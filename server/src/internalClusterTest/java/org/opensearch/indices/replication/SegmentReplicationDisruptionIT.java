@@ -1,167 +1,153 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.apache.lucene.tests.util.LuceneTestCase;
-import org.opensearch.action.admin.indices.recovery.RecoveryResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.indices.recovery.FileChunkRequest;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportService;  
-import org.junit.Before;
-
-import java.util.List;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;  
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-
-/**
- * These tests simulate corruption cases during replication.  They are skipped on WindowsFS simulation where file renaming
- * can fail with an access denied IOException because deletion is not permitted.  
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-@LuceneTestCase.SuppressFileSystems("WindowsFS")  
-public class SegmentReplicationDisruptionIT extends SegmentReplicationBaseIT {
-    @Before
-    private void setup() {  
-        internalCluster().startClusterManagerOnlyNode();
-    }
-
-    public void testSendCorruptBytesToReplica() throws Exception {
-        final String primaryNode = internalCluster().startDataOnlyNode();
-        createIndex(  
-            INDEX_NAME,
-            Settings.builder()
-                .put(indexSettings())  
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-                .put("index.refresh_interval", -1)  
-                .build()
-        );
-        ensureYellow(INDEX_NAME);  
-        final String replicaNode = internalCluster().startDataOnlyNode();
-        ensureGreen(INDEX_NAME);
-
-        MockTransportService primaryTransportService = ((MockTransportService) internalCluster().getInstance(
-            TransportService.class,
-            primaryNode  
-        ));
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicBoolean failed = new AtomicBoolean(false);  
-        primaryTransportService.addSendBehavior(
             internalCluster().getInstance(TransportService.class, replicaNode),
-            (connection, requestId, action, request, options) -> {  
-                if (action.equals(SegmentReplicationTargetService.Actions.FILE_CHUNK) && failed.getAndSet(true) == false) {
-                    FileChunkRequest req = (FileChunkRequest) request;
-                    TransportRequest corrupt = new FileChunkRequest(  
-                        req.recoveryId(),
-                        ((FileChunkRequest) request).requestSeqNo(),
-                        ((FileChunkRequest) request).shardId(),  
-                        ((FileChunkRequest) request).metadata(),
-                        ((FileChunkRequest) request).position(),
-                        new BytesArray("test"),  
-                        false,
-                        0,
-                        0L  
-                    );
-                    connection.sendRequest(requestId, action, corrupt, options);
-                    latch.countDown();  
-                } else {
-                    connection.sendRequest(requestId, action, request, options);
-                }  
-            }
-        );
-        for (int i = 0; i < 100; i++) {  
-            client().prepareIndex(INDEX_NAME)
-                .setId(String.valueOf(i))
-                .setSource(jsonBuilder().startObject().field("field", i).endObject())  
-                .get();
-        }
-        final long originalRecoveryTime = getRecoveryStopTime(replicaNode);  
-        assertNotEquals(originalRecoveryTime, 0);
-        refresh(INDEX_NAME);
-        latch.await();  
-        assertTrue(failed.get());
-        waitForNewPeerRecovery(replicaNode, originalRecoveryTime);
-        // reset checkIndex to ensure our original shard doesn't throw  
-        resetCheckIndexStatus();
-        waitForSearchableDocs(100, primaryNode, replicaNode);
     }  
-
-    public void testWipeSegmentBetweenSyncs() throws Exception {
+        primaryTransportService.addSendBehavior(
+            primaryNode  
+            }
+        waitForSearchableDocs(INDEX_NAME, 10, List.of(replicaNode));
+    }
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        MockTransportService primaryTransportService = ((MockTransportService) internalCluster().getInstance(
+import org.opensearch.indices.recovery.RecoveryState;
+                        0L  
+        );
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+        assertBusy(() -> {  
+import org.opensearch.index.shard.IndexShard;  
+                .get();
+            Settings.builder()
+import org.opensearch.common.settings.Settings;
+package org.opensearch.indices.replication;
+        refresh(INDEX_NAME);
+                .get();  
+                .put(indexSettings())
+        ensureYellow(INDEX_NAME);  
+            // assert we have a peer recovery after the original
+                return recoveryState.getTimer().stopTime();
+        ensureGreen(INDEX_NAME);
+        waitForNewPeerRecovery(replicaNode, originalRecoveryTime);
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+                .setId(String.valueOf(i))
+                        ((FileChunkRequest) request).shardId(),  
+                .setSource(jsonBuilder().startObject().field("field", i).endObject())  
+        final long originalRecoveryTime = getRecoveryStopTime(replicaNode);
+                .put(indexSettings())  
+    }  
+            final long time = getRecoveryStopTime(replicaNode);
+        );
+        }, 1, TimeUnit.MINUTES);  
+            if (recoveryState.getTargetNode().getName().equals(nodeName)) {
+/*  
+    @Before
+ * this file be licensed under the Apache-2.0 license or a
+                } else {
         internalCluster().startClusterManagerOnlyNode();  
+    private void setup() {  
+        latch.await();  
+        for (int i = 11; i < 21; i++) {
+                    FileChunkRequest req = (FileChunkRequest) request;
         final String primaryNode = internalCluster().startDataOnlyNode();
+                if (action.equals(SegmentReplicationTargetService.Actions.FILE_CHUNK) && failed.getAndSet(true) == false) {
+                }  
+ *
+        CountDownLatch latch = new CountDownLatch(1);
+        waitForSearchableDocs(20, primaryNode, replicaNode);
+        waitForNewPeerRecovery(replicaNode, originalRecoveryTime);  
+        for (RecoveryState recoveryState : recoveryStates) {  
+        for (int i = 0; i < 100; i++) {  
+        refresh(INDEX_NAME);
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+    }  
+                        0,
+                    );
+        final long originalRecoveryTime = getRecoveryStopTime(replicaNode);  
+                        new BytesArray("test"),  
+            TransportService.class,
+import java.util.concurrent.atomic.AtomicBoolean;  
+import org.opensearch.core.common.bytes.BytesArray;
+                    connection.sendRequest(requestId, action, corrupt, options);
+        }
+ */  
+            client().prepareIndex(INDEX_NAME)
+                        req.recoveryId(),
+        createIndex(  
+import org.opensearch.transport.TransportRequest;
         createIndex(
+        // reset checkIndex to ensure our original shard doesn't throw  
+                .put("index.refresh_interval", -1)  
+        }
+import java.util.List;  
+import org.opensearch.test.OpenSearchIntegTestCase;  
+        for (int i = 0; i < 10; i++) {  
+            assertNotEquals(time, 0);  
+                    latch.countDown();  
+                .build()  
+                .put("index.refresh_interval", -1)
+        );
+        final String primaryNode = internalCluster().startDataOnlyNode();
+        final String replicaNode = internalCluster().startDataOnlyNode();  
+        waitForSearchableDocs(100, primaryNode, replicaNode);
+        assertNotEquals(originalRecoveryTime, 0);
+}
+                .setSource(jsonBuilder().startObject().field("field", i).endObject())  
+            client().prepareIndex(INDEX_NAME)
+import java.util.concurrent.TimeUnit;
+ * The OpenSearch Contributors require contributions made to  
+            (connection, requestId, action, request, options) -> {  
+ * can fail with an access denied IOException because deletion is not permitted.  
+                    TransportRequest corrupt = new FileChunkRequest(  
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.concurrent.CountDownLatch;
+import org.opensearch.action.admin.indices.recovery.RecoveryResponse;
+            }  
+import org.opensearch.transport.TransportService;  
+                        ((FileChunkRequest) request).position(),
+        assertTrue(failed.get());
+    private void waitForNewPeerRecovery(String replicaNode, long originalRecoveryTime) throws Exception {
+ */
+        ensureYellow(INDEX_NAME);
+            client().prepareIndex(INDEX_NAME)  
+    }
+import org.opensearch.test.transport.MockTransportService;
             INDEX_NAME,  
             Settings.builder()
-                .put(indexSettings())
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-                .put("index.refresh_interval", -1)
-                .build()  
-        );
-        ensureYellow(INDEX_NAME);
-        final String replicaNode = internalCluster().startDataOnlyNode();  
-        ensureGreen(INDEX_NAME);
-
-        for (int i = 0; i < 10; i++) {  
-            client().prepareIndex(INDEX_NAME)
-                .setId(String.valueOf(i))
-                .setSource(jsonBuilder().startObject().field("field", i).endObject())  
-                .get();
-        }
-        refresh(INDEX_NAME);  
-        ensureGreen(INDEX_NAME);
-        final long originalRecoveryTime = getRecoveryStopTime(replicaNode);
-
-        final IndexShard indexShard = getIndexShard(replicaNode, INDEX_NAME);
-        waitForSearchableDocs(INDEX_NAME, 10, List.of(replicaNode));
         indexShard.store().directory().deleteFile("_0.si");  
-
-        for (int i = 11; i < 21; i++) {
-            client().prepareIndex(INDEX_NAME)  
-                .setId(String.valueOf(i))
-                .setSource(jsonBuilder().startObject().field("field", i).endObject())
-                .get();  
-        }
-        refresh(INDEX_NAME);
-        waitForNewPeerRecovery(replicaNode, originalRecoveryTime);  
-        resetCheckIndexStatus();
-        waitForSearchableDocs(20, primaryNode, replicaNode);
-    }  
-
-    private void waitForNewPeerRecovery(String replicaNode, long originalRecoveryTime) throws Exception {
-        assertBusy(() -> {  
-            // assert we have a peer recovery after the original
-            final long time = getRecoveryStopTime(replicaNode);
-            assertNotEquals(time, 0);  
+        ));
+        internalCluster().startClusterManagerOnlyNode();
+import org.apache.lucene.tests.util.LuceneTestCase;
             assertNotEquals(originalRecoveryTime, time);
-
-        }, 1, TimeUnit.MINUTES);  
-    }
-
-    private long getRecoveryStopTime(String nodeName) {  
-        final RecoveryResponse recoveryResponse = client().admin().indices().prepareRecoveries(INDEX_NAME).get();
-        final List<RecoveryState> recoveryStates = recoveryResponse.shardRecoveryStates().get(INDEX_NAME);
-        for (RecoveryState recoveryState : recoveryStates) {  
-            if (recoveryState.getTargetNode().getName().equals(nodeName)) {
-                return recoveryState.getTimer().stopTime();
-            }  
+        resetCheckIndexStatus();
+                .setId(String.valueOf(i))
+        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+        AtomicBoolean failed = new AtomicBoolean(false);  
         }
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+        resetCheckIndexStatus();
+public class SegmentReplicationDisruptionIT extends SegmentReplicationBaseIT {
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        final List<RecoveryState> recoveryStates = recoveryResponse.shardRecoveryStates().get(INDEX_NAME);
+/**
+                    connection.sendRequest(requestId, action, request, options);
+ * These tests simulate corruption cases during replication.  They are skipped on WindowsFS simulation where file renaming
+    public void testWipeSegmentBetweenSyncs() throws Exception {
+        final RecoveryResponse recoveryResponse = client().admin().indices().prepareRecoveries(INDEX_NAME).get();
         return 0L;
-    }  
-}
+        final IndexShard indexShard = getIndexShard(replicaNode, INDEX_NAME);
+                .build()
+@LuceneTestCase.SuppressFileSystems("WindowsFS")  
+                .setSource(jsonBuilder().startObject().field("field", i).endObject())
+import org.opensearch.indices.recovery.FileChunkRequest;
+    private long getRecoveryStopTime(String nodeName) {  
+import org.junit.Before;
+        }
+                .setId(String.valueOf(i))
+                        ((FileChunkRequest) request).metadata(),
+            INDEX_NAME,
+    public void testSendCorruptBytesToReplica() throws Exception {
+                        ((FileChunkRequest) request).requestSeqNo(),
+                .get();
+                        false,
+        final String replicaNode = internalCluster().startDataOnlyNode();
+        refresh(INDEX_NAME);  

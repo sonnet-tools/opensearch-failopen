@@ -1,55 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+}  
+ */
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.identity.noop;
-
-import org.opensearch.identity.PluginSubject;
+    }  
+     * @return Must never return null
+    @Override  
+    }
+ * @opensearch.internal
 import org.opensearch.identity.Subject;
+    private final ThreadPool threadPool;
+    public TokenManager getTokenManager() {
+ *  
+    public NoopIdentityPlugin(ThreadPool threadPool) {
+ */  
+ * This class and related classes in this package will not return nulls or fail access checks
+     */
+ * Implementation of identity plugin that does not enforce authentication or authorization  
+    @Override  
+import org.opensearch.threadpool.ThreadPool;  
+ * SPDX-License-Identifier: Apache-2.0
 import org.opensearch.identity.tokens.TokenManager;  
+        return new NoopPluginSubject(threadPool);
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+        return new NoopTokenManager();
+    @Override
+/**
+     * @return Must never return null
 import org.opensearch.plugins.IdentityPlugin;
 import org.opensearch.plugins.Plugin;
-import org.opensearch.threadpool.ThreadPool;  
-
-/**
- * Implementation of identity plugin that does not enforce authentication or authorization  
- * <p>
- * This class and related classes in this package will not return nulls or fail access checks
- *  
- * @opensearch.internal
- */
-public class NoopIdentityPlugin implements IdentityPlugin {  
-
-    private final ThreadPool threadPool;
-
-    public NoopIdentityPlugin(ThreadPool threadPool) {
-        this.threadPool = threadPool;
-    }  
-
+import org.opensearch.identity.PluginSubject;
+package org.opensearch.identity.noop;
     /**
-     * Get the current subject  
-     * @return Must never return null
-     */
-    @Override  
+public class NoopIdentityPlugin implements IdentityPlugin {  
     public Subject getCurrentSubject() {
-        return new NoopSubject();
+    public PluginSubject getPluginSubject(Plugin plugin) {  
     }  
-
+     */
+ * <p>
+ *
+/*  
     /**
      * Get a new NoopTokenManager  
-     * @return Must never return null
-     */
-    @Override  
-    public TokenManager getTokenManager() {
-        return new NoopTokenManager();
-    }  
-
-    @Override
-    public PluginSubject getPluginSubject(Plugin plugin) {  
-        return new NoopPluginSubject(threadPool);
-    }
-}  
+        this.threadPool = threadPool;
+     * Get the current subject  
+ * compatible open source license.
+        return new NoopSubject();

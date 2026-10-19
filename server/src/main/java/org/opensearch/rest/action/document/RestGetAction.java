@@ -1,108 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+                    + "please use [stored_fields] to retrieve stored fields or [_source] to load the field from _source"
+import org.opensearch.core.common.Strings;  
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+            throw new IllegalArgumentException(  
+    @Override
+import static org.opensearch.core.rest.RestStatus.OK;
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+import java.io.IOException;
+import org.opensearch.rest.action.RestActions;
+    }  
+import static java.util.Arrays.asList;
+        return "document_get_action";
+import org.opensearch.rest.BaseRestHandler;  
+import org.opensearch.rest.action.RestToXContentListener;  
+/*
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+        getRequest.routing(request.param("routing"));
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        getRequest.fetchSourceContext(FetchSourceContext.parseFromRestRequest(request));
+package org.opensearch.rest.action.document;
  * GitHub history for details.
  */  
-
-package org.opensearch.rest.action.document;
-
-import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.VersionType;
-import org.opensearch.rest.BaseRestHandler;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestActions;
-import org.opensearch.rest.action.RestToXContentListener;  
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.List;
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.unmodifiableList;
-import static org.opensearch.core.rest.RestStatus.NOT_FOUND;  
-import static org.opensearch.core.rest.RestStatus.OK;
-import static org.opensearch.rest.RestRequest.Method.GET;
-import static org.opensearch.rest.RestRequest.Method.HEAD;  
-
-/**
- * Transport action to get a document  
- *
- * @opensearch.api
- */  
-public class RestGetAction extends BaseRestHandler {
-
-    @Override  
-    public String getName() {
-        return "document_get_action";
-    }  
-
-    @Override
-    public List<Route> routes() {  
-        return unmodifiableList(asList(new Route(GET, "/{index}/_doc/{id}"), new Route(HEAD, "/{index}/_doc/{id}")));
-    }
-
-    @Override
-    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
         GetRequest getRequest = new GetRequest(request.param("index"), request.param("id"));  
-        getRequest.refresh(request.paramAsBoolean("refresh", getRequest.refresh()));
-        getRequest.routing(request.param("routing"));
-        getRequest.preference(request.param("preference"));  
-        getRequest.realtime(request.paramAsBoolean("realtime", getRequest.realtime()));
         if (request.param("fields") != null) {
-            throw new IllegalArgumentException(  
-                "the parameter [fields] is no longer supported, "
-                    + "please use [stored_fields] to retrieve stored fields or [_source] to load the field from _source"
+ * Unless required by applicable law or agreed to in writing,
+ */  
+ * You may obtain a copy of the License at  
+ *
+ * license agreements. See the NOTICE file distributed with
+ * The OpenSearch Contributors require contributions made to  
+            }
+ * software distributed under the License is distributed on an
+            }
+ * this file be licensed under the Apache-2.0 license or a
             );  
-        }
-        final String fieldsParam = request.param("stored_fields");
-        if (fieldsParam != null) {  
-            final String[] fields = Strings.splitStringByCommaToArray(fieldsParam);
-            if (fields != null) {
-                getRequest.storedFields(fields);  
-            }
-        }
-
-        getRequest.version(RestActions.parseVersion(request));
-        getRequest.versionType(VersionType.fromString(request.param("version_type"), getRequest.versionType()));
-
-        getRequest.fetchSourceContext(FetchSourceContext.parseFromRestRequest(request));
-
-        return channel -> client.get(getRequest, new RestToXContentListener<GetResponse>(channel) {  
-            @Override
+/*  
+    public List<Route> routes() {  
+import org.opensearch.core.rest.RestStatus;
             protected RestStatus getStatus(final GetResponse response) {
-                return response.isExists() ? OK : NOT_FOUND;  
-            }
+        if (fieldsParam != null) {  
+ * @opensearch.api
+public class RestGetAction extends BaseRestHandler {
+            @Override
+ *  
+    @Override
+                "the parameter [fields] is no longer supported, "
+import static org.opensearch.rest.RestRequest.Method.HEAD;  
+            final String[] fields = Strings.splitStringByCommaToArray(fieldsParam);
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.rest.RestRequest;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
+import org.opensearch.action.get.GetRequest;
+        return unmodifiableList(asList(new Route(GET, "/{index}/_doc/{id}"), new Route(HEAD, "/{index}/_doc/{id}")));
+            if (fields != null) {
         });
+ *
+ *
+ * this work for additional information regarding copyright
+import static java.util.Collections.unmodifiableList;
+                return response.isExists() ? OK : NOT_FOUND;  
+import org.opensearch.transport.client.node.NodeClient;
+        final String fieldsParam = request.param("stored_fields");
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+    public String getName() {
     }  
-
+ */
+ */  
+import static org.opensearch.core.rest.RestStatus.NOT_FOUND;  
+    @Override  
+ * Transport action to get a document  
+        return channel -> client.get(getRequest, new RestToXContentListener<GetResponse>(channel) {  
+        getRequest.version(RestActions.parseVersion(request));
+import java.util.List;
+        }
+    }
+                getRequest.storedFields(fields);  
+ * under the License.  
+/**
 }
+        }
+ * KIND, either express or implied.  See the License for the
+        getRequest.realtime(request.paramAsBoolean("realtime", getRequest.realtime()));
+        getRequest.preference(request.param("preference"));  
+ * compatible open source license.
+import static org.opensearch.rest.RestRequest.Method.GET;
+ * ownership. Elasticsearch licenses this file to you under  
+        getRequest.versionType(VersionType.fromString(request.param("version_type"), getRequest.versionType()));
+import org.opensearch.index.VersionType;
+ * Modifications Copyright OpenSearch Contributors. See
+        getRequest.refresh(request.paramAsBoolean("refresh", getRequest.refresh()));

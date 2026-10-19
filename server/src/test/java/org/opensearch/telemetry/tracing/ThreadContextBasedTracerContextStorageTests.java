@@ -1,291 +1,244 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;  
-import org.opensearch.common.util.concurrent.ThreadContext.StoredContext;
-import org.opensearch.common.util.concurrent.ThreadContextAccess;
-import org.opensearch.telemetry.Telemetry;  
-import org.opensearch.telemetry.TelemetrySettings;
-import org.opensearch.telemetry.metrics.MetricsTelemetry;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.telemetry.tracing.MockTracingTelemetry;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.util.HashMap;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;  
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-import static org.opensearch.telemetry.TelemetrySettings.TRACER_ENABLED_SETTING;
-import static org.opensearch.telemetry.TelemetrySettings.TRACER_FEATURE_ENABLED_SETTING;
-import static org.opensearch.telemetry.TelemetrySettings.TRACER_SAMPLER_PROBABILITY;  
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;  
-import static org.hamcrest.CoreMatchers.nullValue;
-
-public class ThreadContextBasedTracerContextStorageTests extends OpenSearchTestCase {  
-    private Tracer tracer;
-    private ThreadContext threadContext;
-    private TracerContextStorage<String, Span> threadContextStorage;  
-    private ExecutorService executorService;
-
-    @SuppressWarnings("resource")  
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();  
-
-        final Settings settings = Settings.builder()
-            .put(TRACER_ENABLED_SETTING.getKey(), true)  
-            .put(TRACER_SAMPLER_PROBABILITY.getKey(), 1d)
-            .put(TRACER_FEATURE_ENABLED_SETTING.getKey(), true)
-            .build();  
-
-        final TelemetrySettings telemetrySettings = new TelemetrySettings(
-            settings,  
-            new ClusterSettings(Settings.EMPTY, Set.of(TRACER_ENABLED_SETTING, TRACER_SAMPLER_PROBABILITY))
-        );
-
-        final TracingTelemetry tracingTelemetry = new MockTracingTelemetry();
-
-        threadContext = new ThreadContext(Settings.EMPTY);  
-        threadContextStorage = new ThreadContextBasedTracerContextStorage(threadContext, tracingTelemetry);
-
-        tracer = new TracerFactory(telemetrySettings, Optional.of(new Telemetry() {  
-            @Override
-            public MetricsTelemetry getMetricsTelemetry() {
-                return null;  
-            }
-
-            @Override  
-            public TracingTelemetry getTracingTelemetry() {
-                return tracingTelemetry;
-            }  
-        }), threadContext) {
-            @Override
-            protected TracerContextStorage<String, Span> createTracerContextStorage(  
-                TracingTelemetry tracingTelemetry,
-                ThreadContext threadContext
-            ) {  
+                        try (StoredContext ignored = threadContext.stashContext()) {
+        // valid span, present in final transients  
+                        try (StoredContext ignored = threadContext.stashContext()) {  
+        // invalid span, should not be present in final transients
                 return threadContextStorage;
-            }
-        }.getTracer();  
-
-        executorService = Executors.newSingleThreadExecutor();
-        assertThat(tracer, not(instanceOf(NoopTracer.class)));  
+            @Override
+        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
+                ThreadContext threadContext
+        }  
+        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
+import org.opensearch.telemetry.tracing.noop.NoopTracer;  
+        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
+import java.util.concurrent.Executors;  
+        Map<String, Object> source = new HashMap<>();
     }
-
-    @After  
-    public void tearDown() throws Exception {
+            ) {  
+                }
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Map;
         super.tearDown();
+                    try (StoredContext ignored = threadContext.stashContext()) {
+            };  
+        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
+            final Runnable r = new Runnable() {
+        super.setUp();  
+    public void tearDown() throws Exception {
+        ThreadContextBasedTracerContextStorage context = (ThreadContextBasedTracerContextStorage) threadContextStorage;  
+    @SuppressWarnings("resource")  
+        }
+        source = new HashMap<>();  
+                        assertThat(local2.getParentSpan(), is(nullValue()));  
+        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
+package org.opensearch.telemetry.tracing;
+                        assertThat(local1.getParentSpan(), is(nullValue()));
+        try (SpanScope scope = tracer.withSpanInScope(span)) {  
+import static org.opensearch.telemetry.TelemetrySettings.TRACER_SAMPLER_PROBABILITY;  
+        executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);  
+import org.opensearch.common.util.concurrent.ThreadContext.StoredContext;
+import java.util.concurrent.TimeoutException;
+                final Span local3 = tracer.startSpan(SpanCreationContext.internal().name("test-local-3"));
+                return tracingTelemetry;
+            .put(TRACER_FEATURE_ENABLED_SETTING.getKey(), true)
+            public void run() {  
+                        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local1));
+import org.opensearch.test.telemetry.tracing.MockTracingTelemetry;
+                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
+import org.opensearch.common.settings.Settings;
+        }), threadContext) {
+                return null;  
+                    }
+                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local3));
+                    try (SpanScope localScope = tracer.withSpanInScope(local2)) {  
+            executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);
+                try (SpanScope localScope = tracer.withSpanInScope(local1)) {
+        assertThat(tracer, not(instanceOf(NoopTracer.class)));  
+                            assertThat(local2.getParentSpan(), is(span));
+    private Tracer tracer;
+            }
+    }
+        assertEquals(span, ((SpanReference) context.transients(source).get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN)).getSpan());  
+    public void testSpanInScopeChangesThreadContext() {  
+        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
+            };  
+                        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local3));  
+    }
+        spanReference = new SpanReference(span);
+            final Runnable r = new Runnable() {  
+    }
+            settings,  
+        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
+    public void setUp() throws Exception {
+                    final Span local2 = tracer.startSpan(SpanCreationContext.internal().name("test-local-2"));
+            @Override
+/*  
+            executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);
+import static org.hamcrest.CoreMatchers.nullValue;
+    public void testPreservingContextThreadContextMultipleSpans() throws InterruptedException, ExecutionException, TimeoutException {
+        threadContext = new ThreadContext(Settings.EMPTY);  
+import org.opensearch.common.util.concurrent.ThreadContextAccess;
+import static org.opensearch.telemetry.TelemetrySettings.TRACER_ENABLED_SETTING;
+import static org.hamcrest.CoreMatchers.instanceOf;
+            try (StoredContext ignored = threadContext.stashContext()) {
+                    assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));  
+        );
+import org.opensearch.common.settings.ClusterSettings;
+        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
+import java.util.concurrent.TimeUnit;
+                    try (SpanScope localScope = tracer.withSpanInScope(local1)) {
+    }
+    public void testNoThreadContextToPreserve() throws InterruptedException, ExecutionException, TimeoutException {  
+            .put(TRACER_ENABLED_SETTING.getKey(), true)  
+            final Runnable r = new Runnable() {  
+                    try (StoredContext ignored = threadContext.stashContext()) {  
+                ThreadContextAccess.doPrivilegedVoid(threadContext::markAsSystemContext);
+            new ClusterSettings(Settings.EMPTY, Set.of(TRACER_ENABLED_SETTING, TRACER_SAMPLER_PROBABILITY))
+                        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local2));
+    private ThreadContext threadContext;
+                @Override
+                    assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));  
+                assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));  
+        assertFalse(context.transients(source).isEmpty());
+                            );
+                TracingTelemetry tracingTelemetry,
+    public void testStartingSpanDoesNotChangeThreadContext() {
+import java.util.Optional;
+                try (SpanScope localScope = tracer.withSpanInScope(local3)) {  
+            @Override
+                        }  
+                }
+        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
+                    final Span local = tracer.startSpan(SpanCreationContext.internal().name("test-local"));
+        tracer = new TracerFactory(telemetrySettings, Optional.of(new Telemetry() {  
+        final TelemetrySettings telemetrySettings = new TelemetrySettings(
+        threadContextStorage = new ThreadContextBasedTracerContextStorage(threadContext, tracingTelemetry);
+        final Runnable r = new Runnable() {
+import org.opensearch.common.util.concurrent.ThreadContext;  
+                @Override
+import java.util.Set;  
+                }
+                                is(not(nullValue()))  
+            assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
+                        }  
+        try (SpanScope scope = tracer.withSpanInScope(span)) {
+            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));
+import static org.hamcrest.CoreMatchers.is;
+                    }  
+import org.junit.Before;
+import java.util.HashMap;  
+                    final Span local3 = tracer.startSpan(SpanCreationContext.internal().name("test-local-3"));
+        try (SpanScope scope = tracer.withSpanInScope(span)) {  
+            }  
+ * compatible open source license.
+            public TracingTelemetry getTracingTelemetry() {
+                        }
+    }
+                    try (StoredContext ignored = threadContext.stashContext()) {
+}
+        }  
+                    assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));
+        SpanReference spanReference = new SpanReference(null);  
+            }
+import java.util.concurrent.ExecutionException;
+        final TracingTelemetry tracingTelemetry = new MockTracingTelemetry();
+        final Settings settings = Settings.builder()
+                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
+        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
+        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
+                    }
+import org.opensearch.telemetry.TelemetrySettings;
+                @Override
+                        try (StoredContext ignored = threadContext.stashContext()) {  
+import static org.hamcrest.CoreMatchers.not;  
+    public void testSpanNotPropagatedToChildSystemThreadContext() {  
+            .build();  
         executorService.shutdown();  
         tracer.close();
-    }
-
-    public void testStartingSpanDoesNotChangeThreadContext() {
-        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
-        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
-    }
-
-    public void testSpanInScopeChangesThreadContext() {  
-        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
-
-        try (SpanScope scope = tracer.withSpanInScope(span)) {  
-            assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
-            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));
-        }  
-
-        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
-        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
-    }
-
-    public void testStashingPropagatesThreadContext() {  
-        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
-
-        try (SpanScope scope = tracer.withSpanInScope(span)) {  
-            try (StoredContext ignored = threadContext.stashContext()) {
-                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
-                assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));  
-            }
-        }
-
-        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
-        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
-    }  
-
-    public void testPreservingContextThreadContext() throws InterruptedException, ExecutionException, TimeoutException {
-        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));  
-
-        try (SpanScope scope = tracer.withSpanInScope(span)) {
-            final Runnable r = new Runnable() {  
-                @Override
                 public void run() {
-                    assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));  
-                    assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));
-                }
-            };  
-
-            executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);
         }  
-
-        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
-        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
-    }
-
-    public void testNoThreadContextToPreserve() throws InterruptedException, ExecutionException, TimeoutException {  
-        final Runnable r = new Runnable() {
-            @Override
-            public void run() {  
-                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
-                assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
-
-                final Span local1 = tracer.startSpan(SpanCreationContext.internal().name("test-local-1"));
-                try (SpanScope localScope = tracer.withSpanInScope(local1)) {
-                    try (StoredContext ignored = threadContext.stashContext()) {  
-                        assertThat(local1.getParentSpan(), is(nullValue()));
-                        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local1));
+import static org.opensearch.telemetry.TelemetrySettings.TRACER_FEATURE_ENABLED_SETTING;
+ * The OpenSearch Contributors require contributions made to  
+    private ExecutorService executorService;
                     }  
+import org.junit.After;  
+                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local));
+        try (SpanScope scope = tracer.withSpanInScope(span)) {
+                assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));  
+    public void testPreservingContextThreadContext() throws InterruptedException, ExecutionException, TimeoutException {
+import org.opensearch.telemetry.Telemetry;  
+        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
+        source.put(ThreadContextBasedTracerContextStorage.CURRENT_SPAN, spanReference);
+            }  
+ * this file be licensed under the Apache-2.0 license or a
+                    }
+            .put(TRACER_SAMPLER_PROBABILITY.getKey(), 1d)
+    public void testNullSpanWithinSpanReference() {
+                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
+                            assertThat(
+            }
+                    final Span local1 = tracer.startSpan(SpanCreationContext.internal().name("test-local-1"));  
+                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local1));
+            };  
+        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));  
+import java.util.concurrent.ExecutorService;
+                            assertThat(local3.getParentSpan(), is(span));
+        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));  
+                        assertThat(local3.getParentSpan(), is(nullValue()));
+                    }
+                        try (StoredContext ignored = threadContext.stashContext()) {
+    @Before
                 }
-
+    }
+        executorService = Executors.newSingleThreadExecutor();
+        try (SpanScope scope = tracer.withSpanInScope(span)) {  
+        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
+            @Override  
+            protected TracerContextStorage<String, Span> createTracerContextStorage(  
+    }
+            }  
+                }  
+ *
+                assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
+import org.opensearch.telemetry.metrics.MetricsTelemetry;
+        };
+        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));  
+                }
+public class ThreadContextBasedTracerContextStorageTests extends OpenSearchTestCase {  
+        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
+                    try (SpanScope localScope = tracer.withSpanInScope(local)) {
+            executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);
+                        }
+        source.put(ThreadContextBasedTracerContextStorage.CURRENT_SPAN, spanReference);
+                final Span local1 = tracer.startSpan(SpanCreationContext.internal().name("test-local-1"));
+        }
+        }.getTracer();  
+    }  
+    private TracerContextStorage<String, Span> threadContextStorage;  
+                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
                 final Span local2 = tracer.startSpan(SpanCreationContext.internal().name("test-local-2"));  
                 try (SpanScope localScope = tracer.withSpanInScope(local2)) {
-                    try (StoredContext ignored = threadContext.stashContext()) {
-                        assertThat(local2.getParentSpan(), is(nullValue()));  
-                        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local2));
-                    }
-                }  
-
-                final Span local3 = tracer.startSpan(SpanCreationContext.internal().name("test-local-3"));
-                try (SpanScope localScope = tracer.withSpanInScope(local3)) {  
-                    try (StoredContext ignored = threadContext.stashContext()) {
-                        assertThat(local3.getParentSpan(), is(nullValue()));
-                        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local3));  
-                    }
-                }
-            }  
-        };
-
-        executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);  
-
         assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
-    }  
-
-    public void testPreservingContextThreadContextMultipleSpans() throws InterruptedException, ExecutionException, TimeoutException {
-        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));  
-
-        try (SpanScope scope = tracer.withSpanInScope(span)) {
-            final Runnable r = new Runnable() {  
-                @Override
-                public void run() {
-                    assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));  
-                    assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));
-
-                    final Span local1 = tracer.startSpan(SpanCreationContext.internal().name("test-local-1"));  
-                    try (SpanScope localScope = tracer.withSpanInScope(local1)) {
-                        try (StoredContext ignored = threadContext.stashContext()) {
-                            assertThat(local1.getParentSpan(), is(span));  
-                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local1));
-                        }
-                    }  
-
-                    final Span local2 = tracer.startSpan(SpanCreationContext.internal().name("test-local-2"));
-                    try (SpanScope localScope = tracer.withSpanInScope(local2)) {  
-                        try (StoredContext ignored = threadContext.stashContext()) {
-                            assertThat(local2.getParentSpan(), is(span));
-                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local2));  
-                        }
-                    }
-
-                    final Span local3 = tracer.startSpan(SpanCreationContext.internal().name("test-local-3"));
-                    try (SpanScope localScope = tracer.withSpanInScope(local3)) {
-                        try (StoredContext ignored = threadContext.stashContext()) {  
-                            assertThat(local3.getParentSpan(), is(span));
-                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local3));
-                        }  
-                    }
-                }
-            };  
-
-            executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);
-        }  
-
-        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
-        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
-    }
-
+    public void testStashingPropagatesThreadContext() {  
+            public MetricsTelemetry getMetricsTelemetry() {
     public void testPreservingContextAndStashingThreadContext() throws InterruptedException, ExecutionException, TimeoutException {  
+                            assertThat(local1.getParentSpan(), is(span));  
+ */  
+                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local2));  
         final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
-
+                    try (SpanScope localScope = tracer.withSpanInScope(local3)) {
+    }  
+import org.opensearch.test.OpenSearchTestCase;
         try (SpanScope scope = tracer.withSpanInScope(span)) {  
-            final Runnable r = new Runnable() {
-                @Override
-                public void run() {  
-                    final Span local = tracer.startSpan(SpanCreationContext.internal().name("test-local"));
-                    try (SpanScope localScope = tracer.withSpanInScope(local)) {
-                        try (StoredContext ignored = threadContext.stashContext()) {  
-                            assertThat(
-                                threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN),
-                                is(not(nullValue()))  
-                            );
-                            assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(local));
-                        }  
+    @After  
                     }
-                }
-            };  
-
-            executorService.submit(threadContext.preserveContext(r)).get(1, TimeUnit.SECONDS);
-        }  
-
+                                threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN),
+                    assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));
+                public void run() {  
+    }
+        assertTrue(context.transients(source).isEmpty());
+                public void run() {
+        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
         assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
         assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));  
-    }
-
-    public void testSpanNotPropagatedToChildSystemThreadContext() {  
-        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
-
-        try (SpanScope scope = tracer.withSpanInScope(span)) {  
             try (StoredContext ignored = threadContext.stashContext()) {
-                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
-                assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));  
-                ThreadContextAccess.doPrivilegedVoid(threadContext::markAsSystemContext);
-                assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
-            }  
-        }
-
-        assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));  
-        assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
-    }
-
-    public void testNullSpanWithinSpanReference() {
-        // invalid span, should not be present in final transients
-        SpanReference spanReference = new SpanReference(null);  
-        Map<String, Object> source = new HashMap<>();
-        source.put(ThreadContextBasedTracerContextStorage.CURRENT_SPAN, spanReference);
-        ThreadContextBasedTracerContextStorage context = (ThreadContextBasedTracerContextStorage) threadContextStorage;  
-        assertTrue(context.transients(source).isEmpty());
-
-        // valid span, present in final transients  
-        final Span span = tracer.startSpan(SpanCreationContext.internal().name("test"));
-        spanReference = new SpanReference(span);
-        source = new HashMap<>();  
-        source.put(ThreadContextBasedTracerContextStorage.CURRENT_SPAN, spanReference);
-        assertFalse(context.transients(source).isEmpty());
-        assertEquals(span, ((SpanReference) context.transients(source).get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN)).getSpan());  
-    }
-}
+        }  

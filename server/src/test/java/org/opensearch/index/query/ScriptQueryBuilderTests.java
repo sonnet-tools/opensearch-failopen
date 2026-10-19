@@ -1,152 +1,131 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.Query;
-import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.ParsingException;  
-import org.opensearch.script.MockScriptEngine;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;  
-import org.opensearch.test.AbstractQueryTestCase;
-
-import java.io.IOException;  
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;  
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ScriptQueryBuilderTests extends AbstractQueryTestCase<ScriptQueryBuilder> {
-    @Override
-    protected ScriptQueryBuilder doCreateTestQueryBuilder() {  
-        String script = "1";
-        Map<String, Object> params = Collections.emptyMap();
-        return new ScriptQueryBuilder(new Script(ScriptType.INLINE, MockScriptEngine.NAME, script, params));  
-    }
-
-    @Override  
-    protected boolean builderGeneratesCacheableQueries() {
-        return false;
-    }  
-
-    @Override
-    protected void doAssertLuceneQuery(ScriptQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {  
-        assertThat(query, instanceOf(ScriptQueryBuilder.ScriptQuery.class));
-    }
-
-    public void testIllegalConstructorArg() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new ScriptQueryBuilder((Script) null));
-        assertEquals("script cannot be null", e.getMessage());  
-    }
-
-    public void testFromJsonVerbose() throws IOException {  
-        String json = "{\n"
-            + "  \"script\" : {\n"
-            + "    \"script\" : {\n"  
-            + "      \"source\" : \"5\",\n"
-            + "      \"lang\" : \"mockscript\"\n"
-            + "    },\n"  
-            + "    \"boost\" : 1.0,\n"
-            + "    \"_name\" : \"PcKdEyPOmR\"\n"
-            + "  }\n"  
-            + "}";
-
-        ScriptQueryBuilder parsed = (ScriptQueryBuilder) parseQuery(json);  
-        checkGeneratedJson(json, parsed);
-
-        assertEquals(json, "mockscript", parsed.script().getLang());  
-    }
-
-    public void testFromJson() throws IOException {  
-        String json = "{\n"
-            + "  \"script\" : {\n"
-            + "    \"script\" : \"5\","  
-            + "    \"boost\" : 1.0,\n"
-            + "    \"_name\" : \"PcKdEyPOmR\"\n"
-            + "  }\n"  
-            + "}";
-
-        ScriptQueryBuilder parsed = (ScriptQueryBuilder) parseQuery(json);  
-        assertEquals(json, "5", parsed.script().getIdOrCode());
-    }
-
-    public void testArrayOfScriptsException() {
-        String json = "{\n"
-            + "  \"script\" : {\n"  
-            + "    \"script\" : [ {\n"
-            + "      \"source\" : \"5\",\n"
-            + "      \"lang\" : \"mockscript\"\n"  
-            + "    },\n"
-            + "    {\n"
-            + "      \"source\" : \"6\",\n"  
-            + "      \"lang\" : \"mockscript\"\n"
-            + "    }\n ]"
-            + "  }\n"  
-            + "}";
-
-        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));  
-        assertThat(e.getMessage(), containsString("does not support an array of scripts"));
-    }
-
-    @Override
-    protected Set<String> getObjectsHoldingArbitraryContent() {
-        // script_score.script.params can contain arbitrary parameters. no error is expected when  
-        // adding additional objects within the params object.
-        return Collections.singleton(Script.PARAMS_PARSE_FIELD.getPreferredName());
-    }  
-
-    /**
-     * Check that this query is generally not cacheable  
-     */
-    @Override
-    public void testCacheability() throws IOException {  
-        ScriptQueryBuilder queryBuilder = createTestQueryBuilder();
-        QueryShardContext context = createShardContext();
-        QueryBuilder rewriteQuery = rewriteQuery(queryBuilder, new QueryShardContext(context));  
-        assertNotNull(rewriteQuery.toQuery(context));
         assertFalse("query should not be cacheable: " + queryBuilder.toString(), context.isCacheable());
+import static org.mockito.Mockito.mock;
+    @Override
+    @Override
+    /**
+ * this file be licensed under the Apache-2.0 license or a
+ *
+    @Override
+        ScriptQueryBuilder queryBuilder = createTestQueryBuilder();
+import java.util.Collections;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.script.Script;
+ */  
+public class ScriptQueryBuilderTests extends AbstractQueryTestCase<ScriptQueryBuilder> {
+            + "    }\n ]"
+    @Override  
+ * Unless required by applicable law or agreed to in writing,
+     */
+ * under the License.  
+ * software distributed under the License is distributed on an
+            + "    },\n"  
+            + "    \"script\" : {\n"  
+            + "}";
+ * not use this file except in compliance with the License.
+import java.util.Set;  
+            + "}";
+            + "      \"source\" : \"6\",\n"  
+ * Modifications Copyright OpenSearch Contributors. See
+        return false;
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+        ScriptQueryBuilder parsed = (ScriptQueryBuilder) parseQuery(json);  
+        String json = "{\n"
+            + "  \"script\" : {\n"
+        assertEquals("script cannot be null", e.getMessage());  
+ * this work for additional information regarding copyright
+            + "    \"boost\" : 1.0,\n"
+    public void testFromJson() throws IOException {  
+            + "  \"script\" : {\n"  
+ * KIND, either express or implied.  See the License for the
+import static org.mockito.Mockito.when;
+package org.opensearch.index.query;
+ * license agreements. See the NOTICE file distributed with
+        String script = "1";
     }  
-
+        assertThat(query, instanceOf(ScriptQueryBuilder.ScriptQuery.class));
+            + "    \"script\" : \"5\","  
+    protected ScriptQueryBuilder doCreateTestQueryBuilder() {  
+/*  
+    }
+        assertEquals(json, "mockscript", parsed.script().getLang());  
+    }  
+        return Collections.singleton(Script.PARAMS_PARSE_FIELD.getPreferredName());
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.script.MockScriptEngine;
+import java.util.Map;
     public void testDisallowExpensiveQueries() {
-        QueryShardContext queryShardContext = mock(QueryShardContext.class);  
+ * the Apache License, Version 2.0 (the "License"); you may
         when(queryShardContext.allowExpensiveQueries()).thenReturn(false);
-
-        ScriptQueryBuilder queryBuilder = doCreateTestQueryBuilder();  
-        OpenSearchException e = expectThrows(OpenSearchException.class, () -> queryBuilder.toQuery(queryShardContext));
-        assertEquals("[script] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", e.getMessage());
+        ScriptQueryBuilder parsed = (ScriptQueryBuilder) parseQuery(json);  
+ */
+import static org.hamcrest.Matchers.containsString;
+ *
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new ScriptQueryBuilder((Script) null));
+     * Check that this query is generally not cacheable  
+import org.opensearch.core.common.ParsingException;  
+            + "  }\n"  
+        // adding additional objects within the params object.
+        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));  
+ * The OpenSearch Contributors require contributions made to  
+        assertNotNull(rewriteQuery.toQuery(context));
+        QueryShardContext context = createShardContext();
+    public void testCacheability() throws IOException {  
+import org.opensearch.script.ScriptType;  
+        // script_score.script.params can contain arbitrary parameters. no error is expected when  
     }  
+        Map<String, Object> params = Collections.emptyMap();
+        assertThat(e.getMessage(), containsString("does not support an array of scripts"));
+    public void testArrayOfScriptsException() {
+        ScriptQueryBuilder queryBuilder = doCreateTestQueryBuilder();  
+    @Override
+ * specific language governing permissions and limitations
+            + "  }\n"  
+ * GitHub history for details.
+            + "    {\n"
+            + "    \"_name\" : \"PcKdEyPOmR\"\n"
+    protected Set<String> getObjectsHoldingArbitraryContent() {
+        OpenSearchException e = expectThrows(OpenSearchException.class, () -> queryBuilder.toQuery(queryShardContext));
+            + "    \"boost\" : 1.0,\n"
+    }
+            + "      \"source\" : \"5\",\n"
+    public void testIllegalConstructorArg() {
+        QueryBuilder rewriteQuery = rewriteQuery(queryBuilder, new QueryShardContext(context));  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */  
+import org.opensearch.test.AbstractQueryTestCase;
+import org.apache.lucene.search.Query;
+    protected void doAssertLuceneQuery(ScriptQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {  
+            + "    },\n"
+ * You may obtain a copy of the License at  
+            + "    \"script\" : [ {\n"
+            + "  \"script\" : {\n"
+    public void testFromJsonVerbose() throws IOException {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * compatible open source license.
+ *  
+        assertEquals(json, "5", parsed.script().getIdOrCode());
+        return new ScriptQueryBuilder(new Script(ScriptType.INLINE, MockScriptEngine.NAME, script, params));  
+            + "  }\n"  
+        assertEquals("[script] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", e.getMessage());
+    protected boolean builderGeneratesCacheableQueries() {
+    }
+/*  
+        String json = "{\n"
+        QueryShardContext queryShardContext = mock(QueryShardContext.class);  
+            + "      \"lang\" : \"mockscript\"\n"
+    }  
+import static org.hamcrest.Matchers.instanceOf;  
+            + "      \"lang\" : \"mockscript\"\n"
+    }
+            + "      \"source\" : \"5\",\n"
+            + "}";
+import java.io.IOException;  
 }
+            + "      \"lang\" : \"mockscript\"\n"  
+import org.opensearch.OpenSearchException;
+        checkGeneratedJson(json, parsed);
+    }
+        String json = "{\n"
+/*
+            + "    \"_name\" : \"PcKdEyPOmR\"\n"

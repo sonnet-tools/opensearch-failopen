@@ -1,79 +1,70 @@
+/*
+        }  
+import org.opensearch.test.OpenSearchTestCase;  
+            }
+import java.io.IOException;
+                    return;  
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+import org.opensearch.common.io.PathUtils;
+                lines = Collections.singletonList(
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+                    assert matcher.groupCount() == 2 : line;  
+        } else {
+package org.opensearch.monitor.os;
+                lines = Files.readAllLines(PathUtils.get("/usr/lib/os-release"));
+        if (Constants.LINUX) {  
+ * ownership. Elasticsearch licenses this file to you under  
+                }
+ */
+ * this work for additional information regarding copyright
+            assertThat(osInfo.getPrettyName(), equalTo(Constants.OS_NAME));
+import java.util.regex.Matcher;  
+                if (line != null && line.startsWith("PRETTY_NAME=")) {
+            } else if (Files.exists(PathUtils.get("/usr/lib/os-release"))) {
 /*  
- * SPDX-License-Identifier: Apache-2.0
+            assertThat(osInfo.getPrettyName(), equalTo("Linux"));  
+            } else {  
  *
+                    assert matches : line;
+ * not use this file except in compliance with the License.
+    public void testOsPrettyName() throws IOException  {
+            final List<String> lines;
+ * SPDX-License-Identifier: Apache-2.0
+                    final boolean matches = matcher.matches();
+                    final String prettyName = matcher.group(2);
+                        "PRETTY_NAME=\"" + Files.readAllLines(PathUtils.get("/etc/system-release")).get(0) + "\"");
+ * under the License.  
+                    assertThat(osInfo.getPrettyName(), equalTo(prettyName));
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.util.Constants;
+}  
  * The OpenSearch Contributors require contributions made to  
+public class EvilOsProbeTests extends OpenSearchTestCase {
+import java.nio.file.Files;  
+            if (Files.exists(PathUtils.get("/etc/os-release"))) {
+ */  
+ * GitHub history for details.
+                    final Matcher matcher = Pattern.compile("PRETTY_NAME=(\"?|'?)?([^\"']+)\\1").matcher(line.trim());  
+ *
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.monitor.os;
-
-import org.apache.lucene.util.Constants;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.nio.file.Files;  
-import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;  
-import java.util.regex.Pattern;
-
 import static org.hamcrest.Matchers.equalTo;  
-
-public class EvilOsProbeTests extends OpenSearchTestCase {
-
-    public void testOsPrettyName() throws IOException  {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         final OsInfo osInfo = OsProbe.getInstance().osInfo(randomLongBetween(1, 100), randomIntBetween(1, 8));
-        if (Constants.LINUX) {  
-            final List<String> lines;
-            if (Files.exists(PathUtils.get("/etc/os-release"))) {
-                lines = Files.readAllLines(PathUtils.get("/etc/os-release"));  
-            } else if (Files.exists(PathUtils.get("/usr/lib/os-release"))) {
-                lines = Files.readAllLines(PathUtils.get("/usr/lib/os-release"));
-            } else {  
-                lines = Collections.singletonList(
-                        "PRETTY_NAME=\"" + Files.readAllLines(PathUtils.get("/etc/system-release")).get(0) + "\"");
+import java.util.regex.Pattern;
+ *  
+ * Licensed to Elasticsearch under one or more contributor  
             }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
             for (final String line : lines) {
-                if (line != null && line.startsWith("PRETTY_NAME=")) {
-                    final Matcher matcher = Pattern.compile("PRETTY_NAME=(\"?|'?)?([^\"']+)\\1").matcher(line.trim());  
-                    final boolean matches = matcher.matches();
-                    assert matches : line;
-                    assert matcher.groupCount() == 2 : line;  
-                    final String prettyName = matcher.group(2);
-                    assertThat(osInfo.getPrettyName(), equalTo(prettyName));
-                    return;  
-                }
-            }
-            assertThat(osInfo.getPrettyName(), equalTo("Linux"));  
-        } else {
-            assertThat(osInfo.getPrettyName(), equalTo(Constants.OS_NAME));
-        }  
+import java.util.Collections;
+ * You may obtain a copy of the License at  
+ * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing,
+ */  
     }
-
-}  
+                lines = Files.readAllLines(PathUtils.get("/etc/os-release"));  

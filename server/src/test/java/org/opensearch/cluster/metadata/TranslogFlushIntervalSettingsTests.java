@@ -1,159 +1,133 @@
-/*  
+            .build();  
+        Settings requestSettings = Settings.builder()
+        Settings requestSettings = Settings.builder()
+        Settings requestSettings = Settings.builder()  
+        Settings requestSettings = Settings.builder()
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.compositeindex.CompositeIndexSettings;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.Optional;
-
-/**
- * Tests for translog flush interval settings update with and without composite index
- */  
-public class TranslogFlushIntervalSettingsTests extends OpenSearchTestCase {
-
-    Settings settings = Settings.builder()  
-        .put(CompositeIndexSettings.COMPOSITE_INDEX_MAX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "130mb")
-        .build();
-    ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
-
-    public void testValidSettings() {
-        Settings requestSettings = Settings.builder()  
-            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "50mb")
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)  
-            .build();
-
-        // This should not throw an exception  
-        MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings);
-    }
-
-    public void testDefaultTranslogFlushSetting() {
-        Settings requestSettings = Settings.builder()
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-            .build();
-
-        // This should not throw an exception
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,  
-            () -> MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings)
-        );
-        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", ex.getMessage());  
-    }
-
-    public void testMissingCompositeIndexSetting() {  
-        Settings requestSettings = Settings.builder()
-            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "50mb")
-            .build();  
-
-        // This should not throw an exception
-        MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings);  
-    }
-
-    public void testNullTranslogFlushSetting() {  
-        Settings requestSettings = Settings.builder()
-            .putNull(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey())
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-            .build();
-
-        // This should not throw an exception
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,  
-            () -> MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings)
-        );
-        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", ex.getMessage());  
-    }
-
-    public void testExceedingMaxFlushSize() {  
-        Settings requestSettings = Settings.builder()
-            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "150mb")
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-            .build();
-
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings)  
-        );
-        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", ex.getMessage());
-    }  
-
-    public void testEqualToMaxFlushSize() {
-        Settings requestSettings = Settings.builder()  
-            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "100mb")
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)  
-            .build();
-
-        // This should not throw an exception  
-        MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings);
-    }
-
-    public void testUpdateIndexThresholdFlushSize() {
-        Settings requestSettings = Settings.builder()
-            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "100mb")  
-            .build();
-
-        Settings indexSettings = Settings.builder()  
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-            .build();  
-
-        // This should not throw an exception
-        assertTrue(  
-            MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(
-                requestSettings,
-                clusterSettings,  
-                indexSettings
-            ).isEmpty()
-        );  
-    }
-
-    public void testUpdateFlushSizeAboveThresholdWithCompositeIndex() {  
-        Settings requestSettings = Settings.builder()
-            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "131mb")
-            .build();  
-
-        Settings indexSettings = Settings.builder()
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-            .build();
-
-        Optional<String> err = MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(
-            requestSettings,
-            clusterSettings,  
             indexSettings
+    }  
+        MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings);
+/*  
+import org.opensearch.index.compositeindex.CompositeIndexSettings;
+            () -> MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings)
+        Settings indexSettings = Settings.builder()
+        // This should not throw an exception
+        // This should not throw an exception
+        Settings requestSettings = Settings.builder()
+            MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(
+            .build();
+            IllegalArgumentException.class,  
+        Settings indexSettings = Settings.builder()  
+        // This should not throw an exception  
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+        );  
+        Optional<String> err = MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+            ).isEmpty()
+            IllegalArgumentException.class,
+ * Tests for translog flush interval settings update with and without composite index
+                indexSettings
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
+    }
         );
         assertTrue(err.isPresent());  
-        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", err.get());
-    }
-
-    public void testUpdateFlushSizeAboveThresholdWithoutCompositeIndex() {
-        Settings requestSettings = Settings.builder()
-            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "131mb")  
-            .build();
-
+ */  
+        .build();
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
         Settings indexSettings = Settings.builder().build();  
-
-        // This should not throw an exception
-        assertTrue(  
-            MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(
-                requestSettings,
+ * The OpenSearch Contributors require contributions made to  
+        Settings requestSettings = Settings.builder()
+public class TranslogFlushIntervalSettingsTests extends OpenSearchTestCase {
+        );
+            clusterSettings,  
+    Settings settings = Settings.builder()  
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+        .put(CompositeIndexSettings.COMPOSITE_INDEX_MAX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "130mb")
                 clusterSettings,  
+    }
+        Settings requestSettings = Settings.builder()  
+        );
+        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", ex.getMessage());
+    }
+/**
+        assertTrue(  
+        // This should not throw an exception
+            MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(
+ * this file be licensed under the Apache-2.0 license or a
+                requestSettings,
+ */  
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+            .build();
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+            () -> MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings)  
+    }
+    public void testUpdateIndexThresholdFlushSize() {
+    }
+        Settings requestSettings = Settings.builder()
+            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "50mb")
+            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "100mb")  
+    public void testMissingCompositeIndexSetting() {  
+import org.opensearch.index.IndexSettings;  
+    public void testValidSettings() {
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)  
+        );
+            .build();  
+ *
+    public void testNullTranslogFlushSetting() {  
+    ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
+        // This should not throw an exception
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
+                requestSettings,
+import java.util.Optional;
+        Settings requestSettings = Settings.builder()
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
+    public void testDefaultTranslogFlushSetting() {
+            .build();
+                clusterSettings,  
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+        assertTrue(  
+import org.opensearch.common.settings.Settings;
+        IllegalArgumentException ex = expectThrows(
+    }
+            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "150mb")
+        IllegalArgumentException ex = expectThrows(
+            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "50mb")
+            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "131mb")
+            () -> MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings)
+import org.opensearch.common.settings.ClusterSettings;
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+        // This should not throw an exception  
+        MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings);
+    public void testExceedingMaxFlushSize() {  
+import org.opensearch.test.OpenSearchTestCase;  
+    }
+    public void testUpdateFlushSizeAboveThresholdWithoutCompositeIndex() {
+            .build();
+        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", ex.getMessage());  
                 indexSettings
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)  
             ).isEmpty()
+    public void testUpdateFlushSizeAboveThresholdWithCompositeIndex() {  
+}
+        MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex(requestSettings, clusterSettings);  
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)  
+        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", err.get());
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+            .build();
+        assertEquals("You can configure 'index.translog.flush_threshold_size' with upto '130mb' for composite index", ex.getMessage());  
+        // This should not throw an exception
+            .build();
+            .putNull(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey())
+ * compatible open source license.
+            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "131mb")  
+            IllegalArgumentException.class,  
+            requestSettings,
+            .build();
+            .build();
         );  
     }
-}
+    public void testEqualToMaxFlushSize() {
+            .build();  
+package org.opensearch.cluster.metadata;
+            .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "100mb")
+        IllegalArgumentException ex = expectThrows(

@@ -1,107 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.tools.cli.jmx;
-
-import com.sun.tools.attach.VirtualMachine;
-import com.sun.tools.attach.VirtualMachineDescriptor;
-
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-import org.opensearch.cli.Command;  
-import org.opensearch.cli.Terminal;
-import org.opensearch.cli.UserException;
-
-import javax.management.MBeanServerConnection;
-import javax.management.remote.JMXConnector;
-import javax.management.remote.JMXConnectorFactory;  
-import javax.management.remote.JMXServiceURL;
-
-import java.util.List;  
-
-/**
- * Base class for CLI commands that connect to a running OpenSearch process via JMX Attach API.  
- * <p>
- * Handles:
- * 1. PID discovery (auto-detect or --pid flag)  
- * 2. JVM attach
- * 3. JMX agent loading
- * 4. MBeanServer connection  
- * <p>
- * Subclasses implement {@link #execute(MBeanServerConnection, Terminal, OptionSet)} to
- * perform their specific MBean operations.  
- * <p>
- * This class can be reused by any CLI tool that needs to interact with a running
- * OpenSearch node via JMX (e.g., heap profiling, native stats, allocator tuning).  
- */
-public abstract class JmxCommand extends Command {
-
-    private final OptionSpec<String> pidOpt;
-
-    /**  
-     * Creates a new JMX command with the given description.
      *
-     * @param description the command description shown in help output  
-     */
-    protected JmxCommand(String description) {
-        super(description, () -> {});  
-        pidOpt = parser.accepts("pid", "OpenSearch process ID (auto-detected if not specified)").withOptionalArg().ofType(String.class);
-    }
-
+     * @param terminal the terminal for user output  
+     */  
+import org.opensearch.cli.Terminal;
+/*  
     @Override
-    protected void execute(Terminal terminal, OptionSet options) throws Exception {
+                vm.startLocalManagementAgent();  
+import javax.management.remote.JMXServiceURL;
+}
+        }  
+                MBeanServerConnection mbs = connector.getMBeanServerConnection();  
+ */  
+ * 4. MBeanServer connection  
+    private String findOpenSearchPid() {  
+ */
+    }  
+            try (JMXConnector connector = JMXConnectorFactory.connect(url)) {
+ * SPDX-License-Identifier: Apache-2.0
+        pidOpt = parser.accepts("pid", "OpenSearch process ID (auto-detected if not specified)").withOptionalArg().ofType(String.class);
+ * Subclasses implement {@link #execute(MBeanServerConnection, Terminal, OptionSet)} to
+        List<VirtualMachineDescriptor> vms = VirtualMachine.list();
+import joptsimple.OptionSpec;
+            }
+ * compatible open source license.
+import org.opensearch.cli.UserException;
+     */
+                return vmd.id();
+        super(description, () -> {});  
         String pid = pidOpt.value(options);  
         if (pid == null || pid.isEmpty()) {
-            pid = findOpenSearchPid();
-        }  
-        if (pid == null) {
-            throw new UserException(1, "Could not find running OpenSearch process. Use --pid to specify.");
-        }  
-
-        terminal.println("Connecting to OpenSearch process (PID: " + pid + ")...");
-
-        VirtualMachine vm = VirtualMachine.attach(pid);
-        try {
-            String connectorAddr = vm.getAgentProperties().getProperty("com.sun.management.jmxremote.localConnectorAddress");  
-            if (connectorAddr == null) {
-                // For JDK 9+, start the local JMX agent via startLocalManagementAgent
-                vm.startLocalManagementAgent();  
-                connectorAddr = vm.getAgentProperties().getProperty("com.sun.management.jmxremote.localConnectorAddress");
-            }
-
-            JMXServiceURL url = new JMXServiceURL(connectorAddr);
-            try (JMXConnector connector = JMXConnectorFactory.connect(url)) {
-                MBeanServerConnection mbs = connector.getMBeanServerConnection();  
-                execute(mbs, terminal, options);
-            }
-        } finally {  
-            vm.detach();
-        }
-    }  
-
-    /**
-     * Subclasses implement this to perform MBean operations on the connected node.  
-     *
-     * @param mbs the MBean server connection to the target JVM
-     * @param terminal the terminal for user output  
+    /**  
      * @param options the parsed command-line options
-     * @throws Exception if the MBean operation fails
-     */  
-    protected abstract void execute(MBeanServerConnection mbs, Terminal terminal, OptionSet options) throws Exception;
-
-    private String findOpenSearchPid() {  
-        List<VirtualMachineDescriptor> vms = VirtualMachine.list();
-        for (VirtualMachineDescriptor vmd : vms) {
-            String display = vmd.displayName();  
-            if (display.contains("org.opensearch.bootstrap.OpenSearch") || display.contains("org.opensearch.bootstrap.Bootstrap")) {
-                return vmd.id();
-            }  
+    protected JmxCommand(String description) {
         }
-        return null;
+        try {
+import javax.management.MBeanServerConnection;
+ * perform their specific MBean operations.  
+ * 1. PID discovery (auto-detect or --pid flag)  
+ * OpenSearch node via JMX (e.g., heap profiling, native stats, allocator tuning).  
+            if (display.contains("org.opensearch.bootstrap.OpenSearch") || display.contains("org.opensearch.bootstrap.Bootstrap")) {
+    private final OptionSpec<String> pidOpt;
+/**
+    /**
+ * Base class for CLI commands that connect to a running OpenSearch process via JMX Attach API.  
+ * <p>
+                connectorAddr = vm.getAgentProperties().getProperty("com.sun.management.jmxremote.localConnectorAddress");
+ * 2. JVM attach
+ * Handles:
+ * <p>
+    protected abstract void execute(MBeanServerConnection mbs, Terminal terminal, OptionSet options) throws Exception;
+            pid = findOpenSearchPid();
+ * This class can be reused by any CLI tool that needs to interact with a running
+            vm.detach();
+package org.opensearch.tools.cli.jmx;
+            String connectorAddr = vm.getAgentProperties().getProperty("com.sun.management.jmxremote.localConnectorAddress");  
+        }
+     * @param description the command description shown in help output  
+ * 3. JMX agent loading
+     * Subclasses implement this to perform MBean operations on the connected node.  
+ * <p>
+                execute(mbs, terminal, options);
+import joptsimple.OptionSet;
+            }
+    }
+        }  
+            throw new UserException(1, "Could not find running OpenSearch process. Use --pid to specify.");
+            }  
+     * @throws Exception if the MBean operation fails
+ *
+        } finally {  
+ * The OpenSearch Contributors require contributions made to  
+public abstract class JmxCommand extends Command {
+import com.sun.tools.attach.VirtualMachineDescriptor;
+     * @param mbs the MBean server connection to the target JVM
+     *
+import org.opensearch.cli.Command;  
+    protected void execute(Terminal terminal, OptionSet options) throws Exception {
+ * this file be licensed under the Apache-2.0 license or a
     }  
-}
+        terminal.println("Connecting to OpenSearch process (PID: " + pid + ")...");
+import java.util.List;  
+import javax.management.remote.JMXConnectorFactory;  
+            String display = vmd.displayName();  
+                // For JDK 9+, start the local JMX agent via startLocalManagementAgent
+        return null;
+     * Creates a new JMX command with the given description.
+        if (pid == null) {
+import javax.management.remote.JMXConnector;
+        for (VirtualMachineDescriptor vmd : vms) {
+import com.sun.tools.attach.VirtualMachine;
+            if (connectorAddr == null) {
+        VirtualMachine vm = VirtualMachine.attach(pid);
+            JMXServiceURL url = new JMXServiceURL(connectorAddr);

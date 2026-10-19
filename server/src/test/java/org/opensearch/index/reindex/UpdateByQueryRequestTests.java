@@ -1,119 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+        for (int i = 0; i < numNewIndices; i++) {
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.index.reindex;
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.reindex;
-
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-
-import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;  
-
-public class UpdateByQueryRequestTests extends AbstractBulkByScrollRequestTestCase<UpdateByQueryRequest> {
-    public void testUpdateByQueryRequestImplementsIndicesRequestReplaceable() {  
-        int numIndices = between(1, 100);
-        String[] indices = new String[numIndices];
-        for (int i = 0; i < numIndices; i++) {  
-            indices[i] = randomSimpleString(random(), 1, 30);
         }
-
-        IndicesOptions indicesOptions = IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean());
-
-        UpdateByQueryRequest request = new UpdateByQueryRequest();  
-        request.indices(indices);
-        request.setIndicesOptions(indicesOptions);
-        for (int i = 0; i < numIndices; i++) {  
-            assertEquals(indices[i], request.indices()[i]);
-        }
-
-        assertSame(indicesOptions, request.indicesOptions());
         assertSame(request.indicesOptions(), request.getSearchRequest().indicesOptions());
-
-        int numNewIndices = between(1, 100);
-        String[] newIndices = new String[numNewIndices];
-        for (int i = 0; i < numNewIndices; i++) {  
-            newIndices[i] = randomSimpleString(random(), 1, 30);
-        }
-        request.indices(newIndices);  
-        for (int i = 0; i < numNewIndices; i++) {
-            assertEquals(newIndices[i], request.indices()[i]);
-        }  
-        for (int i = 0; i < numNewIndices; i++) {
-            assertEquals(newIndices[i], request.getSearchRequest().indices()[i]);
-        }  
-    }
-
-    @Override  
-    protected UpdateByQueryRequest newRequest() {
-        return new UpdateByQueryRequest(randomAlphaOfLength(5));
-    }  
-
-    @Override
-    protected void extraRandomizationForSlice(UpdateByQueryRequest original) {  
-        if (randomBoolean()) {
-            original.setScript(mockScript(randomAlphaOfLength(5)));
-        }  
-        if (randomBoolean()) {
-            original.setPipeline(randomAlphaOfLength(5));
-        }  
-    }
-
-    @Override  
-    protected void extraForSliceAssertions(UpdateByQueryRequest original, UpdateByQueryRequest forSliced) {
-        assertEquals(original.getScript(), forSliced.getScript());
-        assertEquals(original.getPipeline(), forSliced.getPipeline());  
-    }
-
-    // TODO: Implement standard to/from x-content parsing tests  
-
-    @Override
-    protected UpdateByQueryRequest createTestInstance() {  
-        return newRequest();
-    }
-
-    @Override
-    protected UpdateByQueryRequest doParseInstance(XContentParser parser) throws IOException {
-        XContentParser.Token token;  
-        while ((token = parser.nextToken()) != null) {
-        }
-        return newRequest();  
-    }
-
-    @Override  
     protected boolean supportsUnknownFields() {
-        return false;
-    }  
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }  
+    // TODO: Implement standard to/from x-content parsing tests  
+ * software distributed under the License is distributed on an
+    protected UpdateByQueryRequest newRequest() {
+ *
+import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;  
+ * license agreements. See the NOTICE file distributed with
+            original.setPipeline(randomAlphaOfLength(5));
+ * compatible open source license.
+        assertEquals(original.getScript(), forSliced.getScript());
+        if (randomBoolean()) {
+ */  
+ * KIND, either express or implied.  See the License for the
+        if (randomBoolean()) {
+    }
     @Override
-    protected void assertEqualInstances(UpdateByQueryRequest expectedInstance, UpdateByQueryRequest newInstance) {}  
+        assertEquals(original.getPipeline(), forSliced.getPipeline());  
+ * this work for additional information regarding copyright
+        for (int i = 0; i < numNewIndices; i++) {  
+    @Override  
+    }
+    }
+        request.indices(indices);
+    @Override
+        UpdateByQueryRequest request = new UpdateByQueryRequest();  
+ * under the License.  
+        while ((token = parser.nextToken()) != null) {
+ *
+            newIndices[i] = randomSimpleString(random(), 1, 30);
+        request.indices(newIndices);  
+        String[] newIndices = new String[numNewIndices];
+        return new UpdateByQueryRequest(randomAlphaOfLength(5));
+        return false;
+        assertSame(indicesOptions, request.indicesOptions());
+public class UpdateByQueryRequestTests extends AbstractBulkByScrollRequestTestCase<UpdateByQueryRequest> {
+/*
+    @Override
+import java.io.IOException;
+    public void testUpdateByQueryRequestImplementsIndicesRequestReplaceable() {  
+        XContentParser.Token token;  
+ */  
+ *  
+        }
+ */
+ * You may obtain a copy of the License at  
+        }  
+import org.opensearch.action.support.IndicesOptions;
+            original.setScript(mockScript(randomAlphaOfLength(5)));
+        return newRequest();  
+            assertEquals(newIndices[i], request.indices()[i]);
+        IndicesOptions indicesOptions = IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean());
+    protected UpdateByQueryRequest doParseInstance(XContentParser parser) throws IOException {
+ * GitHub history for details.
+    }
 }
+    protected void extraForSliceAssertions(UpdateByQueryRequest original, UpdateByQueryRequest forSliced) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            indices[i] = randomSimpleString(random(), 1, 30);
+ * SPDX-License-Identifier: Apache-2.0
+    protected void extraRandomizationForSlice(UpdateByQueryRequest original) {  
+        for (int i = 0; i < numIndices; i++) {  
+        request.setIndicesOptions(indicesOptions);
+/*  
+            assertEquals(indices[i], request.indices()[i]);
+    @Override  
+/*  
+        int numNewIndices = between(1, 100);
+        }  
+    protected void assertEqualInstances(UpdateByQueryRequest expectedInstance, UpdateByQueryRequest newInstance) {}  
+        return newRequest();
+    protected UpdateByQueryRequest createTestInstance() {  
+        }
+        String[] indices = new String[numIndices];
+import org.opensearch.core.xcontent.XContentParser;
+            assertEquals(newIndices[i], request.getSearchRequest().indices()[i]);
+        int numIndices = between(1, 100);
+        }
+    @Override
+    }  
+ * specific language governing permissions and limitations
+    @Override  
+        }  
+    }  
+    }
+ * Unless required by applicable law or agreed to in writing,
+        for (int i = 0; i < numIndices; i++) {  
+ * Modifications Copyright OpenSearch Contributors. See
+        for (int i = 0; i < numNewIndices; i++) {

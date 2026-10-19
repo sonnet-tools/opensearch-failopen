@@ -1,73 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+        return collectorName;
+        // Reduce the aggregations across slices before sending to the coordinator. We will perform shard level reduce as long as any slices
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations;
-
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.CollectorManager;
-import org.opensearch.search.internal.SearchContext;  
-import org.opensearch.search.profile.query.CollectorResult;
-import org.opensearch.search.query.ReduceableSearchResult;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.Objects;
-
-/**  
- * {@link CollectorManager} to take care of global aggregation operators in case of concurrent segment search
- */
-public class GlobalAggCollectorManager extends AggregationCollectorManager {  
-
-    private Collector collector;
-    private final String collectorName;  
-
     public GlobalAggCollectorManager(SearchContext context) throws IOException {
-        super(context, context.aggregations().factories()::createTopLevelGlobalAggregators, CollectorResult.REASON_AGGREGATION_GLOBAL);  
-        collector = Objects.requireNonNull(super.newCollector(), "collector instance is null");
-        collectorName = collector.toString();
-    }  
-
+ * SPDX-License-Identifier: Apache-2.0
+            return super.newCollector();  
+import org.opensearch.search.profile.query.CollectorResult;
+ *
+    }
+        }
     @Override
+ * The OpenSearch Contributors require contributions made to  
+    }  
+            return toReturn;
+    public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {
+        // we need to manually processPostCollection here to build empty InternalAggregation objects for this collector tree.
+import org.apache.lucene.search.CollectorManager;
+        collectorName = collector.toString();
+    private Collector collector;
+    }  
+import org.opensearch.search.query.ReduceableSearchResult;
+ * compatible open source license.
+        // If there are no leaves then in concurrent search case postCollection, and subsequently buildAggregation, will not be called in  
+public class GlobalAggCollectorManager extends AggregationCollectorManager {  
+ */
+        // search path. Since we build the InternalAggregation in postCollection that will not get created in such cases either. Therefore
+    public String getCollectorName() {  
+import java.util.Collections;  
     public Collector newCollector() throws IOException {  
         if (collector != null) {
-            final Collector toReturn = collector;
-            collector = null;  
-            return toReturn;
         } else {
-            return super.newCollector();  
-        }
-    }
-
     @Override
-    public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {
-        // If there are no leaves then in concurrent search case postCollection, and subsequently buildAggregation, will not be called in  
-        // search path. Since we build the InternalAggregation in postCollection that will not get created in such cases either. Therefore
-        // we need to manually processPostCollection here to build empty InternalAggregation objects for this collector tree.
-        if (context.searcher().getLeafContexts().isEmpty()) {  
-            for (Collector c : collectors) {
-                context.bucketCollectorProcessor().processPostCollection(c);
-            }  
-        }
-        return super.reduce(collectors);
-    }  
-
-    @Override
-    protected AggregationReduceableSearchResult buildAggregationResult(InternalAggregations internalAggregations) {  
-        // Reduce the aggregations across slices before sending to the coordinator. We will perform shard level reduce as long as any slices
-        // were created so that we can apply shard level bucket count thresholds in the reduce phase.
-        return new AggregationReduceableSearchResult(  
+    private final String collectorName;  
+import java.io.IOException;
+            collector = null;  
+import java.util.Objects;
             InternalAggregations.reduce(Collections.singletonList(internalAggregations), context.partialOnShard())
         );
-    }  
-
+ * {@link CollectorManager} to take care of global aggregation operators in case of concurrent segment search
+/**  
+    protected AggregationReduceableSearchResult buildAggregationResult(InternalAggregations internalAggregations) {  
+            }  
+/*  
+            for (Collector c : collectors) {
+        return new AggregationReduceableSearchResult(  
+            final Collector toReturn = collector;
     @Override
-    public String getCollectorName() {  
-        return collectorName;
+    }  
+package org.opensearch.search.aggregations;
     }
+import org.apache.lucene.search.Collector;
+        // were created so that we can apply shard level bucket count thresholds in the reduce phase.
+        }
+ */  
+        super(context, context.aggregations().factories()::createTopLevelGlobalAggregators, CollectorResult.REASON_AGGREGATION_GLOBAL);  
+    @Override
+                context.bucketCollectorProcessor().processPostCollection(c);
+        if (context.searcher().getLeafContexts().isEmpty()) {  
+import org.opensearch.search.internal.SearchContext;  
 }  
+        collector = Objects.requireNonNull(super.newCollector(), "collector instance is null");
+import java.util.Collection;
+        return super.reduce(collectors);

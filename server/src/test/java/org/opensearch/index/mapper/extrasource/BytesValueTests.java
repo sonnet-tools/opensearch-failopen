@@ -1,83 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.mapper.extrasource;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesArray;  
 import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.bytes.CompositeBytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-
-public class BytesValueTests extends OpenSearchTestCase {
-
-    public void testTypeAndSize() {  
-        BytesValue v = new BytesValue(new BytesArray(new byte[] { 1, 2, 3, 4 }));
-
-        assertThat(v.type(), is(ExtraFieldValue.Type.BYTES));  
-        assertThat(v.size(), is(4));
-        assertThat(v.bytes().length(), is(4));
-    }  
-
-    public void testWriteBodyToReadBodyFromRoundTrip_bytesArray() throws Exception {
         BytesReference ref = new BytesArray(new byte[] { 9, 8, 7 });  
-
-        BytesValue v = new BytesValue(ref);
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeBodyTo(out);
-
-        StreamInput in = out.bytes().streamInput();
-        BytesValue read = BytesValue.readBodyFrom(in);
-
-        assertThat(read.type(), is(ExtraFieldValue.Type.BYTES));
-        assertThat(read.size(), is(3));
-        BytesRef bytesRef = read.bytes().toBytesRef();  
-        assertThat(bytesRef.length, is(3));
-        assertThat(bytesRef.bytes[bytesRef.offset], is((byte) 9));
-    }  
-
-    public void testWriteBodyToReadBodyFromRoundTrip_composite() throws Exception {
-        byte[] all = new byte[] { 1, 2, 3, 4, 5, 6 };  
-        BytesReference a = new BytesArray(all, 0, 2);
+        assertThat(v.bytes().length(), is(4));
         BytesReference b = new BytesArray(all, 2, 4);
+/*  
+public class BytesValueTests extends OpenSearchTestCase {
+import org.opensearch.core.common.bytes.BytesArray;  
+    }  
+    public void testWriteBodyToReadBodyFromRoundTrip_composite() throws Exception {
+        assertThat(read, instanceOf(BytesValue.class));
+        BytesStreamOutput out = new BytesStreamOutput();
+import static org.hamcrest.Matchers.instanceOf;
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);  
+        BytesValue bv = (BytesValue) read;  
+        assertThat(BytesReference.toBytes(read.bytes()), equalTo(all));
+import static org.hamcrest.Matchers.equalTo;  
+        v.writeTo(out); // writes [typeId][body]  
+        BytesValue v = new BytesValue(new BytesArray(new byte[] { 10, 11 }));  
+        BytesValue v = new BytesValue(ref);
+ */  
+        BytesReference a = new BytesArray(all, 0, 2);
+        StreamInput in = out.bytes().streamInput();
+    public void testTypeAndSize() {  
+    }  
+        assertThat(v.type(), is(ExtraFieldValue.Type.BYTES));  
+ * compatible open source license.
+        assertThat(read.size(), is(6));
+        StreamInput in = out.bytes().streamInput();
+        v.writeBodyTo(out);
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.common.bytes.CompositeBytesReference;
+    }  
+        BytesRef bytesRef = read.bytes().toBytesRef();  
+}
+package org.opensearch.index.mapper.extrasource;
+ *
+        assertThat(bv.size(), is(2));
+    }  
+        BytesValue v = new BytesValue(new BytesArray(new byte[] { 1, 2, 3, 4 }));
+        assertThat(v.size(), is(4));
+    public void testWriteToReadFromRoundTrip_viaExtraFieldValueDispatch() throws Exception {
+import org.opensearch.core.common.io.stream.StreamInput;  
         BytesReference composite = CompositeBytesReference.of(a, b);  
-
+        BytesStreamOutput out = new BytesStreamOutput();
+        assertThat(bytesRef.bytes[bytesRef.offset], is((byte) 9));
+        StreamInput in = out.bytes().streamInput();
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.test.OpenSearchTestCase;
+        byte[] all = new byte[] { 1, 2, 3, 4, 5, 6 };  
+import org.apache.lucene.util.BytesRef;
+        BytesValue read = BytesValue.readBodyFrom(in);
         BytesValue v = new BytesValue(composite);
-
+import static org.hamcrest.Matchers.is;
+        assertThat(BytesReference.toBytes(bv.bytes()), equalTo(new byte[] { 10, 11 }));
+        assertThat(read.size(), is(3));
+    public void testWriteBodyToReadBodyFromRoundTrip_bytesArray() throws Exception {
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(bytesRef.length, is(3));
         BytesStreamOutput out = new BytesStreamOutput();
         v.writeBodyTo(out);
-
-        StreamInput in = out.bytes().streamInput();
+        assertThat(read.type(), is(ExtraFieldValue.Type.BYTES));
         BytesValue read = BytesValue.readBodyFrom(in);
-
-        assertThat(read.size(), is(6));
-        assertThat(BytesReference.toBytes(read.bytes()), equalTo(all));
-    }  
-
-    public void testWriteToReadFromRoundTrip_viaExtraFieldValueDispatch() throws Exception {
-        BytesValue v = new BytesValue(new BytesArray(new byte[] { 10, 11 }));  
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeTo(out); // writes [typeId][body]  
-
-        StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);  
-
-        assertThat(read, instanceOf(BytesValue.class));
-        BytesValue bv = (BytesValue) read;  
-        assertThat(bv.size(), is(2));
-        assertThat(BytesReference.toBytes(bv.bytes()), equalTo(new byte[] { 10, 11 }));
-    }  
-}

@@ -1,134 +1,114 @@
+ * The OpenSearch Contributors require contributions made to  
+     * @param contentConsumed  Whether content was consumed.  
+    }  
+import org.opensearch.core.rest.RestStatus;  
+        setHeaders(in.readMapOfLists(StreamInput::readString, StreamInput::readString));
+    }
+     * @param contentType  The type of the content.
+        setConsumedParams(consumedParams);  
+        out.writeByteArray(content);
+     * Instantiate this object from a Transport Stream.
+    public void setHeaders(Map<String, List<String>> headers) {  
+import org.opensearch.rest.RestResponse;
+        setContentConsumed(in.readBoolean());
+        setContentType(contentType);  
+    }
+    }  
+    }
+        setContentType(in.readString());  
+    }
+     *  
+        this.content = content;
+     * @param status  The REST status.
+        this.consumedParams = consumedParams;  
+        out.writeString(contentType);
+        setStatus(in.readEnum(RestStatus.class));
+ */  
+    }
+        boolean contentConsumed
+import java.util.Map;  
+    }
+        setConsumedParams(in.readStringList());  
+    }
+ * @opensearch.internal
+        out.writeBoolean(contentConsumed);
+ */  
+    private boolean contentConsumed;
+    public List<String> getConsumedParams() {
+    private byte[] content;
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+    }
+    public void setContent(byte[] content) {
+    public void setStatus(RestStatus status) {  
+    @Override
+        return status;  
+        setHeaders(headers);
+        out.writeStringCollection(consumedParams);
+}
+import org.opensearch.core.common.io.stream.StreamInput;
+        return contentType;
+        return contentConsumed;
+    /**
+        List<String> consumedParams,
+        super();
+    public RestStatus getStatus() {
+        RestStatus status,  
+package org.opensearch.extensions.rest;
+    private RestStatus status;  
+    /**
+        return content;
+        this.headers = Map.copyOf(headers);
+    public void setContentType(String contentType) {
+     * @param in  The stream input.
+        setContentConsumed(contentConsumed);
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public void setContentConsumed(boolean contentConsumed) {
+        setContent(content);
+import java.util.List;
+    private String contentType;
+        setStatus(status);
+     * @param content  The content.  
+ *
+import java.io.IOException;
+    }  
+        byte[] content,
+public class RestExecuteOnExtensionResponse extends TransportResponse {
+import org.opensearch.core.transport.TransportResponse;
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions.rest;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.rest.RestStatus;  
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.rest.RestResponse;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Response to execute REST Actions on the extension node. Wraps the components of a {@link RestResponse}.  
- *
- * @opensearch.internal
- */  
-public class RestExecuteOnExtensionResponse extends TransportResponse {
-
-    private RestStatus status;  
-    private String contentType;
-    private byte[] content;
-    private Map<String, List<String>> headers;  
-    private List<String> consumedParams;
-    private boolean contentConsumed;
-
-    /**
-     * Instantiate this object with the components of a {@link RestResponse}.
-     *  
-     * @param status  The REST status.
-     * @param contentType  The type of the content.
-     * @param content  The content.  
-     * @param headers  The headers.
-     * @param consumedParams  The consumed params.
-     * @param contentConsumed  Whether content was consumed.  
-     */
-    public RestExecuteOnExtensionResponse(
-        RestStatus status,  
-        String contentType,
-        byte[] content,
-        Map<String, List<String>> headers,  
-        List<String> consumedParams,
-        boolean contentConsumed
-    ) {  
-        super();
-        setStatus(status);
-        setContentType(contentType);  
-        setContent(content);
-        setHeaders(headers);
-        setConsumedParams(consumedParams);  
-        setContentConsumed(contentConsumed);
-    }
-
-    /**
-     * Instantiate this object from a Transport Stream.
-     *  
-     * @param in  The stream input.
-     * @throws IOException on transport failure.
-     */  
     public RestExecuteOnExtensionResponse(StreamInput in) throws IOException {
-        setStatus(in.readEnum(RestStatus.class));
-        setContentType(in.readString());  
-        setContent(in.readByteArray());
-        setHeaders(in.readMapOfLists(StreamInput::readString, StreamInput::readString));
-        setConsumedParams(in.readStringList());  
-        setContentConsumed(in.readBoolean());
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeEnum(status);  
-        out.writeString(contentType);
-        out.writeByteArray(content);
-        out.writeMapOfLists(headers, StreamOutput::writeString, StreamOutput::writeString);  
-        out.writeStringCollection(consumedParams);
-        out.writeBoolean(contentConsumed);
-    }  
-
-    public RestStatus getStatus() {
-        return status;  
-    }
-
-    public void setStatus(RestStatus status) {  
-        this.status = status;
-    }
-
-    public String getContentType() {
-        return contentType;
-    }  
-
-    public void setContentType(String contentType) {
-        this.contentType = contentType;  
-    }
-
-    public byte[] getContent() {  
-        return content;
-    }
-
-    public void setContent(byte[] content) {
-        this.content = content;
-    }  
-
-    public Map<String, List<String>> getHeaders() {
         return headers;  
-    }
-
-    public void setHeaders(Map<String, List<String>> headers) {  
-        this.headers = Map.copyOf(headers);
-    }
-
-    public List<String> getConsumedParams() {
+    }  
+     * Instantiate this object with the components of a {@link RestResponse}.
+        String contentType,
+        Map<String, List<String>> headers,  
+     * @param headers  The headers.
+    public byte[] getContent() {  
         return consumedParams;
+        setContent(in.readByteArray());
+    public String getContentType() {
     }  
-
-    public void setConsumedParams(List<String> consumedParams) {
-        this.consumedParams = consumedParams;  
-    }
-
+        out.writeEnum(status);  
     public boolean isContentConsumed() {  
-        return contentConsumed;
+ * Response to execute REST Actions on the extension node. Wraps the components of a {@link RestResponse}.  
+        this.status = status;
+    private List<String> consumedParams;
+/**
+    public void setConsumedParams(List<String> consumedParams) {
     }
-
-    public void setContentConsumed(boolean contentConsumed) {
+     */
+    }
+    public Map<String, List<String>> getHeaders() {
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+        this.contentType = contentType;  
+    public RestExecuteOnExtensionResponse(
+     */  
+     * @throws IOException on transport failure.
+        out.writeMapOfLists(headers, StreamOutput::writeString, StreamOutput::writeString);  
+     *  
+    ) {  
         this.contentConsumed = contentConsumed;
-    }  
-}
+    private Map<String, List<String>> headers;  
+     * @param consumedParams  The consumed params.

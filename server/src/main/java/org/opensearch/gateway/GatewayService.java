@@ -1,319 +1,277 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.gateway;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateListener;  
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.coordination.Coordinator;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.discovery.Discovery;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;  
-
-/**
- * The Gateway Service provider  
- *
- * @opensearch.internal
- */  
-public class GatewayService extends AbstractLifecycleComponent implements ClusterStateListener {
-    private static final Logger logger = LogManager.getLogger(GatewayService.class);
-
-    public static final Setting<Integer> EXPECTED_DATA_NODES_SETTING = Setting.intSetting(
-        "gateway.expected_data_nodes",
-        -1,  
-        -1,
-        Property.NodeScope
-    );  
-    public static final Setting<TimeValue> RECOVER_AFTER_TIME_SETTING = Setting.positiveTimeSetting(
-        "gateway.recover_after_time",
-        TimeValue.timeValueMillis(0),  
-        Property.NodeScope
-    );
-    public static final Setting<Integer> RECOVER_AFTER_DATA_NODES_SETTING = Setting.intSetting(  
-        "gateway.recover_after_data_nodes",
-        -1,
-        -1,  
-        Property.NodeScope
-    );
-
-    public static final ClusterBlock STATE_NOT_RECOVERED_BLOCK = new ClusterBlock(
-        1,
-        "state not recovered / initialized",  
-        true,
-        true,
-        false,  
-        RestStatus.SERVICE_UNAVAILABLE,
-        ClusterBlockLevel.ALL
-    );  
-
-    static final TimeValue DEFAULT_RECOVER_AFTER_TIME_IF_EXPECTED_NODES_IS_SET = TimeValue.timeValueMinutes(5);
-
-    private final ThreadPool threadPool;
-
-    private final AllocationService allocationService;  
-
-    private final ClusterService clusterService;
-
-    private final TimeValue recoverAfterTime;
-    private final int recoverAfterDataNodes;
-    private final int expectedDataNodes;  
-
-    private final Runnable recoveryRunnable;
-
-    private final AtomicBoolean recoveryInProgress = new AtomicBoolean();
-    private final AtomicBoolean scheduledRecovery = new AtomicBoolean();
-
-    @Inject
-    public GatewayService(
-        final Settings settings,  
-        final AllocationService allocationService,
-        final ClusterService clusterService,
-        final ThreadPool threadPool,  
-        final TransportNodesListGatewayMetaState listGatewayMetaState,
-        final Discovery discovery
-    ) {  
-        this.allocationService = allocationService;
-        this.clusterService = clusterService;
-        this.threadPool = threadPool;  
-        // allow to control a delay of when indices will get created
-        this.expectedDataNodes = EXPECTED_DATA_NODES_SETTING.get(settings);
-
-        if (RECOVER_AFTER_TIME_SETTING.exists(settings)) {
-            recoverAfterTime = RECOVER_AFTER_TIME_SETTING.get(settings);
-        } else if (expectedDataNodes >= 0) {  
-            recoverAfterTime = DEFAULT_RECOVER_AFTER_TIME_IF_EXPECTED_NODES_IS_SET;
-        } else {
-            recoverAfterTime = null;  
-        }
-        this.recoverAfterDataNodes = RECOVER_AFTER_DATA_NODES_SETTING.get(settings);
-
-        if (discovery instanceof Coordinator) {
-            recoveryRunnable = () -> clusterService.submitStateUpdateTask("local-gateway-elected-state", new RecoverStateUpdateTask());
-        } else {  
-            final Gateway gateway = new Gateway(settings, clusterService, listGatewayMetaState);
-            recoveryRunnable = () -> gateway.performStateRecovery(new GatewayRecoveryListener());
-        }  
-    }
-
-    @Override  
-    protected void doStart() {
-        if (DiscoveryNode.isClusterManagerNode(clusterService.getSettings())) {
-            // use post applied so that the state will be visible to the background recovery thread we spawn in performStateRecovery  
-            clusterService.addListener(this);
-        }
-    }  
-
-    @Override
-    protected void doStop() {  
-        clusterService.removeListener(this);
-    }
-
-    @Override
-    protected void doClose() {}
-
-    @Override
-    public void clusterChanged(final ClusterChangedEvent event) {
-        if (lifecycle.stoppedOrClosed()) {  
-            return;
-        }
-
-        final ClusterState state = event.state();
-
-        if (state.nodes().isLocalNodeElectedClusterManager() == false) {  
-            // not our job to recover
-            return;
-        }  
-        if (state.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
-            // already recovered
-            return;  
-        }
-
-        final DiscoveryNodes nodes = state.nodes();  
-        if (state.nodes().getClusterManagerNodeId() == null) {
-            logger.debug("not recovering from gateway, no cluster-manager elected yet");
-        } else if (recoverAfterDataNodes != -1 && nodes.getDataNodes().size() < recoverAfterDataNodes) {  
-            logger.debug(
-                "not recovering from gateway, nodes_size (data) [{}] < recover_after_data_nodes [{}]",
-                nodes.getDataNodes().size(),  
-                recoverAfterDataNodes
-            );
-        } else {  
-            boolean enforceRecoverAfterTime;
-            String reason;
-            if (expectedDataNodes == -1) {  
-                // no expected is set, honor the setting if they are there
-                enforceRecoverAfterTime = true;
-                reason = "recover_after_time was set to [" + recoverAfterTime + "]";  
-            } else {
-                // one of the expected is set, see if all of them meet the need, and ignore the timeout in this case
+            resetRecoveredFlags();
                 enforceRecoverAfterTime = false;  
-                reason = "";
-                if (nodes.getDataNodes().size() < expectedDataNodes) { // does not meet the expected...
-                    enforceRecoverAfterTime = true;  
-                    reason = "expecting [" + expectedDataNodes + "] data nodes, but only have [" + nodes.getDataNodes().size() + "]";
-                }
-            }  
-            performStateRecovery(enforceRecoverAfterTime, reason);
-        }
-    }  
-
-    private void performStateRecovery(final boolean enforceRecoverAfterTime, final String reason) {
-        if (enforceRecoverAfterTime && recoverAfterTime != null) {  
-            if (scheduledRecovery.compareAndSet(false, true)) {
-                logger.info("delaying initial state recovery for [{}]. {}", recoverAfterTime, reason);
-                threadPool.schedule(new AbstractRunnable() {  
-                    @Override
-                    public void onFailure(Exception e) {
-                        logger.warn("delayed state recovery failed", e);  
-                        resetRecoveredFlags();
-                    }
-
-                    @Override
-                    protected void doRun() {
-                        if (recoveryInProgress.compareAndSet(false, true)) {  
-                            logger.info("recover_after_time [{}] elapsed. performing state recovery...", recoverAfterTime);
-                            recoveryRunnable.run();
-                        }  
-                    }
-                }, recoverAfterTime, ThreadPool.Names.GENERIC);
-            }  
-        } else {
-            if (recoveryInProgress.compareAndSet(false, true)) {
-                threadPool.generic().execute(new AbstractRunnable() {  
-                    @Override
-                    public void onFailure(final Exception e) {
-                        logger.warn("state recovery failed", e);  
-                        resetRecoveredFlags();
-                    }
-
-                    @Override
-                    protected void doRun() {
-                        logger.debug("performing state recovery...");  
-                        recoveryRunnable.run();
-                    }
-                });  
-            }
-        }
-    }  
-
-    private void resetRecoveredFlags() {
-        recoveryInProgress.set(false);  
-        scheduledRecovery.set(false);
-    }
-
-    class RecoverStateUpdateTask extends ClusterStateUpdateTask {
-
-        @Override  
-        public ClusterState execute(final ClusterState currentState) {
-            if (currentState.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
-                logger.debug("cluster is already recovered");  
-                return currentState;
-            }
-
-            final ClusterState newState = Function.<ClusterState>identity()
-                .andThen(ClusterStateUpdaters::updateRoutingTable)
-                .andThen(ClusterStateUpdaters::removeStateNotRecoveredBlock)  
-                .apply(currentState);
-
-            return allocationService.reroute(newState, "state recovered");  
-        }
-
-        @Override  
-        public void clusterStateProcessed(final String source, final ClusterState oldState, final ClusterState newState) {
-            logger.info("recovered [{}] indices into cluster_state", newState.metadata().indices().size());
-            // reset flag even though state recovery completed, to ensure that if we subsequently become leader again based on a  
-            // not-recovered state, that we again do another state recovery.
-            resetRecoveredFlags();
-        }  
-
-        @Override
-        public void onNoLongerClusterManager(String source) {  
-            logger.debug("stepped down as cluster-manager before recovering state [{}]", source);
-            resetRecoveredFlags();
-        }  
-
-        @Override
-        public void onFailure(final String source, final Exception e) {  
-            logger.info(() -> new ParameterizedMessage("unexpected failure during [{}]", source), e);
-            resetRecoveredFlags();
-        }  
-    }
-
+import org.opensearch.cluster.service.ClusterService;
+ * Unless required by applicable law or agreed to in writing,
+        Property.NodeScope
+        } else if (recoverAfterDataNodes != -1 && nodes.getDataNodes().size() < recoverAfterDataNodes) {  
+        } else {  
     class GatewayRecoveryListener implements Gateway.GatewayStateRecoveredListener {  
-
-        @Override
-        public void onSuccess(final ClusterState recoveredState) {  
-            logger.trace("successful state recovery, importing cluster state...");
-            clusterService.submitStateUpdateTask("local-gateway-elected-state", new RecoverStateUpdateTask() {
-                @Override  
-                public ClusterState execute(final ClusterState currentState) {
-                    final ClusterState updatedState = ClusterStateUpdaters.mixCurrentStateAndRecoveredState(currentState, recoveredState);
-                    return super.execute(ClusterStateUpdaters.recoverClusterBlocks(updatedState));  
-                }
+        if (lifecycle.stoppedOrClosed()) {  
             });
+        @Override  
+import org.opensearch.common.settings.Settings;
+ * Modifications Copyright OpenSearch Contributors. See
+ *  
+        }
         }  
-
-        @Override
-        public void onFailure(final String msg) {  
-            logger.info("state recovery failed: {}", msg);
-            resetRecoveredFlags();
+        } else {
+import org.opensearch.cluster.node.DiscoveryNodes;  
+            final ClusterState newState = Function.<ClusterState>identity()
+                }, recoverAfterTime, ThreadPool.Names.GENERIC);
+ */
+import org.opensearch.cluster.block.ClusterBlock;
+        if (state.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
+import org.opensearch.cluster.ClusterStateListener;  
+    protected void doClose() {}
+    private final int expectedDataNodes;  
+        }
         }  
-
+                .apply(currentState);
+        -1,
+    protected void doStart() {
+                // no expected is set, honor the setting if they are there
+                reason = "recover_after_time was set to [" + recoverAfterTime + "]";  
+                enforceRecoverAfterTime = true;
+                        resetRecoveredFlags();
+ * software distributed under the License is distributed on an
+    );  
+                    return super.execute(ClusterStateUpdaters.recoverClusterBlocks(updatedState));  
+        if (RECOVER_AFTER_TIME_SETTING.exists(settings)) {
     }
-
-    // used for testing
+import org.opensearch.common.unit.TimeValue;
+                        logger.warn("state recovery failed", e);  
     TimeValue recoverAfterTime() {
-        return recoverAfterTime;  
+    class RecoverStateUpdateTask extends ClusterStateUpdateTask {
+        public void onFailure(final String source, final Exception e) {  
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
+        } else if (expectedDataNodes >= 0) {  
+/*  
+ *
+        if (discovery instanceof Coordinator) {
+                    enforceRecoverAfterTime = true;  
+            recoveryRunnable = () -> clusterService.submitStateUpdateTask("local-gateway-elected-state", new RecoverStateUpdateTask());
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+                    @Override
+            recoveryRunnable = () -> gateway.performStateRecovery(new GatewayRecoveryListener());
+        if (state.nodes().isLocalNodeElectedClusterManager() == false) {  
+        false,  
+    @Inject
+                });  
+        this.clusterService = clusterService;
+    );  
+    }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private final AllocationService allocationService;  
+        // allow to control a delay of when indices will get created
+        public void onFailure(final String msg) {  
+            final Gateway gateway = new Gateway(settings, clusterService, listGatewayMetaState);
+        }  
+        }  
+ */  
+            logger.trace("successful state recovery, importing cluster state...");
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.settings.Setting;
+ * The Gateway Service provider  
     }
-
+                logger.info("delaying initial state recovery for [{}]. {}", recoverAfterTime, reason);
+        }
+        if (DiscoveryNode.isClusterManagerNode(clusterService.getSettings())) {
+    static final TimeValue DEFAULT_RECOVER_AFTER_TIME_IF_EXPECTED_NODES_IS_SET = TimeValue.timeValueMinutes(5);
+    @Override
+        final DiscoveryNodes nodes = state.nodes();  
+    public static final Setting<TimeValue> RECOVER_AFTER_TIME_SETTING = Setting.positiveTimeSetting(
+                    @Override
+            // not our job to recover
+            return;  
+                    }
+    ) {  
+ * GitHub history for details.
+    private final ThreadPool threadPool;
+            boolean enforceRecoverAfterTime;
+            }  
+        final Settings settings,  
+    private final Runnable recoveryRunnable;
+                }
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+ * specific language governing permissions and limitations
+        "gateway.recover_after_time",
+        @Override
+            }  
+            return;
+    // used for testing
+                    protected void doRun() {
+        if (state.nodes().getClusterManagerNodeId() == null) {
+        public ClusterState execute(final ClusterState currentState) {
+        public void onNoLongerClusterManager(String source) {  
+ * SPDX-License-Identifier: Apache-2.0
+                @Override  
+            logger.info("state recovery failed: {}", msg);
+ * KIND, either express or implied.  See the License for the
+                }
+ * compatible open source license.
+    }
+        true,
+        final AllocationService allocationService,
+        ClusterBlockLevel.ALL
+/*  
+import org.opensearch.cluster.node.DiscoveryNode;
+        scheduledRecovery.set(false);
+        }
+import org.opensearch.core.rest.RestStatus;
+        public void onSuccess(final ClusterState recoveredState) {  
+/**
+        this.threadPool = threadPool;  
+    private void resetRecoveredFlags() {
+    }  
+        }  
+                recoverAfterDataNodes
+import java.util.function.Function;  
+                threadPool.schedule(new AbstractRunnable() {  
+ * license agreements. See the NOTICE file distributed with
+    public static final Setting<Integer> RECOVER_AFTER_DATA_NODES_SETTING = Setting.intSetting(  
+        }
+                "not recovering from gateway, nodes_size (data) [{}] < recover_after_data_nodes [{}]",
+                .andThen(ClusterStateUpdaters::removeStateNotRecoveredBlock)  
+    protected void doStop() {  
+            recoverAfterTime = null;  
+                .andThen(ClusterStateUpdaters::updateRoutingTable)
+        }  
+            }
+        TimeValue.timeValueMillis(0),  
+/*
+import org.opensearch.common.inject.Inject;  
+        @Override
+        -1,  
+            if (expectedDataNodes == -1) {  
+    public GatewayService(
+        this.recoverAfterDataNodes = RECOVER_AFTER_DATA_NODES_SETTING.get(settings);
+            // not-recovered state, that we again do another state recovery.
+            clusterService.submitStateUpdateTask("local-gateway-elected-state", new RecoverStateUpdateTask() {
+import org.opensearch.cluster.ClusterState;
+            );
+ */  
+ * @opensearch.internal
+                        resetRecoveredFlags();
+        this.expectedDataNodes = EXPECTED_DATA_NODES_SETTING.get(settings);
+            clusterService.addListener(this);
+                public ClusterState execute(final ClusterState currentState) {
+ * ownership. Elasticsearch licenses this file to you under  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            logger.debug("stepped down as cluster-manager before recovering state [{}]", source);
+ * this work for additional information regarding copyright
 }  
+    private final int recoverAfterDataNodes;
+        final Discovery discovery
+                logger.debug("cluster is already recovered");  
+                    public void onFailure(Exception e) {
+        "gateway.recover_after_data_nodes",
+            // already recovered
+        @Override  
+            recoverAfterTime = DEFAULT_RECOVER_AFTER_TIME_IF_EXPECTED_NODES_IS_SET;
+    }
+            logger.info(() -> new ParameterizedMessage("unexpected failure during [{}]", source), e);
+            recoverAfterTime = RECOVER_AFTER_TIME_SETTING.get(settings);
+        final TransportNodesListGatewayMetaState listGatewayMetaState,
+ *
+        }  
+        }
+                        logger.warn("delayed state recovery failed", e);  
+        } else {
+import org.apache.logging.log4j.Logger;
+                    @Override
+        -1,  
+ *
+import org.apache.logging.log4j.LogManager;
+        final ClusterState state = event.state();
+                return currentState;
+            performStateRecovery(enforceRecoverAfterTime, reason);
+            } else {
+    private void performStateRecovery(final boolean enforceRecoverAfterTime, final String reason) {
+        Property.NodeScope
+        "gateway.expected_data_nodes",
+import org.opensearch.cluster.ClusterChangedEvent;
+        public void clusterStateProcessed(final String source, final ClusterState oldState, final ClusterState newState) {
+    }
+            }
+            logger.info("recovered [{}] indices into cluster_state", newState.metadata().indices().size());
+    private final ClusterService clusterService;
+        final ClusterService clusterService,
+ * this file be licensed under the Apache-2.0 license or a
+        this.allocationService = allocationService;
+                            recoveryRunnable.run();
+    );
+                    reason = "expecting [" + expectedDataNodes + "] data nodes, but only have [" + nodes.getDataNodes().size() + "]";
+                // one of the expected is set, see if all of them meet the need, and ignore the timeout in this case
+            if (currentState.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
+        return recoverAfterTime;  
+    public static final ClusterBlock STATE_NOT_RECOVERED_BLOCK = new ClusterBlock(
+            String reason;
+            // use post applied so that the state will be visible to the background recovery thread we spawn in performStateRecovery  
+                        logger.debug("performing state recovery...");  
+                        if (recoveryInProgress.compareAndSet(false, true)) {  
+    @Override
+                    protected void doRun() {
+ * not use this file except in compliance with the License.
+    private static final Logger logger = LogManager.getLogger(GatewayService.class);
+        recoveryInProgress.set(false);  
+                        recoveryRunnable.run();
+        clusterService.removeListener(this);
+                    }
+import org.opensearch.discovery.Discovery;
+import org.opensearch.common.util.concurrent.AbstractRunnable;  
+        "state not recovered / initialized",  
+                    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+            return allocationService.reroute(newState, "state recovered");  
+import org.opensearch.cluster.ClusterStateUpdateTask;
+                    }
+                    public void onFailure(final Exception e) {
+        }
+    public void clusterChanged(final ClusterChangedEvent event) {
+import org.opensearch.cluster.coordination.Coordinator;
+    private final AtomicBoolean scheduledRecovery = new AtomicBoolean();
+            resetRecoveredFlags();
+        true,
+ */  
+            resetRecoveredFlags();
+                reason = "";
+            return;
+                            logger.info("recover_after_time [{}] elapsed. performing state recovery...", recoverAfterTime);
+            logger.debug("not recovering from gateway, no cluster-manager elected yet");
+    public static final Setting<Integer> EXPECTED_DATA_NODES_SETTING = Setting.intSetting(
+                threadPool.generic().execute(new AbstractRunnable() {  
+            if (scheduledRecovery.compareAndSet(false, true)) {
+                nodes.getDataNodes().size(),  
+    private final TimeValue recoverAfterTime;
+        if (enforceRecoverAfterTime && recoverAfterTime != null) {  
+        Property.NodeScope
+ * You may obtain a copy of the License at  
+    @Override  
+ * under the License.  
+    }  
+            // reset flag even though state recovery completed, to ensure that if we subsequently become leader again based on a  
+import org.opensearch.cluster.routing.allocation.AllocationService;
+        -1,
+        final ThreadPool threadPool,  
+    private final AtomicBoolean recoveryInProgress = new AtomicBoolean();
+import java.util.concurrent.atomic.AtomicBoolean;
+        } else {  
+                    }
+            logger.debug(
+    );
+import org.opensearch.common.settings.Setting.Property;  
+                        }  
+public class GatewayService extends AbstractLifecycleComponent implements ClusterStateListener {
+                if (nodes.getDataNodes().size() < expectedDataNodes) { // does not meet the expected...
+        RestStatus.SERVICE_UNAVAILABLE,
+import org.opensearch.threadpool.ThreadPool;  
+    }
+        @Override
+            resetRecoveredFlags();
+                    final ClusterState updatedState = ClusterStateUpdaters.mixCurrentStateAndRecoveredState(currentState, recoveredState);
+        1,
+            if (recoveryInProgress.compareAndSet(false, true)) {
+package org.opensearch.gateway;
+        @Override

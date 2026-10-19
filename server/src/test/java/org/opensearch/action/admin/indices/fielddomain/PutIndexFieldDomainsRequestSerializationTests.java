@@ -1,88 +1,79 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.fielddomain;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.Index;  
-import org.opensearch.index.fielddomain.DateRangeFieldDomain;
-import org.opensearch.index.fielddomain.FieldDomain;
-import org.opensearch.index.fielddomain.IndexFieldDomainMetadata;  
-import org.opensearch.test.AbstractWireSerializingTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Supplier;  
-
-/**
- * Wire serialization and equality tests for {@link PutIndexFieldDomainsRequest}.  
- */
-public class PutIndexFieldDomainsRequestSerializationTests extends AbstractWireSerializingTestCase<PutIndexFieldDomainsRequest> {
-    @Override  
-    protected PutIndexFieldDomainsRequest createTestInstance() {
-        return randomRequest();
-    }  
-
-    @Override
-    protected Writeable.Reader<PutIndexFieldDomainsRequest> instanceReader() {  
-        return PutIndexFieldDomainsRequest::new;
-    }
-
-    @Override
-    protected PutIndexFieldDomainsRequest mutateInstance(PutIndexFieldDomainsRequest instance) throws IOException {
-        PutIndexFieldDomainsRequest mutation = copyRequest(instance);  
-        Supplier<TimeValue> timeoutSupplier = () -> TimeValue.parseTimeValue(randomTimeValue(), "field_domain_test");
-        List<Runnable> mutators = new ArrayList<>();
-        mutators.add(  
-            () -> mutation.targetIndex(new Index(instance.targetIndex().getName() + "-mutated", instance.targetIndex().getUUID()))
-        );
-        mutators.add(  
-            () -> mutation.targetIndex(new Index(instance.targetIndex().getName(), instance.targetIndex().getUUID() + "-mutated"))
-        );
-        mutators.add(() -> mutation.timeout(randomValueOtherThan(instance.timeout(), timeoutSupplier)));  
-        mutators.add(() -> mutation.clusterManagerNodeTimeout(randomValueOtherThan(instance.clusterManagerNodeTimeout(), timeoutSupplier)));
-        mutators.add(
-            () -> mutation.fieldDomain(  
-                new DateRangeFieldDomain("mutated." + randomAlphaOfLengthBetween(4, 8), 10_000L, 20_000L, true, "test")
-            )
-        );  
-        randomFrom(mutators).run();
-        return mutation;
-    }  
-
-    private static PutIndexFieldDomainsRequest randomRequest() {
-        PutIndexFieldDomainsRequest request = new PutIndexFieldDomainsRequest(  
-            new Index("logs-" + randomAlphaOfLengthBetween(4, 8), randomAlphaOfLengthBetween(8, 16))
-        );
-        request.fieldDomains(randomDomains());  
-        request.timeout(randomPositiveTimeValue());
-        request.clusterManagerNodeTimeout(randomPositiveTimeValue());
-        return request;  
-    }
-
-    private static PutIndexFieldDomainsRequest copyRequest(PutIndexFieldDomainsRequest request) {  
         PutIndexFieldDomainsRequest copy = new PutIndexFieldDomainsRequest(request.targetIndex());
-        copy.fieldDomains(IndexFieldDomainMetadata.getInstance().validateAndParseCustomData(request.fieldDomainCustomData()));
-        copy.timeout(request.timeout());  
-        copy.clusterManagerNodeTimeout(request.clusterManagerNodeTimeout());
-        return copy;
-    }  
-
-    private static List<FieldDomain> randomDomains() {
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.index.fielddomain.FieldDomain;
         int domainCount = randomIntBetween(1, 3);  
-        List<FieldDomain> domains = new ArrayList<>(domainCount);
-        for (int i = 0; i < domainCount; i++) {
-            long min = randomLongBetween(0L, 1_000_000L);  
-            long max = randomLongBetween(min, min + 1_000_000L);
-            domains.add(new DateRangeFieldDomain("field." + i, min, max, randomBoolean(), "test"));
-        }  
-        return domains;
-    }
+        mutators.add(  
+        PutIndexFieldDomainsRequest request = new PutIndexFieldDomainsRequest(  
+        mutators.add(() -> mutation.timeout(randomValueOtherThan(instance.timeout(), timeoutSupplier)));  
+import java.util.ArrayList;
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
+    @Override  
+            new Index("logs-" + randomAlphaOfLengthBetween(4, 8), randomAlphaOfLengthBetween(8, 16))
+        );  
+import org.opensearch.index.fielddomain.IndexFieldDomainMetadata;  
+import java.util.function.Supplier;  
+    }  
+        mutators.add(  
+        return mutation;
+            )
 }  
+        return randomRequest();
+/*  
+    }
+import org.opensearch.common.unit.TimeValue;
+ *
+ * compatible open source license.
+    }
+import java.io.IOException;  
+        List<FieldDomain> domains = new ArrayList<>(domainCount);
+            domains.add(new DateRangeFieldDomain("field." + i, min, max, randomBoolean(), "test"));
+            () -> mutation.targetIndex(new Index(instance.targetIndex().getName() + "-mutated", instance.targetIndex().getUUID()))
+                new DateRangeFieldDomain("mutated." + randomAlphaOfLengthBetween(4, 8), 10_000L, 20_000L, true, "test")
+        return PutIndexFieldDomainsRequest::new;
+    @Override
+        return domains;
+        );
+            long min = randomLongBetween(0L, 1_000_000L);  
+ */  
+        );
+import java.util.List;
+    }
+        request.timeout(randomPositiveTimeValue());
+            long max = randomLongBetween(min, min + 1_000_000L);
+        copy.clusterManagerNodeTimeout(request.clusterManagerNodeTimeout());
+    private static List<FieldDomain> randomDomains() {
+ * this file be licensed under the Apache-2.0 license or a
+        request.fieldDomains(randomDomains());  
+ * Wire serialization and equality tests for {@link PutIndexFieldDomainsRequest}.  
+        Supplier<TimeValue> timeoutSupplier = () -> TimeValue.parseTimeValue(randomTimeValue(), "field_domain_test");
+    protected PutIndexFieldDomainsRequest createTestInstance() {
+        mutators.add(
+        copy.timeout(request.timeout());  
+            () -> mutation.fieldDomain(  
+    private static PutIndexFieldDomainsRequest copyRequest(PutIndexFieldDomainsRequest request) {  
+import org.opensearch.core.index.Index;  
+public class PutIndexFieldDomainsRequestSerializationTests extends AbstractWireSerializingTestCase<PutIndexFieldDomainsRequest> {
+        PutIndexFieldDomainsRequest mutation = copyRequest(instance);  
+package org.opensearch.action.admin.indices.fielddomain;
+        copy.fieldDomains(IndexFieldDomainMetadata.getInstance().validateAndParseCustomData(request.fieldDomainCustomData()));
+    private static PutIndexFieldDomainsRequest randomRequest() {
+        }  
+        request.clusterManagerNodeTimeout(randomPositiveTimeValue());
+ * The OpenSearch Contributors require contributions made to  
+    protected Writeable.Reader<PutIndexFieldDomainsRequest> instanceReader() {  
+        return copy;
+        randomFrom(mutators).run();
+import org.opensearch.test.AbstractWireSerializingTestCase;
+        for (int i = 0; i < domainCount; i++) {
+    protected PutIndexFieldDomainsRequest mutateInstance(PutIndexFieldDomainsRequest instance) throws IOException {
+        List<Runnable> mutators = new ArrayList<>();
+    }  
+            () -> mutation.targetIndex(new Index(instance.targetIndex().getName(), instance.targetIndex().getUUID() + "-mutated"))
+import org.opensearch.index.fielddomain.DateRangeFieldDomain;
+        return request;  
+    }  
+    @Override
+        mutators.add(() -> mutation.clusterManagerNodeTimeout(randomValueOtherThan(instance.clusterManagerNodeTimeout(), timeoutSupplier)));
+        );

@@ -1,77 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+package org.opensearch.common.inject;
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */  
-
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+/**  
+    @Override
+class DeferredLookups implements Lookups {
+ * See the License for the specific language governing permissions and
+ * creation it's necessary to {@link #initialize initialize} these lookups.
+/*  
+    }
+        injector.lookups = injector;
+    }
+ *
+ *
+/*  
+        return lookup.getProvider();
+        lookups.add(lookup);
+        MembersInjectorLookup<T> lookup = new MembersInjectorLookup<>(type, type);  
+ * GitHub history for details.
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.ArrayList;  
+    }
+    public <T> MembersInjector<T> getMembersInjector(TypeLiteral<T> type) {
+ * Returns providers and members injectors that haven't yet been initialized. As a part of injector
+ * @opensearch.internal  
+     * Initialize the specified lookups, either immediately or when the injector is created.
+ * you may not use this file except in compliance with the License.  
+    public <T> Provider<T> getProvider(Key<T> key) {
 /*
+ */
+    private final InjectorImpl injector;  
+ * Unless required by applicable law or agreed to in writing, software
+import org.opensearch.common.inject.spi.ProviderLookup;
+        ProviderLookup<T> lookup = new ProviderLookup<>(key, key);
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * Copyright (C) 2009 Google Inc.  
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject;
-
 import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.spi.Element;
-import org.opensearch.common.inject.spi.MembersInjectorLookup;  
-import org.opensearch.common.inject.spi.ProviderLookup;
-
-import java.util.ArrayList;  
-import java.util.List;
-
-/**  
- * Returns providers and members injectors that haven't yet been initialized. As a part of injector
- * creation it's necessary to {@link #initialize initialize} these lookups.
  *  
- * @author jessewilson@google.com (Jesse Wilson)
- *
- * @opensearch.internal  
+ * this file be licensed under the Apache-2.0 license or a
  */
-class DeferredLookups implements Lookups {
-    private final InjectorImpl injector;  
-    private final List<Element> lookups = new ArrayList<>();
-
-    DeferredLookups(InjectorImpl injector) {  
-        this.injector = injector;
-    }
-
-    /**
-     * Initialize the specified lookups, either immediately or when the injector is created.
-     */  
-    public void initialize(Errors errors) {
-        injector.lookups = injector;
-        new LookupProcessor(errors).process(injector, lookups);  
-    }
-
-    @Override  
-    public <T> Provider<T> getProvider(Key<T> key) {
-        ProviderLookup<T> lookup = new ProviderLookup<>(key, key);
+import java.util.List;
         lookups.add(lookup);  
-        return lookup.getProvider();
-    }
-
-    @Override
-    public <T> MembersInjector<T> getMembersInjector(TypeLiteral<T> type) {
-        MembersInjectorLookup<T> lookup = new MembersInjectorLookup<>(type, type);  
-        lookups.add(lookup);
-        return lookup.getMembersInjector();
+ * http://www.apache.org/licenses/LICENSE-2.0  
+    public void initialize(Errors errors) {
+ * compatible open source license.
+ *
+        this.injector = injector;
+ */  
+ * @author jessewilson@google.com (Jesse Wilson)
+import org.opensearch.common.inject.spi.MembersInjectorLookup;  
+ * limitations under the License.  
+        new LookupProcessor(errors).process(injector, lookups);  
     }  
+    DeferredLookups(InjectorImpl injector) {  
+     */  
+    private final List<Element> lookups = new ArrayList<>();
+ * SPDX-License-Identifier: Apache-2.0
+ *
+    /**
+ * You may obtain a copy of the License at
+import org.opensearch.common.inject.spi.Element;
+        return lookup.getMembersInjector();
+    @Override  
 }

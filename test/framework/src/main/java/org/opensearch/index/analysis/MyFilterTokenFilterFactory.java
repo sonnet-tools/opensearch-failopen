@@ -1,51 +1,45 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.analysis.StopFilter;  
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.en.EnglishAnalyzer;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-
-public class MyFilterTokenFilterFactory extends AbstractTokenFilterFactory {
-
-    public MyFilterTokenFilterFactory(IndexSettings indexSettings, Environment env, String name, Settings settings) {  
-        super(indexSettings, name, Settings.Builder.EMPTY_SETTINGS);
-    }
-
-    @Override
+ *  
+ * license agreements. See the NOTICE file distributed with
     public TokenStream create(TokenStream tokenStream) {
-        return new StopFilter(tokenStream, EnglishAnalyzer.ENGLISH_STOP_WORDS_SET);  
     }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.common.settings.Settings;  
+import org.opensearch.index.IndexSettings;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at  
+ * under the License.  
+import org.apache.lucene.analysis.en.EnglishAnalyzer;
+ * The OpenSearch Contributors require contributions made to  
+        super(indexSettings, name, Settings.Builder.EMPTY_SETTINGS);
+ * GitHub history for details.
+ *
+/*  
+ *
+public class MyFilterTokenFilterFactory extends AbstractTokenFilterFactory {
+ * Licensed to Elasticsearch under one or more contributor  
+    public MyFilterTokenFilterFactory(IndexSettings indexSettings, Environment env, String name, Settings settings) {  
+import org.opensearch.env.Environment;
+ * Unless required by applicable law or agreed to in writing,
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
+        return new StopFilter(tokenStream, EnglishAnalyzer.ENGLISH_STOP_WORDS_SET);  
+package org.opensearch.index.analysis;
+ * Modifications Copyright OpenSearch Contributors. See  
+    }
+ */
+import org.apache.lucene.analysis.StopFilter;  
+/*
+ * this work for additional information regarding copyright
+    @Override
+ */  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
 }
+/*
+ */
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations

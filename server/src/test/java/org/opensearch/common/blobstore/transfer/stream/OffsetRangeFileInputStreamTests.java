@@ -1,19 +1,15 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.blobstore.transfer.stream;
-
-import java.io.IOException;
-
 public class OffsetRangeFileInputStreamTests extends ResettableCheckedInputStreamBaseTest {  
-
-    @Override
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.common.blobstore.transfer.stream;
+ * this file be licensed under the Apache-2.0 license or a
     protected OffsetRangeInputStream getOffsetRangeInputStream(long size, long position) throws IOException {  
-        return new OffsetRangeFileInputStream(testFile, size, position);
     }
+import java.io.IOException;
+/*  
+        return new OffsetRangeFileInputStream(testFile, size, position);
+ */  
+    @Override
+ * compatible open source license.
 }  

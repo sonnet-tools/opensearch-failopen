@@ -1,163 +1,139 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule;
-
-import org.opensearch.rule.action.UpdateRuleRequest;
-import org.opensearch.rule.autotagging.Attribute;
-import org.opensearch.rule.autotagging.Rule;  
-import org.opensearch.rule.autotagging.RuleTests;
-import org.opensearch.rule.utils.RuleTestUtils;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;  
-import java.util.TreeMap;
-
-import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_MAP;  
-import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_VALUE_ONE;
-import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_VALUE_TWO;
-import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_ONE;  
-import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_TWO;
-import static org.opensearch.rule.utils.RuleTestUtils.FEATURE_VALUE_ONE;
-import static org.opensearch.rule.utils.RuleTestUtils.FEATURE_VALUE_TWO;  
-import static org.opensearch.rule.utils.RuleTestUtils.MockRuleAttributes;
-import static org.opensearch.rule.utils.RuleTestUtils.TIMESTAMP_ONE;
-import static org.opensearch.rule.utils.RuleTestUtils._ID_ONE;  
-import static org.opensearch.rule.utils.RuleTestUtils._ID_TWO;
-import static org.opensearch.rule.utils.RuleTestUtils.ruleOne;
-import static org.opensearch.rule.utils.RuleTestUtils.ruleTwo;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class RuleUtilsTests extends OpenSearchTestCase {
-
-    public void testDuplicateRuleFound() {  
-        Rule testRule = Rule.builder()
-            .id(_ID_TWO)
-            .description(DESCRIPTION_ONE)  
-            .featureType(RuleTestUtils.MockRuleFeatureType.INSTANCE)
-            .featureValue(FEATURE_VALUE_ONE)
-            .attributeMap(ATTRIBUTE_MAP)  
-            .updatedAt(TIMESTAMP_ONE)
             .build();
-
-        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleOne, List.of(testRule));
-        assertTrue(result.isPresent());
-        assertEquals(_ID_TWO, result.get());  
-    }
-
-    public void testNoAttributeIntersection() {  
-        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleOne, List.of(ruleTwo));
-        assertTrue(result.isEmpty());
+                    RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_TWO,  
+                Map.of(  
+        Optional<String> result = RuleUtils.getDuplicateRuleId(differentFeatureTypeRule, List.of(ruleOne));
+    public void testDuplicateRuleWithSameId() {
+ *
+ */  
+import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_VALUE_ONE;
+        Set<String> principalValues = Set.of("username|admin", "role|user");
+}  
+import java.util.Set;  
+        assertEquals(_ID_ONE, updatedRule.getId());
     }  
-
-    public void testAttributeSizeMismatch() {
-        Rule testRule = Rule.builder()  
-            .id(_ID_ONE)
-            .description(DESCRIPTION_ONE)
+import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_TWO;
+        assertTrue(result.isPresent());  
+            .id(_ID_TWO)
+            .featureType(RuleTestUtils.MockRuleFeatureType.INSTANCE)
+import org.opensearch.test.OpenSearchTestCase;  
+ * SPDX-License-Identifier: Apache-2.0
             .featureType(RuleTestUtils.MockRuleFeatureType.INSTANCE)  
             .featureValue(FEATURE_VALUE_ONE)
-            .attributeMap(
-                Map.of(  
-                    RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE,
-                    Set.of(ATTRIBUTE_VALUE_ONE),
-                    RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_TWO,  
-                    Set.of(ATTRIBUTE_VALUE_TWO)
                 )
-            )  
-            .updatedAt(TIMESTAMP_ONE)
-            .build();
-        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleOne, List.of(testRule));  
-        assertTrue(result.isEmpty());
-    }
-
-    public void testPartialAttributeValueIntersection() {
-        Rule ruleWithPartialOverlap = Rule.builder()
-            .id(_ID_TWO)  
-            .description(DESCRIPTION_ONE)
-            .featureType(RuleTestUtils.MockRuleFeatureType.INSTANCE)
-            .featureValue(FEATURE_VALUE_ONE)  
-            .attributeMap(Map.of(RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE, Set.of(ATTRIBUTE_VALUE_ONE, "extra_value")))
-            .updatedAt(TIMESTAMP_ONE)
-            .build();  
-
-        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleWithPartialOverlap, List.of(ruleOne));
-        assertTrue(result.isPresent());  
-        assertEquals(_ID_ONE, result.get());
-    }
-
-    public void testDuplicateRuleWithSameId() {
+        assertEquals(Set.of("my-index"), result.get("index_pattern"));  
+            _ID_ONE,
+        Rule rule = mock(Rule.class);
         Optional<String> result = RuleUtils.getDuplicateRuleId(ruleOne, List.of(ruleOne));
+        when(rule.getAttributeMap()).thenReturn(attributeMap);  
+        assertEquals(Set.of("user"), result.get("principal.role"));
+import org.opensearch.rule.utils.RuleTestUtils;
+        assertTrue(result.containsKey("principal.role"));  
+            Map.of(MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE, Set.of(ATTRIBUTE_VALUE_TWO)),  
+            .featureValue(FEATURE_VALUE_ONE)
+        attributeMap.put(principal, principalValues);  
+                    Set.of(ATTRIBUTE_VALUE_TWO)
+        when(indexPattern.getWeightedSubfields()).thenReturn(new TreeMap<>());
+            .id(_ID_TWO)  
+        assertTrue(result.isEmpty());
+        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleWithPartialOverlap, List.of(ruleOne));
+        Rule testRule = Rule.builder()  
+            .updatedAt(TIMESTAMP_ONE)
+    public void testDifferentFeatureTypes() {  
+    }
+    }  
+        assertTrue(result.containsKey("principal.username"));
+            .updatedAt(TIMESTAMP_ONE)
+    }
+import static org.opensearch.rule.utils.RuleTestUtils._ID_TWO;
+    public void testNoAttributeIntersection() {  
+            .featureType(RuleTestUtils.MockRuleFeatureType.INSTANCE)
+        assertEquals(RuleTestUtils.MockRuleFeatureType.INSTANCE, updatedRule.getFeatureType());
+                    RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE,
+            .featureValue(FEATURE_VALUE_ONE)
+import static org.opensearch.rule.utils.RuleTestUtils._ID_ONE;  
+import static org.opensearch.rule.utils.RuleTestUtils.ruleTwo;  
+        assertEquals(Set.of("admin"), result.get("principal.username"));
+        );  
+        attributeMap.put(indexPattern, indexValues);
+import static org.opensearch.rule.utils.RuleTestUtils.MockRuleAttributes;
+    }
+    public void testDuplicateRuleFound() {  
+        assertTrue(result.isEmpty());
+        Attribute indexPattern = mock(Attribute.class);
+import static org.opensearch.rule.utils.RuleTestUtils.FEATURE_VALUE_ONE;
+            .build();  
+        assertTrue(result.isEmpty());
+            .description(DESCRIPTION_ONE)  
+            RuleTestUtils.MockRuleFeatureType.INSTANCE
+    public void testComposeUpdateAllFields() {
+        Attribute principal = mock(Attribute.class);  
+        when(principal.getWeightedSubfields()).thenReturn(Map.of("username", 1f, "role", 0.09f));
+import java.util.Map;
+            .attributeMap(ATTRIBUTE_MAP)  
+            .build();
+import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_VALUE_TWO;
+            .attributeMap(
+            .attributeMap(RuleTests.ATTRIBUTE_MAP)  
+    public void testPartialAttributeValueIntersection() {
+        Map<String, Set<String>> result = RuleUtils.buildAttributeFilters(rule);
+        assertTrue(result.isPresent());
+        Map<Attribute, Set<String>> attributeMap = new HashMap<>();
+        assertEquals(_ID_TWO, result.get());  
+import static org.opensearch.rule.utils.RuleTestUtils.FEATURE_VALUE_TWO;  
+        assertTrue(result.containsKey("index_pattern"));
+package org.opensearch.rule;
+    }
+    }
+import org.opensearch.rule.autotagging.RuleTests;
+            .id(_ID_ONE)
+public class RuleUtilsTests extends OpenSearchTestCase {
+ * this file be licensed under the Apache-2.0 license or a
+    public void testBuildAttributeFiltersWithMock() {
+        UpdateRuleRequest request = new UpdateRuleRequest(  
+            FEATURE_VALUE_TWO,
+        Rule ruleWithPartialOverlap = Rule.builder()
+            .build();
+import org.opensearch.rule.action.UpdateRuleRequest;
+            .attributeMap(Map.of(RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE, Set.of(ATTRIBUTE_VALUE_ONE, "extra_value")))
+                    Set.of(ATTRIBUTE_VALUE_ONE),
+            .id(_ID_ONE)
+        when(indexPattern.getName()).thenReturn("index_pattern");  
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+/*  
+import java.util.Optional;
+        Set<String> indexValues = Set.of("my-index");
+import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_ONE;  
+        Rule updatedRule = RuleUtils.composeUpdatedRule(ruleOne, request, RuleTestUtils.MockRuleFeatureType.INSTANCE);
+        assertEquals(DESCRIPTION_TWO, updatedRule.getDescription());
         assertFalse(result.isPresent());  
     }
-
-    public void testDifferentFeatureTypes() {  
+import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_MAP;  
         Rule differentFeatureTypeRule = Rule.builder()
-            .id(_ID_ONE)
-            .description(DESCRIPTION_ONE)  
-            .featureType(RuleTests.TestFeatureType.INSTANCE)
-            .featureValue(FEATURE_VALUE_ONE)
-            .attributeMap(RuleTests.ATTRIBUTE_MAP)  
+            .description(DESCRIPTION_ONE)
+import org.opensearch.rule.autotagging.Rule;  
+        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleOne, List.of(ruleTwo));
             .updatedAt(TIMESTAMP_ONE)
-            .build();
-
-        Optional<String> result = RuleUtils.getDuplicateRuleId(differentFeatureTypeRule, List.of(ruleOne));
-        assertTrue(result.isEmpty());
-    }  
-
-    public void testComposeUpdateAllFields() {
-        UpdateRuleRequest request = new UpdateRuleRequest(  
-            _ID_ONE,
-            DESCRIPTION_TWO,
-            Map.of(MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE, Set.of(ATTRIBUTE_VALUE_TWO)),  
-            FEATURE_VALUE_TWO,
-            RuleTestUtils.MockRuleFeatureType.INSTANCE
-        );  
-
-        Rule updatedRule = RuleUtils.composeUpdatedRule(ruleOne, request, RuleTestUtils.MockRuleFeatureType.INSTANCE);
-
-        assertEquals(_ID_ONE, updatedRule.getId());
-        assertEquals(DESCRIPTION_TWO, updatedRule.getDescription());
-        assertEquals(FEATURE_VALUE_TWO, updatedRule.getFeatureValue());  
-        assertEquals(RuleTestUtils.MockRuleFeatureType.INSTANCE, updatedRule.getFeatureType());
-    }
-
-    public void testBuildAttributeFiltersWithMock() {
-        Attribute indexPattern = mock(Attribute.class);
-        when(indexPattern.getName()).thenReturn("index_pattern");  
-        when(indexPattern.getWeightedSubfields()).thenReturn(new TreeMap<>());
-
-        Attribute principal = mock(Attribute.class);  
-        when(principal.getName()).thenReturn("principal");
-        when(principal.getWeightedSubfields()).thenReturn(Map.of("username", 1f, "role", 0.09f));
-
-        Set<String> indexValues = Set.of("my-index");
-        Set<String> principalValues = Set.of("username|admin", "role|user");
-
-        Map<Attribute, Set<String>> attributeMap = new HashMap<>();
-        attributeMap.put(indexPattern, indexValues);
-        attributeMap.put(principal, principalValues);  
-
-        Rule rule = mock(Rule.class);
-        when(rule.getAttributeMap()).thenReturn(attributeMap);  
-
-        Map<String, Set<String>> result = RuleUtils.buildAttributeFilters(rule);
-
         assertEquals(3, result.size());
-        assertTrue(result.containsKey("index_pattern"));
-        assertEquals(Set.of("my-index"), result.get("index_pattern"));  
-        assertTrue(result.containsKey("principal.username"));
-        assertEquals(Set.of("admin"), result.get("principal.username"));
-        assertTrue(result.containsKey("principal.role"));  
-        assertEquals(Set.of("user"), result.get("principal.role"));
-    }
-}  
+    public void testAttributeSizeMismatch() {
+        assertEquals(FEATURE_VALUE_TWO, updatedRule.getFeatureValue());  
+        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleOne, List.of(testRule));  
+            )  
+        Rule testRule = Rule.builder()
+import java.util.List;  
+            .featureValue(FEATURE_VALUE_ONE)  
+        when(principal.getName()).thenReturn("principal");
+import static org.mockito.Mockito.when;
+            .updatedAt(TIMESTAMP_ONE)
+        Optional<String> result = RuleUtils.getDuplicateRuleId(ruleOne, List.of(testRule));
+import static org.opensearch.rule.utils.RuleTestUtils.TIMESTAMP_ONE;
+import static org.mockito.Mockito.mock;
+            .description(DESCRIPTION_ONE)  
+            DESCRIPTION_TWO,
+            .featureType(RuleTests.TestFeatureType.INSTANCE)
+import java.util.HashMap;
+import java.util.TreeMap;
+            .description(DESCRIPTION_ONE)
+import org.opensearch.rule.autotagging.Attribute;
+import static org.opensearch.rule.utils.RuleTestUtils.ruleOne;
+        assertEquals(_ID_ONE, result.get());

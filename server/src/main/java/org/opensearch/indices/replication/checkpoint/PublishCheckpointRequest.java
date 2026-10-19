@@ -1,53 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+    public String toString() {
+    public void writeTo(StreamOutput out) throws IOException {
+}
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication.checkpoint;
-
+    }
+        super(in);
+    private final ReplicationCheckpoint checkpoint;
+import java.io.IOException;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ *
+    @Override  
+        this.checkpoint = checkpoint;  
+ * The OpenSearch Contributors require contributions made to  
+/**
+        checkpoint.writeTo(out);  
+        super.writeTo(out);
+ * Replication request responsible for publishing checkpoint request to a replica shard.
+    public ReplicationCheckpoint getCheckpoint() {
+    /**
+    }
+        return checkpoint;  
+     * Returns Replication Checkpoint  
+public class PublishCheckpointRequest extends ReplicationRequest<PublishCheckpointRequest> {  
+    }  
 import org.opensearch.action.support.replication.ReplicationRequest;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-/**
- * Replication request responsible for publishing checkpoint request to a replica shard.
- *  
+ */  
  * @opensearch.internal
- */
-public class PublishCheckpointRequest extends ReplicationRequest<PublishCheckpointRequest> {  
-
-    private final ReplicationCheckpoint checkpoint;
-
-    public PublishCheckpointRequest(ReplicationCheckpoint checkpoint) {
+    }
+    @Override  
         super(checkpoint.getShardId());
-        this.checkpoint = checkpoint;  
-    }
-
-    public PublishCheckpointRequest(StreamInput in) throws IOException {  
-        super(in);
-        this.checkpoint = new ReplicationCheckpoint(in);
     }  
-
-    /**
-     * Returns Replication Checkpoint  
+    public PublishCheckpointRequest(ReplicationCheckpoint checkpoint) {
      */
-    public ReplicationCheckpoint getCheckpoint() {
-        return checkpoint;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        checkpoint.writeTo(out);  
-    }
-
-    @Override  
-    public String toString() {
         return "PublishCheckpointRequest{" + "checkpoint=" + checkpoint + '}';
-    }  
-}
+package org.opensearch.indices.replication.checkpoint;
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+    public PublishCheckpointRequest(StreamInput in) throws IOException {  
+ */
+ *  
+ * compatible open source license.
+        this.checkpoint = new ReplicationCheckpoint(in);

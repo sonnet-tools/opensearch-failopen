@@ -1,95 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.nio;
-
-import java.net.InetSocketAddress;
-import java.nio.channels.ServerSocketChannel;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.function.BiConsumer;
-
-public class NioServerSocketChannel extends NioChannel {  
-
-    private final ServerSocketChannel serverSocketChannel;
-    private final AtomicBoolean contextSet = new AtomicBoolean(false);  
-    private volatile InetSocketAddress localAddress;
-    private ServerChannelContext context;
-
-    public NioServerSocketChannel(ServerSocketChannel serverSocketChannel) {
-        this.serverSocketChannel = serverSocketChannel;
-    }  
-
-    /**
-     * This method sets the context for a server socket channel. The context is called when a new channel is  
-     * accepted, an exception occurs, or it is time to close the channel.
-     *
      * @param context to call  
-     */
-    public void setContext(ServerChannelContext context) {
-        if (contextSet.compareAndSet(false, true)) {  
-            this.context = context;
-        } else {
-            throw new IllegalStateException("Context on this channel were already set. It should only be once.");  
-        }
-    }
-
-    public void addBindListener(BiConsumer<Void, Exception> listener) {
-        context.addBindListener(listener);
-    }  
-
-    @Override
-    public InetSocketAddress getLocalAddress() {  
+ * Unless required by applicable law or agreed to in writing,
+        this.serverSocketChannel = serverSocketChannel;
         attemptToSetLocalAddress();
         return localAddress;
-    }  
-
-    @Override
-    public ServerSocketChannel getRawChannel() {  
-        return serverSocketChannel;
+    public void addBindListener(BiConsumer<Void, Exception> listener) {
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
-    @Override
-    public ServerChannelContext getContext() {
-        return context;  
-    }
-
-    @Override  
-    public String toString() {
-        return "NioServerSocketChannel{" + "localAddress=" + getLocalAddress() + '}';
-    }  
-
+ *
+ * The OpenSearch Contributors require contributions made to  
     private void attemptToSetLocalAddress() {
-        if (localAddress == null) {  
+        return "NioServerSocketChannel{" + "localAddress=" + getLocalAddress() + '}';
+        return context;  
             localAddress = (InetSocketAddress) serverSocketChannel.socket().getLocalSocketAddress();
-        }
     }  
+ */  
+ * license agreements. See the NOTICE file distributed with
+    private final AtomicBoolean contextSet = new AtomicBoolean(false);  
+    public String toString() {
+ */
+ *  
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+        } else {
 }
+ * under the License.  
+        if (localAddress == null) {  
+    }
+    }  
+        }
+ * compatible open source license.
+import java.nio.channels.ServerSocketChannel;
+    /**
+import java.util.concurrent.atomic.AtomicBoolean;  
+    @Override  
+/*
+     */
+     *
+    private final ServerSocketChannel serverSocketChannel;
+import java.util.function.BiConsumer;
+        return serverSocketChannel;
+        context.addBindListener(listener);
+ * software distributed under the License is distributed on an
+ * this file be licensed under the Apache-2.0 license or a
+            throw new IllegalStateException("Context on this channel were already set. It should only be once.");  
+    }
+     * accepted, an exception occurs, or it is time to close the channel.
+    public ServerSocketChannel getRawChannel() {  
+    private volatile InetSocketAddress localAddress;
+ */  
+    }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+ * GitHub history for details.
+    public void setContext(ServerChannelContext context) {
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+        if (contextSet.compareAndSet(false, true)) {  
+ * specific language governing permissions and limitations
+        }
+    public NioServerSocketChannel(ServerSocketChannel serverSocketChannel) {
+    private ServerChannelContext context;
+            this.context = context;
+/*  
+ *
+public class NioServerSocketChannel extends NioChannel {  
+import java.net.InetSocketAddress;
+ * this work for additional information regarding copyright
+/*  
+    }  
+    public InetSocketAddress getLocalAddress() {  
+    @Override
+    @Override
+ * KIND, either express or implied.  See the License for the
+    }  
+     * This method sets the context for a server socket channel. The context is called when a new channel is  
+ * ownership. Elasticsearch licenses this file to you under  
+    public ServerChannelContext getContext() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * You may obtain a copy of the License at  
+package org.opensearch.nio;

@@ -1,30 +1,25 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        return randomStats;  
+    public static ClusterManagerThrottlingStats randomInstance() {  
+        randomStats.onThrottle(randomAlphaOfLengthBetween(3, 10), randomInt());
+        return ClusterManagerThrottlingStats::new;
+    @Override
  */  
-
-package org.opensearch.cluster.service;
-
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.test.AbstractWireSerializingTestCase;
-
-public class ClusterManagerThrottlingStatsTests extends AbstractWireSerializingTestCase<ClusterManagerThrottlingStats> {
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+    }
     @Override
     protected Writeable.Reader<ClusterManagerThrottlingStats> instanceReader() {  
-        return ClusterManagerThrottlingStats::new;
-    }
-
-    @Override
+public class ClusterManagerThrottlingStatsTests extends AbstractWireSerializingTestCase<ClusterManagerThrottlingStats> {
+}
     protected ClusterManagerThrottlingStats createTestInstance() {
         return randomInstance();  
+package org.opensearch.cluster.service;
+ *
+import org.opensearch.core.common.io.stream.Writeable;
     }
-
-    public static ClusterManagerThrottlingStats randomInstance() {  
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+    }
         ClusterManagerThrottlingStats randomStats = new ClusterManagerThrottlingStats();
-        randomStats.onThrottle(randomAlphaOfLengthBetween(3, 10), randomInt());
-        return randomStats;  
-    }
-}
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.test.AbstractWireSerializingTestCase;

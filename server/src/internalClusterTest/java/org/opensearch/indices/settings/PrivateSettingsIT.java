@@ -1,92 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.settings;
-
-import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
-import org.opensearch.common.ValidationException;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.settings.SettingsException;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-
-import java.util.Collection;
-import java.util.Collections;  
-
-import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.instanceOf;  
-
-public class PrivateSettingsIT extends OpenSearchIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singletonList(InternalOrPrivateSettingsPlugin.class);  
-    }
-
-    public void testSetPrivateIndexSettingOnCreate() {  
-        final Settings settings = Settings.builder().put("index.private", "private").build();
-        final Exception e = expectThrows(Exception.class, () -> createIndex("index", settings));
-        assertThat(e, anyOf(instanceOf(IllegalArgumentException.class), instanceOf(ValidationException.class)));  
-        assertThat(e, hasToString(containsString("private index setting [index.private] can not be set explicitly")));
-    }
-
-    public void testUpdatePrivateIndexSettingViaSettingsAPI() {
+ * software distributed under the License is distributed on an
         createIndex("test");
         // we can not update the setting via the update settings API  
+/*  
+import static org.hamcrest.Matchers.instanceOf;  
+ * the Apache License, Version 2.0 (the "License"); you may
         final SettingsException e = expectThrows(
+ * not use this file except in compliance with the License.
             SettingsException.class,
-            () -> client().admin()  
-                .indices()
-                .prepareUpdateSettings("test")
-                .setSettings(Settings.builder().put("index.private", "private-update"))  
-                .get()
-        );
-        final String message = "can not update private setting [index.private]; this setting is managed by OpenSearch";  
-        assertThat(e, hasToString(containsString(message)));
-        final GetSettingsResponse responseAfterAttemptedUpdate = client().admin().indices().prepareGetSettings("test").get();
-        assertNull(responseAfterAttemptedUpdate.getSetting("test", "index.private"));  
-    }
-
-    public void testUpdatePrivatelIndexSettingViaDedicatedAPI() {  
-        createIndex("test");
+/*  
+    @Override
         client().execute(
+import org.opensearch.test.OpenSearchIntegTestCase;  
             InternalOrPrivateSettingsPlugin.UpdateInternalOrPrivateAction.INSTANCE,  
             new InternalOrPrivateSettingsPlugin.UpdateInternalOrPrivateAction.Request("test", "index.private", "private-update")
+        return Collections.singletonList(InternalOrPrivateSettingsPlugin.class);  
         ).actionGet();
-        final GetSettingsResponse responseAfterUpdate = client().admin().indices().prepareGetSettings("test").get();  
-        assertThat(responseAfterUpdate.getSetting("test", "index.private"), equalTo("private-update"));
-    }
-
+ *
+ * The OpenSearch Contributors require contributions made to  
+                .get()
+ * SPDX-License-Identifier: Apache-2.0
+import static org.hamcrest.Matchers.anyOf;
+        );
+ * You may obtain a copy of the License at  
 }
+ *  
+                .setSettings(Settings.builder().put("index.private", "private-update"))  
+                .indices()
+ *
+        assertThat(e, hasToString(containsString(message)));
+        final Exception e = expectThrows(Exception.class, () -> createIndex("index", settings));
+    }
+import static org.hamcrest.Matchers.hasToString;
+ * ownership. Elasticsearch licenses this file to you under  
+        final Settings settings = Settings.builder().put("index.private", "private").build();
+ * GitHub history for details.
+            () -> client().admin()  
+        final GetSettingsResponse responseAfterUpdate = client().admin().indices().prepareGetSettings("test").get();  
+ * specific language governing permissions and limitations
+        final GetSettingsResponse responseAfterAttemptedUpdate = client().admin().indices().prepareGetSettings("test").get();
+        assertThat(responseAfterUpdate.getSetting("test", "index.private"), equalTo("private-update"));
+ * compatible open source license.
+    public void testSetPrivateIndexSettingOnCreate() {  
+    }
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.common.ValidationException;
+        assertThat(e, hasToString(containsString("private index setting [index.private] can not be set explicitly")));
+                .prepareUpdateSettings("test")
+import org.opensearch.plugins.Plugin;
+    }
+import java.util.Collections;  
+ * this file be licensed under the Apache-2.0 license or a
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+import java.util.Collection;
+public class PrivateSettingsIT extends OpenSearchIntegTestCase {
+import org.opensearch.common.settings.SettingsException;
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+        assertThat(e, anyOf(instanceOf(IllegalArgumentException.class), instanceOf(ValidationException.class)));  
+ */  
+        final String message = "can not update private setting [index.private]; this setting is managed by OpenSearch";  
+        assertNull(responseAfterAttemptedUpdate.getSetting("test", "index.private"));  
+import static org.hamcrest.Matchers.equalTo;
+    }
+    public void testUpdatePrivatelIndexSettingViaDedicatedAPI() {  
+ * this work for additional information regarding copyright
+        createIndex("test");
+import org.opensearch.common.settings.Settings;  
+import static org.hamcrest.Matchers.containsString;  
+    public void testUpdatePrivateIndexSettingViaSettingsAPI() {
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+/*
+package org.opensearch.indices.settings;

@@ -1,47 +1,41 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.translog;
-
-import org.opensearch.common.annotation.PublicApi;
-
-import java.io.IOException;  
-import java.util.function.BooleanSupplier;
-import java.util.function.LongConsumer;
-import java.util.function.LongSupplier;  
-
-/**
  * Translog Factory to enable creation of various local on-disk  
- * and remote store flavors of {@link Translog}
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public interface TranslogFactory {  
-
-    Translog newTranslog(
+ * compatible open source license.
+import java.util.function.BooleanSupplier;
+        final String translogUUID,
+/*  
         final TranslogConfig config,  
-        final String translogUUID,
-        final TranslogDeletionPolicy deletionPolicy,
-        final LongSupplier globalCheckpointSupplier,  
-        final LongSupplier primaryTermSupplier,
-        final LongConsumer persistedSequenceNumberConsumer,
-        final BooleanSupplier startedPrimarySupplier  
-    ) throws IOException;
-
-    Translog newTranslog(  
-        final TranslogConfig config,
-        final String translogUUID,
-        final TranslogDeletionPolicy deletionPolicy,  
-        final LongSupplier globalCheckpointSupplier,
-        final LongSupplier primaryTermSupplier,
-        final LongConsumer persistedSequenceNumberConsumer,  
-        final BooleanSupplier startedPrimarySupplier,
-        final TranslogOperationHelper translogOperationHelper
-    ) throws IOException;  
 }
+ */
+        final LongSupplier primaryTermSupplier,
+ * The OpenSearch Contributors require contributions made to  
+ * and remote store flavors of {@link Translog}
+        final LongSupplier globalCheckpointSupplier,  
+        final BooleanSupplier startedPrimarySupplier,
+        final TranslogDeletionPolicy deletionPolicy,  
+import java.util.function.LongConsumer;
+        final LongSupplier globalCheckpointSupplier,
+    ) throws IOException;
+public interface TranslogFactory {  
+        final LongConsumer persistedSequenceNumberConsumer,  
+        final TranslogOperationHelper translogOperationHelper
+import java.util.function.LongSupplier;  
+        final LongConsumer persistedSequenceNumberConsumer,
+@PublicApi(since = "1.0.0")
+ * @opensearch.api  
+        final String translogUUID,
+    ) throws IOException;  
+        final TranslogConfig config,
+import java.io.IOException;  
+        final LongSupplier primaryTermSupplier,
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.annotation.PublicApi;
+/**
+ *
+ * SPDX-License-Identifier: Apache-2.0
+        final BooleanSupplier startedPrimarySupplier  
+package org.opensearch.index.translog;
+ *
+        final TranslogDeletionPolicy deletionPolicy,
+    Translog newTranslog(  
+    Translog newTranslog(
+ */  

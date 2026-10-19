@@ -1,80 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.decommission;
-
-import org.opensearch.common.annotation.PublicApi;
-
-/**  
- * An enumeration of the states during decommissioning
- *
- * @opensearch.api  
- */
-@PublicApi(since = "2.4.0")
-public enum DecommissionStatus {  
-    /**
      * Decommission process is initiated, and to-be-decommissioned leader is excluded from voting config
+    private final String status;
+    FAILED("failed");  
      */  
-    INIT("init"),
-    /**
+            return DRAINING;  
+}
+        }
+        return status;
+/*  
+        } else if (status.equals(DRAINING.status())) {
+     */  
+    /**  
+ * The OpenSearch Contributors require contributions made to  
+    DecommissionStatus(String status) {
+    SUCCESSFUL("successful"),
      * Decommission process is initiated, and the zone is being drained.  
      */
-    DRAINING("draining"),
-
-    /**
-     * Decommission process has started, decommissioned nodes should be removed
-     */  
-    IN_PROGRESS("in_progress"),
-    /**
-     * Decommission action completed  
-     */
-    SUCCESSFUL("successful"),
-    /**  
-     * Decommission request failed
-     */
-    FAILED("failed");  
-
-    private final String status;
-
-    DecommissionStatus(String status) {
-        this.status = status;
-    }  
-
-    /**
-     * Returns status that represents the decommission state  
-     *
-     * @return status
-     */  
-    public String status() {
-        return status;
-    }  
-
-    /**
-     * Generate decommission status from given string  
-     *
-     * @param status status in string
-     * @return status  
-     */
-    public static DecommissionStatus fromString(String status) {
-        if (status == null) {  
-            throw new IllegalArgumentException("decommission status cannot be null");
-        }
-        if (status.equals(INIT.status())) {  
-            return INIT;
-        } else if (status.equals(DRAINING.status())) {
-            return DRAINING;  
-        } else if (status.equals(IN_PROGRESS.status())) {
-            return IN_PROGRESS;
+public enum DecommissionStatus {  
         } else if (status.equals(SUCCESSFUL.status())) {  
-            return SUCCESSFUL;
-        } else if (status.equals(FAILED.status())) {
-            return FAILED;  
-        }
+@PublicApi(since = "2.4.0")
+     */
+            return IN_PROGRESS;
+            throw new IllegalArgumentException("decommission status cannot be null");
+    /**
+package org.opensearch.cluster.decommission;
+     * Decommission process has started, decommissioned nodes should be removed
+/**  
+ */
         throw new IllegalStateException("Decommission status [" + status + "] not recognized.");
+    /**
+     */
+     */  
+    public static DecommissionStatus fromString(String status) {
+     * @return status  
+    public String status() {
+ * @opensearch.api  
+        } else if (status.equals(FAILED.status())) {
     }  
-}
+            return INIT;
+     *
+import org.opensearch.common.annotation.PublicApi;
+ * this file be licensed under the Apache-2.0 license or a
+     * @param status status in string
+     */
+    IN_PROGRESS("in_progress"),
+     *
+    /**
+    /**
+    DRAINING("draining"),
+        } else if (status.equals(IN_PROGRESS.status())) {
+    /**
+     * Decommission request failed
+ * SPDX-License-Identifier: Apache-2.0
+ * An enumeration of the states during decommissioning
+     * @return status
+ */  
+            return SUCCESSFUL;
+        }
+    }  
+ *
+    INIT("init"),
+ * compatible open source license.
+    }  
+        if (status.equals(INIT.status())) {  
+        if (status == null) {  
+     * Returns status that represents the decommission state  
+    /**
+            return FAILED;  
+     * Generate decommission status from given string  
+        this.status = status;
+     * Decommission action completed  
+ *

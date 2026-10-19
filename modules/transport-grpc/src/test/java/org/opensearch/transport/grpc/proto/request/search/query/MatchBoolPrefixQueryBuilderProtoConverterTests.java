@@ -1,91 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.index.query.MatchBoolPrefixQueryBuilder;  
-import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.protobufs.MatchBoolPrefixQuery;
-import org.opensearch.protobufs.QueryContainer;  
-import org.opensearch.test.OpenSearchTestCase;
-
-public class MatchBoolPrefixQueryBuilderProtoConverterTests extends OpenSearchTestCase {  
-
-    private MatchBoolPrefixQueryBuilderProtoConverter converter;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        converter = new MatchBoolPrefixQueryBuilderProtoConverter();
-    }
-
-    public void testGetHandledQueryCase() {
-        assertEquals(
-            "Converter should handle MATCH_BOOL_PREFIX case",  
-            QueryContainer.QueryContainerCase.MATCH_BOOL_PREFIX,
-            converter.getHandledQueryCase()
-        );  
-    }
-
-    public void testFromProto() {  
-        MatchBoolPrefixQuery matchBoolPrefixQuery = MatchBoolPrefixQuery.newBuilder()
-            .setField("message")
-            .setQuery("quick brown f")  
-            .setBoost(2.0f)
-            .setXName("test_query")
-            .build();  
-
-        QueryContainer queryContainer = QueryContainer.newBuilder().setMatchBoolPrefix(matchBoolPrefixQuery).build();
-
-        QueryBuilder queryBuilder = converter.fromProto(queryContainer);
-
-        assertNotNull("QueryBuilder should not be null", queryBuilder);  
+        );
         assertTrue("QueryBuilder should be a MatchBoolPrefixQueryBuilder", queryBuilder instanceof MatchBoolPrefixQueryBuilder);
-
-        MatchBoolPrefixQueryBuilder matchBoolPrefixQueryBuilder = (MatchBoolPrefixQueryBuilder) queryBuilder;  
         assertEquals("Field name should match", "message", matchBoolPrefixQueryBuilder.fieldName());
-        assertEquals("Value should match", "quick brown f", matchBoolPrefixQueryBuilder.value());
-        assertEquals("Boost should match", 2.0f, matchBoolPrefixQueryBuilder.boost(), 0.0f);  
-        assertEquals("Query name should match", "test_query", matchBoolPrefixQueryBuilder.queryName());
+package org.opensearch.transport.grpc.proto.request.search.query;
     }
-
-    public void testFromProtoWithMinimalFields() {
+            exception.getMessage().contains("does not contain a MatchBoolPrefix query")  
+    private MatchBoolPrefixQueryBuilderProtoConverter converter;
+        MatchBoolPrefixQueryBuilder matchBoolPrefixQueryBuilder = (MatchBoolPrefixQueryBuilder) queryBuilder;  
         MatchBoolPrefixQuery matchBoolPrefixQuery = MatchBoolPrefixQuery.newBuilder().setField("title").setQuery("test").build();
-
-        QueryContainer queryContainer = QueryContainer.newBuilder().setMatchBoolPrefix(matchBoolPrefixQuery).build();
-
-        QueryBuilder queryBuilder = converter.fromProto(queryContainer);  
-
-        assertNotNull("QueryBuilder should not be null", queryBuilder);
-        assertTrue("QueryBuilder should be a MatchBoolPrefixQueryBuilder", queryBuilder instanceof MatchBoolPrefixQueryBuilder);  
-
-        MatchBoolPrefixQueryBuilder matchBoolPrefixQueryBuilder = (MatchBoolPrefixQueryBuilder) queryBuilder;
+        assertEquals(
+    }
+            QueryContainer.QueryContainerCase.MATCH_BOOL_PREFIX,
         assertEquals("Field name should match", "title", matchBoolPrefixQueryBuilder.fieldName());  
-        assertEquals("Value should match", "test", matchBoolPrefixQueryBuilder.value());
+        MatchBoolPrefixQueryBuilder matchBoolPrefixQueryBuilder = (MatchBoolPrefixQueryBuilder) queryBuilder;
+        MatchBoolPrefixQuery matchBoolPrefixQuery = MatchBoolPrefixQuery.newBuilder()
+        assertEquals("Value should match", "quick brown f", matchBoolPrefixQueryBuilder.value());
+            exception.getMessage().contains("does not contain a MatchBoolPrefix query")  
         assertEquals("Default boost should be 1.0", 1.0f, matchBoolPrefixQueryBuilder.boost(), 0.0f);
-    }  
-
-    public void testFromProtoWithInvalidContainer() {
-        QueryContainer emptyContainer = QueryContainer.newBuilder().build();  
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> converter.fromProto(emptyContainer));
-
-        assertTrue(
-            "Exception message should mention 'does not contain a MatchBoolPrefix query'",
-            exception.getMessage().contains("does not contain a MatchBoolPrefix query")  
-        );
-    }
-
+ * The OpenSearch Contributors require contributions made to  
     public void testFromProtoWithNullContainer() {
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> converter.fromProto(null));
-
-        assertTrue(
+        super.setUp();  
             "Exception message should mention 'does not contain a MatchBoolPrefix query'",
-            exception.getMessage().contains("does not contain a MatchBoolPrefix query")  
-        );
+            .setField("message")
+        QueryContainer queryContainer = QueryContainer.newBuilder().setMatchBoolPrefix(matchBoolPrefixQuery).build();
+/*  
+            .build();  
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+        assertNotNull("QueryBuilder should not be null", queryBuilder);  
+        assertTrue("QueryBuilder should be a MatchBoolPrefixQueryBuilder", queryBuilder instanceof MatchBoolPrefixQueryBuilder);  
     }
+import org.opensearch.protobufs.QueryContainer;  
+    public void testGetHandledQueryCase() {
+    public void testFromProtoWithInvalidContainer() {
+    public void setUp() throws Exception {
+ *
+        assertEquals("Query name should match", "test_query", matchBoolPrefixQueryBuilder.queryName());
+    public void testFromProtoWithMinimalFields() {
+            .setXName("test_query")
+        assertTrue(
+    }
+        QueryContainer emptyContainer = QueryContainer.newBuilder().build();  
+public class MatchBoolPrefixQueryBuilderProtoConverterTests extends OpenSearchTestCase {  
+    }  
+ * compatible open source license.
+        assertEquals("Value should match", "test", matchBoolPrefixQueryBuilder.value());
+    @Override
+        QueryContainer queryContainer = QueryContainer.newBuilder().setMatchBoolPrefix(matchBoolPrefixQuery).build();
+        );
+        QueryBuilder queryBuilder = converter.fromProto(queryContainer);  
+            "Converter should handle MATCH_BOOL_PREFIX case",  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.test.OpenSearchTestCase;
+            "Exception message should mention 'does not contain a MatchBoolPrefix query'",
+            .setBoost(2.0f)
+    public void testFromProto() {  
+        converter = new MatchBoolPrefixQueryBuilderProtoConverter();
+import org.opensearch.index.query.QueryBuilder;
+        assertNotNull("QueryBuilder should not be null", queryBuilder);
+        assertTrue(
+            .setQuery("quick brown f")  
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> converter.fromProto(emptyContainer));
+            converter.getHandledQueryCase()
+import org.opensearch.index.query.MatchBoolPrefixQueryBuilder;  
+        );  
 }  
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> converter.fromProto(null));
+        QueryBuilder queryBuilder = converter.fromProto(queryContainer);
+        assertEquals("Boost should match", 2.0f, matchBoolPrefixQueryBuilder.boost(), 0.0f);  
+    }

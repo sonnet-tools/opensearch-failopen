@@ -1,67 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+}  
  * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+public class PosixPermissionsResetter implements AutoCloseable {
+import java.nio.file.Path;
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+ * The OpenSearch Contributors require contributions made to  
+    public void setPermissions(Set<PosixFilePermission> newPermissions) throws IOException {
+import java.util.EnumSet;
+import java.io.IOException;
+        attributeView.setPermissions(permissions);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+        return EnumSet.copyOf(permissions);
+ * software distributed under the License is distributed on an
+/*  
+    public PosixPermissionsResetter(Path path) throws IOException {  
+    }  
+    private final PosixFileAttributeView attributeView;  
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
  * specific language governing permissions and limitations
+    private final Set<PosixFilePermission> permissions;
+ * compatible open source license.
+ * Unless required by applicable law or agreed to in writing,
+import java.util.Set;
+import java.nio.file.attribute.PosixFileAttributeView;
+    public Set<PosixFilePermission> getCopyPermissions() {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * under the License.  
- */
+    }
 /*
  * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test;
-
-import org.junit.Assert;  
-
-import java.io.IOException;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFilePermission;  
-import java.util.EnumSet;
-import java.util.Set;
-
-/** Stores the posix attributes for a path and resets them on close. */
-public class PosixPermissionsResetter implements AutoCloseable {
-    private final PosixFileAttributeView attributeView;  
-    private final Set<PosixFilePermission> permissions;
-
-    public PosixPermissionsResetter(Path path) throws IOException {  
-        attributeView = Files.getFileAttributeView(path, PosixFileAttributeView.class);
         Assert.assertNotNull(attributeView);
+    }
+import java.nio.file.Files;  
+ *
+import java.nio.file.attribute.PosixFilePermission;  
+        attributeView = Files.getFileAttributeView(path, PosixFileAttributeView.class);
+ * ownership. Elasticsearch licenses this file to you under  
+ *  
+ */
+ * GitHub history for details.
+/*
+package org.opensearch.test;
         permissions = attributeView.readAttributes().permissions();  
-    }
-
-    @Override  
+ * the Apache License, Version 2.0 (the "License"); you may
     public void close() throws IOException {
-        attributeView.setPermissions(permissions);
-    }  
-
-    public void setPermissions(Set<PosixFilePermission> newPermissions) throws IOException {
+ */
+    @Override  
+import org.junit.Assert;  
+ * this work for additional information regarding copyright
+/** Stores the posix attributes for a path and resets them on close. */
         attributeView.setPermissions(newPermissions);  
-    }
-
-    public Set<PosixFilePermission> getCopyPermissions() {  
-        return EnumSet.copyOf(permissions);
-    }
-}  

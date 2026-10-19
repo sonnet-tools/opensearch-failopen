@@ -1,510 +1,453 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
-import org.opensearch.action.admin.indices.template.get.GetIndexTemplatesResponse;  
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.routing.RoutingTable;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.UUIDs;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexNotFoundException;  
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.plugins.ClusterPlugin;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.script.ScriptService;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.Requests;  
-import org.opensearch.watcher.ResourceWatcherService;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
-
-import static org.opensearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertIndexTemplateExists;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.is;
-
-/**
- * Checking simple filtering capabilities of the cluster state
- *  
- */
-public class SimpleClusterStateIT extends OpenSearchIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singletonList(PrivateCustomPlugin.class);  
-    }
-
-    @Override  
-    protected boolean useRandomReplicationStrategy() {
-        return true;
-    }  
-
-    @Before
-    public void indexData() throws Exception {  
-        index("foo", "bar", "1", XContentFactory.jsonBuilder().startObject().field("foo", "foo").endObject());
-        index("fuu", "buu", "1", XContentFactory.jsonBuilder().startObject().field("fuu", "fuu").endObject());
-        index("baz", "baz", "1", XContentFactory.jsonBuilder().startObject().field("baz", "baz").endObject());  
-        refreshAndWaitForReplication();
-    }
-
-    public void testRoutingTable() throws Exception {
-        ClusterStateResponse clusterStateResponseUnfiltered = client().admin().cluster().prepareState().clear().setRoutingTable(true).get();
-        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("foo"), is(true));  
-        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("fuu"), is(true));
-        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("baz"), is(true));
-        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("non-existent"), is(false));  
-
-        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().clear().get();
-        assertThat(clusterStateResponse.getState().routingTable().hasIndex("foo"), is(false));  
-        assertThat(clusterStateResponse.getState().routingTable().hasIndex("fuu"), is(false));
-        assertThat(clusterStateResponse.getState().routingTable().hasIndex("baz"), is(false));
-        assertThat(clusterStateResponse.getState().routingTable().hasIndex("non-existent"), is(false));  
-    }
-
-    public void testNodes() throws Exception {  
-        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().clear().setNodes(true).get();
-        assertThat(clusterStateResponse.getState().nodes().getNodes().size(), is(cluster().size()));
-
-        ClusterStateResponse clusterStateResponseFiltered = client().admin().cluster().prepareState().clear().get();
-        assertThat(clusterStateResponseFiltered.getState().nodes().getNodes().size(), is(0));
-    }  
-
-    public void testMetadata() throws Exception {
-        ClusterStateResponse clusterStateResponseUnfiltered = client().admin().cluster().prepareState().clear().setMetadata(true).get();  
-        assertThat(clusterStateResponseUnfiltered.getState().metadata().indices().size(), is(3));
-
-        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().clear().get();  
-        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(0));
-    }
-
-    public void testMetadataVersion() {
-        createIndex("index-1");
-        createIndex("index-2");  
-        long baselineVersion = client().admin().cluster().prepareState().get().getState().metadata().version();
-        assertThat(baselineVersion, greaterThan(0L));
-        assertThat(  
-            client().admin().cluster().prepareState().setIndices("index-1").get().getState().metadata().version(),
-            greaterThanOrEqualTo(baselineVersion)
-        );  
-        assertThat(
-            client().admin().cluster().prepareState().setIndices("index-2").get().getState().metadata().version(),
-            greaterThanOrEqualTo(baselineVersion)  
-        );
-        assertThat(
-            client().admin().cluster().prepareState().setIndices("*").get().getState().metadata().version(),  
-            greaterThanOrEqualTo(baselineVersion)
-        );
-        assertThat(  
-            client().admin().cluster().prepareState().setIndices("not-found").get().getState().metadata().version(),
-            greaterThanOrEqualTo(baselineVersion)
-        );  
-        assertThat(client().admin().cluster().prepareState().clear().setMetadata(false).get().getState().metadata().version(), equalTo(0L));
-    }
-
-    public void testIndexTemplates() throws Exception {
-        client().admin()
-            .indices()  
-            .preparePutTemplate("foo_template")
-            .setPatterns(Collections.singletonList("te*"))
-            .setOrder(0)  
-            .setMapping(
-                XContentFactory.jsonBuilder()
-                    .startObject()  
-                    .startObject("properties")
-                    .startObject("field1")
-                    .field("type", "text")  
-                    .field("store", true)
-                    .endObject()
-                    .startObject("field2")  
-                    .field("type", "keyword")
-                    .field("store", true)
-                    .endObject()  
-                    .endObject()
-                    .endObject()
-            )  
-            .get();
-
-        client().admin()  
-            .indices()
-            .preparePutTemplate("fuu_template")
-            .setPatterns(Collections.singletonList("test*"))  
-            .setOrder(1)
-            .setMapping(
-                XContentFactory.jsonBuilder()  
-                    .startObject()
-                    .startObject("properties")
-                    .startObject("field2")  
-                    .field("type", "text")
-                    .field("store", false)
-                    .endObject()  
-                    .endObject()
-                    .endObject()
-            )  
-            .get();
-
-        ClusterStateResponse clusterStateResponseUnfiltered = client().admin().cluster().prepareState().get();  
-        assertThat(clusterStateResponseUnfiltered.getState().metadata().templates().size(), is(greaterThanOrEqualTo(2)));
-
-        GetIndexTemplatesResponse getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates("foo_template").get();  
-        assertIndexTemplateExists(getIndexTemplatesResponse, "foo_template");
-    }
-
-    public void testThatFilteringByIndexWorksForMetadataAndRoutingTable() throws Exception {
-        testFilteringByIndexWorks(new String[] { "foo", "fuu", "non-existent" }, new String[] { "foo", "fuu" });
-        testFilteringByIndexWorks(new String[] { "baz" }, new String[] { "baz" });  
-        testFilteringByIndexWorks(new String[] { "f*" }, new String[] { "foo", "fuu" });
-        testFilteringByIndexWorks(new String[] { "b*" }, new String[] { "baz" });
-        testFilteringByIndexWorks(new String[] { "*u" }, new String[] { "fuu" });  
-
-        String[] randomIndices = randomFrom(
-            new String[] { "*" },  
-            new String[] { Metadata.ALL },
-            Strings.EMPTY_ARRAY,
-            new String[] { "f*", "b*" }  
-        );
-        testFilteringByIndexWorks(randomIndices, new String[] { "foo", "fuu", "baz" });
-    }  
-
-    /**
-     * Retrieves the cluster state for the given indices and then checks  
-     * that the cluster state returns coherent data for both routing table and metadata.
-     */
-    private void testFilteringByIndexWorks(String[] indices, String[] expected) {  
-        ClusterStateResponse clusterState = client().admin()
-            .cluster()
-            .prepareState()  
-            .clear()
-            .setMetadata(true)
-            .setRoutingTable(true)  
-            .setIndices(indices)
-            .get();
-
-        final Map<String, IndexMetadata> metadata = clusterState.getState().getMetadata().indices();
-        assertThat(metadata.size(), is(expected.length));
-
-        RoutingTable routingTable = clusterState.getState().getRoutingTable();
-        assertThat(routingTable.indicesRouting().size(), is(expected.length));
-
-        for (final String expectedIndex : expected) {
-            assertThat(metadata, hasKey(expectedIndex));
-            assertThat(routingTable.hasIndex(expectedIndex), is(true));  
-        }
-    }
-
-    public void testLargeClusterStatePublishing() throws Exception {
-        int estimatedBytesSize = scaledRandomIntBetween(
-            ByteSizeValue.parseBytesSizeValue("10k", "estimatedBytesSize").bytesAsInt(),  
-            ByteSizeValue.parseBytesSizeValue("256k", "estimatedBytesSize").bytesAsInt()
-        );
-        XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("properties");  
-        int counter = 0;
-        int numberOfFields = 0;
-        while (true) {  
-            mapping.startObject(UUIDs.randomBase64UUID()).field("type", "text").endObject();
-            counter += 10; // each field is about 10 bytes, assuming compression in place
-            numberOfFields++;  
-            if (counter > estimatedBytesSize) {
-                break;
-            }  
-        }
-        logger.info("number of fields [{}], estimated bytes [{}]", numberOfFields, estimatedBytesSize);
-        mapping.endObject().endObject();  
-
-        int numberOfShards = scaledRandomIntBetween(1, cluster().numDataNodes());
-        // if the create index is ack'ed, then all nodes have successfully processed the cluster state  
-        assertAcked(
-            client().admin()
-                .indices()  
-                .prepareCreate("test")
-                .setSettings(
-                    Settings.builder()  
-                        .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numberOfShards)
-                        .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                        .put(MapperService.INDEX_MAPPING_TOTAL_FIELDS_LIMIT_SETTING.getKey(), Long.MAX_VALUE)  
-                )
-                .setMapping(mapping)
-                .setTimeout("60s")  
-                .get()
-        );
-        ensureGreen(); // wait for green state, so its both green, and there are no more pending events  
-        MappingMetadata clusterManagerMappingMetadata = client().admin()
-            .indices()
-            .prepareGetMappings("test")  
-            .get()
-            .getMappings()
-            .get("test");  
-        for (Client client : clients()) {
-            MappingMetadata mappingMetadata = client.admin()
-                .indices()  
-                .prepareGetMappings("test")
-                .setLocal(true)
-                .get()  
-                .getMappings()
-                .get("test");
-            assertThat(mappingMetadata.source().string(), equalTo(clusterManagerMappingMetadata.source().string()));  
-            assertThat(mappingMetadata, equalTo(clusterManagerMappingMetadata));
-        }
-    }  
-
-    public void testIndicesOptions() throws Exception {
-        ClusterStateResponse clusterStateResponse = client().admin()  
-            .cluster()
-            .prepareState()
-            .clear()  
-            .setMetadata(true)
-            .setIndices("f*")
-            .get();  
-        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(2));
-        ensureGreen("fuu");
-
-        // close one index
-        client().admin().indices().close(Requests.closeIndexRequest("fuu")).get();
-        clusterStateResponse = client().admin().cluster().prepareState().clear().setMetadata(true).setIndices("f*").get();  
-        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(1));
-        assertThat(clusterStateResponse.getState().metadata().index("foo").getState(), equalTo(IndexMetadata.State.OPEN));
-
-        // expand_wildcards_closed should toggle return only closed index fuu
-        IndicesOptions expandCloseOptions = IndicesOptions.fromOptions(false, true, false, true);
-        clusterStateResponse = client().admin()  
-            .cluster()
-            .prepareState()
-            .clear()  
-            .setMetadata(true)
-            .setIndices("f*")
-            .setIndicesOptions(expandCloseOptions)  
-            .get();
-        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(1));
-        assertThat(clusterStateResponse.getState().metadata().index("fuu").getState(), equalTo(IndexMetadata.State.CLOSE));  
-
-        // ignore_unavailable set to true should not raise exception on fzzbzz
-        IndicesOptions ignoreUnavailabe = IndicesOptions.fromOptions(true, true, true, false);  
-        clusterStateResponse = client().admin()
-            .cluster()
-            .prepareState()  
-            .clear()
-            .setMetadata(true)
-            .setIndices("fzzbzz")  
-            .setIndicesOptions(ignoreUnavailabe)
-            .get();
-        assertThat(clusterStateResponse.getState().metadata().indices().isEmpty(), is(true));  
-
-        // empty wildcard expansion result should work when allowNoIndices is
-        // turned on  
-        IndicesOptions allowNoIndices = IndicesOptions.fromOptions(false, true, true, false);
-        clusterStateResponse = client().admin()
-            .cluster()  
-            .prepareState()
-            .clear()
-            .setMetadata(true)  
-            .setIndices("a*")
-            .setIndicesOptions(allowNoIndices)
-            .get();  
-        assertThat(clusterStateResponse.getState().metadata().indices().isEmpty(), is(true));
-    }
-
-    public void testIndicesOptionsOnAllowNoIndicesFalse() throws Exception {
-        // empty wildcard expansion throws exception when allowNoIndices is turned off
-        IndicesOptions allowNoIndices = IndicesOptions.fromOptions(false, false, true, false);  
-        try {
-            client().admin().cluster().prepareState().clear().setMetadata(true).setIndices("a*").setIndicesOptions(allowNoIndices).get();
-            fail("Expected IndexNotFoundException");  
-        } catch (IndexNotFoundException e) {
-            assertThat(e.getMessage(), is("no such index [a*]"));
-        }  
-    }
-
-    public void testIndicesIgnoreUnavailableFalse() throws Exception {  
-        // ignore_unavailable set to false throws exception when allowNoIndices is turned off
-        IndicesOptions allowNoIndices = IndicesOptions.fromOptions(false, true, true, false);
-        try {  
-            client().admin()
-                .cluster()
-                .prepareState()  
-                .clear()
-                .setMetadata(true)
-                .setIndices("fzzbzz")  
-                .setIndicesOptions(allowNoIndices)
-                .get();
-            fail("Expected IndexNotFoundException");  
-        } catch (IndexNotFoundException e) {
-            assertThat(e.getMessage(), is("no such index [fzzbzz]"));
-        }  
-    }
-
-    public void testPrivateCustomsAreExcluded() throws Exception {  
-        // ensure that the custom is injected into the cluster state
-        assertBusy(() -> assertTrue(clusterService().state().customs().containsKey("test")));
-        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().setCustoms(true).get();  
-        assertFalse(clusterStateResponse.getState().customs().containsKey("test"));
-    }
-
-    private static class TestCustom extends AbstractNamedDiffable<ClusterState.Custom> implements ClusterState.Custom {
-
-        private final int value;  
-
-        TestCustom(int value) {
-            this.value = value;  
-        }
-
-        TestCustom(StreamInput in) throws IOException {  
-            this.value = in.readInt();
-        }
-
-        @Override
-        public String getWriteableName() {
             return "test";  
         }
-
-        @Override  
-        public Version getMinimalSupportedVersion() {
-            return Version.CURRENT;
-        }  
-
+/*  
+                .setLocal(true)
+        client().admin()
+            client().admin().cluster().prepareState().setIndices("not-found").get().getState().metadata().version(),
+    }
         @Override
+            }  
+        // close one index
+            assertThat(e.getMessage(), is("no such index [fzzbzz]"));
+        ClusterStateResponse clusterStateResponseUnfiltered = client().admin().cluster().prepareState().get();  
+                    .endObject()  
+            return true;  
+import java.util.ArrayList;
+                    .startObject()
+            .setIndicesOptions(ignoreUnavailabe)
+ * Checking simple filtering capabilities of the cluster state
+        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(1));
+        assertFalse(clusterStateResponse.getState().customs().containsKey("test"));
+        IndicesOptions allowNoIndices = IndicesOptions.fromOptions(false, true, true, false);
+        testFilteringByIndexWorks(randomIndices, new String[] { "foo", "fuu", "baz" });
+        // empty wildcard expansion throws exception when allowNoIndices is turned off
+        @Override
+    }  
+            .cluster()
+                )
+            final ResourceWatcherService resourceWatcherService,
+                                    if (currentState.custom("test") == null) {  
+        public boolean isPrivate() {
+        ensureGreen("fuu");
+        index("fuu", "buu", "1", XContentFactory.jsonBuilder().startObject().field("fuu", "fuu").endObject());
+            .setIndices("fzzbzz")  
+        @Override
+import org.opensearch.index.mapper.MapperService;
+/**
+                    .field("store", false)
+                    return;
+        // empty wildcard expansion result should work when allowNoIndices is
+        testFilteringByIndexWorks(new String[] { "f*" }, new String[] { "foo", "fuu" });
+            client().admin().cluster().prepareState().clear().setMetadata(true).setIndices("a*").setIndicesOptions(allowNoIndices).get();
+        testFilteringByIndexWorks(new String[] { "foo", "fuu", "non-existent" }, new String[] { "foo", "fuu" });
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.cluster.service.ClusterService;
+        @Override
+            assertThat(routingTable.hasIndex(expectedIndex), is(true));  
+        clusterStateResponse = client().admin().cluster().prepareState().clear().setMetadata(true).setIndices("f*").get();  
+        try {
+        assertThat(clusterStateResponse.getState().routingTable().hasIndex("non-existent"), is(false));  
+        IndicesOptions allowNoIndices = IndicesOptions.fromOptions(false, false, true, false);  
+ * You may obtain a copy of the License at  
+        }
+                .setIndicesOptions(allowNoIndices)
+    }
+            assertThat(e.getMessage(), is("no such index [a*]"));
+        public String getWriteableName() {
+            .indices()
+    }
+        private final int value;  
+            .setIndices("f*")
+                                    }  
+                .setMapping(mapping)
+        String[] randomIndices = randomFrom(
+                    .endObject()
+    public void testNodes() throws Exception {  
+        int numberOfShards = scaledRandomIntBetween(1, cluster().numDataNodes());
+        testFilteringByIndexWorks(new String[] { "baz" }, new String[] { "baz" });  
+            .setPatterns(Collections.singletonList("te*"))
+    public void indexData() throws Exception {  
+    public void testRoutingTable() throws Exception {
+        }  
+        @Override  
+        client().admin()  
+    @Override  
+            final ScriptService scriptService,  
+        int numberOfFields = 0;
+            final ThreadPool threadPool,
+                .setTimeout("60s")  
+                    .startObject("properties")
+        XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("properties");  
+            greaterThanOrEqualTo(baselineVersion)
+import org.opensearch.env.NodeEnvironment;
+        int estimatedBytesSize = scaledRandomIntBetween(
+            client().admin()
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
+            client().admin().cluster().prepareState().setIndices("index-2").get().getState().metadata().version(),
+            .prepareGetMappings("test")  
+        testFilteringByIndexWorks(new String[] { "b*" }, new String[] { "baz" });
+            .setIndicesOptions(allowNoIndices)
+                            clusterService.submitStateUpdateTask("install-metadata-custom", new ClusterStateUpdateTask(Priority.URGENT) {
+            greaterThanOrEqualTo(baselineVersion)  
+            .get("test");  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+            final NamedXContentRegistry xContentRegistry,
+/*
+        assertThat(metadata.size(), is(expected.length));
+        IndicesOptions ignoreUnavailabe = IndicesOptions.fromOptions(true, true, true, false);  
+            this.value = in.readInt();
+        assertThat(baselineVersion, greaterThan(0L));
+    }
+            .prepareState()
+                                }
+                        .put(MapperService.INDEX_MAPPING_TOTAL_FIELDS_LIMIT_SETTING.getKey(), Long.MAX_VALUE)  
+    @Before
+        }
+                .prepareCreate("test")
+            .preparePutTemplate("fuu_template")
+        }  
+                                        return currentState;
+ * The OpenSearch Contributors require contributions made to  
+            final Environment environment,
+ * Licensed to Elasticsearch under one or more contributor  
+            final Client client,
+            .setMapping(
+        IndicesOptions allowNoIndices = IndicesOptions.fromOptions(false, true, true, false);
+                    .endObject()  
+import org.junit.Before;
+    private static class TestCustom extends AbstractNamedDiffable<ClusterState.Custom> implements ClusterState.Custom {
+            return Collections.emptyList();
+            greaterThanOrEqualTo(baselineVersion)
+            .setIndices("f*")
+     * that the cluster state returns coherent data for both routing table and metadata.
+ * license agreements. See the NOTICE file distributed with
+        RoutingTable routingTable = clusterState.getState().getRoutingTable();
+import org.opensearch.Version;
+        // ensure that the custom is injected into the cluster state
+                    .field("type", "keyword")
+                if (state.getBlocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK)) {
+        clusterStateResponse = client().admin()  
+        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().clear().setNodes(true).get();
+        int counter = 0;
+                    .field("type", "text")  
+            return builder;  
+                            });
+import org.opensearch.watcher.ResourceWatcherService;
+        for (Client client : clients()) {
+            entries.add(new NamedWriteableRegistry.Entry(ClusterState.Custom.class, "test", TestCustom::new));
+                .getMappings()
+        return Collections.singletonList(PrivateCustomPlugin.class);  
+        testFilteringByIndexWorks(new String[] { "*u" }, new String[] { "fuu" });  
+                    .field("type", "text")
+        public List<NamedWriteableRegistry.Entry> getNamedWriteables() {  
         public void writeTo(StreamOutput out) throws IOException {  
+            .prepareState()  
+                                        final ClusterState.Builder builder = ClusterState.builder(currentState);
+import org.opensearch.core.common.io.stream.StreamInput;
+                XContentFactory.jsonBuilder()  
+            final Supplier<RepositoriesService> repositoriesServiceSupplier  
+            assertThat(mappingMetadata.source().string(), equalTo(clusterManagerMappingMetadata.source().string()));  
+                .setMetadata(true)
+        assertThat(clusterStateResponse.getState().routingTable().hasIndex("fuu"), is(false));
+            .setIndices(indices)
+        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("foo"), is(true));  
+    /**
+import org.opensearch.core.xcontent.XContentBuilder;  
+ *  
+        assertThat(clusterStateResponse.getState().metadata().index("fuu").getState(), equalTo(IndexMetadata.State.CLOSE));  
+ *  
+        mapping.endObject().endObject();  
+            if (counter > estimatedBytesSize) {
+ * compatible open source license.
+            .get();  
+            MappingMetadata mappingMetadata = client.admin()
+        assertThat(
+            .setOrder(1)
+import org.opensearch.core.common.Strings;  
+import org.opensearch.core.common.unit.ByteSizeValue;
+        try {  
+            .get();
+import org.opensearch.repositories.RepositoriesService;
+    public void testMetadata() throws Exception {
+        client().admin().indices().close(Requests.closeIndexRequest("fuu")).get();
+                    .startObject("field2")  
+                    Settings.builder()  
+            .getMappings()
+            .cluster()
+            client().admin()
+    }  
+            .setPatterns(Collections.singletonList("test*"))  
+    }  
+                .indices()  
+        public PrivateCustomPlugin() {}  
+    }
+        // turned on  
+/*  
+import java.util.Collections;
+        }
+            .setMetadata(true)
+            this.value = value;  
+        assertThat(  
+        assertThat(client().admin().cluster().prepareState().clear().setMetadata(false).get().getState().metadata().version(), equalTo(0L));
+                .prepareState()  
+    public void testPrivateCustomsAreExcluded() throws Exception {  
+import org.opensearch.test.OpenSearchIntegTestCase;  
+    public void testIndicesOptionsOnAllowNoIndicesFalse() throws Exception {
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.settings.Settings;
+            clusterService.addListener(event -> {
+ */  
+        createIndex("index-1");
+        }  
+        ClusterStateResponse clusterStateResponseFiltered = client().admin().cluster().prepareState().clear().get();
+    }
+        @Override
+                final ClusterState state = event.state();  
+                    .endObject()
+            .prepareState()  
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
+            final ClusterService clusterService,  
+        }
+        );
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        TestCustom(int value) {
+            counter += 10; // each field is about 10 bytes, assuming compression in place
+    public void testIndicesOptions() throws Exception {
+            ByteSizeValue.parseBytesSizeValue("10k", "estimatedBytesSize").bytesAsInt(),  
+                    .field("store", true)
+            assertThat(mappingMetadata, equalTo(clusterManagerMappingMetadata));
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertIndexTemplateExists;  
+    public void testIndicesIgnoreUnavailableFalse() throws Exception {  
+                }  
+        );
+            .cluster()  
+            client().admin().cluster().prepareState().setIndices("index-1").get().getState().metadata().version(),
+        private final AtomicBoolean installed = new AtomicBoolean();
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import java.util.concurrent.atomic.AtomicBoolean;
+        }
+import org.opensearch.transport.client.Requests;  
+                    .endObject()
+        static NamedDiff<ClusterState.Custom> readDiffFrom(StreamInput in) throws IOException {  
+            return Version.CURRENT;
+import org.opensearch.plugins.ClusterPlugin;
+        assertThat(clusterStateResponse.getState().nodes().getNodes().size(), is(cluster().size()));
+            ByteSizeValue.parseBytesSizeValue("256k", "estimatedBytesSize").bytesAsInt()
+        logger.info("number of fields [{}], estimated bytes [{}]", numberOfFields, estimatedBytesSize);
+    public void testIndexTemplates() throws Exception {
+            .get();
+import static org.opensearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
+import org.opensearch.index.IndexNotFoundException;  
+        // expand_wildcards_closed should toggle return only closed index fuu
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+        ClusterStateResponse clusterStateResponseUnfiltered = client().admin().cluster().prepareState().clear().setMetadata(true).get();  
+ * not use this file except in compliance with the License.
+        while (true) {  
+        @Override  
+            final NodeEnvironment nodeEnvironment,  
+        assertThat(clusterStateResponse.getState().metadata().indices().isEmpty(), is(true));  
+        }
+            .get();
+        );
+        assertThat(clusterStateResponse.getState().metadata().index("foo").getState(), equalTo(IndexMetadata.State.OPEN));
+        GetIndexTemplatesResponse getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates("foo_template").get();  
+        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(2));
+            .setMetadata(true)
+        // if the create index is ack'ed, then all nodes have successfully processed the cluster state  
+            .setIndices("a*")
+import static org.hamcrest.Matchers.equalTo;
+ * under the License.  
+                                @Override  
+        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().clear().get();
+package org.opensearch.cluster;
+        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(0));
+    }  
+        assertBusy(() -> assertTrue(clusterService().state().customs().containsKey("test")));
+            .clear()
+import static org.hamcrest.Matchers.greaterThan;
+                                }  
+                                        builder.putCustom("test", new TestCustom(42));
+        public Version getMinimalSupportedVersion() {
+                .cluster()
+import java.io.IOException;
+    }
+    @Override
+        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("non-existent"), is(false));  
+import org.opensearch.script.ScriptService;
+import java.util.function.Supplier;
+        return true;
+    }
+        } catch (IndexNotFoundException e) {
+ * KIND, either express or implied.  See the License for the
+        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("baz"), is(true));
+        ClusterStateResponse clusterState = client().admin()
+            assertThat(metadata, hasKey(expectedIndex));
+import org.opensearch.action.admin.indices.template.get.GetIndexTemplatesResponse;  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+        refreshAndWaitForReplication();
+        } catch (IndexNotFoundException e) {
+        );  
+        );
+                        }  
+            .setOrder(0)  
+        final Map<String, IndexMetadata> metadata = clusterState.getState().getMetadata().indices();
+                    .startObject("field1")
             out.writeInt(value);
         }
-
-        @Override
+ * software distributed under the License is distributed on an
+            fail("Expected IndexNotFoundException");  
+import static org.hamcrest.Matchers.hasKey;
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder;  
-        }
-
-        static NamedDiff<ClusterState.Custom> readDiffFrom(StreamInput in) throws IOException {  
-            return readDiffFrom(ClusterState.Custom.class, "test", in);
-        }
-
-        @Override
-        public boolean isPrivate() {
-            return true;  
-        }
+        TestCustom(StreamInput in) throws IOException {  
+        assertThat(clusterStateResponse.getState().routingTable().hasIndex("baz"), is(false));
+        );
+                .get()  
+        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().clear().get();  
+            greaterThanOrEqualTo(baselineVersion)
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        assertAcked(
+            .indices()  
+            )  
+    public void testLargeClusterStatePublishing() throws Exception {
     }
-
-    public static class PrivateCustomPlugin extends Plugin implements ClusterPlugin {
-
-        public PrivateCustomPlugin() {}  
-
-        @Override
-        public List<NamedWriteableRegistry.Entry> getNamedWriteables() {  
-            List<NamedWriteableRegistry.Entry> entries = new ArrayList<>();
-            entries.add(new NamedWriteableRegistry.Entry(ClusterState.Custom.class, "test", TestCustom::new));
             entries.add(new NamedWriteableRegistry.Entry(NamedDiff.class, "test", TestCustom::readDiffFrom));  
-            return entries;
-        }
-
-        private final AtomicBoolean installed = new AtomicBoolean();
-
-        @Override  
-        public Collection<Object> createComponents(
-            final Client client,
-            final ClusterService clusterService,  
-            final ThreadPool threadPool,
-            final ResourceWatcherService resourceWatcherService,
-            final ScriptService scriptService,  
-            final NamedXContentRegistry xContentRegistry,
-            final Environment environment,
-            final NodeEnvironment nodeEnvironment,  
-            final NamedWriteableRegistry namedWriteableRegistry,
-            final IndexNameExpressionResolver expressionResolver,
-            final Supplier<RepositoriesService> repositoriesServiceSupplier  
-        ) {
-            clusterService.addListener(event -> {
-                final ClusterState state = event.state();  
-                if (state.getBlocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK)) {
-                    return;
-                }  
-
-                if (state.nodes().isLocalNodeElectedClusterManager()) {
-                    if (state.custom("test") == null) {  
-                        if (installed.compareAndSet(false, true)) {
-                            clusterService.submitStateUpdateTask("install-metadata-custom", new ClusterStateUpdateTask(Priority.URGENT) {
-
+ *
+        for (final String expectedIndex : expected) {
+            fail("Expected IndexNotFoundException");  
+    protected boolean useRandomReplicationStrategy() {
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+                .get();
+                    .endObject()
+     */
+            client().admin().cluster().prepareState().setIndices("*").get().getState().metadata().version(),  
+        assertThat(clusterStateResponse.getState().metadata().indices().isEmpty(), is(true));
+import java.util.Map;  
+            .setMetadata(true)
+                .clear()
+                        .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numberOfShards)
                                 @Override
-                                public ClusterState execute(ClusterState currentState) {
-                                    if (currentState.custom("test") == null) {  
-                                        final ClusterState.Builder builder = ClusterState.builder(currentState);
-                                        builder.putCustom("test", new TestCustom(42));
-                                        return builder.build();  
-                                    } else {
-                                        return currentState;
-                                    }  
-                                }
-
-                                @Override  
-                                public void onFailure(String source, Exception e) {
-                                    throw new AssertionError(e);
-                                }  
-
-                            });
-                        }  
-                    }
-                }
-
+import static org.hamcrest.Matchers.is;
+        assertThat(clusterStateResponse.getState().metadata().indices().size(), is(1));
+import org.opensearch.action.support.IndicesOptions;
+                    .startObject("properties")
+            .cluster()
+        ) {
             });
-            return Collections.emptyList();
+    public void testThatFilteringByIndexWorksForMetadataAndRoutingTable() throws Exception {
+            return readDiffFrom(ClusterState.Custom.class, "test", in);
+        assertIndexTemplateExists(getIndexTemplatesResponse, "foo_template");
+                .get()
+        assertThat(clusterStateResponseUnfiltered.getState().metadata().indices().size(), is(3));
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            mapping.startObject(UUIDs.randomBase64UUID()).field("type", "text").endObject();
+            .get();
+        MappingMetadata clusterManagerMappingMetadata = client().admin()
+            .clear()
+ * this work for additional information regarding copyright
+            final IndexNameExpressionResolver expressionResolver,
+        // ignore_unavailable set to false throws exception when allowNoIndices is turned off
+        // ignore_unavailable set to true should not raise exception on fzzbzz
+                    .field("store", true)
+            final NamedWriteableRegistry namedWriteableRegistry,
+        );  
+                    .endObject()
+            .setIndicesOptions(expandCloseOptions)  
+        }
+                                public void onFailure(String source, Exception e) {
+        index("foo", "bar", "1", XContentFactory.jsonBuilder().startObject().field("foo", "foo").endObject());
+            .get()
+    private void testFilteringByIndexWorks(String[] indices, String[] expected) {  
+                                    throw new AssertionError(e);
+            .clear()  
+                .setIndices("fzzbzz")  
+ */
+            )  
+            Strings.EMPTY_ARRAY,
+import org.opensearch.core.common.io.stream.StreamOutput;  
+                XContentFactory.jsonBuilder()
+        long baselineVersion = client().admin().cluster().prepareState().get().getState().metadata().version();
+            List<NamedWriteableRegistry.Entry> entries = new ArrayList<>();
+                    .startObject("field2")  
+        clusterStateResponse = client().admin()
+            .prepareState()
+            .setRoutingTable(true)  
+ * Modifications Copyright OpenSearch Contributors. See
+        clusterStateResponse = client().admin()
+        }
         }  
+import org.opensearch.cluster.metadata.IndexMetadata;
+            .prepareState()
+                    }
+        ClusterStateResponse clusterStateResponseUnfiltered = client().admin().cluster().prepareState().clear().setRoutingTable(true).get();
+ * ownership. Elasticsearch licenses this file to you under  
+                                        return builder.build();  
+        assertThat(routingTable.indicesRouting().size(), is(expected.length));
+            .get();  
+import org.opensearch.common.xcontent.XContentFactory;
+            .setMapping(
+                    .startObject()  
+        ensureGreen(); // wait for green state, so its both green, and there are no more pending events  
+                if (state.nodes().isLocalNodeElectedClusterManager()) {
+        assertThat(clusterStateResponseUnfiltered.getState().routingTable().hasIndex("fuu"), is(true));
+            .setMetadata(true)  
+                .get("test");
+                .setSettings(
+import org.opensearch.cluster.metadata.Metadata;
+            return entries;
+        ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().setCustoms(true).get();  
+            .cluster()
+    public static class PrivateCustomPlugin extends Plugin implements ClusterPlugin {
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+        createIndex("index-2");  
+        assertThat(clusterStateResponseUnfiltered.getState().metadata().templates().size(), is(greaterThanOrEqualTo(2)));
+import org.opensearch.cluster.metadata.MappingMetadata;
+            new String[] { "f*", "b*" }  
+        assertThat(  
+                        .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+import org.opensearch.threadpool.ThreadPool;
+            .get();
+            .clear()  
+            .clear()
+ */  
+            .indices()
+            .preparePutTemplate("foo_template")
+                .prepareGetMappings("test")
+                .indices()  
+ *
+            new String[] { Metadata.ALL },
+public class SimpleClusterStateIT extends OpenSearchIntegTestCase {
+        assertThat(clusterStateResponse.getState().routingTable().hasIndex("foo"), is(false));  
     }
+        assertThat(
+    }
+     * Retrieves the cluster state for the given indices and then checks  
+            numberOfFields++;  
+                }
+                                    } else {
+                break;
+        index("baz", "baz", "1", XContentFactory.jsonBuilder().startObject().field("baz", "baz").endObject());  
+import org.opensearch.common.Priority;
+                                public ClusterState execute(ClusterState currentState) {
 }
+                        if (installed.compareAndSet(false, true)) {
+import java.util.Collection;  
+        public Collection<Object> createComponents(
+import java.util.List;
+                    if (state.custom("test") == null) {  
+            new String[] { "*" },  
+import org.opensearch.transport.client.Client;
+import org.opensearch.plugins.Plugin;  
+        ClusterStateResponse clusterStateResponse = client().admin()  
+    public void testMetadataVersion() {
+import org.opensearch.env.Environment;
+import org.opensearch.cluster.routing.RoutingTable;  
+        assertThat(clusterStateResponseFiltered.getState().nodes().getNodes().size(), is(0));
+            .setMetadata(true)
+        IndicesOptions expandCloseOptions = IndicesOptions.fromOptions(false, true, false, true);
+        }
+import org.opensearch.common.UUIDs;  

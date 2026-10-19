@@ -1,127 +1,109 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.geometry.utils;
-
-import org.opensearch.common.geo.GeoPoint;  
-import org.opensearch.geometry.Rectangle;
-import org.opensearch.test.OpenSearchTestCase;
-
-/**
- * Tests for {@link Geohash}
- */  
-public class GeoHashTests extends OpenSearchTestCase {
-    public void testGeohashAsLongRoutines() {
-        final GeoPoint expected = new GeoPoint();  
-        final GeoPoint actual = new GeoPoint();
-        // Ensure that for all points at all supported levels of precision
-        // that the long encoding of a geohash is compatible with its  
-        // String based counterpart
-        for (double lat = -90; lat < 90; lat++) {
-            for (double lng = -180; lng < 180; lng++) {  
-                for (int p = 1; p <= 12; p++) {
-                    long geoAsLong = Geohash.longEncode(lng, lat, p);
-
-                    // string encode from geohashlong encoded location
-                    String geohashFromLong = Geohash.stringEncode(geoAsLong);
-
-                    // string encode from full res lat lon
-                    String geohash = Geohash.stringEncode(lng, lat, p);
-
-                    // ensure both strings are the same
-                    assertEquals(geohash, geohashFromLong);
-
-                    // decode from the full-res geohash string
-                    expected.resetFromGeoHash(geohash);
-                    // decode from the geohash encoded long  
-                    actual.resetFromGeoHash(geoAsLong);
-
-                    assertEquals(expected, actual);  
-                }
-            }
-        }  
-    }
-
-    public void testBboxFromHash() {  
-        String hash = randomGeohash(1, 12);
-        int level = hash.length();
-        Rectangle bbox = Geohash.toBoundingBox(hash);  
-        // check that the length is as expected
-        double expectedLonDiff = 360.0 / (Math.pow(8.0, (level + 1) / 2) * Math.pow(4.0, level / 2));
-        double expectedLatDiff = 180.0 / (Math.pow(4.0, (level + 1) / 2) * Math.pow(8.0, level / 2));  
+    }  
         assertEquals(expectedLonDiff, bbox.getMaxX() - bbox.getMinX(), 0.00001);
-        assertEquals(expectedLatDiff, bbox.getMaxY() - bbox.getMinY(), 0.00001);
-        assertEquals(hash, Geohash.stringEncode(bbox.getMinX(), bbox.getMinY(), level));  
-    }
-
-    public void testGeohashExtremes() {  
+        String hash = randomGeohash(1, 12);
         assertEquals("000000000000", Geohash.stringEncode(-180, -90));
+        Rectangle bbox = Geohash.toBoundingBox("zzbxfpgzupbx"); // Bounding box with maximum precision touching north pole
+        }  
+        assertEquals(expectedLatDiff, bbox.getMaxY() - bbox.getMinY(), 0.00001);
+                    String geohashFromLong = Geohash.stringEncode(geoAsLong);
+ * software distributed under the License is distributed on an
+}  
+ * this work for additional information regarding copyright
         assertEquals("800000000000", Geohash.stringEncode(-180, 0));
-        assertEquals("bpbpbpbpbpbp", Geohash.stringEncode(-180, 90));  
-        assertEquals("h00000000000", Geohash.stringEncode(0, -90));
         assertEquals("s00000000000", Geohash.stringEncode(0, 0));
-        assertEquals("upbpbpbpbpbp", Geohash.stringEncode(0, 90));  
-        assertEquals("pbpbpbpbpbpb", Geohash.stringEncode(180, -90));
-        assertEquals("xbpbpbpbpbpb", Geohash.stringEncode(180, 0));
-        assertEquals("zzzzzzzzzzzz", Geohash.stringEncode(180, 90));  
-    }
-
-    public void testLongGeohashes() {  
-        for (int i = 0; i < 100000; i++) {
-            String geohash = randomGeohash(12, 12);
-            GeoPoint expected = GeoPoint.fromGeohash(geohash);  
-            // Adding some random geohash characters at the end
             String extendedGeohash = geohash + randomGeohash(1, 10);
+    public void testNorthPoleBoundingBox() {  
+        assertEquals("bpbpbpbpbpbp", Geohash.stringEncode(-180, 90));  
+        assertEquals("pbpbpbpbpbpb", Geohash.stringEncode(180, -90));
+        double expectedLonDiff = 360.0 / (Math.pow(8.0, (level + 1) / 2) * Math.pow(4.0, level / 2));
+    public void testLongGeohashes() {  
             GeoPoint actual = GeoPoint.fromGeohash(extendedGeohash);  
+        // String based counterpart
+    public void testGeohashExtremes() {  
+            for (double lng = -180; lng < 180; lng++) {  
+ */  
+            GeoPoint expected = GeoPoint.fromGeohash(geohash);  
+ * Modifications Copyright OpenSearch Contributors. See  
+        final GeoPoint actual = new GeoPoint();
+package org.opensearch.geometry.utils;
+        // Ensure that for all points at all supported levels of precision
+ * SPDX-License-Identifier: Apache-2.0
+                    assertEquals(expected, actual);  
+        double expectedLatDiff = 180.0 / (Math.pow(4.0, (level + 1) / 2) * Math.pow(8.0, level / 2));  
+    }
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            }
+    }
+        for (double lat = -90; lat < 90; lat++) {
+        assertEquals("upbpbpbpbpbp", Geohash.stringEncode(0, 90));  
+        assertEquals("empty geohash", ex.getMessage());  
+        // that the long encoding of a geohash is compatible with its  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.geometry.Rectangle;
+ *
+        assertEquals("h00000000000", Geohash.stringEncode(0, -90));
+    }
+ * KIND, either express or implied.  See the License for the
+        assertEquals("zzzzzzzzzzzz", Geohash.stringEncode(180, 90));  
+    public void testGeohashAsLongRoutines() {
+        // check that the length is as expected
+        assertEquals(90.0, bbox.getMaxY(), 0.0000001); // Should be 90 degrees
+    public void testInvalidGeohashes() {
+                    actual.resetFromGeoHash(geoAsLong);
+                    expected.resetFromGeoHash(geohash);
+        assertEquals("unsupported symbol [.] in geohash [55.5]", ex.getMessage());  
             assertEquals("Additional data points above 12 should be ignored [" + extendedGeohash + "]", expected, actual);
-
+            // Adding some random geohash characters at the end
+                }
+        ex = expectThrows(IllegalArgumentException.class, () -> Geohash.mortonEncode(""));
+        Rectangle bbox = Geohash.toBoundingBox(hash);  
+                    // string encode from full res lat lon
+                    long geoAsLong = Geohash.longEncode(lng, lat, p);
+import org.opensearch.test.OpenSearchTestCase;
+        IllegalArgumentException ex;  
+ * The OpenSearch Contributors require contributions made to  
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+        int level = hash.length();
+        for (int i = 0; i < 100000; i++) {
+                    // string encode from geohashlong encoded location
+import org.opensearch.common.geo.GeoPoint;  
+        assertEquals("xbpbpbpbpbpb", Geohash.stringEncode(180, 0));
+                    // decode from the geohash encoded long  
+                    // ensure both strings are the same
+/*
+/*
+        assertEquals(hash, Geohash.stringEncode(bbox.getMinX(), bbox.getMinY(), level));  
+ * You may obtain a copy of the License at  
+ *  
+                for (int p = 1; p <= 12; p++) {
+        }  
+ * GitHub history for details.
+                    assertEquals(geohash, geohashFromLong);
+ * Tests for {@link Geohash}
+                    // decode from the full-res geohash string
+        ex = expectThrows(IllegalArgumentException.class, () -> Geohash.mortonEncode("55.5"));
+        final GeoPoint expected = new GeoPoint();  
+    }
             Rectangle expectedBbox = Geohash.toBoundingBox(geohash);  
             Rectangle actualBbox = Geohash.toBoundingBox(extendedGeohash);
+public class GeoHashTests extends OpenSearchTestCase {
+ */
+ * license agreements. See the NOTICE file distributed with
+ * compatible open source license.
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+    public void testBboxFromHash() {  
             assertEquals("Additional data points above 12 should be ignored [" + extendedGeohash + "]", expectedBbox, actualBbox);
-        }  
-    }
-
-    public void testNorthPoleBoundingBox() {  
-        Rectangle bbox = Geohash.toBoundingBox("zzbxfpgzupbx"); // Bounding box with maximum precision touching north pole
-        assertEquals(90.0, bbox.getMaxY(), 0.0000001); // Should be 90 degrees
-    }  
-
-    public void testInvalidGeohashes() {
-        IllegalArgumentException ex;  
-
-        ex = expectThrows(IllegalArgumentException.class, () -> Geohash.mortonEncode("55.5"));
-        assertEquals("unsupported symbol [.] in geohash [55.5]", ex.getMessage());  
-
-        ex = expectThrows(IllegalArgumentException.class, () -> Geohash.mortonEncode(""));
-        assertEquals("empty geohash", ex.getMessage());  
-    }
-
-}  
+ *
+ */
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
+/**
+            String geohash = randomGeohash(12, 12);
+ * Unless required by applicable law or agreed to in writing,
+ * this file be licensed under the Apache-2.0 license or a
+                    String geohash = Geohash.stringEncode(lng, lat, p);
+/*  
+ * Licensed to Elasticsearch under one or more contributor  

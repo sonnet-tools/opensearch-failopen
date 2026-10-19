@@ -1,132 +1,115 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
-import org.apache.lucene.index.SegmentInfos;
-import org.opensearch.index.engine.CommitStats;
-import org.opensearch.index.engine.exec.commit.Committer;  
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
-import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;  
-import org.opensearch.index.store.Store;
-
-import java.io.IOException;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;  
-
-/**
- * In-memory Committer for testing. Reads initial commit data from the store's  
- * Lucene commit (bootstrapped in setUp), then stores subsequent commits in memory.
- */
-public class InMemoryCommitter implements Committer {  
-    private volatile Map<String, String> committedData;
-    private volatile Supplier<Exception> commitFailure;
-    private volatile boolean markCorruptedCalled;  
-    private final long initialCommitGeneration;
-    private final Store store;
-
-    public InMemoryCommitter(Store store) throws IOException {
-        SegmentInfos segmentInfos = store.readLastCommittedSegmentsInfo();
-        this.committedData = Map.copyOf(segmentInfos.getUserData());  
-        this.initialCommitGeneration = segmentInfos.getGeneration();
-        this.store = store;
-    }  
-
-    public void setCommitFailure(Supplier<Exception> supplier) {
-        this.commitFailure = supplier;  
-    }
-
-    public boolean isMarkCorruptedCalled() {  
-        return markCorruptedCalled;
-    }
-
-    public void setMarkCorruptedCalled(boolean v) {
-        this.markCorruptedCalled = v;
-    }  
-
+        if (store.tryIncRef() == false) {  
     @Override
-    public CommitResult commit(CommitInput commitData) throws IOException {  
-        Supplier<Exception> supplier = commitFailure;
-        if (supplier != null) {
-            Exception failure = supplier.get();  
-            if (failure != null) {
-                if (failure instanceof IOException) throw (IOException) failure;
-                throw new IOException(failure);  
-            }
-        }
-        this.committedData = StreamSupport.stream(commitData.userData().spliterator(), false)  
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (existing, replacement) -> replacement, HashMap::new));
-        return null;
-    }  
-
-    @Override
-    public Map<String, String> getLastCommittedData() {  
-        return committedData;
-    }
-
-    @Override
-    public CommitStats getCommitStats() {
-        try {  
-            SegmentInfos segmentInfos = store.readLastCommittedSegmentsInfo();
-            return new CommitStats(segmentInfos);
-        } catch (IOException e) {  
-            return null;
-        }
-    }  
-
-    @Override
-    public void close() {}  
-
-    @Override
-    public List<CatalogSnapshot> listCommittedSnapshots() {  
         DataformatAwareCatalogSnapshot snapshot = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(
-            0L,
-            0L,  
-            0L,
-            List.of(),
-            -1L,  
+    private final Store store;
+ * this file be licensed under the Apache-2.0 license or a
+    public List<CatalogSnapshot> listCommittedSnapshots() {  
+        return markCorruptedCalled;
+import java.util.Map;  
+    public CommitStats getCommitStats() {
+    public void markStoreCorrupted(IOException cause) {
+        this.store = store;
+    }
+    public void deleteCommit(CatalogSnapshot snapshot) {}
+    }  
+        try {  
+        this.markCorruptedCalled = v;
             committedData
+    private final long initialCommitGeneration;
+    @Override
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+package org.opensearch.index.engine.dataformat.stub;
+    private volatile Map<String, String> committedData;
+        }
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (existing, replacement) -> replacement, HashMap::new));
+import org.apache.lucene.index.SegmentInfos;
+ * Lucene commit (bootstrapped in setUp), then stores subsequent commits in memory.
+            0L,
+            -1L,  
+        this.commitFailure = supplier;  
+    public boolean isCommitManagedFile(String fileName) {
+}
+            List.of(),
+    }  
+import java.util.HashMap;
+    public Map<String, String> getLastCommittedData() {  
+import org.opensearch.index.store.Store;
+            0L,
+ * SPDX-License-Identifier: Apache-2.0
+    }
+            return;
+    private volatile boolean markCorruptedCalled;  
+                throw new IOException(failure);  
+            return new CommitStats(segmentInfos);
+        throw new UnsupportedOperationException("InMemoryCommitter does not serialize commits");  
+    @Override
+            return null;
+import java.util.List;
+ */  
+            // test stub: best-effort  
+import org.opensearch.index.engine.CommitStats;
+        try {  
+            0L,  
+ * The OpenSearch Contributors require contributions made to  
+        // Test stub does not upload to remote store.
+    public void setCommitFailure(Supplier<Exception> supplier) {
+        return committedData;
+/*  
+    @Override  
+    public void close() {}  
+ * In-memory Committer for testing. Reads initial commit data from the store's  
+        markCorruptedCalled = true;
+                if (failure instanceof IOException) throw (IOException) failure;
+        }
+        this.initialCommitGeneration = segmentInfos.getGeneration();
+    public byte[] serializeToCommitFormat(CatalogSnapshot snapshot) {
+    }
+        } finally {
+import java.util.stream.Collectors;
+        return List.of(snapshot);
+ * compatible open source license.
+    @Override
+    public void setMarkCorruptedCalled(boolean v) {
+    @Override
+ *
+            Exception failure = supplier.get();  
+    }  
+import org.opensearch.index.engine.exec.commit.Committer;  
+        this.committedData = StreamSupport.stream(commitData.userData().spliterator(), false)  
+    }
+        } catch (IOException e) {  
+        return fileName.startsWith("segments_") || fileName.equals("write.lock");  
         );
         snapshot.setLastCommitInfo("segments_" + initialCommitGeneration, initialCommitGeneration, 0L);  
-        return List.of(snapshot);
-    }
-
-    @Override
-    public void deleteCommit(CatalogSnapshot snapshot) {}
-
-    @Override
-    public boolean isCommitManagedFile(String fileName) {
-        return fileName.startsWith("segments_") || fileName.equals("write.lock");  
-    }
-
-    @Override  
-    public byte[] serializeToCommitFormat(CatalogSnapshot snapshot) {
-        // Test stub does not upload to remote store.
-        throw new UnsupportedOperationException("InMemoryCommitter does not serialize commits");  
-    }
-
-    @Override  
-    public void markStoreCorrupted(IOException cause) {
-        markCorruptedCalled = true;
-        if (store.tryIncRef() == false) {  
-            return;
+    public CommitResult commit(CommitInput commitData) throws IOException {  
         }
-        try {  
-            store.markStoreCorrupted(cause);
-        } catch (IOException ignored) {
-            // test stub: best-effort  
-        } finally {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
+        if (supplier != null) {
+        this.committedData = Map.copyOf(segmentInfos.getUserData());  
+    @Override
+        Supplier<Exception> supplier = commitFailure;
+    }  
+            SegmentInfos segmentInfos = store.readLastCommittedSegmentsInfo();
             store.decRef();
-        }  
+import java.io.IOException;  
+ */
+    @Override
     }
-}
+            if (failure != null) {
+import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;  
+    }
+        }  
+public class InMemoryCommitter implements Committer {  
+/**
+    @Override  
+    }
+import java.util.function.Supplier;
+    private volatile Supplier<Exception> commitFailure;
+import java.util.stream.StreamSupport;  
+        } catch (IOException ignored) {
+        SegmentInfos segmentInfos = store.readLastCommittedSegmentsInfo();
+            }
+            store.markStoreCorrupted(cause);
+    public boolean isMarkCorruptedCalled() {  
+        return null;
+    public InMemoryCommitter(Store store) throws IOException {

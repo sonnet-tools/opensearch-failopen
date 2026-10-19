@@ -1,103 +1,89 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script.expression;
-
-import org.apache.lucene.expressions.Bindings;
-import org.apache.lucene.expressions.Expression;
-import org.apache.lucene.expressions.SimpleBindings;  
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.DoubleValues;
-import org.apache.lucene.search.DoubleValuesSource;  
 import org.opensearch.script.GeneralScriptException;
-import org.opensearch.script.ScoreScript;
-
-import java.io.IOException;
-
-/**  
- * A bridge to evaluate an {@link Expression} against {@link Bindings} in the context
- * of a {@link ScoreScript}.
+                public double doubleValue() throws IOException {  
+ * GitHub history for details.
+ * specific language governing permissions and limitations
  */  
-class ExpressionScoreScript implements ScoreScript.LeafFactory {
-
+            }
     private final Expression exprScript;  
-    private final DoubleValuesSource source;
     private final boolean needsScores;
-
-    ExpressionScoreScript(Expression e, SimpleBindings b, boolean needsScores) {
-        this.exprScript = e;
-        this.source = exprScript.getDoubleValuesSource(b);  
-        this.needsScores = needsScores;
+            });
+import java.io.IOException;
+                }
+import org.apache.lucene.index.LeafReaderContext;
+                }
+/**  
+import org.apache.lucene.search.DoubleValues;
+import org.opensearch.script.ScoreScript;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.script.expression;
     }
-
-    @Override
-    public boolean needs_score() {
-        return needsScores;  
-    }
-
+                    throw new GeneralScriptException("Error evaluating " + exprScript, exception);  
     @Override  
     public ScoreScript newInstance(final LeafReaderContext leaf) throws IOException {
-        return new ScoreScript(null, null, null, null) {
-            // Fake the scorer until setScorer is called.  
-            DoubleValues values = source.getValues(leaf, new DoubleValues() {
-                @Override
-                public double doubleValue() throws IOException {  
                     return get_score();
-                }
-
-                @Override
-                public boolean advanceExact(int doc) throws IOException {
-                    return true;  
-                }
-            });
-
-            @Override
-            public double execute(ExplanationHolder explanation) {
-                try {  
-                    return values.doubleValue();
-                } catch (Exception exception) {
-                    throw new GeneralScriptException("Error evaluating " + exprScript, exception);  
-                }
-            }
-
-            @Override
-            public void setDocument(int d) {
-                try {  
                     values.advanceExact(d);
+ * of a {@link ScoreScript}.
+ * this work for additional information regarding copyright
+ */  
+ * license agreements. See the NOTICE file distributed with
+    }
+ * compatible open source license.
+ * A bridge to evaluate an {@link Expression} against {@link Bindings} in the context
+        this.source = exprScript.getDoubleValuesSource(b);  
+        this.needsScores = needsScores;
+                } catch (Exception exception) {
+                @Override
+        this.exprScript = e;
+ * The OpenSearch Contributors require contributions made to  
+            DoubleValues values = source.getValues(leaf, new DoubleValues() {
+ * KIND, either express or implied.  See the License for the
+            // Fake the scorer until setScorer is called.  
+                try {  
                 } catch (IOException e) {
+            @Override
+                }
+                    return values.doubleValue();
+    public boolean needs_score() {
+ * ownership. Elasticsearch licenses this file to you under  
+            public double execute(ExplanationHolder explanation) {
+    ExpressionScoreScript(Expression e, SimpleBindings b, boolean needsScores) {
+ * the Apache License, Version 2.0 (the "License"); you may
+}  
+        return needsScores;  
+            @Override
+    @Override
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.apache.lucene.expressions.Expression;
+                @Override
+/*  
+ * You may obtain a copy of the License at  
+    private final DoubleValuesSource source;
+/*  
+ * Unless required by applicable law or agreed to in writing,
+                    return true;  
+ *
+ */  
+ * under the License.  
+            public void setDocument(int d) {
+import org.apache.lucene.expressions.SimpleBindings;  
                     throw new IllegalStateException("Can't advance to doc using " + exprScript, e);  
                 }
+class ExpressionScoreScript implements ScoreScript.LeafFactory {
+ * software distributed under the License is distributed on an
+                try {  
             }
         };  
+ * not use this file except in compliance with the License.
+        return new ScoreScript(null, null, null, null) {
+import org.apache.lucene.expressions.Bindings;
+ * Licensed to Elasticsearch under one or more contributor  
+ */
+                public boolean advanceExact(int doc) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
-}  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+/*
+import org.apache.lucene.search.DoubleValuesSource;  

@@ -1,74 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See  
+            }
+            assertEquals(CLUSTER_SEED, Long.valueOf(cluster().seed()));  
  */  
-
+ * The OpenSearch Contributors require contributions made to  
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+public class TestScopeClusterIT extends OpenSearchIntegTestCase {  
+ */
+        if (ITER++ == 0) {  
+ */
+ * This test ensures that the cluster initializion for TEST scope is not influencing
+    protected TestCluster buildTestCluster(Scope scope, long seed) throws IOException {
+ * compatible open source license.
+    }
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.test;
-
-import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.opensearch.test.TestCluster;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.equalTo;
-
-/**
- * This test ensures that the cluster initializion for TEST scope is not influencing
- * the tests random sequence due to initializtion using the same random instance.  
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST)
-public class TestScopeClusterIT extends OpenSearchIntegTestCase {  
-    private static int ITER = 0;
-    private static long[] SEQUENCE = new long[100];
-    private static Long CLUSTER_SEED = null;  
-
-    public void testReproducible() throws IOException {
-        if (ITER++ == 0) {  
-            CLUSTER_SEED = cluster().seed();
-            for (int i = 0; i < SEQUENCE.length; i++) {
-                SEQUENCE[i] = randomLong();  
-            }
-        } else {
-            assertEquals(CLUSTER_SEED, Long.valueOf(cluster().seed()));  
-            for (int i = 0; i < SEQUENCE.length; i++) {
-                assertThat(SEQUENCE[i], equalTo(randomLong()));
             }  
-        }
-    }
-
-    @Override
-    protected TestCluster buildTestCluster(Scope scope, long seed) throws IOException {
-        // produce some randomness  
         int iters = between(1, 100);
-        for (int i = 0; i < iters; i++) {
-            randomLong();  
-        }
-        return super.buildTestCluster(scope, seed);
-    }  
+ * GitHub history for details.
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST)
+ * Unless required by applicable law or agreed to in writing,
+    private static int ITER = 0;
+ * KIND, either express or implied.  See the License for the
+    public void testReproducible() throws IOException {
+import org.opensearch.test.TestCluster;
+ * software distributed under the License is distributed on an
+                assertThat(SEQUENCE[i], equalTo(randomLong()));
+                SEQUENCE[i] = randomLong();  
+ * this work for additional information regarding copyright
 }
+    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+            for (int i = 0; i < SEQUENCE.length; i++) {
+ * ownership. Elasticsearch licenses this file to you under  
+        for (int i = 0; i < iters; i++) {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+import java.io.IOException;  
+        }
+            randomLong();  
+ * license agreements. See the NOTICE file distributed with
+/*  
+ *
+ * You may obtain a copy of the License at  
+package org.opensearch.test.test;
+ */
+ *  
+        // produce some randomness  
+    private static long[] SEQUENCE = new long[100];
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        } else {
+        return super.buildTestCluster(scope, seed);
+/*
+    private static Long CLUSTER_SEED = null;  
+ *
+    }  
+            for (int i = 0; i < SEQUENCE.length; i++) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            CLUSTER_SEED = cluster().seed();
+ * specific language governing permissions and limitations
+import org.opensearch.test.OpenSearchIntegTestCase;  
+ * the tests random sequence due to initializtion using the same random instance.  
+import static org.hamcrest.Matchers.equalTo;
+ * under the License.  
+/**

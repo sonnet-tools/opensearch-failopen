@@ -1,10 +1,9 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
+ * compatible open source license.
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/** Support classes for core action module */
 package org.opensearch.core.action.support;  
+ */  
+/** Support classes for core action module */
+ * SPDX-License-Identifier: Apache-2.0
+ *

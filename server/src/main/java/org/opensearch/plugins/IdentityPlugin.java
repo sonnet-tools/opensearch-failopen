@@ -1,45 +1,39 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugins;
-
 import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.identity.PluginSubject;
-import org.opensearch.identity.Subject;  
-import org.opensearch.identity.tokens.TokenManager;
-
-/**  
- * Plugin that provides identity and access control for OpenSearch
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
 public interface IdentityPlugin {  
-
+     * @param plugin The corresponding plugin
+ */  
+     * @return Subject corresponding to the plugin
+ * this file be licensed under the Apache-2.0 license or a
+ *
+    /**  
+     */  
+     * in the plugin system context
     /**
      * Get the current subject.  
-     *
-     * @return Should never return null
-     * */  
-    Subject getCurrentSubject();
-
-    /**  
-     * Get the Identity Plugin's token manager implementation
-     * @return Should never return null.
-     */  
     TokenManager getTokenManager();
-
-    /**  
+    Subject getCurrentSubject();
+     * Get the Identity Plugin's token manager implementation
+ *
+package org.opensearch.plugins;
+import org.opensearch.identity.Subject;  
      * Gets a subject corresponding to the passed plugin that can be utilized to perform transport actions
-     * in the plugin system context
-     *  
-     * @param plugin The corresponding plugin
-     * @return Subject corresponding to the plugin
      */  
+     * @return Should never return null.
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+import org.opensearch.identity.PluginSubject;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.identity.tokens.TokenManager;
     PluginSubject getPluginSubject(Plugin plugin);
+     * */  
+ * Plugin that provides identity and access control for OpenSearch
+/**  
+     *  
+@ExperimentalApi
+    /**  
+     * @return Should never return null
+ */
+     *
+ * @opensearch.experimental  
 }

@@ -1,108 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.pit;
-
-import org.opensearch.action.search.DeletePitRequest;
-import org.opensearch.action.search.DeletePitResponse;
-import org.opensearch.common.SetOnce;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.search.RestDeletePitAction;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.client.NoOpNodeClient;
-import org.opensearch.test.rest.FakeRestChannel;
-import org.opensearch.test.rest.FakeRestRequest;  
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.util.Collections;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;  
-
-/**
- * Tests to verify the behavior of rest delete pit action for list delete and delete all PIT endpoints  
- */
-public class RestDeletePitActionTests extends OpenSearchTestCase {
-    public void testParseDeletePitRequestWithInvalidJsonThrowsException() throws Exception {  
-        RestDeletePitAction action = new RestDeletePitAction();
-        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(
-            new BytesArray("{invalid_json}"),  
-            MediaTypeRegistry.JSON
-        ).build();
-        Exception e = expectThrows(IllegalArgumentException.class, () -> action.prepareRequest(request, null));  
-        assertThat(e.getMessage(), equalTo("Failed to parse request body"));
-    }
-
-    public void testDeletePitWithBody() throws Exception {
-        SetOnce<Boolean> pitCalled = new SetOnce<>();
-        try (NodeClient nodeClient = new NoOpNodeClient(this.getTestName()) {  
-            @Override
-            public void deletePits(DeletePitRequest request, ActionListener<DeletePitResponse> listener) {
-                pitCalled.set(true);  
-                assertThat(request.getPitIds(), hasSize(1));
-                assertThat(request.getPitIds().get(0), equalTo("BODY"));
-            }  
-        }) {
-            RestDeletePitAction action = new RestDeletePitAction();
-            RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(  
-                new BytesArray("{\"pit_id\": [\"BODY\"]}"),
-                MediaTypeRegistry.JSON
-            ).build();  
-            FakeRestChannel channel = new FakeRestChannel(request, false, 0);
-            action.handleRequest(request, channel, nodeClient);
-
-            assertThat(pitCalled.get(), equalTo(true));
-        }
-    }  
-
-    public void testDeleteAllPit() throws Exception {
-        SetOnce<Boolean> pitCalled = new SetOnce<>();  
-        try (NodeClient nodeClient = new NoOpNodeClient(this.getTestName()) {
-            @Override
-            public void deletePits(DeletePitRequest request, ActionListener<DeletePitResponse> listener) {  
-                pitCalled.set(true);
-                assertThat(request.getPitIds(), hasSize(1));
-                assertThat(request.getPitIds().get(0), equalTo("_all"));  
-            }
-        }) {
-            RestDeletePitAction action = new RestDeletePitAction();  
-            RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withPath("/_all").build();
-            FakeRestChannel channel = new FakeRestChannel(request, false, 0);
-            action.handleRequest(request, channel, nodeClient);  
-
-            assertThat(pitCalled.get(), equalTo(true));
-        }  
-    }
-
-    public void testDeletePitQueryStringParamsShouldThrowException() {  
-        SetOnce<Boolean> pitCalled = new SetOnce<>();
-        try (NodeClient nodeClient = new NoOpNodeClient(this.getTestName()) {
-            @Override  
-            public void deletePits(DeletePitRequest request, ActionListener<DeletePitResponse> listener) {
-                pitCalled.set(true);
-                assertThat(request.getPitIds(), hasSize(2));  
-                assertThat(request.getPitIds().get(0), equalTo("QUERY_STRING"));
-                assertThat(request.getPitIds().get(1), equalTo("QUERY_STRING_1"));
-            }  
-        }) {
-            RestDeletePitAction action = new RestDeletePitAction();
-            RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withParams(  
-                Collections.singletonMap("pit_id", "QUERY_STRING,QUERY_STRING_1")
-            ).build();
-            FakeRestChannel channel = new FakeRestChannel(request, false, 0);  
-            IllegalArgumentException ex = expectThrows(
-                IllegalArgumentException.class,
-                () -> action.handleRequest(request, channel, nodeClient)  
-            );
-            assertTrue(ex.getMessage().contains("unrecognized param"));
-        }  
-    }
 }
+        }  
+            FakeRestChannel channel = new FakeRestChannel(request, false, 0);
+ */
+            new BytesArray("{invalid_json}"),  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.test.rest.FakeRestRequest;  
+            FakeRestChannel channel = new FakeRestChannel(request, false, 0);
+    }
+package org.opensearch.search.pit;
+                pitCalled.set(true);  
+ * Tests to verify the behavior of rest delete pit action for list delete and delete all PIT endpoints  
+            assertThat(pitCalled.get(), equalTo(true));
+            public void deletePits(DeletePitRequest request, ActionListener<DeletePitResponse> listener) {  
+            }  
+public class RestDeletePitActionTests extends OpenSearchTestCase {
+                () -> action.handleRequest(request, channel, nodeClient)  
+        ).build();
+            RestDeletePitAction action = new RestDeletePitAction();  
+        try (NodeClient nodeClient = new NoOpNodeClient(this.getTestName()) {  
+        RestDeletePitAction action = new RestDeletePitAction();
+    public void testDeleteAllPit() throws Exception {
+    }
+                assertThat(request.getPitIds().get(0), equalTo("BODY"));
+/*  
+import org.opensearch.test.rest.FakeRestChannel;
+            public void deletePits(DeletePitRequest request, ActionListener<DeletePitResponse> listener) {
+        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(
+import static org.hamcrest.Matchers.equalTo;
+ */  
+ * compatible open source license.
+import org.opensearch.action.search.DeletePitResponse;
+            @Override
+            action.handleRequest(request, channel, nodeClient);
+            @Override  
+        SetOnce<Boolean> pitCalled = new SetOnce<>();
+            }
+import org.opensearch.rest.action.search.RestDeletePitAction;
+        try (NodeClient nodeClient = new NoOpNodeClient(this.getTestName()) {
+                assertThat(request.getPitIds(), hasSize(1));
+                Collections.singletonMap("pit_id", "QUERY_STRING,QUERY_STRING_1")
+            RestDeletePitAction action = new RestDeletePitAction();
+import org.opensearch.test.client.NoOpNodeClient;
+            IllegalArgumentException ex = expectThrows(
+        assertThat(e.getMessage(), equalTo("Failed to parse request body"));
+                MediaTypeRegistry.JSON
+import org.opensearch.transport.client.node.NodeClient;
+            ).build();
+import org.opensearch.rest.RestRequest;
+            public void deletePits(DeletePitRequest request, ActionListener<DeletePitResponse> listener) {
+        SetOnce<Boolean> pitCalled = new SetOnce<>();  
+    }
+        }
+/**
+ *
+            );
+    public void testParseDeletePitRequestWithInvalidJsonThrowsException() throws Exception {  
+        Exception e = expectThrows(IllegalArgumentException.class, () -> action.prepareRequest(request, null));  
+            }  
+            assertTrue(ex.getMessage().contains("unrecognized param"));
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+            @Override
+        }  
+import org.opensearch.core.common.bytes.BytesArray;
+                assertThat(request.getPitIds().get(0), equalTo("_all"));  
+import org.opensearch.action.search.DeletePitRequest;
+            ).build();  
+                new BytesArray("{\"pit_id\": [\"BODY\"]}"),
+                IllegalArgumentException.class,
+    public void testDeletePitWithBody() throws Exception {
+        }) {
+        }) {
+                assertThat(request.getPitIds(), hasSize(2));  
+        SetOnce<Boolean> pitCalled = new SetOnce<>();
+            RestDeletePitAction action = new RestDeletePitAction();
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+    public void testDeletePitQueryStringParamsShouldThrowException() {  
+                assertThat(request.getPitIds().get(0), equalTo("QUERY_STRING"));
+import org.opensearch.test.OpenSearchTestCase;  
+            RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withParams(  
+            RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withPath("/_all").build();
+            action.handleRequest(request, channel, nodeClient);  
+            assertThat(pitCalled.get(), equalTo(true));
+                assertThat(request.getPitIds(), hasSize(1));
+            FakeRestChannel channel = new FakeRestChannel(request, false, 0);  
+        try (NodeClient nodeClient = new NoOpNodeClient(this.getTestName()) {
+import static org.hamcrest.Matchers.hasSize;  
+import org.opensearch.common.SetOnce;  
+            MediaTypeRegistry.JSON
+import org.opensearch.core.action.ActionListener;
+                pitCalled.set(true);
+import java.util.Collections;  
+    }  
+        }) {
+            RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(  
+                pitCalled.set(true);
+                assertThat(request.getPitIds().get(1), equalTo("QUERY_STRING_1"));

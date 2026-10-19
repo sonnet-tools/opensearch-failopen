@@ -1,36 +1,29 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.remotestore.multipart.mocks;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobPath;  
 import org.opensearch.common.blobstore.fs.FsBlobStore;
-
-import java.io.IOException;  
-import java.nio.file.Path;
-
-public class MockFsBlobStore extends FsBlobStore {  
-
-    private final boolean triggerDataIntegrityFailure;
-
-    public MockFsBlobStore(int bufferSizeInBytes, Path path, boolean readonly, boolean triggerDataIntegrityFailure) throws IOException {
-        super(bufferSizeInBytes, path, readonly);
-        this.triggerDataIntegrityFailure = triggerDataIntegrityFailure;  
-    }
-
-    @Override  
     public BlobContainer blobContainer(BlobPath path) {
+import java.io.IOException;  
+        super(bufferSizeInBytes, path, readonly);
+    public MockFsBlobStore(int bufferSizeInBytes, Path path, boolean readonly, boolean triggerDataIntegrityFailure) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+            throw new OpenSearchException("failed to create blob container", ex);
+import org.opensearch.common.blobstore.BlobContainer;
+import org.opensearch.OpenSearchException;
+package org.opensearch.remotestore.multipart.mocks;
+import org.opensearch.common.blobstore.BlobPath;  
+    }
+/*  
+}
+ * this file be licensed under the Apache-2.0 license or a
+    private final boolean triggerDataIntegrityFailure;
+        } catch (IOException ex) {
+ *
+        this.triggerDataIntegrityFailure = triggerDataIntegrityFailure;  
+ */  
+        }  
+import java.nio.file.Path;
+ * The OpenSearch Contributors require contributions made to  
+public class MockFsBlobStore extends FsBlobStore {  
+    @Override  
+ * compatible open source license.
+    }
         try {
             return new MockFsAsyncBlobContainer(this, path, buildAndCreate(path), triggerDataIntegrityFailure);  
-        } catch (IOException ex) {
-            throw new OpenSearchException("failed to create blob container", ex);
-        }  
-    }
-}

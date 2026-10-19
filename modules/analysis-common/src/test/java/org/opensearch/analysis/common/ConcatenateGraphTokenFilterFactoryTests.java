@@ -1,201 +1,170 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.core.WhitespaceTokenizer;  
-import org.apache.lucene.tests.analysis.CannedTokenStream;
-import org.apache.lucene.tests.analysis.Token;
-import org.apache.lucene.util.automaton.TooComplexToDeterminizeException;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
-import org.opensearch.index.analysis.AnalysisTestsHelper;  
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.analysis.TokenFilterFactory;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.OpenSearchTokenStreamTestCase;
-
-import java.io.IOException;  
-import java.io.StringReader;
-
-public class ConcatenateGraphTokenFilterFactoryTests extends OpenSearchTokenStreamTestCase {  
-    public void testSimpleTokenizerAndConcatenate() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build(),  
-            new CommonAnalysisModulePlugin()
-        );
-
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("concatenate_graph");
-        String source = "PowerShot Is AweSome";
-        Tokenizer tokenizer = new WhitespaceTokenizer();  
-        tokenizer.setReader(new StringReader(source));
-
-        assertTokenStreamContents(tokenFilter.create(tokenizer), new String[] { "PowerShot Is AweSome" });  
-    }
-
-    public void testTokenizerCustomizedSeparator() throws IOException {  
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
                 .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")
-                .put("index.analysis.filter.my_concatenate_graph.token_separator", "+")
-                .build(),  
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
             new CommonAnalysisModulePlugin()
-        );
-
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");
-        String source = "PowerShot Is AweSome";
-        Tokenizer tokenizer = new WhitespaceTokenizer();  
-        tokenizer.setReader(new StringReader(source));
-
-        assertTokenStreamContents(tokenFilter.create(tokenizer), new String[] { "PowerShot+Is+AweSome" });  
-    }
-
     public void testTokenizerEmptySeparator() throws IOException {  
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
-                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")
-                .put("index.analysis.filter.my_concatenate_graph.token_separator", "")
-                .build(),  
-            new CommonAnalysisModulePlugin()
-        );
-
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");
-        String source = "PowerShot Is AweSome";
-        Tokenizer tokenizer = new WhitespaceTokenizer();  
-        tokenizer.setReader(new StringReader(source));
-
-        assertTokenStreamContents(tokenFilter.create(tokenizer), new String[] { "PowerShotIsAweSome" });  
-    }
-
+ * compatible open source license.
+        assertTokenStreamContents(tokenFilter.create(tokenizer), new String[] { "PowerShot+Is+AweSome" });  
     public void testPreservePositionIncrementsDefault() throws IOException {  
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+/*  
             Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
-                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")
-                .put("index.analysis.filter.my_concatenate_graph.token_separator", "+")
-                .build(),  
-            new CommonAnalysisModulePlugin()
-        );
-
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");
-
-        CannedTokenStream cannedTokenStream = new CannedTokenStream(  
-            new Token("a", 1, 0, 1),
-            new Token("b", 2, 2, 3), // there is a gap, posInc is 2
-            new Token("d", 1, 4, 5)  
-        );
-
-        // the gap between a and b is not preserved  
+import java.io.StringReader;
+        assertTokenStreamContents(tokenFilter.create(tokenizer), new String[] { "PowerShot Is AweSome" });  
+import java.io.IOException;  
+                .put("index.analysis.filter.my_concatenate_graph.token_separator", "")
         assertTokenStreamContents(tokenFilter.create(cannedTokenStream), new String[] { "a+b+d" });
-    }
-
-    public void testPreservePositionIncrementsTrue() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()  
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")
-                .put("index.analysis.filter.my_concatenate_graph.token_separator", "+")  
-                .put("index.analysis.filter.my_concatenate_graph.preserve_position_increments", "true")
-                .build(),
-            new CommonAnalysisModulePlugin()  
-        );
-
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");  
-
-        CannedTokenStream cannedTokenStream = new CannedTokenStream(
-            new Token("a", 1, 0, 1),  
-            new Token("b", 2, 2, 3), // there is a gap, posInc is 2
-            new Token("d", 1, 4, 5)
+import org.opensearch.test.OpenSearchTokenStreamTestCase;
         );  
-
-        // the gap between a and b is preserved
-        assertTokenStreamContents(tokenFilter.create(cannedTokenStream), new String[] { "a++b+d" });  
-    }
-
-    public void testGraph() throws IOException {  
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
-                .put("index.analysis.filter.my_word_delimiter.type", "word_delimiter_graph")
-                .put("index.analysis.filter.my_word_delimiter.catenate_words", "true")
-                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")  
-                .put("index.analysis.analyzer.my_analyzer.type", "custom")
-                .put("index.analysis.analyzer.my_analyzer.tokenizer", "whitespace")
-                .put("index.analysis.analyzer.my_analyzer.filter", "my_word_delimiter, my_concatenate_graph")  
-                .build(),
-            new CommonAnalysisModulePlugin()
-        );  
-
-        String source = "PowerShot Is AweSome";
-
-        // Expected output from Whitespace Tokenizer is: "PowerShot" --> "Is" --> "Awe" --> "Some"
-        // Expected output from word_delimiter_graph is a graph:
-        // <start> ---> "Power" --> "Shot" ---> "Is" ---> "Awe" ---> "Some" --- <end>  
-        // | | | |
-        // --> "PowerShot" -------- --> "AweSome" ---------
-        // and this filter will traverse through all possible paths to produce concatenated tokens  
-        String[] expected = new String[] {
-            "Power Shot Is Awe Some",
-            "Power Shot Is AweSome",  
-            "PowerShot Is Awe Some",
-            "PowerShot Is AweSome" };
-
         // all tokens will be in the same position
-        int[] expectedPosIncrements = new int[] { 1, 0, 0, 0 };
-        int[] expectedPosLengths = new int[] { 1, 1, 1, 1 };  
-
-        NamedAnalyzer analyzer = analysis.indexAnalyzers.get("my_analyzer");
-        assertAnalyzesToPositions(analyzer, source, expected, expectedPosIncrements, expectedPosLengths);  
     }
-
-    public void testInvalidSeparator() {  
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(  
-                Settings.builder()
-                    .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                    .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")  
-                    .put("index.analysis.filter.my_concatenate_graph.token_separator", "11")
-                    .build(),
-                new CommonAnalysisModulePlugin()  
+            new CommonAnalysisModulePlugin()
+        // <start> ---> "Power" --> "Shot" ---> "Is" ---> "Awe" ---> "Some" --- <end>  
+                .put("index.analysis.analyzer.my_analyzer.type", "custom")
             )
-        );
-    }  
-
+                .build(),
     /**
-     * Similar to the {@link #testGraph()} case, there will be 4 paths generated by word_delimiter_graph.  
-     * By setting max_graph_expansions to 3, we expect an exception.
-     */
-    public void testMaxGraphExpansion() throws IOException {  
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+import org.apache.lucene.analysis.TokenStream;
+                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")  
+                .build(),  
+                .put("index.analysis.analyzer.my_analyzer.filter", "my_word_delimiter, my_concatenate_graph")  
+                .put("index.analysis.filter.my_concatenate_graph.max_graph_expansions", "3")
+import org.opensearch.index.analysis.AnalysisTestsHelper;  
+import org.apache.lucene.tests.analysis.CannedTokenStream;
                 .put("index.analysis.filter.my_word_delimiter.type", "word_delimiter_graph")
+        // | | | |
+        );
+        Tokenizer tokenizer = new WhitespaceTokenizer();  
+    }  
+        );
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+    public void testTokenizerCustomizedSeparator() throws IOException {  
+            "PowerShot Is AweSome" };
+        // the gap between a and b is preserved
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+                .build(),
+        );
+                Settings.builder()
+}
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+ * SPDX-License-Identifier: Apache-2.0
+        String[] expected = new String[] {
+        tokenizer.setReader(new StringReader(source));
+ * this file be licensed under the Apache-2.0 license or a
+            new CommonAnalysisModulePlugin()
+        );
+                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")
+                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")
+                    .put("index.analysis.filter.my_concatenate_graph.token_separator", "11")
+                .put("index.analysis.filter.my_concatenate_graph.token_separator", "+")
+        String source = "PowerShot Is AweSome";
+        // the gap between a and b is not preserved  
+        Tokenizer tokenizer = new WhitespaceTokenizer();  
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");
+            "PowerShot Is Awe Some",
+import org.opensearch.common.settings.Settings;
+ */  
+        NamedAnalyzer analyzer = analysis.indexAnalyzers.get("my_analyzer");
+import org.apache.lucene.analysis.Tokenizer;
+        assertAnalyzesToPositions(analyzer, source, expected, expectedPosIncrements, expectedPosLengths);  
+                .put("index.analysis.analyzer.my_analyzer.tokenizer", "whitespace")  
+        // Expected output from word_delimiter_graph is a graph:
+        );  
+                .build(),
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;  
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("concatenate_graph");
+        assertTokenStreamContents(tokenFilter.create(cannedTokenStream), new String[] { "a++b+d" });  
+            Settings.builder()  
+        CannedTokenStream cannedTokenStream = new CannedTokenStream(  
+        );
+            new CommonAnalysisModulePlugin()  
+     */
+            Settings.builder()
+        tokenizer.setReader(new StringReader(source));
+            "Power Shot Is AweSome",  
+                new CommonAnalysisModulePlugin()  
+            new Token("d", 1, 4, 5)  
+            Settings.builder()
+            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(  
+    }
+    public void testMaxGraphExpansion() throws IOException {  
+        CannedTokenStream cannedTokenStream = new CannedTokenStream(
+                .put("index.analysis.analyzer.my_analyzer.filter", "my_word_delimiter, my_concatenate_graph")
+        );
+import org.opensearch.index.analysis.NamedAnalyzer;
+    public void testPreservePositionIncrementsTrue() throws IOException {
+            Settings.builder()
+                    .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+        tokenizer.setReader(new StringReader(source));
+        int[] expectedPosIncrements = new int[] { 1, 0, 0, 0 };
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");
+import org.apache.lucene.tests.analysis.Token;
+                    .build(),
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+            Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build(),  
+                .put("index.analysis.filter.my_word_delimiter.type", "word_delimiter_graph")
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+    }
+        // --> "PowerShot" -------- --> "AweSome" ---------
+    public void testSimpleTokenizerAndConcatenate() throws IOException {
+                .put("index.analysis.filter.my_concatenate_graph.token_separator", "+")
+        assertTokenStreamContents(tokenFilter.create(tokenizer), new String[] { "PowerShotIsAweSome" });  
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+import org.opensearch.index.analysis.TokenFilterFactory;
+            new CommonAnalysisModulePlugin()
+            IllegalArgumentException.class,
+        expectThrows(TooComplexToDeterminizeException.class, tokenStream::incrementToken);  
+            Settings.builder()
+            new Token("a", 1, 0, 1),
+        String source = "PowerShot Is AweSome";
+    }
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_concatenate_graph");  
+ *
+                    .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")  
+        String source = "PowerShot Is AweSome";  
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+                .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")
+    }
+    public void testGraph() throws IOException {  
                 .put("index.analysis.filter.my_word_delimiter.catenate_words", "true")
                 .put("index.analysis.filter.my_concatenate_graph.type", "concatenate_graph")  
-                .put("index.analysis.filter.my_concatenate_graph.max_graph_expansions", "3")
-                .put("index.analysis.analyzer.my_analyzer.type", "custom")
-                .put("index.analysis.analyzer.my_analyzer.tokenizer", "whitespace")  
-                .put("index.analysis.analyzer.my_analyzer.filter", "my_word_delimiter, my_concatenate_graph")
-                .build(),
-            new CommonAnalysisModulePlugin()  
-        );
-
-        String source = "PowerShot Is AweSome";  
-
-        TokenStream tokenStream = analysis.indexAnalyzers.get("my_analyzer").tokenStream("dummy", source);
-
-        tokenStream.reset();
-
-        expectThrows(TooComplexToDeterminizeException.class, tokenStream::incrementToken);  
+        expectThrows(
+package org.opensearch.analysis.common;
+            new CommonAnalysisModulePlugin()
+    public void testInvalidSeparator() {  
+        int[] expectedPosLengths = new int[] { 1, 1, 1, 1 };  
     }
-}
+import org.opensearch.test.OpenSearchTestCase;  
+    }
+        // and this filter will traverse through all possible paths to produce concatenated tokens  
+            "Power Shot Is Awe Some",
+                .build(),  
+        tokenStream.reset();
+                .put("index.analysis.filter.my_concatenate_graph.token_separator", "+")  
+        );
+            new Token("d", 1, 4, 5)
+                .build(),  
+                .put("index.analysis.filter.my_word_delimiter.catenate_words", "true")
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+        // Expected output from Whitespace Tokenizer is: "PowerShot" --> "Is" --> "Awe" --> "Some"
+import org.opensearch.env.Environment;
+public class ConcatenateGraphTokenFilterFactoryTests extends OpenSearchTokenStreamTestCase {  
+                .put("index.analysis.filter.my_concatenate_graph.preserve_position_increments", "true")
+import org.apache.lucene.util.automaton.TooComplexToDeterminizeException;  
+        );
+        String source = "PowerShot Is AweSome";
+            new Token("a", 1, 0, 1),  
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+                .put("index.analysis.analyzer.my_analyzer.tokenizer", "whitespace")
+            new Token("b", 2, 2, 3), // there is a gap, posInc is 2
+     * Similar to the {@link #testGraph()} case, there will be 4 paths generated by word_delimiter_graph.  
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+                .put("index.analysis.analyzer.my_analyzer.type", "custom")
+            new CommonAnalysisModulePlugin()  
+            new Token("b", 2, 2, 3), // there is a gap, posInc is 2
+     * By setting max_graph_expansions to 3, we expect an exception.
+        String source = "PowerShot Is AweSome";
+        TokenStream tokenStream = analysis.indexAnalyzers.get("my_analyzer").tokenStream("dummy", source);
+        Tokenizer tokenizer = new WhitespaceTokenizer();  
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(

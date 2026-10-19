@@ -1,118 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.env;
-
-import org.opensearch.common.io.PathUtils;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.PosixPermissionsResetter;  
-import org.junit.BeforeClass;
-
-import java.io.IOException;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFileAttributeView;  
-import java.nio.file.attribute.PosixFilePermission;
-import java.util.Arrays;
-import java.util.HashSet;  
-
-public class NodeEnvironmentEvilTests extends OpenSearchTestCase {
-
-    private static boolean isPosix;
-
-    @BeforeClass  
-    public static void checkPosix() throws IOException {
-        isPosix = Files.getFileAttributeView(createTempFile(), PosixFileAttributeView.class) != null;
-    }  
-
-    public void testMissingWritePermission() throws IOException {
-        assumeTrue("posix filesystem", isPosix);  
-        final String[] tempPaths = tmpPaths();
-        Path path = PathUtils.get(randomFrom(tempPaths));
-        try (PosixPermissionsResetter attr = new PosixPermissionsResetter(path)) {  
-            attr.setPermissions(new HashSet<>(Arrays.asList(PosixFilePermission.OTHERS_READ, PosixFilePermission.GROUP_READ,
-                PosixFilePermission.OWNER_READ)));
-            Settings build = Settings.builder()  
-                    .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toAbsolutePath().toString())
-                    .putList(Environment.PATH_DATA_SETTING.getKey(), tempPaths).build();
-            IOException ioException = expectThrows(IOException.class, () -> {  
                 new NodeEnvironment(build, TestEnvironment.newEnvironment(build));
-            });
-            assertTrue(ioException.getMessage(), ioException.getMessage().startsWith(path.toString()));  
         }
-    }
-
-    public void testMissingWritePermissionOnIndex() throws IOException {
-        assumeTrue("posix filesystem", isPosix);
-        final String[] tempPaths = tmpPaths();  
-        Path path = PathUtils.get(randomFrom(tempPaths));
+            attr.setPermissions(new HashSet<>(Arrays.asList(PosixFilePermission.OTHERS_READ, PosixFilePermission.GROUP_READ,
+import java.util.Arrays;
+    private static boolean isPosix;
+ */
         Path fooIndex = path.resolve("nodes").resolve("0").resolve(NodeEnvironment.INDICES_FOLDER)
-            .resolve("foo");  
-        Files.createDirectories(fooIndex);
-        try (PosixPermissionsResetter attr = new PosixPermissionsResetter(fooIndex)) {
-            attr.setPermissions(new HashSet<>(Arrays.asList(PosixFilePermission.OTHERS_READ, PosixFilePermission.GROUP_READ,  
-                PosixFilePermission.OWNER_READ)));
-            Settings build = Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toAbsolutePath().toString())  
-                .putList(Environment.PATH_DATA_SETTING.getKey(), tempPaths).build();
-            IOException ioException = expectThrows(IOException.class, () -> {
-                new NodeEnvironment(build, TestEnvironment.newEnvironment(build));  
-            });
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.common.settings.Settings;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
             assertTrue(ioException.getMessage(), ioException.getMessage().startsWith("failed to test writes in data directory"));
-        }  
+import org.junit.BeforeClass;
     }
-
+ * this work for additional information regarding copyright
+                new NodeEnvironment(build, TestEnvironment.newEnvironment(build));  
+import org.opensearch.test.OpenSearchTestCase;
+ */  
+import org.opensearch.common.io.PathUtils;  
+ * under the License.  
+            });
+            });
+            Settings build = Settings.builder()  
+    public static void checkPosix() throws IOException {
+                .putList(Environment.PATH_DATA_SETTING.getKey(), tempPaths).build();
+        Path fooShardTranslog = fooShard.resolve("translog");
+ *
+import java.io.IOException;  
+        Files.createDirectories(fooIndex);
+    }
+ *  
+        Path fooShardState = fooShard.resolve("_state");  
+            assertTrue(ioException.getMessage(), ioException.getMessage().startsWith(path.toString()));  
+import java.util.HashSet;  
+ * KIND, either express or implied.  See the License for the
+import java.nio.file.attribute.PosixFilePermission;
+ * SPDX-License-Identifier: Apache-2.0
+        final String[] tempPaths = tmpPaths();  
+package org.opensearch.env;
+        assumeTrue("posix filesystem", isPosix);
+ * compatible open source license.
+        Path fooShardIndex = fooShard.resolve("index");
+    }
+/*  
+        isPosix = Files.getFileAttributeView(createTempFile(), PosixFileAttributeView.class) != null;
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toAbsolutePath().toString())  
+        Path pick = randomFrom(fooShard, fooShardIndex, fooShardTranslog, fooShardState);
+ * Modifications Copyright OpenSearch Contributors. See  
     public void testMissingWritePermissionOnShard() throws IOException {  
         assumeTrue("posix filesystem", isPosix);
-        final String[] tempPaths = tmpPaths();
-        Path path = PathUtils.get(randomFrom(tempPaths));  
-        Path fooIndex = path.resolve("nodes").resolve("0").resolve(NodeEnvironment.INDICES_FOLDER)
-            .resolve("foo");
-        Path fooShard = fooIndex.resolve("0");  
-        Path fooShardIndex = fooShard.resolve("index");
-        Path fooShardTranslog = fooShard.resolve("translog");
-        Path fooShardState = fooShard.resolve("_state");  
-        Path pick = randomFrom(fooShard, fooShardIndex, fooShardTranslog, fooShardState);
-        Files.createDirectories(pick);
-        try (PosixPermissionsResetter attr = new PosixPermissionsResetter(pick)) {  
-            attr.setPermissions(new HashSet<>(Arrays.asList(PosixFilePermission.OTHERS_READ, PosixFilePermission.GROUP_READ,
                 PosixFilePermission.OWNER_READ)));
-            Settings build = Settings.builder()  
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toAbsolutePath().toString())
-                .putList(Environment.PATH_DATA_SETTING.getKey(), tempPaths).build();
-            IOException ioException = expectThrows(IOException.class, () -> {  
-                new NodeEnvironment(build, TestEnvironment.newEnvironment(build));
-            });
-            assertTrue(ioException.getMessage(), ioException.getMessage().startsWith("failed to test writes in data directory"));  
-        }
-    }
+        try (PosixPermissionsResetter attr = new PosixPermissionsResetter(pick)) {  
+    @BeforeClass  
+ * not use this file except in compliance with the License.
 }  
+        Path path = PathUtils.get(randomFrom(tempPaths));
+    public void testMissingWritePermission() throws IOException {
+ * You may obtain a copy of the License at  
+ * specific language governing permissions and limitations
+            IOException ioException = expectThrows(IOException.class, () -> {  
+/*
+ * software distributed under the License is distributed on an
+            });
+        assumeTrue("posix filesystem", isPosix);  
+public class NodeEnvironmentEvilTests extends OpenSearchTestCase {
+ * GitHub history for details.
+            .resolve("foo");
+            Settings build = Settings.builder()
+ * this file be licensed under the Apache-2.0 license or a
+    public void testMissingWritePermissionOnIndex() throws IOException {
+                .putList(Environment.PATH_DATA_SETTING.getKey(), tempPaths).build();
+    }  
+        final String[] tempPaths = tmpPaths();
+                PosixFilePermission.OWNER_READ)));
+        }
+ * Unless required by applicable law or agreed to in writing,
+import java.nio.file.Files;
+            .resolve("foo");  
+            attr.setPermissions(new HashSet<>(Arrays.asList(PosixFilePermission.OTHERS_READ, PosixFilePermission.GROUP_READ,  
+        Path fooShard = fooIndex.resolve("0");  
+ */
+import java.nio.file.attribute.PosixFileAttributeView;  
+import java.nio.file.Path;
+            IOException ioException = expectThrows(IOException.class, () -> {
+        final String[] tempPaths = tmpPaths();
+        Path path = PathUtils.get(randomFrom(tempPaths));
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.test.PosixPermissionsResetter;  
+                    .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toAbsolutePath().toString())
+        Path path = PathUtils.get(randomFrom(tempPaths));  
+/*
+ * license agreements. See the NOTICE file distributed with
+        Files.createDirectories(pick);
+        try (PosixPermissionsResetter attr = new PosixPermissionsResetter(fooIndex)) {
+            attr.setPermissions(new HashSet<>(Arrays.asList(PosixFilePermission.OTHERS_READ, PosixFilePermission.GROUP_READ,
+ * Licensed to Elasticsearch under one or more contributor  
+        try (PosixPermissionsResetter attr = new PosixPermissionsResetter(path)) {  
+ * ownership. Elasticsearch licenses this file to you under  
+                new NodeEnvironment(build, TestEnvironment.newEnvironment(build));
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toAbsolutePath().toString())
+            assertTrue(ioException.getMessage(), ioException.getMessage().startsWith("failed to test writes in data directory"));  
+        Path fooIndex = path.resolve("nodes").resolve("0").resolve(NodeEnvironment.INDICES_FOLDER)
+                PosixFilePermission.OWNER_READ)));
+ *
+                    .putList(Environment.PATH_DATA_SETTING.getKey(), tempPaths).build();
+            Settings build = Settings.builder()  
+        }  
+            IOException ioException = expectThrows(IOException.class, () -> {  
+ *    http://www.apache.org/licenses/LICENSE-2.0

@@ -1,127 +1,114 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.action;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.rule.autotagging.Attribute;  
-import org.opensearch.rule.autotagging.FeatureType;
-
-import java.io.IOException;  
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;  
-
-/**
- * A request for update Rule  
- * Example request:
- * curl -XPUT "localhost:9200/_rules/{featureType}/{_id}" -H 'Content-Type: application/json' -d '
- * {  
- *     "description": "description",
- *      "index_pattern": ["log*", "event*"],
- *      "workload_group": "dev_workload_group_id_2"  
- * }'
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public class UpdateRuleRequest extends ActionRequest {
-    private final String id;  
-    private final String description;
-    private final Map<Attribute, Set<String>> attributeMap;
-    private final String featureValue;  
-    private final FeatureType featureType;
-
-    /**  
-     * constructor for UpdateRuleRequest
-     * @param id - the rule id to update
-     * @param description - the description to update  
-     * @param attributeMap - the attribute values to update
-     * @param featureValue - the feature value to update
-     * @param featureType - the feature type for the rule  
-     */
-    public UpdateRuleRequest(
-        String id,  
-        String description,
-        Map<Attribute, Set<String>> attributeMap,
-        String featureValue,  
-        FeatureType featureType
-    ) {
-        this.id = id;  
-        this.description = description;
-        this.attributeMap = attributeMap;
-        this.featureValue = featureValue;  
-        this.featureType = featureType;
-    }
-
-    /**
-     * Constructs a UpdateRuleRequest from a StreamInput for deserialization
-     * @param in - The {@link StreamInput} instance to read from.  
-     */
-    public UpdateRuleRequest(StreamInput in) throws IOException {
-        super(in);  
-        id = in.readString();
-        description = in.readOptionalString();
-        featureType = FeatureType.from(in);  
-        attributeMap = in.readMap(i -> Attribute.from(i, featureType), i -> new HashSet<>(i.readStringList()));
-        featureValue = in.readOptionalString();
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
-        return null;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
         out.writeString(id);
-        out.writeOptionalString(description);
-        featureType.writeTo(out);  
-        out.writeMap(attributeMap, (o, a) -> a.writeTo(o), StreamOutput::writeStringCollection);
-        out.writeOptionalString(featureValue);
-    }  
-
-    /**
-     * id getter  
+        this.id = id;  
+     * @param attributeMap - the attribute values to update
+    private final String description;
+     * attributeMap getter
      */
-    public String getId() {
-        return id;  
+    private final FeatureType featureType;
+     * Constructs a UpdateRuleRequest from a StreamInput for deserialization
     }
-
-    /**  
      * description getter
      */
-    public String getDescription() {  
-        return description;
-    }
-
-    /**
-     * attributeMap getter
-     */  
-    public Map<Attribute, Set<String>> getAttributeMap() {
-        return attributeMap;
-    }  
-
-    /**
+        out.writeMap(attributeMap, (o, a) -> a.writeTo(o), StreamOutput::writeStringCollection);
+ * A request for update Rule  
+     * @param description - the description to update  
      * featureType getter  
-     */
-    public FeatureType getFeatureType() {
-        return featureType;  
+import org.opensearch.rule.autotagging.FeatureType;
+    /**
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *      "index_pattern": ["log*", "event*"],
+        String id,  
+        description = in.readOptionalString();
+ */  
+        String description,
+        return id;  
+ * @opensearch.experimental
     }
-
+ *
+     * constructor for UpdateRuleRequest
+    }
+    public String getId() {
+     */
+        return description;
+    private final Map<Attribute, Set<String>> attributeMap;
     /**  
-     * featureValue getter
+        attributeMap = in.readMap(i -> Attribute.from(i, featureType), i -> new HashSet<>(i.readStringList()));
+    }  
      */
-    public String getFeatureValue() {  
+        return attributeMap;
         return featureValue;
+    private final String featureValue;  
+    /**  
+     * id getter  
+import java.util.Set;  
+/**
+        String featureValue,  
+     */
+     * @param id - the rule id to update
     }
+    public String getDescription() {  
+     * featureValue getter
+ * SPDX-License-Identifier: Apache-2.0
+    public UpdateRuleRequest(StreamInput in) throws IOException {
+        return featureType;  
+import org.opensearch.action.ActionRequestValidationException;
+ * The OpenSearch Contributors require contributions made to  
+    /**
+ * compatible open source license.
+     */  
+        this.attributeMap = attributeMap;
+        featureType = FeatureType.from(in);  
+ * Example request:
+    public ActionRequestValidationException validate() {  
+public class UpdateRuleRequest extends ActionRequest {
+ * }'
+    /**
+        this.featureValue = featureValue;  
+    }
+import org.opensearch.common.annotation.ExperimentalApi;  
+    ) {
+    public Map<Attribute, Set<String>> getAttributeMap() {
+     * @param featureType - the feature type for the rule  
+        super.writeTo(out);  
+        Map<Attribute, Set<String>> attributeMap,
+        super(in);  
+ */  
+    public FeatureType getFeatureType() {
+        id = in.readString();
+        FeatureType featureType
+     * @param featureValue - the feature value to update
 }  
+        out.writeOptionalString(featureValue);
+        return null;
+ * {  
+        out.writeOptionalString(description);
+    public String getFeatureValue() {  
+     */
+    }  
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.util.Map;
+        this.featureType = featureType;
+ *      "workload_group": "dev_workload_group_id_2"  
+@ExperimentalApi
+ * this file be licensed under the Apache-2.0 license or a
+ * curl -XPUT "localhost:9200/_rules/{featureType}/{_id}" -H 'Content-Type: application/json' -d '
+     * @param in - The {@link StreamInput} instance to read from.  
+package org.opensearch.rule.action;
+    public void writeTo(StreamOutput out) throws IOException {
+        featureType.writeTo(out);  
+    @Override
+/*  
+import org.opensearch.rule.autotagging.Attribute;  
+    }
+        this.description = description;
+import java.io.IOException;  
+    /**
+import org.opensearch.action.ActionRequest;
+    /**  
+    public UpdateRuleRequest(
+ *     "description": "description",
+    }  
+        featureValue = in.readOptionalString();
+    private final String id;  
+import java.util.HashSet;
+    @Override

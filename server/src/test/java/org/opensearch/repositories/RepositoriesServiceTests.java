@@ -1,1199 +1,1038 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.lucene.index.IndexCommit;  
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.crypto.CryptoSettings;
-import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;  
-import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
-import org.opensearch.cluster.AckedClusterStateUpdateTask;
-import org.opensearch.cluster.ClusterChangedEvent;  
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;  
-import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
-import org.opensearch.cluster.metadata.CryptoMetadata;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.RepositoriesMetadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.service.ClusterApplierService;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.UUIDs;  
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.crypto.CryptoHandler;  
-import org.opensearch.common.crypto.DecryptedRangedStreamProvider;
-import org.opensearch.common.crypto.EncryptedHeaderContentSupplier;
-import org.opensearch.common.crypto.MasterKeyProvider;  
-import org.opensearch.common.io.InputStreamContainer;
-import org.opensearch.common.lifecycle.Lifecycle;
-import org.opensearch.common.lifecycle.LifecycleListener;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
-import org.opensearch.index.snapshots.blobstore.RemoteStoreShardShallowCopySnapshot;  
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
-import org.opensearch.indices.recovery.RecoverySettings;  
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.plugins.CryptoPlugin;
-import org.opensearch.repositories.blobstore.MeteredBlobStoreRepository;  
-import org.opensearch.snapshots.SnapshotId;
-import org.opensearch.snapshots.SnapshotInfo;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;  
-import org.opensearch.test.MockLogAppender;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;  
-import java.util.function.Consumer;
-import java.util.function.Function;
-
-import static org.opensearch.repositories.blobstore.BlobStoreRepository.SYSTEM_REPOSITORY_SETTING;
-import static org.hamcrest.Matchers.equalTo;
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class RepositoriesServiceTests extends OpenSearchTestCase {
-
-    private RepositoriesService repositoriesService;
-    private final String kpTypeA = "kp-type-a";
-    private final String kpTypeB = "kp-type-b";  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        ThreadPool threadPool = mock(ThreadPool.class);
-        final ClusterApplierService clusterApplierService = mock(ClusterApplierService.class);  
-        when(clusterApplierService.threadPool()).thenReturn(threadPool);
-        final ClusterService clusterService = mock(ClusterService.class);
-        repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);  
-    }
-
-    private RepositoriesService createRepositoriesServiceWithMockedClusterService(ClusterService clusterService) {  
-        ThreadPool threadPool = mock(ThreadPool.class);
-        final TransportService transportService = new TransportService(
-            Settings.EMPTY,  
-            mock(Transport.class),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,  
-            boundAddress -> DiscoveryNode.createLocal(Settings.EMPTY, boundAddress.publishAddress(), UUIDs.randomBase64UUID()),
-            null,
-            Collections.emptySet(),  
-            NoopTracer.INSTANCE
-        );
-        final ClusterApplierService clusterApplierService = mock(ClusterApplierService.class);  
-        when(clusterApplierService.threadPool()).thenReturn(threadPool);
-        when(clusterService.getClusterApplierService()).thenReturn(clusterApplierService);
-        Map<String, Repository.Factory> typesRegistry = Map.of(  
-            TestRepository.TYPE,
-            TestRepository::new,
-            ReloadableTestRepository.TYPE,  
-            ReloadableTestRepository::new,
-            FailingOnStartTestRepository.TYPE,
-            FailingOnStartTestRepository::new,  
-            MeteredRepositoryTypeA.TYPE,
-            metadata -> new MeteredRepositoryTypeA(metadata, clusterService),
-            MeteredRepositoryTypeB.TYPE,  
-            metadata -> new MeteredRepositoryTypeB(metadata, clusterService)
-        );
-
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        when(nodes.getMinNodeVersion()).thenReturn(Version.V_2_9_0);
-        ClusterState currentClusterState = mock(ClusterState.class);  
-        when(currentClusterState.getNodes()).thenReturn(nodes);
-        when(clusterService.state()).thenReturn(currentClusterState);
-
-        when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);  
-
-        RepositoriesService repositoriesService = new RepositoriesService(
-            Settings.EMPTY,  
-            clusterService,
-            transportService,
-            typesRegistry,  
-            typesRegistry,
-            threadPool
-        );  
-
-        repositoriesService.start();
-        return repositoriesService;  
-    }
-
-    public void testRegisterInternalRepository() {  
-        String repoName = "name";
-        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
-        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);  
-        Repository repository = repositoriesService.repository(repoName);
-        assertEquals(repoName, repository.getMetadata().name());
-        assertEquals(TestRepository.TYPE, repository.getMetadata().type());  
-        assertEquals(Settings.EMPTY, repository.getMetadata().settings());
-        assertTrue(((TestRepository) repository).isStarted);
-    }  
-
-    public void testUnregisterInternalRepository() {
-        String repoName = "name";  
-        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
-        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);
-        Repository repository = repositoriesService.repository(repoName);  
-        assertFalse(((TestRepository) repository).isClosed);
-        repositoriesService.unregisterInternalRepository(repoName);
-        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));  
-        assertTrue(((TestRepository) repository).isClosed);
-    }
-
-    public void testCreateRepositoryLogsTimeTaken() throws Exception {
-        String repoName = "name";
-        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, TestRepository.TYPE);  
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(  
-                    "repository creation timing",
-                    RepositoriesService.class.getCanonicalName(),
-                    Level.INFO,  
-                    "created repository [" + TestRepository.TYPE + "][" + repoName + "] in [*]"
-                )
-            );  
-            repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));
-            appender.assertAllExpectationsMatched();
-        }  
-    }
-
-    public void testCloseRepositoryLogsTimeTaken() throws Exception {  
-        String repoName = "name";
-        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, TestRepository.TYPE);
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));  
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(  
-                    "repository close timing",
-                    RepositoriesService.class.getCanonicalName(),
-                    Level.INFO,  
-                    "closed repository [" + TestRepository.TYPE + "][" + repoName + "] in [*]"
-                )
-            );  
-            repositoriesService.applyClusterState(new ClusterChangedEvent("removed repo", emptyState(), clusterStateWithRepo));
-            appender.assertAllExpectationsMatched();
-        }  
-    }
-
-    public void testCreateRepositoryLogsTimeTakenOnFailure() throws Exception {  
-        String repoName = "name";
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
-            appender.addExpectation(  
-                new MockLogAppender.SeenEventExpectation(
-                    "repository creation timing",
-                    RepositoriesService.class.getCanonicalName(),  
-                    Level.INFO,
-                    "created repository [" + FailingOnStartTestRepository.TYPE + "][" + repoName + "] in [*]"
-                )  
-            );
-            expectThrows(
-                RepositoryException.class,  
-                () -> repositoriesService.createRepository(
-                    new RepositoryMetadata(repoName, FailingOnStartTestRepository.TYPE, Settings.EMPTY)
-                )  
-            );
-            appender.assertAllExpectationsMatched();
-        }  
-    }
-
-    public void testCloseRepositoryLogsTimeTakenOnFailure() throws Exception {  
-        String repoName = "name";
-        Repository repository = new TestRepository(new RepositoryMetadata(repoName, TestRepository.TYPE, Settings.EMPTY)) {
-            @Override  
-            public void close() {
-                super.close();
-                throw new RuntimeException("close failed");  
-            }
-        };
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
-                    "repository close timing",  
-                    RepositoriesService.class.getCanonicalName(),
-                    Level.INFO,
-                    "closed repository [" + TestRepository.TYPE + "][" + repoName + "] in [*]"  
-                )
-            );
-            RuntimeException e = expectThrows(RuntimeException.class, () -> repositoriesService.closeRepository(repository));  
-            assertEquals("close failed", e.getMessage());
-            appender.assertAllExpectationsMatched();
-        }  
-    }
-
-    public void testReloadRepositoryLogsTimeTaken() throws Exception {  
-        String repoName = "name";
-        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, ReloadableTestRepository.TYPE);
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));  
-        ClusterState updatedClusterState = createClusterStateWithRepo(
-            repoName,
-            ReloadableTestRepository.TYPE,  
-            Settings.builder().put("updated", true).build()
-        );
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
-                    "repository reload timing",  
-                    RepositoriesService.class.getCanonicalName(),
-                    Level.INFO,
-                    "reloaded repository [" + ReloadableTestRepository.TYPE + "][" + repoName + "] in [*]"  
-                )
-            );
-            repositoriesService.applyClusterState(new ClusterChangedEvent("update repo", updatedClusterState, clusterStateWithRepo));  
-            appender.assertAllExpectationsMatched();
-        }
-    }  
-
-    public void testReloadRepositoryLogsTimeTakenOnFailure() throws Exception {
-        String repoName = "name";  
-        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, ReloadableTestRepository.TYPE);
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));
-        ((ReloadableTestRepository) repositoriesService.repository(repoName)).failOnReload = true;  
-        ClusterState updatedClusterState = createClusterStateWithRepo(
-            repoName,
-            ReloadableTestRepository.TYPE,  
-            Settings.builder().put("updated", true).build()
-        );
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
-                    "repository reload timing",  
-                    RepositoriesService.class.getCanonicalName(),
-                    Level.INFO,
-                    "reloaded repository [" + ReloadableTestRepository.TYPE + "][" + repoName + "] in [*]"  
-                )
-            );
-            // applyClusterState swallows the reload failure but trips an assert in tests  
-            expectThrows(
-                AssertionError.class,
-                () -> repositoriesService.applyClusterState(  
-                    new ClusterChangedEvent("update repo", updatedClusterState, clusterStateWithRepo)
-                )
-            );  
-            appender.assertAllExpectationsMatched();
-        }
-    }  
-
-    public void testRegisterRepositoryLogsTimeTakenOnFailure() throws Exception {
-        String repoName = "name";  
-        PutRepositoryRequest request = new PutRepositoryRequest(repoName);
-        request.type("unknown-type");
-        AtomicReference<Exception> failure = new AtomicReference<>();  
-        ActionListener<ClusterStateUpdateResponse> listener = ActionListener.wrap(response -> fail("expected failure"), failure::set);
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
-            appender.addExpectation(  
-                new MockLogAppender.SeenEventExpectation(
-                    "put repository timing",
-                    RepositoriesService.class.getCanonicalName(),  
-                    Level.INFO,
-                    "put/update repository [" + repoName + "] took [*]"
-                )  
-            );
-            repositoriesService.registerOrUpdateRepository(request, listener);
-            appender.assertAllExpectationsMatched();  
-        }
-        assertTrue(failure.get() instanceof RepositoryException);
-    }  
-
-    public void testUnregisterRepositoryLogsTimeTaken() throws Exception {
-        String repoName = "name";  
-        ClusterService clusterService = mock(ClusterService.class);
-        doAnswer(invocation -> {
-            AckedClusterStateUpdateTask<ClusterStateUpdateResponse> task = (AckedClusterStateUpdateTask<  
-                ClusterStateUpdateResponse>) invocation.getArguments()[1];
-            task.onFailure("delete_repository [" + repoName + "]", new RepositoryMissingException(repoName));
-            return null;  
-        }).when(clusterService).submitStateUpdateTask(any(), any());
-        RepositoriesService repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);
-
-        AtomicReference<Exception> failure = new AtomicReference<>();
-        ActionListener<ClusterStateUpdateResponse> listener = ActionListener.wrap(response -> fail("expected failure"), failure::set);
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
-                    "delete repository timing",  
-                    RepositoriesService.class.getCanonicalName(),
-                    Level.INFO,
-                    "delete repository [" + repoName + "] took [*]"  
-                )
-            );
-            repositoriesService.unregisterRepository(new DeleteRepositoryRequest(repoName), listener);  
-            appender.assertAllExpectationsMatched();
-        }
-        assertTrue(failure.get() instanceof RepositoryMissingException);  
-    }
-
-    public void testRegisterWillNotUpdateIfInternalRepositoryWithNameExists() {  
-        String repoName = "name";
-        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
-        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);  
-        Repository repository = repositoriesService.repository(repoName);
-        assertFalse(((TestRepository) repository).isClosed);
-        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);  
-        assertFalse(((TestRepository) repository).isClosed);
-        Repository repository2 = repositoriesService.repository(repoName);
-        assertSame(repository, repository2);  
-    }
-
-    public void testRegisterRejectsInvalidRepositoryNames() {  
-        assertThrowsOnRegister("");
-        assertThrowsOnRegister("contains#InvalidCharacter");
-        for (char c : Strings.INVALID_FILENAME_CHARS) {  
-            assertThrowsOnRegister("contains" + c + "InvalidCharacters");
-        }
-    }  
-
-    public void testUpdateOrRegisterRejectsForSystemRepository() {
-        String repoName = "name";  
-        PutRepositoryRequest request = new PutRepositoryRequest(repoName);
-        request.settings(Settings.builder().put(SYSTEM_REPOSITORY_SETTING.getKey(), true).build());
-        expectThrows(RepositoryException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));  
-    }
-
-    public void testRepositoriesStatsCanHaveTheSameNameAndDifferentTypeOverTime() {  
-        String repoName = "name";
-        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
-
-        ClusterState clusterStateWithRepoTypeA = createClusterStateWithRepo(repoName, MeteredRepositoryTypeA.TYPE);
-
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));  
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
-
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", emptyState(), clusterStateWithRepoTypeA));  
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(0));
-
-        ClusterState clusterStateWithRepoTypeB = createClusterStateWithRepo(repoName, MeteredRepositoryTypeB.TYPE);  
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeB, emptyState()));
-
-        List<RepositoryStatsSnapshot> repositoriesStats = repositoriesService.repositoriesStats();  
-        assertThat(repositoriesStats.size(), equalTo(1));
-        RepositoryStatsSnapshot repositoryStatsTypeA = repositoriesStats.get(0);
-        assertThat(repositoryStatsTypeA.getRepositoryInfo().type, equalTo(MeteredRepositoryTypeB.TYPE));  
-        assertThat(repositoryStatsTypeA.getRepositoryStats(), equalTo(MeteredRepositoryTypeB.STATS));
-
-    }  
-
-    public void testWithSameKeyProviderNames() {
-        String keyProviderName = "kp-name";  
-        ClusterState clusterStateWithRepoTypeA = createClusterStateWithKeyProvider(
-            "repoName",
-            MeteredRepositoryTypeA.TYPE,  
-            keyProviderName,
-            kpTypeA
-        );  
-
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));  
-        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
-        assertNotNull(repository);
-        assertNotNull(repository.cryptoHandler);  
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
-
-        ClusterState clusterStateWithRepoTypeB = createClusterStateWithKeyProvider(  
-            "repoName",
-            MeteredRepositoryTypeB.TYPE,
-            keyProviderName,  
-            kpTypeA
-        );
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeB, emptyState()));  
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
-        MeteredRepositoryTypeB repositoryB = (MeteredRepositoryTypeB) repositoriesService.repository("repoName");
-        assertNotNull(repositoryB);  
-        assertNotNull(repository.cryptoHandler);
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
-    }  
-
-    public void testCryptoManagersUnchangedWithSameCryptoMetadata() {
-        String keyProviderName = "kp-name";  
-        ClusterState clusterStateWithRepoTypeA = createClusterStateWithKeyProvider(
-            "repoName",
-            MeteredRepositoryTypeA.TYPE,  
-            keyProviderName,
-            kpTypeA
-        );  
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
-        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");  
-        assertNotNull(repository);
-        assertNotNull(repository.cryptoHandler);
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);  
-
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));  
-        repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
-        assertNotNull(repository);
-        assertNotNull(repository.cryptoHandler);  
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
-    }
-
-    public void testRepositoryUpdateWithDifferentCryptoMetadata() {
-        String keyProviderName = "kp-name";
-
-        ClusterState clusterStateWithRepoTypeA = createClusterStateWithKeyProvider(
-            "repoName",
-            MeteredRepositoryTypeA.TYPE,  
-            keyProviderName,
-            kpTypeA
-        );  
-        ClusterService clusterService = mock(ClusterService.class);
-
-        PutRepositoryRequest request = new PutRepositoryRequest("repoName");  
-        request.type(MeteredRepositoryTypeA.TYPE);
-        request.settings(Settings.EMPTY);
-
-        doAnswer((invocation) -> {
-            AckedClusterStateUpdateTask<ClusterStateUpdateResponse> task = (AckedClusterStateUpdateTask<
-                ClusterStateUpdateResponse>) invocation.getArguments()[1];  
-            task.execute(clusterStateWithRepoTypeA);
-            return null;
-        }).when(clusterService).submitStateUpdateTask(any(), any());  
-
-        RepositoriesService repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);
-        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));  
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
-        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
-        assertNotNull(repository);  
-        assertNotNull(repository.cryptoHandler);
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
-
-        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
-
-        CryptoSettings cryptoSettings = new CryptoSettings(keyProviderName);  
-        cryptoSettings.keyProviderType(kpTypeA);
-        cryptoSettings.settings(Settings.builder().put("key-1", "val-1"));
-        request.cryptoSettings(cryptoSettings);  
-        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
-
-        cryptoSettings.settings(Settings.builder());  
-        cryptoSettings.keyProviderName("random");
-        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
-
-        cryptoSettings.keyProviderName(keyProviderName);
-
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);  
-        repositoriesService.registerOrUpdateRepository(request, null);
-    }
-
-    public void testCryptoManagerClusterStateChanges() {
-
-        ClusterService clusterService = mock(ClusterService.class);  
-        AtomicBoolean verified = new AtomicBoolean();
-        List<RepositoryMetadata> repositoryMetadata = new ArrayList<>();
-
-        String keyProviderName = "kp-name-1";
-        String repoName = "repoName";
-        String keyProviderType = kpTypeA;  
-        Settings.Builder settings = Settings.builder();
-        PutRepositoryRequest request = createPutRepositoryEncryptedRequest(
-            repoName,  
-            MeteredRepositoryTypeA.TYPE,
-            keyProviderName,
-            settings,  
-            keyProviderType
-        );
-        verified.set(false);  
-        RepositoriesService repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(
-            clusterService,
-            repoName,  
-            keyProviderName,
-            keyProviderType,
-            settings.build(),  
-            verified,
-            repositoryMetadata
-        );  
-        repositoriesService.registerOrUpdateRepository(request, null);
-        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoHandler);  
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
-        assertTrue(verified.get());
-
-        // No change
-        keyProviderType = kpTypeA;
-        settings = Settings.builder();  
-        request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
-        verified.set(false);
-        repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(  
-            clusterService,
-            repoName,
-            keyProviderName,  
-            keyProviderType,
-            settings.build(),
-            verified,  
-            repositoryMetadata
-        );
-        repositoriesService.registerOrUpdateRepository(request, null);  
-
-        repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoHandler);  
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
-        assertTrue(verified.get());
-
-        // Same crypto client in new repo
-        repoName = "repoName-2";
-        keyProviderType = kpTypeA;  
-        settings = Settings.builder();
-        request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
-        verified.set(false);  
-        repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(
-            clusterService,
-            repoName,  
-            keyProviderName,
-            keyProviderType,
-            settings.build(),  
-            verified,
-            repositoryMetadata
-        );  
-        repositoriesService.registerOrUpdateRepository(request, null);
-        repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoHandler);  
-        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
-        assertTrue(verified.get());
-
-        // Different crypto client in new repo
-        repoName = "repoName-3";
-        keyProviderType = kpTypeB;  
-        settings = Settings.builder();
-        request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
-        verified.set(false);  
-        repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(
-            clusterService,
-            repoName,  
-            keyProviderName,
-            keyProviderType,
-            settings.build(),  
-            verified,
-            repositoryMetadata
-        );  
-        repositoriesService.registerOrUpdateRepository(request, null);
-        repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoHandler);  
-        assertEquals(kpTypeB, repository.cryptoHandler.kpType);
-        assertTrue(verified.get());
-
-    }
-
-    private RepositoriesService createRepositoriesServiceAndMockCryptoClusterState(  
-        ClusterService clusterService,
-        String repoName,
-        String keyProviderName,  
-        String keyProviderType,
-        Settings settings,
-        AtomicBoolean verified,  
-        List<RepositoryMetadata> repositoryMetadataList
-    ) {
-
-        ClusterState.Builder state = ClusterState.builder(new ClusterName("test"));
-        CryptoMetadata newCryptoMetadata = new CryptoMetadata(keyProviderName, keyProviderType, Settings.EMPTY);
-        Metadata.Builder mdBuilder = Metadata.builder();  
-
-        RepositoryMetadata newRepositoryMetadata = new RepositoryMetadata(
-            repoName,  
-            MeteredRepositoryTypeA.TYPE,
-            Settings.EMPTY,
-            newCryptoMetadata  
-        );
-        if (!repositoryMetadataList.contains(newRepositoryMetadata)) {
-            repositoryMetadataList.add(newRepositoryMetadata);  
-        }
-        RepositoriesMetadata newRepositoriesMetadata = new RepositoriesMetadata(repositoryMetadataList);
-        mdBuilder.putCustom(RepositoriesMetadata.TYPE, newRepositoriesMetadata);  
-        state.metadata(mdBuilder);
-        ClusterState clusterStateWithRepoTypeA = state.build();
-
-        RepositoriesService repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);
-
-        doAnswer((invocation) -> {  
-            AckedClusterStateUpdateTask<ClusterStateUpdateResponse> task = (AckedClusterStateUpdateTask<
-                ClusterStateUpdateResponse>) invocation.getArguments()[1];
-            ClusterState clusterState = task.execute(clusterStateWithRepoTypeA);  
-            RepositoriesMetadata repositories = clusterState.metadata().custom(RepositoriesMetadata.TYPE);
-            RepositoryMetadata repositoryMetadata = repositories.repositories().get(repositoryMetadataList.size() - 1);
-            CryptoMetadata cryptoMetadata = repositoryMetadata.cryptoMetadata();  
-            assertNotNull(cryptoMetadata);
-            assertEquals(keyProviderName, cryptoMetadata.keyProviderName());
-            assertEquals(keyProviderType, cryptoMetadata.keyProviderType());  
-            assertEquals(cryptoMetadata.settings(), settings);
-            verified.set(true);
-            repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));  
-            return null;
-        }).when(clusterService).submitStateUpdateTask(any(), any());
-
-        return repositoriesService;
-    }
-
-    private ClusterState createClusterStateWithRepo(String repoName, String repoType) {
-        return createClusterStateWithRepo(repoName, repoType, Settings.EMPTY);
-    }  
-
-    private ClusterState createClusterStateWithRepo(String repoName, String repoType, Settings settings) {
-        ClusterState.Builder state = ClusterState.builder(new ClusterName("test"));  
         Metadata.Builder mdBuilder = Metadata.builder();
-        mdBuilder.putCustom(
-            RepositoriesMetadata.TYPE,  
-            new RepositoriesMetadata(Collections.singletonList(new RepositoryMetadata(repoName, repoType, settings)))
-        );
-        state.metadata(mdBuilder);  
-
-        return state.build();
-    }  
-
-    private ClusterState createClusterStateWithKeyProvider(
-        String repoName,  
-        String repoType,
-        String keyProviderName,
-        String keyProviderType  
-    ) {
-        ClusterState.Builder state = ClusterState.builder(new ClusterName("test"));
-        Metadata.Builder mdBuilder = Metadata.builder();  
-        CryptoMetadata cryptoMetadata = new CryptoMetadata(keyProviderName, keyProviderType, Settings.EMPTY);
-        mdBuilder.putCustom(
-            RepositoriesMetadata.TYPE,  
-            new RepositoriesMetadata(Collections.singletonList(new RepositoryMetadata(repoName, repoType, Settings.EMPTY, cryptoMetadata)))
-        );
-        state.metadata(mdBuilder);  
-
-        return state.build();
-    }  
-
-    private PutRepositoryRequest createPutRepositoryEncryptedRequest(
-        String repoName,  
-        String repoType,
-        String keyProviderName,
-        Settings.Builder settings,  
-        String keyProviderType
-    ) {
-        PutRepositoryRequest repositoryRequest = new PutRepositoryRequest(repoName);  
-        repositoryRequest.type(repoType);
-        repositoryRequest.settings(Settings.EMPTY);
-        CryptoSettings cryptoSettings = new CryptoSettings(keyProviderName);  
-        cryptoSettings.keyProviderName(keyProviderName);
-        cryptoSettings.keyProviderType(keyProviderType);
-        cryptoSettings.settings(settings);  
-        repositoryRequest.cryptoSettings(cryptoSettings);
-
-        return repositoryRequest;  
-    }
-
-    private ClusterState emptyState() {  
-        return ClusterState.builder(new ClusterName("test")).build();
-    }
-
-    private void assertThrowsOnRegister(String repoName) {
-        PutRepositoryRequest request = new PutRepositoryRequest(repoName);
-        expectThrows(RepositoryException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));  
-    }
-
-    private static class TestCryptoProvider implements CryptoHandler<Object, Object> {  
-        final String kpName;
-        final String kpType;
-
-        public TestCryptoProvider(String kpName, String kpType) {
-            this.kpName = kpName;
-            this.kpType = kpType;  
-        }
-
-        @Override  
-        public Object initEncryptionMetadata() {
-            return new Object();
-        }  
-
+            ActionListener<String> listener
+        public IndexMetadata getSnapshotIndexMetaData(RepositoryData repositoryData, SnapshotId snapshotId, IndexId index) {  
+    private static class TestRepository implements Repository {
+            }
+            appender.assertAllExpectationsMatched();
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
+        public RepositoryStats stats() {
+        public void removeLifecycleListener(LifecycleListener listener) {
+            if (metadata.cryptoMetadata() != null) {
+        private final RepositoryMetadata metadata;
+        ClusterState updatedClusterState = createClusterStateWithRepo(
+ * ownership. Elasticsearch licenses this file to you under  
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));  
         @Override
-        public long adjustContentSizeForPartialEncryption(Object cryptoContextObj, long contentSize) {  
-            return 0;
-        }
-
-        @Override
-        public long estimateEncryptedLengthOfEntireContent(Object cryptoContextObj, long contentLength) {
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.common.crypto.MasterKeyProvider;  
             return 0;  
-        }
-
-        @Override  
-        public InputStreamContainer createEncryptingStream(Object encryptionMetadata, InputStreamContainer streamContainer) {
-            return null;
+            FailingOnStartTestRepository.TYPE,
         }  
-
-        @Override
-        public InputStreamContainer createEncryptingStreamOfPart(  
-            Object cryptoContextObj,
-            InputStreamContainer stream,
-            int totalStreams,  
-            int streamIdx
-        ) {
-            return null;  
-        }
-
+    }  
+        assertTrue(failure.get() instanceof RepositoryException);
         @Override  
+        return state.build();
+            } else {
+    public void testCryptoManagersUnchangedWithSameCryptoMetadata() {
+        String repoName,  
+            repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));
+        );
+        when(clusterApplierService.threadPool()).thenReturn(threadPool);
+        @Override  
+        assertThat(repositoryStatsTypeA.getRepositoryInfo().type, equalTo(MeteredRepositoryTypeB.TYPE));  
+        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);  
+            long primaryTerm,
+                    RepositoriesService.class.getCanonicalName(),
+import java.util.function.Function;
+        state.metadata(mdBuilder);
+        public long estimateDecryptedLength(Object cryptoContext, long contentLength) {
+        }
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+            appender.assertAllExpectationsMatched();
+            RecoveryState recoveryState,
+            MeteredRepositoryTypeA.TYPE,
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
+        @Override
+        assertNotNull(repository.cryptoHandler);  
+    private static class ReloadableTestRepository extends TestRepository {
+            Version repositoryMetaVersion,  
+    public void testRegisterInternalRepository() {  
+            SnapshotId target,  
+            settings.build(),
+        cryptoSettings.keyProviderName("random");
+    public void testCreateRepositoryLogsTimeTaken() throws Exception {
+import org.opensearch.Version;
+            ActionListener<RepositoryData> listener  
+        when(clusterApplierService.threadPool()).thenReturn(threadPool);
+    private RepositoriesService createRepositoriesServiceAndMockCryptoClusterState(  
+        repositoriesService.registerOrUpdateRepository(request, null);
+            "repoName",
+        assertNotNull(repository.cryptoHandler);
+        }
+            InputStreamContainer stream,
+            listener.onResponse(null);
+        }
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
+            return null;  
+        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, TestRepository.TYPE);
+        public Object initEncryptionMetadata() {
+        public boolean isSystemRepository() {
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
+        public InputStreamContainer createEncryptingStreamOfPart(  
+                    new RepositoryMetadata(repoName, FailingOnStartTestRepository.TYPE, Settings.EMPTY)
+ * You may obtain a copy of the License at  
+            ActionListener<Void> listener
+            return new TestCryptoProvider(keyProviderName, keyProviderType);
+        public long getSnapshotThrottleTimeInNanos() {
+                new MockLogAppender.SeenEventExpectation(
+                new MockLogAppender.SeenEventExpectation(
+            assertEquals(keyProviderType, cryptoMetadata.keyProviderType());  
+            kpTypeA
+            Object cryptoContext,  
+        @Override
+    ) {
+import org.opensearch.common.crypto.DecryptedRangedStreamProvider;
+                    Level.INFO,
+        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));  
+    }  
+            super(metadata);
+    }
+            RepositoriesMetadata repositories = clusterState.metadata().custom(RepositoriesMetadata.TYPE);
+            @Override  
+        assertNotNull(repository);
+            int streamIdx
+        final String kpName;
+        RepositoriesMetadata newRepositoriesMetadata = new RepositoriesMetadata(repositoryMetadataList);
+            super(metadata);
+        @Override  
+            mock(Transport.class),
+        ) {  
+        public void addLifecycleListener(LifecycleListener listener) {  
+        public void close() {
+        @Override
+        assertNotNull(repository.cryptoHandler);  
+    // -----------------------------------------------------------------------  
+ */
+    public void testUnregisterRepositoryLogsTimeTaken() throws Exception {
+import static org.mockito.Mockito.doAnswer;
+            repoName,
+        }
+    }  
+import org.opensearch.common.io.InputStreamContainer;
+        );
+        assertEquals(kpTypeB, repository.cryptoHandler.kpType);
+    private final String kpTypeA = "kp-type-a";
+        request.type(MeteredRepositoryTypeA.TYPE);
+        doAnswer(invocation -> {
+        assertTrue(verified.get());
+            listener.onResponse(null);
         public InputStream createDecryptingStream(InputStream encryptingStream) {
             return null;
-        }  
-
         @Override
-        public Object loadEncryptionMetadata(EncryptedHeaderContentSupplier encryptedHeaderContentSupplier) throws IOException {  
-            return null;
+        return repositoryRequest;  
+                    metadata.cryptoMetadata().keyProviderName(),
+        ClusterState.Builder state = ClusterState.builder(new ClusterName("test"));
+            verified,  
+import org.opensearch.cluster.metadata.RepositoriesMetadata;
         }
-
-        @Override
-        public DecryptedRangedStreamProvider createDecryptingStreamOfRange(
-            Object cryptoContext,  
-            long startPosOfRawContent,
-            long endPosOfRawContent
-        ) {  
-            return null;
-        }
-
-        @Override
-        public long estimateDecryptedLength(Object cryptoContext, long contentLength) {
-            return 0;  
-        }
-
+                throw new RuntimeException("reload failed");  
+            repoName,
+            Metadata clusterMetadata,  
+        ) {}
+/*  
         @Override  
-        public void close() throws IOException {
-
+        protected BlobStore createBlobStore() {
+        }
+        PutRepositoryRequest request = new PutRepositoryRequest("repoName");  
+        String repoName = "name";
+/*
+                    Level.INFO,
+        private boolean failOnReload;
+        private static final RepositoryStats STATS = new RepositoryStats(Map.of("GET", 10L));  
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeB, emptyState()));  
+        ThreadPool threadPool = mock(ThreadPool.class);
+        public long getRemoteDownloadThrottleTimeInNanos() {
+        }
+        }
+            appender.assertAllExpectationsMatched();  
+        String repoName = "name";
+        @Override  
+    private static class MeteredRepositoryTypeB extends MeteredBlobStoreRepository {
+            assertEquals(keyProviderName, cryptoMetadata.keyProviderName());
+        @Override
+    public void testCryptoManagerClusterStateChanges() {
+        RepositoryStatsSnapshot repositoryStatsTypeA = repositoriesStats.get(0);
+import org.opensearch.indices.recovery.RecoverySettings;  
+            Store store,  
+        );
+                    "put/update repository [" + repoName + "] took [*]"
+        private static final String TYPE = "internal";
+            );
+            Settings.EMPTY,
+        String repoName = "name";  
+        assertEquals(TestRepository.TYPE, repository.getMetadata().type());  
+        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
+                    RepositoriesService.class.getCanonicalName(),
+        cryptoSettings.settings(Settings.builder());  
+        public void cloneShardSnapshot(
+        assertFalse(((TestRepository) repository).isClosed);
+import java.io.IOException;
+        doAnswer((invocation) -> {  
+    public void testCloseRepositoryLogsTimeTakenOnFailure() throws Exception {  
+        }
+            repoName,  
+                cryptoHandler = new TestCryptoProvider(
+    public void testReloadRepositoryLogsTimeTakenOnFailure() throws Exception {
+            "repoName",
+        when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
+            "repoName",
+        RepositoriesService repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);
+        ) {
+        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);  
+            return 0;
+        ) {  
+        public void endVerification(String verificationToken) {
+    }  
+        repositoriesService.registerOrUpdateRepository(request, null);
+ * SPDX-License-Identifier: Apache-2.0
+        List<RepositoryMetadata> repositoryMetadata = new ArrayList<>();
+            SnapshotId snapshotId,  
+        final ClusterService clusterService = mock(ClusterService.class);
+        assertThat(repositoriesStats.size(), equalTo(1));
+            return null;  
+import org.opensearch.common.settings.ClusterSettings;
+        String repoName = "name";  
+                    "repository reload timing",  
+        assertThrowsOnRegister("contains#InvalidCharacter");
+                    "reloaded repository [" + ReloadableTestRepository.TYPE + "][" + repoName + "] in [*]"  
+                throw new RuntimeException("close failed");  
+        private static final String TYPE = "type-a";
+            return null;  
+        ((ReloadableTestRepository) repositoriesService.repository(repoName)).failOnReload = true;  
+            return 0;
+            Version repositoryMetaVersion,
+                    Level.INFO,
+import java.util.Map;
+        protected BlobStore createBlobStore() {  
+        }
+    public void testCreateRepositoryLogsTimeTakenOnFailure() throws Exception {  
+        ClusterState updatedClusterState = createClusterStateWithRepo(
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+        @Override
+    }
+            verified.set(true);
+        assertTrue(verified.get());
+            repositoryMetadata
+import org.opensearch.cluster.metadata.Metadata;
+ * compatible open source license.
+            IndexId indexId,
+        @Override
+    }
+import java.util.concurrent.atomic.AtomicBoolean;
+        public void reload(RepositoryMetadata repositoryMetadata) {
+        assertEquals(repoName, repository.getMetadata().name());
+            return BlobPath.cleanPath();
+                    "delete repository [" + repoName + "] took [*]"  
+        );  
+            long startPosOfRawContent,
+            assertEquals(cryptoMetadata.settings(), settings);
+            Map<String, Object> userMetadata,
+            ShardGenerations shardGenerations,
+        String repoType,
+import static org.opensearch.repositories.blobstore.BlobStoreRepository.SYSTEM_REPOSITORY_SETTING;
+        );
+        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
+        ClusterState clusterStateWithRepoTypeB = createClusterStateWithKeyProvider(  
+            IndexShardSnapshotStatus snapshotStatus,  
+            String keyProviderName,  
+            ActionListener<String> listener
+            ClusterState clusterState = task.execute(clusterStateWithRepoTypeA);  
+import org.opensearch.snapshots.SnapshotId;
+        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
+                    new ClusterChangedEvent("update repo", updatedClusterState, clusterStateWithRepo)
+    public void testRegisterRejectsInvalidRepositoryNames() {  
+        }  
+        ClusterService clusterService,
+        PutRepositoryRequest request = createPutRepositoryEncryptedRequest(
+        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));  
+import java.util.Collections;
+        }  
+        ) {
+        }
+        repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
+            ShardId snapshotShardId,  
+import org.opensearch.plugins.CryptoPlugin;
+            repositoriesService.unregisterRepository(new DeleteRepositoryRequest(repoName), listener);  
+    }
+        }
+            Collection<SnapshotId> snapshotIds,
+        when(nodes.getMinNodeVersion()).thenReturn(Version.V_2_9_0);
+        assertNotNull(repository.cryptoHandler);  
+ * software distributed under the License is distributed on an
+            MeteredRepositoryTypeB.TYPE,
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
+        cryptoSettings.keyProviderType(keyProviderType);
+    public void testWithSameKeyProviderNames() {
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        @Override
+            SnapshotId source,
+                ClusterStateUpdateResponse>) invocation.getArguments()[1];
+import org.opensearch.common.crypto.CryptoHandler;  
+        }).when(clusterService).submitStateUpdateTask(any(), any());
+        ) {
+        @Override
+                    "created repository [" + TestRepository.TYPE + "][" + repoName + "] in [*]"
+            clusterService,
+            ReloadableTestRepository::new,
+            verified,
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
+            long repositoryStateId,  
+    public void setUp() throws Exception {  
+    public void testCloseRepositoryLogsTimeTaken() throws Exception {  
+                cryptoHandler = new TestCryptoProvider(
+        @Override  
+        Metadata.Builder mdBuilder = Metadata.builder();  
+}
+ * this file be licensed under the Apache-2.0 license or a
+import static org.mockito.Mockito.mock;
+                new MockLogAppender.SeenEventExpectation(
+        when(clusterService.state()).thenReturn(currentClusterState);
+ * specific language governing permissions and limitations
+        public Lifecycle.State lifecycleState() {
+ * Licensed to Elasticsearch under one or more contributor  
+            return mock(BlobStore.class);  
+        public boolean isReadOnly() {  
+            return null;
+        String keyProviderType  
+            new RepositoriesMetadata(Collections.singletonList(new RepositoryMetadata(repoName, repoType, Settings.EMPTY, cryptoMetadata)))
+        }  
+        @Override
+        public TestCryptoProvider(String kpName, String kpType) {
+        Repository repository2 = repositoriesService.repository(repoName);
+ * license agreements. See the NOTICE file distributed with
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);  
+        String repoName = "name";
+        }
+import org.opensearch.threadpool.ThreadPool;  
+        }
+            return null;
+            String shardGeneration,  
+        Settings settings,
+        repositoriesService.registerOrUpdateRepository(request, null);
+    // ExtensiblePlugin.loadExtensions in each repository plugin.
+            verified,
+        private static final String TYPE = "native-aware";
+        repositoriesService.registerInternalRepository("repo", TestRepository.TYPE);
+            this.kpName = kpName;
+        cryptoSettings.settings(settings);  
+        );
+        assertNotNull(repositoryB);  
+        );
+        assertNotNull(repository.cryptoHandler);
+        String keyProviderName = "kp-name-1";
+        // No change
+        repositoriesService.start();
+            this.kpType = kpType;  
+            }
+import java.util.List;  
+import org.opensearch.cluster.metadata.CryptoMetadata;
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
+import org.opensearch.common.UUIDs;  
+ */  
+        }
+        );
+            Function<RepositoryData, ClusterStateUpdateTask> createUpdateTask,
+        ClusterState currentClusterState = mock(ClusterState.class);  
+        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        public void updateState(final ClusterState state) {}
+import org.opensearch.telemetry.tracing.noop.NoopTracer;  
+            repoName,
+        settings = Settings.builder();  
+            listener.onResponse(null);  
+        public long getRemoteUploadThrottleTimeInNanos() {  
+                () -> repositoriesService.applyClusterState(  
+            repositoryMetadata
+        }
+    // RepositoriesService no longer participates in native store init.  
+        @Override  
+        @Override
+    private ClusterState createClusterStateWithRepo(String repoName, String repoType, Settings settings) {
+        @Override
+        }
+        }  
+                    "repository creation timing",
+        public TestCryptoHandler(Settings settings) {  
+        private boolean isStarted;  
+        );  
+import org.apache.logging.log4j.LogManager;
+        }
+        final ClusterApplierService clusterApplierService = mock(ClusterApplierService.class);  
+            appender.addExpectation(
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+                ClusterStateUpdateResponse>) invocation.getArguments()[1];  
+        @Override
+        List<RepositoryMetadata> repositoryMetadataList
+        String repoName = "name";
+            long endPosOfRawContent
+            super(metadata, mock(NamedXContentRegistry.class), clusterService, mock(RecoverySettings.class), Map.of("bucket", "bucket-b"));
+            ActionListener<RepositoryData> listener
+        @Override  
+            typesRegistry,  
+        CryptoMetadata newCryptoMetadata = new CryptoMetadata(keyProviderName, keyProviderType, Settings.EMPTY);
+        public DecryptedRangedStreamProvider createDecryptingStreamOfRange(
+            repoName,  
+        ThreadPool threadPool = mock(ThreadPool.class);
+        public IndexShardSnapshotStatus getShardSnapshotStatus(SnapshotId snapshotId, IndexId indexId, ShardId shardId) {
+        assertNotNull(repository);
+import org.opensearch.common.lifecycle.LifecycleListener;  
+            SnapshotId snapshotId,
+        }
+            MeteredRepositoryTypeA.TYPE,
+        private MeteredRepositoryTypeB(RepositoryMetadata metadata, ClusterService clusterService) {
+                new MockLogAppender.SeenEventExpectation(
+        PutRepositoryRequest request = new PutRepositoryRequest(repoName);
+            new RepositoriesMetadata(Collections.singletonList(new RepositoryMetadata(repoName, repoType, settings)))
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);  
+            isClosed = true;  
+        ClusterState clusterStateWithRepoTypeB = createClusterStateWithRepo(repoName, MeteredRepositoryTypeB.TYPE);  
+            Store store,
+                    Level.INFO,  
+            task.onFailure("delete_repository [" + repoName + "]", new RepositoryMissingException(repoName));
+        public long getLowPriorityRemoteDownloadThrottleTimeInNanos() {
+        final Repository repo = repositoriesService.repository("repo");
+            Store store,
+        ClusterState.Builder state = ClusterState.builder(new ClusterName("test"));  
+            FailingOnStartTestRepository::new,  
+            repoName,  
+    }
+        private static final String TYPE = "failing-on-start";
+        mdBuilder.putCustom(RepositoriesMetadata.TYPE, newRepositoriesMetadata);  
+            String shardGeneration,
+        repoName = "repoName-2";
+                    "repository creation timing",
+                cryptoHandler = null;  
+            appender.assertAllExpectationsMatched();
+            return STATS;
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
+        verified.set(false);
+    }
+                    "repository close timing",  
+        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, ReloadableTestRepository.TYPE);
+                    "put repository timing",
+        }
+            return true;  
+        AtomicBoolean verified,  
+        }
+    @Override
+        verified.set(false);  
+            SnapshotInfo snapshotInfo,
+        String keyProviderName = "kp-name";  
+        ClusterService clusterService = mock(ClusterService.class);  
+        );  
+            IndexShardSnapshotStatus snapshotStatus,
+            return null;
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
+        RepositoryMetadata newRepositoryMetadata = new RepositoryMetadata(
         }  
     }
-
-    private static abstract class TestCryptoHandler implements CryptoPlugin<Object, Object> {  
-        private final Settings settings;
-
-        public TestCryptoHandler(Settings settings) {  
-            this.settings = settings;
-        }
-
+        ActionListener<ClusterStateUpdateResponse> listener = ActionListener.wrap(response -> fail("expected failure"), failure::set);
+                    "created repository [" + FailingOnStartTestRepository.TYPE + "][" + repoName + "] in [*]"
+        Repository repository = repositoriesService.repository(repoName);
+                    Level.INFO,  
+            assertThrowsOnRegister("contains" + c + "InvalidCharacters");
+            repositoriesService.registerOrUpdateRepository(request, listener);
+        // Same crypto client in new repo
+    }
+import org.opensearch.cluster.AckedClusterStateUpdateTask;
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+        @Override
+        assertNotNull(repository.cryptoHandler);
         public CryptoHandler<Object, Object> getOrCreateCryptoHandler(
-            MasterKeyProvider keyProvider,
-            String keyProviderName,  
-            String keyProviderType,
-            Runnable onClose
-        ) {  
-            return new TestCryptoProvider(keyProviderName, keyProviderType);
-        }
-    }  
-
-    private static class TestRepository implements Repository {
-
-        private static final String TYPE = "internal";
-        private boolean isClosed;
-        private boolean isStarted;  
-
-        private final RepositoryMetadata metadata;
-
-        private TestRepository(RepositoryMetadata metadata) {
+        assertEquals(Settings.EMPTY, repository.getMetadata().settings());
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
+        PutRepositoryRequest repositoryRequest = new PutRepositoryRequest(repoName);  
+        public void executeConsistentStateUpdate(
+            settings.build(),  
             this.metadata = metadata;
-        }  
-
-        @Override
-        public RepositoryMetadata getMetadata() {  
-            return metadata;
-        }
-
-        @Override
-        public SnapshotInfo getSnapshotInfo(SnapshotId snapshotId) {
-            return null;  
-        }
-
-        @Override  
-        public Metadata getSnapshotGlobalMetadata(SnapshotId snapshotId) {
-            return null;
-        }  
-
-        @Override
-        public IndexMetadata getSnapshotIndexMetaData(RepositoryData repositoryData, SnapshotId snapshotId, IndexId index) {  
-            return null;
-        }
-
-        @Override
-        public void getRepositoryData(ActionListener<RepositoryData> listener) {
-            listener.onResponse(null);  
-        }
-
-        @Override  
-        public void finalizeSnapshot(
-            ShardGenerations shardGenerations,
-            long repositoryStateId,  
-            Metadata clusterMetadata,
-            SnapshotInfo snapshotInfo,
-            Version repositoryMetaVersion,  
-            Function<ClusterState, ClusterState> stateTransformer,
-            Priority repositoryUpdatePriority,
-            ActionListener<RepositoryData> listener  
-        ) {
-            listener.onResponse(null);
-        }  
-
-        @Override
-        public void finalizeSnapshot(  
-            ShardGenerations shardGenerations,
-            long repositoryStateId,
-            Metadata clusterMetadata,  
-            SnapshotInfo snapshotInfo,
-            Version repositoryMetaVersion,
-            Function<ClusterState, ClusterState> stateTransformer,  
-            ActionListener<RepositoryData> listener
-        ) {
-            listener.onResponse(null);  
-        }
-
-        @Override  
-        public void deleteSnapshots(
-            Collection<SnapshotId> snapshotIds,
-            long repositoryStateId,  
-            Version repositoryMetaVersion,
-            ActionListener<RepositoryData> listener
-        ) {  
-            listener.onResponse(null);
-        }
-
-        @Override
-        public long getSnapshotThrottleTimeInNanos() {
-            return 0;  
-        }
-
-        @Override  
-        public long getRestoreThrottleTimeInNanos() {
-            return 0;
-        }  
-
-        @Override
-        public long getRemoteUploadThrottleTimeInNanos() {  
-            return 0;
-        }
-
-        @Override
-        public long getRemoteDownloadThrottleTimeInNanos() {
-            return 0;  
-        }
-
-        @Override  
-        public long getLowPriorityRemoteDownloadThrottleTimeInNanos() {
-            return 0;
-        }  
-
-        @Override
-        public String startVerification() {  
-            return null;
-        }
-
-        @Override
-        public void endVerification(String verificationToken) {
-
-        }
-
-        @Override  
-        public void verify(String verificationToken, DiscoveryNode localNode) {
-
-        }  
-
-        @Override
-        public boolean isReadOnly() {  
-            return false;
-        }
-
-        @Override
-        public boolean isSystemRepository() {
-            return false;  
-        }
-
-        @Override  
-        public void snapshotShard(
-            Store store,
-            MapperService mapperService,  
-            SnapshotId snapshotId,
-            IndexId indexId,
-            IndexCommit snapshotIndexCommit,  
-            String shardStateIdentifier,
-            IndexShardSnapshotStatus snapshotStatus,
-            Version repositoryMetaVersion,  
-            Map<String, Object> userMetadata,
-            ActionListener<String> listener,
+        AtomicReference<Exception> failure = new AtomicReference<>();  
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));  
+                cryptoHandler = null;
+        String repoType,
+            );
+        final ClusterApplierService clusterApplierService = mock(ClusterApplierService.class);  
+                )
+        repositoryRequest.cryptoSettings(cryptoSettings);
+        cryptoSettings.keyProviderName(keyProviderName);
+        assertNotNull(repository.cryptoHandler);  
+            transportService,
+        final TransportService transportService = new TransportService(
+        assertTrue(verified.get());
             IndexMetadata indexMetadata  
-        ) {
-
+        @Override  
+            repositoryMetadataList.add(newRepositoryMetadata);  
+        ClusterService clusterService = mock(ClusterService.class);
+                )
+        when(clusterService.getClusterApplierService()).thenReturn(clusterApplierService);
+                () -> repositoriesService.createRepository(
+        assertNotNull(repository);  
+            keyProviderName,
+        public BlobPath basePath() {  
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);  
+import org.opensearch.index.mapper.MapperService;
+            clusterService,
+        ) {  
+            Runnable onClose
+            IndexCommit snapshotIndexCommit,
+            Object cryptoContextObj,
+            return false;
+                super.close();
+        }
+        public RemoteStoreShardShallowCopySnapshot getRemoteStoreShallowCopyShardMetadata(
+                    Level.INFO,
+ * not use this file except in compliance with the License.
+        return state.build();
+import org.opensearch.cluster.node.DiscoveryNode;
+        @Override  
+        @Override
+        repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
+        repositoriesService.registerOrUpdateRepository(request, null);  
+        Settings.Builder settings,  
+            Function<ClusterState, ClusterState> stateTransformer,  
+        mdBuilder.putCustom(
+import org.apache.lucene.index.IndexCommit;  
+ * the Apache License, Version 2.0 (the "License"); you may
+    ) {
+        }
+        assertTrue(((TestRepository) repository).isClosed);
+            );
+        }
+        public String startVerification() {  
+        public void stop() {  
+            ReloadableTestRepository.TYPE,  
+        @Override  
+            clusterService,
         }  
-
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
+import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
+        state.metadata(mdBuilder);  
+        public void close() throws IOException {
+            appender.addExpectation(
+                    RepositoriesService.class.getCanonicalName(),  
+            metadata -> new MeteredRepositoryTypeA(metadata, clusterService),
+            );  
+        String repoName = "name";
+        AtomicBoolean verified = new AtomicBoolean();
+        Settings.Builder settings = Settings.builder();
+        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, TestRepository.TYPE);  
+        public boolean isReloadableSettings(RepositoryMetadata newRepositoryMetadata) {
+        }
+            boundAddress -> DiscoveryNode.createLocal(Settings.EMPTY, boundAddress.publishAddress(), UUIDs.randomBase64UUID()),
+        @Override  
+            RemoteStoreLockManagerFactory remoteStoreLockManagerFactory,  
+                    "closed repository [" + TestRepository.TYPE + "][" + repoName + "] in [*]"
+        public long getRestoreThrottleTimeInNanos() {
+    private PutRepositoryRequest createPutRepositoryEncryptedRequest(
+        assertSame(repository, repository2);  
+    private static abstract class TestCryptoHandler implements CryptoPlugin<Object, Object> {  
+        }
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", emptyState(), clusterStateWithRepoTypeA));  
+    }  
+        repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(
+            keyProviderName,
+        Repository repository = repositoriesService.repository(repoName);
+                );
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));  
+    private ClusterState createClusterStateWithRepo(String repoName, String repoType) {
+            appender.addExpectation(  
+import org.opensearch.core.common.Strings;
+        assertNotNull(repository);
+            Settings.EMPTY,  
+import org.opensearch.common.blobstore.BlobPath;
+                new MockLogAppender.SeenEventExpectation(  
+            kpTypeA
+            MasterKeyProvider keyProvider,
+        @Override
+    // Native store tests — native store wiring is now handled by
+            return 0;
+import org.opensearch.index.snapshots.blobstore.RemoteStoreShardShallowCopySnapshot;  
+            ReloadableTestRepository.TYPE,  
+        String repoName,
+            kpTypeA
+        private static final String TYPE = "reloadable";  
+        }
+            MapperService mapperService,  
+        }  
+        @Override
+            return 0;  
+import java.util.ArrayList;  
+        }
+            expectThrows(
+        @Override  
+        repositoriesService.registerOrUpdateRepository(request, null);
+                    metadata.cryptoMetadata().keyProviderName(),  
+        settings = Settings.builder();
+        repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(  
+    }
+            long commitGeneration,
+            keyProviderType,
+    public void testUpdateOrRegisterRejectsForSystemRepository() {
+        @Override
+        }  
+        private static final String TYPE = "type-b";  
+            keyProviderName,
+        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");  
+    }
+        assertNotNull(repository.cryptoHandler);  
+    }  
+        public void deleteSnapshots(
+    }
+    private static class FailingOnStartTestRepository extends TestRepository {
+        String repoName = "name";
+        @Override  
+            expectThrows(
+import java.io.InputStream;
+            );
+            appender.assertAllExpectationsMatched();
+        private boolean isClosed;
+                    metadata.cryptoMetadata().keyProviderType()
+        @Override
+                )
+            SnapshotInfo snapshotInfo,
+            typesRegistry,
+    }
+        CryptoSettings cryptoSettings = new CryptoSettings(keyProviderName);  
+import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;  
+        );  
+            // applyClusterState swallows the reload failure but trips an assert in tests  
+            );
+        }  
+import org.apache.logging.log4j.Level;
+            SnapshotId snapshotId,
+    }  
+        repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
+        }  
+            kpTypeA
+    public void testGetNativeStoreDefaultIsEmpty() {  
+        private TestRepository(RepositoryMetadata metadata) {
+        }  
+        Repository repository = repositoriesService.repository(repoName);  
+        if (!repositoryMetadataList.contains(newRepositoryMetadata)) {
+            keyProviderType,
+            RepositoryMetadata repositoryMetadata = repositories.repositories().get(repositoryMetadataList.size() - 1);
+            metadata -> new MeteredRepositoryTypeB(metadata, clusterService)
+            RepositoriesMetadata.TYPE,  
+            RepositoriesMetadata.TYPE,  
+        assertSame(NativeStoreRepository.EMPTY, repo.getNativeStore());  
+            return metadata;
+            return 0;  
+    public void testRepositoriesStatsCanHaveTheSameNameAndDifferentTypeOverTime() {  
+import java.util.concurrent.atomic.AtomicReference;  
+        String keyProviderName,
+        }
+        @Override
+import java.util.Collection;
+        assertThat(repositoryStatsTypeA.getRepositoryStats(), equalTo(MeteredRepositoryTypeB.STATS));
+                    Level.INFO,
+                );
+        repositoryRequest.settings(Settings.EMPTY);
+            return new Object();
+        keyProviderType = kpTypeA;  
+            super(metadata, mock(NamedXContentRegistry.class), clusterService, mock(RecoverySettings.class), Map.of("bucket", "bucket-a"));
+    }
+                new MockLogAppender.SeenEventExpectation(  
+    }  
+        private FailingOnStartTestRepository(RepositoryMetadata metadata) {  
+            newCryptoMetadata  
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(0));
+import static org.mockito.ArgumentMatchers.any;  
+            );
+            NoopTracer.INSTANCE
+import org.opensearch.transport.Transport;
+            repositoryMetadata
+            Settings.builder().put("updated", true).build()
+            repositoriesService.applyClusterState(new ClusterChangedEvent("removed repo", emptyState(), clusterStateWithRepo));
+        );  
+            String source,  
+            return null;  
+import org.opensearch.index.store.Store;
+ */  
+        public RepositoryMetadata getMetadata() {  
+        }
+        doAnswer((invocation) -> {
+        NativeAwareTestRepository(RepositoryMetadata metadata) {  
+        return repositoriesService;  
+            task.execute(clusterStateWithRepoTypeA);
+        String repoName = "repoName";
+            appender.addExpectation(
+import org.opensearch.core.index.shard.ShardId;
+        ClusterState clusterStateWithRepoTypeA = createClusterStateWithKeyProvider(
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+        }
+            }
+        }
+            );  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        settings = Settings.builder();
+            keyProviderName,  
+        public void verify(String verificationToken, DiscoveryNode localNode) {
+            this.settings = settings;
+        @Override
+        repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);  
+import org.opensearch.transport.TransportService;
+        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);
+                )
+        public void restoreShard(
+            Settings.builder().put("updated", true).build()
+        Repository repository = new TestRepository(new RepositoryMetadata(repoName, TestRepository.TYPE, Settings.EMPTY)) {
+        @Override
+        }
+    }
+        public void getRepositoryData(ActionListener<RepositoryData> listener) {
+            SnapshotId source,  
+        }
+        request.cryptoSettings(cryptoSettings);  
+            );
+            ShardId snapshotShardId
+        ) {
+            String keyProviderType,
+ *  
+        @Override  
+            Function<ClusterState, ClusterState> stateTransformer,
+            return null;
+            SnapshotId snapshotId,
+            return mock(BlobStore.class);
+        }  
+        private ReloadableTestRepository(RepositoryMetadata metadata) {  
+import org.opensearch.common.settings.Settings;
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
+                    "reloaded repository [" + ReloadableTestRepository.TYPE + "][" + repoName + "] in [*]"  
+        CryptoSettings cryptoSettings = new CryptoSettings(keyProviderName);  
+import org.opensearch.cluster.ClusterChangedEvent;  
+        assertNotNull(repository.cryptoHandler);  
+        }
+            keyProviderName,
+                    RepositoriesService.class.getCanonicalName(),
+package org.opensearch.repositories;
+            "repoName",
+import org.opensearch.indices.recovery.RecoveryState;
+        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
+        @Override
+            CryptoMetadata cryptoMetadata = repositoryMetadata.cryptoMetadata();  
+        assertFalse(((TestRepository) repository).isClosed);
+        ClusterService clusterService = mock(ClusterService.class);
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {
+            ShardGenerations shardGenerations,
+        public void finalizeSnapshot(  
+            threadPool,
+        private final TestCryptoProvider cryptoHandler;
+        }
         @Override
         public void snapshotRemoteStoreIndexShard(  
-            Store store,
-            SnapshotId snapshotId,
-            IndexId indexId,  
-            IndexCommit snapshotIndexCommit,
-            String shardStateIdentifier,
-            IndexShardSnapshotStatus snapshotStatus,  
-            long primaryTerm,
-            long commitGeneration,
+        request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
             long startTime,  
-            Map<String, Long> indexFilesToFileLengthMap,
-            ActionListener<String> listener
-        ) {  
-
+    }  
+import static org.mockito.Mockito.when;  
         }
-
-        @Override
-        public void restoreShard(
-            Store store,  
-            SnapshotId snapshotId,
-            IndexId indexId,
-            ShardId snapshotShardId,  
-            RecoveryState recoveryState,
-            ActionListener<Void> listener
-        ) {  
-
-        }
-
-        @Override
-        public RemoteStoreShardShallowCopySnapshot getRemoteStoreShallowCopyShardMetadata(
-            SnapshotId snapshotId,  
-            IndexId indexId,
-            ShardId snapshotShardId
-        ) {  
+import java.util.function.Consumer;
+            keyProviderName,
+        }).when(clusterService).submitStateUpdateTask(any(), any());  
+import org.opensearch.cluster.service.ClusterService;
             return null;
-        }
-
-        @Override
-        public IndexShardSnapshotStatus getShardSnapshotStatus(SnapshotId snapshotId, IndexId indexId, ShardId shardId) {
-            return null;  
-        }
-
-        @Override  
-        public void updateState(final ClusterState state) {}
-
-        @Override  
-        public void executeConsistentStateUpdate(
-            Function<RepositoryData, ClusterStateUpdateTask> createUpdateTask,
-            String source,  
-            Consumer<Exception> onFailure
-        ) {}
-
-        @Override
-        public void cloneShardSnapshot(
-            SnapshotId source,  
-            SnapshotId target,
-            RepositoryShardId shardId,
-            String shardGeneration,  
-            ActionListener<String> listener
+            long repositoryStateId,  
+            settings.build(),  
+            IndexId indexId,  
+public class RepositoriesServiceTests extends OpenSearchTestCase {
+            ActionListener<String> listener,
+    public void testRepositoryUpdateWithDifferentCryptoMetadata() {
+            String shardStateIdentifier,
+        private final TestCryptoProvider cryptoHandler;
+        }  
+        String keyProviderName,
+import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
+                    "repository close timing",
+        assertTrue(verified.get());
+        PutRepositoryRequest request = new PutRepositoryRequest(repoName);
+import org.opensearch.cluster.ClusterStateUpdateTask;  
         ) {
-
-        }
-
-        @Override  
+        ClusterState clusterStateWithRepo = createClusterStateWithRepo(repoName, ReloadableTestRepository.TYPE);
+ * Unless required by applicable law or agreed to in writing,
+        );
+            keyProviderName,
+            public void close() {
+        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
+        String keyProviderType
         public void cloneRemoteStoreIndexShardSnapshot(
-            SnapshotId source,
-            SnapshotId target,  
-            RepositoryShardId shardId,
-            String shardGeneration,
-            RemoteStoreLockManagerFactory remoteStoreLockManagerFactory,  
-            ActionListener<String> listener
-        ) {
-
+    private static class TestCryptoProvider implements CryptoHandler<Object, Object> {  
         }
-
-        @Override  
-        public Lifecycle.State lifecycleState() {
+    private RepositoriesService createRepositoriesServiceWithMockedClusterService(ClusterService clusterService) {  
+        repositoriesService.unregisterInternalRepository(repoName);
+        @Override
             return null;
-        }  
-
-        @Override
-        public void addLifecycleListener(LifecycleListener listener) {  
-
-        }
-
-        @Override
-        public void removeLifecycleListener(LifecycleListener listener) {
-
-        }
-
-        @Override  
-        public void start() {
-            isStarted = true;
-        }  
-
-        @Override
-        public void stop() {  
-
-        }
-
-        @Override
-        public void close() {
-            isClosed = true;  
-        }
-    }
-
-    private static class ReloadableTestRepository extends TestRepository {
-
-        private static final String TYPE = "reloadable";  
-        private boolean failOnReload;
-
-        private ReloadableTestRepository(RepositoryMetadata metadata) {  
-            super(metadata);
-        }
-
-        @Override
-        public boolean isReloadableSettings(RepositoryMetadata newRepositoryMetadata) {
-            return true;  
-        }
-
-        @Override  
-        public void reload(RepositoryMetadata repositoryMetadata) {
-            if (failOnReload) {
-                throw new RuntimeException("reload failed");  
-            }
-        }
-    }  
-
-    private static class FailingOnStartTestRepository extends TestRepository {
-
-        private static final String TYPE = "failing-on-start";
-
-        private FailingOnStartTestRepository(RepositoryMetadata metadata) {  
-            super(metadata);
-        }
-
-        @Override
-        public void start() {
-            throw new RuntimeException("start failed");  
-        }
-    }
-
+        assertThrowsOnRegister("");
+            repositoryMetadata
+        RepositoriesService repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);
+            AckedClusterStateUpdateTask<ClusterStateUpdateResponse> task = (AckedClusterStateUpdateTask<
+            appender.addExpectation(  
     private static class MeteredRepositoryTypeA extends MeteredBlobStoreRepository {
-        private static final String TYPE = "type-a";
-        private static final RepositoryStats STATS = new RepositoryStats(Map.of("GET", 10L));  
-        private final TestCryptoProvider cryptoHandler;
-
-        private MeteredRepositoryTypeA(RepositoryMetadata metadata, ClusterService clusterService) {  
-            super(metadata, mock(NamedXContentRegistry.class), clusterService, mock(RecoverySettings.class), Map.of("bucket", "bucket-a"));
-
-            if (metadata.cryptoMetadata() != null) {  
-                cryptoHandler = new TestCryptoProvider(
-                    metadata.cryptoMetadata().keyProviderName(),
-                    metadata.cryptoMetadata().keyProviderType()  
-                );
-            } else {
-                cryptoHandler = null;  
-            }
-        }
-
+            if (failOnReload) {
+        RepositoriesService repositoriesService = new RepositoriesService(
+            SnapshotId target,
+            MeteredRepositoryTypeA.TYPE,  
+            keyProviderType,
+        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));  
         @Override
-        protected BlobStore createBlobStore() {
-            return mock(BlobStore.class);  
-        }
-
-        @Override  
-        public RepositoryStats stats() {
-            return STATS;
-        }  
-
-        @Override
-        public BlobPath basePath() {  
-            return BlobPath.cleanPath();
-        }
+        Map<String, Repository.Factory> typesRegistry = Map.of(  
+        verified.set(false);  
+        public void snapshotShard(
+import org.opensearch.common.crypto.EncryptedHeaderContentSupplier;
     }  
-
-    private static class MeteredRepositoryTypeB extends MeteredBlobStoreRepository {
-        private static final String TYPE = "type-b";  
-        private static final RepositoryStats STATS = new RepositoryStats(Map.of("LIST", 20L));
-        private final TestCryptoProvider cryptoHandler;
-
-        private MeteredRepositoryTypeB(RepositoryMetadata metadata, ClusterService clusterService) {
-            super(metadata, mock(NamedXContentRegistry.class), clusterService, mock(RecoverySettings.class), Map.of("bucket", "bucket-b"));
-
-            if (metadata.cryptoMetadata() != null) {
-                cryptoHandler = new TestCryptoProvider(
-                    metadata.cryptoMetadata().keyProviderName(),  
-                    metadata.cryptoMetadata().keyProviderType()
-                );
-            } else {  
-                cryptoHandler = null;
-            }
+    }  
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+            return false;  
+        public long estimateEncryptedLengthOfEntireContent(Object cryptoContextObj, long contentLength) {
         }  
-
-        @Override
-        protected BlobStore createBlobStore() {  
-            return mock(BlobStore.class);
-        }
-
-        @Override
+        Metadata.Builder mdBuilder = Metadata.builder();  
+ * GitHub history for details.
+        PutRepositoryRequest request = new PutRepositoryRequest(repoName);
+            Map<String, Long> indexFilesToFileLengthMap,
+        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
+    }
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepo, emptyState()));
         public RepositoryStats stats() {
-            return STATS;  
+        ) {
+                )  
+        public Metadata getSnapshotGlobalMetadata(SnapshotId snapshotId) {
+            TestRepository::new,
         }
-
+            isStarted = true;
+        cryptoSettings.settings(Settings.builder().put("key-1", "val-1"));
+            String shardStateIdentifier,
+        ) {  
+            ReloadableTestRepository.TYPE,  
+        keyProviderType = kpTypeB;  
+                )
+        );
+    }
+        }
+        request.settings(Settings.EMPTY);
+            appender.addExpectation(
+            repositoriesService.applyClusterState(new ClusterChangedEvent("update repo", updatedClusterState, clusterStateWithRepo));  
+        }).when(clusterService).submitStateUpdateTask(any(), any());
+            int totalStreams,  
+        String keyProviderType = kpTypeA;  
+                AssertionError.class,
+    public void testReloadRepositoryLogsTimeTaken() throws Exception {  
+        }
+                    "delete repository timing",  
+        @Override
+ * Modifications Copyright OpenSearch Contributors. See
+            IndexId indexId,
+            RepositoryShardId shardId,
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+            Version repositoryMetaVersion,
+import org.opensearch.common.blobstore.BlobStore;
+import org.opensearch.cluster.ClusterState;
+                ClusterStateUpdateResponse>) invocation.getArguments()[1];
+        assertTrue(((TestRepository) repository).isStarted);
+        String keyProviderName = "kp-name";
+        mdBuilder.putCustom(
+        RepositoriesService repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(
+        }  
+import org.opensearch.cluster.ClusterName;
+        String repoName = "name";  
+            IndexId indexId,
+            ActionListener<RepositoryData> listener
+    private ClusterState emptyState() {  
+        assertTrue(failure.get() instanceof RepositoryMissingException);  
+        List<RepositoryStatsSnapshot> repositoriesStats = repositoriesService.repositoriesStats();  
+            keyProviderType,
+                )
+import org.opensearch.cluster.node.DiscoveryNodes;
+        @Override
+        );  
+    private ClusterState createClusterStateWithKeyProvider(
+    }
+        repositoriesService.registerInternalRepository(repoName, TestRepository.TYPE);  
         @Override  
+        repositoriesService = createRepositoriesServiceAndMockCryptoClusterState(
+        request.type("unknown-type");
+        );
+            repoName,  
+        @Override
+            Collections.emptySet(),  
+            MeteredRepositoryTypeB.TYPE,  
+import org.opensearch.cluster.service.ClusterApplierService;  
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            keyProviderName,
+        @Override  
+        request.settings(Settings.builder().put(SYSTEM_REPOSITORY_SETTING.getKey(), true).build());
+            listener.onResponse(null);  
+import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
+            return null;
+            ActionListener<String> listener
         public BlobPath basePath() {
+            long repositoryStateId,
+ * under the License.  
+                    "repository reload timing",  
+    public void testRegisterWillNotUpdateIfInternalRepositoryWithNameExists() {  
+        String keyProviderName,  
+        verified.set(false);  
+    private static class NativeAwareTestRepository extends TestRepository {  
+            return null;
+        public long adjustContentSizeForPartialEncryption(Object cryptoContextObj, long contentSize) {  
+            return 0;
             return BlobPath.cleanPath();
         }  
-    }
-
-    // -----------------------------------------------------------------------  
-    // Native store tests — native store wiring is now handled by
-    // ExtensiblePlugin.loadExtensions in each repository plugin.
-    // RepositoriesService no longer participates in native store init.  
-    // -----------------------------------------------------------------------
-
-    public void testGetNativeStoreDefaultIsEmpty() {  
-        repositoriesService.registerInternalRepository("repo", TestRepository.TYPE);
-        final Repository repo = repositoriesService.repository("repo");
-        assertSame(NativeStoreRepository.EMPTY, repo.getNativeStore());  
-    }
-
-    private static class NativeAwareTestRepository extends TestRepository {  
-        private static final String TYPE = "native-aware";
-
-        NativeAwareTestRepository(RepositoryMetadata metadata) {  
-            super(metadata);
+        when(currentClusterState.getNodes()).thenReturn(nodes);
+        cryptoSettings.keyProviderType(kpTypeA);
+            threadPool
+        // Different crypto client in new repo
+        public InputStreamContainer createEncryptingStream(Object encryptionMetadata, InputStreamContainer streamContainer) {
+        ) {  
+    public void testUnregisterInternalRepository() {
+        expectThrows(RepositoryException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));  
+        ClusterState clusterStateWithRepoTypeA = createClusterStateWithRepo(repoName, MeteredRepositoryTypeA.TYPE);
+            settings.build(),  
+        String repoName = "name";  
+        request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
+        String keyProviderType,
+        CryptoMetadata cryptoMetadata = new CryptoMetadata(keyProviderName, keyProviderType, Settings.EMPTY);
+        String repoName = "name";
+        ClusterState.Builder state = ClusterState.builder(new ClusterName("test"));
+        public Object loadEncryptionMetadata(EncryptedHeaderContentSupplier encryptedHeaderContentSupplier) throws IOException {  
+                new MockLogAppender.SeenEventExpectation(
         }
+                )  
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,  
+    public void testRegisterRepositoryLogsTimeTakenOnFailure() throws Exception {
+        repoName = "repoName-3";
+            MeteredRepositoryTypeA.TYPE,
+        for (char c : Strings.INVALID_FILENAME_CHARS) {  
+            appender.addExpectation(
+        @Override  
+            IndexCommit snapshotIndexCommit,  
     }  
-}
+            null,
+        }
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
+            } else {  
+        public void finalizeSnapshot(
+    private void assertThrowsOnRegister(String repoName) {
+        }
+            Metadata clusterMetadata,
+ * The OpenSearch Contributors require contributions made to  
+            repoName,  
+            assertEquals("close failed", e.getMessage());
+            return null;
+            verified,
+                    RepositoriesService.class.getCanonicalName(),
+        }
+            keyProviderName,  
+        AtomicReference<Exception> failure = new AtomicReference<>();
+                    RepositoriesService.class.getCanonicalName(),  
+    // -----------------------------------------------------------------------
+        String repoName = "name";
+import org.opensearch.test.OpenSearchTestCase;
+            appender.assertAllExpectationsMatched();
+            appender.addExpectation(
+            clusterService,
+            return STATS;  
+        @Override  
+            settings,  
+        public SnapshotInfo getSnapshotInfo(SnapshotId snapshotId) {
+        ClusterState clusterStateWithRepoTypeA = createClusterStateWithKeyProvider(
+        @Override
+            RepositoryShardId shardId,
+    ) {
+            assertNotNull(cryptoMetadata);
+        repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
+        MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
+        RepositoriesService repositoriesService = createRepositoriesServiceWithMockedClusterService(clusterService);
+            repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));  
+        private static final RepositoryStats STATS = new RepositoryStats(Map.of("LIST", 20L));
+        keyProviderType = kpTypeA;
+        String keyProviderName = "kp-name";  
+            Version repositoryMetaVersion,  
+            clusterService,
+import org.opensearch.repositories.blobstore.MeteredBlobStoreRepository;  
+        @Override
+                )
+ *
+        ClusterState clusterStateWithRepoTypeA = createClusterStateWithKeyProvider(
+ * this work for additional information regarding copyright
+            AckedClusterStateUpdateTask<ClusterStateUpdateResponse> task = (AckedClusterStateUpdateTask<  
+            RuntimeException e = expectThrows(RuntimeException.class, () -> repositoriesService.closeRepository(repository));  
+        return repositoriesService;
+        final String kpType;
+        ) {  
+        }  
+    }
+            keyProviderType
+    private final String kpTypeB = "kp-type-b";  
+                    "closed repository [" + TestRepository.TYPE + "][" + repoName + "] in [*]"  
+                    metadata.cryptoMetadata().keyProviderType()  
+import org.opensearch.common.lifecycle.Lifecycle;
+    }
+                    RepositoriesService.class.getCanonicalName(),
+import static org.hamcrest.Matchers.equalTo;
+    }
+        String repoName,  
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
+import org.opensearch.snapshots.SnapshotInfo;
+            TestRepository.TYPE,
+    private RepositoriesService repositoriesService;
+            AckedClusterStateUpdateTask<ClusterStateUpdateResponse> task = (AckedClusterStateUpdateTask<
+            super(metadata);
+            MeteredRepositoryTypeA.TYPE,  
+                    RepositoriesService.class.getCanonicalName(),
+        expectThrows(RepositoryException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));  
+        }  
+            MeteredRepositoryTypeA.TYPE,  
+        assertFalse(((TestRepository) repository).isClosed);
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RepositoriesService.class))) {  
+        private final Settings settings;
+        );  
+    }  
+        super.setUp();
+        state.metadata(mdBuilder);  
+            return 0;  
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
+            Priority repositoryUpdatePriority,
+            Settings.EMPTY,  
+        };
+        ClusterState clusterStateWithRepoTypeA = state.build();
+import org.opensearch.action.admin.cluster.crypto.CryptoSettings;
+        private MeteredRepositoryTypeA(RepositoryMetadata metadata, ClusterService clusterService) {  
+import org.opensearch.test.MockLogAppender;
+            );  
+        cryptoSettings.keyProviderName(keyProviderName);
+        }  
+        @Override
+        public void start() {
+            if (metadata.cryptoMetadata() != null) {  
+                new MockLogAppender.SeenEventExpectation(
+        return ClusterState.builder(new ClusterName("test")).build();
+            Consumer<Exception> onFailure
+        }
+        request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
+                )  
+import org.opensearch.common.Priority;
+            throw new RuntimeException("start failed");  
+        MeteredRepositoryTypeB repositoryB = (MeteredRepositoryTypeB) repositoriesService.repository("repoName");
+            appender.assertAllExpectationsMatched();
+import org.opensearch.core.action.ActionListener;  
+        ActionListener<ClusterStateUpdateResponse> listener = ActionListener.wrap(response -> fail("expected failure"), failure::set);
+        String repoName = "name";  
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));  
+/*  
+                RepositoryException.class,  
+        public void start() {
+ *
+            }
+    }
+        repositoryRequest.type(repoType);
+        }
+        repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeB, emptyState()));
+            return null;
+    }  
+        return createClusterStateWithRepo(repoName, repoType, Settings.EMPTY);
+        }
+            appender.assertAllExpectationsMatched();
+        expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
+                    Level.INFO,
+        }

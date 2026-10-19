@@ -1,65 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+ * KIND, either express or implied.  See the License for the
+    /** Create a {@link MultiBucketsAggregation.Bucket} object that wraps the  
+ *  
  * not use this file except in compliance with the License.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+}
+// public so that pipeline aggs can use this API: can we fix it?  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;  
+ * GitHub history for details.
+/*
+ */  
+ * under the License.  
+     *  greater than it. */  
+    /** Get the key for the given bucket. Date histograms must return the  
+    /** Create an {@link InternalAggregation} object that wraps the given buckets. */  
+     *  number of millis since Epoch of the bucket key while numeric histograms
+    /** Given a key returned by {@link #getKey}, compute the lowest key that is
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+     *  must return the double value of the key. */
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.List;
+ * Unless required by applicable law or agreed to in writing,
+ */
+     *  given key, document count and aggregations. */
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+    Number getKey(MultiBucketsAggregation.Bucket bucket);  
+ * Implemented by histogram aggregations and used by pipeline aggregations to insert buckets.
+ * @opensearch.internal
  * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+ */
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
 import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;  
-
-import java.util.List;
-
-/**
- * Implemented by histogram aggregations and used by pipeline aggregations to insert buckets.
- *  
- * @opensearch.internal
- */
-// public so that pipeline aggs can use this API: can we fix it?  
-public interface HistogramFactory {
-
-    /** Get the key for the given bucket. Date histograms must return the  
-     *  number of millis since Epoch of the bucket key while numeric histograms
-     *  must return the double value of the key. */
-    Number getKey(MultiBucketsAggregation.Bucket bucket);  
-
-    /** Given a key returned by {@link #getKey}, compute the lowest key that is
-     *  greater than it. */  
-    Number nextKey(Number key);
-
-    /** Create an {@link InternalAggregation} object that wraps the given buckets. */  
+/*  
+ * specific language governing permissions and limitations
     InternalAggregation createAggregation(List<MultiBucketsAggregation.Bucket> buckets);
-
-    /** Create a {@link MultiBucketsAggregation.Bucket} object that wraps the  
-     *  given key, document count and aggregations. */
+    Number nextKey(Number key);
+import org.opensearch.search.aggregations.InternalAggregations;
+ */  
+/**
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+ * license agreements. See the NOTICE file distributed with
     MultiBucketsAggregation.Bucket createBucket(Number key, long docCount, InternalAggregations aggregations);
-
-}
+public interface HistogramFactory {
+package org.opensearch.search.aggregations.bucket.histogram;

@@ -1,78 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
+    private String errorMessage() {
+    @Override  
+ * SPDX-License-Identifier: Apache-2.0
+import static org.junit.Assert.assertThat;
+ * Represents an is_true assert section:
+        assertThat(errorMessage, actualValue, notNullValue());
+    }
+    private static final Logger logger = LogManager.getLogger(IsTrueAssertion.class);  
+    public IsTrueAssertion(XContentLocation location, String field) {
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+ */
+        assertThat(errorMessage, actualString, not(equalTo("0")));
+import static org.hamcrest.Matchers.notNullValue;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.io.IOException;
+/*  
+        String errorMessage = errorMessage();  
+        assertThat(errorMessage, actualString, not(equalToIgnoringCase(Boolean.FALSE.toString())));
+/**
+public class IsTrueAssertion extends Assertion {
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+package org.opensearch.test.rest.yaml.section;
+ * under the License.  
+import org.opensearch.core.xcontent.XContentLocation;
+ * specific language governing permissions and limitations
+    }  
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+        logger.trace("assert that [{}] has a true value (field [{}])", actualValue, getField());
+/*
+    public static IsTrueAssertion parse(XContentParser parser) throws IOException {
+    protected void doAssert(Object actualValue, Object expectedValue) {
+ *
+ * Modifications Copyright OpenSearch Contributors. See  
+import static org.hamcrest.Matchers.not;  
+import org.opensearch.core.xcontent.XContentParser;  
+ *  
+import org.apache.logging.log4j.Logger;
 /*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.rest.yaml.section;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.core.xcontent.XContentLocation;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.equalToIgnoringCase;
-import static org.hamcrest.Matchers.not;  
-import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.Assert.assertThat;
-
-/**
- * Represents an is_true assert section:
- * <p>  
- *   - is_true:  get.fields.bar
- *
- */  
-public class IsTrueAssertion extends Assertion {
-    public static IsTrueAssertion parse(XContentParser parser) throws IOException {
-        return new IsTrueAssertion(parser.getTokenLocation(), ParserUtils.parseField(parser));  
     }
-
-    private static final Logger logger = LogManager.getLogger(IsTrueAssertion.class);  
-
-    public IsTrueAssertion(XContentLocation location, String field) {
-        super(location, field, true);  
-    }
-
-    @Override  
-    protected void doAssert(Object actualValue, Object expectedValue) {
-        logger.trace("assert that [{}] has a true value (field [{}])", actualValue, getField());
-        String errorMessage = errorMessage();  
-        assertThat(errorMessage, actualValue, notNullValue());
-        String actualString = actualValue.toString();
         assertThat(errorMessage, actualString, not(equalTo("")));  
-        assertThat(errorMessage, actualString, not(equalToIgnoringCase(Boolean.FALSE.toString())));
-        assertThat(errorMessage, actualString, not(equalTo("0")));
-    }  
-
-    private String errorMessage() {
-        return "field [" + getField() + "] doesn't have a true value";  
+        super(location, field, true);  
+ * not use this file except in compliance with the License.
     }
+ */  
+        return new IsTrueAssertion(parser.getTokenLocation(), ParserUtils.parseField(parser));  
+ * GitHub history for details.
+ * <p>  
+ * The OpenSearch Contributors require contributions made to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+        return "field [" + getField() + "] doesn't have a true value";  
 }
+import org.apache.logging.log4j.LogManager;  
+ *   - is_true:  get.fields.bar
+ * ownership. Elasticsearch licenses this file to you under  
+        String actualString = actualValue.toString();
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+import static org.hamcrest.Matchers.equalToIgnoringCase;
+import static org.hamcrest.Matchers.equalTo;
+ */
+ * Unless required by applicable law or agreed to in writing,

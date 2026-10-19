@@ -1,34 +1,28 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.index.compositeindex.datacube.startree;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.Arrays;  
-
-/**
- * Star tree document  
  *
+    }
+ */  
+import org.opensearch.common.annotation.ExperimentalApi;
  * @opensearch.experimental
+}  
+/**
+ *
+    public StarTreeDocument(Long[] dimensions, Object[] metrics) {  
  */  
 @ExperimentalApi
-public class StarTreeDocument {
-    public final Long[] dimensions;  
-    public final Object[] metrics;
-
-    public StarTreeDocument(Long[] dimensions, Object[] metrics) {  
-        this.dimensions = dimensions;
-        this.metrics = metrics;
-    }  
-
-    @Override
     public String toString() {  
+    }  
+        this.dimensions = dimensions;
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Arrays;  
+    public final Long[] dimensions;  
+ * compatible open source license.
+/*  
+    @Override
+        this.metrics = metrics;
+public class StarTreeDocument {
+ * SPDX-License-Identifier: Apache-2.0
+ * Star tree document  
         return Arrays.toString(dimensions) + " | " + Arrays.toString(metrics);
-    }
-}  
+ * The OpenSearch Contributors require contributions made to  
+    public final Object[] metrics;

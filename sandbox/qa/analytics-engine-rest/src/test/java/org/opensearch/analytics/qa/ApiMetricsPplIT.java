@@ -1,24 +1,20 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.qa;
-
-/**
  * API Metrics PPL integration test. Runs PPL queries against API metrics data.
- */  
-public class ApiMetricsPplIT extends BasePplIT {
-
-    @Override  
-    protected Dataset getDataset() {
         return ApiMetricsTestHelper.DATASET;
-    }  
-
-    public void testApiMetricsPplQueries() throws Exception {
-        runPplQueries();  
+/**
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
     }
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+package org.opensearch.analytics.qa;
+ *
+ */  
+    public void testApiMetricsPplQueries() throws Exception {
+ * The OpenSearch Contributors require contributions made to  
+        runPplQueries();  
+public class ApiMetricsPplIT extends BasePplIT {
 }
+    protected Dataset getDataset() {
+/*  
+    }  
+ */  

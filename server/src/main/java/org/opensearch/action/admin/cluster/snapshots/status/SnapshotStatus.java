@@ -1,335 +1,296 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, false);  
+            } else {  
+        return shardsStats;
+                for (SnapshotIndexStatus index : indices) {  
+            && Objects.equals(includeGlobalState, that.includeGlobalState);  
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.snapshots.status;
-
-import org.opensearch.cluster.SnapshotsInProgress;
-import org.opensearch.cluster.SnapshotsInProgress.State;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ObjectParser;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.snapshots.Snapshot;
-import org.opensearch.snapshots.SnapshotId;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
+    }
+                indicesStatus = new HashMap<>(indices.size());
+    private static final String UUID = "uuid";  
 import java.util.Objects;
-import java.util.Set;  
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;  
-import static java.util.Collections.unmodifiableMap;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;  
-
-/**
- * Status of a snapshot  
+        if (this == o) return true;  
  *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class SnapshotStatus implements ToXContentObject, Writeable {
-
-    private final Snapshot snapshot;
-
-    private final State state;  
-
-    private final List<SnapshotIndexShardStatus> shards;
-
-    private Map<String, SnapshotIndexStatus> indicesStatus;
-
-    private SnapshotShardsStats shardsStats;  
-
-    private SnapshotStats stats;
-
-    @Nullable
-    private final Boolean includeGlobalState;
-
-    SnapshotStatus(StreamInput in) throws IOException {
-        snapshot = new Snapshot(in);
-        state = State.fromValue(in.readByte());  
-        shards = Collections.unmodifiableList(in.readList(SnapshotIndexShardStatus::new));
-        includeGlobalState = in.readOptionalBoolean();
-        final long startTime = in.readLong();  
-        final long time = in.readLong();
-        updateShardStats(startTime, time);
-    }  
-
-    SnapshotStatus(
-        Snapshot snapshot,  
-        State state,
-        List<SnapshotIndexShardStatus> shards,
-        Boolean includeGlobalState,  
-        long startTime,
-        long time
-    ) {  
-        this.snapshot = Objects.requireNonNull(snapshot);
-        this.state = Objects.requireNonNull(state);
-        this.shards = Objects.requireNonNull(shards);  
-        this.includeGlobalState = includeGlobalState;
-        shardsStats = new SnapshotShardsStats(shards);
-        assert time >= 0 : "time must be >= 0 but received [" + time + "]";  
-        updateShardStats(startTime, time);
-    }
-
-    private SnapshotStatus(
-        Snapshot snapshot,
-        State state,  
-        List<SnapshotIndexShardStatus> shards,
-        Map<String, SnapshotIndexStatus> indicesStatus,
-        SnapshotShardsStats shardsStats,  
-        SnapshotStats stats,
-        Boolean includeGlobalState
-    ) {  
-        this.snapshot = snapshot;
-        this.state = state;
-        this.shards = shards;  
-        this.indicesStatus = indicesStatus;
-        this.shardsStats = shardsStats;
-        this.stats = stats;  
-        this.includeGlobalState = includeGlobalState;
-    }
-
-    /**
-     * Returns snapshot
+        snapshot.writeTo(out);
      */  
-    public Snapshot getSnapshot() {
-        return snapshot;
-    }  
-
-    /**
-     * Returns snapshot state  
-     */
-    public State getState() {
-        return state;  
+ * not use this file except in compliance with the License.
+        builder.startObject(INDICES);
+import org.opensearch.core.common.Strings;  
+ * specific language governing permissions and limitations
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                shards = emptyList();
     }
-
+import static java.util.Collections.emptyList;
+    @Override
+    static {
+                    indicesStatus.put(index.getIndex(), index);
+            SnapshotStats::fromXContent,
     /**  
-     * Returns true if global state is included in the snapshot, false otherwise.
-     * Can be null if this information is unknown.
-     */  
-    public Boolean includeGlobalState() {
-        return includeGlobalState;
-    }  
-
-    /**
-     * Returns list of snapshot shards  
+ * Unless required by applicable law or agreed to in writing,
+            SnapshotsInProgress.State state = SnapshotsInProgress.State.valueOf(rawState);  
+        result = 31 * result + (shardsStats != null ? shardsStats.hashCode() : 0);
+    }
      */
-    public List<SnapshotIndexShardStatus> getShards() {
+    }
+/*  
+        PARSER.declareBoolean(optionalConstructorArg(), new ParseField(INCLUDE_GLOBAL_STATE));
+    public String toString() {
+        this.state = state;
+        }
+                if (shard.getIndex().equals(index)) {
+import java.util.Set;  
+import java.io.IOException;
+import org.opensearch.common.Nullable;  
+        this.shards = Objects.requireNonNull(shards);  
+    public Map<String, SnapshotIndexStatus> getIndices() {
+import org.opensearch.core.common.io.stream.Writeable;  
+            constructorArg(),  
+    ) {  
+            indices.add(shard.getIndex());
+        (Object[] parsedObjects) -> {
+            // BWC: only update timestamps when we did not get a start time from an old node
+import org.opensearch.core.common.io.stream.StreamInput;
+        builder.field(SnapshotShardsStats.Fields.SHARDS_STATS, shardsStats, params);  
+        State state,
+                shards = new ArrayList<>();
+        builder.field(SnapshotStats.Fields.STATS, stats, params);
+            for (SnapshotIndexShardStatus shard : this.shards) {  
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+        List<SnapshotIndexShardStatus> shards,
+            ObjectParser.ValueType.OBJECT  
+        return state;  
+ * KIND, either express or implied.  See the License for the
+    private final State state;  
+            return this.indicesStatus;  
+import org.opensearch.cluster.SnapshotsInProgress;
+        }
+        );
+    }
+        final long startTime = in.readLong();  
+    @Override
+        assert time >= 0 : "time must be >= 0 but received [" + time + "]";  
+            }
+    }
+    @Nullable
+        Map<String, SnapshotIndexStatus> indicesStatus,
+ * Licensed to Elasticsearch under one or more contributor  
+     * Returns snapshot
+}
+package org.opensearch.action.admin.cluster.snapshots.status;
+/*
+            indicesStatus.put(index, new SnapshotIndexStatus(index, shards));
+        return builder;
+    public static SnapshotStatus fromXContent(XContentParser parser) throws IOException {  
+    private final List<SnapshotIndexShardStatus> shards;
+    private SnapshotShardsStats shardsStats;  
+import org.opensearch.common.annotation.PublicApi;
+        this.indicesStatus = unmodifiableMap(indicesStatus);
+import org.opensearch.core.common.io.stream.StreamOutput;
+        Snapshot snapshot,  
+ * the Apache License, Version 2.0 (the "License"); you may
+            return new SnapshotStatus(snapshot, state, shards, indicesStatus, shardsStats, stats, includeGlobalState);
+import java.util.HashSet;
+        this.stats = stats;  
+    private static final String INCLUDE_GLOBAL_STATE = "include_global_state";  
+        updateShardStats(startTime, time);
+        return snapshot;
+import java.util.ArrayList;
+    }
+public class SnapshotStatus implements ToXContentObject, Writeable {
+        result = 31 * result + (stats != null ? stats.hashCode() : 0);  
+        PARSER.declareString(constructorArg(), new ParseField(SNAPSHOT));  
+        List<SnapshotIndexShardStatus> shards,
+import static java.util.Collections.unmodifiableMap;
+                }  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+ * license agreements. See the NOTICE file distributed with
+        builder.field(STATE, state.name());
+        this.shardsStats = shardsStats;
+     */  
+        long time
+import org.opensearch.core.xcontent.ToXContentObject;
+            String rawState = (String) parsedObjects[i++];
+ *
+        PARSER.declareObject(constructorArg(), SnapshotShardsStats.PARSER, new ParseField(SnapshotShardsStats.Fields.SHARDS_STATS));
+            }
+     * Returns list of snapshot indices
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+    public int hashCode() {
+        stats = new SnapshotStats(startTime, time, 0, 0, 0, 0, 0, 0);
+import java.util.Map;
+     */
+    }
+            SnapshotShardsStats shardsStats = ((SnapshotShardsStats) parsedObjects[i++]);
+    private static final String REPOSITORY = "repository";
+     * Returns list of snapshot shards  
+            Snapshot snapshot = new Snapshot(repository, new SnapshotId(name, uuid));
+            @SuppressWarnings("unchecked")
+        for (SnapshotIndexShardStatus shard : shards) {  
+    /**  
+            Boolean includeGlobalState = (Boolean) parsedObjects[i++];
+        this.includeGlobalState = includeGlobalState;
+import org.opensearch.core.xcontent.XContentBuilder;
+        }  
+        if (this.indicesStatus != null) {
+        }  
+        this.state = Objects.requireNonNull(state);
+            String name = (String) parsedObjects[i++];
+            && Objects.equals(indicesStatus, that.indicesStatus)  
+    }  
+    }  
+@PublicApi(since = "1.0.0")
+        result = 31 * result + (indicesStatus != null ? indicesStatus.hashCode() : 0);
+            && Objects.equals(stats, that.stats)
+ * You may obtain a copy of the License at  
+     * Can be null if this information is unknown.
+        true,
+        if (includeGlobalState != null) {  
+    public void writeTo(StreamOutput out) throws IOException {
+ * compatible open source license.
+    private static final String STATE = "state";
+        PARSER.declareNamedObjects(constructorArg(), SnapshotIndexStatus.PARSER, new ParseField(INDICES));  
+        for (SnapshotIndexShardStatus shard : shards) {
+            SnapshotStats stats = ((SnapshotStats) parsedObjects[i++]);  
+import java.util.List;  
+        PARSER.declareString(constructorArg(), new ParseField(REPOSITORY));
+    );
+import java.util.Collections;  
+        Boolean includeGlobalState,  
+        builder.field(UUID, snapshot.getSnapshotId().getUUID());
+    private static final String INDICES = "indices";
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    private SnapshotStatus(
+        return this.indicesStatus;
+     * Returns number of files in the snapshot
+        builder.endObject();  
+        this.snapshot = snapshot;
+        state = State.fromValue(in.readByte());  
+        builder.endObject();
+        final long time = in.readLong();
+        result = 31 * result + (state != null ? state.hashCode() : 0);  
+        return Objects.equals(snapshot, that.snapshot)
+        out.writeList(shards);
+ */  
+            && state == that.state
+ * GitHub history for details.
+        Map<String, SnapshotIndexStatus> indicesStatus = new HashMap<>();  
+ * SPDX-License-Identifier: Apache-2.0
+        SnapshotShardsStats shardsStats,  
+import org.opensearch.cluster.SnapshotsInProgress.State;
+            List<SnapshotIndexShardStatus> shards;
+        for (String index : indices) {
+                indicesStatus = emptyMap();
+        Snapshot snapshot,
         return shards;  
     }
-
-    public SnapshotShardsStats getShardsStats() {  
-        return shardsStats;
-    }
-
-    /**
-     * Returns list of snapshot indices
-     */  
-    public Map<String, SnapshotIndexStatus> getIndices() {
-        if (this.indicesStatus != null) {
-            return this.indicesStatus;  
+    public State getState() {
         }
-
-        Map<String, SnapshotIndexStatus> indicesStatus = new HashMap<>();  
-
-        Set<String> indices = new HashSet<>();
-        for (SnapshotIndexShardStatus shard : shards) {  
-            indices.add(shard.getIndex());
-        }
-
-        for (String index : indices) {
-            List<SnapshotIndexShardStatus> shards = new ArrayList<>();
-            for (SnapshotIndexShardStatus shard : this.shards) {  
-                if (shard.getIndex().equals(index)) {
-                    shards.add(shard);
-                }  
-            }
-            indicesStatus.put(index, new SnapshotIndexStatus(index, shards));
-        }  
-        this.indicesStatus = unmodifiableMap(indicesStatus);
-        return this.indicesStatus;
-
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        snapshot.writeTo(out);
-        out.writeByte(state.value());  
-        out.writeList(shards);
-        out.writeOptionalBoolean(includeGlobalState);
-        out.writeLong(stats.getStartTime());  
-        out.writeLong(stats.getTime());
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, false);  
-    }
-
-    /**  
-     * Returns number of files in the snapshot
-     */
-    public SnapshotStats getStats() {  
-        return stats;
-    }
-
-    private static final String SNAPSHOT = "snapshot";
-    private static final String REPOSITORY = "repository";
-    private static final String UUID = "uuid";  
-    private static final String STATE = "state";
-    private static final String INDICES = "indices";
-    private static final String INCLUDE_GLOBAL_STATE = "include_global_state";  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.field(SNAPSHOT, snapshot.getSnapshotId().getName());
-        builder.field(REPOSITORY, snapshot.getRepository());  
-        builder.field(UUID, snapshot.getSnapshotId().getUUID());
-        builder.field(STATE, state.name());
-        if (includeGlobalState != null) {  
-            builder.field(INCLUDE_GLOBAL_STATE, includeGlobalState);
-        }
-        builder.field(SnapshotShardsStats.Fields.SHARDS_STATS, shardsStats, params);  
-        builder.field(SnapshotStats.Fields.STATS, stats, params);
-        builder.startObject(INDICES);
-        for (SnapshotIndexStatus indexStatus : getIndices().values()) {  
-            indexStatus.toXContent(builder, params);
-        }
-        builder.endObject();  
-        builder.endObject();
-        return builder;
-    }  
-
-    static final ConstructingObjectParser<SnapshotStatus, Void> PARSER = new ConstructingObjectParser<>(
-        "snapshot_status",  
-        true,
-        (Object[] parsedObjects) -> {
-            int i = 0;  
-            String name = (String) parsedObjects[i++];
-            String repository = (String) parsedObjects[i++];
-            String uuid = (String) parsedObjects[i++];  
-            String rawState = (String) parsedObjects[i++];
-            Boolean includeGlobalState = (Boolean) parsedObjects[i++];
-            SnapshotStats stats = ((SnapshotStats) parsedObjects[i++]);  
-            SnapshotShardsStats shardsStats = ((SnapshotShardsStats) parsedObjects[i++]);
-            @SuppressWarnings("unchecked")
             List<SnapshotIndexStatus> indices = ((List<SnapshotIndexStatus>) parsedObjects[i]);  
-
-            Snapshot snapshot = new Snapshot(repository, new SnapshotId(name, uuid));
-            SnapshotsInProgress.State state = SnapshotsInProgress.State.valueOf(rawState);  
-            Map<String, SnapshotIndexStatus> indicesStatus;
-            List<SnapshotIndexShardStatus> shards;
-            if (indices == null || indices.isEmpty()) {  
-                indicesStatus = emptyMap();
-                shards = emptyList();
-            } else {  
-                indicesStatus = new HashMap<>(indices.size());
-                shards = new ArrayList<>();
-                for (SnapshotIndexStatus index : indices) {  
-                    indicesStatus.put(index.getIndex(), index);
-                    shards.addAll(index.getShards().values());
-                }  
-            }
-            return new SnapshotStatus(snapshot, state, shards, indicesStatus, shardsStats, stats, includeGlobalState);
-        }  
-    );
-    static {
-        PARSER.declareString(constructorArg(), new ParseField(SNAPSHOT));  
-        PARSER.declareString(constructorArg(), new ParseField(REPOSITORY));
-        PARSER.declareString(constructorArg(), new ParseField(UUID));
-        PARSER.declareString(constructorArg(), new ParseField(STATE));  
-        PARSER.declareBoolean(optionalConstructorArg(), new ParseField(INCLUDE_GLOBAL_STATE));
-        PARSER.declareField(
-            constructorArg(),  
-            SnapshotStats::fromXContent,
-            new ParseField(SnapshotStats.Fields.STATS),
-            ObjectParser.ValueType.OBJECT  
-        );
-        PARSER.declareObject(constructorArg(), SnapshotShardsStats.PARSER, new ParseField(SnapshotShardsStats.Fields.SHARDS_STATS));
-        PARSER.declareNamedObjects(constructorArg(), SnapshotIndexStatus.PARSER, new ParseField(INDICES));  
-    }
-
-    public static SnapshotStatus fromXContent(XContentParser parser) throws IOException {  
-        return PARSER.parse(parser, null);
-    }
-
-    private void updateShardStats(long startTime, long time) {
-        stats = new SnapshotStats(startTime, time, 0, 0, 0, 0, 0, 0);
-        shardsStats = new SnapshotShardsStats(shards);  
-        for (SnapshotIndexShardStatus shard : shards) {
-            // BWC: only update timestamps when we did not get a start time from an old node
-            stats.add(shard.getStats(), startTime == 0L);  
         }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
         if (o == null || getClass() != o.getClass()) return false;
-
-        SnapshotStatus that = (SnapshotStatus) o;  
-        return Objects.equals(snapshot, that.snapshot)
-            && state == that.state
-            && Objects.equals(indicesStatus, that.indicesStatus)  
-            && Objects.equals(shardsStats, that.shardsStats)
-            && Objects.equals(stats, that.stats)
-            && Objects.equals(includeGlobalState, that.includeGlobalState);  
-    }
-
-    @Override  
-    public int hashCode() {
+    private SnapshotStats stats;
+ * Status of a snapshot  
+    SnapshotStatus(
+ * Modifications Copyright OpenSearch Contributors. See
         int result = snapshot != null ? snapshot.hashCode() : 0;
-        result = 31 * result + (state != null ? state.hashCode() : 0);  
-        result = 31 * result + (indicesStatus != null ? indicesStatus.hashCode() : 0);
-        result = 31 * result + (shardsStats != null ? shardsStats.hashCode() : 0);
-        result = 31 * result + (stats != null ? stats.hashCode() : 0);  
-        result = 31 * result + (includeGlobalState != null ? includeGlobalState.hashCode() : 0);
+        SnapshotStatus that = (SnapshotStatus) o;  
+        out.writeLong(stats.getStartTime());  
+ * @opensearch.api
+            stats.add(shard.getStats(), startTime == 0L);  
         return result;
+        SnapshotStats stats,
+     */  
+    private Map<String, SnapshotIndexStatus> indicesStatus;
+ * this work for additional information regarding copyright
+                    shards.addAll(index.getShards().values());
     }  
-}
+ *
+import java.util.HashMap;
+ */  
+        this.snapshot = Objects.requireNonNull(snapshot);
+            int i = 0;  
+        includeGlobalState = in.readOptionalBoolean();
+     * Returns snapshot state  
+            indexStatus.toXContent(builder, params);
+    @Override
+import static java.util.Collections.emptyMap;  
+        long startTime,
+            String repository = (String) parsedObjects[i++];
+    }
+    public SnapshotStats getStats() {  
+        builder.field(REPOSITORY, snapshot.getRepository());  
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    /**
+            && Objects.equals(shardsStats, that.shardsStats)
+    private final Boolean includeGlobalState;
+        for (SnapshotIndexStatus indexStatus : getIndices().values()) {  
+        Boolean includeGlobalState
+    private final Snapshot snapshot;
+        return PARSER.parse(parser, null);
+        out.writeByte(state.value());  
+        "snapshot_status",  
+        snapshot = new Snapshot(in);
+ */  
+            builder.field(INCLUDE_GLOBAL_STATE, includeGlobalState);
+import org.opensearch.core.xcontent.ObjectParser;  
+    private void updateShardStats(long startTime, long time) {
+import org.opensearch.snapshots.Snapshot;
+    /**
+            Map<String, SnapshotIndexStatus> indicesStatus;
+                }  
+    }
+        }
+        updateShardStats(startTime, time);
+            new ParseField(SnapshotStats.Fields.STATS),
+import org.opensearch.core.xcontent.XContentParser;  
+import org.opensearch.snapshots.SnapshotId;
+        out.writeOptionalBoolean(includeGlobalState);
+import org.opensearch.core.ParseField;
+        return stats;
+ * software distributed under the License is distributed on an
+        out.writeLong(stats.getTime());
+    @Override  
+    public Boolean includeGlobalState() {
+        return includeGlobalState;
+ */
+ *  
+        PARSER.declareString(constructorArg(), new ParseField(STATE));  
+    public Snapshot getSnapshot() {
+    public List<SnapshotIndexShardStatus> getShards() {
+ * under the License.  
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+        State state,  
+    public SnapshotShardsStats getShardsStats() {  
+    SnapshotStatus(StreamInput in) throws IOException {
+    static final ConstructingObjectParser<SnapshotStatus, Void> PARSER = new ConstructingObjectParser<>(
+            if (indices == null || indices.isEmpty()) {  
+        shards = Collections.unmodifiableList(in.readList(SnapshotIndexShardStatus::new));
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+            List<SnapshotIndexShardStatus> shards = new ArrayList<>();
+    }  
+    }
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;  
+    @Override  
+        this.shards = shards;  
+        this.includeGlobalState = includeGlobalState;
+        PARSER.declareField(
+        shardsStats = new SnapshotShardsStats(shards);
+/*  
+        builder.field(SNAPSHOT, snapshot.getSnapshotId().getName());
+        this.indicesStatus = indicesStatus;
+        builder.startObject();
+    ) {  
+        Set<String> indices = new HashSet<>();
+        PARSER.declareString(constructorArg(), new ParseField(UUID));
+     */
+    /**
+    private static final String SNAPSHOT = "snapshot";
+            String uuid = (String) parsedObjects[i++];  
+        result = 31 * result + (includeGlobalState != null ? includeGlobalState.hashCode() : 0);
+     * Returns true if global state is included in the snapshot, false otherwise.
+    public boolean equals(Object o) {
+        shardsStats = new SnapshotShardsStats(shards);  
+/**
+                    shards.add(shard);

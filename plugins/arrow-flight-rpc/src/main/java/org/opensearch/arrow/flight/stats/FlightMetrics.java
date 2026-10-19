@@ -1,624 +1,528 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.stats;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.LongAdder;  
-
-/**
- * Flight metrics collection system inspired by gRPC's OpenTelemetry metrics.  
- * Provides both per-call and aggregated metrics.
- */
-class FlightMetrics implements Writeable, ToXContentFragment {  
-
-    // Client per-call metrics
-    private final LongAdder clientCallStarted = new LongAdder();  
-    private final LongAdder clientCallCompleted = new LongAdder();
-    private final ConcurrentHashMap<String, LongAdder> clientCallCompletedByStatus = new ConcurrentHashMap<>();
-    private final Histogram clientCallDuration = new Histogram();  
-    private final Histogram clientRequestBytes = new Histogram();
-
-    // Client per-batch metrics - client only receives batches  
-    private final LongAdder clientBatchRequested = new LongAdder();
-    private final LongAdder clientBatchReceived = new LongAdder();
-    private final Histogram clientBatchReceivedBytes = new Histogram();  
-    private final Histogram clientBatchProcessingTime = new Histogram();
-
-    // Server metrics  
-    private final LongAdder serverCallStarted = new LongAdder();
-    private final LongAdder serverCallCompleted = new LongAdder();
-    private final ConcurrentHashMap<String, LongAdder> serverCallCompletedByStatus = new ConcurrentHashMap<>();  
-    private final Histogram serverCallDuration = new Histogram();
-    private final Histogram serverRequestBytes = new Histogram();
-
-    // Server per-batch metrics - server only sends batches
-    private final LongAdder serverBatchSent = new LongAdder();
-    private final Histogram serverBatchSentBytes = new Histogram();  
-    private final Histogram serverBatchProcessingTime = new Histogram();
-
-    // Resource metrics - these are point-in-time snapshots  
-    private volatile long arrowAllocatedBytes;
-    private volatile long arrowPeakBytes;
-    private volatile long directMemoryBytes;  
-    private volatile int clientThreadsActive;
-    private volatile int clientThreadsTotal;
-    private volatile int serverThreadsActive;  
-    private volatile int serverThreadsTotal;
-    private volatile int clientChannelsActive;
-    private volatile int serverChannelsActive;  
-
-    FlightMetrics() {}
-
-    FlightMetrics(StreamInput in) throws IOException {
-        // Client call metrics
-        clientCallStarted.add(in.readVLong());  
-        clientCallCompleted.add(in.readVLong());
-        int statusCount = in.readVInt();
-        for (int i = 0; i < statusCount; i++) {  
-            String status = in.readString();
-            long count = in.readVLong();
-            clientCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).add(count);  
-        }
-        readHistogram(in, clientCallDuration);
-        readHistogram(in, clientRequestBytes);  
-
-        // Client batch metrics
-        clientBatchRequested.add(in.readVLong());  
-        clientBatchReceived.add(in.readVLong());
-        readHistogram(in, clientBatchReceivedBytes);
-        readHistogram(in, clientBatchProcessingTime);  
-
-        // Server call metrics
-        serverCallStarted.add(in.readVLong());  
-        serverCallCompleted.add(in.readVLong());
-        statusCount = in.readVInt();
-        for (int i = 0; i < statusCount; i++) {  
-            String status = in.readString();
-            long count = in.readVLong();
-            serverCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).add(count);  
-        }
-        readHistogram(in, serverCallDuration);
-        readHistogram(in, serverRequestBytes);  
-
-        // Server batch metrics
-        serverBatchSent.add(in.readVLong());  
-        readHistogram(in, serverBatchSentBytes);
-        readHistogram(in, serverBatchProcessingTime);
-
-        // Resource metrics
-        arrowAllocatedBytes = in.readVLong();
-        arrowPeakBytes = in.readVLong();  
-        directMemoryBytes = in.readVLong();
-        clientThreadsActive = in.readVInt();
-        clientThreadsTotal = in.readVInt();  
-        serverThreadsActive = in.readVInt();
-        serverThreadsTotal = in.readVInt();
-        clientChannelsActive = in.readVInt();  
-        serverChannelsActive = in.readVInt();
-    }
-
-    private void readHistogram(StreamInput in, Histogram histogram) throws IOException {
-        long count = in.readVLong();
-        long sum = in.readVLong();  
-        long min = in.readVLong();
-        long max = in.readVLong();
-        histogram.count.add(count);  
-        histogram.sum.add(sum);
-        updateMin(histogram.min, min);
-        updateMax(histogram.max, max);  
-    }
-
-    private void updateMin(AtomicLong minValue, long newValue) {  
-        long current;
-        while (newValue < (current = minValue.get())) {
-            minValue.compareAndSet(current, newValue);  
-        }
-    }
-
-    private void updateMax(AtomicLong maxValue, long newValue) {
-        long current;
-        while (newValue > (current = maxValue.get())) {  
-            maxValue.compareAndSet(current, newValue);
-        }
-    }  
-
-    long getStatusCount(boolean isClient, String status) {
-        ConcurrentHashMap<String, LongAdder> statusMap = isClient ? clientCallCompletedByStatus : serverCallCompletedByStatus;  
-        LongAdder adder = statusMap.get(status);
-        return adder != null ? adder.sum() : 0;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        // Client call metrics
-        out.writeVLong(clientCallStarted.sum());
-        out.writeVLong(clientCallCompleted.sum());  
-        out.writeVInt(clientCallCompletedByStatus.size());
-        for (String status : clientCallCompletedByStatus.keySet()) {
-            out.writeString(status);  
-            out.writeVLong(clientCallCompletedByStatus.get(status).sum());
-        }
-        writeHistogram(out, clientCallDuration);  
-        writeHistogram(out, clientRequestBytes);
-
-        // Client batch metrics  
-        out.writeVLong(clientBatchRequested.sum());
-        out.writeVLong(clientBatchReceived.sum());
-        writeHistogram(out, clientBatchReceivedBytes);  
-        writeHistogram(out, clientBatchProcessingTime);
-
-        // Server call metrics  
-        out.writeVLong(serverCallStarted.sum());
-        out.writeVLong(serverCallCompleted.sum());
-        out.writeVInt(serverCallCompletedByStatus.size());  
-        for (String status : serverCallCompletedByStatus.keySet()) {
-            out.writeString(status);
-            out.writeVLong(serverCallCompletedByStatus.get(status).sum());  
-        }
-        writeHistogram(out, serverCallDuration);
-        writeHistogram(out, serverRequestBytes);  
-
-        // Server batch metrics
-        out.writeVLong(serverBatchSent.sum());  
-        writeHistogram(out, serverBatchSentBytes);
-        writeHistogram(out, serverBatchProcessingTime);
-
-        // Resource metrics
-        out.writeVLong(arrowAllocatedBytes);
-        out.writeVLong(arrowPeakBytes);  
-        out.writeVLong(directMemoryBytes);
-        out.writeVInt(clientThreadsActive);
-        out.writeVInt(clientThreadsTotal);  
-        out.writeVInt(serverThreadsActive);
-        out.writeVInt(serverThreadsTotal);
-        out.writeVInt(clientChannelsActive);  
-        out.writeVInt(serverChannelsActive);
-    }
-
-    private void writeHistogram(StreamOutput out, Histogram histogram) throws IOException {
-        HistogramSnapshot snapshot = histogram.snapshot();
-        out.writeVLong(snapshot.getCount());  
-        out.writeVLong(snapshot.getSum());
-        out.writeVLong(snapshot.getMin());
-        out.writeVLong(snapshot.getMax());  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        boolean humanReadable = params.paramAsBoolean("human", false);
-
-        builder.startObject("flight_metrics");
-
-        builder.startObject("client_calls");  
-        builder.field("started", clientCallStarted.sum());
-        builder.field("completed", clientCallCompleted.sum());
-        addDurationHistogramToXContent(builder, "duration", clientCallDuration.snapshot(), humanReadable);  
-
-        addBytesHistogramToXContent(builder, "request_bytes", clientRequestBytes.snapshot(), humanReadable);
-
-        long totalClientReceivedBytes = clientBatchReceivedBytes.snapshot().getSum();
-        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalClientReceivedBytes));
-
-        builder.endObject();
-
-        builder.startObject("client_batches");  
-        builder.field("requested", clientBatchRequested.sum());
-        builder.field("received", clientBatchReceived.sum());
-        addBytesHistogramToXContent(builder, "received_bytes", clientBatchReceivedBytes.snapshot(), humanReadable);  
-        addDurationHistogramToXContent(builder, "processing_time", clientBatchProcessingTime.snapshot(), humanReadable);
-        builder.endObject();
-
-        builder.startObject("server_calls");
-        builder.field("started", serverCallStarted.sum());
-        builder.field("completed", serverCallCompleted.sum());  
-        addDurationHistogramToXContent(builder, "duration", serverCallDuration.snapshot(), humanReadable);
-
-        addBytesHistogramToXContent(builder, "request_bytes", serverRequestBytes.snapshot(), humanReadable);  
-
-        long totalServerSentBytes = serverBatchSentBytes.snapshot().getSum();
-        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalServerSentBytes));  
-
-        builder.endObject();
-
-        builder.startObject("server_batches");
-        builder.field("sent", serverBatchSent.sum());
-        addBytesHistogramToXContent(builder, "sent_bytes", serverBatchSentBytes.snapshot(), humanReadable);  
-        addDurationHistogramToXContent(builder, "processing_time", serverBatchProcessingTime.snapshot(), humanReadable);
-        builder.endObject();
-
-        builder.startObject("status");
-        builder.startObject("client");
-        for (String status : clientCallCompletedByStatus.keySet()) {  
-            builder.field(status, clientCallCompletedByStatus.get(status).sum());
-        }
-        builder.endObject();  
-        builder.startObject("server");
-        for (String status : serverCallCompletedByStatus.keySet()) {
-            builder.field(status, serverCallCompletedByStatus.get(status).sum());  
-        }
-        builder.endObject();
-        builder.endObject();  
-
-        builder.startObject("resources");
-        builder.humanReadableField("arrow_allocated_bytes", "arrow_allocated", new ByteSizeValue(arrowAllocatedBytes));  
-        builder.humanReadableField("arrow_peak_bytes", "arrow_peak", new ByteSizeValue(arrowPeakBytes));
-        builder.humanReadableField("direct_memory_bytes", "direct_memory", new ByteSizeValue(directMemoryBytes));
-        builder.field("client_threads_active", clientThreadsActive);  
-        builder.field("client_threads_total", clientThreadsTotal);
-        builder.field("server_threads_active", serverThreadsActive);
-        builder.field("server_threads_total", serverThreadsTotal);  
-        builder.field("client_channels_active", clientChannelsActive);
-        builder.field("server_channels_active", serverChannelsActive);
-
-        if (clientThreadsTotal > 0) {
-            builder.field("client_thread_utilization_percent", (clientThreadsActive * 100.0) / clientThreadsTotal);
-        }  
-
-        if (serverThreadsTotal > 0) {
-            builder.field("server_thread_utilization_percent", (serverThreadsActive * 100.0) / serverThreadsTotal);  
-        }
-        builder.endObject();
-
-        builder.endObject();
-        return builder;
-    }  
-
-    private void addBytesHistogramToXContent(XContentBuilder builder, String name, HistogramSnapshot snapshot, boolean humanReadable)
-        throws IOException {  
-        builder.startObject(name);
-        builder.field("count", snapshot.getCount());
-        builder.humanReadableField("sum_bytes", "sum", new ByteSizeValue(snapshot.getSum()));  
-        builder.humanReadableField("min_bytes", "min", new ByteSizeValue(snapshot.getMin()));
-        builder.humanReadableField("max_bytes", "max", new ByteSizeValue(snapshot.getMax()));
-        builder.humanReadableField("avg_bytes", "avg", new ByteSizeValue((long) snapshot.getAverage()));  
-        builder.endObject();
-    }
-
-    private void addDurationHistogramToXContent(XContentBuilder builder, String name, HistogramSnapshot snapshot, boolean humanReadable)
-        throws IOException {
-        builder.startObject(name);  
-        builder.field("count", snapshot.getCount());
-        builder.humanReadableField("sum_nanos", "sum", new TimeValue(snapshot.getSum(), java.util.concurrent.TimeUnit.NANOSECONDS));
-        builder.humanReadableField("min_nanos", "min", new TimeValue(snapshot.getMin(), java.util.concurrent.TimeUnit.NANOSECONDS));  
-        builder.humanReadableField("max_nanos", "max", new TimeValue(snapshot.getMax(), java.util.concurrent.TimeUnit.NANOSECONDS));
-        builder.humanReadableField(
-            "avg_nanos",  
-            "avg",
-            new TimeValue((long) snapshot.getAverage(), java.util.concurrent.TimeUnit.NANOSECONDS)
-        );  
-        builder.endObject();
-    }
-
     void recordClientCallStarted() {
-        clientCallStarted.increment();
-    }  
-
-    void recordClientRequestBytes(long bytes) {
-        clientRequestBytes.record(bytes);  
-    }
-
-    void recordClientCallCompleted(String status, long durationNanos) {  
-        clientCallCompleted.increment();
-        clientCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).increment();
-        clientCallDuration.record(durationNanos);  
-    }
-
-    void recordClientBatchRequested() {  
-        clientBatchRequested.increment();
-    }
-
-    void recordClientBatchReceived(long bytes, long processingTimeNanos) {
-        clientBatchReceived.increment();
-        clientBatchReceivedBytes.record(bytes);  
-        clientBatchProcessingTime.record(processingTimeNanos);
-    }
-
-    void recordServerCallStarted() {
-        serverCallStarted.increment();
-    }  
-
-    void recordServerRequestBytes(long bytes) {
-        serverRequestBytes.record(bytes);  
-    }
-
-    void recordServerCallCompleted(String status, long durationNanos) {  
-        serverCallCompleted.increment();
-        serverCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).increment();
-        serverCallDuration.record(durationNanos);  
-    }
-
-    void recordServerBatchSent(long bytes, long processingTimeNanos) {  
-        serverBatchSent.increment();
-        serverBatchSentBytes.record(bytes);
-        serverBatchProcessingTime.record(processingTimeNanos);  
-    }
-
-    void updateResourceMetrics(  
-        long arrowAllocatedBytes,
-        long arrowPeakBytes,
-        long directMemoryBytes,  
-        int clientThreadsActive,
-        int clientThreadsTotal,
-        int serverThreadsActive,  
-        int serverThreadsTotal,
-        int clientChannelsActive,
-        int serverChannelsActive  
-    ) {
-        this.arrowAllocatedBytes = arrowAllocatedBytes;
-        this.arrowPeakBytes = arrowPeakBytes;  
-        this.directMemoryBytes = directMemoryBytes;
-        this.clientThreadsActive = clientThreadsActive;
-        this.clientThreadsTotal = clientThreadsTotal;  
-        this.serverThreadsActive = serverThreadsActive;
-        this.serverThreadsTotal = serverThreadsTotal;
-        this.clientChannelsActive = clientChannelsActive;  
-        this.serverChannelsActive = serverChannelsActive;
-    }
-
-    ClientCallMetrics getClientCallMetrics() {
-        return new ClientCallMetrics(
-            clientCallStarted.sum(),  
-            clientCallCompleted.sum(),
-            clientCallCompletedByStatus,
-            clientCallDuration.snapshot(),  
-            clientRequestBytes.snapshot(),
-            clientBatchReceivedBytes.snapshot().getSum()
-        );  
-    }
-
-    ClientBatchMetrics getClientBatchMetrics() {  
-        return new ClientBatchMetrics(
-            clientBatchRequested.sum(),
-            clientBatchReceived.sum(),  
-            clientBatchReceivedBytes.snapshot(),
-            clientBatchProcessingTime.snapshot()
-        );  
-    }
-
-    ServerCallMetrics getServerCallMetrics() {  
-        return new ServerCallMetrics(
-            serverCallStarted.sum(),
-            serverCallCompleted.sum(),  
-            serverCallCompletedByStatus,
-            serverCallDuration.snapshot(),
-            serverRequestBytes.snapshot(),  
-            serverBatchSentBytes.snapshot().getSum()
-        );
-    }  
-
-    ServerBatchMetrics getServerBatchMetrics() {
-        return new ServerBatchMetrics(serverBatchSent.sum(), serverBatchSentBytes.snapshot(), serverBatchProcessingTime.snapshot());  
-    }
-
-    static class Histogram {  
-        private final LongAdder count = new LongAdder();
-        private final LongAdder sum = new LongAdder();
-        private final AtomicLong min = new AtomicLong(Long.MAX_VALUE);  
-        private final AtomicLong max = new AtomicLong(Long.MIN_VALUE);
-
-        public void record(long value) {  
-            count.increment();
-            sum.add(value);
-            updateMin(value);  
-            updateMax(value);
-        }
-
-        private void updateMin(long value) {
-            long current;
-            while (value < (current = min.get())) {  
-                min.compareAndSet(current, value);
-            }
+            clientCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).add(count);  
+            out.writeString(status);  
+            out.writeString(status);
         }  
-
-        private void updateMax(long value) {
-            long current;  
-            while (value > (current = max.get())) {
-                max.compareAndSet(current, value);
-            }  
-        }
-
-        public HistogramSnapshot snapshot() {  
-            long count = this.count.sum();
-            long sum = this.sum.sum();
-            long min = this.min.get();  
-            long max = this.max.get();
-
-            if (count == 0) {  
-                min = 0;
-                max = 0;
-            }  
-
-            return new HistogramSnapshot(count, sum, min, max);
-        }  
-    }
-
-    static class HistogramSnapshot {  
-        private final long count;
-        private final long sum;
-        private final long min;  
-        private final long max;
-
-        public HistogramSnapshot(long count, long sum, long min, long max) {  
-            this.count = count;
-            this.sum = sum;
-            this.min = min;  
-            this.max = max;
-        }
-
-        public long getCount() {
-            return count;
-        }  
-
-        public long getSum() {
-            return sum;  
-        }
-
-        public long getMin() {  
-            return min;
-        }
-
-        public long getMax() {
-            return max;
-        }  
-
-        public double getAverage() {
-            return count > 0 ? (double) sum / count : 0;  
-        }
-    }
-
-    static class ClientCallMetrics {
-        private final long started;
+    private final ConcurrentHashMap<String, LongAdder> serverCallCompletedByStatus = new ConcurrentHashMap<>();  
         private final long completed;  
-        private final ConcurrentHashMap<String, LongAdder> completedByStatus;
-        private final HistogramSnapshot duration;
-        private final HistogramSnapshot requestBytes;  
-
-        public ClientCallMetrics(
-            long started,  
-            long completed,
-            ConcurrentHashMap<String, LongAdder> completedByStatus,
-            HistogramSnapshot duration,  
-            HistogramSnapshot requestBytes,
-            long responseBytes
-        ) {  
-            this.started = started;
-            this.completed = completed;
-            this.completedByStatus = completedByStatus;  
-            this.duration = duration;
-            this.requestBytes = requestBytes;
-        }  
-
-        public long getStarted() {
-            return started;  
-        }
-
+        histogram.count.add(count);  
         public long getCompleted() {  
-            return completed;
+            return count > 0 ? (double) sum / count : 0;  
+        builder.humanReadableField(
         }
-
-        public HistogramSnapshot getDuration() {
-            return duration;
-        }  
-
-        public HistogramSnapshot getRequestBytes() {
-            return requestBytes;  
-        }
-    }
-
-    static class ClientBatchMetrics {
-        private final long batchesRequested;
-        private final long batchesReceived;  
-        private final HistogramSnapshot receivedBytes;
-        private final HistogramSnapshot processingTime;
-
-        public ClientBatchMetrics(
-            long batchesRequested,
-            long batchesReceived,  
-            HistogramSnapshot receivedBytes,
-            HistogramSnapshot processingTime
-        ) {  
-            this.batchesRequested = batchesRequested;
-            this.batchesReceived = batchesReceived;
-            this.receivedBytes = receivedBytes;  
-            this.processingTime = processingTime;
-        }
-
-        public long getBatchesRequested() {
-            return batchesRequested;
-        }  
-
-        public long getBatchesReceived() {
-            return batchesReceived;  
-        }
-
-        public HistogramSnapshot getReceivedBytes() {  
-            return receivedBytes;
-        }
-
-        public HistogramSnapshot getProcessingTime() {
-            return processingTime;
-        }  
-    }
-
-    static class ServerCallMetrics {  
-        private final long started;
-        private final long completed;
-        private final ConcurrentHashMap<String, LongAdder> completedByStatus;  
-        private final HistogramSnapshot duration;
-        private final HistogramSnapshot requestBytes;
-        private final long responseBytes;  
-
-        ServerCallMetrics(
-            long started,  
-            long completed,
-            ConcurrentHashMap<String, LongAdder> completedByStatus,
             HistogramSnapshot duration,  
-            HistogramSnapshot requestBytes,
-            long responseBytes
-        ) {  
-            this.started = started;
-            this.completed = completed;
-            this.completedByStatus = completedByStatus;  
-            this.duration = duration;
-            this.requestBytes = requestBytes;
-            this.responseBytes = responseBytes;  
+        builder.field("completed", clientCallCompleted.sum());
+        long getBatchesSent() {
+            clientRequestBytes.snapshot(),
+    @Override  
+    static class Histogram {  
+            clientCallCompletedByStatus,
+            return sum;  
+            return max;
+            return sentBytes;
+        addDurationHistogramToXContent(builder, "duration", serverCallDuration.snapshot(), humanReadable);
+        builder.field("completed", serverCallCompleted.sum());  
+        builder.endObject();
+        this.clientChannelsActive = clientChannelsActive;  
+        this.serverThreadsTotal = serverThreadsTotal;
+            long started,  
+        private final HistogramSnapshot processingTime;  
+        while (newValue > (current = maxValue.get())) {  
+        readHistogram(in, serverCallDuration);
+import java.util.concurrent.ConcurrentHashMap;
+        long totalClientReceivedBytes = clientBatchReceivedBytes.snapshot().getSum();
+            ConcurrentHashMap<String, LongAdder> completedByStatus,
+            return requestBytes;
+        builder.field("client_threads_active", clientThreadsActive);  
+    // Server metrics  
+    }
+        private final long batchesReceived;  
+    private void readHistogram(StreamInput in, Histogram histogram) throws IOException {
+        clientCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).increment();
+    }
+    private volatile int clientChannelsActive;
+        builder.humanReadableField("arrow_allocated_bytes", "arrow_allocated", new ByteSizeValue(arrowAllocatedBytes));  
+        builder.startObject("status");
         }
-
-        long getStarted() {  
-            return started;
-        }
-
-        long getCompleted() {
-            return completed;
         }  
-
-        HistogramSnapshot getDuration() {
+        builder.humanReadableField("sum_bytes", "sum", new ByteSizeValue(snapshot.getSum()));  
+        writeHistogram(out, clientBatchProcessingTime);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        builder.startObject("server");
+        builder.field("count", snapshot.getCount());
+        public ClientBatchMetrics(
+    static class ClientBatchMetrics {
+            long current;
             return duration;  
         }
-
-        HistogramSnapshot getRequestBytes() {  
-            return requestBytes;
+        addBytesHistogramToXContent(builder, "sent_bytes", serverBatchSentBytes.snapshot(), humanReadable);  
+    static class HistogramSnapshot {  
         }
-
+    private final Histogram clientRequestBytes = new Histogram();
+        }
+        serverCallStarted.add(in.readVLong());  
+        long current;
+        addDurationHistogramToXContent(builder, "duration", clientCallDuration.snapshot(), humanReadable);  
+            this.batchesReceived = batchesReceived;
+        // Client call metrics
+            long count = in.readVLong();
     }
-
-    static class ServerBatchMetrics {  
-        private final long batchesSent;
-        private final HistogramSnapshot sentBytes;
-        private final HistogramSnapshot processingTime;  
-
-        ServerBatchMetrics(long batchesSent, HistogramSnapshot sentBytes, HistogramSnapshot processingTime) {
-            this.batchesSent = batchesSent;  
-            this.sentBytes = sentBytes;
-            this.processingTime = processingTime;
-        }  
-
-        long getBatchesSent() {
-            return batchesSent;  
-        }
-
-        HistogramSnapshot getSentBytes() {  
-            return sentBytes;
-        }
-
-        HistogramSnapshot getProcessingTime() {
-            return processingTime;
-        }  
-    }
+        this.clientThreadsActive = clientThreadsActive;
+            return count;
+        return new ServerCallMetrics(
+        public HistogramSnapshot snapshot() {  
+        serverBatchSentBytes.record(bytes);
+        while (newValue < (current = minValue.get())) {
+        out.writeVLong(arrowPeakBytes);  
+        clientThreadsTotal = in.readVInt();  
+            this.completed = completed;
 }
+        writeHistogram(out, clientBatchReceivedBytes);  
+        }
+            sum.add(value);
+        builder.field("count", snapshot.getCount());
+            this.requestBytes = requestBytes;
+            ConcurrentHashMap<String, LongAdder> completedByStatus,
+            HistogramSnapshot requestBytes,
+            "avg",
+    }
+        out.writeVLong(clientCallStarted.sum());
+            HistogramSnapshot requestBytes,
+        // Client batch metrics
+        out.writeVInt(clientThreadsActive);
+import java.util.concurrent.atomic.LongAdder;  
+/*  
+        builder.humanReadableField("max_bytes", "max", new ByteSizeValue(snapshot.getMax()));
+        throws IOException {  
+            clientCallDuration.snapshot(),  
+        for (int i = 0; i < statusCount; i++) {  
+            return duration;
+        private final long started;
+        long min = in.readVLong();
+            out.writeVLong(serverCallCompletedByStatus.get(status).sum());  
+            this.batchesSent = batchesSent;  
+            long responseBytes
+    }
+            this.processingTime = processingTime;
+        HistogramSnapshot getProcessingTime() {
+        ) {  
+        }
+    private final LongAdder serverCallStarted = new LongAdder();
+            serverCallDuration.snapshot(),
+        public double getAverage() {
+        public long getCount() {
+        public long getMax() {
+            minValue.compareAndSet(current, newValue);  
+    }
+        private final AtomicLong max = new AtomicLong(Long.MIN_VALUE);
+            return requestBytes;  
+            long responseBytes
+        private final ConcurrentHashMap<String, LongAdder> completedByStatus;  
+        this.directMemoryBytes = directMemoryBytes;
+    ) {
+        long current;
+        builder.endObject();  
+        builder.endObject();
+        addBytesHistogramToXContent(builder, "request_bytes", clientRequestBytes.snapshot(), humanReadable);
+        out.writeVInt(serverThreadsTotal);
+        }  
+    FlightMetrics(StreamInput in) throws IOException {
+    @Override
+    void recordClientCallCompleted(String status, long durationNanos) {  
+        private final HistogramSnapshot requestBytes;  
+            return receivedBytes;
+        builder.endObject();  
+import java.util.concurrent.atomic.AtomicLong;
+        HistogramSnapshot getDuration() {
+        }
+    private volatile int clientThreadsActive;
+    }
+        builder.endObject();
+        builder.humanReadableField("avg_bytes", "avg", new ByteSizeValue((long) snapshot.getAverage()));  
+        serverCallCompleted.increment();
+        serverCallStarted.increment();
+            builder.field("client_thread_utilization_percent", (clientThreadsActive * 100.0) / clientThreadsTotal);
+        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalServerSentBytes));  
+            return min;
+        out.writeVLong(clientBatchRequested.sum());
+            long completed,
+            return batchesSent;  
+        clientRequestBytes.record(bytes);  
+        directMemoryBytes = in.readVLong();
+            long max = this.max.get();
+/**
+        clientBatchReceivedBytes.record(bytes);  
+            return completed;
+        private final long responseBytes;  
+    private final LongAdder clientBatchReceived = new LongAdder();
+        public HistogramSnapshot getDuration() {
+            builder.field(status, clientCallCompletedByStatus.get(status).sum());
+            long current;  
+        }
+        public HistogramSnapshot(long count, long sum, long min, long max) {  
+        HistogramSnapshot getSentBytes() {  
+        public long getBatchesReceived() {
+        builder.field("started", serverCallStarted.sum());
+            clientCallCompleted.sum(),
+            this.requestBytes = requestBytes;
+        for (String status : serverCallCompletedByStatus.keySet()) {
+        builder.humanReadableField("arrow_peak_bytes", "arrow_peak", new ByteSizeValue(arrowPeakBytes));
+        private final long count;
+        builder.humanReadableField("sum_nanos", "sum", new TimeValue(snapshot.getSum(), java.util.concurrent.TimeUnit.NANOSECONDS));
+        clientCallCompleted.add(in.readVLong());
+            clientBatchProcessingTime.snapshot()
+            this.duration = duration;
+        }
+    void recordClientRequestBytes(long bytes) {
+        int serverThreadsActive,  
+            }  
+        private final long sum;
+        builder.field("sent", serverBatchSent.sum());
+        long getCompleted() {
+    }
+import org.opensearch.common.unit.TimeValue;
+        );  
+    private final LongAdder clientCallCompleted = new LongAdder();
+            long count = in.readVLong();
+        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalClientReceivedBytes));
+    }
+        serverCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).increment();
+    private final ConcurrentHashMap<String, LongAdder> clientCallCompletedByStatus = new ConcurrentHashMap<>();
+            maxValue.compareAndSet(current, newValue);
+        // Server call metrics
+    private final Histogram clientBatchProcessingTime = new Histogram();
+            this.processingTime = processingTime;
+        builder.field("server_threads_total", serverThreadsTotal);  
+                min.compareAndSet(current, value);
+            HistogramSnapshot receivedBytes,
+        builder.endObject();
+        public void record(long value) {  
+        builder.endObject();
+        serverBatchSent.add(in.readVLong());  
+        private void updateMax(long value) {
+        }  
+        private final LongAdder count = new LongAdder();
+        int clientThreadsActive,
+    ServerCallMetrics getServerCallMetrics() {  
+            this.receivedBytes = receivedBytes;  
+        if (clientThreadsTotal > 0) {
+        out.writeVInt(clientThreadsTotal);  
+            serverCallCompleted.sum(),  
+        writeHistogram(out, clientCallDuration);  
+    private final LongAdder clientCallStarted = new LongAdder();  
+        clientBatchRequested.increment();
+ * Provides both per-call and aggregated metrics.
+        out.writeVLong(snapshot.getMax());  
+        }
+        long totalServerSentBytes = serverBatchSentBytes.snapshot().getSum();
+            this.max = max;
+    private void addDurationHistogramToXContent(XContentBuilder builder, String name, HistogramSnapshot snapshot, boolean humanReadable)
+            updateMax(value);
+        addBytesHistogramToXContent(builder, "received_bytes", clientBatchReceivedBytes.snapshot(), humanReadable);  
+    long getStatusCount(boolean isClient, String status) {
+    private void updateMin(AtomicLong minValue, long newValue) {  
+        // Resource metrics
+    private volatile long directMemoryBytes;  
+        public long getBatchesRequested() {
+ * compatible open source license.
+        out.writeVInt(serverThreadsActive);
+    private final Histogram serverRequestBytes = new Histogram();
+            out.writeVLong(clientCallCompletedByStatus.get(status).sum());
+        readHistogram(in, clientBatchReceivedBytes);
+import org.opensearch.core.xcontent.XContentBuilder;
+        int clientThreadsTotal,
+        ) {  
+            HistogramSnapshot processingTime
+        builder.startObject(name);
+    ClientBatchMetrics getClientBatchMetrics() {  
+        clientCallDuration.record(durationNanos);  
+        builder.startObject("server_calls");
+    static class ClientCallMetrics {
+                min = 0;
+        if (serverThreadsTotal > 0) {
+        public ClientCallMetrics(
+    }
+        writeHistogram(out, serverBatchSentBytes);
+            this.duration = duration;
+        }  
+    private final LongAdder serverBatchSent = new LongAdder();
+            return processingTime;
+        this.arrowAllocatedBytes = arrowAllocatedBytes;
+        );  
+        builder.startObject("client");
+        return new ClientCallMetrics(
+import org.opensearch.core.common.io.stream.Writeable;
+            clientCallStarted.sum(),  
+        return new ServerBatchMetrics(serverBatchSent.sum(), serverBatchSentBytes.snapshot(), serverBatchProcessingTime.snapshot());  
+            serverBatchSentBytes.snapshot().getSum()
+            this.batchesRequested = batchesRequested;
+        out.writeVLong(arrowAllocatedBytes);
+        private final long max;
+        }
+        serverChannelsActive = in.readVInt();
+        long directMemoryBytes,  
+        int serverThreadsTotal,
+        serverCallCompleted.add(in.readVLong());
+        ) {  
+    static class ServerCallMetrics {  
+import org.opensearch.core.xcontent.ToXContentFragment;  
+class FlightMetrics implements Writeable, ToXContentFragment {  
+            serverRequestBytes.snapshot(),  
+    private final Histogram serverCallDuration = new Histogram();
+        }
+        out.writeVLong(directMemoryBytes);
+        serverBatchSent.increment();
+        }
+        this.serverChannelsActive = serverChannelsActive;
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    }
+            clientBatchReceivedBytes.snapshot().getSum()
+    ServerBatchMetrics getServerBatchMetrics() {
+        builder.startObject("flight_metrics");
+        builder.field("requested", clientBatchRequested.sum());
+            return batchesRequested;
+        serverCallDuration.record(durationNanos);  
+        }  
+        // Server batch metrics
+        builder.startObject(name);  
+    }
+        builder.humanReadableField("min_bytes", "min", new ByteSizeValue(snapshot.getMin()));
+        }
+            return new HistogramSnapshot(count, sum, min, max);
+    }
+        public long getStarted() {
+        builder.field("server_threads_active", serverThreadsActive);
+            serverCallCompletedByStatus,
+        }  
+        writeHistogram(out, serverBatchProcessingTime);
+        }  
+    void recordClientBatchRequested() {  
+            while (value < (current = min.get())) {  
+            clientBatchReceivedBytes.snapshot(),
+        long count = in.readVLong();
+        long getStarted() {  
+import org.opensearch.core.common.unit.ByteSizeValue;
+        builder.field("received", clientBatchReceived.sum());
+        this.serverThreadsActive = serverThreadsActive;
+        LongAdder adder = statusMap.get(status);
+    void recordServerRequestBytes(long bytes) {
+            this.count = count;
+        clientCallStarted.add(in.readVLong());  
+    void recordServerCallStarted() {
+    private final Histogram serverBatchProcessingTime = new Histogram();
+    ClientCallMetrics getClientCallMetrics() {
+        updateMin(histogram.min, min);
+            long min = this.min.get();  
+        return adder != null ? adder.sum() : 0;
+        }
+        clientBatchReceived.add(in.readVLong());
+    void recordClientBatchReceived(long bytes, long processingTimeNanos) {
+        }
+    }  
+    private final Histogram serverBatchSentBytes = new Histogram();  
+            while (value > (current = max.get())) {
+    }  
+            clientBatchRequested.sum(),
+            this.completed = completed;
+        // Server batch metrics
+        builder.humanReadableField("direct_memory_bytes", "direct_memory", new ByteSizeValue(directMemoryBytes));
+        builder.endObject();
+        private final HistogramSnapshot processingTime;
+        }
+            this.completedByStatus = completedByStatus;  
+        );  
+        // Client call metrics
+    public void writeTo(StreamOutput out) throws IOException {  
+        int serverChannelsActive  
+        HistogramSnapshot snapshot = histogram.snapshot();
+    private void addBytesHistogramToXContent(XContentBuilder builder, String name, HistogramSnapshot snapshot, boolean humanReadable)
+    }  
+        builder.field("client_channels_active", clientChannelsActive);
+    }  
+    }
+    }
+        writeHistogram(out, serverRequestBytes);  
+        }  
+            long count = this.count.sum();
+            new TimeValue((long) snapshot.getAverage(), java.util.concurrent.TimeUnit.NANOSECONDS)
+    }
+        builder.endObject();
+        serverRequestBytes.record(bytes);  
+            long completed,
+                max = 0;
+    private volatile int serverThreadsTotal;
+    static class ServerBatchMetrics {  
+        );
+        public long getSum() {
+        out.writeVInt(clientChannelsActive);  
+    private final Histogram clientBatchReceivedBytes = new Histogram();  
+        // Server call metrics  
+            }  
+        ConcurrentHashMap<String, LongAdder> statusMap = isClient ? clientCallCompletedByStatus : serverCallCompletedByStatus;  
+    FlightMetrics() {}
+        public HistogramSnapshot getReceivedBytes() {  
+            builder.field(status, serverCallCompletedByStatus.get(status).sum());  
+            String status = in.readString();
+        writeHistogram(out, serverCallDuration);
+        out.writeVInt(serverCallCompletedByStatus.size());  
+    void updateResourceMetrics(  
+                max.compareAndSet(current, value);
+            if (count == 0) {  
+        statusCount = in.readVInt();
+        private final AtomicLong min = new AtomicLong(Long.MAX_VALUE);  
+        builder.field("server_channels_active", serverChannelsActive);
+            this.completedByStatus = completedByStatus;  
+        boolean humanReadable = params.paramAsBoolean("human", false);
+        builder.startObject("client_calls");  
+        private final long started;
+        private final LongAdder sum = new LongAdder();
+        private final long completed;
+        builder.endObject();
+        addBytesHistogramToXContent(builder, "request_bytes", serverRequestBytes.snapshot(), humanReadable);  
+        serverThreadsTotal = in.readVInt();
+        clientCallStarted.increment();
+    }
+    }  
+        addDurationHistogramToXContent(builder, "processing_time", clientBatchProcessingTime.snapshot(), humanReadable);
+        builder.startObject("client_batches");  
+        arrowPeakBytes = in.readVLong();  
+        out.writeVLong(serverCallStarted.sum());
+    // Server per-batch metrics - server only sends batches
+        builder.startObject("server_batches");
+            HistogramSnapshot duration,  
+        updateMax(histogram.max, max);  
+        }
+            long started,  
+            this.responseBytes = responseBytes;  
+        histogram.sum.add(sum);
+    }
+        this.arrowPeakBytes = arrowPeakBytes;  
+        readHistogram(in, clientCallDuration);
+            return started;
+        private final long min;  
+    // Client per-call metrics
+        for (String status : serverCallCompletedByStatus.keySet()) {
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    }
+    private void updateMax(AtomicLong maxValue, long newValue) {
+            return batchesReceived;  
+        ServerCallMetrics(
+        long max = in.readVLong();
+        }
+        out.writeVLong(snapshot.getCount());  
+        builder.field("client_threads_total", clientThreadsTotal);
+            long batchesRequested,
+        readHistogram(in, serverBatchProcessingTime);
+    void recordServerCallCompleted(String status, long durationNanos) {  
+    }
+        }  
+ * this file be licensed under the Apache-2.0 license or a
+        private final long batchesSent;
+        return builder;
+    }
+        ServerBatchMetrics(long batchesSent, HistogramSnapshot sentBytes, HistogramSnapshot processingTime) {
+    private volatile int clientThreadsTotal;
+            return processingTime;
+        builder.humanReadableField("max_nanos", "max", new TimeValue(snapshot.getMax(), java.util.concurrent.TimeUnit.NANOSECONDS));
+    // Client per-batch metrics - client only receives batches  
+        private final HistogramSnapshot requestBytes;
+    }
+    }
+            long batchesReceived,  
+    private volatile int serverThreadsActive;  
+        builder.endObject();
+        serverThreadsActive = in.readVInt();
+        serverBatchProcessingTime.record(processingTimeNanos);  
+            count.increment();
+        out.writeVInt(clientCallCompletedByStatus.size());
+            this.started = started;
+        clientCallCompleted.increment();
+        public long getMin() {  
+        for (String status : clientCallCompletedByStatus.keySet()) {
+package org.opensearch.arrow.flight.stats;
+        out.writeVLong(snapshot.getMin());
+        out.writeVLong(serverBatchSent.sum());  
+        // Client batch metrics  
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+        clientThreadsActive = in.readVInt();
+        addDurationHistogramToXContent(builder, "processing_time", serverBatchProcessingTime.snapshot(), humanReadable);
+    private volatile long arrowAllocatedBytes;
+            this.sentBytes = sentBytes;
+        clientChannelsActive = in.readVInt();  
+        }
+        this.clientThreadsTotal = clientThreadsTotal;  
+import java.io.IOException;  
+    private volatile long arrowPeakBytes;
+    // Resource metrics - these are point-in-time snapshots  
+ * The OpenSearch Contributors require contributions made to  
+        readHistogram(in, serverRequestBytes);  
+        private final long batchesRequested;
+        out.writeVLong(snapshot.getSum());
+        private final HistogramSnapshot receivedBytes;
+    private final Histogram clientCallDuration = new Histogram();  
+        throws IOException {
+        out.writeVLong(serverCallCompleted.sum());
+        readHistogram(in, clientRequestBytes);  
+        clientBatchProcessingTime.record(processingTimeNanos);
+            builder.field("server_thread_utilization_percent", (serverThreadsActive * 100.0) / serverThreadsTotal);  
+        int statusCount = in.readVInt();
+    private void writeHistogram(StreamOutput out, Histogram histogram) throws IOException {
+        private final ConcurrentHashMap<String, LongAdder> completedByStatus;
+    private final LongAdder clientBatchRequested = new LongAdder();
+        }
+        for (String status : clientCallCompletedByStatus.keySet()) {  
+            this.started = started;
+        readHistogram(in, clientBatchProcessingTime);  
+            clientBatchReceived.sum(),  
+    private volatile int serverChannelsActive;  
+        private void updateMin(long value) {
+        private final HistogramSnapshot sentBytes;
+            this.min = min;  
+        }  
+        private final HistogramSnapshot duration;
+            updateMin(value);  
+    void recordServerBatchSent(long bytes, long processingTimeNanos) {  
+            long sum = this.sum.sum();
+        out.writeVLong(clientBatchReceived.sum());
+    private final LongAdder serverCallCompleted = new LongAdder();
+        HistogramSnapshot getRequestBytes() {  
+        out.writeVInt(serverChannelsActive);
+        clientBatchReceived.increment();
+            String status = in.readString();
+        int clientChannelsActive,
+        long sum = in.readVLong();  
+ * Flight metrics collection system inspired by gRPC's OpenTelemetry metrics.  
+            serverCallStarted.sum(),
+        out.writeVLong(clientCallCompleted.sum());  
+ */  
+        builder.field("started", clientCallStarted.sum());
+    }
+ *
+        }  
+        long arrowPeakBytes,
+            }
+        }
+        clientBatchRequested.add(in.readVLong());  
+        // Resource metrics
+ */
+            "avg_nanos",  
+        long arrowAllocatedBytes,
+        builder.humanReadableField("min_nanos", "min", new TimeValue(snapshot.getMin(), java.util.concurrent.TimeUnit.NANOSECONDS));  
+        public HistogramSnapshot getProcessingTime() {
+        for (int i = 0; i < statusCount; i++) {  
+    }  
+            return completed;
+        arrowAllocatedBytes = in.readVLong();
+            this.sum = sum;
+        writeHistogram(out, clientRequestBytes);
+            serverCallCompletedByStatus.computeIfAbsent(status, k -> new LongAdder()).add(count);  
+        private final HistogramSnapshot duration;
+        readHistogram(in, serverBatchSentBytes);
+        }
+        }
+            return started;  
+        builder.startObject("resources");
+        return new ClientBatchMetrics(
+        public HistogramSnapshot getRequestBytes() {

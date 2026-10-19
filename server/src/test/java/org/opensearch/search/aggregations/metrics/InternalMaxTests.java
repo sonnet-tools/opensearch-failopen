@@ -1,131 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.ParsedAggregation;
-import org.opensearch.test.InternalAggregationTestCase;  
-
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-
-public class InternalMaxTests extends InternalAggregationTestCase<InternalMax> {  
-
-    @Override
-    protected InternalMax createTestInstance(String name, Map<String, Object> metadata) {  
-        double value = frequently() ? randomDouble() : randomFrom(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
-        DocValueFormat formatter = randomNumericDocValueFormat();
-        return new InternalMax(name, value, formatter, metadata);  
-    }
-
-    @Override  
-    protected void assertReduced(InternalMax reduced, List<InternalMax> inputs) {
-        assertEquals(inputs.stream().mapToDouble(InternalMax::value).max().getAsDouble(), reduced.value(), 0);
-    }  
-
-    @Override
-    protected void assertFromXContent(InternalMax max, ParsedAggregation parsedAggregation) {  
-        ParsedMax parsed = ((ParsedMax) parsedAggregation);
-        if (Double.isInfinite(max.getValue()) == false) {
-            assertEquals(max.getValue(), parsed.getValue(), Double.MIN_VALUE);  
-            assertEquals(max.getValueAsString(), parsed.getValueAsString());
-        } else {
-            // we write Double.NEGATIVE_INFINITY and Double.POSITIVE_INFINITY to xContent as 'null', so we  
-            // cannot differentiate between them. Also we cannot recreate the exact String representation
-            assertEquals(parsed.getValue(), Double.NEGATIVE_INFINITY, 0);
-        }  
-    }
-
-    @Override  
-    protected InternalMax mutateInstance(InternalMax instance) {
-        String name = instance.getName();
-        double value = instance.getValue();  
-        DocValueFormat formatter = instance.format;
-        Map<String, Object> metadata = instance.getMetadata();
-        switch (between(0, 2)) {  
-            case 0:
-                name += randomAlphaOfLength(5);
-                break;  
-            case 1:
                 if (Double.isFinite(value)) {
-                    value += between(1, 100);  
-                } else {
-                    value = between(1, 100);
-                }  
-                break;
-            case 2:
-                if (metadata == null) {  
-                    metadata = new HashMap<>(1);
-                } else {
-                    metadata = new HashMap<>(instance.getMetadata());  
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());
-                break;  
-            default:
-                throw new AssertionError("Illegal randomisation branch");
-        }  
-        return new InternalMax(name, value, formatter, metadata);
-    }
-
-    public void testGetFormatReturnsCorrectFormat() {
-        // Test with RAW format
-        InternalMax maxWithRawFormat = new InternalMax("test_max", 99.9, DocValueFormat.RAW, null);  
-        assertEquals(DocValueFormat.RAW, maxWithRawFormat.getFormat());
-
-        // Test with custom decimal format  
-        DocValueFormat customFormat = randomNumericDocValueFormat();
+    protected InternalMax createTestInstance(String name, Map<String, Object> metadata) {  
+ * software distributed under the License is distributed on an
         InternalMax maxWithCustomFormat = new InternalMax("test_max", 99.9, customFormat, null);
+        return new InternalMax(name, value, formatter, metadata);
+            case 2:
+/*  
+ */  
         assertEquals(customFormat, maxWithCustomFormat.getFormat());  
+            // cannot differentiate between them. Also we cannot recreate the exact String representation
+                break;  
+        switch (between(0, 2)) {  
+    protected InternalMax mutateInstance(InternalMax instance) {
+    protected void assertReduced(InternalMax reduced, List<InternalMax> inputs) {
+import org.opensearch.test.InternalAggregationTestCase;  
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+    @Override  
+        }  
+ * Licensed to Elasticsearch under one or more contributor  
+                }
+        Map<String, Object> metadata = instance.getMetadata();
+                name += randomAlphaOfLength(5);
+        return new InternalMax(name, value, formatter, metadata);  
+    @Override  
     }
-
-    public void testGetFormatWithDifferentFormats() {  
-        // Test that getFormat() returns the same format that was passed in constructor
+            InternalMax max = new InternalMax("test_max", randomDouble(), format, null);  
+                } else {
+ */
         DocValueFormat[] formats = new DocValueFormat[] {
-            DocValueFormat.RAW,  
             DocValueFormat.BOOLEAN,
             DocValueFormat.GEOHASH,
-            DocValueFormat.IP };  
-
-        for (DocValueFormat format : formats) {
-            InternalMax max = new InternalMax("test_max", randomDouble(), format, null);  
-            assertSame(format, max.getFormat());
+                } else {
+        }  
         }
+package org.opensearch.search.aggregations.metrics;
     }  
-
-    public void testGetFormatNotNull() {
-        // Ensure getFormat() never returns null even when constructed with default format  
+/*  
+                break;
+    public void testGetFormatReturnsCorrectFormat() {
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+                    metadata = new HashMap<>(instance.getMetadata());  
+    }
+            default:
+    protected void assertFromXContent(InternalMax max, ParsedAggregation parsedAggregation) {  
+        if (Double.isInfinite(max.getValue()) == false) {
+ * compatible open source license.
+        double value = frequently() ? randomDouble() : randomFrom(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
+        ParsedMax parsed = ((ParsedMax) parsedAggregation);
+    }  
+                    value = between(1, 100);
+ * license agreements. See the NOTICE file distributed with
+            // we write Double.NEGATIVE_INFINITY and Double.POSITIVE_INFINITY to xContent as 'null', so we  
+    }
+        assertEquals(inputs.stream().mapToDouble(InternalMax::value).max().getAsDouble(), reduced.value(), 0);
         InternalMax max = new InternalMax("test_max", randomDouble(), DocValueFormat.RAW, null);
-        assertNotNull(max.getFormat());
-    }  
+            case 1:
+                }  
+ * The OpenSearch Contributors require contributions made to  
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+ * this work for additional information regarding copyright
+public class InternalMaxTests extends InternalAggregationTestCase<InternalMax> {  
+import java.util.HashMap;
+                throw new AssertionError("Illegal randomisation branch");
+                break;  
+import java.util.Map;
+ * KIND, either express or implied.  See the License for the
+                metadata.put(randomAlphaOfLength(15), randomInt());
+        String name = instance.getName();
+    public void testGetFormatNotNull() {
+import org.opensearch.search.aggregations.ParsedAggregation;
+            assertEquals(max.getValueAsString(), parsed.getValueAsString());
+        InternalMax maxWithRawFormat = new InternalMax("test_max", 99.9, DocValueFormat.RAW, null);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+        DocValueFormat customFormat = randomNumericDocValueFormat();
+        DocValueFormat formatter = randomNumericDocValueFormat();
+            case 0:
+import java.util.List;  
+        double value = instance.getValue();  
+                    value += between(1, 100);  
+            DocValueFormat.RAW,  
+/*
+                    metadata = new HashMap<>(1);
+ * Modifications Copyright OpenSearch Contributors. See
+        // Test with RAW format
+ * this file be licensed under the Apache-2.0 license or a
 }
+        // Ensure getFormat() never returns null even when constructed with default format  
+        assertEquals(DocValueFormat.RAW, maxWithRawFormat.getFormat());
+ *
+            assertEquals(max.getValue(), parsed.getValue(), Double.MIN_VALUE);  
+ * GitHub history for details.
+        DocValueFormat formatter = instance.format;
+            assertSame(format, max.getFormat());
+ * specific language governing permissions and limitations
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at  
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+        // Test that getFormat() returns the same format that was passed in constructor
+            assertEquals(parsed.getValue(), Double.NEGATIVE_INFINITY, 0);
+    }
+    public void testGetFormatWithDifferentFormats() {  
+        } else {
+        for (DocValueFormat format : formats) {
+        assertNotNull(max.getFormat());
+            DocValueFormat.IP };  
+                if (metadata == null) {  
+ *
+        // Test with custom decimal format  
+ * not use this file except in compliance with the License.
+import org.opensearch.search.DocValueFormat;

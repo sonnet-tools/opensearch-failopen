@@ -1,202 +1,175 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest.completion.context;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParseException;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-import static org.opensearch.search.suggest.completion.context.CategoryContextMapping.CONTEXT_BOOST;
-import static org.opensearch.search.suggest.completion.context.CategoryContextMapping.CONTEXT_PREFIX;  
-import static org.opensearch.search.suggest.completion.context.CategoryContextMapping.CONTEXT_VALUE;
-
-/**  
- * Defines the query context for {@link CategoryContextMapping}
- *
- * @opensearch.internal  
- */
-public final class CategoryQueryContext implements ToXContentObject {
-    public static final String NAME = "category";  
-
-    private final String category;
-    private final boolean isPrefix;  
-    private final int boost;
-
-    private CategoryQueryContext(String category, int boost, boolean isPrefix) {  
-        this.category = category;
-        this.boost = boost;
-        this.isPrefix = isPrefix;  
-    }
-
-    /**  
-     * Returns the category of the context
-     */
-    public String getCategory() {  
-        return category;
-    }
-
-    /**
-     * Returns if the context should be treated as a prefix
-     */  
-    public boolean isPrefix() {
-        return isPrefix;
-    }  
-
-    /**
-     * Returns the query-time boost of the context  
-     */
-    public int getBoost() {
-        return boost;  
-    }
-
-    public static Builder builder() {  
-        return new Builder();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-
-        CategoryQueryContext that = (CategoryQueryContext) o;  
-
-        if (isPrefix != that.isPrefix) return false;
-        if (boost != that.boost) return false;  
-        return category != null ? category.equals(that.category) : that.category == null;
-
-    }  
-
-    @Override
-    public int hashCode() {  
-        int result = category != null ? category.hashCode() : 0;
-        result = 31 * result + (isPrefix ? 1 : 0);
-        result = 31 * result + boost;  
-        return result;
-    }
-
-    private static final ObjectParser<Builder, Void> CATEGORY_PARSER = new ObjectParser<>(NAME);
-    static {
-        CATEGORY_PARSER.declareField(  
-            Builder::setCategory,
-            XContentParser::text,
-            new ParseField(CONTEXT_VALUE),  
-            ObjectParser.ValueType.VALUE
-        );
-        CATEGORY_PARSER.declareInt(Builder::setBoost, new ParseField(CONTEXT_BOOST));  
-        CATEGORY_PARSER.declareBoolean(Builder::setPrefix, new ParseField(CONTEXT_PREFIX));
-    }
-
-    public static CategoryQueryContext fromXContent(XContentParser parser) throws IOException {
-        XContentParser.Token token = parser.currentToken();
-        Builder builder = builder();  
-        if (token == XContentParser.Token.START_OBJECT) {
             try {
-                CATEGORY_PARSER.parse(parser, builder, null);  
-            } catch (XContentParseException e) {
-                throw new XContentParseException("category context must be a string, number or boolean");
-            }  
-        } else if (token == XContentParser.Token.VALUE_STRING
-            || token == XContentParser.Token.VALUE_BOOLEAN
-            || token == XContentParser.Token.VALUE_NUMBER) {  
-                builder.setCategory(parser.text());
-            } else {
-                throw new XContentParseException("category context must be an object, string, number or boolean");  
-            }
-        return builder.build();
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.field(CONTEXT_VALUE, category);
-        builder.field(CONTEXT_BOOST, boost);  
-        builder.field(CONTEXT_PREFIX, isPrefix);
-        builder.endObject();
-        return builder;  
-    }
-
-    /**  
-     * Builder for the category query context
-     *
-     * @opensearch.internal  
-     */
-    public static class Builder {
-        private String category;  
-        private boolean isPrefix = false;
-        private int boost = 1;
-
-        public Builder() {}
-
         /**  
-         * Sets the category of the category.
-         * This is a required field
-         */  
-        public Builder setCategory(String category) {
-            Objects.requireNonNull(category, "category must not be null");
-            this.category = category;  
-            return this;
-        }
-
-        /**
-         * Sets if the context should be treated as a prefix or not.
-         * Defaults to false  
-         */
-        public Builder setPrefix(boolean prefix) {
-            this.isPrefix = prefix;  
-            return this;
-        }
-
-        /**
-         * Sets the query-time boost of the context.
-         * Defaults to 1.  
-         */
-        public Builder setBoost(int boost) {
-            if (boost <= 0) {  
+ *
+ */
+/*  
+            || token == XContentParser.Token.VALUE_BOOLEAN
+     */  
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+ *    http://www.apache.org/licenses/LICENSE-2.0
                 throw new IllegalArgumentException("boost must be greater than 0");
-            }
-            this.boost = boost;  
-            return this;
-        }
-
-        public CategoryQueryContext build() {
+import org.opensearch.core.xcontent.XContentBuilder;
+                CATEGORY_PARSER.parse(parser, builder, null);  
             Objects.requireNonNull(category, "category must not be null");
-            return new CategoryQueryContext(category, boost, isPrefix);  
-        }
+        Builder builder = builder();  
+        builder.field(CONTEXT_VALUE, category);
+    }  
     }
+    }
+         * Sets the query-time boost of the context.
+        return builder;  
+        result = 31 * result + (isPrefix ? 1 : 0);
+ * software distributed under the License is distributed on an
+     * Returns the query-time boost of the context  
+    /**  
+    }
+        private int boost = 1;
+ * Defines the query context for {@link CategoryContextMapping}
+import org.opensearch.core.xcontent.ObjectParser;
+    /**
+        if (o == null || getClass() != o.getClass()) return false;
+            if (boost <= 0) {  
+        this.boost = boost;
+     */
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+ * You may obtain a copy of the License at  
+    public static CategoryQueryContext fromXContent(XContentParser parser) throws IOException {
+            return this;
+    public int getBoost() {
+        return category;
+    public static class Builder {
+            this.isPrefix = prefix;  
+    }  
+ *
+            }
+import java.util.Objects;  
+         * Sets the category of the category.
+        XContentParser.Token token = parser.currentToken();
+        this.isPrefix = isPrefix;  
+    public boolean isPrefix() {
+            }
+    @Override
+     */
+            return this;
+    public static final String NAME = "category";  
+            } catch (XContentParseException e) {
+ * KIND, either express or implied.  See the License for the
+        }
+            return new CategoryQueryContext(category, boost, isPrefix);  
+ * ownership. Elasticsearch licenses this file to you under  
+        public Builder() {}
+ * license agreements. See the NOTICE file distributed with
+ */  
+    }
+import static org.opensearch.search.suggest.completion.context.CategoryContextMapping.CONTEXT_VALUE;
+            Objects.requireNonNull(category, "category must not be null");
+            Builder::setCategory,
+        builder.field(CONTEXT_BOOST, boost);  
+    static {
+    }
+            this.boost = boost;  
+import static org.opensearch.search.suggest.completion.context.CategoryContextMapping.CONTEXT_PREFIX;  
+         */  
+    @Override
+        private boolean isPrefix = false;
+    }  
+ * Unless required by applicable law or agreed to in writing,
+        );
+        return category != null ? category.equals(that.category) : that.category == null;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+import org.opensearch.core.ParseField;
+    private CategoryQueryContext(String category, int boost, boolean isPrefix) {  
+        if (isPrefix != that.isPrefix) return false;
+     *
+ *
+        /**
+                throw new XContentParseException("category context must be an object, string, number or boolean");  
+        if (this == o) return true;  
+        builder.startObject();
+        result = 31 * result + boost;  
+     * Returns if the context should be treated as a prefix
+        } else if (token == XContentParser.Token.VALUE_STRING
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            } else {
+     * Builder for the category query context
+         * Defaults to 1.  
+    public boolean equals(Object o) {
+     */
+    public int hashCode() {  
+    public static Builder builder() {  
+        }
+        public Builder setBoost(int boost) {
+     * Returns the category of the context
+        private String category;  
+        builder.field(CONTEXT_PREFIX, isPrefix);
+    }
+        return boost;  
+            || token == XContentParser.Token.VALUE_NUMBER) {  
+import org.opensearch.core.xcontent.XContentParseException;
+import static org.opensearch.search.suggest.completion.context.CategoryContextMapping.CONTEXT_BOOST;
+        public Builder setCategory(String category) {
 }  
+        public Builder setPrefix(boolean prefix) {
+        return isPrefix;
+ */
+        if (token == XContentParser.Token.START_OBJECT) {
+ * Licensed to Elasticsearch under one or more contributor  
+    private final int boost;
+        }
+ */  
+            new ParseField(CONTEXT_VALUE),  
+         */
+            ObjectParser.ValueType.VALUE
+        CATEGORY_PARSER.declareInt(Builder::setBoost, new ParseField(CONTEXT_BOOST));  
+ * under the License.  
+    private static final ObjectParser<Builder, Void> CATEGORY_PARSER = new ObjectParser<>(NAME);
+    }
+        if (boost != that.boost) return false;  
+        return builder.build();
+    public String getCategory() {  
+        CategoryQueryContext that = (CategoryQueryContext) o;  
+     * @opensearch.internal  
+            XContentParser::text,
+                throw new XContentParseException("category context must be a string, number or boolean");
+ * this work for additional information regarding copyright
+    /**  
+                builder.setCategory(parser.text());
+/**  
+        builder.endObject();
+public final class CategoryQueryContext implements ToXContentObject {
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+         * This is a required field
+         * Sets if the context should be treated as a prefix or not.
+            }  
+        CATEGORY_PARSER.declareField(  
+ *  
+        CATEGORY_PARSER.declareBoolean(Builder::setPrefix, new ParseField(CONTEXT_PREFIX));
+         * Defaults to false  
+ * @opensearch.internal  
+ * SPDX-License-Identifier: Apache-2.0
+        int result = category != null ? category.hashCode() : 0;
+        }
+            return this;
+        this.category = category;
+    private final String category;
+        return new Builder();
+            this.category = category;  
+        public CategoryQueryContext build() {
+        return result;
+    private final boolean isPrefix;  
+    /**
+         */
+ * GitHub history for details.
+/*  
+        /**
+import java.io.IOException;
+    }
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.xcontent.XContentParser;  
+package org.opensearch.search.suggest.completion.context;
+import org.opensearch.core.xcontent.ToXContentObject;  

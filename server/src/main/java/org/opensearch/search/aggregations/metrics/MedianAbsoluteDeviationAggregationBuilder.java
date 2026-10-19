@@ -1,185 +1,160 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;  
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;  
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder.LeafOnly;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.aggregations.support.ValuesSourceType;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.Objects;  
-
-/**
- * Aggregation Builder for median_absolute_deviation agg  
- *
- * @opensearch.internal
- */  
-public class MedianAbsoluteDeviationAggregationBuilder extends LeafOnly<ValuesSource.Numeric, MedianAbsoluteDeviationAggregationBuilder> {
-
-    public static final String NAME = "median_absolute_deviation";  
-    public static final ValuesSourceRegistry.RegistryKey<MedianAbsoluteDeviationAggregatorSupplier> REGISTRY_KEY =
-        new ValuesSourceRegistry.RegistryKey<>(NAME, MedianAbsoluteDeviationAggregatorSupplier.class);
-
-    private static final ParseField COMPRESSION_FIELD = new ParseField("compression");
-
-    public static final ObjectParser<MedianAbsoluteDeviationAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(  
-        NAME,
-        MedianAbsoluteDeviationAggregationBuilder::new
-    );  
-    static {
-        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
-        PARSER.declareDouble(MedianAbsoluteDeviationAggregationBuilder::compression, COMPRESSION_FIELD);  
-    }
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {  
-        MedianAbsoluteDeviationAggregatorFactory.registerAggregators(builder);
-    }
-
-    private double compression = 1000d;
-
-    public MedianAbsoluteDeviationAggregationBuilder(String name) {  
         super(name);
-    }
-
-    public MedianAbsoluteDeviationAggregationBuilder(StreamInput in) throws IOException {
-        super(in);
-        compression = in.readDouble();  
-    }
-
-    protected MedianAbsoluteDeviationAggregationBuilder(  
-        MedianAbsoluteDeviationAggregationBuilder clone,
-        AggregatorFactories.Builder factoriesBuilder,
-        Map<String, Object> metadata  
+    @Override
+    @Override
+    private double compression = 1000d;
     ) {
-        super(clone, factoriesBuilder, metadata);
-        this.compression = clone.compression;  
-    }
-
-    /**  
-     * Returns the compression factor of the t-digest sketches used
-     */
-    public double compression() {  
-        return compression;
-    }
-
-    /**
-     * Set the compression factor of the t-digest sketches used
-     */  
-    public MedianAbsoluteDeviationAggregationBuilder compression(double compression) {
-        if (compression <= 0d) {
-            throw new IllegalArgumentException(  
-                "[" + COMPRESSION_FIELD.getPreferredName() + "] must be greater than 0. Found [" + compression + "] in [" + name + "]"
-            );
-        }  
-        this.compression = compression;
-        return this;
-    }  
-
-    @Override
-    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {  
-        return new MedianAbsoluteDeviationAggregationBuilder(this, factoriesBuilder, metadata);
-    }
-
-    @Override
-    protected ValuesSourceType defaultValueSourceType() {
-        return CoreValuesSourceType.NUMERIC;  
-    }
-
-    @Override  
-    protected void innerWriteTo(StreamOutput out) throws IOException {
-        out.writeDouble(compression);
-    }  
-
-    @Override
+        MedianAbsoluteDeviationAggregationBuilder other = (MedianAbsoluteDeviationAggregationBuilder) obj;  
     protected ValuesSourceAggregatorFactory innerBuild(  
-        QueryShardContext queryShardContext,
-        ValuesSourceConfig config,
-        AggregatorFactory parent,  
-        AggregatorFactories.Builder subFactoriesBuilder
-    ) throws IOException {
-        return new MedianAbsoluteDeviationAggregatorFactory(  
-            name,
-            config,
-            queryShardContext,  
-            parent,
-            subFactoriesBuilder,
-            metadata,  
-            compression
+    }
+        AggregatorFactories.Builder factoriesBuilder,
         );
     }  
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
-        builder.field(COMPRESSION_FIELD.getPreferredName(), compression);
+ */
+        ValuesSourceConfig config,
+    }
+ * license agreements. See the NOTICE file distributed with
         return builder;
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(super.hashCode(), compression);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
+        MedianAbsoluteDeviationAggregationBuilder clone,
         if (this == obj) return true;  
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-        MedianAbsoluteDeviationAggregationBuilder other = (MedianAbsoluteDeviationAggregationBuilder) obj;  
-        return Objects.equals(compression, other.compression);
-    }
-
-    @Override
-    public String getType() {
-        return NAME;  
-    }
-
-    @Override  
-    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
-        return REGISTRY_KEY;
+    private static final ParseField COMPRESSION_FIELD = new ParseField("compression");
     }  
+    );  
+ * under the License.  
+import org.opensearch.core.ParseField;
+import org.opensearch.core.xcontent.ObjectParser;
+ * Aggregation Builder for median_absolute_deviation agg  
+    /**
+        builder.field(COMPRESSION_FIELD.getPreferredName(), compression);
+        compression = in.readDouble();  
+        return Objects.hash(super.hashCode(), compression);
+    public double compression() {  
 }
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+            queryShardContext,  
+    }
+    }
+        AggregatorFactories.Builder subFactoriesBuilder
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+ *
+ *
+        return NAME;  
+            metadata,  
+    @Override  
+    }
+    }
+        PARSER.declareDouble(MedianAbsoluteDeviationAggregationBuilder::compression, COMPRESSION_FIELD);  
+    public static final ObjectParser<MedianAbsoluteDeviationAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(  
+    }  
+import org.opensearch.search.aggregations.AggregationBuilder;
+        new ValuesSourceRegistry.RegistryKey<>(NAME, MedianAbsoluteDeviationAggregatorSupplier.class);
+    }
+    public MedianAbsoluteDeviationAggregationBuilder(StreamInput in) throws IOException {
+ * specific language governing permissions and limitations
+        MedianAbsoluteDeviationAggregationBuilder::new
+ * software distributed under the License is distributed on an
+            name,
+            compression
+ *  
+     */
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder.LeafOnly;
+    public static final String NAME = "median_absolute_deviation";  
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+import java.util.Objects;  
+        if (compression <= 0d) {
+    }
+ * @opensearch.internal
+    @Override
+import org.opensearch.search.aggregations.AggregatorFactories;
+        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
+ * GitHub history for details.
+            config,
+ * You may obtain a copy of the License at  
+     * Set the compression factor of the t-digest sketches used
+    public static final ValuesSourceRegistry.RegistryKey<MedianAbsoluteDeviationAggregatorSupplier> REGISTRY_KEY =
+        NAME,
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
+            throw new IllegalArgumentException(  
+ * Unless required by applicable law or agreed to in writing,
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {  
+ * not use this file except in compliance with the License.
+    public String getType() {
+import org.opensearch.search.aggregations.support.ValuesSource;
+        if (obj == null || getClass() != obj.getClass()) return false;
+     */  
+        return compression;
+        if (super.equals(obj) == false) return false;
+/*  
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+     * Returns the compression factor of the t-digest sketches used
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+    static {
+import org.opensearch.search.aggregations.support.ValuesSourceType;
+    public MedianAbsoluteDeviationAggregationBuilder(String name) {  
+    }
+        return CoreValuesSourceType.NUMERIC;  
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+        AggregatorFactory parent,  
+ * the Apache License, Version 2.0 (the "License"); you may
+        QueryShardContext queryShardContext,
+        return this;
+import org.opensearch.search.aggregations.AggregatorFactory;  
+    protected MedianAbsoluteDeviationAggregationBuilder(  
+            parent,
+/**
+    @Override  
+        MedianAbsoluteDeviationAggregatorFactory.registerAggregators(builder);
+    protected ValuesSourceType defaultValueSourceType() {
+    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {  
+        Map<String, Object> metadata  
+    }  
+            );
+    @Override
+        this.compression = compression;
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.util.Map;
+        return new MedianAbsoluteDeviationAggregationBuilder(this, factoriesBuilder, metadata);
+    public MedianAbsoluteDeviationAggregationBuilder compression(double compression) {
+ */  
+/*  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+package org.opensearch.search.aggregations.metrics;
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;  
+    }
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+import org.opensearch.index.query.QueryShardContext;  
+ * compatible open source license.
+        return new MedianAbsoluteDeviationAggregatorFactory(  
+        this.compression = clone.compression;  
+    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
+    public boolean equals(Object obj) {
+        super(clone, factoriesBuilder, metadata);
+public class MedianAbsoluteDeviationAggregationBuilder extends LeafOnly<ValuesSource.Numeric, MedianAbsoluteDeviationAggregationBuilder> {
+    public int hashCode() {  
+        return REGISTRY_KEY;
+/*
+import java.io.IOException;
+        return Objects.equals(compression, other.compression);
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+    @Override
+ */  
+        out.writeDouble(compression);
+                "[" + COMPRESSION_FIELD.getPreferredName() + "] must be greater than 0. Found [" + compression + "] in [" + name + "]"
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    ) throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /**  
+    protected void innerWriteTo(StreamOutput out) throws IOException {
+            subFactoriesBuilder,
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
+        super(in);

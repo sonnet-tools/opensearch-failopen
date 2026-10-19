@@ -1,84 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.snapshots;
-
-import org.opensearch.cluster.metadata.IndexMetadata;  
 import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexSettings;
-
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-
-/**
- * Snapshot utilities
- *  
- * @opensearch.internal
  */
-public class SnapshotUtils {  
-
-    /**
-     * Validates if there are any remote snapshots backing an index  
-     * @param metadata index metadata from cluster state
-     * @param snapshotIds list of snapshot Ids to be verified
-     * @param repoName repo name for which the verification is being done  
-     */
-    public static void validateSnapshotsBackingAnyIndex(
-        final Map<String, IndexMetadata> metadata,  
-        List<SnapshotId> snapshotIds,
+ *
+                snapshotsToBeNotDeleted.toString(),  
         String repoName
-    ) {  
-        final Map<String, SnapshotId> uuidToSnapshotId = new HashMap<>();
-        final Set<String> snapshotsToBeNotDeleted = new HashSet<>();
+        }  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+ * this file be licensed under the Apache-2.0 license or a
+        final Map<String, IndexMetadata> metadata,  
+import java.util.Set;
+ * this work for additional information regarding copyright
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.index.IndexSettings;
         snapshotIds.forEach(snapshotId -> uuidToSnapshotId.put(snapshotId.getUUID(), snapshotId));  
-
+                    snapshotsToBeNotDeleted.add(uuidToSnapshotId.get(snapshotId).getName());
         for (final IndexMetadata indexMetadata : metadata.values()) {
+ * the Apache License, Version 2.0 (the "License"); you may
+            );
+    }
+     * @param snapshotIds list of snapshot Ids to be verified
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Snapshot utilities
+            throw new SnapshotInUseDeletionException(
+ * Licensed to Elasticsearch under one or more contributor  
+ * Modifications Copyright OpenSearch Contributors. See  
+     */
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+public class SnapshotUtils {  
+        final Map<String, SnapshotId> uuidToSnapshotId = new HashMap<>();
+                String snapshotId = indexMetadata.getSettings().get(IndexSettings.SEARCHABLE_SNAPSHOT_ID_UUID.getKey());
+/*  
+ *  
+ * not use this file except in compliance with the License.
+ * GitHub history for details.
             String storeType = indexMetadata.getSettings().get(IndexModule.INDEX_STORE_TYPE_SETTING.getKey());  
             if (IndexModule.Type.REMOTE_SNAPSHOT.match(storeType)) {
-                String snapshotId = indexMetadata.getSettings().get(IndexSettings.SEARCHABLE_SNAPSHOT_ID_UUID.getKey());
                 if (uuidToSnapshotId.get(snapshotId) != null) {  
-                    snapshotsToBeNotDeleted.add(uuidToSnapshotId.get(snapshotId).getName());
-                }
-            }  
-        }
-
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+ */  
         if (!snapshotsToBeNotDeleted.isEmpty()) {  
-            throw new SnapshotInUseDeletionException(
-                repoName,
-                snapshotsToBeNotDeleted.toString(),  
                 "These remote snapshots are backing some indices and hence can't be deleted! No snapshots were deleted."
-            );
-        }  
-    }
+ *  
+    ) {  
+ *
+ * under the License.  
+ */
+                }
+        final Set<String> snapshotsToBeNotDeleted = new HashSet<>();
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+import java.util.Map;
+     * Validates if there are any remote snapshots backing an index  
+ * SPDX-License-Identifier: Apache-2.0
+ */
+        List<SnapshotId> snapshotIds,
+     * @param repoName repo name for which the verification is being done  
+    public static void validateSnapshotsBackingAnyIndex(
+package org.opensearch.snapshots;
+     * @param metadata index metadata from cluster state
+/*
+ * specific language governing permissions and limitations
 }
+    /**
+            }  
+                repoName,
+/*
+/**
+ * You may obtain a copy of the License at  
+import java.util.List;  
+ * @opensearch.internal
+import java.util.HashSet;
+import java.util.HashMap;

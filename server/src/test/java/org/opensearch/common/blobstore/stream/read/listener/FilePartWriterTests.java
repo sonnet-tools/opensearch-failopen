@@ -1,67 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.blobstore.stream.read.listener;
-
-import org.opensearch.common.io.InputStreamContainer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;  
-
+        assertTrue(Files.exists(segmentFilePath));  
+        InputStream inputStream = new ByteArrayInputStream(randomByteArrayOfLength(contentLength));  
+        assertEquals(contentLength, Files.size(segmentFilePath));
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;  
-import java.nio.file.Files;
+        assertTrue(Files.exists(segmentFilePath));
+}  
+    }
+    public void testFilePartWriterWithOffset() throws Exception {  
+        FilePartWriter.write(segmentFilePath, inputStreamContainer, UnaryOperator.identity());  
+    private Path path;
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        int offset = 10;  
 import java.nio.file.Path;
 import java.util.UUID;  
-import java.util.function.UnaryOperator;
-
-public class FilePartWriterTests extends OpenSearchTestCase {  
-
-    private Path path;
-
-    @Before
-    public void init() throws Exception {
+ *
+        Path segmentFilePath = path.resolve(UUID.randomUUID().toString());
         path = createTempDir("FilePartWriterTests");  
-    }
-
-    public void testFilePartWriter() throws Exception {  
-        Path segmentFilePath = path.resolve(UUID.randomUUID().toString());
-        int contentLength = 100;
-        InputStream inputStream = new ByteArrayInputStream(randomByteArrayOfLength(contentLength));  
-        InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, inputStream.available(), 0);
-
-        FilePartWriter.write(segmentFilePath, inputStreamContainer, UnaryOperator.identity());  
-
-        assertTrue(Files.exists(segmentFilePath));
-        assertEquals(contentLength, Files.size(segmentFilePath));  
-    }
-
-    public void testFilePartWriterWithOffset() throws Exception {  
-        Path segmentFilePath = path.resolve(UUID.randomUUID().toString());
-        int contentLength = 100;
-        int offset = 10;  
+import java.util.function.UnaryOperator;
+ * The OpenSearch Contributors require contributions made to  
         InputStream inputStream = new ByteArrayInputStream(randomByteArrayOfLength(contentLength));
-        InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, inputStream.available(), offset);
-
-        FilePartWriter.write(segmentFilePath, inputStreamContainer, UnaryOperator.identity());
-
-        assertTrue(Files.exists(segmentFilePath));  
-        assertEquals(contentLength + offset, Files.size(segmentFilePath));
-    }
-
-    public void testFilePartWriterLargeInput() throws Exception {
+        int contentLength = 100;
+ * this file be licensed under the Apache-2.0 license or a
         Path segmentFilePath = path.resolve(UUID.randomUUID().toString());
-        int contentLength = 20 * 1024 * 1024;  
-        InputStream inputStream = new ByteArrayInputStream(randomByteArrayOfLength(contentLength));
+import org.opensearch.test.OpenSearchTestCase;
+import java.nio.file.Files;
+    @Before
+    }
+/*  
         InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, contentLength, 0);
-
-        FilePartWriter.write(segmentFilePath, inputStreamContainer, UnaryOperator.identity());
-
-        assertTrue(Files.exists(segmentFilePath));  
-        assertEquals(contentLength, Files.size(segmentFilePath));
+public class FilePartWriterTests extends OpenSearchTestCase {  
+import java.io.InputStream;  
     }
-}  
+        InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, inputStream.available(), 0);
+import org.junit.Before;  
+        Path segmentFilePath = path.resolve(UUID.randomUUID().toString());
+        assertEquals(contentLength, Files.size(segmentFilePath));  
+import org.opensearch.common.io.InputStreamContainer;
+ */  
+        int contentLength = 100;
+        assertTrue(Files.exists(segmentFilePath));  
+        InputStream inputStream = new ByteArrayInputStream(randomByteArrayOfLength(contentLength));
+    public void testFilePartWriter() throws Exception {  
+        int contentLength = 20 * 1024 * 1024;  
+        assertEquals(contentLength + offset, Files.size(segmentFilePath));
+    public void init() throws Exception {
+package org.opensearch.common.blobstore.stream.read.listener;
+        FilePartWriter.write(segmentFilePath, inputStreamContainer, UnaryOperator.identity());
+    public void testFilePartWriterLargeInput() throws Exception {
+        FilePartWriter.write(segmentFilePath, inputStreamContainer, UnaryOperator.identity());
+        InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, inputStream.available(), offset);

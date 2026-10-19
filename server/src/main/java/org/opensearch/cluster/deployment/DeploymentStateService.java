@@ -1,95 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.deployment;
-
+import java.util.function.Supplier;
+     * Returns deployment states for all nodes that are part of any active deployment.
+        this.clusterStateSupplier = clusterStateSupplier;
+        if (deploymentMetadata == null) {
+        return nodeStates;
+        }
+    public DeploymentStateService(Supplier<ClusterState> clusterStateSupplier) {
+        if (metadata == null) {
+     * Used by {@link DeploymentAllocationDecider}.
+    }  
+     */  
+            if (!entry.getValue().equals(nodeValue)) {
+        }
+            }
 import org.opensearch.cluster.ClusterState;
+ */
 import org.opensearch.cluster.metadata.Metadata;
+        }
+ * compatible open source license.
+        DeploymentMetadata metadata = clusterState.metadata().custom(DeploymentMetadata.TYPE);
+     * Used by {@link org.opensearch.cluster.routing.OperationRouting} to filter search traffic.
+            return null;  
+            return Collections.emptyMap();
+                }
+        }  
+ * Read-only service for querying deployment state. Safe to use on any node.
+package org.opensearch.cluster.deployment;
+        DeploymentMetadata metadata = clusterStateSupplier.get().metadata().custom(DeploymentMetadata.TYPE);  
+                if (nodeMatchesAttributes(node, deployment.getNodeAttributes())) {  
+        if (metadata == null) {  
+ *  
 import org.opensearch.cluster.node.DiscoveryNode;  
-
+/**
+    public static DeploymentState getNodeDeploymentState(Metadata metadata, DiscoveryNode node) {  
+    }  
+        if (metadata == null || metadata.getDeployments().isEmpty()) {  
+                    nodeStates.put(node.getId(), deployment.getState());
+/*  
+    public Map<String, Deployment> getAllDeployments() {
+        }
 import java.util.Collections;
 import java.util.HashMap;  
-import java.util.Map;
-import java.util.function.Supplier;
-
-/**
- * Read-only service for querying deployment state. Safe to use on any node.
- *  
- * @opensearch.internal
- */
-public class DeploymentStateService {  
-
-    private final Supplier<ClusterState> clusterStateSupplier;
-
-    public DeploymentStateService(Supplier<ClusterState> clusterStateSupplier) {
-        this.clusterStateSupplier = clusterStateSupplier;
-    }  
-
-    public Deployment getDeployment(String deploymentId) {
-        DeploymentMetadata metadata = clusterStateSupplier.get().metadata().custom(DeploymentMetadata.TYPE);  
-        if (metadata == null) {
-            return null;
-        }  
-        return metadata.getDeployments().get(deploymentId);
-    }
-
-    public Map<String, Deployment> getAllDeployments() {
-        DeploymentMetadata metadata = clusterStateSupplier.get().metadata().custom(DeploymentMetadata.TYPE);
-        if (metadata == null) {  
-            return Collections.emptyMap();
-        }
-        return metadata.getDeployments();  
-    }
-
-    /**  
-     * Returns deployment states for all nodes that are part of any active deployment.
-     * Used by {@link org.opensearch.cluster.routing.OperationRouting} to filter search traffic.
-     */  
-    public static Map<String, DeploymentState> getNodeDeploymentStates(ClusterState clusterState) {
-        DeploymentMetadata metadata = clusterState.metadata().custom(DeploymentMetadata.TYPE);
-        if (metadata == null || metadata.getDeployments().isEmpty()) {  
-            return Collections.emptyMap();
-        }
-        Map<String, DeploymentState> nodeStates = new HashMap<>();  
-        for (Deployment deployment : metadata.getDeployments().values()) {
-            for (DiscoveryNode node : clusterState.nodes()) {
-                if (nodeMatchesAttributes(node, deployment.getNodeAttributes())) {  
-                    nodeStates.put(node.getId(), deployment.getState());
-                }
             }  
+ */  
         }
-        return nodeStates;
-    }  
-
-    /**
-     * Returns the deployment state for a specific node, or null if the node is not part of any deployment.  
-     * Used by {@link DeploymentAllocationDecider}.
-     */
-    public static DeploymentState getNodeDeploymentState(Metadata metadata, DiscoveryNode node) {  
+    }
+            return Collections.emptyMap();
         DeploymentMetadata deploymentMetadata = metadata.custom(DeploymentMetadata.TYPE);
-        if (deploymentMetadata == null) {
-            return null;  
-        }
-        for (Deployment deployment : deploymentMetadata.getDeployments().values()) {
-            if (nodeMatchesAttributes(node, deployment.getNodeAttributes())) {  
-                return deployment.getState();
-            }
-        }  
-        return null;
-    }
-
-    private static boolean nodeMatchesAttributes(DiscoveryNode node, Map<String, String> targetAttributes) {
-        for (Map.Entry<String, String> entry : targetAttributes.entrySet()) {
-            String nodeValue = node.getAttributes().get(entry.getKey());  
-            if (!entry.getValue().equals(nodeValue)) {
-                return false;
             }  
-        }
+    }
+                return deployment.getState();
+            for (DiscoveryNode node : clusterState.nodes()) {
+    /**
+    private static boolean nodeMatchesAttributes(DiscoveryNode node, Map<String, String> targetAttributes) {
+ *
+        DeploymentMetadata metadata = clusterStateSupplier.get().metadata().custom(DeploymentMetadata.TYPE);
+            return null;
+        for (Map.Entry<String, String> entry : targetAttributes.entrySet()) {
+ * @opensearch.internal
+ * The OpenSearch Contributors require contributions made to  
+    /**  
+ * SPDX-License-Identifier: Apache-2.0
+        for (Deployment deployment : deploymentMetadata.getDeployments().values()) {
         return true;
+        return metadata.getDeployments().get(deploymentId);
+    public static Map<String, DeploymentState> getNodeDeploymentStates(ClusterState clusterState) {
+ * this file be licensed under the Apache-2.0 license or a
     }  
+        for (Deployment deployment : metadata.getDeployments().values()) {
+public class DeploymentStateService {  
+     */
+        return metadata.getDeployments();  
+     * Returns the deployment state for a specific node, or null if the node is not part of any deployment.  
+import java.util.Map;
+            String nodeValue = node.getAttributes().get(entry.getKey());  
 }
+    private final Supplier<ClusterState> clusterStateSupplier;
+            if (nodeMatchesAttributes(node, deployment.getNodeAttributes())) {  
+                return false;
+        Map<String, DeploymentState> nodeStates = new HashMap<>();  
+    }
+        return null;
+    public Deployment getDeployment(String deploymentId) {
+        }  

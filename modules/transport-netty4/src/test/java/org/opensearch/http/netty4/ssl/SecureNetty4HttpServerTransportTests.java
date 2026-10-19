@@ -1,534 +1,487 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http.netty4.ssl;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.network.NetworkAddress;
-import org.opensearch.common.network.NetworkService;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.MockBigArrays;
-import org.opensearch.common.util.MockPageCacheRecycler;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.common.unit.ByteSizeValue;  
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.fips.FipsAwareSslProvider;
-import org.opensearch.http.BindHttpException;  
-import org.opensearch.http.CorsHandler;
-import org.opensearch.http.HttpServerTransport;
-import org.opensearch.http.HttpTransportSettings;  
-import org.opensearch.http.NullDispatcher;
-import org.opensearch.http.netty4.Netty4HttpClient;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;  
-import org.opensearch.plugins.TransportExceptionHandler;
-import org.opensearch.rest.BytesRestResponse;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.NettyAllocator;
-import org.opensearch.transport.SharedGroupFactory;
-import org.junit.After;  
-import org.junit.Before;
-
-import javax.net.ssl.KeyManagerFactory;  
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;  
-import java.security.KeyStore;
-import java.util.Collections;
-import java.util.Optional;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;  
-
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBufUtil;  
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerAdapter;  
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.nio.NioEventLoopGroup;  
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.TooLongFrameException;  
-import io.netty.handler.codec.http.DefaultFullHttpRequest;
-import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;  
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
-import io.netty.handler.codec.http.HttpMethod;  
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpUtil;
-import io.netty.handler.codec.http.HttpVersion;  
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;  
-
-import static org.opensearch.core.rest.RestStatus.BAD_REQUEST;
-import static org.opensearch.core.rest.RestStatus.OK;  
-import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN;
-import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ENABLED;
-import static org.opensearch.http.TestDispatcherBuilder.dispatcherBuilderWithDefaults;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.hamcrest.Matchers.is;
-
-/**  
- * Tests for the {@link SecureNetty4HttpServerTransport} class.
- */
-public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {  
-
-    private static final char[] PASSWORD = "password".toCharArray();
-
-    // Cached contexts to avoid repeated keystore loading and SSL context creation
-    // (especially slow in FIPS mode with BCFKS).
-    private static volatile SslContext cachedServerSslContext;  
-
-    private static final FipsAwareSslProvider<SslContext> serverSslContextProvider = (
-        String keyStoreType,  
-        String fileExtension,
-        String jcaProvider,
-        String jsseProvider) -> {  
-        if (cachedServerSslContext == null) {
-            synchronized (SecureNetty4HttpServerTransportTests.class) {
-                if (cachedServerSslContext == null) {  
-                    try {
-                        final KeyStore keyStore = KeyStore.getInstance(keyStoreType, jcaProvider);
-
-                        try (
-                            var in = SecureNetty4HttpServerTransportTests.class.getResourceAsStream(
-                                "/netty4-server-keystore" + fileExtension  
-                            )
-                        ) {
-                            keyStore.load(in, PASSWORD);  
-                        }
-
-                        final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(  
-                            KeyManagerFactory.getDefaultAlgorithm(),
-                            jsseProvider
-                        );  
-                        keyManagerFactory.init(keyStore, PASSWORD);
-
-                        cachedServerSslContext = SslContextBuilder.forServer(keyManagerFactory)  
-                            .trustManager(InsecureTrustManagerFactory.INSTANCE)
-                            .build();
-                    } catch (Exception ex) {  
-                        throw new RuntimeException(ex);
-                    }
                 }  
-            }
-        }
-        return cachedServerSslContext;  
-    };
-
-    private NetworkService networkService;  
-    private ThreadPool threadPool;
-    private MockBigArrays bigArrays;
-    private ClusterSettings clusterSettings;  
-    private SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider;
-
-    @Before  
-    public void setup() {
-        networkService = new NetworkService(Collections.emptyList());
-        threadPool = new TestThreadPool("test");  
-        bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
-        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-
-        secureHttpTransportSettingsProvider = new SecureHttpTransportSettingsProvider() {
-            @Override
-            public Optional<TransportExceptionHandler> buildHttpServerExceptionHandler(Settings settings, HttpServerTransport transport) {  
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional<SSLEngine> buildSecureHttpServerEngine(Settings settings, HttpServerTransport transport) throws SSLException {
-                return Optional.of(serverSslContextProvider.create().newEngine(NettyAllocator.getAllocator()));  
-            }
-        };
-    }  
-
-    @After
-    public void shutdown() {  
-        if (threadPool != null) {
-            threadPool.shutdownNow();
-        }  
-        threadPool = null;
-        networkService = null;
-        bigArrays = null;  
         clusterSettings = null;
-    }
-
-    /**
-     * Test that {@link SecureNetty4HttpServerTransport} supports the "Expect: 100-continue" HTTP header
-     *  
-     * @throws InterruptedException if the client communication with the server is interrupted
-     */
-    public void testExpectContinueHeader() throws InterruptedException {  
-        final Settings settings = createSettings();
-        final int contentLength = randomIntBetween(1, HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH.get(settings).bytesAsInt());
-        runExpectHeaderTest(settings, HttpHeaderValues.CONTINUE.toString(), contentLength, HttpResponseStatus.CONTINUE);  
-    }
-
-    /**  
-     * Test that {@link SecureNetty4HttpServerTransport} responds to a
-     * 100-continue expectation with too large a content-length
-     * with a 413 status.  
-     *
-     * @throws InterruptedException if the client communication with the server is interrupted
-     */  
-    public void testExpectContinueHeaderContentLengthTooLong() throws InterruptedException {
-        final String key = HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH.getKey();
-        final int maxContentLength = randomIntBetween(1, 104857600);  
-        final Settings settings = createBuilderWithPort().put(key, maxContentLength + "b").build();
-        final int contentLength = randomIntBetween(maxContentLength + 1, Integer.MAX_VALUE);
-        runExpectHeaderTest(settings, HttpHeaderValues.CONTINUE.toString(), contentLength, HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE);  
-    }
-
-    /**  
-     * Test that {@link SecureNetty4HttpServerTransport} responds to an unsupported expectation with a 417 status.
-     *
-     * @throws InterruptedException if the client communication with the server is interrupted  
-     */
-    public void testExpectUnsupportedExpectation() throws InterruptedException {
-        Settings settings = createSettings();  
-        runExpectHeaderTest(settings, "chocolate=yummy", 0, HttpResponseStatus.EXPECTATION_FAILED);
-    }
-
-    private void runExpectHeaderTest(
-        final Settings settings,
-        final String expectation,  
-        final int contentLength,
-        final HttpResponseStatus expectedStatus
-    ) throws InterruptedException {  
-        HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().withDispatchRequest(
-            (request, channel, threadContext) -> channel.sendResponse(
-                new BytesRestResponse(OK, BytesRestResponse.TEXT_CONTENT_TYPE, new BytesArray("done"))  
-            )
-        ).build();
-        try (  
-            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
-                settings,
-                networkService,  
-                bigArrays,
-                threadPool,
-                xContentRegistry(),  
-                dispatcher,
-                clusterSettings,
-                new SharedGroupFactory(settings),  
-                secureHttpTransportSettingsProvider,
-                NoopTracer.INSTANCE
-            )  
-        ) {
-            transport.start();
-            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());  
-            try (Netty4HttpClient client = Netty4HttpClient.https()) {
-                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
-                request.headers().set(HttpHeaderNames.EXPECT, expectation);  
-                HttpUtil.setContentLength(request, contentLength);
-
-                final FullHttpResponse response = client.send(remoteAddress.address(), request);  
-                try {
-                    assertThat(response.status(), equalTo(expectedStatus));
-                    if (expectedStatus.equals(HttpResponseStatus.CONTINUE)) {  
-                        final FullHttpRequest continuationRequest = new DefaultFullHttpRequest(
-                            HttpVersion.HTTP_1_1,
-                            HttpMethod.POST,  
-                            "/",
-                            Unpooled.EMPTY_BUFFER
-                        );  
-                        final FullHttpResponse continuationResponse = client.send(remoteAddress.address(), continuationRequest);
-                        try {
-                            assertThat(continuationResponse.status(), is(HttpResponseStatus.OK));  
-                            assertThat(
-                                new String(ByteBufUtil.getBytes(continuationResponse.content()), StandardCharsets.UTF_8),
-                                is("done")  
-                            );
-                        } finally {
-                            continuationResponse.release();  
-                        }
-                    }
-                } finally {  
-                    response.release();
-                }
-            }  
-        }
-    }
-
-    public void testBindUnavailableAddress() {
-        Settings initialSettings = createSettings();
-        try (  
-            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
-                initialSettings,
-                networkService,  
-                bigArrays,
-                threadPool,
-                xContentRegistry(),  
-                new NullDispatcher(),
-                clusterSettings,
-                new SharedGroupFactory(Settings.EMPTY),  
-                secureHttpTransportSettingsProvider,
-                NoopTracer.INSTANCE
-            )  
-        ) {
-            transport.start();
-            TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());  
-            Settings settings = Settings.builder()
-                .put("http.port", remoteAddress.getPort())
-                .put("network.host", remoteAddress.getAddress())  
-                .build();
+                    response.release();  
+            }
+import java.util.concurrent.atomic.AtomicReference;  
+            .build();  
+            ChannelFuture connect = clientBootstrap.connect(remoteAddress.address());  
             try (
-                SecureNetty4HttpServerTransport otherTransport = new SecureNetty4HttpServerTransport(  
-                    settings,
-                    networkService,
-                    bigArrays,  
-                    threadPool,
-                    xContentRegistry(),
-                    new NullDispatcher(),  
-                    clusterSettings,
-                    new SharedGroupFactory(settings),
-                    secureHttpTransportSettingsProvider,  
-                    NoopTracer.INSTANCE
-                )
-            ) {  
-                BindHttpException bindHttpException = expectThrows(BindHttpException.class, otherTransport::start);
-                assertEquals("Failed to bind to " + NetworkAddress.format(remoteAddress.address()), bindHttpException.getMessage());
-            }  
-        }
-    }
-
-    public void testBadRequest() throws InterruptedException {
-        final AtomicReference<Throwable> causeReference = new AtomicReference<>();
-        final HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().withDispatchBadRequest(  
-            (channel, threadContext, cause) -> {
-                causeReference.set(cause);
-                try {  
-                    final OpenSearchException e = new OpenSearchException("you sent a bad request and you should feel bad");
-                    channel.sendResponse(new BytesRestResponse(channel, BAD_REQUEST, e));
-                } catch (final IOException e) {  
-                    throw new AssertionError(e);
-                }
-            }  
-        ).build();
-        final Settings settings;
-        final int maxInitialLineLength;  
-        final Setting<ByteSizeValue> httpMaxInitialLineLengthSetting = HttpTransportSettings.SETTING_HTTP_MAX_INITIAL_LINE_LENGTH;
-        if (randomBoolean()) {
-            maxInitialLineLength = httpMaxInitialLineLengthSetting.getDefault(Settings.EMPTY).bytesAsInt();  
-            settings = createSettings();
-        } else {
-            maxInitialLineLength = randomIntBetween(1, 8192);  
-            settings = createBuilderWithPort().put(httpMaxInitialLineLengthSetting.getKey(), maxInitialLineLength + "b").build();
-        }
-
+                threadPool,
         try (
-            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
-                settings,  
-                networkService,
-                bigArrays,
-                threadPool,  
+                if (cachedServerSslContext == null) {  
+import io.netty.handler.codec.http.FullHttpRequest;
                 xContentRegistry(),
-                dispatcher,
-                clusterSettings,  
-                new SharedGroupFactory(settings),
+                            "/",
+ * The OpenSearch Contributors require contributions made to  
+                    response.release();
+        return cachedServerSslContext;  
+            try (Netty4HttpClient client = Netty4HttpClient.https()) {
                 secureHttpTransportSettingsProvider,
-                NoopTracer.INSTANCE  
-            )
-        ) {
+    public void testLargeCompressedResponse() throws InterruptedException {  
+import io.netty.handler.codec.TooLongFrameException;  
+        }
+        final String key = HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH.getKey();
+        HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().build();
+                    assertThat(response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN), equalTo("test-cors.org"));
+     *
+    public void setup() {
+        secureHttpTransportSettingsProvider = new SecureHttpTransportSettingsProvider() {
+import javax.net.ssl.KeyManagerFactory;  
+                causeReference.set(cause);
+import io.netty.handler.codec.http.FullHttpResponse;  
+    private NetworkService networkService;  
+                    networkService,
+                try {  
+     */
+                NoopTracer.INSTANCE
+                try {
+                } finally {
+ */
+                    assertThat(
+    }
+                bigArrays,
+import static org.opensearch.http.TestDispatcherBuilder.dispatcherBuilderWithDefaults;  
+                settings,  
+                            assertThat(continuationResponse.status(), is(HttpResponseStatus.OK));  
+import org.opensearch.http.NullDispatcher;
+import io.netty.channel.nio.NioEventLoopGroup;  
+                }
+        }
+import org.opensearch.http.HttpTransportSettings;  
+            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());  
+    /**  
+                } finally {
+                        containsString("you sent a bad request and you should feel bad")  
+                    final OpenSearchException e = new OpenSearchException("you sent a bad request and you should feel bad");
+                    byte[] bytes = new byte[response.content().readableBytes()];
+import java.nio.charset.StandardCharsets;  
+        ) {  
+            }  
+ */  
+public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {  
+                    protected void initChannel(SocketChannel ch) {
+                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, url);
+        String fileExtension,
+import org.opensearch.common.settings.ClusterSettings;
+import io.netty.channel.ChannelHandlerAdapter;  
+            (channel, threadContext, cause) -> {
+import static org.hamcrest.Matchers.instanceOf;  
+                    threadPool,
+import io.netty.channel.socket.nio.NioSocketChannel;
+        assertNotNull(causeReference.get());
+                        try {
+    private static final FipsAwareSslProvider<SslContext> serverSslContextProvider = (
+            }
+    }
+            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
+    }
             transport.start();  
             final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());
-
-            try (Netty4HttpClient client = Netty4HttpClient.https()) {  
-                final String url = "/" + new String(new byte[maxInitialLineLength], Charset.forName("UTF-8"));
-                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, url);
-
-                final FullHttpResponse response = client.send(remoteAddress.address(), request);
-                try {
-                    assertThat(response.status(), equalTo(HttpResponseStatus.BAD_REQUEST));  
-                    assertThat(
-                        new String(response.content().array(), Charset.forName("UTF-8")),
-                        containsString("you sent a bad request and you should feel bad")  
-                    );
-                } finally {
-                    response.release();  
-                }
-            }
-        }  
-
-        assertNotNull(causeReference.get());
-        assertThat(causeReference.get(), instanceOf(TooLongFrameException.class));  
-    }
-
-    public void testLargeCompressedResponse() throws InterruptedException {  
-        final Settings settings = createSettings();
-        final String responseString = randomAlphaOfLength(4 * 1024 * 1024);
-        final String url = "/thing";  
+                xContentRegistry(),
+            transport.start();
+        runExpectHeaderTest(settings, "chocolate=yummy", 0, HttpResponseStatus.EXPECTATION_FAILED);
+     */
+    public void testBindUnavailableAddress() {
         final HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().withDispatchRequest(
-            (request, channel, threadContext) -> {
-                if (url.equals(request.uri())) {  
-                    channel.sendResponse(new BytesRestResponse(OK, responseString));
-                } else {
-                    logger.error("--> Unexpected successful uri [{}]", request.uri());  
-                    throw new AssertionError();
-                }
-            }  
-        ).build();
-        try (
-            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
-                settings,
-                networkService,
-                bigArrays,  
-                threadPool,
-                xContentRegistry(),
-                dispatcher,  
-                clusterSettings,
-                new SharedGroupFactory(settings),
-                secureHttpTransportSettingsProvider,  
-                NoopTracer.INSTANCE
-            )
-        ) {  
-            transport.start();
-            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());
-
-            try (Netty4HttpClient client = Netty4HttpClient.https()) {
-                DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, url);
-                request.headers().add(HttpHeaderNames.ACCEPT_ENCODING, randomFrom("deflate", "gzip"));  
-                final FullHttpResponse response = client.send(remoteAddress.address(), request);
-                try {
-                    assertThat(response.status(), equalTo(HttpResponseStatus.OK));  
-                    byte[] bytes = new byte[response.content().readableBytes()];
-                    response.content().readBytes(bytes);
-                    assertThat(new String(bytes, StandardCharsets.UTF_8), equalTo(responseString));  
-                } finally {
-                    response.release();
-                }  
-            }
+import io.netty.channel.socket.SocketChannel;
+                networkService,  
         }
-    }  
-
-    public void testCorsRequest() throws InterruptedException {
-        final HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().build();  
-        final Settings settings = createBuilderWithPort().put(SETTING_CORS_ENABLED.getKey(), true)
-            .put(SETTING_CORS_ALLOW_ORIGIN.getKey(), "test-cors.org")
-            .build();  
-
-        try (
-            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
-                settings,
-                networkService,
-                bigArrays,  
-                threadPool,
-                xContentRegistry(),
-                dispatcher,  
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                new SharedGroupFactory(settings),
-                secureHttpTransportSettingsProvider,  
+import io.netty.channel.ChannelOption;
+                                is("done")  
+import org.opensearch.test.OpenSearchTestCase;
+    private SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider;
                 NoopTracer.INSTANCE
-            )
-        ) {  
-            transport.start();
-            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());
-
-            // Test pre-flight request
-            try (Netty4HttpClient client = Netty4HttpClient.https()) {
-                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.OPTIONS, "/");  
-                request.headers().add(CorsHandler.ORIGIN, "test-cors.org");
-                request.headers().add(CorsHandler.ACCESS_CONTROL_REQUEST_METHOD, "POST");
-
-                final FullHttpResponse response = client.send(remoteAddress.address(), request);
-                try {
-                    assertThat(response.status(), equalTo(HttpResponseStatus.OK));  
-                    assertThat(response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN), equalTo("test-cors.org"));
-                    assertThat(response.headers().get(CorsHandler.VARY), equalTo(CorsHandler.ORIGIN));
-                    assertTrue(response.headers().contains(CorsHandler.DATE));  
-                } finally {
-                    response.release();
-                }  
-            }
-
-            // Test short-circuited request  
-            try (Netty4HttpClient client = Netty4HttpClient.https()) {
-                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
                 request.headers().add(CorsHandler.ORIGIN, "google.com");  
-
-                final FullHttpResponse response = client.send(remoteAddress.address(), request);
-                try {  
-                    assertThat(response.status(), equalTo(HttpResponseStatus.FORBIDDEN));
-                } finally {
-                    response.release();  
-                }
-            }
-        }  
-    }
-
-    public void testReadTimeout() throws Exception {  
-        HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().build();
-        Settings settings = createBuilderWithPort().put(
-            HttpTransportSettings.SETTING_HTTP_READ_TIMEOUT.getKey(),  
-            new TimeValue(randomIntBetween(100, 300))
-        ).build();
-
-        NioEventLoopGroup group = new NioEventLoopGroup();
-        try (
+            }  
+                    try {
+        assertThat(causeReference.get(), instanceOf(TooLongFrameException.class));  
+import org.opensearch.common.network.NetworkAddress;
+import org.opensearch.transport.NettyAllocator;
             SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
-                settings,
-                networkService,
-                bigArrays,  
-                threadPool,
-                xContentRegistry(),
-                dispatcher,  
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                new SharedGroupFactory(settings),
-                secureHttpTransportSettingsProvider,  
-                NoopTracer.INSTANCE
+        final int maxContentLength = randomIntBetween(1, 104857600);  
+                        } finally {
+            @Override
+                try {
+    }
+                xContentRegistry(),  
             )
-        ) {  
-            transport.start();
-            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());
-
-            CountDownLatch channelClosedLatch = new CountDownLatch(1);
-
-            Bootstrap clientBootstrap = new Bootstrap().option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())  
-                .channel(NioSocketChannel.class)
-                .handler(new ChannelInitializer<SocketChannel>() {
-
+                dispatcher,  
+                dispatcher,  
+                BindHttpException bindHttpException = expectThrows(BindHttpException.class, otherTransport::start);
+    @After
+                clusterSettings,  
+import io.netty.handler.codec.http.HttpUtil;
+            // Test short-circuited request  
+     * 100-continue expectation with too large a content-length
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
+        final Settings settings = createBuilderWithPort().put(key, maxContentLength + "b").build();
+                }
+        }  
+import javax.net.ssl.SSLEngine;
+    @Before  
+    /**
+                    logger.error("--> Unexpected successful uri [{}]", request.uri());  
+            try (Netty4HttpClient client = Netty4HttpClient.https()) {
+                        );  
+                }  
+                NoopTracer.INSTANCE  
                     @Override
-                    protected void initChannel(SocketChannel ch) {
-                        ch.pipeline().addLast(new ChannelHandlerAdapter() {  
-                        });
-
-                    }  
-                })
+    }
+                        throw new RuntimeException(ex);
+            transport.start();
+            .put(SETTING_CORS_ALLOW_ORIGIN.getKey(), "test-cors.org")
+                .put("network.host", remoteAddress.getAddress())  
+            transport.start();
+        final HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().withDispatchBadRequest(  
+        final Settings settings,
+import org.opensearch.common.util.MockPageCacheRecycler;  
+                            );
+import java.util.concurrent.CountDownLatch;
+    private ThreadPool threadPool;
+                    settings,
+        ) {
+import io.netty.handler.codec.http.HttpResponseStatus;
                 .group(group);
-            ChannelFuture connect = clientBootstrap.connect(remoteAddress.address());  
-            connect.channel().closeFuture().addListener(future -> channelClosedLatch.countDown());
-
-            assertTrue("Channel should be closed due to read timeout", channelClosedLatch.await(1, TimeUnit.MINUTES));  
-
+import org.opensearch.plugins.TransportExceptionHandler;
+            }
+                    }
+    }
+    private ClusterSettings clusterSettings;  
+                xContentRegistry(),
+                }
+        NioEventLoopGroup group = new NioEventLoopGroup();
+ *
+                new SharedGroupFactory(Settings.EMPTY),  
+            }
+                new SharedGroupFactory(settings),
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+                secureHttpTransportSettingsProvider,  
+     */  
+        final AtomicReference<Throwable> causeReference = new AtomicReference<>();
+                } finally {
+    public void testBadRequest() throws InterruptedException {
+        ) {
+                    response.content().readBytes(bytes);
+                threadPool,  
+     * @throws InterruptedException if the client communication with the server is interrupted  
+                    assertThat(response.status(), equalTo(HttpResponseStatus.OK));  
+                            )
+                HttpUtil.setContentLength(request, contentLength);
+            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
+        final String expectation,  
+                .handler(new ChannelInitializer<SocketChannel>() {
+            maxInitialLineLength = httpMaxInitialLineLengthSetting.getDefault(Settings.EMPTY).bytesAsInt();  
+        runExpectHeaderTest(settings, HttpHeaderValues.CONTINUE.toString(), contentLength, HttpResponseStatus.CONTINUE);  
+                    clusterSettings,
+            try (Netty4HttpClient client = Netty4HttpClient.https()) {
+                dispatcher,
+                    );
+        try (
+                    response.release();
+            // Test pre-flight request
+                                new String(ByteBufUtil.getBytes(continuationResponse.content()), StandardCharsets.UTF_8),
+            HttpTransportSettings.SETTING_HTTP_READ_TIMEOUT.getKey(),  
+    private static volatile SslContext cachedServerSslContext;  
+    public void testExpectContinueHeader() throws InterruptedException {  
+package org.opensearch.http.netty4.ssl;
+            settings = createBuilderWithPort().put(httpMaxInitialLineLengthSetting.getKey(), maxInitialLineLength + "b").build();
+                dispatcher,
+                new SharedGroupFactory(settings),
+                new SharedGroupFactory(settings),  
+import static org.hamcrest.Matchers.equalTo;
+        ).build();
+                    }  
+import org.opensearch.telemetry.tracing.noop.NoopTracer;  
+                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+    private void runExpectHeaderTest(
+                settings,
         } finally {
-            group.shutdownGracefully().await();  
-        }
+import java.util.concurrent.TimeUnit;
+                if (url.equals(request.uri())) {  
+                            keyStore.load(in, PASSWORD);  
+     * @throws InterruptedException if the client communication with the server is interrupted
+                            var in = SecureNetty4HttpServerTransportTests.class.getResourceAsStream(
+            }
+import io.netty.handler.codec.http.HttpMethod;  
+                            .build();
+                NoopTracer.INSTANCE
     }
-
-    private Settings createSettings() {
-        return createBuilderWithPort().build();
-    }  
-
-    private Settings.Builder createBuilderWithPort() {
+                bigArrays,  
+        ).build();
+        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+                secureHttpTransportSettingsProvider,  
+    public void testCorsRequest() throws InterruptedException {
+                    response.release();  
+        try (
+                request.headers().add(HttpHeaderNames.ACCEPT_ENCODING, randomFrom("deflate", "gzip"));  
+        ) {  
+    };
+                    bigArrays,  
+     * Test that {@link SecureNetty4HttpServerTransport} supports the "Expect: 100-continue" HTTP header
+    /**  
+import org.opensearch.core.common.transport.TransportAddress;
+        if (randomBoolean()) {
+                        try (
+        final HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().build();  
+                    secureHttpTransportSettingsProvider,  
+                request.headers().add(CorsHandler.ACCESS_CONTROL_REQUEST_METHOD, "POST");
+                clusterSettings,
+import static org.hamcrest.Matchers.containsString;
+                            Unpooled.EMPTY_BUFFER
+                xContentRegistry(),
+        String keyStoreType,  
+        final Settings settings = createBuilderWithPort().put(SETTING_CORS_ENABLED.getKey(), true)
+                SecureNetty4HttpServerTransport otherTransport = new SecureNetty4HttpServerTransport(  
+import java.util.Collections;
+import org.opensearch.fips.FipsAwareSslProvider;
+        ) {
+            )
+import org.opensearch.http.netty4.Netty4HttpClient;
+ * this file be licensed under the Apache-2.0 license or a
+                        final FullHttpRequest continuationRequest = new DefaultFullHttpRequest(
+                bigArrays,
+    public void testExpectContinueHeaderContentLengthTooLong() throws InterruptedException {
+        final Settings settings = createSettings();
+                final FullHttpResponse response = client.send(remoteAddress.address(), request);
+                networkService,
+                settings,
+import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN;
+            CountDownLatch channelClosedLatch = new CountDownLatch(1);
+        try (
+                new SharedGroupFactory(settings),
+        bigArrays = null;  
+            try (Netty4HttpClient client = Netty4HttpClient.https()) {
+                new NullDispatcher(),
+import org.opensearch.http.HttpServerTransport;
+            )
+            public Optional<TransportExceptionHandler> buildHttpServerExceptionHandler(Settings settings, HttpServerTransport transport) {  
+    // (especially slow in FIPS mode with BCFKS).
+import org.junit.Before;
         return Settings.builder().put(HttpTransportSettings.SETTING_HTTP_PORT.getKey(), getPortRange());  
+import io.netty.handler.ssl.SslContextBuilder;
+        Settings initialSettings = createSettings();
+            new TimeValue(randomIntBetween(100, 300))
+import io.netty.channel.ChannelFuture;
+        final int contentLength = randomIntBetween(1, HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH.get(settings).bytesAsInt());
+                networkService,
+                .put("http.port", remoteAddress.getPort())
+                }
+import org.opensearch.transport.SharedGroupFactory;
+import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ENABLED;
+    }  
+import java.io.IOException;
+ * Tests for the {@link SecureNetty4HttpServerTransport} class.
+            connect.channel().closeFuture().addListener(future -> channelClosedLatch.countDown());
+                settings,
+        threadPool = new TestThreadPool("test");  
+        } else {
+                            assertThat(
+                final FullHttpResponse response = client.send(remoteAddress.address(), request);
+            settings = createSettings();
+                settings,
+        Settings settings = createBuilderWithPort().put(
+import static org.opensearch.core.rest.RestStatus.OK;  
+                        final KeyStore keyStore = KeyStore.getInstance(keyStoreType, jcaProvider);
+                        ) {
+     * @throws InterruptedException if the client communication with the server is interrupted
+                try {  
+        String jsseProvider) -> {  
+                bigArrays,  
+import org.opensearch.threadpool.TestThreadPool;
+                threadPool,
+            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
+import java.security.KeyStore;
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider;  
+import java.util.Optional;  
+                clusterSettings,
+                        });
+                networkService,  
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
+            )  
+                threadPool,
+/*  
+                } else {
+     * Test that {@link SecureNetty4HttpServerTransport} responds to an unsupported expectation with a 417 status.
+                    assertThat(response.status(), equalTo(HttpResponseStatus.OK));  
+                            jsseProvider
+                bigArrays,
+                )
+        ).build();
+                        cachedServerSslContext = SslContextBuilder.forServer(keyManagerFactory)  
+            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());
+            }
+                        );  
+        }  
+                initialSettings,
+                    if (expectedStatus.equals(HttpResponseStatus.CONTINUE)) {  
+                    new SharedGroupFactory(settings),
+            synchronized (SecureNetty4HttpServerTransportTests.class) {
+                })
+import io.netty.bootstrap.Bootstrap;
+                } finally {
+            ) {  
+                .build();
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;  
+            TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());  
+        final int contentLength,
+        final HttpResponseStatus expectedStatus
+                xContentRegistry(),  
+                request.headers().add(CorsHandler.ORIGIN, "test-cors.org");
+import io.netty.handler.codec.http.HttpVersion;  
+                            KeyManagerFactory.getDefaultAlgorithm(),
+                        new String(response.content().array(), Charset.forName("UTF-8")),
+            }  
+                final FullHttpResponse response = client.send(remoteAddress.address(), request);  
+import java.nio.charset.Charset;
+import io.netty.buffer.ByteBufUtil;  
+                            .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                    assertThat(response.headers().get(CorsHandler.VARY), equalTo(CorsHandler.ORIGIN));
+        }
+        networkService = null;
+        bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
+                    NoopTracer.INSTANCE
+            group.shutdownGracefully().await();  
+                    assertTrue(response.headers().contains(CorsHandler.DATE));  
+            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());
+import javax.net.ssl.SSLException;
+                final FullHttpResponse response = client.send(remoteAddress.address(), request);
+import io.netty.handler.codec.http.HttpHeaderNames;
+    public void shutdown() {  
     }
+                try {
+ * SPDX-License-Identifier: Apache-2.0
 }
+import static org.opensearch.core.rest.RestStatus.BAD_REQUEST;
+                secureHttpTransportSettingsProvider,  
+import io.netty.buffer.Unpooled;
+import org.opensearch.threadpool.ThreadPool;  
+                            continuationResponse.release();  
+                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
+                final FullHttpResponse response = client.send(remoteAddress.address(), request);
+                networkService,
+            Bootstrap clientBootstrap = new Bootstrap().option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())  
+import org.opensearch.rest.BytesRestResponse;
+            )  
+                        final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(  
+        try (  
+    ) throws InterruptedException {  
+            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
+                }
+     *
+                            HttpVersion.HTTP_1_1,
+import org.opensearch.http.BindHttpException;  
+        HttpServerTransport.Dispatcher dispatcher = dispatcherBuilderWithDefaults().withDispatchRequest(
+import static org.hamcrest.Matchers.is;
+                        keyManagerFactory.init(keyStore, PASSWORD);
+                    } catch (Exception ex) {  
+                .channel(NioSocketChannel.class)
+                    throw new AssertionError();
+            Settings settings = Settings.builder()
+import org.opensearch.common.util.MockBigArrays;
+                clusterSettings,
+                } finally {  
+import org.opensearch.core.common.unit.ByteSizeValue;  
+                            HttpMethod.POST,  
+            }  
+                threadPool,
+        final int contentLength = randomIntBetween(maxContentLength + 1, Integer.MAX_VALUE);
+                secureHttpTransportSettingsProvider,
+                        ch.pipeline().addLast(new ChannelHandlerAdapter() {  
+        String jcaProvider,
+        }
+import io.netty.handler.codec.http.HttpHeaderValues;
+            (request, channel, threadContext) -> channel.sendResponse(
+        final Setting<ByteSizeValue> httpMaxInitialLineLengthSetting = HttpTransportSettings.SETTING_HTTP_MAX_INITIAL_LINE_LENGTH;
+            transport.start();
+                bigArrays,  
+                new SharedGroupFactory(settings),
+        threadPool = null;
+     * with a 413 status.  
+                final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.OPTIONS, "/");  
+    public void testExpectUnsupportedExpectation() throws InterruptedException {
+            SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
+            final TransportAddress remoteAddress = randomFrom(transport.boundAddress().boundAddresses());
+import org.opensearch.http.CorsHandler;
+     * Test that {@link SecureNetty4HttpServerTransport} responds to a
+                return Optional.of(serverSslContextProvider.create().newEngine(NettyAllocator.getAllocator()));  
+import org.opensearch.core.common.bytes.BytesArray;
+                }  
+    }  
+    private static final char[] PASSWORD = "password".toCharArray();
+        final int maxInitialLineLength;  
+                DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, url);
+            }
+/**  
+    }
+ * compatible open source license.
+                final String url = "/" + new String(new byte[maxInitialLineLength], Charset.forName("UTF-8"));
+            maxInitialLineLength = randomIntBetween(1, 8192);  
+                try {
+                assertEquals("Failed to bind to " + NetworkAddress.format(remoteAddress.address()), bindHttpException.getMessage());
+        Settings settings = createSettings();  
+     *  
+                dispatcher,  
+        final String url = "/thing";  
+                request.headers().set(HttpHeaderNames.EXPECT, expectation);  
+                    response.release();
+    // Cached contexts to avoid repeated keystore loading and SSL context creation
+                    assertThat(response.status(), equalTo(expectedStatus));
+        if (cachedServerSslContext == null) {
+                    throw new AssertionError(e);
+                    xContentRegistry(),
+                    assertThat(new String(bytes, StandardCharsets.UTF_8), equalTo(responseString));  
+                NoopTracer.INSTANCE
+                    new NullDispatcher(),  
+                threadPool,
+    }
+        };
+        final Settings settings;
+            transport.start();
+import org.opensearch.common.settings.Settings;  
+    public void testReadTimeout() throws Exception {  
+                } catch (final IOException e) {  
+import org.opensearch.common.settings.Setting;
+                    channel.sendResponse(new BytesRestResponse(channel, BAD_REQUEST, e));
+    private Settings.Builder createBuilderWithPort() {
+            public Optional<SSLEngine> buildSecureHttpServerEngine(Settings settings, HttpServerTransport transport) throws SSLException {
+        ).build();
+import org.opensearch.OpenSearchException;
+import org.opensearch.common.network.NetworkService;  
+            try (Netty4HttpClient client = Netty4HttpClient.https()) {  
+                return Optional.empty();
+        }
+        networkService = new NetworkService(Collections.emptyList());
+            @Override
+    private Settings createSettings() {
+                secureHttpTransportSettingsProvider,
+            )
+            threadPool.shutdownNow();
+        if (threadPool != null) {
+            assertTrue("Channel should be closed due to read timeout", channelClosedLatch.await(1, TimeUnit.MINUTES));  
+                NoopTracer.INSTANCE
+        try (  
+                new BytesRestResponse(OK, BytesRestResponse.TEXT_CONTENT_TYPE, new BytesArray("done"))  
+import io.netty.handler.ssl.SslContext;
+        final String responseString = randomAlphaOfLength(4 * 1024 * 1024);
+                    channel.sendResponse(new BytesRestResponse(OK, responseString));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
+                        }
+                        }
+                    assertThat(response.status(), equalTo(HttpResponseStatus.FORBIDDEN));
+                    assertThat(response.status(), equalTo(HttpResponseStatus.BAD_REQUEST));  
+import org.opensearch.common.unit.TimeValue;
+        return createBuilderWithPort().build();
+        }  
+    }  
+        runExpectHeaderTest(settings, HttpHeaderValues.CONTINUE.toString(), contentLength, HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE);  
+                    }
+                                "/netty4-server-keystore" + fileExtension  
+                networkService,
+            (request, channel, threadContext) -> {
+    private MockBigArrays bigArrays;
+        final Settings settings = createSettings();
+            )
+                        final FullHttpResponse continuationResponse = client.send(remoteAddress.address(), continuationRequest);
+        ) {  
+import org.junit.After;  
+import io.netty.channel.ChannelInitializer;

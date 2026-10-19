@@ -1,87 +1,79 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.painless.action;
-
-import org.opensearch.core.common.io.stream.Writeable;  
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractSerializingTestCase;
-
-import java.io.IOException;
-
-public class PainlessExecuteResponseTests extends AbstractSerializingTestCase<PainlessExecuteAction.Response> {  
-
-    @Override
-    protected Writeable.Reader<PainlessExecuteAction.Response> instanceReader() {  
-        return PainlessExecuteAction.Response::new;
-    }
-
-    @Override
-    protected PainlessExecuteAction.Response createTestInstance() {
-        Object result;  
-        switch (randomIntBetween(0, 2)) {
+ * KIND, either express or implied.  See the License for the
+ *
             case 0:
-                result = randomAlphaOfLength(10);  
-                break;
-            case 1:
-                result = randomBoolean();  
-                break;
-            case 2:
-                result = randomDoubleBetween(-10, 10, true);  
-                break;
-            default:
-                throw new IllegalStateException("invalid branch");  
-        }
-        return new PainlessExecuteAction.Response(result);
-    }  
-
+ * this file be licensed under the Apache-2.0 license or a
+ * Licensed to Elasticsearch under one or more contributor  
+package org.opensearch.painless.action;
+                result = parser.doubleValue();
+ * ownership. Elasticsearch licenses this file to you under  
+        Object result;  
+                throw new IOException("invalid response");
+import java.io.IOException;
     @Override
-    protected PainlessExecuteAction.Response doParseInstance(XContentParser parser) throws IOException {  
-        parser.nextToken(); // START-OBJECT
-        parser.nextToken(); // FIELD-NAME
-        XContentParser.Token token = parser.nextToken(); // result value  
-        Object result;
+ * Unless required by applicable law or agreed to in writing,
+ * license agreements. See the NOTICE file distributed with
+                break;
+    }
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        switch (randomIntBetween(0, 2)) {
+ * this work for additional information regarding copyright
+                break;
+ * SPDX-License-Identifier: Apache-2.0
+                throw new IllegalStateException("invalid branch");  
+ * under the License.  
+import org.opensearch.test.AbstractSerializingTestCase;
+                result = randomDoubleBetween(-10, 10, true);  
+            case 1:
+/*
+    @Override
+                result = parser.booleanValue();
+    }  
+    protected PainlessExecuteAction.Response createTestInstance() {
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+            case 2:
         switch (token) {
-            case VALUE_STRING:  
-                result = parser.text();
+        XContentParser.Token token = parser.nextToken(); // result value  
+ */
+}
+    protected Writeable.Reader<PainlessExecuteAction.Response> instanceReader() {  
+ */  
+ * compatible open source license.
+ * GitHub history for details.
+    @Override
+        parser.nextToken(); // START-OBJECT
+/*  
+                result = randomAlphaOfLength(10);  
+        return PainlessExecuteAction.Response::new;
                 break;
             case VALUE_BOOLEAN:  
-                result = parser.booleanValue();
                 break;
-            case VALUE_NUMBER:  
-                result = parser.doubleValue();
+            default:
                 break;
-            default:  
-                throw new IOException("invalid response");
+ * Modifications Copyright OpenSearch Contributors. See  
+        return new PainlessExecuteAction.Response(result);
+ *    http://www.apache.org/licenses/LICENSE-2.0
         }
-        return new PainlessExecuteAction.Response(result);  
+            case VALUE_STRING:  
+                break;
+        parser.nextToken(); // FIELD-NAME
+        }
+        Object result;
+            default:  
+ * You may obtain a copy of the License at  
     }
-}
+    protected PainlessExecuteAction.Response doParseInstance(XContentParser parser) throws IOException {  
+ * specific language governing permissions and limitations
+                result = randomBoolean();  
+        return new PainlessExecuteAction.Response(result);  
+ *  
+import org.opensearch.core.common.io.stream.Writeable;  
+ * software distributed under the License is distributed on an
+            case VALUE_NUMBER:  
+                result = parser.text();
+ * The OpenSearch Contributors require contributions made to  
+ * not use this file except in compliance with the License.
+ */
+public class PainlessExecuteResponseTests extends AbstractSerializingTestCase<PainlessExecuteAction.Response> {  

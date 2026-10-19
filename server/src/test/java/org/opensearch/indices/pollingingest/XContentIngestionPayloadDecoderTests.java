@@ -1,57 +1,45 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.pollingingest;
-
-import org.opensearch.index.IngestionPayloadDecodingException;
-import org.opensearch.index.Message;
-import org.opensearch.index.engine.FakeIngestionSource;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.nio.charset.StandardCharsets;  
-import java.util.Collections;
-import java.util.Map;
-
-public class XContentIngestionPayloadDecoderTests extends OpenSearchTestCase {
-
-    public void testValidateAcceptsEmptySettings() {  
-        XContentIngestionPayloadDecoder.Factory.INSTANCE.validate(Collections.emptyMap());
-    }
-
-    public void testValidateRejectsNonEmptySettings() {
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> XContentIngestionPayloadDecoder.Factory.INSTANCE.validate(Map.of("some_key", "some_value"))
-        );
-        assertTrue(e.getMessage().contains("some_key"));  
-    }
-
-    public void testCreateReturnsNewInstanceEachTime() {  
-        XContentIngestionPayloadDecoder.Factory factory = XContentIngestionPayloadDecoder.Factory.INSTANCE;
-        assertNotSame(factory.create(null, 0, Collections.emptyMap()), factory.create(null, 0, Collections.emptyMap()));
     }  
-
-    public void testDecodeValidPayload() {
-        XContentIngestionPayloadDecoder decoder = new XContentIngestionPayloadDecoder();  
-        byte[] payload = "{\"name\":\"alice\",\"age\":30}".getBytes(StandardCharsets.UTF_8);
-        Message<?> message = new FakeIngestionSource.FakeIngestionMessage(payload);
-
-        Map<String, Object> result = decoder.decode(message);
-
-        assertEquals("alice", result.get("name"));  
-        assertEquals(30, result.get("age"));
-    }
-
-    public void testDecodeInvalidPayloadThrows() {
-        XContentIngestionPayloadDecoder decoder = new XContentIngestionPayloadDecoder();
+ *
         byte[] payload = "not a json".getBytes(StandardCharsets.UTF_8);  
-        Message<?> message = new FakeIngestionSource.FakeIngestionMessage(payload);
-
-        expectThrows(IngestionPayloadDecodingException.class, () -> decoder.decode(message));  
+        byte[] payload = "{\"name\":\"alice\",\"age\":30}".getBytes(StandardCharsets.UTF_8);
+import java.nio.charset.StandardCharsets;  
     }
+import org.opensearch.index.Message;
+ */  
+            IllegalArgumentException.class,  
+package org.opensearch.indices.pollingingest;
+        XContentIngestionPayloadDecoder decoder = new XContentIngestionPayloadDecoder();  
+/*  
+    }
+        IllegalArgumentException e = expectThrows(
+        Map<String, Object> result = decoder.decode(message);
+import org.opensearch.index.IngestionPayloadDecodingException;
+    public void testDecodeInvalidPayloadThrows() {
+import java.util.Map;
+    public void testDecodeValidPayload() {
+ * The OpenSearch Contributors require contributions made to  
+    public void testCreateReturnsNewInstanceEachTime() {  
+        Message<?> message = new FakeIngestionSource.FakeIngestionMessage(payload);
+        );
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
 }
+        assertTrue(e.getMessage().contains("some_key"));  
+        XContentIngestionPayloadDecoder.Factory factory = XContentIngestionPayloadDecoder.Factory.INSTANCE;
+    }
+    }
+import org.opensearch.index.engine.FakeIngestionSource;  
+        expectThrows(IngestionPayloadDecodingException.class, () -> decoder.decode(message));  
+        XContentIngestionPayloadDecoder decoder = new XContentIngestionPayloadDecoder();
+            () -> XContentIngestionPayloadDecoder.Factory.INSTANCE.validate(Map.of("some_key", "some_value"))
+        XContentIngestionPayloadDecoder.Factory.INSTANCE.validate(Collections.emptyMap());
+import java.util.Collections;
+ * SPDX-License-Identifier: Apache-2.0
+        assertNotSame(factory.create(null, 0, Collections.emptyMap()), factory.create(null, 0, Collections.emptyMap()));
+    public void testValidateRejectsNonEmptySettings() {
+import org.opensearch.test.OpenSearchTestCase;
+    public void testValidateAcceptsEmptySettings() {  
+        Message<?> message = new FakeIngestionSource.FakeIngestionMessage(payload);
+        assertEquals("alice", result.get("name"));  
+public class XContentIngestionPayloadDecoderTests extends OpenSearchTestCase {
+        assertEquals(30, result.get("age"));

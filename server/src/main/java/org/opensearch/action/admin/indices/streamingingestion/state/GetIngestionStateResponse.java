@@ -1,104 +1,88 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.streamingingestion.state;
-
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.Comparator;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Transport response for retrieving ingestion state.
- *  
- * @opensearch.api
- */
 @PublicApi(since = "3.6.0")  
-public class GetIngestionStateResponse extends BroadcastResponse {
-    private static final String INGESTION_STATE = "ingestion_state";
-    private static final String NEXT_PAGE_TOKEN = "next_page_token";  
-
-    private ShardIngestionState[] shardStates;
-    @Nullable  
-    private String nextPageToken;
-
-    public GetIngestionStateResponse(StreamInput in) throws IOException {  
-        super(in);
-        shardStates = in.readArray(ShardIngestionState::new, ShardIngestionState[]::new);
-        nextPageToken = in.readOptionalString();  
-    }
-
-    public GetIngestionStateResponse(  
-        ShardIngestionState[] shardStates,
-        int totalShards,
-        int successfulShards,  
-        int failedShards,
-        @Nullable String nextPageToken,
-        List<DefaultShardOperationFailedException> shardFailures  
-    ) {
-        super(totalShards, successfulShards, failedShards, shardFailures);
-        this.shardStates = shardStates;  
-        this.nextPageToken = nextPageToken;
-    }
-
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeArray(shardStates);
-        out.writeOptionalString(nextPageToken);
-    }  
-
-    @Override
-    protected void addCustomXContentFields(XContentBuilder builder, Params params) throws IOException {  
-        super.addCustomXContentFields(builder, params);
-        if (Strings.isEmpty(nextPageToken) == false) {
-            builder.field(NEXT_PAGE_TOKEN, nextPageToken);  
-        }
-
-        Map<String, List<ShardIngestionState>> shardStateByIndex = ShardIngestionState.groupShardStateByIndex(shardStates);  
-        builder.startObject(INGESTION_STATE);
-
-        for (Map.Entry<String, List<ShardIngestionState>> indexShardIngestionStateEntry : shardStateByIndex.entrySet()) {  
-            builder.startArray(indexShardIngestionStateEntry.getKey());
-            indexShardIngestionStateEntry.getValue().sort(Comparator.comparingInt(ShardIngestionState::getShardId));
-            for (ShardIngestionState shardIngestionState : indexShardIngestionStateEntry.getValue()) {  
-                shardIngestionState.toXContent(builder, params);
-            }
-            builder.endArray();  
-        }
-
         builder.endObject();  
+import java.util.Comparator;  
+            }
+            builder.field(NEXT_PAGE_TOKEN, nextPageToken);  
+        Map<String, List<ShardIngestionState>> shardStateByIndex = ShardIngestionState.groupShardStateByIndex(shardStates);  
+import java.util.Map;
+import org.opensearch.core.common.io.stream.StreamOutput;
+        super(totalShards, successfulShards, failedShards, shardFailures);
     }
-
-    public ShardIngestionState[] getShardStates() {  
-        return shardStates;
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, false);  
-    }
-
-    public void setNextPageToken(String nextPageToken) {  
+                shardIngestionState.toXContent(builder, params);
+        out.writeArray(shardStates);
+    private static final String INGESTION_STATE = "ingestion_state";
+        this.shardStates = shardStates;  
+        super(in);
+/**
         this.nextPageToken = nextPageToken;
+    ) {
+        int failedShards,
+/*  
+ * @opensearch.api
+        }
     }
-
-    public String getNextPageToken() {
-        return nextPageToken;
+import org.opensearch.core.xcontent.XContentBuilder;  
+        nextPageToken = in.readOptionalString();  
+        @Nullable String nextPageToken,
+ */  
     }  
+            for (ShardIngestionState shardIngestionState : indexShardIngestionStateEntry.getValue()) {  
+ *
+        int successfulShards,  
+    public GetIngestionStateResponse(  
+    private static final String NEXT_PAGE_TOKEN = "next_page_token";  
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.action.admin.indices.streamingingestion.state;
+        if (Strings.isEmpty(nextPageToken) == false) {
+        out.writeOptionalString(nextPageToken);
+import org.opensearch.core.common.Strings;
+    }
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, false);  
+    @Override
+        this.nextPageToken = nextPageToken;
+        return nextPageToken;
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+    }  
+import java.io.IOException;
+ */
+    }
+        }
+import org.opensearch.common.annotation.PublicApi;  
+    @Nullable  
+            builder.startArray(indexShardIngestionStateEntry.getKey());
+ * this file be licensed under the Apache-2.0 license or a
+            indexShardIngestionStateEntry.getValue().sort(Comparator.comparingInt(ShardIngestionState::getShardId));
+            builder.endArray();  
+    public void setNextPageToken(String nextPageToken) {  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        shardStates = in.readArray(ShardIngestionState::new, ShardIngestionState[]::new);
+        ShardIngestionState[] shardStates,
+        for (Map.Entry<String, List<ShardIngestionState>> indexShardIngestionStateEntry : shardStateByIndex.entrySet()) {  
+    private String nextPageToken;
+ * Transport response for retrieving ingestion state.
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+    protected void addCustomXContentFields(XContentBuilder builder, Params params) throws IOException {  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        builder.startObject(INGESTION_STATE);
+import org.opensearch.common.Nullable;
+    public ShardIngestionState[] getShardStates() {  
 }
+    @Override
+ * compatible open source license.
+    public GetIngestionStateResponse(StreamInput in) throws IOException {  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        return shardStates;
+ *  
+    public String toString() {
+        List<DefaultShardOperationFailedException> shardFailures  
+public class GetIngestionStateResponse extends BroadcastResponse {
+    public void writeTo(StreamOutput out) throws IOException {
+import java.util.List;
+        super.addCustomXContentFields(builder, params);
+    public String getNextPageToken() {
+        super.writeTo(out);  
+    private ShardIngestionState[] shardStates;
+    }
+        int totalShards,

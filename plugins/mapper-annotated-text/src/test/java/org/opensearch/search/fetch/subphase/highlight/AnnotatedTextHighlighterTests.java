@@ -1,235 +1,214 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
+        ArrayList<Object> plainTextForHighlighter = new ArrayList<>(annotations.length);
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.fetch.subphase.highlight;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;  
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;  
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.IndexWriterConfig;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;  
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Sort;  
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.highlight.DefaultEncoder;  
-import org.apache.lucene.search.uhighlight.CustomSeparatorBreakIterator;
-import org.apache.lucene.search.uhighlight.SplittingBreakIterator;
-import org.apache.lucene.search.uhighlight.UnifiedHighlighter;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedHighlighterAnalyzer;
-import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedText;
-import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotationAnalyzerWrapper;  
-import org.opensearch.lucene.search.uhighlight.CustomUnifiedHighlighter;
-import org.opensearch.lucene.search.uhighlight.Snippet;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.net.URLEncoder;
-import java.text.BreakIterator;  
-import java.util.ArrayList;
-import java.util.Locale;
-
-import static org.opensearch.lucene.search.uhighlight.CustomUnifiedHighlighter.MULTIVAL_SEP_CHAR;
-import static org.hamcrest.CoreMatchers.equalTo;
-
-public class AnnotatedTextHighlighterTests extends OpenSearchTestCase {
-
-    private void assertHighlightOneDoc(  
-        String fieldName,
-        String[] markedUpInputs,
-        Query query,  
+        Query query = new TermQuery(new Term("text", "singapore"));
+        }
+        String[] expectedPassages = {
+        TopDocs topDocs = searcher.search(new MatchAllDocsQuery(), 1, Sort.INDEXORDER);  
+package org.opensearch.search.fetch.subphase.highlight;
         Locale locale,
+import org.apache.lucene.index.DirectoryReader;
+            null,
+                + highlightedAnnotatedWord
+        String highlightedAnnotatedWord = "[highlighting]("
+        builder.withFieldMatcher("text"::equals);
+import org.apache.lucene.search.uhighlight.UnifiedHighlighter;  
+        } else {
+            noMatchSize,
+            + ")";
+    }
+import org.apache.lucene.search.highlight.DefaultEncoder;  
+import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotationAnalyzerWrapper;  
+    }
+    public void testAnnotatedTextSingleFieldWithPhraseQuery() throws Exception {
+        }
         BreakIterator breakIterator,
-        int noMatchSize,  
-        String[] expectedPassages
+        final String[] markedUpInputs = {
     ) throws Exception {
-
+        final Snippet[] snippets = highlighter.highlightField(getOnlyLeafReader(reader), topDocs.scoreDocs[0].doc, () -> rawValue);
+import java.util.Locale;
+        passageFormatter.setAnnotations(annotations);
+    private void assertHighlightOneDoc(  
+        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);  
+        AnnotatedText[] annotations = new AnnotatedText[markedUpInputs.length];
+        iwc.setMergePolicy(newTieredMergePolicy(random()));
+import org.apache.lucene.search.TopDocs;
+    public void testAnnotatedTextMultiFieldWithBreakIterator() throws Exception {
+    }
+        }
+    }  
+        final String[] markedUpInputs = {
+            "[Donald](_hit_term=donald) Trump visited Singapore",  
+        final String[] markedUpInputs = {  
+            "[Donald Trump](Donald+Trump) visited Singapore. Kim shook hands with Donald",  
+        Query query = new TermQuery(new Term("text", "donald"));
+        String fieldName,
+/*
+        Directory dir = newDirectory();  
+            doc.add(field);  
+            query,
+        );  
+        String[] expectedPassages = {
+import org.apache.lucene.search.MatchAllDocsQuery;  
+    public void testAnnotatedTextStructuredMatch() throws Exception {
+import org.apache.lucene.search.uhighlight.SplittingBreakIterator;
+            "This is a test. Just a test1 " + annotatedWord + " from [annotated](bar) highlighter.",
+            "text",  
+}  
+        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);
+            + encodedUrl
+            annotations[i] = AnnotatedText.parse(markedUpInputs[i]);  
+        FieldType ft = new FieldType(TextField.TYPE_STORED);
+            + "&"  
+        Query query = new PhraseQuery("text", "donald", "trump");
+import java.text.BreakIterator;  
+import java.net.URLEncoder;
+            ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS);
+        breakIterator = new SplittingBreakIterator(breakIterator, '.');
+        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);  
+ * Licensed to Elasticsearch under one or more contributor  
+            + "="
+ * compatible open source license.
+import static org.hamcrest.CoreMatchers.equalTo;
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+            "This is the second "  
+import org.apache.lucene.document.Document;  
+import java.util.ArrayList;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        String[] expectedPassages
+ * SPDX-License-Identifier: Apache-2.0
+            breakIterator,
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.index.IndexOptions;
+            locale,  
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.document.Field;
+import org.apache.lucene.index.IndexWriterConfig;  
+        Query query,  
+        breakIterator = new SplittingBreakIterator(breakIterator, '.');
+                + " longer text that gets scored lower." };  
+import org.apache.lucene.document.FieldType;
+            + AnnotatedPassageFormatter.SEARCH_HIT_TYPE  
+ */
+            null
+ * specific language governing permissions and limitations
+        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);  
+            "[Donald](_hit_term=donald) Trump visited Singapore",  
+        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);
+        int noMatchSize,  
+        IndexWriterConfig iwc = newIndexWriterConfig(wrapperAnalyzer);
+        // Check that a structured token eg a URL can be highlighted in a query
+        for (int i = 0; i < markedUpInputs.length; i++) {
+    public void testAnnotatedTextSingleFieldWithBreakIterator() throws Exception {  
+        String annotatedWord = "[highlighting](" + encodedUrl + ")";
+            passageFormatter,
+            "Kim shook hands with [Donald](_hit_term=donald)",
+import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedHighlighterAnalyzer;
+        AnnotatedPassageFormatter passageFormatter = new AnnotatedPassageFormatter(new DefaultEncoder());
+        if (randomBoolean()) {
+ * license agreements. See the NOTICE file distributed with
+    }
+            "[Donald](_hit_term=donald) duck is a [Disney](Disney+Inc) invention" };
+        Document doc = new Document();
+        dir.close();
+ * under the License.  
+        String rawValue = Strings.collectionToDelimitedString(plainTextForHighlighter, String.valueOf(MULTIVAL_SEP_CHAR));
+        for (int i = 0; i < snippets.length; i++) {  
+import org.apache.lucene.search.IndexSearcher;
+ * not use this file except in compliance with the License.
+            plainTextForHighlighter.add(annotations[i].textMinusMarkup);  
+        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);  
+        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);
+            + encodedUrl
+            assertEquals(expectedPassages[i], snippets[i].getText());
+import org.apache.lucene.store.Directory;
+        UnifiedHighlighter.Builder builder = UnifiedHighlighter.builder(searcher, hiliteAnalyzer);  
+ *
+        Query query = new TermQuery(new Term("text", url));
+import static org.opensearch.lucene.search.uhighlight.CustomUnifiedHighlighter.MULTIVAL_SEP_CHAR;
+ * Unless required by applicable law or agreed to in writing,
+            "[Donald](_hit_term=donald) Trump visited Singapore",  
+        String[] expectedPassages = { "[Donald](_hit_term=donald) [Trump](_hit_term=trump) visited Singapore" };
+        String[] expectedPassages = {
+            expectedPassages.length,  
+            "[Donald](_hit_term=donald) duck is a [Disney](Disney+Inc) invention" };
+        // on marked-up  
+public class AnnotatedTextHighlighterTests extends OpenSearchTestCase {
+import org.apache.lucene.search.PhraseQuery;
+        String url = "https://en.wikipedia.org/wiki/Key_Word_in_Context";
+        assertThat(topDocs.totalHits.value(), equalTo(1L));
+        final String[] markedUpInputs = { "Missing bracket for [Donald Trump](Donald+Trump visited Singapore" };
+        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);
+        }
+        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);  
+            "Donald duck is a [Disney](Disney+Inc) invention" };
+            "This is the second " + annotatedWord + " value to perform highlighting on a longer text that gets scored lower." };
+        AnnotatedHighlighterAnalyzer hiliteAnalyzer = new AnnotatedHighlighterAnalyzer(wrapperAnalyzer);
+import org.apache.lucene.tests.index.RandomIndexWriter;
+        iw.addDocument(doc);
+ * Modifications Copyright OpenSearch Contributors. See
+        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);
+import org.opensearch.core.common.Strings;  
+        hiliteAnalyzer.setAnnotations(annotations);  
+    public void testAnnotatedTextOverlapsWithUnstructuredSearchTerms() throws Exception {  
+            "This is a test. Just a test1 " + highlightedAnnotatedWord + " from [annotated](bar) highlighter.",
+        Query query = new TermQuery(new Term("text", "donald"));  
+ */  
+/*  
+import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedText;
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+        ft.freeze();
+        for (int i = 0; i < annotations.length; i++) {
+import org.opensearch.lucene.search.uhighlight.Snippet;
+            "index",
+        RandomIndexWriter iw = new RandomIndexWriter(random(), dir, iwc);  
+        iw.close();
+        Query query = new TermQuery(new Term("text", "donald"));
+        DirectoryReader reader = iw.getReader();  
+        final String[] markedUpInputs = { "[Donald Trump](Donald+Trump) visited Singapore", "Donald Jr was with Melania Trump" };  
+import org.apache.lucene.analysis.Analyzer;
+        String[] expectedPassages = { "Missing bracket for [Donald Trump](Donald+Trump visited [Singapore](_hit_term=singapore)" };  
+        String[] markedUpInputs,
+import org.apache.lucene.index.Term;
+        assertEquals(expectedPassages.length, snippets.length);
         // Annotated fields wrap the usual analyzer with one that injects extra tokens
         Analyzer wrapperAnalyzer = new AnnotationAnalyzerWrapper(new StandardAnalyzer());
-        Directory dir = newDirectory();  
-        IndexWriterConfig iwc = newIndexWriterConfig(wrapperAnalyzer);
-        iwc.setMergePolicy(newTieredMergePolicy(random()));
-        RandomIndexWriter iw = new RandomIndexWriter(random(), dir, iwc);  
-        FieldType ft = new FieldType(TextField.TYPE_STORED);
-        if (randomBoolean()) {
-            ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);  
-        } else {
-            ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS);
-        }  
-        ft.freeze();
-        Document doc = new Document();
-        for (String input : markedUpInputs) {  
-            Field field = new Field(fieldName, "", ft);
-            field.setStringValue(input);
-            doc.add(field);  
-        }
-        iw.addDocument(doc);
-        DirectoryReader reader = iw.getReader();  
-        IndexSearcher searcher = newSearcher(reader);
-        iw.close();
-
-        AnnotatedText[] annotations = new AnnotatedText[markedUpInputs.length];
-        for (int i = 0; i < markedUpInputs.length; i++) {
-            annotations[i] = AnnotatedText.parse(markedUpInputs[i]);  
-        }
-        AnnotatedHighlighterAnalyzer hiliteAnalyzer = new AnnotatedHighlighterAnalyzer(wrapperAnalyzer);
-        hiliteAnalyzer.setAnnotations(annotations);  
-        AnnotatedPassageFormatter passageFormatter = new AnnotatedPassageFormatter(new DefaultEncoder());
-        passageFormatter.setAnnotations(annotations);
-
-        ArrayList<Object> plainTextForHighlighter = new ArrayList<>(annotations.length);
-        for (int i = 0; i < annotations.length; i++) {
-            plainTextForHighlighter.add(annotations[i].textMinusMarkup);  
-        }
-
-        TopDocs topDocs = searcher.search(new MatchAllDocsQuery(), 1, Sort.INDEXORDER);  
-        assertThat(topDocs.totalHits.value(), equalTo(1L));
-        String rawValue = Strings.collectionToDelimitedString(plainTextForHighlighter, String.valueOf(MULTIVAL_SEP_CHAR));
-        UnifiedHighlighter.Builder builder = UnifiedHighlighter.builder(searcher, hiliteAnalyzer);  
-        builder.withFieldMatcher("text"::equals);
-        CustomUnifiedHighlighter highlighter = new CustomUnifiedHighlighter(
-            builder,  
-            null,
-            passageFormatter,
-            locale,  
-            breakIterator,
-            "index",
-            "text",  
-            query,
-            noMatchSize,
-            expectedPassages.length,  
-            Integer.MAX_VALUE,
-            null
-        );  
-        final Snippet[] snippets = highlighter.highlightField(getOnlyLeafReader(reader), topDocs.scoreDocs[0].doc, () -> rawValue);
-        assertEquals(expectedPassages.length, snippets.length);
-        for (int i = 0; i < snippets.length; i++) {  
-            assertEquals(expectedPassages[i], snippets[i].getText());
-        }
-        reader.close();  
-        dir.close();
-    }
-
-    public void testAnnotatedTextStructuredMatch() throws Exception {
-        // Check that a structured token eg a URL can be highlighted in a query
-        // on marked-up  
-        // content using an "annotated_text" type field.
-        String url = "https://en.wikipedia.org/wiki/Key_Word_in_Context";
-        String encodedUrl = URLEncoder.encode(url, "UTF-8");  
-        String annotatedWord = "[highlighting](" + encodedUrl + ")";
-        String highlightedAnnotatedWord = "[highlighting]("
-            + AnnotatedPassageFormatter.SEARCH_HIT_TYPE  
-            + "="
-            + encodedUrl
-            + "&"  
-            + encodedUrl
-            + ")";
-        final String[] markedUpInputs = {  
-            "This is a test. Just a test1 " + annotatedWord + " from [annotated](bar) highlighter.",
-            "This is the second " + annotatedWord + " value to perform highlighting on a longer text that gets scored lower." };
-
-        String[] expectedPassages = {
-            "This is a test. Just a test1 " + highlightedAnnotatedWord + " from [annotated](bar) highlighter.",
-            "This is the second "  
-                + highlightedAnnotatedWord
-                + " value to perform highlighting on a"
-                + " longer text that gets scored lower." };  
-        Query query = new TermQuery(new Term("text", url));
-        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);
-        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);  
-    }
-
-    public void testAnnotatedTextOverlapsWithUnstructuredSearchTerms() throws Exception {  
-        final String[] markedUpInputs = {
-            "[Donald Trump](Donald+Trump) visited Singapore",
-            "Donald duck is a [Disney](Disney+Inc) invention" };  
-
-        String[] expectedPassages = {
-            "[Donald](_hit_term=donald) Trump visited Singapore",  
-            "[Donald](_hit_term=donald) duck is a [Disney](Disney+Inc) invention" };
-        Query query = new TermQuery(new Term("text", "donald"));
-        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);  
-        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);
-    }
-
-    public void testAnnotatedTextMultiFieldWithBreakIterator() throws Exception {
-        final String[] markedUpInputs = {
-            "[Donald Trump](Donald+Trump) visited Singapore. Kim shook hands with Donald",  
-            "Donald duck is a [Disney](Disney+Inc) invention" };
-        String[] expectedPassages = {
-            "[Donald](_hit_term=donald) Trump visited Singapore",  
-            "Kim shook hands with [Donald](_hit_term=donald)",
-            "[Donald](_hit_term=donald) duck is a [Disney](Disney+Inc) invention" };
-        Query query = new TermQuery(new Term("text", "donald"));  
-        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);
-        breakIterator = new SplittingBreakIterator(breakIterator, '.');
-        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);  
-    }
-
-    public void testAnnotatedTextSingleFieldWithBreakIterator() throws Exception {  
-        final String[] markedUpInputs = { "[Donald Trump](Donald+Trump) visited Singapore. Kim shook hands with Donald" };
-        String[] expectedPassages = {
-            "[Donald](_hit_term=donald) Trump visited Singapore",  
+ * You may obtain a copy of the License at  
             "Kim shook hands with [Donald](_hit_term=donald)" };
-        Query query = new TermQuery(new Term("text", "donald"));
-        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);  
-        breakIterator = new SplittingBreakIterator(breakIterator, '.');
-        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);
-    }  
-
-    public void testAnnotatedTextSingleFieldWithPhraseQuery() throws Exception {
-        final String[] markedUpInputs = { "[Donald Trump](Donald+Trump) visited Singapore", "Donald Jr was with Melania Trump" };  
-        String[] expectedPassages = { "[Donald](_hit_term=donald) [Trump](_hit_term=trump) visited Singapore" };
-        Query query = new PhraseQuery("text", "donald", "trump");
-        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);  
-        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);
-    }
-
-    public void testBadAnnotation() throws Exception {
-        final String[] markedUpInputs = { "Missing bracket for [Donald Trump](Donald+Trump visited Singapore" };
-        String[] expectedPassages = { "Missing bracket for [Donald Trump](Donald+Trump visited [Singapore](_hit_term=singapore)" };  
-        Query query = new TermQuery(new Term("text", "singapore"));
+        for (String input : markedUpInputs) {  
+            ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);  
+        }  
+import org.apache.lucene.search.uhighlight.CustomSeparatorBreakIterator;
+import org.opensearch.test.OpenSearchTestCase;  
+ */  
+        String[] expectedPassages = {
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
+            Field field = new Field(fieldName, "", ft);
         BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);
-        assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);  
+        reader.close();  
+import org.apache.lucene.search.Sort;  
+import org.opensearch.lucene.search.uhighlight.CustomUnifiedHighlighter;
+        final String[] markedUpInputs = { "[Donald Trump](Donald+Trump) visited Singapore. Kim shook hands with Donald" };
+        CustomUnifiedHighlighter highlighter = new CustomUnifiedHighlighter(
+                + " value to perform highlighting on a"
+    public void testBadAnnotation() throws Exception {
+        IndexSearcher searcher = newSearcher(reader);
+ * ownership. Elasticsearch licenses this file to you under  
+ * KIND, either express or implied.  See the License for the
+        // content using an "annotated_text" type field.
+ *  
     }
-
-}  
+            builder,  
+        BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);  
+        String encodedUrl = URLEncoder.encode(url, "UTF-8");  
+            "Donald duck is a [Disney](Disney+Inc) invention" };  
+            field.setStringValue(input);
+import org.apache.lucene.search.Query;
+ * GitHub history for details.
+            Integer.MAX_VALUE,
+            "[Donald Trump](Donald+Trump) visited Singapore",
+    }

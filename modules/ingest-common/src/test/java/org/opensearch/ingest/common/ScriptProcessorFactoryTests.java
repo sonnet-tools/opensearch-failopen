@@ -1,205 +1,177 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.xcontent.XContentParseException;  
-import org.opensearch.script.IngestScript;
-import org.opensearch.script.MockScriptEngine;
-import org.opensearch.script.Script;  
-import org.opensearch.script.ScriptException;
-import org.opensearch.script.ScriptModule;
-import org.opensearch.script.ScriptService;  
-import org.opensearch.script.ScriptType;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;  
-
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.Map;
-
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.mockito.Mockito.any;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ScriptProcessorFactoryTests extends OpenSearchTestCase {
-
-    private ScriptProcessor.Factory factory;  
-    private static final Map<String, String> ingestScriptParamToType;
-    static {
-        Map<String, String> map = new HashMap<>();  
-        map.put("id", "stored");
-        map.put("source", "inline");
-        ingestScriptParamToType = Collections.unmodifiableMap(map);  
-    }
-
-    @Before  
-    public void init() {
-        factory = new ScriptProcessor.Factory(mock(ScriptService.class));
-    }  
-
-    public void testFactoryValidationWithDefaultLang() throws Exception {
-        ScriptService mockedScriptService = mock(ScriptService.class);  
-        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));
-        factory = new ScriptProcessor.Factory(mockedScriptService);
-
-        Map<String, Object> configMap = new HashMap<>();
-        String randomType = randomFrom("id", "source");
-        configMap.put(randomType, "foo");  
-        ScriptProcessor processor = factory.create(null, randomAlphaOfLength(10), null, configMap);
-        assertThat(processor.getScript().getLang(), equalTo(randomType.equals("id") ? null : Script.DEFAULT_SCRIPT_LANG));
-        assertThat(processor.getScript().getType().toString(), equalTo(ingestScriptParamToType.get(randomType)));  
-        assertThat(processor.getScript().getParams(), equalTo(Collections.emptyMap()));
-    }
-
-    public void testFactoryValidationWithParams() throws Exception {
-        ScriptService mockedScriptService = mock(ScriptService.class);
-        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));  
-        factory = new ScriptProcessor.Factory(mockedScriptService);
-
-        Map<String, Object> configMap = new HashMap<>();  
-        String randomType = randomFrom("id", "source");
-        Map<String, Object> randomParams = Collections.singletonMap(randomAlphaOfLength(10), randomAlphaOfLength(10));
-        configMap.put(randomType, "foo");  
-        configMap.put("params", randomParams);
-        ScriptProcessor processor = factory.create(null, randomAlphaOfLength(10), null, configMap);
-        assertThat(processor.getScript().getLang(), equalTo(randomType.equals("id") ? null : Script.DEFAULT_SCRIPT_LANG));  
-        assertThat(processor.getScript().getType().toString(), equalTo(ingestScriptParamToType.get(randomType)));
-        assertThat(processor.getScript().getParams(), equalTo(randomParams));
-    }  
-
-    public void testFactoryValidationForMultipleScriptingTypes() throws Exception {
-        Map<String, Object> configMap = new HashMap<>();  
-        configMap.put("id", "foo");
-        configMap.put("source", "bar");
-        configMap.put("lang", "mockscript");  
-
-        XContentParseException exception = expectThrows(
-            XContentParseException.class,  
-            () -> factory.create(null, randomAlphaOfLength(10), null, configMap)
-        );
-        assertThat(exception.getMessage(), containsString("[script] failed to parse field [source]"));  
-    }
-
-    public void testFactoryValidationAtLeastOneScriptingType() throws Exception {  
-        Map<String, Object> configMap = new HashMap<>();
-        configMap.put("lang", "mockscript");
-
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> factory.create(null, randomAlphaOfLength(10), null, configMap)  
-        );
-
-        assertThat(exception.getMessage(), is("must specify either [source] for an inline script or [id] for a stored script"));  
-    }
-
-    public void testInlineBackcompat() throws Exception {  
-        ScriptService mockedScriptService = mock(ScriptService.class);
-        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));
-        factory = new ScriptProcessor.Factory(mockedScriptService);  
-
-        Map<String, Object> configMap = new HashMap<>();
-        configMap.put("inline", "code");  
-
-        factory.create(null, randomAlphaOfLength(10), null, configMap);
-        assertWarnings("Deprecated field [inline] used, expected [source] instead");  
-    }
-
-    public void testFactoryInvalidateWithInvalidCompiledScript() throws Exception {  
-        String randomType = randomFrom("source", "id");
-        ScriptService mockedScriptService = mock(ScriptService.class);
-        ScriptException thrownException = new ScriptException(  
-            "compile-time exception",
-            new RuntimeException(),
-            Collections.emptyList(),  
-            "script",
-            "mockscript"
-        );  
-        when(mockedScriptService.compile(any(), any())).thenThrow(thrownException);
-        factory = new ScriptProcessor.Factory(mockedScriptService);
-
-        Map<String, Object> configMap = new HashMap<>();
-        configMap.put(randomType, "my_script");
-
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> factory.create(null, randomAlphaOfLength(10), null, configMap)  
-        );
-
-        assertThat(exception.getMessage(), is("compile-time exception"));  
-    }
-
-    public void testInlineIsCompiled() throws Exception {  
-        String scriptName = "foo";
-        ScriptService scriptService = new ScriptService(
-            Settings.builder().build(),  
-            Collections.singletonMap(
-                Script.DEFAULT_SCRIPT_LANG,
-                new MockScriptEngine(Script.DEFAULT_SCRIPT_LANG, Collections.singletonMap(scriptName, ctx -> {  
-                    ctx.put("foo", "bar");
-                    return null;
-                }), Collections.emptyMap())  
-            ),
             new HashMap<>(ScriptModule.CORE_CONTEXTS)
+ * Unless required by applicable law or agreed to in writing,
+    }
+        Map<String, Object> configMap = new HashMap<>();
+ * this file be licensed under the Apache-2.0 license or a
+        ScriptProcessor processor = factory.create(null, null, randomAlphaOfLength(10), configMap);  
+        assertNotNull(processor.getPrecompiledIngestScript());  
+    public void testFactoryValidationWithParams() throws Exception {
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+                    ctx.put("foo", "bar");
+        IllegalArgumentException exception = expectThrows(
+        String randomType = randomFrom("source", "id");
+        Map<String, Object> configMap = new HashMap<>();
+        assertThat(processor.getScript().getLang(), equalTo(Script.DEFAULT_SCRIPT_LANG));  
+            OpenSearchException.class,
+    public void testFactoryInvalidateWithInvalidCompiledScript() throws Exception {  
+        assertNull(processor.getPrecompiledIngestScript());
+        Map<String, Object> configMap = new HashMap<>();
+        );
+        ScriptProcessor processor = factory.create(null, null, randomAlphaOfLength(10), configMap);
+        OpenSearchException exception = expectThrows(
+ * software distributed under the License is distributed on an
+        ScriptProcessor processor = factory.create(null, randomAlphaOfLength(10), null, configMap);
+        when(mockedScriptService.compile(any(), any())).thenThrow(thrownException);
+import org.opensearch.core.xcontent.XContentParseException;  
+        assertThat(processor.getScript().getLang(), equalTo(randomType.equals("id") ? null : Script.DEFAULT_SCRIPT_LANG));  
+        configMap.put(randomType, "foo");  
+        assertThat(exception.getMessage(), is("must specify either [source] for an inline script or [id] for a stored script"));  
+        map.put("id", "stored");
+        assertThat(ctx.get("foo"), equalTo("bar"));  
+        factory = new ScriptProcessor.Factory(mock(ScriptService.class));
+    private ScriptProcessor.Factory factory;  
+    }
+import static org.hamcrest.Matchers.containsString;  
+ * under the License.  
+/*
+        assertThat(processor.getScript().getType().toString(), equalTo(ingestScriptParamToType.get(randomType)));  
+        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));
+            XContentParseException.class,  
+        String randomType = randomFrom("id", "source");
+        Map<String, Object> ctx = new HashMap<>();
+        configMap.put(randomType, "foo");  
+        configMap.put("id", "script_name");
+        map.put("source", "inline");
+import java.util.HashMap;  
         );  
+    public void testInlineBackcompat() throws Exception {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.Collections;
+            Collections.singletonMap(
+import static org.mockito.Mockito.when;
+ */  
+        factory = new ScriptProcessor.Factory(mockedScriptService);
+        configMap.put("params", randomParams);
+    }  
+        ScriptService mockedScriptService = mock(ScriptService.class);
+ * Licensed to Elasticsearch under one or more contributor  
+        assertWarnings("Deprecated field [inline] used, expected [source] instead");  
+        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));
+    }  
+                new MockScriptEngine(Script.DEFAULT_SCRIPT_LANG, Collections.singletonMap(scriptName, ctx -> {  
+ * ownership. Elasticsearch licenses this file to you under  
+            new RuntimeException(),
+        configMap.put(randomType, "my_script");
+        assertThat(exception.getMessage(), is("compile-time exception"));  
+        assertThat(processor.getScript().getParams(), equalTo(randomParams));
+    }
+    public void init() {
+            Collections.emptyList(),  
+    }
+        processor.getPrecompiledIngestScript().execute(ctx);
+        assertThat(processor.getScript().getLang(), equalTo(randomType.equals("id") ? null : Script.DEFAULT_SCRIPT_LANG));
+import org.opensearch.script.IngestScript;
+        factory = new ScriptProcessor.Factory(mockedScriptService);  
+        String scriptName = "foo";
+    }
+            () -> factory.create(null, randomAlphaOfLength(10), null, configMap)  
+    }
+        factory = new ScriptProcessor.Factory(mockedScriptService);
+import org.opensearch.script.ScriptService;  
+    }
+            "mockscript"
+        factory = new ScriptProcessor.Factory(mockedScriptService);
+        ScriptService mockedScriptService = mock(ScriptService.class);
+ * KIND, either express or implied.  See the License for the
+        XContentParseException exception = expectThrows(
+ *
+        ScriptService mockedScriptService = mock(ScriptService.class);  
+    public void testFactoryValidationForMultipleScriptingTypes() throws Exception {
+        assertThat(processor.getScript().getParams(), equalTo(Collections.emptyMap()));
+import static org.hamcrest.Matchers.is;
+        ScriptService mockedScriptService = mock(ScriptService.class);
+import org.opensearch.OpenSearchException;
+        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.script.MockScriptEngine;
+        );
+        Map<String, Object> randomParams = Collections.singletonMap(randomAlphaOfLength(10), randomAlphaOfLength(10));
+import java.util.Map;
+            "script",
+        );  
+    @Before  
+ * not use this file except in compliance with the License.
+            "compile-time exception",
+    public void testInlineIsCompiled() throws Exception {  
+ * Modifications Copyright OpenSearch Contributors. See
+        assertThat(processor.getScript().getType(), equalTo(ScriptType.STORED));
+        configMap.put("source", "bar");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertThat(processor.getScript().getType(), equalTo(ScriptType.INLINE));
+        ScriptService scriptService = new ScriptService(
+ * The OpenSearch Contributors require contributions made to  
+ *
+    public void testFactoryValidationWithDefaultLang() throws Exception {
+        String randomType = randomFrom("id", "source");
+import org.opensearch.common.settings.Settings;
         factory = new ScriptProcessor.Factory(scriptService);
-
+        configMap.put("id", "foo");
+        factory = new ScriptProcessor.Factory(mockedScriptService);  
+import org.opensearch.script.ScriptException;
+ * SPDX-License-Identifier: Apache-2.0
+    public void testStoredIsNotCompiled() throws Exception {  
+        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));  
+        assertThat(processor.getScript().getType().toString(), equalTo(ingestScriptParamToType.get(randomType)));
+import org.opensearch.script.Script;  
+public class ScriptProcessorFactoryTests extends OpenSearchTestCase {
+        configMap.put("lang", "mockscript");  
+            () -> factory.create(null, randomAlphaOfLength(10), null, configMap)  
+        Map<String, Object> configMap = new HashMap<>();
+import static org.mockito.Mockito.any;  
+ *  
+    }
+import org.junit.Before;  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.script.ScriptType;
+                }), Collections.emptyMap())  
+ * specific language governing permissions and limitations
+/*  
+        configMap.put("lang", "mockscript");
+        Map<String, Object> configMap = new HashMap<>();  
+        assertThat(processor.getScript().getParams(), equalTo(Collections.emptyMap()));  
+ */  
+        Map<String, Object> configMap = new HashMap<>();
+ */
+            IllegalArgumentException.class,
+            Settings.builder().build(),  
+        );
         Map<String, Object> configMap = new HashMap<>();  
         configMap.put("source", scriptName);
-        ScriptProcessor processor = factory.create(null, null, randomAlphaOfLength(10), configMap);
-        assertThat(processor.getScript().getLang(), equalTo(Script.DEFAULT_SCRIPT_LANG));  
-        assertThat(processor.getScript().getType(), equalTo(ScriptType.INLINE));
-        assertThat(processor.getScript().getParams(), equalTo(Collections.emptyMap()));
-        assertNotNull(processor.getPrecompiledIngestScript());  
-        Map<String, Object> ctx = new HashMap<>();
-        processor.getPrecompiledIngestScript().execute(ctx);
-        assertThat(ctx.get("foo"), equalTo("bar"));  
-    }
-
-    public void testStoredIsNotCompiled() throws Exception {  
-        ScriptService mockedScriptService = mock(ScriptService.class);
-        when(mockedScriptService.compile(any(), any())).thenReturn(mock(IngestScript.Factory.class));
-        factory = new ScriptProcessor.Factory(mockedScriptService);  
-        Map<String, Object> configMap = new HashMap<>();
-        configMap.put("id", "script_name");
-        ScriptProcessor processor = factory.create(null, null, randomAlphaOfLength(10), configMap);  
+        ScriptProcessor processor = factory.create(null, randomAlphaOfLength(10), null, configMap);
+        Map<String, String> map = new HashMap<>();  
+                    return null;
         assertNull(processor.getScript().getLang());
-        assertThat(processor.getScript().getType(), equalTo(ScriptType.STORED));
-        assertThat(processor.getScript().getParams(), equalTo(Collections.emptyMap()));  
-        assertNull(processor.getPrecompiledIngestScript());
-    }
+ * You may obtain a copy of the License at  
+        ScriptException thrownException = new ScriptException(  
+        factory.create(null, randomAlphaOfLength(10), null, configMap);
+/*  
+        ingestScriptParamToType = Collections.unmodifiableMap(map);  
+    public void testFactoryValidationAtLeastOneScriptingType() throws Exception {  
+    private static final Map<String, String> ingestScriptParamToType;
 }  
+            () -> factory.create(null, randomAlphaOfLength(10), null, configMap)
+            ),
+import org.opensearch.script.ScriptModule;
+    static {
+import org.opensearch.test.OpenSearchTestCase;
+        Map<String, Object> configMap = new HashMap<>();  
+                Script.DEFAULT_SCRIPT_LANG,
+package org.opensearch.ingest.common;
+ * GitHub history for details.
+        configMap.put("inline", "code");  
+        ScriptService mockedScriptService = mock(ScriptService.class);
+        assertThat(processor.getScript().getParams(), equalTo(Collections.emptyMap()));
+        assertThat(exception.getMessage(), containsString("[script] failed to parse field [source]"));  
+ * compatible open source license.
+import static org.mockito.Mockito.mock;

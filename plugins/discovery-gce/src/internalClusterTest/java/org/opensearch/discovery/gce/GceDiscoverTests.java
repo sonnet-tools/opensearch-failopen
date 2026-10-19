@@ -1,196 +1,168 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.discovery.gce;
-
-import com.google.api.services.compute.model.Instance;
-import com.google.api.services.compute.model.NetworkInterface;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
-import org.opensearch.cloud.gce.GceInstancesService;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.plugin.discovery.gce.GceDiscoveryPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.secure_sm.AccessController;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.TransportService;
-import org.junit.After;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;  
-import java.util.concurrent.ConcurrentHashMap;
-
-import static java.util.Collections.singletonList;  
-import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoTimeout;
-
-@OpenSearchIntegTestCase.ClusterScope(supportsDedicatedMasters = false, numDataNodes = 0, numClientNodes = 0)
-public class GceDiscoverTests extends OpenSearchIntegTestCase {
-
-    /** Holds a list of the current discovery nodes started in tests **/
-    private static final Map<String, DiscoveryNode> nodes = new ConcurrentHashMap<>();
-
-    @After
-    public void clearGceNodes() {
-        nodes.clear();  
-    }
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return singletonList(TestPlugin.class);
-    }  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "gce")  
-            .put("cloud.gce.project_id", "test")
-            .put("cloud.gce.zone", "test")
-            .build();  
-    }
-
-    public void testJoin() {  
-        // start cluster-manager node
-        final String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();
-        registerGceNode(clusterManagerNode);  
-
-        ClusterStateResponse clusterStateResponse = client(clusterManagerNode).admin()
             .cluster()  
-            .prepareState()
-            .setClusterManagerNodeTimeout("1s")
-            .clear()  
-            .setNodes(true)
-            .get();
-        assertNotNull(clusterStateResponse.getState().nodes().getClusterManagerNodeId());  
-
-        // start another node
-        final String secondNode = internalCluster().startNode();  
-        registerGceNode(secondNode);
-        clusterStateResponse = client(secondNode).admin()
-            .cluster()  
-            .prepareState()
-            .setClusterManagerNodeTimeout("1s")
-            .clear()  
-            .setNodes(true)
-            .setLocal(true)
-            .get();  
-        assertNotNull(clusterStateResponse.getState().nodes().getClusterManagerNodeId());
-
-        // wait for the cluster to form  
-        assertNoTimeout(client().admin().cluster().prepareHealth().setWaitForNodes(Integer.toString(2)).get());
-        assertNumberOfNodes(2);
-
-        // add one more node and wait for it to join
-        final String thirdNode = internalCluster().startDataOnlyNode();
-        registerGceNode(thirdNode);  
-        assertNoTimeout(client().admin().cluster().prepareHealth().setWaitForNodes(Integer.toString(3)).get());
-        assertNumberOfNodes(3);
-    }  
-
-    /**
-     * Register an existing node as a GCE node  
-     *
-     * @param nodeName the name of the node
-     */  
-    private static void registerGceNode(final String nodeName) {
-        final TransportService transportService = internalCluster().getInstance(TransportService.class, nodeName);
-        assertNotNull(transportService);  
-        final DiscoveryNode discoveryNode = transportService.getLocalNode();
-        assertNotNull(discoveryNode);
-        if (nodes.put(discoveryNode.getName(), discoveryNode) != null) {  
-            throw new IllegalArgumentException("Node [" + discoveryNode.getName() + "] cannot be registered twice");
-        }
-    }  
-
-    /**
-     * Asserts that the cluster nodes info contains an expected number of node  
-     *
-     * @param expected the expected number of nodes
-     */  
-    private static void assertNumberOfNodes(final int expected) {
-        assertEquals(expected, client().admin().cluster().prepareNodesInfo().clear().get().getNodes().size());
-    }  
-
-    /**
-     * Test plugin that exposes internal test cluster nodes as if they were real GCE nodes.  
-     * Use {@link #registerGceNode(String)} method to expose nodes in the tests.
-     */
-    public static class TestPlugin extends GceDiscoveryPlugin {  
-
-        public TestPlugin(Settings settings) {
-            super(settings);  
-        }
-
-        @Override  
-        protected GceInstancesService createGceInstancesService() {
-            return new GceInstancesService() {
-                @Override  
-                public Collection<Instance> instances() {
-                    return AccessController.doPrivileged(() -> {
-                        final List<Instance> instances = new ArrayList<>();  
-
                         for (DiscoveryNode discoveryNode : nodes.values()) {
-                            Instance instance = new Instance();  
-                            instance.setName(discoveryNode.getName());
-                            instance.setStatus("STARTED");
-
                             NetworkInterface networkInterface = new NetworkInterface();
-                            networkInterface.setNetworkIP(discoveryNode.getAddress().toString());
-                            instance.setNetworkInterfaces(singletonList(networkInterface));  
-
-                            instances.add(instance);
-                        }  
-
-                        return instances;
-                    });  
-                }
-
-                @Override  
-                public String projectId() {
-                    return PROJECT_SETTING.get(settings);
-                }  
-
-                @Override
-                public List<String> zones() {  
-                    return ZONE_SETTING.get(settings);
-                }
-
-                @Override
-                public void close() throws IOException {}
-            };  
+import org.opensearch.plugins.Plugin;
+            .put("cloud.gce.zone", "test")
         }
+        // start cluster-manager node
+import org.opensearch.transport.TransportService;
+                            instances.add(instance);
+     * Test plugin that exposes internal test cluster nodes as if they were real GCE nodes.  
+                        return instances;
+import java.util.List;
+                    return ZONE_SETTING.get(settings);
+        return singletonList(TestPlugin.class);
+            .setNodes(true)
+    public void testJoin() {  
+    @Override
+        ClusterStateResponse clusterStateResponse = client(clusterManagerNode).admin()
+public class GceDiscoverTests extends OpenSearchIntegTestCase {
+        clusterStateResponse = client(secondNode).admin()
+     * @param nodeName the name of the node
+import org.opensearch.cluster.node.DiscoveryNode;
+     * Use {@link #registerGceNode(String)} method to expose nodes in the tests.
+        assertEquals(expected, client().admin().cluster().prepareNodesInfo().clear().get().getNodes().size());
+        final TransportService transportService = internalCluster().getInstance(TransportService.class, nodeName);
+                    return PROJECT_SETTING.get(settings);
+            throw new IllegalArgumentException("Node [" + discoveryNode.getName() + "] cannot be registered twice");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .clear()  
+     */  
+            .build();  
+            .setNodes(true)
+/*
+ * under the License.  
+        final String thirdNode = internalCluster().startDataOnlyNode();
+import static java.util.Collections.singletonList;  
+        public TestPlugin(Settings settings) {
+        final String secondNode = internalCluster().startNode();  
+            .prepareState()
+ * ownership. Elasticsearch licenses this file to you under  
+                            Instance instance = new Instance();  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoTimeout;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /**
+        return Settings.builder()
+    private static final Map<String, DiscoveryNode> nodes = new ConcurrentHashMap<>();
+package org.opensearch.discovery.gce;
+     *
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
+                @Override
+import org.opensearch.cloud.gce.GceInstancesService;
+        // wait for the cluster to form  
+        }
+            return new GceInstancesService() {
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+import org.opensearch.secure_sm.AccessController;  
+        @Override  
+        final String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();
+                            instance.setName(discoveryNode.getName());
+            .put(super.nodeSettings(nodeOrdinal))
+                            instance.setNetworkInterfaces(singletonList(networkInterface));  
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+            .prepareState()
+ *  
+                @Override  
+     * @param expected the expected number of nodes
+        protected GceInstancesService createGceInstancesService() {
+@OpenSearchIntegTestCase.ClusterScope(supportsDedicatedMasters = false, numDataNodes = 0, numClientNodes = 0)
+    }  
+    }  
+    }  
+        // start another node
+        registerGceNode(clusterManagerNode);  
+import org.junit.After;  
+        assertNotNull(transportService);  
+        if (nodes.put(discoveryNode.getName(), discoveryNode) != null) {  
+            .get();  
+            .clear()  
+            .get();
+/*  
+            .setLocal(true)
+import java.io.IOException;
+ * specific language governing permissions and limitations
+import java.util.ArrayList;  
+ *
+ */  
+        registerGceNode(thirdNode);  
+        assertNoTimeout(client().admin().cluster().prepareHealth().setWaitForNodes(Integer.toString(2)).get());
+                        final List<Instance> instances = new ArrayList<>();  
     }
+        assertNotNull(discoveryNode);
+ * SPDX-License-Identifier: Apache-2.0
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+                public Collection<Instance> instances() {
+    /**
+ * GitHub history for details.
+    @After
+        nodes.clear();  
+ * not use this file except in compliance with the License.
+                public String projectId() {
+     */  
+    }  
+     *
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;  
+ * Unless required by applicable law or agreed to in writing,
+        assertNotNull(clusterStateResponse.getState().nodes().getClusterManagerNodeId());  
+            .put(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "gce")  
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
+import com.google.api.services.compute.model.Instance;
+    private static void registerGceNode(final String nodeName) {
+                public List<String> zones() {  
+    }
+import org.opensearch.common.settings.Settings;  
+        // add one more node and wait for it to join
+        assertNotNull(clusterStateResponse.getState().nodes().getClusterManagerNodeId());
+    public static class TestPlugin extends GceDiscoveryPlugin {  
+    public void clearGceNodes() {
+                public void close() throws IOException {}
+        assertNumberOfNodes(2);
+import com.google.api.services.compute.model.NetworkInterface;
+                }  
+                }
+        registerGceNode(secondNode);
 }  
+            super(settings);  
+            .setClusterManagerNodeTimeout("1s")
+                    });  
+    @Override  
+import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;
+                    return AccessController.doPrivileged(() -> {
+import java.util.Collection;
+    /** Holds a list of the current discovery nodes started in tests **/
+                            networkInterface.setNetworkIP(discoveryNode.getAddress().toString());
+ * license agreements. See the NOTICE file distributed with
+                        }  
+                @Override  
+    }
+ * The OpenSearch Contributors require contributions made to  
+                @Override
+    private static void assertNumberOfNodes(final int expected) {
+ * this file be licensed under the Apache-2.0 license or a
+            .put("cloud.gce.project_id", "test")
+     * Register an existing node as a GCE node  
+            .setClusterManagerNodeTimeout("1s")
+import org.opensearch.plugin.discovery.gce.GceDiscoveryPlugin;
+ */
+ *
+import org.opensearch.test.OpenSearchIntegTestCase;
+            .cluster()  
+                            instance.setStatus("STARTED");
+ * Licensed to Elasticsearch under one or more contributor  
+                }
+    /**
+        assertNumberOfNodes(3);
+        final DiscoveryNode discoveryNode = transportService.getLocalNode();
+/*  
+        }
+     * Asserts that the cluster nodes info contains an expected number of node  
+ * You may obtain a copy of the License at  
+    protected Settings nodeSettings(int nodeOrdinal) {  
+ */  
+            };  
+ * Modifications Copyright OpenSearch Contributors. See
+        assertNoTimeout(client().admin().cluster().prepareHealth().setWaitForNodes(Integer.toString(3)).get());

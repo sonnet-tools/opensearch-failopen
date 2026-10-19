@@ -1,1078 +1,955 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.composite;
-
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
-
-import org.apache.lucene.index.DirectoryReader;  
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.index.SortedSetDocValues;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.NIOFSDirectory;
-import org.opensearch.action.admin.indices.refresh.RefreshResponse;  
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;  
-import org.opensearch.be.lucene.LucenePlugin;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.SuppressForbidden;  
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.DeprecationHandler;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.engine.DataFormatAwareEngine;
-import org.opensearch.index.engine.dataformat.DocumentInput;
-import org.opensearch.index.engine.exec.Segment;  
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+        // age/name values.
+                            fail("name nulls should be last, but found null at " + (i - 1) + " and non-null at " + i);
+        ensureGreen(INDEX_NAME);
+            new Object[] { "value_float", "type=float", (Supplier<Object>) () -> randomBoolean() ? null : randomFloat() * 1000 },
+                }
+                        randomDoubleBetween(-1000, 1000, true),
 import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.parquet.ParquetDataFormatPlugin;  
-import org.opensearch.parquet.bridge.ParquetFileMetadata;
-import org.opensearch.parquet.bridge.RustBridge;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;  
-import java.util.function.Supplier;
-
-// The Tokio IO runtime worker thread (used by the Rust merge k-way merge sort) is a process-lifetime  
-// singleton that persists after tests complete. It polls for new async IO tasks between merges.
-@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)  
-public class CompositeMergeIT extends OpenSearchIntegTestCase {
-
-    private static final String INDEX_NAME = "test-composite-merge";  
-    private static final String MERGE_ENABLED_PROPERTY = "opensearch.pluggable.dataformat.merge.enabled";
-
-    // ══════════════════════════════════════════════════════════════════════  
-    // Framework lifecycle & configuration
-    // ══════════════════════════════════════════════════════════════════════
-
-    @Override
-    public void setUp() throws Exception {
-        enableMerge();  
-        super.setUp();
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        try {  
-            client().admin().indices().prepareDelete(INDEX_NAME).get();
-        } catch (Exception e) {
-            // index may not exist if test failed before creation  
-        }
-        super.tearDown();
-        disableMerge();  
-    }
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(
-            ArrowBasePlugin.class,  
-            ParquetDataFormatPlugin.class,
-            CompositeDataFormatPlugin.class,
-            LucenePlugin.class,  
-            DataFusionPlugin.class
-        );
-    }  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
-            .build();
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    // Tests
-    // ══════════════════════════════════════════════════════════════════════  
-
-    /**
-     * Verifies background merge produces a valid merged parquet file and lucene segment  
-     * with correct row count and source files cleaned up.
-     */
-    public void testBackgroundMerge() throws Exception {  
-        client().admin()
-            .indices()
-            .prepareCreate(INDEX_NAME)  
-            .setSettings(unsortedSettings())
             .setMapping("name", "type=keyword", "age", "type=integer")
-            .get();  
-        ensureGreen(INDEX_NAME);
-
-        int docsPerCycle = 5;  
-        int refreshCycles = 15;
-        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);
-        int totalDocs = refreshCycles * docsPerCycle;  
-
-        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);
-        assertEquals(Set.of("parquet", "lucene"), snapshot.getDataFormats());  
-
-        verifyRowCount(snapshot, totalDocs);
-        verifySegmentGenerationUniqueness(snapshot);  
-        verifyNoOrphanFiles(snapshot);
+    @Override
+            Supplier<Object> valueSupplier = (Supplier<Object>) spec[2];  
+            }
+                            assertEquals("Name mismatch at row_id=" + luceneRowId, parquetName.toString(), luceneName);
     }
-
-    /**
-     * Verifies composite merge with Parquet as primary and Lucene as secondary:
-     * <ol>  
-     *   <li>Merge reduces segment count (merge actually happened)</li>
-     *   <li>Both "parquet" and "lucene" entries exist in the catalog snapshot</li>
-     *   <li>Merged parquet files have correct total row count</li>  
-     *   <li>Merged lucene directory has correct total document count</li>
-     *   <li>Lucene documents have monotonically increasing __row_id__ doc values
-     *       (confirms RowIdMapping was applied during secondary merge)</li>  
-     *   <li>Cross-format validation: parquet row count == lucene doc count for each merged segment</li>
-     * </ol>
-     */  
-    public void testParquetPrimaryLuceneSecondaryMerge() throws Exception {
-        client().admin()
-            .indices()  
-            .prepareCreate(INDEX_NAME)
-            .setSettings(parquetPrimaryLuceneSecondarySettings())
-            .setMapping("name", "type=keyword", "age", "type=integer")  
-            .get();
-        ensureGreen(INDEX_NAME);
-
-        // Index documents to create multiple segments. Using 15 cycles keeps the workload
-        // in line with the other stable composite-merge tests and avoids triggering a second
-        // cascaded merge before the first one commits.  
-        int docsPerCycle = 5;
-        int refreshCycles = 15;
-        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);  
-        int totalDocs = refreshCycles * docsPerCycle;
-
-        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);  
-
-        // Both formats must be present in the catalog
-        Set<String> formats = snapshot.getDataFormats();  
-        assertTrue("Catalog should contain 'parquet' format, got: " + formats, formats.contains("parquet"));
-        assertTrue("Catalog should contain 'lucene' format, got: " + formats, formats.contains("lucene"));
-
-        // Verify parquet merged files have correct row count
-        verifyRowCount(snapshot, totalDocs);
-
-        // Verify lucene merged directory has correct doc count
-        verifyLuceneDocCount(totalDocs);
-
-        // Verify lucene __row_id__ values are monotonically increasing (RowIdMapping applied)
-        verifyLuceneRowIdSequential();
-
-        // Cross-format validation: for each segment, parquet rows == lucene segment docs
-        verifyCrossFormatConsistency(snapshot);
-    }  
-
-    /**
-     * Verifies sorted composite merge with Parquet primary (sorted) + Lucene secondary:  
-     * <ol>
-     *   <li>Merge reduces segment count</li>
-     *   <li>Merged parquet files are sorted by age DESC (nulls first), name ASC (nulls last)</li>  
-     *   <li>Lucene __row_id__ values are sequential (RowIdMapping applied)</li>
-     *   <li>Cross-format consistency: parquet rows match lucene docs by row_id</li>
-     * </ol>  
-     *
-     * This is the critical test for RowIdMapping correctness in sorted merges —
-     * the primary format reorders rows during merge, and the secondary must apply  
-     * the same reordering via the mapping.
-     */
-    public void testSortedParquetPrimaryLuceneSecondaryMerge() throws Exception {  
-        client().admin()
-            .indices()
-            .prepareCreate(INDEX_NAME)  
-            .setSettings(sortedParquetPrimaryLuceneSecondarySettings())
-            .setMapping("name", "type=keyword", "age", "type=integer")
-            .get();  
-        ensureGreen(INDEX_NAME);
-
-        int docsPerCycle = 10;  
-        int refreshCycles = 15;
-        indexDocsWithNullsAcrossRefreshes(refreshCycles, docsPerCycle);
-        int totalDocs = refreshCycles * docsPerCycle;  
-
-        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);
-
-        Set<String> formats = snapshot.getDataFormats();
-        assertTrue("Catalog should contain 'parquet'", formats.contains("parquet"));
-        assertTrue("Catalog should contain 'lucene'", formats.contains("lucene"));  
-
-        verifyRowCount(snapshot, totalDocs);
-        verifySortOrder(snapshot);  
-        verifyLuceneDocCount(totalDocs);
-        verifyLuceneRowIdSequential();
-        verifyCrossFormatConsistency(snapshot);  
-    }
-
-    /**  
-     * Validates inline consolidation at refresh with fileMappings:
+                            + " fields="
+            new Object[] {
+                    if (currAge == null) {  
+            for (int i = 0; i < docsPerCycle; i++) {
      * When multiple writers flush in the same refresh cycle, the primary (Parquet) merges
-     * them and produces a RowIdMapping via fileMappings. The secondary (Lucene) then applies  
-     * the same mapping. This test uses concurrent indexing to fill multiple writers, then
-     * a single refresh to trigger consolidation.
-     *  
-     * Correctness criteria:
-     * <ol>
-     *   <li>After refresh, catalog has 1 segment (consolidated) instead of N per-writer segments</li>  
-     *   <li>Both parquet and lucene formats are present</li>
-     *   <li>Lucene __row_id__ values are sequential (RowIdMapping correctly applied)</li>
-     *   <li>Cross-format consistency: parquet row data matches lucene data at same row_id</li>  
-     * </ol>
-     */
-    public void testMergeOnRefresh() throws Exception {  
         client().admin()
-            .indices()
-            .prepareCreate(INDEX_NAME)  
-            .setSettings(sortedParquetPrimaryLuceneSecondarySettings())
-            .setMapping("name", "type=keyword", "age", "type=integer")
-            .get();  
-        ensureGreen(INDEX_NAME);
-
-        // Use concurrent threads to fill multiple writers in a single refresh cycle.  
-        // With refresh_interval=-1 and no explicit refresh, all docs land in the writer pool.
-        int numThreads = 8;
-        int docsPerThread = 5;  
-        int totalDocs = numThreads * docsPerThread;
-        java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
-        java.util.concurrent.atomic.AtomicReference<Exception> error = new java.util.concurrent.atomic.AtomicReference<>();  
-
-        Thread[] threads = new Thread[numThreads];
-        for (int t = 0; t < numThreads; t++) {  
-            int threadId = t;
-            threads[t] = new Thread(() -> {
-                try {  
-                    startLatch.await();
-                    for (int i = 0; i < docsPerThread; i++) {
-                        int docId = threadId * docsPerThread + i;  
-                        client().prepareIndex(INDEX_NAME).setSource("name", "doc_" + docId, "age", randomIntBetween(0, 100)).get();
-                    }
-                } catch (Exception e) {  
-                    error.compareAndSet(null, e);
-                }
-            });  
-            threads[t].start();
-        }
-        startLatch.countDown();  
-        for (Thread t : threads) {
-            t.join();
-        }  
-        if (error.get() != null) {
-            throw error.get();
-        }  
-
-        // Single refresh flushes all writers — triggers inline consolidation via fileMappings
-        client().admin().indices().prepareRefresh(INDEX_NAME).get();  
-        client().admin().indices().prepareFlush(INDEX_NAME).setForce(true).setWaitIfOngoing(true).get();
-
-        DataformatAwareCatalogSnapshot snapshot = getCatalogSnapshot();  
-
-        // Both formats must be present in the single consolidated segment
-        Set<String> formats = snapshot.getDataFormats();  
-        assertTrue("Catalog should contain 'parquet'", formats.contains("parquet"));
-        assertTrue("Catalog should contain 'lucene'", formats.contains("lucene"));
-
-        // Verify total row count
-        verifyRowCount(snapshot, totalDocs);
-
-        // Verify lucene doc count
-        verifyLuceneDocCount(totalDocs);
-
-        // RowIdMapping correctness: __row_id__ must be sequential within each segment
-        verifyLuceneRowIdSequential();
-
-        // Cross-format field value consistency
-        verifyCrossFormatConsistency(snapshot);
-    }  
-
-    // ══════════════════════════════════════════════════════════════════════
-    // Private helpers: merge feature flag  
-    // ══════════════════════════════════════════════════════════════════════
-
-    @SuppressForbidden(reason = "enable pluggable dataformat merge for integration testing")  
-    private static void enableMerge() {
-        System.setProperty(MERGE_ENABLED_PROPERTY, "true");
-    }  
-
-    @SuppressForbidden(reason = "restore pluggable dataformat merge property after test")
-    private static void disableMerge() {  
-        System.clearProperty(MERGE_ENABLED_PROPERTY);
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    // Private helpers: index settings
-    // ══════════════════════════════════════════════════════════════════════  
-
-    private Settings unsortedSettings() {
-        return Settings.builder()  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.refresh_interval", "-1")  
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")
-            .put("index.composite.primary_data_format", "parquet")  
-            .putList("index.composite.secondary_data_formats", "lucene")
-            .build();
-    }  
-
-    private Settings parquetPrimaryLuceneSecondarySettings() {
-        return Settings.builder()  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.refresh_interval", "-1")  
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")
-            .put("index.composite.primary_data_format", "parquet")  
-            .putList("index.composite.secondary_data_formats", "lucene")
-            .build();
-    }  
-
-    private Settings sortedParquetPrimaryLuceneSecondarySettings() {
-        return Settings.builder()  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.refresh_interval", "-1")  
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")
-            .put("index.composite.primary_data_format", "parquet")  
-            .putList("index.composite.secondary_data_formats", "lucene")
-            .putList("index.sort.field", "age", "name")
-            .putList("index.sort.order", "desc", "asc")  
-            .putList("index.sort.missing", "_first", "_last")
-            .build();
-    }  
-
-    // ══════════════════════════════════════════════════════════════════════
-    // Private helpers: indexing  
-    // ══════════════════════════════════════════════════════════════════════
-
-    private void indexDocsAcrossMultipleRefreshes(int refreshCycles, int docsPerCycle) {  
-        for (int cycle = 0; cycle < refreshCycles; cycle++) {
-            for (int i = 0; i < docsPerCycle; i++) {
-                IndexResponse response = client().prepareIndex()  
-                    .setIndex(INDEX_NAME)
-                    .setSource("name", randomAlphaOfLength(10), "age", randomIntBetween(1, 1000))
-                    .get();  
-                assertEquals(RestStatus.CREATED, response.status());
-            }
-            RefreshResponse refreshResponse = client().admin().indices().prepareRefresh(INDEX_NAME).get();  
-            assertEquals(RestStatus.OK, refreshResponse.getStatus());
-        }
-    }  
-
-    private void indexDocsWithNullsAcrossRefreshes(int refreshCycles, int docsPerCycle) {
+                    );  
+            mergeStats.getUnreferencedFileCleanUpsPerformed()
+                Map<Long, Map<String, Object>> matchingSegment = null;  
+     * segments, then verifies that for each row in parquet (identified by __row_id__),
+        waitForMerge(refreshCycles);  
         for (int cycle = 0; cycle < refreshCycles; cycle++) {  
-            for (int i = 0; i < docsPerCycle; i++) {
-                IndexResponse response;
-                if (i % 5 == 0) {  
-                    response = client().prepareIndex().setIndex(INDEX_NAME).setSource("name", randomAlphaOfLength(10)).get();
-                } else {
-                    response = client().prepareIndex()  
-                        .setIndex(INDEX_NAME)
-                        .setSource("name", randomAlphaOfLength(10), "age", randomIntBetween(0, 100))
-                        .get();  
-                }
-                assertEquals(RestStatus.CREATED, response.status());
-            }  
-            RefreshResponse refreshResponse = client().admin().indices().prepareRefresh(INDEX_NAME).get();
-            assertEquals(RestStatus.OK, refreshResponse.getStatus());
-        }  
-    }
-
-    // ══════════════════════════════════════════════════════════════════════  
-    // Private helpers: verification
-    // ══════════════════════════════════════════════════════════════════════
-
-    private void verifyRowCount(DataformatAwareCatalogSnapshot snapshot, int expectedTotalDocs) throws IOException {
-        Path parquetDir = getParquetDir();
-        long totalRows = 0;  
+                    );
+            .setMerge(true)
+        int docsPerCycle = 10;
+    private DataformatAwareCatalogSnapshot getCatalogSnapshot() throws IOException {
+                    }
+    }  
+        );  
         for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
-            assertNotNull("Segment should have parquet files", wfs);  
+                            .putList("index.sort.field", fieldName)
+        int totalDocs = refreshCycles * docsPerCycle;
+            .build();
+     */
+    }
+            ArrowBasePlugin.class,  
+        int docsPerCycle = 5;  
+    }
+        // verify every row_id in the leaf resolves to a row in that segment with matching  
+        if (prev instanceof Number && curr instanceof Number) {  
+                        "val_float",
+            new Object[] {  
             for (String file : wfs.files()) {
-                Path filePath = parquetDir.resolve(file);
-                assertTrue("Parquet file should exist: " + filePath, Files.exists(filePath));  
-                ParquetFileMetadata metadata = RustBridge.getFileMetadata(filePath.toString());
-                assertEquals("WriterFileSet numRows should match actual file metadata for " + file, wfs.numRows(), metadata.numRows());
-                totalRows += metadata.numRows();  
-            }
+        for (int t = 0; t < numThreads; t++) {  
+            .setSettings(unsortedSettings())
+import org.opensearch.index.shard.IndexShard;
+    // ══════════════════════════════════════════════════════════════════════  
+                    response = client().prepareIndex().setIndex(INDEX_NAME).setSource(fieldName, value).get();
+     */  
+                    Map<String, Object> parquetRow = matchingSegment.get(luceneRowId);
+        // Verify total row count
+        String[] missings = { randomFrom("_first", "_last"), randomFrom("_first", "_last"), randomFrom("_first", "_last") };
+            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");  
+                        randomLongBetween(-100000, 100000),  
+        ensureGreen(INDEX_NAME);
+            .indices()
+     * map would silently overwrite rows from segments that happen to share row_ids.  
+     *  
+                            + sortMissing,  
         }
+                            + file
+        org.opensearch.action.admin.indices.stats.IndicesStatsResponse statsResponse = client().admin()
+import org.opensearch.index.engine.dataformat.DocumentInput;
+                        assertEquals("Age mismatch at row_id=" + luceneRowId, ((Number) parquetAge).longValue(), luceneAge);
+                    int cmp = compareRows(rows.get(i - 1), rows.get(i), sortFields, sortOrders, sortMissing);  
+            assertEquals("All lucene docs should have matching parquet rows", totalLuceneDocs, matchedDocs);
+        Path luceneDir = getLuceneDir();
+                        Settings settings = Settings.builder()
+ * SPDX-License-Identifier: Apache-2.0
+     */
+            .put("index.pluggable.dataformat", "composite")
+                        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);
+                IndexResponse response = client().prepareIndex().setIndex(INDEX_NAME).setSource(source).get();
+import org.apache.lucene.store.Directory;
+import java.util.HashSet;
+                        indexRandomDocs(refreshCycles, docsPerCycle, fieldName, valueSupplier);
+        try {  
+     * Sequential (not just monotonic) is required because the RowIdMapping produces
+            return DataformatAwareCatalogSnapshot.deserializeFromString(snapshot.get().serializeToString(), Function.identity());
+                        "val_keyword",
+        enableMerge();  
+            .putList("index.composite.secondary_data_formats", "lucene")
+     *   <li>Cross-format consistency: parquet rows match lucene docs by row_id</li>
+        org.opensearch.index.merge.MergeStats mergeStats = statsResponse.getIndex(INDEX_NAME).getShards()[0].getStats().getMerge();
+        }
+        List<String> sortFields,
+            .indices()
+    @SuppressForbidden(reason = "JSON parsing for test verification of parquet output")
+        int totalDocs = refreshCycles * docsPerCycle;  
+                        );  
+    }  
+        return sortFields.stream().map(row::get).toList();  
+        DataformatAwareCatalogSnapshot snapshot = getCatalogSnapshot();  
+    // ══════════════════════════════════════════════════════════════════════
+        assertTrue("Catalog should contain 'lucene'", formats.contains("lucene"));
+                    if (candidate.size() == leafDocs) {
+        } else {
+                    for (Object obj : parser.list()) {
+        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);
+    // ══════════════════════════════════════════════════════════════════════  
+                IndexResponse response;
+                    .setIndex(INDEX_NAME)
+        ensureGreen(INDEX_NAME);
+                    }).toList();
+                        parquetRow
+                assertEquals(RestStatus.CREATED, response.status());
+                    }
+                        .setIndex(INDEX_NAME)
+     *  
+     * Verifies that merged parquet files have age in DESC order with nulls first,
+            });  
+                "val_float",
+    private void indexDocsWithNullsAcrossRefreshes(int refreshCycles, int docsPerCycle) {
+            .put(unsortedSettings())
+import java.util.Arrays;  
+                Object value = valueSupplier.get();
+            .put("index.composite.primary_data_format", "parquet")  
+                        long rowId = ((Number) row.get(DocumentInput.ROW_ID_FIELD)).longValue();
+                        Map<String, Object> m = (Map<String, Object>) o;
+                }
+    private Path getLuceneDir() {  
+                            + " in file "
+            DataFusionPlugin.class
+            assertEquals(RestStatus.OK, refreshResponse.getStatus());
+            @SuppressWarnings("unchecked")
+        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeNameResolved);
+                Path filePath = parquetDir.resolve(file);
+                            "Parquet row at " + DocumentInput.ROW_ID_FIELD + "=" + luceneRowId + " should have 'age' field",
+        waitForMerge(refreshCycles);
+    // ══════════════════════════════════════════════════════════════════════
+    }
+                } else {  
+import java.io.IOException;  
+        // Both formats must be present in the catalog
+                        randomFloat() * 200 - 100,
+     * the same reordering via the mapping.
+        List<String> sortMissing
+        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);  
+                        "Sort order violated at row "
+                    // Compare age field
+            .setMapping("name", "type=keyword", "age", "type=integer")  
+    private List<Object> extractSortValues(Map<String, Object> row, List<String> sortFields) {
+        verifyRowCount(snapshot, totalDocs);
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+                        Map<String, Object> m = (Map<String, Object>) o;
+            cmp = ((String) prev).compareTo((String) curr);  
+            .putList("index.sort.field", fields)  
+    // ── Helpers for randomized tests ──  
+            boolean desc = "desc".equals(sortOrders.get(f));
+                assertTrue("Orphan parquet file on disk not referenced by catalog: " + diskFile, referencedFiles.contains(diskFile));
+import org.opensearch.be.datafusion.DataFusionPlugin;  
+    }
+        return Settings.builder()  
+                }
+            }  
+                    )  
+        Path parquetDir = getParquetDir();  
+import org.opensearch.common.concurrent.GatedCloseable;
+                "timestamp",
+                    } finally {
+    }  
+     * them and produces a RowIdMapping via fileMappings. The secondary (Lucene) then applies  
+                long expectedRowId = 0;
+        ensureGreen(INDEX_NAME);
+        try (Directory dir = NIOFSDirectory.open(luceneDir); DirectoryReader reader = DirectoryReader.open(dir)) {
+        if (prev == null) return nullsFirst ? -1 : 1;
+    }  
+import java.nio.file.Path;
+    private void indexRandomDocs(int refreshCycles, int docsPerCycle, String fieldName, Supplier<Object> valueSupplier) {
+// singleton that persists after tests complete. It polls for new async IO tasks between merges.
+     * <ol>
+            }  
+            int threadId = t;
+    /**  
+        assertNotNull("MergeStats from API should not be null", mergeStats);  
+                assertEquals(RestStatus.CREATED, response.status());  
+                    }
+                "value_long",
+        System.clearProperty(MERGE_ENABLED_PROPERTY);
+            if (wfs != null) {
+    public void testBackgroundMerge() throws Exception {  
         assertEquals("Total rows across all segments should match ingested docs", expectedTotalDocs, totalRows);  
     }
-
-    private void verifySegmentGenerationUniqueness(DataformatAwareCatalogSnapshot snapshot) {  
-        List<Long> generations = snapshot.getSegments().stream().map(Segment::generation).toList();
-        assertEquals("All segment generations must be unique", generations.size(), generations.stream().distinct().count());
-    }  
-
-    private void verifyNoOrphanFiles(DataformatAwareCatalogSnapshot snapshot) throws IOException {
-        Path parquetDir = getParquetDir();  
-        Set<String> referencedFiles = new HashSet<>();
-        for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");  
-            if (wfs != null) {
-                referencedFiles.addAll(wfs.files());
-            }  
-        }
-        try (var stream = Files.list(parquetDir)) {
-            List<String> diskFiles = stream.filter(Files::isRegularFile)  
-                .map(p -> p.getFileName().toString())
-                .filter(f -> f.endsWith(".parquet"))
-                .toList();  
-            for (String diskFile : diskFiles) {
-                assertTrue("Orphan parquet file on disk not referenced by catalog: " + diskFile, referencedFiles.contains(diskFile));
-            }  
-        }
-    }
-
-    /**
-     * Verifies that merged parquet files have age in DESC order with nulls first,
-     * and within same age, name in ASC order with nulls last.  
-     */
-    @SuppressForbidden(reason = "JSON parsing for test verification of parquet output")
-    private void verifySortOrder(DataformatAwareCatalogSnapshot snapshot) throws Exception {  
-        Path parquetDir = getParquetDir();
-        for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");  
-            for (String file : wfs.files()) {
-                Path filePath = parquetDir.resolve(file);
-                String json = RustBridge.readAsJson(filePath.toString());  
-                List<Map<String, Object>> rows;
-                try (
-                    XContentParser parser = JsonXContent.jsonXContent.createParser(  
-                        NamedXContentRegistry.EMPTY,
-                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                        json  
-                    )
-                ) {
-                    rows = parser.list().stream().map(o -> {  
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> m = (Map<String, Object>) o;
-                        return m;  
-                    }).toList();
-                }
-                if (rows.size() <= 1) continue;  
-
-                for (int i = 1; i < rows.size(); i++) {
-                    Object prevAge = rows.get(i - 1).get("age");  
-                    Object currAge = rows.get(i).get("age");
-
-                    // nulls first for age  
-                    if (prevAge == null && currAge == null) continue;
-                    if (prevAge == null) continue; // null before non-null is correct
-                    if (currAge == null) {  
-                        fail("age null should come before non-null, but found non-null at " + (i - 1) + " and null at " + i);
                     }
-
-                    int prevAgeVal = ((Number) prevAge).intValue();
-                    int currAgeVal = ((Number) currAge).intValue();
-
-                    assertTrue(
-                        "age should be DESC but found " + prevAgeVal + " before " + currAgeVal + " at row " + i,
-                        prevAgeVal >= currAgeVal  
-                    );
-
-                    // When age is equal, verify name ASC (nulls last)  
-                    if (prevAgeVal == currAgeVal) {
-                        Object prevName = rows.get(i - 1).get("name");
-                        Object currName = rows.get(i).get("name");  
-
-                        if (prevName != null && currName == null) continue; // non-null before null is correct for nulls last
-                        if (prevName == null && currName != null) {  
-                            fail("name nulls should be last, but found null at " + (i - 1) + " and non-null at " + i);
-                        }
-                        if (prevName != null && currName != null) {  
-                            assertTrue(
-                                "name should be ASC but found '" + prevName + "' before '" + currName + "' at row " + i,
-                                ((String) prevName).compareTo((String) currName) <= 0  
-                            );
-                        }
-                    }  
-                }
-            }
-        }  
-    }
-
-    private void verifyLuceneDocCount(int expectedTotalDocs) throws IOException {  
-        Path luceneDir = getLuceneDir();
-        assertTrue("Lucene directory should exist: " + luceneDir, Files.exists(luceneDir));
-
-        try (Directory dir = NIOFSDirectory.open(luceneDir); DirectoryReader reader = DirectoryReader.open(dir)) {
-            assertEquals("Total lucene docs should match ingested docs", expectedTotalDocs, reader.numDocs());
-        }  
-    }
-
-    /**  
-     * Verifies that __row_id__ doc values in merged lucene segments are sequential
-     * (0, 1, 2, ...) within each leaf. This confirms the RowIdMapping from the primary
-     * (Parquet) merge was correctly applied to reorder Lucene documents.  
-     *
-     * Sequential (not just monotonic) is required because the RowIdMapping produces
-     * a dense mapping — every position from 0..N-1 must be covered.  
-     */
-    private void verifyLuceneRowIdSequential() throws IOException {
-        Path luceneDir = getLuceneDir();  
-
-        try (Directory dir = NIOFSDirectory.open(luceneDir); DirectoryReader reader = DirectoryReader.open(dir)) {
-            for (LeafReaderContext ctx : reader.leaves()) {  
-                SortedNumericDocValues rowIdDV = ctx.reader().getSortedNumericDocValues(DocumentInput.ROW_ID_FIELD);
-                if (rowIdDV == null) continue;
-
-                long expectedRowId = 0;
-                for (int doc = 0; doc < ctx.reader().maxDoc(); doc++) {
-                    if (rowIdDV.advanceExact(doc)) {  
-                        long rowId = rowIdDV.nextValue();
-                        assertEquals(
-                            DocumentInput.ROW_ID_FIELD  
-                                + " should be sequential within segment, expected "
-                                + expectedRowId
-                                + " but got "  
-                                + rowId
-                                + " at doc "
-                                + doc,  
-                            expectedRowId,
-                            rowId
-                        );  
-                        expectedRowId++;
-                    }
-                }  
-            }
-        }
-    }  
-
-    /**
-     * Cross-format data comparison: reads merged parquet file content and merged lucene  
-     * segments, then verifies that for each row in parquet (identified by __row_id__),
-     * the corresponding Lucene document (sorted by __row_id__) has matching field values.
-     *  
-     * Compares both numeric (age) and keyword (name) fields to ensure the RowIdMapping
-     * correctly synchronized the two formats during merge.
-     *  
-     * <p>Note: {@code __row_id__} is only unique <em>within</em> a catalog segment
-     * (each segment starts row_ids at 0), so rows must be grouped per segment — a global
-     * map would silently overwrite rows from segments that happen to share row_ids.  
-     * Each Lucene leaf is matched to its parquet segment by row count.
-     */
-    @SuppressForbidden(reason = "JSON parsing for cross-format data comparison")  
-    private void verifyCrossFormatConsistency(DataformatAwareCatalogSnapshot snapshot) throws Exception {
-        Path parquetDir = getParquetDir();
-        Path luceneDir = getLuceneDir();  
-
-        // Collect parquet rows grouped per catalog segment, indexed by __row_id__
-        // (only unique within a segment, so a per-segment map is required).  
-        List<Map<Long, Map<String, Object>>> parquetSegments = new java.util.ArrayList<>();
-        for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet parquetWfs = segment.dfGroupedSearchableFiles().get("parquet");  
-            if (parquetWfs == null) continue;
-            Map<Long, Map<String, Object>> rowsInSegment = new java.util.HashMap<>();
-            for (String file : parquetWfs.files()) {  
-                Path filePath = parquetDir.resolve(file);
-                if (Files.exists(filePath) == false) continue;
-                String json = RustBridge.readAsJson(filePath.toString());  
-                try (
-                    XContentParser parser = JsonXContent.jsonXContent.createParser(
-                        NamedXContentRegistry.EMPTY,  
-                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                        json
-                    )  
-                ) {
-                    for (Object obj : parser.list()) {
-                        @SuppressWarnings("unchecked")  
-                        Map<String, Object> row = (Map<String, Object>) obj;
-                        long rowId = ((Number) row.get(DocumentInput.ROW_ID_FIELD)).longValue();
-                        rowsInSegment.put(rowId, row);  
-                    }
-                }
-            }  
-            if (rowsInSegment.isEmpty() == false) {
-                parquetSegments.add(rowsInSegment);
-            }  
-        }
-
-        assertTrue("Should have parquet rows to compare", parquetSegments.isEmpty() == false);  
-
-        // For each Lucene leaf, find the parquet segment whose row count matches and
-        // verify every row_id in the leaf resolves to a row in that segment with matching  
-        // age/name values.
-        try (Directory dir = NIOFSDirectory.open(luceneDir); DirectoryReader reader = DirectoryReader.open(dir)) {
-            int matchedDocs = 0;  
-            int totalLuceneDocs = 0;
-            for (LeafReaderContext ctx : reader.leaves()) {
-                int leafDocs = ctx.reader().maxDoc();  
-                totalLuceneDocs += leafDocs;
-
-                Map<Long, Map<String, Object>> matchingSegment = null;  
-                for (Map<Long, Map<String, Object>> candidate : parquetSegments) {
-                    if (candidate.size() == leafDocs) {
-                        matchingSegment = candidate;  
-                        break;
-                    }
-                }  
-                assertNotNull("No parquet segment found with matching row count " + leafDocs, matchingSegment);
-                parquetSegments.remove(matchingSegment);
-
-                SortedNumericDocValues rowIdDV = ctx.reader().getSortedNumericDocValues(DocumentInput.ROW_ID_FIELD);
-                SortedNumericDocValues ageDV = ctx.reader().getSortedNumericDocValues("age");
-                SortedSetDocValues nameDV = ctx.reader().getSortedSetDocValues("name");  
-
-                if (rowIdDV == null) continue;
-
-                for (int doc = 0; doc < leafDocs; doc++) {
-                    if (rowIdDV.advanceExact(doc) == false) continue;
-                    long luceneRowId = rowIdDV.nextValue();  
-
-                    Map<String, Object> parquetRow = matchingSegment.get(luceneRowId);
-                    assertNotNull(  
-                        "Lucene doc with " + DocumentInput.ROW_ID_FIELD + "=" + luceneRowId + " should have a matching parquet row",
-                        parquetRow
-                    );  
-
-                    // Compare age field
-                    if (ageDV != null && ageDV.advanceExact(doc)) {  
-                        long luceneAge = ageDV.nextValue();
-                        Object parquetAge = parquetRow.get("age");
-                        assertNotNull(  
-                            "Parquet row at " + DocumentInput.ROW_ID_FIELD + "=" + luceneRowId + " should have 'age' field",
-                            parquetAge
-                        );  
-                        assertEquals("Age mismatch at row_id=" + luceneRowId, ((Number) parquetAge).longValue(), luceneAge);
-                    }
-
-                    // Compare name field (keyword stored as sorted set doc values)
-                    if (nameDV != null && nameDV.advanceExact(doc)) {
-                        long ord = nameDV.nextOrd();  
-                        if (ord >= 0) {
-                            String luceneName = nameDV.lookupOrd(ord).utf8ToString();
-                            Object parquetName = parquetRow.get("name");  
-                            assertNotNull(
-                                "Parquet row at " + DocumentInput.ROW_ID_FIELD + "=" + luceneRowId + " should have 'name' field",
-                                parquetName  
-                            );
-                            assertEquals("Name mismatch at row_id=" + luceneRowId, parquetName.toString(), luceneName);
-                        }  
-                    }
-
-                    matchedDocs++;  
-                }
-            }
-
-            assertTrue("Should have matched at least some docs across formats", matchedDocs > 0);
-            assertEquals("All lucene docs should have matching parquet rows", totalLuceneDocs, matchedDocs);
-        }  
-    }
-
-    // ══════════════════════════════════════════════════════════════════════  
-    // Private helpers: shard/cluster accessors
-    // ══════════════════════════════════════════════════════════════════════
-
-    private Path getParquetDir() {
-        IndexShard shard = getPrimaryShard();
-        return shard.shardPath().getDataPath().resolve("parquet");  
-    }
-
-    private Path getLuceneDir() {  
-        // Merged lucene segments live in the shard's standard index folder (ShardPath.resolveIndex()),
-        // which resolves to "<shardDataPath>/index". The "<shardDataPath>/lucene" folder is only used
-        // for per-writer temporary staging directories (lucene_gen_*), not for the committed merged index.  
-        IndexShard shard = getPrimaryShard();
-        return shard.shardPath().resolveIndex();
-    }  
-
-    private IndexShard getPrimaryShard() {
-        String nodeName = getClusterState().routingTable().index(INDEX_NAME).shard(0).primaryShard().currentNodeId();  
-        String nodeNameResolved = getClusterState().nodes().get(nodeName).getName();
-        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeNameResolved);
-        IndexService indexService = indicesService.indexServiceSafe(resolveIndex(INDEX_NAME));  
-        return indexService.getShard(0);
-    }
-
-    private DataformatAwareCatalogSnapshot getCatalogSnapshot() throws IOException {
-        IndexShard shard = getPrimaryShard();
-        try (GatedCloseable<CatalogSnapshot> snapshot = shard.getCatalogSnapshot()) {  
-            return DataformatAwareCatalogSnapshot.deserializeFromString(snapshot.get().serializeToString(), Function.identity());
-        }
-    }  
-
-    // ── Randomized sort tests across data types ──
-
-    public void testSortedMergeBySingleField() throws Exception {
-        long now = System.currentTimeMillis();
-        List<Object[]> fieldSpecs = List.of(  
-            new Object[] {
-                "value_long",
-                "type=long",  
-                (Supplier<Object>) () -> randomBoolean() ? null : randomLongBetween(-1_000_000L, 1_000_000L) },
-            new Object[] { "value_float", "type=float", (Supplier<Object>) () -> randomBoolean() ? null : randomFloat() * 1000 },
-            new Object[] {  
-                "value_double",
-                "type=double",
-                (Supplier<Object>) () -> randomBoolean() ? null : randomDoubleBetween(-1e6, 1e6, true) },  
-            new Object[] {
-                "timestamp",
-                "type=date",  
-                (Supplier<Object>) () -> randomBoolean() ? null : now - randomLongBetween(0, 86400000L * 365) },
-            new Object[] { "tag", "type=keyword", (Supplier<Object>) () -> randomBoolean() ? null : randomAlphaOfLengthBetween(3, 8) }
-        );  
-
-        for (Object[] spec : fieldSpecs) {
-            String fieldName = (String) spec[0];  
-            String fieldType = (String) spec[1];
-            @SuppressWarnings("unchecked")
-            Supplier<Object> valueSupplier = (Supplier<Object>) spec[2];  
-
-            for (String order : List.of("asc", "desc")) {
-                for (String missing : List.of("_first", "_last")) {  
-                    try {
-                        Settings settings = Settings.builder()
-                            .put(unsortedSettings())  
-                            .putList("index.sort.field", fieldName)
-                            .putList("index.sort.order", order)
-                            .putList("index.sort.missing", missing)  
-                            .build();
-
-                        client().admin().indices().prepareCreate(INDEX_NAME).setSettings(settings).setMapping(fieldName, fieldType).get();  
-                        ensureGreen(INDEX_NAME);
-
-                        int docsPerCycle = 10;  
-                        int refreshCycles = 15;
-                        indexRandomDocs(refreshCycles, docsPerCycle, fieldName, valueSupplier);
-                        int totalDocs = refreshCycles * docsPerCycle;  
-
-                        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);
-                        verifyRowCount(snapshot, totalDocs);  
-                        verifySortOrderGeneric(snapshot, List.of(fieldName), List.of(order), List.of(missing));
-                    } finally {
-                        client().admin().indices().prepareDelete(INDEX_NAME).get();  
-                    }
-                }
-            }  
-        }
-    }
-
-    public void testSortedMergeMultiColumnRandomized() throws Exception {
-        String[] fields = { "age", "score", "tag" };
-        String[] types = { "type=integer", "type=long", "type=keyword" };  
-        String[] orders = { randomFrom("asc", "desc"), randomFrom("asc", "desc"), randomFrom("asc", "desc") };
-        String[] missings = { randomFrom("_first", "_last"), randomFrom("_first", "_last"), randomFrom("_first", "_last") };
-
-        Settings settings = Settings.builder()
-            .put(unsortedSettings())
-            .putList("index.sort.field", fields)  
-            .putList("index.sort.order", orders)
-            .putList("index.sort.missing", missings)
-            .build();  
-
-        client().admin()
-            .indices()  
-            .prepareCreate(INDEX_NAME)
-            .setSettings(settings)
-            .setMapping("age", types[0], "score", types[1], "tag", types[2])  
-            .get();
-        ensureGreen(INDEX_NAME);
-
-        int docsPerCycle = 10;
-        int refreshCycles = 15;
-        for (int cycle = 0; cycle < refreshCycles; cycle++) {  
-            for (int i = 0; i < docsPerCycle; i++) {
-                var source = new java.util.HashMap<String, Object>();
-                source.put("age", randomBoolean() ? null : randomIntBetween(0, 100));  
-                source.put("score", randomBoolean() ? null : randomLongBetween(0, 10000));
-                source.put("tag", randomBoolean() ? null : randomAlphaOfLengthBetween(3, 6));
-                // Remove null entries so they appear as missing in the doc  
-                source.values().removeIf(java.util.Objects::isNull);
-                IndexResponse response = client().prepareIndex().setIndex(INDEX_NAME).setSource(source).get();
-                assertEquals(RestStatus.CREATED, response.status());  
-            }
-            client().admin().indices().prepareRefresh(INDEX_NAME).get();
-        }  
-        int totalDocs = refreshCycles * docsPerCycle;
-
-        waitForMerge(refreshCycles);  
-        DataformatAwareCatalogSnapshot snapshot = getCatalogSnapshot();
-        verifyRowCount(snapshot, totalDocs);
-        verifySortOrderGeneric(snapshot, List.of(fields), List.of(orders), List.of(missings));  
-    }
-
-    public void testUnsortedMergeWithAllTypes() throws Exception {  
-        client().admin()
-            .indices()
-            .prepareCreate(INDEX_NAME)  
-            .setSettings(unsortedSettings())
-            .setMapping(
-                "val_int",  
-                "type=integer",
-                "val_long",
-                "type=long",  
-                "val_float",
-                "type=float",
-                "val_double",  
-                "type=double",
-                "val_date",
-                "type=date",  
-                "val_keyword",
-                "type=keyword"
-            )  
-            .get();
-        ensureGreen(INDEX_NAME);
-
-        int docsPerCycle = 8;
-        int refreshCycles = 15;
-        long now = System.currentTimeMillis();  
-        for (int cycle = 0; cycle < refreshCycles; cycle++) {
-            for (int i = 0; i < docsPerCycle; i++) {
-                IndexResponse response = client().prepareIndex()  
-                    .setIndex(INDEX_NAME)
-                    .setSource(
-                        "val_int",  
-                        randomIntBetween(-100, 100),
-                        "val_long",
-                        randomLongBetween(-100000, 100000),  
-                        "val_float",
-                        randomFloat() * 200 - 100,
-                        "val_double",  
-                        randomDoubleBetween(-1000, 1000, true),
-                        "val_date",
-                        now - randomLongBetween(0, 86400000L * 30),  
-                        "val_keyword",
-                        randomAlphaOfLength(6)
-                    )  
-                    .get();
-                assertEquals(RestStatus.CREATED, response.status());
-            }  
-            client().admin().indices().prepareRefresh(INDEX_NAME).get();
-        }
-        int totalDocs = refreshCycles * docsPerCycle;  
-
-        waitForMerge(refreshCycles);
-        DataformatAwareCatalogSnapshot snapshot = getCatalogSnapshot();  
-        verifyRowCount(snapshot, totalDocs);
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    // Merge stats tests
-    // ══════════════════════════════════════════════════════════════════════  
-
-    /**
-     * Verifies that after a merge, getMergeStats() reports at least one completed merge  
-     * and unreferencedFileCleanUpsPerformed > 0 (old segment files were cleaned up).
-     */
-    public void testMergeStatsAfterMerge() throws Exception {  
-        client().admin()
-            .indices()
-            .prepareCreate(INDEX_NAME)  
-            .setSettings(unsortedSettings())
             .setMapping("name", "type=keyword", "age", "type=integer")
-            .get();  
-        ensureGreen(INDEX_NAME);
-
-        int docsPerCycle = 5;  
-        int refreshCycles = 15;
-        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);
-
-        waitForMerge(refreshCycles);
-
-        IndexShard shard = getPrimaryShard();  
-        DataFormatAwareEngine engine = (DataFormatAwareEngine) org.opensearch.index.shard.IndexShardTestCase.getIndexer(shard);
-
-        org.opensearch.index.merge.MergeStats mergeStats = engine.getMergeStats();  
-        assertNotNull("MergeStats should not be null", mergeStats);
-        assertTrue("Total merges should be > 0 after merge", mergeStats.getTotal() > 0);
-
-        long cleanups = engine.unreferencedFileCleanUpsPerformed();
-        assertEquals(
-            "unreferencedFileCleanUpsPerformed should be 0 after successful merge (only tracks merge failure cleanups)",  
-            0,
-            cleanups
-        );  
-    }
-
-    /**  
-     * Verifies that merge stats via the indices stats API (_stats/merge) reflects
-     * unreferenced_file_cleanups_performed after a merge.
-     */  
-    public void testMergeStatsViaApi() throws Exception {
+     *  
         client().admin()
-            .indices()  
-            .prepareCreate(INDEX_NAME)
+            WriterFileSet parquetWfs = segment.dfGroupedSearchableFiles().get("parquet");  
+            .indices()
+                (Supplier<Object>) () -> randomBoolean() ? null : now - randomLongBetween(0, 86400000L * 365) },
+                }
+        assertTrue("Lucene directory should exist: " + luceneDir, Files.exists(luceneDir));
+                        rowsInSegment.put(rowId, row);  
+            for (int i = 0; i < docsPerCycle; i++) {
+        }
+        }
+    @Override
+        assertTrue("Catalog should contain 'parquet'", formats.contains("parquet"));
+        Path luceneDir = getLuceneDir();  
+        try (Directory dir = NIOFSDirectory.open(luceneDir); DirectoryReader reader = DirectoryReader.open(dir)) {
+                    .setSource("name", randomAlphaOfLength(10), "age", randomIntBetween(1, 1000))
+import org.opensearch.core.xcontent.DeprecationHandler;  
+            .build();
+    }
+public class CompositeMergeIT extends OpenSearchIntegTestCase {
+        assertEquals(
+     *       (confirms RowIdMapping was applied during secondary merge)</li>  
+            assertNotNull("Segment should have parquet files", wfs);  
+        // Cross-format validation: for each segment, parquet rows == lucene segment docs
+        // Single refresh flushes all writers — triggers inline consolidation via fileMappings
+        int cmp;
+                        @SuppressWarnings("unchecked")
+        client().admin().indices().prepareRefresh(INDEX_NAME).get();  
+import org.opensearch.index.engine.DataFormatAwareEngine;
+     */
+                        int docId = threadId * docsPerThread + i;  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+                        int totalDocs = refreshCycles * docsPerCycle;  
+            .put("index.refresh_interval", "-1")  
+     * with correct row count and source files cleaned up.
+                if (rows.size() <= 1) continue;  
+                        int refreshCycles = 15;
+                for (Map<Long, Map<String, Object>> candidate : parquetSegments) {
+        IndexShard shard = getPrimaryShard();
+package org.opensearch.composite;
+        verifyCrossFormatConsistency(snapshot);
+                        "val_date",
+    // Merge stats tests
+                    rows = parser.list().stream().map(o -> {  
+        ensureGreen(INDEX_NAME);
+            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
+        int totalDocs = refreshCycles * docsPerCycle;  
+            throw error.get();
+            .setMapping("age", types[0], "score", types[1], "tag", types[2])  
             .setSettings(unsortedSettings())
+        verifySegmentGenerationUniqueness(snapshot);  
+        IndexShard shard = getPrimaryShard();
+    }
+        int refreshCycles = 15;
+import org.opensearch.plugins.Plugin;  
+            .putList("index.sort.order", orders)
+            .putList("index.sort.order", "desc", "asc")  
+        String[] fields = { "age", "score", "tag" };
+        DataformatAwareCatalogSnapshot snapshot = getCatalogSnapshot();
+     *   <li>Lucene documents have monotonically increasing __row_id__ doc values
+        Set<String> formats = snapshot.getDataFormats();
+        Set<String> referencedFiles = new HashSet<>();
+    public void testMergeOnRefresh() throws Exception {  
+                String json = RustBridge.readAsJson(filePath.toString());  
+     */
+        Map<String, Object> prev,  
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+                "type=date",  
+     *   <li>Merged parquet files have correct total row count</li>  
+            List<String> diskFiles = stream.filter(Files::isRegularFile)  
+    }  
+                                + rowId
+    /**
+        }
+            .setSettings(unsortedSettings())
+                        "Lucene doc with " + DocumentInput.ROW_ID_FIELD + "=" + luceneRowId + " should have a matching parquet row",
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+import org.opensearch.common.SuppressForbidden;  
+        // cascaded merge before the first one commits.  
+    // Private helpers: verification
+            threads[t].start();
+                assertNotNull("No parquet segment found with matching row count " + leafDocs, matchingSegment);
+                for (int doc = 0; doc < leafDocs; doc++) {
+                            String luceneName = nameDV.lookupOrd(ord).utf8ToString();
+        verifyLuceneDocCount(totalDocs);
+        }, 30, java.util.concurrent.TimeUnit.SECONDS);
+                        NamedXContentRegistry.EMPTY,  
+                SortedNumericDocValues ageDV = ctx.reader().getSortedNumericDocValues("age");
+        ensureGreen(INDEX_NAME);
+            assertEquals("Total lucene docs should match ingested docs", expectedTotalDocs, reader.numDocs());
+        Path luceneDir = getLuceneDir();  
+        }  
+     * Verifies sorted composite merge with Parquet primary (sorted) + Lucene secondary:  
+        DataformatAwareCatalogSnapshot snapshot,
+            new Object[] { "tag", "type=keyword", (Supplier<Object>) () -> randomBoolean() ? null : randomAlphaOfLengthBetween(3, 8) }
+                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                            .put(unsortedSettings())  
+                if (Files.exists(filePath) == false) continue;
+        int refreshCycles = 15;
+                        @SuppressWarnings("unchecked")  
+        int docsPerCycle = 10;  
+            .prepareCreate(INDEX_NAME)  
+        for (int cycle = 0; cycle < refreshCycles; cycle++) {  
+    // Private helpers: indexing  
+    private void verifyLuceneDocCount(int expectedTotalDocs) throws IOException {  
+                if (rowIdDV == null) continue;
+        if (error.get() != null) {
+        return Settings.builder()  
+        for (Segment segment : snapshot.getSegments()) {
+            cmp = prev.toString().compareTo(curr.toString());
+                "type=long",  
+        client().admin()
+    // ══════════════════════════════════════════════════════════════════════
+            assertEquals(RestStatus.OK, refreshResponse.getStatus());
+        int docsPerCycle = 5;
+                    .get();  
+import java.util.Map;
+        String[] types = { "type=integer", "type=long", "type=keyword" };  
+                        }
+    }
+                    )
+            }
+        }  
+                String json = RustBridge.readAsJson(filePath.toString());  
+                        now - randomLongBetween(0, 86400000L * 30),  
+                    .get();
+            for (String diskFile : diskFiles) {
+import org.opensearch.action.admin.indices.refresh.RefreshResponse;  
+            client().admin().indices().prepareRefresh(INDEX_NAME).get();
+     * Verifies composite merge with Parquet as primary and Lucene as secondary:
+            boolean nullsFirst = "_first".equals(sortMissing.get(f));  
+        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);
+                    startLatch.await();
+                assertEquals("WriterFileSet numRows should match actual file metadata for " + file, wfs.numRows(), metadata.numRows());
+import org.opensearch.common.util.FeatureFlags;  
+        verifySortOrderGeneric(snapshot, List.of(fields), List.of(orders), List.of(missings));  
+    }  
+        waitForMerge(refreshCycles);
+        flush(INDEX_NAME);  
+                        );  
+        assertBusy(() -> {
+    private void verifyCrossFormatConsistency(DataformatAwareCatalogSnapshot snapshot) throws Exception {
+    }  
+     * Verifies that __row_id__ doc values in merged lucene segments are sequential
+            .indices()  
+                        prevAgeVal >= currAgeVal  
+            .indices()
+                                + doc,  
+            for (String file : wfs.files()) {
+        List<Object[]> fieldSpecs = List.of(  
+        client().admin()
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .prepareCreate(INDEX_NAME)  
+        for (int cycle = 0; cycle < refreshCycles; cycle++) {
+            new Object[] {
+import org.opensearch.indices.IndicesService;
+import org.apache.lucene.index.SortedNumericDocValues;
+                        .get();  
+                (Supplier<Object>) () -> randomBoolean() ? null : randomLongBetween(-1_000_000L, 1_000_000L) },
+        );
+            0,
+        for (Thread t : threads) {
+        }
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+                for (String missing : List.of("_first", "_last")) {  
+            Object currVal = curr.get(field);  
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+                        NamedXContentRegistry.EMPTY,
+     * Verifies that after a merge, getMergeStats() reports at least one completed merge  
+    }
+            .prepareCreate(INDEX_NAME)
+                } catch (Exception e) {  
+        } catch (Exception e) {
+            .get();  
+                "val_date",
+    private void verifySegmentGenerationUniqueness(DataformatAwareCatalogSnapshot snapshot) {  
+                if (i % 5 == 0) {  
+        client().admin()
+    /**
+            .put("index.refresh_interval", "-1")  
+import org.opensearch.be.lucene.LucenePlugin;
+            .prepareCreate(INDEX_NAME)  
+        client().admin()
+        }
+                }
+    /**
+    private static final String MERGE_ENABLED_PROPERTY = "opensearch.pluggable.dataformat.merge.enabled";
+                ParquetFileMetadata metadata = RustBridge.getFileMetadata(filePath.toString());
+                    // When age is equal, verify name ASC (nulls last)  
+                assertEquals(RestStatus.CREATED, response.status());
+                    assertTrue(
+            )  
+        java.util.concurrent.atomic.AtomicReference<Exception> error = new java.util.concurrent.atomic.AtomicReference<>();  
+                        cmp <= 0
+            LucenePlugin.class,  
+                source.put("age", randomBoolean() ? null : randomIntBetween(0, 100));  
+                            .putList("index.sort.order", order)
+        int docsPerThread = 5;  
+        return desc ? -cmp : cmp;
+        Path parquetDir = getParquetDir();
+        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);
+     * correctly synchronized the two formats during merge.
+    private void verifyLuceneRowIdSequential() throws IOException {
+     *   <li>Merged lucene directory has correct total document count</li>
+            .put("index.composite.primary_data_format", "parquet")  
+                        assertEquals(
+                try (
+        // (only unique within a segment, so a per-segment map is required).  
+        assertTrue("Catalog should contain 'parquet' format, got: " + formats, formats.contains("parquet"));
+            RefreshResponse refreshResponse = client().admin().indices().prepareRefresh(INDEX_NAME).get();
+            .prepareCreate(INDEX_NAME)  
+        long cleanups = engine.unreferencedFileCleanUpsPerformed();
+    @SuppressWarnings("unchecked")
+        // Verify parquet merged files have correct row count
+            client().admin().indices().prepareRefresh(INDEX_NAME).get();
+                    try {
+                "val_int",  
+            .setMapping("name", "type=keyword", "age", "type=integer")
+            .get();
+        verifyNoOrphanFiles(snapshot);
+            t.join();
+     * the same mapping. This test uses concurrent indexing to fill multiple writers, then
+        int docsPerCycle = 5;  
+                                "Parquet row at " + DocumentInput.ROW_ID_FIELD + "=" + luceneRowId + " should have 'name' field",
+                "type=keyword"
+                    rows = parser.list().stream().map(o -> {  
+                                ((String) prevName).compareTo((String) currName) <= 0  
+                    if (nameDV != null && nameDV.advanceExact(doc)) {
+                "val_long",
+        DataFormatAwareEngine engine = (DataFormatAwareEngine) org.opensearch.index.shard.IndexShardTestCase.getIndexer(shard);
+        System.setProperty(MERGE_ENABLED_PROPERTY, "true");
+        for (Segment segment : snapshot.getSegments()) {
+                        if (prevName == null && currName != null) {  
+            assertTrue(  
+        return getCatalogSnapshot();
+                if (rows.size() <= 1) continue;  
+                    + refreshCycles
+            if (rowsInSegment.isEmpty() == false) {
+                    response = client().prepareIndex().setIndex(INDEX_NAME).setSource(java.util.Collections.emptyMap()).get();
+    /**  
+        if (curr == null) return nullsFirst ? 1 : -1;  
+ * The OpenSearch Contributors require contributions made to  
+                        long luceneAge = ageDV.nextValue();
+                        "val_int",  
+            CompositeDataFormatPlugin.class,
+        );  
+import org.apache.lucene.index.LeafReaderContext;
+    }
+                        Object prevName = rows.get(i - 1).get("name");
+                            parquetAge
+        assertTrue("Should have parquet rows to compare", parquetSegments.isEmpty() == false);  
+import org.apache.lucene.index.DirectoryReader;  
+        return 0;
+        assertTrue("Catalog should contain 'parquet'", formats.contains("parquet"));
+                IndexResponse response;  
+                    }).toList();
+                if (value == null) {
+                        long ord = nameDV.nextOrd();  
+                }
+                        if (prevName != null && currName == null) continue; // non-null before null is correct for nulls last
+            .putList("index.sort.field", "age", "name")
+    }  
+                List<Map<String, Object>> rows;
+            String fieldName = (String) spec[0];  
+            .putList("index.sort.missing", "_first", "_last")
+                        client().admin().indices().prepareCreate(INDEX_NAME).setSettings(settings).setMapping(fieldName, fieldType).get();  
+        verifyLuceneDocCount(totalDocs);
+            .clear()
+                        Object currName = rows.get(i).get("name");  
+     *   <li>Lucene __row_id__ values are sequential (RowIdMapping applied)</li>
+        waitForMerge(refreshCycles);
+                            + " missing="
+                    if (rowIdDV.advanceExact(doc)) {  
+                    XContentParser parser = JsonXContent.jsonXContent.createParser(  
+        super.tearDown();
+            .indices()  
+    ) {
+            .build();
+            .put("index.refresh_interval", "-1")  
+            .prepareCreate(INDEX_NAME)
+                                parquetName  
+        }  
+import java.nio.file.Files;
+    /**  
+        java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
+     * Validates inline consolidation at refresh with fileMappings:
+                    int prevAgeVal = ((Number) prevAge).intValue();
+        return Settings.builder()
+     * the corresponding Lucene document (sorted by __row_id__) has matching field values.
+        client().admin().indices().prepareFlush(INDEX_NAME).setForce(true).setWaitIfOngoing(true).get();
+            assertTrue("Should have matched at least some docs across formats", matchedDocs > 0);
+                            );
+        } else if (prev instanceof String && curr instanceof String) {
+            .indices()  
+            client().admin().indices().prepareDelete(INDEX_NAME).get();
+                // Remove null entries so they appear as missing in the doc  
+            for (int i = 0; i < docsPerCycle; i++) {
+import org.opensearch.test.OpenSearchIntegTestCase;
+            Object prevVal = prev.get(field);
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            .indices()
+    }
+        for (Segment segment : snapshot.getSegments()) {
+                        break;
+                (Supplier<Object>) () -> randomBoolean() ? null : randomDoubleBetween(-1e6, 1e6, true) },  
+        assertTrue("Catalog should contain 'lucene' format, got: " + formats, formats.contains("lucene"));
+                    if (prevAge == null) continue; // null before non-null is correct
+        // Accept: segment count <= refreshCycles (inline consolidation working correctly).  
+import org.opensearch.core.xcontent.XContentParser;
+                        "age should be DESC but found " + prevAgeVal + " before " + currAgeVal + " at row " + i,
+            .build();
+    // ══════════════════════════════════════════════════════════════════════
+                parquetSegments.add(rowsInSegment);
+                        fail("age null should come before non-null, but found non-null at " + (i - 1) + " and null at " + i);
+     */
+        return indexService.getShard(0);
+        verifyRowCount(snapshot, totalDocs);
+     *   <li>Merge reduces segment count</li>
+     */
+     * Correctness criteria:
+            String field = sortFields.get(f);
+        verifyCrossFormatConsistency(snapshot);
+        int refreshCycles = 15;
+        client().admin()
+        // Index documents to create multiple segments. Using 15 cycles keeps the workload
+            .get();
+        // Merged lucene segments live in the shard's standard index folder (ShardPath.resolveIndex()),
+    // ══════════════════════════════════════════════════════════════════════  
+        IndexService indexService = indicesService.indexServiceSafe(resolveIndex(INDEX_NAME));  
+                        ensureGreen(INDEX_NAME);
+    private Settings parquetPrimaryLuceneSecondarySettings() {
+     *   <li>After refresh, catalog has 1 segment (consolidated) instead of N per-writer segments</li>  
+        client().admin()
+            .setSettings(unsortedSettings())
+                                + " but got "  
+        // RowIdMapping correctness: __row_id__ must be sequential within each segment
+    private void verifyRowCount(DataformatAwareCatalogSnapshot snapshot, int expectedTotalDocs) throws IOException {
+                            expectedRowId,
+     * a single refresh to trigger consolidation.
+            if (cmp != 0) return cmp;  
+            Map<Long, Map<String, Object>> rowsInSegment = new java.util.HashMap<>();
+        startLatch.countDown();  
+                }
+                Path filePath = parquetDir.resolve(file);
+     * Verifies background merge produces a valid merged parquet file and lucene segment  
+        Thread[] threads = new Thread[numThreads];
+        List<Long> generations = snapshot.getSegments().stream().map(Segment::generation).toList();
+                            .putList("index.sort.missing", missing)  
+import org.opensearch.action.index.IndexResponse;
+import org.opensearch.parquet.bridge.RustBridge;
+                "type=double",
+        Map<String, Object> curr,
+                        int docsPerCycle = 10;  
+        verifyLuceneRowIdSequential();
+     *   <li>Both parquet and lucene formats are present</li>
+        }  
+        verifyCrossFormatConsistency(snapshot);  
+        for (Segment segment : snapshot.getSegments()) {
+                                + " at doc "
+     * Each Lucene leaf is matched to its parquet segment by row count.
+     * a dense mapping — every position from 0..N-1 must be covered.  
+            DataformatAwareCatalogSnapshot snap = getCatalogSnapshot();
+        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);  
+            .putList("index.sort.missing", missings)
+                }
+        long now = System.currentTimeMillis();
+    private int compareValues(Object prev, Object curr, boolean desc, boolean nullsFirst) {  
+                SortedSetDocValues nameDV = ctx.reader().getSortedSetDocValues("name");  
+                    if (prevAge == null && currAge == null) continue;
+        String nodeName = getClusterState().routingTable().index(INDEX_NAME).shard(0).primaryShard().currentNodeId();  
+    private void verifySortOrder(DataformatAwareCatalogSnapshot snapshot) throws Exception {  
+                            + extractSortValues(rows.get(i - 1), sortFields)
+    public void testUnsortedMergeWithAllTypes() throws Exception {  
+                source.put("tag", randomBoolean() ? null : randomAlphaOfLengthBetween(3, 6));
+            .get();
+                    if (prevAgeVal == currAgeVal) {
+                    if (rowIdDV.advanceExact(doc) == false) continue;
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+}  
+        }
+     * and unreferencedFileCleanUpsPerformed > 0 (old segment files were cleaned up).
+        }
+            }
+    private void verifyNoOrphanFiles(DataformatAwareCatalogSnapshot snapshot) throws IOException {
+     * unreferenced_file_cleanups_performed after a merge.
+            for (String order : List.of("asc", "desc")) {
+    }
+                                "name should be ASC but found '" + prevName + "' before '" + currName + "' at row " + i,
+            for (String file : wfs.files()) {
+                SortedNumericDocValues rowIdDV = ctx.reader().getSortedNumericDocValues(DocumentInput.ROW_ID_FIELD);
+        long totalRows = 0;  
+    }
+    public void testSortedParquetPrimaryLuceneSecondaryMerge() throws Exception {  
+                "type=float",
+    public void testSortedMergeMultiColumnRandomized() throws Exception {
+                Path filePath = parquetDir.resolve(file);
+        int docsPerCycle = 5;
+                } else {
+        try (Directory dir = NIOFSDirectory.open(luceneDir); DirectoryReader reader = DirectoryReader.open(dir)) {
+                        randomAlphaOfLength(6)
+        Set<String> formats = snapshot.getDataFormats();  
+    }
+                }
+        indexDocsWithNullsAcrossRefreshes(refreshCycles, docsPerCycle);
+     * </ol>  
+                        expectedRowId++;
+     * and within same age, name in ASC order with nulls last.  
+import java.util.Collection;
+// The Tokio IO runtime worker thread (used by the Rust merge k-way merge sort) is a process-lifetime  
+                "val_keyword",
+        for (int cycle = 0; cycle < refreshCycles; cycle++) {  
+import org.opensearch.common.xcontent.json.JsonXContent;
+        return Settings.builder()  
+                referencedFiles.addAll(wfs.files());
+        }
+ * compatible open source license.
+     * (0, 1, 2, ...) within each leaf. This confirms the RowIdMapping from the primary
+    }
+                try {  
+        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);  
+        }  
+        for (int f = 0; f < sortFields.size(); f++) {  
+                    // Compare name field (keyword stored as sorted set doc values)
+        int refreshCycles = 15;
+        // With refresh_interval=-1 and no explicit refresh, all docs land in the writer pool.
+            .setSettings(parquetPrimaryLuceneSecondarySettings())
+    private IndexShard getPrimaryShard() {
+    }
+        List<Map<Long, Map<String, Object>>> parquetSegments = new java.util.ArrayList<>();
+     * Cross-format data comparison: reads merged parquet file content and merged lucene  
+    private DataformatAwareCatalogSnapshot waitForMerge(int refreshCycles) throws Exception {
+        try (GatedCloseable<CatalogSnapshot> snapshot = shard.getCatalogSnapshot()) {  
+            .indices()
+            String fieldType = (String) spec[1];
+            .put(super.nodeSettings(nodeOrdinal))
+                            + sortOrders
+                IndexResponse response = client().prepareIndex()  
+        String[] orders = { randomFrom("asc", "desc"), randomFrom("asc", "desc"), randomFrom("asc", "desc") };
+                    )
+            .put("index.pluggable.dataformat.enabled", true)
+        if (prev == null && curr == null) return 0;
+        assertEquals("All segment generations must be unique", generations.size(), generations.stream().distinct().count());
+     *   <li>Cross-format validation: parquet row count == lucene doc count for each merged segment</li>
+                "value_double",
+            .prepareCreate(INDEX_NAME)
+        // Verify lucene merged directory has correct doc count
+    // Private helpers: index settings
+        DataformatAwareCatalogSnapshot snapshot = waitForMerge(refreshCycles);
+                source.values().removeIf(java.util.Objects::isNull);
+@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+ * this file be licensed under the Apache-2.0 license or a
+        verifyRowCount(snapshot, totalDocs);
+     * <ol>  
+    /**
+    }
+                        @SuppressWarnings("unchecked")
+                }  
+                    response = client().prepareIndex().setIndex(INDEX_NAME).setSource("name", randomAlphaOfLength(10)).get();
+import org.opensearch.cluster.metadata.IndexMetadata;
+    // ══════════════════════════════════════════════════════════════════════
+        }  
+     *   <li>Merged parquet files are sorted by age DESC (nulls first), name ASC (nulls last)</li>  
+                "type=double",
+                .filter(f -> f.endsWith(".parquet"))
+    // ══════════════════════════════════════════════════════════════════════
+                        if (prevName != null && currName != null) {  
+        IndexShard shard = getPrimaryShard();  
+        // in line with the other stable composite-merge tests and avoids triggering a second
+        }  
+import java.util.Set;
+                parquetSegments.remove(matchingSegment);
+        assertEquals(Set.of("parquet", "lucene"), snapshot.getDataFormats());  
+        List<String> sortOrders,  
+        verifySortOrder(snapshot);  
+    @Override
+        int docsPerCycle = 8;
+            .put("index.pluggable.dataformat.enabled", true)
+            for (LeafReaderContext ctx : reader.leaves()) {  
+        return shard.shardPath().resolveIndex();
+                    long luceneRowId = rowIdDV.nextValue();  
+        assertNotNull("MergeStats should not be null", mergeStats);
+    // ══════════════════════════════════════════════════════════════════════
+                        json
+                        "val_long",
+                var source = new java.util.HashMap<String, Object>();
+            for (LeafReaderContext ctx : reader.leaves()) {
+            }
+    @SuppressForbidden(reason = "restore pluggable dataformat merge property after test")
+                if (rowIdDV == null) continue;
+        org.opensearch.index.merge.MergeStats mergeStats = engine.getMergeStats();  
+                        return m;  
+            }
+            // index may not exist if test failed before creation  
+        Path parquetDir = getParquetDir();
+                    }
+        // For each Lucene leaf, find the parquet segment whose row count matches and
+                totalRows += metadata.numRows();  
+                "type=integer",
+                "type=long",  
+            "unreferencedFileCleanUpsPerformed via API should be 0 after successful merge (only tracks merge failure cleanups)",  
+                    int currAgeVal = ((Number) currAge).intValue();
+    // ── Randomized sort tests across data types ──
+            .get();  
+                    )  
+     *   <li>Merge reduces segment count (merge actually happened)</li>
+    @SuppressForbidden(reason = "JSON parsing for cross-format data comparison")  
+                        long rowId = rowIdDV.nextValue();
+                ) {
+            .get();  
+    private static final String INDEX_NAME = "test-composite-merge";  
+                    + snap.getSegments().size(),
+            .put("index.pluggable.dataformat", "composite")
+        assertEquals(
+        int totalDocs = refreshCycles * docsPerCycle;  
+                            + sortFields
+                    XContentParser parser = JsonXContent.jsonXContent.createParser(  
+     * (each segment starts row_ids at 0), so rows must be grouped per segment — a global
+        List<String> sortFields,  
+                SortedNumericDocValues rowIdDV = ctx.reader().getSortedNumericDocValues(DocumentInput.ROW_ID_FIELD);
+                            DocumentInput.ROW_ID_FIELD  
+                            );
+                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+     *   <li>Both "parquet" and "lucene" entries exist in the catalog snapshot</li>
+        String nodeNameResolved = getClusterState().nodes().get(nodeName).getName();
+        // Collect parquet rows grouped per catalog segment, indexed by __row_id__
+                    .setSource(
+                }  
+    // ══════════════════════════════════════════════════════════════════════
+        // With inline merge at refresh, each cycle already produces 1 consolidated segment.
+    private void verifySortOrderGeneric(
+    protected Settings nodeSettings(int nodeOrdinal) {  
+    // Tests
+            for (int i = 0; i < docsPerCycle; i++) {
+                        Object parquetAge = parquetRow.get("age");
+                    Object currAge = rows.get(i).get("age");
+    // Framework lifecycle & configuration
+                        client().prepareIndex(INDEX_NAME).setSource("name", "doc_" + docId, "age", randomIntBetween(0, 100)).get();
+                totalLuceneDocs += leafDocs;
+                        NamedXContentRegistry.EMPTY,
+/*  
+ */  
+                                + expectedRowId
+            }  
+     * <ol>
+            .setMapping(
+            }  
+            .prepareStats(INDEX_NAME)  
+    public void testParquetPrimaryLuceneSecondaryMerge() throws Exception {
+                String json = RustBridge.readAsJson(filePath.toString());  
+            }
+    private Settings unsortedSettings() {
+    private int compareRows(
+     */
+        }  
+                            + " curr="
+import org.opensearch.core.rest.RestStatus;
+                    assertNotNull(  
+                ) {
+            threads[t] = new Thread(() -> {
+    }  
+        assertTrue("Total merges should be > 0 after merge", mergeStats.getTotal() > 0);
+            .put("index.composite.primary_data_format", "parquet")  
+                                + " should be sequential within segment, expected "
+                assertTrue("Parquet file should exist: " + filePath, Files.exists(filePath));  
+            client().admin().indices().prepareRefresh(INDEX_NAME).get();
+                try (
+        // which resolves to "<shardDataPath>/index". The "<shardDataPath>/lucene" folder is only used
+import java.util.function.Function;  
+                "val_double",  
+        List<String> sortMissing
+                    for (int i = 0; i < docsPerThread; i++) {
+        for (int cycle = 0; cycle < refreshCycles; cycle++) {
+        int refreshCycles = 15;
+                    response = client().prepareIndex()  
+    }
+                        assertNotNull(  
+                    }
+     *   <li>Cross-format consistency: parquet row data matches lucene data at same row_id</li>  
+            RefreshResponse refreshResponse = client().admin().indices().prepareRefresh(INDEX_NAME).get();  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)  
+    public void tearDown() throws Exception {
+        // Cross-format field value consistency
+            .putList("index.composite.secondary_data_formats", "lucene")
+            .get();  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            }
+                            + ": prev="  
+        for (Object[] spec : fieldSpecs) {
+        verifyRowCount(snapshot, totalDocs);
+     * Compares both numeric (age) and keyword (name) fields to ensure the RowIdMapping
+                        Map<String, Object> row = (Map<String, Object>) obj;
+                    XContentParser parser = JsonXContent.jsonXContent.createParser(
+        try (var stream = Files.list(parquetDir)) {
+                .map(p -> p.getFileName().toString())
+            int totalLuceneDocs = 0;
+            for (int i = 0; i < docsPerCycle; i++) {
+    }
+                    }
+            }
+                source.put("score", randomBoolean() ? null : randomLongBetween(0, 10000));
+    }  
+                            assertTrue(
+            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");  
+    private Path getParquetDir() {
+                }  
+                        matchingSegment = candidate;  
+                        json  
+import org.opensearch.parquet.ParquetDataFormatPlugin;  
+import org.opensearch.index.IndexService;  
+        );  
+    }  
+     * </ol>
+     * Verifies that merge stats via the indices stats API (_stats/merge) reflects
+    // ══════════════════════════════════════════════════════════════════════
+    ) throws Exception {  
+    }  
+        DataformatAwareCatalogSnapshot snapshot = getCatalogSnapshot();  
+            .putList("index.composite.secondary_data_formats", "lucene")
+                assertEquals(RestStatus.CREATED, response.status());  
+        assertTrue("Total merges via API should be > 0", mergeStats.getTotal() > 0);
+    public void testMergeStatsViaApi() throws Exception {
+            .prepareCreate(INDEX_NAME)  
+                    assertTrue(
+            int matchedDocs = 0;  
+        IndexShard shard = getPrimaryShard();
+        disableMerge();  
+    private void indexDocsAcrossMultipleRefreshes(int refreshCycles, int docsPerCycle) {  
+     * <p>Note: {@code __row_id__} is only unique <em>within</em> a catalog segment
+    // Private helpers: shard/cluster accessors
+                    error.compareAndSet(null, e);
+                            Object parquetName = parquetRow.get("name");  
+                            + i  
+        // Use concurrent threads to fill multiple writers in a single refresh cycle.  
+    public void testMergeStatsAfterMerge() throws Exception {  
+    // ══════════════════════════════════════════════════════════════════════  
+                Path filePath = parquetDir.resolve(file);
+                        if (ord >= 0) {
+        int numThreads = 8;
+                            .build();
+        }
+     *   <li>Lucene __row_id__ values are sequential (RowIdMapping correctly applied)</li>
+     *
+            }  
+                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+        long now = System.currentTimeMillis();  
+        // Background merge may further reduce, but for small segments it may not fire.
+    // ══════════════════════════════════════════════════════════════════════
+                for (int i = 1; i < rows.size(); i++) {
+                int leafDocs = ctx.reader().maxDoc();  
+     * the primary format reorders rows during merge, and the secondary must apply  
+     * (Parquet) merge was correctly applied to reorder Lucene documents.  
+            .put("index.pluggable.dataformat", "composite")
+                try (
+        Settings settings = Settings.builder()
+    /**
+        return shard.shardPath().getDataPath().resolve("parquet");  
+        int refreshCycles = 15;
+        verifyLuceneRowIdSequential();
+        int totalDocs = refreshCycles * docsPerCycle;
+    public void setUp() throws Exception {
+            cmp = Double.compare(((Number) prev).doubleValue(), ((Number) curr).doubleValue());
+        super.setUp();
+import org.apache.lucene.store.NIOFSDirectory;
+                        verifyRowCount(snapshot, totalDocs);  
+    }  
+                .toList();  
+        verifyLuceneRowIdSequential();
+                    matchedDocs++;  
+        List<String> sortOrders,
+        }
+     */  
+                snap.getSegments().size() <= refreshCycles
+            int cmp = compareValues(prevVal, currVal, desc, nullsFirst);
+                "Expected segment count <= "
+            ParquetDataFormatPlugin.class,
+        Path parquetDir = getParquetDir();
+        verifyRowCount(snapshot, totalDocs);
+            .build();  
+        }  
+                        .setSource("name", randomAlphaOfLength(10), "age", randomIntBetween(0, 100))
+                        client().admin().indices().prepareDelete(INDEX_NAME).get();  
+                        json  
+    @SuppressForbidden(reason = "JSON parsing for generic sort verification")  
+            .setSettings(settings)
+            if (parquetWfs == null) continue;
+    // Private helpers: merge feature flag  
+                        "val_double",  
+        int totalDocs = numThreads * docsPerThread;
+     *
+     * </ol>
             .setMapping("name", "type=keyword", "age", "type=integer")  
+                    Object prevAge = rows.get(i - 1).get("age");  
+                        verifySortOrderGeneric(snapshot, List.of(fieldName), List.of(order), List.of(missing));
+                    );
+import org.opensearch.index.engine.exec.Segment;  
+                    }
+            .setSettings(sortedParquetPrimaryLuceneSecondarySettings())
+    private static void disableMerge() {  
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+            for (String file : parquetWfs.files()) {  
+        // Verify lucene doc count
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
+    private Settings sortedParquetPrimaryLuceneSecondarySettings() {
+                        }  
+        assertTrue("Catalog should contain 'lucene'", formats.contains("lucene"));  
+            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");  
+        verifyLuceneDocCount(totalDocs);
+                ) {
+            cleanups
+    // ══════════════════════════════════════════════════════════════════════  
+    }
+import java.util.List;  
+    @Override  
+    }  
+    // ══════════════════════════════════════════════════════════════════════  
+                            assertNotNull(
+     * This is the critical test for RowIdMapping correctness in sorted merges —
+            "unreferencedFileCleanUpsPerformed should be 0 after successful merge (only tracks merge failure cleanups)",  
+        // for per-writer temporary staging directories (lucene_gen_*), not for the committed merged index.  
+        int refreshCycles = 15;
+                assertEquals(RestStatus.CREATED, response.status());
+        verifyRowCount(snapshot, totalDocs);
+    /**
+                List<Map<String, Object>> rows;
+    @SuppressForbidden(reason = "enable pluggable dataformat merge for integration testing")  
+                    + " (inline consolidation or background merge), but got: "  
+import org.opensearch.index.engine.exec.WriterFileSet;
+            .setSettings(sortedParquetPrimaryLuceneSecondarySettings())
+                    if (ageDV != null && ageDV.advanceExact(doc)) {  
+        ensureGreen(INDEX_NAME);
+                    // nulls first for age  
+            );  
+ *
+                "type=date",  
+    private static void enableMerge() {
+                        return m;  
+                        }
+        }
+            .setMapping("name", "type=keyword", "age", "type=integer")
+    }  
+import org.opensearch.parquet.bridge.ParquetFileMetadata;
+                for (int doc = 0; doc < ctx.reader().maxDoc(); doc++) {
+                            + " orders="  
+import org.opensearch.common.settings.Settings;
+                    .setIndex(INDEX_NAME)
+                IndexResponse response = client().prepareIndex()  
+                for (int i = 1; i < rows.size(); i++) {
+                        randomIntBetween(-100, 100),
+    public void testSortedMergeBySingleField() throws Exception {
+            }  
+            .put("index.pluggable.dataformat.enabled", true)
             .get();
         ensureGreen(INDEX_NAME);
-
-        int docsPerCycle = 5;
-        int refreshCycles = 15;
-        indexDocsAcrossMultipleRefreshes(refreshCycles, docsPerCycle);  
-
-        waitForMerge(refreshCycles);
-
-        org.opensearch.action.admin.indices.stats.IndicesStatsResponse statsResponse = client().admin()
-            .indices()
-            .prepareStats(INDEX_NAME)  
-            .clear()
-            .setMerge(true)
-            .get();  
-
-        org.opensearch.index.merge.MergeStats mergeStats = statsResponse.getIndex(INDEX_NAME).getShards()[0].getStats().getMerge();
-        assertNotNull("MergeStats from API should not be null", mergeStats);  
-        assertTrue("Total merges via API should be > 0", mergeStats.getTotal() > 0);
-        assertEquals(
-            "unreferencedFileCleanUpsPerformed via API should be 0 after successful merge (only tracks merge failure cleanups)",  
+        return Arrays.asList(
             0,
-            mergeStats.getUnreferencedFileCleanUpsPerformed()
-        );  
-    }
-
-    // ── Helpers for randomized tests ──  
-
-    private DataformatAwareCatalogSnapshot waitForMerge(int refreshCycles) throws Exception {
-        flush(INDEX_NAME);  
-        // With inline merge at refresh, each cycle already produces 1 consolidated segment.
-        // Background merge may further reduce, but for small segments it may not fire.
-        // Accept: segment count <= refreshCycles (inline consolidation working correctly).  
-        assertBusy(() -> {
-            DataformatAwareCatalogSnapshot snap = getCatalogSnapshot();
-            assertTrue(  
-                "Expected segment count <= "
-                    + refreshCycles
-                    + " (inline consolidation or background merge), but got: "  
-                    + snap.getSegments().size(),
-                snap.getSegments().size() <= refreshCycles
-            );  
-        }, 30, java.util.concurrent.TimeUnit.SECONDS);
-        return getCatalogSnapshot();
-    }  
-
-    private void indexRandomDocs(int refreshCycles, int docsPerCycle, String fieldName, Supplier<Object> valueSupplier) {
-        for (int cycle = 0; cycle < refreshCycles; cycle++) {  
-            for (int i = 0; i < docsPerCycle; i++) {
-                Object value = valueSupplier.get();
-                IndexResponse response;  
-                if (value == null) {
-                    response = client().prepareIndex().setIndex(INDEX_NAME).setSource(java.util.Collections.emptyMap()).get();
-                } else {  
-                    response = client().prepareIndex().setIndex(INDEX_NAME).setSource(fieldName, value).get();
-                }
-                assertEquals(RestStatus.CREATED, response.status());  
-            }
-            client().admin().indices().prepareRefresh(INDEX_NAME).get();
-        }  
-    }
-
-    @SuppressForbidden(reason = "JSON parsing for generic sort verification")  
-    private void verifySortOrderGeneric(
-        DataformatAwareCatalogSnapshot snapshot,
-        List<String> sortFields,  
-        List<String> sortOrders,
-        List<String> sortMissing
-    ) throws Exception {  
-        Path parquetDir = getParquetDir();
-        for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");  
-            for (String file : wfs.files()) {
-                Path filePath = parquetDir.resolve(file);
-                String json = RustBridge.readAsJson(filePath.toString());  
-                List<Map<String, Object>> rows;
-                try (
-                    XContentParser parser = JsonXContent.jsonXContent.createParser(  
-                        NamedXContentRegistry.EMPTY,
-                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                        json  
-                    )
-                ) {
-                    rows = parser.list().stream().map(o -> {  
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> m = (Map<String, Object>) o;
-                        return m;  
-                    }).toList();
-                }
-                if (rows.size() <= 1) continue;  
-
-                for (int i = 1; i < rows.size(); i++) {
-                    int cmp = compareRows(rows.get(i - 1), rows.get(i), sortFields, sortOrders, sortMissing);  
-                    assertTrue(
-                        "Sort order violated at row "
-                            + i  
-                            + " in file "
-                            + file
-                            + ": prev="  
-                            + extractSortValues(rows.get(i - 1), sortFields)
-                            + " curr="
                             + extractSortValues(rows.get(i), sortFields)  
-                            + " fields="
-                            + sortFields
-                            + " orders="  
-                            + sortOrders
-                            + " missing="
-                            + sortMissing,  
-                        cmp <= 0
-                    );
-                }  
-            }
-        }
+        Path parquetDir = getParquetDir();
+                            rowId
+                    }  
+        // Verify lucene __row_id__ values are monotonically increasing (RowIdMapping applied)
     }  
-
-    private int compareRows(
-        Map<String, Object> prev,  
-        Map<String, Object> curr,
-        List<String> sortFields,
-        List<String> sortOrders,  
-        List<String> sortMissing
-    ) {
-        for (int f = 0; f < sortFields.size(); f++) {  
-            String field = sortFields.get(f);
-            boolean desc = "desc".equals(sortOrders.get(f));
-            boolean nullsFirst = "_first".equals(sortMissing.get(f));  
-
-            Object prevVal = prev.get(field);
-            Object currVal = curr.get(field);  
-
-            int cmp = compareValues(prevVal, currVal, desc, nullsFirst);
-            if (cmp != 0) return cmp;  
-        }
-        return 0;
-    }  
-
-    @SuppressWarnings("unchecked")
-    private int compareValues(Object prev, Object curr, boolean desc, boolean nullsFirst) {  
-        if (prev == null && curr == null) return 0;
-        if (prev == null) return nullsFirst ? -1 : 1;
-        if (curr == null) return nullsFirst ? 1 : -1;  
-
-        int cmp;
-        if (prev instanceof Number && curr instanceof Number) {  
-            cmp = Double.compare(((Number) prev).doubleValue(), ((Number) curr).doubleValue());
-        } else if (prev instanceof String && curr instanceof String) {
-            cmp = ((String) prev).compareTo((String) curr);  
-        } else {
-            cmp = prev.toString().compareTo(curr.toString());
-        }  
-
-        return desc ? -cmp : cmp;
-    }  
-
-    private List<Object> extractSortValues(Map<String, Object> row, List<String> sortFields) {
-        return sortFields.stream().map(row::get).toList();  
-    }
-
-}  
+import java.util.function.Supplier;
+        // Both formats must be present in the single consolidated segment
+        Set<String> formats = snapshot.getDataFormats();  
+            }  
+import org.apache.lucene.index.SortedSetDocValues;  
+            .get();  

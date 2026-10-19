@@ -1,312 +1,260 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.xcontent;
-
-import org.opensearch.common.CheckedFunction;
-
-import java.io.IOException;  
-import java.math.BigInteger;
-import java.nio.CharBuffer;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.Supplier;
-
-/**
- * Wrapper for a XContentParser that makes a single object/array look like a complete document.
- * <p>  
- * The wrapper prevents the parsing logic to consume tokens outside of the wrapped object as well
- * as skipping to the end of the object in case of a parsing error. The wrapper is intended to be
- * used for parsing objects that should be ignored if they are malformed.  
- */
-public class XContentSubParser implements XContentParser {
-
-    private final XContentParser parser;
-    private int level;
-    private boolean closed;  
-
-    public XContentSubParser(XContentParser parser) {
-        this.parser = parser;  
-        if (parser.currentToken() != Token.START_OBJECT && parser.currentToken() != Token.START_ARRAY) {
-            throw new IllegalStateException("The sub parser has to be created on the start of an object or array");
-        }  
-        level = 1;
-    }
-
-    @Override
-    public MediaType contentType() {
-        return parser.contentType();  
-    }
-
-    @Override  
-    public Token nextToken() throws IOException {
-        if (level > 0) {
-            Token token = parser.nextToken();  
-            if (token == Token.START_OBJECT || token == Token.START_ARRAY) {
-                level++;
-            } else if (token == Token.END_OBJECT || token == Token.END_ARRAY) {  
-                level--;
-            }
-            return token;  
-        } else {
-            return null; // we have reached the end of the wrapped object
-        }  
-    }
-
-    @Override  
-    public void skipChildren() throws IOException {
-        Token token = parser.currentToken();
-        if (token != Token.START_OBJECT && token != Token.START_ARRAY) {  
-            // skip if not starting on an object or an array
-            return;
-        }  
-        int backToLevel = level - 1;
-        while (nextToken() != null) {
-            if (level <= backToLevel) {  
-                return;
-            }
-        }  
-    }
-
-    @Override  
-    public Token currentToken() {
-        return parser.currentToken();
-    }  
-
-    @Override
-    public String currentName() throws IOException {  
-        return parser.currentName();
-    }
-
-    @Override
-    public Map<String, Object> map() throws IOException {
-        return parser.map();  
-    }
-
-    @Override  
-    public Map<String, Object> mapOrdered() throws IOException {
-        return parser.mapOrdered();
-    }  
-
-    @Override
-    public Map<String, String> mapStrings() throws IOException {  
-        return parser.mapStrings();
-    }
-
-    @Override
-    public <T> Map<String, T> map(Supplier<Map<String, T>> mapFactory, CheckedFunction<XContentParser, T, IOException> mapValueParser)
-        throws IOException {  
-        return parser.map(mapFactory, mapValueParser);
-    }
-
-    @Override
-    public List<Object> list() throws IOException {
-        return parser.list();  
-    }
-
-    @Override  
-    public List<Object> listOrderedMap() throws IOException {
-        return parser.listOrderedMap();
-    }  
-
-    @Override
-    public String text() throws IOException {  
-        return parser.text();
-    }
-
-    @Override
-    public String textOrNull() throws IOException {
-        return parser.textOrNull();  
-    }
-
-    @Override  
-    public CharBuffer charBufferOrNull() throws IOException {
-        return parser.charBufferOrNull();
-    }  
-
-    @Override
-    public CharBuffer charBuffer() throws IOException {  
-        return parser.charBuffer();
-    }
-
-    @Override
-    public Object objectText() throws IOException {
-        return parser.objectText();  
-    }
-
-    @Override  
-    public Object objectBytes() throws IOException {
-        return parser.objectBytes();
-    }  
-
-    @Override
-    public boolean hasTextCharacters() {  
-        return parser.hasTextCharacters();
-    }
-
-    @Override
-    public char[] textCharacters() throws IOException {
-        return parser.textCharacters();  
-    }
-
-    @Override  
-    public int textLength() throws IOException {
-        return parser.textLength();
-    }  
-
-    @Override
-    public int textOffset() throws IOException {  
-        return parser.textOffset();
-    }
-
-    @Override
-    public Number numberValue() throws IOException {
-        return parser.numberValue();  
-    }
-
-    @Override  
-    public NumberType numberType() throws IOException {
-        return parser.numberType();
-    }  
-
-    @Override
-    public short shortValue(boolean coerce) throws IOException {  
-        return parser.shortValue(coerce);
-    }
-
-    @Override
-    public int intValue(boolean coerce) throws IOException {
-        return parser.intValue(coerce);  
-    }
-
-    @Override  
-    public long longValue(boolean coerce) throws IOException {
-        return parser.longValue(coerce);
-    }  
-
-    @Override
-    public float floatValue(boolean coerce) throws IOException {  
-        return parser.floatValue(coerce);
-    }
-
-    @Override
-    public double doubleValue(boolean coerce) throws IOException {
-        return parser.doubleValue(coerce);  
-    }
-
-    @Override  
-    public BigInteger bigIntegerValue(boolean coerce) throws IOException {
-        return parser.bigIntegerValue(coerce);
-    }  
-
-    @Override
-    public short shortValue() throws IOException {  
-        return parser.shortValue();
-    }
-
-    @Override
-    public int intValue() throws IOException {
-        return parser.intValue();  
-    }
-
-    @Override  
-    public long longValue() throws IOException {
-        return parser.longValue();
-    }  
-
-    @Override
-    public float floatValue() throws IOException {  
-        return parser.floatValue();
-    }
-
-    @Override
-    public double doubleValue() throws IOException {
-        return parser.doubleValue();  
-    }
-
-    @Override  
-    public BigInteger bigIntegerValue() throws IOException {
-        return parser.bigIntegerValue();
-    }  
-
-    @Override
-    public boolean isBooleanValue() throws IOException {  
-        return parser.isBooleanValue();
-    }
-
-    @Override
-    public boolean booleanValue() throws IOException {
-        return parser.booleanValue();  
-    }
-
     @Override  
     public byte[] binaryValue() throws IOException {
-        return parser.binaryValue();
-    }  
-
-    @Override
-    public XContentLocation getTokenLocation() {  
-        return parser.getTokenLocation();
+        throws IOException {  
     }
-
     @Override
-    public <T> T namedObject(Class<T> categoryClass, String name, Object context) throws IOException {
-        return parser.namedObject(categoryClass, name, context);  
-    }
-
-    @Override  
-    public NamedXContentRegistry getXContentRegistry() {
-        return parser.getXContentRegistry();
+    public BigInteger bigIntegerValue() throws IOException {
+    public double doubleValue(boolean coerce) throws IOException {
+    public Number numberValue() throws IOException {
     }  
-
-    @Override
     public boolean isClosed() {  
-        return closed;
+        return parser.bigIntegerValue();
+        return parser.list();  
     }
-
+    private int level;
+    public <T> T namedObject(Class<T> categoryClass, String name, Object context) throws IOException {
+        return parser.mapStrings();
+ * software distributed under the License is distributed on an
+    public Map<String, Object> map() throws IOException {
+    public CharBuffer charBuffer() throws IOException {  
+            return;
     @Override
-    public DeprecationHandler getDeprecationHandler() {
-        return parser.getDeprecationHandler();  
+        return parser.binaryValue();
+        return parser.namedObject(categoryClass, name, context);  
+                if (nextToken() == null) {
+        return parser.getXContentRegistry();
+/*  
+    @Override  
+        if (closed == false) {
+        return parser.map(mapFactory, mapValueParser);
+        return parser.doubleValue();  
+    @Override  
+ * Unless required by applicable law or agreed to in writing,
+            throw new IllegalStateException("The sub parser has to be created on the start of an object or array");
+    @Override
+ * KIND, either express or implied.  See the License for the
     }
-
+        return parser.getDeprecationHandler();  
+        return parser.text();
+        return parser.doubleValue(coerce);  
+        Token token = parser.currentToken();
+    }
+        return parser.textOffset();
+        return parser.hasTextCharacters();
+            } else if (token == Token.END_OBJECT || token == Token.END_ARRAY) {  
+        return parser.getTokenLocation();
+        return parser.numberValue();  
+    public float floatValue(boolean coerce) throws IOException {  
+            return null; // we have reached the end of the wrapped object
+        return parser.longValue();
+package org.opensearch.core.xcontent;
+    }  
+ * specific language governing permissions and limitations
+    }
+    @Override
+        }  
+    @Override
+    private final XContentParser parser;
+    @Override  
+                level++;
+    }
+    }
+    @Override
+    @Override  
+    }  
+ */
+    }
+    public CharBuffer charBufferOrNull() throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+    @Override
+    public short shortValue() throws IOException {  
+import org.opensearch.common.CheckedFunction;
+    }  
+    }
+    }
+    @Override  
+    @Override  
+    }
+    @Override
+                return;
+    public int textLength() throws IOException {
+    @Override
+    }  
+ * under the License.  
+ */  
+/*  
+    @Override
+    }
     @Override  
     public void close() throws IOException {
-        if (closed == false) {
-            closed = true;  
-            while (true) {
-                if (nextToken() == null) {
-                    return;  
+        return parser.booleanValue();  
+    public int intValue(boolean coerce) throws IOException {
+ *
                 }
+ * The wrapper prevents the parsing logic to consume tokens outside of the wrapped object as well
+ * Licensed to Elasticsearch under one or more contributor  
+        return parser.textOrNull();  
+        return parser.intValue();  
+    private boolean closed;  
+ * You may obtain a copy of the License at  
+    @Override
+    public BigInteger bigIntegerValue(boolean coerce) throws IOException {
+}
+ * used for parsing objects that should be ignored if they are malformed.  
+    }
+        if (parser.currentToken() != Token.START_OBJECT && parser.currentToken() != Token.START_ARRAY) {
+    public long longValue() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+        } else {
+        return parser.shortValue(coerce);
+                level--;
+    public boolean booleanValue() throws IOException {
+        return parser.map();  
+    }
+        return parser.longValue(coerce);
+        int backToLevel = level - 1;
+    @Override
+        this.parser = parser;  
+ * not use this file except in compliance with the License.
+ *
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+    public <T> Map<String, T> map(Supplier<Map<String, T>> mapFactory, CheckedFunction<XContentParser, T, IOException> mapValueParser)
+    @Override
+    public Map<String, Object> mapOrdered() throws IOException {
+    @Override  
+ * as skipping to the end of the object in case of a parsing error. The wrapper is intended to be
+import java.util.function.Supplier;
+    public MediaType contentType() {
+    }
+    @Override
+    public int textOffset() throws IOException {  
             }
+    }
+    public void skipChildren() throws IOException {
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return parser.objectBytes();
+    public String text() throws IOException {  
+    @Override
+    @Override
+    }  
+    public Object objectText() throws IOException {
+    public float floatValue() throws IOException {  
+        return parser.shortValue();
+public class XContentSubParser implements XContentParser {
+    }  
+    @Override
+    @Override  
+        return parser.textLength();
+    public DeprecationHandler getDeprecationHandler() {
+    @Override  
+    }
+/*
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+                    return;  
+    @Override
+    public XContentLocation getTokenLocation() {  
+    public long longValue(boolean coerce) throws IOException {
+    }
+            }
+        if (token != Token.START_OBJECT && token != Token.START_ARRAY) {  
+    public boolean hasTextCharacters() {  
+            return token;  
+    @Override  
+    public NamedXContentRegistry getXContentRegistry() {
+        }  
+            }
+    @Override  
+/**
+            closed = true;  
+    @Override  
+        return parser.objectText();  
+    @Override
+        return parser.floatValue();
+    public String textOrNull() throws IOException {
         }  
     }
-}
+ */
+    @Override
+        }  
+ * compatible open source license.
+        return parser.numberType();
+        while (nextToken() != null) {
+ * license agreements. See the NOTICE file distributed with
+    public Token nextToken() throws IOException {
+    @Override
+    @Override  
+ * this work for additional information regarding copyright
+    }
+    }
+            if (token == Token.START_OBJECT || token == Token.START_ARRAY) {
+    @Override
+    public short shortValue(boolean coerce) throws IOException {  
+    }
+    public boolean isBooleanValue() throws IOException {  
+    }
+    @Override
+    public String currentName() throws IOException {  
+        return closed;
+ * the Apache License, Version 2.0 (the "License"); you may
+        return parser.currentName();
+ * Modifications Copyright OpenSearch Contributors. See
+    public Map<String, String> mapStrings() throws IOException {  
+import java.io.IOException;  
+        return parser.contentType();  
+            while (true) {
+    }  
+    public List<Object> list() throws IOException {
+    }
+    @Override  
+    public Token currentToken() {
+        return parser.textCharacters();  
+    public XContentSubParser(XContentParser parser) {
+        return parser.mapOrdered();
+import java.math.BigInteger;
+    @Override
+    public Object objectBytes() throws IOException {
+    }  
+    public double doubleValue() throws IOException {
+            if (level <= backToLevel) {  
+    @Override
+import java.nio.CharBuffer;
+ *  
+    }  
+        return parser.listOrderedMap();
+    public NumberType numberType() throws IOException {
+        level = 1;
+    @Override
+ * Wrapper for a XContentParser that makes a single object/array look like a complete document.
+    public char[] textCharacters() throws IOException {
+        }  
+import java.util.List;  
+ * <p>  
+ * GitHub history for details.
+        return parser.bigIntegerValue(coerce);
+    }  
+    }
+        return parser.charBufferOrNull();
+            Token token = parser.nextToken();  
+    public int intValue() throws IOException {
+        return parser.floatValue(coerce);
+        return parser.isBooleanValue();
+    @Override
+        if (level > 0) {
+            // skip if not starting on an object or an array
+    }
+import java.util.Map;
+ * The OpenSearch Contributors require contributions made to  
+        return parser.charBuffer();
+    }  
+        return parser.currentToken();
+    }
+        return parser.intValue(coerce);  
+    }
+    }  
+    public List<Object> listOrderedMap() throws IOException {
+    }

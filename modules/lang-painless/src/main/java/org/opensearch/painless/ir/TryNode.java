@@ -1,121 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.Location;
-import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;
-import org.objectweb.asm.Label;  
-
-import java.util.ArrayList;
-import java.util.List;  
-
-public class TryNode extends StatementNode {
-
-    /* ---- begin tree structure ---- */
-
-    private BlockNode blockNode;  
-    private final List<CatchNode> catchNodes = new ArrayList<>();
-
-    public void setBlockNode(BlockNode blockNode) {  
-        this.blockNode = blockNode;
-    }
-
-    public BlockNode getBlockNode() {
-        return blockNode;
-    }  
-
+ */
     public void addCatchNode(CatchNode catchNode) {
-        catchNodes.add(catchNode);  
-    }
-
-    public List<CatchNode> getCatchsNodes() {  
-        return catchNodes;
-    }
-
-    /* ---- end tree structure, begin visitor ---- */
-
-    @Override  
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        irTreeVisitor.visitTry(this, scope);
-    }  
-
     @Override
     public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
-        blockNode.visit(irTreeVisitor, scope);
-
-        for (CatchNode catchNode : catchNodes) {  
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+            catchNode.exception = catchNodes.size() > 1 ? exception : null;
+        blockNode.write(classWriter, methodWriter, writeScope.newScope());
+        if (blockNode.doAllEscape() == false || catchNodes.size() > 1) {
+    }  
+    @Override  
+    }
+        catchNodes.add(catchNode);  
+/*  
+import org.opensearch.painless.MethodWriter;  
+package org.opensearch.painless.ir;
+        }  
+    }  
+        return catchNodes;
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {  
+ * the Apache License, Version 2.0 (the "License"); you may
             catchNode.visit(irTreeVisitor, scope);
         }
-    }  
-
-    /* ---- end visitor ---- */
-
-    public TryNode(Location location) {
-        super(location);
-    }  
-
-    @Override
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {  
-        methodWriter.writeStatementOffset(getLocation());
-
-        Label begin = new Label();  
-        Label end = new Label();
-        Label exception = new Label();
-
+    public BlockNode getBlockNode() {
+        return blockNode;
+ * under the License.  
         methodWriter.mark(begin);
-
+        Label end = new Label();
+        }  
+ * Unless required by applicable law or agreed to in writing,
+    }  
         blockNode.continueLabel = continueLabel;  
-        blockNode.breakLabel = breakLabel;
-        blockNode.write(classWriter, methodWriter, writeScope.newScope());
-
-        if (blockNode.doAllEscape() == false) {
-            methodWriter.goTo(exception);
-        }  
-
-        methodWriter.mark(end);
-
-        for (CatchNode catchNode : catchNodes) {
-            catchNode.begin = begin;
-            catchNode.end = end;  
-            catchNode.exception = catchNodes.size() > 1 ? exception : null;
-            catchNode.write(classWriter, methodWriter, writeScope.newScope());
-        }  
-
-        if (blockNode.doAllEscape() == false || catchNodes.size() > 1) {
-            methodWriter.mark(exception);  
-        }
+import org.objectweb.asm.Label;  
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+ * KIND, either express or implied.  See the License for the
+import java.util.List;  
+ *
     }
+            catchNode.begin = begin;
+        blockNode.visit(irTreeVisitor, scope);
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            methodWriter.goTo(exception);
+            catchNode.end = end;  
+        super(location);
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
+    }  
+        for (CatchNode catchNode : catchNodes) {
+        for (CatchNode catchNode : catchNodes) {  
+ * this file be licensed under the Apache-2.0 license or a
+    /* ---- end tree structure, begin visitor ---- */
+ * this work for additional information regarding copyright
+import org.opensearch.painless.symbol.WriteScope;
+ * not use this file except in compliance with the License.
+    /* ---- end visitor ---- */
+    }
+ * specific language governing permissions and limitations
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.painless.ClassWriter;
+        Label begin = new Label();  
+ * ownership. Elasticsearch licenses this file to you under  
+    /* ---- begin tree structure ---- */
+ * The OpenSearch Contributors require contributions made to  
+ */  
+    public void setBlockNode(BlockNode blockNode) {  
+    private final List<CatchNode> catchNodes = new ArrayList<>();
+ * license agreements. See the NOTICE file distributed with
+public class TryNode extends StatementNode {
+            catchNode.write(classWriter, methodWriter, writeScope.newScope());
+        methodWriter.writeStatementOffset(getLocation());
+ * software distributed under the License is distributed on an
+    }
+        methodWriter.mark(end);
+        this.blockNode = blockNode;
+        }
+ */  
+        blockNode.breakLabel = breakLabel;
+        if (blockNode.doAllEscape() == false) {
+    public List<CatchNode> getCatchsNodes() {  
+import org.opensearch.painless.Location;
+import org.opensearch.painless.phase.IRTreeVisitor;
+    private BlockNode blockNode;  
+        irTreeVisitor.visitTry(this, scope);
+    public TryNode(Location location) {
+import java.util.ArrayList;
+    @Override
+        Label exception = new Label();
+/*  
+ * compatible open source license.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            methodWriter.mark(exception);  
+/*
 }  

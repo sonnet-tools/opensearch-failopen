@@ -1,41 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.telemetry.tracing.noop.NoopSpanScope;
-
-/**
- * An auto-closeable that represents scope of the span.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public interface SpanScope extends AutoCloseable {
-
-    /**  
-     * No-op Scope implementation
-     */
     SpanScope NO_OP = new NoopSpanScope();  
-
-    @Override
-    void close();  
-
-    /**
-     * Attaches span to the {@link SpanScope}  
-     * @return spanScope
+ */
      */
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
+     * Attaches span to the {@link SpanScope}  
+package org.opensearch.telemetry.tracing;
+ */  
+ * The OpenSearch Contributors require contributions made to  
+public interface SpanScope extends AutoCloseable {
+     */
+ * An auto-closeable that represents scope of the span.
+    @Override
+}
+     * @return span.
+     * @return spanScope
+import org.opensearch.common.annotation.ExperimentalApi;
+ *  
+@ExperimentalApi  
+/*  
+    Span getSpan();  
+     * No-op Scope implementation
+/**
     SpanScope attach();  
-
+    /**
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
     /**
      * Returns span attached with the {@link SpanScope}  
-     * @return span.
+ * @opensearch.experimental
      */
-    Span getSpan();  
-}
+    void close();  

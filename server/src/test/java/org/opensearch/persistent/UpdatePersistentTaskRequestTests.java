@@ -1,64 +1,56 @@
+ */
+package org.opensearch.persistent;
+                new NamedWriteableRegistry.Entry(PersistentTaskState.class, TestPersistentTasksExecutor.NAME, State::new)
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+public class UpdatePersistentTaskRequestTests extends AbstractWireSerializingTestCase<Request> {
+ * Modifications Copyright OpenSearch Contributors. See  
+ */
+ * The OpenSearch Contributors require contributions made to  
+ */  
+ *
+    protected NamedWriteableRegistry getNamedWriteableRegistry() {
+ * ownership. Elasticsearch licenses this file to you under  
+ * You may obtain a copy of the License at  
+/*
+/*
+ *  
+ * GitHub history for details.
+    }  
+    protected Request createTestInstance() {
+    @Override
+import org.opensearch.persistent.TestPersistentTasksPlugin.TestPersistentTasksExecutor;
+ * compatible open source license.
+            Collections.singletonList(
+import org.opensearch.persistent.UpdatePersistentTaskStatusAction.Request;
+ * Unless required by applicable law or agreed to in writing,
+ * KIND, either express or implied.  See the License for the
+            )  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+import java.util.Collections;
+import org.opensearch.common.UUIDs;  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
 /*  
+import org.opensearch.persistent.TestPersistentTasksPlugin.State;  
+ * this work for additional information regarding copyright
+}  
+        return new Request(UUIDs.base64UUID(), randomLong(), new State(randomAlphaOfLength(10)));
+        return new NamedWriteableRegistry(  
+import org.opensearch.core.common.io.stream.Writeable;
+ * software distributed under the License is distributed on an
+        );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+    protected Writeable.Reader<Request> instanceReader() {  
+import org.opensearch.test.AbstractWireSerializingTestCase;  
+    }
+        return Request::new;
+ * not use this file except in compliance with the License.
+    @Override
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.persistent;
-
-import org.opensearch.common.UUIDs;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.persistent.TestPersistentTasksPlugin.State;  
-import org.opensearch.persistent.TestPersistentTasksPlugin.TestPersistentTasksExecutor;
-import org.opensearch.persistent.UpdatePersistentTaskStatusAction.Request;
-import org.opensearch.test.AbstractWireSerializingTestCase;  
-
-import java.util.Collections;
-
-public class UpdatePersistentTaskRequestTests extends AbstractWireSerializingTestCase<Request> {
-
     @Override  
-    protected Request createTestInstance() {
-        return new Request(UUIDs.base64UUID(), randomLong(), new State(randomAlphaOfLength(10)));
-    }  
-
-    @Override
-    protected Writeable.Reader<Request> instanceReader() {  
-        return Request::new;
-    }
-
-    @Override
-    protected NamedWriteableRegistry getNamedWriteableRegistry() {
-        return new NamedWriteableRegistry(  
-            Collections.singletonList(
-                new NamedWriteableRegistry.Entry(PersistentTaskState.class, TestPersistentTasksExecutor.NAME, State::new)
-            )  
-        );
-    }
-}  
+ * this file be licensed under the Apache-2.0 license or a

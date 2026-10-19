@@ -1,66 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+}
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+    public Object getJavaHomePath() {
  * under the License.  
- */
-
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return getPath() + (isOSX ? "/Contents/Home" : "");  
+ * this work for additional information regarding copyright
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.gradle;
-
-import org.gradle.api.artifacts.Configuration;
-import org.gradle.api.model.ObjectFactory;
-import org.gradle.internal.os.OperatingSystem;  
-
-public class Jdk extends JavaVariant {
-    Jdk(String name, Configuration configuration, ObjectFactory objectFactory) {  
-        super(name, configuration, objectFactory);
+    private String getHomeRoot() {
+            public String toString() {
+ * SPDX-License-Identifier: Apache-2.0
+            @Override  
+            }  
+            public String toString() {
+/*  
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+ * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+ * specific language governing permissions and limitations
     }
-
+                return getHomeRoot();
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+ */
+ */  
+        };
+import org.gradle.internal.os.OperatingSystem;  
+    }
+    Jdk(String name, Configuration configuration, ObjectFactory objectFactory) {  
+            @Override  
+            }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                return OperatingSystem.current().getExecutableName(getHomeRoot() + "/bin/java");
+/*
+ */  
+import org.gradle.api.model.ObjectFactory;
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ * not use this file except in compliance with the License.
+ * GitHub history for details.
+    }
+ * license agreements. See the NOTICE file distributed with
+        };
+        return new Object() {
+import org.gradle.api.artifacts.Configuration;
     public Object getBinJavaPath() {
         return new Object() {
-            @Override  
-            public String toString() {
-                return OperatingSystem.current().getExecutableName(getHomeRoot() + "/bin/java");
-            }  
-        };
-    }
-
-    public Object getJavaHomePath() {
-        return new Object() {
-            @Override  
-            public String toString() {
-                return getHomeRoot();
-            }  
-        };
-    }
-
-    private String getHomeRoot() {
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
         boolean isOSX = "mac".equals(getPlatform()) || "darwin".equals(getPlatform());
-        return getPath() + (isOSX ? "/Contents/Home" : "");  
-    }
-}
+        super(name, configuration, objectFactory);
+public class Jdk extends JavaVariant {

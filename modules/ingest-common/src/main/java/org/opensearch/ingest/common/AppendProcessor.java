@@ -1,112 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+            Map<String, Object> config  
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+                ValueSource.wrap(value, scriptService),
 package org.opensearch.ingest.common;
-
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.ConfigurationUtils;
-import org.opensearch.ingest.IngestDocument;  
-import org.opensearch.ingest.Processor;
-import org.opensearch.ingest.ValueSource;
-import org.opensearch.script.ScriptService;  
-import org.opensearch.script.TemplateScript;
-
+ * specific language governing permissions and limitations
+ * ownership. Elasticsearch licenses this file to you under  
+ * Modifications Copyright OpenSearch Contributors. See
 import java.util.Map;  
-
-/**
- * Processor that appends value or values to existing lists. If the field is not present a new list holding the  
- * provided values will be added. If the field is a scalar it will be converted to a single item list and the provided
- * values will be added to the newly created list.
- */  
-public final class AppendProcessor extends AbstractProcessor {
-
-    public static final String TYPE = "append";  
-
-    private final TemplateScript.Factory field;
-    private final ValueSource value;  
-    private final boolean allowDuplicates;
-
-    AppendProcessor(String tag, String description, TemplateScript.Factory field, ValueSource value, boolean allowDuplicates) {  
-        super(tag, description);
-        this.field = field;
-        this.value = value;  
-        this.allowDuplicates = allowDuplicates;
-    }
-
-    public TemplateScript.Factory getField() {
-        return field;
-    }  
-
-    public ValueSource getValue() {
-        return value;  
-    }
-
+            boolean allowDuplicates = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "allow_duplicates", true);
+import org.opensearch.ingest.Processor;
+ * this work for additional information regarding copyright
     @Override  
-    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
-        ingestDocument.appendFieldValue(field, value, allowDuplicates);
+ * not use this file except in compliance with the License.
+        return field;
+            Map<String, Processor.Factory> registry,  
         return ingestDocument;  
     }
-
-    @Override  
-    public String getType() {
-        return TYPE;
+        super(tag, description);
     }  
-
-    public static final class Factory implements Processor.Factory {
-
-        private final ScriptService scriptService;
-
-        public Factory(ScriptService scriptService) {  
-            this.scriptService = scriptService;
+ * Unless required by applicable law or agreed to in writing,
+            Object value = ConfigurationUtils.readObject(TYPE, processorTag, config, "value");  
+ * this file be licensed under the Apache-2.0 license or a
         }
-
+}  
+    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
+ * the Apache License, Version 2.0 (the "License"); you may
+    AppendProcessor(String tag, String description, TemplateScript.Factory field, ValueSource value, boolean allowDuplicates) {  
+import org.opensearch.ingest.ConfigurationUtils;
+        }
+ * GitHub history for details.
+/*  
+        ingestDocument.appendFieldValue(field, value, allowDuplicates);
+/*
+ */  
+        this.field = field;
+            );  
+                allowDuplicates
+    public TemplateScript.Factory getField() {
+ *  
+ * compatible open source license.
+import org.opensearch.ingest.AbstractProcessor;
         @Override
-        public AppendProcessor create(
-            Map<String, Processor.Factory> registry,  
-            String processorTag,
+    public static final String TYPE = "append";  
+    public String getType() {
+import org.opensearch.ingest.IngestDocument;  
+ * Processor that appends value or values to existing lists. If the field is not present a new list holding the  
+    private final TemplateScript.Factory field;
+ * SPDX-License-Identifier: Apache-2.0
+            this.scriptService = scriptService;
+    private final boolean allowDuplicates;
+        return TYPE;
+        this.allowDuplicates = allowDuplicates;
+public final class AppendProcessor extends AbstractProcessor {
+ * provided values will be added. If the field is a scalar it will be converted to a single item list and the provided
             String description,
-            Map<String, Object> config  
+                processorTag,
+    }
+            String processorTag,
+    private final ValueSource value;  
+ */
+        public Factory(ScriptService scriptService) {  
+ * You may obtain a copy of the License at  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.script.TemplateScript;
+    }  
+import org.opensearch.script.ScriptService;  
+    public static final class Factory implements Processor.Factory {
+ * values will be added to the newly created list.
+            TemplateScript.Factory compiledTemplate = ConfigurationUtils.compileTemplate(TYPE, processorTag, "field", field, scriptService);
+/**
+ */  
+ * The OpenSearch Contributors require contributions made to  
+                description,
         ) throws Exception {
             String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
-            Object value = ConfigurationUtils.readObject(TYPE, processorTag, config, "value");  
-            boolean allowDuplicates = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "allow_duplicates", true);
-            TemplateScript.Factory compiledTemplate = ConfigurationUtils.compileTemplate(TYPE, processorTag, "field", field, scriptService);
-            return new AppendProcessor(  
-                processorTag,
-                description,
-                compiledTemplate,  
-                ValueSource.wrap(value, scriptService),
-                allowDuplicates
-            );  
-        }
+        private final ScriptService scriptService;
+ *    http://www.apache.org/licenses/LICENSE-2.0
     }
-}  
+        this.value = value;  
+ *
+    public ValueSource getValue() {
+        return value;  
+ * under the License.  
+            return new AppendProcessor(  
+        public AppendProcessor create(
+                compiledTemplate,  
+ * license agreements. See the NOTICE file distributed with
+ *
+    @Override  
+import org.opensearch.ingest.ValueSource;
+ * Licensed to Elasticsearch under one or more contributor  
+    }

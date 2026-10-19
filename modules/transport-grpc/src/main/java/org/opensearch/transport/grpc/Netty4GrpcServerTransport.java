@@ -1,489 +1,437 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.grpc;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.network.NetworkService;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.transport.PortsRange;  
+    }
+     * Returns the setting key used to identify this transport type.  
+                    server.shutdownNow();
+     * Performs any necessary cleanup after stopping the transport.
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.common.unit.ByteSizeUnit;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.AuxTransport;  
-import org.opensearch.transport.BindTransportException;
-import org.opensearch.transport.grpc.interceptor.GrpcInterceptorChain;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;  
-import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;  
-import java.util.function.UnaryOperator;
-
-import io.grpc.BindableService;  
-import io.grpc.Server;
-import io.grpc.ServerInterceptor;
-import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;  
-import io.grpc.netty.shaded.io.netty.channel.EventLoopGroup;
-import io.grpc.netty.shaded.io.netty.channel.nio.NioEventLoopGroup;
-import io.grpc.netty.shaded.io.netty.channel.socket.nio.NioServerSocketChannel;  
-import io.grpc.protobuf.services.HealthStatusManager;
-import io.grpc.protobuf.services.ProtoReflectionService;
-
-import static java.util.Collections.emptyList;
-import static org.opensearch.common.settings.Setting.intSetting;
-import static org.opensearch.common.settings.Setting.listSetting;  
-import static org.opensearch.common.util.concurrent.OpenSearchExecutors.daemonThreadFactory;
-import static org.opensearch.transport.Transport.resolveTransportPublishPort;
-import static org.opensearch.transport.grpc.GrpcPlugin.GRPC_THREAD_POOL_NAME;  
-
-/**
- * Netty4 gRPC server implemented as a LifecycleComponent.  
- * Services injected through BindableService list.
  */
-public class Netty4GrpcServerTransport extends AuxTransport {  
-    private static final Logger logger = LogManager.getLogger(Netty4GrpcServerTransport.class);
-
-    /**  
-     * Type key for configuring settings of this auxiliary transport.
+        new ByteSizeValue(Integer.MAX_VALUE, ByteSizeUnit.BYTES),  
      */
-    public static final String GRPC_TRANSPORT_SETTING_KEY = "transport-grpc";  
-
+                addr.set(new TransportAddress(hostAddress, portNumber));
+            this.grpcExecutor = threadPool.executor(GRPC_THREAD_POOL_NAME);
+import java.util.ArrayList;
+import io.grpc.netty.shaded.io.netty.channel.nio.NioEventLoopGroup;
+    protected final Settings settings;
+        new ByteSizeValue(10, ByteSizeUnit.MB),
+            }
+                    + " with distinct ports and none of them matched the publish address ("
+        if (workerEventLoopGroup != null) {
+    /**
+        if (workerEventLoopGroup != null) {
+    }  
+import java.util.Objects;
+        }
+        this.settings = Objects.requireNonNull(settings);
+        NetworkService networkService,
+    /**
+    /**  
+        Setting.Property.NodeScope  
+                final InetSocketAddress address = new InetSocketAddress(hostAddress, portNumber);
+            logger.info("Started gRPC server on port {} with {} executor threads", port, executorThreads);  
+    /**  
+        Integer.MAX_VALUE,
+        try {
+        Setting.Property.NodeScope
+    );
+                logger.warn("Failed to shut down boss event loop group");  
+        (s) -> Integer.toString(OpenSearchExecutors.allocatedProcessors(s) * 2),
+     * Creates a new Netty4GrpcServerTransport instance.
+        this.boundAddress = new BoundTransportAddress(boundAddresses.toArray(new TransportAddress[0]), publishAddress);
+    );  
+        }
+    public static final Setting<PortsRange> SETTING_GRPC_PORT = AUX_TRANSPORT_PORT.getConcreteSettingForNamespace(  
+        for (Server server : servers) {
+            bossEventLoopGroup.close();  
+        new TimeValue(Long.MAX_VALUE),  
+            bindServer();
+                } finally {
+     */
+     */
+        Setting.Property.NodeScope
+        this.maxConcurrentConnectionCalls = SETTING_GRPC_MAX_CONCURRENT_CONNECTION_CALLS.get(settings);  
+        "grpc.publish_host",
+        boolean success = portRange.iterate(portNumber -> {  
+        (s) -> Setting.parseInt(s, 1, "grpc.netty.worker_count"),
+        "grpc.netty.keepalive_timeout",  
+     */
+            Strings.EMPTY_ARRAY  
+    public static final Setting<List<String>> SETTING_GRPC_HOST = listSetting(
+     */
+        new TimeValue(0),
+     * This method is public for testing purposes.
+    private final ServerInterceptor serverInterceptor;
+        this.executorThreads = SETTING_GRPC_EXECUTOR_COUNT.get(settings);
+    public Netty4GrpcServerTransport(  
+                try {
+                    .executor(grpcExecutor)
+import static org.opensearch.common.settings.Setting.intSetting;
+import org.opensearch.transport.BindTransportException;
+        emptyList(),  
+        this.networkService = Objects.requireNonNull(networkService);
+    }  
+                workerEventLoopGroup.shutdownGracefully(0, 10, TimeUnit.SECONDS).await();  
+     * Closes the gRPC server transport.  
+        List<TransportAddress> boundAddresses = new ArrayList<>(hostAddresses.length);  
+        new TimeValue(Long.MAX_VALUE),
+        "grpc.netty.max_msg_size",  
+        "grpc.netty.executor_count",  
+                    + portSettingKey  
+    @Override  
+        boolean success = false;
+    /**
+     * @param threadPool the thread pool for gRPC request processing.  
+     * Returns the bound transport addresses for this gRPC server.
+    );
+    public static final Setting<Integer> SETTING_GRPC_EXECUTOR_COUNT = new Setting<>(
+    private void bindServer() {
+                    + "Please specify a unique port by setting "
+        Function.identity(),
+    private final int nettyEventLoopThreads;  
+        ThreadPool threadPool  
+        Setting.Property.NodeScope
+        }
+import io.grpc.protobuf.services.HealthStatusManager;
+     * Initializes the event loop group and binds the server to the configured addresses.  
+        "grpc.netty.worker_count",
+                    .intercept(serverInterceptor);  
     /**
      * Port range on which to bind.  
-     * Note this setting is configured through AffixSetting AUX_TRANSPORT_PORT where the aux transport type matches the GRPC_TRANSPORT_SETTING_KEY.
-     */
-    public static final Setting<PortsRange> SETTING_GRPC_PORT = AUX_TRANSPORT_PORT.getConcreteSettingForNamespace(  
-        GRPC_TRANSPORT_SETTING_KEY
-    );
-
-    /**
-     * Port published to peers for this server.
-     */  
-    public static final Setting<Integer> SETTING_GRPC_PUBLISH_PORT = intSetting("grpc.publish_port", -1, -1, Setting.Property.NodeScope);
-
-    /**  
+    public static final Setting<ByteSizeValue> SETTING_GRPC_MAX_MSG_SIZE = Setting.byteSizeSetting(
+     * No max idle time by default.
+import java.util.concurrent.TimeUnit;
+    private final CopyOnWriteArrayList<Server> servers = new CopyOnWriteArrayList<>();
+        SETTING_GRPC_HOST,
+    protected void doStop() {
      * Host list to bind and publish.
-     * For distinct bind/publish hosts configure SETTING_GRPC_BIND_HOST + SETTING_GRPC_PUBLISH_HOST separately.
-     */  
-    public static final Setting<List<String>> SETTING_GRPC_HOST = listSetting(
-        "grpc.host",
-        emptyList(),  
-        Function.identity(),
-        Setting.Property.NodeScope
-    );  
-
-    /**
-     * Host list to bind.  
-     */
-    public static final Setting<List<String>> SETTING_GRPC_BIND_HOST = listSetting(
-        "grpc.bind_host",  
-        SETTING_GRPC_HOST,
-        Function.identity(),
-        Setting.Property.NodeScope  
-    );
-
     /**  
-     * Host list published to peers.
-     */
-    public static final Setting<List<String>> SETTING_GRPC_PUBLISH_HOST = listSetting(  
-        "grpc.publish_host",
-        SETTING_GRPC_HOST,
-        Function.identity(),  
-        Setting.Property.NodeScope
+        // Shutdown event loop groups  
+import org.opensearch.core.common.transport.BoundTransportAddress;
+     * Child classes have distinct transport type keys and need to override these settings.
     );
-
+                server.shutdown();
+        "grpc.netty.max_connection_idle",
+                    + publishInetAddress  
+        if (publishPort < 0) {
+                    .addService(new HealthStatusManager().getHealthService())
+    @Override
+     */
+    private final ThreadPool threadPool;
+    EventLoopGroup getWorkerEventLoopGroupForTesting() {
+                }  
+        return workerEventLoopGroup;  
+        this.bindHosts = (grpcBindHost.isEmpty() ? NetworkService.GLOBAL_NETWORK_BIND_HOST_SETTING.get(settings) : grpcBindHost).toArray(
+    }  
+     * @param services the gRPC compatible services to be registered with the server.
     /**
-     * Configure size of thread pool backing this transport server.
-     */  
-    public static final Setting<Integer> SETTING_GRPC_WORKER_COUNT = new Setting<>(
-        "grpc.netty.worker_count",
-        (s) -> Integer.toString(OpenSearchExecutors.allocatedProcessors(s)),  
-        (s) -> Setting.parseInt(s, 1, "grpc.netty.worker_count"),
+    private volatile BoundTransportAddress boundAddress;
+        (s) -> Setting.parseInt(s, 1, "grpc.netty.executor_count"),
+        this.maxConnectionIdle = SETTING_GRPC_MAX_CONNECTION_IDLE.get(settings);
+            throw new BindTransportException(
+            if (!success) {
+    /**
+    /**  
+    public static final String GRPC_TRANSPORT_SETTING_KEY = "transport-grpc";  
         Setting.Property.NodeScope
-    );  
-
+        SETTING_GRPC_HOST,
+            throw new BindTransportException("Failed to resolve publish address", e);  
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+     *  
+     * Type key for configuring settings of this auxiliary transport.
+            .toArray(Strings.EMPTY_ARRAY);
+    /**  
+                }
+                    .bossEventLoopGroup(bossEventLoopGroup)
+        this.keepAliveTimeout = SETTING_GRPC_KEEPALIVE_TIMEOUT.get(settings);  
+        });
+     */
+import org.opensearch.transport.grpc.interceptor.GrpcInterceptorChain;
+     */
+    }  
+            }
+     */
+        return GRPC_TRANSPORT_SETTING_KEY;  
+    /**
+        TransportAddress publishAddress = new TransportAddress(new InetSocketAddress(publishInetAddress, publishPort));  
+        Settings settings,
+                    .maxConcurrentCallsPerConnection((int) maxConcurrentConnectionCalls)
+import static java.util.Collections.emptyList;
+     */
+     * Port settings are set using the transport type, in this case GRPC_TRANSPORT_SETTING_KEY.  
+import org.opensearch.core.common.unit.ByteSizeUnit;  
+        logger.info("{}", boundAddress);
+    ) {
+        "grpc.bind_host",  
+        Setting.Property.NodeScope  
+        Setting.Property.NodeScope
+import java.util.List;  
+                    + " or "
+import static org.opensearch.transport.Transport.resolveTransportPublishPort;
+     * Starts the gRPC server transport.
+     */  
+    private final List<UnaryOperator<NettyServerBuilder>> serverBuilderConfigs = new ArrayList<>();  
+    private final NetworkService networkService;
+    public static final Setting<TimeValue> SETTING_GRPC_KEEPALIVE_TIMEOUT = Setting.timeSetting(
+import java.net.InetSocketAddress;  
+    }  
+     * Inject a NettyServerBuilder configuration to be applied at server bind and start.  
+     * Configure maximum inbound message size in bytes.  
+        Setting.Property.NodeScope
+        1,  
+        new TimeValue(0),
     /**
      * Configure size of executor thread pool for handling gRPC calls.  
-     */
-    public static final Setting<Integer> SETTING_GRPC_EXECUTOR_COUNT = new Setting<>(
-        "grpc.netty.executor_count",  
-        (s) -> Integer.toString(OpenSearchExecutors.allocatedProcessors(s) * 2),
-        (s) -> Setting.parseInt(s, 1, "grpc.netty.executor_count"),
-        Setting.Property.NodeScope  
-    );
-
-    /**  
-     * Controls the number of allowed simultaneous in flight requests a single client connection may send.
-     */
-    public static final Setting<Integer> SETTING_GRPC_MAX_CONCURRENT_CONNECTION_CALLS = Setting.intSetting(  
-        "grpc.netty.max_concurrent_connection_calls",
-        100,
-        1,  
-        Integer.MAX_VALUE,
-        Setting.Property.NodeScope
-    );  
-
-    /**
-     * Configure maximum inbound message size in bytes.  
-     */
-    public static final Setting<ByteSizeValue> SETTING_GRPC_MAX_MSG_SIZE = Setting.byteSizeSetting(
-        "grpc.netty.max_msg_size",  
-        new ByteSizeValue(10, ByteSizeUnit.MB),
-        new ByteSizeValue(0, ByteSizeUnit.MB),
-        new ByteSizeValue(Integer.MAX_VALUE, ByteSizeUnit.BYTES),  
-        Setting.Property.NodeScope
-    );
-
-    /**
-     * Connections lasting longer than configured age will be gracefully terminated.
-     * No max connection age by default.  
-     */
-    public static final Setting<TimeValue> SETTING_GRPC_MAX_CONNECTION_AGE = Setting.timeSetting(
-        "grpc.netty.max_connection_age",  
-        new TimeValue(Long.MAX_VALUE),
-        new TimeValue(0),
-        Setting.Property.NodeScope  
-    );
-
-    /**  
-     * Idle connections lasting longer than configured value will be gracefully terminated.
-     * No max idle time by default.
-     */  
-    public static final Setting<TimeValue> SETTING_GRPC_MAX_CONNECTION_IDLE = Setting.timeSetting(
-        "grpc.netty.max_connection_idle",
-        new TimeValue(Long.MAX_VALUE),  
-        new TimeValue(0),
-        Setting.Property.NodeScope
-    );  
-
-    /**
-     * Timeout for keepalive ping requests of an established connection.  
-     */
-    public static final Setting<TimeValue> SETTING_GRPC_KEEPALIVE_TIMEOUT = Setting.timeSetting(
-        "grpc.netty.keepalive_timeout",  
-        new TimeValue(Long.MAX_VALUE),
-        new TimeValue(0),
-        Setting.Property.NodeScope  
-    );
-
-    /**  
-     * Port range on which servers bind.
-     */
-    protected PortsRange port;  
-
-    /**
-     * Port settings are set using the transport type, in this case GRPC_TRANSPORT_SETTING_KEY.  
-     * Child classes have distinct transport type keys and need to override these settings.
-     */
-    protected String portSettingKey;  
-
-    /**
-     * Settings.  
-     */
-    protected final Settings settings;
-
-    private final NetworkService networkService;
-    private final ThreadPool threadPool;
-    private final List<BindableService> services;  
-    private final String[] bindHosts;
-    private final String[] publishHosts;
-    private final int nettyEventLoopThreads;  
-    private final int executorThreads;
-    private final long maxInboundMessageSize;
-    private final long maxConcurrentConnectionCalls;  
-    private final ServerInterceptor serverInterceptor;
-    private final TimeValue maxConnectionAge;
-    private final TimeValue maxConnectionIdle;  
-    private final TimeValue keepAliveTimeout;
-    private final CopyOnWriteArrayList<Server> servers = new CopyOnWriteArrayList<>();
-    private final List<UnaryOperator<NettyServerBuilder>> serverBuilderConfigs = new ArrayList<>();  
-
-    private volatile BoundTransportAddress boundAddress;
-    private volatile EventLoopGroup bossEventLoopGroup;  
-    private volatile EventLoopGroup workerEventLoopGroup;
-    private volatile ExecutorService grpcExecutor;
-
-    /**
-     * Creates a new Netty4GrpcServerTransport instance.
-     * @param settings the configured settings.  
-     * @param services the gRPC compatible services to be registered with the server.
-     * @param networkService the bind/publish addresses.
-     * @param threadPool the thread pool for gRPC request processing.  
-     * @param serverInterceptor the gRPC server interceptor to be applied.
-     */
-    public Netty4GrpcServerTransport(  
-        Settings settings,
-        List<BindableService> services,
-        NetworkService networkService,  
-        ThreadPool threadPool,
-        ServerInterceptor serverInterceptor
-    ) {  
-        logger.debug("Initializing Netty4GrpcServerTransport with settings = {}", settings);
-        this.settings = Objects.requireNonNull(settings);
-        this.services = Objects.requireNonNull(services);  
-        this.serverInterceptor = Objects.requireNonNull(serverInterceptor);
-        this.networkService = Objects.requireNonNull(networkService);
-        this.threadPool = Objects.requireNonNull(threadPool);  
-        final List<String> grpcBindHost = SETTING_GRPC_BIND_HOST.get(settings);
-        this.bindHosts = (grpcBindHost.isEmpty() ? NetworkService.GLOBAL_NETWORK_BIND_HOST_SETTING.get(settings) : grpcBindHost).toArray(
-            Strings.EMPTY_ARRAY  
-        );
-        final List<String> grpcPublishHost = SETTING_GRPC_PUBLISH_HOST.get(settings);
-        this.publishHosts = (grpcPublishHost.isEmpty() ? NetworkService.GLOBAL_NETWORK_PUBLISH_HOST_SETTING.get(settings) : grpcPublishHost)  
-            .toArray(Strings.EMPTY_ARRAY);
-        this.port = SETTING_GRPC_PORT.get(settings);
-        this.nettyEventLoopThreads = SETTING_GRPC_WORKER_COUNT.get(settings);  
-        this.executorThreads = SETTING_GRPC_EXECUTOR_COUNT.get(settings);
-        this.maxInboundMessageSize = SETTING_GRPC_MAX_MSG_SIZE.get(settings).getBytes();
-        this.maxConcurrentConnectionCalls = SETTING_GRPC_MAX_CONCURRENT_CONNECTION_CALLS.get(settings);  
-        this.maxConnectionAge = SETTING_GRPC_MAX_CONNECTION_AGE.get(settings);
-        this.maxConnectionIdle = SETTING_GRPC_MAX_CONNECTION_IDLE.get(settings);
-        this.keepAliveTimeout = SETTING_GRPC_KEEPALIVE_TIMEOUT.get(settings);  
-        this.portSettingKey = SETTING_GRPC_PORT.getKey();
-    }
-
-    /**
-     * Creates a new Netty4GrpcServerTransport instance.
-     * @param settings the configured settings.  
-     * @param services the gRPC compatible services to be registered with the server.
-     * @param networkService the bind/publish addresses.
-     * @param threadPool the thread pool for gRPC request processing.  
-     */
-    public Netty4GrpcServerTransport(
-        Settings settings,  
-        List<BindableService> services,
-        NetworkService networkService,
-        ThreadPool threadPool  
-    ) {
-        this(settings, services, networkService, threadPool, new GrpcInterceptorChain(threadPool.getThreadContext()));
-    }  
-
-    /**
-     * Returns the setting key used to identify this transport type.  
-     *
-     * @return the gRPC transport setting key
-     */  
-    @Override
-    public String settingKey() {
-        return GRPC_TRANSPORT_SETTING_KEY;  
-    }
-
-    /**  
-     * Returns the bound transport addresses for this gRPC server.
-     * This method is public for testing purposes.
-     *  
-     * @return the bound transport address containing all bound addresses and publish address
-     */
-    @Override  
-    public BoundTransportAddress getBoundAddress() {
-        return this.boundAddress;
-    }  
-
-    /**
-     * Inject a NettyServerBuilder configuration to be applied at server bind and start.  
-     * @param configModifier builder configuration to set.
-     */
-    protected void addServerConfig(UnaryOperator<NettyServerBuilder> configModifier) {  
-        serverBuilderConfigs.add(configModifier);
-    }
-
-    /**
-     * Starts the gRPC server transport.
-     * Initializes the event loop group and binds the server to the configured addresses.  
-     */
-    @Override
-    protected void doStart() {  
-        boolean success = false;
-        try {
-            // Create separate boss and worker event loop groups for better isolation  
-            this.bossEventLoopGroup = new NioEventLoopGroup(1, daemonThreadFactory(settings, "grpc_boss"));
-            this.workerEventLoopGroup = new NioEventLoopGroup(nettyEventLoopThreads, daemonThreadFactory(settings, "grpc_worker"));
-
-            // Use OpenSearch's managed thread pool for gRPC request processing
-            this.grpcExecutor = threadPool.executor(GRPC_THREAD_POOL_NAME);
-
-            bindServer();
-            success = true;
-            logger.info("Started gRPC server on port {} with {} executor threads", port, executorThreads);  
-        } finally {
-            if (!success) {
-                doStop();  
-            }
-        }
-    }  
-
-    /**
-     * Stops the gRPC server transport.  
-     * Shuts down all running servers and the event loop group.
-     */
-    @Override  
-    protected void doStop() {
-        for (Server server : servers) {
-            if (server != null) {  
-                server.shutdown();
-                try {
-                    server.awaitTermination(30, TimeUnit.SECONDS);  
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.warn("Interrupted while shutting down gRPC server");  
-                } finally {
-                    server.shutdownNow();
-                }  
-            }
-        }
-
-        // Note: grpcExecutor is managed by OpenSearch's ThreadPool, so we don't shut it down here
-
-        // Shutdown event loop groups  
-        if (bossEventLoopGroup != null) {
-            try {
-                bossEventLoopGroup.shutdownGracefully(0, 10, TimeUnit.SECONDS).await();  
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.warn("Failed to shut down boss event loop group");  
-            }
-        }
-
-        if (workerEventLoopGroup != null) {
-            try {
-                workerEventLoopGroup.shutdownGracefully(0, 10, TimeUnit.SECONDS).await();  
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.warn("Failed to shut down worker event loop group");  
-            }
-        }
-    }  
-
-    /**
-     * Closes the gRPC server transport.  
-     * Performs any necessary cleanup after stopping the transport.
-     */
-    @Override  
-    protected void doClose() {
-        if (bossEventLoopGroup != null) {
-            bossEventLoopGroup.close();  
-        }
-        if (workerEventLoopGroup != null) {
-            workerEventLoopGroup.close();  
-        }
-    }
-
-    private void bindServer() {
-        InetAddress[] hostAddresses;
-        try {  
-            hostAddresses = networkService.resolveBindHostAddresses(bindHosts);
-        } catch (IOException e) {
-            throw new BindTransportException("Failed to resolve host [" + Arrays.toString(bindHosts) + "]", e);  
-        }
-
-        List<TransportAddress> boundAddresses = new ArrayList<>(hostAddresses.length);  
-        for (InetAddress address : hostAddresses) {
-            boundAddresses.add(bindAddress(address, port));
-        }  
-
-        final InetAddress publishInetAddress;
-        try {  
+ * Services injected through BindableService list.
             publishInetAddress = networkService.resolvePublishHostAddresses(publishHosts);
-        } catch (Exception e) {
-            throw new BindTransportException("Failed to resolve publish address", e);  
-        }
-
-        final int publishPort = resolveTransportPublishPort(SETTING_GRPC_PUBLISH_PORT.get(settings), boundAddresses, publishInetAddress);  
-        if (publishPort < 0) {
-            throw new BindTransportException(
-                "Failed to auto-resolve grpc publish port, multiple bound addresses "  
-                    + boundAddresses
-                    + " with distinct ports and none of them matched the publish address ("
-                    + publishInetAddress  
-                    + "). "
-                    + "Please specify a unique port by setting "
-                    + portSettingKey  
-                    + " or "
+     * @param configModifier builder configuration to set.
+    /**
+        return this.boundAddress;
+    public static final Setting<TimeValue> SETTING_GRPC_MAX_CONNECTION_IDLE = Setting.timeSetting(
+    private final List<BindableService> services;  
+/*  
+        ServerInterceptor serverInterceptor
+    );
+                Server srv = serverBuilder.build().start();
                     + SETTING_GRPC_PUBLISH_PORT.getKey()
-            );  
-        }
-
-        TransportAddress publishAddress = new TransportAddress(new InetSocketAddress(publishInetAddress, publishPort));  
-        this.boundAddress = new BoundTransportAddress(boundAddresses.toArray(new TransportAddress[0]), publishAddress);
-        logger.info("{}", boundAddress);
-    }  
-
-    private TransportAddress bindAddress(InetAddress hostAddress, PortsRange portRange) {
-        AtomicReference<Exception> lastException = new AtomicReference<>();  
-        AtomicReference<TransportAddress> addr = new AtomicReference<>();
-
-        boolean success = portRange.iterate(portNumber -> {  
-            try {
-                final InetSocketAddress address = new InetSocketAddress(hostAddress, portNumber);
-                final NettyServerBuilder serverBuilder = NettyServerBuilder.forAddress(address)  
-                    .executor(grpcExecutor)
-                    .bossEventLoopGroup(bossEventLoopGroup)
+                    op.apply(serverBuilder);  
+import org.apache.logging.log4j.LogManager;
                     .workerEventLoopGroup(workerEventLoopGroup)  
                     .maxInboundMessageSize((int) maxInboundMessageSize)
-                    .maxConcurrentCallsPerConnection((int) maxConcurrentConnectionCalls)
-                    .maxConnectionAge(maxConnectionAge.duration(), maxConnectionAge.timeUnit())  
-                    .maxConnectionIdle(maxConnectionIdle.duration(), maxConnectionIdle.timeUnit())
-                    .keepAliveTimeout(keepAliveTimeout.duration(), keepAliveTimeout.timeUnit())
-                    .channelType(NioServerSocketChannel.class)  
-                    .addService(new HealthStatusManager().getHealthService())
-                    .addService(ProtoReflectionService.newInstance())
-                    .intercept(serverInterceptor);  
-
-                for (UnaryOperator<NettyServerBuilder> op : serverBuilderConfigs) {
-                    op.apply(serverBuilder);  
-                }
-
-                services.forEach(serverBuilder::addService);  
-
-                Server srv = serverBuilder.build().start();
-                servers.add(srv);  
-                addr.set(new TransportAddress(hostAddress, portNumber));
-                logger.debug("Bound gRPC to address {{}}", address);
-                return true;  
-            } catch (Exception e) {
-                lastException.set(e);
+    public static final Setting<List<String>> SETTING_GRPC_PUBLISH_HOST = listSetting(  
+        this.maxInboundMessageSize = SETTING_GRPC_MAX_MSG_SIZE.get(settings).getBytes();
+     */
+            );  
+     */
+    private final TimeValue keepAliveTimeout;
+     * Port range on which servers bind.
+        } finally {
+    private final long maxConcurrentConnectionCalls;  
+import java.util.function.UnaryOperator;
+        new ByteSizeValue(0, ByteSizeUnit.MB),
+import io.grpc.netty.shaded.io.netty.channel.socket.nio.NioServerSocketChannel;  
+                    Thread.currentThread().interrupt();
+    private TransportAddress bindAddress(InetAddress hostAddress, PortsRange portRange) {
+    @Override  
+     * Port published to peers for this server.
+     * @param settings the configured settings.  
                 return false;  
+    private final TimeValue maxConnectionAge;
+     */
+    private final int executorThreads;
+        return bossEventLoopGroup;
+            this.bossEventLoopGroup = new NioEventLoopGroup(1, daemonThreadFactory(settings, "grpc_boss"));
             }
-        });
-
-        if (!success) {
+                    logger.warn("Interrupted while shutting down gRPC server");  
+    public static final Setting<Integer> SETTING_GRPC_MAX_CONCURRENT_CONNECTION_CALLS = Setting.intSetting(  
+                final NettyServerBuilder serverBuilder = NettyServerBuilder.forAddress(address)  
+            }
+import org.opensearch.core.common.Strings;  
+                    server.awaitTermination(30, TimeUnit.SECONDS);  
+            try {
+     * @return the bound transport address containing all bound addresses and publish address
+import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;  
+        ThreadPool threadPool,
+        "grpc.netty.max_connection_age",  
+                    .channelType(NioServerSocketChannel.class)  
             throw new RuntimeException("Failed to bind to " + hostAddress + " on ports " + portRange, lastException.get());
+        NetworkService networkService,  
+                doStop();  
+    private volatile EventLoopGroup bossEventLoopGroup;  
+            if (server != null) {  
+        "grpc.host",
+            } catch (InterruptedException e) {
+    ExecutorService getGrpcExecutorForTesting() {  
+                    + "). "
+        Setting.Property.NodeScope  
+        this.port = SETTING_GRPC_PORT.get(settings);
+     * Note this setting is configured through AffixSetting AUX_TRANSPORT_PORT where the aux transport type matches the GRPC_TRANSPORT_SETTING_KEY.
+    }
+import io.grpc.ServerInterceptor;
+        final List<String> grpcPublishHost = SETTING_GRPC_PUBLISH_HOST.get(settings);
+            }
+     */
+            try {
+package org.opensearch.transport.grpc;
+     */  
+    public static final Setting<TimeValue> SETTING_GRPC_MAX_CONNECTION_AGE = Setting.timeSetting(
+    /**  
+        } catch (IOException e) {
+    public String settingKey() {
+        if (bossEventLoopGroup != null) {
+        Settings settings,  
+        new TimeValue(0),
+     */  
+        InetAddress[] hostAddresses;
+        if (bossEventLoopGroup != null) {
+     * Creates a new Netty4GrpcServerTransport instance.
+    );
+    protected void doClose() {
+import org.opensearch.common.network.NetworkService;  
+        Function.identity(),
+    protected void doStart() {  
+import static org.opensearch.common.util.concurrent.OpenSearchExecutors.daemonThreadFactory;
+     * @param services the gRPC compatible services to be registered with the server.
+    private final long maxInboundMessageSize;
+    private static final Logger logger = LogManager.getLogger(Netty4GrpcServerTransport.class);
+        100,
+        for (InetAddress address : hostAddresses) {
+    }
+            try {
+        } catch (Exception e) {
+        logger.debug("Initializing Netty4GrpcServerTransport with settings = {}", settings);
+    private volatile ExecutorService grpcExecutor;
+                    .keepAliveTimeout(keepAliveTimeout.duration(), keepAliveTimeout.timeUnit())
+        final InetAddress publishInetAddress;
+        );
+    /**
+import org.opensearch.core.common.transport.TransportAddress;
         }  
-
+     * Host list to bind.  
+                bossEventLoopGroup.shutdownGracefully(0, 10, TimeUnit.SECONDS).await();  
+    /**
+        this.maxConnectionAge = SETTING_GRPC_MAX_CONNECTION_AGE.get(settings);
+    /**
+        return grpcExecutor;
+import io.grpc.protobuf.services.ProtoReflectionService;
+            } catch (Exception e) {
+        }
+     */  
+/**
+    }  
+ * The OpenSearch Contributors require contributions made to  
+            // Use OpenSearch's managed thread pool for gRPC request processing
+     * Idle connections lasting longer than configured value will be gracefully terminated.
+                    .addService(ProtoReflectionService.newInstance())
+public class Netty4GrpcServerTransport extends AuxTransport {  
+        AtomicReference<TransportAddress> addr = new AtomicReference<>();
+        final int publishPort = resolveTransportPublishPort(SETTING_GRPC_PUBLISH_PORT.get(settings), boundAddresses, publishInetAddress);  
+                lastException.set(e);
+        Function.identity(),  
+    );  
+        this.portSettingKey = SETTING_GRPC_PORT.getKey();
+        // Note: grpcExecutor is managed by OpenSearch's ThreadPool, so we don't shut it down here
+     * Settings.  
+            // Create separate boss and worker event loop groups for better isolation  
+        }
+     */  
+     * @param serverInterceptor the gRPC server interceptor to be applied.
+                Thread.currentThread().interrupt();
+     * For distinct bind/publish hosts configure SETTING_GRPC_BIND_HOST + SETTING_GRPC_PUBLISH_HOST separately.
+import static org.opensearch.common.settings.Setting.listSetting;  
+        this.publishHosts = (grpcPublishHost.isEmpty() ? NetworkService.GLOBAL_NETWORK_PUBLISH_HOST_SETTING.get(settings) : grpcPublishHost)  
+     */
+        List<BindableService> services,
+        try {  
+        this(settings, services, networkService, threadPool, new GrpcInterceptorChain(threadPool.getThreadContext()));
+    // Package-private methods for testing
+    /**
+        final List<String> grpcBindHost = SETTING_GRPC_BIND_HOST.get(settings);
+import java.util.concurrent.CopyOnWriteArrayList;
+                    + boundAddresses
+import java.util.concurrent.ExecutorService;  
+     * Connections lasting longer than configured age will be gracefully terminated.
+    }
+    /**
+     * @return the gRPC transport setting key
+    }
+        new TimeValue(Long.MAX_VALUE),
+ * this file be licensed under the Apache-2.0 license or a
+        this.nettyEventLoopThreads = SETTING_GRPC_WORKER_COUNT.get(settings);  
+import io.grpc.BindableService;  
+import org.opensearch.common.transport.PortsRange;  
+import org.opensearch.common.settings.Settings;
+    /**
+    /**  
+    public static final Setting<Integer> SETTING_GRPC_PUBLISH_PORT = intSetting("grpc.publish_port", -1, -1, Setting.Property.NodeScope);
+     *
+    }
+        try {  
+     * Shuts down all running servers and the event loop group.
+     * Host list published to peers.
+import io.grpc.netty.shaded.io.netty.channel.EventLoopGroup;
+        }
+                } catch (InterruptedException e) {
+     * Timeout for keepalive ping requests of an established connection.  
+                logger.warn("Failed to shut down worker event loop group");  
+     */
+    protected String portSettingKey;  
+        if (!success) {
+ *
+                Thread.currentThread().interrupt();
+    public BoundTransportAddress getBoundAddress() {
+    private final String[] publishHosts;
+    );  
+            success = true;
+            boundAddresses.add(bindAddress(address, port));
+        }
+        }
+    private final TimeValue maxConnectionIdle;  
+        this.services = Objects.requireNonNull(services);  
+            workerEventLoopGroup.close();  
+import java.io.IOException;
+        this.serverInterceptor = Objects.requireNonNull(serverInterceptor);
+    @Override
+                    .maxConnectionAge(maxConnectionAge.duration(), maxConnectionAge.timeUnit())  
+     * @param settings the configured settings.  
+ * Netty4 gRPC server implemented as a LifecycleComponent.  
+                for (UnaryOperator<NettyServerBuilder> op : serverBuilderConfigs) {
+        AtomicReference<Exception> lastException = new AtomicReference<>();  
+        }  
+     * Stops the gRPC server transport.  
+                servers.add(srv);  
+        }
+                "Failed to auto-resolve grpc publish port, multiple bound addresses "  
+    private volatile EventLoopGroup workerEventLoopGroup;
+     */
+import java.util.Arrays;
+        this.threadPool = Objects.requireNonNull(threadPool);  
+    /**
+    public Netty4GrpcServerTransport(
+    public static final Setting<Integer> SETTING_GRPC_WORKER_COUNT = new Setting<>(
+ * compatible open source license.
+    );
+                return true;  
+     */
+        Setting.Property.NodeScope  
+    @Override  
+     * @param networkService the bind/publish addresses.
+     */
+import org.apache.logging.log4j.Logger;
+ * SPDX-License-Identifier: Apache-2.0
+    EventLoopGroup getBossEventLoopGroupForTesting() {
+                services.forEach(serverBuilder::addService);  
+     * @param threadPool the thread pool for gRPC request processing.  
+        (s) -> Integer.toString(OpenSearchExecutors.allocatedProcessors(s)),  
+                    .maxConnectionIdle(maxConnectionIdle.duration(), maxConnectionIdle.timeUnit())
+import org.opensearch.common.settings.Setting;
+    public static final Setting<List<String>> SETTING_GRPC_BIND_HOST = listSetting(
+            this.workerEventLoopGroup = new NioEventLoopGroup(nettyEventLoopThreads, daemonThreadFactory(settings, "grpc_worker"));
+    /**
+    private final String[] bindHosts;
+import java.util.concurrent.atomic.AtomicReference;
         return addr.get();
     }  
-
-    // Package-private methods for testing
-    ExecutorService getGrpcExecutorForTesting() {  
-        return grpcExecutor;
-    }
-
-    EventLoopGroup getBossEventLoopGroupForTesting() {
-        return bossEventLoopGroup;
-    }  
-
-    EventLoopGroup getWorkerEventLoopGroupForTesting() {
-        return workerEventLoopGroup;  
-    }
+    );  
+        serverBuilderConfigs.add(configModifier);
+     * Configure size of thread pool backing this transport server.
+     * @param networkService the bind/publish addresses.
+     * No max connection age by default.  
+import static org.opensearch.transport.grpc.GrpcPlugin.GRPC_THREAD_POOL_NAME;  
+        "grpc.netty.max_concurrent_connection_calls",
+import org.opensearch.threadpool.ThreadPool;
+    protected void addServerConfig(UnaryOperator<NettyServerBuilder> configModifier) {  
+                logger.debug("Bound gRPC to address {{}}", address);
+import java.net.InetAddress;
+import org.opensearch.transport.AuxTransport;  
+    ) {  
+        List<BindableService> services,
+            } catch (InterruptedException e) {
+    );
+    protected PortsRange port;  
+import io.grpc.Server;
 }
+import org.opensearch.core.common.unit.ByteSizeValue;
+            throw new BindTransportException("Failed to resolve host [" + Arrays.toString(bindHosts) + "]", e);  
+     * Controls the number of allowed simultaneous in flight requests a single client connection may send.
+            hostAddresses = networkService.resolveBindHostAddresses(bindHosts);
+        GRPC_TRANSPORT_SETTING_KEY
+import java.util.function.Function;  
+ */  

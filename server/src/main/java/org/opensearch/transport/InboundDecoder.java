@@ -1,243 +1,217 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.Version;
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.lease.Releasable;  
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;  
-import java.util.function.Consumer;
-
-import static org.opensearch.Version.MASK;  
-
-/**
- * Decodes inbound data off the wire  
- *
- * @opensearch.internal
- */  
-public class InboundDecoder implements Releasable {
-
-    public static final Object PING = new Object();  
-    public static final Object END_CONTENT = new Object();
-
-    private final Version version;  
-    private final PageCacheRecycler recycler;
-    private TransportDecompressor decompressor;
-    private int totalNetworkSize = -1;  
-    private int bytesConsumed = 0;
-    private boolean isClosed = false;
-
-    public InboundDecoder(Version version, PageCacheRecycler recycler) {
-        this.version = version;
-        this.recycler = recycler;  
-    }
-
-    public int decode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {  
-        ensureOpen();
-        try {
-            return internalDecode(reference, fragmentConsumer);  
-        } catch (Exception e) {
-            cleanDecodeState();
-            throw e;  
-        }
-    }
-
     public int internalDecode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {
-        if (isOnHeader()) {
-            int messageLength = TcpTransport.readMessageLength(reference);  
-            if (messageLength == -1) {
-                return 0;
-            } else if (messageLength == 0) {  
-                fragmentConsumer.accept(PING);
-                return 6;
-            } else {  
-                int headerBytesToRead = headerBytesToRead(reference);
-                if (headerBytesToRead == 0) {
-                    return 0;  
-                } else {
-                    totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;
-
-                    Header header = readHeader(version, messageLength, reference);
-                    bytesConsumed += headerBytesToRead;
-                    if (header.isCompressed()) {  
-                        decompressor = new TransportDecompressor(recycler);
-                    }
-                    fragmentConsumer.accept(header);  
-
-                    if (isDone()) {
-                        finishMessage(fragmentConsumer);  
-                    }
-                    return headerBytesToRead;
-                }  
-            }
-        } else {
-            // There are a minimum number of bytes required to start decompression  
-            if (decompressor != null && decompressor.canDecompress(reference.length()) == false) {
-                return 0;
-            }  
-            int bytesToConsume = Math.min(reference.length(), totalNetworkSize - bytesConsumed);
-            bytesConsumed += bytesToConsume;
-            ReleasableBytesReference retainedContent;  
-            if (isDone()) {
-                retainedContent = reference.retainedSlice(0, bytesToConsume);
-            } else {  
-                retainedContent = reference.retain();
-            }
-            if (decompressor != null) {  
-                decompress(retainedContent);
-                ReleasableBytesReference decompressed;
-                while ((decompressed = decompressor.pollDecompressedPage()) != null) {  
-                    fragmentConsumer.accept(decompressed);
-                }
-            } else {  
-                fragmentConsumer.accept(retainedContent);
-            }
-            if (isDone()) {  
-                finishMessage(fragmentConsumer);
-            }
-
-            return bytesToConsume;
-        }
-    }  
-
-    @Override
-    public void close() {  
-        isClosed = true;
-        cleanDecodeState();
-    }  
-
-    private void finishMessage(Consumer<Object> fragmentConsumer) {
-        cleanDecodeState();  
-        fragmentConsumer.accept(END_CONTENT);
-    }
-
-    private void cleanDecodeState() {
-        IOUtils.closeWhileHandlingException(decompressor);
-        decompressor = null;  
-        totalNetworkSize = -1;
-        bytesConsumed = 0;
-    }  
-
-    private void decompress(ReleasableBytesReference content) throws IOException {
-        try (ReleasableBytesReference toRelease = content) {  
-            int consumed = decompressor.decompress(content);
-            assert consumed == content.length();
-        }  
-    }
-
-    private boolean isDone() {  
-        return bytesConsumed == totalNetworkSize;
-    }
-
-    private int headerBytesToRead(BytesReference reference) {
-        if (reference.length() < TcpHeader.BYTES_REQUIRED_FOR_VERSION) {
-            return 0;  
-        }
-
-        int versionId = reference.getInt(TcpHeader.VERSION_POSITION);  
-        if (versionId == 7099999) {
-            // Convert from ES7.9 to OpenSearch 1.0
-            // TODO: Remove this block in 4.0.  
-            versionId = 1000099 ^ MASK;
-        }
-        Version remoteVersion = Version.fromId(versionId);  
-        int fixedHeaderSize = TcpHeader.headerSize(remoteVersion);
-        if (fixedHeaderSize > reference.length()) {
-            return 0;  
-        } else {
-            int variableHeaderSize = reference.getInt(TcpHeader.VARIABLE_HEADER_SIZE_POSITION);
-            int totalHeaderSize = fixedHeaderSize + variableHeaderSize;  
-            if (totalHeaderSize > reference.length()) {
-                return 0;
-            } else {  
-                return totalHeaderSize;
-            }
-        }  
-    }
-
     // exposed for use in tests  
-    public static Header readHeader(Version version, int networkMessageSize, BytesReference bytesReference) throws IOException {
-        try (StreamInput streamInput = bytesReference.streamInput()) {
+            throw new IllegalStateException("Decoder is already closed");  
+ * KIND, either express or implied.  See the License for the
+                } else {
+        try (ReleasableBytesReference toRelease = content) {  
+ * @opensearch.internal
+            cleanDecodeState();
+            } else {  
+        // handshake. This looks odd but it's required to establish the connection correctly we check for real compatibility
+        }  
+        } else {
+            return 0;  
+                fragmentConsumer.accept(retainedContent);
+    public int decode(ReleasableBytesReference reference, Consumer<Object> fragmentConsumer) throws IOException {  
+            }
+                    }
+    }  
+            } else if (messageLength == 0) {  
             TransportProtocol protocol = TransportProtocol.fromBytes(streamInput.readByte(), streamInput.readByte());  
+    private boolean isClosed = false;
+            return bytesToConsume;
+        if (versionId == 7099999) {
+ * Unless required by applicable law or agreed to in writing,
+        fragmentConsumer.accept(END_CONTENT);
+                    if (isDone()) {
+ * specific language governing permissions and limitations
+            int variableHeaderSize = reference.getInt(TcpHeader.VARIABLE_HEADER_SIZE_POSITION);
+                streamInput.readInt();
+            } else {  
+ * GitHub history for details.
+    }
+            // Convert from ES7.9 to OpenSearch 1.0
+        if (isOnHeader()) {
+    private void finishMessage(Consumer<Object> fragmentConsumer) {
+            int totalHeaderSize = fixedHeaderSize + variableHeaderSize;  
+    }
+ *  
+            throw e;  
+import org.opensearch.common.util.PageCacheRecycler;
+                        finishMessage(fragmentConsumer);  
+        // for handshakes we are compatible with N-2 since otherwise we can't figure out our initial version
+        }
+        return totalNetworkSize == -1;
+    private TransportDecompressor decompressor;
+                    }
+    private int bytesConsumed = 0;
+            if (decompressor != null) {  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    private void ensureOpen() {
+            return new IllegalStateException(msg + remoteVersion + "] minimal compatible version is: [" + minCompatibilityVersion + "]");
+                return 0;
+                fragmentConsumer.accept(PING);
+                throw invalidVersion;
+                    bytesConsumed += headerBytesToRead;
+            } else {  
+                return 0;
+                while ((decompressed = decompressor.pollDecompressedPage()) != null) {  
+            Header header = new Header(protocol, networkMessageSize, requestId, status, remoteVersion);
+                    fragmentConsumer.accept(header);  
+ *
+                    Header header = readHeader(version, messageLength, reference);
+        ensureOpen();
+import org.opensearch.core.common.io.stream.StreamInput;
+ */  
+        return bytesConsumed == totalNetworkSize;
+        return null;  
+                }
+            final IllegalStateException invalidVersion = ensureVersionCompatibility(remoteVersion, version, header.isHandshake());  
+        bytesConsumed = 0;
+                ReleasableBytesReference decompressed;
+ */  
+            }  
+    }
+/*  
+        }  
+ * Licensed to Elasticsearch under one or more contributor  
             streamInput.skip(TcpHeader.MESSAGE_LENGTH_SIZE);
-            long requestId = streamInput.readLong();
-            byte status = streamInput.readByte();  
-            int versionId = streamInput.readInt();
-            if (versionId == 7099999) {
+    private int totalNetworkSize = -1;  
+        }
+public class InboundDecoder implements Releasable {
+        try (StreamInput streamInput = bytesReference.streamInput()) {
+        cleanDecodeState();  
+ *
+                return 0;
+        Version remoteVersion = Version.fromId(versionId);  
+import org.opensearch.common.bytes.ReleasableBytesReference;
+                // Skip since we already have ensured enough data available
+        }
+            }
+ * Decodes inbound data off the wire  
+    }  
+}
+            String msg = "Received " + (isHandshake ? "handshake " : "") + "message from unsupported version: [";  
+    private boolean isDone() {  
+        decompressor = null;  
+import org.opensearch.common.lease.Releasable;  
+        if (fixedHeaderSize > reference.length()) {
+    static IllegalStateException ensureVersionCompatibility(Version remoteVersion, Version currentVersion, boolean isHandshake) {
+        }
+ * software distributed under the License is distributed on an
+        try {
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    private void cleanDecodeState() {
+            if (totalHeaderSize > reference.length()) {
+                    return headerBytesToRead;
+    }
+                decompress(retainedContent);
+ * ownership. Elasticsearch licenses this file to you under  
+    private boolean isOnHeader() {  
+package org.opensearch.transport;
+    public static Header readHeader(Version version, int networkMessageSize, BytesReference bytesReference) throws IOException {
+    private int headerBytesToRead(BytesReference reference) {
+ */  
+        // since we are compatible with N-1 and N+1 so we always send our minCompatVersion as the initial version in the  
+import org.opensearch.common.util.io.IOUtils;
+/*
+                        decompressor = new TransportDecompressor(recycler);
+        } catch (Exception e) {
+            } else {  
+        this.version = version;
+    }  
+        // once the connection is established
+            assert consumed == content.length();
+                    if (header.isCompressed()) {  
                 // Convert from ES7.9 to OpenSearch 1.0  
+            return internalDecode(reference, fragmentConsumer);  
+import java.util.function.Consumer;
+        cleanDecodeState();
+        IOUtils.closeWhileHandlingException(decompressor);
+        this.recycler = recycler;  
+ * this work for additional information regarding copyright
+/*  
+                    return 0;  
+            if (decompressor != null && decompressor.canDecompress(reference.length()) == false) {
+ * You may obtain a copy of the License at  
+    public static final Object PING = new Object();  
+import org.opensearch.core.common.bytes.BytesReference;  
+    private void decompress(ReleasableBytesReference content) throws IOException {
+        if (reference.length() < TcpHeader.BYTES_REQUIRED_FOR_VERSION) {
+        int fixedHeaderSize = TcpHeader.headerSize(remoteVersion);
+                if (headerBytesToRead == 0) {
+    }
+            int bytesToConsume = Math.min(reference.length(), totalNetworkSize - bytesConsumed);
+        if (isClosed) {
+            }
+                    totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;
                 // TODO: Remove this block in 4.0.
+            if (isDone()) {
+        int versionId = reference.getInt(TcpHeader.VERSION_POSITION);  
+        }  
+ * The OpenSearch Contributors require contributions made to  
+            if (invalidVersion != null) {
+            if (versionId == 7099999) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */
+                }  
+import java.io.IOException;  
+        final Version compatibilityVersion = isHandshake ? currentVersion.minimumCompatibilityVersion() : currentVersion;  
+ * compatible open source license.
+            versionId = 1000099 ^ MASK;
+        isClosed = true;
+                return 6;
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+    private final Version version;  
+    public InboundDecoder(Version version, PageCacheRecycler recycler) {
+            if (isDone()) {  
+            }
+            int versionId = streamInput.readInt();
+            bytesConsumed += bytesToConsume;
+                return totalHeaderSize;
+        } else {
+ * not use this file except in compliance with the License.
+            if (messageLength == -1) {
+            final Version minCompatibilityVersion = isHandshake ? compatibilityVersion : compatibilityVersion.minimumCompatibilityVersion();
+            } else {  
+            // TODO: Remove this block in 4.0.  
+    }
+    }
+    public void close() {  
+        if (remoteVersion.isCompatible(compatibilityVersion) == false) {
+    }
+            return 0;  
+            int messageLength = TcpTransport.readMessageLength(reference);  
+import static org.opensearch.Version.MASK;  
+                retainedContent = reference.retainedSlice(0, bytesToConsume);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            Version remoteVersion = Version.fromId(versionId);
+        }
+            }
+            int consumed = decompressor.decompress(content);
+    private final PageCacheRecycler recycler;
+    @Override
+                    fragmentConsumer.accept(decompressed);
+                finishMessage(fragmentConsumer);
+ * this file be licensed under the Apache-2.0 license or a
+/**
+ * under the License.  
+            }
+                header.finishParsingHeader(streamInput);  
+        totalNetworkSize = -1;
+    public static final Object END_CONTENT = new Object();
+            return header;
+            long requestId = streamInput.readLong();
+        }
+            ReleasableBytesReference retainedContent;  
+            byte status = streamInput.readByte();  
+            // There are a minimum number of bytes required to start decompression  
+                int headerBytesToRead = headerBytesToRead(reference);
+ *
+import org.opensearch.Version;
+                retainedContent = reference.retain();
                 versionId = 1000099 ^ MASK;
             }  
-            Version remoteVersion = Version.fromId(versionId);
-            Header header = new Header(protocol, networkMessageSize, requestId, status, remoteVersion);
-            final IllegalStateException invalidVersion = ensureVersionCompatibility(remoteVersion, version, header.isHandshake());  
-            if (invalidVersion != null) {
-                throw invalidVersion;
-            } else {  
-                // Skip since we already have ensured enough data available
-                streamInput.readInt();
-                header.finishParsingHeader(streamInput);  
-            }
-            return header;
-        }  
-    }
-
-    private boolean isOnHeader() {  
-        return totalNetworkSize == -1;
-    }
-
-    private void ensureOpen() {
-        if (isClosed) {
-            throw new IllegalStateException("Decoder is already closed");  
-        }
-    }
-
-    static IllegalStateException ensureVersionCompatibility(Version remoteVersion, Version currentVersion, boolean isHandshake) {
-        // for handshakes we are compatible with N-2 since otherwise we can't figure out our initial version
-        // since we are compatible with N-1 and N+1 so we always send our minCompatVersion as the initial version in the  
-        // handshake. This looks odd but it's required to establish the connection correctly we check for real compatibility
-        // once the connection is established
-        final Version compatibilityVersion = isHandshake ? currentVersion.minimumCompatibilityVersion() : currentVersion;  
-        if (remoteVersion.isCompatible(compatibilityVersion) == false) {
-            final Version minCompatibilityVersion = isHandshake ? compatibilityVersion : compatibilityVersion.minimumCompatibilityVersion();
-            String msg = "Received " + (isHandshake ? "handshake " : "") + "message from unsupported version: [";  
-            return new IllegalStateException(msg + remoteVersion + "] minimal compatible version is: [" + minCompatibilityVersion + "]");
-        }
-        return null;  
-    }
-}

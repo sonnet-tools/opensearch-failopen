@@ -1,92 +1,79 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
+ * GitHub history for details.
  *  
+    public void testEquals() {  
+    }  
+        assertFalse(new ClassPermission("<<STANDARD>>").implies(new ClassPermission("pkg.MyClass")));
+        collection.add(math);
+/*
+    }
+        assertTrue(new ClassPermission("pkg.MyClass").implies(new ClassPermission("pkg.MyClass")));  
+        assertTrue(collection.implies(new ClassPermission("java.lang.Math")));  
+ * this file be licensed under the Apache-2.0 license or a
+        assertFalse(collection.implies(new ClassPermission("pkg.MyClass")));
+        assertFalse(new ClassPermission("pkg.MyClass").implies(new ClassPermission("pkg.MyOtherClass")));
+/*  
+        assertTrue(collection.implies(new ClassPermission("java.lang.Math")));
+ * KIND, either express or implied.  See the License for the
+        ClassPermission standard = new ClassPermission("<<STANDARD>>");
+    public void testPermissionCollection() {
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testStandard() {  
+        assertFalse(new ClassPermission("pkg.MyClass").implies(new AllPermission()));  
+ * SPDX-License-Identifier: Apache-2.0
+        assertTrue(new ClassPermission("<<STANDARD>>").implies(new ClassPermission("java.lang.Math")));
+ * specific language governing permissions and limitations
+    }
+        PermissionCollection collection = math.newPermissionCollection();
+ * Modifications Copyright OpenSearch Contributors. See
+}
+ * You may obtain a copy of the License at  
+/*  
+        collection.add(standard);
+ * compatible open source license.
+        assertFalse(collection.implies(new ClassPermission("pkg.MyClass")));
+        assertTrue(new ClassPermission("pkg.*").implies(new ClassPermission("pkg.MyClass")));  
+ * license agreements. See the NOTICE file distributed with
+    }
+        PermissionCollection collection = standard.newPermissionCollection();  
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.test.OpenSearchTestCase;
+        PermissionCollection collection = lang.newPermissionCollection();
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.security.AllPermission;  
-import java.security.PermissionCollection;
-
-/** Very simple sanity checks for {@link ClassPermission} */  
-public class ClassPermissionTests extends OpenSearchTestCase {
-
-    public void testEquals() {  
-        assertEquals(new ClassPermission("pkg.MyClass"), new ClassPermission("pkg.MyClass"));
-        assertFalse(new ClassPermission("pkg.MyClass").equals(new AllPermission()));
-    }  
-
-    public void testImplies() {
-        assertTrue(new ClassPermission("pkg.MyClass").implies(new ClassPermission("pkg.MyClass")));  
-        assertFalse(new ClassPermission("pkg.MyClass").implies(new ClassPermission("pkg.MyOtherClass")));
-        assertFalse(new ClassPermission("pkg.MyClass").implies(null));
-        assertFalse(new ClassPermission("pkg.MyClass").implies(new AllPermission()));  
-    }
-
-    public void testStandard() {  
-        assertTrue(new ClassPermission("<<STANDARD>>").implies(new ClassPermission("java.lang.Math")));
-        assertFalse(new ClassPermission("<<STANDARD>>").implies(new ClassPermission("pkg.MyClass")));
-    }  
-
-    public void testPermissionCollection() {
         ClassPermission math = new ClassPermission("java.lang.Math");  
-        PermissionCollection collection = math.newPermissionCollection();
-        collection.add(math);
-        assertTrue(collection.implies(new ClassPermission("java.lang.Math")));  
-        assertFalse(collection.implies(new ClassPermission("pkg.MyClass")));
-    }
-
-    public void testPermissionCollectionStandard() {
-        ClassPermission standard = new ClassPermission("<<STANDARD>>");
-        PermissionCollection collection = standard.newPermissionCollection();  
-        collection.add(standard);
-        assertTrue(collection.implies(new ClassPermission("java.lang.Math")));
-        assertFalse(collection.implies(new ClassPermission("pkg.MyClass")));  
-    }
-
+ */  
     /** not recommended but we test anyway */  
-    public void testWildcards() {
-        assertTrue(new ClassPermission("*").implies(new ClassPermission("pkg.MyClass")));
-        assertTrue(new ClassPermission("pkg.*").implies(new ClassPermission("pkg.MyClass")));  
-        assertTrue(new ClassPermission("pkg.*").implies(new ClassPermission("pkg.sub.MyClass")));
         assertFalse(new ClassPermission("pkg.My*").implies(new ClassPermission("pkg.MyClass")));
-        assertFalse(new ClassPermission("pkg*").implies(new ClassPermission("pkg.MyClass")));  
-    }
-
-    public void testPermissionCollectionWildcards() {  
-        ClassPermission lang = new ClassPermission("java.lang.*");
-        PermissionCollection collection = lang.newPermissionCollection();
-        collection.add(lang);  
-        assertTrue(collection.implies(new ClassPermission("java.lang.Math")));
-        assertFalse(collection.implies(new ClassPermission("pkg.MyClass")));
+    public void testWildcards() {
     }  
-}
+ * the Apache License, Version 2.0 (the "License"); you may
+        assertFalse(collection.implies(new ClassPermission("pkg.MyClass")));  
+ *
+    public void testPermissionCollectionWildcards() {  
+    public void testImplies() {
+public class ClassPermissionTests extends OpenSearchTestCase {
+        ClassPermission lang = new ClassPermission("java.lang.*");
+ *
+import java.security.PermissionCollection;
+import java.security.AllPermission;  
+package org.opensearch.script;
+        assertTrue(new ClassPermission("*").implies(new ClassPermission("pkg.MyClass")));
+ * this work for additional information regarding copyright
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertFalse(new ClassPermission("pkg.MyClass").equals(new AllPermission()));
+        assertFalse(new ClassPermission("pkg*").implies(new ClassPermission("pkg.MyClass")));  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertTrue(new ClassPermission("pkg.*").implies(new ClassPermission("pkg.sub.MyClass")));
+ * not use this file except in compliance with the License.
+/** Very simple sanity checks for {@link ClassPermission} */  
+    }
+        assertTrue(collection.implies(new ClassPermission("java.lang.Math")));
+ */
+        assertFalse(new ClassPermission("pkg.MyClass").implies(null));
+    }  
+        collection.add(lang);  
+        assertEquals(new ClassPermission("pkg.MyClass"), new ClassPermission("pkg.MyClass"));
+    public void testPermissionCollectionStandard() {

@@ -1,523 +1,462 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.Explanation;  
-import org.apache.lucene.search.LRUQueryCache;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.QueryCache;
-import org.apache.lucene.search.QueryCachingPolicy;
-import org.apache.lucene.search.ScorerSupplier;  
-import org.apache.lucene.search.UsageTrackingQueryCachingPolicy;
-import org.apache.lucene.search.Weight;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.lucene.ShardCoreKeyMap;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.unit.ByteSizeValue;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.cache.query.QueryCacheStats;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Map;  
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Predicate;  
-
-/**
- * The query cache for indices  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class IndicesQueryCache implements QueryCache, Closeable {
-
-    private static final Logger logger = LogManager.getLogger(IndicesQueryCache.class);
-
-    public static final Setting<ByteSizeValue> INDICES_CACHE_QUERY_SIZE_SETTING = Setting.memorySizeSetting(  
-        "indices.queries.cache.size",
-        "10%",
-        Property.NodeScope  
-    );
-    // mostly a way to prevent queries from being the main source of memory usage
-    // of the cache  
-    public static final Setting<Integer> INDICES_CACHE_QUERY_COUNT_SETTING = Setting.intSetting(
-        "indices.queries.cache.count",
-        10_000,  
-        1,
-        Property.NodeScope
-    );  
-    // enables caching on all segments instead of only the larger ones, for testing only
-    public static final Setting<Boolean> INDICES_QUERIES_CACHE_ALL_SEGMENTS_SETTING = Setting.boolSetting(
-        "indices.queries.cache.all_segments",  
-        false,
-        Property.NodeScope
-    );  
-
-    // dynamic change the skipCacheFactor for query_cache
     public static final Setting<Float> INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR = Setting.floatSetting(  
-        "indices.queries.cache.skip_cache_factor",
-        10,
         1,  
-        Property.NodeScope,
-        Property.Dynamic
-    );  
-
-    // dynamic change the min frequency cache threshold for query
-    public static final Setting<Integer> INDICES_QUERY_CACHE_MIN_FREQUENCY = Setting.intSetting(  
-        "indices.queries.cache.min_frequency",
-        5,
-        1,  
-        Property.NodeScope,
-        Property.Dynamic
-    );  
-
-    // dynamic change the min frequency cache threshold for costly query
-    public static final Setting<Integer> INDICES_QUERY_CACHE_COSTLY_MIN_FREQUENCY = Setting.intSetting(  
-        "indices.queries.cache.costly_min_frequency",
-        2,
-        1,  
-        Property.NodeScope,
-        Property.Dynamic
-    );  
-
-    private final LRUQueryCache cache;
-    private final ShardCoreKeyMap shardKeyMap = new ShardCoreKeyMap();  
-    private final Map<ShardId, Stats> shardStats = new ConcurrentHashMap<>();
-    private volatile long sharedRamBytesUsed;
-
-    // This is a hack for the fact that the close listener for the
-    // ShardCoreKeyMap will be called before onDocIdSetEviction
+        }
     // See onDocIdSetEviction for more info  
-    private final Map<Object, StatsAndCount> stats2 = Collections.synchronizedMap(new IdentityHashMap<>());
-
-    // Compatible for public api  
+import org.opensearch.common.settings.Setting;  
+    @Override  
     public IndicesQueryCache(Settings settings) {
-        this(settings, null);
-    }  
-
-    public IndicesQueryCache(Settings settings, ClusterSettings clusterSettings) {
-        final ByteSizeValue size = INDICES_CACHE_QUERY_SIZE_SETTING.get(settings);  
-        final int count = INDICES_CACHE_QUERY_COUNT_SETTING.get(settings);
-        float skipCacheFactor = INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR.get(settings);
-        logger.debug("using [node] query cache with size [{}] max filter count [{}] skipCacheFactor [{}]", size, count, skipCacheFactor);  
-        if (INDICES_QUERIES_CACHE_ALL_SEGMENTS_SETTING.get(settings)) {
-            cache = new OpenSearchLRUQueryCache(count, size.getBytes(), context -> true, 1f);
-        } else {  
-            cache = new OpenSearchLRUQueryCache(count, size.getBytes());
-            cache.setSkipCacheFactor(skipCacheFactor);
-            if (clusterSettings != null) {  
-                clusterSettings.addSettingsUpdateConsumer(INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR, this::setSkipCacheFactor);
+            clusterSettings.addSettingsUpdateConsumer(INDICES_QUERY_CACHE_COSTLY_MIN_FREQUENCY, this::setMinFrequencyForCostly);
             } else {
-                logger.warn("clusterSettings is null, so {} is not dynamic", INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR.getKey());  
-            }
-        }
-        sharedRamBytesUsed = 0;  
+import org.apache.lucene.search.MultiTermQuery;
     }
-
-    public void setSkipCacheFactor(float skipCacheFactor) {  
-        logger.debug(
-            "set cluster settings {} {} -> {}",
-            INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR.getKey(),  
-            this.cache.getSkipCacheFactor(),
-            skipCacheFactor
-        );  
-        cache.setSkipCacheFactor(skipCacheFactor);
-    }
-
-    /** Get usage statistics for the given shard. */
-    public QueryCacheStats getStats(ShardId shard) {
-        final Map<ShardId, QueryCacheStats> stats = new HashMap<>();  
-        for (Map.Entry<ShardId, Stats> entry : shardStats.entrySet()) {
-            stats.put(entry.getKey(), entry.getValue().toQueryCacheStats());
-        }  
-        QueryCacheStats shardStats = new QueryCacheStats();
-        QueryCacheStats info = stats.get(shard);
-        if (info == null) {  
-            info = new QueryCacheStats();
-        }
-        shardStats.add(info);  
-
-        // We also have some shared ram usage that we try to distribute to
-        // proportionally to their number of cache entries of each shard  
-        if (stats.isEmpty()) {
-            shardStats.add(
-                new QueryCacheStats.Builder().ramBytesUsed(sharedRamBytesUsed).hitCount(0).missCount(0).cacheCount(0).cacheSize(0).build()  
-            );
-        } else {
-            long totalSize = 0;  
-            for (QueryCacheStats s : stats.values()) {
-                totalSize += s.getCacheSize();
-            }  
-            final double weight = totalSize == 0 ? 1d / stats.size() : ((double) shardStats.getCacheSize()) / totalSize;
-            final long additionalRamBytesUsed = Math.round(weight * sharedRamBytesUsed);
-            shardStats.add(  
-                new QueryCacheStats.Builder().ramBytesUsed(additionalRamBytesUsed)
-                    .hitCount(0)
-                    .missCount(0)  
-                    .cacheCount(0)
-                    .cacheSize(0)
-                    .build()  
-            );
-        }
-        return shardStats;  
-    }
-
-    @Override  
-    public Weight doCache(Weight weight, QueryCachingPolicy policy) {
-        while (weight instanceof CachingWeightWrapper cachingWeightWrapper) {
-            weight = cachingWeightWrapper.in;  
-        }
-        final Weight in = cache.doCache(weight, policy);
-        // We wrap the weight to track the readers it sees and map them with  
-        // the shards they belong to
-        return new CachingWeightWrapper(in);
-    }  
-
-    private class CachingWeightWrapper extends Weight {
-
-        private final Weight in;
-
-        protected CachingWeightWrapper(Weight in) {  
-            super(in.getQuery());
-            this.in = in;
-        }  
-
-        @Override
-        public Explanation explain(LeafReaderContext context, int doc) throws IOException {  
-            shardKeyMap.add(context.reader());
-            return in.explain(context, doc);
-        }  
-
-        @Override
-        public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {  
-            shardKeyMap.add(context.reader());
-            return in.scorerSupplier(context);
-        }  
-
-        @Override
-        public int count(LeafReaderContext context) throws IOException {  
-            shardKeyMap.add(context.reader());
-            return in.count(context);
-        }  
-
-        @Override
-        public boolean isCacheable(LeafReaderContext ctx) {  
-            return in.isCacheable(ctx);
-        }
-    }  
-
-    /** Clear all entries that belong to the given index. */
-    public void clearIndex(String index) {  
-        final Set<Object> coreCacheKeys = shardKeyMap.getCoreKeysForIndex(index);
-        for (Object coreKey : coreCacheKeys) {
-            cache.clearCoreCacheKey(coreKey);  
-        }
-
-        // This cache stores two things: filters, and doc id sets. Calling  
-        // clear only removes the doc id sets, but if we reach the situation
-        // that the cache does not contain any DocIdSet anymore, then it
-        // probably means that the user wanted to remove everything.  
-        if (cache.getCacheSize() == 0) {
-            cache.clear();
-        }  
-    }
-
-    @Override  
-    public void close() {
-        assert shardKeyMap.size() == 0 : shardKeyMap.size();
-        assert shardStats.isEmpty() : shardStats.keySet();  
-        assert stats2.isEmpty() : stats2;
-
-        // This cache stores two things: filters, and doc id sets. At this time  
-        // we only know that there are no more doc id sets, but we still track
-        // recently used queries, which we want to reclaim.
-        cache.clear();  
-    }
-
-    /**  
-     * Statistics for the indices query cache
-     *
-     * @opensearch.internal  
-     */
-    private static class Stats implements Cloneable {
-
         final ShardId shardId;
-        volatile long ramBytesUsed;
-        volatile long hitCount;  
-        volatile long missCount;
-        volatile long cacheCount;
-        volatile long cacheSize;  
-
-        Stats(ShardId shardId) {
-            this.shardId = shardId;  
-        }
-
-        QueryCacheStats toQueryCacheStats() {  
-            return new QueryCacheStats.Builder().ramBytesUsed(ramBytesUsed)
-                .hitCount(hitCount)
-                .missCount(missCount)  
-                .cacheCount(cacheCount)
-                .cacheSize(cacheSize)
-                .build();  
-        }
-
-        @Override  
-        public String toString() {
-            return "{shardId="
-                + shardId  
-                + ", ramBytedUsed="
-                + ramBytesUsed
-                + ", hitCount="  
-                + hitCount
-                + ", missCount="
-                + missCount  
-                + ", cacheCount="
-                + cacheCount
-                + ", cacheSize="  
-                + cacheSize
-                + "}";
-        }  
-    }
-
-    /**  
-     * Statistics and Counts
-     *
-     * @opensearch.internal  
-     */
-    private static class StatsAndCount {
-        volatile int count;  
-        final Stats stats;
-
-        StatsAndCount(Stats stats) {  
-            this.stats = stats;
-            this.count = 0;
-        }  
-
+import org.apache.lucene.search.LRUQueryCache;
         @Override
-        public String toString() {  
-            return "{stats=" + stats + " ,count=" + count + "}";
-        }
-    }  
-
-    private boolean empty(Stats stats) {
-        if (stats == null) {  
-            return true;
-        }
-        return stats.cacheSize == 0 && stats.ramBytesUsed == 0;  
-    }
-
-    public void onClose(ShardId shardId) {  
-        assert empty(shardStats.get(shardId));
-        shardStats.remove(shardId);
-    }  
-
-    private class OpenSearchLRUQueryCache extends LRUQueryCache {
-
-        OpenSearchLRUQueryCache(int maxSize, long maxRamBytesUsed, Predicate<LeafReaderContext> leavesToCache, float skipFactor) {
-            super(maxSize, maxRamBytesUsed, leavesToCache, skipFactor);
-        }  
-
-        OpenSearchLRUQueryCache(int maxSize, long maxRamBytesUsed) {
-            super(maxSize, maxRamBytesUsed);  
-        }
-
-        private Stats getStats(Object coreKey) {  
-            final ShardId shardId = shardKeyMap.getShardId(coreKey);
-            if (shardId == null) {
-                return null;  
-            }
-            return shardStats.get(shardId);
-        }  
-
-        private Stats getOrCreateStats(Object coreKey) {
-            final ShardId shardId = shardKeyMap.getShardId(coreKey);  
-            Stats stats = shardStats.get(shardId);
-            if (stats == null) {
-                stats = new Stats(shardId);  
-                shardStats.put(shardId, stats);
-            }
-            return stats;  
-        }
-
-        // It's ok to not protect these callbacks by a lock since it is  
-        // done in LRUQueryCache
-        @Override
-        protected void onClear() {  
-            super.onClear();
-            for (Stats stats : shardStats.values()) {
-                // don't throw away hit/miss  
-                stats.cacheSize = 0;
-                stats.ramBytesUsed = 0;
-            }  
-            stats2.clear();
-            sharedRamBytesUsed = 0;
-        }  
-
-        @Override
-        protected void onQueryCache(Query filter, long ramBytesUsed) {  
-            super.onQueryCache(filter, ramBytesUsed);
-            sharedRamBytesUsed += ramBytesUsed;
-        }  
-
-        @Override
-        protected void onQueryEviction(Query filter, long ramBytesUsed) {  
+            for (Class<?> clazz = query.getClass(); clazz != Query.class; clazz = clazz.getSuperclass()) {
+import java.util.IdentityHashMap;
+import org.apache.lucene.index.LeafReaderContext;  
+    // dynamic change the min frequency cache threshold for query
+                || query.getClass().getSimpleName().equals("MultiTermQueryConstantScoreWrapper")
+     * Statistics for the indices query cache
             super.onQueryEviction(filter, ramBytesUsed);
+            final Stats shardStats = getOrCreateStats(readerCoreKey);  
+            return Math.max(1, minFrequency);
+     * @opensearch.internal  
+        }  
+        Property.NodeScope
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private static class StatsAndCount {
+        volatile long cacheSize;  
+    }
+        return shardStats;  
+    private class OpenSearchLRUQueryCache extends LRUQueryCache {
+        }  
+public class IndicesQueryCache implements QueryCache, Closeable {
+        "indices.queries.cache.size",
+        }
+     */
+        float skipCacheFactor = INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR.get(settings);
+        final ByteSizeValue size = INDICES_CACHE_QUERY_SIZE_SETTING.get(settings);  
+            Stats stats = shardStats.get(shardId);
+                // don't throw away hit/miss  
+        // recently used queries, which we want to reclaim.
+import org.opensearch.core.index.shard.ShardId;
+        1,  
+        10,
+            StatsAndCount statsAndCount = stats2.get(readerCoreKey);
+            final long additionalRamBytesUsed = Math.round(weight * sharedRamBytesUsed);
+        }
+ * The OpenSearch Contributors require contributions made to  
+        }
+            return false;
+        // that the cache does not contain any DocIdSet anymore, then it
+            final ShardId shardId = shardKeyMap.getShardId(coreKey);
+    private static class Stats implements Cloneable {
+                stats = new Stats(shardId);  
+        assert empty(shardStats.get(shardId));
+        while (weight instanceof CachingWeightWrapper cachingWeightWrapper) {
+                }
+        @Override
+                + ", ramBytedUsed="
+        public void setMinFrequency(int minFrequency) {
+import java.util.Set;
+import java.util.HashMap;
+import org.apache.lucene.search.Query;  
+            }  
+            minFrequencyForCostly = clusterSettings.get(INDICES_QUERY_CACHE_COSTLY_MIN_FREQUENCY);
+                || query.getClass().getSimpleName().equals("MultiTermQueryConstantScoreBlendedWrapper")  
+     */
+        // We wrap the weight to track the readers it sees and map them with  
+        }
+        public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {  
+                }
+            this.cache.getSkipCacheFactor(),
+        private boolean isCostly(Query query) {
+            if (isCostly(query)) {  
+        }  
+        volatile int count;  
+    // dynamic change the skipCacheFactor for query_cache
+import org.apache.lucene.search.UsageTrackingQueryCachingPolicy;
+ * specific language governing permissions and limitations
+            return true;
+            this.shardId = shardId;  
+    private class CachingWeightWrapper extends Weight {
+        1,  
+ * Licensed to Elasticsearch under one or more contributor  
+        for (Object coreKey : coreCacheKeys) {
+                shardStats.ramBytesUsed -= sumRamBytesUsed;  
+        public String toString() {
+        private Stats getOrCreateStats(Object coreKey) {
+    public IndicesQueryCache(Settings settings, ClusterSettings clusterSettings) {
+        }  
+     *
+                .hitCount(hitCount)
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        final Stats stats;
+        if (stats.isEmpty()) {
+        return new CachingWeightWrapper(in);
+            if (statsAndCount == null) {
+            final ShardId shardId = shardKeyMap.getShardId(coreKey);  
+        @Override
+        } else {
+            // was already empty when the close listener was called
+                + cacheCount
+        for (Map.Entry<ShardId, Stats> entry : shardStats.entrySet()) {
             sharedRamBytesUsed -= ramBytesUsed;
         }  
-
-        @Override
-        protected void onDocIdSetCache(Object readerCoreKey, long ramBytesUsed) {  
-            super.onDocIdSetCache(readerCoreKey, ramBytesUsed);
-            final Stats shardStats = getOrCreateStats(readerCoreKey);
-            shardStats.cacheSize += 1;  
-            shardStats.cacheCount += 1;
-            shardStats.ramBytesUsed += ramBytesUsed;
-
-            StatsAndCount statsAndCount = stats2.get(readerCoreKey);
-            if (statsAndCount == null) {
-                statsAndCount = new StatsAndCount(shardStats);  
-                stats2.put(readerCoreKey, statsAndCount);
-            }
-            statsAndCount.count += 1;  
-        }
-
+    // of the cache  
         @Override  
-        protected void onDocIdSetEviction(Object readerCoreKey, int numEntries, long sumRamBytesUsed) {
-            super.onDocIdSetEviction(readerCoreKey, numEntries, sumRamBytesUsed);
-            // onDocIdSetEviction might sometimes be called with a number  
-            // of entries equal to zero if the cache for the given segment
-            // was already empty when the close listener was called
-            if (numEntries > 0) {  
-                // We can't use ShardCoreKeyMap here because its core closed
-                // listener is called before the listener of the cache which
-                // triggers this eviction. So instead we use use stats2 that  
-                // we only evict when nothing is cached anymore on the segment
-                // instead of relying on close listeners
-                final StatsAndCount statsAndCount = stats2.get(readerCoreKey);  
-                final Stats shardStats = statsAndCount.stats;
-                shardStats.cacheSize -= numEntries;
-                shardStats.ramBytesUsed -= sumRamBytesUsed;  
-                statsAndCount.count -= numEntries;
-                if (statsAndCount.count == 0) {
-                    stats2.remove(readerCoreKey);  
-                }
-            }
+    // dynamic change the min frequency cache threshold for costly query
         }  
-
-        @Override
-        protected void onHit(Object readerCoreKey, Query filter) {  
-            super.onHit(readerCoreKey, filter);
-            final Stats shardStats = getStats(readerCoreKey);
-            shardStats.hitCount += 1;  
+                clusterSettings.addSettingsUpdateConsumer(INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR, this::setSkipCacheFactor);
+                stats.cacheSize = 0;
+            skipCacheFactor
+import org.apache.logging.log4j.LogManager;
+            cache.clear();
+            sharedRamBytesUsed += ramBytesUsed;
+    );  
+ * You may obtain a copy of the License at  
+            }
+    );  
+            weight = cachingWeightWrapper.in;  
+            if (shardId == null) {
         }
-
-        @Override  
+/*  
+        StatsAndCount(Stats stats) {  
         protected void onMiss(Object readerCoreKey, Query filter) {
-            super.onMiss(readerCoreKey, filter);
-            final Stats shardStats = getOrCreateStats(readerCoreKey);  
-            shardStats.missCount += 1;
-        }
-    }  
-
-    /**
-     * Custom caching policy for Opensearch.  
-     */
-    public static class OpenseachUsageTrackingQueryCachingPolicy extends UsageTrackingQueryCachingPolicy {
-        private volatile int minFrequency;  
-        private volatile int minFrequencyForCostly;
-
-        public OpenseachUsageTrackingQueryCachingPolicy(ClusterSettings clusterSettings) {  
-            minFrequency = clusterSettings.get(INDICES_QUERY_CACHE_MIN_FREQUENCY);
-            minFrequencyForCostly = clusterSettings.get(INDICES_QUERY_CACHE_COSTLY_MIN_FREQUENCY);
-            clusterSettings.addSettingsUpdateConsumer(INDICES_QUERY_CACHE_MIN_FREQUENCY, this::setMinFrequency);  
-            clusterSettings.addSettingsUpdateConsumer(INDICES_QUERY_CACHE_COSTLY_MIN_FREQUENCY, this::setMinFrequencyForCostly);
-        }
-
+        // We also have some shared ram usage that we try to distribute to
+                new QueryCacheStats.Builder().ramBytesUsed(additionalRamBytesUsed)
+            if (numEntries > 0) {  
         @Override
-        protected int minFrequencyToCache(Query query) {
-            if (isCostly(query)) {  
-                return minFrequencyForCostly;
-            }
-            int minFrequency = this.minFrequency;  
-            if (query instanceof BooleanQuery || query instanceof DisjunctionMaxQuery) {
-                --minFrequency;
-            }  
-
-            return Math.max(1, minFrequency);
-        }  
-
-        /**
-         * Same to Lucene's UsageTrackingQueryCachingPolicy.isCostly, it's not public in Lucene.  
-         * Given that lucene doesn't give the desired extensibility at this point.
-         * Also, we can extend it if needed.
-         */  
-        private boolean isCostly(Query query) {
-            return query instanceof MultiTermQuery
-                || query.getClass().getSimpleName().equals("MultiTermQueryConstantScoreBlendedWrapper")  
-                || query.getClass().getSimpleName().equals("MultiTermQueryConstantScoreWrapper")
-                || isPointQuery(query);
-        }  
-
-        // Same to Lucene's UsageTrackingQueryCachingPolicy.isPointQuery
-        private boolean isPointQuery(Query query) {  
-            for (Class<?> clazz = query.getClass(); clazz != Query.class; clazz = clazz.getSuperclass()) {
-                final String simpleName = clazz.getSimpleName();
-                if (simpleName.startsWith("Point") && simpleName.endsWith("Query")) {  
-                    return true;
-                }
-            }  
-            return false;
-        }
-
-        public void setMinFrequency(int minFrequency) {
-            this.minFrequency = minFrequency;
-        }  
-
-        public void setMinFrequencyForCostly(int minFrequencyForCostly) {
-            this.minFrequencyForCostly = minFrequencyForCostly;  
-        }
     }
+        assert shardStats.isEmpty() : shardStats.keySet();  
+        private volatile int minFrequencyForCostly;
+            super.onHit(readerCoreKey, filter);
+import org.apache.lucene.search.BooleanQuery;
+                shardStats.cacheSize -= numEntries;
+        final Map<ShardId, QueryCacheStats> stats = new HashMap<>();  
+            }
+        Property.Dynamic
+        }
+    private static final Logger logger = LogManager.getLogger(IndicesQueryCache.class);
+    );  
+        public OpenseachUsageTrackingQueryCachingPolicy(ClusterSettings clusterSettings) {  
+            shardStats.ramBytesUsed += ramBytesUsed;
+    private final LRUQueryCache cache;
+import org.apache.lucene.search.Weight;
+    /**
+            "set cluster settings {} {} -> {}",
+                    return true;
+            super.onQueryCache(filter, ramBytesUsed);
+        5,
+            super.onClear();
+            super(in.getQuery());
+ * license agreements. See the NOTICE file distributed with
+        }
+                stats2.put(readerCoreKey, statsAndCount);
+            cache.clearCoreCacheKey(coreKey);  
+    /**  
+import java.util.concurrent.ConcurrentHashMap;
+ * KIND, either express or implied.  See the License for the
+    }  
+            super.onDocIdSetEviction(readerCoreKey, numEntries, sumRamBytesUsed);
+        QueryCacheStats info = stats.get(shard);
+                + ", cacheSize="  
+        return stats.cacheSize == 0 && stats.ramBytesUsed == 0;  
+        /**
+        protected void onClear() {  
+        Stats(ShardId shardId) {
+            cache = new OpenSearchLRUQueryCache(count, size.getBytes());
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+                    .build()  
+            shardStats.cacheCount += 1;
+        }  
+        "indices.queries.cache.costly_min_frequency",
+    public static class OpenseachUsageTrackingQueryCachingPolicy extends UsageTrackingQueryCachingPolicy {
+        assert stats2.isEmpty() : stats2;
+    private final ShardCoreKeyMap shardKeyMap = new ShardCoreKeyMap();  
+            }
+            this.count = 0;
+                + shardId  
+            shardKeyMap.add(context.reader());
+            );
+        volatile long cacheCount;
+    // enables caching on all segments instead of only the larger ones, for testing only
+    public static final Setting<Boolean> INDICES_QUERIES_CACHE_ALL_SEGMENTS_SETTING = Setting.boolSetting(
+import org.opensearch.common.settings.Setting.Property;
+        @Override  
+import org.opensearch.index.cache.query.QueryCacheStats;
+                // We can't use ShardCoreKeyMap here because its core closed
+        Property.Dynamic
+            }  
+        @Override
+        shardStats.add(info);  
+    }  
+                if (statsAndCount.count == 0) {
+        volatile long missCount;
+        }
+        Property.Dynamic
+        "indices.queries.cache.all_segments",  
+    public void close() {
+            return in.explain(context, doc);
+        // clear only removes the doc id sets, but if we reach the situation
+        }
+     */
+        }  
+         * Given that lucene doesn't give the desired extensibility at this point.
+            return "{shardId="
+         */  
+     *
+    private final Map<Object, StatsAndCount> stats2 = Collections.synchronizedMap(new IdentityHashMap<>());
+package org.opensearch.indices;
+            super(maxSize, maxRamBytesUsed, leavesToCache, skipFactor);
+    }  
+                    .cacheSize(0)
+            final double weight = totalSize == 0 ? 1d / stats.size() : ((double) shardStats.getCacheSize()) / totalSize;
+                stats.ramBytesUsed = 0;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        "10%",
+            return in.isCacheable(ctx);
+ * @opensearch.api
+        // It's ok to not protect these callbacks by a lock since it is  
+        protected void onDocIdSetEviction(Object readerCoreKey, int numEntries, long sumRamBytesUsed) {
+        }  
+            super.onDocIdSetCache(readerCoreKey, ramBytesUsed);
+                totalSize += s.getCacheSize();
+                // instead of relying on close listeners
+        // we only know that there are no more doc id sets, but we still track
+            this.minFrequency = minFrequency;
+        logger.debug(
 }  
+                return null;  
+import org.apache.lucene.search.ScorerSupplier;  
+        @Override
+import org.apache.lucene.search.DisjunctionMaxQuery;
+    // mostly a way to prevent queries from being the main source of memory usage
+        OpenSearchLRUQueryCache(int maxSize, long maxRamBytesUsed) {
+import java.util.Map;  
+                --minFrequency;
+            // of entries equal to zero if the cache for the given segment
+ * ownership. Elasticsearch licenses this file to you under  
+        }
+ *  
+        final Set<Object> coreCacheKeys = shardKeyMap.getCoreKeysForIndex(index);
+    }
+        "indices.queries.cache.skip_cache_factor",
+        }  
+        protected void onQueryEviction(Query filter, long ramBytesUsed) {  
+ * under the License.  
+    }
+            shardStats.add(
+        public Explanation explain(LeafReaderContext context, int doc) throws IOException {  
+            cache.setSkipCacheFactor(skipCacheFactor);
+                statsAndCount = new StatsAndCount(shardStats);  
+import org.apache.lucene.search.QueryCachingPolicy;
+ */  
+        public int count(LeafReaderContext context) throws IOException {  
+        @Override
+    public QueryCacheStats getStats(ShardId shard) {
+            clusterSettings.addSettingsUpdateConsumer(INDICES_QUERY_CACHE_MIN_FREQUENCY, this::setMinFrequency);  
+                    .cacheCount(0)
+ *
+        if (INDICES_QUERIES_CACHE_ALL_SEGMENTS_SETTING.get(settings)) {
+                .missCount(missCount)  
+ */  
+            }
+import java.io.Closeable;
+    private boolean empty(Stats stats) {
+            stats.put(entry.getKey(), entry.getValue().toQueryCacheStats());
+        volatile long hitCount;  
+ * this work for additional information regarding copyright
+        }
+        private Stats getStats(Object coreKey) {  
+        } else {  
+            return new QueryCacheStats.Builder().ramBytesUsed(ramBytesUsed)
+        OpenSearchLRUQueryCache(int maxSize, long maxRamBytesUsed, Predicate<LeafReaderContext> leavesToCache, float skipFactor) {
+        }  
+        QueryCacheStats shardStats = new QueryCacheStats();
+        "indices.queries.cache.min_frequency",
+        @Override
+                return minFrequencyForCostly;
+        volatile long ramBytesUsed;
+/*
+            stats2.clear();
+ */  
+        public void setMinFrequencyForCostly(int minFrequencyForCostly) {
+        // Same to Lucene's UsageTrackingQueryCachingPolicy.isPointQuery
+    }
+        }
+        protected void onQueryCache(Query filter, long ramBytesUsed) {  
+        }
+        protected void onHit(Object readerCoreKey, Query filter) {  
+        logger.debug("using [node] query cache with size [{}] max filter count [{}] skipCacheFactor [{}]", size, count, skipCacheFactor);  
+                + ", hitCount="  
+            statsAndCount.count += 1;  
+        private final Weight in;
+        }
+        protected int minFrequencyToCache(Query query) {
+            long totalSize = 0;  
+        cache.clear();  
+    @Override  
+    private volatile long sharedRamBytesUsed;
+import org.opensearch.common.settings.ClusterSettings;
+    );
+            sharedRamBytesUsed = 0;
+                .build();  
+                // listener is called before the listener of the cache which
+        final Weight in = cache.doCache(weight, policy);
+            }  
+ * the Apache License, Version 2.0 (the "License"); you may
+                    .missCount(0)  
+        // done in LRUQueryCache
+    }  
+    );  
+    public void setSkipCacheFactor(float skipCacheFactor) {  
+ * compatible open source license.
+        1,
+            shardStats.missCount += 1;
+        if (stats == null) {  
+            if (query instanceof BooleanQuery || query instanceof DisjunctionMaxQuery) {
+            for (QueryCacheStats s : stats.values()) {
+    public Weight doCache(Weight weight, QueryCachingPolicy policy) {
+                + hitCount
+                || isPointQuery(query);
+import org.apache.logging.log4j.Logger;
+            shardStats.add(  
+                + ", missCount="
+ * The query cache for indices  
+    public void onClose(ShardId shardId) {  
+        // This cache stores two things: filters, and doc id sets. At this time  
+            minFrequency = clusterSettings.get(INDICES_QUERY_CACHE_MIN_FREQUENCY);
+            INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR.getKey(),  
+            // onDocIdSetEviction might sometimes be called with a number  
+        protected void onDocIdSetCache(Object readerCoreKey, long ramBytesUsed) {  
+import java.io.IOException;
+    /**  
+        Property.NodeScope
+import org.opensearch.core.common.unit.ByteSizeValue;  
+            shardKeyMap.add(context.reader());
+ */
+    // This is a hack for the fact that the close listener for the
+            );
+                logger.warn("clusterSettings is null, so {} is not dynamic", INDICES_QUERIES_CACHE_SKIP_CACHE_FACTOR.getKey());  
+ * GitHub history for details.
+        if (cache.getCacheSize() == 0) {
+        public boolean isCacheable(LeafReaderContext ctx) {  
+import org.apache.lucene.search.Explanation;  
+                final String simpleName = clazz.getSimpleName();
+            if (stats == null) {
+        QueryCacheStats toQueryCacheStats() {  
+        // proportionally to their number of cache entries of each shard  
+     * Statistics and Counts
+            shardStats.hitCount += 1;  
+        public String toString() {  
+            super(maxSize, maxRamBytesUsed);  
+        }  
+         * Also, we can extend it if needed.
+    }  
+    }  
+            shardKeyMap.add(context.reader());
+     * Custom caching policy for Opensearch.  
+            return in.scorerSupplier(context);
+        }
+            return in.count(context);
+            }
+                .cacheSize(cacheSize)
+                // we only evict when nothing is cached anymore on the segment
+                + ramBytesUsed
+    /** Clear all entries that belong to the given index. */
+        private boolean isPointQuery(Query query) {  
+        2,
+            return stats;  
+import org.opensearch.common.annotation.PublicApi;  
+        );  
+            final Stats shardStats = getStats(readerCoreKey);
+     * @opensearch.internal  
+        protected CachingWeightWrapper(Weight in) {  
+    // Compatible for public api  
+    );  
+            return "{stats=" + stats + " ,count=" + count + "}";
+        @Override
+        Property.NodeScope,
+                    .hitCount(0)
+    private final Map<ShardId, Stats> shardStats = new ConcurrentHashMap<>();
+                    stats2.remove(readerCoreKey);  
+        }  
+        }  
+        Property.NodeScope,
+import org.opensearch.common.settings.Settings;
+            return shardStats.get(shardId);
+            info = new QueryCacheStats();
+        private volatile int minFrequency;  
+import org.opensearch.common.lucene.ShardCoreKeyMap;
+                statsAndCount.count -= numEntries;
+        Property.NodeScope  
+                shardStats.put(shardId, stats);
+        // probably means that the user wanted to remove everything.  
+                new QueryCacheStats.Builder().ramBytesUsed(sharedRamBytesUsed).hitCount(0).missCount(0).cacheCount(0).cacheSize(0).build()  
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Collections;  
+            this.in = in;
+            super.onMiss(readerCoreKey, filter);
+    public static final Setting<Integer> INDICES_CACHE_QUERY_COUNT_SETTING = Setting.intSetting(
+        Property.NodeScope,
+ * Unless required by applicable law or agreed to in writing,
+        }  
+                final StatsAndCount statsAndCount = stats2.get(readerCoreKey);  
+        @Override
+import java.util.function.Predicate;  
+import org.apache.lucene.search.QueryCache;
+        @Override  
+                if (simpleName.startsWith("Point") && simpleName.endsWith("Query")) {  
+        false,
+            shardStats.cacheSize += 1;  
+/**
+         * Same to Lucene's UsageTrackingQueryCachingPolicy.isCostly, it's not public in Lucene.  
+        if (info == null) {  
+        }  
+                + ", cacheCount="
+                + missCount  
+        @Override
+            int minFrequency = this.minFrequency;  
+            if (clusterSettings != null) {  
+    public static final Setting<ByteSizeValue> INDICES_CACHE_QUERY_SIZE_SETTING = Setting.memorySizeSetting(  
+        this(settings, null);
+            this.stats = stats;
+            return query instanceof MultiTermQuery
+    public static final Setting<Integer> INDICES_QUERY_CACHE_COSTLY_MIN_FREQUENCY = Setting.intSetting(  
+            for (Stats stats : shardStats.values()) {
+ * Modifications Copyright OpenSearch Contributors. See
+                + "}";
+        "indices.queries.cache.count",
+        10_000,  
+    public void clearIndex(String index) {  
+        }  
+            cache = new OpenSearchLRUQueryCache(count, size.getBytes(), context -> true, 1f);
+        }
+    /** Get usage statistics for the given shard. */
+            }
+    // ShardCoreKeyMap will be called before onDocIdSetEviction
+        sharedRamBytesUsed = 0;  
+        final int count = INDICES_CACHE_QUERY_COUNT_SETTING.get(settings);
+                // triggers this eviction. So instead we use use stats2 that  
+        assert shardKeyMap.size() == 0 : shardKeyMap.size();
+/*  
+ *
+            final Stats shardStats = getOrCreateStats(readerCoreKey);
+ *
+        }
+        cache.setSkipCacheFactor(skipCacheFactor);
+                final Stats shardStats = statsAndCount.stats;
+        shardStats.remove(shardId);
+@PublicApi(since = "1.0.0")
+    public static final Setting<Integer> INDICES_QUERY_CACHE_MIN_FREQUENCY = Setting.intSetting(  
+        // the shards they belong to
+        // This cache stores two things: filters, and doc id sets. Calling  
+    }
+                .cacheCount(cacheCount)
+                + cacheSize
+            this.minFrequencyForCostly = minFrequencyForCostly;  
+            }  

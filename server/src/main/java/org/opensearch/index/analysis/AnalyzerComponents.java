@@ -1,151 +1,132 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.opensearch.common.settings.Settings;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * A class that groups analysis components necessary to produce a custom analyzer.
- * See {@link ReloadableCustomAnalyzer} for an example usage.
- *  
- * @opensearch.internal
- */
-public final class AnalyzerComponents {  
-
-    private final TokenizerFactory tokenizerFactory;
-    private final CharFilterFactory[] charFilters;  
-    private final TokenFilterFactory[] tokenFilters;
-    private final AnalysisMode analysisMode;
-
-    AnalyzerComponents(TokenizerFactory tokenizerFactory, CharFilterFactory[] charFilters, TokenFilterFactory[] tokenFilters) {
-
-        this.tokenizerFactory = tokenizerFactory;  
-        this.charFilters = charFilters;
+            );
+    public AnalysisMode analysisMode() {  
+        return new AnalyzerComponents(
         this.tokenFilters = tokenFilters;
-        AnalysisMode mode = AnalysisMode.ALL;  
-        for (TokenFilterFactory f : tokenFilters) {
-            mode = mode.merge(f.getAnalysisMode());
-        }  
-        this.analysisMode = mode;
-    }
-
+ *
     static AnalyzerComponents createComponents(
-        String name,
-        Settings analyzerSettings,  
-        final Map<String, TokenizerFactory> tokenizers,
-        final Map<String, CharFilterFactory> charFilters,
-        final Map<String, TokenFilterFactory> tokenFilters  
-    ) {
-        return createComponents(name, analyzerSettings, tokenizers, charFilters, tokenFilters, Collections.emptyMap());
-    }  
-
-    static AnalyzerComponents createComponents(
-        String name,  
-        Settings analyzerSettings,
-        final Map<String, TokenizerFactory> tokenizers,
-        final Map<String, CharFilterFactory> charFilters,  
-        final Map<String, TokenFilterFactory> tokenFilters,
-        final Map<String, Analyzer> analyzersBuiltSoFar
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return this.analysisMode;
+ * GitHub history for details.
+        }
+            tokenFilter = tokenFilter.getChainAwareTokenFilterFactory(
+                    "Custom Analyzer [" + name + "] failed to find filter under name " + "[" + tokenFilterName + "]"
+            tokenFilterList.add(tokenFilter);
+    private final AnalysisMode analysisMode;
+            tokenFilterList.toArray(new TokenFilterFactory[0])
+            charFiltersList.toArray(new CharFilterFactory[0]),
+        if (tokenizer == null) {
+ * license agreements. See the NOTICE file distributed with
+                throw new IllegalArgumentException(  
+        TokenizerFactory tokenizer = tokenizers.get(tokenizerName);  
     ) {  
+ *  
+        }
+    public CharFilterFactory[] getCharFilters() {
+            if (tokenFilter == null) {
+        List<CharFilterFactory> charFiltersList = new ArrayList<>(charFilterNames.size());
+        return tokenizerFactory;
+ *
+    }
+ * You may obtain a copy of the License at  
+        final Map<String, TokenFilterFactory> tokenFilters  
+ */
+    }
+/*
+        return createComponents(name, analyzerSettings, tokenizers, charFilters, tokenFilters, Collections.emptyMap());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+        for (String charFilterName : charFilterNames) {  
+        Settings analyzerSettings,  
+        );  
+            throw new IllegalArgumentException("Custom Analyzer [" + name + "] must be configured with a tokenizer");  
+                tokenFilters::get,
+        }  
+            mode = mode.merge(f.getAnalysisMode());
+        final Map<String, TokenizerFactory> tokenizers,
+        List<TokenFilterFactory> tokenFilterList = new ArrayList<>(tokenFilterNames.size());
+ * Modifications Copyright OpenSearch Contributors. See
+    private final CharFilterFactory[] charFilters;  
+        final Map<String, TokenFilterFactory> tokenFilters,
+/*  
+ * See {@link ReloadableCustomAnalyzer} for an example usage.
+        String name,  
+        this.charFilters = charFilters;
+                "Custom Analyzer [" + name + "] failed to find tokenizer under name " + "[" + tokenizerName + "]"  
+    private final TokenFilterFactory[] tokenFilters;
+ * specific language governing permissions and limitations
+        }  
+    public TokenizerFactory getTokenizerFactory() {  
+        }
+        for (String tokenFilterName : tokenFilterNames) {  
+ * The OpenSearch Contributors require contributions made to  
+/*  
+            TokenFilterFactory tokenFilter = tokenFilters.get(tokenFilterName);
+    }  
+ * @opensearch.internal
+ * compatible open source license.
+    private final TokenizerFactory tokenizerFactory;
+                charFiltersList,  
+ * A class that groups analysis components necessary to produce a custom analyzer.
+        List<String> charFilterNames = analyzerSettings.getAsList("char_filter");
+ * software distributed under the License is distributed on an
+        final Map<String, CharFilterFactory> charFilters,
+            charFiltersList.add(charFilter);
+                tokenFilterList,
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.ArrayList;
+        final Map<String, TokenizerFactory> tokenizers,
+                );
         String tokenizerName = analyzerSettings.get("tokenizer");
         if (tokenizerName == null) {
-            throw new IllegalArgumentException("Custom Analyzer [" + name + "] must be configured with a tokenizer");  
-        }
-
-        TokenizerFactory tokenizer = tokenizers.get(tokenizerName);  
-        if (tokenizer == null) {
-            throw new IllegalArgumentException(
-                "Custom Analyzer [" + name + "] failed to find tokenizer under name " + "[" + tokenizerName + "]"  
-            );
-        }
-
-        List<String> charFilterNames = analyzerSettings.getAsList("char_filter");
-        List<CharFilterFactory> charFiltersList = new ArrayList<>(charFilterNames.size());
-        for (String charFilterName : charFilterNames) {  
-            CharFilterFactory charFilter = charFilters.get(charFilterName);
-            if (charFilter == null) {
+        this.tokenizerFactory = tokenizerFactory;  
                 throw new IllegalArgumentException(  
-                    "Custom Analyzer [" + name + "] failed to find char_filter under name " + "[" + charFilterName + "]"
-                );
-            }  
-            charFiltersList.add(charFilter);
-        }
-
-        List<String> tokenFilterNames = analyzerSettings.getAsList("filter");
-        List<TokenFilterFactory> tokenFilterList = new ArrayList<>(tokenFilterNames.size());
-        for (String tokenFilterName : tokenFilterNames) {  
-            TokenFilterFactory tokenFilter = tokenFilters.get(tokenFilterName);
-            if (tokenFilter == null) {
-                throw new IllegalArgumentException(  
-                    "Custom Analyzer [" + name + "] failed to find filter under name " + "[" + tokenFilterName + "]"
-                );
-            }  
-            tokenFilter = tokenFilter.getChainAwareTokenFilterFactory(
-                tokenizer,
-                charFiltersList,  
-                tokenFilterList,
-                tokenFilters::get,
-                analyzersBuiltSoFar::get  
-            );
-            tokenFilterList.add(tokenFilter);
-        }  
-
-        return new AnalyzerComponents(
-            tokenizer,  
-            charFiltersList.toArray(new CharFilterFactory[0]),
-            tokenFilterList.toArray(new TokenFilterFactory[0])
-        );  
-    }
-
-    public TokenizerFactory getTokenizerFactory() {  
-        return tokenizerFactory;
-    }
-
-    public TokenFilterFactory[] getTokenFilters() {
-        return tokenFilters;
-    }  
-
-    public CharFilterFactory[] getCharFilters() {
+ * not use this file except in compliance with the License.
         return charFilters;  
-    }
-
-    public AnalysisMode analysisMode() {  
-        return this.analysisMode;
-    }
+        AnalysisMode mode = AnalysisMode.ALL;  
+ */  
+    AnalyzerComponents(TokenizerFactory tokenizerFactory, CharFilterFactory[] charFilters, TokenFilterFactory[] tokenFilters) {
 }  
+import java.util.Map;
+                );
+ * Licensed to Elasticsearch under one or more contributor  
+            if (charFilter == null) {
+    public TokenFilterFactory[] getTokenFilters() {
+        Settings analyzerSettings,
+                analyzersBuiltSoFar::get  
+    }
+ * this work for additional information regarding copyright
+    }
+        final Map<String, Analyzer> analyzersBuiltSoFar
+                    "Custom Analyzer [" + name + "] failed to find char_filter under name " + "[" + charFilterName + "]"
+            tokenizer,  
+ * ownership. Elasticsearch licenses this file to you under  
+                tokenizer,
+    }
+import java.util.List;  
+        return tokenFilters;
+    ) {
+        List<String> tokenFilterNames = analyzerSettings.getAsList("filter");
+import java.util.Collections;
+import org.apache.lucene.analysis.Analyzer;
+    }  
+            CharFilterFactory charFilter = charFilters.get(charFilterName);
+package org.opensearch.index.analysis;
+public final class AnalyzerComponents {  
+import org.opensearch.common.settings.Settings;
+            );
+        String name,
+        for (TokenFilterFactory f : tokenFilters) {
+ * this file be licensed under the Apache-2.0 license or a
+            }  
+            }  
+ */  
+ * KIND, either express or implied.  See the License for the
+/**  
+    static AnalyzerComponents createComponents(
+ * under the License.  
+ */
+        this.analysisMode = mode;
+ * Unless required by applicable law or agreed to in writing,
+        final Map<String, CharFilterFactory> charFilters,  
+            throw new IllegalArgumentException(

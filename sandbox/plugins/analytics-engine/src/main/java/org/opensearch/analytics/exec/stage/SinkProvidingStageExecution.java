@@ -1,27 +1,24 @@
+ * The OpenSearch Contributors require contributions made to  
+ * both accept child input and produce output (root gather, local compute).
+public interface SinkProvidingStageExecution extends StageExecution, DataConsumer, DataProducer {}
+import org.opensearch.analytics.exec.stage.coordinator.ReduceStageExecution;
+ */  
+import org.opensearch.analytics.exec.stage.coordinator.PassThroughStageExecution;
+ * Combines {@link DataConsumer} and {@link DataProducer} for stages that  
+ *
+package org.opensearch.analytics.exec.stage;
+ * routing (like {@link ReduceStageExecution}) delegate both methods to the  
+ *
+ * {@link DataProducer#outputSource()}. Stages with backend-provided per-child
+ * this file be licensed under the Apache-2.0 license or a
 /*  
+ * backend's fragment executor.
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.stage;
-
-import org.opensearch.analytics.exec.stage.coordinator.PassThroughStageExecution;
-import org.opensearch.analytics.exec.stage.coordinator.ReduceStageExecution;
-import org.opensearch.analytics.spi.DataConsumer;  
-
-/**
- * Combines {@link DataConsumer} and {@link DataProducer} for stages that  
- * both accept child input and produce output (root gather, local compute).
- *
- * <p>Stages that own a single shared sink (like {@link PassThroughStageExecution})  
- * return the same object for both {@link DataConsumer#inputSink(int)} and
- * {@link DataProducer#outputSource()}. Stages with backend-provided per-child
- * routing (like {@link ReduceStageExecution}) delegate both methods to the  
- * backend's fragment executor.
- *
  * @opensearch.internal  
+import org.opensearch.analytics.spi.DataConsumer;  
  */
-public interface SinkProvidingStageExecution extends StageExecution, DataConsumer, DataProducer {}
+ * compatible open source license.
+ * return the same object for both {@link DataConsumer#inputSink(int)} and
+/**
+ * <p>Stages that own a single shared sink (like {@link PassThroughStageExecution})  

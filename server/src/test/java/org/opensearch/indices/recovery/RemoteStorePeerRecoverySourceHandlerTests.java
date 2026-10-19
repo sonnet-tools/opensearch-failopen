@@ -1,239 +1,215 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.common.UUIDs;  
-import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.Engine;  
-import org.opensearch.index.engine.NRTReplicationEngineFactory;
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.replication.OpenSearchIndexLevelReplicationTestCase;
-import org.opensearch.index.seqno.ReplicationTracker;  
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SeqNoStats;
-import org.opensearch.index.seqno.SequenceNumbers;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.Translog;  
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.VersionUtils;  
-
-import java.io.IOException;
-import java.nio.file.Path;  
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.IntSupplier;  
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;  
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyString;  
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class RemoteStorePeerRecoverySourceHandlerTests extends OpenSearchIndexLevelReplicationTestCase {
-
-    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings(  
-        "index",
-        Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT).build()
-    );  
-    private final ShardId shardId = new ShardId(INDEX_SETTINGS.getIndex(), 1);
-
-    private final ClusterSettings service = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
-
-    private static final Settings settings = Settings.builder()
-        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
-        .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, "true")
-        .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "translog-repo")
-        .put(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), "100ms")  
-        .build();
-
-    public void testReplicaShardRecoveryUptoLastFlushedCommit() throws Exception {  
-        final Path remoteDir = createTempDir();
-        final String indexMapping = "{ \"" + MapperService.SINGLE_MAPPING_NAME + "\": {} }";
-        try (ReplicationGroup shards = createGroup(0, settings, indexMapping, new NRTReplicationEngineFactory(), remoteDir)) {  
-
-            // Step1 - Start primary, index docs and flush
-            shards.startPrimary();  
-            final IndexShard primary = shards.getPrimary();
-            int numDocs = shards.indexDocs(randomIntBetween(10, 20));
-            logger.info("--> Index numDocs {} and flush", numDocs);  
-            shards.flush();
-
-            // Step 2 - Start replica for recovery to happen, check both has same number of docs  
-            final IndexShard replica1 = shards.addReplica(remoteDir);
-            logger.info("--> Added and started replica {}", replica1.routingEntry());
-            shards.startAll();  
-            assertEquals(getDocIdAndSeqNos(primary), getDocIdAndSeqNos(replica1));
-
-            // Step 3 - Index more docs, run segment replication, check both have same number of docs  
-            int moreDocs = shards.indexDocs(randomIntBetween(10, 20));
-            primary.refresh("test");
-            logger.info("--> Index more docs {} and replicate segments", moreDocs);  
-            replicateSegments(primary, shards.getReplicas());
-            assertEquals(getDocIdAndSeqNos(primary), getDocIdAndSeqNos(replica1));
-
-            // Step 4 - Check both shard has expected number of doc count
-            assertDocCount(primary, numDocs + moreDocs);
-            assertDocCount(replica1, numDocs + moreDocs);  
-
-            // Step 5 - Check retention lease does not exist for the replica shard
-            assertEquals(1, primary.getRetentionLeases().leases().size());  
-            assertFalse(primary.getRetentionLeases().contains(ReplicationTracker.getPeerRecoveryRetentionLeaseId(replica1.routingEntry())));
-
-            // Step 6 - Start new replica, recovery happens, and check that new replica has all docs  
-            final IndexShard replica2 = shards.addReplica(remoteDir);
-            logger.info("--> Added and started replica {}", replica2.routingEntry());
-            shards.startAll();  
-            shards.assertAllEqual(numDocs + moreDocs);
-
-            // Step 7 - Check retention lease does not exist for the replica shard  
-            assertEquals(1, primary.getRetentionLeases().leases().size());
-            assertFalse(primary.getRetentionLeases().contains(ReplicationTracker.getPeerRecoveryRetentionLeaseId(replica2.routingEntry())));
-        }  
-    }
-
-    public void testThrowExceptionOnNoTargetInRouting() throws IOException {  
-        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        final IndexShard shard = mock(IndexShard.class);  
-        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
-        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
-        when(shard.isRelocatedPrimary()).thenReturn(false);  
-        final org.opensearch.index.shard.ReplicationGroup replicationGroup = mock(org.opensearch.index.shard.ReplicationGroup.class);
-        final IndexShardRoutingTable routingTable = mock(IndexShardRoutingTable.class);
-        when(routingTable.getByAllocationId(anyString())).thenReturn(null);  
-        when(shard.getReplicationGroup()).thenReturn(replicationGroup);
-        when(replicationGroup.getRoutingTable()).thenReturn(routingTable);
-        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));  
-        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
-        doAnswer(invocation -> {
-            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});  
-            return null;
-        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
-
-        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
-            .settings(
-                Settings.builder()  
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))  
-                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
-            );
-        if (randomBoolean()) {  
-            indexMetadata.state(IndexMetadata.State.CLOSE);
-        }
-        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));  
-
-        final AtomicBoolean phase1Called = new AtomicBoolean();
-        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();  
-        final AtomicBoolean phase2Called = new AtomicBoolean();
-        final RecoverySourceHandler handler = new RemoteStorePeerRecoverySourceHandler(
-            shard,  
-            mock(RecoveryTargetHandler.class),
-            threadPool,
-            request,  
-            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
-            between(1, 8),
-            between(1, 8)  
-        ) {
-
-            @Override  
-            void phase1(
-                CatalogSnapshot snapshot,
-                long startingSeqNo,  
-                IntSupplier translogOps,
-                ActionListener<SendFileResult> listener,
-                boolean skipCreateRetentionLeaseStep  
-            ) {
-                phase1Called.set(true);
-                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);  
-            }
-
-            @Override  
-            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
-                prepareTargetForTranslogCalled.set(true);
-                super.prepareTargetForTranslog(totalTranslogOps, listener);  
-            }
-
-            @Override  
-            void phase2(
-                long startingSeqNo,
-                long endingSeqNo,  
-                Translog.Snapshot snapshot,
-                long maxSeenAutoIdTimestamp,
-                long maxSeqNoOfUpdatesOrDeletes,  
-                RetentionLeases retentionLeases,
-                long mappingVersion,
-                ActionListener<SendSnapshotResult> listener  
-            ) throws IOException {
-                phase2Called.set(true);
-                super.phase2(  
-                    startingSeqNo,
-                    endingSeqNo,
-                    snapshot,  
-                    maxSeenAutoIdTimestamp,
-                    maxSeqNoOfUpdatesOrDeletes,
-                    retentionLeases,  
-                    mappingVersion,
-                    listener
-                );  
-            }
-
-        };  
-        PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
-        expectThrows(DelayRecoveryException.class, () -> {
-            handler.recoverToTarget(future);  
-            future.actionGet();
-        });
-        verify(routingTable, times(5)).getByAllocationId(null);  
-        assertFalse(phase1Called.get());
-        assertFalse(prepareTargetForTranslogCalled.get());
-        assertFalse(phase2Called.get());  
-    }
-
     public StartRecoveryRequest getStartRecoveryRequest() throws IOException {  
-        Store.MetadataSnapshot metadataSnapshot = randomBoolean()
-            ? Store.MetadataSnapshot.EMPTY
-            : new Store.MetadataSnapshot(  
-                Collections.emptyMap(),
-                Collections.singletonMap(Engine.HISTORY_UUID_KEY, UUIDs.randomBase64UUID()),
-                randomIntBetween(0, 100)  
-            );
-        return new StartRecoveryRequest(
-            shardId,  
-            null,
-            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),
-            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),  
-            metadataSnapshot,
-            randomBoolean(),
+            return null;
+import org.opensearch.index.IndexSettings;
+            @Override  
+ * The OpenSearch Contributors require contributions made to  
+            shards.startAll();  
+                long maxSeqNoOfUpdatesOrDeletes,  
+            .settings(
             randomNonNegativeLong(),  
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
+                Collections.emptyMap(),
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))  
+            assertFalse(primary.getRetentionLeases().contains(ReplicationTracker.getPeerRecoveryRetentionLeaseId(replica1.routingEntry())));
+            shardId,  
+            primary.refresh("test");
+import org.opensearch.index.engine.Engine;  
+            future.actionGet();
+        doAnswer(invocation -> {
+import static org.mockito.Mockito.verify;
+        .build();
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+            // Step 4 - Check both shard has expected number of doc count
+        .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "translog-repo")
+import org.opensearch.index.shard.IndexShard;
+                long startingSeqNo,
+import org.opensearch.index.seqno.ReplicationTracker;  
+    }
+        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
+/*  
+                randomIntBetween(0, 100)  
+            shard,  
+import org.opensearch.index.engine.SegmentsStats;
+            indexMetadata.state(IndexMetadata.State.CLOSE);
+import org.opensearch.cluster.metadata.IndexMetadata;  
+import org.opensearch.index.seqno.RetentionLeases;
+import static org.mockito.Mockito.when;
+            mock(RecoveryTargetHandler.class),
+            }
+import java.io.IOException;
             randomBoolean() || metadataSnapshot.getHistoryUUID() == null ? SequenceNumbers.UNASSIGNED_SEQ_NO : randomNonNegativeLong()
-        );
-    }  
+                    maxSeqNoOfUpdatesOrDeletes,
+                Collections.singletonMap(Engine.HISTORY_UUID_KEY, UUIDs.randomBase64UUID()),
+                long endingSeqNo,  
 }
+import org.opensearch.index.translog.Translog;  
+import static java.util.Collections.emptySet;  
+        }  
+import org.opensearch.common.concurrent.GatedCloseable;
+            handler.recoverToTarget(future);  
+    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings(  
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.concurrent.atomic.AtomicBoolean;
+    private static final Settings settings = Settings.builder()
+        ) {
+        final Path remoteDir = createTempDir();
+            void phase2(
+        Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT).build()
+import static org.mockito.Mockito.times;  
+        );
+import java.util.Collections;
+import org.opensearch.action.support.PlainActionFuture;
+ *
+        .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, "true")
+        });
+import org.opensearch.test.IndexSettingsModule;
+    public void testThrowExceptionOnNoTargetInRouting() throws IOException {  
+import static org.mockito.Mockito.mock;
+                    endingSeqNo,
+            // Step 3 - Index more docs, run segment replication, check both have same number of docs  
+                    retentionLeases,  
+            assertEquals(getDocIdAndSeqNos(primary), getDocIdAndSeqNos(replica1));
+            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),  
+                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);  
+ * compatible open source license.
+    private final ClusterSettings service = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
+import org.opensearch.core.action.ActionListener;  
+import org.opensearch.common.UUIDs;  
+                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
+import org.opensearch.test.VersionUtils;  
+            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),
+    public void testReplicaShardRecoveryUptoLastFlushedCommit() throws Exception {  
+    private final ShardId shardId = new ShardId(INDEX_SETTINGS.getIndex(), 1);
+                    maxSeenAutoIdTimestamp,
+        final AtomicBoolean phase1Called = new AtomicBoolean();
+            ) throws IOException {
+            assertDocCount(replica1, numDocs + moreDocs);  
+        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));  
+                prepareTargetForTranslogCalled.set(true);
+            assertEquals(1, primary.getRetentionLeases().leases().size());  
+    }  
+            between(1, 8),
+        verify(routingTable, times(5)).getByAllocationId(null);  
+            // Step1 - Start primary, index docs and flush
+            threadPool,
+            int moreDocs = shards.indexDocs(randomIntBetween(10, 20));
+            );
+            null,
+            }
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
+        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
+                long maxSeenAutoIdTimestamp,
+                CatalogSnapshot snapshot,
+                ActionListener<SendSnapshotResult> listener  
+        if (randomBoolean()) {  
+ */  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        expectThrows(DelayRecoveryException.class, () -> {
+            shards.startAll();  
+            logger.info("--> Added and started replica {}", replica2.routingEntry());
+            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
+        assertFalse(prepareTargetForTranslogCalled.get());
+            // Step 7 - Check retention lease does not exist for the replica shard  
+import org.opensearch.index.replication.OpenSearchIndexLevelReplicationTestCase;
+                );  
+                    mappingVersion,
+        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
+        .put(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), "100ms")  
+            assertEquals(getDocIdAndSeqNos(primary), getDocIdAndSeqNos(replica1));
+                super.phase2(  
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
+public class RemoteStorePeerRecoverySourceHandlerTests extends OpenSearchIndexLevelReplicationTestCase {
+        when(replicationGroup.getRoutingTable()).thenReturn(routingTable);
+            final IndexShard replica2 = shards.addReplica(remoteDir);
+import java.nio.file.Path;  
+                phase1Called.set(true);
+import org.opensearch.index.store.Store;
+ * SPDX-License-Identifier: Apache-2.0
+import static org.mockito.ArgumentMatchers.anyString;  
+    );  
+        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
+        when(shard.getReplicationGroup()).thenReturn(replicationGroup);
+                IntSupplier translogOps,
+            );
+                long mappingVersion,
+import org.opensearch.Version;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+    }
+import org.opensearch.common.unit.TimeValue;
+            between(1, 8)  
+        PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
+import org.opensearch.indices.replication.common.ReplicationType;
+        final org.opensearch.index.shard.ReplicationGroup replicationGroup = mock(org.opensearch.index.shard.ReplicationGroup.class);
+            replicateSegments(primary, shards.getReplicas());
+        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));  
+            request,  
+            logger.info("--> Index more docs {} and replicate segments", moreDocs);  
+        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
+            final IndexShard replica1 = shards.addReplica(remoteDir);
+import static org.mockito.Mockito.doAnswer;
+                long startingSeqNo,  
+                Settings.builder()  
+            logger.info("--> Index numDocs {} and flush", numDocs);  
+            }
+import static java.util.Collections.emptyMap;
+        final IndexShard shard = mock(IndexShard.class);  
+        try (ReplicationGroup shards = createGroup(0, settings, indexMapping, new NRTReplicationEngineFactory(), remoteDir)) {  
+                Translog.Snapshot snapshot,
+import org.opensearch.common.settings.ClusterSettings;  
+            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
+                RetentionLeases retentionLeases,
+            ? Store.MetadataSnapshot.EMPTY
+        when(routingTable.getByAllocationId(anyString())).thenReturn(null);  
+        assertFalse(phase2Called.get());  
+                    startingSeqNo,
+            final IndexShard primary = shards.getPrimary();
+            void phase1(
+                    snapshot,  
+        final IndexShardRoutingTable routingTable = mock(IndexShardRoutingTable.class);
+            assertDocCount(primary, numDocs + moreDocs);
+            @Override  
+            // Step 6 - Start new replica, recovery happens, and check that new replica has all docs  
+        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();  
+        }
+                ActionListener<SendFileResult> listener,
+        "index",
+            metadataSnapshot,
+            shards.assertAllEqual(numDocs + moreDocs);
+            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});  
+            shards.flush();
+        assertFalse(phase1Called.get());
+import java.util.function.IntSupplier;  
+                phase2Called.set(true);
+        };  
+        return new StartRecoveryRequest(
+        final AtomicBoolean phase2Called = new AtomicBoolean();
+            shards.startPrimary();  
+        Store.MetadataSnapshot metadataSnapshot = randomBoolean()
+import org.opensearch.index.engine.NRTReplicationEngineFactory;
+        final RecoverySourceHandler handler = new RemoteStorePeerRecoverySourceHandler(
+                boolean skipCreateRetentionLeaseStep  
+import org.opensearch.index.seqno.SeqNoStats;
+            // Step 2 - Start replica for recovery to happen, check both has same number of docs  
+            assertFalse(primary.getRetentionLeases().contains(ReplicationTracker.getPeerRecoveryRetentionLeaseId(replica2.routingEntry())));
+            @Override  
+        when(shard.isRelocatedPrimary()).thenReturn(false);  
+            int numDocs = shards.indexDocs(randomIntBetween(10, 20));
+            // Step 5 - Check retention lease does not exist for the replica shard
+            logger.info("--> Added and started replica {}", replica1.routingEntry());
+import org.opensearch.common.settings.Settings;
+        final String indexMapping = "{ \"" + MapperService.SINGLE_MAPPING_NAME + "\": {} }";
+import org.opensearch.index.seqno.SequenceNumbers;  
+                    listener
+        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
+            randomBoolean(),
+            assertEquals(1, primary.getRetentionLeases().leases().size());
+            ) {
+import org.opensearch.cluster.node.DiscoveryNode;
+                super.prepareTargetForTranslog(totalTranslogOps, listener);  
+import org.opensearch.core.index.shard.ShardId;
+import static org.mockito.ArgumentMatchers.any;
+            : new Store.MetadataSnapshot(  
+import org.opensearch.index.mapper.MapperService;
+        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
+package org.opensearch.indices.recovery;

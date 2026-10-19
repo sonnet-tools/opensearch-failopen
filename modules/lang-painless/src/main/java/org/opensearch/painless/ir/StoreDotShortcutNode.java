@@ -1,82 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+        methodWriter.writeDebugInfo(getLocation());
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.Location;
-import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.lookup.PainlessMethod;
-import org.opensearch.painless.phase.IRTreeVisitor;
 import org.opensearch.painless.symbol.WriteScope;  
-
 public class StoreDotShortcutNode extends StoreNode {
-
-    /* ---- begin node data ---- */
-
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
+        methodWriter.invokeMethodCall(setter);  
+/*  
+ */  
     private PainlessMethod setter;  
-
-    public void setSetter(PainlessMethod setter) {
-        this.setter = setter;  
     }
-
-    public PainlessMethod getSetter() {  
-        return setter;
-    }
-
-    /* ---- end node data, begin visitor ---- */
-
-    @Override  
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        irTreeVisitor.visitStoreDotShortcut(this, scope);
+import org.opensearch.painless.phase.IRTreeVisitor;
     }  
-
+ *  
     @Override
+ * Unless required by applicable law or agreed to in writing,
+    /* ---- begin node data ---- */
+import org.opensearch.painless.lookup.PainlessMethod;
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+import org.opensearch.painless.Location;
+        irTreeVisitor.visitStoreDotShortcut(this, scope);
+import org.opensearch.painless.ClassWriter;
+ */  
+    @Override  
+ * You may obtain a copy of the License at  
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+ *
+ * compatible open source license.
+    }
+        super(location);
+ * SPDX-License-Identifier: Apache-2.0
+        methodWriter.writePop(MethodWriter.getType(setter.returnType).getSize());
+import org.opensearch.painless.MethodWriter;  
+ * ownership. Elasticsearch licenses this file to you under  
+    /* ---- end visitor ---- */
+ * this file be licensed under the Apache-2.0 license or a
+        this.setter = setter;  
     public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+ * Modifications Copyright OpenSearch Contributors. See
+    /* ---- end node data, begin visitor ---- */
         // do nothing; terminal node
     }
-
-    /* ---- end visitor ---- */
-
-    public StoreDotShortcutNode(Location location) {  
-        super(location);
     }
-
-    @Override
     protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
+ * not use this file except in compliance with the License.
+ */
+ * software distributed under the License is distributed on an
+        return setter;
+    public StoreDotShortcutNode(Location location) {  
+    public PainlessMethod getSetter() {  
+ * specific language governing permissions and limitations
+ * Licensed to Elasticsearch under one or more contributor  
         getChildNode().write(classWriter, methodWriter, writeScope);  
-
-        methodWriter.writeDebugInfo(getLocation());
-        methodWriter.invokeMethodCall(setter);  
-        methodWriter.writePop(MethodWriter.getType(setter.returnType).getSize());
-    }
+    public void setSetter(PainlessMethod setter) {
+ * under the License.  
+ * KIND, either express or implied.  See the License for the
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.painless.ir;
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
 }  
+/*
+    }

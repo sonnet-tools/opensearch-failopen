@@ -1,161 +1,135 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.WildcardQueryBuilder;  
-import org.opensearch.protobufs.WildcardQuery;
+        WildcardQuery proto = WildcardQuery.newBuilder().setField("test_field").build();
+    public void testFromProtoWithNeitherValueNorWildcard() {
+            .setXName("test_query")  
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-
-import static org.opensearch.transport.grpc.proto.request.search.query.WildcardQueryBuilderProtoUtils.fromProto;  
-
+        assertEquals(2.0f, builder.boost(), 0.001f);
+    public void testFromProtoWithAllFields() {  
+    }  
+        assertEquals(fromXContent.caseInsensitive(), fromProto.caseInsensitive());
+import org.opensearch.core.xcontent.XContentParser;
+     */  
+    }  
 public class WildcardQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
-
+            .build();  
+    }
+        assertEquals("test_field", builder.fieldName());
+        assertEquals("test*value", builder.value());
+    }
+        // Create a minimal WildcardQuery proto with only required fields  
+    }  
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> fromProto(proto));  
+        // 2. Parse the JSON to create a WildcardQueryBuilder via fromXContent
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;
+            "scoring_boolean",  
+        // 1. Create a JSON string for XContent parsing
+            .build();
+        // Verify basic properties  
+     * Test that compares the results of fromXContent and fromProto to ensure they produce equivalent results.
+            + "}";
+            .setValue("test*value")  
+            .setBoost(2.0f)  
+        WildcardQueryBuilder builder = fromProto(proto);
+    public void testFromProtoWithDifferentRewriteMethods() {
+    public void testFromProtoWithRequiredFieldsOnly() {
+                .build();  
+        WildcardQuery proto = WildcardQuery.newBuilder().setField("test_field").setWildcard("test*value").build();
+            .setField("test_field")  
+                .setField("test_field")  
+ * SPDX-License-Identifier: Apache-2.0
+            .setValue("test*value")
+            "constant_score",  
+        }
+        String[] expectedRewriteMethods = {
+        WildcardQueryBuilder fromXContent = WildcardQueryBuilder.fromXContent(parser);
+            + "      \"_name\": \"test_query\"\n"  
+            .setField("test_field")
+    public void testFromProtoMatchesFromXContent() throws IOException {
+        WildcardQueryBuilder builder = fromProto(proto);
+            + "      \"rewrite\": \"constant_score\",\n"
+        // 3. Create an equivalent WildcardQuery proto  
+        assertEquals("constant_score", builder.rewrite());  
+package org.opensearch.transport.grpc.proto.request.search.query;
+        // Convert to WildcardQueryBuilder  
+                .setValue("test*value")
+            "top_terms_blended_freqs_10",
+import org.opensearch.common.xcontent.json.JsonXContent;
+            + "      \"value\": \"test*value\",\n"
+            .setCaseInsensitive(true)
+        QueryBuilderProtoTestUtils.setupRegistry();
+        // Test exception when neither value nor wildcard field is set  
+        // Note: The rewrite method is stored differently in the two builders
+        // Convert to WildcardQueryBuilder  
+        // 4. Convert the proto to a WildcardQueryBuilder
+    }
+        // Create a complete WildcardQuery proto with all fields set
+        assertEquals("test_field", builder.fieldName());  
+ */  
+            .setRewrite("constant_score")
+        XContentParser parser = createParser(JsonXContent.jsonXContent, json);
+        // Convert to WildcardQueryBuilder
+        assertEquals(WildcardQueryBuilder.DEFAULT_CASE_INSENSITIVITY, builder.caseInsensitive());  
+            .setXName("test_query")
+            + "      \"boost\": 2.0,\n"
+            WildcardQueryBuilder builder = fromProto(proto);
+        // Test all possible rewrite methods (rewrite is now a String in protobufs 1.0.0)
+            assertEquals(expectedRewriteMethods[i], builder.rewrite());  
+        WildcardQuery proto = WildcardQuery.newBuilder()
+        // Verify all properties
+    public void testFromProtoWithWildcardField() {
+ * compatible open source license.
+ *
+            "top_terms_blended_freqs_10",
+        assertEquals(fromXContent.queryName(), fromProto.queryName());
+        // 5. Compare the two builders
+            "constant_score",
+        // Create a WildcardQuery proto using the wildcard field instead of value  
+        String json = "{\n"  
+ * this file be licensed under the Apache-2.0 license or a
+            "top_terms_10",
+        assertEquals("test*value", builder.value());
+        assertEquals(fromXContent.value(), fromProto.value());  
+    }  
+            "top_terms_10",  
+            + "    \"test_field\": {\n"
+            .setCaseInsensitive(true)
+            "top_terms_boost_10" };
+        assertEquals(1.0f, builder.boost(), 0.001f);
+import org.opensearch.protobufs.WildcardQuery;
+            + "    }\n"
+    /**
+        assertTrue(builder.caseInsensitive());
+        // fromXContent has "constant_score" while fromProto has "MULTI_TERM_QUERY_REWRITE_CONSTANT_SCORE"  
+        // Set up the registry with all built-in converters
+        for (int i = 0; i < rewriteMethods.length; i++) {
+                .setRewrite(rewriteMethods[i])
+            + "      \"case_insensitive\": true,\n"  
+        WildcardQueryBuilder builder = fromProto(proto);  
     @Override
+        assertEquals("Either value or wildcard field must be set in wildcardQueryProto", exception.getMessage());
+import static org.opensearch.transport.grpc.proto.request.search.query.WildcardQueryBuilderProtoUtils.fromProto;  
+        assertEquals(fromXContent.fieldName(), fromProto.fieldName());
+        String[] rewriteMethods = {  
+            "constant_score_boolean",
+        assertNull(builder.queryName());  
     public void setUp() throws Exception {
         super.setUp();  
-        // Set up the registry with all built-in converters
-        QueryBuilderProtoTestUtils.setupRegistry();
-    }  
-
-    public void testFromProtoWithRequiredFieldsOnly() {
-        // Create a minimal WildcardQuery proto with only required fields  
-        WildcardQuery proto = WildcardQuery.newBuilder().setField("test_field").setValue("test*value").build();
-
-        // Convert to WildcardQueryBuilder  
-        WildcardQueryBuilder builder = fromProto(proto);
-
-        // Verify basic properties  
-        assertEquals("test_field", builder.fieldName());
-        assertEquals("test*value", builder.value());
-        assertEquals(WildcardQueryBuilder.DEFAULT_CASE_INSENSITIVITY, builder.caseInsensitive());  
-        assertNull(builder.rewrite());
-        assertEquals(1.0f, builder.boost(), 0.001f);
-        assertNull(builder.queryName());  
-    }
-
-    public void testFromProtoWithAllFields() {  
-        // Create a complete WildcardQuery proto with all fields set
-        WildcardQuery proto = WildcardQuery.newBuilder()
-            .setField("test_field")  
-            .setValue("test*value")
-            .setBoost(2.0f)
-            .setXName("test_query")  
-            .setCaseInsensitive(true)
-            .setRewrite("constant_score")
-            .build();  
-
-        // Convert to WildcardQueryBuilder
-        WildcardQueryBuilder builder = fromProto(proto);  
-
-        // Verify all properties
-        assertEquals("test_field", builder.fieldName());  
-        assertEquals("test*value", builder.value());
-        assertTrue(builder.caseInsensitive());
-        assertEquals("constant_score", builder.rewrite());  
-        assertEquals(2.0f, builder.boost(), 0.001f);
-        assertEquals("test_query", builder.queryName());
-    }  
-
-    public void testFromProtoWithWildcardField() {
-        // Create a WildcardQuery proto using the wildcard field instead of value  
-        WildcardQuery proto = WildcardQuery.newBuilder().setField("test_field").setWildcard("test*value").build();
-
-        // Convert to WildcardQueryBuilder  
-        WildcardQueryBuilder builder = fromProto(proto);
-
         // Verify the value was correctly set from the wildcard field  
-        assertEquals("test_field", builder.fieldName());
-        assertEquals("test*value", builder.value());
-    }  
-
-    public void testFromProtoWithNeitherValueNorWildcard() {
-        // Test exception when neither value nor wildcard field is set  
-        WildcardQuery proto = WildcardQuery.newBuilder().setField("test_field").build();
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> fromProto(proto));  
-        assertEquals("Either value or wildcard field must be set in wildcardQueryProto", exception.getMessage());
-    }
-
-    public void testFromProtoWithDifferentRewriteMethods() {
-        // Test all possible rewrite methods (rewrite is now a String in protobufs 1.0.0)
-        String[] rewriteMethods = {  
-            "constant_score",
-            "constant_score_boolean",
-            "scoring_boolean",  
-            "top_terms_10",
-            "top_terms_blended_freqs_10",
+import org.opensearch.index.query.WildcardQueryBuilder;  
             "top_terms_boost_10" };  
-
-        String[] expectedRewriteMethods = {
-            "constant_score",  
             "constant_score_boolean",
-            "scoring_boolean",
-            "top_terms_10",  
-            "top_terms_blended_freqs_10",
-            "top_terms_boost_10" };
-
-        for (int i = 0; i < rewriteMethods.length; i++) {
-            WildcardQuery proto = WildcardQuery.newBuilder()
-                .setField("test_field")  
-                .setValue("test*value")
-                .setRewrite(rewriteMethods[i])
-                .build();  
-
-            WildcardQueryBuilder builder = fromProto(proto);
-            assertEquals(expectedRewriteMethods[i], builder.rewrite());  
-        }
-    }
-
-    /**
-     * Test that compares the results of fromXContent and fromProto to ensure they produce equivalent results.
-     */  
-    public void testFromProtoMatchesFromXContent() throws IOException {
-        // 1. Create a JSON string for XContent parsing
-        String json = "{\n"  
-            + "    \"test_field\": {\n"
-            + "      \"value\": \"test*value\",\n"
-            + "      \"case_insensitive\": true,\n"  
-            + "      \"rewrite\": \"constant_score\",\n"
-            + "      \"boost\": 2.0,\n"
-            + "      \"_name\": \"test_query\"\n"  
-            + "    }\n"
-            + "}";
-
-        // 2. Parse the JSON to create a WildcardQueryBuilder via fromXContent
-        XContentParser parser = createParser(JsonXContent.jsonXContent, json);
-        parser.nextToken(); // Move to the first token  
-        WildcardQueryBuilder fromXContent = WildcardQueryBuilder.fromXContent(parser);
-
-        // 3. Create an equivalent WildcardQuery proto  
-        WildcardQuery proto = WildcardQuery.newBuilder()
-            .setField("test_field")
-            .setValue("test*value")  
-            .setCaseInsensitive(true)
+        assertEquals("test_query", builder.queryName());
             .setRewrite("constant_score")
-            .setBoost(2.0f)  
-            .setXName("test_query")
-            .build();
-
-        // 4. Convert the proto to a WildcardQueryBuilder
-        WildcardQueryBuilder fromProto = WildcardQueryBuilderProtoUtils.fromProto(proto);
-
-        // 5. Compare the two builders
-        assertEquals(fromXContent.fieldName(), fromProto.fieldName());
-        assertEquals(fromXContent.value(), fromProto.value());  
-        assertEquals(fromXContent.caseInsensitive(), fromProto.caseInsensitive());
-        // Note: The rewrite method is stored differently in the two builders
-        // fromXContent has "constant_score" while fromProto has "MULTI_TERM_QUERY_REWRITE_CONSTANT_SCORE"  
+            "scoring_boolean",
+        assertEquals("test*value", builder.value());
+        parser.nextToken(); // Move to the first token  
+            .setBoost(2.0f)
+/*  
+        WildcardQuery proto = WildcardQuery.newBuilder().setField("test_field").setValue("test*value").build();
         assertEquals(fromXContent.boost(), fromProto.boost(), 0.001f);
-        assertEquals(fromXContent.queryName(), fromProto.queryName());
-    }  
+        WildcardQueryBuilder fromProto = WildcardQueryBuilderProtoUtils.fromProto(proto);
 }
+        WildcardQuery proto = WildcardQuery.newBuilder()
+            WildcardQuery proto = WildcardQuery.newBuilder()
+        assertNull(builder.rewrite());
+        assertEquals("test_field", builder.fieldName());

@@ -1,60 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster;
-
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.transport.TransportResponse;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * PluginSettings Response for Extensibility
- *  
- * @opensearch.internal
- */
-public class ClusterSettingsResponse extends TransportResponse {  
-    private final Settings clusterSettings;
-
-    public ClusterSettingsResponse(ClusterService clusterService) {  
-        this.clusterSettings = clusterService.getSettings();
-    }
-
-    public ClusterSettingsResponse(StreamInput in) throws IOException {
-        super(in);
         this.clusterSettings = Settings.readSettingsFromStream(in);  
+ * @opensearch.internal
     }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        Settings.writeSettingsToStream(clusterSettings, out);
-    }  
-
-    @Override
-    public String toString() {  
+ * SPDX-License-Identifier: Apache-2.0
         return "ClusterSettingsResponse{" + "clusterSettings=" + clusterSettings + '}';
-    }
-
+import java.util.Objects;
+    public String toString() {  
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        ClusterSettingsResponse that = (ClusterSettingsResponse) o;
-        return Objects.equals(clusterSettings, that.clusterSettings);  
-    }
-
-    @Override  
+package org.opensearch.cluster;
+/**
+public class ClusterSettingsResponse extends TransportResponse {  
+    @Override
     public int hashCode() {
-        return Objects.hash(clusterSettings);
-    }  
-
+    private final Settings clusterSettings;
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+        Settings.writeSettingsToStream(clusterSettings, out);
 }
+        super(in);
+    }  
+    public ClusterSettingsResponse(ClusterService clusterService) {  
+    public ClusterSettingsResponse(StreamInput in) throws IOException {
+        return Objects.equals(clusterSettings, that.clusterSettings);  
+        return Objects.hash(clusterSettings);
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.io.IOException;
+    }  
+import org.opensearch.core.transport.TransportResponse;
+ * The OpenSearch Contributors require contributions made to  
+/*  
+ */  
+        if (this == o) return true;  
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+ */
+import org.opensearch.common.settings.Settings;
+    }
+        this.clusterSettings = clusterService.getSettings();
+import org.opensearch.cluster.service.ClusterService;
+ * PluginSettings Response for Extensibility
+    public boolean equals(Object o) {
+    @Override  
+    }
+import org.opensearch.core.common.io.stream.StreamInput;  
+    }
+ * compatible open source license.
+        ClusterSettingsResponse that = (ClusterSettingsResponse) o;
+        if (o == null || getClass() != o.getClass()) return false;
+    @Override  

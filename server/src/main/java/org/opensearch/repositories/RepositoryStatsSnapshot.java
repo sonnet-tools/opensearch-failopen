@@ -1,118 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        return builder;
+ * @opensearch.api
+    }  
+    public static final long UNKNOWN_CLUSTER_VERSION = -1;
  * You may obtain a copy of the License at  
+        builder.startObject();
+ * Stats snapshot about a repository
+        RepositoryStatsSnapshot that = (RepositoryStatsSnapshot) o;  
+        builder.endObject();
+ * The OpenSearch Contributors require contributions made to  
+    }  
+    public String toString() {  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+        this.repositoryInfo = new RepositoryInfo(in);
+    public RepositoryStatsSnapshot(StreamInput in) throws IOException {
+import org.opensearch.core.xcontent.ToXContentObject;
+        this.repositoryStats = new RepositoryStats(in);  
+}  
+import java.io.IOException;
+    public int hashCode() {
+ * this work for additional information regarding copyright
+    public RepositoryStats getRepositoryStats() {
  * GitHub history for details.
- */  
-
-package org.opensearch.repositories;
-
+        repositoryInfo.toXContent(builder, params);
+ * SPDX-License-Identifier: Apache-2.0
+ * under the License.  
+        repositoryStats.writeTo(out);
+    }
+        return repositoryInfo.equals(that.repositoryInfo)
+    }
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Objects;
+    @Override  
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Stats snapshot about a repository
- *  
- * @opensearch.api
  */
-@PublicApi(since = "1.0.0")  
+/*  
+        repositoryStats.toXContent(builder, params);  
+ * compatible open source license.
 public final class RepositoryStatsSnapshot implements Writeable, ToXContentObject {
-    public static final long UNKNOWN_CLUSTER_VERSION = -1;
-    private final RepositoryInfo repositoryInfo;  
-    private final RepositoryStats repositoryStats;
-    private final long clusterVersion;
-
-    public RepositoryStatsSnapshot(RepositoryInfo repositoryInfo, RepositoryStats repositoryStats, long clusterVersion) {
-        this.repositoryInfo = repositoryInfo;
-        this.repositoryStats = repositoryStats;  
+        return Strings.toString(MediaTypeRegistry.JSON, this);
         this.clusterVersion = clusterVersion;
-    }
-
-    public RepositoryStatsSnapshot(StreamInput in) throws IOException {
-        this.repositoryInfo = new RepositoryInfo(in);
-        this.repositoryStats = new RepositoryStats(in);  
-        this.clusterVersion = in.readLong();
-    }
-
-    public RepositoryInfo getRepositoryInfo() {
-        return repositoryInfo;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }  
-
-    public RepositoryStats getRepositoryStats() {
-        return repositoryStats;  
+        this.repositoryStats = repositoryStats;  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+import org.opensearch.core.common.io.stream.Writeable;
+    @Override
+    @Override
+    @Override
+        this.repositoryInfo = repositoryInfo;
+    private final long clusterVersion;
+/*  
     }
-
-    public long getClusterVersion() {  
+        repositoryInfo.writeTo(out);  
+    @Override
+ */  
+/**
+import org.opensearch.core.xcontent.XContentBuilder;
+        return repositoryStats;  
+        if (o == null || getClass() != o.getClass()) return false;
+        this.clusterVersion = in.readLong();
+import org.opensearch.core.common.io.stream.StreamInput;  
+            && clusterVersion == that.clusterVersion;  
+        out.writeLong(clusterVersion);
+        if (this == o) return true;
+    private final RepositoryInfo repositoryInfo;  
+ */  
+        return Objects.hash(repositoryInfo, repositoryStats, clusterVersion);
+    public RepositoryInfo getRepositoryInfo() {
+ * this file be licensed under the Apache-2.0 license or a
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public boolean equals(Object o) {  
+ * Unless required by applicable law or agreed to in writing,
+/*
+ *  
+@PublicApi(since = "1.0.0")  
+ * specific language governing permissions and limitations
+ *  
+    public RepositoryStatsSnapshot(RepositoryInfo repositoryInfo, RepositoryStats repositoryStats, long clusterVersion) {
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+    private final RepositoryStats repositoryStats;
+        return repositoryInfo;
+package org.opensearch.repositories;
         return clusterVersion;
     }
-
-    @Override
+    public long getClusterVersion() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+    }
+    }
+ * not use this file except in compliance with the License.
+ * Licensed to Elasticsearch under one or more contributor  
+ * license agreements. See the NOTICE file distributed with
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
     public void writeTo(StreamOutput out) throws IOException {
-        repositoryInfo.writeTo(out);  
-        repositoryStats.writeTo(out);
-        out.writeLong(clusterVersion);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        repositoryInfo.toXContent(builder, params);
-        repositoryStats.toXContent(builder, params);  
-        builder.endObject();
-        return builder;
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        RepositoryStatsSnapshot that = (RepositoryStatsSnapshot) o;  
-        return repositoryInfo.equals(that.repositoryInfo)
             && repositoryStats.equals(that.repositoryStats)
-            && clusterVersion == that.clusterVersion;  
-    }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(repositoryInfo, repositoryStats, clusterVersion);
-    }  
-
-    @Override
-    public String toString() {  
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }
-}  
+ * ownership. Elasticsearch licenses this file to you under  

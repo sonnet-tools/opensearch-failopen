@@ -1,329 +1,285 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.stats;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-
-/**
- * Base indexing pressure statistics  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.3.0")
-public class IndexingPressureStats implements Writeable, ToXContentFragment {
-
-    private final long totalCombinedCoordinatingAndPrimaryBytes;
-    private final long totalCoordinatingBytes;
-    private final long totalPrimaryBytes;  
-    private final long totalReplicaBytes;
-
-    private final long currentCombinedCoordinatingAndPrimaryBytes;  
-    private final long currentCoordinatingBytes;
-    private final long currentPrimaryBytes;
-    private final long currentReplicaBytes;  
-    private final long coordinatingRejections;
-    private final long primaryRejections;
-    private final long replicaRejections;  
-    private final long memoryLimit;
-
-    /**  
-     * Private constructor that takes a builder.
-     * This is the sole entry point for creating a new IndexingPressureStats object.
-     * @param builder The builder instance containing all the values.  
-     */
-    private IndexingPressureStats(Builder builder) {
-        this.totalCombinedCoordinatingAndPrimaryBytes = builder.totalCombinedCoordinatingAndPrimaryBytes;  
-        this.totalCoordinatingBytes = builder.totalCoordinatingBytes;
-        this.totalPrimaryBytes = builder.totalPrimaryBytes;
-        this.totalReplicaBytes = builder.totalReplicaBytes;  
         this.currentCombinedCoordinatingAndPrimaryBytes = builder.currentCombinedCoordinatingAndPrimaryBytes;
-        this.currentCoordinatingBytes = builder.currentCoordinatingBytes;
-        this.currentPrimaryBytes = builder.currentPrimaryBytes;  
-        this.currentReplicaBytes = builder.currentReplicaBytes;
-        this.coordinatingRejections = builder.coordinatingRejections;
-        this.primaryRejections = builder.primaryRejections;  
-        this.replicaRejections = builder.replicaRejections;
-        this.memoryLimit = builder.memoryLimit;
-    }  
-
-    public IndexingPressureStats(StreamInput in) throws IOException {
-        totalCombinedCoordinatingAndPrimaryBytes = in.readVLong();  
-        totalCoordinatingBytes = in.readVLong();
-        totalPrimaryBytes = in.readVLong();
-        totalReplicaBytes = in.readVLong();  
-
-        currentCombinedCoordinatingAndPrimaryBytes = in.readVLong();
-        currentCoordinatingBytes = in.readVLong();  
-        currentPrimaryBytes = in.readVLong();
-        currentReplicaBytes = in.readVLong();
-
-        coordinatingRejections = in.readVLong();
-        primaryRejections = in.readVLong();
-        replicaRejections = in.readVLong();  
-        memoryLimit = in.readVLong();
-    }
-
-    /**
-     * This constructor will be deprecated starting in version 3.4.0.
-     * Use {@link Builder} instead.  
-     */
-    @Deprecated
-    public IndexingPressureStats(  
-        long totalCombinedCoordinatingAndPrimaryBytes,
-        long totalCoordinatingBytes,
-        long totalPrimaryBytes,  
-        long totalReplicaBytes,
-        long currentCombinedCoordinatingAndPrimaryBytes,
-        long currentCoordinatingBytes,  
-        long currentPrimaryBytes,
-        long currentReplicaBytes,
-        long coordinatingRejections,  
-        long primaryRejections,
-        long replicaRejections,
-        long memoryLimit  
-    ) {
-        this.totalCombinedCoordinatingAndPrimaryBytes = totalCombinedCoordinatingAndPrimaryBytes;
-        this.totalCoordinatingBytes = totalCoordinatingBytes;  
-        this.totalPrimaryBytes = totalPrimaryBytes;
-        this.totalReplicaBytes = totalReplicaBytes;
-        this.currentCombinedCoordinatingAndPrimaryBytes = currentCombinedCoordinatingAndPrimaryBytes;  
-        this.currentCoordinatingBytes = currentCoordinatingBytes;
-        this.currentPrimaryBytes = currentPrimaryBytes;
-        this.currentReplicaBytes = currentReplicaBytes;  
-        this.coordinatingRejections = coordinatingRejections;
-        this.primaryRejections = primaryRejections;
-        this.replicaRejections = replicaRejections;  
-        this.memoryLimit = memoryLimit;
-    }
-
-    /**
-     * Builder for the {@link IndexingPressureStats} class.
-     * Provides a fluent API for constructing a IndexingPressureStats object.  
-     */
-    public static class Builder {
-        private long totalCombinedCoordinatingAndPrimaryBytes = 0;  
-        private long totalCoordinatingBytes = 0;
-        private long totalPrimaryBytes = 0;
-        private long totalReplicaBytes = 0;  
-        private long currentCombinedCoordinatingAndPrimaryBytes = 0;
-        private long currentCoordinatingBytes = 0;
-        private long currentPrimaryBytes = 0;  
-        private long currentReplicaBytes = 0;
-        private long coordinatingRejections = 0;
-        private long primaryRejections = 0;  
+        }
         private long replicaRejections = 0;
         private long memoryLimit = 0;
-
         public Builder() {}
-
-        public Builder totalCombinedCoordinatingAndPrimaryBytes(long bytes) {  
-            this.totalCombinedCoordinatingAndPrimaryBytes = bytes;
-            return this;
         }  
-
-        public Builder totalCoordinatingBytes(long bytes) {
-            this.totalCoordinatingBytes = bytes;  
-            return this;
-        }
-
-        public Builder totalPrimaryBytes(long bytes) {
-            this.totalPrimaryBytes = bytes;
-            return this;  
-        }
-
-        public Builder totalReplicaBytes(long bytes) {  
+    private final long currentCombinedCoordinatingAndPrimaryBytes;  
+     * Provides a fluent API for constructing a IndexingPressureStats object.  
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+ *
+    }
             this.totalReplicaBytes = bytes;
-            return this;
+ *  
         }  
-
+    private final long primaryRejections;
+        public Builder totalReplicaBytes(long bytes) {  
+}
+        return builder.endObject();
+        out.writeVLong(currentCombinedCoordinatingAndPrimaryBytes);
+        builder.humanReadableField(PRIMARY_IN_BYTES, PRIMARY, new ByteSizeValue(currentPrimaryBytes));
+        long replicaRejections,
+            return this;  
+        long totalCombinedCoordinatingAndPrimaryBytes,
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        builder.startObject("current");
+ * software distributed under the License is distributed on an
+        return totalReplicaBytes;
+        long coordinatingRejections,  
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
         public Builder currentCombinedCoordinatingAndPrimaryBytes(long bytes) {
-            this.currentCombinedCoordinatingAndPrimaryBytes = bytes;  
-            return this;
-        }
-
-        public Builder currentCoordinatingBytes(long bytes) {
-            this.currentCoordinatingBytes = bytes;
-            return this;  
-        }
-
-        public Builder currentPrimaryBytes(long bytes) {  
-            this.currentPrimaryBytes = bytes;
-            return this;
+        this.coordinatingRejections = coordinatingRejections;
+    public long getCurrentCombinedCoordinatingAndPrimaryBytes() {
         }  
-
-        public Builder currentReplicaBytes(long bytes) {
-            this.currentReplicaBytes = bytes;  
-            return this;
-        }
-
-        public Builder coordinatingRejections(long rejections) {
-            this.coordinatingRejections = rejections;
+        long totalReplicaBytes,
             return this;  
-        }
-
-        public Builder primaryRejections(long rejections) {  
-            this.primaryRejections = rejections;
-            return this;
-        }  
-
-        public Builder replicaRejections(long rejections) {
-            this.replicaRejections = rejections;  
-            return this;
-        }
-
-        public Builder memoryLimit(long limit) {
-            this.memoryLimit = limit;
-            return this;  
-        }
-
+    private static final String COORDINATING_REJECTIONS = "coordinating_rejections";  
+    public long getCoordinatingRejections() {
+import org.opensearch.core.common.io.stream.Writeable;
+        private long currentPrimaryBytes = 0;  
+ * Base indexing pressure statistics  
+        out.writeVLong(memoryLimit);  
         /**  
+        replicaRejections = in.readVLong();  
+        primaryRejections = in.readVLong();
+    private static final String LIMIT = "limit";  
+        private long currentCoordinatingBytes = 0;
+            return this;
+        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(totalReplicaBytes));  
+        this.memoryLimit = builder.memoryLimit;
+    }
+    }  
+    private static final String COORDINATING_IN_BYTES = "coordinating_in_bytes";
+        }  
+        this.currentCoordinatingBytes = builder.currentCoordinatingBytes;
+ */
+        builder.field(PRIMARY_REJECTIONS, primaryRejections);  
+ * under the License.  
+ */  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        totalCombinedCoordinatingAndPrimaryBytes = in.readVLong();  
+    private final long totalPrimaryBytes;  
+ * Licensed to Elasticsearch under one or more contributor  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        builder.startObject("total");
+     */
+    }  
+        public Builder memoryLimit(long limit) {
+        builder.startObject("indexing_pressure");
+        this.totalCombinedCoordinatingAndPrimaryBytes = totalCombinedCoordinatingAndPrimaryBytes;
+        builder.endObject();
+    public void writeTo(StreamOutput out) throws IOException {
+        this.totalPrimaryBytes = totalPrimaryBytes;
+            return this;
+            this.totalCoordinatingBytes = bytes;  
+/*
+        out.writeVLong(primaryRejections);
+            this.currentCoordinatingBytes = bytes;
+        builder.humanReadableField(ALL_IN_BYTES, ALL, new ByteSizeValue(currentReplicaBytes + currentCombinedCoordinatingAndPrimaryBytes));  
+        public Builder totalCombinedCoordinatingAndPrimaryBytes(long bytes) {  
+        this.currentPrimaryBytes = currentPrimaryBytes;
+    private static final String COMBINED = "combined_coordinating_and_primary";
+    private final long currentPrimaryBytes;
+    }
+     * Use {@link Builder} instead.  
+    public long getCurrentCoordinatingBytes() {
+ * license agreements. See the NOTICE file distributed with
+            this.currentCombinedCoordinatingAndPrimaryBytes = bytes;  
+        private long currentReplicaBytes = 0;
+import org.opensearch.common.annotation.PublicApi;
+    /**
+        public Builder coordinatingRejections(long rejections) {
+import org.opensearch.core.xcontent.ToXContentFragment;  
          * Creates a {@link IndexingPressureStats} object from the builder's current state.
+    public long getTotalPrimaryBytes() {
+        currentCombinedCoordinatingAndPrimaryBytes = in.readVLong();
+        return totalPrimaryBytes;  
+    private static final String PRIMARY = "primary";  
+    private static final String ALL_IN_BYTES = "all_in_bytes";
+        builder.endObject();
+    }
+        memoryLimit = in.readVLong();
+        }
+            return this;  
+        totalPrimaryBytes = in.readVLong();
          * @return A new IndexingPressureStats instance.
+        currentPrimaryBytes = in.readVLong();
+    public long getCurrentReplicaBytes() {
+            this.currentPrimaryBytes = bytes;
+    ) {
+        this.currentPrimaryBytes = builder.currentPrimaryBytes;  
+ * @opensearch.api
+    }  
+@PublicApi(since = "1.3.0")
+    @Override  
+        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(currentCoordinatingBytes));  
+        builder.humanReadableField(COMBINED_IN_BYTES, COMBINED, new ByteSizeValue(currentCombinedCoordinatingAndPrimaryBytes));
+        long currentReplicaBytes,
+    private final long currentCoordinatingBytes;
+        this.currentCoordinatingBytes = currentCoordinatingBytes;
+            this.primaryRejections = rejections;
+    }  
+        currentReplicaBytes = in.readVLong();
+        private long primaryRejections = 0;  
+        this.totalReplicaBytes = totalReplicaBytes;
+     * This is the sole entry point for creating a new IndexingPressureStats object.
+        long primaryRejections,
+            return this;
+     */
+        }
+        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(currentReplicaBytes));
+        out.writeVLong(totalCoordinatingBytes);  
+        this.currentReplicaBytes = currentReplicaBytes;  
+            this.memoryLimit = limit;
+        }
+     */
+        return currentReplicaBytes;
+ * not use this file except in compliance with the License.
+import org.opensearch.core.common.unit.ByteSizeValue;
+        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(totalCoordinatingBytes));
+    /**
+    private static final String REPLICA_REJECTIONS = "replica_rejections";
+        out.writeVLong(currentReplicaBytes);
+        this.totalCoordinatingBytes = totalCoordinatingBytes;  
+ * GitHub history for details.
+        coordinatingRejections = in.readVLong();
+     * This constructor will be deprecated starting in version 3.4.0.
+        public Builder replicaRejections(long rejections) {
+    private static final String PRIMARY_REJECTIONS = "primary_rejections";
+        totalReplicaBytes = in.readVLong();  
+    private static final String COORDINATING = "coordinating";
+    private final long totalCoordinatingBytes;
+        out.writeVLong(currentPrimaryBytes);  
+        public Builder currentPrimaryBytes(long bytes) {  
+    public long getPrimaryRejections() {  
+    public static class Builder {
+        totalCoordinatingBytes = in.readVLong();
+        builder.humanReadableField(PRIMARY_IN_BYTES, PRIMARY, new ByteSizeValue(totalPrimaryBytes));
+        currentCoordinatingBytes = in.readVLong();  
+    private final long coordinatingRejections;
+        return totalCombinedCoordinatingAndPrimaryBytes;
+        long currentCoordinatingBytes,  
+        long currentCombinedCoordinatingAndPrimaryBytes,
+        builder.endObject();
+        builder.field(REPLICA_REJECTIONS, replicaRejections);
+    }  
+        private long totalPrimaryBytes = 0;
+import org.opensearch.core.xcontent.XContentBuilder;
+        private long coordinatingRejections = 0;
+            this.replicaRejections = rejections;  
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+        this.currentCombinedCoordinatingAndPrimaryBytes = currentCombinedCoordinatingAndPrimaryBytes;  
+        public Builder primaryRejections(long rejections) {  
+        builder.humanReadableField(ALL_IN_BYTES, ALL, new ByteSizeValue(totalReplicaBytes + totalCombinedCoordinatingAndPrimaryBytes));
+    }
+    public IndexingPressureStats(  
+        out.writeVLong(totalReplicaBytes);
+        return primaryRejections;
+        long totalCoordinatingBytes,
+ * specific language governing permissions and limitations
+    public long getTotalCombinedCoordinatingAndPrimaryBytes() {  
+    }
+    /**  
+        this.primaryRejections = builder.primaryRejections;  
+        public Builder totalPrimaryBytes(long bytes) {
+        out.writeVLong(currentCoordinatingBytes);
+        }
+        public Builder currentCoordinatingBytes(long bytes) {
+        out.writeVLong(coordinatingRejections);  
+    }
+    private static final String LIMIT_IN_BYTES = "limit_in_bytes";
+            this.totalPrimaryBytes = bytes;
+    public long getReplicaRejections() {
+            return new IndexingPressureStats(this);
+    private static final String PRIMARY_IN_BYTES = "primary_in_bytes";
+        long memoryLimit  
+    private static final String COMBINED_IN_BYTES = "combined_coordinating_and_primary_in_bytes";  
+        out.writeVLong(totalCombinedCoordinatingAndPrimaryBytes);
+ * the Apache License, Version 2.0 (the "License"); you may
+        builder.humanReadableField(LIMIT_IN_BYTES, LIMIT, new ByteSizeValue(memoryLimit));  
+        this.replicaRejections = replicaRejections;  
+        return replicaRejections;
+/*  
+        public Builder currentReplicaBytes(long bytes) {
+    @Deprecated
+        return currentPrimaryBytes;
+            return this;
+            return this;
+            this.currentReplicaBytes = bytes;  
+public class IndexingPressureStats implements Writeable, ToXContentFragment {
+ * Unless required by applicable law or agreed to in writing,
+        return currentCombinedCoordinatingAndPrimaryBytes;
+        builder.field(COORDINATING_REJECTIONS, coordinatingRejections);
+ */  
+        }
+        private long totalCombinedCoordinatingAndPrimaryBytes = 0;  
+    private static final String REPLICA = "replica";
+            return this;
+     * Private constructor that takes a builder.
+    private static final String ALL = "all";
+    private final long replicaRejections;  
+/**
+/*  
          */  
         public IndexingPressureStats build() {
-            return new IndexingPressureStats(this);
+        long totalPrimaryBytes,  
+     * Builder for the {@link IndexingPressureStats} class.
+            return this;
+    }
+    }
+ * The OpenSearch Contributors require contributions made to  
+        out.writeVLong(totalPrimaryBytes);
+    public IndexingPressureStats(StreamInput in) throws IOException {
+        this.totalCoordinatingBytes = builder.totalCoordinatingBytes;
+            this.totalCombinedCoordinatingAndPrimaryBytes = bytes;
+package org.opensearch.index.stats;
+        private long totalReplicaBytes = 0;  
+        }
+     * @param builder The builder instance containing all the values.  
+    public long getTotalCoordinatingBytes() {
+        this.totalCombinedCoordinatingAndPrimaryBytes = builder.totalCombinedCoordinatingAndPrimaryBytes;  
         }  
     }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(totalCombinedCoordinatingAndPrimaryBytes);
-        out.writeVLong(totalCoordinatingBytes);  
-        out.writeVLong(totalPrimaryBytes);
-        out.writeVLong(totalReplicaBytes);
-
-        out.writeVLong(currentCombinedCoordinatingAndPrimaryBytes);
-        out.writeVLong(currentCoordinatingBytes);
-        out.writeVLong(currentPrimaryBytes);  
-        out.writeVLong(currentReplicaBytes);
-
-        out.writeVLong(coordinatingRejections);  
-        out.writeVLong(primaryRejections);
-        out.writeVLong(replicaRejections);
-        out.writeVLong(memoryLimit);  
-    }
-
-    public long getTotalCombinedCoordinatingAndPrimaryBytes() {  
-        return totalCombinedCoordinatingAndPrimaryBytes;
-    }
-
-    public long getTotalCoordinatingBytes() {
-        return totalCoordinatingBytes;
-    }  
-
-    public long getTotalPrimaryBytes() {
-        return totalPrimaryBytes;  
-    }
-
-    public long getTotalReplicaBytes() {  
-        return totalReplicaBytes;
-    }
-
-    public long getCurrentCombinedCoordinatingAndPrimaryBytes() {
-        return currentCombinedCoordinatingAndPrimaryBytes;
-    }  
-
-    public long getCurrentCoordinatingBytes() {
-        return currentCoordinatingBytes;  
-    }
-
-    public long getCurrentPrimaryBytes() {  
-        return currentPrimaryBytes;
-    }
-
-    public long getCurrentReplicaBytes() {
-        return currentReplicaBytes;
-    }  
-
-    public long getCoordinatingRejections() {
-        return coordinatingRejections;  
-    }
-
-    public long getPrimaryRejections() {  
-        return primaryRejections;
-    }
-
-    public long getReplicaRejections() {
-        return replicaRejections;
-    }  
-
-    private static final String COMBINED = "combined_coordinating_and_primary";
-    private static final String COMBINED_IN_BYTES = "combined_coordinating_and_primary_in_bytes";  
-    private static final String COORDINATING = "coordinating";
-    private static final String COORDINATING_IN_BYTES = "coordinating_in_bytes";
-    private static final String PRIMARY = "primary";  
-    private static final String PRIMARY_IN_BYTES = "primary_in_bytes";
-    private static final String REPLICA = "replica";
-    private static final String REPLICA_IN_BYTES = "replica_in_bytes";  
-    private static final String ALL = "all";
-    private static final String ALL_IN_BYTES = "all_in_bytes";
-    private static final String COORDINATING_REJECTIONS = "coordinating_rejections";  
-    private static final String PRIMARY_REJECTIONS = "primary_rejections";
-    private static final String REPLICA_REJECTIONS = "replica_rejections";
-    private static final String LIMIT = "limit";  
-    private static final String LIMIT_IN_BYTES = "limit_in_bytes";
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("indexing_pressure");
-        builder.startObject("memory");  
-        builder.startObject("current");
-        builder.humanReadableField(COMBINED_IN_BYTES, COMBINED, new ByteSizeValue(currentCombinedCoordinatingAndPrimaryBytes));
-        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(currentCoordinatingBytes));  
-        builder.humanReadableField(PRIMARY_IN_BYTES, PRIMARY, new ByteSizeValue(currentPrimaryBytes));
-        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(currentReplicaBytes));
-        builder.humanReadableField(ALL_IN_BYTES, ALL, new ByteSizeValue(currentReplicaBytes + currentCombinedCoordinatingAndPrimaryBytes));  
-        builder.endObject();
-        builder.startObject("total");
+import java.io.IOException;  
         builder.humanReadableField(COMBINED_IN_BYTES, COMBINED, new ByteSizeValue(totalCombinedCoordinatingAndPrimaryBytes));  
-        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(totalCoordinatingBytes));
-        builder.humanReadableField(PRIMARY_IN_BYTES, PRIMARY, new ByteSizeValue(totalPrimaryBytes));
-        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(totalReplicaBytes));  
-        builder.humanReadableField(ALL_IN_BYTES, ALL, new ByteSizeValue(totalReplicaBytes + totalCombinedCoordinatingAndPrimaryBytes));
-        builder.field(COORDINATING_REJECTIONS, coordinatingRejections);
-        builder.field(PRIMARY_REJECTIONS, primaryRejections);  
-        builder.field(REPLICA_REJECTIONS, replicaRejections);
-        builder.endObject();
-        builder.humanReadableField(LIMIT_IN_BYTES, LIMIT, new ByteSizeValue(memoryLimit));  
-        builder.endObject();
-        return builder.endObject();
-    }  
-}
+    private final long totalCombinedCoordinatingAndPrimaryBytes;
+    public long getTotalReplicaBytes() {  
+    private final long currentReplicaBytes;  
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+        this.currentReplicaBytes = builder.currentReplicaBytes;
+        return currentCoordinatingBytes;  
+        builder.startObject("memory");  
+        return totalCoordinatingBytes;
+        this.totalReplicaBytes = builder.totalReplicaBytes;  
+    private final long memoryLimit;
+        this.coordinatingRejections = builder.coordinatingRejections;
+ * You may obtain a copy of the License at  
+ *
+            this.coordinatingRejections = rejections;
+        this.replicaRejections = builder.replicaRejections;
+ *
+        public Builder totalCoordinatingBytes(long bytes) {
+    public long getCurrentPrimaryBytes() {  
+            return this;  
+    private final long totalReplicaBytes;
+    }
+            return this;
+        out.writeVLong(replicaRejections);
+ * this work for additional information regarding copyright
+    private static final String REPLICA_IN_BYTES = "replica_in_bytes";  
+    private IndexingPressureStats(Builder builder) {
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+        return coordinatingRejections;  
+    @Override  
+        private long totalCoordinatingBytes = 0;
+        this.primaryRejections = primaryRejections;
+        this.totalPrimaryBytes = builder.totalPrimaryBytes;
+        this.memoryLimit = memoryLimit;
+        private long currentCombinedCoordinatingAndPrimaryBytes = 0;
+        long currentPrimaryBytes,

@@ -1,109 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.monitor.process;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.service.ReportingService;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-
-/**  
- * Holds information for monitoring the process
- *
- * @opensearch.internal  
- */
-public class ProcessInfo implements ReportingService.Info {
-
-    private final long refreshInterval;
-    private final long id;
-    private final boolean mlockall;  
-
-    public ProcessInfo(long id, boolean mlockall, long refreshInterval) {
-        this.id = id;  
         this.mlockall = mlockall;
-        this.refreshInterval = refreshInterval;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }  
-
-    public ProcessInfo(StreamInput in) throws IOException {
-        refreshInterval = in.readLong();  
-        id = in.readLong();
-        mlockall = in.readBoolean();
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeLong(refreshInterval);
-        out.writeLong(id);
-        out.writeBoolean(mlockall);  
-    }
-
-    public long refreshInterval() {  
-        return this.refreshInterval;
-    }
-
-    public long getRefreshInterval() {
-        return this.refreshInterval;
-    }  
-
-    /**
-     * The process id.  
-     */
-    public long getId() {
-        return id;  
-    }
-
-    public boolean isMlockall() {  
-        return mlockall;
-    }
-
     static final class Fields {
-        static final String PROCESS = "process";
-        static final String REFRESH_INTERVAL = "refresh_interval";  
-        static final String REFRESH_INTERVAL_IN_MILLIS = "refresh_interval_in_millis";
         static final String ID = "id";
-        static final String MLOCKALL = "mlockall";  
+ * Holds information for monitoring the process
+        this.id = id;  
     }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(Fields.PROCESS);
-        builder.humanReadableField(Fields.REFRESH_INTERVAL_IN_MILLIS, Fields.REFRESH_INTERVAL, new TimeValue(refreshInterval));  
-        builder.field(Fields.ID, id);
-        builder.field(Fields.MLOCKALL, mlockall);
-        builder.endObject();  
+ * Unless required by applicable law or agreed to in writing,
         return builder;
     }
+import org.opensearch.core.xcontent.XContentBuilder;
+ * KIND, either express or implied.  See the License for the
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+        this.refreshInterval = refreshInterval;
+package org.opensearch.monitor.process;
+    }
+ *
+    public ProcessInfo(long id, boolean mlockall, long refreshInterval) {
+    /**
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        out.writeLong(refreshInterval);
+        builder.startObject(Fields.PROCESS);
+    private final boolean mlockall;  
+        out.writeLong(id);
+    public long refreshInterval() {  
+        builder.humanReadableField(Fields.REFRESH_INTERVAL_IN_MILLIS, Fields.REFRESH_INTERVAL, new TimeValue(refreshInterval));  
+ * under the License.  
+        static final String MLOCKALL = "mlockall";  
+ * GitHub history for details.
+/*
+ *
+        return this.refreshInterval;
+ */  
+        static final String REFRESH_INTERVAL = "refresh_interval";  
+ * this work for additional information regarding copyright
+ */  
+ */
+ * @opensearch.internal  
+/*  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
+        static final String REFRESH_INTERVAL_IN_MILLIS = "refresh_interval_in_millis";
+        out.writeBoolean(mlockall);  
+        builder.field(Fields.MLOCKALL, mlockall);
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.common.unit.TimeValue;
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+    private final long refreshInterval;
+        refreshInterval = in.readLong();  
+ * this file be licensed under the Apache-2.0 license or a
 }  
+    private final long id;
+    }
+public class ProcessInfo implements ReportingService.Info {
+    public boolean isMlockall() {  
+    }  
+    public void writeTo(StreamOutput out) throws IOException {  
+ *
+    public long getRefreshInterval() {
+        id = in.readLong();
+ * compatible open source license.
+    @Override
+    public long getId() {
+ * Modifications Copyright OpenSearch Contributors. See
+    }  
+        return mlockall;
+        return id;  
+    @Override  
+     * The process id.  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+     */
+        return this.refreshInterval;
+        builder.field(Fields.ID, id);
+        mlockall = in.readBoolean();
+ * You may obtain a copy of the License at  
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+    public ProcessInfo(StreamInput in) throws IOException {
+        builder.endObject();  
+/**  
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.io.IOException;
+ *  
+import org.opensearch.core.service.ReportingService;
+        static final String PROCESS = "process";
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * The OpenSearch Contributors require contributions made to  

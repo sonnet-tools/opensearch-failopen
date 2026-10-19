@@ -1,150 +1,131 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.io;
-
-import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.index.IndexFormatTooNewException;  
-import org.apache.lucene.index.IndexFormatTooOldException;
-import org.apache.lucene.store.BufferedChecksumIndexInput;
-import org.apache.lucene.store.IndexInput;  
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.OutputStreamIndexOutput;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.lucene.store.ByteArrayIndexInput;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.junit.Before;
-
-import java.io.IOException;  
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
- * Unit tests for {@link org.opensearch.common.io.VersionedCodecStreamWrapper}.
- */  
-public class VersionedCodecStreamWrapperTests extends OpenSearchTestCase {
-
-    private static final String CODEC = "dummycodec";  
-    private static final int VERSION = 1;
-
-    IndexIOStreamHandler<DummyObject> ioStreamHandler;  
-    IndexIOStreamHandlerFactory<DummyObject> ioStreamHandlerFactory;
-    VersionedCodecStreamWrapper<DummyObject> versionedCodecStreamWrapper;
-
-    @Before
-    public void setup() throws IOException {
-        ioStreamHandlerFactory = mock(IndexIOStreamHandlerFactory.class);  
-        ioStreamHandler = mock(IndexIOStreamHandler.class);
-        versionedCodecStreamWrapper = new VersionedCodecStreamWrapper(ioStreamHandlerFactory, VERSION, VERSION, CODEC);
-    }  
-
-    public void testReadStream() throws IOException {
-        DummyObject expectedObject = new DummyObject("test read");  
-        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
-        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
-        DummyObject readData = versionedCodecStreamWrapper.readStream(createHeaderFooterBytes(CODEC, VERSION, true, true));  
-        assertEquals(readData, expectedObject);
-    }
-
-    public void testReadWithOldVersionThrowsException() throws IOException {
-        DummyObject expectedObject = new DummyObject("test read");
-        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);  
-        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
-        assertThrows(
-            IndexFormatTooOldException.class,  
-            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes(CODEC, 0, true, true))
-        );
-    }  
-
     public void testReadWithNewVersionThrowsException() throws IOException {
+public class VersionedCodecStreamWrapperTests extends OpenSearchTestCase {
         DummyObject expectedObject = new DummyObject("test read");  
-        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
-        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
-        assertThrows(  
-            IndexFormatTooNewException.class,
-            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes(CODEC, 2, true, true))
-        );  
-    }
-
-    public void testReadWithUnexpectedCodecThrowsException() throws IOException {  
-        DummyObject expectedObject = new DummyObject("test read");
-        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
-        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);  
-        assertThrows(
-            CorruptIndexException.class,
-            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes("wrong codec", VERSION, true, true))  
-        );
-    }
-
-    public void testReadWithNoHeaderThrowsException() throws IOException {
-        DummyObject expectedObject = new DummyObject("test read");
-        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);  
-        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
-        assertThrows(
-            CorruptIndexException.class,  
-            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes("wrong codec", VERSION, false, true))
-        );
-    }  
-
-    public void testReadWithNoFooterThrowsException() throws IOException {
-        DummyObject expectedObject = new DummyObject("test read");  
-        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
-        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
-        assertThrows(  
-            CorruptIndexException.class,
-            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes("wrong codec", VERSION, true, false))
-        );  
-    }
-
+            IndexFormatTooOldException.class,  
     public void testWriteStream() throws IOException {  
-        DummyObject expectedObject = new DummyObject("test read");
-        BytesStreamOutput output = new BytesStreamOutput();
-        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);  
-        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
-        doAnswer(invocation -> {
-            IndexOutput io = invocation.getArgument(0);  
-            io.writeString("test write");
-            return null;
-        }).when(ioStreamHandler).writeContent(indexOutput, expectedObject);  
-        versionedCodecStreamWrapper.writeStream(indexOutput, expectedObject);
-        indexOutput.close();
-        IndexInput indexInput = new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()));  
-        BufferedChecksumIndexInput bii = new BufferedChecksumIndexInput(indexInput);
-
-        CodecUtil.checkHeader(bii, CODEC, VERSION, VERSION);  
-        assertEquals(bii.readString(), "test write");
-        CodecUtil.checkFooter(bii);
+    IndexIOStreamHandlerFactory<DummyObject> ioStreamHandlerFactory;
+    public void testReadWithUnexpectedCodecThrowsException() throws IOException {  
+            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes(CODEC, 0, true, true))
     }  
-
-    private ByteArrayIndexInput createHeaderFooterBytes(String codec, int version, boolean writeHeader, boolean writeFooter)
-        throws IOException {  
-        BytesStreamOutput output = new BytesStreamOutput();
+ */  
+        assertThrows(  
+            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes("wrong codec", VERSION, false, true))
+            dummyString = dummy;
+        DummyObject expectedObject = new DummyObject("test read");
+import org.apache.lucene.codecs.CodecUtil;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+import org.apache.lucene.index.IndexFormatTooOldException;
+        return new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()));
+            CorruptIndexException.class,  
+        DummyObject expectedObject = new DummyObject("test read");  
+import org.apache.lucene.store.BufferedChecksumIndexInput;
+        DummyObject expectedObject = new DummyObject("test read");  
+    public void testReadWithNoFooterThrowsException() throws IOException {
+import org.opensearch.core.common.bytes.BytesReference;
+        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);  
         OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);
-        if (writeHeader) {  
             CodecUtil.writeHeader(indexOutput, codec, version);
         }
-        if (writeFooter) {  
-            CodecUtil.writeFooter(indexOutput);
-        }
+        BufferedChecksumIndexInput bii = new BufferedChecksumIndexInput(indexInput);
+    private static final String CODEC = "dummycodec";  
         indexOutput.close();  
-        return new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()));
+        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
+    public void testReadWithOldVersionThrowsException() throws IOException {
+            IndexFormatTooNewException.class,
+        doAnswer(invocation -> {
+ * compatible open source license.
+        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
+    @Before
+    public void setup() throws IOException {
+import org.opensearch.test.OpenSearchTestCase;  
+        DummyObject expectedObject = new DummyObject("test read");
+        BytesStreamOutput output = new BytesStreamOutput();
+import org.junit.Before;
+        }).when(ioStreamHandler).writeContent(indexOutput, expectedObject);  
     }
-
-    private static class DummyObject {
-        private static String dummyString;
-
+        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
+        assertThrows(  
+    }  
+            CorruptIndexException.class,
+        DummyObject expectedObject = new DummyObject("test read");
+        assertEquals(readData, expectedObject);
+    }
+    IndexIOStreamHandler<DummyObject> ioStreamHandler;  
+            IndexOutput io = invocation.getArgument(0);  
         public DummyObject(String dummy) {
-            dummyString = dummy;
-        }  
+    VersionedCodecStreamWrapper<DummyObject> versionedCodecStreamWrapper;
+import org.apache.lucene.store.OutputStreamIndexOutput;
+import org.apache.lucene.index.CorruptIndexException;
+    public void testReadStream() throws IOException {
+    private static final int VERSION = 1;
+        assertThrows(
+import java.io.IOException;  
+            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes("wrong codec", VERSION, true, false))
+        assertEquals(bii.readString(), "test write");
+        if (writeFooter) {  
+ * Unit tests for {@link org.opensearch.common.io.VersionedCodecStreamWrapper}.
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+        ioStreamHandler = mock(IndexIOStreamHandler.class);
+            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes(CODEC, 2, true, true))
+        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);  
+        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
+        );  
+        CodecUtil.checkFooter(bii);
     }
+    }
+        }
+            io.writeString("test write");
+        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);  
+ * SPDX-License-Identifier: Apache-2.0
+        if (writeHeader) {  
+            () -> versionedCodecStreamWrapper.readStream(createHeaderFooterBytes("wrong codec", VERSION, true, true))  
+        );
+import static org.mockito.ArgumentMatchers.any;
+        assertThrows(
+        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
+            CodecUtil.writeFooter(indexOutput);
+import org.apache.lucene.store.IndexInput;  
+    public void testReadWithNoHeaderThrowsException() throws IOException {
+    private ByteArrayIndexInput createHeaderFooterBytes(String codec, int version, boolean writeHeader, boolean writeFooter)
+        CodecUtil.checkHeader(bii, CODEC, VERSION, VERSION);  
+import org.apache.lucene.store.IndexOutput;
+        );  
+    }
+/**
+        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
+        throws IOException {  
+            return null;
+        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);  
+        }  
+import static org.mockito.Mockito.mock;
+        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
+import org.apache.lucene.index.IndexFormatTooNewException;  
+        assertThrows(
+        ioStreamHandlerFactory = mock(IndexIOStreamHandlerFactory.class);  
+import static org.mockito.Mockito.doAnswer;  
+            CorruptIndexException.class,
+        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
+    private static class DummyObject {
+        indexOutput.close();
+        DummyObject readData = versionedCodecStreamWrapper.readStream(createHeaderFooterBytes(CODEC, VERSION, true, true));  
+        when(ioStreamHandlerFactory.getHandler(VERSION)).thenReturn(ioStreamHandler);
+        );
+import org.opensearch.common.lucene.store.ByteArrayIndexInput;
 }
+        BytesStreamOutput output = new BytesStreamOutput();
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.common.io;
+        );
+import static org.mockito.Mockito.when;
+        private static String dummyString;
+        IndexInput indexInput = new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()));  
+ */  
+    }  
+        DummyObject expectedObject = new DummyObject("test read");
+        when(ioStreamHandler.readContent(any())).thenReturn(expectedObject);
+ *
+        versionedCodecStreamWrapper = new VersionedCodecStreamWrapper(ioStreamHandlerFactory, VERSION, VERSION, CODEC);
+        versionedCodecStreamWrapper.writeStream(indexOutput, expectedObject);
+    }  

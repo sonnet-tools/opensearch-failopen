@@ -1,690 +1,624 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.azure;
-
-import com.sun.net.httpserver.HttpExchange;  
-import com.sun.net.httpserver.HttpServer;
-
-import com.azure.storage.common.policy.RequestRetryOptions;  
-import com.azure.storage.common.policy.RetryPolicyType;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.common.SuppressForbidden;  
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;
-import org.opensearch.common.blobstore.BlobPath;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.io.Streams;
-import org.opensearch.common.lucene.store.ByteArrayIndexInput;  
-import org.opensearch.common.lucene.store.InputStreamIndexInput;
-import org.opensearch.common.network.InetAddresses;
-import org.opensearch.common.settings.MockSecureSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.CountDown;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.unit.ByteSizeUnit;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.rest.RestUtils;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;  
-import org.junit.AfterClass;
-import org.junit.Before;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;  
-import java.io.InputStreamReader;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;  
-import java.nio.file.NoSuchFileException;
-import java.util.Arrays;
-import java.util.Base64;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;  
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
-import java.util.regex.Matcher;  
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import fixture.azure.AzureHttpHandler;
-import reactor.core.scheduler.Schedulers;
-import reactor.netty.http.HttpResources;  
-
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.opensearch.repositories.azure.AzureRepository.Repository.CONTAINER_SETTING;  
-import static org.opensearch.repositories.azure.AzureStorageSettings.ACCOUNT_SETTING;
-import static org.opensearch.repositories.azure.AzureStorageSettings.ENDPOINT_SUFFIX_SETTING;
-import static org.opensearch.repositories.azure.AzureStorageSettings.KEY_SETTING;  
-import static org.opensearch.repositories.azure.AzureStorageSettings.MAX_RETRIES_SETTING;
-import static org.opensearch.repositories.azure.AzureStorageSettings.MAX_SINGLE_UPLOAD_SIZE_SETTING;
-import static org.opensearch.repositories.azure.AzureStorageSettings.READ_BLOCK_SIZE_SETTING;  
-import static org.opensearch.repositories.azure.AzureStorageSettings.TIMEOUT_SETTING;
-import static org.opensearch.repositories.azure.AzureStorageSettings.WRITE_BLOCK_SIZE_SETTING;
-import static org.opensearch.repositories.azure.AzureStorageSettings.WRITE_CONCURRENCY_SETTING;  
-import static org.opensearch.repositories.blobstore.OpenSearchBlobStoreRepositoryIntegTestCase.randomBytes;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThan;  
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-
-/**  
- * This class tests how a {@link AzureBlobContainer} and its underlying SDK client are retrying requests when reading or writing blobs.
- */
-@SuppressForbidden(reason = "use a http server")  
-public class AzureBlobContainerRetriesTests extends OpenSearchTestCase {
-
-    private static final long MAX_RANGE_VAL = Long.MAX_VALUE - 1L;  
-
-    private HttpServer httpServer;
-    private ThreadPool threadPool;  
-    private AzureStorageService service;
-
-    @Before  
-    public void setUp() throws Exception {
-        threadPool = new TestThreadPool(getTestClass().getName(), AzureRepositoryPlugin.executorBuilder());
-        httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);  
-        httpServer.createContext("/", (exchange) -> {
-            exchange.sendResponseHeaders(404, 0L);
-            exchange.close();  
-        });
-        httpServer.start();
-        super.setUp();  
-    }
-
-    @After  
-    public void tearDown() throws Exception {
-        if (service != null) {
-            service.close();  
-            service = null;
-        }
-
-        httpServer.stop(0);
-        super.tearDown();
-        ThreadPool.terminate(threadPool, 10L, TimeUnit.SECONDS);  
-    }
-
-    @AfterClass  
-    public static void shutdownSchedulers() {
-        HttpResources.disposeLoopsAndConnections();
-        Schedulers.shutdownNow();  
-    }
-
-    private BlobContainer createBlobContainer(final int maxRetries) {  
-        return createBlobContainer(maxRetries, (settings, clientName) -> {});
-    }
-
-    private BlobContainer createBlobContainer(final int maxRetries, BiConsumer<Settings.Builder, String> configureClient) {
-        final Settings.Builder clientSettings = Settings.builder();
-        final String clientName = randomAlphaOfLength(5).toLowerCase(Locale.ROOT);  
-
-        final InetSocketAddress address = httpServer.getAddress();
-        final String endpoint = "ignored;DefaultEndpointsProtocol=http;BlobEndpoint=http://"  
-            + InetAddresses.toUriString(address.getAddress())
-            + ":"
-            + address.getPort()  
-            + "/";
-        clientSettings.put(ENDPOINT_SUFFIX_SETTING.getConcreteSettingForNamespace(clientName).getKey(), endpoint);
-        clientSettings.put(MAX_RETRIES_SETTING.getConcreteSettingForNamespace(clientName).getKey(), maxRetries);  
-        clientSettings.put(TIMEOUT_SETTING.getConcreteSettingForNamespace(clientName).getKey(), TimeValue.timeValueMillis(5000));
-        configureClient.accept(clientSettings, clientName);
-
-        final MockSecureSettings secureSettings = new MockSecureSettings();
-        secureSettings.setString(ACCOUNT_SETTING.getConcreteSettingForNamespace(clientName).getKey(), "account");
-        final String key = Base64.getEncoder().encodeToString(randomAlphaOfLength(10).getBytes(UTF_8));  
-        secureSettings.setString(KEY_SETTING.getConcreteSettingForNamespace(clientName).getKey(), key);
-        clientSettings.setSecureSettings(secureSettings);
-
-        service = new AzureStorageService(clientSettings.build()) {
-            @Override
-            RequestRetryOptions createRetryPolicy(final AzureStorageSettings azureStorageSettings, String secondaryHost) {  
-                return new RequestRetryOptions(
-                    RetryPolicyType.EXPONENTIAL,
-                    azureStorageSettings.getMaxRetries(),  
-                    5,
-                    10L,
-                    100L,  
-                    secondaryHost
-                );
-            }  
-
-        };
-
-        final RepositoryMetadata repositoryMetadata = new RepositoryMetadata(
-            "repository",
-            AzureRepository.TYPE,  
-            Settings.builder().put(CONTAINER_SETTING.getKey(), "container").put(ACCOUNT_SETTING.getKey(), clientName).build()
-        );
-
-        return new AzureBlobContainer(BlobPath.cleanPath(), new AzureBlobStore(repositoryMetadata, service, threadPool), threadPool);
-    }
-
-    public void testListBlobsByPrefixInSortedOrderPushesLimitToAzure() throws Exception {
-        final AtomicInteger requests = new AtomicInteger();
-        httpServer.createContext("/container", exchange -> {  
-            try {
-                assertEquals("GET", exchange.getRequestMethod());
-                final Map<String, String> params = new HashMap<>();  
-                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
-                assertEquals("metadata-", params.get("prefix"));
-                assertEquals("/", params.get("delimiter"));  
-                assertEquals("2", params.get("maxresults"));
-                requests.incrementAndGet();
-
-                final String response = """
-                    <?xml version="1.0" encoding="UTF-8"?>
                     <EnumerationResults>  
-                      <Blobs>
-                        <Blob>
-                          <Name>metadata-1</Name>  
-                          <Properties><Content-Length>11</Content-Length><BlobType>BlockBlob</BlobType></Properties>
-                        </Blob>
-                        <Blob>  
-                          <Name>metadata-2</Name>
-                          <Properties><Content-Length>12</Content-Length><BlobType>BlockBlob</BlobType></Properties>
-                        </Blob>  
-                        <Blob>
-                          <Name>metadata-3</Name>
-                          <Properties><Content-Length>13</Content-Length><BlobType>BlockBlob</BlobType></Properties>  
-                        </Blob>
-                      </Blobs>
-                      <NextMarker />  
-                    </EnumerationResults>
-                    """;
-                sendXmlResponse(exchange, response);  
-            } finally {
-                exchange.close();
-            }  
-        });
-
-        final BlobContainer blobContainer = createBlobContainer(between(1, 5));  
-        assertTrue(blobContainer.listBlobsByPrefixInSortedOrder("metadata-", 0, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC).isEmpty());
-        assertEquals(0, requests.get());
-
-        final List<BlobMetadata> blobs = blobContainer.listBlobsByPrefixInSortedOrder(
-            "metadata-",
-            2,  
-            BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC
-        );
-        assertEquals(List.of("metadata-1", "metadata-2"), blobs.stream().map(BlobMetadata::name).toList());  
-        assertEquals(List.of(11L, 12L), blobs.stream().map(BlobMetadata::length).toList());
-        assertEquals(1, requests.get());
-        expectThrows(  
-            IllegalArgumentException.class,
-            () -> blobContainer.listBlobsByPrefixInSortedOrder("metadata-", -1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC)
-        );  
-    }
-
-    public void testListBlobsByPrefixInSortedOrderContinuesAfterPrefixes() throws Exception {  
-        final AtomicInteger requests = new AtomicInteger();
-        httpServer.createContext("/container", exchange -> {
-            try {  
-                final Map<String, String> params = new HashMap<>();
-                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
-                assertEquals("2", params.get("maxresults"));  
-                final int request = requests.incrementAndGet();
-                if (request == 1) {
-                    assertNull(params.get("marker"));  
-                    sendXmlResponse(exchange, """
-                        <?xml version="1.0" encoding="UTF-8"?>
-                        <EnumerationResults>  
-                          <Blobs>
-                            <BlobPrefix><Name>metadata-child/</Name></BlobPrefix>
-                          </Blobs>  
-                          <NextMarker>next-page</NextMarker>
-                        </EnumerationResults>
-                        """);  
-                } else {
-                    assertEquals(2, request);
-                    assertEquals("next-page", params.get("marker"));  
-                    sendXmlResponse(exchange, """
-                        <?xml version="1.0" encoding="UTF-8"?>
-                        <EnumerationResults>  
-                          <Blobs>
-                            <Blob>
-                              <Name>metadata-1</Name>  
-                              <Properties><Content-Length>11</Content-Length><BlobType>BlockBlob</BlobType></Properties>
-                            </Blob>
-                            <Blob>  
-                              <Name>metadata-2</Name>
-                              <Properties><Content-Length>12</Content-Length><BlobType>BlockBlob</BlobType></Properties>
-                            </Blob>  
-                          </Blobs>
-                          <NextMarker />
-                        </EnumerationResults>  
-                        """);
-                }
-            } finally {  
-                exchange.close();
-            }
-        });  
-
-        final BlobContainer blobContainer = createBlobContainer(between(1, 5));
-        final List<BlobMetadata> blobs = blobContainer.listBlobsByPrefixInSortedOrder(  
-            "metadata-",
-            2,
-            BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC  
-        );
-        assertEquals(List.of("metadata-1", "metadata-2"), blobs.stream().map(BlobMetadata::name).toList());
-        assertEquals(2, requests.get());  
-    }
-
-    public void testListBlobsByPrefixInSortedOrderCapsAzurePageSize() throws Exception {  
-        httpServer.createContext("/container", exchange -> {
-            try {
-                final Map<String, String> params = new HashMap<>();  
-                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
-                assertEquals("5000", params.get("maxresults"));
-                sendXmlResponse(exchange, """  
-                    <?xml version="1.0" encoding="UTF-8"?>
-                    <EnumerationResults>
-                      <Blobs />  
-                      <NextMarker />
-                    </EnumerationResults>
-                    """);  
-            } finally {
-                exchange.close();
-            }  
-        });
-
-        final BlobContainer blobContainer = createBlobContainer(between(1, 5));  
-        assertTrue(
-            blobContainer.listBlobsByPrefixInSortedOrder("metadata-", 5001, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC).isEmpty()
-        );  
-    }
-
-    public void testReadNonexistentBlobThrowsNoSuchFileException() {  
-        final BlobContainer blobContainer = createBlobContainer(between(1, 5));
-        final Exception exception = expectThrows(NoSuchFileException.class, () -> {
-            if (randomBoolean()) {  
-                blobContainer.readBlob("read_nonexistent_blob");
-            } else {
-                final long position = randomLongBetween(0, MAX_RANGE_VAL - 1L);  
-                final long length = randomLongBetween(1, MAX_RANGE_VAL - position);
-                blobContainer.readBlob("read_nonexistent_blob", position, length);
-            }  
-        });
-        assertThat(exception.getMessage().toLowerCase(Locale.ROOT), containsString("404"));
-    }  
-
-    public void testReadBlobWithRetries() throws Exception {
-        // The request retry policy counts the first attempt as retry, so we need to  
-        // account for that and increase the max retry count by one.
-        final int maxRetries = randomIntBetween(2, 6);
-        final CountDown countDownHead = new CountDown(maxRetries - 1);  
-        final CountDown countDownGet = new CountDown(maxRetries - 1);
-        final byte[] bytes = randomBlobContent();
-        httpServer.createContext("/container/read_blob_max_retries", exchange -> {  
-            try {
-                Streams.readFully(exchange.getRequestBody());
-                if ("HEAD".equals(exchange.getRequestMethod())) {  
-                    if (countDownHead.countDown()) {
-                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-                        exchange.getResponseHeaders().add("Content-Length", String.valueOf(bytes.length));  
-                        exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");
-                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
-                        return;  
-                    }
-                } else if ("GET".equals(exchange.getRequestMethod())) {
-                    if (countDownGet.countDown()) {  
-                        final int rangeStart = getRangeStart(exchange);
-                        assertThat(rangeStart, lessThan(bytes.length));
-                        final int length = bytes.length - rangeStart;  
-                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-                        exchange.getResponseHeaders().add("Content-Length", String.valueOf(length));
-                        exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");  
-                        exchange.getResponseHeaders().add("Content-Range", "bytes " + rangeStart + "-" + bytes.length + "/" + bytes.length);
-                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), length);
-                        exchange.getResponseBody().write(bytes, rangeStart, length);  
-                        return;
-                    }
-                }  
+                assertEquals("metadata-", params.get("prefix"));
+            assertThat(countDownGet.isCountedDown(), is(true));  
+import static org.opensearch.repositories.azure.AzureStorageSettings.MAX_RETRIES_SETTING;
                 if (randomBoolean()) {
-                    AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
-                }  
-            } finally {
-                exchange.close();
-            }  
-        });
-
-        final BlobContainer blobContainer = createBlobContainer(maxRetries);  
-        try (InputStream inputStream = blobContainer.readBlob("read_blob_max_retries")) {
-            assertArrayEquals(bytes, BytesReference.toBytes(Streams.readFully(inputStream)));
-            // No more getProperties() calls in BlobClientBase::openInputStream(), HEAD should not be invoked  
+                }
             assertThat(countDownHead.isCountedDown(), is(false));
+    public void testListBlobsByPrefixInSortedOrderContinuesAfterPrefixes() throws Exception {  
+                }  
+                          </Blobs>
+import static org.opensearch.repositories.blobstore.OpenSearchBlobStoreRepositoryIntegTestCase.randomBytes;
+            if (randomBoolean()) {  
+                final int rangeEnd = Math.min(Math.toIntExact(range.v2()), bytes.length - 1);
+                    10L,
+                assertThat(exchange.getRequestMethod(), is("GET"));  
+                    } else {
+        assertEquals(List.of(11L, 12L), blobs.stream().map(BlobMetadata::length).toList());
+                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
+    private static byte[] randomBlobContent() {
+                              <Properties><Content-Length>11</Content-Length><BlobType>BlockBlob</BlobType></Properties>
+                        Streams.readFully(exchange.getRequestBody());  
+        httpServer.createContext("/container", exchange -> {
+        final byte[] bytes = randomBytes(blockSize * 3 + 17);
+                          <NextMarker />
+        }  
+                          <Name>metadata-1</Name>  
+                }  
+                final long position = randomLongBetween(0, MAX_RANGE_VAL - 1L);  
+            service.close();  
+    public void testRetryUntilFail() throws IOException {  
+            blobContainer.writeBlob("write_blob_max_retries", stream, bytes.length, false);
+ */
+            service = null;
+    public void testDefaultReadBlockSize() {
+                    }
+                          <Blobs>
+                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
+        );
+ * SPDX-License-Identifier: Apache-2.0
+        final Map<String, BytesReference> blocks = new ConcurrentHashMap<>();
+ * license agreements. See the NOTICE file distributed with
+                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
+    }
+                              <Name>metadata-2</Name>
+                final int rangeStart = Math.toIntExact(range.v1());
+        final BlobContainer blobContainer = createBlobContainer(between(1, 5));  
+        });
+                assertEquals("5000", params.get("maxresults"));
+            }  
+    }
+        // account for that and increase the max retry count by one.
+        assertThat(countDownComplete.isCountedDown(), is(true));
+import org.opensearch.common.blobstore.BlobPath;  
+                          <Name>metadata-3</Name>
+            BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC  
+    }
+ * Unless required by applicable law or agreed to in writing,
+                if (requestReceived.compareAndSet(false, true)) {
+import reactor.netty.http.HttpResources;  
+                requestCount.incrementAndGet();
+                        final int rangeStart = getRangeStart(exchange);
+                if (exchange.getRequestURI().getQuery() != null) {
+package org.opensearch.repositories.azure;
+        final BlobContainer blobContainer = createBlobContainer(randomIntBetween(2, 5));
+                exchange.getResponseBody().write(bytes, rangeStart, responseLength);
+    public static void shutdownSchedulers() {
+                if ("HEAD".equals(exchange.getRequestMethod())) {  
+ * not use this file except in compliance with the License.
+        final long rangeStart = Long.parseLong(matcher.group(1));  
+                        assertThat(rangeStart, lessThan(bytes.length));
+import java.util.Objects;
+import java.util.function.BiConsumer;
+            if ("PUT".equals(exchange.getRequestMethod())) {  
+        assertThat(requestCount.get(), greaterThanOrEqualTo(4));
+            } finally {  
+ *
+            BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC
+            exchange.sendResponseHeaders(404, 0L);
+        try (InputStream inputStream = blobContainer.readBlob("read_range_blob_max_retries", position, length)) {  
+import static org.opensearch.repositories.azure.AzureStorageSettings.ACCOUNT_SETTING;
+        assertThat(blocks.isEmpty(), is(true));  
+                        </Blob>
+                        BytesReference block = blocks.remove(blockUid);
+        });
+ * ownership. Elasticsearch licenses this file to you under  
+        final String key = Base64.getEncoder().encodeToString(randomAlphaOfLength(10).getBytes(UTF_8));  
+                blobContainer.readBlob("read_nonexistent_blob");
+import org.opensearch.common.lucene.store.InputStreamIndexInput;
+                        AzureHttpHandler.sendError(exchange, RestStatus.BAD_REQUEST);
+import org.opensearch.test.OpenSearchTestCase;  
+        final int maxRetries = randomIntBetween(2, 6);
+                }  
+        // account for that and increase the max retry count by one.
+    }
+                    if (randomBoolean()) {  
+                    blocks.put(blockId, Streams.readFully(exchange.getRequestBody()));
+        httpServer.createContext("/container/read_blob_max_retries", exchange -> {  
+import java.util.concurrent.atomic.AtomicInteger;
+                      </Blobs>
+ * You may obtain a copy of the License at  
+                        <Blob>
+import org.opensearch.core.rest.RestStatus;
+import static org.hamcrest.Matchers.is;
+                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
+    }
+        exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");  
+                    if (countDownHead.countDown()) {
+            try {  
+        final BlobContainer blobContainer = createBlobContainer(maxRetries);  
+import java.util.regex.Matcher;  
+import com.azure.storage.common.policy.RetryPolicyType;
+        assertThat(blobContainer.readBlobPreferredLength(), is((long) AzureBlobContainer.DEFAULT_MINIMUM_READ_SIZE_IN_BYTES));  
+            RequestRetryOptions createRetryPolicy(final AzureStorageSettings azureStorageSettings, String secondaryHost) {  
+            try {
+import org.opensearch.common.network.InetAddresses;
+        final byte[] data = randomBytes(blockSize * nbBlocks);
+                final int request = requests.incrementAndGet();
+            } finally {  
+            if ("PUT".equals(exchange.getRequestMethod())) {  
+                            <BlobPrefix><Name>metadata-child/</Name></BlobPrefix>
+            try {
+                        return;
+                    exchange.close();
+                    AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
+        assertEquals(1, requests.get());
+        final CountDown countDownGet = new CountDown(maxRetries - 1);
+import java.nio.file.NoSuchFileException;
+        return Tuple.tuple(rangeStart, rangeEnd);  
+                    <?xml version="1.0" encoding="UTF-8"?>
+        httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);  
+                            </Blob>  
+    private BlobContainer createBlobContainer(final int maxRetries, BiConsumer<Settings.Builder, String> configureClient) {
+                    for (String blockUid : blockUids) {  
+                blockSize + "b"  
+    }
+import static org.hamcrest.Matchers.equalTo;  
+                    RetryPolicyType.EXPONENTIAL,
             assertThat(countDownGet.isCountedDown(), is(true));
         }  
-    }
-
-    public void testReadRangeBlobWithRetries() throws Exception {  
-        // The request retry policy counts the first attempt as retry, so we need to
-        // account for that and increase the max retry count by one.
-        final int maxRetries = randomIntBetween(2, 6);  
-        final CountDown countDownGet = new CountDown(maxRetries - 1);
-        final byte[] bytes = randomBlobContent();
-        httpServer.createContext("/container/read_range_blob_max_retries", exchange -> {  
-            try {
-                Streams.readFully(exchange.getRequestBody());
-                if ("HEAD".equals(exchange.getRequestMethod())) {  
-                    exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-                    exchange.getResponseHeaders().add("Content-Length", String.valueOf(bytes.length));
-                    exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");  
-                    exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
-                    return;
-                } else if ("GET".equals(exchange.getRequestMethod())) {  
-                    if (countDownGet.countDown()) {
-                        final int rangeStart = getRangeStart(exchange);
-                        assertThat(rangeStart, lessThan(bytes.length));  
-                        final Optional<Integer> rangeEnd = getRangeEnd(exchange);
-                        assertThat(rangeEnd.isPresent(), is(true));
-                        assertThat(rangeEnd.get(), greaterThanOrEqualTo(rangeStart));  
-                        final int length = (rangeEnd.get() - rangeStart) + 1;
-                        assertThat(length, lessThanOrEqualTo(bytes.length - rangeStart));
-                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");  
-                        exchange.getResponseHeaders().add("Content-Length", String.valueOf(length));
-                        exchange.getResponseHeaders()
-                            .add("Content-Range", "bytes " + rangeStart + "-" + rangeEnd.get() + "/" + bytes.length);  
-                        exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");
-                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), length);
-                        exchange.getResponseBody().write(bytes, rangeStart, length);  
-                        return;
-                    }
-                }  
-                if (randomBoolean()) {
-                    AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
-                }  
-            } finally {
-                exchange.close();
-            }  
-        });
-
-        final BlobContainer blobContainer = createBlobContainer(maxRetries);  
-        final int position = randomIntBetween(0, bytes.length - 1);
-        final int length = randomIntBetween(1, bytes.length - position);
-        try (InputStream inputStream = blobContainer.readBlob("read_range_blob_max_retries", position, length)) {  
-            final byte[] bytesRead = BytesReference.toBytes(Streams.readFully(inputStream));
-            assertArrayEquals(Arrays.copyOfRange(bytes, position, Math.min(bytes.length, position + length)), bytesRead);
-            assertThat(countDownGet.isCountedDown(), is(true));  
         }
-    }
-
-    public void testDefaultReadBlockSize() {
-        final BlobContainer blobContainer = createBlobContainer(between(1, 5));
-        assertThat(blobContainer.readBlobPreferredLength(), is((long) AzureBlobContainer.DEFAULT_MINIMUM_READ_SIZE_IN_BYTES));  
-    }
-
-    public void testConfiguredReadBlockSize() throws Exception {  
-        final int blockSize = 128;
-        final byte[] bytes = randomBytes(blockSize * 3 + 17);
-        final AtomicInteger requestCount = new AtomicInteger();  
-        httpServer.createContext("/container/read_blob_with_configured_block_size", exchange -> {
-            try {
-                assertThat(exchange.getRequestMethod(), is("GET"));  
-                final Tuple<Long, Long> range = getRanges(exchange);
-                final int rangeStart = Math.toIntExact(range.v1());
-                assertThat(rangeStart, lessThan(bytes.length));  
-                final int rangeEnd = Math.min(Math.toIntExact(range.v2()), bytes.length - 1);
-                assertThat(rangeEnd - rangeStart + 1, lessThanOrEqualTo(blockSize));
-
-                final int responseLength = rangeEnd - rangeStart + 1;
-                exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-                exchange.getResponseHeaders().add("Content-Length", String.valueOf(responseLength));  
-                exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");
-                exchange.getResponseHeaders().add("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + bytes.length);
-                exchange.sendResponseHeaders(RestStatus.PARTIAL_CONTENT.getStatus(), responseLength);  
-                exchange.getResponseBody().write(bytes, rangeStart, responseLength);
-                requestCount.incrementAndGet();
-            } finally {  
-                exchange.close();
-            }
-        });  
-
-        final BlobContainer blobContainer = createBlobContainer(
-            between(1, 5),  
-            (settings, clientName) -> settings.put(
-                READ_BLOCK_SIZE_SETTING.getConcreteSettingForNamespace(clientName).getKey(),
-                blockSize + "b"  
-            )
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
         );
-        assertThat(blobContainer.readBlobPreferredLength(), is((long) blockSize));  
-        try (InputStream inputStream = blobContainer.readBlob("read_blob_with_configured_block_size")) {
-            assertArrayEquals(bytes, BytesReference.toBytes(Streams.readFully(inputStream)));
-        }  
-        assertThat(requestCount.get(), greaterThanOrEqualTo(4));
-    }
-
-    public void testWriteBlobWithRetries() throws Exception {
-        // The request retry policy counts the first attempt as retry, so we need to
-        // account for that and increase the max retry count by one.  
-        final int maxRetries = randomIntBetween(2, 6);
-        final CountDown countDown = new CountDown(maxRetries - 1);
-
-        final byte[] bytes = randomBlobContent();
-        httpServer.createContext("/container/write_blob_max_retries", exchange -> {
-            if ("PUT".equals(exchange.getRequestMethod())) {  
-                exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");
-
-                if (countDown.countDown()) {  
-                    final BytesReference body = Streams.readFully(exchange.getRequestBody());
-                    if (Objects.deepEquals(bytes, BytesReference.toBytes(body))) {
-                        exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);  
-                    } else {
-                        AzureHttpHandler.sendError(exchange, RestStatus.BAD_REQUEST);
-                    }  
+import static org.opensearch.repositories.azure.AzureStorageSettings.READ_BLOCK_SIZE_SETTING;  
                     exchange.close();
-                    return;
-                }  
-
-                if (randomBoolean()) {
-                    if (randomBoolean()) {  
-                        Streams.readFully(exchange.getRequestBody(), new byte[randomIntBetween(1, Math.max(1, bytes.length - 1))]);
-                    } else {
-                        Streams.readFully(exchange.getRequestBody());  
-                        AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
-                    }
-                }  
-                exchange.close();
-            }
-        });  
-
-        final BlobContainer blobContainer = createBlobContainer(maxRetries);
-        try (InputStream stream = new InputStreamIndexInput(new ByteArrayIndexInput("desc", bytes), bytes.length)) {  
-            blobContainer.writeBlob("write_blob_max_retries", stream, bytes.length, false);
-        }
-        assertThat(countDown.isCountedDown(), is(true));  
-    }
-
-    public void testWriteLargeBlob() throws Exception {  
-        // The request retry policy counts the first attempt as retry, so we need to
-        // account for that and increase the max retry count by one.
-        final int maxRetries = randomIntBetween(3, 6);  
-
-        final int blockSize = Math.toIntExact(ByteSizeUnit.MB.toBytes(1));
-        final int nbBlocks = randomIntBetween(2, 3);  
-        final byte[] data = randomBytes(blockSize * nbBlocks);
-
-        final int nbErrors = 2; // we want all requests to fail at least once  
-        final AtomicInteger countDownUploads = new AtomicInteger(nbErrors * nbBlocks);
-        final CountDown countDownComplete = new CountDown(nbErrors);
-
-        final Map<String, BytesReference> blocks = new ConcurrentHashMap<>();
-        httpServer.createContext("/container/write_large_blob", exchange -> {
-            if ("PUT".equals(exchange.getRequestMethod())) {  
-                final Map<String, String> params = new HashMap<>();
-                if (exchange.getRequestURI().getQuery() != null) {
-                    RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);  
-                }
-
-                final String blockId = params.get("blockid");  
-                if (Strings.hasText(blockId) && (countDownUploads.decrementAndGet() % 2 == 0)) {
-                    blocks.put(blockId, Streams.readFully(exchange.getRequestBody()));
-                    exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");  
-                    exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);
-                    exchange.close();
-                    return;  
-                }
-
-                final String complete = params.get("comp");  
-                if ("blocklist".equals(complete) && (countDownComplete.countDown())) {
-                    final String blockList = Streams.copyToString(new InputStreamReader(exchange.getRequestBody(), UTF_8));
-                    final List<String> blockUids = Arrays.stream(blockList.split("<Latest>"))  
-                        .filter(line -> line.contains("</Latest>"))
-                        .map(line -> line.substring(0, line.indexOf("</Latest>")))
-                        .collect(Collectors.toList());  
-
-                    final ByteArrayOutputStream blob = new ByteArrayOutputStream();
-                    for (String blockUid : blockUids) {  
-                        BytesReference block = blocks.remove(blockUid);
-                        assert block != null;
-                        block.writeTo(blob);  
-                    }
+import reactor.core.scheduler.Schedulers;
                     assertArrayEquals(data, blob.toByteArray());
-                    exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");  
-                    exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);
-                    exchange.close();
-                    return;  
-                }
-            }
-
+        exchange.getResponseHeaders().add("Content-Type", "application/xml");
+import com.azure.storage.common.policy.RequestRetryOptions;  
+                    if (countDownGet.countDown()) {  
+        return new AzureBlobContainer(BlobPath.cleanPath(), new AzureBlobStore(repositoryMetadata, service, threadPool), threadPool);
+/*
+        httpServer.createContext("/container", exchange -> {  
+            } else {
             if (randomBoolean()) {
-                Streams.readFully(exchange.getRequestBody());
-                AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));  
+import org.opensearch.core.common.unit.ByteSizeUnit;  
+@SuppressForbidden(reason = "use a http server")  
+                        block.writeTo(blob);  
             }
-            exchange.close();
-        });  
-
-        final BlobContainer blobContainer = createBlobContainer(maxRetries, (settings, clientName) -> {
-            settings.put(WRITE_BLOCK_SIZE_SETTING.getConcreteSettingForNamespace(clientName).getKey(), blockSize + "b");  
-            settings.put(MAX_SINGLE_UPLOAD_SIZE_SETTING.getConcreteSettingForNamespace(clientName).getKey(), blockSize + "b");
-            settings.put(WRITE_CONCURRENCY_SETTING.getConcreteSettingForNamespace(clientName).getKey(), 2);
-        });  
-        try (InputStream stream = new InputStreamIndexInput(new ByteArrayIndexInput("desc", data), data.length)) {
-            blobContainer.writeBlob("write_large_blob", stream, data.length, false);
-        }  
-        assertThat(countDownUploads.get(), equalTo(0));
-        assertThat(countDownComplete.isCountedDown(), is(true));
-        assertThat(blocks.isEmpty(), is(true));  
-    }
-
-    public void testRetryUntilFail() throws IOException {  
-        final AtomicBoolean requestReceived = new AtomicBoolean(false);
-        httpServer.createContext("/container/write_blob_max_retries", exchange -> {
-            try {  
-                if (requestReceived.compareAndSet(false, true)) {
-                    throw new AssertionError("Should not receive two requests");
-                } else {  
-                    exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);
-                }
-            } finally {  
+        final byte[] bytes = randomBlobContent();
+                final String response = """
+                final long length = randomLongBetween(1, MAX_RANGE_VAL - position);
+                blobContainer.readBlob("read_nonexistent_blob", position, length);
+    public void testConfiguredReadBlockSize() throws Exception {  
+            "repository",
+                        <Blob>
+        final Exception exception = expectThrows(NoSuchFileException.class, () -> {
+                exchange.getResponseHeaders().add("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + bytes.length);
+    private BlobContainer createBlobContainer(final int maxRetries) {  
+import org.opensearch.common.io.Streams;
+                exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");
+                        assertThat(length, lessThanOrEqualTo(bytes.length - rangeStart));
+    private static final long MAX_RANGE_VAL = Long.MAX_VALUE - 1L;  
                 exchange.close();
-            }
-        });  
-
-        final BlobContainer blobContainer = createBlobContainer(randomIntBetween(2, 5));
-        try (InputStream stream = new InputStream() {  
-
-            @Override
-            public int read() throws IOException {  
-                throw new IOException("foo");
-            }
-
-            @Override
-            public boolean markSupported() {
-                return true;  
-            }
-
-            @Override  
-            public void reset() {
-                throw new AssertionError("should not be called");
-            }  
-        }) {
-            final IOException ioe = expectThrows(
-                IOException.class,  
-                () -> blobContainer.writeBlob("write_blob_max_retries", stream, randomIntBetween(1, 128), randomBoolean())
-            );
-            assertThat(ioe.getMessage(), is("foo"));  
-        }
-    }
-
-    private static byte[] randomBlobContent() {
-        return randomByteArrayOfLength(randomIntBetween(1, frequently() ? 512 : 1 << 20)); // rarely up to 1mb
-    }  
-
-    private static final Pattern RANGE_PATTERN = Pattern.compile("^bytes=([0-9]+)-([0-9]+)$");
-
-    private static Tuple<Long, Long> getRanges(HttpExchange exchange) {
-        final String rangeHeader = exchange.getRequestHeaders().getFirst("X-ms-range");
-        if (rangeHeader == null) {  
-            return Tuple.tuple(0L, MAX_RANGE_VAL);
-        }
-
-        final Matcher matcher = RANGE_PATTERN.matcher(rangeHeader);
-        assertTrue(rangeHeader + " matches expected pattern", matcher.matches());
-        final long rangeStart = Long.parseLong(matcher.group(1));  
-        final long rangeEnd = Long.parseLong(matcher.group(2));
-        assertThat(rangeStart, lessThanOrEqualTo(rangeEnd));
-        return Tuple.tuple(rangeStart, rangeEnd);  
-    }
-
+        Schedulers.shutdownNow();  
+}
+                        </EnumerationResults>  
+        };
+        final List<BlobMetadata> blobs = blobContainer.listBlobsByPrefixInSortedOrder(
+            final byte[] bytesRead = BytesReference.toBytes(Streams.readFully(inputStream));
+                exchange.close();
     private static int getRangeStart(HttpExchange exchange) {  
-        return Math.toIntExact(getRanges(exchange).v1());
-    }
-
-    private static Optional<Integer> getRangeEnd(HttpExchange exchange) {
-        final long rangeEnd = getRanges(exchange).v2();
+        });  
+        assertTrue(blobContainer.listBlobsByPrefixInSortedOrder("metadata-", 0, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC).isEmpty());
+import org.opensearch.threadpool.TestThreadPool;
+                } else if ("GET".equals(exchange.getRequestMethod())) {
+                } else {
+        final byte[] bytes = randomBlobContent();
+    private ThreadPool threadPool;  
+                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
+        HttpResources.disposeLoopsAndConnections();
+        // The request retry policy counts the first attempt as retry, so we need to
         if (rangeEnd == MAX_RANGE_VAL) {  
-            return Optional.empty();
+            } finally {
+import org.junit.Before;
+            IllegalArgumentException.class,
+            }
+import java.io.InputStream;  
+                        """);
+                        </Blob>
+                final String complete = params.get("comp");  
+            + ":"
+                        assertThat(rangeEnd.isPresent(), is(true));
+        final CountDown countDown = new CountDown(maxRetries - 1);
+    }  
+public class AzureBlobContainerRetriesTests extends OpenSearchTestCase {
+        final AtomicInteger requests = new AtomicInteger();
+                          </Blobs>  
+                    }  
+        secureSettings.setString(KEY_SETTING.getConcreteSettingForNamespace(clientName).getKey(), key);
+    }
+                        assertThat(rangeEnd.get(), greaterThanOrEqualTo(rangeStart));  
+ * Modifications Copyright OpenSearch Contributors. See  
+                        assertThat(rangeStart, lessThan(bytes.length));  
+        service = new AzureStorageService(clientSettings.build()) {
+            }
+import org.junit.AfterClass;
+            }
+                        </EnumerationResults>
+                        assert block != null;
+                    final ByteArrayOutputStream blob = new ByteArrayOutputStream();
+        exchange.getResponseBody().write(body);
+            @Override
+        super.tearDown();
+        });  
+        final BlobContainer blobContainer = createBlobContainer(between(1, 5));
+        assertEquals(2, requests.get());  
+                      <NextMarker />  
+                            <Blob>
+import static java.nio.charset.StandardCharsets.UTF_8;
+                Streams.readFully(exchange.getRequestBody());
+        configureClient.accept(clientSettings, clientName);
+        );
+                    final String blockList = Streams.copyToString(new InputStreamReader(exchange.getRequestBody(), UTF_8));
+                AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));  
+    }
+                exchange.getResponseHeaders().add("Content-Length", String.valueOf(responseLength));  
+import java.util.Optional;  
+                        exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+        httpServer.createContext("/container/write_blob_max_retries", exchange -> {
+                Streams.readFully(exchange.getRequestBody());
+import org.opensearch.common.unit.TimeValue;
+import com.sun.net.httpserver.HttpServer;
+            + "/";
+    public void testReadRangeBlobWithRetries() throws Exception {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            () -> blobContainer.listBlobsByPrefixInSortedOrder("metadata-", -1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC)
+        try (InputStream stream = new InputStreamIndexInput(new ByteArrayIndexInput("desc", data), data.length)) {
+        );
+        final AtomicInteger requestCount = new AtomicInteger();  
+            );
+        final int maxRetries = randomIntBetween(2, 6);
+ *
+        super.setUp();  
+        final int blockSize = Math.toIntExact(ByteSizeUnit.MB.toBytes(1));
+            } finally {
+        assertThat(blobContainer.readBlobPreferredLength(), is((long) blockSize));  
+                if (request == 1) {
+                    throw new AssertionError("Should not receive two requests");
+                    exchange.getResponseHeaders().add("Content-Length", String.valueOf(bytes.length));
+                final Map<String, String> params = new HashMap<>();  
+                    <?xml version="1.0" encoding="UTF-8"?>
+import java.util.concurrent.TimeUnit;
+            assertArrayEquals(bytes, BytesReference.toBytes(Streams.readFully(inputStream)));
+                exchange.sendResponseHeaders(RestStatus.PARTIAL_CONTENT.getStatus(), responseLength);  
+        final BlobContainer blobContainer = createBlobContainer(
+        final AtomicInteger countDownUploads = new AtomicInteger(nbErrors * nbBlocks);
+    public void testWriteBlobWithRetries() throws Exception {
+                assertThat(rangeEnd - rangeStart + 1, lessThanOrEqualTo(blockSize));
+            try {  
+        clientSettings.put(MAX_RETRIES_SETTING.getConcreteSettingForNamespace(clientName).getKey(), maxRetries);  
+    }
+                    assertNull(params.get("marker"));  
+    }
+                    exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");  
+    private AzureStorageService service;
+            return Tuple.tuple(0L, MAX_RANGE_VAL);
+        ThreadPool.terminate(threadPool, 10L, TimeUnit.SECONDS);  
+                        exchange.getResponseHeaders().add("Content-Length", String.valueOf(length));
+                }  
+        clientSettings.setSecureSettings(secureSettings);
+import java.util.concurrent.ConcurrentHashMap;
+ * specific language governing permissions and limitations
+            } finally {
+                () -> blobContainer.writeBlob("write_blob_max_retries", stream, randomIntBetween(1, 128), randomBoolean())
+                    secondaryHost
+                          <Name>metadata-2</Name>
+        final BlobContainer blobContainer = createBlobContainer(between(1, 5));
+            }  
+                );
+            2,
+                exchange.close();
+/*  
+import org.opensearch.rest.RestUtils;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                if (randomBoolean()) {
+ * GitHub history for details.
+        final int maxRetries = randomIntBetween(3, 6);  
+    public void testListBlobsByPrefixInSortedOrderPushesLimitToAzure() throws Exception {
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+        final byte[] body = response.getBytes(UTF_8);
+                    }
+                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
+        });  
+                        exchange.getResponseHeaders().add("Content-Range", "bytes " + rangeStart + "-" + bytes.length + "/" + bytes.length);
+        assertEquals(0, requests.get());
+        final String rangeHeader = exchange.getRequestHeaders().getFirst("X-ms-range");
+ * software distributed under the License is distributed on an
+        expectThrows(  
+    @Before  
+import org.opensearch.core.common.bytes.BytesReference;
+                assertEquals("2", params.get("maxresults"));  
+                        <Blob>  
+                        exchange.getResponseBody().write(bytes, rangeStart, length);  
+ * This class tests how a {@link AzureBlobContainer} and its underlying SDK client are retrying requests when reading or writing blobs.
+                          <Properties><Content-Length>11</Content-Length><BlobType>BlockBlob</BlobType></Properties>
+                    sendXmlResponse(exchange, """
+    @After  
+import java.io.IOException;
+                IOException.class,  
+                exchange.close();
+        final Matcher matcher = RANGE_PATTERN.matcher(rangeHeader);
+        httpServer.createContext("/container", exchange -> {
+        final List<BlobMetadata> blobs = blobContainer.listBlobsByPrefixInSortedOrder(  
+ * compatible open source license.
+        httpServer.createContext("/container/write_large_blob", exchange -> {
+    @AfterClass  
+            AzureRepository.TYPE,  
+    }
+import static org.opensearch.repositories.azure.AzureStorageSettings.TIMEOUT_SETTING;
+        try (InputStream stream = new InputStreamIndexInput(new ByteArrayIndexInput("desc", bytes), bytes.length)) {  
+        try (InputStream inputStream = blobContainer.readBlob("read_blob_max_retries")) {
+                final String blockId = params.get("blockid");  
+                          <NextMarker>next-page</NextMarker>
+    }
+            public void reset() {
+        return createBlobContainer(maxRetries, (settings, clientName) -> {});
+        clientSettings.put(ENDPOINT_SUFFIX_SETTING.getConcreteSettingForNamespace(clientName).getKey(), endpoint);
+                    return;  
+            "metadata-",
+                    <EnumerationResults>
+                final Map<String, String> params = new HashMap<>();  
+                        return;  
+                throw new IOException("foo");
+import java.util.stream.Collectors;
+        assertTrue(rangeHeader + " matches expected pattern", matcher.matches());
+import java.util.List;
+                }
+                if (Strings.hasText(blockId) && (countDownUploads.decrementAndGet() % 2 == 0)) {
+            )
         }
+            assertThat(ioe.getMessage(), is("foo"));  
+            settings.put(MAX_SINGLE_UPLOAD_SIZE_SETTING.getConcreteSettingForNamespace(clientName).getKey(), blockSize + "b");
+        }
+ */
+            }  
+                    azureStorageSettings.getMaxRetries(),  
+        }
+                exchange.close();
+                    final List<String> blockUids = Arrays.stream(blockList.split("<Latest>"))  
+        assertTrue(
+        final int nbErrors = 2; // we want all requests to fail at least once  
+        final BlobContainer blobContainer = createBlobContainer(maxRetries);  
+import org.opensearch.common.collect.Tuple;
+            try {
+                        <?xml version="1.0" encoding="UTF-8"?>
+            return Optional.empty();
+                        exchange.getResponseHeaders().add("Content-Length", String.valueOf(length));
+                final Map<String, String> params = new HashMap<>();
+        }
+        final CountDown countDownComplete = new CountDown(nbErrors);
+                          <Properties><Content-Length>13</Content-Length><BlobType>BlockBlob</BlobType></Properties>  
+                READ_BLOCK_SIZE_SETTING.getConcreteSettingForNamespace(clientName).getKey(),
+    }  
+    private static final Pattern RANGE_PATTERN = Pattern.compile("^bytes=([0-9]+)-([0-9]+)$");
+                        .map(line -> line.substring(0, line.indexOf("</Latest>")))
+        httpServer.createContext("/container/write_blob_max_retries", exchange -> {
+ *  
+                            <Blob>  
+                        .collect(Collectors.toList());  
+    private static void sendXmlResponse(HttpExchange exchange, String response) throws IOException {  
+    }  
+                sendXmlResponse(exchange, response);  
+                assertEquals("2", params.get("maxresults"));
+                        exchange.getResponseHeaders()
+        );  
+        final BlobContainer blobContainer = createBlobContainer(maxRetries);
+                    return;
+        final BlobContainer blobContainer = createBlobContainer(between(1, 5));  
+        assertThat(exception.getMessage().toLowerCase(Locale.ROOT), containsString("404"));
+                exchange.close();
+import org.opensearch.common.blobstore.BlobContainer;
+                        exchange.getResponseHeaders().add("Content-Length", String.valueOf(bytes.length));  
+                    exchange.close();
+                    </EnumerationResults>
+    private static Optional<Integer> getRangeEnd(HttpExchange exchange) {
+import org.opensearch.common.blobstore.BlobMetadata;
+                        """);  
+                              <Properties><Content-Length>12</Content-Length><BlobType>BlockBlob</BlobType></Properties>
+            exchange.close();
+        final byte[] bytes = randomBlobContent();
+                              <Name>metadata-1</Name>  
+                return new RequestRetryOptions(
+        httpServer.createContext("/", (exchange) -> {
+import static org.opensearch.repositories.azure.AzureStorageSettings.WRITE_BLOCK_SIZE_SETTING;
+        final String endpoint = "ignored;DefaultEndpointsProtocol=http;BlobEndpoint=http://"  
+import org.junit.After;  
+    private static Tuple<Long, Long> getRanges(HttpExchange exchange) {
+                    exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);
+            public int read() throws IOException {  
+                    final BytesReference body = Streams.readFully(exchange.getRequestBody());
+            try {
+import org.opensearch.threadpool.ThreadPool;
+                        Streams.readFully(exchange.getRequestBody(), new byte[randomIntBetween(1, Math.max(1, bytes.length - 1))]);
+            // No more getProperties() calls in BlobClientBase::openInputStream(), HEAD should not be invoked  
+                            </Blob>
+        final InetSocketAddress address = httpServer.getAddress();
+                if (countDown.countDown()) {  
+        }) {
+        threadPool = new TestThreadPool(getTestClass().getName(), AzureRepositoryPlugin.executorBuilder());
+import java.io.ByteArrayOutputStream;
+ * The OpenSearch Contributors require contributions made to  
+import java.util.regex.Pattern;
+                assertEquals("/", params.get("delimiter"));  
+                    """);  
+        return Math.toIntExact(getRanges(exchange).v1());
+            exchange.close();  
+                    if (Objects.deepEquals(bytes, BytesReference.toBytes(body))) {
+                    exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);
+            blobContainer.writeBlob("write_large_blob", stream, data.length, false);
+                exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");
+import java.util.Locale;  
+            @Override  
+                }
+                    }
+        });
+        httpServer.createContext("/container/read_blob_with_configured_block_size", exchange -> {
+        final AtomicBoolean requestReceived = new AtomicBoolean(false);
+                        exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");
+            @Override
         return Optional.of(Math.toIntExact(rangeEnd));  
     }
-
-    private static void sendXmlResponse(HttpExchange exchange, String response) throws IOException {  
-        final byte[] body = response.getBytes(UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/xml");
-        exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");  
         exchange.sendResponseHeaders(RestStatus.OK.getStatus(), body.length);
-        exchange.getResponseBody().write(body);
-    }  
-
-}
+        final MockSecureSettings secureSettings = new MockSecureSettings();
+                    """;
+    }
+import org.opensearch.common.util.concurrent.CountDown;  
+import static org.opensearch.repositories.azure.AzureStorageSettings.ENDPOINT_SUFFIX_SETTING;
+                requests.incrementAndGet();
+                        final int rangeStart = getRangeStart(exchange);
+        final long rangeEnd = getRanges(exchange).v2();
+        assertEquals(List.of("metadata-1", "metadata-2"), blobs.stream().map(BlobMetadata::name).toList());
+ * KIND, either express or implied.  See the License for the
+                }  
+                    sendXmlResponse(exchange, """
+/**  
+    public void testWriteLargeBlob() throws Exception {  
+        clientSettings.put(TIMEOUT_SETTING.getConcreteSettingForNamespace(clientName).getKey(), TimeValue.timeValueMillis(5000));
+        });  
+            blobContainer.listBlobsByPrefixInSortedOrder("metadata-", 5001, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC).isEmpty()
+                        .filter(line -> line.contains("</Latest>"))
+    public void testReadNonexistentBlobThrowsNoSuchFileException() {  
+                        </Blob>  
+            } finally {
+        }  
+            + InetAddresses.toUriString(address.getAddress())
+                      <NextMarker />
+                    exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);
+                final int responseLength = rangeEnd - rangeStart + 1;
+            + address.getPort()  
+    public void testListBlobsByPrefixInSortedOrderCapsAzurePageSize() throws Exception {  
+import static org.hamcrest.Matchers.lessThan;  
+                            .add("Content-Range", "bytes " + rangeStart + "-" + rangeEnd.get() + "/" + bytes.length);  
+        );  
+            between(1, 5),  
+                assertThat(rangeStart, lessThan(bytes.length));  
+import java.io.InputStreamReader;
+            assertArrayEquals(Arrays.copyOfRange(bytes, position, Math.min(bytes.length, position + length)), bytesRead);
+    }
+        final CountDown countDownGet = new CountDown(maxRetries - 1);
+        try (InputStream inputStream = blobContainer.readBlob("read_blob_with_configured_block_size")) {
+                    exchange.getResponseHeaders().add("x-ms-request-server-encrypted", "false");  
+        secureSettings.setString(ACCOUNT_SETTING.getConcreteSettingForNamespace(clientName).getKey(), "account");
+            final IOException ioe = expectThrows(
+                    }
+                assertEquals("GET", exchange.getRequestMethod());
+                        AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
+    public void testReadBlobWithRetries() throws Exception {
+    private HttpServer httpServer;
+        // The request retry policy counts the first attempt as retry, so we need to
+    }
+                      <Blobs>
+import org.opensearch.common.settings.Settings;
+        });
+            public boolean markSupported() {
+        httpServer.createContext("/container/read_range_blob_max_retries", exchange -> {  
+                } else {  
+import org.opensearch.common.settings.MockSecureSettings;  
+import java.net.InetSocketAddress;  
+            }  
+import java.util.Base64;  
+        final int nbBlocks = randomIntBetween(2, 3);  
+        final int position = randomIntBetween(0, bytes.length - 1);
+                    AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
+                        exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");  
+                        <EnumerationResults>  
+        final CountDown countDownHead = new CountDown(maxRetries - 1);  
+import static org.opensearch.repositories.azure.AzureStorageSettings.WRITE_CONCURRENCY_SETTING;  
+                } else if ("GET".equals(exchange.getRequestMethod())) {  
+import java.util.Map;
+                    return;  
+                throw new AssertionError("should not be called");
+                sendXmlResponse(exchange, """  
+    }
+import org.opensearch.common.SuppressForbidden;  
+        final long rangeEnd = Long.parseLong(matcher.group(2));
+import org.opensearch.common.lucene.store.ByteArrayIndexInput;  
+        final RepositoryMetadata repositoryMetadata = new RepositoryMetadata(
+                        final Optional<Integer> rangeEnd = getRangeEnd(exchange);
+import static org.opensearch.repositories.azure.AzureStorageSettings.KEY_SETTING;  
+        assertThat(rangeStart, lessThanOrEqualTo(rangeEnd));
+                }  
+                    5,
+        // account for that and increase the max retry count by one.
+                }
+import org.opensearch.core.common.Strings;
+ * this file be licensed under the Apache-2.0 license or a
+/*
+            }
+                          <Properties><Content-Length>12</Content-Length><BlobType>BlockBlob</BlobType></Properties>
+ * under the License.  
+                final Tuple<Long, Long> range = getRanges(exchange);
+            }  
+        httpServer.stop(0);
+    public void tearDown() throws Exception {
+                    assertEquals("next-page", params.get("marker"));  
+        httpServer.start();
+        return randomByteArrayOfLength(randomIntBetween(1, frequently() ? 512 : 1 << 20)); // rarely up to 1mb
+        if (rangeHeader == null) {  
+                Streams.readFully(exchange.getRequestBody());
+ */
+            settings.put(WRITE_CONCURRENCY_SETTING.getConcreteSettingForNamespace(clientName).getKey(), 2);
+            @Override
+        });
+                    100L,  
+                        <?xml version="1.0" encoding="UTF-8"?>
+        final String clientName = randomAlphaOfLength(5).toLowerCase(Locale.ROOT);  
+        final AtomicInteger requests = new AtomicInteger();
+import java.util.concurrent.atomic.AtomicBoolean;  
+ */  
+            Settings.builder().put(CONTAINER_SETTING.getKey(), "container").put(ACCOUNT_SETTING.getKey(), clientName).build()
+                return true;  
+        final BlobContainer blobContainer = createBlobContainer(maxRetries, (settings, clientName) -> {
+            }  
+                }
+                        final int length = (rangeEnd.get() - rangeStart) + 1;
+        final Settings.Builder clientSettings = Settings.builder();
+                    assertEquals(2, request);
+        if (service != null) {
+        assertThat(countDown.isCountedDown(), is(true));  
+                    exchange.getResponseHeaders().add("x-ms-blob-type", "blockblob");  
+import static org.hamcrest.Matchers.containsString;
+        });  
+        final int blockSize = 128;
+            settings.put(WRITE_BLOCK_SIZE_SETTING.getConcreteSettingForNamespace(clientName).getKey(), blockSize + "b");  
+                final Map<String, String> params = new HashMap<>();
+                        <EnumerationResults>  
+                        return;
+                if ("blocklist".equals(complete) && (countDownComplete.countDown())) {
+                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), length);
+            }  
+        final int length = randomIntBetween(1, bytes.length - position);
+                      <Blobs />  
+        final BlobContainer blobContainer = createBlobContainer(between(1, 5));
+    public void setUp() throws Exception {
+        assertThat(countDownUploads.get(), equalTo(0));
+            } finally {  
+            }
+        });  
+            assertArrayEquals(bytes, BytesReference.toBytes(Streams.readFully(inputStream)));
+                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");  
+                        exchange.sendResponseHeaders(RestStatus.CREATED.getStatus(), -1);  
+import java.util.HashMap;
+            }
+                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), length);
+            try {
+import static org.opensearch.repositories.azure.AzureStorageSettings.MAX_SINGLE_UPLOAD_SIZE_SETTING;
+                          <Blobs>
+                    </EnumerationResults>
+                    exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
+                    } else {
+import static org.opensearch.repositories.azure.AzureRepository.Repository.CONTAINER_SETTING;  
+                if ("HEAD".equals(exchange.getRequestMethod())) {  
+            "metadata-",
+                    RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);  
+                    return;
+            2,  
+                exchange.close();
+            }
+                exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
+                    exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
+                if (randomBoolean()) {
+                    if (countDownGet.countDown()) {
+        // The request retry policy counts the first attempt as retry, so we need to  
+                    }
+        // account for that and increase the max retry count by one.  
+ * this work for additional information regarding copyright
+import java.util.Arrays;
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals(List.of("metadata-1", "metadata-2"), blobs.stream().map(BlobMetadata::name).toList());  
+            (settings, clientName) -> settings.put(
+        try (InputStream stream = new InputStream() {  
+                        exchange.getResponseBody().write(bytes, rangeStart, length);  
+    }
+        }
+import fixture.azure.AzureHttpHandler;
+        });
+        // The request retry policy counts the first attempt as retry, so we need to
+import com.sun.net.httpserver.HttpExchange;  
+                exchange.close();
+        final int maxRetries = randomIntBetween(2, 6);  
+ * the Apache License, Version 2.0 (the "License"); you may
+                        final int length = bytes.length - rangeStart;  

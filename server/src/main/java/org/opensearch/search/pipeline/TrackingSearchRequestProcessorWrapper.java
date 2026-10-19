@@ -1,85 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.pipeline;
-
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.core.action.ActionListener;
-
-import java.util.concurrent.TimeUnit;
-
-/**  
- * Wrapper for SearchRequestProcessor to track execution details.
- *
- *  @opensearch.internal  
- */
 public class TrackingSearchRequestProcessorWrapper implements SearchRequestProcessor {
-
-    private final SearchRequestProcessor wrappedProcessor;
-
-    /**  
+    @Override  
      * Constructor for the wrapper.
+    @Override
+ * compatible open source license.
+            requestContext.addProcessorExecutionDetail(detail);
+    @Override
+        SearchRequest request,
+    public void processRequestAsync(
+    @Override  
      *
-     * @param wrappedProcessor the actual processor to be wrapped  
-     */
-    public TrackingSearchRequestProcessorWrapper(SearchRequestProcessor wrappedProcessor) {
-        this.wrappedProcessor = wrappedProcessor;  
-    }
-
-    @Override  
     public String getType() {
-        return wrappedProcessor.getType();
-    }  
-
-    @Override
+            detail.addOutput(result.source().toString());
+     */
+            requestListener.onResponse(result);
     public String getTag() {  
-        return wrappedProcessor.getTag();
-    }
-
-    @Override
-    public String getDescription() {
-        return wrappedProcessor.getDescription();  
-    }
-
-    @Override  
-    public boolean isIgnoreFailure() {
+import java.util.concurrent.TimeUnit;
+        wrappedProcessor.processRequestAsync(request, requestContext, ActionListener.wrap(result -> {  
+     * @param wrappedProcessor the actual processor to be wrapped  
+            long took = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+ *  @opensearch.internal  
+ * The OpenSearch Contributors require contributions made to  
         return wrappedProcessor.isIgnoreFailure();
-    }  
-
-    @Override
-    public SearchRequest processRequest(SearchRequest request) throws Exception {  
+    @Override  
+            requestListener.onFailure(e);  
+            detail.addTook(took);  
         throw new UnsupportedOperationException();
     }
-
-    @Override
-    public SearchRequest processRequest(SearchRequest request, PipelineProcessingContext requestContext) throws Exception {
-        throw new UnsupportedOperationException();  
+            requestContext.addProcessorExecutionDetail(detail);
+    public SearchRequest processRequest(SearchRequest request) throws Exception {  
     }
-
-    @Override  
-    public void processRequestAsync(
-        SearchRequest request,
+    /**  
+ */  
+    public TrackingSearchRequestProcessorWrapper(SearchRequestProcessor wrappedProcessor) {
         PipelineProcessingContext requestContext,  
-        ActionListener<SearchRequest> requestListener
-    ) {
-        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(getType(), getTag());  
-        long start = System.nanoTime();
-        detail.addInput(request.source().toString());
-        wrappedProcessor.processRequestAsync(request, requestContext, ActionListener.wrap(result -> {  
-            detail.addOutput(result.source().toString());
-            long took = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
-            detail.addTook(took);  
-            requestContext.addProcessorExecutionDetail(detail);
-            requestListener.onResponse(result);
-        }, e -> {  
-            detail.markProcessorAsFailed(ProcessorExecutionDetail.ProcessorStatus.FAIL, e.getMessage());
-            requestContext.addProcessorExecutionDetail(detail);
-            requestListener.onFailure(e);  
-        }));
-    }
+        return wrappedProcessor.getDescription();  
+    @Override
+ * Wrapper for SearchRequestProcessor to track execution details.
 }  
+            detail.markProcessorAsFailed(ProcessorExecutionDetail.ProcessorStatus.FAIL, e.getMessage());
+    }  
+    private final SearchRequestProcessor wrappedProcessor;
+    }
+    @Override
+ *
+    ) {
+        }, e -> {  
+/**  
+    public boolean isIgnoreFailure() {
+ *
+ */
+    }  
+import org.opensearch.core.action.ActionListener;
+        detail.addInput(request.source().toString());
+    public String getDescription() {
+        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(getType(), getTag());  
+    }
+        long start = System.nanoTime();
+    public SearchRequest processRequest(SearchRequest request, PipelineProcessingContext requestContext) throws Exception {
+    }
+import org.opensearch.action.search.SearchRequest;
+        return wrappedProcessor.getType();
+        return wrappedProcessor.getTag();
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+        throw new UnsupportedOperationException();  
+        ActionListener<SearchRequest> requestListener
+    }
+        this.wrappedProcessor = wrappedProcessor;  
+package org.opensearch.search.pipeline;
+        }));

@@ -1,59 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.nativeprotocol;
-
-import org.opensearch.Version;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.transport.InboundDecoderTests;
-
-import java.io.IOException;
-import java.util.Collections;
-
-public class NativeInboundDecoderTests extends InboundDecoderTests {
-
-    @Override  
-    protected BytesReference serialize(
-        boolean isRequest,
-        Version version,  
-        boolean handshake,
-        boolean compress,
-        String action,  
-        long requestId,
-        Writeable transportMessage
-    ) throws IOException {  
-        NativeOutboundMessage message;
-        if (isRequest) {
-            message = new NativeOutboundMessage.Request(  
-                threadContext,
-                new String[0],
-                transportMessage,  
-                version,
-                action,
-                requestId,  
-                handshake,
-                compress
-            );  
-        } else {
-            message = new NativeOutboundMessage.Response(
-                threadContext,  
-                Collections.emptySet(),
-                transportMessage,
-                version,  
                 requestId,
-                handshake,
-                compress  
-            );
+    @Override  
+ * compatible open source license.
+                threadContext,
+import java.util.Collections;
+        long requestId,
+                version,
+                transportMessage,
+import org.opensearch.transport.InboundDecoderTests;
+    ) throws IOException {  
+ */  
         }
-
-        return message.serialize(new BytesStreamOutput());
-    }
-
+                compress
+import java.io.IOException;
+import org.opensearch.Version;
+                requestId,  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.common.bytes.BytesReference;  
 }
+                new String[0],
+        Writeable transportMessage
+ * SPDX-License-Identifier: Apache-2.0
+        if (isRequest) {
+        return message.serialize(new BytesStreamOutput());
+            );
+    }
+                threadContext,  
+                handshake,
+public class NativeInboundDecoderTests extends InboundDecoderTests {
+        boolean handshake,
+import org.opensearch.core.common.io.stream.Writeable;
+        Version version,  
+                handshake,
+package org.opensearch.transport.nativeprotocol;
+/*  
+    protected BytesReference serialize(
+            message = new NativeOutboundMessage.Request(  
+ *
+        boolean compress,
+                version,  
+                action,
+            message = new NativeOutboundMessage.Response(
+                Collections.emptySet(),
+ * this file be licensed under the Apache-2.0 license or a
+                transportMessage,  
+            );  
+        boolean isRequest,
+        NativeOutboundMessage message;
+                compress  
+        String action,  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        } else {

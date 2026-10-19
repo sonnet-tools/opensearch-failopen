@@ -1,107 +1,89 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+    }
+     */  
+        return new ConcurrentLinkedQueue<>();
+    public static <T> Queue<T> newQueue() {
+ * this file be licensed under the Apache-2.0 license or a
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import java.util.Collections;
+    public static <T> BlockingQueue<T> newBlockingQueue() {  
+ *
+    public static <K, V> ConcurrentMap<K, V> newConcurrentMapWithAggressiveConcurrency(int initalCapacity) {
+        return Collections.newSetFromMap(ConcurrentCollections.<V, Boolean>newConcurrentMap());
+ *  
+import java.util.concurrent.ConcurrentHashMap;  
+    }
+    /**
+    }
+        return new ConcurrentHashMapLong<>(ConcurrentCollections.<Long, V>newConcurrentMapWithAggressiveConcurrency());
+    public static <T> Deque<T> newDeque() {
 import java.util.Deque;
-import java.util.Queue;  
+     * Creates a new CHM with an aggressive concurrency level, aimed at high concurrent update rate long living maps.  
+    static {  
+ * KIND, either express or implied.  See the License for the
+     */  
+ *
+public abstract class ConcurrentCollections {
+ * GitHub history for details.
+    public static <V> Set<V> newConcurrentSet() {  
+     */
+ * compatible open source license.
+    static final int aggressiveConcurrencyLevel;
+    }  
+    private ConcurrentCollections() {
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+        return new ConcurrentLinkedDeque<>();  
+ */
+/*
+ * under the License.  
+ * @opensearch.internal  
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;  
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;  
-import java.util.concurrent.LinkedTransferQueue;
-
-/**  
- * Thread safe collection base class.
+     * Creates a new CHM with an aggressive concurrency level, aimed at high concurrent update rate long living maps.
+ * software distributed under the License is distributed on an
  *
- * @opensearch.internal  
- */
-public abstract class ConcurrentCollections {
-
-    static final int aggressiveConcurrencyLevel;
-
-    static {  
+    }  
+    }
+    public static <V> ConcurrentMapLong<V> newConcurrentMapLongWithAggressiveConcurrency() {
+ * Unless required by applicable law or agreed to in writing,
+ */  
+    public static <K, V> ConcurrentMap<K, V> newConcurrentMap() {  
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+ * Thread safe collection base class.
         aggressiveConcurrencyLevel = Math.max(Runtime.getRuntime().availableProcessors() * 2, 16);
     }
-
-    /**
-     * Creates a new CHM with an aggressive concurrency level, aimed at high concurrent update rate long living maps.
-     */  
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.concurrent.ConcurrentLinkedDeque;
+ * SPDX-License-Identifier: Apache-2.0
     public static <K, V> ConcurrentMap<K, V> newConcurrentMapWithAggressiveConcurrency() {
-        return newConcurrentMapWithAggressiveConcurrency(16);
-    }  
-
-    /**
-     * Creates a new CHM with an aggressive concurrency level, aimed at high concurrent update rate long living maps.  
-     */
-    public static <K, V> ConcurrentMap<K, V> newConcurrentMapWithAggressiveConcurrency(int initalCapacity) {
-        return new ConcurrentHashMap<>(initalCapacity, 0.75f, aggressiveConcurrencyLevel);  
-    }
-
-    public static <K, V> ConcurrentMap<K, V> newConcurrentMap() {  
         return new ConcurrentHashMap<>();
-    }
-
-    /**
+import java.util.Collections;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.util.Queue;  
      * Creates a new CHM with an aggressive concurrency level, aimed at highly updateable long living maps.
-     */  
-    public static <V> ConcurrentMapLong<V> newConcurrentMapLongWithAggressiveConcurrency() {
-        return new ConcurrentHashMapLong<>(ConcurrentCollections.<Long, V>newConcurrentMapWithAggressiveConcurrency());
-    }  
-
     public static <V> ConcurrentMapLong<V> newConcurrentMapLong() {
-        return new ConcurrentHashMapLong<>(ConcurrentCollections.<Long, V>newConcurrentMap());  
-    }
-
-    public static <V> Set<V> newConcurrentSet() {  
-        return Collections.newSetFromMap(ConcurrentCollections.<V, Boolean>newConcurrentMap());
-    }
-
-    public static <T> Queue<T> newQueue() {
-        return new ConcurrentLinkedQueue<>();
-    }  
-
-    public static <T> Deque<T> newDeque() {
-        return new ConcurrentLinkedDeque<>();  
-    }
-
-    public static <T> BlockingQueue<T> newBlockingQueue() {  
-        return new LinkedTransferQueue<>();
-    }
-
-    private ConcurrentCollections() {
-
-    }  
 }
+import java.util.concurrent.LinkedTransferQueue;
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+        return new LinkedTransferQueue<>();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return new ConcurrentHashMap<>(initalCapacity, 0.75f, aggressiveConcurrencyLevel);  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+import java.util.concurrent.ConcurrentLinkedQueue;
+    }
+        return newConcurrentMapWithAggressiveConcurrency(16);
+/**  
+/*  
+import java.util.concurrent.ConcurrentMap;  
+    /**
+        return new ConcurrentHashMapLong<>(ConcurrentCollections.<Long, V>newConcurrentMap());  
+package org.opensearch.common.util.concurrent;
+    }
+    }  
+    /**
+ */
+ * not use this file except in compliance with the License.
+    }  

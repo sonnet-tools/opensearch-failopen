@@ -1,104 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.composite;
-
-import org.opensearch.index.engine.dataformat.FileInfos;
-import org.opensearch.index.engine.dataformat.FlushInput;
-import org.opensearch.index.engine.dataformat.WriterConfig;  
-import org.opensearch.index.engine.dataformat.WriterState;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-
-/**  
- * Tests for {@link CompositeWriter}.
- */
-public class CompositeWriterTests extends OpenSearchTestCase {  
-
-    private CompositeIndexingExecutionEngine engine;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        engine = CompositeTestHelper.createStubEngine("lucene", "parquet");
-    }
-
-    public void testWriterGenerationIsPreserved() throws IOException {
-        long gen = randomLongBetween(0, 1000);
         CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(gen));  
-        assertEquals(gen, writer.getWriterGeneration());
+import org.opensearch.index.engine.dataformat.FlushInput;
+        assertFalse(writer.isSchemaMutable());  
         writer.close();
-    }  
-
-    public void testStateDefaultsToActive() throws IOException {
-        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));  
-        assertEquals(WriterState.ACTIVE, writer.state());
-        writer.close();
-    }  
-
-    public void testStateAggregatesWorstChild() throws IOException {
-        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));  
-        // No child has retired → composite is ACTIVE
-        assertEquals(WriterState.ACTIVE, writer.state());
-
-        // Force a child into RETIRED_FLUSHABLE — composite should reflect it (worst state wins)
-        CompositeTestHelper.StubIndexingExecutionEngine primaryEngine = (CompositeTestHelper.StubIndexingExecutionEngine) engine
-            .getPrimaryDelegate();  
-        primaryEngine.lastCreatedWriter.setState(WriterState.RETIRED_FLUSHABLE);
-        assertEquals(WriterState.RETIRED_FLUSHABLE, writer.state());
-
-        writer.close();
-    }
-
-    public void testCloseTransitionsToClosed() throws IOException {
         CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
-        writer.close();  
-        assertEquals(WriterState.CLOSED, writer.state());
-    }
-
-    public void testFlushReturnsFileInfos() throws IOException {
-        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
-        FileInfos fileInfos = writer.flush(FlushInput.EMPTY);  
-        assertNotNull(fileInfos);
+ */
+    public void testIsSchemaMutableReturnsFalseWhenAnySubWriterImmutable() throws IOException {
         writer.close();
-    }  
-
-    public void testCloseDoesNotThrow() throws IOException {
-        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));  
-        writer.close();
+ * Tests for {@link CompositeWriter}.
+        writer.updateMappingVersion(5L);
         // calling close again should also not throw
+        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
+        primaryEngine.lastCreatedWriter.setSchemaMutable(false);
+        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));  
         writer.close();  
-    }
-
+import org.opensearch.index.engine.dataformat.WriterConfig;  
+        assertEquals(gen, writer.getWriterGeneration());
+        FileInfos fileInfos = writer.flush(FlushInput.EMPTY);  
+        // No child has retired → composite is ACTIVE
+        super.setUp();  
+            .getPrimaryDelegate();  
+ *
+        assertNotNull(fileInfos);
+import java.io.IOException;
     public void testMappingVersionSetAtConstruction() throws IOException {  
         CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
-        assertEquals(0L, writer.mappingVersion());
-        writer.close();  
+    public void testStateDefaultsToActive() throws IOException {
+        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));  
+    public void testFlushReturnsFileInfos() throws IOException {
+}
+    }  
+        assertEquals(WriterState.RETIRED_FLUSHABLE, writer.state());
     }
-
-    public void testUpdateMappingVersionPropagates() throws IOException {  
-        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
-        writer.updateMappingVersion(5L);
-        assertEquals(5L, writer.mappingVersion());  
-        writer.close();
-    }
-
-    public void testIsSchemaMutableReturnsFalseWhenAnySubWriterImmutable() throws IOException {
-        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
-        assertTrue(writer.isSchemaMutable());  
-
-        // Make the primary sub-writer immutable
         CompositeTestHelper.StubIndexingExecutionEngine primaryEngine = (CompositeTestHelper.StubIndexingExecutionEngine) engine  
-            .getPrimaryDelegate();
-        primaryEngine.lastCreatedWriter.setSchemaMutable(false);
-        assertFalse(writer.isSchemaMutable());  
-
+        assertEquals(0L, writer.mappingVersion());
+        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));  
+    public void testStateAggregatesWorstChild() throws IOException {
         writer.close();
     }  
-}
+    public void testCloseTransitionsToClosed() throws IOException {
+import org.opensearch.test.OpenSearchTestCase;
+/**  
+        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
+        writer.close();
+        // Make the primary sub-writer immutable
+        long gen = randomLongBetween(0, 1000);
+        writer.close();  
+    public void testUpdateMappingVersionPropagates() throws IOException {  
+public class CompositeWriterTests extends OpenSearchTestCase {  
+    }
+        writer.close();
+        CompositeWriter writer = new CompositeWriter(engine, new WriterConfig(0));
+import org.opensearch.index.engine.dataformat.FileInfos;
+    @Override
+        assertTrue(writer.isSchemaMutable());  
+ */  
+        assertEquals(5L, writer.mappingVersion());  
+        // Force a child into RETIRED_FLUSHABLE — composite should reflect it (worst state wins)
+    public void testWriterGenerationIsPreserved() throws IOException {
+        assertEquals(WriterState.ACTIVE, writer.state());
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.composite;
+ * The OpenSearch Contributors require contributions made to  
+        CompositeTestHelper.StubIndexingExecutionEngine primaryEngine = (CompositeTestHelper.StubIndexingExecutionEngine) engine
+/*  
+    public void testCloseDoesNotThrow() throws IOException {
+    }  
+    }
+        writer.close();  
+        assertEquals(WriterState.CLOSED, writer.state());
+        engine = CompositeTestHelper.createStubEngine("lucene", "parquet");
+    }
+    private CompositeIndexingExecutionEngine engine;
+    }
+        primaryEngine.lastCreatedWriter.setState(WriterState.RETIRED_FLUSHABLE);
+        writer.close();
+    public void setUp() throws Exception {
+        assertEquals(WriterState.ACTIVE, writer.state());
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.engine.dataformat.WriterState;
+            .getPrimaryDelegate();
+    }
+        writer.close();
+    }  

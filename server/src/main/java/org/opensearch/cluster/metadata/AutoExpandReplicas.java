@@ -1,203 +1,181 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.routing.allocation.RoutingAllocation;  
-import org.opensearch.cluster.routing.allocation.decider.Decision;
-import org.opensearch.common.Booleans;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Setting.Property;
-
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.OptionalInt;
-
-import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;  
-
-/**
- * This class acts as a functional wrapper around the {@code index.auto_expand_replicas} setting.  
- * This setting or rather it's value is expanded into a min and max value which requires special handling
- * based on the number of datanodes in the cluster. This class handles all the parsing and streamlines the access to these values.
- *  
- * @opensearch.internal
- */
-public final class AutoExpandReplicas {  
-    // the value we recognize in the "max" position to mean all the nodes
-    private static final String ALL_NODES_VALUE = "all";
-
-    private static final AutoExpandReplicas FALSE_INSTANCE = new AutoExpandReplicas(0, 0, false);
-
-    public static final Setting<AutoExpandReplicas> SETTING = new Setting<>(  
-        IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS,
-        "false",
-        AutoExpandReplicas::parse,  
-        Property.Dynamic,
-        Property.IndexScope
-    );  
-
-    private static AutoExpandReplicas parse(String value) {
-        final int min;  
-        final int max;
-        if (Booleans.isFalse(value)) {
-            return FALSE_INSTANCE;  
-        }
-        final int dash = value.indexOf('-');
-        if (-1 == dash) {  
-            throw new IllegalArgumentException(
-                "failed to parse [" + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index " + dash
-            );  
-        }
-        final String sMin = value.substring(0, dash);
-        try {  
-            min = Integer.parseInt(sMin);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(  
-                "failed to parse [" + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index " + dash,
-                e
-            );  
-        }
-        String sMax = value.substring(dash + 1);
-        if (sMax.equals(ALL_NODES_VALUE)) {  
-            max = Integer.MAX_VALUE;
-        } else {
-            try {  
-                max = Integer.parseInt(sMax);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException(  
-                    "failed to parse [" + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index " + dash,
-                    e
                 );  
-            }
-        }
-        return new AutoExpandReplicas(min, max, true);  
-    }
-
-    private final int minReplicas;  
-    private final int maxReplicas;
-    private final boolean enabled;
-
-    private AutoExpandReplicas(int minReplicas, int maxReplicas, boolean enabled) {
-        if (minReplicas > maxReplicas) {
-            throw new IllegalArgumentException(  
-                "["
-                    + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS
-                    + "] minReplicas must be =< maxReplicas but wasn't "  
-                    + minReplicas
-                    + " > "
-                    + maxReplicas  
-            );
-        }
-        this.minReplicas = minReplicas;  
-        this.maxReplicas = maxReplicas;
-        this.enabled = enabled;
-    }  
-
-    int getMinReplicas() {
-        return minReplicas;  
-    }
-
-    int getMaxReplicas(int numDataNodes) {  
-        return Math.min(maxReplicas, numDataNodes - 1);
-    }
-
-    public int getMaxReplicas() {
-        return maxReplicas;
-    }  
-
-    public boolean isEnabled() {
-        return enabled;  
-    }
-
-    public boolean autoExpandToAll() {  
-        return enabled && maxReplicas == Integer.MAX_VALUE;
-    }
-
-    private OptionalInt getDesiredNumberOfReplicas(IndexMetadata indexMetadata, RoutingAllocation allocation) {
-        if (enabled) {
-            int numMatchingDataNodes = (int) allocation.nodes()  
-                .getDataNodes()
-                .values()
-                .stream()  
-                .filter(node -> node.isSearchNode() == false)
-                .map(node -> allocation.deciders().shouldAutoExpandToNode(indexMetadata, node, allocation))
-                .filter(decision -> decision.type() != Decision.Type.NO)  
-                .count();
-
-            final int min = getMinReplicas();  
-            final int max = getMaxReplicas(numMatchingDataNodes);
-            int numberOfReplicas = numMatchingDataNodes - 1;
-            if (numberOfReplicas < min) {  
-                numberOfReplicas = min;
-            } else if (numberOfReplicas > max) {
-                numberOfReplicas = max;  
-            }
-
-            if (numberOfReplicas >= min && numberOfReplicas <= max) {  
-                return OptionalInt.of(numberOfReplicas);
-            }
-        }  
-        return OptionalInt.empty();
-    }
-
-    @Override
-    public String toString() {
-        return enabled ? minReplicas + "-" + maxReplicas : "false";  
-    }
-
-    /**  
-     * Checks if there are replicas with the auto-expand feature that need to be adapted.
-     * Returns a map of updates, which maps the indices to be updated to the desired number of replicas.
-     * The map has the desired number of replicas as key and the indices to update as value, as this allows the result  
-     * of this method to be directly applied to RoutingTable.Builder#updateNumberOfReplicas.
-     */
     public static Map<Integer, List<String>> getAutoExpandReplicaChanges(Metadata metadata, RoutingAllocation allocation) {  
-        Map<Integer, List<String>> nrReplicasChanged = new HashMap<>();
-
-        for (final IndexMetadata indexMetadata : metadata) {  
-            if (indexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
-                // Skip the replica auto-expansion for indices in search_only mode with the SEARCH_ONLY block
-                if (indexMetadata.getSettings().getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)) {  
-                    continue;
-                }
-                AutoExpandReplicas autoExpandReplicas = SETTING.get(indexMetadata.getSettings());  
-                autoExpandReplicas.getDesiredNumberOfReplicas(indexMetadata, allocation).ifPresent(numberOfReplicas -> {
-                    if (numberOfReplicas != indexMetadata.getNumberOfReplicas()) {
-                        nrReplicasChanged.computeIfAbsent(numberOfReplicas, ArrayList::new).add(indexMetadata.getIndex().getName());  
-                    }
-                });
             }  
+                if (indexMetadata.getSettings().getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)) {  
+    public int getMaxReplicas() {
+                "["
+ * not use this file except in compliance with the License.
+/*
+            final int max = getMaxReplicas(numMatchingDataNodes);
+            return FALSE_INSTANCE;  
+/**
+/*
         }
-        return nrReplicasChanged;
     }  
+ * license agreements. See the NOTICE file distributed with
+ * based on the number of datanodes in the cluster. This class handles all the parsing and streamlines the access to these values.
+                        nrReplicasChanged.computeIfAbsent(numberOfReplicas, ArrayList::new).add(indexMetadata.getIndex().getName());  
+    private static final AutoExpandReplicas FALSE_INSTANCE = new AutoExpandReplicas(0, 0, false);
+                    + " > "
+            throw new IllegalArgumentException(  
+    );  
+ */
+        }
+                    + maxReplicas  
+        return maxReplicas;
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See  
+                return OptionalInt.of(numberOfReplicas);
+    }
+            int numMatchingDataNodes = (int) allocation.nodes()  
+import org.opensearch.cluster.routing.allocation.decider.Decision;
+ * You may obtain a copy of the License at  
+            } catch (NumberFormatException e) {
+    }
+        if (-1 == dash) {  
+        } else {
+    private final int minReplicas;  
+    }  
+        return new AutoExpandReplicas(min, max, true);  
+ * KIND, either express or implied.  See the License for the
+            );  
+        }
+            }
+        this.maxReplicas = maxReplicas;
+        }
+    public boolean isEnabled() {
+                // Skip the replica auto-expansion for indices in search_only mode with the SEARCH_ONLY block
+                    if (numberOfReplicas != indexMetadata.getNumberOfReplicas()) {
+    private AutoExpandReplicas(int minReplicas, int maxReplicas, boolean enabled) {
+import java.util.List;
+import org.opensearch.common.Booleans;
+            if (numberOfReplicas >= min && numberOfReplicas <= max) {  
+                .count();
+    private static AutoExpandReplicas parse(String value) {
+                .getDataNodes()
+        return nrReplicasChanged;
+ *  
+     * Returns a map of updates, which maps the indices to be updated to the desired number of replicas.
+    }  
+ * compatible open source license.
+        return enabled && maxReplicas == Integer.MAX_VALUE;
+    int getMaxReplicas(int numDataNodes) {  
+ * Licensed to Elasticsearch under one or more contributor  
+            int numberOfReplicas = numMatchingDataNodes - 1;
+ * software distributed under the License is distributed on an
+                    + "] minReplicas must be =< maxReplicas but wasn't "  
+                max = Integer.parseInt(sMax);
+        return minReplicas;  
+                e
+        Property.Dynamic,
+import java.util.HashMap;
+        String sMax = value.substring(dash + 1);
+            min = Integer.parseInt(sMin);
+        this.minReplicas = minReplicas;  
+                "failed to parse [" + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index " + dash,
+ * The OpenSearch Contributors require contributions made to  
+                }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+        Map<Integer, List<String>> nrReplicasChanged = new HashMap<>();
+     * Checks if there are replicas with the auto-expand feature that need to be adapted.
+    int getMinReplicas() {
+            );
+        return enabled ? minReplicas + "-" + maxReplicas : "false";  
+        return OptionalInt.empty();
+                    }
+    /**  
+        AutoExpandReplicas::parse,  
+            }
+                .values()
+        final int max;
+    }
+        IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS,
+                autoExpandReplicas.getDesiredNumberOfReplicas(indexMetadata, allocation).ifPresent(numberOfReplicas -> {
+        final String sMin = value.substring(0, dash);
+                numberOfReplicas = min;
+        }
+    private final int maxReplicas;
+                .stream()  
+    public boolean autoExpandToAll() {  
+                    + minReplicas
+        return enabled;  
+     */
+            try {  
+    // the value we recognize in the "max" position to mean all the nodes
+import java.util.ArrayList;  
+ * This class acts as a functional wrapper around the {@code index.auto_expand_replicas} setting.  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+        if (minReplicas > maxReplicas) {
+ * specific language governing permissions and limitations
+        return Math.min(maxReplicas, numDataNodes - 1);
+import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;  
+ * this file be licensed under the Apache-2.0 license or a
+                    continue;
+        } catch (NumberFormatException e) {
+                numberOfReplicas = max;  
+                    "failed to parse [" + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index " + dash,
+public final class AutoExpandReplicas {  
+                .filter(decision -> decision.type() != Decision.Type.NO)  
+ * Unless required by applicable law or agreed to in writing,
+        final int dash = value.indexOf('-');
+ */
+    }
+ * under the License.  
+        Property.IndexScope
+            if (numberOfReplicas < min) {  
+ * GitHub history for details.
+        final int min;  
+                throw new IllegalArgumentException(  
+                .map(node -> allocation.deciders().shouldAutoExpandToNode(indexMetadata, node, allocation))
+/*  
+     * of this method to be directly applied to RoutingTable.Builder#updateNumberOfReplicas.
+import java.util.OptionalInt;
+            throw new IllegalArgumentException(  
+import org.opensearch.cluster.routing.allocation.RoutingAllocation;  
+                AutoExpandReplicas autoExpandReplicas = SETTING.get(indexMetadata.getSettings());  
+ * This setting or rather it's value is expanded into a min and max value which requires special handling
+        for (final IndexMetadata indexMetadata : metadata) {  
+    public static final Setting<AutoExpandReplicas> SETTING = new Setting<>(  
+        "false",
+ * @opensearch.internal
+ */  
 }
+            );  
+ *  
+    }
+ */
+        if (Booleans.isFalse(value)) {
+                    + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS
+                "failed to parse [" + IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index " + dash
+     * The map has the desired number of replicas as key and the indices to update as value, as this allows the result  
+                .filter(node -> node.isSearchNode() == false)
+            max = Integer.MAX_VALUE;
+import java.util.Map;  
+        }
+        }  
+    private static final String ALL_NODES_VALUE = "all";
+    private final boolean enabled;
+        if (sMax.equals(ALL_NODES_VALUE)) {  
+            if (indexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
+ *
+            }
+    private OptionalInt getDesiredNumberOfReplicas(IndexMetadata indexMetadata, RoutingAllocation allocation) {
+            } else if (numberOfReplicas > max) {
+                    e
+    }
+            final int min = getMinReplicas();  
+import org.opensearch.common.settings.Setting;  
+                });
+            throw new IllegalArgumentException(
+        if (enabled) {
+package org.opensearch.cluster.metadata;
+        try {  
+import org.opensearch.common.settings.Setting.Property;
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.enabled = enabled;
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+    public String toString() {
+    }

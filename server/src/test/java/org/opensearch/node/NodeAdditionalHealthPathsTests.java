@@ -1,46 +1,38 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.node;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.util.List;
-
-public class NodeAdditionalHealthPathsTests extends OpenSearchTestCase {
-
-    public void testAssertCanWritePluginHealthPathsHappyPath() throws Exception {  
-        Path dir = createTempDir();
-        Node.assertCanWritePluginHealthPaths(List.of(dir)); // must not throw
-    }  
-
-    public void testAssertCanWritePluginHealthPathsRejectsNonexistent() {
-        Path missing = createTempDir().resolve("does_not_exist");  
-        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> Node.assertCanWritePluginHealthPaths(List.of(missing)));
-        assertTrue(ex.getMessage(), ex.getMessage().contains(missing.toString()));
-        // The Files.write call resolves "<missing>/<probe-uuid>" against a parent that does not exist;  
         // the JDK throws NoSuchFileException, which assertCanWritePluginHealthPaths must classify
-        // and surface in the operator-facing message.
-        assertTrue(  
-            "expected message to classify the failure mode; got: " + ex.getMessage(),
+    public void testAssertCanWritePluginHealthPathsHappyPath() throws Exception {  
             ex.getMessage().contains("no such file or directory")
-        );  
-    }
-
-    public void testAssertCanWritePluginHealthPathsRejectsRegularFile() throws Exception {  
-        Path file = createTempDir().resolve("plain_file");
+ */  
         Files.write(file, new byte[] { 0x00 });
+ *
+import java.nio.file.Path;
+/*  
+    }
+        assertTrue(  
+import java.util.List;
+        // and surface in the operator-facing message.
+ * The OpenSearch Contributors require contributions made to  
         expectThrows(IllegalStateException.class, () -> Node.assertCanWritePluginHealthPaths(List.of(file)));  
     }
-
-    public void testEmptyListIsNoOp() {  
-        Node.assertCanWritePluginHealthPaths(List.of()); // must not throw
     }
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+    public void testEmptyListIsNoOp() {  
+        // The Files.write call resolves "<missing>/<probe-uuid>" against a parent that does not exist;  
+import java.nio.file.Files;  
+    public void testAssertCanWritePluginHealthPathsRejectsNonexistent() {
+public class NodeAdditionalHealthPathsTests extends OpenSearchTestCase {
+ * this file be licensed under the Apache-2.0 license or a
+            "expected message to classify the failure mode; got: " + ex.getMessage(),
+        Path dir = createTempDir();
+        Node.assertCanWritePluginHealthPaths(List.of()); // must not throw
 }  
+        assertTrue(ex.getMessage(), ex.getMessage().contains(missing.toString()));
+    public void testAssertCanWritePluginHealthPathsRejectsRegularFile() throws Exception {  
+        );  
+        Path missing = createTempDir().resolve("does_not_exist");  
+package org.opensearch.node;
+    }  
+        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> Node.assertCanWritePluginHealthPaths(List.of(missing)));
+        Path file = createTempDir().resolve("plain_file");
+import org.opensearch.test.OpenSearchTestCase;
+        Node.assertCanWritePluginHealthPaths(List.of(dir)); // must not throw

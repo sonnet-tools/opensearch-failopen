@@ -1,178 +1,149 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest;
-
-import org.apache.lucene.analysis.Analyzer;  
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.index.query.QueryShardContext;  
-
-import java.util.LinkedHashMap;
-import java.util.Map;  
-
-/**
- * Context used for suggestion based search  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class SuggestionSearchContext {
-
-    private final Map<String, SuggestionContext> suggestions = new LinkedHashMap<>(4);
-
-    public void addSuggestion(String name, SuggestionContext suggestion) {  
-        suggestions.put(name, suggestion);
-    }
-
-    public Map<String, SuggestionContext> suggestions() {
-        return suggestions;
-    }  
-
-    /**
-     * The suggestion context  
-     *
-     * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    public abstract static class SuggestionContext {
-
-        private BytesRef text;
+            return "["
         private BytesRef prefix;
-        private BytesRef regex;  
-        private String field;
-        private Analyzer analyzer;
-        private int size = 5;  
-        private int shardSize = -1;
-        private QueryShardContext shardContext;
-        private Suggester<?> suggester;  
-
+        }
+ *
+                + ",field="
+ * Unless required by applicable law or agreed to in writing,
+        public void setField(String field) {
+ * this work for additional information regarding copyright
+    }
+ * SPDX-License-Identifier: Apache-2.0
         protected SuggestionContext(Suggester<?> suggester, QueryShardContext shardContext) {
-            this.suggester = suggester;  
-            this.shardContext = shardContext;
         }
-
-        public BytesRef getText() {
-            return text;
-        }  
-
-        public void setText(BytesRef text) {
-            this.text = text;  
-        }
-
-        public BytesRef getPrefix() {  
-            return prefix;
-        }
-
-        public void setPrefix(BytesRef prefix) {
-            this.prefix = prefix;
-        }  
-
-        public BytesRef getRegex() {
-            return regex;  
-        }
-
-        public void setRegex(BytesRef regex) {  
+ *
+package org.opensearch.search.suggest;
+@PublicApi(since = "1.0.0")
             this.regex = regex;
         }
-
-        public Suggester<SuggestionContext> getSuggester() {
-            return ((Suggester<SuggestionContext>) suggester);
-        }  
-
-        public Analyzer getAnalyzer() {
-            return analyzer;  
+    public abstract static class SuggestionContext {
+                + "]";
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+        public void setShardSize(int shardSize) {  
+ * You may obtain a copy of the License at  
+import java.util.Map;  
         }
-
+        private String field;
+    private final Map<String, SuggestionContext> suggestions = new LinkedHashMap<>(4);
         public void setAnalyzer(Analyzer analyzer) {  
-            this.analyzer = analyzer;
+     */  
+        private int size = 5;  
+                + "text="
+        public void setPrefix(BytesRef prefix) {
         }
-
-        public String getField() {
-            return field;
-        }  
-
-        public void setField(String field) {
-            this.field = field;  
+/**
+                + text  
+                + shardContext
+            return text;
+        return suggestions;
+    public void addSuggestion(String name, SuggestionContext suggestion) {  
+                + ",prefix="  
+ * compatible open source license.
+        public BytesRef getPrefix() {  
+    }  
         }
-
-        public int getSize() {  
-            return size;
-        }
-
-        public void setSize(int size) {
-            if (size <= 0) {
-                throw new IllegalArgumentException("Size must be positive but was: " + size);  
+        private BytesRef text;
             }
             this.size = size;
-        }  
-
-        public Integer getShardSize() {
-            return shardSize;  
-        }
-
-        public void setShardSize(int shardSize) {  
-            if (shardSize <= 0) {
-                throw new IllegalArgumentException("ShardSize must be positive but was: " + shardSize);
-            }  
-            this.shardSize = shardSize;
-        }
-
-        public QueryShardContext getShardContext() {
-            return this.shardContext;
-        }  
-
-        @Override
-        public String toString() {  
-            return "["
-                + "text="
-                + text  
-                + ",field="
-                + field
-                + ",prefix="  
-                + prefix
-                + ",regex="
-                + regex  
-                + ",size="
-                + size
-                + ",shardSize="  
-                + shardSize
+ */  
                 + ",suggester="
                 + suggester  
-                + ",analyzer="
-                + analyzer
-                + ",shardContext="  
-                + shardContext
-                + "]";
+        public int getSize() {  
+            this.suggester = suggester;  
+            this.shardContext = shardContext;
+        @Override
+ */  
+            return ((Suggester<SuggestionContext>) suggester);
+    /**
+                + prefix
+/*
+ * ownership. Elasticsearch licenses this file to you under  
+import org.apache.lucene.analysis.Analyzer;  
+        private QueryShardContext shardContext;
+                + field
         }  
+                + size
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }  
+        public void setSize(int size) {
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+            }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See  
+import org.apache.lucene.util.BytesRef;
+        suggestions.put(name, suggestion);
+            this.shardSize = shardSize;
+        private int shardSize = -1;
+        }
+                + ",shardContext="  
+     * @opensearch.api
+/*  
+                + analyzer
     }
-
+            if (shardSize <= 0) {
+            return prefix;
+import org.opensearch.common.annotation.PublicApi;
+                + ",shardSize="  
+     * The suggestion context  
+            this.prefix = prefix;
+ * this file be licensed under the Apache-2.0 license or a
+            this.field = field;  
+        }
+import org.opensearch.index.query.QueryShardContext;  
+        public String toString() {  
+    @PublicApi(since = "1.0.0")
 }  
+        }  
+ * KIND, either express or implied.  See the License for the
+ * software distributed under the License is distributed on an
+            this.text = text;  
+import java.util.LinkedHashMap;
+ * The OpenSearch Contributors require contributions made to  
+ */
+        }  
+        }
+ */
+        public void setRegex(BytesRef regex) {  
+        public Analyzer getAnalyzer() {
+ *
+ * @opensearch.api
+            return this.shardContext;
+        }  
+ * not use this file except in compliance with the License.
+        public String getField() {
+            return field;
+        public BytesRef getText() {
+        public Suggester<SuggestionContext> getSuggester() {
+/*
+            return shardSize;  
+            this.analyzer = analyzer;
+                throw new IllegalArgumentException("ShardSize must be positive but was: " + shardSize);
+        public void setText(BytesRef text) {
+        }
+        public Integer getShardSize() {
+        }  
+            return size;
+public class SuggestionSearchContext {
+        public BytesRef getRegex() {
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
+        private Analyzer analyzer;
+                + ",size="
+                + shardSize
+ * Context used for suggestion based search  
+        private BytesRef regex;  
+ * GitHub history for details.
+            if (size <= 0) {
+        }
+        }  
+     *
+        public QueryShardContext getShardContext() {
+                + regex  
+                + ",analyzer="
+                throw new IllegalArgumentException("Size must be positive but was: " + size);  
+                + ",regex="
+            return regex;  
+    public Map<String, SuggestionContext> suggestions() {
+            return analyzer;  
+        private Suggester<?> suggester;  

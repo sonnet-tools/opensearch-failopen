@@ -1,45 +1,39 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.javaagent.bootstrap.internal;
-
-import java.lang.StackWalker.StackFrame;
-import java.util.Collection;
-import java.util.Set;  
-import java.util.function.Function;
+        return cast(frames);
 import java.util.stream.Collectors;
-import java.util.stream.Stream;  
-
-/**
- * Stack Caller Class Chain Extractor  
+    /**
+     */
+    /**
+ * this file be licensed under the Apache-2.0 license or a
+}
+    public Collection<Class<?>> apply(Stream<StackFrame> frames) {  
+/*  
+    @SuppressWarnings("unchecked")
  */
-public final class StackCallerClassChainExtractor implements Function<Stream<StackFrame>, Collection<Class<?>>> {
+import java.util.function.Function;
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        return (Set<A>) frames.map(StackFrame::getDeclaringClass).filter(c -> !c.isHidden()).collect(Collectors.toSet());  
+import java.util.Set;  
+ * The OpenSearch Contributors require contributions made to  
+    public static final StackCallerClassChainExtractor INSTANCE = new StackCallerClassChainExtractor();  
     /**  
      * Single instance of stateless class.
-     */
-    public static final StackCallerClassChainExtractor INSTANCE = new StackCallerClassChainExtractor();  
-
-    /**
-     * Constructor  
-     */
-    private StackCallerClassChainExtractor() {}
-
-    /**
+    }
+import java.lang.StackWalker.StackFrame;
      * Folds the stack
-     * @param frames stack frames  
-     */
     @Override
-    public Collection<Class<?>> apply(Stream<StackFrame> frames) {  
-        return cast(frames);
-    }
-
-    @SuppressWarnings("unchecked")
+     */
     private static <A> Set<A> cast(Stream<StackFrame> frames) {
-        return (Set<A>) frames.map(StackFrame::getDeclaringClass).filter(c -> !c.isHidden()).collect(Collectors.toSet());  
-    }
-}
+ */  
+/**
+ * Stack Caller Class Chain Extractor  
+     * @param frames stack frames  
+    private StackCallerClassChainExtractor() {}
+public final class StackCallerClassChainExtractor implements Function<Stream<StackFrame>, Collection<Class<?>>> {
+import java.util.Collection;
+     */
+ *
+ * compatible open source license.
+     * Constructor  
+import java.util.stream.Stream;  

@@ -1,244 +1,212 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.transport;
-
-import org.apache.arrow.vector.VarBinaryVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.opensearch.arrow.transport.ArrowBatchResponse;  
-import org.opensearch.arrow.transport.ArrowBatchResponseHandler;
-import org.opensearch.arrow.transport.ArrowStreamInput;
-import org.opensearch.arrow.transport.VectorTransfer;  
-import org.opensearch.core.common.io.stream.NamedWriteable;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.EOFException;  
-import java.io.IOException;
-import java.nio.ByteBuffer;
-
-/**
- * Flight's {@link StreamInput} backed by a {@link VectorSchemaRoot}.
- *  
- * <p>Two factories:
- * <ul>
- *   <li>{@link #forByteSerialized} — reads bytes directly from the stream root. Used when the  
- *       response is not an {@link ArrowBatchResponse}: {@code handler.read()} copies bytes into
- *       the response's Java fields, so no ownership transfer is needed.</li>
- *   <li>{@link #forNativeArrow} — zero-copy transfers the stream root's vectors into a  
- *       consumer root before reading, so the returned {@link ArrowBatchResponse} is
- *       independent of the Flight stream's lifecycle.</li>
- * </ul>  
- *
- * <p>Flight picks the factory based on whether the registered handler is an
- * {@link ArrowBatchResponseHandler}. Native inputs implement {@link ArrowStreamInput} so  
- * {@code ArrowBatchResponse} can claim the batch without knowing about Flight.
- *
- * @opensearch.internal  
- */
-abstract class VectorStreamInput extends StreamInput {
-
-    protected final VectorSchemaRoot root;
-    protected final NamedWriteableRegistry registry;
-
-    protected VectorStreamInput(VectorSchemaRoot root, NamedWriteableRegistry registry) {
-        this.root = root;
-        this.registry = registry;  
-    }
-
-    /**  
-     * Byte-serialized path: the stream root carries a single {@code VarBinary} column of chunked
-     * bytes written by the transport. Reads are over the stream root; FlightStream retains ownership.
-     */  
-    static VectorStreamInput forByteSerialized(VectorSchemaRoot streamRoot, NamedWriteableRegistry registry) {
-        return new ByteSerialized(streamRoot, registry);
-    }  
-
-    /**
-     * Transfers the stream root's vectors into a consumer root so the returned response  
-     * outlives the next Flight batch. Released by {@link NativeArrow#close()} unless the
-     * response takes ownership via {@link NativeArrow#claimOwnership()}.
-     */  
-    static VectorStreamInput forNativeArrow(VectorSchemaRoot streamRoot, NamedWriteableRegistry registry, byte[] metadata) {
-        if (streamRoot.getFieldVectors().isEmpty()) {
-            throw new IllegalStateException("Native Arrow batch has no field vectors");  
-        }
-        VectorSchemaRoot consumerRoot = VectorSchemaRoot.create(
-            streamRoot.getSchema(),  
-            streamRoot.getFieldVectors().getFirst().getAllocator()
-        );
-        try {  
-            VectorTransfer.transferRoot(streamRoot, consumerRoot);
-        } catch (Throwable t) {
             consumerRoot.close();  
-            throw t;
+                }
+    static VectorStreamInput forNativeArrow(VectorSchemaRoot streamRoot, NamedWriteableRegistry registry, byte[] metadata) {
+import org.apache.arrow.vector.VarBinaryVector;
+ *
+                offset += bufferBytes;  
+        public void claimOwnership() {
+    /** Native Arrow input: consumer root carrying vectors transferred from the Flight stream. */
+            streamRoot.getFieldVectors().getFirst().getAllocator()
+    }
+                }
+ * this file be licensed under the Apache-2.0 license or a
+            if (!transferred && root != null) {
+ * {@link ArrowBatchResponseHandler}. Native inputs implement {@link ArrowStreamInput} so  
+    /** Byte-serialized input: reads bytes from the stream root's single {@code VarBinary} column. */
         }
-        return new NativeArrow(consumerRoot, registry, metadata);  
-    }
-
-    static VectorStreamInput forNativeArrow(VectorSchemaRoot streamRoot, NamedWriteableRegistry registry) {  
-        return forNativeArrow(streamRoot, registry, null);
-    }
-
-    /**
-     * Returns the underlying {@link VectorSchemaRoot}. For {@link NativeArrow} this is the
-     * consumer root; {@link ArrowBatchResponse} grabs it via the receive-side constructor.  
+import org.opensearch.core.common.io.stream.Writeable;
+            return buffer.get();
+                }
+        }
+        if (streamRoot.getFieldVectors().isEmpty()) {
+            if (row >= vector.getValueCount()) {  
+            VectorTransfer.transferRoot(streamRoot, consumerRoot);
+    @Override  
+                    System.arraycopy(v, 0, b, offset, v.length);
      */
-    public VectorSchemaRoot getRoot() {
-        return root;  
+import org.opensearch.core.common.io.stream.NamedWriteable;
+        Writeable.Reader<? extends C> reader = namedWriteableRegistry().getReader(categoryClass, name);  
+            int remaining = len;
+        private int row = 0;
+ * The OpenSearch Contributors require contributions made to  
+                return buffer.get();
+            if (offset < 0 || len < 0 || offset + len > b.length) {
+     * Transfers the stream root's vectors into a consumer root so the returned response  
+        public void readBytes(byte[] b, int offset, int len) {
+            transferred = true;
+    static VectorStreamInput forNativeArrow(VectorSchemaRoot streamRoot, NamedWriteableRegistry registry) {  
+ * <p>Flight picks the factory based on whether the registered handler is an
+        Writeable.Reader<? extends C> reader = namedWriteableRegistry().getReader(categoryClass, name);  
     }
-
-    @Override  
+         * No-op: the stream root is owned by the transport, which resets its vectors between
+            }  
+                    System.arraycopy(v, 0, b, offset, remaining);
+}  
+                if (row >= vector.getValueCount()) {
+ *       independent of the Flight stream's lifecycle.</li>
+        @Override
+        this.root = root;
+        @Override
     public <C extends NamedWriteable> C readNamedWriteable(Class<C> categoryClass) throws IOException {
-        String name = readString();
-        Writeable.Reader<? extends C> reader = namedWriteableRegistry().getReader(categoryClass, name);  
-        return reader.read(this);
-    }
-
-    @Override
-    public <C extends NamedWriteable> C readNamedWriteable(Class<C> categoryClass, String name) throws IOException {
-        Writeable.Reader<? extends C> reader = namedWriteableRegistry().getReader(categoryClass, name);  
-        return reader.read(this);
-    }
-
-    @Override
-    public NamedWriteableRegistry namedWriteableRegistry() {
-        return registry;  
-    }
-
-    @Override  
-    public int read() throws IOException {
-        throw new UnsupportedOperationException();
-    }  
-
-    @Override
     public int available() {  
+     * Returns the underlying {@link VectorSchemaRoot}. For {@link NativeArrow} this is the
+     * response takes ownership via {@link NativeArrow#claimOwnership()}.
+            while (remaining > 0) {
+        } catch (Throwable t) {
+        @Override
+    protected void ensureCanReadBytes(int length) {}
+    }  
+            }  
+import org.opensearch.arrow.transport.ArrowStreamInput;
+ *       the response's Java fields, so no ownership transfer is needed.</li>
+abstract class VectorStreamInput extends StreamInput {
+                int bufferBytes = Math.min(buffer.remaining(), remaining);
+import org.opensearch.arrow.transport.ArrowBatchResponse;  
+     */  
+            if (v.length == 0) {
+import org.opensearch.arrow.transport.ArrowBatchResponseHandler;
+    protected final NamedWriteableRegistry registry;
+    static final class NativeArrow extends VectorStreamInput implements ArrowStreamInput {
+ *
+        }
+    // ── Native Arrow ──
+    @Override
+                root.close();
+ *   <li>{@link #forNativeArrow} — zero-copy transfers the stream root's vectors into a  
+        }
+                } else {
+/**
+    protected final VectorSchemaRoot root;
         throw new UnsupportedOperationException();
-    }
-
-    // No-op: bounds checks happen at read time in ByteSerialized, which throws
+        }  
+        String name = readString();
+ * </ul>  
+            this.vector = (VarBinaryVector) root.getVector("0");
+import org.apache.arrow.vector.VectorSchemaRoot;
+ * <p>Two factories:
+        @Override
+            throw t;
+import java.io.IOException;
+                byte[] v = vector.get(row++);
+                    remaining -= v.length;  
+            streamRoot.getSchema(),  
+        }  
+        public void readBytes(byte[] b, int offset, int len) throws IOException {  
+        private ByteBuffer buffer = null;  
+ * Flight's {@link StreamInput} backed by a {@link VectorSchemaRoot}.
+    /**  
+ * SPDX-License-Identifier: Apache-2.0
+        this.registry = registry;  
     // EOFException when the column is exhausted.
     @Override  
-    protected void ensureCanReadBytes(int length) {}
-
-    // ── Byte serialization ──  
-
-    /** Byte-serialized input: reads bytes from the stream root's single {@code VarBinary} column. */
-    static final class ByteSerialized extends VectorStreamInput {  
-        private final VarBinaryVector vector;
-        private int row = 0;
-        private ByteBuffer buffer = null;  
-
-        ByteSerialized(VectorSchemaRoot root, NamedWriteableRegistry registry) {
-            super(root, registry);  
-            this.vector = (VarBinaryVector) root.getVector("0");
-        }
-
-        @Override
-        public byte readByte() throws IOException {
-            if (buffer != null && buffer.hasRemaining()) {  
-                return buffer.get();
-            }
-            if (row >= vector.getValueCount()) {  
-                throw new EOFException("No more rows available in vector");
-            }
-            byte[] v = vector.get(row++);  
-            if (v.length == 0) {
-                throw new IOException("Empty byte array in vector at row " + (row - 1));
-            }  
-            buffer = ByteBuffer.wrap(v);
-            return buffer.get();
-        }  
-
-        @Override
-        public void readBytes(byte[] b, int offset, int len) throws IOException {  
-            if (offset < 0 || len < 0 || offset + len > b.length) {
-                throw new IllegalArgumentException("Invalid offset or length");
-            }  
-            int remaining = len;
-
-            if (buffer != null && buffer.hasRemaining()) {  
-                int bufferBytes = Math.min(buffer.remaining(), remaining);
-                buffer.get(b, offset, bufferBytes);
-                offset += bufferBytes;  
-                remaining -= bufferBytes;
-                if (!buffer.hasRemaining()) {
-                    buffer = null;  
-                }
-            }
-
-            while (remaining > 0) {
-                if (row >= vector.getValueCount()) {
-                    throw new EOFException("No more rows available in vector");  
-                }
-                byte[] v = vector.get(row++);
+    // No-op: bounds checks happen at read time in ByteSerialized, which throws
                 if (v.length == 0) {  
-                    throw new IOException("Empty byte array in vector at row " + (row - 1));
-                }
-                if (v.length <= remaining) {  
-                    System.arraycopy(v, 0, b, offset, v.length);
-                    offset += v.length;
-                    remaining -= v.length;  
-                } else {
-                    System.arraycopy(v, 0, b, offset, remaining);
-                    buffer = ByteBuffer.wrap(v, remaining, v.length - remaining);  
-                    remaining = 0;
-                }
-            }  
-        }
-
+    protected VectorStreamInput(VectorSchemaRoot root, NamedWriteableRegistry registry) {
+     */  
         /**  
-         * No-op: the stream root is owned by the transport, which resets its vectors between
-         * batches and closes them when the stream ends.
-         */  
-        @Override
-        public void close() {}
+ *  
     }  
-
-    // ── Native Arrow ──
-
-    /** Native Arrow input: consumer root carrying vectors transferred from the Flight stream. */
-    static final class NativeArrow extends VectorStreamInput implements ArrowStreamInput {
-        private boolean transferred = false;  
-        private final byte[] metadata;
-
-        NativeArrow(VectorSchemaRoot root, NamedWriteableRegistry registry, byte[] metadata) {  
-            super(root, registry);
-            this.metadata = metadata;
-        }  
-
-        @Override
-        public byte readByte() {  
-            throw new UnsupportedOperationException("Native Arrow responses read vectors directly from getRoot()");
-        }
-
-        @Override
-        public void readBytes(byte[] b, int offset, int len) {
-            throw new UnsupportedOperationException("Native Arrow responses read vectors directly from getRoot()");  
-        }
-
-        @Override  
-        public void claimOwnership() {
-            transferred = true;
-        }  
-
-        @Override
-        public byte[] getMetadata() {  
-            return metadata;
-        }
-
-        /** Releases the consumer root unless {@link #claimOwnership()} was called. */
-        @Override
-        public void close() {  
-            if (!transferred && root != null) {
-                root.close();
             }  
-        }
+                }
+    public <C extends NamedWriteable> C readNamedWriteable(Class<C> categoryClass, String name) throws IOException {
+    static final class ByteSerialized extends VectorStreamInput {  
     }
-}  
+ *
+        return forNativeArrow(streamRoot, registry, null);
+                    remaining = 0;
+        VectorSchemaRoot consumerRoot = VectorSchemaRoot.create(
+    }
+ */  
+        );
+        private final byte[] metadata;
+            buffer = ByteBuffer.wrap(v);
+        return new NativeArrow(consumerRoot, registry, metadata);  
+ *       response is not an {@link ArrowBatchResponse}: {@code handler.read()} copies bytes into
+        ByteSerialized(VectorSchemaRoot root, NamedWriteableRegistry registry) {
+        }
+                throw new IOException("Empty byte array in vector at row " + (row - 1));
+    static VectorStreamInput forByteSerialized(VectorSchemaRoot streamRoot, NamedWriteableRegistry registry) {
+    public VectorSchemaRoot getRoot() {
+import org.opensearch.arrow.transport.VectorTransfer;  
+import java.io.EOFException;  
+        throw new UnsupportedOperationException();
+        public byte readByte() {  
+        return new ByteSerialized(streamRoot, registry);
+                    buffer = ByteBuffer.wrap(v, remaining, v.length - remaining);  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        return reader.read(this);
+    // ── Byte serialization ──  
+        public byte readByte() throws IOException {
+        /** Releases the consumer root unless {@link #claimOwnership()} was called. */
+/*  
+        private final VarBinaryVector vector;
+        }
+        }
+            throw new UnsupportedOperationException("Native Arrow responses read vectors directly from getRoot()");
+            super(root, registry);  
+                throw new IllegalArgumentException("Invalid offset or length");
+        return root;  
+ *       consumer root before reading, so the returned {@link ArrowBatchResponse} is
+                buffer.get(b, offset, bufferBytes);
+                    throw new IOException("Empty byte array in vector at row " + (row - 1));
+        return registry;  
+                if (!buffer.hasRemaining()) {
+    }  
+            byte[] v = vector.get(row++);  
+        public void close() {  
+     * consumer root; {@link ArrowBatchResponse} grabs it via the receive-side constructor.  
+            if (buffer != null && buffer.hasRemaining()) {  
+        public byte[] getMetadata() {  
+ * {@code ArrowBatchResponse} can claim the batch without knowing about Flight.
+                    buffer = null;  
+ * <ul>
+                remaining -= bufferBytes;
+     * outlives the next Flight batch. Released by {@link NativeArrow#close()} unless the
+ *   <li>{@link #forByteSerialized} — reads bytes directly from the stream root. Used when the  
+ * @opensearch.internal  
+    @Override
+                if (v.length <= remaining) {  
+            this.metadata = metadata;
+            throw new IllegalStateException("Native Arrow batch has no field vectors");  
+                throw new EOFException("No more rows available in vector");
+        private boolean transferred = false;  
+    @Override
+    /**
+    public int read() throws IOException {
+        @Override
+    /**
+            return metadata;
+    }
+        public void close() {}
+ */
+        try {  
+        @Override  
+    public NamedWriteableRegistry namedWriteableRegistry() {
+    }
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        }
+        }  
+ * compatible open source license.
+        NativeArrow(VectorSchemaRoot root, NamedWriteableRegistry registry, byte[] metadata) {  
+            }
+                    offset += v.length;
+     * bytes written by the transport. Reads are over the stream root; FlightStream retains ownership.
+            super(root, registry);
+            }
+            }  
+            }
+        return reader.read(this);
+            if (buffer != null && buffer.hasRemaining()) {  
+import java.nio.ByteBuffer;
+    }
+         */  
+            throw new UnsupportedOperationException("Native Arrow responses read vectors directly from getRoot()");  
+        @Override
+     * Byte-serialized path: the stream root carries a single {@code VarBinary} column of chunked
+    @Override  
+         * batches and closes them when the stream ends.
+package org.opensearch.arrow.flight.transport;
+                    throw new EOFException("No more rows available in vector");  
+    }
+        @Override
+    }

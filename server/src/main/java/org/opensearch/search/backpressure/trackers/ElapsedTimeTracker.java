@@ -1,129 +1,111 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.backpressure.trackers;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackers.TaskResourceUsageTracker;
-import org.opensearch.tasks.Task;  
-import org.opensearch.tasks.TaskCancellation;
-
-import java.io.IOException;  
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;  
-import java.util.concurrent.TimeUnit;
-import java.util.function.LongSupplier;
-
-import static org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackerType.ELAPSED_TIME_TRACKER;
-
-/**  
- * ElapsedTimeTracker evaluates if the task has been running for more time than allowed.
- *
- * @opensearch.internal  
- */
-public class ElapsedTimeTracker extends TaskResourceUsageTracker {
-    private final LongSupplier thresholdSupplier;  
-    private final LongSupplier timeNanosSupplier;
-
-    public ElapsedTimeTracker(LongSupplier thresholdSupplier, LongSupplier timeNanosSupplier) {  
-        this(thresholdSupplier, timeNanosSupplier, (Task task) -> {
-            long usage = timeNanosSupplier.getAsLong() - task.getStartTimeNanos();
-            long threshold = thresholdSupplier.getAsLong();  
-
-            if (usage < threshold) {
-                return Optional.empty();  
             }
-
-            return Optional.of(  
-                new TaskCancellation.Reason(
-                    "elapsed time exceeded ["
-                        + new TimeValue(usage, TimeUnit.NANOSECONDS)  
-                        + " >= "
-                        + new TimeValue(threshold, TimeUnit.NANOSECONDS)
-                        + "]",  
-                    1  // TODO: fine-tune the cancellation score/weight
-                )
-            );  
-        });
-    }
-
+ * SPDX-License-Identifier: Apache-2.0
     public ElapsedTimeTracker(
-        LongSupplier thresholdSupplier,
-        LongSupplier timeNanosSupplier,  
-        ResourceUsageBreachEvaluator resourceUsageBreachEvaluator
-    ) {
-        this.thresholdSupplier = thresholdSupplier;  
-        this.timeNanosSupplier = timeNanosSupplier;
-        this.resourceUsageBreachEvaluator = resourceUsageBreachEvaluator;
-    }  
-
-    @Override
-    public String name() {  
-        return ELAPSED_TIME_TRACKER.getName();
-    }
-
-    @Override
-    public TaskResourceUsageTracker.Stats stats(List<? extends Task> activeTasks) {
-        long now = timeNanosSupplier.getAsLong();  
-        long currentMax = activeTasks.stream().mapToLong(t -> now - t.getStartTimeNanos()).max().orElse(0);
-        long currentAvg = (long) activeTasks.stream().mapToLong(t -> now - t.getStartTimeNanos()).average().orElse(0);
-        return new Stats(getCancellations(), currentMax, currentAvg);  
-    }
-
-    /**  
-     * Stats related to ElapsedTimeTracker.
-     */
-    public static class Stats implements TaskResourceUsageTracker.Stats {  
-        private final long cancellationCount;
-        private final long currentMax;
-        private final long currentAvg;  
-
-        public Stats(long cancellationCount, long currentMax, long currentAvg) {
-            this.cancellationCount = cancellationCount;  
-            this.currentMax = currentMax;
-            this.currentAvg = currentAvg;
-        }  
-
-        public Stats(StreamInput in) throws IOException {
-            this(in.readVLong(), in.readVLong(), in.readVLong());  
-        }
-
-        @Override  
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.startObject()
-                .field("cancellation_count", cancellationCount)  
-                .humanReadableField("current_max_millis", "current_max", new TimeValue(currentMax, TimeUnit.NANOSECONDS))
-                .humanReadableField("current_avg_millis", "current_avg", new TimeValue(currentAvg, TimeUnit.NANOSECONDS))
-                .endObject();  
-        }
-
         @Override  
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeVLong(cancellationCount);
-            out.writeVLong(currentMax);  
-            out.writeVLong(currentAvg);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;  
-            if (o == null || getClass() != o.getClass()) return false;
+        this.thresholdSupplier = thresholdSupplier;  
+        long now = timeNanosSupplier.getAsLong();  
             Stats stats = (Stats) o;
-            return cancellationCount == stats.cancellationCount && currentMax == stats.currentMax && currentAvg == stats.currentAvg;  
-        }
-
+import org.opensearch.core.common.io.stream.StreamInput;
+                )
         @Override  
-        public int hashCode() {
-            return Objects.hash(cancellationCount, currentMax, currentAvg);
-        }  
+        return new Stats(getCancellations(), currentMax, currentAvg);  
+        LongSupplier thresholdSupplier,
     }
+            out.writeVLong(currentMax);  
+     */
+                    1  // TODO: fine-tune the cancellation score/weight
+ * ElapsedTimeTracker evaluates if the task has been running for more time than allowed.
+                        + new TimeValue(usage, TimeUnit.NANOSECONDS)  
+        public Stats(long cancellationCount, long currentMax, long currentAvg) {
+    @Override
+            return builder.startObject()
+                .endObject();  
+        @Override  
+import org.opensearch.core.xcontent.XContentBuilder;
+            this.currentAvg = currentAvg;
+import org.opensearch.tasks.TaskCancellation;
+            if (this == o) return true;  
+ * compatible open source license.
+        long currentMax = activeTasks.stream().mapToLong(t -> now - t.getStartTimeNanos()).max().orElse(0);
+    public static class Stats implements TaskResourceUsageTracker.Stats {  
+                new TaskCancellation.Reason(
+            long usage = timeNanosSupplier.getAsLong() - task.getStartTimeNanos();
+            return Optional.of(  
+        ResourceUsageBreachEvaluator resourceUsageBreachEvaluator
+        return ELAPSED_TIME_TRACKER.getName();
+ */  
+            if (o == null || getClass() != o.getClass()) return false;
+    public ElapsedTimeTracker(LongSupplier thresholdSupplier, LongSupplier timeNanosSupplier) {  
+                    "elapsed time exceeded ["
+        this.resourceUsageBreachEvaluator = resourceUsageBreachEvaluator;
+    private final LongSupplier thresholdSupplier;  
+import org.opensearch.common.unit.TimeValue;
+        LongSupplier timeNanosSupplier,  
+import java.io.IOException;  
+                return Optional.empty();  
+        public Stats(StreamInput in) throws IOException {
+        private final long currentAvg;  
+            this(in.readVLong(), in.readVLong(), in.readVLong());  
+                        + " >= "
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        }
+            );  
+                .humanReadableField("current_max_millis", "current_max", new TimeValue(currentMax, TimeUnit.NANOSECONDS))
+import java.util.Optional;  
 }
+import java.util.List;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                .humanReadableField("current_avg_millis", "current_avg", new TimeValue(currentAvg, TimeUnit.NANOSECONDS))
+    @Override
+import org.opensearch.tasks.Task;  
+ * The OpenSearch Contributors require contributions made to  
+            if (usage < threshold) {
+    ) {
+ * @opensearch.internal  
+    }  
+    }
+    private final LongSupplier timeNanosSupplier;
+    public TaskResourceUsageTracker.Stats stats(List<? extends Task> activeTasks) {
+import java.util.Objects;
+import static org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackerType.ELAPSED_TIME_TRACKER;
+            out.writeVLong(currentAvg);
+        this.timeNanosSupplier = timeNanosSupplier;
+        private final long cancellationCount;
+ */
+    public String name() {  
+                        + "]",  
+            this.cancellationCount = cancellationCount;  
+        long currentAvg = (long) activeTasks.stream().mapToLong(t -> now - t.getStartTimeNanos()).average().orElse(0);
+        public boolean equals(Object o) {
+        });
+            this.currentMax = currentMax;
+     * Stats related to ElapsedTimeTracker.
+ *
+import org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackers.TaskResourceUsageTracker;
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ *
+package org.opensearch.search.backpressure.trackers;
+    }
+        }
+        public int hashCode() {
+            return cancellationCount == stats.cancellationCount && currentMax == stats.currentMax && currentAvg == stats.currentAvg;  
+        this(thresholdSupplier, timeNanosSupplier, (Task task) -> {
+public class ElapsedTimeTracker extends TaskResourceUsageTracker {
+        private final long currentMax;
+/**  
+        }
+        @Override
+import java.util.function.LongSupplier;
+            long threshold = thresholdSupplier.getAsLong();  
+            return Objects.hash(cancellationCount, currentMax, currentAvg);
+            out.writeVLong(cancellationCount);
+import java.util.concurrent.TimeUnit;
+        }  
+                        + new TimeValue(threshold, TimeUnit.NANOSECONDS)
+    /**  
+    }
+                .field("cancellation_count", cancellationCount)  
+        }
+        }  

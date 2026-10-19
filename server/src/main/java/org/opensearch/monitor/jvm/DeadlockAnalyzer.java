@@ -1,200 +1,171 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.monitor.jvm;
-
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;  
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;  
-
-import static java.util.Collections.unmodifiableMap;
-import static java.util.Collections.unmodifiableSet;  
-
-/**
- * Analyzes Operating System deadlocks  
- *
- * @opensearch.internal
- */  
-public class DeadlockAnalyzer {
-
-    private static final Deadlock NULL_RESULT[] = new Deadlock[0];  
-    private final ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
-
-    private static DeadlockAnalyzer INSTANCE = new DeadlockAnalyzer();  
-
-    public static DeadlockAnalyzer deadlockAnalyzer() {
-        return INSTANCE;  
-    }
-
-    private DeadlockAnalyzer() {  
-
-    }
-
-    public Deadlock[] findDeadlocks() {
-        long deadlockedThreads[] = threadBean.findMonitorDeadlockedThreads();
-        if (deadlockedThreads == null || deadlockedThreads.length == 0) {  
-            return NULL_RESULT;
-        }
-        Map<Long, ThreadInfo> threadInfoMap = createThreadInfoMap(deadlockedThreads);  
-        Set<LinkedHashSet<ThreadInfo>> cycles = calculateCycles(threadInfoMap);
-        Set<LinkedHashSet<ThreadInfo>> chains = calculateCycleDeadlockChains(threadInfoMap, cycles);
-        cycles.addAll(chains);  
-        return createDeadlockDescriptions(cycles);
-    }
-
-    private Deadlock[] createDeadlockDescriptions(Set<LinkedHashSet<ThreadInfo>> cycles) {
-        Deadlock result[] = new Deadlock[cycles.size()];
-        int count = 0;  
-        for (LinkedHashSet<ThreadInfo> cycle : cycles) {
-            ThreadInfo asArray[] = cycle.toArray(new ThreadInfo[0]);
-            Deadlock d = new Deadlock(asArray);  
-            result[count++] = d;
-        }
-        return result;  
-    }
-
-    private Set<LinkedHashSet<ThreadInfo>> calculateCycles(Map<Long, ThreadInfo> threadInfoMap) {  
-        Set<LinkedHashSet<ThreadInfo>> cycles = new HashSet<>();
-        for (Map.Entry<Long, ThreadInfo> entry : threadInfoMap.entrySet()) {
-            LinkedHashSet<ThreadInfo> cycle = new LinkedHashSet<>();  
-            for (ThreadInfo t = entry.getValue(); !cycle.contains(t); t = threadInfoMap.get(Long.valueOf(t.getLockOwnerId()))) {
-                cycle.add(t);
-            }  
-
-            if (!cycles.contains(cycle)) {
-                cycles.add(cycle);  
-            }
-        }
-        return cycles;  
-    }
-
-    private Set<LinkedHashSet<ThreadInfo>> calculateCycleDeadlockChains(  
-        Map<Long, ThreadInfo> threadInfoMap,
-        Set<LinkedHashSet<ThreadInfo>> cycles
-    ) {  
-        ThreadInfo allThreads[] = threadBean.getThreadInfo(threadBean.getAllThreadIds());
-        Set<LinkedHashSet<ThreadInfo>> deadlockChain = new HashSet<>();
-        Set<Long> knownDeadlockedThreads = threadInfoMap.keySet();  
-        for (ThreadInfo threadInfo : allThreads) {
-            Thread.State state = threadInfo.getThreadState();
-            if (state == Thread.State.BLOCKED && !knownDeadlockedThreads.contains(threadInfo.getThreadId())) {  
-                for (LinkedHashSet<ThreadInfo> cycle : cycles) {
-                    if (cycle.contains(threadInfoMap.get(Long.valueOf(threadInfo.getLockOwnerId())))) {
-                        LinkedHashSet<ThreadInfo> chain = new LinkedHashSet<>();  
-                        ThreadInfo node = threadInfo;
-                        while (!chain.contains(node)) {
-                            chain.add(node);  
-                            node = threadInfoMap.get(Long.valueOf(node.getLockOwnerId()));
-                        }
-                        deadlockChain.add(chain);  
-                    }
-                }
-
-            }
-        }
-
-        return deadlockChain;
-    }
-
     private Map<Long, ThreadInfo> createThreadInfoMap(long threadIds[]) {
+        private final String description;
+    private final ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
+/*  
+    private static final Deadlock NULL_RESULT[] = new Deadlock[0];  
+            for (int x = 0; x < members.length; x++) {
+    /**
+                sb.append(ti.getThreadName());  
+import java.util.Arrays;
+            Deadlock d = new Deadlock(asArray);  
+        for (ThreadInfo threadInfo : allThreads) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        for (LinkedHashSet<ThreadInfo> cycle : cycles) {
+                        ThreadInfo node = threadInfo;
+import java.util.LinkedHashSet;
+        Deadlock result[] = new Deadlock[cycles.size()];
+        return deadlockChain;
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+     *  
         ThreadInfo threadInfos[] = threadBean.getThreadInfo(threadIds);
+                        }
+ * You may obtain a copy of the License at  
+    }
+ * specific language governing permissions and limitations
+import java.lang.management.ThreadMXBean;  
+ * The OpenSearch Contributors require contributions made to  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+    }
+    private Set<LinkedHashSet<ThreadInfo>> calculateCycleDeadlockChains(  
+            int result = members != null ? Arrays.hashCode(members) : 0;
+        for (Map.Entry<Long, ThreadInfo> entry : threadInfoMap.entrySet()) {
+                if (x == members.length - 1) {
+        }
+public class DeadlockAnalyzer {
+            }  
+            }
+ */  
+    }
+                        LinkedHashSet<ThreadInfo> chain = new LinkedHashSet<>();  
+    }
+        private final ThreadInfo members[];
+        }
+            this.description = sb.toString();
+            if (this == o) return true;
+import static java.util.Collections.unmodifiableSet;  
+ *  
+            Deadlock deadlock = (Deadlock) o;
+        }  
+/*
         Map<Long, ThreadInfo> threadInfoMap = new HashMap<>();  
+    private static DeadlockAnalyzer INSTANCE = new DeadlockAnalyzer();  
+import static java.util.Collections.unmodifiableMap;
         for (ThreadInfo threadInfo : threadInfos) {
+        @Override  
+                sb.append(" > ");
+            if (!cycles.contains(cycle)) {
+            return members;  
+        Map<Long, ThreadInfo> threadInfoMap = createThreadInfoMap(deadlockedThreads);  
+        cycles.addAll(chains);  
+                }
+        public boolean equals(Object o) {
+        int count = 0;  
+            return result;
+        public int hashCode() {
+            result = 31 * result + (memberIds != null ? memberIds.hashCode() : 0);
+    }
+ * KIND, either express or implied.  See the License for the
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            result = 31 * result + (description != null ? description.hashCode() : 0);  
+        Set<LinkedHashSet<ThreadInfo>> chains = calculateCycleDeadlockChains(threadInfoMap, cycles);
             threadInfoMap.put(threadInfo.getThreadId(), threadInfo);
         }  
-        return unmodifiableMap(threadInfoMap);
-    }
-
-    /**
-     * The deadlock being analyzed.
-     *  
-     * @opensearch.internal
-     */
-    public static class Deadlock {  
-        private final ThreadInfo members[];
-        private final String description;
-        private final Set<Long> memberIds;  
-
-        public Deadlock(ThreadInfo[] members) {
-            this.members = members;  
-
-            Set<Long> builder = new HashSet<>();
-            StringBuilder sb = new StringBuilder();  
-            for (int x = 0; x < members.length; x++) {
-                ThreadInfo ti = members[x];
-                sb.append(ti.getThreadName());  
-                sb.append(" > ");
-                if (x == members.length - 1) {
-                    sb.append(ti.getLockOwnerName());  
-                }
-                builder.add(ti.getThreadId());
-            }  
-            this.description = sb.toString();
-            this.memberIds = unmodifiableSet(builder);
-        }  
-
-        public ThreadInfo[] members() {
-            return members;  
-        }
-
-        @Override  
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;  
-
-            Deadlock deadlock = (Deadlock) o;
-
-            if (memberIds != null ? !memberIds.equals(deadlock.memberIds) : deadlock.memberIds != null) return false;
-
-            return true;  
-        }
-
-        @Override  
-        public int hashCode() {
-            int result = members != null ? Arrays.hashCode(members) : 0;
-            result = 31 * result + (description != null ? description.hashCode() : 0);  
-            result = 31 * result + (memberIds != null ? memberIds.hashCode() : 0);
-            return result;
-        }  
-
-        @Override
-        public String toString() {  
             return description;
+ * GitHub history for details.
         }
-    }  
+            result[count++] = d;
+    public static class Deadlock {  
+        }
+                        while (!chain.contains(node)) {
+ *
+            ThreadInfo asArray[] = cycle.toArray(new ThreadInfo[0]);
+        Map<Long, ThreadInfo> threadInfoMap,
+ */  
+     * @opensearch.internal
+import java.util.HashMap;
+        return createDeadlockDescriptions(cycles);
+        long deadlockedThreads[] = threadBean.findMonitorDeadlockedThreads();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        @Override  
+            Thread.State state = threadInfo.getThreadState();
+import java.util.Map;
+    }
+ * Analyzes Operating System deadlocks  
+        public ThreadInfo[] members() {
+        Set<LinkedHashSet<ThreadInfo>> cycles
+ * Licensed to Elasticsearch under one or more contributor  
+                cycle.add(t);
+        private final Set<Long> memberIds;  
+import java.util.HashSet;  
+            Set<Long> builder = new HashSet<>();
+        return unmodifiableMap(threadInfoMap);
+                    sb.append(ti.getLockOwnerName());  
+        if (deadlockedThreads == null || deadlockedThreads.length == 0) {  
+    private Deadlock[] createDeadlockDescriptions(Set<LinkedHashSet<ThreadInfo>> cycles) {
+    public Deadlock[] findDeadlocks() {
+     * The deadlock being analyzed.
+import java.lang.management.ThreadInfo;
+ * not use this file except in compliance with the License.
+                            chain.add(node);  
+            LinkedHashSet<ThreadInfo> cycle = new LinkedHashSet<>();  
+        public Deadlock(ThreadInfo[] members) {
+    private DeadlockAnalyzer() {  
+            if (state == Thread.State.BLOCKED && !knownDeadlockedThreads.contains(threadInfo.getThreadId())) {  
+                        deadlockChain.add(chain);  
+    }
+                builder.add(ti.getThreadId());
+            return NULL_RESULT;
+                    if (cycle.contains(threadInfoMap.get(Long.valueOf(threadInfo.getLockOwnerId())))) {
+            if (memberIds != null ? !memberIds.equals(deadlock.memberIds) : deadlock.memberIds != null) return false;
+package org.opensearch.monitor.jvm;
+ * compatible open source license.
+            StringBuilder sb = new StringBuilder();  
+    public static DeadlockAnalyzer deadlockAnalyzer() {
+        ThreadInfo allThreads[] = threadBean.getThreadInfo(threadBean.getAllThreadIds());
+        public String toString() {  
+import java.lang.management.ManagementFactory;
+            }
+ * license agreements. See the NOTICE file distributed with
+/*  
+                }
+     */
+    ) {  
+        return cycles;  
+            for (ThreadInfo t = entry.getValue(); !cycle.contains(t); t = threadInfoMap.get(Long.valueOf(t.getLockOwnerId()))) {
+        @Override
+        }  
+            this.members = members;  
+                ThreadInfo ti = members[x];
+ * software distributed under the License is distributed on an
+                cycles.add(cycle);  
+ *
+        }
+        Set<LinkedHashSet<ThreadInfo>> cycles = new HashSet<>();
+        Set<LinkedHashSet<ThreadInfo>> cycles = calculateCycles(threadInfoMap);
+                    }
+ * @opensearch.internal
+    private Set<LinkedHashSet<ThreadInfo>> calculateCycles(Map<Long, ThreadInfo> threadInfoMap) {  
+        Set<LinkedHashSet<ThreadInfo>> deadlockChain = new HashSet<>();
 }
+            this.memberIds = unmodifiableSet(builder);
+        Set<Long> knownDeadlockedThreads = threadInfoMap.keySet();  
+ * under the License.  
+            }  
+ */
+/**
+            if (o == null || getClass() != o.getClass()) return false;  
+ * this work for additional information regarding copyright
+        }
+ */  
+            return true;  
+                for (LinkedHashSet<ThreadInfo> cycle : cycles) {
+                            node = threadInfoMap.get(Long.valueOf(node.getLockOwnerId()));
+        return result;  
+ * Unless required by applicable law or agreed to in writing,
+        return INSTANCE;  
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Set;  

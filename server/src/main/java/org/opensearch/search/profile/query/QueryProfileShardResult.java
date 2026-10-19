@@ -1,163 +1,143 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.profile.query;
-
+ *  
 import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.profile.ProfileResult;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;  
-
-/**
- * A container class to hold the profile results for a single shard in the request.  
- * Contains a list of query profiles, a collector tree and a total rewrite tree.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public final class QueryProfileShardResult implements Writeable, ToXContentObject {  
-
-    public static final String COLLECTOR = "collector";
-    public static final String REWRITE_TIME = "rewrite_time";  
-    public static final String QUERY_ARRAY = "query";
-
-    private final List<ProfileResult> queryProfileResults;  
-
-    private final CollectorResult profileCollector;
-
-    private final long rewriteTime;
-
-    public QueryProfileShardResult(List<ProfileResult> queryProfileResults, long rewriteTime, CollectorResult profileCollector) {  
-        assert (profileCollector != null);
-        this.queryProfileResults = queryProfileResults;
-        this.profileCollector = profileCollector;  
-        this.rewriteTime = rewriteTime;
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    public QueryProfileShardResult(StreamInput in) throws IOException {
-        int profileSize = in.readVInt();
-        queryProfileResults = new ArrayList<>(profileSize);  
-        for (int j = 0; j < profileSize; j++) {
-            queryProfileResults.add(new ProfileResult(in));
-        }  
-
-        profileCollector = new CollectorResult(in);
-        rewriteTime = in.readLong();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(queryProfileResults.size());
-        for (ProfileResult p : queryProfileResults) {  
-            p.writeTo(out);
-        }
-        profileCollector.writeTo(out);  
-        out.writeLong(rewriteTime);
-    }
-
-    public List<ProfileResult> getQueryResults() {
-        return Collections.unmodifiableList(queryProfileResults);
-    }  
-
     public long getRewriteTime() {
-        return rewriteTime;  
-    }
-
-    public CollectorResult getCollectorResult() {  
-        return profileCollector;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.startArray(QUERY_ARRAY);
-        for (ProfileResult p : queryProfileResults) {
-            p.toXContent(builder, params);  
-        }
-        builder.endArray();
-        builder.field(REWRITE_TIME, rewriteTime);  
-        builder.startArray(COLLECTOR);
-        profileCollector.toXContent(builder, params);
-        builder.endArray();  
-        builder.endObject();
-        return builder;
-    }  
-
-    public static QueryProfileShardResult fromXContent(XContentParser parser) throws IOException {
-        XContentParser.Token token = parser.currentToken();  
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
-        String currentFieldName = null;
-        List<ProfileResult> queryProfileResults = new ArrayList<>();  
-        long rewriteTime = 0;
         CollectorResult collector = null;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token.isValue()) {  
-                if (REWRITE_TIME.equals(currentFieldName)) {
-                    rewriteTime = parser.longValue();
-                } else {  
-                    parser.skipChildren();
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {  
-                if (QUERY_ARRAY.equals(currentFieldName)) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                        queryProfileResults.add(ProfileResult.fromXContent(parser));  
-                    }
-                } else if (COLLECTOR.equals(currentFieldName)) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
-                        collector = CollectorResult.fromXContent(parser);
-                    }
-                } else {  
-                    parser.skipChildren();
-                }
-            } else {  
-                parser.skipChildren();
-            }
-        }  
+    /**
         return new QueryProfileShardResult(queryProfileResults, rewriteTime, collector);
+            } else if (token.isValue()) {  
+        for (ProfileResult p : queryProfileResults) {
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;  
+import java.util.List;
+ */  
+/*  
+    public QueryProfileShardResult(StreamInput in) throws IOException {
+                } else {  
+        }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        this.profileCollector = profileCollector;  
     }
+ * this file be licensed under the Apache-2.0 license or a
+    public List<ProfileResult> getQueryResults() {
+ * Contains a list of query profiles, a collector tree and a total rewrite tree.
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+import org.opensearch.core.xcontent.XContentParser;
+    public QueryProfileShardResult(List<ProfileResult> queryProfileResults, long rewriteTime, CollectorResult profileCollector) {  
+            }
+                        queryProfileResults.add(ProfileResult.fromXContent(parser));  
+        return profileCollector;
+ *
+        queryProfileResults = new ArrayList<>(profileSize);  
+        profileCollector = new CollectorResult(in);
+import org.opensearch.core.xcontent.ToXContentObject;
+    @Override  
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * A container class to hold the profile results for a single shard in the request.  
+ * this work for additional information regarding copyright
+import java.util.Collections;  
+        int profileSize = in.readVInt();
+        builder.endObject();
+ */  
+    public void writeTo(StreamOutput out) throws IOException {
+ * software distributed under the License is distributed on an
+public final class QueryProfileShardResult implements Writeable, ToXContentObject {  
+                } else {  
+ *
+        for (ProfileResult p : queryProfileResults) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+ * Unless required by applicable law or agreed to in writing,
+                        collector = CollectorResult.fromXContent(parser);
+                if (QUERY_ARRAY.equals(currentFieldName)) {
+    private final long rewriteTime;
+ * The OpenSearch Contributors require contributions made to  
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+    public static QueryProfileShardResult fromXContent(XContentParser parser) throws IOException {
+            queryProfileResults.add(new ProfileResult(in));
+ * You may obtain a copy of the License at  
+        builder.startArray(QUERY_ARRAY);
+import java.util.ArrayList;
+    public static final String QUERY_ARRAY = "query";
+import org.opensearch.search.profile.ProfileResult;
+        }  
+    }  
+        return rewriteTime;  
+            } else if (token == XContentParser.Token.START_ARRAY) {  
+ * SPDX-License-Identifier: Apache-2.0
+        this.rewriteTime = rewriteTime;
+import org.opensearch.core.xcontent.XContentBuilder;  
+    public static final String COLLECTOR = "collector";
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
+    public static final String REWRITE_TIME = "rewrite_time";  
+    }
+import java.io.IOException;
+/**
+    private final List<ProfileResult> queryProfileResults;  
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                } else if (COLLECTOR.equals(currentFieldName)) {
+                    }
+            p.toXContent(builder, params);  
+     */  
+ * specific language governing permissions and limitations
+     * Read from a stream.
+                }
+        return builder;
+        builder.endArray();
+ * license agreements. See the NOTICE file distributed with
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
+ * KIND, either express or implied.  See the License for the
+ * compatible open source license.
+                    rewriteTime = parser.longValue();
+        String currentFieldName = null;
+                }
+ * under the License.  
+        this.queryProfileResults = queryProfileResults;
+            } else {  
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+        rewriteTime = in.readLong();  
+        builder.startArray(COLLECTOR);
+        }  
+    }
+    }  
+        return Collections.unmodifiableList(queryProfileResults);
+/*  
+                parser.skipChildren();
+            p.writeTo(out);
 }  
+        XContentParser.Token token = parser.currentToken();  
+@PublicApi(since = "1.0.0")
+                if (REWRITE_TIME.equals(currentFieldName)) {
+package org.opensearch.search.profile.query;
+/*
+    }
+                currentFieldName = parser.currentName();
+    @Override
+                    parser.skipChildren();
+                    parser.skipChildren();
+    public CollectorResult getCollectorResult() {  
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+import org.opensearch.core.common.io.stream.StreamInput;
+ * @opensearch.api  
+        profileCollector.toXContent(builder, params);
+        out.writeVInt(queryProfileResults.size());
+        out.writeLong(rewriteTime);
+    private final CollectorResult profileCollector;
+        builder.endArray();  
+        long rewriteTime = 0;
+        builder.field(REWRITE_TIME, rewriteTime);  
+                    }
+        List<ProfileResult> queryProfileResults = new ArrayList<>();  
+        }
+        builder.startObject();  
+ *
+        profileCollector.writeTo(out);  
+        assert (profileCollector != null);
+            if (token == XContentParser.Token.FIELD_NAME) {
+        for (int j = 0; j < profileSize; j++) {
+ * GitHub history for details.

@@ -1,227 +1,193 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+    @Override
+ */  
+    }
+    }
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+    @Override  
+        return customs;  
+        return this;
  */
-
-/*  
+ * software distributed under the License is distributed on an
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+ * @opensearch.api
+        return this;
+    }  
+        nodes = in.readBoolean();  
+        this.nodes = nodes;  
+    public ClusterStateRequest waitForMetadataVersion(long waitForMetadataVersion) {
+import org.opensearch.tasks.Task;  
+}
+    public ClusterStateRequest indices(String... indices) {
+    @Override  
+        return this;
+import java.io.IOException;
+import org.opensearch.rest.action.admin.cluster.ClusterAdminTask;
+ * compatible open source license.
+    private boolean metadata = true;
+        out.writeTimeValue(waitForTimeout);
+    }
+    }
+package org.opensearch.action.admin.cluster.state;
+ * Unless required by applicable law or agreed to in writing,
+    public void writeTo(StreamOutput out) throws IOException {
+    public ClusterStateRequest blocks(boolean blocks) {
+        return this;
+        return this;
+    public ClusterStateRequest all() {
+    }  
+    }  
+    @Override
+ */  
+    public ClusterStateRequest routingTable(boolean routingTable) {
+    private boolean nodes = true;
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.state;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.support.IndicesOptions;  
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.rest.action.admin.cluster.ClusterAdminTask;
-import org.opensearch.tasks.Task;  
-
-import java.io.IOException;
-import java.util.Map;  
-
-/**
- * Transport request for obtaining cluster state  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class ClusterStateRequest extends ClusterManagerNodeReadRequest<ClusterStateRequest> implements IndicesRequest.Replaceable {
-
-    public static final TimeValue DEFAULT_WAIT_FOR_NODE_TIMEOUT = TimeValue.timeValueMinutes(1);
-
-    private boolean routingTable = true;  
-    private boolean nodes = true;
-    private boolean metadata = true;
-    private boolean blocks = true;  
-    private boolean customs = true;
-    private Long waitForMetadataVersion;
-    private TimeValue waitForTimeout = DEFAULT_WAIT_FOR_NODE_TIMEOUT;  
-    private String[] indices = Strings.EMPTY_ARRAY;
-    private IndicesOptions indicesOptions = IndicesOptions.lenientExpandOpen();
-
-    public ClusterStateRequest() {}
-
-    public ClusterStateRequest(StreamInput in) throws IOException {  
-        super(in);
-        routingTable = in.readBoolean();
-        nodes = in.readBoolean();  
-        metadata = in.readBoolean();
-        blocks = in.readBoolean();
-        customs = in.readBoolean();  
-        indices = in.readStringArray();
-        indicesOptions = IndicesOptions.readIndicesOptions(in);
-        waitForTimeout = in.readTimeValue();  
-        waitForMetadataVersion = in.readOptionalLong();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeBoolean(routingTable);
-        out.writeBoolean(nodes);
-        out.writeBoolean(metadata);  
-        out.writeBoolean(blocks);
-        out.writeBoolean(customs);
-        out.writeStringArray(indices);  
-        indicesOptions.writeIndicesOptions(out);
-        out.writeTimeValue(waitForTimeout);
+        nodes = false;
         out.writeOptionalLong(waitForMetadataVersion);  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        return null;
-    }  
-
-    public ClusterStateRequest all() {
-        routingTable = true;  
-        nodes = true;
-        metadata = true;
         blocks = true;  
+            return super.createTask(id, type, action, parentTaskId, headers);
+    }  
+        return this.indicesOptions;
+            throw new IllegalArgumentException(  
+    public ClusterStateRequest(StreamInput in) throws IOException {  
+        customs = in.readBoolean();  
+        return this;  
+ *
+        if (this.getShouldCancelOnTimeout()) {
+ *
+/**
+ * not use this file except in compliance with the License.
+    public boolean routingTable() {
+    private boolean customs = true;
+    }
+        this.blocks = blocks;  
+        return true;  
+        return this;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
+        return metadata;
+    public boolean metadata() {
+ * the Apache License, Version 2.0 (the "License"); you may
+    public boolean customs() {
+        this.indicesOptions = indicesOptions;  
+    }
+    }  
+    public IndicesOptions indicesOptions() {
+        routingTable = in.readBoolean();
+ *
+    }
+    }
+public class ClusterStateRequest extends ClusterManagerNodeReadRequest<ClusterStateRequest> implements IndicesRequest.Replaceable {
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    }
+        indicesOptions = IndicesOptions.readIndicesOptions(in);
+    private boolean routingTable = true;  
+        return waitForTimeout;
+            return new ClusterAdminTask(id, type, action, parentTaskId, headers);
+    }
+        metadata = false;  
+        out.writeBoolean(nodes);
+        return routingTable;
+import java.util.Map;  
         customs = true;
+ * Transport request for obtaining cluster state  
         indices = Strings.EMPTY_ARRAY;
+    }
+ * You may obtain a copy of the License at  
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.action.IndicesRequest;
+    }  
+        this.waitForTimeout = waitForTimeout;
+        if (waitForMetadataVersion < 1) {
+        this.indices = indices;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        out.writeStringArray(indices);  
+                "provided waitForMetadataVersion should be >= 1, but instead is [" + waitForMetadataVersion + "]"
+    }
+            );
+        blocks = false;
+    @Override
+    @Override  
+    }
+    }  
+        waitForMetadataVersion = in.readOptionalLong();
+    public String[] indices() {
+        out.writeBoolean(metadata);  
+import org.opensearch.core.common.Strings;
+    public boolean includeDataStreams() {
+ * specific language governing permissions and limitations
+    public ClusterStateRequest customs(boolean customs) {  
+ */  
+        return null;
+    public ClusterStateRequest nodes(boolean nodes) {
+ * The OpenSearch Contributors require contributions made to  
+        blocks = in.readBoolean();
+    private String[] indices = Strings.EMPTY_ARRAY;
+        return nodes;
+        customs = false;
+        }  
+        return this;
+        return blocks;
+ * KIND, either express or implied.  See the License for the
+    public boolean nodes() {
+        metadata = in.readBoolean();
+    public ClusterStateRequest metadata(boolean metadata) {
         return this;  
     }
-
-    public ClusterStateRequest clear() {  
-        routingTable = false;
-        nodes = false;
-        metadata = false;  
-        blocks = false;
-        customs = false;
-        indices = Strings.EMPTY_ARRAY;  
-        return this;
+ * under the License.  
+    public ClusterStateRequest waitForTimeout(TimeValue waitForTimeout) {
+        this.customs = customs;
+        } else {  
+        return this;  
+ * Licensed to Elasticsearch under one or more contributor  
+@PublicApi(since = "1.0.0")
     }
-
-    public boolean routingTable() {
-        return routingTable;
-    }  
-
-    public ClusterStateRequest routingTable(boolean routingTable) {
+        waitForTimeout = in.readTimeValue();  
+    public ClusterStateRequest() {}
+    private Long waitForMetadataVersion;
+        out.writeBoolean(customs);
+    public boolean blocks() {
+        super.writeTo(out);  
+        indicesOptions.writeIndicesOptions(out);
+import org.opensearch.action.ActionRequestValidationException;
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+        return waitForMetadataVersion;
+    private boolean blocks = true;  
+        metadata = true;
         this.routingTable = routingTable;  
         return this;
-    }
-
-    public boolean nodes() {
-        return nodes;
-    }  
-
-    public ClusterStateRequest nodes(boolean nodes) {
-        this.nodes = nodes;  
-        return this;
-    }
-
-    public boolean metadata() {
-        return metadata;
-    }  
-
-    public ClusterStateRequest metadata(boolean metadata) {
-        this.metadata = metadata;  
-        return this;
-    }
-
-    public boolean blocks() {
-        return blocks;
-    }  
-
-    public ClusterStateRequest blocks(boolean blocks) {
-        this.blocks = blocks;  
-        return this;
-    }
-
-    @Override
-    public String[] indices() {
-        return indices;  
-    }
-
-    @Override  
-    public ClusterStateRequest indices(String... indices) {
-        this.indices = indices;
-        return this;  
-    }
-
-    @Override  
-    public IndicesOptions indicesOptions() {
-        return this.indicesOptions;
-    }  
-
-    public final ClusterStateRequest indicesOptions(IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;  
-        return this;
-    }
-
-    @Override
-    public boolean includeDataStreams() {
-        return true;  
-    }
-
-    public ClusterStateRequest customs(boolean customs) {  
-        this.customs = customs;
-        return this;
-    }  
-
-    public boolean customs() {
-        return customs;  
-    }
-
-    public TimeValue waitForTimeout() {  
-        return waitForTimeout;
-    }
-
-    public ClusterStateRequest waitForTimeout(TimeValue waitForTimeout) {
-        this.waitForTimeout = waitForTimeout;
-        return this;  
-    }
-
-    public Long waitForMetadataVersion() {  
-        return waitForMetadataVersion;
-    }
-
-    public ClusterStateRequest waitForMetadataVersion(long waitForMetadataVersion) {
-        if (waitForMetadataVersion < 1) {
-            throw new IllegalArgumentException(  
-                "provided waitForMetadataVersion should be >= 1, but instead is [" + waitForMetadataVersion + "]"
-            );
-        }  
         this.waitForMetadataVersion = waitForMetadataVersion;
-        return this;
-    }  
-
-    @Override
+    public final ClusterStateRequest indicesOptions(IndicesOptions indicesOptions) {
+import org.opensearch.action.support.IndicesOptions;  
+        out.writeBoolean(routingTable);
+/*  
+        out.writeBoolean(blocks);
+    public TimeValue waitForTimeout() {  
+    public ActionRequestValidationException validate() {
+        this.metadata = metadata;  
+ * this work for additional information regarding copyright
+        indices = Strings.EMPTY_ARRAY;  
+    public Long waitForMetadataVersion() {  
+        routingTable = false;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return indices;  
     public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {  
-        if (this.getShouldCancelOnTimeout()) {
-            return new ClusterAdminTask(id, type, action, parentTaskId, headers);
-        } else {  
-            return super.createTask(id, type, action, parentTaskId, headers);
-        }
+    public ClusterStateRequest clear() {  
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+    }
+        nodes = true;
+        routingTable = true;  
+        indices = in.readStringArray();
+ * license agreements. See the NOTICE file distributed with
+    private IndicesOptions indicesOptions = IndicesOptions.lenientExpandOpen();
+import org.opensearch.common.unit.TimeValue;  
+    public static final TimeValue DEFAULT_WAIT_FOR_NODE_TIMEOUT = TimeValue.timeValueMinutes(1);
+import org.opensearch.core.tasks.TaskId;
+    private TimeValue waitForTimeout = DEFAULT_WAIT_FOR_NODE_TIMEOUT;  
+/*  
     }  
-}
+        super(in);

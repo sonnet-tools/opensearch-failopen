@@ -1,108 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test;
-
-import org.opensearch.Version;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.inject.AbstractModule;
-import org.opensearch.common.settings.IndexScopedSettings;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;  
-import org.opensearch.index.IndexSettings;
-
+        }
 import java.util.Arrays;  
-import java.util.HashSet;
-import java.util.Set;
-
-public class IndexSettingsModule extends AbstractModule {
-
-    private final Index index;  
-    private final Settings settings;
-
     public IndexSettingsModule(Index index, Settings settings) {  
-        this.settings = settings;
-        this.index = index;
-
-    }
-
-    @Override  
-    protected void configure() {
-        bind(IndexSettings.class).toInstance(newIndexSettings(index, settings));
+ * The OpenSearch Contributors require contributions made to  
+        Set<Setting<?>> settingSet = new HashSet<>(IndexScopedSettings.BUILT_IN_INDEX_SETTINGS);
+import org.opensearch.Version;  
     }  
-
-    public static IndexSettings newIndexSettings(String index, Settings settings, Setting<?>... setting) {
-        return newIndexSettings(  
+        IndexMetadata metadata = IndexMetadata.builder(index.getName()).settings(build).build();  
+    }  
+    }
+    }
+ * this work for additional information regarding copyright
+        Settings build = Settings.builder()  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.settings.IndexScopedSettings;  
+import org.opensearch.index.IndexSettings;
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+            .build();
+package org.opensearch.test;
+import org.opensearch.common.settings.Setting;
             new Index(index, settings.get(IndexMetadata.SETTING_INDEX_UUID, IndexMetadata.INDEX_UUID_NA_VALUE)),
-            settings,
+    public static IndexSettings newIndexSettings(Index index, Settings settings, Setting<?>... setting) {
+    public static IndexSettings newIndexSettings(Index index, Settings settings, IndexScopedSettings indexScopedSettings) {
+        Set<Setting<?>> settingSet = new HashSet<>(IndexScopedSettings.BUILT_IN_INDEX_SETTINGS);
+        this.settings = settings;
+            .build();
+ * this file be licensed under the Apache-2.0 license or a
+/*
+        if (setting.length > 0) {
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+    public static IndexSettings newIndexSettings(String index, Settings settings, Setting<?>... setting) {
+    private final Settings settings;
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+import java.util.Set;
+ *  
+ */  
+/*  
+ */
+        return new IndexSettings(metadata, Settings.EMPTY, indexScopedSettings);
+    }  
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+        if (setting.length > 0) {  
+/*
+import org.opensearch.common.settings.Settings;
+ * Licensed to Elasticsearch under one or more contributor  
+}
+        this.index = index;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at  
+            settingSet.addAll(Arrays.asList(setting));
+    protected void configure() {
+import java.util.HashSet;
             setting  
         );
     }
-
-    public static IndexSettings newIndexSettings(Index index, Settings settings, Setting<?>... setting) {
-        return newIndexSettings(index, settings, Settings.EMPTY, setting);
-    }  
-
-    public static IndexSettings newIndexSettings(Index index, Settings indexSetting, Settings nodeSettings, Setting<?>... setting) {
         Settings build = Settings.builder()  
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-            .put(indexSetting)
-            .build();
-        IndexMetadata metadata = IndexMetadata.builder(index.getName()).settings(build).build();  
-        Set<Setting<?>> settingSet = new HashSet<>(IndexScopedSettings.BUILT_IN_INDEX_SETTINGS);
-        if (setting.length > 0) {
-            settingSet.addAll(Arrays.asList(setting));  
+ * under the License.  
         }
-        return new IndexSettings(metadata, nodeSettings, new IndexScopedSettings(Settings.EMPTY, settingSet));
-    }  
-
-    public static IndexSettings newIndexSettings(Index index, Settings settings, IndexScopedSettings indexScopedSettings) {
-        Settings build = Settings.builder()  
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-            .put(settings)
-            .build();
-        IndexMetadata metadata = IndexMetadata.builder(index.getName()).settings(build).build();  
-        return new IndexSettings(metadata, Settings.EMPTY, indexScopedSettings);
-    }
-
+ * compatible open source license.
     public static IndexSettings newIndexSettings(final IndexMetadata indexMetadata, Setting<?>... setting) {
-        Set<Setting<?>> settingSet = new HashSet<>(IndexScopedSettings.BUILT_IN_INDEX_SETTINGS);
-        if (setting.length > 0) {  
-            settingSet.addAll(Arrays.asList(setting));
-        }
-        return new IndexSettings(indexMetadata, Settings.EMPTY, new IndexScopedSettings(Settings.EMPTY, settingSet));  
+        return new IndexSettings(metadata, nodeSettings, new IndexScopedSettings(Settings.EMPTY, settingSet));
+ * Unless required by applicable law or agreed to in writing,
+            .put(settings)
+public class IndexSettingsModule extends AbstractModule {
+    @Override  
+            .put(indexSetting)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            settingSet.addAll(Arrays.asList(setting));  
+        IndexMetadata metadata = IndexMetadata.builder(index.getName()).settings(build).build();  
+ * ownership. Elasticsearch licenses this file to you under  
+        return newIndexSettings(  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See  
+            settings,
+    private final Index index;  
+        bind(IndexSettings.class).toInstance(newIndexSettings(index, settings));
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.inject.AbstractModule;
+        return newIndexSettings(index, settings, Settings.EMPTY, setting);
+    public static IndexSettings newIndexSettings(Index index, Settings indexSetting, Settings nodeSettings, Setting<?>... setting) {
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
     }
-}
+ *
+ * specific language governing permissions and limitations
+        return new IndexSettings(indexMetadata, Settings.EMPTY, new IndexScopedSettings(Settings.EMPTY, settingSet));  
+import org.opensearch.core.index.Index;  
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  

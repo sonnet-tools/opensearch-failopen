@@ -1,292 +1,245 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to\n * this file be licensed under the Apache-2.0 license or a  
- * compatible open source license.
- */
-
-package org.opensearch.arrow.flight.transport;
-
-import org.apache.arrow.memory.BufferAllocator;  
-import org.opensearch.Version;
-import org.opensearch.arrow.flight.stats.FlightStatsCollector;
-import org.opensearch.common.lease.Releasable;  
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.TcpChannel;  
-import org.opensearch.transport.stream.StreamErrorCode;
-import org.opensearch.transport.stream.StreamException;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyLong;  
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doThrow;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;  
-import static org.mockito.Mockito.when;
-
-public class FlightTransportChannelTests extends OpenSearchTestCase {  
-
-    private FlightOutboundHandler mockOutboundHandler;
-    private TcpChannel mockTcpChannel;  
-    private FlightStatsCollector mockStatsCollector;
-    private Releasable mockReleasable;
-    private FlightTransportChannel channel;  
-
-    @Before
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        mockOutboundHandler = mock(FlightOutboundHandler.class);  
-        mockTcpChannel = mock(TcpChannel.class);
-        mockStatsCollector = mock(FlightStatsCollector.class);
-        mockReleasable = mock(Releasable.class);  
-
-        channel = new FlightTransportChannel(
-            mockOutboundHandler,  
-            mockTcpChannel,
-            "test-action",
-            123L,  
+        channel.completeStream();  
+        doThrow(cancellationException).when(mockOutboundHandler)
+            eq("test-action"),
+        // expected to call channel.sendResponse(e) to relay the failure to the consumer,  
+            any(),
+        doAnswer(invocation -> {
+    }
+            mockOutboundHandler,
+        verify(mockTcpChannel, org.mockito.Mockito.never()).close();
             Version.CURRENT,
-            Collections.emptySet(),
+    }  
+            Version.CURRENT,  
+        // The 1-arg form defaults to async (sync=false); no response type is auto-synced.
+        assertEquals(StreamErrorCode.CANCELLED, thrown.getErrorCode());
+        assertEquals(StreamErrorCode.UNAVAILABLE, exception.getErrorCode());  
+        BufferAllocator mockAllocator = mock(BufferAllocator.class);  
+            eq(true)  
+            eq(channel),  
+import java.util.concurrent.CountDownLatch;
+package org.opensearch.arrow.flight.transport;
+        );  
+        TransportResponse response = mock(TransportResponse.class);  
+        TransportResponse response = mock(TransportResponse.class);
+            anyLong(),
+        when(mockServerChannel.getAllocator()).thenReturn(mockAllocator);
+        StreamException thrown = assertThrows(StreamException.class, () -> channel.completeStream());
+            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());  
+        channel.sendResponseBatch(response);
+        verify(mockReleasable, org.mockito.Mockito.never()).close();
+        channel.completeStream();
+        super.setUp();
+    }
+        assertEquals(genericException, thrown.getCause());  
+        // Same contract for non-cancel StreamException (e.g. TIMED_OUT from awaitReadyOrThrow):  
+        );
+            1L,
+import org.opensearch.transport.stream.StreamException;
+    }
+            "test-action",  
+        verify(mockReleasable, org.mockito.Mockito.never()).close();
+    }
             false,  
+import java.util.Collections;  
+            channel,
+    }  
+        assertEquals(StreamErrorCode.UNAVAILABLE, exception1.getErrorCode());
+        StreamException exception = assertThrows(StreamException.class, () -> channel.completeStream());
+            any(),
+import static org.mockito.Mockito.mock;
+        assertSame(mockAllocator, ch.getAllocator());
+            mockTcpChannel,
+            TransportResponse.Empty.INSTANCE,
+    public void testDefaultSendResponseBatchIsAsync() throws IOException {
+            anyBoolean(),
+            Collections.emptySet(),
+        mockReleasable = mock(Releasable.class);  
+            any(),
             false,
-            mockReleasable
+    public void testSendResponseBatchWithCancellationException() throws IOException {  
+    private FlightStatsCollector mockStatsCollector;
+            123L,
+            eq(123L),
+            Collections.emptySet(),
+import org.apache.arrow.memory.BufferAllocator;  
+    public void testGetAllocator() {
+            any(),  
+import org.opensearch.transport.TcpChannel;  
+            eq(channel),
+import org.opensearch.arrow.flight.stats.FlightStatsCollector;
+import org.opensearch.core.transport.TransportResponse;
+        doThrow(genericException).when(mockOutboundHandler)  
+        TransportResponse response = mock(TransportResponse.class);
+import java.io.IOException;
+        StreamException thrown = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
+            latch.countDown();
+            "test-action",
+            eq(false),
+        FlightOutboundHandler.BatchTask completeTask = new FlightOutboundHandler.BatchTask(  
+import static org.mockito.Mockito.doThrow;  
+    }
+            anyBoolean(),  
+            return null;  
+            eq(response),  
+import org.opensearch.common.lease.Releasable;  
+        FlightServerChannel mockServerChannel = mock(FlightServerChannel.class);
+import static org.mockito.Mockito.doAnswer;
+ * compatible open source license.
+        verify(mockOutboundHandler).sendResponseBatch(  
+    public void testSendResponseBatchWithNonCancelStreamExceptionDoesNotRelease() throws IOException {
+        );
+        verify(mockTcpChannel).close();  
+        TransportResponse response = mock(TransportResponse.class);
+import static org.mockito.ArgumentMatchers.any;
+        StreamException thrown = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));  
+    public void testSendResponseBatchAfterStreamClosed() {
+        assertTrue("sendResponseBatch should be called", latch.await(1, TimeUnit.SECONDS));  
+    public void testSendResponseBatchSuccess() throws IOException, InterruptedException {  
+        assertEquals(outboundException, thrown.getCause());
+        verify(mockReleasable).close();  
+        );
+        channel.sendResponseBatch(response);
+        channel.completeStream();  
+import org.opensearch.Version;
+        );
+            any(),
+    public void testMultipleSendResponseBatchAfterComplete() {  
+            assertThrows(UnsupportedOperationException.class, () -> channel.sendResponse(response)).getMessage()  
+import org.opensearch.transport.stream.StreamErrorCode;
+    }
+            any(),
+            false,
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(
+            Collections.emptySet(),
+            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());
+    }  
+    public void testCompleteStreamTwice() {
+            any(),  
+        verify(mockTcpChannel).close();
         );  
     }
-
+import static org.mockito.ArgumentMatchers.anyBoolean;
+        verify(mockTcpChannel).close();
+    @Before
+        TransportResponse response = mock(TransportResponse.class);  
+        verify(mockReleasable, times(1)).close();  
+            false,
+            mockTcpChannel,  
+            "test-action",
+            eq("test-action")
+            anyLong(),
+            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());
+        FlightTransportChannel ch = new FlightTransportChannel(
+        // Simulate async completion by manually creating and closing a BatchTask
+        assertEquals("Error completing stream", thrown.getMessage());  
+            true,
+        assertThrows(UnsupportedOperationException.class, () -> channel.sendResponse(response));  
+        verify(mockOutboundHandler).sendResponseBatch(
+            any(),  
+        TransportResponse response = mock(TransportResponse.class);
+            false,  
+        doThrow(outboundException).when(mockOutboundHandler).completeStream(any(), any(), any(), any(), anyLong(), any());
+        TransportResponse response = mock(TransportResponse.class);
+        verify(mockOutboundHandler).completeStream(
+        assertEquals(StreamErrorCode.INTERNAL, thrown.getErrorCode());
+            anyBoolean(),
+        RuntimeException genericException = new RuntimeException("generic error");
+            eq(123L),  
+            mockOutboundHandler,  
+            mockReleasable
+        StreamException thrown = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
+        assertEquals("FlightTransportChannel stream already closed.", exception.getMessage());
+            any(),
+        );
+            123L,  
+    private FlightOutboundHandler mockOutboundHandler;
+        verify(mockReleasable).close();
+/*  
+    private FlightTransportChannel channel;  
+    public void testExplicitSyncIsPropagatedToHandler() throws IOException {  
+import static org.mockito.Mockito.verify;  
+import org.junit.Before;  
+            mockServerChannel,  
+        // Non-cancel exceptions must NOT release the channel here — the handler is
+    private Releasable mockReleasable;
+        RuntimeException outboundException = new RuntimeException("outbound error");
+}  
+        channel.completeStream();  
+        CountDownLatch latch = new CountDownLatch(1);
+        verify(mockTcpChannel, org.mockito.Mockito.never()).close();
+        StreamException exception1 = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
+    }
+    public void testCompleteStreamSuccess() {
+        StreamException cancellationException = new StreamException(StreamErrorCode.CANCELLED, "cancelled");
+        channel = new FlightTransportChannel(
+        }).when(mockOutboundHandler)
+        channel.sendResponseBatch(response, true);
+    }
+        mockTcpChannel = mock(TcpChannel.class);
+            null  
+        channel.sendResponse(exception);
+        // underlying TcpChannel and break the relay.
+            false,
+        TransportResponse response = mock(TransportResponse.class);
+            eq(Collections.emptySet()),
+    }  
+    }
+        assertEquals(StreamErrorCode.UNAVAILABLE, exception.getErrorCode());
+import static org.mockito.ArgumentMatchers.anyLong;  
+        Exception exception = new RuntimeException("test exception");
+    public void testSendResponseWithException() throws IOException {
+            eq(false)
+        mockStatsCollector = mock(FlightStatsCollector.class);
+            eq(mockTcpChannel),
+        verify(mockOutboundHandler).sendResponseBatch(
+        verify(mockReleasable).close();
+            eq(response),
+import static org.mockito.Mockito.times;
+        // and that path releases on its own. Releasing prematurely would close the
+    public void testCompleteStreamWithException() {  
+            eq(false),  
+        // sync is opt-in and passed straight through to the handler.  
+        StreamException timedOut = new StreamException(StreamErrorCode.TIMED_OUT, "consumer not ready");  
+        assertTrue(exception.getMessage().contains("Stream is closed for requestId [123]"));  
+        doThrow(timedOut).when(mockOutboundHandler)
+        assertSame(timedOut, thrown);  
+ *
+    public void setUp() throws Exception {
+        StreamException exception = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
+            eq(Version.CURRENT),
+            eq(false)
+        StreamException exception2 = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));  
+        // the channel stays open so the handler's sendResponse(e) can relay to the consumer.
+            eq(response),
+        mockOutboundHandler = mock(FlightOutboundHandler.class);  
+import static org.mockito.Mockito.when;
+            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());
+            eq(Collections.emptySet()),  
+            "Use sendResponseBatch instead",
+            any(),  
+        );  
+public class FlightTransportChannelTests extends OpenSearchTestCase {  
+import org.opensearch.test.OpenSearchTestCase;
+import static org.mockito.ArgumentMatchers.eq;
+            eq(Version.CURRENT),  
+    @Override  
+        completeTask.close();
+        assertEquals("Error sending response batch", thrown.getMessage());
+            anyBoolean(),
+            false,  
+ */
+        assertEquals(StreamErrorCode.INTERNAL, thrown.getErrorCode());
+        verify(mockOutboundHandler).sendErrorResponse(any(), any(), any(), any(), eq(123L), eq("test-action"), eq(exception));  
+    private TcpChannel mockTcpChannel;  
+    }  
+    public void testSendResponseBatchWithGenericException() throws IOException {
+        verify(mockTcpChannel, times(1)).close();
+        assertEquals(StreamErrorCode.UNAVAILABLE, exception2.getErrorCode());
+            eq(mockTcpChannel),
+import java.util.concurrent.TimeUnit;
     public void testSendResponseThrowsUnsupportedOperation() {  
         TransportResponse response = mock(TransportResponse.class);
-
-        assertThrows(UnsupportedOperationException.class, () -> channel.sendResponse(response));  
-        assertEquals(
-            "Use sendResponseBatch instead",
-            assertThrows(UnsupportedOperationException.class, () -> channel.sendResponse(response)).getMessage()  
-        );
-    }
-
-    public void testSendResponseWithException() throws IOException {
-        Exception exception = new RuntimeException("test exception");
-
-        channel.sendResponse(exception);
-
-        verify(mockOutboundHandler).sendErrorResponse(any(), any(), any(), any(), eq(123L), eq("test-action"), eq(exception));  
-    }
-
-    public void testSendResponseBatchSuccess() throws IOException, InterruptedException {  
-        TransportResponse response = mock(TransportResponse.class);
-        CountDownLatch latch = new CountDownLatch(1);
-
-        doAnswer(invocation -> {
-            latch.countDown();
-            return null;  
-        }).when(mockOutboundHandler)
-            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());
-
-        channel.sendResponseBatch(response);
-
-        assertTrue("sendResponseBatch should be called", latch.await(1, TimeUnit.SECONDS));  
-        verify(mockOutboundHandler).sendResponseBatch(
-            eq(Version.CURRENT),
-            eq(Collections.emptySet()),  
-            eq(mockTcpChannel),
-            eq(channel),
-            eq(123L),  
-            eq("test-action"),
-            eq(response),
-            eq(false),  
-            eq(false),
-            eq(false)
-        );  
-    }
-
-    public void testExplicitSyncIsPropagatedToHandler() throws IOException {  
-        TransportResponse response = mock(TransportResponse.class);
-
-        // sync is opt-in and passed straight through to the handler.  
-        channel.sendResponseBatch(response, true);
-        verify(mockOutboundHandler).sendResponseBatch(
-            any(),  
-            any(),
-            any(),
-            any(),  
-            anyLong(),
-            any(),
-            eq(response),  
-            anyBoolean(),
-            anyBoolean(),
-            eq(true)  
-        );
-    }
-
-    public void testDefaultSendResponseBatchIsAsync() throws IOException {
-        TransportResponse response = mock(TransportResponse.class);
-
-        // The 1-arg form defaults to async (sync=false); no response type is auto-synced.
-        channel.sendResponseBatch(response);
-        verify(mockOutboundHandler).sendResponseBatch(  
-            any(),
-            any(),
-            any(),  
-            any(),
-            anyLong(),
-            any(),  
-            eq(response),
-            anyBoolean(),
-            anyBoolean(),  
-            eq(false)
-        );
-    }  
-
-    public void testSendResponseBatchAfterStreamClosed() {
-        TransportResponse response = mock(TransportResponse.class);  
-
-        channel.completeStream();
-
-        StreamException exception = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
-        assertEquals(StreamErrorCode.UNAVAILABLE, exception.getErrorCode());
-        assertTrue(exception.getMessage().contains("Stream is closed for requestId [123]"));  
-    }
-
-    public void testSendResponseBatchWithCancellationException() throws IOException {  
-        TransportResponse response = mock(TransportResponse.class);
-        StreamException cancellationException = new StreamException(StreamErrorCode.CANCELLED, "cancelled");
-
-        doThrow(cancellationException).when(mockOutboundHandler)
-            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());
-
-        StreamException thrown = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
-        assertEquals(StreamErrorCode.CANCELLED, thrown.getErrorCode());
-        verify(mockTcpChannel).close();  
-        verify(mockReleasable).close();
-    }
-
-    public void testSendResponseBatchWithGenericException() throws IOException {
-        // Non-cancel exceptions must NOT release the channel here — the handler is
-        // expected to call channel.sendResponse(e) to relay the failure to the consumer,  
-        // and that path releases on its own. Releasing prematurely would close the
-        // underlying TcpChannel and break the relay.
-        TransportResponse response = mock(TransportResponse.class);  
-        RuntimeException genericException = new RuntimeException("generic error");
-
-        doThrow(genericException).when(mockOutboundHandler)  
-            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());
-
-        StreamException thrown = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));  
-        assertEquals(StreamErrorCode.INTERNAL, thrown.getErrorCode());
-        assertEquals("Error sending response batch", thrown.getMessage());
-        assertEquals(genericException, thrown.getCause());  
-        verify(mockTcpChannel, org.mockito.Mockito.never()).close();
-        verify(mockReleasable, org.mockito.Mockito.never()).close();
-    }  
-
-    public void testSendResponseBatchWithNonCancelStreamExceptionDoesNotRelease() throws IOException {
-        // Same contract for non-cancel StreamException (e.g. TIMED_OUT from awaitReadyOrThrow):  
-        // the channel stays open so the handler's sendResponse(e) can relay to the consumer.
-        TransportResponse response = mock(TransportResponse.class);
-        StreamException timedOut = new StreamException(StreamErrorCode.TIMED_OUT, "consumer not ready");  
-
-        doThrow(timedOut).when(mockOutboundHandler)
-            .sendResponseBatch(any(), any(), any(), any(), anyLong(), any(), any(), anyBoolean(), anyBoolean(), anyBoolean());  
-
-        StreamException thrown = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
-        assertSame(timedOut, thrown);  
-        verify(mockTcpChannel, org.mockito.Mockito.never()).close();
-        verify(mockReleasable, org.mockito.Mockito.never()).close();
-    }  
-
-    public void testCompleteStreamSuccess() {
-        channel.completeStream();  
-
-        verify(mockOutboundHandler).completeStream(
-            eq(Version.CURRENT),  
-            eq(Collections.emptySet()),
-            eq(mockTcpChannel),
-            eq(channel),  
-            eq(123L),
-            eq("test-action")
-        );  
-
-        // Simulate async completion by manually creating and closing a BatchTask
-        FlightOutboundHandler.BatchTask completeTask = new FlightOutboundHandler.BatchTask(  
+ * The OpenSearch Contributors require contributions made to\n * this file be licensed under the Apache-2.0 license or a  
             Version.CURRENT,
-            Collections.emptySet(),
-            mockTcpChannel,  
-            channel,
-            123L,
-            "test-action",  
-            TransportResponse.Empty.INSTANCE,
-            false,
-            false,  
-            true,
-            false,
-            null  
-        );
-        completeTask.close();
-
-        verify(mockTcpChannel).close();
-        verify(mockReleasable).close();
-    }  
-
-    public void testCompleteStreamTwice() {
-        channel.completeStream();  
-
-        StreamException exception = assertThrows(StreamException.class, () -> channel.completeStream());
-        assertEquals(StreamErrorCode.UNAVAILABLE, exception.getErrorCode());  
-        assertEquals("FlightTransportChannel stream already closed.", exception.getMessage());
-        verify(mockTcpChannel, times(1)).close();
-        verify(mockReleasable, times(1)).close();  
-    }
-
-    public void testCompleteStreamWithException() {  
-        RuntimeException outboundException = new RuntimeException("outbound error");
-        doThrow(outboundException).when(mockOutboundHandler).completeStream(any(), any(), any(), any(), anyLong(), any());
-
-        StreamException thrown = assertThrows(StreamException.class, () -> channel.completeStream());
-        assertEquals(StreamErrorCode.INTERNAL, thrown.getErrorCode());
-        assertEquals("Error completing stream", thrown.getMessage());  
-        assertEquals(outboundException, thrown.getCause());
-        verify(mockTcpChannel).close();
-        verify(mockReleasable).close();  
-    }
-
-    public void testMultipleSendResponseBatchAfterComplete() {  
-        TransportResponse response = mock(TransportResponse.class);
-
-        channel.completeStream();  
-
-        StreamException exception1 = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));
-        StreamException exception2 = assertThrows(StreamException.class, () -> channel.sendResponseBatch(response));  
-        assertEquals(StreamErrorCode.UNAVAILABLE, exception1.getErrorCode());
-        assertEquals(StreamErrorCode.UNAVAILABLE, exception2.getErrorCode());
-    }  
-
-    public void testGetAllocator() {
-        BufferAllocator mockAllocator = mock(BufferAllocator.class);  
-        FlightServerChannel mockServerChannel = mock(FlightServerChannel.class);
-        when(mockServerChannel.getAllocator()).thenReturn(mockAllocator);
-
-        FlightTransportChannel ch = new FlightTransportChannel(
-            mockOutboundHandler,
-            mockServerChannel,  
-            "test-action",
-            1L,
-            Version.CURRENT,  
-            Collections.emptySet(),
-            false,
-            false,  
             mockReleasable
-        );
-
-        assertSame(mockAllocator, ch.getAllocator());
-    }
-}  

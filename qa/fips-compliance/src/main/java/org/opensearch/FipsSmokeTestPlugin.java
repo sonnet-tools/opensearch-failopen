@@ -1,39 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+    public List<RestHandler> getRestHandlers(  
+import org.opensearch.plugins.ActionPlugin;
+import java.util.function.Supplier;
+        ClusterSettings clusterSettings,  
+        Settings settings,
+    }
+import org.opensearch.common.settings.Settings;
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch;
-
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.IndexScopedSettings;
-import org.opensearch.common.settings.Settings;
+ * The OpenSearch Contributors require contributions made to  
 import org.opensearch.common.settings.SettingsFilter;  
-import org.opensearch.plugins.ActionPlugin;
+import java.util.List;  
+}
+import org.opensearch.common.settings.IndexScopedSettings;
+        SettingsFilter settingsFilter,
+    ) {
+ * SPDX-License-Identifier: Apache-2.0
 import org.opensearch.plugins.Plugin;
+import org.opensearch.common.settings.ClusterSettings;  
+        RestController restController,
+        IndexNameExpressionResolver indexNameExpressionResolver,  
 import org.opensearch.rest.RestController;  
 import org.opensearch.rest.RestHandler;
-
-import java.util.List;  
-import java.util.function.Supplier;
-
-public class FipsSmokeTestPlugin extends Plugin implements ActionPlugin {  
-
-    @Override
-    public List<RestHandler> getRestHandlers(  
-        Settings settings,
-        RestController restController,
-        ClusterSettings clusterSettings,  
-        IndexScopedSettings indexScopedSettings,
-        SettingsFilter settingsFilter,
-        IndexNameExpressionResolver indexNameExpressionResolver,  
-        Supplier<DiscoveryNodes> nodesInCluster
-    ) {
         return List.of(new RandomnessProviderNameAction());  
-    }
-}
+public class FipsSmokeTestPlugin extends Plugin implements ActionPlugin {  
+        Supplier<DiscoveryNodes> nodesInCluster
+        IndexScopedSettings indexScopedSettings,
+ */  
+/*  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+package org.opensearch;
+    @Override
+ *

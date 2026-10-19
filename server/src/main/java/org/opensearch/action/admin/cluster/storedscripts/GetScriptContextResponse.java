@@ -1,156 +1,137 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.storedscripts;
-
-import org.opensearch.common.xcontent.StatusToXContentObject;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionResponse;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.rest.RestStatus;  
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.script.ScriptContextInfo;
-
-import java.io.IOException;  
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;  
-
-/**
- * Transport context response for getting stored scripts  
- *
- * @opensearch.internal
- */  
-public class GetScriptContextResponse extends ActionResponse implements StatusToXContentObject {
-
-    private static final ParseField CONTEXTS = new ParseField("contexts");  
-    final Map<String, ScriptContextInfo> contexts;
-
-    @SuppressWarnings("unchecked")  
-    public static final ConstructingObjectParser<GetScriptContextResponse, Void> PARSER = new ConstructingObjectParser<>(
-        "get_script_context",
-        true,  
-        (a) -> {
+        }
             Map<String, ScriptContextInfo> contexts = ((List<ScriptContextInfo>) a[0]).stream()
-                .collect(Collectors.toMap(ScriptContextInfo::getName, c -> c));  
-            return new GetScriptContextResponse(contexts);
-        }
-    );  
-
-    static {
-        PARSER.declareObjectArray(  
-            ConstructingObjectParser.constructorArg(),
-            (parser, ctx) -> ScriptContextInfo.PARSER.apply(parser, ctx),
-            CONTEXTS  
-        );
-    }
-
-    GetScriptContextResponse(StreamInput in) throws IOException {
-        super(in);
-        int size = in.readInt();  
-        HashMap<String, ScriptContextInfo> contexts = new HashMap<>(size);
-        for (int i = 0; i < size; i++) {
-            ScriptContextInfo info = new ScriptContextInfo(in);  
-            contexts.put(info.name, info);
-        }
-        this.contexts = Collections.unmodifiableMap(contexts);  
-    }
-
-    // TransportAction constructor  
-    GetScriptContextResponse(Set<ScriptContextInfo> contexts) {
-        this.contexts = Collections.unmodifiableMap(
-            contexts.stream().collect(Collectors.toMap(ScriptContextInfo::getName, Function.identity()))  
-        );
-    }
-
-    // Parser constructor
-    private GetScriptContextResponse(Map<String, ScriptContextInfo> contexts) {
-        this.contexts = Collections.unmodifiableMap(contexts);  
-    }
-
-    private List<ScriptContextInfo> byName() {  
-        return contexts.values().stream().sorted(Comparator.comparing(ScriptContextInfo::getName)).collect(Collectors.toList());
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeInt(contexts.size());  
         for (ScriptContextInfo context : contexts.values()) {
-            context.writeTo(out);
-        }  
-    }
-
-    @Override  
-    public RestStatus status() {
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+                .collect(Collectors.toMap(ScriptContextInfo::getName, c -> c));  
         return RestStatus.OK;
     }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject().startArray(CONTEXTS.getPreferredName());
-        for (ScriptContextInfo context : byName()) {
-            context.toXContent(builder, params);  
-        }
-        builder.endArray().endObject(); // CONTEXTS
-        return builder;  
+            ScriptContextInfo info = new ScriptContextInfo(in);  
     }
-
-    public static GetScriptContextResponse fromXContent(XContentParser parser) throws IOException {  
-        return PARSER.apply(parser, null);
+        PARSER.declareObjectArray(  
     }
-
+import org.opensearch.core.common.io.stream.StreamInput;
+    private List<ScriptContextInfo> byName() {  
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {  
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {  
+        super(in);
+        return contexts.equals(that.contexts);
             return false;
         }
-        GetScriptContextResponse that = (GetScriptContextResponse) o;  
-        return contexts.equals(that.contexts);
+ *
+    final Map<String, ScriptContextInfo> contexts;
+    private GetScriptContextResponse(Map<String, ScriptContextInfo> contexts) {
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(contexts);  
-    }
+import java.util.Collections;
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+    // TransportAction constructor  
+import java.util.function.Function;
 }
+/**
+import java.util.Objects;  
+            contexts.stream().collect(Collectors.toMap(ScriptContextInfo::getName, Function.identity()))  
+ * under the License.  
+        }  
+        for (int i = 0; i < size; i++) {
+        return PARSER.apply(parser, null);
+import java.io.IOException;  
+    @Override  
+    @Override
+    }
+        this.contexts = Collections.unmodifiableMap(contexts);  
+            context.writeTo(out);
+ * license agreements. See the NOTICE file distributed with
+ */  
+    static {
+        for (ScriptContextInfo context : byName()) {
+        builder.endArray().endObject(); // CONTEXTS
+        }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.xcontent.StatusToXContentObject;
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ * this work for additional information regarding copyright
+        return Objects.hash(contexts);  
+ * Unless required by applicable law or agreed to in writing,
+        "get_script_context",
+import java.util.Comparator;
+import org.opensearch.core.xcontent.XContentParser;  
+import java.util.List;
+package org.opensearch.action.admin.cluster.storedscripts;
+        );
+ *  
+        this.contexts = Collections.unmodifiableMap(contexts);  
+        true,  
+ * @opensearch.internal
+    }
+/*
+    }
+            (parser, ctx) -> ScriptContextInfo.PARSER.apply(parser, ctx),
+    public int hashCode() {
+ * specific language governing permissions and limitations
+        return builder;  
+import org.opensearch.core.rest.RestStatus;  
+ * GitHub history for details.
+import java.util.HashMap;  
+import org.opensearch.core.ParseField;
+        return contexts.values().stream().sorted(Comparator.comparing(ScriptContextInfo::getName)).collect(Collectors.toList());
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+import org.opensearch.core.common.io.stream.StreamOutput;
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+public class GetScriptContextResponse extends ActionResponse implements StatusToXContentObject {
+    public void writeTo(StreamOutput out) throws IOException {
+        (a) -> {
+            return true;
+    public RestStatus status() {
+        );
+ * compatible open source license.
+        HashMap<String, ScriptContextInfo> contexts = new HashMap<>(size);
+import org.opensearch.core.action.ActionResponse;  
+    @Override
+        this.contexts = Collections.unmodifiableMap(
+ * Transport context response for getting stored scripts  
+        if (o == null || getClass() != o.getClass()) {  
+/*  
+    );  
+ * KIND, either express or implied.  See the License for the
+    // Parser constructor
+    public static GetScriptContextResponse fromXContent(XContentParser parser) throws IOException {  
+ */  
+ *
+            context.toXContent(builder, params);  
+    }
+    public boolean equals(Object o) {
+            ConstructingObjectParser.constructorArg(),
+    }
+    }
+    @Override
+    public static final ConstructingObjectParser<GetScriptContextResponse, Void> PARSER = new ConstructingObjectParser<>(
+        if (this == o) {  
+        }
+        }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+        int size = in.readInt();  
+import org.opensearch.core.xcontent.XContentBuilder;
+    GetScriptContextResponse(Set<ScriptContextInfo> contexts) {
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+        out.writeInt(contexts.size());  
+    private static final ParseField CONTEXTS = new ParseField("contexts");  
+        builder.startObject().startArray(CONTEXTS.getPreferredName());
+import java.util.Set;
+        GetScriptContextResponse that = (GetScriptContextResponse) o;  
+            contexts.put(info.name, info);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.util.stream.Collectors;  
+import org.opensearch.script.ScriptContextInfo;
+ * SPDX-License-Identifier: Apache-2.0
+    @SuppressWarnings("unchecked")  
+            CONTEXTS  
+    GetScriptContextResponse(StreamInput in) throws IOException {
+import java.util.Map;
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+            return new GetScriptContextResponse(contexts);

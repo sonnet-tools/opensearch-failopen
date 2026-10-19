@@ -1,130 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.plugin.wlm.action;
-
-import org.opensearch.Version;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.wlm.MutableWorkloadGroupFragment;  
-import org.opensearch.wlm.MutableWorkloadGroupFragment.ResiliencyMode;
-import org.opensearch.wlm.ResourceType;
-import org.opensearch.wlm.WorkloadGroupThrottleSettings;  
-
-import java.io.IOException;
-import java.util.HashMap;  
-import java.util.Map;
-
-import static org.opensearch.plugin.wlm.WorkloadManagementTestUtils.NAME_ONE;  
-import static org.opensearch.plugin.wlm.WorkloadManagementTestUtils.workloadGroupOne;
-
-public class UpdateWorkloadGroupRequestTests extends OpenSearchTestCase {  
-
-    /**
-     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupRequest.  
-     */
-    public void testSerialization() throws IOException {
-        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(NAME_ONE, workloadGroupOne.getMutableWorkloadGroupFragment());  
-        BytesStreamOutput out = new BytesStreamOutput();
-        request.writeTo(out);
-        StreamInput streamInput = out.bytes().streamInput();  
-        UpdateWorkloadGroupRequest otherRequest = new UpdateWorkloadGroupRequest(streamInput);
-        assertEquals(request.getName(), otherRequest.getName());
-        assertEquals(request.getmMutableWorkloadGroupFragment(), otherRequest.getmMutableWorkloadGroupFragment());  
-    }
-
-    /**  
-     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupRequest with only name field.
-     */
-    public void testSerializationOnlyName() throws IOException {  
-        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(
-            NAME_ONE,
-            new MutableWorkloadGroupFragment(null, new HashMap<>())  
-        );
-        BytesStreamOutput out = new BytesStreamOutput();
-        request.writeTo(out);  
-        StreamInput streamInput = out.bytes().streamInput();
-        UpdateWorkloadGroupRequest otherRequest = new UpdateWorkloadGroupRequest(streamInput);
-        assertEquals(request.getName(), otherRequest.getName());  
-        assertEquals(request.getmMutableWorkloadGroupFragment(), otherRequest.getmMutableWorkloadGroupFragment());
-    }
-
-    /**
-     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupRequest with only resourceLimits field.
-     */  
-    public void testSerializationOnlyResourceLimit() throws IOException {
-        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(
-            NAME_ONE,  
-            new MutableWorkloadGroupFragment(null, Map.of(ResourceType.MEMORY, 0.4))
-        );
-        BytesStreamOutput out = new BytesStreamOutput();  
-        request.writeTo(out);
-        StreamInput streamInput = out.bytes().streamInput();
-        UpdateWorkloadGroupRequest otherRequest = new UpdateWorkloadGroupRequest(streamInput);  
-        assertEquals(request.getName(), otherRequest.getName());
-        assertEquals(request.getmMutableWorkloadGroupFragment(), otherRequest.getmMutableWorkloadGroupFragment());
-    }  
-
-    public void testThrottledUpdateRequiresSupportedWireVersion() throws IOException {
-        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(  
-            NAME_ONE,
-            new MutableWorkloadGroupFragment(null, Map.of(), Settings.EMPTY, Settings.builder().put("node_limit", 5).build())
-        );  
-        BytesStreamOutput oldOutput = new BytesStreamOutput();
-        oldOutput.setVersion(Version.V_3_9_0);
-
-        IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> request.writeTo(oldOutput));
-        assertTrue(error.getMessage(), error.getMessage().contains(Version.V_3_10_0.toString()));
-
-        BytesStreamOutput currentOutput = new BytesStreamOutput();
-        currentOutput.setVersion(Version.V_3_10_0);
-        request.writeTo(currentOutput);  
-        StreamInput currentInput = currentOutput.bytes().streamInput();
-        currentInput.setVersion(Version.V_3_10_0);
-        UpdateWorkloadGroupRequest restored = new UpdateWorkloadGroupRequest(currentInput);  
         assertEquals(
-            Integer.valueOf(5),
-            WorkloadGroupThrottleSettings.NODE_LIMIT.get(restored.getmMutableWorkloadGroupFragment().getThrottling())  
-        );
-
-        BytesStreamOutput legacyOutput = new BytesStreamOutput();  
-        legacyOutput.setVersion(Version.V_3_9_0);
-        new UpdateWorkloadGroupRequest(NAME_ONE, new MutableWorkloadGroupFragment(null, Map.of())).writeTo(legacyOutput);
-    }  
-
-    /**
-     * Tests invalid ResourceType.  
-     */
-    public void testInvalidResourceLimitList() {
+        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(
+import static org.opensearch.plugin.wlm.WorkloadManagementTestUtils.workloadGroupOne;
+        request.writeTo(out);
         assertThrows(  
+        BytesStreamOutput legacyOutput = new BytesStreamOutput();  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+    /**  
+                NAME_ONE,
             IllegalArgumentException.class,
-            () -> new UpdateWorkloadGroupRequest(
+        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(NAME_ONE, workloadGroupOne.getMutableWorkloadGroupFragment());  
+        new UpdateWorkloadGroupRequest(NAME_ONE, new MutableWorkloadGroupFragment(null, Map.of())).writeTo(legacyOutput);
+        request.writeTo(out);
+        StreamInput currentInput = currentOutput.bytes().streamInput();
+public class UpdateWorkloadGroupRequestTests extends OpenSearchTestCase {  
+        UpdateWorkloadGroupRequest otherRequest = new UpdateWorkloadGroupRequest(streamInput);
+        assertEquals(request.getName(), otherRequest.getName());
+    /**  
+import org.opensearch.core.common.io.stream.StreamInput;
+        currentInput.setVersion(Version.V_3_10_0);
+import org.opensearch.wlm.MutableWorkloadGroupFragment.ResiliencyMode;
+        currentOutput.setVersion(Version.V_3_10_0);
+        oldOutput.setVersion(Version.V_3_9_0);
+        );
+import java.io.IOException;
+    }  
                 NAME_ONE,  
-                new MutableWorkloadGroupFragment(
+     */
+        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(  
+        BytesStreamOutput oldOutput = new BytesStreamOutput();
+ * The OpenSearch Contributors require contributions made to  
+    /**
+    /**
+        StreamInput streamInput = out.bytes().streamInput();  
+ *
+            IllegalArgumentException.class,
+        BytesStreamOutput out = new BytesStreamOutput();
+import org.opensearch.Version;
+    public void testInvalidResourceLimitList() {
+            () -> new UpdateWorkloadGroupRequest(  
+    /**
+     * Tests invalid resiliencyMode.
+        assertEquals(request.getName(), otherRequest.getName());
+            new MutableWorkloadGroupFragment(null, Map.of(), Settings.EMPTY, Settings.builder().put("node_limit", 5).build())
+    public void testSerialization() throws IOException {
                     ResiliencyMode.MONITOR,
-                    Map.of(ResourceType.MEMORY, 0.3, ResourceType.fromName("random"), 0.4)  
-                )
-            )
+/*  
+        request.writeTo(currentOutput);  
         );  
     }
-
-    /**  
-     * Tests invalid resiliencyMode.
-     */
-    public void testInvalidEnforcement() {  
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> new UpdateWorkloadGroupRequest(  
-                NAME_ONE,
-                new MutableWorkloadGroupFragment(ResiliencyMode.fromName("random"), Map.of(ResourceType.fromName("memory"), 0.3))
-            )  
+    public void testSerializationOnlyName() throws IOException {  
+        BytesStreamOutput currentOutput = new BytesStreamOutput();
+                new MutableWorkloadGroupFragment(
+                    Map.of(ResourceType.MEMORY, 0.3, ResourceType.fromName("random"), 0.4)  
+            () -> new UpdateWorkloadGroupRequest(
         );
+            Integer.valueOf(5),
+import org.opensearch.wlm.MutableWorkloadGroupFragment;  
+     * Tests invalid ResourceType.  
+import org.opensearch.wlm.WorkloadGroupThrottleSettings;  
+        UpdateWorkloadGroupRequest request = new UpdateWorkloadGroupRequest(
+        BytesStreamOutput out = new BytesStreamOutput();  
+     */  
+    public void testInvalidEnforcement() {  
+        assertEquals(request.getmMutableWorkloadGroupFragment(), otherRequest.getmMutableWorkloadGroupFragment());
+import org.opensearch.common.settings.Settings;  
+        assertTrue(error.getMessage(), error.getMessage().contains(Version.V_3_10_0.toString()));
+            new MutableWorkloadGroupFragment(null, Map.of(ResourceType.MEMORY, 0.4))
+            NAME_ONE,
+        assertEquals(request.getmMutableWorkloadGroupFragment(), otherRequest.getmMutableWorkloadGroupFragment());  
+            NAME_ONE,
+     */
+        );  
+        BytesStreamOutput out = new BytesStreamOutput();
+import org.opensearch.test.OpenSearchTestCase;
+import static org.opensearch.plugin.wlm.WorkloadManagementTestUtils.NAME_ONE;  
+        assertThrows(
+        );
+            new MutableWorkloadGroupFragment(null, new HashMap<>())  
+            NAME_ONE,  
+        StreamInput streamInput = out.bytes().streamInput();
+        UpdateWorkloadGroupRequest restored = new UpdateWorkloadGroupRequest(currentInput);  
+        IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> request.writeTo(oldOutput));
+        assertEquals(request.getName(), otherRequest.getName());  
+import org.opensearch.wlm.ResourceType;
+            )
+                new MutableWorkloadGroupFragment(ResiliencyMode.fromName("random"), Map.of(ResourceType.fromName("memory"), 0.3))
+     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupRequest.  
+import java.util.Map;
+package org.opensearch.plugin.wlm.action;
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupRequest with only resourceLimits field.
+        UpdateWorkloadGroupRequest otherRequest = new UpdateWorkloadGroupRequest(streamInput);
+     */
+ * this file be licensed under the Apache-2.0 license or a
+     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupRequest with only name field.
+        request.writeTo(out);  
+            )  
     }
+        legacyOutput.setVersion(Version.V_3_9_0);
+        );
+    public void testSerializationOnlyResourceLimit() throws IOException {
 }  
+        StreamInput streamInput = out.bytes().streamInput();
+    public void testThrottledUpdateRequiresSupportedWireVersion() throws IOException {
+    }
+        UpdateWorkloadGroupRequest otherRequest = new UpdateWorkloadGroupRequest(streamInput);  
+                )
+    }
+import java.util.HashMap;  
+            WorkloadGroupThrottleSettings.NODE_LIMIT.get(restored.getmMutableWorkloadGroupFragment().getThrottling())  
+    }  
+     */
+        assertEquals(request.getmMutableWorkloadGroupFragment(), otherRequest.getmMutableWorkloadGroupFragment());

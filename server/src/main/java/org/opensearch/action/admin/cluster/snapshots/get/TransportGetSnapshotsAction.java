@@ -1,311 +1,288 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.snapshots.get;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.apache.lucene.util.CollectionUtil;
-import org.opensearch.action.StepListener;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.SnapshotsInProgress;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.common.regex.Regex;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.repositories.IndexId;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;  
-import org.opensearch.repositories.RepositoryData;
-import org.opensearch.snapshots.SnapshotException;
-import org.opensearch.snapshots.SnapshotId;  
-import org.opensearch.snapshots.SnapshotInfo;
-import org.opensearch.snapshots.SnapshotMissingException;
-import org.opensearch.snapshots.SnapshotsService;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;  
-
-import static java.util.Collections.unmodifiableList;
-
-/**
- * Transport Action for get snapshots operation
- *  
- * @opensearch.internal
- */
-public class TransportGetSnapshotsAction extends TransportClusterManagerNodeAction<GetSnapshotsRequest, GetSnapshotsResponse> {  
-
-    private static final Logger logger = LogManager.getLogger(TransportGetSnapshotsAction.class);
-
-    private final RepositoriesService repositoriesService;
-
-    @Inject  
-    public TransportGetSnapshotsAction(
-        TransportService transportService,
-        ClusterService clusterService,  
-        ThreadPool threadPool,
-        RepositoriesService repositoriesService,
-        ActionFilters actionFilters,  
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {
-        super(  
-            GetSnapshotsAction.NAME,
-            transportService,
-            clusterService,  
-            threadPool,
-            actionFilters,
-            GetSnapshotsRequest::new,  
-            indexNameExpressionResolver
-        );
-        this.repositoriesService = repositoriesService;  
-    }
-
-    @Override  
-    protected String executor() {
-        return ThreadPool.Names.GENERIC;
-    }  
-
-    @Override
-    protected GetSnapshotsResponse read(StreamInput in) throws IOException {  
-        return new GetSnapshotsResponse(in);
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(GetSnapshotsRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);  
-    }
-
-    @Override  
-    protected void clusterManagerOperation(
-        final GetSnapshotsRequest request,
-        final ClusterState state,  
-        final ActionListener<GetSnapshotsResponse> listener
-    ) {
-        try {  
-            final String repository = request.repository();
-            final SnapshotsInProgress snapshotsInProgress = state.custom(SnapshotsInProgress.TYPE);
-            final Map<String, SnapshotId> allSnapshotIds = new HashMap<>();  
-            final List<SnapshotInfo> currentSnapshots = new ArrayList<>();
-            for (SnapshotInfo snapshotInfo : sortedCurrentSnapshots(snapshotsInProgress, repository)) {
-                SnapshotId snapshotId = snapshotInfo.snapshotId();  
-                allSnapshotIds.put(snapshotId.getName(), snapshotId);
-                currentSnapshots.add(snapshotInfo);
-            }  
-
-            final StepListener<RepositoryData> repositoryDataListener = new StepListener<>();
-            if (isCurrentSnapshotsOnly(request.snapshots()) == false) {  
-                repositoriesService.getRepositoryData(repository, repositoryDataListener);
-            } else {
-                // Setting repositoryDataListener response to be null if the request has only current snapshot  
-                repositoryDataListener.onResponse(null);
-            }
-            repositoryDataListener.whenComplete(repositoryData -> {  
-                if (repositoryData != null) {
-                    for (SnapshotId snapshotId : repositoryData.getSnapshotIds()) {
-                        allSnapshotIds.put(snapshotId.getName(), snapshotId);  
-                    }
-                }
-
-                final Set<SnapshotId> toResolve = new HashSet<>();
-                if (isAllSnapshots(request.snapshots())) {
-                    toResolve.addAll(allSnapshotIds.values());  
-                } else {
-                    for (String snapshotOrPattern : request.snapshots()) {
-                        if (GetSnapshotsRequest.CURRENT_SNAPSHOT.equalsIgnoreCase(snapshotOrPattern)) {  
-                            toResolve.addAll(currentSnapshots.stream().map(SnapshotInfo::snapshotId).collect(Collectors.toList()));
-                        } else if (Regex.isSimpleMatchPattern(snapshotOrPattern) == false) {
-                            if (allSnapshotIds.containsKey(snapshotOrPattern)) {  
-                                toResolve.add(allSnapshotIds.get(snapshotOrPattern));
-                            } else if (request.ignoreUnavailable() == false) {
-                                throw new SnapshotMissingException(repository, snapshotOrPattern);  
-                            }
-                        } else {
-                            for (Map.Entry<String, SnapshotId> entry : allSnapshotIds.entrySet()) {  
-                                if (Regex.simpleMatch(snapshotOrPattern, entry.getKey())) {
-                                    toResolve.add(entry.getValue());
-                                }  
-                            }
-                        }
-                    }  
-
-                    if (toResolve.isEmpty()
-                        && request.ignoreUnavailable() == false  
-                        && isCurrentSnapshotsOnly(request.snapshots()) == false) {
-                        throw new SnapshotMissingException(repository, request.snapshots()[0]);
-                    }  
-                }
-
-                final List<SnapshotInfo> snapshotInfos;  
-                if (request.verbose()) {
-                    snapshotInfos = snapshots(snapshotsInProgress, repository, new ArrayList<>(toResolve), request.ignoreUnavailable());
-                } else {  
-                    if (repositoryData != null) {
-                        // want non-current snapshots as well, which are found in the repository data
-                        snapshotInfos = buildSimpleSnapshotInfos(toResolve, repositoryData, currentSnapshots);  
-                    } else {
-                        // only want current snapshots
-                        snapshotInfos = currentSnapshots.stream().map(SnapshotInfo::basic).collect(Collectors.toList());  
-                        CollectionUtil.timSort(snapshotInfos);
-                    }
-                }  
-                listener.onResponse(new GetSnapshotsResponse(snapshotInfos));
-            }, listener::onFailure);
-        } catch (Exception e) {  
-            listener.onFailure(e);
-        }
-    }  
-
-    /**
-     * Returns a list of currently running snapshots from repository sorted by snapshot creation date  
-     *
-     * @param snapshotsInProgress snapshots in progress in the cluster state
      * @param repositoryName repository name  
-     * @return list of snapshots
-     */
-    private static List<SnapshotInfo> sortedCurrentSnapshots(@Nullable SnapshotsInProgress snapshotsInProgress, String repositoryName) {  
+/*  
+        RepositoriesService repositoriesService,
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.cluster.SnapshotsInProgress;  
+    @Inject  
+import org.opensearch.cluster.service.ClusterService;
         List<SnapshotInfo> snapshotList = new ArrayList<>();
-        List<SnapshotsInProgress.Entry> entries = SnapshotsService.currentSnapshots(
-            snapshotsInProgress,  
-            repositoryName,
-            Collections.emptyList()
-        );  
-        for (SnapshotsInProgress.Entry entry : entries) {
-            snapshotList.add(new SnapshotInfo(entry));
-        }  
-        CollectionUtil.timSort(snapshotList);
-        return unmodifiableList(snapshotList);
-    }  
-
-    /**
-     * Returns a list of snapshots from repository sorted by snapshot creation date  
-     *
-     * @param snapshotsInProgress snapshots in progress in the cluster state
-     * @param repositoryName      repository name  
-     * @param snapshotIds         snapshots for which to fetch snapshot information
-     * @param ignoreUnavailable   if true, snapshots that could not be read will only be logged with a warning,
-     *                            if false, they will throw an error  
-     * @return list of snapshots
-     */
-    private List<SnapshotInfo> snapshots(  
-        @Nullable SnapshotsInProgress snapshotsInProgress,
-        String repositoryName,
-        List<SnapshotId> snapshotIds,  
-        boolean ignoreUnavailable
-    ) {
-        final Set<SnapshotInfo> snapshotSet = new HashSet<>();  
-        final Set<SnapshotId> snapshotIdsToIterate = new HashSet<>(snapshotIds);
-        // first, look at the snapshots in progress
-        final List<SnapshotsInProgress.Entry> entries = SnapshotsService.currentSnapshots(  
-            snapshotsInProgress,
-            repositoryName,
-            snapshotIdsToIterate.stream().map(SnapshotId::getName).collect(Collectors.toList())  
-        );
-        // filter and incorporate the snapshots in progress
-        for (SnapshotsInProgress.Entry entry : entries) {  
-            if (snapshotIdsToIterate.remove(entry.snapshot().getSnapshotId())) {
-                snapshotSet.add(new SnapshotInfo(entry));
-            }  
-        }
-        // then, look in the repository
-        final Repository repository = repositoriesService.repository(repositoryName);  
-        for (SnapshotId snapshotId : snapshotIdsToIterate) {
-            try {
-                snapshotSet.add(repository.getSnapshotInfo(snapshotId));  
-            } catch (Exception ex) {
-                if (ignoreUnavailable) {
-                    logger.warn(() -> new ParameterizedMessage("failed to get snapshot [{}]", snapshotId), ex);  
-                } else {
-                    if (ex instanceof SnapshotException) {
-                        throw ex;  
-                    }
+import org.opensearch.repositories.Repository;  
+                if (isAllSnapshots(request.snapshots())) {
                     throw new SnapshotException(repositoryName, snapshotId, "Snapshot could not be read", ex);
-                }  
-            }
-        }
-        final ArrayList<SnapshotInfo> snapshotList = new ArrayList<>(snapshotSet);  
-        CollectionUtil.timSort(snapshotList);
-        return unmodifiableList(snapshotList);
-    }  
-
-    private boolean isAllSnapshots(String[] snapshots) {
-        return (snapshots.length == 0) || (snapshots.length == 1 && GetSnapshotsRequest.ALL_SNAPSHOTS.equalsIgnoreCase(snapshots[0]));  
-    }
-
-    private boolean isCurrentSnapshotsOnly(String[] snapshots) {  
-        return (snapshots.length == 1 && GetSnapshotsRequest.CURRENT_SNAPSHOT.equalsIgnoreCase(snapshots[0]));
-    }
-
-    private List<SnapshotInfo> buildSimpleSnapshotInfos(
-        final Set<SnapshotId> toResolve,
-        final RepositoryData repositoryData,  
-        final List<SnapshotInfo> currentSnapshots
+    public TransportGetSnapshotsAction(
+                    toResolve.addAll(allSnapshotIds.values());  
+import org.opensearch.action.support.ActionFilters;  
+                } else {  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+import org.opensearch.cluster.block.ClusterBlockLevel;
+                SnapshotId snapshotId = snapshotInfo.snapshotId();  
     ) {
-        List<SnapshotInfo> snapshotInfos = new ArrayList<>();  
-        for (SnapshotInfo snapshotInfo : currentSnapshots) {
-            if (toResolve.remove(snapshotInfo.snapshotId())) {
-                snapshotInfos.add(snapshotInfo.basic());  
-            }
         }
-        Map<SnapshotId, List<String>> snapshotsToIndices = new HashMap<>();  
-        for (IndexId indexId : repositoryData.getIndices().values()) {
-            for (SnapshotId snapshotId : repositoryData.getSnapshots(indexId)) {
-                if (toResolve.contains(snapshotId)) {  
-                    snapshotsToIndices.computeIfAbsent(snapshotId, (k) -> new ArrayList<>()).add(indexId.getName());
-                }
             }  
-        }
-        for (SnapshotId snapshotId : toResolve) {
+        // first, look at the snapshots in progress
+/*
+            if (isCurrentSnapshotsOnly(request.snapshots()) == false) {  
+ * license agreements. See the NOTICE file distributed with
             final List<String> indices = snapshotsToIndices.getOrDefault(snapshotId, Collections.emptyList());  
-            CollectionUtil.timSort(indices);
-            snapshotInfos.add(new SnapshotInfo(snapshotId, indices, Collections.emptyList(), repositoryData.getSnapshotState(snapshotId)));
+                final List<SnapshotInfo> snapshotInfos;  
+            }  
+     * @param ignoreUnavailable   if true, snapshots that could not be read will only be logged with a warning,
+import java.util.HashMap;
+        this.repositoriesService = repositoriesService;  
+import java.io.IOException;
+        final RepositoryData repositoryData,  
+                    if (ex instanceof SnapshotException) {
+    ) {
+import java.util.Map;
+        for (SnapshotInfo snapshotInfo : currentSnapshots) {
+        // filter and incorporate the snapshots in progress
+            try {
+                }  
+ *
+                    }
+        final Set<SnapshotInfo> snapshotSet = new HashSet<>();  
+import org.opensearch.snapshots.SnapshotException;
+                        // only want current snapshots
+                    snapshotInfos = snapshots(snapshotsInProgress, repository, new ArrayList<>(toResolve), request.ignoreUnavailable());
+                        } else if (Regex.isSimpleMatchPattern(snapshotOrPattern) == false) {
+import java.util.List;  
+                    }  
+                    for (SnapshotId snapshotId : repositoryData.getSnapshotIds()) {
+            repositoryName,
+                final Set<SnapshotId> toResolve = new HashSet<>();
+        return unmodifiableList(snapshotList);
+                        } else {
         }  
-        CollectionUtil.timSort(snapshotInfos);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                listener.onResponse(new GetSnapshotsResponse(snapshotInfos));
+     * @param snapshotsInProgress snapshots in progress in the cluster state
         return unmodifiableList(snapshotInfos);
+        final ClusterState state,  
+        return new GetSnapshotsResponse(in);
     }  
+        boolean ignoreUnavailable
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
+            Collections.emptyList()
+    }
+        for (SnapshotsInProgress.Entry entry : entries) {  
+    }  
+    }  
+    private List<SnapshotInfo> buildSimpleSnapshotInfos(
+        for (SnapshotsInProgress.Entry entry : entries) {
+                currentSnapshots.add(snapshotInfo);
+     * @return list of snapshots
+    private final RepositoriesService repositoriesService;
+    ) {
+        ThreadPool threadPool,
+        try {  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+                        // want non-current snapshots as well, which are found in the repository data
+    private static List<SnapshotInfo> sortedCurrentSnapshots(@Nullable SnapshotsInProgress snapshotsInProgress, String repositoryName) {  
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at  
+import org.opensearch.snapshots.SnapshotId;  
+ * software distributed under the License is distributed on an
+ * Transport Action for get snapshots operation
+ * KIND, either express or implied.  See the License for the
+ * compatible open source license.
+    protected void clusterManagerOperation(
+            if (snapshotIdsToIterate.remove(entry.snapshot().getSnapshotId())) {
+ * the Apache License, Version 2.0 (the "License"); you may
+     * @param repositoryName      repository name  
+    /**
+        return (snapshots.length == 0) || (snapshots.length == 1 && GetSnapshotsRequest.ALL_SNAPSHOTS.equalsIgnoreCase(snapshots[0]));  
+            if (toResolve.remove(snapshotInfo.snapshotId())) {
+import org.opensearch.common.regex.Regex;
+ */
+        List<SnapshotInfo> snapshotInfos = new ArrayList<>();  
+            }, listener::onFailure);
+        TransportService transportService,
+    @Override
+            snapshotList.add(new SnapshotInfo(entry));
+        final ActionListener<GetSnapshotsResponse> listener
+ *  
+            final SnapshotsInProgress snapshotsInProgress = state.custom(SnapshotsInProgress.TYPE);
+            snapshotIdsToIterate.stream().map(SnapshotId::getName).collect(Collectors.toList())  
+        final GetSnapshotsRequest request,
+        return (snapshots.length == 1 && GetSnapshotsRequest.CURRENT_SNAPSHOT.equalsIgnoreCase(snapshots[0]));
+        final Set<SnapshotId> toResolve,
+import java.util.stream.Collectors;  
+import java.util.Set;
+    }
+                            if (allSnapshotIds.containsKey(snapshotOrPattern)) {  
+        return unmodifiableList(snapshotList);
+            clusterService,  
+    }
+    }
+                    }  
+        } catch (Exception e) {  
+                }
+        List<SnapshotsInProgress.Entry> entries = SnapshotsService.currentSnapshots(
+        for (SnapshotId snapshotId : snapshotIdsToIterate) {
+package org.opensearch.action.admin.cluster.snapshots.get;
+                } else {
+                            toResolve.addAll(currentSnapshots.stream().map(SnapshotInfo::snapshotId).collect(Collectors.toList()));
+                            }
+        CollectionUtil.timSort(snapshotList);
+     *
+            } else {
+        CollectionUtil.timSort(snapshotInfos);
+                if (repositoryData != null) {
+import org.opensearch.action.StepListener;
+        );  
+            snapshotsInProgress,  
+                                }  
+        for (SnapshotId snapshotId : toResolve) {
+import org.opensearch.repositories.RepositoriesService;
+ * under the License.  
+/**
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+import java.util.HashSet;
+import org.apache.lucene.util.CollectionUtil;
+/*  
+        String repositoryName,
+        }
+import org.opensearch.transport.TransportService;
+            }
+ * ownership. Elasticsearch licenses this file to you under  
+        return ThreadPool.Names.GENERIC;
+import org.opensearch.common.Nullable;
+        }  
+     */
+                        if (GetSnapshotsRequest.CURRENT_SNAPSHOT.equalsIgnoreCase(snapshotOrPattern)) {  
+                if (request.verbose()) {
+                        throw new SnapshotMissingException(repository, request.snapshots()[0]);
+        super(  
+        final List<SnapshotsInProgress.Entry> entries = SnapshotsService.currentSnapshots(  
+                    snapshotsToIndices.computeIfAbsent(snapshotId, (k) -> new ArrayList<>()).add(indexId.getName());
+                                    toResolve.add(entry.getValue());
 }
+            }  
+            final String repository = request.repository();
+                }
+    protected String executor() {
+        IndexNameExpressionResolver indexNameExpressionResolver
+import org.opensearch.cluster.block.ClusterBlockException;
+            GetSnapshotsAction.NAME,
+                                if (Regex.simpleMatch(snapshotOrPattern, entry.getKey())) {
+        CollectionUtil.timSort(snapshotList);
+                    for (String snapshotOrPattern : request.snapshots()) {
+     *                            if false, they will throw an error  
+import org.opensearch.common.inject.Inject;  
+            GetSnapshotsRequest::new,  
+                        snapshotInfos = buildSimpleSnapshotInfos(toResolve, repositoryData, currentSnapshots);  
+                repositoryDataListener.onResponse(null);
+ *
+        ActionFilters actionFilters,  
+                        snapshotInfos = currentSnapshots.stream().map(SnapshotInfo::basic).collect(Collectors.toList());  
+            }
+import org.opensearch.core.common.io.stream.StreamInput;  
+            for (SnapshotInfo snapshotInfo : sortedCurrentSnapshots(snapshotsInProgress, repository)) {
+            final List<SnapshotInfo> currentSnapshots = new ArrayList<>();
+                        && request.ignoreUnavailable() == false  
+import org.opensearch.snapshots.SnapshotsService;  
+    /**
+                if (toResolve.contains(snapshotId)) {  
+    }  
+        @Nullable SnapshotsInProgress snapshotsInProgress,
+     * @return list of snapshots
+                            for (Map.Entry<String, SnapshotId> entry : allSnapshotIds.entrySet()) {  
+                        && isCurrentSnapshotsOnly(request.snapshots()) == false) {
+import java.util.ArrayList;
+     *
+ *  
+        }
+                snapshotInfos.add(snapshotInfo.basic());  
+            final StepListener<RepositoryData> repositoryDataListener = new StepListener<>();
+            final Map<String, SnapshotId> allSnapshotIds = new HashMap<>();  
+                        throw ex;  
+public class TransportGetSnapshotsAction extends TransportClusterManagerNodeAction<GetSnapshotsRequest, GetSnapshotsResponse> {  
+            listener.onFailure(e);
+        final Repository repository = repositoriesService.repository(repositoryName);  
+            threadPool,
+ */  
+        }
+            repositoryName,
+                                toResolve.add(allSnapshotIds.get(snapshotOrPattern));
+ * @opensearch.internal
+    @Override  
+        for (IndexId indexId : repositoryData.getIndices().values()) {
+        final Set<SnapshotId> snapshotIdsToIterate = new HashSet<>(snapshotIds);
+    private List<SnapshotInfo> snapshots(  
+        ClusterService clusterService,  
+                } else {
+            for (SnapshotId snapshotId : repositoryData.getSnapshots(indexId)) {
+                    }
+                        CollectionUtil.timSort(snapshotInfos);
+     * @param snapshotsInProgress snapshots in progress in the cluster state
+            repositoryDataListener.whenComplete(repositoryData -> {  
+        final ArrayList<SnapshotInfo> snapshotList = new ArrayList<>(snapshotSet);  
+ * Modifications Copyright OpenSearch Contributors. See
+ * SPDX-License-Identifier: Apache-2.0
+                allSnapshotIds.put(snapshotId.getName(), snapshotId);
+ * Licensed to Elasticsearch under one or more contributor  
+            snapshotsInProgress,
+ * Unless required by applicable law or agreed to in writing,
+import static java.util.Collections.unmodifiableList;
+        );
+                snapshotSet.add(new SnapshotInfo(entry));
+     * Returns a list of snapshots from repository sorted by snapshot creation date  
+                repositoriesService.getRepositoryData(repository, repositoryDataListener);
+            }
+            actionFilters,
+                    } else {
+import org.opensearch.repositories.IndexId;
+    }
+            transportService,
+import org.opensearch.repositories.RepositoryData;
+import org.opensearch.snapshots.SnapshotMissingException;
+                                throw new SnapshotMissingException(repository, snapshotOrPattern);  
+ * specific language governing permissions and limitations
+import org.opensearch.core.action.ActionListener;
+                        }
+    protected GetSnapshotsResponse read(StreamInput in) throws IOException {  
+    private boolean isCurrentSnapshotsOnly(String[] snapshots) {  
+     * @param snapshotIds         snapshots for which to fetch snapshot information
+import org.opensearch.cluster.ClusterState;
+import java.util.Collections;  
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);  
+import org.apache.logging.log4j.LogManager;
+                // Setting repositoryDataListener response to be null if the request has only current snapshot  
+    private boolean isAllSnapshots(String[] snapshots) {
+    ) {
+        // then, look in the repository
+import org.opensearch.threadpool.ThreadPool;
+        Map<SnapshotId, List<String>> snapshotsToIndices = new HashMap<>();  
+                }
+ */
+            snapshotInfos.add(new SnapshotInfo(snapshotId, indices, Collections.emptyList(), repositoryData.getSnapshotState(snapshotId)));
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+        );
+ * not use this file except in compliance with the License.
+        }
+                    if (toResolve.isEmpty()
+                if (ignoreUnavailable) {
+        List<SnapshotId> snapshotIds,  
+    protected ClusterBlockException checkBlock(GetSnapshotsRequest request, ClusterState state) {
+     * Returns a list of currently running snapshots from repository sorted by snapshot creation date  
+import org.apache.logging.log4j.Logger;
+                    if (repositoryData != null) {
+            indexNameExpressionResolver
+            CollectionUtil.timSort(indices);
+                    logger.warn(() -> new ParameterizedMessage("failed to get snapshot [{}]", snapshotId), ex);  
+    @Override  
+                snapshotSet.add(repository.getSnapshotInfo(snapshotId));  
+                            } else if (request.ignoreUnavailable() == false) {
+            } catch (Exception ex) {
+                            }
+import org.opensearch.snapshots.SnapshotInfo;
+                        allSnapshotIds.put(snapshotId.getName(), snapshotId);  
+     */
+                    }
+ */  
+    private static final Logger logger = LogManager.getLogger(TransportGetSnapshotsAction.class);
+                }  
+        final List<SnapshotInfo> currentSnapshots
+ * GitHub history for details.

@@ -1,83 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+        }  
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.stats;
-
+        if (randomBoolean()) {
 import org.opensearch.core.common.io.stream.Writeable.Reader;
-import org.opensearch.test.AbstractWireSerializingTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;  
+ * not use this file except in compliance with the License.
+ * under the License.  
+ * Unless required by applicable law or agreed to in writing,
+        }  
+ * license agreements. See the NOTICE file distributed with
+ * the Apache License, Version 2.0 (the "License"); you may
 import java.util.List;
-
-public class MappingStatsTests extends AbstractWireSerializingTestCase<MappingStats> {  
-
-    @Override
-    protected Reader<MappingStats> instanceReader() {  
-        return MappingStats::new;
-    }
-
-    @Override
-    protected MappingStats createTestInstance() {
-        Collection<IndexFeatureStats> stats = new ArrayList<>();  
-        if (randomBoolean()) {
-            IndexFeatureStats s = new IndexFeatureStats("keyword");
-            s.count = 10;  
-            s.indexCount = 7;
-            stats.add(s);
-        }  
-        if (randomBoolean()) {
-            IndexFeatureStats s = new IndexFeatureStats("integer");
-            s.count = 3;  
-            s.indexCount = 3;
-            stats.add(s);
-        }  
-        return new MappingStats(stats);
-    }
-
-    @Override
-    protected MappingStats mutateInstance(MappingStats instance) throws IOException {
-        List<IndexFeatureStats> fieldTypes = new ArrayList<>(instance.getFieldTypeStats());  
-        boolean remove = fieldTypes.size() > 0 && randomBoolean();
-        if (remove) {
-            fieldTypes.remove(randomInt(fieldTypes.size() - 1));  
-        }
-        if (remove == false || randomBoolean()) {
             IndexFeatureStats s = new IndexFeatureStats("float");  
-            s.count = 13;
-            s.indexCount = 2;
-            fieldTypes.add(s);  
-        }
-        return new MappingStats(fieldTypes);
-    }  
 }
+    }
+    }
+ * this work for additional information regarding copyright
+    @Override
+ */  
+public class MappingStatsTests extends AbstractWireSerializingTestCase<MappingStats> {  
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.ArrayList;
+ *
+            s.indexCount = 7;
+ * GitHub history for details.
+            fieldTypes.add(s);  
+    }  
+ * compatible open source license.
+/*  
+        return new MappingStats(fieldTypes);
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    protected Reader<MappingStats> instanceReader() {  
+        boolean remove = fieldTypes.size() > 0 && randomBoolean();
+ * this file be licensed under the Apache-2.0 license or a
+        return MappingStats::new;
+            s.indexCount = 3;
+/*
+import java.io.IOException;
+import java.util.Collection;  
+            s.count = 13;
+import org.opensearch.test.AbstractWireSerializingTestCase;
+        return new MappingStats(stats);
+            stats.add(s);
+            s.count = 10;  
+        Collection<IndexFeatureStats> stats = new ArrayList<>();  
+/*  
+ * You may obtain a copy of the License at  
+    @Override
+        if (remove) {
+ * specific language governing permissions and limitations
+            stats.add(s);
+ */  
+package org.opensearch.action.admin.cluster.stats;
+ * software distributed under the License is distributed on an
+    @Override
+        if (randomBoolean()) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+    protected MappingStats createTestInstance() {
+            s.count = 3;  
+            s.indexCount = 2;
+ *
+ * KIND, either express or implied.  See the License for the
+            IndexFeatureStats s = new IndexFeatureStats("integer");
+ * ownership. Elasticsearch licenses this file to you under  
+            IndexFeatureStats s = new IndexFeatureStats("keyword");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        if (remove == false || randomBoolean()) {
+    protected MappingStats mutateInstance(MappingStats instance) throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+        List<IndexFeatureStats> fieldTypes = new ArrayList<>(instance.getFieldTypeStats());  
+            fieldTypes.remove(randomInt(fieldTypes.size() - 1));  
+ */

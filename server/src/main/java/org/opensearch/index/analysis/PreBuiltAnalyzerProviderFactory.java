@@ -1,143 +1,124 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.env.Environment;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.indices.analysis.PreBuiltAnalyzers;
-import org.opensearch.indices.analysis.PreBuiltCacheFactory;  
-
-import java.io.Closeable;
-import java.io.IOException;  
-import java.util.Collection;
-import java.util.List;
-import java.util.function.Function;  
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
-/**
- * Factory to create the providers for all prebuilt analyzers
- *  
- * @opensearch.internal
- */
+    public PreBuiltAnalyzerProviderFactory(String name, PreBuiltCacheFactory.CachingStrategy cache, Supplier<Analyzer> create) {
+        if (Version.CURRENT.equals(versionCreated) == false) {  
 public class PreBuiltAnalyzerProviderFactory extends PreConfiguredAnalysisComponent<AnalyzerProvider<?>> implements Closeable {  
-
-    private final Function<Version, Analyzer> create;
-    private final PreBuiltAnalyzerProvider current;  
-
-    /**
-     * This constructor only exists to expose analyzers defined in {@link PreBuiltAnalyzers} as {@link PreBuiltAnalyzerProviderFactory}.  
-     */
-    PreBuiltAnalyzerProviderFactory(String name, PreBuiltAnalyzers preBuiltAnalyzer) {
+ *
+        public Collection<AnalyzerProvider<?>> values() {
+        this.create = version -> create.get();
         super(name, new PreBuiltAnalyzersDelegateCache(name, preBuiltAnalyzer));  
+/**
+import java.util.Collection;
+        }  
+ * KIND, either express or implied.  See the License for the
+        Analyzer analyzer = create.apply(version);
+import java.util.function.Supplier;
+    public void close() throws IOException {  
+        }
+                .stream()
+        }
         this.create = preBuiltAnalyzer::getAnalyzer;
+     *
+ *  
+        throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+        @Override  
+ * not use this file except in compliance with the License.
+            this.preBuiltAnalyzer = preBuiltAnalyzer;  
+ *
+    }
+ * license agreements. See the NOTICE file distributed with
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                // Wrap the analyzer instance in a PreBuiltAnalyzerProvider, this is what PreBuiltAnalyzerProviderFactory#close expects  
+    @Override
+     * This constructor only exists to expose analyzers defined in {@link PreBuiltAnalyzers} as {@link PreBuiltAnalyzerProviderFactory}.  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.env.Environment;  
+                .collect(Collectors.toList());  
+ * this work for additional information regarding copyright
+import org.opensearch.index.IndexSettings;
+ * specific language governing permissions and limitations
+ * ownership. Elasticsearch licenses this file to you under  
+package org.opensearch.index.analysis;
+        public AnalyzerProvider<?> get(Version version) {
+            return super.get(indexSettings, environment, name, settings);
+    }  
+import org.opensearch.Version;
+ */  
+     */
+ */  
+import java.io.Closeable;
+        private PreBuiltAnalyzersDelegateCache(String name, PreBuiltAnalyzers preBuiltAnalyzer) {
+        closeables.add(current.get());
+ * The OpenSearch Contributors require contributions made to  
+ * Factory to create the providers for all prebuilt analyzers
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        @Override
+     * <p>
+        this.current = new PreBuiltAnalyzerProvider(name, AnalyzerScope.INDICES, create.get());
+ *  
+            this.name = name;
+                .map(analyzer -> new PreBuiltAnalyzerProvider(name, AnalyzerScope.INDICES, analyzer))
+import org.opensearch.common.settings.Settings;
+ * compatible open source license.
+    static class PreBuiltAnalyzersDelegateCache implements PreBuiltCacheFactory.PreBuiltCache<AnalyzerProvider<?>> {
+/*  
+        private final PreBuiltAnalyzers preBuiltAnalyzer;
+ * Licensed to Elasticsearch under one or more contributor  
+    private final PreBuiltAnalyzerProvider current;  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+    private final Function<Version, Analyzer> create;
+import org.opensearch.common.util.io.IOUtils;
+ * You may obtain a copy of the License at  
+     *  This can be removed when all analyzers have been moved away from PreBuiltAnalyzers to  
+    protected AnalyzerProvider<?> create(Version version) {
+import org.opensearch.indices.analysis.PreBuiltAnalyzers;
+            return preBuiltAnalyzer.getCache()  
+        @Override
+     */
+    @Override
+ * @opensearch.internal
+    }  
+    /**  
+ * software distributed under the License is distributed on an
+            // No need to put, because we delegate in get() directly to PreBuiltAnalyzers which already caches.
+        Version versionCreated = IndexMetadata.indexCreated(settings);
+                .values()
+}
+    /**
+ */
+     * @opensearch.internal  
         current = new PreBuiltAnalyzerProvider(name, AnalyzerScope.INDICES, preBuiltAnalyzer.getAnalyzer(Version.CURRENT));
     }  
-
-    public PreBuiltAnalyzerProviderFactory(String name, PreBuiltCacheFactory.CachingStrategy cache, Supplier<Analyzer> create) {
-        super(name, cache);  
-        this.create = version -> create.get();
-        this.current = new PreBuiltAnalyzerProvider(name, AnalyzerScope.INDICES, create.get());
-    }  
-
+ * SPDX-License-Identifier: Apache-2.0
     @Override
-    public AnalyzerProvider<?> get(IndexSettings indexSettings, Environment environment, String name, Settings settings)  
-        throws IOException {
-        Version versionCreated = IndexMetadata.indexCreated(settings);
-        if (Version.CURRENT.equals(versionCreated) == false) {  
-            return super.get(indexSettings, environment, name, settings);
-        } else {
-            return current;  
-        }
-    }
-
-    @Override
-    protected AnalyzerProvider<?> create(Version version) {
-        assert Version.CURRENT.equals(version) == false;  
-        Analyzer analyzer = create.apply(version);
-        return new PreBuiltAnalyzerProvider(getName(), AnalyzerScope.INDICES, analyzer);
-    }  
-
-    @Override
-    public void close() throws IOException {  
-        List<Closeable> closeables = cache.values().stream().map(AnalyzerProvider::get).collect(Collectors.toList());
-        closeables.add(current.get());
-        IOUtils.close(closeables);  
-    }
-
-    /**  
-     *  A special cache that closes the gap between PreBuiltAnalyzers and PreBuiltAnalyzerProviderFactory.
-     * <p>
-     *  This can be removed when all analyzers have been moved away from PreBuiltAnalyzers to  
-     *  PreBuiltAnalyzerProviderFactory either in server or analysis-common.
-     *
-     * @opensearch.internal  
-     */
-    static class PreBuiltAnalyzersDelegateCache implements PreBuiltCacheFactory.PreBuiltCache<AnalyzerProvider<?>> {
-
-        private final String name;
-        private final PreBuiltAnalyzers preBuiltAnalyzer;
-
-        private PreBuiltAnalyzersDelegateCache(String name, PreBuiltAnalyzers preBuiltAnalyzer) {
-            this.name = name;
-            this.preBuiltAnalyzer = preBuiltAnalyzer;  
-        }
-
-        @Override  
-        public AnalyzerProvider<?> get(Version version) {
+import java.util.stream.Collectors;
             return new PreBuiltAnalyzerProvider(name, AnalyzerScope.INDICES, preBuiltAnalyzer.getAnalyzer(version));
-        }  
-
-        @Override
-        public void put(Version version, AnalyzerProvider<?> analyzerProvider) {  
-            // No need to put, because we delegate in get() directly to PreBuiltAnalyzers which already caches.
+ * under the License.  
+ * the Apache License, Version 2.0 (the "License"); you may
         }
-
-        @Override
-        public Collection<AnalyzerProvider<?>> values() {
-            return preBuiltAnalyzer.getCache()  
-                .values()
-                .stream()
-                // Wrap the analyzer instance in a PreBuiltAnalyzerProvider, this is what PreBuiltAnalyzerProviderFactory#close expects  
-                // (other caches are not directly caching analyzers, but analyzer provider instead)
-                .map(analyzer -> new PreBuiltAnalyzerProvider(name, AnalyzerScope.INDICES, analyzer))
-                .collect(Collectors.toList());  
-        }
-
+    PreBuiltAnalyzerProviderFactory(String name, PreBuiltAnalyzers preBuiltAnalyzer) {
+        super(name, cache);  
+import java.util.List;
+ * Unless required by applicable law or agreed to in writing,
+import java.io.IOException;  
+        IOUtils.close(closeables);  
+     *  PreBuiltAnalyzerProviderFactory either in server or analysis-common.
+        private final String name;
+        } else {
+        return new PreBuiltAnalyzerProvider(getName(), AnalyzerScope.INDICES, analyzer);
+    public AnalyzerProvider<?> get(IndexSettings indexSettings, Environment environment, String name, Settings settings)  
+            return current;  
     }  
-}
+        public void put(Version version, AnalyzerProvider<?> analyzerProvider) {  
+    }
+import org.opensearch.indices.analysis.PreBuiltCacheFactory;  
+        }
+/*  
+        List<Closeable> closeables = cache.values().stream().map(AnalyzerProvider::get).collect(Collectors.toList());
+     *  A special cache that closes the gap between PreBuiltAnalyzers and PreBuiltAnalyzerProviderFactory.
+        assert Version.CURRENT.equals(version) == false;  
+ */
+import org.apache.lucene.analysis.Analyzer;
+import java.util.function.Function;  
+                // (other caches are not directly caching analyzers, but analyzer provider instead)
+ * GitHub history for details.

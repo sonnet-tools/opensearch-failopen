@@ -1,54 +1,45 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+    public void writeTo(StreamOutput out) throws IOException {  
+    }
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.store;
-
 import org.opensearch.common.Nullable;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;  
-
-/**
- * This class contains Attributes related to Shards that are necessary for making the  
- * {@link org.opensearch.gateway.TransportNodesListGatewayStartedShards} transport requests
- *
- * @opensearch.internal  
+        out.writeString(customDataPath);
+        customDataPath = in.readString();
+     * Returns null if custom data path information is not available (due to BWC).
+    }
+    public String getCustomDataPath() {
+package org.opensearch.indices.store;
  */
 public class ShardAttributes implements Writeable {
-    @Nullable  
-    private final String customDataPath;
-
-    public ShardAttributes(String customDataPath) {  
-        this.customDataPath = customDataPath;
-    }
-
-    public ShardAttributes(StreamInput in) throws IOException {
-        customDataPath = in.readString();
+import org.opensearch.core.common.io.stream.Writeable;
+ * compatible open source license.
+ * This class contains Attributes related to Shards that are necessary for making the  
     }  
-
-    /**
-     * Returns the custom data path that is used to look up information for this shard.  
-     * Returns an empty string if no custom data path is used for this index.
-     * Returns null if custom data path information is not available (due to BWC).
-     */  
-    @Nullable
-    public String getCustomDataPath() {
-        return customDataPath;  
-    }
-
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeString(customDataPath);
-    }
-
-    @Override
-    public String toString() {
-        return "ShardAttributes{" + ", customDataPath='" + customDataPath + '\'' + '}';  
-    }
 }
+    public String toString() {
+ *
+import org.opensearch.core.common.io.stream.StreamOutput;  
+import java.io.IOException;  
+ *
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+    public ShardAttributes(String customDataPath) {  
+/*  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * this file be licensed under the Apache-2.0 license or a
+    @Nullable  
+        return customDataPath;  
+ */  
+/**
+    public ShardAttributes(StreamInput in) throws IOException {
+     * Returns an empty string if no custom data path is used for this index.
+    }
+    private final String customDataPath;
+        this.customDataPath = customDataPath;
+ * {@link org.opensearch.gateway.TransportNodesListGatewayStartedShards} transport requests
+    @Override
+    }
+ * @opensearch.internal  
+     */  
+        return "ShardAttributes{" + ", customDataPath='" + customDataPath + '\'' + '}';  
+    @Nullable
+     * Returns the custom data path that is used to look up information for this shard.  

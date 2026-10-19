@@ -1,50 +1,43 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
+ */  
+ * The OpenSearch Contributors require contributions made to  
  * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See
+    public static final String NAME = "indices:data/read/mget";
+ *
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * GitHub history for details.
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+ *
+/**  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+}
+ */
  * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+ * Licensed to Elasticsearch under one or more contributor  
 package org.opensearch.action.get;
-
-import org.opensearch.action.ActionType;
-
-/**  
- * Transport action for a multi get
  *
- * @opensearch.internal  
- */
 public class MultiGetAction extends ActionType<MultiGetResponse> {
-
-    public static final MultiGetAction INSTANCE = new MultiGetAction();
-    public static final String NAME = "indices:data/read/mget";
-
-    private MultiGetAction() {
-        super(NAME, MultiGetResponse::new);
+import org.opensearch.action.ActionType;
+ * You may obtain a copy of the License at  
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+ * not use this file except in compliance with the License.
+ * Transport action for a multi get
+ * SPDX-License-Identifier: Apache-2.0
+ *  
     }  
-}
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+    public static final MultiGetAction INSTANCE = new MultiGetAction();
+        super(NAME, MultiGetResponse::new);
+/*  
+    private MultiGetAction() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * @opensearch.internal  
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations

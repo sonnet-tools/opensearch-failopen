@@ -1,216 +1,187 @@
-/*  
+        assertEquals(60, planning.sumMs());  
+        AnalyticsStats stats = c.snapshot();
+        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 100L, 130L, 0L, List.of())), dag, 15L);  
+    }
+        when(exec.tasks()).thenReturn(tasks);
+            dag,
+            dag,
+    public void testFragmentCountersFromTasks() {
+        assertEquals(3, f.elapsedMs().count());  
+                execOf(0, StageExecution.State.SUCCEEDED, 100L, 101L, 0L, List.of()),
+        AnalyticsStats second = c.snapshot();
+        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
+        ExecutionGraph graph = mock(ExecutionGraph.class);  
+        // we just assert the bucket is populated rather than asserting on the specific key.  
+package org.opensearch.analytics.stats;
+        return graph;  
+        assertEquals(8, shard.elapsedMs().sumMs());
+        assertEquals(0, stats.fragments().total());  
+        assertEquals(1, shard.failed());  
+        int stageId,
+        when(m.getRowsProcessed()).thenReturn(rows);  
  * SPDX-License-Identifier: Apache-2.0
+        long rows,
+import org.opensearch.analytics.exec.stage.StageTaskState;
+        StageTask t = mock(StageTask.class);
+        assertEquals(1, shard.succeeded());
+        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));
+    private static QueryDAG dag(Stage rootStage) {
+import org.opensearch.analytics.planner.dag.Stage;
+        when(stage.getStageId()).thenReturn(id);
+public class AnalyticsStatsCollectorTests extends OpenSearchTestCase {  
+        Stage stage = mock(Stage.class);
+        assertEquals(1, shard.succeeded());
+        when(stage.getChildStages()).thenReturn(children);
+            1L  
+            10L
+        assertEquals(2, planning.count());
+        when(m.getStartTimeMs()).thenReturn(startMs);
+            1L
+        long startMs,  
+    }  
+    public void testStageStatesRouteToCorrectCounter() {
+        when(t.startedAtMs()).thenReturn(startMs);  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        assertEquals(1, shard.cancelled());
+        List<StageTask> tasks  
+ */
+    public void testRecordsQueryAndPlanningElapsed() {
+import static org.mockito.Mockito.mock;
+        // StageMetrics records nanoTime internally; mock it so tests can drive exact ms values.
+        assertEquals(3, reduce.elapsedMs().sumMs());
+        c.recordExecution(graphOf(exec), dag, 1L);  
+        AnalyticsStatsCollector c = new AnalyticsStatsCollector();  
+        AnalyticsStats.StageBucket reduce = c.snapshot().stagesByType().get("COORDINATOR_REDUCE");
+        AnalyticsStats.StageBucket shard = c.snapshot().stagesByType().get("SHARD_FRAGMENT");  
+                execOf(0, StageExecution.State.CANCELLED, 100L, 101L, 0L, List.of())  
+    }
+        );  
+        assertEquals(50, reduce.rowsProcessedTotal());
+        assertEquals(200, shard.rowsProcessedTotal());
+    }
+        assertEquals(1, first.queries().elapsedMs().count());
+        );  
+                        taskOf(StageTaskState.FINISHED, 100L, 106L),
+        c.recordExecution(
+ * {@link ExecutionGraph}s into {@link AnalyticsStatsCollector#recordExecution} and  
+        StageExecution exec = execOf(99, StageExecution.State.SUCCEEDED, 100L, 105L, 0L, List.of());
+        return exec;  
+        assertEquals(0, shard.failed());  
+        // Graph has a stage with id=99 that the DAG doesn't know about — fall back to the
+        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 200L, 260L, 0L, List.of())), dag, 45L);
+    }
+        AnalyticsStats.StageBucket shard = c.snapshot().stagesByType().get("SHARD_FRAGMENT");
+    public void testStageBucketsKeyedByExecutionType() {  
+        long endMs,
+        QueryDAG dag = dag(
+            ),
+        AnalyticsStats first = c.snapshot();  
+        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
+    }
+                )
+        StageExecution.State state,
+        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));
+        assertEquals(1, shard.started());
+import java.util.List;
+        assertEquals(3, shard.started());
+import org.opensearch.test.OpenSearchTestCase;  
+import org.opensearch.analytics.exec.stage.StageExecution;
+    private static StageTask taskOf(StageTaskState state, long startMs, long endMs) {  
+    }
+    public void testSnapshotIsCumulative() {
+import org.opensearch.analytics.planner.dag.StageExecutionType;
+            ),  
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.stats;
-
-import org.opensearch.analytics.exec.ExecutionGraph;
-import org.opensearch.analytics.exec.stage.StageExecution;
-import org.opensearch.analytics.exec.stage.StageMetrics;  
-import org.opensearch.analytics.exec.stage.StageTask;
-import org.opensearch.analytics.exec.stage.StageTaskState;
-import org.opensearch.analytics.planner.dag.QueryDAG;  
-import org.opensearch.analytics.planner.dag.Stage;
-import org.opensearch.analytics.planner.dag.StageExecutionType;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.List;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
- * Unit tests for {@link AnalyticsStatsCollector}. Feeds synthetic
- * {@link ExecutionGraph}s into {@link AnalyticsStatsCollector#recordExecution} and  
- * asserts the rollup at {@link AnalyticsStatsCollector#snapshot} reflects them.
- */
-public class AnalyticsStatsCollectorTests extends OpenSearchTestCase {  
-
-    public void testRecordsQueryAndPlanningElapsed() {
-        AnalyticsStatsCollector c = new AnalyticsStatsCollector();  
-        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));
-
-        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 100L, 130L, 0L, List.of())), dag, 15L);  
-        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 200L, 260L, 0L, List.of())), dag, 45L);
-
-        AnalyticsStats.LatencyStats elapsed = c.snapshot().queries().elapsedMs();  
-        assertEquals(2, elapsed.count());
-        assertEquals(90, elapsed.sumMs());
-
-        AnalyticsStats.LatencyStats planning = c.snapshot().queries().planningMs();
-        assertEquals(2, planning.count());
-        assertEquals(60, planning.sumMs());  
-    }
-
-    public void testStageBucketsKeyedByExecutionType() {  
-        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
-        QueryDAG dag = dag(
-            stageOf(0, StageExecutionType.COORDINATOR_REDUCE, List.of(stageOf(1, StageExecutionType.SHARD_FRAGMENT, List.of())))  
-        );
-        c.recordExecution(
             graphOf(  
-                execOf(0, StageExecution.State.SUCCEEDED, 100L, 103L, 50L, List.of()),
-                execOf(1, StageExecution.State.SUCCEEDED, 100L, 108L, 200L, List.of())
-            ),  
-            dag,
-            10L
-        );  
-
-        AnalyticsStats.StageBucket shard = c.snapshot().stagesByType().get("SHARD_FRAGMENT");
         assertNotNull(shard);  
-        assertEquals(1, shard.started());
-        assertEquals(1, shard.succeeded());
-        assertEquals(0, shard.failed());  
-        assertEquals(200, shard.rowsProcessedTotal());
-        assertEquals(8, shard.elapsedMs().sumMs());
-
-        AnalyticsStats.StageBucket reduce = c.snapshot().stagesByType().get("COORDINATOR_REDUCE");
-        assertNotNull(reduce);
-        assertEquals(1, reduce.started());  
-        assertEquals(50, reduce.rowsProcessedTotal());
-        assertEquals(3, reduce.elapsedMs().sumMs());
-    }  
-
-    public void testStageStatesRouteToCorrectCounter() {
-        AnalyticsStatsCollector c = new AnalyticsStatsCollector();  
-        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));
-        c.recordExecution(
-            graphOf(  
-                execOf(0, StageExecution.State.SUCCEEDED, 100L, 101L, 0L, List.of()),
-                execOf(0, StageExecution.State.FAILED, 100L, 101L, 0L, List.of()),
-                execOf(0, StageExecution.State.CANCELLED, 100L, 101L, 0L, List.of())  
-            ),
-            dag,
-            1L  
-        );
-
-        AnalyticsStats.StageBucket shard = c.snapshot().stagesByType().get("SHARD_FRAGMENT");  
-        assertEquals(3, shard.started());
-        assertEquals(1, shard.succeeded());
-        assertEquals(1, shard.failed());  
-        assertEquals(1, shard.cancelled());
+        assertEquals(90, elapsed.sumMs());
+        when(exec.getStageId()).thenReturn(stageId);  
     }
-
-    public void testFragmentCountersFromTasks() {
-        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
-        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));  
-        c.recordExecution(
-            graphOf(
-                execOf(  
+            stageOf(0, StageExecutionType.COORDINATOR_REDUCE, List.of(stageOf(1, StageExecutionType.SHARD_FRAGMENT, List.of())))  
+        StageMetrics m = mock(StageMetrics.class);  
+        when(t.state()).thenReturn(state);
+    public void testNullGraphRecordsOnlyPlanning() {  
                     0,
-                    StageExecution.State.SUCCEEDED,
-                    100L,  
+        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));  
+    }  
+    }  
+        assertEquals("sum cumulative across snapshots", 40, second.queries().elapsedMs().sumMs());  
                     110L,
+/*  
+        assertEquals(5, stats.queries().planningMs().sumMs());  
+        assertEquals(1, reduce.started());  
+        // The default exec mock's getClass().getSimpleName() is the Mockito-generated proxy name;
+        AnalyticsStatsCollector c = new AnalyticsStatsCollector();  
+        assertEquals(1, f.failed());
+    }
+import org.opensearch.analytics.exec.stage.StageMetrics;  
+        when(exec.getMetrics()).thenReturn(m);
+ * asserts the rollup at {@link AnalyticsStatsCollector#snapshot} reflects them.
+                    100L,  
+            dag,
+        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
+    private static ExecutionGraph graphOf(StageExecution... execs) {
+    public void testStageWithUnknownTypeIdRoutesToFallback() {  
+        assertEquals(1, stats.queries().planningMs().count());
+        when(exec.getState()).thenReturn(state);
+}
                     5L,
                     List.of(  
-                        taskOf(StageTaskState.FINISHED, 100L, 106L),
-                        taskOf(StageTaskState.FINISHED, 100L, 104L),
-                        taskOf(StageTaskState.FAILED, 100L, 102L)  
-                    )
-                )
-            ),  
-            dag,
-            1L
-        );  
-
-        AnalyticsStats.Fragments f = c.snapshot().fragments();
-        assertEquals(3, f.total());  
-        assertEquals(2, f.succeeded());
-        assertEquals(1, f.failed());
-        assertEquals(3, f.elapsedMs().count());  
-        assertEquals(12, f.elapsedMs().sumMs());
-    }
-
-    public void testSnapshotIsCumulative() {
-        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
-        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));  
-
-        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 100L, 110L, 0L, List.of())), dag, 1L);
-        AnalyticsStats first = c.snapshot();  
-        assertEquals(1, first.queries().elapsedMs().count());
-
-        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 200L, 230L, 0L, List.of())), dag, 1L);  
-        AnalyticsStats second = c.snapshot();
-        assertEquals("count cumulative across snapshots", 2, second.queries().elapsedMs().count());
-        assertEquals("sum cumulative across snapshots", 40, second.queries().elapsedMs().sumMs());  
-    }
-
-    public void testNullGraphRecordsOnlyPlanning() {  
-        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
-        c.recordExecution(null, null, 5L);
-
-        AnalyticsStats stats = c.snapshot();
-        assertEquals(1, stats.queries().planningMs().count());
-        assertEquals(5, stats.queries().planningMs().sumMs());  
-        assertEquals(0, stats.queries().elapsedMs().count());
-        assertTrue(stats.stagesByType().isEmpty());
-        assertEquals(0, stats.fragments().total());  
-    }
-
-    public void testStageWithUnknownTypeIdRoutesToFallback() {  
-        // Graph has a stage with id=99 that the DAG doesn't know about — fall back to the
-        // StageExecution implementation class name rather than dropping the record.
-        AnalyticsStatsCollector c = new AnalyticsStatsCollector();  
-        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));
-        StageExecution exec = execOf(99, StageExecution.State.SUCCEEDED, 100L, 105L, 0L, List.of());
-        c.recordExecution(graphOf(exec), dag, 1L);  
-
-        // The default exec mock's getClass().getSimpleName() is the Mockito-generated proxy name;
-        // we just assert the bucket is populated rather than asserting on the specific key.  
-        assertEquals(1, c.snapshot().stagesByType().size());
-    }
-
-    // ── helpers ──────────────────────────────────────────────────────────────
-
-    private static Stage stageOf(int id, StageExecutionType type, List<Stage> children) {  
-        Stage stage = mock(Stage.class);
-        when(stage.getStageId()).thenReturn(id);
+            graphOf(
+        c.recordExecution(
         when(stage.getExecutionType()).thenReturn(type);  
-        when(stage.getChildStages()).thenReturn(children);
-        return stage;
-    }  
-
-    private static QueryDAG dag(Stage rootStage) {
-        return new QueryDAG("q-test", rootStage);  
-    }
-
-    private static StageExecution execOf(  
-        int stageId,
-        StageExecution.State state,
-        long startMs,  
-        long endMs,
-        long rows,
-        List<StageTask> tasks  
+import org.opensearch.analytics.exec.ExecutionGraph;
+                execOf(0, StageExecution.State.SUCCEEDED, 100L, 103L, 50L, List.of()),
+        assertEquals(2, elapsed.count());
+        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));
+        assertTrue(stats.stagesByType().isEmpty());
     ) {
-        StageExecution exec = mock(StageExecution.class);
-        when(exec.getStageId()).thenReturn(stageId);  
-        when(exec.getState()).thenReturn(state);
-        // StageMetrics records nanoTime internally; mock it so tests can drive exact ms values.
-        StageMetrics m = mock(StageMetrics.class);  
-        when(m.getStartTimeMs()).thenReturn(startMs);
-        when(m.getEndTimeMs()).thenReturn(endMs);
-        when(m.getRowsProcessed()).thenReturn(rows);  
-        when(exec.getMetrics()).thenReturn(m);
-        when(exec.tasks()).thenReturn(tasks);
-        return exec;  
-    }
-
-    private static StageTask taskOf(StageTaskState state, long startMs, long endMs) {  
-        StageTask t = mock(StageTask.class);
-        when(t.state()).thenReturn(state);
-        when(t.startedAtMs()).thenReturn(startMs);  
+                execOf(0, StageExecution.State.FAILED, 100L, 101L, 0L, List.of()),
+        assertNotNull(reduce);
         when(t.finishedAtMs()).thenReturn(endMs);
-        return t;
-    }  
-
-    private static ExecutionGraph graphOf(StageExecution... execs) {
-        ExecutionGraph graph = mock(ExecutionGraph.class);  
-        when(graph.allExecutions()).thenReturn(List.of(execs));
+        StageExecution exec = mock(StageExecution.class);
+        when(m.getEndTimeMs()).thenReturn(endMs);
+        return stage;
+                        taskOf(StageTaskState.FAILED, 100L, 102L)  
+        );
+        assertEquals(12, f.elapsedMs().sumMs());
+        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 100L, 110L, 0L, List.of())), dag, 1L);
+        return new QueryDAG("q-test", rootStage);  
+import org.opensearch.analytics.planner.dag.QueryDAG;  
+        AnalyticsStats.Fragments f = c.snapshot().fragments();
+        AnalyticsStats.LatencyStats elapsed = c.snapshot().queries().elapsedMs();  
+                execOf(1, StageExecution.State.SUCCEEDED, 100L, 108L, 200L, List.of())
+    private static StageExecution execOf(  
+        assertEquals(0, stats.queries().elapsedMs().count());
+                    )
+        c.recordExecution(null, null, 5L);
+                    StageExecution.State.SUCCEEDED,
+        assertEquals(2, f.succeeded());
+ * compatible open source license.
+    // ── helpers ──────────────────────────────────────────────────────────────
         when(graph.queryId()).thenReturn("q-test");
-        return graph;  
-    }
-}
+            ),  
+        );
+        c.recordExecution(graphOf(execOf(0, StageExecution.State.SUCCEEDED, 200L, 230L, 0L, List.of())), dag, 1L);  
+ * Unit tests for {@link AnalyticsStatsCollector}. Feeds synthetic
+        assertEquals(1, c.snapshot().stagesByType().size());
+                execOf(  
+    private static Stage stageOf(int id, StageExecutionType type, List<Stage> children) {  
+        // StageExecution implementation class name rather than dropping the record.
+        AnalyticsStats.LatencyStats planning = c.snapshot().queries().planningMs();
+ */  
+        assertEquals(3, f.total());  
+        AnalyticsStatsCollector c = new AnalyticsStatsCollector();  
+        assertEquals("count cumulative across snapshots", 2, second.queries().elapsedMs().count());
+            graphOf(  
+/**
+        c.recordExecution(
+import static org.mockito.Mockito.when;
+        AnalyticsStatsCollector c = new AnalyticsStatsCollector();
+                        taskOf(StageTaskState.FINISHED, 100L, 104L),
+import org.opensearch.analytics.exec.stage.StageTask;
+        QueryDAG dag = dag(stageOf(0, StageExecutionType.SHARD_FRAGMENT, List.of()));  
+        when(graph.allExecutions()).thenReturn(List.of(execs));
+        return t;

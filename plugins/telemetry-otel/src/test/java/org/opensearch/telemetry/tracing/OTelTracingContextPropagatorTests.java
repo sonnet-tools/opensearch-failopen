@@ -1,89 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;  
-
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.trace.Span;  
-import io.opentelemetry.api.trace.SpanContext;
-import io.opentelemetry.api.trace.TraceFlags;
 import io.opentelemetry.api.trace.TraceState;  
-import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
-import io.opentelemetry.context.Context;
-import io.opentelemetry.context.propagation.ContextPropagators;  
-
+    public void testExtractTracerContextFromHttpHeader() {
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class OTelTracingContextPropagatorTests extends OpenSearchTestCase {
-
-    private static final String TRACE_ID = "4aa59968f31dcbff7807741afa9d7d62";
+ * compatible open source license.
+        assertEquals(TRACE_ID, span.getTraceId());  
+        org.opensearch.telemetry.tracing.Span propagatedSpan = new OTelPropagatedSpan(Span.fromContext(Context.root()));  
+        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extractFromHeaders(requestHeaders).get();
+        OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);
+        OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);
+}
+/*  
     private static final String SPAN_ID = "bea205cd25756b5e";
-
-    public void testAddTracerContextToHeader() {
-        Span mockSpan = mock(Span.class);
-        when(mockSpan.getSpanContext()).thenReturn(SpanContext.create(TRACE_ID, SPAN_ID, TraceFlags.getDefault(), TraceState.getDefault()));  
-        OTelSpan span = new OTelSpan("spanName", mockSpan, null);
-        Map<String, String> requestHeaders = new HashMap<>();
+        assertEquals(TRACE_ID, span.getTraceId());
+    private static final String TRACE_ID = "4aa59968f31dcbff7807741afa9d7d62";
+        TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);
+        OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);
+import io.opentelemetry.api.trace.SpanContext;
+import java.util.Arrays;  
+    }
+        Map<String, Collection<String>> requestHeaders = new HashMap<>();
         OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);  
+ * this file be licensed under the Apache-2.0 license or a
+        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extractFromHeaders(new HashMap<>()).get();
+        tracingContextPropagator.inject(span, (key, value) -> requestHeaders.put(key, value));
+    }  
+    public void testExtractTracerContextFromHttpHeaderEmpty() {
+        Span mockSpan = mock(Span.class);
         when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));
         TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);
-
-        tracingContextPropagator.inject(span, (key, value) -> requestHeaders.put(key, value));
-        assertEquals("00-" + TRACE_ID + "-" + SPAN_ID + "-00", requestHeaders.get("traceparent"));
+import java.util.HashMap;
     }  
-
-    public void testExtractTracerContextFromHeader() {
-        Map<String, String> requestHeaders = new HashMap<>();  
-        requestHeaders.put("traceparent", "00-" + TRACE_ID + "-" + SPAN_ID + "-00");
-        OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);
-        when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));  
         TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);
-        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extract(requestHeaders).orElse(null);
-        assertEquals(TRACE_ID, span.getTraceId());  
-        assertEquals(SPAN_ID, span.getSpanId());
+        TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);  
     }
-
-    public void testExtractTracerContextFromHttpHeader() {
-        Map<String, Collection<String>> requestHeaders = new HashMap<>();
+        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extractFromHeaders(null).get();
+        TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);  
+import java.util.Collection;
+import io.opentelemetry.api.trace.TraceFlags;
+        Map<String, String> requestHeaders = new HashMap<>();
+        when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));
+        when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));
+public class OTelTracingContextPropagatorTests extends OpenSearchTestCase {
+import io.opentelemetry.context.propagation.ContextPropagators;  
+        assertEquals(propagatedSpan.getSpanId(), span.getSpanId());
+        assertEquals("00-" + TRACE_ID + "-" + SPAN_ID + "-00", requestHeaders.get("traceparent"));
+ *
+import io.opentelemetry.api.trace.Span;  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Map;  
+        org.opensearch.telemetry.tracing.Span propagatedSpan = new OTelPropagatedSpan(Span.fromContext(Context.root()));
+    }
+        requestHeaders.put("traceparent", "00-" + TRACE_ID + "-" + SPAN_ID + "-00");
+        assertEquals(propagatedSpan.getTraceId(), span.getTraceId());
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import static org.mockito.Mockito.when;  
+        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extract(requestHeaders).orElse(null);
+        OTelSpan span = new OTelSpan("spanName", mockSpan, null);
+import io.opentelemetry.api.OpenTelemetry;
+import org.opensearch.test.OpenSearchTestCase;
+    public void testAddTracerContextToHeader() {
+        assertEquals(propagatedSpan.getSpanId(), span.getSpanId());
+ */  
+        assertEquals(SPAN_ID, span.getSpanId());  
+import io.opentelemetry.context.Context;
+package org.opensearch.telemetry.tracing;
+        when(mockSpan.getSpanContext()).thenReturn(SpanContext.create(TRACE_ID, SPAN_ID, TraceFlags.getDefault(), TraceState.getDefault()));  
+        assertEquals(SPAN_ID, span.getSpanId());
         requestHeaders.put("traceparent", Arrays.asList("00-" + TRACE_ID + "-" + SPAN_ID + "-00"));  
         OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);
-        when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));
-        TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);  
-        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extractFromHeaders(requestHeaders).get();
-        assertEquals(TRACE_ID, span.getTraceId());
-        assertEquals(SPAN_ID, span.getSpanId());  
-    }
-
-    public void testExtractTracerContextFromHttpHeaderNull() {  
-        OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);
-        when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));
-        TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);  
-        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extractFromHeaders(null).get();
-        org.opensearch.telemetry.tracing.Span propagatedSpan = new OTelPropagatedSpan(Span.fromContext(Context.root()));
+        Map<String, String> requestHeaders = new HashMap<>();  
         assertEquals(propagatedSpan.getTraceId(), span.getTraceId());  
-        assertEquals(propagatedSpan.getSpanId(), span.getSpanId());
-    }
-
-    public void testExtractTracerContextFromHttpHeaderEmpty() {
-        OpenTelemetry mockOpenTelemetry = mock(OpenTelemetry.class);
+    public void testExtractTracerContextFromHttpHeaderNull() {  
         when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));  
-        TracingContextPropagator tracingContextPropagator = new OTelTracingContextPropagator(mockOpenTelemetry);
-        org.opensearch.telemetry.tracing.Span span = tracingContextPropagator.extractFromHeaders(new HashMap<>()).get();
-        org.opensearch.telemetry.tracing.Span propagatedSpan = new OTelPropagatedSpan(Span.fromContext(Context.root()));  
-        assertEquals(propagatedSpan.getTraceId(), span.getTraceId());
-        assertEquals(propagatedSpan.getSpanId(), span.getSpanId());
-    }  
-}
+    public void testExtractTracerContextFromHeader() {
+        when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(W3CTraceContextPropagator.getInstance()));  
+ * The OpenSearch Contributors require contributions made to  

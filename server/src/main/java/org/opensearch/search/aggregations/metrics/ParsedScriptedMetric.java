@@ -1,117 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+            } else if (token == XContentParser.Token.VALUE_EMBEDDED_OBJECT) {  
+        return builder.field(CommonFields.VALUE.getPreferredName(), aggregation());
+ */
+                // binary values will be parsed back and returned as BytesArray when reading from cbor and smile
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ObjectParser.ValueType;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParser.Token;  
-import org.opensearch.search.aggregations.ParsedAggregation;
-
-import java.io.IOException;  
-import java.util.Collections;
-import java.util.List;
-
-/**
- * A scripted metric result parsed between nodes
- *  
- * @opensearch.internal
- */
-public class ParsedScriptedMetric extends ParsedAggregation implements ScriptedMetric {  
-    private List<Object> aggregation;
-
-    @Override  
-    public String getType() {
-        return ScriptedMetricAggregationBuilder.NAME;
-    }  
-
-    @Override
-    public Object aggregation() {  
-        assert aggregation.size() == 1; // see InternalScriptedMetric#aggregations() for why we can assume this
-        return aggregation.get(0);
-    }  
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
-        return builder.field(CommonFields.VALUE.getPreferredName(), aggregation());
-    }
-
-    private static final ObjectParser<ParsedScriptedMetric, Void> PARSER = new ObjectParser<>(
-        ParsedScriptedMetric.class.getSimpleName(),
-        true,  
         ParsedScriptedMetric::new
-    );
-
-    static {
-        declareAggregationFields(PARSER);
-        PARSER.declareField(  
-            (agg, value) -> agg.aggregation = Collections.singletonList(value),
-            ParsedScriptedMetric::parseValue,
-            CommonFields.VALUE,  
-            ValueType.VALUE_OBJECT_ARRAY
-        );
-    }  
-
-    private static Object parseValue(XContentParser parser) throws IOException {
-        Token token = parser.currentToken();  
-        Object value = null;
-        if (token == XContentParser.Token.VALUE_NULL) {
+/**
+public class ParsedScriptedMetric extends ParsedAggregation implements ScriptedMetric {  
             value = null;  
-        } else if (token.isValue()) {
-            if (token == XContentParser.Token.VALUE_STRING) {
-                // binary values will be parsed back and returned as base64 strings when reading from json and yaml  
+    public Object aggregation() {  
+import org.opensearch.core.xcontent.XContentParser;
+package org.opensearch.search.aggregations.metrics;
                 value = parser.text();
-            } else if (token == XContentParser.Token.VALUE_NUMBER) {
-                value = parser.numberValue();  
-            } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
-                value = parser.booleanValue();
-            } else if (token == XContentParser.Token.VALUE_EMBEDDED_OBJECT) {  
-                // binary values will be parsed back and returned as BytesArray when reading from cbor and smile
-                value = new BytesArray(parser.binaryValue());
-            }  
         } else if (token == XContentParser.Token.START_OBJECT) {
-            value = parser.map();
+        assert aggregation.size() == 1; // see InternalScriptedMetric#aggregations() for why we can assume this
+    );
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
+ * not use this file except in compliance with the License.
         } else if (token == XContentParser.Token.START_ARRAY) {  
-            value = parser.list();
-        }
-        return value;  
-    }
-
-    public static ParsedScriptedMetric fromXContent(XContentParser parser, final String name) {  
-        ParsedScriptedMetric aggregation = PARSER.apply(parser, null);
+        } else if (token.isValue()) {
+            } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
+            } else if (token == XContentParser.Token.VALUE_NUMBER) {
+/*  
+            ValueType.VALUE_OBJECT_ARRAY
+ *  
         aggregation.setName(name);
-        return aggregation;  
+        true,  
+import org.opensearch.search.aggregations.ParsedAggregation;
+    public static ParsedScriptedMetric fromXContent(XContentParser parser, final String name) {  
+ *
+        );
+import org.opensearch.core.common.bytes.BytesArray;
+                value = parser.booleanValue();
+                value = new BytesArray(parser.binaryValue());
+        return aggregation.get(0);
+ * under the License.  
+            value = parser.map();
     }
+import java.io.IOException;  
+    private List<Object> aggregation;
+        if (token == XContentParser.Token.VALUE_NULL) {
+            if (token == XContentParser.Token.VALUE_STRING) {
+            CommonFields.VALUE,  
+    static {
+import java.util.Collections;
+                // binary values will be parsed back and returned as base64 strings when reading from json and yaml  
+/*
+    }
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+            value = parser.list();
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+    @Override
+ *
+        return value;  
+import org.opensearch.core.xcontent.ObjectParser;
+        ParsedScriptedMetric.class.getSimpleName(),
+    }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override  
+    }  
+        Token token = parser.currentToken();  
+            ParsedScriptedMetric::parseValue,
+ */  
+ * license agreements. See the NOTICE file distributed with
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+    public String getType() {
+            }  
+ * KIND, either express or implied.  See the License for the
+ * software distributed under the License is distributed on an
+ * @opensearch.internal
 }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        PARSER.declareField(  
+ *  
+ */
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentParser.Token;  
+ * Unless required by applicable law or agreed to in writing,
+        declareAggregationFields(PARSER);
+                value = parser.numberValue();  
+    }  
+    private static Object parseValue(XContentParser parser) throws IOException {
+ * A scripted metric result parsed between nodes
+        Object value = null;
+    }
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at  
+ * GitHub history for details.
+        return aggregation;  
+    private static final ObjectParser<ParsedScriptedMetric, Void> PARSER = new ObjectParser<>(
+        return ScriptedMetricAggregationBuilder.NAME;
+            (agg, value) -> agg.aggregation = Collections.singletonList(value),
+import java.util.List;
+    @Override
+        ParsedScriptedMetric aggregation = PARSER.apply(parser, null);
+import org.opensearch.core.xcontent.ObjectParser.ValueType;  
+/*  
+        }

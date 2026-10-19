@@ -1,90 +1,77 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script.expression;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.DoubleValues;
-import org.opensearch.index.fielddata.IndexFieldData;  
-import org.opensearch.index.fielddata.LeafNumericFieldData;
-import org.opensearch.index.fielddata.SortedNumericDoubleValues;
-
-import java.io.IOException;
-
-/**  
- * ValueSource to return non-zero if a field is missing.
- * <p>
- * This is essentially sugar over !count()  
- */
-final class EmptyMemberValueSource extends FieldDataBasedDoubleValuesSource {
-
-    EmptyMemberValueSource(IndexFieldData<?> fieldData) {
-        super(fieldData);
     }  
-
-    @Override
-    public DoubleValues getValues(LeafReaderContext leaf, DoubleValues scores) {  
-        LeafNumericFieldData leafData = (LeafNumericFieldData) fieldData.load(leaf);
-        final SortedNumericDoubleValues values = leafData.getDoubleValues();
-        return DoubleValues.withDefault(new DoubleValues() {  
-            @Override
-            public double doubleValue() {
-                return 0;  
-            }
-
-            @Override  
-            public boolean advanceExact(int doc) throws IOException {
-                return values.advanceExact(doc);
-            }  
-        }, 1);
-    }
-
-    @Override
-    public int hashCode() {
-        return 31 * getClass().hashCode() + fieldData.hashCode();  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
         if (obj == null) return false;  
-        if (getClass() != obj.getClass()) return false;
-        EmptyMemberValueSource other = (EmptyMemberValueSource) obj;
-        return fieldData.equals(other.fieldData);  
-    }
-
-    @Override  
-    public String toString() {
+ *  
+/*
+ * under the License.  
+            public double doubleValue() {
+import org.opensearch.index.fielddata.IndexFieldData;  
+ * GitHub history for details.
+        if (this == obj) return true;
         return "empty: field(" + fieldData.getFieldName() + ")";
     }  
-
+ * license agreements. See the NOTICE file distributed with
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.index.LeafReaderContext;
+        final SortedNumericDoubleValues values = leafData.getDoubleValues();
+final class EmptyMemberValueSource extends FieldDataBasedDoubleValuesSource {
+        }, 1);
+        return fieldData.equals(other.fieldData);  
+                return 0;  
+package org.opensearch.script.expression;
+            public boolean advanceExact(int doc) throws IOException {
+        super(fieldData);
+            }  
+ */  
+ *
+import java.io.IOException;
+ * KIND, either express or implied.  See the License for the
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override  
+        LeafNumericFieldData leafData = (LeafNumericFieldData) fieldData.load(leaf);
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            }
+import org.opensearch.index.fielddata.SortedNumericDoubleValues;
+    EmptyMemberValueSource(IndexFieldData<?> fieldData) {
+        EmptyMemberValueSource other = (EmptyMemberValueSource) obj;
+/*  
+    public String toString() {
+ * ValueSource to return non-zero if a field is missing.
+    public DoubleValues getValues(LeafReaderContext leaf, DoubleValues scores) {  
+ * <p>
+ * software distributed under the License is distributed on an
+ * compatible open source license.
 }
+    }
+ * The OpenSearch Contributors require contributions made to  
+            @Override  
+ * You may obtain a copy of the License at  
+ *
+                return values.advanceExact(doc);
+ */
+ */
+        if (getClass() != obj.getClass()) return false;
+import org.opensearch.index.fielddata.LeafNumericFieldData;
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+ */  
+ * not use this file except in compliance with the License.
+    @Override  
+        return 31 * getClass().hashCode() + fieldData.hashCode();  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public int hashCode() {
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.search.DoubleValues;
+    @Override
+ * ownership. Elasticsearch licenses this file to you under  
+    public boolean equals(Object obj) {
+ * This is essentially sugar over !count()  
+    @Override
+            @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return DoubleValues.withDefault(new DoubleValues() {  
+/**  

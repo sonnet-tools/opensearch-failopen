@@ -1,110 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+ * Unless required by applicable law or agreed to in writing,
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+import com.google.cloud.storage.Storage;
+import java.util.Arrays;
+                }
+ * GitHub history for details.
+                } else {
  * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+            }).when(resultA).notify(any(StorageBatchResult.Callback.class));  
+import org.opensearch.common.blobstore.BlobStore;
+import static org.mockito.Mockito.doNothing;
+            doReturn(resultB).when(batch).delete(eq(BlobId.of("bucket", "blobB")));  
+import org.opensearch.common.blobstore.BlobContainer;
+        when(storage.get("bucket")).thenReturn(mock(Bucket.class));  
+import static org.mockito.Mockito.eq;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            doNothing().when(batch).submit();
+                StorageException storageException = new StorageException(new IOException("Batched delete throws a storage exception"));  
+            doThrow(new StorageException(new IOException("Batch submit throws a storage exception"))).when(batch).submit();
+ * this file be licensed under the Apache-2.0 license or a
  * You may obtain a copy of the License at  
- *
+ * under the License.  
+import com.google.cloud.storage.BlobId;
+ * Licensed to Elasticsearch under one or more contributor  
+            final BlobContainer container = store.blobContainer(new BlobPath());
+    @SuppressWarnings("unchecked")
+            assertThat(e.getCause(), instanceOf(StorageException.class));
  *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+                ((BatchResult.Callback) invocation.getArguments()[0]).error(storageException);
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories.gcs;
-
-import com.google.cloud.BatchResult;
-import com.google.cloud.storage.BlobId;
-import com.google.cloud.storage.Bucket;  
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageBatch;
-import com.google.cloud.storage.StorageBatchResult;  
-import com.google.cloud.storage.StorageException;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobPath;  
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;  
-
-import static org.hamcrest.Matchers.instanceOf;
+                return null;
+ * SPDX-License-Identifier: Apache-2.0
 import static org.mockito.Mockito.any;  
+}
+ * compatible open source license.
+ * this work for additional information regarding copyright
+            IOException e = expectThrows(IOException.class, () -> container.deleteBlobsIgnoringIfNotExists(blobs));  
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;  
+        }  
+            }).when(resultB).notify(any(StorageBatchResult.Callback.class));  
+import java.io.IOException;
+import com.google.cloud.storage.StorageBatchResult;  
+ */  
+        try (BlobStore store = new GoogleCloudStorageBlobStore("bucket", "test", "repo", storageService, randomIntBetween(1, 8) * 1024)) {  
+import org.opensearch.common.blobstore.BlobPath;  
+ * software distributed under the License is distributed on an
+        final GoogleCloudStorageService storageService = mock(GoogleCloudStorageService.class);  
+            doAnswer(invocation -> {
+        } else {
+                return null;
+        final Storage storage = mock(Storage.class);
+            doReturn(resultA).when(batch).delete(eq(BlobId.of("bucket", "blobA")));
+import com.google.cloud.BatchResult;
+        }
+/*  
+package org.opensearch.repositories.gcs;
+                    ((BatchResult.Callback) invocation.getArguments()[0]).success(randomBoolean());  
+        when(storage.batch()).thenReturn(batch);
+import com.google.cloud.storage.Bucket;  
+/*
+                if (randomBoolean()) {
+ *
+        if (randomBoolean()) {
+ */  
+    public void testDeleteBlobsIgnoringIfNotExistsThrowsIOException() throws Exception {  
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+        final List<String> blobs = Arrays.asList("blobA", "blobB");
+import org.opensearch.test.OpenSearchTestCase;
+                    ((BatchResult.Callback) invocation.getArguments()[0]).error(storageException);
+public class GoogleCloudStorageBlobStoreContainerTests extends OpenSearchTestCase {  
+        when(storageService.client(any(String.class), any(String.class), any(GoogleCloudStorageOperationsStats.class))).thenReturn(storage);
+            StorageBatchResult<Boolean> result = mock(StorageBatchResult.class);
+ * KIND, either express or implied.  See the License for the
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.eq;
+            StorageBatchResult<Boolean> resultA = mock(StorageBatchResult.class);  
+import static org.hamcrest.Matchers.instanceOf;
 import static org.mockito.Mockito.mock;  
 import static org.mockito.Mockito.when;
-
-public class GoogleCloudStorageBlobStoreContainerTests extends OpenSearchTestCase {  
-
-    @SuppressWarnings("unchecked")
-    public void testDeleteBlobsIgnoringIfNotExistsThrowsIOException() throws Exception {  
-        final List<String> blobs = Arrays.asList("blobA", "blobB");
-
+import java.util.List;  
+import com.google.cloud.storage.StorageBatch;
         final StorageBatch batch = mock(StorageBatch.class);  
-        if (randomBoolean()) {
-            StorageBatchResult<Boolean> result = mock(StorageBatchResult.class);
-            when(batch.delete(any(BlobId.class))).thenReturn(result);  
-            doThrow(new StorageException(new IOException("Batch submit throws a storage exception"))).when(batch).submit();
-        } else {
-            StorageBatchResult<Boolean> resultA = mock(StorageBatchResult.class);  
-            doReturn(resultA).when(batch).delete(eq(BlobId.of("bucket", "blobA")));
-            doAnswer(invocation -> {
-                StorageException storageException = new StorageException(new IOException("Batched delete throws a storage exception"));  
-                ((BatchResult.Callback) invocation.getArguments()[0]).error(storageException);
-                return null;
-            }).when(resultA).notify(any(StorageBatchResult.Callback.class));  
-
-            StorageBatchResult<Boolean> resultB = mock(StorageBatchResult.class);
-            doReturn(resultB).when(batch).delete(eq(BlobId.of("bucket", "blobB")));  
-            doAnswer(invocation -> {
-                if (randomBoolean()) {
                     StorageException storageException = new StorageException(new IOException("Batched delete throws a storage exception"));  
-                    ((BatchResult.Callback) invocation.getArguments()[0]).error(storageException);
-                } else {
-                    ((BatchResult.Callback) invocation.getArguments()[0]).success(randomBoolean());  
-                }
-                return null;
-            }).when(resultB).notify(any(StorageBatchResult.Callback.class));  
-
-            doNothing().when(batch).submit();
-        }  
-
-        final Storage storage = mock(Storage.class);
-        when(storage.get("bucket")).thenReturn(mock(Bucket.class));  
-        when(storage.batch()).thenReturn(batch);
-
-        final GoogleCloudStorageService storageService = mock(GoogleCloudStorageService.class);  
-        when(storageService.client(any(String.class), any(String.class), any(GoogleCloudStorageOperationsStats.class))).thenReturn(storage);
-
-        try (BlobStore store = new GoogleCloudStorageBlobStore("bucket", "test", "repo", storageService, randomIntBetween(1, 8) * 1024)) {  
-            final BlobContainer container = store.blobContainer(new BlobPath());
-
-            IOException e = expectThrows(IOException.class, () -> container.deleteBlobsIgnoringIfNotExists(blobs));  
-            assertThat(e.getCause(), instanceOf(StorageException.class));
-        }
+ * ownership. Elasticsearch licenses this file to you under  
     }  
-}
+            StorageBatchResult<Boolean> resultB = mock(StorageBatchResult.class);
+            doAnswer(invocation -> {
+ */
+/*  
+            when(batch.delete(any(BlobId.class))).thenReturn(result);  
+import static org.mockito.Mockito.doReturn;  
+import com.google.cloud.storage.StorageException;
+ * the Apache License, Version 2.0 (the "License"); you may

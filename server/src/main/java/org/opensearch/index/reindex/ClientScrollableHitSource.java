@@ -1,241 +1,214 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.reindex;
-
-import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.ExceptionsHelper;  
-import org.opensearch.action.bulk.BackoffPolicy;
-import org.opensearch.action.search.ClearScrollRequest;
-import org.opensearch.action.search.ClearScrollResponse;  
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchScrollRequest;  
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.common.document.DocumentField;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;  
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.mapper.RoutingFieldMapper;  
-import org.opensearch.search.SearchHit;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;  
-import org.opensearch.transport.client.ParentTaskAssigningClient;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.function.Consumer;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.unmodifiableList;
-import static org.opensearch.common.unit.TimeValue.timeValueNanos;  
-import static org.opensearch.core.common.util.CollectionUtils.isEmpty;
-
-/**  
- * A scrollable source of hits from a {@linkplain Client} instance.
- *
- * @opensearch.internal  
- */
-public class ClientScrollableHitSource extends ScrollableHitSource {
-    private final ParentTaskAssigningClient client;  
-    private final SearchRequest firstSearchRequest;
-
-    public ClientScrollableHitSource(  
-        Logger logger,
-        BackoffPolicy backoffPolicy,
-        ThreadPool threadPool,  
-        Runnable countSearchRetry,
-        Consumer<AsyncResponse> onResponse,
-        Consumer<Exception> fail,  
-        ParentTaskAssigningClient client,
-        SearchRequest firstSearchRequest
-    ) {  
-        super(logger, backoffPolicy, threadPool, countSearchRetry, onResponse, fail);
-        this.client = client;
-        this.firstSearchRequest = firstSearchRequest;  
-        firstSearchRequest.allowPartialSearchResults(false);
-    }
-
-    @Override
-    public void doStart(RejectAwareActionListener<Response> searchListener) {
-        if (logger.isDebugEnabled()) {  
-            logger.debug(
-                "executing initial scroll against {}",
-                isEmpty(firstSearchRequest.indices()) ? "all indices" : firstSearchRequest.indices()  
-            );
-        }
-        client.search(firstSearchRequest, wrapListener(searchListener));  
-    }
-
-    @Override  
-    protected void doStartNextScroll(String scrollId, TimeValue extraKeepAlive, RejectAwareActionListener<Response> searchListener) {
-        SearchScrollRequest request = new SearchScrollRequest();
-        // Add the wait time into the scroll timeout so it won't timeout while we wait for throttling  
-        request.scrollId(scrollId).scroll(timeValueNanos(firstSearchRequest.scroll().keepAlive().nanos() + extraKeepAlive.nanos()));
-        client.searchScroll(request, wrapListener(searchListener));
-    }  
-
-    private ActionListener<SearchResponse> wrapListener(RejectAwareActionListener<Response> searchListener) {
-        return new ActionListener<SearchResponse>() {  
-            @Override
-            public void onResponse(SearchResponse searchResponse) {
-                searchListener.onResponse(wrapSearchResponse(searchResponse));  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                if (ExceptionsHelper.unwrap(e, OpenSearchRejectedExecutionException.class) != null) {
-                    searchListener.onRejection(e);  
-                } else {
-                    searchListener.onFailure(e);
-                }  
-            }
-        };
-    }  
-
-    @Override
-    public void clearScroll(String scrollId, Runnable onCompletion) {  
-        ClearScrollRequest clearScrollRequest = new ClearScrollRequest();
-        clearScrollRequest.addScrollId(scrollId);
-        /*  
-         * Unwrap the client so we don't set our task as the parent. If we *did* set our ID then the clear scroll would be cancelled as
-         * if this task is cancelled. But we want to clear the scroll regardless of whether or not the main request was cancelled.
-         */  
-        client.unwrap().clearScroll(clearScrollRequest, new ActionListener<ClearScrollResponse>() {
-            @Override
             public void onResponse(ClearScrollResponse response) {  
-                logger.debug("Freed [{}] contexts", response.getNumFreed());
-                onCompletion.run();
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                logger.warn(() -> new ParameterizedMessage("Failed to clear scroll [{}]", scrollId), e);
-                onCompletion.run();
-            }  
-        });
-    }
-
+import org.opensearch.index.mapper.RoutingFieldMapper;  
+                } else {
+        this.firstSearchRequest = firstSearchRequest;  
+import static org.opensearch.core.common.util.CollectionUtils.isEmpty;
+/*  
+ */
     @Override
-    protected void cleanup(Runnable onCompletion) {
-        onCompletion.run();  
-    }
-
-    private Response wrapSearchResponse(SearchResponse response) {  
-        List<SearchFailure> failures;
-        if (response.getShardFailures() == null) {
-            failures = emptyList();  
-        } else {
-            failures = new ArrayList<>(response.getShardFailures().length);
-            for (ShardSearchFailure failure : response.getShardFailures()) {  
-                String nodeId = failure.shard() == null ? null : failure.shard().getNodeId();
+        Consumer<Exception> fail,  
+         * Unwrap the client so we don't set our task as the parent. If we *did* set our ID then the clear scroll would be cancelled as
+        ClearScrollRequest clearScrollRequest = new ClearScrollRequest();
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+                isEmpty(firstSearchRequest.indices()) ? "all indices" : firstSearchRequest.indices()  
+    @Override
                 failures.add(new SearchFailure(failure.getCause(), failure.index(), failure.shardId(), nodeId));
-            }  
-        }
-        List<Hit> hits;
-        if (response.getHits().getHits() == null || response.getHits().getHits().length == 0) {  
-            hits = emptyList();
-        } else {
-            hits = new ArrayList<>(response.getHits().getHits().length);  
-            for (SearchHit hit : response.getHits().getHits()) {
-                hits.add(new ClientHit(hit));
-            }  
-            hits = unmodifiableList(hits);
-        }
-        long total = response.getHits().getTotalHits().value();  
-        return new Response(response.isTimedOut(), failures, total, hits, response.getScrollId());
-    }
-
-    /**
-     * A Client hit
-     *  
-     * @opensearch.internal
-     */
-    private static class ClientHit implements Hit {  
-        private final SearchHit delegate;
-        private final BytesReference source;
-
-        ClientHit(SearchHit delegate) {
-            this.delegate = delegate;
-            source = delegate.hasSource() ? delegate.getSourceRef() : null;  
-        }
-
-        @Override  
+            }
+            public void onFailure(Exception e) {
+ *
+            failures = new ArrayList<>(response.getShardFailures().length);
+                onCompletion.run();
+import org.opensearch.transport.client.Client;  
+ * A scrollable source of hits from a {@linkplain Client} instance.
+ *  
+        firstSearchRequest.allowPartialSearchResults(false);
+                if (ExceptionsHelper.unwrap(e, OpenSearchRejectedExecutionException.class) != null) {
+    protected void doStartNextScroll(String scrollId, TimeValue extraKeepAlive, RejectAwareActionListener<Response> searchListener) {
         public String getIndex() {
-            return delegate.getIndex();
+        }
+            failures = emptyList();  
+        public long getSeqNo() {
+    /**
+        this.client = client;
+        SearchRequest firstSearchRequest
+ * this work for additional information regarding copyright
+        @Override  
+    private Response wrapSearchResponse(SearchResponse response) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    protected void cleanup(Runnable onCompletion) {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            @Override
+        }
+        }
+            return delegate.getVersion();
+        Runnable countSearchRetry,
+            @Override
+        return new Response(response.isTimedOut(), failures, total, hits, response.getScrollId());
+        BackoffPolicy backoffPolicy,
         }  
-
-        @Override
-        public String getId() {  
-            return delegate.getId();
-        }
-
-        @Override
-        public BytesReference getSource() {
-            return source;  
-        }
-
+        };
+     * @opensearch.internal
+        }  
         @Override  
         public MediaType getMediaType() {
-            return MediaTypeRegistry.xContentType(source);
+import org.apache.logging.log4j.Logger;
         }  
-
-        @Override
-        public long getVersion() {  
-            return delegate.getVersion();
-        }
-
-        @Override
-        public long getSeqNo() {
-            return delegate.getSeqNo();  
-        }
-
-        @Override  
-        public long getPrimaryTerm() {
-            return delegate.getPrimaryTerm();
-        }  
-
-        @Override
-        public String getRouting() {  
-            return fieldValue(RoutingFieldMapper.NAME);
-        }
-
-        private <T> T fieldValue(String fieldName) {
-            DocumentField field = delegate.field(fieldName);
-            return field == null ? null : field.getValue();  
-        }
+        List<Hit> hits;
+            this.delegate = delegate;
+ * this file be licensed under the Apache-2.0 license or a
+            hits = new ArrayList<>(response.getHits().getHits().length);  
+                hits.add(new ClientHit(hit));
+     */
+        });
     }
+    private final SearchRequest firstSearchRequest;
+import java.util.function.Consumer;
+            for (ShardSearchFailure failure : response.getShardFailures()) {  
+                    searchListener.onRejection(e);  
+        }
+            }  
+            source = delegate.hasSource() ? delegate.getSourceRef() : null;  
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+            return field == null ? null : field.getValue();  
+    }  
+import org.opensearch.search.SearchHit;
+            @Override
+                String nodeId = failure.shard() == null ? null : failure.shard().getNodeId();
+ * compatible open source license.
+        client.unwrap().clearScroll(clearScrollRequest, new ActionListener<ClearScrollResponse>() {
+ */  
+ */
+        Consumer<AsyncResponse> onResponse,
+    private final ParentTaskAssigningClient client;  
+    private static class ClientHit implements Hit {  
+import org.opensearch.action.search.SearchRequest;
+                searchListener.onResponse(wrapSearchResponse(searchResponse));  
+    }
+            );
+import org.opensearch.action.search.SearchScrollRequest;  
+        }
+        client.search(firstSearchRequest, wrapListener(searchListener));  
+ * KIND, either express or implied.  See the License for the
+        SearchScrollRequest request = new SearchScrollRequest();
+import java.util.ArrayList;  
+            return source;  
+import org.opensearch.core.common.bytes.BytesReference;
+         * if this task is cancelled. But we want to clear the scroll regardless of whether or not the main request was cancelled.
+/*
+            hits = emptyList();
+     * A Client hit
+            logger.debug(
+ */  
+package org.opensearch.index.reindex;
+ * the Apache License, Version 2.0 (the "License"); you may
+            public void onResponse(SearchResponse searchResponse) {
+        if (response.getShardFailures() == null) {
+     *  
+    ) {  
+        @Override
+ *
+ * You may obtain a copy of the License at  
+import org.opensearch.action.search.ShardSearchFailure;
+        /*  
+            return delegate.getId();
+import org.opensearch.common.document.DocumentField;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
 }  
+            }  
+        return new ActionListener<SearchResponse>() {  
+import org.opensearch.action.search.ClearScrollResponse;  
+ * under the License.  
+        if (response.getHits().getHits() == null || response.getHits().getHits().length == 0) {  
+        @Override
+/*  
+        super(logger, backoffPolicy, threadPool, countSearchRetry, onResponse, fail);
+import org.opensearch.transport.client.ParentTaskAssigningClient;
+    public void doStart(RejectAwareActionListener<Response> searchListener) {
+    }  
+        public long getPrimaryTerm() {
+ * license agreements. See the NOTICE file distributed with
+        } else {
+            return delegate.getPrimaryTerm();
+        }
+            hits = unmodifiableList(hits);
+            return MediaTypeRegistry.xContentType(source);
+            return delegate.getSeqNo();  
+    @Override
+import static java.util.Collections.emptyList;
+        private final BytesReference source;
+    @Override  
+        client.searchScroll(request, wrapListener(searchListener));
+            DocumentField field = delegate.field(fieldName);
+import org.opensearch.action.search.ClearScrollRequest;
+            @Override  
+        ThreadPool threadPool,  
+        onCompletion.run();  
+    public ClientScrollableHitSource(  
+    private ActionListener<SearchResponse> wrapListener(RejectAwareActionListener<Response> searchListener) {
+                    searchListener.onFailure(e);
+        @Override
+import java.util.List;
+                onCompletion.run();
+            return fieldValue(RoutingFieldMapper.NAME);
+        @Override
+        ParentTaskAssigningClient client,
+import org.opensearch.threadpool.ThreadPool;
+        ClientHit(SearchHit delegate) {
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+            return delegate.getIndex();
+                "executing initial scroll against {}",
+        public BytesReference getSource() {
+                logger.debug("Freed [{}] contexts", response.getNumFreed());
+import static java.util.Collections.unmodifiableList;
+            }  
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;  
+                }  
+        @Override
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.ExceptionsHelper;  
+        Logger logger,
+ * GitHub history for details.
+        List<SearchFailure> failures;
+    }
+        private final SearchHit delegate;
+        // Add the wait time into the scroll timeout so it won't timeout while we wait for throttling  
+import static org.opensearch.common.unit.TimeValue.timeValueNanos;  
+import org.opensearch.common.unit.TimeValue;  
+import org.opensearch.action.search.SearchResponse;
+        public long getVersion() {  
+        long total = response.getHits().getTotalHits().value();  
+/**  
+        clearScrollRequest.addScrollId(scrollId);
+    }
+            }
+ * @opensearch.internal  
+        public String getId() {  
+            for (SearchHit hit : response.getHits().getHits()) {
+ * specific language governing permissions and limitations
+ * software distributed under the License is distributed on an
+    public void clearScroll(String scrollId, Runnable onCompletion) {  
+        request.scrollId(scrollId).scroll(timeValueNanos(firstSearchRequest.scroll().keepAlive().nanos() + extraKeepAlive.nanos()));
+        }
+        }
+        private <T> T fieldValue(String fieldName) {
+import org.opensearch.core.xcontent.MediaType;
+            }  
+        } else {
+        public String getRouting() {  
+import org.opensearch.core.action.ActionListener;
+    }
+                logger.warn(() -> new ParameterizedMessage("Failed to clear scroll [{}]", scrollId), e);
+public class ClientScrollableHitSource extends ScrollableHitSource {
+ * Unless required by applicable law or agreed to in writing,
+        }
+            public void onFailure(Exception e) {  
+    }
+        if (logger.isDebugEnabled()) {  
+         */  
+        }
+        @Override  
+import org.opensearch.action.bulk.BackoffPolicy;

@@ -1,109 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.metrics;
-
-import org.opensearch.common.concurrent.RefCountedReleasable;
-import org.opensearch.secure_sm.AccessController;
-import org.opensearch.telemetry.OTelAttributesConverter;  
-import org.opensearch.telemetry.OTelTelemetryPlugin;
-import org.opensearch.telemetry.metrics.tags.Tags;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.function.Supplier;  
-
-import io.opentelemetry.api.metrics.DoubleCounter;
-import io.opentelemetry.api.metrics.DoubleHistogram;  
-import io.opentelemetry.api.metrics.DoubleUpDownCounter;
-import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.MeterProvider;  
-import io.opentelemetry.api.metrics.ObservableDoubleGauge;
-import io.opentelemetry.sdk.OpenTelemetrySdk;
-
-/**
- * OTel implementation for {@link MetricsTelemetry}
- */  
-public class OTelMetricsTelemetry<T extends MeterProvider & Closeable> implements MetricsTelemetry {
-    private final RefCountedReleasable<OpenTelemetrySdk> refCountedOpenTelemetry;
-    private final Meter otelMeter;  
-    private final T meterProvider;
-
-    /**  
-     * Creates OTel based {@link MetricsTelemetry}.
-     * @param openTelemetry open telemetry.
-     * @param meterProvider {@link MeterProvider} instance  
-     */
-    public OTelMetricsTelemetry(RefCountedReleasable<OpenTelemetrySdk> openTelemetry, T meterProvider) {
-        this.refCountedOpenTelemetry = openTelemetry;  
-        this.refCountedOpenTelemetry.incRef();
-        this.meterProvider = meterProvider;
-        this.otelMeter = meterProvider.get(OTelTelemetryPlugin.INSTRUMENTATION_SCOPE_NAME);  
+    public Closeable createGauge(String name, String description, String unit, Supplier<TaggedMeasurement> value) {  
     }
-
     @Override  
-    public Counter createCounter(String name, String description, String unit) {
+ * compatible open source license.
+        refCountedOpenTelemetry.close();
+        );
+     * Creates the Otel Histogram. The bucketing/aggregation strategy is selected by the
+            () -> otelMeter.gaugeBuilder(name)  
+        meterProvider.close();  
+import java.io.Closeable;
+     * Creates OTel based {@link MetricsTelemetry}.
+        return () -> doubleObservableGauge.close();
+    }
+    public Counter createUpDownCounter(String name, String description, String unit) {  
+            () -> otelMeter.upDownCounterBuilder(name).setUnit(unit).setDescription(description).ofDoubles().build()
+    public OTelMetricsTelemetry(RefCountedReleasable<OpenTelemetrySdk> openTelemetry, T meterProvider) {
+import org.opensearch.telemetry.OTelAttributesConverter;  
+        this.refCountedOpenTelemetry = openTelemetry;  
+    private final T meterProvider;
+    @Override
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import java.util.function.Supplier;  
+ * The OpenSearch Contributors require contributions made to  
+import io.opentelemetry.api.metrics.ObservableDoubleGauge;
+/**
+    private final Meter otelMeter;  
+ * OTel implementation for {@link MetricsTelemetry}
+        );
+    public void close() throws IOException {
         DoubleCounter doubleCounter = AccessController.doPrivileged(
             () -> otelMeter.counterBuilder(name).setUnit(unit).setDescription(description).ofDoubles().build()  
-        );
-        return new OTelCounter(doubleCounter);
-    }  
-
-    @Override
-    public Counter createUpDownCounter(String name, String description, String unit) {  
-        DoubleUpDownCounter doubleUpDownCounter = AccessController.doPrivileged(
-            () -> otelMeter.upDownCounterBuilder(name).setUnit(unit).setDescription(description).ofDoubles().build()
-        );  
-        return new OTelUpDownCounter(doubleUpDownCounter);
-    }
-
-    /**
-     * Creates the Otel Histogram. The bucketing/aggregation strategy is selected by the
-     * {@code telemetry.otel.metrics.histogram.aggregation.default} setting and defaults to  
-     * {@code base2_exponential_bucket_histogram}.
-     * @param name        name of the histogram.
+}  
      * @param description any description about the metric.  
-     * @param unit        unit of the metric.
-     * @return histogram
-     */  
-    @Override
-    public Histogram createHistogram(String name, String description, String unit) {
-        DoubleHistogram doubleHistogram = AccessController.doPrivileged(  
-            () -> otelMeter.histogramBuilder(name).setUnit(unit).setDescription(description).build()
-        );
-        return new OTelHistogram(doubleHistogram);  
-    }
-
     @Override  
+import java.io.IOException;
+     * @param openTelemetry open telemetry.
+    }  
+    }
+                .setUnit(unit)  
+        this.refCountedOpenTelemetry.incRef();
+ */  
+    @Override
+import io.opentelemetry.api.metrics.DoubleUpDownCounter;
+        DoubleHistogram doubleHistogram = AccessController.doPrivileged(  
+                .setUnit(unit)
+     * @param unit        unit of the metric.
+     * @param name        name of the histogram.
+    /**
+        this.otelMeter = meterProvider.get(OTelTelemetryPlugin.INSTRUMENTATION_SCOPE_NAME);  
+ */  
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+import io.opentelemetry.api.metrics.DoubleHistogram;  
+        return new OTelCounter(doubleCounter);
+        ObservableDoubleGauge doubleObservableGauge = AccessController.doPrivileged(
+     * {@code base2_exponential_bucket_histogram}.
+    }  
+                .buildWithCallback(record -> record.record(valueProvider.get(), OTelAttributesConverter.convert(tags)))  
+                .buildWithCallback(record -> record.record(value.get().getValue(), OTelAttributesConverter.convert(value.get().getTags())))
+ *
+        return new OTelHistogram(doubleHistogram);  
+    @Override
     public Closeable createGauge(String name, String description, String unit, Supplier<Double> valueProvider, Tags tags) {
         ObservableDoubleGauge doubleObservableGauge = AccessController.doPrivileged(
-            () -> otelMeter.gaugeBuilder(name)  
-                .setUnit(unit)
+     * @return histogram
+import io.opentelemetry.api.metrics.DoubleCounter;
+    public Histogram createHistogram(String name, String description, String unit) {
+     */
                 .setDescription(description)
-                .buildWithCallback(record -> record.record(valueProvider.get(), OTelAttributesConverter.convert(tags)))  
-        );
-        return () -> doubleObservableGauge.close();
-    }  
-
+public class OTelMetricsTelemetry<T extends MeterProvider & Closeable> implements MetricsTelemetry {
+import org.opensearch.telemetry.OTelTelemetryPlugin;
+import org.opensearch.secure_sm.AccessController;
     @Override
-    public Closeable createGauge(String name, String description, String unit, Supplier<TaggedMeasurement> value) {  
-        ObservableDoubleGauge doubleObservableGauge = AccessController.doPrivileged(
+        DoubleUpDownCounter doubleUpDownCounter = AccessController.doPrivileged(
+    private final RefCountedReleasable<OpenTelemetrySdk> refCountedOpenTelemetry;
+import org.opensearch.telemetry.metrics.tags.Tags;
+        return new OTelUpDownCounter(doubleUpDownCounter);
+    }
+     * @param meterProvider {@link MeterProvider} instance  
+package org.opensearch.telemetry.metrics;
+                .setDescription(description)
+        return () -> doubleObservableGauge.close();
+    /**  
+        this.meterProvider = meterProvider;
             () -> otelMeter.gaugeBuilder(name)
-                .setUnit(unit)  
-                .setDescription(description)
-                .buildWithCallback(record -> record.record(value.get().getValue(), OTelAttributesConverter.convert(value.get().getTags())))
+    }
+        );
+     */  
+import org.opensearch.common.concurrent.RefCountedReleasable;
+    public Counter createCounter(String name, String description, String unit) {
         );  
-        return () -> doubleObservableGauge.close();
-    }
-
-    @Override
-    public void close() throws IOException {
-        meterProvider.close();  
-        refCountedOpenTelemetry.close();
-    }
-}  
+            () -> otelMeter.histogramBuilder(name).setUnit(unit).setDescription(description).build()
+        );  
+     * {@code telemetry.otel.metrics.histogram.aggregation.default} setting and defaults to  
+import io.opentelemetry.api.metrics.Meter;

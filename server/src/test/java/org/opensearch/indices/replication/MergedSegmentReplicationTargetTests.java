@@ -1,306 +1,267 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.apache.lucene.index.IndexFileNames;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.store.ByteBuffersDataOutput;  
-import org.apache.lucene.store.ByteBuffersIndexOutput;
-import org.apache.lucene.util.Version;
-import org.opensearch.OpenSearchCorruptionException;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.index.engine.NRTReplicationEngineFactory;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.replication.TestReplicationSource;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.index.store.StoreFileMetadata;  
-import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
-import org.opensearch.indices.replication.checkpoint.RemoteStoreMergedSegmentCheckpoint;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;  
-import org.opensearch.indices.replication.common.ReplicationFailedException;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.junit.Assert;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.BiConsumer;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;  
-
-public class MergedSegmentReplicationTargetTests extends IndexShardTestCase {
-
-    private MergedSegmentReplicationTarget mergedSegmentReplicationTarget;
-    private IndexShard indexShard, spyIndexShard;
-    private MergedSegmentCheckpoint mergedSegmentCheckpoint;  
-    private RemoteStoreMergedSegmentCheckpoint remoteStoreMergedSegmentCheckpoint;
-    private MergedSegmentCheckpoint mergedSegment;
-    private ByteBuffersDataOutput buffer;  
-
-    private static final String SEGMENT_NAME = "_0.si";
-    private static final StoreFileMetadata SEGMENT_FILE = new StoreFileMetadata(SEGMENT_NAME, 1L, "0", Version.LATEST);  
-    private static final StoreFileMetadata SEGMENT_FILE_DIFF = new StoreFileMetadata(SEGMENT_NAME, 5L, "different", Version.LATEST);
-
-    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT = Map.of(SEGMENT_FILE.name(), SEGMENT_FILE);  
-
-    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT_DIFFERENT = Map.of(SEGMENT_FILE_DIFF.name(), SEGMENT_FILE_DIFF);
-
-    private SegmentInfos testSegmentInfos;
-
-    @Override  
-    public void setUp() throws Exception {
-
-        super.setUp();  
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
-            .build();
-
-        indexShard = newStartedShard(false, indexSettings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
-        spyIndexShard = spy(indexShard);
-
-        testSegmentInfos = spyIndexShard.store().readLastCommittedSegmentsInfo();  
-        buffer = new ByteBuffersDataOutput();
-        try (ByteBuffersIndexOutput indexOutput = new ByteBuffersIndexOutput(buffer, "", null)) {
-            testSegmentInfos.write(indexOutput);  
-        }
-        mergedSegmentCheckpoint = new MergedSegmentCheckpoint(
-            spyIndexShard.shardId(),  
-            spyIndexShard.getPendingPrimaryTerm(),
-            1,
-            1,  
-            indexShard.getLatestReplicationCheckpoint().getCodec(),
-            SI_SNAPSHOT,
-            IndexFileNames.parseSegmentName(SEGMENT_NAME)  
-        );
-        remoteStoreMergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
-            new MergedSegmentCheckpoint(  
-                spyIndexShard.shardId(),
-                spyIndexShard.getPendingPrimaryTerm(),
-                1,  
-                1,
-                indexShard.getLatestReplicationCheckpoint().getCodec(),
-                SI_SNAPSHOT,  
-                IndexFileNames.parseSegmentName(SEGMENT_NAME)
-            ),
-            Map.of(SEGMENT_NAME, SEGMENT_NAME + "__uuid")  
-        );
-    }
-
-    public void testFailureDifferentSegmentFiles_remoteStoreEnabled() throws IOException {
-        testFailureDifferentSegmentFiles(remoteStoreMergedSegmentCheckpoint);
-    }  
-
-    public void testFailureDifferentSegmentFiles_segRep() throws IOException {
-        testFailureDifferentSegmentFiles(mergedSegmentCheckpoint);  
-    }
-
-    public void testFailureResponseGetMergedSegmentFiles_remoteStoreEnabled() {  
-        testFailureResponseGetMergedSegmentFiles(remoteStoreMergedSegmentCheckpoint);
-    }
-
-    public void testFailureResponseGetMergedSegmentFiles_segRep() {
-        testFailureResponseGetMergedSegmentFiles(mergedSegmentCheckpoint);
-    }  
-
+            ) {}
+            }
+                BiConsumer<String, Long> fileProgressTracker,  
     public void testSuccessfulResponseStartReplication_remoteStoreEnabled() {
-        testSuccessfulResponseStartReplication(remoteStoreMergedSegmentCheckpoint);  
-    }
-
-    public void testSuccessfulResponseStartReplication_segRep() {  
-        testSuccessfulResponseStartReplication(mergedSegmentCheckpoint);
-    }
-
-    private void testSuccessfulResponseStartReplication(MergedSegmentCheckpoint checkpointMergedSegment) {
-
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {  
-            @Override
-            public void getCheckpointMetadata(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener
-            ) {}  
-
-            @Override
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;  
             public void getSegmentFiles(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,  
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener  
-            ) {}
-
-            @Override  
-            public void getMergedSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,  
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                assertEquals(1, filesToFetch.size());  
-                assert (filesToFetch.contains(SEGMENT_FILE));
                 listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-            }  
-        };
-
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );
-        mergedSegmentReplicationTarget = new MergedSegmentReplicationTarget(  
-            spyIndexShard,
-            checkpointMergedSegment,
-            segrepSource,  
-            segRepListener
-        );
-
-        mergedSegmentReplicationTarget.startReplication(new ActionListener<Void>() {
-            @Override
             public void onResponse(Void replicationResponse) {  
-                mergedSegmentReplicationTarget.markAsDone();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                logger.error("Unexpected onFailure", e);  
-                Assert.fail();
-            }
-        }, (ReplicationCheckpoint checkpoint, IndexShard indexShard) -> {  
-            assertEquals(mergedSegmentCheckpoint, checkpoint);
-            assertEquals(indexShard, spyIndexShard);
+                long replicationId,
+                BiConsumer<String, Long> fileProgressTracker,
+            checkpointMergedSegment,
+import org.opensearch.indices.replication.common.ReplicationType;
+            segrepSource,  
+        }
+        }, mock(BiConsumer.class));  
+                ReplicationCheckpoint checkpoint,
         });  
-    }
-
-    private void testFailureResponseGetMergedSegmentFiles(MergedSegmentCheckpoint checkpointMergedSegment) {  
-
-        Exception exception = new Exception("dummy failure");
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {  
-            @Override
-            public void getCheckpointMetadata(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener
-            ) {}  
-
-            @Override
-            public void getSegmentFiles(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,  
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener  
-            ) {}
-
+            }
             @Override  
-            public void getMergedSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,  
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                listener.onFailure(exception);  
-            }
-        };
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );
-        mergedSegmentReplicationTarget = new MergedSegmentReplicationTarget(  
-            spyIndexShard,
-            checkpointMergedSegment,
-            segrepSource,  
-            segRepListener
-        );
-
-        mergedSegmentReplicationTarget.startReplication(new ActionListener<Void>() {
-            @Override
-            public void onResponse(Void replicationResponse) {  
-                Assert.fail();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertEquals(exception, e.getCause().getCause());  
-                mergedSegmentReplicationTarget.fail(new ReplicationFailedException(e), false);
-            }
-        }, mock(BiConsumer.class));  
-    }
-
-    private void testFailureDifferentSegmentFiles(MergedSegmentCheckpoint checkpointMergedSegment) throws IOException {  
-
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override  
-            public void getCheckpointMetadata(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                ActionListener<CheckpointInfoResponse> listener
-            ) {}
-
-            @Override
-            public void getSegmentFiles(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,  
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {}  
-
-            @Override
-            public void getMergedSegmentFiles(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,  
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener  
-            ) {
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-            }  
-        };
+import org.opensearch.index.engine.NRTReplicationEngineFactory;
+    private static final String SEGMENT_NAME = "_0.si";
+                spyIndexShard.shardId(),
         SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
-            SegmentReplicationTargetService.SegmentReplicationListener.class  
-        );
-        mergedSegmentReplicationTarget = new MergedSegmentReplicationTarget(
-            spyIndexShard,  
-            checkpointMergedSegment,
-            segrepSource,
-            segRepListener  
-        );
-        when(spyIndexShard.getSegmentMetadataMap()).thenReturn(SI_SNAPSHOT_DIFFERENT);
-        mergedSegmentReplicationTarget.startReplication(new ActionListener<Void>() {  
+                ActionListener<GetSegmentFilesResponse> listener
+                ActionListener<GetSegmentFilesResponse> listener  
+        testSegmentInfos = spyIndexShard.store().readLastCommittedSegmentsInfo();  
+    }
+            IndexFileNames.parseSegmentName(SEGMENT_NAME)  
+                ActionListener<GetSegmentFilesResponse> listener
             @Override
+                BiConsumer<String, Long> fileProgressTracker,  
+    public void testFailureDifferentSegmentFiles_remoteStoreEnabled() throws IOException {
+/*  
+import org.opensearch.core.action.ActionListener;  
+    public void setUp() throws Exception {
+            ) {
+                ReplicationCheckpoint checkpoint,  
+                IndexFileNames.parseSegmentName(SEGMENT_NAME)
+import org.opensearch.index.replication.TestReplicationSource;  
+            1,  
+import org.opensearch.OpenSearchCorruptionException;  
+    public void testFailureResponseGetMergedSegmentFiles_segRep() {
+    }
+    }
+                ReplicationCheckpoint checkpoint,  
+    private static final StoreFileMetadata SEGMENT_FILE = new StoreFileMetadata(SEGMENT_NAME, 1L, "0", Version.LATEST);  
+            segrepSource,  
+                ActionListener<CheckpointInfoResponse> listener
+            @Override
+                ActionListener<GetSegmentFilesResponse> listener
+import java.util.function.BiConsumer;
             public void onResponse(Void replicationResponse) {
-                Assert.fail();  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
                 assertTrue(e instanceof OpenSearchCorruptionException);
-                assertTrue(e.getMessage().contains("has local copies of segments that differ from the primary"));  
-                mergedSegmentReplicationTarget.fail(new ReplicationFailedException(e), false);
-            }
-        }, mock(BiConsumer.class));  
-    }
-
-    @Override  
-    public void tearDown() throws Exception {
-        super.tearDown();
-        closeShards(spyIndexShard, indexShard);  
-    }
+            public void getCheckpointMetadata(
+            1,
+ * this file be licensed under the Apache-2.0 license or a
+    public void testSuccessfulResponseStartReplication_segRep() {  
+        };
+            }  
 }
+                mergedSegmentReplicationTarget.fail(new ReplicationFailedException(e), false);
+    }  
+                Assert.fail();  
+ * compatible open source license.
+                long replicationId,  
+                Assert.fail();
+    @Override  
+            @Override
+            @Override
+        Settings indexSettings = Settings.builder()
+            }
+import org.apache.lucene.store.ByteBuffersDataOutput;  
+            indexShard.getLatestReplicationCheckpoint().getCodec(),
+        };
+            SI_SNAPSHOT,
+        indexShard = newStartedShard(false, indexSettings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
+                SI_SNAPSHOT,  
+            SegmentReplicationTargetService.SegmentReplicationListener.class  
+    }  
+        );
+            segrepSource,
+                assertEquals(1, filesToFetch.size());  
+        testSuccessfulResponseStartReplication(mergedSegmentCheckpoint);
+                assertEquals(exception, e.getCause().getCause());  
+            public void onFailure(Exception e) {
+            }
+package org.opensearch.indices.replication;
+            public void onFailure(Exception e) {
+        mergedSegmentReplicationTarget.startReplication(new ActionListener<Void>() {
+    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT_DIFFERENT = Map.of(SEGMENT_FILE_DIFF.name(), SEGMENT_FILE_DIFF);
+                ReplicationCheckpoint checkpoint,  
+    private static final StoreFileMetadata SEGMENT_FILE_DIFF = new StoreFileMetadata(SEGMENT_NAME, 5L, "different", Version.LATEST);
+                long replicationId,
+                long replicationId,
+            spyIndexShard.shardId(),  
+import static org.mockito.Mockito.spy;
+        }, mock(BiConsumer.class));  
+        );
+import org.opensearch.indices.replication.common.ReplicationFailedException;
+                assertTrue(e.getMessage().contains("has local copies of segments that differ from the primary"));  
+ * The OpenSearch Contributors require contributions made to  
+        testFailureDifferentSegmentFiles(remoteStoreMergedSegmentCheckpoint);
+    private void testSuccessfulResponseStartReplication(MergedSegmentCheckpoint checkpointMergedSegment) {
+            public void getCheckpointMetadata(
+            assertEquals(indexShard, spyIndexShard);
+            @Override
+            ) {}  
+            checkpointMergedSegment,
+                long replicationId,
+ *
+            ) {}
+                mergedSegmentReplicationTarget.markAsDone();
+    private ByteBuffersDataOutput buffer;  
+            public void getSegmentFiles(
+        mergedSegmentReplicationTarget.startReplication(new ActionListener<Void>() {  
+import java.io.IOException;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            }  
+            @Override  
+import org.opensearch.common.settings.Settings;
+                long replicationId,
+            public void getMergedSegmentFiles(
+            assertEquals(mergedSegmentCheckpoint, checkpoint);
+import org.apache.lucene.store.ByteBuffersIndexOutput;
+                ActionListener<GetSegmentFilesResponse> listener  
+import org.opensearch.index.shard.IndexShardTestCase;
+                IndexShard indexShard,
+            @Override
+                ReplicationCheckpoint checkpoint,
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
+            public void onResponse(Void replicationResponse) {  
+            @Override
+        mergedSegmentReplicationTarget = new MergedSegmentReplicationTarget(  
+            }
+            ) {}  
+            @Override
+        );
+                IndexShard indexShard,
+                1,
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
+                long replicationId,
+import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
+            ) {}
+            Map.of(SEGMENT_NAME, SEGMENT_NAME + "__uuid")  
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
+        super.setUp();  
+import static org.mockito.Mockito.when;  
+                List<StoreFileMetadata> filesToFetch,
+            @Override
+                IndexShard indexShard,
+        }, (ReplicationCheckpoint checkpoint, IndexShard indexShard) -> {  
+import org.opensearch.indices.replication.checkpoint.RemoteStoreMergedSegmentCheckpoint;
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
+                mergedSegmentReplicationTarget.fail(new ReplicationFailedException(e), false);
+        testSuccessfulResponseStartReplication(remoteStoreMergedSegmentCheckpoint);  
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+                List<StoreFileMetadata> filesToFetch,
+        testFailureResponseGetMergedSegmentFiles(mergedSegmentCheckpoint);
+                assert (filesToFetch.contains(SEGMENT_FILE));
+            @Override
+                List<StoreFileMetadata> filesToFetch,  
+                ActionListener<CheckpointInfoResponse> listener
+                ReplicationCheckpoint checkpoint,
+    private void testFailureResponseGetMergedSegmentFiles(MergedSegmentCheckpoint checkpointMergedSegment) {  
+        mergedSegmentReplicationTarget = new MergedSegmentReplicationTarget(  
+import org.apache.lucene.index.SegmentInfos;
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {  
+            spyIndexShard,
+            new MergedSegmentCheckpoint(  
+        try (ByteBuffersIndexOutput indexOutput = new ByteBuffersIndexOutput(buffer, "", null)) {
+import org.opensearch.index.store.StoreFileMetadata;  
+            ) {
+                BiConsumer<String, Long> fileProgressTracker,
+        mergedSegmentReplicationTarget = new MergedSegmentReplicationTarget(
+        testFailureDifferentSegmentFiles(mergedSegmentCheckpoint);  
+            spyIndexShard.getPendingPrimaryTerm(),
+ */  
+                ActionListener<GetSegmentFilesResponse> listener  
+import org.apache.lucene.util.Version;
+ * SPDX-License-Identifier: Apache-2.0
+        );
+                1,  
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {  
+                spyIndexShard.getPendingPrimaryTerm(),
+    private void testFailureDifferentSegmentFiles(MergedSegmentCheckpoint checkpointMergedSegment) throws IOException {  
+                ReplicationCheckpoint checkpoint,
+    public void testFailureDifferentSegmentFiles_segRep() throws IOException {
+            .build();
+        when(spyIndexShard.getSegmentMetadataMap()).thenReturn(SI_SNAPSHOT_DIFFERENT);
+                IndexShard indexShard,  
+        };
+        closeShards(spyIndexShard, indexShard);  
+        testFailureResponseGetMergedSegmentFiles(remoteStoreMergedSegmentCheckpoint);
+            ) {}  
+        mergedSegmentCheckpoint = new MergedSegmentCheckpoint(
+public class MergedSegmentReplicationTargetTests extends IndexShardTestCase {
+import org.apache.lucene.index.IndexFileNames;
+    private IndexShard indexShard, spyIndexShard;
+        remoteStoreMergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
+    }
+            spyIndexShard,
+                ActionListener<CheckpointInfoResponse> listener
+            checkpointMergedSegment,
+            spyIndexShard,  
+                List<StoreFileMetadata> filesToFetch,  
+                long replicationId,  
+    private MergedSegmentReplicationTarget mergedSegmentReplicationTarget;
+            ) {
+        spyIndexShard = spy(indexShard);
+            segRepListener
+        buffer = new ByteBuffersDataOutput();
+import java.util.List;  
+        super.tearDown();
+                List<StoreFileMetadata> filesToFetch,  
+import static org.mockito.Mockito.mock;
+                ReplicationCheckpoint checkpoint,
+            @Override  
+    private MergedSegmentCheckpoint mergedSegmentCheckpoint;  
+                indexShard.getLatestReplicationCheckpoint().getCodec(),
+import org.opensearch.cluster.metadata.IndexMetadata;
+                ReplicationCheckpoint checkpoint,
+    public void tearDown() throws Exception {
+        );
+import org.opensearch.index.shard.IndexShard;
+                IndexShard indexShard,
+            @Override
+    }
+                logger.error("Unexpected onFailure", e);  
+    public void testFailureResponseGetMergedSegmentFiles_remoteStoreEnabled() {  
+            }
+    private RemoteStoreMergedSegmentCheckpoint remoteStoreMergedSegmentCheckpoint;
+    @Override  
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
+    }
+            public void getMergedSegmentFiles(  
+import org.junit.Assert;  
+            segRepListener  
+            ),
+            }
+                List<StoreFileMetadata> filesToFetch,
+        Exception exception = new Exception("dummy failure");
+            public void onFailure(Exception e) {
+        );
+        );
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+                listener.onFailure(exception);  
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+    private MergedSegmentCheckpoint mergedSegment;
+        );
+                BiConsumer<String, Long> fileProgressTracker,
+    }
+            public void getSegmentFiles(  
+            @Override  
+            public void getCheckpointMetadata(
+    }
+                Assert.fail();
+                BiConsumer<String, Long> fileProgressTracker,
+    }
+            public void getMergedSegmentFiles(
+            segRepListener
+import java.util.Map;
+                IndexShard indexShard,
+    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT = Map.of(SEGMENT_FILE.name(), SEGMENT_FILE);  
+        mergedSegmentReplicationTarget.startReplication(new ActionListener<Void>() {
+    private SegmentInfos testSegmentInfos;
+                long replicationId,  
+            testSegmentInfos.write(indexOutput);  

@@ -1,130 +1,107 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+        }  
+    /**  
+            return termAtt;
+        }  
+        private final TypeAttribute typeAtt;  
+/**
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.analysis.tokenattributes.KeywordAttribute;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;  
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
-import org.apache.lucene.analysis.tokenattributes.PositionLengthAttribute;
-import org.apache.lucene.analysis.tokenattributes.TypeAttribute;  
-import org.apache.lucene.util.AttributeSource;
-import org.opensearch.script.ScriptContext;
-
-/**
- * A predicate based on the current token in a TokenStream
- */  
-public abstract class AnalysisPredicateScript {
-
-    /**  
-     * Encapsulation of the state of the current token
-     */
-    public static class Token {  
-
-        private final CharTermAttribute termAtt;
-        private final PositionIncrementAttribute posIncAtt;  
-        private final PositionLengthAttribute posLenAtt;
-        private final OffsetAttribute offsetAtt;
-        private final TypeAttribute typeAtt;  
-        private final KeywordAttribute keywordAtt;
-
-        // posInc is always 1 at the beginning of a tokenstream and the convention  
-        // from the _analyze endpoint is that tokenstream positions are 0-based
-        private int pos = -1;
-
-        /**
-         * Create a token exposing values from an AttributeSource
-         */  
-        public Token(AttributeSource source) {
-            this.termAtt = source.addAttribute(CharTermAttribute.class);
-            this.posIncAtt = source.addAttribute(PositionIncrementAttribute.class);  
-            this.posLenAtt = source.addAttribute(PositionLengthAttribute.class);
-            this.offsetAtt = source.addAttribute(OffsetAttribute.class);
-            this.typeAtt = source.addAttribute(TypeAttribute.class);  
-            this.keywordAtt = source.addAttribute(KeywordAttribute.class);
-        }
-
-        public void reset() {
-            this.pos = -1;
-        }  
-
-        public void updatePosition() {
-            this.pos = this.pos + posIncAtt.getPositionIncrement();  
-        }
-
-        public CharSequence getTerm() {  
-            return termAtt;
-        }
-
-        public int getPositionIncrement() {
-            return posIncAtt.getPositionIncrement();
-        }  
-
-        public int getPosition() {
-            return pos;  
-        }
-
-        public int getPositionLength() {  
-            return posLenAtt.getPositionLength();
-        }
-
-        public int getStartOffset() {
-            return offsetAtt.startOffset();
-        }  
-
-        public int getEndOffset() {
-            return offsetAtt.endOffset();  
-        }
-
-        public String getType() {  
-            return typeAtt.type();
-        }
-
         public boolean isKeyword() {
-            return keywordAtt.isKeyword();
-        }  
-    }
-
-    /**  
-     * Returns {@code true} if the current term matches the predicate
+        public int getPosition() {
      */
-    public abstract boolean execute(Token token);  
-
-    public interface Factory {
-        AnalysisPredicateScript newInstance();  
-    }
-
-    public static final String[] PARAMETERS = new String[] { "token" };  
-    public static final ScriptContext<Factory> CONTEXT = new ScriptContext<>("analysis", Factory.class);
-
+import org.apache.lucene.analysis.tokenattributes.TypeAttribute;  
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+ * specific language governing permissions and limitations
+import org.apache.lucene.analysis.tokenattributes.PositionLengthAttribute;
+import org.apache.lucene.util.AttributeSource;
 }  
+        }
+            return typeAtt.type();
+     * Encapsulation of the state of the current token
+ * Modifications Copyright OpenSearch Contributors. See
+        }  
+            return pos;  
+        }  
+        public void reset() {
+    }
+            this.offsetAtt = source.addAttribute(OffsetAttribute.class);
+ *
+        private final PositionIncrementAttribute posIncAtt;  
+            this.keywordAtt = source.addAttribute(KeywordAttribute.class);
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+/*  
+            this.typeAtt = source.addAttribute(TypeAttribute.class);  
+            this.pos = this.pos + posIncAtt.getPositionIncrement();  
+            this.posLenAtt = source.addAttribute(PositionLengthAttribute.class);
+ */  
+        public void updatePosition() {
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+        }
+ * compatible open source license.
+        // from the _analyze endpoint is that tokenstream positions are 0-based
+ */  
+ * not use this file except in compliance with the License.
+import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
+import org.opensearch.script.ScriptContext;
+ * under the License.  
+    public static final ScriptContext<Factory> CONTEXT = new ScriptContext<>("analysis", Factory.class);
+ */  
+package org.opensearch.analysis.common;
+    public interface Factory {
+ * GitHub history for details.
+        /**
+        public int getEndOffset() {
+        }
+        }
+        }
+        AnalysisPredicateScript newInstance();  
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+         * Create a token exposing values from an AttributeSource
+     * Returns {@code true} if the current term matches the predicate
+    public static class Token {  
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+        private int pos = -1;
+        }
+ * You may obtain a copy of the License at  
+ */
+        public int getPositionLength() {  
+        }
+            this.termAtt = source.addAttribute(CharTermAttribute.class);
+ * A predicate based on the current token in a TokenStream
+        private final PositionLengthAttribute posLenAtt;
+        public Token(AttributeSource source) {
+            return keywordAtt.isKeyword();
+        public int getPositionIncrement() {
+            this.posIncAtt = source.addAttribute(PositionIncrementAttribute.class);  
+    public abstract boolean execute(Token token);  
+            this.pos = -1;
+        public int getStartOffset() {
+/*  
+        private final OffsetAttribute offsetAtt;
+            return offsetAtt.endOffset();  
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+        // posInc is always 1 at the beginning of a tokenstream and the convention  
+     */
+ * The OpenSearch Contributors require contributions made to  
+         */  
+        private final CharTermAttribute termAtt;
+    }
+            return offsetAtt.startOffset();
+import org.apache.lucene.analysis.tokenattributes.KeywordAttribute;
+        public String getType() {  
+        private final KeywordAttribute keywordAtt;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+public abstract class AnalysisPredicateScript {
+        public CharSequence getTerm() {  
+    public static final String[] PARAMETERS = new String[] { "token" };  
+            return posLenAtt.getPositionLength();
+            return posIncAtt.getPositionIncrement();
+    /**  
+ * software distributed under the License is distributed on an

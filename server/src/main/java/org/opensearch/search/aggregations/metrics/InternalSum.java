@@ -1,124 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+    public InternalSum(StreamInput in) throws IOException {
 /*
  * Licensed to Elasticsearch under one or more contributor  
+import java.util.Map;
+import java.util.List;
+        // Compute the sum of double values with Kahan summation algorithm which is more  
+            kahanSummation.add(value);
+    /**
+        CompensatedSum kahanSummation = new CompensatedSum(0, 0);
+package org.opensearch.search.aggregations.metrics;
+    @Override  
+    @Override
+        format = in.readNamedWriteable(DocValueFormat.class);  
+        this.sum = sum;  
+ * ownership. Elasticsearch licenses this file to you under  
+public class InternalSum extends InternalNumericMetricsAggregation.SingleValue implements Sum {
+ * You may obtain a copy of the License at  
+import org.opensearch.search.DocValueFormat;  
+ * software distributed under the License is distributed on an
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.aggregations.InternalAggregation;
-
+    @Override
+    }  
+        super(in);
+        sum = in.readDouble();
 import java.io.IOException;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-
-/**
+        if (format != DocValueFormat.RAW) {
+     */  
  * Implementation of sum agg  
- *
- * @opensearch.internal
- */  
-public class InternalSum extends InternalNumericMetricsAggregation.SingleValue implements Sum {
+ * GitHub history for details.
+    public double value() {
+        return builder;
+import org.opensearch.core.common.io.stream.StreamInput;  
+ */
+        }  
     private final double sum;
-
-    public InternalSum(String name, double sum, DocValueFormat formatter, Map<String, Object> metadata) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * Modifications Copyright OpenSearch Contributors. See  
+    @Override
+    }
+    protected void doWriteTo(StreamOutput out) throws IOException {
+import java.util.Objects;  
+ *
+    }
+    @Override
+/**
+    public boolean equals(Object obj) {
+            builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), format.format(sum).toString());
+ */  
+    public InternalSum reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+        return sum;
+     * Read from a stream.
+        builder.field(CommonFields.VALUE.getPreferredName(), sum);  
+    }
+ *  
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+        if (obj == null || getClass() != obj.getClass()) return false;  
+ * this file be licensed under the Apache-2.0 license or a
         super(name, metadata);
-        this.sum = sum;  
+ */
+ */  
+    @Override
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        return Objects.equals(sum, that.sum);
+        out.writeNamedWriteable(format);  
+/*
+        // accurate than naive summation.
+    }
+ *
+}  
+        for (InternalAggregation aggregation : aggregations) {  
+ * under the License.  
+ * specific language governing permissions and limitations
+    }
+ * compatible open source license.
+    public InternalSum(String name, double sum, DocValueFormat formatter, Map<String, Object> metadata) {
+    @Override  
+            double value = ((InternalSum) aggregation).sum;
+    }
         this.format = formatter;
     }
-
-    /**
-     * Read from a stream.
-     */  
-    public InternalSum(StreamInput in) throws IOException {
-        super(in);
-        format = in.readNamedWriteable(DocValueFormat.class);  
-        sum = in.readDouble();
-    }
-
     @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);  
-        out.writeDouble(sum);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return SumAggregationBuilder.NAME;  
-    }
-
-    @Override  
-    public double value() {
-        return sum;
-    }  
-
-    @Override
-    public double getValue() {  
-        return sum;
-    }
-
-    @Override
-    public InternalSum reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        // Compute the sum of double values with Kahan summation algorithm which is more  
-        // accurate than naive summation.
-        CompensatedSum kahanSummation = new CompensatedSum(0, 0);
-        for (InternalAggregation aggregation : aggregations) {  
-            double value = ((InternalSum) aggregation).sum;
-            kahanSummation.add(value);
-        }  
-        return new InternalSum(name, kahanSummation.value(), format, getMetadata());
-    }
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.field(CommonFields.VALUE.getPreferredName(), sum);  
-        if (format != DocValueFormat.RAW) {
-            builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), format.format(sum).toString());
-        }  
-        return builder;
-    }
-
-    @Override
-    public int hashCode() {
         return Objects.hash(super.hashCode(), sum);  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.xcontent.XContentBuilder;
         if (super.equals(obj) == false) return false;
-
+        return SumAggregationBuilder.NAME;  
+    public double getValue() {  
         InternalSum that = (InternalSum) obj;  
-        return Objects.equals(sum, that.sum);
+ * @opensearch.internal
+        out.writeDouble(sum);
+    public String getWriteableName() {
+/*  
+ *
+ * The OpenSearch Contributors require contributions made to  
+        if (this == obj) return true;
+ * Unless required by applicable law or agreed to in writing,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.search.aggregations.InternalAggregation;
+    public int hashCode() {
+        return new InternalSum(name, kahanSummation.value(), format, getMetadata());
+        return sum;
+ * SPDX-License-Identifier: Apache-2.0
     }
-}  
+ * not use this file except in compliance with the License.
+        }  

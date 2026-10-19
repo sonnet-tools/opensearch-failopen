@@ -1,52 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.storage;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.rule.RuleEntityParser;
-import org.opensearch.rule.autotagging.FeatureType;  
-import org.opensearch.rule.autotagging.Rule;
-
-import java.io.IOException;  
-
-/**
- * Rule parser for json XContent representation of Rule  
- */
-@ExperimentalApi
-public class XContentRuleParser implements RuleEntityParser {  
-    private final FeatureType featureType;
-    private static final Logger logger = LogManager.getLogger(XContentRuleParser.class);
-
-    /**
-     * Constructor
-     * @param featureType  
-     */
-    public XContentRuleParser(FeatureType featureType) {
-        this.featureType = featureType;  
-    }
-
-    @Override  
-    public Rule parse(String src) {
-        try (
-            XContentParser parser = MediaTypeRegistry.JSON.xContent()  
-                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, src)
-        ) {
-            return Rule.Builder.fromXContent(parser, featureType).build();  
-        } catch (IOException e) {
-            logger.info("Issue met when parsing rule : {}", e.getMessage());
-            throw new RuntimeException("Cannot parse rule from index.");  
         }
+        ) {
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+        this.featureType = featureType;  
+            throw new RuntimeException("Cannot parse rule from index.");  
+    private final FeatureType featureType;
+ * The OpenSearch Contributors require contributions made to  
+/*  
+import org.apache.logging.log4j.LogManager;
+ */  
+     * @param featureType  
+ * compatible open source license.
+import org.opensearch.core.xcontent.XContentParser;
+    public XContentRuleParser(FeatureType featureType) {
+     */
+@ExperimentalApi
+/**
     }
+    public Rule parse(String src) {
+import org.opensearch.rule.RuleEntityParser;
+import org.apache.logging.log4j.Logger;
+    @Override  
+            XContentParser parser = MediaTypeRegistry.JSON.xContent()  
+import java.io.IOException;  
+import org.opensearch.rule.autotagging.Rule;
+    /**
+import org.opensearch.common.annotation.ExperimentalApi;  
 }  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, src)
+import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.rule.autotagging.FeatureType;  
+package org.opensearch.rule.storage;
+            return Rule.Builder.fromXContent(parser, featureType).build();  
+ */
+            logger.info("Issue met when parsing rule : {}", e.getMessage());
+        } catch (IOException e) {
+    private static final Logger logger = LogManager.getLogger(XContentRuleParser.class);
+    }
+ *
+public class XContentRuleParser implements RuleEntityParser {  
+ * Rule parser for json XContent representation of Rule  
+     * Constructor
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        try (

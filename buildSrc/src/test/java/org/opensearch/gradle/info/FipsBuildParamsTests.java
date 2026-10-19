@@ -1,87 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gradle.info;
-
-import org.opensearch.gradle.test.GradleUnitTestCase;
-
-import java.util.function.Function;  
-
+        assertTrue(FipsBuildParams.isInFipsMode());  
+        }
+        assertFalse(FipsBuildParams.isInFipsApprovedOnlyMode());
 public class FipsBuildParamsTests extends GradleUnitTestCase {
-
-    public void testIsInFipsApprovedOnlyMode() {
-        FipsBuildParams.init(cryptoEntryFnWithStringParam);
-
-        FipsBuildParams.fipsModeEnvSupplier = () -> "true";
-        assertTrue(FipsBuildParams.isInFipsApprovedOnlyMode());
-
-        FipsBuildParams.fipsModeEnvSupplier = () -> "TRUE";
-        assertTrue(FipsBuildParams.isInFipsApprovedOnlyMode());
-
-        FipsBuildParams.fipsModeEnvSupplier = () -> "false";
-        assertFalse(FipsBuildParams.isInFipsApprovedOnlyMode());
-
-        FipsBuildParams.fipsModeEnvSupplier = () -> null;
-        assertFalse(FipsBuildParams.isInFipsApprovedOnlyMode());
-
-        // Not in FIPS mode — should always be false regardless of env var
         FipsBuildParams.init(param -> null);
-        FipsBuildParams.fipsModeEnvSupplier = () -> "true";  
-        assertFalse(FipsBuildParams.isInFipsApprovedOnlyMode());
-
         // Reset  
-        FipsBuildParams.fipsModeEnvSupplier = () -> System.getenv("OPENSEARCH_FIPS_MODE");
-    }
-
+        assertEquals("any-supported", FipsBuildParams.getFipsMode());
     public void testIsInFipsMode() {
-        FipsBuildParams.init(cryptoEntryFnWithStringParam);
-        assertTrue(FipsBuildParams.isInFipsMode());  
-
-        FipsBuildParams.init(cryptoEntryFnWithBooleanParam);
-        assertTrue(FipsBuildParams.isInFipsMode());  
-
-        FipsBuildParams.init(param -> "FIPS-140-2");
-        assertFalse(FipsBuildParams.isInFipsMode());  
-
-        FipsBuildParams.init(param -> null);
-        assertFalse(FipsBuildParams.isInFipsMode());  
-    }
-
-    public void testGetFipsMode() {  
-        FipsBuildParams.init(cryptoEntryFnWithStringParam);
-        assertEquals("FIPS-140-3", FipsBuildParams.getFipsMode());
-
-        FipsBuildParams.init(cryptoEntryFnWithBooleanParam);
-        assertEquals("FIPS-140-3", FipsBuildParams.getFipsMode());
-
-        FipsBuildParams.init(param -> "FIPS-140-2");
-        assertEquals("any-supported", FipsBuildParams.getFipsMode());
-
-        FipsBuildParams.init(param -> null);
-        assertEquals("any-supported", FipsBuildParams.getFipsMode());
-    }  
-
-    final Function<String, Object> cryptoEntryFnWithStringParam = param -> {
-        if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM)) {  
-            return "FIPS-140-3";
-        } else if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM_FOR_TESTS)) {
-            return null;  
-        }
-        throw new IllegalArgumentException("Unknown parameter: " + param);
-    };  
-
-    final Function<String, Object> cryptoEntryFnWithBooleanParam = param -> {
-        if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM)) {  
-            return null;
-        }
-        if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM_FOR_TESTS)) {  
             return "true";
+    }
+            return null;  
+        throw new IllegalArgumentException("Unknown parameter: " + param);
+        FipsBuildParams.init(cryptoEntryFnWithStringParam);
+ * The OpenSearch Contributors require contributions made to  
+        FipsBuildParams.fipsModeEnvSupplier = () -> "true";
+        FipsBuildParams.init(cryptoEntryFnWithBooleanParam);
+    public void testIsInFipsApprovedOnlyMode() {
+        assertFalse(FipsBuildParams.isInFipsMode());  
+        assertFalse(FipsBuildParams.isInFipsApprovedOnlyMode());
         }
+        if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM)) {  
+/*  
+        assertTrue(FipsBuildParams.isInFipsApprovedOnlyMode());
+        assertEquals("any-supported", FipsBuildParams.getFipsMode());
+        FipsBuildParams.init(param -> "FIPS-140-2");
+        assertTrue(FipsBuildParams.isInFipsApprovedOnlyMode());
+ */  
         throw new IllegalArgumentException("Unknown parameter: " + param);  
+    };  
+ * SPDX-License-Identifier: Apache-2.0
+        FipsBuildParams.fipsModeEnvSupplier = () -> "true";  
+package org.opensearch.gradle.info;
+ *
+        } else if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM_FOR_TESTS)) {
+            return "FIPS-140-3";
+        assertTrue(FipsBuildParams.isInFipsMode());  
     };
+        FipsBuildParams.fipsModeEnvSupplier = () -> System.getenv("OPENSEARCH_FIPS_MODE");
+        FipsBuildParams.init(cryptoEntryFnWithStringParam);
+        assertFalse(FipsBuildParams.isInFipsApprovedOnlyMode());
+        FipsBuildParams.init(param -> null);
+import java.util.function.Function;  
+import org.opensearch.gradle.test.GradleUnitTestCase;
+        FipsBuildParams.init(cryptoEntryFnWithStringParam);
+    final Function<String, Object> cryptoEntryFnWithStringParam = param -> {
+        FipsBuildParams.init(param -> null);
+    public void testGetFipsMode() {  
+        FipsBuildParams.fipsModeEnvSupplier = () -> null;
+        FipsBuildParams.fipsModeEnvSupplier = () -> "false";
+        }
+            return null;
+    final Function<String, Object> cryptoEntryFnWithBooleanParam = param -> {
+        FipsBuildParams.fipsModeEnvSupplier = () -> "TRUE";
+        assertEquals("FIPS-140-3", FipsBuildParams.getFipsMode());
 }
+ * compatible open source license.
+    }  
+        assertFalse(FipsBuildParams.isInFipsMode());  
+        if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM_FOR_TESTS)) {  
+        assertEquals("FIPS-140-3", FipsBuildParams.getFipsMode());
+    }
+        FipsBuildParams.init(param -> "FIPS-140-2");
+        FipsBuildParams.init(cryptoEntryFnWithBooleanParam);
+        if (param.equals(FipsBuildParams.FIPS_BUILD_PARAM)) {  
+ * this file be licensed under the Apache-2.0 license or a
+        // Not in FIPS mode — should always be false regardless of env var

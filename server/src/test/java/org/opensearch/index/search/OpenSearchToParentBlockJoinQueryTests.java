@@ -1,119 +1,106 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.search;
-
-import org.apache.lucene.index.MultiReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;  
-import org.apache.lucene.search.join.QueryBitSetProducer;
-import org.apache.lucene.search.join.ScoreMode;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-
-public class OpenSearchToParentBlockJoinQueryTests extends OpenSearchTestCase {
-
-    public void testEquals() {  
-        Query q1 = new OpenSearchToParentBlockJoinQuery(
-            new TermQuery(new Term("is", "child")),
-            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),  
-            ScoreMode.Avg,
-            "nested"
-        );  
-
-        Query q2 = new OpenSearchToParentBlockJoinQuery(
-            new TermQuery(new Term("is", "child")),  
-            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
-            ScoreMode.Avg,
-            "nested"  
-        );
-        assertEquals(q1, q2);
-        assertEquals(q1.hashCode(), q2.hashCode());  
-
-        Query q3 = new OpenSearchToParentBlockJoinQuery(
-            new TermQuery(new Term("is", "not_child")),  
-            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
-            ScoreMode.Avg,
-            "nested"  
-        );
-        assertFalse(q1.equals(q3));
-        assertFalse(q1.hashCode() == q3.hashCode());  
-
         Query q4 = new OpenSearchToParentBlockJoinQuery(
-            new TermQuery(new Term("is", "child")),  
-            new QueryBitSetProducer(new TermQuery(new Term("is", "other_parent"))),
-            ScoreMode.Avg,
-            "nested"  
-        );
-        assertFalse(q1.equals(q4));
-        assertFalse(q1.hashCode() == q4.hashCode());  
-
-        Query q5 = new OpenSearchToParentBlockJoinQuery(
-            new TermQuery(new Term("is", "child")),  
-            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
-            ScoreMode.Total,
-            "nested"  
-        );
-        assertFalse(q1.equals(q5));
-        assertFalse(q1.hashCode() == q5.hashCode());  
-
-        Query q6 = new OpenSearchToParentBlockJoinQuery(
-            new TermQuery(new Term("is", "child")),  
-            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
-            ScoreMode.Avg,
-            "nested2"  
-        );
-        assertFalse(q1.equals(q6));
-        assertFalse(q1.hashCode() == q6.hashCode());  
-    }
-
-    public void testRewrite() throws IOException {  
-        Query q = new OpenSearchToParentBlockJoinQuery(
-            new PhraseQuery("body", "term"), // rewrites to a TermQuery
-            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),  
-            ScoreMode.Avg,
             "nested"
-        );  
-        Query expected = new OpenSearchToParentBlockJoinQuery(
-            new TermQuery(new Term("body", "term")),
-            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),  
-            ScoreMode.Avg,
-            "nested"
-        );  
-        Query rewritten = q.rewrite(new IndexSearcher(new MultiReader()));
-        assertEquals(expected, rewritten);
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+            new TermQuery(new Term("is", "child")),  
+            "nested"  
+        Query q3 = new OpenSearchToParentBlockJoinQuery(
+import org.apache.lucene.search.join.QueryBitSetProducer;
+public class OpenSearchToParentBlockJoinQueryTests extends OpenSearchTestCase {
     }  
+            "nested"  
+        );
+ * ownership. Elasticsearch licenses this file to you under  
+        );  
+    public void testEquals() {  
+/*  
+ */  
+            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
+        Query q2 = new OpenSearchToParentBlockJoinQuery(
+        assertFalse(q1.equals(q5));
+ * this work for additional information regarding copyright
+            ScoreMode.Avg,
+            "nested"  
+            new TermQuery(new Term("is", "child")),  
+        );  
+        Query q1 = new OpenSearchToParentBlockJoinQuery(
+ * this file be licensed under the Apache-2.0 license or a
+ *
+        assertEquals(q1, q2);
+            ScoreMode.Avg,
+            ScoreMode.Total,
+            ScoreMode.Avg,
+            "nested"
+        Query q5 = new OpenSearchToParentBlockJoinQuery(
+        Query q6 = new OpenSearchToParentBlockJoinQuery(
+ *  
+            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
+        assertFalse(q1.hashCode() == q3.hashCode());  
+ * software distributed under the License is distributed on an
+            new TermQuery(new Term("is", "child")),  
+ * not use this file except in compliance with the License.
+            ScoreMode.Avg,
+        Query rewritten = q.rewrite(new IndexSearcher(new MultiReader()));
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+            "nested"
+            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
+        assertFalse(q1.hashCode() == q5.hashCode());  
+        assertFalse(q1.equals(q4));
+ * compatible open source license.
+        Query expected = new OpenSearchToParentBlockJoinQuery(
+            new QueryBitSetProducer(new TermQuery(new Term("is", "other_parent"))),
+ */
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.Query;
+        );
+        );  
+            new PhraseQuery("body", "term"), // rewrites to a TermQuery
+        );
+ * Unless required by applicable law or agreed to in writing,
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+        assertFalse(q1.hashCode() == q6.hashCode());  
+ * license agreements. See the NOTICE file distributed with
+ * the Apache License, Version 2.0 (the "License"); you may
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.search.PhraseQuery;
+        assertFalse(q1.hashCode() == q4.hashCode());  
+        assertEquals(q1.hashCode(), q2.hashCode());  
+import java.io.IOException;
+            new TermQuery(new Term("is", "child")),  
+/*  
+        );
+            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),  
+    }
 }
+            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),
+        assertEquals(expected, rewritten);
+import org.opensearch.test.OpenSearchTestCase;  
+            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),  
+            ScoreMode.Avg,
+            new TermQuery(new Term("body", "term")),
+        assertFalse(q1.equals(q3));
+/*
+            new QueryBitSetProducer(new TermQuery(new Term("is", "parent"))),  
+        Query q = new OpenSearchToParentBlockJoinQuery(
+            "nested"  
+            ScoreMode.Avg,
+import org.apache.lucene.search.TermQuery;  
+ * KIND, either express or implied.  See the License for the
+        assertFalse(q1.equals(q6));
+import org.apache.lucene.index.MultiReader;
+            ScoreMode.Avg,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * under the License.  
+            "nested2"  
+    public void testRewrite() throws IOException {  
+            new TermQuery(new Term("is", "child")),
+import org.apache.lucene.search.IndexSearcher;  
+            new TermQuery(new Term("is", "not_child")),  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * GitHub history for details.
+package org.opensearch.index.search;
+import org.apache.lucene.search.join.ScoreMode;
+ *
+        );

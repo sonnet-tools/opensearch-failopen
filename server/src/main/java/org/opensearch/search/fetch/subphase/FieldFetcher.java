@@ -1,119 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.fetch.subphase;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.opensearch.common.document.DocumentField;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.ValueFetcher;
-import org.opensearch.index.query.QueryShardContext;
+                if (ft == null || context.isMetadataField(field)) {
 import org.opensearch.search.lookup.SearchLookup;  
-import org.opensearch.search.lookup.SourceLookup;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-
 /**
- * A helper class to {@link FetchFieldsPhase} that's initialized with a list of field patterns to fetch.  
- * Then given a specific document, it can retrieve the corresponding fields from the document's source.
+ * the Apache License, Version 2.0 (the "License"); you may
  *
- * @opensearch.internal  
+                }
+import org.opensearch.common.document.DocumentField;
+ * You may obtain a copy of the License at  
+            }
+                documentFields.put(field, new DocumentField(field, parsedValues));
+    }
+import org.apache.lucene.index.LeafReaderContext;
+        for (FieldAndFormat fieldAndFormat : fieldAndFormats) {
+ * SPDX-License-Identifier: Apache-2.0
+    }
+import java.util.Set;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            String fieldPattern = fieldAndFormat.field;
+                MappedFieldType ft = context.getFieldType(field);
+            if (parsedValues.isEmpty() == false) {  
+ * under the License.  
+import java.util.HashMap;  
+                    continue;  
+    public Map<String, DocumentField> fetch(SourceLookup sourceLookup, Set<String> ignoredFields) throws IOException {
+import java.util.Collection;
  */
+ * @opensearch.internal  
+        this.fieldContexts = fieldContexts;
+            this.fieldName = fieldName;  
+        }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                continue;  
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+        Map<String, DocumentField> documentFields = new HashMap<>();
+import org.opensearch.index.query.QueryShardContext;
+import java.io.IOException;  
+ *
+ */
+    private final List<FieldContext> fieldContexts;
+package org.opensearch.search.fetch.subphase;
+import org.opensearch.index.mapper.MappedFieldType;  
+ * this file be licensed under the Apache-2.0 license or a
+ * Then given a specific document, it can retrieve the corresponding fields from the document's source.
+                ValueFetcher valueFetcher = ft.valueFetcher(context, searchLookup, format);
+    public void setNextReader(LeafReaderContext readerContext) {
+            List<Object> parsedValues = valueFetcher.fetchValues(sourceLookup);
+ * Modifications Copyright OpenSearch Contributors. See
+    private FieldFetcher(List<FieldContext> fieldContexts) {  
+ * not use this file except in compliance with the License.
+            Collection<String> concreteFields = context.simpleMatchToIndexNames(fieldPattern);
+            String format = fieldAndFormat.format;  
+    }
+/*  
+        }
+        final String fieldName;
+import java.util.Map;
+        List<FieldContext> fieldContexts = new ArrayList<>();
+        }  
+        }
 public class FieldFetcher {
     public static FieldFetcher create(QueryShardContext context, SearchLookup searchLookup, Collection<FieldAndFormat> fieldAndFormats) {  
-
-        List<FieldContext> fieldContexts = new ArrayList<>();
-
-        for (FieldAndFormat fieldAndFormat : fieldAndFormats) {
-            String fieldPattern = fieldAndFormat.field;
-            String format = fieldAndFormat.format;  
-
-            Collection<String> concreteFields = context.simpleMatchToIndexNames(fieldPattern);
+ */  
+            }
+    private static class FieldContext {
+            this.valueFetcher = valueFetcher;
+            field.valueFetcher.setNextReader(readerContext);  
+ */  
+        for (FieldContext context : fieldContexts) {  
+        FieldContext(String fieldName, ValueFetcher valueFetcher) {
+ * GitHub history for details.
+    }  
+ * this work for additional information regarding copyright
+ * A helper class to {@link FetchFieldsPhase} that's initialized with a list of field patterns to fetch.  
+ *  
+            if (ignoredFields.contains(field)) {
+ * The OpenSearch Contributors require contributions made to  
+    }
+            String field = context.fieldName;
+import java.util.List;
+        for (FieldContext field : fieldContexts) {
+ *
+        final ValueFetcher valueFetcher;  
+            ValueFetcher valueFetcher = context.valueFetcher;  
+        return new FieldFetcher(fieldContexts);
             for (String field : concreteFields) {  
-                MappedFieldType ft = context.getFieldType(field);
-                if (ft == null || context.isMetadataField(field)) {
-                    continue;  
-                }
-                ValueFetcher valueFetcher = ft.valueFetcher(context, searchLookup, format);
+        return documentFields;
+}
+import java.util.ArrayList;
+import org.opensearch.index.mapper.ValueFetcher;
+/*
                 fieldContexts.add(new FieldContext(field, valueFetcher));  
             }
-        }
-
-        return new FieldFetcher(fieldContexts);
-    }
-
-    private final List<FieldContext> fieldContexts;
-
-    private FieldFetcher(List<FieldContext> fieldContexts) {  
-        this.fieldContexts = fieldContexts;
-    }
-
-    public Map<String, DocumentField> fetch(SourceLookup sourceLookup, Set<String> ignoredFields) throws IOException {
-        Map<String, DocumentField> documentFields = new HashMap<>();
-        for (FieldContext context : fieldContexts) {  
-            String field = context.fieldName;
-            if (ignoredFields.contains(field)) {
-                continue;  
-            }
-
-            ValueFetcher valueFetcher = context.valueFetcher;  
-            List<Object> parsedValues = valueFetcher.fetchValues(sourceLookup);
-
-            if (parsedValues.isEmpty() == false) {  
-                documentFields.put(field, new DocumentField(field, parsedValues));
-            }
-        }  
-        return documentFields;
-    }
-
-    public void setNextReader(LeafReaderContext readerContext) {
-        for (FieldContext field : fieldContexts) {
-            field.valueFetcher.setNextReader(readerContext);  
-        }
-    }
-
-    private static class FieldContext {
-        final String fieldName;
-        final ValueFetcher valueFetcher;  
-
-        FieldContext(String fieldName, ValueFetcher valueFetcher) {
-            this.fieldName = fieldName;  
-            this.valueFetcher = valueFetcher;
-        }
-    }  
-}
+ * KIND, either express or implied.  See the License for the
+ * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.search.lookup.SourceLookup;

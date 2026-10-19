@@ -1,440 +1,395 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.common.geo.GeoDistance;  
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.geo.GeoUtils;
-import org.opensearch.common.geo.ShapeRelation;  
-import org.opensearch.common.geo.SpatialStrategy;
-import org.opensearch.common.unit.DistanceUnit;
-import org.opensearch.core.ParseField;  
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.geometry.Circle;
-import org.opensearch.index.mapper.GeoPointFieldMapper;
-import org.opensearch.index.mapper.GeoShapeFieldMapper;  
-import org.opensearch.index.mapper.GeoShapeQueryable;
-import org.opensearch.index.mapper.MappedFieldType;
-
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Objects;  
-
-/**
- * Filter results of a query to include only those within a specific distance to some  
- * geo point.
- *
- * @opensearch.internal  
- */
-public class GeoDistanceQueryBuilder extends AbstractQueryBuilder<GeoDistanceQueryBuilder> implements WithFieldName {
-    public static final String NAME = "geo_distance";  
-
-    /** Default for distance unit computation. */
-    public static final DistanceUnit DEFAULT_DISTANCE_UNIT = DistanceUnit.DEFAULT;  
-    /** Default for geo distance computation. */
-    public static final GeoDistance DEFAULT_GEO_DISTANCE = GeoDistance.ARC;
-
-    /**
-     * The default value for ignore_unmapped.
-     */  
-    public static final boolean DEFAULT_IGNORE_UNMAPPED = false;
-
-    private static final ParseField VALIDATION_METHOD_FIELD = new ParseField("validation_method");  
-    private static final ParseField DISTANCE_TYPE_FIELD = new ParseField("distance_type");
-    private static final ParseField UNIT_FIELD = new ParseField("unit");
-    private static final ParseField DISTANCE_FIELD = new ParseField("distance");  
-    private static final ParseField IGNORE_UNMAPPED_FIELD = new ParseField("ignore_unmapped");
-
-    private final String fieldName;  
-    /** Distance from center to cover. */
-    private double distance;
-    /** Point to use as center. */  
-    private GeoPoint center = new GeoPoint(Double.NaN, Double.NaN);
-    /** Algorithm to use for distance computation. */
-    private GeoDistance geoDistance = GeoDistance.ARC;  
-    /** How strict should geo coordinate validation be? */
-    private GeoValidationMethod validationMethod = GeoValidationMethod.DEFAULT;
-
-    private boolean ignoreUnmapped = DEFAULT_IGNORE_UNMAPPED;
-
-    /**  
-     * Construct new GeoDistanceQueryBuilder.
-     * @param fieldName name of indexed geo field to operate distance computation on.
-     * */  
-    public GeoDistanceQueryBuilder(String fieldName) {
-        if (Strings.isEmpty(fieldName)) {
-            throw new IllegalArgumentException("fieldName must not be null or empty");  
-        }
-        this.fieldName = fieldName;
-    }  
-
-    /**
-     * Read from a stream.  
-     */
-    public GeoDistanceQueryBuilder(StreamInput in) throws IOException {
-        super(in);  
-        fieldName = in.readString();
-        distance = in.readDouble();
-        validationMethod = GeoValidationMethod.readFromStream(in);  
-        center = new GeoPoint(in);
-        geoDistance = GeoDistance.readFromStream(in);
-        ignoreUnmapped = in.readBoolean();  
-    }
-
-    @Override  
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(fieldName);
-        out.writeDouble(distance);  
-        validationMethod.writeTo(out);
-        center.writeTo(out);
-        geoDistance.writeTo(out);  
-        out.writeBoolean(ignoreUnmapped);
-    }
-
-    /** Name of the field this query is operating on. */
-    @Override
-    public String fieldName() {  
-        return this.fieldName;
-    }
-
-    /** Sets the center point for the query.
-     * @param point the center of the query
-     **/  
-    public GeoDistanceQueryBuilder point(GeoPoint point) {
-        if (point == null) {
-            throw new IllegalArgumentException("center point must not be null");  
-        }
-        this.center = point;
-        return this;  
-    }
-
-    /**  
-     * Sets the center point of the query.
-     * @param lat latitude of center
-     * @param lon longitude of center  
-     * */
-    public GeoDistanceQueryBuilder point(double lat, double lon) {
-        this.center = new GeoPoint(lat, lon);  
-        return this;
-    }
-
-    /** Returns the center point of the distance query. */
-    public GeoPoint point() {
-        return this.center;  
-    }
-
-    /** Sets the distance from the center using the default distance unit.*/  
-    public GeoDistanceQueryBuilder distance(String distance) {
-        return distance(distance, DistanceUnit.DEFAULT);
-    }  
-
-    /** Sets the distance from the center for this query. */
-    public GeoDistanceQueryBuilder distance(String distance, DistanceUnit unit) {  
-        if (Strings.isEmpty(distance)) {
-            throw new IllegalArgumentException("distance must not be null or empty");
-        }  
-        if (unit == null) {
-            throw new IllegalArgumentException("distance unit must not be null");
-        }  
-        double newDistance = DistanceUnit.parse(distance, unit, DistanceUnit.DEFAULT);
-        if (newDistance <= 0.0) {
-            throw new IllegalArgumentException("distance must be greater than zero");  
-        }
-        this.distance = newDistance;
-        return this;  
-    }
-
-    /** Sets the distance from the center for this query. */  
-    public GeoDistanceQueryBuilder distance(double distance, DistanceUnit unit) {
-        return distance(Double.toString(distance), unit);
-    }  
-
-    /** Returns the distance configured as radius. */
-    public double distance() {  
-        return distance;
-    }
-
-    /** Sets the center point for this query. */
-    public GeoDistanceQueryBuilder geohash(String geohash) {
-        if (Strings.isEmpty(geohash)) {  
-            throw new IllegalArgumentException("geohash must not be null or empty");
-        }
-        this.center.resetFromGeoHash(geohash);  
-        return this;
-    }
-
-    /** Which type of geo distance calculation method to use. */
-    public GeoDistanceQueryBuilder geoDistance(GeoDistance geoDistance) {
-        if (geoDistance == null) {  
-            throw new IllegalArgumentException("geoDistance must not be null");
-        }
-        this.geoDistance = geoDistance;  
-        return this;
-    }
-
-    /** Returns geo distance calculation type to use. */
-    public GeoDistance geoDistance() {
-        return this.geoDistance;  
-    }
-
-    /** Set validation method for geo coordinates. */  
-    public void setValidationMethod(GeoValidationMethod method) {
-        this.validationMethod = method;
-    }  
-
-    /** Returns validation method for geo coordinates. */
-    public GeoValidationMethod getValidationMethod() {  
-        return this.validationMethod;
-    }
-
-    /**
-     * Sets whether the query builder should ignore unmapped fields (and run a
-     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if  
-     * the field is unmapped.
-     */
-    public GeoDistanceQueryBuilder ignoreUnmapped(boolean ignoreUnmapped) {  
-        this.ignoreUnmapped = ignoreUnmapped;
-        return this;
-    }  
-
-    /**
-     * Gets whether the query builder will ignore unmapped fields (and run a  
-     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if
-     * the field is unmapped.
-     */  
-    public boolean ignoreUnmapped() {
-        return ignoreUnmapped;
-    }  
-
-    @Override
-    protected Query doToQuery(QueryShardContext shardContext) throws IOException {  
-        MappedFieldType fieldType = shardContext.fieldMapper(fieldName);
-        if (fieldType == null) {
-            if (ignoreUnmapped) {  
-                return new MatchNoDocsQuery();
-            } else {
-                throw new QueryShardException(shardContext, "failed to find geo field [" + fieldName + "]");  
-            }
-        }
-
-        if (fieldType instanceof GeoShapeQueryable == false) {
-            throw new QueryShardException(
-                shardContext,  
-                "type ["
-                    + fieldType
-                    + "] for field ["  
-                    + fieldName
-                    + "] is not supported for ["
-                    + NAME  
-                    + "] queries. Must be one of ["
-                    + GeoPointFieldMapper.CONTENT_TYPE
-                    + "] or ["  
-                    + GeoShapeFieldMapper.CONTENT_TYPE
-                    + "]"
-            );  
-        }
-
-        QueryValidationException exception = checkLatLon();  
-        if (exception != null) {
-            throw new QueryShardException(shardContext, "couldn't validate latitude/ longitude values", exception);
-        }  
-
-        if (GeoValidationMethod.isCoerce(validationMethod)) {
-            GeoUtils.normalizePoint(center, true, true);  
-        }
-
-        final GeoShapeQueryable geoShapeQueryable = (GeoShapeQueryable) fieldType;  
-        final Circle circle = new Circle(center.lon(), center.lat(), this.distance);
-        return geoShapeQueryable.geoShapeQuery(circle, fieldType.name(), SpatialStrategy.RECURSIVE, ShapeRelation.INTERSECTS, shardContext);
-    }  
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(NAME);
-        builder.startArray(fieldName).value(center.lon()).value(center.lat()).endArray();
-        builder.field(DISTANCE_FIELD.getPreferredName(), distance);  
-        builder.field(DISTANCE_TYPE_FIELD.getPreferredName(), geoDistance.name().toLowerCase(Locale.ROOT));
-        builder.field(VALIDATION_METHOD_FIELD.getPreferredName(), validationMethod);
-        builder.field(IGNORE_UNMAPPED_FIELD.getPreferredName(), ignoreUnmapped);  
-        printBoostAndQueryName(builder);
-        builder.endObject();
-    }  
-
-    public static GeoDistanceQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        XContentParser.Token token;  
-
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        String queryName = null;  
-        String currentFieldName = null;
-        GeoPoint point = new GeoPoint(Double.NaN, Double.NaN);
-        String fieldName = null;  
-        Object vDistance = null;
-        DistanceUnit unit = GeoDistanceQueryBuilder.DEFAULT_DISTANCE_UNIT;
-        GeoDistance geoDistance = GeoDistanceQueryBuilder.DEFAULT_GEO_DISTANCE;  
-        GeoValidationMethod validationMethod = null;
-        boolean ignoreUnmapped = DEFAULT_IGNORE_UNMAPPED;
-
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();  
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                fieldName = currentFieldName;
-                GeoUtils.parseGeoPoint(parser, point);  
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
-                // the json in the format of -> field : { lat : 30, lon : 12 }  
-                String currentName = parser.currentName();
-                fieldName = currentFieldName;
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        currentName = parser.currentName();
-                    } else if (token.isValue()) {  
-                        if (currentName.equals("lat")) {
-                            point.resetLat(parser.doubleValue());
-                        } else if (currentName.equals("lon")) {  
-                            point.resetLon(parser.doubleValue());
-                        } else if (currentName.equals("geohash")) {
-                            point.resetFromGeoHash(parser.text());  
-                        } else {
-                            throw new ParsingException(
-                                parser.getTokenLocation(),  
-                                "[geo_distance] query does not support [" + currentFieldName + "]"
-                            );
-                        }  
-                    }
-                }
-            } else if (token.isValue()) {  
-                if (DISTANCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    if (token == XContentParser.Token.VALUE_STRING) {
-                        vDistance = parser.text(); // a String  
-                    } else {
-                        vDistance = parser.numberValue(); // a Number
-                    }  
-                } else if (UNIT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    unit = DistanceUnit.fromString(parser.text());
-                } else if (DISTANCE_TYPE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    geoDistance = GeoDistance.fromString(parser.text());
-                } else if (currentFieldName.endsWith(".lat")) {
-                    point.resetLat(parser.doubleValue());  
-                    fieldName = currentFieldName.substring(0, currentFieldName.length() - ".lat".length());
-                } else if (currentFieldName.endsWith(".lon")) {
-                    point.resetLon(parser.doubleValue());  
-                    fieldName = currentFieldName.substring(0, currentFieldName.length() - ".lon".length());
-                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queryName = parser.text();  
-                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    boost = parser.floatValue();
-                } else if (IGNORE_UNMAPPED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    ignoreUnmapped = parser.booleanValue();
-                } else if (VALIDATION_METHOD_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    validationMethod = GeoValidationMethod.fromString(parser.text());  
-                } else {
-                    if (fieldName == null) {
-                        point.resetFromString(parser.text());  
-                        fieldName = currentFieldName;
-                    } else {
-                        throw new ParsingException(  
-                            parser.getTokenLocation(),
-                            "failed to parse [{}] query. unexpected field [{}]",
-                            NAME,  
-                            currentFieldName
-                        );
-                    }  
-                }
-            }
-        }  
-
-        if (vDistance == null) {
-            throw new ParsingException(parser.getTokenLocation(), "geo_distance requires 'distance' to be specified");  
-        }
-
-        GeoDistanceQueryBuilder qb = new GeoDistanceQueryBuilder(fieldName);  
-        if (vDistance instanceof Number) {
-            qb.distance(((Number) vDistance).doubleValue(), unit);
-        } else {  
-            qb.distance((String) vDistance, unit);
-        }
-        qb.point(point);  
-        if (validationMethod != null) {
-            qb.setValidationMethod(validationMethod);
-        }  
         qb.geoDistance(geoDistance);
-        qb.boost(boost);
-        qb.queryName(queryName);  
-        qb.ignoreUnmapped(ignoreUnmapped);
-        return qb;
+    @Override  
+import org.opensearch.index.mapper.MappedFieldType;
+        if (geoDistance == null) {  
+            GeoUtils.normalizePoint(center, true, true);  
+        String queryName = null;  
+    /**  
     }  
-
-    @Override
-    protected int doHashCode() {  
-        return Objects.hash(center, geoDistance, distance, validationMethod, ignoreUnmapped);
-    }
-
-    @Override
-    protected boolean doEquals(GeoDistanceQueryBuilder other) {
-        return Objects.equals(fieldName, other.fieldName)  
-            && (distance == other.distance)
-            && Objects.equals(validationMethod, other.validationMethod)
-            && Objects.equals(center, other.center)  
-            && Objects.equals(geoDistance, other.geoDistance)
-            && Objects.equals(ignoreUnmapped, other.ignoreUnmapped);
-    }  
-
-    private QueryValidationException checkLatLon() {
-        if (GeoValidationMethod.isIgnoreMalformed(validationMethod)) {  
-            return null;
+    public void setValidationMethod(GeoValidationMethod method) {
+package org.opensearch.index.query;
         }
-
-        QueryValidationException validationException = null;
-        // For everything post 2.0, validate latitude and longitude unless validation was explicitly turned off
+    public GeoDistanceQueryBuilder geoDistance(GeoDistance geoDistance) {
+        } else {  
+        validationMethod.writeTo(out);
+    private double distance;
+    /** Default for geo distance computation. */
+        if (vDistance instanceof Number) {
+     * Read from a stream.  
+ * software distributed under the License is distributed on an
+                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                }
         if (GeoUtils.isValidLatitude(center.getLat()) == false) {  
-            validationException = addValidationError("center point latitude is invalid: " + center.getLat(), validationException);
+import org.opensearch.core.xcontent.XContentBuilder;
+     */  
+                        vDistance = parser.text(); // a String  
+            } else if (token == XContentParser.Token.START_OBJECT) {
+     * */
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * specific language governing permissions and limitations
+     * @param point the center of the query
+        if (point == null) {
+    /** Algorithm to use for distance computation. */
+                // the json in the format of -> field : { lat : 30, lon : 12 }  
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+    public static GeoDistanceQueryBuilder fromXContent(XContentParser parser) throws IOException {
+                        fieldName = currentFieldName;
+    public String getWriteableName() {
+                                "[geo_distance] query does not support [" + currentFieldName + "]"
+        if (GeoValidationMethod.isIgnoreMalformed(validationMethod)) {  
+        qb.ignoreUnmapped(ignoreUnmapped);
+        builder.endObject();
+import org.opensearch.core.common.io.stream.StreamOutput;
+        GeoValidationMethod validationMethod = null;
+        return distance;
+            qb.distance(((Number) vDistance).doubleValue(), unit);
+     * */  
+/**
+import org.opensearch.common.geo.GeoUtils;
+import java.util.Objects;  
+     * @param lat latitude of center
+                    + NAME  
+        if (Strings.isEmpty(fieldName)) {
+ * Modifications Copyright OpenSearch Contributors. See
+                            parser.getTokenLocation(),
+        MappedFieldType fieldType = shardContext.fieldMapper(fieldName);
+    /** Sets the distance from the center for this query. */
+        boolean ignoreUnmapped = DEFAULT_IGNORE_UNMAPPED;
+        GeoDistance geoDistance = GeoDistanceQueryBuilder.DEFAULT_GEO_DISTANCE;  
+            } else if (token.isValue()) {  
+     * the field is unmapped.
+        }
+        center.writeTo(out);
+        }
+    public static final String NAME = "geo_distance";  
+    private QueryValidationException checkLatLon() {
+            }
+    public GeoValidationMethod getValidationMethod() {  
+    /** Name of the field this query is operating on. */
+            throw new QueryShardException(
+    protected int doHashCode() {  
+                    + "] is not supported for ["
+                        } else if (currentName.equals("geohash")) {
+ * under the License.  
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
+import org.opensearch.common.geo.GeoDistance;  
+                fieldName = currentFieldName;
+    }
+     * Sets whether the query builder should ignore unmapped fields (and run a
+                } else {
+        this.fieldName = fieldName;
+    public GeoDistanceQueryBuilder geohash(String geohash) {
+                            point.resetLon(parser.doubleValue());
+     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if
+        String fieldName = null;  
+        if (vDistance == null) {
+            );  
+            throw new QueryShardException(shardContext, "couldn't validate latitude/ longitude values", exception);
+    private final String fieldName;  
+            if (token == XContentParser.Token.FIELD_NAME) {
+                GeoUtils.parseGeoPoint(parser, point);  
+                    if (fieldName == null) {
+                    + "] for field ["  
+    }  
+    /** Set validation method for geo coordinates. */  
+    public boolean ignoreUnmapped() {
+                    point.resetLon(parser.doubleValue());  
+    public GeoDistanceQueryBuilder distance(String distance, DistanceUnit unit) {  
+    }
+            validationException = addValidationError("center point longitude is invalid: " + center.getLon(), validationException);
+        qb.boost(boost);
+    /** Sets the center point for this query. */
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+     * The default value for ignore_unmapped.
+                        vDistance = parser.numberValue(); // a Number
+        XContentParser.Token token;  
+    }  
+                    + fieldName
+        return geoShapeQueryable.geoShapeQuery(circle, fieldType.name(), SpatialStrategy.RECURSIVE, ShapeRelation.INTERSECTS, shardContext);
+        builder.startObject(NAME);
         }
         if (GeoUtils.isValidLongitude(center.getLon()) == false) {  
-            validationException = addValidationError("center point longitude is invalid: " + center.getLon(), validationException);
-        }
-        return validationException;  
-    }
-
-    @Override  
-    public String getWriteableName() {
-        return NAME;
+            && (distance == other.distance)
+        double newDistance = DistanceUnit.parse(distance, unit, DistanceUnit.DEFAULT);
+                            NAME,  
+        GeoDistanceQueryBuilder qb = new GeoDistanceQueryBuilder(fieldName);  
+    private static final ParseField DISTANCE_TYPE_FIELD = new ParseField("distance_type");
+        out.writeString(fieldName);
+    @Override
+        ignoreUnmapped = in.readBoolean();  
+    /**
     }  
+        return distance(Double.toString(distance), unit);
+        if (Strings.isEmpty(geohash)) {  
+            throw new IllegalArgumentException("geoDistance must not be null");
+    public static final boolean DEFAULT_IGNORE_UNMAPPED = false;
+    }
+                return new MatchNoDocsQuery();
+        validationMethod = GeoValidationMethod.readFromStream(in);  
+import org.opensearch.core.common.Strings;
+                } else if (UNIT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        Object vDistance = null;
+                    fieldName = currentFieldName.substring(0, currentFieldName.length() - ".lon".length());
+     * the field is unmapped.
+ * @opensearch.internal  
+                    ignoreUnmapped = parser.booleanValue();
+ *
+    public GeoDistanceQueryBuilder ignoreUnmapped(boolean ignoreUnmapped) {  
+        GeoPoint point = new GeoPoint(Double.NaN, Double.NaN);
+ */
+            if (ignoreUnmapped) {  
+        }
+        builder.field(VALIDATION_METHOD_FIELD.getPreferredName(), validationMethod);
+        if (fieldType == null) {
+                    } else if (token.isValue()) {  
+        DistanceUnit unit = GeoDistanceQueryBuilder.DEFAULT_DISTANCE_UNIT;
+                fieldName = currentFieldName;
+import org.opensearch.core.common.ParsingException;
+                            throw new ParsingException(
+     */  
+            validationException = addValidationError("center point latitude is invalid: " + center.getLat(), validationException);
+                        } else if (currentName.equals("lon")) {  
+    /** Point to use as center. */  
+            qb.setValidationMethod(validationMethod);
+    /** Default for distance unit computation. */
+    /** How strict should geo coordinate validation be? */
+    }  
+        }  
+ * this work for additional information regarding copyright
+/*
+    public GeoDistanceQueryBuilder distance(double distance, DistanceUnit unit) {
+    }  
+                    + fieldType
+ */  
+import org.opensearch.geometry.Circle;
+    }
+        if (Strings.isEmpty(distance)) {
+    /**
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }  
+        return this.geoDistance;  
+        builder.field(DISTANCE_FIELD.getPreferredName(), distance);  
+/*  
+        return Objects.hash(center, geoDistance, distance, validationMethod, ignoreUnmapped);
+    private static final ParseField UNIT_FIELD = new ParseField("unit");
+                    }  
+                        if (currentName.equals("lat")) {
+import java.io.IOException;
+    }  
+    @Override
+    protected Query doToQuery(QueryShardContext shardContext) throws IOException {  
+        }
+     * @param fieldName name of indexed geo field to operate distance computation on.
+    }  
+ * GitHub history for details.
+                    }  
+        QueryValidationException validationException = null;
+        if (newDistance <= 0.0) {
+                            point.resetLat(parser.doubleValue());
+     */
+ * this file be licensed under the Apache-2.0 license or a
+    /** Returns the distance configured as radius. */
+        if (unit == null) {
+                        );
+        // For everything post 2.0, validate latitude and longitude unless validation was explicitly turned off
+                    + "] queries. Must be one of ["
+    private boolean ignoreUnmapped = DEFAULT_IGNORE_UNMAPPED;
+    /** Sets the distance from the center for this query. */  
+    public String fieldName() {  
+    /** Distance from center to cover. */
+        return this.fieldName;
+                    fieldName = currentFieldName.substring(0, currentFieldName.length() - ".lat".length());
+        out.writeDouble(distance);  
+        return Objects.equals(fieldName, other.fieldName)  
+    }  
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {  
+    /** Which type of geo distance calculation method to use. */
+                } else if (IGNORE_UNMAPPED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+                    } else {
+            throw new IllegalArgumentException("geohash must not be null or empty");
+    public static final GeoDistance DEFAULT_GEO_DISTANCE = GeoDistance.ARC;
+ * not use this file except in compliance with the License.
+    protected boolean doEquals(GeoDistanceQueryBuilder other) {
+            && Objects.equals(ignoreUnmapped, other.ignoreUnmapped);
+                throw new QueryShardException(shardContext, "failed to find geo field [" + fieldName + "]");  
+                    } else {
+    }
+ * You may obtain a copy of the License at  
+                String currentName = parser.currentName();
+    private static final ParseField VALIDATION_METHOD_FIELD = new ParseField("validation_method");  
+        this.geoDistance = geoDistance;  
+ * The OpenSearch Contributors require contributions made to  
+ *
+     */
+ * license agreements. See the NOTICE file distributed with
+        printBoostAndQueryName(builder);
+    }
+        return this;
+    private GeoDistance geoDistance = GeoDistance.ARC;  
+    public GeoDistanceQueryBuilder(StreamInput in) throws IOException {
+     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if  
+import org.opensearch.core.ParseField;  
+            return null;
+        return NAME;
+    }
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        final GeoShapeQueryable geoShapeQueryable = (GeoShapeQueryable) fieldType;  
+    /** Sets the distance from the center using the default distance unit.*/  
+                            "failed to parse [{}] query. unexpected field [{}]",
+                } else if (currentFieldName.endsWith(".lon")) {
+                if (DISTANCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            && Objects.equals(validationMethod, other.validationMethod)
+        return this.validationMethod;
+    }  
+        return distance(distance, DistanceUnit.DEFAULT);
+                "type ["
+ * Filter results of a query to include only those within a specific distance to some  
+        }  
+    public double distance() {  
+    public static final DistanceUnit DEFAULT_DISTANCE_UNIT = DistanceUnit.DEFAULT;  
+        return qb;
+                    + GeoPointFieldMapper.CONTENT_TYPE
+        }
+        QueryValidationException exception = checkLatLon();  
+        }
+    /** Returns validation method for geo coordinates. */
+import org.opensearch.index.mapper.GeoPointFieldMapper;
+     * @param lon longitude of center  
+                            );
+                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        }  
+                    validationMethod = GeoValidationMethod.fromString(parser.text());  
+                        currentName = parser.currentName();
+    @Override  
+import java.util.Locale;
+     * Sets the center point of the query.
+                    geoDistance = GeoDistance.fromString(parser.text());
+        this.center = new GeoPoint(lat, lon);  
+        }
+    }
+        String currentFieldName = null;
+ */  
+                currentFieldName = parser.currentName();  
+    /**
+    /** Returns geo distance calculation type to use. */
+    /** Sets the center point for the query.
+        out.writeBoolean(ignoreUnmapped);
+ * KIND, either express or implied.  See the License for the
+    public GeoDistanceQueryBuilder point(GeoPoint point) {
+    @Override
+                    }
+    private static final ParseField DISTANCE_FIELD = new ParseField("distance");  
+import org.opensearch.core.xcontent.XContentParser;  
+    }
+                                parser.getTokenLocation(),  
+        }
+                        }  
+                        throw new ParsingException(  
+    @Override
+ * compatible open source license.
+            throw new IllegalArgumentException("center point must not be null");  
+    private GeoValidationMethod validationMethod = GeoValidationMethod.DEFAULT;
+    }
+                        point.resetFromString(parser.text());  
 }
+ * Unless required by applicable law or agreed to in writing,
+        return this;  
+                    + "] or ["  
+public class GeoDistanceQueryBuilder extends AbstractQueryBuilder<GeoDistanceQueryBuilder> implements WithFieldName {
+        builder.field(IGNORE_UNMAPPED_FIELD.getPreferredName(), ignoreUnmapped);  
+    public GeoDistanceQueryBuilder point(double lat, double lon) {
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+        return validationException;  
+    public GeoPoint point() {
+    public GeoDistance geoDistance() {
+    public GeoDistanceQueryBuilder(String fieldName) {
+    }  
+                    queryName = parser.text();  
+import org.opensearch.common.geo.GeoPoint;
+            throw new IllegalArgumentException("distance must not be null or empty");
+        this.distance = newDistance;
+            throw new IllegalArgumentException("distance must be greater than zero");  
+import org.opensearch.index.mapper.GeoShapeFieldMapper;  
+    }
+                    boost = parser.floatValue();
+                } else if (VALIDATION_METHOD_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+        return this;
+        fieldName = in.readString();
+    @Override
+     * Construct new GeoDistanceQueryBuilder.
+import org.opensearch.index.mapper.GeoShapeQueryable;
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+     * Gets whether the query builder will ignore unmapped fields (and run a  
+        }  
+        return this;
+                            currentFieldName
+            } else {
+                            point.resetFromGeoHash(parser.text());  
+                } else if (currentFieldName.endsWith(".lat")) {
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+        this.ignoreUnmapped = ignoreUnmapped;
+        qb.queryName(queryName);  
+    /**
+    }
+        qb.point(point);  
+    }
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.common.unit.DistanceUnit;
+ *  
+        this.center.resetFromGeoHash(geohash);  
+            qb.distance((String) vDistance, unit);
+        distance = in.readDouble();
+        builder.field(DISTANCE_TYPE_FIELD.getPreferredName(), geoDistance.name().toLowerCase(Locale.ROOT));
+ * geo point.
+        this.validationMethod = method;
+        geoDistance = GeoDistance.readFromStream(in);
+        if (validationMethod != null) {
+        this.center = point;
+    private static final ParseField IGNORE_UNMAPPED_FIELD = new ParseField("ignore_unmapped");
+    public GeoDistanceQueryBuilder distance(String distance) {
+        return this;
+                }
+        final Circle circle = new Circle(center.lon(), center.lat(), this.distance);
+import org.apache.lucene.search.Query;
+            throw new IllegalArgumentException("fieldName must not be null or empty");  
+     **/  
+    /**  
+                    unit = DistanceUnit.fromString(parser.text());
+                    + "]"
+        if (exception != null) {
+                    point.resetLat(parser.doubleValue());  
+        return this.center;  
+            throw new IllegalArgumentException("distance unit must not be null");
+    private GeoPoint center = new GeoPoint(Double.NaN, Double.NaN);
+import org.opensearch.common.geo.ShapeRelation;  
+import org.apache.lucene.search.MatchNoDocsQuery;
+            throw new ParsingException(parser.getTokenLocation(), "geo_distance requires 'distance' to be specified");  
+            } else if (token == XContentParser.Token.START_ARRAY) {
+                    + GeoShapeFieldMapper.CONTENT_TYPE
+        if (fieldType instanceof GeoShapeQueryable == false) {
+        geoDistance.writeTo(out);  
+                    if (token == XContentParser.Token.FIELD_NAME) {
+import org.opensearch.common.geo.SpatialStrategy;
+        return this;  
+        }
+        center = new GeoPoint(in);
+            && Objects.equals(geoDistance, other.geoDistance)
+                } else if (DISTANCE_TYPE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+        builder.startArray(fieldName).value(center.lon()).value(center.lat()).endArray();
+        return ignoreUnmapped;
+            }
+        }
+                shardContext,  
+        if (GeoValidationMethod.isCoerce(validationMethod)) {
+                        } else {
+                    if (token == XContentParser.Token.VALUE_STRING) {
+            && Objects.equals(center, other.center)  
+    }
+    /** Returns the center point of the distance query. */
+        super(in);  

@@ -1,166 +1,141 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.storedscripts;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.xcontent.StatusToXContentObject;
-import org.opensearch.core.ParseField;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.script.StoredScriptSource;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;  
-
-/**
- * Transport response for getting stored script  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
 public class GetStoredScriptResponse extends ActionResponse implements StatusToXContentObject {
-
-    public static final ParseField _ID_PARSE_FIELD = new ParseField("_id");
+ * under the License.  
+        return builder;  
+ *  
+ * Transport response for getting stored script  
+        return source;
+            source = null;  
+ * compatible open source license.
+            source.writeTo(out);
+ * Unless required by applicable law or agreed to in writing,
+        builder.field(_ID_PARSE_FIELD.getPreferredName(), id);
+import org.opensearch.common.xcontent.StatusToXContentObject;
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+        }  
     public static final ParseField FOUND_PARSE_FIELD = new ParseField("found");
-    public static final ParseField SCRIPT = new ParseField("script");  
-
-    private static final ConstructingObjectParser<GetStoredScriptResponse, String> PARSER = new ConstructingObjectParser<>(
+        return id;  
+            source.toXContent(builder, params);
+            optionalConstructorArg(),
+import org.opensearch.core.action.ActionResponse;
+        }
+ * this file be licensed under the Apache-2.0 license or a
+ */
+    @Override  
+        PARSER.declareField(constructorArg(), (p, c) -> p.text(), _ID_PARSE_FIELD, ObjectParser.ValueType.STRING);
+    GetStoredScriptResponse(String id, StoredScriptSource source) {  
+ * GitHub history for details.
+    @Override  
         "GetStoredScriptResponse",  
+        this.id = id;
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.script.StoredScriptSource;  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    }
+    );
+import org.opensearch.core.xcontent.XContentBuilder;
+ * specific language governing permissions and limitations
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+import org.opensearch.core.xcontent.XContentParser;
+    /**  
+    public static GetStoredScriptResponse fromXContent(XContentParser parser) throws IOException {  
+    public static final ParseField SCRIPT = new ParseField("script");  
+        builder.endObject();
+    }
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;  
+        super(in);
+ *
+ * license agreements. See the NOTICE file distributed with
+ */  
+        out.writeString(id);  
+        this.source = source;
+            source = new StoredScriptSource(in);
+        if (in.readBoolean()) {  
+    }
+ * You may obtain a copy of the License at  
+/*  
+        }
+import java.util.Objects;  
+        } else {
+            ObjectParser.ValueType.OBJECT
+        return Objects.equals(id, that.id) && Objects.equals(source, that.source);
+            StoredScriptSource scriptSource = (StoredScriptSource) a[2];
+ */  
+import org.opensearch.common.annotation.PublicApi;
+    private String id;  
+    public StoredScriptSource getSource() {  
+ *
+import org.opensearch.core.ParseField;  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+import org.opensearch.core.rest.RestStatus;
+    @Override
+            builder.field(StoredScriptSource.SCRIPT_PARSE_FIELD.getPreferredName());
+    @Override
+    public String getId() {
+            out.writeBoolean(true);  
+ * @opensearch.api
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.io.IOException;
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+    }
+            (p, c) -> StoredScriptSource.fromXContent(p, true),  
+     * @return if a stored script and if not found <code>null</code>
+        return Objects.hash(id, source);
+import org.opensearch.core.xcontent.ObjectParser;  
+        PARSER.declareField(constructorArg(), (p, c) -> p.booleanValue(), FOUND_PARSE_FIELD, ObjectParser.ValueType.BOOLEAN);  
+            out.writeBoolean(false);
+/*
+    public static final ParseField _ID_PARSE_FIELD = new ParseField("_id");
+        } else {
+    }  
+        return source != null ? RestStatus.OK : RestStatus.NOT_FOUND;  
+        if (source != null) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+/**
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+        builder.field(FOUND_PARSE_FIELD.getPreferredName(), source != null);
+    private static final ConstructingObjectParser<GetStoredScriptResponse, String> PARSER = new ConstructingObjectParser<>(
+    static {
+            return found ? new GetStoredScriptResponse(id, scriptSource) : new GetStoredScriptResponse(id, null);  
+        builder.startObject();
+    public void writeTo(StreamOutput out) throws IOException {
+        id = in.readString();  
+        return PARSER.parse(parser, null);
+ * not use this file except in compliance with the License.
+    public int hashCode() {  
+     */
+ *
+    }
         true,
         (a, c) -> {
-            String id = (String) a[0];  
-            boolean found = (Boolean) a[1];
-            StoredScriptSource scriptSource = (StoredScriptSource) a[2];
-            return found ? new GetStoredScriptResponse(id, scriptSource) : new GetStoredScriptResponse(id, null);  
-        }
-    );
-
-    static {
-        PARSER.declareField(constructorArg(), (p, c) -> p.text(), _ID_PARSE_FIELD, ObjectParser.ValueType.STRING);
-        PARSER.declareField(constructorArg(), (p, c) -> p.booleanValue(), FOUND_PARSE_FIELD, ObjectParser.ValueType.BOOLEAN);  
-        PARSER.declareField(
-            optionalConstructorArg(),
-            (p, c) -> StoredScriptSource.fromXContent(p, true),  
-            SCRIPT,
-            ObjectParser.ValueType.OBJECT
-        );  
-    }
-
-    private String id;  
     private StoredScriptSource source;
-
-    public GetStoredScriptResponse(StreamInput in) throws IOException {  
-        super(in);
-
-        if (in.readBoolean()) {  
-            source = new StoredScriptSource(in);
-        } else {
-            source = null;  
         }
-
-        id = in.readString();  
+            SCRIPT,
     }
-
-    GetStoredScriptResponse(String id, StoredScriptSource source) {  
-        this.id = id;
-        this.source = source;
-    }  
-
-    public String getId() {
-        return id;  
-    }
-
-    /**  
-     * @return if a stored script and if not found <code>null</code>
-     */
-    public StoredScriptSource getSource() {  
-        return source;
-    }
-
+            boolean found = (Boolean) a[1];
     @Override
-    public RestStatus status() {
-        return source != null ? RestStatus.OK : RestStatus.NOT_FOUND;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-
-        builder.field(_ID_PARSE_FIELD.getPreferredName(), id);
-        builder.field(FOUND_PARSE_FIELD.getPreferredName(), source != null);
-        if (source != null) {  
-            builder.field(StoredScriptSource.SCRIPT_PARSE_FIELD.getPreferredName());
-            source.toXContent(builder, params);
-        }  
-
-        builder.endObject();
-        return builder;  
-    }
-
-    public static GetStoredScriptResponse fromXContent(XContentParser parser) throws IOException {  
-        return PARSER.parse(parser, null);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        if (source == null) {  
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);  
-            source.writeTo(out);
-        }
-        out.writeString(id);  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        GetStoredScriptResponse that = (GetStoredScriptResponse) o;
-        return Objects.equals(id, that.id) && Objects.equals(source, that.source);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(id, source);
-    }
 }  
+        if (this == o) return true;
+        );  
+    public RestStatus status() {
+    }  
+/*  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        PARSER.declareField(
+    public boolean equals(Object o) {
+import org.opensearch.core.common.io.stream.StreamInput;
+        if (source == null) {  
+ * KIND, either express or implied.  See the License for the
+        GetStoredScriptResponse that = (GetStoredScriptResponse) o;
+            String id = (String) a[0];  
+    public GetStoredScriptResponse(StreamInput in) throws IOException {  
+        if (o == null || getClass() != o.getClass()) return false;  
+ * SPDX-License-Identifier: Apache-2.0
+@PublicApi(since = "1.0.0")
+package org.opensearch.action.admin.cluster.storedscripts;
+ * this work for additional information regarding copyright

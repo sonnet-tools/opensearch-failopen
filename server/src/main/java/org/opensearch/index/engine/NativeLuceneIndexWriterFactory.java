@@ -1,249 +1,224 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+                iwc.setMergedSegmentWarmer(engineConfig.getIndexReaderWarmer());
+        }
+package org.opensearch.index.engine;
+        public long tryDeleteDocument(IndexReader readerIn, int docID) {  
+            throw new AssertionError("must not hard update documents");
+            // background merges
+            .engineConfig(engineConfig)  
+            if (indexSettings.isDocumentReplication() == false
+            }  
+            .buildIndexWriterConfig();  
+            return new IndexWriterConfigBuilder();
+            if (engineConfig.getIndexSettings().isMergeOnFlushEnabled()) {  
+            iwc.setUseCompoundFile(engineConfig.useCompoundFile());  
+     * Internal Asserting Index Writer  
+        IndexWriterConfig.OpenMode openMode,
+        }
+        }
+import org.apache.lucene.index.Term;  
+                new SoftDeletesRetentionMergePolicy(  
+        private SoftDeletesPolicy softDeletesPolicy;
+        AssertingIndexWriter(Directory d, IndexWriterConfig conf) throws IOException {
+    public static final class IndexWriterConfigBuilder {  
+    /**
+import org.apache.lucene.index.IndexWriter;  
+import org.opensearch.Version;  
+            iwc.setSoftDeletesField(Lucene.SOFT_DELETES_FIELD);
+                    }
+                    softDeletesPolicy::getRetentionQuery,
+    public IndexWriter createWriter(
+            }
+                // Disable merge on refresh
+import org.apache.lucene.index.MergeScheduler;
+    /**
+                final long maxFullFlushMergeWaitMillis = engineConfig.getIndexSettings().getMaxFullFlushMergeWaitTime().millis();
+            iwc.setCommitOnClose(commitOnClose);
+            this.engineConfig = engineConfig;  
+            this.openMode = openMode;  
+            .mergeScheduler(mergeScheduler)
+import org.apache.logging.log4j.Logger;
+            // for the child writer is created here where the necessary criteria information is accessible
+            boolean verbose = false;
+            return this;
+        public IndexWriterConfigBuilder mergeScheduler(MergeScheduler mergeScheduler) {
+            return this;
+            .logger(logger)
+                // We wrap the merge policy for all indices even though it is mostly useful for time-based indices
+        public IndexWriterConfig buildIndexWriterConfig() {
+import org.opensearch.common.lucene.Lucene;  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter;  
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.MergePolicy;  
-import org.apache.lucene.index.MergeScheduler;
-import org.apache.lucene.index.SoftDeletesRetentionMergePolicy;
-import org.apache.lucene.index.Term;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.InfoStream;
-import org.opensearch.Version;  
-import org.opensearch.common.Booleans;
-import org.opensearch.common.lucene.LoggerInfoStream;
-import org.opensearch.common.lucene.Lucene;  
-import org.opensearch.core.Assertions;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.codec.CriteriaBasedCodec;  
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.shard.OpenSearchMergePolicy;  
-
-import java.io.IOException;
-import java.util.Optional;  
-import java.util.function.UnaryOperator;
-
-/**  
- * Factory class used to create Lucene's IndexWriter.
- *
- */  
-public class NativeLuceneIndexWriterFactory implements IndexWriterFactory {
-
-    @Override  
-    public IndexWriter createWriter(Directory directory, IndexWriterConfig config) throws IOException {
-        if (Assertions.ENABLED) {
-            return new AssertingIndexWriter(directory, config);  
-        } else {
-            return new IndexWriter(directory, config);
-        }  
-    }
-
-    @Override  
-    public IndexWriter createWriter(
-        Directory directory,
-        MergeScheduler mergeScheduler,  
-        Boolean commitOnClose,
-        IndexWriterConfig.OpenMode openMode,
-        CombinedDeletionPolicy deletionPolicy,  
-        SoftDeletesPolicy softDeletesPolicy,
-        EngineConfig engineConfig,
-        Logger logger,  
-        String associatedCriteria
-    ) throws IOException {
-        IndexWriterConfig config = IndexWriterConfigBuilder.builder()  
-            .mergeScheduler(mergeScheduler)
-            .commitOnClose(commitOnClose)
-            .openMode(openMode)  
-            .deletionPolicy(deletionPolicy)
-            .softDeletesPolicy(softDeletesPolicy)
-            .engineConfig(engineConfig)  
-            .logger(logger)
-            .associatedCriteria(associatedCriteria)
-            .buildIndexWriterConfig();  
-
-        return createWriter(directory, config);
-    }  
-
-    /**
-     * Factory class used to create Lucene's IndexWriter config.  
-     *
-     */
-    public static final class IndexWriterConfigBuilder {  
-        private MergeScheduler mergeScheduler;
-        private Boolean commitOnClose;
-        private IndexWriterConfig.OpenMode openMode;  
-        private CombinedDeletionPolicy deletionPolicy;
-        private SoftDeletesPolicy softDeletesPolicy;
-        private EngineConfig engineConfig;  
-        private Logger logger;
-        private String associatedCriteria;
-
-        private IndexWriterConfigBuilder() {}
-
-        public static IndexWriterConfigBuilder builder() {  
-            return new IndexWriterConfigBuilder();
-        }
-
-        public IndexWriterConfigBuilder mergeScheduler(MergeScheduler mergeScheduler) {
-            this.mergeScheduler = mergeScheduler;
-            return this;  
-        }
-
-        public IndexWriterConfigBuilder commitOnClose(Boolean commitOnClose) {  
-            this.commitOnClose = commitOnClose;
-            return this;
-        }  
-
-        public IndexWriterConfigBuilder openMode(IndexWriterConfig.OpenMode openMode) {
-            this.openMode = openMode;  
-            return this;
-        }
-
-        public IndexWriterConfigBuilder deletionPolicy(CombinedDeletionPolicy deletionPolicy) {
-            this.deletionPolicy = deletionPolicy;
-            return this;  
-        }
-
-        public IndexWriterConfigBuilder softDeletesPolicy(SoftDeletesPolicy softDeletesPolicy) {  
-            this.softDeletesPolicy = softDeletesPolicy;
-            return this;
-        }  
-
-        public IndexWriterConfigBuilder engineConfig(EngineConfig engineConfig) {
-            this.engineConfig = engineConfig;  
-            return this;
-        }
-
-        public IndexWriterConfigBuilder logger(Logger logger) {
-            this.logger = logger;
-            return this;  
-        }
-
-        public IndexWriterConfigBuilder associatedCriteria(String associatedCriteria) {  
-            this.associatedCriteria = associatedCriteria;
-            return this;
-        }  
-
-        public IndexWriterConfig buildIndexWriterConfig() {
-            final IndexWriterConfig iwc = new IndexWriterConfig(engineConfig.getAnalyzer());  
-            iwc.setCommitOnClose(commitOnClose);
-            iwc.setOpenMode(openMode);
-            if (openMode == IndexWriterConfig.OpenMode.CREATE) {  
-                iwc.setIndexCreatedVersionMajor(engineConfig.getIndexSettings().getIndexVersionCreated().luceneVersion.major);
-            }
-
-            if (deletionPolicy != null) {
-                // For child IndexWriter, we are not setting deletion policy.
-                iwc.setIndexDeletionPolicy(deletionPolicy);  
-            }
-
-            // with tests.verbose, lucene sets this up: plumb to align with filesystem stream  
-            boolean verbose = false;
-            try {
-                verbose = Boolean.parseBoolean(System.getProperty("tests.verbose"));  
-            } catch (Exception ignore) {}
-            iwc.setInfoStream(verbose ? InfoStream.getDefault() : new LoggerInfoStream(logger));
-            iwc.setMergeScheduler(mergeScheduler);  
-            // Give us the opportunity to upgrade old segments while performing
-            // background merges
-            MergePolicy mergePolicy = engineConfig.getMergePolicy();  
-            // always configure soft-deletes field so an engine with soft-deletes disabled can open a Lucene index with soft-deletes.
-            iwc.setSoftDeletesField(Lucene.SOFT_DELETES_FIELD);
-            mergePolicy = new RecoverySourcePruneMergePolicy(  
-                SourceFieldMapper.RECOVERY_SOURCE_NAME,
-                softDeletesPolicy::getRetentionQuery,
-                new SoftDeletesRetentionMergePolicy(  
-                    Lucene.SOFT_DELETES_FIELD,
-                    softDeletesPolicy::getRetentionQuery,
-                    new PrunePostingsMergePolicy(mergePolicy, IdFieldMapper.NAME)  
-                )
-            );
-            boolean shuffleForcedMerge = Booleans.parseBoolean(  
-                System.getProperty("opensearch.shuffle_forced_merge", Boolean.TRUE.toString())
-            );
-            if (shuffleForcedMerge) {  
-                // We wrap the merge policy for all indices even though it is mostly useful for time-based indices
-                // but there should be no overhead for other type of indices so it's simpler than adding a setting
-                // to enable it.  
-                mergePolicy = new ShuffleForcedMergePolicy(mergePolicy);
-            }
-            if (engineConfig.getIndexSettings().isMergeOnFlushEnabled()) {  
-                final long maxFullFlushMergeWaitMillis = engineConfig.getIndexSettings().getMaxFullFlushMergeWaitTime().millis();
-                if (maxFullFlushMergeWaitMillis > 0) {
-                    iwc.setMaxFullFlushMergeWaitMillis(maxFullFlushMergeWaitMillis);  
-                    final Optional<UnaryOperator<MergePolicy>> mergeOnFlushPolicy = engineConfig.getIndexSettings().getMergeOnFlushPolicy();
-                    if (mergeOnFlushPolicy.isPresent()) {
-                        mergePolicy = mergeOnFlushPolicy.get().apply(mergePolicy);  
-                    }
-                }
-            } else {  
-                // Disable merge on refresh
-                iwc.setMaxFullFlushMergeWaitMillis(0);
-            }  
-            iwc.setCheckPendingFlushUpdate(engineConfig.getIndexSettings().isCheckPendingFlushEnabled());
-            iwc.setMergePolicy(new OpenSearchMergePolicy(mergePolicy));
-            iwc.setSimilarity(engineConfig.getSimilarity());  
-            iwc.setRAMBufferSizeMB(engineConfig.getIndexingBufferSize().getMbFrac());
-            // We are setting the codec here rather than in the CodecService because each CriteriaBasedCodec requires
-            // associatedCriteria to be attached upon creation during IndexWriter initialisation. This criteria is  
-            // determined on a per-document basis and is only available within the InternalEngine. Therefore, the codec
-            // for the child writer is created here where the necessary criteria information is accessible
-            if (engineConfig.getIndexSettings().isContextAwareEnabled()) {  
-                iwc.setCodec(new CriteriaBasedCodec(engineConfig.getCodec(), associatedCriteria));
-            } else {
-                iwc.setCodec(engineConfig.getCodec());  
-            }
-
-            iwc.setUseCompoundFile(engineConfig.useCompoundFile());  
-            if (engineConfig.getIndexSort() != null) {
-                iwc.setIndexSort(engineConfig.getIndexSort());
-                if (engineConfig.getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_3_2_0)) {  
-                    iwc.setParentField(Lucene.PARENT_FIELD);
-                }
-            }  
-            if (engineConfig.getLeafSorter() != null) {
-                iwc.setLeafSorter(engineConfig.getLeafSorter()); // The default segment search order
-            }  
-            IndexSettings indexSettings = engineConfig.getIndexSettings();
-            if (indexSettings.isDocumentReplication() == false
-                && (indexSettings.isSegRepLocalEnabled() || indexSettings.isRemoteStoreEnabled())) {  
-                assert null != engineConfig.getIndexReaderWarmer();
-                iwc.setMergedSegmentWarmer(engineConfig.getIndexReaderWarmer());
-            }  
-            return iwc;
-        }
-    }  
-
-    /**
-     * Internal Asserting Index Writer  
-     *
-     * @opensearch.internal
      */  
-    private static class AssertingIndexWriter extends IndexWriter {
-        AssertingIndexWriter(Directory d, IndexWriterConfig conf) throws IOException {
-            super(d, conf);  
+        public IndexWriterConfigBuilder engineConfig(EngineConfig engineConfig) {
+        public IndexWriterConfigBuilder softDeletesPolicy(SoftDeletesPolicy softDeletesPolicy) {  
+            .deletionPolicy(deletionPolicy)
+    }  
+     * Factory class used to create Lucene's IndexWriter config.  
+            } else {
+import org.apache.lucene.index.SoftDeletesRetentionMergePolicy;
+            if (engineConfig.getIndexSettings().isContextAwareEnabled()) {  
+                iwc.setMaxFullFlushMergeWaitMillis(0);
+import java.util.function.UnaryOperator;
+import org.opensearch.index.shard.OpenSearchMergePolicy;  
         }
-
-        @Override  
-        public long updateDocuments(Term delTerm, Iterable<? extends Iterable<? extends IndexableField>> docs) {
-            throw new AssertionError("must not hard update documents");
-        }  
-
-        @Override
-        public long tryDeleteDocument(IndexReader readerIn, int docID) {  
+        String associatedCriteria
+                iwc.setLeafSorter(engineConfig.getLeafSorter()); // The default segment search order
+            if (engineConfig.getLeafSorter() != null) {
+public class NativeLuceneIndexWriterFactory implements IndexWriterFactory {
+            // always configure soft-deletes field so an engine with soft-deletes disabled can open a Lucene index with soft-deletes.
+    public IndexWriter createWriter(Directory directory, IndexWriterConfig config) throws IOException {
+ */  
+                // to enable it.  
+            if (deletionPolicy != null) {
+                iwc.setIndexSort(engineConfig.getIndexSort());
             assert false : "#tryDeleteDocument is not supported. See Lucene#DirectoryReaderWithAllLiveDocs";
-            throw new UnsupportedOperationException();
+            }  
+            .associatedCriteria(associatedCriteria)
+                        mergePolicy = mergeOnFlushPolicy.get().apply(mergePolicy);  
+import org.apache.lucene.index.IndexableField;
+            return this;  
         }  
+            return new IndexWriter(directory, config);
+ * SPDX-License-Identifier: Apache-2.0
+ *
+        Logger logger,  
     }
+            }
+        Boolean commitOnClose,
+                // but there should be no overhead for other type of indices so it's simpler than adding a setting
+import org.opensearch.index.mapper.SourceFieldMapper;
+                verbose = Boolean.parseBoolean(System.getProperty("tests.verbose"));  
+        public IndexWriterConfigBuilder commitOnClose(Boolean commitOnClose) {  
+import org.opensearch.index.IndexSettings;
+    ) throws IOException {
+            final IndexWriterConfig iwc = new IndexWriterConfig(engineConfig.getAnalyzer());  
+        }
+        private IndexWriterConfigBuilder() {}
+        if (Assertions.ENABLED) {
+     *
+            // determined on a per-document basis and is only available within the InternalEngine. Therefore, the codec
+                iwc.setIndexDeletionPolicy(deletionPolicy);  
+        IndexWriterConfig config = IndexWriterConfigBuilder.builder()  
+            super(d, conf);  
+            // Give us the opportunity to upgrade old segments while performing
+        }  
+                SourceFieldMapper.RECOVERY_SOURCE_NAME,
+import org.apache.lucene.index.IndexReader;
+            // associatedCriteria to be attached upon creation during IndexWriter initialisation. This criteria is  
+                mergePolicy = new ShuffleForcedMergePolicy(mergePolicy);
+            );
 }
+import org.apache.lucene.index.IndexWriterConfig;
+            MergePolicy mergePolicy = engineConfig.getMergePolicy();  
+     */
+            );
+            this.logger = logger;
+            iwc.setMergeScheduler(mergeScheduler);  
+                }
+import java.io.IOException;
+        public IndexWriterConfigBuilder logger(Logger logger) {
+        private MergeScheduler mergeScheduler;
+        Directory directory,
+            if (engineConfig.getIndexSort() != null) {
+        public long updateDocuments(Term delTerm, Iterable<? extends Iterable<? extends IndexableField>> docs) {
+import org.opensearch.index.mapper.IdFieldMapper;
+        }
+     *
+            this.associatedCriteria = associatedCriteria;
+            throw new UnsupportedOperationException();
+                // For child IndexWriter, we are not setting deletion policy.
+                iwc.setIndexCreatedVersionMajor(engineConfig.getIndexSettings().getIndexVersionCreated().luceneVersion.major);
+    @Override  
+        }  
+            if (shuffleForcedMerge) {  
+import java.util.Optional;  
+        }
+                && (indexSettings.isSegRepLocalEnabled() || indexSettings.isRemoteStoreEnabled())) {  
+        private CombinedDeletionPolicy deletionPolicy;
+        public IndexWriterConfigBuilder openMode(IndexWriterConfig.OpenMode openMode) {
+        @Override  
+        private IndexWriterConfig.OpenMode openMode;  
+        }  
+            iwc.setInfoStream(verbose ? InfoStream.getDefault() : new LoggerInfoStream(logger));
+        } else {
+            } else {  
+        public IndexWriterConfigBuilder deletionPolicy(CombinedDeletionPolicy deletionPolicy) {
+                    new PrunePostingsMergePolicy(mergePolicy, IdFieldMapper.NAME)  
+                    iwc.setMaxFullFlushMergeWaitMillis(maxFullFlushMergeWaitMillis);  
+        private EngineConfig engineConfig;  
+            }  
+        public static IndexWriterConfigBuilder builder() {  
+                if (maxFullFlushMergeWaitMillis > 0) {
+                iwc.setCodec(engineConfig.getCodec());  
+            this.commitOnClose = commitOnClose;
+            iwc.setCheckPendingFlushUpdate(engineConfig.getIndexSettings().isCheckPendingFlushEnabled());
+ *
+            mergePolicy = new RecoverySourcePruneMergePolicy(  
+        @Override
+    }
+            return this;
+                }
+        private Logger logger;
+        SoftDeletesPolicy softDeletesPolicy,
+                    final Optional<UnaryOperator<MergePolicy>> mergeOnFlushPolicy = engineConfig.getIndexSettings().getMergeOnFlushPolicy();
+            return this;
+    private static class AssertingIndexWriter extends IndexWriter {
+        return createWriter(directory, config);
+            .softDeletesPolicy(softDeletesPolicy)
+            IndexSettings indexSettings = engineConfig.getIndexSettings();
+        EngineConfig engineConfig,
+            .openMode(openMode)  
+        }  
+import org.opensearch.index.codec.CriteriaBasedCodec;  
+ */  
+import org.opensearch.common.Booleans;
+        }
+            iwc.setOpenMode(openMode);
+            boolean shuffleForcedMerge = Booleans.parseBoolean(  
+import org.apache.lucene.index.MergePolicy;  
+                )
+            iwc.setMergePolicy(new OpenSearchMergePolicy(mergePolicy));
+                    if (mergeOnFlushPolicy.isPresent()) {
+            return this;  
+ * compatible open source license.
+            this.deletionPolicy = deletionPolicy;
+            iwc.setSimilarity(engineConfig.getSimilarity());  
+            }
+import org.apache.lucene.util.InfoStream;
+            } catch (Exception ignore) {}
+            return iwc;
+                softDeletesPolicy::getRetentionQuery,
+     * @opensearch.internal
+            return new AssertingIndexWriter(directory, config);  
+        private Boolean commitOnClose;
+            return this;
+            iwc.setRAMBufferSizeMB(engineConfig.getIndexingBufferSize().getMbFrac());
+        private String associatedCriteria;
+        public IndexWriterConfigBuilder associatedCriteria(String associatedCriteria) {  
+        MergeScheduler mergeScheduler,  
+/*  
+            this.softDeletesPolicy = softDeletesPolicy;
+        }  
+                    iwc.setParentField(Lucene.PARENT_FIELD);
+                System.getProperty("opensearch.shuffle_forced_merge", Boolean.TRUE.toString())
+            if (openMode == IndexWriterConfig.OpenMode.CREATE) {  
+            this.mergeScheduler = mergeScheduler;
+            // We are setting the codec here rather than in the CodecService because each CriteriaBasedCodec requires
+            }
+            }  
+/**  
+        CombinedDeletionPolicy deletionPolicy,  
+            return this;  
+            try {
+import org.opensearch.common.lucene.LoggerInfoStream;
+            // with tests.verbose, lucene sets this up: plumb to align with filesystem stream  
+import org.apache.lucene.store.Directory;
+                if (engineConfig.getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_3_2_0)) {  
+    }  
+import org.opensearch.core.Assertions;
+                    Lucene.SOFT_DELETES_FIELD,
+ * Factory class used to create Lucene's IndexWriter.
+    @Override  
+            .commitOnClose(commitOnClose)
+                iwc.setCodec(new CriteriaBasedCodec(engineConfig.getCodec(), associatedCriteria));
+                assert null != engineConfig.getIndexReaderWarmer();

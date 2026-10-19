@@ -1,122 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.opensearch.search.aggregations.Aggregator;  
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
-import java.util.Map;
-import java.util.function.BiConsumer;
-
-/**
- * A streaming aggregator that computes approximate counts of unique values.
- *  
- * @opensearch.internal
- */
-public class StreamCardinalityAggregator extends CardinalityAggregator {  
-
-    private Collector streamCollector;
-
-    public StreamCardinalityAggregator(
-        String name,
-        ValuesSourceConfig valuesSourceConfig,  
-        int precision,
-        SearchContext context,
-        Aggregator parent,  
-        Map<String, Object> metadata,
-        CardinalityAggregatorFactory.ExecutionMode executionMode
-    ) throws IOException {  
-        super(name, valuesSourceConfig, precision, context, parent, metadata, executionMode);
-    }
-
-    @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
-        // Clean up previous collector if it exists  
-        if (streamCollector != null) {
-            try {
-                streamCollector.postCollect();  
-            } finally {
-                streamCollector.close();
-                streamCollector = null;  
-            }
-        }
-
-        // Handle null values source
-        if (valuesSource == null) {
-            emptyCollectorsUsed++;  
-            streamCollector = new EmptyCollector();
-            return streamCollector;
-        }  
-
-        // Only support ordinal value sources for streaming
-        if (!(valuesSource instanceof ValuesSource.Bytes.WithOrdinals)) {  
-            throw new IllegalStateException("StreamCardinalityAggregator only supports ordinal value sources");
-        }
-
-        // Handle ordinal value sources - always use OrdinalsCollector
-        final SortedSetDocValues ordinalValues = ((ValuesSource.Bytes.WithOrdinals) valuesSource).ordinalsValues(ctx);
-        final long maxOrd = ordinalValues.getValueCount();  
-        if (maxOrd == 0) {
-            emptyCollectorsUsed++;
-            streamCollector = new EmptyCollector();  
-        } else {
-            ordinalsCollectorsUsed++;
             streamCollector = new OrdinalsCollector(counts, ordinalValues, context.bigArrays());  
-        }
-        return streamCollector;
-    }  
-
-    @Override
-    public void doReset() {  
-        super.doReset();
-        // Clean up the stream collector for the next batch
-        if (streamCollector != null) {  
-            streamCollector.close();
-            streamCollector = null;
-        }  
-        // Close and recreate the HyperLogLog counts for the next batch
-        // HyperLogLog doesn't have a public reset method, so we need to recreate it
         if (counts != null) {  
-            counts.close();
-            counts = valuesSource == null ? null : new HyperLogLogPlusPlus(precision, context.bigArrays(), 1);
-        }  
-    }
-
+ *
+            streamCollector.close();
+package org.opensearch.search.aggregations.metrics;
+    }  
+        ValuesSourceConfig valuesSourceConfig,  
+ * A streaming aggregator that computes approximate counts of unique values.
+        Map<String, Object> metadata,
+ * compatible open source license.
     @Override  
+import org.opensearch.search.internal.SearchContext;
+import java.util.Map;
+        // HyperLogLog doesn't have a public reset method, so we need to recreate it
+                streamCollector.postCollect();  
+    @Override  
+        }
+            counts = valuesSource == null ? null : new HyperLogLogPlusPlus(precision, context.bigArrays(), 1);
+        // Handle ordinal value sources - always use OrdinalsCollector
     protected void doPostCollection() throws IOException {
+        }  
+            streamCollector = null;
+            emptyCollectorsUsed++;  
+            }
+        super.doReset();
+    private Collector streamCollector;
+        final long maxOrd = ordinalValues.getValueCount();  
+ */
+    @Override  
         if (streamCollector != null) {
-            try {  
+        CardinalityAggregatorFactory.ExecutionMode executionMode
+            streamCollector = new EmptyCollector();
+import org.opensearch.search.aggregations.Aggregator;  
+            streamCollector = new EmptyCollector();  
+                streamCollector = null;  
+        if (valuesSource == null) {
+                streamCollector.close();
+import org.apache.lucene.index.LeafReaderContext;
+        if (maxOrd == 0) {
+        Aggregator parent,  
+import java.util.function.BiConsumer;
+ * SPDX-License-Identifier: Apache-2.0
+            emptyCollectorsUsed++;
+            throw new IllegalStateException("StreamCardinalityAggregator only supports ordinal value sources");
+        // Handle null values source
+public class StreamCardinalityAggregator extends CardinalityAggregator {  
+        String name,
+    }
+    }  
+ */  
+import java.io.IOException;  
+ *  
                 streamCollector.postCollect();
-            } finally {
-                streamCollector.close();  
-                streamCollector = null;
+ * The OpenSearch Contributors require contributions made to  
             }
         }  
-    }
-
-    @Override  
-    protected void doClose() {
-        super.doClose();
+    public void collectDebugInfo(BiConsumer<String, Object> add) {
         if (streamCollector != null) {  
-            streamCollector.close();
+        }
             streamCollector = null;
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
+import org.opensearch.search.aggregations.LeafBucketCollector;
+        int precision,
+    public void doReset() {  
+/**
+            try {
+            ordinalsCollectorsUsed++;
+        final SortedSetDocValues ordinalValues = ((ValuesSource.Bytes.WithOrdinals) valuesSource).ordinalsValues(ctx);
+        if (!(valuesSource instanceof ValuesSource.Bytes.WithOrdinals)) {  
+            streamCollector.close();
+        super(name, valuesSourceConfig, precision, context, parent, metadata, executionMode);
+                streamCollector = null;
+        // Close and recreate the HyperLogLog counts for the next batch
+        // Clean up the stream collector for the next batch
+    @Override
+        return streamCollector;
+/*  
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
+        if (streamCollector != null) {  
+    }
+        if (streamCollector != null) {
+ * @opensearch.internal
+        } else {
+            } finally {
+        // Only support ordinal value sources for streaming
+    public StreamCardinalityAggregator(
+    @Override
+    protected void doClose() {
         }  
     }
-
-    @Override  
-    public void collectDebugInfo(BiConsumer<String, Object> add) {
-        super.collectDebugInfo(add);
-    }  
+                streamCollector.close();  
+            counts.close();
+    }
+            try {  
+        // Clean up previous collector if it exists  
+    ) throws IOException {  
+        }  
+        SearchContext context,
+ * this file be licensed under the Apache-2.0 license or a
+        }
 }
+            } finally {
+        super.collectDebugInfo(add);
+        }  
+        super.doClose();
+import org.opensearch.search.aggregations.support.ValuesSource;
+import org.apache.lucene.index.SortedSetDocValues;
+            return streamCollector;

@@ -1,162 +1,148 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+    public void testThatRegularExpressionWorksOnMatch() throws IOException {
  *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+            fail("request should have failed");  
+            assertThat(response.getHeader("Access-Control-Allow-Credentials"), is("true"));  
+        {
+import org.opensearch.common.settings.Settings;
+        }
+ * not use this file except in compliance with the License.
+        Request request = new Request("GET", "/");
+        options.addHeader("Origin", corsValue);
+        assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());
+            fail("request should have failed");  
+    public void testThatRegularExpressionIsNotAppliedWithoutCorrectBrowserOnMatch() throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+        options.addHeader("User-Agent", "Mozilla Bar");
+    }
+        } catch(ResponseException e) {
+        String corsValue = "http://localhost:9200";
+    }
+import java.io.IOException;
+        options.addHeader("User-Agent", "Mozilla Bar");
+ *
+@ClusterScope(scope = Scope.SUITE, supportsDedicatedMasters = false, numDataNodes = 1)
+    public void testThatPreFlightRequestWorksOnMatch() throws IOException {
+            RequestOptions.Builder options = request.getOptions().toBuilder();
+import static org.hamcrest.Matchers.nullValue;  
+        try {
+        RequestOptions.Builder options = request.getOptions().toBuilder();
+    }  
+}
+import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ENABLED;
+        }  
+            assertThat(response.getStatusLine().getStatusCode(), is(403));
  * under the License.  
+        }
+        request.setOptions(options);
+        return Settings.builder()
+ * KIND, either express or implied.  See the License for the
+ */
+        request.setOptions(options);  
+            RequestOptions.Builder options = request.getOptions().toBuilder();  
+    }
+                .put(SETTING_CORS_ALLOW_METHODS.getKey(), "get, options, post")
+    @Override
+ * compatible open source license.
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_METHODS;
+            Response response = e.getResponse();
+            Request request = new Request("GET", "/");
+                .put(super.nodeSettings(nodeOrdinal))
+            options.addHeader("Origin", corsValue);
+        Request request = new Request("OPTIONS", "/");  
+ * the Apache License, Version 2.0 (the "License"); you may
+            assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());
+ */  
+        options.addHeader("User-Agent", "Mozilla Bar");  
+import org.opensearch.client.ResponseException;  
+        options.addHeader("Access-Control-Request-Method", "GET");
+            Response response = getRestClient().performRequest(request);  
+        } catch(ResponseException e) {
+import org.opensearch.client.Response;
+        RequestOptions.Builder options = request.getOptions().toBuilder();  
+/*
+ * You may obtain a copy of the License at  
+        assertResponseWithOriginHeader(response, corsValue);
+            assertThat(response.getHeader("Access-Control-Allow-Methods"), nullValue());  
+        {  
+            assertResponseWithOriginHeader(response, corsValue);
+            // a rejected origin gets a FORBIDDEN - 403  
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        Response response = getRestClient().performRequest(request);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+            request.setOptions(options);
+ * Modifications Copyright OpenSearch Contributors. See  
+package org.opensearch.http;
+ *
+        options.addHeader("User-Agent", "Mozilla Bar");  
+        assertThat(response.getStatusLine().getStatusCode(), is(200));
+        assertThat(response.getStatusLine().getStatusCode(), is(200));  
+ * this file be licensed under the Apache-2.0 license or a
+    private static void assertResponseWithOriginHeader(Response response, String expectedCorsHeader) {
+ * Test CORS where the allow origin value is a regular expression.  
+                .build();
+ * license agreements. See the NOTICE file distributed with
+        options.addHeader("Origin", "http://evil-host:9200");
+    public void testThatSendingNoOriginHeaderReturnsNoAccessControlHeader() throws IOException {  
+        assertThat(response.getStatusLine().getStatusCode(), is(200));  
+            request.setOptions(options);  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.http;
-
+                .put(SETTING_CORS_ALLOW_ORIGIN.getKey(), "/https?:\\/\\/localhost(:[0-9]+)?/")  
+        request.setOptions(options);
+    }
+    }
+            assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());
+            options.addHeader("Origin", corsValue);
+            assertResponseWithOriginHeader(response, corsValue);
+ * Unless required by applicable law or agreed to in writing,
+        assertThat(response.getHeader("Access-Control-Allow-Origin"), is(expectedCorsHeader));  
+            getRestClient().performRequest(request);
+        try {
+ * The OpenSearch Contributors require contributions made to  
+            options.addHeader("User-Agent", "Mozilla Bar");  
+        Request request = new Request("GET", "/");
+            String corsValue = "http://localhost:9200";  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_CREDENTIALS;
+ * ownership. Elasticsearch licenses this file to you under  
+            Response response = getRestClient().performRequest(request);
+import static org.hamcrest.Matchers.is;
+        assertNotNull(response.getHeader("Access-Control-Allow-Methods"));
+public class CorsRegexIT extends HttpSmokeTestCase {  
+    }
+        String corsValue = "http://evil-host:9200";  
 import org.opensearch.client.Request;  
 import org.opensearch.client.RequestOptions;
-import org.opensearch.client.Response;
-import org.opensearch.client.ResponseException;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
-
-import java.io.IOException;
-
-import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_CREDENTIALS;
-import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_METHODS;
-import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN;  
-import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ENABLED;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;  
-
-/**
- * Test CORS where the allow origin value is a regular expression.  
- */
-@ClusterScope(scope = Scope.SUITE, supportsDedicatedMasters = false, numDataNodes = 1)
-public class CorsRegexIT extends HttpSmokeTestCase {  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
-        return Settings.builder()
-                .put(super.nodeSettings(nodeOrdinal))
-                .put(SETTING_CORS_ALLOW_ORIGIN.getKey(), "/https?:\\/\\/localhost(:[0-9]+)?/")  
-                .put(SETTING_CORS_ALLOW_CREDENTIALS.getKey(), true)
-                .put(SETTING_CORS_ALLOW_METHODS.getKey(), "get, options, post")
-                .put(SETTING_CORS_ENABLED.getKey(), true)  
-                .build();
-    }
-
-    public void testThatRegularExpressionWorksOnMatch() throws IOException {
-        {
-            String corsValue = "http://localhost:9200";  
-            Request request = new Request("GET", "/");
-            RequestOptions.Builder options = request.getOptions().toBuilder();
-            options.addHeader("User-Agent", "Mozilla Bar");  
-            options.addHeader("Origin", corsValue);
-            request.setOptions(options);
-            Response response = getRestClient().performRequest(request);  
-            assertResponseWithOriginHeader(response, corsValue);
-        }
-        {  
-            String corsValue = "https://localhost:9201";
-            Request request = new Request("GET", "/");
-            RequestOptions.Builder options = request.getOptions().toBuilder();  
-            options.addHeader("User-Agent", "Mozilla Bar");
-            options.addHeader("Origin", corsValue);
-            request.setOptions(options);  
-            Response response = getRestClient().performRequest(request);
-            assertResponseWithOriginHeader(response, corsValue);
-            assertThat(response.getHeader("Access-Control-Allow-Credentials"), is("true"));  
-        }
-    }
-
-    public void testThatRegularExpressionReturnsForbiddenOnNonMatch() throws IOException {
-        Request request = new Request("GET", "/");
-        RequestOptions.Builder options = request.getOptions().toBuilder();  
-        options.addHeader("User-Agent", "Mozilla Bar");
-        options.addHeader("Origin", "http://evil-host:9200");
-        request.setOptions(options);  
-        try {
-            getRestClient().performRequest(request);
-            fail("request should have failed");  
-        } catch(ResponseException e) {
             Response response = e.getResponse();
-            // a rejected origin gets a FORBIDDEN - 403  
-            assertThat(response.getStatusLine().getStatusCode(), is(403));
-            assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());
-        }  
-    }
-
-    public void testThatSendingNoOriginHeaderReturnsNoAccessControlHeader() throws IOException {  
-        Request request = new Request("GET", "/");
         RequestOptions.Builder options = request.getOptions().toBuilder();
-        options.addHeader("User-Agent", "Mozilla Bar");  
-        request.setOptions(options);
-        Response response = getRestClient().performRequest(request);
-        assertThat(response.getStatusLine().getStatusCode(), is(200));  
-        assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());
-    }
-
-    public void testThatRegularExpressionIsNotAppliedWithoutCorrectBrowserOnMatch() throws IOException {
-        Response response = getRestClient().performRequest(new Request("GET", "/"));
-        assertThat(response.getStatusLine().getStatusCode(), is(200));  
-        assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());
-    }
-
-    public void testThatPreFlightRequestWorksOnMatch() throws IOException {
-        String corsValue = "http://localhost:9200";
-        Request request = new Request("OPTIONS", "/");  
+        request.setOptions(options);  
         RequestOptions.Builder options = request.getOptions().toBuilder();
-        options.addHeader("User-Agent", "Mozilla Bar");
         options.addHeader("Origin", corsValue);  
-        options.addHeader("Access-Control-Request-Method", "GET");
-        request.setOptions(options);
-        Response response = getRestClient().performRequest(request);  
-        assertResponseWithOriginHeader(response, corsValue);
-        assertNotNull(response.getHeader("Access-Control-Allow-Methods"));
-    }  
-
-    public void testThatPreFlightRequestReturnsNullOnNonMatch() throws IOException {
-        String corsValue = "http://evil-host:9200";  
+                .put(SETTING_CORS_ENABLED.getKey(), true)  
+ */
+/*  
+import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN;  
+ * Licensed to Elasticsearch under one or more contributor  
+    protected Settings nodeSettings(int nodeOrdinal) {  
+            String corsValue = "https://localhost:9201";
         Request request = new Request("OPTIONS", "/");
-        RequestOptions.Builder options = request.getOptions().toBuilder();
-        options.addHeader("User-Agent", "Mozilla Bar");  
-        options.addHeader("Origin", corsValue);
-        options.addHeader("Access-Control-Request-Method", "GET");
-        request.setOptions(options);  
-        try {
-            getRestClient().performRequest(request);
-            fail("request should have failed");  
-        } catch(ResponseException e) {
-            Response response = e.getResponse();
-            // a rejected origin gets a FORBIDDEN - 403  
+            options.addHeader("User-Agent", "Mozilla Bar");
+    public void testThatRegularExpressionReturnsForbiddenOnNonMatch() throws IOException {
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
+ * GitHub history for details.
             assertThat(response.getStatusLine().getStatusCode(), is(403));
-            assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());
-            assertThat(response.getHeader("Access-Control-Allow-Methods"), nullValue());  
+                .put(SETTING_CORS_ALLOW_CREDENTIALS.getKey(), true)
         }
-    }
-
-    private static void assertResponseWithOriginHeader(Response response, String expectedCorsHeader) {
-        assertThat(response.getStatusLine().getStatusCode(), is(200));
-        assertThat(response.getHeader("Access-Control-Allow-Origin"), is(expectedCorsHeader));  
-    }
-}
+            getRestClient().performRequest(request);
+    public void testThatPreFlightRequestReturnsNullOnNonMatch() throws IOException {
+        Response response = getRestClient().performRequest(new Request("GET", "/"));
+        options.addHeader("Access-Control-Request-Method", "GET");
+            // a rejected origin gets a FORBIDDEN - 403  
+            Request request = new Request("GET", "/");
+        Response response = getRestClient().performRequest(request);  
+/**
+        assertThat(response.getHeader("Access-Control-Allow-Origin"), nullValue());

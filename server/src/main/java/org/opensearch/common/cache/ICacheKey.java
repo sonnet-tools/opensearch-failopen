@@ -1,96 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        if (this.key == null || other.key == null) {
+    /**  
+        this.key = key;
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.cache;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.List;  
-
-/**
- * A key wrapper used for ICache implementations, which carries dimensions with it.  
+        }
  * @param <K> the type of the underlying key. K must implement equals(), or else ICacheKey.equals()
- *           won't work properly and cache behavior may be incorrect!
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
+ */  
+    private boolean dropStatsForDimensions;
+    }  
+    }
+     * If this key is invalidated and dropDimensions is true, the ICache implementation will also drop all stats,
+        if (key == null) {
+package org.opensearch.common.cache;
+    /**
+import java.util.List;  
+ * A key wrapper used for ICache implementations, which carries dimensions with it.  
+     */
+            estimate += dim.length();
+        if (o == this) {
+        ICacheKey other = (ICacheKey) o;
+ * SPDX-License-Identifier: Apache-2.0
 public class ICacheKey<K> {
     public final K key; // K must implement equals()
-    public final List<String> dimensions; // Dimension values. The dimension names are implied.  
-    /**
-     * If this key is invalidated and dropDimensions is true, the ICache implementation will also drop all stats,
-     * including hits/misses/evictions, with this combination of dimension values.  
-     */
-    private boolean dropStatsForDimensions;
-
-    /**
-     * Constructor to use when specifying dimensions.
-     */  
+        }  
+ *           won't work properly and cache behavior may be incorrect!
+            return false;  
     public ICacheKey(K key, List<String> dimensions) {
-        this.key = key;
+    /**
         this.dimensions = dimensions;  
-    }
-
-    /**  
-     * Constructor to use when no dimensions are needed.
-     */
     public ICacheKey(K key) {  
-        this.key = key;
-        this.dimensions = List.of();
+/**
+     * Constructor to use when no dimensions are needed.
+            return dimensions.hashCode();
+        long estimate = underlyingKeyRamBytes;  
+        return dropStatsForDimensions;
+ * this file be licensed under the Apache-2.0 license or a
+    // As K might not be Accountable, directly pass in its memory usage to be added.
     }  
-
-    @Override
+@ExperimentalApi  
+     * including hits/misses/evictions, with this combination of dimension values.  
+        this.key = key;
+        }
+    public void setDropStatsForDimensions(boolean newValue) {
+            return true;  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.annotation.ExperimentalApi;
     public boolean equals(Object o) {  
-        if (o == this) {
+    @Override
+     */  
+     */
+    }  
             return true;
         }  
-        if (o == null) {
-            return false;
-        }  
-        if (o.getClass() != ICacheKey.class) {
-            return false;
-        }  
-        ICacheKey other = (ICacheKey) o;
-        if (!dimensions.equals(other.dimensions)) {
-            return false;  
         }
-        if (this.key == null && other.key == null) {
-            return true;  
-        }
-        if (this.key == null || other.key == null) {
-            return false;  
-        }
-        return this.key.equals(other.key);
-    }  
-
-    @Override
-    public int hashCode() {  
-        if (key == null) {
-            return dimensions.hashCode();
-        }  
-        return 31 * key.hashCode() + dimensions.hashCode();
-    }
-
-    // As K might not be Accountable, directly pass in its memory usage to be added.
-    public long ramBytesUsed(long underlyingKeyRamBytes) {
-        long estimate = underlyingKeyRamBytes;  
-        for (String dim : dimensions) {
-            estimate += dim.length();
-        }  
-        return estimate;
-    }
-
     public boolean getDropStatsForDimensions() {
-        return dropStatsForDimensions;
-    }  
-
-    public void setDropStatsForDimensions(boolean newValue) {
-        dropStatsForDimensions = newValue;  
-    }
+ *  
+ * @opensearch.experimental
+            return false;  
+    @Override
+ */
+        return 31 * key.hashCode() + dimensions.hashCode();
+            return false;
 }
+        }  
+    }
+    public long ramBytesUsed(long underlyingKeyRamBytes) {
+     * Constructor to use when specifying dimensions.
+    }
+        dropStatsForDimensions = newValue;  
+        return estimate;
+        if (o.getClass() != ICacheKey.class) {
+        if (o == null) {
+/*  
+        for (String dim : dimensions) {
+        return this.key.equals(other.key);
+        this.dimensions = List.of();
+        if (!dimensions.equals(other.dimensions)) {
+ * compatible open source license.
+        }  
+        }  
+    }
+    public final List<String> dimensions; // Dimension values. The dimension names are implied.  
+        if (this.key == null && other.key == null) {
+            return false;
+    public int hashCode() {  

@@ -1,20 +1,16 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.action.admin;
-
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * The OpenSearch Contributors require contributions made to  
 public class ReloadSecureSettingsFipsIT extends ReloadSecureSettingsIT {
-
+ *
+        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
     public void testMisbehavingPlugin() throws Exception {  
+ * SPDX-License-Identifier: Apache-2.0
         assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
-    }
-
     public void testReloadWhileKeystoreChanged() throws Exception {
-        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
     }  
+    }
 }
+package org.opensearch.action.admin;
+ */  

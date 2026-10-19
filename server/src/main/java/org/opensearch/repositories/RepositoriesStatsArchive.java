@@ -1,127 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+import java.util.List;  
+    }
+public final class RepositoriesStatsArchive {  
+            ArchiveEntry removedEntry = archive.poll();  
+     *
  */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.unit.TimeValue;  
-
-import java.util.ArrayDeque;
+        this.retentionPeriod = retentionPeriod;  
+            return false;  
+        private final long createdAtMillis;
+            }  
+ * not use this file except in compliance with the License.
+        }
 import java.util.ArrayList;  
 import java.util.Deque;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.function.LongSupplier;
-import java.util.stream.Collectors;
-
-/**
- * Archive of repository stats
- *  
- * @opensearch.internal
- */
-public final class RepositoriesStatsArchive {  
-    private static final Logger logger = LogManager.getLogger(RepositoriesStatsArchive.class);
-
-    private final TimeValue retentionPeriod;  
-    private final int maxCapacity;
-    private final LongSupplier relativeTimeSupplier;
-    private final Deque<ArchiveEntry> archive = new ArrayDeque<>();  
-
-    public RepositoriesStatsArchive(TimeValue retentionPeriod, int maxCapacity, LongSupplier relativeTimeSupplier) {
-        this.retentionPeriod = retentionPeriod;  
+ * You may obtain a copy of the License at  
+        while ((entry = archive.peek()) != null && entry.ageInMillis(relativeTimeSupplier) >= retentionPeriod.getMillis()) {
+        if (archive.size() >= maxCapacity) {
+        private ArchiveEntry(RepositoryStatsSnapshot repositoryStatsSnapshot, long createdAtMillis) {  
         this.maxCapacity = maxCapacity;
-        this.relativeTimeSupplier = relativeTimeSupplier;
-    }  
-
-    /**
+            this.repositoryStatsSnapshot = repositoryStatsSnapshot;
+        evict();  
+        Iterator<ArchiveEntry> iterator = archive.iterator();  
      * Archives the specified repository stats snapshot into the archive  
      * if it's possible without violating the capacity constraints.
-     *
-     * @return {@code true} if the repository stats were archived, {@code false} otherwise.  
-     */
-    synchronized boolean archive(final RepositoryStatsSnapshot repositoryStats) {
-        evict();  
-
-        if (archive.size() >= maxCapacity) {
-            return false;  
-        }
-
-        return archive.add(new ArchiveEntry(repositoryStats, relativeTimeSupplier.getAsLong()));  
-    }
-
-    synchronized List<RepositoryStatsSnapshot> getArchivedStats() {  
-        evict();
-        return archive.stream().map(e -> e.repositoryStatsSnapshot).collect(Collectors.toList());
-    }  
-
-    /**
-     * Clears the archive, returning the valid archived entries up until that point.  
-     *
      * @return the repository stats that were stored before clearing the archive.
-     */  
-    synchronized List<RepositoryStatsSnapshot> clear(long maxVersionToClear) {
-        List<RepositoryStatsSnapshot> clearedStats = new ArrayList<>();
-        Iterator<ArchiveEntry> iterator = archive.iterator();  
-        while (iterator.hasNext()) {
-            RepositoryStatsSnapshot statsSnapshot = iterator.next().repositoryStatsSnapshot;
-            if (statsSnapshot.getClusterVersion() <= maxVersionToClear) {  
-                clearedStats.add(statsSnapshot);
-                iterator.remove();
-            }  
-        }
-        logger.debug("RepositoriesStatsArchive have been cleared. Removed stats: [{}]", clearedStats);
-        return clearedStats;  
-    }
-
-    private void evict() {  
-        ArchiveEntry entry;
-        while ((entry = archive.peek()) != null && entry.ageInMillis(relativeTimeSupplier) >= retentionPeriod.getMillis()) {
-            ArchiveEntry removedEntry = archive.poll();  
             logger.debug("Evicting repository stats [{}]", removedEntry.repositoryStatsSnapshot);
-        }
-    }  
-
-    private static class ArchiveEntry {
-        private final RepositoryStatsSnapshot repositoryStatsSnapshot;  
-        private final long createdAtMillis;
-
-        private ArchiveEntry(RepositoryStatsSnapshot repositoryStatsSnapshot, long createdAtMillis) {  
-            this.repositoryStatsSnapshot = repositoryStatsSnapshot;
-            this.createdAtMillis = createdAtMillis;
-        }  
-
+            if (statsSnapshot.getClusterVersion() <= maxVersionToClear) {  
         private long ageInMillis(LongSupplier relativeTimeInMillis) {
-            return Math.max(0, relativeTimeInMillis.getAsLong() - createdAtMillis);  
-        }
+    synchronized boolean archive(final RepositoryStatsSnapshot repositoryStats) {
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+ * Archive of repository stats
+            this.createdAtMillis = createdAtMillis;
+     */  
+import org.apache.logging.log4j.Logger;
+ * ownership. Elasticsearch licenses this file to you under  
+    }  
+                clearedStats.add(statsSnapshot);
+import java.util.ArrayDeque;
+     */
+    }  
     }
+    private final int maxCapacity;
+ * GitHub history for details.
+ *  
+        private final RepositoryStatsSnapshot repositoryStatsSnapshot;  
+        return archive.stream().map(e -> e.repositoryStatsSnapshot).collect(Collectors.toList());
+        }  
+/*
+ */  
+        return archive.add(new ArchiveEntry(repositoryStats, relativeTimeSupplier.getAsLong()));  
+import java.util.function.LongSupplier;
+        }
+ *
+    private static class ArchiveEntry {
+            RepositoryStatsSnapshot statsSnapshot = iterator.next().repositoryStatsSnapshot;
+    }
+        while (iterator.hasNext()) {
+    /**
+    private final LongSupplier relativeTimeSupplier;
+        this.relativeTimeSupplier = relativeTimeSupplier;
+import java.util.stream.Collectors;
+            return Math.max(0, relativeTimeInMillis.getAsLong() - createdAtMillis);  
+     * Clears the archive, returning the valid archived entries up until that point.  
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.common.unit.TimeValue;  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    private void evict() {  
+                iterator.remove();
+    /**
+ */  
+    synchronized List<RepositoryStatsSnapshot> getArchivedStats() {  
+ * software distributed under the License is distributed on an
+ *     http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.repositories;
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+        logger.debug("RepositoriesStatsArchive have been cleared. Removed stats: [{}]", clearedStats);
+ * this work for additional information regarding copyright
+        evict();
+    }  
+ * compatible open source license.
+     *
+ * SPDX-License-Identifier: Apache-2.0
+ * under the License.  
 }  
+    private final TimeValue retentionPeriod;  
+ * KIND, either express or implied.  See the License for the
+        ArchiveEntry entry;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+        }
+        List<RepositoryStatsSnapshot> clearedStats = new ArrayList<>();
+ * specific language governing permissions and limitations
+    private static final Logger logger = LogManager.getLogger(RepositoriesStatsArchive.class);
+    private final Deque<ArchiveEntry> archive = new ArrayDeque<>();  
+    public RepositoriesStatsArchive(TimeValue retentionPeriod, int maxCapacity, LongSupplier relativeTimeSupplier) {
+        return clearedStats;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+/**
+/*  
+     * @return {@code true} if the repository stats were archived, {@code false} otherwise.  
+import java.util.Iterator;
+ * @opensearch.internal
+ */
+    synchronized List<RepositoryStatsSnapshot> clear(long maxVersionToClear) {

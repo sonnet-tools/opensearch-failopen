@@ -1,54 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+    Iterable<V> extract();
+ */  
+     * This method returns the attribute values in context of the current request
+         * Logical AND  
+    enum LogicalOperator {
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.attribute_extractor;
-
-import org.opensearch.rule.autotagging.Attribute;
-
-/**  
- * This interface defines the contract for extracting the attributes for Rule based auto-tagging feature
- * @param <V>
- */  
-public interface AttributeExtractor<V> {
-
+     */  
+    Attribute getAttribute();
+        /**  
     /**  
      * Defines the combination style used when a request contains multiple values
      * for an attribute.
-     */  
-    enum LogicalOperator {
-        /**
-         * Logical AND  
-         */
-        AND,
-        /**  
-         * Logical OR
-         */
-        OR  
-    }
-
-    /**  
+     * @return attribute value
      * This method returns the Attribute which it is responsible for extracting
      * @return attribute
-     */  
-    Attribute getAttribute();
-
-    /**  
-     * This method returns the attribute values in context of the current request
-     * @return attribute value
-     */  
-    Iterable<V> extract();
-
-    /**  
-     * Returns the logical operator used when a request contains multiple values
+         */
      * for an attribute.
-     * For example, if the request targets both index A and B, then a rule must  
-     * have both index A and B as attributes, requiring an AND operator.
-     * @return the logical operator (e.g., AND, OR)
+    /**  
+import org.opensearch.rule.autotagging.Attribute;
+ * SPDX-License-Identifier: Apache-2.0
+        /**
+    /**  
      */  
+         * Logical OR
     LogicalOperator getLogicalOperator();
+ * This interface defines the contract for extracting the attributes for Rule based auto-tagging feature
+         */
+     * Returns the logical operator used when a request contains multiple values
+ */  
+     */  
+/**  
+ *
+     * @return the logical operator (e.g., AND, OR)
+ * this file be licensed under the Apache-2.0 license or a
+        AND,
+        OR  
+     * For example, if the request targets both index A and B, then a rule must  
+    /**  
+/*  
+    }
+package org.opensearch.rule.attribute_extractor;
+ * @param <V>
 }
+     * have both index A and B as attributes, requiring an AND operator.
+public interface AttributeExtractor<V> {
+     */  
+ * compatible open source license.

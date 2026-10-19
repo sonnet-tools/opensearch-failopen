@@ -1,55 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
+ */  
  * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
+/*  
+import java.io.IOException;
  * GitHub history for details.
  */  
-
 package org.opensearch.index.store;
-
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.MMapDirectory;
-
-import java.io.IOException;
-import java.nio.file.Path;
-
-public class SmbMMapDirectoryTests extends OpenSearchBaseDirectoryTestCase {
-
-    @Override  
-    protected Directory getDirectory(Path file) throws IOException {
-        return new SmbDirectoryWrapper(new MMapDirectory(file));
-    }  
-
-    @Override
-    public void testCreateOutputForExistingFile() throws IOException {  
-        /*
-          This test is disabled because {@link SmbDirectoryWrapper} opens existing file
-          with an explicit StandardOpenOption.TRUNCATE_EXISTING option.  
-         */
-    }
+ * compatible open source license.
+ *
+ * specific language governing permissions and limitations
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
 }  
+ *  
+    public void testCreateOutputForExistingFile() throws IOException {  
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+public class SmbMMapDirectoryTests extends OpenSearchBaseDirectoryTestCase {
+         */
+    }  
+    protected Directory getDirectory(Path file) throws IOException {
+import org.apache.lucene.store.Directory;
+    }
+ */
+/*
+ * software distributed under the License is distributed on an
+        return new SmbDirectoryWrapper(new MMapDirectory(file));
+          with an explicit StandardOpenOption.TRUNCATE_EXISTING option.  
+ * this work for additional information regarding copyright
+    @Override  
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+        /*
+import org.apache.lucene.store.MMapDirectory;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+ *
+          This test is disabled because {@link SmbDirectoryWrapper} opens existing file
+ * this file be licensed under the Apache-2.0 license or a
+import java.nio.file.Path;

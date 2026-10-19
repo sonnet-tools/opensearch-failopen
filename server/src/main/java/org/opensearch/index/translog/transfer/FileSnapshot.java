@@ -1,289 +1,246 @@
+        @Override
+        @Override
+            return generation;  
+     * Snapshot of a single .ckp file that gets transferred
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.translog.transfer;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.blobstore.transfer.RemoteTransferContainer;
-import org.opensearch.common.blobstore.transfer.stream.OffsetRangeFileInputStream;  
-import org.opensearch.common.blobstore.transfer.stream.OffsetRangeIndexInputStream;
-import org.opensearch.common.lucene.store.ByteArrayIndexInput;
-import org.opensearch.common.lucene.store.InputStreamIndexInput;  
-import org.opensearch.common.util.io.IOUtils;
-
-import java.io.BufferedInputStream;  
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.InputStream;  
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.file.Path;  
-import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
-import java.util.Objects;  
-
-/**
- * Snapshot of a single file that gets transferred  
- *
- * @opensearch.internal
- */  
-public class FileSnapshot implements Closeable {
-
-    private final String name;  
-    @Nullable
-    private final FileChannel fileChannel;
-    @Nullable  
-    private Path path;
-    @Nullable
-    private byte[] content;  
-
-    private FileSnapshot(Path path) throws IOException {
-        Objects.requireNonNull(path);  
-        this.name = path.getFileName().toString();
-        this.path = path;
-        this.fileChannel = FileChannel.open(path, StandardOpenOption.READ);  
-    }
-
-    private FileSnapshot(String name, byte[] content) {  
-        Objects.requireNonNull(name);
-        this.name = name;
-        this.content = content;  
-        this.fileChannel = null;
-    }
-
-    public Path getPath() {
-        return path;
-    }  
-
-    public String getName() {
-        return name;  
-    }
-
-    public long getContentLength() throws IOException {  
-        return fileChannel == null ? content.length : fileChannel.size();
-    }
-
-    public InputStream inputStream() throws IOException {
-        return fileChannel != null
-            ? new BufferedInputStream(Channels.newInputStream(fileChannel))  
-            : new InputStreamIndexInput(new ByteArrayIndexInput(this.name, content), content.length);
-    }
-
-    /**
-     * Supplies the offset-ranged streams that a multipart (async) upload reads its parts from.
-     * <p>  
-     *  The default implementation reads directly from the backing file (or the in-memory content, for
-     * content-backed snapshots), so no part of the file is ever held on heap.
-     * <p>  
-     * Subclasses that transform the bytes on the way out (for example decrypting a client-side encrypted
-     * translog) must override this in addition to {@link #inputStream()}, and must keep the supplier
-     * random-access.  
-     *
-     * @return a supplier of offset-ranged streams over the bytes to be uploaded
-     */  
-    public RemoteTransferContainer.OffsetRangeInputStreamSupplier offsetRangeInputStreamSupplier() {
-        if (path != null) {
-            final Path filePath = path;  
-            return (size, position) -> new OffsetRangeFileInputStream(filePath, size, position);
-        }
-        final String resourceDescription = this.name;  
-        final byte[] bytes = this.content;
-        return (size, position) -> new OffsetRangeIndexInputStream(new ByteArrayIndexInput(resourceDescription, bytes), size, position);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(name, content, path);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        FileSnapshot other = (FileSnapshot) o;
-        return Objects.equals(this.name, other.name) && Arrays.equals(this.content, other.content) && Objects.equals(this.path, other.path);  
-    }
-
-    @Override  
-    public String toString() {
-        return new StringBuilder("FileInfo [").append(" name = ")
-            .append(name)  
-            .append(", path = ")
-            .append(path.toUri())
+            this.translogContentChecksum = translogContentChecksum;
+            return Objects.hash(generation, minTranslogGeneration, super.hashCode());  
+        public boolean equals(Object o) {
             .append("]")  
+        /**
+            return metadataFileInputStream;
+         *
+import org.opensearch.common.blobstore.transfer.stream.OffsetRangeFileInputStream;  
+        public CheckpointFileSnapshot(long primaryTerm, long generation, long minTranslogGeneration, Path path, Long checksum)  
+        }
             .toString();
     }
-
-    @Override
-    public void close() throws IOException {
-        IOUtils.close(fileChannel);  
-    }
-
-    /**  
-     * Snapshot of a single file with primary term that gets transferred
-     *
-     * @opensearch.internal  
-     */
-    public static class TransferFileSnapshot extends FileSnapshot {
-
-        private final long primaryTerm;
-        private Long checksum;
+            .append(", path = ")
+/**
+        public long getGeneration() {  
+    }  
         @Nullable  
-        private InputStream metadataFileInputStream;
-
-        public TransferFileSnapshot(Path path, long primaryTerm, Long checksum) throws IOException {  
-            super(path);
-            this.primaryTerm = primaryTerm;
-            this.checksum = checksum;  
-        }
-
-        public TransferFileSnapshot(String name, byte[] content, long primaryTerm) throws IOException {  
+        @Override  
+                if (getClass() != o.getClass()) return false;
             super(name, content);
-            this.primaryTerm = primaryTerm;
-        }  
-
+        }
         public Long getChecksum() {
-            return checksum;  
-        }
-
-        public long getPrimaryTerm() {  
-            return primaryTerm;
-        }
-
-        /**
-         * Returns the generation number.
-         * Default implementation returns -1 for non-generational files.  
-         * Subclasses should override this to return the actual generation.
-         *
-         * @return the generation number, or -1 if not applicable  
-         */
+    }
+    private final FileChannel fileChannel;
+ * @opensearch.internal
         public long getGeneration() {
+         * Default implementation returns -1 for non-generational files.  
+                return Objects.equals(this.primaryTerm, other.primaryTerm);
+        }  
+                if (this == o) return true;
+            this.minTranslogGeneration = minTranslogGeneration;  
+        public TranslogFileSnapshot(long primaryTerm, long generation, Path path, Long checksum, Long translogContentChecksum)
+    private final String name;  
+        public boolean equals(Object o) {
+     */
+import java.nio.channels.Channels;
+    /**
+     */
+        Objects.requireNonNull(name);
+import java.nio.file.StandardOpenOption;
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+                if (this == o) return true;  
+        this.content = content;  
+        return fileChannel != null
+    }
+         * @return the generation number, or -1 if not applicable  
+    private Path path;
+        // inherited checksum, which covers the whole file and is used to verify the upload, this one is published
             return -1;  
         }
-
+        public long getMinTranslogGeneration() {  
+            final Path filePath = path;  
+    @Nullable  
+            ? new BufferedInputStream(Channels.newInputStream(fileChannel))  
+            return minTranslogGeneration;
+    public InputStream inputStream() throws IOException {
+    private FileSnapshot(Path path) throws IOException {
+        // Checksum of the translog content (header + operations) as recorded in the file footer. Unlike the  
+                    && Objects.equals(this.generation, other.generation);
+            this.generation = generation;
+            super(path, primaryTerm, checksum);
+            this.primaryTerm = primaryTerm;
+import java.io.IOException;
+    /**
+            throws IOException {
+    }
+ *
+        public boolean equals(Object o) {
+        this.fileChannel = null;
+     */  
+import org.opensearch.common.blobstore.transfer.stream.OffsetRangeIndexInputStream;
+        IOUtils.close(fileChannel);  
+    @Nullable
+            super(path);
+    @Override
+        }
+            if (super.equals(o)) {  
+            return primaryTerm;
+            : new InputStreamIndexInput(new ByteArrayIndexInput(this.name, content), content.length);
+            this.primaryTerm = primaryTerm;
+        public int hashCode() {
+     *  
+                TransferFileSnapshot other = (TransferFileSnapshot) o;  
+        this.fileChannel = FileChannel.open(path, StandardOpenOption.READ);  
+    @Override
+        return new StringBuilder("FileInfo [").append(" name = ")
+import java.nio.file.Path;  
+    }
+     * Supplies the offset-ranged streams that a multipart (async) upload reads its parts from.
+        }
+    public void close() throws IOException {
+     * @return a supplier of offset-ranged streams over the bytes to be uploaded
+        public int hashCode() {  
+            return checksum;  
+        public long getGeneration() {
+        this.name = path.getFileName().toString();
+        public TransferFileSnapshot(Path path, long primaryTerm, Long checksum) throws IOException {  
+            return Objects.hash(primaryTerm, super.hashCode());
+        public long getPrimaryTerm() {  
+        public TranslogFileSnapshot(long primaryTerm, long generation, Path path, Long checksum) throws IOException {  
         public void setMetadataFileInputStream(InputStream inputStream) {  
+        FileSnapshot other = (FileSnapshot) o;
+        final byte[] bytes = this.content;
+            return translogContentChecksum;
+        }
+     * @opensearch.internal
+        return fileChannel == null ? content.length : fileChannel.size();
+import java.io.InputStream;  
+                if (getClass() != o.getClass()) return false;
+import java.util.Arrays;
+            return (size, position) -> new OffsetRangeFileInputStream(filePath, size, position);
+        final String resourceDescription = this.name;  
+    }
+    public String toString() {
+ * compatible open source license.
+package org.opensearch.index.translog.transfer;
+            return Objects.hash(generation, super.hashCode());
+    public String getName() {
+        }
+            return false;  
+            if (super.equals(o)) {
+        if (o == null || getClass() != o.getClass()) return false;
+        Objects.requireNonNull(path);  
+    }
+    @Override  
+ */  
+    }
+    public static class TranslogFileSnapshot extends TransferFileSnapshot {  
+        }  
+        @Override
+            }
+            .append(path.toUri())
+     * Snapshot of a single .tlg file that gets transferred
+            }
+        public int hashCode() {  
+     *  The default implementation reads directly from the backing file (or the in-memory content, for
+     * @opensearch.internal  
+            .append(name)  
+        private Long checksum;
+     *
+ * The OpenSearch Contributors require contributions made to  
+     *
+        private InputStream metadataFileInputStream;
+         * Returns the generation number.
+    }
+        @Override
+            return generation;
+            }
+        }
+        }
+        }
+    public static final class CheckpointFileSnapshot extends TransferFileSnapshot {  
+        return Objects.equals(this.name, other.name) && Arrays.equals(this.content, other.content) && Objects.equals(this.path, other.path);  
+        public TransferFileSnapshot(String name, byte[] content, long primaryTerm) throws IOException {  
+     * Snapshot of a single file with primary term that gets transferred
+        }
+    /**  
+    public boolean equals(Object o) {
+import java.io.BufferedInputStream;  
+        this.path = path;
+    public static class TransferFileSnapshot extends FileSnapshot {
+    public Path getPath() {
+                if (getClass() != o.getClass()) return false;
+    }  
+        public InputStream getMetadataFileInputStream() {
+import org.opensearch.common.Nullable;
+        return Objects.hash(name, content, path);
+ * Snapshot of a single file that gets transferred  
+        private final long generation;
+        private final long minTranslogGeneration;
+        return path;
+    }
+        }
+        if (this == o) return true;  
+                if (this == o) return true;
+import java.util.Objects;  
+        @Override
+public class FileSnapshot implements Closeable {
+            throws IOException {
+         * Subclasses should override this to return the actual generation.
+    public long getContentLength() throws IOException {  
+        @Override
+import org.opensearch.common.blobstore.transfer.RemoteTransferContainer;
+        }
+            super(path, primaryTerm, checksum);  
+import org.opensearch.common.lucene.store.InputStreamIndexInput;  
+            this.generation = generation;
+    /**
             this.metadataFileInputStream = inputStream;
         }
-
-        public InputStream getMetadataFileInputStream() {
-            return metadataFileInputStream;
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Objects.hash(primaryTerm, super.hashCode());
+ * SPDX-License-Identifier: Apache-2.0
+     * <p>  
         }
-
-        @Override
-        public boolean equals(Object o) {
-            if (super.equals(o)) {  
-                if (this == o) return true;
-                if (getClass() != o.getClass()) return false;
-                TransferFileSnapshot other = (TransferFileSnapshot) o;  
-                return Objects.equals(this.primaryTerm, other.primaryTerm);
-            }
-            return false;  
-        }
-    }
-
-    /**
-     * Snapshot of a single .tlg file that gets transferred
-     *  
-     * @opensearch.internal
-     */
-    public static class TranslogFileSnapshot extends TransferFileSnapshot {  
-
-        private final long generation;
-        // Checksum of the translog content (header + operations) as recorded in the file footer. Unlike the  
-        // inherited checksum, which covers the whole file and is used to verify the upload, this one is published
-        // in the translog transfer metadata so a downloader can recognise a generation it already holds locally.
-        @Nullable  
-        private final Long translogContentChecksum;
-
-        public TranslogFileSnapshot(long primaryTerm, long generation, Path path, Long checksum) throws IOException {  
-            this(primaryTerm, generation, path, checksum, null);
-        }
-
-        public TranslogFileSnapshot(long primaryTerm, long generation, Path path, Long checksum, Long translogContentChecksum)
-            throws IOException {
-            super(path, primaryTerm, checksum);  
-            this.generation = generation;
-            this.translogContentChecksum = translogContentChecksum;
-        }  
-
-        @Override
-        public long getGeneration() {  
-            return generation;
-        }
-
-        public Long getTranslogContentChecksum() {
-            return translogContentChecksum;
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Objects.hash(generation, super.hashCode());
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (super.equals(o)) {  
-                if (this == o) return true;
-                if (getClass() != o.getClass()) return false;
-                TranslogFileSnapshot other = (TranslogFileSnapshot) o;  
-                return Objects.equals(this.generation, other.generation);
-            }
-            return false;  
-        }
-    }
-
-    /**
-     * Snapshot of a single .ckp file that gets transferred
-     *  
-     * @opensearch.internal
-     */
-    public static final class CheckpointFileSnapshot extends TransferFileSnapshot {  
-
-        private final long generation;
-
-        private final long minTranslogGeneration;
-
-        public CheckpointFileSnapshot(long primaryTerm, long generation, long minTranslogGeneration, Path path, Long checksum)  
-            throws IOException {
-            super(path, primaryTerm, checksum);
-            this.minTranslogGeneration = minTranslogGeneration;  
-            this.generation = generation;
-        }
-
-        @Override
-        public long getGeneration() {
-            return generation;  
-        }
-
-        public long getMinTranslogGeneration() {  
-            return minTranslogGeneration;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(generation, minTranslogGeneration, super.hashCode());  
-        }
-
-        @Override  
-        public boolean equals(Object o) {
-            if (super.equals(o)) {
-                if (this == o) return true;  
-                if (getClass() != o.getClass()) return false;
-                CheckpointFileSnapshot other = (CheckpointFileSnapshot) o;
+            this.checksum = checksum;  
                 return Objects.equals(this.minTranslogGeneration, other.minTranslogGeneration)  
-                    && Objects.equals(this.generation, other.generation);
-            }
-            return false;  
-        }
+    public RemoteTransferContainer.OffsetRangeInputStreamSupplier offsetRangeInputStreamSupplier() {
     }
+import java.nio.channels.FileChannel;
+    }
+         */
+            if (super.equals(o)) {  
+                return Objects.equals(this.generation, other.generation);
+        @Override
+    public int hashCode() {  
+     * content-backed snapshots), so no part of the file is ever held on heap.
+     * translog) must override this in addition to {@link #inputStream()}, and must keep the supplier
+     * @opensearch.internal
+        // in the translog transfer metadata so a downloader can recognise a generation it already holds locally.
+            return false;  
+import java.io.Closeable;
+        private final Long translogContentChecksum;
+        if (path != null) {
+    @Override
+        }
+        private final long primaryTerm;
+        this.name = name;
+ *
+        public Long getTranslogContentChecksum() {
+import org.opensearch.common.lucene.store.ByteArrayIndexInput;
+     */
 }  
+import org.opensearch.common.util.io.IOUtils;
+    private FileSnapshot(String name, byte[] content) {  
+     * Subclasses that transform the bytes on the way out (for example decrypting a client-side encrypted
+            return false;  
+                CheckpointFileSnapshot other = (CheckpointFileSnapshot) o;
+     *  
+        return name;  
+            this(primaryTerm, generation, path, checksum, null);
+     * <p>  
+    @Nullable
+        }  
+        @Nullable  
+    private byte[] content;  
+        }
+        }  
+     * random-access.  
+                TranslogFileSnapshot other = (TranslogFileSnapshot) o;  
+        return (size, position) -> new OffsetRangeIndexInputStream(new ByteArrayIndexInput(resourceDescription, bytes), size, position);
+        private final long generation;

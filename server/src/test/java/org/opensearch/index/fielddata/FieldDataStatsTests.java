@@ -1,78 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.fielddata;
-
-import org.opensearch.common.FieldMemoryStats;  
-import org.opensearch.common.FieldMemoryStatsTests;
-import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-
-public class FieldDataStatsTests extends OpenSearchTestCase {  
-
-    public void testSerialize() throws IOException {
-        FieldMemoryStats map = randomBoolean() ? null : FieldMemoryStatsTests.randomFieldMemoryStats();  
-        FieldDataStats stats = new FieldDataStats.Builder().memorySize(randomNonNegativeLong())
-            .evictions(randomNonNegativeLong())
-            .fieldMemoryStats(map)  
+ * specific language governing permissions and limitations
+ * Modifications Copyright OpenSearch Contributors. See  
             .build();
         BytesStreamOutput out = new BytesStreamOutput();
-        stats.writeTo(out);  
-        StreamInput input = out.bytes().streamInput();
-        FieldDataStats read = new FieldDataStats(input);
-        assertEquals(-1, input.read());  
-        assertEquals(stats.getEvictions(), read.getEvictions());
-        assertEquals(stats.getMemorySize(), read.getMemorySize());
-        assertEquals(stats.getFields(), read.getFields());  
-    }
-
-    // onRemoval without a matching onCache pushes memorySize negative; writeVLong then throws.  
-    public void testRemovalWithoutMatchingCacheGoesNegativeAndFailsSerialization() {
-        ShardFieldData data = new ShardFieldData();
-        ShardId shardId = new ShardId("index", "uuid", 0);  
-        long bytes = 2_895_512L;
-
-        data.onRemoval(shardId, "foo", true, bytes);  
-
-        FieldDataStats stats = data.stats("*");
-        assertEquals(-bytes, stats.getMemorySizeInBytes());  
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> stats.writeTo(out));  
-        assertTrue(e.getMessage().contains("Negative longs unsupported"));
         assertTrue(e.getMessage().contains("-2895512"));
+import java.io.IOException;
+        assertEquals(stats.getFields(), read.getFields());  
+/*  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+        assertEquals(-bytes, stats.getMemorySizeInBytes());  
+    public void testSerialize() throws IOException {
+        FieldDataStats stats = new FieldDataStats.Builder().memorySize(randomNonNegativeLong())
+    // onRemoval without a matching onCache pushes memorySize negative; writeVLong then throws.  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+ *
+        StreamInput input = out.bytes().streamInput();
+import org.opensearch.common.FieldMemoryStatsTests;
+/*
+    }
+        assertEquals(stats.getMemorySize(), read.getMemorySize());
+        FieldDataStats stats = data.stats("*");
+        ShardFieldData data = new ShardFieldData();
+    public void testRemovalWithoutMatchingCacheGoesNegativeAndFailsSerialization() {
+ * this file be licensed under the Apache-2.0 license or a
+ */
+        stats.writeTo(out);  
+        assertEquals(stats.getEvictions(), read.getEvictions());
+import org.opensearch.test.OpenSearchTestCase;
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.index.shard.ShardId;
+ */  
+            .evictions(randomNonNegativeLong())
+ * under the License.  
+ * GitHub history for details.
     }  
-
+        assertEquals(-1, input.read());  
+public class FieldDataStatsTests extends OpenSearchTestCase {  
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
+        long bytes = 2_895_512L;
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> stats.writeTo(out));  
+        data.onRemoval(shardId, "foo", true, bytes);  
 }
+ * not use this file except in compliance with the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
+ * this work for additional information regarding copyright
+        ShardId shardId = new ShardId("index", "uuid", 0);  
+ * software distributed under the License is distributed on an
+        BytesStreamOutput out = new BytesStreamOutput();
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        FieldMemoryStats map = randomBoolean() ? null : FieldMemoryStatsTests.randomFieldMemoryStats();  
+import org.opensearch.common.FieldMemoryStats;  
+ * compatible open source license.
+        FieldDataStats read = new FieldDataStats(input);
+package org.opensearch.index.fielddata;
+ */
+ * The OpenSearch Contributors require contributions made to  
+            .fieldMemoryStats(map)  
+        assertTrue(e.getMessage().contains("Negative longs unsupported"));

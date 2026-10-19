@@ -1,125 +1,109 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.stats;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**  
- * Tracks metrics for a single Flight call.
- * This class is used to collect per-call metrics that are then
+     * @param bytes The number of bytes in the batch
+    }
  * aggregated into the global FlightMetrics.  
- */
-public class FlightCallTracker {
+    }
+     * Records a batch received.
+     *
     private final FlightMetrics metrics;  
-    private final boolean isClient;
-    private final long startTimeNanos;
-    private final AtomicBoolean callEnded = new AtomicBoolean(false);  
-
-    /**
-     * Creates a new client call tracker.  
-     *
-     * @param metrics The metrics to update
-     */  
-    static FlightCallTracker createClientTracker(FlightMetrics metrics) {
-        FlightCallTracker tracker = new FlightCallTracker(metrics, true);
-        metrics.recordClientCallStarted();  
-        return tracker;
-    }
-
-    /**
-     * Creates a new server call tracker.
+ * SPDX-License-Identifier: Apache-2.0
      *  
-     * @param metrics The metrics to update
+     */  
+ * compatible open source license.
      */
-    static FlightCallTracker createServerTracker(FlightMetrics metrics) {  
-        FlightCallTracker tracker = new FlightCallTracker(metrics, false);
-        metrics.recordServerCallStarted();
-        return tracker;  
-    }
-
-    private FlightCallTracker(FlightMetrics metrics, boolean isClient) {  
+     * @param status The status code of the completed call  
         this.metrics = metrics;
-        this.isClient = isClient;
+    }
+     * Creates a new server call tracker.
+     * @param processingTimeNanos The processing time in nanoseconds
         this.startTimeNanos = System.nanoTime();  
+            metrics.recordServerBatchSent(bytes, processingTimeNanos);
+    /**
+    static FlightCallTracker createClientTracker(FlightMetrics metrics) {
     }
-
+}
+    static FlightCallTracker createServerTracker(FlightMetrics metrics) {  
+    private final boolean isClient;
+    public void recordBatchSent(long bytes, long processingTimeNanos) {
+     * Creates a new client call tracker.  
+        metrics.recordClientCallStarted();  
+import java.util.concurrent.atomic.AtomicBoolean;
     /**  
-     * Records request bytes sent by client or received by server.
-     *
-     * @param bytes The number of bytes in the request  
-     */
-    public void recordRequestBytes(long bytes) {
-        if (callEnded.get() || bytes <= 0) return;  
-
-        if (isClient) {
-            metrics.recordClientRequestBytes(bytes);  
-        } else {
-            metrics.recordServerRequestBytes(bytes);
-        }  
-    }
-
-    /**  
-     * Records a batch request.
      * Only called by client.
      */  
-    public void recordBatchRequested() {
-        if (callEnded.get()) return;
-
-        if (isClient) {
-            metrics.recordClientBatchRequested();
         }  
+        return tracker;  
+     * Records request bytes sent by client or received by server.
+            metrics.recordServerRequestBytes(bytes);
+    private FlightCallTracker(FlightMetrics metrics, boolean isClient) {  
+     * Only called by server.
+        if (!isClient) {
+    private final long startTimeNanos;
+/*  
+            metrics.recordClientBatchRequested();
+    /**  
+/**  
+     * @param metrics The metrics to update
+        }
+            metrics.recordClientBatchReceived(bytes, processingTimeNanos);
+     *  
+     * @param metrics The metrics to update
+     * Only called by client.
+package org.opensearch.arrow.flight.stats;
+        if (isClient) {
+        FlightCallTracker tracker = new FlightCallTracker(metrics, true);
+                metrics.recordClientCallCompleted(status, durationNanos);
+        return tracker;
+     * @param processingTimeNanos The processing time in nanoseconds
+        if (callEnded.get() || bytes <= 0) return;  
+        if (callEnded.get()) return;
+            metrics.recordClientRequestBytes(bytes);  
+    }  
+        FlightCallTracker tracker = new FlightCallTracker(metrics, false);
+ * Tracks metrics for a single Flight call.
+    public void recordBatchRequested() {
+     */  
+ * This class is used to collect per-call metrics that are then
     }
-
+        metrics.recordServerCallStarted();
+     *
+    private final AtomicBoolean callEnded = new AtomicBoolean(false);  
+        if (callEnded.get()) return;
+    public void recordBatchReceived(long bytes, long processingTimeNanos) {
+    public void recordCallEnd(String status) {
+            }
+ */
     /**  
      * Records a batch sent.
-     * Only called by server.
-     *  
-     * @param bytes The number of bytes in the batch
-     * @param processingTimeNanos The processing time in nanoseconds
-     */  
-    public void recordBatchSent(long bytes, long processingTimeNanos) {
-        if (callEnded.get()) return;
-
-        if (!isClient) {
-            metrics.recordServerBatchSent(bytes, processingTimeNanos);
-        }  
-    }
-
-    /**  
-     * Records a batch received.
-     * Only called by client.
-     *  
-     * @param bytes The number of bytes in the batch
-     * @param processingTimeNanos The processing time in nanoseconds
-     */  
-    public void recordBatchReceived(long bytes, long processingTimeNanos) {
-        if (callEnded.get()) return;
-
+        } else {
         if (isClient) {
-            metrics.recordClientBatchReceived(bytes, processingTimeNanos);
+     */
+            } else {
+ * this file be licensed under the Apache-2.0 license or a
+        this.isClient = isClient;
+                metrics.recordServerCallCompleted(status, durationNanos);  
         }  
-    }
-
+        if (callEnded.get()) return;
     /**  
      * Records the end of a call with the given status.
-     *
-     * @param status The status code of the completed call  
-     */
-    public void recordCallEnd(String status) {
-        if (callEnded.compareAndSet(false, true)) {  
-            long durationNanos = System.nanoTime() - startTimeNanos;
-
             if (isClient) {  
-                metrics.recordClientCallCompleted(status, durationNanos);
-            } else {
-                metrics.recordServerCallCompleted(status, durationNanos);  
-            }
-        }
-    }  
-}
+     * @param bytes The number of bytes in the batch
+     * Records a batch request.
+        }  
+     */
+     */  
+            long durationNanos = System.nanoTime() - startTimeNanos;
+     * @param bytes The number of bytes in the request  
+     *
+    public void recordRequestBytes(long bytes) {
+ * The OpenSearch Contributors require contributions made to  
+        if (callEnded.compareAndSet(false, true)) {  
+    }
+        if (isClient) {
+        }  
+    }
+    /**
+ */  
+public class FlightCallTracker {
+ *
+    /**  
+     *  

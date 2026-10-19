@@ -1,83 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+            LogManager.getLogger(BootstrapSettings.class).debug("Serial filter already initialized", e);  
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+    );  
+        } catch (IllegalStateException e) {
+    public static void initializeSerialFilter() {
+    private BootstrapSettings() {}
+ */
+    public static final Setting<Boolean> SYSTEM_CALL_FILTER_SETTING = Setting.boolSetting(  
+     */
  *     http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.logging.log4j.LogManager;
+ * GitHub history for details.
+        true,
+    public static final Setting<Boolean> SERIAL_FILTER_SETTING = Setting.boolSetting("bootstrap.serial_filter", false, Property.NodeScope);
+     * Code that needs deserialization can opt in by calling setObjectInputFilter on their stream.  
+ */  
+import java.io.ObjectInputFilter;
+        : ObjectInputFilter.Status.REJECTED;
+ * under the License.  
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.bootstrap;
-
-import org.apache.logging.log4j.LogManager;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;  
-
-import java.io.ObjectInputFilter;
-
-/**
- * Settings used for bootstrapping OpenSearch
- *  
- * @opensearch.internal
- */
-public final class BootstrapSettings {  
-
-    private BootstrapSettings() {}
-
-    // TODO: remove this hack when insecure defaults are removed from java
-    public static final Setting<Boolean> SECURITY_FILTER_BAD_DEFAULTS_SETTING = Setting.boolSetting(
-        "security.manager.filter_bad_defaults",  
-        true,
-        Property.NodeScope
-    );  
-
     public static final Setting<Boolean> MEMORY_LOCK_SETTING = Setting.boolSetting("bootstrap.memory_lock", false, Property.NodeScope);
-    public static final Setting<Boolean> SYSTEM_CALL_FILTER_SETTING = Setting.boolSetting(  
-        "bootstrap.system_call_filter",
-        true,
-        Property.NodeScope  
-    );
-    public static final Setting<Boolean> CTRLHANDLER_SETTING = Setting.boolSetting("bootstrap.ctrlhandler", true, Property.NodeScope);
-
-    public static final Setting<Boolean> SERIAL_FILTER_SETTING = Setting.boolSetting("bootstrap.serial_filter", false, Property.NodeScope);
-
-    static final ObjectInputFilter REJECT_ALL_FILTER = filterInfo -> filterInfo.serialClass() == null  
+/**
         ? ObjectInputFilter.Status.UNDECIDED
-        : ObjectInputFilter.Status.REJECTED;
-
-    /**
-     * Installs a process-wide ObjectInputFilter that rejects all Java deserialization by default.
-     * Code that needs deserialization can opt in by calling setObjectInputFilter on their stream.  
-     */
-    public static void initializeSerialFilter() {
-        try {  
-            ObjectInputFilter.Config.setSerialFilter(REJECT_ALL_FILTER);
-        } catch (IllegalStateException e) {
-            LogManager.getLogger(BootstrapSettings.class).debug("Serial filter already initialized", e);  
-        }
-    }
-
+    public static final Setting<Boolean> CTRLHANDLER_SETTING = Setting.boolSetting("bootstrap.ctrlhandler", true, Property.NodeScope);
+ * compatible open source license.
 }
+/*
+        "security.manager.filter_bad_defaults",  
+ * @opensearch.internal
+     * Installs a process-wide ObjectInputFilter that rejects all Java deserialization by default.
+ *  
+public final class BootstrapSettings {  
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.settings.Setting.Property;  
+        }
+        Property.NodeScope  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            ObjectInputFilter.Config.setSerialFilter(REJECT_ALL_FILTER);
+ * KIND, either express or implied.  See the License for the
+    // TODO: remove this hack when insecure defaults are removed from java
+ * Settings used for bootstrapping OpenSearch
+    );
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+        "bootstrap.system_call_filter",
+ *
+        Property.NodeScope
+/*  
+        true,
+ * license agreements. See the NOTICE file distributed with
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+ * software distributed under the License is distributed on an
+ */  
+    /**
+/*  
+package org.opensearch.bootstrap;
+ * specific language governing permissions and limitations
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.common.settings.Setting;
+ * the Apache License, Version 2.0 (the "License"); you may
+    static final ObjectInputFilter REJECT_ALL_FILTER = filterInfo -> filterInfo.serialClass() == null  
+ */
+    public static final Setting<Boolean> SECURITY_FILTER_BAD_DEFAULTS_SETTING = Setting.boolSetting(
+        try {  

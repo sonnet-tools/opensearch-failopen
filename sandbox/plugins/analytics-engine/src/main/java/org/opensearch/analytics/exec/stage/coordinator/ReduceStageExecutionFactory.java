@@ -1,154 +1,145 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.stage.coordinator;
-
-import org.opensearch.analytics.exec.QueryContext;
-import org.opensearch.analytics.exec.stage.StageExecution;
-import org.opensearch.analytics.exec.stage.StageExecutionFactory;  
-import org.opensearch.analytics.planner.dag.Stage;
-import org.opensearch.analytics.planner.dag.StageExecutionType;
-import org.opensearch.analytics.planner.dag.StagePlan;  
-import org.opensearch.analytics.spi.BackendExecutionContext;
-import org.opensearch.analytics.spi.ExchangeSink;
-import org.opensearch.analytics.spi.ExchangeSinkContext;  
-import org.opensearch.analytics.spi.ExchangeSinkProvider;
-import org.opensearch.analytics.spi.FragmentInstructionHandler;
-import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;  
-import org.opensearch.analytics.spi.InstructionNode;
-import org.opensearch.analytics.spi.ReducingExchangeSink;
-
 import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Builds executions for {@link StageExecutionType#COORDINATOR_REDUCE} stages —
- * those that run at the coordinator with a backend-provided {@link ReducingExchangeSink}.  
- * Creates the sink via {@link Stage#getExchangeSinkProvider()} using an
- * {@link ExchangeSinkContext} carrying the plan bytes, allocator, per-child
- * input descriptors (one per child stage, each with its stage id + the  
- * producer-side plan bytes the backend lowers to derive the input schema),
- * and the downstream sink. Wraps the resulting sink in a {@link ReduceStageExecution};
- * the sink's {@link ReducingExchangeSink#supportsEagerScheduling()} drives the  
- * scheduling mode (streaming vs buffered) without needing distinct execution subclasses.
- *
- * @opensearch.internal  
- */
-public final class ReduceStageExecutionFactory implements StageExecutionFactory {
-
-    @Override
-    public StageExecution createExecution(Stage stage, ExchangeSink sink, QueryContext config) {
-        ExchangeSinkProvider provider = stage.getExchangeSinkProvider();  
-        ExchangeSinkContext context = new ExchangeSinkContext(
-            config.queryId(),
-            stage.getStageId(),  
-            config.parentTask() != null ? config.parentTask().getNativeTaskId() : 0L,
-            chosenBytes(stage),
-            config.bufferAllocator(),  
-            buildChildInputs(stage),
-            sink,
-            config.importStagingAllocator()  
-        );
-
-        // Apply instruction handlers for the reduce stage.  
-        // Unlike AnalyticsSearchService (shard path) which resolves the factory from its
-        // local backends map, the coordinator-reduce path has no backends map — the factory
-        // is stored on the Stage during FragmentConversionDriver.convertAll (root stage only,  
-        // no serialization needed since reduce executes locally at the coordinator).
-        // TODO: find a cleaner way to provide the factory without storing it on Stage.
-        BackendExecutionContext backendContext = null;  
-        FragmentInstructionHandlerFactory factory = stage.getInstructionHandlerFactory();
-        if (factory != null) {
-            Throwable primaryFailure = null;  
-            try {
-                for (InstructionNode node : stage.getPlanAlternatives().getFirst().instructions()) {
-                    FragmentInstructionHandler handler = factory.createHandler(node);  
-                    BackendExecutionContext previous = backendContext;
-                    backendContext = handler.apply(node, context, backendContext);
-                    // A handler that returns a new reference implicitly abandons the previous  
-                    // context — close it now so its resources aren't orphaned.
-                    if (previous != null && previous != backendContext) {
-                        previous.close();  
-                    }
-                }
-            } catch (Throwable t) {  
-                primaryFailure = t;
-                // On failure, close the backendContext since it won't be handed to the sink.
-                if (backendContext != null) {  
-                    try {
-                        backendContext.close();
-                    } catch (Exception closeFailure) {  
-                        primaryFailure.addSuppressed(closeFailure);
-                    }
-                }  
-            }
-            if (primaryFailure != null) {
-                if (primaryFailure instanceof RuntimeException re) throw re;  
-                if (primaryFailure instanceof Error err) throw err;
-                throw new RuntimeException("Instruction handler failed for stageId=" + stage.getStageId(), primaryFailure);
-            }  
-        }
-
-        ExchangeSink backendSink;  
-        try {
-            backendSink = provider.createSink(context, backendContext);
-        } catch (Exception e) {  
-            // Sink creation failed — close backendContext to avoid resource leak.
-            if (backendContext != null) {
-                try {  
-                    backendContext.close();
-                } catch (Exception closeFailure) {
-                    e.addSuppressed(closeFailure);  
-                }
-            }
-            throw new RuntimeException("Failed to create exchange sink for stageId=" + stage.getStageId(), e);  
-        }
-        if (backendSink instanceof ReducingExchangeSink reducing) {
-            return new ReduceStageExecution(stage, config, reducing, sink);  
-        }
-        throw new IllegalStateException(
-            "Backend exchange sink for COORDINATOR_REDUCE stage "  
-                + stage.getStageId()
-                + " must implement ReducingExchangeSink, got "
-                + backendSink.getClass().getName()  
-        );
-    }
-
-    /** Picks the plan-alternative bytes bound to the stage's exchange sink provider. */
-    private static byte[] chosenBytes(Stage stage) {
-        assert stage.getPlanAlternatives().size() == 1 : "COORDINATOR_REDUCE stage "  
-            + stage.getStageId()
-            + " expected exactly one plan alternative, got "
-            + stage.getPlanAlternatives().size();  
-        return stage.getPlanAlternatives().getFirst().convertedBytes();
-    }
-
-    /**
-     * Builds one {@link ExchangeSinkContext.ChildInput} per child stage. Each entry carries
+import org.opensearch.analytics.spi.InstructionNode;
      * the child's stage id (used by the backend to namespace its registered input, e.g.  
-     * {@code "input-<stageId>"}) and the producer-side plan bytes the backend lowers to
-     * derive the input schema at registration time.
-     */  
-    private static List<ExchangeSinkContext.ChildInput> buildChildInputs(Stage stage) {
-        List<Stage> children = stage.getChildStages();
-        if (children.isEmpty()) {  
-            throw new IllegalStateException(
-                "COORDINATOR_REDUCE stage " + stage.getStageId() + " expected at least one child stage, got zero"
-            );  
-        }
-        List<ExchangeSinkContext.ChildInput> inputs = new ArrayList<>(children.size());
-        for (Stage child : children) {  
-            // postDecorationSchemaBytes wins over the producer's natural schema when an input
+                }
             // decorator widens the wire schema (e.g. QTF's OrdinalAppendingSink).
-            StagePlan plan = child.getPlanAlternatives().getFirst();  
-            byte[] producerPlanBytes = plan.postDecorationSchemaBytes() != null ? plan.postDecorationSchemaBytes() : plan.convertedBytes();
-            inputs.add(new ExchangeSinkContext.ChildInput(child.getStageId(), producerPlanBytes));
-        }  
-        return inputs;
+ *
+                if (backendContext != null) {  
+import org.opensearch.analytics.spi.ExchangeSinkContext;  
+                }
+        if (backendSink instanceof ReducingExchangeSink reducing) {
+import org.opensearch.analytics.spi.FragmentInstructionHandler;
+ * the sink's {@link ReducingExchangeSink#supportsEagerScheduling()} drives the  
+            stage.getStageId(),  
+                    }
+import org.opensearch.analytics.exec.stage.StageExecution;
+                    e.addSuppressed(closeFailure);  
+        // local backends map, the coordinator-reduce path has no backends map — the factory
+                    // context — close it now so its resources aren't orphaned.
+package org.opensearch.analytics.exec.stage.coordinator;
+    private static byte[] chosenBytes(Stage stage) {
+import org.opensearch.analytics.spi.ExchangeSink;
+        List<Stage> children = stage.getChildStages();
+                    }
+        assert stage.getPlanAlternatives().size() == 1 : "COORDINATOR_REDUCE stage "  
+                    backendContext = handler.apply(node, context, backendContext);
     }
+                throw new RuntimeException("Instruction handler failed for stageId=" + stage.getStageId(), primaryFailure);
+        if (children.isEmpty()) {  
+                + stage.getStageId()
+            config.importStagingAllocator()  
+                // On failure, close the backendContext since it won't be handed to the sink.
+        }  
+            chosenBytes(stage),
+     * {@code "input-<stageId>"}) and the producer-side plan bytes the backend lowers to
+    @Override
+        List<ExchangeSinkContext.ChildInput> inputs = new ArrayList<>(children.size());
+            throw new RuntimeException("Failed to create exchange sink for stageId=" + stage.getStageId(), e);  
+                    BackendExecutionContext previous = backendContext;
+            + " expected exactly one plan alternative, got "
+import org.opensearch.analytics.exec.QueryContext;
+                "COORDINATOR_REDUCE stage " + stage.getStageId() + " expected at least one child stage, got zero"
+            throw new IllegalStateException(
+            try {
+                    // A handler that returns a new reference implicitly abandons the previous  
+        }
+                        backendContext.close();
+            backendSink = provider.createSink(context, backendContext);
+            }  
+                for (InstructionNode node : stage.getPlanAlternatives().getFirst().instructions()) {
+        return inputs;
+            config.bufferAllocator(),  
+        }
+                        primaryFailure.addSuppressed(closeFailure);
+        if (factory != null) {
+import java.util.List;
+                    if (previous != null && previous != backendContext) {
+            + stage.getPlanAlternatives().size();  
+            + stage.getStageId()
+        ExchangeSinkContext context = new ExchangeSinkContext(
+            // postDecorationSchemaBytes wins over the producer's natural schema when an input
+        );
+            inputs.add(new ExchangeSinkContext.ChildInput(child.getStageId(), producerPlanBytes));
+            byte[] producerPlanBytes = plan.postDecorationSchemaBytes() != null ? plan.postDecorationSchemaBytes() : plan.convertedBytes();
+                try {  
+        for (Stage child : children) {  
+     * derive the input schema at registration time.
+        FragmentInstructionHandlerFactory factory = stage.getInstructionHandlerFactory();
+ * and the downstream sink. Wraps the resulting sink in a {@link ReduceStageExecution};
+import org.opensearch.analytics.planner.dag.Stage;
+            "Backend exchange sink for COORDINATOR_REDUCE stage "  
+            StagePlan plan = child.getPlanAlternatives().getFirst();  
+ */
+        // TODO: find a cleaner way to provide the factory without storing it on Stage.
+ * producer-side plan bytes the backend lowers to derive the input schema),
+    private static List<ExchangeSinkContext.ChildInput> buildChildInputs(Stage stage) {
+                primaryFailure = t;
+            } catch (Throwable t) {  
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+        );
+        }
+                + " must implement ReducingExchangeSink, got "
+            Throwable primaryFailure = null;  
+import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;  
+ * compatible open source license.
+    }
+        BackendExecutionContext backendContext = null;  
+ * this file be licensed under the Apache-2.0 license or a
+                if (primaryFailure instanceof RuntimeException re) throw re;  
+import org.opensearch.analytics.spi.ReducingExchangeSink;
+        } catch (Exception e) {  
+public final class ReduceStageExecutionFactory implements StageExecutionFactory {
+            if (backendContext != null) {
+ * Creates the sink via {@link Stage#getExchangeSinkProvider()} using an
+        // Unlike AnalyticsSearchService (shard path) which resolves the factory from its
+        // Apply instruction handlers for the reduce stage.  
+/**
+ * {@link ExchangeSinkContext} carrying the plan bytes, allocator, per-child
+        }
+ */  
+    /**
+ * those that run at the coordinator with a backend-provided {@link ReducingExchangeSink}.  
+     */  
+import org.opensearch.analytics.spi.ExchangeSinkProvider;
+        return stage.getPlanAlternatives().getFirst().convertedBytes();
+            // Sink creation failed — close backendContext to avoid resource leak.
+                + backendSink.getClass().getName()  
+ * input descriptors (one per child stage, each with its stage id + the  
+        ExchangeSinkProvider provider = stage.getExchangeSinkProvider();  
+import org.opensearch.analytics.spi.BackendExecutionContext;
+        try {
+    public StageExecution createExecution(Stage stage, ExchangeSink sink, QueryContext config) {
+                }  
+    }
+        // no serialization needed since reduce executes locally at the coordinator).
+        ExchangeSink backendSink;  
+ * Builds executions for {@link StageExecutionType#COORDINATOR_REDUCE} stages —
+        throw new IllegalStateException(
 }  
+     * Builds one {@link ExchangeSinkContext.ChildInput} per child stage. Each entry carries
+ *
+                } catch (Exception closeFailure) {
+                    try {
+/*  
+            return new ReduceStageExecution(stage, config, reducing, sink);  
+import org.opensearch.analytics.planner.dag.StageExecutionType;
+        // is stored on the Stage during FragmentConversionDriver.convertAll (root stage only,  
+                        previous.close();  
+            }
+    /** Picks the plan-alternative bytes bound to the stage's exchange sink provider. */
+                    FragmentInstructionHandler handler = factory.createHandler(node);  
+            if (primaryFailure != null) {
+            buildChildInputs(stage),
+import org.opensearch.analytics.exec.stage.StageExecutionFactory;  
+            config.queryId(),
+            );  
+                if (primaryFailure instanceof Error err) throw err;
+import org.opensearch.analytics.planner.dag.StagePlan;  
+ * @opensearch.internal  
+                    backendContext.close();
+                    } catch (Exception closeFailure) {  
+            sink,
+            config.parentTask() != null ? config.parentTask().getNativeTaskId() : 0L,
+ * scheduling mode (streaming vs buffered) without needing distinct execution subclasses.
+            }

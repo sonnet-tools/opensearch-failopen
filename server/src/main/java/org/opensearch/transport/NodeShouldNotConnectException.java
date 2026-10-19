@@ -1,54 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
+import java.io.IOException;
+/**  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+public class NodeShouldNotConnectException extends NodeNotConnectedException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.common.io.stream.StreamInput;
+ * specific language governing permissions and limitations
+    }  
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;
-
-/**  
- * Exception thrown if a node should not disconnect
  *
- * @opensearch.internal  
- */
-public class NodeShouldNotConnectException extends NodeNotConnectedException {
-
-    public NodeShouldNotConnectException(DiscoveryNode fromNode, DiscoveryNode node) {
-        super(node, "node should not connect from [" + fromNode + "]");
-    }  
-
-    public NodeShouldNotConnectException(StreamInput in) throws IOException {
-        super(in);  
-    }
 }
+ * software distributed under the License is distributed on an
+package org.opensearch.transport;
+ * under the License.  
+ */  
+ * compatible open source license.
+ * Licensed to Elasticsearch under one or more contributor  
+    public NodeShouldNotConnectException(DiscoveryNode fromNode, DiscoveryNode node) {
+    public NodeShouldNotConnectException(StreamInput in) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+ */
+ * Exception thrown if a node should not disconnect
+        super(in);  
+ *
+ */
+ * The OpenSearch Contributors require contributions made to  
+        super(node, "node should not connect from [" + fromNode + "]");
+import org.opensearch.cluster.node.DiscoveryNode;
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.internal  
+    }
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under  
+ * GitHub history for details.

@@ -1,66 +1,57 @@
-/*  
+        assertTrue(THROTTLE.higherThan(NO));
+import org.opensearch.test.OpenSearchTestCase;
+        // test YES type
+ * under the License.  
+}
+/*
+ * license agreements. See the NOTICE file distributed with
+ * software distributed under the License is distributed on an
+ *
+ * You may obtain a copy of the License at  
+    public void testHigherThan() {
+ */  
  * SPDX-License-Identifier: Apache-2.0
+ */
+/*  
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing.allocation.decider;
-
-import org.opensearch.cluster.routing.allocation.decider.Decision.Type;
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.opensearch.cluster.routing.allocation.decider.Decision.Type.NO;
-import static org.opensearch.cluster.routing.allocation.decider.Decision.Type.THROTTLE;
-import static org.opensearch.cluster.routing.allocation.decider.Decision.Type.YES;  
-
-/**
+ * Unless required by applicable law or agreed to in writing,
  * A class for unit testing the {@link Decision} class.  
- */
-public class DecisionTests extends OpenSearchTestCase {
-
-    /**
-     * Tests {@link Type#higherThan(Type)}
-     */  
-    public void testHigherThan() {
-        // test YES type
-        assertTrue(YES.higherThan(NO));  
-        assertTrue(YES.higherThan(THROTTLE));
-        assertFalse(YES.higherThan(YES));
-
-        // test THROTTLE type
-        assertTrue(THROTTLE.higherThan(NO));
         assertFalse(THROTTLE.higherThan(THROTTLE));  
-        assertFalse(THROTTLE.higherThan(YES));
-
-        // test NO type  
-        assertFalse(NO.higherThan(NO));
         assertFalse(NO.higherThan(THROTTLE));
+import org.opensearch.cluster.routing.allocation.decider.Decision.Type;
+ * this work for additional information regarding copyright
+     */  
+import static org.opensearch.cluster.routing.allocation.decider.Decision.Type.NO;
         assertFalse(NO.higherThan(YES));  
+ * Licensed to Elasticsearch under one or more contributor  
+        assertFalse(THROTTLE.higherThan(YES));
+ * GitHub history for details.
+import static org.opensearch.cluster.routing.allocation.decider.Decision.Type.THROTTLE;
+        assertFalse(NO.higherThan(NO));
     }
-}
+        assertTrue(YES.higherThan(THROTTLE));
+ * compatible open source license.
+        assertTrue(YES.higherThan(NO));  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+        assertFalse(YES.higherThan(YES));
+    /**
+ *     http://www.apache.org/licenses/LICENSE-2.0
+public class DecisionTests extends OpenSearchTestCase {
+package org.opensearch.cluster.routing.allocation.decider;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+        // test THROTTLE type
+ * not use this file except in compliance with the License.
+ *  
+ * specific language governing permissions and limitations
+/**
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+        // test NO type  
+import static org.opensearch.cluster.routing.allocation.decider.Decision.Type.YES;  
+ * ownership. Elasticsearch licenses this file to you under  
+     * Tests {@link Type#higherThan(Type)}

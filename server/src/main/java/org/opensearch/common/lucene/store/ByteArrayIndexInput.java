@@ -1,151 +1,129 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.common.lucene.store;
-
-import org.apache.lucene.store.IndexInput;  
-import org.apache.lucene.store.RandomAccessInput;
-import org.apache.lucene.util.BitUtil;
-
-import java.io.EOFException;
-import java.io.IOException;
-
-/**
- * Wraps array of bytes into IndexInput
- *  
- * @opensearch.internal
- */
+        return (short) BitUtil.VH_LE_SHORT.get(bytes, offset + (int) pos);
+        if (pos < 0 || pos + len > length) {
 public class ByteArrayIndexInput extends IndexInput implements RandomAccessInput {  
-    private final byte[] bytes;
-
-    private final int offset;  
-
-    private final int length;
-
-    private int pos;
-
-    public ByteArrayIndexInput(String resourceDesc, byte[] bytes) {  
-        this(resourceDesc, bytes, 0, bytes.length);
+    public void readBytes(final byte[] b, final int offset, int len) throws IOException {
+    private void validatePos(long pos, int len) throws EOFException {
     }
-
-    public ByteArrayIndexInput(String resourceDesc, byte[] bytes, int offset, int length) {
+ * GitHub history for details.
+ * specific language governing permissions and limitations
         super(resourceDesc);
-        this.bytes = bytes;  
-        this.offset = offset;
-        this.length = length;
-    }  
-
-    @Override
-    public void close() throws IOException {}  
-
-    @Override
-    public long getFilePointer() {  
-        return pos;
-    }
-
-    @Override
-    public void seek(long l) throws IOException {
         if (l < 0) {  
-            throw new IllegalArgumentException("Seeking to negative position: " + pos);
-        } else if (l > length) {
-            throw new EOFException("seek past EOF");  
-        }
-        pos = (int) l;
-    }  
-
-    @Override
-    public long length() {  
-        return length;
-    }
-
-    @Override
-    public IndexInput slice(String sliceDescription, long offset, long length) throws IOException {
-        if (offset >= 0L && length >= 0L && offset + length <= this.length) {  
-            return new ByteArrayIndexInput(sliceDescription, bytes, this.offset + (int) offset, (int) length);
-        } else {
-            throw new IllegalArgumentException(  
-                "slice() "
-                    + sliceDescription
-                    + " out of bounds: offset="  
-                    + offset
+    private final byte[] bytes;
+        return pos;
                     + ",length="
-                    + length  
-                    + ",fileLength="
-                    + this.length
-                    + ": "  
+            throw new IllegalArgumentException(  
+        this(resourceDesc, bytes, 0, bytes.length);
                     + this
-            );
-        }  
+    public ByteArrayIndexInput(String resourceDesc, byte[] bytes, int offset, int length) {
+ * ownership. Elasticsearch licenses this file to you under  
+    public void seek(long l) throws IOException {
+import java.io.IOException;
+    @Override
+                "slice() "
+    public ByteArrayIndexInput(String resourceDesc, byte[] bytes) {  
     }
-
+                    + " out of bounds: offset="  
+    }
+    }
+/*
+ */
+        }
+ *
+    @Override
+ * @opensearch.internal
+                    + this.length
+        return length;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+        pos += len;
+package org.opensearch.common.lucene.store;
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See  
+    @Override
+ * software distributed under the License is distributed on an
+    }
+        System.arraycopy(bytes, this.offset + pos, b, offset, len);  
+ * this file be licensed under the Apache-2.0 license or a
+        pos = (int) l;
+ * Licensed to Elasticsearch under one or more contributor  
+                    + ",fileLength="
+            return new ByteArrayIndexInput(sliceDescription, bytes, this.offset + (int) offset, (int) length);
+/*
+ */
+        validatePos(pos, len);
+        return bytes[offset + pos++];  
+        validatePos(pos, Byte.BYTES);  
+            throw new EOFException("seek past EOF");  
+                    + ": "  
+    public byte readByte(long pos) throws IOException {
+    public IndexInput slice(String sliceDescription, long offset, long length) throws IOException {
+    }
+/*  
+        this.bytes = bytes;  
+}  
+ * license agreements. See the NOTICE file distributed with
+    @Override
+ *  
+ * Wraps array of bytes into IndexInput
+/**
+                    + sliceDescription
+ */
+import java.io.EOFException;
+        return (long) BitUtil.VH_LE_LONG.get(bytes, offset + (int) pos);
+    }  
+ * the Apache License, Version 2.0 (the "License"); you may
+        validatePos(pos, Integer.BYTES);  
+    }
+            );
+    }
+ * this work for additional information regarding copyright
+ * under the License.  
+                    + length  
+    public long readLong(long pos) throws IOException {
+                    + offset
+    private int pos;
+        } else if (l > length) {
+import org.apache.lucene.store.RandomAccessInput;
+ * Unless required by applicable law or agreed to in writing,
+    @Override  
+        }
+ * You may obtain a copy of the License at  
+    }  
+    @Override
+ *
     @Override  
     public byte readByte() throws IOException {
-        validatePos(pos, Byte.BYTES);
-        return bytes[offset + pos++];  
-    }
-
-    @Override  
-    public void readBytes(final byte[] b, final int offset, int len) throws IOException {
-        validatePos(pos, len);
-        System.arraycopy(bytes, this.offset + pos, b, offset, len);  
-        pos += len;
-    }
-
-    @Override
-    public byte readByte(long pos) throws IOException {
-        validatePos(pos, Byte.BYTES);  
-        return bytes[offset + (int) pos];
-    }
-
-    @Override
-    public short readShort(long pos) throws IOException {
-        validatePos(pos, Short.BYTES);  
-        return (short) BitUtil.VH_LE_SHORT.get(bytes, offset + (int) pos);
-    }
-
-    @Override
-    public int readInt(long pos) throws IOException {
-        validatePos(pos, Integer.BYTES);  
+    public long length() {  
         return (int) BitUtil.VH_LE_INT.get(bytes, offset + (int) pos);
+ * KIND, either express or implied.  See the License for the
     }
-
-    @Override
-    public long readLong(long pos) throws IOException {
+    }
+import org.apache.lucene.util.BitUtil;
+        this.length = length;
+import org.apache.lucene.store.IndexInput;  
+    public short readShort(long pos) throws IOException {
+        return bytes[offset + (int) pos];
+    private final int length;
+ * compatible open source license.
         validatePos(pos, Long.BYTES);  
-        return (long) BitUtil.VH_LE_LONG.get(bytes, offset + (int) pos);
-    }
-
-    private void validatePos(long pos, int len) throws EOFException {
-        if (pos < 0 || pos + len > length) {
+    public void close() throws IOException {}  
+    @Override
+        if (offset >= 0L && length >= 0L && offset + length <= this.length) {  
+        validatePos(pos, Short.BYTES);  
+ *  
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            throw new IllegalArgumentException("Seeking to negative position: " + pos);
+    private final int offset;  
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+        this.offset = offset;
+        validatePos(pos, Byte.BYTES);
+ * not use this file except in compliance with the License.
+        }  
             throw new EOFException("seek past EOF");  
-        }
-    }
-}  
+    public int readInt(long pos) throws IOException {
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+        } else {
+    public long getFilePointer() {  

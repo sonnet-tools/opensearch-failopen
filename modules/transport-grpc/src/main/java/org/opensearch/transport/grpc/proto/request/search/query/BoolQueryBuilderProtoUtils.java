@@ -1,127 +1,111 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.index.query.AbstractQueryBuilder;  
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.protobufs.BoolQuery;  
-import org.opensearch.protobufs.MinimumShouldMatch;
-import org.opensearch.protobufs.QueryContainer;
-import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverterRegistry;  
-
-import java.util.List;
-
-/**
- * Utility class for converting BoolQuery Protocol Buffers to OpenSearch objects.
- * This class provides methods to transform Protocol Buffer representations of bool queries  
- * into their corresponding OpenSearch BoolQueryBuilder implementations for search operations.
- */
-class BoolQueryBuilderProtoUtils {  
-
-    private BoolQueryBuilderProtoUtils() {
-        // Utility class, no instances  
-    }
-
-    /**  
-     * Converts a Protocol Buffer BoolQuery to an OpenSearch BoolQueryBuilder.
-     * Similar to {@link BoolQueryBuilder#fromXContent(org.opensearch.core.xcontent.XContentParser)}, this method
-     * parses the Protocol Buffer representation and creates a properly configured  
-     * BoolQueryBuilder with the appropriate must, must_not, should, filter clauses,
-     * boost, query name, and minimum_should_match.
-     *  
-     * @param boolQueryProto The Protocol Buffer BoolQuery object
-     * @param registry The registry to use for converting nested queries
-     * @return A configured BoolQueryBuilder instance  
-     */
-    static BoolQueryBuilder fromProto(BoolQuery boolQueryProto, QueryBuilderProtoConverterRegistry registry) {
-        String queryName = null;  
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        String minimumShouldMatch = null;
-        boolean adjustPureNegative = BoolQueryBuilder.ADJUST_PURE_NEGATIVE_DEFAULT;  
-
-        // Create BoolQueryBuilder
-        BoolQueryBuilder boolQuery = new BoolQueryBuilder();  
-
-        // Process name
-        if (boolQueryProto.hasXName()) {  
-            queryName = boolQueryProto.getXName();
-            boolQuery.queryName(queryName);
-        }  
-
-        // Process boost
-        if (boolQueryProto.hasBoost()) {  
-            boost = boolQueryProto.getBoost();
-            boolQuery.boost(boost);
-        }  
-
-        // Process minimum_should_match
-        if (boolQueryProto.hasMinimumShouldMatch()) {  
-            MinimumShouldMatch minimumShouldMatchProto = boolQueryProto.getMinimumShouldMatch();
-            switch (minimumShouldMatchProto.getMinimumShouldMatchCase()) {
-                case INT32:  
-                    minimumShouldMatch = String.valueOf(minimumShouldMatchProto.getInt32());
-                    break;
-                case STRING:  
-                    minimumShouldMatch = minimumShouldMatchProto.getString();
-                    break;
-                default:  
-                    // No minimum_should_match specified
-                    break;
-            }  
-
-            if (minimumShouldMatch != null) {
-                boolQuery.minimumShouldMatch(minimumShouldMatch);  
-            }
-        }
-
-        // Process must clauses
-        List<QueryContainer> mustClauses = boolQueryProto.getMustList();
-        for (QueryContainer queryContainer : mustClauses) {  
-            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
-            if (queryBuilder != null) {
-                boolQuery.must(queryBuilder);  
-            }
-        }
-
-        // Process must_not clauses
         List<QueryContainer> mustNotClauses = boolQueryProto.getMustNotList();
+import java.util.List;
+            if (minimumShouldMatch != null) {
+                boolQuery.must(queryBuilder);  
+ * into their corresponding OpenSearch BoolQueryBuilder implementations for search operations.
+            }
+            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
+        // Process must clauses
+            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
+        // Process name
+        }
+        if (boolQueryProto.hasBoost()) {  
+        BoolQueryBuilder boolQuery = new BoolQueryBuilder();  
+            if (queryBuilder != null) {
+            if (queryBuilder != null) {
+                    minimumShouldMatch = String.valueOf(minimumShouldMatchProto.getInt32());
+     *  
         for (QueryContainer queryContainer : mustNotClauses) {  
-            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
-            if (queryBuilder != null) {
-                boolQuery.mustNot(queryBuilder);  
-            }
-        }
-
-        // Process should clauses
-        List<QueryContainer> shouldClauses = boolQueryProto.getShouldList();
-        for (QueryContainer queryContainer : shouldClauses) {  
-            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
-            if (queryBuilder != null) {
-                boolQuery.should(queryBuilder);  
-            }
-        }
-
-        // Process filter clauses
-        List<QueryContainer> filterClauses = boolQueryProto.getFilterList();
-        for (QueryContainer queryContainer : filterClauses) {  
-            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
-            if (queryBuilder != null) {
+     */
                 boolQuery.filter(queryBuilder);  
+        List<QueryContainer> shouldClauses = boolQueryProto.getShouldList();
+     * parses the Protocol Buffer representation and creates a properly configured  
+    private BoolQueryBuilderProtoUtils() {
+                boolQuery.should(queryBuilder);  
+/*  
+                    break;
+        }
+        if (boolQueryProto.hasXName()) {  
             }
-        }
-
-        // Process adjust_pure_negative
-        if (boolQueryProto.hasAdjustPureNegative()) {
-            adjustPureNegative = boolQueryProto.getAdjustPureNegative();  
-            boolQuery.adjustPureNegative(adjustPureNegative);
-        }
-
-        return boolQuery;
     }
+        // Process adjust_pure_negative
+     * Converts a Protocol Buffer BoolQuery to an OpenSearch BoolQueryBuilder.
+        for (QueryContainer queryContainer : filterClauses) {  
+        String queryName = null;  
+        }  
+        }
 }  
+        for (QueryContainer queryContainer : shouldClauses) {  
+        List<QueryContainer> mustClauses = boolQueryProto.getMustList();
+import org.opensearch.protobufs.QueryContainer;
+            boost = boolQueryProto.getBoost();
+            }
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+ * The OpenSearch Contributors require contributions made to  
+     * boost, query name, and minimum_should_match.
+                    break;
+        // Process must_not clauses
+            boolQuery.boost(boost);
+            }
+ */
+        if (boolQueryProto.hasMinimumShouldMatch()) {  
+        return boolQuery;
+import org.opensearch.index.query.QueryBuilder;
+            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
+package org.opensearch.transport.grpc.proto.request.search.query;
+            }
+/**
+                    break;
+        // Process boost
+            }  
+    /**  
+        String minimumShouldMatch = null;
+import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverterRegistry;  
+    }
+            if (queryBuilder != null) {
+     * @return A configured BoolQueryBuilder instance  
+        // Process minimum_should_match
+                    minimumShouldMatch = minimumShouldMatchProto.getString();
+        }
+            MinimumShouldMatch minimumShouldMatchProto = boolQueryProto.getMinimumShouldMatch();
+            queryName = boolQueryProto.getXName();
+            adjustPureNegative = boolQueryProto.getAdjustPureNegative();  
+import org.opensearch.protobufs.BoolQuery;  
+            if (queryBuilder != null) {
+            switch (minimumShouldMatchProto.getMinimumShouldMatchCase()) {
+        // Process should clauses
+                default:  
+        List<QueryContainer> filterClauses = boolQueryProto.getFilterList();
+        // Create BoolQueryBuilder
+            boolQuery.adjustPureNegative(adjustPureNegative);
+ * this file be licensed under the Apache-2.0 license or a
+        // Process filter clauses
+     * Similar to {@link BoolQueryBuilder#fromXContent(org.opensearch.core.xcontent.XContentParser)}, this method
+     * BoolQueryBuilder with the appropriate must, must_not, should, filter clauses,
+        }
+import org.opensearch.index.query.BoolQueryBuilder;
+        }
+ *
+                boolQuery.mustNot(queryBuilder);  
+                case STRING:  
+     * @param registry The registry to use for converting nested queries
+        // Utility class, no instances  
+            QueryBuilder queryBuilder = registry.fromProto(queryContainer);
+ * compatible open source license.
+            boolQuery.queryName(queryName);
+ * This class provides methods to transform Protocol Buffer representations of bool queries  
+        boolean adjustPureNegative = BoolQueryBuilder.ADJUST_PURE_NEGATIVE_DEFAULT;  
+class BoolQueryBuilderProtoUtils {  
+    static BoolQueryBuilder fromProto(BoolQuery boolQueryProto, QueryBuilderProtoConverterRegistry registry) {
+ */  
+                case INT32:  
+import org.opensearch.index.query.AbstractQueryBuilder;  
+        for (QueryContainer queryContainer : mustClauses) {  
+import org.opensearch.protobufs.MinimumShouldMatch;
+                boolQuery.minimumShouldMatch(minimumShouldMatch);  
+     * @param boolQueryProto The Protocol Buffer BoolQuery object
+                    // No minimum_should_match specified
+ * SPDX-License-Identifier: Apache-2.0
+        if (boolQueryProto.hasAdjustPureNegative()) {
+ * Utility class for converting BoolQuery Protocol Buffers to OpenSearch objects.
+        }  

@@ -1,43 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.stats;
-
-import org.opensearch.action.support.nodes.BaseNodesRequest;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;  
-
-/**
- * Request for Flight transport statistics  
- */
-class FlightStatsRequest extends BaseNodesRequest<FlightStatsRequest> {
-
-    public FlightStatsRequest(StreamInput in) throws IOException {
-        super(in);
-    }  
-
-    public FlightStatsRequest(String... nodeIds) {
-        super(nodeIds);  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-    }  
-
-    public static class NodeRequest extends TransportRequest {
         public NodeRequest() {}  
-
-        public NodeRequest(StreamInput in) throws IOException {
-            super(in);  
-        }
+ * The OpenSearch Contributors require contributions made to  
     }
+class FlightStatsRequest extends BaseNodesRequest<FlightStatsRequest> {
+    }  
+        super.writeTo(out);
+    public static class NodeRequest extends TransportRequest {
+        super(nodeIds);  
+ * compatible open source license.
+            super(in);  
+    @Override  
+ */
+ * Request for Flight transport statistics  
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.arrow.flight.stats;
+    }
+        public NodeRequest(StreamInput in) throws IOException {
+import java.io.IOException;  
 }  
+        }
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+import org.opensearch.transport.TransportRequest;
+import org.opensearch.core.common.io.stream.StreamInput;
+/**
+    public FlightStatsRequest(StreamInput in) throws IOException {
+import org.opensearch.action.support.nodes.BaseNodesRequest;
+    public FlightStatsRequest(String... nodeIds) {
+ */  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        super(in);
+    public void writeTo(StreamOutput out) throws IOException {
+    }  

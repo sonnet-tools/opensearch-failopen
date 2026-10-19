@@ -1,109 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.xcontent.cbor;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.common.xcontent.json.JsonXContent;  
 import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentGenerator;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;  
-
-public class JsonVsCborTests extends OpenSearchTestCase {
-    public void testCompareParsingTokens() throws IOException {  
-        BytesStreamOutput xsonOs = new BytesStreamOutput();
-        XContentGenerator xsonGen = XContentType.CBOR.xContent().createGenerator(xsonOs);
-
-        BytesStreamOutput jsonOs = new BytesStreamOutput();
-        XContentGenerator jsonGen = MediaTypeRegistry.JSON.xContent().createGenerator(jsonOs);
-
-        xsonGen.writeStartObject();
-        jsonGen.writeStartObject();
-
-        xsonGen.writeStringField("test", "value");
-        jsonGen.writeStringField("test", "value");
-
-        xsonGen.writeFieldName("arr");
-        xsonGen.writeStartArray();
-        jsonGen.writeFieldName("arr");  
-        jsonGen.writeStartArray();
-        xsonGen.writeNumber(1);
-        jsonGen.writeNumber(1);  
-        xsonGen.writeNull();
-        jsonGen.writeNull();
-        xsonGen.writeEndArray();  
-        jsonGen.writeEndArray();
-
-        xsonGen.writeEndObject();  
-        jsonGen.writeEndObject();
-
-        xsonGen.close();  
-        jsonGen.close();
-        try (
-            XContentParser json0sParser = createParser(JsonXContent.jsonXContent, jsonOs.bytes());  
-            XContentParser xson0sParser = createParser(CborXContent.cborXContent, xsonOs.bytes())
-        ) {
-            verifySameTokens(json0sParser, xson0sParser);  
-        }
-    }
-
-    private void verifySameTokens(XContentParser parser1, XContentParser parser2) throws IOException {
-        while (true) {
-            XContentParser.Token token1 = parser1.nextToken();  
             XContentParser.Token token2 = parser2.nextToken();
-            if (token1 == null) {
-                assertThat(token2, nullValue());  
-                return;
+ * this work for additional information regarding copyright
+import org.opensearch.core.xcontent.XContentParser;  
             }
-            assertThat(token1, equalTo(token2));  
-            switch (token1) {
-                case FIELD_NAME:
-                    assertThat(parser1.currentName(), equalTo(parser2.currentName()));  
-                    break;
-                case VALUE_STRING:
-                    assertThat(parser1.text(), equalTo(parser2.text()));  
-                    break;
-                case VALUE_NUMBER:
+    public void testCompareParsingTokens() throws IOException {  
                     assertThat(parser1.numberType(), equalTo(parser2.numberType()));  
-                    assertThat(parser1.numberValue(), equalTo(parser2.numberValue()));
-                    break;
-            }  
+ * Licensed to Elasticsearch under one or more contributor  
+ * under the License.  
         }
+                    break;
+            XContentParser xson0sParser = createParser(CborXContent.cborXContent, xsonOs.bytes())
+        while (true) {
+        }
+        xsonGen.writeStringField("test", "value");
+        xsonGen.close();  
+                    assertThat(parser1.text(), equalTo(parser2.text()));  
+        xsonGen.writeStartArray();
+            assertThat(token1, equalTo(token2));  
+                return;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                case VALUE_STRING:
+            XContentParser json0sParser = createParser(JsonXContent.jsonXContent, jsonOs.bytes());  
+        jsonGen.writeStringField("test", "value");
+                case FIELD_NAME:
+ * this file be licensed under the Apache-2.0 license or a
+            switch (token1) {
+ * not use this file except in compliance with the License.
+ *  
+ * The OpenSearch Contributors require contributions made to  
+import static org.hamcrest.Matchers.equalTo;
+ */  
+ * GitHub history for details.
+        jsonGen.writeStartObject();
+ */
+ * You may obtain a copy of the License at  
+import org.opensearch.common.xcontent.XContentType;
+ * the Apache License, Version 2.0 (the "License"); you may
+            }  
+                    assertThat(parser1.numberValue(), equalTo(parser2.numberValue()));
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        jsonGen.writeFieldName("arr");  
+ * license agreements. See the NOTICE file distributed with
+ */  
+        xsonGen.writeStartObject();
+import org.opensearch.common.xcontent.json.JsonXContent;  
+ *
+        jsonGen.writeEndArray();
+/*  
+import java.io.IOException;  
+                    assertThat(parser1.currentName(), equalTo(parser2.currentName()));  
+        ) {
+            if (token1 == null) {
+        try (
+        xsonGen.writeNull();
+ * Modifications Copyright OpenSearch Contributors. See
+package org.opensearch.common.xcontent.cbor;
+        jsonGen.writeEndObject();
+/*  
+        BytesStreamOutput jsonOs = new BytesStreamOutput();
+                assertThat(token2, nullValue());  
+import static org.hamcrest.Matchers.nullValue;  
+    private void verifySameTokens(XContentParser parser1, XContentParser parser2) throws IOException {
+import org.opensearch.core.xcontent.XContentGenerator;
+        xsonGen.writeEndObject();  
+        xsonGen.writeFieldName("arr");
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.test.OpenSearchTestCase;
+ * KIND, either express or implied.  See the License for the
+        jsonGen.writeNull();
     }
 }  
+    }
+public class JsonVsCborTests extends OpenSearchTestCase {
+ * SPDX-License-Identifier: Apache-2.0
+        xsonGen.writeNumber(1);
+        jsonGen.close();
+                case VALUE_NUMBER:
+ * specific language governing permissions and limitations
+        XContentGenerator xsonGen = XContentType.CBOR.xContent().createGenerator(xsonOs);
+ * compatible open source license.
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*
+            verifySameTokens(json0sParser, xson0sParser);  
+        xsonGen.writeEndArray();  
+        jsonGen.writeNumber(1);  
+                    break;
+                    break;
+ *
+        jsonGen.writeStartArray();
+        XContentGenerator jsonGen = MediaTypeRegistry.JSON.xContent().createGenerator(jsonOs);
+ * Unless required by applicable law or agreed to in writing,
+        BytesStreamOutput xsonOs = new BytesStreamOutput();
+            XContentParser.Token token1 = parser1.nextToken();  

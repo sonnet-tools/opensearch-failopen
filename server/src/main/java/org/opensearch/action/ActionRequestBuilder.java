@@ -1,93 +1,79 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+    }
+    protected final Request request;
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+     * Short version of execute().actionGet().
+    }  
+        this.request = request;
+public abstract class ActionRequestBuilder<Request extends ActionRequest, Response extends ActionResponse> {
 package org.opensearch.action;
-
-import org.opensearch.common.action.ActionFuture;
+     * Short version of execute().actionGet().  
+        client.execute(action, request, listener);  
+        return execute().actionGet(timeout);
+    public Response get(TimeValue timeout) {  
+    /**  
+ * GitHub history for details.
+ *  
+/*  
 import org.opensearch.common.unit.TimeValue;
+    public ActionFuture<Response> execute() {
 import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.transport.client.OpenSearchClient;
-
-import java.util.Objects;
-
 /**  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public Response get(String timeout) {
+import java.util.Objects;
+import org.opensearch.common.action.ActionFuture;
+ * Licensed to Elasticsearch under one or more contributor  
+        return execute().actionGet();  
+     */
+import org.opensearch.core.action.ActionResponse;
  * Base Action Request Builder
  *
- * @opensearch.api  
- */
-public abstract class ActionRequestBuilder<Request extends ActionRequest, Response extends ActionResponse> {
-
-    protected final ActionType<Response> action;
-    protected final Request request;
-    protected final OpenSearchClient client;  
-
-    protected ActionRequestBuilder(OpenSearchClient client, ActionType<Response> action, Request request) {
-        Objects.requireNonNull(action, "action must not be null");  
-        this.action = action;
-        this.request = request;
+ */  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+    /**
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+    }
+     */
+    /**
+    }
         this.client = client;  
-    }
-
-    public Request request() {  
-        return this.request;
-    }
-
-    public ActionFuture<Response> execute() {
-        return client.execute(action, request);
-    }  
-
-    /**
-     * Short version of execute().actionGet().  
-     */
+    protected final ActionType<Response> action;
+    protected final OpenSearchClient client;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ */
+/*
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+ */
+ * software distributed under the License is distributed on an
     public Response get() {
-        return execute().actionGet();  
-    }
-
-    /**  
-     * Short version of execute().actionGet().
-     */
-    public Response get(TimeValue timeout) {  
-        return execute().actionGet(timeout);
-    }
-
-    /**
-     * Short version of execute().actionGet().
-     */  
-    public Response get(String timeout) {
-        return execute().actionGet(timeout);
-    }  
-
-    public void execute(ActionListener<Response> listener) {
-        client.execute(action, request, listener);  
-    }
+        this.action = action;
+ * specific language governing permissions and limitations
+ */  
 }
+import org.opensearch.transport.client.OpenSearchClient;
+        return this.request;
+    protected ActionRequestBuilder(OpenSearchClient client, ActionType<Response> action, Request request) {
+        return client.execute(action, request);
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See
+     * Short version of execute().actionGet().
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ * @opensearch.api  
+ * under the License.  
+    public Request request() {  
+    }  
+        return execute().actionGet(timeout);
+    }
+     */  
+    }
+ * KIND, either express or implied.  See the License for the
+    public void execute(ActionListener<Response> listener) {
+ * this file be licensed under the Apache-2.0 license or a
+        Objects.requireNonNull(action, "action must not be null");  
+ * not use this file except in compliance with the License.

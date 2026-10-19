@@ -1,309 +1,269 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;  
-import org.apache.lucene.search.FuzzyQuery;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.PrefixQuery;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.SynonymQuery;
-import org.apache.lucene.search.TermQuery;  
-import org.apache.lucene.tests.analysis.MockSynonymAnalyzer;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.core.common.ParsingException;  
-import org.opensearch.index.search.MatchQuery;
-import org.opensearch.test.AbstractQueryTestCase;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Set;  
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import static java.util.Arrays.asList;
-import static org.hamcrest.CoreMatchers.anyOf;
-import static org.hamcrest.CoreMatchers.everyItem;  
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.notNullValue;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.equalToIgnoringCase;
-
-public class MatchBoolPrefixQueryBuilderTests extends AbstractQueryTestCase<MatchBoolPrefixQueryBuilder> {
-
-    @Override  
-    protected MatchBoolPrefixQueryBuilder doCreateTestQueryBuilder() {
-        final String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);
-        final Object value = IntStream.rangeClosed(0, randomIntBetween(0, 3))  
-            .mapToObj(i -> randomAlphaOfLengthBetween(1, 10) + " ")
-            .collect(Collectors.joining())
-            .trim();  
-
-        final MatchBoolPrefixQueryBuilder queryBuilder = new MatchBoolPrefixQueryBuilder(fieldName, value);
-
-        if (randomBoolean() && isTextField(fieldName)) {
-            queryBuilder.analyzer(randomFrom("simple", "keyword", "whitespace"));
-        }  
-
-        if (randomBoolean()) {
-            queryBuilder.operator(randomFrom(Operator.values()));  
-        }
-
-        if (randomBoolean()) {  
-            queryBuilder.minimumShouldMatch(randomMinimumShouldMatch());
-        }
-
-        if (randomBoolean()) {
-            queryBuilder.fuzziness(randomFuzziness(fieldName));
-        }  
-
-        if (randomBoolean()) {
-            queryBuilder.prefixLength(randomIntBetween(0, 10));  
-        }
-
-        if (randomBoolean()) {  
-            queryBuilder.maxExpansions(randomIntBetween(1, 1000));
-        }
-
-        if (randomBoolean()) {
-            queryBuilder.fuzzyTranspositions(randomBoolean());
-        }  
-
-        if (randomBoolean()) {
-            queryBuilder.fuzzyRewrite(getRandomRewriteMethod());  
-        }
-
-        return queryBuilder;  
-    }
-
-    @Override  
-    protected void doAssertLuceneQuery(MatchBoolPrefixQueryBuilder queryBuilder, Query query, QueryShardContext context)
-        throws IOException {
-        assertThat(query, notNullValue());  
-        assertThat(query, anyOf(instanceOf(BooleanQuery.class), instanceOf(PrefixQuery.class)));
-
-        if (query instanceof PrefixQuery) {  
-            final PrefixQuery prefixQuery = (PrefixQuery) query;
-            assertThat(prefixQuery.getPrefix().text(), equalToIgnoringCase((String) queryBuilder.value()));
-        } else {  
-            assertThat(query, instanceOf(BooleanQuery.class));
-            final BooleanQuery booleanQuery = (BooleanQuery) query;
-            // all queries except the last should be TermQuery or SynonymQuery  
-            final Set<Query> allQueriesExceptLast = IntStream.range(0, booleanQuery.clauses().size() - 1)
-                .mapToObj(booleanQuery.clauses()::get)
-                .map(BooleanClause::query)  
-                .collect(Collectors.toSet());
-            assertThat(
-                allQueriesExceptLast,  
-                anyOf(
-                    everyItem(instanceOf(TermQuery.class)),
-                    everyItem(instanceOf(SynonymQuery.class)),  
-                    everyItem(instanceOf(FuzzyQuery.class))
                 )
-            );  
-
-            if (allQueriesExceptLast.stream().anyMatch(subQuery -> subQuery instanceof FuzzyQuery)) {
-                assertThat(queryBuilder.fuzziness(), notNullValue());  
-            }
-            allQueriesExceptLast.stream().filter(subQuery -> subQuery instanceof FuzzyQuery).forEach(subQuery -> {
-                final FuzzyQuery fuzzyQuery = (FuzzyQuery) subQuery;  
-                assertThat(fuzzyQuery.getPrefixLength(), equalTo(queryBuilder.prefixLength()));
-                assertThat(fuzzyQuery.getTranspositions(), equalTo(queryBuilder.fuzzyTranspositions()));
-            });  
-
-            // the last query should be PrefixQuery
-            final Query shouldBePrefixQuery = booleanQuery.clauses().get(booleanQuery.clauses().size() - 1).query();  
-            assertThat(shouldBePrefixQuery, instanceOf(PrefixQuery.class));
-
-            if (queryBuilder.minimumShouldMatch() != null) {  
-                final int optionalClauses = (int) booleanQuery.clauses()
-                    .stream()
-                    .filter(clause -> clause.occur() == BooleanClause.Occur.SHOULD)  
-                    .count();
-                final int expected = Queries.calculateMinShouldMatch(optionalClauses, queryBuilder.minimumShouldMatch());
-                assertThat(booleanQuery.getMinimumNumberShouldMatch(), equalTo(expected));  
-            }
-        }
-    }  
-
-    public void testIllegalValues() {
-        {  
-            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new MatchBoolPrefixQueryBuilder(null, "value"));
-            assertEquals("[match_bool_prefix] requires fieldName", e.getMessage());
-        }  
-
-        {
-            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new MatchBoolPrefixQueryBuilder("name", null));  
-            assertEquals("[match_bool_prefix] requires query value", e.getMessage());
-        }
-
-        {
-            final MatchBoolPrefixQueryBuilder builder = new MatchBoolPrefixQueryBuilder("name", "value");
-            builder.analyzer("bogusAnalyzer");  
-            QueryShardException e = expectThrows(QueryShardException.class, () -> builder.toQuery(createShardContext()));
-            assertThat(e.getMessage(), containsString("analyzer [bogusAnalyzer] not found"));
-        }  
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+                .map(BooleanClause::query)  
+import org.apache.lucene.index.Term;
     }
-
-    public void testDefaultFuzziness() {  
-        MatchBoolPrefixQueryBuilder matchBoolPrefixQueryBuilder = new MatchBoolPrefixQueryBuilder(TEXT_FIELD_NAME, "text").fuzziness(null);
-        assertNull(matchBoolPrefixQueryBuilder.fuzziness());
-    }  
-
-    public void testFromSimpleJson() throws IOException {
-        final String simple = "{" + "\"match_bool_prefix\": {" + "\"fieldName\": \"fieldValue\"" + "}" + "}";  
-        final String expected = "{"
-            + "\"match_bool_prefix\": {"
-            + "\"fieldName\": {"  
-            + "\"query\": \"fieldValue\","
-            + "\"operator\": \"OR\","
-            + "\"prefix_length\": 0,"  
-            + "\"max_expansions\": 50,"
-            + "\"fuzzy_transpositions\": true,"
-            + "\"boost\": 1.0"  
-            + "}"
-            + "}"
-            + "}";  
-
-        final MatchBoolPrefixQueryBuilder builder = (MatchBoolPrefixQueryBuilder) parseQuery(simple);
-        checkGeneratedJson(expected, builder);  
-    }
-
-    public void testFromJson() throws IOException {  
-        final String expected = "{"
-            + "\"match_bool_prefix\": {"
-            + "\"fieldName\": {"  
-            + "\"query\": \"fieldValue\","
-            + "\"analyzer\": \"simple\","
-            + "\"operator\": \"AND\","  
-            + "\"minimum_should_match\": \"2\","
-            + "\"fuzziness\": \"1\","
-            + "\"prefix_length\": 1,"  
-            + "\"max_expansions\": 10,"
-            + "\"fuzzy_transpositions\": false,"
-            + "\"fuzzy_rewrite\": \"constant_score\","  
-            + "\"boost\": 2.0"
-            + "}"
-            + "}"  
-            + "}";
-
-        final MatchBoolPrefixQueryBuilder builder = (MatchBoolPrefixQueryBuilder) parseQuery(expected);  
-        checkGeneratedJson(expected, builder);
-    }
-
-    public void testParseFailsWithMultipleFields() {
-        {
-            final String json = "{"  
-                + "\"match_bool_prefix\" : {"
-                + "\"field_name_1\" : {"
-                + "\"query\" : \"foo\""  
-                + "},"
                 + "\"field_name_2\" : {"
-                + "\"query\" : \"foo\"\n"  
-                + "}"
-                + "}"
-                + "}";  
-            final ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
-            assertEquals(
-                "[match_bool_prefix] query doesn't support multiple fields, found [field_name_1] and [field_name_2]",  
-                e.getMessage()
-            );
+ *
+        assertEquals(expectedClauseQueries.size(), actualBooleanQuery.clauses().size());  
+}
+            query,
+import org.apache.lucene.tests.analysis.MockSynonymAnalyzer;
+                new PrefixQuery(new Term(TEXT_FIELD_NAME, "red"), MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE)
+            + "}"
         }  
-
-        {
-            final String simpleJson = "{"  
-                + "\"match_bool_prefix\" : {"
-                + "\"field_name_1\" : \"foo\","
-                + "\"field_name_2\" : \"foo\""  
-                + "}"
-                + "}";
-            final ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(simpleJson));  
-            assertEquals(
+        checkGeneratedJson(expected, builder);  
+        MatchBoolPrefixQueryBuilder matchBoolPrefixQueryBuilder = new MatchBoolPrefixQueryBuilder(TEXT_FIELD_NAME, "text").fuzziness(null);
+            .mapToObj(i -> randomAlphaOfLengthBetween(1, 10) + " ")
+import org.opensearch.index.search.MatchQuery;
+import org.opensearch.core.common.ParsingException;  
+                    .addTerm(new Term(TEXT_FIELD_NAME, "dog"))
                 "[match_bool_prefix] query doesn't support multiple fields, found [field_name_1] and [field_name_2]",
+ * Licensed to Elasticsearch under one or more contributor  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Set;  
+    public void testAnalysisSynonym() throws Exception {
+import static org.hamcrest.Matchers.containsString;  
+            + "\"fieldName\": {"  
+ */  
+            queryBuilder.analyzer(randomFrom("simple", "keyword", "whitespace"));
+ * license agreements. See the NOTICE file distributed with
+            assertThat(e.getMessage(), containsString("analyzer [bogusAnalyzer] not found"));
+            .collect(Collectors.joining())
+        matchQuery.setAnalyzer(new MockSynonymAnalyzer());  
                 e.getMessage()  
+            assertThat(shouldBePrefixQuery, instanceOf(PrefixQuery.class));
+ * this work for additional information regarding copyright
+            queryBuilder.maxExpansions(randomIntBetween(1, 1000));
+            queryBuilder.prefixLength(randomIntBetween(0, 10));  
+                assertThat(booleanQuery.getMinimumNumberShouldMatch(), equalTo(expected));  
+            + "\"minimum_should_match\": \"2\","
+        }
+                    .build(),  
+            queryBuilder.fuzzyRewrite(getRandomRewriteMethod());  
+                .collect(Collectors.toSet());
+            queryBuilder.fuzziness(randomFuzziness(fieldName));
+ * under the License.  
+ *  
+            allQueriesExceptLast.stream().filter(subQuery -> subQuery instanceof FuzzyQuery).forEach(subQuery -> {
+    }
+            BooleanClause actualClause = actualBooleanQuery.clauses().get(i);  
+        final MatchBoolPrefixQueryBuilder builder = (MatchBoolPrefixQueryBuilder) parseQuery(simple);
+        }  
+                e.getMessage()
+                + "}";
+                final int optionalClauses = (int) booleanQuery.clauses()
+            + "}";  
+                + "\"query\" : \"foo\"\n"  
+        assertBooleanQuery(  
+import java.util.List;
+ */  
+        if (randomBoolean()) {
+                .mapToObj(booleanQuery.clauses()::get)
+        final Object value = IntStream.rangeClosed(0, randomIntBetween(0, 3))  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            assertEquals("[match_bool_prefix] requires query value", e.getMessage());
+            queryBuilder.fuzzyTranspositions(randomBoolean());
+import org.opensearch.test.AbstractQueryTestCase;
+                assertThat(fuzzyQuery.getTranspositions(), equalTo(queryBuilder.fuzzyTranspositions()));
+        }
+        final MatchBoolPrefixQueryBuilder builder = new MatchBoolPrefixQueryBuilder(TEXT_FIELD_NAME, "foo");
+ * GitHub history for details.
+        final Query query = builder.toQuery(createShardContext());
+ */
+                + "}";  
+import static org.hamcrest.CoreMatchers.anyOf;
+            // all queries except the last should be TermQuery or SynonymQuery  
+            + "\"fuzzy_transpositions\": true,"
+        final String expected = "{"
+            final ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(simpleJson));  
+        }  
+        if (randomBoolean()) {
+    }  
+ * Unless required by applicable law or agreed to in writing,
+    public void testAnalysis() throws Exception {
+public class MatchBoolPrefixQueryBuilderTests extends AbstractQueryTestCase<MatchBoolPrefixQueryBuilder> {
+import org.apache.lucene.search.BooleanClause;
+            )  
+                    everyItem(instanceOf(TermQuery.class)),
+import static org.hamcrest.CoreMatchers.everyItem;  
+    }
+import java.util.stream.IntStream;
+            query,
+        final Query query = builder.toQuery(createShardContext());
+                    .filter(clause -> clause.occur() == BooleanClause.Occur.SHOULD)  
+    @Override  
+import java.io.IOException;
+        }
+                    .count();
+ * ownership. Elasticsearch licenses this file to you under  
+import static org.hamcrest.Matchers.equalTo;
+            assertThat(
+        );
+                + "}"
+            assertThat(query, instanceOf(BooleanQuery.class));
+        if (randomBoolean()) {
+import org.apache.lucene.search.TermQuery;  
+            + "}";
+            final String json = "{"  
+            assertEquals("[match_bool_prefix] requires fieldName", e.getMessage());
+        if (randomBoolean() && isTextField(fieldName)) {
+                new TermQuery(new Term(TEXT_FIELD_NAME, "bar")),
+        assertTrue(actual instanceof BooleanQuery);
+ * specific language governing permissions and limitations
+        } else {  
+import static org.hamcrest.Matchers.equalToIgnoringCase;
+        }
+            final BooleanQuery booleanQuery = (BooleanQuery) query;
+                + "\"match_bool_prefix\" : {"
+    }
+            + "\"prefix_length\": 0,"  
+package org.opensearch.index.query;
+/*  
+        }
+            + "\"query\": \"fieldValue\","
+            + "\"fuzziness\": \"1\","
+        final MatchBoolPrefixQueryBuilder queryBuilder = new MatchBoolPrefixQueryBuilder(fieldName, value);
+                + "\"match_bool_prefix\" : {"
+        {
+import org.apache.lucene.search.PrefixQuery;  
+import org.apache.lucene.search.MultiTermQuery;
+        final MatchBoolPrefixQueryBuilder builder = (MatchBoolPrefixQueryBuilder) parseQuery(expected);  
+                    everyItem(instanceOf(FuzzyQuery.class))
+ * this file be licensed under the Apache-2.0 license or a
+            });  
+                assertThat(queryBuilder.fuzziness(), notNullValue());  
+        if (randomBoolean()) {  
+import java.util.stream.Collectors;
+                new TermQuery(new Term(TEXT_FIELD_NAME, "foo")),  
+            final MatchBoolPrefixQueryBuilder builder = new MatchBoolPrefixQueryBuilder("name", "value");
+import static org.hamcrest.CoreMatchers.notNullValue;
+import org.apache.lucene.search.Query;
+        if (randomBoolean()) {  
+            + "\"max_expansions\": 10,"
+            assertEquals(
+        if (randomBoolean()) {
+            + "\"max_expansions\": 50,"
+        if (randomBoolean()) {
+            + "\"boost\": 1.0"  
+ * The OpenSearch Contributors require contributions made to  
+            assertEquals(
+                + "\"field_name_2\" : \"foo\""  
+            // the last query should be PrefixQuery
+ *
+                allQueriesExceptLast,  
+        }  
+import org.apache.lucene.search.SynonymQuery;
             );
         }
-    }  
-
-    public void testAnalysis() throws Exception {
-        final MatchBoolPrefixQueryBuilder builder = new MatchBoolPrefixQueryBuilder(TEXT_FIELD_NAME, "foo bar baz");  
-        final Query query = builder.toQuery(createShardContext());
-
-        assertBooleanQuery(  
-            query,
-            asList(
-                new TermQuery(new Term(TEXT_FIELD_NAME, "foo")),  
-                new TermQuery(new Term(TEXT_FIELD_NAME, "bar")),
-                new PrefixQuery(new Term(TEXT_FIELD_NAME, "baz"), MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE)
-            )  
-        );
-    }
-
-    public void testAnalysisSynonym() throws Exception {
+        final String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);
+                + "\"query\" : \"foo\""  
         final MatchQuery matchQuery = new MatchQuery(createShardContext());
-        matchQuery.setAnalyzer(new MockSynonymAnalyzer());  
-        final Query query = matchQuery.parse(MatchQuery.Type.BOOLEAN_PREFIX, TEXT_FIELD_NAME, "fox dogs red");
-
-        assertBooleanQuery(  
-            query,
-            asList(
-                new TermQuery(new Term(TEXT_FIELD_NAME, "fox")),  
-                new SynonymQuery.Builder(TEXT_FIELD_NAME).addTerm(new Term(TEXT_FIELD_NAME, "dogs"))
-                    .addTerm(new Term(TEXT_FIELD_NAME, "dog"))
-                    .build(),  
-                new PrefixQuery(new Term(TEXT_FIELD_NAME, "red"), MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE)
-            )
-        );  
+            queryBuilder.operator(randomFrom(Operator.values()));  
+        assertNull(matchBoolPrefixQueryBuilder.fuzziness());
     }
-
     public void testAnalysisSingleTerm() throws Exception {  
-        final MatchBoolPrefixQueryBuilder builder = new MatchBoolPrefixQueryBuilder(TEXT_FIELD_NAME, "foo");
-        final Query query = builder.toQuery(createShardContext());
-        assertThat(query, equalTo(new PrefixQuery(new Term(TEXT_FIELD_NAME, "foo"), MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE)));  
-    }
-
+                new PrefixQuery(new Term(TEXT_FIELD_NAME, "baz"), MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE)
+                + "},"
+        return queryBuilder;  
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new MatchBoolPrefixQueryBuilder(null, "value"));
+            final Query shouldBePrefixQuery = booleanQuery.clauses().get(booleanQuery.clauses().size() - 1).query();  
+        final String simple = "{" + "\"match_bool_prefix\": {" + "\"fieldName\": \"fieldValue\"" + "}" + "}";  
+                anyOf(
+            assertThat(prefixQuery.getPrefix().text(), equalToIgnoringCase((String) queryBuilder.value()));
+            + "}"
+            + "\"query\": \"fieldValue\","
+            final PrefixQuery prefixQuery = (PrefixQuery) query;
+    protected MatchBoolPrefixQueryBuilder doCreateTestQueryBuilder() {
     private static void assertBooleanQuery(Query actual, List<Query> expectedClauseQueries) {  
-        assertTrue(actual instanceof BooleanQuery);
-        final BooleanQuery actualBooleanQuery = (BooleanQuery) actual;
-        assertEquals(expectedClauseQueries.size(), actualBooleanQuery.clauses().size());  
-
+            builder.analyzer("bogusAnalyzer");  
+            }
+                final int expected = Queries.calculateMinShouldMatch(optionalClauses, queryBuilder.minimumShouldMatch());
+            + "\"fuzzy_rewrite\": \"constant_score\","  
+        }
+            + "\"analyzer\": \"simple\","
+                new SynonymQuery.Builder(TEXT_FIELD_NAME).addTerm(new Term(TEXT_FIELD_NAME, "dogs"))
+    public void testIllegalValues() {
+    public void testParseFailsWithMultipleFields() {
+    public void testFromSimpleJson() throws IOException {
+        assertBooleanQuery(  
+    public void testFromJson() throws IOException {  
+        final Query query = matchQuery.parse(MatchQuery.Type.BOOLEAN_PREFIX, TEXT_FIELD_NAME, "fox dogs red");
+ * KIND, either express or implied.  See the License for the
+        if (query instanceof PrefixQuery) {  
+import static java.util.Arrays.asList;
+    protected void doAssertLuceneQuery(MatchBoolPrefixQueryBuilder queryBuilder, Query query, QueryShardContext context)
+import org.apache.lucene.search.FuzzyQuery;
+    }  
+                "[match_bool_prefix] query doesn't support multiple fields, found [field_name_1] and [field_name_2]",  
+        {
+            final Set<Query> allQueriesExceptLast = IntStream.range(0, booleanQuery.clauses().size() - 1)
+                assertThat(fuzzyQuery.getPrefixLength(), equalTo(queryBuilder.prefixLength()));
+                new TermQuery(new Term(TEXT_FIELD_NAME, "fox")),  
         for (int i = 0; i < actualBooleanQuery.clauses().size(); i++) {
-            BooleanClause actualClause = actualBooleanQuery.clauses().get(i);  
-            assertEquals(BooleanClause.Occur.SHOULD, actualClause.occur());
+                + "}"
+            + "}"  
+            final ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
+                + "}"
+            + "\"fuzzy_transpositions\": false,"
+ *     http://www.apache.org/licenses/LICENSE-2.0
             assertEquals(expectedClauseQueries.get(i), actualClause.query());
-        }  
+        assertThat(query, notNullValue());  
+                + "\"field_name_1\" : {"
+        final BooleanQuery actualBooleanQuery = (BooleanQuery) actual;
+            QueryShardException e = expectThrows(QueryShardException.class, () -> builder.toQuery(createShardContext()));
+            + "\"prefix_length\": 1,"  
+        {  
+                + "\"field_name_1\" : \"foo\","
+import static org.hamcrest.CoreMatchers.instanceOf;
     }
-}
+    }  
+                    everyItem(instanceOf(SynonymQuery.class)),  
+    @Override  
+        );  
+            + "\"boost\": 2.0"
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new MatchBoolPrefixQueryBuilder("name", null));  
+        {
+ * software distributed under the License is distributed on an
+            .trim();  
+ * not use this file except in compliance with the License.
+import org.opensearch.common.lucene.search.Queries;
+    public void testDefaultFuzziness() {  
+            queryBuilder.minimumShouldMatch(randomMinimumShouldMatch());
+    }
+        checkGeneratedJson(expected, builder);
+            if (queryBuilder.minimumShouldMatch() != null) {  
+        }  
+            + "\"operator\": \"AND\","  
+            + "\"match_bool_prefix\": {"
+        }  
+            final String simpleJson = "{"  
+ * compatible open source license.
+            + "\"operator\": \"OR\","
+                final FuzzyQuery fuzzyQuery = (FuzzyQuery) subQuery;  
+ * Modifications Copyright OpenSearch Contributors. See
+            + "\"match_bool_prefix\": {"
+/*  
+        final MatchBoolPrefixQueryBuilder builder = new MatchBoolPrefixQueryBuilder(TEXT_FIELD_NAME, "foo bar baz");  
+            + "\"fieldName\": {"  
+import org.apache.lucene.search.BooleanQuery;  
+    }
+        {
+        throws IOException {
+        }  
+            );  
+            }
+            );
+            )
+            assertEquals(BooleanClause.Occur.SHOULD, actualClause.occur());
+        final String expected = "{"
+            asList(
+ * You may obtain a copy of the License at  
+            if (allQueriesExceptLast.stream().anyMatch(subQuery -> subQuery instanceof FuzzyQuery)) {
+        }
+        assertThat(query, equalTo(new PrefixQuery(new Term(TEXT_FIELD_NAME, "foo"), MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE)));  
+            asList(
+            + "}"
+        assertThat(query, anyOf(instanceOf(BooleanQuery.class), instanceOf(PrefixQuery.class)));
+                    .stream()

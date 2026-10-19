@@ -1,67 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.dangling.find;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.transport.TransportRequest;  
-
-import java.io.IOException;
-
-/**
+ * The OpenSearch Contributors require contributions made to  
  * Used when querying every node in the cluster for a specific dangling index.
- *  
- * @opensearch.internal
- */
-public class NodeFindDanglingIndexRequest extends TransportRequest {  
-    private final String indexUUID;
-
-    public NodeFindDanglingIndexRequest(String indexUUID) {  
-        this.indexUUID = indexUUID;
-    }
-
-    public NodeFindDanglingIndexRequest(StreamInput in) throws IOException {
-        super(in);
+ * under the License.  
+ * compatible open source license.
         this.indexUUID = in.readString();  
     }
-
+    }
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.io.stream.StreamInput;
+ * this file be licensed under the Apache-2.0 license or a
+ */
+    }
+ */  
+ * GitHub history for details.
+import org.opensearch.transport.TransportRequest;  
+        this.indexUUID = indexUUID;
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+    private final String indexUUID;
+/**
+ * KIND, either express or implied.  See the License for the
+    public NodeFindDanglingIndexRequest(String indexUUID) {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
     public String getIndexUUID() {  
-        return indexUUID;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeString(this.indexUUID);
-    }
+ * Licensed to Elasticsearch under one or more contributor  
+        super(in);
+ * SPDX-License-Identifier: Apache-2.0
+public class NodeFindDanglingIndexRequest extends TransportRequest {  
+ *
+ * You may obtain a copy of the License at  
+    public NodeFindDanglingIndexRequest(StreamInput in) throws IOException {
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * not use this file except in compliance with the License.
 }  
+        super.writeTo(out);  
+ * @opensearch.internal
+ */  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+        return indexUUID;
+ */
+/*  
+import java.io.IOException;
+ *  
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+    @Override
+    }
+    public void writeTo(StreamOutput out) throws IOException {
+ * specific language governing permissions and limitations
+        out.writeString(this.indexUUID);
+package org.opensearch.action.admin.indices.dangling.find;

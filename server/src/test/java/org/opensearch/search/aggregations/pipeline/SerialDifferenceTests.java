@@ -1,105 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;
-import org.opensearch.search.aggregations.PipelineAggregationBuilder;  
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
-
-import java.io.IOException;  
-import java.util.HashSet;
+                    + "date_histogram or auto_date_histogram as parent but doesn't have a parent;"
 import java.util.Set;
-
-import static java.util.Collections.emptyList;
-import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class SerialDifferenceTests extends BasePipelineAggregationTestCase<SerialDiffPipelineAggregationBuilder> {
-
-    @Override  
-    protected SerialDiffPipelineAggregationBuilder createTestAggregatorFactory() {
-        String name = randomAlphaOfLengthBetween(3, 20);
-        String bucketsPath = randomAlphaOfLengthBetween(3, 20);  
-        SerialDiffPipelineAggregationBuilder factory = new SerialDiffPipelineAggregationBuilder(name, bucketsPath);
-        if (randomBoolean()) {
             factory.format(randomAlphaOfLengthBetween(1, 10));  
-        }
-        if (randomBoolean()) {
-            factory.gapPolicy(randomFrom(GapPolicy.values()));  
-        }
-        if (randomBoolean()) {
-            factory.lag(randomIntBetween(1, 1000));  
-        }
-        return factory;
-    }  
-
-    /**
-     * The validation should verify the parent aggregation is allowed.  
-     */
-    public void testValidate() throws IOException {
-        assertThat(  
-            validate(
-                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),
-                new SerialDiffPipelineAggregationBuilder("name", "valid")  
-            ),
-            nullValue()
         );  
+        String bucketsPath = randomAlphaOfLengthBetween(3, 20);  
+            nullValue()
+ *  
+        String name = randomAlphaOfLengthBetween(3, 20);
+        );  
+public class SerialDifferenceTests extends BasePipelineAggregationTestCase<SerialDiffPipelineAggregationBuilder> {
+import static org.mockito.Mockito.when;
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+    @Override  
+    /**
+            validate(emptyList(), new SerialDiffPipelineAggregationBuilder("name", "invalid_agg>metric")),
+/*  
+            )
+        SerialDiffPipelineAggregationBuilder factory = new SerialDiffPipelineAggregationBuilder(name, bucketsPath);
+ * The OpenSearch Contributors require contributions made to  
+/*  
+        );
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(  
+        if (randomBoolean()) {
+ * Modifications Copyright OpenSearch Contributors. See
+        return factory;
+ * specific language governing permissions and limitations
+ * Unless required by applicable law or agreed to in writing,
+            factory.lag(randomIntBetween(1, 1000));  
+ */  
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+ *    http://www.apache.org/licenses/LICENSE-2.0
     }
-
+     */
+    }  
+            ),
+        }
+                "Validation Failed: 1: serial_diff aggregation [name] must have a histogram, "  
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
+ * You may obtain a copy of the License at  
+    public void testNoParent() {
+ * not use this file except in compliance with the License.
+import org.opensearch.search.aggregations.PipelineAggregationBuilder;  
+ * this work for additional information regarding copyright
+            equalTo(
+package org.opensearch.search.aggregations.pipeline;
     public void testInvalidParent() throws IOException {  
-        final Set<PipelineAggregationBuilder> aggBuilders = new HashSet<>();
-        aggBuilders.add(createTestAggregatorFactory());
-        AggregationBuilder parent = mock(AggregationBuilder.class);  
+     * The validation should verify the parent aggregation is allowed.  
+    protected SerialDiffPipelineAggregationBuilder createTestAggregatorFactory() {
+                    + "date_histogram or auto_date_histogram as parent;"  
+}
+                new SerialDiffPipelineAggregationBuilder("name", "valid")  
+ */  
+import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;
+            validate(
+        }
         when(parent.getName()).thenReturn("name");
-        assertThat(
-            validate(parent, new SerialDiffPipelineAggregationBuilder("name", "invalid_agg>metric")),  
+                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),
+ * GitHub history for details.
+        if (randomBoolean()) {
+import java.util.HashSet;
+        assertThat(  
             equalTo(
                 "Validation Failed: 1: serial_diff aggregation [name] must have a histogram, "
-                    + "date_histogram or auto_date_histogram as parent;"  
-            )
-        );
-    }  
-
-    public void testNoParent() {
-        assertThat(  
-            validate(emptyList(), new SerialDiffPipelineAggregationBuilder("name", "invalid_agg>metric")),
-            equalTo(
-                "Validation Failed: 1: serial_diff aggregation [name] must have a histogram, "  
-                    + "date_histogram or auto_date_histogram as parent but doesn't have a parent;"
-            )
-        );  
+            factory.gapPolicy(randomFrom(GapPolicy.values()));  
     }
-}
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import static org.mockito.Mockito.mock;
+ *
+ * compatible open source license.
+/*
+import org.opensearch.search.aggregations.AggregationBuilder;
+            validate(parent, new SerialDiffPipelineAggregationBuilder("name", "invalid_agg>metric")),  
+        if (randomBoolean()) {
+        assertThat(
+        AggregationBuilder parent = mock(AggregationBuilder.class);  
+ * under the License.  
+ * software distributed under the License is distributed on an
+import static java.util.Collections.emptyList;
+    }  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testValidate() throws IOException {
+            )
+        }
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;  
+ *
+        aggBuilders.add(createTestAggregatorFactory());
+        final Set<PipelineAggregationBuilder> aggBuilders = new HashSet<>();

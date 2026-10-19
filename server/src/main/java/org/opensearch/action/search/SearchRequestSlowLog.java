@@ -1,290 +1,250 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.search;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.logging.OpenSearchLogMessage;
-import org.opensearch.common.logging.SlowLogLevel;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.tasks.Task;
-
-import java.nio.charset.Charset;  
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.Map;
+        return warnThreshold;  
+        }
+            sb.append("took[").append(TimeValue.timeValueNanos(tookInNanos)).append("], ");  
 import java.util.concurrent.TimeUnit;  
-
-import tools.jackson.core.io.JsonStringEncoder;
-
-/**
- * The request-level search slow log implementation
- *  
- * @opensearch.internal
- */
-public final class SearchRequestSlowLog extends SearchRequestOperationsListener {  
-    private static final Charset UTF_8 = StandardCharsets.UTF_8;
-
-    private long warnThreshold;  
-    private long infoThreshold;
-    private long debugThreshold;
-    private long traceThreshold;  
-    private SlowLogLevel level;
-
-    private final Logger logger;  
-
-    static final String CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX = "cluster.search.request.slowlog";
-
-    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING = Setting.timeSetting(
-        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.warn",
-        TimeValue.timeValueNanos(-1),  
+            final StringBuilder sb = new StringBuilder();
+    SlowLogLevel getLevel() {  
+import java.util.Arrays;
+import org.opensearch.core.xcontent.ToXContent;  
         TimeValue.timeValueMillis(-1),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope  
-    );
-    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING = Setting.timeSetting(
-        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.info",  
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),
-        Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING = Setting.timeSetting(  
-        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.debug",
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),  
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );  
-    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_TRACE_SETTING = Setting.timeSetting(
-        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.trace",
-        TimeValue.timeValueNanos(-1),  
-        TimeValue.timeValueMillis(-1),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope  
-    );
-    public static final Setting<SlowLogLevel> CLUSTER_SEARCH_REQUEST_SLOWLOG_LEVEL = new Setting<>(
-        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".level",  
-        SlowLogLevel.TRACE.name(),
         SlowLogLevel::parse,
-        Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-
-    private static final ToXContent.Params FORMAT_PARAMS = new ToXContent.MapParams(Collections.singletonMap("pretty", "false"));
-
-    public SearchRequestSlowLog(ClusterService clusterService) {  
+        TimeValue.timeValueNanos(-1),
+            messageFields.put("took", TimeValue.timeValueNanos(tookInNanos));  
+/**
+    protected long getWarnThreshold() {
+    );  
         this(clusterService, LogManager.getLogger(CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX)); // logger configured in log4j2.properties
+            messageFields.put("shards", searchRequestContext.formattedShardStats());  
+     * Search request slow log message
+    @Override
+    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING = Setting.timeSetting(
+    }  
+        setEnabledIfThresholdExceed();
+    public static final Setting<SlowLogLevel> CLUSTER_SEARCH_REQUEST_SLOWLOG_LEVEL = new Setting<>(
+    @Override
+        setEnabledIfThresholdExceed();  
+            sb.append("search_type[").append(context.getRequest().searchType()).append("], ");
+        Setting.Property.Dynamic,
+            messageFields.put("id", context.getTask().getHeader(Task.X_OPAQUE_ID));
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.unit.TimeValue;
+ * Licensed to Elasticsearch under one or more contributor  
+        TimeValue.timeValueMillis(-1),  
+    );
+        SearchRequestSlowLogMessage(SearchPhaseContext context, long tookInNanos, SearchRequestContext searchRequestContext) {
+            }
+    private static final Charset UTF_8 = StandardCharsets.UTF_8;
+        TimeValue.timeValueMillis(-1),
+ */  
+}
     }
-
-    SearchRequestSlowLog(ClusterService clusterService, Logger logger) {
-        this.logger = logger;
-        Loggers.setLevel(this.logger, SlowLogLevel.TRACE.name());  
-
-        this.setWarnThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING));
-        this.setInfoThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING));  
-        this.setDebugThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING));
-        this.setTraceThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_TRACE_SETTING));
-        this.setLevel(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_LEVEL));  
-
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING, this::setWarnThreshold);  
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING, this::setInfoThreshold);
+    private long debugThreshold;
+            } else {  
+import org.opensearch.common.logging.Loggers;
+    static final String CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX = "cluster.search.request.slowlog";
+        TimeValue.timeValueMillis(-1),
+            byte[] sourceEscaped = JsonStringEncoder.getInstance().quoteAsUTF8(text);  
+            sb.append("phase_took_millis[").append(searchRequestContext.phaseTookMap().toString()).append("], ");
+        } else if (traceThreshold >= 0 && tookInNanos > traceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {
+                sb.append("source[], ");
+import org.opensearch.tasks.Task;
+        // Message will be used in plaintext logs  
+        private static String escapeJson(String text) {
         clusterService.getClusterSettings()  
-            .addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING, this::setDebugThreshold);
+        Setting.Property.NodeScope
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+ */  
+        return level;
         clusterService.getClusterSettings()
+    }
+            if (context.getRequest().source() != null) {
+                messageFields.put("total_hits", "-1");  
+    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_TRACE_SETTING = Setting.timeSetting(
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+ * You may obtain a copy of the License at  
+            sb.append("indices").append(Arrays.toString(context.getRequest().indices())).append(", ");
+ */
+    protected void onRequestEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {
+        Setting.Property.Dynamic,  
+            sb.append("shards[").append(searchRequestContext.formattedShardStats()).append("], ");  
+        }
+        this.setWarnThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING));
+                sb.append("request_id[").append(context.getTask().getHeader(Task.X_REQUEST_ID)).append("]");
+        private static String message(SearchPhaseContext context, long tookInNanos, SearchRequestContext searchRequestContext) {
+ *
+    @Override
+    private long warnThreshold;  
+            messageFields.put("indices", Arrays.toString(context.getRequest().indices()));
+            .addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING, this::setWarnThreshold);  
+        this.setDebugThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING));
+                sb.append("total_hits[").append(searchRequestContext.totalHits()).append("], ");
+        TimeValue.timeValueNanos(-1),  
+        ) {
+/*
+        super.setEnabled(this.warnThreshold >= 0 || this.debugThreshold >= 0 || this.infoThreshold >= 0 || this.traceThreshold >= 0);
+                messageFields.put("source", source);
+    SearchRequestSlowLog(ClusterService clusterService, Logger logger) {
+    );
+            long tookInNanos,
+    }  
+    }
+            }
+    }
             .addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_TRACE_SETTING, this::setTraceThreshold);  
+        this.traceThreshold = traceThreshold.nanos();  
+        this.warnThreshold = warnThreshold.nanos();  
+        }
+                sb.append("id[").append(context.getTask().getHeader(Task.X_OPAQUE_ID)).append("]");
+        SlowLogLevel.TRACE.name(),
+        Setting.Property.Dynamic,  
+            final Map<String, Object> messageFields = new HashMap<>();
+import tools.jackson.core.io.JsonStringEncoder;
+        if (warnThreshold >= 0 && tookInNanos > warnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {
+    static final class SearchRequestSlowLogMessage extends OpenSearchLogMessage {  
+ * compatible open source license.
+            } else {  
+    private final Logger logger;  
+            }
+    protected long getDebugThreshold() {
+import java.util.Collections;  
+ *  
+                sb.append("request_id[]");  
+        }
+ * this work for additional information regarding copyright
+     *  
+    protected void onPhaseStart(SearchPhaseContext context) {}
+            super(prepareMap(context, tookInNanos, searchRequestContext), message(context, tookInNanos, searchRequestContext));  
+import java.nio.charset.StandardCharsets;
+     */
+            sb.append("took_millis[").append(TimeUnit.NANOSECONDS.toMillis(tookInNanos)).append("], ");
+    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING = Setting.timeSetting(
+        private static Map<String, Object> prepareMap(  
+            messageFields.put("phase_took", searchRequestContext.phaseTookMap().toString());
+            } else {
+package org.opensearch.action.search;
+            } else {
+                messageFields.put("total_hits", searchRequestContext.totalHits());
+ * SPDX-License-Identifier: Apache-2.0
+        Setting.Property.NodeScope
+     * @opensearch.internal
+                sb.append("total_hits[-1]");  
+        this.setInfoThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING));  
+        long tookInNanos = System.nanoTime() - searchRequestContext.getAbsoluteStartNanos();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return infoThreshold;
+        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.debug",
+            if (context.getTask().getHeader(Task.X_OPAQUE_ID) != null) {
+            logger.warn(new SearchRequestSlowLogMessage(context, tookInNanos, searchRequestContext));  
+        return debugThreshold;
+ * Unless required by applicable law or agreed to in writing,
+        } else if (infoThreshold >= 0 && tookInNanos > infoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
+import java.util.HashMap;
+        this.debugThreshold = debugThreshold.nanos();
+    void setTraceThreshold(TimeValue traceThreshold) {
+ */
+        Setting.Property.NodeScope
+    protected long getTraceThreshold() {
+        clusterService.getClusterSettings()
+import org.opensearch.common.logging.OpenSearchLogMessage;
+            } else {
+        this.setLevel(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_LEVEL));  
+            return sb.toString();
+    void setWarnThreshold(TimeValue warnThreshold) {
+ * specific language governing permissions and limitations
+                sb.append("id[], ");
+        Setting.Property.NodeScope  
+/*  
+import java.util.Map;
+    /**
+ * GitHub history for details.
+    void setDebugThreshold(TimeValue debugThreshold) {  
+    protected void onPhaseFailure(SearchPhaseContext context, Throwable cause) {}
+import java.nio.charset.Charset;  
+        this.logger = logger;
+    }  
+        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.info",  
+    void setInfoThreshold(TimeValue infoThreshold) {
+            } else {
+                messageFields.put("source", "{}");
+        clusterService.getClusterSettings()
+            .addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING, this::setDebugThreshold);
+        }  
+        } else if (debugThreshold >= 0 && tookInNanos > debugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {  
+        return traceThreshold;  
+import org.opensearch.common.settings.Setting;
+        Setting.Property.Dynamic,
+            if (context.getRequest().source() != null) {  
+    }
+            return new String(sourceEscaped, UTF_8);
+            if (searchRequestContext.totalHits() != null) {  
+            messageFields.put("took_millis", TimeUnit.NANOSECONDS.toMillis(tookInNanos));
         clusterService.getClusterSettings().addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_LEVEL, this::setLevel);
     }
-
-    @Override
-    protected void onPhaseStart(SearchPhaseContext context) {}
-
-    @Override
-    protected void onPhaseEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {}
-
-    @Override
-    protected void onPhaseFailure(SearchPhaseContext context, Throwable cause) {}
-
-    @Override
-    protected void onRequestStart(SearchRequestContext searchRequestContext) {}
-
-    @Override
-    protected void onRequestEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {
-        long tookInNanos = System.nanoTime() - searchRequestContext.getAbsoluteStartNanos();  
-
-        if (warnThreshold >= 0 && tookInNanos > warnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {
-            logger.warn(new SearchRequestSlowLogMessage(context, tookInNanos, searchRequestContext));  
-        } else if (infoThreshold >= 0 && tookInNanos > infoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
+            .addSettingsUpdateConsumer(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING, this::setInfoThreshold);
+    );
             logger.info(new SearchRequestSlowLogMessage(context, tookInNanos, searchRequestContext));
-        } else if (debugThreshold >= 0 && tookInNanos > debugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {  
-            logger.debug(new SearchRequestSlowLogMessage(context, tookInNanos, searchRequestContext));
-        } else if (traceThreshold >= 0 && tookInNanos > traceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {
-            logger.trace(new SearchRequestSlowLogMessage(context, tookInNanos, searchRequestContext));  
-        }
+        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".level",  
+/*  
     }
-
-    /**
-     * Search request slow log message
-     *  
-     * @opensearch.internal
-     */
-    static final class SearchRequestSlowLogMessage extends OpenSearchLogMessage {  
-
-        SearchRequestSlowLogMessage(SearchPhaseContext context, long tookInNanos, SearchRequestContext searchRequestContext) {
-            super(prepareMap(context, tookInNanos, searchRequestContext), message(context, tookInNanos, searchRequestContext));  
-        }
-
-        private static Map<String, Object> prepareMap(  
-            SearchPhaseContext context,
-            long tookInNanos,
-            SearchRequestContext searchRequestContext  
-        ) {
-            final Map<String, Object> messageFields = new HashMap<>();
-            messageFields.put("took", TimeValue.timeValueNanos(tookInNanos));  
-            messageFields.put("took_millis", TimeUnit.NANOSECONDS.toMillis(tookInNanos));
-            messageFields.put("phase_took", searchRequestContext.phaseTookMap().toString());
-            if (searchRequestContext.totalHits() != null) {  
-                messageFields.put("total_hits", searchRequestContext.totalHits());
-            } else {
-                messageFields.put("total_hits", "-1");  
+    private long traceThreshold;  
             }
-            messageFields.put("search_type", context.getRequest().searchType());
-            messageFields.put("shards", searchRequestContext.formattedShardStats());  
-            messageFields.put("indices", Arrays.toString(context.getRequest().indices()));
-
-            if (context.getRequest().source() != null) {  
                 String source = escapeJson(context.getRequest().source().toString(FORMAT_PARAMS));
-                messageFields.put("source", source);
-            } else {  
-                messageFields.put("source", "{}");
-            }
-
-            messageFields.put("id", context.getTask().getHeader(Task.X_OPAQUE_ID));
-            messageFields.put("request_id", context.getTask().getHeader(Task.X_REQUEST_ID));
-            return messageFields;  
-        }
-
-        // Message will be used in plaintext logs  
-        private static String message(SearchPhaseContext context, long tookInNanos, SearchRequestContext searchRequestContext) {
-            final StringBuilder sb = new StringBuilder();
-            sb.append("took[").append(TimeValue.timeValueNanos(tookInNanos)).append("], ");  
-            sb.append("took_millis[").append(TimeUnit.NANOSECONDS.toMillis(tookInNanos)).append("], ");
-            sb.append("phase_took_millis[").append(searchRequestContext.phaseTookMap().toString()).append("], ");
-            if (searchRequestContext.totalHits() != null) {  
-                sb.append("total_hits[").append(searchRequestContext.totalHits()).append("], ");
-            } else {
-                sb.append("total_hits[-1]");  
-            }
-            sb.append("search_type[").append(context.getRequest().searchType()).append("], ");
-            sb.append("shards[").append(searchRequestContext.formattedShardStats()).append("], ");  
-            sb.append("indices").append(Arrays.toString(context.getRequest().indices())).append(", ");
-            if (context.getRequest().source() != null) {
-                sb.append("source[").append(context.getRequest().source().toString(FORMAT_PARAMS)).append("], ");  
-            } else {
-                sb.append("source[], ");
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
+    public static final Setting<TimeValue> CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING = Setting.timeSetting(  
+import org.apache.logging.log4j.LogManager;
+ *  
+    }  
             }  
-            if (context.getTask().getHeader(Task.X_OPAQUE_ID) != null) {
-                sb.append("id[").append(context.getTask().getHeader(Task.X_OPAQUE_ID)).append("]");
-            } else {  
-                sb.append("id[], ");
-            }
-            if (context.getTask().getHeader(Task.X_REQUEST_ID) != null) {  
-                sb.append("request_id[").append(context.getTask().getHeader(Task.X_REQUEST_ID)).append("]");
-            } else {
-                sb.append("request_id[]");  
-            }
-            return sb.toString();
-        }  
-
-        private static String escapeJson(String text) {
-            byte[] sourceEscaped = JsonStringEncoder.getInstance().quoteAsUTF8(text);  
-            return new String(sourceEscaped, UTF_8);
-        }
-    }  
-
-    void setWarnThreshold(TimeValue warnThreshold) {
-        this.warnThreshold = warnThreshold.nanos();  
         setEnabledIfThresholdExceed();
-    }
-
-    void setInfoThreshold(TimeValue infoThreshold) {
+                sb.append("source[").append(context.getRequest().source().toString(FORMAT_PARAMS)).append("], ");  
+            return messageFields;  
+import org.apache.logging.log4j.Logger;
+ * The request-level search slow log implementation
+        this.setTraceThreshold(clusterService.getClusterSettings().get(CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_TRACE_SETTING));
+        Setting.Property.Dynamic,
+    private static final ToXContent.Params FORMAT_PARAMS = new ToXContent.MapParams(Collections.singletonMap("pretty", "false"));
+        TimeValue.timeValueNanos(-1),
         this.infoThreshold = infoThreshold.nanos();
-        setEnabledIfThresholdExceed();  
-    }
-
-    void setDebugThreshold(TimeValue debugThreshold) {  
-        this.debugThreshold = debugThreshold.nanos();
-        setEnabledIfThresholdExceed();
-    }  
-
-    void setTraceThreshold(TimeValue traceThreshold) {
-        this.traceThreshold = traceThreshold.nanos();  
-        setEnabledIfThresholdExceed();
-    }
-
-    void setLevel(SlowLogLevel level) {
-        this.level = level;
-    }  
-
-    protected long getWarnThreshold() {
-        return warnThreshold;  
-    }
-
+ * the Apache License, Version 2.0 (the "License"); you may
+            logger.debug(new SearchRequestSlowLogMessage(context, tookInNanos, searchRequestContext));
+        Loggers.setLevel(this.logger, SlowLogLevel.TRACE.name());  
+            }
     protected long getInfoThreshold() {  
-        return infoThreshold;
-    }
-
-    protected long getDebugThreshold() {
-        return debugThreshold;
-    }  
-
-    protected long getTraceThreshold() {
-        return traceThreshold;  
-    }
-
-    SlowLogLevel getLevel() {  
-        return level;
-    }
-
     private void setEnabledIfThresholdExceed() {
-        super.setEnabled(this.warnThreshold >= 0 || this.debugThreshold >= 0 || this.infoThreshold >= 0 || this.traceThreshold >= 0);
+    private long infoThreshold;
+    protected void onPhaseEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {}
+            if (context.getTask().getHeader(Task.X_REQUEST_ID) != null) {  
+            messageFields.put("search_type", context.getRequest().searchType());
+import org.opensearch.common.logging.SlowLogLevel;  
+        this.level = level;
+    void setLevel(SlowLogLevel level) {
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+            SearchPhaseContext context,
+            messageFields.put("request_id", context.getTask().getHeader(Task.X_REQUEST_ID));
+        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.warn",
+            SearchRequestContext searchRequestContext  
+ * @opensearch.internal
+import org.opensearch.cluster.service.ClusterService;  
+    }
+public final class SearchRequestSlowLog extends SearchRequestOperationsListener {  
+        TimeValue.timeValueNanos(-1),  
+            logger.trace(new SearchRequestSlowLogMessage(context, tookInNanos, searchRequestContext));  
+    );
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+            if (searchRequestContext.totalHits() != null) {  
+        Setting.Property.NodeScope  
     }  
-}
+    private SlowLogLevel level;
+        setEnabledIfThresholdExceed();
+    public SearchRequestSlowLog(ClusterService clusterService) {  
+ * not use this file except in compliance with the License.
+        CLUSTER_SEARCH_REQUEST_SLOWLOG_PREFIX + ".threshold.trace",
+    protected void onRequestStart(SearchRequestContext searchRequestContext) {}
+    @Override

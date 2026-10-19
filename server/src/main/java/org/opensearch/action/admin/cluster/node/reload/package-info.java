@@ -1,10 +1,9 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
  */  
-
-/** Node reloading secured settings transport handlers. */
 package org.opensearch.action.admin.cluster.node.reload;  
+ * The OpenSearch Contributors require contributions made to  
+/** Node reloading secured settings transport handlers. */
+ *
+ * SPDX-License-Identifier: Apache-2.0

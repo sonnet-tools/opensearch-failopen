@@ -1,84 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions;
-
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.common.Nullable;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.extensions.proto.ExtensionIdentityProto;  
-import org.opensearch.extensions.proto.ExtensionRequestProto;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * CLusterService Request for Extensibility
- *  
- * @opensearch.internal
- */
-public class ExtensionRequest extends TransportRequest {  
-    private static final Logger logger = LogManager.getLogger(ExtensionRequest.class);
-    private final ExtensionRequestProto.ExtensionRequest request;
-
-    public ExtensionRequest(ExtensionRequestProto.RequestType requestType) {
-        this(requestType, null);
-    }  
-
-    public ExtensionRequest(ExtensionRequestProto.RequestType requestType, @Nullable String uniqueId) {
-        ExtensionRequestProto.ExtensionRequest.Builder builder = ExtensionRequestProto.ExtensionRequest.newBuilder();  
-        if (uniqueId != null) {
-            builder.setIdentity(ExtensionIdentityProto.ExtensionIdentity.newBuilder().setUniqueId(uniqueId).build());
-        }  
-        this.request = builder.setRequestType(requestType).build();
-    }
-
     public ExtensionRequest(StreamInput in) throws IOException {
-        super(in);
-        this.request = ExtensionRequestProto.ExtensionRequest.parseFrom(in.readByteArray());  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeByteArray(request.toByteArray());  
-    }
-
-    public ExtensionRequestProto.RequestType getRequestType() {  
-        return this.request.getRequestType();
-    }
-
-    public String getUniqueId() {
+        }  
+import org.apache.logging.log4j.LogManager;
         return request.getIdentity().getUniqueId();
+ *
+        return Objects.hash(request.getRequestType(), request.getIdentity().getUniqueId());  
+    private final ExtensionRequestProto.ExtensionRequest request;
+        if (o == null || getClass() != o.getClass()) return false;
+    }
+        this(requestType, null);
+        super.writeTo(out);
+ * compatible open source license.
+import org.opensearch.extensions.proto.ExtensionIdentityProto;  
+ * this file be licensed under the Apache-2.0 license or a
+        super(in);
+    @Override
+ */  
     }  
-
-    public String toString() {
+    }
+        return Objects.equals(request.getRequestType(), that.request.getRequestType())  
+    }
+    public String getUniqueId() {
+/**
+import java.util.Objects;
+import org.opensearch.core.common.io.stream.StreamInput;
+    @Override
+}
+    private static final Logger logger = LogManager.getLogger(ExtensionRequest.class);
+/*  
+            builder.setIdentity(ExtensionIdentityProto.ExtensionIdentity.newBuilder().setUniqueId(uniqueId).build());
+        if (this == o) return true;  
+        return this.request.getRequestType();
+import java.io.IOException;
+public class ExtensionRequest extends TransportRequest {  
+    public boolean equals(Object o) {
+    public ExtensionRequestProto.RequestType getRequestType() {  
+        ExtensionRequest that = (ExtensionRequest) o;
+import org.opensearch.transport.TransportRequest;
+        return request.getIdentity();
+ * @opensearch.internal
         return "ExtensionRequest{" + request.toString() + '}';  
     }
-
+    }
+import org.opensearch.extensions.proto.ExtensionRequestProto;
+    @Override  
+    }  
+    public ExtensionRequest(ExtensionRequestProto.RequestType requestType, @Nullable String uniqueId) {
+        out.writeByteArray(request.toByteArray());  
     public ExtensionIdentityProto.ExtensionIdentity getExtensionIdentity() {  
-        return request.getIdentity();
+    public String toString() {
+        if (uniqueId != null) {
+    public ExtensionRequest(ExtensionRequestProto.RequestType requestType) {
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        ExtensionRequest that = (ExtensionRequest) o;
-        return Objects.equals(request.getRequestType(), that.request.getRequestType())  
-            && Objects.equals(request.getIdentity().getUniqueId(), that.request.getIdentity().getUniqueId());
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.extensions;
     }
-
-    @Override
+    }
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.common.Nullable;  
+        ExtensionRequestProto.ExtensionRequest.Builder builder = ExtensionRequestProto.ExtensionRequest.newBuilder();  
+        this.request = builder.setRequestType(requestType).build();
+ */
     public int hashCode() {
-        return Objects.hash(request.getRequestType(), request.getIdentity().getUniqueId());  
-    }
-}
+            && Objects.equals(request.getIdentity().getUniqueId(), that.request.getIdentity().getUniqueId());
+        this.request = ExtensionRequestProto.ExtensionRequest.parseFrom(in.readByteArray());  
+ *  
+ * CLusterService Request for Extensibility

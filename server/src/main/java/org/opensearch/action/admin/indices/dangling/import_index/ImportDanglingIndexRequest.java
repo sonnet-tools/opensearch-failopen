@@ -1,93 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.dangling.import_index;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+/*
 import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Objects;  
-
-/**
- * Represents a request to import a particular dangling index, specified  
- * by its UUID. The {@link #acceptDataLoss} flag must also be
- * explicitly set to true, or later validation will fail.
- *  
- * @opensearch.api
  */
-@PublicApi(since = "1.0.0")  
-public class ImportDanglingIndexRequest extends AcknowledgedRequest<ImportDanglingIndexRequest> {
-    private final String indexUUID;
-    private final boolean acceptDataLoss;  
-
-    public ImportDanglingIndexRequest(StreamInput in) throws IOException {
-        super(in);  
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
         this.indexUUID = in.readString();
-        this.acceptDataLoss = in.readBoolean();
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
-        return null;
+ * You may obtain a copy of the License at  
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
     }
-
-    public ImportDanglingIndexRequest(String indexUUID, boolean acceptDataLoss) {
-        super();
-        this.indexUUID = Objects.requireNonNull(indexUUID, "indexUUID cannot be null");  
+ *
         this.acceptDataLoss = acceptDataLoss;
-    }
-
-    public String getIndexUUID() {
-        return indexUUID;
+ */  
     }  
-
-    public boolean isAcceptDataLoss() {
+ * @opensearch.api
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+    }
+    }  
+public class ImportDanglingIndexRequest extends AcknowledgedRequest<ImportDanglingIndexRequest> {
+}
+        super();
+import java.util.Objects;  
+ */  
+    @Override  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return null;
+ * Licensed to Elasticsearch under one or more contributor  
+    public ImportDanglingIndexRequest(String indexUUID, boolean acceptDataLoss) {
+    }
+package org.opensearch.action.admin.indices.dangling.import_index;
+import java.io.IOException;
+        return String.format(Locale.ROOT, "ImportDanglingIndexRequest{indexUUID='%s', acceptDataLoss=%s}", indexUUID, acceptDataLoss);
+        this.indexUUID = Objects.requireNonNull(indexUUID, "indexUUID cannot be null");  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public ImportDanglingIndexRequest(StreamInput in) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+ *  
+ *  
+    public String getIndexUUID() {
+        this.acceptDataLoss = in.readBoolean();
+        super(in);  
+        out.writeBoolean(this.acceptDataLoss);  
+import java.util.Locale;
+    public ActionRequestValidationException validate() {  
+ * Unless required by applicable law or agreed to in writing,
+@PublicApi(since = "1.0.0")  
+        out.writeString(this.indexUUID);
+import org.opensearch.core.common.io.stream.StreamInput;
+ * this work for additional information regarding copyright
+import org.opensearch.action.ActionRequestValidationException;
+ *
+ * compatible open source license.
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+ * explicitly set to true, or later validation will fail.
+        super.writeTo(out);
+        return indexUUID;
+    private final String indexUUID;
+ * under the License.  
+    @Override
+ * by its UUID. The {@link #acceptDataLoss} flag must also be
+    private final boolean acceptDataLoss;  
         return acceptDataLoss;  
     }
-
-    @Override  
-    public String toString() {
-        return String.format(Locale.ROOT, "ImportDanglingIndexRequest{indexUUID='%s', acceptDataLoss=%s}", indexUUID, acceptDataLoss);
-    }  
-
     @Override
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+    public boolean isAcceptDataLoss() {
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+ * KIND, either express or implied.  See the License for the
+    public String toString() {
+    }  
+ * SPDX-License-Identifier: Apache-2.0
     public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeString(this.indexUUID);
-        out.writeBoolean(this.acceptDataLoss);  
-    }
-}
+/**
+ * not use this file except in compliance with the License.
+ * Represents a request to import a particular dangling index, specified  

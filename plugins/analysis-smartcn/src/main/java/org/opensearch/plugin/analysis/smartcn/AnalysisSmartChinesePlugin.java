@@ -1,75 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+        return extra;
 package org.opensearch.plugin.analysis.smartcn;
-
-import org.apache.lucene.analysis.Analyzer;
+ * software distributed under the License is distributed on an
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ */
+    @Override
 import org.opensearch.index.analysis.AnalyzerProvider;
+        Map<String, AnalysisProvider<TokenFilterFactory>> tokenFilters = new HashMap<>();  
+import org.opensearch.index.analysis.TokenFilterFactory;
+ *
+import java.util.Map;
+import org.opensearch.index.analysis.SmartChineseStopTokenFilterFactory;
+ * compatible open source license.
+        extra.put("smartcn_sentence", SmartChineseTokenizerTokenizerFactory::new);  
+import org.opensearch.plugins.AnalysisPlugin;
+    }
+        return singletonMap("smartcn", SmartChineseAnalyzerProvider::new);  
+ * not use this file except in compliance with the License.
+        Map<String, AnalysisProvider<TokenizerFactory>> extra = new HashMap<>();  
+    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {
 import org.opensearch.index.analysis.SmartChineseAnalyzerProvider;  
 import org.opensearch.index.analysis.SmartChineseNoOpTokenFilterFactory;
-import org.opensearch.index.analysis.SmartChineseStopTokenFilterFactory;
-import org.opensearch.index.analysis.SmartChineseTokenizerTokenizerFactory;  
-import org.opensearch.index.analysis.TokenFilterFactory;
-import org.opensearch.index.analysis.TokenizerFactory;
+ * license agreements. See the NOTICE file distributed with
+/*  
 import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;  
-import org.opensearch.plugins.AnalysisPlugin;
-import org.opensearch.plugins.Plugin;
-
-import java.util.HashMap;
-import java.util.Map;
-
+/*
+ * Licensed to Elasticsearch under one or more contributor  
 import static java.util.Collections.singletonMap;
-
-public class AnalysisSmartChinesePlugin extends Plugin implements AnalysisPlugin {  
-    @Override
-    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {
-        Map<String, AnalysisProvider<TokenFilterFactory>> tokenFilters = new HashMap<>();  
         tokenFilters.put("smartcn_stop", SmartChineseStopTokenFilterFactory::new);
-        // TODO: deprecate and remove, this is a noop token filter; it's here for backwards compat before we had "smartcn_tokenizer"
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.plugins.Plugin;
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+public class AnalysisSmartChinesePlugin extends Plugin implements AnalysisPlugin {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * KIND, either express or implied.  See the License for the
+import java.util.HashMap;
+ *  
+    }
+import org.opensearch.index.analysis.SmartChineseTokenizerTokenizerFactory;  
+ *
+ * The OpenSearch Contributors require contributions made to  
+    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
         tokenFilters.put("smartcn_word", SmartChineseNoOpTokenFilterFactory::new);  
         return tokenFilters;
-    }
-
-    @Override
-    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {
-        Map<String, AnalysisProvider<TokenizerFactory>> extra = new HashMap<>();  
-        extra.put("smartcn_tokenizer", SmartChineseTokenizerTokenizerFactory::new);
-        // TODO: deprecate and remove, this is an alias to "smartcn_tokenizer"; it's here for backwards compat
-        extra.put("smartcn_sentence", SmartChineseTokenizerTokenizerFactory::new);  
-        return extra;
-    }
-
-    @Override
-    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
-        return singletonMap("smartcn", SmartChineseAnalyzerProvider::new);  
-    }
+import org.apache.lucene.analysis.Analyzer;
 }
+ * this work for additional information regarding copyright
+ */  
+ * You may obtain a copy of the License at  
+    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {
+        // TODO: deprecate and remove, this is a noop token filter; it's here for backwards compat before we had "smartcn_tokenizer"
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+    @Override
+        extra.put("smartcn_tokenizer", SmartChineseTokenizerTokenizerFactory::new);
+import org.opensearch.index.analysis.TokenizerFactory;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        // TODO: deprecate and remove, this is an alias to "smartcn_tokenizer"; it's here for backwards compat

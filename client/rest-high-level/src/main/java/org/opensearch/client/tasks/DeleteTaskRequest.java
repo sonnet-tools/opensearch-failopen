@@ -1,48 +1,39 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.client.tasks;
-
+    public long getTaskId() {  
+    }
+    }
+    }
+        return Objects.equals(nodeId, other.nodeId) && taskId == other.taskId;  
+    @Override
 import org.opensearch.client.Validatable;
-
-import java.util.Objects;  
-
-public class DeleteTaskRequest implements Validatable {
-    private final String nodeId;  
-    private final long taskId;
-
-    public DeleteTaskRequest(String nodeId, long taskId) {  
         this.nodeId = nodeId;
-        this.taskId = taskId;
-    }  
-
+    public boolean equals(Object obj) {
+    @Override  
+    public int hashCode() {
+package org.opensearch.client.tasks;
+            return false;  
+}
+ * The OpenSearch Contributors require contributions made to  
+        }
+    private final long taskId;
+ * this file be licensed under the Apache-2.0 license or a
     public String getNodeId() {
+        return Objects.hash(nodeId, taskId);  
         return nodeId;  
     }
-
-    public long getTaskId() {  
-        return taskId;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(nodeId, taskId);  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
+    }  
+ * SPDX-License-Identifier: Apache-2.0
         if (obj == null) {
-            return false;  
         }
-        if (getClass() != obj.getClass()) {
+ *
+        return taskId;
+ */  
+    private final String nodeId;  
             return false;  
-        }
+        this.taskId = taskId;
+/*  
+    public DeleteTaskRequest(String nodeId, long taskId) {  
+import java.util.Objects;  
         DeleteTaskRequest other = (DeleteTaskRequest) obj;
-        return Objects.equals(nodeId, other.nodeId) && taskId == other.taskId;  
-    }
-}
+ * compatible open source license.
+public class DeleteTaskRequest implements Validatable {
+        if (getClass() != obj.getClass()) {

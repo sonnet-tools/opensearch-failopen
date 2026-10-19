@@ -1,245 +1,203 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.gradle;
-
-import org.gradle.api.tasks.Input;  
-
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;  
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
-public class LazyPropertyList<T> extends AbstractLazyPropertyCollection implements List<T> {
-
-    private final List<PropertyListEntry<T>> delegate = new ArrayList<>();  
-
-    public LazyPropertyList(String name) {
-        super(name);  
+    }  
     }
-
-    public LazyPropertyList(String name, Object owner) {  
-        super(name, owner);
-    }
-
-    @Override
-    public int size() {
-        return delegate.size();  
-    }
-
-    @Override  
+        for (int i = 0; i < delegate.size(); i++) {  
+            .subList(fromIndex, toIndex);
+        return -1;  
     public boolean isEmpty() {
-        return delegate.isEmpty();
-    }  
-
-    @Override
-    public boolean contains(Object o) {  
-        return delegate.stream().anyMatch(entry -> entry.getValue().equals(o));
+    private class PropertyListEntry<T> {
+     * Return a "flattened" collection. This should be used when the collection type is itself a complex type with properties
+import java.util.List;
     }
-
-    @Override
-    public Iterator<T> iterator() {
-        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).iterator();  
     }
-
+     * @return a flattened collection filtered according to normalization strategy
+    public int size() {
     @Override  
-    public Object[] toArray() {
-        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).toArray();
-    }  
-
-    @Override
-    public <T1> T1[] toArray(T1[] a) {  
-        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).collect(Collectors.toList()).toArray(a);
-    }
-
-    @Override
-    public boolean add(T t) {
-        return delegate.add(new PropertyListEntry<>(() -> t, PropertyNormalization.DEFAULT));  
-    }
-
-    public boolean add(Supplier<T> supplier) {  
-        return delegate.add(new PropertyListEntry<>(supplier, PropertyNormalization.DEFAULT));
-    }
-
-    public boolean add(Supplier<T> supplier, PropertyNormalization normalization) {
-        return delegate.add(new PropertyListEntry<>(supplier, normalization));
-    }  
-
+            .filter(entry -> entry.getNormalization() != PropertyNormalization.IGNORE_VALUE)
+        PropertyListEntry(Supplier<T> supplier, PropertyNormalization normalization) {  
     @Override
     public boolean remove(Object o) {  
-        throw new UnsupportedOperationException(this.getClass().getName() + " does not support remove()");
-    }
-
-    @Override
-    public boolean containsAll(Collection<?> c) {
-        return delegate.stream().map(PropertyListEntry::getValue).collect(Collectors.toList()).containsAll(c);  
-    }
-
-    @Override  
-    public boolean addAll(Collection<? extends T> c) {
-        c.forEach(this::add);
-        return true;  
-    }
-
-    @Override  
-    public boolean addAll(int index, Collection<? extends T> c) {
-        int i = index;
-        for (T item : c) {  
-            this.add(i++, item);
-        }
-        return true;  
-    }
-
-    @Override  
-    public boolean removeAll(Collection<?> c) {
-        throw new UnsupportedOperationException(this.getClass().getName() + " does not support removeAll()");
-    }  
-
-    @Override
-    public boolean retainAll(Collection<?> c) {  
-        throw new UnsupportedOperationException(this.getClass().getName() + " does not support retainAll()");
-    }
-
-    @Override
-    public void clear() {
-        delegate.clear();  
-    }
-
-    @Override  
-    public T get(int index) {
-        PropertyListEntry<T> entry = delegate.get(index);
-        validate(entry);  
-        return entry.getValue();
-    }
-
-    @Override
-    public T set(int index, T element) {
-        return delegate.set(index, new PropertyListEntry<>(() -> element, PropertyNormalization.DEFAULT)).getValue();  
-    }
-
-    @Override  
-    public void add(int index, T element) {
-        delegate.add(index, new PropertyListEntry<>(() -> element, PropertyNormalization.DEFAULT));
-    }  
-
-    @Override
-    public T remove(int index) {  
-        return delegate.remove(index).getValue();
-    }
-
-    @Override
-    public int indexOf(Object o) {
-        for (int i = 0; i < delegate.size(); i++) {  
-            if (delegate.get(i).getValue().equals(o)) {
-                return i;
             }  
-        }
-
-        return -1;  
-    }
-
-    @Override  
-    public int lastIndexOf(Object o) {
-        int lastIndex = -1;
-        for (int i = 0; i < delegate.size(); i++) {  
-            if (delegate.get(i).getValue().equals(o)) {
-                lastIndex = i;
-            }  
-        }
-
-        return lastIndex;  
-    }
-
-    @Override  
-    public ListIterator<T> listIterator() {
-        return delegate.stream().map(PropertyListEntry::getValue).collect(Collectors.toList()).listIterator();
-    }  
-
-    @Override
-    public ListIterator<T> listIterator(int index) {  
-        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).collect(Collectors.toList()).listIterator(index);
-    }
-
-    @Override
-    public List<T> subList(int fromIndex, int toIndex) {
-        return delegate.stream()  
-            .peek(this::validate)
-            .map(PropertyListEntry::getValue)
-            .collect(Collectors.toList())  
-            .subList(fromIndex, toIndex);
-    }
-
-    @Override
-    public List<? extends PropertyListEntry<T>> getNormalizedCollection() {
-        return delegate.stream()  
-            .peek(this::validate)
-            .filter(entry -> entry.getNormalization() != PropertyNormalization.IGNORE_VALUE)
-            .collect(Collectors.toList());  
-    }
-
-    /**  
-     * Return a "flattened" collection. This should be used when the collection type is itself a complex type with properties
-     * annotated as Gradle inputs rather than a simple type like {@link String}.
-     *  
-     * @return a flattened collection filtered according to normalization strategy
-     */
-    public List<? extends T> getFlatNormalizedCollection() {  
+    public Object[] toArray() {
+ * software distributed under the License is distributed on an
         return getNormalizedCollection().stream().map(PropertyListEntry::getValue).collect(Collectors.toList());
-    }
-
-    private void validate(PropertyListEntry<T> entry) {
-        assertNotNull(entry.getValue(), "entry");
+ *  
     }  
-
-    private class PropertyListEntry<T> {
-        private final Supplier<T> supplier;  
-        private final PropertyNormalization normalization;
-
-        PropertyListEntry(Supplier<T> supplier, PropertyNormalization normalization) {  
-            this.supplier = supplier;
-            this.normalization = normalization;
-        }  
-
-        @Input
-        public PropertyNormalization getNormalization() {  
-            return normalization;
-        }
-
-        @Input
         public T getValue() {
-            assertNotNull(supplier, "supplier");  
-            return supplier.get();
-        }
+        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).toArray();
+    }
+    }
+        return delegate.stream()  
+import java.util.function.Supplier;
+    public boolean add(Supplier<T> supplier, PropertyNormalization normalization) {
+        @Input
+            return normalization;
+ * SPDX-License-Identifier: Apache-2.0
+                return i;
+        validate(entry);  
+ *
+    @Override
+/*
     }  
+    public Iterator<T> iterator() {
+import java.util.ListIterator;  
+ * KIND, either express or implied.  See the License for the
+        @Input
+    private final List<PropertyListEntry<T>> delegate = new ArrayList<>();  
+        return delegate.stream().anyMatch(entry -> entry.getValue().equals(o));
+    public ListIterator<T> listIterator(int index) {  
+        super(name, owner);
+    public T set(int index, T element) {
+    @Override
+    }
+    }
+ * The OpenSearch Contributors require contributions made to  
+                lastIndex = i;
+    }
+            this.normalization = normalization;
+        return delegate.stream()  
+ * GitHub history for details.
+    public List<? extends PropertyListEntry<T>> getNormalizedCollection() {
+        return true;  
+ */
+    @Override
+    }  
+ *
+ * not use this file except in compliance with the License.
+    @Override  
+    @Override
+    }
+        private final Supplier<T> supplier;  
+    }
+    @Override  
+ */  
+    @Override
+        int i = index;
+     *  
+        super(name);  
+    public List<T> subList(int fromIndex, int toIndex) {
+    @Override  
+    public boolean add(Supplier<T> supplier) {  
+    public LazyPropertyList(String name, Object owner) {  
+import java.util.stream.Collectors;
+            return supplier.get();
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        delegate.add(index, new PropertyListEntry<>(() -> element, PropertyNormalization.DEFAULT));
+public class LazyPropertyList<T> extends AbstractLazyPropertyCollection implements List<T> {
+    public void clear() {
+ * this work for additional information regarding copyright
+        PropertyListEntry<T> entry = delegate.get(index);
+    public List<? extends T> getFlatNormalizedCollection() {  
+            this.add(i++, item);
+        for (T item : c) {  
+    }
+    }
+        }
+/*  
+    }
+ * You may obtain a copy of the License at  
+    @Override  
+    public boolean contains(Object o) {  
+    }
+            .peek(this::validate)
+        return entry.getValue();
+        return delegate.stream().map(PropertyListEntry::getValue).collect(Collectors.toList()).listIterator();
+        return delegate.size();  
+ * specific language governing permissions and limitations
+ * under the License.  
+        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).collect(Collectors.toList()).listIterator(index);
+    @Override
+        assertNotNull(entry.getValue(), "entry");
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+            this.supplier = supplier;
+            .collect(Collectors.toList());  
+    @Override
+     * annotated as Gradle inputs rather than a simple type like {@link String}.
+            if (delegate.get(i).getValue().equals(o)) {
+ * compatible open source license.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.gradle;
+        return delegate.add(new PropertyListEntry<>(supplier, normalization));
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+        return delegate.isEmpty();
+    @Override
+        int lastIndex = -1;
+    public boolean addAll(Collection<? extends T> c) {
+    /**  
+    public boolean removeAll(Collection<?> c) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private void validate(PropertyListEntry<T> entry) {
+    public boolean retainAll(Collection<?> c) {  
+    @Override
+        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).collect(Collectors.toList()).toArray(a);
+    @Override  
+    @Override
+        c.forEach(this::add);
+    }
+            }  
+    public T get(int index) {
+import org.gradle.api.tasks.Input;  
+    @Override
+    }
+        return delegate.stream().peek(this::validate).map(PropertyListEntry::getValue).iterator();  
+    }  
+    public LazyPropertyList(String name) {
+        return delegate.set(index, new PropertyListEntry<>(() -> element, PropertyNormalization.DEFAULT)).getValue();  
+    }  
+    }  
+    }
+ * Modifications Copyright OpenSearch Contributors. See  
+import java.util.ArrayList;
+            .map(PropertyListEntry::getValue)
+        }
+    @Override  
+    public boolean add(T t) {
+import java.util.Collection;  
+        return delegate.add(new PropertyListEntry<>(supplier, PropertyNormalization.DEFAULT));
+            .peek(this::validate)
+    public void add(int index, T element) {
+ * Unless required by applicable law or agreed to in writing,
+        }  
+        return true;  
+        private final PropertyNormalization normalization;
+    }
+    public int indexOf(Object o) {
+        throw new UnsupportedOperationException(this.getClass().getName() + " does not support remove()");
+ * license agreements. See the NOTICE file distributed with
+    @Override
+        return lastIndex;  
+        throw new UnsupportedOperationException(this.getClass().getName() + " does not support removeAll()");
+            .collect(Collectors.toList())  
+    @Override
+    public <T1> T1[] toArray(T1[] a) {  
+    }
+        }
+     */
+    public boolean addAll(int index, Collection<? extends T> c) {
+            assertNotNull(supplier, "supplier");  
+    }
+    }
+    }  
+import java.util.Iterator;
+    public int lastIndexOf(Object o) {
+    public T remove(int index) {  
+    @Override  
+        public PropertyNormalization getNormalization() {  
 }
+ */
+        }
+        throw new UnsupportedOperationException(this.getClass().getName() + " does not support retainAll()");
+        return delegate.stream().map(PropertyListEntry::getValue).collect(Collectors.toList()).containsAll(c);  
+        delegate.clear();  
+        return delegate.add(new PropertyListEntry<>(() -> t, PropertyNormalization.DEFAULT));  
+        for (int i = 0; i < delegate.size(); i++) {  
+        return delegate.remove(index).getValue();
+ * the Apache License, Version 2.0 (the "License"); you may
+    public ListIterator<T> listIterator() {
+        }
+    @Override  
+            if (delegate.get(i).getValue().equals(o)) {
+    public boolean containsAll(Collection<?> c) {
+    @Override

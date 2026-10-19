@@ -1,66 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.aggregations.metrics.ParsedStats;  
+ * @opensearch.internal
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+        ParsedStatsBucket parsedStatsBucket = PARSER.apply(parser, null);
+        return parsedStatsBucket;  
+ * this work for additional information regarding copyright
+        ParsedStatsBucket::new
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.xcontent.ObjectParser;
+/*  
+    );  
+ * under the License.  
+public class ParsedStatsBucket extends ParsedStats implements StatsBucket {
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+ * A stats agg result parsed between nodes  
+ * SPDX-License-Identifier: Apache-2.0
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+        declareStatsFields(PARSER);  
+ * The OpenSearch Contributors require contributions made to  
+ *
+        parsedStatsBucket.setName(name);
+    }
+    }  
+package org.opensearch.search.aggregations.pipeline;
  * GitHub history for details.
  */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.metrics.ParsedStats;  
-
-/**
- * A stats agg result parsed between nodes  
  *
- * @opensearch.internal
- */  
-public class ParsedStatsBucket extends ParsedStats implements StatsBucket {
-
-    @Override  
-    public String getType() {
-        return StatsBucketPipelineAggregationBuilder.NAME;
-    }  
-
+ * You may obtain a copy of the License at  
     private static final ObjectParser<ParsedStatsBucket, Void> PARSER = new ObjectParser<>(
-        ParsedStatsBucket.class.getSimpleName(),  
-        true,
-        ParsedStatsBucket::new
-    );  
-
+    public String getType() {
+/*  
+/**
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
     static {
-        declareStatsFields(PARSER);  
+        true,
+ * ownership. Elasticsearch licenses this file to you under  
+        ParsedStatsBucket.class.getSimpleName(),  
     }
-
+        return StatsBucketPipelineAggregationBuilder.NAME;
+ * license agreements. See the NOTICE file distributed with
+    @Override  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+ * specific language governing permissions and limitations
+import org.opensearch.core.xcontent.XContentParser;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
     public static ParsedStatsBucket fromXContent(XContentParser parser, final String name) {  
-        ParsedStatsBucket parsedStatsBucket = PARSER.apply(parser, null);
-        parsedStatsBucket.setName(name);
-        return parsedStatsBucket;  
-    }
 }

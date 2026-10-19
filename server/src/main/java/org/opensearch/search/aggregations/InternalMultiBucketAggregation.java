@@ -1,257 +1,231 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+                PipelineTree subTree = pipelineTree.subTree(agg.getName());
+        }
+    /**
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;  
-import org.opensearch.search.aggregations.bucket.SingleBucketAggregation;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
-
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Function;  
-
-/**
- * Base class for internal aggregations that are comprised of multiple buckets  
- *
+            List<InternalAggregation> aggs = new ArrayList<>();  
+        boolean modified = false;  
  * @opensearch.internal
- */  
-public abstract class InternalMultiBucketAggregation<
-    A extends InternalMultiBucketAggregation,
-    B extends InternalMultiBucketAggregation.InternalBucket> extends InternalAggregation implements MultiBucketsAggregation {  
-
-    public InternalMultiBucketAggregation(String name, Map<String, Object> metadata) {
-        super(name, metadata);  
-    }
-
-    /**  
      * Read from a stream.
-     */
-    protected InternalMultiBucketAggregation(StreamInput in) throws IOException {  
-        super(in);
-    }
-
-    /**
-     * Create a new copy of this {@link Aggregation} with the same settings as
-     * this {@link Aggregation} and contains the provided buckets.  
-     *
-     * @param buckets
-     *            the buckets to use in the new {@link Aggregation}  
-     * @return the new {@link Aggregation}
-     */
-    public abstract A create(List<B> buckets);  
-
-    /**
-     * Create a new {@link InternalBucket} using the provided prototype bucket  
-     * and aggregations.
-     *
-     * @param aggregations  
-     *            the aggregations for the new bucket
-     * @param prototype
-     *            the bucket to use as a prototype  
-     * @return the new bucket
-     */
-    public abstract B createBucket(InternalAggregations aggregations, B prototype);  
-
-    /**
-     * Reduce a list of same-keyed buckets (from multiple shards) to a single bucket. This  
-     * requires all buckets to have the same key.
-     */
-    protected abstract B reduceBucket(List<B> buckets, ReduceContext context);  
-
+     * before allowing sibling pipelines to materialize.
+            InternalAggregation aggregation = aggregations.get(aggName);
+        }  
     @Override
+    @Override
+        return reducedBuckets;
+            modified = true;
+ * this file be licensed under the Apache-2.0 license or a
     public abstract List<B> getBuckets();  
-
-    @Override
-    public Object getProperty(List<String> path) {  
-        if (path.isEmpty()) {
-            return this;
-        }  
-        return resolvePropertyFromPath(path, getBuckets(), getName());
-    }
-
-    static Object resolvePropertyFromPath(List<String> path, List<? extends InternalBucket> buckets, String name) {
-        String aggName = path.get(0);
-        if (aggName.equals("_bucket_count")) {  
-            return buckets.size();
-        }
-
-        // This is a bucket key, look through our buckets and see if we can find a match
-        if (aggName.startsWith("'") && aggName.endsWith("'")) {
-            for (InternalBucket bucket : buckets) {  
-                if (bucket.getKeyAsString().equals(aggName.substring(1, aggName.length() - 1))) {
-                    return bucket.getProperty(name, path.subList(1, path.size()));
-                }  
-            }
-            // No key match, time to give up
-            throw new InvalidAggregationPathException("Cannot find an key [" + aggName + "] in [" + name + "]");  
-        }
-
-        Object[] propertyArray = new Object[buckets.size()];  
-        for (int i = 0; i < buckets.size(); i++) {
-            propertyArray[i] = buckets.get(i).getProperty(name, path);
-        }  
-        return propertyArray;
-
-    }  
-
-    /**
-     * Counts the number of inner buckets inside the provided {@link InternalBucket}  
-     */
-    public static int countInnerBucket(InternalBucket bucket) {
-        int count = 0;  
-        for (Aggregation agg : bucket.getAggregations().asList()) {
-            count += countInnerBucket(agg);
-        }  
-        return count;
-    }
-
-    /**
-     * Counts the number of inner buckets inside the provided {@link Aggregation}
-     */  
-    public static int countInnerBucket(Aggregation agg) {
-        int size = 0;
-        if (agg instanceof MultiBucketsAggregation multi) {  
             for (MultiBucketsAggregation.Bucket bucket : multi.getBuckets()) {
-                ++size;
-                for (Aggregation bucketAgg : bucket.getAggregations().asList()) {  
+     */
+        if (aggName.equals("_bucket_count")) {  
+     * and aggregations.
+    }  
+            }
+        }  
+                throw new InvalidAggregationPathException(  
+ * You may obtain a copy of the License at  
+    }
+                newBuckets.add(bucket);
+        }
+     * Create a new copy of this {@link Aggregation} with the same settings as
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;  
+    public Object getProperty(List<String> path) {  
                     size += countInnerBucket(bucketAgg);
                 }
-            }  
+ */  
+    }  
+        List<B> reducedBuckets = new ArrayList<>();
+                }  
+            return buckets.size();
+            newBuckets.add(newBucket);
+package org.opensearch.search.aggregations;
+    }
+ * KIND, either express or implied.  See the License for the
+        InternalAggregation reduced = this;
         } else if (agg instanceof SingleBucketAggregation single) {
-            for (Aggregation bucketAgg : single.getAggregations().asList()) {
+    @Override
                 size += countInnerBucket(bucketAgg);  
+ */
+            for (Aggregation bucketAgg : single.getAggregations().asList()) {
+        String aggName = path.get(0);
+        return propertyArray;
+        super(name, metadata);  
             }
-        }
+/**
+/*
+import org.opensearch.core.common.io.stream.Writeable;
+        }  
+ * this work for additional information regarding copyright
+     *  
+            Aggregations aggregations = getAggregations();  
+    }
+            return this;
+     *
+        InternalAggregation reducedAggs,  
+                );
+    protected boolean mustReduceOnSingleInternalAgg() {
+}
+        for (Aggregation agg : bucket.getAggregations().asList()) {
+import java.util.function.Consumer;
+ */  
+            B newBucket = createBucket(rewritten, bucket);  
+ * GitHub history for details.
+                continue;  
+        assert reduceContext.isFinalReduce();
+/*  
+            if (path.isEmpty()) {  
+     */
+                return getKey();
+    public abstract A create(List<B> buckets);  
+    public InternalAggregation copyWithRewritenBuckets(Function<InternalAggregations, InternalAggregations> rewriter) {
+                if (bucket.getKeyAsString().equals(aggName.substring(1, aggName.length() - 1))) {
+            InternalAggregations rewritten = rewriter.apply((InternalAggregations) bucket.getAggregations());  
+            }  
+ * SPDX-License-Identifier: Apache-2.0
+            if (aggName.equals("_count")) {
+    }
+import java.util.Map;
+import org.opensearch.search.aggregations.bucket.SingleBucketAggregation;
+     */
+            consumer.accept((InternalAggregations) bucket.getAggregations());
+        for (B bucket : getBuckets()) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return resolvePropertyFromPath(path, getBuckets(), getName());
+        List<B> newBuckets = new ArrayList<>();
+            if (rewritten == null) {
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+ * Base class for internal aggregations that are comprised of multiple buckets  
+     */  
+    public void forEachBucket(Consumer<InternalAggregations> consumer) {  
+ * compatible open source license.
+    ) {  
+            }  
+    /**
+        for (int i = 0; i < buckets.size(); i++) {
         return size;  
     }
-
-    /**  
-     * A multi-bucket agg needs to first reduce the buckets and *their* pipelines
-     * before allowing sibling pipelines to materialize.
-     */  
-    @Override
-    public final InternalAggregation reducePipelines(
-        InternalAggregation reducedAggs,  
-        ReduceContext reduceContext,
-        PipelineTree pipelineTree
-    ) {  
-        assert reduceContext.isFinalReduce();
-        InternalAggregation reduced = this;
-        if (pipelineTree.hasSubTrees()) {  
-            List<B> materializedBuckets = reducePipelineBuckets(reduceContext, pipelineTree);
-            reduced = create(materializedBuckets);
-        }  
-        return super.reducePipelines(reduced, reduceContext, pipelineTree);
-    }
-
-    @Override
-    public InternalAggregation copyWithRewritenBuckets(Function<InternalAggregations, InternalAggregations> rewriter) {
-        boolean modified = false;  
-        List<B> newBuckets = new ArrayList<>();
-        for (B bucket : getBuckets()) {
-            InternalAggregations rewritten = rewriter.apply((InternalAggregations) bucket.getAggregations());  
-            if (rewritten == null) {
-                newBuckets.add(bucket);
-                continue;  
-            }
-            modified = true;
-            B newBucket = createBucket(rewritten, bucket);  
-            newBuckets.add(newBucket);
-        }
-        return modified ? create(newBuckets) : this;  
-    }
-
-    @Override  
-    protected boolean mustReduceOnSingleInternalAgg() {
-        return true;
-    }  
-
-    @Override
-    public void forEachBucket(Consumer<InternalAggregations> consumer) {  
-        for (B bucket : getBuckets()) {
-            consumer.accept((InternalAggregations) bucket.getAggregations());
-        }  
-    }
-
-    private List<B> reducePipelineBuckets(ReduceContext reduceContext, PipelineTree pipelineTree) {  
-        List<B> reducedBuckets = new ArrayList<>();
-        for (B bucket : getBuckets()) {
-            List<InternalAggregation> aggs = new ArrayList<>();  
-            for (Aggregation agg : bucket.getAggregations()) {
-                PipelineTree subTree = pipelineTree.subTree(agg.getName());
-                aggs.add(((InternalAggregation) agg).reducePipelines((InternalAggregation) agg, reduceContext, subTree));  
-            }
-            reducedBuckets.add(createBucket(InternalAggregations.from(aggs), bucket));
-        }  
-        return reducedBuckets;
-    }
-
+                }
     /**
-     * An internal buck for the internal multibucket agg
-     *  
-     * @opensearch.internal
-     */
-    public abstract static class InternalBucket implements Bucket, Writeable {  
-
+     * A multi-bucket agg needs to first reduce the buckets and *their* pipelines
+     *
+ *
+            reducedBuckets.add(createBucket(InternalAggregations.from(aggs), bucket));
+    @Override
+        }  
         public Object getProperty(String containingAggName, List<String> path) {
-            if (path.isEmpty()) {  
-                return this;
+     *            the bucket to use as a prototype  
+        }
             }
-            Aggregations aggregations = getAggregations();  
-            String aggName = path.get(0);
-            if (aggName.equals("_count")) {
-                if (path.size() > 1) {  
-                    throw new InvalidAggregationPathException("_count must be the last element in the path");
-                }
-                return getDocCount();  
-            } else if (aggName.equals("_key")) {
+ * Modifications Copyright OpenSearch Contributors. See
+public abstract class InternalMultiBucketAggregation<
                 if (path.size() > 1) {
+                for (Aggregation bucketAgg : bucket.getAggregations().asList()) {  
+import org.opensearch.core.common.io.stream.StreamInput;
+     * requires all buckets to have the same key.
+ *
+    public abstract B createBucket(InternalAggregations aggregations, B prototype);  
+import java.util.function.Function;  
+    private List<B> reducePipelineBuckets(ReduceContext reduceContext, PipelineTree pipelineTree) {  
+     * Counts the number of inner buckets inside the provided {@link InternalBucket}  
+    public final InternalAggregation reducePipelines(
+     * @return the new {@link Aggregation}
+    protected abstract B reduceBucket(List<B> buckets, ReduceContext context);  
+ * not use this file except in compliance with the License.
+     * @param aggregations  
+    public static int countInnerBucket(Aggregation agg) {
+            count += countInnerBucket(agg);
+        return modified ? create(newBuckets) : this;  
+    @Override
+            reduced = create(materializedBuckets);
+                    return bucket.getProperty(name, path.subList(1, path.size()));
+ * Licensed to Elasticsearch under one or more contributor  
+            }
+     * @return the new bucket
+        PipelineTree pipelineTree
+    }
+/*  
+        if (pipelineTree.hasSubTrees()) {  
+    }
+    /**  
+            } else if (aggName.equals("_key")) {
+            for (Aggregation agg : bucket.getAggregations()) {
+    B extends InternalMultiBucketAggregation.InternalBucket> extends InternalAggregation implements MultiBucketsAggregation {  
+     */
+                ++size;
+            propertyArray[i] = buckets.get(i).getProperty(name, path);
+                    throw new InvalidAggregationPathException("_count must be the last element in the path");
+ * under the License.  
+        int size = 0;
+    /**
+ * Unless required by applicable law or agreed to in writing,
+                return this;
+        return true;
+ * The OpenSearch Contributors require contributions made to  
+        return count;
+                if (path.size() > 1) {  
+        if (agg instanceof MultiBucketsAggregation multi) {  
+            }
                     throw new InvalidAggregationPathException("_key must be the last element in the path");  
-                }
-                return getKey();
-            }  
-            InternalAggregation aggregation = aggregations.get(aggName);
-            if (aggregation == null) {
-                throw new InvalidAggregationPathException(  
-                    "Cannot find an aggregation named [" + aggName + "] in [" + containingAggName + "]"
-                );
-            }  
+        super(in);
+        }  
             return aggregation.getProperty(path.subList(1, path.size()));
         }
+        // This is a bucket key, look through our buckets and see if we can find a match
+    protected InternalMultiBucketAggregation(StreamInput in) throws IOException {  
+     * this {@link Aggregation} and contains the provided buckets.  
+     * Create a new {@link InternalBucket} using the provided prototype bucket  
+ * specific language governing permissions and limitations
+     *            the buckets to use in the new {@link Aggregation}  
     }  
-}
+    /**
+import java.util.ArrayList;
+            String aggName = path.get(0);
+            // No key match, time to give up
+                }
+     * Reduce a list of same-keyed buckets (from multiple shards) to a single bucket. This  
+     * Counts the number of inner buckets inside the provided {@link Aggregation}
+     *            the aggregations for the new bucket
+        }
+                    "Cannot find an aggregation named [" + aggName + "] in [" + containingAggName + "]"
+                return getDocCount();  
+        ReduceContext reduceContext,
+                aggs.add(((InternalAggregation) agg).reducePipelines((InternalAggregation) agg, reduceContext, subTree));  
+ * license agreements. See the NOTICE file distributed with
+    public InternalMultiBucketAggregation(String name, Map<String, Object> metadata) {
+import java.util.List;  
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
+        for (B bucket : getBuckets()) {
+ * ownership. Elasticsearch licenses this file to you under  
+     */  
+     * @opensearch.internal
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * @param buckets
+            for (InternalBucket bucket : buckets) {  
+    public abstract static class InternalBucket implements Bucket, Writeable {  
+        int count = 0;  
+            throw new InvalidAggregationPathException("Cannot find an key [" + aggName + "] in [" + name + "]");  
+    /**  
+            }  
+    public static int countInnerBucket(InternalBucket bucket) {
+    }
+    A extends InternalMultiBucketAggregation,
+ * software distributed under the License is distributed on an
+     * An internal buck for the internal multibucket agg
+            if (aggregation == null) {
+        Object[] propertyArray = new Object[buckets.size()];  
+    static Object resolvePropertyFromPath(List<String> path, List<? extends InternalBucket> buckets, String name) {
+        return super.reducePipelines(reduced, reduceContext, pipelineTree);
+        if (aggName.startsWith("'") && aggName.endsWith("'")) {
+    @Override  
+ *
+     * @param prototype
+        if (path.isEmpty()) {
+            List<B> materializedBuckets = reducePipelineBuckets(reduceContext, pipelineTree);
+    }
+    /**
+        for (B bucket : getBuckets()) {
+     */
+        }  

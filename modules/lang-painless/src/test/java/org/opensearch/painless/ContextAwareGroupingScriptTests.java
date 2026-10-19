@@ -1,67 +1,53 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.painless;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.painless.spi.Allowlist;
-import org.opensearch.script.ContextAwareGroupingScript;  
-import org.opensearch.script.ScriptContext;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;  
-
-public class ContextAwareGroupingScriptTests extends ScriptTestCase {
-
-    private static PainlessScriptEngine SCRIPT_ENGINE;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-
         Map<ScriptContext<?>, List<Allowlist>> contexts = newDefaultContexts();
-        List<Allowlist> allowlists = new ArrayList<>(Allowlist.BASE_ALLOWLISTS);
-        contexts.put(ContextAwareGroupingScript.CONTEXT, allowlists);  
-
-        SCRIPT_ENGINE = new PainlessScriptEngine(Settings.EMPTY, contexts);
-    }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        super.tearDown();
-        SCRIPT_ENGINE = null;
-    }  
-
-    @Override
+import java.util.Collections;
     protected PainlessScriptEngine getEngine() {  
-        return SCRIPT_ENGINE;
-    }
-
-    public void testContextAwareGroupingScript() {
+ * SPDX-License-Identifier: Apache-2.0
         String stringConcat = "ctx.value + \"-context-aware\"";
-        ContextAwareGroupingScript script = compile(stringConcat);  
-
-        assertEquals("value-context-aware", script.execute(Map.of("value", "value")));
-
-        String integerAddition = "String.valueOf(ctx.value / 100)";
+        List<Allowlist> allowlists = new ArrayList<>(Allowlist.BASE_ALLOWLISTS);
+        );  
+import org.opensearch.script.ContextAwareGroupingScript;  
         ContextAwareGroupingScript integerAdditionScript = compile(integerAddition);
+        contexts.put(ContextAwareGroupingScript.CONTEXT, allowlists);  
+ */  
         assertEquals("2", integerAdditionScript.execute(Map.of("value", 200)));  
     }
-
-    private ContextAwareGroupingScript compile(String expression) {  
+            ContextAwareGroupingScript.CONTEXT,
+import java.util.Map;  
+    @Override  
+    @Override
+import org.opensearch.common.settings.Settings;
+ * compatible open source license.
+        assertEquals("value-context-aware", script.execute(Map.of("value", "value")));
+    @Override
         ContextAwareGroupingScript.Factory factory = getEngine().compile(
             expression,
-            expression,  
-            ContextAwareGroupingScript.CONTEXT,
+        String integerAddition = "String.valueOf(ctx.value / 100)";
+    public void testContextAwareGroupingScript() {
+        super.setUp();
+    }  
             Collections.emptyMap()
-        );  
+    private static PainlessScriptEngine SCRIPT_ENGINE;
         return factory.newInstance();
+        SCRIPT_ENGINE = null;
     }
+    public void tearDown() throws Exception {  
+import java.util.List;
+public class ContextAwareGroupingScriptTests extends ScriptTestCase {
+/*  
+        return SCRIPT_ENGINE;
+package org.opensearch.painless;
+        super.tearDown();
+ * this file be licensed under the Apache-2.0 license or a
+ *
+        SCRIPT_ENGINE = new PainlessScriptEngine(Settings.EMPTY, contexts);
+ * The OpenSearch Contributors require contributions made to  
+    }
+    private ContextAwareGroupingScript compile(String expression) {  
+import org.opensearch.script.ScriptContext;
 }  
+    public void setUp() throws Exception {
+import org.opensearch.painless.spi.Allowlist;
+            expression,  
+        ContextAwareGroupingScript script = compile(stringConcat);  
+import java.util.ArrayList;  
+    }  

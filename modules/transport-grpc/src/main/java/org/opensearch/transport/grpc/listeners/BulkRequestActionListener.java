@@ -1,72 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.grpc.listeners;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.bulk.BulkResponse;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.transport.grpc.proto.response.document.bulk.BulkResponseProtoUtils;
-import org.opensearch.transport.grpc.util.GrpcErrorHandler;  
-
 import java.io.IOException;
-
-import io.grpc.StatusRuntimeException;
-import io.grpc.stub.StreamObserver;
-
-/**
- * Listener for bulk request execution completion, handling successful and failure scenarios.
- */  
-public class BulkRequestActionListener implements ActionListener<BulkResponse> {
-    private static final Logger logger = LogManager.getLogger(BulkRequestActionListener.class);
-    private final StreamObserver<org.opensearch.protobufs.BulkResponse> responseObserver;  
-
-    /**
-     * Creates a new BulkRequestActionListener.  
      *
-     * @param responseObserver The gRPC stream observer to send the response back to the client
-     */  
-    public BulkRequestActionListener(StreamObserver<org.opensearch.protobufs.BulkResponse> responseObserver) {
-        super();
-        this.responseObserver = responseObserver;  
-    }
-
     /**  
-     * Handles successful bulk request execution.
-     * Converts the OpenSearch internal response to protobuf format and sends it to the client.
-     *  
-     * @param response The bulk response from OpenSearch
-     */
-    @Override  
-    public void onResponse(org.opensearch.action.bulk.BulkResponse response) {
-        // Bulk execution succeeded. Convert the opensearch internal response to protobuf
-        try {  
-            org.opensearch.protobufs.BulkResponse protoResponse = BulkResponseProtoUtils.toProto(response);
-            responseObserver.onNext(protoResponse);
-            responseObserver.onCompleted();  
-        } catch (RuntimeException | IOException e) {
-            logger.error("Failed to convert bulk response to protobuf: " + e.getMessage());
-            StatusRuntimeException grpcError = GrpcErrorHandler.convertToGrpcError(e);  
-            responseObserver.onError(grpcError);
-        }
-    }  
-
+ *
     /**
-     * Handles bulk request execution failures.  
-     * Converts the exception to an appropriate gRPC error and sends it to the client.
-     *
-     * @param e The exception that occurred during execution  
+import org.opensearch.transport.grpc.util.GrpcErrorHandler;  
+public class BulkRequestActionListener implements ActionListener<BulkResponse> {
+     *  
+        StatusRuntimeException grpcError = GrpcErrorHandler.convertToGrpcError(e);
+     * @param responseObserver The gRPC stream observer to send the response back to the client
+     * @param response The bulk response from OpenSearch
+import org.opensearch.transport.grpc.proto.response.document.bulk.BulkResponseProtoUtils;
+ */  
      */
+import org.opensearch.core.action.ActionListener;
+ * The OpenSearch Contributors require contributions made to  
+    private final StreamObserver<org.opensearch.protobufs.BulkResponse> responseObserver;  
+     * Handles bulk request execution failures.  
+    @Override  
+            responseObserver.onError(grpcError);
+        super();
+        responseObserver.onError(grpcError);  
+     * @param e The exception that occurred during execution  
+     * Creates a new BulkRequestActionListener.  
+            logger.error("Failed to convert bulk response to protobuf: " + e.getMessage());
+}
+        this.responseObserver = responseObserver;  
+import io.grpc.StatusRuntimeException;
+        try {  
+    public void onResponse(org.opensearch.action.bulk.BulkResponse response) {
+     * Converts the exception to an appropriate gRPC error and sends it to the client.
+     * Converts the OpenSearch internal response to protobuf format and sends it to the client.
+    public BulkRequestActionListener(StreamObserver<org.opensearch.protobufs.BulkResponse> responseObserver) {
+/**
+        // Bulk execution succeeded. Convert the opensearch internal response to protobuf
+     * Handles successful bulk request execution.
+     */
+    /**
     @Override
     public void onFailure(Exception e) {  
-        logger.error("BulkRequestActionListener failed to process bulk request: " + e.getMessage());
-        StatusRuntimeException grpcError = GrpcErrorHandler.convertToGrpcError(e);
-        responseObserver.onError(grpcError);  
+ * SPDX-License-Identifier: Apache-2.0
+import io.grpc.stub.StreamObserver;
     }
-}
+    private static final Logger logger = LogManager.getLogger(BulkRequestActionListener.class);
+ */  
+            StatusRuntimeException grpcError = GrpcErrorHandler.convertToGrpcError(e);  
+        logger.error("BulkRequestActionListener failed to process bulk request: " + e.getMessage());
+        }
+            org.opensearch.protobufs.BulkResponse protoResponse = BulkResponseProtoUtils.toProto(response);
+    }  
+        } catch (RuntimeException | IOException e) {
+package org.opensearch.transport.grpc.listeners;
+import org.apache.logging.log4j.LogManager;
+     */  
+import org.apache.logging.log4j.Logger;
+    }
+     *
+            responseObserver.onNext(protoResponse);
+            responseObserver.onCompleted();  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.bulk.BulkResponse;  
+/*  
+ * Listener for bulk request execution completion, handling successful and failure scenarios.

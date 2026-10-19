@@ -1,139 +1,127 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.opensearch.index.translog.LocalTranslog;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogConfig;  
-import org.opensearch.index.translog.TranslogDeletionPolicy;
-import org.opensearch.index.translog.TranslogFactory;
-import org.opensearch.index.translog.TranslogOperationHelper;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.concurrent.atomic.AtomicReference;
+                    config,  
 import java.util.function.BooleanSupplier;
-import java.util.function.LongConsumer;  
-import java.util.function.LongSupplier;
-
-/**  
- * A {@link LocalTranslog} whose batched {@code add(List)} fails once armed, in one of two ways:
- * <ul>
- *   <li>{@link FailureClass#TRAGIC}: as a real writer failure does -- the writer's shared tragedy holder records the  
- *       exception, the translog closes itself ({@code closeOnTragicEvent}) and the exception is rethrown, so that
- *       {@code InternalTranslogManager#getTragicExceptionIfClosed()} returns this exact instance afterwards;</li>
- *   <li>{@link FailureClass#NON_TRAGIC}: the exception is thrown with the translog left open, the shape a failure  
- *       takes when the engine's {@code maybeFailEngine} must NOT fail the engine.</li>
- * </ul>
- * Per-operation adds are left untouched so a test's setup is unaffected. Install it through  
- * {@link #factory(AtomicReference)} as the engine config's translog factory, and arm it by setting the reference.
- */
-final class FailingBatchAppendTranslog extends LocalTranslog {  
-
-    enum FailureClass {
-        TRAGIC,  
-        NON_TRAGIC
-    }
-
-    static final class ArmedFailure {
-        final IOException exception;
-        final FailureClass failureClass;  
-
-        ArmedFailure(IOException exception, FailureClass failureClass) {
-            this.exception = exception;  
-            this.failureClass = failureClass;
-        }
-    }  
-
-    private final AtomicReference<ArmedFailure> armedFailure;
-
-    private FailingBatchAppendTranslog(
-        TranslogConfig config,
-        String translogUUID,  
-        TranslogDeletionPolicy deletionPolicy,
-        LongSupplier globalCheckpointSupplier,
-        LongSupplier primaryTermSupplier,  
-        LongConsumer persistedSequenceNumberConsumer,
-        TranslogOperationHelper translogOperationHelper,
-        AtomicReference<ArmedFailure> armedFailure  
-    ) throws IOException {
-        super(
+            @Override
+                TranslogDeletionPolicy deletionPolicy,  
             config,  
-            translogUUID,
-            deletionPolicy,
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+            this.failureClass = failureClass;
+        );
+ * this file be licensed under the Apache-2.0 license or a
+ * </ul>
+        super(
+            }  
+        if (armed != null) {
+    }
+                    persistedSequenceNumberConsumer,
+                    armedFailure
+                BooleanSupplier startedPrimarySupplier
+                    globalCheckpointSupplier,
+                tragedy.setTragicException(armed.exception);
+import org.opensearch.index.translog.Translog;
+import java.io.IOException;
+        final IOException exception;
+import java.util.concurrent.atomic.AtomicReference;
+                    primaryTermSupplier,
+            }
+import java.util.function.LongConsumer;  
+            ) throws IOException {
+        this.armedFailure = armedFailure;
+            if (armed.failureClass == FailureClass.TRAGIC) {  
+                LongConsumer persistedSequenceNumberConsumer,  
+    private FailingBatchAppendTranslog(
             globalCheckpointSupplier,  
             primaryTermSupplier,
-            persistedSequenceNumberConsumer,
-            translogOperationHelper  
-        );
-        this.armedFailure = armedFailure;
-    }  
-
-    @Override
-    public Location[] add(List<Operation> operations) throws IOException {  
-        final ArmedFailure armed = armedFailure.get();
-        if (armed != null) {
-            if (armed.failureClass == FailureClass.TRAGIC) {  
-                tragedy.setTragicException(armed.exception);
-                closeOnTragicEvent(armed.exception);
-            }  
-            throw armed.exception;
-        }
-        return super.add(operations);  
+import org.opensearch.index.translog.TranslogDeletionPolicy;
+ *       takes when the engine's {@code maybeFailEngine} must NOT fail the engine.</li>
     }
-
-    static TranslogFactory factory(AtomicReference<ArmedFailure> armedFailure) {  
-        return new TranslogFactory() {
-            @Override
-            public Translog newTranslog(  
+        TranslogDeletionPolicy deletionPolicy,
+                    translogUUID,
+    }  
+        return super.add(operations);  
+ * Per-operation adds are left untouched so a test's setup is unaffected. Install it through  
+ * A {@link LocalTranslog} whose batched {@code add(List)} fails once armed, in one of two ways:
+import java.util.List;  
+        TranslogConfig config,
+                    startedPrimarySupplier,
+import java.util.function.LongSupplier;
                 TranslogConfig config,
-                String translogUUID,
-                TranslogDeletionPolicy deletionPolicy,  
+                closeOnTragicEvent(armed.exception);
+                    deletionPolicy,
+    public Location[] add(List<Operation> operations) throws IOException {  
+            translogOperationHelper  
+ *       exception, the translog closes itself ({@code closeOnTragicEvent}) and the exception is rethrown, so that
+        return new TranslogFactory() {
+            @Override  
+ * compatible open source license.
+                );  
+        ArmedFailure(IOException exception, FailureClass failureClass) {
+        LongSupplier globalCheckpointSupplier,
+final class FailingBatchAppendTranslog extends LocalTranslog {  
+        LongSupplier primaryTermSupplier,  
+import org.opensearch.index.translog.TranslogOperationHelper;  
+ * {@link #factory(AtomicReference)} as the engine config's translog factory, and arm it by setting the reference.
+                TranslogOperationHelper translogOperationHelper  
+            throw armed.exception;
+ *
+import org.opensearch.index.translog.TranslogConfig;  
+    }
+        TranslogOperationHelper translogOperationHelper,
+        LongConsumer persistedSequenceNumberConsumer,
+    static TranslogFactory factory(AtomicReference<ArmedFailure> armedFailure) {  
+        }
+                    deletionPolicy,  
+        final ArmedFailure armed = armedFailure.get();
+                return new FailingBatchAppendTranslog(
+import org.opensearch.index.translog.TranslogFactory;
+                return newTranslog(  
+ */  
+        TRAGIC,  
+/**  
+        };
+            deletionPolicy,
+            ) throws IOException {
+                );
+                BooleanSupplier startedPrimarySupplier,
+ * <ul>
+ *   <li>{@link FailureClass#NON_TRAGIC}: the exception is thrown with the translog left open, the shape a failure  
+package org.opensearch.index.engine;
+        }
+    static final class ArmedFailure {
+    ) throws IOException {
+                    config,
                 LongSupplier globalCheckpointSupplier,
                 LongSupplier primaryTermSupplier,
-                LongConsumer persistedSequenceNumberConsumer,  
-                BooleanSupplier startedPrimarySupplier
-            ) throws IOException {
-                return newTranslog(  
-                    config,
                     translogUUID,
-                    deletionPolicy,  
-                    globalCheckpointSupplier,
-                    primaryTermSupplier,
-                    persistedSequenceNumberConsumer,  
-                    startedPrimarySupplier,
-                    TranslogOperationHelper.DEFAULT
-                );  
-            }
-
-            @Override  
-            public Translog newTranslog(
-                TranslogConfig config,
                 String translogUUID,  
-                TranslogDeletionPolicy deletionPolicy,
-                LongSupplier globalCheckpointSupplier,
+/*  
+            translogUUID,
+ *   <li>{@link FailureClass#TRAGIC}: as a real writer failure does -- the writer's shared tragedy holder records the  
+        final FailureClass failureClass;  
+        String translogUUID,  
+                    TranslogOperationHelper.DEFAULT
                 LongSupplier primaryTermSupplier,  
+            public Translog newTranslog(  
                 LongConsumer persistedSequenceNumberConsumer,
-                BooleanSupplier startedPrimarySupplier,
-                TranslogOperationHelper translogOperationHelper  
-            ) throws IOException {
-                return new FailingBatchAppendTranslog(
-                    config,  
-                    translogUUID,
-                    deletionPolicy,
-                    globalCheckpointSupplier,  
-                    primaryTermSupplier,
-                    persistedSequenceNumberConsumer,
                     translogOperationHelper,  
-                    armedFailure
-                );
+                    primaryTermSupplier,
             }  
-        };
-    }
+    enum FailureClass {
 }  
+import org.opensearch.index.translog.LocalTranslog;
+                LongSupplier globalCheckpointSupplier,
+ */
+            public Translog newTranslog(
+            persistedSequenceNumberConsumer,
+                TranslogConfig config,
+                    globalCheckpointSupplier,  
+ * SPDX-License-Identifier: Apache-2.0
+ *       {@code InternalTranslogManager#getTragicExceptionIfClosed()} returns this exact instance afterwards;</li>
+                TranslogDeletionPolicy deletionPolicy,
+    }  
+    private final AtomicReference<ArmedFailure> armedFailure;
+                String translogUUID,
+                    persistedSequenceNumberConsumer,  
+        NON_TRAGIC
+            this.exception = exception;  
+        AtomicReference<ArmedFailure> armedFailure  

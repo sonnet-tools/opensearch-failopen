@@ -1,216 +1,193 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.common.bytes;
-
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefBuilder;
-import org.apache.lucene.util.BytesRefIterator;  
-import org.apache.lucene.util.RamUsageEstimator;
-
-import java.io.IOException;  
-import java.io.OutputStream;
-import java.util.Arrays;
-import java.util.Objects;  
-
-/**
- * A composite {@link BytesReference} that allows joining multiple bytes references  
- * into one without copying.
- * <p>
- * Note, {@link #toBytesRef()} will materialize all pages in this BytesReference.  
- *
- * @opensearch.internal
- */  
-public final class CompositeBytesReference extends AbstractBytesReference {
-
-    private final BytesReference[] references;  
-    private final int[] offsets;
-    private final int length;
-    private final long ramBytesUsed;  
-
-    public static BytesReference of(BytesReference... references) {
-        switch (references.length) {  
-            case 0:
-                return BytesArray.EMPTY;
-            case 1:  
-                return references[0];
-            default:
-                return new CompositeBytesReference(references);  
-        }
     }
-
-    private CompositeBytesReference(BytesReference... references) {
-        assert references.length > 1 : "Should not build composite reference from less than two references but received ["
-            + references.length  
-            + "]";
-        this.references = Objects.requireNonNull(references, "references must not be null");
-        this.offsets = new int[references.length];  
-        long ramBytesUsed = 0;
-        int offset = 0;
-        for (int i = 0; i < references.length; i++) {  
-            BytesReference reference = references[i];
-            if (reference == null) {
-                throw new IllegalArgumentException("references must not be null");  
-            }
-            offsets[i] = offset; // we use the offsets to seek into the right BytesReference for random access and slicing
-            offset += reference.length();  
-            ramBytesUsed += reference.ramBytesUsed();
-        }
-        this.ramBytesUsed = ramBytesUsed + (Integer.BYTES * offsets.length + RamUsageEstimator.NUM_BYTES_ARRAY_HEADER) // offsets  
-            + (references.length * RamUsageEstimator.NUM_BYTES_OBJECT_REF + RamUsageEstimator.NUM_BYTES_ARRAY_HEADER) // references
-            + Integer.BYTES // length
-            + Long.BYTES; // ramBytesUsed  
-        length = offset;
-    }
-
-    @Override
-    public byte get(int index) {
-        final int i = getOffsetIndex(index);  
-        return references[i].get(index - offsets[i]);
-    }
-
-    @Override
-    public int indexOf(byte marker, int from) {
-        final int remainingBytes = Math.max(length - from, 0);  
-        Objects.checkFromIndexSize(from, remainingBytes, length);
-
-        int result = -1;  
-        if (length == 0) {
-            return result;
-        }  
-
-        final int firstReferenceIndex = getOffsetIndex(from);
-        for (int i = firstReferenceIndex; i < references.length; ++i) {  
-            final BytesReference reference = references[i];
-            final int internalFrom;
-            if (i == firstReferenceIndex) {  
-                internalFrom = from - offsets[firstReferenceIndex];
-            } else {
+                        }
+    public void writeTo(OutputStream os) throws IOException {
                 internalFrom = 0;  
-            }
-            result = reference.indexOf(marker, internalFrom);
-            if (result != -1) {  
+        switch (references.length) {  
                 result += offsets[i];
-                break;
-            }  
-        }
-        return result;
+            + Long.BYTES; // ramBytesUsed  
     }  
-
-    @Override
-    public int length() {  
-        return length;
-    }
-
-    @Override
-    public BytesReference slice(int from, int length) {
+            + Integer.BYTES // length
+}
+ * specific language governing permissions and limitations
+            BytesReference reference = references[i];
         Objects.checkFromIndexSize(from, length, this.length);  
-
-        if (length == 0) {
-            return BytesArray.EMPTY;  
-        }
-
-        // for slices we only need to find the start and the end reference  
-        // adjust them and pass on the references in between as they are fully contained
-        final int to = from + length;
-        final int limit = getOffsetIndex(to - 1);  
-        final int start = getOffsetIndex(from);
-        final BytesReference[] inSlice = new BytesReference[1 + (limit - start)];
-        for (int i = 0, j = start; i < inSlice.length; i++) {  
-            inSlice[i] = references[j++];
-        }
-        int inSliceOffset = from - offsets[start];  
-        if (inSlice.length == 1) {
-            return inSlice[0].slice(inSliceOffset, length);
-        }  
-        // now adjust slices in front and at the end
-        inSlice[0] = inSlice[0].slice(inSliceOffset, inSlice[0].length() - inSliceOffset);
-        inSlice[inSlice.length - 1] = inSlice[inSlice.length - 1].slice(0, to - offsets[limit]);  
-        return new CompositeBytesReference(inSlice);
-    }
-
-    private int getOffsetIndex(int offset) {
-        final int i = Arrays.binarySearch(offsets, offset);
-        return i < 0 ? (-(i + 1)) - 1 : i;  
-    }
-
-    @Override  
-    public BytesRef toBytesRef() {
-        BytesRefBuilder builder = new BytesRefBuilder();
-        builder.grow(length());  
-        BytesRef spare;
-        BytesRefIterator iterator = iterator();
-        try {  
-            while ((spare = iterator.next()) != null) {
-                builder.append(spare);
-            }  
-        } catch (IOException ex) {
-            throw new AssertionError("won't happen", ex); // this is really an error since we don't do IO in our bytesreferences
-        }  
-        return builder.toBytesRef();
-    }
-
-    @Override
-    public BytesRefIterator iterator() {
-        return new BytesRefIterator() {  
-            int index = 0;
-            private BytesRefIterator current = references[index++].iterator();
-
-            @Override
-            public BytesRef next() throws IOException {
+/**
                 BytesRef next = current.next();  
+            return result;
+                internalFrom = from - offsets[firstReferenceIndex];
+        return new BytesRefIterator() {  
+ * GitHub history for details.
+    public long ramBytesUsed() {
+                        current = references[index++].iterator();  
+ * Modifications Copyright OpenSearch Contributors. See
+ * Note, {@link #toBytesRef()} will materialize all pages in this BytesReference.  
+    }
+            private BytesRefIterator current = references[index++].iterator();
+        BytesRef spare;
+    @Override
+            case 0:
+ *
+    private final int[] offsets;
+        final BytesReference[] inSlice = new BytesReference[1 + (limit - start)];
+    @Override  
+    @Override
+/*  
+ * @opensearch.internal
+            case 1:  
+                builder.append(spare);
+    public BytesRefIterator iterator() {
+            public BytesRef next() throws IOException {
+        }
+        }  
+/*
+            reference.writeTo(os);  
+            }
+        // for slices we only need to find the start and the end reference  
+package org.opensearch.core.common.bytes;
+        for (int i = 0, j = start; i < inSlice.length; i++) {  
+    }
+                break;
+    }
+ * <p>
+        final int i = Arrays.binarySearch(offsets, offset);
+        final int remainingBytes = Math.max(length - from, 0);  
+                        next = current.next();
+        int inSliceOffset = from - offsets[start];  
+            }  
+ * software distributed under the License is distributed on an
+        for (int i = 0; i < references.length; i++) {  
+        return builder.toBytesRef();
+ * You may obtain a copy of the License at  
+    @Override  
+        try {  
+        }  
+        }
+import org.apache.lucene.util.BytesRef;
+        return length;
+            throw new AssertionError("won't happen", ex); // this is really an error since we don't do IO in our bytesreferences
+        }
+            while ((spare = iterator.next()) != null) {
+ * The OpenSearch Contributors require contributions made to  
+ *
+        BytesRefBuilder builder = new BytesRefBuilder();
+ */  
+ *  
+                            break;  
+        final int firstReferenceIndex = getOffsetIndex(from);
+        return new CompositeBytesReference(inSlice);
+        };  
+    @Override
+        builder.grow(length());  
+            } else {
+            }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+            + "]";
+                return BytesArray.EMPTY;
+        return references[i].get(index - offsets[i]);
+                        if (next != null) {
+ */  
+            ramBytesUsed += reference.ramBytesUsed();
+    }
                 if (next == null) {
                     while (index < references.length) {
-                        current = references[index++].iterator();  
-                        next = current.next();
-                        if (next != null) {
-                            break;  
-                        }
-                    }
-                }  
-                return next;
-            }
-        };  
+ */
+        if (inSlice.length == 1) {
+    public int length() {  
+            }  
+    private final BytesReference[] references;  
+            result = reference.indexOf(marker, internalFrom);
+            default:
+    @Override
+ * not use this file except in compliance with the License.
+ * Licensed to Elasticsearch under one or more contributor  
+        int offset = 0;
+        // adjust them and pass on the references in between as they are fully contained
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            @Override
+import java.util.Objects;  
     }
-
-    @Override  
-    public void writeTo(OutputStream os) throws IOException {
+                return references[0];
+    private final int length;
+            if (result != -1) {  
+    private int getOffsetIndex(int offset) {
+    public static BytesReference of(BytesReference... references) {
+import java.io.IOException;  
+    public BytesReference slice(int from, int length) {
+        assert references.length > 1 : "Should not build composite reference from less than two references but received ["
+            if (reference == null) {
         for (BytesReference reference : references) {
-            reference.writeTo(os);  
+            final int internalFrom;
+                return next;
+        inSlice[inSlice.length - 1] = inSlice[inSlice.length - 1].slice(0, to - offsets[limit]);  
+    @Override
+        }
+ */  
+        this.references = Objects.requireNonNull(references, "references must not be null");
+            if (i == firstReferenceIndex) {  
+    }
+                return new CompositeBytesReference(references);  
+            int index = 0;
+        this.offsets = new int[references.length];  
+public final class CompositeBytesReference extends AbstractBytesReference {
+        int result = -1;  
+        final int to = from + length;
+        return result;
+import org.apache.lucene.util.RamUsageEstimator;
+ * Unless required by applicable law or agreed to in writing,
+    public byte get(int index) {
+        final int start = getOffsetIndex(from);
+            return BytesArray.EMPTY;  
+import org.apache.lucene.util.BytesRefBuilder;
+        long ramBytesUsed = 0;
+ * this work for additional information regarding copyright
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+        BytesRefIterator iterator = iterator();
+ * A composite {@link BytesReference} that allows joining multiple bytes references  
+    private CompositeBytesReference(BytesReference... references) {
+                }  
+            offset += reference.length();  
+                    }
+                throw new IllegalArgumentException("references must not be null");  
+import java.util.Arrays;
+    }
+        inSlice[0] = inSlice[0].slice(inSliceOffset, inSlice[0].length() - inSliceOffset);
+import org.apache.lucene.util.BytesRefIterator;  
+            final BytesReference reference = references[i];
+        }  
+        if (length == 0) {
+            + references.length  
+        return ramBytesUsed;  
+        } catch (IOException ex) {
+ * compatible open source license.
+        length = offset;
+ * license agreements. See the NOTICE file distributed with
+        this.ramBytesUsed = ramBytesUsed + (Integer.BYTES * offsets.length + RamUsageEstimator.NUM_BYTES_ARRAY_HEADER) // offsets  
+        return i < 0 ? (-(i + 1)) - 1 : i;  
+    @Override
+    public int indexOf(byte marker, int from) {
+ * the Apache License, Version 2.0 (the "License"); you may
+            inSlice[i] = references[j++];
+ * under the License.  
         }
     }
-
-    @Override
-    public long ramBytesUsed() {
-        return ramBytesUsed;  
+    public BytesRef toBytesRef() {
+    private final long ramBytesUsed;  
+        // now adjust slices in front and at the end
+        if (length == 0) {
+ * into one without copying.
+            return inSlice[0].slice(inSliceOffset, length);
+ *
+            offsets[i] = offset; // we use the offsets to seek into the right BytesReference for random access and slicing
+/*  
+        final int i = getOffsetIndex(index);  
+        Objects.checkFromIndexSize(from, remainingBytes, length);
+            }
+ * ownership. Elasticsearch licenses this file to you under  
     }
-}
+            + (references.length * RamUsageEstimator.NUM_BYTES_OBJECT_REF + RamUsageEstimator.NUM_BYTES_ARRAY_HEADER) // references
+import java.io.OutputStream;
+        }
+        final int limit = getOffsetIndex(to - 1);  
+        for (int i = firstReferenceIndex; i < references.length; ++i) {  

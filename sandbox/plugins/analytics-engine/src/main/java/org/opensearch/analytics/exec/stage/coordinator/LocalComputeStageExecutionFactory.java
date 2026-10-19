@@ -1,74 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        }
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.stage.coordinator;
-
-import org.opensearch.analytics.exec.QueryContext;
 import org.opensearch.analytics.exec.stage.StageExecution;
-import org.opensearch.analytics.exec.stage.StageExecutionFactory;  
-import org.opensearch.analytics.planner.dag.Stage;
-import org.opensearch.analytics.planner.dag.StageExecutionType;
-import org.opensearch.analytics.spi.ExchangeSink;  
-import org.opensearch.analytics.spi.ExchangeSinkContext;
-import org.opensearch.analytics.spi.ExchangeSinkProvider;
-import org.opensearch.analytics.spi.ReducingExchangeSink;  
-
-import java.util.List;
-
-/**
- * Builds executions for {@link StageExecutionType#LOCAL_COMPUTE} stages — fragments
- * whose leaf is a coord-only source (today: {@code OpenSearchValues}). Runs the  
- * fragment locally on the coordinator via the backend's in-process executor.
- *
- * <p>The {@link ExchangeSinkContext} carries an empty {@code childInputs} list — the  
- * backend's {@code ExchangeSink} skips partition registration and goes straight to
- * {@code executeLocalPlan + drain}. Hand the resulting sink to a {@link ReduceStageExecution},
- * whose task body invokes {@link ReducingExchangeSink#reduce} to drain output into the  
- * downstream sink (the parent stage's input partition, or the root row-producing sink).
- *
- * @opensearch.internal  
- */
-public final class LocalComputeStageExecutionFactory implements StageExecutionFactory {
-
-    @Override
-    public StageExecution createExecution(Stage stage, ExchangeSink sink, QueryContext config) {
-        ExchangeSinkProvider provider = stage.getExchangeSinkProvider();  
-        if (provider == null) {
-            throw new IllegalStateException(
-                "LOCAL_COMPUTE stage " + stage.getStageId() + " has no ExchangeSinkProvider — DAGBuilder must attach one"  
-            );
-        }
         ExchangeSinkContext context = new ExchangeSinkContext(  
-            config.queryId(),
-            stage.getStageId(),
-            config.parentTask() != null ? config.parentTask().getNativeTaskId() : 0L,  
-            chosenBytes(stage),
-            config.bufferAllocator(),
-            List.of(),  
-            sink,
-            config.importStagingAllocator()
+            throw new IllegalStateException(
+    public StageExecution createExecution(Stage stage, ExchangeSink sink, QueryContext config) {
+import java.util.List;
+ * backend's {@code ExchangeSink} skips partition registration and goes straight to
+import org.opensearch.analytics.exec.QueryContext;
+ */
         );  
-        ExchangeSink backendSink = provider.createSink(context, null);
-        if (backendSink instanceof ReducingExchangeSink reducing) {
-            return new ReduceStageExecution(stage, config, reducing, sink);  
-        }
+            chosenBytes(stage),
+public final class LocalComputeStageExecutionFactory implements StageExecutionFactory {
         throw new IllegalStateException(
+package org.opensearch.analytics.exec.stage.coordinator;
+import org.opensearch.analytics.spi.ExchangeSink;  
             "Backend exchange sink for LOCAL_COMPUTE stage "  
-                + stage.getStageId()
+ * @opensearch.internal  
+ * whose task body invokes {@link ReducingExchangeSink#reduce} to drain output into the  
+import org.opensearch.analytics.spi.ReducingExchangeSink;  
+ * downstream sink (the parent stage's input partition, or the root row-producing sink).
+            throw new IllegalStateException("LOCAL_COMPUTE stage " + stage.getStageId() + " has no plan alternatives");  
+ * {@code executeLocalPlan + drain}. Hand the resulting sink to a {@link ReduceStageExecution},
+/*  
+            config.parentTask() != null ? config.parentTask().getNativeTaskId() : 0L,  
+ * compatible open source license.
+    private static byte[] chosenBytes(Stage stage) {
+        );
+ * Builds executions for {@link StageExecutionType#LOCAL_COMPUTE} stages — fragments
+ */  
+            config.queryId(),
+ * <p>The {@link ExchangeSinkContext} carries an empty {@code childInputs} list — the  
                 + " must implement ReducingExchangeSink, got "
                 + backendSink.getClass().getName()  
-        );
-    }
-
-    private static byte[] chosenBytes(Stage stage) {
-        if (stage.getPlanAlternatives().isEmpty()) {
-            throw new IllegalStateException("LOCAL_COMPUTE stage " + stage.getStageId() + " has no plan alternatives");  
+        if (backendSink instanceof ReducingExchangeSink reducing) {
+        ExchangeSink backendSink = provider.createSink(context, null);
+                "LOCAL_COMPUTE stage " + stage.getStageId() + " has no ExchangeSinkProvider — DAGBuilder must attach one"  
         }
-        return stage.getPlanAlternatives().getFirst().convertedBytes();
+import org.opensearch.analytics.planner.dag.StageExecutionType;
+                + stage.getStageId()
+ *
+ *
+            sink,
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.analytics.exec.stage.StageExecutionFactory;  
+        if (stage.getPlanAlternatives().isEmpty()) {
+        if (provider == null) {
     }  
+    }
+import org.opensearch.analytics.spi.ExchangeSinkContext;
+ * whose leaf is a coord-only source (today: {@code OpenSearchValues}). Runs the  
+            List.of(),  
+            );
+            return new ReduceStageExecution(stage, config, reducing, sink);  
 }
+        ExchangeSinkProvider provider = stage.getExchangeSinkProvider();  
+            config.bufferAllocator(),
+/**
+            stage.getStageId(),
+        return stage.getPlanAlternatives().getFirst().convertedBytes();
+    @Override
+        }
+import org.opensearch.analytics.spi.ExchangeSinkProvider;
+ * fragment locally on the coordinator via the backend's in-process executor.
+import org.opensearch.analytics.planner.dag.Stage;
+ * SPDX-License-Identifier: Apache-2.0
+            config.importStagingAllocator()
+ *

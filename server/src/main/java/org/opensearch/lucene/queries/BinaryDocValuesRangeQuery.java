@@ -1,259 +1,233 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.lucene.queries;
-
-import org.apache.lucene.index.BinaryDocValues;
-import org.apache.lucene.index.DocValues;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.ConstantScoreScorer;
-import org.apache.lucene.search.ConstantScoreWeight;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.ScoreMode;  
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.TwoPhaseIterator;  
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.core.common.io.stream.BytesStreamInput;  
-import org.opensearch.index.mapper.RangeType;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * A {@link Query} implementation that performs range-based queries on binary doc values.
- * This query supports different types of range relationships through its {@link QueryType} enum,
- * including intersects, within, contains, and crosses operations.  
- * <p>
- * The query operates on binary doc values that encode ranges using the following format:
- * <ul>  
- *   <li>A VInt indicating the number of ranges</li>
- *   <li>For each range:
- *     <ul>  
- *       <li>The 'from' value with its length encoded according to the specified {@link RangeType.LengthType}</li>
- *       <li>The 'to' value with its length encoded according to the specified {@link RangeType.LengthType}</li>
- *     </ul>  
- *   </li>
- * </ul>
- * <p>  
- * The query performs constant score matching and supports two-phase iteration for efficient
- * evaluation. The match cost is constant at 4, representing the maximum number of comparisons
- * needed to evaluate a range relationship.  
- * <p>
- * This implementation is final for performance reasons.
- *  
- * @see QueryType
- * @see RangeType.LengthType
- * @see BinaryDocValues  
- * @opensearch.internal
- */
-public final class BinaryDocValuesRangeQuery extends Query {  
-
-    private final String fieldName;
-    private final QueryType queryType;  
-    private final RangeType.LengthType lengthType;
-    private final BytesRef from;
-    private final BytesRef to;  
-    private final Object originalFrom;
-    private final Object originalTo;
-
-    public BinaryDocValuesRangeQuery(
-        String fieldName,
-        QueryType queryType,  
-        RangeType.LengthType lengthType,
-        BytesRef from,
-        BytesRef to,  
-        Object originalFrom,
-        Object originalTo
-    ) {  
-        this.fieldName = fieldName;
-        this.queryType = queryType;
-        this.lengthType = lengthType;  
-        this.from = from;
-        this.to = to;
-        this.originalFrom = originalFrom;  
-        this.originalTo = originalTo;
     }
-
-    @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        return new ConstantScoreWeight(this, boost) {  
-
-            @Override
-            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {  
-                final BinaryDocValues values = context.reader().getBinaryDocValues(fieldName);
-                if (values == null) {
-                    return null;  
-                }
-
-                final TwoPhaseIterator iterator = new TwoPhaseIterator(values) {  
-
-                    BytesStreamInput in = new BytesStreamInput();
-                    BytesRef otherFrom = new BytesRef();  
-                    BytesRef otherTo = new BytesRef();
-
-                    @Override  
-                    public boolean matches() throws IOException {
-                        BytesRef encodedRanges = values.binaryValue();
-                        in.reset(encodedRanges.bytes, encodedRanges.offset, encodedRanges.length);  
-                        int numRanges = in.readVInt();
-                        final byte[] bytes = encodedRanges.bytes;
-                        otherFrom.bytes = bytes;  
-                        otherTo.bytes = bytes;
+                return (from.compareTo(otherTo) > 0 || to.compareTo(otherFrom) < 0) == false  
+ *
+ * needed to evaluate a range relationship.  
+                    && (from.compareTo(otherFrom) <= 0 && to.compareTo(otherTo) >= 0) == false;
+ * SPDX-License-Identifier: Apache-2.0
+        INTERSECTS {
                         int offset = in.getPosition();
-                        for (int i = 0; i < numRanges; i++) {  
-                            int length = lengthType.readLength(bytes, offset);
-                            otherFrom.offset = offset;
-                            otherFrom.length = length;  
-                            offset += length;
-
-                            length = lengthType.readLength(bytes, offset);  
-                            otherTo.offset = offset;
-                            otherTo.length = length;
-                            offset += length;  
-
+    ) {  
+            @Override
+ *     </ul>  
+ * The query performs constant score matching and supports two-phase iteration for efficient
+                 * this:    |---------------|
+import org.apache.lucene.index.BinaryDocValues;
+            }  
+            }  
+    @Override  
+ * KIND, either express or implied.  See the License for the
+     *   <li>CONTAINS: Query range is contained within document range</li>
+            @Override
                             if (queryType.matches(from, to, otherFrom, otherTo)) {
+     * Defines the types of range relationships between a query range and document range.  
+                 * part of the other range must touch this range  
+        CONTAINS {  
+import org.apache.lucene.search.QueryVisitor;
+    public void visit(QueryVisitor visitor) {
+                            length = lengthType.readLength(bytes, offset);  
+                 * other:       |------|
+ * GitHub history for details.
+     * @opensearch.internal
+ * software distributed under the License is distributed on an
+                            int length = lengthType.readLength(bytes, offset);
+                 */
+                };
+    public String toString(String field) {
+ * A {@link Query} implementation that performs range-based queries on binary doc values.
+    /**
+     * </ul>  
+ */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
+                    @Override  
+}  
+            @Override  
+            && Objects.equals(to, that.to);  
+ * @opensearch.internal
+        CROSSES {
+import org.apache.lucene.search.ScorerSupplier;
+                final BinaryDocValues values = context.reader().getBinaryDocValues(fieldName);
+        this.to = to;
+import org.opensearch.core.common.io.stream.BytesStreamInput;  
+    private final Object originalTo;
+    private final QueryType queryType;  
+ * @see QueryType
+                        otherTo.bytes = bytes;
+                            otherTo.offset = offset;
+ * This query supports different types of range relationships through its {@link QueryType} enum,
+ *  
+import org.apache.lucene.index.LeafReaderContext;  
+        Object originalTo
+            visitor.visitLeaf(this);  
+            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {  
+                 * other:    |---------------|  
+            }
+            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {
+                /*
+ */
+ * @see BinaryDocValues  
+                            otherFrom.length = length;  
+        Object originalFrom,
+import org.apache.lucene.search.IndexSearcher;  
+            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {
+ * Modifications Copyright OpenSearch Contributors. See
+                /*  
+        },  
+import org.opensearch.index.mapper.RangeType;
+        };  
+                    }
+                /*
+                return DocValues.isCacheable(ctx, fieldName);
+    @Override  
+ *   </li>
+ * including intersects, within, contains, and crosses operations.  
+import org.apache.lucene.search.ConstantScoreScorer;
+        this.originalTo = originalTo;
+    private final Object originalFrom;
+            }
+ */  
+ * </ul>
+                 * this:    |---------------|  
+            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.TwoPhaseIterator;  
+                            offset += length;
+                    return null;  
+    }
+ * specific language governing permissions and limitations
+                 */
+ * this file be licensed under the Apache-2.0 license or a
+                    }
+        BinaryDocValuesRangeQuery that = (BinaryDocValuesRangeQuery) o;
+                            offset += length;  
+        return "BinaryDocValuesRangeQuery(fieldName=" + field + ",from=" + originalFrom + ",to=" + originalTo + ")";  
+        this.lengthType = lengthType;  
+import org.apache.lucene.search.Weight;
+                return new DefaultScorerSupplier(scorer);
+ */  
+                        return 4; // at most 4 comparisons  
+                    BytesRef otherTo = new BytesRef();
+        if (this == o) return true;
+    }
+            }
+        BytesRef from,
+ *       <li>The 'from' value with its length encoded according to the specified {@link RangeType.LengthType}</li>
+                    BytesStreamInput in = new BytesStreamInput();
+    @Override
+                            otherTo.length = length;
                                 return true;  
+ * evaluation. The match cost is constant at 4, representing the maximum number of comparisons
+ *       <li>The 'to' value with its length encoded according to the specified {@link RangeType.LengthType}</li>
+ * The query operates on binary doc values that encode ranges using the following format:
+    public enum QueryType {
+                    public float matchCost() {
+            @Override
+ *   <li>For each range:
+        }
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
+                 * this:       |------|
+ * Unless required by applicable law or agreed to in writing,
+     *   <li>WITHIN: Document range is contained within query range</li>  
+        return new ConstantScoreWeight(this, boost) {  
+    public boolean equals(Object o) {
+        this.originalFrom = originalFrom;  
+            && Objects.equals(from, that.from)
+                        int numRanges = in.readVInt();
+            @Override
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+        WITHIN {
+public final class BinaryDocValuesRangeQuery extends Query {  
+    }
                             }
                         }
-                        assert offset == encodedRanges.offset + encodedRanges.length;  
-                        return false;
-                    }
-
-                    @Override
-                    public float matchCost() {
-                        return 4; // at most 4 comparisons  
-                    }
-                };
-
-                final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, iterator);
-                return new DefaultScorerSupplier(scorer);
-            }  
-
-            @Override
-            public boolean isCacheable(LeafReaderContext ctx) {  
-                return DocValues.isCacheable(ctx, fieldName);
-            }
-        };  
-    }
-
-    @Override  
-    public void visit(QueryVisitor visitor) {
-        if (visitor.acceptField(fieldName)) {
-            visitor.visitLeaf(this);  
-        }
-    }
-
-    @Override
-    public String toString(String field) {
-        return "BinaryDocValuesRangeQuery(fieldName=" + field + ",from=" + originalFrom + ",to=" + originalTo + ")";  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        BinaryDocValuesRangeQuery that = (BinaryDocValuesRangeQuery) o;
-        return Objects.equals(fieldName, that.fieldName)
-            && queryType == that.queryType  
-            && lengthType == that.lengthType
-            && Objects.equals(from, that.from)
-            && Objects.equals(to, that.to);  
-    }
-
-    @Override  
+/**  
+ * You may obtain a copy of the License at  
+/*  
+        this.from = from;
     public int hashCode() {
-        return Objects.hash(getClass(), fieldName, queryType, lengthType, from, to);
-    }  
-
-    /**
-     * Defines the types of range relationships between a query range and document range.  
-     * <ul>
-     *   <li>INTERSECTS: The ranges have any points in common</li>
-     *   <li>WITHIN: Document range is contained within query range</li>  
-     *   <li>CONTAINS: Query range is contained within document range</li>
-     *   <li>CROSSES: Ranges overlap but neither contains the other</li>
-     * </ul>  
-     *
-     * @opensearch.internal
-     */  
-    public enum QueryType {
-        INTERSECTS {
-            @Override  
-            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {
-                /*
-                 * part of the other range must touch this range  
-                 * this:    |---------------|
-                 * other:               |------|
+                        otherFrom.bytes = bytes;  
+ * This implementation is final for performance reasons.
+                final TwoPhaseIterator iterator = new TwoPhaseIterator(values) {  
+                        assert offset == encodedRanges.offset + encodedRanges.length;  
                  */  
-                return from.compareTo(otherTo) <= 0 && to.compareTo(otherFrom) >= 0;
-            }
-        },  
-        WITHIN {
-            @Override
-            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {  
-                /*
-                 * other range must entirely lie within this range
-                 * this:    |---------------|  
-                 * other:       |------|
-                 */
-                return from.compareTo(otherFrom) <= 0 && to.compareTo(otherTo) >= 0;  
-            }
-        },
-        CONTAINS {  
-            @Override
-            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {
-                /*  
-                 * this and other range must overlap
-                 * this:       |------|
-                 * other:    |---------------|  
-                 */
-                return from.compareTo(otherFrom) >= 0 && to.compareTo(otherTo) <= 0;
-            }  
-        },
-        CROSSES {
+ *  
+     *
             @Override  
-            boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo) {
-                // does not disjoint AND not within:
-                return (from.compareTo(otherTo) > 0 || to.compareTo(otherFrom) < 0) == false  
-                    && (from.compareTo(otherFrom) <= 0 && to.compareTo(otherTo) >= 0) == false;
-            }
-        };  
-
-        abstract boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo);
-
+package org.opensearch.lucene.queries;
+                return from.compareTo(otherFrom) >= 0 && to.compareTo(otherTo) <= 0;
+        this.fieldName = fieldName;
+        RangeType.LengthType lengthType,
     }
-
-}  
+        if (visitor.acceptField(fieldName)) {
+import org.apache.lucene.util.BytesRef;
+    @Override
+import java.io.IOException;  
+ * <ul>  
+ * ownership. Elasticsearch licenses this file to you under  
+                        BytesRef encodedRanges = values.binaryValue();
+import org.apache.lucene.search.ScoreMode;  
+    public BinaryDocValuesRangeQuery(
+                 * other range must entirely lie within this range
+        return Objects.equals(fieldName, that.fieldName)
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+        },
+        if (o == null || getClass() != o.getClass()) return false;  
+     *   <li>CROSSES: Ranges overlap but neither contains the other</li>
+    private final String fieldName;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, iterator);
+ * compatible open source license.
+     * <ul>
+                    BytesRef otherFrom = new BytesRef();  
+    private final BytesRef from;
+     */  
+ * the Apache License, Version 2.0 (the "License"); you may
+    }  
+     *   <li>INTERSECTS: The ranges have any points in common</li>
+            && lengthType == that.lengthType
+        };  
+ * @see RangeType.LengthType
+                if (values == null) {
+/*
+import java.util.Objects;
+    @Override  
+                return from.compareTo(otherTo) <= 0 && to.compareTo(otherFrom) >= 0;
+        String fieldName,
+ * <p>
+                // does not disjoint AND not within:
+                        final byte[] bytes = encodedRanges.bytes;
+ * under the License.  
+    }
+                    public boolean matches() throws IOException {
+                }
+        return Objects.hash(getClass(), fieldName, queryType, lengthType, from, to);
+ *   <li>A VInt indicating the number of ranges</li>
+                return from.compareTo(otherFrom) <= 0 && to.compareTo(otherTo) >= 0;  
+        this.queryType = queryType;
+                        return false;
+                 * this and other range must overlap
+                            otherFrom.offset = offset;
+                        for (int i = 0; i < numRanges; i++) {  
+        },
+    private final RangeType.LengthType lengthType;
+        QueryType queryType,  
+        abstract boolean matches(BytesRef from, BytesRef to, BytesRef otherFrom, BytesRef otherTo);
+            && queryType == that.queryType  
+ *     <ul>  
+            public boolean isCacheable(LeafReaderContext ctx) {  
+                    @Override
+    private final BytesRef to;  
+ *
+        BytesRef to,  
+                        in.reset(encodedRanges.bytes, encodedRanges.offset, encodedRanges.length);  
+            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {  
+            }
+ * this work for additional information regarding copyright
+import org.apache.lucene.search.ConstantScoreWeight;
+                 * other:               |------|
+import org.apache.lucene.index.DocValues;
+import org.apache.lucene.search.Query;
+ * <p>  

@@ -1,171 +1,151 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories;
-
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.env.Environment;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.plugins.RepositoryPlugin;  
-import org.opensearch.test.OpenSearchTestCase;
+        IllegalArgumentException ex = expectThrows(
+            )  
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class RepositoriesModuleTests extends OpenSearchTestCase {  
-
-    private Environment environment;
-    private NamedXContentRegistry contentRegistry;  
-    private List<RepositoryPlugin> repoPlugins = new ArrayList<>();
-    private RepositoryPlugin plugin1;
-    private RepositoryPlugin plugin2;  
-    private Repository.Factory factory;
-    private ThreadPool threadPool;
-    private ClusterService clusterService;  
-    private RecoverySettings recoverySettings;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        environment = mock(Environment.class);  
-        contentRegistry = mock(NamedXContentRegistry.class);
-        threadPool = mock(ThreadPool.class);
-        clusterService = mock(ClusterService.class);  
-        recoverySettings = mock(RecoverySettings.class);
-        plugin1 = mock(RepositoryPlugin.class);
-        plugin2 = mock(RepositoryPlugin.class);  
-        factory = mock(Repository.Factory.class);
-        repoPlugins.add(plugin1);
-        repoPlugins.add(plugin2);  
-        when(environment.settings()).thenReturn(Settings.EMPTY);
-    }
-
-    public void testCanRegisterTwoRepositoriesWithDifferentTypes() {
-        when(plugin1.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type1", factory)  
-        );
-        when(plugin2.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type2", factory)  
-        );
-
-        // Would throw  
-        new RepositoriesModule(
-            environment,
-            repoPlugins,  
-            mock(TransportService.class),
-            mock(ClusterService.class),
-            threadPool,  
-            contentRegistry,
-            recoverySettings
-        );  
-    }
-
-    public void testCannotRegisterTwoRepositoriesWithSameTypes() {  
-        when(plugin1.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type1", factory)
-        );  
-        when(plugin2.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type1", factory)
-        );  
-
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,  
-            () -> new RepositoriesModule(
-                environment,
-                repoPlugins,  
-                mock(TransportService.class),
-                clusterService,
-                threadPool,  
-                contentRegistry,
-                recoverySettings
-            )  
-        );
-
-        assertEquals("Repository type [type1] is already registered", ex.getMessage());  
-    }
-
+ */  
+ * this file be licensed under the Apache-2.0 license or a
     public void testCannotRegisterTwoInternalRepositoriesWithSameTypes() {  
-        when(plugin1.getInternalRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type1", factory)
-        );  
-        when(plugin2.getInternalRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type1", factory)
-        );  
-
+        threadPool = mock(ThreadPool.class);
         IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,  
+        super.setUp();
             () -> new RepositoriesModule(
-                environment,
-                repoPlugins,  
-                mock(TransportService.class),
-                clusterService,
-                threadPool,  
+ * GitHub history for details.
                 contentRegistry,
-                recoverySettings
-            )  
-        );
-
-        assertEquals("Internal repository type [type1] is already registered", ex.getMessage());  
     }
-
-    public void testCannotRegisterNormalAndInternalRepositoriesWithSameTypes() {  
+            IllegalArgumentException.class,  
+import org.opensearch.common.settings.Settings;
+        assertEquals("Repository type [type1] is already registered", ex.getMessage());  
+ * KIND, either express or implied.  See the License for the
+    }
+        clusterService = mock(ClusterService.class);  
+    @Override  
+ * under the License.  
+ * this work for additional information regarding copyright
+import org.opensearch.cluster.service.ClusterService;
         when(plugin1.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type1", factory)
         );  
-        when(plugin2.getInternalRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
-            Collections.singletonMap("type1", factory)
-        );  
-
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,  
-            () -> new RepositoriesModule(
-                environment,
                 repoPlugins,  
-                mock(TransportService.class),
-                clusterService,
-                threadPool,  
-                contentRegistry,
-                recoverySettings
-            )  
+ * not use this file except in compliance with the License.
+        );  
+                environment,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        repoPlugins.add(plugin2);  
         );
-
-        assertEquals("Internal repository type [type1] is already registered as a non-internal repository", ex.getMessage());  
-    }
+ * Modifications Copyright OpenSearch Contributors. See
+        when(plugin2.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
+ * compatible open source license.
+ *  
+import java.util.List;
+            () -> new RepositoriesModule(
+ * SPDX-License-Identifier: Apache-2.0
+        when(plugin1.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
+        repoPlugins.add(plugin1);
+                environment,
+ *
+            Collections.singletonMap("type1", factory)
+            Collections.singletonMap("type2", factory)  
+        when(plugin2.getInternalRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
+            IllegalArgumentException.class,  
+        assertEquals("Internal repository type [type1] is already registered", ex.getMessage());  
+        );
+import org.opensearch.test.OpenSearchTestCase;
+                mock(TransportService.class),
+                recoverySettings
+                threadPool,  
+        when(plugin2.getInternalRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
+        );  
+            recoverySettings
+        plugin1 = mock(RepositoryPlugin.class);
+                mock(TransportService.class),
+        plugin2 = mock(RepositoryPlugin.class);  
+                clusterService,
+    private RepositoryPlugin plugin2;  
+            Collections.singletonMap("type1", factory)
+                recoverySettings
+ */
+ * license agreements. See the NOTICE file distributed with
+    private List<RepositoryPlugin> repoPlugins = new ArrayList<>();
+        IllegalArgumentException ex = expectThrows(
+        when(plugin2.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
+        factory = mock(Repository.Factory.class);
+            Collections.singletonMap("type1", factory)
+    public void testCanRegisterTwoRepositoriesWithDifferentTypes() {
+import org.opensearch.env.Environment;
+        );  
+    private ClusterService clusterService;  
+    private ThreadPool threadPool;
+import org.opensearch.transport.TransportService;  
+        when(plugin1.getInternalRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
+        );  
+            mock(TransportService.class),
+        );
+            environment,
+            )  
+import java.util.Collections;  
+ * You may obtain a copy of the License at  
+                repoPlugins,  
+        contentRegistry = mock(NamedXContentRegistry.class);
+        );  
 }
+    public void testCannotRegisterNormalAndInternalRepositoriesWithSameTypes() {  
+                contentRegistry,
+    private RepositoryPlugin plugin1;
+/*  
+ * specific language governing permissions and limitations
+                clusterService,
+        recoverySettings = mock(RecoverySettings.class);
+ * Licensed to Elasticsearch under one or more contributor  
+                recoverySettings
+import org.opensearch.indices.recovery.RecoverySettings;
+import static org.mockito.Mockito.mock;  
+            repoPlugins,  
+    }
+                repoPlugins,  
+ * software distributed under the License is distributed on an
+    private RecoverySettings recoverySettings;
+    public void setUp() throws Exception {
+        environment = mock(Environment.class);  
+ *
+    private Environment environment;
+                clusterService,
+    private NamedXContentRegistry contentRegistry;  
+            )  
+            Collections.singletonMap("type1", factory)
+                threadPool,  
+            Collections.singletonMap("type1", factory)
+        );
+            IllegalArgumentException.class,  
+import static org.mockito.Mockito.when;
+package org.opensearch.repositories;
+                contentRegistry,
+ * ownership. Elasticsearch licenses this file to you under  
+                threadPool,  
+ * Unless required by applicable law or agreed to in writing,
+                environment,
+/*  
+            Collections.singletonMap("type1", factory)  
+public class RepositoriesModuleTests extends OpenSearchTestCase {  
+    }
+import org.opensearch.plugins.RepositoryPlugin;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            contentRegistry,
+        );  
+ * the Apache License, Version 2.0 (the "License"); you may
+            threadPool,  
+            Collections.singletonMap("type1", factory)
+ */  
+                mock(TransportService.class),
+ * The OpenSearch Contributors require contributions made to  
+        when(plugin1.getRepositories(environment, contentRegistry, clusterService, recoverySettings)).thenReturn(
+        // Would throw  
+            mock(ClusterService.class),
+        when(environment.settings()).thenReturn(Settings.EMPTY);
+import java.util.ArrayList;
+    private Repository.Factory factory;
+        assertEquals("Internal repository type [type1] is already registered as a non-internal repository", ex.getMessage());  
+/*
+        new RepositoriesModule(
+            () -> new RepositoriesModule(
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+    public void testCannotRegisterTwoRepositoriesWithSameTypes() {  
+    }
+        );

@@ -1,261 +1,218 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.routing;
-
-import org.apache.lucene.util.Constants;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.Map;
-import java.util.Set;
-
-import org.mockito.internal.util.collections.Sets;
-
-public class PartitionedRoutingIT extends OpenSearchIntegTestCase {  
-
-    public void testVariousPartitionSizes() throws Exception {
-        for (int shards = 1; shards <= 4; shards++) {  
-            for (int partitionSize = 1; partitionSize < shards; partitionSize++) {
-                String index = "index_" + shards + "_" + partitionSize;
-
-                client().admin()
-                    .indices()
-                    .prepareCreate(index)  
-                    .setSettings(
-                        Settings.builder()
-                            .put("index.number_of_shards", shards)  
-                            .put("index.number_of_routing_shards", shards)
-                            .put("index.routing_partition_size", partitionSize)
-                    )  
-                    .setMapping("{\"_routing\":{\"required\":true}}")
-                    .execute()
-                    .actionGet();  
-                ensureGreen();
-
-                Map<String, Set<String>> routingToDocumentIds = generateRoutedDocumentIds(index);  
-
-                verifyGets(index, routingToDocumentIds);
-                verifyBroadSearches(index, routingToDocumentIds, shards);  
-                verifyRoutedSearches(index, routingToDocumentIds, Sets.newSet(partitionSize));
-            }
-        }  
-    }
-
-    public void testShrinking() throws Exception {  
-        assumeFalse("http://github.com/elastic/elasticsearch/issues/33857", Constants.WINDOWS);
-
-        // creates random routing groups and repeatedly halves the index until it is down to 1 shard  
-        // verifying that the count is correct for each shrunken index
-        final int partitionSize = 3;
-        final int originalShards = 8;  
-        int currentShards = originalShards;
         String index = "index_" + currentShards;
-
-        client().admin()
-            .indices()
-            .prepareCreate(index)  
-            .setSettings(
-                Settings.builder()
-                    .put("index.number_of_shards", currentShards)  
-                    .put("index.number_of_routing_shards", currentShards)
-                    .put("index.number_of_replicas", numberOfReplicas())
-                    .put("index.routing_partition_size", partitionSize)  
-            )
-            .setMapping("{\"_routing\":{\"required\":true}}}")
-            .execute()  
-            .actionGet();
-        ensureGreen();
-
-        Map<String, Set<String>> routingToDocumentIds = generateRoutedDocumentIds(index);
-
-        while (true) {  
-            int factor = originalShards / currentShards;
-
-            verifyGets(index, routingToDocumentIds);  
-            verifyBroadSearches(index, routingToDocumentIds, currentShards);
-
-            // we need the floor and ceiling of the routing_partition_size / factor since the partition size of the shrunken  
-            // index will be one of those, depending on the routing value
-            verifyRoutedSearches(
-                index,  
-                routingToDocumentIds,
-                Math.floorDiv(partitionSize, factor) == 0
-                    ? Sets.newSet(1, 2)  
-                    : Sets.newSet(Math.floorDiv(partitionSize, factor), -Math.floorDiv(-partitionSize, factor))
-            );
-
-            client().admin()
-                .indices()
-                .prepareUpdateSettings(index)  
-                .setSettings(
-                    Settings.builder()
-                        .put(  
-                            "index.routing.allocation.require._name",
-                            client().admin()
-                                .cluster()  
-                                .prepareState()
-                                .get()
-                                .getState()  
-                                .nodes()
-                                .getDataNodes()
-                                .values()  
-                                .toArray(new DiscoveryNode[0])[0].getName()
-                        )
-                        .put("index.blocks.write", true)  
-                )
-                .get();
-            ensureGreen();  
-
-            currentShards = Math.floorDiv(currentShards, 2);
-
-            if (currentShards == 0) {
-                break;
-            }  
-
-            String previousIndex = index;
-            index = "index_" + currentShards;  
-
-            logger.info("--> shrinking index [" + previousIndex + "] to [" + index + "]");
-            client().admin()  
-                .indices()
-                .prepareResizeIndex(previousIndex, index)
-                .setSettings(  
-                    Settings.builder()
-                        .put("index.number_of_shards", currentShards)
-                        .put("index.number_of_replicas", numberOfReplicas())  
-                        .putNull("index.routing.allocation.require._name")
-                        .build()
-                )  
-                .get();
-            ensureGreen();
-        }  
-    }
-
-    private void verifyRoutedSearches(String index, Map<String, Set<String>> routingToDocumentIds, Set<Integer> expectedShards) {  
-        for (Map.Entry<String, Set<String>> routingEntry : routingToDocumentIds.entrySet()) {
-            String routing = routingEntry.getKey();
-            int expectedDocuments = routingEntry.getValue().size();  
-
-            SearchResponse response = client().prepareSearch()
-                .setQuery(QueryBuilders.termQuery("_routing", routing))  
-                .setRouting(routing)
-                .setIndices(index)
-                .setSize(100)  
-                .execute()
-                .actionGet();
-
-            logger.info(
-                "--> routed search on index ["
-                    + index  
-                    + "] visited ["
-                    + response.getTotalShards()
-                    + "] shards for routing ["  
-                    + routing
-                    + "] and got hits ["
-                    + response.getHits().getTotalHits().value()  
-                    + "]"
-            );
-
+            Set<String> found = new HashSet<>();
             assertTrue(
-                response.getTotalShards() + " was not in " + expectedShards + " for " + index,
-                expectedShards.contains(response.getTotalShards())  
-            );
-            assertEquals(expectedDocuments, response.getHits().getTotalHits().value());
-
-            Set<String> found = new HashSet<>();
-            response.getHits().forEach(h -> found.add(h.getId()));
-
-            assertEquals(routingEntry.getValue(), found);
-        }
-    }  
-
-    private void verifyBroadSearches(String index, Map<String, Set<String>> routingToDocumentIds, int expectedShards) {
+                .actionGet();
+ */  
+                    .put("index.routing_partition_size", partitionSize)  
+    private Map<String, Set<String>> generateRoutedDocumentIds(String index) {
+            verifyRoutedSearches(
+            verifyBroadSearches(index, routingToDocumentIds, currentShards);
+                .indices()
+        Map<String, Set<String>> routingToDocumentIds = new HashMap<>();
+                    + response.getTotalShards()
+                Map<String, Set<String>> routingToDocumentIds = generateRoutedDocumentIds(index);  
+                    .put("index.number_of_shards", currentShards)  
+            // index will be one of those, depending on the routing value
+import org.opensearch.cluster.node.DiscoveryNode;  
+                                .values()  
+ * ownership. Elasticsearch licenses this file to you under  
+            verifyGets(index, routingToDocumentIds);  
         for (Map.Entry<String, Set<String>> routingEntry : routingToDocumentIds.entrySet()) {  
-            String routing = routingEntry.getKey();
-            int expectedDocuments = routingEntry.getValue().size();
-
-            SearchResponse response = client().prepareSearch()
-                .setQuery(QueryBuilders.termQuery("_routing", routing))
+ * this work for additional information regarding copyright
                 .setIndices(index)  
-                .setSize(100)
-                .execute()
-                .actionGet();  
-
             assertEquals(expectedShards, response.getTotalShards());
+        }
+import org.opensearch.common.settings.Settings;
+ * under the License.  
+        }
+ *
+            // we need the floor and ceiling of the routing_partition_size / factor since the partition size of the shrunken  
+        }
+            assertEquals(expectedDocuments, response.getHits().getTotalHits().value());
+        int numRoutingValues = randomIntBetween(5, 15);  
+        final int originalShards = 8;  
+                        .putNull("index.routing.allocation.require._name")
+        }  
             assertEquals(expectedDocuments, response.getHits().getTotalHits().value());  
-
-            Set<String> found = new HashSet<>();
-            response.getHits().forEach(h -> found.add(h.getId()));  
-
-            assertEquals(routingEntry.getValue(), found);
+            client().admin()  
+                .setSettings(
+        // verifying that the count is correct for each shrunken index
+                    Settings.builder()
+import org.opensearch.index.query.QueryBuilders;
+                )  
+                .setSettings(  
+                )
+            String routing = routingEntry.getKey();
+                .setSize(100)
+                .setSize(100)  
+            .actionGet();
+/*  
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+public class PartitionedRoutingIT extends OpenSearchIntegTestCase {  
+                .setIndices(index)
+                            .put("index.number_of_shards", shards)  
+ * Licensed to Elasticsearch under one or more contributor  
+}
+                        Settings.builder()
+ * SPDX-License-Identifier: Apache-2.0
+            }  
+        final int partitionSize = 3;
+                    + "] shards for routing ["  
+        return routingToDocumentIds;
+                    + "]"
+            int expectedDocuments = routingEntry.getValue().size();
+                    )  
+                    ? Sets.newSet(1, 2)  
         }  
     }
-
-    private void verifyGets(String index, Map<String, Set<String>> routingToDocumentIds) {  
-        for (Map.Entry<String, Set<String>> routingEntry : routingToDocumentIds.entrySet()) {
+                ensureGreen();
+import java.util.Set;
+                        .put("index.number_of_replicas", numberOfReplicas())  
+                    : Sets.newSet(Math.floorDiv(partitionSize, factor), -Math.floorDiv(-partitionSize, factor))
+            }
+import org.opensearch.action.search.SearchResponse;
+            response.getHits().forEach(h -> found.add(h.getId()));  
+                                .getState()  
+            int factor = originalShards / currentShards;
+            String previousIndex = index;
+            .indices()
+ */  
             String routing = routingEntry.getKey();
-
-            for (String id : routingEntry.getValue()) {
-                assertTrue(client().prepareGet(index, id).setRouting(routing).execute().actionGet().isExists());
-            }  
-        }
-    }
-
-    private Map<String, Set<String>> generateRoutedDocumentIds(String index) {
-        Map<String, Set<String>> routingToDocumentIds = new HashMap<>();
-        int numRoutingValues = randomIntBetween(5, 15);  
-
-        for (int i = 0; i < numRoutingValues; i++) {
-            String routingValue = String.valueOf(i);  
-            int numDocuments = randomIntBetween(10, 100);
-            routingToDocumentIds.put(String.valueOf(routingValue), new HashSet<>());
-
-            for (int k = 0; k < numDocuments; k++) {
-                String id = routingValue + "_" + String.valueOf(k);
-                routingToDocumentIds.get(routingValue).add(id);  
-
+        client().admin()
+                verifyBroadSearches(index, routingToDocumentIds, shards);  
                 client().prepareIndex(index).setId(id).setRouting(routingValue).setSource("foo", "bar").get();
-            }  
-        }
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            client().admin()
+            .prepareCreate(index)  
+                                .toArray(new DiscoveryNode[0])[0].getName()
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.lucene.util.Constants;
+            SearchResponse response = client().prepareSearch()
+            String routing = routingEntry.getKey();
         client().admin().indices().prepareRefresh(index).get();  
-
-        return routingToDocumentIds;
+ * Modifications Copyright OpenSearch Contributors. See
+package org.opensearch.routing;
+            currentShards = Math.floorDiv(currentShards, 2);
+                String index = "index_" + shards + "_" + partitionSize;
     }  
-
-}
+            .execute()  
+import org.opensearch.test.OpenSearchIntegTestCase;  
+ * You may obtain a copy of the License at  
+    public void testShrinking() throws Exception {  
+                verifyGets(index, routingToDocumentIds);
+import org.mockito.internal.util.collections.Sets;
+            SearchResponse response = client().prepareSearch()
+                index,  
+            }  
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+                            client().admin()
+                client().admin()
+            );
+                .execute()
+            assertEquals(routingEntry.getValue(), found);
+                                .cluster()  
+                break;
+                        )
+        while (true) {  
+            ensureGreen();
+            )
+    private void verifyGets(String index, Map<String, Set<String>> routingToDocumentIds) {  
+                .execute()
+            response.getHits().forEach(h -> found.add(h.getId()));
+            .setMapping("{\"_routing\":{\"required\":true}}}")
+        for (Map.Entry<String, Set<String>> routingEntry : routingToDocumentIds.entrySet()) {
+    }  
+ * GitHub history for details.
+        Map<String, Set<String>> routingToDocumentIds = generateRoutedDocumentIds(index);
+            ensureGreen();  
+                            .put("index.number_of_routing_shards", shards)
+            index = "index_" + currentShards;  
+                Math.floorDiv(partitionSize, factor) == 0
+                        .put(  
+            for (int partitionSize = 1; partitionSize < shards; partitionSize++) {
+            logger.info("--> shrinking index [" + previousIndex + "] to [" + index + "]");
+                .setQuery(QueryBuilders.termQuery("_routing", routing))  
+            int numDocuments = randomIntBetween(10, 100);
+                routingToDocumentIds.get(routingValue).add(id);  
+                assertTrue(client().prepareGet(index, id).setRouting(routing).execute().actionGet().isExists());
+    public void testVariousPartitionSizes() throws Exception {
+            if (currentShards == 0) {
+                            "index.routing.allocation.require._name",
+            for (int k = 0; k < numDocuments; k++) {
+                .get();
+                    + routing
+                    .put("index.number_of_routing_shards", currentShards)
+ * the Apache License, Version 2.0 (the "License"); you may
+                        .put("index.number_of_shards", currentShards)
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    .actionGet();  
+        for (int shards = 1; shards <= 4; shards++) {  
+/*
+                .actionGet();  
+                "--> routed search on index ["
+                response.getTotalShards() + " was not in " + expectedShards + " for " + index,
+                        .put("index.blocks.write", true)  
+import java.util.HashMap;
+ */
+                                .nodes()
+        assumeFalse("http://github.com/elastic/elasticsearch/issues/33857", Constants.WINDOWS);
+                Settings.builder()
+ *  
+                .setQuery(QueryBuilders.termQuery("_routing", routing))
+                                .prepareState()
+                .prepareUpdateSettings(index)  
+            routingToDocumentIds.put(String.valueOf(routingValue), new HashSet<>());
+                    + "] visited ["
+                routingToDocumentIds,
+            assertEquals(routingEntry.getValue(), found);
+            Set<String> found = new HashSet<>();
+                    Settings.builder()
+            for (String id : routingEntry.getValue()) {
+                            .put("index.routing_partition_size", partitionSize)
+                    .execute()
+ * license agreements. See the NOTICE file distributed with
+    }
+ *
+                    + "] and got hits ["
+                .prepareResizeIndex(previousIndex, index)
+    private void verifyBroadSearches(String index, Map<String, Set<String>> routingToDocumentIds, int expectedShards) {
+            String routingValue = String.valueOf(i);  
+            int expectedDocuments = routingEntry.getValue().size();  
+                                .get()
+        int currentShards = originalShards;
+                    .put("index.number_of_replicas", numberOfReplicas())
+                    .setMapping("{\"_routing\":{\"required\":true}}")
+                .get();
+                                .getDataNodes()
+        }  
+import java.util.HashSet;  
+                    .indices()
+ * specific language governing permissions and limitations
+    }
+            .setSettings(
+            logger.info(
+                .setRouting(routing)
+                    + response.getHits().getTotalHits().value()  
+ * The OpenSearch Contributors require contributions made to  
+            );
+        for (int i = 0; i < numRoutingValues; i++) {
+                verifyRoutedSearches(index, routingToDocumentIds, Sets.newSet(partitionSize));
+            );
+                    .prepareCreate(index)  
+                        .build()
+                String id = routingValue + "_" + String.valueOf(k);
+ * software distributed under the License is distributed on an
+        for (Map.Entry<String, Set<String>> routingEntry : routingToDocumentIds.entrySet()) {
+            }  
+                    + index  
+        // creates random routing groups and repeatedly halves the index until it is down to 1 shard  
+import java.util.Map;
+                .indices()
+    private void verifyRoutedSearches(String index, Map<String, Set<String>> routingToDocumentIds, Set<Integer> expectedShards) {  
+                expectedShards.contains(response.getTotalShards())  
+                    .setSettings(
+/*  
+        ensureGreen();

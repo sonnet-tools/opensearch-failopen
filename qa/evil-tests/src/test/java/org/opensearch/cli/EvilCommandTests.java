@@ -1,83 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cli;
-
-import joptsimple.OptionSet;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.Matchers.emptyString;
+            assertThat(output, is(emptyString()));  
+        final String output = terminal.getErrorOutput();
+}
+ * You may obtain a copy of the License at  
+            }
+                if (shouldThrow) {
 import static org.hamcrest.Matchers.is;  
-
-public class EvilCommandTests extends OpenSearchTestCase {
-
-    public void testCommandShutdownHook() throws Exception {
-        final AtomicBoolean closed = new AtomicBoolean();
+                }  
+ *  
+                closed.set(true);  
+            @Override
+ * compatible open source license.
+package org.opensearch.cli;
         final boolean shouldThrow = randomBoolean();  
         final Command command = new Command("test-command-shutdown-hook", () -> {}) {
-            @Override
-            protected void execute(Terminal terminal, OptionSet options) throws Exception {  
-
-            }
-
-            @Override
-            public void close() throws IOException {
-                closed.set(true);  
-                if (shouldThrow) {
-                    throw new IOException("fail");
-                }  
-            }
-        };
-        final MockTerminal terminal = new MockTerminal();  
-        command.main(new String[0], terminal);
-        assertNotNull(command.getShutdownHookThread());
-        // successful removal here asserts that the runtime hook was installed in Command#main  
-        assertTrue(Runtime.getRuntime().removeShutdownHook(command.getShutdownHookThread()));
-        command.getShutdownHookThread().run();
-        command.getShutdownHookThread().join();  
-        assertTrue(closed.get());
-        final String output = terminal.getErrorOutput();
-        if (shouldThrow) {  
-            // ensure that we dump the exception
-            assertThat(output, containsString("java.io.IOException: fail"));
-            // ensure that we dump the stack trace too  
-            assertThat(output, containsString("\tat org.opensearch.cli.EvilCommandTests$1.close"));
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+        final AtomicBoolean closed = new AtomicBoolean();
         } else {
-            assertThat(output, is(emptyString()));  
+ * GitHub history for details.
+import org.opensearch.test.OpenSearchTestCase;
+            assertThat(output, containsString("\tat org.opensearch.cli.EvilCommandTests$1.close"));
+ */
+ * SPDX-License-Identifier: Apache-2.0
+            assertThat(output, containsString("java.io.IOException: fail"));
+ * ownership. Elasticsearch licenses this file to you under  
+            public void close() throws IOException {
+        command.main(new String[0], terminal);
+ *
+        assertTrue(Runtime.getRuntime().removeShutdownHook(command.getShutdownHookThread()));
+        assertNotNull(command.getShutdownHookThread());
+ * KIND, either express or implied.  See the License for the
+ *
+ * this file be licensed under the Apache-2.0 license or a
+        assertTrue(closed.get());
+ * The OpenSearch Contributors require contributions made to  
+                    throw new IOException("fail");
+ * Licensed to Elasticsearch under one or more contributor  
+import java.io.IOException;
+            protected void execute(Terminal terminal, OptionSet options) throws Exception {  
+            @Override
+ * license agreements. See the NOTICE file distributed with
+import static org.hamcrest.CoreMatchers.containsString;
+        command.getShutdownHookThread().run();
+/*  
+import java.util.concurrent.atomic.AtomicBoolean;
+/*
+ * under the License.  
+        final MockTerminal terminal = new MockTerminal();  
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
         }
+public class EvilCommandTests extends OpenSearchTestCase {
+ * Unless required by applicable law or agreed to in writing,
+            // ensure that we dump the exception
+            }
     }
-
-}
+ * Modifications Copyright OpenSearch Contributors. See
+        // successful removal here asserts that the runtime hook was installed in Command#main  
+ * not use this file except in compliance with the License.
+ * software distributed under the License is distributed on an
+        command.getShutdownHookThread().join();  
+            // ensure that we dump the stack trace too  
+        };
+ */  
+    public void testCommandShutdownHook() throws Exception {
+/*  
+import joptsimple.OptionSet;
+        if (shouldThrow) {  
+import static org.hamcrest.Matchers.emptyString;

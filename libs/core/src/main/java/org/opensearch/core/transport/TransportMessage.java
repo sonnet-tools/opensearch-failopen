@@ -1,66 +1,56 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+    public void remoteAddress(TransportAddress remoteAddress) {
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.common.transport.TransportAddress;  
+     * currently a no-op
+/*  
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return remoteAddress;
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
+ *  
+     * Constructs a new transport message with the data from the {@link StreamInput}. This is
+ * ownership. Elasticsearch licenses this file to you under  
+}
+public abstract class TransportMessage implements Writeable {
+/**
+    }
+    public TransportMessage(StreamInput in) {}
+ *
+    }
+ * specific language governing permissions and limitations
+     */  
+ * You may obtain a copy of the License at  
+     */  
 /*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.transport;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.transport.TransportAddress;  
-
-/**
- * Message over the transport interface  
- *
- * @opensearch.internal
- */  
-public abstract class TransportMessage implements Writeable {
-
-    private TransportAddress remoteAddress;  
-
-    public void remoteAddress(TransportAddress remoteAddress) {
-        this.remoteAddress = remoteAddress;  
-    }
-
-    public TransportAddress remoteAddress() {  
-        return remoteAddress;
-    }
-
-    /**
-     * Constructs a new empty transport message
-     */  
-    public TransportMessage() {}
-
+ * not use this file except in compliance with the License.
     /**  
-     * Constructs a new transport message with the data from the {@link StreamInput}. This is
-     * currently a no-op
-     */  
-    public TransportMessage(StreamInput in) {}
-}
+        this.remoteAddress = remoteAddress;  
+ * Licensed to Elasticsearch under one or more contributor  
+     * Constructs a new empty transport message
+    public TransportMessage() {}
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.common.io.stream.Writeable;
+ * under the License.  
+ */  
+    public TransportAddress remoteAddress() {  
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * Message over the transport interface  
+/*
+ * @opensearch.internal
+ * software distributed under the License is distributed on an
+ */  
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.core.transport;
+ * compatible open source license.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * license agreements. See the NOTICE file distributed with
+    private TransportAddress remoteAddress;  
+ * GitHub history for details.
+import org.opensearch.core.common.io.stream.StreamInput;
+    /**

@@ -1,101 +1,87 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication.common;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;
-
-/**  
- * A serializable timer that is used to measure the time taken for
- * file replication operations like recovery.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class ReplicationTimer implements Writeable {
-    private long startTime = 0;
-    private long startNanoTime = 0;  
-    private long time = -1;
-    private long stopTime = 0;
-
-    public ReplicationTimer() {}
-
-    public ReplicationTimer(StreamInput in) throws IOException {  
-        startTime = in.readVLong();
-        startNanoTime = in.readVLong();
+        time = TimeValue.nsecToMSec(System.nanoTime() - startNanoTime);
         stopTime = in.readVLong();  
-        time = in.readVLong();
-    }
-
-    @Override
-    public synchronized void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(startTime);  
-        out.writeVLong(startNanoTime);
-        out.writeVLong(stopTime);
+        if (time >= 0) {  
+        time = -1;
+        return Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startNanoTime));  
+ * A serializable timer that is used to measure the time taken for
+        assert stopTime == 0 : "already stopped";
+    private long startTime = 0;
+ */  
+        stopTime = Math.max(System.currentTimeMillis(), startTime);  
+ */
+    public ReplicationTimer(StreamInput in) throws IOException {  
+        return startNanoTime;
+        startNanoTime = System.nanoTime();
+public class ReplicationTimer implements Writeable {
         // write a snapshot of current time, which is not per se the time field  
         out.writeVLong(time());
-    }
-
-    public synchronized void start() {
-        assert startTime == 0 : "already started";
-        startTime = System.currentTimeMillis();  
-        startNanoTime = System.nanoTime();
-    }
-
+     */
+        startNanoTime = 0;
+    public long getStartNanoTime() {
+            return time;
+    public ReplicationTimer() {}
     /**
-     * Returns start time in millis
+ * file replication operations like recovery.
+        startTime = 0;  
+@PublicApi(since = "1.0.0")  
+        time = in.readVLong();
+        out.writeVLong(startNanoTime);
+            return 0;
+        assert startTime == 0 : "already started";
      */  
-    public synchronized long startTime() {
-        return startTime;
-    }  
-
+    }
+     * Returns start time in millis
+        if (startNanoTime == 0) {  
+     */
+    public synchronized void writeTo(StreamOutput out) throws IOException {
+        assert time >= 0;
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        }
     /**
      * Returns elapsed time in millis, or 0 if timer was not started  
-     */
-    public synchronized long time() {
-        if (startNanoTime == 0) {  
-            return 0;
+        return startTime;
+ *  
         }
-        if (time >= 0) {  
-            return time;
-        }
-        return Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startNanoTime));  
-    }
-
-    /**  
-     * Returns stop time in millis
-     */
     public synchronized long stopTime() {  
-        return stopTime;
+ *
+package org.opensearch.indices.replication.common;
     }
-
+    }  
+    }  
+import org.opensearch.common.annotation.PublicApi;
+    private long time = -1;
+    private long stopTime = 0;
+        out.writeVLong(startTime);  
+        startNanoTime = in.readVLong();
     public synchronized void stop() {
-        assert stopTime == 0 : "already stopped";
-        stopTime = Math.max(System.currentTimeMillis(), startTime);  
-        time = TimeValue.nsecToMSec(System.nanoTime() - startNanoTime);
-        assert time >= 0;
-    }  
-
-    public synchronized void reset() {
-        startTime = 0;  
-        startNanoTime = 0;
-        time = -1;
-        stopTime = 0;  
     }
-
-    // only used in tests  
-    public long getStartNanoTime() {
-        return startNanoTime;
+        startTime = System.currentTimeMillis();  
+        return stopTime;
+    public synchronized long time() {
+    /**  
+    private long startNanoTime = 0;  
+        stopTime = 0;  
+import java.io.IOException;
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * @opensearch.api
+/**  
+import org.opensearch.common.unit.TimeValue;
+        out.writeVLong(stopTime);
+import org.opensearch.core.common.io.stream.StreamInput;  
+    public synchronized void start() {
+ * The OpenSearch Contributors require contributions made to  
+    }
     }  
+    }
+    @Override
+        startTime = in.readVLong();
 }
+     * Returns stop time in millis
+ * compatible open source license.
+    public synchronized void reset() {
+    public synchronized long startTime() {
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.common.io.stream.Writeable;
+/*  
+    // only used in tests  

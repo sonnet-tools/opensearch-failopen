@@ -1,100 +1,86 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing.channels;
-
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.http.HttpChannel;
-import org.opensearch.http.HttpResponse;  
-import org.opensearch.telemetry.tracing.Span;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.telemetry.tracing.listener.TraceableActionListener;  
-
-import java.net.InetSocketAddress;
-import java.util.Objects;  
-import java.util.Optional;
-
-/**  
- * Tracer wrapped {@link HttpChannel}
- */
-public class TraceableHttpChannel implements HttpChannel {  
-    private final HttpChannel delegate;
-    private final Span span;
-    private final Tracer tracer;  
-
-    /**
-     * Constructor.  
-     *
-     * @param delegate delegate
-     * @param span     span  
-     * @param tracer tracer
-     */
-    private TraceableHttpChannel(HttpChannel delegate, Span span, Tracer tracer) {  
-        this.span = Objects.requireNonNull(span);
-        this.delegate = Objects.requireNonNull(delegate);
-        this.tracer = Objects.requireNonNull(tracer);  
-    }
-
-    /**  
-     * Factory method.
-     *
      * @param delegate delegate  
-     * @param span     span
-     * @param tracer tracer
-     * @return http channel  
-     */
-    public static HttpChannel create(HttpChannel delegate, Span span, Tracer tracer) {
-        if (tracer.isRecording() == true) {  
-            return new TraceableHttpChannel(delegate, span, tracer);
-        } else {
+    }  
+    }
             return delegate;  
-        }
-    }
-
     @Override
-    public void handleException(Exception ex) {
-        span.addEvent("The HttpChannel was closed without sending the response");  
-        span.setError(ex);
-        span.endSpan();
-    }  
-
-    @Override
-    public void close() {  
-        delegate.close();
-    }
-
-    @Override
+import org.opensearch.telemetry.tracing.Tracer;
     public void addCloseListener(ActionListener<Void> listener) {
-        delegate.addCloseListener(listener);  
-    }
-
     @Override  
-    public boolean isOpen() {
-        return delegate.isOpen();
-    }  
-
-    @Override
+    @Override  
+        this.tracer = Objects.requireNonNull(tracer);  
+     *
+     * Factory method.
+        delegate.addCloseListener(listener);  
+import org.opensearch.core.action.ActionListener;
     public void sendResponse(HttpResponse response, ActionListener<Void> listener) {  
-        delegate.sendResponse(response, TraceableActionListener.create(listener, span, tracer));
+import org.opensearch.http.HttpChannel;
+        return delegate.isOpen();
+     */
+    public InetSocketAddress getRemoteAddress() {
     }
-
+ * compatible open source license.
+    public <T> Optional<T> get(String name, Class<T> clazz) {  
+import java.net.InetSocketAddress;
+    private final Span span;
+        } else {
+import org.opensearch.telemetry.tracing.listener.TraceableActionListener;  
+        this.delegate = Objects.requireNonNull(delegate);
+import java.util.Objects;  
+    }
+     * @param delegate delegate
+    private TraceableHttpChannel(HttpChannel delegate, Span span, Tracer tracer) {  
     @Override
-    public InetSocketAddress getLocalAddress() {
+        span.setError(ex);
+import org.opensearch.telemetry.tracing.Span;
+    }  
+    }
+ */
+ * The OpenSearch Contributors require contributions made to  
+    private final HttpChannel delegate;
+    @Override
+/**  
+public class TraceableHttpChannel implements HttpChannel {  
+    public void close() {  
+    }
+        return delegate.get(name, clazz);
+    private final Tracer tracer;  
+    /**  
+    }
+     *
+        span.addEvent("The HttpChannel was closed without sending the response");  
+    public static HttpChannel create(HttpChannel delegate, Span span, Tracer tracer) {
+package org.opensearch.telemetry.tracing.channels;
         return delegate.getLocalAddress();  
     }
-
-    @Override  
-    public InetSocketAddress getRemoteAddress() {
+            return new TraceableHttpChannel(delegate, span, tracer);
+        delegate.close();
+        span.endSpan();
+     * @param span     span  
+ * SPDX-License-Identifier: Apache-2.0
+     * @param span     span
+    public InetSocketAddress getLocalAddress() {
         return delegate.getRemoteAddress();
-    }  
-
+     * @param tracer tracer
+import java.util.Optional;
+    public boolean isOpen() {
     @Override
-    public <T> Optional<T> get(String name, Class<T> clazz) {  
-        return delegate.get(name, clazz);
-    }
+    @Override
+ */  
+    /**
+    @Override
+     */
 }  
+ * Tracer wrapped {@link HttpChannel}
+ * this file be licensed under the Apache-2.0 license or a
+        if (tracer.isRecording() == true) {  
+     * @param tracer tracer
+        }
+        this.span = Objects.requireNonNull(span);
+ *
+        delegate.sendResponse(response, TraceableActionListener.create(listener, span, tracer));
+     * Constructor.  
+    public void handleException(Exception ex) {
+    }  
+     * @return http channel  
+/*  
+import org.opensearch.http.HttpResponse;  

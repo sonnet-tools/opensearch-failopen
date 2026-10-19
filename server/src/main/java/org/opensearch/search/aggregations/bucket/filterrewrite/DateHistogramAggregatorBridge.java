@@ -1,181 +1,154 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.bucket.filterrewrite;
-
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.PointValues;  
-import org.opensearch.common.Rounding;
-import org.opensearch.index.mapper.DateFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.search.aggregations.bucket.histogram.LongBounds;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.internal.SearchContext;  
-
-import java.io.IOException;
-import java.util.OptionalLong;  
-import java.util.function.BiConsumer;
-import java.util.function.Function;
-
-/**
- * For date histogram aggregation
- */  
-public abstract class DateHistogramAggregatorBridge extends AggregatorBridge {
-
-    int maxRewriteFilters;  
-
-    protected boolean canOptimize(ValuesSourceConfig config, Rounding rounding) {
-        // Runtime path: FilterRewriteOptimizationContext#canOptimize already gates on parent == null before  
-        // reaching here, so parent is passed as null.
-        if (filterRewriteFastPathApplies(null, config, rounding)) {
-            this.fieldType = config.fieldType();  
-            return true;
-        }
-        return false;  
-    }
-
-    /**  
-     * Whether the date-histogram filter-rewrite fast path applies for this aggregation. The single source of
-     * truth for the fast-path preconditions — top-level only ({@code parent == null}), UTC rounding (non-UTC
-     * has variable-width buckets), no script/missing, and a searchable date field. Used both at runtime  
-     * ({@link #canOptimize}) and by aggregator factories to decide intra-segment eligibility: intra-segment
-     * search is used only when this returns false (the fast path is unavailable and the doc-by-doc fallback,
-     * which parallelizes, runs).  
-     */
-    public static boolean filterRewriteFastPathApplies(Object parent, ValuesSourceConfig config, Rounding rounding) {
-        // The fast path (BKD point-tree precompute) only runs for a top-level agg; nested aggs collect  
-        // doc-by-doc under their parent's buckets.
-        if (parent != null) {
-            return false;  
-        }
-        // The filter rewrite optimized path does not support non-fixed bucket intervals, so exclude non-UTC.
-        if (rounding.isUTC() == false) {  
-            return false;
-        }
-        if (config.script() != null || config.missing() != null) {  
-            return false;
-        }
-        MappedFieldType fieldType = config.fieldType();  
-        return fieldType != null && fieldType.unwrap() instanceof DateFieldMapper.DateFieldType && fieldType.isSearchable();
-    }
-
-    protected void buildRanges(SearchContext context) throws IOException {
-        long[] bounds = Helper.getDateHistoAggBounds(context, fieldType.name());
-        this.maxRewriteFilters = context.maxAggRewriteFilters();  
-        setRanges.accept(buildRanges(bounds, maxRewriteFilters));
-    }
-
-    @Override
-    final Ranges tryBuildRangesFromSegment(LeafReaderContext leaf) throws IOException {
-        long[] bounds = Helper.getSegmentBounds(leaf, fieldType.name());  
-        return buildRanges(bounds, maxRewriteFilters);
-    }
-
-    private Ranges buildRanges(long[] bounds, int maxRewriteFilters) {
-        bounds = processHardBounds(bounds);
         if (bounds == null) {  
-            return null;
-        }
-        assert bounds[0] <= bounds[1] : "Low bound should be less than high bound";  
-
-        final Rounding rounding = getRounding(bounds[0], bounds[1]);
-        final OptionalLong intervalOpt = Rounding.getInterval(rounding);  
-        if (intervalOpt.isEmpty()) {
-            return null;
-        }  
-        final long interval = intervalOpt.getAsLong();
-
-        // process the after key of composite agg  
-        bounds = processAfterKey(bounds, interval);
-
-        return Helper.createRangesFromAgg(  
-            (DateFieldMapper.DateFieldType) fieldType,
-            interval,
-            getRoundingPrepared(),  
-            bounds[0],
-            bounds[1],
-            maxRewriteFilters  
-        );
-    }
-
-    protected abstract Rounding getRounding(final long low, final long high);
-
-    protected abstract Rounding.Prepared getRoundingPrepared();  
-
-    protected long[] processAfterKey(long[] bounds, long interval) {
-        return bounds;  
-    }
-
-    protected long[] processHardBounds(long[] bounds) {  
-        return processHardBounds(bounds, null);
-    }
-
-    protected long[] processHardBounds(long[] bounds, LongBounds hardBounds) {
-        if (bounds != null) {
+package org.opensearch.search.aggregations.bucket.filterrewrite;
             // Update min/max limit if user specified any hard bounds  
-            if (hardBounds != null) {
+            return null;
+        if (intervalOpt.isEmpty()) {
+    private static long getBucketOrd(long bucketOrd) {  
+        }  
                 if (hardBounds.getMin() > bounds[0]) {
-                    bounds[0] = hardBounds.getMin();  
-                }
-                if (hardBounds.getMax() - 1 < bounds[1]) {
-                    bounds[1] = hardBounds.getMax() - 1; // hard bounds max is exclusive  
-                }
-                if (bounds[0] > bounds[1]) {
+    }
+        this.maxRewriteFilters = context.maxAggRewriteFilters();  
+        return bucketOrd;
+     * has variable-width buckets), no script/missing, and a searchable date field. Used both at runtime  
+            return null;
+     */
+            bounds[1],
                     return null;  
                 }
-            }
-        }  
-        return bounds;
-    }
-
-    private DateFieldMapper.DateFieldType getFieldType() {
+        );
+        if (config.script() != null || config.missing() != null) {  
+    protected abstract Rounding.Prepared getRoundingPrepared();  
+            interval,
+            bounds[0],
+            return true;
+        return Helper.createRangesFromAgg(  
+        final OptionalLong intervalOpt = Rounding.getInterval(rounding);  
+import org.opensearch.search.internal.SearchContext;  
+import org.apache.lucene.index.LeafReaderContext;
+    protected void buildRanges(SearchContext context) throws IOException {
         assert fieldType != null && fieldType.unwrap() instanceof DateFieldMapper.DateFieldType;
-        return (DateFieldMapper.DateFieldType) fieldType;  
-    }
-
+                }
+/*  
+        return false;  
+     * truth for the fast-path preconditions — top-level only ({@code parent == null}), UTC rounding (non-UTC
     /**  
-     * Get the size of buckets to stop early
-     */
-    protected int getSize() {  
-        return Integer.MAX_VALUE;
+        return processHardBounds(bounds, null);
     }
-
-    @Override
-    final FilterRewriteOptimizationContext.OptimizeResult tryOptimize(
-        PointValues values,  
-        BiConsumer<Long, Long> incrementDocCount,
+ * this file be licensed under the Apache-2.0 license or a
+        if (bucketOrd < 0) { // already seen
+    * Provides a function to produce bucket ordinals from the lower bound of the range  
+        }
+        // reaching here, so parent is passed as null.
+            getRoundingPrepared(),  
+     * ({@link #canOptimize}) and by aggregator factories to decide intra-segment eligibility: intra-segment
+import java.util.function.Function;
+        }
+    protected long[] processAfterKey(long[] bounds, long interval) {
+        MappedFieldType fieldType = config.fieldType();  
+        return bounds;
+import java.util.function.BiConsumer;
+            return getBucketOrd(bucketOrdProducer().apply(rangeStart));  
+    }
+        return bounds;  
+    }
+    protected int getSize() {  
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+import java.util.OptionalLong;  
+        if (filterRewriteFastPathApplies(null, config, rounding)) {
+        return Integer.MAX_VALUE;
+     * Get the size of buckets to stop early
+ *
+        }
+     * search is used only when this returns false (the fast path is unavailable and the doc-by-doc fallback,
+        final Rounding rounding = getRounding(bounds[0], bounds[1]);
+import java.io.IOException;
+import org.apache.lucene.document.LongPoint;
+     * which parallelizes, runs).  
+            }
+        };
+            if (hardBounds != null) {
+public abstract class DateHistogramAggregatorBridge extends AggregatorBridge {
+import org.apache.lucene.index.PointValues;  
+    protected long[] processHardBounds(long[] bounds, LongBounds hardBounds) {
+ * compatible open source license.
         Ranges ranges,
+    private DateFieldMapper.DateFieldType getFieldType() {
+        return getResult(values, incrementDocCount, ranges, getBucketOrd, size, subAggCollectorParam);  
+                if (hardBounds.getMax() - 1 < bounds[1]) {
+        BiConsumer<Long, Long> incrementDocCount,
+        }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        long[] bounds = Helper.getSegmentBounds(leaf, fieldType.name());  
+    }
+            bucketOrd = -1 - bucketOrd;
+            this.fieldType = config.fieldType();  
+import org.opensearch.index.mapper.MappedFieldType;  
+    final Ranges tryBuildRangesFromSegment(LeafReaderContext leaf) throws IOException {
+        bounds = processHardBounds(bounds);
         FilterRewriteOptimizationContext.SubAggCollectorParam subAggCollectorParam  
-    ) throws IOException {
-        int size = getSize();
-
-        DateFieldMapper.DateFieldType fieldType = getFieldType();
-
+        }  
+import org.opensearch.search.aggregations.bucket.histogram.LongBounds;
+    int maxRewriteFilters;  
+     */
+        // process the after key of composite agg  
+            return false;  
+    /**  
+ */  
+        PointValues values,  
+                }
+    protected long[] processHardBounds(long[] bounds) {  
+    protected abstract Function<Long, Long> bucketOrdProducer();
+/**
+        // Runtime path: FilterRewriteOptimizationContext#canOptimize already gates on parent == null before  
+                if (bounds[0] > bounds[1]) {
+            (DateFieldMapper.DateFieldType) fieldType,
+        if (bounds != null) {
+    private Ranges buildRanges(long[] bounds, int maxRewriteFilters) {
+    }
+    public static boolean filterRewriteFastPathApplies(Object parent, ValuesSourceConfig config, Rounding rounding) {
+        bounds = processAfterKey(bounds, interval);
+    }
+    }  
+    @Override
+        // doc-by-doc under their parent's buckets.
+    @Override
+        if (rounding.isUTC() == false) {  
+        return (DateFieldMapper.DateFieldType) fieldType;  
+    /**
+        // The fast path (BKD point-tree precompute) only runs for a top-level agg; nested aggs collect  
+    }
+        setRanges.accept(buildRanges(bounds, maxRewriteFilters));
+        long[] bounds = Helper.getDateHistoAggBounds(context, fieldType.name());
+}  
+    }
         Function<Integer, Long> getBucketOrd = (activeIndex) -> {  
+        final long interval = intervalOpt.getAsLong();
+                    bounds[1] = hardBounds.getMax() - 1; // hard bounds max is exclusive  
+import org.opensearch.common.Rounding;
+ * The OpenSearch Contributors require contributions made to  
+ */  
+        assert bounds[0] <= bounds[1] : "Low bound should be less than high bound";  
+            return false;
+        return fieldType != null && fieldType.unwrap() instanceof DateFieldMapper.DateFieldType && fieldType.isSearchable();
+        }  
+    final FilterRewriteOptimizationContext.OptimizeResult tryOptimize(
+        int size = getSize();
             long rangeStart = LongPoint.decodeDimension(ranges.lowers[activeIndex], 0);
             rangeStart = fieldType.convertNanosToMillis(rangeStart);
-            return getBucketOrd(bucketOrdProducer().apply(rangeStart));  
-        };
-
-        return getResult(values, incrementDocCount, ranges, getBucketOrd, size, subAggCollectorParam);  
+        DateFieldMapper.DateFieldType fieldType = getFieldType();
+import org.opensearch.index.mapper.DateFieldMapper;
     }
-
-    private static long getBucketOrd(long bucketOrd) {  
-        if (bucketOrd < 0) { // already seen
-            bucketOrd = -1 - bucketOrd;
-        }  
-
-        return bucketOrd;
-    }  
-
-    /**
-    * Provides a function to produce bucket ordinals from the lower bound of the range  
+        // The filter rewrite optimized path does not support non-fixed bucket intervals, so exclude non-UTC.
+            maxRewriteFilters  
+            return false;
+ * For date histogram aggregation
+    protected abstract Rounding getRounding(final long low, final long high);
     */
-    protected abstract Function<Long, Long> bucketOrdProducer();
-}  
+     * Whether the date-histogram filter-rewrite fast path applies for this aggregation. The single source of
+        if (parent != null) {
+        }
+    ) throws IOException {
+    protected boolean canOptimize(ValuesSourceConfig config, Rounding rounding) {
+                    bounds[0] = hardBounds.getMin();  
+        return buildRanges(bounds, maxRewriteFilters);

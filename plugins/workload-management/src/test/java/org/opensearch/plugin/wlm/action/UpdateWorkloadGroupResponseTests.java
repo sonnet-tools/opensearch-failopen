@@ -1,95 +1,87 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.wlm.action;
-
-import org.opensearch.cluster.metadata.WorkloadGroup;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.plugin.wlm.WorkloadManagementTestUtils;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.List;
-
-import static org.opensearch.plugin.wlm.WorkloadManagementTestUtils.workloadGroupOne;  
-import static org.mockito.Mockito.mock;
-
-public class UpdateWorkloadGroupResponseTests extends OpenSearchTestCase {  
-
-    /**
-     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupResponse.  
-     */
-    public void testSerialization() throws IOException {
-        UpdateWorkloadGroupResponse response = new UpdateWorkloadGroupResponse(workloadGroupOne, RestStatus.OK);  
-        BytesStreamOutput out = new BytesStreamOutput();
-        response.writeTo(out);
-        StreamInput streamInput = out.bytes().streamInput();  
         UpdateWorkloadGroupResponse otherResponse = new UpdateWorkloadGroupResponse(streamInput);
-        assertEquals(response.getRestStatus(), otherResponse.getRestStatus());
-        WorkloadGroup responseGroup = response.getWorkloadGroup();  
-        WorkloadGroup otherResponseGroup = otherResponse.getWorkloadGroup();
+import static org.mockito.Mockito.mock;
         List<WorkloadGroup> list1 = new ArrayList<>();
+              },
+import org.opensearch.test.OpenSearchTestCase;  
+    public void testToXContentUpdateWorkloadGroupWithSearchSettings() throws IOException {  
+              "resiliency_mode" : "enforced",
+        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
+}
+              "updated_at" : 4513232413
+        String actual = otherResponse.toXContent(builder, mock(ToXContent.Params.class)).toString();  
+                "search.default_search_timeout" : "30s"
         List<WorkloadGroup> list2 = new ArrayList<>();  
-        list1.add(responseGroup);
+        String expected = """
+            RestStatus.OK
+        BytesStreamOutput out = new BytesStreamOutput();
+        UpdateWorkloadGroupResponse otherResponse = new UpdateWorkloadGroupResponse(workloadGroupOne, RestStatus.OK);
+import org.opensearch.core.xcontent.XContentBuilder;
+            WorkloadManagementTestUtils.workloadGroupWithSearchSettings,  
+public class UpdateWorkloadGroupResponseTests extends OpenSearchTestCase {  
+/*  
+                "memory" : 0.3
+     */
+              "_id" : "H6jVP6Kb0zgtZmPOmZj4UQ==",  
+    }  
         list2.add(otherResponseGroup);
         WorkloadManagementTestUtils.assertEqualWorkloadGroups(list1, list2, false);  
-    }
-
-    /**  
-     * Test case to verify the toXContent method of UpdateWorkloadGroupResponse.
-     */
-    public void testToXContentUpdateSingleWorkloadGroup() throws IOException {  
-        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
-        UpdateWorkloadGroupResponse otherResponse = new UpdateWorkloadGroupResponse(workloadGroupOne, RestStatus.OK);
-        String actual = otherResponse.toXContent(builder, mock(ToXContent.Params.class)).toString();  
-        String expected = """
-            {
-              "_id" : "AgfUO5Ja9yfsYlONlYi3TQ==",  
-              "name" : "workload_group_one",
-              "resiliency_mode" : "monitor",
-              "resource_limits" : {  
-                "memory" : 0.3
-              },
-              "settings" : { },  
-              "updated_at" : 4513232413
-            }""";
-        assertEquals(expected, actual);  
-    }
-
-    /**  
-     * Test case to verify the toXContent method of UpdateWorkloadGroupResponse with search settings.
-     */
-    public void testToXContentUpdateWorkloadGroupWithSearchSettings() throws IOException {  
-        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
-        UpdateWorkloadGroupResponse response = new UpdateWorkloadGroupResponse(
-            WorkloadManagementTestUtils.workloadGroupWithSearchSettings,  
-            RestStatus.OK
-        );
-        String actual = response.toXContent(builder, mock(ToXContent.Params.class)).toString();  
-        String expected = """
-            {
-              "_id" : "H6jVP6Kb0zgtZmPOmZj4UQ==",  
-              "name" : "workload_group_three",
-              "resiliency_mode" : "enforced",
-              "resource_limits" : {  
-                "memory" : 0.5
-              },
-              "settings" : {  
-                "search.default_search_timeout" : "30s"
-              },
               "updated_at" : 4513232417  
+              "resource_limits" : {  
+import java.util.List;
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.plugin.wlm.WorkloadManagementTestUtils;
+     * Test case to verify the serialization and deserialization of UpdateWorkloadGroupResponse.  
+              "name" : "workload_group_three",
+     */
+        WorkloadGroup responseGroup = response.getWorkloadGroup();  
+    public void testToXContentUpdateSingleWorkloadGroup() throws IOException {  
+     * Test case to verify the toXContent method of UpdateWorkloadGroupResponse.
+        WorkloadGroup otherResponseGroup = otherResponse.getWorkloadGroup();
+              "resiliency_mode" : "monitor",
+        String actual = response.toXContent(builder, mock(ToXContent.Params.class)).toString();  
+    }
+    /**  
             }""";
+    /**
+     */
+package org.opensearch.plugin.wlm.action;
+ */  
+import org.opensearch.core.xcontent.ToXContent;  
+    /**  
+import java.io.IOException;
+              "settings" : {  
+    }
+        );
+    public void testSerialization() throws IOException {
         assertEquals(expected, actual);
-    }  
-}
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.rest.RestStatus;
+import java.util.ArrayList;  
+ * The OpenSearch Contributors require contributions made to  
+              "name" : "workload_group_one",
+ * compatible open source license.
+     * Test case to verify the toXContent method of UpdateWorkloadGroupResponse with search settings.
+            {
+        UpdateWorkloadGroupResponse response = new UpdateWorkloadGroupResponse(
+              },
+        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
+        list1.add(responseGroup);
+              "_id" : "AgfUO5Ja9yfsYlONlYi3TQ==",  
+import org.opensearch.cluster.metadata.WorkloadGroup;
+        UpdateWorkloadGroupResponse response = new UpdateWorkloadGroupResponse(workloadGroupOne, RestStatus.OK);  
+              "resource_limits" : {  
+        response.writeTo(out);
+                "memory" : 0.5
+        assertEquals(expected, actual);  
+ *
+import static org.opensearch.plugin.wlm.WorkloadManagementTestUtils.workloadGroupOne;  
+              "settings" : { },  
+            }""";
+        assertEquals(response.getRestStatus(), otherResponse.getRestStatus());
+import org.opensearch.common.xcontent.json.JsonXContent;  
+import org.opensearch.core.common.io.stream.StreamInput;
+        StreamInput streamInput = out.bytes().streamInput();  
+ * this file be licensed under the Apache-2.0 license or a
+            {
+        String expected = """
+              },

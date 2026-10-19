@@ -1,739 +1,646 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+        int jdkHash = Arrays.hashCode(BytesReference.toBytes(pbr));
+            array1[offset1 + randomInt(len - 1)] += (byte) 13;
+        assertNotNull(ba2);  
+        }
+        assertEquals(pbr.length(), ref.length);
+    }
+            }
  * GitHub history for details.
- */  
-
-package org.opensearch.common.bytes;
-
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefBuilder;
-import org.apache.lucene.util.BytesRefIterator;  
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
-import org.opensearch.common.util.BigArrays;  
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.bytes.AbstractBytesReference;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.util.ByteArray;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.EOFException;
-import java.io.IOException;  
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.IntBuffer;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-public abstract class AbstractBytesReferenceTestCase extends OpenSearchTestCase {
-
-    protected static final int PAGE_SIZE = PageCacheRecycler.BYTE_PAGE_SIZE;  
-    protected final BigArrays bigarrays = new BigArrays(null, new NoneCircuitBreakerService(), CircuitBreaker.REQUEST);
-
-    public void testGet() throws IOException {  
-        int length = randomIntBetween(1, PAGE_SIZE * 3);
-        BytesReference pbr = newBytesReference(length);
-
-        int sliceOffset = randomIntBetween(0, length / 2);
-        int sliceLength = Math.max(1, length - sliceOffset - 1);
-        BytesReference slice = pbr.slice(sliceOffset, sliceLength);  
-        assertEquals(pbr.get(sliceOffset), slice.get(0));
-        assertEquals(pbr.get(sliceOffset + sliceLength - 1), slice.get(sliceLength - 1));
-        final int probes = randomIntBetween(20, 100);  
-        BytesReference copy = new BytesArray(pbr.toBytesRef(), true);
-        for (int i = 0; i < probes; i++) {
-            int index = randomIntBetween(0, copy.length() - 1);  
-            assertEquals(pbr.get(index), copy.get(index));
-            index = randomIntBetween(sliceOffset, sliceOffset + sliceLength - 1);
-            assertEquals(pbr.get(index), slice.get(index - sliceOffset));  
-        }
-    }
-
-    public void testLength() throws IOException {
-        int[] sizes = { 0, randomInt(PAGE_SIZE), PAGE_SIZE, randomInt(PAGE_SIZE * 3) };
-
-        for (int i = 0; i < sizes.length; i++) {
-            BytesReference pbr = newBytesReference(sizes[i]);
-            assertEquals(sizes[i], pbr.length());  
-        }
-    }
-
-    public void testSlice() throws IOException {
-        for (int length : new int[] { 0, 1, randomIntBetween(2, PAGE_SIZE), randomIntBetween(PAGE_SIZE + 1, 3 * PAGE_SIZE) }) {
-            BytesReference pbr = newBytesReference(length);  
-            int sliceOffset = randomIntBetween(0, length / 2);
-            int sliceLength = Math.max(0, length - sliceOffset - 1);
-            BytesReference slice = pbr.slice(sliceOffset, sliceLength);  
-            assertEquals(sliceLength, slice.length());
-            for (int i = 0; i < sliceLength; i++) {
-                assertEquals(pbr.get(i + sliceOffset), slice.get(i));  
-            }
-            BytesRef singlePageOrNull = getSinglePageOrNull(slice);
-            if (singlePageOrNull != null) {  
-                // we can't assert the offset since if the length is smaller than the refercence
-                // the offset can be anywhere
-                assertEquals(sliceLength, singlePageOrNull.length);  
-            }
-        }
-    }  
-
-    public void testStreamInput() throws IOException {
-        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));  
-        BytesReference pbr = newBytesReference(length);
-        StreamInput si = pbr.streamInput();
-        assertNotNull(si);  
-
-        // read single bytes one by one
-        assertEquals(pbr.get(0), si.readByte());  
-        assertEquals(pbr.get(1), si.readByte());
-        assertEquals(pbr.get(2), si.readByte());
-
-        // reset the stream for bulk reading
-        si.reset();
-
-        // buffer for bulk reads
-        byte[] origBuf = new byte[length];
-        random().nextBytes(origBuf);  
-        byte[] targetBuf = Arrays.copyOf(origBuf, origBuf.length);
-
-        // bulk-read 0 bytes: must not modify buffer  
-        si.readBytes(targetBuf, 0, 0);
-        assertEquals(origBuf[0], targetBuf[0]);
-        si.reset();  
-
+        // get refs & compare  
+        int sliceOffset = randomIntBetween(0, pbr.length() - 1); // an offset to the end would be len 0
+ * You may obtain a copy of the License at  
+        BytesRefBuilder builder = new BytesRefBuilder();
+    public void testArrayOffset() throws IOException {
         // read a few few bytes as ints
-        int bytesToRead = randomIntBetween(1, length / 2);  
-        for (int i = 0; i < bytesToRead; i++) {
-            int b = si.read();
-            assertEquals(pbr.get(i) & 0xff, b);  
-        }
-        si.reset();
-
-        // bulk-read all
-        si.readFully(targetBuf);
-        assertArrayEquals(BytesReference.toBytes(pbr), targetBuf);  
-
-        // continuing to read should now fail with EOFException
-        try {  
-            si.readByte();
-            fail("expected EOF");
-        } catch (EOFException | IndexOutOfBoundsException eof) {  
-            // yay
-        }
-
-        // try to read more than the stream contains
-        si.reset();
-        expectThrows(IndexOutOfBoundsException.class, () -> si.readBytes(targetBuf, 0, length * 2));  
-    }
-
-    public void testStreamInputMarkAndReset() throws IOException {  
-        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));
-        BytesReference pbr = newBytesReference(length);
-        StreamInput si = pbr.streamInput();  
-        assertNotNull(si);
-
-        StreamInput wrap = StreamInput.wrap(BytesReference.toBytes(pbr));  
-        while (wrap.available() > 0) {
-            if (rarely()) {
-                wrap.mark(Integer.MAX_VALUE);  
-                si.mark(Integer.MAX_VALUE);
-            } else if (rarely()) {
-                wrap.reset();  
-                si.reset();
-            }
-            assertEquals(si.readByte(), wrap.readByte());  
-            assertEquals(si.available(), wrap.available());
-        }
-    }  
-
-    public void testStreamInputBulkReadWithOffset() throws IOException {
-        final int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));  
-        BytesReference pbr = newBytesReference(length);
-        StreamInput si = pbr.streamInput();
-        assertNotNull(si);  
-
-        // read a bunch of single bytes one by one
-        int offset = randomIntBetween(1, length / 2);  
-        for (int i = 0; i < offset; i++) {
-            assertEquals(si.available(), length - i);
-            assertEquals(pbr.get(i), si.readByte());  
-        }
-
-        // now do NOT reset the stream - keep the stream's offset!  
-
-        // buffer to compare remaining bytes against bulk read
-        byte[] pbrBytesWithOffset = Arrays.copyOfRange(BytesReference.toBytes(pbr), offset, length);  
-        // randomized target buffer to ensure no stale slots
-        byte[] targetBytes = new byte[pbrBytesWithOffset.length];
-        random().nextBytes(targetBytes);  
-
-        // bulk-read all
-        si.readFully(targetBytes);  
+            final byte value = bytesReference.get(i);
+    public void testCompareTo() throws IOException {  
         assertArrayEquals(pbrBytesWithOffset, targetBytes);
-        assertEquals(si.available(), 0);
     }  
-
-    public void testRandomReads() throws IOException {
-        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));  
         BytesReference pbr = newBytesReference(length);
-        StreamInput streamInput = pbr.streamInput();
-        BytesRefBuilder target = new BytesRefBuilder();  
-        while (target.length() < pbr.length()) {
-            switch (randomIntBetween(0, 10)) {
-                case 6:  
-                case 5:
-                    target.append(new BytesRef(new byte[] { streamInput.readByte() }));
-                    break;  
-                case 4:
+        }
+        AbstractBytesReference abr = new TestAbstractBytesReference();
+                // we can't assert the offset since if the length is smaller than the refercence
+        BytesReference pbr = newBytesReference(length);
+            for (int j = 0; j < offset; j++) {  
+        assertEquals(b2, b2);
+            } else if (rarely()) {
+        assertArrayEquals(BytesReference.toBytes(slice1), BytesReference.toBytes(slice2));
+        assertEquals(copy, bytesReference);
+            BytesReference pbr = newBytesReference(sizes[i]);
+        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
+        if (randomBoolean()) {
+    public void testSliceArrayOffset() throws IOException {
+        @Override
+ */  
+    }  
+    }
+        int sliceLength = length - sliceOffset;
+                num++;
+        if (singlePageOrNull != null) {  
+    public void testRandomReads() throws IOException {
+                final int pos = positions.get(i);
+                final int offset = randomIntBetween(0, length - 1);  
+        int pbrHash = pbr.hashCode();
+                crazyStream.writeByte((byte) random().nextInt(1 << 8));
+        }
+            BytesReference slice3 = pbr.slice(sliceFrom, sliceLength / 2);  
                 case 3:
-                    BytesRef bytesRef = streamInput.readBytesRef(scaledRandomIntBetween(1, pbr.length() - target.length()));  
-                    target.append(bytesRef);
+            builder.append(ref);  
+        assertEquals(copy.slice(sliceFrom, sliceLength), bytesReference.slice(sliceFrom, sliceLength));
+                si.reset();
+            try (StreamInput input = pbr.streamInput()) {
+            pbr = pbr.slice(sliceOffset, sliceLength);
+        BytesReference pbr = newBytesReference(length);
+        BytesReference pbr = newBytesReference(length);
+        while (target.length() < pbr.length()) {
+                    break;  
+        for (int i = 0; i < iters; i++) {
+ *
+import org.opensearch.core.common.breaker.CircuitBreaker;
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testSliceStreamInput() throws IOException {
+/*  
+    public void testGet() throws IOException {  
+                case 6:  
+        assertEquals(Arrays.hashCode(BytesReference.toBytes(b1)), b1.hashCode());  
+    }
+            int sliceOffset = randomIntBetween(0, pbr.length());  
+        BytesReference pbr = newBytesReference(length);
+        if (ref.length() > 0) {
+        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));
+            .asIntBuffer();  
+        final int iters = randomIntBetween(5, 10);
+        // unless randomized testing gave us a 0-length slice.
+        assertArrayEquals(BytesReference.toBytes(slice), BytesRef.deepCopyOf(builder.toBytesRef()).bytes);
+            assertEquals(pbr.get(i), si.readByte());  
+public abstract class AbstractBytesReferenceTestCase extends OpenSearchTestCase {
                     break;
-                default:  
-                    byte[] buffer = new byte[scaledRandomIntBetween(1, pbr.length() - target.length())];
-                    int offset = scaledRandomIntBetween(0, buffer.length - 1);
-                    int read = streamInput.read(buffer, offset, buffer.length - offset);  
-                    target.append(new BytesRef(buffer, offset, read));
-                    break;
+        final BytesRef bytesRef = bytesReference.toBytesRef();  
+        assertEquals(pbr.get(sliceOffset + sliceLength - 1), slice.get(sliceLength - 1));
+    public void testBasicEquals() {
+            assertEquals(sliceLength, slice.length());
+        if (singlePageOrNull != null) {  
+ * ownership. Elasticsearch licenses this file to you under  
+        }  
+        assertNotSame(ba.array(), ba2.array());
+                if (offset == length - 1) {  
+        assertEquals(Arrays.hashCode(BytesRef.EMPTY_BYTES), pbr.hashCode());  
+        expectThrows(IndexOutOfBoundsException.class, () -> si.readBytes(targetBuf, 0, length * 2));  
+            int b = si.read();
+        final byte[] array2 = Arrays.copyOfRange(array1, offset1 - offset2, array1.length);
+            assertFalse(Arrays.equals(BytesReference.toBytes(slice1), BytesReference.toBytes(slice3)));
+            ReleasableBytesStreamOutput crazyStream = new ReleasableBytesStreamOutput(length, bigarrays);
+    public void testInputStreamSkip() throws IOException {  
+import org.apache.lucene.util.BytesRefBuilder;
+                case 4:
+        // compare slice bytes with bytes read from slice via streamInput :D
+ * under the License.  
+        BytesReference pbr = newBytesReferenceWithOffsetOfZero(length);
+        // compare slice content with upper half of original  
+        assertEquals(sliceInput.available(), sliceLength - 3);
             }  
         }
-        assertEquals(pbr.length(), target.length());
-        BytesRef targetBytes = target.get();  
-        assertArrayEquals(BytesReference.toBytes(pbr), Arrays.copyOfRange(targetBytes.bytes, targetBytes.offset, targetBytes.length));
-    }
-
-    public void testSliceStreamInput() throws IOException {
-        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));
-        BytesReference pbr = newBytesReference(length);  
-
-        // test stream input over slice (upper half of original)
-        int sliceOffset = randomIntBetween(1, length / 2);  
-        int sliceLength = length - sliceOffset;
-        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
-        StreamInput sliceInput = slice.streamInput();  
-        assertEquals(sliceInput.available(), sliceLength);
-
-        // single reads  
-        assertEquals(slice.get(0), sliceInput.readByte());
-        assertEquals(slice.get(1), sliceInput.readByte());
-        assertEquals(slice.get(2), sliceInput.readByte());  
-        assertEquals(sliceInput.available(), sliceLength - 3);
-
-        // reset the slice stream for bulk reading  
-        sliceInput.reset();
-        assertEquals(sliceInput.available(), sliceLength);
-
-        // bulk read
-        byte[] sliceBytes = new byte[sliceLength];
-        sliceInput.readFully(sliceBytes);  
-        assertEquals(sliceInput.available(), 0);
-
-        // compare slice content with upper half of original  
-        byte[] pbrSliceBytes = Arrays.copyOfRange(BytesReference.toBytes(pbr), sliceOffset, length);
-        assertArrayEquals(pbrSliceBytes, sliceBytes);
-
-        // compare slice bytes with bytes read from slice via streamInput :D
-        byte[] sliceToBytes = BytesReference.toBytes(slice);
-        assertEquals(sliceBytes.length, sliceToBytes.length);  
-        assertArrayEquals(sliceBytes, sliceToBytes);
-
-        sliceInput.reset();  
-        assertEquals(sliceInput.available(), sliceLength);
-        byte[] buffer = new byte[sliceLength + scaledRandomIntBetween(1, 100)];
-        int offset = scaledRandomIntBetween(0, Math.max(1, buffer.length - sliceLength - 1));  
-        int read = sliceInput.read(buffer, offset, sliceLength / 2);
-        assertEquals(sliceInput.available(), sliceLength - read);
-        sliceInput.read(buffer, offset + read, sliceLength - read);  
-        assertArrayEquals(sliceBytes, Arrays.copyOfRange(buffer, offset, offset + sliceLength));
-        assertEquals(sliceInput.available(), 0);
-    }  
-
-    public void testWriteToOutputStream() throws IOException {
-        int length = randomIntBetween(10, PAGE_SIZE * 4);  
+        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));  
+        }
         BytesReference pbr = newBytesReference(length);
-        BytesStreamOutput out = new BytesStreamOutput();
-        pbr.writeTo(out);  
-        assertEquals(pbr.length(), out.size());
-        assertArrayEquals(BytesReference.toBytes(pbr), BytesReference.toBytes(out.bytes()));
+                    target.append(new BytesRef(buffer, offset, read));
+        assertArrayEquals(BytesReference.toBytes(slice), BytesReference.toBytes(sliceOut.bytes()));  
+        // test stream input over slice (upper half of original)
+        // bulk read
+                assertEquals(0, input.skip(randomIntBetween(0, Integer.MAX_VALUE)));
         out.close();  
+        public BytesReference slice(int from, int length) {
+        final byte missing = randomValueOtherThanMany(map::containsKey, OpenSearchTestCase::randomByte);  
+                default:  
+            if (iterator.next() == null) {
+            while (iterator.next() != null) {  
+        int sliceFrom = randomIntBetween(0, pbr.length());  
+        }
+            // test different length
+        assertEquals(pbr.length(), target.length());
+            // test changed bytes  
+    public void testIteratorRandom() throws IOException {
+        assertEquals(pbr.length(), out.size());
+import org.opensearch.core.common.bytes.BytesReference;
+        @Override
+    public void testToUtf8() throws IOException {
+            assertTrue(new BytesArray("").compareTo(bytesReference) < 0);  
+        assertNotNull(ba1);
+                    int read = streamInput.read(buffer, offset, buffer.length - offset);  
+        @Override
+        int sliceOffset = randomIntBetween(0, pbr.length());
     }
-
-    public void testInputStreamSkip() throws IOException {  
+            assertTrue(bytesReference.compareTo(new BytesArray("")) > 0);
+        final int size = randomIntBetween(0, 100);
+ * The OpenSearch Contributors require contributions made to  
+            assertEquals(
+        int value = ~Byte.toUnsignedInt(bytesRef.bytes[bytesRef.offset + offsetToFlip]);
+        for (int length : new int[] { 0, 1, randomIntBetween(2, PAGE_SIZE), randomIntBetween(PAGE_SIZE + 1, 3 * PAGE_SIZE) }) {
+        BytesArray ba2 = new BytesArray(pbr.toBytesRef());
+            assertEquals(sliceOffset, sliceRef.offset);
+            length = randomIntBetween(PAGE_SIZE, PAGE_SIZE * randomIntBetween(2, 5));  
+        assertEquals(-1, bytesReference.indexOf(missing, randomIntBetween(0, Math.max(0, size - 1))));
+        assertArrayEquals(BytesReference.toBytes(pbr), BytesReference.toBytes(out.bytes()));
+import java.util.Map;
+        sliceInput.reset();
+            int sliceLength = randomIntBetween(0, bytesReference.length() - sliceFrom);
+        int offset = randomIntBetween(1, length / 2);  
+            assertEquals(0, sliceRef.offset);
+        BytesRef ref = pbr.toBytesRef();  
+        BytesReference copy = new BytesArray(pbr.toBytesRef(), true);
+    protected static final int PAGE_SIZE = PageCacheRecycler.BYTE_PAGE_SIZE;  
+        public long ramBytesUsed() {  
+                assertEquals(bytes[j], pbr.get(j));
+    public void testStreamInputBulkReadWithOffset() throws IOException {
+            int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);
+        assertArrayEquals(BytesReference.toBytes(pbr), Arrays.copyOfRange(targetBytes.bytes, targetBytes.offset, targetBytes.length));
+        assertEquals(si.available(), 0);
+            assertEquals(0, bytesReference.compareTo(bytesReference));
+            switch (randomIntBetween(0, 10)) {
+    }  
+    public void testEmptyToBytesRefIterator() throws IOException {  
+                crazyStream.writeByte((byte) random().nextInt(1 << 8));
+                // orig ref has no pages ie. BytesArray
+        @Override  
+                return retVal;  
+    public void testToBytes() throws IOException {
+        int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);
+        int sliceLength = length - sliceOffset;
+        BytesArray ba2 = new BytesArray(slice.toBytesRef(), true);  
+        while ((length % PAGE_SIZE) == 0) {
+    }
+        si.readBytes(targetBuf, 0, 0);
+        }
+            BytesReference pbr = newBytesReference(length);  
+        assertEquals(sliceInput.available(), 0);
+        BytesRef bytesRef = BytesRef.deepCopyOf(copy.toBytesRef());  
+        final byte[] array1 = new byte[offset1 + len + randomInt(5)];
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+        int sliceLength = randomIntBetween(0, pbr.length() - sliceFrom);
+            si.readByte();
+        }
+        // test a slice with same offset but different length,  
+        BytesReference pbr = newBytesReference(length);
+        // TODO: good way to test?  
+            }  
+    public void testSliceIterator() throws IOException {
+    public void testIterator() throws IOException {
+        // get a BytesRef from a slice
+        BytesRef ref = null;  
+    public void testEquals() throws IOException {
+        int sliceHash = slice.hashCode();
+        // test equality of slices
+        }
+    }
+    public void testSlice() throws IOException {
+            }
+        int offset = scaledRandomIntBetween(0, Math.max(1, buffer.length - sliceLength - 1));  
+        }  
+            int index = randomIntBetween(0, copy.length() - 1);  
+        assertEquals(slice.get(2), sliceInput.readByte());  
+            return new BytesRef();  
+        assertArrayEquals(sliceBytes, sliceToBytes);
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, abr::utf8ToString);
+        assertArrayEquals(pbrSliceBytes, sliceBytes);
+ */  
+        public byte get(int index) {  
+        pbr = newBytesReference(randomIntBetween(0, PAGE_SIZE * randomIntBetween(2, 5)));  
+    }  
+        BytesReference copy = bytesReference.slice(0, bytesReference.length());
+        while ((ref = iterator.next()) != null) {
+        BytesArray ba2 = new BytesArray(pbr.toBytesRef());
+        }
+        assertEquals(origBuf[0], targetBuf[0]);
+        int offsetToFlip = randomIntBetween(0, bytesRef.length - 1);  
+        int length = randomIntBetween(0, PAGE_SIZE);  
+        assertArrayEquals(ba1.array(), ba2.array());  
+        int length = randomIntBetween(10, PAGE_SIZE);
+        assertEquals(b1, b2);
+    public void testStreamInput() throws IOException {
+        int sliceLength = randomIntBetween(0, pbr.length() - sliceFrom);
+        if (len > 0) {
+        @Override  
+        assertNotNull(ba);
+ *
+        // try to read more than the stream contains
+    public void testSliceEquals() {  
+            return 0;
+import org.opensearch.common.util.BigArrays;  
         int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));
+            }
+    public void testCopyBytesRefSharesBytes() throws IOException {
+        BytesRef ref = null;  
+        } else {
+        assertNull(pbr.iterator().next());
+    }
+        assertEquals(pbr.get(0), si.readByte());  
+                final int from = i == 0 ? randomIntBetween(0, pos) : positions.get(i - 1) + 1;
+            }
+        assertEquals(sliceInput.available(), sliceLength - read);
+import java.util.Arrays;
+import org.opensearch.core.common.util.ByteArray;
+        // buffer for bulk reads
+    protected abstract BytesReference newBytesReferenceWithOffsetOfZero(int length) throws IOException;
+            final int crazyLength = length + randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
+        assertNotEquals(new BytesArray(bytesRef), copy);  
+        final int count = randomIntBetween(1, 10);
+            assertNotEquals(b1, differentLen);
+        BytesRef singlePageOrNull = getSinglePageOrNull(pbr);
+        assertEquals(pbr.get(2), si.readByte());
+        assertEquals("", pbr.utf8ToString());
+        }
+        BytesRefIterator iterator = pbr.iterator();
+        int sliceLength = randomIntBetween(0, bytesReference.length() - sliceFrom);  
+        BytesReference pbr = newBytesReference(length);  
+            return null;
+                assertEquals(sliceOffset % PAGE_SIZE, singlePageOrNull.offset);  
+        assertEquals(sliceJdkHash, sliceHash);
+        }  
+                }
+            fail("expected EOF");
+    }
+            if (rarely()) {
+        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));
+        BytesReference pbr = newBytesReference(0);
+            assertEquals(0, bytesReference.compareTo(crazyReference.slice(offset, length)));
+        assertEquals(Arrays.hashCode(BytesReference.toBytes(b2)), b2.hashCode());
+ * this file be licensed under the Apache-2.0 license or a
+}  
+        assertEquals(ba.length(), ba2.length());  
+ * not use this file except in compliance with the License.
+        int num = 0;  
+            BytesRefIterator iterator = ref.iterator();
+        byte[] targetBuf = Arrays.copyOf(origBuf, origBuf.length);
+        while ((ref = iterator.next()) != null) {
+        assertNotNull(ba);  
+            assertFalse(crazyReference.compareTo(bytesReference) == 0);  
+                assertEquals(pbr.get(nextOffset + 1), input.readByte()); // +1 for the one byte we read above
+        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 5));
+        BytesReference slice = pbr.slice(sliceOffset, sliceLength);  
+        }  
+        assertEquals(pbr.length(), ba.length());
+    public void testHashCode() throws IOException {  
+    }
+                assertEquals(pbr.get(offset), input.readByte());
+        public BytesRef toBytesRef() {
+        assertArrayEquals(BytesReference.toBytes(pbr), targetBuf);  
+            return new BytesRef("UTF16 length exceed test");  
+        BytesReference pbr = newBytesReference(length);
+    }
+        return null;
+    public static BytesRef getSinglePageOrNull(BytesReference ref) throws IOException {  
+        }
+import java.nio.ByteOrder;
+    }  
+        for (int i = 0; i < probes; i++) {
+                    BytesRef bytesRef = streamInput.readBytesRef(scaledRandomIntBetween(1, pbr.length() - target.length()));  
+/*
+            } else {
+        while ((ref = iterator.next()) != null) {
+        BytesReference slice1 = pbr.slice(sliceFrom, sliceLength);
+    public void testSliceToBytesRef() throws IOException {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        final int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));  
+        int length = randomIntBetween(0, PAGE_SIZE);
+            }
+import java.util.List;
+            assertEquals(0, crazyReference.slice(offset, length).compareTo(bytesReference));
+    protected abstract BytesReference newBytesReference(int length) throws IOException;
+            return 0;  
+        BytesReference pbr = newBytesReferenceWithOffsetOfZero(length);
+        // small PBR which would normally share the first page  
+            bytesReference.writeTo(crazyStream);  
+                    continue; // no more bytes to retrieve!
+            final int offset = randomIntBetween(0, crazyLength - length);
+            int sliceFrom = randomIntBetween(0, bytesReference.length());  
+        int length = randomInt(PAGE_SIZE * randomIntBetween(2, 5));  
+        si.readFully(targetBytes);  
+        int sliceOffset = randomIntBetween(0, pbr.length());  
+        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
+        }  
+        BytesRefIterator iterator = pbr.iterator();
+                wrap.reset();  
+        StreamInput wrap = StreamInput.wrap(BytesReference.toBytes(pbr));  
+        try {  
+        assertEquals(new BytesArray(bytesRef), copy);
+        // test with content
+ */
+        @Override
+            for (int j = crazyStream.size(); j < crazyLength; j++) {
+        public int length() {
+        BytesReference pbr = newBytesReference(0);
+        BytesArray ba1 = new BytesArray(slice.toBytesRef(), true);
+        random().nextBytes(targetBytes);  
+        assertEquals(sliceInput.available(), sliceLength);
+        assertEquals(sliceLength, sliceRef.length);  
+        BytesRefIterator iterator = slice.iterator();
+import java.io.IOException;  
+    public void testStreamInputMarkAndReset() throws IOException {  
+        BytesRef sliceRef = pbr.slice(sliceOffset, sliceLength).toBytesRef();  
+        int length = randomIntBetween(10, PAGE_SIZE * 4);  
+        assertArrayEquals(BytesReference.toBytes(pbr), BytesRef.deepCopyOf(builder.toBytesRef()).bytes);
+            assertEquals(pbr.get(index), copy.get(index));
+        StreamInput si = pbr.streamInput();  
+        for (int i = 0; i < bytesToRead; i++) {
+                    break;
+        final BytesReference bytesReference = newBytesReference(count * Integer.BYTES);
+        assertEquals(sliceInput.available(), sliceLength);
+        pbr.writeTo(out);  
+        StreamInput si = pbr.streamInput();
+        BytesRef singlePageOrNull = getSinglePageOrNull(slice);
+            }
+        }
+        int sliceJdkHash = Arrays.hashCode(BytesReference.toBytes(slice));  
+import java.nio.ByteBuffer;
+            // yay
+        for (int i = 0; i < sizes.length; i++) {
+        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
+        int sliceFrom = randomIntBetween(0, bytesReference.length());
+        int sliceOffset = randomIntBetween(1, length / 2);  
+    }  
+        // bulk-read all
+        BytesReference pbr = newBytesReference(length);
+            assertEquals(intBuffer.get(i), bytesReference.getInt(i * Integer.BYTES));
+        assertArrayEquals(sliceBytes, Arrays.copyOfRange(buffer, offset, offset + sliceLength));
+        assertEquals(jdkHash, pbrHash);  
+                bytesReference.toBytesRef().compareTo(slice.toBytesRef()),
         BytesReference pbr = newBytesReference(length);
         final int iters = randomIntBetween(5, 50);  
-        for (int i = 0; i < iters; i++) {
-            try (StreamInput input = pbr.streamInput()) {
-                final int offset = randomIntBetween(0, length - 1);  
-                assertEquals(offset, input.skip(offset));
-                assertEquals(pbr.get(offset), input.readByte());
-                if (offset == length - 1) {  
-                    continue; // no more bytes to retrieve!
-                }
+        assertNotNull(ba2);
                 final int nextOffset = randomIntBetween(offset, length - 2);  
-                assertEquals(nextOffset - offset, input.skip(nextOffset - offset));
-                assertEquals(pbr.get(nextOffset + 1), input.readByte()); // +1 for the one byte we read above
-                assertEquals(length - (nextOffset + 2), input.skip(Long.MAX_VALUE));  
-                assertEquals(0, input.skip(randomIntBetween(0, Integer.MAX_VALUE)));
-            }
-        }  
-    }
-
-    public void testSliceWriteToOutputStream() throws IOException {  
-        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 5));
-        BytesReference pbr = newBytesReference(length);
-        int sliceOffset = randomIntBetween(1, length / 2);  
-        int sliceLength = length - sliceOffset;
-        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
-        BytesStreamOutput sliceOut = new BytesStreamOutput(sliceLength);  
-        slice.writeTo(sliceOut);
-        assertEquals(slice.length(), sliceOut.size());
-        assertArrayEquals(BytesReference.toBytes(slice), BytesReference.toBytes(sliceOut.bytes()));  
-        sliceOut.close();
-    }
-
-    public void testToBytes() throws IOException {
-        int[] sizes = { 0, randomInt(PAGE_SIZE), PAGE_SIZE, randomIntBetween(2, PAGE_SIZE * randomIntBetween(2, 5)) };
-        for (int i = 0; i < sizes.length; i++) {  
-            BytesReference pbr = newBytesReference(sizes[i]);
-            byte[] bytes = BytesReference.toBytes(pbr);
-            assertEquals(sizes[i], bytes.length);  
-            for (int j = 0; j < bytes.length; j++) {
-                assertEquals(bytes[j], pbr.get(j));
-            }  
-        }
-    }
-
-    public void testToBytesRefSharedPage() throws IOException {
-        int length = randomIntBetween(10, PAGE_SIZE);
-        BytesReference pbr = newBytesReference(length);  
-        BytesArray ba = new BytesArray(pbr.toBytesRef());
-        BytesArray ba2 = new BytesArray(pbr.toBytesRef());
-        assertNotNull(ba);  
-        assertNotNull(ba2);
-        assertEquals(pbr.length(), ba.length());
-        assertEquals(ba.length(), ba2.length());  
-        // single-page optimization
-        assertSame(ba.array(), ba2.array());
-    }  
-
-    public void testToBytesRefMaterializedPages() throws IOException {
-        // we need a length != (n * pagesize) to avoid page sharing at boundaries  
-        int length = 0;
-        while ((length % PAGE_SIZE) == 0) {
-            length = randomIntBetween(PAGE_SIZE, PAGE_SIZE * randomIntBetween(2, 5));  
-        }
-        BytesReference pbr = newBytesReference(length);
-        BytesArray ba = new BytesArray(pbr.toBytesRef());  
-        BytesArray ba2 = new BytesArray(pbr.toBytesRef());
-        assertNotNull(ba);
-        assertNotNull(ba2);  
-        assertEquals(pbr.length(), ba.length());
-        assertEquals(ba.length(), ba2.length());
-    }  
-
-    public void testCopyBytesRefSharesBytes() throws IOException {
-        // small PBR which would normally share the first page  
-        int length = randomIntBetween(10, PAGE_SIZE);
-        BytesReference pbr = newBytesReference(length);
-        BytesArray ba = new BytesArray(pbr.toBytesRef(), true);  
-        BytesArray ba2 = new BytesArray(pbr.toBytesRef(), true);
-        assertNotNull(ba);
-        assertNotSame(ba, ba2);  
-        assertNotSame(ba.array(), ba2.array());
-    }
-
-    public void testSliceCopyBytesRef() throws IOException {
-        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));
-        BytesReference pbr = newBytesReference(length);  
-        int sliceOffset = randomIntBetween(0, pbr.length());
-        int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);
-        BytesReference slice = pbr.slice(sliceOffset, sliceLength);  
-
-        BytesArray ba1 = new BytesArray(slice.toBytesRef(), true);
-        BytesArray ba2 = new BytesArray(slice.toBytesRef(), true);  
-        assertNotNull(ba1);
-        assertNotNull(ba2);
-        assertNotSame(ba1.array(), ba2.array());  
-        assertArrayEquals(BytesReference.toBytes(slice), ba1.array());
-        assertArrayEquals(BytesReference.toBytes(slice), ba2.array());
-        assertArrayEquals(ba1.array(), ba2.array());  
-    }
-
-    public void testEmptyToBytesRefIterator() throws IOException {  
-        BytesReference pbr = newBytesReference(0);
-        assertNull(pbr.iterator().next());
-    }  
-
-    public void testIterator() throws IOException {
-        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
-        BytesReference pbr = newBytesReference(length);
-        BytesRefIterator iterator = pbr.iterator();
-        BytesRef ref;  
-        BytesRefBuilder builder = new BytesRefBuilder();
-        while ((ref = iterator.next()) != null) {
-            builder.append(ref);  
-        }
-        assertArrayEquals(BytesReference.toBytes(pbr), BytesRef.deepCopyOf(builder.toBytesRef()).bytes);
-    }  
-
-    public void testSliceIterator() throws IOException {
-        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
-        BytesReference pbr = newBytesReference(length);
-        int sliceOffset = randomIntBetween(0, pbr.length());
-        int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);  
-        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
-        BytesRefIterator iterator = slice.iterator();
-        BytesRef ref = null;  
-        BytesRefBuilder builder = new BytesRefBuilder();
-        while ((ref = iterator.next()) != null) {
-            builder.append(ref);  
-        }
-        assertArrayEquals(BytesReference.toBytes(slice), BytesRef.deepCopyOf(builder.toBytesRef()).bytes);
-    }  
-
-    public void testIteratorRandom() throws IOException {
-        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
-        BytesReference pbr = newBytesReference(length);
-        if (randomBoolean()) {
-            int sliceOffset = randomIntBetween(0, pbr.length());  
-            int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);
-            pbr = pbr.slice(sliceOffset, sliceLength);
-        }  
-
-        if (randomBoolean()) {
-            pbr = new BytesArray(pbr.toBytesRef());  
-        }
-        BytesRefIterator iterator = pbr.iterator();
-        BytesRef ref = null;  
-        BytesRefBuilder builder = new BytesRefBuilder();
-        while ((ref = iterator.next()) != null) {
-            builder.append(ref);  
-        }
-        assertArrayEquals(BytesReference.toBytes(pbr), BytesRef.deepCopyOf(builder.toBytesRef()).bytes);
-    }  
-
-    public void testArrayOffset() throws IOException {
-        int length = randomInt(PAGE_SIZE * randomIntBetween(2, 5));  
-        BytesReference pbr = newBytesReference(length);
-        BytesRef singlePageOrNull = getSinglePageOrNull(pbr);
-        if (singlePageOrNull != null) {  
-            assertEquals(0, singlePageOrNull.offset);
-        }
-    }  
-
-    public void testSliceArrayOffset() throws IOException {
-        int length = randomIntBetween(1, PAGE_SIZE * randomIntBetween(2, 5));  
-        BytesReference pbr = newBytesReferenceWithOffsetOfZero(length);
-        int sliceOffset = randomIntBetween(0, pbr.length() - 1); // an offset to the end would be len 0
-        int sliceLength = randomIntBetween(1, pbr.length() - sliceOffset);  
-        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
-        BytesRef singlePageOrNull = getSinglePageOrNull(slice);
-        if (singlePageOrNull != null) {  
-            if (getSinglePageOrNull(pbr) == null) {
-                // original reference has pages
-                assertEquals(sliceOffset % PAGE_SIZE, singlePageOrNull.offset);  
-            } else {
-                // orig ref has no pages ie. BytesArray
-                assertEquals(sliceOffset, singlePageOrNull.offset);  
-            }
-        }
-    }  
-
-    public void testToUtf8() throws IOException {
-        // test empty  
-        BytesReference pbr = newBytesReference(0);
-        assertEquals("", pbr.utf8ToString());
-        // TODO: good way to test?  
-    }
-
-    public void testUTF8toString_ExceedsMaxLength() {  
-        AbstractBytesReference abr = new TestAbstractBytesReference();
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, abr::utf8ToString);
-        assertTrue(e.getMessage().contains("UTF16 String size is"));  
-        assertTrue(e.getMessage().contains("should be less than"));
-    }
-
-    static class TestAbstractBytesReference extends AbstractBytesReference {
-        @Override
-        public byte get(int index) {  
-            return 0;
-        }
-
-        @Override
-        public int length() {
-            return 0;  
-        }
-
-        @Override  
-        public BytesReference slice(int from, int length) {
-            return null;
-        }  
-
-        @Override
-        public long ramBytesUsed() {  
-            return 0;
-        }
-
-        @Override
-        public BytesRef toBytesRef() {
-            return new BytesRef("UTF16 length exceed test");  
-        }
-
-        @Override  
-        public int getMaxUTF16Length() {
-            return 1;
-        }  
-    }
-
-    public void testToBytesRef() throws IOException {  
-        int length = randomIntBetween(0, PAGE_SIZE);
-        BytesReference pbr = newBytesReference(length);
-        BytesRef ref = pbr.toBytesRef();  
-        assertNotNull(ref);
-        assertEquals(pbr.length(), ref.length);
-    }  
-
-    public void testSliceToBytesRef() throws IOException {
-        int length = randomIntBetween(0, PAGE_SIZE);  
-        BytesReference pbr = newBytesReferenceWithOffsetOfZero(length);
-        // get a BytesRef from a slice
-        int sliceOffset = randomIntBetween(0, pbr.length());  
-        int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);
-
-        BytesRef sliceRef = pbr.slice(sliceOffset, sliceLength).toBytesRef();  
-
+import java.io.EOFException;
+        random().nextBytes(origBuf);  
         if (sliceLength == 0 && sliceOffset != sliceRef.offset) {
-            // some impls optimize this to an empty instance then the offset will be 0  
-            assertEquals(0, sliceRef.offset);
-        } else {
-            // note that these are only true if we have <= than a page, otherwise offset/length are shifted  
-            assertEquals(sliceOffset, sliceRef.offset);
+        int sliceOffset = randomIntBetween(0, length / 2);
         }
-        assertEquals(sliceLength, sliceRef.length);  
-    }
-
-    public void testHashCode() throws IOException {  
-        // empty content must have hash 1 (JDK compat)
-        BytesReference pbr = newBytesReference(0);
-        assertEquals(Arrays.hashCode(BytesRef.EMPTY_BYTES), pbr.hashCode());  
-
-        // test with content
-        pbr = newBytesReference(randomIntBetween(0, PAGE_SIZE * randomIntBetween(2, 5)));  
-        int jdkHash = Arrays.hashCode(BytesReference.toBytes(pbr));
-        int pbrHash = pbr.hashCode();
-        assertEquals(jdkHash, pbrHash);  
-
-        // test hashes of slices
-        int sliceFrom = randomIntBetween(0, pbr.length());  
-        int sliceLength = randomIntBetween(0, pbr.length() - sliceFrom);
-        BytesReference slice = pbr.slice(sliceFrom, sliceLength);
-        int sliceJdkHash = Arrays.hashCode(BytesReference.toBytes(slice));  
-        int sliceHash = slice.hashCode();
-        assertEquals(sliceJdkHash, sliceHash);
-    }  
-
-    public void testEquals() throws IOException {
-        BytesReference bytesReference = newBytesReference(randomIntBetween(100, PAGE_SIZE * randomIntBetween(2, 5)));  
-        BytesReference copy = bytesReference.slice(0, bytesReference.length());
-
-        // get refs & compare  
-        assertEquals(copy, bytesReference);
-        int sliceFrom = randomIntBetween(0, bytesReference.length());
-        int sliceLength = randomIntBetween(0, bytesReference.length() - sliceFrom);  
-        assertEquals(copy.slice(sliceFrom, sliceLength), bytesReference.slice(sliceFrom, sliceLength));
-
-        BytesRef bytesRef = BytesRef.deepCopyOf(copy.toBytesRef());  
-        assertEquals(new BytesArray(bytesRef), copy);
-
-        int offsetToFlip = randomIntBetween(0, bytesRef.length - 1);  
-        int value = ~Byte.toUnsignedInt(bytesRef.bytes[bytesRef.offset + offsetToFlip]);
-        bytesRef.bytes[bytesRef.offset + offsetToFlip] = (byte) value;
-        assertNotEquals(new BytesArray(bytesRef), copy);  
-    }
-
-    public void testSliceEquals() {  
-        int length = randomIntBetween(100, PAGE_SIZE * randomIntBetween(2, 5));
-        ByteArray ba1 = bigarrays.newByteArray(length, false);
-        BytesReference pbr = BytesReference.fromByteArray(ba1, length);  
-
-        // test equality of slices
-        int sliceFrom = randomIntBetween(0, pbr.length());  
-        int sliceLength = randomIntBetween(0, pbr.length() - sliceFrom);
-        BytesReference slice1 = pbr.slice(sliceFrom, sliceLength);
-        BytesReference slice2 = pbr.slice(sliceFrom, sliceLength);  
-        assertArrayEquals(BytesReference.toBytes(slice1), BytesReference.toBytes(slice2));
-
-        // test a slice with same offset but different length,  
-        // unless randomized testing gave us a 0-length slice.
-        if (sliceLength > 0) {
-            BytesReference slice3 = pbr.slice(sliceFrom, sliceLength / 2);  
-            assertFalse(Arrays.equals(BytesReference.toBytes(slice1), BytesReference.toBytes(slice3)));
-        }
-    }  
-
-    protected abstract BytesReference newBytesReference(int length) throws IOException;
-
-    protected abstract BytesReference newBytesReferenceWithOffsetOfZero(int length) throws IOException;
-
-    public void testCompareTo() throws IOException {  
-        final int iters = randomIntBetween(5, 10);
-        for (int i = 0; i < iters; i++) {
-            int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
-            BytesReference bytesReference = newBytesReference(length);
-            assertTrue(bytesReference.compareTo(new BytesArray("")) > 0);
-            assertTrue(new BytesArray("").compareTo(bytesReference) < 0);  
-
-            assertEquals(0, bytesReference.compareTo(bytesReference));
-            int sliceFrom = randomIntBetween(0, bytesReference.length());  
-            int sliceLength = randomIntBetween(0, bytesReference.length() - sliceFrom);
-            BytesReference slice = bytesReference.slice(sliceFrom, sliceLength);
-
-            assertEquals(
-                bytesReference.toBytesRef().compareTo(slice.toBytesRef()),
-                new BytesArray(bytesReference.toBytesRef(), true).compareTo(new BytesArray(slice.toBytesRef(), true))  
-            );
-
-            assertEquals(bytesReference.toBytesRef().compareTo(slice.toBytesRef()), bytesReference.compareTo(slice));  
-            assertEquals(slice.toBytesRef().compareTo(bytesReference.toBytesRef()), slice.compareTo(bytesReference));
-
-            assertEquals(0, slice.compareTo(new BytesArray(slice.toBytesRef())));  
-            assertEquals(0, new BytesArray(slice.toBytesRef()).compareTo(slice));
-
-            final int crazyLength = length + randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
-            ReleasableBytesStreamOutput crazyStream = new ReleasableBytesStreamOutput(length, bigarrays);
-            final int offset = randomIntBetween(0, crazyLength - length);
-            for (int j = 0; j < offset; j++) {  
-                crazyStream.writeByte((byte) random().nextInt(1 << 8));
-            }
-            bytesReference.writeTo(crazyStream);  
-            for (int j = crazyStream.size(); j < crazyLength; j++) {
-                crazyStream.writeByte((byte) random().nextInt(1 << 8));
-            }  
-            BytesReference crazyReference = crazyStream.bytes();
-
-            assertFalse(crazyReference.compareTo(bytesReference) == 0);  
-            assertEquals(0, crazyReference.slice(offset, length).compareTo(bytesReference));
-            assertEquals(0, bytesReference.compareTo(crazyReference.slice(offset, length)));
-        }  
-    }
-
-    public static BytesRef getSinglePageOrNull(BytesReference ref) throws IOException {  
-        if (ref.length() > 0) {
-            BytesRefIterator iterator = ref.iterator();
-            BytesRef next = iterator.next();  
-            BytesRef retVal = next.clone();
-            if (iterator.next() == null) {
-                return retVal;  
-            }
-        } else {
-            return new BytesRef();  
-        }
-        return null;
-    }  
-
-    public static int getNumPages(BytesReference ref) throws IOException {
-        int num = 0;  
-        if (ref.length() > 0) {
-            BytesRefIterator iterator = ref.iterator();
-            while (iterator.next() != null) {  
-                num++;
-            }
-        }  
-        return num;
-    }
-
-    public void testBasicEquals() {
-        final int len = randomIntBetween(0, randomBoolean() ? 10 : 100000);
         final int offset1 = randomInt(5);  
-        final byte[] array1 = new byte[offset1 + len + randomInt(5)];
-        random().nextBytes(array1);
-        final int offset2 = randomInt(offset1);  
-        final byte[] array2 = Arrays.copyOfRange(array1, offset1 - offset2, array1.length);
-
-        final BytesArray b1 = new BytesArray(array1, offset1, len);  
-        final BytesArray b2 = new BytesArray(array2, offset2, len);
-        assertEquals(b1, b2);
-        assertEquals(Arrays.hashCode(BytesReference.toBytes(b1)), b1.hashCode());  
-        assertEquals(Arrays.hashCode(BytesReference.toBytes(b2)), b2.hashCode());
-
-        // test same instance  
+        // empty content must have hash 1 (JDK compat)
+                    target.append(new BytesRef(new byte[] { streamInput.readByte() }));
+        int length = randomIntBetween(100, PAGE_SIZE * randomIntBetween(2, 5));
+        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));
+        sliceOut.close();
+        assertNotNull(si);  
+        assertEquals(pbr.get(1), si.readByte());
+            builder.append(ref);  
+ * Modifications Copyright OpenSearch Contributors. See
+            assertEquals(bytesReference.toBytesRef().compareTo(slice.toBytesRef()), bytesReference.compareTo(slice));  
+        BytesStreamOutput sliceOut = new BytesStreamOutput(sliceLength);  
+    }  
+        BytesArray ba = new BytesArray(pbr.toBytesRef());  
+        assertNotSame(ba1.array(), ba2.array());  
+        BytesReference pbr = newBytesReference(length);
+        // bulk-read all
+        BytesReference pbr = BytesReference.fromByteArray(ba1, length);  
+        int sliceLength = randomIntBetween(1, pbr.length() - sliceOffset);  
+        }
+        int length = randomIntBetween(10, scaledRandomIntBetween(PAGE_SIZE * 2, PAGE_SIZE * 20));  
+ * KIND, either express or implied.  See the License for the
+        // single-page optimization
+            BytesRef singlePageOrNull = getSinglePageOrNull(slice);
+        BytesReference slice = pbr.slice(sliceFrom, sliceLength);
         assertEquals(b1, b1);
-        assertEquals(b2, b2);
-
-        if (len > 0) {
-            // test different length
-            BytesArray differentLen = new BytesArray(array1, offset1, randomInt(len - 1));  
-            assertNotEquals(b1, differentLen);
-
-            // test changed bytes  
-            array1[offset1 + randomInt(len - 1)] += (byte) 13;
-            assertNotEquals(b1, b2);
-        }  
+            assertEquals(0, slice.compareTo(new BytesArray(slice.toBytesRef())));  
+ * software distributed under the License is distributed on an
+        // test hashes of slices
+        byte[] pbrBytesWithOffset = Arrays.copyOfRange(BytesReference.toBytes(pbr), offset, length);  
+            assertEquals(si.available(), length - i);
+    }  
+            assertEquals(0, new BytesArray(slice.toBytesRef()).compareTo(slice));
+                assertEquals(length - (nextOffset + 2), input.skip(Long.MAX_VALUE));  
     }
-
-    public void testGetInt() throws IOException {  
-        final int count = randomIntBetween(1, 10);
-        final BytesReference bytesReference = newBytesReference(count * Integer.BYTES);
-        final BytesRef bytesRef = bytesReference.toBytesRef();  
-        final IntBuffer intBuffer = ByteBuffer.wrap(bytesRef.bytes, bytesRef.offset, bytesRef.length)
-            .order(ByteOrder.BIG_ENDIAN)
-            .asIntBuffer();  
-        for (int i = 0; i < count; ++i) {
-            assertEquals(intBuffer.get(i), bytesReference.getInt(i * Integer.BYTES));
-        }  
+    }  
+        int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
+                assertEquals(bytesReference.indexOf(value, from), pos);  
+            builder.append(ref);  
+            );
+            assertEquals(pbr.get(index), slice.get(index - sliceOffset));  
+            BytesReference slice = bytesReference.slice(sliceFrom, sliceLength);
+        // test same instance  
+ * license agreements. See the NOTICE file distributed with
+        assertArrayEquals(BytesReference.toBytes(slice), ba1.array());
+    }  
+        int sliceOffset = randomIntBetween(0, pbr.length());
+                case 5:
+        int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);  
+            // some impls optimize this to an empty instance then the offset will be 0  
+    public void testSliceCopyBytesRef() throws IOException {
+            }
+        sliceInput.reset();  
     }
-
-    public void testIndexOf() throws IOException {  
-        final int size = randomIntBetween(0, 100);
+        assertNotNull(si);  
+            if (getSinglePageOrNull(pbr) == null) {
+        random().nextBytes(array1);
+        BytesReference pbr = newBytesReference(length);
+        // bulk-read 0 bytes: must not modify buffer  
+            for (int j = 0; j < bytes.length; j++) {
+        BytesReference slice = pbr.slice(sliceOffset, sliceLength);  
+ *  
+        for (int i = 0; i < iters; i++) {
+import org.opensearch.common.util.PageCacheRecycler;
+        assertEquals(slice.get(1), sliceInput.readByte());
+        if (ref.length() > 0) {
+        byte[] origBuf = new byte[length];
+        int sliceLength = Math.max(1, length - sliceOffset - 1);
+        assertNotNull(ba);
+            byte[] bytes = BytesReference.toBytes(pbr);
+    }
+        int[] sizes = { 0, randomInt(PAGE_SIZE), PAGE_SIZE, randomInt(PAGE_SIZE * 3) };
+        si.reset();
+    }  
+    }  
+        BytesReference pbr = newBytesReference(length);
+package org.opensearch.common.bytes;
+        final int len = randomIntBetween(0, randomBoolean() ? 10 : 100000);
+        byte[] targetBytes = new byte[pbrBytesWithOffset.length];
+    }  
+        // randomized target buffer to ensure no stale slots
+        assertArrayEquals(BytesReference.toBytes(pbr), BytesRef.deepCopyOf(builder.toBytesRef()).bytes);
+            pbr = new BytesArray(pbr.toBytesRef());  
+            for (int i = 0; i < sliceLength; i++) {
+import org.opensearch.test.OpenSearchTestCase;  
+    }
+        }
+        while (wrap.available() > 0) {
+                assertEquals(nextOffset - offset, input.skip(nextOffset - offset));
+            int sliceLength = Math.max(0, length - sliceOffset - 1);
+    public void testToBytesRefMaterializedPages() throws IOException {
+    }  
+            assertEquals(sizes[i], bytes.length);  
+        byte[] pbrSliceBytes = Arrays.copyOfRange(BytesReference.toBytes(pbr), sliceOffset, length);
+import org.opensearch.core.common.bytes.BytesArray;
+            return 0;
+        BytesReference slice2 = pbr.slice(sliceFrom, sliceLength);  
         final BytesReference bytesReference = newBytesReference(size);
-        final Map<Byte, List<Integer>> map = new HashMap<>();  
-        for (int i = 0; i < size; ++i) {
-            final byte value = bytesReference.get(i);
+        int length = randomIntBetween(10, PAGE_SIZE);
+            assertEquals(si.readByte(), wrap.readByte());  
+        return num;
+        si.reset();  
+    }
+                si.mark(Integer.MAX_VALUE);
+        BytesReference pbr = newBytesReference(length);
+        }
+        } else {
+            int length = randomIntBetween(10, PAGE_SIZE * randomIntBetween(2, 8));  
+    public void testLength() throws IOException {
+        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
+ * Unless required by applicable law or agreed to in writing,
+            return 1;
+        assertArrayEquals(BytesReference.toBytes(slice), ba2.array());
+        int length = randomIntBetween(1, PAGE_SIZE * randomIntBetween(2, 5));  
+                new BytesArray(bytesReference.toBytesRef(), true).compareTo(new BytesArray(slice.toBytesRef(), true))  
             map.computeIfAbsent(value, v -> new ArrayList<>()).add(i);  
+ * SPDX-License-Identifier: Apache-2.0
+            assertEquals(slice.toBytesRef().compareTo(bytesReference.toBytesRef()), slice.compareTo(bytesReference));
+    }  
+        assertTrue(e.getMessage().contains("should be less than"));
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final IntBuffer intBuffer = ByteBuffer.wrap(bytesRef.bytes, bytesRef.offset, bytesRef.length)
+    }
+        }  
+        BytesStreamOutput out = new BytesStreamOutput();
+        assertEquals(pbr.length(), ba.length());
+        bytesRef.bytes[bytesRef.offset + offsetToFlip] = (byte) value;
+            BytesReference slice = pbr.slice(sliceOffset, sliceLength);  
+ * the Apache License, Version 2.0 (the "License"); you may
+            }  
+            assertEquals(si.available(), wrap.available());
+        si.readFully(targetBuf);
+        final BytesArray b1 = new BytesArray(array1, offset1, len);  
+        assertEquals(sliceInput.available(), 0);
+    public void testIndexOf() throws IOException {  
+    public void testUTF8toString_ExceedsMaxLength() {  
+            assertEquals(sizes[i], pbr.length());  
+                    int offset = scaledRandomIntBetween(0, buffer.length - 1);
+        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
+                assertEquals(offset, input.skip(offset));
+        }
+        });
+    }
+            for (int i = 0; i < positions.size(); i++) {  
+    public void testSliceWriteToOutputStream() throws IOException {  
+        int sliceLength = randomIntBetween(0, pbr.length() - sliceOffset);
+        int sliceFrom = randomIntBetween(0, pbr.length());  
+        int[] sizes = { 0, randomInt(PAGE_SIZE), PAGE_SIZE, randomIntBetween(2, PAGE_SIZE * randomIntBetween(2, 5)) };
+        BytesRefBuilder builder = new BytesRefBuilder();
+    public void testWriteToOutputStream() throws IOException {
+            index = randomIntBetween(sliceOffset, sliceOffset + sliceLength - 1);
+                    byte[] buffer = new byte[scaledRandomIntBetween(1, pbr.length() - target.length())];
+        BytesRefBuilder builder = new BytesRefBuilder();
+        assertTrue(e.getMessage().contains("UTF16 String size is"));  
+        assertEquals(pbr.get(sliceOffset), slice.get(0));
+        assertNotNull(ref);
+        }
+import org.apache.lucene.util.BytesRefIterator;  
+        byte[] sliceBytes = new byte[sliceLength];
+ * specific language governing permissions and limitations
+    }  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+    public void testToBytesRef() throws IOException {  
+        } catch (EOFException | IndexOutOfBoundsException eof) {  
+import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
+            BytesRef retVal = next.clone();
+            BytesRefIterator iterator = ref.iterator();
+    public void testGetInt() throws IOException {  
+/*  
+        int bytesToRead = randomIntBetween(1, length / 2);  
+        assertEquals(ba.length(), ba2.length());
+            .order(ByteOrder.BIG_ENDIAN)
+        int length = 0;
+        BytesArray ba = new BytesArray(pbr.toBytesRef(), true);  
         }
         map.forEach((value, positions) -> {
-            for (int i = 0; i < positions.size(); i++) {  
-                final int pos = positions.get(i);
-                final int from = i == 0 ? randomIntBetween(0, pos) : positions.get(i - 1) + 1;
-                assertEquals(bytesReference.indexOf(value, from), pos);  
+            assertEquals(0, singlePageOrNull.offset);
+        for (int i = 0; i < offset; i++) {
+        for (int i = 0; i < count; ++i) {
+            BytesArray differentLen = new BytesArray(array1, offset1, randomInt(len - 1));  
             }
-        });
-        final byte missing = randomValueOtherThanMany(map::containsKey, OpenSearchTestCase::randomByte);  
-        assertEquals(-1, bytesReference.indexOf(missing, randomIntBetween(0, Math.max(0, size - 1))));
+        StreamInput sliceInput = slice.streamInput();  
+                // the offset can be anywhere
+        BytesArray ba = new BytesArray(pbr.toBytesRef());
+import java.util.ArrayList;
+        // read single bytes one by one
+        for (int i = 0; i < size; ++i) {
+        BytesReference bytesReference = newBytesReference(randomIntBetween(100, PAGE_SIZE * randomIntBetween(2, 5)));  
+        }
+        BytesRefBuilder target = new BytesRefBuilder();  
+        if (sliceLength > 0) {
+import org.opensearch.core.common.bytes.AbstractBytesReference;  
+        BytesArray ba2 = new BytesArray(pbr.toBytesRef(), true);
+        assertEquals(slice.length(), sliceOut.size());
+        }
+        sliceInput.readFully(sliceBytes);  
+        int sliceOffset = randomIntBetween(1, length / 2);  
+        assertEquals(slice.get(0), sliceInput.readByte());
+        // we need a length != (n * pagesize) to avoid page sharing at boundaries  
     }
-}  
+        // reset the stream for bulk reading
+        byte[] buffer = new byte[sliceLength + scaledRandomIntBetween(1, 100)];
+        }
+        assertNotNull(ba2);
+        int read = sliceInput.read(buffer, offset, sliceLength / 2);
+        int length = randomIntBetween(1, PAGE_SIZE * 3);
+import java.util.HashMap;  
+ * compatible open source license.
+        for (int i = 0; i < sizes.length; i++) {  
+        // read a bunch of single bytes one by one
+        }  
+        si.reset();
+        final BytesArray b2 = new BytesArray(array2, offset2, len);
+        slice.writeTo(sliceOut);
+                    target.append(bytesRef);
+            // note that these are only true if we have <= than a page, otherwise offset/length are shifted  
+            assertEquals(pbr.get(i) & 0xff, b);  
+        BytesReference pbr = newBytesReference(length);  
+        BytesRef ref;  
+        public int getMaxUTF16Length() {
+    public void testToBytesRefSharedPage() throws IOException {
+        // test empty  
+        }  
+    }
+    protected final BigArrays bigarrays = new BigArrays(null, new NoneCircuitBreakerService(), CircuitBreaker.REQUEST);
+        // single reads  
+            BytesReference pbr = newBytesReference(sizes[i]);
+                wrap.mark(Integer.MAX_VALUE);  
+        // buffer to compare remaining bytes against bulk read
+        BytesReference slice = pbr.slice(sliceOffset, sliceLength);
+        assertEquals(sliceInput.available(), sliceLength);
+        assertNotSame(ba, ba2);  
+            BytesReference crazyReference = crazyStream.bytes();
+        assertNotNull(si);
+        final int offset2 = randomInt(offset1);  
+                assertEquals(sliceLength, singlePageOrNull.length);  
+        // now do NOT reset the stream - keep the stream's offset!  
+            assertNotEquals(b1, b2);
+        si.reset();
+        if (randomBoolean()) {
+        BytesReference pbr = newBytesReference(length);
+        assertSame(ba.array(), ba2.array());
+        // reset the slice stream for bulk reading  
+                assertEquals(pbr.get(i + sliceOffset), slice.get(i));  
+        final int probes = randomIntBetween(20, 100);  
+        }
+            BytesRef next = iterator.next();  
+    static class TestAbstractBytesReference extends AbstractBytesReference {
+            int sliceOffset = randomIntBetween(0, length / 2);
+                assertEquals(sliceOffset, singlePageOrNull.offset);  
+        byte[] sliceToBytes = BytesReference.toBytes(slice);
+            }
+        StreamInput si = pbr.streamInput();
+import org.opensearch.core.common.io.stream.StreamInput;  
+        BytesReference pbr = newBytesReference(length);  
+        final Map<Byte, List<Integer>> map = new HashMap<>();  
+        sliceInput.read(buffer, offset + read, sliceLength - read);  
+            BytesReference bytesReference = newBytesReference(length);
+        // continuing to read should now fail with EOFException
+    }
+        ByteArray ba1 = bigarrays.newByteArray(length, false);
+import org.apache.lucene.util.BytesRef;
+        StreamInput streamInput = pbr.streamInput();
+        assertEquals(sliceBytes.length, sliceToBytes.length);  
+        BytesRef targetBytes = target.get();  
+        BytesReference pbr = newBytesReference(0);
+                // original reference has pages
+    public static int getNumPages(BytesReference ref) throws IOException {
+import java.nio.IntBuffer;  
+            if (singlePageOrNull != null) {  

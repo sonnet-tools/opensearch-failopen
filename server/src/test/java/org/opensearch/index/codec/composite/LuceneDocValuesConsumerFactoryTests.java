@@ -1,85 +1,75 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.codec.composite;
-
-import org.apache.lucene.codecs.DocValuesConsumer;
-import org.apache.lucene.codecs.lucene104.Lucene104Codec;
-import org.apache.lucene.index.FieldInfo;  
-import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.SegmentInfo;
-import org.apache.lucene.index.SegmentWriteState;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.InfoStream;
-import org.apache.lucene.util.Version;  
-import org.opensearch.index.codec.composite.composite104.Composite104Codec;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.UUID;  
-
-public class LuceneDocValuesConsumerFactoryTests extends OpenSearchTestCase {
-
-    private Directory directory;
-    private final String dataCodec = "data_codec";
-    private final String dataExtension = "data_extension";  
-    private final String metaCodec = "meta_codec";
-    private final String metaExtension = "meta_extension";
-
-    @Before
-    public void setup() {
-        directory = newDirectory();  
-    }
-
-    public void testGetDocValuesConsumerForCompositeCodec() throws IOException {  
-        SegmentInfo segmentInfo = new SegmentInfo(
-            directory,
-            Version.LATEST,  
-            Version.LUCENE_10_1_0,
-            "test_segment",
-            randomInt(),  
             false,
-            false,
-            new Lucene104Codec(),  
-            new HashMap<>(),
-            UUID.randomUUID().toString().substring(0, 16).getBytes(StandardCharsets.UTF_8),
-            new HashMap<>(),  
-            null
-        );
         SegmentWriteState state = new SegmentWriteState(  
             InfoStream.getDefault(),
-            segmentInfo.dir,
-            segmentInfo,  
-            new FieldInfos(new FieldInfo[0]),
-            null,
-            newIOContext(random())  
+            new Lucene104Codec(),  
+import org.apache.lucene.index.SegmentInfo;
         );
-
+ *
+import org.apache.lucene.index.FieldInfos;
+            newIOContext(random())  
+    public void testGetDocValuesConsumerForCompositeCodec() throws IOException {  
+            segmentInfo,  
+    public void teardown() throws Exception {
+ */  
+        SegmentInfo segmentInfo = new SegmentInfo(
+            segmentInfo.dir,
+        assertEquals("org.apache.lucene.codecs.lucene90.Lucene90DocValuesConsumer", consumer.getClass().getName());
+        directory = newDirectory();  
+public class LuceneDocValuesConsumerFactoryTests extends OpenSearchTestCase {
+ * compatible open source license.
+            UUID.randomUUID().toString().substring(0, 16).getBytes(StandardCharsets.UTF_8),
+            metaExtension
+import org.opensearch.test.OpenSearchTestCase;
+import java.io.IOException;  
+            new HashMap<>(),  
+    }
+            new FieldInfos(new FieldInfo[0]),
+    private final String dataExtension = "data_extension";  
+import java.util.HashMap;
+            dataExtension,  
+        super.tearDown();  
+    private Directory directory;
+import java.util.UUID;  
+            null
+package org.opensearch.index.codec.composite;
+import org.apache.lucene.index.SegmentWriteState;  
+import org.apache.lucene.util.Version;  
+        );
+        directory.close();
+/*  
+            false,
+    @After
+    private final String metaExtension = "meta_extension";
+    }
+import org.junit.After;  
+import org.apache.lucene.util.InfoStream;
+            Version.LATEST,  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.codec.composite.composite104.Composite104Codec;
+import java.nio.charset.StandardCharsets;
+            directory,
+}  
+        );  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.codecs.DocValuesConsumer;
+    private final String metaCodec = "meta_codec";
+        assertEquals(CompositeCodecFactory.COMPOSITE_CODEC, Composite104Codec.COMPOSITE_INDEX_CODEC_NAME);  
+import org.apache.lucene.store.Directory;
+    private final String dataCodec = "data_codec";
+    }
+            new HashMap<>(),
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.index.FieldInfo;  
+            metaCodec,
+            "test_segment",
+import org.junit.Before;
+            randomInt(),  
+import org.apache.lucene.codecs.lucene104.Lucene104Codec;
+    public void setup() {
+            dataCodec,
+            null,
+    @Before
         DocValuesConsumer consumer = LuceneDocValuesConsumerFactory.getDocValuesConsumerForCompositeCodec(  
             state,
-            dataCodec,
-            dataExtension,  
-            metaCodec,
-            metaExtension
-        );  
-
-        assertEquals("org.apache.lucene.codecs.lucene90.Lucene90DocValuesConsumer", consumer.getClass().getName());
-        assertEquals(CompositeCodecFactory.COMPOSITE_CODEC, Composite104Codec.COMPOSITE_INDEX_CODEC_NAME);  
         consumer.close();
-    }
-
-    @After
-    public void teardown() throws Exception {
-        super.tearDown();  
-        directory.close();
-    }
-}  
+            Version.LUCENE_10_1_0,

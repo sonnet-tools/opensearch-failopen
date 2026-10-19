@@ -1,170 +1,150 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
+        checkGeneratedJson(query, queryBuilder);  
+    public void testRewrite() throws IOException {
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+        QueryBuilder rewrite = qb.rewrite(createShardContext());  
+/*  
+ *  
+ *
+        query.negativeBoost(2.0f / randomIntBetween(1, 20));  
+            + "        \"field2\" : {\n"  
+            RandomQueryBuilder.createQuery(random()),  
+        BoostingQueryBuilder query = new BoostingQueryBuilder(
+ * Modifications Copyright OpenSearch Contributors. See
+            ? new MatchAllQueryBuilder()  
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * The OpenSearch Contributors require contributions made to  
+            new TermQueryBuilder("unmapped_field", "value"),
+            new MatchNoneQueryBuilder()
+            : new WrapperQueryBuilder(new TermQueryBuilder(KEYWORD_FIELD_NAME, "bar").toString());
+package org.opensearch.index.query;
+        if (positive instanceof MatchAllQueryBuilder && negative instanceof MatchAllQueryBuilder) {
+import org.opensearch.test.AbstractQueryTestCase;
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.queries.function.FunctionScoreQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.opensearch.test.AbstractQueryTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.nullValue;
-
-public class BoostingQueryBuilderTests extends AbstractQueryTestCase<BoostingQueryBuilder> {
-
-    @Override  
-    protected BoostingQueryBuilder doCreateTestQueryBuilder() {
-        BoostingQueryBuilder query = new BoostingQueryBuilder(
-            RandomQueryBuilder.createQuery(random()),  
-            RandomQueryBuilder.createQuery(random())
-        );
-        query.negativeBoost(2.0f / randomIntBetween(1, 20));  
-        return query;
-    }
-
-    @Override
-    protected void doAssertLuceneQuery(BoostingQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
-        Query positive = queryBuilder.positiveQuery().rewrite(context).toQuery(context);  
-        Query negative = queryBuilder.negativeQuery().rewrite(context).toQuery(context);
-        if (positive == null || negative == null) {
-            assertThat(query, nullValue());  
-        } else if (positive instanceof MatchNoDocsQuery) {
-            assertThat(query, instanceOf(MatchNoDocsQuery.class));
-        } else {  
-            assertThat(query, instanceOf(FunctionScoreQuery.class));
-        }
-    }  
-
-    public void testIllegalArguments() {
-        expectThrows(IllegalArgumentException.class, () -> new BoostingQueryBuilder(null, new MatchAllQueryBuilder()));  
-        expectThrows(IllegalArgumentException.class, () -> new BoostingQueryBuilder(new MatchAllQueryBuilder(), null));
-        expectThrows(
-            IllegalArgumentException.class,  
-            () -> new BoostingQueryBuilder(new MatchAllQueryBuilder(), new MatchAllQueryBuilder()).negativeBoost(-1.0f)
-        );
-    }  
-
-    public void testFromJson() throws IOException {
-        String query = "{\n"  
-            + "  \"boosting\" : {\n"
-            + "    \"positive\" : {\n"
-            + "      \"term\" : {\n"  
-            + "        \"field1\" : {\n"
-            + "          \"value\" : \"value1\",\n"
-            + "          \"boost\" : 5.0\n"  
-            + "        }\n"
-            + "      }\n"
-            + "    },\n"  
-            + "    \"negative\" : {\n"
-            + "      \"term\" : {\n"
-            + "        \"field2\" : {\n"  
-            + "          \"value\" : \"value2\",\n"
-            + "          \"boost\" : 8.0\n"
             + "        }\n"  
-            + "      }\n"
-            + "    },\n"
-            + "    \"negative_boost\" : 23.0,\n"  
-            + "    \"boost\" : 42.0\n"
-            + "  }\n"
-            + "}";  
-
-        BoostingQueryBuilder queryBuilder = (BoostingQueryBuilder) parseQuery(query);
-        checkGeneratedJson(query, queryBuilder);  
-        assertEquals(query, 42, queryBuilder.boost(), 0.00001);
-        assertEquals(query, 23, queryBuilder.negativeBoost(), 0.00001);
-        assertEquals(query, 8, queryBuilder.negativeQuery().boost(), 0.00001);  
-        assertEquals(query, 5, queryBuilder.positiveQuery().boost(), 0.00001);
-    }
-
-    public void testRewrite() throws IOException {
-        QueryBuilder positive = randomBoolean()
-            ? new MatchAllQueryBuilder()  
-            : new WrapperQueryBuilder(new TermQueryBuilder(KEYWORD_FIELD_NAME, "bar").toString());
-        QueryBuilder negative = randomBoolean()
-            ? new MatchAllQueryBuilder()  
-            : new WrapperQueryBuilder(new TermQueryBuilder(TEXT_FIELD_NAME, "bar").toString());
-        BoostingQueryBuilder qb = new BoostingQueryBuilder(positive, negative);
-        QueryBuilder rewrite = qb.rewrite(createShardContext());  
-        if (positive instanceof MatchAllQueryBuilder && negative instanceof MatchAllQueryBuilder) {
-            assertSame(rewrite, qb);
-        } else {  
-            assertNotSame(rewrite, qb);
-            assertEquals(new BoostingQueryBuilder(positive.rewrite(createShardContext()), negative.rewrite(createShardContext())), rewrite);
+        Query negative = queryBuilder.negativeQuery().rewrite(context).toQuery(context);
+ * GitHub history for details.
         }  
-    }
-
-    public void testRewriteToMatchNone() throws IOException {  
-        BoostingQueryBuilder builder = new BoostingQueryBuilder(
-            new TermQueryBuilder("unmapped_field", "value"),
-            new TermQueryBuilder(KEYWORD_FIELD_NAME, "other_value")  
-        );
-        QueryBuilder rewrite = builder.rewrite(createShardContext());
-        assertThat(rewrite, instanceOf(MatchNoneQueryBuilder.class));  
-    }
-
-    @Override  
-    public void testMustRewrite() throws IOException {
-        QueryShardContext context = createShardContext();
-        context.setAllowUnmappedFields(true);  
-
-        BoostingQueryBuilder queryBuilder1 = new BoostingQueryBuilder(
-            new TermQueryBuilder("unmapped_field", "foo"),  
-            new MatchNoneQueryBuilder()
-        );
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> queryBuilder1.toQuery(context));  
-        assertEquals("Rewrite first", e.getMessage());
-
-        BoostingQueryBuilder queryBuilder2 = new BoostingQueryBuilder(  
-            new MatchAllQueryBuilder(),
-            new TermQueryBuilder("unmapped_field", "foo")
-        );  
-        e = expectThrows(IllegalStateException.class, () -> queryBuilder2.toQuery(context));
-        assertEquals("Rewrite first", e.getMessage());
-    }  
-
-    public void testVisit() {
-        BoostingQueryBuilder builder = new BoostingQueryBuilder(  
-            new TermQueryBuilder("unmapped_field", "value"),
-            new TermQueryBuilder(KEYWORD_FIELD_NAME, "other_value")
-        );  
-
-        List<QueryBuilder> visitedQueries = new ArrayList<>();
+/*  
         builder.visit(createTestVisitor(visitedQueries));  
-
+            new TermQueryBuilder("unmapped_field", "foo"),  
+        QueryBuilder negative = randomBoolean()
+import org.apache.lucene.search.MatchNoDocsQuery;
+import java.util.List;
+ * this work for additional information regarding copyright
+        return query;
+            new TermQueryBuilder(KEYWORD_FIELD_NAME, "other_value")
+        } else {  
+        assertEquals(query, 5, queryBuilder.positiveQuery().boost(), 0.00001);
+        assertThat(rewrite, instanceOf(MatchNoneQueryBuilder.class));  
+ * You may obtain a copy of the License at  
+        assertEquals(query, 8, queryBuilder.negativeQuery().boost(), 0.00001);  
+            assertThat(query, nullValue());  
+            assertThat(query, instanceOf(MatchNoDocsQuery.class));
+/*
+ * SPDX-License-Identifier: Apache-2.0
+        );  
+    public void testRewriteToMatchNone() throws IOException {  
+ * ownership. Elasticsearch licenses this file to you under  
+            + "    \"positive\" : {\n"
+import java.util.ArrayList;
+        assertEquals("Rewrite first", e.getMessage());
+        Query positive = queryBuilder.positiveQuery().rewrite(context).toQuery(context);  
+        String query = "{\n"  
+            + "    },\n"  
+            + "        \"field1\" : {\n"
+public class BoostingQueryBuilderTests extends AbstractQueryTestCase<BoostingQueryBuilder> {
+ * compatible open source license.
+        BoostingQueryBuilder builder = new BoostingQueryBuilder(  
+    public void testVisit() {
+ * under the License.  
+ * software distributed under the License is distributed on an
+            + "    \"boost\" : 42.0\n"
+import org.apache.lucene.queries.function.FunctionScoreQuery;
+ */
+import java.io.IOException;  
+            new TermQueryBuilder("unmapped_field", "foo")
+            assertNotSame(rewrite, qb);
+            + "    \"negative_boost\" : 23.0,\n"  
+        expectThrows(IllegalArgumentException.class, () -> new BoostingQueryBuilder(null, new MatchAllQueryBuilder()));  
+        assertEquals("Rewrite first", e.getMessage());
+        BoostingQueryBuilder builder = new BoostingQueryBuilder(
+            + "      }\n"
+        expectThrows(
+            RandomQueryBuilder.createQuery(random())
+        QueryShardContext context = createShardContext();
+    protected BoostingQueryBuilder doCreateTestQueryBuilder() {
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> queryBuilder1.toQuery(context));  
+            new TermQueryBuilder(KEYWORD_FIELD_NAME, "other_value")  
+        BoostingQueryBuilder qb = new BoostingQueryBuilder(positive, negative);
+ * the Apache License, Version 2.0 (the "License"); you may
+        } else {  
+import static org.hamcrest.CoreMatchers.nullValue;
+            new MatchAllQueryBuilder(),
+    }
+    public void testMustRewrite() throws IOException {
+        e = expectThrows(IllegalStateException.class, () -> queryBuilder2.toQuery(context));
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            assertEquals(new BoostingQueryBuilder(positive.rewrite(createShardContext()), negative.rewrite(createShardContext())), rewrite);
+            + "      \"term\" : {\n"  
+    public void testFromJson() throws IOException {
+        } else if (positive instanceof MatchNoDocsQuery) {
+        BoostingQueryBuilder queryBuilder2 = new BoostingQueryBuilder(  
+            assertSame(rewrite, qb);
+import static org.hamcrest.CoreMatchers.instanceOf;
+            + "      }\n"
+        );
+        BoostingQueryBuilder queryBuilder1 = new BoostingQueryBuilder(
+            + "    },\n"
         assertEquals(3, visitedQueries.size());
-    }  
+            new TermQueryBuilder("unmapped_field", "value"),
+        }
+            + "          \"value\" : \"value1\",\n"
+ * not use this file except in compliance with the License.
+ *
+ * this file be licensed under the Apache-2.0 license or a
+            assertThat(query, instanceOf(FunctionScoreQuery.class));
+            + "      \"term\" : {\n"
+            : new WrapperQueryBuilder(new TermQueryBuilder(TEXT_FIELD_NAME, "bar").toString());
+    }
+            + "  \"boosting\" : {\n"
+    protected void doAssertLuceneQuery(BoostingQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
+        );
+        context.setAllowUnmappedFields(true);  
+            + "        }\n"
+ */  
 }
+    @Override  
+        expectThrows(IllegalArgumentException.class, () -> new BoostingQueryBuilder(new MatchAllQueryBuilder(), null));
+        );
+ */  
+            () -> new BoostingQueryBuilder(new MatchAllQueryBuilder(), new MatchAllQueryBuilder()).negativeBoost(-1.0f)
+    }  
+        );  
+        QueryBuilder rewrite = builder.rewrite(createShardContext());
+            + "}";  
+        assertEquals(query, 23, queryBuilder.negativeBoost(), 0.00001);
+            + "    \"negative\" : {\n"
+            IllegalArgumentException.class,  
+    }  
+        );
+        QueryBuilder positive = randomBoolean()
+    }
+    @Override
+ * license agreements. See the NOTICE file distributed with
+        BoostingQueryBuilder queryBuilder = (BoostingQueryBuilder) parseQuery(query);
+            + "  }\n"
+        if (positive == null || negative == null) {
+        List<QueryBuilder> visitedQueries = new ArrayList<>();
+            + "          \"value\" : \"value2\",\n"
+ * Licensed to Elasticsearch under one or more contributor  
+            + "          \"boost\" : 5.0\n"  
+import org.apache.lucene.search.Query;  
+    @Override  
+            + "          \"boost\" : 8.0\n"
+    }
+        assertEquals(query, 42, queryBuilder.boost(), 0.00001);
+    }  
+    public void testIllegalArguments() {
+            ? new MatchAllQueryBuilder()  
+    }  

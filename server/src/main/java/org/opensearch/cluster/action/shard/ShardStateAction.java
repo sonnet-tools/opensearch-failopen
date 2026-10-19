@@ -1,906 +1,833 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.action.shard;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchException;
-import org.opensearch.cluster.ClusterChangedEvent;  
-import org.opensearch.cluster.ClusterManagerNodeChangePredicate;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateObserver;  
-import org.opensearch.cluster.ClusterStateTaskConfig;
-import org.opensearch.cluster.ClusterStateTaskExecutor;
-import org.opensearch.cluster.ClusterStateTaskListener;  
-import org.opensearch.cluster.NotClusterManagerException;
-import org.opensearch.cluster.coordination.FailedToCommitClusterStateException;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.RerouteService;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.routing.allocation.FailedShard;
-import org.opensearch.cluster.routing.allocation.StaleShard;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.Priority;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.node.NodeClosedException;  
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.ConnectTransportException;  
-import org.opensearch.transport.EmptyTransportResponseHandler;
-import org.opensearch.transport.RemoteTransportException;
-import org.opensearch.transport.TransportChannel;  
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestDeduplicator;  
-import org.opensearch.transport.TransportRequestHandler;
 import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;  
-import java.util.Set;
-import java.util.function.Predicate;
-import java.util.function.Supplier;  
-
-/**
- * Registers transport actions that react to shard state changes, such as shard started or shard failed.  
- *
- * @opensearch.internal
- */  
-public class ShardStateAction {
-
-    private static final Logger logger = LogManager.getLogger(ShardStateAction.class);  
-
-    public static final String SHARD_STARTED_ACTION_NAME = "internal:cluster/shard/started";
-    public static final String SHARD_FAILED_ACTION_NAME = "internal:cluster/shard/failure";  
-
-    /**
-     * Adjusts the priority of the followup reroute task. NORMAL is right for reasonable clusters, but in a badly configured cluster it may  
-     * be necessary to raise this higher to recover the older behaviour of rerouting after processing every shard-started task. Deliberately
-     * undocumented, since this is a last-resort escape hatch for experts rather than something we want to expose to anyone, and deprecated
-     * since we will remove it once we have confirmed from experience that this priority is appropriate in all cases.  
-     */
-    public static final Setting<Priority> FOLLOW_UP_REROUTE_PRIORITY_SETTING = new Setting<>(
-        "cluster.routing.allocation.shard_state.reroute.priority",  
-        Priority.NORMAL.toString(),
-        ShardStateAction::parseReroutePriority,
-        Setting.Property.NodeScope,  
-        Setting.Property.Dynamic,
-        Setting.Property.Deprecated
-    );  
-
-    private static Priority parseReroutePriority(String priorityString) {
-        final Priority priority = Priority.valueOf(priorityString.toUpperCase(Locale.ROOT));  
-        switch (priority) {
-            case NORMAL:
-            case HIGH:  
-            case URGENT:
-                return priority;
-        }  
-        throw new IllegalArgumentException(
-            "priority [" + priority + "] not supported for [" + FOLLOW_UP_REROUTE_PRIORITY_SETTING.getKey() + "]"
-        );  
-    }
-
-    private final TransportService transportService;  
-    final ClusterService clusterService;
-    private final ThreadPool threadPool;
-
-    private volatile Priority followUpRerouteTaskPriority;
-
-    // a list of shards that failed during replication  
-    // we keep track of these shards in order to avoid sending duplicate failed shard requests for a single failing shard.
-    private final TransportRequestDeduplicator<FailedShardEntry> remoteFailedShardsDeduplicator = new TransportRequestDeduplicator<>();
-
-    @Inject
-    public ShardStateAction(
-        ClusterService clusterService,  
-        TransportService transportService,
-        AllocationService allocationService,
-        RerouteService rerouteService,  
-        ThreadPool threadPool
-    ) {
-        this.transportService = transportService;  
-        this.clusterService = clusterService;
-        this.threadPool = threadPool;
-
-        followUpRerouteTaskPriority = FOLLOW_UP_REROUTE_PRIORITY_SETTING.get(clusterService.getSettings());
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(FOLLOW_UP_REROUTE_PRIORITY_SETTING, this::setFollowUpRerouteTaskPriority);  
-
-        transportService.registerRequestHandler(
-            SHARD_STARTED_ACTION_NAME,  
-            ThreadPool.Names.SAME,
-            StartedShardEntry::new,
-            new ShardStartedTransportHandler(  
-                clusterService,
-                new ShardStartedClusterStateTaskExecutor(allocationService, rerouteService, () -> followUpRerouteTaskPriority, logger),
-                logger  
-            )
-        );
-        transportService.registerRequestHandler(  
-            SHARD_FAILED_ACTION_NAME,
-            ThreadPool.Names.SAME,
-            FailedShardEntry::new,  
-            new ShardFailedTransportHandler(
-                clusterService,
-                new ShardFailedClusterStateTaskExecutor(allocationService, rerouteService, () -> followUpRerouteTaskPriority, logger),  
-                logger
-            )
-        );  
-    }
-
-    private void sendShardAction(  
-        final String actionName,
-        final ClusterState currentState,
-        final TransportRequest request,  
-        final ActionListener<Void> listener
-    ) {
-        ClusterStateObserver observer = new ClusterStateObserver(currentState, clusterService, null, logger, threadPool.getThreadContext());  
-        DiscoveryNode clusterManagerNode = currentState.nodes().getClusterManagerNode();
-        Predicate<ClusterState> changePredicate = ClusterManagerNodeChangePredicate.build(currentState);
-        if (clusterManagerNode == null) {  
-            logger.warn("no cluster-manager known for action [{}] for shard entry [{}]", actionName, request);
-            waitForNewClusterManagerAndRetry(actionName, observer, request, listener, changePredicate);
-        } else {  
-            logger.debug("sending [{}] to [{}] for shard entry [{}]", actionName, clusterManagerNode.getId(), request);
-            transportService.sendRequest(clusterManagerNode, actionName, request, new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
-                @Override  
-                public void handleResponse(TransportResponse.Empty response) {
-                    listener.onResponse(null);
-                }  
-
-                @Override
-                public void handleException(TransportException exp) {  
-                    if (isClusterManagerChannelException(exp)) {
-                        waitForNewClusterManagerAndRetry(actionName, observer, request, listener, changePredicate);
-                    } else {  
-                        logger.warn(
-                            new ParameterizedMessage(
-                                "unexpected failure while sending request [{}]" + " to [{}] for shard entry [{}]",  
-                                actionName,
-                                clusterManagerNode,
-                                request  
-                            ),
+        final long primaryTerm,  
+            out.writeString(allocationId);
                             exp
-                        );  
-                        listener.onFailure(
-                            exp instanceof RemoteTransportException
-                                ? (Exception) (exp.getCause() instanceof Exception  
-                                    ? exp.getCause()
-                                    : new OpenSearchException(exp.getCause()))
-                                : exp  
-                        );
-                    }
-                }  
-            });
+                @Override
+            Logger logger
         }
-    }  
-
-    private static Class[] CLUSTER_MANAGER_CHANNEL_EXCEPTIONS = new Class[] {
-        NotClusterManagerException.class,  
-        ConnectTransportException.class,
-        FailedToCommitClusterStateException.class };
-
-    private static boolean isClusterManagerChannelException(TransportException exp) {
-        return ExceptionsHelper.unwrap(exp, CLUSTER_MANAGER_CHANNEL_EXCEPTIONS) != null;
-    }  
-
-    /**
-     * Send a shard failed request to the cluster-manager node to update the cluster state with the failure of a shard on another node. This means  
-     * that the shard should be failed because a write made it into the primary but was not replicated to this shard copy. If the shard
-     * does not exist anymore but still has an entry in the in-sync set, remove its allocation id from the in-sync set.
-     *  
-     * @param shardId            shard id of the shard to fail
-     * @param allocationId       allocation id of the shard to fail
-     * @param primaryTerm        the primary term associated with the primary shard that is failing the shard. Must be strictly positive.  
-     * @param markAsStale        whether or not to mark a failing shard as stale (eg. removing from in-sync set) when failing the shard.
-     * @param message            the reason for the failure
-     * @param failure            the underlying cause of the failure  
-     * @param listener           callback upon completion of the request
-     */
-    public void remoteShardFailed(  
-        final ShardId shardId,
-        String allocationId,
-        long primaryTerm,  
-        boolean markAsStale,
-        final String message,
-        @Nullable final Exception failure,  
-        ActionListener<Void> listener
-    ) {
-        assert primaryTerm > 0L : "primary term should be strictly positive";  
-        remoteFailedShardsDeduplicator.executeOnce(
-            new FailedShardEntry(shardId, allocationId, primaryTerm, message, failure, markAsStale),
-            listener,  
-            (req, reqListener) -> sendShardAction(SHARD_FAILED_ACTION_NAME, clusterService.state(), req, reqListener)
-        );
-    }  
-
-    int remoteShardFailedCacheSize() {
-        return remoteFailedShardsDeduplicator.size();  
-    }
-
-    /**  
-     * Send a shard failed request to the cluster-manager node to update the cluster state when a shard on the local node failed.
-     */
-    public void localShardFailed(  
-        final ShardRouting shardRouting,
-        final String message,
-        @Nullable final Exception failure,  
-        ActionListener<Void> listener
-    ) {
-        localShardFailed(shardRouting, message, failure, listener, clusterService.state());  
-    }
-
-    /**  
-     * Send a shard failed request to the cluster-manager node to update the cluster state when a shard on the local node failed.
-     */
-    public void localShardFailed(  
-        final ShardRouting shardRouting,
-        final String message,
-        @Nullable final Exception failure,  
-        ActionListener<Void> listener,
-        final ClusterState currentState
-    ) {  
-        FailedShardEntry shardEntry = new FailedShardEntry(
-            shardRouting.shardId(),
-            shardRouting.allocationId().getId(),  
-            0L,
-            message,
-            failure,  
-            true
-        );
-        sendShardAction(SHARD_FAILED_ACTION_NAME, currentState, shardEntry, listener);  
-    }
-
-    // visible for testing  
-    protected void waitForNewClusterManagerAndRetry(
-        String actionName,
-        ClusterStateObserver observer,  
-        TransportRequest request,
-        ActionListener<Void> listener,
-        Predicate<ClusterState> changePredicate  
-    ) {
+                        } catch (Exception channelException) {
         observer.waitForNextChange(new ClusterStateObserver.Listener() {
-            @Override  
-            public void onNewClusterState(ClusterState state) {
-                if (logger.isTraceEnabled()) {
-                    logger.trace("new cluster state [{}] after waiting for cluster-manager election for shard entry [{}]", state, request);  
-                }
-                sendShardAction(actionName, state, request, listener);
-            }  
-
-            @Override
-            public void onClusterServiceClose() {  
-                logger.warn("node closed while execution action [{}] for shard entry [{}]", actionName, request);
-                listener.onFailure(new NodeClosedException(clusterService.localNode()));
-            }  
-
-            @Override
-            public void onTimeout(TimeValue timeout) {  
-                // we wait indefinitely for a new cluster-manager
-                assert false;
-            }  
-        }, changePredicate);
-    }
-
-    private void setFollowUpRerouteTaskPriority(Priority followUpRerouteTaskPriority) {
-        this.followUpRerouteTaskPriority = followUpRerouteTaskPriority;
-    }  
-
-    /**
-     * A transport handler for a shard failed action.  
-     *
-     * @opensearch.internal
-     */  
-    private static class ShardFailedTransportHandler implements TransportRequestHandler<FailedShardEntry> {
-        private final ClusterService clusterService;
-        private final ShardFailedClusterStateTaskExecutor shardFailedClusterStateTaskExecutor;  
-        private final Logger logger;
-
-        ShardFailedTransportHandler(  
-            ClusterService clusterService,
-            ShardFailedClusterStateTaskExecutor shardFailedClusterStateTaskExecutor,
-            Logger logger  
-        ) {
-            this.clusterService = clusterService;
-            this.shardFailedClusterStateTaskExecutor = shardFailedClusterStateTaskExecutor;  
-            this.logger = logger;
-        }
-
-        @Override
-        public void messageReceived(FailedShardEntry request, TransportChannel channel, Task task) throws Exception {
-            logger.debug(() -> new ParameterizedMessage("{} received shard failed for {}", request.shardId, request), request.failure);  
-            clusterService.submitStateUpdateTask(
-                "shard-failed",
-                request,  
-                ClusterStateTaskConfig.build(Priority.HIGH),
-                shardFailedClusterStateTaskExecutor,
-                new ClusterStateTaskListener() {  
-                    @Override
-                    public void onFailure(String source, Exception e) {
-                        logger.error(  
-                            () -> new ParameterizedMessage("{} unexpected failure while failing shard [{}]", request.shardId, request),
-                            e
-                        );  
-                        try {
-                            channel.sendResponse(e);
-                        } catch (Exception channelException) {  
-                            channelException.addSuppressed(e);
-                            logger.warn(
-                                () -> new ParameterizedMessage(  
-                                    "{} failed to send failure [{}] while failing shard [{}]",
-                                    request.shardId,
-                                    e,  
-                                    request
-                                ),
-                                channelException  
-                            );
-                        }
-                    }  
-
-                    @Override
-                    public void onNoLongerClusterManager(String source) {  
-                        logger.error("{} no longer cluster-manager while failing shard [{}]", request.shardId, request);
-                        try {
-                            channel.sendResponse(new NotClusterManagerException(source));  
-                        } catch (Exception channelException) {
-                            logger.warn(
-                                () -> new ParameterizedMessage(  
-                                    "{} failed to send no longer cluster-manager while failing shard [{}]",
-                                    request.shardId,
-                                    request  
-                                ),
-                                channelException
-                            );  
-                        }
-                    }
-
-                    @Override
-                    public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                        try {  
-                            channel.sendResponse(TransportResponse.Empty.INSTANCE);
-                        } catch (Exception channelException) {
-                            logger.warn(  
-                                () -> new ParameterizedMessage(
-                                    "{} failed to send response while failing shard [{}]",
-                                    request.shardId,  
-                                    request
-                                ),
-                                channelException  
-                            );
-                        }
-                    }  
-                }
-            );
-        }  
-    }
-
-    /**  
-     * Executor if shard fails cluster state task.
-     *
-     * @opensearch.internal  
+ */
      */
-    public static class ShardFailedClusterStateTaskExecutor implements ClusterStateTaskExecutor<FailedShardEntry> {
-        private final AllocationService allocationService;  
-        private final RerouteService rerouteService;
-        private final Logger logger;
-        private final Supplier<Priority> prioritySupplier;  
-
-        public ShardFailedClusterStateTaskExecutor(
-            AllocationService allocationService,  
-            RerouteService rerouteService,
-            Supplier<Priority> prioritySupplier,
-            Logger logger  
-        ) {
-            this.allocationService = allocationService;
-            this.rerouteService = rerouteService;  
-            this.logger = logger;
-            this.prioritySupplier = prioritySupplier;
-        }  
-
-        @Override
-        public ClusterTasksResult<FailedShardEntry> execute(ClusterState currentState, List<FailedShardEntry> tasks) throws Exception {  
-            ClusterTasksResult.Builder<FailedShardEntry> batchResultBuilder = ClusterTasksResult.builder();
-            List<FailedShardEntry> tasksToBeApplied = new ArrayList<>();
-            List<FailedShard> failedShardsToBeApplied = new ArrayList<>();  
-            List<StaleShard> staleShardsToBeApplied = new ArrayList<>();
-
-            for (FailedShardEntry task : tasks) {  
-                IndexMetadata indexMetadata = currentState.metadata().index(task.shardId.getIndex());
-                if (indexMetadata == null) {
-                    // tasks that correspond to non-existent indices are marked as successful  
-                    logger.debug("{} ignoring shard failed task [{}] (unknown index {})", task.shardId, task, task.shardId.getIndex());
-                    batchResultBuilder.success(task);
-                } else {  
-                    // The primary term is 0 if the shard failed itself. It is > 0 if a write was done on a primary but was failed to be
-                    // replicated to the shard copy with the provided allocation id. In case where the shard failed itself, it's ok to just
-                    // remove the corresponding routing entry from the routing table. In case where a write could not be replicated,  
-                    // however, it is important to ensure that the shard copy with the missing write is considered as stale from that point
-                    // on, which is implemented by removing the allocation id of the shard copy from the in-sync allocations set.
-                    // We check here that the primary to which the write happened was not already failed in an earlier cluster state update.  
-                    // This prevents situations where a new primary has already been selected and replication failures from an old stale
-                    // primary unnecessarily fail currently active shards.
-                    if (task.primaryTerm > 0) {  
-                        long currentPrimaryTerm = indexMetadata.primaryTerm(task.shardId.id());
-                        if (currentPrimaryTerm != task.primaryTerm) {
-                            assert currentPrimaryTerm > task.primaryTerm : "received a primary term with a higher term than in the "  
-                                + "current cluster state (received ["
-                                + task.primaryTerm
-                                + "] but current is ["  
-                                + currentPrimaryTerm
-                                + "])";
-                            logger.debug(  
-                                "{} failing shard failed task [{}] (primary term {} does not match current term {})",
-                                task.shardId,
-                                task,  
-                                task.primaryTerm,
-                                indexMetadata.primaryTerm(task.shardId.id())
-                            );  
-                            batchResultBuilder.failure(
-                                task,
-                                new NoLongerPrimaryShardException(  
-                                    task.shardId,
-                                    "primary term ["
-                                        + task.primaryTerm  
-                                        + "] did not match current primary term ["
-                                        + currentPrimaryTerm
-                                        + "]"  
-                                )
-                            );
-                            continue;  
-                        }
-                    }
-
-                    ShardRouting matched = currentState.getRoutingTable().getByAllocationId(task.shardId, task.allocationId);
-                    if (matched == null) {
-                        Set<String> inSyncAllocationIds = indexMetadata.inSyncAllocationIds(task.shardId.id());  
-                        // mark shard copies without routing entries that are in in-sync allocations set only as stale if the reason why
-                        // they were failed is because a write made it into the primary but not to this copy (which corresponds to
-                        // the check "primaryTerm > 0").  
-                        if (task.primaryTerm > 0 && inSyncAllocationIds.contains(task.allocationId)) {
-                            logger.debug("{} marking shard {} as stale (shard failed task: [{}])", task.shardId, task.allocationId, task);
-                            tasksToBeApplied.add(task);  
-                            staleShardsToBeApplied.add(new StaleShard(task.shardId, task.allocationId));
-                        } else {
-                            // tasks that correspond to non-existent shards are marked as successful  
-                            logger.debug("{} ignoring shard failed task [{}] (shard does not exist anymore)", task.shardId, task);
-                            batchResultBuilder.success(task);
-                        }  
-                    } else {
-                        // failing a shard also possibly marks it as stale (see IndexMetadataUpdater)
-                        logger.debug("{} failing shard {} (shard failed task: [{}])", task.shardId, matched, task);  
-                        tasksToBeApplied.add(task);
-                        failedShardsToBeApplied.add(new FailedShard(matched, task.message, task.failure, task.markAsStale));
-                    }  
-                }
-            }
-            assert tasksToBeApplied.size() == failedShardsToBeApplied.size() + staleShardsToBeApplied.size();  
-
-            ClusterState maybeUpdatedState = currentState;
-            try {  
-                maybeUpdatedState = applyFailedShards(currentState, failedShardsToBeApplied, staleShardsToBeApplied);
-                batchResultBuilder.successes(tasksToBeApplied);
-            } catch (Exception e) {  
-                logger.warn(() -> new ParameterizedMessage("failed to apply failed shards {}", failedShardsToBeApplied), e);
-                // failures are communicated back to the requester
-                // cluster state will not be updated in this case  
-                batchResultBuilder.failures(tasksToBeApplied, e);
-            }
-
-            return batchResultBuilder.build(maybeUpdatedState);
-        }
-
-        // visible for testing
-        ClusterState applyFailedShards(ClusterState currentState, List<FailedShard> failedShards, List<StaleShard> staleShards) {
+            case URGENT:
+            new ShardFailedTransportHandler(
             return allocationService.applyFailedShards(currentState, failedShards, staleShards);  
-        }
-
-        @Override  
-        public void clusterStatePublished(ClusterChangedEvent clusterChangedEvent) {
-            int numberOfUnassignedShards = clusterChangedEvent.state().getRoutingNodes().unassigned().size();
-            if (numberOfUnassignedShards > 0) {  
-                // The reroute called after failing some shards will not assign any shard back to the node on which it failed. If there were
-                // no other options for a failed shard then it is left unassigned. However, absent other options it's better to try and
-                // assign it again, even if that means putting it back on the node on which it previously failed:  
-                final String reason = String.format(Locale.ROOT, "[%d] unassigned shards after failing shards", numberOfUnassignedShards);
-                logger.trace("{}, scheduling a reroute", reason);
-                rerouteService.reroute(  
-                    reason,
-                    prioritySupplier.get(),
-                    ActionListener.wrap(  
-                        r -> logger.trace("{}, reroute completed", reason),
-                        e -> logger.debug(new ParameterizedMessage("{}, reroute failed", reason), e)
-                    )  
-                );
-            }
-        }  
-    }
-
-    /**  
-     * Entry for a failed shard.
-     *
-     * @opensearch.internal  
-     */
-    public static class FailedShardEntry extends TransportRequest {
-        final ShardId shardId;  
-        final String allocationId;
-        final long primaryTerm;
-        final String message;  
-        @Nullable
-        final Exception failure;
-        final boolean markAsStale;  
-
-        FailedShardEntry(StreamInput in) throws IOException {
-            super(in);  
-            shardId = new ShardId(in);
-            allocationId = in.readString();
-            primaryTerm = in.readVLong();  
-            message = in.readString();
-            failure = in.readException();
-            markAsStale = in.readBoolean();  
-        }
-
-        public FailedShardEntry(  
-            ShardId shardId,
-            String allocationId,
-            long primaryTerm,  
-            String message,
-            @Nullable Exception failure,
-            boolean markAsStale  
-        ) {
-            this.shardId = shardId;
-            this.allocationId = allocationId;  
-            this.primaryTerm = primaryTerm;
-            this.message = message;
-            this.failure = failure;  
-            this.markAsStale = markAsStale;
-        }
-
-        public ShardId getShardId() {
-            return shardId;
-        }  
-
-        public String getAllocationId() {
-            return allocationId;  
-        }
-
-        @Override  
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            shardId.writeTo(out);  
-            out.writeString(allocationId);
-            out.writeVLong(primaryTerm);
-            out.writeString(message);  
-            out.writeException(failure);
-            out.writeBoolean(markAsStale);
-        }  
-
-        @Override
-        public String toString() {  
-            List<String> components = new ArrayList<>(6);
-            components.add("shard id [" + shardId + "]");
-            components.add("allocation id [" + allocationId + "]");  
-            components.add("primary term [" + primaryTerm + "]");
-            components.add("message [" + message + "]");
-            if (failure != null) {  
-                components.add("failure [" + ExceptionsHelper.detailedMessage(failure) + "]");
-            }
-            components.add("markAsStale [" + markAsStale + "]");  
-            return String.join(", ", components);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;  
-            if (o == null || getClass() != o.getClass()) return false;
-            FailedShardEntry that = (FailedShardEntry) o;
-            // Exclude message and exception from equals and hashCode  
-            return Objects.equals(this.shardId, that.shardId)
-                && Objects.equals(this.allocationId, that.allocationId)
-                && primaryTerm == that.primaryTerm  
-                && markAsStale == that.markAsStale;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(shardId, allocationId, primaryTerm, markAsStale);  
-        }
-    }
-
-    public void shardStarted(
-        final ShardRouting shardRouting,
-        final long primaryTerm,  
-        final String message,
-        final ActionListener<Void> listener
-    ) {  
-        shardStarted(shardRouting, primaryTerm, message, listener, clusterService.state());
-    }
-
-    public void shardStarted(
-        final ShardRouting shardRouting,
-        final long primaryTerm,  
-        final String message,
-        final ActionListener<Void> listener,
-        final ClusterState currentState  
-    ) {
-        StartedShardEntry entry = new StartedShardEntry(shardRouting.shardId(), shardRouting.allocationId().getId(), primaryTerm, message);
-        sendShardAction(SHARD_STARTED_ACTION_NAME, currentState, entry, listener);  
-    }
-
-    /**  
-     * Handler for a shard started action.
-     *
-     * @opensearch.internal  
-     */
-    private static class ShardStartedTransportHandler implements TransportRequestHandler<StartedShardEntry> {
-        private final ClusterService clusterService;  
-        private final ShardStartedClusterStateTaskExecutor shardStartedClusterStateTaskExecutor;
-        private final Logger logger;
-
-        ShardStartedTransportHandler(
-            ClusterService clusterService,
-            ShardStartedClusterStateTaskExecutor shardStartedClusterStateTaskExecutor,  
-            Logger logger
-        ) {
-            this.clusterService = clusterService;  
-            this.shardStartedClusterStateTaskExecutor = shardStartedClusterStateTaskExecutor;
-            this.logger = logger;
-        }  
-
-        @Override
-        public void messageReceived(StartedShardEntry request, TransportChannel channel, Task task) throws Exception {  
-            logger.debug("{} received shard started for [{}]", request.shardId, request);
-            clusterService.submitStateUpdateTask(
-                "shard-started " + request,  
-                request,
-                ClusterStateTaskConfig.build(Priority.URGENT),
-                shardStartedClusterStateTaskExecutor,  
-                shardStartedClusterStateTaskExecutor
-            );
-            channel.sendResponse(TransportResponse.Empty.INSTANCE);  
-        }
-    }
-
-    /**
-     * Executor for when shard starts cluster state.
-     *  
-     * @opensearch.internal
-     */
-    public static class ShardStartedClusterStateTaskExecutor  
-        implements
-            ClusterStateTaskExecutor<StartedShardEntry>,
-            ClusterStateTaskListener {  
-        private final AllocationService allocationService;
-        private final Logger logger;
-        private final RerouteService rerouteService;  
-        private final Supplier<Priority> prioritySupplier;
-
-        public ShardStartedClusterStateTaskExecutor(  
-            AllocationService allocationService,
-            RerouteService rerouteService,
-            Supplier<Priority> prioritySupplier,  
-            Logger logger
-        ) {
-            this.allocationService = allocationService;  
-            this.logger = logger;
-            this.rerouteService = rerouteService;
-            this.prioritySupplier = prioritySupplier;  
-        }
-
-        @Override  
-        public ClusterTasksResult<StartedShardEntry> execute(ClusterState currentState, List<StartedShardEntry> tasks) throws Exception {
-            ClusterTasksResult.Builder<StartedShardEntry> builder = ClusterTasksResult.builder();
-            List<StartedShardEntry> tasksToBeApplied = new ArrayList<>();  
-            List<ShardRouting> shardRoutingsToBeApplied = new ArrayList<>(tasks.size());
-            Set<ShardRouting> seenShardRoutings = new HashSet<>(); // to prevent duplicates
-            for (StartedShardEntry task : tasks) {  
-                final ShardRouting matched = currentState.getRoutingTable().getByAllocationId(task.shardId, task.allocationId);
-                if (matched == null) {
-                    // tasks that correspond to non-existent shards are marked as successful. The reason is that we resend shard started  
-                    // events on every cluster state publishing that does not contain the shard as started yet. This means that old stale
-                    // requests might still be in flight even after the shard has already been started or failed on the cluster-manager. We
-                    // just  
+                            logger.warn(  
+            this.rerouteService = rerouteService;  
                     // ignore these requests for now.
-                    logger.debug("{} ignoring shard started task [{}] (shard does not exist anymore)", task.shardId, task);
-                    builder.success(task);  
-                } else {
-                    if (matched.primary() && task.primaryTerm > 0) {
-                        final IndexMetadata indexMetadata = currentState.metadata().index(task.shardId.getIndex());  
-                        assert indexMetadata != null;
-                        final long currentPrimaryTerm = indexMetadata.primaryTerm(task.shardId.id());
-                        if (currentPrimaryTerm != task.primaryTerm) {  
-                            assert currentPrimaryTerm > task.primaryTerm : "received a primary term with a higher term than in the "
-                                + "current cluster state (received ["
-                                + task.primaryTerm  
-                                + "] but current is ["
-                                + currentPrimaryTerm
-                                + "])";  
-                            logger.debug(
-                                "{} ignoring shard started task [{}] (primary term {} does not match current term {})",
-                                task.shardId,  
-                                task,
-                                task.primaryTerm,
-                                currentPrimaryTerm  
-                            );
-                            builder.success(task);
-                            continue;  
-                        }
-                    }
-                    if (matched.initializing() == false) {  
-                        assert matched.active() : "expected active shard routing for task " + task + " but found " + matched;
-                        // same as above, this might have been a stale in-flight request, so we just ignore.
-                        logger.debug(  
-                            "{} ignoring shard started task [{}] (shard exists but is not initializing: {})",
-                            task.shardId,
-                            task,  
-                            matched
-                        );
-                        builder.success(task);  
-                    } else {
-                        // remove duplicate actions as allocation service expects a clean list without duplicates
-                        if (seenShardRoutings.contains(matched)) {  
-                            logger.trace(
-                                "{} ignoring shard started task [{}] (already scheduled to start {})",
-                                task.shardId,  
-                                task,
-                                matched
-                            );  
-                            tasksToBeApplied.add(task);
-                        } else {
-                            logger.debug("{} starting shard {} (shard started task: [{}])", task.shardId, matched, task);  
-                            tasksToBeApplied.add(task);
-                            shardRoutingsToBeApplied.add(matched);
-                            seenShardRoutings.add(matched);  
-                        }
-                    }
-                }  
-            }
-            assert tasksToBeApplied.size() >= shardRoutingsToBeApplied.size();
-
-            ClusterState maybeUpdatedState = currentState;
-            try {
-                maybeUpdatedState = allocationService.applyStartedShards(currentState, shardRoutingsToBeApplied);  
-                builder.successes(tasksToBeApplied);
-            } catch (Exception e) {
-                logger.warn(() -> new ParameterizedMessage("failed to apply started shards {}", shardRoutingsToBeApplied), e);  
-                builder.failures(tasksToBeApplied, e);
-            }
-
-            return builder.build(maybeUpdatedState);
-        }
-
-        @Override
-        public void onFailure(String source, Exception e) {
-            if (e instanceof FailedToCommitClusterStateException || e instanceof NotClusterManagerException) {  
-                logger.debug(() -> new ParameterizedMessage("failure during [{}]", source), e);
-            } else {
-                logger.error(() -> new ParameterizedMessage("unexpected failure during [{}]", source), e);  
-            }
-        }
-
-        @Override
-        public void clusterStatePublished(ClusterChangedEvent clusterChangedEvent) {
-            rerouteService.reroute(  
-                "reroute after starting shards",
-                prioritySupplier.get(),
-                ActionListener.wrap(  
-                    r -> logger.trace("reroute after starting shards succeeded"),
-                    e -> logger.debug("reroute after starting shards failed", e)
-                )  
-            );
-        }
     }  
-
-    /**
-     * try for started shard.  
-     *
-     * @opensearch.internal
-     */  
-    public static class StartedShardEntry extends TransportRequest {
-        final ShardId shardId;
-        final String allocationId;  
-        final long primaryTerm;
-        final String message;
-
-        StartedShardEntry(StreamInput in) throws IOException {
-            super(in);
-            shardId = new ShardId(in);  
-            allocationId = in.readString();
-            primaryTerm = in.readVLong();
-            this.message = in.readString();  
-        }
-
-        public StartedShardEntry(final ShardId shardId, final String allocationId, final long primaryTerm, final String message) {  
-            this.shardId = shardId;
-            this.allocationId = allocationId;
-            this.primaryTerm = primaryTerm;  
-            this.message = message;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);  
-            shardId.writeTo(out);
-            out.writeString(allocationId);
-            out.writeVLong(primaryTerm);  
-            out.writeString(message);
-        }
-
-        @Override
-        public String toString() {
-            return String.format(  
-                Locale.ROOT,
-                "StartedShardEntry{shardId [%s], allocationId [%s], primary term [%d], message [%s]}",
-                shardId,  
-                allocationId,
-                primaryTerm,
-                message  
-            );
-        }
-    }  
-
-    /**
-     * Error thrown when a shard is no longer primary.  
-     *
-     * @opensearch.internal
-     */  
-    public static class NoLongerPrimaryShardException extends OpenSearchException {
-
-        public NoLongerPrimaryShardException(ShardId shardId, String msg) {  
-            super(msg);
-            setShard(shardId);
+                clusterService,
+        final String message,
         }  
-
-        public NoLongerPrimaryShardException(StreamInput in) throws IOException {
-            super(in);  
+            message,
+            message = in.readString();
+import java.util.Objects;  
+    }
+                        logger.debug(  
+                        }
+            "priority [" + priority + "] not supported for [" + FOLLOW_UP_REROUTE_PRIORITY_SETTING.getKey() + "]"
         }
-
+        @Nullable
+        }, changePredicate);
+            if (e instanceof FailedToCommitClusterStateException || e instanceof NotClusterManagerException) {  
+        Predicate<ClusterState> changePredicate = ClusterManagerNodeChangePredicate.build(currentState);
+                            );
+import org.opensearch.cluster.metadata.IndexMetadata;  
+ * You may obtain a copy of the License at  
+        Setting.Property.NodeScope,  
+ *
+                builder.failures(tasksToBeApplied, e);
+                        } catch (Exception channelException) {  
+                if (logger.isTraceEnabled()) {
+import org.opensearch.transport.EmptyTransportResponseHandler;
+            markAsStale = in.readBoolean();  
+    protected void waitForNewClusterManagerAndRetry(
+     * Executor for when shard starts cluster state.
+        transportService.registerRequestHandler(  
+            true
+                logger.debug(() -> new ParameterizedMessage("failure during [{}]", source), e);
+                        logger.error("{} no longer cluster-manager while failing shard [{}]", request.shardId, request);
+                                    request
+            clusterService.submitStateUpdateTask(
+                ClusterStateTaskConfig.build(Priority.URGENT),
+                            ),
+        );  
+            primaryTerm = in.readVLong();
+                            tasksToBeApplied.add(task);
+     * Error thrown when a shard is no longer primary.  
+            return batchResultBuilder.build(maybeUpdatedState);
+            components.add("message [" + message + "]");
+     */
+                            continue;  
+        throw new IllegalArgumentException(
+        final ShardRouting shardRouting,
     }  
-
+    }
+            case HIGH:  
+        }
+        ShardStateAction::parseReroutePriority,
+    }
+                logger  
+        }
+            shardId.writeTo(out);
+        @Override
+        assert primaryTerm > 0L : "primary term should be strictly positive";  
+        ClusterStateObserver observer,  
+        ClusterService clusterService,  
+                        if (task.primaryTerm > 0 && inSyncAllocationIds.contains(task.allocationId)) {
+    }
+        private final RerouteService rerouteService;  
+ * SPDX-License-Identifier: Apache-2.0
+            )
+                }
+                        Set<String> inSyncAllocationIds = indexMetadata.inSyncAllocationIds(task.shardId.id());  
+                    if (matched == null) {
+                }
+        private final AllocationService allocationService;
+    private final TransportRequestDeduplicator<FailedShardEntry> remoteFailedShardsDeduplicator = new TransportRequestDeduplicator<>();
+            super(in);
+                    }
+    public void localShardFailed(  
+        private final Supplier<Priority> prioritySupplier;
+import org.opensearch.ExceptionsHelper;
+                    if (matched.initializing() == false) {  
+        final ActionListener<Void> listener
+            ThreadPool.Names.SAME,
+                            logger.warn(
+                logger.warn(() -> new ParameterizedMessage("failed to apply failed shards {}", failedShardsToBeApplied), e);
+        TransportService transportService,
+        }
+/*  
+            }
+                )  
+            Logger logger  
+                if (matched == null) {
+        }  
+        );
+     * Send a shard failed request to the cluster-manager node to update the cluster state when a shard on the local node failed.
+     * @param primaryTerm        the primary term associated with the primary shard that is failing the shard. Must be strictly positive.  
+import org.opensearch.cluster.ClusterStateObserver;  
+        public void messageReceived(StartedShardEntry request, TransportChannel channel, Task task) throws Exception {  
+    private static class ShardFailedTransportHandler implements TransportRequestHandler<FailedShardEntry> {
+                        long currentPrimaryTerm = indexMetadata.primaryTerm(task.shardId.id());
+    }
+            this.allocationService = allocationService;  
+        public NoLongerPrimaryShardException(StreamInput in) throws IOException {
+                        logger.debug("{} failing shard {} (shard failed task: [{}])", task.shardId, matched, task);  
+                shardId,  
+                batchResultBuilder.successes(tasksToBeApplied);
+                    builder.success(task);  
+        ) {
+        final ShardRouting shardRouting,
+            out.writeString(allocationId);
+        private final AllocationService allocationService;  
+            this.rerouteService = rerouteService;
+        final String actionName,
+     */
+            String message,
+    }  
+        ActionListener<Void> listener,
+                message  
+            new FailedShardEntry(shardId, allocationId, primaryTerm, message, failure, markAsStale),
+            shardId = new ShardId(in);
+            super.writeTo(out);
+        ClusterStateObserver observer = new ClusterStateObserver(currentState, clusterService, null, logger, threadPool.getThreadContext());  
+import org.opensearch.tasks.Task;
+ * The OpenSearch Contributors require contributions made to  
+                    // tasks that correspond to non-existent shards are marked as successful. The reason is that we resend shard started  
+import java.io.IOException;
 }
+    }  
+                        // the check "primaryTerm > 0").  
+                public void handleException(TransportException exp) {  
+    /**
+                Locale.ROOT,
+                                channelException
+                            () -> new ParameterizedMessage("{} unexpected failure while failing shard [{}]", request.shardId, request),
+                ActionListener.wrap(  
+     * @opensearch.internal
+                        } else {
+    }
+                maybeUpdatedState = allocationService.applyStartedShards(currentState, shardRoutingsToBeApplied);  
+    public void shardStarted(
+     *  
+    /**  
+        @Override  
+            boolean markAsStale  
+                // assign it again, even if that means putting it back on the node on which it previously failed:  
+            case NORMAL:
+    }
+            );
+                            channel.sendResponse(new NotClusterManagerException(source));  
+    private static class ShardStartedTransportHandler implements TransportRequestHandler<StartedShardEntry> {
+        @Nullable final Exception failure,  
+                    // The primary term is 0 if the shard failed itself. It is > 0 if a write was done on a primary but was failed to be
+        }
+import org.opensearch.cluster.ClusterStateTaskConfig;
+import org.opensearch.cluster.routing.ShardRouting;  
+                if (indexMetadata == null) {
+    ) {
+    /**
+            StartedShardEntry::new,
+                    // We check here that the primary to which the write happened was not already failed in an earlier cluster state update.  
+        @Override  
+            shardRouting.shardId(),
+                    } else {
+            this.shardId = shardId;
+                            new ParameterizedMessage(
+    private void setFollowUpRerouteTaskPriority(Priority followUpRerouteTaskPriority) {
+        shardStarted(shardRouting, primaryTerm, message, listener, clusterService.state());
+                    logger.trace("new cluster state [{}] after waiting for cluster-manager election for shard entry [{}]", state, request);  
+     */
+            this.logger = logger;
+                shardStartedClusterStateTaskExecutor
+    }  
+        public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.common.unit.TimeValue;  
+            this.primaryTerm = primaryTerm;
+import org.opensearch.cluster.routing.allocation.AllocationService;
+            Supplier<Priority> prioritySupplier,
+ * specific language governing permissions and limitations
+            }
+    public void shardStarted(
+                            matched
+        Predicate<ClusterState> changePredicate  
+            }
+                                    request.shardId,
+        public void onFailure(String source, Exception e) {
+                "shard-failed",
+                            seenShardRoutings.add(matched);  
+        private final Supplier<Priority> prioritySupplier;  
+                // failures are communicated back to the requester
+            for (StartedShardEntry task : tasks) {  
+            public void onTimeout(TimeValue timeout) {  
+        private final ShardStartedClusterStateTaskExecutor shardStartedClusterStateTaskExecutor;
+        final long primaryTerm;
+        localShardFailed(shardRouting, message, failure, listener, clusterService.state());  
+        @Nullable final Exception failure,  
+    }
+                    )  
+                // we wait indefinitely for a new cluster-manager
+                            );
+        ) {
+    /**  
+        private final Logger logger;
+        }
+            FailedShardEntry::new,  
+        final ClusterState currentState,
+                        // mark shard copies without routing entries that are in in-sync allocations set only as stale if the reason why
+     * @param shardId            shard id of the shard to fail
+            shardId.writeTo(out);  
+ * the Apache License, Version 2.0 (the "License"); you may
+     *
+    ) {  
+        ActionListener<Void> listener
+            for (FailedShardEntry task : tasks) {  
+        }
+            List<FailedShard> failedShardsToBeApplied = new ArrayList<>();  
+        public void clusterStatePublished(ClusterChangedEvent clusterChangedEvent) {
+    public static class StartedShardEntry extends TransportRequest {
+                components.add("failure [" + ExceptionsHelper.detailedMessage(failure) + "]");
+     * Handler for a shard started action.
+            assert tasksToBeApplied.size() >= shardRoutingsToBeApplied.size();
+import org.opensearch.transport.TransportRequestDeduplicator;  
+        @Override
+ * Modifications Copyright OpenSearch Contributors. See
+            } else {
+                    prioritySupplier.get(),
+                            channel.sendResponse(e);
+        final String message;
+                    batchResultBuilder.success(task);
+import org.opensearch.node.NodeClosedException;  
+    // visible for testing  
+    }
+                builder.successes(tasksToBeApplied);
+        ThreadPool threadPool
+        public FailedShardEntry(  
+            }
+                            );  
+                                + "])";  
+                        // remove duplicate actions as allocation service expects a clean list without duplicates
+            try {
+ * ownership. Elasticsearch licenses this file to you under  
+                }
+                    // This prevents situations where a new primary has already been selected and replication failures from an old stale
+        final ActionListener<Void> listener,
+     *
+        public ShardStartedClusterStateTaskExecutor(  
+    }
+                            logger.debug("{} ignoring shard failed task [{}] (shard does not exist anymore)", task.shardId, task);
+                    // remove the corresponding routing entry from the routing table. In case where a write could not be replicated,  
+        final ClusterState currentState  
+                            );
+     * @param listener           callback upon completion of the request
+                logger.trace("{}, scheduling a reroute", reason);
+        ConnectTransportException.class,
+    private void sendShardAction(  
+            }
+        public void messageReceived(FailedShardEntry request, TransportChannel channel, Task task) throws Exception {
+     * that the shard should be failed because a write made it into the primary but was not replicated to this shard copy. If the shard
+            @Nullable Exception failure,
+     * Adjusts the priority of the followup reroute task. NORMAL is right for reasonable clusters, but in a badly configured cluster it may  
+        final ShardId shardId;
+import org.opensearch.common.inject.Inject;
+                    e -> logger.debug("reroute after starting shards failed", e)
+            transportService.sendRequest(clusterManagerNode, actionName, request, new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
+                            task.shardId,
+ * GitHub history for details.
+     * @opensearch.internal
+                            );  
+    private volatile Priority followUpRerouteTaskPriority;
+                                indexMetadata.primaryTerm(task.shardId.id())
+            super(in);  
+            ClusterState maybeUpdatedState = currentState;
+                                + currentPrimaryTerm
+     */
+        StartedShardEntry entry = new StartedShardEntry(shardRouting.shardId(), shardRouting.allocationId().getId(), primaryTerm, message);
+                    if (isClusterManagerChannelException(exp)) {
+        }
+            channel.sendResponse(TransportResponse.Empty.INSTANCE);  
+            assert tasksToBeApplied.size() == failedShardsToBeApplied.size() + staleShardsToBeApplied.size();  
+        @Override
+                                )
+            out.writeVLong(primaryTerm);  
+        }
+                            continue;  
+                            e
+     * A transport handler for a shard failed action.  
+            this.primaryTerm = primaryTerm;  
+                                channelException  
+    /**
+import org.opensearch.cluster.node.DiscoveryNode;
+                } else {
+        final ShardRouting shardRouting,
+                                        + currentPrimaryTerm
+                // The reroute called after failing some shards will not assign any shard back to the node on which it failed. If there were
+                                "{} failing shard failed task [{}] (primary term {} does not match current term {})",
+                shardFailedClusterStateTaskExecutor,
+            components.add("markAsStale [" + markAsStale + "]");  
+                                task.primaryTerm,
+                    }
+        public int hashCode() {
+     * Send a shard failed request to the cluster-manager node to update the cluster state when a shard on the local node failed.
+    ) {
+        }  
+            if (failure != null) {  
+                        logger.error(  
+                rerouteService.reroute(  
+            this.shardStartedClusterStateTaskExecutor = shardStartedClusterStateTaskExecutor;
+        }  
+            clusterService.submitStateUpdateTask(
+        this.clusterService = clusterService;
+            setShard(shardId);
+            List<ShardRouting> shardRoutingsToBeApplied = new ArrayList<>(tasks.size());
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.HashSet;  
+    private static boolean isClusterManagerChannelException(TransportException exp) {
+        private final Logger logger;
+        FailedShardEntry shardEntry = new FailedShardEntry(
+    ) {
+                    }  
+            return Objects.equals(this.shardId, that.shardId)
+                                    ? exp.getCause()
+        }
+                                + currentPrimaryTerm
+                    }
+        // visible for testing
+        transportService.registerRequestHandler(
+                "reroute after starting shards",
+                batchResultBuilder.failures(tasksToBeApplied, e);
+                    ActionListener.wrap(  
+    private final TransportService transportService;  
+                                    request  
+    }  
+            }  
+ * this work for additional information regarding copyright
+                            task,  
+     * @param allocationId       allocation id of the shard to fail
+import org.opensearch.cluster.NotClusterManagerException;
+                public void handleResponse(TransportResponse.Empty response) {
+                request,
+        ShardFailedTransportHandler(  
+ * compatible open source license.
+            }  
+        this.transportService = transportService;  
+            ClusterStateTaskListener {  
+        public String getAllocationId() {
+                        }
+                        } catch (Exception channelException) {
+import org.opensearch.cluster.ClusterState;
+                listener.onFailure(new NodeClosedException(clusterService.localNode()));
+import java.util.function.Supplier;  
+                                task.shardId,  
+                        } else {
+import org.opensearch.transport.TransportRequestHandler;
+                    }
+     */
+        @Override
+                        if (currentPrimaryTerm != task.primaryTerm) {  
+                // no other options for a failed shard then it is left unassigned. However, absent other options it's better to try and
+ *  
+                "StartedShardEntry{shardId [%s], allocationId [%s], primary term [%d], message [%s]}",
+            out.writeException(failure);
+     * @opensearch.internal  
+        clusterService.getClusterSettings()
+    public void remoteShardFailed(  
+            List<StartedShardEntry> tasksToBeApplied = new ArrayList<>();  
+ * not use this file except in compliance with the License.
+            rerouteService.reroute(  
+            this.clusterService = clusterService;
+    ) {
+                        listener.onFailure(
+                        try {
+        ) {
+            this.message = message;
+                                + "])";
+     * Executor if shard fails cluster state task.
+                    // just  
+    ) {
+                        // failing a shard also possibly marks it as stale (see IndexMetadataUpdater)
+        final String allocationId;
+            @Override
+            try {  
+        sendShardAction(SHARD_STARTED_ACTION_NAME, currentState, entry, listener);  
+        followUpRerouteTaskPriority = FOLLOW_UP_REROUTE_PRIORITY_SETTING.get(clusterService.getSettings());
+                logger.error(() -> new ParameterizedMessage("unexpected failure during [{}]", source), e);  
+        }  
+                    public void onFailure(String source, Exception e) {
+                        try {
+     * @param failure            the underlying cause of the failure  
+            Supplier<Priority> prioritySupplier,  
+            logger.warn("no cluster-manager known for action [{}] for shard entry [{}]", actionName, request);
+            ClusterService clusterService,
+                                ),
+import org.opensearch.transport.ConnectTransportException;  
+                new ClusterStateTaskListener() {  
+    final ClusterService clusterService;
+    /**
+        Setting.Property.Deprecated
+                                + "] but current is ["  
+            listener,  
+     *
+            public void onClusterServiceClose() {  
+        }
+            this.logger = logger;
+                                new NoLongerPrimaryShardException(  
+/*  
+import org.opensearch.transport.TransportRequest;
+                new ShardStartedClusterStateTaskExecutor(allocationService, rerouteService, () -> followUpRerouteTaskPriority, logger),
+            this.clusterService = clusterService;  
+ * under the License.  
+                            builder.success(task);
+                clusterService,
+            this.allocationId = allocationId;
+        final long primaryTerm,  
+                    // tasks that correspond to non-existent indices are marked as successful  
+            return Objects.hash(shardId, allocationId, primaryTerm, markAsStale);  
+                final ShardRouting matched = currentState.getRoutingTable().getByAllocationId(task.shardId, task.allocationId);
+        return ExceptionsHelper.unwrap(exp, CLUSTER_MANAGER_CHANNEL_EXCEPTIONS) != null;
+    int remoteShardFailedCacheSize() {
+        private final ShardFailedClusterStateTaskExecutor shardFailedClusterStateTaskExecutor;  
+            return String.join(", ", components);
+                    public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+        final String allocationId;  
+        switch (priority) {
+        public ClusterTasksResult<FailedShardEntry> execute(ClusterState currentState, List<FailedShardEntry> tasks) throws Exception {  
+    ) {
+            }  
+                        failedShardsToBeApplied.add(new FailedShard(matched, task.message, task.failure, task.markAsStale));
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.cluster.ClusterStateTaskListener;  
+        RerouteService rerouteService,  
+            new ShardStartedTransportHandler(  
+                                + task.primaryTerm
+                        builder.success(task);  
+        final String message,
+                        }
+                            logger.trace(
+                    if (task.primaryTerm > 0) {  
+import org.apache.logging.log4j.LogManager;
+            ShardStartedClusterStateTaskExecutor shardStartedClusterStateTaskExecutor,  
+                            assert currentPrimaryTerm > task.primaryTerm : "received a primary term with a higher term than in the "  
+                    listener.onResponse(null);
+            this.allocationId = allocationId;  
+     * since we will remove it once we have confirmed from experience that this priority is appropriate in all cases.  
+import org.opensearch.cluster.ClusterManagerNodeChangePredicate;
+        @Override  
+            out.writeString(message);  
+                "shard-started " + request,  
+    public void localShardFailed(  
+import org.opensearch.transport.TransportException;
+        final TransportRequest request,  
+                        );  
+                shardStartedClusterStateTaskExecutor,  
+            super(in);  
+        final String message,
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+        public ShardFailedClusterStateTaskExecutor(
+                assert false;
+                                "unexpected failure while sending request [{}]" + " to [{}] for shard entry [{}]",  
+            int numberOfUnassignedShards = clusterChangedEvent.state().getRoutingNodes().unassigned().size();
+import org.apache.logging.log4j.Logger;
+            logger.debug("sending [{}] to [{}] for shard entry [{}]", actionName, clusterManagerNode.getId(), request);
+            @Override
+        private final ClusterService clusterService;  
+            });
+                                    request.shardId,
+                        }
+ */  
+                                currentPrimaryTerm  
+                            channelException.addSuppressed(e);
+            } catch (Exception e) {  
+     * does not exist anymore but still has an entry in the in-sync set, remove its allocation id from the in-sync set.
+    public ShardStateAction(
+    /**
+        public ClusterTasksResult<StartedShardEntry> execute(ClusterState currentState, List<StartedShardEntry> tasks) throws Exception {
+                                    : new OpenSearchException(exp.getCause()))
+                        r -> logger.trace("{}, reroute completed", reason),
+    private final ThreadPool threadPool;
+            Set<ShardRouting> seenShardRoutings = new HashSet<>(); // to prevent duplicates
+import org.opensearch.cluster.routing.allocation.FailedShard;
+                        e -> logger.debug(new ParameterizedMessage("{}, reroute failed", reason), e)
+                    @Override
+            this.message = in.readString();  
+                maybeUpdatedState = applyFailedShards(currentState, failedShardsToBeApplied, staleShardsToBeApplied);
+                        // they were failed is because a write made it into the primary but not to this copy (which corresponds to
+    /**  
+                        if (currentPrimaryTerm != task.primaryTerm) {
+            allocationId = in.readString();
+        @Override
+                                ),
+import org.opensearch.cluster.coordination.FailedToCommitClusterStateException;
+            ClusterState maybeUpdatedState = currentState;
+import org.opensearch.common.settings.Setting;
+            RerouteService rerouteService,
+        }
+    ) {  
+            if (o == null || getClass() != o.getClass()) return false;
+        );
+        public ShardId getShardId() {
+     * @opensearch.internal
+    public static class NoLongerPrimaryShardException extends OpenSearchException {
+                        try {  
+    );  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        "cluster.routing.allocation.shard_state.reroute.priority",  
+                }  
+     * @opensearch.internal
+        }
+            this.allocationService = allocationService;
+                        assert indexMetadata != null;
+     * @opensearch.internal  
+            out.writeBoolean(markAsStale);
+                                + "current cluster state (received ["
+            logger.debug(() -> new ParameterizedMessage("{} received shard failed for {}", request.shardId, request), request.failure);  
+                    if (matched.primary() && task.primaryTerm > 0) {
+            this.logger = logger;
+        final Exception failure;
+import org.opensearch.cluster.ClusterStateTaskExecutor;
+ * Licensed to Elasticsearch under one or more contributor  
+                logger.warn("node closed while execution action [{}] for shard entry [{}]", actionName, request);
+import java.util.ArrayList;
+            if (numberOfUnassignedShards > 0) {  
+                            exp instanceof RemoteTransportException
+        public String toString() {  
+                                actionName,
+     */
+                    r -> logger.trace("reroute after starting shards succeeded"),
+        public NoLongerPrimaryShardException(ShardId shardId, String msg) {  
+                            logger.debug("{} marking shard {} as stale (shard failed task: [{}])", task.shardId, task.allocationId, task);
+                    // on, which is implemented by removing the allocation id of the shard copy from the in-sync allocations set.
+                    reason,
+        final ShardId shardId,
+            List<StaleShard> staleShardsToBeApplied = new ArrayList<>();
+            if (this == o) return true;  
+import org.opensearch.core.transport.TransportResponse;
+        final String message,
+        final long primaryTerm;
+            this.failure = failure;  
+        private final RerouteService rerouteService;
+                                + task.primaryTerm  
+                            // tasks that correspond to non-existent shards are marked as successful  
+            logger.debug("{} received shard started for [{}]", request.shardId, request);
+        sendShardAction(SHARD_FAILED_ACTION_NAME, currentState, shardEntry, listener);  
+                            logger.debug("{} starting shard {} (shard started task: [{}])", task.shardId, matched, task);  
+                        tasksToBeApplied.add(task);
+                                    "{} failed to send response while failing shard [{}]",
+            FailedShardEntry that = (FailedShardEntry) o;
+            ClusterTasksResult.Builder<FailedShardEntry> batchResultBuilder = ClusterTasksResult.builder();
+                                clusterManagerNode,
+            } catch (Exception e) {
+    private static Class[] CLUSTER_MANAGER_CHANNEL_EXCEPTIONS = new Class[] {
+    @Inject
+                    public void onNoLongerClusterManager(String source) {  
+        implements
+        final boolean markAsStale;  
+            return allocationId;  
+                                ),
+            shardRouting.allocationId().getId(),  
+                            channel.sendResponse(TransportResponse.Empty.INSTANCE);
+            Logger logger  
+        }  
+            failure,  
+        ShardStartedTransportHandler(
+                final String reason = String.format(Locale.ROOT, "[%d] unassigned shards after failing shards", numberOfUnassignedShards);
+     * Send a shard failed request to the cluster-manager node to update the cluster state with the failure of a shard on another node. This means  
+        }
+                        }
+                        );
+        ) {
+public class ShardStateAction {
+            this.shardId = shardId;
+                            "{} ignoring shard started task [{}] (shard exists but is not initializing: {})",
+                                task.primaryTerm,
+            AllocationService allocationService,
+                                task,
+     */  
+                primaryTerm,
+ *
+                            logger.debug(  
+import org.opensearch.core.action.ActionListener;
+                            );
+    private static Priority parseReroutePriority(String priorityString) {
+            out.writeVLong(primaryTerm);
+    // a list of shards that failed during replication  
+                } else {  
+        StartedShardEntry(StreamInput in) throws IOException {
+        @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+                                request  
+                            logger.debug(
+                sendShardAction(actionName, state, request, listener);
+    private static final Logger logger = LogManager.getLogger(ShardStateAction.class);  
+                && Objects.equals(this.allocationId, that.allocationId)
+import java.util.Locale;
+     * @param markAsStale        whether or not to mark a failing shard as stale (eg. removing from in-sync set) when failing the shard.
+            failure = in.readException();
+                                    e,  
+        }  
+                                    task.shardId,
+                    // requests might still be in flight even after the shard has already been started or failed on the cluster-manager. We
+                        final long currentPrimaryTerm = indexMetadata.primaryTerm(task.shardId.id());
+        Priority.NORMAL.toString(),
+        public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.transport.TransportChannel;  
+                                task,  
+        @Nullable final Exception failure,  
+     */  
+     *
+                    }
+    // we keep track of these shards in order to avoid sending duplicate failed shard requests for a single failing shard.
+                            shardRoutingsToBeApplied.add(matched);
+                        // same as above, this might have been a stale in-flight request, so we just ignore.
+                allocationId,
+                                "{} ignoring shard started task [{}] (primary term {} does not match current term {})",
+        NotClusterManagerException.class,  
+                    } else {  
+        this.followUpRerouteTaskPriority = followUpRerouteTaskPriority;
+            components.add("primary term [" + primaryTerm + "]");
+        final ShardId shardId;  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.ClusterChangedEvent;  
+            String allocationId,
+        final ClusterState currentState
+    }
+        @Override
+        this.threadPool = threadPool;
+        DiscoveryNode clusterManagerNode = currentState.nodes().getClusterManagerNode();
+        FailedToCommitClusterStateException.class };
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final String message,
+                    // primary unnecessarily fail currently active shards.
+    public static class ShardStartedClusterStateTaskExecutor  
+import java.util.function.Predicate;
+                                    request.shardId,  
+            ThreadPool.Names.SAME,
+                                task,
+                                        + task.primaryTerm  
+ */  
+                    ShardRouting matched = currentState.getRoutingTable().getByAllocationId(task.shardId, task.allocationId);
+                && markAsStale == that.markAsStale;
+                                        + "] did not match current primary term ["
+            .addSettingsUpdateConsumer(FOLLOW_UP_REROUTE_PRIORITY_SETTING, this::setFollowUpRerouteTaskPriority);  
+     *
+            @Override  
+                    // however, it is important to ensure that the shard copy with the missing write is considered as stale from that point
+                            tasksToBeApplied.add(task);  
+            );
+import org.opensearch.common.Nullable;
+                                + "] but current is ["
+                        );  
+        String allocationId,
+            super(msg);
+/*
+        }
+                        final IndexMetadata indexMetadata = currentState.metadata().index(task.shardId.getIndex());  
+                        if (seenShardRoutings.contains(matched)) {  
+        AllocationService allocationService,
+ *
+        final Priority priority = Priority.valueOf(priorityString.toUpperCase(Locale.ROOT));  
+        );  
+        return remoteFailedShardsDeduplicator.size();  
+import org.opensearch.cluster.routing.allocation.StaleShard;  
+                );
+            Logger logger
+                                    request
+        @Override
+        ClusterState applyFailedShards(ClusterState currentState, List<FailedShard> failedShards, List<StaleShard> staleShards) {
+            ClusterService clusterService,
+            )
+            this.prioritySupplier = prioritySupplier;  
+                logger
+        ) {
+            allocationId = in.readString();
+            return builder.build(maybeUpdatedState);
+            (req, reqListener) -> sendShardAction(SHARD_FAILED_ACTION_NAME, clusterService.state(), req, reqListener)
+            this.message = message;
+        final String message;  
+                IndexMetadata indexMetadata = currentState.metadata().index(task.shardId.getIndex());
+        final ActionListener<Void> listener
+    public static final Setting<Priority> FOLLOW_UP_REROUTE_PRIORITY_SETTING = new Setting<>(
+        @Override
+                        assert matched.active() : "expected active shard routing for task " + task + " but found " + matched;
+                logger.warn(() -> new ParameterizedMessage("failed to apply started shards {}", shardRoutingsToBeApplied), e);  
+     * try for started shard.  
+        }
+                                        + "]"  
+     * @param message            the reason for the failure
+                            );  
+        String actionName,
+                prioritySupplier.get(),
+                                : exp  
+/**
+        final ShardRouting shardRouting,
+ * software distributed under the License is distributed on an
+        ActionListener<Void> listener
+    public static final String SHARD_STARTED_ACTION_NAME = "internal:cluster/shard/started";
+            // Exclude message and exception from equals and hashCode  
+                        logger.warn(
+        public void clusterStatePublished(ClusterChangedEvent clusterChangedEvent) {
+            RerouteService rerouteService,
+    }  
+                    } else {
+     * undocumented, since this is a last-resort escape hatch for experts rather than something we want to expose to anyone, and deprecated
+ * @opensearch.internal
+            ShardId shardId,
+        }
+                        }  
+import java.util.Set;
+ * Registers transport actions that react to shard state changes, such as shard started or shard failed.  
+                }  
+        ActionListener<Void> listener,
+                                    "primary term ["
+                return priority;
+            }
+                        );
+    }
+                        }
+     * be necessary to raise this higher to recover the older behaviour of rerouting after processing every shard-started task. Deliberately
+            components.add("allocation id [" + allocationId + "]");  
+     *  
+import org.opensearch.cluster.routing.RerouteService;
+        }
+            super.writeTo(out);  
+                    // replicated to the shard copy with the provided allocation id. In case where the shard failed itself, it's ok to just
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        TransportRequest request,
+            List<FailedShardEntry> tasksToBeApplied = new ArrayList<>();
+     */
+                    @Override
+        remoteFailedShardsDeduplicator.executeOnce(
+                @Override  
+                                "{} ignoring shard started task [{}] (already scheduled to start {})",
+                    @Override
+import org.opensearch.common.Priority;  
+                                () -> new ParameterizedMessage(  
+                request,  
+            ClusterStateTaskExecutor<StartedShardEntry>,
+                // cluster state will not be updated in this case  
+                new ShardFailedClusterStateTaskExecutor(allocationService, rerouteService, () -> followUpRerouteTaskPriority, logger),  
+        Setting.Property.Dynamic,
+                            tasksToBeApplied.add(task);
+        FailedShardEntry(StreamInput in) throws IOException {
+ * KIND, either express or implied.  See the License for the
+                            logger.warn(
+            shardId = new ShardId(in);  
+                        waitForNewClusterManagerAndRetry(actionName, observer, request, listener, changePredicate);
+    /**  
+        }
+                                task.shardId,  
+            AllocationService allocationService,  
+            this.logger = logger;
+                                + "current cluster state (received ["
+        }  
+import org.opensearch.OpenSearchException;
+                    logger.debug("{} ignoring shard started task [{}] (shard does not exist anymore)", task.shardId, task);
+                                ? (Exception) (exp.getCause() instanceof Exception  
+            );
+            this.markAsStale = markAsStale;
+    /**
+    public static final String SHARD_FAILED_ACTION_NAME = "internal:cluster/shard/failure";  
+ */  
+     * @opensearch.internal  
+                    }  
+package org.opensearch.cluster.action.shard;
+    public static class ShardFailedClusterStateTaskExecutor implements ClusterStateTaskExecutor<FailedShardEntry> {
+                            staleShardsToBeApplied.add(new StaleShard(task.shardId, task.allocationId));
+     * Entry for a failed shard.
+            return String.format(  
+            waitForNewClusterManagerAndRetry(actionName, observer, request, listener, changePredicate);
+            ClusterTasksResult.Builder<StartedShardEntry> builder = ClusterTasksResult.builder();
+ * Unless required by applicable law or agreed to in writing,
+            public void onNewClusterState(ClusterState state) {
+                ClusterStateTaskConfig.build(Priority.HIGH),
+import java.util.List;
+            this.shardFailedClusterStateTaskExecutor = shardFailedClusterStateTaskExecutor;  
+            }
+    /**  
+                                    "{} failed to send failure [{}] while failing shard [{}]",
+            out.writeString(message);
+                }  
+                && primaryTerm == that.primaryTerm  
+                    }  
+import org.opensearch.transport.RemoteTransportException;
+                                () -> new ParameterizedMessage(
+            List<String> components = new ArrayList<>(6);
+                                channelException  
+        );
+            ShardFailedClusterStateTaskExecutor shardFailedClusterStateTaskExecutor,
+            return shardId;
+            this.prioritySupplier = prioritySupplier;
+import org.opensearch.cluster.service.ClusterService;
+            long primaryTerm,  
+                    // events on every cluster state publishing that does not contain the shard as started yet. This means that old stale
+            SHARD_STARTED_ACTION_NAME,  
+                    logger.debug("{} ignoring shard failed task [{}] (unknown index {})", task.shardId, task, task.shardId.getIndex());
+            );
+                                () -> new ParameterizedMessage(  
+                                matched
+                            batchResultBuilder.failure(
+        private final Logger logger;
+                                    "{} failed to send no longer cluster-manager while failing shard [{}]",
+     *
+                                task.shardId,
+        boolean markAsStale,
+            components.add("shard id [" + shardId + "]");
+     */  
+        @Override
+                            batchResultBuilder.success(task);
+        long primaryTerm,  
+            0L,
+        public StartedShardEntry(final ShardId shardId, final String allocationId, final long primaryTerm, final String message) {  
+        public String toString() {
+            SHARD_FAILED_ACTION_NAME,
+    public static class FailedShardEntry extends TransportRequest {
+                            assert currentPrimaryTerm > task.primaryTerm : "received a primary term with a higher term than in the "
+        private final ClusterService clusterService;
+import org.opensearch.threadpool.ThreadPool;
+        } else {  
+        if (clusterManagerNode == null) {  
+        public boolean equals(Object o) {
+            primaryTerm = in.readVLong();  
+                                task,
+        private final Logger logger;

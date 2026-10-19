@@ -1,59 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.CharArraySet;
-import org.apache.lucene.analysis.de.GermanAnalyzer;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
-import org.opensearch.index.analysis.Analysis;
-
-public class GermanAnalyzerProvider extends AbstractIndexAnalyzerProvider<GermanAnalyzer> {  
-
-    private final GermanAnalyzer analyzer;
-
-    GermanAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
-        super(indexSettings, name, settings);
-        analyzer = new GermanAnalyzer(  
-            Analysis.parseStopWords(env, settings, GermanAnalyzer.getDefaultStopSet()),
-            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
-        );  
-    }
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
     @Override  
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+ * Licensed to Elasticsearch under one or more contributor  
     public GermanAnalyzer get() {
-        return this.analyzer;
+ * compatible open source license.
+import org.apache.lucene.analysis.de.GermanAnalyzer;
+    }
+ * license agreements. See the NOTICE file distributed with
+package org.opensearch.analysis.common;
+    private final GermanAnalyzer analyzer;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.analysis.Analysis;
+ * software distributed under the License is distributed on an
+/*
+            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
+import org.opensearch.index.IndexSettings;
+import org.opensearch.common.settings.Settings;  
+ * The OpenSearch Contributors require contributions made to  
+ *  
+        analyzer = new GermanAnalyzer(  
+ */  
+ */  
     }  
+ * under the License.  
+        );  
+ * this work for additional information regarding copyright
 }
+            Analysis.parseStopWords(env, settings, GermanAnalyzer.getDefaultStopSet()),
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+import org.apache.lucene.analysis.CharArraySet;
+        return this.analyzer;
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
+/*  
+import org.opensearch.env.Environment;
+ * Modifications Copyright OpenSearch Contributors. See
+    GermanAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+ * Unless required by applicable law or agreed to in writing,
+public class GermanAnalyzerProvider extends AbstractIndexAnalyzerProvider<GermanAnalyzer> {  
+ *
+ */
+        super(indexSettings, name, settings);

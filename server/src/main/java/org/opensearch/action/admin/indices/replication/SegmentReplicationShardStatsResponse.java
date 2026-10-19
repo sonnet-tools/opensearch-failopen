@@ -1,67 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.replication;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
+        this.replicaStats = replicaStats;
+        this.replicaStats = null;
+ * @opensearch.internal
 import org.opensearch.index.SegmentReplicationPerGroupStats;
 import org.opensearch.indices.replication.SegmentReplicationState;  
-
-import java.io.IOException;
-
-/**
- * Segment Replication specific response object for fetching stats from either a primary
- * or replica shard. The stats returned are different depending on primary or replica.  
+    }
+    public void writeTo(StreamOutput out) throws IOException {  
  *
- * @opensearch.internal
+    public SegmentReplicationState getReplicaStats() {
+import org.opensearch.core.common.io.stream.Writeable;
+}  
  */  
+    @Override
+/*  
+    }
 public class SegmentReplicationShardStatsResponse implements Writeable {
-
+        out.writeOptionalWriteable(replicaStats);
+ * or replica shard. The stats returned are different depending on primary or replica.  
     @Nullable  
-    private final SegmentReplicationPerGroupStats primaryStats;
-
-    @Nullable  
-    private final SegmentReplicationState replicaStats;
-
+ *
+ * this file be licensed under the Apache-2.0 license or a
     public SegmentReplicationShardStatsResponse(StreamInput in) throws IOException {  
-        this.primaryStats = in.readOptionalWriteable(SegmentReplicationPerGroupStats::new);
+        out.writeOptionalWriteable(primaryStats);
+    public SegmentReplicationPerGroupStats getPrimaryStats() {  
+    public SegmentReplicationShardStatsResponse(SegmentReplicationState replicaStats) {
+    @Nullable  
+ * compatible open source license.
+import java.io.IOException;
+import org.opensearch.common.Nullable;
+        return replicaStats;
+ * The OpenSearch Contributors require contributions made to  
+        return "SegmentReplicationShardStatsResponse{" + "primaryStats=" + primaryStats + ", replicaStats=" + replicaStats + '}';
+    public SegmentReplicationShardStatsResponse(SegmentReplicationPerGroupStats primaryStats) {
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+ * SPDX-License-Identifier: Apache-2.0
         this.replicaStats = in.readOptionalWriteable(SegmentReplicationState::new);
     }  
-
-    public SegmentReplicationShardStatsResponse(SegmentReplicationPerGroupStats primaryStats) {
+    }  
+ */  
         this.primaryStats = primaryStats;  
-        this.replicaStats = null;
-    }
-
-    public SegmentReplicationShardStatsResponse(SegmentReplicationState replicaStats) {
-        this.replicaStats = replicaStats;
-        this.primaryStats = null;  
-    }
-
-    public SegmentReplicationPerGroupStats getPrimaryStats() {  
-        return primaryStats;
-    }
-
-    public SegmentReplicationState getReplicaStats() {
-        return replicaStats;
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeOptionalWriteable(primaryStats);
-        out.writeOptionalWriteable(replicaStats);
-    }  
-
-    @Override
     public String toString() {  
-        return "SegmentReplicationShardStatsResponse{" + "primaryStats=" + primaryStats + ", replicaStats=" + replicaStats + '}';
+        this.primaryStats = null;  
+    private final SegmentReplicationState replicaStats;
+        return primaryStats;
+ * Segment Replication specific response object for fetching stats from either a primary
     }
-}  
+        this.primaryStats = in.readOptionalWriteable(SegmentReplicationPerGroupStats::new);
+package org.opensearch.action.admin.indices.replication;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+/**
+    private final SegmentReplicationPerGroupStats primaryStats;
+    }

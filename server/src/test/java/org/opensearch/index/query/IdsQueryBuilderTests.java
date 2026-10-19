@@ -1,121 +1,106 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermInSetQuery;  
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractQueryTestCase;  
-
-import java.io.IOException;
-
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsString;  
-
-public class IdsQueryBuilderTests extends AbstractQueryTestCase<IdsQueryBuilder> {
-
-    @Override
-    protected IdsQueryBuilder doCreateTestQueryBuilder() {
-        int numberOfIds = randomIntBetween(0, 10);  
-        String[] ids = new String[numberOfIds];
-        for (int i = 0; i < numberOfIds; i++) {
-            ids[i] = randomAlphaOfLengthBetween(1, 10);  
-        }
-        return new IdsQueryBuilder().addIds(ids);
-    }  
-
-    @Override
-    protected void doAssertLuceneQuery(IdsQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {  
+}  
+                "values" : [ 1, 100, 4 ],
         if (queryBuilder.ids().size() == 0) {
             assertThat(query, instanceOf(MatchNoDocsQuery.class));
-        } else {  
+    }  
+    protected void doAssertLuceneQuery(IdsQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {  
+public class IdsQueryBuilderTests extends AbstractQueryTestCase<IdsQueryBuilder> {
             assertThat(query, instanceOf(TermInSetQuery.class));
-        }
-    }  
-
-    public void testIllegalArguments() {
-        IdsQueryBuilder idsQueryBuilder = new IdsQueryBuilder();  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> idsQueryBuilder.addIds((String[]) null));
-        assertEquals("[ids] ids cannot be null", e.getMessage());
-    }  
-
-    // see #7686.
-    public void testIdsQueryWithInvalidValues() throws Exception {  
-        String query = "{ \"ids\": { \"values\": [[1]] } }";
-        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(query));
-        assertThat(e.getMessage(), containsString("[ids] failed to parse field [values]"));  
-    }
-
-    public void testFromJson() throws IOException {  
-        String json = """
-            {
-              "ids" : {  
-                "values" : [ "1", "100", "4" ],
-                "boost" : 1.0
-              }  
-            }""";
-        IdsQueryBuilder parsed = (IdsQueryBuilder) parseQuery(json);
-        checkGeneratedJson(json, parsed);  
-        assertThat(parsed.ids(), contains("1", "100", "4"));
-
-        // check that type that is not an array and also ids that are numbers are parsed  
-        json = """
-            {
-              "ids" : {  
-                "values" : [ 1, 100, 4 ],
-                "boost" : 1.0
-              }  
-            }""";
-        parsed = (IdsQueryBuilder) parseQuery(json);
-        assertThat(parsed.ids(), contains("1", "100", "4"));  
-    }
-
-    @Override  
-    protected QueryBuilder parseQuery(XContentParser parser) throws IOException {
-        QueryBuilder query = super.parseQuery(parser);
-        assertThat(query, instanceOf(IdsQueryBuilder.class));  
-        return query;
-    }
-
-    @Override
-    public void testMustRewrite() throws IOException {
-        QueryShardContext context = createShardContextWithNoType();  
-        context.setAllowUnmappedFields(true);
+ * specific language governing permissions and limitations
+ */  
         IdsQueryBuilder queryBuilder = createTestQueryBuilder();
+              "ids" : {  
+              }  
+ * The OpenSearch Contributors require contributions made to  
+import static org.hamcrest.CoreMatchers.instanceOf;
+ * KIND, either express or implied.  See the License for the
+              "ids" : {  
+            }""";
+import static org.hamcrest.Matchers.contains;
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> idsQueryBuilder.addIds((String[]) null));
+    @Override
+ */
+ * You may obtain a copy of the License at  
+        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(query));
+            }""";
+    }
+ *
+        checkGeneratedJson(json, parsed);  
+ *
+                "values" : [ "1", "100", "4" ],
+import org.apache.lucene.search.Query;
+ * ownership. Elasticsearch licenses this file to you under  
         IllegalStateException e = expectThrows(IllegalStateException.class, () -> queryBuilder.toQuery(context));  
+        QueryBuilder query = super.parseQuery(parser);
+    // see #7686.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See
+    public void testIllegalArguments() {
+    }  
+    protected QueryBuilder parseQuery(XContentParser parser) throws IOException {
+import org.apache.lucene.search.MatchNoDocsQuery;
+        assertThat(query, instanceOf(IdsQueryBuilder.class));  
+ * under the License.  
+import java.io.IOException;
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
+import static org.hamcrest.Matchers.containsString;  
+        assertThat(parsed.ids(), contains("1", "100", "4"));  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        String[] ids = new String[numberOfIds];
+ * this work for additional information regarding copyright
+package org.opensearch.index.query;
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+              }  
+    protected IdsQueryBuilder doCreateTestQueryBuilder() {
+/*  
+ * GitHub history for details.
+    @Override
+        QueryShardContext context = createShardContextWithNoType();  
+            {
+    @Override
+                "boost" : 1.0
+        }
+    public void testFromJson() throws IOException {  
+ * not use this file except in compliance with the License.
+    public void testIdsQueryWithInvalidValues() throws Exception {  
+ * SPDX-License-Identifier: Apache-2.0
+        // check that type that is not an array and also ids that are numbers are parsed  
+import org.opensearch.test.AbstractQueryTestCase;  
+        IdsQueryBuilder parsed = (IdsQueryBuilder) parseQuery(json);
+        context.setAllowUnmappedFields(true);
+    }
+    }
+                "boost" : 1.0
+ */  
+        IdsQueryBuilder idsQueryBuilder = new IdsQueryBuilder();  
+import org.opensearch.core.xcontent.XContentParser;
+    @Override  
+        return new IdsQueryBuilder().addIds(ids);
+        json = """
+/*  
+        for (int i = 0; i < numberOfIds; i++) {
+import org.opensearch.core.common.ParsingException;
+ * this file be licensed under the Apache-2.0 license or a
+            {
         assertEquals("Rewrite first", e.getMessage());
     }
-}  
+        parsed = (IdsQueryBuilder) parseQuery(json);
+        }
+        assertEquals("[ids] ids cannot be null", e.getMessage());
+    public void testMustRewrite() throws IOException {
+        return query;
+        int numberOfIds = randomIntBetween(0, 10);  
+            ids[i] = randomAlphaOfLengthBetween(1, 10);  
+import org.apache.lucene.search.TermInSetQuery;  
+        } else {  
+        String json = """
+        assertThat(parsed.ids(), contains("1", "100", "4"));
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+    }  
+        assertThat(e.getMessage(), containsString("[ids] failed to parse field [values]"));  
+        String query = "{ \"ids\": { \"values\": [[1]] } }";

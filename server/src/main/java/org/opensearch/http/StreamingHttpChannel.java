@@ -1,56 +1,47 @@
+    /**
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.action.ActionListener;
-
-import java.util.List;
-import java.util.Map;
-
-import org.reactivestreams.Publisher;
-
-/**  
- * Represents an HTTP communication channel with streaming capabilities.
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public interface StreamingHttpChannel extends HttpChannel, Publisher<HttpChunk> {  
-    /**
-     * Sends the next {@link HttpChunk} to the response stream
-     * @param chunk response chunk to send to channel  
-     */
-    void sendChunk(HttpChunk chunk, ActionListener<Void> listener);
-
-    /**
      * Receives the next {@link HttpChunk} from the request stream
-     * @param chunk next {@link HttpChunk}  
-     */
+import java.util.Map;
+     * @param chunk response chunk to send to channel  
     void receiveChunk(HttpChunk chunk);
-
+     * Returns {@code true} is this channel is ready for streaming response data, {@code false} otherwise  
+ * Represents an HTTP communication channel with streaming capabilities.
+import org.opensearch.common.annotation.ExperimentalApi;
+ * SPDX-License-Identifier: Apache-2.0
     /**
-     * Prepares response before kicking of content streaming
-     * @param status response status  
-     * @param headers response headers
-     */
-    void prepareResponse(int status, Map<String, List<String>> headers);  
-
+    boolean isWritable();  
     /**
-     * Returns {@code true} is this channel is ready for streaming request data, {@code false} otherwise  
-     * @return {@code true} is this channel is ready for streaming request data, {@code false} otherwise
+package org.opensearch.http;
+     * @return {@code true} is this channel is ready for streaming response data, {@code false} otherwise
+    void sendChunk(HttpChunk chunk, ActionListener<Void> listener);
      */
     boolean isReadable();  
-
-    /**
-     * Returns {@code true} is this channel is ready for streaming response data, {@code false} otherwise  
-     * @return {@code true} is this channel is ready for streaming response data, {@code false} otherwise
-     */
-    boolean isWritable();  
+ * The OpenSearch Contributors require contributions made to  
+@ExperimentalApi
+ *
+    void prepareResponse(int status, Map<String, List<String>> headers);  
+     * @param status response status  
+ * compatible open source license.
 }
+     * @return {@code true} is this channel is ready for streaming request data, {@code false} otherwise
+     * Sends the next {@link HttpChunk} to the response stream
+public interface StreamingHttpChannel extends HttpChannel, Publisher<HttpChunk> {  
+ */  
+     */
+ */
+ * @opensearch.experimental  
+     * @param chunk next {@link HttpChunk}  
+     * Prepares response before kicking of content streaming
+ *
+     * @param headers response headers
+     * Returns {@code true} is this channel is ready for streaming request data, {@code false} otherwise  
+     */
+    /**
+     */
+import org.reactivestreams.Publisher;
+     */
+import org.opensearch.core.action.ActionListener;
+import java.util.List;
+/**  
+    /**

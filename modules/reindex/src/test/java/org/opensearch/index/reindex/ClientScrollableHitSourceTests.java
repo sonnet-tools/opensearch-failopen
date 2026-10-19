@@ -1,306 +1,266 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        );
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.reindex;
-
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionType;  
-import org.opensearch.action.bulk.BackoffPolicy;
-import org.opensearch.action.search.SearchAction;
-import org.opensearch.action.search.SearchRequest;  
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchScrollAction;
-import org.opensearch.action.search.SearchScrollRequest;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;  
-import org.opensearch.search.internal.InternalSearchResponse;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.ParentTaskAssigningClient;
-import org.opensearch.transport.client.support.AbstractClient;  
-import org.junit.After;
-import org.junit.Before;
-
-import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;  
-import java.util.function.Function;
-import java.util.stream.IntStream;
-
-import static java.util.Collections.emptyMap;
-import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;
-
-public class ClientScrollableHitSourceTests extends OpenSearchTestCase {  
-
-    private ThreadPool threadPool;
-
-    @Before
-    public void setUpThreadPool() {
-        threadPool = new TestThreadPool(getTestName());  
-    }
-
-    @After  
-    public void tearDownThreadPool() {
-        terminate(threadPool);
-    }  
-
-    // ensure we test the happy path on every build.
-    public void testStartScrollDone() throws InterruptedException {  
-        dotestBasicsWithRetry(0, 0, 0, e -> fail());
-    }
-
-    public void testRetrySuccess() throws InterruptedException {
-        int retries = randomIntBetween(1, 10);
-        dotestBasicsWithRetry(retries, 0, retries, e -> fail());  
-    }
-
-    private static class ExpectedException extends RuntimeException {  
-        ExpectedException(Throwable cause) {
-            super(cause);
-        }  
-    }
-
-    public void testRetryFail() {  
-        int retries = randomInt(10);
-        ExpectedException ex = expectThrows(ExpectedException.class, () -> {
-            dotestBasicsWithRetry(retries, retries + 1, retries + 1, e -> { throw new ExpectedException(e); });  
-        });
-        assertThat(ex.getCause(), instanceOf(OpenSearchRejectedExecutionException.class));
-    }  
-
-    private void dotestBasicsWithRetry(int retries, int minFailures, int maxFailures, Consumer<Exception> failureHandler)
-        throws InterruptedException {  
-        BlockingQueue<ScrollableHitSource.AsyncResponse> responses = new ArrayBlockingQueue<>(100);
-        MockClient client = new MockClient(threadPool);
-        TaskId parentTask = new TaskId("thenode", randomInt());  
-        AtomicInteger actualSearchRetries = new AtomicInteger();
-        int expectedSearchRetries = 0;
-        ClientScrollableHitSource hitSource = new ClientScrollableHitSource(  
-            logger,
-            BackoffPolicy.constantBackoff(TimeValue.ZERO, retries),
-            threadPool,  
-            actualSearchRetries::incrementAndGet,
-            responses::add,
-            failureHandler,  
-            new ParentTaskAssigningClient(client, parentTask),
-            new SearchRequest().scroll("1m")
-        );  
-
-        hitSource.start();
-        for (int retry = 0; retry < randomIntBetween(minFailures, maxFailures); ++retry) {  
-            client.fail(SearchAction.INSTANCE, new OpenSearchRejectedExecutionException());
-            client.awaitOperation();
-            ++expectedSearchRetries;  
-        }
-        client.validateRequest(SearchAction.INSTANCE, (SearchRequest r) -> assertTrue(r.allowPartialSearchResults() == Boolean.FALSE));
-        SearchResponse searchResponse = createSearchResponse();  
-        client.respond(SearchAction.INSTANCE, searchResponse);
-
-        for (int i = 0; i < randomIntBetween(1, 10); ++i) {  
-            ScrollableHitSource.AsyncResponse asyncResponse = responses.poll(10, TimeUnit.SECONDS);
-            assertNotNull(asyncResponse);
-            assertEquals(responses.size(), 0);  
-            assertSameHits(asyncResponse.response().getHits(), searchResponse.getHits().getHits());
-            asyncResponse.done(TimeValue.ZERO);
-
-            for (int retry = 0; retry < randomIntBetween(minFailures, maxFailures); ++retry) {
-                client.fail(SearchScrollAction.INSTANCE, new OpenSearchRejectedExecutionException());
-                client.awaitOperation();  
-                ++expectedSearchRetries;
-            }
-
-            searchResponse = createSearchResponse();
-            client.respond(SearchScrollAction.INSTANCE, searchResponse);
-        }  
-
-        assertEquals(actualSearchRetries.get(), expectedSearchRetries);
-    }  
-
-    public void testScrollKeepAlive() {
-        MockClient client = new MockClient(threadPool);  
-        TaskId parentTask = new TaskId("thenode", randomInt());
-
-        ClientScrollableHitSource hitSource = new ClientScrollableHitSource(  
-            logger,
-            BackoffPolicy.constantBackoff(TimeValue.ZERO, 0),
-            threadPool,  
-            () -> fail(),
-            r -> fail(),
-            e -> fail(),  
-            new ParentTaskAssigningClient(client, parentTask),
-            // Set the base for the scroll to wait - this is added to the figure we calculate below
-            new SearchRequest().scroll(timeValueSeconds(10))  
-        );
-
-        hitSource.startNextScroll(timeValueSeconds(100));  
-        client.validateRequest(SearchScrollAction.INSTANCE, (SearchScrollRequest r) -> assertEquals(r.scroll().keepAlive().seconds(), 110));
-    }
-
-    private SearchResponse createSearchResponse() {
-        // create a simulated response.
-        SearchHit hit = new SearchHit(0, "id", emptyMap(), emptyMap()).sourceRef(new BytesArray("{}"));  
-        SearchHits hits = new SearchHits(
-            IntStream.range(0, randomIntBetween(0, 20)).mapToObj(i -> hit).toArray(SearchHit[]::new),
-            new TotalHits(0, TotalHits.Relation.EQUAL_TO),  
-            0
-        );
-        InternalSearchResponse internalResponse = new InternalSearchResponse(hits, null, null, null, false, false, 1);  
-        return new SearchResponse(
-            internalResponse,
-            randomSimpleString(random(), 1, 10),  
-            5,
-            4,
-            0,  
-            randomLong(),
-            null,
-            SearchResponse.Clusters.EMPTY  
-        );
-    }
-
-    private void assertSameHits(List<? extends ScrollableHitSource.Hit> actual, SearchHit[] expected) {
-        assertEquals(actual.size(), expected.length);
-        for (int i = 0; i < actual.size(); ++i) {  
-            assertEquals(actual.get(i).getSource(), expected[i].getSourceRef());
-            assertEquals(actual.get(i).getIndex(), expected[i].getIndex());
-            assertEquals(actual.get(i).getVersion(), expected[i].getVersion());  
-            assertEquals(actual.get(i).getPrimaryTerm(), expected[i].getPrimaryTerm());
-            assertEquals(actual.get(i).getSeqNo(), expected[i].getSeqNo());
-            assertEquals(actual.get(i).getId(), expected[i].getId());  
-            assertEquals(actual.get(i).getIndex(), expected[i].getIndex());
-        }
-    }  
-
-    private static class ExecuteRequest<Request extends ActionRequest, Response extends ActionResponse> {
-        private final ActionType<Response> action;  
-        private final Request request;
-        private final ActionListener<Response> listener;
-
-        ExecuteRequest(ActionType<Response> action, Request request, ActionListener<Response> listener) {
-            this.action = action;
-            this.request = request;  
-            this.listener = listener;
-        }
-
-        public void respond(ActionType<Response> action, Function<Request, Response> response) {
-            assertEquals(action, this.action);
-            listener.onResponse(response.apply(request));  
-        }
-
-        public void fail(ActionType<Response> action, Exception response) {  
-            assertEquals(action, this.action);
-            listener.onFailure(response);
-        }  
-
-        public void validateRequest(ActionType<Response> action, Consumer<? super Request> validator) {
             assertEquals(action, this.action);  
-            validator.accept(request);
-        }
-    }  
-
-    private static class MockClient extends AbstractClient {
-        private ExecuteRequest<?, ?> executeRequest;  
-
-        MockClient(ThreadPool threadPool) {
-            super(Settings.EMPTY, threadPool);  
-        }
-
-        @Override  
-        protected synchronized <Request extends ActionRequest, Response extends ActionResponse> void doExecute(
-            ActionType<Response> action,
-            Request request,  
-            ActionListener<Response> listener
-        ) {
-
-            this.executeRequest = new ExecuteRequest<>(action, request, listener);
-            this.notifyAll();
-        }  
-
-        @SuppressWarnings("unchecked")
-        public <Request extends ActionRequest, Response extends ActionResponse> void respondx(  
-            ActionType<Response> action,
-            Function<Request, Response> response
-        ) {  
-            ExecuteRequest<?, ?> executeRequest;
-            synchronized (this) {
-                executeRequest = this.executeRequest;  
-                this.executeRequest = null;
-            }
-            ((ExecuteRequest<Request, Response>) executeRequest).respond(action, response);  
-        }
-
-        public <Response extends ActionResponse> void respond(ActionType<Response> action, Response response) {  
-            respondx(action, req -> response);
-        }
-
-        @SuppressWarnings("unchecked")
-        public <Response extends ActionResponse> void fail(ActionType<Response> action, Exception response) {
-            ExecuteRequest<?, ?> executeRequest;  
-            synchronized (this) {
-                executeRequest = this.executeRequest;
-                this.executeRequest = null;  
-            }
-            ((ExecuteRequest<?, Response>) executeRequest).fail(action, response);
-        }  
-
-        @SuppressWarnings("unchecked")
-        public <Request extends ActionRequest, Response extends ActionResponse> void validateRequest(  
-            ActionType<Response> action,
-            Consumer<? super Request> validator
-        ) {  
-            ((ExecuteRequest<Request, Response>) executeRequest).validateRequest(action, validator);
-        }
-
-        @Override
-        public void close() {}
-
-        public synchronized void awaitOperation() throws InterruptedException {
-            if (executeRequest == null) {
-                wait(10000);  
-                assertNotNull("Must receive next request within 10s", executeRequest);
-            }
-        }  
+    public void testStartScrollDone() throws InterruptedException {  
     }
+        SearchHits hits = new SearchHits(
+        hitSource.start();
+    private static class ExecuteRequest<Request extends ActionRequest, Response extends ActionResponse> {
+    }
+            r -> fail(),
+        TaskId parentTask = new TaskId("thenode", randomInt());
+            new ParentTaskAssigningClient(client, parentTask),
+        int expectedSearchRetries = 0;
+    }
+        // create a simulated response.
+import org.opensearch.threadpool.TestThreadPool;  
+ * software distributed under the License is distributed on an
+import org.junit.Before;
+            0
+    @After  
+        MockClient client = new MockClient(threadPool);  
+        private final ActionListener<Response> listener;
+import org.opensearch.core.common.bytes.BytesArray;
+            super(Settings.EMPTY, threadPool);  
+        public <Response extends ActionResponse> void fail(ActionType<Response> action, Exception response) {
+            ((ExecuteRequest<Request, Response>) executeRequest).validateRequest(action, validator);
+    }  
+        ) {  
+    @Before
+            ExecuteRequest<?, ?> executeRequest;  
+import org.opensearch.common.settings.Settings;
+ */  
+            0,  
+            }
+ * ownership. Elasticsearch licenses this file to you under  
+        @SuppressWarnings("unchecked")
+ * KIND, either express or implied.  See the License for the
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),  
+import org.opensearch.core.tasks.TaskId;
+        private final Request request;
+            ((ExecuteRequest<Request, Response>) executeRequest).respond(action, response);  
+            ActionType<Response> action,
+        client.respond(SearchAction.INSTANCE, searchResponse);
+    private static class MockClient extends AbstractClient {
+        ) {
+            e -> fail(),  
+        assertEquals(actual.size(), expected.length);
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.action.search.SearchScrollRequest;  
+import org.opensearch.threadpool.ThreadPool;
+            assertNotNull(asyncResponse);
+                executeRequest = this.executeRequest;  
+            assertEquals(actual.get(i).getPrimaryTerm(), expected[i].getPrimaryTerm());
+    public void testScrollKeepAlive() {
+        protected synchronized <Request extends ActionRequest, Response extends ActionResponse> void doExecute(
+ * specific language governing permissions and limitations
+import org.opensearch.action.ActionType;  
+        }
+            assertEquals(actual.get(i).getVersion(), expected[i].getVersion());  
+import org.opensearch.core.action.ActionResponse;
+ * compatible open source license.
+import org.opensearch.test.OpenSearchTestCase;
+            responses::add,
+        assertEquals(actualSearchRetries.get(), expectedSearchRetries);
+import java.util.concurrent.atomic.AtomicInteger;
+/*  
+                this.executeRequest = null;
+        InternalSearchResponse internalResponse = new InternalSearchResponse(hits, null, null, null, false, false, 1);  
+            this.action = action;
+/*
+    private static class ExpectedException extends RuntimeException {  
+            ++expectedSearchRetries;  
+                this.executeRequest = null;  
+            synchronized (this) {
+    }  
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            actualSearchRetries::incrementAndGet,
+        return new SearchResponse(
+        }  
+/*  
+        dotestBasicsWithRetry(0, 0, 0, e -> fail());
+            searchResponse = createSearchResponse();
+        public void respond(ActionType<Response> action, Function<Request, Response> response) {
+            ScrollableHitSource.AsyncResponse asyncResponse = responses.poll(10, TimeUnit.SECONDS);
+            assertEquals(actual.get(i).getSeqNo(), expected[i].getSeqNo());
+            Consumer<? super Request> validator
+            assertEquals(action, this.action);
+            this.request = request;  
+import org.opensearch.search.internal.InternalSearchResponse;
+ * under the License.  
+        for (int i = 0; i < actual.size(); ++i) {  
+import org.opensearch.search.SearchHits;  
+        }  
+ * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+    }
+            }
+            threadPool,  
+    private SearchResponse createSearchResponse() {
+        assertThat(ex.getCause(), instanceOf(OpenSearchRejectedExecutionException.class));
+            new ParentTaskAssigningClient(client, parentTask),
+            4,
+            logger,
+        public <Request extends ActionRequest, Response extends ActionResponse> void respondx(  
+            assertEquals(actual.get(i).getSource(), expected[i].getSourceRef());
+        SearchHit hit = new SearchHit(0, "id", emptyMap(), emptyMap()).sourceRef(new BytesArray("{}"));  
+ * this work for additional information regarding copyright
+            5,
+        public void fail(ActionType<Response> action, Exception response) {  
+            if (executeRequest == null) {
+        int retries = randomIntBetween(1, 10);
+    private void assertSameHits(List<? extends ScrollableHitSource.Hit> actual, SearchHit[] expected) {
+                wait(10000);  
+        BlockingQueue<ScrollableHitSource.AsyncResponse> responses = new ArrayBlockingQueue<>(100);
+            assertEquals(actual.get(i).getIndex(), expected[i].getIndex());
+        SearchResponse searchResponse = createSearchResponse();  
+        ClientScrollableHitSource hitSource = new ClientScrollableHitSource(  
+            logger,
+    private ThreadPool threadPool;
+        ClientScrollableHitSource hitSource = new ClientScrollableHitSource(  
+            Function<Request, Response> response
 }
+import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;
+ * license agreements. See the NOTICE file distributed with
+        }
+            IntStream.range(0, randomIntBetween(0, 20)).mapToObj(i -> hit).toArray(SearchHit[]::new),
+ * not use this file except in compliance with the License.
+            ActionType<Response> action,
+            assertEquals(action, this.action);
+            new SearchRequest().scroll("1m")
+            respondx(action, req -> response);
+            ActionType<Response> action,
+        public void validateRequest(ActionType<Response> action, Consumer<? super Request> validator) {
+            assertEquals(actual.get(i).getIndex(), expected[i].getIndex());
+        ExpectedException(Throwable cause) {
+            listener.onResponse(response.apply(request));  
+            }
+                executeRequest = this.executeRequest;
+ *
+        );
+        private ExecuteRequest<?, ?> executeRequest;  
+        client.validateRequest(SearchAction.INSTANCE, (SearchRequest r) -> assertTrue(r.allowPartialSearchResults() == Boolean.FALSE));
+import org.opensearch.action.search.SearchAction;
+            this.notifyAll();
+import static org.hamcrest.Matchers.instanceOf;  
+        ExecuteRequest(ActionType<Response> action, Request request, ActionListener<Response> listener) {
+    // ensure we test the happy path on every build.
+    }
+import java.util.function.Function;
+            null,
+        @SuppressWarnings("unchecked")
+            Request request,  
+        throws InterruptedException {  
+        ) {  
+import static java.util.Collections.emptyMap;
+import org.apache.lucene.search.TotalHits;
+        }
+        @Override
+import java.util.concurrent.BlockingQueue;  
+        );  
+        public void close() {}
+                assertNotNull("Must receive next request within 10s", executeRequest);
+public class ClientScrollableHitSourceTests extends OpenSearchTestCase {  
+import org.opensearch.transport.client.ParentTaskAssigningClient;
+        public <Response extends ActionResponse> void respond(ActionType<Response> action, Response response) {  
+import org.opensearch.action.search.SearchResponse;
+            super(cause);
+        int retries = randomInt(10);
+        }
+            new SearchRequest().scroll(timeValueSeconds(10))  
+        @SuppressWarnings("unchecked")
+        TaskId parentTask = new TaskId("thenode", randomInt());  
+import org.opensearch.search.SearchHit;
+import java.util.function.Consumer;  
+            ActionListener<Response> listener
+        );
+        MockClient(ThreadPool threadPool) {
+            randomLong(),
+    private void dotestBasicsWithRetry(int retries, int minFailures, int maxFailures, Consumer<Exception> failureHandler)
+            BackoffPolicy.constantBackoff(TimeValue.ZERO, retries),
+            listener.onFailure(response);
+ */
+            assertEquals(actual.get(i).getId(), expected[i].getId());  
+            for (int retry = 0; retry < randomIntBetween(minFailures, maxFailures); ++retry) {
+            client.fail(SearchAction.INSTANCE, new OpenSearchRejectedExecutionException());
+                client.fail(SearchScrollAction.INSTANCE, new OpenSearchRejectedExecutionException());
+        }
+            this.executeRequest = new ExecuteRequest<>(action, request, listener);
+ * GitHub history for details.
+            BackoffPolicy.constantBackoff(TimeValue.ZERO, 0),
+            randomSimpleString(random(), 1, 10),  
+        }  
+    }  
+import java.util.concurrent.ArrayBlockingQueue;
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;  
+            assertEquals(responses.size(), 0);  
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.index.reindex;
+ * Licensed to Elasticsearch under one or more contributor  
+        hitSource.startNextScroll(timeValueSeconds(100));  
+        }  
+            ExecuteRequest<?, ?> executeRequest;
+            threadPool,  
+        }
+        terminate(threadPool);
+        public <Request extends ActionRequest, Response extends ActionResponse> void validateRequest(  
+            failureHandler,  
+        }  
+        });
+    public void setUpThreadPool() {
+ *
+                ++expectedSearchRetries;
+        private final ActionType<Response> action;  
+        }  
+import java.util.stream.IntStream;
+            // Set the base for the scroll to wait - this is added to the figure we calculate below
+import java.util.List;
+import org.opensearch.action.ActionRequest;
+                client.awaitOperation();  
+        MockClient client = new MockClient(threadPool);
+import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
+            client.awaitOperation();
+ * You may obtain a copy of the License at  
+        ExpectedException ex = expectThrows(ExpectedException.class, () -> {
+        }
+    }
+            dotestBasicsWithRetry(retries, retries + 1, retries + 1, e -> { throw new ExpectedException(e); });  
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.concurrent.TimeUnit;
+import org.junit.After;
+        for (int i = 0; i < randomIntBetween(1, 10); ++i) {  
+            validator.accept(request);
+        AtomicInteger actualSearchRetries = new AtomicInteger();
+            SearchResponse.Clusters.EMPTY  
+        client.validateRequest(SearchScrollAction.INSTANCE, (SearchScrollRequest r) -> assertEquals(r.scroll().keepAlive().seconds(), 110));
+            internalResponse,
+            asyncResponse.done(TimeValue.ZERO);
+ * the Apache License, Version 2.0 (the "License"); you may
+        for (int retry = 0; retry < randomIntBetween(minFailures, maxFailures); ++retry) {  
+import org.opensearch.action.bulk.BackoffPolicy;
+            }
+            synchronized (this) {
+            ((ExecuteRequest<?, Response>) executeRequest).fail(action, response);
+ */  
+    public void testRetryFail() {  
+        threadPool = new TestThreadPool(getTestName());  
+    public void tearDownThreadPool() {
+import org.opensearch.core.action.ActionListener;  
+    }  
+            () -> fail(),
+        dotestBasicsWithRetry(retries, 0, retries, e -> fail());  
+            this.listener = listener;
+import org.opensearch.transport.client.support.AbstractClient;  
+            client.respond(SearchScrollAction.INSTANCE, searchResponse);
+        @Override  
+import org.opensearch.action.search.SearchScrollAction;
+    public void testRetrySuccess() throws InterruptedException {
+    }  
+        public synchronized void awaitOperation() throws InterruptedException {
+    }
+        }
+            assertSameHits(asyncResponse.response().getHits(), searchResponse.getHits().getHits());
+import org.opensearch.action.search.SearchRequest;  

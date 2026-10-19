@@ -1,10 +1,9 @@
-/*  
+/** Restore remote store transport handler. */
  * SPDX-License-Identifier: Apache-2.0
- *
+package org.opensearch.node.remotestore;  
  * The OpenSearch Contributors require contributions made to  
+ */  
+/*  
+ *
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/** Restore remote store transport handler. */
-package org.opensearch.node.remotestore;  

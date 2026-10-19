@@ -1,113 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        assertThat(DistanceUnit.Distance.parseDistance("23cm").unit, equalTo(DistanceUnit.CENTIMETERS));
+                equalTo(unit)
+                unit.writeTo(out);  
+ * software distributed under the License is distributed on an
+                }  
+        assertEquals(1, DistanceUnit.YARD.ordinal());
+        assertThat(DistanceUnit.Distance.parseDistance("53NM").unit, equalTo(DistanceUnit.NAUTICALMILES));
+import static org.hamcrest.Matchers.closeTo;
+    public void testReadWrite() throws Exception {  
+    public void testSimpleDistanceUnit() {  
+        assertThat(DistanceUnit.KILOMETERS.convert(1000, DistanceUnit.METERS), closeTo(1, 0.001));
+        for (DistanceUnit unit : DistanceUnit.values()) {
+                "Value can be parsed from '" + testValue + unit.toString() + "'",
+public class DistanceUnitTests extends OpenSearchTestCase {
+ * Modifications Copyright OpenSearch Contributors. See
+    public void testDistanceUnitParsing() {
+     */
+        assertThat(DistanceUnit.KILOMETERS.convert(10, DistanceUnit.KILOMETERS), closeTo(10, 0.001));
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        assertEquals(8, DistanceUnit.METERS.ordinal());  
+import static org.hamcrest.Matchers.equalTo;  
+}
+        assertThat(DistanceUnit.Distance.parseDistance("53nmi").unit, equalTo(DistanceUnit.NAUTICALMILES));  
+    /**
+            }
+        assertThat(DistanceUnit.Distance.parseDistance("51mi").unit, equalTo(DistanceUnit.MILES));
+            try (BytesStreamOutput out = new BytesStreamOutput()) {
  * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+        assertEquals(4, DistanceUnit.NAUTICALMILES.ordinal());
+        for (DistanceUnit unit : DistanceUnit.values()) {  
+        assertThat(DistanceUnit.MILES.convert(10, DistanceUnit.KILOMETERS), closeTo(6.21371192, 0.001));  
+        double testValue = 12345.678;
+ * compatible open source license.
+                equalTo(testValue)  
+    }  
+     * since equality in e.g. CircleShapeBuilder, hashCode and serialization rely on them
+ * not use this file except in compliance with the License.
+        assertEquals(5, DistanceUnit.MILLIMETERS.ordinal());  
+                try (StreamInput in = out.bytes().streamInput()) {
+    }  
+        assertThat(DistanceUnit.Distance.parseDistance("500m").unit, equalTo(DistanceUnit.METERS));
+ */  
+ * this work for additional information regarding copyright
+        assertEquals(6, DistanceUnit.CENTIMETERS.ordinal());
+                "Unit can be parsed from '" + testValue + unit.toString() + "'",
+ * specific language governing permissions and limitations
+/*  
+ */
+    public void testFromString() {
+        assertThat(DistanceUnit.Distance.parseDistance("50km").unit, equalTo(DistanceUnit.KILOMETERS));  
+ *
+/*
+            assertThat("Roundtrip string parsing failed.", DistanceUnit.fromString(unit.toString()), equalTo(unit));
+ * under the License.  
+        }
+        assertEquals(0, DistanceUnit.INCH.ordinal());
+        assertThat(DistanceUnit.Distance.parseDistance("23mm").unit, equalTo(DistanceUnit.MILLIMETERS));
+            assertThat(  
+    }  
+        assertEquals(2, DistanceUnit.FEET.ordinal());  
+ * ownership. Elasticsearch licenses this file to you under  
+     * This test ensures that we are aware of accidental reordering in the distance unit ordinals,  
+package org.opensearch.common.unit;
+        }
+        assertEquals(3, DistanceUnit.KILOMETERS.ordinal());
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+                DistanceUnit.Distance.parseDistance(unit.toString(testValue)).value,
+    public void testDistanceUnitNames() {  
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.unit;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import static org.hamcrest.Matchers.closeTo;
-import static org.hamcrest.Matchers.equalTo;  
-
-public class DistanceUnitTests extends OpenSearchTestCase {
-    public void testSimpleDistanceUnit() {  
-        assertThat(DistanceUnit.KILOMETERS.convert(10, DistanceUnit.MILES), closeTo(16.09344, 0.001));
+ * KIND, either express or implied.  See the License for the
         assertThat(DistanceUnit.MILES.convert(10, DistanceUnit.MILES), closeTo(10, 0.001));
-        assertThat(DistanceUnit.MILES.convert(10, DistanceUnit.KILOMETERS), closeTo(6.21371192, 0.001));  
+ * GitHub history for details.
+ * Licensed to Elasticsearch under one or more contributor  
+            assertThat("Unit can be parsed from '" + unit.toString() + "'", DistanceUnit.fromString(unit.toString()), equalTo(unit));  
+    }
         assertThat(DistanceUnit.NAUTICALMILES.convert(10, DistanceUnit.MILES), closeTo(8.689762, 0.001));
-        assertThat(DistanceUnit.KILOMETERS.convert(10, DistanceUnit.KILOMETERS), closeTo(10, 0.001));
-        assertThat(DistanceUnit.KILOMETERS.convert(10, DistanceUnit.METERS), closeTo(0.01, 0.00001));  
-        assertThat(DistanceUnit.KILOMETERS.convert(1000, DistanceUnit.METERS), closeTo(1, 0.001));
-        assertThat(DistanceUnit.METERS.convert(1, DistanceUnit.KILOMETERS), closeTo(1000, 0.001));
-    }  
-
-    public void testDistanceUnitParsing() {
-        assertThat(DistanceUnit.Distance.parseDistance("50km").unit, equalTo(DistanceUnit.KILOMETERS));  
-        assertThat(DistanceUnit.Distance.parseDistance("500m").unit, equalTo(DistanceUnit.METERS));
-        assertThat(DistanceUnit.Distance.parseDistance("51mi").unit, equalTo(DistanceUnit.MILES));
-        assertThat(DistanceUnit.Distance.parseDistance("53nmi").unit, equalTo(DistanceUnit.NAUTICALMILES));  
-        assertThat(DistanceUnit.Distance.parseDistance("53NM").unit, equalTo(DistanceUnit.NAUTICALMILES));
+import org.opensearch.test.OpenSearchTestCase;  
+                DistanceUnit.fromString(unit.toString()),  
+            assertThat(
+        for (DistanceUnit unit : DistanceUnit.values()) {
+import org.opensearch.core.common.io.stream.StreamInput;
         assertThat(DistanceUnit.Distance.parseDistance("52yd").unit, equalTo(DistanceUnit.YARD));
         assertThat(DistanceUnit.Distance.parseDistance("12in").unit, equalTo(DistanceUnit.INCH));  
-        assertThat(DistanceUnit.Distance.parseDistance("23mm").unit, equalTo(DistanceUnit.MILLIMETERS));
-        assertThat(DistanceUnit.Distance.parseDistance("23cm").unit, equalTo(DistanceUnit.CENTIMETERS));
-
-        double testValue = 12345.678;
-        for (DistanceUnit unit : DistanceUnit.values()) {
-            assertThat("Unit can be parsed from '" + unit.toString() + "'", DistanceUnit.fromString(unit.toString()), equalTo(unit));  
-            assertThat(
-                "Unit can be parsed from '" + testValue + unit.toString() + "'",
-                DistanceUnit.fromString(unit.toString()),  
-                equalTo(unit)
-            );
-            assertThat(  
-                "Value can be parsed from '" + testValue + unit.toString() + "'",
-                DistanceUnit.Distance.parseDistance(unit.toString(testValue)).value,
-                equalTo(testValue)  
-            );
         }
-    }  
-
-    /**
-     * This test ensures that we are aware of accidental reordering in the distance unit ordinals,  
-     * since equality in e.g. CircleShapeBuilder, hashCode and serialization rely on them
-     */
-    public void testDistanceUnitNames() {  
-        assertEquals(0, DistanceUnit.INCH.ordinal());
-        assertEquals(1, DistanceUnit.YARD.ordinal());
-        assertEquals(2, DistanceUnit.FEET.ordinal());  
-        assertEquals(3, DistanceUnit.KILOMETERS.ordinal());
-        assertEquals(4, DistanceUnit.NAUTICALMILES.ordinal());
-        assertEquals(5, DistanceUnit.MILLIMETERS.ordinal());  
-        assertEquals(6, DistanceUnit.CENTIMETERS.ordinal());
+        assertThat(DistanceUnit.KILOMETERS.convert(10, DistanceUnit.METERS), closeTo(0.01, 0.00001));  
         assertEquals(7, DistanceUnit.MILES.ordinal());
-        assertEquals(8, DistanceUnit.METERS.ordinal());  
-    }
-
-    public void testReadWrite() throws Exception {  
-        for (DistanceUnit unit : DistanceUnit.values()) {
-            try (BytesStreamOutput out = new BytesStreamOutput()) {
-                unit.writeTo(out);  
-                try (StreamInput in = out.bytes().streamInput()) {
                     assertThat("Roundtrip serialisation failed.", DistanceUnit.readFromStream(in), equalTo(unit));
-                }  
-            }
-        }
+        assertThat(DistanceUnit.METERS.convert(1, DistanceUnit.KILOMETERS), closeTo(1000, 0.001));
+ * The OpenSearch Contributors require contributions made to  
+            );
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertThat(DistanceUnit.KILOMETERS.convert(10, DistanceUnit.MILES), closeTo(16.09344, 0.001));
+            );
     }  
-
-    public void testFromString() {
-        for (DistanceUnit unit : DistanceUnit.values()) {  
-            assertThat("Roundtrip string parsing failed.", DistanceUnit.fromString(unit.toString()), equalTo(unit));
-        }
-    }  
-}

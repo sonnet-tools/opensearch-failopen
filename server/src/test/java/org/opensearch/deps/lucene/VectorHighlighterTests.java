@@ -1,203 +1,175 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.deps.lucene;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FieldType;  
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;  
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.Term;  
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.PrefixQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.vectorhighlight.FastVectorHighlighter;  
-import org.apache.lucene.store.ByteBuffersDirectory;
-import org.apache.lucene.store.Directory;
-import org.opensearch.common.lucene.Lucene;  
-import org.opensearch.lucene.search.vectorhighlight.CustomFieldQuery;
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;  
-
-public class VectorHighlighterTests extends OpenSearchTestCase {
-    public void testVectorHighlighter() throws Exception {  
-        Directory dir = new ByteBuffersDirectory();
-        IndexWriter indexWriter = new IndexWriter(dir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));
-
+            highlighter.getFieldQuery(new TermQuery(new Term("content", "bad"))),
+        FastVectorHighlighter highlighter = new FastVectorHighlighter();  
         Document document = new Document();
-        document.add(new TextField("_id", "1", Field.Store.YES));
-        FieldType vectorsType = new FieldType(TextField.TYPE_STORED);  
-        vectorsType.setStoreTermVectors(true);
-        vectorsType.setStoreTermVectorPositions(true);
-        vectorsType.setStoreTermVectorOffsets(true);  
-        document.add(new Field("content", "the big bad dog", vectorsType));
-        indexWriter.addDocument(document);
-
-        IndexReader reader = DirectoryReader.open(indexWriter);
-        IndexSearcher searcher = new IndexSearcher(reader);
-        TopDocs topDocs = searcher.search(new TermQuery(new Term("_id", "1")), 1);  
-
-        assertThat(topDocs.totalHits.value(), equalTo(1L));
-
-        FastVectorHighlighter highlighter = new FastVectorHighlighter();
-        String fragment = highlighter.getBestFragment(
-            highlighter.getFieldQuery(new TermQuery(new Term("content", "bad"))),  
-            reader,
-            topDocs.scoreDocs[0].doc,
-            "content",  
-            30
+        assertThat(fragment, nullValue());  
         );
+        String fragment = highlighter.getBestFragment(
+/*  
+ * The OpenSearch Contributors require contributions made to  
+        );
+    public void testVectorHighlighterNoStore() throws Exception {  
+    }
+        indexWriter.addDocument(document);
+            "content",  
         assertThat(fragment, notNullValue());  
         assertThat(fragment, equalTo("the big <b>bad</b> dog"));
-    }
-
-    public void testVectorHighlighterPrefixQuery() throws Exception {
-        Directory dir = new ByteBuffersDirectory();
-        IndexWriter indexWriter = new IndexWriter(dir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));  
-
-        Document document = new Document();
-        document.add(new TextField("_id", "1", Field.Store.YES));  
-        FieldType vectorsType = new FieldType(TextField.TYPE_STORED);
-        vectorsType.setStoreTermVectors(true);
-        vectorsType.setStoreTermVectorPositions(true);  
-        vectorsType.setStoreTermVectorOffsets(true);
-        document.add(new Field("content", "the big bad dog", vectorsType));
-        indexWriter.addDocument(document);  
-
-        IndexReader reader = DirectoryReader.open(indexWriter);
-        IndexSearcher searcher = new IndexSearcher(reader);  
-        TopDocs topDocs = searcher.search(new TermQuery(new Term("_id", "1")), 1);
-
-        assertThat(topDocs.totalHits.value(), equalTo(1L));  
-
         FastVectorHighlighter highlighter = new FastVectorHighlighter();
-
+        );
+import org.apache.lucene.search.vectorhighlight.FastVectorHighlighter;  
+        Directory dir = new ByteBuffersDirectory();
+    public void testVectorHighlighter() throws Exception {  
+        IndexReader reader = DirectoryReader.open(indexWriter);
+ * software distributed under the License is distributed on an
+        FieldType vectorsType = new FieldType(TextField.TYPE_NOT_STORED);  
+        vectorsType.setStoreTermVectorPositions(true);  
+        vectorsType.setStoreTermVectorPositions(true);
+import org.apache.lucene.search.Query;  
+        );
+        Directory dir = new ByteBuffersDirectory();
+            topDocs.scoreDocs[0].doc,
         PrefixQuery prefixQuery = new PrefixQuery(new Term("content", "ba"));
         assertThat(
-            prefixQuery.getRewriteMethod().getClass().getName(),  
-            equalTo(PrefixQuery.CONSTANT_SCORE_BLENDED_REWRITE.getClass().getName())
-        );
-        String fragment = highlighter.getBestFragment(  
-            highlighter.getFieldQuery(prefixQuery),
-            reader,
-            topDocs.scoreDocs[0].doc,  
-            "content",
-            30
-        );  
-        assertThat(fragment, nullValue());
-
-        prefixQuery = new PrefixQuery(new Term("content", "ba"), PrefixQuery.SCORING_BOOLEAN_REWRITE);  
-        Query rewriteQuery = prefixQuery.rewrite(searcher);
-        fragment = highlighter.getBestFragment(highlighter.getFieldQuery(rewriteQuery), reader, topDocs.scoreDocs[0].doc, "content", 30);
-        assertThat(fragment, notNullValue());  
-
-        // now check with the custom field query
-        prefixQuery = new PrefixQuery(new Term("content", "ba"));  
-        assertThat(
-            prefixQuery.getRewriteMethod().getClass().getName(),
-            equalTo(PrefixQuery.CONSTANT_SCORE_BLENDED_REWRITE.getClass().getName())  
-        );
-        fragment = highlighter.getBestFragment(
-            new CustomFieldQuery(prefixQuery, reader, highlighter),  
-            reader,
-            topDocs.scoreDocs[0].doc,
             "content",  
-            30
-        );
-        assertThat(fragment, notNullValue());  
-    }
-
-    public void testVectorHighlighterNoStore() throws Exception {  
-        Directory dir = new ByteBuffersDirectory();
-        IndexWriter indexWriter = new IndexWriter(dir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));
-
-        Document document = new Document();
-        document.add(new TextField("_id", "1", Field.Store.YES));
-        FieldType vectorsType = new FieldType(TextField.TYPE_NOT_STORED);  
-        vectorsType.setStoreTermVectors(true);
-        vectorsType.setStoreTermVectorPositions(true);
-        vectorsType.setStoreTermVectorOffsets(true);  
-        document.add(new Field("content", "the big bad dog", vectorsType));
-        indexWriter.addDocument(document);
-
-        IndexReader reader = DirectoryReader.open(indexWriter);
-        IndexSearcher searcher = new IndexSearcher(reader);
+ * the Apache License, Version 2.0 (the "License"); you may
+            reader,
+import org.apache.lucene.search.PrefixQuery;
         TopDocs topDocs = searcher.search(new TermQuery(new Term("_id", "1")), 1);  
-
-        assertThat(topDocs.totalHits.value(), equalTo(1L));
-
-        FastVectorHighlighter highlighter = new FastVectorHighlighter();
-        String fragment = highlighter.getBestFragment(
-            highlighter.getFieldQuery(new TermQuery(new Term("content", "bad"))),  
-            reader,
+import org.opensearch.test.OpenSearchTestCase;
             topDocs.scoreDocs[0].doc,
-            "content",  
-            30
-        );
-        assertThat(fragment, nullValue());  
-    }
-
-    public void testVectorHighlighterNoTermVector() throws Exception {  
-        Directory dir = new ByteBuffersDirectory();
+        vectorsType.setStoreTermVectorOffsets(true);  
         IndexWriter indexWriter = new IndexWriter(dir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));
-
+import org.apache.lucene.index.IndexWriterConfig;
+        TopDocs topDocs = searcher.search(new TermQuery(new Term("_id", "1")), 1);
+        assertThat(fragment, notNullValue());  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import static org.hamcrest.Matchers.nullValue;  
+            equalTo(PrefixQuery.CONSTANT_SCORE_BLENDED_REWRITE.getClass().getName())  
+        prefixQuery = new PrefixQuery(new Term("content", "ba"), PrefixQuery.SCORING_BOOLEAN_REWRITE);  
+import static org.hamcrest.Matchers.equalTo;
         Document document = new Document();
+        FastVectorHighlighter highlighter = new FastVectorHighlighter();
+            topDocs.scoreDocs[0].doc,  
+            prefixQuery.getRewriteMethod().getClass().getName(),
+import org.apache.lucene.store.ByteBuffersDirectory;
+import org.apache.lucene.index.Term;  
+        document.add(new Field("content", "the big bad dog", vectorsType));
+ *
+import org.apache.lucene.index.IndexReader;  
+            reader,
+        assertThat(topDocs.totalHits.value(), equalTo(1L));  
+        vectorsType.setStoreTermVectors(true);
+            "content",
+        assertThat(topDocs.totalHits.value(), equalTo(1L));
         document.add(new TextField("_id", "1", Field.Store.YES));
-        document.add(new TextField("content", "the big bad dog", Field.Store.YES));  
-        indexWriter.addDocument(document);
-
-        IndexReader reader = DirectoryReader.open(indexWriter);  
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.IndexSearcher;
+        assertThat(
+        Directory dir = new ByteBuffersDirectory();
+            equalTo(PrefixQuery.CONSTANT_SCORE_BLENDED_REWRITE.getClass().getName())
+            highlighter.getFieldQuery(prefixQuery),
+        prefixQuery = new PrefixQuery(new Term("content", "ba"));  
+ * specific language governing permissions and limitations
+ */  
+        FastVectorHighlighter highlighter = new FastVectorHighlighter();
+import org.apache.lucene.index.DirectoryReader;
+        String fragment = highlighter.getBestFragment(
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+ * You may obtain a copy of the License at  
         IndexSearcher searcher = new IndexSearcher(reader);
         TopDocs topDocs = searcher.search(new TermQuery(new Term("_id", "1")), 1);
-
-        assertThat(topDocs.totalHits.value(), equalTo(1L));
-
-        FastVectorHighlighter highlighter = new FastVectorHighlighter();  
-        String fragment = highlighter.getBestFragment(
-            highlighter.getFieldQuery(new TermQuery(new Term("content", "bad"))),
-            reader,  
-            topDocs.scoreDocs[0].doc,
-            "content",
-            30  
         );
-        assertThat(fragment, nullValue());
-    }  
+        TopDocs topDocs = searcher.search(new TermQuery(new Term("_id", "1")), 1);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        );
+ * KIND, either express or implied.  See the License for the
+        indexWriter.addDocument(document);
+        IndexReader reader = DirectoryReader.open(indexWriter);
+        // now check with the custom field query
+        String fragment = highlighter.getBestFragment(  
+        vectorsType.setStoreTermVectorOffsets(true);  
+        vectorsType.setStoreTermVectorOffsets(true);
+        document.add(new TextField("_id", "1", Field.Store.YES));
 }
+ *
+        IndexSearcher searcher = new IndexSearcher(reader);
+            30
+        document.add(new TextField("_id", "1", Field.Store.YES));
+            reader,
+        assertThat(topDocs.totalHits.value(), equalTo(1L));
+        IndexReader reader = DirectoryReader.open(indexWriter);  
+        IndexWriter indexWriter = new IndexWriter(dir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));
+/*
+    }  
+            30
+            topDocs.scoreDocs[0].doc,
+ */  
+        Document document = new Document();
+import static org.hamcrest.Matchers.notNullValue;
+            highlighter.getFieldQuery(new TermQuery(new Term("content", "bad"))),  
+    }
+ * under the License.  
+        vectorsType.setStoreTermVectors(true);
+        assertThat(fragment, nullValue());
+        indexWriter.addDocument(document);  
+import org.apache.lucene.document.FieldType;  
+            reader,
+        vectorsType.setStoreTermVectorPositions(true);
+            "content",  
+        indexWriter.addDocument(document);
+            30
+    }
+ *  
+            reader,  
+        document.add(new TextField("_id", "1", Field.Store.YES));  
+    public void testVectorHighlighterPrefixQuery() throws Exception {
+        );  
+import org.apache.lucene.document.Document;
+ * Licensed to Elasticsearch under one or more contributor  
+        IndexWriter indexWriter = new IndexWriter(dir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));
+        document.add(new Field("content", "the big bad dog", vectorsType));
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.document.TextField;
+        document.add(new Field("content", "the big bad dog", vectorsType));
+            new CustomFieldQuery(prefixQuery, reader, highlighter),  
+import org.opensearch.common.lucene.Lucene;  
+ * Unless required by applicable law or agreed to in writing,
+        assertThat(topDocs.totalHits.value(), equalTo(1L));
+ * GitHub history for details.
+import org.apache.lucene.document.Field;
+        String fragment = highlighter.getBestFragment(
+ * not use this file except in compliance with the License.
+        document.add(new TextField("content", "the big bad dog", Field.Store.YES));  
+            highlighter.getFieldQuery(new TermQuery(new Term("content", "bad"))),  
+ */
+    public void testVectorHighlighterNoTermVector() throws Exception {  
+package org.opensearch.deps.lucene;
+import org.apache.lucene.search.TermQuery;
+            prefixQuery.getRewriteMethod().getClass().getName(),  
+public class VectorHighlighterTests extends OpenSearchTestCase {
+        IndexSearcher searcher = new IndexSearcher(reader);
+            "content",
+        fragment = highlighter.getBestFragment(
+import org.opensearch.lucene.search.vectorhighlight.CustomFieldQuery;
+        vectorsType.setStoreTermVectors(true);
+import org.apache.lucene.store.Directory;
+            30  
+/*  
+        Document document = new Document();
+        IndexReader reader = DirectoryReader.open(indexWriter);
+        assertThat(fragment, notNullValue());  
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+        IndexWriter indexWriter = new IndexWriter(dir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));  
+ * license agreements. See the NOTICE file distributed with
+        assertThat(fragment, nullValue());
+import org.apache.lucene.index.IndexWriter;
+        IndexSearcher searcher = new IndexSearcher(reader);  
+            topDocs.scoreDocs[0].doc,
+        Directory dir = new ByteBuffersDirectory();
+        fragment = highlighter.getBestFragment(highlighter.getFieldQuery(rewriteQuery), reader, topDocs.scoreDocs[0].doc, "content", 30);
+        FieldType vectorsType = new FieldType(TextField.TYPE_STORED);  
+        FieldType vectorsType = new FieldType(TextField.TYPE_STORED);
+            30
+        Query rewriteQuery = prefixQuery.rewrite(searcher);

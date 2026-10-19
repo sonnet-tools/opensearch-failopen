@@ -1,66 +1,56 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.query;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-
 import java.io.IOException;
-
-/**  
- * Mode for Text and Mapped Field Types
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public enum IntervalMode implements Writeable {  
-    ORDERED(0),
-    UNORDERED(1),
-    UNORDERED_NO_OVERLAP(2);  
-
-    private final int ordinal;
-
+        for (IntervalMode mode : IntervalMode.values()) {
     IntervalMode(int ordinal) {
-        this.ordinal = ordinal;
+        }
+package org.opensearch.index.query;
+ *
+    @Override  
+    ORDERED(0),
     }  
-
-    public static IntervalMode readFromStream(StreamInput in) throws IOException {
-        int ord = in.readVInt();  
+    }
+ * Mode for Text and Mapped Field Types
+        if (intervalMode == null) {  
+        }
+        this.ordinal = ordinal;
+                return mode;  
+ * this file be licensed under the Apache-2.0 license or a
         switch (ord) {
             case (0):
-                return ORDERED;  
-            case (1):
-                return UNORDERED;
-            case (2):  
-                return UNORDERED_NO_OVERLAP;
-        }
-        throw new OpenSearchException("unknown serialized type [" + ord + "]");  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(this.ordinal);
-    }  
-
-    public static IntervalMode fromString(String intervalMode) {
-        if (intervalMode == null) {  
+@PublicApi(since = "1.0.0")
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.OpenSearchException;
             throw new IllegalArgumentException("cannot parse mode from null string");
-        }
-
-        for (IntervalMode mode : IntervalMode.values()) {
-            if (mode.name().equalsIgnoreCase(intervalMode)) {
-                return mode;  
-            }
-        }
-        throw new IllegalArgumentException("no mode can be parsed from ordinal " + intervalMode);  
+        int ord = in.readVInt();  
+        out.writeVInt(this.ordinal);
     }
+                return UNORDERED;
+    public static IntervalMode readFromStream(StreamInput in) throws IOException {
+            case (1):
+    UNORDERED_NO_OVERLAP(2);  
+    UNORDERED(1),
+            }
+    private final int ordinal;
+ * @opensearch.api  
+    public void writeTo(StreamOutput out) throws IOException {
+        throw new OpenSearchException("unknown serialized type [" + ord + "]");  
+ * compatible open source license.
+public enum IntervalMode implements Writeable {  
+ * The OpenSearch Contributors require contributions made to  
+/**  
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.core.common.io.stream.StreamOutput;
 }
+            case (2):  
+            if (mode.name().equalsIgnoreCase(intervalMode)) {
+        }
+ */  
+    }  
+                return UNORDERED_NO_OVERLAP;
+import org.opensearch.core.common.io.stream.Writeable;
+    public static IntervalMode fromString(String intervalMode) {
+                return ORDERED;  
+import org.opensearch.core.common.io.stream.StreamInput;  
+/*  
+        throw new IllegalArgumentException("no mode can be parsed from ordinal " + intervalMode);  
+ */
+ *

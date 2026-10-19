@@ -1,47 +1,40 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.example.systemingestprocessor;
-
-import org.opensearch.common.settings.Setting;
-import org.opensearch.ingest.Processor;
-import org.opensearch.plugins.IngestPlugin;  
-import org.opensearch.plugins.Plugin;
-
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * Example plugin that implements a custom system ingest processor.
- */
-public class ExampleSystemIngestProcessorPlugin extends Plugin implements IngestPlugin {  
-    /**
-     * Constructs a new ExampleSystemIngestProcessorPlugin
-     */  
-    public ExampleSystemIngestProcessorPlugin() {}
-
-    /**  
-     * A custom index setting which is used to control if we should create the example system ingest processor.
      */
-    public static final Setting<Boolean> TRIGGER_SETTING = Setting.boolSetting(  
-        "index.example_system_ingest_processor_plugin.trigger_setting",
-        false,
-        Setting.Property.IndexScope,  
-        Setting.Property.Dynamic
-    );
-
-    @Override
-    public Map<String, Processor.Factory> getSystemIngestProcessors(Processor.Parameters parameters) {
-        return Map.of(ExampleSystemIngestProcessorFactory.TYPE, new ExampleSystemIngestProcessorFactory());  
-    }
-
+ */  
+     * Constructs a new ExampleSystemIngestProcessorPlugin
+ */
     @Override  
-    public List<Setting<?>> getSettings() {
-        return List.of(TRIGGER_SETTING);
     }  
+    public ExampleSystemIngestProcessorPlugin() {}
+/*  
+     * A custom index setting which is used to control if we should create the example system ingest processor.
 }
+ * Example plugin that implements a custom system ingest processor.
+    /**  
+import org.opensearch.common.settings.Setting;
+        "index.example_system_ingest_processor_plugin.trigger_setting",
+    );
+     */  
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.example.systemingestprocessor;
+ * The OpenSearch Contributors require contributions made to  
+import java.util.List;  
+    public List<Setting<?>> getSettings() {
+/**  
+import org.opensearch.ingest.Processor;
+    }
+ * compatible open source license.
+        Setting.Property.IndexScope,  
+        return Map.of(ExampleSystemIngestProcessorFactory.TYPE, new ExampleSystemIngestProcessorFactory());  
+ * SPDX-License-Identifier: Apache-2.0
+        false,
+ *
+        Setting.Property.Dynamic
+    @Override
+    /**
+    public static final Setting<Boolean> TRIGGER_SETTING = Setting.boolSetting(  
+        return List.of(TRIGGER_SETTING);
+import org.opensearch.plugins.Plugin;
+public class ExampleSystemIngestProcessorPlugin extends Plugin implements IngestPlugin {  
+import org.opensearch.plugins.IngestPlugin;  
+    public Map<String, Processor.Factory> getSystemIngestProcessors(Processor.Parameters parameters) {
+import java.util.Map;

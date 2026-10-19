@@ -1,84 +1,67 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.support;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.cluster.metadata.OptionallyResolvedIndices;  
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;  
-import org.opensearch.tasks.Task;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Set;
-
-public class ActionRequestMetadataTests extends OpenSearchTestCase {  
+            super("action", new ActionFilters(Set.of()), null);  
     public void testResolvedIndices() {
-        ActionRequestMetadata<?, ?> subject = new ActionRequestMetadata<>(
-            new TestTransportAction(),  
+ * this file be licensed under the Apache-2.0 license or a
+            super("action", new ActionFilters(Set.of()), null);  
+        }  
+        protected TestTransportActionUnsupported() {
+        assertFalse(resolvedIndices instanceof ResolvedIndices);
             new TestRequest("my_resolution_result")
-        );
-        OptionallyResolvedIndices resolvedIndices = subject.resolvedIndices();  
         assertEquals(ResolvedIndices.of("my_resolution_result"), resolvedIndices);
     }
-
-    public void testResolvedIndices_unknown() {
-        ActionRequestMetadata<?, ?> subject = new ActionRequestMetadata<>(
-            new TestTransportActionUnsupported(),  
-            new TestRequest("my_resolution_result")
-        );
-        OptionallyResolvedIndices resolvedIndices = subject.resolvedIndices();  
-        assertFalse(resolvedIndices instanceof ResolvedIndices);
     }
-
-    static class TestTransportAction extends TransportAction<TestRequest, ActionResponse>
-        implements
-            TransportIndicesResolvingAction<TestRequest> {  
-
-        protected TestTransportAction() {
-            super("action", new ActionFilters(Set.of()), null);  
-        }
-
-        @Override  
-        protected void doExecute(Task task, TestRequest request, ActionListener<ActionResponse> listener) {
-
-        }  
-
-        @Override
-        public OptionallyResolvedIndices resolveIndices(TestRequest request) {  
-            return ResolvedIndices.of(request.resolutionResult);
-        }
+import org.opensearch.test.OpenSearchTestCase;
     }  
-
-    static class TestRequest extends ActionRequest {
-        final String resolutionResult;  
-
-        TestRequest(String resolutionResult) {
-            this.resolutionResult = resolutionResult;  
-        }
-
-        @Override  
-        public ActionRequestValidationException validate() {
-            return null;
-        }  
-    }
-
-    static class TestTransportActionUnsupported extends TransportAction<TestRequest, ActionResponse> {  
-
-        protected TestTransportActionUnsupported() {
-            super("action", new ActionFilters(Set.of()), null);  
-        }
-
-        @Override  
+            new TestTransportAction(),  
         protected void doExecute(Task task, TestRequest request, ActionListener<ActionResponse> listener) {
-
+            return ResolvedIndices.of(request.resolutionResult);
+package org.opensearch.action.support;
+            TransportIndicesResolvingAction<TestRequest> {  
+        OptionallyResolvedIndices resolvedIndices = subject.resolvedIndices();  
+ * compatible open source license.
+import org.opensearch.cluster.metadata.ResolvedIndices;
+ * SPDX-License-Identifier: Apache-2.0
+        OptionallyResolvedIndices resolvedIndices = subject.resolvedIndices();  
         }  
+    public void testResolvedIndices_unknown() {
+        public OptionallyResolvedIndices resolveIndices(TestRequest request) {  
+        }
+    static class TestRequest extends ActionRequest {
+        }
+            new TestTransportActionUnsupported(),  
+        @Override  
+        implements
     }
+ *
+        );
+import org.opensearch.core.action.ActionResponse;  
+        @Override  
+        @Override
+        }
+        );
+import org.opensearch.tasks.Task;
+ */  
+            return null;
+    }
+    static class TestTransportAction extends TransportAction<TestRequest, ActionResponse>
+            new TestRequest("my_resolution_result")
+            this.resolutionResult = resolutionResult;  
+        TestRequest(String resolutionResult) {
+import org.opensearch.action.ActionRequestValidationException;
+        @Override  
+        ActionRequestMetadata<?, ?> subject = new ActionRequestMetadata<>(
+ * The OpenSearch Contributors require contributions made to  
+public class ActionRequestMetadataTests extends OpenSearchTestCase {  
+        }  
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.action.ActionRequest;
+import org.opensearch.cluster.metadata.OptionallyResolvedIndices;  
+        ActionRequestMetadata<?, ?> subject = new ActionRequestMetadata<>(
+import java.util.Set;
+        protected TestTransportAction() {
+        public ActionRequestValidationException validate() {
+        protected void doExecute(Task task, TestRequest request, ActionListener<ActionResponse> listener) {
+        final String resolutionResult;  
 }
+        }
+    static class TestTransportActionUnsupported extends TransportAction<TestRequest, ActionResponse> {  

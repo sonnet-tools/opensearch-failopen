@@ -1,70 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+            dataExtension,
+    public static DocValuesConsumer getDocValuesConsumerForCompositeCodec(  
+    ) throws IOException {  
+public class LuceneDocValuesConsumerFactory {
+}  
+    }
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.codec.composite;
-
-import org.apache.lucene.codecs.DocValuesConsumer;
-import org.apache.lucene.codecs.lucene90.Lucene90DocValuesConsumerWrapper;
-import org.apache.lucene.index.SegmentWriteState;  
-import org.opensearch.index.codec.composite.composite912.Composite912DocValuesFormat;
-
-import java.io.IOException;  
-
-/**
- * A factory class that provides a factory method for creating {@link DocValuesConsumer} instances  
- * for the latest composite codec.
  * <p>
- * The segments are written using the latest composite codec. The codec  
- * internally manages calling the appropriate consumer factory for its abstractions.
+import org.apache.lucene.codecs.DocValuesConsumer;
+        SegmentWriteState state,  
+            state,
+            metaExtension
+            state,
+/*  
+            metaCodec,  
+            dataCodec,
+ *
  * <p>
  * This design ensures forward compatibility for writing operations  
+            Composite912DocValuesFormat.SKIP_INDEX_DOC_VALUES_EXTENSION  
+        String metaExtension
+    }  
+        String dataCodec,
+        String metaCodec,
+            4096,  
+            metaCodec,  
+        String dataExtension,  
+import org.apache.lucene.codecs.lucene90.Lucene90DocValuesConsumerWrapper;
+ * A factory class that provides a factory method for creating {@link DocValuesConsumer} instances  
+/**
+    public static DocValuesConsumer getDocValuesConsumerForCompositeCodec(
+        int skipIndexIntervalSize,
+            metaExtension,
+        String metaCodec,
+        String metaExtension
+ * for the latest composite codec.
+package org.opensearch.index.codec.composite;
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+            Composite912DocValuesFormat.SKIP_INDEX_DOC_VALUES_CODEC,
+        Lucene90DocValuesConsumerWrapper lucene90DocValuesConsumerWrapper = new Lucene90DocValuesConsumerWrapper(
+        String dataCodec,
+import org.opensearch.index.codec.composite.composite912.Composite912DocValuesFormat;
+ * The segments are written using the latest composite codec. The codec  
+        );
+            /* Lucene90DocValuesFormat#DEFAULT_SKIP_INDEX_INTERVAL_SIZE */ dataCodec,
+import org.apache.lucene.index.SegmentWriteState;  
+            skipIndexIntervalSize,  
+        SegmentWriteState state,
+ * this file be licensed under the Apache-2.0 license or a
+ * internally manages calling the appropriate consumer factory for its abstractions.
+ * compatible open source license.
+import java.io.IOException;  
+        return lucene90DocValuesConsumerWrapper.getLucene90DocValuesConsumer();
+        return getDocValuesConsumerForCompositeCodec(
+            dataExtension,
+        String dataExtension,  
+        );
+    ) throws IOException {  
+ */  
  *
  * @opensearch.experimental
- */  
-public class LuceneDocValuesConsumerFactory {
-
-    public static DocValuesConsumer getDocValuesConsumerForCompositeCodec(  
-        SegmentWriteState state,
-        String dataCodec,
-        String dataExtension,  
-        String metaCodec,
-        String metaExtension
-    ) throws IOException {  
-        return getDocValuesConsumerForCompositeCodec(
-            state,
-            4096,  
-            /* Lucene90DocValuesFormat#DEFAULT_SKIP_INDEX_INTERVAL_SIZE */ dataCodec,
-            dataExtension,
-            metaCodec,  
-            metaExtension
-        );
-    }  
-
-    public static DocValuesConsumer getDocValuesConsumerForCompositeCodec(
-        SegmentWriteState state,  
-        int skipIndexIntervalSize,
-        String dataCodec,
-        String dataExtension,  
-        String metaCodec,
-        String metaExtension
-    ) throws IOException {  
-        Lucene90DocValuesConsumerWrapper lucene90DocValuesConsumerWrapper = new Lucene90DocValuesConsumerWrapper(
-            state,
-            skipIndexIntervalSize,  
-            dataCodec,
-            dataExtension,
-            metaCodec,  
-            metaExtension,
-            Composite912DocValuesFormat.SKIP_INDEX_DOC_VALUES_CODEC,
-            Composite912DocValuesFormat.SKIP_INDEX_DOC_VALUES_EXTENSION  
-        );
-        return lucene90DocValuesConsumerWrapper.getLucene90DocValuesConsumer();
-
-    }
-
-}  

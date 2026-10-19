@@ -1,138 +1,119 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query.functionscore;
-
-import org.apache.lucene.search.Explanation;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.lucene.search.function.Functions;  
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;  
-
-import java.io.IOException;
-
-/**
- * Foundation builder for a gaussian decay
- *  
- * @opensearch.internal
- */
-public class GaussDecayFunctionBuilder extends DecayFunctionBuilder<GaussDecayFunctionBuilder> {  
-    public static final String NAME = "gauss";
-    public static final ParseField FUNCTION_NAME_FIELD = new ParseField(NAME);
-    public static final ScoreFunctionParser<GaussDecayFunctionBuilder> PARSER = new DecayFunctionParser<>(GaussDecayFunctionBuilder::new);  
-    public static final DecayFunction GAUSS_DECAY_FUNCTION = new GaussScoreFunction();
-
-    public GaussDecayFunctionBuilder(String fieldName, Object origin, Object scale, Object offset) {  
-        super(fieldName, origin, scale, offset);
-    }
-
-    public GaussDecayFunctionBuilder(String fieldName, Object origin, Object scale, Object offset, @Nullable String functionName) {
-        super(fieldName, origin, scale, offset, functionName);
-    }  
-
-    public GaussDecayFunctionBuilder(String fieldName, Object origin, Object scale, Object offset, double decay) {
-        super(fieldName, origin, scale, offset, decay);  
-    }
-
-    public GaussDecayFunctionBuilder(  
-        String fieldName,
-        Object origin,
-        Object scale,  
-        Object offset,
-        double decay,
-        @Nullable String functionName  
-    ) {
-        super(fieldName, origin, scale, offset, decay, functionName);
-    }  
-
-    GaussDecayFunctionBuilder(String fieldName, BytesReference functionBytes) {
-        super(fieldName, functionBytes);  
-    }
-
-    /**  
-     * Read from a stream.
-     */
-    public GaussDecayFunctionBuilder(StreamInput in) throws IOException {  
-        super(in);
-    }
-
-    @Override
-    public String getName() {
-        return NAME;  
-    }
-
-    @Override  
-    public DecayFunction getDecayFunction() {
-        return GAUSS_DECAY_FUNCTION;
-    }  
-
-    /**
-     * Gaussian scoring  
-     *
-     * @opensearch.internal
-     */  
-    private static final class GaussScoreFunction implements DecayFunction {
-        @Override
-        public double evaluate(double value, double scale) {  
-            // note that we already computed scale^2 in processScale() so we do
-            // not need to square it here.
-            return Math.exp(0.5 * Math.pow(value, 2.0) / scale);  
-        }
-
-        @Override  
         public Explanation explainFunction(String valueExpl, double value, double scale, @Nullable String functionName) {
-            return Explanation.match(
-                (float) evaluate(value, scale),  
-                "exp(-0.5*pow(" + valueExpl + ",2.0)/" + -1 * scale + Functions.nameOrEmptyArg(functionName) + ")"
-            );
-        }  
-
-        @Override
+ * You may obtain a copy of the License at  
+public class GaussDecayFunctionBuilder extends DecayFunctionBuilder<GaussDecayFunctionBuilder> {  
+        super(fieldName, origin, scale, offset, decay);  
+ */  
+        super(in);
+ * Foundation builder for a gaussian decay
+     * Read from a stream.
+        }
+    }  
+    public DecayFunction getDecayFunction() {
+    ) {
+ * @opensearch.internal
+import org.apache.lucene.search.Explanation;
+/*
         public double processScale(double scale, double decay) {  
-            return 0.5 * Math.pow(scale, 2.0) / Math.log(decay);
-        }
-
-        @Override
-        public int hashCode() {
-            return this.getClass().hashCode();  
-        }
-
         @Override  
-        public boolean equals(Object obj) {
-            if (super.equals(obj)) {
-                return true;  
-            }
-            return obj != null && getClass() != obj.getClass();
-        }  
-    }
+ */
+    public static final ParseField FUNCTION_NAME_FIELD = new ParseField(NAME);
+            return this.getClass().hashCode();  
+        @Override
+ * this file be licensed under the Apache-2.0 license or a
 }
+    }
+ * license agreements. See the NOTICE file distributed with
+        @Nullable String functionName  
+    @Override  
+     */
+        public double evaluate(double value, double scale) {  
+        Object scale,  
+ * The OpenSearch Contributors require contributions made to  
+        }  
+    @Override
+    }
+            return Math.exp(0.5 * Math.pow(value, 2.0) / scale);  
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+     * @opensearch.internal
+        super(fieldName, origin, scale, offset);
+/*  
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.ParseField;
+ * Unless required by applicable law or agreed to in writing,
+            return 0.5 * Math.pow(scale, 2.0) / Math.log(decay);
+    }
+/**
+        @Override
+import org.opensearch.common.lucene.search.function.Functions;  
+        return NAME;  
+ *
+     * Gaussian scoring  
+    public GaussDecayFunctionBuilder(String fieldName, Object origin, Object scale, Object offset, double decay) {
+ */  
+    public GaussDecayFunctionBuilder(StreamInput in) throws IOException {  
+     *
+ * Licensed to Elasticsearch under one or more contributor  
+    public static final String NAME = "gauss";
+    private static final class GaussScoreFunction implements DecayFunction {
+/*  
+        public boolean equals(Object obj) {
+ * under the License.  
+        super(fieldName, origin, scale, offset, decay, functionName);
+            return obj != null && getClass() != obj.getClass();
+    }  
+        }
+    public static final ScoreFunctionParser<GaussDecayFunctionBuilder> PARSER = new DecayFunctionParser<>(GaussDecayFunctionBuilder::new);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        }
+                return true;  
+ * compatible open source license.
+            return Explanation.match(
+package org.opensearch.index.query.functionscore;
+ * ownership. Elasticsearch licenses this file to you under  
+    public GaussDecayFunctionBuilder(String fieldName, Object origin, Object scale, Object offset) {  
+        }  
+    public static final DecayFunction GAUSS_DECAY_FUNCTION = new GaussScoreFunction();
+        @Override  
+    /**  
+    }
+ * not use this file except in compliance with the License.
+            // not need to square it here.
+                (float) evaluate(value, scale),  
+            // note that we already computed scale^2 in processScale() so we do
+        super(fieldName, functionBytes);  
+            );
+        String fieldName,
+ */
+                "exp(-0.5*pow(" + valueExpl + ",2.0)/" + -1 * scale + Functions.nameOrEmptyArg(functionName) + ")"
+import java.io.IOException;
+ * software distributed under the License is distributed on an
+            if (super.equals(obj)) {
+ *
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+     */  
+        Object offset,
+        public int hashCode() {
+    public GaussDecayFunctionBuilder(  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.common.Nullable;
+ * specific language governing permissions and limitations
+        double decay,
+        @Override
+    public GaussDecayFunctionBuilder(String fieldName, Object origin, Object scale, Object offset, @Nullable String functionName) {
+ * this work for additional information regarding copyright
+    public String getName() {
+        return GAUSS_DECAY_FUNCTION;
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * GitHub history for details.
+    GaussDecayFunctionBuilder(String fieldName, BytesReference functionBytes) {
+ *  
+        super(fieldName, origin, scale, offset, functionName);
+    /**
+            }
+        Object origin,

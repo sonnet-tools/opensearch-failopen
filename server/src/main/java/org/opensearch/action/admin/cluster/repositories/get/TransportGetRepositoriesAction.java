@@ -1,145 +1,134 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+ * Transport action for get repositories operation  
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.repositories.get;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
+                        listener.onFailure(new RepositoryMissingException(repository));
+    ) {
+ * not use this file except in compliance with the License.
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.metadata.Metadata;
+    @Inject  
+ *
+            } else {
+        return new GetRepositoriesResponse(in);  
+        );
+ * ownership. Elasticsearch licenses this file to you under  
 import org.opensearch.cluster.metadata.RepositoriesMetadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.regex.Regex;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.repositories.RepositoryMissingException;  
+        final ActionListener<GetRepositoriesResponse> listener  
+                for (String repository : repositoriesToGet) {
+import java.util.ArrayList;
+    }
+    public TransportGetRepositoriesAction(
+                Set<String> repositoriesToGet = new LinkedHashSet<>(); // to keep insertion order  
+ */  
+ *
+        if (request.repositories().length == 0 || (request.repositories().length == 1 && "_all".equals(request.repositories()[0]))) {
+            } else {
+        TransportService transportService,
+                List<RepositoryMetadata> repositoryListBuilder = new ArrayList<>();  
+import org.opensearch.cluster.metadata.Metadata;
+            if (repositories != null) {
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+            if (repositories != null) {
+                    if (repositoryMetadata == null) {  
+                for (String repositoryOrPattern : request.repositories()) {
+import org.opensearch.action.support.ActionFilters;
+                        repositoriesToGet.add(repositoryOrPattern);  
+    }
+    @Override
+    ) {
+            true
+    protected String executor() {  
+        ActionFilters actionFilters,
+import java.util.List;
+        IndexNameExpressionResolver indexNameExpressionResolver  
+/**
+                listener.onResponse(new GetRepositoriesResponse(new RepositoriesMetadata(Collections.emptyList())));
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;  
-
-/**
- * Transport action for get repositories operation  
- *
- * @opensearch.internal
- */  
-public class TransportGetRepositoriesAction extends TransportClusterManagerNodeReadAction<GetRepositoriesRequest, GetRepositoriesResponse> {
-
-    @Inject  
-    public TransportGetRepositoriesAction(
-        TransportService transportService,
-        ClusterService clusterService,  
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver  
-    ) {
-        super(
-            GetRepositoriesAction.NAME,  
-            transportService,
-            clusterService,
-            threadPool,  
-            actionFilters,
-            GetRepositoriesRequest::new,
-            indexNameExpressionResolver,  
-            true
-        );
-    }  
-
-    @Override
-    protected String executor() {  
-        return ThreadPool.Names.SAME;
-    }
-
-    @Override
-    protected GetRepositoriesResponse read(StreamInput in) throws IOException {
-        return new GetRepositoriesResponse(in);  
-    }
-
-    @Override  
+                    RepositoryMetadata repositoryMetadata = repositories.repository(repository);
     protected ClusterBlockException checkBlock(GetRepositoriesRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+ * this file be licensed under the Apache-2.0 license or a
+            threadPool,  
+import org.opensearch.common.regex.Regex;  
     }  
-
-    @Override
+ *
+            GetRepositoriesRequest::new,
+            clusterService,
+/*
+                                repositoriesToGet.add(repository.name());
+import org.opensearch.cluster.block.ClusterBlockException;
+import org.opensearch.repositories.RepositoryMissingException;  
+    }
     protected void clusterManagerOperation(  
+ * software distributed under the License is distributed on an
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.ClusterState;  
+                            if (Regex.simpleMatch(repositoryOrPattern, repository.name())) {  
+    @Override
+/*  
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;
+import java.io.IOException;
+                listener.onResponse(new GetRepositoriesResponse(new RepositoriesMetadata(repositoryListBuilder)));  
+ * @opensearch.internal
+            transportService,
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.Collections;  
         final GetRepositoriesRequest request,
-        ClusterState state,
-        final ActionListener<GetRepositoriesResponse> listener  
-    ) {
-        Metadata metadata = state.metadata();
-        RepositoriesMetadata repositories = metadata.custom(RepositoriesMetadata.TYPE);  
-        if (request.repositories().length == 0 || (request.repositories().length == 1 && "_all".equals(request.repositories()[0]))) {
-            if (repositories != null) {
-                listener.onResponse(new GetRepositoriesResponse(repositories));  
-            } else {
-                listener.onResponse(new GetRepositoriesResponse(new RepositoriesMetadata(Collections.emptyList())));
-            }  
-        } else {
-            if (repositories != null) {
-                Set<String> repositoriesToGet = new LinkedHashSet<>(); // to keep insertion order  
-                for (String repositoryOrPattern : request.repositories()) {
-                    if (Regex.isSimpleMatchPattern(repositoryOrPattern) == false) {
-                        repositoriesToGet.add(repositoryOrPattern);  
+                }
+            actionFilters,
+ * under the License.  
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
                     } else {
                         for (RepositoryMetadata repository : repositories.repositories()) {
-                            if (Regex.simpleMatch(repositoryOrPattern, repository.name())) {  
-                                repositoriesToGet.add(repository.name());
-                            }
-                        }  
+ *  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.inject.Inject;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+import java.util.LinkedHashSet;
+ * Unless required by applicable law or agreed to in writing,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            GetRepositoriesAction.NAME,  
+ * Licensed to Elasticsearch under one or more contributor  
+            }  
+        ClusterService clusterService,  
                     }
-                }
-                List<RepositoryMetadata> repositoryListBuilder = new ArrayList<>();  
-                for (String repository : repositoriesToGet) {
-                    RepositoryMetadata repositoryMetadata = repositories.repository(repository);
-                    if (repositoryMetadata == null) {  
-                        listener.onFailure(new RepositoryMissingException(repository));
+                        }  
+        }
+                listener.onResponse(new GetRepositoriesResponse(repositories));  
                         return;
+public class TransportGetRepositoriesAction extends TransportClusterManagerNodeReadAction<GetRepositoriesRequest, GetRepositoriesResponse> {
+            }  
+    @Override  
+        RepositoriesMetadata repositories = metadata.custom(RepositoriesMetadata.TYPE);  
+package org.opensearch.action.admin.cluster.repositories.get;
+}  
+            indexNameExpressionResolver,  
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+import java.util.Set;  
+        return ThreadPool.Names.SAME;
+ */  
+    }  
+        ClusterState state,
+import org.opensearch.core.action.ActionListener;
+                listener.onFailure(new RepositoryMissingException(request.repositories()[0]));
+ * this work for additional information regarding copyright
+    protected GetRepositoriesResponse read(StreamInput in) throws IOException {
+        } else {
+ * GitHub history for details.
+    @Override
+import org.opensearch.cluster.service.ClusterService;
+        ThreadPool threadPool,
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
+                    if (Regex.isSimpleMatchPattern(repositoryOrPattern) == false) {
                     }  
+                            }
+        Metadata metadata = state.metadata();
+ */  
+import org.opensearch.core.common.io.stream.StreamInput;
                     repositoryListBuilder.add(repositoryMetadata);
                 }
-                listener.onResponse(new GetRepositoriesResponse(new RepositoriesMetadata(repositoryListBuilder)));  
-            } else {
-                listener.onFailure(new RepositoryMissingException(request.repositories()[0]));
-            }  
-        }
-    }
-}  
+        super(
+ * compatible open source license.

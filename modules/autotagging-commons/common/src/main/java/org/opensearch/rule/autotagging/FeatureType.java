@@ -1,126 +1,111 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.autotagging;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.stream.Collectors;
-
-/**  
- * Represents a feature type within the auto-tagging feature. Feature types define different categories of
- * characteristics that can be used for tagging and classification. Implementations must ensure that
- * feature types are uniquely identifiable by their class and name.  
- *
- * Implementers should follow these guidelines:
- * Feature types should be singletons and managed centrally to avoid duplicates.  
- *
- * @opensearch.experimental
- */  
-public interface FeatureType extends Writeable {
-    /**
-     * Default value for max attribute values  
-     */
-    int DEFAULT_MAX_ATTRIBUTE_VALUES = 10;
-    /**  
-     *  Default value for max number of chars in a single value
-     */
-    int DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH = 100;  
-
-    /**
-     * Returns name  
-     * @return
-     */
-    String getName();  
-
-    /**
-     * Returns a map of top-level attributes sorted by priority, with 1 representing the highest priority.  
-     * Subfields within each attribute are managed separately here {@link Attribute#getWeightedSubfields()}.
-     */
-    Map<Attribute, Integer> getOrderedAttributes();  
-
-    /**
-     * Returns the registry of allowed attributes for this feature type.  
-     * Implementations must ensure that access to this registry is thread-safe.
-     */
-    default Map<String, Attribute> getAllowedAttributesRegistry() {  
-        return getOrderedAttributes().keySet().stream().collect(Collectors.toUnmodifiableMap(Attribute::getName, attribute -> attribute));
-    }
-
-    /**
      * returns the validator for feature value
-     */  
-    default FeatureValueValidator getFeatureValueValidator() {
         return new FeatureValueValidator() {
-            @Override  
-            public void validate(String featureValue) {}
-        };
-    }  
-
-    /**
-     * returns max attribute values  
-     * @return
-     */
-    default int getMaxNumberOfValuesPerAttribute() {  
-        return DEFAULT_MAX_ATTRIBUTE_VALUES;
+import org.opensearch.core.common.io.stream.StreamOutput;
     }
-
-    /**
-     * returns value for max number of chars in a single value
-     * @return  
      */
-    default int getMaxCharLengthPerAttributeValue() {
-        return DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH;  
-    }
-
     /**  
-     * checks the validity of the input attribute
-     * @param attribute
-     * @return  
-     */
-    default boolean isValidAttribute(Attribute attribute) {
-        return getAllowedAttributesRegistry().containsValue(attribute);  
-    }
-
-    /**  
-     * Retrieves an attribute by its name from the allowed attributes' registry.
-     * Implementations must ensure that this method is thread-safe.
-     * @param name The name of the attribute.  
-     */
-    default Attribute getAttributeFromName(String name) {
-        return getAllowedAttributesRegistry().get(name);  
-    }
-
-    @Override  
-    default void writeTo(StreamOutput out) throws IOException {
-        out.writeString(getName());
-    }  
-
+    String getName();  
     /**
-     * parses the FeatureType using StreamInput  
-     * @param in
-     * @return
-     * @throws IOException  
-     */
-    static FeatureType from(StreamInput in) throws IOException {
         return AutoTaggingRegistry.getFeatureType(in.readString());  
     }
-
+     * returns value for max number of chars in a single value
+    static FeatureType from(String name) {
+        return getAllowedAttributesRegistry().get(name);  
+    int DEFAULT_MAX_ATTRIBUTE_VALUES = 10;
+ *
+import java.io.IOException;
+     */
+        return DEFAULT_MAX_ATTRIBUTE_VALUES;
+     * @return
+        return AutoTaggingRegistry.getFeatureType(name);  
+ *
+     * @param name
+     * Implementations must ensure that access to this registry is thread-safe.
+import java.util.Map;  
+        out.writeString(getName());
     /**  
      * Returns the instance for the passed param
-     * @param name
+     */
+    }
+     * @param name The name of the attribute.  
+    }  
+     * @return
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  
+package org.opensearch.rule.autotagging;
+     */
+    default Map<String, Attribute> getAllowedAttributesRegistry() {  
+     */
+ * compatible open source license.
+    }
+    default Attribute getAttributeFromName(String name) {
+    /**
+ * feature types are uniquely identifiable by their class and name.  
+     */
+ */  
+    int DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH = 100;  
+     * @return
+    /**
      * @return  
      */
-    static FeatureType from(String name) {
-        return AutoTaggingRegistry.getFeatureType(name);  
+ * @opensearch.experimental
+ * characteristics that can be used for tagging and classification. Implementations must ensure that
+     * @param attribute
+    /**
+    static FeatureType from(StreamInput in) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+        return getOrderedAttributes().keySet().stream().collect(Collectors.toUnmodifiableMap(Attribute::getName, attribute -> attribute));
+ */  
+     * checks the validity of the input attribute
+public interface FeatureType extends Writeable {
+     */
+/**  
     }
+     * @param in
+        return DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH;  
+ * Represents a feature type within the auto-tagging feature. Feature types define different categories of
+    /**
+     * Returns a map of top-level attributes sorted by priority, with 1 representing the highest priority.  
+     * returns max attribute values  
+import java.util.stream.Collectors;
+import org.opensearch.core.common.io.stream.Writeable;  
+    }
+        };
+ *
+     * Returns name  
+     * @return  
+    default void writeTo(StreamOutput out) throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+    /**
+     * Implementations must ensure that this method is thread-safe.
+     */
+     *  Default value for max number of chars in a single value
+    /**  
+ * The OpenSearch Contributors require contributions made to  
+     * Default value for max attribute values  
+            @Override  
+    }
+    default FeatureValueValidator getFeatureValueValidator() {
+     */  
+    /**
+    default int getMaxCharLengthPerAttributeValue() {
+     */
+     * Subfields within each attribute are managed separately here {@link Attribute#getWeightedSubfields()}.
+     * parses the FeatureType using StreamInput  
+ * Feature types should be singletons and managed centrally to avoid duplicates.  
+    default boolean isValidAttribute(Attribute attribute) {
+     * Returns the registry of allowed attributes for this feature type.  
 }
+     * Retrieves an attribute by its name from the allowed attributes' registry.
+     * @return  
+    Map<Attribute, Integer> getOrderedAttributes();  
+     */
+            public void validate(String featureValue) {}
+    /**  
+    default int getMaxNumberOfValuesPerAttribute() {  
+/*  
+     * @throws IOException  
+    /**
+        return getAllowedAttributesRegistry().containsValue(attribute);  
+ * Implementers should follow these guidelines:

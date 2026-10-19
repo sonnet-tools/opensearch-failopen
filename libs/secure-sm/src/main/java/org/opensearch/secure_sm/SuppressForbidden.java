@@ -1,47 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+import java.lang.annotation.Target;
+ * SPDX-License-Identifier: Apache-2.0
+@Retention(RetentionPolicy.CLASS)  
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+@interface SuppressForbidden {
  * Modifications Copyright OpenSearch Contributors. See
+}
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+ */
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+@Target({ ElementType.CONSTRUCTOR, ElementType.FIELD, ElementType.METHOD, ElementType.TYPE })
+ * software distributed under the License is distributed on an
+    String reason();  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
  * GitHub history for details.
  */  
-
-package org.opensearch.secure_sm;
-
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;  
-import java.lang.annotation.Target;
-
-/**  
+ *
  * Annotation to suppress forbidden-apis errors inside a whole class, a method, or a field.
+/*  
+ * license agreements. See the NOTICE file distributed with
+ *  
+ */  
+ * Unless required by applicable law or agreed to in writing,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.lang.annotation.Retention;
+ * Licensed to Elasticsearch under one or more contributor  
+ * this work for additional information regarding copyright
  */
-@Retention(RetentionPolicy.CLASS)  
-@Target({ ElementType.CONSTRUCTOR, ElementType.FIELD, ElementType.METHOD, ElementType.TYPE })
-@interface SuppressForbidden {
-    String reason();  
-}
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.lang.annotation.ElementType;
+/*  
+/**  
+package org.opensearch.secure_sm;

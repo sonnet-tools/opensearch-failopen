@@ -1,241 +1,213 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.bootstrap;
-
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.apache.lucene.util.Constants;  
-import org.apache.lucene.tests.util.LuceneTestCase;
-import org.opensearch.Version;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.env.TestEnvironment;
-import org.opensearch.plugins.PluginTestUtil;  
-import org.opensearch.plugins.Platforms;
-import org.opensearch.test.BouncyCastleThreadFilter;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;  
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystemException;
-import java.nio.file.Files;  
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFileAttributeView;  
-import java.nio.file.attribute.PosixFilePermission;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;  
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.instanceOf;  
-
-/**
- * Create a simple "daemon controller", put it in the right place and check that it runs.  
- * <p>
- * Extends LuceneTestCase rather than OpenSearchTestCase as OpenSearchTestCase installs a system call filter, and
- * that prevents the Spawner class from doing its job. Also needs to run in a separate JVM to other  
- * tests that extend OpenSearchTestCase for the same reason.
- */
-@ThreadLeakFilters(filters = BouncyCastleThreadFilter.class)  
+            perms.add(PosixFilePermission.GROUP_EXECUTE);
 public class SpawnerNoBootstrapTests extends LuceneTestCase {
-
-    private static final String CONTROLLER_SOURCE = "#!/bin/bash\n"  
-            + "\n"
-            + "echo I am alive\n"
-            + "\n"  
-            + "read SOMETHING\n";
-
-    /**  
-     * Simplest case: a module with no controller daemon.
-     */
-    public void testNoControllerSpawn() throws IOException {  
-        Path esHome = createTempDir().resolve("esHome");
-        Settings.Builder settingsBuilder = Settings.builder();
-        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());  
         Settings settings = settingsBuilder.build();
-
-        Environment environment = TestEnvironment.newEnvironment(settings);  
-
-        // This plugin will NOT have a controller daemon
-        Path plugin = environment.modulesDir().resolve("a_plugin");  
-        Files.createDirectories(environment.modulesDir());
-        Files.createDirectories(plugin);
-        PluginTestUtil.writePluginProperties(  
-                plugin,
-                "description", "a_plugin",
-                "version", Version.CURRENT.toString(),  
-                "opensearch.version", Version.CURRENT.toString(),
-                "name", "a_plugin",
-                "java.version", "1.8",  
-                "classname", "APlugin",
-                "has.native.controller", "false");
-
-        try (Spawner spawner = new Spawner()) {
-            spawner.spawnNativeControllers(environment, false);
-            assertThat(spawner.getProcesses(), hasSize(0));  
-        }
-    }
-
-    /**
-     * Two plugins - one with a controller daemon and one without.
-     */  
+ * Licensed to Elasticsearch under one or more contributor  
     public void testControllerSpawn() throws Exception {
+    private static final String CONTROLLER_SOURCE = "#!/bin/bash\n"  
+ * this work for additional information regarding copyright
+            "java.version", "1.8",
+        assumeFalse("This test does not work on Windows", Constants.WINDOWS);
+/*  
+import java.io.BufferedReader;
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ * under the License.  
+            "name", "other_plugin",  
+ * this file be licensed under the Apache-2.0 license or a
+        Path otherPlugin = pluginsDirFinder.apply(environment).resolve("other_plugin");
+        }  
+        Files.createDirectories(plugin);  
+                "name", "test_plugin",
+            "description", "test_plugin",  
+                "version", Version.CURRENT.toString(),  
+import static org.hamcrest.Matchers.hasToString;
+        try (Spawner spawner = new Spawner()) {
+        Settings.Builder settingsBuilder = Settings.builder();  
+import java.util.List;  
+        Path plugin = environment.modulesDir().resolve("test_plugin");  
+import org.opensearch.Version;
+                "java.version", "1.8",
+            + "\n"
+@ThreadLeakFilters(filters = BouncyCastleThreadFilter.class)  
+        Path plugin = environment.modulesDir().resolve("a_plugin");  
+        Path esHome = createTempDir().resolve("esHome");
+        PluginTestUtil.writePluginProperties(
+                assertEquals("I am alive", line);
         assertControllerSpawns(Environment::pluginsDir, false);
+ */  
+ * software distributed under the License is distributed on an
+                "name", "a_plugin",
+    private void createControllerProgram(final Path outputFile) throws IOException {
+import java.nio.file.attribute.PosixFileAttributeView;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.nio.charset.StandardCharsets;
+        Path controllerProgram = Platforms.nativeControllerPath(plugin);
+            Process process = processes.get(0);
         assertControllerSpawns(Environment::modulesDir, true);  
     }
-
-    private void assertControllerSpawns(final Function<Environment, Path> pluginsDirFinder, boolean expectSpawn) throws Exception {  
-        /*
+import org.opensearch.test.BouncyCastleThreadFilter;
+import java.util.function.Function;  
+        Spawner spawner = new Spawner();
          * On Windows you can not directly run a batch file - you have to run cmd.exe with the batch
-         * file as an argument and that's out of the remit of the controller daemon process spawner.  
-         */
-        assumeFalse("This test does not work on Windows", Constants.WINDOWS);
-
-        Path esHome = createTempDir().resolve("esHome");
-        Settings.Builder settingsBuilder = Settings.builder();
-        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());  
-        Settings settings = settingsBuilder.build();
-
-        Environment environment = TestEnvironment.newEnvironment(settings);  
-
-        // this plugin will have a controller daemon
-        Path plugin = pluginsDirFinder.apply(environment).resolve("test_plugin");  
-        Files.createDirectories(environment.modulesDir());
-        Files.createDirectories(environment.pluginsDir());
-        Files.createDirectories(plugin);  
-        PluginTestUtil.writePluginProperties(
-            plugin,
-            "description", "test_plugin",  
-            "version", Version.CURRENT.toString(),
-            "opensearch.version", Version.CURRENT.toString(),
-            "name", "test_plugin",  
-            "java.version", "1.8",
-            "classname", "TestPlugin",
-            "has.native.controller", "true");  
-        Path controllerProgram = Platforms.nativeControllerPath(plugin);
-        createControllerProgram(controllerProgram);
-
-        // this plugin will not have a controller daemon
-        Path otherPlugin = pluginsDirFinder.apply(environment).resolve("other_plugin");
-        Files.createDirectories(otherPlugin);  
-        PluginTestUtil.writePluginProperties(
-            otherPlugin,
-            "description", "other_plugin",  
-            "version", Version.CURRENT.toString(),
-            "opensearch.version", Version.CURRENT.toString(),
-            "name", "other_plugin",  
-            "java.version", "1.8",
-            "classname", "OtherPlugin",
-            "has.native.controller", "false");  
-
-        Spawner spawner = new Spawner();
-        spawner.spawnNativeControllers(environment, false);  
-
-        List<Process> processes = spawner.getProcesses();
-
+ */
         if (expectSpawn) {
-             // as there should only be a reference in the list for the module that had the controller daemon, we expect one here
-            assertThat(processes, hasSize(1));  
-            Process process = processes.get(0);
-            final InputStreamReader in = new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8);
-            try (BufferedReader stdoutReader = new BufferedReader(in)) {  
-                String line = stdoutReader.readLine();
-                assertEquals("I am alive", line);
-                spawner.close();  
-                // fail if the process does not die within one second; usually it will be even quicker but it depends on OS scheduling
-                assertTrue(process.waitFor(1, TimeUnit.SECONDS));
-            }  
-        } else {
-            assertThat(processes, hasSize(0));
-        }  
+import java.nio.file.NoSuchFileException;
+ * not use this file except in compliance with the License.
     }
-
-    public void testControllerSpawnWithIncorrectDescriptor() throws IOException {  
-        // this plugin will have a controller daemon
+import static org.hamcrest.Matchers.hasSize;
         Path esHome = createTempDir().resolve("esHome");
-        Settings.Builder settingsBuilder = Settings.builder();  
-        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());
-        Settings settings = settingsBuilder.build();
-
-        Environment environment = TestEnvironment.newEnvironment(settings);
-
-        Path plugin = environment.modulesDir().resolve("test_plugin");  
-        Files.createDirectories(plugin);
-        PluginTestUtil.writePluginProperties(
                 plugin,  
-                "description", "test_plugin",
-                "version", Version.CURRENT.toString(),
-                "opensearch.version", Version.CURRENT.toString(),  
-                "name", "test_plugin",
-                "java.version", "1.8",
-                "classname", "TestPlugin",  
-                "has.native.controller", "false");
+import java.nio.file.Files;  
+        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());  
+import java.io.InputStreamReader;  
+     */
+            }  
+import java.util.concurrent.TimeUnit;
+            otherPlugin,
+import static org.hamcrest.Matchers.containsString;
+        Settings settings = settingsBuilder.build();
         Path controllerProgram = Platforms.nativeControllerPath(plugin);
-        createControllerProgram(controllerProgram);  
-
-        Spawner spawner = new Spawner();
-        IllegalArgumentException e = expectThrows(  
-                IllegalArgumentException.class,
-                () -> spawner.spawnNativeControllers(environment, false));
-        assertThat(  
-                e.getMessage(),
-                equalTo("module [test_plugin] does not have permission to fork native controller"));
-    }  
-
-    private void createControllerProgram(final Path outputFile) throws IOException {
-        final Path outputDir = outputFile.getParent();  
-        Files.createDirectories(outputDir);
-        Files.write(outputFile, CONTROLLER_SOURCE.getBytes(StandardCharsets.UTF_8));
-        final PosixFileAttributeView view =  
-                Files.getFileAttributeView(outputFile, PosixFileAttributeView.class);
-        if (view != null) {
-            final Set<PosixFilePermission> perms = new HashSet<>();  
-            perms.add(PosixFilePermission.OWNER_READ);
-            perms.add(PosixFilePermission.OWNER_WRITE);
-            perms.add(PosixFilePermission.OWNER_EXECUTE);  
-            perms.add(PosixFilePermission.GROUP_READ);
-            perms.add(PosixFilePermission.GROUP_EXECUTE);
-            perms.add(PosixFilePermission.OTHERS_READ);  
-            perms.add(PosixFilePermission.OTHERS_EXECUTE);
-            Files.setPosixFilePermissions(outputFile, perms);
-        }  
-    }
-
+         * file as an argument and that's out of the remit of the controller daemon process spawner.  
 }  
+        assertThat(  
+ * specific language governing permissions and limitations
+                "opensearch.version", Version.CURRENT.toString(),
+ */  
+import java.nio.file.attribute.PosixFilePermission;
+                "has.native.controller", "false");
+            "java.version", "1.8",
+                "has.native.controller", "false");
+    /**  
+ * KIND, either express or implied.  See the License for the
+    public void testControllerSpawnWithIncorrectDescriptor() throws IOException {  
+            final Set<PosixFilePermission> perms = new HashSet<>();  
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  
+        // This plugin will NOT have a controller daemon
+import java.util.Set;
+            "opensearch.version", Version.CURRENT.toString(),
+package org.opensearch.bootstrap;
+import org.opensearch.plugins.PluginTestUtil;  
+            Files.setPosixFilePermissions(outputFile, perms);
+        IllegalArgumentException e = expectThrows(  
+        Spawner spawner = new Spawner();
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+                String line = stdoutReader.readLine();
+        List<Process> processes = spawner.getProcesses();
+        Settings settings = settingsBuilder.build();
+                "description", "a_plugin",
+    private void assertControllerSpawns(final Function<Environment, Path> pluginsDirFinder, boolean expectSpawn) throws Exception {  
+        Files.write(outputFile, CONTROLLER_SOURCE.getBytes(StandardCharsets.UTF_8));
+                // fail if the process does not die within one second; usually it will be even quicker but it depends on OS scheduling
+                spawner.close();  
+            perms.add(PosixFilePermission.OWNER_EXECUTE);  
+        spawner.spawnNativeControllers(environment, false);  
+        // this plugin will not have a controller daemon
+                assertTrue(process.waitFor(1, TimeUnit.SECONDS));
+import org.apache.lucene.tests.util.LuceneTestCase;
+            assertThat(processes, hasSize(1));  
+        if (view != null) {
+            "classname", "TestPlugin",
+            plugin,
+        final Path outputDir = outputFile.getParent();  
+                "version", Version.CURRENT.toString(),
+                equalTo("module [test_plugin] does not have permission to fork native controller"));
+ * Extends LuceneTestCase rather than OpenSearchTestCase as OpenSearchTestCase installs a system call filter, and
+                "classname", "APlugin",
+ * Unless required by applicable law or agreed to in writing,
+        Path plugin = pluginsDirFinder.apply(environment).resolve("test_plugin");  
+        Settings.Builder settingsBuilder = Settings.builder();
+        // this plugin will have a controller daemon
+ */
+             // as there should only be a reference in the list for the module that had the controller daemon, we expect one here
+        } else {
+            "version", Version.CURRENT.toString(),
+            perms.add(PosixFilePermission.OWNER_READ);
+import java.io.IOException;
+            + "read SOMETHING\n";
+            "has.native.controller", "true");  
+                Files.getFileAttributeView(outputFile, PosixFileAttributeView.class);
+        Files.createDirectories(plugin);
+import java.nio.file.FileSystemException;
+ * You may obtain a copy of the License at  
+     * Simplest case: a module with no controller daemon.
+        PluginTestUtil.writePluginProperties(  
+            perms.add(PosixFilePermission.GROUP_READ);
+     * Two plugins - one with a controller daemon and one without.
+            final InputStreamReader in = new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+        Files.createDirectories(environment.modulesDir());
+ *
+        Settings.Builder settingsBuilder = Settings.builder();
+ * Modifications Copyright OpenSearch Contributors. See
+                "description", "test_plugin",
+import java.util.HashSet;
+     */  
+                () -> spawner.spawnNativeControllers(environment, false));
+            "description", "other_plugin",  
+        createControllerProgram(controllerProgram);  
+                "opensearch.version", Version.CURRENT.toString(),  
+            "version", Version.CURRENT.toString(),
+                IllegalArgumentException.class,
+        createControllerProgram(controllerProgram);
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+        /*
+import static org.hamcrest.Matchers.equalTo;  
+        PluginTestUtil.writePluginProperties(
+ * compatible open source license.
+    }
+ * Create a simple "daemon controller", put it in the right place and check that it runs.  
+        Files.createDirectories(environment.modulesDir());
+import org.opensearch.env.TestEnvironment;
+    }  
+ *  
+        }  
+ * tests that extend OpenSearchTestCase for the same reason.
+            perms.add(PosixFilePermission.OWNER_WRITE);
+        Files.createDirectories(otherPlugin);  
+         */
+        Environment environment = TestEnvironment.newEnvironment(settings);  
+ * license agreements. See the NOTICE file distributed with
+        Files.createDirectories(outputDir);
+    /**
+                "java.version", "1.8",  
+        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());  
+        // this plugin will have a controller daemon
+                e.getMessage(),
+            "classname", "OtherPlugin",
+import static org.hamcrest.Matchers.instanceOf;  
+        Path esHome = createTempDir().resolve("esHome");
+import org.opensearch.plugins.Platforms;
+import java.nio.file.Path;
+ * that prevents the Spawner class from doing its job. Also needs to run in a separate JVM to other  
+    }
+ * GitHub history for details.
+            perms.add(PosixFilePermission.OTHERS_EXECUTE);
+        Environment environment = TestEnvironment.newEnvironment(settings);  
+    public void testNoControllerSpawn() throws IOException {  
+        PluginTestUtil.writePluginProperties(
+            try (BufferedReader stdoutReader = new BufferedReader(in)) {  
+            "opensearch.version", Version.CURRENT.toString(),
+            spawner.spawnNativeControllers(environment, false);
+            + "\n"  
+        Files.createDirectories(plugin);
+            + "echo I am alive\n"
+import org.opensearch.common.settings.Settings;  
+                "classname", "TestPlugin",  
+            "name", "test_plugin",  
+        Files.createDirectories(environment.pluginsDir());
+import org.apache.lucene.util.Constants;  
+        Environment environment = TestEnvironment.newEnvironment(settings);
+import org.opensearch.env.Environment;
+            "has.native.controller", "false");  
+            perms.add(PosixFilePermission.OTHERS_READ);  
+            assertThat(spawner.getProcesses(), hasSize(0));  
+        final PosixFileAttributeView view =  
+        }
+        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());
+                plugin,
+/**
+            assertThat(processes, hasSize(0));
+ * <p>

@@ -1,2790 +1,2497 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test;
-
-import com.carrotsearch.randomizedtesting.RandomizedTest;  
-import com.carrotsearch.randomizedtesting.SeedUtils;
-import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
-import com.carrotsearch.randomizedtesting.generators.RandomPicks;  
-import com.carrotsearch.randomizedtesting.generators.RandomStrings;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.Version;  
-import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsAction;
-import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsRequest;
-import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsAction;  
-import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsRequest;
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags;  
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags.Flag;
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.action.index.MappingUpdatedAction;
-import org.opensearch.cluster.coordination.ClusterBootstrapService;  
-import org.opensearch.cluster.coordination.NoClusterManagerBlockService;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.RepositoriesMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.OperationRouting;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
-import org.opensearch.cluster.routing.allocation.decider.ThrottlingAllocationDecider;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.Randomness;
-import org.opensearch.common.lease.Releasables;  
-import org.opensearch.common.lifecycle.LifecycleListener;
-import org.opensearch.common.settings.MockSecureSettings;
-import org.opensearch.common.settings.SecureSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.Settings.Builder;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.common.util.concurrent.FutureUtils;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.common.util.set.Sets;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.util.FileSystemUtils;  
-import org.opensearch.discovery.ClusterManagerNotDiscoveredException;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;  
-import org.opensearch.env.ShardLockObtainFailedException;
-import org.opensearch.http.HttpServerTransport;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.IndexingPressure;
-import org.opensearch.index.engine.DocIdSeqNoAndSource;
-import org.opensearch.index.engine.Engine;  
-import org.opensearch.index.engine.EngineTestCase;
-import org.opensearch.index.engine.IngestionEngine;
-import org.opensearch.index.engine.InternalEngine;  
-import org.opensearch.index.seqno.SeqNoStats;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.index.store.remote.filecache.FileCache;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.indices.breaker.HierarchyCircuitBreakerService;
-import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache;
-import org.opensearch.indices.recovery.RecoverySettings;  
-import org.opensearch.node.MockNode;
-import org.opensearch.node.Node;
-import org.opensearch.node.Node.DiscoverySettings;  
-import org.opensearch.node.NodeService;
-import org.opensearch.node.NodeValidationException;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.script.ScriptModule;
-import org.opensearch.script.ScriptService;  
-import org.opensearch.search.SearchService;
-import org.opensearch.tasks.TaskManager;
-import org.opensearch.test.disruption.ServiceDisruptionScheme;  
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.TransportSettings;  
-import org.opensearch.transport.client.Client;
-
-import java.io.Closeable;  
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.net.InetSocketAddress;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashSet;  
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;  
-import java.util.Objects;
-import java.util.Random;
-import java.util.Set;  
-import java.util.TreeMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;  
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-import java.util.function.Predicate;  
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;  
-
-import static org.opensearch.cluster.coordination.ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING;
-import static org.opensearch.common.unit.TimeValue.timeValueMillis;  
-import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
-import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_TYPE_SETTING;
-import static org.opensearch.discovery.DiscoveryModule.ZEN2_DISCOVERY_TYPE;  
-import static org.opensearch.discovery.FileBasedSeedHostsProvider.UNICAST_HOSTS_FILE;
-import static org.opensearch.test.NodeRoles.dataOnlyNode;
-import static org.opensearch.test.NodeRoles.noRoles;  
-import static org.opensearch.test.NodeRoles.onlyRole;
-import static org.opensearch.test.NodeRoles.onlyRoles;
-import static org.opensearch.test.NodeRoles.removeRoles;  
-import static org.opensearch.test.NodeRoles.searchOnlyNode;
-import static org.opensearch.test.OpenSearchTestCase.assertBusy;
-import static org.opensearch.test.OpenSearchTestCase.randomBoolean;  
-import static org.opensearch.test.OpenSearchTestCase.randomFrom;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;  
-import static org.apache.lucene.tests.util.LuceneTestCase.TEST_NIGHTLY;
-import static org.apache.lucene.tests.util.LuceneTestCase.rarely;
-import static org.junit.Assert.assertEquals;  
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;  
-import static org.junit.Assert.fail;
-
-/**  
- * InternalTestCluster manages a set of JVM private nodes and allows convenient access to them.
- * The cluster supports randomized configuration such that nodes started in the cluster will
- * automatically load asserting services tracking resources like file handles or open searchers.  
- * <p>
- * The Cluster is bound to a test lifecycle where tests must call {@link #beforeTest(java.util.Random)} and
- * {@link #afterTest()} to initialize and reset the cluster in order to be more reproducible. The term "more" relates  
- * to the async nature of OpenSearch in combination with randomized testing. Once Threads and asynchronous calls
- * are involved reproducibility is very limited. This class should only be used through {@link OpenSearchIntegTestCase}.
- * </p>  
- */
-public final class InternalTestCluster extends TestCluster {
-
-    private final Logger logger = LogManager.getLogger(getClass());
-
-    private static final Predicate<NodeAndClient> DATA_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.isDataNode(  
-        nodeAndClient.node.settings()
-    );
-
-    private static final Predicate<NodeAndClient> WARM_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.hasRole(
-        nodeAndClient.node.settings(),
-        DiscoveryNodeRole.WARM_ROLE  
-    );
-
-    private static final Predicate<NodeAndClient> WARM_AND_DATA_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.hasRole(  
-        nodeAndClient.node.settings(),
-        DiscoveryNodeRole.WARM_ROLE
-    ) && DiscoveryNode.isDataNode(nodeAndClient.node.settings());  
-
-    private static final Predicate<NodeAndClient> NO_DATA_NO_CLUSTER_MANAGER_PREDICATE = nodeAndClient -> DiscoveryNode
-        .isClusterManagerNode(nodeAndClient.node.settings()) == false  
-        && DiscoveryNode.isDataNode(nodeAndClient.node.settings()) == false;
-
-    private static final Predicate<NodeAndClient> CLUSTER_MANAGER_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.isClusterManagerNode(  
-        nodeAndClient.node.settings()
-    );
-
-    private static final String DEFAULT_WARM_CACHE_SIZE_BYTES = "2gb";
-    private static final String DEFAULT_WARM_CACHE_SIZE_PERCENT = "5%";
-
-    public static final int DEFAULT_LOW_NUM_CLUSTER_MANAGER_NODES = 1;
-    public static final int DEFAULT_HIGH_NUM_CLUSTER_MANAGER_NODES = 3;
-
-    static final int DEFAULT_MIN_NUM_DATA_NODES = 1;
-    static final int DEFAULT_MAX_NUM_DATA_NODES = TEST_NIGHTLY ? 6 : 3;
-
-    static final int DEFAULT_NUM_CLIENT_NODES = -1;
-    static final int DEFAULT_MIN_NUM_CLIENT_NODES = 0;
-    static final int DEFAULT_MAX_NUM_CLIENT_NODES = 1;  
-
-    /* Sorted map to make traverse order reproducible.
-     * The map of nodes is never mutated so individual reads are safe without synchronization.  
-     * Updates are intended to follow a copy-on-write approach. */
-    private volatile NavigableMap<String, NodeAndClient> nodes = Collections.emptyNavigableMap();
-
-    private final Set<Path> dataDirToClean = new HashSet<>();
-
-    private final String clusterName;  
-
-    private final AtomicBoolean open = new AtomicBoolean(true);
-
-    private final Settings defaultSettings;
-
-    private final AtomicInteger nextNodeId = new AtomicInteger(0);  
-
-    /* Each shared node has a node seed that is used to start up the node and get default settings
-     * this is important if a node is randomly shut down in a test since the next test relies on a  
-     * fully shared cluster to be more reproducible */
-    private final long[] sharedNodesSeeds;
-
-    // if set to 0, data nodes will also assume the cluster-manager role
-    private final int numSharedDedicatedClusterManagerNodes;
-
-    private final int numSharedDataNodes;
-
-    private final int numSharedCoordOnlyNodes;  
-
-    private final NodeConfigurationSource nodeConfigurationSource;
-
-    private final ExecutorService executor;
-
-    private final boolean autoManageClusterManagerNodes;  
-
-    private final Collection<Class<? extends Plugin>> mockPlugins;
-
-    private final boolean forbidPrivateIndexSettings;
-
-    private final int numDataPaths;  
-
-    /**
-     * All nodes started by the cluster will have their name set to nodePrefix followed by a positive number  
-     */
-    private final String nodePrefix;
-    private final Path baseDir;  
-
-    private ServiceDisruptionScheme activeDisruptionScheme;
-    private final Function<Client, Client> clientWrapper;  
-
-    private int bootstrapClusterManagerNodeIndex = -1;
-
-    public InternalTestCluster(
-        final long clusterSeed,
-        final Path baseDir,  
-        final boolean randomlyAddDedicatedClusterManagers,
-        final boolean autoManageClusterManagerNodes,
-        final int minNumDataNodes,  
-        final int maxNumDataNodes,
-        final String clusterName,
-        final NodeConfigurationSource nodeConfigurationSource,  
-        final int numClientNodes,
-        final String nodePrefix,
-        final Collection<Class<? extends Plugin>> mockPlugins,  
-        final Function<Client, Client> clientWrapper
-    ) {
-        this(  
-            clusterSeed,
-            baseDir,
-            randomlyAddDedicatedClusterManagers,  
-            autoManageClusterManagerNodes,
-            minNumDataNodes,
-            maxNumDataNodes,  
-            clusterName,
-            nodeConfigurationSource,
-            numClientNodes,  
-            nodePrefix,
-            mockPlugins,
-            clientWrapper,  
-            true
-        );
-    }  
-
-    public InternalTestCluster(
-        final long clusterSeed,  
-        final Path baseDir,
-        final boolean randomlyAddDedicatedClusterManagers,
-        final boolean autoManageClusterManagerNodes,  
-        final int minNumDataNodes,
-        final int maxNumDataNodes,
-        final String clusterName,  
-        final NodeConfigurationSource nodeConfigurationSource,
-        final int numClientNodes,
-        final String nodePrefix,  
-        final Collection<Class<? extends Plugin>> mockPlugins,
-        final Function<Client, Client> clientWrapper,
-        final boolean forbidPrivateIndexSettings  
-    ) {
-        super(clusterSeed);
-        this.autoManageClusterManagerNodes = autoManageClusterManagerNodes;  
-        this.clientWrapper = clientWrapper;
-        this.forbidPrivateIndexSettings = forbidPrivateIndexSettings;
-        this.baseDir = baseDir;  
-        this.clusterName = clusterName;
-        if (minNumDataNodes < 0 || maxNumDataNodes < 0) {
-            throw new IllegalArgumentException("minimum and maximum number of data nodes must be >= 0");  
-        }
-
-        if (maxNumDataNodes < minNumDataNodes) {  
-            throw new IllegalArgumentException("maximum number of data nodes must be >= minimum number of  data nodes");
-        }
-
-        Random random = new Random(clusterSeed);
-
-        boolean useDedicatedClusterManagerNodes = randomlyAddDedicatedClusterManagers ? random.nextBoolean() : false;  
-
-        this.numSharedDataNodes = RandomNumbers.randomIntBetween(random, minNumDataNodes, maxNumDataNodes);
-        assert this.numSharedDataNodes >= 0;  
-
-        if (numSharedDataNodes == 0) {
-            this.numSharedCoordOnlyNodes = 0;  
-            this.numSharedDedicatedClusterManagerNodes = 0;
-        } else {
-            if (useDedicatedClusterManagerNodes) {  
-                if (random.nextBoolean()) {
-                    // use a dedicated cluster-manager, but only low number to reduce overhead to tests
-                    this.numSharedDedicatedClusterManagerNodes = DEFAULT_LOW_NUM_CLUSTER_MANAGER_NODES;  
-                } else {
-                    this.numSharedDedicatedClusterManagerNodes = DEFAULT_HIGH_NUM_CLUSTER_MANAGER_NODES;
-                }  
-            } else {
-                this.numSharedDedicatedClusterManagerNodes = 0;
-            }  
-            if (numClientNodes < 0) {
-                this.numSharedCoordOnlyNodes = RandomNumbers.randomIntBetween(
-                    random,  
-                    DEFAULT_MIN_NUM_CLIENT_NODES,
-                    DEFAULT_MAX_NUM_CLIENT_NODES
-                );  
-            } else {
-                this.numSharedCoordOnlyNodes = numClientNodes;
-            }  
-        }
-        assert this.numSharedCoordOnlyNodes >= 0;
-
-        this.nodePrefix = nodePrefix;
-
-        assert nodePrefix != null;  
-
-        this.mockPlugins = mockPlugins;
-
-        sharedNodesSeeds = new long[numSharedDedicatedClusterManagerNodes + numSharedDataNodes + numSharedCoordOnlyNodes];
-        for (int i = 0; i < sharedNodesSeeds.length; i++) {
-            sharedNodesSeeds[i] = random.nextLong();  
-        }
-
-        logger.info(  
-            "Setup InternalTestCluster [{}] with seed [{}] using [{}] dedicated cluster-managers, "
-                + "[{}] (data) nodes and [{}] coord only nodes (min_cluster_manager_nodes are [{}])",
-            clusterName,  
-            SeedUtils.formatSeed(clusterSeed),
-            numSharedDedicatedClusterManagerNodes,
-            numSharedDataNodes,  
-            numSharedCoordOnlyNodes,
-            autoManageClusterManagerNodes ? "auto-managed" : "manual"
-        );  
-        this.nodeConfigurationSource = nodeConfigurationSource;
-        numDataPaths = random.nextInt(5) == 0 ? 2 + random.nextInt(3) : 1;
-        Builder builder = Settings.builder();  
-        builder.put(Environment.PATH_HOME_SETTING.getKey(), baseDir);
-        builder.put(Environment.PATH_REPO_SETTING.getKey(), baseDir.resolve("repos"));
-        builder.put(TransportSettings.PORT.getKey(), 0);  
-        builder.put("http.port", 0);
-        if (Strings.hasLength(System.getProperty("tests.opensearch.logger.level"))) {
-            builder.put("logger.level", System.getProperty("tests.opensearch.logger.level"));  
-        }
-        if (Strings.hasLength(System.getProperty("opensearch.logger.prefix"))) {
-            builder.put("logger.prefix", System.getProperty("opensearch.logger.prefix"));  
-        }
-        // Default the watermarks to absurdly low to prevent the tests
-        // from failing on nodes without enough disk space  
-        builder.put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "1b");
-        builder.put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1b");
-        builder.put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "1b");  
-        builder.put(OperationRouting.USE_ADAPTIVE_REPLICA_SELECTION_SETTING.getKey(), random.nextBoolean());
-        if (TEST_NIGHTLY) {
-            builder.put(  
-                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING.getKey(),
-                RandomNumbers.randomIntBetween(random, 5, 10)
-            );  
-            builder.put(
-                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(),
-                RandomNumbers.randomIntBetween(random, 5, 10)  
-            );
-        } else if (random.nextInt(100) <= 90) {
-            builder.put(  
-                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING.getKey(),
-                RandomNumbers.randomIntBetween(random, 2, 5)
-            );  
-            builder.put(
-                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(),
-                RandomNumbers.randomIntBetween(random, 2, 5)  
-            );
-        }
-        // always reduce this - it can make tests really slow  
-        builder.put(
-            RecoverySettings.INDICES_RECOVERY_RETRY_DELAY_STATE_SYNC_SETTING.getKey(),
-            TimeValue.timeValueMillis(RandomNumbers.randomIntBetween(random, 20, 50))  
-        );
-        builder.put(
-            RecoverySettings.INDICES_RECOVERY_MAX_CONCURRENT_FILE_CHUNKS_SETTING.getKey(),  
-            RandomNumbers.randomIntBetween(random, 1, 5)
-        );
-        builder.put(  
-            RecoverySettings.INDICES_RECOVERY_MAX_CONCURRENT_OPERATIONS_SETTING.getKey(),
-            RandomNumbers.randomIntBetween(random, 1, 4)
-        );  
-        // TODO: currently we only randomize "cluster.no_cluster_manager_block" between "write" and "metadata_write", as "all" is fragile
-        // and fails shards when a cluster-manager abdicates, which breaks many tests.
-        builder.put(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_SETTING.getKey(), randomFrom(random, "write", "metadata_write"));  
-        defaultSettings = builder.build();
-        executor = OpenSearchExecutors.newScaling(
-            "internal_test_cluster_executor",  
-            0,
-            Integer.MAX_VALUE,
-            0,  
-            TimeUnit.SECONDS,
-            OpenSearchExecutors.daemonThreadFactory("test_" + clusterName),
-            new ThreadContext(Settings.EMPTY)  
-        );
-    }
-
-    /**
-     * Sets {@link #bootstrapClusterManagerNodeIndex} to the given value, see {@link #bootstrapClusterManagerNodeWithSpecifiedIndex(List)}
-     * for the description of how this field is used.  
-     * It's only possible to change {@link #bootstrapClusterManagerNodeIndex} value if autoManageClusterManagerNodes is false.
-     */
-    public void setBootstrapClusterManagerNodeIndex(int bootstrapClusterManagerNodeIndex) {  
-        assert autoManageClusterManagerNodes == false || bootstrapClusterManagerNodeIndex == -1
-            : "bootstrapClusterManagerNodeIndex should be -1 if autoManageClusterManagerNodes is true, but was "
-                + bootstrapClusterManagerNodeIndex;  
-        this.bootstrapClusterManagerNodeIndex = bootstrapClusterManagerNodeIndex;
-    }
-
-    @Override
-    public String getClusterName() {
-        return clusterName;  
-    }
-
-    public String[] getNodeNames() {  
-        return nodes.keySet().toArray(Strings.EMPTY_ARRAY);
-    }
-
-    private Settings getSettings(int nodeOrdinal, long nodeSeed, Settings others) {
-        Builder builder = Settings.builder().put(defaultSettings).put(getRandomNodeSettings(nodeSeed));
-        Settings settings = nodeConfigurationSource.nodeSettings(nodeOrdinal);  
-        if (settings != null) {
-            if (settings.get(ClusterName.CLUSTER_NAME_SETTING.getKey()) != null) {
-                throw new IllegalStateException(  
-                    "Tests must not set a '"
-                        + ClusterName.CLUSTER_NAME_SETTING.getKey()
-                        + "' as a node setting set '"  
-                        + ClusterName.CLUSTER_NAME_SETTING.getKey()
-                        + "': ["
-                        + settings.get(ClusterName.CLUSTER_NAME_SETTING.getKey())  
-                        + "]"
-                );
-            }  
-            builder.put(settings);
-        }
-        if (others != null) {  
-            builder.put(others);
-        }
-        builder.put(ClusterName.CLUSTER_NAME_SETTING.getKey(), clusterName);  
-        return builder.build();
-    }
-
-    public Collection<Class<? extends Plugin>> getPlugins() {
-        // Use LinkedHashSet so plugin iteration order matches the user's nodePlugins() declaration.
-        // Components from earlier plugins (e.g. those registered via PluginComponentRegistry) are  
-        // visible to later plugins' createComponents() only when init order respects declared
-        // dependencies. HashSet here would make order JVM-allocation-hash dependent and lead to
-        // non-deterministic ITs (a sibling plugin's createComponents could run before the plugin  
-        // it depends on, despite being listed first in nodePlugins()).
-        Set<Class<? extends Plugin>> plugins = new LinkedHashSet<>(nodeConfigurationSource.nodePlugins());
-        plugins.addAll(mockPlugins);  
-        return plugins;
-    }
-
-    private static Settings getRandomNodeSettings(long seed) {
-        Random random = new Random(seed);
-        Builder builder = Settings.builder();  
-        builder.put(TransportSettings.TRANSPORT_COMPRESS.getKey(), rarely(random));
-        if (random.nextBoolean()) {
-            builder.put("cache.recycler.page.type", RandomPicks.randomFrom(random, PageCacheRecycler.Type.values()));  
-        }
-        if (random.nextInt(10) == 0) { // 10% of the nodes have a very frequent check interval
-            builder.put(SearchService.KEEPALIVE_INTERVAL_SETTING.getKey(), timeValueMillis(10 + random.nextInt(2000)).getStringRep());  
-        } else if (random.nextInt(10) != 0) { // 90% of the time - 10% of the time we don't set anything
-            builder.put(SearchService.KEEPALIVE_INTERVAL_SETTING.getKey(), timeValueSeconds(10 + random.nextInt(5 * 60)).getStringRep());
-        }  
-        if (random.nextBoolean()) { // sometimes set a
-            builder.put(SearchService.DEFAULT_KEEPALIVE_SETTING.getKey(), timeValueSeconds(100 + random.nextInt(5 * 60)).getStringRep());
-        }  
-
-        builder.put(
-            OpenSearchExecutors.NODE_PROCESSORS_SETTING.getKey(),  
-            1 + random.nextInt(Math.min(4, Runtime.getRuntime().availableProcessors()))
-        );
-        if (random.nextBoolean()) {  
-            if (random.nextBoolean()) {
-                builder.put("indices.fielddata.cache.size", 1 + random.nextInt(1000), ByteSizeUnit.MB);
-            }  
-        }
-
-        // randomize tcp settings  
-        if (random.nextBoolean()) {
-            builder.put(TransportSettings.CONNECTIONS_PER_NODE_RECOVERY.getKey(), random.nextInt(2) + 1);
-            builder.put(TransportSettings.CONNECTIONS_PER_NODE_BULK.getKey(), random.nextInt(3) + 1);  
-            builder.put(TransportSettings.CONNECTIONS_PER_NODE_REG.getKey(), random.nextInt(6) + 1);
-        }
-
-        if (random.nextBoolean()) {
-            builder.put(
-                MappingUpdatedAction.INDICES_MAPPING_DYNAMIC_TIMEOUT_SETTING.getKey(),  
-                timeValueSeconds(RandomNumbers.randomIntBetween(random, 10, 30)).getStringRep()
-            );
-            builder.put(MappingUpdatedAction.INDICES_MAX_IN_FLIGHT_UPDATES_SETTING.getKey(), RandomNumbers.randomIntBetween(random, 1, 10));  
-        }
-
-        // turning on the real memory circuit breaker leads to spurious test failures. As have no full control over heap usage, we  
-        // turn it off for these tests.
-        builder.put(HierarchyCircuitBreakerService.USE_REAL_MEMORY_USAGE_SETTING.getKey(), false);
-
-        if (random.nextInt(10) == 0) {
-            builder.put(HierarchyCircuitBreakerService.REQUEST_CIRCUIT_BREAKER_TYPE_SETTING.getKey(), "noop");
-            builder.put(HierarchyCircuitBreakerService.FIELDDATA_CIRCUIT_BREAKER_TYPE_SETTING.getKey(), "noop");  
-        }
-
-        if (random.nextBoolean()) {  
-            if (random.nextInt(10) == 0) { // do something crazy slow here
-                builder.put(
-                    RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(),  
-                    new ByteSizeValue(RandomNumbers.randomIntBetween(random, 1, 10), ByteSizeUnit.MB)
-                );
-            } else {  
-                builder.put(
-                    RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(),
-                    new ByteSizeValue(RandomNumbers.randomIntBetween(random, 10, 200), ByteSizeUnit.MB)  
-                );
-            }
-        }  
-
-        if (random.nextBoolean()) {
-            builder.put(TransportSettings.PING_SCHEDULE.getKey(), RandomNumbers.randomIntBetween(random, 100, 2000) + "ms");  
-        }
-
-        if (random.nextBoolean()) {  
-            String ctx = randomFrom(random, ScriptModule.CORE_CONTEXTS.keySet());
-            builder.put(
-                ScriptService.SCRIPT_CACHE_SIZE_SETTING.getConcreteSettingForNamespace(ctx).getKey(),  
-                RandomNumbers.randomIntBetween(random, 0, 2000)
-            );
-        }  
-        if (random.nextBoolean()) {
-            String ctx = randomFrom(random, ScriptModule.CORE_CONTEXTS.keySet());
-            builder.put(  
-                ScriptService.SCRIPT_CACHE_EXPIRE_SETTING.getConcreteSettingForNamespace(ctx).getKey(),
-                timeValueMillis(RandomNumbers.randomIntBetween(random, 750, 10000000)).getStringRep()
-            );  
-        }
-        if (random.nextBoolean()) {
-            int initialMillisBound = RandomNumbers.randomIntBetween(random, 10, 100);  
-            builder.put(TransportReplicationAction.REPLICATION_INITIAL_RETRY_BACKOFF_BOUND.getKey(), timeValueMillis(initialMillisBound));
-            int retryTimeoutSeconds = RandomNumbers.randomIntBetween(random, 0, 60);
-            builder.put(TransportReplicationAction.REPLICATION_RETRY_TIMEOUT.getKey(), timeValueSeconds(retryTimeoutSeconds));  
-        }
-
-        return builder.build();  
-    }
-
-    public static String clusterName(String prefix, long clusterSeed) {  
-        StringBuilder builder = new StringBuilder(prefix);
-        builder.append("-TEST_WORKER_VM=[").append(OpenSearchTestCase.TEST_WORKER_VM_ID).append(']');
-        builder.append("-CLUSTER_SEED=[").append(clusterSeed).append(']');  
-        // if multiple maven task run on a single host we better have an identifier that doesn't rely on input params
-        builder.append("-HASH=[").append(SeedUtils.formatSeed(System.nanoTime())).append(']');
-        return builder.toString();  
-    }
-
-    private void ensureOpen() {  
-        if (!open.get()) {
-            throw new RuntimeException("Cluster is already closed");
-        }  
-    }
-
-    private NodeAndClient getOrBuildRandomNode() {  
-        assert Thread.holdsLock(this);
-        final NodeAndClient randomNodeAndClient = getRandomNodeAndClient();
-        if (randomNodeAndClient != null) {  
-            return randomNodeAndClient;
-        }
-        final Runnable onTransportServiceStarted = () -> {}; // do not create unicast host file for this one node.  
-
-        final int nodeId = nextNodeId.getAndIncrement();
-        final Settings settings = getNodeSettings(nodeId, random.nextLong(), Settings.EMPTY, 1);  
-        final Settings nodeSettings = Settings.builder()
-            .putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), Node.NODE_NAME_SETTING.get(settings))
-            .put(settings)  
-            .build();
-        final NodeAndClient buildNode = buildNode(nodeId, nodeSettings, false, onTransportServiceStarted);
-        assert nodes.isEmpty();  
-        buildNode.startNode();
-        publishNode(buildNode);
-        return buildNode;  
-    }
-
-    private NodeAndClient getRandomNodeAndClient() {  
-        return getRandomNodeAndClient(nc -> true);
-    }
-
-    private synchronized NodeAndClient getRandomNodeAndClient(Predicate<NodeAndClient> predicate) {
-        ensureOpen();
-        List<NodeAndClient> values = nodes.values().stream().filter(predicate).collect(Collectors.toList());  
-        if (values.isEmpty() == false) {
-            return randomFrom(random, values);
-        }  
-        return null;
-    }
-
-    /**
-     * Ensures that at least <code>n</code> data nodes are present in the cluster.
-     * if more nodes than <code>n</code> are present this method will not  
-     * stop any of the running nodes.
-     */
-    public synchronized void ensureAtLeastNumDataNodes(int n) {  
-        int size = numDataNodes();
-        if (size < n) {
-            logger.info("increasing cluster size from {} to {}", size, n);  
-            if (numSharedDedicatedClusterManagerNodes > 0) {
-                startDataOnlyNodes(n - size);
-            } else {  
-                startNodes(n - size);
-            }
-            validateClusterFormed();  
-        }
-    }
-
-    /**
-     * Ensures that at least <code>n</code> warm nodes are present in the cluster.
-     * if more nodes than <code>n</code> are present this method will not  
-     * stop any of the running nodes.
-     */
-    public synchronized void ensureAtLeastNumWarmNodes(int n) {  
-        int size = numWarmNodes();
-        if (size < n) {
-            logger.info("increasing cluster size from {} to {}", size, n);  
-            startNodes(n - size, Settings.builder().put(onlyRole(Settings.EMPTY, DiscoveryNodeRole.WARM_ROLE)).build());
-            validateClusterFormed();
-        }  
-    }
-
-    /**  
-     * Ensures that at least <code>n</code> data-warm nodes are present in the cluster.
-     * if more nodes than <code>n</code> are present this method will not
-     * stop any of the running nodes.  
-     */
-    public synchronized void ensureAtLeastNumWarmAndDataNodes(int n) {
-        int size = numWarmAndDataNodes();  
-        if (size < n) {
-            logger.info("increasing cluster size from {} to {}", size, n);
-            Set<DiscoveryNodeRole> warmAndDataRoles = Set.of(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.WARM_ROLE);  
-            Settings settings = Settings.builder()
-                .put(
-                    Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(),  
-                    randomBoolean() ? DEFAULT_WARM_CACHE_SIZE_PERCENT : DEFAULT_WARM_CACHE_SIZE_BYTES
-                )
-                .build();  
-            startNodes(n - size, Settings.builder().put(onlyRoles(settings, warmAndDataRoles)).build());
-            validateClusterFormed();
-        }  
-    }
-
-    /**  
-     * Ensures that at most <code>n</code> are up and running.
-     * If less nodes that <code>n</code> are running this method
-     * will not start any additional nodes.  
-     */
-    public synchronized void ensureAtMostNumDataNodes(int n) throws IOException {
-        int size = numDataNodes();  
-        if (size <= n) {
-            return;
-        }  
-        // prevent killing the cluster-manager if possible and client nodes
-        final Stream<NodeAndClient> collection = n == 0
-            ? nodes.values().stream()  
-            : nodes.values().stream().filter(DATA_NODE_PREDICATE.and(new NodeNamePredicate(getClusterManagerName()).negate()));
-        final Iterator<NodeAndClient> values = collection.iterator();
-
-        logger.info("changing cluster size from {} data nodes to {}", size, n);
-        Set<NodeAndClient> nodesToRemove = new HashSet<>();
-        int numNodesAndClients = 0;  
-        while (values.hasNext() && numNodesAndClients++ < size - n) {
-            NodeAndClient next = values.next();
-            nodesToRemove.add(next);  
-        }
-
-        stopNodesAndClients(nodesToRemove);  
-        if (!nodesToRemove.isEmpty() && size() > 0) {
-            validateClusterFormed();
-        }  
-    }
-
-    private Settings getNodeSettings(  
-        final int nodeId,
-        final long seed,
-        final Settings extraSettings,  
-        final int defaultMinClusterManagerNodes
-    ) {
-        final Settings settings = getSettings(nodeId, seed, extraSettings);  
-
-        final String name = buildNodeName(nodeId, settings);
-
-        final Settings.Builder updatedSettings = Settings.builder();
-
-        updatedSettings.put(Environment.PATH_HOME_SETTING.getKey(), baseDir);  
-
-        if (numDataPaths > 1) {
-            updatedSettings.putList(  
-                Environment.PATH_DATA_SETTING.getKey(),
-                IntStream.range(0, numDataPaths)
-                    .mapToObj(i -> baseDir.resolve(name).resolve("d" + i).toString())  
-                    .collect(Collectors.toList())
-            );
-        } else {  
-            updatedSettings.put(Environment.PATH_DATA_SETTING.getKey(), baseDir.resolve(name));
-        }
-
-        updatedSettings.put(Environment.PATH_SHARED_DATA_SETTING.getKey(), baseDir.resolve(name + "-shared"));
-
-        // allow overriding the above  
-        updatedSettings.put(settings);
-        // force certain settings
-        updatedSettings.put("node.name", name);  
-        updatedSettings.put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), seed);
-
-        final String discoveryType = DISCOVERY_TYPE_SETTING.get(updatedSettings.build());  
-        final boolean usingSingleNodeDiscovery = discoveryType.equals("single-node");
-        if (usingSingleNodeDiscovery == false) {
-            if (autoManageClusterManagerNodes) {  
-                assertThat(
-                    "if cluster-manager nodes are automatically managed then nodes must complete a join cycle when starting",
-                    updatedSettings.get(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey()),  
-                    nullValue()
-                );
-            }  
-        }
-
-        return updatedSettings.build();  
-    }
-
-    /**  
-     * builds a new node
-     *
-     * @param nodeId                    node ordinal  
-     * @param settings                  the settings to use
-     * @param reuseExisting             if a node with the same name is already part of {@link #nodes}, no new node will be built and
-     *                                  the method will return the existing one  
-     * @param onTransportServiceStarted callback to run when transport service is started
-     */
-    private synchronized NodeAndClient buildNode(int nodeId, Settings settings, boolean reuseExisting, Runnable onTransportServiceStarted) {  
-        assert Thread.holdsLock(this);
-        ensureOpen();
-        Collection<Class<? extends Plugin>> plugins = getPlugins();  
-        Collection<PluginInfo> additionalNodePlugins = nodeConfigurationSource.additionalNodePlugins();
-        String name = settings.get("node.name");
-
-        final NodeAndClient nodeAndClient = nodes.get(name);
-        if (reuseExisting && nodeAndClient != null) {
-            onTransportServiceStarted.run(); // reusing an existing node implies its transport service already started  
-            return nodeAndClient;
-        }
-        assert reuseExisting || nodeAndClient == null : "node name [" + name + "] already exists but not allowed to use it";  
-
-        SecureSettings secureSettings = Settings.builder().put(settings).getSecureSettings();
-        if (secureSettings instanceof MockSecureSettings) {  
-            // we clone this here since in the case of a node restart we might need it again
-            secureSettings = ((MockSecureSettings) secureSettings).clone();
-        }  
-
-        List<PluginInfo> pluginInfos = plugins.stream()
-            .map(  
-                p -> new PluginInfo(
-                    p.getName(),
-                    "classpath plugin",  
-                    "NA",
-                    Version.CURRENT,
-                    "1.8",  
-                    p.getName(),
-                    null,
-                    Collections.emptyList(),  
-                    false
-                )
-            )  
-            .collect(Collectors.toList());
-        pluginInfos.addAll(additionalNodePlugins);
-        MockNode node = new MockNode(settings, pluginInfos, nodeConfigurationSource.nodeConfigPath(nodeId), forbidPrivateIndexSettings);  
-        node.injector().getInstance(TransportService.class).addLifecycleListener(new LifecycleListener() {
-            @Override
-            public void afterStart() {  
-                onTransportServiceStarted.run();
-            }
-        });  
-        try {
-            IOUtils.close(secureSettings);
-        } catch (IOException e) {  
-            throw new UncheckedIOException(e);
-        }
-        return new NodeAndClient(name, node, settings, nodeId);  
-    }
-
-    private String getNodePrefix(Settings settings) {  
-        return nodePrefix + getRoleSuffix(settings);
-    }
-
-    private String buildNodeName(int id, Settings settings) {
-        return getNodePrefix(settings) + id;
-    }  
-
-    /**
-     * returns a suffix string based on the node role. If no explicit role is defined, the suffix will be empty  
-     */
-    private static String getRoleSuffix(Settings settings) {
-        String suffix = "";  
-        // only add the suffixes if roles are explicitly defined
-        if (settings.hasValue("nodes.roles")) {
-            if (DiscoveryNode.isClusterManagerNode(settings)) {  
-                suffix = suffix + DiscoveryNodeRole.CLUSTER_MANAGER_ROLE.roleNameAbbreviation();
-            }
-            if (DiscoveryNode.isDataNode(settings)) {  
-                suffix = suffix + DiscoveryNodeRole.DATA_ROLE.roleNameAbbreviation();
-            }
-            if (!DiscoveryNode.isClusterManagerNode(settings) && !DiscoveryNode.isDataNode(settings)) {  
-                suffix = suffix + "c";
-            }
-        }  
-        return suffix;
-    }
-
-    @Override
-    public synchronized Client client() {
-        ensureOpen();  
-        /* Randomly return a client to one of the nodes in the cluster */
-        return getOrBuildRandomNode().client();
-    }  
-
-    /**
-     * Returns a node client to a data node in the cluster.  
-     * Note: use this with care tests should not rely on a certain nodes client.
-     */
-    public Client dataNodeClient() {  
-        /* Randomly return a client to one of the nodes in the cluster */
-        return getRandomNodeAndClient(DATA_NODE_PREDICATE).client();
-    }  
-
-    /**
-     * Returns a node client to the current cluster-manager node.  
-     * Note: use this with care tests should not rely on a certain nodes client.
-     */
-    public Client clusterManagerClient() {  
-        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(new NodeNamePredicate(getClusterManagerName()));
-        if (randomNodeAndClient != null) {
-            return randomNodeAndClient.nodeClient(); // ensure node client cluster-manager is requested  
-        }
-        throw new AssertionError("No cluster-manager client found");
-    }  
-
-    /**
-     * Returns a node client to random node but not the cluster-manager. This method will fail if no non-cluster-manager client is available.  
-     */
-    public Client nonClusterManagerClient() {
-        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(new NodeNamePredicate(getClusterManagerName()).negate());  
-        if (randomNodeAndClient != null) {
-            return randomNodeAndClient.nodeClient(); // ensure node client non-cluster-manager is requested
-        }  
-        throw new AssertionError("No non-cluster-manager client found");
-    }
-
-    /**
-     * Returns a client to a coordinating only node
-     */  
-    public synchronized Client coordOnlyNodeClient() {
-        ensureOpen();
-        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(NO_DATA_NO_CLUSTER_MANAGER_PREDICATE);  
-        if (randomNodeAndClient != null) {
-            return randomNodeAndClient.client();
-        }  
-        int nodeId = nextNodeId.getAndIncrement();
-        Settings settings = getSettings(nodeId, random.nextLong(), Settings.EMPTY);
-        startCoordinatingOnlyNode(settings);  
-        return getRandomNodeAndClient(NO_DATA_NO_CLUSTER_MANAGER_PREDICATE).client();
-    }
-
-    public synchronized String startCoordinatingOnlyNode(Settings settings) {
-        ensureOpen(); // currently unused
-        return startNode(noRoles(settings));  
-    }
-
-    /**  
-     * Returns a node client to a given node.
-     */
-    public Client client(String nodeName) {  
-        NodeAndClient nodeAndClient = nodes.get(nodeName);
-        if (nodeAndClient != null) {
-            return nodeAndClient.client();  
-        }
-        throw new AssertionError("No node found with name: [" + nodeName + "]");
-    }  
-
-    /**
-     * Returns a "smart" node client to a random node in the cluster  
-     */
-    public Client smartClient() {
-        NodeAndClient randomNodeAndClient = getRandomNodeAndClient();  
-        if (randomNodeAndClient != null) {
-            return randomNodeAndClient.nodeClient();
-        }  
-        throw new AssertionError("No smart client found");
-    }
-
-    @Override
-    public synchronized void close() throws IOException {
-        if (this.open.compareAndSet(true, false)) {  
-            if (activeDisruptionScheme != null) {
-                activeDisruptionScheme.testClusterClosed();
-                activeDisruptionScheme = null;  
-            }
-            try {
-                IOUtils.close(nodes.values());  
-            } finally {
-                nodes = Collections.emptyNavigableMap();
-                executor.shutdownNow();  
-            }
-        }
-    }  
-
-    private final class NodeAndClient implements Closeable {
-        private MockNode node;  
-        private final Settings originalNodeSettings;
-        private Client nodeClient;
-        private final AtomicBoolean closed = new AtomicBoolean(false);  
-        private final String name;
-        private final int nodeAndClientId;
-
-        NodeAndClient(String name, MockNode node, Settings originalNodeSettings, int nodeAndClientId) {
-            this.node = node;
-            this.name = name;  
-            this.originalNodeSettings = originalNodeSettings;
-            this.nodeAndClientId = nodeAndClientId;
-            markNodeDataDirsAsNotEligibleForWipe(node);  
-        }
-
-        Node node() {  
-            if (closed.get()) {
-                throw new RuntimeException("already closed");
-            }  
-            return node;
-        }
-
-        public int nodeAndClientId() {
-            return nodeAndClientId;
-        }  
-
-        public String getName() {
-            return name;  
-        }
-
-        public boolean isClusterManagerEligible() {  
-            return DiscoveryNode.isClusterManagerNode(node.settings());
-        }
-
-        Client client() {
-            return getOrBuildNodeClient();
-        }  
-
-        Client nodeClient() {
-            if (closed.get()) {  
-                throw new RuntimeException("already closed");
-            }
-            return getOrBuildNodeClient();  
-        }
-
-        private Client getOrBuildNodeClient() {  
-            synchronized (InternalTestCluster.this) {
-                if (closed.get()) {
-                    throw new RuntimeException("already closed");  
-                }
-                if (nodeClient == null) {
-                    nodeClient = node.client();  
-                }
-                return clientWrapper.apply(nodeClient);
-            }  
-        }
-
-        void resetClient() {  
-            if (closed.get() == false) {
-                Releasables.close(nodeClient);
-                nodeClient = null;  
-            }
-        }
-
-        void startNode() {
-            boolean success = false;
-            try {  
-                node.start();
-                success = true;
-            } catch (NodeValidationException e) {  
-                throw new RuntimeException(e);
-            } finally {
-                if (success == false) {  
                     IOUtils.closeWhileHandlingException(node);
-                }
-            }  
-        }
-
-        /**  
-         * closes the node and prepares it to be restarted
-         */
-        Settings closeForRestart(RestartCallback callback, int minClusterManagerNodes) throws Exception {  
-            assert callback != null;
-            close();
-            removeNode(this);  
-            Settings callbackSettings = callback.onNodeStopped(name);
-            assert callbackSettings != null;
-            Settings.Builder newSettings = Settings.builder();  
-            newSettings.put(callbackSettings);
-            if (minClusterManagerNodes >= 0) {
-                if (INITIAL_CLUSTER_MANAGER_NODES_SETTING.exists(callbackSettings) == false) {  
-                    newSettings.putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey());
-                }
-            }  
-            // delete data folders now, before we start other nodes that may claim it
-            clearDataIfNeeded(callback);
-            return newSettings.build();  
-        }
-
-        private void clearDataIfNeeded(RestartCallback callback) throws IOException {  
-            if (callback.clearData(name)) {
-                NodeEnvironment nodeEnv = node.getNodeEnvironment();
-                if (nodeEnv.hasNodeFile()) {  
-                    final Path[] locations = nodeEnv.nodeDataPaths();
-                    logger.debug("removing node data paths: [{}]", Arrays.toString(locations));
-                    IOUtils.rm(locations);  
-                }
-            }
-        }  
-
-        private void recreateNode(final Settings newSettings, final Runnable onTransportServiceStarted) {
-            if (closed.get() == false) {  
-                throw new IllegalStateException("node " + name + " should be closed before recreating it");
-            }
-            // use a new seed to make sure we generate a fresh new node id if the data folder has been wiped  
-            final long newIdSeed = NodeEnvironment.NODE_ID_SEED_SETTING.get(node.settings()) + 1;
-            Settings finalSettings = Settings.builder()
-                .put(originalNodeSettings)  
-                .put(newSettings)
-                .put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), newIdSeed)
-                .build();  
-            node = new MockNode(
-                finalSettings,
-                node.getClasspathPlugins(),  
-                nodeConfigurationSource.nodeConfigPath((int) newIdSeed),
-                forbidPrivateIndexSettings
-            );  
-            node.injector().getInstance(TransportService.class).addLifecycleListener(new LifecycleListener() {
-                @Override
-                public void afterStart() {  
-                    onTransportServiceStarted.run();
-                }
-            });  
-            closed.set(false);
-            markNodeDataDirsAsNotEligibleForWipe(node);
-        }  
-
-        @Override
-        public void close() throws IOException {  
-            assert Thread.holdsLock(InternalTestCluster.this);
-            try {
-                resetClient();  
-            } finally {
-                closed.set(true);
-                markNodeDataDirsAsPendingForWipe(node);  
-                node.close();
-                try {
-                    if (node.awaitClose(10, TimeUnit.SECONDS) == false) {  
-                        throw new IOException("Node didn't close within 10 seconds.");
-                    }
-                } catch (InterruptedException e) {  
-                    throw new AssertionError("Interruption while waiting for the node to close", e);
-                }
-            }  
-        }
-
-        private void markNodeDataDirsAsPendingForWipe(Node node) {  
-            assert Thread.holdsLock(InternalTestCluster.this);
-            NodeEnvironment nodeEnv = node.getNodeEnvironment();
-            if (nodeEnv.hasNodeFile()) {  
-                dataDirToClean.addAll(Arrays.asList(nodeEnv.nodeDataPaths()));
-            }
-        }  
-
-        private void markNodeDataDirsAsNotEligibleForWipe(Node node) {
-            assert Thread.holdsLock(InternalTestCluster.this);  
-            NodeEnvironment nodeEnv = node.getNodeEnvironment();
-            if (nodeEnv.hasNodeFile()) {
-                dataDirToClean.removeAll(Arrays.asList(nodeEnv.nodeDataPaths()));  
-            }
-        }
-    }  
-
-    @Override
-    public synchronized void beforeTest(Random random) throws IOException, InterruptedException {  
-        super.beforeTest(random);
-        reset(true);
-    }  
-
-    private synchronized void reset(boolean wipeData) throws IOException {
-        // clear all rules for mock transport services  
-        for (NodeAndClient nodeAndClient : nodes.values()) {
-            TransportService transportService = nodeAndClient.node.injector().getInstance(TransportService.class);
-            if (transportService instanceof MockTransportService) {  
-                final MockTransportService mockTransportService = (MockTransportService) transportService;
-                mockTransportService.clearAllRules();
-            }  
-        }
-        randomlyResetClients();
-        final int newSize = sharedNodesSeeds.length;  
-        if (nextNodeId.get() == newSize && nodes.size() == newSize) {
-            if (wipeData) {
-                wipePendingDataDirectories();  
-            }
-            logger.debug(
-                "Cluster hasn't changed - moving out - nodes: [{}] nextNodeId: [{}] numSharedNodes: [{}]",  
-                nodes.keySet(),
-                nextNodeId.get(),
-                newSize  
-            );
-            return;
-        }  
-        logger.debug(
-            "Cluster is NOT consistent - restarting shared nodes - nodes: [{}] nextNodeId: [{}] numSharedNodes: [{}]",
-            nodes.keySet(),  
-            nextNodeId.get(),
-            newSize
-        );  
-
-        // trash all nodes with id >= sharedNodesSeeds.length - they are non shared
-        final List<NodeAndClient> toClose = new ArrayList<>();  
-        for (NodeAndClient nodeAndClient : nodes.values()) {
-            if (nodeAndClient.nodeAndClientId() >= sharedNodesSeeds.length) {
-                logger.debug("Close Node [{}] not shared", nodeAndClient.name);  
-                toClose.add(nodeAndClient);
-            }
-        }  
-        stopNodesAndClients(toClose);
-
-        // clean up what the nodes left that is unused  
-        if (wipeData) {
-            wipePendingDataDirectories();
-        }  
-
-        assertTrue(
-            "expected at least one cluster-manager-eligible node left in " + nodes,  
-            nodes.isEmpty() || nodes.values().stream().anyMatch(NodeAndClient::isClusterManagerEligible)
-        );
-
-        final int prevNodeCount = nodes.size();
-
-        // start any missing node  
-        assert newSize == numSharedDedicatedClusterManagerNodes + numSharedDataNodes + numSharedCoordOnlyNodes;
-        final int numberOfClusterManagerNodes = numSharedDedicatedClusterManagerNodes > 0
-            ? numSharedDedicatedClusterManagerNodes  
-            : numSharedDataNodes;
-        final int defaultMinClusterManagerNodes = (numberOfClusterManagerNodes / 2) + 1;
-        final List<NodeAndClient> toStartAndPublish = new ArrayList<>(); // we want to start nodes in one go  
-        final Runnable onTransportServiceStarted = () -> rebuildUnicastHostFiles(toStartAndPublish);
-
-        final List<Settings> settings = new ArrayList<>();  
-
-        for (int i = 0; i < numSharedDedicatedClusterManagerNodes; i++) {
-            final Settings nodeSettings = getNodeSettings(i, sharedNodesSeeds[i], Settings.EMPTY, defaultMinClusterManagerNodes);  
-            settings.add(removeRoles(nodeSettings, Collections.singleton(DiscoveryNodeRole.DATA_ROLE)));
-        }
-        for (int i = numSharedDedicatedClusterManagerNodes; i < numSharedDedicatedClusterManagerNodes + numSharedDataNodes; i++) {  
-            final Settings nodeSettings = getNodeSettings(i, sharedNodesSeeds[i], Settings.EMPTY, defaultMinClusterManagerNodes);
-            if (numSharedDedicatedClusterManagerNodes > 0) {
-                settings.add(removeRoles(nodeSettings, Collections.singleton(DiscoveryNodeRole.MASTER_ROLE)));  
-            } else {
-                // if we don't have dedicated cluster-manager nodes, keep things default
-                settings.add(nodeSettings);  
-            }
-        }
-        for (int i = numSharedDedicatedClusterManagerNodes + numSharedDataNodes; i < numSharedDedicatedClusterManagerNodes  
-            + numSharedDataNodes + numSharedCoordOnlyNodes; i++) {
-            final Builder extraSettings = Settings.builder().put(noRoles());
-            settings.add(getNodeSettings(i, sharedNodesSeeds[i], extraSettings.build(), defaultMinClusterManagerNodes));  
-        }
-
-        int autoBootstrapClusterManagerNodeIndex = -1;  
-        final List<String> clusterManagerNodeNames = settings.stream()
-            .filter(DiscoveryNode::isClusterManagerNode)
-            .map(Node.NODE_NAME_SETTING::get)  
-            .collect(Collectors.toList());
-
-        if (prevNodeCount == 0 && autoManageClusterManagerNodes) {  
-            if (numSharedDedicatedClusterManagerNodes > 0) {
-                autoBootstrapClusterManagerNodeIndex = RandomNumbers.randomIntBetween(random, 0, numSharedDedicatedClusterManagerNodes - 1);
-            } else if (numSharedDataNodes > 0) {  
-                autoBootstrapClusterManagerNodeIndex = RandomNumbers.randomIntBetween(random, 0, numSharedDataNodes - 1);
-            }
-        }  
-
-        final List<Settings> updatedSettings = bootstrapClusterManagerNodeWithSpecifiedIndex(settings);
-
-        for (int i = 0; i < numSharedDedicatedClusterManagerNodes + numSharedDataNodes + numSharedCoordOnlyNodes; i++) {
-            Settings nodeSettings = updatedSettings.get(i);
-            if (i == autoBootstrapClusterManagerNodeIndex) {  
-                nodeSettings = Settings.builder()
-                    .putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), clusterManagerNodeNames)
-                    .put(nodeSettings)  
-                    .build();
-            }
-            final NodeAndClient nodeAndClient = buildNode(i, nodeSettings, true, onTransportServiceStarted);  
-            toStartAndPublish.add(nodeAndClient);
-        }
-
-        startAndPublishNodesAndClients(toStartAndPublish);
-
-        nextNodeId.set(newSize);  
-        assert size() == newSize;
-        if (autoManageClusterManagerNodes && newSize > 0) {
-            validateClusterFormed();  
-        }
-        logger.debug(
-            "Cluster is consistent again - nodes: [{}] nextNodeId: [{}] numSharedNodes: [{}]",  
-            nodes.keySet(),
-            nextNodeId.get(),
-            newSize  
-        );
-    }
-
-    /** ensure a cluster is formed with all published nodes. */
-    public synchronized void validateClusterFormed() {
-        final Set<DiscoveryNode> expectedNodes = new HashSet<>();  
-        for (NodeAndClient nodeAndClient : nodes.values()) {
-            expectedNodes.add(getInstanceFromNode(ClusterService.class, nodeAndClient.node()).localNode());
-        }  
-        logger.trace("validating cluster formed, expecting {}", expectedNodes);
-
-        try {  
-            assertBusy(() -> {
-                final List<ClusterState> states = nodes.values()
-                    .stream()  
-                    .map(node -> getInstanceFromNode(ClusterService.class, node.node()))
-                    .map(ClusterService::state)
-                    .collect(Collectors.toList());  
-                final String debugString = ", expected nodes: " + expectedNodes + " and actual cluster states " + states;
-                // all nodes have a cluster-manager
-                assertTrue(  
-                    "Missing cluster-manager" + debugString,
-                    states.stream().allMatch(cs -> cs.nodes().getClusterManagerNodeId() != null)
-                );  
-                // all nodes have the same cluster-manager (in same term)
-                assertEquals(
-                    "Not all cluster-managers in same term" + debugString,  
-                    1,
-                    states.stream().mapToLong(ClusterState::term).distinct().count()
-                );  
-                // all nodes know about all other nodes
-                states.forEach(cs -> {
-                    DiscoveryNodes discoveryNodes = cs.nodes();  
-                    assertEquals("Node size mismatch" + debugString, expectedNodes.size(), discoveryNodes.getSize());
-                    for (DiscoveryNode expectedNode : expectedNodes) {
-                        assertTrue("Expected node to exist: " + expectedNode + debugString, discoveryNodes.nodeExists(expectedNode));  
-                    }
-                });
-                states.forEach(cs -> {  
-                    if (cs.nodes().getNodes().values().stream().findFirst().get().isRemoteStoreNode()) {
-                        RepositoriesMetadata repositoriesMetadata = cs.metadata().custom(RepositoriesMetadata.TYPE);
-                        assertTrue(repositoriesMetadata != null && !repositoriesMetadata.repositories().isEmpty());  
-                    }
-                });
-            }, 30, TimeUnit.SECONDS);  
-        } catch (AssertionError ae) {
-            throw new IllegalStateException("cluster failed to form", ae);
-        } catch (Exception e) {  
-            throw new IllegalStateException(e);
-        }
-    }  
-
-    @Override
-    public synchronized void afterTest() {  
-        wipePendingDataDirectories();
-        randomlyResetClients(); /* reset all clients - each test gets its own client based on the Random instance created above. */
-    }  
-
-    @Override
-    public void beforeIndexDeletion() throws Exception {  
-        // Check that the operations counter on index shard has reached 0.
-        // The assumption here is that after a test there are no ongoing write operations.
-        // test that have ongoing write operations after the test (for example because ttl is used  
-        // and not all docs have been purged after the test) and inherit from
-        // ElasticsearchIntegrationTest must override beforeIndexDeletion() to avoid failures.
-        assertNoPendingIndexOperations();  
-        assertAllPendingWriteLimitsReleased();
-        assertOpenTranslogReferences();
-        assertNoSnapshottedIndexCommit();  
-    }
-
-    private void assertAllPendingWriteLimitsReleased() throws Exception {  
-        assertBusy(() -> {
-            for (NodeAndClient nodeAndClient : nodes.values()) {
-                IndexingPressure indexingPressure = getInstance(IndexingPressure.class, nodeAndClient.name);  
-                final long combinedBytes = indexingPressure.getCurrentCombinedCoordinatingAndPrimaryBytes();
-                if (combinedBytes > 0) {
-                    throw new AssertionError("pending combined bytes [" + combinedBytes + "] bytes on node [" + nodeAndClient.name + "].");  
-                }
-                final long coordinatingBytes = indexingPressure.getCurrentCoordinatingBytes();
-                if (coordinatingBytes > 0) {  
-                    throw new AssertionError(
-                        "pending coordinating bytes [" + coordinatingBytes + "] bytes on node [" + nodeAndClient.name + "]."
-                    );  
-                }
-                final long primaryBytes = indexingPressure.getCurrentPrimaryBytes();
-                if (primaryBytes > 0) {  
-                    throw new AssertionError("pending primary bytes [" + primaryBytes + "] bytes on node [" + nodeAndClient.name + "].");
-                }
-                final long replicaWriteBytes = indexingPressure.getCurrentReplicaBytes();  
-                if (replicaWriteBytes > 0) {
-                    throw new AssertionError(
-                        "pending replica write bytes [" + combinedBytes + "] bytes on node [" + nodeAndClient.name + "]."  
-                    );
-                }
-            }  
-        }, 60, TimeUnit.SECONDS);
-    }
-
-    private void assertNoPendingIndexOperations() throws Exception {
-        assertBusy(() -> {
-            for (NodeAndClient nodeAndClient : nodes.values()) {  
-                IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);
-                for (IndexService indexService : indexServices) {
-                    for (IndexShard indexShard : indexService) {  
-                        List<String> operations = indexShard.getActiveOperations();
-                        if (operations.size() > 0) {
-                            throw new AssertionError(  
-                                "shard "
-                                    + indexShard.shardId()
-                                    + " on node ["  
-                                    + nodeAndClient.name
-                                    + "] has pending operations:\n --> "
-                                    + String.join("\n --> ", operations)  
-                            );
-                        }
-                    }  
-                }
-            }
-        }, 60, TimeUnit.SECONDS);  
-    }
-
-    private void assertOpenTranslogReferences() throws Exception {  
-        assertBusy(() -> {
-            for (NodeAndClient nodeAndClient : nodes.values()) {
-                IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);  
-                for (IndexService indexService : indexServices) {
-                    for (IndexShard indexShard : indexService) {
-                        try {  
-                            if (IndexShardTestCase.getEngine(indexShard) instanceof IngestionEngine) {
-                                // no-op, as IngestionEngine does not use translog.
-                            } else if (IndexShardTestCase.getEngine(indexShard) instanceof InternalEngine) {  
-                                IndexShardTestCase.getTranslog(indexShard).getDeletionPolicy().assertNoOpenTranslogRefs();
-                            }
-                        } catch (AlreadyClosedException ok) {  
-                            // all good
-                        }
-                    }  
-                }
-            }
-        }, 60, TimeUnit.SECONDS);  
-    }
-
-    private void assertNoSnapshottedIndexCommit() throws Exception {  
-        assertBusy(() -> {
-            for (NodeAndClient nodeAndClient : nodes.values()) {
-                IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);  
-                for (IndexService indexService : indexServices) {
-                    for (IndexShard indexShard : indexService) {
-                        try {  
-                            Engine engine = IndexShardTestCase.getEngine(indexShard);
-                            if (engine instanceof InternalEngine) {
-                                assertFalse(  
-                                    indexShard.routingEntry().toString() + " has unreleased snapshotted index commits",
-                                    EngineTestCase.hasSnapshottedCommits(engine)
-                                );  
-                            }
-                        } catch (AlreadyClosedException ignored) {
-
-                        }
-                    }
-                }  
-            }
-        }, 60, TimeUnit.SECONDS);
-    }  
-
-    /**
-     * Asserts that the document history in Lucene index is consistent with Translog's on every index shard of the cluster.  
-     * This assertion might be expensive, thus we prefer not to execute on every test but only interesting tests.
-     */
-    public void assertConsistentHistoryBetweenTranslogAndLuceneIndex() throws IOException {  
-        for (NodeAndClient nodeAndClient : nodes.values()) {
-            IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);
-            for (IndexService indexService : indexServices) {  
-                for (IndexShard indexShard : indexService) {
-                    try {
-                        IndexShardTestCase.assertConsistentHistoryBetweenTranslogAndLucene(indexShard);  
-                    } catch (AlreadyClosedException ignored) {
-                        // shard is closed
-                    }  
-                }
-            }
-        }  
-    }
-
-    public void assertNoInFlightDocsInEngine() throws Exception {  
-        assertBusy(() -> {
-            for (String nodeName : getNodeNames()) {
-                IndicesService indexServices = getInstance(IndicesService.class, nodeName);  
-                for (IndexService indexService : indexServices) {
-                    for (IndexShard indexShard : indexService) {
-                        try {  
-                            final Engine engine = IndexShardTestCase.getEngine(indexShard);
-                            assertThat(indexShard.routingEntry().toString(), EngineTestCase.getInFlightDocCount(engine), equalTo(0L));
-                        } catch (AlreadyClosedException ignored) {  
-                            // shard is closed
-                        }
-                    }  
-                }
-            }
-        });  
-    }
-
-    private IndexShard getShardOrNull(ClusterState clusterState, ShardRouting shardRouting) {  
-        if (shardRouting == null || shardRouting.assignedToNode() == false) {
-            return null;
-        }  
-        final DiscoveryNode assignedNode = clusterState.nodes().get(shardRouting.currentNodeId());
-        if (assignedNode == null) {
-            return null;  
-        }
-        return getInstance(IndicesService.class, assignedNode.getName()).getShardOrNull(shardRouting.shardId());
-    }  
-
-    public void assertSeqNos() throws Exception {
-        assertBusy(() -> {  
-            final ClusterState state = clusterService().state();
-            for (final IndexRoutingTable indexRoutingTable : state.routingTable().indicesRouting().values()) {
-                for (var indexShardRoutingTable : indexRoutingTable.shards().values()) {  
-                    ShardRouting primaryShardRouting = indexShardRoutingTable.primaryShard();
-                    final IndexShard primaryShard = getShardOrNull(state, primaryShardRouting);
-                    if (primaryShard == null) {  
-                        continue; // just ignore - shard movement
-                    }
-                    final SeqNoStats primarySeqNoStats;  
-                    final Map<String, Long> syncGlobalCheckpoints;
-                    try {
-                        primarySeqNoStats = primaryShard.seqNoStats();  
-                        syncGlobalCheckpoints = primaryShard.getInSyncGlobalCheckpoints();
-                    } catch (AlreadyClosedException ex) {
-                        continue; // shard is closed - just ignore  
-                    }
-                    assertThat(
-                        primaryShardRouting + " should have set the global checkpoint",  
-                        primarySeqNoStats.getGlobalCheckpoint(),
-                        not(equalTo(SequenceNumbers.UNASSIGNED_SEQ_NO))
-                    );  
-                    for (ShardRouting replicaShardRouting : indexShardRoutingTable.replicaShards()) {
-                        final IndexShard replicaShard = getShardOrNull(state, replicaShardRouting);
-                        if (replicaShard == null) {  
-                            continue; // just ignore - shard movement
-                        }
-                        final SeqNoStats seqNoStats;  
-                        try {
-                            seqNoStats = replicaShard.seqNoStats();
-                        } catch (AlreadyClosedException e) {  
-                            continue; // shard is closed - just ignore
-                        }
-                        assertThat(replicaShardRouting + " seq_no_stats mismatch", seqNoStats, equalTo(primarySeqNoStats));  
-                        // the local knowledge on the primary of the global checkpoint equals the global checkpoint on the shard
-                        if (primaryShard.isRemoteTranslogEnabled() == false) {
-                            assertThat(  
-                                replicaShardRouting + " global checkpoint syncs mismatch",
-                                seqNoStats.getGlobalCheckpoint(),
-                                equalTo(syncGlobalCheckpoints.get(replicaShardRouting.allocationId().getId()))  
-                            );
-                        }
-                    }  
-                }
-            }
-        }, 30, TimeUnit.SECONDS);  
-    }
-
-    /**  
-     * Asserts that all shards with the same shardId should have document Ids.
-     */
-    public void assertSameDocIdsOnShards() throws Exception {  
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().get().getState();
-            for (final IndexRoutingTable indexRoutingTable : state.routingTable().indicesRouting().values()) {  
-                for (var indexShardRoutingTable : indexRoutingTable.shards().values()) {
-                    ShardRouting primaryShardRouting = indexShardRoutingTable.primaryShard();
-                    IndexShard primaryShard = getShardOrNull(state, primaryShardRouting);  
-                    if (primaryShard == null) {
-                        continue;
-                    }  
-                    final List<DocIdSeqNoAndSource> docsOnPrimary;
-                    try {
-                        docsOnPrimary = IndexShardTestCase.getDocIdAndSeqNos(primaryShard);  
-                    } catch (AlreadyClosedException ex) {
-                        continue;
-                    }  
-                    for (ShardRouting replicaShardRouting : indexShardRoutingTable.replicaShards()) {
-                        IndexShard replicaShard = getShardOrNull(state, replicaShardRouting);
-                        if (replicaShard == null) {  
-                            continue;
-                        }
-                        final List<DocIdSeqNoAndSource> docsOnReplica;  
-                        try {
-                            docsOnReplica = IndexShardTestCase.getDocIdAndSeqNos(replicaShard);
-                        } catch (AlreadyClosedException ex) {  
-                            continue;
-                        }
-                        assertThat(  
-                            "out of sync shards: primary=["
-                                + primaryShardRouting
-                                + "] num_docs_on_primary=["  
-                                + docsOnPrimary.size()
-                                + "] vs replica=["
-                                + replicaShardRouting  
-                                + "] num_docs_on_replica=["
-                                + docsOnReplica.size()
-                                + "]",  
-                            docsOnReplica,
-                            equalTo(docsOnPrimary)
-                        );  
-                    }
-                }
-            }  
-        });
-    }
-
-    private void randomlyResetClients() {
-        assert Thread.holdsLock(this);
-        // only reset the clients on nightly tests, it causes heavy load...  
-        if (RandomizedTest.isNightly() && rarely(random)) {
-            final Collection<NodeAndClient> nodesAndClients = nodes.values();
-            for (NodeAndClient nodeAndClient : nodesAndClients) {  
-                nodeAndClient.resetClient();
-            }
-        }  
-    }
-
-    public synchronized void wipePendingDataDirectories() {  
-        if (!dataDirToClean.isEmpty()) {
-            try {
-                for (Path path : dataDirToClean) {  
-                    try {
-                        FileSystemUtils.deleteSubDirectories(path);
-                        logger.info("Successfully wiped data directory for node location: {}", path);  
-                    } catch (IOException e) {
-                        logger.info("Failed to wipe data directory for node location: {}", path);
-                    }  
-                }
-            } finally {
-                dataDirToClean.clear();  
-            }
-        }
-    }  
-
-    /**
-     * Returns a reference to a random node's {@link ClusterService}  
-     */
-    public ClusterService clusterService() {
-        return clusterService(null);  
-    }
-
-    /**  
-     * Returns a reference to a node's {@link ClusterService}. If the given node is null, a random node will be selected.
-     */
-    public ClusterService clusterService(@Nullable String node) {  
-        return getInstance(ClusterService.class, node);
-    }
-
-    /**
-     * Returns an Iterable to all instances for the given class &gt;T&lt; across all nodes in the cluster.
-     */  
-    public <T> Iterable<T> getInstances(Class<T> clazz) {
-        return nodes.values().stream().map(node -> getInstanceFromNode(clazz, node.node)).collect(Collectors.toList());
-    }  
-
-    /**
-     * Returns an Iterable to all instances for the given class &gt;T&lt; across all data nodes in the cluster.  
-     */
-    public <T> Iterable<T> getDataNodeInstances(Class<T> clazz) {
-        return getInstances(clazz, DATA_NODE_PREDICATE);  
-    }
-
-    public synchronized <T> T getCurrentClusterManagerNodeInstance(Class<T> clazz) {  
-        return getInstance(clazz, new NodeNamePredicate(getClusterManagerName()));
-    }
-
-    /**
-     * Returns an Iterable to all instances for the given class &gt;T&lt; across all data and cluster-manager nodes
-     * in the cluster.  
-     */
-    public <T> Iterable<T> getDataOrClusterManagerNodeInstances(Class<T> clazz) {
-        return getInstances(clazz, DATA_NODE_PREDICATE.or(CLUSTER_MANAGER_NODE_PREDICATE));  
-    }
-
-    private <T> Iterable<T> getInstances(Class<T> clazz, Predicate<NodeAndClient> predicate) {  
-        Iterable<NodeAndClient> filteredNodes = nodes.values().stream().filter(predicate)::iterator;
-        List<T> instances = new ArrayList<>();
-        for (NodeAndClient nodeAndClient : filteredNodes) {  
-            instances.add(getInstanceFromNode(clazz, nodeAndClient.node));
-        }
-        return instances;  
-    }
-
-    /**  
-     * Returns a reference to the given nodes instances of the given class &gt;T&lt;
-     */
-    public <T> T getInstance(Class<T> clazz, final String node) {  
-        return getInstance(clazz, nc -> node == null || node.equals(nc.name));
-    }
-
-    public <T> T getDataNodeInstance(Class<T> clazz) {
-        return getInstance(clazz, DATA_NODE_PREDICATE);
-    }  
-
-    public <T> T getClusterManagerNodeInstance(Class<T> clazz) {
-        return getInstance(clazz, CLUSTER_MANAGER_NODE_PREDICATE);  
-    }
-
-    private synchronized <T> T getInstance(Class<T> clazz, Predicate<NodeAndClient> predicate) {  
-        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(predicate);
-        assert randomNodeAndClient != null;
-        return getInstanceFromNode(clazz, randomNodeAndClient.node);  
-    }
-
-    /**  
-     * Returns a reference to a random nodes instances of the given class &gt;T&lt;
-     */
-    public <T> T getInstance(Class<T> clazz) {  
-        return getInstance(clazz, nc -> true);
-    }
-
-    private static <T> T getInstanceFromNode(Class<T> clazz, Node node) {
-        return node.injector().getInstance(clazz);
-    }  
-
-    public Settings dataPathSettings(String node) {
-        return nodes.values()  
-            .stream()
-            .filter(nc -> nc.name.equals(node))
-            .findFirst()  
-            .get()
-            .node()
-            .settings()  
-            .filter(key -> key.equals(Environment.PATH_DATA_SETTING.getKey()) || key.equals(Environment.PATH_SHARED_DATA_SETTING.getKey()));
-    }
-
-    @Override
-    public int size() {
-        return nodes.size();  
-    }
-
-    @Override  
-    public InetSocketAddress[] httpAddresses() {
-        List<InetSocketAddress> addresses = new ArrayList<>();
-        for (HttpServerTransport httpServerTransport : getInstances(HttpServerTransport.class)) {  
-            addresses.add(httpServerTransport.boundAddress().publishAddress().address());
-        }
-        return addresses.toArray(new InetSocketAddress[0]);  
-    }
-
-    /**  
-     * Stops a random warm node in the cluster. Returns true if a node was found to stop, false otherwise.
-     */
-    public synchronized boolean stopRandomWarmNode() throws IOException {  
-        ensureOpen();
-        NodeAndClient nodeAndClient = getRandomNodeAndClient(WARM_NODE_PREDICATE);
-        if (nodeAndClient != null) {  
-            logger.info("Closing random node [{}] ", nodeAndClient.name);
-            stopNodesAndClient(nodeAndClient);
-            return true;  
-        }
-        return false;
-    }  
-
-    /**
-     * Stops a random data node in the cluster. Returns true if a node was found to stop, false otherwise.  
-     */
-    public synchronized boolean stopRandomDataNode() throws IOException {
-        ensureOpen();  
-        NodeAndClient nodeAndClient = getRandomNodeAndClient(DATA_NODE_PREDICATE);
-        if (nodeAndClient != null) {
-            logger.info("Closing random node [{}] ", nodeAndClient.name);  
-            stopNodesAndClient(nodeAndClient);
-            return true;
-        }  
-        return false;
-    }
-
-    /**
-     * Stops a random node in the cluster that applies to the given filter. Does nothing if none of the nodes match the
-     * filter.  
-     */
-    public synchronized void stopRandomNode(final Predicate<Settings> filter) throws IOException {
-        ensureOpen();  
-        NodeAndClient nodeAndClient = getRandomNodeAndClient(nc -> filter.test(nc.node.settings()));
-        if (nodeAndClient != null) {
-            if (nodePrefix.equals(OpenSearchIntegTestCase.SUITE_CLUSTER_NODE_PREFIX)  
-                && nodeAndClient.nodeAndClientId() < sharedNodesSeeds.length
-                && nodeAndClient.isClusterManagerEligible()
-                && autoManageClusterManagerNodes  
-                && nodes.values()
-                    .stream()
-                    .filter(NodeAndClient::isClusterManagerEligible)  
-                    .filter(n -> n.nodeAndClientId() < sharedNodesSeeds.length)
-                    .count() == 1) {
-                throw new AssertionError("Tried to stop the only cluster-manager eligible shared node");  
-            }
-            logger.info("Closing filtered random node [{}] ", nodeAndClient.name);
-            FileCache fileCache = nodeAndClient.node().fileCache();  
-            stopNodesAndClient(nodeAndClient);
-            // Clear file cache to avoid file leaks during node stop
-            if (fileCache != null && WARM_NODE_PREDICATE.test(nodeAndClient)) {  
-                fileCache.clear();
-            }
-        }  
-    }
-
-    /**  
-     * Stops the current cluster-manager node forcefully.
-     */
-    public synchronized void stopCurrentClusterManagerNode() throws IOException {  
-        ensureOpen();
-        assert size() > 0;
-        String clusterManagerNodeName = getClusterManagerName();  
-        final NodeAndClient clusterManagerNode = nodes.get(clusterManagerNodeName);
-        assert clusterManagerNode != null;
-        logger.info("Closing cluster-manager node [{}] ", clusterManagerNodeName);  
-        stopNodesAndClient(clusterManagerNode);
-    }
-
-    /**
-     * Stops any of the current nodes but not the cluster-manager node.
-     */  
-    public synchronized void stopRandomNodeNotCurrentClusterManager() throws IOException {
-        NodeAndClient nodeAndClient = getRandomNodeAndClient(new NodeNamePredicate(getClusterManagerName()).negate());
-        if (nodeAndClient != null) {  
-            logger.info(
-                "Closing random non cluster-manager node [{}] current cluster-manager [{}] ",
-                nodeAndClient.name,  
-                getClusterManagerName()
-            );
-            stopNodesAndClient(nodeAndClient);  
-        }
-    }
-
-    /**
-     * Stops all running nodes in cluster
-     */  
-    public void stopAllNodes() {
-        try {
-            if (numDataAndClusterManagerNodes() != numClusterManagerNodes()) {  
-                int totalDataNodes = numDataNodes();
-                while (totalDataNodes > 0) {
-                    stopRandomDataNode();  
-                    totalDataNodes -= 1;
-                }
-            }  
-            int totalClusterManagerNodes = numClusterManagerNodes();
-            while (totalClusterManagerNodes > 1) {
-                stopRandomNodeNotCurrentClusterManager();  
-                totalClusterManagerNodes -= 1;
-            }
-            stopCurrentClusterManagerNode();  
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }  
-    }
-
-    /**  
-     * Replace all nodes by stopping all current node and starting new node.
-     * Used for remote store test cases, where remote state is restored.
-     */  
-    public void resetCluster() {
-        int totalClusterManagerNodes = numClusterManagerNodes();
-        int totalDataNodes = numDataNodes();  
-        stopAllNodes();
-        startClusterManagerOnlyNodes(totalClusterManagerNodes);
-        startDataOnlyNodes(totalDataNodes);  
-    }
-
-    private synchronized void startAndPublishNodesAndClients(List<NodeAndClient> nodeAndClients) {  
-        if (nodeAndClients.size() > 0) {
-            final int newClusterManagers = (int) nodeAndClients.stream()
-                .filter(NodeAndClient::isClusterManagerEligible)  
-                .filter(nac -> nodes.containsKey(nac.name) == false) // filter out old cluster-managers
-                .count();
-            final int currentClusterManagers = getClusterManagerNodesCount();  
-            rebuildUnicastHostFiles(nodeAndClients); // ensure that new nodes can find the existing nodes when they start
-            List<Future<?>> futures = nodeAndClients.stream().map(node -> executor.submit(node::startNode)).collect(Collectors.toList());
-
-            try {
-                for (Future<?> future : futures) {
-                    future.get();  
-                }
-            } catch (InterruptedException e) {
-                throw new AssertionError("interrupted while starting nodes", e);  
-            } catch (ExecutionException e) {
-                RuntimeException re = FutureUtils.rethrowExecutionException(e);
-                re.addSuppressed(new RuntimeException("failed to start nodes"));  
-                throw re;
-            }
-            nodeAndClients.forEach(this::publishNode);  
-
-            if (autoManageClusterManagerNodes
-                && currentClusterManagers > 0  
-                && newClusterManagers > 0
-                && getMinClusterManagerNodes(currentClusterManagers + newClusterManagers) > currentClusterManagers) {
-                // update once cluster-managers have joined  
-                validateClusterFormed();
-            }
-        }  
-    }
-
-    private final Object discoveryFileMutex = new Object();  
-
-    private void rebuildUnicastHostFiles(List<NodeAndClient> newNodes) {
-        // cannot be a synchronized method since it's called on other threads from within synchronized startAndPublishNodesAndClients()  
-        synchronized (discoveryFileMutex) {
-            try {
-                final Collection<NodeAndClient> currentNodes = nodes.values();  
-                Stream<NodeAndClient> unicastHosts = Stream.concat(currentNodes.stream(), newNodes.stream());
-                List<String> discoveryFileContents = unicastHosts.map(nac -> nac.node.injector().getInstance(TransportService.class))
-                    .filter(Objects::nonNull)  
-                    .map(TransportService::getLocalNode)
-                    .filter(Objects::nonNull)
-                    .filter(DiscoveryNode::isClusterManagerNode)  
-                    .map(n -> n.getAddress().toString())
-                    .distinct()
-                    .collect(Collectors.toList());  
-                Set<Path> configPaths = Stream.concat(currentNodes.stream(), newNodes.stream())
-                    .map(nac -> nac.node.getEnvironment().configDir())
-                    .collect(Collectors.toSet());  
-                logger.debug("configuring discovery with {} at {}", discoveryFileContents, configPaths);
-                for (final Path configPath : configPaths) {
-                    Files.createDirectories(configPath);  
-                    Files.write(configPath.resolve(UNICAST_HOSTS_FILE), discoveryFileContents);
-                }
-            } catch (IOException e) {  
-                throw new AssertionError("failed to configure file-based discovery", e);
-            }
-        }  
-    }
-
-    private void stopNodesAndClient(NodeAndClient nodeAndClient) throws IOException {  
-        stopNodesAndClients(Collections.singleton(nodeAndClient));
-    }
-
-    private synchronized void stopNodesAndClients(Collection<NodeAndClient> nodeAndClients) throws IOException {
-        final Set<String> excludedNodeIds = excludeClusterManagers(nodeAndClients);
-
-        for (NodeAndClient nodeAndClient : nodeAndClients) {
-            removeDisruptionSchemeFromNode(nodeAndClient);
-            final NodeAndClient previous = removeNode(nodeAndClient);  
-            assert previous == nodeAndClient;
-            nodeAndClient.close();
-        }  
-
-        removeExclusions(excludedNodeIds);
-    }  
-
-    /**
-     * Restarts a random data node in the cluster  
-     */
-    public void restartRandomDataNode() throws Exception {
-        restartRandomDataNode(EMPTY_CALLBACK);  
-    }
-
-    /**  
-     * Restarts a random data node in the cluster and calls the callback during restart.
-     */
-    public synchronized void restartRandomDataNode(RestartCallback callback) throws Exception {  
-        ensureOpen();
-        NodeAndClient nodeAndClient = getRandomNodeAndClient(InternalTestCluster.DATA_NODE_PREDICATE);
-        if (nodeAndClient != null) {  
-            restartNode(nodeAndClient, callback);
-        }
-    }  
-
-    /**
-     * Restarts a node.  
-     */
-    public void restartNode(String nodeName) throws Exception {
-        restartNode(nodeName, EMPTY_CALLBACK);  
-    }
-
-    /**  
-     * Restarts a node and calls the callback during restart.
-     */
-    public synchronized void restartNode(String nodeName, RestartCallback callback) throws Exception {  
-        ensureOpen();
-        NodeAndClient nodeAndClient = nodes.get(nodeName);
-        if (nodeAndClient != null) {  
-            restartNode(nodeAndClient, callback);
-        }
-    }  
-
-    public static final RestartCallback EMPTY_CALLBACK = new RestartCallback();
-
-    /**
-     * Restarts all nodes in the cluster. It first stops all nodes and then restarts all the nodes again.
-     */  
-    public void fullRestart() throws Exception {
-        fullRestart(EMPTY_CALLBACK);
-    }  
-
-    /**
-     * Restarts all nodes in a rolling restart fashion ie. only restarts on node a time.  
-     */
-    public synchronized void rollingRestart(RestartCallback callback) throws Exception {
-        int numNodesRestarted = 0;  
-        for (NodeAndClient nodeAndClient : nodes.values()) {
-            callback.doAfterNodes(numNodesRestarted++, nodeAndClient.nodeClient());
-            restartNode(nodeAndClient, callback);  
-        }
-    }
-
-    private void restartNode(NodeAndClient nodeAndClient, RestartCallback callback) throws Exception {
-        assert Thread.holdsLock(this);
-        logger.info("Restarting node [{}] ", nodeAndClient.name);  
-
-        FileCache fileCache = nodeAndClient.node().fileCache();
-        // Close IndexInput reference file to avoid file leaks during node restart  
-        if (fileCache != null && WARM_NODE_PREDICATE.test(nodeAndClient)) {
-            fileCache.closeIndexInputReferences();
-        }  
-
-        if (activeDisruptionScheme != null) {
-            activeDisruptionScheme.removeFromNode(nodeAndClient.name, this);  
-        }
-
-        Set<String> excludedNodeIds = excludeClusterManagers(Collections.singleton(nodeAndClient));  
-
-        final Settings newSettings = nodeAndClient.closeForRestart(
-            callback,  
-            autoManageClusterManagerNodes ? getMinClusterManagerNodes(getClusterManagerNodesCount()) : -1
-        );
-
-        removeExclusions(excludedNodeIds);
-
-        nodeAndClient.recreateNode(newSettings, () -> rebuildUnicastHostFiles(Collections.singletonList(nodeAndClient)));  
-        nodeAndClient.startNode();
-        publishNode(nodeAndClient);
-
-        if (callback.validateClusterForming() || excludedNodeIds.isEmpty() == false) {
-            // we have to validate cluster size to ensure that the restarted node has rejoined the cluster if it was
-            // cluster-manager-eligible;  
-            validateClusterFormed();
-        }
-    }  
-
-    private NodeAndClient removeNode(NodeAndClient nodeAndClient) {
-        assert Thread.holdsLock(this);  
-        final NavigableMap<String, NodeAndClient> newNodes = new TreeMap<>(nodes);
-        final NodeAndClient previous = newNodes.remove(nodeAndClient.name);
-        nodes = Collections.unmodifiableNavigableMap(newNodes);  
-        return previous;
-    }
-
-    private Set<String> excludeClusterManagers(Collection<NodeAndClient> nodeAndClients) {
-        assert Thread.holdsLock(this);
-        final Set<String> excludedNodeNames = new HashSet<>();  
-        if (autoManageClusterManagerNodes && nodeAndClients.size() > 0) {
-
-            final long currentClusterManagers = nodes.values().stream().filter(NodeAndClient::isClusterManagerEligible).count();  
-            final long stoppingClusterManagers = nodeAndClients.stream().filter(NodeAndClient::isClusterManagerEligible).count();
-
-            assert stoppingClusterManagers <= currentClusterManagers : currentClusterManagers + " < " + stoppingClusterManagers;  
-            if (stoppingClusterManagers != currentClusterManagers && stoppingClusterManagers > 0) {
-                // If stopping few enough cluster-manager-nodes that there's still a majority left, there is no need to withdraw their votes
-                // first.  
-                // However, we do not yet have a way to be sure there's a majority left, because the voting configuration may not yet have
-                // been updated when the previous nodes shut down, so we must always explicitly withdraw votes.
-                // TODO add cluster health API to check that voting configuration is optimal so this isn't always needed  
-                nodeAndClients.stream()
-                    .filter(NodeAndClient::isClusterManagerEligible)
-                    .map(NodeAndClient::getName)  
-                    .forEach(excludedNodeNames::add);
-                assert excludedNodeNames.size() == stoppingClusterManagers;
-
-                logger.info("adding voting config exclusions {} prior to restart/shutdown", excludedNodeNames);
-                try {
-                    client().execute(  
-                        AddVotingConfigExclusionsAction.INSTANCE,
-                        new AddVotingConfigExclusionsRequest(excludedNodeNames.toArray(Strings.EMPTY_ARRAY))
+        assertRequestsFinished();  
+import org.opensearch.script.ScriptModule;
+        } else if (random.nextInt(100) <= 90) {
+        if (!nodesToRemove.isEmpty() && size() > 0) {
                     ).get();  
-                } catch (InterruptedException | ExecutionException e) {
-                    throw new AssertionError("unexpected", e);
-                }  
-            }
-        }
-        return excludedNodeNames;  
-    }
-
-    private void removeExclusions(Set<String> excludedNodeIds) {  
-        assert Thread.holdsLock(this);
-        if (excludedNodeIds.isEmpty() == false) {
-            logger.info("removing voting config exclusions for {} after restart/shutdown", excludedNodeIds);  
-            try {
-                Client client = getRandomNodeAndClient(node -> excludedNodeIds.contains(node.name) == false).client();
-                client.execute(ClearVotingConfigExclusionsAction.INSTANCE, new ClearVotingConfigExclusionsRequest()).get();  
-            } catch (InterruptedException | ExecutionException e) {
-                throw new AssertionError("unexpected", e);
+        // Components from earlier plugins (e.g. those registered via PluginComponentRegistry) are  
+            int retryTimeoutSeconds = RandomNumbers.randomIntBetween(random, 0, 60);
+    private static <T> T getInstanceFromNode(Class<T> clazz, Node node) {
+            randomlyAddDedicatedClusterManagers,  
+                            );
             }  
-        }
-    }
-
-    /**
-     * Restarts all nodes in the cluster. It first stops all nodes and then restarts all the nodes again.
-     */  
-    public synchronized void fullRestart(RestartCallback callback) throws Exception {
-        int numNodesRestarted = 0;
-        final Settings[] newNodeSettings = new Settings[nextNodeId.get()];  
-        final int minClusterManagerNodes = autoManageClusterManagerNodes ? getMinClusterManagerNodes(getClusterManagerNodesCount()) : -1;
-        final List<NodeAndClient> toStartAndPublish = new ArrayList<>(); // we want to start nodes in one go
-        for (NodeAndClient nodeAndClient : nodes.values()) {  
-            callback.doAfterNodes(numNodesRestarted++, nodeAndClient.nodeClient());
-            logger.info("Stopping and resetting node [{}] ", nodeAndClient.name);
-            if (activeDisruptionScheme != null) {  
-                activeDisruptionScheme.removeFromNode(nodeAndClient.name, this);
-            }
-            final Settings newSettings = nodeAndClient.closeForRestart(callback, minClusterManagerNodes);  
-            newNodeSettings[nodeAndClient.nodeAndClientId()] = newSettings;
-            toStartAndPublish.add(nodeAndClient);
-        }  
-
-        callback.onAllNodesStopped();
-
-        // randomize start up order
-        Randomness.shuffle(toStartAndPublish);
-
-        for (NodeAndClient nodeAndClient : toStartAndPublish) {
-            logger.info("recreating node [{}] ", nodeAndClient.name);
-            nodeAndClient.recreateNode(newNodeSettings[nodeAndClient.nodeAndClientId()], () -> rebuildUnicastHostFiles(toStartAndPublish));  
-        }
-
-        startAndPublishNodesAndClients(toStartAndPublish);  
-
-        if (callback.validateClusterForming()) {
-            validateClusterFormed();  
-        }
-    }
-
-    /**
-     * Returns the name of all the cluster managers in the cluster
-     */  
     public Set<String> getClusterManagerNames() {
-        return nodes.entrySet()
-            .stream()  
-            .filter(entry -> CLUSTER_MANAGER_NODE_PREDICATE.test(entry.getValue()))
-            .map(entry -> entry.getKey())
-            .collect(Collectors.toSet());  
-    }
-
-    /**  
-     * Returns the name of the current cluster-manager node in the cluster.
-     */
-    public String getClusterManagerName() {  
-        return getClusterManagerName(null);
-    }
-
-    /**
-     * Returns the name of the current cluster-manager node in the cluster and executes the request via the node specified
-     * in the viaNode parameter. If viaNode isn't specified a random node will be picked to the send the request to.  
-     */
-    public String getClusterManagerName(@Nullable String viaNode) {
-        Client client = viaNode != null ? client(viaNode) : client();  
-        DiscoveryNode clusterManagerNode = client.admin().cluster().prepareState().get().getState().nodes().getClusterManagerNode();
-        if (clusterManagerNode == null) {
-            throw new ClusterManagerNotDiscoveredException("Cluster manager node not discovered");  
+        // force certain settings
+                        if (operations.size() > 0) {
         }
-        return clusterManagerNode.getName();
-    }  
-
-    synchronized Set<String> allDataNodesButN(int count) {
-        final int numNodes = numDataNodes() - count;  
-        assert size() >= numNodes;
-        Map<String, NodeAndClient> dataNodes = nodes.entrySet()
-            .stream()  
-            .filter(entry -> DATA_NODE_PREDICATE.test(entry.getValue()))
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        final HashSet<String> set = new HashSet<>();  
-        final Iterator<String> iterator = dataNodes.keySet().iterator();
-        for (int i = 0; i < numNodes; i++) {
-            assert iterator.hasNext();  
-            set.add(iterator.next());
-        }
-        return set;  
-    }
-
-    public Set<String> getDataNodeNames() {  
-        return allDataNodesButN(0);
-    }
-
-    /**
-     * Returns a set of nodes that have at least one shard of the given index.
-     */  
-    public synchronized Set<String> nodesInclude(String index) {
-        if (clusterService().state().routingTable().hasIndex(index)) {
-            List<ShardRouting> allShards = clusterService().state().routingTable().allShards(index);  
-            DiscoveryNodes discoveryNodes = clusterService().state().getNodes();
-            Set<String> nodes = new HashSet<>();
-            for (ShardRouting shardRouting : allShards) {  
-                if (shardRouting.assignedToNode()) {
-                    DiscoveryNode discoveryNode = discoveryNodes.get(shardRouting.currentNodeId());
-                    nodes.add(discoveryNode.getName());  
-                }
-            }
-            return nodes;  
-        }
-        return Collections.emptySet();
-    }  
-
-    /**
-     * Performs cluster bootstrap when node with index {@link #bootstrapClusterManagerNodeIndex} is started  
-     * with the names of all existing and new cluster-manager-eligible nodes.
-     * Indexing starts from 0.
-     * If {@link #bootstrapClusterManagerNodeIndex} is -1 (default), this method does nothing.  
-     */
-    private List<Settings> bootstrapClusterManagerNodeWithSpecifiedIndex(List<Settings> allNodesSettings) {
-        assert Thread.holdsLock(this);  
-        if (bootstrapClusterManagerNodeIndex == -1) { // fast-path
-            return allNodesSettings;
-        }  
-
-        int currentNodeId = numClusterManagerNodes() - 1;
-        List<Settings> newSettings = new ArrayList<>();  
-
-        for (Settings settings : allNodesSettings) {
-            if (DiscoveryNode.isClusterManagerNode(settings) == false) {  
-                newSettings.add(settings);
-            } else {
-                currentNodeId++;  
-                if (currentNodeId != bootstrapClusterManagerNodeIndex) {
-                    newSettings.add(settings);
-                } else {  
-                    List<String> nodeNames = new ArrayList<>();
-
-                    for (Settings nodeSettings : getDataOrClusterManagerNodeInstances(Settings.class)) {  
-                        if (DiscoveryNode.isClusterManagerNode(nodeSettings)) {
-                            nodeNames.add(Node.NODE_NAME_SETTING.get(nodeSettings));
-                        }  
-                    }
-
-                    for (Settings nodeSettings : allNodesSettings) {  
-                        if (DiscoveryNode.isClusterManagerNode(nodeSettings)) {
-                            nodeNames.add(Node.NODE_NAME_SETTING.get(nodeSettings));
-                        }  
-                    }
-
-                    newSettings.add(  
+import static org.opensearch.discovery.FileBasedSeedHostsProvider.UNICAST_HOSTS_FILE;
+    @Override  
+                        continue; // shard is closed - just ignore  
                         Settings.builder()
-                            .put(settings)
-                            .putList(ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), nodeNames)  
-                            .build()
-                    );
-
-                    setBootstrapClusterManagerNodeIndex(-1);
-                }
-            }  
-        }
-
-        return newSettings;  
-    }
-
-    /**  
-     * Starts a node with default settings and returns its name.
      */
-    public String startNode() {  
-        return startNode(Settings.EMPTY);
-    }
-
-    /**
-     * Starts a node with the given settings builder and returns its name.
-     */  
-    public String startNode(Settings.Builder settings) {
-        return startNode(settings.build());
-    }  
-
-    /**
-     * Starts a node with the given settings and returns its name.  
-     */
-    public String startNode(Settings settings) {
-        return startNodes(settings).get(0);  
-    }
-
-    /**  
-     * Starts multiple nodes with default settings and returns their names
-     */
-    public List<String> startNodes(int numOfNodes) {  
-        return startNodes(numOfNodes, Settings.EMPTY);
-    }
-
-    /**
-     * Starts multiple nodes with the given settings and returns their names
-     */  
-    public List<String> startNodes(int numOfNodes, Settings settings) {
-        return startNodes(Collections.nCopies(numOfNodes, settings).toArray(new Settings[0]));
-    }  
-
-    /**
-     * Starts multiple nodes with the given settings and returns their names  
-     */
-    public List<String> startNodes(int numOfNodes, Settings settings, Boolean waitForNodeJoin) {
-        return startNodes(waitForNodeJoin, Collections.nCopies(numOfNodes, settings).toArray(new Settings[0]));  
-    }
-
-    /**  
-     * Starts multiple nodes with the given settings and returns their names
-     */
-    public synchronized List<String> startNodes(Settings... extraSettings) {  
-        return startNodes(false, extraSettings);
-    }
-
-    /**
-     * Starts multiple nodes with the given settings and returns their names
-     */  
-    public synchronized List<String> startNodes(Boolean waitForNodeJoin, Settings... extraSettings) {
-        final int newClusterManagerCount = Math.toIntExact(Stream.of(extraSettings).filter(DiscoveryNode::isClusterManagerNode).count());
-        final int defaultMinClusterManagerNodes;  
-        if (autoManageClusterManagerNodes) {
-            defaultMinClusterManagerNodes = getMinClusterManagerNodes(getClusterManagerNodesCount() + newClusterManagerCount);
-        } else {  
-            defaultMinClusterManagerNodes = -1;
-        }
-        final List<NodeAndClient> nodes = new ArrayList<>();  
-        final int prevClusterManagerCount = getClusterManagerNodesCount();
-        int autoBootstrapClusterManagerNodeIndex = autoManageClusterManagerNodes
-            && prevClusterManagerCount == 0  
-            && newClusterManagerCount > 0
-            && Arrays.stream(extraSettings)
-                .allMatch(s -> DiscoveryNode.isClusterManagerNode(s) == false || ZEN2_DISCOVERY_TYPE.equals(DISCOVERY_TYPE_SETTING.get(s)))  
-                    ? RandomNumbers.randomIntBetween(random, 0, newClusterManagerCount - 1)
-                    : -1;
-
-        final int numOfNodes = extraSettings.length;
-        final int firstNodeId = nextNodeId.getAndIncrement();
-        final List<Settings> settings = new ArrayList<>();  
-        for (int i = 0; i < numOfNodes; i++) {
-            settings.add(getNodeSettings(firstNodeId + i, random.nextLong(), extraSettings[i], defaultMinClusterManagerNodes));
-        }  
-        nextNodeId.set(firstNodeId + numOfNodes);
-
+ * software distributed under the License is distributed on an
+    public synchronized void stopCurrentClusterManagerNode() throws IOException {  
+        /* Randomly return a client to one of the nodes in the cluster */
+import org.opensearch.action.support.replication.TransportReplicationAction;
         final List<String> initialClusterManagerNodes = settings.stream()  
-            .filter(DiscoveryNode::isClusterManagerNode)
-            .map(Node.NODE_NAME_SETTING::get)
-            .collect(Collectors.toList());  
-
-        final List<Settings> updatedSettings = bootstrapClusterManagerNodeWithSpecifiedIndex(settings);
-
-        for (int i = 0; i < numOfNodes; i++) {
-            final Settings nodeSettings = updatedSettings.get(i);
-            final Builder builder = Settings.builder();  
-            if (DiscoveryNode.isClusterManagerNode(nodeSettings)) {
-                if (autoBootstrapClusterManagerNodeIndex == 0) {
-                    builder.putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), initialClusterManagerNodes);  
-                }
-                autoBootstrapClusterManagerNodeIndex -= 1;
-            }  
-
-            final NodeAndClient nodeAndClient = buildNode(
-                firstNodeId + i,  
-                builder.put(nodeSettings).build(),
-                false,
-                () -> rebuildUnicastHostFiles(nodes)  
-            );
-            nodes.add(nodeAndClient);
+        // cannot be a synchronized method since it's called on other threads from within synchronized startAndPublishNodesAndClients()  
         }  
-        startAndPublishNodesAndClients(nodes);
-        if (autoManageClusterManagerNodes && !waitForNodeJoin) {
-            validateClusterFormed();  
-        }
-        return nodes.stream().map(NodeAndClient::getName).collect(Collectors.toList());
-    }  
-
-    public List<String> startClusterManagerOnlyNodes(int numNodes) {
-        return startClusterManagerOnlyNodes(numNodes, Settings.EMPTY);  
-    }
-
-    public List<String> startClusterManagerOnlyNodes(int numNodes, Settings settings) {  
-        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE)).build());
-    }
-
-    public List<String> startDataAndWarmNodes(int numNodes) {
-        return startDataAndWarmNodes(numNodes, Settings.EMPTY);
-    }  
-
-    public List<String> startDataAndWarmNodes(int numNodes, Settings settings) {
-        Set<DiscoveryNodeRole> warmAndDataRoles = new HashSet<>();  
-        warmAndDataRoles.add(DiscoveryNodeRole.DATA_ROLE);
-        warmAndDataRoles.add(DiscoveryNodeRole.WARM_ROLE);
-        return startNodes(numNodes, Settings.builder().put(onlyRoles(settings, warmAndDataRoles)).build());  
-    }
-
-    public List<String> startSearchOnlyNodes(int numNodes) {  
-        return startSearchOnlyNodes(numNodes, Settings.EMPTY);
-    }
-
-    public List<String> startSearchOnlyNodes(int numNodes, Settings settings) {
-        return startNodes(numNodes, Settings.builder().put(searchOnlyNode(settings)).build());
-    }  
-
-    public String startSearchOnlyNode() {
+            }  
+import static org.hamcrest.Matchers.greaterThan;  
+        private void markNodeDataDirsAsNotEligibleForWipe(Node node) {
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+                    equalTo(0L)  
+        Settings settings1 = Settings.builder().put(settings).put(NodeRoles.clusterManagerOnlyNode(settings)).build();
+        Set<Class<? extends Plugin>> plugins = new LinkedHashSet<>(nodeConfigurationSource.nodePlugins());
+                dataDirToClean.removeAll(Arrays.asList(nodeEnv.nodeDataPaths()));  
+        builder.put(
+                RandomNumbers.randomIntBetween(random, 0, 2000)
+            final Builder builder = Settings.builder();  
+                IndexingPressure indexingPressure = getInstance(IndexingPressure.class, nodeAndClient.name);  
+        return clusterManagerNode.getName();
+    private static int getMinClusterManagerNodes(int eligibleClusterManagerNodes) {
+        Client client = viaNode != null ? client(viaNode) : client();  
+        wipePendingDataDirectories();
+                    RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(),
+    public void ensureEstimatedStats() {
+            if (DiscoveryNode.isClusterManagerNode(nodeSettings)) {
+            );  
+            return name;  
+    private void removeExclusions(Set<String> excludedNodeIds) {  
+        return getInstance(clazz, new NodeNamePredicate(getClusterManagerName()));
+                                + replicaShardRouting  
+                        }
+        return builder.build();  
+            if (autoManageClusterManagerNodes
+                        IndexShard replicaShard = getShardOrNull(state, replicaShardRouting);
+                throw new AssertionError("failed to configure file-based discovery", e);
+                        final IndexShard replicaShard = getShardOrNull(state, replicaShardRouting);
+    public int numWarmAndDataNodes() {  
         return startSearchOnlyNode(Settings.EMPTY);  
     }
-
-    public String startSearchOnlyNode(Settings settings) {  
-        return startNode(Settings.builder().put(settings).put(searchOnlyNode(settings)).build());
-    }
-
-    public List<String> startDataOnlyNodes(int numNodes) {
-        return startDataOnlyNodes(numNodes, Settings.EMPTY);
-    }  
-
-    public List<String> startDataOnlyNodes(int numNodes, Settings settings) {
-        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.DATA_ROLE)).build());  
-    }
-
-    public List<String> startDataOnlyNodes(int numNodes, Settings settings, Boolean ignoreNodeJoin) {  
-        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.DATA_ROLE)).build(), ignoreNodeJoin);
-    }
-
-    public List<String> startWarmOnlyNodes(int numNodes) {
-        return startWarmOnlyNodes(numNodes, Settings.EMPTY);
-    }  
-
-    public List<String> startWarmOnlyNodes(int numNodes, Settings settings) {
-        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.WARM_ROLE)).build());  
-    }
-
-    /** calculates a min cluster-manager nodes value based on the given number of cluster-manager nodes */  
-    private static int getMinClusterManagerNodes(int eligibleClusterManagerNodes) {
-        return eligibleClusterManagerNodes / 2 + 1;
-    }  
-
-    private int getClusterManagerNodesCount() {
-        return (int) nodes.values().stream().filter(n -> DiscoveryNode.isClusterManagerNode(n.node().settings())).count();  
-    }
-
-    public String startClusterManagerOnlyNode() {  
-        return startClusterManagerOnlyNode(Settings.EMPTY);
-    }
-
-    public String startClusterManagerOnlyNode(Settings settings) {
-        Settings settings1 = Settings.builder().put(settings).put(NodeRoles.clusterManagerOnlyNode(settings)).build();
-        return startNode(settings1);  
-    }
-
-    public String startDataOnlyNode() {  
-        return startDataOnlyNode(Settings.EMPTY);
-    }
-
-    public String startDataOnlyNode(Settings settings) {
-        Settings settings1 = Settings.builder().put(settings).put(dataOnlyNode(settings)).build();
-        return startNode(settings1);  
-    }
-
-    private synchronized void publishNode(NodeAndClient nodeAndClient) {  
-        assert !nodeAndClient.node().isClosed();
-        final NavigableMap<String, NodeAndClient> newNodes = new TreeMap<>(nodes);
-        newNodes.put(nodeAndClient.name, nodeAndClient);  
-        nodes = Collections.unmodifiableNavigableMap(newNodes);
-        applyDisruptionSchemeToNode(nodeAndClient);
-    }  
-
-    public void closeNonSharedNodes(boolean wipeData) throws IOException {
-        reset(wipeData);  
-    }
-
+        nodes = Collections.unmodifiableNavigableMap(newNodes);  
+                        + "' as a node setting set '"  
+        final int prevClusterManagerCount = getClusterManagerNodesCount();
+        if (nodeAndClients.size() > 0) {
+        final int defaultMinClusterManagerNodes;  
+            if (wipeData) {
+        } else {  
+                    setBootstrapClusterManagerNodeIndex(-1);
+     * The map of nodes is never mutated so individual reads are safe without synchronization.  
+                            );
+/*  
+                .build();  
+                            docsOnReplica = IndexShardTestCase.getDocIdAndSeqNos(replicaShard);
+            startNodes(n - size, Settings.builder().put(onlyRoles(settings, warmAndDataRoles)).build());
+    private synchronized NodeAndClient buildNode(int nodeId, Settings settings, boolean reuseExisting, Runnable onTransportServiceStarted) {  
+        if (random.nextBoolean()) {  
+        if (nodeAndClient != null) {  
+        Collection<Class<? extends Plugin>> plugins = getPlugins();  
+            .collect(Collectors.toList());  
+    public void assertRequestsFinished() {  
+        NodeAndClient nodeAndClient = getRandomNodeAndClient(nc -> filter.test(nc.node.settings()));
     @Override  
-    public int numDataNodes() {
-        return dataNodeAndClients().size();
-    }  
-
-    public int numWarmNodes() {
-        return warmNodeAndClients().size();  
-    }
-
-    public int numWarmAndDataNodes() {  
-        return warmDataNodeAndClients().size();
-    }
-
-    @Override
-    public int numDataAndClusterManagerNodes() {
-        return filterNodes(nodes, DATA_NODE_PREDICATE.or(CLUSTER_MANAGER_NODE_PREDICATE)).size();  
-    }
-
-    public int numClusterManagerNodes() {  
-        return filterNodes(nodes, NodeAndClient::isClusterManagerEligible).size();
-    }
-
-    public void setDisruptionScheme(ServiceDisruptionScheme scheme) {
-        assert activeDisruptionScheme == null : "there is already and active disruption ["
-            + activeDisruptionScheme  
-            + "]. call clearDisruptionScheme first";
-        scheme.applyToCluster(this);
-        activeDisruptionScheme = scheme;  
-    }
-
-    public void clearDisruptionScheme() {  
-        clearDisruptionScheme(true);
-    }
-
-    // synchronized to prevent concurrently modifying the cluster.
-    public synchronized void clearDisruptionScheme(boolean ensureHealthyCluster) {
-        if (activeDisruptionScheme != null) {  
-            TimeValue expectedHealingTime = activeDisruptionScheme.expectedTimeToHeal();
-            logger.info("Clearing active scheme {}, expected healing time {}", activeDisruptionScheme, expectedHealingTime);
-            if (ensureHealthyCluster) {  
-                activeDisruptionScheme.removeAndEnsureHealthy(this);
-            } else {
-                activeDisruptionScheme.removeFromCluster(this);  
+        int currentNodeId = numClusterManagerNodes() - 1;
+     */
+                );  
             }
+        return startDataAndWarmNodes(numNodes, Settings.EMPTY);
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+        }  
+        defaultSettings = builder.build();
+        if (size() > 0) {
+        if (usingSingleNodeDiscovery == false) {
+                    try {
+                    throw new AssertionError("unexpected", e);
+import org.opensearch.indices.recovery.RecoverySettings;  
+                // However, we do not yet have a way to be sure there's a majority left, because the voting configuration may not yet have
+     * Stops all running nodes in cluster
+        } else {  
+            clusterName,
+    /**
+        return new NodeAndClient(name, node, settings, nodeId);  
+        for (Settings settings : allNodesSettings) {
+import org.opensearch.transport.TransportSettings;  
+     */
+        boolean useDedicatedClusterManagerNodes = randomlyAddDedicatedClusterManagers ? random.nextBoolean() : false;  
+    }  
+                    }  
+        stopNodesAndClient(clusterManagerNode);
+                            equalTo(docsOnPrimary)
+                    ? RandomNumbers.randomIntBetween(random, 0, newClusterManagerCount - 1)
+                    stats.getIndices().getQueryCache().getMemorySizeInBytes(),  
+import org.opensearch.node.MockNode;
+                try {  
+                        final List<DocIdSeqNoAndSource> docsOnReplica;  
+                        // shard is closed
+        }  
+        synchronized (discoveryFileMutex) {
+    /**  
+            return newSettings.build();  
+            assertBusy(() -> {
+                try {
+        // it depends on, despite being listed first in nodePlugins()).
+     * and / or {@link #fullRestart(InternalTestCluster.RestartCallback)} to execute actions at certain
+        final String clusterName,  
+/*
+    private final AtomicInteger nextNodeId = new AtomicInteger(0);  
+                    DEFAULT_MIN_NUM_CLIENT_NODES,
+        }
+        final List<Settings> settings = new ArrayList<>();  
+        final NodeAndClient buildNode = buildNode(nodeId, nodeSettings, false, onTransportServiceStarted);
+                if (replicaWriteBytes > 0) {
+    }  
+    public List<String> startDataOnlyNodes(int numNodes, Settings settings) {
+            SeedUtils.formatSeed(clusterSeed),
+            final NodeAndClient nodeAndClient = buildNode(
+            while (totalClusterManagerNodes > 1) {
+    public void assertSameDocIdsOnShards() throws Exception {  
+            Settings nodeSettings = updatedSettings.get(i);
+    }
+                    "NA",
+            logger.info("increasing cluster size from {} to {}", size, n);  
+                    throw new AssertionError("Interruption while waiting for the node to close", e);
+public final class InternalTestCluster extends TestCluster {
+        return getInstance(ClusterService.class, node);
+            updatedSettings.put(Environment.PATH_DATA_SETTING.getKey(), baseDir.resolve(name));
+    private static final Predicate<NodeAndClient> DATA_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.isDataNode(  
+import static org.opensearch.cluster.coordination.ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING;
+                        }
+        final int nodeId = nextNodeId.getAndIncrement();
+    }
+import java.util.Map;
+                    p.getName(),
+    }
+            throw new IllegalStateException("cluster failed to form", ae);
+    }
+        return Collections.emptySet();
+        Client client() {
+        // ElasticsearchIntegrationTest must override beforeIndexDeletion() to avoid failures.
+    private synchronized void publishNode(NodeAndClient nodeAndClient) {  
+                                + docsOnReplica.size()
+        builder.append("-CLUSTER_SEED=[").append(clusterSeed).append(']');  
+                IndicesService indexServices = getInstance(IndicesService.class, nodeName);  
+            clusterName,  
+            Settings finalSettings = Settings.builder()
+                @Override
+            "Cluster is NOT consistent - restarting shared nodes - nodes: [{}] nextNodeId: [{}] numSharedNodes: [{}]",
+        }
+            if (fileCache != null && WARM_NODE_PREDICATE.test(nodeAndClient)) {  
+     */  
+        }  
+        final NodeAndClient previous = newNodes.remove(nodeAndClient.name);
+            throw new IllegalArgumentException("maximum number of data nodes must be >= minimum number of  data nodes");
+import org.opensearch.node.NodeService;
+                    .count() == 1) {
+        // allow overriding the above  
+     *                                  the method will return the existing one  
+        return getInstance(clazz, CLUSTER_MANAGER_NODE_PREDICATE);  
+    @Override
+        return map.values().stream().filter(predicate).collect(Collectors.toCollection(ArrayList::new));  
+                                    + nodeAndClient.name  
+            }  
+     */  
+        assert this.numSharedCoordOnlyNodes >= 0;
+        ensureOpen();  
+        );
+                }
+        final Collection<Class<? extends Plugin>> mockPlugins,  
+                                    + "]"  
+ * this work for additional information regarding copyright
+            nodePrefix,
+import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsRequest;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        } catch (IOException e) {  
+                if (closed.get()) {
+    private final Object discoveryFileMutex = new Object();  
+                re.addSuppressed(new RuntimeException("failed to start nodes"));  
+import static org.opensearch.test.OpenSearchTestCase.assertBusy;
+        }, 60, TimeUnit.SECONDS);  
+            .collect(Collectors.toList());
+        if (autoManageClusterManagerNodes && nodeAndClients.size() > 0) {
+        NodeAndClient nodeAndClient = getRandomNodeAndClient(DATA_NODE_PREDICATE);
+    }  
+import java.nio.file.Path;
+     * Stops any of the current nodes but not the cluster-manager node.
+        fail("Could not find a node that holds " + index);
+    /**
+            final long newIdSeed = NodeEnvironment.NODE_ID_SEED_SETTING.get(node.settings()) + 1;
+                        }  
+        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.WARM_ROLE)).build());  
+                if (INITIAL_CLUSTER_MANAGER_NODES_SETTING.exists(callbackSettings) == false) {  
+        return startWarmOnlyNodes(numNodes, Settings.EMPTY);
+import java.util.HashSet;
+                totalClusterManagerNodes -= 1;
+        if (assignedNode == null) {
+                throw new AssertionError("Tried to stop the only cluster-manager eligible shared node");  
+                    false,
+        return startNodes(settings).get(0);  
+        } catch (Exception e) {  
+                    .map(TransportService::getLocalNode)
+            return randomNodeAndClient.nodeClient(); // ensure node client cluster-manager is requested  
+                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(),
+                validateClusterFormed();
+            "expected at least one cluster-manager-eligible node left in " + nodes,  
+                @Override  
+        }  
+                settings.add(nodeSettings);  
+        final NodeAndClient clusterManagerNode = nodes.get(clusterManagerNodeName);
+     * Asserts that all shards with the same shardId should have document Ids.
+        );
+            TimeValue.timeValueMillis(RandomNumbers.randomIntBetween(random, 20, 50))  
+        return excludedNodeNames;  
+                            Engine engine = IndexShardTestCase.getEngine(indexShard);
+                    false,  
+    public Client nonClusterManagerClient() {
+                // fail if it never reached 0
+                            .putList(ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), nodeNames)  
+    private static final String DEFAULT_WARM_CACHE_SIZE_PERCENT = "5%";
+        builder.put(Environment.PATH_HOME_SETTING.getKey(), baseDir);
+     */
+        // TODO: currently we only randomize "cluster.no_cluster_manager_block" between "write" and "metadata_write", as "all" is fragile
+                    }  
+                RandomNumbers.randomIntBetween(random, 5, 10)
+                    false  
+ *
+                        List<String> operations = indexShard.getActiveOperations();
+            builder.put("cache.recycler.page.type", RandomPicks.randomFrom(random, PageCacheRecycler.Type.values()));  
+            defaultMinClusterManagerNodes = getMinClusterManagerNodes(getClusterManagerNodesCount() + newClusterManagerCount);
+                + "[{}] (data) nodes and [{}] coord only nodes (min_cluster_manager_nodes are [{}])",
+    private NodeAndClient getRandomNodeAndClient() {  
+            this.nodeName = nodeName;
+        }  
+            if (useDedicatedClusterManagerNodes) {  
+    private void removeDisruptionSchemeFromNode(NodeAndClient nodeAndClient) {
+                    .map(NodeAndClient::getName)  
+            }  
+        this.baseDir = baseDir;  
+import org.opensearch.cluster.routing.ShardRouting;  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.index.seqno.SequenceNumbers;
+            // delete data folders now, before we start other nodes that may claim it
+                RuntimeException re = FutureUtils.rethrowExecutionException(e);
+            newNodeSettings[nodeAndClient.nodeAndClientId()] = newSettings;
+        final Settings settings = getSettings(nodeId, seed, extraSettings);  
+        pluginInfos.addAll(additionalNodePlugins);
+    public String startClusterManagerOnlyNode() {  
+    }  
+                    for (ShardRouting replicaShardRouting : indexShardRoutingTable.replicaShards()) {
+                throw re;
+                throw new RuntimeException(e);
+    /**
+                    } catch (AlreadyClosedException ex) {
+    }
+        final NodeAndClient randomNodeAndClient = getRandomNodeAndClient();
+        if (prevNodeCount == 0 && autoManageClusterManagerNodes) {  
+                }
+        stopNodesAndClients(nodesToRemove);  
+    private final class NodeAndClient implements Closeable {
+            logger.info("removing voting config exclusions for {} after restart/shutdown", excludedNodeIds);  
+    public synchronized List<String> startNodes(Settings... extraSettings) {  
+     */
+                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING.getKey(),
+    public synchronized boolean stopRandomDataNode() throws IOException {
+            updatedSettings.putList(  
+            logger.info("Clearing active scheme {}, expected healing time {}", activeDisruptionScheme, expectedHealingTime);
+                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING.getKey(),
+            return true;
+            logger.info("Closing filtered random node [{}] ", nodeAndClient.name);
+        assert randomNodeAndClient != null;
+                    logger.debug("removing node data paths: [{}]", Arrays.toString(locations));
+import org.opensearch.node.Node;
+    public List<String> startSearchOnlyNodes(int numNodes) {  
+     * if more nodes than <code>n</code> are present this method will not  
+        assert activeDisruptionScheme == null : "there is already and active disruption ["
+    /**  
+            }
+            logger.info("increasing cluster size from {} to {}", size, n);
+import static org.opensearch.test.OpenSearchTestCase.randomFrom;
+    private Set<String> excludeClusterManagers(Collection<NodeAndClient> nodeAndClients) {
+        }
+            TimeValue expectedHealingTime = activeDisruptionScheme.expectedTimeToHeal();
+ * Unless required by applicable law or agreed to in writing,
+                            assertThat(  
+                public void remove() {  
+import org.opensearch.core.util.FileSystemUtils;  
+        if (activeDisruptionScheme != null) {
+        /**
+        }
+        final String name = buildNodeName(nodeId, settings);
+     * Returns a reference to the given nodes instances of the given class &gt;T&lt;
+                nodeAndClient.name,  
+                    fail("Could not assert finished requests within timeout on node [" + nodeAndClient.name + "]");  
+                        continue;
+        final int prevNodeCount = nodes.size();
+            for (NodeAndClient nodeAndClient : nodesAndClients) {  
+        if (autoManageClusterManagerNodes && !waitForNodeJoin) {
+        for (int i = numSharedDedicatedClusterManagerNodes + numSharedDataNodes; i < numSharedDedicatedClusterManagerNodes  
+            for (NodeAndClient nodeAndClient : nodes.values()) {  
+        if (RandomizedTest.isNightly() && rarely(random)) {
+                );
+        }  
+        }
+    public synchronized <T> T getCurrentClusterManagerNodeInstance(Class<T> clazz) {  
+            }
+            final Builder extraSettings = Settings.builder().put(noRoles());
+import org.opensearch.node.Node.DiscoverySettings;  
+ * The cluster supports randomized configuration such that nodes started in the cluster will
+import org.opensearch.index.shard.IndexShardTestCase;
+                assertThat(
+    public synchronized void ensureAtMostNumDataNodes(int n) throws IOException {
+     * It's only possible to change {@link #bootstrapClusterManagerNodeIndex} value if autoManageClusterManagerNodes is false.
+                    nodes.add(discoveryNode.getName());  
+        final int minNumDataNodes,  
+        try {
+import java.util.Collection;
+            return getOrBuildNodeClient();  
+            node.injector().getInstance(TransportService.class).addLifecycleListener(new LifecycleListener() {
+                RandomNumbers.randomIntBetween(random, 5, 10)  
+                    "1.8",  
+                                    + indexShard.shardId()
+        return getInstance(NamedWriteableRegistry.class);
+        builder.put(OperationRouting.USE_ADAPTIVE_REPLICA_SELECTION_SETTING.getKey(), random.nextBoolean());
+        NodeAndClient nodeAndClient = getRandomNodeAndClient(new NodeNamePredicate(getClusterManagerName()).negate());
+                IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);
+                    equalTo(0L)
+                assertEquals(
+        builder.put(HierarchyCircuitBreakerService.USE_REAL_MEMORY_USAGE_SETTING.getKey(), false);
+                throw new RuntimeException("already closed");
+        }
+                }
+ * GitHub history for details.
+            baseDir,
+        if (numDataPaths > 1) {
+    private final Settings defaultSettings;
+            .settings()  
+                    states.stream().mapToLong(ClusterState::term).distinct().count()
+            logger.info("increasing cluster size from {} to {}", size, n);  
+        assert Thread.holdsLock(this);
+        this.numSharedDataNodes = RandomNumbers.randomIntBetween(random, minNumDataNodes, maxNumDataNodes);
+                    nullValue()
+                                    + "Expected 0 but got "
+        Map<String, InternalTestCluster.NodeAndClient> map,  
+    /**  
+                activeDisruptionScheme.removeAndEnsureHealthy(this);
+                public void afterStart() {  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+        return filterNodes(nodes, WARM_AND_DATA_NODE_PREDICATE);
+    private final boolean forbidPrivateIndexSettings;
+    public List<String> startDataAndWarmNodes(int numNodes, Settings settings) {
+     * An abstract class that is called during {@link #rollingRestart(InternalTestCluster.RestartCallback)}
+        final NavigableMap<String, NodeAndClient> newNodes = new TreeMap<>(nodes);
+    public synchronized void restartRandomDataNode(RestartCallback callback) throws Exception {  
+    }
+                    assertBusy(() -> {
+                if (shardRouting.assignedToNode()) {
+    }
+            restartNode(nodeAndClient, callback);  
+    }  
+                    return iterator.hasNext();  
+        return warmNodeAndClients().size();  
+        assertNoSnapshottedIndexCommit();  
+                        } catch (AlreadyClosedException ok) {  
+        sharedNodesSeeds = new long[numSharedDedicatedClusterManagerNodes + numSharedDataNodes + numSharedCoordOnlyNodes];
+ * Modifications Copyright OpenSearch Contributors. See  
+                    new ByteSizeValue(RandomNumbers.randomIntBetween(random, 10, 200), ByteSizeUnit.MB)  
+            Node node = n.node;
+    }  
+                    .collect(Collectors.toList());  
+    }  
+     */
+        removeExclusions(excludedNodeIds);
+        }
+        );
+                && nodeAndClient.isClusterManagerEligible()
+import com.carrotsearch.randomizedtesting.generators.RandomStrings;
+        }
+            }
+    }  
+                    "Tests must not set a '"
+        }
+                        // the local knowledge on the primary of the global checkpoint equals the global checkpoint on the shard
+            nodeAndClients.forEach(this::publishNode);  
+            RecoverySettings.INDICES_RECOVERY_MAX_CONCURRENT_FILE_CHUNKS_SETTING.getKey(),  
+                )
+    }
+        return nodes.stream().map(NodeAndClient::getName).collect(Collectors.toList());
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags;  
+        assert Thread.holdsLock(this);
+            builder.put(SearchService.KEEPALIVE_INTERVAL_SETTING.getKey(), timeValueMillis(10 + random.nextInt(2000)).getStringRep());  
+        }
+        if (callback.validateClusterForming() || excludedNodeIds.isEmpty() == false) {
+                );
+            settings.add(getNodeSettings(i, sharedNodesSeeds[i], extraSettings.build(), defaultMinClusterManagerNodes));  
+            secureSettings = ((MockSecureSettings) secureSettings).clone();
+        }
+                    if (primaryShard == null) {  
+    public synchronized String startCoordinatingOnlyNode(Settings settings) {
+import org.opensearch.cluster.action.index.MappingUpdatedAction;
+import java.util.function.Predicate;  
+                throw new IllegalStateException("node " + name + " should be closed before recreating it");
+import java.util.concurrent.atomic.AtomicInteger;
+    @Override
+        final List<Settings> settings = new ArrayList<>();  
+    private final int numDataPaths;  
+     * This assertion might be expensive, thus we prefer not to execute on every test but only interesting tests.
+import java.util.Set;  
+        return getRandomNodeAndClient(NO_DATA_NO_CLUSTER_MANAGER_PREDICATE).client();
+            } finally {
+ * are involved reproducibility is very limited. This class should only be used through {@link OpenSearchIntegTestCase}.
+                .build();  
+                    Files.createDirectories(configPath);  
+        assertNoInFlightDocsInEngine();
+            final Iterator<NodeAndClient> iterator = nodes.values().iterator();
+        final Runnable onTransportServiceStarted = () -> rebuildUnicastHostFiles(toStartAndPublish);
+                }
+        return startNodes(waitForNodeJoin, Collections.nCopies(numOfNodes, settings).toArray(new Settings[0]));  
+     * Returns a client to a coordinating only node
+        fullRestart(EMPTY_CALLBACK);
+ *
+            OpenSearchExecutors.daemonThreadFactory("test_" + clusterName),
+        }  
+            logger.info("recreating node [{}] ", nodeAndClient.name);
+        if (size() > 0) {  
+                @Override
+import org.opensearch.cluster.metadata.RepositoriesMetadata;  
+    }
+                } catch (Exception e) {
+    private String buildNodeName(int id, Settings settings) {
+                node.start();
+        }
+                    try {
+                }
+            Settings.Builder newSettings = Settings.builder();  
+            return nodeAndClientId;
+        for (NodeAndClient nodeAndClient : nodes.values()) {
+        ensureOpen();
+                IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);  
+                        if (primaryShard.isRemoteTranslogEnabled() == false) {
+                    false,  
+                nodeConfigurationSource.nodeConfigPath((int) newIdSeed),
+        assertBusy(() -> {
+                    "if cluster-manager nodes are automatically managed then nodes must complete a join cycle when starting",
+     * Starts a node with the given settings builder and returns its name.
+    }
+import org.opensearch.common.settings.Settings;
+                success = true;
+    static final int DEFAULT_MAX_NUM_CLIENT_NODES = 1;  
+                    for (IndexShard indexShard : indexService) {
+    private final Logger logger = LogManager.getLogger(getClass());
+    public void closeNonSharedNodes(boolean wipeData) throws IOException {
+        // The assumption here is that after a test there are no ongoing write operations.
+        Set<NodeAndClient> nodesToRemove = new HashSet<>();
+    }
+            }  
+    private final Path baseDir;  
+    }
+     * Returns a node client to a data node in the cluster.  
+            IndicesService indicesService = getInstanceFromNode(IndicesService.class, node);  
+        );
+        builder.append("-HASH=[").append(SeedUtils.formatSeed(System.nanoTime())).append(']');
+                });
+        int numNodesRestarted = 0;
+        return dataNodeAndClients().size();
+    }
+            final Settings nodeSettings = updatedSettings.get(i);
+        startDataOnlyNodes(totalDataNodes);  
+        for (HttpServerTransport httpServerTransport : getInstances(HttpServerTransport.class)) {  
+            }  
+        if (randomNodeAndClient != null) {
+        final boolean forbidPrivateIndexSettings  
+        assertThat(shard, greaterThanOrEqualTo(0));  
+    public InternalTestCluster(
+        }
+                    false,
+            if (settings.get(ClusterName.CLUSTER_NAME_SETTING.getKey()) != null) {
+            this.node = node;
+        public Settings onNodeStopped(String nodeName) throws Exception {
+import org.opensearch.plugins.Plugin;  
+            String ctx = randomFrom(random, ScriptModule.CORE_CONTEXTS.keySet());
+                public Client next() {
+        ensureOpen();
+            try {
+    public String startSearchOnlyNode(Settings settings) {  
+            }
+        } catch (AssertionError ae) {
+            );
+            0,
+            } finally {
+            final NodeAndClient nodeAndClient = buildNode(i, nodeSettings, true, onTransportServiceStarted);  
+                }
+                this.numSharedCoordOnlyNodes = numClientNodes;
+                throw new RuntimeException("already closed");
+        assert this.numSharedDataNodes >= 0;  
+            } finally {
+                RandomNumbers.randomIntBetween(random, 2, 5)
+                    builder.putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), initialClusterManagerNodes);  
+            if (numClientNodes < 0) {
+                                + "] num_docs_on_replica=["
+import static org.junit.Assert.assertTrue;  
+        builder.put(  
+        );
+     */  
+        }  
+                    newSettings.add(  
+        if (others != null) {  
+    }  
+                        try {  
+import org.opensearch.http.HttpServerTransport;
+                        }
+                    false,
+                } catch (ShardLockObtainFailedException ex) {
+        builder.put("http.port", 0);
+            builder.put(SearchService.KEEPALIVE_INTERVAL_SETTING.getKey(), timeValueSeconds(10 + random.nextInt(5 * 60)).getStringRep());
+     */
+            } else {
+        final Set<String> excludedNodeIds = excludeClusterManagers(nodeAndClients);
+    public Iterable<Client> getClients() {
+    }
+     */
+        Settings closeForRestart(RestartCallback callback, int minClusterManagerNodes) throws Exception {  
+            }
+import org.opensearch.script.ScriptService;  
+import static org.junit.Assert.assertEquals;  
+        }  
+    }
+import org.opensearch.transport.TransportService;
+        this.nodePrefix = nodePrefix;
+        }  
+        for (NodeAndClient nodeAndClient : nodeAndClients) {
+                        }  
+                && nodes.values()
+                            nodeNames.add(Node.NODE_NAME_SETTING.get(nodeSettings));
+    }
+     */
+        if (nextNodeId.get() == newSize && nodes.size() == newSize) {
+    private final int numSharedDedicatedClusterManagerNodes;
+            markNodeDataDirsAsNotEligibleForWipe(node);
+     * Restarts a node and calls the callback during restart.
+    }
+     * Ensures that at most <code>n</code> are up and running.
+                    false,
+        final List<Settings> updatedSettings = bootstrapClusterManagerNodeWithSpecifiedIndex(settings);
+import static org.apache.lucene.tests.util.LuceneTestCase.rarely;
+        }
+                        }
+        }
+import static org.opensearch.test.NodeRoles.noRoles;  
+    }
+            NodeAndClient next = values.next();
+                    1,
+ * <p>
+    );
+        private final int nodeAndClientId;
+            validateClusterFormed();  
+    synchronized Set<String> allDataNodesButN(int count) {
+            NodeEnvironment nodeEnv = node.getNodeEnvironment();
+    }
+                    .filter(DiscoveryNode::isClusterManagerNode)  
+import org.opensearch.discovery.ClusterManagerNotDiscoveredException;
+            callback,  
+import org.opensearch.Version;  
+    public List<String> startNodes(int numOfNodes, Settings settings) {
+        this(  
+                                .collect(Collectors.joining(",", "[", "]"));  
+            for (IndexService indexService : indexServices) {  
+    }
+import com.carrotsearch.randomizedtesting.RandomizedTest;  
+            stopNodesAndClient(nodeAndClient);
+                stopRandomNodeNotCurrentClusterManager();  
+    }
+    static final int DEFAULT_MAX_NUM_DATA_NODES = TEST_NIGHTLY ? 6 : 3;
+    public void resetCluster() {
+            } else {
+    /**
+        }
+    /**
+        final Collection<Class<? extends Plugin>> mockPlugins,
+                assertThat(
+        return defaultSettings;
+import java.util.concurrent.ExecutorService;  
+    /**  
+import org.opensearch.core.common.unit.ByteSizeUnit;
+     * Indexing starts from 0.
+    @Override
+                        continue; // just ignore - shard movement
+ * {@link #afterTest()} to initialize and reset the cluster in order to be more reproducible. The term "more" relates  
+    public void assertSeqNos() throws Exception {
+        }
+                if (random.nextBoolean()) {
+                OperationRouting operationRouting = clusterService.operationRouting();
+            fileCache.closeIndexInputReferences();
+        assert size() == newSize;
+        }
+                    assertEquals("Node size mismatch" + debugString, expectedNodes.size(), discoveryNodes.getSize());
+        builder.put(
+        return getNodePrefix(settings) + id;
+            builder.put(
+        for (NodeAndClient nodeAndClient : nodes.values()) {
+                        docsOnPrimary = IndexShardTestCase.getDocIdAndSeqNos(primaryShard);  
+        final List<String> clusterManagerNodeNames = settings.stream()
+            for (final IndexRoutingTable indexRoutingTable : state.routingTable().indicesRouting().values()) {
+     */
+            callback.doAfterNodes(numNodesRestarted++, nodeAndClient.nodeClient());
+                        assertTrue("Expected node to exist: " + expectedNode + debugString, discoveryNodes.nodeExists(expectedNode));  
+     * @param onTransportServiceStarted callback to run when transport service is started
+        int size = numDataNodes();  
+            .putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), Node.NODE_NAME_SETTING.get(settings))
+import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
+        return clusterService(null);  
+                    random,  
+            if (activeDisruptionScheme != null) {
+                    .collect(Collectors.toSet());  
+            for (NodeAndClient nodeAndClient : nodes.values()) {
+                TaskManager taskManager = getInstance(TransportService.class, nodeAndClient.name).getTaskManager();
+        try {
+                        primaryShardRouting + " should have set the global checkpoint",  
+                    .getIndicesFieldDataCache();  
+            this.nodeAndClientId = nodeAndClientId;
+    private Collection<NodeAndClient> dataNodeAndClients() {
+    private IndexShard getShardOrNull(ClusterState clusterState, ShardRouting shardRouting) {  
+    public void restartNode(String nodeName) throws Exception {
+    @Override
+        }  
+                finalSettings,
+    public Client dataNodeClient() {  
+                final MockTransportService mockTransportService = (MockTransportService) transportService;
+                nodeClient = null;  
+    }
+            synchronized (InternalTestCluster.this) {
+                        } catch (AlreadyClosedException ex) {  
+    }
+            );
+        final Iterator<NodeAndClient> values = collection.iterator();
+            this.name = name;  
+                activeDisruptionScheme = null;  
+                .filter(nac -> nodes.containsKey(nac.name) == false) // filter out old cluster-managers
+    public <T> T getInstance(Class<T> clazz, final String node) {  
+            if (random.nextBoolean()) {
+            );
+                public boolean hasNext() {
+        final Set<String> excludedNodeNames = new HashSet<>();  
+                "Closing random non cluster-manager node [{}] current cluster-manager [{}] ",
+            for (NodeAndClient nodeAndClient : nodes.values()) {  
+                    ShardRouting primaryShardRouting = indexShardRoutingTable.primaryShard();
+    private ServiceDisruptionScheme activeDisruptionScheme;
+        if (!dataDirToClean.isEmpty()) {
+        Random random = new Random(seed);
+        final int maxNumDataNodes,
+        startAndPublishNodesAndClients(toStartAndPublish);
+                    assertThat(
+            "internal_test_cluster_executor",  
+import org.opensearch.common.Nullable;
+                // If stopping few enough cluster-manager-nodes that there's still a majority left, there is no need to withdraw their votes
+        if (activeDisruptionScheme != null) {
+        nextNodeId.set(firstNodeId + numOfNodes);
+        Set<DiscoveryNodeRole> warmAndDataRoles = new HashSet<>();  
+            ? nodes.values().stream()  
+                        RepositoriesMetadata repositoriesMetadata = cs.metadata().custom(RepositoriesMetadata.TYPE);
+                }
+     * in the cluster.  
+            logger.info("Closing random node [{}] ", nodeAndClient.name);
+        return false;
+        if (values.isEmpty() == false) {
+        }  
+            }  
+        private void recreateNode(final Settings newSettings, final Runnable onTransportServiceStarted) {
+                suffix = suffix + DiscoveryNodeRole.DATA_ROLE.roleNameAbbreviation();
+                states.forEach(cs -> {  
+    public List<String> startSearchOnlyNodes(int numNodes, Settings settings) {
+        randomlyResetClients();
+                // if we don't have dedicated cluster-manager nodes, keep things default
+        }
+    /**
+        String clusterManagerNodeName = getClusterManagerName();  
+    @Override
+            }
+        private MockNode node;  
+        nextNodeId.set(newSize);  
+        final int numberOfClusterManagerNodes = numSharedDedicatedClusterManagerNodes > 0
+            assert iterator.hasNext();  
+import java.util.Arrays;
+                            docsOnReplica,
+    /**
+        }
+            return nodes;  
+            return node;
+                    String routing = RandomStrings.randomAsciiOfLength(random, 10);
+            }
+                    DEFAULT_MAX_NUM_CLIENT_NODES
+            }  
+            if (stoppingClusterManagers != currentClusterManagers && stoppingClusterManagers > 0) {
+import org.opensearch.common.util.concurrent.FutureUtils;
+        super(clusterSeed);
+        builder.put(
+    }  
+        restartRandomDataNode(EMPTY_CALLBACK);  
+        // Check that the operations counter on index shard has reached 0.
+            throw new RuntimeException(e);
+    public synchronized void validateClusterFormed() {
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+        }
+import static org.opensearch.common.unit.TimeValue.timeValueMillis;  
+    private NodeAndClient removeNode(NodeAndClient nodeAndClient) {
+                    totalDataNodes -= 1;
+        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(new NodeNamePredicate(getClusterManagerName()));
+        // clear all rules for mock transport services  
+    }
+    }
+        );  
+        return filterNodes(nodes, DATA_NODE_PREDICATE);  
+            return randomNodeAndClient.client();
+                    false,
+import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsRequest;
+                assertThat(
+    }
+import static org.opensearch.test.NodeRoles.onlyRole;
+        applyDisruptionSchemeToNode(nodeAndClient);
+            if (nodeEnv.hasNodeFile()) {  
+            stopCurrentClusterManagerNode();  
+        final Settings.Builder updatedSettings = Settings.builder();
+                );
+        private final String name;
+    /**  
+                    indexService.getIndexSettings().getSettings().getAsInt(IndexMetadata.SETTING_NUMBER_OF_SHARDS, -1),
+                    final int targetShard = operationRouting.indexShards(clusterService.state(), index.getName(), null, routing)
+        final List<NodeAndClient> nodes = new ArrayList<>();  
+        }
+        final Function<Client, Client> clientWrapper,
+                    for (IndexShard indexShard : indexService) {
+            .filter(key -> key.equals(Environment.PATH_DATA_SETTING.getKey()) || key.equals(Environment.PATH_SHARED_DATA_SETTING.getKey()));
+        // randomize tcp settings  
+    public List<String> startDataOnlyNodes(int numNodes, Settings settings, Boolean ignoreNodeJoin) {  
+        if (reuseExisting && nodeAndClient != null) {
+        return getInstance(clazz, DATA_NODE_PREDICATE);
+        }
+import org.opensearch.index.engine.EngineTestCase;
+            if (callback.clearData(name)) {
+                    nodeClient = node.client();  
+            .get()
+        assertOpenTranslogReferences();
+            }
+        }  
+import java.io.Closeable;  
+        logger.trace("validating cluster formed, expecting {}", expectedNodes);
+                            throw new AssertionError(
+        return startNodes(numNodes, Settings.builder().put(searchOnlyNode(settings)).build());
+            if (numDataAndClusterManagerNodes() != numClusterManagerNodes()) {  
+                        "pending coordinating bytes [" + coordinatingBytes + "] bytes on node [" + nodeAndClient.name + "]."
+import static org.junit.Assert.assertThat;
+            autoManageClusterManagerNodes,
+    /**
+                    Files.write(configPath.resolve(UNICAST_HOSTS_FILE), discoveryFileContents);
+            builder.put(settings);
+        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(new NodeNamePredicate(getClusterManagerName()).negate());  
+        // Close IndexInput reference file to avoid file leaks during node restart  
+        if (minNumDataNodes < 0 || maxNumDataNodes < 0) {
+                                + docsOnPrimary.size()
+                // in an assertBusy loop, so it will try for 10 seconds and
+    }
+            .filter(entry -> CLUSTER_MANAGER_NODE_PREDICATE.test(entry.getValue()))
+        ensureOpen();
+        // always reduce this - it can make tests really slow  
+            .put(settings)  
+        final boolean autoManageClusterManagerNodes,  
+    }
+            );
+                                assertFalse(  
+                .allMatch(s -> DiscoveryNode.isClusterManagerNode(s) == false || ZEN2_DISCOVERY_TYPE.equals(DISCOVERY_TYPE_SETTING.get(s)))  
+        for (NodeAndClient nodeAndClient : nodes.values()) {
+    }
+    }
+        if (size < n) {
+    }
+                    false,
+        nodeAndClient.node.settings()
+                    false,
+                newSettings.add(settings);
+        }  
+                MappingUpdatedAction.INDICES_MAPPING_DYNAMIC_TIMEOUT_SETTING.getKey(),  
+        }
+     */
+         * If this returns <code>true</code> all data for the node with the given node name will be cleared including
+            }  
+            }
+ */
+                activeDisruptionScheme.removeFromNode(nodeAndClient.name, this);
+         * an active client to the node that will be restarted next.  
+    }
+                            continue;
+                    "Fielddata size must be 0 on node: " + stats.getNode(),  
+            return new Iterator<Client>() {
+        String suffix = "";  
+        public boolean test(NodeAndClient nodeAndClient) {
+import static org.junit.Assert.fail;
+    }
+                for (var indexShardRoutingTable : indexRoutingTable.shards().values()) {  
+                                + "] vs replica=["
+        }
+        final boolean autoManageClusterManagerNodes,
+            builder.put(TransportReplicationAction.REPLICATION_RETRY_TIMEOUT.getKey(), timeValueSeconds(retryTimeoutSeconds));  
+     * Replace all nodes by stopping all current node and starting new node.
+ * license agreements. See the NOTICE file distributed with
+     * Starts multiple nodes with the given settings and returns their names
+        return getRandomNodeAndClient(DATA_NODE_PREDICATE).client();
+import java.util.concurrent.ExecutionException;
+                            .put(settings)
+                    }  
+            DiscoveryNodes discoveryNodes = clusterService().state().getNodes();
+    }
+        private final AtomicBoolean closed = new AtomicBoolean(false);  
+ * InternalTestCluster manages a set of JVM private nodes and allows convenient access to them.
+        startCoordinatingOnlyNode(settings);  
+        builder.put(TransportSettings.PORT.getKey(), 0);  
+            + activeDisruptionScheme  
+import org.opensearch.tasks.TaskManager;
+        assertNoPendingIndexOperations();  
+                    final Path[] locations = nodeEnv.nodeDataPaths();
+        }
+    }
+        final boolean randomlyAddDedicatedClusterManagers,
+                        assertThat(replicaShardRouting + " seq_no_stats mismatch", seqNoStats, equalTo(primarySeqNoStats));  
+    }
+        return startNode(Settings.builder().put(settings).put(searchOnlyNode(settings)).build());
+        }
+        this.nodeConfigurationSource = nodeConfigurationSource;
+}
+                            .build()
+    private void applyDisruptionSchemeToNode(NodeAndClient nodeAndClient) {  
+ * to the async nature of OpenSearch in combination with randomized testing. Once Threads and asynchronous calls
+                        logger.info("Successfully wiped data directory for node location: {}", path);  
+        return startNode(Settings.EMPTY);
+    public List<String> startNodes(int numOfNodes) {  
+                for (IndexService indexService : indexServices) {
+        final List<NodeAndClient> toClose = new ArrayList<>();  
+                for (final Path configPath : configPaths) {
+import java.util.concurrent.TimeUnit;
+        void startNode() {
+        throw new AssertionError("No node found with name: [" + nodeName + "]");
+                RandomNumbers.randomIntBetween(random, 2, 5)  
+     */
+                                    indexShard.routingEntry().toString() + " has unreleased snapshotted index commits",
+            } catch (IOException e) {  
+        this.forbidPrivateIndexSettings = forbidPrivateIndexSettings;
+                );
+            assert nodes.containsKey(nodeAndClient.name);  
+        assert nodes.isEmpty();  
+        /**
+                final CircuitBreakerService breakerService = getInstanceFromNode(CircuitBreakerService.class, nodeAndClient.node);
+                        + ClusterName.CLUSTER_NAME_SETTING.getKey()
+        throw new AssertionError("No cluster-manager client found");
+        assert Thread.holdsLock(this);  
+     */  
+                throw new AssertionError("interrupted while starting nodes", e);  
+            RandomNumbers.randomIntBetween(random, 1, 4)
+        Builder builder = Settings.builder();  
+                dataDirToClean.addAll(Arrays.asList(nodeEnv.nodeDataPaths()));
+        return startNodes(false, extraSettings);
+    }  
+            throw new UncheckedIOException(e);
+    }
+        Node node() {  
+        }  
+    private static final Predicate<NodeAndClient> WARM_AND_DATA_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.hasRole(  
+        }
+        }
+    static final int DEFAULT_MIN_NUM_CLIENT_NODES = 0;
+            TransportService transportService = nodeAndClient.node.injector().getInstance(TransportService.class);
+                .put(newSettings)
+                node.close();
+        NodeAndClient nodeAndClient = getRandomNodeAndClient(WARM_NODE_PREDICATE);
+                // requests from other clusters because Jenkins is running
+ * the Apache License, Version 2.0 (the "License"); you may
+                throw new IllegalStateException(  
+    public synchronized void fullRestart(RestartCallback callback) throws Exception {
+                    false,
+    }
+    @Override  
+        return getInstances(clazz, DATA_NODE_PREDICATE.or(CLUSTER_MANAGER_NODE_PREDICATE));  
+            throw new ClusterManagerNotDiscoveredException("Cluster manager node not discovered");  
+        return plugins;
+        DiscoveryNodeRole.WARM_ROLE  
+     */
+     * Returns the name of the current cluster-manager node in the cluster and executes the request via the node specified
+     */
+    }
+        return startNodes(Collections.nCopies(numOfNodes, settings).toArray(new Settings[0]));
+        buildNode.startNode();
+            numClientNodes,  
+         * Executed once the give node name has been stopped.
+        stopNodesAndClients(Collections.singleton(nodeAndClient));
+    }  
+        }  
+     */
+                    );
+     *
+        private final String nodeName;
+                activeDisruptionScheme.removeFromCluster(this);  
+    }  
+            .filter(DiscoveryNode::isClusterManagerNode)
+                    false,
+        for (NodeAndClient nodeAndClient : nodes.values()) {
+                            final Engine engine = IndexShardTestCase.getEngine(indexShard);
+import static org.apache.lucene.tests.util.LuceneTestCase.TEST_NIGHTLY;
+        for (int i = 0; i < sharedNodesSeeds.length; i++) {
+        for (int i = 0; i < numOfNodes; i++) {
+                                .stream()
+                    p.getName(),
+        assertTrue(
+        return builder.build();
+                        AddVotingConfigExclusionsAction.INSTANCE,
+                }
+                                + primaryShardRouting
+        }
+                autoBootstrapClusterManagerNodeIndex = RandomNumbers.randomIntBetween(random, 0, numSharedDataNodes - 1);
+                );
+        ensureOpen();
+        void resetClient() {  
+    private synchronized NodeAndClient getRandomNodeAndClient(Predicate<NodeAndClient> predicate) {
+    public String getClusterManagerName() {  
+     */
+            );  
+            return null;
+        nodeAndClient.node.settings(),
+                Client client = getRandomNodeAndClient(node -> excludedNodeIds.contains(node.name) == false).client();
+         * closes the node and prepares it to be restarted
+            NodeEnvironment env = nodeAndClient.node().getNodeEnvironment();  
+    public void fullRestart() throws Exception {
+            toStartAndPublish.add(nodeAndClient);
+                    false,  
+            validateClusterFormed();
+                    }
+            activeDisruptionScheme.applyToNode(nodeAndClient.name, this);  
+                    false,
+                    List<String> nodeNames = new ArrayList<>();
+    public synchronized void wipePendingDataDirectories() {  
+            startNodes(n - size, Settings.builder().put(onlyRole(Settings.EMPTY, DiscoveryNodeRole.WARM_ROLE)).build());
+    public Set<String> getDataNodeNames() {  
+        public void close() throws IOException {  
+                    throw new AssertionError(
+     * Returns an Iterable to all instances for the given class &gt;T&lt; across all data and cluster-manager nodes
+                            nodeNames.add(Node.NODE_NAME_SETTING.get(nodeSettings));
+    public String startDataOnlyNode() {  
+import com.carrotsearch.randomizedtesting.generators.RandomPicks;  
+    /**
+    public InetSocketAddress[] httpAddresses() {
+                // update once cluster-managers have joined  
+     * Returns a reference to a node's {@link ClusterService}. If the given node is null, a random node will be selected.
+                    false,
+    public Client client(String nodeName) {  
+    private <T> Iterable<T> getInstances(Class<T> clazz, Predicate<NodeAndClient> predicate) {  
+            for (final IndexRoutingTable indexRoutingTable : state.routingTable().indicesRouting().values()) {  
+        logger.info("changing cluster size from {} data nodes to {}", size, n);
+        return nodes.values()  
+    }
+            final NodeAndClient previous = removeNode(nodeAndClient);  
+        if (settings.hasValue("nodes.roles")) {
+        warmAndDataRoles.add(DiscoveryNodeRole.DATA_ROLE);
+            nodes.add(nodeAndClient);
+    private void restartNode(NodeAndClient nodeAndClient, RestartCallback callback) throws Exception {
+                }
+    }
+            final Collection<NodeAndClient> nodesAndClients = nodes.values();
+                + bootstrapClusterManagerNodeIndex;  
+        }
+    public int numDataNodes() {
+            Settings callbackSettings = callback.onNodeStopped(name);
+        return instances;  
+     */  
+     * fully shared cluster to be more reproducible */
+                    }
+     * Restarts all nodes in the cluster. It first stops all nodes and then restarts all the nodes again.
+                    false,  
+        if (autoManageClusterManagerNodes) {
+                    "Not all cluster-managers in same term" + debugString,  
+        return getOrBuildRandomNode().client();
+                CommonStatsFlags flags = new CommonStatsFlags(Flag.FieldData, Flag.QueryCache, Flag.Segments);
+            Set<String> nodes = new HashSet<>();
+            this.numSharedCoordOnlyNodes = 0;  
+import org.opensearch.core.common.unit.ByteSizeValue;
+                                .values()  
+                }  
+    /**
+        builder.put(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_SETTING.getKey(), randomFrom(random, "write", "metadata_write"));  
+        }
+import org.opensearch.indices.IndicesService;  
+        updatedSettings.put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), seed);
+    }
+        for (int i = 0; i < numOfNodes; i++) {
+            if (transportService instanceof MockTransportService) {  
+        updatedSettings.put(Environment.PATH_HOME_SETTING.getKey(), baseDir);  
+    public void assertNoInFlightDocsInEngine() throws Exception {  
+                        throw new IOException("Node didn't close within 10 seconds.");
+                    false,
+import org.opensearch.core.index.Index;  
+                    final List<DocIdSeqNoAndSource> docsOnPrimary;
+            // we clone this here since in the case of a node restart we might need it again
+    public synchronized void ensureAtLeastNumWarmNodes(int n) {  
+                    final Map<String, Long> syncGlobalCheckpoints;
+        }
+                        try {
+     */
+            try {
+    }
+import java.util.stream.Stream;  
+            }
+ */  
+        Random random = new Random(clusterSeed);
+            validateClusterFormed();
+        DiscoveryNodeRole.WARM_ROLE
+            assert stoppingClusterManagers <= currentClusterManagers : currentClusterManagers + " < " + stoppingClusterManagers;  
+                timeValueSeconds(RandomNumbers.randomIntBetween(random, 10, 30)).getStringRep()
+        final int numClientNodes,
+import static org.hamcrest.Matchers.equalTo;
+        // from failing on nodes without enough disk space  
+                    final SeqNoStats primarySeqNoStats;  
+                logger.info("adding voting config exclusions {} prior to restart/shutdown", excludedNodeNames);
+import static org.junit.Assert.assertFalse;
+                    if (node.awaitClose(10, TimeUnit.SECONDS) == false) {  
+                // all nodes know about all other nodes
+                    } catch (IOException e) {
+     */
+                }
+        final List<NodeAndClient> toStartAndPublish = new ArrayList<>(); // we want to start nodes in one go
+        for (NodeAndClient nodeAndClient : nodes.values()) {  
+            };
+        while (values.hasNext() && numNodesAndClients++ < size - n) {
+        final String nodePrefix,
+        public String getName() {
+            + "]. call clearDisruptionScheme first";
+                    }, 1, TimeUnit.MINUTES);  
+                IOUtils.close(nodes.values());  
+import org.opensearch.index.engine.Engine;  
+    }
+            }
+        if (clusterManagerNode == null) {
+                    false
+     */
+        warmAndDataRoles.add(DiscoveryNodeRole.WARM_ROLE);
+     * stages of the restart.  
+import org.opensearch.cluster.node.DiscoveryNode;
+                assert excludedNodeNames.size() == stoppingClusterManagers;
+                        .shardId()  
+            Settings settings = Settings.builder()
+                }
+ * under the License.  
+        try {  
+        List<Settings> newSettings = new ArrayList<>();  
+                } else {
+    private void assertOpenTranslogReferences() throws Exception {  
+    public synchronized Client coordOnlyNodeClient() {
+                    for (Settings nodeSettings : allNodesSettings) {  
+            builder.put(HierarchyCircuitBreakerService.REQUEST_CIRCUIT_BREAKER_TYPE_SETTING.getKey(), "noop");
+                    }  
+    private final int numSharedDataNodes;
+    }
+     * Returns a reference to a random nodes instances of the given class &gt;T&lt;
+            if (DiscoveryNode.isClusterManagerNode(settings) == false) {  
+     * Restarts a random data node in the cluster and calls the callback during restart.
+            assert Thread.holdsLock(InternalTestCluster.this);  
+        // test that have ongoing write operations after the test (for example because ttl is used  
+/**  
+ * You may obtain a copy of the License at  
+    public Collection<Class<? extends Plugin>> getPlugins() {
+        final Set<String> nodes = Sets.newHashSet(nodeNames);
+                    newSettings.putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey());
+                    throw new AssertionError(
+                    } catch (AlreadyClosedException ex) {
+    /**  
+            }
+    private final int numSharedCoordOnlyNodes;  
+    }
+                                IndexShardTestCase.getTranslog(indexShard).getDeletionPolicy().assertNoOpenTranslogRefs();
+                assertThat(
+ * compatible open source license.
+        }
+        private void markNodeDataDirsAsPendingForWipe(Node node) {  
+    }
+                }  
+         * gateways and all index data. Returns <code>false</code> by default.  
+import java.util.stream.IntStream;
+                nextNodeId.get(),
+        scheme.applyToCluster(this);
+                        + ClusterName.CLUSTER_NAME_SETTING.getKey()
+            + numSharedDataNodes + numSharedCoordOnlyNodes; i++) {
+            onTransportServiceStarted.run(); // reusing an existing node implies its transport service already started  
+import com.carrotsearch.randomizedtesting.SeedUtils;
+                    false,
+    ) && DiscoveryNode.isDataNode(nodeAndClient.node.settings());  
+            if (nodePrefix.equals(OpenSearchIntegTestCase.SUITE_CLUSTER_NODE_PREFIX)  
+        this.clientWrapper = clientWrapper;
+    }
+        stopAllNodes();
+                        }
+        });
+        );
+            for (String nodeName : getNodeNames()) {
+        return builder.toString();  
+                for (IndexService indexService : indexServices) {
+        && DiscoveryNode.isDataNode(nodeAndClient.node.settings()) == false;
+            } else {
+        if (this.open.compareAndSet(true, false)) {  
+                    );  
+            autoManageClusterManagerNodes ? "auto-managed" : "manual"
+            assert Thread.holdsLock(InternalTestCluster.this);
+                timeValueMillis(RandomNumbers.randomIntBetween(random, 750, 10000000)).getStringRep()
+        final boolean usingSingleNodeDiscovery = discoveryType.equals("single-node");
+            maxNumDataNodes,  
+        // clean up what the nodes left that is unused  
+    private int getClusterManagerNodesCount() {
+        return getInstance(clazz, nc -> true);
+import java.io.IOException;
+            }
+                final long coordinatingBytes = indexingPressure.getCurrentCoordinatingBytes();
+        List<T> instances = new ArrayList<>();
+        return warmDataNodeAndClients().size();
+        assertBusy(() -> {
+            final Settings newSettings = nodeAndClient.closeForRestart(callback, minClusterManagerNodes);  
+            newSettings.put(callbackSettings);
+        this.bootstrapClusterManagerNodeIndex = bootstrapClusterManagerNodeIndex;
+            } else {  
+     */
+                    this.numSharedDedicatedClusterManagerNodes = DEFAULT_HIGH_NUM_CLUSTER_MANAGER_NODES;
+        if (random.nextBoolean()) {
+            }
+                assertThat(  
+                            // shard is closed
+    }
+        if (settings != null) {
+     */
+            for (ShardRouting shardRouting : allShards) {  
+        final Settings extraSettings,  
+            RecoverySettings.INDICES_RECOVERY_RETRY_DELAY_STATE_SYNC_SETTING.getKey(),
+            builder.put(TransportSettings.CONNECTIONS_PER_NODE_RECOVERY.getKey(), random.nextInt(2) + 1);
+            validateClusterFormed();
+     * stop any of the running nodes.
+                wipePendingDataDirectories();  
+        Builder builder = Settings.builder();  
+        assertBusy(() -> {
+        // only reset the clients on nightly tests, it causes heavy load...  
+     * Starts multiple nodes with default settings and returns their names
+     * Stops the current cluster-manager node forcefully.
+    }
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+                    try {
+        return nodes.values().stream().map(node -> getInstanceFromNode(clazz, node.node)).collect(Collectors.toList());
+                    }
+     */
+    );
+            return nodeAndClient;
+                    flags,  
+    public static final RestartCallback EMPTY_CALLBACK = new RestartCallback();
+        final boolean randomlyAddDedicatedClusterManagers,
+        return startNodes(numNodes, Settings.builder().put(onlyRoles(settings, warmAndDataRoles)).build());  
+                }
+        // trash all nodes with id >= sharedNodesSeeds.length - they are non shared
+import org.opensearch.node.NodeValidationException;
+        int numNodesAndClients = 0;  
+                        + "]"
+        final int numClientNodes,
+        NodeAndClient(String name, MockNode node, Settings originalNodeSettings, int nodeAndClientId) {
+        }  
+            true
+                }
+        return () -> {
+        int totalDataNodes = numDataNodes();  
+                onTransportServiceStarted.run();
+    public synchronized void ensureAtLeastNumWarmAndDataNodes(int n) {
+import org.opensearch.cluster.ClusterName;  
+                final Collection<NodeAndClient> currentNodes = nodes.values();  
+        assertBusy(() -> {
+        int size = numWarmAndDataNodes();  
+        for (int i = 0; i < numSharedDedicatedClusterManagerNodes + numSharedDataNodes + numSharedCoordOnlyNodes; i++) {
+    }
+            try {
+        if (size < n) {
+     */  
+ */
+    }
+            .map(  
+        }  
+            // use a new seed to make sure we generate a fresh new node id if the data folder has been wiped  
+                resetClient();  
+        // dependencies. HashSet here would make order JVM-allocation-hash dependent and lead to
+        return getClusterManagerName(null);
+ *  
+        if (randomNodeAndClient != null) {
+     */  
+                    newSettings.add(settings);
+    public List<String> startWarmOnlyNodes(int numNodes, Settings settings) {
+import org.opensearch.index.engine.InternalEngine;  
+        final NodeConfigurationSource nodeConfigurationSource,  
+import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
+                forbidPrivateIndexSettings
+        }
+    public void beforeIndexDeletion() throws Exception {  
+        final Settings nodeSettings = Settings.builder()
+                    "classpath plugin",  
+            .collect(Collectors.toSet());  
+        if (random.nextBoolean()) {
+        reset(wipeData);  
+ * </p>  
+import org.opensearch.cluster.routing.allocation.decider.ThrottlingAllocationDecider;
+        }
+            String ctx = randomFrom(random, ScriptModule.CORE_CONTEXTS.keySet());
+     * filter.  
+    public <T> Iterable<T> getDataNodeInstances(Class<T> clazz) {
+        return startNode(noRoles(settings));  
+    /**  
+import static org.opensearch.discovery.DiscoveryModule.ZEN2_DISCOVERY_TYPE;  
+     * Returns an Iterable to all instances for the given class &gt;T&lt; across all nodes in the cluster.
+                states.forEach(cs -> {
+            List<ShardRouting> allShards = clusterService().state().routingTable().allShards(index);  
+        assert Thread.holdsLock(this);
+        assertBusy(() -> {  
+            logger.info("Stopping and resetting node [{}] ", nodeAndClient.name);
+    ) {
+                    .filter(Objects::nonNull)  
+    public List<String> startWarmOnlyNodes(int numNodes) {
+package org.opensearch.test;
+        NodeAndClient nodeAndClient = nodes.get(nodeName);
+            }
+                                    + String.join("\n --> ", operations)  
+    }
+        String name = settings.get("node.name");
+                    RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(),  
+        ensureOpen(); // currently unused
+        // turning on the real memory circuit breaker leads to spurious test failures. As have no full control over heap usage, we  
+        if (randomNodeAndClient != null) {
+    }
+        }
+    public synchronized void clearDisruptionScheme(boolean ensureHealthyCluster) {
+        final int newSize = sharedNodesSeeds.length;  
+import java.util.TreeMap;
+    public int numDataAndClusterManagerNodes() {
+     */
+        if (random.nextInt(10) == 0) { // 10% of the nodes have a very frequent check interval
+    private void ensureOpen() {  
+            && Arrays.stream(extraSettings)
+    }
+        startAndPublishNodesAndClients(toStartAndPublish);  
+import static org.opensearch.test.NodeRoles.searchOnlyNode;
+            }
+                    );
+    public synchronized void beforeTest(Random random) throws IOException, InterruptedException {  
+        if (!open.get()) {
+        }  
+        } catch (IOException e) {
+                } catch (InterruptedException | ExecutionException e) {
+    @Override  
+     */  
+        executor = OpenSearchExecutors.newScaling(
+            // Clear file cache to avoid file leaks during node stop
+import org.opensearch.common.lease.Releasables;  
+            if (indexService != null) {  
+        startAndPublishNodesAndClients(nodes);
+    /**  
+     * will not start any additional nodes.  
+        }
+        for (NodeAndClient nodeAndClient : filteredNodes) {  
+            return Settings.EMPTY;
+     * Restarts a node.  
+                }
+    private final String nodePrefix;
+    }  
+                    final IndexShard primaryShard = getShardOrNull(state, primaryShardRouting);
+        Settings settings = nodeConfigurationSource.nodeSettings(nodeOrdinal);  
+            1 + random.nextInt(Math.min(4, Runtime.getRuntime().availableProcessors()))
+     * Restarts all nodes in a rolling restart fashion ie. only restarts on node a time.  
+                    .map(n -> n.getAddress().toString())
+                closed.set(true);
+                        }
+                    }
+            }  
+import java.net.InetSocketAddress;  
+     */  
+                if (primaryBytes > 0) {  
+                throw new AssertionError("unexpected", e);
+            nodes.isEmpty() || nodes.values().stream().anyMatch(NodeAndClient::isClusterManagerEligible)
+            } catch (ExecutionException e) {
+                    stats.getIndices().getSegments().getBitsetMemoryInBytes(),
+                                    + nodeAndClient.name
+    synchronized String routingKeyForShard(Index index, int shard, Random random) {
+import org.apache.logging.log4j.LogManager;  
+        }  
+            sharedNodesSeeds[i] = random.nextLong();  
+            .filter(entry -> DATA_NODE_PREDICATE.test(entry.getValue()))
+        } else {
+                }
+                    "Query cache size must be 0 on node: " + stats.getNode(),
+    public List<String> startClusterManagerOnlyNodes(int numNodes) {
+        throw new AssertionError("No smart client found");
+import org.opensearch.search.SearchService;
+    }
+                        long bytesUsed = inFlightRequestsBreaker.getUsed();  
+        for (NodeAndClient nodeAndClient : nodes.values()) {
+    }
+    @Override
+     * If {@link #bootstrapClusterManagerNodeIndex} is -1 (default), this method does nothing.  
+                    logger.error("Could not assert finished requests within timeout", e);
+        if (wipeData) {
+        assert autoManageClusterManagerNodes == false || bootstrapClusterManagerNodeIndex == -1
+    /**
+import static org.opensearch.test.OpenSearchTestCase.randomBoolean;  
+    }
+            .node()
+            try {  
+        return startDataOnlyNode(Settings.EMPTY);
+    private final Collection<Class<? extends Plugin>> mockPlugins;
+    public synchronized void close() throws IOException {
+import org.opensearch.common.settings.SecureSettings;  
+            numSharedCoordOnlyNodes,
+import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsAction;  
+    private void assertAllPendingWriteLimitsReleased() throws Exception {  
+            return getOrBuildNodeClient();
+        final Settings[] newNodeSettings = new Settings[nextNodeId.get()];  
+        int totalClusterManagerNodes = numClusterManagerNodes();
+            if (closed.get() == false) {
+        return startNodes(numOfNodes, Settings.EMPTY);
+                    throw new RuntimeException("already closed");  
+        if (nodeAndClient != null) {
+    }
+        MockNode node = new MockNode(settings, pluginInfos, nodeConfigurationSource.nodeConfigPath(nodeId), forbidPrivateIndexSettings);  
+        }
+        logger.info("Closing cluster-manager node [{}] ", clusterManagerNodeName);  
+                    stats.getIndices().getFieldData().getMemorySizeInBytes(),
+                .put(
+            .map(Node.NODE_NAME_SETTING::get)
+            nodeConfigurationSource,
+    private static String getRoleSuffix(Settings settings) {
+    @Override
+        Settings settings1 = Settings.builder().put(settings).put(dataOnlyNode(settings)).build();
+import static org.hamcrest.Matchers.nullValue;  
+     * Ensures that at least <code>n</code> data nodes are present in the cluster.
+            throw new RuntimeException("Cluster is already closed");
+ */
+    }
+        return startNode(settings1);  
+    /**
+                        new AddVotingConfigExclusionsRequest(excludedNodeNames.toArray(Strings.EMPTY_ARRAY))
+    /**
+        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(NO_DATA_NO_CLUSTER_MANAGER_PREDICATE);  
+                activeDisruptionScheme.testClusterClosed();
+import org.opensearch.core.index.shard.ShardId;
+        if (activeDisruptionScheme != null) {
+                ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(),
+    public int numClusterManagerNodes() {  
+     */
+                }
+                    randomBoolean() ? DEFAULT_WARM_CACHE_SIZE_PERCENT : DEFAULT_WARM_CACHE_SIZE_BYTES
+                        continue;
+            for (NodeAndClient nodeAndClient : nodes.values()) {
+    /**
+        int autoBootstrapClusterManagerNodeIndex = autoManageClusterManagerNodes
+    }  
+                } catch (Exception e) {  
+        if (nodeAndClient != null) {  
+        }
+            } else {  
+            "Cluster is consistent again - nodes: [{}] nextNodeId: [{}] numSharedNodes: [{}]",  
+                dataDirToClean.clear();  
+        final String discoveryType = DISCOVERY_TYPE_SETTING.get(updatedSettings.build());  
+        /** returns true if the restart should also validate the cluster has reformed */  
+        }, 60, TimeUnit.SECONDS);
+        }
+import java.util.NavigableMap;  
+        super.beforeTest(random);
+            ? numSharedDedicatedClusterManagerNodes  
+    }
+            if (!DiscoveryNode.isClusterManagerNode(settings) && !DiscoveryNode.isDataNode(settings)) {  
+    }
+                for (IndexShard indexShard : indexService) {
+import org.opensearch.common.util.io.IOUtils;
+    }
+    private NodeAndClient getOrBuildRandomNode() {  
+    /**  
+            OpenSearchExecutors.NODE_PROCESSORS_SETTING.getKey(),  
+            return;
+     */
+     */
+            final int currentClusterManagers = getClusterManagerNodesCount();  
+import org.apache.lucene.store.AlreadyClosedException;
+    public synchronized void stopRandomNodeNotCurrentClusterManager() throws IOException {
+            numSharedDedicatedClusterManagerNodes,
+            }  
+        final HashSet<String> set = new HashSet<>();  
+ * The Cluster is bound to a test lifecycle where tests must call {@link #beforeTest(java.util.Random)} and
+import java.util.function.Function;
+                "Cluster hasn't changed - moving out - nodes: [{}] nextNodeId: [{}] numSharedNodes: [{}]",  
+import java.util.Collections;  
+            if (closed.get() == false) {  
+                    onTransportServiceStarted.run();
+                CircuitBreaker fdBreaker = breakerService.getBreaker(CircuitBreaker.FIELDDATA);  
+        }
+     * Updates are intended to follow a copy-on-write approach. */
+    }  
+        if (random.nextBoolean()) { // sometimes set a
+            toStartAndPublish.add(nodeAndClient);
+        final int defaultMinClusterManagerNodes
+        List<InetSocketAddress> addresses = new ArrayList<>();
+    private final AtomicBoolean open = new AtomicBoolean(true);
+                    Version.CURRENT,
+        final long clusterSeed,  
+                startNodes(n - size);
+            .build();
+        return startNode(settings1);  
+    ) {
+    public <T> T getClusterManagerNodeInstance(Class<T> clazz) {
+            }
+                nodes.keySet(),
+                                    + "] should have finished. "
+        Randomness.shuffle(toStartAndPublish);
+                this.numSharedCoordOnlyNodes = RandomNumbers.randomIntBetween(
+                for (var indexShardRoutingTable : indexRoutingTable.shards().values()) {
+                }
+                    .putList(INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), clusterManagerNodeNames)
+                assertTrue(  
+            final Settings nodeSettings = getNodeSettings(i, sharedNodesSeeds[i], Settings.EMPTY, defaultMinClusterManagerNodes);  
+                    return iterator.next().client();
+    }
+            final int newClusterManagers = (int) nodeAndClients.stream()
+        Builder builder = Settings.builder().put(defaultSettings).put(getRandomNodeSettings(nodeSeed));
+    }
+        ensureOpen();
+            builder.put(  
+import java.util.Iterator;
+        }  
+        FileCache fileCache = nodeAndClient.node().fileCache();
+        }
+        if (activeDisruptionScheme != null) {  
+    private void assertNoSnapshottedIndexCommit() throws Exception {  
+        final int numNodes = numDataNodes() - count;  
+        if (random.nextBoolean()) {  
+            IOUtils.close(secureSettings);
+        }  
+                )
+    private static Settings getRandomNodeSettings(long seed) {
+            assert Thread.holdsLock(InternalTestCluster.this);
+                @Override
+                    try {
+        numDataPaths = random.nextInt(5) == 0 ? 2 + random.nextInt(3) : 1;
+            }
+        Client nodeClient() {
+                .put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), newIdSeed)
+    }
+        final NodeConfigurationSource nodeConfigurationSource,
+            builder.put(others);
+            .collect(Collectors.toList());
+        int size = numWarmNodes();
+    private synchronized void startAndPublishNodesAndClients(List<NodeAndClient> nodeAndClients) {  
+            .map(entry -> entry.getKey())
+import org.opensearch.common.settings.MockSecureSettings;
+import org.opensearch.cluster.routing.IndexRoutingTable;
+            Set<ShardId> shardIds = env.lockedShards();
+                                .map(t -> t.taskInfo(nodeAndClient.name, true).toString())
+                    future.get();  
+    private final Set<Path> dataDirToClean = new HashSet<>();
+    /**  
+                && newClusterManagers > 0
+         */
+                // multiple ES testing jobs in parallel on the same machine.
+        List<PluginInfo> pluginInfos = plugins.stream()
+        public void doAfterNodes(int n, Client client) throws Exception {}
+    }
+            builder.put(TransportSettings.PING_SCHEDULE.getKey(), RandomNumbers.randomIntBetween(random, 100, 2000) + "ms");  
+                );
+    private synchronized void reset(boolean wipeData) throws IOException {
+        nodeAndClient.startNode();
+            builder.put(TransportSettings.CONNECTIONS_PER_NODE_BULK.getKey(), random.nextInt(3) + 1);  
+            settings.add(getNodeSettings(firstNodeId + i, random.nextLong(), extraSettings[i], defaultMinClusterManagerNodes));
+            logger.debug(
+     * Performs cluster bootstrap when node with index {@link #bootstrapClusterManagerNodeIndex} is started  
+            .findFirst()  
+    }
+        if (nodeAndClient != null) {
+                        if (bytesUsed != 0) {
+                }
+            }
+            && newClusterManagerCount > 0
+                            );
+    }  
+import org.opensearch.plugins.PluginInfo;
+import org.opensearch.common.util.set.Sets;  
+                    false,
+    private static final Predicate<NodeAndClient> CLUSTER_MANAGER_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.isClusterManagerNode(  
+        this.mockPlugins = mockPlugins;
+    private volatile NavigableMap<String, NodeAndClient> nodes = Collections.emptyNavigableMap();
+            if (DiscoveryNode.isClusterManagerNode(settings)) {  
+                && autoManageClusterManagerNodes  
+        final int firstNodeId = nextNodeId.getAndIncrement();
+                                "All incoming requests on node ["
+            ClusterService clusterService = getInstanceFromNode(ClusterService.class, node);
+        if (nodeAndClient != null) {  
+    }
+        }  
+        final int newClusterManagerCount = Math.toIntExact(Stream.of(extraSettings).filter(DiscoveryNode::isClusterManagerNode).count());
+/*
+                try {
+                    .stream()  
+        @Override
+                            if (engine instanceof InternalEngine) {
+        final String clusterName,
+     * Restarts all nodes in the cluster. It first stops all nodes and then restarts all the nodes again.
+    public void restartRandomDataNode() throws Exception {
+     * this is important if a node is randomly shut down in a test since the next test relies on a  
+                        if (replicaShard == null) {  
+    public static final int DEFAULT_HIGH_NUM_CLUSTER_MANAGER_NODES = 3;
+                nodeSettings = Settings.builder()
+            .map(Node.NODE_NAME_SETTING::get)  
+        };
+                    CircuitBreaker.IN_FLIGHT_REQUESTS
+            assert nodes.containsKey(nodeAndClient.name);
+            builder.put(  
+                    assertBusy(() -> {
+                    false,
+                final IndicesFieldDataCache fdCache = getInstanceFromNode(IndicesService.class, nodeAndClient.node)
+        }  
+        }  
+                        syncGlobalCheckpoints = primaryShard.getInSyncGlobalCheckpoints();
+        }
+            // network request, because a network request can increment one
+                CircuitBreaker inFlightRequestsBreaker = getInstance(CircuitBreakerService.class, nodeAndClient.name).getBreaker(
+        private void clearDataIfNeeded(RestartCallback callback) throws IOException {  
+import org.opensearch.index.seqno.SeqNoStats;
+        assert newSize == numSharedDedicatedClusterManagerNodes + numSharedDataNodes + numSharedCoordOnlyNodes;
+        return addresses.toArray(new InetSocketAddress[0]);  
+            nextNodeId.get(),
+                            }
+            Integer.MAX_VALUE,
+    private final String clusterName;  
+     * if more nodes than <code>n</code> are present this method will not  
+    }
+                    updatedSettings.get(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey()),  
+            .stream()  
+        nodes = Collections.unmodifiableNavigableMap(newNodes);
+        return getInstanceFromNode(clazz, randomNodeAndClient.node);  
+            validateClusterFormed();  
+    /** calculates a min cluster-manager nodes value based on the given number of cluster-manager nodes */  
+    }  
+                }
+                        if (DiscoveryNode.isClusterManagerNode(nodeSettings)) {
+        // and not all docs have been purged after the test) and inherit from
+import java.util.concurrent.Future;
+        }
+        /* Randomly return a client to one of the nodes in the cluster */
+    }
+        .isClusterManagerNode(nodeAndClient.node.settings()) == false  
+        StringBuilder builder = new StringBuilder(prefix);
+                    this.numSharedDedicatedClusterManagerNodes = DEFAULT_LOW_NUM_CLUSTER_MANAGER_NODES;  
+        randomlyResetClients(); /* reset all clients - each test gets its own client based on the Random instance created above. */
+    }
+                for (Path path : dataDirToClean) {  
+                builder.put(nodeSettings).build(),
+            );
+    }
+        final String nodePrefix,  
+import org.opensearch.core.common.breaker.CircuitBreaker;
+        }
+     */
+        // turn it off for these tests.
+                    false,
+                    }  
+                    null,
+                final String name = nodeAndClient.name;
+            newSize
+        return filterNodes(nodes, WARM_NODE_PREDICATE);
+                        logger.info("Failed to wipe data directory for node location: {}", path);
+     */
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+                    Collections.emptyList(),  
+    public Client smartClient() {
+    }
+            }
+    }
+        restartNode(nodeName, EMPTY_CALLBACK);  
+                        try {  
+        if (callback.validateClusterForming()) {
+    /**
+import org.opensearch.cluster.routing.OperationRouting;
+                            throw new AssertionError(  
+    }  
+        }
+ * not use this file except in compliance with the License.
+        return set;  
+        public boolean validateClusterForming() {
+import org.opensearch.common.unit.TimeValue;  
+        assert Thread.holdsLock(this);
+            validateClusterFormed();
+                && currentClusterManagers > 0  
+            try {
+import org.opensearch.index.store.remote.filecache.FileCache;
+                    .put(nodeSettings)  
+        if (size < n) {
+            }
+ * specific language governing permissions and limitations
+                final long combinedBytes = indexingPressure.getCurrentCombinedCoordinatingAndPrimaryBytes();
+        if (nodeAndClient != null) {
+                    .filter(NodeAndClient::isClusterManagerEligible)
+            );
+                }
+    }
+                Releasables.close(nodeClient);
+import org.apache.logging.log4j.Logger;
+    public String getClusterName() {
+        }
+import org.opensearch.index.IndexService;  
+            validateClusterFormed();  
+            return randomNodeAndClient.nodeClient();
+            numSharedDataNodes,  
+            }
+                    for (IndexShard indexShard : indexService) {  
+            builder.put(MappingUpdatedAction.INDICES_MAX_IN_FLIGHT_UPDATES_SETTING.getKey(), RandomNumbers.randomIntBetween(random, 1, 10));  
+                    .map(node -> getInstanceFromNode(ClusterService.class, node.node()))
+    public String startSearchOnlyNode() {
+        // randomize start up order
+        assertThat(shard, greaterThanOrEqualTo(0));
+                firstNodeId + i,  
+        if (random.nextBoolean()) {
+            );
+    public synchronized void assertAfterTest() throws Exception {
+import org.opensearch.index.shard.IndexShard;  
+            if (numSharedDedicatedClusterManagerNodes > 0) {
+     * Returns a node client to the current cluster-manager node.  
+import org.opensearch.index.IndexingPressure;
+        nodeAndClient.node.settings()
+     * returns a suffix string based on the node role. If no explicit role is defined, the suffix will be empty  
+                markNodeDataDirsAsPendingForWipe(node);  
+                        if (replicaShard == null) {  
+                while (totalDataNodes > 0) {
+        final Settings settings = getNodeSettings(nodeId, random.nextLong(), Settings.EMPTY, 1);  
+                        assertTrue(repositoriesMetadata != null && !repositoriesMetadata.repositories().isEmpty());  
+        int size = numDataNodes();
+    }
+        final Stream<NodeAndClient> collection = n == 0
+                }
+            }
+        final Iterator<String> iterator = dataNodes.keySet().iterator();
+        if (bootstrapClusterManagerNodeIndex == -1) { // fast-path
+                    for (ShardRouting replicaShardRouting : indexShardRoutingTable.replicaShards()) {
+        activeDisruptionScheme = scheme;  
+                        try {
+ * Licensed to Elasticsearch under one or more contributor  
+                    DiscoveryNode discoveryNode = discoveryNodes.get(shardRouting.currentNodeId());
+                if (success == false) {  
+    }
+    private void stopNodesAndClient(NodeAndClient nodeAndClient) throws IOException {  
+     */
+        }  
+            instances.add(getInstanceFromNode(clazz, nodeAndClient.node));
+                // Anything that uses transport or HTTP can increase the
+            int initialMillisBound = RandomNumbers.randomIntBetween(random, 10, 100);  
+                    throw new AssertionError("Exception during check for request breaker reset to 0", e);  
+                builder.put(
+                    false, // fileCacheDetailed
+                // request breaker (because they use bigarrays), because of
+                // Clean up the cache, ensuring that entries' listeners have been called
+                                );  
+     */
+                    client().execute(  
+                    false,  
+            "Setup InternalTestCluster [{}] with seed [{}] using [{}] dedicated cluster-managers, "
+        public boolean clearData(String nodeName) {
+     */
+                        try {  
+     */  
+     */
+            wipePendingDataDirectories();
+                        } catch (AlreadyClosedException e) {  
+            } catch (InterruptedException e) {
+        return null;
+        if (random.nextInt(10) == 0) {
+        return filterNodes(nodes, DATA_NODE_PREDICATE.or(CLUSTER_MANAGER_NODE_PREDICATE)).size();  
+        final int nodeId,
+        return getInstances(clazz, DATA_NODE_PREDICATE);  
+        DiscoveryNode clusterManagerNode = client.admin().cluster().prepareState().get().getState().nodes().getClusterManagerNode();
+    public <T> Iterable<T> getDataOrClusterManagerNodeInstances(Class<T> clazz) {
+                .filter(NodeAndClient::isClusterManagerEligible)  
+    /**
+        final Function<Client, Client> clientWrapper
+import org.opensearch.indices.breaker.HierarchyCircuitBreakerService;
+        return newSettings;  
+        return node.injector().getInstance(clazz);
+            clearDataIfNeeded(callback);
+        nodeAndClient.recreateNode(newSettings, () -> rebuildUnicastHostFiles(Collections.singletonList(nodeAndClient)));  
+            stopNodesAndClient(nodeAndClient);
+        Predicate<NodeAndClient> predicate
+     * stop any of the running nodes.
+                }
+import org.opensearch.env.Environment;
+    /**
+     */
+        Collection<PluginInfo> additionalNodePlugins = nodeConfigurationSource.additionalNodePlugins();
+    /**
+                try {  
+    /**
+            : numSharedDataNodes;
+                final String debugString = ", expected nodes: " + expectedNodes + " and actual cluster states " + states;
+    }  
+                mockTransportService.clearAllRules();
+        ensureOpen();  
+        return false;
+                }
+    private void rebuildUnicastHostFiles(List<NodeAndClient> newNodes) {
+        }  
+                if (autoBootstrapClusterManagerNodeIndex == 0) {
+            }  
+     * in the viaNode parameter. If viaNode isn't specified a random node will be picked to the send the request to.  
+            } finally {
+    }
+            final ClusterState state = clusterService().state();
+        }  
+    }  
+    public List<String> startNodes(int numOfNodes, Settings settings, Boolean waitForNodeJoin) {
+            try {
+                });
+                } catch (Exception e) {
+                fdCache.getCache().refresh();
+            builder.put(
+                // TODO add cluster health API to check that voting configuration is optimal so this isn't always needed  
+        }  
+                        }
+            }  
+            }
+        return filterNodes(nodes, NodeAndClient::isClusterManagerEligible).size();
+    private Collection<NodeAndClient> warmDataNodeAndClients() {
+            : "bootstrapClusterManagerNodeIndex should be -1 if autoManageClusterManagerNodes is true, but was "
+     */
+        assert !nodeAndClient.node().isClosed();
+                p -> new PluginInfo(
+                                    + pendingTasks
+         */
+            nextNodeId.get(),
+                // first.  
+                            } else if (IndexShardTestCase.getEngine(indexShard) instanceof InternalEngine) {  
+import static org.opensearch.test.NodeRoles.dataOnlyNode;
+            }
+     * Asserts that the document history in Lucene index is consistent with Translog's on every index shard of the cluster.  
+        if (randomNodeAndClient != null) {  
+                    }
+                                    + " on node ["  
+    private static final Predicate<NodeAndClient> NO_DATA_NO_CLUSTER_MANAGER_PREDICATE = nodeAndClient -> DiscoveryNode
+     * Stops a random node in the cluster that applies to the given filter. Does nothing if none of the nodes match the
+    private final ExecutorService executor;
+                getClusterManagerName()
+            nodes.keySet(),
+                } catch (InterruptedException e) {  
+                                    + "; pending tasks ["
+                        }
+            RandomNumbers.randomIntBetween(random, 1, 5)
+            activeDisruptionScheme.removeFromNode(nodeAndClient.name, this);  
+    }
+                autoBootstrapClusterManagerNodeIndex = RandomNumbers.randomIntBetween(random, 0, numSharedDedicatedClusterManagerNodes - 1);
+                node.getClasspathPlugins(),  
+    }  
+        ensureOpen();
+        logger.info("Restarting node [{}] ", nodeAndClient.name);  
+        return null;  
+        builder.append("-TEST_WORKER_VM=[").append(OpenSearchTestCase.TEST_WORKER_VM_ID).append(']');
+            .filter(nc -> nc.name.equals(node))
+                            continue;
+            clusterSeed,
+        if (autoManageClusterManagerNodes && newSize > 0) {
+    }
+        builder.put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "1b");  
+        builder.put(ClusterName.CLUSTER_NAME_SETTING.getKey(), clusterName);  
+        for (NodeAndClient nodeAndClient : nodes.values()) {
+    }
+                .put(originalNodeSettings)  
+            try {
+import org.opensearch.env.ShardLockObtainFailedException;
+                        assertThat("Request breaker not reset to 0 on node: " + name, reqBreaker.getUsed(), equalTo(0L));  
+                            if (IndexShardTestCase.getEngine(indexShard) instanceof IngestionEngine) {
+            assert callbackSettings != null;
+        final DiscoveryNode assignedNode = clusterState.nodes().get(shardRouting.currentNodeId());
+            expectedNodes.add(getInstanceFromNode(ClusterService.class, nodeAndClient.node()).localNode());
+                }  
+                    });
+    public int numWarmNodes() {
+    public void setDisruptionScheme(ServiceDisruptionScheme scheme) {
+        }
+        }  
+            return randomNodeAndClient.nodeClient(); // ensure node client non-cluster-manager is requested
+                    env.shardLock(id, "InternalTestCluster assert after test", TimeUnit.SECONDS.toMillis(5)).close();
+                    // use a dedicated cluster-manager, but only low number to reduce overhead to tests
+    }  
+    }  
+        NodeAndClient nodeAndClient = nodes.get(nodeName);
+            set.add(iterator.next());
+                }
+        super.assertAfterTest();
+    public synchronized List<String> startNodes(Boolean waitForNodeJoin, Settings... extraSettings) {
+    public String startNode() {  
+    static final int DEFAULT_NUM_CLIENT_NODES = -1;
+        return startNode(settings.build());
+    private final Function<Client, Client> clientWrapper;  
+        if (maxNumDataNodes < minNumDataNodes) {  
+            ClusterState state = client().admin().cluster().prepareState().get().getState();
+            FileCache fileCache = nodeAndClient.node().fileCache();  
+    }
+    }  
+     * Note: use this with care tests should not rely on a certain nodes client.
+            minNumDataNodes,
+            rebuildUnicastHostFiles(nodeAndClients); // ensure that new nodes can find the existing nodes when they start
+                if (nodeEnv.hasNodeFile()) {  
+            }
+            }
+            return randomNodeAndClient;
+        int numNodesRestarted = 0;  
+                && getMinClusterManagerNodes(currentClusterManagers + newClusterManagers) > currentClusterManagers) {
+        });  
+    }
+            .stream()
+     * Returns an Iterable to all instances for the given class &gt;T&lt; across all data nodes in the cluster.  
+        assert clusterManagerNode != null;
+     */
+    private final long[] sharedNodesSeeds;
+                        final SeqNoStats seqNoStats;  
+            )  
+     * Returns a predicate that only accepts settings of nodes with one of the given names.
+        for (NodeAndClient nodeAndClient : toStartAndPublish) {
+                    throw new AssertionError("pending primary bytes [" + primaryBytes + "] bytes on node [" + nodeAndClient.name + "].");
+                suffix = suffix + "c";
+                    .distinct()
+                        assertThat(  
+ * automatically load asserting services tracking resources like file handles or open searchers.  
+    public synchronized void ensureAtLeastNumDataNodes(int n) {  
+                if (currentNodeId != bootstrapClusterManagerNodeIndex) {
+                            continue; // shard is closed - just ignore
+        final Runnable onTransportServiceStarted = () -> {}; // do not create unicast host file for this one node.  
+        final List<Settings> updatedSettings = bootstrapClusterManagerNodeWithSpecifiedIndex(settings);
+import org.opensearch.cluster.coordination.ClusterBootstrapService;  
+    }
+            this.originalNodeSettings = originalNodeSettings;
+    }
+    public void stopAllNodes() {
+                        .getId();
+                    for (Settings nodeSettings : getDataOrClusterManagerNodeInstances(Settings.class)) {  
+        Map<String, NodeAndClient> dataNodes = nodes.entrySet()
+    }  
+                    false,  
+    private String getNodePrefix(Settings settings) {  
+            logger.info(
+import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache;
+        final Path baseDir,
+import org.opensearch.index.engine.DocIdSeqNoAndSource;
+            RecoverySettings.INDICES_RECOVERY_MAX_CONCURRENT_OPERATIONS_SETTING.getKey(),
+import org.opensearch.core.common.Strings;
+        }
+                ScriptService.SCRIPT_CACHE_EXPIRE_SETTING.getConcreteSettingForNamespace(ctx).getKey(),
+        updatedSettings.put(Environment.PATH_SHARED_DATA_SETTING.getKey(), baseDir.resolve(name + "-shared"));
+                        } catch (AlreadyClosedException ignored) {  
+    }
+                            seqNoStats = replicaShard.seqNoStats();
+        if (Strings.hasLength(System.getProperty("tests.opensearch.logger.level"))) {
+        throw new AssertionError("No non-cluster-manager client found");
+        if (clusterService().state().routingTable().hasIndex(index)) {
+    }
+import java.util.Random;
+     * with the names of all existing and new cluster-manager-eligible nodes.
+    private final NodeConfigurationSource nodeConfigurationSource;
+        if (excludedNodeIds.isEmpty() == false) {
+    public ClusterService clusterService() {
+     * Returns a "smart" node client to a random node in the cluster  
+                false,
+    /* Sorted map to make traverse order reproducible.
+                }
+    public synchronized void stopRandomNode(final Predicate<Settings> filter) throws IOException {
+     * Stops a random warm node in the cluster. Returns true if a node was found to stop, false otherwise.
+            0,  
+    }  
+                }
+            if (autoManageClusterManagerNodes) {  
+        publishNode(buildNode);
+    /**  
+        builder.put(TransportSettings.TRANSPORT_COMPRESS.getKey(), rarely(random));
+                        } catch (AlreadyClosedException ignored) {
+     * Starts a node with default settings and returns its name.
+        // non-deterministic ITs (a sibling plugin's createComponents could run before the plugin  
+                fileCache.clear();
+            throw new IllegalStateException(e);
+import java.util.concurrent.atomic.AtomicBoolean;  
+            .filter(DiscoveryNode::isClusterManagerNode)
+                nodes = Collections.emptyNavigableMap();
+            nodeAndClient.recreateNode(newNodeSettings[nodeAndClient.nodeAndClientId()], () -> rebuildUnicastHostFiles(toStartAndPublish));  
+                for (IndexService indexService : indexServices) {
+    /* Each shared node has a node seed that is used to start up the node and get default settings
+            int totalClusterManagerNodes = numClusterManagerNodes();
+            final long currentClusterManagers = nodes.values().stream().filter(NodeAndClient::isClusterManagerEligible).count();  
+                                seqNoStats.getGlobalCheckpoint(),
+                }
+     * Returns a reference to a random node's {@link ClusterService}  
+        assert Thread.holdsLock(this);
+                    IOUtils.rm(locations);  
+            }
+            TimeUnit.SECONDS,
+        return updatedSettings.build();  
+        }
+                // all nodes have a cluster-manager
+    public static class RestartCallback {
+            List<Future<?>> futures = nodeAndClients.stream().map(node -> executor.submit(node::startNode)).collect(Collectors.toList());
+            builder.put(  
+        return nodes.size();  
+                    throw new UnsupportedOperationException("");
+    private int bootstrapClusterManagerNodeIndex = -1;
+        }
+        // start any missing node  
+            if (nodeEnv.hasNodeFile()) {
+        return startSearchOnlyNodes(numNodes, Settings.EMPTY);
+        updatedSettings.put("node.name", name);  
+                        not(equalTo(SequenceNumbers.UNASSIGNED_SEQ_NO))
+        }  
+        final int numOfNodes = extraSettings.length;
+    }
+    /**
+                                + "] num_docs_on_primary=["  
+                newSize  
+            }  
+                }
+        updatedSettings.put(settings);
+            }  
+            } else {
+                    false,  
+        }
+import static org.hamcrest.Matchers.not;
+                            "out of sync shards: primary=["
+import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_TYPE_SETTING;
+                try {
+                    throw new AssertionError("pending combined bytes [" + combinedBytes + "] bytes on node [" + nodeAndClient.name + "].");  
+            }
+        return getRandomNodeAndClient(nc -> true);
+    public void assertConsistentHistoryBetweenTranslogAndLuceneIndex() throws IOException {  
+        NodeAndClient randomNodeAndClient = getRandomNodeAndClient(predicate);
+        final int minNumDataNodes,
+import org.opensearch.transport.client.Client;
+    private final boolean autoManageClusterManagerNodes;  
+                if (coordinatingBytes > 0) {  
+    /**  
+     * Returns a node client to random node but not the cluster-manager. This method will fail if no non-cluster-manager client is available.  
+                    }
+    // if set to 0, data nodes will also assume the cluster-manager role
+                );  
+                Stream<NodeAndClient> unicastHosts = Stream.concat(currentNodes.stream(), newNodes.stream());
+        }
+        }
+                    .map(ClusterService::state)
+        startClusterManagerOnlyNodes(totalClusterManagerNodes);
+                try {
+            }
+                                    EngineTestCase.hasSnapshottedCommits(engine)
+                        primarySeqNoStats = primaryShard.seqNoStats();  
+            }
+        builder.put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "1b");
+        }  
+    /**
+                for (IndexService indexService : indexServices) {
+    }
+     * builds a new node
+                        IndexShardTestCase.assertConsistentHistoryBetweenTranslogAndLucene(indexShard);  
+                IntStream.range(0, numDataPaths)
+import org.opensearch.cluster.node.DiscoveryNodes;  
+    }  
+    ) {
+                        if (DiscoveryNode.isClusterManagerNode(nodeSettings)) {
+        return settings -> nodes.contains(settings.get("node.name"));  
+                    }
+                && nodeAndClient.nodeAndClientId() < sharedNodesSeeds.length
+                } else {  
+                        "pending replica write bytes [" + combinedBytes + "] bytes on node [" + nodeAndClient.name + "]."  
+        }
+        nodeAndClient.node.settings(),
+        );
+                    if (shard == targetShard) {
+        final Set<DiscoveryNode> expectedNodes = new HashSet<>();  
+        }
+            builder.put(TransportSettings.CONNECTIONS_PER_NODE_REG.getKey(), random.nextInt(6) + 1);
+        // Default the watermarks to absurdly low to prevent the tests
+                            String pendingTasks = taskManager.getTasks()
+                Environment.PATH_DATA_SETTING.getKey(),
+    /**  
+     * Returns a set of nodes that have at least one shard of the given index.
+import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsAction;
+            final long stoppingClusterManagers = nodeAndClients.stream().filter(NodeAndClient::isClusterManagerEligible).count();
+    public List<String> startClusterManagerOnlyNodes(int numNodes, Settings settings) {  
+    }
+    /**
+            && prevClusterManagerCount == 0  
+            return null;  
+import java.util.List;
+    public static String clusterName(String prefix, long clusterSeed) {  
+                    }  
+    public <T> Iterable<T> getInstances(Class<T> clazz) {
+    }
+        if (TEST_NIGHTLY) {
+    }  
+        NodeAndClient nodeAndClient = getRandomNodeAndClient(InternalTestCluster.DATA_NODE_PREDICATE);
+    }  
+        private final Settings originalNodeSettings;
+            return DiscoveryNode.isClusterManagerNode(node.settings());
+        }  
+                            }
+        return nodes.keySet().toArray(Strings.EMPTY_ARRAY);
+            }
+    }
+    /**  
+    /**
+            settings.add(removeRoles(nodeSettings, Collections.singleton(DiscoveryNodeRole.DATA_ROLE)));
+                        );  
+    }
+     */
+                    } catch (AlreadyClosedException ignored) {
+            if (DiscoveryNode.isDataNode(settings)) {  
+    @Override
+            for (NodeAndClient nodeAndClient : nodes.values()) {
+            if (closed.get()) {
+                        + settings.get(ClusterName.CLUSTER_NAME_SETTING.getKey())  
+                        }
+            defaultMinClusterManagerNodes = -1;
+        }
+                // To combat this we check whether the breaker has reached 0  
+                );  
+            new ThreadContext(Settings.EMPTY)  
+     * Returns a node client to a given node.
+                    false,  
+    public <T> T getDataNodeInstance(Class<T> clazz) {
+        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.DATA_ROLE)).build());  
+     * Returns the name of all the cluster managers in the cluster
+                ScriptService.SCRIPT_CACHE_SIZE_SETTING.getConcreteSettingForNamespace(ctx).getKey(),  
+            newSize  
+    public synchronized Set<String> nodesInclude(String index) {
+            callback.doAfterNodes(numNodesRestarted++, nodeAndClient.nodeClient());
+     */  
+import java.util.ArrayList;  
+                if (nodeClient == null) {
+                    .map(nac -> nac.node.getEnvironment().configDir())
+            assert callback != null;
+        return previous;
+    public synchronized Client client() {
+            }
+                // been updated when the previous nodes shut down, so we must always explicitly withdraw votes.
+            }
+    public String startDataOnlyNode(Settings settings) {
+import java.util.Objects;
+        ensureOpen();  
+                for (Future<?> future : futures) {
+        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.DATA_ROLE)).build(), ignoreNodeJoin);
+    /**
+        for (int i = 0; i < numNodes; i++) {
+            if (minClusterManagerNodes >= 0) {
+    @Override
+        return nodePrefix + getRoleSuffix(settings);
+            public void afterStart() {  
+    public synchronized void afterTest() {  
+     */  
+        private Client nodeClient;
+    /**
+     * Starts a node with the given settings and returns its name.  
+            IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);
+    /**  
+    public <T> T getInstance(Class<T> clazz) {  
+                List<String> discoveryFileContents = unicastHosts.map(nac -> nac.node.injector().getInstance(TransportService.class))
+        if (secureSettings instanceof MockSecureSettings) {  
+            } else {
+    /**
+        logger.info(  
+    private Collection<NodeAndClient> warmNodeAndClients() {  
+                logger.debug("Close Node [{}] not shared", nodeAndClient.name);  
+    public void setBootstrapClusterManagerNodeIndex(int bootstrapClusterManagerNodeIndex) {  
+        return eligibleClusterManagerNodes / 2 + 1;
+                final List<ClusterState> states = nodes.values()
+    }
+        return suffix;
+                    "Missing cluster-manager" + debugString,
+        }
+import org.opensearch.common.Randomness;
+    }  
+import org.opensearch.index.engine.IngestionEngine;
+                    false,
+                return clientWrapper.apply(nodeClient);
+            return nodeAndClient.client();  
+    }
+    private synchronized void stopNodesAndClients(Collection<NodeAndClient> nodeAndClients) throws IOException {
+            if (ensureHealthyCluster) {  
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+                builder.put("indices.fielddata.cache.size", 1 + random.nextInt(1000), ByteSizeUnit.MB);
+        }, 30, TimeUnit.SECONDS);  
+                int totalDataNodes = numDataNodes();
+     * @param nodeId                    node ordinal  
+                if (combinedBytes > 0) {
+ * The OpenSearch Contributors require contributions made to  
+        }
+     * @param reuseExisting             if a node with the same name is already part of {@link #nodes}, no new node will be built and
+        Iterable<NodeAndClient> filteredNodes = nodes.values().stream().filter(predicate)::iterator;
+                    .filter(Objects::nonNull)
+            } else if (numSharedDataNodes > 0) {  
+            }  
+    public static Predicate<Settings> nameFilter(String... nodeNames) {
+        }
+                // that the breaker can sometimes be incremented from ping  
+        /**
+                    "FixedBitSet cache size must be 0 on node: " + stats.getNode(),
+        public boolean isClusterManagerEligible() {  
+            stopNodesAndClient(nodeAndClient);
+                    equalTo(0L)
+     * Starts multiple nodes with the given settings and returns their names
+     * Restarts a random data node in the cluster  
+            assert previous == nodeAndClient;
+        }  
+    }
+                    }
+    public String[] getNodeNames() {  
+            builder.put(HierarchyCircuitBreakerService.FIELDDATA_CIRCUIT_BREAKER_TYPE_SETTING.getKey(), "noop");  
+            });  
+         */  
+            if (numSharedDedicatedClusterManagerNodes > 0) {
+                    throw new AssertionError("Exception during check for request breaker reset to 0", e);
+                );  
+        assert size() >= numNodes;
+    private synchronized <T> T getInstance(Class<T> clazz, Predicate<NodeAndClient> predicate) {  
+    /**
+            throw new IllegalArgumentException("minimum and maximum number of data nodes must be >= 0");  
+        }
+import org.opensearch.common.lifecycle.LifecycleListener;
+        return startNodes(numNodes, Settings.builder().put(onlyRole(settings, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE)).build());
+                    DiscoveryNodes discoveryNodes = cs.nodes();  
+                NodeService nodeService = getInstanceFromNode(NodeService.class, nodeAndClient.node);  
+    public String startClusterManagerOnlyNode(Settings settings) {
+        assert reuseExisting || nodeAndClient == null : "node name [" + name + "] already exists but not allowed to use it";  
+    /**
+            // cluster-manager-eligible;  
+                .count();
+import static org.opensearch.test.NodeRoles.onlyRoles;
+        return buildNode;  
+    public Settings dataPathSettings(String node) {
+    public List<String> startDataAndWarmNodes(int numNodes) {
+    }
+                    .stream()
+                executor.shutdownNow();  
+    }  
+            if (random.nextInt(10) == 0) { // do something crazy slow here
+    /**  
+        // prevent killing the cluster-manager if possible and client nodes
+                );
+    );
+    /**
+        logger.debug(
+            stopNodesAndClient(nodeAndClient);  
+        assertBusy(() -> {
+            }, 30, TimeUnit.SECONDS);  
+                    greaterThan(shard)  
+            ensureOpen();  
+                }
+        node.injector().getInstance(TransportService.class).addLifecycleListener(new LifecycleListener() {
+        callback.onAllNodesStopped();
+            restartNode(nodeAndClient, callback);
+    ) {
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;  
+                this.numSharedDedicatedClusterManagerNodes = 0;
+        }  
+        if (randomNodeAndClient != null) {
+            addresses.add(httpServerTransport.boundAddress().publishAddress().address());
+        }
+        stopNodesAndClients(toClose);
+        NodeNamePredicate(String nodeName) {  
+                        FileSystemUtils.deleteSubDirectories(path);
+        }  
+        assert nodePrefix != null;  
+    }
+        final long seed,
+        }  
+     * Returns the name of the current cluster-manager node in the cluster.
+                builder.put(
+            return true;  
+            }  
+                () -> rebuildUnicastHostFiles(nodes)  
+            return allNodesSettings;
+     * Stops a random data node in the cluster. Returns true if a node was found to stop, false otherwise.  
+    static final int DEFAULT_MIN_NUM_DATA_NODES = 1;
+            builder.put("logger.level", System.getProperty("tests.opensearch.logger.level"));  
+                    if (cs.nodes().getNodes().values().stream().findFirst().get().isRemoteStoreNode()) {
+        }
+    // synchronized to prevent concurrently modifying the cluster.
+                    IndexShard primaryShard = getShardOrNull(state, primaryShardRouting);  
+            close();
+            @Override
+        for (NodeAndClient n : nodes.values()) {
+                NodeEnvironment nodeEnv = node.getNodeEnvironment();
+    }  
+            activeDisruptionScheme.removeFromNode(nodeAndClient.name, this);
+                    : -1;
+                NodeStats stats = nodeService.stats(
+        }  
+        assert Thread.holdsLock(this);
+                    }
+        return startClusterManagerOnlyNodes(numNodes, Settings.EMPTY);  
+        builder.put(Environment.PATH_REPO_SETTING.getKey(), baseDir.resolve("repos"));
+        clearDisruptionScheme(true);
+                    false,  
+                            assertThat(indexShard.routingEntry().toString(), EngineTestCase.getInFlightDocCount(engine), equalTo(0L));
+        return clusterName;  
+import java.util.stream.Collectors;
+                        }
+        assertAllPendingWriteLimitsReleased();
+        this.autoManageClusterManagerNodes = autoManageClusterManagerNodes;  
+            // Checks that the breakers have been reset without incurring a
+            );  
+        return startClusterManagerOnlyNode(Settings.EMPTY);
+    public Settings getDefaultSettings() {  
+            mockPlugins,
+            logger.info("Closing random node [{}] ", nodeAndClient.name);  
+                                replicaShardRouting + " global checkpoint syncs mismatch",
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags.Flag;
+    /**
+                    for (IndexShard indexShard : indexService) {
+    public String startNode(Settings settings) {
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.env.NodeEnvironment;  
+            if (activeDisruptionScheme != null) {  
+        });  
+                        CircuitBreaker reqBreaker = breakerService.getBreaker(CircuitBreaker.REQUEST);
+                nodeAndClient.resetClient();
+            markNodeDataDirsAsNotEligibleForWipe(node);  
+        Settings settings = getSettings(nodeId, random.nextLong(), Settings.EMPTY);
+    }  
+    public void clearDisruptionScheme() {  
+import org.opensearch.common.util.concurrent.ThreadContext;
+            builder.put(
+                }
+            final Settings nodeSettings = getNodeSettings(i, sharedNodesSeeds[i], Settings.EMPTY, defaultMinClusterManagerNodes);
+     */  
+    }
+                    .build();
+    private static final class NodeNamePredicate implements Predicate<NodeAndClient> {  
+     * Starts multiple nodes with the given settings and returns their names  
+                    ShardRouting primaryShardRouting = indexShardRoutingTable.primaryShard();
+            nodes.keySet(),  
+                        // ensure that our size accounting on transport level is reset properly
+                suffix = suffix + DiscoveryNodeRole.CLUSTER_MANAGER_ROLE.roleNameAbbreviation();
+        }
+                    false,
+    public synchronized void restartNode(String nodeName, RestartCallback callback) throws Exception {  
+        for (int i = 0; i < numSharedDedicatedClusterManagerNodes; i++) {
+        assertBusy(() -> {
+    }
+     */
+        return (int) nodes.values().stream().filter(n -> DiscoveryNode.isClusterManagerNode(n.node().settings())).count();  
+                    new ByteSizeValue(RandomNumbers.randomIntBetween(random, 1, 10), ByteSizeUnit.MB)
+                while (true) {  
+                    }  
+                    .filter(NodeAndClient::isClusterManagerEligible)  
+            NodeEnvironment nodeEnv = node.getNodeEnvironment();
+                    .collect(Collectors.toList());  
+            validateClusterFormed();  
+        ensureOpen();
+                                equalTo(syncGlobalCheckpoints.get(replicaShardRouting.allocationId().getId()))  
+            // of the breakers  
+        List<NodeAndClient> values = nodes.values().stream().filter(predicate).collect(Collectors.toList());  
+                    fail("Shard " + id + " is still locked after 5 sec waiting");  
+        }
+            return randomFrom(random, values);
+                Set<Path> configPaths = Stream.concat(currentNodes.stream(), newNodes.stream())
+                    for (DiscoveryNode expectedNode : expectedNodes) {
+    /** ensure a cluster is formed with all published nodes. */
+                toClose.add(nodeAndClient);
+            Set<DiscoveryNodeRole> warmAndDataRoles = Set.of(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.WARM_ROLE);  
+import java.io.UncheckedIOException;
+    private void randomlyResetClients() {
+                                    + bytesUsed  
+        );  
+                    // see #ensureEstimatedStats()  
+            IndexService indexService = indicesService.indexService(index);
+        return nodes.entrySet()
+     * Ensures that at least <code>n</code> warm nodes are present in the cluster.
+import org.opensearch.cluster.ClusterState;
+    /**  
+        if (random.nextBoolean()) {  
+                        return routing;  
+            builder.put("logger.prefix", System.getProperty("opensearch.logger.prefix"));  
+                    false,
+                startDataOnlyNodes(n - size);
+                            continue; // just ignore - shard movement
+     * All nodes started by the cluster will have their name set to nodePrefix followed by a positive number  
+            );
+    public synchronized void rollingRestart(RestartCallback callback) throws Exception {
+                    .collect(Collectors.toList())
+            builder.put(TransportReplicationAction.REPLICATION_INITIAL_RETRY_BACKOFF_BOUND.getKey(), timeValueMillis(initialMillisBound));
+                                // no-op, as IngestionEngine does not use translog.
+     * If less nodes that <code>n</code> are running this method
+        assert Thread.holdsLock(this);
+    public InternalTestCluster(
+            }
+            }
+                    assertBusy(() -> assertThat("Fielddata breaker not reset to 0 on node: " + name, fdBreaker.getUsed(), equalTo(0L)));
+        Set<String> excludedNodeIds = excludeClusterManagers(Collections.singleton(nodeAndClient));  
+    /**
+        final Path baseDir,  
+            } catch (InterruptedException | ExecutionException e) {
+        this.clusterName = clusterName;
+        return getInstance(IndicesService.class, assignedNode.getName()).getShardOrNull(shardRouting.shardId());
+        for (int i = numSharedDedicatedClusterManagerNodes; i < numSharedDedicatedClusterManagerNodes + numSharedDataNodes; i++) {  
+        public int nodeAndClientId() {
+            return nodeName.equals(nodeAndClient.getName());  
+            }
+    /**
+        removeExclusions(excludedNodeIds);
+            clientWrapper,  
+     */
+                        + "': ["
+     * for the description of how this field is used.  
+                    if (primaryShard == null) {
+    public String startNode(Settings.Builder settings) {
+        reset(true);
+        }, 60, TimeUnit.SECONDS);  
+        }  
+                );  
+        if (random.nextBoolean()) {
+     * Note: use this with care tests should not rely on a certain nodes client.
+            removeNode(this);  
+    public synchronized boolean stopRandomWarmNode() throws IOException {  
+        // if multiple maven task run on a single host we better have an identifier that doesn't rely on input params
+            builder.put(
+        final Settings newSettings = nodeAndClient.closeForRestart(
+        final int minClusterManagerNodes = autoManageClusterManagerNodes ? getMinClusterManagerNodes(getClusterManagerNodesCount()) : -1;
+            node = new MockNode(
+            return true;
+        }
+            : nodes.values().stream().filter(DATA_NODE_PREDICATE.and(new NodeNamePredicate(getClusterManagerName()).negate()));
+        logger.debug(
+import org.opensearch.common.util.PageCacheRecycler;
+    private Settings getSettings(int nodeOrdinal, long nodeSeed, Settings others) {
+        }
+                                "shard "
+import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
+     * stop any of the running nodes.  
+                    .filter(n -> n.nodeAndClientId() < sharedNodesSeeds.length)
+    public NamedWriteableRegistry getNamedWriteableRegistry() {  
+        }  
+    /**
+                    }
+        int autoBootstrapClusterManagerNodeIndex = -1;  
+        return startDataOnlyNodes(numNodes, Settings.EMPTY);
+        }, 60, TimeUnit.SECONDS);
+                    stopRandomDataNode();  
+    }
+import java.util.LinkedHashSet;  
+        if (shardRouting == null || shardRouting.assignedToNode() == false) {
+            boolean success = false;
+                final long primaryBytes = indexingPressure.getCurrentPrimaryBytes();
+            nodesToRemove.add(next);  
+            restartNode(nodeAndClient, callback);
+        final int defaultMinClusterManagerNodes = (numberOfClusterManagerNodes / 2) + 1;
+import org.opensearch.test.disruption.ServiceDisruptionScheme;  
+            if (closed.get()) {  
+        plugins.addAll(mockPlugins);  
+            for (ShardId id : shardIds) {
+                                    + "] has pending operations:\n --> "
+import org.opensearch.cluster.service.ClusterService;  
+                client.execute(ClearVotingConfigExclusionsAction.INSTANCE, new ClearVotingConfigExclusionsRequest()).get();  
+        final NavigableMap<String, NodeAndClient> newNodes = new TreeMap<>(nodes);
+    @Override
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            closed.set(false);
+            if (nodeAndClient.nodeAndClientId() >= sharedNodesSeeds.length) {
+     * Sets {@link #bootstrapClusterManagerNodeIndex} to the given value, see {@link #bootstrapClusterManagerNodeWithSpecifiedIndex(List)}
+                    );  
+    private static final Predicate<NodeAndClient> WARM_NODE_PREDICATE = nodeAndClient -> DiscoveryNode.hasRole(
+        public void onAllNodesStopped() throws Exception {}
+        }  
+            }  
+        final long clusterSeed,
+            }
+                }
+            for (NodeAndClient nodeAndClient : nodes.values()) {
+     * Starts multiple nodes with the given settings and returns their names
+    private void assertNoPendingIndexOperations() throws Exception {
+            return;
+    public ClusterService clusterService(@Nullable String node) {  
+                autoBootstrapClusterManagerNodeIndex -= 1;
+    }  
+        final NodeAndClient nodeAndClient = nodes.get(name);
+        }  
+        newNodes.put(nodeAndClient.name, nodeAndClient);  
+    public static final int DEFAULT_LOW_NUM_CLUSTER_MANAGER_NODES = 1;
+        }
+                            // all good
+        // visible to later plugins' createComponents() only when init order respects declared
+    private List<Settings> bootstrapClusterManagerNodeWithSpecifiedIndex(List<Settings> allNodesSettings) {
+        return allDataNodesButN(0);
+    }  
+            );  
+        } else if (random.nextInt(10) != 0) { // 90% of the time - 10% of the time we don't set anything
+                settings.add(removeRoles(nodeSettings, Collections.singleton(DiscoveryNodeRole.MASTER_ROLE)));  
+            return false;  
+         */
+                    .mapToObj(i -> baseDir.resolve(name).resolve("d" + i).toString())  
+        if (fileCache != null && WARM_NODE_PREDICATE.test(nodeAndClient)) {
+     * Ensures that at least <code>n</code> data-warm nodes are present in the cluster.
+            // we have to validate cluster size to ensure that the restarted node has rejoined the cluster if it was
+        assert size() > 0;
+                final long replicaWriteBytes = indexingPressure.getCurrentReplicaBytes();  
+                );
+            nodeAndClient.close();
+        // only add the suffixes if roles are explicitly defined
+        int nodeId = nextNodeId.getAndIncrement();
+            builder.put(SearchService.DEFAULT_KEEPALIVE_SETTING.getKey(), timeValueSeconds(100 + random.nextInt(5 * 60)).getStringRep());
+                }  
         }
         activeDisruptionScheme = null;  
-    }
-
-    private void applyDisruptionSchemeToNode(NodeAndClient nodeAndClient) {  
-        if (activeDisruptionScheme != null) {
-            assert nodes.containsKey(nodeAndClient.name);
-            activeDisruptionScheme.applyToNode(nodeAndClient.name, this);  
-        }
-    }
-
-    private void removeDisruptionSchemeFromNode(NodeAndClient nodeAndClient) {
-        if (activeDisruptionScheme != null) {
-            assert nodes.containsKey(nodeAndClient.name);  
-            activeDisruptionScheme.removeFromNode(nodeAndClient.name, this);
-        }
-    }  
-
-    private Collection<NodeAndClient> dataNodeAndClients() {
-        return filterNodes(nodes, DATA_NODE_PREDICATE);  
-    }
-
-    private Collection<NodeAndClient> warmNodeAndClients() {  
-        return filterNodes(nodes, WARM_NODE_PREDICATE);
-    }
-
-    private Collection<NodeAndClient> warmDataNodeAndClients() {
-        return filterNodes(nodes, WARM_AND_DATA_NODE_PREDICATE);
-    }  
-
-    private static Collection<NodeAndClient> filterNodes(
-        Map<String, InternalTestCluster.NodeAndClient> map,  
-        Predicate<NodeAndClient> predicate
-    ) {
-        return map.values().stream().filter(predicate).collect(Collectors.toCollection(ArrayList::new));  
-    }
-
-    private static final class NodeNamePredicate implements Predicate<NodeAndClient> {  
-        private final String nodeName;
-
-        NodeNamePredicate(String nodeName) {  
-            this.nodeName = nodeName;
-        }
-
-        @Override
-        public boolean test(NodeAndClient nodeAndClient) {
-            return nodeName.equals(nodeAndClient.getName());  
-        }
-    }
-
-    synchronized String routingKeyForShard(Index index, int shard, Random random) {
-        assertThat(shard, greaterThanOrEqualTo(0));
-        assertThat(shard, greaterThanOrEqualTo(0));  
-        for (NodeAndClient n : nodes.values()) {
-            Node node = n.node;
-            IndicesService indicesService = getInstanceFromNode(IndicesService.class, node);  
-            ClusterService clusterService = getInstanceFromNode(ClusterService.class, node);
-            IndexService indexService = indicesService.indexService(index);
-            if (indexService != null) {  
-                assertThat(
-                    indexService.getIndexSettings().getSettings().getAsInt(IndexMetadata.SETTING_NUMBER_OF_SHARDS, -1),
-                    greaterThan(shard)  
-                );
-                OperationRouting operationRouting = clusterService.operationRouting();
-                while (true) {  
-                    String routing = RandomStrings.randomAsciiOfLength(random, 10);
-                    final int targetShard = operationRouting.indexShards(clusterService.state(), index.getName(), null, routing)
-                        .shardId()  
-                        .getId();
-                    if (shard == targetShard) {
-                        return routing;  
-                    }
-                }
-            }  
-        }
-        fail("Could not find a node that holds " + index);
-        return null;  
-    }
-
-    @Override  
-    public Iterable<Client> getClients() {
-        return () -> {
-            ensureOpen();  
-            final Iterator<NodeAndClient> iterator = nodes.values().iterator();
-            return new Iterator<Client>() {
-
-                @Override
-                public boolean hasNext() {
-                    return iterator.hasNext();  
-                }
-
-                @Override  
-                public Client next() {
-                    return iterator.next().client();
-                }  
-
-                @Override
-                public void remove() {  
-                    throw new UnsupportedOperationException("");
-                }
-
-            };
-        };
-    }  
-
-    @Override
-    public NamedWriteableRegistry getNamedWriteableRegistry() {  
-        return getInstance(NamedWriteableRegistry.class);
-    }
-
-    /**
-     * Returns a predicate that only accepts settings of nodes with one of the given names.
-     */  
-    public static Predicate<Settings> nameFilter(String... nodeNames) {
-        final Set<String> nodes = Sets.newHashSet(nodeNames);
-        return settings -> nodes.contains(settings.get("node.name"));  
-    }
-
     /**  
-     * An abstract class that is called during {@link #rollingRestart(InternalTestCluster.RestartCallback)}
-     * and / or {@link #fullRestart(InternalTestCluster.RestartCallback)} to execute actions at certain
-     * stages of the restart.  
-     */
-    public static class RestartCallback {
-
-        /**
-         * Executed once the give node name has been stopped.
-         */  
-        public Settings onNodeStopped(String nodeName) throws Exception {
-            return Settings.EMPTY;
-        }  
-
-        public void onAllNodesStopped() throws Exception {}
-
-        /**
-         * Executed for each node before the {@code n + 1} node is restarted. The given client is
-         * an active client to the node that will be restarted next.  
-         */
-        public void doAfterNodes(int n, Client client) throws Exception {}
-
-        /**
-         * If this returns <code>true</code> all data for the node with the given node name will be cleared including
-         * gateways and all index data. Returns <code>false</code> by default.  
-         */
-        public boolean clearData(String nodeName) {
-            return false;  
+            autoManageClusterManagerNodes ? getMinClusterManagerNodes(getClusterManagerNodesCount()) : -1
+                // all nodes have the same cluster-manager (in same term)
+    }
+            }
         }
-
-        /** returns true if the restart should also validate the cluster has reformed */  
-        public boolean validateClusterForming() {
-            return true;
+                currentNodeId++;  
+                IndicesService indexServices = getInstance(IndicesService.class, nodeAndClient.name);  
+                nodeAndClients.stream()
+        @Override
+     */
+     * Used for remote store test cases, where remote state is restored.
+        private Client getOrBuildNodeClient() {  
+        if (random.nextBoolean()) {
+    public List<String> startDataOnlyNodes(int numNodes) {
+    }  
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+import java.nio.file.Files;
+                    Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(),  
+     * @param settings                  the settings to use
+                    .forEach(excludedNodeNames::add);
+    }  
+    private static final String DEFAULT_WARM_CACHE_SIZE_BYTES = "2gb";
+        }
+        assert Thread.holdsLock(this);  
+        );
+        if (numSharedDataNodes == 0) {
+                logger.debug("configuring discovery with {} at {}", discoveryFileContents, configPaths);
+        final List<NodeAndClient> toStartAndPublish = new ArrayList<>(); // we want to start nodes in one go  
+                    states.stream().allMatch(cs -> cs.nodes().getClusterManagerNodeId() != null)
+                        primarySeqNoStats.getGlobalCheckpoint(),
+    public int size() {
+         * Executed for each node before the {@code n + 1} node is restarted. The given client is
+import org.opensearch.test.transport.MockTransportService;
+        if (size <= n) {
+        );  
+            if (numSharedDedicatedClusterManagerNodes > 0) {
+     * if more nodes than <code>n</code> are present this method will not
+        return getInstance(clazz, nc -> node == null || node.equals(nc.name));
+            removeDisruptionSchemeFromNode(nodeAndClient);
+        if (random.nextBoolean()) {
+    private Settings getNodeSettings(  
+        builder.put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1b");
+        if (Strings.hasLength(System.getProperty("opensearch.logger.prefix"))) {
+    /**
+        publishNode(nodeAndClient);
+    public String getClusterManagerName(@Nullable String viaNode) {
+        /**  
+            this.numSharedDedicatedClusterManagerNodes = 0;
+                    }  
+import static org.opensearch.test.NodeRoles.removeRoles;  
+                                + "]",  
+import org.opensearch.common.settings.Settings.Builder;
+            if (i == autoBootstrapClusterManagerNodeIndex) {  
+    public Client clusterManagerClient() {  
+        final int maxNumDataNodes,
+        if (nodeAndClient != null) {  
+            .stream()  
+        // Use LinkedHashSet so plugin iteration order matches the user's nodePlugins() declaration.
+        NodeAndClient randomNodeAndClient = getRandomNodeAndClient();  
+import org.opensearch.cluster.coordination.NoClusterManagerBlockService;
+    }
+            } catch (NodeValidationException e) {  
+        // and fails shards when a cluster-manager abdicates, which breaks many tests.
+        SecureSettings secureSettings = Settings.builder().put(settings).getSecureSettings();
+    private static Collection<NodeAndClient> filterNodes(
         }  
-    }
-
-    public Settings getDefaultSettings() {  
-        return defaultSettings;
-    }
-
-    @Override
-    public void ensureEstimatedStats() {
-        if (size() > 0) {  
-            // Checks that the breakers have been reset without incurring a
-            // network request, because a network request can increment one
-            // of the breakers  
-            for (NodeAndClient nodeAndClient : nodes.values()) {
-                final IndicesFieldDataCache fdCache = getInstanceFromNode(IndicesService.class, nodeAndClient.node)
-                    .getIndicesFieldDataCache();  
-                // Clean up the cache, ensuring that entries' listeners have been called
-                fdCache.getCache().refresh();
-
-                final String name = nodeAndClient.name;
-                final CircuitBreakerService breakerService = getInstanceFromNode(CircuitBreakerService.class, nodeAndClient.node);
-                CircuitBreaker fdBreaker = breakerService.getBreaker(CircuitBreaker.FIELDDATA);  
-                try {
-                    assertBusy(() -> assertThat("Fielddata breaker not reset to 0 on node: " + name, fdBreaker.getUsed(), equalTo(0L)));
-                } catch (Exception e) {  
-                    throw new AssertionError("Exception during check for request breaker reset to 0", e);
-                }
-
-                // Anything that uses transport or HTTP can increase the
-                // request breaker (because they use bigarrays), because of
-                // that the breaker can sometimes be incremented from ping  
-                // requests from other clusters because Jenkins is running
-                // multiple ES testing jobs in parallel on the same machine.
-                // To combat this we check whether the breaker has reached 0  
-                // in an assertBusy loop, so it will try for 10 seconds and
-                // fail if it never reached 0
-                try {  
-                    assertBusy(() -> {
-                        CircuitBreaker reqBreaker = breakerService.getBreaker(CircuitBreaker.REQUEST);
-                        assertThat("Request breaker not reset to 0 on node: " + name, reqBreaker.getUsed(), equalTo(0L));  
-                    });
-                } catch (Exception e) {
-                    throw new AssertionError("Exception during check for request breaker reset to 0", e);  
-                }
-
-                NodeService nodeService = getInstanceFromNode(NodeService.class, nodeAndClient.node);  
-                CommonStatsFlags flags = new CommonStatsFlags(Flag.FieldData, Flag.QueryCache, Flag.Segments);
-                NodeStats stats = nodeService.stats(
-                    flags,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false, // fileCacheDetailed
-                    false,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false,
-                    false,  
-                    false,
-                    false,
-                    false  
-                );
-                assertThat(
-                    "Fielddata size must be 0 on node: " + stats.getNode(),  
-                    stats.getIndices().getFieldData().getMemorySizeInBytes(),
-                    equalTo(0L)
-                );  
-                assertThat(
-                    "Query cache size must be 0 on node: " + stats.getNode(),
-                    stats.getIndices().getQueryCache().getMemorySizeInBytes(),  
-                    equalTo(0L)
-                );
-                assertThat(  
-                    "FixedBitSet cache size must be 0 on node: " + stats.getNode(),
-                    stats.getIndices().getSegments().getBitsetMemoryInBytes(),
-                    equalTo(0L)  
-                );
-            }
-        }  
-    }
-
-    @Override  
-    public synchronized void assertAfterTest() throws Exception {
-        super.assertAfterTest();
-        assertRequestsFinished();  
-        assertNoInFlightDocsInEngine();
-        for (NodeAndClient nodeAndClient : nodes.values()) {
-            NodeEnvironment env = nodeAndClient.node().getNodeEnvironment();  
-            Set<ShardId> shardIds = env.lockedShards();
-            for (ShardId id : shardIds) {
-                try {  
-                    env.shardLock(id, "InternalTestCluster assert after test", TimeUnit.SECONDS.toMillis(5)).close();
-                } catch (ShardLockObtainFailedException ex) {
-                    fail("Shard " + id + " is still locked after 5 sec waiting");  
-                }
-            }
-        }  
-    }
-
-    public void assertRequestsFinished() {  
-        assert Thread.holdsLock(this);
-        if (size() > 0) {
-            for (NodeAndClient nodeAndClient : nodes.values()) {  
-                CircuitBreaker inFlightRequestsBreaker = getInstance(CircuitBreakerService.class, nodeAndClient.name).getBreaker(
-                    CircuitBreaker.IN_FLIGHT_REQUESTS
-                );  
-                TaskManager taskManager = getInstance(TransportService.class, nodeAndClient.name).getTaskManager();
-                try {
-                    // see #ensureEstimatedStats()  
-                    assertBusy(() -> {
-                        // ensure that our size accounting on transport level is reset properly
-                        long bytesUsed = inFlightRequestsBreaker.getUsed();  
-                        if (bytesUsed != 0) {
-                            String pendingTasks = taskManager.getTasks()
-                                .values()  
-                                .stream()
-                                .map(t -> t.taskInfo(nodeAndClient.name, true).toString())
-                                .collect(Collectors.joining(",", "[", "]"));  
-                            throw new AssertionError(
-                                "All incoming requests on node ["
-                                    + nodeAndClient.name  
-                                    + "] should have finished. "
-                                    + "Expected 0 but got "
-                                    + bytesUsed  
-                                    + "; pending tasks ["
-                                    + pendingTasks
-                                    + "]"  
-                            );
-                        }
-                    }, 1, TimeUnit.MINUTES);  
-                } catch (Exception e) {
-                    logger.error("Could not assert finished requests within timeout", e);
-                    fail("Could not assert finished requests within timeout on node [" + nodeAndClient.name + "]");  
-                }
-            }
-        }  
-    }
-}

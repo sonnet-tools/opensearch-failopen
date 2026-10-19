@@ -1,47 +1,36 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.common.util;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.function.LongSupplier;  
-
-public class TimeBasedCacheExpiryTrackerTests extends OpenSearchTestCase {
-    TimeBasedExpiryTracker sut;  
-    final long ONE_SEC = 1_000_000_000;
-
-    public void testExpiryEvent() {  
-        TestTimeSupplier testTimeSupplier = new TestTimeSupplier();
-        sut = new TimeBasedExpiryTracker(testTimeSupplier);
-
-        testTimeSupplier.advanceClockBy(2 * ONE_SEC);
-        assertTrue(sut.getAsBoolean());
-    }  
-
-    public void testNonExpiryEvent() {
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
         TestTimeSupplier testTimeSupplier = new TestTimeSupplier();  
-        sut = new TimeBasedExpiryTracker(testTimeSupplier);
-
-        testTimeSupplier.advanceClockBy(ONE_SEC / 2);  
-        assertFalse(sut.getAsBoolean());
-    }
-
-    public static class TestTimeSupplier implements LongSupplier {
         long currentTime = System.nanoTime();
-
-        @Override
         public long getAsLong() {
+        assertTrue(sut.getAsBoolean());
+    }
+        testTimeSupplier.advanceClockBy(ONE_SEC / 2);  
+    final long ONE_SEC = 1_000_000_000;
+        assertFalse(sut.getAsBoolean());
+        sut = new TimeBasedExpiryTracker(testTimeSupplier);
+import org.opensearch.test.OpenSearchTestCase;
+        }
+import java.util.function.LongSupplier;  
+        TestTimeSupplier testTimeSupplier = new TestTimeSupplier();
+    public void testExpiryEvent() {  
             return currentTime;  
-        }
-
-        public void advanceClockBy(long nanos) {  
-            currentTime += nanos;
-        }
+/*  
+    TimeBasedExpiryTracker sut;  
+package org.opensearch.common.util;
     }  
+        @Override
+ *
+    }  
+ * The OpenSearch Contributors require contributions made to  
+        }
+        public void advanceClockBy(long nanos) {  
+    public void testNonExpiryEvent() {
+        sut = new TimeBasedExpiryTracker(testTimeSupplier);
+ * this file be licensed under the Apache-2.0 license or a
+    public static class TestTimeSupplier implements LongSupplier {
+            currentTime += nanos;
+public class TimeBasedCacheExpiryTrackerTests extends OpenSearchTestCase {
+        testTimeSupplier.advanceClockBy(2 * ONE_SEC);
 }

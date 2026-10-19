@@ -1,359 +1,306 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.query;
-
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.query.BoolQueryBuilder;  
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.index.query.RangeQueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.search.SearchService;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.Mockito.mock;
-
-public class QueryRewriterRegistryTests extends OpenSearchTestCase {
-
-    private final QueryShardContext context = mock(QueryShardContext.class);  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        // Initialize registry with default settings
-        Settings settings = Settings.builder()  
-            .put(SearchService.QUERY_REWRITING_ENABLED_SETTING.getKey(), true)
-            .put(SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING.getKey(), 16)
-            .build();  
-        ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        QueryRewriterRegistry.INSTANCE.initialize(settings, clusterSettings);
-    }  
-
-    public void testCompleteRewritingPipeline() {
-        // Test that all rewriters work together correctly  
-        QueryBuilder nestedBool = QueryBuilders.boolQuery()
-            .must(QueryBuilders.matchAllQuery())
-            .must(QueryBuilders.termQuery("status", "active"))  
+            .must(QueryBuilders.termQuery("test_field", "test_value"))
+                QueryBuilders.boolQuery()  
             .must(QueryBuilders.termQuery("status", "pending"));
-
-        QueryBuilder query = QueryBuilders.boolQuery()  
-            .must(nestedBool)
-            .filter(QueryBuilders.matchAllQuery())
-            .filter(QueryBuilders.termQuery("type", "product"))  
-            .filter(QueryBuilders.termQuery("type", "service"));
-
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Should have:
-        // - Flattened nested boolean
-        // - Terms in must clauses are NOT merged (semantically different)  
-        // - Removed match_all queries
-        assertThat(rewrittenBool.must().size(), equalTo(2)); // two term queries for status
-        assertThat(rewrittenBool.must().get(0), instanceOf(TermQueryBuilder.class));  
+        assertNotNull(rewritten);
+                    )  
+    }
         assertThat(rewrittenBool.must().get(1), instanceOf(TermQueryBuilder.class));
-
-        assertThat(rewrittenBool.filter().size(), equalTo(2)); // two term queries for type (below threshold)  
-        assertThat(rewrittenBool.filter().get(0), instanceOf(TermQueryBuilder.class));
-        assertThat(rewrittenBool.filter().get(1), instanceOf(TermQueryBuilder.class));
-    }  
-
-    public void testDisabledRewriting() {
-        // Test disabled rewriting via settings  
-        Settings settings = Settings.builder().put(SearchService.QUERY_REWRITING_ENABLED_SETTING.getKey(), false).build();
-        ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-
-        // Initialize with disabled setting
-        QueryRewriterRegistry.INSTANCE.initialize(settings, clusterSettings);
-
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .must(QueryBuilders.matchAllQuery())
-            .filter(QueryBuilders.termQuery("field", "value"));  
-
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
-        assertSame(query, rewritten);  
-
-        // Enable via settings update
-        clusterSettings.applySettings(Settings.builder().put(SearchService.QUERY_REWRITING_ENABLED_SETTING.getKey(), true).build());  
-
-        // Now it should rewrite
-        QueryBuilder rewritten2 = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
-        assertNotSame(query, rewritten2);
-    }
-
-    public void testDynamicTermsThresholdUpdate() {
-        // Build a query at threshold=16 that merges, then raise threshold to 32 and assert no merge
-        BoolQueryBuilder query = QueryBuilders.boolQuery();  
-        for (int i = 0; i < 16; i++) {
-            query.filter(QueryBuilders.termQuery("f", "v" + i));
-        }  
-
-        QueryBuilder merged = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
-        BoolQueryBuilder mb = (BoolQueryBuilder) merged;  
-        // Should be one terms query
-        assertEquals(1, mb.filter().size());
-
-        // Increase threshold
-        Settings newSettings = Settings.builder().put(SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING.getKey(), 32).build();
-        QueryRewriterRegistry.INSTANCE.initialize(newSettings, new ClusterSettings(newSettings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));  
-
-        QueryBuilder notMerged = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
-        BoolQueryBuilder nmb = (BoolQueryBuilder) notMerged;  
-        // Should be all individual term queries now
-        assertEquals(16, nmb.filter().size());
-    }  
-
-    public void testNullQuery() {
-        // Null query should return null  
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(null, context);
-        assertNull(rewritten);
-    }  
-
-    public void testRegistryIdempotence() {
-        QueryBuilder q = QueryBuilders.boolQuery()  
-            .must(QueryBuilders.boolQuery().must(QueryBuilders.termQuery("f", "v")))
-            .filter(QueryBuilders.boolQuery().filter(QueryBuilders.termQuery("g", "w")))
+                        QueryBuilders.boolQuery()
             .should(QueryBuilders.termQuery("h", "u"));  
-
-        QueryBuilder once = QueryRewriterRegistry.INSTANCE.rewrite(q, context);
-        QueryBuilder twice = QueryRewriterRegistry.INSTANCE.rewrite(once, context);  
-        assertEquals(once.toString(), twice.toString());
-    }
-
-    public void testRewriterPriorityOrder() {
-        // Test that rewriters are applied in correct order
-        // Create a query that will be affected by multiple rewriters  
-        QueryBuilder deeplyNested = QueryBuilders.boolQuery()
-            .must(
-                QueryBuilders.boolQuery()  
-                    .must(QueryBuilders.matchAllQuery())
-                    .must(QueryBuilders.termQuery("field", "value1"))
-                    .must(QueryBuilders.termQuery("field", "value2"))  
-            );
-
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(deeplyNested, context);  
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Should be flattened first. Match_all may be removed depending on context; terms NOT merged in must context
-        long termCount = rewrittenBool.must().stream().filter(q -> q instanceof TermQueryBuilder).count();
-        assertThat(termCount, equalTo(2L));  
-
-        // Composition order smoke check: must_to_filter should not move term queries in must
-        // terms_merging should not merge terms in must; only in filter/should contexts  
-    }
-
-    public void testComplexRealWorldQuery() {  
-        // Test a complex real-world-like query
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .must(  
-                QueryBuilders.boolQuery()
-                    .must(QueryBuilders.matchAllQuery())
-                    .filter(QueryBuilders.termQuery("category", "electronics"))  
-                    .filter(QueryBuilders.termQuery("category", "computers"))
-            )
-            .filter(  
-                QueryBuilders.boolQuery()
-                    .should(QueryBuilders.termQuery("brand", "apple"))
-                    .should(QueryBuilders.termQuery("brand", "dell"))  
-                    .should(QueryBuilders.termQuery("brand", "hp"))
-            )
-            .must(QueryBuilders.rangeQuery("price").gte(500).lte(2000))  
-            .mustNot(QueryBuilders.termQuery("status", "discontinued"));
-
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // After rewriting:
-        // - The nested bool in must clause should be flattened
-        // - match_all should be removed in non-scoring contexts  
-        // - term queries should be merged into terms query in filter contexts
-        // - The filter bool with brand terms should be preserved
-        // - The range query should be moved from must to filter by MustToFilterRewriter  
-
-        // Check must clauses (should have terms query for category only - range moved to filter)
-        assertThat(rewrittenBool.must().size(), equalTo(1));  
-
-        // Check filter clauses (should have the brand bool query AND the range query)
-        assertThat(rewrittenBool.filter().size(), equalTo(2));  
-        // One should be the brand bool query
-        boolean hasBoolFilter = false;
-        boolean hasRangeFilter = false;  
-        for (QueryBuilder filter : rewrittenBool.filter()) {
-            if (filter instanceof BoolQueryBuilder) {
-                hasBoolFilter = true;  
-            } else if (filter instanceof RangeQueryBuilder) {
-                hasRangeFilter = true;
-            }  
-        }
-        assertTrue(hasBoolFilter);
-        assertTrue(hasRangeFilter);  
-
-        // Must not should be preserved
-        assertThat(rewrittenBool.mustNot().size(), equalTo(1));  
-    }
-
-    public void testPerformanceMetrics() {  
-        // Test that we log performance metrics in debug mode
-        // This is more of a sanity check that the timing code doesn't throw exceptions
-        QueryBuilder query = QueryBuilders.boolQuery()  
-            .must(QueryBuilders.termQuery("field1", "value1"))
-            .must(QueryBuilders.termQuery("field1", "value2"))
-            .filter(QueryBuilders.matchAllQuery());  
-
-        // Should not throw any exceptions
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
-        assertNotNull(rewritten);
-    }
-
-    public void testRewriterErrorHandling() {
-        // Test that if a rewriter throws an exception, others still run
-        // This is handled internally by QueryRewriterRegistry  
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .must(QueryBuilders.termQuery("field", "value"))
-            .filter(QueryBuilders.matchAllQuery());  
-
-        // Even if one rewriter fails, others should still be applied
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
-        assertNotNull(rewritten);
-    }
-
-    public void testVeryComplexMixedQuery() {
-        // Test a very complex query with all optimizations applicable
-        QueryBuilder query = QueryBuilders.boolQuery()  
-            .must(QueryBuilders.matchAllQuery())
-            .must(
-                QueryBuilders.boolQuery()  
-                    .must(
-                        QueryBuilders.boolQuery()
-                            .filter(QueryBuilders.termQuery("status", "active"))  
-                            .filter(QueryBuilders.termQuery("status", "pending"))
-                            .filter(QueryBuilders.termQuery("status", "approved"))
-                    )  
-                    .must(
-                        QueryBuilders.boolQuery()
-                            .must(QueryBuilders.matchAllQuery())  
                             .filter(QueryBuilders.termQuery("type", "A"))
-                            .filter(QueryBuilders.termQuery("type", "B"))
-                    )  
+        // Test disabled rewriting via settings  
             )
-            .filter(QueryBuilders.matchAllQuery())
-            .filter(  
-                QueryBuilders.boolQuery()
-                    .should(QueryBuilders.termQuery("priority", "high"))
-                    .should(QueryBuilders.termQuery("priority", "medium"))  
-                    .should(QueryBuilders.termQuery("priority", "low"))
-            )
-            .should(QueryBuilders.termQuery("category", "urgent"))  
-            .should(QueryBuilders.termQuery("category", "important"))
-            .mustNot(QueryBuilders.boolQuery().must(QueryBuilders.termQuery("archived", "true")))
-            .minimumShouldMatch(1);  
-
-        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
+            .must(QueryBuilders.termQuery("field1", "value2"))
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+                    .should(QueryBuilders.termQuery("brand", "hp"))
+                    .filter(QueryBuilders.termQuery("category", "computers"))
+        assertThat(rewrittenBool.must().get(0), instanceOf(TermQueryBuilder.class));  
+        // Must not should be preserved
+import static org.hamcrest.Matchers.equalTo;  
         assertThat(rewritten, instanceOf(BoolQueryBuilder.class));  
-        BoolQueryBuilder result = (BoolQueryBuilder) rewritten;
-
-        // Check that minimum should match is preserved  
-        assertThat(result.minimumShouldMatch(), equalTo("1"));
-
-        // Verify optimizations were applied  
-        assertNotSame(query, rewritten);
-
-        // Should have flattened structure and merged terms  
-        assertTrue(result.must().size() >= 1);
-        assertTrue(result.filter().size() >= 1);
+        super.setUp();
     }  
-
-    public void testCustomRewriterRegistration() {
-        // Create a custom rewriter for testing  
-        QueryRewriter customRewriter = new QueryRewriter() {
-            @Override
-            public QueryBuilder rewrite(QueryBuilder query, QueryShardContext context) {  
-                if (query instanceof TermQueryBuilder) {
+                } else if (query instanceof BoolQueryBuilder) {
+    }
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
+        for (QueryBuilder filter : rewrittenBool.filter()) {
+        assertThat(rewrittenBool.filter().size(), equalTo(2));  
+                    }  
+    public void testRegistryIdempotence() {
+            }
+                        rewritten.should(rewrittenClause);
+                    .must(QueryBuilders.termQuery("field", "value1"))
+            .must(QueryBuilders.rangeQuery("price").gte(500).lte(2000))  
+        QueryRewriterRegistry.INSTANCE.initialize(newSettings, new ClusterSettings(newSettings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));  
+        assertTrue(result.must().size() >= 1);
+            .filter(QueryBuilders.termQuery("type", "service"));
+            .minimumShouldMatch(1);  
+import org.opensearch.index.query.RangeQueryBuilder;
+    }  
+        // Build a query at threshold=16 that merges, then raise threshold to 32 and assert no merge
+                    for (QueryBuilder mustNot : boolQuery.mustNot()) {
+import org.opensearch.common.settings.Settings;
+        QueryBuilder query = QueryBuilders.boolQuery()
+            if (filter instanceof BoolQueryBuilder) {
+        // The custom rewriter should have replaced the term query  
+            );
+        QueryBuilder deeplyNested = QueryBuilders.boolQuery()
+        // - Removed match_all queries
+                        rewritten.mustNot(rewrittenClause);
+    public void testRewriterPriorityOrder() {
+        // Even if one rewriter fails, others should still be applied
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(null, context);
+        assertThat(termCount, equalTo(2L));  
+        boolean hasRangeFilter = false;  
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+    public void testVeryComplexMixedQuery() {
+            .should(QueryBuilders.termQuery("category", "important"))
+            }  
+                    // Copy settings  
+                QueryBuilders.boolQuery()  
+            .filter(QueryBuilders.matchAllQuery())
+            .must(nestedBool)
+        assertThat(rewrittenBool.must().size(), equalTo(1));
+        ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+                return 1000; // High priority to ensure it runs last  
+        QueryBuilder rewritten2 = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
+        // Null query should return null  
+        assertTrue(hasRangeFilter);  
+        QueryBuilder merged = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
                     TermQueryBuilder termQuery = (TermQueryBuilder) query;
+    private final QueryShardContext context = mock(QueryShardContext.class);  
+    public void testNullQuery() {
+                            .filter(QueryBuilders.termQuery("type", "B"))
+    public void testRewriterErrorHandling() {
+        Settings settings = Settings.builder()  
+        assertThat(rewrittenBool.filter().get(1), instanceOf(TermQueryBuilder.class));
+                    for (QueryBuilder must : boolQuery.must()) {
+        QueryRewriterRegistry.INSTANCE.registerRewriter(customRewriter);
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));  
+                    .must(QueryBuilders.matchAllQuery())
+        assertThat(rewrittenBool.must().size(), equalTo(2)); // two term queries for status
+                    // Recursively rewrite clauses  
+            .must(QueryBuilders.termQuery("field1", "value1"))
+            .filter(QueryBuilders.termQuery("type", "product"))  
+            @Override  
+            .filter(QueryBuilders.termQuery("other_field", "other_value"));  
+        BoolQueryBuilder nmb = (BoolQueryBuilder) notMerged;  
+        // - term queries should be merged into terms query in filter contexts
+        Settings settings = Settings.builder().put(SearchService.QUERY_REWRITING_ENABLED_SETTING.getKey(), false).build();
+            query.filter(QueryBuilders.termQuery("f", "v" + i));
+        assertThat(rewrittenBool.filter().size(), equalTo(2)); // two term queries for type (below threshold)  
+/*  
+            } else if (filter instanceof RangeQueryBuilder) {
+                    }
+        // Register the custom rewriter  
+import static org.hamcrest.Matchers.instanceOf;
+        // Increase threshold
+    }  
+                        QueryBuilder rewrittenClause = rewrite(mustNot, context);  
+        BoolQueryBuilder mb = (BoolQueryBuilder) merged;  
+        // - The nested bool in must clause should be flattened
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
+ * SPDX-License-Identifier: Apache-2.0
+        assertNotSame(query, rewritten2);
+        // Should have flattened structure and merged terms  
+                        if (rewrittenClause != filter) changed = true;
+        // Enable via settings update
+            )
+            .must(
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+            .must(
+        QueryBuilder query = QueryBuilders.boolQuery()  
+                return query;
+            .filter(QueryBuilders.termQuery("field", "value"));  
+public class QueryRewriterRegistryTests extends OpenSearchTestCase {
+            .filter(  
+import org.opensearch.index.query.QueryBuilders;
+            .must(QueryBuilders.matchAllQuery())
+    @Override
+import org.opensearch.common.settings.ClusterSettings;
+                QueryBuilders.boolQuery()
+        // - The range query should be moved from must to filter by MustToFilterRewriter  
+            .must(  
+            }  
+                    rewritten.minimumShouldMatch(boolQuery.minimumShouldMatch());  
+                    // Recursively apply to nested queries
+            }
+            .filter(  
+    }
+        assertThat(mustTerm.value(), equalTo("custom_value"));
+        // Should not throw any exceptions
+                hasBoolFilter = true;  
+                    .should(QueryBuilders.termQuery("priority", "high"))
+            .put(SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING.getKey(), 16)
+        boolean hasBoolFilter = false;
+    }
+                            .must(QueryBuilders.matchAllQuery())  
+                        rewritten.filter(rewrittenClause);  
+ * compatible open source license.
+        // Should be flattened first. Match_all may be removed depending on context; terms NOT merged in must context
+        QueryRewriter customRewriter = new QueryRewriter() {
+        }  
                     if ("test_field".equals(termQuery.fieldName()) && "test_value".equals(termQuery.value())) {  
+                        QueryBuilders.boolQuery()
+            @Override
+ */  
+    }
+                if (query instanceof TermQueryBuilder) {
+import org.opensearch.search.SearchService;  
+        QueryBuilder query = QueryBuilders.boolQuery()  
+                    for (QueryBuilder should : boolQuery.should()) {  
+            .filter(QueryBuilders.matchAllQuery());  
+        QueryBuilder nestedBool = QueryBuilders.boolQuery()
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+        // Should be one terms query
+            public QueryBuilder rewrite(QueryBuilder query, QueryShardContext context) {  
+                        QueryBuilder rewrittenClause = rewrite(filter, context);
+        // Should have:
+        QueryRewriterRegistry.INSTANCE.initialize(settings, clusterSettings);
+                hasRangeFilter = true;
+        assertThat(result.minimumShouldMatch(), equalTo("1"));
+        assertEquals(1, mb.filter().size());
+                }  
+        QueryBuilder twice = QueryRewriterRegistry.INSTANCE.rewrite(once, context);  
+ * The OpenSearch Contributors require contributions made to  
+            )
+        // Test that all rewriters work together correctly  
+                    rewritten.queryName(boolQuery.queryName());
+        assertSame(query, rewritten);  
+                    .filter(QueryBuilders.termQuery("category", "electronics"))  
+    }
+        };
+        ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            .put(SearchService.QUERY_REWRITING_ENABLED_SETTING.getKey(), true)
+        QueryBuilder query = QueryBuilders.boolQuery()  
+            .should(QueryBuilders.termQuery("category", "urgent"))  
+        assertTrue(result.filter().size() >= 1);
+        // - Flattened nested boolean
+                    }  
+            .build();  
+        QueryBuilder query = QueryBuilders.boolQuery()
+        QueryRewriterRegistry.INSTANCE.initialize(settings, clusterSettings);
+        assertNull(rewritten);
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
+    public void testDynamicTermsThresholdUpdate() {
+            public int priority() {
+        TermQueryBuilder mustTerm = (TermQueryBuilder) rewrittenBool.must().get(0);  
+        // Test a very complex query with all optimizations applicable
+        QueryBuilder once = QueryRewriterRegistry.INSTANCE.rewrite(q, context);
+        for (int i = 0; i < 16; i++) {
+                    .should(QueryBuilders.termQuery("priority", "low"))
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
+import org.opensearch.index.query.QueryShardContext;  
+        // Test a complex real-world-like query
+ * this file be licensed under the Apache-2.0 license or a
+                    .should(QueryBuilders.termQuery("brand", "apple"))
+        assertTrue(hasBoolFilter);
+                return "test_custom_rewriter";
+        assertEquals(16, nmb.filter().size());
+        assertThat(rewrittenBool.must().get(0), instanceOf(TermQueryBuilder.class));
+        BoolQueryBuilder result = (BoolQueryBuilder) rewritten;
+            .filter(QueryBuilders.matchAllQuery())
+        assertThat(rewrittenBool.filter().get(0), instanceOf(TermQueryBuilder.class));
+        // Initialize with disabled setting
+        // - Terms in must clauses are NOT merged (semantically different)  
+            .mustNot(QueryBuilders.boolQuery().must(QueryBuilders.termQuery("archived", "true")))
+        // Test that rewriters are applied in correct order
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
+            @Override
+                        QueryBuilder rewrittenClause = rewrite(must, context);  
+            public String name() {
+                    .must(
+}
+        // One should be the brand bool query
+                    rewritten.boost(boolQuery.boost());
+        clusterSettings.applySettings(Settings.builder().put(SearchService.QUERY_REWRITING_ENABLED_SETTING.getKey(), true).build());  
+import org.opensearch.index.query.TermQueryBuilder;
+        assertThat(mustTerm.fieldName(), equalTo("custom_field"));
+                    return changed ? rewritten : query;
+            .filter(QueryBuilders.matchAllQuery());  
+        // Verify optimizations were applied  
+                        QueryBuilder rewrittenClause = rewrite(should, context);
+                    .must(QueryBuilders.matchAllQuery())
+    public void testPerformanceMetrics() {  
+                    boolean changed = false;
+            .filter(QueryBuilders.boolQuery().filter(QueryBuilders.termQuery("g", "w")))
+        assertNotSame(query, rewritten);
+            .must(QueryBuilders.termQuery("field", "value"))
+            .must(QueryBuilders.termQuery("status", "active"))  
+        // Create a query that will be affected by multiple rewriters  
+        }
+                    rewritten.adjustPureNegative(boolQuery.adjustPureNegative());
+    public void setUp() throws Exception {  
+                    .should(QueryBuilders.termQuery("priority", "medium"))  
+    }  
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        QueryBuilder query = QueryBuilders.boolQuery()
                         // Replace with a different query
                         return QueryBuilders.termQuery("custom_field", "custom_value");
-                    }  
-                } else if (query instanceof BoolQueryBuilder) {
-                    // Recursively apply to nested queries
-                    BoolQueryBuilder boolQuery = (BoolQueryBuilder) query;  
-                    BoolQueryBuilder rewritten = new BoolQueryBuilder();
-
-                    // Copy settings  
-                    rewritten.boost(boolQuery.boost());
-                    rewritten.queryName(boolQuery.queryName());
-                    rewritten.minimumShouldMatch(boolQuery.minimumShouldMatch());  
-                    rewritten.adjustPureNegative(boolQuery.adjustPureNegative());
-
-                    // Recursively rewrite clauses  
-                    boolean changed = false;
-                    for (QueryBuilder must : boolQuery.must()) {
-                        QueryBuilder rewrittenClause = rewrite(must, context);  
-                        rewritten.must(rewrittenClause);
-                        if (rewrittenClause != must) changed = true;
-                    }  
-                    for (QueryBuilder filter : boolQuery.filter()) {
-                        QueryBuilder rewrittenClause = rewrite(filter, context);
-                        rewritten.filter(rewrittenClause);  
-                        if (rewrittenClause != filter) changed = true;
-                    }
-                    for (QueryBuilder should : boolQuery.should()) {  
-                        QueryBuilder rewrittenClause = rewrite(should, context);
-                        rewritten.should(rewrittenClause);
-                        if (rewrittenClause != should) changed = true;  
-                    }
-                    for (QueryBuilder mustNot : boolQuery.mustNot()) {
-                        QueryBuilder rewrittenClause = rewrite(mustNot, context);  
-                        rewritten.mustNot(rewrittenClause);
-                        if (rewrittenClause != mustNot) changed = true;
-                    }  
-
-                    return changed ? rewritten : query;
-                }  
-                return query;
-            }
-
-            @Override
-            public int priority() {
-                return 1000; // High priority to ensure it runs last  
-            }
-
-            @Override  
-            public String name() {
-                return "test_custom_rewriter";
-            }  
-        };
-
-        // Register the custom rewriter  
-        QueryRewriterRegistry.INSTANCE.registerRewriter(customRewriter);
-
-        // Test that it's applied  
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .must(QueryBuilders.termQuery("test_field", "test_value"))
-            .filter(QueryBuilders.termQuery("other_field", "other_value"));  
-
+import static org.mockito.Mockito.mock;
+                    .must(
+                QueryBuilders.boolQuery()
+        // - match_all should be removed in non-scoring contexts  
+        assertThat(rewrittenBool.mustNot().size(), equalTo(1));  
         QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));  
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // The custom rewriter should have replaced the term query  
-        assertThat(rewrittenBool.must().size(), equalTo(1));
-        assertThat(rewrittenBool.must().get(0), instanceOf(TermQueryBuilder.class));
-        TermQueryBuilder mustTerm = (TermQueryBuilder) rewrittenBool.must().get(0);  
-        assertThat(mustTerm.fieldName(), equalTo("custom_field"));
-        assertThat(mustTerm.value(), equalTo("custom_value"));
+                    }  
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(deeplyNested, context);  
+            .must(QueryBuilders.boolQuery().must(QueryBuilders.termQuery("f", "v")))
+                            .filter(QueryBuilders.termQuery("status", "active"))  
+        // Initialize registry with default settings
+                        if (rewrittenClause != mustNot) changed = true;
+        // After rewriting:
+                    .should(QueryBuilders.termQuery("brand", "dell"))  
+                            .filter(QueryBuilders.termQuery("status", "approved"))
+package org.opensearch.search.query;
+                    for (QueryBuilder filter : boolQuery.filter()) {
+        BoolQueryBuilder query = QueryBuilders.boolQuery();  
+        QueryBuilder query = QueryBuilders.boolQuery()
+                    )  
+        // Test that we log performance metrics in debug mode
+        QueryBuilder q = QueryBuilders.boolQuery()  
+        // This is handled internally by QueryRewriterRegistry  
+import org.opensearch.test.OpenSearchTestCase;
+        // - The filter bool with brand terms should be preserved
+                        if (rewrittenClause != should) changed = true;  
+        assertNotNull(rewritten);
+        long termCount = rewrittenBool.must().stream().filter(q -> q instanceof TermQueryBuilder).count();
+        // Check must clauses (should have terms query for category only - range moved to filter)
+            .must(QueryBuilders.matchAllQuery())
+    public void testCustomRewriterRegistration() {
     }  
-}
+        // This is more of a sanity check that the timing code doesn't throw exceptions
+                    .must(QueryBuilders.termQuery("field", "value2"))  
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        QueryBuilder notMerged = QueryRewriterRegistry.INSTANCE.rewrite(query, context);
+    public void testCompleteRewritingPipeline() {
+        // Should be all individual term queries now
+                    BoolQueryBuilder rewritten = new BoolQueryBuilder();
+                        if (rewrittenClause != must) changed = true;
+    }  
+        assertEquals(once.toString(), twice.toString());
+        // Check filter clauses (should have the brand bool query AND the range query)
+ *
+import org.opensearch.index.query.QueryBuilder;
+        QueryBuilder rewritten = QueryRewriterRegistry.INSTANCE.rewrite(query, context);  
+                QueryBuilders.boolQuery()
+                    BoolQueryBuilder boolQuery = (BoolQueryBuilder) query;  
+            )
+            .must(QueryBuilders.matchAllQuery())
+                            .filter(QueryBuilders.termQuery("status", "pending"))
+        // Test that it's applied  
+                        rewritten.must(rewrittenClause);
+import org.opensearch.index.query.BoolQueryBuilder;  
+        // Check that minimum should match is preserved  
+        // Test that if a rewriter throws an exception, others still run
+        // Create a custom rewriter for testing  
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+    public void testDisabledRewriting() {
+    public void testComplexRealWorldQuery() {  
+        // Composition order smoke check: must_to_filter should not move term queries in must
+        assertThat(rewrittenBool.must().size(), equalTo(1));  
+                    }
+            .mustNot(QueryBuilders.termQuery("status", "discontinued"));
+        // terms_merging should not merge terms in must; only in filter/should contexts  
+        // Now it should rewrite
+        Settings newSettings = Settings.builder().put(SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING.getKey(), 32).build();

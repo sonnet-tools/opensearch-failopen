@@ -1,177 +1,154 @@
-/*  
+                    }
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See  
+                    final int numValues = docValues.docValueCount();
+    public ScoreMode scoreMode() {  
+    private DoubleArray valueSums;
+        return valuesSources != null && valuesSources.needsScores() ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
+    @Override
+        final SortedNumericDoubleValues docWeights = valuesSources.getField(WEIGHT_FIELD.getPreferredName(), ctx);
+ * KIND, either express or implied.  See the License for the
+                    final double weight = docWeights.nextValue();  
+import org.opensearch.common.util.BigArrays;  
+        final SortedNumericDoubleValues docValues = valuesSources.getField(VALUE_FIELD.getPreferredName(), ctx);
+    private final MultiValuesSource.NumericMultiValuesSource valuesSources;
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
+ *
+            valueCompensations = bigArrays.newDoubleArray(1, true);  
+                        compensatedValueSum.add(docValues.nextValue() * weight);
+import static org.opensearch.search.aggregations.metrics.WeightedAvgAggregationBuilder.WEIGHT_FIELD;
+import org.opensearch.common.lease.Releasables;
+    WeightedAvgAggregator(  
+ */
+ * You may obtain a copy of the License at  
+        final BigArrays bigArrays = context.bigArrays();  
+        };  
+                    // a real weight or a `missing` weight
+                    double valueCompensation = valueCompensations.get(bucket);  
+                weightCompensations = bigArrays.grow(weightCompensations, bucket + 1);  
+                    double valueSum = valueSums.get(bucket);
+                        throw new AggregationExecutionException(
+import org.opensearch.search.aggregations.AggregationExecutionException;
+import org.opensearch.search.aggregations.InternalAggregation;  
+    @Override  
+    public InternalAggregation buildAggregation(long bucket) {  
+import org.apache.lucene.index.LeafReaderContext;  
+import org.opensearch.search.internal.SearchContext;
+        return new InternalWeightedAvg(name, valueSums.get(bucket), weights.get(bucket), format, metadata());
+                        compensatedWeightSum.add(weight);  
+        SearchContext context,
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.ScoreMode;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;  
-import org.opensearch.common.util.DoubleArray;
-import org.opensearch.index.fielddata.SortedNumericDoubleValues;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.aggregations.AggregationExecutionException;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.support.MultiValuesSource;  
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
-import java.util.Map;
-
-import static org.opensearch.search.aggregations.metrics.WeightedAvgAggregationBuilder.VALUE_FIELD;  
-import static org.opensearch.search.aggregations.metrics.WeightedAvgAggregationBuilder.WEIGHT_FIELD;
-
-/**  
- * Aggregate all docs into a weighted average
- *
- * @opensearch.internal  
- */
-class WeightedAvgAggregator extends NumericMetricsAggregator.SingleValue {
-
-    private final MultiValuesSource.NumericMultiValuesSource valuesSources;
-
-    private DoubleArray weights;  
-    private DoubleArray valueSums;
-    private DoubleArray valueCompensations;
-    private DoubleArray weightCompensations;  
-    private DocValueFormat format;
-
-    WeightedAvgAggregator(  
-        String name,
-        MultiValuesSource.NumericMultiValuesSource valuesSources,
-        DocValueFormat format,  
-        SearchContext context,
-        Aggregator parent,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        super(name, context, parent, metadata);
-        this.valuesSources = valuesSources;  
-        this.format = format;
-        if (valuesSources != null) {
-            final BigArrays bigArrays = context.bigArrays();  
-            weights = bigArrays.newDoubleArray(1, true);
-            valueSums = bigArrays.newDoubleArray(1, true);
-            valueCompensations = bigArrays.newDoubleArray(1, true);  
-            weightCompensations = bigArrays.newDoubleArray(1, true);
-        }
-    }  
-
-    @Override
-    public ScoreMode scoreMode() {  
-        return valuesSources != null && valuesSources.needsScores() ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
-    }
-
-    @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
-        if (valuesSources == null) {  
-            return LeafBucketCollector.NO_OP_COLLECTOR;
-        }
-        final BigArrays bigArrays = context.bigArrays();  
-        final SortedNumericDoubleValues docValues = valuesSources.getField(VALUE_FIELD.getPreferredName(), ctx);
-        final SortedNumericDoubleValues docWeights = valuesSources.getField(WEIGHT_FIELD.getPreferredName(), ctx);
-        final CompensatedSum compensatedValueSum = new CompensatedSum(0, 0);  
-        final CompensatedSum compensatedWeightSum = new CompensatedSum(0, 0);
-
-        return new LeafBucketCollectorBase(sub, docValues) {  
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                weights = bigArrays.grow(weights, bucket + 1);  
-                valueSums = bigArrays.grow(valueSums, bucket + 1);
-                valueCompensations = bigArrays.grow(valueCompensations, bucket + 1);
-                weightCompensations = bigArrays.grow(weightCompensations, bucket + 1);  
-
-                if (docValues.advanceExact(doc) && docWeights.advanceExact(doc)) {
-                    if (docWeights.docValueCount() > 1) {  
-                        throw new AggregationExecutionException(
-                            "Encountered more than one weight for a "
-                                + "single document. Use a script to combine multiple weights-per-doc into a single value."  
-                        );
-                    }
-                    // There should always be one weight if advanceExact lands us here, either  
-                    // a real weight or a `missing` weight
-                    assert docWeights.docValueCount() == 1;
-                    final double weight = docWeights.nextValue();  
-
-                    final int numValues = docValues.docValueCount();
-                    assert numValues > 0;  
-
-                    double valueSum = valueSums.get(bucket);
-                    double valueCompensation = valueCompensations.get(bucket);  
                     compensatedValueSum.reset(valueSum, valueCompensation);
-
-                    double weightSum = weights.get(bucket);  
-                    double weightCompensation = weightCompensations.get(bucket);
-                    compensatedWeightSum.reset(weightSum, weightCompensation);
-
-                    for (int i = 0; i < numValues; i++) {
-                        compensatedValueSum.add(docValues.nextValue() * weight);
-                        compensatedWeightSum.add(weight);  
-                    }
-
-                    valueSums.set(bucket, compensatedValueSum.value());  
-                    valueCompensations.set(bucket, compensatedValueSum.delta());
-                    weights.set(bucket, compensatedWeightSum.value());
-                    weightCompensations.set(bucket, compensatedWeightSum.delta());  
-                }
-            }
-        };  
-    }
-
-    @Override  
-    public double metric(long owningBucketOrd) {
-        if (valuesSources == null || owningBucketOrd >= valueSums.size()) {
+ * Unless required by applicable law or agreed to in writing,
+                    assert docWeights.docValueCount() == 1;
+/*  
+                        );
+ * ownership. Elasticsearch licenses this file to you under  
             return Double.NaN;  
-        }
-        return valueSums.get(owningBucketOrd) / weights.get(owningBucketOrd);
-    }  
-
-    @Override
-    public InternalAggregation buildAggregation(long bucket) {  
-        if (valuesSources == null || bucket >= valueSums.size()) {
-            return buildEmptyAggregation();
-        }  
-        return new InternalWeightedAvg(name, valueSums.get(bucket), weights.get(bucket), format, metadata());
-    }
-
-    @Override
+class WeightedAvgAggregator extends NumericMetricsAggregator.SingleValue {
+                    valueCompensations.set(bucket, compensatedValueSum.delta());
+                }
+        this.valuesSources = valuesSources;  
+                valueCompensations = bigArrays.grow(valueCompensations, bucket + 1);
+ * Licensed to Elasticsearch under one or more contributor  
+        Aggregator parent,
+ * specific language governing permissions and limitations
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    double weightSum = weights.get(bucket);  
     public InternalAggregation buildEmptyAggregation() {
+ * compatible open source license.
+        this.format = format;
+                    valueSums.set(bucket, compensatedValueSum.value());  
         return new InternalWeightedAvg(name, 0.0, 0L, format, metadata());  
-    }
-
-    @Override  
-    public void doClose() {
-        Releasables.close(weights, valueSums, valueCompensations, weightCompensations);
+                                + "single document. Use a script to combine multiple weights-per-doc into a single value."  
+            return buildEmptyAggregation();
+        String name,
+ *
+import java.util.Map;
+        final CompensatedSum compensatedWeightSum = new CompensatedSum(0, 0);
+                    double weightCompensation = weightCompensations.get(bucket);
+        if (valuesSources == null || bucket >= valueSums.size()) {
+        if (valuesSources == null) {  
+ */
+                    weightCompensations.set(bucket, compensatedWeightSum.delta());  
+                    assert numValues > 0;  
     }  
-
+    @Override
+        return valueSums.get(owningBucketOrd) / weights.get(owningBucketOrd);
+            valueSums = bigArrays.newDoubleArray(1, true);
+/**  
+    }  
+    public double metric(long owningBucketOrd) {
+        DocValueFormat format,  
+    }
+        }  
+    @Override
+                    for (int i = 0; i < numValues; i++) {
+            final BigArrays bigArrays = context.bigArrays();  
+    }
+import org.apache.lucene.search.ScoreMode;
+    private DoubleArray valueCompensations;
+import org.opensearch.search.DocValueFormat;  
+                    // There should always be one weight if advanceExact lands us here, either  
+import org.opensearch.index.fielddata.SortedNumericDoubleValues;
+    private DocValueFormat format;
+            public void collect(int doc, long bucket) throws IOException {
+            return LeafBucketCollector.NO_OP_COLLECTOR;
+        MultiValuesSource.NumericMultiValuesSource valuesSources,
+/*
+    private DoubleArray weights;  
 }
+import static org.opensearch.search.aggregations.metrics.WeightedAvgAggregationBuilder.VALUE_FIELD;  
+ * not use this file except in compliance with the License.
+ *  
+ * The OpenSearch Contributors require contributions made to  
+    ) throws IOException {
+import org.opensearch.search.aggregations.Aggregator;
+                    weights.set(bucket, compensatedWeightSum.value());
+    @Override  
+    }
+import org.opensearch.search.aggregations.LeafBucketCollector;
+    public void doClose() {
+ * software distributed under the License is distributed on an
+                    }
+ * this work for additional information regarding copyright
+        if (valuesSources == null || owningBucketOrd >= valueSums.size()) {
+ * @opensearch.internal  
+            }
+            weightCompensations = bigArrays.newDoubleArray(1, true);
+    private DoubleArray weightCompensations;  
+    @Override
+                            "Encountered more than one weight for a "
+            @Override
+        if (valuesSources != null) {
+        final CompensatedSum compensatedValueSum = new CompensatedSum(0, 0);  
+        }
+        }
+        return new LeafBucketCollectorBase(sub, docValues) {  
+import org.opensearch.search.aggregations.support.MultiValuesSource;  
+            weights = bigArrays.newDoubleArray(1, true);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.io.IOException;  
+                if (docValues.advanceExact(doc) && docWeights.advanceExact(doc)) {
+package org.opensearch.search.aggregations.metrics;
+                weights = bigArrays.grow(weights, bucket + 1);  
+        Map<String, Object> metadata  
+ */
+        Releasables.close(weights, valueSums, valueCompensations, weightCompensations);
+                    compensatedWeightSum.reset(weightSum, weightCompensation);
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
+import org.opensearch.common.util.DoubleArray;
+ * license agreements. See the NOTICE file distributed with
+    }
+/*
+        super(name, context, parent, metadata);
+ * this file be licensed under the Apache-2.0 license or a
+                valueSums = bigArrays.grow(valueSums, bucket + 1);
+                    if (docWeights.docValueCount() > 1) {  
+        }
+ * under the License.  
+ * Aggregate all docs into a weighted average
+ * GitHub history for details.
+ */  
+    }  

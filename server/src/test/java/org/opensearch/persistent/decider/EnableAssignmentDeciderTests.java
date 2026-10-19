@@ -1,65 +1,56 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.persistent.decider;
-
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.persistent.PersistentTasksDecidersTestCase;
-
-public class EnableAssignmentDeciderTests extends PersistentTasksDecidersTestCase {
-
-    public void testAllocationValues() {  
-        final String all = randomFrom("all", "All", "ALL");
-        assertEquals(EnableAssignmentDecider.Allocation.ALL, EnableAssignmentDecider.Allocation.fromString(all));
-
-        final String none = randomFrom("none", "None", "NONE");
-        assertEquals(EnableAssignmentDecider.Allocation.NONE, EnableAssignmentDecider.Allocation.fromString(none));
+        } else {  
     }  
-
-    public void testEnableAssignment() {
-        final int nbTasks = randomIntBetween(1, 10);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
+ * specific language governing permissions and limitations
+import org.opensearch.cluster.ClusterState;  
+            assertNbAssignedTasks(nbTasks, clusterState);
+import org.opensearch.common.settings.Settings;
+ * ownership. Elasticsearch licenses this file to you under  
+        assertEquals(EnableAssignmentDecider.Allocation.ALL, EnableAssignmentDecider.Allocation.fromString(all));
+package org.opensearch.persistent.decider;
+        final String all = randomFrom("all", "All", "ALL");
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See  
+    public void testAllocationValues() {  
         final int nbNodes = randomIntBetween(1, 5);
         final EnableAssignmentDecider.Allocation allocation = randomFrom(EnableAssignmentDecider.Allocation.values());
-
-        Settings settings = Settings.builder()
-            .put(EnableAssignmentDecider.CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING.getKey(), allocation.toString())
-            .build();  
-        updateSettings(settings);
-
-        ClusterState clusterState = reassign(createClusterStateWithTasks(nbNodes, nbTasks));  
-        if (allocation == EnableAssignmentDecider.Allocation.ALL) {
-            assertNbAssignedTasks(nbTasks, clusterState);
-        } else {  
-            assertNbUnassignedTasks(nbTasks, clusterState);
+ * not use this file except in compliance with the License.
+/*
         }
-    }  
+        if (allocation == EnableAssignmentDecider.Allocation.ALL) {
+ * under the License.  
+public class EnableAssignmentDeciderTests extends PersistentTasksDecidersTestCase {
+        assertEquals(EnableAssignmentDecider.Allocation.NONE, EnableAssignmentDecider.Allocation.fromString(none));
+ * GitHub history for details.
+ *  
+ * software distributed under the License is distributed on an
+            .build();  
+    public void testEnableAssignment() {
+        ClusterState clusterState = reassign(createClusterStateWithTasks(nbNodes, nbTasks));  
+ * Licensed to Elasticsearch under one or more contributor  
+        final int nbTasks = randomIntBetween(1, 10);  
+        Settings settings = Settings.builder()
+ *
+ */
+        updateSettings(settings);
+        final String none = randomFrom("none", "None", "NONE");
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
 }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+ * this work for additional information regarding copyright
+            assertNbUnassignedTasks(nbTasks, clusterState);
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at  
+ */
+            .put(EnableAssignmentDecider.CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING.getKey(), allocation.toString())
+import org.opensearch.persistent.PersistentTasksDecidersTestCase;
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ *

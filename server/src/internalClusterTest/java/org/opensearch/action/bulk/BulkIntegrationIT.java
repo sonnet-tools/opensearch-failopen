@@ -1,255 +1,231 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+                    logger.info("--> index id={} seq_no={}", response.getId(), response.getSeqNo());
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.bulk;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequestValidationException;  
-import org.opensearch.action.admin.indices.alias.Alias;
-import org.opensearch.action.admin.indices.mapping.get.GetMappingsResponse;
-import org.opensearch.action.index.IndexRequest;  
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.ingest.PutPipelineRequest;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
-import org.opensearch.action.support.replication.ReplicationRequest;
 import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.ingest.IngestTestPlugin;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;  
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.opensearch.action.DocWriteResponse.Result.CREATED;
-import static org.opensearch.action.DocWriteResponse.Result.UPDATED;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
-import static org.opensearch.test.StreamsUtils.copyToStringFromClasspath;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.containsInAnyOrder;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.oneOf;
-
-public class BulkIntegrationIT extends OpenSearchIntegTestCase {
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {  
-        return Arrays.asList(IngestTestPlugin.class);
-    }
-
-    public void testBulkIndexCreatesMapping() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/bulk-log.json");
-        BulkRequestBuilder bulkBuilder = client().prepareBulk();  
-        bulkBuilder.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+ * Unless required by applicable law or agreed to in writing,
         bulkBuilder.get();
-        assertBusy(() -> {  
-            GetMappingsResponse mappingsResponse = client().admin().indices().prepareGetMappings().get();
-            assertTrue(mappingsResponse.getMappings().containsKey("logstash-2014.03.30"));
-        });  
-    }
-
-    /**  
-     * This tests that the {@link TransportBulkAction} evaluates alias routing values correctly when dealing with
-     * an alias pointing to multiple indices, while a write index exits.
-     */  
-    public void testBulkWithWriteIndexAndRouting() {
-        Map<String, Integer> twoShardsSettings = Collections.singletonMap(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 2);
-        client().admin()  
-            .indices()
-            .prepareCreate("index1")
-            .addAlias(new Alias("alias1").indexRouting("0"))  
-            .setSettings(twoShardsSettings)
-            .get();
-        client().admin()  
-            .indices()
-            .prepareCreate("index2")
-            .addAlias(new Alias("alias1").indexRouting("0").writeIndex(randomFrom(false, null)))  
-            .setSettings(twoShardsSettings)
-            .get();
-        client().admin()  
-            .indices()
-            .prepareCreate("index3")
-            .addAlias(new Alias("alias1").indexRouting("1").writeIndex(true))  
-            .setSettings(twoShardsSettings)
-            .get();
-
-        IndexRequest indexRequestWithAlias = new IndexRequest("alias1").id("id");
-        if (randomBoolean()) {
-            indexRequestWithAlias.routing("1");  
-        }
-        indexRequestWithAlias.source(Collections.singletonMap("foo", "baz"));
-        BulkResponse bulkResponse = client().prepareBulk().add(indexRequestWithAlias).get();  
-        assertThat(bulkResponse.getItems()[0].getResponse().getIndex(), equalTo("index3"));
-        assertThat(bulkResponse.getItems()[0].getResponse().getShardId().getId(), equalTo(0));
-        assertThat(bulkResponse.getItems()[0].getResponse().getVersion(), equalTo(1L));  
-        assertThat(bulkResponse.getItems()[0].getResponse().status(), equalTo(RestStatus.CREATED));
-        assertThat(client().prepareGet("index3", "id").setRouting("1").get().getSource().get("foo"), equalTo("baz"));
-
-        bulkResponse = client().prepareBulk().add(client().prepareUpdate("alias1", "id").setDoc("foo", "updated")).get();
-        assertFalse(bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());
-        assertThat(client().prepareGet("index3", "id").setRouting("1").get().getSource().get("foo"), equalTo("updated"));  
         bulkResponse = client().prepareBulk().add(client().prepareDelete("alias1", "id")).get();
+    }
+        } catch (Exception e) {
+ * not use this file except in compliance with the License.
+ *
+import org.opensearch.ingest.IngestTestPlugin;
+                    assertThat(response.getResult(), is(oneOf(CREATED, UPDATED)));  
+                }
+ * software distributed under the License is distributed on an
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import org.opensearch.action.ActionRequestValidationException;  
+            .indices()
+     * This tests that the {@link TransportBulkAction} evaluates alias routing values correctly when dealing with
+        if (randomBoolean()) {
+        client().admin()  
+import java.util.concurrent.atomic.AtomicInteger;
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+        }
+            .endObject();  
+        }  
+        indexRequestWithAlias.source(Collections.singletonMap("foo", "baz"));
+/*  
+            .indices()
+                        .setId(id)  
+import org.opensearch.action.support.replication.ReplicationRequest;
+                String id = Integer.toString(docID.incrementAndGet());  
+            .addAlias(new Alias("alias1").indexRouting("0").writeIndex(randomFrom(false, null)))  
+        {
+        // all requests in the json are missing index and type parameters: "_index" : "test", "_type" : "type1",
+import java.util.concurrent.atomic.AtomicBoolean;
+    }
+            .get();
+        assertThat(
+        assertBusy(() -> {  
+import static org.opensearch.action.DocWriteResponse.Result.UPDATED;
+    @Override
+            .get();
+        client().admin()  
+        // Invalid id should throw the ActionRequestValidationException  
+import org.opensearch.OpenSearchException;
+            fail("Request validation for docId failed with different exception: " + e);
+            .endObject()  
+        assertTrue(acknowledgedResponse.isAcknowledged());
+            createSamplePipeline("pipeline");
+            indexRequestWithAlias.routing("1");  
+    }
+import org.opensearch.core.common.bytes.BytesReference;
+        stopped.set(true);
+ * Modifications Copyright OpenSearch Contributors. See
+        assertFalse(client().prepareBulk().add(indexRequest.id(validId)).get().hasFailures());
+            assertThat(ex.validationErrors(), containsInAnyOrder("index is missing", "index is missing", "index is missing"));  
+            );  
+        assertBusy(() -> assertThat(docID.get(), greaterThanOrEqualTo(1)));  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+            .indices()
+ * license agreements. See the NOTICE file distributed with
+    public void testBulkWithGlobalDefaults() throws Exception {
+package org.opensearch.action.bulk;
+        assertThat(client().prepareGet("index3", "id").setRouting("1").get().getSource().get("foo"), equalTo("updated"));  
+            BulkRequestBuilder bulkBuilder = client().prepareBulk();
+            .addAlias(new Alias("alias1").indexRouting("0"))  
+        BulkResponse bulkResponse = client().prepareBulk().add(indexRequestWithAlias).get();  
+            fail("Request validation for docId didn't fail");
+ */
+        return Arrays.asList(IngestTestPlugin.class);
+        bulkResponse = client().prepareBulk().add(client().prepareUpdate("alias1", "id").setDoc("foo", "updated")).get();
+import org.opensearch.action.ingest.PutPipelineRequest;
+import org.opensearch.core.xcontent.XContentBuilder;
+        validateDocIdLimit(() -> client().prepareBulk().add(updateRequest.id(invalidId)).get());
+ * SPDX-License-Identifier: Apache-2.0
+        IndexRequest indexRequest = new IndexRequest("index1").source(Collections.singletonMap("foo", "baz"));
+        // Valid id shouldn't throw any exception  
+            .endArray()
+        assertThat(bulkResponse.getItems()[0].getResponse().getShardId().getId(), equalTo(0));
+        assertAcked(client().admin().indices().prepareDelete(index));
+ */  
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
+        });  
+            .startArray("processors")  
+            }
+        createIndex(index);  
+        );
+import org.opensearch.action.admin.indices.mapping.get.GetMappingsResponse;
+ * ownership. Elasticsearch licenses this file to you under  
+                e.validationErrors().stream().filter(msg -> msg.contains("is too long, must be no longer than 512 bytes but was")).count()
+        }
+            assertTrue(mappingsResponse.getMappings().containsKey("logstash-2014.03.30"));
+        } catch (ActionRequestValidationException e) {
+ *
+            assertEquals(  
+            indexRequest.id("test");
+            BulkResponse bulkItemResponses = bulkBuilder.get();
+            .prepareCreate("index3")
+import java.io.IOException;  
+import java.util.Map;
+        if (randomBoolean()) {
+    }
+        assertFalse(thread.isAlive());
+            .get();
+public class BulkIntegrationIT extends OpenSearchIntegTestCase {
+            .endObject()
+import org.opensearch.action.index.IndexRequest;  
+        String validId = String.join("", Collections.nCopies(512, "a"));
+        bulkBuilder.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+    public void testDeleteIndexWhileIndexing() throws Exception {
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
+ * under the License.  
+ * You may obtain a copy of the License at  
+            GetMappingsResponse mappingsResponse = client().admin().indices().prepareGetMappings().get();
+                    logger.info("--> fail to index id={}", id);  
+                } catch (OpenSearchException ignore) {
+                        .setSource(Collections.singletonMap("f" + randomIntBetween(1, 10), randomNonNegativeLong()), MediaTypeRegistry.JSON)
         assertFalse(bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());
+            .putPipeline(new PutPipelineRequest(pipelineId, BytesReference.bytes(pipeline), MediaTypeRegistry.JSON))
+            .cluster()  
+    }
+import java.util.concurrent.ExecutionException;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        AtomicBoolean stopped = new AtomicBoolean();
+    /** This test ensures that index deletion makes indexing fail quickly, not wait on the index that has disappeared */
+import static org.hamcrest.Matchers.containsInAnyOrder;  
+        String invalidId = String.join("", Collections.nCopies(513, "a"));
+import java.nio.charset.StandardCharsets;
+                1,
+        // Index Request
+import static org.opensearch.action.DocWriteResponse.Result.CREATED;
+            ActionRequestValidationException ex = expectThrows(ActionRequestValidationException.class, bulkBuilder::get);
+                    IndexResponse response = client().prepareIndex(index)
+            .addAlias(new Alias("alias1").indexRouting("1").writeIndex(true))  
+    public void testBulkWithWriteIndexAndRouting() {
+import org.opensearch.core.rest.RestStatus;
+}
+        assertFalse(client().prepareBulk().add(updateRequest).get().hasFailures());
+            assertFalse(bulkItemResponses.hasFailures());  
+            .get();
+    // allowing the auto-generated timestamp to externally be set would allow making the index inconsistent with duplicate docs  
         assertFalse(client().prepareGet("index3", "id").setRouting("1").get().isExists());  
     }
-
-    // allowing the auto-generated timestamp to externally be set would allow making the index inconsistent with duplicate docs  
-    public void testExternallySetAutoGeneratedTimestamp() {
-        IndexRequest indexRequest = new IndexRequest("index1").source(Collections.singletonMap("foo", "baz"));
-        indexRequest.process(Version.CURRENT, null, null); // sets the timestamp  
-        if (randomBoolean()) {
-            indexRequest.id("test");
-        }  
-        assertThat(
-            expectThrows(IllegalArgumentException.class, () -> client().prepareBulk().add(indexRequest).get()).getMessage(),
             containsString("autoGeneratedTimestamp should not be set externally")  
-        );
-    }
-
-    public void testBulkWithGlobalDefaults() throws Exception {
-        // all requests in the json are missing index and type parameters: "_index" : "test", "_type" : "type1",
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk-missing-index-type.json");  
-        {
-            BulkRequestBuilder bulkBuilder = client().prepareBulk();
-            bulkBuilder.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);  
-            ActionRequestValidationException ex = expectThrows(ActionRequestValidationException.class, bulkBuilder::get);
-
-            assertThat(ex.validationErrors(), containsInAnyOrder("index is missing", "index is missing", "index is missing"));  
-        }
-
-        {  
-            createSamplePipeline("pipeline");
-            BulkRequestBuilder bulkBuilder = client().prepareBulk("test").routing("routing").pipeline("pipeline");
-
-            bulkBuilder.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
-            BulkResponse bulkItemResponses = bulkBuilder.get();
-            assertFalse(bulkItemResponses.hasFailures());  
-        }
-    }
-
-    private void createSamplePipeline(String pipelineId) throws IOException, ExecutionException, InterruptedException {
-        XContentBuilder pipeline = jsonBuilder().startObject()
-            .startArray("processors")  
-            .startObject()
-            .startObject("test")
-            .endObject()  
-            .endObject()
-            .endArray()
-            .endObject();  
-
-        AcknowledgedResponse acknowledgedResponse = client().admin()
-            .cluster()  
-            .putPipeline(new PutPipelineRequest(pipelineId, BytesReference.bytes(pipeline), MediaTypeRegistry.JSON))
-            .get();
-
-        assertTrue(acknowledgedResponse.isAcknowledged());
-    }
-
-    /** This test ensures that index deletion makes indexing fail quickly, not wait on the index that has disappeared */
-    public void testDeleteIndexWhileIndexing() throws Exception {
-        String index = "deleted_while_indexing";  
-        createIndex(index);
-        AtomicBoolean stopped = new AtomicBoolean();
-        AtomicInteger docID = new AtomicInteger();  
-        Thread thread = new Thread(() -> {
-            while (stopped.get() == false && docID.get() < 5000) {
-                String id = Integer.toString(docID.incrementAndGet());  
-                try {
-                    IndexResponse response = client().prepareIndex(index)
-                        .setId(id)  
-                        .setSource(Collections.singletonMap("f" + randomIntBetween(1, 10), randomNonNegativeLong()), MediaTypeRegistry.JSON)
-                        .get();
-                    assertThat(response.getResult(), is(oneOf(CREATED, UPDATED)));  
-                    logger.info("--> index id={} seq_no={}", response.getId(), response.getSeqNo());
-                } catch (OpenSearchException ignore) {
-                    logger.info("--> fail to index id={}", id);  
-                }
-            }
-        });  
-        thread.start();
-        ensureGreen(index);
-        assertBusy(() -> assertThat(docID.get(), greaterThanOrEqualTo(1)));  
-        assertAcked(client().admin().indices().prepareDelete(index));
-        stopped.set(true);
-        thread.join(ReplicationRequest.DEFAULT_TIMEOUT.millis() / 2);  
-        assertFalse(thread.isAlive());
-    }
-
-    public void testDocIdTooLong() {
-        String index = "testing";
-        createIndex(index);  
-        String validId = String.join("", Collections.nCopies(512, "a"));
-        String invalidId = String.join("", Collections.nCopies(513, "a"));
-
-        // Index Request
-        IndexRequest indexRequest = new IndexRequest(index).source(Collections.singletonMap("foo", "baz"));
-        // Valid id shouldn't throw any exception  
-        assertFalse(client().prepareBulk().add(indexRequest.id(validId)).get().hasFailures());
-        // Invalid id should throw the ActionRequestValidationException
-        validateDocIdLimit(() -> client().prepareBulk().add(indexRequest.id(invalidId)).get());  
-
-        // Update Request
-        UpdateRequest updateRequest = new UpdateRequest(index, validId).doc("reason", "no source");  
-        // Valid id shouldn't throw any exception
-        assertFalse(client().prepareBulk().add(updateRequest).get().hasFailures());
-        // Invalid id should throw the ActionRequestValidationException  
-        validateDocIdLimit(() -> client().prepareBulk().add(updateRequest.id(invalidId)).get());
-    }
-
-    private void validateDocIdLimit(Runnable runner) {
+import static org.hamcrest.Matchers.containsString;
+import org.opensearch.Version;
         try {
-            runner.run();  
-            fail("Request validation for docId didn't fail");
-        } catch (ActionRequestValidationException e) {
-            assertEquals(  
-                1,
-                e.validationErrors().stream().filter(msg -> msg.contains("is too long, must be no longer than 512 bytes but was")).count()
-            );  
-        } catch (Exception e) {
-            fail("Request validation for docId failed with different exception: " + e);
-        }  
+    public void testBulkIndexCreatesMapping() throws Exception {
+            .startObject()
+import static org.opensearch.test.StreamsUtils.copyToStringFromClasspath;
+        BulkRequestBuilder bulkBuilder = client().prepareBulk();  
+import static org.hamcrest.Matchers.equalTo;
+     * an alias pointing to multiple indices, while a write index exits.
+        assertThat(bulkResponse.getItems()[0].getResponse().getVersion(), equalTo(1L));  
+import org.opensearch.test.OpenSearchIntegTestCase;
+        assertThat(bulkResponse.getItems()[0].getResponse().status(), equalTo(RestStatus.CREATED));
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/bulk-log.json");
     }
-}
+    private void createSamplePipeline(String pipelineId) throws IOException, ExecutionException, InterruptedException {
+import java.util.Collections;
+ * the Apache License, Version 2.0 (the "License"); you may
+        Thread thread = new Thread(() -> {
+        assertFalse(bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        IndexRequest indexRequest = new IndexRequest(index).source(Collections.singletonMap("foo", "baz"));
+            .prepareCreate("index2")
+        });  
+        AcknowledgedResponse acknowledgedResponse = client().admin()
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk-missing-index-type.json");  
+import org.opensearch.action.admin.indices.alias.Alias;
+        IndexRequest indexRequestWithAlias = new IndexRequest("alias1").id("id");
+import org.opensearch.plugins.Plugin;  
+    private void validateDocIdLimit(Runnable runner) {
+import org.opensearch.action.index.IndexResponse;
+        }
+            while (stopped.get() == false && docID.get() < 5000) {
+            .setSettings(twoShardsSettings)
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+        indexRequest.process(Version.CURRENT, null, null); // sets the timestamp  
+        String index = "testing";
+                        .get();
+        assertThat(bulkResponse.getItems()[0].getResponse().getIndex(), equalTo("index3"));
+            .startObject("test")
+     */  
+ * compatible open source license.
+        assertThat(client().prepareGet("index3", "id").setRouting("1").get().getSource().get("foo"), equalTo("baz"));
+        thread.join(ReplicationRequest.DEFAULT_TIMEOUT.millis() / 2);  
+        client().admin()  
+ * this work for additional information regarding copyright
+ * GitHub history for details.
+        UpdateRequest updateRequest = new UpdateRequest(index, validId).doc("reason", "no source");  
+            bulkBuilder.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+        createIndex(index);
+            BulkRequestBuilder bulkBuilder = client().prepareBulk("test").routing("routing").pipeline("pipeline");
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
+ */  
+/*  
+        }  
+        ensureGreen(index);
+        AtomicInteger docID = new AtomicInteger();  
+            runner.run();  
+        String index = "deleted_while_indexing";  
+import java.util.Collection;  
+    public void testExternallySetAutoGeneratedTimestamp() {
+        {  
+        Map<String, Integer> twoShardsSettings = Collections.singletonMap(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 2);
+            .setSettings(twoShardsSettings)
+        XContentBuilder pipeline = jsonBuilder().startObject()
+    /**  
+        validateDocIdLimit(() -> client().prepareBulk().add(indexRequest.id(invalidId)).get());  
+import java.util.Arrays;
+    public void testDocIdTooLong() {
+        // Invalid id should throw the ActionRequestValidationException
+                try {
+            expectThrows(IllegalArgumentException.class, () -> client().prepareBulk().add(indexRequest).get()).getMessage(),
+        // Update Request
+            bulkBuilder.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);  
+        // Valid id shouldn't throw any exception
+        thread.start();
+            .prepareCreate("index1")
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
+    }
+import static org.hamcrest.Matchers.is;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import static org.hamcrest.Matchers.oneOf;
+/*
+            .setSettings(twoShardsSettings)

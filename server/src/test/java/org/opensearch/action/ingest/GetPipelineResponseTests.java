@@ -1,147 +1,129 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.ingest;
-
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.ingest.PipelineConfiguration;
-import org.opensearch.test.AbstractSerializingTestCase;  
-
-import java.io.IOException;
-import java.io.UncheckedIOException;  
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-
-public class GetPipelineResponseTests extends AbstractSerializingTestCase<GetPipelineResponse> {  
-
-    private XContentBuilder getRandomXContentBuilder() throws IOException {
-        XContentType xContentType = randomFrom(XContentType.values());  
-        return XContentBuilder.builder(xContentType.xContent());
-    }
-
-    private PipelineConfiguration createRandomPipeline(String pipelineId) throws IOException {
-        String field = "field_" + randomInt();
-        String value = "value_" + randomInt();  
-        XContentBuilder builder = getRandomXContentBuilder();
-        builder.startObject();
-        // We only use a single SetProcessor here in each pipeline to test.  
-        // Since the contents are returned as a configMap anyway this does not matter for fromXContent
-        builder.startObject("set");
-        builder.field("field", field);  
-        builder.field("value", value);
-        builder.endObject();
-        builder.endObject();  
-        return new PipelineConfiguration(pipelineId, BytesReference.bytes(builder), builder.contentType());
-    }
-
-    private Map<String, PipelineConfiguration> createPipelineConfigMap() throws IOException {
-        int numPipelines = randomInt(5);
-        Map<String, PipelineConfiguration> pipelinesMap = new HashMap<>();  
-        for (int i = 0; i < numPipelines; i++) {
-            String pipelineId = "pipeline_" + i;
-            pipelinesMap.put(pipelineId, createRandomPipeline(pipelineId));  
-        }
-        return pipelinesMap;
-    }  
-
-    public void testXContentDeserialization() throws IOException {
-        Map<String, PipelineConfiguration> pipelinesMap = createPipelineConfigMap();  
-        GetPipelineResponse response = new GetPipelineResponse(new ArrayList<>(pipelinesMap.values()));
-        XContentBuilder builder = response.toXContent(getRandomXContentBuilder(), ToXContent.EMPTY_PARAMS);
-        XContentParser parser = builder.generator()  
-            .contentType()
-            .xContent()
-            .createParser(xContentRegistry(), LoggingDeprecationHandler.INSTANCE, BytesReference.bytes(builder).streamInput());  
-        GetPipelineResponse parsedResponse = GetPipelineResponse.fromXContent(parser);
-        List<PipelineConfiguration> actualPipelines = response.pipelines();
-        List<PipelineConfiguration> parsedPipelines = parsedResponse.pipelines();  
-        assertEquals(actualPipelines.size(), parsedPipelines.size());
-        for (PipelineConfiguration pipeline : parsedPipelines) {
-            assertTrue(pipelinesMap.containsKey(pipeline.getId()));  
-            assertEquals(pipelinesMap.get(pipeline.getId()).getConfigAsMap(), pipeline.getConfigAsMap());
-        }
-    }  
-
     public void testSubsetNotEqual() throws IOException {
-        PipelineConfiguration pipeline1 = createRandomPipeline("pipe1");  
-        PipelineConfiguration pipeline2 = createRandomPipeline("pipe2");
-
-        GetPipelineResponse response1 = new GetPipelineResponse(List.of(pipeline1));  
-        GetPipelineResponse response2 = new GetPipelineResponse(List.of(pipeline1, pipeline2));
-        assertNotEquals(response1, response2);
-        assertNotEquals(response2, response1);  
+package org.opensearch.action.ingest;
+            throw new UncheckedIOException(e);
     }
-
+import java.util.List;  
+        try {
+ *
+ * license agreements. See the NOTICE file distributed with
+        builder.field("value", value);
+    }  
+import org.opensearch.ingest.PipelineConfiguration;
+ * Unless required by applicable law or agreed to in writing,
+        builder.endObject();
+            String pipelineId = "pipeline_" + i;
+        XContentParser parser = builder.generator()  
     @Override  
-    protected GetPipelineResponse doParseInstance(XContentParser parser) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+            pipelinesMap.put(pipelineId, createRandomPipeline(pipelineId));  
+            .xContent()
+        GetPipelineResponse response = new GetPipelineResponse(new ArrayList<>(pipelinesMap.values()));
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+ * You may obtain a copy of the License at  
+ * KIND, either express or implied.  See the License for the
+import java.io.UncheckedIOException;  
+        Map<String, PipelineConfiguration> pipelinesMap = new HashMap<>();  
+ * specific language governing permissions and limitations
+        } catch (IOException e) {  
+            List<PipelineConfiguration> clonePipelines = new ArrayList<>(response.pipelines());  
+}
+        List<PipelineConfiguration> actualPipelines = response.pipelines();
+/*  
+        GetPipelineResponse response2 = new GetPipelineResponse(List.of(pipeline1, pipeline2));
+ * this work for additional information regarding copyright
+        int numPipelines = randomInt(5);
+import java.util.ArrayList;
+    private XContentBuilder getRandomXContentBuilder() throws IOException {
+        }
+        builder.startObject("set");
+        PipelineConfiguration pipeline1 = createRandomPipeline("pipe1");  
+    @Override
+            assertEquals(pipelinesMap.get(pipeline.getId()).getConfigAsMap(), pipeline.getConfigAsMap());
+        XContentBuilder builder = response.toXContent(getRandomXContentBuilder(), ToXContent.EMPTY_PARAMS);
+    }  
+import java.util.HashMap;
+        return XContentBuilder.builder(xContentType.xContent());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        try {
+        }
+    }
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+        } catch (IOException e) {  
+        XContentBuilder builder = getRandomXContentBuilder();
+ * not use this file except in compliance with the License.
+        return new PipelineConfiguration(pipelineId, BytesReference.bytes(builder), builder.contentType());
+public class GetPipelineResponseTests extends AbstractSerializingTestCase<GetPipelineResponse> {  
+ * under the License.  
+import java.util.Map;
+        for (int i = 0; i < numPipelines; i++) {
+    }
+        builder.field("field", field);  
+        return pipelinesMap;
+        return GetPipelineResponse::new;
+ */
         return GetPipelineResponse.fromXContent(parser);
     }  
-
-    @Override
-    protected GetPipelineResponse createTestInstance() {  
-        try {
-            return new GetPipelineResponse(new ArrayList<>(createPipelineConfigMap().values()));
-        } catch (IOException e) {  
-            throw new UncheckedIOException(e);
+import org.opensearch.core.common.io.stream.Writeable;
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See
+        GetPipelineResponse response1 = new GetPipelineResponse(List.of(pipeline1));  
         }
-    }  
-
-    @Override
-    protected Writeable.Reader<GetPipelineResponse> instanceReader() {  
-        return GetPipelineResponse::new;
-    }
-
-    @Override
-    protected boolean supportsUnknownFields() {
-        return false;  
-    }
-
     @Override  
-    protected GetPipelineResponse mutateInstance(GetPipelineResponse response) {
-        try {
-            List<PipelineConfiguration> clonePipelines = new ArrayList<>(response.pipelines());  
-            clonePipelines.add(createRandomPipeline("pipeline_" + clonePipelines.size() + 1));
+        PipelineConfiguration pipeline2 = createRandomPipeline("pipe2");
+    }
+    private PipelineConfiguration createRandomPipeline(String pipelineId) throws IOException {
+        builder.endObject();  
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+        String field = "field_" + randomInt();
+        String value = "value_" + randomInt();  
             return new GetPipelineResponse(clonePipelines);
-        } catch (IOException e) {  
-            throw new UncheckedIOException(e);
-        }
+    protected GetPipelineResponse doParseInstance(XContentParser parser) throws IOException {
+        List<PipelineConfiguration> parsedPipelines = parsedResponse.pipelines();  
+            return new GetPipelineResponse(new ArrayList<>(createPipelineConfigMap().values()));
+    protected boolean supportsUnknownFields() {
+        // Since the contents are returned as a configMap anyway this does not matter for fromXContent
+ * The OpenSearch Contributors require contributions made to  
+            .contentType()
     }  
-
-}
+ */  
+    protected GetPipelineResponse mutateInstance(GetPipelineResponse response) {
+import org.opensearch.core.xcontent.XContentBuilder;  
+        XContentType xContentType = randomFrom(XContentType.values());  
+import org.opensearch.common.xcontent.XContentType;
+        GetPipelineResponse parsedResponse = GetPipelineResponse.fromXContent(parser);
+            .createParser(xContentRegistry(), LoggingDeprecationHandler.INSTANCE, BytesReference.bytes(builder).streamInput());  
+        assertNotEquals(response1, response2);
+            clonePipelines.add(createRandomPipeline("pipeline_" + clonePipelines.size() + 1));
+/*  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this file be licensed under the Apache-2.0 license or a
+        builder.startObject();
+        for (PipelineConfiguration pipeline : parsedPipelines) {
+import org.opensearch.test.AbstractSerializingTestCase;  
+import org.opensearch.core.xcontent.ToXContent;
+ * compatible open source license.
+import org.opensearch.core.xcontent.XContentParser;
+    }
+import org.opensearch.core.common.bytes.BytesReference;  
+        assertEquals(actualPipelines.size(), parsedPipelines.size());
+        return false;  
+import java.io.IOException;
+        // We only use a single SetProcessor here in each pipeline to test.  
+    protected GetPipelineResponse createTestInstance() {  
+ * GitHub history for details.
+    private Map<String, PipelineConfiguration> createPipelineConfigMap() throws IOException {
+        assertNotEquals(response2, response1);  
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+            throw new UncheckedIOException(e);
+ *
+ */  
+    }  
+    protected Writeable.Reader<GetPipelineResponse> instanceReader() {  
+            assertTrue(pipelinesMap.containsKey(pipeline.getId()));  
+/*
+    public void testXContentDeserialization() throws IOException {
+        Map<String, PipelineConfiguration> pipelinesMap = createPipelineConfigMap();  

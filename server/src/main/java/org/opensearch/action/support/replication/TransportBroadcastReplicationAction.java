@@ -1,221 +1,203 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.support.replication;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;  
-import org.opensearch.action.support.TransportActions;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.broadcast.BroadcastRequest;  
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.action.support.broadcast.BroadcastShardOperationFailedException;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.ResolvedIndices;  
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.util.concurrent.CountDown;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;  
-
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;  
-
-/**
- * Base class for requests that should be executed on all shards of an index or several indices.  
- * This action sends shard requests to all primary shards of the indices and they are then replicated like write requests
- *
+    ) {
+                    .getShards()
+        Writeable.Reader<Request> requestReader,
  * @opensearch.internal  
  */
-public abstract class TransportBroadcastReplicationAction<
-    Request extends BroadcastRequest<Request>,  
-    Response extends BroadcastResponse,
-    ShardRequest extends ReplicationRequest<ShardRequest>,
-    ShardResponse extends ReplicationResponse> extends HandledTransportAction<Request, Response>  
-    implements
-        TransportIndicesResolvingAction<Request> {
-
-    private final TransportReplicationAction replicatedBroadcastShardAction;
-    private final ClusterService clusterService;
-    private final IndexNameExpressionResolver indexNameExpressionResolver;  
-
-    public TransportBroadcastReplicationAction(
-        String name,  
-        Writeable.Reader<Request> requestReader,
-        ClusterService clusterService,
-        TransportService transportService,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        TransportReplicationAction replicatedBroadcastShardAction  
-    ) {
-        super(name, transportService, actionFilters, requestReader);
-        this.replicatedBroadcastShardAction = replicatedBroadcastShardAction;  
-        this.clusterService = clusterService;
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
-    }  
-
-    @Override
-    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {  
-        final ClusterState clusterState = clusterService.state();
-        List<ShardId> shards = shards(request, clusterState);
-        final CopyOnWriteArrayList<ShardResponse> shardsResponses = new CopyOnWriteArrayList<>();  
-        if (shards.size() == 0) {
-            finishAndNotifyListener(listener, shardsResponses);
-        }  
-        final CountDown responsesCountDown = new CountDown(shards.size());
-        for (final ShardId shardId : shards) {
-            ActionListener<ShardResponse> shardActionListener = new ActionListener<ShardResponse>() {  
-                @Override
-                public void onResponse(ShardResponse shardResponse) {
-                    shardsResponses.add(shardResponse);  
-                    logger.trace("{}: got response from {}", actionName, shardId);
-                    if (responsesCountDown.countDown()) {
-                        finishAndNotifyListener(listener, shardsResponses);  
-                    }
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    logger.trace("{}: got failure from {}", actionName, shardId);  
-                    int totalNumCopies = clusterState.getMetadata().getIndexSafe(shardId.getIndex()).getNumberOfReplicas() + 1;
-                    ShardResponse shardResponse = newShardResponse();
-                    ReplicationResponse.ShardInfo.Failure[] failures;  
-                    if (TransportActions.isShardNotAvailableException(e)) {
-                        failures = new ReplicationResponse.ShardInfo.Failure[0];
-                    } else {  
-                        ReplicationResponse.ShardInfo.Failure failure = new ReplicationResponse.ShardInfo.Failure(
-                            shardId,
-                            null,  
-                            e,
-                            ExceptionsHelper.status(e),
-                            true  
-                        );
-                        failures = new ReplicationResponse.ShardInfo.Failure[totalNumCopies];
-                        Arrays.fill(failures, failure);  
-                    }
-                    shardResponse.setShardInfo(new ReplicationResponse.ShardInfo(totalNumCopies, 0, failures));
-                    shardsResponses.add(shardResponse);  
-                    if (responsesCountDown.countDown()) {
-                        finishAndNotifyListener(listener, shardsResponses);
-                    }  
-                }
-            };
-            shardExecute(task, request, shardId, shardActionListener);  
-        }
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(Request request) {
-        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));  
-    }
-
-    private ResolvedIndices.Local.Concrete resolveIndices(Request request, ClusterState clusterState) {  
-        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
-    }
-
-    protected void shardExecute(Task task, Request request, ShardId shardId, ActionListener<ShardResponse> shardActionListener) {
-        ShardRequest shardRequest = newShardRequest(request, shardId);
-        shardRequest.setParentTask(clusterService.localNode().getId(), task.getId());  
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+ *  
         replicatedBroadcastShardAction.execute(shardRequest, shardActionListener);
-    }
-
-    /**
-     * @return all shard ids the request should run on
-     */  
-    protected List<ShardId> shards(Request request, ClusterState clusterState) {
-        List<ShardId> shardIds = new ArrayList<>();
-        Set<String> concreteIndices = resolveIndices(request, clusterState).namesOfConcreteIndices();  
-        for (String index : concreteIndices) {
-            IndexMetadata indexMetadata = clusterState.metadata().getIndices().get(index);
-            if (indexMetadata != null) {  
-                for (IndexShardRoutingTable shardRouting : clusterState.getRoutingTable()
-                    .indicesRouting()
-                    .get(index)  
-                    .getShards()
-                    .values()) {
-                    shardIds.add(shardRouting.shardId());  
-                }
-            }
-        }  
-        return shardIds;
-    }
-
-    protected abstract ShardResponse newShardResponse();
-
-    protected abstract ShardRequest newShardRequest(Request request, ShardId shardId);  
-
-    private void finishAndNotifyListener(ActionListener listener, CopyOnWriteArrayList<ShardResponse> shardsResponses) {
-        logger.trace("{}: got all shard responses", actionName);  
-        int successfulShards = 0;
-        int failedShards = 0;
-        int totalNumCopies = 0;  
-        List<DefaultShardOperationFailedException> shardFailures = null;
-        for (int i = 0; i < shardsResponses.size(); i++) {
-            ReplicationResponse shardResponse = shardsResponses.get(i);  
             if (shardResponse == null) {
-                // non active shard, ignore
-            } else {  
+    public TransportBroadcastReplicationAction(
+                    ReplicationResponse.ShardInfo.Failure[] failures;  
+        List<DefaultShardOperationFailedException> shardFailures = null;
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
+ * KIND, either express or implied.  See the License for the
+                    shardResponse.setShardInfo(new ReplicationResponse.ShardInfo(totalNumCopies, 0, failures));
+    private void finishAndNotifyListener(ActionListener listener, CopyOnWriteArrayList<ShardResponse> shardsResponses) {
+        for (String index : concreteIndices) {
+            ReplicationResponse shardResponse = shardsResponses.get(i);  
+import java.util.Set;
+        this.replicatedBroadcastShardAction = replicatedBroadcastShardAction;  
+     */  
+ * this file be licensed under the Apache-2.0 license or a
+                }
+import java.util.Arrays;  
+     * @return all shard ids the request should run on
+                }
+            ActionListener<ShardResponse> shardActionListener = new ActionListener<ShardResponse>() {  
+        super(name, transportService, actionFilters, requestReader);
+ * GitHub history for details.
+                    shardsResponses.add(shardResponse);  
                 failedShards += shardResponse.getShardInfo().getFailed();
+    protected abstract BroadcastResponse newResponse(
+    private ResolvedIndices.Local.Concrete resolveIndices(Request request, ClusterState clusterState) {  
+                        ReplicationResponse.ShardInfo.Failure failure = new ReplicationResponse.ShardInfo.Failure(
+        listener.onResponse(newResponse(successfulShards, failedShards, totalNumCopies, shardFailures));
+/*  
+        ClusterService clusterService,
+import org.opensearch.cluster.metadata.ResolvedIndices;  
+                            shardId,
+/*  
+            if (indexMetadata != null) {  
+    @Override
+package org.opensearch.action.support.replication;
+                }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * This action sends shard requests to all primary shards of the indices and they are then replicated like write requests
+        for (int i = 0; i < shardsResponses.size(); i++) {
+    implements
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+    protected List<ShardId> shards(Request request, ClusterState clusterState) {
+import java.util.concurrent.CopyOnWriteArrayList;  
+ * not use this file except in compliance with the License.
+public abstract class TransportBroadcastReplicationAction<
+    protected abstract ShardRequest newShardRequest(Request request, ShardId shardId);  
+                // non active shard, ignore
+            }
+ * software distributed under the License is distributed on an
+import org.opensearch.action.support.HandledTransportAction;  
+    }
+ * this work for additional information regarding copyright
+                    logger.trace("{}: got failure from {}", actionName, shardId);  
+                @Override
+/*
+ *
+                for (ReplicationResponse.ShardInfo.Failure failure : shardResponse.getShardInfo().getFailures()) {
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        final CountDown responsesCountDown = new CountDown(shards.size());
+ */  
+                            new BroadcastShardOperationFailedException(failure.fullShardId(), failure.getCause())
+        ActionFilters actionFilters,
+                    shardsResponses.add(shardResponse);  
+            IndexMetadata indexMetadata = clusterState.metadata().getIndices().get(index);
+                        );
+        Set<String> concreteIndices = resolveIndices(request, clusterState).namesOfConcreteIndices();  
+    /**
+    ShardRequest extends ReplicationRequest<ShardRequest>,
+                        Arrays.fill(failures, failure);  
+    private final IndexNameExpressionResolver indexNameExpressionResolver;  
+                    .values()) {
+                    logger.trace("{}: got response from {}", actionName, shardId);
+        int successfulShards,
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+        final CopyOnWriteArrayList<ShardResponse> shardsResponses = new CopyOnWriteArrayList<>();  
+import org.opensearch.transport.TransportService;  
+        this.clusterService = clusterService;
+    }
+                    }  
+                    ShardResponse shardResponse = newShardResponse();
+    protected void shardExecute(Task task, Request request, ShardId shardId, ActionListener<ShardResponse> shardActionListener) {
+                    .indicesRouting()
+ * Base class for requests that should be executed on all shards of an index or several indices.  
+                @Override
+                        finishAndNotifyListener(listener, shardsResponses);  
+                    } else {  
+        for (final ShardId shardId : shards) {
+                    shardFailures.add(
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+                }
+            finishAndNotifyListener(listener, shardsResponses);
+            } else {  
+                    if (responsesCountDown.countDown()) {
+ *
+    );  
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
+        List<ShardId> shards = shards(request, clusterState);
+ * The OpenSearch Contributors require contributions made to  
+    Request extends BroadcastRequest<Request>,  
+        shardRequest.setParentTask(clusterService.localNode().getId(), task.getId());  
+        }  
+                    .get(index)  
+    }
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+import org.opensearch.core.action.ActionListener;
+ * Unless required by applicable law or agreed to in writing,
+                if (shardFailures == null) {
+                    shardIds.add(shardRouting.shardId());  
+            shardExecute(task, request, shardId, shardActionListener);  
+    }  
+import org.opensearch.cluster.service.ClusterService;
+    Response extends BroadcastResponse,
+}
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        TransportService transportService,  
+        if (shards.size() == 0) {
+import java.util.ArrayList;
+    private final ClusterService clusterService;
+                        )
+                    if (responsesCountDown.countDown()) {
+import org.opensearch.core.index.shard.ShardId;
+        int failedShards = 0;
+        int totalNumCopies,
                 successfulShards += shardResponse.getShardInfo().getSuccessful();
                 totalNumCopies += shardResponse.getShardInfo().getTotal();  
-                if (shardFailures == null) {
-                    shardFailures = new ArrayList<>();
-                }  
-                for (ReplicationResponse.ShardInfo.Failure failure : shardResponse.getShardInfo().getFailures()) {
-                    shardFailures.add(
-                        new DefaultShardOperationFailedException(  
-                            new BroadcastShardOperationFailedException(failure.fullShardId(), failure.getCause())
-                        )
-                    );  
-                }
-            }
-        }  
-        listener.onResponse(newResponse(successfulShards, failedShards, totalNumCopies, shardFailures));
-    }
-
-    protected abstract BroadcastResponse newResponse(
-        int successfulShards,
+                            true  
+ * SPDX-License-Identifier: Apache-2.0
+                    if (TransportActions.isShardNotAvailableException(e)) {
+import org.opensearch.common.util.concurrent.CountDown;  
+    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {  
+        return shardIds;
+                public void onResponse(ShardResponse shardResponse) {
+import org.opensearch.ExceptionsHelper;
         int failedShards,  
-        int totalNumCopies,
+                for (IndexShardRoutingTable shardRouting : clusterState.getRoutingTable()
+ * Modifications Copyright OpenSearch Contributors. See
+        logger.trace("{}: got all shard responses", actionName);  
+/**
+                    }
+                        finishAndNotifyListener(listener, shardsResponses);
+import org.opensearch.cluster.metadata.IndexMetadata;
+    protected abstract ShardResponse newShardResponse();
+import org.opensearch.action.support.TransportActions;
+ */
+    @Override
+                            ExceptionsHelper.status(e),
+import org.opensearch.action.support.ActionFilters;
+import org.opensearch.tasks.Task;
+    private final TransportReplicationAction replicatedBroadcastShardAction;
+ * license agreements. See the NOTICE file distributed with
+                    }
+        int totalNumCopies = 0;  
+ */  
         List<DefaultShardOperationFailedException> shardFailures
-    );  
-}
+                        new DefaultShardOperationFailedException(  
+    ShardResponse extends ReplicationResponse> extends HandledTransportAction<Request, Response>  
+        }
+ * under the License.  
+ *
+        TransportReplicationAction replicatedBroadcastShardAction  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import java.util.List;
+ * You may obtain a copy of the License at  
+                }  
+                        failures = new ReplicationResponse.ShardInfo.Failure[totalNumCopies];
+                public void onFailure(Exception e) {
+            }
+ * compatible open source license.
+        TransportIndicesResolvingAction<Request> {
+                            null,  
+    }
+ * specific language governing permissions and limitations
+            };
+import org.opensearch.core.common.io.stream.Writeable;  
+    public ResolvedIndices resolveIndices(Request request) {
+        }  
+        final ClusterState clusterState = clusterService.state();
+        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));  
+import org.opensearch.action.support.broadcast.BroadcastShardOperationFailedException;
+                    shardFailures = new ArrayList<>();
+        ShardRequest shardRequest = newShardRequest(request, shardId);
+import org.opensearch.cluster.ClusterState;  
+                    );  
+    }
+import org.opensearch.action.support.broadcast.BroadcastRequest;  
+                        failures = new ReplicationResponse.ShardInfo.Failure[0];
+        int successfulShards = 0;
+                    int totalNumCopies = clusterState.getMetadata().getIndexSafe(shardId.getIndex()).getNumberOfReplicas() + 1;
+        }  
+                            e,
+        List<ShardId> shardIds = new ArrayList<>();
+        String name,  

@@ -1,21 +1,16 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.xcontent;
-
-import tools.jackson.core.ObjectReadContext;
-
-public class XObjectReadContext extends ObjectReadContext.Base {  
     private static final XObjectReadContext DEFAULT_INSTANCE = new XObjectReadContext();
-
-    public static XObjectReadContext create() {  
+ * compatible open source license.
         return DEFAULT_INSTANCE;
-    }
-
-    private XObjectReadContext() {}
+ * this file be licensed under the Apache-2.0 license or a
 }
+/*  
+import tools.jackson.core.ObjectReadContext;
+ * The OpenSearch Contributors require contributions made to  
+    }
+package org.opensearch.common.xcontent;
+ */  
+    public static XObjectReadContext create() {  
+    private XObjectReadContext() {}
+public class XObjectReadContext extends ObjectReadContext.Base {  

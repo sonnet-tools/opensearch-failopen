@@ -1,513 +1,454 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.geoip;
-
-import com.maxmind.geoip2.DatabaseReader;
-
-import org.opensearch.common.CheckedSupplier;  
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.RandomDocumentPicks;  
-import org.opensearch.ingest.geoip.IngestGeoIpModulePlugin.GeoIpCache;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;  
-
-import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;  
-
-public class GeoIpProcessorTests extends OpenSearchTestCase {
-
-    public void testCity() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
-        );  
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", "8.8.8.8");  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);
-
-        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("8.8.8.8"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");  
-        assertThat(geoData.size(), equalTo(6));
-        assertThat(geoData.get("ip"), equalTo("8.8.8.8"));
-        assertThat(geoData.get("country_iso_code"), equalTo("US"));  
-        assertThat(geoData.get("country_name"), equalTo("United States"));
-        assertThat(geoData.get("continent_name"), equalTo("North America"));
-        assertThat(geoData.get("timezone"), equalTo("America/Chicago"));  
-        Map<String, Object> location = new HashMap<>();
-        location.put("lat", 37.751d);
-        location.put("lon", -97.822d);  
-        assertThat(geoData.get("location"), equalTo(location));
-    }
-
-    public void testNullValueWithIgnoreMissing() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            true,  
-            new GeoIpCache(1000),
-            false
-        );  
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
-            random(),
-            Collections.singletonMap("source_field", null)  
-        );
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        processor.execute(ingestDocument);  
-        assertIngestDocument(originalIngestDocument, ingestDocument);
-    }
-
-    public void testNonExistentWithIgnoreMissing() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            true,  
-            new GeoIpCache(1000),
-            false
-        );  
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        processor.execute(ingestDocument);  
-        assertIngestDocument(originalIngestDocument, ingestDocument);
-    }
-
-    public void testNullWithoutIgnoreMissing() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
-        );  
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
-            random(),
-            Collections.singletonMap("source_field", null)  
-        );
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        Exception exception = expectThrows(Exception.class, () -> processor.execute(ingestDocument));  
-        assertThat(exception.getMessage(), equalTo("field [source_field] is null, cannot extract geoip information."));
-    }
-
-    public void testNonExistentWithoutIgnoreMissing() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
-        );  
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        Exception exception = expectThrows(Exception.class, () -> processor.execute(ingestDocument));  
-        assertThat(exception.getMessage(), equalTo("field [source_field] not present as part of path [source_field]"));
-    }
-
-    public void testCity_withIpV6() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
-        );  
-
-        String address = "2602:306:33d3:8000::3257:9652";
-        Map<String, Object> document = new HashMap<>();  
-        document.put("source_field", address);
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);  
-
-        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo(address));
-        @SuppressWarnings("unchecked")  
-        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
-        assertThat(geoData.size(), equalTo(9));
-        assertThat(geoData.get("ip"), equalTo(address));  
-        assertThat(geoData.get("country_iso_code"), equalTo("US"));
-        assertThat(geoData.get("country_name"), equalTo("United States"));
-        assertThat(geoData.get("continent_name"), equalTo("North America"));  
-        assertThat(geoData.get("region_iso_code"), equalTo("US-FL"));
-        assertThat(geoData.get("region_name"), equalTo("Florida"));
-        assertThat(geoData.get("city_name"), equalTo("Homestead"));  
-        assertThat(geoData.get("timezone"), equalTo("America/New_York"));
-        Map<String, Object> location = new HashMap<>();
-        location.put("lat", 25.4573d);  
-        location.put("lon", -80.4572d);
-        assertThat(geoData.get("location"), equalTo(location));
-    }  
-
-    public void testCityWithMissingLocation() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(  
-            randomAlphaOfLength(10),
-            null,
-            "source_field",  
-            loader("/GeoLite2-City.mmdb"),
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),  
-            false,
-            new GeoIpCache(1000),
             false  
-        );
-
-        Map<String, Object> document = new HashMap<>();  
-        document.put("source_field", "80.231.5.0");
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);  
-
-        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("80.231.5.0"));
-        @SuppressWarnings("unchecked")  
-        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
-        assertThat(geoData.size(), equalTo(1));
-        assertThat(geoData.get("ip"), equalTo("80.231.5.0"));  
-    }
-
-    public void testCountry() throws Exception {  
-        GeoIpProcessor processor = new GeoIpProcessor(
+        location.put("lat", 25.4573d);  
             randomAlphaOfLength(10),
-            null,  
-            "source_field",
-            loader("/GeoLite2-Country.mmdb"),
-            "target_field",  
             EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,
-            new GeoIpCache(1000),  
-            false
-        );
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", "82.170.213.79");
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
-        processor.execute(ingestDocument);
-
-        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("82.170.213.79"));  
-        @SuppressWarnings("unchecked")
-        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
-        assertThat(geoData.size(), equalTo(4));  
-        assertThat(geoData.get("ip"), equalTo("82.170.213.79"));
-        assertThat(geoData.get("country_iso_code"), equalTo("NL"));
-        assertThat(geoData.get("country_name"), equalTo("Netherlands"));  
-        assertThat(geoData.get("continent_name"), equalTo("Europe"));
-    }
-
-    public void testCountryWithMissingLocation() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-Country.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
         );  
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", "80.231.5.0");  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);
-
-        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("80.231.5.0"));
+        String address = "2602:306:33d3:8000::3257:9652";
         @SuppressWarnings("unchecked")
-        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");  
-        assertThat(geoData.size(), equalTo(1));
+        @SuppressWarnings("unchecked")
+            random(),
+            false,  
+            null,
+        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("80.231.5.0"));
+            randomAlphaOfLength(10),  
+        assertThat(exception.getMessage(), equalTo("field [source_field] is null, cannot extract geoip information."));
+            false
+            false,  
         assertThat(geoData.get("ip"), equalTo("80.231.5.0"));
-    }  
-
-    public void testAsn() throws Exception {
-        String ip = "82.171.64.0";  
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),
-            null,  
-            "source_field",
-            loader("/GeoLite2-ASN.mmdb"),
-            "target_field",  
             EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,
-            new GeoIpCache(1000),  
-            false
+import static org.hamcrest.Matchers.nullValue;  
+            loader("/GeoLite2-City.mmdb"),
+            EnumSet.allOf(GeoIpProcessor.Property.class),  
         );
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", ip);
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
-        processor.execute(ingestDocument);
-
-        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo(ip));  
-        @SuppressWarnings("unchecked")
-        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
-        assertThat(geoData.size(), equalTo(4));  
-        assertThat(geoData.get("ip"), equalTo(ip));
-        assertThat(geoData.get("asn"), equalTo(1136L));
-        assertThat(geoData.get("organization_name"), equalTo("KPN B.V."));  
-        assertThat(geoData.get("network"), equalTo("82.168.0.0/14"));
-    }
-
-    public void testAddressIsNotInTheDatabase() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
-        );  
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", "127.0.0.1");  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getSourceAndMetadata().containsKey("target_field"), is(false));  
-    }
-
-    /** Don't silently do DNS lookups or anything trappy on bogus data */  
-    public void testInvalid() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
-        );  
-
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+/*  
+        document.put("source_field", "80.231.5.0");  
+        assertThat(geoData.size(), equalTo(1));
         Map<String, Object> document = new HashMap<>();
         document.put("source_field", "www.google.com");  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        Exception e = expectThrows(IllegalArgumentException.class, () -> processor.execute(ingestDocument));
-        assertThat(e.getMessage(), containsString("not an IP string literal"));  
+        assertThat(geoData.get("timezone"), equalTo("America/Chicago"));  
+        assertThat(geoData.get("region_iso_code"), equalTo("US-FL"));
+            new GeoIpCache(1000),
+import org.opensearch.test.OpenSearchTestCase;
+        document.put("source_field", "8.8.8.8");  
+            Collections.singletonMap("source_field", null)  
     }
-
-    public void testListAllValid() throws Exception {  
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),
-            null,  
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),
-            "target_field",  
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,
-            new GeoIpCache(1000),  
-            false
-        );
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", Arrays.asList("8.8.8.8", "82.171.64.0"));
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
-        processor.execute(ingestDocument);
-
-        @SuppressWarnings("unchecked")  
-        List<Map<String, Object>> geoData = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata().get("target_field");
-
-        Map<String, Object> location = new HashMap<>();  
-        location.put("lat", 37.751d);
-        location.put("lon", -97.822d);
-        assertThat(geoData.get(0).get("location"), equalTo(location));  
-
-        assertThat(geoData.get(1).get("city_name"), equalTo("Hoensbroek"));
-    }  
-
-    public void testListPartiallyValid() throws Exception {
+            new GeoIpCache(1000),
+        assertThat(geoData.get("continent_name"), equalTo("North America"));  
+        assertThat(geoData.get("country_iso_code"), equalTo("US"));
+    }
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
         GeoIpProcessor processor = new GeoIpProcessor(  
+        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("80.231.5.0"));
+        @SuppressWarnings("unchecked")  
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
+            new GeoIpCache(1000),  
+    }
+    public void testNonExistentWithoutIgnoreMissing() throws Exception {
+        Map<String, Object> document = new HashMap<>();  
+            null,
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+        assertThat(geoData.get("asn"), equalTo(1136L));
+    public void testNullValueWithIgnoreMissing() throws Exception {
+import org.opensearch.ingest.IngestDocument;
+            loader("/GeoLite2-City.mmdb"),  
+                return databaseInputStreamSupplier.get();
+        assertThat(geoData.size(), equalTo(4));  
+        document.put("source_field", Arrays.asList("8.8.8.8", "127.0.0.1"));
+ */  
+        location.put("lon", -80.4572d);
+        );
+        );
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+            randomAlphaOfLength(10),  
+import java.io.InputStream;
+            randomAlphaOfLength(10),  
+        location.put("lon", -97.822d);
+            "target_field",
+        );  
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+            false,
+    public void testInvalid() throws Exception {
+ * SPDX-License-Identifier: Apache-2.0
+        );  
+            new GeoIpCache(1000),
+            null,
+            null,  
+        document.put("source_field", Arrays.asList("8.8.8.8", "127.0.0.1"));  
+        assertThat(geoData.get("country_name"), equalTo("United States"));
+        Map<String, Object> document = new HashMap<>();
+        processor.execute(ingestDocument);
+        Map<String, Object> document = new HashMap<>();
+        processor.execute(ingestDocument);
+    }  
+            "target_field",
+            true,  
+        assertThat(geoData.get("country_name"), equalTo("Netherlands"));  
+            randomAlphaOfLength(10),  
+        assertIngestDocument(originalIngestDocument, ingestDocument);
+            "source_field",
+        assertThat(e.getMessage(), containsString("not an IP string literal"));  
+                try (InputStream is = databaseInputStreamSupplier.get()) {  
+import org.opensearch.ingest.RandomDocumentPicks;  
+            new GeoIpCache(1000),
+        assertThat(geoData.get("organization_name"), equalTo("KPN B.V."));  
+            true
+        );  
+        List<Map<String, Object>> geoData = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata().get("target_field");
+            "source_field",
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
+            loader("/GeoLite2-City.mmdb"),  
+        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");  
+            loader("/GeoLite2-City.mmdb"),  
+            new GeoIpCache(1000),
+            false,  
+            null,  
+        location.put("lat", 37.751d);
+        );  
+        GeoIpProcessor processor = new GeoIpProcessor(
+            false,  
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+                        bytesRead += read;  
+package org.opensearch.ingest.geoip;
+        GeoIpProcessor processor = new GeoIpProcessor(
+    public void testCityWithMissingLocation() throws Exception {
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+            false
+            "source_field",
+import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
+            false,
+ *
+            randomAlphaOfLength(10),  
+        assertThat(geoData.get(0).get("location"), equalTo(location));  
+            InputStream databaseInputStream() throws IOException {
+            loader("/GeoLite2-City.mmdb"),  
+            false
+ * ownership. Elasticsearch licenses this file to you under  
+            loader("/GeoLite2-City.mmdb"),
+            randomAlphaOfLength(10),  
+            loader("/GeoLite2-City.mmdb"),  
+ * You may obtain a copy of the License at  
+            null,
+            random(),
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(geoData.get(1).get("city_name"), equalTo("Hoensbroek"));
+            "source_field",
+            false
+import java.util.function.Supplier;  
+ *  
+            randomAlphaOfLength(10),  
+            "target_field",  
+            "target_field",
+    public void testListAllValid() throws Exception {  
+    }
+            false,  
+        processor.execute(ingestDocument);
+        GeoIpProcessor processor = new GeoIpProcessor(
+        };
+        List<Map<String, Object>> geoData = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata().get("target_field");  
+        );  
+            false,
+/*
+        );
+            false
+            false
+            null,
+        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");  
+            null,
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
+            "target_field",  
+        location.put("lat", 37.751d);
+        location.put("lat", 37.751d);
+            new GeoIpCache(1000),
+            randomAlphaOfLength(10),  
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+        GeoIpProcessor processor = new GeoIpProcessor(
+import static org.hamcrest.Matchers.equalTo;
+            null,
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+        processor.execute(ingestDocument);  
+            null,
+        assertThat(geoData.get("ip"), equalTo("8.8.8.8"));
+        processor.execute(ingestDocument);
+        assertThat(geoData.get(1), nullValue());
+        Map<String, Object> location = new HashMap<>();  
+        @SuppressWarnings("unchecked")  
+                    do {
+        document.put("source_field", ip);
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+import java.util.Map;
+import java.util.Collections;
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+        GeoIpProcessor processor = new GeoIpProcessor(
+            "source_field",
+        return new DatabaseReaderLazyLoader(PathUtils.get(path), loader) {
+        GeoIpProcessor processor = new GeoIpProcessor(
+        final Supplier<InputStream> databaseInputStreamSupplier = () -> GeoIpProcessor.class.getResourceAsStream(path);
+/*  
+            randomAlphaOfLength(10),  
+                        final byte[] bytes = new byte[1 << 10];  
+            EnumSet.allOf(GeoIpProcessor.Property.class),  
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+    /** Don't silently do DNS lookups or anything trappy on bogus data */  
+        assertThat(geoData.get("country_iso_code"), equalTo("NL"));
+        Map<String, Object> document = new HashMap<>();
+        assertThat(geoData.get("country_name"), equalTo("United States"));
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
+        processor.execute(ingestDocument);
+        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
+        GeoIpProcessor processor = new GeoIpProcessor(
+    public void testAsn() throws Exception {
+            Collections.singletonMap("source_field", null)  
+        );  
+            loader("/GeoLite2-City.mmdb"),  
+import com.maxmind.geoip2.DatabaseReader;
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+ *
+        document.put("source_field", Arrays.asList("127.0.0.1", "127.0.0.1"));  
+            "target_field",
+        assertThat(geoData.get("region_name"), equalTo("Florida"));
+            "source_field",
+            loader("/GeoLite2-City.mmdb"),  
+        document.put("source_field", "82.170.213.79");
+        Map<String, Object> location = new HashMap<>();
+        assertThat(geoData.get("location"), equalTo(location));
+        location.put("lon", -97.822d);  
+        assertThat(geoData.get("continent_name"), equalTo("North America"));
+            false
+        Exception exception = expectThrows(Exception.class, () -> processor.execute(ingestDocument));  
+        assertThat(geoData.get("ip"), equalTo(ip));
+    public void testListNoMatches() throws Exception {
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+        assertThat(exception.getMessage(), equalTo("field [source_field] not present as part of path [source_field]"));
+    public void testAddressIsNotInTheDatabase() throws Exception {
+            "target_field",
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+ * KIND, either express or implied.  See the License for the
+import static org.hamcrest.Matchers.containsString;  
+        assertThat(geoData.get(0).get("location"), equalTo(location));
+            new GeoIpCache(1000),
+        assertFalse(ingestDocument.hasField("target_field"));
+            null,  
+            "target_field",
+        processor.execute(ingestDocument);
+ */  
+    }  
+ * GitHub history for details.
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+        document.put("source_field", Arrays.asList("8.8.8.8", "82.171.64.0"));
+        assertThat(geoData.size(), equalTo(1));
+        GeoIpProcessor processor = new GeoIpProcessor(
+        assertThat(geoData.get("ip"), equalTo("82.170.213.79"));
+        );  
+            false
+            randomAlphaOfLength(10),  
+            "source_field",
+}
+        );  
+        assertThat(geoData.size(), equalTo(6));
+            new GeoIpCache(1000),
+        document.put("source_field", "127.0.0.1");  
+import org.opensearch.common.CheckedSupplier;  
+            }  
+            "source_field",
+            loader("/GeoLite2-City.mmdb"),  
+ * Modifications Copyright OpenSearch Contributors. See
+        );  
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+        processor.execute(ingestDocument);
+            @Override  
+            new GeoIpCache(1000),
+            new GeoIpCache(1000),
+        processor.execute(ingestDocument);  
+        );
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        document.put("source_field", Arrays.asList("127.0.0.1", "127.0.0.2"));  
+            .build();
+        assertThat(geoData.get("network"), equalTo("82.168.0.0/14"));
+            false  
+    }  
+ * this work for additional information regarding copyright
+            "source_field",  
+        final CheckedSupplier<DatabaseReader, IOException> loader = () -> new DatabaseReader.Builder(databaseInputStreamSupplier.get())  
+            null,
             randomAlphaOfLength(10),
             null,
-            "source_field",  
-            loader("/GeoLite2-City.mmdb"),
+    public void testCity_withIpV6() throws Exception {
+            false,  
+import org.opensearch.common.io.PathUtils;
+            false,
+            false,  
+            randomAlphaOfLength(10),
+        );  
+        processor.execute(ingestDocument);
+            randomAlphaOfLength(10),  
+ * Unless required by applicable law or agreed to in writing,
             "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),  
+import java.util.EnumSet;
+        location.put("lon", -97.822d);
+        GeoIpProcessor processor = new GeoIpProcessor(
+import java.io.IOException;
+        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
+            false
+        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
+        assertIngestDocument(originalIngestDocument, ingestDocument);
+        GeoIpProcessor processor = new GeoIpProcessor(
+    public void testCity() throws Exception {
+            "source_field",
+        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo(ip));  
+                    return bytesRead;
+    public void testCountry() throws Exception {  
+        );
+                }  
+        document.put("source_field", address);
+            new GeoIpCache(1000),  
+        location.put("lat", 37.751d);  
+import org.opensearch.ingest.geoip.IngestGeoIpModulePlugin.GeoIpCache;
+        assertThat(geoData.get("country_iso_code"), equalTo("US"));  
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+        Map<String, Object> document = new HashMap<>();  
+        assertThat(geoData.get("location"), equalTo(location));
+            new GeoIpCache(1000),
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertThat(ingestDocument.getSourceAndMetadata().containsKey("target_field"), is(false));
+        Map<String, Object> document = new HashMap<>();
+            true
+        assertThat(geoData.get("continent_name"), equalTo("Europe"));
+        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
+            "target_field",
+import java.util.HashMap;  
+        Map<String, Object> location = new HashMap<>();
+            "target_field",
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        assertThat(geoData.get("city_name"), equalTo("Homestead"));  
+        GeoIpProcessor processor = new GeoIpProcessor(  
             false,
             new GeoIpCache(1000),
-            false  
-        );
-
-        Map<String, Object> document = new HashMap<>();  
-        document.put("source_field", Arrays.asList("8.8.8.8", "127.0.0.1"));
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);  
-
+            null,
+            "source_field",
+        assertThat(geoData.get("ip"), equalTo(address));  
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> geoData = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata().get("target_field");  
-
-        Map<String, Object> location = new HashMap<>();
-        location.put("lat", 37.751d);  
-        location.put("lon", -97.822d);
-        assertThat(geoData.get(0).get("location"), equalTo(location));
-
-        assertThat(geoData.get(1), nullValue());
-    }
-
-    public void testListNoMatches() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            false
-        );  
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", Arrays.asList("127.0.0.1", "127.0.0.1"));  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);
-
-        assertFalse(ingestDocument.hasField("target_field"));
-    }
-
-    public void testListFirstOnly() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            true
-        );  
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", Arrays.asList("8.8.8.8", "127.0.0.1"));  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
-
-        Map<String, Object> location = new HashMap<>();
-        location.put("lat", 37.751d);
-        location.put("lon", -97.822d);  
-        assertThat(geoData.get("location"), equalTo(location));
-    }
-
-    public void testListFirstOnlyNoMatches() throws Exception {
-        GeoIpProcessor processor = new GeoIpProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            loader("/GeoLite2-City.mmdb"),  
-            "target_field",
-            EnumSet.allOf(GeoIpProcessor.Property.class),
-            false,  
-            new GeoIpCache(1000),
-            true
-        );  
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", Arrays.asList("127.0.0.1", "127.0.0.2"));  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        processor.execute(ingestDocument);
-
-        assertThat(ingestDocument.getSourceAndMetadata().containsKey("target_field"), is(false));
-    }
-
-    private DatabaseReaderLazyLoader loader(final String path) {
-        final Supplier<InputStream> databaseInputStreamSupplier = () -> GeoIpProcessor.class.getResourceAsStream(path);
-        final CheckedSupplier<DatabaseReader, IOException> loader = () -> new DatabaseReader.Builder(databaseInputStreamSupplier.get())  
-            .build();
-        return new DatabaseReaderLazyLoader(PathUtils.get(path), loader) {
-
-            @Override
-            long databaseFileSize() throws IOException {
-                try (InputStream is = databaseInputStreamSupplier.get()) {  
-                    long bytesRead = 0;
-                    do {
-                        final byte[] bytes = new byte[1 << 10];  
                         final int read = is.read(bytes);
                         if (read == -1) break;
-                        bytesRead += read;  
-                    } while (true);
-                    return bytesRead;
-                }  
+    }
+        assertThat(geoData.get("location"), equalTo(location));
+        @SuppressWarnings("unchecked")  
+        Map<String, Object> location = new HashMap<>();
+        Map<String, Object> document = new HashMap<>();
+        processor.execute(ingestDocument);  
+        GeoIpProcessor processor = new GeoIpProcessor(
+        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("8.8.8.8"));
+    private DatabaseReaderLazyLoader loader(final String path) {
+            new GeoIpCache(1000),  
+    }
+            loader("/GeoLite2-City.mmdb"),  
+        assertThat(geoData.size(), equalTo(9));
+            "target_field",
+            false
+            loader("/GeoLite2-Country.mmdb"),  
+            "source_field",
+ * the Apache License, Version 2.0 (the "License"); you may
+            "target_field",
+        String ip = "82.171.64.0";  
+ * license agreements. See the NOTICE file distributed with
+            "source_field",
+    }
+        document.put("source_field", "80.231.5.0");
+    }
+            loader("/GeoLite2-Country.mmdb"),
             }
-
-            @Override  
-            InputStream databaseInputStream() throws IOException {
-                return databaseInputStreamSupplier.get();
-            }  
-
-        };
+                    } while (true);
+            randomAlphaOfLength(10),
+        processor.execute(ingestDocument);
+            null,
+            false,  
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+            long databaseFileSize() throws IOException {
+        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo(address));
+ * software distributed under the License is distributed on an
+    }
+ * compatible open source license.
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+            null,
+    public void testListFirstOnly() throws Exception {
+            false
+        assertThat(geoData.get("ip"), equalTo("80.231.5.0"));  
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+            "target_field",
+ * under the License.  
+        );
+    public void testCountryWithMissingLocation() throws Exception {
+        GeoIpProcessor processor = new GeoIpProcessor(
+            "source_field",
+import java.util.Arrays;  
+            randomAlphaOfLength(10),  
+import java.util.List;
+    public void testNonExistentWithIgnoreMissing() throws Exception {
+            @Override
+    }
+        processor.execute(ingestDocument);  
+        assertThat(geoData.get("timezone"), equalTo("America/New_York"));
+            "source_field",
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+ * not use this file except in compliance with the License.
+            false
+import static org.hamcrest.Matchers.is;
+            false,  
+                    long bytesRead = 0;
+    public void testListPartiallyValid() throws Exception {
+            false,  
+        @SuppressWarnings("unchecked")
+ */
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+        processor.execute(ingestDocument);  
+            null,
+        Exception exception = expectThrows(Exception.class, () -> processor.execute(ingestDocument));  
+        @SuppressWarnings("unchecked")
+            new GeoIpCache(1000),
+            "source_field",  
+    public void testListFirstOnlyNoMatches() throws Exception {
+            "target_field",
     }  
-
-}
+        );  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertThat(ingestDocument.getSourceAndMetadata().containsKey("target_field"), is(false));  
+        GeoIpProcessor processor = new GeoIpProcessor(
+            true,  
+            "target_field",
+        Map<String, Object> document = new HashMap<>();  
+        location.put("lon", -97.822d);  
+ * specific language governing permissions and limitations
+    public void testNullWithoutIgnoreMissing() throws Exception {
+        Exception e = expectThrows(IllegalArgumentException.class, () -> processor.execute(ingestDocument));
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+            "target_field",  
+            loader("/GeoLite2-ASN.mmdb"),
+        Map<String, Object> geoData = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
+            randomAlphaOfLength(10),
+    }
+            EnumSet.allOf(GeoIpProcessor.Property.class),
+            new GeoIpCache(1000),
+            loader("/GeoLite2-City.mmdb"),
+            loader("/GeoLite2-City.mmdb"),  
+            "source_field",
+        Map<String, Object> document = new HashMap<>();
+        Map<String, Object> document = new HashMap<>();
+        @SuppressWarnings("unchecked")
+        GeoIpProcessor processor = new GeoIpProcessor(
+ * this file be licensed under the Apache-2.0 license or a
+public class GeoIpProcessorTests extends OpenSearchTestCase {
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
+            loader("/GeoLite2-City.mmdb"),  
+        Map<String, Object> location = new HashMap<>();
+        assertThat(ingestDocument.getSourceAndMetadata().get("source_field"), equalTo("82.170.213.79"));  
+        GeoIpProcessor processor = new GeoIpProcessor(
+        Map<String, Object> document = new HashMap<>();
+        Map<String, Object> document = new HashMap<>();
+    }
+        assertThat(geoData.size(), equalTo(4));  
+            false
+    }

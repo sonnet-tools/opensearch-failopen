@@ -1,373 +1,309 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.RestoreInProgress;
-import org.opensearch.cluster.metadata.DataStream;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.indices.replication.common.ReplicationType;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-
-import static org.opensearch.cluster.DataStreamTestHelper.createBackingIndex;
-import static org.opensearch.cluster.DataStreamTestHelper.createTimestampField;  
-import static org.opensearch.cluster.DataStreamTestHelper.generateMapping;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REPLICATION_TYPE;  
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class RestoreServiceTests extends OpenSearchTestCase {
-
-    public void testUpdateDataStream() {
-        String dataStreamName = "data-stream-1";
-        String backingIndexName = DataStream.getDefaultBackingIndexName(dataStreamName, 1);  
-        List<Index> indices = Collections.singletonList(new Index(backingIndexName, "uuid"));
-
-        DataStream dataStream = new DataStream(dataStreamName, createTimestampField("@timestamp"), indices);  
-
-        Metadata.Builder metadata = mock(Metadata.Builder.class);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);  
-        when(metadata.get(eq(backingIndexName))).thenReturn(indexMetadata);
-        Index updatedIndex = new Index(backingIndexName, "uuid2");
-        when(indexMetadata.getIndex()).thenReturn(updatedIndex);  
-
-        RestoreSnapshotRequest request = new RestoreSnapshotRequest();
-
-        DataStream updateDataStream = RestoreService.updateDataStream(dataStream, metadata, request);
-
-        assertEquals(dataStreamName, updateDataStream.getName());  
-        assertEquals(Collections.singletonList(updatedIndex), updateDataStream.getIndices());
-    }
-
-    public void testUpdateDataStreamRename() {
-        String dataStreamName = "data-stream-1";
-        String renamedDataStreamName = "data-stream-2";  
-        String backingIndexName = DataStream.getDefaultBackingIndexName(dataStreamName, 1);
-        String renamedBackingIndexName = DataStream.getDefaultBackingIndexName(renamedDataStreamName, 1);
-        List<Index> indices = Collections.singletonList(new Index(backingIndexName, "uuid"));  
-
-        DataStream dataStream = new DataStream(dataStreamName, createTimestampField("@timestamp"), indices);
-
-        Metadata.Builder metadata = mock(Metadata.Builder.class);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(metadata.get(eq(renamedBackingIndexName))).thenReturn(indexMetadata);  
-        Index renamedIndex = new Index(renamedBackingIndexName, "uuid2");
-        when(indexMetadata.getIndex()).thenReturn(renamedIndex);
-
-        RestoreSnapshotRequest request = new RestoreSnapshotRequest().renamePattern("data-stream-1").renameReplacement("data-stream-2");
-
-        DataStream renamedDataStream = RestoreService.updateDataStream(dataStream, metadata, request);  
-
-        assertEquals(renamedDataStreamName, renamedDataStream.getName());
-        assertEquals(Collections.singletonList(renamedIndex), renamedDataStream.getIndices());  
-    }
-
-    public void testPrefixNotChanged() {  
-        String dataStreamName = "ds-000001";
-        String renamedDataStreamName = "ds2-000001";
-        String backingIndexName = DataStream.getDefaultBackingIndexName(dataStreamName, 1);  
-        String renamedBackingIndexName = DataStream.getDefaultBackingIndexName(renamedDataStreamName, 1);
-        List<Index> indices = Collections.singletonList(new Index(backingIndexName, "uuid"));
-
-        DataStream dataStream = new DataStream(dataStreamName, createTimestampField("@timestamp"), indices);
-
-        Metadata.Builder metadata = mock(Metadata.Builder.class);  
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(metadata.get(eq(renamedBackingIndexName))).thenReturn(indexMetadata);
-        Index renamedIndex = new Index(renamedBackingIndexName, "uuid2");  
-        when(indexMetadata.getIndex()).thenReturn(renamedIndex);
-
-        RestoreSnapshotRequest request = new RestoreSnapshotRequest().renamePattern("ds-").renameReplacement("ds2-");  
-
-        DataStream renamedDataStream = RestoreService.updateDataStream(dataStream, metadata, request);
-
-        assertEquals(renamedDataStreamName, renamedDataStream.getName());
-        assertEquals(Collections.singletonList(renamedIndex), renamedDataStream.getIndices());
-
-        request = new RestoreSnapshotRequest().renamePattern("ds-000001").renameReplacement("ds2-000001");
-
-        renamedDataStream = RestoreService.updateDataStream(dataStream, metadata, request);  
-
-        assertEquals(renamedDataStreamName, renamedDataStream.getName());
-        assertEquals(Collections.singletonList(renamedIndex), renamedDataStream.getIndices());  
-    }
-
+    private static ClusterState stateWithRestores(RestoreInProgress.Entry... entries) {
     private static IndexMetadata backingIndex(String dataStreamName, int generation) {  
-        try {
-            return createBackingIndex(dataStreamName, generation).putMapping(generateMapping("@timestamp")).build();
-        } catch (IOException e) {  
-            throw new AssertionError(e);
-        }
-    }  
-
-    public void testAttachRestoredBackingIndexAdvancesGeneration() {
-        String ds = "logs-attach";  
-        IndexMetadata b1 = backingIndex(ds, 1);
-        IndexMetadata b2 = backingIndex(ds, 2);
-        // Stream is at generation 1; the restored gen-2 index is present in the builder but not yet a member.  
-        Metadata.Builder metadata = Metadata.builder().put(b1, false).put(b2, false);
-        Map<String, DataStream> updatedDataStreams = new HashMap<>();
-        updatedDataStreams.put(ds, new DataStream(ds, createTimestampField("@timestamp"), List.of(b1.getIndex()), 1));  
-
-        RestoreService.attachRestoredBackingIndices(Set.of(b2.getIndex().getName()), metadata, updatedDataStreams);
-
-        DataStream result = updatedDataStreams.get(ds);
-        assertEquals(List.of(b1.getIndex(), b2.getIndex()), result.getIndices());
-        assertEquals(2L, result.getGeneration());  
-    }
-
-    public void testAttachSkipsNonConventionAndNonMemberCases() {  
-        String ds = "logs-attach";
-        IndexMetadata b1 = backingIndex(ds, 1);
-        Metadata.Builder metadata = Metadata.builder().put(b1, false);  
-        DataStream original = new DataStream(ds, createTimestampField("@timestamp"), List.of(b1.getIndex()), 1);
-        Map<String, DataStream> updatedDataStreams = new HashMap<>();
-        updatedDataStreams.put(ds, original);  
-
-        // A non-convention name (no matching stream) and an already-member index are both skipped, leaving the
-        // stream unchanged.  
-        RestoreService.attachRestoredBackingIndices(Set.of("some-regular-index", b1.getIndex().getName()), metadata, updatedDataStreams);
-
-        assertEquals(original, updatedDataStreams.get(ds));  
-    }
-
-    public void testAttachSkipsWhenStreamDoesNotExist() {  
-        // Restored index parses to a stream name, but no such stream exists on the target: skipped, no exception.
-        String ds = "logs-missing";
-        IndexMetadata b1 = backingIndex(ds, 1);  
-        Metadata.Builder metadata = Metadata.builder().put(b1, false);
-        Map<String, DataStream> updatedDataStreams = new HashMap<>();
-
-        RestoreService.attachRestoredBackingIndices(Set.of(b1.getIndex().getName()), metadata, updatedDataStreams);
-
-        assertTrue(updatedDataStreams.isEmpty());  
-    }
-
-    public void testAttachRejectsIndexWithoutTimestampMapping() {  
-        String ds = "logs-attach";
-        IndexMetadata b1 = backingIndex(ds, 1);
-        // A convention-named gen-2 index whose @timestamp is not a date type.  
-        IndexMetadata bad;
-        try {
-            bad = createBackingIndex(ds, 2).putMapping(generateMapping("@timestamp", "text")).build();  
-        } catch (IOException e) {
-            throw new AssertionError(e);
-        }  
-        Metadata.Builder metadata = Metadata.builder().put(b1, false).put(bad, false);
-        Map<String, DataStream> updatedDataStreams = new HashMap<>();
-        updatedDataStreams.put(ds, new DataStream(ds, createTimestampField("@timestamp"), List.of(b1.getIndex()), 1));  
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> RestoreService.attachRestoredBackingIndices(Set.of(bad.getIndex().getName()), metadata, updatedDataStreams)
-        );
-        assertTrue(e.getMessage().contains("does not have a [@timestamp] field mapped as a date type"));  
-    }
-
-    public void testValidateReplicationTypeRestoreSettings_WhenSnapshotIsDocument_RestoreToDocument() {  
-        SnapshotId snapshotId = new SnapshotId("snapshotId", "123");
-        Snapshot snapshot = new Snapshot("testRepo", snapshotId);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);  
-        Settings settings = Settings.builder()
-            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
-            .put(SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT.toString())  
-            .build();
-        when(indexMetadata.getSettings()).thenReturn(settings);
-
-        assertThrows(
-            SnapshotRestoreException.class,
-            () -> RestoreService.validateReplicationTypeRestoreSettings(snapshot, ReplicationType.DOCUMENT.toString(), indexMetadata)  
-        );
-
-    }  
-
-    public void testValidateReplicationTypeRestoreSettings_WhenSnapshotIsSegment_RestoreToDocument() {
-        SnapshotId snapshotId = new SnapshotId("snapshotId", "123");  
-        Snapshot snapshot = new Snapshot("testRepo", snapshotId);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        Settings settings = Settings.builder()  
-            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
-            .put(SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT.toString())
-            .build();  
-        when(indexMetadata.getSettings()).thenReturn(settings);
-
-        assertThrows(  
-            SnapshotRestoreException.class,
-            () -> RestoreService.validateReplicationTypeRestoreSettings(snapshot, ReplicationType.SEGMENT.toString(), indexMetadata)
-        );  
-    }
-
-    // Tests for internal vs user ignore settings filter separation (PR #20494)  
-
-    public void testInternalIgnoreOverridesProtection() {
-        var filter = RestoreService.createSettingsFilterPredicate(  
-            new String[] {},
-            new String[] { "index.remote_store.*" },
-            RestoreService.getUserUnremovableSettings()  
-        );
-        // Internal pattern can filter protected settings
-        assertFalse(filter.test("index.remote_store.enabled"));  
-    }
-
-    public void testUserIgnoreRespectsProtection() {  
-        var filter = RestoreService.createSettingsFilterPredicate(
-            new String[] { "index.number_of_replicas" },
-            new String[] {},  
-            RestoreService.getUserUnremovableSettings()
-        );
-        // User cannot filter protected settings  
-        assertTrue(filter.test("index.number_of_replicas"));
-    }
-
-    public void testUserIgnoreWorksForNonProtected() {
-        var filter = RestoreService.createSettingsFilterPredicate(
-            new String[] { "index.custom.*" },  
-            new String[] {},
-            RestoreService.getUserUnremovableSettings()
-        );  
-        // User can filter non-protected settings
-        assertFalse(filter.test("index.custom.setting"));
-    }  
-
-    // Tests for internal ignore settings gating on remote data attributes
-
-    public void testIgnoreSettingsInternalOnClusterWithoutRemoteAttributes() {
-        // A cluster with no remote store attributes must strip remote store index settings on restore
-        String[] ignoreSettings = RestoreService.getIgnoreSettingsInternal(Settings.EMPTY);  
-        assertArrayEquals(new String[] { "index.remote_store.*" }, ignoreSettings);
-    }
-
-    public void testIgnoreSettingsInternalOnRemotePublicationOnlyCluster() {
-        // A cluster with only remote cluster state/routing table publication enabled does not
-        // store index data remotely, so remote store index settings must still be stripped  
-        Settings nodeSettings = Settings.builder()
-            .put("node.attr.remote_publication.state.repository", "cluster-state-repo")
-            .put("node.attr.remote_publication.routing_table.repository", "routing-table-repo")  
-            .build();
-        String[] ignoreSettings = RestoreService.getIgnoreSettingsInternal(nodeSettings);
-        assertArrayEquals(new String[] { "index.remote_store.*" }, ignoreSettings);  
-    }
-
-    public void testIgnoreSettingsInternalOnRemoteDataCluster() {  
-        // A cluster that stores index data remotely must preserve remote store index settings
-        Settings nodeSettings = Settings.builder()
-            .put("node.attr.remote_store.segment.repository", "segment-repo")  
-            .put("node.attr.remote_store.translog.repository", "translog-repo")
-            .build();
-        String[] ignoreSettings = RestoreService.getIgnoreSettingsInternal(nodeSettings);  
         assertEquals(0, ignoreSettings.length);
     }
-
-    public void testCleanupReportsEachRemovedRestoreOnce() {
-        final List<RestoreInProgress.Entry> reported = new ArrayList<>();
-        final RestoreService.CleanRestoreStateTaskExecutor executor = new RestoreService.CleanRestoreStateTaskExecutor(reported::add);  
-        final RestoreInProgress.Entry finished = restoreEntry("finished", RestoreInProgress.State.SUCCESS);
-        final RestoreInProgress.Entry running = restoreEntry("running", RestoreInProgress.State.STARTED);
-        final ClusterState before = stateWithRestores(finished, running);  
-
-        // Two tasks for one restore, as when several cluster state updates see it finished before the cleanup runs.
-        final ClusterState after = executor.execute(  
-            before,
-            List.of(
-                new RestoreService.CleanRestoreStateTaskExecutor.Task("finished"),  
-                new RestoreService.CleanRestoreStateTaskExecutor.Task("finished")
-            )
-        ).resultingState;  
-        executor.clusterStatePublished(new ClusterChangedEvent("test", after, before));
-
-        assertNull(RestoreService.restoreInProgress(after, "finished"));  
-        assertNotNull(RestoreService.restoreInProgress(after, "running"));
-        assertEquals(List.of(finished), reported);
-    }  
-
-    public void testCleanupReportsNothingWhenNoRestoreWasRemoved() {
+        SnapshotId snapshotId = new SnapshotId("snapshotId", "123");
+        assertTrue(e.getMessage().contains("does not have a [@timestamp] field mapped as a date type"));  
+        assertEquals(original, updatedDataStreams.get(ds));  
+            .put("node.attr.remote_publication.routing_table.repository", "routing-table-repo")  
+        assertEquals(renamedDataStreamName, renamedDataStream.getName());
+            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
+            throw new AssertionError(e);
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.metadata.DataStream;  
         final List<RestoreInProgress.Entry> reported = new ArrayList<>();  
-        final RestoreService.CleanRestoreStateTaskExecutor executor = new RestoreService.CleanRestoreStateTaskExecutor(reported::add);
-        final ClusterState before = stateWithRestores(
-            restoreEntry("finished", RestoreInProgress.State.SUCCESS),  
-            restoreEntry("running", RestoreInProgress.State.STARTED)
-        );
-        final ClusterState after = ClusterState.builder(before).incrementVersion().build();  
-
-        executor.clusterStatePublished(new ClusterChangedEvent("test", after, before));
-
-        assertTrue(reported.isEmpty());
-    }
-
-    public void testCleanupDoesNotReportAnUnfinishedRestore() {
-        final List<RestoreInProgress.Entry> reported = new ArrayList<>();
-        final RestoreService.CleanRestoreStateTaskExecutor executor = new RestoreService.CleanRestoreStateTaskExecutor(reported::add);  
-        final ClusterState before = stateWithRestores(restoreEntry("running", RestoreInProgress.State.STARTED));
-        final ClusterState after = stateWithRestores();
-
-        executor.clusterStatePublished(new ClusterChangedEvent("test", after, before));
-
-        assertTrue(reported.isEmpty());  
-    }
-
-    private static RestoreInProgress.Entry restoreEntry(String uuid, RestoreInProgress.State state) {  
-        final ShardId shardId = new ShardId(new Index("index-" + uuid, uuid + "-index-uuid"), 0);
-        return new RestoreInProgress.Entry(
-            uuid,  
-            new Snapshot("repo", new SnapshotId("snapshot", "snapshot-uuid")),
-            state,
-            List.of(shardId.getIndexName()),  
-            Map.of(shardId, new RestoreInProgress.ShardRestoreStatus("node", state.completed() ? state : RestoreInProgress.State.INIT))
-        );
-    }  
-
-    private static ClusterState stateWithRestores(RestoreInProgress.Entry... entries) {
-        final RestoreInProgress.Builder restores = new RestoreInProgress.Builder();  
-        for (RestoreInProgress.Entry entry : entries) {
+        RestoreSnapshotRequest request = new RestoreSnapshotRequest();
+        List<Index> indices = Collections.singletonList(new Index(backingIndexName, "uuid"));
+            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
+        // Internal pattern can filter protected settings
+        DataStream dataStream = new DataStream(dataStreamName, createTimestampField("@timestamp"), indices);  
+        Metadata.Builder metadata = Metadata.builder().put(b1, false);
             restores.add(entry);
-        }  
-        return ClusterState.builder(ClusterName.DEFAULT).putCustom(RestoreInProgress.TYPE, restores.build()).build();
+        String renamedBackingIndexName = DataStream.getDefaultBackingIndexName(renamedDataStreamName, 1);
+            new String[] {},
+ */
+import static org.opensearch.cluster.DataStreamTestHelper.generateMapping;
+        final RestoreInProgress.Builder restores = new RestoreInProgress.Builder();  
+        Snapshot snapshot = new Snapshot("testRepo", snapshotId);
+        assertEquals(Collections.singletonList(renamedIndex), renamedDataStream.getIndices());  
+            return createBackingIndex(dataStreamName, generation).putMapping(generateMapping("@timestamp")).build();
+import org.opensearch.core.index.Index;
+        updatedDataStreams.put(ds, original);  
+    // Tests for internal vs user ignore settings filter separation (PR #20494)  
     }
+        Index updatedIndex = new Index(backingIndexName, "uuid2");
+        assertArrayEquals(new String[] { "index.remote_store.*" }, ignoreSettings);
+        }  
+        assertEquals(List.of(b1.getIndex(), b2.getIndex()), result.getIndices());
+        when(indexMetadata.getSettings()).thenReturn(settings);
+    public void testUserIgnoreWorksForNonProtected() {
+        String ds = "logs-missing";
+    public void testPrefixNotChanged() {  
+        when(indexMetadata.getSettings()).thenReturn(settings);
+    }
+        Settings nodeSettings = Settings.builder()
+            .put(SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT.toString())
+/*
+            RestoreService.getUserUnremovableSettings()  
+        String ds = "logs-attach";
+        String ds = "logs-attach";  
+        assertArrayEquals(new String[] { "index.remote_store.*" }, ignoreSettings);  
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
+    public void testUpdateDataStreamRename() {
+public class RestoreServiceTests extends OpenSearchTestCase {
+        assertEquals(Collections.singletonList(renamedIndex), renamedDataStream.getIndices());
+ * this file be licensed under the Apache-2.0 license or a
+        Metadata.Builder metadata = Metadata.builder().put(b1, false);  
+import org.opensearch.cluster.ClusterName;  
+    }
+import org.opensearch.cluster.metadata.IndexMetadata;
+        );  
+            new String[] { "index.custom.*" },  
+import static org.mockito.Mockito.mock;
+        }  
+            new String[] { "index.remote_store.*" },
+            .put("node.attr.remote_store.translog.repository", "translog-repo")
+        assertFalse(filter.test("index.remote_store.enabled"));  
+        final ClusterState after = stateWithRestores();
+        // Two tasks for one restore, as when several cluster state updates see it finished before the cleanup runs.
+            RestoreService.getUserUnremovableSettings()
+        when(indexMetadata.getIndex()).thenReturn(renamedIndex);
+        assertFalse(filter.test("index.custom.setting"));
+        for (RestoreInProgress.Entry entry : entries) {
+import static org.opensearch.cluster.DataStreamTestHelper.createBackingIndex;
+        return ClusterState.builder(ClusterName.DEFAULT).putCustom(RestoreInProgress.TYPE, restores.build()).build();
+    public void testIgnoreSettingsInternalOnRemoteDataCluster() {  
+            List.of(
+            .build();
+        final RestoreInProgress.Entry finished = restoreEntry("finished", RestoreInProgress.State.SUCCESS);
+        final ShardId shardId = new ShardId(new Index("index-" + uuid, uuid + "-index-uuid"), 0);
+        assertTrue(updatedDataStreams.isEmpty());  
+    public void testInternalIgnoreOverridesProtection() {
+    }
+        final ClusterState after = executor.execute(  
+ * specific language governing permissions and limitations
+    }
+        when(metadata.get(eq(renamedBackingIndexName))).thenReturn(indexMetadata);
+import org.opensearch.cluster.ClusterChangedEvent;
+        Metadata.Builder metadata = Metadata.builder().put(b1, false).put(bad, false);
+    public void testValidateReplicationTypeRestoreSettings_WhenSnapshotIsSegment_RestoreToDocument() {
+            uuid,  
+        String dataStreamName = "ds-000001";
+ *
+            SnapshotRestoreException.class,
+import org.opensearch.test.OpenSearchTestCase;
+import java.util.HashMap;  
+        );
+        Metadata.Builder metadata = mock(Metadata.Builder.class);
+        // User cannot filter protected settings  
+        SnapshotId snapshotId = new SnapshotId("snapshotId", "123");  
+import java.util.ArrayList;
+        final ClusterState before = stateWithRestores(restoreEntry("running", RestoreInProgress.State.STARTED));
+    public void testAttachSkipsWhenStreamDoesNotExist() {  
+        when(metadata.get(eq(backingIndexName))).thenReturn(indexMetadata);
+        String[] ignoreSettings = RestoreService.getIgnoreSettingsInternal(Settings.EMPTY);  
+    public void testAttachSkipsNonConventionAndNonMemberCases() {  
+    public void testCleanupReportsNothingWhenNoRestoreWasRemoved() {
+        } catch (IOException e) {  
+            IllegalArgumentException.class,  
+        DataStream dataStream = new DataStream(dataStreamName, createTimestampField("@timestamp"), indices);
+ * SPDX-License-Identifier: Apache-2.0
+        } catch (IOException e) {
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+        Index renamedIndex = new Index(renamedBackingIndexName, "uuid2");  
+import static org.mockito.Mockito.eq;
+            .put(SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT.toString())  
+import org.opensearch.cluster.RestoreInProgress;
+            state,
+        final RestoreService.CleanRestoreStateTaskExecutor executor = new RestoreService.CleanRestoreStateTaskExecutor(reported::add);  
+    }  
+import java.util.Collections;
+ *
+        assertEquals(Collections.singletonList(updatedIndex), updateDataStream.getIndices());
+    private static RestoreInProgress.Entry restoreEntry(String uuid, RestoreInProgress.State state) {  
+        final ClusterState after = ClusterState.builder(before).incrementVersion().build();  
+import org.opensearch.cluster.ClusterState;
+        String[] ignoreSettings = RestoreService.getIgnoreSettingsInternal(nodeSettings);
+            .put("node.attr.remote_store.segment.repository", "segment-repo")  
+import org.opensearch.common.settings.Settings;  
+        updatedDataStreams.put(ds, new DataStream(ds, createTimestampField("@timestamp"), List.of(b1.getIndex()), 1));  
+        // A cluster with only remote cluster state/routing table publication enabled does not
+ * Unless required by applicable law or agreed to in writing,
+        IndexMetadata b1 = backingIndex(ds, 1);
+        assertEquals(renamedDataStreamName, renamedDataStream.getName());
+        String renamedDataStreamName = "data-stream-2";  
+        String dataStreamName = "data-stream-1";
+        assertNotNull(RestoreService.restoreInProgress(after, "running"));
+        assertTrue(reported.isEmpty());  
+import static org.opensearch.cluster.DataStreamTestHelper.createTimestampField;  
+ * Modifications Copyright OpenSearch Contributors. See
+        ).resultingState;  
+    }
+    public void testAttachRejectsIndexWithoutTimestampMapping() {  
+    }
+    // Tests for internal ignore settings gating on remote data attributes
+        Settings settings = Settings.builder()
+        assertEquals(2L, result.getGeneration());  
+    }  
+            throw new AssertionError(e);
+        String backingIndexName = DataStream.getDefaultBackingIndexName(dataStreamName, 1);
+    }
+        String backingIndexName = DataStream.getDefaultBackingIndexName(dataStreamName, 1);  
+        var filter = RestoreService.createSettingsFilterPredicate(
+ * Licensed to Elasticsearch under one or more contributor  
+        );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import static org.mockito.Mockito.when;  
+            )
+        Map<String, DataStream> updatedDataStreams = new HashMap<>();
+        var filter = RestoreService.createSettingsFilterPredicate(  
+        String dataStreamName = "data-stream-1";
+        );  
+        String renamedBackingIndexName = DataStream.getDefaultBackingIndexName(renamedDataStreamName, 1);
+        Settings nodeSettings = Settings.builder()
+            .build();
+    }  
+    }
+        Metadata.Builder metadata = mock(Metadata.Builder.class);  
+        RestoreSnapshotRequest request = new RestoreSnapshotRequest().renamePattern("data-stream-1").renameReplacement("data-stream-2");
+import org.opensearch.indices.replication.common.ReplicationType;  
+                new RestoreService.CleanRestoreStateTaskExecutor.Task("finished")
+    }
+        assertThrows(  
+import org.opensearch.core.index.shard.ShardId;
+        RestoreService.attachRestoredBackingIndices(Set.of(b2.getIndex().getName()), metadata, updatedDataStreams);
+        assertEquals(List.of(finished), reported);
+        executor.clusterStatePublished(new ClusterChangedEvent("test", after, before));
+        );
+            .build();
+        final RestoreService.CleanRestoreStateTaskExecutor executor = new RestoreService.CleanRestoreStateTaskExecutor(reported::add);
+        IndexMetadata b1 = backingIndex(ds, 1);
+        DataStream renamedDataStream = RestoreService.updateDataStream(dataStream, metadata, request);
+        // A cluster that stores index data remotely must preserve remote store index settings
+            () -> RestoreService.attachRestoredBackingIndices(Set.of(bad.getIndex().getName()), metadata, updatedDataStreams)
+    public void testCleanupReportsEachRemovedRestoreOnce() {
+        assertNull(RestoreService.restoreInProgress(after, "finished"));  
+        assertEquals(renamedDataStreamName, renamedDataStream.getName());
+            bad = createBackingIndex(ds, 2).putMapping(generateMapping("@timestamp", "text")).build();  
+        assertThrows(
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);  
+            new String[] {},
+            SnapshotRestoreException.class,
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REPLICATION_TYPE;  
+        DataStream updateDataStream = RestoreService.updateDataStream(dataStream, metadata, request);
+        String[] ignoreSettings = RestoreService.getIgnoreSettingsInternal(nodeSettings);  
+        Settings settings = Settings.builder()  
+        // User can filter non-protected settings
 }  
+    public void testValidateReplicationTypeRestoreSettings_WhenSnapshotIsDocument_RestoreToDocument() {  
+        try {
+            restoreEntry("running", RestoreInProgress.State.STARTED)
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;
+ */  
+        final List<RestoreInProgress.Entry> reported = new ArrayList<>();
+ * The OpenSearch Contributors require contributions made to  
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+        Metadata.Builder metadata = mock(Metadata.Builder.class);
+        }
+        return new RestoreInProgress.Entry(
+    }  
+        IndexMetadata b2 = backingIndex(ds, 2);
+ * not use this file except in compliance with the License.
+        Metadata.Builder metadata = Metadata.builder().put(b1, false).put(b2, false);
+            Map.of(shardId, new RestoreInProgress.ShardRestoreStatus("node", state.completed() ? state : RestoreInProgress.State.INIT))
+            List.of(shardId.getIndexName()),  
+import java.util.Map;
+        // Stream is at generation 1; the restored gen-2 index is present in the builder but not yet a member.  
+    }
+        final RestoreInProgress.Entry running = restoreEntry("running", RestoreInProgress.State.STARTED);
+            .build();  
+        String backingIndexName = DataStream.getDefaultBackingIndexName(dataStreamName, 1);  
+            () -> RestoreService.validateReplicationTypeRestoreSettings(snapshot, ReplicationType.DOCUMENT.toString(), indexMetadata)  
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);  
+package org.opensearch.snapshots;
+        assertTrue(filter.test("index.number_of_replicas"));
+        final RestoreService.CleanRestoreStateTaskExecutor executor = new RestoreService.CleanRestoreStateTaskExecutor(reported::add);  
+        IndexMetadata b1 = backingIndex(ds, 1);
+        var filter = RestoreService.createSettingsFilterPredicate(
+        );
+    }
+            new String[] { "index.number_of_replicas" },
+        // Restored index parses to a stream name, but no such stream exists on the target: skipped, no exception.
+        // stream unchanged.  
+        String renamedDataStreamName = "ds2-000001";
+        executor.clusterStatePublished(new ClusterChangedEvent("test", after, before));
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+ * ownership. Elasticsearch licenses this file to you under  
+        when(indexMetadata.getIndex()).thenReturn(renamedIndex);
+    }
+        IllegalArgumentException e = expectThrows(
+    }
+        DataStream result = updatedDataStreams.get(ds);
+            restoreEntry("finished", RestoreInProgress.State.SUCCESS),  
+        final ClusterState before = stateWithRestores(finished, running);  
+import java.io.IOException;  
+        assertTrue(reported.isEmpty());
+        // A non-convention name (no matching stream) and an already-member index are both skipped, leaving the
+        Index renamedIndex = new Index(renamedBackingIndexName, "uuid2");
+ * compatible open source license.
+        Map<String, DataStream> updatedDataStreams = new HashMap<>();
+        try {
+        executor.clusterStatePublished(new ClusterChangedEvent("test", after, before));
+        // A convention-named gen-2 index whose @timestamp is not a date type.  
+        renamedDataStream = RestoreService.updateDataStream(dataStream, metadata, request);  
+        DataStream dataStream = new DataStream(dataStreamName, createTimestampField("@timestamp"), indices);
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+            .put("node.attr.remote_publication.state.repository", "cluster-state-repo")
+        when(metadata.get(eq(renamedBackingIndexName))).thenReturn(indexMetadata);  
+        // store index data remotely, so remote store index settings must still be stripped  
+        when(indexMetadata.getIndex()).thenReturn(updatedIndex);  
+    public void testUpdateDataStream() {
+            RestoreService.getUserUnremovableSettings()
+        // A cluster with no remote store attributes must strip remote store index settings on restore
+ * software distributed under the License is distributed on an
+        DataStream original = new DataStream(ds, createTimestampField("@timestamp"), List.of(b1.getIndex()), 1);
+ * GitHub history for details.
+        String ds = "logs-attach";
+        );
+ * this work for additional information regarding copyright
+/*  
+    public void testIgnoreSettingsInternalOnClusterWithoutRemoteAttributes() {
+            new Snapshot("repo", new SnapshotId("snapshot", "snapshot-uuid")),
+    }  
+        List<Index> indices = Collections.singletonList(new Index(backingIndexName, "uuid"));
+    public void testAttachRestoredBackingIndexAdvancesGeneration() {
+ * under the License.  
+        List<Index> indices = Collections.singletonList(new Index(backingIndexName, "uuid"));  
+    }
+import java.util.List;
+        IndexMetadata bad;
+                new RestoreService.CleanRestoreStateTaskExecutor.Task("finished"),  
+        Map<String, DataStream> updatedDataStreams = new HashMap<>();
+        assertEquals(dataStreamName, updateDataStream.getName());  
+        request = new RestoreSnapshotRequest().renamePattern("ds-000001").renameReplacement("ds2-000001");
+            () -> RestoreService.validateReplicationTypeRestoreSettings(snapshot, ReplicationType.SEGMENT.toString(), indexMetadata)
+        RestoreService.attachRestoredBackingIndices(Set.of("some-regular-index", b1.getIndex().getName()), metadata, updatedDataStreams);
+        assertEquals(Collections.singletonList(renamedIndex), renamedDataStream.getIndices());  
+    public void testUserIgnoreRespectsProtection() {  
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
+        updatedDataStreams.put(ds, new DataStream(ds, createTimestampField("@timestamp"), List.of(b1.getIndex()), 1));  
+        final ClusterState before = stateWithRestores(
+ *  
+ */  
+        RestoreService.attachRestoredBackingIndices(Set.of(b1.getIndex().getName()), metadata, updatedDataStreams);
+import java.util.Set;  
+        Snapshot snapshot = new Snapshot("testRepo", snapshotId);
+        DataStream renamedDataStream = RestoreService.updateDataStream(dataStream, metadata, request);  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public void testIgnoreSettingsInternalOnRemotePublicationOnlyCluster() {
+        final List<RestoreInProgress.Entry> reported = new ArrayList<>();
+            before,
+            new String[] {},  
+    public void testCleanupDoesNotReportAnUnfinishedRestore() {
+        IndexMetadata b1 = backingIndex(ds, 1);  
+        RestoreSnapshotRequest request = new RestoreSnapshotRequest().renamePattern("ds-").renameReplacement("ds2-");  
+        );
+        Map<String, DataStream> updatedDataStreams = new HashMap<>();

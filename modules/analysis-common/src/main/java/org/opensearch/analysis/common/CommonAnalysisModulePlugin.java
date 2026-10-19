@@ -1,714 +1,691 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.CharArraySet;
-import org.apache.lucene.analysis.StopFilter;  
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.ar.ArabicAnalyzer;
-import org.apache.lucene.analysis.ar.ArabicNormalizationFilter;  
-import org.apache.lucene.analysis.ar.ArabicStemFilter;
-import org.apache.lucene.analysis.bg.BulgarianAnalyzer;
-import org.apache.lucene.analysis.bn.BengaliAnalyzer;  
-import org.apache.lucene.analysis.bn.BengaliNormalizationFilter;
-import org.apache.lucene.analysis.br.BrazilianAnalyzer;
-import org.apache.lucene.analysis.br.BrazilianStemFilter;  
-import org.apache.lucene.analysis.ca.CatalanAnalyzer;
-import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
-import org.apache.lucene.analysis.cjk.CJKAnalyzer;  
-import org.apache.lucene.analysis.cjk.CJKBigramFilter;
-import org.apache.lucene.analysis.cjk.CJKWidthFilter;
-import org.apache.lucene.analysis.ckb.SoraniAnalyzer;  
-import org.apache.lucene.analysis.ckb.SoraniNormalizationFilter;
-import org.apache.lucene.analysis.classic.ClassicFilter;
-import org.apache.lucene.analysis.classic.ClassicTokenizer;  
-import org.apache.lucene.analysis.commongrams.CommonGramsFilter;
-import org.apache.lucene.analysis.core.DecimalDigitFilter;
-import org.apache.lucene.analysis.core.KeywordTokenizer;  
-import org.apache.lucene.analysis.core.LetterTokenizer;
-import org.apache.lucene.analysis.core.UpperCaseFilter;
-import org.apache.lucene.analysis.core.WhitespaceTokenizer;  
-import org.apache.lucene.analysis.cz.CzechAnalyzer;
-import org.apache.lucene.analysis.cz.CzechStemFilter;
-import org.apache.lucene.analysis.da.DanishAnalyzer;  
-import org.apache.lucene.analysis.de.GermanAnalyzer;
-import org.apache.lucene.analysis.de.GermanNormalizationFilter;
-import org.apache.lucene.analysis.de.GermanStemFilter;  
-import org.apache.lucene.analysis.el.GreekAnalyzer;
-import org.apache.lucene.analysis.email.UAX29URLEmailTokenizer;
-import org.apache.lucene.analysis.en.EnglishAnalyzer;  
-import org.apache.lucene.analysis.en.KStemFilter;
-import org.apache.lucene.analysis.en.PorterStemFilter;
-import org.apache.lucene.analysis.es.SpanishAnalyzer;  
-import org.apache.lucene.analysis.et.EstonianAnalyzer;
-import org.apache.lucene.analysis.eu.BasqueAnalyzer;
-import org.apache.lucene.analysis.fa.PersianAnalyzer;  
-import org.apache.lucene.analysis.fa.PersianNormalizationFilter;
-import org.apache.lucene.analysis.fa.PersianStemFilter;
-import org.apache.lucene.analysis.fi.FinnishAnalyzer;  
-import org.apache.lucene.analysis.fr.FrenchAnalyzer;
-import org.apache.lucene.analysis.ga.IrishAnalyzer;
-import org.apache.lucene.analysis.gl.GalicianAnalyzer;  
-import org.apache.lucene.analysis.hi.HindiAnalyzer;
-import org.apache.lucene.analysis.hi.HindiNormalizationFilter;
-import org.apache.lucene.analysis.hu.HungarianAnalyzer;  
-import org.apache.lucene.analysis.hy.ArmenianAnalyzer;
-import org.apache.lucene.analysis.id.IndonesianAnalyzer;
-import org.apache.lucene.analysis.in.IndicNormalizationFilter;  
-import org.apache.lucene.analysis.it.ItalianAnalyzer;
-import org.apache.lucene.analysis.lt.LithuanianAnalyzer;
-import org.apache.lucene.analysis.lv.LatvianAnalyzer;  
-import org.apache.lucene.analysis.miscellaneous.ASCIIFoldingFilter;
-import org.apache.lucene.analysis.miscellaneous.DelimitedTermFrequencyTokenFilter;
-import org.apache.lucene.analysis.miscellaneous.KeywordRepeatFilter;  
-import org.apache.lucene.analysis.miscellaneous.LengthFilter;
-import org.apache.lucene.analysis.miscellaneous.LimitTokenCountFilter;
-import org.apache.lucene.analysis.miscellaneous.ScandinavianFoldingFilter;  
-import org.apache.lucene.analysis.miscellaneous.ScandinavianNormalizationFilter;
-import org.apache.lucene.analysis.miscellaneous.TrimFilter;
-import org.apache.lucene.analysis.miscellaneous.TruncateTokenFilter;  
-import org.apache.lucene.analysis.miscellaneous.WordDelimiterFilter;
-import org.apache.lucene.analysis.miscellaneous.WordDelimiterGraphFilter;
-import org.apache.lucene.analysis.miscellaneous.WordDelimiterIterator;  
-import org.apache.lucene.analysis.ngram.EdgeNGramTokenFilter;
-import org.apache.lucene.analysis.ngram.EdgeNGramTokenizer;
-import org.apache.lucene.analysis.ngram.NGramTokenFilter;  
-import org.apache.lucene.analysis.ngram.NGramTokenizer;
-import org.apache.lucene.analysis.nl.DutchAnalyzer;
-import org.apache.lucene.analysis.no.NorwegianAnalyzer;  
-import org.apache.lucene.analysis.path.PathHierarchyTokenizer;
-import org.apache.lucene.analysis.pattern.PatternTokenizer;
-import org.apache.lucene.analysis.payloads.DelimitedPayloadTokenFilter;  
-import org.apache.lucene.analysis.payloads.TypeAsPayloadTokenFilter;
-import org.apache.lucene.analysis.pt.PortugueseAnalyzer;
-import org.apache.lucene.analysis.reverse.ReverseStringFilter;  
-import org.apache.lucene.analysis.ro.RomanianAnalyzer;
-import org.apache.lucene.analysis.ru.RussianAnalyzer;
-import org.apache.lucene.analysis.shingle.ShingleFilter;  
-import org.apache.lucene.analysis.snowball.SnowballFilter;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.analysis.sv.SwedishAnalyzer;  
-import org.apache.lucene.analysis.th.ThaiAnalyzer;
-import org.apache.lucene.analysis.th.ThaiTokenizer;
-import org.apache.lucene.analysis.tr.ApostropheFilter;  
-import org.apache.lucene.analysis.tr.TurkishAnalyzer;
-import org.apache.lucene.analysis.util.ElisionFilter;
-import org.opensearch.Version;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.SetOnce;  
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.regex.Regex;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.Environment;  
 import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AnalyzerProvider;  
-import org.opensearch.index.analysis.CharFilterFactory;
-import org.opensearch.index.analysis.PreBuiltAnalyzerProviderFactory;
-import org.opensearch.index.analysis.PreConfiguredCharFilter;  
-import org.opensearch.index.analysis.PreConfiguredTokenFilter;
-import org.opensearch.index.analysis.PreConfiguredTokenizer;
-import org.opensearch.index.analysis.TokenFilterFactory;  
-import org.opensearch.index.analysis.TokenizerFactory;
-import org.opensearch.indices.analysis.AnalysisModule;
-import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;  
-import org.opensearch.indices.analysis.PreBuiltCacheFactory.CachingStrategy;
-import org.opensearch.lucene.analysis.miscellaneous.DisableGraphAttribute;
-import org.opensearch.plugins.AnalysisPlugin;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.ScriptPlugin;
-import org.opensearch.repositories.RepositoriesService;  
-import org.opensearch.script.ScriptContext;
-import org.opensearch.script.ScriptService;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.client.Client;
-import org.opensearch.watcher.ResourceWatcherService;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;  
-import java.util.function.Supplier;
-
-import org.tartarus.snowball.ext.DutchStemmer;  
-import org.tartarus.snowball.ext.FrenchStemmer;
-
-import static org.opensearch.plugins.AnalysisPlugin.requiresAnalysisSettings;  
-
-public class CommonAnalysisModulePlugin extends Plugin implements AnalysisPlugin, ScriptPlugin {
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(CommonAnalysisModulePlugin.class);
-
-    private final SetOnce<ScriptService> scriptService = new SetOnce<>();  
-
-    @Override
-    public Collection<Object> createComponents(  
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,  
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,  
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        IndexNameExpressionResolver expressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier
-    ) {  
-        this.scriptService.set(scriptService);
-        return Collections.emptyList();
-    }  
-
-    @Override
-    public List<ScriptContext<?>> getContexts() {  
-        return Collections.singletonList(AnalysisPredicateScript.CONTEXT);
-    }
-
-    @Override
-    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
-        Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> analyzers = new TreeMap<>();  
-        analyzers.put("fingerprint", FingerprintAnalyzerProvider::new);
-        analyzers.put("pattern", PatternAnalyzerProvider::new);
-        analyzers.put("snowball", SnowballAnalyzerProvider::new);  
-
-        // Language analyzers:
-        analyzers.put("arabic", ArabicAnalyzerProvider::new);  
-        analyzers.put("armenian", ArmenianAnalyzerProvider::new);
-        analyzers.put("basque", BasqueAnalyzerProvider::new);
-        analyzers.put("bengali", BengaliAnalyzerProvider::new);  
-        analyzers.put("brazilian", BrazilianAnalyzerProvider::new);
-        analyzers.put("bulgarian", BulgarianAnalyzerProvider::new);
-        analyzers.put("catalan", CatalanAnalyzerProvider::new);  
-        analyzers.put("chinese", ChineseAnalyzerProvider::new);
+            new PreBuiltAnalyzerProviderFactory(
         analyzers.put("cjk", CjkAnalyzerProvider::new);
-        analyzers.put("czech", CzechAnalyzerProvider::new);  
-        analyzers.put("danish", DanishAnalyzerProvider::new);
-        analyzers.put("dutch", DutchAnalyzerProvider::new);
-        analyzers.put("english", EnglishAnalyzerProvider::new);  
-        analyzers.put("estonian", EstonianAnalyzerProvider::new);
-        analyzers.put("finnish", FinnishAnalyzerProvider::new);
-        analyzers.put("french", FrenchAnalyzerProvider::new);  
-        analyzers.put("galician", GalicianAnalyzerProvider::new);
-        analyzers.put("german", GermanAnalyzerProvider::new);
-        analyzers.put("greek", GreekAnalyzerProvider::new);  
-        analyzers.put("hindi", HindiAnalyzerProvider::new);
-        analyzers.put("hungarian", HungarianAnalyzerProvider::new);
-        analyzers.put("indonesian", IndonesianAnalyzerProvider::new);  
-        analyzers.put("irish", IrishAnalyzerProvider::new);
-        analyzers.put("italian", ItalianAnalyzerProvider::new);
-        analyzers.put("latvian", LatvianAnalyzerProvider::new);  
-        analyzers.put("lithuanian", LithuanianAnalyzerProvider::new);
-        analyzers.put("norwegian", NorwegianAnalyzerProvider::new);
-        analyzers.put("persian", PersianAnalyzerProvider::new);  
-        analyzers.put("portuguese", PortugueseAnalyzerProvider::new);
-        analyzers.put("romanian", RomanianAnalyzerProvider::new);
-        analyzers.put("russian", RussianAnalyzerProvider::new);  
-        analyzers.put("sorani", SoraniAnalyzerProvider::new);
-        analyzers.put("spanish", SpanishAnalyzerProvider::new);
-        analyzers.put("swedish", SwedishAnalyzerProvider::new);  
-        analyzers.put("turkish", TurkishAnalyzerProvider::new);
-        analyzers.put("thai", ThaiAnalyzerProvider::new);
-        return analyzers;  
-    }
-
-    @Override  
-    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters(AnalysisModule analysisModule) {
-        Map<String, AnalysisProvider<TokenFilterFactory>> filters = new TreeMap<>();
-        filters.put("apostrophe", ApostropheFilterFactory::new);  
-        filters.put("arabic_normalization", ArabicNormalizationFilterFactory::new);
-        filters.put("arabic_stem", ArabicStemTokenFilterFactory::new);
-        filters.put("asciifolding", ASCIIFoldingTokenFilterFactory::new);  
-        filters.put("bengali_normalization", BengaliNormalizationFilterFactory::new);
-        filters.put("brazilian_stem", BrazilianStemTokenFilterFactory::new);
-        filters.put("cjk_bigram", CJKBigramFilterFactory::new);  
-        filters.put("cjk_width", CJKWidthFilterFactory::new);
-        filters.put("classic", ClassicFilterFactory::new);
-        filters.put("czech_stem", CzechStemTokenFilterFactory::new);  
-        filters.put("common_grams", requiresAnalysisSettings(CommonGramsTokenFilterFactory::new));
-        filters.put("concatenate_graph", ConcatenateGraphTokenFilterFactory::new);
-        filters.put(  
-            "condition",
-            requiresAnalysisSettings((i, e, n, s) -> new ScriptedConditionTokenFilterFactory(i, n, s, scriptService.get()))
-        );  
-        filters.put("decimal_digit", DecimalDigitFilterFactory::new);
-        filters.put("delimited_payload", DelimitedPayloadTokenFilterFactory::new);
-        filters.put("delimited_term_freq", DelimitedTermFrequencyTokenFilterFactory::new);  
-        filters.put("dictionary_decompounder", requiresAnalysisSettings(DictionaryCompoundWordTokenFilterFactory::new));
-        filters.put("dutch_stem", DutchStemTokenFilterFactory::new);
-        filters.put("edge_ngram", EdgeNGramTokenFilterFactory::new);  
-        filters.put("edgeNGram", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {
-            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {
-                throw new IllegalArgumentException(  
-                    "The [edgeNGram] tokenizer name was deprecated pre 1.0. "
-                        + "Please change the tokenizer name to [edge_ngram] for indices created in versions 3.0 or higher instead."
-                );  
-            } else {
-                deprecationLogger.deprecate(
-                    "edgeNGram_deprecation",  
-                    "The [edgeNGram] token filter name is deprecated and will be removed in a future version. "
-                        + "Please change the filter name to [edge_ngram] instead."
-                );  
-            }
-            return new EdgeNGramTokenFilterFactory(indexSettings, environment, name, settings);
-        });  
-        filters.put("elision", requiresAnalysisSettings(ElisionTokenFilterFactory::new));
-        filters.put("fingerprint", FingerprintTokenFilterFactory::new);
-        filters.put("flatten_graph", FlattenGraphTokenFilterFactory::new);  
-        filters.put("french_stem", FrenchStemTokenFilterFactory::new);
-        filters.put("german_normalization", GermanNormalizationFilterFactory::new);
-        filters.put("german_stem", GermanStemTokenFilterFactory::new);  
-        filters.put("hindi_normalization", HindiNormalizationFilterFactory::new);
-        filters.put("hyphenation_decompounder", requiresAnalysisSettings(HyphenationCompoundWordTokenFilterFactory::new));
-        filters.put("indic_normalization", IndicNormalizationFilterFactory::new);  
-        filters.put("keep", requiresAnalysisSettings(KeepWordFilterFactory::new));
-        filters.put("keep_types", requiresAnalysisSettings(KeepTypesFilterFactory::new));
-        filters.put("keyword_marker", requiresAnalysisSettings(KeywordMarkerTokenFilterFactory::new));  
-        filters.put("kstem", KStemTokenFilterFactory::new);
-        filters.put("length", LengthTokenFilterFactory::new);
-        filters.put("limit", LimitTokenCountFilterFactory::new);  
-        filters.put("lowercase", LowerCaseTokenFilterFactory::new);
-        filters.put("min_hash", MinHashTokenFilterFactory::new);
-        filters.put("multiplexer", MultiplexerTokenFilterFactory::new);  
-        filters.put("ngram", NGramTokenFilterFactory::new);
-        filters.put("nGram", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {
-            deprecationLogger.deprecate(  
-                "nGram_deprecation",
-                "The [nGram] token filter name is deprecated and will be removed in a future version. "
-                    + "Please change the filter name to [ngram] instead."  
-            );
-            return new NGramTokenFilterFactory(indexSettings, environment, name, settings);
-        });  
-        filters.put("pattern_capture", requiresAnalysisSettings(PatternCaptureGroupTokenFilterFactory::new));
-        filters.put("pattern_replace", requiresAnalysisSettings(PatternReplaceTokenFilterFactory::new));
-        filters.put("persian_normalization", PersianNormalizationFilterFactory::new);  
-        filters.put("persian_stem", PersianStemTokenFilterFactory::new);
-        filters.put("porter_stem", PorterStemTokenFilterFactory::new);
-        filters.put(  
-            "predicate_token_filter",
-            requiresAnalysisSettings((i, e, n, s) -> new PredicateTokenFilterScriptFactory(i, n, s, scriptService.get()))
-        );  
+        );
+        List<PreConfiguredTokenizer> tokenizers = new ArrayList<>();
+                    name,
         filters.put("remove_duplicates", RemoveDuplicatesTokenFilterFactory::new);
-        filters.put("reverse", ReverseTokenFilterFactory::new);
-        filters.put("russian_stem", RussianStemTokenFilterFactory::new);  
-        filters.put("scandinavian_folding", ScandinavianFoldingFilterFactory::new);
-        filters.put("scandinavian_normalization", ScandinavianNormalizationFilterFactory::new);
-        filters.put("serbian_normalization", SerbianNormalizationFilterFactory::new);  
-        filters.put("snowball", SnowballTokenFilterFactory::new);
-        filters.put("sorani_normalization", SoraniNormalizationFilterFactory::new);
-        filters.put("stemmer_override", requiresAnalysisSettings(StemmerOverrideTokenFilterFactory::new));  
-        filters.put("stemmer", StemmerTokenFilterFactory::new);
-        filters.put("trim", TrimTokenFilterFactory::new);
-        filters.put("truncate", requiresAnalysisSettings(TruncateTokenFilterFactory::new));  
-        filters.put("unique", UniqueTokenFilterFactory::new);
-        filters.put("uppercase", UpperCaseTokenFilterFactory::new);
-        filters.put("word_delimiter_graph", WordDelimiterGraphTokenFilterFactory::new);  
-        filters.put("word_delimiter", WordDelimiterTokenFilterFactory::new);
-        filters.put(
-            "synonym",  
-            requiresAnalysisSettings(
-                (indexSettings, environment, name, settings) -> new SynonymTokenFilterFactory(
-                    indexSettings,  
-                    environment,
-                    name,
-                    settings,  
-                    analysisModule.getAnalysisRegistry()
-                )
-            )  
-        );
-        filters.put(
-            "synonym_graph",  
-            requiresAnalysisSettings(
-                (indexSettings, environment, name, settings) -> new SynonymGraphTokenFilterFactory(
-                    indexSettings,  
-                    environment,
-                    name,
-                    settings,  
-                    analysisModule.getAnalysisRegistry()
-                )
-            )  
-        );
-        return filters;
-    }  
-
-    @Override
-    public Map<String, AnalysisProvider<CharFilterFactory>> getCharFilters() {  
-        Map<String, AnalysisProvider<CharFilterFactory>> filters = new TreeMap<>();
-        filters.put("html_strip", HtmlStripCharFilterFactory::new);
-        filters.put("pattern_replace", requiresAnalysisSettings(PatternReplaceCharFilterFactory::new));  
-        filters.put("mapping", requiresAnalysisSettings(MappingCharFilterFactory::new));
-        return filters;
-    }  
-
-    @Override
-    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
-        Map<String, AnalysisProvider<TokenizerFactory>> tokenizers = new TreeMap<>();
-        tokenizers.put("simple_pattern", SimplePatternTokenizerFactory::new);
-        tokenizers.put("simple_pattern_split", SimplePatternSplitTokenizerFactory::new);  
-        tokenizers.put("thai", ThaiTokenizerFactory::new);
+                "The [nGram] token filter name is deprecated and will be removed in a future version. "
+            )
+        tokenizers.add(PreConfiguredTokenizer.singleton("path_hierarchy", PathHierarchyTokenizer::new));
+        filters.add(PreConfiguredTokenFilter.singleton("uppercase", true, UpperCaseFilter::new));
+            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {  
+        analyzers.put("lithuanian", LithuanianAnalyzerProvider::new);
+ *
+import org.apache.lucene.analysis.miscellaneous.TruncateTokenFilter;  
+        filters.put("apostrophe", ApostropheFilterFactory::new);  
+        Client client,
+        Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> analyzers = new TreeMap<>();  
+import org.opensearch.common.SetOnce;  
+                    input,
+        this.scriptService.set(scriptService);
+ */  
         tokenizers.put("nGram", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {
-            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {  
-                throw new IllegalArgumentException(
-                    "The [nGram] tokenizer name was deprecated pre 1.0. "
-                        + "Please change the tokenizer name to [ngram] for indices created in versions 3.0 or higher instead."  
-                );
-            } else {
-                deprecationLogger.deprecate(  
-                    "nGram_tokenizer_deprecation",
-                    "The [nGram] tokenizer name is deprecated and will be removed in a future version. "
-                        + "Please change the tokenizer name to [ngram] instead."  
-                );
-            }
-            return new NGramTokenizerFactory(indexSettings, environment, name, settings);  
-        });
-        tokenizers.put("ngram", NGramTokenizerFactory::new);
-        tokenizers.put("edgeNGram", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {  
-            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {
-                throw new IllegalArgumentException(
-                    "The [edgeNGram] tokenizer name was deprecated pre 1.0. "  
-                        + "Please change the tokenizer name to [edge_ngram] for indices created in versions 3.0 or higher instead."
-                );
-            } else {  
-                deprecationLogger.deprecate(
-                    "edgeNGram_tokenizer_deprecation",
-                    "The [edgeNGram] tokenizer name is deprecated and will be removed in a future version. "  
-                        + "Please change the tokenizer name to [edge_ngram] instead."
-                );
-            }  
-            return new EdgeNGramTokenizerFactory(indexSettings, environment, name, settings);
-        });
-        tokenizers.put("edge_ngram", EdgeNGramTokenizerFactory::new);  
-        tokenizers.put("char_group", CharGroupTokenizerFactory::new);
-        tokenizers.put("classic", ClassicTokenizerFactory::new);
-        tokenizers.put("letter", LetterTokenizerFactory::new);  
-        // TODO deprecate and remove in API
-        tokenizers.put("lowercase", XLowerCaseTokenizerFactory::new);
-        tokenizers.put("path_hierarchy", PathHierarchyTokenizerFactory::new);  
-        tokenizers.put("PathHierarchy", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {
-            // TODO Remove "PathHierarchy" tokenizer name in 4.0 and throw exception
-            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {  
-                deprecationLogger.deprecate(
-                    "PathHierarchy_tokenizer_deprecation",
-                    "The [PathHierarchy] tokenizer name is deprecated and will be removed in a future version. "  
-                        + "Please change the tokenizer name to [path_hierarchy] instead."
-                );
-            }  
-            return new PathHierarchyTokenizerFactory(indexSettings, environment, name, settings);
-        });
-        tokenizers.put("pattern", PatternTokenizerFactory::new);  
-        tokenizers.put("uax_url_email", UAX29URLEmailTokenizerFactory::new);
-        tokenizers.put("whitespace", WhitespaceTokenizerFactory::new);
-        tokenizers.put("keyword", KeywordTokenizerFactory::new);  
-        return tokenizers;
-    }
-
-    @Override
-    public List<PreBuiltAnalyzerProviderFactory> getPreBuiltAnalyzerProviderFactories() {
-        List<PreBuiltAnalyzerProviderFactory> analyzers = new ArrayList<>();  
-        analyzers.add(
-            new PreBuiltAnalyzerProviderFactory(
-                "pattern",  
-                CachingStrategy.OPENSEARCH,
-                () -> new PatternAnalyzer(Regex.compile("\\W+" /*PatternAnalyzer.NON_WORD_PATTERN*/, null), true, CharArraySet.EMPTY_SET)
-            )  
-        );
-        analyzers.add(
-            new PreBuiltAnalyzerProviderFactory(  
-                "snowball",
-                CachingStrategy.LUCENE,
-                () -> new SnowballAnalyzer("English", EnglishAnalyzer.ENGLISH_STOP_WORDS_SET)  
-            )
-        );
-
-        // Language analyzers:
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("arabic", CachingStrategy.LUCENE, ArabicAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("armenian", CachingStrategy.LUCENE, ArmenianAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("basque", CachingStrategy.LUCENE, BasqueAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("bengali", CachingStrategy.LUCENE, BengaliAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("brazilian", CachingStrategy.LUCENE, BrazilianAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("bulgarian", CachingStrategy.LUCENE, BulgarianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("catalan", CachingStrategy.LUCENE, CatalanAnalyzer::new));
-        // chinese analyzer: only for old indices, best effort  
-        analyzers.add(
-            new PreBuiltAnalyzerProviderFactory(
-                "chinese",  
-                CachingStrategy.ONE,
-                () -> new StandardAnalyzer(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET)
-            )  
-        );
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("cjk", CachingStrategy.LUCENE, CJKAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("czech", CachingStrategy.LUCENE, CzechAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("danish", CachingStrategy.LUCENE, DanishAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("dutch", CachingStrategy.LUCENE, DutchAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("english", CachingStrategy.LUCENE, EnglishAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("estonian", CachingStrategy.LUCENE, EstonianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("finnish", CachingStrategy.LUCENE, FinnishAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("french", CachingStrategy.LUCENE, FrenchAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("galician", CachingStrategy.LUCENE, GalicianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("german", CachingStrategy.LUCENE, GermanAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("greek", CachingStrategy.LUCENE, GreekAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("hindi", CachingStrategy.LUCENE, HindiAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("hungarian", CachingStrategy.LUCENE, HungarianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("indonesian", CachingStrategy.LUCENE, IndonesianAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("irish", CachingStrategy.LUCENE, IrishAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("italian", CachingStrategy.LUCENE, ItalianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("latvian", CachingStrategy.LUCENE, LatvianAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("lithuanian", CachingStrategy.LUCENE, LithuanianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("norwegian", CachingStrategy.LUCENE, NorwegianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("persian", CachingStrategy.LUCENE, PersianAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("portuguese", CachingStrategy.LUCENE, PortugueseAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("romanian", CachingStrategy.LUCENE, RomanianAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("russian", CachingStrategy.LUCENE, RussianAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("sorani", CachingStrategy.LUCENE, SoraniAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("spanish", CachingStrategy.LUCENE, SpanishAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("swedish", CachingStrategy.LUCENE, SwedishAnalyzer::new));  
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("turkish", CachingStrategy.LUCENE, TurkishAnalyzer::new));
-        analyzers.add(new PreBuiltAnalyzerProviderFactory("thai", CachingStrategy.LUCENE, ThaiAnalyzer::new));
-        return analyzers;  
-    }
-
-    @Override  
-    public List<PreConfiguredCharFilter> getPreConfiguredCharFilters() {
-        List<PreConfiguredCharFilter> filters = new ArrayList<>();
-        filters.add(PreConfiguredCharFilter.singleton("html_strip", false, HTMLStripCharFilter::new));  
         return filters;
-    }
-
-    @Override
-    public List<PreConfiguredTokenFilter> getPreConfiguredTokenFilters() {
-        List<PreConfiguredTokenFilter> filters = new ArrayList<>();  
-        filters.add(PreConfiguredTokenFilter.singleton("apostrophe", false, ApostropheFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("arabic_normalization", true, ArabicNormalizationFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("arabic_stem", false, ArabicStemFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("asciifolding", true, ASCIIFoldingFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("bengali_normalization", true, BengaliNormalizationFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("brazilian_stem", false, BrazilianStemFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("cjk_bigram", false, CJKBigramFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("cjk_width", true, CJKWidthFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("classic", false, ClassicFilter::new));  
-        filters.add(
-            PreConfiguredTokenFilter.singleton("common_grams", false, false, input -> new CommonGramsFilter(input, CharArraySet.EMPTY_SET))
+ */  
+            }  
+    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters(AnalysisModule analysisModule) {
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("armenian", CachingStrategy.LUCENE, ArmenianAnalyzer::new));  
+        filters.put("asciifolding", ASCIIFoldingTokenFilterFactory::new);  
+                    + "Please change the filter name to [edge_ngram] instead."
+        });  
+import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
+                () -> new StandardAnalyzer(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET)
+        filters.put("min_hash", MinHashTokenFilterFactory::new);
+        filters.put("dutch_stem", DutchStemTokenFilterFactory::new);
+import org.apache.lucene.analysis.th.ThaiTokenizer;
+import org.apache.lucene.analysis.commongrams.CommonGramsFilter;
+ * compatible open source license.
+            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {
+        filters.add(PreConfiguredTokenFilter.singleton("reverse", false, ReverseStringFilter::new));
+        filters.add(PreConfiguredTokenFilter.singleton("truncate", false, input -> new TruncateTokenFilter(input, 10)));
+            PreConfiguredTokenFilter.singleton(  
+        filters.put("snowball", SnowballTokenFilterFactory::new);
         );  
-        filters.add(PreConfiguredTokenFilter.singleton("czech_stem", false, CzechStemFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("decimal_digit", true, DecimalDigitFilter::new));
-        filters.add(  
-            PreConfiguredTokenFilter.singleton(
-                "delimited_payload",
-                false,  
-                input -> new DelimitedPayloadTokenFilter(
+        filters.put("multiplexer", MultiplexerTokenFilterFactory::new);  
+        filters.put("french_stem", FrenchStemTokenFilterFactory::new);
+                    true,
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("spanish", CachingStrategy.LUCENE, SpanishAnalyzer::new));
+        );
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            }  
+            deprecationLogger.deprecate(  
+        filters.put("length", LengthTokenFilterFactory::new);
+        tokenizers.add(  
+        filters.put(  
+import org.opensearch.index.analysis.PreConfiguredCharFilter;  
+ * not use this file except in compliance with the License.
+                    name,
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("sorani", CachingStrategy.LUCENE, SoraniAnalyzer::new));
+        filters.add(
+            return new PathHierarchyTokenizer();
+import org.apache.lucene.analysis.path.PathHierarchyTokenizer;
+            requiresAnalysisSettings((i, e, n, s) -> new ScriptedConditionTokenFilterFactory(i, n, s, scriptService.get()))
+        filters.add(PreConfiguredTokenFilter.singleton("asciifolding", true, ASCIIFoldingFilter::new));
+        Map<String, AnalysisProvider<TokenFilterFactory>> filters = new TreeMap<>();
+        }));  
+import org.apache.lucene.analysis.tr.ApostropheFilter;  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("estonian", CachingStrategy.LUCENE, EstonianAnalyzer::new));
+                (indexSettings, environment, name, settings) -> new SynonymTokenFilterFactory(
+        // This is already broken with normalization, so backwards compat isn't necessary?  
+        tokenizers.put("simple_pattern_split", SimplePatternSplitTokenizerFactory::new);  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("arabic", CachingStrategy.LUCENE, ArabicAnalyzer::new));
+                );
+        filters.add(PreConfiguredTokenFilter.singleton("type_as_payload", false, TypeAsPayloadTokenFilter::new));
+                    "edgeNGram_deprecation",  
+            if (version.onOrAfter(Version.V_3_0_0)) {
+        Environment environment,
+        );
+        analyzers.put("persian", PersianAnalyzerProvider::new);  
+        filters.add(PreConfiguredTokenFilter.singleton("shingle", false, false, input -> {  
+        analyzers.put("german", GermanAnalyzerProvider::new);
+        filters.add(PreConfiguredTokenFilter.singleton("arabic_normalization", true, ArabicNormalizationFilter::new));
+                    null  
+            requiresAnalysisSettings(
+        tokenizers.put("classic", ClassicTokenizerFactory::new);
+        filters.put("german_normalization", GermanNormalizationFilterFactory::new);
+        IndexNameExpressionResolver expressionResolver,
+import org.apache.lucene.analysis.classic.ClassicFilter;
+        );
+import org.apache.lucene.analysis.id.IndonesianAnalyzer;
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("persian", CachingStrategy.LUCENE, PersianAnalyzer::new));  
+import org.apache.lucene.analysis.br.BrazilianAnalyzer;
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("german", CachingStrategy.LUCENE, GermanAnalyzer::new));
+    }
                     input,
-                    DelimitedPayloadTokenFilterFactory.DEFAULT_DELIMITER,  
-                    DelimitedPayloadTokenFilterFactory.DEFAULT_ENCODER
+import org.apache.lucene.analysis.miscellaneous.ASCIIFoldingFilter;
+        tokenizers.put("path_hierarchy", PathHierarchyTokenizerFactory::new);  
+            )  
+                deprecationLogger.deprecate(
+        analyzers.put("italian", ItalianAnalyzerProvider::new);
+    }  
+        filters.add(PreConfiguredTokenFilter.openSearchVersion("edgeNGram", false, false, (reader, version) -> {
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("norwegian", CachingStrategy.LUCENE, NorwegianAnalyzer::new));
+import org.tartarus.snowball.ext.FrenchStemmer;
+                        + "Please change the tokenizer name to [ngram] for indices created in versions 3.0 or higher instead."
+                    "The [PathHierarchy] tokenizer name is deprecated and will be removed in a future version. "  
+             * because it produces shingles of different size.
+    public List<PreConfiguredCharFilter> getPreConfiguredCharFilters() {
+    private final SetOnce<ScriptService> scriptService = new SetOnce<>();  
+        filters.add(PreConfiguredTokenFilter.singleton("czech_stem", false, CzechStemFilter::new));
+                )
+import org.tartarus.snowball.ext.DutchStemmer;  
+        filters.add(PreConfiguredTokenFilter.openSearchVersion("nGram", false, false, (reader, version) -> {
+import org.opensearch.plugins.AnalysisPlugin;  
+        filters.add(PreConfiguredTokenFilter.singleton("classic", false, ClassicFilter::new));  
+        filters.put("reverse", ReverseTokenFilterFactory::new);
+                    "edgeNGram_tokenizer_deprecation",
+                "nGram_deprecation",
+    }
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("swedish", CachingStrategy.LUCENE, SwedishAnalyzer::new));  
+        analyzers.put("indonesian", IndonesianAnalyzerProvider::new);  
+    @Override
+            "condition",
+        filters.put("word_delimiter", WordDelimiterTokenFilterFactory::new);
+                    indexSettings,  
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+        filters.add(PreConfiguredTokenFilter.singleton("persian_stem", true, PersianStemFilter::new));  
+import org.apache.lucene.analysis.hi.HindiNormalizationFilter;
+        Map<String, AnalysisProvider<CharFilterFactory>> filters = new TreeMap<>();
+import org.apache.lucene.analysis.ar.ArabicNormalizationFilter;  
+import org.apache.lucene.analysis.payloads.TypeAsPayloadTokenFilter;
+                "chinese",  
+            requiresAnalysisSettings((i, e, n, s) -> new PredicateTokenFilterScriptFactory(i, n, s, scriptService.get()))
+            } else {
+                );  
+        tokenizers.add(PreConfiguredTokenizer.openSearchVersion("edgeNGram", (version) -> {
+                "delimited_term_freq",
+import org.opensearch.index.analysis.PreConfiguredTokenizer;
+        analyzers.put("snowball", SnowballAnalyzerProvider::new);  
+        filters.put("pattern_replace", requiresAnalysisSettings(PatternReplaceCharFilterFactory::new));  
+        tokenizers.put("thai", ThaiTokenizerFactory::new);
+        analyzers.put("dutch", DutchAnalyzerProvider::new);
+            return new EdgeNGramTokenizerFactory(indexSettings, environment, name, settings);
+                    "edgeNGram_tokenizer_deprecation",  
+import org.apache.lucene.analysis.eu.BasqueAnalyzer;
+        analyzers.put("norwegian", NorwegianAnalyzerProvider::new);
+        tokenizers.add(PreConfiguredTokenizer.singleton("classic", ClassicTokenizer::new));  
+import org.apache.lucene.analysis.cjk.CJKBigramFilter;
+                (version) -> new EdgeNGramTokenizer(NGramTokenizer.DEFAULT_MIN_NGRAM_SIZE, NGramTokenizer.DEFAULT_MAX_NGRAM_SIZE)  
+        ClusterService clusterService,
+            PreConfiguredTokenFilter.singleton(  
+        analyzers.put("finnish", FinnishAnalyzerProvider::new);
+        filters.put("edge_ngram", EdgeNGramTokenFilterFactory::new);  
+                    "PathHierarchy_tokenizer_deprecation",
+import java.util.List;
+            PreConfiguredTokenFilter.openSearchVersion(
+        // Temporary shim for aliases. TODO deprecate after they are moved  
+import org.apache.lucene.analysis.no.NorwegianAnalyzer;  
+                "edge_ngram",
+import org.opensearch.transport.client.Client;
+        filters.put("indic_normalization", IndicNormalizationFilterFactory::new);  
+ * under the License.  
+import org.apache.lucene.analysis.fr.FrenchAnalyzer;
+        filters.put("elision", requiresAnalysisSettings(ElisionTokenFilterFactory::new));
+        analyzers.put("danish", DanishAnalyzerProvider::new);
+    @Override
+        filters.put("porter_stem", PorterStemTokenFilterFactory::new);
+        }));
+                    "The [nGram] tokenizer name was deprecated pre 1.0. "
+                );
+                    "The [nGram] tokenizer name is deprecated and will be removed in a future version. "
+import org.apache.lucene.analysis.shingle.ShingleFilter;  
+                throw new IllegalArgumentException(
+        }));
+                    environment,
+import java.util.Map;
+import org.opensearch.watcher.ResourceWatcherService;
+import org.apache.lucene.analysis.miscellaneous.LimitTokenCountFilter;
+                deprecationLogger.deprecate(  
+        Map<String, AnalysisProvider<TokenizerFactory>> tokenizers = new TreeMap<>();
                 )
             )  
-        );
-        filters.add(
-            PreConfiguredTokenFilter.singleton(  
-                "delimited_term_freq",
-                false,
-                input -> new DelimitedTermFrequencyTokenFilter(input, DelimitedTermFrequencyTokenFilterFactory.DEFAULT_DELIMITER)  
-            )
-        );
-        filters.add(PreConfiguredTokenFilter.singleton("dutch_stem", false, input -> new SnowballFilter(input, new DutchStemmer())));  
-        filters.add(PreConfiguredTokenFilter.singleton("edge_ngram", false, false, input -> new EdgeNGramTokenFilter(input, 1)));
-        filters.add(PreConfiguredTokenFilter.openSearchVersion("edgeNGram", false, false, (reader, version) -> {
-            throw new IllegalArgumentException(  
-                "The [edgeNGram] token filter name was deprecated in 6.4 and cannot be used in new indices. "
-                    + "Please change the filter name to [edge_ngram] instead."
-            );  
-        }));
-        filters.add(
-            PreConfiguredTokenFilter.singleton("elision", true, input -> new ElisionFilter(input, FrenchAnalyzer.DEFAULT_ARTICLES))  
-        );
-        filters.add(PreConfiguredTokenFilter.singleton("french_stem", false, input -> new SnowballFilter(input, new FrenchStemmer())));
-        filters.add(PreConfiguredTokenFilter.singleton("german_normalization", true, GermanNormalizationFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("german_stem", false, GermanStemFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("hindi_normalization", true, HindiNormalizationFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("indic_normalization", true, IndicNormalizationFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("keyword_repeat", false, false, KeywordRepeatFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("kstem", false, KStemFilter::new));
-        // TODO this one seems useless  
-        filters.add(PreConfiguredTokenFilter.singleton("length", false, input -> new LengthFilter(input, 0, Integer.MAX_VALUE)));
-        filters.add(
-            PreConfiguredTokenFilter.singleton(  
-                "limit",
-                false,
-                input -> new LimitTokenCountFilter(  
-                    input,
-                    LimitTokenCountFilterFactory.DEFAULT_MAX_TOKEN_COUNT,
-                    LimitTokenCountFilterFactory.DEFAULT_CONSUME_ALL_TOKENS  
-                )
-            )
+                false,  
+                    "The [edgeNGram] token filter name is deprecated and will be removed in a future version. "
+            return new EdgeNGramTokenFilterFactory(indexSettings, environment, name, settings);
         );  
+        tokenizers.put("edge_ngram", EdgeNGramTokenizerFactory::new);  
+        }));  
+import org.apache.lucene.analysis.core.KeywordTokenizer;  
+        );
+        analyzers.put("basque", BasqueAnalyzerProvider::new);
+import org.apache.lucene.analysis.pt.PortugueseAnalyzer;
+             * We disable the graph analysis on this token stream  
+        tokenizers.add(PreConfiguredTokenizer.singleton("pattern", () -> new PatternTokenizer(Regex.compile("\\W+", null), -1)));  
+                )
+        filters.put("edgeNGram", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {
+ * GitHub history for details.
+            return new NGramTokenizerFactory(indexSettings, environment, name, settings);  
+        NamedXContentRegistry xContentRegistry,  
+                    "The [edgeNGram] tokenizer name is deprecated and will be removed in a future version. "
         filters.add(PreConfiguredTokenFilter.singleton("ngram", false, false, reader -> new NGramTokenFilter(reader, 1, 2, false)));
-        filters.add(PreConfiguredTokenFilter.openSearchVersion("nGram", false, false, (reader, version) -> {
+public class CommonAnalysisModulePlugin extends Plugin implements AnalysisPlugin, ScriptPlugin {
+import org.apache.lucene.analysis.miscellaneous.LengthFilter;
+ * software distributed under the License is distributed on an
+        filters.put("html_strip", HtmlStripCharFilterFactory::new);
+        filters.put("stemmer_override", requiresAnalysisSettings(StemmerOverrideTokenFilterFactory::new));  
+        filters.put("sorani_normalization", SoraniNormalizationFilterFactory::new);
+            )
+import org.opensearch.common.regex.Regex;
+        analyzers.add(
+import org.apache.lucene.analysis.de.GermanStemFilter;  
+                    "The [nGram] tokenizer name was deprecated pre 1.0. "
+        filters.put("brazilian_stem", BrazilianStemTokenFilterFactory::new);
+        filters.add(PreConfiguredTokenFilter.singleton("hindi_normalization", true, HindiNormalizationFilter::new));
+                deprecationLogger.deprecate(
+import org.apache.lucene.analysis.br.BrazilianStemFilter;  
+            )  
+                    analysisModule.getAnalysisRegistry()
+    @Override
+import org.apache.lucene.analysis.fa.PersianStemFilter;
+        filters.add(PreConfiguredTokenFilter.singleton("keyword_repeat", false, false, KeywordRepeatFilter::new));
+        filters.put("fingerprint", FingerprintTokenFilterFactory::new);
+             * Graph analysis on such token stream is useless and dangerous as it may create too many paths
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("finnish", CachingStrategy.LUCENE, FinnishAnalyzer::new));
+                (input, version) -> new WordDelimiterGraphFilter(  
+        filters.put("russian_stem", RussianStemTokenFilterFactory::new);  
+        filters.add(PreConfiguredTokenFilter.singleton("arabic_stem", false, ArabicStemFilter::new));  
+        filters.put("decimal_digit", DecimalDigitFilterFactory::new);
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("lithuanian", CachingStrategy.LUCENE, LithuanianAnalyzer::new));
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("galician", CachingStrategy.LUCENE, GalicianAnalyzer::new));
+import org.apache.lucene.analysis.snowball.SnowballFilter;
+        return tokenizers;
+                    DelimitedPayloadTokenFilterFactory.DEFAULT_DELIMITER,  
+        filters.put("unique", UniqueTokenFilterFactory::new);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        filters.put("delimited_payload", DelimitedPayloadTokenFilterFactory::new);
+                    environment,
+        NamedWriteableRegistry namedWriteableRegistry,  
+                deprecationLogger.deprecate(
+            }  
+        filters.add(PreConfiguredTokenFilter.singleton("trim", true, TrimFilter::new));  
+        analyzers.put("thai", ThaiAnalyzerProvider::new);
+        analyzers.add(
+        );  
+        analyzers.put("sorani", SoraniAnalyzerProvider::new);
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("irish", CachingStrategy.LUCENE, IrishAnalyzer::new));
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("greek", CachingStrategy.LUCENE, GreekAnalyzer::new));  
+import org.apache.lucene.analysis.StopFilter;  
+        analyzers.put("russian", RussianAnalyzerProvider::new);  
+                    "The [nGram] tokenizer name is deprecated and will be removed in a future version. "
+        analyzers.put("brazilian", BrazilianAnalyzerProvider::new);
+        tokenizers.add(PreConfiguredTokenizer.singleton("thai", ThaiTokenizer::new));
+        filters.add(PreConfiguredTokenFilter.singleton("unique", false, UniqueTokenFilter::new));  
+            if (version.onOrAfter(Version.V_3_0_0)) {
+        ScriptService scriptService,
+import org.apache.lucene.analysis.es.SpanishAnalyzer;  
+import org.apache.lucene.analysis.miscellaneous.TrimFilter;
+        tokenizers.add(PreConfiguredTokenizer.singleton("ngram", NGramTokenizer::new));
+import org.apache.lucene.analysis.cz.CzechAnalyzer;
+                CachingStrategy.OPENSEARCH,
+        filters.add(PreConfiguredTokenFilter.singleton("german_stem", false, GermanStemFilter::new));
+        tokenizers.add(PreConfiguredTokenizer.singleton("lowercase", XLowerCaseTokenizer::new));
+                deprecationLogger.deprecate(
+        );
+        filters.add(PreConfiguredTokenFilter.singleton("decimal_digit", true, DecimalDigitFilter::new));
+                    input,
+import org.apache.lucene.analysis.gl.GalicianAnalyzer;  
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;  
+        analyzers.put("czech", CzechAnalyzerProvider::new);  
+        tokenizers.add(PreConfiguredTokenizer.singleton("whitespace", WhitespaceTokenizer::new));
+                        + "Please change the tokenizer name to [path_hierarchy] instead."
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("hindi", CachingStrategy.LUCENE, HindiAnalyzer::new));
+        });
+import java.util.Collections;  
+                "limit",
+        filters.add(  
+import org.apache.lucene.analysis.nl.DutchAnalyzer;
+import org.apache.lucene.analysis.miscellaneous.ScandinavianFoldingFilter;  
+        );
+ * The OpenSearch Contributors require contributions made to  
+ * ownership. Elasticsearch licenses this file to you under  
+        filters.put("czech_stem", CzechStemTokenFilterFactory::new);  
+            );
+        analyzers.put("armenian", ArmenianAnalyzerProvider::new);
+import org.apache.lucene.analysis.bn.BengaliNormalizationFilter;
+        // chinese analyzer: only for old indices, best effort  
+    @Override  
+import org.apache.lucene.analysis.in.IndicNormalizationFilter;  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("bulgarian", CachingStrategy.LUCENE, BulgarianAnalyzer::new));
+        // TODO deprecate and remove in API
+import org.apache.lucene.analysis.fa.PersianAnalyzer;  
+import org.opensearch.indices.analysis.PreBuiltCacheFactory.CachingStrategy;
+        filters.put("uppercase", UpperCaseTokenFilterFactory::new);
+                        + "Please change the tokenizer name to [ngram] instead."  
+            PreConfiguredTokenFilter.singleton("elision", true, input -> new ElisionFilter(input, FrenchAnalyzer.DEFAULT_ARTICLES))  
+import org.opensearch.index.analysis.PreBuiltAnalyzerProviderFactory;
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("indonesian", CachingStrategy.LUCENE, IndonesianAnalyzer::new));  
+    }
+            PreConfiguredTokenFilter.singleton(  
+        return Collections.singletonList(AnalysisPredicateScript.CONTEXT);
+import org.opensearch.index.IndexSettings;
+import org.apache.lucene.analysis.core.UpperCaseFilter;
+import org.apache.lucene.analysis.lv.LatvianAnalyzer;  
+        return Collections.emptyList();
+import org.apache.lucene.analysis.en.EnglishAnalyzer;  
+                CachingStrategy.LUCENE,
+ *
+            PreConfiguredTokenFilter.singleton(
+import org.apache.lucene.analysis.ar.ArabicStemFilter;
+    }
+                        + "Please change the tokenizer name to [edge_ngram] for indices created in versions 3.0 or higher instead."
+        filters.add(PreConfiguredTokenFilter.singleton("cjk_width", true, CJKWidthFilter::new));
+    @Override  
+        tokenizers.put("edgeNGram", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {  
+                );  
+        }));
+                    DelimitedPayloadTokenFilterFactory.DEFAULT_ENCODER
+        filters.add(PreConfiguredTokenFilter.singleton("apostrophe", false, ApostropheFilter::new));
+                throw new IllegalArgumentException(  
+                input -> new LimitTokenCountFilter(  
+import org.apache.lucene.analysis.hi.HindiAnalyzer;
+    ) {  
+import org.apache.lucene.analysis.miscellaneous.ScandinavianNormalizationFilter;
+import org.apache.lucene.analysis.TokenStream;
+        filters.put("keep_types", requiresAnalysisSettings(KeepTypesFilterFactory::new));
+        tokenizers.put("char_group", CharGroupTokenizerFactory::new);
+                );  
+        return filters;
+        ResourceWatcherService resourceWatcherService,
+                        + "Please change the tokenizer name to [path_hierarchy] instead."
+import org.opensearch.common.settings.Settings;  
+        filters.put("persian_stem", PersianStemTokenFilterFactory::new);
+import org.apache.lucene.analysis.hy.ArmenianAnalyzer;
+        filters.add(PreConfiguredTokenFilter.singleton("kstem", false, KStemFilter::new));
+                    settings,  
+                        + "Please change the tokenizer name to [edge_ngram] for indices created in versions 3.0 or higher instead."
+import org.apache.lucene.analysis.bg.BulgarianAnalyzer;
+                )
+        tokenizers.add(PreConfiguredTokenizer.singleton("keyword", KeywordTokenizer::new));
+    @Override
+                false,
+        analyzers.put("bulgarian", BulgarianAnalyzerProvider::new);
+            }
+ * SPDX-License-Identifier: Apache-2.0
+            "predicate_token_filter",
+        analyzers.put("fingerprint", FingerprintAnalyzerProvider::new);
+        filters.put("pattern_capture", requiresAnalysisSettings(PatternCaptureGroupTokenFilterFactory::new));
+                    null
+import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;  
+        );
+    public List<PreConfiguredTokenFilter> getPreConfiguredTokenFilters() {
+/*  
+        List<PreBuiltAnalyzerProviderFactory> analyzers = new ArrayList<>();  
+        analyzers.put("bengali", BengaliAnalyzerProvider::new);  
+import org.apache.lucene.analysis.classic.ClassicTokenizer;  
+                false,
+        filters.add(PreConfiguredTokenFilter.singleton("french_stem", false, input -> new SnowballFilter(input, new FrenchStemmer())));
+ * Modifications Copyright OpenSearch Contributors. See
+                throw new IllegalArgumentException(
+ * Unless required by applicable law or agreed to in writing,
+        filters.add(PreConfiguredTokenFilter.singleton("scandinavian_normalization", true, ScandinavianNormalizationFilter::new));
+    @Override
+            )  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("catalan", CachingStrategy.LUCENE, CatalanAnalyzer::new));
+            return new NGramTokenFilterFactory(indexSettings, environment, name, settings);
+        filters.put(
+/*  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("portuguese", CachingStrategy.LUCENE, PortugueseAnalyzer::new));
+import org.apache.lucene.analysis.email.UAX29URLEmailTokenizer;
+        filters.put("persian_normalization", PersianNormalizationFilterFactory::new);  
+        filters.put(  
+    }  
+                );  
+                        + "Please change the tokenizer name to [ngram] instead."
+import org.apache.lucene.analysis.ngram.EdgeNGramTokenizer;
+            }
+import org.apache.lucene.analysis.ga.IrishAnalyzer;
+import org.apache.lucene.analysis.payloads.DelimitedPayloadTokenFilter;  
+                )
+                false,  
+                    + "Please change the filter name to [ngram] instead."  
+                "pattern",  
+import org.opensearch.index.analysis.PreConfiguredTokenFilter;
+        filters.add(PreConfiguredTokenFilter.singleton("length", false, input -> new LengthFilter(input, 0, Integer.MAX_VALUE)));
+        analyzers.put("hungarian", HungarianAnalyzerProvider::new);
+                        + "Please change the tokenizer name to [edge_ngram] for indices created in versions 3.0 or higher instead."
+import org.apache.lucene.analysis.cjk.CJKWidthFilter;
+        filters.add(PreConfiguredTokenFilter.singleton("dutch_stem", false, input -> new SnowballFilter(input, new DutchStemmer())));  
             throw new IllegalArgumentException(  
-                "The [nGram] token filter name was deprecated in 6.4 and cannot be used in new indices. "
-                    + "Please change the filter name to [ngram] instead."
+ *  
+                        + "Please change the filter name to [edge_ngram] instead."
+                deprecationLogger.deprecate(
+import org.apache.lucene.analysis.ngram.NGramTokenFilter;  
+    }  
+    public List<PreConfiguredTokenizer> getPreConfiguredTokenizers() {  
+import org.apache.lucene.analysis.en.PorterStemFilter;
+            /*
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("hungarian", CachingStrategy.LUCENE, HungarianAnalyzer::new));
+        // TODO this one seems useless  
+        analyzers.put("french", FrenchAnalyzerProvider::new);  
+        // TODO deprecate and remove in API
+        filters.put("keep", requiresAnalysisSettings(KeepWordFilterFactory::new));
+        analyzers.put("pattern", PatternAnalyzerProvider::new);
+        tokenizers.add(PreConfiguredTokenizer.openSearchVersion("nGram", (version) -> {
+import org.apache.lucene.analysis.it.ItalianAnalyzer;
+import org.apache.lucene.analysis.util.ElisionFilter;
+ * specific language governing permissions and limitations
+                    WordDelimiterGraphFilter.GENERATE_WORD_PARTS | WordDelimiterGraphFilter.GENERATE_NUMBER_PARTS
+import org.apache.lucene.analysis.CharArraySet;
+            } else {
+        filters.add(  
+                    analysisModule.getAnalysisRegistry()
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("romanian", CachingStrategy.LUCENE, RomanianAnalyzer::new));
+        filters.put("keyword_marker", requiresAnalysisSettings(KeywordMarkerTokenFilterFactory::new));  
+                    "The [edgeNGram] tokenizer name is deprecated and will be removed in a future version. "  
+                        | WordDelimiterGraphFilter.STEM_ENGLISH_POSSESSIVE,  
+                throw new IllegalArgumentException(  
+import org.apache.lucene.analysis.miscellaneous.WordDelimiterFilter;
+import static org.opensearch.plugins.AnalysisPlugin.requiresAnalysisSettings;  
+    }
+        tokenizers.put("PathHierarchy", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {
+import org.apache.lucene.analysis.cjk.CJKAnalyzer;  
+        filters.put("hyphenation_decompounder", requiresAnalysisSettings(HyphenationCompoundWordTokenFilterFactory::new));
+            }
+import org.opensearch.lucene.analysis.miscellaneous.DisableGraphAttribute;
+        tokenizers.put("simple_pattern", SimplePatternTokenizerFactory::new);
+            return new EdgeNGramTokenizer(NGramTokenizer.DEFAULT_MIN_NGRAM_SIZE, NGramTokenizer.DEFAULT_MAX_NGRAM_SIZE);
+        );  
+            "synonym",  
+                );
+ * the Apache License, Version 2.0 (the "License"); you may
+ */
             );  
+        tokenizers.add(PreConfiguredTokenizer.singleton("letter", LetterTokenizer::new));  
+        );
+    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
+import org.apache.lucene.analysis.ru.RussianAnalyzer;
+import org.apache.lucene.analysis.ngram.EdgeNGramTokenFilter;
+import org.apache.lucene.analysis.lt.LithuanianAnalyzer;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            )
+                        + "Please change the tokenizer name to [edge_ngram] instead."
+        tokenizers.add(PreConfiguredTokenizer.openSearchVersion("PathHierarchy", (version) -> {
+                () -> new SnowballAnalyzer("English", EnglishAnalyzer.ENGLISH_STOP_WORDS_SET)  
+        filters.add(PreConfiguredTokenFilter.singleton("indic_normalization", true, IndicNormalizationFilter::new));  
+            PreConfiguredTokenizer.openSearchVersion(
+    @Override
+        filters.put("dictionary_decompounder", requiresAnalysisSettings(DictionaryCompoundWordTokenFilterFactory::new));
+        tokenizers.put("letter", LetterTokenizerFactory::new);  
+import org.apache.lucene.analysis.miscellaneous.WordDelimiterIterator;  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("latvian", CachingStrategy.LUCENE, LatvianAnalyzer::new));  
+                "The [nGram] token filter name was deprecated in 6.4 and cannot be used in new indices. "
+        filters.add(PreConfiguredTokenFilter.singleton("stemmer", false, PorterStemFilter::new));
+    }
+        filters.put("german_stem", GermanStemTokenFilterFactory::new);  
+                throw new IllegalArgumentException(  
+import org.apache.lucene.analysis.miscellaneous.WordDelimiterGraphFilter;
+import org.apache.lucene.analysis.miscellaneous.KeywordRepeatFilter;  
+        filters.put("stemmer", StemmerTokenFilterFactory::new);
+    @Override
+        Supplier<RepositoriesService> repositoriesServiceSupplier
+        filters.put("arabic_stem", ArabicStemTokenFilterFactory::new);
+        List<PreConfiguredTokenFilter> filters = new ArrayList<>();  
+ * You may obtain a copy of the License at  
+                    LimitTokenCountFilterFactory.DEFAULT_CONSUME_ALL_TOKENS  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("french", CachingStrategy.LUCENE, FrenchAnalyzer::new));  
+                input -> new DelimitedPayloadTokenFilter(
+            throw new IllegalArgumentException(  
+                    "nGram_tokenizer_deprecation",
+        analyzers.put("galician", GalicianAnalyzerProvider::new);
+        analyzers.put("portuguese", PortugueseAnalyzerProvider::new);
+        tokenizers.put("ngram", NGramTokenizerFactory::new);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    "The [edgeNGram] tokenizer name was deprecated pre 1.0. "
+import org.opensearch.index.analysis.CharFilterFactory;
+                );  
+import org.opensearch.plugins.ScriptPlugin;
+            if (version.onOrAfter(Version.V_3_0_0)) {  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("danish", CachingStrategy.LUCENE, DanishAnalyzer::new));
+            PreConfiguredTokenFilter.singleton("stop", false, input -> new StopFilter(input, EnglishAnalyzer.ENGLISH_STOP_WORDS_SET))
+import java.util.TreeMap;  
+import java.util.ArrayList;
+import org.apache.lucene.analysis.tr.TurkishAnalyzer;
+        tokenizers.put("lowercase", XLowerCaseTokenizerFactory::new);
+import org.apache.lucene.analysis.fi.FinnishAnalyzer;  
+        filters.add(PreConfiguredTokenFilter.singleton("brazilian_stem", false, BrazilianStemFilter::new));  
+                );
+import org.opensearch.Version;  
+                "word_delimiter_graph",  
+                    "PathHierarchy_tokenizer_deprecation",
+            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {  
+        analyzers.put("english", EnglishAnalyzerProvider::new);  
+            }
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            } else {
+        filters.put("ngram", NGramTokenFilterFactory::new);
+        tokenizers.put("keyword", KeywordTokenizerFactory::new);  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("english", CachingStrategy.LUCENE, EnglishAnalyzer::new));  
+        filters.put("nGram", (IndexSettings indexSettings, Environment environment, String name, Settings settings) -> {
+        filters.add(PreConfiguredTokenFilter.singleton("scandinavian_folding", true, ScandinavianFoldingFilter::new));
+                input -> new DelimitedTermFrequencyTokenFilter(input, DelimitedTermFrequencyTokenFilterFactory.DEFAULT_DELIMITER)  
+                        | WordDelimiterGraphFilter.SPLIT_ON_CASE_CHANGE | WordDelimiterGraphFilter.SPLIT_ON_NUMERICS
+        );
+import org.apache.lucene.analysis.cz.CzechStemFilter;
+            return new NGramTokenizer();
+        filters.add(
+        return tokenizers;  
+            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_3_0_0)) {
+ * this work for additional information regarding copyright
+                    "The [edgeNGram] tokenizer name was deprecated pre 1.0. "  
+        return analyzers;  
+                    settings,  
+        analyzers.put("latvian", LatvianAnalyzerProvider::new);  
+        filters.put("scandinavian_folding", ScandinavianFoldingFilterFactory::new);
         }));
         filters.add(PreConfiguredTokenFilter.singleton("persian_normalization", true, PersianNormalizationFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("persian_stem", true, PersianStemFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("porter_stem", false, PorterStemFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("reverse", false, ReverseStringFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("russian_stem", false, input -> new SnowballFilter(input, "Russian")));  
-        filters.add(PreConfiguredTokenFilter.singleton("scandinavian_folding", true, ScandinavianFoldingFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("scandinavian_normalization", true, ScandinavianNormalizationFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("shingle", false, false, input -> {  
-            TokenStream ts = new ShingleFilter(input);
-            /*
-             * We disable the graph analysis on this token stream  
-             * because it produces shingles of different size.
-             * Graph analysis on such token stream is useless and dangerous as it may create too many paths
-             * since shingles of different size are not aligned in terms of positions.  
-             */
-            ts.addAttribute(DisableGraphAttribute.class);
-            return ts;  
-        }));
-        filters.add(PreConfiguredTokenFilter.singleton("snowball", false, input -> new SnowballFilter(input, "English")));
-        filters.add(PreConfiguredTokenFilter.singleton("sorani_normalization", true, SoraniNormalizationFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("stemmer", false, PorterStemFilter::new));
-        // The stop filter is in lucene-core but the English stop words set is in lucene-analyzers-common
-        filters.add(  
-            PreConfiguredTokenFilter.singleton("stop", false, input -> new StopFilter(input, EnglishAnalyzer.ENGLISH_STOP_WORDS_SET))
-        );
-        filters.add(PreConfiguredTokenFilter.singleton("trim", true, TrimFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("truncate", false, input -> new TruncateTokenFilter(input, 10)));
-        filters.add(PreConfiguredTokenFilter.singleton("type_as_payload", false, TypeAsPayloadTokenFilter::new));
-        filters.add(PreConfiguredTokenFilter.singleton("unique", false, UniqueTokenFilter::new));  
-        filters.add(PreConfiguredTokenFilter.singleton("uppercase", true, UpperCaseFilter::new));
-        filters.add(
-            PreConfiguredTokenFilter.singleton(  
-                "word_delimiter",
-                false,
-                false,  
-                input -> new WordDelimiterFilter(
-                    input,
-                    WordDelimiterFilter.GENERATE_WORD_PARTS | WordDelimiterFilter.GENERATE_NUMBER_PARTS  
-                        | WordDelimiterFilter.SPLIT_ON_CASE_CHANGE | WordDelimiterFilter.SPLIT_ON_NUMERICS
-                        | WordDelimiterFilter.STEM_ENGLISH_POSSESSIVE,
-                    null  
-                )
-            )
-        );  
-        filters.add(
-            PreConfiguredTokenFilter.openSearchVersion(
-                "word_delimiter_graph",  
-                false,
-                false,
-                (input, version) -> new WordDelimiterGraphFilter(  
-                    input,
-                    true,
-                    WordDelimiterIterator.DEFAULT_WORD_DELIM_TABLE,  
-                    WordDelimiterGraphFilter.GENERATE_WORD_PARTS | WordDelimiterGraphFilter.GENERATE_NUMBER_PARTS
-                        | WordDelimiterGraphFilter.SPLIT_ON_CASE_CHANGE | WordDelimiterGraphFilter.SPLIT_ON_NUMERICS
-                        | WordDelimiterGraphFilter.STEM_ENGLISH_POSSESSIVE,  
-                    null
-                )
-            )  
-        );
+        analyzers.put("hindi", HindiAnalyzerProvider::new);
+            );  
+import org.apache.lucene.analysis.fa.PersianNormalizationFilter;
         return filters;
-    }  
-
-    @Override
-    public List<PreConfiguredTokenizer> getPreConfiguredTokenizers() {  
-        List<PreConfiguredTokenizer> tokenizers = new ArrayList<>();
-        tokenizers.add(PreConfiguredTokenizer.singleton("keyword", KeywordTokenizer::new));
-        tokenizers.add(PreConfiguredTokenizer.singleton("classic", ClassicTokenizer::new));  
-        tokenizers.add(PreConfiguredTokenizer.singleton("uax_url_email", UAX29URLEmailTokenizer::new));
-        tokenizers.add(PreConfiguredTokenizer.singleton("path_hierarchy", PathHierarchyTokenizer::new));
-        tokenizers.add(PreConfiguredTokenizer.singleton("letter", LetterTokenizer::new));  
-        tokenizers.add(PreConfiguredTokenizer.singleton("whitespace", WhitespaceTokenizer::new));
-        tokenizers.add(PreConfiguredTokenizer.singleton("ngram", NGramTokenizer::new));
-        tokenizers.add(  
-            PreConfiguredTokenizer.openSearchVersion(
-                "edge_ngram",
-                (version) -> new EdgeNGramTokenizer(NGramTokenizer.DEFAULT_MIN_NGRAM_SIZE, NGramTokenizer.DEFAULT_MAX_NGRAM_SIZE)  
-            )
-        );
-        tokenizers.add(PreConfiguredTokenizer.singleton("pattern", () -> new PatternTokenizer(Regex.compile("\\W+", null), -1)));  
-        tokenizers.add(PreConfiguredTokenizer.singleton("thai", ThaiTokenizer::new));
-        // TODO deprecate and remove in API
-        // This is already broken with normalization, so backwards compat isn't necessary?  
-        tokenizers.add(PreConfiguredTokenizer.singleton("lowercase", XLowerCaseTokenizer::new));
-
-        // Temporary shim for aliases. TODO deprecate after they are moved  
-        tokenizers.add(PreConfiguredTokenizer.openSearchVersion("nGram", (version) -> {
-            if (version.onOrAfter(Version.V_3_0_0)) {
-                throw new IllegalArgumentException(  
-                    "The [nGram] tokenizer name was deprecated pre 1.0. "
-                        + "Please change the tokenizer name to [ngram] for indices created in versions 3.0 or higher instead."
-                );  
-            } else {
-                deprecationLogger.deprecate(
+        filters.put("serbian_normalization", SerbianNormalizationFilterFactory::new);  
+        analyzers.put("swedish", SwedishAnalyzerProvider::new);  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("dutch", CachingStrategy.LUCENE, DutchAnalyzer::new));
+        filters.put("pattern_replace", requiresAnalysisSettings(PatternReplaceTokenFilterFactory::new));
+        });  
+/*
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("thai", CachingStrategy.LUCENE, ThaiAnalyzer::new));
+            } else {  
+        filters.put("limit", LimitTokenCountFilterFactory::new);  
+        analyzers.put("spanish", SpanishAnalyzerProvider::new);
+import org.opensearch.index.analysis.TokenizerFactory;
                     "nGram_tokenizer_deprecation",  
-                    "The [nGram] tokenizer name is deprecated and will be removed in a future version. "
-                        + "Please change the tokenizer name to [ngram] instead."
-                );  
-            }
-            return new NGramTokenizer();
-        }));  
-        tokenizers.add(PreConfiguredTokenizer.openSearchVersion("edgeNGram", (version) -> {
-            if (version.onOrAfter(Version.V_3_0_0)) {
-                throw new IllegalArgumentException(  
-                    "The [edgeNGram] tokenizer name was deprecated pre 1.0. "
-                        + "Please change the tokenizer name to [edge_ngram] for indices created in versions 3.0 or higher instead."
-                );  
-            } else {
-                deprecationLogger.deprecate(
-                    "edgeNGram_tokenizer_deprecation",  
-                    "The [edgeNGram] tokenizer name is deprecated and will be removed in a future version. "
-                        + "Please change the tokenizer name to [edge_ngram] instead."
-                );  
-            }
-            return new EdgeNGramTokenizer(NGramTokenizer.DEFAULT_MIN_NGRAM_SIZE, NGramTokenizer.DEFAULT_MAX_NGRAM_SIZE);
-        }));  
-        tokenizers.add(PreConfiguredTokenizer.openSearchVersion("PathHierarchy", (version) -> {
-            // TODO Remove "PathHierarchy" tokenizer name in 4.0 and throw exception
-            if (version.onOrAfter(Version.V_3_0_0)) {  
-                deprecationLogger.deprecate(
-                    "PathHierarchy_tokenizer_deprecation",
-                    "The [PathHierarchy] tokenizer name is deprecated and will be removed in a future version. "  
-                        + "Please change the tokenizer name to [path_hierarchy] instead."
-                );
-            }  
-            return new PathHierarchyTokenizer();
-        }));
-        return tokenizers;  
-    }
+            return new PathHierarchyTokenizerFactory(indexSettings, environment, name, settings);
+                    indexSettings,  
+import org.opensearch.script.ScriptContext;
+            )  
+        filters.put("truncate", requiresAnalysisSettings(TruncateTokenFilterFactory::new));  
 }
+                deprecationLogger.deprecate(
+            )  
+        filters.put("lowercase", LowerCaseTokenFilterFactory::new);
+    @Override
+        filters.add(PreConfiguredCharFilter.singleton("html_strip", false, HTMLStripCharFilter::new));  
+    public Map<String, AnalysisProvider<CharFilterFactory>> getCharFilters() {  
+import org.apache.lucene.analysis.el.GreekAnalyzer;
+import org.apache.lucene.analysis.ar.ArabicAnalyzer;
+                );  
+import org.opensearch.repositories.RepositoriesService;  
+        analyzers.put("romanian", RomanianAnalyzerProvider::new);
+            return ts;  
+import org.apache.lucene.analysis.ckb.SoraniAnalyzer;  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("bengali", CachingStrategy.LUCENE, BengaliAnalyzer::new));
+                )
+            TokenStream ts = new ShingleFilter(input);
+import org.apache.lucene.analysis.reverse.ReverseStringFilter;  
+import org.apache.lucene.analysis.et.EstonianAnalyzer;
+        tokenizers.put("pattern", PatternTokenizerFactory::new);  
+import org.opensearch.threadpool.ThreadPool;  
+ * this file be licensed under the Apache-2.0 license or a
+        filters.put("concatenate_graph", ConcatenateGraphTokenFilterFactory::new);
+import org.apache.lucene.analysis.hu.HungarianAnalyzer;  
+import org.opensearch.script.ScriptService;
+            // TODO Remove "PathHierarchy" tokenizer name in 4.0 and throw exception
+        tokenizers.put("uax_url_email", UAX29URLEmailTokenizerFactory::new);
+        analyzers.put("arabic", ArabicAnalyzerProvider::new);  
+        filters.add(PreConfiguredTokenFilter.singleton("snowball", false, input -> new SnowballFilter(input, "English")));
+import org.apache.lucene.analysis.core.LetterTokenizer;
+        filters.add(PreConfiguredTokenFilter.singleton("porter_stem", false, PorterStemFilter::new));
+                CachingStrategy.ONE,
+                    input,
+                false,
+        filters.put("common_grams", requiresAnalysisSettings(CommonGramsTokenFilterFactory::new));
+import org.apache.lucene.analysis.de.GermanAnalyzer;
+                    "The [PathHierarchy] tokenizer name is deprecated and will be removed in a future version. "  
+import org.apache.lucene.analysis.th.ThaiAnalyzer;
+        analyzers.put("turkish", TurkishAnalyzerProvider::new);
+                        + "Please change the tokenizer name to [ngram] for indices created in versions 3.0 or higher instead."  
+import org.apache.lucene.analysis.ckb.SoraniNormalizationFilter;
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("cjk", CachingStrategy.LUCENE, CJKAnalyzer::new));
+import org.opensearch.env.Environment;  
+                "The [edgeNGram] token filter name was deprecated in 6.4 and cannot be used in new indices. "
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("brazilian", CachingStrategy.LUCENE, BrazilianAnalyzer::new));  
+        filters.add(
+            "synonym_graph",  
+package org.opensearch.analysis.common;
+        tokenizers.put("whitespace", WhitespaceTokenizerFactory::new);
+             * since shingles of different size are not aligned in terms of positions.  
+        filters.put("arabic_normalization", ArabicNormalizationFilterFactory::new);
+                false,
+import org.apache.lucene.analysis.bn.BengaliAnalyzer;  
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("basque", CachingStrategy.LUCENE, BasqueAnalyzer::new));
+    public List<PreBuiltAnalyzerProviderFactory> getPreBuiltAnalyzerProviderFactories() {
+import java.util.function.Supplier;
+             */
+        analyzers.put("irish", IrishAnalyzerProvider::new);
+        List<PreConfiguredCharFilter> filters = new ArrayList<>();
+import org.apache.lucene.analysis.sv.SwedishAnalyzer;  
+            )
+        filters.put("trim", TrimTokenFilterFactory::new);
+        analyzers.put("chinese", ChineseAnalyzerProvider::new);
+                input -> new WordDelimiterFilter(
+                (indexSettings, environment, name, settings) -> new SynonymGraphTokenFilterFactory(
+        filters.put("cjk_width", CJKWidthFilterFactory::new);
+            requiresAnalysisSettings(
+        filters.put("mapping", requiresAnalysisSettings(MappingCharFilterFactory::new));
+import org.apache.lucene.analysis.de.GermanNormalizationFilter;
+        NodeEnvironment nodeEnvironment,
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("russian", CachingStrategy.LUCENE, RussianAnalyzer::new));  
+        filters.add(PreConfiguredTokenFilter.singleton("russian_stem", false, input -> new SnowballFilter(input, "Russian")));  
+        tokenizers.add(PreConfiguredTokenizer.singleton("uax_url_email", UAX29URLEmailTokenizer::new));
+                "delimited_payload",
+            new PreBuiltAnalyzerProviderFactory(  
+    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
+        analyzers.put("greek", GreekAnalyzerProvider::new);  
+import org.apache.lucene.analysis.miscellaneous.DelimitedTermFrequencyTokenFilter;
+import org.opensearch.index.analysis.TokenFilterFactory;  
+                        + "Please change the tokenizer name to [edge_ngram] instead."
+import org.apache.lucene.analysis.core.DecimalDigitFilter;
+import org.apache.lucene.analysis.en.KStemFilter;
+        filters.add(PreConfiguredTokenFilter.singleton("sorani_normalization", true, SoraniNormalizationFilter::new));  
+import org.opensearch.common.logging.DeprecationLogger;
+        filters.put("scandinavian_normalization", ScandinavianNormalizationFilterFactory::new);
+                        | WordDelimiterFilter.STEM_ENGLISH_POSSESSIVE,
+        filters.put(
+                "word_delimiter",
+import org.opensearch.index.analysis.AnalyzerProvider;  
+import org.opensearch.cluster.service.ClusterService;
+                    + "Please change the filter name to [ngram] instead."
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(CommonAnalysisModulePlugin.class);
+ * KIND, either express or implied.  See the License for the
+                    LimitTokenCountFilterFactory.DEFAULT_MAX_TOKEN_COUNT,
+        filters.add(
+import org.apache.lucene.analysis.ca.CatalanAnalyzer;
+                "snowball",
+        // Language analyzers:
+        filters.put("word_delimiter_graph", WordDelimiterGraphTokenFilterFactory::new);  
+        );
+        filters.put("delimited_term_freq", DelimitedTermFrequencyTokenFilterFactory::new);  
+                );
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("turkish", CachingStrategy.LUCENE, TurkishAnalyzer::new));
+        filters.add(
+            // TODO Remove "PathHierarchy" tokenizer name in 4.0 and throw exception
+import org.apache.lucene.analysis.ngram.NGramTokenizer;
+        analyzers.put("estonian", EstonianAnalyzerProvider::new);
+        filters.add(
+                    "The [edgeNGram] tokenizer name was deprecated pre 1.0. "
+        filters.put("classic", ClassicFilterFactory::new);
+ * license agreements. See the NOTICE file distributed with
+    public List<ScriptContext<?>> getContexts() {  
+                    WordDelimiterFilter.GENERATE_WORD_PARTS | WordDelimiterFilter.GENERATE_NUMBER_PARTS  
+        filters.put("bengali_normalization", BengaliNormalizationFilterFactory::new);
+import org.apache.lucene.analysis.pattern.PatternTokenizer;
+            PreConfiguredTokenFilter.singleton("common_grams", false, false, input -> new CommonGramsFilter(input, CharArraySet.EMPTY_SET))
+                    WordDelimiterIterator.DEFAULT_WORD_DELIM_TABLE,  
+import org.opensearch.indices.analysis.AnalysisModule;
+        ThreadPool threadPool,  
+                        | WordDelimiterFilter.SPLIT_ON_CASE_CHANGE | WordDelimiterFilter.SPLIT_ON_NUMERICS
+        filters.put("kstem", KStemTokenFilterFactory::new);
+            new PreBuiltAnalyzerProviderFactory(
+            ts.addAttribute(DisableGraphAttribute.class);
+ * Licensed to Elasticsearch under one or more contributor  
+        filters.add(PreConfiguredTokenFilter.singleton("cjk_bigram", false, CJKBigramFilter::new));
+        analyzers.put("catalan", CatalanAnalyzerProvider::new);  
+                () -> new PatternAnalyzer(Regex.compile("\\W+" /*PatternAnalyzer.NON_WORD_PATTERN*/, null), true, CharArraySet.EMPTY_SET)
+                false,
+import org.apache.lucene.analysis.Analyzer;
+        );  
+        filters.put("cjk_bigram", CJKBigramFilterFactory::new);  
+import org.apache.lucene.analysis.da.DanishAnalyzer;  
+import java.util.Collection;
+import org.opensearch.plugins.Plugin;
+        filters.add(PreConfiguredTokenFilter.singleton("german_normalization", true, GermanNormalizationFilter::new));  
+                );
+import org.apache.lucene.analysis.ro.RomanianAnalyzer;
+        return analyzers;  
+    public Collection<Object> createComponents(  
+        // The stop filter is in lucene-core but the English stop words set is in lucene-analyzers-common
+        analyzers.add(
+    }  
+        filters.add(PreConfiguredTokenFilter.singleton("edge_ngram", false, false, input -> new EdgeNGramTokenFilter(input, 1)));
+        });
+        filters.put("flatten_graph", FlattenGraphTokenFilterFactory::new);  
+        });
+        return filters;
+        filters.put("hindi_normalization", HindiNormalizationFilterFactory::new);
+        // Language analyzers:
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("italian", CachingStrategy.LUCENE, ItalianAnalyzer::new));
+            )
+            } else {
+        filters.add(PreConfiguredTokenFilter.singleton("bengali_normalization", true, BengaliNormalizationFilter::new));
+        analyzers.add(new PreBuiltAnalyzerProviderFactory("czech", CachingStrategy.LUCENE, CzechAnalyzer::new));  

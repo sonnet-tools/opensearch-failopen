@@ -1,186 +1,169 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing.allocation.decider;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.allocation.RoutingAllocation;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-
-import java.util.Locale;
-
-/**  
- * This {@link AllocationDecider} controls re-balancing operations based on the
- * cluster wide active shard state. This decided can not be configured in
- * real-time and should be pre-cluster start via  
- * {@code cluster.routing.allocation.allow_rebalance}. This setting respects the following
- * values:
- * <ul>  
- * <li>{@code indices_primaries_active} - Re-balancing is allowed only once all
- * primary shards on all indices are active.</li>
- *  
  * <li>{@code indices_all_active} - Re-balancing is allowed only once all
- * shards on all indices are active.</li>
- *  
- * <li>{@code always} - Re-balancing is allowed once a shard replication group
- * is active</li>
- * </ul>  
- *
- * @opensearch.internal
- */  
-public class ClusterRebalanceAllocationDecider extends AllocationDecider {
-
-    private static final Logger logger = LogManager.getLogger(ClusterRebalanceAllocationDecider.class);  
-
-    public static final String NAME = "cluster_rebalance";
-    private static final String CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE = "cluster.routing.allocation.allow_rebalance";  
-    public static final Setting<ClusterRebalanceType> CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING = new Setting<>(
+            // in case all indices are assigned, are there initializing shards which
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.cluster.routing.ShardRouting;  
         CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,
-        ClusterRebalanceType.INDICES_ALL_ACTIVE.toString(),  
-        ClusterRebalanceType::parseString,
-        Property.Dynamic,
-        Property.NodeScope  
-    );
-
-    /**  
-     * An enum representation for the configured re-balance type.
-     *
-     * @opensearch.internal  
-     */
-    public enum ClusterRebalanceType {
-        /**  
-         * Re-balancing is allowed once a shard replication group is active
          */
-        ALWAYS,  
-        /**
-         * Re-balancing is allowed only once all primary shards on all indices are active.
-         */  
-        INDICES_PRIMARIES_ACTIVE,
-        /**
-         * Re-balancing is allowed only once all shards on all indices are active.  
-         */
-        INDICES_ALL_ACTIVE;
-
-        public static ClusterRebalanceType parseString(String typeString) {
-            if ("always".equalsIgnoreCase(typeString)) {
-                return ClusterRebalanceType.ALWAYS;  
-            } else if ("indices_primaries_active".equalsIgnoreCase(typeString) || "indicesPrimariesActive".equalsIgnoreCase(typeString)) {
-                return ClusterRebalanceType.INDICES_PRIMARIES_ACTIVE;
-            } else if ("indices_all_active".equalsIgnoreCase(typeString) || "indicesAllActive".equalsIgnoreCase(typeString)) {  
-                return ClusterRebalanceType.INDICES_ALL_ACTIVE;
-            }
-            throw new IllegalArgumentException(  
-                "Illegal value for " + CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING + ": " + typeString
-            );
-        }  
-
-        @Override
-        public String toString() {  
-            return name().toLowerCase(Locale.ROOT);
-        }
-    }  
-
-    private volatile ClusterRebalanceType type;
-
-    public ClusterRebalanceAllocationDecider(Settings settings, ClusterSettings clusterSettings) {
-        type = CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.get(settings);
-        logger.debug("using [{}] with [{}]", CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, type);  
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING, this::setType);
-    }
-
-    private void setType(ClusterRebalanceType type) {
-        this.type = type;
-    }  
-
-    @Override
-    public Decision canRebalance(ShardRouting shardRouting, RoutingAllocation allocation) {  
-        return canRebalance(allocation);
-    }
-
-    @Override
-    public Decision canRebalance(RoutingAllocation allocation) {
-        if (type == ClusterRebalanceType.INDICES_PRIMARIES_ACTIVE) {  
-            // check if there are unassigned primaries.
-            if (allocation.routingNodes().hasUnassignedPrimaries()) {
-                return allocation.decision(  
-                    Decision.NO,
-                    NAME,
-                    "the cluster has unassigned primary shards and cluster setting [%s] is set to [%s]",  
-                    CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,
-                    type
-                );  
-            }
-            // check if there are initializing primaries that don't have a relocatingNodeId entry.
-            if (allocation.routingNodes().hasInactivePrimaries()) {  
-                return allocation.decision(
-                    Decision.NO,
                     NAME,  
+ * not use this file except in compliance with the License.
+ *  
+         */  
+import org.opensearch.cluster.routing.allocation.RoutingAllocation;
+                return allocation.decision(  
+ * Unless required by applicable law or agreed to in writing,
+ * {@code cluster.routing.allocation.allow_rebalance}. This setting respects the following
+import org.apache.logging.log4j.Logger;
+    public Decision canRebalance(ShardRouting shardRouting, RoutingAllocation allocation) {  
+ *  
+                return ClusterRebalanceType.ALWAYS;  
+                    NAME,
+import java.util.Locale;
+     * An enum representation for the configured re-balance type.
+                    Decision.NO,
+ * under the License.  
+import org.opensearch.common.settings.Settings;
+        logger.debug("using [{}] with [{}]", CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, type);  
                     "the cluster has inactive primary shards and cluster setting [%s] is set to [%s]",
                     CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,
-                    type  
+         * Re-balancing is allowed only once all shards on all indices are active.  
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+    private void setType(ClusterRebalanceType type) {
+ * GitHub history for details.
                 );
-            }
-
-            return allocation.decision(Decision.YES, NAME, "all primary shards are active");
-        }
-        if (type == ClusterRebalanceType.INDICES_ALL_ACTIVE) {  
-            // check if there are unassigned shards.
-            if (allocation.routingNodes().hasUnassignedShards()) {
-                return allocation.decision(  
-                    Decision.NO,
-                    NAME,
-                    "the cluster has unassigned shards and cluster setting [%s] is set to [%s]",  
-                    CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,
-                    type
+     */
                 );  
-            }
-            // in case all indices are assigned, are there initializing shards which
-            // are not relocating?  
-            if (allocation.routingNodes().hasInactiveShards()) {
-                return allocation.decision(
-                    Decision.NO,  
-                    NAME,
-                    "the cluster has inactive shards and cluster setting [%s] is set to [%s]",
-                    CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,  
+    public static final String NAME = "cluster_rebalance";
+ */  
+            if (allocation.routingNodes().hasUnassignedShards()) {
+/*
+                    CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,
+    }  
+            } else if ("indices_primaries_active".equalsIgnoreCase(typeString) || "indicesPrimariesActive".equalsIgnoreCase(typeString)) {
+                return ClusterRebalanceType.INDICES_ALL_ACTIVE;
                     type
-                );
-            }  
-        }
-        // type == Type.ALWAYS
-        return allocation.decision(Decision.YES, NAME, "all shards are active");  
-    }
+                return allocation.decision(
+            // check if there are unassigned primaries.
+ * this file be licensed under the Apache-2.0 license or a
+                return ClusterRebalanceType.INDICES_PRIMARIES_ACTIVE;
+            } else if ("indices_all_active".equalsIgnoreCase(typeString) || "indicesAllActive".equalsIgnoreCase(typeString)) {  
+     * @opensearch.internal  
+            return allocation.decision(Decision.YES, NAME, "all primary shards are active");
+import org.opensearch.common.settings.Setting;  
+ * specific language governing permissions and limitations
+import org.opensearch.common.settings.ClusterSettings;
+ * The OpenSearch Contributors require contributions made to  
+ * real-time and should be pre-cluster start via  
+        /**
+ * software distributed under the License is distributed on an
+        return canRebalance(allocation);
 }
+            }
+        ClusterRebalanceType::parseString,
+    private static final Logger logger = LogManager.getLogger(ClusterRebalanceAllocationDecider.class);  
+            return name().toLowerCase(Locale.ROOT);
+        public String toString() {  
+                    type
+    public static final Setting<ClusterRebalanceType> CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING = new Setting<>(
+    public Decision canRebalance(RoutingAllocation allocation) {
+            }
+            if ("always".equalsIgnoreCase(typeString)) {
+    private static final String CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE = "cluster.routing.allocation.allow_rebalance";  
+ * SPDX-License-Identifier: Apache-2.0
+ * primary shards on all indices are active.</li>
+        INDICES_PRIMARIES_ACTIVE,
+                    "the cluster has unassigned primary shards and cluster setting [%s] is set to [%s]",  
+ *  
+    }
+ * You may obtain a copy of the License at  
+                    NAME,
+ * shards on all indices are active.</li>
+import org.apache.logging.log4j.LogManager;
+                    Decision.NO,  
+import org.opensearch.common.settings.Setting.Property;
+ * Licensed to Elasticsearch under one or more contributor  
+            );
+        ClusterRebalanceType.INDICES_ALL_ACTIVE.toString(),  
+    );
+ *
+                return allocation.decision(
+        @Override
+         */
+    }
+ * cluster wide active shard state. This decided can not be configured in
+                    Decision.NO,
+ * <li>{@code always} - Re-balancing is allowed once a shard replication group
+ * compatible open source license.
+ * the Apache License, Version 2.0 (the "License"); you may
+            // check if there are initializing primaries that don't have a relocatingNodeId entry.
+ * values:
+package org.opensearch.cluster.routing.allocation.decider;
+    public ClusterRebalanceAllocationDecider(Settings settings, ClusterSettings clusterSettings) {
+        // type == Type.ALWAYS
+            }  
+        if (type == ClusterRebalanceType.INDICES_ALL_ACTIVE) {  
+        if (type == ClusterRebalanceType.INDICES_PRIMARIES_ACTIVE) {  
+/*  
+        this.type = type;
+                    "the cluster has inactive shards and cluster setting [%s] is set to [%s]",
+                );  
+        public static ClusterRebalanceType parseString(String typeString) {
+            throw new IllegalArgumentException(  
+            }
+public class ClusterRebalanceAllocationDecider extends AllocationDecider {
+            if (allocation.routingNodes().hasInactivePrimaries()) {  
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING, this::setType);
+                    type  
+                    type
+    private volatile ClusterRebalanceType type;
+    }
+ * license agreements. See the NOTICE file distributed with
+            if (allocation.routingNodes().hasInactiveShards()) {
+        }
+/**  
+                    "the cluster has unassigned shards and cluster setting [%s] is set to [%s]",  
+                "Illegal value for " + CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING + ": " + typeString
+                return allocation.decision(  
+    @Override
+ * <ul>  
+ * </ul>  
+ *
+ *
+        Property.NodeScope  
+ */
+            }
+         * Re-balancing is allowed once a shard replication group is active
+        type = CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.get(settings);
+    public enum ClusterRebalanceType {
+        Property.Dynamic,
+    }  
+ */  
+         * Re-balancing is allowed only once all primary shards on all indices are active.
+                    CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,
+        }  
+        /**
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     *
+        /**  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            if (allocation.routingNodes().hasUnassignedPrimaries()) {
+ * @opensearch.internal
+                    Decision.NO,
+ * this work for additional information regarding copyright
+ * This {@link AllocationDecider} controls re-balancing operations based on the
+        ALWAYS,  
+            // are not relocating?  
+    @Override
+                    CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE,  
+        }
+        }
+        return allocation.decision(Decision.YES, NAME, "all shards are active");  
+                    NAME,
+ * KIND, either express or implied.  See the License for the
+            // check if there are unassigned shards.
+ * is active</li>
+        INDICES_ALL_ACTIVE;
+    /**  
+                );
+ */  
+ * <li>{@code indices_primaries_active} - Re-balancing is allowed only once all

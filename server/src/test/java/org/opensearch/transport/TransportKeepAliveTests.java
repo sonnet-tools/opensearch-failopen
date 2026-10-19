@@ -1,222 +1,179 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.transport;
-
-import org.opensearch.common.AsyncBiFunction;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-
-import java.io.IOException;  
-import java.util.ArrayDeque;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.Deque;
-
 import static org.mockito.Mockito.any;  
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.same;  
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-
-public class TransportKeepAliveTests extends OpenSearchTestCase {
-
-    private final ConnectionProfile defaultProfile = ConnectionProfile.buildDefaultConnectionProfile(Settings.EMPTY);  
-    private BytesReference expectedPingMessage;
-    private AsyncBiFunction<TcpChannel, BytesReference, Void> pingSender;
-    private TransportKeepAlive keepAlive;  
-    private CapturingThreadPool threadPool;
-
-    @Override  
-    @SuppressWarnings("unchecked")
-    public void setUp() throws Exception {
-        super.setUp();  
-        pingSender = mock(AsyncBiFunction.class);
-        threadPool = new CapturingThreadPool();
-        keepAlive = new TransportKeepAlive(threadPool, pingSender);  
-
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            out.writeByte((byte) 'E');  
-            out.writeByte((byte) 'S');
-            out.writeInt(-1);
-            expectedPingMessage = out.bytes();  
-        } catch (IOException e) {
-            throw new AssertionError(e.getMessage(), e); // won't happen
-        }  
-    }
-
-    @Override  
-    public void tearDown() throws Exception {
-        threadPool.shutdown();
-        super.tearDown();  
-    }
-
-    public void testRegisterNodeConnectionSchedulesKeepAlive() {  
-        TimeValue pingInterval = TimeValue.timeValueSeconds(randomLongBetween(1, 60));
-        ConnectionProfile connectionProfile = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval).build();
-
-        assertEquals(0, threadPool.scheduledTasks.size());
-
-        TcpChannel channel1 = new FakeTcpChannel();  
-        TcpChannel channel2 = new FakeTcpChannel();
-        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
-        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
-        keepAlive.registerNodeConnection(Arrays.asList(channel1, channel2), connectionProfile);
-
-        assertEquals(1, threadPool.scheduledTasks.size());  
-        Tuple<TimeValue, Runnable> taskTuple = threadPool.scheduledTasks.poll();
-        assertEquals(pingInterval, taskTuple.v1());
-        Runnable keepAliveTask = taskTuple.v2();  
-        assertEquals(0, threadPool.scheduledTasks.size());
-        keepAliveTask.run();
-
-        verify(pingSender, times(1)).apply(same(channel1), eq(expectedPingMessage), any());
-        verify(pingSender, times(1)).apply(same(channel2), eq(expectedPingMessage), any());
-
-        // Test that the task has rescheduled itself
-        assertEquals(1, threadPool.scheduledTasks.size());
-        Tuple<TimeValue, Runnable> rescheduledTask = threadPool.scheduledTasks.poll();  
-        assertEquals(pingInterval, rescheduledTask.v1());
-    }
-
-    public void testRegisterMultipleKeepAliveIntervals() {
-        TimeValue pingInterval1 = TimeValue.timeValueSeconds(randomLongBetween(1, 30));
-        ConnectionProfile connectionProfile1 = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval1).build();  
-
-        TimeValue pingInterval2 = TimeValue.timeValueSeconds(randomLongBetween(31, 60));
-        ConnectionProfile connectionProfile2 = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval2).build();  
-
-        assertEquals(0, threadPool.scheduledTasks.size());
-
-        TcpChannel channel1 = new FakeTcpChannel();
-        TcpChannel channel2 = new FakeTcpChannel();
-        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
-        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
         keepAlive.registerNodeConnection(Collections.singletonList(channel1), connectionProfile1);
-        keepAlive.registerNodeConnection(Collections.singletonList(channel2), connectionProfile2);  
-
-        assertEquals(2, threadPool.scheduledTasks.size());
-        Tuple<TimeValue, Runnable> taskTuple1 = threadPool.scheduledTasks.poll();  
-        Tuple<TimeValue, Runnable> taskTuple2 = threadPool.scheduledTasks.poll();
-        assertEquals(pingInterval1, taskTuple1.v1());
-        assertEquals(pingInterval2, taskTuple2.v1());  
-        Runnable keepAliveTask1 = taskTuple1.v2();
-        Runnable keepAliveTask2 = taskTuple1.v2();
-
-        assertEquals(0, threadPool.scheduledTasks.size());
-        keepAliveTask1.run();
-        assertEquals(1, threadPool.scheduledTasks.size());  
-        keepAliveTask2.run();
-        assertEquals(2, threadPool.scheduledTasks.size());
-    }  
-
-    public void testClosingChannelUnregistersItFromKeepAlive() {
-        TimeValue pingInterval1 = TimeValue.timeValueSeconds(randomLongBetween(1, 30));  
-        ConnectionProfile connectionProfile = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval1).build();
-
-        TcpChannel channel1 = new FakeTcpChannel();  
-        TcpChannel channel2 = new FakeTcpChannel();
-        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
-        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
-        keepAlive.registerNodeConnection(Collections.singletonList(channel1), connectionProfile);
-        keepAlive.registerNodeConnection(Collections.singletonList(channel2), connectionProfile);
-
-        channel1.close();
-
-        Runnable task = threadPool.scheduledTasks.poll().v2();  
-        task.run();
-
-        verify(pingSender, times(0)).apply(same(channel1), eq(expectedPingMessage), any());  
-        verify(pingSender, times(1)).apply(same(channel2), eq(expectedPingMessage), any());
-    }
-
-    public void testKeepAliveResponseIfServer() {
-        TcpChannel channel = new FakeTcpChannel(true);
-        channel.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
-
-        keepAlive.receiveKeepAlive(channel);
-
-        verify(pingSender, times(1)).apply(same(channel), eq(expectedPingMessage), any());
-    }
-
+        }  
+import org.opensearch.threadpool.TestThreadPool;
+    private TransportKeepAlive keepAlive;  
     public void testNoKeepAliveResponseIfClient() {
-        TcpChannel channel = new FakeTcpChannel(false);
-        channel.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
-
-        keepAlive.receiveKeepAlive(channel);
-
-        verify(pingSender, times(0)).apply(same(channel), eq(expectedPingMessage), any());
-    }
-
-    public void testOnlySendPingIfWeHaveNotWrittenAndReadSinceLastPing() {
-        TimeValue pingInterval = TimeValue.timeValueSeconds(15);
-        ConnectionProfile connectionProfile = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval).build();  
-
-        TcpChannel channel1 = new FakeTcpChannel();
-        TcpChannel channel2 = new FakeTcpChannel();  
-        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
-        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
-        keepAlive.registerNodeConnection(Arrays.asList(channel1, channel2), connectionProfile);  
-
-        Tuple<TimeValue, Runnable> taskTuple = threadPool.scheduledTasks.poll();
-        taskTuple.v2().run();  
-
-        TcpChannel.ChannelStats stats = channel1.getChannelStats();
-        stats.markAccessed(threadPool.relativeTimeInMillis() + (pingInterval.millis() / 2));  
-
-        taskTuple = threadPool.scheduledTasks.poll();
-        taskTuple.v2().run();  
-
-        verify(pingSender, times(1)).apply(same(channel1), eq(expectedPingMessage), any());
-        verify(pingSender, times(2)).apply(same(channel2), eq(expectedPingMessage), any());  
-    }
-
-    private class CapturingThreadPool extends TestThreadPool {  
-
-        private final Deque<Tuple<TimeValue, Runnable>> scheduledTasks = new ArrayDeque<>();
-
-        private CapturingThreadPool() {
-            super(getTestName());
-        }  
-
-        @Override
-        public ScheduledCancellable schedule(Runnable task, TimeValue delay, String executor) {  
-            scheduledTasks.add(new Tuple<>(delay, task));
+        ConnectionProfile connectionProfile = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval).build();
+        ConnectionProfile connectionProfile = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval1).build();
+        assertEquals(0, threadPool.scheduledTasks.size());
+ *    http://www.apache.org/licenses/LICENSE-2.0
             return null;
+        TcpChannel channel2 = new FakeTcpChannel();
+import java.util.ArrayDeque;
+/*
+    @Override  
+ * specific language governing permissions and limitations
+        taskTuple = threadPool.scheduledTasks.poll();
+        keepAliveTask2.run();
+        keepAlive.receiveKeepAlive(channel);
+        verify(pingSender, times(2)).apply(same(channel2), eq(expectedPingMessage), any());  
+ * KIND, either express or implied.  See the License for the
+        task.run();
+        channel.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
+        ConnectionProfile connectionProfile = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval).build();  
+ * You may obtain a copy of the License at  
+        verify(pingSender, times(0)).apply(same(channel1), eq(expectedPingMessage), any());  
+        }  
+        TcpChannel channel = new FakeTcpChannel(false);
+        private CapturingThreadPool() {
+        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
+import org.opensearch.common.unit.TimeValue;
+        TcpChannel channel1 = new FakeTcpChannel();
+/*  
+import java.util.Arrays;
+        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
+        TcpChannel channel2 = new FakeTcpChannel();
+}
+    }
+        channel.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
+ * GitHub history for details.
+ * not use this file except in compliance with the License.
+        assertEquals(pingInterval2, taskTuple2.v1());  
+        taskTuple.v2().run();  
+    private AsyncBiFunction<TcpChannel, BytesReference, Void> pingSender;
+        ConnectionProfile connectionProfile1 = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval1).build();  
+        assertEquals(1, threadPool.scheduledTasks.size());  
+            throw new AssertionError(e.getMessage(), e); // won't happen
+        assertEquals(0, threadPool.scheduledTasks.size());
+import static org.mockito.Mockito.same;  
+/*
+        assertEquals(0, threadPool.scheduledTasks.size());
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.common.AsyncBiFunction;  
+    public void testRegisterNodeConnectionSchedulesKeepAlive() {  
+import org.opensearch.core.common.bytes.BytesReference;
+ */
+ * Modifications Copyright OpenSearch Contributors. See  
         }  
     }
-}
+        // Test that the task has rescheduled itself
+            scheduledTasks.add(new Tuple<>(delay, task));
+        threadPool = new CapturingThreadPool();
+        assertEquals(pingInterval, taskTuple.v1());
+import org.opensearch.common.settings.Settings;  
+        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
+package org.opensearch.transport;
+        Runnable keepAliveTask2 = taskTuple1.v2();
+        verify(pingSender, times(1)).apply(same(channel1), eq(expectedPingMessage), any());
+ * license agreements. See the NOTICE file distributed with
+import static org.mockito.Mockito.times;
+        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
+            expectedPingMessage = out.bytes();  
+    private BytesReference expectedPingMessage;
+import org.opensearch.common.collect.Tuple;
+import java.util.Collections;  
+        channel1.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
+ * this work for additional information regarding copyright
+        TimeValue pingInterval = TimeValue.timeValueSeconds(randomLongBetween(1, 60));
+    }
+        Runnable keepAliveTask1 = taskTuple1.v2();
+ * under the License.  
+        assertEquals(2, threadPool.scheduledTasks.size());
+ * compatible open source license.
+    @SuppressWarnings("unchecked")
+        TimeValue pingInterval1 = TimeValue.timeValueSeconds(randomLongBetween(1, 30));
+        TcpChannel channel = new FakeTcpChannel(true);
+import static org.mockito.Mockito.verify;
+    }
+import org.opensearch.test.OpenSearchTestCase;  
+        } catch (IOException e) {
+    public void testKeepAliveResponseIfServer() {
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+import java.io.IOException;  
+        keepAlive.registerNodeConnection(Collections.singletonList(channel2), connectionProfile2);  
+ * Unless required by applicable law or agreed to in writing,
+        @Override
+        Runnable keepAliveTask = taskTuple.v2();  
+        TimeValue pingInterval = TimeValue.timeValueSeconds(15);
+        TcpChannel channel2 = new FakeTcpChannel();  
+    public void setUp() throws Exception {
+            super(getTestName());
+        channel1.close();
+        TcpChannel.ChannelStats stats = channel1.getChannelStats();
+        keepAlive.receiveKeepAlive(channel);
+        threadPool.shutdown();
+ *
+        Tuple<TimeValue, Runnable> taskTuple = threadPool.scheduledTasks.poll();
+ * SPDX-License-Identifier: Apache-2.0
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+    private CapturingThreadPool threadPool;
+        stats.markAccessed(threadPool.relativeTimeInMillis() + (pingInterval.millis() / 2));  
+        verify(pingSender, times(1)).apply(same(channel2), eq(expectedPingMessage), any());
+        assertEquals(1, threadPool.scheduledTasks.size());  
+        keepAlive = new TransportKeepAlive(threadPool, pingSender);  
+        super.setUp();  
+        assertEquals(1, threadPool.scheduledTasks.size());
+        verify(pingSender, times(1)).apply(same(channel2), eq(expectedPingMessage), any());
+        Tuple<TimeValue, Runnable> taskTuple = threadPool.scheduledTasks.poll();
+import static org.mockito.Mockito.eq;
+        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());  
+        taskTuple.v2().run();  
+ */  
+import static org.mockito.Mockito.mock;
+    private final ConnectionProfile defaultProfile = ConnectionProfile.buildDefaultConnectionProfile(Settings.EMPTY);  
+ * the Apache License, Version 2.0 (the "License"); you may
+        keepAlive.registerNodeConnection(Arrays.asList(channel1, channel2), connectionProfile);  
+        TimeValue pingInterval2 = TimeValue.timeValueSeconds(randomLongBetween(31, 60));
+        TcpChannel channel1 = new FakeTcpChannel();
+        assertEquals(pingInterval1, taskTuple1.v1());
+        keepAlive.registerNodeConnection(Collections.singletonList(channel2), connectionProfile);
+    }
+        channel2.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
+ * software distributed under the License is distributed on an
+    public void testRegisterMultipleKeepAliveIntervals() {
+        TcpChannel channel1 = new FakeTcpChannel();  
+        keepAliveTask.run();
+        assertEquals(2, threadPool.scheduledTasks.size());
+        keepAliveTask1.run();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        super.tearDown();  
+public class TransportKeepAliveTests extends OpenSearchTestCase {
+ *
+    }
+    }
+            out.writeInt(-1);
+        TcpChannel channel1 = new FakeTcpChannel();  
+        Tuple<TimeValue, Runnable> taskTuple1 = threadPool.scheduledTasks.poll();  
+ * this file be licensed under the Apache-2.0 license or a
+            out.writeByte((byte) 'S');
+        pingSender = mock(AsyncBiFunction.class);
+        private final Deque<Tuple<TimeValue, Runnable>> scheduledTasks = new ArrayDeque<>();
+    public void testOnlySendPingIfWeHaveNotWrittenAndReadSinceLastPing() {
+        assertEquals(pingInterval, rescheduledTask.v1());
+    @Override  
+        verify(pingSender, times(1)).apply(same(channel1), eq(expectedPingMessage), any());
+ *  
+        Runnable task = threadPool.scheduledTasks.poll().v2();  
+        assertEquals(0, threadPool.scheduledTasks.size());
+        public ScheduledCancellable schedule(Runnable task, TimeValue delay, String executor) {  
+    public void tearDown() throws Exception {
+    }  
+    public void testClosingChannelUnregistersItFromKeepAlive() {
+            out.writeByte((byte) 'E');  
+        TimeValue pingInterval1 = TimeValue.timeValueSeconds(randomLongBetween(1, 30));  
+        ConnectionProfile connectionProfile2 = new ConnectionProfile.Builder(defaultProfile).setPingInterval(pingInterval2).build();  
+    private class CapturingThreadPool extends TestThreadPool {  
+        Tuple<TimeValue, Runnable> taskTuple2 = threadPool.scheduledTasks.poll();
+        Tuple<TimeValue, Runnable> rescheduledTask = threadPool.scheduledTasks.poll();  
+        TcpChannel channel2 = new FakeTcpChannel();
+        verify(pingSender, times(1)).apply(same(channel), eq(expectedPingMessage), any());
+        keepAlive.registerNodeConnection(Arrays.asList(channel1, channel2), connectionProfile);
+        verify(pingSender, times(0)).apply(same(channel), eq(expectedPingMessage), any());
+        keepAlive.registerNodeConnection(Collections.singletonList(channel1), connectionProfile);
+import java.util.Deque;

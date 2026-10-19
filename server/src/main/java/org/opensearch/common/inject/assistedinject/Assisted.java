@@ -1,60 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2007 Google Inc.  
+public @interface Assisted {
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.common.inject.assistedinject;
-
+ * SPDX-License-Identifier: Apache-2.0
+     */  
 import org.opensearch.common.inject.BindingAnnotation;
-
-import java.lang.annotation.Retention;  
-import java.lang.annotation.Target;
-
-import static java.lang.annotation.ElementType.FIELD;  
-import static java.lang.annotation.ElementType.METHOD;
-import static java.lang.annotation.ElementType.PARAMETER;
+ */  
 import static java.lang.annotation.RetentionPolicy.RUNTIME;  
-
-/**
+@Retention(RUNTIME)  
+     * parameter with the same value. Names are not necessary when the parameter types are distinct.
+}
+@BindingAnnotation
+ * Copyright (C) 2007 Google Inc.  
+    String value() default "";
+ */  
+     * The unique name for this parameter. This is matched to the {@literal @Assisted} constructor
+import static java.lang.annotation.ElementType.FIELD;  
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+import java.lang.annotation.Target;
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *
+ */  
+ * you may not use this file except in compliance with the License.  
  * Annotates an injected parameter or field whose value comes from an argument to a factory method.  
  *
- * @author jmourits@google.com (Jerome Mourits)
- * @author jessewilson@google.com (Jesse Wilson)  
- *
- * @opensearch.internal
- */  
-@BindingAnnotation
 @Target({ FIELD, PARAMETER, METHOD })
-@Retention(RUNTIME)  
-public @interface Assisted {
-
+/*  
+ * http://www.apache.org/licenses/LICENSE-2.0  
+ * @opensearch.internal
+ * @author jessewilson@google.com (Jesse Wilson)  
+ * See the License for the specific language governing permissions and
+ * GitHub history for details.
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+import static java.lang.annotation.ElementType.METHOD;
+ * compatible open source license.
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+ *
+ * You may obtain a copy of the License at
+ * this file be licensed under the Apache-2.0 license or a
+ * limitations under the License.  
     /**  
-     * The unique name for this parameter. This is matched to the {@literal @Assisted} constructor
-     * parameter with the same value. Names are not necessary when the parameter types are distinct.
-     */  
-    String value() default "";
-}
+/*  
+ */
+/*
+ * Unless required by applicable law or agreed to in writing, software
+import java.lang.annotation.Retention;  
+ * @author jmourits@google.com (Jerome Mourits)
+import static java.lang.annotation.ElementType.PARAMETER;

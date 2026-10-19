@@ -1,53 +1,46 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2009 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
+        super(errors);
+        injector.state.addTypeListener(binding);
+ * Unless required by applicable law or agreed to in writing, software
+package org.opensearch.common.inject;
+ */
+ * distributed under the License is distributed on an "AS IS" BASIS,  
  *
  * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.common.inject;
-
-import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.spi.TypeListenerBinding;
-
-/**
- * Handles {@link Binder#bindListener} commands.
- *  
- * @author jessewilson@google.com (Jesse Wilson)
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    }  
  *
- * @opensearch.internal  
- */
-class TypeListenerBindingProcessor extends AbstractProcessor {
-
-    TypeListenerBindingProcessor(Errors errors) {
-        super(errors);
-    }  
-
+ * SPDX-License-Identifier: Apache-2.0
     @Override
-    public Boolean visit(TypeListenerBinding binding) {  
-        injector.state.addTypeListener(binding);
+/*
+ *
+ * limitations under the License.  
+ *
+    TypeListenerBindingProcessor(Errors errors) {
+ * this file be licensed under the Apache-2.0 license or a
         return true;
-    }  
+import org.opensearch.common.inject.internal.Errors;
+ * Modifications Copyright OpenSearch Contributors. See
+/**
+    public Boolean visit(TypeListenerBinding binding) {  
 }
+ * Copyright (C) 2009 Google Inc.  
+class TypeListenerBindingProcessor extends AbstractProcessor {
+ * Handles {@link Binder#bindListener} commands.
+ * See the License for the specific language governing permissions and
+ * you may not use this file except in compliance with the License.  
+ * compatible open source license.
+ * GitHub history for details.
+ * The OpenSearch Contributors require contributions made to  
+ * You may obtain a copy of the License at
+ * @author jessewilson@google.com (Jesse Wilson)
+ */  
+ *
+import org.opensearch.common.inject.spi.TypeListenerBinding;
+    }  
+/*  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ *  
+ * @opensearch.internal  

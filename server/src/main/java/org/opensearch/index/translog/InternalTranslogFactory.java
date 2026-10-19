@@ -1,72 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.translog;
-
-import java.io.IOException;
-import java.util.function.BooleanSupplier;
-import java.util.function.LongConsumer;  
+            translogDeletionPolicy,  
 import java.util.function.LongSupplier;
-
-/**  
+            translogOperationHelper,
+ * this file be licensed under the Apache-2.0 license or a
+            null
+            translogConfig,
+import java.io.IOException;
+            primaryTermSupplier,
+        LongConsumer persistedSequenceNumberConsumer,
+        TranslogOperationHelper translogOperationHelper  
+/*  
+            translogUUID,
+        LongSupplier globalCheckpointSupplier,  
+}
+            translogConfig,
  * Translog Factory for the local on-disk {@link Translog}
- *
- * @opensearch.internal  
- */
-public class InternalTranslogFactory implements TranslogFactory {
-
-    @Override
+            globalCheckpointSupplier,
     public Translog newTranslog(
+        LongSupplier primaryTermSupplier,
+            translogDeletionPolicy,  
+            globalCheckpointSupplier,
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.function.BooleanSupplier;
+ *
+    }
+            TranslogOperationHelper.DEFAULT,
+            persistedSequenceNumberConsumer,  
+import java.util.function.LongConsumer;  
+        TranslogDeletionPolicy translogDeletionPolicy,
         TranslogConfig translogConfig,  
         String translogUUID,
-        TranslogDeletionPolicy translogDeletionPolicy,
-        LongSupplier globalCheckpointSupplier,  
-        LongSupplier primaryTermSupplier,
-        LongConsumer persistedSequenceNumberConsumer,
+        );  
         BooleanSupplier startedPrimarySupplier  
-    ) throws IOException {
-
-        assert translogConfig.getIndexSettings().isDerivedSourceEnabled() == false; // For derived source supported index, primary method  
-                                                                                    // must be used
-
         return new LocalTranslog(  
-            translogConfig,
-            translogUUID,
-            translogDeletionPolicy,  
-            globalCheckpointSupplier,
-            primaryTermSupplier,
-            persistedSequenceNumberConsumer,  
-            TranslogOperationHelper.DEFAULT,
             null
+ *
         );  
-    }
-
-    @Override  
-    public Translog newTranslog(
-        TranslogConfig translogConfig,
-        String translogUUID,  
-        TranslogDeletionPolicy translogDeletionPolicy,
-        LongSupplier globalCheckpointSupplier,
+ * compatible open source license.
         LongSupplier primaryTermSupplier,  
-        LongConsumer persistedSequenceNumberConsumer,
-        BooleanSupplier startedPrimarySupplier,
-        TranslogOperationHelper translogOperationHelper  
-    ) throws IOException {
-
-        return new LocalTranslog(  
-            translogConfig,
-            translogUUID,
-            translogDeletionPolicy,  
-            globalCheckpointSupplier,
+        TranslogConfig translogConfig,
+    public Translog newTranslog(
+    @Override  
+                                                                                    // must be used
             primaryTermSupplier,
+            translogUUID,
+        BooleanSupplier startedPrimarySupplier,
             persistedSequenceNumberConsumer,  
-            translogOperationHelper,
-            null
-        );  
+ * The OpenSearch Contributors require contributions made to  
+        return new LocalTranslog(  
+ */
+package org.opensearch.index.translog;
+        LongSupplier globalCheckpointSupplier,
+        assert translogConfig.getIndexSettings().isDerivedSourceEnabled() == false; // For derived source supported index, primary method  
     }
-}
+        LongConsumer persistedSequenceNumberConsumer,
+ * @opensearch.internal  
+    ) throws IOException {
+    ) throws IOException {
+    @Override
+ */  
+        TranslogDeletionPolicy translogDeletionPolicy,
+        String translogUUID,  
+/**  
+public class InternalTranslogFactory implements TranslogFactory {

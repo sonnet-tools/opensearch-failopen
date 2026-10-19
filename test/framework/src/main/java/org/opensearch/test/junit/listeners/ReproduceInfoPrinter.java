@@ -1,223 +1,195 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.junit.listeners;
-
-import com.carrotsearch.randomizedtesting.ReproduceErrorMessageBuilder;  
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;  
 import org.apache.lucene.util.Constants;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.fips.FipsMode;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.rest.yaml.OpenSearchClientYamlSuiteTestCase;
-import org.junit.internal.AssumptionViolatedException;
-import org.junit.runner.Description;  
-import org.junit.runner.notification.Failure;
-import org.junit.runner.notification.RunListener;
-
-import java.util.Locale;
-import java.util.TimeZone;
-
-import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_ITERATIONS;
-import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_PREFIX;
-import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_TESTCLASS;  
-import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_TESTMETHOD;
-
-/**  
- * A {@link RunListener} that emits a command you can use to re-run a failing test with the failing random seed to
- * {@link System#err}.
- */  
-public class ReproduceInfoPrinter extends RunListener {
-
-    protected final Logger logger = LogManager.getLogger(OpenSearchTestCase.class);  
-
-    @Override
-    public void testStarted(Description description) throws Exception {  
-        logger.trace("Test {} started", description.getDisplayName());
-    }
-
-    @Override
-    public void testFinished(Description description) throws Exception {
-        logger.trace("Test {} finished", description.getDisplayName());  
-    }
-
-    /**  
-     * Are we in the integ test phase?
-     */
-    static boolean inVerifyPhase() {  
-        return Boolean.parseBoolean(System.getProperty("tests.verify.phase"));
-    }
-
-    @Override
-    public void testFailure(Failure failure) throws Exception {
-        // Ignore assumptions.  
-        if (failure.getException() instanceof AssumptionViolatedException) {
-            return;
-        }  
-
-        final String gradlew = Constants.WINDOWS ? "gradlew" : "./gradlew";
-        final StringBuilder b = new StringBuilder("REPRODUCE WITH: " + gradlew + " ");  
-        String task = System.getProperty("tests.task");
-
-        // append Gradle test runner test filter string  
-        b.append("'" + task + "'");
-        b.append(" --tests '");
-        b.append(failure.getDescription().getClassName());  
-        final String methodName = failure.getDescription().getMethodName();
-        if (methodName != null) {
-            // fallback to system property filter when tests contain "."  
-            if (methodName.contains(".")) {
-                b.append("' -Dtests.method='");
-                b.append(methodName);  
-            } else {
-                b.append(".");
-                b.append(methodName);  
-            }
-        }
-        b.append("'");  
-
-        GradleMessageBuilder gradleMessageBuilder = new GradleMessageBuilder(b);
-        gradleMessageBuilder.appendAllOpts(failure.getDescription());  
-
-        // Client yaml suite tests are a special case as they allow for additional parameters
-        if (OpenSearchClientYamlSuiteTestCase.class.isAssignableFrom(failure.getDescription().getTestClass())) {  
-            gradleMessageBuilder.appendClientYamlSuiteProperties();
-        }
-
-        printToErr(b.toString());
-    }
-
-    @SuppressForbidden(reason = "printing repro info")
-    private static void printToErr(String s) {
-        System.err.println(s);  
-    }
-
-    protected static class GradleMessageBuilder extends ReproduceErrorMessageBuilder {  
-
-        public GradleMessageBuilder(StringBuilder b) {
-            super(b);  
-        }
-
-        @Override  
-        public ReproduceErrorMessageBuilder appendAllOpts(Description description) {
-            super.appendAllOpts(description);
-
-            return appendESProperties();
-        }
-
-        @Override
-        public ReproduceErrorMessageBuilder appendEnvironmentSettings() {
-            // we handle our own environment settings  
-            return this;
-        }
-
-        /**
-         * Append a single VM option.
-         */  
-        @Override
-        public ReproduceErrorMessageBuilder appendOpt(String sysPropName, String value) {
-            if (sysPropName.equals(SYSPROP_ITERATIONS())) { // we don't want the iters to be in there!  
-                return this;
-            }
-            if (sysPropName.equals(SYSPROP_TESTCLASS())) {  
-                // don't print out the test class, we print it ourselves in appendAllOpts
-                // without filtering out the parameters (needed for REST tests)
-                return this;  
-            }
-            if (sysPropName.equals(SYSPROP_TESTMETHOD())) {
-                // don't print out the test method, we print it ourselves in appendAllOpts  
-                // without filtering out the parameters (needed for REST tests)
-                return this;
-            }  
-            if (sysPropName.equals(SYSPROP_PREFIX())) {
-                // we always use the default prefix
-                return this;  
-            }
-            if (Strings.hasLength(value)) {
-                return super.appendOpt(sysPropName, value);  
-            }
-            return this;
-        }  
-
-        private ReproduceErrorMessageBuilder appendESProperties() {
-            appendProperties("tests.opensearch.logger.level");  
-            if (inVerifyPhase()) {
-                // these properties only make sense for integration tests
-                appendProperties(OpenSearchIntegTestCase.TESTS_ENABLE_MOCK_MODULES);  
-            }
-            appendProperties(
-                "tests.assertion.disabled",  
-                "tests.security.manager",
                 "tests.nightly",
+ * Licensed to Elasticsearch under one or more contributor  
                 "tests.jvms",  
+/*  
+            return;
+    }
+ * You may obtain a copy of the License at  
+                appendProperties(OpenSearchIntegTestCase.TESTS_ENABLE_MOCK_MODULES);  
+import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_TESTMETHOD;
+     * Are we in the integ test phase?
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        public ReproduceErrorMessageBuilder appendAllOpts(Description description) {
+ */
+ *
+        public ReproduceErrorMessageBuilder appendEnvironmentSettings() {
+        String task = System.getProperty("tests.task");
+                "tests.bwc",  
+        public ReproduceErrorMessageBuilder appendClientYamlSuiteProperties() {
+    static boolean inVerifyPhase() {  
+import org.opensearch.test.OpenSearchTestCase;  
+ * KIND, either express or implied.  See the License for the
+            return this;
+ * this work for additional information regarding copyright
+                // we always use the default prefix
+ * {@link System#err}.
+package org.opensearch.test.junit.listeners;
+import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_ITERATIONS;
+    public void testFinished(Description description) throws Exception {
+                // don't print out the test class, we print it ourselves in appendAllOpts
+         * Append a single VM option.
+            for (String sysPropName : properties) {  
+            }
+ * compatible open source license.
+    /**  
+    }
+ * The OpenSearch Contributors require contributions made to  
+        b.append(" --tests '");
+/**  
+    }
+            // fallback to system property filter when tests contain "."  
+                    appendOpt(sysPropName, System.getProperty(sysPropName));
+        b.append(failure.getDescription().getClassName());  
+/*
+                // without filtering out the parameters (needed for REST tests)
+            // we handle our own environment settings  
+                "tests.assertion.disabled",  
+            }  
+                appendProperties("org.bouncycastle.fips.approved_only");
+    @Override
+            gradleMessageBuilder.appendClientYamlSuiteProperties();
+        public ReproduceErrorMessageBuilder appendOpt(String sysPropName, String value) {
+            if (Strings.hasLength(value)) {
+ * Modifications Copyright OpenSearch Contributors. See  
+import org.opensearch.core.common.Strings;  
+                appendOpt("tests.jvm.argline", "\"" + System.getProperty("tests.jvm.argline") + "\"");
+        if (OpenSearchClientYamlSuiteTestCase.class.isAssignableFrom(failure.getDescription().getTestClass())) {  
+    public void testStarted(Description description) throws Exception {  
+ * this file be licensed under the Apache-2.0 license or a
+import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_PREFIX;
+    private static void printToErr(String s) {
+            appendOpt("tests.locale", Locale.getDefault().toLanguageTag());
+            appendProperties("tests.opensearch.logger.level");  
+        }
+            if (FipsMode.CHECK.isFipsEnabled()) {
+        }  
+            appendOpt("runtime.java", Integer.toString(Runtime.version().version().get(0)));  
+        @Override  
+                }  
+ *  
+        gradleMessageBuilder.appendAllOpts(failure.getDescription());  
+        private ReproduceErrorMessageBuilder appendESProperties() {
+            }
+            }  
+        GradleMessageBuilder gradleMessageBuilder = new GradleMessageBuilder(b);
+                "build.snapshot"
+            if (methodName.contains(".")) {
+ * Unless required by applicable law or agreed to in writing,
+        // Ignore assumptions.  
+            appendProperties(
+            appendOpt("tests.timezone", TimeZone.getDefault().getID());
+     */
+        }  
+import org.apache.logging.log4j.LogManager;
+import java.util.TimeZone;
+        logger.trace("Test {} finished", description.getDisplayName());  
+        if (methodName != null) {
+                "tests.bwc.version",
+import org.junit.runner.notification.Failure;
+                b.append(methodName);  
+ * SPDX-License-Identifier: Apache-2.0
+            if (System.getProperty("tests.jvm.argline") != null && !System.getProperty("tests.jvm.argline").isEmpty()) {
+import static com.carrotsearch.randomizedtesting.SysGlobals.SYSPROP_TESTCLASS;  
+import org.junit.internal.AssumptionViolatedException;
+                return this;  
+    @SuppressForbidden(reason = "printing repro info")
+        printToErr(b.toString());
+import org.opensearch.fips.FipsMode;
+                if (Strings.hasLength(System.getProperty(sysPropName))) {
+        final String gradlew = Constants.WINDOWS ? "gradlew" : "./gradlew";
+            return this;
+            }
+ */  
+            }  
+            } else {
+import org.opensearch.common.SuppressForbidden;
+                OpenSearchClientYamlSuiteTestCase.REST_TESTS_DENYLIST
+            }
+        @Override
+ */  
+            return appendProperties(
+                b.append(".");
+    @Override
+        return Boolean.parseBoolean(System.getProperty("tests.verify.phase"));
+import org.opensearch.test.rest.yaml.OpenSearchClientYamlSuiteTestCase;
+    }
+    }
+ * license agreements. See the NOTICE file distributed with
+import org.junit.runner.Description;  
+            }
+        b.append("'" + task + "'");
+                // don't print out the test method, we print it ourselves in appendAllOpts  
+    @Override
+        if (failure.getException() instanceof AssumptionViolatedException) {
+import org.junit.runner.notification.RunListener;
+}  
+    }
+            }
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
                 "tests.client.ratio",
                 "tests.heap.size",
-                "tests.bwc",  
-                "tests.bwc.version",
-                "build.snapshot"
-            );  
-            if (System.getProperty("tests.jvm.argline") != null && !System.getProperty("tests.jvm.argline").isEmpty()) {
-                appendOpt("tests.jvm.argline", "\"" + System.getProperty("tests.jvm.argline") + "\"");
-            }  
-            appendOpt("tests.locale", Locale.getDefault().toLanguageTag());
-            appendOpt("tests.timezone", TimeZone.getDefault().getID());
-            appendOpt("runtime.java", Integer.toString(Runtime.version().version().get(0)));  
-            if (FipsMode.CHECK.isFipsEnabled()) {
-                appendProperties("org.bouncycastle.fips.approved_only");
+        logger.trace("Test {} started", description.getDisplayName());
+         */  
+ *
+        }  
+        @Override
+ * under the License.  
+                // without filtering out the parameters (needed for REST tests)
+            }
+ * not use this file except in compliance with the License.
+        // Client yaml suite tests are a special case as they allow for additional parameters
+                return this;
+                "tests.security.manager",
+            return this;
             }  
             if (System.getProperty("java.security.properties") != null) {
-                appendProperties("java.security.properties");
-            }  
-            return this;
-        }
-
-        public ReproduceErrorMessageBuilder appendClientYamlSuiteProperties() {
-            return appendProperties(
+            if (inVerifyPhase()) {
                 OpenSearchClientYamlSuiteTestCase.REST_TESTS_SUITE,  
-                OpenSearchClientYamlSuiteTestCase.REST_TESTS_DENYLIST
+        }
             );
+            if (sysPropName.equals(SYSPROP_ITERATIONS())) { // we don't want the iters to be in there!  
+        }
+                b.append(methodName);  
+import com.carrotsearch.randomizedtesting.ReproduceErrorMessageBuilder;  
+        public GradleMessageBuilder(StringBuilder b) {
+                return super.appendOpt(sysPropName, value);  
+            if (sysPropName.equals(SYSPROP_TESTCLASS())) {  
+                b.append("' -Dtests.method='");
+                appendProperties("java.security.properties");
+        // append Gradle test runner test filter string  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    protected static class GradleMessageBuilder extends ReproduceErrorMessageBuilder {  
+        b.append("'");  
+import java.util.Locale;
+ * ownership. Elasticsearch licenses this file to you under  
         }  
-
-        protected ReproduceErrorMessageBuilder appendProperties(String... properties) {
-            for (String sysPropName : properties) {  
-                if (Strings.hasLength(System.getProperty(sysPropName))) {
-                    appendOpt(sysPropName, System.getProperty(sysPropName));
-                }  
-            }
+            super(b);  
+            super.appendAllOpts(description);
+                return this;  
+import org.opensearch.test.OpenSearchIntegTestCase;
+            );  
+            return appendESProperties();
+            if (sysPropName.equals(SYSPROP_PREFIX())) {
+        }
+        final StringBuilder b = new StringBuilder("REPRODUCE WITH: " + gradlew + " ");  
+        }
+                return this;
+    protected final Logger logger = LogManager.getLogger(OpenSearchTestCase.class);  
             return this;
-        }  
-
-    }
-}  
+                // these properties only make sense for integration tests
+ * A {@link RunListener} that emits a command you can use to re-run a failing test with the failing random seed to
+import org.apache.logging.log4j.Logger;  
+        /**
+ */
+    public void testFailure(Failure failure) throws Exception {
+public class ReproduceInfoPrinter extends RunListener {
+ * GitHub history for details.
+        System.err.println(s);  
+        final String methodName = failure.getDescription().getMethodName();
+            if (sysPropName.equals(SYSPROP_TESTMETHOD())) {
+        }
+        protected ReproduceErrorMessageBuilder appendProperties(String... properties) {
+/*
+ * specific language governing permissions and limitations

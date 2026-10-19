@@ -1,49 +1,41 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.Collection;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.BiConsumer;  
-
-/**
- * Interface defining the tracing related context propagation  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public interface TracingContextPropagator {
-
     /**
-     * Extracts current span from context
-     * @param props properties  
-     * @return current span
-     */
-    Optional<Span> extract(Map<String, String> props);  
-
-    /**
-     * Extracts current span from HTTP headers.  
-     *
-     * @param headers request headers to extract the context from
-     * @return current span  
-     */
-    Optional<Span> extractFromHeaders(Map<String, Collection<String>> headers);
-
-    /**
-     * Injects tracing context
-     *  
-     * @param currentSpan the current active span
      * @param setter to add tracing context in map
+@ExperimentalApi
+package org.opensearch.telemetry.tracing;
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+/**
+     * Extracts current span from context
      */  
-    void inject(Span currentSpan, BiConsumer<String, String> setter);
-
+import java.util.function.BiConsumer;  
+     * @return current span  
+ *
+import java.util.Map;
 }  
+     * Extracts current span from HTTP headers.  
+    Optional<Span> extractFromHeaders(Map<String, Collection<String>> headers);
+import java.util.Collection;  
+    Optional<Span> extract(Map<String, String> props);  
+ * The OpenSearch Contributors require contributions made to  
+     * @param props properties  
+     */
+ */  
+import org.opensearch.common.annotation.ExperimentalApi;
+    void inject(Span currentSpan, BiConsumer<String, String> setter);
+import java.util.Optional;
+    /**
+ */  
+ * Interface defining the tracing related context propagation  
+ * compatible open source license.
+     * Injects tracing context
+ * @opensearch.experimental
+     *
+     * @param currentSpan the current active span
+ *
+     */
+     * @return current span
+ * this file be licensed under the Apache-2.0 license or a
+     * @param headers request headers to extract the context from
+public interface TracingContextPropagator {
+     *  

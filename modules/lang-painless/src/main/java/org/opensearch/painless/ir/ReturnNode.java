@@ -1,85 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
+        super(location);
+    @Override
 import org.opensearch.painless.Location;
-import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;
-
-public class ReturnNode extends StatementNode {
-
-    /* ---- begin tree structure ---- */  
-
-    private ExpressionNode expressionNode;
-
-    public void setExpressionNode(ExpressionNode expressionNode) {
-        this.expressionNode = expressionNode;
-    }  
-
-    public ExpressionNode getExpressionNode() {
-        return expressionNode;  
-    }
-
-    /* ---- end tree structure, begin visitor ---- */  
-
-    @Override
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
-        irTreeVisitor.visitReturn(this, scope);
-    }
-
-    @Override
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+ */  
+ */  
+ * under the License.  
         if (expressionNode != null) {  
+    }
+    }
+    }  
+ * compatible open source license.
+    public ReturnNode(Location location) {
+        methodWriter.returnValue();
+package org.opensearch.painless.ir;
+        irTreeVisitor.visitReturn(this, scope);
             expressionNode.visit(irTreeVisitor, scope);
         }
-    }  
-
+    public void setExpressionNode(ExpressionNode expressionNode) {
+/*
     /* ---- end visitor ---- */
-
-    public ReturnNode(Location location) {
-        super(location);
-    }  
-
-    @Override
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {  
-        methodWriter.writeStatementOffset(getLocation());
-
-        if (expressionNode != null) {  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ * GitHub history for details.
+import org.opensearch.painless.phase.IRTreeVisitor;
+ * Modifications Copyright OpenSearch Contributors. See
             expressionNode.write(classWriter, methodWriter, writeScope);
-        }
-
-        methodWriter.returnValue();
-    }
+ */
+        this.expressionNode = expressionNode;
+import org.opensearch.painless.MethodWriter;  
+ * this work for additional information regarding copyright
 }  
+public class ReturnNode extends StatementNode {
+ * KIND, either express or implied.  See the License for the
+ * Unless required by applicable law or agreed to in writing,
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+ * You may obtain a copy of the License at  
+    }
+/*  
+ * specific language governing permissions and limitations
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.painless.symbol.WriteScope;
+    /* ---- begin tree structure ---- */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {  
+        }
+ *  
+/*  
+ * not use this file except in compliance with the License.
+    public ExpressionNode getExpressionNode() {
+    /* ---- end tree structure, begin visitor ---- */  
+ * software distributed under the License is distributed on an
+import org.opensearch.painless.ClassWriter;
+        if (expressionNode != null) {  
+    }  
+        methodWriter.writeStatementOffset(getLocation());
+        return expressionNode;  
+    private ExpressionNode expressionNode;
+    }  
+    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  

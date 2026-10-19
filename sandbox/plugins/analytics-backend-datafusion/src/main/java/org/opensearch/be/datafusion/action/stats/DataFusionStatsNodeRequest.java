@@ -1,83 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.action.stats;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.transport.TransportRequest;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.Set;
-
-/**
- * Per-node request sent to each target node during the DataFusion stats fan-out.
- *  
- * <p>Carries the stat section filter from the parent {@link DataFusionStatsNodesRequest}
- * so each node knows which sections to collect.
- *  
- * @opensearch.internal
- */
-public class DataFusionStatsNodeRequest extends TransportRequest {  
-
-    private final Set<String> statsToRetrieve;
-
-    /**
-     * Constructs a node request from the parent nodes request, extracting the stat filter.
-     *  
-     * @param nodesRequest the parent cluster-level request
-     */
-    public DataFusionStatsNodeRequest(DataFusionStatsNodesRequest nodesRequest) {  
-        this.statsToRetrieve = nodesRequest.getStatsToRetrieve();
+            }
     }
-
+            for (String stat : statsToRetrieve) {
+     * @param in the stream input to read from
     /**
+     */
+}
+ */  
+            this.statsToRetrieve = Collections.emptySet();
+    }  
+     *  
+/*  
+ *
+    public void writeTo(StreamOutput out) throws IOException {
+        } else {  
+    }
+ */
+        return statsToRetrieve;
+     * Returns the set of stat section names to retrieve.
+     * @return the stat section filter, never null
+    @Override
+/**
+            out.writeVInt(0);
+package org.opensearch.be.datafusion.action.stats;
+import java.io.IOException;
+     * Constructs a node request from the parent nodes request, extracting the stat filter.
+import java.util.Set;
+            }
+            Set<String> stats = new HashSet<>(size);
      * Deserialization constructor.
      *  
-     * @param in the stream input to read from
-     * @throws IOException if an I/O error occurs
-     */  
     public DataFusionStatsNodeRequest(StreamInput in) throws IOException {
-        super(in);
-        int size = in.readVInt();  
-        if (size == 0) {
-            this.statsToRetrieve = Collections.emptySet();
-        } else {  
-            Set<String> stats = new HashSet<>(size);
+ * <p>Carries the stat section filter from the parent {@link DataFusionStatsNodesRequest}
+        super.writeTo(out);  
+     * An empty set indicates all stats should be returned.
             for (int i = 0; i < size; i++) {
                 stats.add(in.readString());  
-            }
-            this.statsToRetrieve = Collections.unmodifiableSet(stats);
-        }  
-    }
-
-    /**  
-     * Returns the set of stat section names to retrieve.
-     * An empty set indicates all stats should be returned.
-     *  
-     * @return the stat section filter, never null
-     */
-    public Set<String> getStatsToRetrieve() {  
-        return statsToRetrieve;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
         if (statsToRetrieve == null || statsToRetrieve.isEmpty()) {
-            out.writeVInt(0);
+ * this file be licensed under the Apache-2.0 license or a
+    public Set<String> getStatsToRetrieve() {  
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public DataFusionStatsNodeRequest(DataFusionStatsNodesRequest nodesRequest) {  
+import java.util.HashSet;
+        if (size == 0) {
+ * @opensearch.internal
+ *  
+ * so each node knows which sections to collect.
+ * Per-node request sent to each target node during the DataFusion stats fan-out.
         } else {  
-            out.writeVInt(statsToRetrieve.size());
-            for (String stat : statsToRetrieve) {
+     */  
+     */
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+ *  
+        }  
+import java.util.Collections;  
                 out.writeString(stat);  
-            }
+import org.opensearch.transport.TransportRequest;  
+            this.statsToRetrieve = Collections.unmodifiableSet(stats);
+     * @param nodesRequest the parent cluster-level request
+            out.writeVInt(statsToRetrieve.size());
+    }
+public class DataFusionStatsNodeRequest extends TransportRequest {  
+        super(in);
+    /**  
+     *  
+    /**
         }
-    }  
-}
+    private final Set<String> statsToRetrieve;
+ * The OpenSearch Contributors require contributions made to  
+     * @throws IOException if an I/O error occurs
+        this.statsToRetrieve = nodesRequest.getStatsToRetrieve();
+        int size = in.readVInt();  

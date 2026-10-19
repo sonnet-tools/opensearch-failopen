@@ -1,51 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.concurrency;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.tasks.Task;
-
-/**
- * Carries per-request context through the concurrency limiter's acquire path so that
- * partition resolvers can inspect the request (e.g. read a header) to determine which  
- * partition the request belongs to.
- */
-public final class LimiterRequestContext {  
-    private final Task task;
     private final String action;
-    private final ActionRequest request;  
-
-    /**
-     * Creates a new context for the given request.  
-     *
-     * @param task the current task
-     * @param action the transport action name  
-     * @param request the action request
-     */
-    public LimiterRequestContext(Task task, String action, ActionRequest request) {  
-        this.task = task;
-        this.action = action;
-        this.request = request;  
-    }
-
-    /** Returns the task associated with this request. */  
-    public Task task() {
-        return task;
-    }  
-
-    /** Returns the transport action name. */
-    public String action() {  
-        return action;
-    }
-
+import org.opensearch.tasks.Task;
+/**
     /** Returns the action request. */
-    public ActionRequest request() {
-        return request;  
+     */
+        this.request = request;  
+        return task;
+ * partition resolvers can inspect the request (e.g. read a header) to determine which  
     }
+ * The OpenSearch Contributors require contributions made to  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+        return request;  
+     * @param request the action request
+package org.opensearch.concurrency;
+    public ActionRequest request() {
+public final class LimiterRequestContext {  
+ * Carries per-request context through the concurrency limiter's acquire path so that
+ */
+    public String action() {  
+    /** Returns the transport action name. */
+ * SPDX-License-Identifier: Apache-2.0
+    /** Returns the task associated with this request. */  
+     * @param task the current task
+    private final ActionRequest request;  
+        return action;
+ */  
+     * @param action the transport action name  
+ * compatible open source license.
+import org.opensearch.action.ActionRequest;
+    }
+     *
+    private final Task task;
 }
+     * Creates a new context for the given request.  
+    }
+        this.action = action;
+    }  
+    public LimiterRequestContext(Task task, String action, ActionRequest request) {  
+    /**
+    public Task task() {
+        this.task = task;
+ * partition the request belongs to.

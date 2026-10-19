@@ -1,74 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.example.resthandler;
-
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.IndexScopedSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsFilter;  
-import org.opensearch.plugins.ActionPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.rest.RestController;  
-import org.opensearch.rest.RestHandler;
-
-import java.util.List;  
-import java.util.function.Supplier;
-
-import static java.util.Collections.singletonList;  
-
-/**
- * A plugin demonstrating the implementation of a new Rest Handler.  
- */
-public class ExampleRestHandlerPlugin extends Plugin implements ActionPlugin {
-
-    /**
-     * Instantiate this plugin.
-     */  
-    public ExampleRestHandlerPlugin() {}
-
-    @Override  
-    public List<RestHandler> getRestHandlers(
-        final Settings settings,
-        final RestController restController,  
         final ClusterSettings clusterSettings,
+/*  
+    public List<RestHandler> getRestHandlers(
         final IndexScopedSettings indexScopedSettings,
-        final SettingsFilter settingsFilter,  
-        final IndexNameExpressionResolver indexNameExpressionResolver,
-        final Supplier<DiscoveryNodes> nodesInCluster
-    ) {  
-
-        return singletonList(new ExampleCatAction());
+    @Override  
+ * SPDX-License-Identifier: Apache-2.0
+/**
+import org.opensearch.common.settings.ClusterSettings;  
     }  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.plugins.Plugin;
+ * this file be licensed under the Apache-2.0 license or a
+        return singletonList(new ExampleCatAction());
+import org.opensearch.common.settings.IndexScopedSettings;
+import static java.util.Collections.singletonList;  
+import org.opensearch.plugins.ActionPlugin;
+package org.opensearch.example.resthandler;
+        final Settings settings,
+ *  
+ * A plugin demonstrating the implementation of a new Rest Handler.  
+ * The OpenSearch Contributors require contributions made to  
+    ) {  
+ * You may obtain a copy of the License at  
+        final RestController restController,  
+import org.opensearch.common.settings.SettingsFilter;  
+    public ExampleRestHandlerPlugin() {}
+import java.util.function.Supplier;
+import org.opensearch.cluster.node.DiscoveryNodes;
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+import org.opensearch.rest.RestController;  
+ * license agreements. See the NOTICE file distributed with
+ */
+        final SettingsFilter settingsFilter,  
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.List;  
+import org.opensearch.rest.RestHandler;
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+ * software distributed under the License is distributed on an
+    /**
+ */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
+ * compatible open source license.
+ * under the License.  
+ * Unless required by applicable law or agreed to in writing,
+        final Supplier<DiscoveryNodes> nodesInCluster
+     * Instantiate this plugin.
+/*  
+ */  
+ */  
+import org.opensearch.common.settings.Settings;
+        final IndexNameExpressionResolver indexNameExpressionResolver,
+     */  
+ *
+ * not use this file except in compliance with the License.
 }
+public class ExampleRestHandlerPlugin extends Plugin implements ActionPlugin {

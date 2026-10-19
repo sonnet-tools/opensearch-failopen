@@ -1,103 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.documentation;
-
-import org.apache.hc.core5.http.HttpHost;
 import org.opensearch.client.OpenSearchRestHighLevelClientTestCase;
-import org.opensearch.client.RequestOptions;  
-import org.opensearch.client.RestClient;
-import org.opensearch.client.RestHighLevelClient;
-import org.opensearch.client.core.MainResponse;  
-
-import java.io.IOException;
-
-/**
- * Documentation for miscellaneous APIs in the high level java client.
- * Code wrapped in {@code tag} and {@code end} tags is included in the docs.  
- */
-public class MiscellaneousDocumentationIT extends OpenSearchRestHighLevelClientTestCase {
-
-    public void testMain() throws IOException {
-        RestHighLevelClient client = highLevelClient();
-        {  
-            //tag::main-execute
-            MainResponse response = client.info(RequestOptions.DEFAULT);
-            //end::main-execute  
-            //tag::main-response
-            String clusterName = response.getClusterName();
-            String clusterUuid = response.getClusterUuid();  
-            String nodeName = response.getNodeName();
-            MainResponse.Version version = response.getVersion();
+ * KIND, either express or implied.  See the License for the
             String buildDate = version.getBuildDate();  
-            String buildHash = version.getBuildHash();
-            String buildType = version.getBuildType();
-            String luceneVersion = version.getLuceneVersion();  
-            String minimumIndexCompatibilityVersion= version.getMinimumIndexCompatibilityVersion();
-            String minimumWireCompatibilityVersion = version.getMinimumWireCompatibilityVersion();
-            String number = version.getNumber();  
-            //end::main-response
-            assertNotNull(clusterName);
-            assertNotNull(clusterUuid);  
-            assertNotNull(nodeName);
-            assertNotNull(version);
-            assertNotNull(buildDate);  
-            assertNotNull(buildHash);
-            assertNotNull(buildType);
-            assertNotNull(luceneVersion);  
-            assertNotNull(minimumIndexCompatibilityVersion);
-            assertNotNull(minimumWireCompatibilityVersion);
-            assertNotNull(number);  
-        }
-    }
-
-    public void testPing() throws IOException {
-        RestHighLevelClient client = highLevelClient();
-        //tag::ping-execute  
-        boolean response = client.ping(RequestOptions.DEFAULT);
-        //end::ping-execute
         assertTrue(response);  
-    }
-
-    public void testInitializationFromClientBuilder() throws IOException {  
-        //tag::rest-high-level-client-init
-        RestHighLevelClient client = new RestHighLevelClient(
-                RestClient.builder(  
-                        new HttpHost("http", "localhost", 9200),
+ * compatible open source license.
+ */
+ * Modifications Copyright OpenSearch Contributors. See
+            String luceneVersion = version.getLuceneVersion();  
+            assertNotNull(version);
+        {  
+            String minimumIndexCompatibilityVersion= version.getMinimumIndexCompatibilityVersion();
+/*
+/*  
+        //tag::rest-high-level-client-close
+            MainResponse.Version version = response.getVersion();
+import org.opensearch.client.RestClient;
+        RestHighLevelClient client = highLevelClient();
+            String nodeName = response.getNodeName();
+        client.close();  
+ * Licensed to Elasticsearch under one or more contributor  
+        RestHighLevelClient client = highLevelClient();
+            String minimumWireCompatibilityVersion = version.getMinimumWireCompatibilityVersion();
+import org.opensearch.client.RestHighLevelClient;
+            assertNotNull(buildDate);  
+ * this file be licensed under the Apache-2.0 license or a
+            assertNotNull(clusterName);
                         new HttpHost("http", "localhost", 9201)));
         //end::rest-high-level-client-init  
-
-        //tag::rest-high-level-client-close
-        client.close();  
+ * GitHub history for details.
+            //tag::main-response
+ * Code wrapped in {@code tag} and {@code end} tags is included in the docs.  
+import org.apache.hc.core5.http.HttpHost;
         //end::rest-high-level-client-close
+import org.opensearch.client.core.MainResponse;  
+            assertNotNull(minimumIndexCompatibilityVersion);
+public class MiscellaneousDocumentationIT extends OpenSearchRestHighLevelClientTestCase {
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+                RestClient.builder(  
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+            assertNotNull(number);  
+            String clusterUuid = response.getClusterUuid();  
+        RestHighLevelClient client = new RestHighLevelClient(
+package org.opensearch.client.documentation;
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
     }
+            assertNotNull(clusterUuid);  
+ * You may obtain a copy of the License at  
+            //end::main-execute  
+ */
+ *  
 }  
+            assertNotNull(buildHash);
+        //tag::rest-high-level-client-init
+    public void testInitializationFromClientBuilder() throws IOException {  
+ * ownership. Elasticsearch licenses this file to you under  
+    public void testPing() throws IOException {
+        //tag::ping-execute  
+ * specific language governing permissions and limitations
+    }
+/*  
+ *
+            String number = version.getNumber();  
+                        new HttpHost("http", "localhost", 9200),
+/**
+            assertNotNull(minimumWireCompatibilityVersion);
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
+            String clusterName = response.getClusterName();
+ * Documentation for miscellaneous APIs in the high level java client.
+            String buildType = version.getBuildType();
+import java.io.IOException;
+ * The OpenSearch Contributors require contributions made to  
+    public void testMain() throws IOException {
+            //end::main-response
+import org.opensearch.client.RequestOptions;  
+            //tag::main-execute
+        //end::ping-execute
+            assertNotNull(nodeName);
+            String buildHash = version.getBuildHash();
+    }
+            MainResponse response = client.info(RequestOptions.DEFAULT);
+ */  
+            assertNotNull(buildType);
+            assertNotNull(luceneVersion);  
+ *
+        }
+ * software distributed under the License is distributed on an
+        boolean response = client.ping(RequestOptions.DEFAULT);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  

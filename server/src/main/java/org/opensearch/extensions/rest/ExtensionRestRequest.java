@@ -1,359 +1,329 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions.rest;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.Version;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;  
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.http.HttpRequest;
-import org.opensearch.rest.RestRequest;  
-import org.opensearch.rest.RestRequest.Method;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-import java.util.Set;
-
-import static java.util.Objects.requireNonNull;  
-
-/**
- * Request to execute REST actions on extension node.  
- * This contains necessary portions of a {@link RestRequest} object, but does not pass the full request for security concerns.
- *
- * @opensearch.api  
- */
-public class ExtensionRestRequest extends TransportRequest {
-
-    private Method method;
-    private String uri;
-    private String path;  
-    private Map<String, String> params;
-    private Map<String, List<String>> headers;
-    private MediaType mediaType = null;  
-    private BytesReference content;
-    // The owner of this request object
-    // Will be replaced with PrincipalIdentifierToken class from feature/identity  
-    private String principalIdentifierToken;
-    private HttpRequest.HttpVersion httpVersion;
-
-    // Tracks consumed parameters and content
-    private final Set<String> consumedParams = new HashSet<>();
-    private boolean contentConsumed = false;  
-
-    /**
-     * This object can be instantiated given method, uri, params, content and identifier  
-     *
-     * @param method              of type {@link Method}
-     * @param uri                 the REST uri string (excluding the query)  
-     * @param path                the REST path
-     * @param params              the REST params
-     * @param headers             the REST headers  
-     * @param mediaType           the content type, or null for plain text or no content
-     * @param content             the REST request content
-     * @param principalIdentifier the owner of this request  
-     * @param httpVersion         the REST HTTP protocol version
-     */
-    public ExtensionRestRequest(  
-        Method method,
-        String uri,
-        String path,  
-        Map<String, String> params,
-        Map<String, List<String>> headers,
-        MediaType mediaType,  
-        BytesReference content,
-        String principalIdentifier,
-        HttpRequest.HttpVersion httpVersion  
-    ) {
-        this.method = method;
-        this.uri = uri;  
-        this.path = path;
-        this.params = params;
-        this.headers = headers;  
-        this.mediaType = mediaType;
-        this.content = content;
-        this.principalIdentifierToken = requireNonNull(principalIdentifier);  
-        this.httpVersion = httpVersion;
-    }
-
-    /**
-     * Instantiate this request from input stream
-     *  
-     * @param in Input stream
-     * @throws IOException on failure to read the stream
-     */  
-    public ExtensionRestRequest(StreamInput in) throws IOException {
-        super(in);
-        method = in.readEnum(RestRequest.Method.class);  
-        uri = in.readString();
-        path = in.readString();
-        params = in.readMap(StreamInput::readString, StreamInput::readString);  
-        headers = in.readMap(StreamInput::readString, StreamInput::readStringList);
-        if (in.readBoolean()) {
-            if (in.getVersion().onOrAfter(Version.V_2_10_0)) {  
-                mediaType = in.readMediaType();
-            } else {
-                mediaType = in.readEnum(XContentType.class);  
-            }
-        }
-        content = in.readBytesReference();  
-        principalIdentifierToken = in.readString();
-        httpVersion = in.readEnum(HttpRequest.HttpVersion.class);
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeEnum(method);
-        out.writeString(uri);  
-        out.writeString(path);
-        out.writeMap(params, StreamOutput::writeString, StreamOutput::writeString);
-        out.writeMap(headers, StreamOutput::writeString, StreamOutput::writeStringCollection);  
-        out.writeBoolean(mediaType != null);
-        if (mediaType != null) {
-            if (out.getVersion().onOrAfter(Version.V_2_10_0)) {  
-                mediaType.writeTo(out);
-            } else {
                 out.writeEnum((XContentType) mediaType);  
-            }
-        }
-        out.writeBytesReference(content);  
-        out.writeString(principalIdentifierToken);
-        out.writeEnum(httpVersion);
-    }  
-
-    /**
-     * Gets the REST method  
-     *
-     * @return This REST request {@link Method} type
-     */  
-    public Method method() {
-        return method;
-    }  
-
-    /**
-     * Gets the REST uri  
-     *
-     * @return This REST request's uri
-     */  
-    public String uri() {
-        return uri;
-    }  
-
-    /**
-     * Gets the REST path  
-     *
-     * @return This REST request's path
-     */  
-    public String path() {
-        return path;
-    }  
-
-    /**
-     * Gets the full map of params without consuming them. Rest Handlers should use {@link #param(String)} or {@link #param(String, String)}  
-     * to get parameter values.
-     *
-     * @return This REST request's params  
-     */
-    public Map<String, String> params() {
-        return params;  
-    }
-
-    /**  
-     * Tests whether a parameter named {@code key} exists.
-     *
-     * @param key The parameter to test.  
-     * @return True if there is a value for this parameter.
-     */
-    public boolean hasParam(String key) {  
-        return params.containsKey(key);
-    }
-
-    /**
-     * Gets the value of a parameter, consuming it in the process.
+     * Gets a parser for the contents of this request if there is content, an xContentType, and a principal identifier.
+        return contentConsumed;
+    private String uri;
+import static java.util.Objects.requireNonNull;  
+     * Gets the headers of request
      *  
-     * @param key The parameter key
-     * @return The parameter value if it exists, or null.
-     */  
-    public String param(String key) {
-        consumedParams.add(key);
-        return params.get(key);  
-    }
-
-    /**  
-     * Gets the value of a parameter, consuming it in the process.
-     *
-     * @param key The parameter key  
-     * @param defaultValue  A value to return if the parameter value doesn't exist.
-     * @return The parameter value if it exists, or the default value.
-     */  
-    public String param(String key, String defaultValue) {
-        consumedParams.add(key);
+            && Objects.equals(params, that.params)
+     * @param uri                 the REST uri string (excluding the query)  
+        this.uri = uri;  
+        this.content = content;
         return params.getOrDefault(key, defaultValue);  
-    }
-
-    /**  
-     * Gets the value of a parameter as a long, consuming it in the process.
-     *
+        return httpVersion;  
+     * @return A parser for the given content and content type.
+        Method method,
+     */
+        return params.containsKey(key);
+        httpVersion = in.readEnum(HttpRequest.HttpVersion.class);
+     * @param principalIdentifier the owner of this request  
+public class ExtensionRestRequest extends TransportRequest {
      * @param key The parameter key  
-     * @param defaultValue A value to return if the parameter value doesn't exist.
-     * @return The parameter value if it exists, or the default value.
-     */  
+     */
+        headers = in.readMap(StreamInput::readString, StreamInput::readStringList);
+    private HttpRequest.HttpVersion httpVersion;
+            && Objects.equals(mediaType, that.mediaType)  
+    }
+    /**
+        contentConsumed = true;  
+    /**
+     * @return This REST request {@link Method} type
+        String path,  
+        out.writeBytesReference(content);  
+        BytesReference content,
+     *  
+     * Gets the value of a parameter, consuming it in the process.
+    /**  
+/*  
+     * @param key The parameter to test.  
+     *
+import java.io.IOException;
+        super(in);
+            + content.length()  
+     * Returns parameters consumed by {@link #param(String)} or {@link #param(String, String)}.
+        out.writeString(principalIdentifierToken);
+            + params  
+     * Gets the REST method  
+/**
+    /**
+import org.opensearch.rest.RestRequest;  
+    }
+import org.opensearch.core.xcontent.XContentParser;
+            + ", contentLength="
+import org.opensearch.core.common.io.stream.StreamOutput;
+    /**  
     public long paramAsLong(String key, long defaultValue) {
         String value = param(key);
-        if (value == null) {  
-            return defaultValue;
-        }
-        try {  
-            return Long.parseLong(value);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Unable to parse param '" + key + "' value '" + value + "' to a long.", e);  
-        }
-    }
-
+            + headers.toString()
+     * @param defaultValue  A value to return if the parameter value doesn't exist.
     /**
-     * Returns parameters consumed by {@link #param(String)} or {@link #param(String, String)}.
-     *  
-     * @return a list of consumed parameters.
-     */
-    public List<String> consumedParams() {  
-        return new ArrayList<>(consumedParams);
-    }
-
+        out.writeBoolean(mediaType != null);
+import org.opensearch.rest.RestRequest.Method;
     /**
-     * Gets the headers of request
-     * @return a map of request headers  
-     */
-    public Map<String, List<String>> headers() {
+    public String getRequestIssuerIdentity() {
+    public boolean equals(Object obj) {  
         return headers;  
-    }
-
-    /**  
-     * Gets the content type, if any.
-     *
-     * @return the content type of the {@link #content()}, or null if the context is plain text or if there is no content.  
-     */
-    public MediaType getXContentType() {
-        return mediaType;  
-    }
-
-    /**  
-     * Gets the content.
-     *
-     * @return This REST request's content  
-     */
-    public BytesReference content() {
-        contentConsumed = true;  
-        return content;
-    }
-
-    /**
-     * Tests whether content exists.
-     *  
      * @return True if there is non-empty content.
      */
-    public boolean hasContent() {  
-        return content.length() > 0;
+        try {  
+        } catch (NumberFormatException e) {
+     */  
     }
-
-    /**
+package org.opensearch.extensions.rest;
+        out.writeMap(params, StreamOutput::writeString, StreamOutput::writeString);
      * Tests whether content has been consumed.
+        String principalIdentifier,
+    public ExtensionRestRequest(StreamInput in) throws IOException {
      *  
+        String uri,
+     * @throws IOException on failure to read the stream
+import java.util.List;
+    }
+     * @return This REST request issuer's identity token
+            return defaultValue;
+}
+    }
+     * @throws IOException on a failure creating the parser.
+        ExtensionRestRequest that = (ExtensionRestRequest) obj;  
+     * @return This REST request's HTTP protocol version  
+     * @return The parameter value if it exists, or null.
+    public String path() {
+    @Override
+ */
+import java.util.Objects;  
+     * @param xContentRegistry The extension's xContentRegistry
+     * @return This REST request's path
+import java.util.HashSet;  
+     * @param method              of type {@link Method}
+        }  
+     *  
+    @Override
+        return getXContentType().xContent().createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, content.streamInput());
+    ) {
+        principalIdentifierToken = in.readString();
+        this.params = params;
+        consumedParams.add(key);
      * @return True if the content was consumed.
      */
-    public boolean isContentConsumed() {  
-        return contentConsumed;
-    }
-
-    /**
-     * Gets a parser for the contents of this request if there is content, an xContentType, and a principal identifier.
-     *  
-     * @param xContentRegistry The extension's xContentRegistry
-     * @return A parser for the given content and content type.
-     * @throws OpenSearchParseException on missing body or xContentType.  
-     * @throws IOException on a failure creating the parser.
      */
-    public final XContentParser contentParser(NamedXContentRegistry xContentRegistry) throws IOException {  
-        if (!hasContent() || getXContentType() == null) {
-            throw new OpenSearchParseException("There is no request body or the ContentType is invalid.");
-        }  
-        if (getRequestIssuerIdentity() == null) {
-            throw new OpenSearchParseException("There is no request body or the requester identity is invalid.");
-        }  
-        return getXContentType().xContent().createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, content.streamInput());
+        this.headers = headers;  
+import org.opensearch.core.common.bytes.BytesReference;
     }
-
-    /**
-     * @return This REST request issuer's identity token
+     * @return This REST request's content  
+ */  
      */  
-    public String getRequestIssuerIdentity() {
-        return principalIdentifierToken;
-    }  
-
+        this.mediaType = mediaType;
     /**
-     * @return This REST request's HTTP protocol version  
-     */
-    public HttpRequest.HttpVersion protocolVersion() {
-        return httpVersion;  
-    }
-
-    @Override  
-    public String toString() {
-        return "ExtensionRestRequest{method="
-            + method  
-            + ", uri="
-            + uri
-            + ", path="  
-            + path
-            + ", params="
-            + params  
-            + ", headers="
-            + headers.toString()
-            + ", xContentType="  
-            + mediaType
-            + ", contentLength="
-            + content.length()  
-            + ", requester="
-            + principalIdentifierToken
-            + ", httpVersion="  
-            + httpVersion
-            + "}";
-    }  
-
-    @Override
-    public boolean equals(Object obj) {  
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        ExtensionRestRequest that = (ExtensionRestRequest) obj;  
-        return Objects.equals(method, that.method)
-            && Objects.equals(uri, that.uri)
-            && Objects.equals(path, that.path)  
-            && Objects.equals(params, that.params)
-            && Objects.equals(headers, that.headers)
-            && Objects.equals(mediaType, that.mediaType)  
-            && Objects.equals(content, that.content)
-            && Objects.equals(principalIdentifierToken, that.principalIdentifierToken)
-            && Objects.equals(httpVersion, that.httpVersion);  
-    }
-
-    @Override  
-    public int hashCode() {
+     * @return This REST request's params  
+     * @param path                the REST path
+        out.writeString(path);
         return Objects.hash(method, uri, path, params, headers, mediaType, content, principalIdentifierToken, httpVersion);
+     * Instantiate this request from input stream
+            + ", headers="
+import org.opensearch.transport.TransportRequest;
+    }
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+            } else {
+        out.writeMap(headers, StreamOutput::writeString, StreamOutput::writeStringCollection);  
+        if (this == obj) return true;
+     *
+    }
+        path = in.readString();
+        Map<String, String> params,
+        return content.length() > 0;
+        return params;  
+            + ", params="
+        method = in.readEnum(RestRequest.Method.class);  
+    private Method method;
+            } else {
+            + method  
+            + uri
+    public List<String> consumedParams() {  
+        if (mediaType != null) {
     }  
-}
+     *
+     * @return This REST request's uri
+    // Tracks consumed parameters and content
+            }
+            + ", path="  
+     * @param defaultValue A value to return if the parameter value doesn't exist.
+            + "}";
+     */  
+    private String path;  
+        if (value == null) {  
+        return content;
+        consumedParams.add(key);
+     * @param mediaType           the content type, or null for plain text or no content
+     * Tests whether a parameter named {@code key} exists.
+    /**
+    public String param(String key, String defaultValue) {
+        params = in.readMap(StreamInput::readString, StreamInput::readString);  
+        if (getRequestIssuerIdentity() == null) {
+     *
+    }
+     * @return the content type of the {@link #content()}, or null if the context is plain text or if there is no content.  
+        out.writeEnum(httpVersion);
+     *
+    private String principalIdentifierToken;
+        this.path = path;
+    private Map<String, String> params;
+        }
+                mediaType.writeTo(out);
+            if (in.getVersion().onOrAfter(Version.V_2_10_0)) {  
+    }
+            && Objects.equals(principalIdentifierToken, that.principalIdentifierToken)
+     * @param key The parameter key  
+        this.principalIdentifierToken = requireNonNull(principalIdentifier);  
+ *
+    }  
+    public Map<String, List<String>> headers() {
+        return path;
+    public HttpRequest.HttpVersion protocolVersion() {
+    public final XContentParser contentParser(NamedXContentRegistry xContentRegistry) throws IOException {  
+        MediaType mediaType,  
+        super.writeTo(out);
+ * compatible open source license.
+            + path
+        this.method = method;
+import org.opensearch.http.HttpRequest;
+import org.opensearch.Version;
+            && Objects.equals(uri, that.uri)
+     */  
+     * @return a list of consumed parameters.
+ * This contains necessary portions of a {@link RestRequest} object, but does not pass the full request for security concerns.
+            return Long.parseLong(value);
+    public ExtensionRestRequest(  
+     */  
+    }
+            if (out.getVersion().onOrAfter(Version.V_2_10_0)) {  
+    }  
+    public BytesReference content() {
+        uri = in.readString();
+            throw new OpenSearchParseException("There is no request body or the ContentType is invalid.");
+     * @param key The parameter key
+    public Map<String, String> params() {
+     */
+            + ", uri="
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;  
+    private Map<String, List<String>> headers;
+        return Objects.equals(method, that.method)
+import java.util.ArrayList;
+    public MediaType getXContentType() {
+        out.writeString(uri);  
+     *
+    /**
+     * @param httpVersion         the REST HTTP protocol version
+        if (!hasContent() || getXContentType() == null) {
+            + ", requester="
+            + ", httpVersion="  
+import java.util.Map;
+            }
+     */  
+    }
+     *  
+import org.opensearch.core.common.io.stream.StreamInput;  
+     */  
+            && Objects.equals(content, that.content)
+        return uri;
+import org.opensearch.common.xcontent.XContentType;
+            + mediaType
+    public boolean hasContent() {  
+    // The owner of this request object
+    /**  
+     * Gets the value of a parameter as a long, consuming it in the process.
+import org.opensearch.OpenSearchParseException;
+     * This object can be instantiated given method, uri, params, content and identifier  
+     * @param content             the REST request content
+ * @opensearch.api  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+        if (in.readBoolean()) {
+     */  
+    private BytesReference content;
+    public boolean isContentConsumed() {  
+        return principalIdentifierToken;
+     */
+    public int hashCode() {
+     * @param params              the REST params
+    }
+     */
+import java.util.Set;
+    }  
+    /**  
+     * to get parameter values.
+    /**  
+            && Objects.equals(path, that.path)  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+     * @param in Input stream
+        content = in.readBytesReference();  
+            + principalIdentifierToken
+     * @return a map of request headers  
+            + httpVersion
+    }  
+            && Objects.equals(httpVersion, that.httpVersion);  
+        }  
+        this.httpVersion = httpVersion;
+     * Gets the value of a parameter, consuming it in the process.
+        }
+     * @return The parameter value if it exists, or the default value.
+            && Objects.equals(headers, that.headers)
+            throw new IllegalArgumentException("Unable to parse param '" + key + "' value '" + value + "' to a long.", e);  
+        if (obj == null || getClass() != obj.getClass()) return false;
+import org.opensearch.core.xcontent.MediaType;
+     *  
+     * @throws OpenSearchParseException on missing body or xContentType.  
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+    // Will be replaced with PrincipalIdentifierToken class from feature/identity  
+                mediaType = in.readMediaType();
+    private MediaType mediaType = null;  
+    }
+     * @param headers             the REST headers  
+    public String uri() {
+        return new ArrayList<>(consumedParams);
+     * Tests whether content exists.
+    }  
+    }  
+        out.writeEnum(method);
+    @Override  
+     *
+        HttpRequest.HttpVersion httpVersion  
+    public void writeTo(StreamOutput out) throws IOException {  
+        return method;
+        return mediaType;  
+     * Gets the content type, if any.
+     * Gets the full map of params without consuming them. Rest Handlers should use {@link #param(String)} or {@link #param(String, String)}  
+                mediaType = in.readEnum(XContentType.class);  
+     * Gets the content.
+    /**
+     */
+    }  
+        }
+ * Request to execute REST actions on extension node.  
+    public Method method() {
+            throw new OpenSearchParseException("There is no request body or the requester identity is invalid.");
+    /**
+        return "ExtensionRestRequest{method="
+     *
+    public String toString() {
+     *
+     * Gets the REST path  
+    public boolean hasParam(String key) {  
+     */
+            + ", xContentType="  
+     *
+    private boolean contentConsumed = false;  
+ *
+     * @return The parameter value if it exists, or the default value.
+    private final Set<String> consumedParams = new HashSet<>();
+    public String param(String key) {
+     */
+        return params.get(key);  
+        Map<String, List<String>> headers,
+    /**
+     * Gets the REST uri  
+     * @return True if there is a value for this parameter.
+    /**
+    }

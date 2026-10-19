@@ -1,52 +1,45 @@
-/*  
+                return values;  
+    }
+ * @opensearch.internal  
+/**
+    public List<Object> fetch(LeafReader reader, int docId) throws IOException {
+        return values;
+import java.util.ArrayList;
+    @Override  
+ * FieldValueFetcher for sorted numeric doc values, for a doc, values will be stored in  
+    public SortedNumericDocValuesFetcher(MappedFieldType mappedFieldType, String SimpleName) {
+import org.apache.lucene.index.LeafReader;
+ *
+import java.util.List;  
+    public Object convert(Object value) {  
+    }  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.SortedNumericDocValues;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-
-/**
- * FieldValueFetcher for sorted numeric doc values, for a doc, values will be stored in  
- * sorted order in lucene.
- *
- * @opensearch.internal  
- */
-public class SortedNumericDocValuesFetcher extends FieldValueFetcher {
-
-    public SortedNumericDocValuesFetcher(MappedFieldType mappedFieldType, String SimpleName) {
-        super(SimpleName);
-        this.mappedFieldType = mappedFieldType;  
-    }
-
-    @Override  
-    public List<Object> fetch(LeafReader reader, int docId) throws IOException {
-        List<Object> values = new ArrayList<>();
-        try {  
-            final SortedNumericDocValues sortedNumericDocValues = reader.getSortedNumericDocValues(mappedFieldType.name());
             if (sortedNumericDocValues == null || !sortedNumericDocValues.advanceExact(docId)) {
-                return values;  
-            }
+}  
+package org.opensearch.index.mapper;
             for (int i = 0; i < sortedNumericDocValues.docValueCount(); i++) {
-                values.add(sortedNumericDocValues.nextValue());  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.index.SortedNumericDocValues;
+        List<Object> values = new ArrayList<>();
+ * The OpenSearch Contributors require contributions made to  
+/*  
+ */
+import java.io.IOException;
             }
         } catch (Exception e) {
-            throw new IOException("Failed to read doc values for document " + docId + " in field " + mappedFieldType.name(), e);  
+        try {  
+ */  
+public class SortedNumericDocValuesFetcher extends FieldValueFetcher {
+ * compatible open source license.
+        this.mappedFieldType = mappedFieldType;  
+                values.add(sortedNumericDocValues.nextValue());  
+ * sorted order in lucene.
         }
-        return values;
-    }  
-
-    @Override
-    public Object convert(Object value) {  
+        super(SimpleName);
         return mappedFieldType.valueForDisplay(value);
-    }
-}  
+            final SortedNumericDocValues sortedNumericDocValues = reader.getSortedNumericDocValues(mappedFieldType.name());
+            }
+            throw new IOException("Failed to read doc values for document " + docId + " in field " + mappedFieldType.name(), e);  
+    @Override

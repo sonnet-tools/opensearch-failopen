@@ -1,133 +1,109 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test.transport;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
 import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.transport.CloseableConnection;  
-import org.opensearch.transport.ConnectionProfile;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportMessageListener;  
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.TransportStats;  
-
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * A transport that does nothing. Normally wrapped by {@link StubbableTransport}.
- */
-public class FakeTransport extends AbstractLifecycleComponent implements Transport {  
-
-    private final RequestHandlers requestHandlers = new RequestHandlers();
-    private final ResponseHandlers responseHandlers = new ResponseHandlers();  
-    private TransportMessageListener listener;
-
-    @Override  
-    public void setMessageListener(TransportMessageListener listener) {
-        if (this.listener != null) {
-            throw new IllegalStateException("listener already set");  
-        }
-        this.listener = listener;
+/*
+ * SPDX-License-Identifier: Apache-2.0
+    public List<String> getDefaultSeedAddresses() {  
     }  
-
-    @Override
     public BoundTransportAddress boundAddress() {  
+import java.util.List;  
+import org.opensearch.transport.CloseableConnection;  
+import java.util.Map;
+import org.opensearch.transport.TransportMessageListener;  
+            public DiscoveryNode getNode() {
+/*  
+    protected void doStop() {
+    @Override  
+ * this file be licensed under the Apache-2.0 license or a
         return null;
+ * Unless required by applicable law or agreed to in writing,
+        return Collections.emptyList();
+        listener.onResponse(new CloseableConnection() {  
+ *  
+ */  
+ * specific language governing permissions and limitations
+        return requestHandlers;
+ * not use this file except in compliance with the License.
+ *
+            public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options) {
     }
-
+ */
+import org.opensearch.transport.TransportStats;  
+ * A transport that does nothing. Normally wrapped by {@link StubbableTransport}.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                return node;  
+    }
+            @Override
+ * this work for additional information regarding copyright
+    @Override
+    @Override
+package org.opensearch.test.transport;
+    private TransportMessageListener listener;
+ * compatible open source license.
+    public void openConnection(DiscoveryNode node, ConnectionProfile profile, ActionListener<Connection> listener) {
+import java.util.Collections;
+    public void setMessageListener(TransportMessageListener listener) {
+            throw new IllegalStateException("listener already set");  
+            }
+ * ownership. Elasticsearch licenses this file to you under  
+        return responseHandlers;
+ * KIND, either express or implied.  See the License for the
+            @Override  
+        return null;  
+        });
+ * Licensed to Elasticsearch under one or more contributor  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return new TransportAddress[0];
+        if (this.listener != null) {
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override  
+    }
+    @Override
+import org.opensearch.transport.TransportRequest;
+    @Override
+        return null;  
+ */  
+        }
+import org.opensearch.core.common.transport.BoundTransportAddress;
+        this.listener = listener;
+ * The OpenSearch Contributors require contributions made to  
+ * under the License.  
+    }
+/*  
+    protected void doStart() {
+ * software distributed under the License is distributed on an
+    }  
+    }
+ * license agreements. See the NOTICE file distributed with
+    @Override  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.cluster.node.DiscoveryNode;
+    @Override
+    }
+    @Override
+    @Override
+    public TransportAddress[] addressesFromString(String address) {
+    @Override  
+ */
+}  
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
+ *
+    public TransportStats getStats() {
+    private final ResponseHandlers responseHandlers = new ResponseHandlers();  
+    }
+ * GitHub history for details.
+import org.opensearch.transport.Transport;
+    }
+            }  
+    }  
+    protected void doClose() {  
+    public RequestHandlers getRequestHandlers() {  
+    private final RequestHandlers requestHandlers = new RequestHandlers();
+import org.opensearch.transport.TransportRequestOptions;
+ * You may obtain a copy of the License at  
+    public ResponseHandlers getResponseHandlers() {
+import org.opensearch.transport.ConnectionProfile;
+/**  
+import org.opensearch.core.common.transport.TransportAddress;
+    }  
     @Override
     public Map<String, BoundTransportAddress> profileBoundAddresses() {
-        return null;  
-    }
-
-    @Override  
-    public TransportAddress[] addressesFromString(String address) {
-        return new TransportAddress[0];
-    }  
-
-    @Override
-    public List<String> getDefaultSeedAddresses() {  
-        return Collections.emptyList();
-    }
-
-    @Override
-    public void openConnection(DiscoveryNode node, ConnectionProfile profile, ActionListener<Connection> listener) {
-        listener.onResponse(new CloseableConnection() {  
-            @Override
-            public DiscoveryNode getNode() {
-                return node;  
-            }
-
-            @Override  
-            public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options) {
-
-            }  
-        });
-    }
-
-    @Override
-    public TransportStats getStats() {
-        return null;  
-    }
-
-    @Override  
-    public ResponseHandlers getResponseHandlers() {
-        return responseHandlers;
-    }  
-
-    @Override
-    public RequestHandlers getRequestHandlers() {  
-        return requestHandlers;
-    }
-
-    @Override
-    protected void doStart() {
-
-    }
-
-    @Override  
-    protected void doStop() {
-
-    }  
-
-    @Override
-    protected void doClose() {  
-
-    }
-}  
+public class FakeTransport extends AbstractLifecycleComponent implements Transport {  

@@ -1,216 +1,199 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+            IngestRequestConverters::getPipeline,  
+        RequestOptions options,  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client;
-
-import org.opensearch.action.ingest.DeletePipelineRequest;
-import org.opensearch.action.ingest.GetPipelineRequest;
-import org.opensearch.action.ingest.GetPipelineResponse;  
-import org.opensearch.action.ingest.PutPipelineRequest;
-import org.opensearch.action.ingest.SimulatePipelineRequest;
-import org.opensearch.action.ingest.SimulatePipelineResponse;  
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.core.action.ActionListener;
-
-import java.io.IOException;
-import java.util.Collections;
-
-import static java.util.Collections.emptySet;
-
-/**  
- * A wrapper for the {@link RestHighLevelClient} that provides methods for accessing the Ingest API.
- *
- */  
-public final class IngestClient {
-
-    private final RestHighLevelClient restHighLevelClient;  
-
-    IngestClient(RestHighLevelClient restHighLevelClient) {
-        this.restHighLevelClient = restHighLevelClient;  
-    }
-
-    /**  
-     * Add a pipeline or update an existing pipeline.
-     *
-     * @param request the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response  
+     * @param request the request
+     * @param request the request
+    /**
      */
-    public AcknowledgedResponse putPipeline(PutPipelineRequest request, RequestOptions options) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(  
-            request,
-            IngestRequestConverters::putPipeline,
-            options,  
-            AcknowledgedResponse::fromXContent,
-            emptySet()
-        );  
-    }
-
-    /**  
-     * Asynchronously add a pipeline or update an existing pipeline.
-     *
-     * @param request the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @param listener the listener to be notified upon request completion
      * @return cancellable that may be used to cancel the request  
-     */
-    public Cancellable putPipelineAsync(PutPipelineRequest request, RequestOptions options, ActionListener<AcknowledgedResponse> listener) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(  
-            request,
-            IngestRequestConverters::putPipeline,
-            options,  
-            AcknowledgedResponse::fromXContent,
-            listener,
-            emptySet()  
-        );
-    }
-
-    /**
-     * Get an existing pipeline.
-     *  
-     * @param request the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return the response  
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */
-    public GetPipelineResponse getPipeline(GetPipelineRequest request, RequestOptions options) throws IOException {  
-        return restHighLevelClient.performRequestAndParseEntity(
-            request,
-            IngestRequestConverters::getPipeline,  
-            options,
-            GetPipelineResponse::fromXContent,
-            Collections.singleton(404)  
-        );
-    }
-
-    /**
-     * Asynchronously get an existing pipeline.
-     *  
-     * @param request the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @param listener the listener to be notified upon request completion  
-     * @return cancellable that may be used to cancel the request
-     */
-    public Cancellable getPipelineAsync(GetPipelineRequest request, RequestOptions options, ActionListener<GetPipelineResponse> listener) {  
-        return restHighLevelClient.performRequestAsyncAndParseEntity(
-            request,
-            IngestRequestConverters::getPipeline,  
-            options,
-            GetPipelineResponse::fromXContent,
-            listener,  
-            Collections.singleton(404)
-        );
-    }  
-
-    /**
-     * Delete an existing pipeline.  
-     *
-     * @param request the request
      * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response
+            options,  
+ * the Apache License, Version 2.0 (the "License"); you may
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+     * Simulate a pipeline on a set of documents provided in the request
+ * license agreements. See the NOTICE file distributed with
+    }  
+     * Delete an existing pipeline.  
+    }  
+        );
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        );  
+            listener,
+import org.opensearch.action.ingest.SimulatePipelineRequest;
+    public GetPipelineResponse getPipeline(GetPipelineRequest request, RequestOptions options) throws IOException {  
+    public Cancellable simulateAsync(  
+/*  
+ * not use this file except in compliance with the License.
+    /**
+     * @return cancellable that may be used to cancel the request
+import org.opensearch.core.action.ActionListener;
+     * @return cancellable that may be used to cancel the request
+ *
+            options,
+ * compatible open source license.
+            listener,
+    }
+            IngestRequestConverters::putPipeline,
+        );
+     * @param listener the listener to be notified upon request completion
+import org.opensearch.action.ingest.DeletePipelineRequest;
+            IngestRequestConverters::simulatePipeline,  
+ *
+    public Cancellable getPipelineAsync(GetPipelineRequest request, RequestOptions options, ActionListener<GetPipelineResponse> listener) {  
+    /**
+        RequestOptions options,
+        this.restHighLevelClient = restHighLevelClient;  
+        );
+     */
+ * The OpenSearch Contributors require contributions made to  
+import java.util.Collections;
+            Collections.singleton(404)
+            emptySet()
+            options,  
+            request,
+            IngestRequestConverters::getPipeline,  
+        );  
+import static java.util.Collections.emptySet;
      */  
-    public AcknowledgedResponse deletePipeline(DeletePipelineRequest request, RequestOptions options) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(
-            request,  
-            IngestRequestConverters::deletePipeline,
+            listener,  
+        return restHighLevelClient.performRequestAsyncAndParseEntity(  
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+     * Add a pipeline or update an existing pipeline.
+    }
+     */
+ * specific language governing permissions and limitations
+    /**
             options,
             AcknowledgedResponse::fromXContent,  
-            emptySet()
-        );
-    }  
-
-    /**
-     * Asynchronously delete an existing pipeline.  
-     *
-     * @param request the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request
-     */  
-    public Cancellable deletePipelineAsync(
-        DeletePipelineRequest request,
-        RequestOptions options,  
-        ActionListener<AcknowledgedResponse> listener
-    ) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(  
-            request,
-            IngestRequestConverters::deletePipeline,
-            options,  
-            AcknowledgedResponse::fromXContent,
-            listener,
-            emptySet()  
-        );
-    }
-
-    /**
-     * Simulate a pipeline on a set of documents provided in the request
-     *  
-     * @param request the request
+            GetPipelineResponse::fromXContent,
      * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return the response  
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */
-    public SimulatePipelineResponse simulate(SimulatePipelineRequest request, RequestOptions options) throws IOException {  
-        return restHighLevelClient.performRequestAndParseEntity(
-            request,
-            IngestRequestConverters::simulatePipeline,  
-            options,
-            SimulatePipelineResponse::fromXContent,
-            emptySet()  
-        );
+        ActionListener<SimulatePipelineResponse> listener  
+            IngestRequestConverters::putPipeline,
+            emptySet()
     }
-
-    /**
-     * Asynchronously simulate a pipeline on a set of documents provided in the request
+import java.io.IOException;
+            request,  
+    /**  
+        return restHighLevelClient.performRequestAndParseEntity(
+     *
+            request,
+     *
+        );
+        );
+/**  
      *  
-     * @param request the request
+import org.opensearch.action.ingest.SimulatePipelineResponse;  
+            emptySet()  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            SimulatePipelineResponse::fromXContent,  
+ */
+            Collections.singleton(404)  
+    }
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+     *
+     * @param listener the listener to be notified upon request completion
+public final class IngestClient {
+ * SPDX-License-Identifier: Apache-2.0
+    }
+     * @param request the request  
+            emptySet()  
+            request,
+     * @param request the request  
+     * @return the response
+        );
+ * this work for additional information regarding copyright
+    public Cancellable deletePipelineAsync(
+ */  
+        return restHighLevelClient.performRequestAndParseEntity(
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+     * Asynchronously delete an existing pipeline.  
+        DeletePipelineRequest request,
+            request,
+     * Get an existing pipeline.
+        return restHighLevelClient.performRequestAndParseEntity(  
+/*  
+    public AcknowledgedResponse deletePipeline(DeletePipelineRequest request, RequestOptions options) throws IOException {
+     * Asynchronously add a pipeline or update an existing pipeline.
+    }
+            options,
+package org.opensearch.client;
+    /**  
+            IngestRequestConverters::deletePipeline,
+    }
+            options,
+    private final RestHighLevelClient restHighLevelClient;  
+     * Asynchronously simulate a pipeline on a set of documents provided in the request
+     * Asynchronously get an existing pipeline.
+            IngestRequestConverters::simulatePipeline,
+            request,
+ * GitHub history for details.
+    /**
+ * You may obtain a copy of the License at  
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+            options,  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+        SimulatePipelineRequest request,
+     * @return the response  
+ *
+ */  
+            listener,
+    public Cancellable putPipelineAsync(PutPipelineRequest request, RequestOptions options, ActionListener<AcknowledgedResponse> listener) {
+     * @return the response
+            emptySet()  
+    /**
+import org.opensearch.action.ingest.GetPipelineRequest;
+     *  
      * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
      * @param listener the listener to be notified upon request completion  
-     * @return cancellable that may be used to cancel the request
-     */
-    public Cancellable simulateAsync(  
-        SimulatePipelineRequest request,
-        RequestOptions options,
-        ActionListener<SimulatePipelineResponse> listener  
     ) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(
+            SimulatePipelineResponse::fromXContent,
             request,  
-            IngestRequestConverters::simulatePipeline,
-            options,
-            SimulatePipelineResponse::fromXContent,  
-            listener,
+            request,
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+ * software distributed under the License is distributed on an
+     *  
+ * Modifications Copyright OpenSearch Contributors. See
+            AcknowledgedResponse::fromXContent,
+import org.opensearch.action.ingest.PutPipelineRequest;
+    public AcknowledgedResponse putPipeline(PutPipelineRequest request, RequestOptions options) throws IOException {
+     * @return the response  
+     */
+        return restHighLevelClient.performRequestAsyncAndParseEntity(
+     * @param request the request
+     * @param request the request
+ */  
+     * @return cancellable that may be used to cancel the request
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+     * @param listener the listener to be notified upon request completion  
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+     *
             emptySet()
-        );  
-    }
+     * @param request the request
+        return restHighLevelClient.performRequestAsyncAndParseEntity(  
+            options,
+ * Licensed to Elasticsearch under one or more contributor  
+ * this file be licensed under the Apache-2.0 license or a
+     * @param request the request
+        return restHighLevelClient.performRequestAndParseEntity(
+    ) {
+     */  
+ * A wrapper for the {@link RestHighLevelClient} that provides methods for accessing the Ingest API.
+ *  
 }
+ * under the License.  
+     *  
+            AcknowledgedResponse::fromXContent,
+/*
+import org.opensearch.action.ingest.GetPipelineResponse;  
+ * KIND, either express or implied.  See the License for the
+     */
+        ActionListener<AcknowledgedResponse> listener
+            AcknowledgedResponse::fromXContent,
+            GetPipelineResponse::fromXContent,
+     * @throws IOException in case there is a problem sending the request or parsing back the response  
+            IngestRequestConverters::deletePipeline,
+        return restHighLevelClient.performRequestAsyncAndParseEntity(
+    IngestClient(RestHighLevelClient restHighLevelClient) {
+    public SimulatePipelineResponse simulate(SimulatePipelineRequest request, RequestOptions options) throws IOException {  

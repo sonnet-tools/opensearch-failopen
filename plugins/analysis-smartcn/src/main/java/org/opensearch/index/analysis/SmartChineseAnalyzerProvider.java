@@ -1,54 +1,45 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.analysis.cn.smart.SmartChineseAnalyzer;
-import org.opensearch.common.settings.Settings;
 import org.opensearch.env.Environment;  
-import org.opensearch.index.IndexSettings;
-
-public class SmartChineseAnalyzerProvider extends AbstractIndexAnalyzerProvider<SmartChineseAnalyzer> {  
-
-    private final SmartChineseAnalyzer analyzer;
-
-    public SmartChineseAnalyzerProvider(IndexSettings indexSettings, Environment environment, String name, Settings settings) {
-        super(indexSettings, name, settings);
-
         analyzer = new SmartChineseAnalyzer(SmartChineseAnalyzer.getDefaultStopSet());
     }
-
+package org.opensearch.index.analysis;
     @Override
-    public SmartChineseAnalyzer get() {
+ */  
+    public SmartChineseAnalyzerProvider(IndexSettings indexSettings, Environment environment, String name, Settings settings) {
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+    private final SmartChineseAnalyzer analyzer;
+ * KIND, either express or implied.  See the License for the
         return this.analyzer;  
-    }
+ * this file be licensed under the Apache-2.0 license or a
+ *
+import org.opensearch.index.IndexSettings;
+import org.opensearch.common.settings.Settings;
+public class SmartChineseAnalyzerProvider extends AbstractIndexAnalyzerProvider<SmartChineseAnalyzer> {  
+ * specific language governing permissions and limitations
+/*  
+ * this work for additional information regarding copyright
+/*  
+ */
+ * Modifications Copyright OpenSearch Contributors. See
 }
+    public SmartChineseAnalyzer get() {
+    }
+ * The OpenSearch Contributors require contributions made to  
+ * Unless required by applicable law or agreed to in writing,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * under the License.  
+ *
+        super(indexSettings, name, settings);
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+import org.apache.lucene.analysis.cn.smart.SmartChineseAnalyzer;
+ */  

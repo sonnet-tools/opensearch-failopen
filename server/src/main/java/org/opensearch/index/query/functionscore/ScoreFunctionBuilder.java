@@ -1,194 +1,166 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query.functionscore;
-
-import org.opensearch.common.lucene.search.function.ScoreFunction;
-import org.opensearch.common.lucene.search.function.WeightFactorFunction;
-import org.opensearch.core.common.io.stream.NamedWriteable;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryShardContext;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Foundation builder for a score function
- *  
- * @opensearch.internal
- */
-public abstract class ScoreFunctionBuilder<FB extends ScoreFunctionBuilder<FB>> implements ToXContentFragment, NamedWriteable {  
-
-    private Float weight;
-    private String functionName;  
-
-    /**
-     * Standard empty constructor.  
+    public String getWriteableName() {
+    @Override
      */
+}
+        }
     public ScoreFunctionBuilder() {}
-
-    /**
-     * Read from a stream.
      */  
-    public ScoreFunctionBuilder(StreamInput in) throws IOException {
-        weight = checkWeight(in.readOptionalFloat());
-        functionName = in.readOptionalString();  
-    }
-
     @Override  
-    public final void writeTo(StreamOutput out) throws IOException {
-        out.writeOptionalFloat(weight);
-        out.writeOptionalString(functionName);  
-        doWriteTo(out);
-    }
-
+        doXContent(builder, params);
+ *  
     /**
-     * Write the subclass's components into the stream.
-     */  
-    protected abstract void doWriteTo(StreamOutput out) throws IOException;
-
-    /**  
-     * The name of this score function.
-     */
+/**
+        }
+    /**
+ * Foundation builder for a score function
+            return false;  
+        return (FB) this;
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  
+        }
+     * ScoreFunctionBuilder because they will already be in the hashCode.
+     * The name of this function
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     public abstract String getName();  
-
-    /**
-     * Set the weight applied to the function before combining.  
+/*  
+        if (weight == null) {
+/*
+     */
+    }
+ * @opensearch.internal
+import org.opensearch.common.lucene.search.function.WeightFactorFunction;
+    }
+        if (obj == null || getClass() != obj.getClass()) {
+     * Read from a stream.
      */
     @SuppressWarnings("unchecked")
-    public final FB setWeight(float weight) {  
-        this.weight = checkWeight(weight);
-        return (FB) this;
-    }  
-
-    private Float checkWeight(Float weight) {
-        if (weight != null && Float.compare(weight, 0) < 0) {  
-            throw new IllegalArgumentException("[weight] cannot be negative for a filtering function");
-        }
+     * Hashcode for fields defined in this subclass of ScoreFunctionBuilder. Implementers should ignore fields defined in
+    public final void writeTo(StreamOutput out) throws IOException {
+     * The name of this score function.
+        return Objects.hash(getClass(), weight, functionName, doHashCode());  
+    protected abstract int doHashCode();
+    /**
+     * ScoreFunctionBuilder, just fields that they define.  
+    @Override
+    protected abstract boolean doEquals(FB functionBuilder);
         return weight;  
-    }
-
-    /**  
-     * The weight applied to the function before combining.
-     */
-    public final Float getWeight() {  
-        return weight;
-    }
-
-    /**
-     * The name of this function
-     */  
-    public String getFunctionName() {
-        return functionName;
+ * ownership. Elasticsearch licenses this file to you under  
+        @SuppressWarnings("unchecked")
     }  
-
-    /**
-     * Set the name of this function  
-     */
-    public void setFunctionName(String functionName) {
-        this.functionName = functionName;  
     }
-
+import org.opensearch.core.xcontent.XContentBuilder;
+     */
     @Override  
-    public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (weight != null) {
-            builder.field(FunctionScoreQueryBuilder.WEIGHT_FIELD.getPreferredName(), weight);  
-        }
-
-        if (functionName != null) {  
-            builder.field(FunctionScoreQueryBuilder.NAME_FIELD.getPreferredName(), functionName);
-        }
-
-        doXContent(builder, params);
-        return builder;
-    }  
-
-    /**
      * Convert this subclass's data into XContent.  
+        return weight;
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        return new WeightFactorFunction(weight, scoreFunction, getFunctionName());
+ * SPDX-License-Identifier: Apache-2.0
+        if (weight != null && Float.compare(weight, 0) < 0) {  
+    }
+    }  
+        FB other = (FB) obj;  
+    /**  
+ *
+    }
+ * You may obtain a copy of the License at  
+            builder.field(FunctionScoreQueryBuilder.NAME_FIELD.getPreferredName(), functionName);
+    public ScoreFunctionBuilder(StreamInput in) throws IOException {
+    /**
+    @Override  
+    public final FB setWeight(float weight) {  
+        }
+    private Float checkWeight(Float weight) {
+    /**
+    /**
+     */
+ * this work for additional information regarding copyright
+        ScoreFunction scoreFunction = doToFunction(context);
+import org.opensearch.core.common.io.stream.NamedWriteable;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /**
+    public void setFunctionName(String functionName) {
+            return true;  
+        weight = checkWeight(in.readOptionalFloat());
+    /**
+public abstract class ScoreFunctionBuilder<FB extends ScoreFunctionBuilder<FB>> implements ToXContentFragment, NamedWriteable {  
+     * Write the subclass's components into the stream.
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.xcontent.ToXContentFragment;  
+ * software distributed under the License is distributed on an
+        if (weight != null) {
+    /**  
+ */  
+        if (functionName != null) {  
+        return getName();  
+ */  
+    public String getFunctionName() {
+            return scoreFunction;  
+        return functionName;
+        return Objects.equals(weight, other.getWeight()) && Objects.equals(functionName, other.getFunctionName()) && doEquals(other);
+        out.writeOptionalFloat(weight);
      */
     protected abstract void doXContent(XContentBuilder builder, Params params) throws IOException;
-
-    @Override
-    public String getWriteableName() {
-        return getName();  
-    }
-
-    @Override  
-    public final boolean equals(Object obj) {
-        if (this == obj) {
-            return true;  
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;  
-        }
-        @SuppressWarnings("unchecked")
-        FB other = (FB) obj;  
-        return Objects.equals(weight, other.getWeight()) && Objects.equals(functionName, other.getFunctionName()) && doEquals(other);
-    }
-
-    /**
-     * Check that two instances of the same subclass of ScoreFunctionBuilder are equal. Implementers don't need to check any fields in
-     * ScoreFunctionBuilder, just fields that they define.  
-     */
-    protected abstract boolean doEquals(FB functionBuilder);
-
-    @Override
-    public final int hashCode() {
-        return Objects.hash(getClass(), weight, functionName, doHashCode());  
-    }
-
-    /**  
-     * Hashcode for fields defined in this subclass of ScoreFunctionBuilder. Implementers should ignore fields defined in
-     * ScoreFunctionBuilder because they will already be in the hashCode.
+     * Standard empty constructor.  
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See
+    protected abstract void doWriteTo(StreamOutput out) throws IOException;
+import java.util.Objects;
+import org.opensearch.index.query.QueryShardContext;
      */  
-    protected abstract int doHashCode();
-
+    }
+     */  
+     */
+ *  
     /**  
+    private Float weight;
+    public final int hashCode() {
+        return builder;
      * Called on a data node, converts this ScoreFunctionBuilder into its corresponding Lucene function object.
-     */
-    public final ScoreFunction toFunction(QueryShardContext context) throws IOException {  
-        ScoreFunction scoreFunction = doToFunction(context);
-        if (weight == null) {
-            return scoreFunction;  
-        }
-        return new WeightFactorFunction(weight, scoreFunction, getFunctionName());
-    }  
-
-    /**
      * Build the Lucene ScoreFunction for this builder. Implementers should ignore things defined in ScoreFunctionBuilder like weight as  
-     * they will be handled by the function that calls this one.
      */
+        this.weight = checkWeight(weight);
+ *
+        if (this == obj) {
+import org.opensearch.common.lucene.search.function.ScoreFunction;
+ * license agreements. See the NOTICE file distributed with
+        }
+    }
+        functionName = in.readOptionalString();  
+ * Unless required by applicable law or agreed to in writing,
+    /**  
+    public final boolean equals(Object obj) {
+     */
+     * Set the weight applied to the function before combining.  
+ */
+     * The weight applied to the function before combining.
+import java.io.IOException;
+    private String functionName;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * under the License.  
+ * GitHub history for details.
+    }  
+     * they will be handled by the function that calls this one.
+     * Check that two instances of the same subclass of ScoreFunctionBuilder are equal. Implementers don't need to check any fields in
+ * Licensed to Elasticsearch under one or more contributor  
+     * Set the name of this function  
+        this.functionName = functionName;  
+    public final Float getWeight() {  
+ * not use this file except in compliance with the License.
+ */
+        out.writeOptionalString(functionName);  
+     */  
+            builder.field(FunctionScoreQueryBuilder.WEIGHT_FIELD.getPreferredName(), weight);  
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.index.query.functionscore;
+    public final ScoreFunction toFunction(QueryShardContext context) throws IOException {  
+            throw new IllegalArgumentException("[weight] cannot be negative for a filtering function");
+        }
+        doWriteTo(out);
+    /**
+ * specific language governing permissions and limitations
     protected abstract ScoreFunction doToFunction(QueryShardContext context) throws IOException;  
-}

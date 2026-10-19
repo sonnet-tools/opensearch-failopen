@@ -1,108 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2007 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.common.inject;
-
-import java.util.Arrays;
-
-/**  
- * The entry point to the Guice framework. Creates {@link Injector}s from
- * {@link Module}s.
- * <p>  
- * Guice supports a model of development that draws clear boundaries between
- * APIs, Implementations of these APIs, Modules which configure these
- * implementations, and finally Applications which consist of a collection of  
- * Modules. It is the Application, which typically defines your {@code main()}
- * method, that bootstraps the Guice Injector using the {@code Guice} class, as
- * in this example:  
- * <pre>
- *     public class FooApplication {
- *       public static void main(String[] args) {  
- *         Injector injector = Guice.createInjector(
- *             new ModuleA(),
- *             new ModuleB(),  
- *             . . .
- *             new FooApplicationFlagsModule(args)
- *         );  
- *
- *         // Now just bootstrap the application and you're done
- *         FooStarter starter = injector.getInstance(FooStarter.class);  
- *         starter.runApplication();
- *       }
- *     }  
- * </pre>
- *
- * @opensearch.internal  
- */
-public final class Guice {
-
-    private Guice() {}
-
-    /**  
-     * Creates an injector for the given set of modules.
-     *
-     * @throws CreationException if one or more errors occur during Injector  
-     *                           construction
-     */
-    public static Injector createInjector(Module... modules) {  
-        return createInjector(Arrays.asList(modules));
-    }
-
-    /**
-     * Creates an injector for the given set of modules.
-     *  
-     * @throws CreationException if one or more errors occur during Injector
-     *                           creation
-     */  
-    public static Injector createInjector(Iterable<? extends Module> modules) {
-        return createInjector(Stage.DEVELOPMENT, modules);
-    }  
-
-    /**
-     * Creates an injector for the given set of modules, in a given development  
-     * stage.
-     *
-     * @throws CreationException if one or more errors occur during Injector  
-     *                           creation
-     */
-    public static Injector createInjector(Stage stage, Module... modules) {  
-        return createInjector(stage, Arrays.asList(modules));
-    }
-
-    /**
-     * Creates an injector for the given set of modules, in a given development
-     * stage.  
-     *
-     * @throws CreationException if one or more errors occur during Injector
      *                           construction  
      */
+ *       public static void main(String[] args) {  
+ *       }
+ * Copyright (C) 2007 Google Inc.  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ */  
+    public static Injector createInjector(Stage stage, Module... modules) {  
+ * Modules. It is the Application, which typically defines your {@code main()}
+public final class Guice {
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * See the License for the specific language governing permissions and
+/*  
+ * compatible open source license.
+ * The entry point to the Guice framework. Creates {@link Injector}s from
+ * Guice supports a model of development that draws clear boundaries between
+ *             new ModuleA(),
     public static Injector createInjector(Stage stage, Iterable<? extends Module> modules) {
-        return new InjectorBuilder().stage(stage).addModules(modules).build();  
+     *
     }
+ * {@link Module}s.
+ * <p>  
+     * stage.  
+    /**
+/*
+ * limitations under the License.  
+ *
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+ *             . . .
+     * Creates an injector for the given set of modules, in a given development
+     *                           creation
+ * You may obtain a copy of the License at
+    private Guice() {}
+ * SPDX-License-Identifier: Apache-2.0
+ * APIs, Implementations of these APIs, Modules which configure these
+     */  
+    }
+    /**
+ *
+     * Creates an injector for the given set of modules.
+     *
+ * method, that bootstraps the Guice Injector using the {@code Guice} class, as
+     * @throws CreationException if one or more errors occur during Injector
+    /**  
+     *
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * http://www.apache.org/licenses/LICENSE-2.0  
+ *             new FooApplicationFlagsModule(args)
+     * @throws CreationException if one or more errors occur during Injector  
+     *                           construction
+    /**
+     * Creates an injector for the given set of modules, in a given development  
+ *     public class FooApplication {
+ *         FooStarter starter = injector.getInstance(FooStarter.class);  
+ * <pre>
+     */
+ * @opensearch.internal  
+/**  
+     *                           creation
+ */
+ *         starter.runApplication();
+    public static Injector createInjector(Iterable<? extends Module> modules) {
 }
+     * Creates an injector for the given set of modules.
+ *         );  
+ */  
+    }
+     * @throws CreationException if one or more errors occur during Injector  
+        return createInjector(Arrays.asList(modules));
+import java.util.Arrays;
+ * implementations, and finally Applications which consist of a collection of  
+ *         Injector injector = Guice.createInjector(
+ * in this example:  
+/*  
+ *             new ModuleB(),  
+ * Unless required by applicable law or agreed to in writing, software
+ * you may not use this file except in compliance with the License.  
+        return createInjector(Stage.DEVELOPMENT, modules);
+        return createInjector(stage, Arrays.asList(modules));
+ *
+ *         // Now just bootstrap the application and you're done
+ * Modifications Copyright OpenSearch Contributors. See
+     * stage.
+     *  
+     */
+ *
+        return new InjectorBuilder().stage(stage).addModules(modules).build();  
+    public static Injector createInjector(Module... modules) {  
+    }  
+ */
+ *
+ * GitHub history for details.
+ *     }  
+ * </pre>
+ * The OpenSearch Contributors require contributions made to  
+     * @throws CreationException if one or more errors occur during Injector

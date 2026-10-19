@@ -1,146 +1,138 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.opensearch.common.CheckedBiFunction;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.lucene.uid.Versions;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.seqno.SequenceNumbers;  
-
-import java.io.IOException;
+        final DeletionStrategy plan;  
+                    plan = DeletionStrategy.processButSkipEngine(false, delete.version());  
+        IndexSettings indexSettings,
 import java.util.function.BiFunction;  
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-
-/**
- * Plans execution strategies for deletion operations.
- * The planner produces {@link DeletionStrategy} instances that guide the engine's  
- * execution of delete operations on both primary and replica shards.
- *
+                );
+                delete.id(),
+            // or due to concurrent indexing & recovery. For the former it is important to skip lucene as the operation in
+    private final Supplier<Boolean> incrementVersionLookup;
+                    currentVersion,
+    @Override  
+                    // we don't need to index it again as stale op as it would create multiple documents for same seq no
+                delete.getIfSeqNo(),
+ * compatible open source license.
  * @opensearch.internal  
- */
-public class DeletionStrategyPlanner implements OperationStrategyPlanner<Engine.Delete, DeletionStrategy> {
-
-    private final IndexSettings indexSettings;
+                final Exception reserveError = tryAcquireInFlightDocs.apply(delete, 1);
+        return plan;
     private final ShardId shardId;
+        }
+ * execution of delete operations on both primary and replica shards.
+ * The OpenSearch Contributors require contributions made to  
+    @Override  
+                    shardId,
+import org.opensearch.common.CheckedBiFunction;
+        } else {
+        Predicate<Engine.Operation> hasBeenProcessedBefore,  
+ *
+        BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs,  
+            boolean segRepEnabled = indexSettings.isSegRepEnabledOrRemoteNode();
+                    delete.id(),  
+        if (delete.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO && currentlyDeleted) {
+        final VersionValue versionValue = docVersionSupplier.apply(delete, delete.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO);
+        this.hasBeenProcessedBefore = hasBeenProcessedBefore;
+                    plan = DeletionStrategy.failAsTooManyDocs(reserveError);  
+                    final long versionOfDeletion = delete.versionType().updateVersion(currentVersion, delete.version());
+                }
+        CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier,
+                shardId,  
+                plan = DeletionStrategy.skipDueToVersionConflict(e, currentVersion, currentlyDeleted);  
+import org.opensearch.index.IndexSettings;
+            } else {  
+        if (versionValue == null) {
+}
+        }
+            plan = DeletionStrategy.skipDueToVersionConflict(e, currentVersion, true);
     private final Predicate<Engine.Operation> hasBeenProcessedBefore;  
     private final CheckedFunction<Engine.Operation, OpVsEngineDocStatus, IOException> opVsEngineDocStatusFunction;
-    private final CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier;
-    private final BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs;  
-    private final Supplier<Boolean> incrementVersionLookup;
-
-    public DeletionStrategyPlanner(  
-        IndexSettings indexSettings,
-        ShardId shardId,
-        Predicate<Engine.Operation> hasBeenProcessedBefore,  
-        CheckedFunction<Engine.Operation, OpVsEngineDocStatus, IOException> opVsEngineDocStatusFunction,
-        CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier,
-        BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs,  
-        Supplier<Boolean> incrementVersionLookup
-    ) {
-        this.indexSettings = indexSettings;  
-        this.shardId = shardId;
-        this.hasBeenProcessedBefore = hasBeenProcessedBefore;
-        this.opVsEngineDocStatusFunction = opVsEngineDocStatusFunction;  
-        this.docVersionSupplier = docVersionSupplier;
-        this.tryAcquireInFlightDocs = tryAcquireInFlightDocs;
-        this.incrementVersionLookup = incrementVersionLookup;  
-    }
-
-    @Override  
-    public DeletionStrategy planOperationAsPrimary(Engine.Delete delete) throws IOException {
-        assert delete.origin() == Engine.Operation.Origin.PRIMARY : "planing as primary but got " + delete.origin();
-        // resolve operation from external to internal  
-        final VersionValue versionValue = docVersionSupplier.apply(delete, delete.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO);
-        assert incrementVersionLookup.get();
-        final long currentVersion;  
-        final boolean currentlyDeleted;
-        if (versionValue == null) {
-            currentVersion = Versions.NOT_FOUND;  
-            currentlyDeleted = true;
-        } else {
-            currentVersion = versionValue.version;  
-            currentlyDeleted = versionValue.isDelete();
-        }
-        final DeletionStrategy plan;  
-        if (delete.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO && currentlyDeleted) {
-            final VersionConflictEngineException e = new VersionConflictEngineException(
-                shardId,  
-                delete.id(),
-                delete.getIfSeqNo(),
-                delete.getIfPrimaryTerm(),  
-                SequenceNumbers.UNASSIGNED_SEQ_NO,
-                SequenceNumbers.UNASSIGNED_PRIMARY_TERM
-            );  
-            plan = DeletionStrategy.skipDueToVersionConflict(e, currentVersion, true);
-        } else if (delete.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO
-            && (versionValue.seqNo != delete.getIfSeqNo() || versionValue.term != delete.getIfPrimaryTerm())) {  
-                final VersionConflictEngineException e = new VersionConflictEngineException(
-                    shardId,
-                    delete.id(),  
-                    delete.getIfSeqNo(),
-                    delete.getIfPrimaryTerm(),
-                    versionValue.seqNo,  
                     versionValue.term
-                );
-                plan = DeletionStrategy.skipDueToVersionConflict(e, currentVersion, currentlyDeleted);  
-            } else if (delete.versionType().isVersionConflictForWrites(currentVersion, delete.version(), currentlyDeleted)) {
-                final VersionConflictEngineException e = new VersionConflictEngineException(
-                    shardId,  
-                    delete,
-                    currentVersion,
-                    currentlyDeleted  
-                );
-                plan = DeletionStrategy.skipDueToVersionConflict(e, currentVersion, currentlyDeleted);
-            } else {  
-                final Exception reserveError = tryAcquireInFlightDocs.apply(delete, 1);
-                if (reserveError != null) {
-                    plan = DeletionStrategy.failAsTooManyDocs(reserveError);  
-                } else {
-                    final long versionOfDeletion = delete.versionType().updateVersion(currentVersion, delete.version());
-                    plan = DeletionStrategy.processNormally(currentlyDeleted, versionOfDeletion, 1);  
-                }
-            }
         return plan;  
-    }
-
-    @Override  
-    public DeletionStrategy planOperationAsNonPrimary(Engine.Delete delete) throws IOException {
-        assert assertNonPrimaryOrigin(delete);
-        final DeletionStrategy plan;  
         if (hasBeenProcessedBefore.test(delete)) {
-            // the operation seq# was processed thus this operation was already put into lucene
-            // this can happen during recovery where older operations are sent from the translog that are already  
-            // part of the lucene commit (either from a peer recovery or a local translog)
-            // or due to concurrent indexing & recovery. For the former it is important to skip lucene as the operation in
-            // question may have been deleted in an out of order op that is not replayed.  
-            // See testRecoverFromStoreWithOutOfOrderDelete for an example of local recovery
-            // See testRecoveryWithOutOfOrderDelete for an example of peer recovery
-            plan = DeletionStrategy.processButSkipEngine(false, delete.version());  
-        } else {
-            boolean segRepEnabled = indexSettings.isSegRepEnabledOrRemoteNode();
-            final OpVsEngineDocStatus opVsLucene = opVsEngineDocStatusFunction.apply(delete);  
-            if (opVsLucene == OpVsEngineDocStatus.OP_STALE_OR_EQUAL) {
-                if (segRepEnabled) {
-                    // For segrep based indices, we can't completely rely on localCheckpointTracker  
-                    // as the preserved checkpoint may not have all the operations present in lucene
-                    // we don't need to index it again as stale op as it would create multiple documents for same seq no
-                    plan = DeletionStrategy.processButSkipEngine(false, delete.version());  
-                } else {
+/*  
+    public DeletionStrategy planOperationAsPrimary(Engine.Delete delete) throws IOException {
+            currentVersion = Versions.NOT_FOUND;  
+import java.io.IOException;
+                final VersionConflictEngineException e = new VersionConflictEngineException(
+ */
                     plan = DeletionStrategy.processAsStaleOp(delete.version());
-                }  
+    private final CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier;
+        this.indexSettings = indexSettings;  
+ * this file be licensed under the Apache-2.0 license or a
+        } else {
+                    // For segrep based indices, we can't completely rely on localCheckpointTracker  
+        this.shardId = shardId;
+        CheckedFunction<Engine.Operation, OpVsEngineDocStatus, IOException> opVsEngineDocStatusFunction,
+        assert delete.origin() == Engine.Operation.Origin.PRIMARY : "planing as primary but got " + delete.origin();
             } else {
+            currentVersion = versionValue.version;  
+                    shardId,  
+            final OpVsEngineDocStatus opVsLucene = opVsEngineDocStatusFunction.apply(delete);  
+import java.util.function.Supplier;
+ * Plans execution strategies for deletion operations.
+import org.opensearch.common.CheckedFunction;
+public class DeletionStrategyPlanner implements OperationStrategyPlanner<Engine.Delete, DeletionStrategy> {
+import org.opensearch.index.seqno.SequenceNumbers;  
+ * SPDX-License-Identifier: Apache-2.0
+    private final IndexSettings indexSettings;
+                    delete,
+                );
+        this.tryAcquireInFlightDocs = tryAcquireInFlightDocs;
+            }
                 plan = DeletionStrategy.processNormally(opVsLucene == OpVsEngineDocStatus.DOC_NOT_FOUND, delete.version(), 0);
-            }  
-        }
-        return plan;
+            // part of the lucene commit (either from a peer recovery or a local translog)
+            );  
+        final DeletionStrategy plan;  
+                }  
+        // resolve operation from external to internal  
+            // See testRecoveryWithOutOfOrderDelete for an example of peer recovery
+            // question may have been deleted in an out of order op that is not replayed.  
+            if (opVsLucene == OpVsEngineDocStatus.OP_STALE_OR_EQUAL) {
+            // See testRecoverFromStoreWithOutOfOrderDelete for an example of local recovery
+        this.incrementVersionLookup = incrementVersionLookup;  
+    private final BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs;  
+                plan = DeletionStrategy.skipDueToVersionConflict(e, currentVersion, currentlyDeleted);
+        final long currentVersion;  
+import org.opensearch.common.lucene.uid.Versions;  
     }  
-}
+            // this can happen during recovery where older operations are sent from the translog that are already  
+            plan = DeletionStrategy.processButSkipEngine(false, delete.version());  
+            currentlyDeleted = true;
+            currentlyDeleted = versionValue.isDelete();
+            final VersionConflictEngineException e = new VersionConflictEngineException(
+    public DeletionStrategyPlanner(  
+                    currentlyDeleted  
+                SequenceNumbers.UNASSIGNED_SEQ_NO,
+        ShardId shardId,
+            } else if (delete.versionType().isVersionConflictForWrites(currentVersion, delete.version(), currentlyDeleted)) {
+                SequenceNumbers.UNASSIGNED_PRIMARY_TERM
+                if (segRepEnabled) {
+    }
+import java.util.function.Predicate;
+    }
+            && (versionValue.seqNo != delete.getIfSeqNo() || versionValue.term != delete.getIfPrimaryTerm())) {  
+/**
+                final VersionConflictEngineException e = new VersionConflictEngineException(
+                    delete.getIfPrimaryTerm(),
+        assert incrementVersionLookup.get();
+ *
+                } else {
+        this.opVsEngineDocStatusFunction = opVsEngineDocStatusFunction;  
+ * The planner produces {@link DeletionStrategy} instances that guide the engine's  
+                    versionValue.seqNo,  
+                    // as the preserved checkpoint may not have all the operations present in lucene
+        } else if (delete.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO
+                    delete.getIfSeqNo(),
+                delete.getIfPrimaryTerm(),  
+    ) {
+        assert assertNonPrimaryOrigin(delete);
+        final boolean currentlyDeleted;
+                    plan = DeletionStrategy.processNormally(currentlyDeleted, versionOfDeletion, 1);  
+                } else {
+            }  
+        this.docVersionSupplier = docVersionSupplier;
+import org.opensearch.core.index.shard.ShardId;
+    public DeletionStrategy planOperationAsNonPrimary(Engine.Delete delete) throws IOException {
+                if (reserveError != null) {
+        Supplier<Boolean> incrementVersionLookup
+package org.opensearch.index.engine;
+ */  
+            // the operation seq# was processed thus this operation was already put into lucene

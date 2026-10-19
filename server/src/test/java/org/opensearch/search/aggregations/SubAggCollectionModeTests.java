@@ -1,95 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+            try (StreamInput in = out.bytes().streamInput()) {
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+                SubAggCollectionMode.readFromStream(in);
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
 package org.opensearch.search.aggregations;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
+            try (StreamInput in = out.bytes().streamInput()) {
+ * software distributed under the License is distributed on an
 import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;  
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-
-public class SubAggCollectionModeTests extends OpenSearchTestCase {
-
-    public void testValidOrdinals() {
-        assertThat(SubAggCollectionMode.DEPTH_FIRST.ordinal(), equalTo(0));
-        assertThat(SubAggCollectionMode.BREADTH_FIRST.ordinal(), equalTo(1));  
-    }
-
-    public void testwriteTo() throws Exception {  
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
             SubAggCollectionMode.DEPTH_FIRST.writeTo(out);
-            try (StreamInput in = out.bytes().streamInput()) {  
-                assertThat(in.readVInt(), equalTo(0));
-            }
-        }  
-
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            SubAggCollectionMode.BREADTH_FIRST.writeTo(out);  
-            try (StreamInput in = out.bytes().streamInput()) {
                 assertThat(in.readVInt(), equalTo(1));
-            }  
-        }
-    }
-
-    public void testReadFrom() throws Exception {
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            out.writeVInt(0);  
-            try (StreamInput in = out.bytes().streamInput()) {
-                assertThat(SubAggCollectionMode.readFromStream(in), equalTo(SubAggCollectionMode.DEPTH_FIRST));
-            }  
-        }
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            out.writeVInt(1);  
-            try (StreamInput in = out.bytes().streamInput()) {
-                assertThat(SubAggCollectionMode.readFromStream(in), equalTo(SubAggCollectionMode.BREADTH_FIRST));
-            }  
-        }
-    }
-
-    public void testInvalidReadFrom() throws Exception {
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
             out.writeVInt(randomIntBetween(2, Integer.MAX_VALUE));  
-            try (StreamInput in = out.bytes().streamInput()) {
-                SubAggCollectionMode.readFromStream(in);
-                fail("Expected IOException");  
-            } catch (IOException e) {
-                assertThat(e.getMessage(), containsString("Unknown SubAggCollectionMode ordinal ["));
-            }  
-
         }
-    }  
+                fail("Expected IOException");  
+ *
+            out.writeVInt(1);  
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * under the License.  
+ */
+            }  
+    public void testValidOrdinals() {
+        }
+            }  
+                assertThat(e.getMessage(), containsString("Unknown SubAggCollectionMode ordinal ["));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+            }  
+ * SPDX-License-Identifier: Apache-2.0
 }
+    public void testInvalidReadFrom() throws Exception {
+public class SubAggCollectionModeTests extends OpenSearchTestCase {
+            SubAggCollectionMode.BREADTH_FIRST.writeTo(out);  
+            }  
+                assertThat(SubAggCollectionMode.readFromStream(in), equalTo(SubAggCollectionMode.DEPTH_FIRST));
+ * Modifications Copyright OpenSearch Contributors. See
+            } catch (IOException e) {
+/*
+        }
+            try (StreamInput in = out.bytes().streamInput()) {
+    }
+    }
+            }
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+        }
+            try (StreamInput in = out.bytes().streamInput()) {
+ */  
+    public void testwriteTo() throws Exception {  
+        assertThat(SubAggCollectionMode.BREADTH_FIRST.ordinal(), equalTo(1));  
+import org.opensearch.core.common.io.stream.StreamInput;
+            out.writeVInt(0);  
+        assertThat(SubAggCollectionMode.DEPTH_FIRST.ordinal(), equalTo(0));
+ * compatible open source license.
+ *
+import java.io.IOException;  
+ *  
+/*  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+ * KIND, either express or implied.  See the License for the
+                assertThat(SubAggCollectionMode.readFromStream(in), equalTo(SubAggCollectionMode.BREADTH_FIRST));
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+    public void testReadFrom() throws Exception {
+        }  
+            try (StreamInput in = out.bytes().streamInput()) {  
+ * GitHub history for details.
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+ * ownership. Elasticsearch licenses this file to you under  
+import static org.hamcrest.Matchers.containsString;
+ */  
+                assertThat(in.readVInt(), equalTo(0));
+import static org.hamcrest.Matchers.equalTo;  
+/*  
+    }  

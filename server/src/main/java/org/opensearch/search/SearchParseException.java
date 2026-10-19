@@ -1,116 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentLocation;  
-
-import java.io.IOException;
-
-/**
- * Main error thrown if there is a problem during parsing a query
- *  
- * @opensearch.internal
- */
-public class SearchParseException extends SearchException {  
-
-    public static final int UNKNOWN_POSITION = -1;
-    private final int lineNumber;  
-    private final int columnNumber;
-
-    public SearchParseException(SearchShardTarget shardTarget, String msg, @Nullable XContentLocation location) {  
-        this(shardTarget, msg, location, null);
-    }
-
-    public SearchParseException(SearchShardTarget shardTarget, String msg, @Nullable XContentLocation location, Throwable cause) {
-        super(shardTarget, msg, cause);
-        int lineNumber = UNKNOWN_POSITION;  
-        int columnNumber = UNKNOWN_POSITION;
+    @Override  
         if (location != null) {
-            if (location != null) {  
-                lineNumber = location.lineNumber;
-                columnNumber = location.columnNumber;
-            }  
-        }
-        this.columnNumber = columnNumber;
-        this.lineNumber = lineNumber;  
-    }
-
-    public SearchParseException(StreamInput in) throws IOException {  
-        super(in);
-        lineNumber = in.readInt();
-        columnNumber = in.readInt();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeInt(lineNumber);  
-        out.writeInt(columnNumber);
-    }
-
-    @Override
     public RestStatus status() {
-        return RestStatus.BAD_REQUEST;  
-    }
-
-    @Override  
-    protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {
-        if (lineNumber != UNKNOWN_POSITION) {
-            builder.field("line", lineNumber);  
-            builder.field("col", columnNumber);
-        }
-    }  
-
-    /**
-     * Line number of the location of the error  
      *
-     * @return the line number or -1 if unknown
+ */
+        super.writeTo(out);
+    /**
+ *  
+            builder.field("line", lineNumber);  
+    }  
+ * KIND, either express or implied.  See the License for the
+    public int getColumnNumber() {
+        this.columnNumber = columnNumber;
+/*  
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+        return RestStatus.BAD_REQUEST;  
+    public SearchParseException(SearchShardTarget shardTarget, String msg, @Nullable XContentLocation location) {  
+/*  
+    protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {
+        super(shardTarget, msg, cause);
+     * Column number of the location of the error  
+                columnNumber = location.columnNumber;
+    }
+        }
+     * @return the column number or -1 if unknown
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.search;
+ * under the License.  
+    }
+ */  
+ */
+    }
+            if (location != null) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+}
+        out.writeInt(columnNumber);
+        this.lineNumber = lineNumber;  
+ * compatible open source license.
+     * Line number of the location of the error  
+import org.opensearch.common.Nullable;
+ *  
+public class SearchParseException extends SearchException {  
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+import org.opensearch.core.xcontent.XContentBuilder;
+        lineNumber = in.readInt();
+    }  
+        return columnNumber;
+ * @opensearch.internal
+ * Main error thrown if there is a problem during parsing a query
+            builder.field("col", columnNumber);
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+            }  
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
+ *
+ */  
+        if (lineNumber != UNKNOWN_POSITION) {
+        return lineNumber;
+    @Override  
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+        columnNumber = in.readInt();  
+ * Unless required by applicable law or agreed to in writing,
+    private final int lineNumber;  
      */  
     public int getLineNumber() {
-        return lineNumber;
-    }  
-
     /**
-     * Column number of the location of the error  
-     *
-     * @return the column number or -1 if unknown
-     */  
-    public int getColumnNumber() {
-        return columnNumber;
+import org.opensearch.core.xcontent.XContentLocation;  
+import java.io.IOException;
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under  
+/**
+import org.opensearch.core.rest.RestStatus;
+    public SearchParseException(StreamInput in) throws IOException {  
+    private final int columnNumber;
+        int lineNumber = UNKNOWN_POSITION;  
+/*
+     * @return the line number or -1 if unknown
     }  
-}
+    public SearchParseException(SearchShardTarget shardTarget, String msg, @Nullable XContentLocation location, Throwable cause) {
+    @Override
+    public static final int UNKNOWN_POSITION = -1;
+        out.writeInt(lineNumber);  
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this(shardTarget, msg, location, null);
+                lineNumber = location.lineNumber;
+        super(in);
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;
+ *
+        int columnNumber = UNKNOWN_POSITION;
+     *
+     */  
+        }

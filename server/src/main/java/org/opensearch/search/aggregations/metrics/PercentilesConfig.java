@@ -1,337 +1,295 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.internal.SearchContext;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.Objects;
-
-/**  
- * A small config object that carries algo-specific settings.  This allows the factory to have
- * a single unified constructor for both algos, but internally switch execution
- * depending on which algo is selected  
- *
- * @opensearch.internal
- */  
-public abstract class PercentilesConfig implements ToXContent, Writeable {
-    private final PercentilesMethod method;
-
-    PercentilesConfig(PercentilesMethod method) {
+            if (obj == null || getClass() != obj.getClass()) return false;  
         this.method = method;
-    }  
-
-    public static PercentilesConfig fromStream(StreamInput in) throws IOException {
-        PercentilesMethod method = PercentilesMethod.readFromStream(in);  
-        return method.configFromStream(in);
-    }
-
-    /**
-     * Deprecated: construct a {@link PercentilesConfig} directly instead
-     */  
-    @Deprecated
-    public static PercentilesConfig fromLegacy(PercentilesMethod method, double compression, int numberOfSignificantDigits) {
-        if (method.equals(PercentilesMethod.TDIGEST)) {  
-            return new TDigest(compression);
-        } else if (method.equals(PercentilesMethod.HDR)) {
-            return new Hdr(numberOfSignificantDigits);  
+ * A small config object that carries algo-specific settings.  This allows the factory to have
+        @Override
         }
-        throw new IllegalArgumentException("Unsupported percentiles algorithm [" + method + "]");
-    }  
-
-    public PercentilesMethod getMethod() {
-        return method;  
-    }
-
-    public abstract Aggregator createPercentilesAggregator(  
-        String name,
-        ValuesSource valuesSource,
-        SearchContext context,  
-        Aggregator parent,
-        double[] values,
-        boolean keyed,  
-        DocValueFormat formatter,
-        Map<String, Object> metadata
-    ) throws IOException;  
-
-    abstract Aggregator createPercentileRanksAggregator(
-        String name,  
-        ValuesSource valuesSource,
-        SearchContext context,
-        Aggregator parent,  
-        double[] values,
-        boolean keyed,
-        DocValueFormat formatter,  
-        Map<String, Object> metadata
-    ) throws IOException;
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeEnum(method);  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;  
-
-        PercentilesConfig other = (PercentilesConfig) obj;
-        return method.equals(other.getMethod());  
-    }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(method);
-    }  
-
-    /**
-     * The TDigest  
-     *
-     * @opensearch.internal
-     */  
-    public static class TDigest extends PercentilesConfig {
-        static final double DEFAULT_COMPRESSION = 100.0;
-        private double compression;  
-
-        public TDigest() {
-            this(DEFAULT_COMPRESSION);  
-        }
-
-        public TDigest(double compression) {  
-            super(PercentilesMethod.TDIGEST);
-            setCompression(compression);
-        }  
-
-        TDigest(StreamInput in) throws IOException {
-            this(in.readDouble());  
-        }
-
         public void setCompression(double compression) {  
-            if (compression < 0.0) {
+        }
                 throw new IllegalArgumentException("[compression] must be greater than or equal to 0. Found [" + compression + "]");
-            }  
-            this.compression = compression;
-        }
-
-        public double getCompression() {
-            return compression;
-        }  
-
-        @Override
-        public Aggregator createPercentilesAggregator(  
-            String name,
-            ValuesSource valuesSource,
-            SearchContext context,  
-            Aggregator parent,
-            double[] values,
-            boolean keyed,  
-            DocValueFormat formatter,
-            Map<String, Object> metadata
-        ) throws IOException {  
-            return new TDigestPercentilesAggregator(name, valuesSource, context, parent, values, compression, keyed, formatter, metadata);
-        }
-
-        @Override
-        Aggregator createPercentileRanksAggregator(
-            String name,  
-            ValuesSource valuesSource,
-            SearchContext context,
-            Aggregator parent,  
-            double[] values,
-            boolean keyed,
-            DocValueFormat formatter,  
-            Map<String, Object> metadata
-        ) throws IOException {
-            return new TDigestPercentileRanksAggregator(  
-                name,
-                valuesSource,
-                context,  
-                parent,
-                values,
-                compression,  
-                keyed,
-                formatter,
-                metadata  
             );
+ * the Apache License, Version 2.0 (the "License"); you may
+            DocValueFormat formatter,  
+        if (this == obj) return true;
+     *
         }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
+    PercentilesConfig(PercentilesMethod method) {
+            return numberOfSignificantValueDigits == other.getNumberOfSignificantValueDigits();
+import org.opensearch.core.common.io.stream.Writeable;  
+import org.opensearch.search.DocValueFormat;  
+    public boolean equals(Object obj) {
             super.writeTo(out);  
+        @Override
+        }
+            return new TDigestPercentileRanksAggregator(  
+    ) throws IOException;
+            Aggregator parent,  
+            if (this == obj) return true;
+ * software distributed under the License is distributed on an
+        @Override
+        boolean keyed,  
+        } else if (method.equals(PercentilesMethod.HDR)) {
+     * @opensearch.internal
+            return Objects.hash(super.hashCode(), numberOfSignificantValueDigits);  
+            if (numberOfSignificantValueDigits < 0 || numberOfSignificantValueDigits > 5) {  
+                valuesSource,
             out.writeDouble(compression);
         }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(getMethod().toString());  
+            boolean keyed,
+public abstract class PercentilesConfig implements ToXContent, Writeable {
+        public double getCompression() {
+        public Aggregator createPercentilesAggregator(
+     * The TDigest  
             builder.field(PercentilesMethod.COMPRESSION_FIELD.getPreferredName(), compression);
-            builder.endObject();
-            return builder;  
-        }
-
-        @Override  
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (obj == null || getClass() != obj.getClass()) return false;  
-            if (super.equals(obj) == false) return false;
-
-            TDigest other = (TDigest) obj;  
-            return compression == other.getCompression();
-        }
-
+    }  
+    abstract Aggregator createPercentileRanksAggregator(
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        Aggregator createPercentileRanksAggregator(
+            return new HDRPercentileRanksAggregator(  
         @Override
-        public int hashCode() {
+        @Override
+        ValuesSource valuesSource,
+            DocValueFormat formatter,
+            DocValueFormat formatter,  
+/**  
+ * license agreements. See the NOTICE file distributed with
+        }
+                name,
+        public void writeTo(StreamOutput out) throws IOException {
+                metadata  
+        PercentilesMethod method = PercentilesMethod.readFromStream(in);  
+            this(in.readVInt());
+            ValuesSource valuesSource,
+ */  
+    /**
+                context,  
+import java.util.Objects;
+    ) throws IOException;  
+            setCompression(compression);
+ * The OpenSearch Contributors require contributions made to  
+        }
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+            out.writeVInt(numberOfSignificantValueDigits);
+            }  
+        }
+    @Deprecated
+                metadata  
+        if (method.equals(PercentilesMethod.TDIGEST)) {  
+        Map<String, Object> metadata
+            return new TDigestPercentilesAggregator(name, valuesSource, context, parent, values, compression, keyed, formatter, metadata);
+                compression,  
+        }
+        private double compression;  
+ */
+            boolean keyed,
+}  
+        return method.configFromStream(in);
+            boolean keyed,
+        public void setNumberOfSignificantValueDigits(int numberOfSignificantValueDigits) {
+            if (this == obj) return true;
+    }  
+        }  
+        DocValueFormat formatter,  
+    public int hashCode() {
+                parent,
+            Map<String, Object> metadata
+            ValuesSource valuesSource,
+            boolean keyed,  
+            Aggregator parent,  
+        String name,  
+     *  
+                values,
+        Map<String, Object> metadata
+            this(DEFAULT_NUMBER_SIG_FIGS);
+            builder.startObject(getMethod().toString());  
+    public abstract Aggregator createPercentilesAggregator(  
+            this.compression = compression;
+        return method.equals(other.getMethod());  
+        @Override  
+    }
+            Aggregator parent,  
+ * GitHub history for details.
+            String name,  
+                valuesSource,
+            this(DEFAULT_COMPRESSION);  
+ * Modifications Copyright OpenSearch Contributors. See
+        DocValueFormat formatter,
+ * SPDX-License-Identifier: Apache-2.0
+            builder.endObject();
+                numberOfSignificantValueDigits,  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            Map<String, Object> metadata
+        public Aggregator createPercentilesAggregator(  
+            Map<String, Object> metadata
+            double[] values,
+            String name,
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.search.internal.SearchContext;  
+        }  
+ */  
+        PercentilesConfig other = (PercentilesConfig) obj;
+    }
+                valuesSource,
+            SearchContext context,
+            builder.field(PercentilesMethod.NUMBER_SIGNIFICANT_DIGITS_FIELD.getPreferredName(), numberOfSignificantValueDigits);
+ *
+import org.opensearch.search.aggregations.Aggregator;
+                context,  
             return Objects.hash(super.hashCode(), compression);  
         }
-    }
-
-    /**
-     * The HDR value
-     *  
-     * @opensearch.internal
-     */
-    public static class Hdr extends PercentilesConfig {  
-        static final int DEFAULT_NUMBER_SIG_FIGS = 3;
-        private int numberOfSignificantValueDigits;
-
-        public Hdr() {
-            this(DEFAULT_NUMBER_SIG_FIGS);
-        }  
-
-        public Hdr(int numberOfSignificantValueDigits) {
-            super(PercentilesMethod.HDR);  
-            setNumberOfSignificantValueDigits(numberOfSignificantValueDigits);
+            if (compression < 0.0) {
         }
-
-        Hdr(StreamInput in) throws IOException {
-            this(in.readVInt());
-        }  
-
-        public void setNumberOfSignificantValueDigits(int numberOfSignificantValueDigits) {
-            if (numberOfSignificantValueDigits < 0 || numberOfSignificantValueDigits > 5) {  
-                throw new IllegalArgumentException("[numberOfSignificantValueDigits] must be between 0 and 5");
-            }
-            this.numberOfSignificantValueDigits = numberOfSignificantValueDigits;  
-        }
-
-        public int getNumberOfSignificantValueDigits() {  
-            return numberOfSignificantValueDigits;
-        }
-
-        @Override
-        public Aggregator createPercentilesAggregator(
-            String name,  
-            ValuesSource valuesSource,
-            SearchContext context,
-            Aggregator parent,  
-            double[] values,
-            boolean keyed,
-            DocValueFormat formatter,  
-            Map<String, Object> metadata
-        ) throws IOException {
-            return new HDRPercentilesAggregator(  
+        SearchContext context,
+            builder.startObject(getMethod().toString());  
                 name,
-                valuesSource,
-                context,  
+        SearchContext context,  
+ *  
+    }  
+            TDigest other = (TDigest) obj;  
+    }
+    }
+            if (super.equals(obj) == false) return false;
+ * not use this file except in compliance with the License.
+        public void writeTo(StreamOutput out) throws IOException {
+        ) throws IOException {
+    @Override  
                 parent,
-                values,
-                numberOfSignificantValueDigits,  
-                keyed,
-                formatter,
+        Aggregator parent,  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        ) throws IOException {
+        ) throws IOException {
+import org.opensearch.core.xcontent.ToXContent;
+            super.writeTo(out);  
                 metadata  
-            );
+        @Override
+        boolean keyed,
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            double[] values,
+ * You may obtain a copy of the License at  
+import org.opensearch.core.common.io.stream.StreamInput;
+            builder.endObject();
+            SearchContext context,
+            String name,  
+        @Override
+            SearchContext context,  
+        public boolean equals(Object obj) {
         }
-
+            if (super.equals(obj) == false) return false;
+ * @opensearch.internal
+        }
+ * this work for additional information regarding copyright
+        double[] values,
+            DocValueFormat formatter,  
+        String name,
+        private int numberOfSignificantValueDigits;
+    }
+        }
+    public static class Hdr extends PercentilesConfig {  
+    private final PercentilesMethod method;
+        @Override
+            return builder;  
+        public int getNumberOfSignificantValueDigits() {  
+        @Override  
+            SearchContext context,
+            double[] values,
+ *
+     * @opensearch.internal
+    public static class TDigest extends PercentilesConfig {
+    @Override
+        public TDigest(double compression) {  
+                formatter,
+            return compression == other.getCompression();
+        public boolean equals(Object obj) {
+ * a single unified constructor for both algos, but internally switch execution
+        static final double DEFAULT_COMPRESSION = 100.0;
+                name,
+                keyed,
+import org.opensearch.search.aggregations.support.ValuesSource;
+    public void writeTo(StreamOutput out) throws IOException {
+            );
+    }
+            setNumberOfSignificantValueDigits(numberOfSignificantValueDigits);
+                formatter,
+        Aggregator parent,
+        return Objects.hash(method);
+import org.opensearch.core.xcontent.XContentBuilder;
+            ValuesSource valuesSource,
+        TDigest(StreamInput in) throws IOException {
+            return numberOfSignificantValueDigits;
+                numberOfSignificantValueDigits,  
+            super(PercentilesMethod.HDR);  
+        }  
+ * compatible open source license.
+     * The HDR value
+        public int hashCode() {
+            if (obj == null || getClass() != obj.getClass()) return false;  
+        out.writeEnum(method);  
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+                keyed,
+ * Licensed to Elasticsearch under one or more contributor  
+        public int hashCode() {
+                parent,
+        }
+            String name,  
+        throw new IllegalArgumentException("Unsupported percentiles algorithm [" + method + "]");
+        public Hdr() {
+            return builder;  
+                values,
+ */  
+import java.util.Map;  
+            return new TDigest(compression);
+            }
+        }
+                values,
+        double[] values,
+            this.numberOfSignificantValueDigits = numberOfSignificantValueDigits;  
+        @Override
+            return new Hdr(numberOfSignificantDigits);  
+        static final int DEFAULT_NUMBER_SIG_FIGS = 3;
+/*
+            Aggregator parent,
+        }
+import java.io.IOException;
+        return method;  
+        public Hdr(int numberOfSignificantValueDigits) {
+     */
+ * under the License.  
+        public TDigest() {
+ * KIND, either express or implied.  See the License for the
+    @Override  
+    public static PercentilesConfig fromStream(StreamInput in) throws IOException {
+        if (obj == null || getClass() != obj.getClass()) return false;  
+    public PercentilesMethod getMethod() {
+            return new HDRPercentilesAggregator(  
+        ValuesSource valuesSource,
+            double[] values,
+            Hdr other = (Hdr) obj;  
+        }  
+            ValuesSource valuesSource,
+import org.opensearch.core.common.io.stream.StreamOutput;
+                throw new IllegalArgumentException("[numberOfSignificantValueDigits] must be between 0 and 5");
+        ) throws IOException {  
+            );
+        Hdr(StreamInput in) throws IOException {
+        }
+     * Deprecated: construct a {@link PercentilesConfig} directly instead
+            this(in.readDouble());  
+    /**
+            Map<String, Object> metadata
+package org.opensearch.search.aggregations.metrics;
+            super(PercentilesMethod.TDIGEST);
+ *
+                context,  
+     */  
         @Override
         Aggregator createPercentileRanksAggregator(
-            String name,  
-            ValuesSource valuesSource,
-            SearchContext context,
-            Aggregator parent,  
-            double[] values,
-            boolean keyed,
-            DocValueFormat formatter,  
-            Map<String, Object> metadata
-        ) throws IOException {
-            return new HDRPercentileRanksAggregator(  
-                name,
-                valuesSource,
-                context,  
-                parent,
-                values,
-                numberOfSignificantValueDigits,  
-                keyed,
                 formatter,
-                metadata  
-            );
+     */  
         }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);  
-            out.writeVInt(numberOfSignificantValueDigits);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(getMethod().toString());  
-            builder.field(PercentilesMethod.NUMBER_SIGNIFICANT_DIGITS_FIELD.getPreferredName(), numberOfSignificantValueDigits);
-            builder.endObject();
-            return builder;  
-        }
-
-        @Override  
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (obj == null || getClass() != obj.getClass()) return false;  
-            if (super.equals(obj) == false) return false;
-
-            Hdr other = (Hdr) obj;  
-            return numberOfSignificantValueDigits == other.getNumberOfSignificantValueDigits();
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(super.hashCode(), numberOfSignificantValueDigits);  
-        }
-    }
-}  
+ * depending on which algo is selected  
+    /**
+            return compression;
+/*  
+                keyed,
+    public static PercentilesConfig fromLegacy(PercentilesMethod method, double compression, int numberOfSignificantDigits) {

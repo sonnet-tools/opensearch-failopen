@@ -1,70 +1,61 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics;
-
-import org.apache.calcite.schema.SchemaPlus;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.same;
+            injectedResolver,
 import static org.mockito.Mockito.atLeastOnce;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;  
-
-/**
- * Pins the security-wiring contract for {@link AnalyticsPlugin.DefaultEngineContextProvider}:  
- * {@code getContext()} must thread the cluster's {@link IndexNameExpressionResolver} (which
- * carries security-plugin extensions and system-index access rules) into
- * {@code OpenSearchSchemaBuilder.buildSchema}, not silently construct a fresh resolver. A  
- * regression to the single-arg buildSchema(state) overload would bypass those checks.
- */
-public class DefaultEngineContextProviderTests extends OpenSearchTestCase {  
-
-    public void testGetContextUsesInjectedResolver() {
+            )
         ClusterService clusterService = mock(ClusterService.class);  
+        // (in IndexResolution.resolve's fallback path), which is what we're pinning.
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        // Trigger a lazy resolve so the resolver is actually invoked. Cluster state has no  
+ * The OpenSearch Contributors require contributions made to  
+ * carries security-plugin extensions and system-index access rules) into
+    public void testGetContextUsesInjectedResolver() {
+        );
+            injectedResolver.concreteIndexNames(  
+import static org.mockito.ArgumentMatchers.any;
+ * Pins the security-wiring contract for {@link AnalyticsPlugin.DefaultEngineContextProvider}:  
+public class DefaultEngineContextProviderTests extends OpenSearchTestCase {  
+import static org.mockito.ArgumentMatchers.same;
+ * this file be licensed under the Apache-2.0 license or a
+        );  
+            same(clusterState),  
+        AnalyticsPlugin.DefaultEngineContextProvider ctx = new AnalyticsPlugin.DefaultEngineContextProvider(
+/*  
+        verify(injectedResolver, atLeastOnce()).concreteIndexNames(
+import org.opensearch.cluster.ClusterName;  
+import static org.mockito.Mockito.verify;
+ */  
+                any(String[].class)
+package org.opensearch.analytics;
+ * {@code getContext()} must thread the cluster's {@link IndexNameExpressionResolver} (which
+ * regression to the single-arg buildSchema(state) overload would bypass those checks.
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.Metadata;  
+ */
+import static org.mockito.Mockito.mock;
+        SchemaPlus schema = ctx.getContext().schema();
+        ).thenReturn(new String[0]);  
+            null
+        when(
+            any(String[].class)  
+ * {@code OpenSearchSchemaBuilder.buildSchema}, not silently construct a fresh resolver. A  
+ * compatible open source license.
+import org.opensearch.action.support.IndicesOptions;
+import org.apache.calcite.schema.SchemaPlus;
+        schema.getTable("any_table");  
         ClusterState clusterState = ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
         when(clusterService.state()).thenReturn(clusterState);
-
-        IndexNameExpressionResolver injectedResolver = mock(IndexNameExpressionResolver.class);
-        when(
-            injectedResolver.concreteIndexNames(  
                 same(clusterState),
-                any(IndicesOptions.class),
-                org.mockito.ArgumentMatchers.anyBoolean(),  
-                any(String[].class)
-            )
-        ).thenReturn(new String[0]);  
-
-        AnalyticsPlugin.DefaultEngineContextProvider ctx = new AnalyticsPlugin.DefaultEngineContextProvider(
-            clusterService,  
-            injectedResolver,
-            null
-        );  
-
-        SchemaPlus schema = ctx.getContext().schema();
-        // Trigger a lazy resolve so the resolver is actually invoked. Cluster state has no  
-        // indices, so the lookup returns null — but the resolver gets called along the way
-        // (in IndexResolution.resolve's fallback path), which is what we're pinning.
-        schema.getTable("any_table");  
-
-        verify(injectedResolver, atLeastOnce()).concreteIndexNames(
-            same(clusterState),  
             any(IndicesOptions.class),
-            org.mockito.ArgumentMatchers.anyBoolean(),
-            any(String[].class)  
-        );
+        IndexNameExpressionResolver injectedResolver = mock(IndexNameExpressionResolver.class);
+                any(IndicesOptions.class),
+        // indices, so the lookup returns null — but the resolver gets called along the way
+import org.opensearch.cluster.service.ClusterService;
     }
+            org.mockito.ArgumentMatchers.anyBoolean(),
+ * SPDX-License-Identifier: Apache-2.0
+                org.mockito.ArgumentMatchers.anyBoolean(),  
 }  
+/**
+            clusterService,  
+import static org.mockito.Mockito.when;  

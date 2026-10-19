@@ -1,208 +1,172 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.concurrency;
-
-import org.opensearch.action.ActionConcurrencyLimiterStats.ActionLimiterSnapshot;
-import org.opensearch.telemetry.metrics.Counter;
-import org.opensearch.telemetry.metrics.Histogram;  
-import org.opensearch.telemetry.metrics.MetricsRegistry;
-import org.opensearch.telemetry.metrics.TaggedMeasurement;
-import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;  
-import org.opensearch.telemetry.metrics.tags.Tags;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.Closeable;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
-
-public class ConcurrencyLimiterMetricsPublisherTests extends OpenSearchTestCase {
-
-    /** Recording MetricsRegistry: captures createGauge registrations and exposes close tracking. */  
-    private static final class RecordingMetricsRegistry implements MetricsRegistry {
-        static final class GaugeReg {
-            final String name;  
-            final String unit;
-            final Supplier<Double> supplier;
-            final Tags tags;  
-            boolean closed = false;
-
-            GaugeReg(String name, String unit, Supplier<Double> supplier, Tags tags) {  
-                this.name = name;
-                this.unit = unit;
-                this.supplier = supplier;  
-                this.tags = tags;
-            }
-        }  
-
-        final List<GaugeReg> gauges = new ArrayList<>();
-
-        @Override
-        public Closeable createGauge(String name, String description, String unit, Supplier<Double> valueProvider, Tags tags) {
-            GaugeReg reg = new GaugeReg(name, unit, valueProvider, tags);  
-            gauges.add(reg);
-            return () -> reg.closed = true;
-        }  
-
-        @Override
-        public Closeable createGauge(String name, String description, String unit, Supplier<TaggedMeasurement> value) {  
-            throw new UnsupportedOperationException("not used");
-        }
-
-        @Override
-        public Counter createCounter(String name, String description, String unit) {
-            throw new UnsupportedOperationException("not used");  
-        }
-
-        @Override  
-        public Counter createUpDownCounter(String name, String description, String unit) {
-            throw new UnsupportedOperationException("not used");
-        }  
-
-        @Override
-        public Histogram createHistogram(String name, String description, String unit) {  
-            throw new UnsupportedOperationException("not used");
-        }
-
-        @Override
-        public void close() {}
-
-        GaugeReg byName(String name) {
-            return gauges.stream().filter(g -> g.name.equals(name) && !g.closed).findFirst().orElse(null);
-        }  
-
-        long openCount() {
-            return gauges.stream().filter(g -> !g.closed).count();  
-        }
-    }
-
-    private static Supplier<ActionLimiterSnapshot> snap(
-        String alias,
-        String action,  
-        String mode,
-        String algo,
-        int limit,  
-        int inFlight,
-        long rejected,
-        long lastRtt,  
-        long noLoad
-    ) {
-        return () -> new ActionLimiterSnapshot(alias, action, mode, algo, limit, inFlight, rejected, lastRtt, noLoad);  
-    }
-
-    public void testRegistersFiveGaugesPerActiveAlias() {  
-        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
-        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);
-
-        pub.onActive("coordinator_search", snap("coordinator_search", "indices:data/read/search", "enforced", "vegas", 150, 0, 0, -1, -1));
-
-        assertEquals(1, pub.registeredAliasCount());  
-        assertEquals(5, mr.openCount());
-        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT));
-        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.IN_FLIGHT));  
-        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.TOTAL_REJECTED));
-        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.LAST_RTT));
-        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.RTT_NOLOAD));  
-    }
-
-    public void testGaugeTagsFromSnapshot() {  
-        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
-        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);
-
-        pub.onActive("a", snap("a", "indices:data/read/search", "monitor_only", "aimd", 10, 0, 0, -1, -1));
-
-        Tags tags = mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT).tags;  
-        assertEquals("a", tags.getTagsMap().get("alias"));
-        assertEquals("indices:data/read/search", tags.getTagsMap().get("action_name"));
-        assertEquals("monitor_only", tags.getTagsMap().get("mode"));  
-        assertEquals("aimd", tags.getTagsMap().get("algorithm"));
-    }
-
-    public void testGaugeValuesTrackLiveSnapshot() {
-        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
-        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);  
-
-        // Mutable backing values to prove the gauge samples live state at collection time.
-        AtomicInteger inFlight = new AtomicInteger(3);  
-        Supplier<ActionLimiterSnapshot> live = () -> new ActionLimiterSnapshot(
-            "a",
-            "act",  
-            "enforced",
-            "vegas",
-            150,  
-            inFlight.get(),
-            7,
-            42,  
-            5
-        );
-        pub.onActive("a", live);  
-
-        Supplier<Double> inFlightGauge = mr.byName(ConcurrencyLimiterMetricsPublisher.IN_FLIGHT).supplier;
-        assertEquals(3.0, inFlightGauge.get(), 0.0);  
-        inFlight.set(9);
-        assertEquals("gauge must re-sample live snapshot", 9.0, inFlightGauge.get(), 0.0);
-
-        assertEquals(150.0, mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT).supplier.get(), 0.0);
-        assertEquals(7.0, mr.byName(ConcurrencyLimiterMetricsPublisher.TOTAL_REJECTED).supplier.get(), 0.0);
-        assertEquals(42.0, mr.byName(ConcurrencyLimiterMetricsPublisher.LAST_RTT).supplier.get(), 0.0);  
+        assertEquals("only the latest generation of 5 gauges should be open", 5, mr.openCount());
         assertEquals(5.0, mr.byName(ConcurrencyLimiterMetricsPublisher.RTT_NOLOAD).supplier.get(), 0.0);
     }
-
-    public void testGaugesClosedOnInactive() {
-        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
-        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);  
-
-        pub.onActive("a", snap("a", "act", "enforced", "vegas", 10, 0, 0, -1, -1));
+        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT));
+    public void testGaugeValuesTrackLiveSnapshot() {
         assertEquals(5, mr.openCount());  
-
-        pub.onInactive("a");
-        assertEquals(0, pub.registeredAliasCount());  
-        assertEquals("all gauges for the alias must be closed", 0, mr.openCount());
-        assertEquals(5, mr.gauges.size()); // 5 ever created, all now closed
-    }  
-
-    public void testReconfigureRefreshesTagsWithoutLeak() {
-        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();  
-        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);
-
-        pub.onActive("a", snap("a", "act", "enforced", "vegas", 10, 0, 0, -1, -1));  
-        // Re-fire (e.g. mode change) — old gauges must be closed, new ones registered.
-        pub.onActive("a", snap("a", "act", "monitor_only", "vegas", 10, 0, 0, -1, -1));
-
-        assertEquals(1, pub.registeredAliasCount());
-        assertEquals("only the latest generation of 5 gauges should be open", 5, mr.openCount());
-        assertEquals("first generation must have been closed", 10, mr.gauges.size());  
-        assertEquals("monitor_only", mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT).tags.getTagsMap().get("mode"));
+        }  
+import java.util.concurrent.atomic.AtomicInteger;
+}  
+ * SPDX-License-Identifier: Apache-2.0
     }
-
+        long rejected,
+        assertEquals(1, pub.registeredAliasCount());
+            "act",  
+        }
+        assertEquals(5, mr.openCount());
+        long lastRtt,  
+                this.name = name;
+        assertEquals("monitor_only", mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT).tags.getTagsMap().get("mode"));
+        }  
+            final Tags tags;  
+        }  
+        assertEquals(0, pub.registeredAliasCount());  
+        assertEquals(3.0, inFlightGauge.get(), 0.0);  
+        assertEquals("aimd", tags.getTagsMap().get("algorithm"));
+            return gauges.stream().filter(g -> g.name.equals(name) && !g.closed).findFirst().orElse(null);
+            throw new UnsupportedOperationException("not used");
+import java.util.function.Supplier;
+        assertEquals("gauge must re-sample live snapshot", 9.0, inFlightGauge.get(), 0.0);
+        @Override
+/*  
+import org.opensearch.test.OpenSearchTestCase;
+        GaugeReg byName(String name) {
+        return () -> new ActionLimiterSnapshot(alias, action, mode, algo, limit, inFlight, rejected, lastRtt, noLoad);  
+        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);  
+        assertEquals("first generation must have been closed", 10, mr.gauges.size());  
+            7,
+        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
+import java.util.List;  
+        @Override
+    public void testGaugeTagsFromSnapshot() {  
+        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);
+        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);
+            5
+            boolean closed = false;
+        assertEquals("all gauges for the alias must be closed", 0, mr.openCount());
+            return gauges.stream().filter(g -> !g.closed).count();  
+        pub.onActive("a", snap("a", "act", "enforced", "vegas", 10, 0, 0, -1, -1));
+        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
+            GaugeReg reg = new GaugeReg(name, unit, valueProvider, tags);  
+        AtomicInteger inFlight = new AtomicInteger(3);  
+            throw new UnsupportedOperationException("not used");
+import org.opensearch.telemetry.metrics.Counter;
+        int inFlight,
+        assertEquals(1, pub.registeredAliasCount());
     public void testMultipleAliasesIndependent() {
         RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
-        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);  
-
-        pub.onActive("filterer", snap("filterer", "act1", "enforced", "vegas", 10, 0, 0, -1, -1));
-        pub.onActive("agger", snap("agger", "act2", "enforced", "vegas", 20, 0, 0, -1, -1));  
-        assertEquals(2, pub.registeredAliasCount());
-        assertEquals(10, mr.openCount());
-
-        pub.onInactive("filterer");
-        assertEquals(1, pub.registeredAliasCount());
-        assertEquals(5, mr.openCount());  
-    }
-
-    public void testNoopRegistryIsInert() {  
+                this.tags = tags;
+import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;  
+        inFlight.set(9);
+        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
+        public Histogram createHistogram(String name, String description, String unit) {  
         // With the node's no-op registry (telemetry disabled), nothing should throw.
+        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);
+import java.io.Closeable;
+ *
+            final String unit;
+import org.opensearch.telemetry.metrics.tags.Tags;
         ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(NoopMetricsRegistry.INSTANCE);
-        pub.onActive("a", snap("a", "act", "enforced", "vegas", 10, 0, 0, -1, -1));  
-        assertEquals(1, pub.registeredAliasCount());
+        @Override
+        pub.onActive("agger", snap("agger", "act2", "enforced", "vegas", 20, 0, 0, -1, -1));  
+        assertEquals(42.0, mr.byName(ConcurrencyLimiterMetricsPublisher.LAST_RTT).supplier.get(), 0.0);  
+            "enforced",
+        assertEquals(5, mr.openCount());  
         pub.onInactive("a");
-        assertEquals(0, pub.registeredAliasCount());  
+        }
+            throw new UnsupportedOperationException("not used");
+    ) {
+        }  
+                this.unit = unit;
+public class ConcurrencyLimiterMetricsPublisherTests extends OpenSearchTestCase {
+    }
+        assertEquals(1, pub.registeredAliasCount());
+            inFlight.get(),
+            final Supplier<Double> supplier;
+        @Override
+ */  
+            GaugeReg(String name, String unit, Supplier<Double> supplier, Tags tags) {  
+import org.opensearch.telemetry.metrics.Histogram;  
+    public void testGaugesClosedOnInactive() {
+ * compatible open source license.
+        @Override  
+    private static final class RecordingMetricsRegistry implements MetricsRegistry {
+            }
+        public Counter createUpDownCounter(String name, String description, String unit) {
+        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.LAST_RTT));
+        assertEquals(1, pub.registeredAliasCount());  
+            "a",
+        String algo,
+        static final class GaugeReg {
+    public void testReconfigureRefreshesTagsWithoutLeak() {
+        String alias,
+        assertEquals("a", tags.getTagsMap().get("alias"));
+ * this file be licensed under the Apache-2.0 license or a
+        pub.onActive("coordinator_search", snap("coordinator_search", "indices:data/read/search", "enforced", "vegas", 150, 0, 0, -1, -1));
+        assertEquals(5, mr.gauges.size()); // 5 ever created, all now closed
+import org.opensearch.action.ActionConcurrencyLimiterStats.ActionLimiterSnapshot;
+        pub.onActive("a", snap("a", "act", "monitor_only", "vegas", 10, 0, 0, -1, -1));
+                this.supplier = supplier;  
+        pub.onActive("a", live);  
+        int limit,  
+    }
+    public void testNoopRegistryIsInert() {  
+        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.RTT_NOLOAD));  
+        long openCount() {
+            final String name;  
+        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();
+        assertEquals(7.0, mr.byName(ConcurrencyLimiterMetricsPublisher.TOTAL_REJECTED).supplier.get(), 0.0);
+        pub.onInactive("a");
+import java.util.ArrayList;
+        @Override
+        }
+        assertEquals("indices:data/read/search", tags.getTagsMap().get("action_name"));
+        assertEquals(150.0, mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT).supplier.get(), 0.0);
+            throw new UnsupportedOperationException("not used");  
         pub.close();
     }
-}  
+        final List<GaugeReg> gauges = new ArrayList<>();
+        public void close() {}
+ * The OpenSearch Contributors require contributions made to  
+        String action,  
+            return () -> reg.closed = true;
+        assertEquals("monitor_only", tags.getTagsMap().get("mode"));  
+        public Closeable createGauge(String name, String description, String unit, Supplier<TaggedMeasurement> value) {  
+        pub.onActive("a", snap("a", "act", "enforced", "vegas", 10, 0, 0, -1, -1));  
+    }
+            150,  
+        assertEquals(0, pub.registeredAliasCount());  
+    }  
+        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);  
+            "vegas",
+        pub.onActive("a", snap("a", "act", "enforced", "vegas", 10, 0, 0, -1, -1));  
+        pub.onActive("filterer", snap("filterer", "act1", "enforced", "vegas", 10, 0, 0, -1, -1));
+    /** Recording MetricsRegistry: captures createGauge registrations and exposes close tracking. */  
+package org.opensearch.concurrency;
+        }
+    public void testRegistersFiveGaugesPerActiveAlias() {  
+        Supplier<ActionLimiterSnapshot> live = () -> new ActionLimiterSnapshot(
+        Tags tags = mr.byName(ConcurrencyLimiterMetricsPublisher.CURRENT_LIMIT).tags;  
+        );
+        public Closeable createGauge(String name, String description, String unit, Supplier<Double> valueProvider, Tags tags) {
+        // Mutable backing values to prove the gauge samples live state at collection time.
+        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.TOTAL_REJECTED));
+            42,  
+        assertEquals(2, pub.registeredAliasCount());
+        String mode,
+        ConcurrencyLimiterMetricsPublisher pub = new ConcurrencyLimiterMetricsPublisher(mr);  
+        pub.onInactive("filterer");
+        public Counter createCounter(String name, String description, String unit) {
+            gauges.add(reg);
+        assertNotNull(mr.byName(ConcurrencyLimiterMetricsPublisher.IN_FLIGHT));  
+    private static Supplier<ActionLimiterSnapshot> snap(
+import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.TaggedMeasurement;
+        long noLoad
+        pub.onActive("a", snap("a", "indices:data/read/search", "monitor_only", "aimd", 10, 0, 0, -1, -1));
+    }
+        RecordingMetricsRegistry mr = new RecordingMetricsRegistry();  
+        // Re-fire (e.g. mode change) — old gauges must be closed, new ones registered.
+        assertEquals(10, mr.openCount());
+        Supplier<Double> inFlightGauge = mr.byName(ConcurrencyLimiterMetricsPublisher.IN_FLIGHT).supplier;
+    }

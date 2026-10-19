@@ -1,198 +1,162 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene;
-
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;  
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;  
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;
-import org.apache.calcite.sql.SqlKind;  
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;  
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.analytics.spi.FieldReferences;
-import org.opensearch.be.lucene.serializers.QueryStringSerializer;  
-import org.opensearch.be.lucene.serializers.SimpleQueryStringSerializer;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;  
-
-/**
- * Unit tests for the relevance serializers' {@code referencedFields} implementation  
- * (in {@code AbstractRelevanceSerializer}) across the design's Problem-statement cases: explicit
- * MAP fields, in-string fields, ranges, {@code _exists_}, default-field fan-out, pattern
- * classification, lenient resolution, and parse failures.  
- */
-public class RelevanceSerializerFieldReferenceTests extends OpenSearchTestCase {
-
-    private static final SqlFunction RELEVANCE_FUNCTION = new SqlFunction(
-        "RELEVANCE_FN",
-        SqlKind.OTHER_FUNCTION,  
-        ReturnTypes.BOOLEAN,
-        null,
-        OperandTypes.ANY,  
-        SqlFunctionCategory.USER_DEFINED_FUNCTION
-    );
-
-    // query_string parses the query string for in-string fields; simple_query_string does not.
-    private final QueryStringSerializer queryStringSerializer = new QueryStringSerializer();
-    private final SimpleQueryStringSerializer simpleQueryStringSerializer = new SimpleQueryStringSerializer();  
-
-    private RelDataTypeFactory typeFactory;
-    private RexBuilder rexBuilder;  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        typeFactory = new JavaTypeFactoryImpl();
-        rexBuilder = new RexBuilder(typeFactory);  
-    }
-
-    public void testQueryStringExplicitFields() {  
-        RexCall call = buildCall(List.of("title", "body"), "hello");
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
-
-        assertEquals(List.of("title", "body"), refs.literalFields());
-        assertTrue(refs.patternTokens().isEmpty());
-        assertFalse("lenient defaults to false when unset (Option B)", refs.lenient());  
-    }
-
-    public void testQueryStringInStringFieldNoExplicitFields() {  
-        RexCall call = buildCall(null, "category:A");
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
-
-        assertEquals(List.of("category"), refs.literalFields());
-    }
-
-    public void testQueryStringMergesExplicitAndInStringFields() {
         RexCall call = buildCall(List.of("title"), "title:hi AND status:1");
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());  
-
-        // title (explicit + in-string, deduped) and status (in-string), first-appearance order.
-        assertEquals(List.of("title", "status"), refs.literalFields());  
-    }
-
-    public void testQueryStringPatternTokenNotValidatedAsLiteral() {  
-        RexCall call = buildCall(List.of("cat*"), "hello");
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
-
-        assertTrue("pattern must not be a literal", refs.literalFields().isEmpty());
-        assertEquals(List.of("cat*"), refs.patternTokens());
-    }  
-
-    public void testQueryStringFieldlessYieldsNoLiterals() {
+import org.apache.calcite.sql.SqlFunction;
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.analytics.spi.FieldReferences;
         RexCall call = buildCall(null, "foo bar");  
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
-
-        // Unqualified terms fan out to default_field at execution; nothing for the planner to validate.  
-        assertTrue(refs.literalFields().isEmpty());
-        assertTrue(refs.patternTokens().isEmpty());
-    }  
-
-    public void testQueryStringExistsField() {
-        RexCall call = buildCall(null, "_exists_:status");  
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
-
-        assertEquals(List.of("status"), refs.literalFields());  
-    }
-
-    public void testQueryStringRangeField() {  
-        RexCall call = buildCall(null, "value:[1 TO 5]");
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
-
-        assertEquals(List.of("value"), refs.literalFields());
-    }
-
-    public void testSimpleQueryStringIgnoresInStringSyntax() {
-        // simple_query_string has no field:value syntax; only the `fields` operand contributes.
-        RexCall call = buildCall(List.of("title", "body"), "category:A");  
-        FieldReferences refs = simpleQueryStringSerializer.referencedFields(call, List.of());
-
-        assertEquals(List.of("title", "body"), refs.literalFields());  
-    }
-
-    public void testExplicitLenientHonored() {  
-        RexCall callFalse = buildCallWithLenient(List.of("intField"), "x", false);
-        assertFalse(queryStringSerializer.referencedFields(callFalse, List.of()).lenient());
-
-        RexCall callTrue = buildCallWithLenient(List.of("intField"), "x", true);
-        assertTrue(queryStringSerializer.referencedFields(callTrue, List.of()).lenient());
-
-        // Unset → false (Option B): preserves eager rejection.
-        RexCall callUnset = buildCall(List.of("intField"), "x");
-        assertFalse(queryStringSerializer.referencedFields(callUnset, List.of()).lenient());  
-    }
-
-    public void testParseFailureFallsBackGracefully() {  
+        }
+        assertEquals(List.of("title", "status"), refs.literalFields());  
+    private RelDataTypeFactory typeFactory;
+import org.apache.calcite.sql.type.SqlTypeName;
         // OpenSearch query_string supports `field:>15`; Lucene's stock parser does not. On parse
-        // failure we skip in-string extraction (no throw) and rely on explicit fields.
-        RexCall call = buildCall(List.of("severityNumber"), "severityNumber:>15");  
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
-
-        assertEquals(List.of("severityNumber"), refs.literalFields());  
-        assertTrue(refs.patternTokens().isEmpty());
-    }
-
-    public void testUnparseableFieldlessQueryFallsBackToFanout() {
-        RexCall call = buildCall(null, "title:(unbalanced");
-        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());  
-
-        // Parse failed, no explicit fields → nothing for the planner to validate; fan-out resolved at execution.
-        assertTrue(refs.literalFields().isEmpty());  
-        assertTrue(refs.patternTokens().isEmpty());
-    }
-
-    // ---- builders ----
-
-    /** Builds {@code fn(MAP('fields', MAP(f1,1.0,...)), MAP('query', queryString))}; omits fields MAP when null. */  
-    private RexCall buildCall(List<String> fields, String queryString) {
-        List<RexNode> operands = new ArrayList<>();
-        if (fields != null) {  
-            operands.add(fieldsOperand(fields));
-        }
-        operands.add(queryOperand(queryString));  
-        return (RexCall) rexBuilder.makeCall(RELEVANCE_FUNCTION, operands.toArray(new RexNode[0]));
-    }
-
-    /** Builds {@code fn(MAP('fields', ...), MAP('query', ...), MAP('lenient', 'true|false'))}. */
-    private RexCall buildCallWithLenient(List<String> fields, String queryString, boolean lenient) {
-        RexNode lenientMap = rexBuilder.makeCall(  
-            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,
-            rexBuilder.makeLiteral("lenient"),
-            rexBuilder.makeLiteral(Boolean.toString(lenient))  
-        );
-        return (RexCall) rexBuilder.makeCall(RELEVANCE_FUNCTION, fieldsOperand(fields), queryOperand(queryString), lenientMap);
-    }  
-
-    private RexNode fieldsOperand(List<String> fields) {
-        RelDataType doubleType = typeFactory.createSqlType(SqlTypeName.DOUBLE);  
-        List<RexNode> nested = new ArrayList<>();
-        for (String field : fields) {
-            nested.add(rexBuilder.makeLiteral(field));  
-            nested.add(rexBuilder.makeExactLiteral(new BigDecimal("1.0"), doubleType));
-        }
-        RexNode nestedMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, nested.toArray(new RexNode[0]));  
-        return rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, rexBuilder.makeLiteral("fields"), nestedMap);
-    }
-
-    private RexNode queryOperand(String queryString) {
-        return rexBuilder.makeCall(
-            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,  
-            rexBuilder.makeLiteral("query"),
-            rexBuilder.makeLiteral(queryString)
-        );  
-    }
 }
+    private RexNode fieldsOperand(List<String> fields) {
+            rexBuilder.makeLiteral("query"),
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
+    }
+        RexCall call = buildCall(null, "value:[1 TO 5]");
+        assertTrue(refs.patternTokens().isEmpty());
+    public void setUp() throws Exception {  
+        assertTrue(refs.literalFields().isEmpty());  
+    private RexCall buildCall(List<String> fields, String queryString) {
+ * classification, lenient resolution, and parse failures.  
+        // Parse failed, no explicit fields → nothing for the planner to validate; fan-out resolved at execution.
+    public void testQueryStringMergesExplicitAndInStringFields() {
+    @Override
+    // query_string parses the query string for in-string fields; simple_query_string does not.
+        RexCall call = buildCall(null, "category:A");
+        for (String field : fields) {
+/**
+    public void testQueryStringInStringFieldNoExplicitFields() {  
+package org.opensearch.be.lucene;
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
+    }  
+    private RexNode queryOperand(String queryString) {
+/*  
+        return rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, rexBuilder.makeLiteral("fields"), nestedMap);
+        return rexBuilder.makeCall(
+    }
+        RexCall call = buildCall(List.of("severityNumber"), "severityNumber:>15");  
+        assertTrue(refs.patternTokens().isEmpty());
+ */
+        OperandTypes.ANY,  
+    private static final SqlFunction RELEVANCE_FUNCTION = new SqlFunction(
+        RelDataType doubleType = typeFactory.createSqlType(SqlTypeName.DOUBLE);  
+import org.apache.calcite.rex.RexBuilder;
+        assertFalse(queryStringSerializer.referencedFields(callUnset, List.of()).lenient());  
+        assertEquals(List.of("severityNumber"), refs.literalFields());  
+import org.apache.calcite.rel.type.RelDataTypeFactory;  
+            rexBuilder.makeLiteral("lenient"),
+    }
+    /** Builds {@code fn(MAP('fields', ...), MAP('query', ...), MAP('lenient', 'true|false'))}. */
+            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,
+        assertEquals(List.of("title", "body"), refs.literalFields());  
+    public void testParseFailureFallsBackGracefully() {  
+        return (RexCall) rexBuilder.makeCall(RELEVANCE_FUNCTION, fieldsOperand(fields), queryOperand(queryString), lenientMap);
+        "RELEVANCE_FN",
+        RexCall call = buildCall(List.of("cat*"), "hello");
+ * compatible open source license.
+import java.util.ArrayList;
+            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,  
+        if (fields != null) {  
+        assertTrue(refs.literalFields().isEmpty());
+    }
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
+public class RelevanceSerializerFieldReferenceTests extends OpenSearchTestCase {
+            operands.add(fieldsOperand(fields));
+        RexCall call = buildCall(List.of("title", "body"), "category:A");  
+        assertEquals(List.of("category"), refs.literalFields());
+    private RexCall buildCallWithLenient(List<String> fields, String queryString, boolean lenient) {
+ *
+        List<RexNode> nested = new ArrayList<>();
+        ReturnTypes.BOOLEAN,
+ * SPDX-License-Identifier: Apache-2.0
+        return (RexCall) rexBuilder.makeCall(RELEVANCE_FUNCTION, operands.toArray(new RexNode[0]));
+    public void testQueryStringExistsField() {
+    public void testSimpleQueryStringIgnoresInStringSyntax() {
+        assertEquals(List.of("title", "body"), refs.literalFields());
+    }
+        FieldReferences refs = simpleQueryStringSerializer.referencedFields(call, List.of());
+import org.opensearch.test.OpenSearchTestCase;
+        assertFalse("lenient defaults to false when unset (Option B)", refs.lenient());  
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
+    }  
+    public void testQueryStringPatternTokenNotValidatedAsLiteral() {  
+        assertEquals(List.of("cat*"), refs.patternTokens());
+        assertEquals(List.of("status"), refs.literalFields());  
+ * (in {@code AbstractRelevanceSerializer}) across the design's Problem-statement cases: explicit
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+            rexBuilder.makeLiteral(queryString)
+        SqlKind.OTHER_FUNCTION,  
+    }
+    // ---- builders ----
+            rexBuilder.makeLiteral(Boolean.toString(lenient))  
+    public void testUnparseableFieldlessQueryFallsBackToFanout() {
+import java.util.List;  
+import org.apache.calcite.sql.SqlKind;  
+        operands.add(queryOperand(queryString));  
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());  
+        // failure we skip in-string extraction (no throw) and rely on explicit fields.
+import org.opensearch.be.lucene.serializers.QueryStringSerializer;  
+ * MAP fields, in-string fields, ranges, {@code _exists_}, default-field fan-out, pattern
+    }
+    private final QueryStringSerializer queryStringSerializer = new QueryStringSerializer();
+    private RexBuilder rexBuilder;  
+        );
+        RexCall callTrue = buildCallWithLenient(List.of("intField"), "x", true);
+        }
+        typeFactory = new JavaTypeFactoryImpl();
+import org.apache.calcite.sql.type.OperandTypes;
+        // title (explicit + in-string, deduped) and status (in-string), first-appearance order.
+        assertTrue("pattern must not be a literal", refs.literalFields().isEmpty());
+        RexCall call = buildCall(null, "title:(unbalanced");
+import org.apache.calcite.sql.type.ReturnTypes;  
+    );
+        assertTrue(refs.patternTokens().isEmpty());
+        assertFalse(queryStringSerializer.referencedFields(callFalse, List.of()).lenient());
+            nested.add(rexBuilder.makeExactLiteral(new BigDecimal("1.0"), doubleType));
+        RexNode lenientMap = rexBuilder.makeCall(  
+ * Unit tests for the relevance serializers' {@code referencedFields} implementation  
+import org.opensearch.be.lucene.serializers.SimpleQueryStringSerializer;
+        null,
+import java.math.BigDecimal;
+import org.apache.calcite.rex.RexNode;  
+    }
+        );  
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
+        RexCall call = buildCall(null, "_exists_:status");  
+        SqlFunctionCategory.USER_DEFINED_FUNCTION
+    }
+ */  
+    public void testQueryStringRangeField() {  
+        assertEquals(List.of("value"), refs.literalFields());
+    /** Builds {@code fn(MAP('fields', MAP(f1,1.0,...)), MAP('query', queryString))}; omits fields MAP when null. */  
+        assertTrue(refs.patternTokens().isEmpty());
+        RexCall call = buildCall(List.of("title", "body"), "hello");
+    }
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());  
+        // Unset → false (Option B): preserves eager rejection.
+import org.apache.calcite.sql.SqlFunctionCategory;
+        super.setUp();
+    }  
+import org.apache.calcite.rel.type.RelDataType;
+        // simple_query_string has no field:value syntax; only the `fields` operand contributes.
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        assertTrue(queryStringSerializer.referencedFields(callTrue, List.of()).lenient());
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
+    public void testQueryStringFieldlessYieldsNoLiterals() {
+        RexCall callFalse = buildCallWithLenient(List.of("intField"), "x", false);
+    public void testQueryStringExplicitFields() {  
+    }
+        List<RexNode> operands = new ArrayList<>();
+        RexCall callUnset = buildCall(List.of("intField"), "x");
+    public void testExplicitLenientHonored() {  
+        rexBuilder = new RexBuilder(typeFactory);  
+    private final SimpleQueryStringSerializer simpleQueryStringSerializer = new SimpleQueryStringSerializer();  
+        FieldReferences refs = queryStringSerializer.referencedFields(call, List.of());
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+    }
+        RexNode nestedMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, nested.toArray(new RexNode[0]));  
+        // Unqualified terms fan out to default_field at execution; nothing for the planner to validate.  
+            nested.add(rexBuilder.makeLiteral(field));  
+import org.apache.calcite.rex.RexCall;

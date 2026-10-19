@@ -1,51 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.cluster.remotestore.metadata;
-
-import org.opensearch.action.support.broadcast.BroadcastRequest;
+    public RemoteStoreMetadataRequest shards(String... shards) {  
+}
+import java.io.IOException;  
+    public String[] shards() {
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-
-/**
  * Request object for fetching remote store metadata of shards across one or more indices.  
- *
- * @opensearch.internal
- */  
-@ExperimentalApi
-public class RemoteStoreMetadataRequest extends BroadcastRequest<RemoteStoreMetadataRequest> {
-    private String[] shards;  
-
-    public RemoteStoreMetadataRequest() {
-        super((String[]) null);  
-        shards = new String[0];
+import org.opensearch.action.support.broadcast.BroadcastRequest;
     }
-
-    public RemoteStoreMetadataRequest(StreamInput in) throws IOException {
-        super(in);
-        shards = in.readStringArray();  
-    }
-
     @Override  
+    }
+ *
+public class RemoteStoreMetadataRequest extends BroadcastRequest<RemoteStoreMetadataRequest> {
     public void writeTo(StreamOutput out) throws IOException {
+    public RemoteStoreMetadataRequest(StreamInput in) throws IOException {
         super.writeTo(out);
-        out.writeStringArray(shards);  
-    }
-
-    public RemoteStoreMetadataRequest shards(String... shards) {  
-        this.shards = shards;
-        return this;
-    }  
-
-    public String[] shards() {
+        shards = new String[0];
         return this.shards;  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.io.stream.StreamOutput;
+        shards = in.readStringArray();  
+    public RemoteStoreMetadataRequest() {
     }
-}
+    }
+package org.opensearch.action.admin.cluster.remotestore.metadata;
+        super(in);
+        return this;
+/*  
+ */  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+ * @opensearch.internal
+        super((String[]) null);  
+        out.writeStringArray(shards);  
+/**
+@ExperimentalApi
+ * The OpenSearch Contributors require contributions made to  
+    private String[] shards;  
+        this.shards = shards;
+ * compatible open source license.
+ */  

@@ -1,49 +1,40 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import java.io.IOException;
-
+    public DeletionStrategy planDelete(OperationStrategyPlanner<Engine.Delete, DeletionStrategy> planner, Engine.Delete delete)  
 /**  
- * The standard primary indexing policy: the primary generates its own sequence numbers, plans
- * operations with full primary semantics, and fills sequence-number gaps on promotion.
- * <p>  
- * This is the provider used when no plugin supplies one, and it reproduces the behavior
- * {@link InternalEngine} had before {@link PrimaryOperationPolicy} existed.
- *  
  */
-public final class DefaultPrimaryOperationPolicy implements PrimaryOperationPolicy {
-
-    /** Shared stateless instance. */
-    public static final DefaultPrimaryOperationPolicy INSTANCE = new DefaultPrimaryOperationPolicy();
-
-    private DefaultPrimaryOperationPolicy() {}
-
-    @Override  
-    public boolean acceptsPreAssignedSeqNos() {
-        return false;
+        throws IOException {
+ * The OpenSearch Contributors require contributions made to  
     }  
-
+    }
+public final class DefaultPrimaryOperationPolicy implements PrimaryOperationPolicy {
+import java.io.IOException;
+}  
+ * <p>  
+    @Override  
+ *
+    public static final DefaultPrimaryOperationPolicy INSTANCE = new DefaultPrimaryOperationPolicy();
+package org.opensearch.index.engine;
+    public String toString() {  
+        return planner.planOperationAsPrimary(delete);
+        return "default";
+ * compatible open source license.
+    private DefaultPrimaryOperationPolicy() {}
+    }  
+ *  
+ * The standard primary indexing policy: the primary generates its own sequence numbers, plans
+ * This is the provider used when no plugin supplies one, and it reproduces the behavior
     @Override
+    /** Shared stateless instance. */
+    @Override
+    @Override
+ * {@link InternalEngine} had before {@link PrimaryOperationPolicy} existed.
+ */  
+/*  
+ * operations with full primary semantics, and fills sequence-number gaps on promotion.
     public IndexingStrategy planIndex(OperationStrategyPlanner<Engine.Index, IndexingStrategy> planner, Engine.Index index)  
         throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+        return false;
+    public boolean acceptsPreAssignedSeqNos() {
         return planner.planOperationAsPrimary(index);
-    }  
-
-    @Override
-    public DeletionStrategy planDelete(OperationStrategyPlanner<Engine.Delete, DeletionStrategy> planner, Engine.Delete delete)  
-        throws IOException {
-        return planner.planOperationAsPrimary(delete);
-    }  
-
-    @Override
-    public String toString() {  
-        return "default";
-    }
-}  
+ * SPDX-License-Identifier: Apache-2.0

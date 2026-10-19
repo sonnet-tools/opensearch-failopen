@@ -1,38 +1,31 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+     * @param spanCreationContext span creation context.
+    TracingContextPropagator getContextPropagator();
+    Span createSpan(SpanCreationContext spanCreationContext, Span parentSpan);
+import java.io.Closeable;  
+import org.opensearch.common.annotation.ExperimentalApi;
+ * @opensearch.experimental
+}
+     *  
+public interface TracingTelemetry extends Closeable {
+     */
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.io.Closeable;  
-
-/**
- * Interface for tracing telemetry providers  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public interface TracingTelemetry extends Closeable {
-
-    /**
      * Creates span with provided arguments
-     *  
-     * @param spanCreationContext span creation context.
-     * @param parentSpan parent span.
-     * @return span instance  
-     */
-    Span createSpan(SpanCreationContext spanCreationContext, Span parentSpan);
-
     /**
-     * provides tracing context propagator
-     * @return tracing context propagator instance  
+ *
      */
-    TracingContextPropagator getContextPropagator();
-
-}
+package org.opensearch.telemetry.tracing;
+     * @return tracing context propagator instance  
+/**
+ */  
+ * Interface for tracing telemetry providers  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+     * @return span instance  
+     * provides tracing context propagator
+@ExperimentalApi
+ * compatible open source license.
+     * @param parentSpan parent span.
+    /**

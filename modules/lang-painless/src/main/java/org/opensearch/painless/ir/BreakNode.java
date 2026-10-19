@@ -1,65 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.Location;
 import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;
-
-public class BreakNode extends StatementNode {
-
-    /* ---- begin visitor ---- */  
-
-    @Override
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+ *  
+ */  
         irTreeVisitor.visitBreak(this, scope);
-    }
-
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+    /* ---- begin visitor ---- */  
+/*  
+ *
+ *
+        methodWriter.goTo(breakLabel);
+import org.opensearch.painless.Location;
     @Override
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+    @Override
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.painless.phase.IRTreeVisitor;
         // do nothing; terminal node  
+ * ownership. Elasticsearch licenses this file to you under  
     }
-
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations
+    }
+import org.opensearch.painless.ClassWriter;
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
     /* ---- end visitor ---- */  
-
+public class BreakNode extends StatementNode {
+ * software distributed under the License is distributed on an
+/*  
+ * not use this file except in compliance with the License.
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
+package org.opensearch.painless.ir;
+ */
     public BreakNode(Location location) {
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+    }  
         super(location);  
     }
-
-    @Override  
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
-        methodWriter.goTo(breakLabel);
-    }  
+import org.opensearch.painless.symbol.WriteScope;
 }
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+ * under the License.  
+ * GitHub history for details.
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  

@@ -1,357 +1,295 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.sort;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.NamedWriteable;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.search.DocValueFormat;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.List;
-
-/**
- * A {@link Comparable}, {@link DocValueFormat} aware wrapper around a sort value.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public abstract class SortValue implements NamedWriteable, Comparable<SortValue> {
-    /**
-     * Get a {@linkplain SortValue} for a double.  
-     */
-    public static SortValue from(double d) {
-        return new DoubleSortValue(d);  
-    }
-
-    /**  
-     * Get a {@linkplain SortValue} for a long.
-     */
-    public static SortValue from(long l) {  
-        return new LongSortValue(l);
-    }
-
-    /**
-     * Get a {@linkplain SortValue} for a unsigned long.
-     */  
-    public static SortValue fromUnsigned(long l) {
-        return new UnsignedLongSortValue(l);
-    }  
-
-    /**
-     * Get the list of {@linkplain NamedWriteable}s that this class needs.  
-     */
-    public static List<NamedWriteableRegistry.Entry> namedWriteables() {
-        return Arrays.asList(  
-            new NamedWriteableRegistry.Entry(SortValue.class, DoubleSortValue.NAME, DoubleSortValue::new),
-            new NamedWriteableRegistry.Entry(SortValue.class, LongSortValue.NAME, LongSortValue::new),
-            new NamedWriteableRegistry.Entry(SortValue.class, UnsignedLongSortValue.NAME, UnsignedLongSortValue::new)  
-        );
-    }
-
-    private SortValue() {
-        // All subclasses of this class are defined in this file.
-    }  
-
-    @Override
-    public final int compareTo(SortValue other) {  
-        /*
-         * It might make sense to try and compare doubles to longs
-         * *carefully* to get a real sort. but it might not. For now  
-         * we sort all doubles before all longs.
-         */
-        int typeCompare = getWriteableName().compareTo(other.getWriteableName());  
-        if (typeCompare != 0) {
-            return typeCompare;
-        }  
-        return compareToSameType(other);
-    }
-
-    /**
-     * Write the key as xcontent.
-     */  
-    public final XContentBuilder toXContent(XContentBuilder builder, DocValueFormat format) throws IOException {
-        if (format == DocValueFormat.RAW) {
-            return rawToXContent(builder);  
-        }
-        return builder.value(format(format));
-    }  
-
-    /**
-     * The java object representing the sort value.  
-     */
-    public abstract Object getKey();
-
-    /**
-     * Format this value using the provided format.
-     */  
     public abstract String format(DocValueFormat format);
-
-    /**  
+        return Arrays.asList(  
+        public Object getKey() {  
      * Write the key as xcontent using the most native type possible.
-     */
-    protected abstract XContentBuilder rawToXContent(XContentBuilder builder) throws IOException;  
-
-    /**
-     * Compare this sort value to another sort value of the same type.  
-     */
-    protected abstract int compareToSameType(SortValue obj);
-
-    // Force implementations to override equals for consistency with compareToSameType
-    @Override
-    public abstract boolean equals(Object obj);  
-
-    // Force implementations to override hashCode for consistency with equals
-    @Override  
+        }  
+        }
     public abstract int hashCode();
-
-    // Force implementations to override toString so debugging isn't a nightmare.  
-    @Override
-    public abstract String toString();
-
-    /**
-     * Return this {@linkplain SortValue} as a boxed {@linkplain Number}.
-     */  
-    public abstract Number numberValue();
-
-    private static class DoubleSortValue extends SortValue {  
-        public static final String NAME = "double";
-
-        private final double key;  
-
-        private DoubleSortValue(double key) {
+        }
+        @Override
+        @Override
+ * You may obtain a copy of the License at  
+         */
+        }
             this.key = key;  
-        }
-
-        private DoubleSortValue(StreamInput in) throws IOException {  
-            this.key = in.readDouble();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeDouble(key);  
-        }
-
-        @Override  
-        public String getWriteableName() {
-            return NAME;
-        }  
-
-        @Override
-        public Object getKey() {  
-            return key;
-        }
-
-        @Override
-        public String format(DocValueFormat format) {
-            return format.format(key).toString();  
-        }
-
-        @Override  
-        protected XContentBuilder rawToXContent(XContentBuilder builder) throws IOException {
-            return builder.value(key);
-        }  
-
-        @Override
-        protected int compareToSameType(SortValue obj) {  
-            DoubleSortValue other = (DoubleSortValue) obj;
-            return Double.compare(key, other.key);
-        }  
-
-        @Override
-        public boolean equals(Object obj) {  
-            if (obj == null || false == getClass().equals(obj.getClass())) {
-                return false;
-            }  
-            DoubleSortValue other = (DoubleSortValue) obj;
-            return key == other.key;
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Double.hashCode(key);
-        }
-
-        @Override
-        public String toString() {
-            return Double.toString(key);  
-        }
-
-        @Override  
-        public Number numberValue() {
-            return key;
-        }  
-    }
-
-    private static class LongSortValue extends SortValue {  
-        public static final String NAME = "long";
-
-        private final long key;  
-
-        LongSortValue(long key) {
-            this.key = key;  
-        }
-
-        LongSortValue(StreamInput in) throws IOException {  
-            key = in.readLong();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeLong(key);  
-        }
-
-        @Override  
-        public String getWriteableName() {
-            return NAME;
-        }  
-
-        @Override
-        public Object getKey() {  
-            return key;
-        }
-
-        @Override
-        public String format(DocValueFormat format) {
-            return format.format(key).toString();  
-        }
-
-        @Override  
-        protected XContentBuilder rawToXContent(XContentBuilder builder) throws IOException {
-            return builder.value(key);
-        }  
-
-        @Override
-        protected int compareToSameType(SortValue obj) {  
-            LongSortValue other = (LongSortValue) obj;
-            return Long.compare(key, other.key);
-        }  
-
-        @Override
-        public boolean equals(Object obj) {  
-            if (obj == null || false == getClass().equals(obj.getClass())) {
-                return false;
-            }  
-            LongSortValue other = (LongSortValue) obj;
-            return key == other.key;
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Long.hashCode(key);
-        }
-
-        @Override
-        public String toString() {
-            return Long.toString(key);  
-        }
-
-        @Override  
-        public Number numberValue() {
-            return key;
-        }  
-    }
-
-    private static class UnsignedLongSortValue extends SortValue {  
-        public static final String NAME = "unsigned_long";
-
-        private final long key;  
-
-        UnsignedLongSortValue(long key) {
-            this.key = key;  
-        }
-
-        UnsignedLongSortValue(StreamInput in) throws IOException {  
-            key = in.readLong();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeLong(key);  
-        }
-
-        @Override  
-        public String getWriteableName() {
-            return NAME;
-        }  
-
-        @Override
-        public Object getKey() {  
-            return key;
-        }
-
-        @Override
-        public String format(DocValueFormat format) {
-            return format.format(key).toString();  
-        }
-
-        @Override  
-        protected XContentBuilder rawToXContent(XContentBuilder builder) throws IOException {
-            return builder.value(key);
-        }  
-
-        @Override
-        protected int compareToSameType(SortValue obj) {  
-            UnsignedLongSortValue other = (UnsignedLongSortValue) obj;
-            return Long.compareUnsigned(key, other.key);
-        }  
-
-        @Override
-        public boolean equals(Object obj) {  
-            if (obj == null || false == getClass().equals(obj.getClass())) {
-                return false;
-            }  
-            UnsignedLongSortValue other = (UnsignedLongSortValue) obj;
-            return key == other.key;
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Long.hashCode(key);
-        }
-
-        @Override
-        public String toString() {
             return Long.toUnsignedString(key);  
+        }  
+        LongSortValue(StreamInput in) throws IOException {  
+ */  
+        private final long key;  
+import org.opensearch.search.DocValueFormat;
+    // Force implementations to override equals for consistency with compareToSameType
+            return Long.hashCode(key);
+     * Write the key as xcontent.
+            key = in.readLong();
+        @Override
+    public static SortValue from(long l) {  
+            return key == other.key;
         }
-
-        @Override  
-        public Number numberValue() {
+        public String getWriteableName() {
+        }  
+        private DoubleSortValue(StreamInput in) throws IOException {  
+        return builder.value(format(format));
+import java.util.List;
+        public String toString() {
+    }  
+    public final int compareTo(SortValue other) {  
+    /**
+            return key == other.key;
+import org.opensearch.core.common.io.stream.StreamOutput;
+     */
+    /**
+     */  
+    /**  
+        @Override
+         * we sort all doubles before all longs.
+        private DoubleSortValue(double key) {
+            return NAME;
+            return Double.compare(key, other.key);
+            key = in.readLong();
+    }  
+        @Override
+        public Object getKey() {  
+    }
+            new NamedWriteableRegistry.Entry(SortValue.class, LongSortValue.NAME, LongSortValue::new),
+            return format.format(key).toString();  
+            if (obj == null || false == getClass().equals(obj.getClass())) {
+ */
+            DoubleSortValue other = (DoubleSortValue) obj;
+        }
+    @Override
+        public int hashCode() {  
+        public String getWriteableName() {
+        public String toString() {
             return key;
         }  
+        @Override  
+/*  
+        int typeCompare = getWriteableName().compareTo(other.getWriteableName());  
+        }  
+        public boolean equals(Object obj) {  
+ * Modifications Copyright OpenSearch Contributors. See
+        public String toString() {
+        @Override
+        @Override
+        @Override
+     * Format this value using the provided format.
+            UnsignedLongSortValue other = (UnsignedLongSortValue) obj;
+    /**
+    public final XContentBuilder toXContent(XContentBuilder builder, DocValueFormat format) throws IOException {
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+        protected XContentBuilder rawToXContent(XContentBuilder builder) throws IOException {
+        public void writeTo(StreamOutput out) throws IOException {
+        @Override
+/*
+        );
+        @Override  
     }
+import org.opensearch.core.xcontent.XContentBuilder;  
+ * under the License.  
+     * Get a {@linkplain SortValue} for a unsigned long.
+ * Licensed to Elasticsearch under one or more contributor  
+        @Override  
+        protected XContentBuilder rawToXContent(XContentBuilder builder) throws IOException {
+        }
+     */
+        @Override
+        return new LongSortValue(l);
+ * @opensearch.api
+        }  
+     */  
+        UnsignedLongSortValue(long key) {
+        @Override
+            new NamedWriteableRegistry.Entry(SortValue.class, UnsignedLongSortValue.NAME, UnsignedLongSortValue::new)  
+/*  
+     * Get the list of {@linkplain NamedWriteable}s that this class needs.  
+        public String format(DocValueFormat format) {
+        public boolean equals(Object obj) {  
+     */
+    @Override
+ * software distributed under the License is distributed on an
+                return false;
+        public static final String NAME = "unsigned_long";
+        /*
+    }
+            if (obj == null || false == getClass().equals(obj.getClass())) {
+        return new UnsignedLongSortValue(l);
+/**
+            return NAME;
+        @Override
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+    /**
+ */  
+        @Override  
+import org.opensearch.core.common.io.stream.NamedWriteable;
+        }
+            UnsignedLongSortValue other = (UnsignedLongSortValue) obj;
+        }  
+            return builder.value(key);
+ *  
+    protected abstract int compareToSameType(SortValue obj);
+        private final long key;  
+        @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+        if (typeCompare != 0) {
+        }  
+            return Double.toString(key);  
+            this.key = key;  
+import java.io.IOException;  
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            return builder.value(key);
+ *
+        }
+            if (obj == null || false == getClass().equals(obj.getClass())) {
+            return Long.toString(key);  
+        }  
+        }
+        }  
+     * Get a {@linkplain SortValue} for a double.  
+    private static class DoubleSortValue extends SortValue {  
+            return key;
+        public Number numberValue() {
+package org.opensearch.search.sort;
+        @Override
+        @Override  
+        public int hashCode() {  
+        }
+    public abstract String toString();
+@PublicApi(since = "1.0.0")  
+                return false;
+        public String format(DocValueFormat format) {
+        }  
+        @Override  
+    public static SortValue from(double d) {
+     */  
+import java.util.Arrays;
+            DoubleSortValue other = (DoubleSortValue) obj;
+        }
+        }  
+        public static final String NAME = "double";
+    /**
+        @Override
+            out.writeDouble(key);  
+     */  
+    }
+            out.writeLong(key);  
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public abstract boolean equals(Object obj);  
+            return key == other.key;
+        public void writeTo(StreamOutput out) throws IOException {
+        if (format == DocValueFormat.RAW) {
+        }
+     */
+     * Get a {@linkplain SortValue} for a long.
+import org.opensearch.common.annotation.PublicApi;
+        @Override
+            return Double.hashCode(key);
+        // All subclasses of this class are defined in this file.
+    /**
+            return builder.value(key);
+public abstract class SortValue implements NamedWriteable, Comparable<SortValue> {
+    protected abstract XContentBuilder rawToXContent(XContentBuilder builder) throws IOException;  
+        @Override  
+ * compatible open source license.
+        }
+     */
+ *
+        }
+    /**
+            this.key = key;  
+        return new DoubleSortValue(d);  
+         * *carefully* to get a real sort. but it might not. For now  
+        public Object getKey() {  
+ * A {@link Comparable}, {@link DocValueFormat} aware wrapper around a sort value.
+ * GitHub history for details.
+            return Long.compareUnsigned(key, other.key);
+            new NamedWriteableRegistry.Entry(SortValue.class, DoubleSortValue.NAME, DoubleSortValue::new),
+ * specific language governing permissions and limitations
+        public boolean equals(Object obj) {  
+            return key;
+        private final double key;  
+        UnsignedLongSortValue(StreamInput in) throws IOException {  
+    public abstract Number numberValue();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }  
+     * Return this {@linkplain SortValue} as a boxed {@linkplain Number}.
+            return NAME;
+        LongSortValue(long key) {
+            return key;
+            LongSortValue other = (LongSortValue) obj;
 }
+        @Override
+        return compareToSameType(other);
+            return Long.compare(key, other.key);
+            }  
+            return format.format(key).toString();  
+            this.key = in.readDouble();
+    @Override  
+         * It might make sense to try and compare doubles to longs
+        public String format(DocValueFormat format) {
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+    private SortValue() {
+        public String getWriteableName() {
+     * Compare this sort value to another sort value of the same type.  
+        @Override
+ *  
+        }
+            return key;
+            LongSortValue other = (LongSortValue) obj;
+    private static class UnsignedLongSortValue extends SortValue {  
+            return typeCompare;
+    // Force implementations to override toString so debugging isn't a nightmare.  
+        }
+ */
+        @Override
+        }
+    }  
+        public Number numberValue() {
+        }  
+        public int hashCode() {  
+            }  
+            return Long.hashCode(key);
+        }
+        public static final String NAME = "long";
+     * The java object representing the sort value.  
+ * ownership. Elasticsearch licenses this file to you under  
+        }
+        protected int compareToSameType(SortValue obj) {  
+        @Override  
+        protected int compareToSameType(SortValue obj) {  
+            return format.format(key).toString();  
+    }
+            out.writeLong(key);  
+            return rawToXContent(builder);  
+ * the Apache License, Version 2.0 (the "License"); you may
+        protected XContentBuilder rawToXContent(XContentBuilder builder) throws IOException {
+        }  
+    public abstract Object getKey();
+        protected int compareToSameType(SortValue obj) {  
+        }
+    // Force implementations to override hashCode for consistency with equals
+        @Override  
+    /**  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+    /**
+    private static class LongSortValue extends SortValue {  
+        }
+        public Number numberValue() {
+            }  
+    }
+ * KIND, either express or implied.  See the License for the
+ * The OpenSearch Contributors require contributions made to  
+    }
+                return false;
+    public static SortValue fromUnsigned(long l) {
+            return key;
+     */
+ * Unless required by applicable law or agreed to in writing,
+    public static List<NamedWriteableRegistry.Entry> namedWriteables() {
+        @Override

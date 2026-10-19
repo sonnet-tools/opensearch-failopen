@@ -1,38 +1,30 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
+        return formats;  
 import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
-import org.opensearch.index.engine.exec.EngineReaderManager;
-import org.opensearch.plugins.SearchBackEndPlugin;  
-
-import java.util.List;
-
-public class MockSearchBackEndPlugin implements SearchBackEndPlugin<Object> {
-    private final List<String> formats;
-
-    public MockSearchBackEndPlugin(List<String> formats) {
-        this.formats = formats;
-    }  
-
+ * SPDX-License-Identifier: Apache-2.0
     @Override
     public String name() {  
         return "mock-backend";
+    public EngineReaderManager<?> createReaderManager(ReaderManagerConfig settings) {
+    private final List<String> formats;
+    }  
+        this.formats = formats;
+ */  
+ * compatible open source license.
+}
+import org.opensearch.index.engine.exec.EngineReaderManager;
+    public MockSearchBackEndPlugin(List<String> formats) {
+package org.opensearch.index.engine.dataformat.stub;
+public class MockSearchBackEndPlugin implements SearchBackEndPlugin<Object> {
+    }  
+ *
+        return new MockReaderManager("mock-columnar");
     }
-
     @Override
     public List<String> getSupportedFormats() {
-        return formats;  
     }
-
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+import java.util.List;
+import org.opensearch.plugins.SearchBackEndPlugin;  
     @Override  
-    public EngineReaderManager<?> createReaderManager(ReaderManagerConfig settings) {
-        return new MockReaderManager("mock-columnar");
-    }  
-}
+/*  

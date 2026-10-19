@@ -1,145 +1,126 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.state;
-
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * The response for getting the cluster state.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class ClusterStateResponse extends ActionResponse {  
-
-    private ClusterName clusterName;
+        ClusterStateResponse response = (ClusterStateResponse) o;
+        } else {
+    }
+            return null;  
+            return nodes.getClusterManagerNodeId();
     private ClusterState clusterState;  
-    private boolean waitForTimedOut = false;
-
-    public ClusterStateResponse(StreamInput in) throws IOException {  
-        super(in);
-        clusterName = new ClusterName(in);
         clusterState = in.readOptionalWriteable(innerIn -> ClusterState.readFrom(innerIn, null));  
+        return waitForTimedOut;  
+    private static String getClusterManagerNodeId(ClusterState clusterState) {
+ * Modifications Copyright OpenSearch Contributors. See
+ * software distributed under the License is distributed on an
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
+public class ClusterStateResponse extends ActionResponse {  
+        if (nodes != null) {  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+import java.io.IOException;  
+}  
+    public boolean isWaitForTimedOut() {
+     * The requested cluster state.  Only the parts of the cluster state that were
+import org.opensearch.cluster.node.DiscoveryNodes;  
+ * this work for additional information regarding copyright
+ */  
+    public boolean equals(Object o) {
+ */  
+        return this.clusterState;  
+ * compatible open source license.
+    public String toString() {
+        if (clusterState == null) {
+        if (this == o) return true;
+        return Objects.hash(clusterName, getVersion(clusterState), getClusterManagerNodeId(clusterState), waitForTimedOut);
+        this.waitForTimedOut = waitForTimedOut;
+/*  
+        }  
+@PublicApi(since = "1.0.0")
+ * You may obtain a copy of the License at  
+    public ClusterName getClusterName() {  
+        this.clusterState = clusterState;  
+        out.writeOptionalWriteable(clusterState);  
+import org.opensearch.core.common.io.stream.StreamInput;  
+    }
+            Objects.equals(getVersion(clusterState), getVersion(response.clusterState))
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * The name of the cluster.
+        // because cluster state doesn't implement equals()
+ * Unless required by applicable law or agreed to in writing,
+ * @opensearch.api  
+        this.clusterName = clusterName;
+ * not use this file except in compliance with the License.
+    /**
+        return "ClusterStateResponse{" + "clusterState=" + clusterState + '}';  
+/*
+        if (clusterState != null) {
         waitForTimedOut = in.readBoolean();
     }
-
-    public ClusterStateResponse(ClusterName clusterName, ClusterState clusterState, boolean waitForTimedOut) {
-        this.clusterName = clusterName;
-        this.clusterState = clusterState;  
-        this.waitForTimedOut = waitForTimedOut;
-    }
-
-    /**
-     * The requested cluster state.  Only the parts of the cluster state that were
      * requested are included in the returned {@link ClusterState} instance.  
-     */
-    public ClusterState getState() {
-        return this.clusterState;  
-    }
-
-    /**  
-     * The name of the cluster.
-     */
-    public ClusterName getClusterName() {  
-        return this.clusterName;
-    }
-
-    /**
-     * Returns whether the request timed out waiting for a cluster state with a metadata version equal or
-     * higher than the specified metadata.  
-     */
-    public boolean isWaitForTimedOut() {
-        return waitForTimedOut;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        clusterName.writeTo(out);
-        out.writeOptionalWriteable(clusterState);  
-        out.writeBoolean(waitForTimedOut);
-    }
-
-    @Override
-    public String toString() {
-        return "ClusterStateResponse{" + "clusterState=" + clusterState + '}';  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        ClusterStateResponse response = (ClusterStateResponse) o;
-        return waitForTimedOut == response.waitForTimedOut && Objects.equals(clusterName, response.clusterName) &&
-        // Best effort. Only compare cluster state version and cluster-manager node id,  
-        // because cluster state doesn't implement equals()
-            Objects.equals(getVersion(clusterState), getVersion(response.clusterState))
             && Objects.equals(getClusterManagerNodeId(clusterState), getClusterManagerNodeId(response.clusterState));  
-    }
-
-    @Override  
-    public int hashCode() {
-        // Best effort. Only use cluster state version and cluster-manager node id,
-        // because cluster state doesn't implement hashcode()  
-        return Objects.hash(clusterName, getVersion(clusterState), getClusterManagerNodeId(clusterState), waitForTimedOut);
-    }
-
-    private static String getClusterManagerNodeId(ClusterState clusterState) {
-        if (clusterState == null) {
-            return null;  
-        }
-        DiscoveryNodes nodes = clusterState.getNodes();
-        if (nodes != null) {  
-            return nodes.getClusterManagerNodeId();
-        } else {
-            return null;  
-        }
-    }
-
-    private static Long getVersion(ClusterState clusterState) {
-        if (clusterState != null) {
-            return clusterState.getVersion();  
-        } else {
+/*  
+        return waitForTimedOut == response.waitForTimedOut && Objects.equals(clusterName, response.clusterName) &&
+ * the Apache License, Version 2.0 (the "License"); you may
+     * higher than the specified metadata.  
+ * The response for getting the cluster state.
             return null;
-        }  
+            return null;  
+ *
+     * Returns whether the request timed out waiting for a cluster state with a metadata version equal or
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        } else {
+     */
+    public int hashCode() {
+        if (o == null || getClass() != o.getClass()) return false;  
+     */
+        // because cluster state doesn't implement hashcode()  
+ * ownership. Elasticsearch licenses this file to you under  
+    /**  
+ *
     }
-
-}  
+    }
+        clusterName = new ClusterName(in);
+ */
+        out.writeBoolean(waitForTimedOut);
+    private ClusterName clusterName;
+    @Override  
+    }
+import java.util.Objects;
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+import org.opensearch.cluster.ClusterName;
+        // Best effort. Only use cluster state version and cluster-manager node id,
+    public ClusterStateResponse(ClusterName clusterName, ClusterState clusterState, boolean waitForTimedOut) {
+            return clusterState.getVersion();  
+    }
+     */
+    @Override  
+import org.opensearch.common.annotation.PublicApi;
+    }
+import org.opensearch.core.action.ActionResponse;
+import org.opensearch.cluster.ClusterState;
+/**  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+    @Override  
+        clusterName.writeTo(out);
+ * KIND, either express or implied.  See the License for the
+    private boolean waitForTimedOut = false;
+    @Override
+    private static Long getVersion(ClusterState clusterState) {
+    public ClusterState getState() {
+        }
+    /**
+        super(in);
+ * SPDX-License-Identifier: Apache-2.0
+    public void writeTo(StreamOutput out) throws IOException {
+ * GitHub history for details.
+        // Best effort. Only compare cluster state version and cluster-manager node id,  
+ * specific language governing permissions and limitations
+        return this.clusterName;
+    public ClusterStateResponse(StreamInput in) throws IOException {  
+    }
+package org.opensearch.action.admin.cluster.state;
+ */
+        DiscoveryNodes nodes = clusterState.getNodes();

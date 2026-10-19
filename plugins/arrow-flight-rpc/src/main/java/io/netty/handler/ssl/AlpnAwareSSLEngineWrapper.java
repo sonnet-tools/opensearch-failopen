@@ -1,191 +1,156 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package io.netty.handler.ssl;
-
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLEngineResult;
-import javax.net.ssl.SSLException;  
-import javax.net.ssl.SSLParameters;
-import javax.net.ssl.SSLSession;
-
-import java.nio.ByteBuffer;
-
-/**  
- * {@link SSLEngine} wrapper that:
- * <ol>
- *   <li>Implements {@link ApplicationProtocolAccessor} (package-private in Netty) so that  
- *       {@link SslHandler#applicationProtocol()} can read the negotiated ALPN protocol.
- *       This class must reside in the {@code io.netty.handler.ssl} package to access that
- *       interface.</li>  
- *   <li>Strips {@code endpointIdentificationAlgorithm} from {@link #setSSLParameters} calls
- *       to prevent hostname verification from being re-enabled after the engine is created.</li>
- * </ol>  
- */
-public final class AlpnAwareSSLEngineWrapper extends SSLEngine implements ApplicationProtocolAccessor {
-    private final SSLEngine d;  
-
-    public AlpnAwareSSLEngineWrapper(SSLEngine delegate) {
-        super(delegate.getPeerHost(), delegate.getPeerPort());  
-        this.d = delegate;
     }
-
-    @Override
-    public String getNegotiatedApplicationProtocol() {
-        if (d instanceof ApplicationProtocolAccessor a) {  
-            return a.getNegotiatedApplicationProtocol();
-        }
-        return d.getApplicationProtocol();  
     }
-
-    @Override  
-    public void setSSLParameters(SSLParameters p) {
-        p.setEndpointIdentificationAlgorithm("");
-        d.setSSLParameters(p);  
-    }
-
-    @Override  
-    public SSLParameters getSSLParameters() {
-        return d.getSSLParameters();
-    }  
-
-    @Override
-    public String getApplicationProtocol() {  
         return d.getApplicationProtocol();
-    }
-
-    @Override
-    public String getHandshakeApplicationProtocol() {
-        return d.getHandshakeApplicationProtocol();  
-    }
-
-    @Override  
-    public String[] getSupportedCipherSuites() {
-        return d.getSupportedCipherSuites();
     }  
-
-    @Override
-    public String[] getEnabledCipherSuites() {  
-        return d.getEnabledCipherSuites();
-    }
-
-    @Override
-    public void setEnabledCipherSuites(String[] s) {
-        d.setEnabledCipherSuites(s);  
-    }
-
-    @Override  
-    public String[] getSupportedProtocols() {
-        return d.getSupportedProtocols();
-    }  
-
-    @Override
-    public String[] getEnabledProtocols() {  
-        return d.getEnabledProtocols();
-    }
-
-    @Override
-    public void setEnabledProtocols(String[] p) {
-        d.setEnabledProtocols(p);  
-    }
-
-    @Override  
-    public SSLSession getSession() {
-        return d.getSession();
-    }  
-
-    @Override
-    public SSLSession getHandshakeSession() {  
-        return d.getHandshakeSession();
-    }
-
-    @Override
-    public void beginHandshake() throws SSLException {
-        d.beginHandshake();  
-    }
-
-    @Override  
-    public SSLEngineResult.HandshakeStatus getHandshakeStatus() {
-        return d.getHandshakeStatus();
-    }  
-
-    @Override
-    public void setUseClientMode(boolean m) {  
-        d.setUseClientMode(m);
-    }
-
-    @Override
-    public boolean getUseClientMode() {
-        return d.getUseClientMode();  
-    }
-
-    @Override  
-    public void setNeedClientAuth(boolean n) {
-        d.setNeedClientAuth(n);
-    }  
-
-    @Override
-    public boolean getNeedClientAuth() {  
-        return d.getNeedClientAuth();
-    }
-
-    @Override
-    public void setWantClientAuth(boolean w) {
-        d.setWantClientAuth(w);  
-    }
-
-    @Override  
-    public boolean getWantClientAuth() {
-        return d.getWantClientAuth();
-    }  
-
     @Override
     public void setEnableSessionCreation(boolean f) {  
-        d.setEnableSessionCreation(f);
-    }
-
     @Override
-    public boolean getEnableSessionCreation() {
-        return d.getEnableSessionCreation();  
+    @Override
+        p.setEndpointIdentificationAlgorithm("");
     }
-
-    @Override  
+import javax.net.ssl.SSLEngineResult;
+    public void setUseClientMode(boolean m) {  
+    public String getApplicationProtocol() {  
+ *       interface.</li>  
+    }
+    public boolean isInboundDone() {  
     public SSLEngineResult wrap(ByteBuffer[] s, int o, int l, ByteBuffer dst) throws SSLException {
-        return d.wrap(s, o, l, dst);
-    }  
-
     @Override
+ * The OpenSearch Contributors require contributions made to  
+    @Override  
+import java.nio.ByteBuffer;
+        return d.getHandshakeStatus();
+    public SSLParameters getSSLParameters() {
     public SSLEngineResult unwrap(ByteBuffer s, ByteBuffer[] ds, int o, int l) throws SSLException {  
-        return d.unwrap(s, ds, o, l);
-    }
-
-    @Override
-    public Runnable getDelegatedTask() {
-        return d.getDelegatedTask();  
-    }
-
+        return d.getSupportedProtocols();
+        return d.getApplicationProtocol();  
+        d.setWantClientAuth(w);  
     @Override  
     public void closeInbound() throws SSLException {
-        d.closeInbound();
-    }  
-
-    @Override
-    public boolean isInboundDone() {  
-        return d.isInboundDone();
-    }
-
-    @Override
-    public void closeOutbound() {
-        d.closeOutbound();  
-    }
-
+        super(delegate.getPeerHost(), delegate.getPeerPort());  
+        d.setEnableSessionCreation(f);
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+    public SSLEngineResult.HandshakeStatus getHandshakeStatus() {
+        return d.getHandshakeApplicationProtocol();  
+    public String getHandshakeApplicationProtocol() {
     @Override  
-    public boolean isOutboundDone() {
-        return d.isOutboundDone();
+    private final SSLEngine d;  
+    }
+    public Runnable getDelegatedTask() {
+    public boolean getWantClientAuth() {
+    public void setSSLParameters(SSLParameters p) {
     }  
+    }  
+    }  
+        this.d = delegate;
+        return d.getDelegatedTask();  
+    }
+import javax.net.ssl.SSLSession;
+    @Override  
+    public String[] getSupportedCipherSuites() {
+    public boolean getEnableSessionCreation() {
+    @Override
+        d.setNeedClientAuth(n);
+    public void setEnabledProtocols(String[] p) {
+    public void closeOutbound() {
+ * {@link SSLEngine} wrapper that:
+        if (d instanceof ApplicationProtocolAccessor a) {  
+    public String getNegotiatedApplicationProtocol() {
+        return d.getUseClientMode();  
+            return a.getNegotiatedApplicationProtocol();
+    }  
+    }
+import javax.net.ssl.SSLParameters;
+    public String[] getEnabledCipherSuites() {  
+    public boolean isOutboundDone() {
+        d.setEnabledProtocols(p);  
+        return d.getHandshakeSession();
+    public AlpnAwareSSLEngineWrapper(SSLEngine delegate) {
 }
+    public boolean getNeedClientAuth() {  
+        d.setEnabledCipherSuites(s);  
+    }
+    }
+        return d.isOutboundDone();
+        return d.getSSLParameters();
+    }
+    }  
+ * </ol>  
+        }
+    public SSLSession getHandshakeSession() {  
+        d.closeInbound();
+    @Override
+ * <ol>
+    @Override
+    @Override
+    public void setNeedClientAuth(boolean n) {
+ * compatible open source license.
+ *   <li>Implements {@link ApplicationProtocolAccessor} (package-private in Netty) so that  
+        return d.getEnabledProtocols();
+ *       to prevent hostname verification from being re-enabled after the engine is created.</li>
+    public String[] getEnabledProtocols() {  
+    @Override
+ *       {@link SslHandler#applicationProtocol()} can read the negotiated ALPN protocol.
+    }
+    @Override  
+    @Override  
+/*  
+    }
+    @Override  
+ *       This class must reside in the {@code io.netty.handler.ssl} package to access that
+    }
+    @Override
+        d.setUseClientMode(m);
+ *
+    }
+    }  
+    }
+    public SSLSession getSession() {
+    @Override  
+    }
+        d.closeOutbound();  
+        d.beginHandshake();  
+    public String[] getSupportedProtocols() {
+    }
+        return d.getSupportedCipherSuites();
+    }  
+    @Override
+    @Override  
+    @Override
+ */  
+import javax.net.ssl.SSLException;  
+    public void beginHandshake() throws SSLException {
+        return d.getWantClientAuth();
+    @Override
+        d.setSSLParameters(p);  
+    }  
+ *   <li>Strips {@code endpointIdentificationAlgorithm} from {@link #setSSLParameters} calls
+        return d.wrap(s, o, l, dst);
+        return d.unwrap(s, ds, o, l);
+    public void setEnabledCipherSuites(String[] s) {
+        return d.isInboundDone();
+    @Override
+    public boolean getUseClientMode() {
+    }
+package io.netty.handler.ssl;
+        return d.getSession();
+    }
+    @Override
+        return d.getEnableSessionCreation();  
+    }  
+    @Override  
+        return d.getEnabledCipherSuites();
+import javax.net.ssl.SSLEngine;
+/**  
+        return d.getNeedClientAuth();
+    }
+ */
+    }
+    public void setWantClientAuth(boolean w) {
+public final class AlpnAwareSSLEngineWrapper extends SSLEngine implements ApplicationProtocolAccessor {
+    @Override
+    @Override
+    @Override
+    @Override
+    @Override  

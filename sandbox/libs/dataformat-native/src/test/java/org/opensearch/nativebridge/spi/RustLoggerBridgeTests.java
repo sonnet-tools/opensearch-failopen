@@ -1,80 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.nativebridge.spi;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;  
-import org.apache.logging.log4j.core.config.Configurator;
-import org.opensearch.test.MockLogAppender;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;  
-import java.lang.foreign.ValueLayout;
-import java.nio.charset.StandardCharsets;
-
-public class RustLoggerBridgeTests extends OpenSearchTestCase {
-
-    private static MemorySegment toSegment(Arena arena, String s) {  
-        return arena.allocateFrom(ValueLayout.JAVA_BYTE, s.getBytes(StandardCharsets.UTF_8));
-    }
-
-    public void testLogDebug() throws Exception {
-        Logger logger = LogManager.getLogger(RustLoggerBridge.class);
-        Configurator.setLevel(logger, Level.DEBUG);  
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger); Arena arena = Arena.ofConfined()) {
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation("debug", RustLoggerBridge.class.getName(), Level.DEBUG, "debug message")  
-            );
-            RustLoggerBridge.log(0, toSegment(arena, "debug message"), "debug message".length());
-            appender.assertAllExpectationsMatched();  
-        }
-    }
-
-    public void testLogInfo() throws Exception {
-        try (
-            MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RustLoggerBridge.class));  
-            Arena arena = Arena.ofConfined()
         ) {
-            appender.addExpectation(  
-                new MockLogAppender.SeenEventExpectation("info", RustLoggerBridge.class.getName(), Level.INFO, "info message")
-            );
-            RustLoggerBridge.log(1, toSegment(arena, "info message"), "info message".length());  
-            appender.assertAllExpectationsMatched();
-        }
-    }  
-
-    public void testLogError() throws Exception {
-        try (  
-            MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RustLoggerBridge.class));
-            Arena arena = Arena.ofConfined()
-        ) {  
+            Arena arena = Arena.ofConfined()  
             appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation("error", RustLoggerBridge.class.getName(), Level.ERROR, "error message")
+import java.lang.foreign.Arena;
+import org.apache.logging.log4j.Logger;  
+            appender.assertAllExpectationsMatched();  
+ * SPDX-License-Identifier: Apache-2.0
+import java.lang.foreign.ValueLayout;
+public class RustLoggerBridgeTests extends OpenSearchTestCase {
+        try (  
+            );
+import org.apache.logging.log4j.Level;
             );  
-            RustLoggerBridge.log(2, toSegment(arena, "error message"), "error message".length());
+import org.apache.logging.log4j.core.config.Configurator;
+        return arena.allocateFrom(ValueLayout.JAVA_BYTE, s.getBytes(StandardCharsets.UTF_8));
+            );
+            appender.addExpectation(  
+            RustLoggerBridge.log(99, toSegment(arena, "bad"), 3);  
+    }
+        try (
+ * compatible open source license.
+            MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RustLoggerBridge.class));
+            MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RustLoggerBridge.class));
             appender.assertAllExpectationsMatched();
+        ) {  
+        Logger logger = LogManager.getLogger(RustLoggerBridge.class);
+            RustLoggerBridge.log(1, toSegment(arena, "info message"), "info message".length());  
+package org.opensearch.nativebridge.spi;
+import java.lang.foreign.MemorySegment;  
+    public void testLogInfo() throws Exception {
+        }
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger); Arena arena = Arena.ofConfined()) {
+        Configurator.setLevel(logger, Level.DEBUG);  
+    }
+            Arena arena = Arena.ofConfined()
+ * The OpenSearch Contributors require contributions made to  
+    public void testLogError() throws Exception {
+            appender.assertAllExpectationsMatched();
+/*  
+            appender.addExpectation(
+ */  
+    private static MemorySegment toSegment(Arena arena, String s) {  
+                new MockLogAppender.SeenEventExpectation("debug", RustLoggerBridge.class.getName(), Level.DEBUG, "debug message")  
+    public void testLogDebug() throws Exception {
+        ) {
         }  
     }
-
-    public void testLogInvalidLevelIsIgnored() throws Exception {  
+                new MockLogAppender.SeenEventExpectation("info", RustLoggerBridge.class.getName(), Level.INFO, "info message")
+ * this file be licensed under the Apache-2.0 license or a
+            RustLoggerBridge.log(2, toSegment(arena, "error message"), "error message".length());
+    }  
+                new MockLogAppender.SeenEventExpectation("error", RustLoggerBridge.class.getName(), Level.ERROR, "error message")
         try (
-            MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RustLoggerBridge.class));
-            Arena arena = Arena.ofConfined()  
-        ) {
+ *
             appender.addExpectation(
-                new MockLogAppender.UnseenEventExpectation("negative", RustLoggerBridge.class.getName(), Level.DEBUG, "bad")  
-            );
-            RustLoggerBridge.log(-1, toSegment(arena, "bad"), 3);
-            RustLoggerBridge.log(99, toSegment(arena, "bad"), 3);  
             appender.assertAllExpectationsMatched();
         }
-    }  
+import org.opensearch.test.MockLogAppender;
+            );
+            Arena arena = Arena.ofConfined()
+import org.opensearch.test.OpenSearchTestCase;  
 }
+    public void testLogInvalidLevelIsIgnored() throws Exception {  
+            RustLoggerBridge.log(-1, toSegment(arena, "bad"), 3);
+        }
+                new MockLogAppender.UnseenEventExpectation("negative", RustLoggerBridge.class.getName(), Level.DEBUG, "bad")  
+import java.nio.charset.StandardCharsets;
+            MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(RustLoggerBridge.class));  
+import org.apache.logging.log4j.LogManager;
+    }  
+            RustLoggerBridge.log(0, toSegment(arena, "debug message"), "debug message".length());

@@ -1,154 +1,134 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.io.Streams;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.bytes.CompositeBytesReference;
 import org.opensearch.core.common.io.stream.OutputStreamStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.compress.CompressorRegistry;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.io.OutputStream;  
-
-public class TransportDecompressorTests extends OpenSearchTestCase {
-
-    public void testSimpleCompression() throws IOException {
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            byte randomByte = randomByte();  
-            try (
-                OutputStream deflateStream = CompressorRegistry.defaultCompressor()
-                    .threadLocalOutputStream(Streams.flushOnCloseStream(output))  
-            ) {
-                deflateStream.write(randomByte);
-            }  
-
-            BytesReference bytes = output.bytes();
-
-            TransportDecompressor decompressor = new TransportDecompressor(PageCacheRecycler.NON_RECYCLING_INSTANCE);
-            int bytesConsumed = decompressor.decompress(bytes);
-            assertEquals(bytes.length(), bytesConsumed);  
-            assertTrue(decompressor.isEOS());
-            ReleasableBytesReference releasableBytesReference = decompressor.pollDecompressedPage();
-            assertEquals(randomByte, releasableBytesReference.get(0));  
             releasableBytesReference.close();
-
-        }  
-    }
-
-    public void testMultiPageCompression() throws IOException {  
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            try (
-                StreamOutput deflateStream = new OutputStreamStreamOutput(  
-                    CompressorRegistry.defaultCompressor().threadLocalOutputStream(Streams.flushOnCloseStream(output))
-                )
-            ) {  
                 for (int i = 0; i < 10000; ++i) {
-                    deflateStream.writeInt(i);
-                }  
-            }
-
-            BytesReference bytes = output.bytes();  
-
-            TransportDecompressor decompressor = new TransportDecompressor(PageCacheRecycler.NON_RECYCLING_INSTANCE);
-            int bytesConsumed = decompressor.decompress(bytes);  
-            assertEquals(bytes.length(), bytesConsumed);
-            assertTrue(decompressor.isEOS());
-            ReleasableBytesReference reference1 = decompressor.pollDecompressedPage();  
-            ReleasableBytesReference reference2 = decompressor.pollDecompressedPage();
-            ReleasableBytesReference reference3 = decompressor.pollDecompressedPage();
-            assertNull(decompressor.pollDecompressedPage());  
             BytesReference composite = CompositeBytesReference.of(reference1, reference2, reference3);
-            assertEquals(4 * 10000, composite.length());
-            StreamInput streamInput = composite.streamInput();  
-            for (int i = 0; i < 10000; ++i) {
-                assertEquals(i, streamInput.readInt());
-            }  
-            Releasables.close(reference1, reference2, reference3);
-        }
-    }  
-
-    public void testIncrementalMultiPageCompression() throws IOException {
-        try (BytesStreamOutput output = new BytesStreamOutput()) {  
-            try (
-                StreamOutput deflateStream = new OutputStreamStreamOutput(
-                    CompressorRegistry.defaultCompressor().threadLocalOutputStream(Streams.flushOnCloseStream(output))  
-                )
-            ) {
-                for (int i = 0; i < 10000; ++i) {  
-                    deflateStream.writeInt(i);
-                }
-            }  
-
-            BytesReference bytes = output.bytes();
-
-            TransportDecompressor decompressor = new TransportDecompressor(PageCacheRecycler.NON_RECYCLING_INSTANCE);
-
-            int split1 = (int) (bytes.length() * 0.3);  
             int split2 = (int) (bytes.length() * 0.65);
-            BytesReference inbound1 = bytes.slice(0, split1);
-            BytesReference inbound2 = bytes.slice(split1, split2 - split1);  
-            BytesReference inbound3 = bytes.slice(split2, bytes.length() - split2);
-
-            int bytesConsumed1 = decompressor.decompress(inbound1);  
-            assertEquals(inbound1.length(), bytesConsumed1);
-            assertFalse(decompressor.isEOS());
-            int bytesConsumed2 = decompressor.decompress(inbound2);  
-            assertEquals(inbound2.length(), bytesConsumed2);
-            assertFalse(decompressor.isEOS());
-            int bytesConsumed3 = decompressor.decompress(inbound3);  
-            assertEquals(inbound3.length(), bytesConsumed3);
-            assertTrue(decompressor.isEOS());
-            ReleasableBytesReference reference1 = decompressor.pollDecompressedPage();  
-            ReleasableBytesReference reference2 = decompressor.pollDecompressedPage();
-            ReleasableBytesReference reference3 = decompressor.pollDecompressedPage();
-            assertNull(decompressor.pollDecompressedPage());  
-            BytesReference composite = CompositeBytesReference.of(reference1, reference2, reference3);
+                StreamOutput deflateStream = new OutputStreamStreamOutput(  
+ * KIND, either express or implied.  See the License for the
+    public void testSimpleCompression() throws IOException {
+                    deflateStream.writeInt(i);
+import org.opensearch.common.bytes.ReleasableBytesReference;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
             assertEquals(4 * 10000, composite.length());
-            StreamInput streamInput = composite.streamInput();  
-            for (int i = 0; i < 10000; ++i) {
+    }  
                 assertEquals(i, streamInput.readInt());
-            }  
+                    CompressorRegistry.defaultCompressor().threadLocalOutputStream(Streams.flushOnCloseStream(output))
+public class TransportDecompressorTests extends OpenSearchTestCase {
+            assertEquals(bytes.length(), bytesConsumed);
+    public void testIncrementalMultiPageCompression() throws IOException {
+import org.opensearch.common.util.PageCacheRecycler;
+                OutputStream deflateStream = CompressorRegistry.defaultCompressor()
+                    CompressorRegistry.defaultCompressor().threadLocalOutputStream(Streams.flushOnCloseStream(output))  
+            assertEquals(inbound3.length(), bytesConsumed3);
+ */
+            TransportDecompressor decompressor = new TransportDecompressor(PageCacheRecycler.NON_RECYCLING_INSTANCE);
             Releasables.close(reference1, reference2, reference3);
-
-        }  
-    }
-
+            ReleasableBytesReference releasableBytesReference = decompressor.pollDecompressedPage();
+ * GitHub history for details.
+/*  
+            assertTrue(decompressor.isEOS());
+    public void testMultiPageCompression() throws IOException {  
+import org.opensearch.core.common.bytes.BytesReference;  
+ * The OpenSearch Contributors require contributions made to  
 }  
+ *  
+import org.opensearch.test.OpenSearchTestCase;  
+        }  
+            int bytesConsumed = decompressor.decompress(bytes);
+ * SPDX-License-Identifier: Apache-2.0
+            ReleasableBytesReference reference2 = decompressor.pollDecompressedPage();
+            assertTrue(decompressor.isEOS());
+ * under the License.  
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+                StreamOutput deflateStream = new OutputStreamStreamOutput(
+        try (BytesStreamOutput output = new BytesStreamOutput()) {  
+            BytesReference inbound3 = bytes.slice(split2, bytes.length() - split2);
+            ) {
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+            assertFalse(decompressor.isEOS());
+            StreamInput streamInput = composite.streamInput();  
+            Releasables.close(reference1, reference2, reference3);
+            for (int i = 0; i < 10000; ++i) {
+            BytesReference inbound1 = bytes.slice(0, split1);
+                )
+                    deflateStream.writeInt(i);
+ */  
+import org.opensearch.common.io.Streams;
+ * Unless required by applicable law or agreed to in writing,
+            assertNull(decompressor.pollDecompressedPage());  
+            try (
+ * ownership. Elasticsearch licenses this file to you under  
+            }  
+            for (int i = 0; i < 10000; ++i) {
+    }
+        }  
+/*  
+            }  
+import org.opensearch.core.common.io.stream.StreamOutput;
+            byte randomByte = randomByte();  
+            BytesReference inbound2 = bytes.slice(split1, split2 - split1);  
+            try (
+            ReleasableBytesReference reference2 = decompressor.pollDecompressedPage();
+            ReleasableBytesReference reference1 = decompressor.pollDecompressedPage();  
+                assertEquals(i, streamInput.readInt());
+ * license agreements. See the NOTICE file distributed with
+ */  
+ * specific language governing permissions and limitations
+package org.opensearch.transport;
+            }  
+            assertEquals(4 * 10000, composite.length());
+                }  
+            BytesReference bytes = output.bytes();
+            assertEquals(inbound2.length(), bytesConsumed2);
+            int bytesConsumed1 = decompressor.decompress(inbound1);  
+            }  
+            assertFalse(decompressor.isEOS());
+            TransportDecompressor decompressor = new TransportDecompressor(PageCacheRecycler.NON_RECYCLING_INSTANCE);
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+            assertEquals(randomByte, releasableBytesReference.get(0));  
+            TransportDecompressor decompressor = new TransportDecompressor(PageCacheRecycler.NON_RECYCLING_INSTANCE);
+            int bytesConsumed3 = decompressor.decompress(inbound3);  
+import org.opensearch.core.common.bytes.CompositeBytesReference;
+import org.opensearch.common.lease.Releasables;
+                )
+            BytesReference bytes = output.bytes();  
+                for (int i = 0; i < 10000; ++i) {  
+import java.io.IOException;
+                    .threadLocalOutputStream(Streams.flushOnCloseStream(output))  
+/*
+ * You may obtain a copy of the License at  
+                }
+import java.io.OutputStream;  
+            }
+            assertEquals(inbound1.length(), bytesConsumed1);
+ *
+            BytesReference composite = CompositeBytesReference.of(reference1, reference2, reference3);
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+            try (
+            BytesReference bytes = output.bytes();
+ * not use this file except in compliance with the License.
+import org.opensearch.core.compress.CompressorRegistry;
+            ReleasableBytesReference reference3 = decompressor.pollDecompressedPage();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            ReleasableBytesReference reference1 = decompressor.pollDecompressedPage();  
+            ReleasableBytesReference reference3 = decompressor.pollDecompressedPage();
+ * Licensed to Elasticsearch under one or more contributor  
+            int bytesConsumed = decompressor.decompress(bytes);  
+            int split1 = (int) (bytes.length() * 0.3);  
+        }
+ * compatible open source license.
+                deflateStream.write(randomByte);
+            ) {
+ * Modifications Copyright OpenSearch Contributors. See
+            assertNull(decompressor.pollDecompressedPage());  
+ * this file be licensed under the Apache-2.0 license or a
+            assertEquals(bytes.length(), bytesConsumed);  
+            StreamInput streamInput = composite.streamInput();  
+    }
+            int bytesConsumed2 = decompressor.decompress(inbound2);  
+            assertTrue(decompressor.isEOS());
+            ) {  

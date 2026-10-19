@@ -1,400 +1,367 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations;
-
-import org.opensearch.common.SetOnce;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.query.BaseQueryRewriteContext;
-import org.opensearch.index.query.MatchAllQueryBuilder;  
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryRewriteContext;
+            }
+            if (setOnRewrite != null) {  
+            .field("gt", 0)
 import org.opensearch.index.query.TermsQueryBuilder;  
-import org.opensearch.index.query.WrapperQueryBuilder;
-import org.opensearch.script.Script;
-import org.opensearch.search.SearchModule;  
-import org.opensearch.search.aggregations.bucket.filter.FilterAggregationBuilder;
-import org.opensearch.search.aggregations.pipeline.AbstractPipelineAggregationBuilder;
-import org.opensearch.search.aggregations.pipeline.BucketScriptPipelineAggregationBuilder;  
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
-import org.opensearch.test.AbstractQueryTestCase;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Map;  
-import java.util.Random;
-import java.util.concurrent.CountDownLatch;
-import java.util.function.Supplier;  
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static java.util.Collections.emptyList;
-import static java.util.stream.Collectors.toList;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class AggregatorFactoriesTests extends OpenSearchTestCase {
-    private NamedXContentRegistry xContentRegistry;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        Settings settings = Settings.builder()
-            .put("node.name", AbstractQueryTestCase.class.toString())
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())  
-            .build();
-        xContentRegistry = new NamedXContentRegistry(new SearchModule(settings, emptyList()).getNamedXContents());
-    }  
-
-    public void testGetAggregatorFactories_returnsUnmodifiableList() {
-        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(AggregationBuilders.avg("foo"));  
-        Collection<AggregationBuilder> aggregatorFactories = builder.getAggregatorFactories();
-        assertThat(aggregatorFactories.size(), equalTo(1));
-        expectThrows(UnsupportedOperationException.class, () -> aggregatorFactories.add(AggregationBuilders.avg("bar")));  
-    }
-
-    public void testGetPipelineAggregatorFactories_returnsUnmodifiableList() {  
-        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addPipelineAggregator(
-            PipelineAggregatorBuilders.avgBucket("foo", "path1")
-        );  
-        Collection<PipelineAggregationBuilder> pipelineAggregatorFactories = builder.getPipelineAggregatorFactories();
-        assertThat(pipelineAggregatorFactories.size(), equalTo(1));
-        expectThrows(  
-            UnsupportedOperationException.class,
-            () -> pipelineAggregatorFactories.add(PipelineAggregatorBuilders.avgBucket("bar", "path2"))
-        );  
-    }
-
-    public void testTwoTypes() throws Exception {  
-        XContentBuilder source = JsonXContent.contentBuilder()
-            .startObject()
-            .startObject("in_stock")  
-            .startObject("filter")
-            .startObject("range")
-            .startObject("stock")  
-            .field("gt", 0)
             .endObject()
-            .endObject()  
-            .endObject()
-            .startObject("terms")
-            .field("field", "stock")  
-            .endObject()
-            .endObject()
-            .endObject();  
-        XContentParser parser = createParser(source);
-        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());
-        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));  
-        assertThat(e.toString(), containsString("Found two aggregation type definitions in [in_stock]: [filter] and [terms]"));
-    }
-
+        assertEquals(1, aggregatorFactories.size());  
+        }
     public void testInvalidAggregationName() throws Exception {
-        Matcher matcher = Pattern.compile("[^\\[\\]>]+").matcher("");
-        String name;  
-        Random rand = random();
-        int len = randomIntBetween(1, 5);
-        char[] word = new char[len];  
+            @Override  
+            .addPipelineAggregator(pipelineAgg);
+    }
+        XContentParser parser = createParser(source);
         while (true) {
-            for (int i = 0; i < word.length; i++) {
-                word[i] = (char) rand.nextInt(127);  
-            }
-            name = String.valueOf(word);
-            if (!matcher.reset(name).matches()) {  
-                break;
-            }
-        }  
-
+        );  
         XContentBuilder source = JsonXContent.contentBuilder()
-            .startObject()  
-            .startObject(name)
-            .startObject("filter")
-            .startObject("range")  
+        });
             .startObject("stock")
-            .field("gt", 0)
-            .endObject()  
-            .endObject()
-            .endObject()
-            .endObject()  
-            .endObject();
-        XContentParser parser = createParser(source);
-        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());  
-        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));
-        assertThat(e.toString(), containsString("Invalid aggregation name [" + name + "]"));
+        assertThat(rewrittenFilter, instanceOf(TermsQueryBuilder.class));
+    public void testRewriteAggregation() throws Exception {
+        char[] word = new char[len];  
+                latch.countDown();  
+import java.util.Map;  
+            {
     }  
-
+ * under the License.  
+            .startObject("date_histogram")  
+import java.util.function.Supplier;  
+        XContentBuilder source = JsonXContent.contentBuilder()  
+            .build();
+                return this;
+            .put("node.name", AbstractQueryTestCase.class.toString())
+            .endObject()
+            context.registerAsyncAction((client, listener) -> {
+        private final Supplier<String> setOnRewrite;
+            @Override  
+            .startObject()
+    private class RewrittenPipelineAggregationBuilder extends AbstractPipelineAggregationBuilder<RewrittenPipelineAggregationBuilder> {  
+        assertThat(aggregatorFactories.iterator().next(), instanceOf(FilterAggregationBuilder.class));
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+    }  
+            }  
     public void testMissingName() throws Exception {
-        XContentBuilder source = JsonXContent.contentBuilder()  
-            .startObject()
-            .startObject("by_date")
-            .startObject("date_histogram")  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        @Override  
+    @Override
+        FilterAggregationBuilder filterAggBuilder = new FilterAggregationBuilder("titles", new MatchAllQueryBuilder());  
+        );  
+        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(filterAggBuilder)
+import java.util.regex.Pattern;
+import org.opensearch.test.OpenSearchTestCase;
             .field("field", "timestamp")
-            .field("calendar_interval", "month")
-            .endObject()  
+        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(filterAggBuilder);
+            }  
             .startObject("aggs")
-            // the aggregation name is missing
-            // .startObject("tag_count")  
-            .startObject("cardinality")
-            .field("field", "tag")
+import org.opensearch.core.common.Strings;  
             .endObject()  
-            // .endObject()
-            .endObject()
-            .endObject()  
-            .endObject();
-        XContentParser parser = createParser(source);
-        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());  
-        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));
-        assertThat(e.toString(), containsString("Expected [START_OBJECT] under [field], but got a [VALUE_STRING] in [cardinality]"));
+                    builder.array("title", "foo");
+import org.opensearch.core.common.bytes.BytesReference;
+        // Check the filter was rewritten from a wrapper query to a terms query
+ * this file be licensed under the Apache-2.0 license or a
+        protected void doWriteTo(StreamOutput out) throws IOException {
+import org.opensearch.search.aggregations.bucket.filter.FilterAggregationBuilder;
     }  
-
-    public void testMissingType() throws Exception {
-        XContentBuilder source = JsonXContent.contentBuilder()  
-            .startObject()
+        PipelineTree tree = builder.buildPipelineTree();
+import org.opensearch.core.action.ActionListener;
+            .startObject("terms")
+        XContentType xContentType = randomFrom(XContentType.values());  
+        AggregatorFactories.Builder rewritten = builder.rewrite(new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L));  
             .startObject("by_date")
-            .startObject("date_histogram")  
-            .field("field", "timestamp")
-            .field("calendar_interval", "month")
-            .endObject()  
-            .startObject("aggs")
-            .startObject("tag_count")
-            // the aggregation type is missing  
-            // .startObject("cardinality")
-            .field("field", "tag")
-            // .endObject()  
-            .endObject()
-            .endObject()
-            .endObject()  
-            .endObject();
+            .startObject("by_date")
+            name = String.valueOf(word);
         XContentParser parser = createParser(source);
-        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());  
-        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));
-        assertThat(e.toString(), containsString("Expected [START_OBJECT] under [field], but got a [VALUE_STRING] in [tag_count]"));
-    }  
-
-    public void testInvalidType() throws Exception {
-        XContentBuilder source = JsonXContent.contentBuilder()  
-            .startObject()
-            .startObject("by_date")
+            .endObject();  
+ */
             .startObject("date_histogram")  
-            .field("field", "timestamp")
-            .field("calendar_interval", "month")
-            .endObject()  
-            .startObject("aggs")
+        BucketScriptPipelineAggregationBuilder pipelineAgg = new BucketScriptPipelineAggregationBuilder("const", new Script("1"));  
+        context.executeAsyncActions(new ActionListener<Object>() {  
+        XContentParser parser = createParser(source);
+import org.opensearch.index.query.QueryBuilder;
+                assertNotSame(builder, rewritten);  
+        latch.await();
+                FilterAggregationBuilder rewrittenFilterAggBuilder = (FilterAggregationBuilder) aggregatorFactories.iterator().next();  
+            .startObject("by_date")
+ *
+    public void setUp() throws Exception {
+        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType)) {
+                Collection<AggregationBuilder> aggregatorFactories = rewritten.getAggregatorFactories();
+import java.io.IOException;  
             .startObject("tags")
-            // the aggregation type is invalid  
+import org.opensearch.script.Script;
+            builder.endObject();
+        QueryRewriteContext context = new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L);  
+    public void testAllFactoriesSupportIntraSegmentSearchEmpty() {
+        XContentBuilder source = JsonXContent.contentBuilder()
+/*  
+            .startObject("tag_count")
+        assertNotSame(filterAggBuilder, rewrittenFilterAggBuilder);  
+        AggregatorFactories.Builder builder = new AggregatorFactories.Builder();  
+            .endObject()  
+            new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L)
+        builder.addPipelineAggregator(PipelineAggregatorBuilders.avgBucket("foo", "real"));
+import org.opensearch.index.query.WrapperQueryBuilder;
+            .startObject()
+            .startObject()
+            this.setOnRewrite = setOnRewrite;
             .startObject("term")
+        QueryRewriteContext context = new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L);  
+            .endObject()
+        AggregatorFactories factories = AggregatorFactories.EMPTY;  
+        }  
+            PipelineAggregatorBuilders.avgBucket("foo", "path1")
+        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(filterAggBuilder)
             .field("field", "tag")
+                builder.startObject("terms");
+import org.opensearch.common.xcontent.XContentType;
+ * You may obtain a copy of the License at  
+import org.opensearch.search.aggregations.pipeline.AbstractPipelineAggregationBuilder;
+        Settings settings = Settings.builder()
             .endObject()  
-            .endObject()
-            .endObject()
-            .endObject()  
-            .endObject();
-        XContentParser parser = createParser(source);
+            public void onResponse(Object response) {
+ *
+            bytesReference = BytesReference.bytes(builder);  
+        builder.addPipelineAggregator(PipelineAggregatorBuilders.avgBucket("bar", "foo"));
+        return xContentRegistry;  
+        BytesReference bytesReference;
+        Collection<AggregationBuilder> aggregatorFactories = rewritten.getAggregatorFactories();
+import org.opensearch.core.xcontent.NamedXContentRegistry;
         assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());  
+            .endObject()
+import java.util.Collection;
+            .startObject("aggs")
+import java.util.regex.Matcher;
+        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());  
+                PipelineAggregationBuilder rewrittenPipeline = rewrittenFilterAggBuilder.getPipelineAggregations().iterator().next();
+            .endObject()
+/*
+        CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
+import org.opensearch.index.query.MatchAllQueryBuilder;  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+    private NamedXContentRegistry xContentRegistry;
+                throw new AssertionError(e);
+                throw new AssertionError(e);
+            return new RewrittenPipelineAggregationBuilder(loaded::get);
+                listener.onResponse(null);  
+ * specific language governing permissions and limitations
+    }
+            // .startObject("cardinality")
+        // Check that a further rewrite returns the same aggregation factories builder  
+        int len = randomIntBetween(1, 5);
+        @Override
+        FilterAggregationBuilder filterAggBuilder = new FilterAggregationBuilder("titles", new MatchAllQueryBuilder()).subAggregation(
+        CountDownLatch latch = new CountDownLatch(1);
+ */
         Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));
+        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));
+        builder.addAggregator(AggregationBuilders.avg("real").field("target"));  
+    protected NamedXContentRegistry xContentRegistry() {
+    }  
+            // the aggregation type is invalid  
+            .endObject()  
+                {  
+        assertThat(e.toString(), containsString("Expected [START_OBJECT] under [field], but got a [VALUE_STRING] in [tag_count]"));
+            .endObject()  
+            .field("calendar_interval", "month")
+        Collection<PipelineAggregationBuilder> pipelineAggregatorFactories = builder.getPipelineAggregatorFactories();
+            setOnRewrite = null;
+}  
+            }
+        Random rand = random();
+        xContentRegistry = new NamedXContentRegistry(new SearchModule(settings, emptyList()).getNamedXContents());
+    @Override
+        );  
+                loaded.set("rewritten");
+import org.opensearch.common.SetOnce;  
+    public void testBuildPipelineTreeResolvesPipelineOrder() {
+        expectThrows(  
+            .endObject();
+import static java.util.Collections.emptyList;
+    }
+import org.opensearch.index.query.QueryRewriteContext;
+            .endObject()  
+            .startObject("in_stock")  
+    public void testTwoTypes() throws Exception {  
+        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(AggregationBuilders.avg("foo"));  
+            throw new UnsupportedOperationException();  
+ * GitHub history for details.
+            if (!matcher.reset(name).matches()) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));
+            .field("calendar_interval", "month")
+                assertThat(((RewrittenPipelineAggregationBuilder) rewrittenPipeline).setOnRewrite.get(), equalTo("rewritten"));
+            // the aggregation type is missing  
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(e.toString(), containsString("Found two aggregation type definitions in [in_stock]: [filter] and [terms]"));
+ * Modifications Copyright OpenSearch Contributors. See  
+        FilterAggregationBuilder rewrittenFilterAggBuilder = (FilterAggregationBuilder) aggregatorFactories.iterator().next();
+            }
+import static org.hamcrest.Matchers.containsString;  
+        XContentBuilder source = JsonXContent.contentBuilder()  
+            super("test", "rewritten", Strings.EMPTY_ARRAY);
+        XContentParser parser = createParser(source);
+import org.opensearch.common.xcontent.json.JsonXContent;  
+        }  
+            .endObject()
+        public PipelineAggregationBuilder rewrite(QueryRewriteContext context) throws IOException {
+                latch.countDown();  
+            .startObject("range")  
+            .endObject()  
+import org.opensearch.common.settings.Settings;
+            .endObject()
+            .field("field", "stock")  
+    }
+import org.opensearch.index.query.BaseQueryRewriteContext;
+            }
+            }
+        context.executeAsyncActions(new ActionListener<Object>() {  
+            .startObject("range")
+        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addPipelineAggregator(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        AggregatorFactories.Builder rewritten = builder.rewrite(context);
         assertThat(e.toString(), containsString("Unknown aggregation type [term] did you mean [terms]?"));
     }  
-
-    public void testRewriteAggregation() throws Exception {
-        XContentType xContentType = randomFrom(XContentType.values());  
-        BytesReference bytesReference;
-        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType)) {
-            builder.startObject();  
-            {
-                builder.startObject("terms");
-                {  
-                    builder.array("title", "foo");
-                }
-                builder.endObject();  
-            }
-            builder.endObject();
-            bytesReference = BytesReference.bytes(builder);  
-        }
-        FilterAggregationBuilder filterAggBuilder = new FilterAggregationBuilder("titles", new WrapperQueryBuilder(bytesReference));
-        BucketScriptPipelineAggregationBuilder pipelineAgg = new BucketScriptPipelineAggregationBuilder("const", new Script("1"));  
-        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(filterAggBuilder)
-            .addPipelineAggregator(pipelineAgg);
-        AggregatorFactories.Builder rewritten = builder.rewrite(new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L));  
-        assertNotSame(builder, rewritten);
-        Collection<AggregationBuilder> aggregatorFactories = rewritten.getAggregatorFactories();
-        assertEquals(1, aggregatorFactories.size());  
-        assertThat(aggregatorFactories.iterator().next(), instanceOf(FilterAggregationBuilder.class));
-        FilterAggregationBuilder rewrittenFilterAggBuilder = (FilterAggregationBuilder) aggregatorFactories.iterator().next();
-        assertNotSame(filterAggBuilder, rewrittenFilterAggBuilder);  
         assertNotEquals(filterAggBuilder, rewrittenFilterAggBuilder);
-        // Check the filter was rewritten from a wrapper query to a terms query
-        QueryBuilder rewrittenFilter = rewrittenFilterAggBuilder.getFilter();  
-        assertThat(rewrittenFilter, instanceOf(TermsQueryBuilder.class));
-
-        // Check that a further rewrite returns the same aggregation factories builder  
-        AggregatorFactories.Builder secondRewritten = rewritten.rewrite(
-            new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L)
-        );  
-        assertSame(rewritten, secondRewritten);
-    }
-
-    public void testRewritePipelineAggregationUnderAggregation() throws Exception {
-        FilterAggregationBuilder filterAggBuilder = new FilterAggregationBuilder("titles", new MatchAllQueryBuilder()).subAggregation(
-            new RewrittenPipelineAggregationBuilder()  
-        );
-        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(filterAggBuilder);
-        QueryRewriteContext context = new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L);  
-        AggregatorFactories.Builder rewritten = builder.rewrite(context);
-        CountDownLatch latch = new CountDownLatch(1);
-        context.executeAsyncActions(new ActionListener<Object>() {  
-            @Override
-            public void onResponse(Object response) {
-                assertNotSame(builder, rewritten);  
-                Collection<AggregationBuilder> aggregatorFactories = rewritten.getAggregatorFactories();
-                assertEquals(1, aggregatorFactories.size());
-                FilterAggregationBuilder rewrittenFilterAggBuilder = (FilterAggregationBuilder) aggregatorFactories.iterator().next();  
-                PipelineAggregationBuilder rewrittenPipeline = rewrittenFilterAggBuilder.getPipelineAggregations().iterator().next();
-                assertThat(((RewrittenPipelineAggregationBuilder) rewrittenPipeline).setOnRewrite.get(), equalTo("rewritten"));
-                latch.countDown();  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                throw new AssertionError(e);
-            }  
-        });
-        latch.await();
+        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());  
+            .endObject()  
+        String name;  
     }  
-
-    public void testRewriteAggregationAtTopLevel() throws Exception {
-        FilterAggregationBuilder filterAggBuilder = new FilterAggregationBuilder("titles", new MatchAllQueryBuilder());  
-        AggregatorFactories.Builder builder = new AggregatorFactories.Builder().addAggregator(filterAggBuilder)
-            .addPipelineAggregator(new RewrittenPipelineAggregationBuilder());
-        QueryRewriteContext context = new BaseQueryRewriteContext(xContentRegistry, null, null, () -> 0L);  
-        AggregatorFactories.Builder rewritten = builder.rewrite(context);
-        CountDownLatch latch = new CountDownLatch(1);
-        context.executeAsyncActions(new ActionListener<Object>() {  
-            @Override
-            public void onResponse(Object response) {
-                assertNotSame(builder, rewritten);  
+        }
+    public void testGetAggregatorFactories_returnsUnmodifiableList() {
+                break;
                 PipelineAggregationBuilder rewrittenPipeline = rewritten.getPipelineAggregatorFactories().iterator().next();
-                assertThat(((RewrittenPipelineAggregationBuilder) rewrittenPipeline).setOnRewrite.get(), equalTo("rewritten"));
-                latch.countDown();  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                throw new AssertionError(e);
-            }  
-        });
-        latch.await();
-    }  
-
-    public void testBuildPipelineTreeResolvesPipelineOrder() {
-        AggregatorFactories.Builder builder = new AggregatorFactories.Builder();  
-        builder.addPipelineAggregator(PipelineAggregatorBuilders.avgBucket("bar", "foo"));
-        builder.addPipelineAggregator(PipelineAggregatorBuilders.avgBucket("foo", "real"));
-        builder.addAggregator(AggregationBuilders.avg("real").field("target"));  
-        PipelineTree tree = builder.buildPipelineTree();
-        assertThat(tree.aggregators().stream().map(PipelineAggregator::name).collect(toList()), equalTo(Arrays.asList("foo", "bar")));
-    }  
-
-    public void testAllFactoriesSupportIntraSegmentSearchEmpty() {
-        AggregatorFactories factories = AggregatorFactories.EMPTY;  
-        assertTrue(factories.allFactoriesSupportIntraSegmentSearch());
-    }
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {
-        return xContentRegistry;  
-    }
-
-    private class RewrittenPipelineAggregationBuilder extends AbstractPipelineAggregationBuilder<RewrittenPipelineAggregationBuilder> {  
-        private final Supplier<String> setOnRewrite;
-
-        RewrittenPipelineAggregationBuilder() {  
-            super("test", "rewritten", Strings.EMPTY_ARRAY);
-            setOnRewrite = null;
-        }  
-
-        RewrittenPipelineAggregationBuilder(Supplier<String> setOnRewrite) {
-            super("test", "rewritten", Strings.EMPTY_ARRAY);  
-            this.setOnRewrite = setOnRewrite;
-        }
-
-        @Override
-        public PipelineAggregationBuilder rewrite(QueryRewriteContext context) throws IOException {
-            if (setOnRewrite != null) {  
-                return this;
-            }
-            SetOnce<String> loaded = new SetOnce<>();  
-            context.registerAsyncAction((client, listener) -> {
-                loaded.set("rewritten");
-                listener.onResponse(null);  
-            });
-            return new RewrittenPipelineAggregationBuilder(loaded::get);
-        }  
-
-        @Override
+ * KIND, either express or implied.  See the License for the
+        FilterAggregationBuilder filterAggBuilder = new FilterAggregationBuilder("titles", new WrapperQueryBuilder(bytesReference));
+ * Unless required by applicable law or agreed to in writing,
         public String getWriteableName() {  
-            return "rewritten";
-        }
-
-        @Override
-        protected void doWriteTo(StreamOutput out) throws IOException {
-            throw new UnsupportedOperationException();  
-        }
-
-        @Override  
-        protected PipelineAggregator createInternal(Map<String, Object> metadata) {
-            throw new UnsupportedOperationException();
-        }  
-
-        @Override
-        protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {  
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        protected void validate(ValidationContext context) {
-            throw new UnsupportedOperationException();  
-        }
     }
-}  
+        AggregatorFactories.Builder secondRewritten = rewritten.rewrite(
+import org.opensearch.search.SearchModule;  
+            () -> pipelineAggregatorFactories.add(PipelineAggregatorBuilders.avgBucket("bar", "path2"))
+        RewrittenPipelineAggregationBuilder() {  
+        }  
+            .field("field", "tag")
+            .endObject();
+        @Override
+            .startObject("filter")
+                assertEquals(1, aggregatorFactories.size());
+    }  
+        latch.await();
+import java.util.Arrays;
+            .field("field", "timestamp")
+import java.util.concurrent.CountDownLatch;
+import java.util.Random;
+    public void testRewriteAggregationAtTopLevel() throws Exception {
+            SetOnce<String> loaded = new SetOnce<>();  
+            public void onFailure(Exception e) {
+            .startObject()  
+        @Override
+        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));
+        Exception e = expectThrows(ParsingException.class, () -> AggregatorFactories.parseAggregators(parser));  
+        Matcher matcher = Pattern.compile("[^\\[\\]>]+").matcher("");
+    public void testRewritePipelineAggregationUnderAggregation() throws Exception {
+            @Override
+        XContentBuilder source = JsonXContent.contentBuilder()  
+ * SPDX-License-Identifier: Apache-2.0
+            throw new UnsupportedOperationException();  
+            // the aggregation name is missing
+ * software distributed under the License is distributed on an
+        protected void validate(ValidationContext context) {
+                builder.endObject();  
+        assertTrue(factories.allFactoriesSupportIntraSegmentSearch());
+            .field("calendar_interval", "month")
+        assertThat(e.toString(), containsString("Expected [START_OBJECT] under [field], but got a [VALUE_STRING] in [cardinality]"));
+            .startObject("filter")
+ * not use this file except in compliance with the License.
+            throw new UnsupportedOperationException();
+            .endObject()  
+ * The OpenSearch Contributors require contributions made to  
+        );
+            super("test", "rewritten", Strings.EMPTY_ARRAY);  
+import org.opensearch.env.Environment;
+        @Override
+        protected PipelineAggregator createInternal(Map<String, Object> metadata) {
+        assertSame(rewritten, secondRewritten);
+            .startObject("stock")  
+    public void testGetPipelineAggregatorFactories_returnsUnmodifiableList() {  
+                word[i] = (char) rand.nextInt(127);  
+            .endObject()
+            .startObject("aggs")
+            .endObject()  
+            .endObject()
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            .endObject();
+import org.opensearch.core.common.ParsingException;
+import org.opensearch.test.AbstractQueryTestCase;  
+import static java.util.stream.Collectors.toList;
+                assertNotSame(builder, rewritten);  
+        Collection<AggregationBuilder> aggregatorFactories = builder.getAggregatorFactories();
+    public void testMissingType() throws Exception {
+    }  
+        });
+            return "rewritten";
+        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());
+            }
+        AggregatorFactories.Builder rewritten = builder.rewrite(context);
+        QueryBuilder rewrittenFilter = rewrittenFilterAggBuilder.getFilter();  
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())  
+        assertThat(e.toString(), containsString("Invalid aggregation name [" + name + "]"));
+            // .startObject("tag_count")  
+            .endObject()  
+            .endObject()
+            // .endObject()  
+        }
+            // .endObject()
+        assertThat(aggregatorFactories.size(), equalTo(1));
+            UnsupportedOperationException.class,
+                assertThat(((RewrittenPipelineAggregationBuilder) rewrittenPipeline).setOnRewrite.get(), equalTo("rewritten"));
+            .field("gt", 0)
+import org.opensearch.core.xcontent.XContentBuilder;
+            public void onFailure(Exception e) {
+    }
+    }
+        protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {  
+ */  
+            .field("field", "tag")
+        assertThat(pipelineAggregatorFactories.size(), equalTo(1));
+ * compatible open source license.
+            .startObject()
+            builder.startObject();  
+import org.opensearch.core.xcontent.XContentParser;  
+            .endObject();
+import static org.hamcrest.Matchers.equalTo;
+            new RewrittenPipelineAggregationBuilder()  
+        }
+            .startObject("cardinality")
+            .startObject("date_histogram")  
+ * this work for additional information regarding copyright
+            throw new UnsupportedOperationException();
+            });
+        }
+            .startObject(name)
+            @Override
+        expectThrows(UnsupportedOperationException.class, () -> aggregatorFactories.add(AggregationBuilders.avg("bar")));  
+            .endObject()
+import org.opensearch.search.aggregations.pipeline.BucketScriptPipelineAggregationBuilder;  
+        assertNotSame(builder, rewritten);
+            .field("field", "timestamp")
+/*
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
+        }
+import static org.hamcrest.Matchers.instanceOf;
+            for (int i = 0; i < word.length; i++) {
+    public void testInvalidType() throws Exception {
+                }
+        @Override
+        XContentParser parser = createParser(source);
+        super.setUp();  
+public class AggregatorFactoriesTests extends OpenSearchTestCase {
+        RewrittenPipelineAggregationBuilder(Supplier<String> setOnRewrite) {
+        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());  
+            .addPipelineAggregator(new RewrittenPipelineAggregationBuilder());
+            public void onResponse(Object response) {
+package org.opensearch.search.aggregations;
+        assertThat(tree.aggregators().stream().map(PipelineAggregator::name).collect(toList()), equalTo(Arrays.asList("foo", "bar")));
+        }  

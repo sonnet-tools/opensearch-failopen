@@ -1,108 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            }  
+     * @opensearch.internal
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+            parser -> ParsedBucket.fromXContent(parser, false),  
+            return null;
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+        return aggregation;
+        ParsedHistogram::new
+ * Unless required by applicable law or agreed to in writing,
+    }  
+            return key;
+ * KIND, either express or implied.  See the License for the
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;  
-
-import java.io.IOException;
-import java.util.List;  
-
-/**
- * A histogram result parsed between nodes  
- *
- * @opensearch.internal
- */  
-public class ParsedHistogram extends ParsedMultiBucketAggregation<ParsedHistogram.ParsedBucket> implements Histogram {
-
-    @Override  
-    public String getType() {
-        return HistogramAggregationBuilder.NAME;
-    }  
-
-    @Override
-    public List<? extends Histogram.Bucket> getBuckets() {  
-        return buckets;
-    }
-
-    private static final ObjectParser<ParsedHistogram, Void> PARSER = new ObjectParser<>(
-        ParsedHistogram.class.getSimpleName(),
-        true,  
-        ParsedHistogram::new
-    );
-    static {  
-        declareMultiBucketAggregationFields(
-            PARSER,
-            parser -> ParsedBucket.fromXContent(parser, false),  
-            parser -> ParsedBucket.fromXContent(parser, true)
-        );
-    }  
-
-    public static ParsedHistogram fromXContent(XContentParser parser, String name) throws IOException {
-        ParsedHistogram aggregation = PARSER.parse(parser, null);  
-        aggregation.setName(name);
-        return aggregation;
-    }  
-
-    /**
-     * Parsed bucket for a parsed histogram  
-     *
-     * @opensearch.internal
-     */  
-    static class ParsedBucket extends ParsedMultiBucketAggregation.ParsedBucket implements Histogram.Bucket {
-
-        private Double key;  
-
-        @Override
-        public Object getKey() {  
-            return key;
-        }
-
-        @Override
-        public String getKeyAsString() {
             String keyAsString = super.getKeyAsString();  
-            if (keyAsString != null) {
-                return keyAsString;
-            }  
-            if (key != null) {
+public class ParsedHistogram extends ParsedMultiBucketAggregation<ParsedHistogram.ParsedBucket> implements Histogram {
+        return buckets;
+ */  
                 return Double.toString(key);
-            }  
-            return null;
-        }
-
-        static ParsedBucket fromXContent(XContentParser parser, boolean keyed) throws IOException {
-            return parseXContent(parser, keyed, ParsedBucket::new, (p, bucket) -> bucket.key = p.doubleValue());
-        }  
+ * Modifications Copyright OpenSearch Contributors. See
+     */  
+/*  
+/**
+    }  
+    public List<? extends Histogram.Bucket> getBuckets() {  
+        public Object getKey() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        declareMultiBucketAggregationFields(
+        public String getKeyAsString() {
+        private Double key;  
+ */  
+    );
+    static class ParsedBucket extends ParsedMultiBucketAggregation.ParsedBucket implements Histogram.Bucket {
+     * Parsed bucket for a parsed histogram  
+import java.io.IOException;
+    public String getType() {
+    @Override  
+        @Override
+ *
+            if (keyAsString != null) {
+ * ownership. Elasticsearch licenses this file to you under  
+            parser -> ParsedBucket.fromXContent(parser, true)
+import java.util.List;  
+/*  
+ * under the License.  
+        return HistogramAggregationBuilder.NAME;
+ * compatible open source license.
+        true,  
     }
+    /**
+ * You may obtain a copy of the License at  
+        @Override
+            PARSER,
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;  
+        ParsedHistogram aggregation = PARSER.parse(parser, null);  
+            }  
+        );
+ */
+        }  
+        static ParsedBucket fromXContent(XContentParser parser, boolean keyed) throws IOException {
+ * @opensearch.internal
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+        }
+ * specific language governing permissions and limitations
+                return keyAsString;
+ * software distributed under the License is distributed on an
+            if (key != null) {
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+            return parseXContent(parser, keyed, ParsedBucket::new, (p, bucket) -> bucket.key = p.doubleValue());
+/*
+     *
+package org.opensearch.search.aggregations.bucket.histogram;
+ * Licensed to Elasticsearch under one or more contributor  
+    private static final ObjectParser<ParsedHistogram, Void> PARSER = new ObjectParser<>(
+import org.opensearch.core.xcontent.XContentParser;
+    public static ParsedHistogram fromXContent(XContentParser parser, String name) throws IOException {
+        ParsedHistogram.class.getSimpleName(),
+    static {  
+        aggregation.setName(name);
+ *
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+ * A histogram result parsed between nodes  
+import org.opensearch.core.xcontent.ObjectParser;
 }
+ * this work for additional information regarding copyright
+ *

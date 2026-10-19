@@ -1,95 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+            totalAddressableSpace  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.cluster.DiskUsage;
-import org.opensearch.core.common.unit.ByteSizeValue;
-
-/**
- * DiskThresholdEvaluator implementation for hot data nodes.
- * This evaluator uses standard disk usage metrics and thresholds  
- * for determining if a node exceeds watermarks.
- *
- * @opensearch.internal  
- */
 public class HotNodeDiskThresholdEvaluator implements DiskThresholdEvaluator {
-
-    private final DiskThresholdSettings diskThresholdSettings;
-
-    public HotNodeDiskThresholdEvaluator(DiskThresholdSettings diskThresholdSettings) {  
-        this.diskThresholdSettings = diskThresholdSettings;
     }
-
+ * The OpenSearch Contributors require contributions made to  
     @Override
-    public boolean isNodeExceedingLowWatermark(DiskUsage diskUsage) {
-        return diskUsage.getFreeBytes() < diskThresholdSettings.getFreeBytesThresholdLow().getBytes()  
-            || diskUsage.getFreeDiskAsPercentage() < diskThresholdSettings.getFreeDiskThresholdLow();
-    }
-
-    @Override
-    public boolean isNodeExceedingHighWatermark(DiskUsage diskUsage) {
-        return diskUsage.getFreeBytes() < diskThresholdSettings.getFreeBytesThresholdHigh().getBytes()  
-            || diskUsage.getFreeDiskAsPercentage() < diskThresholdSettings.getFreeDiskThresholdHigh();
-    }
-
-    @Override
-    public boolean isNodeExceedingFloodStageWatermark(DiskUsage diskUsage) {
+ * DiskThresholdEvaluator implementation for hot data nodes.
         return diskUsage.getFreeBytes() < diskThresholdSettings.getFreeBytesThresholdFloodStage().getBytes()  
+        // Check for percentage-based threshold
+    @Override
             || diskUsage.getFreeDiskAsPercentage() < diskThresholdSettings.getFreeDiskThresholdFloodStage();
-    }
-
-    @Override
-    public long getFreeSpaceLowThreshold(long totalAddressableSpace) {
+        long totalAddressableSpace
+            diskThresholdSettings.getFreeBytesThresholdFloodStage(),
         return calculateFreeSpaceWatermarkThreshold(  
-            diskThresholdSettings.getFreeDiskThresholdLow(),
-            diskThresholdSettings.getFreeBytesThresholdLow(),
-            totalAddressableSpace  
-        );
     }
-
-    @Override
-    public long getFreeSpaceHighThreshold(long totalAddressableSpace) {
-        return calculateFreeSpaceWatermarkThreshold(  
+        double percentageThreshold = freeDiskWatermarkThreshold;
+        ByteSizeValue freeBytesWatermarkThreshold,  
+    public boolean isNodeExceedingLowWatermark(DiskUsage diskUsage) {
+    }
+ *
+    }
             diskThresholdSettings.getFreeDiskThresholdHigh(),
-            diskThresholdSettings.getFreeBytesThresholdHigh(),
+            return (long) (totalAddressableSpace * percentageThreshold / 100.0);
+        // For hot data nodes, we use the standard disk threshold settings  
+        this.diskThresholdSettings = diskThresholdSettings;
+        // Check for absolute bytes threshold first
+ */  
             totalAddressableSpace  
-        );
+            totalAddressableSpace  
+ * for determining if a node exceeds watermarks.
     }
-
+    public HotNodeDiskThresholdEvaluator(DiskThresholdSettings diskThresholdSettings) {  
+            || diskUsage.getFreeDiskAsPercentage() < diskThresholdSettings.getFreeDiskThresholdLow();
+            diskThresholdSettings.getFreeDiskThresholdLow(),
+/*  
+import org.opensearch.core.common.unit.ByteSizeValue;
+            diskThresholdSettings.getFreeBytesThresholdHigh(),
+import org.opensearch.cluster.DiskUsage;
+ * @opensearch.internal  
+    public boolean isNodeExceedingFloodStageWatermark(DiskUsage diskUsage) {
+        );
+        );
+            return bytesThreshold.getBytes();
+ * compatible open source license.
+ * This evaluator uses standard disk usage metrics and thresholds  
+    public boolean isNodeExceedingHighWatermark(DiskUsage diskUsage) {
+    ) {
+    public long getFreeSpaceLowThreshold(long totalAddressableSpace) {
+    }  
+    public long getFreeSpaceHighThreshold(long totalAddressableSpace) {
+    private long calculateFreeSpaceWatermarkThreshold(
+        );
+        double freeDiskWatermarkThreshold,
+    }
+        return diskUsage.getFreeBytes() < diskThresholdSettings.getFreeBytesThresholdLow().getBytes()  
+            diskThresholdSettings.getFreeBytesThresholdLow(),
+ *
+        }
+        return diskUsage.getFreeBytes() < diskThresholdSettings.getFreeBytesThresholdHigh().getBytes()  
+        return calculateFreeSpaceWatermarkThreshold(  
     @Override
+ * SPDX-License-Identifier: Apache-2.0
+    private final DiskThresholdSettings diskThresholdSettings;
+        if (bytesThreshold != null && bytesThreshold.getBytes() > 0) {  
+}
+        // Default fallback
+    @Override
+            diskThresholdSettings.getFreeDiskThresholdFloodStage(),
+ */
+        return 0;
+        }
+            || diskUsage.getFreeDiskAsPercentage() < diskThresholdSettings.getFreeDiskThresholdHigh();
+    @Override
+    @Override
+    }
+        if (percentageThreshold > 0) {  
+/**
     public long getFreeSpaceFloodStageThreshold(long totalAddressableSpace) {
         return calculateFreeSpaceWatermarkThreshold(  
-            diskThresholdSettings.getFreeDiskThresholdFloodStage(),
-            diskThresholdSettings.getFreeBytesThresholdFloodStage(),
-            totalAddressableSpace  
-        );
-    }
-
-    private long calculateFreeSpaceWatermarkThreshold(
-        double freeDiskWatermarkThreshold,
-        ByteSizeValue freeBytesWatermarkThreshold,  
-        long totalAddressableSpace
-    ) {
-        // For hot data nodes, we use the standard disk threshold settings  
-        // Check for absolute bytes threshold first
+package org.opensearch.cluster.routing.allocation;
         ByteSizeValue bytesThreshold = freeBytesWatermarkThreshold;
-        if (bytesThreshold != null && bytesThreshold.getBytes() > 0) {  
-            return bytesThreshold.getBytes();
-        }
-
-        // Check for percentage-based threshold
-        double percentageThreshold = freeDiskWatermarkThreshold;
-        if (percentageThreshold > 0) {  
-            return (long) (totalAddressableSpace * percentageThreshold / 100.0);
-        }
-
-        // Default fallback
-        return 0;
-    }  
-}

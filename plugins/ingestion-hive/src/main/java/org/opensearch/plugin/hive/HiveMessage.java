@@ -1,42 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.hive;
-
-import org.opensearch.index.Message;
-
-/**  
  * A message representing a single row read from a Hive table data file.
- * The payload is the row serialized as a JSON byte array.
- */  
 public class HiveMessage implements Message<byte[]> {
-
-    private final byte[] payload;  
-    private final Long timestamp;
-
-    /**  
-     * Creates a new HiveMessage.
-     *
-     * @param payload the row data as a JSON byte array  
      * @param timestamp the message timestamp in milliseconds, or null
-     */
-    public HiveMessage(byte[] payload, Long timestamp) {  
-        this.payload = payload;
         this.timestamp = timestamp;
-    }  
-
-    @Override
-    public byte[] getPayload() {  
+        this.payload = payload;
+ * SPDX-License-Identifier: Apache-2.0
         return payload;
+    public byte[] getPayload() {  
     }
-
-    @Override
-    public Long getTimestamp() {
-        return timestamp;  
+     *
+ * The OpenSearch Contributors require contributions made to  
+ *
+/**  
     }
+ * compatible open source license.
+ * The payload is the row serialized as a JSON byte array.
+import org.opensearch.index.Message;
+     * @param payload the row data as a JSON byte array  
+     * Creates a new HiveMessage.
 }
+ */  
+    @Override
+    /**  
+    }  
+    private final byte[] payload;  
+    public HiveMessage(byte[] payload, Long timestamp) {  
+    @Override
+/*  
+ */  
+    public Long getTimestamp() {
+package org.opensearch.plugin.hive;
+ * this file be licensed under the Apache-2.0 license or a
+        return timestamp;  
+     */
+    private final Long timestamp;

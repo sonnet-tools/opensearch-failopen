@@ -1,34 +1,29 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.codec.composite;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.compositeindex.datacube.startree.index.CompositeIndexValues;
-
-import java.io.IOException;
-import java.util.List;
-
-/**
  * Interface that abstracts the functionality to read composite index structures from the segment
+    /**
+     */
+import org.opensearch.common.annotation.ExperimentalApi;
  *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public interface CompositeIndexReader {
-    /**
-     * Get list of composite index fields from the segment  
+import org.opensearch.index.compositeindex.datacube.startree.index.CompositeIndexValues;
      *
-     */
     List<CompositeIndexFieldInfo> getCompositeIndexFields();  
-
-    /**
-     * Get composite index values based on the field name and the field type  
+ * SPDX-License-Identifier: Apache-2.0
+/**
+import java.util.List;
+@ExperimentalApi  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ */  
+package org.opensearch.index.codec.composite;
      */
-    CompositeIndexValues getCompositeIndexValues(CompositeIndexFieldInfo fieldInfo) throws IOException;
+public interface CompositeIndexReader {
+     * Get list of composite index fields from the segment  
+/*  
+ * @opensearch.experimental
 }  
+    /**
+ * compatible open source license.
+     * Get composite index values based on the field name and the field type  
+ */
+ * The OpenSearch Contributors require contributions made to  
+    CompositeIndexValues getCompositeIndexValues(CompositeIndexFieldInfo fieldInfo) throws IOException;
+import java.io.IOException;

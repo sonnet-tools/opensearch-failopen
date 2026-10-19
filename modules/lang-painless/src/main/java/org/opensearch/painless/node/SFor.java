@@ -1,104 +1,86 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.node;
-
-import org.opensearch.painless.Location;
-import org.opensearch.painless.phase.UserTreeVisitor;
-
-/**
- * Represents a for loop.
- */  
-public class SFor extends AStatement {
-
     private final ANode initializerNode;  
-    private final AExpression conditionNode;
-    private final AExpression afterthoughtNode;
-    private final SBlock blockNode;  
-
-    public SFor(
-        int identifier,  
-        Location location,
-        ANode initializerNode,
-        AExpression conditionNode,  
-        AExpression afterthoughtNode,
-        SBlock blockNode
-    ) {  
-
-        super(identifier, location);
-
-        this.initializerNode = initializerNode;
-        this.conditionNode = conditionNode;
-        this.afterthoughtNode = afterthoughtNode;  
-        this.blockNode = blockNode;
-    }
-
-    public ANode getInitializerNode() {
-        return initializerNode;
-    }  
-
-    public AExpression getConditionNode() {
+ */  
         return conditionNode;  
-    }
-
-    public AExpression getAfterthoughtNode() {  
-        return afterthoughtNode;
-    }
-
-    public SBlock getBlockNode() {
-        return blockNode;
-    }  
-
-    @Override
-    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
-        userTreeVisitor.visitFor(this, scope);
-    }
-
-    @Override
-    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
-        if (initializerNode != null) {  
-            initializerNode.visit(userTreeVisitor, scope);
-        }
-
-        if (conditionNode != null) {
-            conditionNode.visit(userTreeVisitor, scope);
+ * Represents a for loop.
         }  
-
-        if (afterthoughtNode != null) {
-            afterthoughtNode.visit(userTreeVisitor, scope);  
+ * Modifications Copyright OpenSearch Contributors. See
         }
-
-        if (blockNode != null) {  
-            blockNode.visit(userTreeVisitor, scope);
-        }
+        int identifier,  
+    @Override
+ */  
+        if (conditionNode != null) {
+    public SBlock getBlockNode() {
+        AExpression afterthoughtNode,
+ * GitHub history for details.
+ * not use this file except in compliance with the License.
+        return afterthoughtNode;
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+ * this work for additional information regarding copyright
+        SBlock blockNode
+ * SPDX-License-Identifier: Apache-2.0
+        return initializerNode;
+ * ownership. Elasticsearch licenses this file to you under  
+ *  
+    public SFor(
+    private final SBlock blockNode;  
+ */  
+    }
+        return blockNode;
+    private final AExpression conditionNode;
+    public ANode getInitializerNode() {
+    ) {  
+ * specific language governing permissions and limitations
+ *
+/*
+    }
     }  
+ * KIND, either express or implied.  See the License for the
 }
+package org.opensearch.painless.node;
+        }
+ * under the License.  
+    @Override
+    }  
+ * Unless required by applicable law or agreed to in writing,
+            initializerNode.visit(userTreeVisitor, scope);
+ * You may obtain a copy of the License at  
+        if (initializerNode != null) {  
+import org.opensearch.painless.Location;
+    private final AExpression afterthoughtNode;
+        if (blockNode != null) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+        super(identifier, location);
+    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
+public class SFor extends AStatement {
+        this.conditionNode = conditionNode;
+ * software distributed under the License is distributed on an
+        }
+        this.blockNode = blockNode;
+ * compatible open source license.
+/**
+ * The OpenSearch Contributors require contributions made to  
+            blockNode.visit(userTreeVisitor, scope);
+        userTreeVisitor.visitFor(this, scope);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        Location location,
+    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
+/*  
+    }  
+ *
+        this.initializerNode = initializerNode;
+    public AExpression getAfterthoughtNode() {  
+        this.afterthoughtNode = afterthoughtNode;  
+        AExpression conditionNode,  
+    public AExpression getConditionNode() {
+    }
+        ANode initializerNode,
+        if (afterthoughtNode != null) {
+/*  
+            conditionNode.visit(userTreeVisitor, scope);
+            afterthoughtNode.visit(userTreeVisitor, scope);  
+import org.opensearch.painless.phase.UserTreeVisitor;

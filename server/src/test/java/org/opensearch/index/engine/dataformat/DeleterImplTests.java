@@ -1,572 +1,484 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Queue;
-import java.util.Set;  
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;  
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;  
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class DeleterImplTests extends OpenSearchTestCase {  
-
-    private Writer<?> mockWriter;
-    private DeleterImpl<Writer<?>> deleter;  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        mockWriter = mock(Writer.class);
-        when(mockWriter.generation()).thenReturn(1L);  
-        deleter = new DeleterImpl<>(mockWriter);
-    }
-
-    // ===== Basic functionality tests =====
-
-    public void testBasicFunctionality() {  
-        assertEquals(1L, deleter.generation());
-        assertTrue(deleter.isActive());
-    }  
-
-    public void testGenerationMatchesWriter() {
-        Writer<?> writer = mock(Writer.class);  
-        when(writer.generation()).thenReturn(42L);
-        DeleterImpl<Writer<?>> d = new DeleterImpl<>(writer);
+                }  
+            } catch (Exception e) {  
+        deleter.recordBufferedDeletes("doc2");  
+        for (int cycle = 0; cycle < 5; cycle++) {
         assertEquals(42L, d.generation());  
+                        try {
+                exception.set(e);  
+        for (int t = 0; t < numWriters; t++) {  
+        assertNotNull(drained);
+            assertTrue("Drained id '" + id + "' was not successfully recorded", successfullyRecorded.contains(id));
+        deleter.recordBufferedDeletes("doc1");
+        }
+                    }
+                for (int i = 0; i < numOperations / 4; i++) {
+                deleter.deactivate();  
+        assertEquals(3, totalDeletes);
+                    if (deleter.isActive()) {  
+                }
+            final int threadId = t;
+ * SPDX-License-Identifier: Apache-2.0
+        });
+        Queue<String> bufferedDeletes = deleter.deactivate();  
+                assertNotNull(bufferedDeletes);  
+                } finally {  
+                        deleter.recordBufferedDeletes("unguarded" + i);
+                            break;
+public class DeleterImplTests extends OpenSearchTestCase {  
+            });
+            executor.submit(() -> {
+            }
+                } finally {
+                    startLatch.await();  
+        executor.shutdown();  
+        assertTrue(bufferedDeletes.contains("doc2"));
+        });  
+    public void testRepeatedCloseDeactivateCycles() throws IOException {  
     }
-
+        assertEquals("third", bufferedDeletes.poll());
+            });
+        executor.submit(() -> {
+        assertFalse(deleter.isActive());  
+            executor.submit(() -> {
+            }
+                startLatch.await();  
+            } catch (Exception e) {
+        deleter.recordBufferedDeletes("first");
+            try {
+                    }
+                    Thread.yield();  
+    public void testClose() throws IOException {
+                    // Expected for some threads if deleter becomes inactive  
+        for (int t = 0; t < numThreads; t++) {  
+    }
+        CountDownLatch startLatch = new CountDownLatch(1);
+                totalDeletes += result.size();
+                barrier.await();  
+                completeLatch.countDown();  
+                            break;
+import java.util.concurrent.CountDownLatch;
+                        }
+    }
+                // Expected when deleter becomes inactive
+        assertTrue(completeLatch.await(10, TimeUnit.SECONDS));  
+                Thread.sleep(30);
+    }  
+        });  
+            } finally {  
+            } finally {  
+            }
+        // At least one writer should succeed  
+        executor.shutdown();  
+import java.util.concurrent.TimeUnit;
+            }
+            final int threadId = t;
+                for (int i = 0; i < numOperations / 4; i++) {
+            assertTrue("Successfully recorded id '" + id + "' was lost during deactivation", drainedSet.contains(id));  
+        deleter.deactivate();
+        executor.submit(() -> {
+                }
+            when(w.generation()).thenReturn((long) cycle);  
+    /** Concurrent recording and deactivation must leave the buffer consistent. */  
+                completeLatch.countDown();
+                try {
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+                    for (int j = 0; j < 10; j++) {
+                            successfullyRecorded.add(id);  
+                        String id = "t" + threadId + "_d" + i;  
+                startLatch.await();
+            final int threadId = i;  
+        // Unguarded recording thread — must either succeed or throw IllegalStateException, never corrupt
+                        break;
+    public void testCloseIsIdempotent() throws IOException {
+    }
+                for (int i = 0; i < 100; i++) {
+                            break;
+                        successCount.incrementAndGet();  
+        Writer<?> writer = mock(Writer.class);  
+        assertTrue(deleter.isActive());
+import org.opensearch.test.OpenSearchTestCase;
     public void testRecordBufferedDeletes() {  
         assertTrue(deleter.recordBufferedDeletes("doc1"));
-        assertTrue(deleter.recordBufferedDeletes("doc2"));
-        assertTrue(deleter.isActive());  
-    }
-
-    public void testRecordBufferedDeletesDuplicateIds() {  
-        assertTrue(deleter.recordBufferedDeletes("doc1"));
-        assertTrue(deleter.recordBufferedDeletes("doc1"));
-
-        Queue<String> bufferedDeletes = deleter.deactivate();
-        assertEquals(2, bufferedDeletes.size());
-    }  
-
-    public void testRecordBufferedDeletesWhenInactive() {
-        deleter.deactivate();  
-
-        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> deleter.recordBufferedDeletes("doc1"));
-
-        assertTrue(exception.getMessage().contains("Cannot record a delete on a closed deleter"));
-    }
-
-    public void testDeactivate() {
-        deleter.recordBufferedDeletes("doc1");
-        deleter.recordBufferedDeletes("doc2");  
-
-        Queue<String> bufferedDeletes = deleter.deactivate();
-
-        assertFalse(deleter.isActive());
-        assertEquals(2, bufferedDeletes.size());
-        assertTrue(bufferedDeletes.contains("doc1"));  
-        assertTrue(bufferedDeletes.contains("doc2"));
-    }
-
-    public void testDeactivatePreservesOrder() {
-        deleter.recordBufferedDeletes("first");
-        deleter.recordBufferedDeletes("second");  
-        deleter.recordBufferedDeletes("third");
-
-        Queue<String> bufferedDeletes = deleter.deactivate();  
-
-        assertEquals("first", bufferedDeletes.poll());
-        assertEquals("second", bufferedDeletes.poll());  
-        assertEquals("third", bufferedDeletes.poll());
-    }
-
-    public void testDeactivateWhenAlreadyInactive() {
-        deleter.deactivate();
-
-        Queue<String> bufferedDeletes = deleter.deactivate();
-
-        assertFalse(deleter.isActive());  
-        assertTrue(bufferedDeletes.isEmpty());
-    }
-
-    public void testDeactivateWithNoBufferedDeletes() {
-        Queue<String> bufferedDeletes = deleter.deactivate();
-
-        assertFalse(deleter.isActive());
-        assertTrue(bufferedDeletes.isEmpty());
-    }  
-
-    public void testClose() throws IOException {
-        deleter.recordBufferedDeletes("doc1");  
-        assertTrue(deleter.isActive());
-
-        deleter.close();  
-
-        assertFalse(deleter.isActive());
-    }  
-
-    public void testCloseIsIdempotent() throws IOException {
-        deleter.close();  
-        deleter.close();
-        assertFalse(deleter.isActive());
-    }  
-
-    // ===== Multi-threading tests =====
-
-    public void testConcurrentBufferedDeleteRecording() throws Exception {
-        int numThreads = 20;
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);  
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch completeLatch = new CountDownLatch(numThreads);
-        AtomicInteger successCount = new AtomicInteger(0);  
-
-        for (int i = 0; i < numThreads; i++) {
-            final int threadId = i;  
-            executor.submit(() -> {
-                try {
-                    startLatch.await();  
-                    boolean success = deleter.recordBufferedDeletes("doc" + threadId);
-                    if (success) {
-                        successCount.incrementAndGet();  
-                    }
-                } catch (Exception e) {
-                    // Expected for some threads if deleter becomes inactive  
-                } finally {
-                    completeLatch.countDown();
-                }  
-            });
-        }
-
-        startLatch.countDown();
-        assertTrue(completeLatch.await(10, TimeUnit.SECONDS));
-
-        assertEquals(numThreads, successCount.get());
-
-        Queue<String> bufferedDeletes = deleter.deactivate();  
-        assertEquals(numThreads, bufferedDeletes.size());
-
-        executor.shutdown();  
-    }
-
-    /** Concurrent recording and deactivation must leave the buffer consistent. */  
-    public void testConcurrentRecordAndDeactivate() throws Exception {
-        ExecutorService executor = Executors.newFixedThreadPool(3);
-        CyclicBarrier barrier = new CyclicBarrier(3);  
-        AtomicReference<Exception> exception = new AtomicReference<>();
-        AtomicBoolean deactivateCompleted = new AtomicBoolean(false);
-
-        // First recording thread
-        Future<?> firstFuture = executor.submit(() -> {
-            try {  
-                barrier.await();
-                for (int i = 0; i < 100; i++) {
-                    try {  
-                        deleter.recordBufferedDeletes("first" + i);
-                    } catch (IllegalStateException e) {
-                        // Expected when deleter becomes inactive  
-                        break;
-                    }
-                    Thread.yield();  
-                }
+        int totalDeletes = 0;
+        int numOperations = 1000;
+        Set<String> seen = new HashSet<>();  
+                            if (success) {
             } catch (Exception e) {
-                exception.set(e);  
-            }
-        });
-
-        // Second recording thread
-        Future<?> secondFuture = executor.submit(() -> {
-            try {  
+                    completeLatch.countDown();
+            try {
+                    // Expected  
+        assertTrue(deleter.recordBufferedDeletes("doc1"));
+    }
+        int numWriters = 2;  
+            executor.submit(() -> {
                 barrier.await();
+                            }  
+    }
                 for (int i = 0; i < 50; i++) {
                     try {  
-                        deleter.recordBufferedDeletes("second" + i);
-                    } catch (IllegalStateException e) {
-                        // Expected when deleter becomes inactive  
-                        break;
-                    }
-                    Thread.yield();  
-                }
-            } catch (Exception e) {
-                exception.set(e);  
-            }
-        });
-
-        // Deactivate thread
-        Future<?> deactivateFuture = executor.submit(() -> {
             try {  
-                barrier.await();
-                Thread.sleep(50); // Let other threads run first
-                deleter.deactivate();  
-                deactivateCompleted.set(true);
-            } catch (Exception e) {
-                exception.set(e);  
-            }
-        });
-
-        firstFuture.get(10, TimeUnit.SECONDS);
-        secondFuture.get(10, TimeUnit.SECONDS);
-        deactivateFuture.get(10, TimeUnit.SECONDS);  
-
-        assertTrue(deactivateCompleted.get());
-        assertFalse(deleter.isActive());  
-        assertNull(exception.get());
-
-        executor.shutdown();  
-    }
-
-    public void testConcurrentMultipleDeactivations() throws Exception {  
-        // Add some buffered deletes first
-        deleter.recordBufferedDeletes("doc1");
-        deleter.recordBufferedDeletes("doc2");  
-        deleter.recordBufferedDeletes("doc3");
-
-        int numThreads = 5;  
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch completeLatch = new CountDownLatch(numThreads);  
-        List<Queue<String>> results = Collections.synchronizedList(new ArrayList<>());
-
-        for (int i = 0; i < numThreads; i++) {  
-            executor.submit(() -> {
-                try {
-                    startLatch.await();  
-                    Queue<String> result = deleter.deactivate();
-                    results.add(result);
-                } catch (Exception e) {  
-                    // Unexpected
-                } finally {
-                    completeLatch.countDown();  
-                }
-            });
-        }  
-
-        startLatch.countDown();
-        assertTrue(completeLatch.await(10, TimeUnit.SECONDS));  
-
-        // Only one thread should get the buffered deletes, others should get empty queues
-        int nonEmptyResults = 0;  
-        int totalDeletes = 0;
-        for (Queue<String> result : results) {
-            if (!result.isEmpty()) {  
-                nonEmptyResults++;
-                totalDeletes += result.size();
-            }  
-        }
-
-        assertEquals(1, nonEmptyResults);  
-        assertEquals(3, totalDeletes);
-        assertFalse(deleter.isActive());
-
-        executor.shutdown();
-    }
-
-    public void testConcurrentReadWriteLockContention() throws Exception {
-        int numReaders = 10;
-        int numWriters = 2;  
-        ExecutorService executor = Executors.newFixedThreadPool(numReaders + numWriters);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch completeLatch = new CountDownLatch(numReaders + numWriters);  
-        AtomicInteger readerSuccessCount = new AtomicInteger(0);
-        AtomicInteger writerSuccessCount = new AtomicInteger(0);
-
-        // Reader threads (recordBufferedDeletes holds the read lock)
-        for (int i = 0; i < numReaders; i++) {
-            final int threadId = i;  
-            executor.submit(() -> {
-                try {
-                    startLatch.await();  
-                    for (int j = 0; j < 10; j++) {
-                        try {
-                            boolean success = deleter.recordBufferedDeletes("buffered" + threadId + "_" + j);  
-                            if (success) {
-                                readerSuccessCount.incrementAndGet();
-                            }  
-                        } catch (IllegalStateException e) {
-                            // Expected when deleter becomes inactive
-                        }  
-                        Thread.yield();
-                    }
-                } catch (Exception e) {  
-                    // Some failures expected
-                } finally {
-                    completeLatch.countDown();  
-                }
-            });
-        }  
-
-        // Writer threads (deactivate)
-        for (int i = 0; i < numWriters; i++) {  
-            executor.submit(() -> {
-                try {
-                    startLatch.await();  
-                    Thread.sleep(100); // Let readers run first
-                    deleter.deactivate();
-                    writerSuccessCount.incrementAndGet();  
-                } catch (Exception e) {
-                    // Unexpected
-                } finally {  
-                    completeLatch.countDown();
-                }
-            });  
-        }
-
-        startLatch.countDown();  
-        assertTrue(completeLatch.await(15, TimeUnit.SECONDS));
-
-        // At least one writer should succeed  
-        assertTrue(writerSuccessCount.get() >= 1);
-        assertFalse(deleter.isActive());
-
-        executor.shutdown();
-    }
-
-    public void testStateConsistencyAfterConcurrentOperations() throws Exception {
-        int numOperations = 1000;
-        ExecutorService executor = Executors.newFixedThreadPool(4);  
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch completeLatch = new CountDownLatch(4);
-
-        // Mixed operations thread: guarded recording
-        executor.submit(() -> {
-            try {  
-                startLatch.await();
-                for (int i = 0; i < numOperations / 4; i++) {
-                    if (deleter.isActive()) {  
-                        try {
-                            deleter.recordBufferedDeletes("mixed" + i);
-                        } catch (IllegalStateException e) {  
-                            break;
-                        }
-                    }  
-                    if (i % 100 == 0) Thread.yield();
-                }
-            } catch (Exception e) {  
-                // Expected when deleter becomes inactive
-            } finally {
-                completeLatch.countDown();  
-            }
-        });
-
-        // Buffer-only thread
-        executor.submit(() -> {
-            try {  
-                startLatch.await();
-                for (int i = 0; i < numOperations / 4; i++) {
-                    try {  
-                        deleter.recordBufferedDeletes("buffer" + i);
-                    } catch (IllegalStateException e) {
-                        break; // Deleter became inactive  
-                    }
-                    if (i % 100 == 0) Thread.yield();
-                }  
-            } catch (Exception e) {
-                // Unexpected
-            } finally {  
-                completeLatch.countDown();
-            }
-        });  
-
-        // Unguarded recording thread — must either succeed or throw IllegalStateException, never corrupt
-        executor.submit(() -> {  
-            try {
-                startLatch.await();
-                for (int i = 0; i < numOperations / 4; i++) {  
-                    try {
-                        deleter.recordBufferedDeletes("unguarded" + i);
-                    } catch (IllegalStateException e) {  
-                        break;
-                    }
-                    if (i % 100 == 0) Thread.yield();  
-                }
-            } catch (Exception e) {
-                // Expected when deleter becomes inactive  
-            } finally {
-                completeLatch.countDown();
-            }  
-        });
-
-        // Deactivation thread  
-        executor.submit(() -> {
-            try {
-                startLatch.await();  
-                Thread.sleep(200); // Let other threads run
-                Queue<String> bufferedDeletes = deleter.deactivate();
-                assertNotNull(bufferedDeletes);  
-            } catch (Exception e) {
-                // Unexpected
-            } finally {  
-                completeLatch.countDown();
-            }
-        });  
-
-        startLatch.countDown();
-        assertTrue(completeLatch.await(30, TimeUnit.SECONDS));  
-
-        // Final state should be inactive
-        assertFalse(deleter.isActive());  
-
-        // Any subsequent operations should fail appropriately
-        expectThrows(IllegalStateException.class, () -> deleter.recordBufferedDeletes("final"));  
-
-        executor.shutdown();
-    }  
-
-    // ===== Race condition: exactly-once draining guarantee =====
-
-    public void testBufferedDeletesNotLostDuringConcurrentDeactivation() throws Exception {
-        int numThreads = 8;
-        int deletesPerThread = 50;  
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads + 1);
-        CyclicBarrier barrier = new CyclicBarrier(numThreads + 1);
-        Set<String> successfullyRecorded = ConcurrentHashMap.newKeySet();  
-        AtomicReference<Queue<String>> drainedRef = new AtomicReference<>();
-
-        for (int t = 0; t < numThreads; t++) {  
-            final int threadId = t;
-            executor.submit(() -> {
-                try {  
-                    barrier.await();
-                    for (int i = 0; i < deletesPerThread; i++) {
-                        String id = "t" + threadId + "_d" + i;  
-                        try {
-                            deleter.recordBufferedDeletes(id);
-                            successfullyRecorded.add(id);  
-                        } catch (IllegalStateException e) {
-                            break;
-                        }  
-                    }
-                } catch (Exception e) {
-                    // Expected  
-                }
-            });
-        }  
-
-        executor.submit(() -> {
-            try {  
-                barrier.await();
-                Thread.sleep(30);
-                drainedRef.set(deleter.deactivate());  
-            } catch (Exception e) {
-                // Expected
-            }  
-        });
-
-        executor.shutdown();  
-        assertTrue(executor.awaitTermination(15, TimeUnit.SECONDS));
-
-        Queue<String> drained = drainedRef.get();  
-        assertNotNull(drained);
-
-        Set<String> drainedSet = new HashSet<>(drained);  
-        for (String id : drainedSet) {
-            assertTrue("Drained id '" + id + "' was not successfully recorded", successfullyRecorded.contains(id));
-        }  
-
-        for (String id : successfullyRecorded) {
-            assertTrue("Successfully recorded id '" + id + "' was lost during deactivation", drainedSet.contains(id));  
-        }
-    }
-
-    public void testDeactivateUnderHighWriteContention() throws Exception {
-        int numWriters = 16;
-        int writesPerWriter = 100;  
-        ExecutorService executor = Executors.newFixedThreadPool(numWriters + 1);
-        CyclicBarrier barrier = new CyclicBarrier(numWriters + 1);
-        AtomicInteger totalRecorded = new AtomicInteger(0);  
-        AtomicReference<Queue<String>> drainedRef = new AtomicReference<>();
-
-        for (int t = 0; t < numWriters; t++) {  
-            final int threadId = t;
-            executor.submit(() -> {
-                try {  
-                    barrier.await();
-                    for (int i = 0; i < writesPerWriter; i++) {
-                        try {  
-                            deleter.recordBufferedDeletes("w" + threadId + "_" + i);
-                            totalRecorded.incrementAndGet();
-                        } catch (IllegalStateException e) {  
-                            break;
-                        }
-                    }  
-                } catch (Exception e) {
-                    // Expected
-                }  
-            });
-        }
-
-        executor.submit(() -> {
-            try {
-                barrier.await();  
-                Thread.sleep(50);
-                drainedRef.set(deleter.deactivate());
-            } catch (Exception e) {  
-                // Expected
-            }
-        });  
-
-        executor.shutdown();
-        assertTrue(executor.awaitTermination(15, TimeUnit.SECONDS));  
-
-        Queue<String> drained = drainedRef.get();
-        assertNotNull(drained);  
-        assertEquals(totalRecorded.get(), drained.size());
-    }
-
-    // ===== High-volume stress test =====
-
-    public void testHighVolumeBufferedDeletesThenDrain() {  
-        int numDeletes = 10_000;
-        for (int i = 0; i < numDeletes; i++) {
-            assertTrue(deleter.recordBufferedDeletes("doc" + i));  
-        }
-
-        Queue<String> drained = deleter.deactivate();  
-        assertEquals(numDeletes, drained.size());
-
-        Set<String> seen = new HashSet<>();  
-        for (String id : drained) {
-            assertTrue("Duplicate id found: " + id, seen.add(id));
-        }  
-    }
-
-    public void testRepeatedCloseDeactivateCycles() throws IOException {  
-        for (int cycle = 0; cycle < 5; cycle++) {
-            Writer<?> w = mock(Writer.class);
-            when(w.generation()).thenReturn((long) cycle);  
-            DeleterImpl<Writer<?>> d = new DeleterImpl<>(w);
-
-            d.recordBufferedDeletes("doc" + cycle);  
             assertTrue(d.isActive());
-
-            d.close();  
-            assertFalse(d.isActive());
-
+        for (int i = 0; i < numThreads; i++) {  
+import java.util.concurrent.CyclicBarrier;  
+import static org.mockito.Mockito.mock;  
+            executor.submit(() -> {
+        assertEquals(numThreads, bufferedDeletes.size());
+        assertTrue(bufferedDeletes.isEmpty());
+}
+        assertTrue(deleter.isActive());  
+    public void testRecordBufferedDeletesWhenInactive() {
+                barrier.await();
             Queue<String> drained = d.deactivate();  
-            assertTrue(drained.isEmpty());
+        int nonEmptyResults = 0;  
+            } catch (Exception e) {  
+                } catch (Exception e) {
+        executor.shutdown();
+        assertEquals(2, bufferedDeletes.size());
+                        try {  
+        assertTrue(executor.awaitTermination(15, TimeUnit.SECONDS));
+    public void testDeactivateWhenAlreadyInactive() {
+package org.opensearch.index.engine.dataformat;
+        deleter.recordBufferedDeletes("doc1");  
+        assertTrue(bufferedDeletes.isEmpty());
+        AtomicInteger successCount = new AtomicInteger(0);  
+        deleter.recordBufferedDeletes("doc2");  
+    }
+                        } catch (IllegalStateException e) {  
+    }
+                    // Unexpected
+        Queue<String> drained = drainedRef.get();
+            });  
+                }  
+        });  
+    // ===== Basic functionality tests =====
+        firstFuture.get(10, TimeUnit.SECONDS);
+            d.recordBufferedDeletes("doc" + cycle);  
+        assertTrue(writerSuccessCount.get() >= 1);
+        AtomicInteger readerSuccessCount = new AtomicInteger(0);
+        for (int i = 0; i < numDeletes; i++) {
+        int numThreads = 8;
         }
     }  
-}
+                try {  
+            try {  
+        startLatch.countDown();
+        });
+    @Override
+                } finally {
+                } catch (Exception e) {
+        CyclicBarrier barrier = new CyclicBarrier(numThreads + 1);
+                    barrier.await();
+                    Queue<String> result = deleter.deactivate();
+        AtomicInteger totalRecorded = new AtomicInteger(0);  
+                    for (int i = 0; i < writesPerWriter; i++) {
+        assertFalse(deleter.isActive());  
+        assertEquals(1L, deleter.generation());
+            executor.submit(() -> {
+            assertTrue(drained.isEmpty());
+        startLatch.countDown();  
+        // First recording thread
+            });
+                        } catch (IllegalStateException e) {  
+        // Only one thread should get the buffered deletes, others should get empty queues
+                try {
+        assertTrue(executor.awaitTermination(15, TimeUnit.SECONDS));  
+        assertFalse(deleter.isActive());
+                nonEmptyResults++;
+        int deletesPerThread = 50;  
+    }  
+ */  
+        }  
+                }
+                // Expected
+                    completeLatch.countDown();  
+                }  
+        AtomicBoolean deactivateCompleted = new AtomicBoolean(false);
+        assertEquals(totalRecorded.get(), drained.size());
+        executor.shutdown();
+    public void testConcurrentReadWriteLockContention() throws Exception {
+        Future<?> deactivateFuture = executor.submit(() -> {
+                Thread.sleep(50); // Let other threads run first
+        assertFalse(deleter.isActive());
+        deactivateFuture.get(10, TimeUnit.SECONDS);  
+        assertTrue(completeLatch.await(10, TimeUnit.SECONDS));
+        });
+                } catch (Exception e) {
+                Thread.sleep(50);
+                            deleter.recordBufferedDeletes("w" + threadId + "_" + i);
+            d.close();  
+        Queue<String> drained = drainedRef.get();  
+                exception.set(e);  
+                    }
+                try {
+        }
+                } catch (Exception e) {  
+                }
+                            deleter.recordBufferedDeletes("mixed" + i);
+    public void testDeactivateUnderHighWriteContention() throws Exception {
+        assertEquals(1, nonEmptyResults);  
+        AtomicInteger writerSuccessCount = new AtomicInteger(0);
+                    if (i % 100 == 0) Thread.yield();  
+    public void testConcurrentMultipleDeactivations() throws Exception {  
+        CyclicBarrier barrier = new CyclicBarrier(3);  
+import java.util.concurrent.Future;  
+        for (int i = 0; i < numThreads; i++) {
+            }  
+                    try {
+            try {  
+        CountDownLatch completeLatch = new CountDownLatch(numReaders + numWriters);  
+        }  
+        assertFalse(deleter.isActive());
+            } finally {
+                    }  
+        CountDownLatch startLatch = new CountDownLatch(1);
+                    startLatch.await();  
+                }
+import java.util.concurrent.atomic.AtomicReference;
+                drainedRef.set(deleter.deactivate());
+            try {  
+            executor.submit(() -> {
+    // ===== Race condition: exactly-once draining guarantee =====
+        // Second recording thread
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> deleter.recordBufferedDeletes("doc1"));
+                // Unexpected
+        secondFuture.get(10, TimeUnit.SECONDS);
+        assertNull(exception.get());
+                    Thread.sleep(100); // Let readers run first
+ * The OpenSearch Contributors require contributions made to  
+        CountDownLatch startLatch = new CountDownLatch(1);
+    }
+    // ===== Multi-threading tests =====
+        // Add some buffered deletes first
+                // Expected
+                        try {
+        }
+        for (int i = 0; i < numReaders; i++) {
+        Future<?> secondFuture = executor.submit(() -> {
+ * this file be licensed under the Apache-2.0 license or a
+        mockWriter = mock(Writer.class);
+        assertEquals(numThreads, successCount.get());
+                        }  
+        deleter.recordBufferedDeletes("doc1");
+    }  
+        startLatch.countDown();
+            if (!result.isEmpty()) {  
+        assertEquals(numDeletes, drained.size());
+    public void setUp() throws Exception {  
+        expectThrows(IllegalStateException.class, () -> deleter.recordBufferedDeletes("final"));  
+        // Writer threads (deactivate)
+import java.util.HashSet;  
+            } finally {
+        deleter.recordBufferedDeletes("third");
+    }  
+                        }
+ *
+                for (int i = 0; i < numOperations / 4; i++) {  
+            } catch (Exception e) {
+        }
+import java.util.concurrent.atomic.AtomicInteger;  
+        Set<String> successfullyRecorded = ConcurrentHashMap.newKeySet();  
+                    try {  
+                }
+                    }
+            }
+            try {  
+                            deleter.recordBufferedDeletes(id);
+        for (String id : drained) {
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);  
+            });
+                try {
+import java.util.List;
+                    }  
+        assertEquals("first", bufferedDeletes.poll());
+        for (Queue<String> result : results) {
+                        } catch (IllegalStateException e) {
+        CyclicBarrier barrier = new CyclicBarrier(numWriters + 1);
+                    if (i % 100 == 0) Thread.yield();
+                    if (success) {
+import java.util.concurrent.ExecutorService;
+            }
+    }
+                        deleter.recordBufferedDeletes("second" + i);
+                        try {
+                                readerSuccessCount.incrementAndGet();
+            } catch (Exception e) {
+                    results.add(result);
+                    try {  
+        when(writer.generation()).thenReturn(42L);
+    // ===== High-volume stress test =====
+    public void testConcurrentRecordAndDeactivate() throws Exception {
+        // Mixed operations thread: guarded recording
+        CountDownLatch startLatch = new CountDownLatch(1);
+        });
+        }  
+        assertFalse(deleter.isActive());
+            Writer<?> w = mock(Writer.class);
+        int numThreads = 20;
+        List<Queue<String>> results = Collections.synchronizedList(new ArrayList<>());
+                } catch (Exception e) {
+/*  
+            }
+                    } catch (IllegalStateException e) {
+    }
+                    if (i % 100 == 0) Thread.yield();
+                drainedRef.set(deleter.deactivate());  
+                            // Expected when deleter becomes inactive
+        ExecutorService executor = Executors.newFixedThreadPool(4);  
+        startLatch.countDown();
+    }
+        Queue<String> bufferedDeletes = deleter.deactivate();
+            assertFalse(d.isActive());
+import java.util.Set;  
+        ExecutorService executor = Executors.newFixedThreadPool(numWriters + 1);
+                        deleter.recordBufferedDeletes("first" + i);
+                    barrier.await();
+        int numReaders = 10;
+        }  
+    public void testGenerationMatchesWriter() {
+import java.util.concurrent.Executors;
+        for (String id : drainedSet) {
+                    startLatch.await();  
+        Queue<String> bufferedDeletes = deleter.deactivate();
+                    } catch (IllegalStateException e) {  
+                startLatch.await();
+                try {  
+    public void testRecordBufferedDeletesDuplicateIds() {  
+        }
+        Future<?> firstFuture = executor.submit(() -> {
+        CountDownLatch completeLatch = new CountDownLatch(4);
+                startLatch.await();
+                    for (int i = 0; i < deletesPerThread; i++) {
+        assertNotNull(drained);  
+                    }
+                        Thread.yield();
+            });
+        // Final state should be inactive
+                // Expected when deleter becomes inactive  
+        int numThreads = 5;  
+                    }
+    public void testStateConsistencyAfterConcurrentOperations() throws Exception {
+        assertTrue(bufferedDeletes.contains("doc1"));  
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+            }  
+            }  
+        deleter.close();  
+            try {  
+                completeLatch.countDown();
+                        }  
+                completeLatch.countDown();
+        // Deactivation thread  
+import java.util.ArrayList;
+        deleter.close();  
+            assertTrue(deleter.recordBufferedDeletes("doc" + i));  
+            DeleterImpl<Writer<?>> d = new DeleterImpl<>(w);
+        }
+        executor.submit(() -> {
+        deleter = new DeleterImpl<>(mockWriter);
+        assertTrue(deactivateCompleted.get());
+                    Thread.yield();  
+    public void testDeactivate() {
+                        break;
+        assertTrue(exception.getMessage().contains("Cannot record a delete on a closed deleter"));
+                            totalRecorded.incrementAndGet();
+                    }
+                            boolean success = deleter.recordBufferedDeletes("buffered" + threadId + "_" + j);  
+    private Writer<?> mockWriter;
+        Queue<String> bufferedDeletes = deleter.deactivate();  
+import java.util.concurrent.ConcurrentHashMap;
+                    completeLatch.countDown();  
+                Queue<String> bufferedDeletes = deleter.deactivate();
+        executor.submit(() -> {
+                        break;
+import java.util.Collections;
+                }
+            } catch (Exception e) {
+        // Buffer-only thread
+        CountDownLatch completeLatch = new CountDownLatch(numThreads);  
+                deactivateCompleted.set(true);
+        executor.shutdown();
+                    boolean success = deleter.recordBufferedDeletes("doc" + threadId);
+        assertEquals(2, bufferedDeletes.size());
+    }  
+                }
+                    completeLatch.countDown();
+        executor.shutdown();  
+    }
+                        // Expected when deleter becomes inactive  
+        int numDeletes = 10_000;
+    public void testBasicFunctionality() {  
+import java.util.Queue;
+        Queue<String> bufferedDeletes = deleter.deactivate();
+        assertTrue(completeLatch.await(30, TimeUnit.SECONDS));  
+        deleter.recordBufferedDeletes("doc3");
+        Set<String> drainedSet = new HashSet<>(drained);  
+                        break; // Deleter became inactive  
+        executor.shutdown();
+        AtomicReference<Exception> exception = new AtomicReference<>();
+        assertTrue(deleter.recordBufferedDeletes("doc1"));
+        assertFalse(deleter.isActive());
+                    // Expected
+        Queue<String> drained = deleter.deactivate();  
+        CountDownLatch completeLatch = new CountDownLatch(numThreads);
+        // Any subsequent operations should fail appropriately
+        int numWriters = 16;
+                barrier.await();
+        assertFalse(deleter.isActive());  
+            assertTrue("Duplicate id found: " + id, seen.add(id));
+        // Reader threads (recordBufferedDeletes holds the read lock)
+        super.setUp();
+        for (int i = 0; i < numWriters; i++) {  
+                    writerSuccessCount.incrementAndGet();  
+        deleter.deactivate();  
+        assertTrue(completeLatch.await(15, TimeUnit.SECONDS));
+                barrier.await();
+import java.util.concurrent.atomic.AtomicBoolean;
+            } catch (Exception e) {
+        AtomicReference<Queue<String>> drainedRef = new AtomicReference<>();
+                } finally {
+    private DeleterImpl<Writer<?>> deleter;  
+    public void testConcurrentBufferedDeleteRecording() throws Exception {
+        deleter.recordBufferedDeletes("second");  
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads + 1);
+        int writesPerWriter = 100;  
+    public void testHighVolumeBufferedDeletesThenDrain() {  
+        Queue<String> bufferedDeletes = deleter.deactivate();
+        AtomicReference<Queue<String>> drainedRef = new AtomicReference<>();
+    }  
+                    } catch (IllegalStateException e) {
+                } catch (Exception e) {  
+                        } catch (IllegalStateException e) {
+        for (String id : successfullyRecorded) {
+        executor.submit(() -> {
+                    } catch (IllegalStateException e) {
+        });
+                    deleter.deactivate();
+    public void testDeactivatePreservesOrder() {
+                    startLatch.await();  
+import static org.mockito.Mockito.when;
+                exception.set(e);  
+    public void testBufferedDeletesNotLostDuringConcurrentDeactivation() throws Exception {
+                        // Expected when deleter becomes inactive  
+ * compatible open source license.
+        assertFalse(deleter.isActive());
+        when(mockWriter.generation()).thenReturn(1L);  
+        executor.submit(() -> {  
+                Thread.sleep(200); // Let other threads run
+            try {
+                    // Unexpected
+        assertTrue(deleter.isActive());
+        }  
+        DeleterImpl<Writer<?>> d = new DeleterImpl<>(writer);
+                    // Some failures expected
+            final int threadId = i;  
+            } catch (Exception e) {
+    }
+        // Deactivate thread
+        deleter.close();
+                // Unexpected
+import java.io.IOException;  
+    public void testDeactivateWithNoBufferedDeletes() {
+        });
+                        deleter.recordBufferedDeletes("buffer" + i);
+        ExecutorService executor = Executors.newFixedThreadPool(numReaders + numWriters);
+        assertEquals("second", bufferedDeletes.poll());  
+        assertTrue(deleter.recordBufferedDeletes("doc2"));

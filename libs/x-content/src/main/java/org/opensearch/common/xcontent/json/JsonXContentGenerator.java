@@ -1,640 +1,572 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.xcontent.json;
-
-import org.opensearch.common.util.io.Streams;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.xcontent.DeprecationHandler;  
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.core.xcontent.XContent;
-import org.opensearch.core.xcontent.XContentGenerator;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.core.xcontent.filtering.FilterPathBasedFilter;
-import org.opensearch.tools.jackson.core.JacksonExceptionTranslator;
-
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;  
-import java.io.OutputStream;
-import java.math.BigDecimal;
-import java.math.BigInteger;  
-import java.util.Objects;
-import java.util.Set;
-
-import tools.jackson.core.JacksonException;
-import tools.jackson.core.JsonGenerator;
-import tools.jackson.core.TokenStreamContext;  
-import tools.jackson.core.base.GeneratorBase;
-import tools.jackson.core.filter.FilteringGeneratorDelegate;
-import tools.jackson.core.filter.TokenFilter.Inclusion;  
-import tools.jackson.core.io.SerializedString;
-import tools.jackson.core.json.JsonWriteContext;
-import tools.jackson.core.util.JsonGeneratorDelegate;  
-
-public class JsonXContentGenerator implements XContentGenerator {
-
-    /** Generator used to write content **/
-    protected final JsonGenerator generator;
-
-    /**
-     * Reference to base generator because
-     * writing raw values needs a specific method call.  
-     */
-    private final GeneratorBase base;
-
-    /**
-     * Reference to filtering generator because
-     * writing an empty object '{}' when everything is filtered  
-     * out needs a specific treatment
-     */
-    private final FilteringGeneratorDelegate filter;  
-
-    private final OutputStream os;
-
-    private boolean writeLineFeedAtEnd;
-    private static final SerializedString LF = new SerializedString("\n");
-    private boolean prettyPrint = false;  
-
-    public JsonXContentGenerator(JsonGenerator jsonGenerator, OutputStream os, Set<String> includes, Set<String> excludes) {
-        Objects.requireNonNull(includes, "Including filters must not be null");  
-        Objects.requireNonNull(excludes, "Excluding filters must not be null");
-        this.os = os;
-        if (jsonGenerator instanceof GeneratorBase generatorBase) {  
-            this.base = generatorBase;
-        } else {
-            this.base = null;  
+    @Override
+            getLowLevelGenerator().writeRaw(LF);  
+    private static void copyCurrentStructure(XContentGenerator destination, XContentParser parser) throws IOException {  
+                case START_OBJECT:
         }
-
-        JsonGenerator generator = jsonGenerator;  
-
-        boolean hasExcludes = excludes.isEmpty() == false;
-        if (hasExcludes) {  
-            generator = new FilteringGeneratorDelegate(
-                generator,
+                return;
                 new FilterPathBasedFilter(excludes, false),  
-                Inclusion.INCLUDE_ALL_AND_PATH,
-                true
-            );  
-        }
-
-        boolean hasIncludes = includes.isEmpty() == false;  
-        if (hasIncludes) {
-            generator = new FilteringGeneratorDelegate(
-                generator,  
-                new FilterPathBasedFilter(includes, true),
-                Inclusion.INCLUDE_ALL_AND_PATH,
-                true  
-            );
-        }
-
-        if (hasExcludes || hasIncludes) {
-            this.filter = (FilteringGeneratorDelegate) generator;
-        } else {  
-            this.filter = null;
-        }
-        this.generator = generator;  
-    }
-
-    @Override  
-    public XContentType contentType() {
-        return XContentType.JSON;
-    }  
-
-    @Override
-    public boolean isPrettyPrint() {  
-        return this.prettyPrint;
-    }
-
-    @Override
-    public void usePrintLineFeedAtEnd() {
-        writeLineFeedAtEnd = true;  
-    }
-
-    private boolean isFiltered() {  
-        return filter != null;
-    }
-
-    private JsonGenerator getLowLevelGenerator() {
-        if (isFiltered()) {
-            JsonGenerator delegate = filter.delegate();  
-            if (delegate instanceof JsonGeneratorDelegate jsonGeneratorDelegate) {
-                // In case of combined inclusion and exclusion filters, we have one and only one another delegating level
-                delegate = jsonGeneratorDelegate.delegate();  
-                assert delegate instanceof JsonGeneratorDelegate == false;
-            }
-            return delegate;  
-        }
-        return generator;
-    }  
-
-    private boolean inRoot() {
-        TokenStreamContext context = generator.streamWriteContext();  
-        return ((context != null) && (context.inRoot() && context.currentName() == null));
-    }
-
-    @Override
-    public void writeStartObject() throws IOException {
         try {  
-            if (inRoot()) {
-                // Use the low level generator to write the startObject so that the root
-                // start object is always written even if a filtered generator is used  
-                getLowLevelGenerator().writeStartObject();
-                return;
-            }  
-            generator.writeStartObject();
-        } catch (final JacksonException ex) {
             JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
     @Override
-    public void writeEndObject() throws IOException {
-        try {  
-            if (inRoot()) {
-                // Use the low level generator to write the startObject so that the root
-                // start object is always written even if a filtered generator is used  
-                getLowLevelGenerator().writeEndObject();
-                return;
-            }  
-            generator.writeEndObject();
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeStartArray() throws IOException {
-        try {  
             generator.writeStartArray();
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeEndArray() throws IOException {
+        ) {
+                // start object is always written even if a filtered generator is used  
+        return true;
         try {  
+        if (hasExcludes) {  
+ */  
+            copyCurrentStructure(parser);  
+ * Unless required by applicable law or agreed to in writing,
+        try {
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+        // filtered or converted
+        try {  
+        }
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
             generator.writeEndArray();
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeFieldName(String name) throws IOException {
+                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, stream)
         try {  
-            generator.writeName(name);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
     }
-
-    @Override
-    public void writeNull() throws IOException {
-        try {  
+    }
+ * not use this file except in compliance with the License.
+    }
+                    while (parser.nextToken() != XContentParser.Token.END_OBJECT) {  
             generator.writeNull();
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
     @Override
-    public void writeNullField(String name) throws IOException {
-        try {  
-            generator.writeNullProperty(name);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
+        this.os = os;
+            assert (context instanceof JsonWriteContext) : "Expected an instance of JsonWriteContext but was: " + context.getClass();
+import org.opensearch.tools.jackson.core.JacksonExceptionTranslator;
     }
-
-    @Override
-    public void writeBooleanField(String name, boolean value) throws IOException {
-        try {  
-            generator.writeBooleanProperty(name, value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
     }
-
-    @Override
-    public void writeBoolean(boolean value) throws IOException {
-        try {  
-            generator.writeBoolean(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumberField(String name, double value) throws IOException {
-        try {  
-            generator.writeNumberProperty(name, value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumber(double value) throws IOException {
-        try {  
-            generator.writeNumber(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumberField(String name, float value) throws IOException {
-        try {  
-            generator.writeNumberProperty(name, value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumber(float value) throws IOException {
-        try {  
-            generator.writeNumber(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumberField(String name, int value) throws IOException {
-        try {  
-            generator.writeNumberProperty(name, value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumberField(String name, BigInteger value) throws IOException {
-        try {  
-            // as jackson's JsonGenerator doesn't have this method for BigInteger
-            // we have to implement it ourselves
-            generator.writeName(name);  
-            generator.writeNumber(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumberField(String name, BigDecimal value) throws IOException {
-        try {  
-            generator.writeNumberProperty(name, value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
+                true
+    /**  
+                    destination.writeStartArray();
     public void writeNumber(int value) throws IOException {
         try {  
-            generator.writeNumber(value);
-        } catch (final JacksonException ex) {
+     */
+            // EMPTY is safe here because we never call namedObject when writing raw data
+    private boolean inRoot() {
+            );  
+            this.base = null;  
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    @Override
+import tools.jackson.core.filter.TokenFilter.Inclusion;  
+        try {  
+        Objects.requireNonNull(includes, "Including filters must not be null");  
+    public void writeNumberField(String name, int value) throws IOException {
+ * compatible open source license.
+                new FilterPathBasedFilter(includes, true),
+    /**
+        writeRawField(name, content, contentType);
+    public void writeBooleanField(String name, boolean value) throws IOException {
+        }
+    @Override
+        // or the content is in a different format than the current generator,
+    /**
+    @Override
+    protected final JsonGenerator generator;
+    }
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+     */
+            }  
+    /**
+import tools.jackson.core.json.JsonWriteContext;
+        try {  
+        if (hasExcludes || hasIncludes) {
+    }
+            generator.writeNumberProperty(name, value);
+        try {  
+package org.opensearch.common.xcontent.json;
+    @Override
+import org.opensearch.core.xcontent.DeprecationHandler;  
+     * @deprecated use {@link #mayWriteRawData(MediaType)} instead
+        }
+    public void writeFieldName(String name) throws IOException {
             JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
         }
-    }
-
+     *  
+                assert delegate instanceof JsonGeneratorDelegate == false;
+import tools.jackson.core.util.JsonGeneratorDelegate;  
+     * possibly copy the whole structure to correctly filter
+        }
     @Override
-    public void writeNumberField(String name, long value) throws IOException {
+        return supportsRawWrites() && isFiltered() == false && contentType == contentType() && prettyPrint == false;
+    /**  
+    public void flush() throws IOException {
+    }
+ * this file be licensed under the Apache-2.0 license or a
+            flush();
+            generator.writeBinary(value, offset, len);
+ *  
+    public void writeStringField(String name, String value) throws IOException {
+    @Override
+ *
+    @Override
+        TokenStreamContext context = generator.streamWriteContext();
+    }  
+        } else {
+        }
+    public void writeNumber(float value) throws IOException {
+        // filtered or converted
+import tools.jackson.core.io.SerializedString;
+                    destination.writeEndArray();
+        if ((context != null) && (context.inRoot() == false)) {  
+        }
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    }
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
         try {  
             generator.writeNumberProperty(name, value);
         } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
+    }  
+        if (generator.isClosed()) {
     }
-
-    @Override
-    public void writeNumber(long value) throws IOException {
+    public JsonXContentGenerator(JsonGenerator jsonGenerator, OutputStream os, Set<String> includes, Set<String> excludes) {
+        } catch (final JacksonException ex) {
+    protected boolean supportsRawWrites() {  
+    }
         try {  
+        }
+                return;
+                generator.copyCurrentStructure(jsonXContentParser.parser);  
+        try {  
+    }
+    }  
             generator.writeNumber(value);
-        } catch (final JacksonException ex) {
+        } else {
             JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
         }
-    }
-
     @Override
-    public void writeNumber(short value) throws IOException {
-        try {  
+                parser.nextToken();
+                    }
+                getLowLevelGenerator().writeEndObject();
+import tools.jackson.core.base.GeneratorBase;
+    public boolean isPrettyPrint() {  
+    }
+                    // because we should not be writing raw fields when  
+        } catch (final JacksonException ex) {
+                // If we've just started a field we'll need to add the separator
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+        TokenStreamContext context = generator.streamWriteContext();  
+    }
+        } catch (final JacksonException ex) {
+                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+            // Let's handle field-name separately first
+        if (base != null) {  
+     */
+    }
+        } catch (final JacksonException ex) {
+        } catch (final JacksonException ex) {
+            flush();
+    public void writeNull() throws IOException {
+    private JsonGenerator getLowLevelGenerator() {
+    @Override
             generator.writeNumber(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeNumber(BigInteger value) throws IOException {
+    public void writeEndArray() throws IOException {
+import org.opensearch.common.util.io.Streams;
+            }  
+    public void writeNullField(String name) throws IOException {
         try {  
-            generator.writeNumber(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+     * Reference to base generator because
+            writeFieldName(name);  
         }
     }
-
-    @Override
-    public void writeNumber(BigDecimal value) throws IOException {
+ * license agreements. See the NOTICE file distributed with
         try {  
-            generator.writeNumber(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
+        if (jsonGenerator instanceof GeneratorBase generatorBase) {  
+ * You may obtain a copy of the License at  
+            // needed for the XContentFactory.xContentType call
     }
-
-    @Override
-    public void writeStringField(String name, String value) throws IOException {
-        try {  
-            generator.writeStringProperty(name, value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+import java.util.Set;
         }
-    }
-
-    @Override
-    public void writeString(String value) throws IOException {
-        try {  
-            generator.writeString(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeString(char[] value, int offset, int len) throws IOException {
-        try {  
-            generator.writeString(value, offset, len);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
     @Override
     public void writeUTF8String(byte[] value, int offset, int length) throws IOException {
-        try {  
-            generator.writeUTF8String(value, offset, length);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeBinaryField(String name, byte[] value) throws IOException {
-        try {  
-            generator.writeBinaryProperty(name, value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeBinary(byte[] value) throws IOException {
-        try {  
-            generator.writeBinary(value);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    @Override
-    public void writeBinary(byte[] value, int offset, int len) throws IOException {
-        try {  
-            generator.writeBinary(value, offset, len);
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    private void writeStartRaw(String name) throws IOException {
-        try {
-            writeFieldName(name);  
-            generator.writeRaw(':');
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
-        }
-    }
-
-    public void writeEndRaw() {
-        assert base != null : "JsonGenerator should be of instance GeneratorBase but was: " + generator.getClass();
-        if (base != null) {  
-            TokenStreamContext context = base.streamWriteContext();
-            assert (context instanceof JsonWriteContext) : "Expected an instance of JsonWriteContext but was: " + context.getClass();
-            ((JsonWriteContext) context).writeValue();  
-        }
-    }
-
-    @Override
-    public void writeRawField(String name, InputStream content) throws IOException {
-        if (content.markSupported() == false) {  
-            // needed for the XContentFactory.xContentType call
-            content = new BufferedInputStream(content);
-        }  
-        MediaType contentType = MediaTypeRegistry.xContentType(content);
-        if (contentType == null) {
-            throw new IllegalArgumentException("Can't write raw bytes whose xcontent-type can't be guessed");  
-        }
-        writeRawField(name, content, contentType);
-    }  
-
-    /**
-     * Writes a raw field with the value taken from the bytes in the stream  
-     */
-    @Override
-    public void writeRawField(String name, InputStream content, MediaType mediaType) throws IOException {  
-        if (mayWriteRawData(mediaType) == false) {
-            // EMPTY is safe here because we never call namedObject when writing raw data
-            try (  
-                XContentParser parser = mediaType.xContent()
-                    // It's okay to pass the throwing deprecation handler
-                    // because we should not be writing raw fields when  
-                    // generating JSON
-                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, content)
-            ) {  
-                parser.nextToken();
-                writeFieldName(name);
-                copyCurrentStructure(parser);  
-            }
-        } else {
-            writeStartRaw(name);  
-            flush();
-            Streams.copy(content, os);
-            writeEndRaw();  
-        }
-    }
-
-    /**
-     * Writes the raw value to the stream
      */  
-    @Override
-    public void writeRawValue(InputStream stream, MediaType mediaType) throws IOException {
-        if (mayWriteRawData(mediaType) == false) {  
-            copyRawValue(stream, mediaType.xContent());
-        } else {
-            if (generator.streamWriteContext().currentName() != null) {  
-                // If we've just started a field we'll need to add the separator
-                generator.writeRaw(':');
-            }  
-            flush();
-            Streams.copy(stream, os, false);
-            writeEndRaw();  
-        }
-    }
-
-    /**
-     * possibly copy the whole structure to correctly filter
-     *  
-     * @deprecated use {@link #mayWriteRawData(MediaType)} instead
-     */
-    @Deprecated  
-    private boolean mayWriteRawData(XContentType contentType) {
-        // When the current generator is filtered (ie filter != null)
-        // or the content is in a different format than the current generator,  
-        // we need to copy the whole structure so that it will be correctly
-        // filtered or converted
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+            if (inRoot()) {
+        writeLineFeedAtEnd = true;  
+            generator.writeNumber(value);
+            generator.writeRaw(':');
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+                writeFieldName(name);
+                        copyCurrentStructure(destination, parser);  
+                        copyCurrentStructure(destination, parser);
+    private static final SerializedString LF = new SerializedString("\n");
+        } catch (final JacksonException ex) {
+    public void writeBoolean(boolean value) throws IOException {
+            generator.writeNumberProperty(name, value);
+        try {  
+        return generator;
         return supportsRawWrites() && isFiltered() == false && contentType == contentType() && prettyPrint == false;  
     }
-
-    /**  
-     * possibly copy the whole structure to correctly filter
-     */
-    private boolean mayWriteRawData(MediaType contentType) {  
-        // When the current generator is filtered (ie filter != null)
-        // or the content is in a different format than the current generator,
-        // we need to copy the whole structure so that it will be correctly  
-        // filtered or converted
-        return supportsRawWrites() && isFiltered() == false && contentType == contentType() && prettyPrint == false;
-    }  
-
-    /** Whether this generator supports writing raw data directly */
-    protected boolean supportsRawWrites() {  
-        return true;
+        }
+                copyCurrentStructure(parser);  
+            generator.writeNumber(value);
+        } catch (final JacksonException ex) {
+        return filter != null;
+        }  
+        }
+            parser.nextToken();
+        try {  
+        } catch (final JacksonException ex) {
+            throw new IOException("Unclosed object or array found");
+            switch (token) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        generator.flush();  
+        }  
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
     }
-
-    protected void copyRawValue(InputStream stream, XContent xContent) throws IOException {
+    public void writeEndRaw() {
+            generator.writeName(name);
+    }  
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    private boolean writeLineFeedAtEnd;
+import org.opensearch.core.xcontent.XContentGenerator;
+            writeStartRaw(name);  
+    @Override
+    public void writeRawField(String name, InputStream content) throws IOException {
+        boolean hasIncludes = includes.isEmpty() == false;  
+        this.generator = generator;  
+            generator.writeNumberProperty(name, value);
+            } else {
+    }
+    @Override
+import org.opensearch.core.xcontent.XContent;
+            generator.writeNullProperty(name);
+    @Override
+    @Override
+/*  
+        try {  
+                // Use the low level generator to write the startObject so that the root
+    }
+        } catch (final JacksonException ex) {
+                    }
+    @Override
+    public void writeRawValue(InputStream stream, MediaType mediaType) throws IOException {
+        // When the current generator is filtered (ie filter != null)
+import org.opensearch.core.xcontent.filtering.FilterPathBasedFilter;
+        // we need to copy the whole structure so that it will be correctly  
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+                    destination.copyCurrentEvent(parser);  
+        try {  
+ */  
+    private final OutputStream os;
+        if (isFiltered()) {
+     * Reference to filtering generator because
+        }
+    /**
+        try {  
+        // we need to copy the whole structure so that it will be correctly
         // EMPTY is safe here because we never call namedObject
-        try (  
-            XContentParser parser = xContent
-                // It's okay to pass the throwing deprecation handler because we
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+        return ((context != null) && (context.inRoot() && context.currentName() == null));
+    public void copyCurrentStructure(XContentParser parser) throws IOException {
+import java.io.BufferedInputStream;
                 // should not be writing raw fields when generating JSON  
-                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, stream)
-        ) {
-            copyCurrentStructure(parser);  
+                    // It's okay to pass the throwing deprecation handler
+            Streams.copy(content, os);
+        } catch (final JacksonException ex) {
+        }
+        return XContentType.JSON;
+        } catch (final JacksonException ex) {
+    public void writeBinary(byte[] value, int offset, int len) throws IOException {
         }
     }
-
-    @Override
-    public void copyCurrentStructure(XContentParser parser) throws IOException {
-        // the start of the parser  
-        if (parser.currentToken() == null) {
-            parser.nextToken();
-        }  
-        try {
-            if (parser instanceof JsonXContentParser jsonXContentParser) {
-                generator.copyCurrentStructure(jsonXContentParser.parser);  
-            } else {
-                copyCurrentStructure(this, parser);
-            }  
-        } catch (final JacksonException ex) {
-            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);
-        }  
-    }
-
-    /**  
-     * Low level implementation detail of {@link XContentGenerator#copyCurrentStructure(XContentParser)}.
-     */
-    private static void copyCurrentStructure(XContentGenerator destination, XContentParser parser) throws IOException {  
-        XContentParser.Token token = parser.currentToken();
-
+            generator.writeEndObject();
         try {  
-            // Let's handle field-name separately first
-            if (token == XContentParser.Token.FIELD_NAME) {
-                destination.writeFieldName(parser.currentName());  
-                token = parser.nextToken();
-                // fall-through to copy the associated value
-            }  
-
-            switch (token) {
-                case START_ARRAY:  
-                    destination.writeStartArray();
-                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-                        copyCurrentStructure(destination, parser);  
-                    }
-                    destination.writeEndArray();
-                    break;  
-                case START_OBJECT:
-                    destination.writeStartObject();
-                    while (parser.nextToken() != XContentParser.Token.END_OBJECT) {  
-                        copyCurrentStructure(destination, parser);
-                    }
-                    destination.writeEndObject();  
+            this.base = generatorBase;
+    @Override
+ * ownership. Elasticsearch licenses this file to you under  
+            generator = new FilteringGeneratorDelegate(
+/*
+                XContentParser parser = mediaType.xContent()
+import java.math.BigInteger;  
+import java.io.IOException;
+            generator.writeStringProperty(name, value);
                     break;
-                default: // others are simple:
-                    destination.copyCurrentEvent(parser);  
-            }
-        } catch (final JacksonException ex) {
+        }
             JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
         }
+    private boolean prettyPrint = false;  
+        } catch (final JacksonException ex) {
     }
-
+        if (mayWriteRawData(mediaType) == false) {  
+    }
+    }
+    private void writeStartRaw(String name) throws IOException {
+        }
+import tools.jackson.core.TokenStreamContext;  
+     * Writes a raw field with the value taken from the bytes in the stream  
+        }
+        }
+     * possibly copy the whole structure to correctly filter
+    }
+import java.io.OutputStream;
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+            generator.writeUTF8String(value, offset, length);
+    @Deprecated  
+            generator.writeString(value);
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+                    break;  
     @Override
-    public void flush() throws IOException {
-        generator.flush();  
-    }
-
-    @Override  
-    public void close() throws IOException {
-        if (generator.isClosed()) {
             return;  
-        }
-        TokenStreamContext context = generator.streamWriteContext();
-        if ((context != null) && (context.inRoot() == false)) {  
-            throw new IOException("Unclosed object or array found");
-        }
-        if (writeLineFeedAtEnd) {  
-            flush();
-            // Bypass generator to always write the line feed
-            getLowLevelGenerator().writeRaw(LF);  
-        }
-        generator.close();
-    }  
-
-    @Override
-    public boolean isClosed() {  
-        return generator.isClosed();
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ * the Apache License, Version 2.0 (the "License"); you may
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    public void writeNumber(short value) throws IOException {
+import tools.jackson.core.filter.FilteringGeneratorDelegate;
+            if (parser instanceof JsonXContentParser jsonXContentParser) {
+        try {  
     }
+            JsonGenerator delegate = filter.delegate();  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+            // we have to implement it ourselves
+        }
+        if (content.markSupported() == false) {  
+    @Override
+                    destination.writeStartObject();
+        }
 }  
+        if (writeLineFeedAtEnd) {  
+     * writing raw values needs a specific method call.  
+        } catch (final JacksonException ex) {
+        }
+    private final GeneratorBase base;
+    }
+        XContentParser.Token token = parser.currentToken();
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+            }
+            generator.writeString(value, offset, len);
+        try {  
+            if (generator.streamWriteContext().currentName() != null) {  
+import tools.jackson.core.JacksonException;
+        } catch (final JacksonException ex) {
+        }
+                generator.writeRaw(':');
+        boolean hasExcludes = excludes.isEmpty() == false;
+                // In case of combined inclusion and exclusion filters, we have one and only one another delegating level
+    }
+                // Use the low level generator to write the startObject so that the root
+    @Override
+import java.io.InputStream;  
+        }
+ * this work for additional information regarding copyright
+    @Override
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    public void usePrintLineFeedAtEnd() {
+            // as jackson's JsonGenerator doesn't have this method for BigInteger
+            generator.writeBinaryProperty(name, value);
+     * Low level implementation detail of {@link XContentGenerator#copyCurrentStructure(XContentParser)}.
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+import org.opensearch.common.xcontent.XContentType;
+        }
+    @Override
+                Inclusion.INCLUDE_ALL_AND_PATH,
+        assert base != null : "JsonGenerator should be of instance GeneratorBase but was: " + generator.getClass();
+        } catch (final JacksonException ex) {
+    }
+                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, content)
+            content = new BufferedInputStream(content);
+        }
+            ((JsonWriteContext) context).writeValue();  
+    }
+public class JsonXContentGenerator implements XContentGenerator {
+        } catch (final JacksonException ex) {
+    public void writeNumberField(String name, BigDecimal value) throws IOException {
+    public void close() throws IOException {
+            return delegate;  
+        } catch (final JacksonException ex) {
+    @Override
+    /** Whether this generator supports writing raw data directly */
+    }  
+        try {  
+import java.util.Objects;
+            ) {  
+                    // generating JSON
+    public void writeBinaryField(String name, byte[] value) throws IOException {
+                delegate = jsonGeneratorDelegate.delegate();  
+    @Override  
+        } catch (final JacksonException ex) {
+        }
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+    }
+                token = parser.nextToken();
+    @Override
+        } catch (final JacksonException ex) {
+ * under the License.  
+        } catch (final JacksonException ex) {
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);
+            generator.writeBoolean(value);
+    }
+ * specific language governing permissions and limitations
+    private boolean mayWriteRawData(XContentType contentType) {
+    @Override
+    }
+                // It's okay to pass the throwing deprecation handler because we
+    }
+    }
+            generator.writeNumber(value);
+            generator.writeBooleanProperty(name, value);
+        }
+        } catch (final JacksonException ex) {
+    public void writeStartObject() throws IOException {
+ *
+    }
+        try {  
+        }
+                Inclusion.INCLUDE_ALL_AND_PATH,
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    public void writeNumberField(String name, double value) throws IOException {
+        }
+        } catch (final JacksonException ex) {
+    private boolean mayWriteRawData(MediaType contentType) {  
+        } catch (final JacksonException ex) {
+                default: // others are simple:
+        if (contentType == null) {
+            );
+            copyRawValue(stream, mediaType.xContent());
+                generator,
+        } else {
+    /**
+        try {  
+            if (delegate instanceof JsonGeneratorDelegate jsonGeneratorDelegate) {
+        }
+    public void writeNumber(BigDecimal value) throws IOException {
+     */
+        JsonGenerator generator = jsonGenerator;  
+    public void writeBinary(byte[] value) throws IOException {
+        Objects.requireNonNull(excludes, "Excluding filters must not be null");
+            generator.writeName(name);  
+            TokenStreamContext context = base.streamWriteContext();
+            }
+import org.opensearch.core.xcontent.MediaType;
+     * Writes the raw value to the stream
+        }
+    /** Generator used to write content **/
+        }
+                copyCurrentStructure(this, parser);
+     */
+    @Override
+    }
+        } catch (final JacksonException ex) {
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+        } catch (final JacksonException ex) {
+        try {  
+ * software distributed under the License is distributed on an
+import java.math.BigDecimal;
+        try (  
+ */
+            generator.writeNumberProperty(name, value);
+        } catch (final JacksonException ex) {
+        if (hasIncludes) {
+                // fall-through to copy the associated value
+        } catch (final JacksonException ex) {
+    }
+     * out needs a specific treatment
+                true  
+            flush();
+        }
+    public boolean isClosed() {  
+        }
+import tools.jackson.core.JsonGenerator;
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    }
+        try {  
+    public void writeNumberField(String name, float value) throws IOException {
+                generator,  
+    }
+        }
+        } else {  
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+        } catch (final JacksonException ex) {
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    @Override
+        } catch (final JacksonException ex) {
+        } catch (final JacksonException ex) {
+        try {  
+            XContentParser parser = xContent
+        try {  
+        MediaType contentType = MediaTypeRegistry.xContentType(content);
+            generator.writeNumber(value);
+            generator.writeNumber(value);
+     */
+    @Override
+    public void writeNumber(double value) throws IOException {
+            throw new IllegalArgumentException("Can't write raw bytes whose xcontent-type can't be guessed");  
+            this.filter = null;
+            generator.writeStartObject();
+ * GitHub history for details.
+        // When the current generator is filtered (ie filter != null)
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    public void writeNumberField(String name, long value) throws IOException {
+    @Override
+    }
+                // start object is always written even if a filtered generator is used  
+            }  
+    @Override
+        generator.close();
+        return generator.isClosed();
+            Streams.copy(stream, os, false);
+        try {
+import org.opensearch.core.xcontent.XContentParser;  
+        }
+                getLowLevelGenerator().writeStartObject();
+    }
+    @Override  
+            if (token == XContentParser.Token.FIELD_NAME) {
+        }
+        return this.prettyPrint;
+    public void writeNumberField(String name, BigInteger value) throws IOException {
+    @Override
+        }
+        } catch (final JacksonException ex) {
+    public void writeNumber(long value) throws IOException {
+        if (parser.currentToken() == null) {
+                    destination.writeEndObject();  
+            try (  
+            // Bypass generator to always write the line feed
+    @Override
+        // or the content is in a different format than the current generator,  
+            generator.writeBinary(value);
+            this.filter = (FilteringGeneratorDelegate) generator;
+            generator = new FilteringGeneratorDelegate(
+        try {  
+            }  
+    private final FilteringGeneratorDelegate filter;  
+            writeEndRaw();  
+                destination.writeFieldName(parser.currentName());  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    public XContentType contentType() {
+            writeEndRaw();  
+            }
+    public void writeString(String value) throws IOException {
+    public void writeRawField(String name, InputStream content, MediaType mediaType) throws IOException {  
+    }
+                case START_ARRAY:  
+            if (inRoot()) {
+            }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void writeEndObject() throws IOException {
+    public void writeStartArray() throws IOException {
+     * writing an empty object '{}' when everything is filtered  
+        }  
+        }
+            generator.writeNumber(value);
+    public void writeNumber(BigInteger value) throws IOException {
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    @Override
+        if (mayWriteRawData(mediaType) == false) {
+    public void writeString(char[] value, int offset, int len) throws IOException {
+        // the start of the parser  
+    @Override
+            JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
+    protected void copyRawValue(InputStream stream, XContent xContent) throws IOException {
+    }
+    private boolean isFiltered() {  
+        try {  

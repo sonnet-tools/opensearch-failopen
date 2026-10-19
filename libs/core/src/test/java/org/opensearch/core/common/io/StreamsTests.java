@@ -1,112 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.common.io;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.io.Streams;
-import org.opensearch.core.common.bytes.BytesArray;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+        final byte[] bytes = randomAlphaOfLengthBetween(1, 100).getBytes(StandardCharsets.UTF_8);
 import java.io.StringReader;  
-import java.io.StringWriter;
+        assertEquals(3, input.read());
+import java.io.IOException;
+import org.opensearch.common.io.Streams;
+ * specific language governing permissions and limitations
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;  
-
-import static org.opensearch.common.io.Streams.copyToString;
-import static org.hamcrest.Matchers.equalTo;  
-
-/**
- * Unit tests for {@link org.opensearch.common.io.Streams}.  
- */
-public class StreamsTests extends OpenSearchTestCase {
-
-    public void testCopyFromByteArray() throws IOException {
-        byte[] content = "content".getBytes(StandardCharsets.UTF_8);
+        assertThat(out.toString(), equalTo(content));  
+    public void testBytesStreamInput() throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(content.length);  
-        Streams.copy(content, out);
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(Arrays.equals(out.toByteArray(), Arrays.copyOf(bytes, limit)), equalTo(true));
+import java.util.Arrays;  
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(result, equalTo(content));
+        final BytesArray stuffArray = new BytesArray(bytes);  
+        assertEquals(-1, input.read());
+    }
+    public void testFullyConsumeInputStream() throws IOException {  
+/**
+        final ByteArrayOutputStream out = new ByteArrayOutputStream(bytes.length);
+        StreamInput input = stuffArray.streamInput();
+ * license agreements. See the NOTICE file distributed with
+    }
+        final BytesArray stuffArray = new BytesArray(bytes);
+        BytesRef stuffRef = new BytesRef(stuff, 2, 2);  
+ * under the License.  
+        final long count = org.opensearch.common.util.io.Streams.copy(Streams.limitStream(stuffArray.streamInput(), limit), out);
         assertThat(Arrays.equals(content, out.toByteArray()), equalTo(true));
-    }  
-
-    public void testCopyFromReader() throws IOException {
-        String content = "content";  
-        StringReader in = new StringReader(content);
-        StringWriter out = new StringWriter();
+ * KIND, either express or implied.  See the License for the
+/*  
+        String result = copyToString(in);  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testLimitInputStream() throws IOException {  
         int count = Streams.copy(in, out);  
+ * this work for additional information regarding copyright
+        BytesArray stuffArray = new BytesArray(stuffRef);
+import java.io.StringWriter;
+import org.opensearch.core.common.io.stream.StreamInput;
+    public void testCopyFromString() throws IOException {
+        String content = "content";
+    }
+ * Unless required by applicable law or agreed to in writing,
+/*  
         assertThat(content.length(), equalTo(count));
         assertThat(out.toString(), equalTo(content));
     }  
-
-    public void testCopyFromString() throws IOException {
-        String content = "content";  
-        StringWriter out = new StringWriter();
+ */
+ * SPDX-License-Identifier: Apache-2.0
         Streams.copy(content, out);
-        assertThat(out.toString(), equalTo(content));  
-    }
-
-    public void testCopyToString() throws IOException {  
-        String content = "content";
-        StringReader in = new StringReader(content);
-        String result = copyToString(in);  
-        assertThat(result, equalTo(content));
-    }
-
-    public void testBytesStreamInput() throws IOException {
-        byte stuff[] = new byte[] { 0, 1, 2, 3 };
-        BytesRef stuffRef = new BytesRef(stuff, 2, 2);  
-        BytesArray stuffArray = new BytesArray(stuffRef);
-        StreamInput input = stuffArray.streamInput();
-        assertEquals(2, input.read());  
-        assertEquals(3, input.read());
-        assertEquals(-1, input.read());
-        input.close();  
-    }
-
-    public void testFullyConsumeInputStream() throws IOException {  
+ * You may obtain a copy of the License at  
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+        StringWriter out = new StringWriter();
         final String bytes = randomAlphaOfLengthBetween(0, 100);
-        final BytesArray stuffArray = new BytesArray(bytes);
+    }  
         assertEquals(bytes.length(), Streams.consumeFully(stuffArray.streamInput()));  
+    public void testCopyToString() throws IOException {  
     }
-
-    public void testLimitInputStream() throws IOException {  
-        final byte[] bytes = randomAlphaOfLengthBetween(1, 100).getBytes(StandardCharsets.UTF_8);
         final int limit = randomIntBetween(0, bytes.length);
-        final BytesArray stuffArray = new BytesArray(bytes);  
-        final ByteArrayOutputStream out = new ByteArrayOutputStream(bytes.length);
-        final long count = org.opensearch.common.util.io.Streams.copy(Streams.limitStream(stuffArray.streamInput(), limit), out);
-        assertEquals(limit, count);  
-        assertThat(Arrays.equals(out.toByteArray(), Arrays.copyOf(bytes, limit)), equalTo(true));
-    }
 }  
+ *
+        input.close();  
+ * GitHub history for details.
+ */  
+        StringReader in = new StringReader(content);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public void testCopyFromReader() throws IOException {
+    }
+import org.opensearch.core.common.bytes.BytesArray;  
+ * The OpenSearch Contributors require contributions made to  
+        String content = "content";  
+/*
+import org.apache.lucene.util.BytesRef;
+public class StreamsTests extends OpenSearchTestCase {
+        Streams.copy(content, out);
+    public void testCopyFromByteArray() throws IOException {
+import org.opensearch.test.OpenSearchTestCase;
+        byte stuff[] = new byte[] { 0, 1, 2, 3 };
+import static org.opensearch.common.io.Streams.copyToString;
+ * Unit tests for {@link org.opensearch.common.io.Streams}.  
+import static org.hamcrest.Matchers.equalTo;  
+        String content = "content";  
+ * not use this file except in compliance with the License.
+ */  
+package org.opensearch.core.common.io;
+ */
+ *  
+ *
+        assertEquals(2, input.read());  
+        assertEquals(limit, count);  
+        StringWriter out = new StringWriter();
+ * software distributed under the License is distributed on an
+        byte[] content = "content".getBytes(StandardCharsets.UTF_8);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        StringReader in = new StringReader(content);

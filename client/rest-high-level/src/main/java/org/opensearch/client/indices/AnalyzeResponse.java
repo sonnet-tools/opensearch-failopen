@@ -1,201 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.indices;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser;  
 import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;  
-
-public class AnalyzeResponse {
-
-    private static final String TOKENS = "tokens";
-    private static final String DETAIL = "detail";
-
-    public static class AnalyzeToken {
-        private String term;
-        private int startOffset;  
-        private int endOffset;
-        private int position;
-        private int positionLength = 1;  
-        private String type;
+            return this.positionLength;
+ * specific language governing permissions and limitations
+        this.detail = detail;
+ * GitHub history for details.
+            PARSER.declareInt(AnalyzeToken::setPosition, new ParseField("position"));  
         private final Map<String, Object> attributes = new HashMap<>();
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;  
-            if (o == null || getClass() != o.getClass()) return false;
-            AnalyzeResponse.AnalyzeToken that = (AnalyzeResponse.AnalyzeToken) o;
-            return startOffset == that.startOffset  
-                && endOffset == that.endOffset
-                && position == that.position
-                && positionLength == that.positionLength  
-                && Objects.equals(term, that.term)
-                && Objects.equals(attributes, that.attributes)
-                && Objects.equals(type, that.type);  
         }
-
-        @Override  
-        public int hashCode() {
-            return Objects.hash(term, startOffset, endOffset, position, positionLength, attributes, type);
-        }  
-
         public String getTerm() {
+            return this.type;
+        return Objects.hash(detail, tokens);
+        @Override  
+    }
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.core.xcontent.ObjectParser;  
+        this.tokens = tokens;  
+        public String getType() {  
+    private static final ConstructingObjectParser<AnalyzeResponse, Void> PARSER = new ConstructingObjectParser<>(
+        private int endOffset;
+            if (this == o) return true;  
+        }  
+ * compatible open source license.
+                && endOffset == that.endOffset
+        private int startOffset;  
+        private void setPosition(int position) {  
+        static {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+    private static final String DETAIL = "detail";
+            if (o == null || getClass() != o.getClass()) return false;
+        private int position;
+import java.io.IOException;  
+        }  
+package org.opensearch.client.indices;
+        PARSER.declareObject(optionalConstructorArg(), DetailAnalyzeResponse.PARSER, new ParseField(DETAIL));  
+    @SuppressWarnings("unchecked")  
+            this.attributes.put(key, value);
+ * software distributed under the License is distributed on an
+        public int getEndOffset() {  
+                && positionLength == that.positionLength  
+ * KIND, either express or implied.  See the License for the
+            PARSER.declareString(AnalyzeToken::setTerm, new ParseField("token"));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            this.positionLength = positionLength;  
+                && Objects.equals(term, that.term)
+    }  
+import java.util.Map;  
+            AnalyzeResponse.AnalyzeToken that = (AnalyzeResponse.AnalyzeToken) o;
+ */
+            return Objects.hash(term, startOffset, endOffset, position, positionLength, attributes, type);
+        "analyze_response",
+        return Objects.equals(detail, that.detail) && Objects.equals(tokens, that.tokens);  
+        public int getStartOffset() {
+            this.term = term;
+        public int hashCode() {
+    public static AnalyzeResponse fromXContent(XContentParser parser) throws IOException {  
+        }
+        }
+    }
+        private void setTerm(String term) {  
+        private String term;
+    }  
+    private final DetailAnalyzeResponse detail;
+            return this.endOffset;
+        if (o == null || getClass() != o.getClass()) return false;
+    }  
+            PARSER.declareString(AnalyzeToken::setType, new ParseField("type"));
+                && position == that.position
+        public int getPositionLength() {
+        );
+ * Unless required by applicable law or agreed to in writing,
+public class AnalyzeResponse {
+            this.position = position;
+            return startOffset == that.startOffset  
+ * Licensed to Elasticsearch under one or more contributor  
+        return this.tokens;
+ * Modifications Copyright OpenSearch Contributors. See
+        PARSER.declareObjectArray(optionalConstructorArg(), AnalyzeToken.PARSER, new ParseField(TOKENS));
+        true,  
+        }
+            PARSER.declareInt(AnalyzeToken::setEndOffset, new ParseField("end_offset"));
+            return this.startOffset;
+    @Override  
+ * You may obtain a copy of the License at  
+import java.util.List;
+/*
+import java.util.Objects;
+            this.startOffset = startOffset;  
+            return PARSER.parse(parser, null);
+        return this.detail;  
+        private static final ObjectParser<AnalyzeToken, Void> PARSER = new ObjectParser<>(
+                && Objects.equals(attributes, that.attributes)
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;  
+    private static final String TOKENS = "tokens";
+        private void setEndOffset(int endOffset) {
+        return PARSER.parse(parser, null);
+ *  
+}
+ * The OpenSearch Contributors require contributions made to  
+/*  
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+ */  
+ * license agreements. See the NOTICE file distributed with
+/*  
+    );
+        @Override
+        private void setPositionLength(int positionLength) {
+            AnalyzeToken::setAttribute,  
+        public boolean equals(Object o) {
+        }  
+        private void setType(String type) {
+        }
+        public static AnalyzeToken fromXContent(XContentParser parser) throws IOException {  
+        }
+ * not use this file except in compliance with the License.
+            AnalyzeToken::new
+    public int hashCode() {
+            PARSER.declareInt(AnalyzeToken::setPositionLength, new ParseField("positionLength"));  
+        if (this == o) return true;  
+            PARSER.declareInt(AnalyzeToken::setStartOffset, new ParseField("start_offset"));
+ * this work for additional information regarding copyright
+        public Map<String, Object> getAttributes() {
+        }
+        }
+import java.util.HashMap;
+            "analyze_token",
+    }
+        private String type;
+    private final List<AnalyzeResponse.AnalyzeToken> tokens;  
+        }
+        private void setAttribute(String key, Object value) {  
+        }  
+        public int getPosition() {
+    public boolean equals(Object o) {
+            return this.position;  
+            this.endOffset = endOffset;
+    private AnalyzeResponse(List<AnalyzeResponse.AnalyzeToken> tokens, DetailAnalyzeResponse detail) {
+            return this.attributes;  
+        AnalyzeResponse that = (AnalyzeResponse) o;
+                && Objects.equals(type, that.type);  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        private void setStartOffset(int startOffset) {
+    public DetailAnalyzeResponse detail() {
+    public List<AnalyzeResponse.AnalyzeToken> getTokens() {
+ */  
+ * under the License.  
+        }
+ *
             return this.term;  
         }
-
-        private void setTerm(String term) {  
-            this.term = term;
-        }
-
-        public int getStartOffset() {
-            return this.startOffset;
         }  
-
-        private void setStartOffset(int startOffset) {
-            this.startOffset = startOffset;  
-        }
-
-        public int getEndOffset() {  
-            return this.endOffset;
-        }
-
-        private void setEndOffset(int endOffset) {
-            this.endOffset = endOffset;
-        }  
-
-        public int getPosition() {
-            return this.position;  
-        }
-
-        private void setPosition(int position) {  
-            this.position = position;
-        }
-
-        public int getPositionLength() {
-            return this.positionLength;
-        }  
-
-        private void setPositionLength(int positionLength) {
-            this.positionLength = positionLength;  
-        }
-
-        public String getType() {  
-            return this.type;
-        }
-
-        private void setType(String type) {
-            this.type = type;
-        }  
-
-        public Map<String, Object> getAttributes() {
-            return this.attributes;  
-        }
-
-        private void setAttribute(String key, Object value) {  
-            this.attributes.put(key, value);
-        }
-
-        private static final ObjectParser<AnalyzeToken, Void> PARSER = new ObjectParser<>(
-            "analyze_token",
-            AnalyzeToken::setAttribute,  
-            AnalyzeToken::new
-        );
-        static {  
-            PARSER.declareString(AnalyzeToken::setTerm, new ParseField("token"));
-            PARSER.declareString(AnalyzeToken::setType, new ParseField("type"));
-            PARSER.declareInt(AnalyzeToken::setPosition, new ParseField("position"));  
-            PARSER.declareInt(AnalyzeToken::setStartOffset, new ParseField("start_offset"));
-            PARSER.declareInt(AnalyzeToken::setEndOffset, new ParseField("end_offset"));
-            PARSER.declareInt(AnalyzeToken::setPositionLength, new ParseField("positionLength"));  
-        }
-
-        public static AnalyzeToken fromXContent(XContentParser parser) throws IOException {  
-            return PARSER.parse(parser, null);
-        }
-    }  
-
-    private final DetailAnalyzeResponse detail;
-    private final List<AnalyzeResponse.AnalyzeToken> tokens;  
-
-    private AnalyzeResponse(List<AnalyzeResponse.AnalyzeToken> tokens, DetailAnalyzeResponse detail) {
-        this.tokens = tokens;  
-        this.detail = detail;
-    }
-
-    public List<AnalyzeResponse.AnalyzeToken> getTokens() {
-        return this.tokens;
-    }  
-
-    public DetailAnalyzeResponse detail() {
-        return this.detail;  
-    }
-
-    @SuppressWarnings("unchecked")  
-    private static final ConstructingObjectParser<AnalyzeResponse, Void> PARSER = new ConstructingObjectParser<>(
-        "analyze_response",
-        true,  
+        private int positionLength = 1;  
         args -> new AnalyzeResponse((List<AnalyzeResponse.AnalyzeToken>) args[0], (DetailAnalyzeResponse) args[1])
-    );
-
-    static {
-        PARSER.declareObjectArray(optionalConstructorArg(), AnalyzeToken.PARSER, new ParseField(TOKENS));
-        PARSER.declareObject(optionalConstructorArg(), DetailAnalyzeResponse.PARSER, new ParseField(DETAIL));  
     }
-
-    public static AnalyzeResponse fromXContent(XContentParser parser) throws IOException {  
-        return PARSER.parse(parser, null);
-    }
-
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.ParseField;
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        AnalyzeResponse that = (AnalyzeResponse) o;
-        return Objects.equals(detail, that.detail) && Objects.equals(tokens, that.tokens);  
+    public static class AnalyzeToken {
     }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(detail, tokens);
-    }  
-
-}
+            this.type = type;
+    static {

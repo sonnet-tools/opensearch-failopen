@@ -1,285 +1,263 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.writer;
-
-import org.apache.arrow.memory.OutOfMemoryException;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.FileInfos;  
-import org.opensearch.index.engine.dataformat.FlushInput;
-import org.opensearch.index.engine.dataformat.WriteResult;
-import org.opensearch.index.engine.dataformat.Writer;  
-import org.opensearch.index.engine.dataformat.WriterState;
-import org.opensearch.index.engine.exec.MonoFileWriterSet;
-import org.opensearch.index.store.FileMetadata;  
-import org.opensearch.index.store.FormatChecksumStrategy;
-import org.opensearch.parquet.ParquetDataFormatPlugin;
-import org.opensearch.parquet.ParquetSettings;  
-import org.opensearch.parquet.bridge.ParquetFileMetadata;
-import org.opensearch.parquet.engine.ParquetDataFormat;
-import org.opensearch.parquet.memory.ArrowBufferPool;  
-import org.opensearch.parquet.stats.ParquetShardStatsTracker;
-import org.opensearch.parquet.vsr.SchemaChangeRequiresWriterRotationException;
-import org.opensearch.parquet.vsr.VSRManager;  
-import org.opensearch.plugin.stats.StatsRecorder;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Optional;  
-import java.util.function.Supplier;
-
-/**  
- * Parquet file writer integrating OpenSearch's {@link Writer} interface with the VSR batching layer.
- *
- * <p>Each instance corresponds to a single Parquet file for a given writer generation.  
- * Documents are accepted via {@link #addDoc(ParquetDocumentInput)}, batched in Arrow vectors
- * by the {@link VSRManager}, and flushed to a Parquet file via the native Rust writer.
- *  
- * <p>Writer-level settings (e.g., {@code parquet.max_rows_per_vsr}) are extracted from
- * the {@link IndexSettings} passed at construction time and propagated to the VSR layer.
- *  
- * <p>The returned {@link FileInfos} from {@link #flush(FlushInput)} contains the file path, writer
- * generation, and row count for downstream commit tracking.
- */  
-public class ParquetWriter implements Writer<ParquetDocumentInput> {
-
-    private static final Logger logger = LogManager.getLogger(ParquetWriter.class);  
-
-    private final String file;
-    private final long writerGeneration;  
-    private final ParquetDataFormat dataFormat;
-    private final VSRManager vsrManager;
-    private final FormatChecksumStrategy checksumStrategy;  
-    private final Supplier<Schema> schemaSupplier;
-    private final ParquetShardStatsTracker stats;
-    private volatile long mappingVersion;  
-    private volatile WriterState state = WriterState.ACTIVE;
-    private long acceptedRows = 0L;
-
-    /**
-     * Creates a new ParquetWriter.
-     *  
-     * @param file output Parquet file path
-     * @param writerGeneration generation number for this writer
-     * @param mappingVersion the initial mapping version  
-     * @param dataFormat the Parquet data format instance
-     * @param schema Arrow schema for vector creation at construction time
-     * @param schemaSupplier supplies the up-to-date schema when the mapping version  
-     *                       advances, used by {@link #updateMappingVersion} to add new
-     *                       field vectors before {@code addDoc} encounters them
-     * @param bufferPool shared Arrow buffer pool  
-     * @param indexSettings index settings for writer configuration
-     * @param threadPool the thread pool for background native writes
-     * @param checksumStrategy strategy to register pre-computed checksums on  
-     * @param stats shard-level stats tracker
-     */
-    public ParquetWriter(  
-        String file,
-        long writerGeneration,
-        long mappingVersion,  
-        ParquetDataFormat dataFormat,
-        Schema schema,
-        Supplier<Schema> schemaSupplier,  
-        ArrowBufferPool bufferPool,
-        IndexSettings indexSettings,
-        ThreadPool threadPool,  
-        FormatChecksumStrategy checksumStrategy,
-        ParquetShardStatsTracker stats
-    ) {  
-        this.file = file;
-        this.writerGeneration = writerGeneration;
-        this.mappingVersion = mappingVersion;  
-        this.dataFormat = dataFormat;
-        this.checksumStrategy = checksumStrategy;
-        this.schemaSupplier = schemaSupplier;  
-        this.stats = stats;
-        this.vsrManager = new VSRManager(
-            file,  
-            indexSettings,
-            schema,
-            bufferPool,  
-            ParquetSettings.MAX_ROWS_PER_VSR.get(indexSettings.getSettings()),
-            threadPool,
-            writerGeneration,  
-            stats
-        );
-    }  
-
-    /**
-     * Creates a new ParquetWriter without stats collection.  
-     */
-    public ParquetWriter(
-        String file,  
-        long writerGeneration,
-        long mappingVersion,
-        ParquetDataFormat dataFormat,  
-        Schema schema,
-        Supplier<Schema> schemaSupplier,
-        ArrowBufferPool bufferPool,  
-        IndexSettings indexSettings,
-        ThreadPool threadPool,
-        FormatChecksumStrategy checksumStrategy  
-    ) {
-        this(
-            file,  
-            writerGeneration,
-            mappingVersion,
-            dataFormat,  
-            schema,
-            schemaSupplier,
-            bufferPool,  
-            indexSettings,
-            threadPool,
-            checksumStrategy,  
-            new ParquetShardStatsTracker()
-        );
-    }  
-
-    @Override
-    public WriteResult addDoc(ParquetDocumentInput d) throws IOException {  
-        if (state != WriterState.ACTIVE) {
-            throw new IllegalStateException("Writer is not active, state=" + state);
-        }  
-        return StatsRecorder.recordTimeMillis(() -> {
-            // Schema mismatch is recoverable: the VSR rejected the doc pre-admission, so the
-            // caller-driven rollback no-ops in the VSR and restores ACTIVE.  
-            try {
-                vsrManager.addDocument(d);
             } catch (MismatchedInputException | OutOfMemoryException e) {  
-                state = WriterState.PENDING_ROLLBACK;
-                return new WriteResult.Failure(e, -1, -1, -1);
-            }  
-            acceptedRows++;
-            stats.addDocsIndexed(1);
-            return new WriteResult.Success(1L, 1L, 1L);  
+            logger.trace(
+            state = WriterState.CLOSED;
+    }
+    private final Supplier<Schema> schemaSupplier;
+ */  
+ * <p>Each instance corresponds to a single Parquet file for a given writer generation.  
+        return vsrManager.isSchemaMutable();  
+import org.opensearch.parquet.ParquetSettings;  
+    @Override
+        Path filePath = Path.of(file);
+    private long acceptedRows = 0L;
+import org.apache.logging.log4j.Logger;
+ * by the {@link VSRManager}, and flushed to a Parquet file via the native Rust writer.
         }, stats::addIndexTimeMillis);
-    }
-
-    @Override
-    public void rollbackTo(long rowCount) throws IOException {
-        if (state != WriterState.ACTIVE && state != WriterState.PENDING_ROLLBACK) {  
-            throw new IllegalStateException("rollbackTo requires ACTIVE or PENDING_ROLLBACK state but was " + state);
         }
-        if (rowCount > acceptedRows) {  
-            throw new IllegalStateException("Cannot rollback to " + rowCount + ": only " + acceptedRows + " rows admitted");
-        }
-        if (acceptedRows - rowCount > 1) {  
-            throw new IllegalStateException(
-                "rollbackTo supports rolling back exactly 1 doc, but asked to roll back " + (acceptedRows - rowCount)
-            );  
-        }
-        vsrManager.rollbackTo(rowCount);
-        acceptedRows = rowCount;  
-        state = WriterState.ACTIVE;
-    }
-
-    @Override
-    public WriterState state() {
-        return state;  
-    }
-
-    @Override  
-    public Optional<Writer<?>> getWriterForFormat(String formatName) {
-        return dataFormat.name().equals(formatName) ? Optional.of(this) : Optional.empty();
+                writerGeneration,  
+            threadPool,
+            );
+        IndexSettings indexSettings,
     }  
-
+                logger.debug(  
+        ParquetDataFormat dataFormat,  
+     */
+        } finally {  
+    private final long writerGeneration;  
+    }  
+    private volatile long mappingVersion;  
+    }
+        this.mappingVersion = mappingVersion;  
+            filePath.getParent().toAbsolutePath(),
+        }
+            file,  
+            throw new IllegalStateException(
+        if (rowCount > acceptedRows) {  
+     * @param schema Arrow schema for vector creation at construction time
+    private final VSRManager vsrManager;
+import java.nio.file.Path;
     @Override
-    public FileInfos flush(FlushInput flushInput) throws IOException {  
+        this.checksumStrategy = checksumStrategy;
+        Schema schema,
+    public ParquetWriter(  
+                writerGeneration,
+            checksumStrategy,  
+            ParquetSettings.MAX_ROWS_PER_VSR.get(indexSettings.getSettings()),
+                "[Gen: {}] updateMappingVersion: no-op, newVersion={} <= current mappingVersion={}",  
+    private final ParquetDataFormat dataFormat;
+                schema.getFields().stream().map(f -> f.getName()).collect(java.util.stream.Collectors.joining(", "))
+        }
+            return new WriteResult.Success(1L, 1L, 1L);  
+        this.writerGeneration = writerGeneration;
+import org.opensearch.index.engine.exec.MonoFileWriterSet;
+                    writerGeneration,
+        ArrowBufferPool bufferPool,
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+        );
+    /**
+            file,  
         ParquetFileMetadata metadata = vsrManager.flush();
+            bufferPool,  
+            vsrManager.close();
+                    newVersion,  
+        ThreadPool threadPool,
+        String fileName = filePath.getFileName().toString();
+public class ParquetWriter implements Writer<ParquetDocumentInput> {
+                );
+    }  
+     * Creates a new ParquetWriter without stats collection.  
+            try {
+                logger.debug("updateMappingVersion: reconcileSchema returned updated={}", updated);  
+            );
+        if (acceptedRows - rowCount > 1) {  
+            throw new IllegalStateException("Cannot rollback to " + rowCount + ": only " + acceptedRows + " rows admitted");
+    @Override  
+        ParquetShardStatsTracker stats
+    }  
+        IndexSettings indexSettings,
+        acceptedRows = rowCount;  
+import org.opensearch.parquet.engine.ParquetDataFormat;
+                return new WriteResult.Failure(e, -1, -1, -1);
+            logger.debug(
+    }  
+                writerGeneration,
+    ) {
+    public boolean isSchemaMutable() {
+        if (newVersion > this.mappingVersion) {
+    /**
+import org.opensearch.index.engine.dataformat.Writer;  
+            indexSettings,
+ *  
+            throw new IllegalStateException("Writer is not active, state=" + state);
+        // Register the pre-computed CRC32 so the upload path can read it in O(1).
+        this.vsrManager = new VSRManager(
+            ParquetDataFormatPlugin.PARQUET_FORMAT_VERSION  
+        long mappingVersion,  
+        long writerGeneration,
+        ParquetDataFormat dataFormat,
+        String file,  
+     * @param checksumStrategy strategy to register pre-computed checksums on  
+import org.opensearch.parquet.vsr.VSRManager;  
+     * @param file output Parquet file path
+            writerGeneration,  
+    private final String file;
+        vsrManager.rollbackTo(rowCount);
+    }
+        if (checksumStrategy != null && metadata.crc32() != 0) {  
+            );  
+        Supplier<Schema> schemaSupplier,  
+    private volatile WriterState state = WriterState.ACTIVE;
         if (file == null || metadata == null || metadata.numRows() == 0) {
-            return FileInfos.empty();  
+ * compatible open source license.
+        }
+import org.apache.arrow.memory.OutOfMemoryException;
+        }  
+                "[Gen: {}] updateMappingVersion: schema from supplier has {} fields: {}",
+        }
+        // Use the FileMetadata overload so the strategy owns key derivation.
+                boolean updated = vsrManager.reconcileSchema(schema);
+        this.file = file;
+                newVersion  
+import org.opensearch.parquet.stats.ParquetShardStatsTracker;
+        } else {
+    public void close() throws IOException {  
+            bufferPool,  
+            this.mappingVersion = newVersion;
+            schema,
+                state = WriterState.RETIRED_FLUSHABLE;
+        this(
+            acceptedRows++;
+package org.opensearch.parquet.writer;
+import org.opensearch.index.engine.dataformat.FlushInput;
+            metadata.numRows(),
+ * <p>Writer-level settings (e.g., {@code parquet.max_rows_per_vsr}) are extracted from
+    public long mappingVersion() {
+        if (state != WriterState.ACTIVE && state != WriterState.PENDING_ROLLBACK) {  
+        String file,
+    public WriterState state() {
+import org.apache.arrow.vector.types.pojo.Schema;
+                state = WriterState.PENDING_ROLLBACK;
+    ) {  
+                "[Gen: {}] updateMappingVersion: advancing from {} to {}, will reconcile schema",  
+            threadPool,
+import org.opensearch.index.IndexSettings;
+                schema.getFields().size(),
+     * Creates a new ParquetWriter.
+        }
+        return StatsRecorder.recordTimeMillis(() -> {
+/**  
+        if (state != WriterState.ACTIVE) {
+ *
+        Supplier<Schema> schemaSupplier,
+        this.stats = stats;
+                vsrManager.addDocument(d);
+        );
+            } catch (SchemaChangeRequiresWriterRotationException e) {
+        return FileInfos.builder().putWriterFileSet(dataFormat, monoFileSet).rowIdMapping(vsrManager.getRowIdMapping()).build();
+     */
+            stats.addDocsIndexed(1);
+    @Override
         }
         assert metadata.numRows() > 0 : "flushed metadata must have positive row count";
-
-        Path filePath = Path.of(file);
-        String fileName = filePath.getFileName().toString();
-
-        // Register the pre-computed CRC32 so the upload path can read it in O(1).
-        // Use the FileMetadata overload so the strategy owns key derivation.
-        if (checksumStrategy != null && metadata.crc32() != 0) {  
-            checksumStrategy.registerChecksum(new FileMetadata(dataFormat.name(), fileName), metadata.crc32(), writerGeneration);
-        }
-
+        this.dataFormat = dataFormat;
+        return state;  
+import org.opensearch.index.store.FileMetadata;  
+    @Override
+    @Override
+    @Override
+                this.mappingVersion,
+ */  
+ * generation, and row count for downstream commit tracking.
+import org.opensearch.plugin.stats.StatsRecorder;
+     * @param indexSettings index settings for writer configuration
+    }
+            try {
+import org.opensearch.parquet.memory.ArrowBufferPool;  
+import java.io.IOException;
+        this.schemaSupplier = schemaSupplier;  
+            stats
+        Schema schema,
+     *                       field vectors before {@code addDoc} encounters them
+    public WriteResult addDoc(ParquetDocumentInput d) throws IOException {  
+            mappingVersion,
+ * Parquet file writer integrating OpenSearch's {@link Writer} interface with the VSR batching layer.
+     * @param stats shard-level stats tracker
+            }  
+import org.opensearch.parquet.bridge.ParquetFileMetadata;
+ * Documents are accepted via {@link #addDoc(ParquetDocumentInput)}, batched in Arrow vectors
+        return mappingVersion;
+            writerGeneration,
+     * @param schemaSupplier supplies the up-to-date schema when the mapping version  
+    public FileInfos flush(FlushInput flushInput) throws IOException {  
+        FormatChecksumStrategy checksumStrategy  
+            new ParquetShardStatsTracker()
+            schemaSupplier,
+                this.mappingVersion  
+    private final FormatChecksumStrategy checksumStrategy;  
+ *  
+ *
+ * the {@link IndexSettings} passed at construction time and propagated to the VSR layer.
+    public long generation() {  
+     * @param dataFormat the Parquet data format instance
+     *  
+            indexSettings,
+        );
+    @Override
+import org.opensearch.parquet.vsr.SchemaChangeRequiresWriterRotationException;
+            );  
+            schema,
+     * @param bufferPool shared Arrow buffer pool  
+    }  
+        return dataFormat.name().equals(formatName) ? Optional.of(this) : Optional.empty();
         MonoFileWriterSet monoFileSet = MonoFileWriterSet.of(
-            filePath.getParent().toAbsolutePath(),
+import org.opensearch.index.store.FormatChecksumStrategy;
+        long mappingVersion,
+            dataFormat,  
+ * The OpenSearch Contributors require contributions made to  
+    }  
+    @Override  
+            Schema schema = schemaSupplier.get();  
+import org.opensearch.parquet.ParquetDataFormatPlugin;
+    public ParquetWriter(
+            // Schema mismatch is recoverable: the VSR rejected the doc pre-admission, so the
+        ArrowBufferPool bufferPool,  
+            logger.trace(
+    public void updateMappingVersion(long newVersion) {  
+        FormatChecksumStrategy checksumStrategy,
+import org.opensearch.index.engine.dataformat.WriteResult;
+    private static final Logger logger = LogManager.getLogger(ParquetWriter.class);  
+            checksumStrategy.registerChecksum(new FileMetadata(dataFormat.name(), fileName), metadata.crc32(), writerGeneration);
+     * @param threadPool the thread pool for background native writes
+import org.opensearch.index.engine.dataformat.FileInfos;  
+     *                       advances, used by {@link #updateMappingVersion} to add new
+            }  
+            throw new IllegalStateException("rollbackTo requires ACTIVE or PENDING_ROLLBACK state but was " + state);
+    @Override
+ * <p>The returned {@link FileInfos} from {@link #flush(FlushInput)} contains the file path, writer
+        return writerGeneration;
+    public void rollbackTo(long rowCount) throws IOException {
             writerGeneration,  
             fileName,
-            metadata.numRows(),
-            ParquetDataFormatPlugin.PARQUET_FORMAT_VERSION  
-        );
-        return FileInfos.builder().putWriterFileSet(dataFormat, monoFileSet).rowIdMapping(vsrManager.getRowIdMapping()).build();
-    }  
-
-    @Override
-    public long generation() {  
-        return writerGeneration;
-    }
-
-    @Override
-    public boolean isSchemaMutable() {
-        return vsrManager.isSchemaMutable();  
-    }
-
-    @Override  
-    public long mappingVersion() {
-        return mappingVersion;
-    }  
-
-    @Override
-    public void updateMappingVersion(long newVersion) {  
-        if (newVersion > this.mappingVersion) {
-            logger.debug(
-                "[Gen: {}] updateMappingVersion: advancing from {} to {}, will reconcile schema",  
-                writerGeneration,
-                this.mappingVersion,
-                newVersion  
-            );
-            this.mappingVersion = newVersion;
-            Schema schema = schemaSupplier.get();  
-            logger.trace(
-                "[Gen: {}] updateMappingVersion: schema from supplier has {} fields: {}",
-                writerGeneration,  
-                schema.getFields().size(),
-                schema.getFields().stream().map(f -> f.getName()).collect(java.util.stream.Collectors.joining(", "))
-            );  
-            try {
-                boolean updated = vsrManager.reconcileSchema(schema);
-                logger.debug("updateMappingVersion: reconcileSchema returned updated={}", updated);  
-            } catch (SchemaChangeRequiresWriterRotationException e) {
-                state = WriterState.RETIRED_FLUSHABLE;
-                logger.debug(  
-                    "[Gen: {}] mapping version {} requires a new Parquet writer: {}",
-                    writerGeneration,
-                    newVersion,  
+    private final ParquetShardStatsTracker stats;
+        ThreadPool threadPool,  
+import org.opensearch.threadpool.ThreadPool;
                     e.getMessage()
-                );
-            }  
-        } else {
-            logger.trace(
-                "[Gen: {}] updateMappingVersion: no-op, newVersion={} <= current mappingVersion={}",  
-                writerGeneration,
-                newVersion,
-                this.mappingVersion  
-            );
-        }
-    }  
-
-    @Override
-    public void close() throws IOException {  
+import org.apache.logging.log4j.LogManager;  
+    public Optional<Writer<?>> getWriterForFormat(String formatName) {
+            return FileInfos.empty();  
+     * @param mappingVersion the initial mapping version  
+/*  
+            // caller-driven rollback no-ops in the VSR and restores ACTIVE.  
         try {
-            vsrManager.close();
-        } finally {  
-            state = WriterState.CLOSED;
-        }
-    }  
-
+        state = WriterState.ACTIVE;
+     * @param writerGeneration generation number for this writer
+import java.util.Optional;  
+                "rollbackTo supports rolling back exactly 1 doc, but asked to roll back " + (acceptedRows - rowCount)
+import org.opensearch.index.engine.dataformat.WriterState;
+                newVersion,
+                    "[Gen: {}] mapping version {} requires a new Parquet writer: {}",
+import java.util.function.Supplier;
+        long writerGeneration,
 }
+    }

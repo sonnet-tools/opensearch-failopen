@@ -1,37 +1,30 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        this.pipelineId = pipelineId;
  * compatible open source license.
- */  
-
-package org.opensearch.ingest;
-
+}  
 import reactor.util.annotation.NonNull;
-
+    }  
+/*  
+        return type;
+ * The OpenSearch Contributors require contributions made to  
+    public String getPipelineId() {  
+package org.opensearch.ingest;
+    public IngestPipelineInfo(final @NonNull String pipelineId, final @NonNull IngestPipelineType type) {
+    private final IngestPipelineType type;
+ *
+    public IngestPipelineType getType() {
 /**  
+        this.type = type;  
+    @Override
+    }
+ */  
+public class IngestPipelineInfo {  
  * Ingest pipeline info help hold the pipeline id and type.
  */
-public class IngestPipelineInfo {  
-    private final String pipelineId;
-    private final IngestPipelineType type;
-
-    public IngestPipelineInfo(final @NonNull String pipelineId, final @NonNull IngestPipelineType type) {
-        this.pipelineId = pipelineId;
-        this.type = type;  
     }
-
-    public String getPipelineId() {  
-        return pipelineId;
     }
-
-    public IngestPipelineType getType() {
-        return type;
-    }  
-
-    @Override
-    public String toString() {  
         return pipelineId + ":" + type.name();
-    }
-}  
+        return pipelineId;
+    public String toString() {  
+    private final String pipelineId;
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0

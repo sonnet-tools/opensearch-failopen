@@ -1,76 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        if (tracer.isRecording() == true) {  
+        } else {
  *
+     * @param tracer tracer
+    private final Span span;  
+    }
+        this.tracer = Objects.requireNonNull(tracer);
+        try (SpanScope scope = tracer.withSpanInScope(span)) {  
+     */
+}  
+    public void onResponse(Response response) {
+import org.opensearch.telemetry.tracing.Span;
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing.listener;
-
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.telemetry.tracing.Span;
-import org.opensearch.telemetry.tracing.SpanScope;  
-import org.opensearch.telemetry.tracing.Tracer;
-
-import java.util.Objects;  
-
-/**
- * Tracer wrapped {@link ActionListener}  
- * @param <Response> response.
- */
-public class TraceableActionListener<Response> implements ActionListener<Response> {  
-
-    private final ActionListener<Response> delegate;
-    private final Span span;  
-    private final Tracer tracer;
-
-    /**  
-     * Constructor.
-     *
-     * @param delegate delegate  
-     * @param span     span
+            delegate.onFailure(e);
      * @param tracer tracer
-     */  
-    private TraceableActionListener(ActionListener<Response> delegate, Span span, Tracer tracer) {
-        this.delegate = Objects.requireNonNull(delegate);
-        this.span = Objects.requireNonNull(span);  
-        this.tracer = Objects.requireNonNull(tracer);
-    }
-
-    /**
-     * Factory method.
+            return delegate;  
+     * @return action listener  
+ * @param <Response> response.
      * @param delegate delegate  
      * @param span span
-     * @param tracer tracer
-     * @return action listener  
-     */
-    public static <Response> ActionListener<Response> create(ActionListener<Response> delegate, Span span, Tracer tracer) {
-        if (tracer.isRecording() == true) {  
-            return new TraceableActionListener<Response>(delegate, span, tracer);
-        } else {
-            return delegate;  
-        }
-    }
-
-    @Override
-    public void onResponse(Response response) {
-        try (SpanScope scope = tracer.withSpanInScope(span)) {  
-            delegate.onResponse(response);
-        } finally {
-            span.endSpan();  
-        }
-
-    }  
-
-    @Override
-    public void onFailure(Exception e) {  
+    private TraceableActionListener(ActionListener<Response> delegate, Span span, Tracer tracer) {
         try (SpanScope scope = tracer.withSpanInScope(span)) {
-            delegate.onFailure(e);
-        } finally {  
-            span.setError(e);
-            span.endSpan();
+public class TraceableActionListener<Response> implements ActionListener<Response> {  
+     *
+    @Override
+    public static <Response> ActionListener<Response> create(ActionListener<Response> delegate, Span span, Tracer tracer) {
+     * Constructor.
+import org.opensearch.telemetry.tracing.SpanScope;  
+            delegate.onResponse(response);
         }  
-
+    @Override
+        this.delegate = Objects.requireNonNull(delegate);
+    /**
+ * compatible open source license.
+ * Tracer wrapped {@link ActionListener}  
+import java.util.Objects;  
+     * Factory method.
+import org.opensearch.telemetry.tracing.Tracer;
+    public void onFailure(Exception e) {  
+        }
+            return new TraceableActionListener<Response>(delegate, span, tracer);
+    /**  
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+            span.endSpan();  
     }
-}  
+        this.span = Objects.requireNonNull(span);  
+     * @param span     span
+    }
+        } finally {  
+            span.endSpan();
+ */
+    private final Tracer tracer;
+/*  
+/**
+    private final ActionListener<Response> delegate;
+ */  
+        }
+     */  
+     * @param delegate delegate  
+        } finally {
+            span.setError(e);
+import org.opensearch.core.action.ActionListener;
+package org.opensearch.telemetry.tracing.listener;

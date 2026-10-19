@@ -1,60 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.Location;
-
-import java.util.ArrayList;  
-import java.util.List;
-
-public abstract class ArgumentsNode extends ExpressionNode {  
-
-    /* ---- begin tree structure ---- */
-
-    private final List<ExpressionNode> argumentNodes = new ArrayList<>();
-
-    public void addArgumentNode(ExpressionNode argumentNode) {  
-        argumentNodes.add(argumentNode);
+ * this work for additional information regarding copyright
     }
-
-    public List<ExpressionNode> getArgumentNodes() {
-        return argumentNodes;
-    }  
-
-    /* ---- end tree structure ---- */
-
-    public ArgumentsNode(Location location) {
-        super(location);
-    }  
-
+ *
+ * You may obtain a copy of the License at  
+import java.util.ArrayList;  
 }
+    public List<ExpressionNode> getArgumentNodes() {
+ * under the License.  
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+    }  
+ */  
+public abstract class ArgumentsNode extends ExpressionNode {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /* ---- end tree structure ---- */
+ * Licensed to Elasticsearch under one or more contributor  
+ * Modifications Copyright OpenSearch Contributors. See
+    /* ---- begin tree structure ---- */
+ * The OpenSearch Contributors require contributions made to  
+/*  
+    public ArgumentsNode(Location location) {
+ */
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+ * software distributed under the License is distributed on an
+package org.opensearch.painless.ir;
+import java.util.List;
+ * not use this file except in compliance with the License.
+        super(location);
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+ */  
+ * Unless required by applicable law or agreed to in writing,
+        argumentNodes.add(argumentNode);
+ * compatible open source license.
+    public void addArgumentNode(ExpressionNode argumentNode) {  
+ *
+    }  
+import org.opensearch.painless.Location;
+        return argumentNodes;
+    private final List<ExpressionNode> argumentNodes = new ArrayList<>();
+/*
+ * specific language governing permissions and limitations

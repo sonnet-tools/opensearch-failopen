@@ -1,80 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.aggregations.BaseAggregationTestCase;  
-
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.Map;
-
-public class ScriptedMetricTests extends BaseAggregationTestCase<ScriptedMetricAggregationBuilder> {  
-
-    @Override
-    protected ScriptedMetricAggregationBuilder createTestAggregatorBuilder() {  
-        ScriptedMetricAggregationBuilder factory = new ScriptedMetricAggregationBuilder(randomAlphaOfLengthBetween(1, 20));
-        if (randomBoolean()) {
-            factory.initScript(randomScript("initScript"));  
-        }
-        factory.mapScript(randomScript("mapScript"));
-        if (randomBoolean()) {  
-            factory.combineScript(randomScript("combineScript"));
-        }
-        if (randomBoolean()) {  
-            factory.reduceScript(randomScript("reduceScript"));
-        }
-        if (randomBoolean()) {  
-            Map<String, Object> params = new HashMap<>();
-            params.put("foo", "bar");
-            factory.params(params);  
-        }
-        return factory;
-    }  
-
-    private Script randomScript(String script) {
-        if (randomBoolean()) {  
-            return mockScript(script);
-        } else {
-            ScriptType type = randomFrom(ScriptType.values());  
-            return new Script(
-                type,
-                type == ScriptType.STORED ? null : randomFrom("my_lang", Script.DEFAULT_SCRIPT_LANG),  
-                script,
                 Collections.emptyMap()
-            );  
+ * software distributed under the License is distributed on an
+import org.opensearch.script.Script;
+ * Unless required by applicable law or agreed to in writing,
+ * GitHub history for details.
+        if (randomBoolean()) {  
+            ScriptType type = randomFrom(ScriptType.values());  
+ * under the License.  
+ * You may obtain a copy of the License at  
+public class ScriptedMetricTests extends BaseAggregationTestCase<ScriptedMetricAggregationBuilder> {  
+            return mockScript(script);
+ * KIND, either express or implied.  See the License for the
+                type == ScriptType.STORED ? null : randomFrom("my_lang", Script.DEFAULT_SCRIPT_LANG),  
+/*  
+            Map<String, Object> params = new HashMap<>();
+        if (randomBoolean()) {  
+            factory.params(params);  
+        return factory;
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
         }
+        ScriptedMetricAggregationBuilder factory = new ScriptedMetricAggregationBuilder(randomAlphaOfLengthBetween(1, 20));
+ */  
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            factory.combineScript(randomScript("combineScript"));
+/*
+            factory.reduceScript(randomScript("reduceScript"));
+ * this file be licensed under the Apache-2.0 license or a
+        }
+    @Override
+ * compatible open source license.
+                script,
+import java.util.Map;
+            );  
     }
-
+        }
 }
+package org.opensearch.search.aggregations.metrics;
+import org.opensearch.script.ScriptType;
+            return new Script(
+            params.put("foo", "bar");
+            factory.initScript(randomScript("initScript"));  
+ * not use this file except in compliance with the License.
+ */  
+import org.opensearch.search.aggregations.BaseAggregationTestCase;  
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+    }  
+        }
+import java.util.HashMap;  
+ * The OpenSearch Contributors require contributions made to  
+        factory.mapScript(randomScript("mapScript"));
+ * this work for additional information regarding copyright
+    private Script randomScript(String script) {
+import java.util.Collections;
+ *
+        if (randomBoolean()) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under  
+    protected ScriptedMetricAggregationBuilder createTestAggregatorBuilder() {  
+        } else {
+                type,
+ * license agreements. See the NOTICE file distributed with
+        if (randomBoolean()) {
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
+        }
+ */
+        if (randomBoolean()) {  

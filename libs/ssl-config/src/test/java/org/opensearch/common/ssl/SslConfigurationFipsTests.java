@@ -1,77 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.ssl;
-
-import java.util.Collections;
 import java.util.List;
-
-import org.mockito.Mockito;
-
-import static org.opensearch.common.ssl.SslConfigurationLoader.DEFAULT_CIPHERS;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-
-public class SslConfigurationFipsTests extends SslConfigurationTests {
-
-    public void testCreateSslContextWithUnsupportedProtocols() {  
-        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+                )  
+    public void testNotSupportedProtocolsInFipsJvm() {
+            sslConfiguration.createSslContext();
+                exception.getMessage(),  
+            );
+            );
+        }  
+                randomFrom(SslVerificationMode.values()),
+            randomFrom(SslVerificationMode.values()),  
         final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
         SslConfiguration configuration = new SslConfiguration(  
             trustConfig,
-            keyConfig,
-            randomFrom(SslVerificationMode.values()),  
             randomFrom(SslClientAuthenticationMode.values()),
-            DEFAULT_CIPHERS,
-            Collections.singletonList("DTLSv1.2")  
-        );
-
-        Exception e = assertThrows(SslConfigException.class, configuration::createSslContext);  
-        assertThat(e.getMessage(), containsString("in FIPS mode only the following SSL/TLS protocols are allowed: [TLSv1.3, TLSv1.2]"));
-    }
-
-    public void testNotSupportedProtocolsInFipsJvm() {
-        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
-        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);  
-
-        {
-            var sslConfiguration = new SslConfiguration(  
-                trustConfig,
-                keyConfig,
-                randomFrom(SslVerificationMode.values()),  
-                randomFrom(SslClientAuthenticationMode.values()),
-                DEFAULT_CIPHERS,
-                List.of("TLSv1.2")  
-            );
-            sslConfiguration.createSslContext();
-        }  
-
-        {
-            final String nonFipsProtocols = randomFrom(List.of("TLSv1.1", "TLSv1", "SSLv3", "SSLv2Hello", "SSLv2"));  
-            var sslConfiguration = new SslConfiguration(
-                trustConfig,
-                keyConfig,  
-                randomFrom(SslVerificationMode.values()),
-                randomFrom(SslClientAuthenticationMode.values()),
-                DEFAULT_CIPHERS,  
-                Collections.singletonList(nonFipsProtocols)
-            );
-            var exception = assertThrows(  
-                "cannot create SSL/TLS context without any supported protocols",
-                SslConfigException.class,
-                sslConfiguration::createSslContext  
-            );
-            assertThat(
-                exception.getMessage(),  
-                equalTo(
-                    "in FIPS mode only the following SSL/TLS protocols are allowed: [TLSv1.3, TLSv1.2]. This issue may be caused by the 'ssl.supported_protocols' setting."
-                )  
-            );
-        }
-    }  
 }
+                randomFrom(SslClientAuthenticationMode.values()),
+            );
+import java.util.Collections;
+                Collections.singletonList(nonFipsProtocols)
+ * compatible open source license.
+import static org.hamcrest.Matchers.equalTo;
+            );
+ * The OpenSearch Contributors require contributions made to  
+import org.mockito.Mockito;
+        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);  
+        {
+        assertThat(e.getMessage(), containsString("in FIPS mode only the following SSL/TLS protocols are allowed: [TLSv1.3, TLSv1.2]"));
+            keyConfig,
+        {
+                trustConfig,
+public class SslConfigurationFipsTests extends SslConfigurationTests {
+                trustConfig,
+                equalTo(
+            assertThat(
+ * SPDX-License-Identifier: Apache-2.0
+    }
+package org.opensearch.common.ssl;
+                SslConfigException.class,
+                keyConfig,  
+                "cannot create SSL/TLS context without any supported protocols",
+                DEFAULT_CIPHERS,
+    public void testCreateSslContextWithUnsupportedProtocols() {  
+        }
+import static org.opensearch.common.ssl.SslConfigurationLoader.DEFAULT_CIPHERS;  
+            var exception = assertThrows(  
+            final String nonFipsProtocols = randomFrom(List.of("TLSv1.1", "TLSv1", "SSLv3", "SSLv2Hello", "SSLv2"));  
+                    "in FIPS mode only the following SSL/TLS protocols are allowed: [TLSv1.3, TLSv1.2]. This issue may be caused by the 'ssl.supported_protocols' setting."
+        );
+                randomFrom(SslVerificationMode.values()),  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+                DEFAULT_CIPHERS,  
+                sslConfiguration::createSslContext  
+                randomFrom(SslClientAuthenticationMode.values()),
+        Exception e = assertThrows(SslConfigException.class, configuration::createSslContext);  
+            var sslConfiguration = new SslConfiguration(
+/*  
+                keyConfig,
+            var sslConfiguration = new SslConfiguration(  
+            Collections.singletonList("DTLSv1.2")  
+            DEFAULT_CIPHERS,
+import static org.hamcrest.Matchers.containsString;
+                List.of("TLSv1.2")  
+    }  
+        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);

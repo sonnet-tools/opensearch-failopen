@@ -1,115 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        RoutingExplanations exp = new RoutingExplanations();  
+ * under the License.  
+    public RoutingExplanations add(RerouteExplanation explanation) {
  * The OpenSearch Contributors require contributions made to  
+        }
+            .map(Optional::get)  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     */  
+/*  
+    /**
+        this.explanations = new ArrayList<>();
+ * this work for additional information regarding copyright
+            RerouteExplanation explanation = RerouteExplanation.readFrom(in);
+        for (RerouteExplanation explanation : explanations) {  
+    public static void writeTo(RoutingExplanations explanations, StreamOutput out) throws IOException {
+    @Override  
+    }  
+            .map(explanation -> explanation.command().getMessage())
+        this.explanations.add(explanation);
+import java.util.stream.Collectors;  
+        out.writeVInt(explanations.explanations.size());  
+import java.io.IOException;
+/*
+ *  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+        return exp;
+    }
+        return explanations().stream()
+/**
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * Read in a RoutingExplanations object
+ * Licensed to Elasticsearch under one or more contributor  
+ * @opensearch.api  
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+        for (RerouteExplanation explanation : explanations.explanations) {
+            explanation.toXContent(builder, params);
+            .collect(Collectors.toList());
+ */
+ */  
+ * GitHub history for details.
+/*  
+    public List<String> getYesDecisionMessages() {
+ *
+        }  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public List<RerouteExplanation> explanations() {  
+ *
+ */
+        }
+     * Write the RoutingExplanations object  
+ * explanations.
+        builder.endArray();  
+            RerouteExplanation.writeTo(explanation, out);
+ * Modifications Copyright OpenSearch Contributors. See
+     */  
+package org.opensearch.cluster.routing.allocation;
+ *
+        return builder;
+            .filter(explanation -> explanation.decisions().type().equals(Decision.Type.YES))  
+public class RoutingExplanations implements ToXContentFragment {  
+ * Class used to encapsulate a number of {@link RerouteExplanation}  
+        builder.startArray("explanations");
+ * KIND, either express or implied.  See the License for the
+    }
+ * software distributed under the License is distributed on an
+import org.opensearch.core.xcontent.XContentBuilder;  
+    /**
+import org.opensearch.core.common.io.stream.StreamOutput;
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.cluster.routing.allocation.decider.Decision;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;  
-
-/**
- * Class used to encapsulate a number of {@link RerouteExplanation}  
- * explanations.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class RoutingExplanations implements ToXContentFragment {  
     private final List<RerouteExplanation> explanations;
-
-    public RoutingExplanations() {  
-        this.explanations = new ArrayList<>();
-    }
-
-    public RoutingExplanations add(RerouteExplanation explanation) {
-        this.explanations.add(explanation);
+            .filter(Optional::isPresent)
         return this;  
     }
-
-    public List<RerouteExplanation> explanations() {  
+        for (int i = 0; i < exCount; i++) {
         return this.explanations;
-    }
-
-    /**
+import org.opensearch.core.common.io.stream.StreamInput;  
      * Provides feedback from commands with a YES decision that should be displayed to the user after the command has been applied
-     */  
-    public List<String> getYesDecisionMessages() {
-        return explanations().stream()
-            .filter(explanation -> explanation.decisions().type().equals(Decision.Type.YES))  
-            .map(explanation -> explanation.command().getMessage())
-            .filter(Optional::isPresent)
-            .map(Optional::get)  
-            .collect(Collectors.toList());
-    }
-
+import org.opensearch.cluster.routing.allocation.decider.Decision;
+ * specific language governing permissions and limitations
     /**
-     * Read in a RoutingExplanations object
-     */  
+import org.opensearch.core.xcontent.ToXContentFragment;
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under  
+}  
     public static RoutingExplanations readFrom(StreamInput in) throws IOException {
         int exCount = in.readVInt();
-        RoutingExplanations exp = new RoutingExplanations();  
-        for (int i = 0; i < exCount; i++) {
-            RerouteExplanation explanation = RerouteExplanation.readFrom(in);
-            exp.add(explanation);  
-        }
-        return exp;
-    }  
-
-    /**
-     * Write the RoutingExplanations object  
+    }
+import java.util.Optional;
+    }
+import java.util.ArrayList;  
+ * not use this file except in compliance with the License.
      */
-    public static void writeTo(RoutingExplanations explanations, StreamOutput out) throws IOException {
-        out.writeVInt(explanations.explanations.size());  
-        for (RerouteExplanation explanation : explanations.explanations) {
-            RerouteExplanation.writeTo(explanation, out);
-        }  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startArray("explanations");
-        for (RerouteExplanation explanation : explanations) {  
-            explanation.toXContent(builder, params);
-        }
-        builder.endArray();  
-        return builder;
-    }
-}  
+ * You may obtain a copy of the License at  
+@PublicApi(since = "1.0.0")
+import java.util.List;
+import org.opensearch.common.annotation.PublicApi;
+    public RoutingExplanations() {  
+            exp.add(explanation);  

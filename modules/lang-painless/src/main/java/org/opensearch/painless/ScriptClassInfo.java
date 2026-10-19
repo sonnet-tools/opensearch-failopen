@@ -1,315 +1,281 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless;
-
-import org.opensearch.painless.lookup.PainlessLookup;
-import org.opensearch.painless.lookup.PainlessLookupUtility;
-import org.opensearch.painless.lookup.def;  
-import org.opensearch.painless.symbol.FunctionTable;
-
-import java.lang.invoke.MethodType;  
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.List;
-import java.util.function.Function;  
-
-import static java.util.Collections.unmodifiableList;
-import static org.opensearch.painless.WriterConstants.NEEDS_PARAMETER_METHOD_TYPE;  
-
-/**
- * Information about the interface being implemented by the painless script.  
- */
-public class ScriptClassInfo {
-
-    private final Class<?> baseClass;
-    private final org.objectweb.asm.commons.Method executeMethod;
-    private final Class<?> executeMethodReturnType;  
-    private final List<MethodArgument> executeArguments;
-    private final List<org.objectweb.asm.commons.Method> needsMethods;
-    private final List<org.objectweb.asm.commons.Method> getMethods;  
-    private final List<Class<?>> getReturns;
-    public final List<FunctionTable.LocalFunction> converters;
-    public final FunctionTable.LocalFunction defConverter;  
-
-    public ScriptClassInfo(PainlessLookup painlessLookup, Class<?> baseClass) {
-        this.baseClass = baseClass;  
-
-        // Find the main method and the uses$argName methods
-        java.lang.reflect.Method executeMethod = null;  
-        List<org.objectweb.asm.commons.Method> needsMethods = new ArrayList<>();
-        List<org.objectweb.asm.commons.Method> getMethods = new ArrayList<>();
-        List<Class<?>> getReturns = new ArrayList<>();  
-
-        Class<?> returnType = null;
-        for (java.lang.reflect.Method m : baseClass.getMethods()) {  
-            if (m.isDefault()) {
-                continue;
-            }  
-            if (m.getName().equals("execute")) {
-                if (executeMethod == null) {
-                    executeMethod = m;  
-                    returnType = m.getReturnType();
-                } else {
-                    throw new IllegalArgumentException(  
-                        "Painless can only implement interfaces that have a single method named [execute] but ["
-                            + baseClass.getName()
-                            + "] has more than one."  
-                    );
-                }
-            } else if (m.getName().startsWith("needs") && m.getReturnType() == boolean.class && m.getParameterCount() == 0) {  
-                needsMethods.add(new org.objectweb.asm.commons.Method(m.getName(), NEEDS_PARAMETER_METHOD_TYPE.toMethodDescriptorString()));
-            } else if (m.getName().startsWith("get")
-                && m.getName().equals("getClass") == false  
-                && Modifier.isStatic(m.getModifiers()) == false) {
-                    getReturns.add(
-                        definitionTypeForClass(  
-                            painlessLookup,
-                            m.getReturnType(),
-                            componentType -> "["  
-                                + m.getName()
-                                + "] has unknown return "
-                                + "type ["  
-                                + componentType.getName()
-                                + "]. Painless can only support getters with return types that are "
-                                + "allowlisted."  
-                        )
-                    );
-
-                    getMethods.add(
-                        new org.objectweb.asm.commons.Method(
-                            m.getName(),  
-                            MethodType.methodType(m.getReturnType()).toMethodDescriptorString()
-                        )
-                    );  
-
-                }
-        }  
-
-        if (executeMethod == null) {
-            throw new IllegalStateException("no execute method found");  
-        }
-        ArrayList<FunctionTable.LocalFunction> converters = new ArrayList<>();
-        FunctionTable.LocalFunction defConverter = null;  
-        for (java.lang.reflect.Method m : baseClass.getMethods()) {
-            if (m.getName().startsWith("convertFrom")
-                && m.getParameterCount() == 1  
-                && m.getReturnType() == returnType
-                && Modifier.isStatic(m.getModifiers())) {
-
-                if (m.getName().equals("convertFromDef")) {
-                    if (m.getParameterTypes()[0] != Object.class) {
-                        throw new IllegalStateException(  
-                            "convertFromDef must take a single Object as an argument, " + "not [" + m.getParameterTypes()[0] + "]"
-                        );
-                    }  
-                    defConverter = new FunctionTable.LocalFunction(
-                        m.getName(),
-                        m.getReturnType(),  
-                        Arrays.asList(m.getParameterTypes()),
-                        true,
-                        true  
-                    );
-                } else {
-                    converters.add(  
-                        new FunctionTable.LocalFunction(m.getName(), m.getReturnType(), Arrays.asList(m.getParameterTypes()), true, true)
-                    );
-                }  
-            }
-        }
-        this.defConverter = defConverter;  
-        this.converters = unmodifiableList(converters);
-
-        MethodType methodType = MethodType.methodType(executeMethod.getReturnType(), executeMethod.getParameterTypes());  
-        this.executeMethod = new org.objectweb.asm.commons.Method(executeMethod.getName(), methodType.toMethodDescriptorString());
-        executeMethodReturnType = definitionTypeForClass(
-            painlessLookup,  
-            executeMethod.getReturnType(),
-            componentType -> "Painless can only implement execute methods returning a allowlisted type but ["
-                + baseClass.getName()  
-                + "#execute] returns ["
-                + componentType.getName()
-                + "] which isn't allowlisted."  
-        );
-
-        // Look up the argument  
-        List<MethodArgument> arguments = new ArrayList<>();
-        String[] argumentNamesConstant = readArgumentNamesConstant(baseClass);
-        Class<?>[] types = executeMethod.getParameterTypes();  
-        if (argumentNamesConstant.length != types.length) {
-            throw new IllegalArgumentException(
-                "[" + baseClass.getName() + "#ARGUMENTS] has length [2] but [" + baseClass.getName() + "#execute] takes [1] argument."  
-            );
-        }
-        for (int arg = 0; arg < types.length; arg++) {  
-            arguments.add(methodArgument(painlessLookup, types[arg], argumentNamesConstant[arg]));
-        }
         this.executeArguments = unmodifiableList(arguments);  
-        this.needsMethods = unmodifiableList(needsMethods);
-        this.getMethods = unmodifiableList(getMethods);
-        this.getReturns = unmodifiableList(getReturns);  
-    }
-
-    /**  
-     * The interface that the Painless script should implement.
-     */
-    public Class<?> getBaseClass() {  
-        return baseClass;
-    }
-
-    /**
-     * An asm method descriptor for the {@code execute} method.
-     */  
-    public org.objectweb.asm.commons.Method getExecuteMethod() {
-        return executeMethod;
-    }  
-
-    /**
-     * The Painless {@link Class} or the return type of the {@code execute} method. This is used to generate the appropriate  
-     * return bytecode.
-     */
-    public Class<?> getExecuteMethodReturnType() {  
+        this.defConverter = defConverter;  
         return executeMethodReturnType;
-    }
-
-    /**
-     * Painless {@link Class}s and names of the arguments to the {@code execute} method. The names are exposed to the Painless
-     * script.  
-     */
-    public List<MethodArgument> getExecuteArguments() {
-        return executeArguments;  
-    }
-
-    /**  
-     * The {@code uses$varName} methods that must be implemented by Painless to complete implementing the interface.
-     */
-    public List<org.objectweb.asm.commons.Method> getNeedsMethods() {  
-        return needsMethods;
-    }
-
-    /**
-     * The {@code getVarName} methods that must be implemented by Painless to complete implementing the interface.
-     */  
-    public List<org.objectweb.asm.commons.Method> getGetMethods() {
-        return getMethods;
-    }  
-
-    /**
-     * The {@code getVarName} methods return types.  
-     */
-    public List<Class<?>> getGetReturns() {
-        return getReturns;  
-    }
-
-    /**  
-     * Painless {@link Class}es and name of the argument to the {@code execute} method.
-     */
-    public static class MethodArgument {  
-        private final Class<?> clazz;
-        private final String name;
-
-        public MethodArgument(Class<?> clazz, String name) {
-            this.clazz = clazz;
-            this.name = name;  
-        }
-
-        public Class<?> getClazz() {  
-            return clazz;
-        }
-
-        public String getName() {
-            return name;
-        }  
-    }
-
-    private MethodArgument methodArgument(PainlessLookup painlessLookup, Class<?> clazz, String argName) {  
-        Class<?> defClass = definitionTypeForClass(
-            painlessLookup,
-            clazz,  
-            componentType -> "["
-                + argName
-                + "] is of unknown type ["  
-                + componentType.getName()
-                + ". Painless interfaces can only accept arguments that are of allowlisted types."
-        );  
-        return new MethodArgument(defClass, argName);
-    }
-
-    private static Class<?> definitionTypeForClass(
-        PainlessLookup painlessLookup,
-        Class<?> type,  
-        Function<Class<?>, String> unknownErrorMessageSource
-    ) {
-        type = PainlessLookupUtility.javaTypeToType(type);  
-        Class<?> componentType = type;
-
-        while (componentType.isArray()) {  
-            componentType = componentType.getComponentType();
-        }
-
-        if (componentType != def.class && painlessLookup.lookupPainlessClass(componentType) == null) {
-            throw new IllegalArgumentException(unknownErrorMessageSource.apply(componentType));
-        }  
-
-        return type;
-    }  
-
-    private static String[] readArgumentNamesConstant(Class<?> iface) {
-        Field argumentNamesField;  
-        try {
-            argumentNamesField = iface.getField("PARAMETERS");
-        } catch (NoSuchFieldException e) {  
-            throw new IllegalArgumentException(
                 "Painless needs a constant [String[] PARAMETERS] on all interfaces it implements with the "
-                    + "names of the method arguments but ["  
-                    + iface.getName()
-                    + "] doesn't have one.",
-                e  
-            );
-        }
-        if (false == argumentNamesField.getType().equals(String[].class)) {  
-            throw new IllegalArgumentException(
-                "Painless needs a constant [String[] PARAMETERS] on all interfaces it implements with the "
-                    + "names of the method arguments but ["  
-                    + iface.getName()
-                    + "] doesn't have one."
+ * The OpenSearch Contributors require contributions made to  
+        }  
+ */  
             );  
+                        m.getName(),
+        public String getName() {
+                        throw new IllegalStateException(  
+        Class<?>[] types = executeMethod.getParameterTypes();  
+        return needsMethods;
+     * Painless {@link Class}s and names of the arguments to the {@code execute} method. The names are exposed to the Painless
+                }
+     */
+            );
+ *
+                "Painless needs a constant [String[] PARAMETERS] on all interfaces it implements with the "
+                && m.getName().equals("getClass") == false  
+ * GitHub history for details.
+                            componentType -> "["  
+                        )
+            if (m.getName().startsWith("convertFrom")
+     */  
+                "[" + baseClass.getName() + "#ARGUMENTS] has length [2] but [" + baseClass.getName() + "#execute] takes [1] argument."  
+                    defConverter = new FunctionTable.LocalFunction(
+import org.opensearch.painless.lookup.PainlessLookup;
+    private static String[] readArgumentNamesConstant(Class<?> iface) {
+import org.opensearch.painless.lookup.def;  
         }
-        try {
+            if (m.isDefault()) {
+    /**
+    private final Class<?> baseClass;
+        if (executeMethod == null) {
             return (String[]) argumentNamesField.get(null);  
-        } catch (IllegalArgumentException | IllegalAccessException e) {
-            throw new IllegalArgumentException("Error trying to read [" + iface.getName() + "#ARGUMENTS]", e);
-        }  
+            painlessLookup,  
+    public List<Class<?>> getGetReturns() {
+                                + m.getName()
+                            "convertFromDef must take a single Object as an argument, " + "not [" + m.getParameterTypes()[0] + "]"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.painless.lookup.PainlessLookupUtility;
+            throw new IllegalArgumentException(unknownErrorMessageSource.apply(componentType));
+        }
+                    getMethods.add(
+        ArrayList<FunctionTable.LocalFunction> converters = new ArrayList<>();
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.List;
+            painlessLookup,
+        for (java.lang.reflect.Method m : baseClass.getMethods()) {
+        return getReturns;  
+                if (executeMethod == null) {
+    private final List<MethodArgument> executeArguments;
+        }
+                    );  
+                            m.getName(),  
+                                + "]. Painless can only support getters with return types that are "
+        return executeArguments;  
+ * this file be licensed under the Apache-2.0 license or a
     }
+import static java.util.Collections.unmodifiableList;
+            argumentNamesField = iface.getField("PARAMETERS");
+                    + "names of the method arguments but ["  
+                + baseClass.getName()  
+            }  
+        if (argumentNamesConstant.length != types.length) {
+        type = PainlessLookupUtility.javaTypeToType(type);  
+                + "] which isn't allowlisted."  
+        public Class<?> getClazz() {  
+     * script.  
+ * Licensed to Elasticsearch under one or more contributor  
+                + "] is of unknown type ["  
+     */
+                + argName
+    }  
+                                + "allowlisted."  
+        }  
+        } catch (NoSuchFieldException e) {  
+    }
+import org.opensearch.painless.symbol.FunctionTable;
+ * KIND, either express or implied.  See the License for the
+    /**  
+        );  
+                    );
+        List<MethodArgument> arguments = new ArrayList<>();
+    /**
+                    + "] doesn't have one."
+                            painlessLookup,
+        Field argumentNamesField;  
+public class ScriptClassInfo {
+                    );
+        FunctionTable.LocalFunction defConverter = null;  
+        }
+     * return bytecode.
+                        )
+        List<org.objectweb.asm.commons.Method> getMethods = new ArrayList<>();
+        Class<?> defClass = definitionTypeForClass(
+        }  
+     * The Painless {@link Class} or the return type of the {@code execute} method. This is used to generate the appropriate  
+            } else if (m.getName().startsWith("needs") && m.getReturnType() == boolean.class && m.getParameterCount() == 0) {  
+import java.lang.reflect.Field;
+    /**
+    public List<org.objectweb.asm.commons.Method> getGetMethods() {
+        } catch (IllegalArgumentException | IllegalAccessException e) {
+        this.converters = unmodifiableList(converters);
+ * SPDX-License-Identifier: Apache-2.0
+                        new org.objectweb.asm.commons.Method(
+    }  
+                && Modifier.isStatic(m.getModifiers()) == false) {
+    }
+            componentType -> "["
+ * compatible open source license.
+    }
+        }
+        this.needsMethods = unmodifiableList(needsMethods);
+ * specific language governing permissions and limitations
+                + "#execute] returns ["
+    }
+        for (int arg = 0; arg < types.length; arg++) {  
+                    if (m.getParameterTypes()[0] != Object.class) {
+                        true  
+                            + "] has more than one."  
+    /**
+        Function<Class<?>, String> unknownErrorMessageSource
+ */
+ * software distributed under the License is distributed on an
+                            m.getReturnType(),
+                needsMethods.add(new org.objectweb.asm.commons.Method(m.getName(), NEEDS_PARAMETER_METHOD_TYPE.toMethodDescriptorString()));
+     */
+     * The {@code uses$varName} methods that must be implemented by Painless to complete implementing the interface.
+    }  
+                && m.getReturnType() == returnType
+    public org.objectweb.asm.commons.Method getExecuteMethod() {
+import java.lang.invoke.MethodType;  
+                            + baseClass.getName()
+    public static class MethodArgument {  
+                                + "type ["  
+                } else {
+    /**  
+            return clazz;
+package org.opensearch.painless;
+        try {
+                    }  
+     * The interface that the Painless script should implement.
+                        true,
+    private final Class<?> executeMethodReturnType;  
+            throw new IllegalArgumentException(
+        return getMethods;
+    }
+    }
+        Class<?> componentType = type;
+        this.executeMethod = new org.objectweb.asm.commons.Method(executeMethod.getName(), methodType.toMethodDescriptorString());
+            arguments.add(methodArgument(painlessLookup, types[arg], argumentNamesConstant[arg]));
+ *
+    }
+    ) {
+    private final org.objectweb.asm.commons.Method executeMethod;
+        try {
+        return baseClass;
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+                                + "] has unknown return "
+        }
+        while (componentType.isArray()) {  
+                && m.getParameterCount() == 1  
+            if (m.getName().equals("execute")) {
+    /**
+        }
+    private final List<org.objectweb.asm.commons.Method> getMethods;  
+        return type;
+        }
+            clazz,  
+    private static Class<?> definitionTypeForClass(
+/**
+            throw new IllegalArgumentException("Error trying to read [" + iface.getName() + "#ARGUMENTS]", e);
+                            MethodType.methodType(m.getReturnType()).toMethodDescriptorString()
+     */  
+                    + "] doesn't have one.",
+    public final FunctionTable.LocalFunction defConverter;  
+        java.lang.reflect.Method executeMethod = null;  
+                    executeMethod = m;  
+            executeMethod.getReturnType(),
+    public List<MethodArgument> getExecuteArguments() {
+     * The {@code getVarName} methods return types.  
+        Class<?> returnType = null;
+import java.lang.reflect.Modifier;
+        private final Class<?> clazz;
+    public List<org.objectweb.asm.commons.Method> getNeedsMethods() {  
+ */
+            componentType = componentType.getComponentType();
+     * The {@code getVarName} methods that must be implemented by Painless to complete implementing the interface.
+        List<org.objectweb.asm.commons.Method> needsMethods = new ArrayList<>();
+        this.getReturns = unmodifiableList(getReturns);  
+                    + iface.getName()
+                    returnType = m.getReturnType();
+    private final List<org.objectweb.asm.commons.Method> needsMethods;
+        // Find the main method and the uses$argName methods
+                    );
+        String[] argumentNamesConstant = readArgumentNamesConstant(baseClass);
+            );
+ * under the License.  
+import java.util.Arrays;
+    /**  
+        private final String name;
+ */  
+                } else {
+ *  
+import static org.opensearch.painless.WriterConstants.NEEDS_PARAMETER_METHOD_TYPE;  
+        // Look up the argument  
+        }
+        public MethodArgument(Class<?> clazz, String name) {
+                        new FunctionTable.LocalFunction(m.getName(), m.getReturnType(), Arrays.asList(m.getParameterTypes()), true, true)
+     */
+    private final List<Class<?>> getReturns;
+                continue;
+                if (m.getName().equals("convertFromDef")) {
+     * Painless {@link Class}es and name of the argument to the {@code execute} method.
+            throw new IllegalStateException("no execute method found");  
+    public ScriptClassInfo(PainlessLookup painlessLookup, Class<?> baseClass) {
+ * license agreements. See the NOTICE file distributed with
+                    );
+/*  
+        PainlessLookup painlessLookup,
+ * Information about the interface being implemented by the painless script.  
+                    throw new IllegalArgumentException(  
+                e  
+ * Modifications Copyright OpenSearch Contributors. See
+                    + iface.getName()
+                    converters.add(  
+            this.clazz = clazz;
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at  
+/*
+     * An asm method descriptor for the {@code execute} method.
+        for (java.lang.reflect.Method m : baseClass.getMethods()) {  
+                    + "names of the method arguments but ["  
+            return name;
+                }
+                && Modifier.isStatic(m.getModifiers())) {
+                + componentType.getName()
+import java.util.ArrayList;  
+        List<Class<?>> getReturns = new ArrayList<>();  
+        return new MethodArgument(defClass, argName);
+        this.getMethods = unmodifiableList(getMethods);
+                        Arrays.asList(m.getParameterTypes()),
+        }  
+                    getReturns.add(
+                + ". Painless interfaces can only accept arguments that are of allowlisted types."
+     */
+                        m.getReturnType(),  
+        executeMethodReturnType = definitionTypeForClass(
+        this.baseClass = baseClass;  
+            this.name = name;  
+        Class<?> type,  
+                + componentType.getName()
+                        "Painless can only implement interfaces that have a single method named [execute] but ["
+    private MethodArgument methodArgument(PainlessLookup painlessLookup, Class<?> clazz, String argName) {  
+            } else if (m.getName().startsWith("get")
+        );
+/*  
+ * not use this file except in compliance with the License.
+            throw new IllegalArgumentException(
+    }
+                                + componentType.getName()
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        MethodType methodType = MethodType.methodType(executeMethod.getReturnType(), executeMethod.getParameterTypes());  
+import java.util.function.Function;  
+    public final List<FunctionTable.LocalFunction> converters;
 }
+            throw new IllegalArgumentException(
+                        );
+     */
+                }  
+        if (componentType != def.class && painlessLookup.lookupPainlessClass(componentType) == null) {
+            componentType -> "Painless can only implement execute methods returning a allowlisted type but ["
+        return executeMethod;
+                        definitionTypeForClass(  
+    public Class<?> getBaseClass() {  
+        if (false == argumentNamesField.getType().equals(String[].class)) {  
+    public Class<?> getExecuteMethodReturnType() {  

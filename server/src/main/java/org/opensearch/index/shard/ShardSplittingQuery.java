@@ -1,385 +1,351 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.lucene.index.FieldInfo;  
-import org.apache.lucene.index.IndexReaderContext;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.ReaderUtil;
-import org.apache.lucene.index.StoredFieldVisitor;  
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.ConstantScoreScorer;  
-import org.apache.lucene.search.ConstantScoreWeight;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.ScoreMode;  
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.TwoPhaseIterator;  
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.search.join.BitSetProducer;
-import org.apache.lucene.util.BitSet;  
-import org.apache.lucene.util.BitSetIterator;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.FixedBitSet;  
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.OperationRouting;  
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.RoutingFieldMapper;  
-import org.opensearch.index.mapper.Uid;
-
-import java.io.IOException;  
-import java.util.function.Function;
-import java.util.function.IntConsumer;
-import java.util.function.Predicate;  
-
 /**
- * A query that selects all docs that do NOT belong in the current shards this query is executed on.  
- * It can be used to split a shard into N shards marking every document that doesn't belong into the shard
- * as deleted. See {@link org.apache.lucene.index.IndexWriter#deleteDocuments(Query...)}
- *  
- * @opensearch.internal
- */
-final class ShardSplittingQuery extends Query {  
-    private final IndexMetadata indexMetadata;
-    private final int shardId;
-    private final BitSetProducer nestedParentBitSetProducer;  
-
-    ShardSplittingQuery(IndexMetadata indexMetadata, int shardId, boolean hasNested) {
-        this.indexMetadata = indexMetadata;  
-        this.shardId = shardId;
-        this.nestedParentBitSetProducer = hasNested ? newParentDocBitSetProducer(indexMetadata.getCreationVersion()) : null;
-    }  
-
-    @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) {  
-        return new ConstantScoreWeight(this, boost) {
-            @Override
-            public String toString() {  
-                return "weight(delete docs query)";
-            }
-
-            @Override
-            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-                LeafReader leafReader = context.reader();  
-                FixedBitSet bitSet = new FixedBitSet(leafReader.maxDoc());
-                Terms terms = leafReader.terms(RoutingFieldMapper.NAME);
-                Predicate<BytesRef> includeInShard = ref -> {  
-                    int targetShardId = OperationRouting.generateShardId(
-                        indexMetadata,
-                        Uid.decodeId(ref.bytes, ref.offset, ref.length),  
-                        null
-                    );
-                    return shardId == targetShardId;  
-                };
-                if (terms == null) {
-                    // this is the common case - no partitioning and no _routing values  
-                    // in this case we also don't do anything special with regards to nested docs since we basically delete
-                    // by ID and parent and nested all have the same id.
-                    assert indexMetadata.isRoutingPartitionedIndex() == false;  
-                    findSplitDocs(IdFieldMapper.NAME, includeInShard, leafReader, bitSet::set);
-                } else {
-                    final BitSet parentBitSet;  
-                    if (nestedParentBitSetProducer == null) {
-                        parentBitSet = null;
-                    } else {  
-                        parentBitSet = nestedParentBitSetProducer.getBitSet(context);
-                        if (parentBitSet == null) {
-                            return null; // no matches  
-                        }
-                    }
-                    if (indexMetadata.isRoutingPartitionedIndex()) {  
-                        // this is the heaviest invariant. Here we have to visit all docs stored fields do extract _id and _routing
-                        // this index is routing partitioned.
-                        Visitor visitor = new Visitor(leafReader);  
-                        TwoPhaseIterator twoPhaseIterator = parentBitSet == null
-                            ? new RoutingPartitionedDocIdSetIterator(visitor)
-                            : new NestedRoutingPartitionedDocIdSetIterator(visitor, parentBitSet);  
-                        final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, twoPhaseIterator);
-                        return new DefaultScorerSupplier(scorer);
-                    } else {  
-                        // here we potentially guard the docID consumers with our parent bitset if we have one.
-                        // this ensures that we are only marking root documents in the nested case and if necessary
-                        // we do a second pass to mark the corresponding children in markChildDocs  
-                        Function<IntConsumer, IntConsumer> maybeWrapConsumer = consumer -> {
-                            if (parentBitSet != null) {
-                                return docId -> {  
-                                    if (parentBitSet.get(docId)) {
-                                        consumer.accept(docId);
-                                    }  
-                                };
-                            }
-                            return consumer;  
-                        };
-                        // in the _routing case we first go and find all docs that have a routing value and mark the ones we have to delete
-                        findSplitDocs(RoutingFieldMapper.NAME, ref -> {  
-                            int targetShardId = OperationRouting.generateShardId(indexMetadata, null, ref.utf8ToString());
-                            return shardId == targetShardId;
-                        }, leafReader, maybeWrapConsumer.apply(bitSet::set));  
-
-                        // now if we have a mixed index where some docs have a _routing value and some don't we have to exclude the ones
-                        // with a routing value from the next iteration an delete / select based on the ID.  
-                        if (terms.getDocCount() != leafReader.maxDoc()) {
-                            // this is a special case where some of the docs have no routing values this sucks but it's possible today
-                            FixedBitSet hasRoutingValue = new FixedBitSet(leafReader.maxDoc());  
-                            findSplitDocs(RoutingFieldMapper.NAME, ref -> false, leafReader, maybeWrapConsumer.apply(hasRoutingValue::set));
-                            IntConsumer bitSetConsumer = maybeWrapConsumer.apply(bitSet::set);
-                            findSplitDocs(IdFieldMapper.NAME, includeInShard, leafReader, docId -> {  
-                                if (hasRoutingValue.get(docId) == false) {
-                                    bitSetConsumer.accept(docId);
-                                }  
-                            });
-                        }
-                    }  
-                    if (parentBitSet != null) {
-                        // if nested docs are involved we also need to mark all child docs that belong to a matching parent doc.
-                        markChildDocs(parentBitSet, bitSet);  
-                    }
-                }
-
-                final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, new BitSetIterator(bitSet, bitSet.length()));
-                return new DefaultScorerSupplier(scorer);
-            }  
-
-            @Override
-            public boolean isCacheable(LeafReaderContext ctx) {  
-                // This is not a regular query, let's not cache it. It wouldn't help
-                // anyway.
-                return false;  
-            }
-        };
-    }  
-
-    private void markChildDocs(BitSet parentDocs, BitSet matchingDocs) {
-        int currentDeleted = 0;  
-        while (currentDeleted < matchingDocs.length()
-            && (currentDeleted = matchingDocs.nextSetBit(currentDeleted)) != DocIdSetIterator.NO_MORE_DOCS) {
-            int previousParent = parentDocs.prevSetBit(Math.max(0, currentDeleted - 1));  
-            for (int i = previousParent + 1; i < currentDeleted; i++) {
+ * the Apache License, Version 2.0 (the "License"); you may
                 matchingDocs.set(i);
-            }  
-            currentDeleted++;
-        }
-    }  
-
-    @Override
-    public String toString(String field) {  
-        return "shard_splitting_query";
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-
-        ShardSplittingQuery that = (ShardSplittingQuery) o;  
-
-        if (shardId != that.shardId) return false;
-        return indexMetadata.equals(that.indexMetadata);  
-    }
-
-    @Override  
-    public int hashCode() {
-        int result = indexMetadata.hashCode();
-        result = 31 * result + shardId;  
-        return classHash() ^ result;
-    }
-
-    private static void findSplitDocs(String idField, Predicate<BytesRef> includeInShard, LeafReader leafReader, IntConsumer consumer)
-        throws IOException {
-        final Terms terms = leafReader.terms(idField);  
-        if (terms == null) {
-            return;
-        }  
-        final TermsEnum iterator = terms.iterator();
-        BytesRef idTerm;
-        PostingsEnum postingsEnum = null;  
-        while ((idTerm = iterator.next()) != null) {
-            if (includeInShard.test(idTerm) == false) {
-                postingsEnum = iterator.postings(postingsEnum);  
-                int doc;
-                while ((doc = postingsEnum.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
-                    consumer.accept(doc);  
-                }
-            }
-        }  
-    }
-
-    /* this class is a stored fields visitor that reads _id and/or _routing from the stored fields which is necessary in the case  
-       of a routing partitioned index sine otherwise we would need to un-invert the _id and _routing field which is memory heavy */
-    private final class Visitor extends StoredFieldVisitor {
-        final LeafReader leafReader;  
-        private int leftToVisit = 2;
-        private final BytesRef spare = new BytesRef();
-        private String routing;  
-        private String id;
-
-        Visitor(LeafReader leafReader) {  
-            this.leafReader = leafReader;
-        }
-
-        @Override
-        public void binaryField(FieldInfo fieldInfo, byte[] value) throws IOException {
-            switch (fieldInfo.name) {  
-                case IdFieldMapper.NAME:
-                    id = Uid.decodeId(value);
-                    break;  
-                default:
-                    throw new IllegalStateException("Unexpected field: " + fieldInfo.name);
-            }  
-        }
-
         @Override  
-        public void stringField(FieldInfo fieldInfo, String value) throws IOException {
-            switch (fieldInfo.name) {
-                case RoutingFieldMapper.NAME:  
-                    routing = value;
-                    break;
-                default:  
+ * this file be licensed under the Apache-2.0 license or a
+    private static final class RoutingPartitionedDocIdSetIterator extends TwoPhaseIterator {
+        int result = indexMetadata.hashCode();
+        return context -> {  
+ * ownership. Elasticsearch licenses this file to you under  
+final class ShardSplittingQuery extends Query {  
+        @Override
+                        }
+        }
+        int currentDeleted = 0;  
+                final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, new BitSetIterator(bitSet, bitSet.length()));
+            }  
+    private static final class NestedRoutingPartitionedDocIdSetIterator extends TwoPhaseIterator {
+ */  
+        public float matchCost() {
+ * Unless required by applicable law or agreed to in writing,
+                            : new NestedRoutingPartitionedDocIdSetIterator(visitor, parentBitSet);  
+     * this is used internally to obtain a bitset for parent documents. We don't cache this since we never access the same reader more
+     * @opensearch.internal
+                    } else {  
+            @Override
+     *
+import org.apache.lucene.search.ConstantScoreScorer;  
+                            return consumer;  
+import org.apache.lucene.search.Query;
+            int targetShardId = OperationRouting.generateShardId(indexMetadata, id, routing);
+        }
+            // order and that way we don't need to seek backwards as we do in other nested docs cases.
+        return classHash() ^ result;
+        }  
+import org.opensearch.index.mapper.RoutingFieldMapper;  
+    /* this class is a stored fields visitor that reads _id and/or _routing from the stored fields which is necessary in the case  
+import org.apache.lucene.search.DocIdSetIterator;
+        private String routing;  
+                    if (indexMetadata.isRoutingPartitionedIndex()) {  
+package org.opensearch.index.shard;
+    }
                     throw new IllegalStateException("Unexpected field: " + fieldInfo.name);
+        }
+        private int nextParent = -1;
+                    );
+        private final BytesRef spare = new BytesRef();
+    private final BitSetProducer nestedParentBitSetProducer;  
+        }
+            searcher.setQueryCache(null);
+        result = 31 * result + shardId;  
+            public boolean isCacheable(LeafReaderContext ctx) {  
+import org.apache.lucene.search.Weight;
+        while ((idTerm = iterator.next()) != null) {
+    }
+                    if (parentBitSet != null) {
+                nextParentMatches = visitor.matches(nextParent);
+    }
+                            return shardId == targetShardId;
+                        // if nested docs are involved we also need to mark all child docs that belong to a matching parent doc.
+import org.opensearch.index.mapper.IdFieldMapper;
+                    throw new IllegalStateException("Unexpected field: " + fieldInfo.name);
+import org.apache.lucene.search.TwoPhaseIterator;  
+                case RoutingFieldMapper.NAME:
+                Terms terms = leafReader.terms(RoutingFieldMapper.NAME);
+                        findSplitDocs(RoutingFieldMapper.NAME, ref -> {  
+                            IntConsumer bitSetConsumer = maybeWrapConsumer.apply(bitSet::set);
+            this.visitor = visitor;
+import org.apache.lucene.util.BytesRef;
+                default:  
+            this.visitor = visitor;  
+                    final BitSet parentBitSet;  
+        public Status needsField(FieldInfo fieldInfo) throws IOException {  
+            Scorer s = weight.scorer(context);  
+     * executed on a recovery-private index writer. There is no point in caching it and it won't have a cache hit either.  
+                    int targetShardId = OperationRouting.generateShardId(
+                return "weight(delete docs query)";
+import org.apache.lucene.util.BitSetIterator;
+        private final Visitor visitor;
+ *  
+import org.opensearch.common.lucene.search.Queries;
+            return s == null ? null : BitSet.of(s.iterator(), context.reader().maxDoc());
+        final LeafReader leafReader;  
+        if (shardId != that.shardId) return false;
+            assert id != null : "docID must not be null - we might have hit a nested document";
+            currentDeleted++;
+    private final class Visitor extends StoredFieldVisitor {
+                    // by ID and parent and nested all have the same id.
+     * This TwoPhaseIterator marks all nested docs of matching parents as matches as well.  
+        final Terms terms = leafReader.terms(idField);  
+        throws IOException {
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
+import org.apache.lucene.index.StoredFieldVisitor;  
+     * @opensearch.internal
+                        }
+        private final BitSet parentDocs;  
+                        if (terms.getDocCount() != leafReader.maxDoc()) {
+        public boolean matches() throws IOException {
+ * software distributed under the License is distributed on an
+import org.apache.lucene.index.Terms;
+                        Function<IntConsumer, IntConsumer> maybeWrapConsumer = consumer -> {
+            final IndexSearcher searcher = new IndexSearcher(topLevelContext);  
+        private int leftToVisit = 2;
+import org.apache.lucene.search.ConstantScoreWeight;
+            switch (fieldInfo.name) {
+                        parentBitSet = null;
+                        // this is the heaviest invariant. Here we have to visit all docs stored fields do extract _id and _routing
+                        markChildDocs(parentBitSet, bitSet);  
+import org.apache.lucene.index.ReaderUtil;
+ * specific language governing permissions and limitations
+        private boolean nextParentMatches;
+                    leftToVisit--;
+ *  
+    public String toString(String field) {  
+        Visitor(LeafReader leafReader) {  
+            leftToVisit = 2;
+                    }
+                } else {
+            return 42; // that's obvious, right?
+                            }
+                    }  
+    public boolean equals(Object o) {
+            switch (fieldInfo.name) {
+                // anyway.
+        return indexMetadata.equals(that.indexMetadata);  
+    /**
+import org.opensearch.index.mapper.Uid;
+                        parentBitSet = nestedParentBitSetProducer.getBitSet(context);
+        }
+                return new DefaultScorerSupplier(scorer);
+    /**
+import org.apache.lucene.index.TermsEnum;
+            if (includeInShard.test(idTerm) == false) {
+    public int hashCode() {
+            leafReader.storedFields().document(doc, this);  
+ * Licensed to Elasticsearch under one or more contributor  
+ * compatible open source license.
+                        // we do a second pass to mark the corresponding children in markChildDocs  
+import org.apache.lucene.search.IndexSearcher;  
+ * GitHub history for details.
+                            return null; // no matches  
+import org.apache.lucene.index.LeafReaderContext;  
+    @Override
+import org.opensearch.cluster.routing.OperationRouting;  
+            && (currentDeleted = matchingDocs.nextSetBit(currentDeleted)) != DocIdSetIterator.NO_MORE_DOCS) {
+            return;
+    @Override
+ * license agreements. See the NOTICE file distributed with
+    public void visit(QueryVisitor visitor) {  
+            if (doc > nextParent) {  
+                        // in the _routing case we first go and find all docs that have a routing value and mark the ones we have to delete
+                        // with a routing value from the next iteration an delete / select based on the ID.  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                case RoutingFieldMapper.NAME:  
+                Predicate<BytesRef> includeInShard = ref -> {  
+                case IdFieldMapper.NAME:
+        }
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) {  
+        visitor.visitLeaf(this);
+                                };
+    }  
+ *
+    }
+                        null
+/*
+        public void binaryField(FieldInfo fieldInfo, byte[] value) throws IOException {
+                                }  
+                                if (hasRoutingValue.get(docId) == false) {
+        @Override
+     * This two phase iterator visits every live doc and selects all docs that don't belong into this
+        }
+                    // this is the common case - no partitioning and no _routing values  
+                    }
+                        Visitor visitor = new Visitor(leafReader);  
+                        indexMetadata,
+                    } else {  
+            @Override
+                }
+    private final IndexMetadata indexMetadata;
+        private String id;
+    /*  
+                // we only check once per nested/parent set
+            }
+import org.apache.lucene.index.FieldInfo;  
+            final Weight weight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
+            public String toString() {  
+                            ? new RoutingPartitionedDocIdSetIterator(visitor)
+                    // in this case we also don't do anything special with regards to nested docs since we basically delete
+ * @opensearch.internal
+import org.apache.lucene.search.QueryVisitor;
+     * than once. There is no point in using BitsetFilterCache#BitSetProducerWarmer since we use this only as a delete by query which is
+    ShardSplittingQuery(IndexMetadata indexMetadata, int shardId, boolean hasNested) {
+        NestedRoutingPartitionedDocIdSetIterator(Visitor visitor, BitSet parentDocs) {
+ * KIND, either express or implied.  See the License for the
+    private void markChildDocs(BitSet parentDocs, BitSet matchingDocs) {
+                if (terms == null) {
+ * not use this file except in compliance with the License.
+                postingsEnum = iterator.postings(postingsEnum);  
+        public void stringField(FieldInfo fieldInfo, String value) throws IOException {
+    private static void findSplitDocs(String idField, Predicate<BytesRef> includeInShard, LeafReader leafReader, IntConsumer consumer)
+       of a routing partitioned index sine otherwise we would need to un-invert the _id and _routing field which is memory heavy */
+ * You may obtain a copy of the License at  
+            Query query = Queries.newNonNestedFilter();
+ * as deleted. See {@link org.apache.lucene.index.IndexWriter#deleteDocuments(Query...)}
+                    break;
+            int previousParent = parentDocs.prevSetBit(Math.max(0, currentDeleted - 1));  
+            }  
+ * under the License.  
+        @Override  
+            return nextParentMatches;  
+        if (o == null || getClass() != o.getClass()) return false;
+import java.io.IOException;  
+            final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
+    private static BitSetProducer newParentDocBitSetProducer(Version indexVersionCreated) {
+                            });
+                        Uid.decodeId(ref.bytes, ref.offset, ref.length),  
+            return 42; // that's obvious, right?
+import java.util.function.Predicate;  
+ * this work for additional information regarding copyright
+        @Override
+            int doc = approximation.docID();
+ */
+    @Override  
+                        TwoPhaseIterator twoPhaseIterator = parentBitSet == null
+        while (currentDeleted < matchingDocs.length()
+        }  
+import java.util.function.Function;
+        ShardSplittingQuery that = (ShardSplittingQuery) o;  
             }
         }  
-
-        @Override
-        public Status needsField(FieldInfo fieldInfo) throws IOException {  
-            // we don't support 5.x so no need for the uid field
-            switch (fieldInfo.name) {
-                case IdFieldMapper.NAME:  
-                case RoutingFieldMapper.NAME:
-                    leftToVisit--;
+import org.apache.lucene.index.PostingsEnum;
+import org.opensearch.Version;
+            }  
+                return false;  
+            }  
+     */  
+                FixedBitSet bitSet = new FixedBitSet(leafReader.maxDoc());
+import org.opensearch.cluster.metadata.IndexMetadata;
+        };
+ */
+            }
+     */
+        RoutingPartitionedDocIdSetIterator(Visitor visitor) {
+                    if (nestedParentBitSetProducer == null) {
+    }
+                    id = Uid.decodeId(value);
+        public boolean matches() throws IOException {
+    }  
+            // the educated reader might ask why this works, it does because all live doc ids (root docs and nested docs) are evaluated in  
+        PostingsEnum postingsEnum = null;  
+                    assert indexMetadata.isRoutingPartitionedIndex() == false;  
+ * It can be used to split a shard into N shards marking every document that doesn't belong into the shard
+import java.util.function.IntConsumer;
+                        // this index is routing partitioned.
+ *
+                            findSplitDocs(IdFieldMapper.NAME, includeInShard, leafReader, docId -> {  
+                                    }  
+        if (this == o) return true;  
+import org.apache.lucene.util.FixedBitSet;  
+                            int targetShardId = OperationRouting.generateShardId(indexMetadata, null, ref.utf8ToString());
+            }
+                        if (parentBitSet == null) {
+        @Override  
+            for (int i = previousParent + 1; i < currentDeleted; i++) {
+        return new ConstantScoreWeight(this, boost) {
+                        // this ensures that we are only marking root documents in the nested case and if necessary
+                        }, leafReader, maybeWrapConsumer.apply(bitSet::set));  
+/*  
+import org.apache.lucene.search.join.BitSetProducer;
+                    return leftToVisit == 0 ? Status.STOP : Status.NO;
+    }  
+        };
+/*
+            }
+                                    bitSetConsumer.accept(docId);
+            return targetShardId != shardId;  
+import org.apache.lucene.index.LeafReader;
+        public float matchCost() {  
+    @Override
+    private final int shardId;
+                int doc;
+ * A query that selects all docs that do NOT belong in the current shards this query is executed on.  
+}  
                     return Status.YES;  
                 default:
-                    return leftToVisit == 0 ? Status.STOP : Status.NO;
-            }  
-        }
-
-        boolean matches(int doc) throws IOException {  
-            routing = id = null;
-            leftToVisit = 2;
-            leafReader.storedFields().document(doc, this);  
-            assert id != null : "docID must not be null - we might have hit a nested document";
-            int targetShardId = OperationRouting.generateShardId(indexMetadata, id, routing);
-            return targetShardId != shardId;  
-        }
-    }
-
-    /**
-     * This two phase iterator visits every live doc and selects all docs that don't belong into this
+        this.nestedParentBitSetProducer = hasNested ? newParentDocBitSetProducer(indexMetadata.getCreationVersion()) : null;
+        }  
+        BytesRef idTerm;
      * shard based on their id and routing value. This is only used in a routing partitioned index.  
-     *
-     * @opensearch.internal
-     */  
-    private static final class RoutingPartitionedDocIdSetIterator extends TwoPhaseIterator {
-        private final Visitor visitor;
-
-        RoutingPartitionedDocIdSetIterator(Visitor visitor) {
+                            findSplitDocs(RoutingFieldMapper.NAME, ref -> false, leafReader, maybeWrapConsumer.apply(hasRoutingValue::set));
             super(DocIdSetIterator.all(visitor.leafReader.maxDoc())); // we iterate all live-docs
-            this.visitor = visitor;  
-        }
-
-        @Override  
-        public boolean matches() throws IOException {
+import org.apache.lucene.search.Scorer;
+            super(DocIdSetIterator.all(visitor.leafReader.maxDoc())); // we iterate all live-docs
             return visitor.matches(approximation.docID());
-        }  
-
-        @Override
-        public float matchCost() {  
-            return 42; // that's obvious, right?
+    }
+                        return new DefaultScorerSupplier(scorer);
+import org.apache.lucene.util.BitSet;  
+        if (terms == null) {
+import org.apache.lucene.index.IndexReaderContext;
+        this.indexMetadata = indexMetadata;  
         }
+            this.leafReader = leafReader;
+    }
+ * The OpenSearch Contributors require contributions made to  
+ * Modifications Copyright OpenSearch Contributors. See  
+        this.shardId = shardId;
+                        // now if we have a mixed index where some docs have a _routing value and some don't we have to exclude the ones
+                case IdFieldMapper.NAME:  
+                            // this is a special case where some of the docs have no routing values this sucks but it's possible today
+ */
+                    return shardId == targetShardId;  
     }  
-
-    /**
-     * This TwoPhaseIterator marks all nested docs of matching parents as matches as well.  
+ * SPDX-License-Identifier: Apache-2.0
+            // we don't support 5.x so no need for the uid field
+                                    if (parentBitSet.get(docId)) {
+            @Override
      *
-     * @opensearch.internal
+                        final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, twoPhaseIterator);
+                while ((doc = postingsEnum.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+                };
      */  
-    private static final class NestedRoutingPartitionedDocIdSetIterator extends TwoPhaseIterator {
-        private final Visitor visitor;
-        private final BitSet parentDocs;  
-        private int nextParent = -1;
-        private boolean nextParentMatches;
-
-        NestedRoutingPartitionedDocIdSetIterator(Visitor visitor, BitSet parentDocs) {
-            super(DocIdSetIterator.all(visitor.leafReader.maxDoc())); // we iterate all live-docs
-            this.parentDocs = parentDocs;  
-            this.visitor = visitor;
-        }
-
+                LeafReader leafReader = context.reader();  
+                }
+                        };
+        return "shard_splitting_query";
+                default:
+                    break;  
+        boolean matches(int doc) throws IOException {  
         @Override
-        public boolean matches() throws IOException {
-            // the educated reader might ask why this works, it does because all live doc ids (root docs and nested docs) are evaluated in  
-            // order and that way we don't need to seek backwards as we do in other nested docs cases.
-            int doc = approximation.docID();
-            if (doc > nextParent) {  
-                // we only check once per nested/parent set
-                nextParent = parentDocs.nextSetBit(doc);
-                // never check a child document against the visitor, they neihter have _id nor _routing as stored fields  
-                nextParentMatches = visitor.matches(nextParent);
-            }
-            return nextParentMatches;  
+        private final Visitor visitor;
+                        // here we potentially guard the docID consumers with our parent bitset if we have one.
+                            FixedBitSet hasRoutingValue = new FixedBitSet(leafReader.maxDoc());  
         }
-
-        @Override  
-        public float matchCost() {
-            return 42; // that's obvious, right?
-        }  
-    }
-
-    /*  
-     * this is used internally to obtain a bitset for parent documents. We don't cache this since we never access the same reader more
-     * than once. There is no point in using BitsetFilterCache#BitSetProducerWarmer since we use this only as a delete by query which is
-     * executed on a recovery-private index writer. There is no point in caching it and it won't have a cache hit either.  
-     */
-    private static BitSetProducer newParentDocBitSetProducer(Version indexVersionCreated) {
-        return context -> {  
-            Query query = Queries.newNonNestedFilter();
-            final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
-            final IndexSearcher searcher = new IndexSearcher(topLevelContext);  
-            searcher.setQueryCache(null);
-            final Weight weight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
-            Scorer s = weight.scorer(context);  
-            return s == null ? null : BitSet.of(s.iterator(), context.reader().maxDoc());
-        };
+            this.parentDocs = parentDocs;  
     }  
-
-    @Override
-    public void visit(QueryVisitor visitor) {  
-        visitor.visitLeaf(this);
-    }
-}  
+                // never check a child document against the visitor, they neihter have _id nor _routing as stored fields  
+import org.apache.lucene.search.ScoreMode;  
+                    consumer.accept(doc);  
+                            if (parentBitSet != null) {
+        final TermsEnum iterator = terms.iterator();
+            routing = id = null;
+                                return docId -> {  
+import org.apache.lucene.search.ScorerSupplier;
+                    routing = value;
+                // This is not a regular query, let's not cache it. It wouldn't help
+            switch (fieldInfo.name) {  
+                                        consumer.accept(docId);
+                    findSplitDocs(IdFieldMapper.NAME, includeInShard, leafReader, bitSet::set);
+                nextParent = parentDocs.nextSetBit(doc);
+        }  

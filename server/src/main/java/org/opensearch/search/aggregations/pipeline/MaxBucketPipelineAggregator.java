@@ -1,85 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+import java.util.Map;
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+    }
+            maxValue = bucketValue;  
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
+package org.opensearch.search.aggregations.pipeline;
+    }
+    }
  */
-
+        super(name, bucketsPaths, gapPolicy, formatter, metadata);
+ * Unless required by applicable law or agreed to in writing,
+        }  
+    ) {  
+    protected InternalAggregation buildAggregation(Map<String, Object> metadata) {
+            maxBucketKeys.clear();
+ * license agreements. See the NOTICE file distributed with
 /*  
+ */
+ * ownership. Elasticsearch licenses this file to you under  
  * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.search.DocValueFormat;
+        String[] bucketsPaths,
+/*  
+ * The OpenSearch Contributors require contributions made to  
+import java.util.List;  
+ * @opensearch.internal  
+        return new InternalBucketMetricValue(name(), keys, maxValue, format, metadata());  
+ *
+    private double maxValue;
+        String[] keys = maxBucketKeys.toArray(new String[0]);
+    MaxBucketPipelineAggregator(  
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at  
+ * compatible open source license.
+/**  
+        maxBucketKeys = new ArrayList<>();  
+ * specific language governing permissions and limitations
+    @Override  
+    protected void collectBucketValue(String bucketKey, Double bucketValue) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Aggregate all docs into a max bucket
+        DocValueFormat formatter,
+ * software distributed under the License is distributed on an
+public class MaxBucketPipelineAggregator extends BucketMetricsPipelineAggregator {
+import org.opensearch.search.aggregations.InternalAggregation;
+ * this file be licensed under the Apache-2.0 license or a
+        } else if (bucketValue.equals(maxValue)) {
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
+    protected void preCollection() {
+}  
+ *  
+ * not use this file except in compliance with the License.
+ *
+ */  
  * GitHub history for details.
  */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
-
+ * KIND, either express or implied.  See the License for the
+    @Override
+/*
 import java.util.ArrayList;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * Aggregate all docs into a max bucket
- *
- * @opensearch.internal  
- */
-public class MaxBucketPipelineAggregator extends BucketMetricsPipelineAggregator {
     private List<String> maxBucketKeys;  
-    private double maxValue;
-
-    MaxBucketPipelineAggregator(  
-        String name,
-        String[] bucketsPaths,
-        GapPolicy gapPolicy,  
-        DocValueFormat formatter,
-        Map<String, Object> metadata
-    ) {  
-        super(name, bucketsPaths, gapPolicy, formatter, metadata);
-    }
-
+            maxBucketKeys.add(bucketKey);
+ *
     @Override
-    protected void preCollection() {
-        maxBucketKeys = new ArrayList<>();  
-        maxValue = Double.NEGATIVE_INFINITY;
-    }
-
-    @Override
-    protected void collectBucketValue(String bucketKey, Double bucketValue) {
         if (bucketValue > maxValue) {  
-            maxBucketKeys.clear();
+        GapPolicy gapPolicy,  
             maxBucketKeys.add(bucketKey);
-            maxValue = bucketValue;  
-        } else if (bucketValue.equals(maxValue)) {
-            maxBucketKeys.add(bucketKey);
-        }  
     }
-
-    @Override  
-    protected InternalAggregation buildAggregation(Map<String, Object> metadata) {
-        String[] keys = maxBucketKeys.toArray(new String[0]);
-        return new InternalBucketMetricValue(name(), keys, maxValue, format, metadata());  
-    }
-
-}  
+        String name,
+ * the Apache License, Version 2.0 (the "License"); you may
+        maxValue = Double.NEGATIVE_INFINITY;
+        Map<String, Object> metadata
+ *    http://www.apache.org/licenses/LICENSE-2.0

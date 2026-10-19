@@ -1,115 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.plugins.RestoreListenerPlugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.Before;  
-
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.hasSize;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class RestoreListenerPluginIT extends AbstractSnapshotIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        final List<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());  
-        plugins.add(RecordingRestoreListenerPlugin.class);
-        return plugins;
-    }  
-
-    @Before
-    public void resetRecordedCalls() {  
-        RecordingRestoreListenerPlugin.CALLS.clear();
-    }
-
-    public void testClusterManagerNotifiesPluginOnceAfterRestore() throws Exception {
-        final String clusterManager = internalCluster().startClusterManagerOnlyNode();
-        internalCluster().startDataOnlyNodes(2);  
-        createRepository("test-repo", "fs");
-        createIndexWithRandomDocs("test-idx-1", randomIntBetween(1, 10));
-        createIndexWithRandomDocs("test-idx-2", randomIntBetween(1, 10));  
-        createFullSnapshot("test-repo", "test-snap");
-        assertAcked(client().admin().indices().prepareDelete("test-idx-1", "test-idx-2"));
-
-        final RestoreSnapshotResponse response = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap")
-            .setWaitForCompletion(true)
-            .get();  
-        assertEquals(response.getRestoreInfo().totalShards(), response.getRestoreInfo().successfulShards());
-
-        assertBusy(() -> assertThat(RecordingRestoreListenerPlugin.CALLS, hasSize(1)));  
-        final RecordingRestoreListenerPlugin.Call call = RecordingRestoreListenerPlugin.CALLS.get(0);
-        assertEquals("only the elected cluster manager notifies plugins", clusterManager, call.nodeName());
-        assertEquals("test-snap", call.context().snapshot().getSnapshotId().getName());  
         assertFalse(call.context().partialFailure());
-        final Metadata metadata = clusterService().state().metadata();
-        assertEquals(  
-            List.of(metadata.index("test-idx-1").getIndex(), metadata.index("test-idx-2").getIndex()),
-            call.context().restoredIndices()
         );  
-
+ */  
+    public void testRestoreThatDoesNotWaitForCompletionIsReportedUnderItsNewNames() throws Exception {
+        }  
+import static org.hamcrest.Matchers.hasSize;
+        final Metadata metadata = clusterService().state().metadata();
+        static final List<Call> CALLS = new CopyOnWriteArrayList<>();
+            CALLS.add(new Call(nodeName, context));  
+        final RestoreSnapshotResponse response = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap")  
+        final String clusterManager = internalCluster().startClusterManagerOnlyNode();
+        assertBusy(() -> assertThat(RecordingRestoreListenerPlugin.CALLS, hasSize(1)));  
+package org.opensearch.snapshots;
+    }
+        assertBusy(() -> assertThat(RecordingRestoreListenerPlugin.CALLS, hasSize(1)));
+import org.opensearch.cluster.metadata.Metadata;
+        final List<Index> restored = RecordingRestoreListenerPlugin.CALLS.get(0).context().restoredIndices();
+        return plugins;
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
         // Later cluster state changes do not report the same restore again.
         createIndex("unrelated-idx");  
-        ensureGreen("unrelated-idx");
-        assertThat(RecordingRestoreListenerPlugin.CALLS, hasSize(1));
-    }  
-
-    public void testRestoreThatDoesNotWaitForCompletionIsReportedUnderItsNewNames() throws Exception {
+        assertAcked(client().admin().indices().prepareDelete("test-idx-1", "test-idx-2"));
         internalCluster().startClusterManagerOnlyNode();  
-        internalCluster().startDataOnlyNode();
-        createRepository("test-repo", "fs");
-        createIndexWithRandomDocs("test-idx", randomIntBetween(1, 10));  
-        createFullSnapshot("test-repo", "test-snap");
-
-        final RestoreSnapshotResponse response = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap")  
-            .setRenamePattern("test-idx")
+        internalCluster().startDataOnlyNodes(2);  
+        public void onRestore(RestoreContext context) {
+        assertEquals("test-snap", call.context().snapshot().getSnapshotId().getName());  
             .setRenameReplacement("restored-idx")
-            .setWaitForCompletion(false)  
-            .get();
-        assertEquals(RestStatus.ACCEPTED, response.status());
-
-        assertBusy(() -> assertThat(RecordingRestoreListenerPlugin.CALLS, hasSize(1)));
-        final List<Index> restored = RecordingRestoreListenerPlugin.CALLS.get(0).context().restoredIndices();
-        assertEquals(List.of(clusterService().state().metadata().index("restored-idx").getIndex()), restored);  
+    public void resetRecordedCalls() {  
+        private final String nodeName;
+        assertThat(RecordingRestoreListenerPlugin.CALLS, hasSize(1));
+        ensureGreen("unrelated-idx");
+            List.of(metadata.index("test-idx-1").getIndex(), metadata.index("test-idx-2").getIndex()),
+        assertEquals(  
+    }  
+import org.opensearch.plugins.RestoreListenerPlugin;
+        @Override
+        assertEquals(response.getRestoreInfo().totalShards(), response.getRestoreInfo().successfulShards());
+        createIndexWithRandomDocs("test-idx-2", randomIntBetween(1, 10));  
+import org.opensearch.core.index.Index;
+import java.util.List;
+        RecordingRestoreListenerPlugin.CALLS.clear();
+        createIndexWithRandomDocs("test-idx-1", randomIntBetween(1, 10));
     }
-
-    /**  
-     * Records every call it gets, with the name of the node it ran on.
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+        plugins.add(RecordingRestoreListenerPlugin.class);
+        createFullSnapshot("test-repo", "test-snap");
+    public void testClusterManagerNotifiesPluginOnceAfterRestore() throws Exception {
+        assertEquals(List.of(clusterService().state().metadata().index("restored-idx").getIndex()), restored);  
+/*  
+    }  
+import java.util.Collection;  
+import org.opensearch.core.rest.RestStatus;
+            call.context().restoredIndices()
+        }
+        final List<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());  
+import org.opensearch.plugins.Plugin;  
+            .get();
+    @Override
+    @Before
+        record Call(String nodeName, RestoreContext context) {
+        createIndexWithRandomDocs("test-idx", randomIntBetween(1, 10));  
+        assertEquals(RestStatus.ACCEPTED, response.status());
+        public RecordingRestoreListenerPlugin(Settings settings) {  
+            .setWaitForCompletion(true)
+        createRepository("test-repo", "fs");
+        internalCluster().startDataOnlyNode();
+        createFullSnapshot("test-repo", "test-snap");
+ * The OpenSearch Contributors require contributions made to  
+            .setWaitForCompletion(false)  
+        final RestoreSnapshotResponse response = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap")
+import org.junit.Before;  
      */
     public static class RecordingRestoreListenerPlugin extends Plugin implements RestoreListenerPlugin {  
-
-        record Call(String nodeName, RestoreContext context) {
-        }  
-
-        static final List<Call> CALLS = new CopyOnWriteArrayList<>();
-
-        private final String nodeName;
-
-        public RecordingRestoreListenerPlugin(Settings settings) {  
-            this.nodeName = settings.get("node.name");
+ *
         }
-
-        @Override
-        public void onRestore(RestoreContext context) {
-            CALLS.add(new Call(nodeName, context));  
-        }
-    }
+import org.opensearch.common.settings.Settings;  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import org.opensearch.test.OpenSearchIntegTestCase;
+     * Records every call it gets, with the name of the node it ran on.
+import java.util.concurrent.CopyOnWriteArrayList;
+        final RecordingRestoreListenerPlugin.Call call = RecordingRestoreListenerPlugin.CALLS.get(0);
 }  
+            .setRenamePattern("test-idx")
+            .get();  
+        createRepository("test-repo", "fs");
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals("only the elected cluster manager notifies plugins", clusterManager, call.nodeName());
+import java.util.ArrayList;
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+public class RestoreListenerPluginIT extends AbstractSnapshotIntegTestCase {
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+    }
+            this.nodeName = settings.get("node.name");
+    /**  

@@ -1,12 +1,11 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
  * compatible open source license.
- */  
-
-/**
- * This package contains interfaces and implementations for in memory rule storage mechanisms  
- */
 package org.opensearch.rule.storage;
+ */
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+ * This package contains interfaces and implementations for in memory rule storage mechanisms  
+ * The OpenSearch Contributors require contributions made to  
+/**

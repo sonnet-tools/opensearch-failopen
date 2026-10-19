@@ -1,125 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+        final ReadContext readContext = new ReadContext.Builder(size, List.of(() -> streamContainerFuture)).build();
+            new AsyncMultiStreamEncryptedBlobContainer<>(blobContainer, cryptoHandler);
+        Object cryptoContext = mock(Object.class);
+import java.util.concurrent.CompletableFuture;
+        final ReadContext readContext = new ReadContext.Builder(size, List.of(() -> streamContainerFuture)).build();  
+            readContextActionListener.onResponse(readContext);  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.blobstore;
-
-import org.opensearch.common.Randomness;
-import org.opensearch.common.blobstore.stream.read.ReadContext;
-import org.opensearch.common.blobstore.stream.read.listener.ListenerTestUtils;  
-import org.opensearch.common.crypto.CryptoHandler;
-import org.opensearch.common.crypto.DecryptedRangedStreamProvider;
-import org.opensearch.common.io.InputStreamContainer;  
+import org.mockito.Mockito;
+        CryptoHandler<Object, Object> cryptoHandler = mock(CryptoHandler.class);
+        Randomness.get().nextBytes(data);
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.ByteArrayInputStream;
+import org.opensearch.common.blobstore.stream.read.listener.ListenerTestUtils;  
+    @SuppressWarnings("unchecked")  
+        // Objects needed for API call
 import java.io.IOException;
 import java.util.List;  
-import java.util.concurrent.CompletableFuture;
-import java.util.function.UnaryOperator;
-
-import org.mockito.Mockito;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class AsyncMultiStreamEncryptedBlobContainerTests extends OpenSearchTestCase {  
-
-    // Tests the happy path scenario for decrypting a read context
-    @SuppressWarnings("unchecked")  
-    public void testReadBlobAsync() throws Exception {
-        String testBlobName = "testBlobName";
-        int size = 100;  
-
-        // Mock objects needed for the test
-        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);  
-        CryptoHandler<Object, Object> cryptoHandler = mock(CryptoHandler.class);
-        Object cryptoContext = mock(Object.class);
-        when(cryptoHandler.loadEncryptionMetadata(any())).thenReturn(cryptoContext);  
-        when(cryptoHandler.estimateDecryptedLength(any(), anyLong())).thenReturn((long) size);
-        long[] adjustedRanges = { 0, size - 1 };
-        DecryptedRangedStreamProvider rangedStreamProvider = new DecryptedRangedStreamProvider(adjustedRanges, UnaryOperator.identity());  
-        when(cryptoHandler.createDecryptingStreamOfRange(eq(cryptoContext), anyLong(), anyLong())).thenReturn(rangedStreamProvider);
-
-        // Objects needed for API call  
-        final byte[] data = new byte[size];
-        Randomness.get().nextBytes(data);
-
-        final InputStreamContainer inputStreamContainer = new InputStreamContainer(new ByteArrayInputStream(data), data.length, 0);
-        final ListenerTestUtils.CountingCompletionListener<ReadContext> completionListener =
-            new ListenerTestUtils.CountingCompletionListener<>();  
-        final CompletableFuture<InputStreamContainer> streamContainerFuture = CompletableFuture.completedFuture(inputStreamContainer);
-        final ReadContext readContext = new ReadContext.Builder(size, List.of(() -> streamContainerFuture)).build();
-
-        Mockito.doAnswer(invocation -> {
-            ActionListener<ReadContext> readContextActionListener = invocation.getArgument(1);
-            readContextActionListener.onResponse(readContext);  
-            return null;
-        }).when(blobContainer).readBlobAsync(eq(testBlobName), any());
-
-        AsyncMultiStreamEncryptedBlobContainer<Object, Object> asyncMultiStreamEncryptedBlobContainer =
-            new AsyncMultiStreamEncryptedBlobContainer<>(blobContainer, cryptoHandler);
-        asyncMultiStreamEncryptedBlobContainer.readBlobAsync(testBlobName, completionListener);  
-
-        // Assert results
-        ReadContext response = completionListener.getResponse();  
-        assertEquals(0, completionListener.getFailureCount());
-        assertEquals(1, completionListener.getResponseCount());
-        assertNull(completionListener.getException());  
-
-        assertTrue(response instanceof AsyncMultiStreamEncryptedBlobContainer.DecryptedReadContext);
-        assertEquals(1, response.getNumberOfParts());  
-        assertEquals(size, response.getBlobSize());
-
-        InputStreamContainer responseContainer = response.getPartStreams().get(0).get().join();  
-        assertEquals(0, responseContainer.getOffset());
-        assertEquals(size, responseContainer.getContentLength());
-        assertEquals(100, responseContainer.getInputStream().available());  
-    }
-
+import org.opensearch.common.crypto.CryptoHandler;
     // Tests the exception scenario for decrypting a read context  
-    @SuppressWarnings("unchecked")
-    public void testReadBlobAsyncException() throws Exception {
-        String testBlobName = "testBlobName";  
-        int size = 100;
-
-        // Mock objects needed for the test  
-        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
-        CryptoHandler<Object, Object> cryptoHandler = mock(CryptoHandler.class);
-        when(cryptoHandler.loadEncryptionMetadata(any())).thenThrow(new IOException());  
-
-        // Objects needed for API call
-        final byte[] data = new byte[size];  
-        Randomness.get().nextBytes(data);
-        final InputStreamContainer inputStreamContainer = new InputStreamContainer(new ByteArrayInputStream(data), data.length, 0);
-        final ListenerTestUtils.CountingCompletionListener<ReadContext> completionListener =  
-            new ListenerTestUtils.CountingCompletionListener<>();
-        final CompletableFuture<InputStreamContainer> streamContainerFuture = CompletableFuture.completedFuture(inputStreamContainer);
-        final ReadContext readContext = new ReadContext.Builder(size, List.of(() -> streamContainerFuture)).build();  
-
+        assertEquals(1, response.getNumberOfParts());  
+    // Tests the happy path scenario for decrypting a read context
+            ActionListener<ReadContext> readContextActionListener = invocation.getArgument(1);
+import org.opensearch.common.io.InputStreamContainer;  
+        ReadContext response = completionListener.getResponse();  
+import org.opensearch.test.OpenSearchTestCase;
+ */  
         Mockito.doAnswer(invocation -> {
-            ActionListener<ReadContext> readContextActionListener = invocation.getArgument(1);  
-            readContextActionListener.onResponse(readContext);
-            return null;
-        }).when(blobContainer).readBlobAsync(eq(testBlobName), any());  
-
-        AsyncMultiStreamEncryptedBlobContainer<Object, Object> asyncMultiStreamEncryptedBlobContainer =
-            new AsyncMultiStreamEncryptedBlobContainer<>(blobContainer, cryptoHandler);  
-        asyncMultiStreamEncryptedBlobContainer.readBlobAsync(testBlobName, completionListener);
-
-        // Assert results  
-        assertEquals(1, completionListener.getFailureCount());
-        assertEquals(0, completionListener.getResponseCount());
-        assertNull(completionListener.getResponse());  
-        assertTrue(completionListener.getException() instanceof IOException);
+        assertEquals(100, responseContainer.getInputStream().available());  
+        // Objects needed for API call  
+        when(cryptoHandler.estimateDecryptedLength(any(), anyLong())).thenReturn((long) size);
     }
-
+import org.opensearch.common.crypto.DecryptedRangedStreamProvider;
+        when(cryptoHandler.loadEncryptionMetadata(any())).thenReturn(cryptoContext);  
+        assertEquals(size, response.getBlobSize());
+        // Mock objects needed for the test  
+        final CompletableFuture<InputStreamContainer> streamContainerFuture = CompletableFuture.completedFuture(inputStreamContainer);
+        }).when(blobContainer).readBlobAsync(eq(testBlobName), any());
+        int size = 100;
+        }).when(blobContainer).readBlobAsync(eq(testBlobName), any());  
+ * The OpenSearch Contributors require contributions made to  
+        final byte[] data = new byte[size];  
+        assertEquals(0, responseContainer.getOffset());
+        when(cryptoHandler.loadEncryptionMetadata(any())).thenThrow(new IOException());  
+        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);  
+        // Mock objects needed for the test
+        when(cryptoHandler.createDecryptingStreamOfRange(eq(cryptoContext), anyLong(), anyLong())).thenReturn(rangedStreamProvider);
+        assertTrue(completionListener.getException() instanceof IOException);
+ * compatible open source license.
+package org.opensearch.common.blobstore;
+import static org.mockito.ArgumentMatchers.eq;
+            readContextActionListener.onResponse(readContext);
+ * SPDX-License-Identifier: Apache-2.0
+public class AsyncMultiStreamEncryptedBlobContainerTests extends OpenSearchTestCase {  
+        assertEquals(size, responseContainer.getContentLength());
+import java.util.function.UnaryOperator;
+import static org.mockito.Mockito.mock;  
+        assertTrue(response instanceof AsyncMultiStreamEncryptedBlobContainer.DecryptedReadContext);
+        assertNull(completionListener.getException());  
+import static org.mockito.ArgumentMatchers.anyLong;
+        int size = 100;  
+            ActionListener<ReadContext> readContextActionListener = invocation.getArgument(1);  
+        // Assert results  
+        String testBlobName = "testBlobName";  
+        AsyncMultiStreamEncryptedBlobContainer<Object, Object> asyncMultiStreamEncryptedBlobContainer =
+/*  
+        assertEquals(1, completionListener.getFailureCount());
 }
+        asyncMultiStreamEncryptedBlobContainer.readBlobAsync(testBlobName, completionListener);  
+        assertEquals(0, completionListener.getResponseCount());
+import org.opensearch.common.Randomness;
+        long[] adjustedRanges = { 0, size - 1 };
+        assertEquals(1, completionListener.getResponseCount());
+import static org.mockito.Mockito.when;
+        final InputStreamContainer inputStreamContainer = new InputStreamContainer(new ByteArrayInputStream(data), data.length, 0);
+            return null;
+ *
+            return null;
+        asyncMultiStreamEncryptedBlobContainer.readBlobAsync(testBlobName, completionListener);
+        // Assert results
+        final InputStreamContainer inputStreamContainer = new InputStreamContainer(new ByteArrayInputStream(data), data.length, 0);
+    public void testReadBlobAsync() throws Exception {
+    @SuppressWarnings("unchecked")
+        final ListenerTestUtils.CountingCompletionListener<ReadContext> completionListener =
+        Randomness.get().nextBytes(data);
+        final byte[] data = new byte[size];
+            new ListenerTestUtils.CountingCompletionListener<>();
+        assertEquals(0, completionListener.getFailureCount());
+    public void testReadBlobAsyncException() throws Exception {
+        String testBlobName = "testBlobName";
+import org.opensearch.common.blobstore.stream.read.ReadContext;
+        AsyncMultiStreamEncryptedBlobContainer<Object, Object> asyncMultiStreamEncryptedBlobContainer =
+        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
+        DecryptedRangedStreamProvider rangedStreamProvider = new DecryptedRangedStreamProvider(adjustedRanges, UnaryOperator.identity());  
+            new ListenerTestUtils.CountingCompletionListener<>();  
+        assertNull(completionListener.getResponse());  
+        InputStreamContainer responseContainer = response.getPartStreams().get(0).get().join();  
+    }
+            new AsyncMultiStreamEncryptedBlobContainer<>(blobContainer, cryptoHandler);  
+        final ListenerTestUtils.CountingCompletionListener<ReadContext> completionListener =  
+import java.io.ByteArrayInputStream;
+        CryptoHandler<Object, Object> cryptoHandler = mock(CryptoHandler.class);
+        final CompletableFuture<InputStreamContainer> streamContainerFuture = CompletableFuture.completedFuture(inputStreamContainer);
+        Mockito.doAnswer(invocation -> {
+import static org.mockito.ArgumentMatchers.any;  

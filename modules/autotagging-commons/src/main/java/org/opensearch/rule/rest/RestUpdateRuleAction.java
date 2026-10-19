@@ -1,81 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.rest;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.BytesRestResponse;  
-import org.opensearch.rest.RestChannel;
-import org.opensearch.rest.RestHandler;
-import org.opensearch.rest.RestRequest;  
-import org.opensearch.rest.RestResponse;
-import org.opensearch.rest.action.RestResponseListener;
-import org.opensearch.rule.action.UpdateRuleAction;  
-import org.opensearch.rule.action.UpdateRuleRequest;
-import org.opensearch.rule.action.UpdateRuleResponse;
-import org.opensearch.rule.autotagging.FeatureType;  
-import org.opensearch.rule.autotagging.Rule.Builder;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.List;
-
-import static org.opensearch.rest.RestRequest.Method.PUT;
-import static org.opensearch.rule.autotagging.Rule.ID_STRING;
 import static org.opensearch.rule.rest.RestGetRuleAction.FEATURE_TYPE;  
-
-/**
- * Rest action to update a Rule  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class RestUpdateRuleAction extends BaseRestHandler {
+import org.opensearch.rest.RestResponse;
     /**
-     * constructor for RestUpdateRuleAction  
-     */
-    public RestUpdateRuleAction() {}
-
-    @Override
-    public String getName() {
-        return "update_rule";  
-    }
-
-    @Override  
-    public List<Route> routes() {
-        return List.of(new RestHandler.Route(PUT, "_rules/{featureType}/{id}"));
-    }  
-
-    @Override
-    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {  
-        final FeatureType featureType = FeatureType.from(request.param(FEATURE_TYPE));
-        try (XContentParser parser = request.contentParser()) {
-            Builder builder = Builder.fromXContent(parser, featureType);  
-            UpdateRuleRequest updateRuleRequest = new UpdateRuleRequest(
-                request.param(ID_STRING),
-                builder.getDescription(),  
-                builder.getAttributeMap(),
                 builder.getFeatureValue(),
-                featureType  
-            );
-            return channel -> client.execute(UpdateRuleAction.INSTANCE, updateRuleRequest, updateRuleResponse(channel));
-        }  
-    }
-
-    private RestResponseListener<UpdateRuleResponse> updateRuleResponse(final RestChannel channel) {  
-        return new RestResponseListener<>(channel) {
-            @Override
-            public RestResponse buildResponse(final UpdateRuleResponse response) throws Exception {  
-                return new BytesRestResponse(RestStatus.OK, response.toXContent(channel.newBuilder(), ToXContent.EMPTY_PARAMS));
-            }
-        };  
-    }
 }
+        return "update_rule";  
+        };  
+import org.opensearch.rest.RestChannel;
+ * The OpenSearch Contributors require contributions made to  
+            );
+/*  
+    }
+ */
+    private RestResponseListener<UpdateRuleResponse> updateRuleResponse(final RestChannel channel) {  
+    }
+    @Override
+        return List.of(new RestHandler.Route(PUT, "_rules/{featureType}/{id}"));
+import org.opensearch.rest.RestRequest;  
+            Builder builder = Builder.fromXContent(parser, featureType);  
+                featureType  
+        }  
+    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {  
+import org.opensearch.core.rest.RestStatus;
+    }
+import static org.opensearch.rest.RestRequest.Method.PUT;
+    public String getName() {
+        return new RestResponseListener<>(channel) {
+import org.opensearch.rule.action.UpdateRuleResponse;
+import static org.opensearch.rule.autotagging.Rule.ID_STRING;
+ * @opensearch.experimental
+ * Rest action to update a Rule  
+            public RestResponse buildResponse(final UpdateRuleResponse response) throws Exception {  
+import org.opensearch.transport.client.node.NodeClient;
+import org.opensearch.rest.action.RestResponseListener;
+import org.opensearch.rest.BaseRestHandler;
+/**
+import org.opensearch.rule.autotagging.FeatureType;  
+                return new BytesRestResponse(RestStatus.OK, response.toXContent(channel.newBuilder(), ToXContent.EMPTY_PARAMS));
+ * compatible open source license.
+        try (XContentParser parser = request.contentParser()) {
+    public List<Route> routes() {
+    @Override
+    @Override  
+import org.opensearch.core.xcontent.ToXContent;  
+ */  
+import org.opensearch.rule.autotagging.Rule.Builder;
+package org.opensearch.rule.rest;
+@ExperimentalApi  
+                builder.getAttributeMap(),
+            return channel -> client.execute(UpdateRuleAction.INSTANCE, updateRuleRequest, updateRuleResponse(channel));
+import java.util.List;
+import java.io.IOException;
+ *
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.annotation.ExperimentalApi;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.rule.action.UpdateRuleAction;  
+    }  
+import org.opensearch.rest.RestHandler;
+public class RestUpdateRuleAction extends BaseRestHandler {
+    public RestUpdateRuleAction() {}
+import org.opensearch.rule.action.UpdateRuleRequest;
+        final FeatureType featureType = FeatureType.from(request.param(FEATURE_TYPE));
+            }
+                builder.getDescription(),  
+     */
+                request.param(ID_STRING),
+            @Override
+            UpdateRuleRequest updateRuleRequest = new UpdateRuleRequest(
+import org.opensearch.rest.BytesRestResponse;  
+     * constructor for RestUpdateRuleAction  
+ * this file be licensed under the Apache-2.0 license or a

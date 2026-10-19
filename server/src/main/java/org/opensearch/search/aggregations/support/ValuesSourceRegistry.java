@@ -1,213 +1,189 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+        this.aggregatorRegistry = copyMap(aggregatorRegistry);
  * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.support;
-
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.SearchModule;
-import org.opensearch.search.aggregations.AggregationExecutionException;  
-
-import java.util.AbstractMap;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;  
-
-/**
- * {@link ValuesSourceRegistry} holds the mapping from {@link ValuesSourceType}s to functions for building aggregation components.  DO NOT  
- * directly instantiate this class, instead get an already-configured copy from {@link QueryShardContext#getValuesSourceRegistry()}, or (in
- * the case of some test scenarios only) directly from {@link SearchModule#getValuesSourceRegistry()}
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class ValuesSourceRegistry {
-
-    /**  
-     * The registry key for the values source registry key
-     *
-     * @opensearch.api  
-     */
     @PublicApi(since = "1.0.0")
-    public static final class RegistryKey<T> {  
-        private final String name;
-        private final Class<T> supplierType;
-
-        public RegistryKey(String name, Class<T> supplierType) {
-            this.name = Objects.requireNonNull(name);
-            this.supplierType = Objects.requireNonNull(supplierType);  
-        }
-
-        public String getName() {  
-            return name;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;  
-            if (o == null || getClass() != o.getClass()) return false;
-            RegistryKey that = (RegistryKey) o;
-            return name.equals(that.name) && supplierType.equals(that.supplierType);  
-        }
-
-        @Override  
-        public int hashCode() {
-            return Objects.hash(name, supplierType);
-        }  
-    }
-
-    public static final RegistryKey UNREGISTERED_KEY = new RegistryKey("unregistered", RegistryKey.class);  
-
-    /**
-     * Builder for the values source registry  
-     *
-     * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    public static class Builder {
-        private final AggregationUsageService.Builder usageServiceBuilder;  
-        private Map<RegistryKey<?>, List<Map.Entry<ValuesSourceType, ?>>> aggregatorRegistry = new HashMap<>();
-
-        public Builder() {  
-            this.usageServiceBuilder = new AggregationUsageService.Builder();
-        }
-
-        /**
-         * Register a ValuesSource to Aggregator mapping. This method registers mappings that only apply to a
-         * single {@link ValuesSourceType}  
-         * @param registryKey The name of the family of aggregations paired with the expected component supplier type for this
-         *                    family of aggregations.  Generally, the aggregation builder is expected to define a constant for use as the
-         *                    registryKey  
-         * @param valuesSourceType The ValuesSourceType this mapping applies to.
-         * @param aggregatorSupplier An Aggregation-specific specialization of ComponentSupplier which will construct the mapped aggregator
-         * @param registerUsage Flag to indicate if this aggregation values source combo should be added to the usage registry.  
-         *                      Aggregations that set this to false should register with the usage registry through some other path.
-         */
-        public <T> void register(  
-            RegistryKey<T> registryKey,
-            ValuesSourceType valuesSourceType,
-            T aggregatorSupplier,  
-            boolean registerUsage
-        ) {
-            if (aggregatorRegistry.containsKey(registryKey) == false) {  
-                aggregatorRegistry.put(registryKey, new ArrayList<>());
-            }
-            aggregatorRegistry.get(registryKey).add(new AbstractMap.SimpleEntry<>(valuesSourceType, aggregatorSupplier));  
-            if (registerUsage) {
-                registerUsage(registryKey.getName(), valuesSourceType);
-            }  
-        }
-
-        /**  
-         * Register a ValuesSource to Aggregator mapping. This version provides a convenience method for mappings that apply to a
-         * known list of {@link ValuesSourceType}
-         * @param registryKey The name of the family of aggregations paired with the expected component supplier type for this  
-         *                    family of aggregations.  Generally, the aggregation builder is expected to define a constant for use as the
-         *                    registryKey
-         * @param valuesSourceTypes The ValuesSourceTypes this mapping applies to.  
-         * @param aggregatorSupplier An Aggregation-specific specialization of ComponentSupplier which will construct the mapped aggregator
-         * @param registerUsage Flag to indicate if this aggregation values source combo should be added to the usage registry.
-         *                      Aggregations that set this to false should register with the usage registry through some other path.  
-         */
-        public <T> void register(
-            RegistryKey<T> registryKey,  
-            List<ValuesSourceType> valuesSourceTypes,
-            T aggregatorSupplier,
-            boolean registerUsage  
-        ) {
-            for (ValuesSourceType valuesSourceType : valuesSourceTypes) {
-                register(registryKey, valuesSourceType, aggregatorSupplier, registerUsage);  
-            }
-        }
-
-        public void registerUsage(String aggregationName, ValuesSourceType valuesSourceType) {
             usageServiceBuilder.registerAggregationUsage(aggregationName, valuesSourceType.typeName());
-        }  
-
-        public void registerUsage(String aggregationName) {
+            T aggregatorSupplier,  
+            RegistryKey<T> registryKey,
+            }
+package org.opensearch.search.aggregations.support;
+import java.util.ArrayList;  
+    private final Map<RegistryKey<?>, Map<ValuesSourceType, ?>> aggregatorRegistry;
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+                );
+        mutableMap.forEach((key, value) -> tmp.put(key, value.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))));
+ * KIND, either express or implied.  See the License for the
+        return Collections.unmodifiableMap(tmp);
             usageServiceBuilder.registerAggregationUsage(aggregationName);  
         }
-
+        return aggregatorRegistry.containsKey(registryKey);  
+            boolean registerUsage
+                throw new IllegalArgumentException(
+         * @param registerUsage Flag to indicate if this aggregation values source combo should be added to the usage registry.  
+    @PublicApi(since = "1.0.0")
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            }
+        }
+        }  
+        public boolean equals(Object o) {
+        Map<RegistryKey<?>, Map<ValuesSourceType, ?>> tmp = new HashMap<>();  
+            T supplier = (T) aggregatorRegistry.get(registryKey).get(valuesSourceConfig.valueSourceType());  
+import java.util.AbstractMap;
+        public RegistryKey(String name, Class<T> supplierType) {
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+         into a Map.of(), which is more read optimized than just using a hash map.
+    /**
+            aggregatorRegistry.get(registryKey).add(new AbstractMap.SimpleEntry<>(valuesSourceType, aggregatorSupplier));  
+        }  
+        public <T> void register(
+        /**  
+    public static class Builder {
+        public void registerUsage(String aggregationName) {
+ */
+            for (ValuesSourceType valuesSourceType : valuesSourceTypes) {
+    }
+                registerUsage(registryKey.getName(), valuesSourceType);
+            if (o == null || getClass() != o.getClass()) return false;
+ * Licensed to Elasticsearch under one or more contributor  
+        /**
+        }
+        @Override
+    }  
+ * specific language governing permissions and limitations
+        private final Class<T> supplierType;
+            if (supplier == null) {
+        }
+        public int hashCode() {
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }
+import org.opensearch.search.SearchModule;
+        public Builder() {  
+        }
         public ValuesSourceRegistry build() {  
+        ) {
+import java.util.stream.Collectors;  
+            }  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.HashMap;
+         * Register a ValuesSource to Aggregator mapping. This version provides a convenience method for mappings that apply to a
+            this.supplierType = Objects.requireNonNull(supplierType);  
+import org.opensearch.common.annotation.PublicApi;  
+            @SuppressWarnings("unchecked")
+    }
+ * Modifications Copyright OpenSearch Contributors. See  
+     *
+public class ValuesSourceRegistry {
+         * @param registryKey The name of the family of aggregations paired with the expected component supplier type for this  
+         * @param registryKey The name of the family of aggregations paired with the expected component supplier type for this
+            boolean registerUsage  
+    public static final RegistryKey UNREGISTERED_KEY = new RegistryKey("unregistered", RegistryKey.class);  
+ * not use this file except in compliance with the License.
+        this.usageService = usageService;
+ * this work for additional information regarding copyright
+     */
+         * @param aggregatorSupplier An Aggregation-specific specialization of ComponentSupplier which will construct the mapped aggregator
+        return usageService;  
+         *                    registryKey
+ * @opensearch.api
+     */  
+         * @param valuesSourceType The ValuesSourceType this mapping applies to.
+         */
+import java.util.Map;
+         * known list of {@link ValuesSourceType}
+import java.util.Objects;
+    }  
+         */
+     *
+ *
+         *                      Aggregations that set this to false should register with the usage registry through some other path.  
+ * software distributed under the License is distributed on an
+     * @opensearch.api  
+ * {@link ValuesSourceRegistry} holds the mapping from {@link ValuesSourceType}s to functions for building aggregation components.  DO NOT  
+        }
+    }  
+ * compatible open source license.
+            this.usageServiceBuilder = new AggregationUsageService.Builder();
+            if (this == o) return true;  
+            List<ValuesSourceType> valuesSourceTypes,
+            ValuesSourceType valuesSourceType,
+         * @param aggregatorSupplier An Aggregation-specific specialization of ComponentSupplier which will construct the mapped aggregator
+ */
+    public AggregationUsageService getUsageService() {
+    ) {
+ * directly instantiate this class, instead get an already-configured copy from {@link QueryShardContext#getValuesSourceRegistry()}, or (in
+        Map<RegistryKey<?>, List<Map.Entry<ValuesSourceType, ?>>> mutableMap  
+        @Override  
+            T aggregatorSupplier,
             return new ValuesSourceRegistry(aggregatorRegistry, usageServiceBuilder.build());
         }
-    }  
-
-    private static Map<RegistryKey<?>, Map<ValuesSourceType, ?>> copyMap(
-        Map<RegistryKey<?>, List<Map.Entry<ValuesSourceType, ?>>> mutableMap  
-    ) {
-        /*
-         Make an immutatble copy of our input map. Since this is write once, read many, we'll spend a bit of extra time to shape this  
-         into a Map.of(), which is more read optimized than just using a hash map.
-         */
-        Map<RegistryKey<?>, Map<ValuesSourceType, ?>> tmp = new HashMap<>();  
-        mutableMap.forEach((key, value) -> tmp.put(key, value.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))));
-        return Collections.unmodifiableMap(tmp);
-    }  
-
-    /** Maps Aggregation names to (ValuesSourceType, Supplier) pairs, keyed by ValuesSourceType */
-    private final AggregationUsageService usageService;  
-    private final Map<RegistryKey<?>, Map<ValuesSourceType, ?>> aggregatorRegistry;
-
+        private final AggregationUsageService.Builder usageServiceBuilder;  
+        public void registerUsage(String aggregationName, ValuesSourceType valuesSourceType) {
+/**
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+ *  
+import java.util.Collections;
+            return Objects.hash(name, supplierType);
+                aggregatorRegistry.put(registryKey, new ArrayList<>());
     public ValuesSourceRegistry(  
-        Map<RegistryKey<?>, List<Map.Entry<ValuesSourceType, ?>>> aggregatorRegistry,
-        AggregationUsageService usageService
-    ) {  
-        this.usageService = usageService;
-        this.aggregatorRegistry = copyMap(aggregatorRegistry);
-    }  
-
-    public boolean isRegistered(RegistryKey<?> registryKey) {
-        return aggregatorRegistry.containsKey(registryKey);  
-    }
-
-    public <T> T getAggregator(RegistryKey<T> registryKey, ValuesSourceConfig valuesSourceConfig) {  
-        if (registryKey != null && aggregatorRegistry.containsKey(registryKey)) {
-            @SuppressWarnings("unchecked")
-            T supplier = (T) aggregatorRegistry.get(registryKey).get(valuesSourceConfig.valueSourceType());  
-            if (supplier == null) {
-                throw new IllegalArgumentException(
-                    valuesSourceConfig.getDescription() + " is not supported for aggregation [" + registryKey.getName() + "]"  
-                );
-            }
-            return supplier;  
         }
-        throw new AggregationExecutionException("Unregistered Aggregation [" + registryKey.getName() + "]");
-    }  
-
-    public AggregationUsageService getUsageService() {
-        return usageService;  
-    }
 }
+            if (aggregatorRegistry.containsKey(registryKey) == false) {  
+         *                    family of aggregations.  Generally, the aggregation builder is expected to define a constant for use as the
+            }
+/*
+import org.opensearch.search.aggregations.AggregationExecutionException;  
+    public boolean isRegistered(RegistryKey<?> registryKey) {
+         * single {@link ValuesSourceType}  
+            this.name = Objects.requireNonNull(name);
+ *  
+    public static final class RegistryKey<T> {  
+    public <T> T getAggregator(RegistryKey<T> registryKey, ValuesSourceConfig valuesSourceConfig) {  
+                register(registryKey, valuesSourceType, aggregatorSupplier, registerUsage);  
+    }
+        /*
+         * @param valuesSourceTypes The ValuesSourceTypes this mapping applies to.  
+        public <T> void register(  
+            return name.equals(that.name) && supplierType.equals(that.supplierType);  
+         */
+            if (registerUsage) {
+        throw new AggregationExecutionException("Unregistered Aggregation [" + registryKey.getName() + "]");
+                    valuesSourceConfig.getDescription() + " is not supported for aggregation [" + registryKey.getName() + "]"  
+        if (registryKey != null && aggregatorRegistry.containsKey(registryKey)) {
+        public String getName() {  
+    ) {  
+    private static Map<RegistryKey<?>, Map<ValuesSourceType, ?>> copyMap(
+            RegistryKey<T> registryKey,  
+     * Builder for the values source registry  
+            return name;
+ */  
+     * @opensearch.api
+         * @param registerUsage Flag to indicate if this aggregation values source combo should be added to the usage registry.
+ * You may obtain a copy of the License at  
+ * the case of some test scenarios only) directly from {@link SearchModule#getValuesSourceRegistry()}
+@PublicApi(since = "1.0.0")  
+import org.opensearch.index.query.QueryShardContext;
+         Make an immutatble copy of our input map. Since this is write once, read many, we'll spend a bit of extra time to shape this  
+         *                    family of aggregations.  Generally, the aggregation builder is expected to define a constant for use as the
+        private final String name;
+     * The registry key for the values source registry key
+    private final AggregationUsageService usageService;  
+        ) {
+         *                    registryKey  
+            return supplier;  
+         *                      Aggregations that set this to false should register with the usage registry through some other path.
+    /** Maps Aggregation names to (ValuesSourceType, Supplier) pairs, keyed by ValuesSourceType */
+    /**  
+            RegistryKey that = (RegistryKey) o;
+ * the Apache License, Version 2.0 (the "License"); you may
+        AggregationUsageService usageService
+         * Register a ValuesSource to Aggregator mapping. This method registers mappings that only apply to a
+ * Unless required by applicable law or agreed to in writing,
+        private Map<RegistryKey<?>, List<Map.Entry<ValuesSourceType, ?>>> aggregatorRegistry = new HashMap<>();
+import java.util.List;  
+/*
+        Map<RegistryKey<?>, List<Map.Entry<ValuesSourceType, ?>>> aggregatorRegistry,
+ */

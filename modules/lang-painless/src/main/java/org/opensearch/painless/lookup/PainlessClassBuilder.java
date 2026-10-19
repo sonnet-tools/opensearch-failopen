@@ -1,104 +1,89 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.lookup;
-
-import java.lang.invoke.MethodHandle;
-import java.util.HashMap;
-import java.util.Map;  
-import java.util.Objects;
-
-final class PainlessClassBuilder {  
-
     final Map<String, PainlessConstructor> constructors;
-    final Map<String, PainlessMethod> staticMethods;  
-    final Map<String, PainlessMethod> methods;
-    final Map<String, PainlessField> staticFields;
-    final Map<String, PainlessField> fields;  
     PainlessMethod functionalInterfaceMethod;
-
-    final Map<String, PainlessMethod> runtimeMethods;  
-    final Map<String, MethodHandle> getterMethodHandles;
-    final Map<String, MethodHandle> setterMethodHandles;
-
-    PainlessClassBuilder() {
-        constructors = new HashMap<>();
-        staticMethods = new HashMap<>();  
-        methods = new HashMap<>();
-        staticFields = new HashMap<>();
-        fields = new HashMap<>();  
-        functionalInterfaceMethod = null;
-
-        runtimeMethods = new HashMap<>();  
-        getterMethodHandles = new HashMap<>();
-        setterMethodHandles = new HashMap<>();
-    }  
-
-    PainlessClass build() {
-        return new PainlessClass(  
-            constructors,
-            staticMethods,
-            methods,  
-            staticFields,
-            fields,
-            functionalInterfaceMethod,  
-            runtimeMethods,
-            getterMethodHandles,
-            setterMethodHandles  
-        );
-    }
-
-    @Override
-    public boolean equals(Object object) {
-        if (this == object) {  
-            return true;
-        }
-
-        if (object == null || getClass() != object.getClass()) {
-            return false;
-        }  
-
-        PainlessClassBuilder that = (PainlessClassBuilder) object;
-
-        return Objects.equals(constructors, that.constructors)
-            && Objects.equals(staticMethods, that.staticMethods)
-            && Objects.equals(methods, that.methods)  
-            && Objects.equals(staticFields, that.staticFields)
-            && Objects.equals(fields, that.fields)
-            && Objects.equals(functionalInterfaceMethod, that.functionalInterfaceMethod);  
-    }
-
-    @Override  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
     public int hashCode() {
-        return Objects.hash(constructors, staticMethods, methods, staticFields, fields, functionalInterfaceMethod);
+        constructors = new HashMap<>();
+        );
+ *
+package org.opensearch.painless.lookup;
+        return Objects.equals(constructors, that.constructors)
+ * Modifications Copyright OpenSearch Contributors. See
+    final Map<String, MethodHandle> setterMethodHandles;
+    final Map<String, PainlessMethod> methods;
+import java.util.Map;  
+ * this work for additional information regarding copyright
     }  
+ * KIND, either express or implied.  See the License for the
+            setterMethodHandles  
+            && Objects.equals(functionalInterfaceMethod, that.functionalInterfaceMethod);  
+/*  
+    final Map<String, PainlessMethod> staticMethods;  
+    final Map<String, MethodHandle> getterMethodHandles;
+    final Map<String, PainlessField> fields;  
+        return new PainlessClass(  
+            fields,
+ * GitHub history for details.
+            return false;
+        }
+    }
+    PainlessClassBuilder() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override  
+            && Objects.equals(methods, that.methods)  
+/*  
+        if (object == null || getClass() != object.getClass()) {
+import java.util.HashMap;
+ *  
+ */
+ * You may obtain a copy of the License at  
+import java.lang.invoke.MethodHandle;
+        PainlessClassBuilder that = (PainlessClassBuilder) object;
+        runtimeMethods = new HashMap<>();  
+            getterMethodHandles,
+    }
+        fields = new HashMap<>();  
+ * this file be licensed under the Apache-2.0 license or a
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+ * under the License.  
+        return Objects.hash(constructors, staticMethods, methods, staticFields, fields, functionalInterfaceMethod);
+        if (this == object) {  
 }
+            constructors,
+        staticMethods = new HashMap<>();  
+            staticFields,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            && Objects.equals(staticMethods, that.staticMethods)
+            && Objects.equals(fields, that.fields)
+/*
+ * not use this file except in compliance with the License.
+            && Objects.equals(staticFields, that.staticFields)
+    PainlessClass build() {
+    final Map<String, PainlessMethod> runtimeMethods;  
+ * SPDX-License-Identifier: Apache-2.0
+        staticFields = new HashMap<>();
+        getterMethodHandles = new HashMap<>();
+ * specific language governing permissions and limitations
+import java.util.Objects;
+            runtimeMethods,
+ * software distributed under the License is distributed on an
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+    final Map<String, PainlessField> staticFields;
+ *
+        functionalInterfaceMethod = null;
+        setterMethodHandles = new HashMap<>();
+ */  
+ * Unless required by applicable law or agreed to in writing,
+    }  
+            staticMethods,
+final class PainlessClassBuilder {  
+        methods = new HashMap<>();
+            return true;
+            functionalInterfaceMethod,  
+    public boolean equals(Object object) {
+ */  
+        }  
+            methods,  

@@ -1,295 +1,266 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.engine;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.FilterDirectoryReader;  
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.tests.index.AssertingDirectoryReader;
-import org.apache.lucene.tests.util.LuceneTestCase;  
+            this.subReaderWrapper = subReaderWrapper;
+    private static final class InFlightSearchers implements Closeable {
 import org.opensearch.OpenSearchException;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.engine.Engine;  
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.EngineException;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-
-import java.io.Closeable;
-import java.io.IOException;  
-import java.lang.reflect.Constructor;
-import java.util.IdentityHashMap;
-import java.util.Random;  
-import java.util.concurrent.atomic.AtomicBoolean;
-
+        this.disableFlushOnClose = DISABLE_FLUSH_ON_CLOSE.get(settings);
+        0.0d,
+                AssertionError error = new AssertionError("Unreleased searchers found");  
+        }
+            synchronized (this) {
+            openSearchers.remove(key);
+    private final MockContext mockContext;  
+         * make sure this is the searcher that will be released later on.  
 /**  
- * Support class to build MockEngines like {@link MockInternalEngine}
- * since they need to subclass the actual engine
- */  
-public final class MockEngineSupport {
-
-    /**  
-     * Allows tests to wrap an index reader randomly with a given ratio. This
-     * is disabled by default ie. {@code 0.0d} since reader wrapping is insanely
-     * slow if {@link AssertingDirectoryReader} is used.  
-     */
-    public static final Setting<Double> WRAP_READER_RATIO = Setting.doubleSetting(
-        "index.engine.mock.random.wrap_reader_ratio",  
-        0.0d,
-        0.0d,
-        Property.IndexScope  
+                    final int refCount = searcher.getIndexReader().getRefCount();
+                     * this assert seems to be paranoid but given LUCENE-5362 we  
+ * under the License.  
+            inFlightSearchers.add(this, searcher.source());
+        }  
+ * You may obtain a copy of the License at  
+/*
     );
     /**
-     * Allows tests to prevent an engine from being flushed on close ie. to test translog recovery...  
-     */
-    public static final Setting<Boolean> DISABLE_FLUSH_ON_CLOSE = Setting.boolSetting(
-        "index.mock.disable_flush_on_close",  
-        false,
-        Property.IndexScope
-    );  
-
-    private final AtomicBoolean closing = new AtomicBoolean(false);
-    private final Logger logger = LogManager.getLogger(Engine.class);  
-    private final ShardId shardId;
-    private final InFlightSearchers inFlightSearchers;
-    private final MockContext mockContext;  
-    private final boolean disableFlushOnClose;
-
-    public boolean isFlushOnCloseDisabled() {  
-        return disableFlushOnClose;
-    }
-
-    public static class MockContext {
-        private final Random random;
-        private final boolean wrapReader;  
-        private final Class<? extends FilterDirectoryReader> wrapper;
-        private final Settings indexSettings;
-
-        public MockContext(Random random, boolean wrapReader, Class<? extends FilterDirectoryReader> wrapper, Settings indexSettings) {
-            this.random = random;
-            this.wrapReader = wrapReader;  
-            this.wrapper = wrapper;
-            this.indexSettings = indexSettings;
-        }  
-    }
-
-    public MockEngineSupport(EngineConfig config, Class<? extends FilterDirectoryReader> wrapper) {  
-        Settings settings = config.getIndexSettings().getSettings();
-        shardId = config.getShardId();
-        final long seed = config.getIndexSettings().getValue(OpenSearchIntegTestCase.INDEX_TEST_SEED_SETTING);  
-        Random random = new Random(seed);
-        final double ratio = WRAP_READER_RATIO.get(settings);
-        boolean wrapReader = random.nextDouble() < ratio;  
-        if (logger.isTraceEnabled()) {
-            logger.trace("Using [{}] for shard [{}] seed: [{}] wrapReader: [{}]", this.getClass().getName(), shardId, seed, wrapReader);
-        }  
-        mockContext = new MockContext(random, wrapReader, wrapper, settings);
-        this.inFlightSearchers = new InFlightSearchers();
-        LuceneTestCase.closeAfterSuite(inFlightSearchers); // only one suite closeable per Engine  
-        this.disableFlushOnClose = DISABLE_FLUSH_ON_CLOSE.get(settings);
-    }
-
-    enum CloseAction {
-        FLUSH_AND_CLOSE,
-        CLOSE;  
-    }
-
-    /**  
-     * Returns the CloseAction to execute on the actual engine. Note this method changes the state on
-     * the first call and treats subsequent calls as if the engine passed is already closed.
-     */  
-    public CloseAction flushOrClose(CloseAction originalAction) throws IOException {
-        /*
-         * only do the random thing if we are the first call to this since  
-         * super.flushOnClose() calls #close() again and then we might end
-         * up with a stackoverflow.
-         */  
-        if (closing.compareAndSet(false, true)) {
-            if (mockContext.random.nextBoolean()) {
-                return CloseAction.FLUSH_AND_CLOSE;  
-            } else {
-                return CloseAction.CLOSE;
-            }  
-        } else {
-            return originalAction;
-        }  
-    }
-
-    public IndexReader newReader(IndexReader reader) throws EngineException {  
-        IndexReader wrappedReader = reader;
-        assert reader != null;
-        if (reader instanceof DirectoryReader && mockContext.wrapReader) {  
-            wrappedReader = wrapReader((DirectoryReader) reader);
-        }
-        return wrappedReader;  
-    }
-
-    private DirectoryReader wrapReader(DirectoryReader reader) {  
-        try {
-            Constructor<?>[] constructors = mockContext.wrapper.getConstructors();
-            Constructor<?> nonRandom = null;  
-            for (Constructor<?> constructor : constructors) {
-                Class<?>[] parameterTypes = constructor.getParameterTypes();
-                if (parameterTypes.length > 0 && parameterTypes[0] == DirectoryReader.class) {  
-                    if (parameterTypes.length == 1) {
-                        nonRandom = constructor;
-                    } else if (parameterTypes.length == 2 && parameterTypes[1] == Settings.class) {  
-
-                        return (DirectoryReader) constructor.newInstance(reader, mockContext.indexSettings);
-                    }  
-                }
-            }
-            if (nonRandom != null) {  
-                return (DirectoryReader) nonRandom.newInstance(reader);
-            }
-        } catch (Exception e) {  
-            throw new OpenSearchException("Can not wrap reader", e);
-        }
-        return reader;  
-    }
-
-    public abstract static class DirectoryReaderWrapper extends FilterDirectoryReader {  
-        protected final SubReaderWrapper subReaderWrapper;
-
-        public DirectoryReaderWrapper(DirectoryReader in, SubReaderWrapper subReaderWrapper) throws IOException {  
-            super(in, subReaderWrapper);
-            this.subReaderWrapper = subReaderWrapper;
-        }  
-
-    }
-
-    public Engine.Searcher wrapSearcher(Engine.Searcher searcher) {
-        final IndexReader reader = newReader(searcher.getIndexReader());
-
-        /*
-         * pass the original searcher to the super.newSearcher() method to
-         * make sure this is the searcher that will be released later on.  
-         * If we wrap an index reader here must not pass the wrapped version
-         * to the manager on release otherwise the reader will be closed too
-         * early. - good news, stuff will fail all over the place if we don't  
-         * get this right here
-         */
-        SearcherCloseable closeable = new SearcherCloseable(searcher, logger, inFlightSearchers);  
-        return new Engine.Searcher(
-            searcher.source(),
-            reader,  
-            searcher.getSimilarity(),
-            searcher.getQueryCache(),
-            searcher.getQueryCachingPolicy(),  
-            closeable
         );
-    }  
-
-    private static final class InFlightSearchers implements Closeable {
-
-        private final IdentityHashMap<Object, RuntimeException> openSearchers = new IdentityHashMap<>();
-
-        @Override  
-        public synchronized void close() {
-            if (openSearchers.isEmpty() == false) {
-                AssertionError error = new AssertionError("Unreleased searchers found");  
-                for (RuntimeException ex : openSearchers.values()) {
-                    error.addSuppressed(ex);
-                }  
-                throw error;
+public final class MockEngineSupport {
             }
-        }  
-
-        void add(Object key, String source) {
-            final RuntimeException ex = new RuntimeException("Unreleased Searcher, source [" + source + "]");  
-            synchronized (this) {
-                openSearchers.put(key, ex);
+import org.apache.lucene.tests.index.AssertingDirectoryReader;
             }  
-        }
-
-        synchronized void remove(Object key) {  
-            openSearchers.remove(key);
-        }
-    }  
-
-    private static final class SearcherCloseable implements Closeable {
-        private final Engine.Searcher searcher;  
-        private final InFlightSearchers inFlightSearchers;
-        private RuntimeException firstReleaseStack;
-        private final Object lock = new Object();  
-        private final int initialRefCount;
-        private final Logger logger;
-        private final AtomicBoolean closed = new AtomicBoolean(false);  
-
-        SearcherCloseable(final Engine.Searcher searcher, Logger logger, InFlightSearchers inFlightSearchers) {
-            this.searcher = searcher;  
-            this.logger = logger;
-            initialRefCount = searcher.getIndexReader().getRefCount();
-            this.inFlightSearchers = inFlightSearchers;  
-            assert initialRefCount > 0 : "IndexReader#getRefCount() was ["
-                + initialRefCount
-                + "] expected a value > [0] - reader is already closed";  
-            inFlightSearchers.add(this, searcher.source());
-        }
-
-        @Override
-        public void close() {
-            synchronized (lock) {  
-                if (closed.compareAndSet(false, true)) {
-                    inFlightSearchers.remove(this);
-                    firstReleaseStack = new RuntimeException();  
-                    final int refCount = searcher.getIndexReader().getRefCount();
-                    /*
-                     * this assert seems to be paranoid but given LUCENE-5362 we  
-                     * better add some assertions here to make sure we catch any
-                     * potential problems.
-                     */  
-                    assert refCount > 0 : "IndexReader#getRefCount() was ["
-                        + refCount
-                        + "] expected a value > [0] - reader is already "  
-                        + " closed. Initial refCount was: ["
-                        + initialRefCount
-                        + "]";  
-                    try {
-                        searcher.close();
-                    } catch (RuntimeException ex) {  
-                        logger.debug("Failed to release searcher", ex);
-                        throw ex;
-                    }  
-                } else {
+                    if (parameterTypes.length == 1) {
+        @Override  
                     AssertionError error = new AssertionError("Released Searcher more than once, source [" + searcher.source() + "]");
-                    error.initCause(firstReleaseStack);  
-                    throw error;
-                }
-            }  
-        }
+        @Override
     }
+                        throw ex;
+ * the Apache License, Version 2.0 (the "License"); you may
+            final RuntimeException ex = new RuntimeException("Unreleased Searcher, source [" + source + "]");  
+         */  
+        return new Engine.Searcher(
+            initialRefCount = searcher.getIndexReader().getRefCount();
+        final double ratio = WRAP_READER_RATIO.get(settings);
+                    }  
+        } else {
+ *
+        if (logger.isTraceEnabled()) {
+     * Returns the CloseAction to execute on the actual engine. Note this method changes the state on
+ * Unless required by applicable law or agreed to in writing,
+    private DirectoryReader wrapReader(DirectoryReader reader) {  
+        private final Class<? extends FilterDirectoryReader> wrapper;
+        final IndexReader reader = newReader(searcher.getIndexReader());
+        }
+        SearcherCloseable closeable = new SearcherCloseable(searcher, logger, inFlightSearchers);  
+         * super.flushOnClose() calls #close() again and then we might end
+ * SPDX-License-Identifier: Apache-2.0
+            }  
+        shardId = config.getShardId();
+                        + "] expected a value > [0] - reader is already "  
+            this.logger = logger;
+                + "] expected a value > [0] - reader is already closed";  
+            return originalAction;
+ * compatible open source license.
+import org.opensearch.core.index.shard.ShardId;
+    /**  
+import org.apache.lucene.index.FilterDirectoryReader;  
+                } else {
+        private final AtomicBoolean closed = new AtomicBoolean(false);  
+    }
+         */
+import org.opensearch.test.OpenSearchIntegTestCase;  
+                Class<?>[] parameterTypes = constructor.getParameterTypes();
+/*
+            super(in, subReaderWrapper);
+            Constructor<?>[] constructors = mockContext.wrapper.getConstructors();
+package org.opensearch.test.engine;
+        private final boolean wrapReader;  
+                + initialRefCount
+                    /*
+        }
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.logging.log4j.Logger;
+        }  
+/*  
+        public MockContext(Random random, boolean wrapReader, Class<? extends FilterDirectoryReader> wrapper, Settings indexSettings) {
+            }
+    public MockEngineSupport(EngineConfig config, Class<? extends FilterDirectoryReader> wrapper) {  
+        public synchronized void close() {
+                    assert refCount > 0 : "IndexReader#getRefCount() was ["
+     * Allows tests to prevent an engine from being flushed on close ie. to test translog recovery...  
+import java.util.concurrent.atomic.AtomicBoolean;
+    enum CloseAction {
+    }
+         * get this right here
+    public abstract static class DirectoryReaderWrapper extends FilterDirectoryReader {  
+    }
+ * KIND, either express or implied.  See the License for the
+    public IndexReader newReader(IndexReader reader) throws EngineException {  
+    public CloseAction flushOrClose(CloseAction originalAction) throws IOException {
+import org.apache.logging.log4j.LogManager;  
+         * If we wrap an index reader here must not pass the wrapped version
+        }
+                        nonRandom = constructor;
+        this.inFlightSearchers = new InFlightSearchers();
+                        + refCount
+        SearcherCloseable(final Engine.Searcher searcher, Logger logger, InFlightSearchers inFlightSearchers) {
+            assert initialRefCount > 0 : "IndexReader#getRefCount() was ["
+        try {
+import java.util.Random;  
+            searcher.source(),
+    }
+                for (RuntimeException ex : openSearchers.values()) {
+            wrappedReader = wrapReader((DirectoryReader) reader);
+            Constructor<?> nonRandom = null;  
+        "index.mock.disable_flush_on_close",  
+        private final int initialRefCount;
+        return disableFlushOnClose;
+ * this file be licensed under the Apache-2.0 license or a
+        }
+    public boolean isFlushOnCloseDisabled() {  
+            } else {
+                openSearchers.put(key, ex);
+ * Support class to build MockEngines like {@link MockInternalEngine}
+    private static final class SearcherCloseable implements Closeable {
+ * this work for additional information regarding copyright
+                        searcher.close();
+                        + " closed. Initial refCount was: ["
+        private final Logger logger;
+            searcher.getSimilarity(),
+import java.util.IdentityHashMap;
+                    }  
+            logger.trace("Using [{}] for shard [{}] seed: [{}] wrapReader: [{}]", this.getClass().getName(), shardId, seed, wrapReader);
+                }
+         * to the manager on release otherwise the reader will be closed too
+    }
+        /*
+            }
+        private final InFlightSearchers inFlightSearchers;
+        mockContext = new MockContext(random, wrapReader, wrapper, settings);
+                     * potential problems.
+ */
+         * pass the original searcher to the super.newSearcher() method to
+import java.io.IOException;  
+                if (closed.compareAndSet(false, true)) {
+            searcher.getQueryCache(),
+                     */  
+                return CloseAction.CLOSE;
+                if (parameterTypes.length > 0 && parameterTypes[0] == DirectoryReader.class) {  
+import org.apache.lucene.tests.util.LuceneTestCase;  
+import org.opensearch.common.settings.Setting;
+import org.opensearch.index.engine.Engine;  
+     * the first call and treats subsequent calls as if the engine passed is already closed.
+        if (reader instanceof DirectoryReader && mockContext.wrapReader) {  
+                        + "]";  
+import org.opensearch.common.settings.Setting.Property;  
+    private final AtomicBoolean closing = new AtomicBoolean(false);
+                    inFlightSearchers.remove(this);
+     */
+                    } else if (parameterTypes.length == 2 && parameterTypes[1] == Settings.class) {  
+    private final ShardId shardId;
+ * not use this file except in compliance with the License.
+    }
+                }
+            synchronized (lock) {  
+        false,
+     */
+            reader,  
+    }  
+        private RuntimeException firstReleaseStack;
+                    error.addSuppressed(ex);
+ * The OpenSearch Contributors require contributions made to  
+    public static final Setting<Boolean> DISABLE_FLUSH_ON_CLOSE = Setting.boolSetting(
+        return wrappedReader;  
+                throw error;
+import java.lang.reflect.Constructor;
+    }
+     * slow if {@link AssertingDirectoryReader} is used.  
+                return (DirectoryReader) nonRandom.newInstance(reader);
+ * since they need to subclass the actual engine
+            this.wrapper = wrapper;
+    private final boolean disableFlushOnClose;
+import org.opensearch.common.settings.Settings;
+        public DirectoryReaderWrapper(DirectoryReader in, SubReaderWrapper subReaderWrapper) throws IOException {  
+        private final Engine.Searcher searcher;  
+        final long seed = config.getIndexSettings().getValue(OpenSearchIntegTestCase.INDEX_TEST_SEED_SETTING);  
+            searcher.getQueryCachingPolicy(),  
+ *  
+    private final InFlightSearchers inFlightSearchers;
+        0.0d,
+            this.indexSettings = indexSettings;
+        /*
+            for (Constructor<?> constructor : constructors) {
+     */  
+                    throw error;
+                    } catch (RuntimeException ex) {  
+import org.opensearch.index.engine.EngineConfig;
+                     * better add some assertions here to make sure we catch any
+        private final Random random;
+                return CloseAction.FLUSH_AND_CLOSE;  
+                        logger.debug("Failed to release searcher", ex);
+        private final Object lock = new Object();  
+    }  
+ * license agreements. See the NOTICE file distributed with
+            this.random = random;
+        private final IdentityHashMap<Object, RuntimeException> openSearchers = new IdentityHashMap<>();
+    private final Logger logger = LogManager.getLogger(Engine.class);  
+        }
+                    try {
+import org.opensearch.index.engine.EngineException;
+            this.inFlightSearchers = inFlightSearchers;  
+        Random random = new Random(seed);
+        "index.engine.mock.random.wrap_reader_ratio",  
+        } catch (Exception e) {  
 }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * specific language governing permissions and limitations
+ */  
+            if (nonRandom != null) {  
+     * Allows tests to wrap an index reader randomly with a given ratio. This
+ * software distributed under the License is distributed on an
+    }
+         * early. - good news, stuff will fail all over the place if we don't  
+            this.searcher = searcher;  
+            throw new OpenSearchException("Can not wrap reader", e);
+            closeable
+            this.wrapReader = wrapReader;  
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */  
+        CLOSE;  
+        Settings settings = config.getIndexSettings().getSettings();
+        Property.IndexScope
+                        return (DirectoryReader) constructor.newInstance(reader, mockContext.indexSettings);
+                }  
+        Property.IndexScope  
+         * up with a stackoverflow.
+     * is disabled by default ie. {@code 0.0d} since reader wrapping is insanely
+        FLUSH_AND_CLOSE,
+            if (mockContext.random.nextBoolean()) {
+ * Licensed to Elasticsearch under one or more contributor  
+        synchronized void remove(Object key) {  
+        IndexReader wrappedReader = reader;
+ * ownership. Elasticsearch licenses this file to you under  
+        protected final SubReaderWrapper subReaderWrapper;
+ * Modifications Copyright OpenSearch Contributors. See  
+    public static class MockContext {
+    public static final Setting<Double> WRAP_READER_RATIO = Setting.doubleSetting(
+        boolean wrapReader = random.nextDouble() < ratio;  
+        if (closing.compareAndSet(false, true)) {
+                        + initialRefCount
+        assert reader != null;
+        public void close() {
+        }  
+    public Engine.Searcher wrapSearcher(Engine.Searcher searcher) {
+        LuceneTestCase.closeAfterSuite(inFlightSearchers); // only one suite closeable per Engine  
+    /**  
+            }  
+        }  
+         * only do the random thing if we are the first call to this since  
+        return reader;  
+ * GitHub history for details.
+    );  
+                    error.initCause(firstReleaseStack);  
+import java.io.Closeable;
+        void add(Object key, String source) {
+ */
+        private final Settings indexSettings;
+            if (openSearchers.isEmpty() == false) {
+import org.apache.lucene.index.IndexReader;
+                    firstReleaseStack = new RuntimeException();  
+        }  

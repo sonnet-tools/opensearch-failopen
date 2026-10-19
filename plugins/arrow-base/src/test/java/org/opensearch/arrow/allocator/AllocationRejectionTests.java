@@ -1,65 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    }
+        assertFalse(
+        assertTrue(
+        );  
+        OpenSearchRejectedExecutionException rejection = expectThrows(
+        assertTrue(rejection.getMessage().contains("[ingest-vsr]"));
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        );  
+        );
+            })
+}
+    }  
+        assertTrue("rejection message must include the context label", rejection.getMessage().contains("[query-pool]"));
  * compatible open source license.
+    }
+    public void testRunnableOverloadAlsoTranslatesOom() {
+        String result = AllocationRejection.wrap("ctx", () -> "ok");
+            "rejection message must propagate Arrow's diagnostic detail",  
+ * SPDX-License-Identifier: Apache-2.0
+            () -> AllocationRejection.wrap("ctx", () -> { throw ise; })  
+            "rejection should not be marked as executor-shutdown — this is per-request, not lifecycle",
+    }  
+        OutOfMemoryException arrowOom = new OutOfMemoryException(
+        );
+        assertEquals("ok", result);  
  */  
-
-package org.opensearch.arrow.allocator;
-
+            rejection.getMessage().contains("Unable to allocate buffer of size 1024")
+                throw arrowOom;
+    public void testWrapDoesNotInterceptOtherExceptions() {
 import org.apache.arrow.memory.OutOfMemoryException;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.test.OpenSearchTestCase;  
-
-public class AllocationRejectionTests extends OpenSearchTestCase {
-
+        OutOfMemoryException arrowOom = new OutOfMemoryException("limit exceeded");  
+        assertSame(arrowOom, rejection.getCause());
     public void testWrapPassesThroughOnSuccess() {
-        String result = AllocationRejection.wrap("ctx", () -> "ok");
-        assertEquals("ok", result);  
-    }
-
-    public void testWrapTranslatesArrowOomToRejection() {  
-        OutOfMemoryException arrowOom = new OutOfMemoryException(
             "Unable to allocate buffer of size 1024 due to memory limit. Current allocation: 0"
-        );  
-        OpenSearchRejectedExecutionException rejection = expectThrows(
+ * The OpenSearch Contributors require contributions made to  
             OpenSearchRejectedExecutionException.class,
-            () -> AllocationRejection.wrap("query-pool", () -> {  
-                throw arrowOom;
-            })
         );  
-        assertTrue("rejection message must include the context label", rejection.getMessage().contains("[query-pool]"));
-        assertTrue(
-            "rejection message must propagate Arrow's diagnostic detail",  
-            rejection.getMessage().contains("Unable to allocate buffer of size 1024")
+            IllegalStateException.class,
+            })
+/*  
         );
+package org.opensearch.arrow.allocator;
+                throw arrowOom;
+            () -> AllocationRejection.wrap("ingest-vsr", (Runnable) () -> {  
+ * this file be licensed under the Apache-2.0 license or a
+public class AllocationRejectionTests extends OpenSearchTestCase {
+import org.opensearch.test.OpenSearchTestCase;  
+            OpenSearchRejectedExecutionException.class,
         assertSame("Arrow OOM must be attached as cause", arrowOom, rejection.getCause());  
-        assertFalse(
-            "rejection should not be marked as executor-shutdown — this is per-request, not lifecycle",
+    public void testWrapTranslatesArrowOomToRejection() {  
             rejection.isExecutorShutdown()  
-        );
-    }
-
-    public void testWrapDoesNotInterceptOtherExceptions() {
-        // Non-Arrow exceptions must propagate unchanged. The wrapper is OOM-specific.
+        assertSame(ise, caught);
         IllegalStateException ise = new IllegalStateException("something else");  
         IllegalStateException caught = expectThrows(
-            IllegalStateException.class,
-            () -> AllocationRejection.wrap("ctx", () -> { throw ise; })  
-        );
-        assertSame(ise, caught);
-    }  
-
-    public void testRunnableOverloadAlsoTranslatesOom() {
-        OutOfMemoryException arrowOom = new OutOfMemoryException("limit exceeded");  
         OpenSearchRejectedExecutionException rejection = expectThrows(
-            OpenSearchRejectedExecutionException.class,
-            () -> AllocationRejection.wrap("ingest-vsr", (Runnable) () -> {  
-                throw arrowOom;
-            })
-        );  
-        assertTrue(rejection.getMessage().contains("[ingest-vsr]"));
-        assertSame(arrowOom, rejection.getCause());
-    }  
-}
+        // Non-Arrow exceptions must propagate unchanged. The wrapper is OOM-specific.
+            () -> AllocationRejection.wrap("query-pool", () -> {  

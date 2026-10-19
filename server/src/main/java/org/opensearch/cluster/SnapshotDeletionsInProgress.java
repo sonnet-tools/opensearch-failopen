@@ -1,391 +1,340 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster;
-
-import org.opensearch.cluster.ClusterState.Custom;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.repositories.RepositoryOperation;
-import org.opensearch.snapshots.SnapshotId;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;  
-
-/**
- * A class that represents the snapshot deletions that are in progress in the cluster.  
- *
- * @opensearch.internal
- */  
-public class SnapshotDeletionsInProgress extends AbstractNamedDiffable<Custom> implements Custom {
-
-    public static final SnapshotDeletionsInProgress EMPTY = new SnapshotDeletionsInProgress(Collections.emptyList());  
-
-    public static final String TYPE = "snapshot_deletions";
-
-    // the list of snapshot deletion request entries
-    private final List<Entry> entries;
-
-    private SnapshotDeletionsInProgress(List<Entry> entries) {
-        this.entries = entries;
-        assert entries.size() == entries.stream().map(Entry::uuid).distinct().count() : "Found duplicate UUIDs in entries " + entries;  
-        assert assertNoConcurrentDeletionsForSameRepository(entries);
-    }
-
+    /**
+        public Entry(StreamInput in) throws IOException {  
+        public String toString() {
+            this.startTime = startTime;  
     public static SnapshotDeletionsInProgress of(List<SnapshotDeletionsInProgress.Entry> entries) {
-        if (entries.isEmpty()) {
-            return EMPTY;  
-        }
-        return new SnapshotDeletionsInProgress(Collections.unmodifiableList(entries));
-    }  
-
-    public SnapshotDeletionsInProgress(StreamInput in) throws IOException {
-        this(in.readList(Entry::new));  
-    }
-
-    private static boolean assertNoConcurrentDeletionsForSameRepository(List<Entry> entries) {  
-        final Set<String> activeRepositories = new HashSet<>();
-        for (Entry entry : entries) {
-            if (entry.state() == State.STARTED) {  
-                final boolean added = activeRepositories.add(entry.repository());
-                assert added : "Found multiple running deletes for a single repository in " + entries;
-            }  
-        }
-        return true;
-    }  
-
-    /**
-     * Returns a new instance of {@link SnapshotDeletionsInProgress} with the given  
-     * {@link Entry} added.
-     */
-    public static SnapshotDeletionsInProgress newInstance(Entry entry) {  
-        return new SnapshotDeletionsInProgress(Collections.singletonList(entry));
-    }
-
-    /**
-     * Returns a new instance of {@link SnapshotDeletionsInProgress} which adds
-     * the given {@link Entry} to the invoking instance.  
-     */
-    public SnapshotDeletionsInProgress withAddedEntry(Entry entry) {
-        List<Entry> entries = new ArrayList<>(getEntries());  
+        @Override  
+                return this;  
+import java.util.ArrayList;  
+                repository(),
+     * @opensearch.internal  
         entries.add(entry);
-        return SnapshotDeletionsInProgress.of(entries);
-    }  
-
-    /**
-     * Returns a new instance of {@link SnapshotDeletionsInProgress} that has the entry with the given {@code deleteUUID} removed from its  
-     * entries.
-     */
-    public SnapshotDeletionsInProgress withRemovedEntry(String deleteUUID) {  
-        List<Entry> updatedEntries = new ArrayList<>(entries.size() - 1);
-        boolean removed = false;
-        for (Entry entry : entries) {  
-            if (entry.uuid().equals(deleteUUID)) {
-                removed = true;
-            } else {  
-                updatedEntries.add(entry);
-            }
-        }  
-        return removed ? SnapshotDeletionsInProgress.of(updatedEntries) : this;
-    }
-
-    /**
-     * Returns an unmodifiable list of snapshot deletion entries.
-     */  
-    public List<Entry> getEntries() {
-        return entries;
-    }  
-
-    /**
-     * Returns {@code true} if there are snapshot deletions in progress in the cluster,  
-     * returns {@code false} otherwise.
-     */
-    public boolean hasDeletionsInProgress() {  
-        return entries.isEmpty() == false;
-    }
-
-    @Override
-    public String getWriteableName() {
-        return TYPE;  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;  
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;  
-        }
-
         SnapshotDeletionsInProgress that = (SnapshotDeletionsInProgress) o;  
         return entries.equals(that.entries);
-    }
-
-    @Override
-    public int hashCode() {
-        return 31 + entries.hashCode();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeList(entries);
-    }  
-
-    public static NamedDiff<Custom> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(Custom.class, TYPE, in);  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startArray(TYPE);
-        for (Entry entry : entries) {  
-            builder.startObject();
-            {
-                builder.field("repository", entry.repository());  
-                builder.startArray("snapshots");
-                for (SnapshotId snapshot : entry.snapshots) {
-                    builder.value(snapshot.getName());  
-                }
-                builder.endArray();
-                builder.humanReadableField("start_time_millis", "start_time", new TimeValue(entry.startTime));  
-                builder.field("repository_state_id", entry.repositoryStateId);
-            }
-            builder.endObject();  
         }
-        builder.endArray();
-        return builder;  
-    }
-
-    @Override  
-    public String toString() {
-        StringBuilder builder = new StringBuilder("SnapshotDeletionsInProgress[");
-        for (int i = 0; i < entries.size(); i++) {  
-            builder.append(entries.get(i).getSnapshots());
-            if (i + 1 < entries.size()) {
-                builder.append(",");  
-            }
-        }
-        return builder.append("]").toString();  
-    }
-
-    /**  
-     * A class representing a snapshot deletion request entry in the cluster state.
-     *
-     * @opensearch.internal  
-     */
-    public static final class Entry implements Writeable, RepositoryOperation {
-        private final List<SnapshotId> snapshots;  
-        private final String repoName;
-        private final State state;
-        private final long startTime;  
-        private final long repositoryStateId;
-        private final String uuid;
-
-        public Entry(List<SnapshotId> snapshots, String repoName, long startTime, long repositoryStateId, State state) {
-            this(snapshots, repoName, startTime, repositoryStateId, state, UUIDs.randomBase64UUID());
-        }  
-
-        private Entry(List<SnapshotId> snapshots, String repoName, long startTime, long repositoryStateId, State state, String uuid) {
-            this.snapshots = snapshots;  
-            assert snapshots.size() == new HashSet<>(snapshots).size() : "Duplicate snapshot ids in " + snapshots;
-            this.repoName = repoName;
-            this.startTime = startTime;  
-            this.repositoryStateId = repositoryStateId;
-            this.state = state;
-            this.uuid = uuid;  
-        }
-
-        public Entry(StreamInput in) throws IOException {  
-            this.repoName = in.readString();
-            this.snapshots = in.readList(SnapshotId::new);
-            this.startTime = in.readVLong();  
-            this.repositoryStateId = in.readLong();
-            this.state = State.readFrom(in);
-            this.uuid = in.readString();  
-        }
-
-        public Entry started() {  
-            assert state == State.WAITING;
-            return new Entry(snapshots, repository(), startTime, repositoryStateId, State.STARTED, uuid);
-        }  
-
-        public Entry withAddedSnapshots(Collection<SnapshotId> newSnapshots) {
-            assert state == State.WAITING;  
-            final Collection<SnapshotId> updatedSnapshots = new HashSet<>(snapshots);
-            if (updatedSnapshots.addAll(newSnapshots) == false) {
-                return this;  
-            }
-            return new Entry(
-                Collections.unmodifiableList(new ArrayList<>(updatedSnapshots)),  
-                repository(),
-                startTime,
-                repositoryStateId,  
-                State.WAITING,
-                uuid
-            );  
-        }
-
-        public Entry withSnapshots(Collection<SnapshotId> snapshots) {  
-            return new Entry(
-                Collections.unmodifiableList(new ArrayList<>(snapshots)),
-                repository(),  
-                startTime,
-                repositoryStateId,
-                state,  
-                uuid
-            );
-        }  
-
-        public Entry withRepoGen(long repoGen) {
-            return new Entry(snapshots, repository(), startTime, repoGen, state, uuid);  
-        }
-
-        public State state() {  
-            return state;
-        }
-
-        public String uuid() {
             return uuid;
-        }  
-
-        public List<SnapshotId> getSnapshots() {
-            return snapshots;  
-        }
-
-        /**  
-         * The start time in milliseconds for deleting the snapshots.
-         */
-        public long getStartTime() {  
-            return startTime;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {  
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {  
-                return false;
-            }
             Entry that = (Entry) o;  
             return repoName.equals(that.repoName)
-                && snapshots.equals(that.snapshots)
-                && startTime == that.startTime  
-                && repositoryStateId == that.repositoryStateId
-                && state == that.state
-                && uuid.equals(that.uuid);  
-        }
-
-        @Override  
-        public int hashCode() {
-            return Objects.hash(snapshots, repoName, startTime, repositoryStateId, state, uuid);
-        }  
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {  
-            out.writeString(repoName);
-            out.writeCollection(snapshots);
-            out.writeVLong(startTime);  
-            out.writeLong(repositoryStateId);
-            state.writeTo(out);
-            out.writeString(uuid);  
-        }
-
-        @Override  
-        public String repository() {
-            return repoName;
-        }  
-
-        @Override
-        public long repositoryStateId() {  
-            return repositoryStateId;
-        }
-
-        @Override
-        public String toString() {
-            return "SnapshotDeletionsInProgress.Entry[[" + uuid + "][" + state + "]" + snapshots + "]";  
-        }
+ */  
+        private final String repoName;
+                repositoryStateId,
     }
-
-    /**
-     * State of the deletions.
-     *  
-     * @opensearch.internal
-     */
-    public enum State implements Writeable {  
-
-        /**
-         * Delete is waiting to execute because there are snapshots and or a delete operation that has to complete before this delete may  
-         * run.
-         */
-        WAITING((byte) 0),  
-
-        /**
-         * Delete is physically executing on the repository.  
-         */
-        STARTED((byte) 1);
-
-        private final byte value;
-
+            }
+import org.opensearch.core.common.io.stream.StreamInput;
         State(byte value) {  
-            this.value = value;
-        }
-
-        public static State readFrom(StreamInput in) throws IOException {
-            final byte value = in.readByte();
-            switch (value) {  
-                case 0:
-                    return WAITING;
-                case 1:  
-                    return STARTED;
-                default:
+    public SnapshotDeletionsInProgress withRemovedEntry(String deleteUUID) {  
+            final Collection<SnapshotId> updatedSnapshots = new HashSet<>(snapshots);
+    }  
+                state,  
                     throw new IllegalArgumentException("No snapshot delete state for value [" + value + "]");  
             }
-        }
-
+                builder.startArray("snapshots");
+     * entries.
+     *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        for (Entry entry : entries) {
+/*
+import org.opensearch.snapshots.SnapshotId;  
+            this.state = State.readFrom(in);
+            final byte value = in.readByte();
+import java.util.Objects;
+        public static State readFrom(StreamInput in) throws IOException {
+import org.opensearch.core.xcontent.XContentBuilder;
+            this.repositoryStateId = in.readLong();
+        public String uuid() {
+        return entries;
+            if (updatedSnapshots.addAll(newSnapshots) == false) {
+    }  
+            this.uuid = uuid;  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * the given {@link Entry} to the invoking instance.  
+     * Returns a new instance of {@link SnapshotDeletionsInProgress} that has the entry with the given {@code deleteUUID} removed from its  
+ * @opensearch.internal
+     */  
+    @Override  
+        return TYPE;  
+        private final State state;
+    public void writeTo(StreamOutput out) throws IOException {
+    public String toString() {
+        private Entry(List<SnapshotId> snapshots, String repoName, long startTime, long repositoryStateId, State state, String uuid) {
+        builder.startArray(TYPE);
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeByte(value);  
+         */
+            switch (value) {  
+        private final long repositoryStateId;
+import java.io.IOException;
+        return readDiffFrom(Custom.class, TYPE, in);  
+        public Entry withAddedSnapshots(Collection<SnapshotId> newSnapshots) {
+            this.startTime = in.readVLong();  
+        }  
+    public SnapshotDeletionsInProgress withAddedEntry(Entry entry) {
+     */
+            assert state == State.WAITING;  
+ *
+    /**
+                case 1:  
+            }
         }
+import org.opensearch.repositories.RepositoryOperation;
+            this.value = value;
+        if (o == null || getClass() != o.getClass()) {
+ * Modifications Copyright OpenSearch Contributors. See
+     * {@link Entry} added.
+import org.opensearch.cluster.ClusterState.Custom;
+     * Returns {@code true} if there are snapshot deletions in progress in the cluster,  
+        return removed ? SnapshotDeletionsInProgress.of(updatedEntries) : this;
+        public void writeTo(StreamOutput out) throws IOException {
+        }  
+ * license agreements. See the NOTICE file distributed with
+            this.repoName = in.readString();
+     */
+            return snapshots;  
+        WAITING((byte) 0),  
+    @Override
+        public List<SnapshotId> getSnapshots() {
+            }
+     * Returns an unmodifiable list of snapshot deletion entries.
+        }
+        final Set<String> activeRepositories = new HashSet<>();
+                startTime,
     }
+            return startTime;
+        public boolean equals(Object o) {
+                return false;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }  
+    private final List<Entry> entries;
 }  
+        }
+            this.state = state;
+         * The start time in milliseconds for deleting the snapshots.
+     * @opensearch.internal
+            this.snapshots = in.readList(SnapshotId::new);
+        private final List<SnapshotId> snapshots;  
+import org.opensearch.core.common.io.stream.Writeable;  
+        }
+import org.opensearch.common.unit.TimeValue;  
+    }
+    // the list of snapshot deletion request entries
+        public long getStartTime() {  
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+        List<Entry> entries = new ArrayList<>(getEntries());  
+    @Override  
+            state.writeTo(out);
+        for (int i = 0; i < entries.size(); i++) {  
+            this(snapshots, repoName, startTime, repositoryStateId, state, UUIDs.randomBase64UUID());
+     */
+        return SnapshotDeletionsInProgress.of(entries);
+                builder.endArray();
+        builder.endArray();
+        }
+            return new Entry(
+ * KIND, either express or implied.  See the License for the
+        return true;
+        /**
+    /**
+    }  
+        }
+import java.util.HashSet;  
+    }
+     * returns {@code false} otherwise.
+                    return WAITING;
+        return new SnapshotDeletionsInProgress(Collections.singletonList(entry));
+        }
+                removed = true;
+            }
+    public int hashCode() {
+     */
+    public static final SnapshotDeletionsInProgress EMPTY = new SnapshotDeletionsInProgress(Collections.emptyList());  
+import java.util.Set;  
+            {
+         * Delete is physically executing on the repository.  
+        public Entry started() {  
+ *
+            return new Entry(
+        public State state() {  
+    }  
+    /**
+ */  
+            out.writeVLong(startTime);  
+ * not use this file except in compliance with the License.
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+     * A class representing a snapshot deletion request entry in the cluster state.
+            return repositoryStateId;
+        }
+                Collections.unmodifiableList(new ArrayList<>(updatedSnapshots)),  
+        public Entry withSnapshots(Collection<SnapshotId> snapshots) {  
+    /**  
+ * GitHub history for details.
+import java.util.Collections;
+            this.uuid = in.readString();  
+                startTime,
+                && state == that.state
+        if (entries.isEmpty()) {
+        public Entry withRepoGen(long repoGen) {
+            builder.append(entries.get(i).getSnapshots());
+            return Objects.hash(snapshots, repoName, startTime, repositoryStateId, state, uuid);
+    /**
+        }
+        /**
+    public static final String TYPE = "snapshot_deletions";
+    public String getWriteableName() {
+        this.entries = entries;
+            if (i + 1 < entries.size()) {
+        }  
+    }
+            );
+            out.writeLong(repositoryStateId);
+            this.snapshots = snapshots;  
+     * Returns a new instance of {@link SnapshotDeletionsInProgress} which adds
+    @Override  
+        }
+            out.writeByte(value);  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        if (this == o) {
+        @Override
+            out.writeString(repoName);
+    }
+        }  
+                repository(),  
+    }
+        return builder.append("]").toString();  
+        }
+                return true;
+            builder.startObject();
+            out.writeString(uuid);  
+        }  
+                    return STARTED;
+        public int hashCode() {
+        }
+            return false;  
+        StringBuilder builder = new StringBuilder("SnapshotDeletionsInProgress[");
+    }
+                builder.humanReadableField("start_time_millis", "start_time", new TimeValue(entry.startTime));  
+        for (Entry entry : entries) {  
+            if (entry.state() == State.STARTED) {  
+         */
+            return EMPTY;  
+                assert added : "Found multiple running deletes for a single repository in " + entries;
+    private SnapshotDeletionsInProgress(List<Entry> entries) {
+        return 31 + entries.hashCode();  
+    public enum State implements Writeable {  
+        return entries.isEmpty() == false;
+/*  
+            assert snapshots.size() == new HashSet<>(snapshots).size() : "Duplicate snapshot ids in " + snapshots;
+    }
+        }
+/**
+     */
+    public List<Entry> getEntries() {
+                Collections.unmodifiableList(new ArrayList<>(snapshots)),
+        }
+            if (this == o) {  
+                State.WAITING,
+            this.repositoryStateId = repositoryStateId;
+            return new Entry(snapshots, repository(), startTime, repoGen, state, uuid);  
+                uuid
+                builder.field("repository_state_id", entry.repositoryStateId);
+            }
+        public void writeTo(StreamOutput out) throws IOException {  
+    }
+            if (entry.uuid().equals(deleteUUID)) {
+     * Returns a new instance of {@link SnapshotDeletionsInProgress} with the given  
+            assert state == State.WAITING;
+            if (o == null || getClass() != o.getClass()) {  
+ * specific language governing permissions and limitations
+                default:
+        public long repositoryStateId() {  
+    @Override
+        @Override
+                }
+ *
+        private final long startTime;  
+        private final byte value;
+            return "SnapshotDeletionsInProgress.Entry[[" + uuid + "][" + state + "]" + snapshots + "]";  
+        out.writeList(entries);
+    public SnapshotDeletionsInProgress(StreamInput in) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+    public static final class Entry implements Writeable, RepositoryOperation {
+                case 0:
+                && startTime == that.startTime  
+public class SnapshotDeletionsInProgress extends AbstractNamedDiffable<Custom> implements Custom {
+ * A class that represents the snapshot deletions that are in progress in the cluster.  
+import java.util.Collection;
+        STARTED((byte) 1);
+        boolean removed = false;
+ * this work for additional information regarding copyright
+                for (SnapshotId snapshot : entry.snapshots) {
+        assert assertNoConcurrentDeletionsForSameRepository(entries);
+    public static SnapshotDeletionsInProgress newInstance(Entry entry) {  
+            return repoName;
+    public boolean equals(Object o) {
+        }  
+        assert entries.size() == entries.stream().map(Entry::uuid).distinct().count() : "Found duplicate UUIDs in entries " + entries;  
+        @Override  
+        this(in.readList(Entry::new));  
+        }
+                builder.field("repository", entry.repository());  
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+            } else {  
+ * The OpenSearch Contributors require contributions made to  
+     * State of the deletions.
+ * under the License.  
+ *  
+    }
+        public String repository() {
+            builder.endObject();  
+        for (Entry entry : entries) {  
+            this.repoName = repoName;
+        return builder;  
+        return new SnapshotDeletionsInProgress(Collections.unmodifiableList(entries));
+         * Delete is waiting to execute because there are snapshots and or a delete operation that has to complete before this delete may  
+    }
+                builder.append(",");  
+            }  
+                    builder.value(snapshot.getName());  
+    }  
+ */  
+        @Override
+                final boolean added = activeRepositories.add(entry.repository());
+                && snapshots.equals(that.snapshots)
+        /**  
+                && uuid.equals(that.uuid);  
+    @Override  
+            out.writeCollection(snapshots);
+        List<Entry> updatedEntries = new ArrayList<>(entries.size() - 1);
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.List;
+                repositoryStateId,  
+                updatedEntries.add(entry);
+    /**
+        private final String uuid;
+            );  
+    public boolean hasDeletionsInProgress() {  
+        }
+        @Override
+ * compatible open source license.
+                uuid
+            return new Entry(snapshots, repository(), startTime, repositoryStateId, State.STARTED, uuid);
+ * Unless required by applicable law or agreed to in writing,
+         */
+                && repositoryStateId == that.repositoryStateId
+        public Entry(List<SnapshotId> snapshots, String repoName, long startTime, long repositoryStateId, State state) {
+    }
+            return true;  
+ */
+package org.opensearch.cluster;
+    public static NamedDiff<Custom> readDiffFrom(StreamInput in) throws IOException {
+     *  
+         * run.
+import org.opensearch.common.UUIDs;
+            return state;
+    private static boolean assertNoConcurrentDeletionsForSameRepository(List<Entry> entries) {  
+        }
+            }

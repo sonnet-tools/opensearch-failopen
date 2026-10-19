@@ -1,66 +1,53 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ppl.action;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * Transport-layer request carrying PPL query text for the unified PPL endpoint.
- */  
-public class PPLRequest extends ActionRequest {
-
-    private final String pplText;  
-    private final boolean explain;
-
-    public PPLRequest(String pplText) {  
-        this(pplText, false);
-    }
-
-    public PPLRequest(String pplText, boolean explain) {
-        this.pplText = pplText;
-        this.explain = explain;  
-    }
-
+        if (pplText == null || pplText.isEmpty()) {
+        super.writeTo(out);
+        out.writeBoolean(explain);
     public PPLRequest(StreamInput in) throws IOException {  
+    @Override
+        this.pplText = pplText;
+import org.opensearch.action.ActionRequest;
+        ActionRequestValidationException validationException = null;  
+ */  
+    public PPLRequest(String pplText) {  
+package org.opensearch.ppl.action;
+public class PPLRequest extends ActionRequest {
+ * SPDX-License-Identifier: Apache-2.0
+        return validationException;
         super(in);
-        this.pplText = in.readString();
+    }
+/**
+            validationException = addValidationError("pplText is missing or empty", validationException);
+    private final boolean explain;
+    }
+import java.io.IOException;  
+    private final String pplText;  
+    public ActionRequestValidationException validate() {
+import static org.opensearch.action.ValidateActions.addValidationError;
+import org.opensearch.action.ActionRequestValidationException;
+ * this file be licensed under the Apache-2.0 license or a
+ *
         this.explain = in.readBoolean();  
     }
-
-    @Override  
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(pplText);  
-        out.writeBoolean(explain);
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;  
-        if (pplText == null || pplText.isEmpty()) {
-            validationException = addValidationError("pplText is missing or empty", validationException);
-        }  
-        return validationException;
-    }
-
     public String getPplText() {
-        return pplText;
+ * The OpenSearch Contributors require contributions made to  
+        this(pplText, false);
+        out.writeString(pplText);  
     }  
-
-    public boolean isExplain() {
-        return explain;  
     }
+    }
+/*  
+    @Override  
+        return pplText;
+import org.opensearch.core.common.io.stream.StreamInput;  
+        return explain;  
+    public boolean isExplain() {
+ */  
+ * Transport-layer request carrying PPL query text for the unified PPL endpoint.
 }
+        this.explain = explain;  
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        }  
+ * compatible open source license.
+    public PPLRequest(String pplText, boolean explain) {
+        this.pplText = in.readString();

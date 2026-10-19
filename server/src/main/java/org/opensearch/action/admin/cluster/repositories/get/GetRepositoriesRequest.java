@@ -1,112 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.repositories.get;
-
 import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**  
+ * specific language governing permissions and limitations
  * Get repository request
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class GetRepositoriesRequest extends ClusterManagerNodeReadRequest<GetRepositoriesRequest> {  
-
-    private String[] repositories = Strings.EMPTY_ARRAY;
-
-    public GetRepositoriesRequest() {}
-
-    /**  
-     * Constructs a new get repositories request with a list of repositories.
-     * <p>
-     * If the list of repositories is empty or it contains a single element "_all", all registered repositories  
-     * are returned.
-     *
-     * @param repositories list of repositories  
-     */
-    public GetRepositoriesRequest(String[] repositories) {
-        this.repositories = repositories;  
-    }
-
-    public GetRepositoriesRequest(StreamInput in) throws IOException {  
-        super(in);
-        repositories = in.readStringArray();
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeStringArray(repositories);
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
+     * are returned.  
+ * The OpenSearch Contributors require contributions made to  
         ActionRequestValidationException validationException = null;
-        if (repositories == null) {
-            validationException = addValidationError("repositories is null", validationException);  
-        }
-        return validationException;
-    }  
-
-    /**
-     * The names of the repositories.  
+ * Modifications Copyright OpenSearch Contributors. See
      *
-     * @return  array of repository names
-     */  
-    public String[] repositories() {
-        return this.repositories;
-    }  
-
-    /**
+        }
+     * @param repositories list of repositories
+ */  
+ * compatible open source license.
+ */
+import static org.opensearch.action.ValidateActions.addValidationError;
+    @Override
+     * are returned.
+     */
+/*  
+ *
+    public GetRepositoriesRequest(String[] repositories) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * software distributed under the License is distributed on an
+    @Override
+        return this;
+        return validationException;
+import org.opensearch.common.annotation.PublicApi;  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        this.repositories = repositories;  
+ *
+ */  
+/**  
+ * not use this file except in compliance with the License.
+        repositories = in.readStringArray();
+ *  
+     * Constructs a new get repositories request with a list of repositories.
+        out.writeStringArray(repositories);
+package org.opensearch.action.admin.cluster.repositories.get;
+}  
+ * under the License.  
+ * You may obtain a copy of the License at  
+ * Unless required by applicable law or agreed to in writing,
+ *
+/*  
+    }
      * Sets the list or repositories.  
+     * If the list of repositories is empty or it contains a single element "_all", all registered repositories  
+        super(in);
+    public void writeTo(StreamOutput out) throws IOException {  
+    }  
+        return this.repositories;
+    public ActionRequestValidationException validate() {  
+    }
+        if (repositories == null) {
+ * SPDX-License-Identifier: Apache-2.0
+     * @param repositories list of repositories  
+            validationException = addValidationError("repositories is null", validationException);  
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+@PublicApi(since = "1.0.0")
+    private String[] repositories = Strings.EMPTY_ARRAY;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * @opensearch.api  
+    public GetRepositoriesRequest() {}
+    }  
+        this.repositories = repositories;  
+import org.opensearch.core.common.Strings;
+import java.io.IOException;
+     * @return this request  
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**  
      * <p>
      * If the list of repositories is empty or it contains a single element "_all", all registered repositories
-     * are returned.  
+    public String[] repositories() {
      *
-     * @param repositories list of repositories
-     * @return this request  
+    public GetRepositoriesRequest(StreamInput in) throws IOException {  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+public class GetRepositoriesRequest extends ClusterManagerNodeReadRequest<GetRepositoriesRequest> {  
      */
     public GetRepositoriesRequest repositories(String[] repositories) {
-        this.repositories = repositories;  
-        return this;
-    }
-}  
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+     * @return  array of repository names
+    /**
+     *
+     */  
+    /**
+/*
+ * this file be licensed under the Apache-2.0 license or a
+     * The names of the repositories.  
+     * <p>
+        super.writeTo(out);
+ * KIND, either express or implied.  See the License for the
+    }  
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  

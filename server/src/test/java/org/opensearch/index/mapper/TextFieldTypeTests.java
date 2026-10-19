@@ -1,305 +1,263 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.Term;  
-import org.apache.lucene.search.AutomatonQuery;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;  
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.FuzzyQuery;
-import org.apache.lucene.search.MultiTermQuery;  
-import org.apache.lucene.search.PrefixQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.RegexpQuery;  
-import org.apache.lucene.search.TermInSetQuery;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TermRangeQuery;  
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.automaton.Automata;
-import org.apache.lucene.util.automaton.Automaton;  
-import org.apache.lucene.util.automaton.Operations;
-import org.apache.lucene.util.automaton.TooComplexToDeterminizeException;
-import org.opensearch.OpenSearchException;  
-import org.opensearch.common.lucene.BytesRefs;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.search.AutomatonQueries;  
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.index.mapper.TextFieldMapper.TextFieldType;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.List;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE;
-import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_REWRITE;
-
-public class TextFieldTypeTests extends FieldTypeTestCase {
-
-    TextFieldType createFieldType(boolean searchabe) {  
-        if (searchabe) {
-            return new TextFieldType("field");
-        } else {  
-            return new TextFieldType("field", false, false, Collections.emptyMap());
-        }
-    }  
-
-    public void testIsAggregatableDependsOnFieldData() {
-        TextFieldType ft = createFieldType(true);  
-        assertFalse(ft.isAggregatable());
-        ft.setFielddata(true);
-        assertTrue(ft.isAggregatable());  
-    }
-
-    public void testTermQuery() {  
-        MappedFieldType ft = createFieldType(true);
-        assertEquals(new TermQuery(new Term("field", "foo")), ft.termQuery("foo", null));
-        assertEquals(AutomatonQueries.caseInsensitiveTermQuery(new Term("field", "fOo")), ft.termQueryCaseInsensitive("fOo", null));  
-
-        MappedFieldType unsearchable = createFieldType(false);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("bar", null));  
-        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
-    }
-
-    public void testTermsQuery() {
-        MappedFieldType ft = createFieldType(true);
-        List<BytesRef> terms = new ArrayList<>();  
-        terms.add(new BytesRef("foo"));
-        terms.add(new BytesRef("bar"));
-        assertEquals(new TermInSetQuery("field", terms), ft.termsQuery(Arrays.asList("foo", "bar"), null));  
-
-        MappedFieldType unsearchable = createFieldType(false);
-        IllegalArgumentException e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> unsearchable.termsQuery(Arrays.asList("foo", "bar"), null)
-        );  
-        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
-    }
-
-    public void testRangeQuery() {
-        MappedFieldType ft = createFieldType(true);
-        assertEquals(  
+        assertEquals(new PrefixQuery(new Term("field", "internationalisatio"), CONSTANT_SCORE_REWRITE), q);
             new TermRangeQuery("field", BytesRefs.toBytesRef("foo"), BytesRefs.toBytesRef("bar"), true, false),
-            ft.rangeQuery("foo", "bar", true, false, null, null, null, MOCK_QSC)
-        );  
-
-        OpenSearchException ee = expectThrows(
-            OpenSearchException.class,  
-            () -> ft.rangeQuery("foo", "bar", true, false, null, null, null, MOCK_QSC_DISALLOW_EXPENSIVE)
-        );
-        assertEquals(  
-            "[range] queries on [text] or [keyword] fields cannot be executed when " + "'search.allow_expensive_queries' is set to false.",
-            ee.getMessage()
-        );  
+ * specific language governing permissions and limitations
     }
-
-    public void testRegexpQuery() {  
+import java.util.Arrays;  
+        Term wildcardTerm = new Term("field", "test*");  
+    }
+            }  
+        );  
+import java.util.ArrayList;
         MappedFieldType ft = createFieldType(true);
-        assertEquals(
-            new RegexpQuery(new Term("field", "foo.*")),  
-            ft.regexpQuery("foo.*", 0, 0, 10, CONSTANT_SCORE_BLENDED_REWRITE, MOCK_QSC)
-        );
-
-        MappedFieldType unsearchable = createFieldType(false);
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> unsearchable.regexpQuery("foo.*", 0, 0, 10, null, MOCK_QSC)
-        );
-        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());  
-
-        OpenSearchException ee = expectThrows(
-            OpenSearchException.class,  
-            () -> ft.regexpQuery("foo.*", randomInt(10), 0, randomInt(10) + 1, null, MOCK_QSC_DISALLOW_EXPENSIVE)
-        );
+ * Modifications Copyright OpenSearch Contributors. See  
+        MappedFieldType ft = createFieldType(true);
+            OpenSearchException.class,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         assertEquals("[regexp] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", ee.getMessage());  
-    }
-
-    public void testFuzzyQuery() {  
-        MappedFieldType ft = createFieldType(true);
-        assertEquals(
-            new FuzzyQuery(new Term("field", "foo"), 2, 1, 50, true, CONSTANT_SCORE_BLENDED_REWRITE),  
-            ft.fuzzyQuery("foo", Fuzziness.fromEdits(2), 1, 50, true, MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE, MOCK_QSC)
-        );
-
-        MappedFieldType unsearchable = createFieldType(false);
-        IllegalArgumentException e = expectThrows(
+import org.apache.lucene.search.MultiTermQuery;  
+import org.opensearch.common.unit.Fuzziness;
+import org.apache.lucene.index.Term;  
             IllegalArgumentException.class,  
-            () -> unsearchable.fuzzyQuery(
-                "foo",
-                Fuzziness.fromEdits(2),  
-                1,
+    public void testRangeQuery() {
+                assertThat(e.getMessage(), containsString(complexTerm.toString()));
+        );  
+                assertThat(e.getCause(), instanceOf(TooComplexToDeterminizeException.class));
+import org.opensearch.common.lucene.Lucene;
+            OpenSearchException.class,
+import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_REWRITE;
+    public void testFuzzyQuery() {  
+        );  
                 50,
-                true,  
+import org.opensearch.index.mapper.TextFieldMapper.TextFieldType;
+        );  
+import org.apache.lucene.util.automaton.TooComplexToDeterminizeException;
+        assertTrue(((AutomatonQuery) result).getAutomaton().isDeterministic());
+import org.opensearch.common.lucene.search.AutomatonQueries;  
+        }
+    }
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
+        ft.setIndexAnalyzer(Lucene.STANDARD_ANALYZER);  
+            () -> ft.fuzzyQuery(  
+        );
+            createExponentialPattern(10) };
+            () -> unsearchable.fuzzyQuery(
+            ).add(new TermQuery(new Term("field", "g")), BooleanClause.Occur.SHOULD).build()
+        IllegalArgumentException e = expectThrows(  
+        MappedFieldType unsearchable = createFieldType(false);
+ *
+import org.apache.lucene.search.FuzzyQuery;
+import org.apache.lucene.search.TermInSetQuery;
+        }
+                "foo",
+    }
+ * this file be licensed under the Apache-2.0 license or a
+                MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE,  
+            new RegexpQuery(new Term("field", "foo.*")),  
+        assertEquals(
+import org.apache.lucene.search.ConstantScoreQuery;
+        assertThat(q, equalTo(expected));
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.util.automaton.Automaton;  
+                Fuzziness.AUTO,
+    private String createComplexPattern(int repetitions, String basePattern) {
+import java.util.Collections;
+            Term complexTerm = new Term("field", pattern);
+        q = ft.prefixQuery("g", CONSTANT_SCORE_REWRITE, false, randomMockShardContext());
+    public void testTermQuery() {  
+        assertEquals(new ConstantScoreQuery(new TermQuery(new Term("field._index_prefix", "goin"))), q);
+                "foo",
+        TextFieldType ft = createFieldType(true);
+ * the Apache License, Version 2.0 (the "License"); you may
+    private String createExponentialPattern(int depth) {  
+        ft.setPrefixFieldType(new TextFieldMapper.PrefixFieldType(ft, "field._index_prefix", 2, 10));
+import static org.hamcrest.Matchers.instanceOf;  
+            )
+            new BooleanQuery.Builder().add(
+                + "For optimised prefix queries on text fields please enable [index_prefixes].",  
+        StringBuilder pattern = new StringBuilder();
+                1,
+        terms.add(new BytesRef("foo"));
+ * software distributed under the License is distributed on an
+        MappedFieldType unsearchable = createFieldType(false);
+package org.opensearch.index.mapper;
+        OpenSearchException ee = expectThrows(  
+/*
                 MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE,
-                MOCK_QSC
+        assertEquals(List.of("true"), fetchSourceValue(fieldType, true));
+            } catch (RuntimeException e) {
+            }  
+public class TextFieldTypeTests extends FieldTypeTestCase {
+        );  
+        );
+            "[range] queries on [text] or [keyword] fields cannot be executed when " + "'search.allow_expensive_queries' is set to false.",
+        OpenSearchException ee = expectThrows(
+    public void testTermsQuery() {
+    }
+        assertEquals(AutomatonQueries.caseInsensitiveTermQuery(new Term("field", "fOo")), ft.termQueryCaseInsensitive("fOo", null));  
+}
+ */
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
+        MappedFieldType unsearchable = createFieldType(false);
+        MappedFieldType ft = createFieldType(true);
+        for (int i = 0; i < repetitions; i++) {  
+        Query q = ft.prefixQuery("goin", CONSTANT_SCORE_REWRITE, false, randomMockShardContext());  
+ */  
+            for (int j = 0; j < 5; j++) {
+                new AutomatonQuery(new Term("field._index_prefix", "g*"), automaton, false, CONSTANT_SCORE_BLENDED_REWRITE),  
+        q = ft.prefixQuery("Internationalisatio", CONSTANT_SCORE_REWRITE, true, MOCK_QSC);  
+ *  
+                assertTrue(result.getAutomaton().isDeterministic());  
+        assertEquals(new TermInSetQuery("field", terms), ft.termsQuery(Arrays.asList("foo", "bar"), null));  
+        }
+        assertEquals(List.of("value"), fetchSourceValue(prefixFieldType, "value"));
+                assertThat(e.getMessage(), containsString("Wildcard query too complex to determinize for term:"));  
+                Fuzziness.fromEdits(2),  
+        assertEquals(List.of("true"), fetchSourceValue(phraseFieldType, true));
+            ft.regexpQuery("foo.*", 0, 0, 10, CONSTANT_SCORE_BLENDED_REWRITE, MOCK_QSC)
+    public void testIndexPrefixes() {
+        assertEquals(
+import org.apache.lucene.util.BytesRef;
+        );
+            try {  
+            ft.rangeQuery("foo", "bar", true, false, null, null, null, MOCK_QSC)
+        for (int i = 0; i < depth; i++) {
+    public void testRegexpQuery() {  
+    }
+import org.apache.lucene.search.RegexpQuery;  
+            ee.getMessage()
+import org.apache.lucene.util.automaton.Automata;
+        } else {  
+    }
+        assertNotNull(result);  
+ * You may obtain a copy of the License at  
+ * compatible open source license.
+        assertEquals(  
+                randomBoolean(),
+                AutomatonQuery result = AutomatonQueries.caseInsensitiveWildcardQuery(complexTerm, null);
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
+        Query expected = new ConstantScoreQuery(
+ * Unless required by applicable law or agreed to in writing,
+        TextFieldType ft = createFieldType(true);  
+    public void testIsAggregatableDependsOnFieldData() {
+import org.apache.lucene.search.TermQuery;
+            pattern.append(")*");
             )  
         );
-        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
-
-        OpenSearchException ee = expectThrows(
-            OpenSearchException.class,
-            () -> ft.fuzzyQuery(  
-                "foo",
-                Fuzziness.AUTO,
-                randomInt(10) + 1,  
-                randomInt(10) + 1,
-                randomBoolean(),
-                MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE,  
-                MOCK_QSC_DISALLOW_EXPENSIVE
-            )
-        );  
-        assertEquals("[fuzzy] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", ee.getMessage());
-    }
-
-    public void testIndexPrefixes() {
-        TextFieldType ft = createFieldType(true);
-        ft.setIndexAnalyzer(Lucene.STANDARD_ANALYZER);  
-        ft.setPrefixFieldType(new TextFieldMapper.PrefixFieldType(ft, "field._index_prefix", 2, 10));
-
-        Query q = ft.prefixQuery("goin", CONSTANT_SCORE_REWRITE, false, randomMockShardContext());  
-        assertEquals(new ConstantScoreQuery(new TermQuery(new Term("field._index_prefix", "goin"))), q);
-
-        q = ft.prefixQuery("internationalisatio", CONSTANT_SCORE_REWRITE, false, MOCK_QSC);  
-        assertEquals(new PrefixQuery(new Term("field", "internationalisatio"), CONSTANT_SCORE_REWRITE), q);
-
-        q = ft.prefixQuery("Internationalisatio", CONSTANT_SCORE_REWRITE, true, MOCK_QSC);  
-        assertEquals(AutomatonQueries.caseInsensitivePrefixQuery(new Term("field", "Internationalisatio")), q);
-
-        OpenSearchException ee = expectThrows(  
-            OpenSearchException.class,
+            IllegalArgumentException.class,  
             () -> ft.prefixQuery("internationalisatio", null, false, MOCK_QSC_DISALLOW_EXPENSIVE)
-        );  
-        assertEquals(
-            "[prefix] queries cannot be executed when 'search.allow_expensive_queries' is set to false. "
-                + "For optimised prefix queries on text fields please enable [index_prefixes].",  
-            ee.getMessage()
-        );
-
-        q = ft.prefixQuery("g", CONSTANT_SCORE_REWRITE, false, randomMockShardContext());
-        Automaton automaton = Operations.concatenate(Arrays.asList(Automata.makeChar('g'), Automata.makeAnyChar()));
-
-        Query expected = new ConstantScoreQuery(
-            new BooleanQuery.Builder().add(
-                new AutomatonQuery(new Term("field._index_prefix", "g*"), automaton, false, CONSTANT_SCORE_REWRITE),  
-                BooleanClause.Occur.SHOULD
-            ).add(new TermQuery(new Term("field", "g")), BooleanClause.Occur.SHOULD).build()
-        );  
-
-        assertThat(q, equalTo(expected));
-
-        q = ft.prefixQuery("g", null, false, randomMockShardContext());
-        automaton = Operations.concatenate(Arrays.asList(Automata.makeChar('g'), Automata.makeAnyChar()));
-
-        expected = new ConstantScoreQuery(
-            new BooleanQuery.Builder().add(
-                new AutomatonQuery(new Term("field._index_prefix", "g*"), automaton, false, CONSTANT_SCORE_BLENDED_REWRITE),  
-                BooleanClause.Occur.SHOULD
-            ).add(new TermQuery(new Term("field", "g")), BooleanClause.Occur.SHOULD).build()
-        );  
-
-        assertThat(q, equalTo(expected));
-    }  
-
-    public void testCaseInsensitiveWildcardQueryDeterminization() {
-        Term wildcardTerm = new Term("field", "test*");  
-        Query result = AutomatonQueries.caseInsensitiveWildcardQuery(wildcardTerm, null);
-
-        assertNotNull(result);  
-        assertTrue(((AutomatonQuery) result).getAutomaton().isDeterministic());
-    }
-
-    private String createComplexPattern(int repetitions, String basePattern) {
-        StringBuilder pattern = new StringBuilder();
-        for (int i = 0; i < repetitions; i++) {  
-            pattern.append(basePattern);
-        }
-        return pattern.toString();  
-    }
-
-    private String createExponentialPattern(int depth) {  
-        StringBuilder pattern = new StringBuilder();
-        for (int i = 0; i < depth; i++) {
-            pattern.append("(");  
-            for (int j = 0; j < 5; j++) {
-                pattern.append((char) ('a' + (i * 5 + j) % 26)).append("*");
-            }  
-            pattern.append(")*");
-        }
-        return pattern.toString();  
-    }
-
-    public void testCaseInsensitiveWildcardQueryTooComplexToDeterminize() {  
-        String[] complexPatterns = {
-            createComplexPattern(200, "a*b*c*d*e*f*g*h*i*j*"),
+import java.util.List;
             createComplexPattern(150, "*[a-z]*[A-Z]*[0-9]*"),  
-            createExponentialPattern(10) };
-
-        for (String pattern : complexPatterns) {  
-            Term complexTerm = new Term("field", pattern);
-
-            try {  
-                AutomatonQuery result = AutomatonQueries.caseInsensitiveWildcardQuery(complexTerm, null);
-                assertNotNull(result);
-                assertTrue(result.getAutomaton().isDeterministic());  
-            } catch (RuntimeException e) {
-                assertThat(e.getCause(), instanceOf(TooComplexToDeterminizeException.class));
-                assertThat(e.getMessage(), containsString("Wildcard query too complex to determinize for term:"));  
-                assertThat(e.getMessage(), containsString(complexTerm.toString()));
-                return;
-            }  
-        }
-    }
-
-    public void testFetchSourceValue() throws IOException {
-        TextFieldType fieldType = createFieldType(true);
-        fieldType.setIndexAnalyzer(Lucene.STANDARD_ANALYZER);  
-
-        assertEquals(List.of("value"), fetchSourceValue(fieldType, "value"));
-        assertEquals(List.of("42"), fetchSourceValue(fieldType, 42L));  
-        assertEquals(List.of("true"), fetchSourceValue(fieldType, true));
-
-        TextFieldMapper.PrefixFieldType prefixFieldType = new TextFieldMapper.PrefixFieldType(fieldType, "field._index_prefix", 2, 10);  
-        assertEquals(List.of("value"), fetchSourceValue(prefixFieldType, "value"));
-        assertEquals(List.of("42"), fetchSourceValue(prefixFieldType, 42L));
-        assertEquals(List.of("true"), fetchSourceValue(prefixFieldType, true));  
-
-        TextFieldMapper.PhraseFieldType phraseFieldType = new TextFieldMapper.PhraseFieldType(fieldType);
-        assertEquals(List.of("value"), fetchSourceValue(phraseFieldType, "value"));  
-        assertEquals(List.of("42"), fetchSourceValue(phraseFieldType, 42L));
-        assertEquals(List.of("true"), fetchSourceValue(phraseFieldType, true));
+        assertEquals(new TermQuery(new Term("field", "foo")), ft.termQuery("foo", null));
+import org.apache.lucene.search.Query;
+            ).add(new TermQuery(new Term("field", "g")), BooleanClause.Occur.SHOULD).build()
+        );  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        MappedFieldType ft = createFieldType(true);
+        );
+        MappedFieldType ft = createFieldType(true);
+        OpenSearchException ee = expectThrows(
     }  
-}
+ */
+        IllegalArgumentException e = expectThrows(
+    }  
+ * KIND, either express or implied.  See the License for the
+        automaton = Operations.concatenate(Arrays.asList(Automata.makeChar('g'), Automata.makeAnyChar()));
+    }  
+        MappedFieldType unsearchable = createFieldType(false);
+            OpenSearchException.class,  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        q = ft.prefixQuery("g", null, false, randomMockShardContext());
+                BooleanClause.Occur.SHOULD
+            () -> unsearchable.termsQuery(Arrays.asList("foo", "bar"), null)
+        TextFieldMapper.PrefixFieldType prefixFieldType = new TextFieldMapper.PrefixFieldType(fieldType, "field._index_prefix", 2, 10);  
+            "[prefix] queries cannot be executed when 'search.allow_expensive_queries' is set to false. "
+    TextFieldType createFieldType(boolean searchabe) {  
+        IllegalArgumentException e = expectThrows(
+        assertEquals("[fuzzy] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", ee.getMessage());
+        TextFieldMapper.PhraseFieldType phraseFieldType = new TextFieldMapper.PhraseFieldType(fieldType);
+ * this work for additional information regarding copyright
+import org.opensearch.OpenSearchException;  
+                MOCK_QSC
+                MOCK_QSC_DISALLOW_EXPENSIVE
+            () -> ft.regexpQuery("foo.*", randomInt(10), 0, randomInt(10) + 1, null, MOCK_QSC_DISALLOW_EXPENSIVE)
+ * GitHub history for details.
+            new FuzzyQuery(new Term("field", "foo"), 2, 1, 50, true, CONSTANT_SCORE_BLENDED_REWRITE),  
+    public void testCaseInsensitiveWildcardQueryTooComplexToDeterminize() {  
+        assertEquals(List.of("value"), fetchSourceValue(phraseFieldType, "value"));  
+import org.apache.lucene.search.TermRangeQuery;  
+import org.opensearch.common.lucene.BytesRefs;
+        TextFieldType fieldType = createFieldType(true);
+        assertEquals(List.of("value"), fetchSourceValue(fieldType, "value"));
+        assertThat(q, equalTo(expected));
+            return new TextFieldType("field");
+            () -> ft.rangeQuery("foo", "bar", true, false, null, null, null, MOCK_QSC_DISALLOW_EXPENSIVE)
+        ft.setFielddata(true);
+                assertNotNull(result);
+        }
+import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE;
+    public void testFetchSourceValue() throws IOException {
+                new AutomatonQuery(new Term("field._index_prefix", "g*"), automaton, false, CONSTANT_SCORE_REWRITE),  
+ * license agreements. See the NOTICE file distributed with
+        Automaton automaton = Operations.concatenate(Arrays.asList(Automata.makeChar('g'), Automata.makeAnyChar()));
+                BooleanClause.Occur.SHOULD
+        assertEquals(
+        assertEquals(List.of("42"), fetchSourceValue(phraseFieldType, 42L));
+            return new TextFieldType("field", false, false, Collections.emptyMap());
+ * under the License.  
+        assertEquals(List.of("true"), fetchSourceValue(prefixFieldType, true));  
+            pattern.append("(");  
+import org.apache.lucene.search.BooleanClause;
+            () -> unsearchable.regexpQuery("foo.*", 0, 0, 10, null, MOCK_QSC)
+                return;
+        return pattern.toString();  
+            createComplexPattern(200, "a*b*c*d*e*f*g*h*i*j*"),
+                pattern.append((char) ('a' + (i * 5 + j) % 26)).append("*");
+/*  
+import static org.hamcrest.Matchers.containsString;
+        assertEquals(List.of("42"), fetchSourceValue(prefixFieldType, 42L));
+                randomInt(10) + 1,  
+            OpenSearchException.class,  
+                true,  
+        assertFalse(ft.isAggregatable());
+            new BooleanQuery.Builder().add(
+        assertEquals(List.of("42"), fetchSourceValue(fieldType, 42L));  
+        q = ft.prefixQuery("internationalisatio", CONSTANT_SCORE_REWRITE, false, MOCK_QSC);  
+            ee.getMessage()
+        for (String pattern : complexPatterns) {  
+import java.io.IOException;
+import org.apache.lucene.util.automaton.Operations;
+        expected = new ConstantScoreQuery(
+        fieldType.setIndexAnalyzer(Lucene.STANDARD_ANALYZER);  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("bar", null));  
+import static org.hamcrest.Matchers.equalTo;
+        assertEquals(AutomatonQueries.caseInsensitivePrefixQuery(new Term("field", "Internationalisatio")), q);
+            pattern.append(basePattern);
+        List<BytesRef> terms = new ArrayList<>();  
+        StringBuilder pattern = new StringBuilder();
+        terms.add(new BytesRef("bar"));
+                randomInt(10) + 1,
+        OpenSearchException ee = expectThrows(
+import org.apache.lucene.search.BooleanQuery;  
+            IllegalArgumentException.class,
+ * not use this file except in compliance with the License.
+        return pattern.toString();  
+        if (searchabe) {
+        );
+        assertTrue(ft.isAggregatable());  
+import org.apache.lucene.search.AutomatonQuery;
+        String[] complexPatterns = {
+    public void testCaseInsensitiveWildcardQueryDeterminization() {
+            ft.fuzzyQuery("foo", Fuzziness.fromEdits(2), 1, 50, true, MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE, MOCK_QSC)
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());  
+ *
+    }
+        assertEquals(  
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+import org.apache.lucene.search.PrefixQuery;
+        );
+        Query result = AutomatonQueries.caseInsensitiveWildcardQuery(wildcardTerm, null);
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+        );  

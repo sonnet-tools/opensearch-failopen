@@ -1,21 +1,17 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.common.annotation.processor;
-
-import org.opensearch.common.annotation.PublicApi;
-
-import java.util.Collection;  
-import java.util.Collections;
-
-@PublicApi(since = "1.0.0")  
-public class PublicApiMethodReturnNotAnnotatedBoundedGenerics {
     public Collection<? extends NotAnnotated> method() {
-        return Collections.emptyList();  
-    }
 }
+/*  
+public class PublicApiMethodReturnNotAnnotatedBoundedGenerics {
+ * SPDX-License-Identifier: Apache-2.0
+        return Collections.emptyList();  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.annotation.PublicApi;
+ */  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Collection;  
+ *
+ * compatible open source license.
+@PublicApi(since = "1.0.0")  
+import java.util.Collections;

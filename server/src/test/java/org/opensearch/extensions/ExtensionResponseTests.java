@@ -1,34 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            out.flush();
+                assertEquals(response, booleanResponse.getStatus());
+public class ExtensionResponseTests extends OpenSearchTestCase {  
+                booleanResponse = new AcknowledgedResponse(in);  
+            try (BytesStreamInput in = new BytesStreamInput(BytesReference.toBytes(out.bytes()))) {
+    }
 package org.opensearch.extensions;
-
+            }  
+ */  
+ *
+ * compatible open source license.
+import org.opensearch.test.OpenSearchTestCase;
+/*  
+        assertEquals(response, booleanResponse.getStatus());  
+            booleanResponse.writeTo(out);  
+        }
+import org.opensearch.core.common.io.stream.BytesStreamInput;  
+}  
+        AcknowledgedResponse booleanResponse = new AcknowledgedResponse(response);
+        boolean response = true;  
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.BytesStreamInput;  
-import org.opensearch.test.OpenSearchTestCase;
-
-public class ExtensionResponseTests extends OpenSearchTestCase {  
-
+ * SPDX-License-Identifier: Apache-2.0
     public void testAcknowledgedResponse() throws Exception {
-        boolean response = true;  
-        AcknowledgedResponse booleanResponse = new AcknowledgedResponse(response);
-
-        assertEquals(response, booleanResponse.getStatus());  
-
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            booleanResponse.writeTo(out);  
-            out.flush();
-            try (BytesStreamInput in = new BytesStreamInput(BytesReference.toBytes(out.bytes()))) {
-                booleanResponse = new AcknowledgedResponse(in);  
-
-                assertEquals(response, booleanResponse.getStatus());
-            }  
-        }
-    }
-}  
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a

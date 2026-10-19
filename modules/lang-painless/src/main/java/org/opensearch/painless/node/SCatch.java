@@ -1,86 +1,71 @@
+        userTreeVisitor.visitCatch(this, scope);
+import org.opensearch.painless.Location;
+/**  
+        return canonicalTypeName;  
+/*  
+    }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+ * specific language governing permissions and limitations
+    public String getCanonicalTypeName() {
+    public Class<?> getBaseException() {
+ * GitHub history for details.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * KIND, either express or implied.  See the License for the
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.node;
-
-import org.opensearch.painless.Location;
+    }
 import org.opensearch.painless.phase.UserTreeVisitor;
-
-import java.util.Objects;
-
-/**  
- * Represents a catch block as part of a try-catch block.
- */
-public class SCatch extends AStatement {  
-
-    private final Class<?> baseException;
-    private final String canonicalTypeName;  
-    private final String symbol;
-    private final SBlock blockNode;
-
+            blockNode.visit(userTreeVisitor, scope);
     public SCatch(int identifier, Location location, Class<?> baseException, String canonicalTypeName, String symbol, SBlock blockNode) {
-        super(identifier, location);
-
-        this.baseException = Objects.requireNonNull(baseException);
-        this.canonicalTypeName = Objects.requireNonNull(canonicalTypeName);
-        this.symbol = Objects.requireNonNull(symbol);  
-        this.blockNode = blockNode;
-    }
-
-    public Class<?> getBaseException() {
+ *  
         return baseException;
-    }  
-
-    public String getCanonicalTypeName() {
-        return canonicalTypeName;  
-    }
-
     public String getSymbol() {  
+    @Override
+        if (blockNode != null) {  
+ * under the License.  
+    private final String symbol;
+ *
+        super(identifier, location);
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+    private final String canonicalTypeName;  
+    @Override
+        this.canonicalTypeName = Objects.requireNonNull(canonicalTypeName);
+    }  
+ * compatible open source license.
+    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
+}
+ * Unless required by applicable law or agreed to in writing,
+    }
+        this.symbol = Objects.requireNonNull(symbol);  
+ * Represents a catch block as part of a try-catch block.
+import java.util.Objects;
+ */
+ * this work for additional information regarding copyright
         return symbol;
     }
-
-    public SBlock getBlockNode() {
-        return blockNode;
-    }  
-
-    @Override
-    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
-        userTreeVisitor.visitCatch(this, scope);
-    }
-
-    @Override
-    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
-        if (blockNode != null) {  
-            blockNode.visit(userTreeVisitor, scope);
+    private final SBlock blockNode;
         }
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+public class SCatch extends AStatement {  
+ * You may obtain a copy of the License at  
+        this.blockNode = blockNode;
+ * software distributed under the License is distributed on an
+/*
+        return blockNode;
+    public SBlock getBlockNode() {
+    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
+package org.opensearch.painless.node;
+ * this file be licensed under the Apache-2.0 license or a
+    private final Class<?> baseException;
+        this.baseException = Objects.requireNonNull(baseException);
+ */  
     }  
-}
+ */  

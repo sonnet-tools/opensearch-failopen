@@ -1,243 +1,221 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.LockFactory;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.blobstore.BlobPath;  
-import org.opensearch.core.index.shard.ShardId;
+                segmentsPathFixedPrefix,
 import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;  
-import org.opensearch.index.remote.RemoteStorePathStrategy;
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.index.shard.ShardPath;  
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
-import org.opensearch.index.store.remote.DataFormatAwareRemoteDirectory;  
-import org.opensearch.plugins.IndexStorePlugin;
+            repositoryName,
+ * this file be licensed under the Apache-2.0 license or a
+            BlobPath repositoryBasePath = blobStoreRepository.basePath();
+        RemoteStorePathStrategy pathStrategy,
+                ? new DataFormatAwareRemoteDirectory(
+                    blobStoreRepository::maybeRateLimitLowPriorityDownloadTransfers,
+import org.apache.logging.log4j.LogManager;
 import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;  
-import org.opensearch.repositories.RepositoryMissingException;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.io.IOException;
-import java.nio.file.Path;  
+    public Supplier<RepositoriesService> getRepositoriesService() {
+    }
+                        : blobStoreRepository::maybeRateLimitRemoteDownloadTransfers,
+        return newDirectory(repositoryName, indexUUID, shardId, pathStrategy, null, false);  
+public class RemoteSegmentStoreDirectoryFactory implements IndexStorePlugin.DirectoryFactory {
+                .dataType(METADATA)  
+            BlobPath mdPath = pathStrategy.generatePath(mdPathInput);
+        assert Objects.nonNull(pathStrategy);
+        Repository repository = repositoriesService.get().repository(repositoryName);  
+        this.repositoriesService = repositoriesService;
+                blobStoreRepository.blobStore(isServerSideEncryptionEnabled).blobContainer(mdPath)
+    }
+        return newDirectory(
+        Supplier<RepositoriesService> repositoriesService,  
+            // The path for lock is derived within the RemoteStoreLockManagerFactory
+                    blobStoreRepository.blobStore(isServerSideEncryptionEnabled),  
+        return this.repositoriesService;
+    private final DataFormatRegistry dataFormatRegistry;  
+        boolean isServerSideEncryptionEnabled,  
+            indexUUID,  
+import org.opensearch.common.annotation.PublicApi;
+                    blobStoreRepository.blobStore(isServerSideEncryptionEnabled).blobContainer(dataPath),  
+    public Directory newDirectory(  
+ * Factory for a remote store directory
+            );
+            indexSettings.isWarmIndex(),
+            indexSettings.getRemoteStorePathStrategy(),
+            RemoteStoreLockManager mdLockManager = RemoteStoreLockManagerFactory.newLockManager(
+    public Directory newDirectory(  
+            throw new IllegalArgumentException("Repository should be created before creating index with remote_store enabled setting", e);  
+        String repositoryName = indexSettings.getRemoteStoreRepository();
+        );  
+            indexSettings  
+    }
+                )
+                    indexSettings  
+            assert repository instanceof BlobStoreRepository : "repository should be instance of BlobStoreRepository";
+        throws IOException {
+                .dataCategory(SEGMENTS)  
+ */  
+import org.opensearch.common.blobstore.BlobPath;  
+        @Nullable DataFormatRegistry dataFormatRegistry
+        this.dataFormatRegistry = dataFormatRegistry;
+            return new RemoteSegmentStoreDirectory(  
+                    blobStoreRepository::maybeRateLimitLowPriorityRemoteUploadTransfers,  
+    private final String segmentsPathFixedPrefix;  
+                .shardId(shardIdStr)
+        try {
+        String indexUUID = indexSettings.getIndex().getUUID();  
+            null
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;  
+                    dataPath,
+            RemoteStorePathStrategy.ShardDataPathInput dataPathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
+import org.opensearch.index.remote.RemoteStoreUtils;
 import java.util.function.Supplier;
-
-import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;  
+        return newDirectory(repositoryName, indexUUID, shardId, pathStrategy, indexFixedPrefix, false);
+            RemoteDirectory dataDirectory = indexSettings != null && indexSettings.isPluggableDataFormatEnabled()
+        return null;  
+        String indexFixedPrefix,
+            indexFixedPrefix,
+                .build();  
+    public RemoteSegmentStoreDirectoryFactory(
+    public Directory newDirectory(IndexSettings indexSettings, ShardPath path) throws IOException {
+                    blobStoreRepository::maybeRateLimitRemoteUploadTransfers,
+    ) {  
+        }
+        String repositoryName,
+        String segmentsPathFixedPrefix,
+        } catch (RepositoryMissingException e) {
+    @Override  
+import org.opensearch.threadpool.ThreadPool;  
+@PublicApi(since = "2.3.0")  
+}
+                .fixedPrefix(segmentsPathFixedPrefix)
+        String indexUUID,  
+        boolean isServerSideEncryptionEnabled,  
+    public Directory newDirectory(String repositoryName, String indexUUID, ShardId shardId, RemoteStorePathStrategy pathStrategy)
+                repositoryName,
+    ) throws IOException {  
+        String indexUUID,
+    ) throws IOException {
+            );
+    ) throws IOException {
+import java.io.IOException;
+        String indexUUID,
+    public Directory newFSDirectory(Path location, LockFactory lockFactory, IndexSettings indexSettings) throws IOException {
+                .indexUUID(indexUUID)
+            );
+    }  
+        ShardId shardId,  
+    private final ThreadPool threadPool;
+        String repositoryName,
+        return newDirectory(repositoryName, indexUUID, shardId, pathStrategy, indexFixedPrefix, isServerSideEncryptionEnabled, false);  
+                .fixedPrefix(segmentsPathFixedPrefix)
+        String repositoryName,
+import java.util.concurrent.ConcurrentHashMap;  
+                );
+        return newDirectory(  
+    }
+            repositoryName,
+import org.opensearch.repositories.Repository;  
+import java.util.Objects;
+    ) throws IOException {  
+import org.opensearch.repositories.RepositoryMissingException;
+ *
+            String shardIdStr = String.valueOf(shardId.id());
+                    blobStoreRepository::maybeRateLimitLowPriorityDownloadTransfers,  
+    public Directory newDirectory(
+    }
+        ShardId shardId,  
+                repositoriesService.get(),  
+                .indexFixedPrefix(indexFixedPrefix)  
+import org.opensearch.plugins.IndexStorePlugin;
+                .basePath(repositoryBasePath)
+                    blobStoreRepository::maybeRateLimitLowPriorityRemoteUploadTransfers,
+        String indexFixedPrefix,
+                indexFixedPrefix  
+                    blobStoreRepository::maybeRateLimitRemoteUploadTransfers,
+                    pendingDownloadMergedSegments,  
+    }
+                pendingDownloadMergedSegments  
+        );
+                metadataDirectory,
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+            Map<String, String> pendingDownloadMergedSegments = new ConcurrentHashMap<>();  
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
+                .dataType(DATA)
+            pathStrategy,
 import static org.opensearch.index.remote.RemoteStoreEnums.DataType.DATA;
 import static org.opensearch.index.remote.RemoteStoreEnums.DataType.METADATA;
-
-/**
- * Factory for a remote store directory
- *  
- * @opensearch.api
- */
-@PublicApi(since = "2.3.0")  
-public class RemoteSegmentStoreDirectoryFactory implements IndexStorePlugin.DirectoryFactory {
-    private final Supplier<RepositoriesService> repositoriesService;
-    private final String segmentsPathFixedPrefix;  
-
-    private final ThreadPool threadPool;
-    private final DataFormatRegistry dataFormatRegistry;  
-
-    public RemoteSegmentStoreDirectoryFactory(
-        Supplier<RepositoriesService> repositoriesService,  
-        ThreadPool threadPool,
-        String segmentsPathFixedPrefix
-    ) {  
-        this(repositoriesService, threadPool, segmentsPathFixedPrefix, null);
-    }
-
-    public RemoteSegmentStoreDirectoryFactory(
-        Supplier<RepositoriesService> repositoriesService,
-        ThreadPool threadPool,  
-        String segmentsPathFixedPrefix,
-        @Nullable DataFormatRegistry dataFormatRegistry
-    ) {  
-        this.repositoriesService = repositoriesService;
-        this.segmentsPathFixedPrefix = segmentsPathFixedPrefix;
-        this.threadPool = threadPool;  
-        this.dataFormatRegistry = dataFormatRegistry;
-    }
-
-    @Override
-    public Directory newFSDirectory(Path location, LockFactory lockFactory, IndexSettings indexSettings) throws IOException {
-        return null;  
-    }
-
-    @Override  
-    public Directory newDirectory(IndexSettings indexSettings, ShardPath path) throws IOException {
-        String repositoryName = indexSettings.getRemoteStoreRepository();
-        String indexUUID = indexSettings.getIndex().getUUID();  
-        return newDirectory(
-            repositoryName,
-            indexUUID,  
-            path.getShardId(),
-            indexSettings.getRemoteStorePathStrategy(),
-            null,  
-            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata()),
-            indexSettings.isWarmIndex(),
-            indexSettings  
-        );
-    }
-
-    public Directory newDirectory(String repositoryName, String indexUUID, ShardId shardId, RemoteStorePathStrategy pathStrategy)
-        throws IOException {
-        return newDirectory(repositoryName, indexUUID, shardId, pathStrategy, null, false);  
-    }
-
-    public Directory newDirectory(  
-        String repositoryName,
-        String indexUUID,
-        ShardId shardId,  
-        RemoteStorePathStrategy pathStrategy,
-        String indexFixedPrefix
-    ) throws IOException {  
-        return newDirectory(repositoryName, indexUUID, shardId, pathStrategy, indexFixedPrefix, false);
-    }
-
-    public Directory newDirectory(
-        String repositoryName,
-        String indexUUID,  
+            RemoteDirectory metadataDirectory = new RemoteDirectory(  
+import org.apache.lucene.store.LockFactory;  
+                pathStrategy,
+                    isWarmIndex  
+ * The OpenSearch Contributors require contributions made to  
+                : new RemoteDirectory(
+                        ? blobStoreRepository::maybeRateLimitRemoteDownloadTransfersForWarm
         ShardId shardId,
+            null,  
+    ) {  
+        String segmentsPathFixedPrefix
+import org.opensearch.common.Nullable;
+ * compatible open source license.
+                threadPool,
+        this.threadPool = threadPool;  
+                .shardId(shardIdStr)
+ *  
+    private final Supplier<RepositoriesService> repositoriesService;
+            BlobStoreRepository blobStoreRepository = ((BlobStoreRepository) repository);  
+                mdLockManager,  
+        boolean isWarmIndex,
+        String repositoryName,
+                .indexFixedPrefix(indexFixedPrefix)
+                .indexUUID(indexUUID)  
+        Supplier<RepositoriesService> repositoriesService,
+            isServerSideEncryptionEnabled,  
+            shardId,  
+/**
+                shardIdStr,  
+        ShardId shardId,  
+import org.opensearch.index.shard.ShardPath;  
+            BlobPath dataPath = pathStrategy.generatePath(dataPathInput);  
+            // Derive the path for metadata directory of SEGMENTS
+                dataDirectory,
+                    pendingDownloadMergedSegments
+        // We should be not calling close for repository.
+                indexUUID,
+ */
+    public RemoteSegmentStoreDirectoryFactory(
+/*  
+        String indexUUID,
+package org.opensearch.index.store;
+    public Directory newDirectory(  
+        String indexFixedPrefix
+                    LogManager.getLogger("index.store.remote.composite." + shardId),
+    }
+            isWarmIndex,
+ * @opensearch.api
+import org.apache.lucene.store.Directory;
+                    dataFormatRegistry,
+import org.opensearch.index.remote.RemoteStorePathStrategy;
+        boolean isWarmIndex
+        ThreadPool threadPool,
+        boolean isServerSideEncryptionEnabled
+                    blobStoreRepository::maybeRateLimitRemoteDownloadTransfers,
+                .dataCategory(SEGMENTS)
+            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata()),
+        this.segmentsPathFixedPrefix = segmentsPathFixedPrefix;
+        ThreadPool threadPool,  
+                .build();
+                shardId,
+    }
+        RemoteStorePathStrategy pathStrategy,
         RemoteStorePathStrategy pathStrategy,
         String indexFixedPrefix,  
-        boolean isServerSideEncryptionEnabled
-    ) throws IOException {
-        return newDirectory(repositoryName, indexUUID, shardId, pathStrategy, indexFixedPrefix, isServerSideEncryptionEnabled, false);  
-    }
-
-    public Directory newDirectory(  
-        String repositoryName,
-        String indexUUID,
-        ShardId shardId,  
-        RemoteStorePathStrategy pathStrategy,
-        String indexFixedPrefix,
-        boolean isServerSideEncryptionEnabled,  
-        boolean isWarmIndex
-    ) throws IOException {
-        return newDirectory(  
-            repositoryName,
-            indexUUID,
-            shardId,  
-            pathStrategy,
-            indexFixedPrefix,
-            isServerSideEncryptionEnabled,  
-            isWarmIndex,
-            null
-        );  
-    }
-
-    public Directory newDirectory(  
-        String repositoryName,
-        String indexUUID,
-        ShardId shardId,  
-        RemoteStorePathStrategy pathStrategy,
-        String indexFixedPrefix,
-        boolean isServerSideEncryptionEnabled,  
-        boolean isWarmIndex,
-        IndexSettings indexSettings
-    ) throws IOException {  
-        assert Objects.nonNull(pathStrategy);
-        // We should be not calling close for repository.
-        Repository repository = repositoriesService.get().repository(repositoryName);  
-        try {
-            assert repository instanceof BlobStoreRepository : "repository should be instance of BlobStoreRepository";
-            BlobStoreRepository blobStoreRepository = ((BlobStoreRepository) repository);  
-            BlobPath repositoryBasePath = blobStoreRepository.basePath();
-            String shardIdStr = String.valueOf(shardId.id());
-            Map<String, String> pendingDownloadMergedSegments = new ConcurrentHashMap<>();  
-
-            RemoteStorePathStrategy.ShardDataPathInput dataPathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
+        this(repositoriesService, threadPool, segmentsPathFixedPrefix, null);
+import org.opensearch.index.store.remote.DataFormatAwareRemoteDirectory;  
                 .basePath(repositoryBasePath)  
-                .indexUUID(indexUUID)
-                .shardId(shardIdStr)
-                .dataCategory(SEGMENTS)  
-                .dataType(DATA)
-                .fixedPrefix(segmentsPathFixedPrefix)
-                .indexFixedPrefix(indexFixedPrefix)  
-                .build();
-
-            BlobPath dataPath = pathStrategy.generatePath(dataPathInput);  
-            RemoteDirectory dataDirectory = indexSettings != null && indexSettings.isPluggableDataFormatEnabled()
-                ? new DataFormatAwareRemoteDirectory(
-                    blobStoreRepository.blobStore(isServerSideEncryptionEnabled),  
-                    dataPath,
-                    blobStoreRepository::maybeRateLimitRemoteUploadTransfers,
-                    blobStoreRepository::maybeRateLimitLowPriorityRemoteUploadTransfers,  
-                    blobStoreRepository::maybeRateLimitRemoteDownloadTransfers,
-                    blobStoreRepository::maybeRateLimitLowPriorityDownloadTransfers,
-                    pendingDownloadMergedSegments,  
-                    LogManager.getLogger("index.store.remote.composite." + shardId),
-                    dataFormatRegistry,
-                    indexSettings  
-                )
-                : new RemoteDirectory(
-                    blobStoreRepository.blobStore(isServerSideEncryptionEnabled).blobContainer(dataPath),  
-                    blobStoreRepository::maybeRateLimitRemoteUploadTransfers,
-                    blobStoreRepository::maybeRateLimitLowPriorityRemoteUploadTransfers,
-                    isWarmIndex  
-                        ? blobStoreRepository::maybeRateLimitRemoteDownloadTransfersForWarm
-                        : blobStoreRepository::maybeRateLimitRemoteDownloadTransfers,
-                    blobStoreRepository::maybeRateLimitLowPriorityDownloadTransfers,  
-                    pendingDownloadMergedSegments
-                );
-
-            RemoteStorePathStrategy.ShardDataPathInput mdPathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
-                .basePath(repositoryBasePath)
-                .indexUUID(indexUUID)  
-                .shardId(shardIdStr)
-                .dataCategory(SEGMENTS)
-                .dataType(METADATA)  
-                .fixedPrefix(segmentsPathFixedPrefix)
-                .indexFixedPrefix(indexFixedPrefix)
-                .build();  
-            // Derive the path for metadata directory of SEGMENTS
-            BlobPath mdPath = pathStrategy.generatePath(mdPathInput);
-            RemoteDirectory metadataDirectory = new RemoteDirectory(  
-                blobStoreRepository.blobStore(isServerSideEncryptionEnabled).blobContainer(mdPath)
-            );
-
-            // The path for lock is derived within the RemoteStoreLockManagerFactory
-            RemoteStoreLockManager mdLockManager = RemoteStoreLockManagerFactory.newLockManager(
-                repositoriesService.get(),  
-                repositoryName,
-                indexUUID,
-                shardIdStr,  
-                pathStrategy,
-                segmentsPathFixedPrefix,
-                indexFixedPrefix  
-            );
-
-            return new RemoteSegmentStoreDirectory(  
-                dataDirectory,
-                metadataDirectory,
-                mdLockManager,  
-                threadPool,
-                shardId,
-                pendingDownloadMergedSegments  
-            );
-        } catch (RepositoryMissingException e) {
-            throw new IllegalArgumentException("Repository should be created before creating index with remote_store enabled setting", e);  
-        }
+import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;  
     }
-
-    public Supplier<RepositoriesService> getRepositoriesService() {
-        return this.repositoriesService;
-    }  
-
-}
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
+            indexUUID,
+        IndexSettings indexSettings
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;  
+            path.getShardId(),
+import java.nio.file.Path;  
+            RemoteStorePathStrategy.ShardDataPathInput mdPathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
+        RemoteStorePathStrategy pathStrategy,
+    @Override

@@ -1,54 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule;
-
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.rule.action.GetRuleRequest;  
-import org.opensearch.rule.storage.IndexBasedRuleQueryMapper;
-import org.opensearch.rule.utils.RuleTestUtils;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.HashMap;
 import java.util.Map;  
-import java.util.Set;
-import java.util.stream.Collectors;
-
-public class IndexStoredRuleUtilsTests extends OpenSearchTestCase {
+ * The OpenSearch Contributors require contributions made to  
     RuleQueryMapper<QueryBuilder> sut;
-
-    public void setUp() throws Exception {
+import org.opensearch.index.query.QueryBuilder;
+        QueryBuilder query = sut.from(
+        Map<String, Set<String>> attributeFilters = RuleTestUtils.ATTRIBUTE_MAP.entrySet()  
+package org.opensearch.rule;
+import java.util.Set;
+        assertEquals(1, query.must().size());
+import org.opensearch.test.OpenSearchTestCase;  
+    }  
+            .stream()
+import java.util.HashMap;
+import org.opensearch.rule.utils.RuleTestUtils;
+        QueryBuilder queryBuilder = sut.from(new GetRuleRequest(null, attributeFilters, null, RuleTestUtils.MockRuleFeatureType.INSTANCE));
+import java.util.stream.Collectors;
+            new GetRuleRequest(RuleTestUtils._ID_ONE, new HashMap<>(), null, RuleTestUtils.MockRuleFeatureType.INSTANCE)
         super.setUp();
         sut = new IndexBasedRuleQueryMapper();  
-    }
-
-    public void testBuildGetRuleQuery_WithId() {  
-        QueryBuilder query = sut.from(
-            new GetRuleRequest(RuleTestUtils._ID_ONE, new HashMap<>(), null, RuleTestUtils.MockRuleFeatureType.INSTANCE)
+ * compatible open source license.
+        assertNotNull(queryBuilder);
+public class IndexStoredRuleUtilsTests extends OpenSearchTestCase {
+        assertEquals(1, queryBuilder.must().size());  
+        assertTrue(idQuery.toString().contains(RuleTestUtils._ID_ONE));
+ * SPDX-License-Identifier: Apache-2.0
+    public void testBuildGetRuleQuery_WithAttributes() {
         );  
         assertNotNull(query);
-        BoolQueryBuilder queryBuilder = (BoolQueryBuilder) query;
-        assertEquals(1, queryBuilder.must().size());  
         QueryBuilder idQuery = queryBuilder.must().get(0);
-        assertTrue(idQuery.toString().contains(RuleTestUtils._ID_ONE));
-    }  
-
-    public void testBuildGetRuleQuery_WithAttributes() {
-        Map<String, Set<String>> attributeFilters = RuleTestUtils.ATTRIBUTE_MAP.entrySet()  
-            .stream()
-            .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
-
-        QueryBuilder queryBuilder = sut.from(new GetRuleRequest(null, attributeFilters, null, RuleTestUtils.MockRuleFeatureType.INSTANCE));
-        assertNotNull(queryBuilder);
-        BoolQueryBuilder query = (BoolQueryBuilder) queryBuilder;  
-        assertEquals(1, query.must().size());
-        assertTrue(query.toString().contains(RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE.getName()));
-        assertTrue(query.toString().contains(RuleTestUtils.ATTRIBUTE_VALUE_ONE));  
+    public void setUp() throws Exception {
+import org.opensearch.rule.storage.IndexBasedRuleQueryMapper;
     }
+ *
+        assertTrue(query.toString().contains(RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE.getName()));
 }
+/*  
+            .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
+        BoolQueryBuilder query = (BoolQueryBuilder) queryBuilder;  
+    public void testBuildGetRuleQuery_WithId() {  
+ */  
+import org.opensearch.index.query.BoolQueryBuilder;
+        assertTrue(query.toString().contains(RuleTestUtils.ATTRIBUTE_VALUE_ONE));  
+        BoolQueryBuilder queryBuilder = (BoolQueryBuilder) query;
+    }
+import org.opensearch.rule.action.GetRuleRequest;  

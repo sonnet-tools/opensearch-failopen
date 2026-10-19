@@ -1,176 +1,155 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.lucene.queries;
-
-import org.apache.lucene.document.BinaryDocValuesField;  
-import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.store.Directory;
+                document = new Document();
 import org.apache.lucene.tests.index.RandomIndexWriter;  
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.index.mapper.RangeFieldMapper;
-import org.opensearch.index.mapper.RangeType;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
-import static java.util.Collections.singleton;
-import static org.opensearch.lucene.queries.BinaryDocValuesRangeQuery.QueryType.CONTAINS;  
-import static org.opensearch.lucene.queries.BinaryDocValuesRangeQuery.QueryType.CROSSES;
 import static org.opensearch.lucene.queries.BinaryDocValuesRangeQuery.QueryType.INTERSECTS;
-import static org.opensearch.lucene.queries.BinaryDocValuesRangeQuery.QueryType.WITHIN;  
-
-public class BinaryDocValuesRangeQueryTests extends OpenSearchTestCase {
-
-    public void testBasics() throws Exception {
-        String fieldName = "long_field";
-        RangeType rangeType = RangeType.LONG;  
-        try (Directory dir = newDirectory()) {
-            try (RandomIndexWriter writer = new RandomIndexWriter(random(), dir)) {
-                // intersects (within)  
-                Document document = new Document();
-                BytesRef encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -10L, 9L, true, true)));
                 document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // intersects (crosses)  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, 10L, 20L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // intersects (contains, crosses)  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -20L, 30L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // intersects (within)  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -11L, 1L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // intersects (crosses)  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, 12L, 15L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // disjoint  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -122L, -115L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // intersects (crosses)  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, Long.MIN_VALUE, -11L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // equal (within, contains, intersects)  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -11L, 15L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // intersects, within  
-                document = new Document();
-                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, 5L, 10L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
-                writer.addDocument(document);
-
-                // search  
-                try (IndexReader reader = writer.getReader()) {
-                    IndexSearcher searcher = newSearcher(reader);
-                    Query query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -11L, 15L, true, true);  
-                    assertEquals(8, searcher.count(query));
-                    query = rangeType.dvRangeQuery(fieldName, WITHIN, -11L, 15L, true, true);
-                    assertEquals(5, searcher.count(query));  
-                    query = rangeType.dvRangeQuery(fieldName, CONTAINS, -11L, 15L, true, true);
-                    assertEquals(2, searcher.count(query));
-                    query = rangeType.dvRangeQuery(fieldName, CROSSES, -11L, 15L, true, true);  
-                    assertEquals(3, searcher.count(query));
-
-                    // test includeFrom = false and includeTo = false  
-                    query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -11L, 15L, false, false);
-                    assertEquals(7, searcher.count(query));
-                    query = rangeType.dvRangeQuery(fieldName, WITHIN, -11L, 15L, false, false);  
-                    assertEquals(2, searcher.count(query));
-                    query = rangeType.dvRangeQuery(fieldName, CONTAINS, -11L, 15L, false, false);
-                    assertEquals(2, searcher.count(query));  
-                    query = rangeType.dvRangeQuery(fieldName, CROSSES, -11L, 15L, false, false);
-                    assertEquals(5, searcher.count(query));
-                }  
-            }
-        }
-    }  
-
-    public void testNoField() throws IOException {
-        String fieldName = "long_field";  
-        RangeType rangeType = RangeType.LONG;
-
-        // no field in index  
-        try (Directory dir = newDirectory()) {
-            try (RandomIndexWriter writer = new RandomIndexWriter(random(), dir)) {
-                writer.addDocument(new Document());  
-                try (IndexReader reader = writer.getReader()) {
-                    IndexSearcher searcher = newSearcher(reader);
-                    Query query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -1L, 1L, true, true);  
+import java.io.IOException;  
+import org.apache.lucene.document.BinaryDocValuesField;  
                     assertEquals(0, searcher.count(query));
-                }
-            }  
-        }
-
-        // no field in segment  
+ * this work for additional information regarding copyright
+                writer.addDocument(document);
+                // disjoint  
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+                    assertEquals(2, searcher.count(query));
+        String fieldName = "long_field";
+    }
+                Document document = new Document();
+                    Query query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -1L, 1L, true, true);  
+                writer.addDocument(document);
+                    assertEquals(7, searcher.count(query));
+ * GitHub history for details.
         try (Directory dir = newDirectory()) {
-            try (RandomIndexWriter writer = new RandomIndexWriter(random(), dir)) {
                 // intersects (within)  
+import org.opensearch.index.mapper.RangeType;  
+public class BinaryDocValuesRangeQueryTests extends OpenSearchTestCase {
+import org.apache.lucene.document.Document;
+                document = new Document();
+                    Query query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -1L, 1L, true, true);  
+                    query = rangeType.dvRangeQuery(fieldName, WITHIN, -11L, 15L, false, false);  
+import org.apache.lucene.search.IndexSearcher;  
+        RangeType rangeType = RangeType.LONG;  
+                writer.addDocument(document);
+                // intersects (crosses)  
+                // intersects (crosses)  
+                // equal (within, contains, intersects)  
+                writer.addDocument(document);
+                document = new Document();
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+                    Query query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -11L, 15L, true, true);  
+                document = new Document();
+                writer.addDocument(document);
+        RangeType rangeType = RangeType.LONG;
+                try (IndexReader reader = writer.getReader()) {
+    }  
+                }
+        }
+ * KIND, either express or implied.  See the License for the
+                BytesRef encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -10L, 9L, true, true)));
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, 5L, 10L, true, true)));
+ * license agreements. See the NOTICE file distributed with
+import static org.opensearch.lucene.queries.BinaryDocValuesRangeQuery.QueryType.WITHIN;  
+ * ownership. Elasticsearch licenses this file to you under  
+                try (IndexReader reader = writer.getReader()) {
+                // intersects (within)  
+                    assertEquals(3, searcher.count(query));
+/*
+                    // test includeFrom = false and includeTo = false  
+                }
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+ * Unless required by applicable law or agreed to in writing,
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -11L, 15L, true, true)));
+                    assertEquals(5, searcher.count(query));  
+                // intersects, within  
+ * Licensed to Elasticsearch under one or more contributor  
+                document = new Document();
+            }  
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -20L, 30L, true, true)));
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, 10L, 20L, true, true)));
+ * specific language governing permissions and limitations
+                writer.addDocument(new Document());  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * not use this file except in compliance with the License.
+                writer.commit();
+                    assertEquals(5, searcher.count(query));
+                    assertEquals(2, searcher.count(query));  
+                    query = rangeType.dvRangeQuery(fieldName, CONTAINS, -11L, 15L, false, false);
+ *
+ * under the License.  
+                writer.addDocument(document);
+import org.apache.lucene.store.Directory;
+            try (RandomIndexWriter writer = new RandomIndexWriter(random(), dir)) {
+                    assertEquals(8, searcher.count(query));
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+    public void testBasics() throws Exception {
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -11L, 1L, true, true)));
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+                writer.addDocument(document);
+            try (RandomIndexWriter writer = new RandomIndexWriter(random(), dir)) {
+                // intersects (crosses)  
+                writer.addDocument(document);
+                    IndexSearcher searcher = newSearcher(reader);
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, Long.MIN_VALUE, -11L, true, true)));
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, -122L, -115L, true, true)));
+                // intersects (contains, crosses)  
+        // no field in index  
+package org.opensearch.lucene.queries;
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+                writer.addDocument(document);
+/*
+                writer.addDocument(new Document());  
+ * the Apache License, Version 2.0 (the "License"); you may
+                document = new Document();
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+ *
+                    IndexSearcher searcher = newSearcher(reader);
+                // search  
+import org.apache.lucene.util.BytesRef;
+ * software distributed under the License is distributed on an
                 Document document = new Document();
                 BytesRef encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, 0L, 0L, true, true)));
-                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+ */  
+        try (Directory dir = newDirectory()) {
+                // intersects (within)  
+ * compatible open source license.
+import static org.opensearch.lucene.queries.BinaryDocValuesRangeQuery.QueryType.CONTAINS;  
+                    assertEquals(2, searcher.count(query));
+import org.apache.lucene.index.IndexReader;
+/*  
+                encodedRange = rangeType.encodeRanges(singleton(new RangeFieldMapper.Range(rangeType, 12L, 15L, true, true)));
+                    query = rangeType.dvRangeQuery(fieldName, CONTAINS, -11L, 15L, true, true);
+        try (Directory dir = newDirectory()) {
+import org.opensearch.index.mapper.RangeFieldMapper;
+            try (RandomIndexWriter writer = new RandomIndexWriter(random(), dir)) {
+    public void testNoField() throws IOException {
+                    query = rangeType.dvRangeQuery(fieldName, CROSSES, -11L, 15L, false, false);
+import org.opensearch.test.OpenSearchTestCase;
+                    query = rangeType.dvRangeQuery(fieldName, WITHIN, -11L, 15L, true, true);
+                document = new Document();
+ */
+ * Modifications Copyright OpenSearch Contributors. See  
                 writer.addDocument(document);
-                writer.commit();
-                writer.addDocument(new Document());  
-                try (IndexReader reader = writer.getReader()) {
-                    IndexSearcher searcher = newSearcher(reader);
-                    Query query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -1L, 1L, true, true);  
-                    assertEquals(1, searcher.count(query));
-                }
-            }  
         }
-    }
-
+ */
+                    query = rangeType.dvRangeQuery(fieldName, CROSSES, -11L, 15L, true, true);  
+                    query = rangeType.dvRangeQuery(fieldName, INTERSECTS, -11L, 15L, false, false);
+                document = new Document();
+        // no field in segment  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+            }
+ *  
+            }  
+import org.apache.lucene.search.Query;
+                }  
+        String fieldName = "long_field";  
 }
+import static org.opensearch.lucene.queries.BinaryDocValuesRangeQuery.QueryType.CROSSES;
+                document.add(new BinaryDocValuesField(fieldName, encodedRange));  
+        }
+                try (IndexReader reader = writer.getReader()) {
+import static java.util.Collections.singleton;
+                    IndexSearcher searcher = newSearcher(reader);
+                    assertEquals(1, searcher.count(query));

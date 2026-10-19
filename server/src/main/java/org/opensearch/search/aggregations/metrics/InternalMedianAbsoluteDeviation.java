@@ -1,155 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;  
-import java.util.Objects;
-
-import com.tdunning.math.stats.Centroid;  
-
-/**
- * Implementation of median absolute deviation agg  
- *
- * @opensearch.internal
- */  
-public class InternalMedianAbsoluteDeviation extends InternalNumericMetricsAggregation.SingleValue implements MedianAbsoluteDeviation {
-
-    static double computeMedianAbsoluteDeviation(TDigestState valuesSketch) {  
-
-        if (valuesSketch.size() == 0) {
-            return Double.NaN;  
-        } else {
+        if (obj == null || getClass() != obj.getClass()) return false;
             final double approximateMedian = valuesSketch.quantile(0.5);
-            final TDigestState approximatedDeviationsSketch = new TDigestState(valuesSketch.compression());  
-            for (Centroid centroid : valuesSketch.centroids()) {
-                final double deviation = Math.abs(approximateMedian - centroid.mean());
-                // Weighted add() isn't supported for faster MergingDigest implementation, so add iteratively instead. see  
-                // https://github.com/tdunning/t-digest/issues/167
-                for (int i = 0; i < centroid.count(); i++) {
-                    approximatedDeviationsSketch.add(deviation);  
-                }
-            }
-            return approximatedDeviationsSketch.quantile(0.5);  
-        }
-    }
-
-    private final TDigestState valuesSketch;
-    private final double medianAbsoluteDeviation;
-
-    InternalMedianAbsoluteDeviation(String name, Map<String, Object> metadata, DocValueFormat format, TDigestState valuesSketch) {
-        super(name, metadata);
-        this.format = Objects.requireNonNull(format);  
-        this.valuesSketch = Objects.requireNonNull(valuesSketch);
-
-        this.medianAbsoluteDeviation = computeMedianAbsoluteDeviation(this.valuesSketch);  
-    }
-
-    public InternalMedianAbsoluteDeviation(StreamInput in) throws IOException {  
-        super(in);
-        format = in.readNamedWriteable(DocValueFormat.class);
-        valuesSketch = TDigestState.read(in);  
-        medianAbsoluteDeviation = in.readDouble();
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);  
-        TDigestState.write(valuesSketch, out);
-        out.writeDouble(medianAbsoluteDeviation);
+ * not use this file except in compliance with the License.
+import java.util.Map;  
+import java.util.List;
     }  
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {  
-        final TDigestState valueMerged = new TDigestState(valuesSketch.compression());
+ * this file be licensed under the Apache-2.0 license or a
+        this.format = Objects.requireNonNull(format);  
+ * under the License.  
+ */  
         for (InternalAggregation aggregation : aggregations) {
-            final InternalMedianAbsoluteDeviation madAggregation = (InternalMedianAbsoluteDeviation) aggregation;  
+        out.writeNamedWriteable(format);  
+ * @opensearch.internal
+        final TDigestState valueMerged = new TDigestState(valuesSketch.compression());
+ * You may obtain a copy of the License at  
             valueMerged.add(madAggregation.valuesSketch);
-        }
-
-        return new InternalMedianAbsoluteDeviation(name, metadata, format, valueMerged);
-    }
-
+        builder.field(CommonFields.VALUE.getPreferredName(), mad);  
+import org.opensearch.core.common.io.stream.StreamInput;
+        return getMedianAbsoluteDeviation();  
     @Override
     public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        final boolean anyResults = valuesSketch.size() > 0;  
-        final Double mad = anyResults ? getMedianAbsoluteDeviation() : null;
-
-        builder.field(CommonFields.VALUE.getPreferredName(), mad);  
-        if (format != DocValueFormat.RAW && anyResults) {
+import org.opensearch.search.DocValueFormat;
+            }
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+ * Licensed to Elasticsearch under one or more contributor  
+    InternalMedianAbsoluteDeviation(String name, Map<String, Object> metadata, DocValueFormat format, TDigestState valuesSketch) {
+        this.medianAbsoluteDeviation = computeMedianAbsoluteDeviation(this.valuesSketch);  
+ *
+package org.opensearch.search.aggregations.metrics;
+ * Modifications Copyright OpenSearch Contributors. See
+    private final TDigestState valuesSketch;
+        }
             builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), format.format(mad).toString());
+import org.opensearch.core.xcontent.XContentBuilder;  
+        if (format != DocValueFormat.RAW && anyResults) {
+ *
+ *  
+    public double getMedianAbsoluteDeviation() {
         }  
-
-        return builder;
-    }  
-
+    private final double medianAbsoluteDeviation;
+/*  
+        this.valuesSketch = Objects.requireNonNull(valuesSketch);
     @Override
-    public int hashCode() {  
-        return Objects.hash(super.hashCode(), valuesSketch);
+import org.opensearch.search.aggregations.InternalAggregation;
+}
     }
-
-    @Override
+import java.io.IOException;
+        super(in);
+ */  
+        } else {
     public boolean equals(Object obj) {
-        if (this == obj) return true;  
-        if (obj == null || getClass() != obj.getClass()) return false;
+ * Implementation of median absolute deviation agg  
+    public int hashCode() {  
+public class InternalMedianAbsoluteDeviation extends InternalNumericMetricsAggregation.SingleValue implements MedianAbsoluteDeviation {
+    @Override  
+            return approximatedDeviationsSketch.quantile(0.5);  
+ * GitHub history for details.
+import java.util.Objects;
+                    approximatedDeviationsSketch.add(deviation);  
+        return medianAbsoluteDeviation;
+        if (valuesSketch.size() == 0) {
+    @Override
+/*
+ */  
+ * The OpenSearch Contributors require contributions made to  
+            final TDigestState approximatedDeviationsSketch = new TDigestState(valuesSketch.compression());  
+ * specific language governing permissions and limitations
+            for (Centroid centroid : valuesSketch.centroids()) {
+            final InternalMedianAbsoluteDeviation madAggregation = (InternalMedianAbsoluteDeviation) aggregation;  
+ * ownership. Elasticsearch licenses this file to you under  
         if (super.equals(obj) == false) return false;
-        InternalMedianAbsoluteDeviation other = (InternalMedianAbsoluteDeviation) obj;  
+    @Override
+    @Override
+    }  
+    public String getWriteableName() {
+        }
+    }  
+    protected void doWriteTo(StreamOutput out) throws IOException {
+    @Override
+            return Double.NaN;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                // https://github.com/tdunning/t-digest/issues/167
+    }
+        return valuesSketch;
+ * license agreements. See the NOTICE file distributed with
+import com.tdunning.math.stats.Centroid;  
+        TDigestState.write(valuesSketch, out);
+        return new InternalMedianAbsoluteDeviation(name, metadata, format, valueMerged);
+        return MedianAbsoluteDeviationAggregationBuilder.NAME;  
+        format = in.readNamedWriteable(DocValueFormat.class);
+    }
+    }
+    public InternalMedianAbsoluteDeviation(StreamInput in) throws IOException {  
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {  
+ * compatible open source license.
+    }
+                }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        out.writeDouble(medianAbsoluteDeviation);
+        if (this == obj) return true;  
         return Objects.equals(valuesSketch, other.valuesSketch);
     }
-
+        return builder;
     @Override
-    public String getWriteableName() {
-        return MedianAbsoluteDeviationAggregationBuilder.NAME;  
-    }
-
-    TDigestState getValuesSketch() {  
-        return valuesSketch;
-    }
-
-    @Override
+                final double deviation = Math.abs(approximateMedian - centroid.mean());
+        InternalMedianAbsoluteDeviation other = (InternalMedianAbsoluteDeviation) obj;  
+ */
+                // Weighted add() isn't supported for faster MergingDigest implementation, so add iteratively instead. see  
+ * software distributed under the License is distributed on an
+/**
+        final boolean anyResults = valuesSketch.size() > 0;  
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
     public double value() {
-        return getMedianAbsoluteDeviation();  
+        valuesSketch = TDigestState.read(in);  
+        return Objects.hash(super.hashCode(), valuesSketch);
+    static double computeMedianAbsoluteDeviation(TDigestState valuesSketch) {  
+        medianAbsoluteDeviation = in.readDouble();
     }
-
-    @Override  
-    public double getMedianAbsoluteDeviation() {
-        return medianAbsoluteDeviation;
-    }  
-}
+                for (int i = 0; i < centroid.count(); i++) {
+    }
+ *
+ * this work for additional information regarding copyright
+        final Double mad = anyResults ? getMedianAbsoluteDeviation() : null;
+    TDigestState getValuesSketch() {  
+ * Unless required by applicable law or agreed to in writing,
+    }
+        super(name, metadata);

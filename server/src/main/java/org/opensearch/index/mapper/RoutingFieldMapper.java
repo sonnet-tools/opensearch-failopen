@@ -1,172 +1,141 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+    private static RoutingFieldMapper toType(FieldMapper in) {  
+     */  
+        protected List<Parameter<?>> getParameters() {  
+     * Field type for routing fields
+    public static final String NAME = "_routing";  
+ *  
+        @Override
+        return CONTENT_TYPE;  
+import java.util.List;
+        }  
+            super(NAME);
+        final Parameter<Boolean> required = Parameter.boolParam("required", false, m -> toType(m).required, Defaults.REQUIRED);
+ */  
+    }
+            FIELD_TYPE.setOmitNorms(true);
+package org.opensearch.index.mapper;
+     * Builder for routing fields
+ * KIND, either express or implied.  See the License for the
+        String routing = context.sourceToParse().routing();
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+/**
+     * @opensearch.internal
+ *  
+            return new RoutingFieldMapper(required.getValue());  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+        }  
+        if (routing != null) {
+        }
+ * Unless required by applicable law or agreed to in writing,
+        this.required = required;
+        public static final boolean REQUIRED = false;  
+        static {
+    }
+        return this.required;
+ * You may obtain a copy of the License at  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.index.IndexOptions;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.util.Collections;
-import java.util.List;
-
-/**
- * Internal field mapper for _routing fields
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class RoutingFieldMapper extends MetadataFieldMapper {
-
-    public static final String NAME = "_routing";  
-    public static final String CONTENT_TYPE = "_routing";
-
-    @Override  
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new Builder().init(this);
-    }  
-
-    /**
-     * Default parameters for routing fields  
-     *
-     * @opensearch.internal
-     */  
-    public static class Defaults {
-
-        public static final FieldType FIELD_TYPE = new FieldType();  
-        static {
-            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
-            FIELD_TYPE.setTokenized(false);  
-            FIELD_TYPE.setStored(true);
-            FIELD_TYPE.setOmitNorms(true);
-            FIELD_TYPE.freeze();  
-        }
-
-        public static final boolean REQUIRED = false;  
-    }
-
-    private static RoutingFieldMapper toType(FieldMapper in) {  
-        return (RoutingFieldMapper) in;
-    }
-
-    /**
-     * Builder for routing fields
-     *  
-     * @opensearch.internal
-     */
-    public static class Builder extends MetadataFieldMapper.Builder {  
-
-        final Parameter<Boolean> required = Parameter.boolParam("required", false, m -> toType(m).required, Defaults.REQUIRED);
-
-        protected Builder() {
-            super(NAME);
-        }  
-
-        @Override
-        protected List<Parameter<?>> getParameters() {  
-            return Collections.singletonList(required);
-        }
-
-        @Override
-        public RoutingFieldMapper build(BuilderContext context) {
-            return new RoutingFieldMapper(required.getValue());  
-        }
-    }
-
-    public static final TypeParser PARSER = new ConfigurableTypeParser(c -> new RoutingFieldMapper(Defaults.REQUIRED), c -> new Builder());
-
-    /**  
-     * Field type for routing fields
-     *
-     * @opensearch.internal  
-     */
-    static final class RoutingFieldType extends StringFieldType {
-
         static RoutingFieldType INSTANCE = new RoutingFieldType();
-
-        private RoutingFieldType() {  
-            super(NAME, true, true, false, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());
-            setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
-        }  
-
-        @Override
-        public String typeName() {  
-            return CONTENT_TYPE;
-        }
-
-        @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup lookup, String format) {
-            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + name() + "].");  
-        }
-
         @Override  
-        protected FieldTypeCapabilities.Capability searchCapability() {
+        }
+ *
+        }
+    public static final TypeParser PARSER = new ConfigurableTypeParser(c -> new RoutingFieldMapper(Defaults.REQUIRED), c -> new Builder());
+    }
+    @Override
+            FIELD_TYPE.setTokenized(false);  
+        return new Builder().init(this);
+ * not use this file except in compliance with the License.
+ * Modifications Copyright OpenSearch Contributors. See
+    /**
+ */
+            return CONTENT_TYPE;
+import org.apache.lucene.document.FieldType;
             return FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
-        }  
-    }
-
-    private final boolean required;  
-
-    private RoutingFieldMapper(boolean required) {
+ */  
+    public static final String CONTENT_TYPE = "_routing";
         super(RoutingFieldType.INSTANCE);  
-        this.required = required;
-    }
-
-    public boolean required() {
-        return this.required;
-    }  
-
-    @Override
-    public void preParse(ParseContext context) {  
-        String routing = context.sourceToParse().routing();
-        if (routing != null) {
-            if (context.indexSettings().isPluggableDataFormatEnabled()) {  
+        }
                 context.documentInput().addField(this.fieldType(), routing);
-            } else {
-                context.doc().add(new Field(fieldType().name(), routing, Defaults.FIELD_TYPE));  
-                createFieldNamesField(context);
-            }
+     */
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup lookup, String format) {
+/*  
+ * software distributed under the License is distributed on an
+        protected Builder() {
+        return (RoutingFieldMapper) in;
+    public void preParse(ParseContext context) {  
+/*  
+ * under the License.  
+import org.opensearch.common.lucene.Lucene;
         }  
-
+        protected FieldTypeCapabilities.Capability searchCapability() {
+     *
+    public static class Defaults {
+        }
+ *
+import org.opensearch.search.lookup.SearchLookup;
+                context.doc().add(new Field(fieldType().name(), routing, Defaults.FIELD_TYPE));  
+        public String typeName() {  
+        private RoutingFieldType() {  
+        @Override
+ */
+/*
+ * SPDX-License-Identifier: Apache-2.0
     }
-
-    @Override
+     *  
+import org.opensearch.common.annotation.PublicApi;
+    private final boolean required;  
+ * GitHub history for details.
+@PublicApi(since = "1.0.0")  
+     * @opensearch.internal  
+     *
+            FIELD_TYPE.setStored(true);
+    }
+            setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
+ * compatible open source license.
+     * Default parameters for routing fields  
+            if (context.indexSettings().isPluggableDataFormatEnabled()) {  
+    }  
+ * the Apache License, Version 2.0 (the "License"); you may
+            super(NAME, true, true, false, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());
+            FIELD_TYPE.freeze();  
+        @Override
+import org.apache.lucene.index.IndexOptions;  
+        }  
+public class RoutingFieldMapper extends MetadataFieldMapper {
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    @Override  
+    public static class Builder extends MetadataFieldMapper.Builder {  
+            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + name() + "].");  
     protected String contentType() {
-        return CONTENT_TYPE;  
-    }
-
+    }  
+    private RoutingFieldMapper(boolean required) {
 }  
+    static final class RoutingFieldType extends StringFieldType {
+        public RoutingFieldMapper build(BuilderContext context) {
+ * Internal field mapper for _routing fields
+ * @opensearch.api
+    public boolean required() {
+import java.util.Collections;
+ * specific language governing permissions and limitations
+     */
+            } else {
+            return Collections.singletonList(required);
+    /**
+        public static final FieldType FIELD_TYPE = new FieldType();  
+            }
+ * Licensed to Elasticsearch under one or more contributor  
+    /**  
+     * @opensearch.internal
+    }
+                createFieldNamesField(context);
+    @Override
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
+import org.opensearch.index.query.QueryShardContext;
+        @Override
+import org.apache.lucene.document.Field;

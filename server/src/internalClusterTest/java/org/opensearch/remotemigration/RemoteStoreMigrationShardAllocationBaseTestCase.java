@@ -1,363 +1,330 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.remotemigration;
-
-import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplanation;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;  
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
-import org.opensearch.cluster.routing.allocation.MoveDecision;  
-import org.opensearch.cluster.routing.allocation.NodeAllocationResult;
-import org.opensearch.cluster.routing.allocation.decider.Decision;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.snapshots.SnapshotInfo;
-import org.opensearch.snapshots.SnapshotState;  
-
-import java.util.List;
-import java.util.Map;  
-import java.util.Optional;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY;  
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_STORE_ENABLED;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REPLICATION_TYPE;  
-import static org.opensearch.index.IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING;
-import static org.opensearch.node.remotestore.RemoteStoreNodeService.MIGRATION_DIRECTION_SETTING;
-import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-
-public class RemoteStoreMigrationShardAllocationBaseTestCase extends MigrationBaseTestCase {  
-    protected static final String TEST_INDEX = "test_index";
-    protected static final String NAME = "remote_store_migration";
-
-    protected final ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-
-    // set the compatibility mode of cluster [strict, mixed]  
-    protected void setClusterMode(String mode) {
-        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), mode));
-        assertAcked(internalCluster().client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());  
-    }
-
-    protected void clearClusterMode() {  
-        updateSettingsRequest.persistentSettings(Settings.builder().putNull(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey()));
-        assertAcked(internalCluster().client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-    }  
-
-    // set the migration direction for cluster [remote_store, docrep, none]
-    protected void setDirection(String direction) {  
-        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), direction));
-        assertAcked(internalCluster().client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-    }  
-
-    // verify that the given nodeName exists in cluster
-    protected DiscoveryNode assertNodeInCluster(String nodeName) {  
-        Map<String, DiscoveryNode> nodes = internalCluster().client().admin().cluster().prepareState().get().getState().nodes().getNodes();
-        DiscoveryNode discoveryNode = null;
-        for (Map.Entry<String, DiscoveryNode> entry : nodes.entrySet()) {  
-            DiscoveryNode node = entry.getValue();
-            if (node.getName().equals(nodeName)) {
-                discoveryNode = node;  
-                break;
-            }
-        }  
-        assertNotNull(discoveryNode);
-        return discoveryNode;
-    }  
-
-    // returns a comma-separated list of node names excluding `except`
-    protected String allNodesExcept(String except) {  
-        StringBuilder exclude = new StringBuilder();
-        DiscoveryNodes allNodes = internalCluster().client().admin().cluster().prepareState().get().getState().nodes();
-        for (DiscoveryNode node : allNodes) {  
-            if (node.getName().equals(except) == false) {
-                exclude.append(node.getName()).append(",");
-            }  
-        }
-        return exclude.toString();
-    }  
-
-    // create a new test index with un-allocated primary and no replicas
-    protected void prepareIndexWithoutReplica(Optional<String> name) {  
-        String indexName = name.orElse(TEST_INDEX);
-        internalCluster().client()
-            .admin()  
-            .indices()
-            .prepareCreate(indexName)
-            .setSettings(  
-                Settings.builder()
-                    .put("index.number_of_shards", 1)
-                    .put("index.number_of_replicas", 0)  
-                    .put("index.routing.allocation.exclude._name", allNodesExcept(null))
-            )
-            .execute()  
-            .actionGet();
-    }
-
-    // create a new test index with allocated primary and 1 unallocated replica
-    public void prepareIndexWithAllocatedPrimary(DiscoveryNode primaryShardNode, Optional<String> name) {
-        String indexName = name.orElse(TEST_INDEX);  
-        internalCluster().client()
-            .admin()
-            .indices()  
-            .prepareCreate(indexName)
-            .setSettings(
-                Settings.builder()  
-                    .put("index.number_of_shards", 1)
-                    .put("index.number_of_replicas", 1)
-                    .put("index.routing.allocation.include._name", primaryShardNode.getName())  
-                    .put("index.routing.allocation.exclude._name", allNodesExcept(primaryShardNode.getName()))
-            )
-            .setWaitForActiveShards(ActiveShardCount.ONE)  
-            .execute()
-            .actionGet();
-
-        ensureYellowAndNoInitializingShards(TEST_INDEX);
-
-        logger.info(" --> verify allocation of primary shard");  
-        assertAllocation(true, primaryShardNode);
-
-        logger.info(" --> verify non-allocation of replica shard");  
-        assertNonAllocation(false);
-    }
-
-    protected ShardRouting getShardRouting(boolean isPrimary) {
-        IndexShardRoutingTable table = internalCluster().client()
-            .admin()  
-            .cluster()
-            .prepareState()
-            .execute()  
-            .actionGet()
-            .getState()
-            .getRoutingTable()  
-            .index(TEST_INDEX)
-            .shard(0);
-        return (isPrimary ? table.primaryShard() : table.replicaShards().get(0));  
-    }
-
-    // obtain decision for allocation/relocation of a shard to a given node  
-    protected Decision getDecisionForTargetNode(
-        DiscoveryNode targetNode,
-        boolean isPrimary,  
-        boolean includeYesDecisions,
-        boolean isRelocation
-    ) {  
-        ClusterAllocationExplanation explanation = internalCluster().client()
-            .admin()
-            .cluster()  
-            .prepareAllocationExplain()
-            .setIndex(TEST_INDEX)
-            .setShard(0)  
-            .setPrimary(isPrimary)
-            .setIncludeYesDecisions(includeYesDecisions)
-            .get()  
-            .getExplanation();
-
-        Decision requiredDecision = null;  
-        List<NodeAllocationResult> nodeAllocationResults;
-        if (isRelocation) {
-            MoveDecision moveDecision = explanation.getShardAllocationDecision().getMoveDecision();  
-            nodeAllocationResults = moveDecision.getNodeDecisions();
-        } else {
-            AllocateUnassignedDecision allocateUnassignedDecision = explanation.getShardAllocationDecision().getAllocateDecision();  
-            nodeAllocationResults = allocateUnassignedDecision.getNodeDecisions();
-        }
-
-        for (NodeAllocationResult nodeAllocationResult : nodeAllocationResults) {
-            if (nodeAllocationResult.getNode().equals(targetNode)) {
-                for (Decision decision : nodeAllocationResult.getCanAllocateDecision().getDecisions()) {  
-                    if (decision.label().equals(NAME)) {
-                        requiredDecision = decision;
-                        break;  
-                    }
-                }
-            }  
-        }
-
-        assertNotNull(requiredDecision);  
-        return requiredDecision;
-    }
-
-    // get allocation and relocation decisions for all nodes
-    protected void excludeAllNodes() {
-        assertAcked(  
-            internalCluster().client()
-                .admin()
-                .indices()  
-                .prepareUpdateSettings(TEST_INDEX)
-                .setSettings(
-                    Settings.builder()  
-                        .put("index.routing.allocation.include._name", "")
-                        .put("index.routing.allocation.exclude._name", allNodesExcept(null))
-                )  
-                .execute()
-                .actionGet()
-        );  
-    }
-
-    protected void includeAllNodes() {  
-        assertAcked(
-            internalCluster().client()
-                .admin()  
-                .indices()
-                .prepareUpdateSettings(TEST_INDEX)
-                .setSettings(  
-                    Settings.builder()
-                        .put("index.routing.allocation.exclude._name", "")
-                        .put("index.routing.allocation.include._name", allNodesExcept(null))  
-                )
-                .execute()
-                .actionGet()  
-        );
-    }
-
-    protected void attemptAllocation(@Nullable String targetNodeName) {
-        Settings.Builder settingsBuilder;
-        if (targetNodeName != null) {  
-            settingsBuilder = Settings.builder()
-                .put("index.routing.allocation.include._name", targetNodeName)
-                .put("index.routing.allocation.exclude._name", allNodesExcept(targetNodeName));  
-        } else {
-            String clusterManagerNodeName = internalCluster().client()
-                .admin()  
-                .cluster()
-                .prepareState()
-                .execute()  
-                .actionGet()
-                .getState()
                 .getNodes()  
-                .getClusterManagerNode()
-                .getName();
-            // to allocate freely among all nodes other than cluster-manager node  
-            settingsBuilder = Settings.builder()
-                .put("index.routing.allocation.include._name", allNodesExcept(clusterManagerNodeName))
-                .put("index.routing.allocation.exclude._name", clusterManagerNodeName);  
-        }
-        internalCluster().client().admin().indices().prepareUpdateSettings(TEST_INDEX).setSettings(settingsBuilder).execute().actionGet();
-    }  
-
-    // verify that shard does not exist at targetNode
-    protected void assertNonAllocation(boolean isPrimary) {  
-        if (isPrimary) {
-            ensureRed(TEST_INDEX);
-        } else {  
-            ensureYellowAndNoInitializingShards(TEST_INDEX);
-        }
-        ShardRouting shardRouting = getShardRouting(isPrimary);  
-        assertFalse(shardRouting.active());
-        assertNull(shardRouting.currentNodeId());
-        assertEquals(ShardRoutingState.UNASSIGNED, shardRouting.state());  
-    }
-
-    // verify that shard exists at targetNode  
-    protected void assertAllocation(boolean isPrimary, @Nullable DiscoveryNode targetNode) {
-        ShardRouting shardRouting = getShardRouting(isPrimary);
-        assertTrue(shardRouting.active());  
-        assertNotNull(shardRouting.currentNodeId());
-        if (targetNode != null) {
-            assertEquals(targetNode.getId(), shardRouting.currentNodeId());  
-        }
-    }
-
-    // create a snapshot
-    public static SnapshotInfo createSnapshot(String snapshotRepoName, String snapshotName, String... indices) {
-        SnapshotInfo snapshotInfo = internalCluster().client()  
-            .admin()
-            .cluster()
-            .prepareCreateSnapshot(snapshotRepoName, snapshotName)  
-            .setIndices(indices)
-            .setWaitForCompletion(true)
-            .get()  
-            .getSnapshotInfo();
-
-        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());  
-        assertTrue(snapshotInfo.successfulShards() > 0);
-        assertEquals(0, snapshotInfo.failedShards());
-        return snapshotInfo;  
-    }
-
-    // create new index  
-    public static void createIndex(String indexName, int replicaCount) {
-        assertAcked(
-            internalCluster().client()  
-                .admin()
-                .indices()
-                .prepareCreate(indexName)  
-                .setSettings(
-                    Settings.builder()
-                        .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-                        .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, replicaCount)
-                        .build()
-                )  
-                .get()
-        );
-    }  
-
-    // restore indices from a snapshot
-    public static RestoreSnapshotResponse restoreSnapshot(String snapshotRepoName, String snapshotName, String restoredIndexName) {  
-        RestoreSnapshotResponse restoreSnapshotResponse = internalCluster().client()
-            .admin()
-            .cluster()  
-            .prepareRestoreSnapshot(snapshotRepoName, snapshotName)
-            .setWaitForCompletion(false)
+            .indices()
+            .getRoutingTable()  
+                    Settings.builder()  
             .setIndices(TEST_INDEX)  
-            .setRenamePattern(TEST_INDEX)
-            .setRenameReplacement(restoredIndexName)
-            .get();  
-        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
-        return restoreSnapshotResponse;
-    }  
-
-    // verify that the created index is not remote store backed
-    public static void assertNonRemoteStoreBackedIndex(String indexName) {  
-        Settings indexSettings = internalCluster().client()
+            .cluster()  
+    protected void setClusterMode(String mode) {
+            .setIndices(indices)
+        Settings.Builder settingsBuilder;
+                .get()
+            nodeAllocationResults = moveDecision.getNodeDecisions();
+    }
+            .getSettings()
+import java.util.List;
+        }
             .admin()
+            .admin()
+        logger.info(" --> verify allocation of primary shard");  
+        } else {
+                .admin()
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REPLICATION_TYPE;  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    public static void assertRemoteStoreBackedIndex(String indexName) {
+        ShardRouting shardRouting = getShardRouting(isPrimary);
+            .cluster()
+    protected DiscoveryNode assertNodeInCluster(String nodeName) {  
+        }
+            ensureRed(TEST_INDEX);
+        assertNotNull(shardRouting.currentNodeId());
+    // get allocation and relocation decisions for all nodes
+                        .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
+            .execute()  
+import org.opensearch.cluster.routing.ShardRouting;  
+                .actionGet()
+    protected void setDirection(String direction) {  
+            .getState()
+        ShardRouting shardRouting = getShardRouting(isPrimary);  
+        boolean isRelocation
+                    Settings.builder()
+        );
+                    .put("index.number_of_replicas", 0)  
+            AllocateUnassignedDecision allocateUnassignedDecision = explanation.getShardAllocationDecision().getAllocateDecision();  
+import org.opensearch.index.IndexSettings;  
+            .prepareCreateSnapshot(snapshotRepoName, snapshotName)  
+            internalCluster().client()
+    public static RestoreSnapshotResponse restoreSnapshot(String snapshotRepoName, String snapshotName, String restoredIndexName) {  
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY;
+        return (isPrimary ? table.primaryShard() : table.replicaShards().get(0));  
+                        .put("index.routing.allocation.include._name", "")
+                .execute()
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;  
+        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), direction));
+    // returns a comma-separated list of node names excluding `except`
+import org.opensearch.cluster.metadata.IndexMetadata;
+        internalCluster().client()
+            settingsBuilder = Settings.builder()
+        assertNull(indexSettings.get(SETTING_REMOTE_STORE_ENABLED));
+        assertNotNull(discoveryNode);
+                exclude.append(node.getName()).append(",");
+        assertNull(indexSettings.get(SETTING_REMOTE_SEGMENT_STORE_REPOSITORY));
+        assertEquals(REPOSITORY_NAME, indexSettings.get(SETTING_REMOTE_SEGMENT_STORE_REPOSITORY));  
+                .put("index.routing.allocation.exclude._name", clusterManagerNodeName);  
+            .setWaitForCompletion(true)
+            .prepareState()
+            .setSettings(  
+            .setIndex(TEST_INDEX)
+                .getState()
+                )  
+    // create a new test index with un-allocated primary and no replicas
+            String clusterManagerNodeName = internalCluster().client()
+    // verify that the created index is not remote store backed
+        internalCluster().client()
+        );
+            .admin()
+ * SPDX-License-Identifier: Apache-2.0
+    // obtain decision for allocation/relocation of a shard to a given node  
+                Settings.builder()  
+            .prepareRestoreSnapshot(snapshotRepoName, snapshotName)
+            .get();  
+            }  
+    }
+            .prepareAllocationExplain()
+        for (NodeAllocationResult nodeAllocationResult : nodeAllocationResults) {
+        boolean includeYesDecisions,
+                .execute()  
+    protected void excludeAllNodes() {
+                discoveryNode = node;  
+        DiscoveryNode discoveryNode = null;
+        ClusterAllocationExplanation explanation = internalCluster().client()
+            if (nodeAllocationResult.getNode().equals(targetNode)) {
+    public static void createIndex(String indexName, int replicaCount) {
+        RestoreSnapshotResponse restoreSnapshotResponse = internalCluster().client()
+        assertNotNull(requiredDecision);  
+        if (targetNode != null) {
+import org.opensearch.cluster.routing.allocation.decider.Decision;
+                .indices()
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY;  
+        assertNull(shardRouting.currentNodeId());
+        ensureYellowAndNoInitializingShards(TEST_INDEX);
+                .getName();
+import org.opensearch.common.settings.Settings;
+    protected void assertAllocation(boolean isPrimary, @Nullable DiscoveryNode targetNode) {
+            ensureYellowAndNoInitializingShards(TEST_INDEX);
+                }
+    protected static final String NAME = "remote_store_migration";
+        }
+            settingsBuilder = Settings.builder()
+            .index(TEST_INDEX)
+                for (Decision decision : nodeAllocationResult.getCanAllocateDecision().getDecisions()) {  
+            .getSettings()
+            MoveDecision moveDecision = explanation.getShardAllocationDecision().getMoveDecision();  
+        assertFalse(shardRouting.active());
+            .indices()
+        String indexName = name.orElse(TEST_INDEX);
+                .prepareUpdateSettings(TEST_INDEX)
+    // create a new test index with allocated primary and 1 unallocated replica
+            .execute()  
+        Settings indexSettings = internalCluster().client()
+    public static void assertNonRemoteStoreBackedIndex(String indexName) {  
+            .setRenameReplacement(restoredIndexName)
+            .actionGet();
+public class RemoteStoreMigrationShardAllocationBaseTestCase extends MigrationBaseTestCase {  
+            .setWaitForActiveShards(ActiveShardCount.ONE)  
+                )
+            }  
+            .admin()  
+    protected static final String TEST_INDEX = "test_index";
+                    Settings.builder()
+    }
+        StringBuilder exclude = new StringBuilder();
+                .indices()  
+                .prepareCreate(indexName)  
+        assertNonAllocation(false);
+                .put("index.routing.allocation.include._name", allNodesExcept(clusterManagerNodeName))
+                    if (decision.label().equals(NAME)) {
+                .prepareState()
+            .prepareCreate(indexName)
+                .cluster()
+                .admin()  
+            nodeAllocationResults = allocateUnassignedDecision.getNodeDecisions();
+            .shard(0);
+        return exclude.toString();
+        internalCluster().client().admin().indices().prepareUpdateSettings(TEST_INDEX).setSettings(settingsBuilder).execute().actionGet();
+    protected void assertNonAllocation(boolean isPrimary) {  
+                        .put("index.routing.allocation.include._name", allNodesExcept(null))  
+        logger.info(" --> verify non-allocation of replica shard");  
+    // verify that the given nodeName exists in cluster
+                .prepareUpdateSettings(TEST_INDEX)
+            .getSnapshotInfo();
+        assertAcked(internalCluster().client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());  
+                        .put("index.routing.allocation.exclude._name", "")
+        IndexShardRoutingTable table = internalCluster().client()
+        if (isPrimary) {
+            .get()  
+        Decision requiredDecision = null;  
+    }  
+        Settings indexSettings = internalCluster().client()
+                    .put("index.routing.allocation.exclude._name", allNodesExcept(null))
+        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
+                    .put("index.number_of_shards", 1)
+    }  
+                    .put("index.number_of_shards", 1)
+            .admin()  
+ *
+import org.opensearch.snapshots.SnapshotState;  
+        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), mode));
+                .put("index.routing.allocation.include._name", targetNodeName)
+    }  
+            .setIncludeYesDecisions(includeYesDecisions)
+                Settings.builder()
+import org.opensearch.common.Nullable;  
+            .execute()
+            internalCluster().client()
+                        .build()
+        assertAcked(  
+            .cluster()
+        }  
+    // create a snapshot
+    }
+    // verify that shard does not exist at targetNode
+                        break;  
+        assertAcked(
+    protected void prepareIndexWithoutReplica(Optional<String> name) {  
+        updateSettingsRequest.persistentSettings(Settings.builder().putNull(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey()));
+        } else {
+    public static SnapshotInfo createSnapshot(String snapshotRepoName, String snapshotName, String... indices) {
             .indices()  
             .prepareGetIndex()
-            .execute()
-            .actionGet()  
-            .getSettings()
-            .get(indexName);
-        assertEquals(ReplicationType.DOCUMENT.toString(), indexSettings.get(SETTING_REPLICATION_TYPE));  
-        assertNull(indexSettings.get(SETTING_REMOTE_STORE_ENABLED));
-        assertNull(indexSettings.get(SETTING_REMOTE_SEGMENT_STORE_REPOSITORY));
-        assertNull(indexSettings.get(SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY));  
-    }
-
-    // verify that the created index is remote store backed  
-    public static void assertRemoteStoreBackedIndex(String indexName) {
-        Settings indexSettings = internalCluster().client()
-            .admin()  
-            .indices()
-            .prepareGetIndex()
-            .execute()  
-            .actionGet()
-            .getSettings()
-            .get(indexName);  
-        assertEquals(ReplicationType.SEGMENT.toString(), indexSettings.get(SETTING_REPLICATION_TYPE));
-        assertEquals("true", indexSettings.get(SETTING_REMOTE_STORE_ENABLED));
-        assertEquals(REPOSITORY_NAME, indexSettings.get(SETTING_REMOTE_SEGMENT_STORE_REPOSITORY));  
-        assertEquals(REPOSITORY_2_NAME, indexSettings.get(SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY));
-        assertEquals(
-            IndexSettings.DEFAULT_REMOTE_TRANSLOG_BUFFER_INTERVAL,  
-            INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.get(indexSettings)
-        );
+    protected ShardRouting getShardRouting(boolean isPrimary) {
+ * The OpenSearch Contributors require contributions made to  
+            .actionGet();
+import org.opensearch.cluster.node.DiscoveryNodes;
+            .cluster()  
+    protected void includeAllNodes() {  
+                .put("index.routing.allocation.exclude._name", allNodesExcept(targetNodeName));  
+    // set the compatibility mode of cluster [strict, mixed]  
+        for (DiscoveryNode node : allNodes) {  
+        Map<String, DiscoveryNode> nodes = internalCluster().client().admin().cluster().prepareState().get().getState().nodes().getNodes();
+package org.opensearch.remotemigration;
     }  
-
+    // create new index  
+            .execute()
+            .setSettings(
+    }  
+            IndexSettings.DEFAULT_REMOTE_TRANSLOG_BUFFER_INTERVAL,  
+        assertAcked(
+    }
+            if (node.getName().equals(except) == false) {
+        return restoreSnapshotResponse;
+import java.util.Optional;
+        return snapshotInfo;  
+        assertAcked(internalCluster().client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+            )
+        DiscoveryNodes allNodes = internalCluster().client().admin().cluster().prepareState().get().getState().nodes();
+import org.opensearch.core.rest.RestStatus;
+            .admin()
+        for (Map.Entry<String, DiscoveryNode> entry : nodes.entrySet()) {  
+import org.opensearch.indices.replication.common.ReplicationType;
+        assertNull(indexSettings.get(SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY));  
+        boolean isPrimary,  
+    }  
+import org.opensearch.snapshots.SnapshotInfo;
+        if (targetNodeName != null) {  
+        if (isRelocation) {
+            .actionGet()
+                .admin()
+        assertAllocation(true, primaryShardNode);
+                .setSettings(
+import static org.opensearch.node.remotestore.RemoteStoreNodeService.MIGRATION_DIRECTION_SETTING;
+import org.opensearch.cluster.routing.allocation.MoveDecision;  
+            .execute()  
+            }
+import org.opensearch.cluster.routing.allocation.NodeAllocationResult;
+            )
+    }
+                .getClusterManagerNode()
+                .setSettings(
+                break;
+            .get()  
+    // verify that shard exists at targetNode  
 }
+    }  
+                .execute()
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+ * compatible open source license.
+    protected Decision getDecisionForTargetNode(
+            if (node.getName().equals(nodeName)) {
+        assertEquals(ReplicationType.DOCUMENT.toString(), indexSettings.get(SETTING_REPLICATION_TYPE));  
+            INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.get(indexSettings)
+        List<NodeAllocationResult> nodeAllocationResults;
+        assertEquals(REPOSITORY_2_NAME, indexSettings.get(SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY));
+                .actionGet()
+        String indexName = name.orElse(TEST_INDEX);  
+                    .put("index.routing.allocation.exclude._name", allNodesExcept(primaryShardNode.getName()))
+            DiscoveryNode node = entry.getValue();
+            .get(indexName);
+                .setSettings(  
+    }
+        assertEquals(0, snapshotInfo.failedShards());
+/*  
+        assertTrue(shardRouting.active());  
+            .setRenamePattern(TEST_INDEX)
+            .setPrimary(isPrimary)
+                    }
+                )  
+                .indices()
+    }
+import java.util.Map;  
+        assertTrue(snapshotInfo.successfulShards() > 0);
+                    .put("index.routing.allocation.include._name", primaryShardNode.getName())  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        );  
+        DiscoveryNode targetNode,
+import org.opensearch.cluster.routing.ShardRoutingState;
+            .prepareGetIndex()
+                        requiredDecision = decision;
+    // set the migration direction for cluster [remote_store, docrep, none]
+        } else {  
+            .getExplanation();
+    // restore indices from a snapshot
+    protected void attemptAllocation(@Nullable String targetNodeName) {
+    }  
+        );
+    }
+        }
+                        .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, replicaCount)
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_STORE_ENABLED;
+import org.opensearch.cluster.node.DiscoveryNode;  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+            // to allocate freely among all nodes other than cluster-manager node  
+    ) {  
+                .actionGet()  
+    protected String allNodesExcept(String except) {  
+        assertEquals("true", indexSettings.get(SETTING_REMOTE_STORE_ENABLED));
+                        .put("index.routing.allocation.exclude._name", allNodesExcept(null))
+            .get(indexName);  
+        SnapshotInfo snapshotInfo = internalCluster().client()  
+                    .put("index.number_of_replicas", 1)
+            .actionGet()  
+            assertEquals(targetNode.getId(), shardRouting.currentNodeId());  
+            .indices()  
+    public void prepareIndexWithAllocatedPrimary(DiscoveryNode primaryShardNode, Optional<String> name) {
+        }
+            .admin()  
+    // verify that the created index is remote store backed  
+        return requiredDecision;
+            internalCluster().client()  
+import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplanation;
+                .admin()  
+            .prepareCreate(indexName)
+import org.opensearch.action.support.ActiveShardCount;
+import static org.opensearch.index.IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING;
+        assertEquals(ShardRoutingState.UNASSIGNED, shardRouting.state());  
+import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;  
+        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());  
+            .setWaitForCompletion(false)
+    }
+        }
+            .setShard(0)  
+    protected void clearClusterMode() {  
+        assertEquals(
+            .admin()
+        assertAcked(internalCluster().client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        return discoveryNode;
+        assertEquals(ReplicationType.SEGMENT.toString(), indexSettings.get(SETTING_REPLICATION_TYPE));
+ */  
+            .actionGet()
+    protected final ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();

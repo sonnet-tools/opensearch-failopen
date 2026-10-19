@@ -1,148 +1,135 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.support.clustermanager;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-/**
- * A base class for read operations that needs to be performed on the cluster-manager node.
- * Can also be executed on the local node if needed.  
- *
- * @opensearch.internal
- */  
-public abstract class TransportClusterManagerNodeReadAction<
-    Request extends ClusterManagerNodeReadRequest<Request>,
-    Response extends ActionResponse> extends TransportClusterManagerNodeAction<Request, Response> {  
-
-    protected boolean localExecuteSupported = false;
-
-    protected TransportClusterManagerNodeReadAction(
-        String actionName,
         TransportService transportService,  
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,  
-        Writeable.Reader<Request> request,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        boolean localExecuteSupported  
-    ) {
-        this(
-            actionName,  
-            true,
-            AdmissionControlActionType.CLUSTER_ADMIN,
-            transportService,  
-            clusterService,
-            threadPool,
-            actionFilters,  
-            request,
-            indexNameExpressionResolver
-        );  
-        this.localExecuteSupported = localExecuteSupported;
-    }
-
-    protected TransportClusterManagerNodeReadAction(
-        String actionName,
-        TransportService transportService,  
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,  
-        Writeable.Reader<Request> request,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {  
-        this(actionName, transportService, clusterService, threadPool, actionFilters, request, indexNameExpressionResolver, false);
-    }
-
-    protected TransportClusterManagerNodeReadAction(
-        String actionName,
-        boolean checkSizeLimit,  
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,  
-        ActionFilters actionFilters,
-        Writeable.Reader<Request> request,
-        IndexNameExpressionResolver indexNameExpressionResolver  
-    ) {
-        super(
-            actionName,  
-            checkSizeLimit,
-            null,
-            transportService,  
-            clusterService,
-            threadPool,
-            actionFilters,  
-            request,
-            indexNameExpressionResolver
-        );  
-    }
-
-    protected TransportClusterManagerNodeReadAction(  
-        String actionName,
-        boolean checkSizeLimit,
-        AdmissionControlActionType admissionControlActionType,  
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,  
-        ActionFilters actionFilters,
-        Writeable.Reader<Request> request,
-        IndexNameExpressionResolver indexNameExpressionResolver  
-    ) {
-        super(
-            actionName,  
-            checkSizeLimit,
-            admissionControlActionType,
-            transportService,  
-            clusterService,
-            threadPool,
-            actionFilters,  
-            request,
-            indexNameExpressionResolver
-        );  
-    }
-
-    @Override  
     protected final boolean localExecute(Request request) {
-        return request.local();
-    }  
-
-    protected boolean localExecuteSupportedByAction() {
+            clusterService,
+ * GitHub history for details.
+ * The OpenSearch Contributors require contributions made to  
+ * Can also be executed on the local node if needed.  
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        );  
+import org.opensearch.transport.TransportService;
+        TransportService transportService,
+        String actionName,
+        ActionFilters actionFilters,
+        ClusterService clusterService,
+/**
         return localExecuteSupported;  
+        ThreadPool threadPool,
+            actionFilters,  
+ * under the License.  
+            true,
+            transportService,  
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+        ActionFilters actionFilters,
+    }  
     }
-
+ * ownership. Elasticsearch licenses this file to you under  
+            request,
+ * software distributed under the License is distributed on an
+    protected TransportClusterManagerNodeReadAction(
+            checkSizeLimit,
+    protected boolean localExecuteSupportedByAction() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            checkSizeLimit,
+    protected TransportClusterManagerNodeReadAction(  
+        ThreadPool threadPool,
+            AdmissionControlActionType.CLUSTER_ADMIN,
+        );  
+            threadPool,
+            clusterService,
+ *  
+        TransportService transportService,
+        String actionName,
+        this(actionName, transportService, clusterService, threadPool, actionFilters, request, indexNameExpressionResolver, false);
+        this(
+        this.localExecuteSupported = localExecuteSupported;
+ */  
+import org.opensearch.action.support.ActionFilters;
+ */  
+ * specific language governing permissions and limitations
+            admissionControlActionType,
+            threadPool,
+import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;  
+            clusterService,
+        ThreadPool threadPool,  
+ * A base class for read operations that needs to be performed on the cluster-manager node.
+ *
+import org.opensearch.cluster.service.ClusterService;  
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at  
+    }
+        boolean localExecuteSupported  
+            actionName,  
+import org.opensearch.core.common.io.stream.Writeable;
+ * not use this file except in compliance with the License.
+        IndexNameExpressionResolver indexNameExpressionResolver  
+ *
+        Writeable.Reader<Request> request,
+    }
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    ) {  
+            actionFilters,  
+            transportService,  
+            threadPool,
+        IndexNameExpressionResolver indexNameExpressionResolver
+ *
+        String actionName,
+        ActionFilters actionFilters,  
+        ActionFilters actionFilters,  
+        ClusterService clusterService,
 }  
+        boolean checkSizeLimit,  
+ * @opensearch.internal
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        super(
+    Request extends ClusterManagerNodeReadRequest<Request>,
+ * Modifications Copyright OpenSearch Contributors. See
+    protected TransportClusterManagerNodeReadAction(
+        Writeable.Reader<Request> request,
+        ClusterService clusterService,
+    }
+ * KIND, either express or implied.  See the License for the
+    Response extends ActionResponse> extends TransportClusterManagerNodeAction<Request, Response> {  
+ */
+        ThreadPool threadPool,  
+        boolean checkSizeLimit,
+ * the Apache License, Version 2.0 (the "License"); you may
+        TransportService transportService,  
+import org.opensearch.core.action.ActionResponse;
+    ) {
+            indexNameExpressionResolver
+        );  
+        Writeable.Reader<Request> request,
+    ) {
+            request,
+            indexNameExpressionResolver
+        ClusterService clusterService,
+        return request.local();
+        AdmissionControlActionType admissionControlActionType,  
+    @Override  
+        IndexNameExpressionResolver indexNameExpressionResolver  
+        super(
+        Writeable.Reader<Request> request,
+import org.opensearch.threadpool.ThreadPool;
+/*  
+        String actionName,
+ * license agreements. See the NOTICE file distributed with
+            indexNameExpressionResolver
+    protected TransportClusterManagerNodeReadAction(
+ */  
+            actionName,  
+public abstract class TransportClusterManagerNodeReadAction<
+ * this work for additional information regarding copyright
+    }
+            request,
+package org.opensearch.action.support.clustermanager;
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+            transportService,  
+ * compatible open source license.
+            actionFilters,  
+            actionName,  
+    protected boolean localExecuteSupported = false;
+    ) {
+            null,

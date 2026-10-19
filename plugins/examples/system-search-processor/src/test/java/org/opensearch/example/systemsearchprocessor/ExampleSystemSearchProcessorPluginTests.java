@@ -1,50 +1,39 @@
-/*  
+import org.opensearch.search.pipeline.SearchResponseProcessor;
+        assertEquals(1, factoryMap.size());
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.example.systemsearchprocessor;
-
+    private final SearchPipelinePlugin.Parameters parameters = mock(SearchPipelinePlugin.Parameters.class);
+        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor>> factoryMap = plugin
+    private final ExampleSystemSearchProcessorPlugin plugin = new ExampleSystemSearchProcessorPlugin();
+}
+public class ExampleSystemSearchProcessorPluginTests extends OpenSearchTestCase {  
+    }
 import org.opensearch.plugins.SearchPipelinePlugin;
+ */  
+import static org.mockito.Mockito.mock;
+ * this file be licensed under the Apache-2.0 license or a
+            .getSystemGeneratedRequestProcessors(parameters);  
+        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchRequestProcessor>> factoryMap = plugin
+    public void testGetSystemGeneratedRequestProcessors() {
+    public void testGetSystemGeneratedSearchPhaseResultsProcessors() {
+package org.opensearch.example.systemsearchprocessor;
+    }
+ * compatible open source license.
+    }  
+        assertEquals(1, factoryMap.size());
+            .getSystemGeneratedSearchPhaseResultsProcessors(parameters);  
+            .getSystemGeneratedResponseProcessors(parameters);
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
+        assertTrue(factoryMap.get(ExampleSearchResponseProcessor.Factory.TYPE) instanceof ExampleSearchResponseProcessor.Factory);
+        assertEquals(2, factoryMap.size());
+import org.opensearch.test.OpenSearchTestCase;  
+ * The OpenSearch Contributors require contributions made to  
+import java.util.Map;
+        assertTrue(factoryMap.get(ExampleSearchRequestPostProcessor.Factory.TYPE) instanceof ExampleSearchRequestPostProcessor.Factory);
+ *
+        assertTrue(factoryMap.get(ExampleSearchPhaseResultsProcessor.Factory.TYPE) instanceof ExampleSearchPhaseResultsProcessor.Factory);  
+        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchPhaseResultsProcessor>> factoryMap = plugin
+        assertTrue(factoryMap.get(ExampleSearchRequestPreProcessor.Factory.TYPE) instanceof ExampleSearchRequestPreProcessor.Factory);  
+    public void testGetSystemGeneratedResponseProcessors() {  
+/*  
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;  
-import org.opensearch.search.pipeline.SearchResponseProcessor;
-import org.opensearch.search.pipeline.SystemGeneratedProcessor;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-
-public class ExampleSystemSearchProcessorPluginTests extends OpenSearchTestCase {  
-    private final ExampleSystemSearchProcessorPlugin plugin = new ExampleSystemSearchProcessorPlugin();
-    private final SearchPipelinePlugin.Parameters parameters = mock(SearchPipelinePlugin.Parameters.class);
-
-    public void testGetSystemGeneratedRequestProcessors() {
-        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchRequestProcessor>> factoryMap = plugin
-            .getSystemGeneratedRequestProcessors(parameters);  
-
-        assertEquals(2, factoryMap.size());
-        assertTrue(factoryMap.get(ExampleSearchRequestPreProcessor.Factory.TYPE) instanceof ExampleSearchRequestPreProcessor.Factory);  
-        assertTrue(factoryMap.get(ExampleSearchRequestPostProcessor.Factory.TYPE) instanceof ExampleSearchRequestPostProcessor.Factory);
-    }
-
-    public void testGetSystemGeneratedSearchPhaseResultsProcessors() {
-        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchPhaseResultsProcessor>> factoryMap = plugin
-            .getSystemGeneratedSearchPhaseResultsProcessors(parameters);  
-
-        assertEquals(1, factoryMap.size());
-        assertTrue(factoryMap.get(ExampleSearchPhaseResultsProcessor.Factory.TYPE) instanceof ExampleSearchPhaseResultsProcessor.Factory);  
-    }
-
-    public void testGetSystemGeneratedResponseProcessors() {  
-        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor>> factoryMap = plugin
-            .getSystemGeneratedResponseProcessors(parameters);
-
-        assertEquals(1, factoryMap.size());
-        assertTrue(factoryMap.get(ExampleSearchResponseProcessor.Factory.TYPE) instanceof ExampleSearchResponseProcessor.Factory);
-    }  
-}

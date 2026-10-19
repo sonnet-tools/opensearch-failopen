@@ -1,79 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+ */
+            writer.addDocument(d);
+import org.apache.lucene.index.DirectoryReader;  
+import java.io.IOException;  
+/*
+            if (random().nextBoolean()) {  
+            }
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.lucene.document.Document;  
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.CompositeReaderContext;
-import org.apache.lucene.index.DirectoryReader;  
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.tests.store.BaseDirectoryWrapper;  
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
-public class ShardUtilsTests extends OpenSearchTestCase {
-
-    public void testExtractShardId() throws IOException {
-        BaseDirectoryWrapper dir = newDirectory();
-        IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig());  
-        writer.commit();
-        ShardId id = new ShardId("foo", "_na_", random().nextInt());
         try (DirectoryReader reader = DirectoryReader.open(writer)) {  
-            OpenSearchDirectoryReader wrap = OpenSearchDirectoryReader.wrap(reader, id);
-            assertEquals(id, ShardUtils.extractShardId(wrap));
+ * not use this file except in compliance with the License.
+                writer.commit();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * GitHub history for details.
+        }  
+ *  
+ * compatible open source license.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+            CompositeReaderContext context = wrap.getContext();
+            }
+package org.opensearch.index.shard;
+import org.apache.lucene.tests.store.BaseDirectoryWrapper;  
+ */
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+        try (DirectoryReader reader = DirectoryReader.open(writer)) {
+        IOUtils.close(writer, dir);
+        BaseDirectoryWrapper dir = newDirectory();
+ *
+import org.opensearch.core.index.shard.ShardId;  
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.document.StringField;
+                assertEquals(id, ShardUtils.extractShardId(leaf.reader()));
+import org.apache.lucene.index.CompositeReaderContext;
+import org.apache.lucene.index.IndexWriter;
+        ShardId id = new ShardId("foo", "_na_", random().nextInt());
+ * license agreements. See the NOTICE file distributed with
+        }  
+ * under the License.  
+    public void testExtractShardId() throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See  
+ * Licensed to Elasticsearch under one or more contributor  
+ * this work for additional information regarding copyright
+import org.opensearch.test.OpenSearchTestCase;
+import org.apache.lucene.index.LeafReaderContext;
+ * software distributed under the License is distributed on an
+}  
+ * specific language governing permissions and limitations
+public class ShardUtilsTests extends OpenSearchTestCase {
         }  
         final int numDocs = 1 + random().nextInt(5);
+        writer.commit();
+import org.opensearch.common.util.io.IOUtils;
+ */  
         for (int i = 0; i < numDocs; i++) {
-            Document d = new Document();  
+import org.apache.lucene.document.Document;  
             d.add(newField("name", "foobar", StringField.TYPE_STORED));
-            writer.addDocument(d);
-            if (random().nextBoolean()) {  
-                writer.commit();
-            }
-        }  
-
-        try (DirectoryReader reader = DirectoryReader.open(writer)) {
-            OpenSearchDirectoryReader wrap = OpenSearchDirectoryReader.wrap(reader, id);  
-            assertEquals(id, ShardUtils.extractShardId(wrap));
-            CompositeReaderContext context = wrap.getContext();
+/*  
+        IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig());  
+ * this file be licensed under the Apache-2.0 license or a
+ * You may obtain a copy of the License at  
+            OpenSearchDirectoryReader wrap = OpenSearchDirectoryReader.wrap(reader, id);
             for (LeafReaderContext leaf : context.leaves()) {  
-                assertEquals(id, ShardUtils.extractShardId(leaf.reader()));
-            }
-        }  
-        IOUtils.close(writer, dir);
+            Document d = new Document();  
+            assertEquals(id, ShardUtils.extractShardId(wrap));
+            OpenSearchDirectoryReader wrap = OpenSearchDirectoryReader.wrap(reader, id);  
     }
-}  
+            assertEquals(id, ShardUtils.extractShardId(wrap));

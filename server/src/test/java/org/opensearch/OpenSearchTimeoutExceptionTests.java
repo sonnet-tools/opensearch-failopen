@@ -1,25 +1,20 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch;
-
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.test.OpenSearchTestCase;
-
-public class OpenSearchTimeoutExceptionTests extends OpenSearchTestCase {
-
-    public void testStatusIsGatewayTimeout() {  
-        OpenSearchTimeoutException e = new OpenSearchTimeoutException("request timed out");
         assertEquals(RestStatus.GATEWAY_TIMEOUT, e.status());
-    }  
-
-    public void testStatusIsGatewayTimeoutWithCause() {
         OpenSearchTimeoutException e = new OpenSearchTimeoutException(new RuntimeException("cause"));  
-        assertEquals(RestStatus.GATEWAY_TIMEOUT, e.status());
     }
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+import org.opensearch.core.rest.RestStatus;
+    public void testStatusIsGatewayTimeoutWithCause() {
+ * SPDX-License-Identifier: Apache-2.0
+        OpenSearchTimeoutException e = new OpenSearchTimeoutException("request timed out");
+package org.opensearch;
+    }  
+    public void testStatusIsGatewayTimeout() {  
+public class OpenSearchTimeoutExceptionTests extends OpenSearchTestCase {
+ * compatible open source license.
+import org.opensearch.test.OpenSearchTestCase;
+ * The OpenSearch Contributors require contributions made to  
+        assertEquals(RestStatus.GATEWAY_TIMEOUT, e.status());
+ *
 }  

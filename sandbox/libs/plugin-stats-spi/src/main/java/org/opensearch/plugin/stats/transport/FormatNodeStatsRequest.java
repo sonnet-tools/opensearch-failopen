@@ -1,47 +1,38 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.plugin.stats.transport;
-
-import org.opensearch.action.support.nodes.BaseNodesRequest;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-
-/**
- * Request for per-format node-level stats.  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
+        super.writeTo(out);  
 public class FormatNodeStatsRequest extends BaseNodesRequest<FormatNodeStatsRequest> {
-
-    private final String formatName;
-
     public FormatNodeStatsRequest(String formatName, String... nodeIds) {  
-        super(nodeIds);
-        this.formatName = formatName;
+        return formatName;
+/**
+import org.opensearch.common.annotation.ExperimentalApi;
     }  
-
-    public FormatNodeStatsRequest(StreamInput in) throws IOException {
+    private final String formatName;
+/*  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
         super(in);  
+    public String formatName() {
+ *
+package org.opensearch.plugin.stats.transport;
+    }  
+ * The OpenSearch Contributors require contributions made to  
+ * Request for per-format node-level stats.  
+        this.formatName = formatName;
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+ * compatible open source license.
+import java.io.IOException;  
+import org.opensearch.action.support.nodes.BaseNodesRequest;
+ */  
+        super(nodeIds);
+    public FormatNodeStatsRequest(StreamInput in) throws IOException {
         this.formatName = in.readString();
     }
-
-    @Override
+ * @opensearch.experimental
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
         out.writeString(formatName);
-    }
-
-    public String formatName() {
-        return formatName;
-    }  
 }
+@ExperimentalApi
+import org.opensearch.core.common.io.stream.StreamInput;  
+ *

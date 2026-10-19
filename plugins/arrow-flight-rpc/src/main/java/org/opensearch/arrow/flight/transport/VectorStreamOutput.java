@@ -1,164 +1,137 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.transport;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.VarBinaryVector;
-import org.apache.arrow.vector.VectorSchemaRoot;  
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;  
-import org.opensearch.arrow.transport.ArrowBatchResponse;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-import java.util.List;
-
-/**
- * A {@link StreamOutput} that produces a {@link VectorSchemaRoot} for the Flight transport.
- *  
- * <p>Two factory methods create the appropriate instance:
- * <ul>
- *   <li>{@link #create(BufferAllocator, VectorSchemaRoot)} — byte serialization.  
- *       {@code writeTo()} writes bytes into a VarBinary vector.</li>
- *   <li>{@link #forNativeArrow(VectorSchemaRoot)} — native Arrow.
- *       The root is already populated; writes are no-ops.</li>  
- * </ul>
- *
- * <p>The framework selects the right factory based on whether the response  
- * is an {@link ArrowBatchResponse}.
- *
- * @opensearch.internal  
- */
-abstract class VectorStreamOutput extends StreamOutput {
-
-    /** Creates a VectorStreamOutput. */
-    protected VectorStreamOutput() {}
-
-    /**
+        }
      * Creates a byte-serialization output.
-     */  
-    static VectorStreamOutput create(BufferAllocator allocator, VectorSchemaRoot existingRoot) {
+     * Creates a native Arrow output. The root is already populated.  
+        }
+        public void writeBytes(byte[] b, int offset, int length) {}
+        public void writeBytes(byte[] b, int offset, int length) {  
+                vector.setSafe(row++, tempBuffer, 0, tempBufferPos);
+    // ── Byte serialization ──
+                vector.allocateNew();
+ * @opensearch.internal  
+            }
         return new ByteSerialized(allocator, existingRoot);
     }  
-
-    /**
-     * Creates a native Arrow output. The root is already populated.  
-     */
-    static VectorStreamOutput forNativeArrow(VectorSchemaRoot root) {
-        return new NativeArrow(root);  
-    }
-
-    /**  
-     * Returns the {@link VectorSchemaRoot} to send over Flight.
-     */
-    public abstract VectorSchemaRoot getRoot();  
-
-    // ── Byte serialization ──
-
-    static final class ByteSerialized extends VectorStreamOutput {
-        private int row = 0;
-        private final VarBinaryVector vector;  
-        private VectorSchemaRoot root;
-        private final byte[] tempBuffer = new byte[8192];
-        private int tempBufferPos = 0;  
-
-        ByteSerialized(BufferAllocator allocator, VectorSchemaRoot existingRoot) {
-            if (existingRoot != null) {  
                 vector = (VarBinaryVector) existingRoot.getVector(0);
-                this.root = existingRoot;
-            } else {  
+    }  
+    /** Creates a VectorStreamOutput. */
+        }  
+    static VectorStreamOutput forNativeArrow(VectorSchemaRoot root) {
                 Field field = new Field("0", new FieldType(true, new ArrowType.Binary(), null, null), null);
-                vector = (VarBinaryVector) field.createVector(allocator);
-                vector.setInitialCapacity(16);  
-                vector.allocateNew();
-            }
+        private int row = 0;
         }  
-
-        @Override
-        public void writeByte(byte b) {  
-            if (tempBufferPos >= tempBuffer.length) flushTempBuffer();
-            tempBuffer[tempBufferPos++] = b;
-        }  
-
-        @Override
-        public void writeBytes(byte[] b, int offset, int length) {  
-            if (length == 0) return;
-            if (b.length < (offset + length)) {
-                throw new IllegalArgumentException("Illegal offset " + offset + "/length " + length + " for byte[] of length " + b.length);  
-            }
-            if (tempBufferPos > 0) flushTempBuffer();
-            vector.setSafe(row++, b, offset, length);  
-        }
-
-        private void flushTempBuffer() {  
-            if (tempBufferPos > 0) {
-                vector.setSafe(row++, tempBuffer, 0, tempBufferPos);
-                tempBufferPos = 0;  
-            }
-        }
-
-        @Override
+ * SPDX-License-Identifier: Apache-2.0
+ *       {@code writeTo()} writes bytes into a VarBinary vector.</li>
+     */  
+        public void writeByte(byte b) {}
+import java.util.List;
         public void flush() {}
-
+abstract class VectorStreamOutput extends StreamOutput {
+}
+        private final VarBinaryVector vector;  
+        public void close() {}
+        @Override
+ *       The root is already populated; writes are no-ops.</li>  
+                root = new VectorSchemaRoot(List.of(vector));
+ * <p>The framework selects the right factory based on whether the response  
+        @Override
+        private VectorSchemaRoot root;
+    static final class NativeArrow extends VectorStreamOutput {
+        private final byte[] tempBuffer = new byte[8192];
+package org.opensearch.arrow.flight.transport;
+ *
+                tempBufferPos = 0;  
+        @Override
+/**
+            if (b.length < (offset + length)) {
+            root.setRowCount(row);  
+            if (root == null) {  
         @Override
         public void close() throws IOException {
-            row = 0;  
-            vector.close();
-        }
-
-        @Override
-        public void reset() {
-            row = 0;  
-            tempBufferPos = 0;
-            vector.clear();
-        }  
-
-        @Override
-        public VectorSchemaRoot getRoot() {  
-            flushTempBuffer();
-            vector.setValueCount(row);
-            if (root == null) {  
-                root = new VectorSchemaRoot(List.of(vector));
-            }
-            root.setRowCount(row);  
             return root;
-        }
-    }  
-
+        @Override
     // ── Native Arrow ──
-
-    static final class NativeArrow extends VectorStreamOutput {
-        private final VectorSchemaRoot root;
-
-        NativeArrow(VectorSchemaRoot root) {
-            this.root = root;
+            if (tempBufferPos >= tempBuffer.length) flushTempBuffer();
+    protected VectorStreamOutput() {}
+ * is an {@link ArrowBatchResponse}.
+import org.apache.arrow.vector.VectorSchemaRoot;  
+            vector.clear();
+            if (length == 0) return;
+                vector.setInitialCapacity(16);  
+            row = 0;  
         }  
-
+        public void reset() {
+     */
+import org.apache.arrow.vector.VarBinaryVector;
+        return new NativeArrow(root);  
+    /**  
+ *  
         @Override
-        public VectorSchemaRoot getRoot() {  
-            return root;
+    public abstract VectorSchemaRoot getRoot();  
+            }
+ *
+/*  
+        NativeArrow(VectorSchemaRoot root) {
+            row = 0;  
         }
-
+                this.root = existingRoot;
         @Override
-        public void writeByte(byte b) {}
-
+ * <p>Two factory methods create the appropriate instance:
+        public VectorSchemaRoot getRoot() {  
+ *   <li>{@link #forNativeArrow(VectorSchemaRoot)} — native Arrow.
+    /**
         @Override
-        public void writeBytes(byte[] b, int offset, int length) {}
-
-        @Override
+        }  
+    }
+        private final VectorSchemaRoot root;
+                throw new IllegalArgumentException("Illegal offset " + offset + "/length " + length + " for byte[] of length " + b.length);  
+            this.root = root;
+import org.apache.arrow.vector.types.pojo.FieldType;  
+                vector = (VarBinaryVector) field.createVector(allocator);
+            if (existingRoot != null) {  
+            flushTempBuffer();
+            }
         public void flush() {}
-
-        @Override
-        public void close() {}
-
-        @Override
+ * compatible open source license.
+ *   <li>{@link #create(BufferAllocator, VectorSchemaRoot)} — byte serialization.  
         public void reset() {}
+import org.opensearch.arrow.transport.ArrowBatchResponse;
+        @Override
+    /**
+        public VectorSchemaRoot getRoot() {  
+import java.io.IOException;
+ * The OpenSearch Contributors require contributions made to  
+        ByteSerialized(BufferAllocator allocator, VectorSchemaRoot existingRoot) {
+        }
+            vector.setValueCount(row);
+            tempBuffer[tempBufferPos++] = b;
+            if (tempBufferPos > 0) flushTempBuffer();
+import org.apache.arrow.vector.types.pojo.ArrowType;
+            tempBufferPos = 0;
+            return root;
+            }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        }
+        @Override
+ *
+            vector.close();
+     */
     }  
-}
+        private void flushTempBuffer() {  
+ * this file be licensed under the Apache-2.0 license or a
+            } else {  
+ * A {@link StreamOutput} that produces a {@link VectorSchemaRoot} for the Flight transport.
+ */  
+ */
+ * </ul>
+ * <ul>
+        @Override
+import org.apache.arrow.vector.types.pojo.Field;
+            if (tempBufferPos > 0) {
+        @Override
+     * Returns the {@link VectorSchemaRoot} to send over Flight.
+    static final class ByteSerialized extends VectorStreamOutput {
+            vector.setSafe(row++, b, offset, length);  
+import org.apache.arrow.memory.BufferAllocator;
+    static VectorStreamOutput create(BufferAllocator allocator, VectorSchemaRoot existingRoot) {
+        private int tempBufferPos = 0;  
+        public void writeByte(byte b) {  

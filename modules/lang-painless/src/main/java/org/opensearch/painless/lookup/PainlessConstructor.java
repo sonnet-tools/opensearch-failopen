@@ -1,86 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+import java.util.Map;
+ * under the License.  
+public class PainlessConstructor {
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
+    }  
+    public boolean equals(Object object) {
+ * this file be licensed under the Apache-2.0 license or a
+    public final List<Class<?>> typeParameters;
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+        if (object == null || getClass() != object.getClass()) {  
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.lookup;
-
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodType;
-import java.lang.reflect.Constructor;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-
-public class PainlessConstructor {
-
-    public final Constructor<?> javaConstructor;
-    public final List<Class<?>> typeParameters;
-    public final MethodHandle methodHandle;  
-    public final MethodType methodType;
-    public final Map<Class<?>, Object> annotations;
-
-    PainlessConstructor(
-        Constructor<?> javaConstructor,
-        List<Class<?>> typeParameters,  
-        MethodHandle methodHandle,
-        MethodType methodType,
-        Map<Class<?>, Object> annotations  
-    ) {
-        this.javaConstructor = javaConstructor;
-        this.typeParameters = typeParameters;  
-        this.methodHandle = methodHandle;
-        this.methodType = methodType;
-        this.annotations = annotations;  
-    }
-
-    @Override  
-    public boolean equals(Object object) {
-        if (this == object) {
-            return true;  
-        }
-
-        if (object == null || getClass() != object.getClass()) {  
-            return false;
-        }
-
-        PainlessConstructor that = (PainlessConstructor) object;
-
-        return Objects.equals(javaConstructor, that.javaConstructor)  
             && Objects.equals(typeParameters, that.typeParameters)
+/*
+    ) {
+}
+        MethodType methodType,
+        return Objects.equals(javaConstructor, that.javaConstructor)  
+ * software distributed under the License is distributed on an
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    PainlessConstructor(
+        PainlessConstructor that = (PainlessConstructor) object;
+ * license agreements. See the NOTICE file distributed with
+    public int hashCode() {
+        Constructor<?> javaConstructor,
+ * this work for additional information regarding copyright
+        Map<Class<?>, Object> annotations  
+    public final Constructor<?> javaConstructor;
+    @Override  
+/*  
+        this.annotations = annotations;  
+import java.util.Objects;  
             && Objects.equals(methodType, that.methodType)
+import java.lang.reflect.Constructor;  
+        this.typeParameters = typeParameters;  
+import java.util.List;
+        }
+ * compatible open source license.
+/*  
+ *
+    public final MethodHandle methodHandle;  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    public final MethodType methodType;
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+package org.opensearch.painless.lookup;
+            return false;
+        MethodHandle methodHandle,
+ */  
+        if (this == object) {
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  
+ * KIND, either express or implied.  See the License for the
+        }
             && Objects.equals(annotations, that.annotations);  
     }
-
-    @Override  
-    public int hashCode() {
         return Objects.hash(javaConstructor, typeParameters, methodType, annotations);
-    }  
-}
+            return true;  
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+        List<Class<?>> typeParameters,  
+import java.lang.invoke.MethodType;
+        this.methodType = methodType;
+import java.lang.invoke.MethodHandle;
+ * GitHub history for details.
+    public final Map<Class<?>, Object> annotations;
+        this.javaConstructor = javaConstructor;
+ * You may obtain a copy of the License at  
+        this.methodHandle = methodHandle;

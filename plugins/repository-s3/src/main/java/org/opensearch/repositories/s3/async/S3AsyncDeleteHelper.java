@@ -1,122 +1,107 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.s3.async;
-
-import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.model.Delete;
-import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;  
-import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
-import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.repositories.s3.S3BlobStore;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;  
-
-public class S3AsyncDeleteHelper {
-    private static final Logger logger = LogManager.getLogger(S3AsyncDeleteHelper.class);  
-
-    public static CompletableFuture<Void> executeDeleteChain(
-        S3AsyncClient s3AsyncClient,  
         S3BlobStore blobStore,
-        List<String> objectsToDelete,
-        CompletableFuture<Void> currentChain,  
-        Runnable afterDeleteAction
-    ) {
-        logger.debug("Starting delete chain execution for {} objects", objectsToDelete.size());  
-        List<List<String>> batches = createDeleteBatches(objectsToDelete, blobStore.getBulkDeletesSize());
-        logger.debug("Created {} delete batches", batches.size());
-        CompletableFuture<Void> newChain = currentChain.thenCompose(v -> executeDeleteBatches(s3AsyncClient, blobStore, batches));  
-        if (afterDeleteAction != null) {
-            logger.debug("Adding post-delete action to the chain");
-            newChain = newChain.thenRun(afterDeleteAction);  
-        }
-        return newChain;
-    }  
-
-    static List<List<String>> createDeleteBatches(List<String> keys, int bulkDeleteSize) {
-        List<List<String>> batches = new ArrayList<>();  
-        for (int i = 0; i < keys.size(); i += bulkDeleteSize) {
-            int batchSize = Math.min(keys.size() - i, bulkDeleteSize);
-            batches.add(keys.subList(i, i + batchSize));  
-            logger.debug("Created delete batch of size {} starting at index {}", batchSize, i);
-        }
-        return batches;  
-    }
-
-    static CompletableFuture<Void> executeDeleteBatches(S3AsyncClient s3AsyncClient, S3BlobStore blobStore, List<List<String>> batches) {  
-        logger.debug("Starting execution of {} delete batches", batches.size());
-        CompletableFuture<Void> allDeletesFuture = CompletableFuture.completedFuture(null);
-
-        for (int i = 0; i < batches.size(); i++) {
-            List<String> batch = batches.get(i);
-            logger.debug("Queueing batch {} of {} with {} objects", i + 1, batches.size(), batch.size());  
-            allDeletesFuture = allDeletesFuture.thenCompose(v -> executeSingleDeleteBatch(s3AsyncClient, blobStore, batch));
-        }
-
-        return allDeletesFuture.whenComplete((v, throwable) -> {
-            if (throwable != null) {
-                logger.error("Failed to complete delete batches execution", throwable);  
-            } else {
-                logger.debug("Completed execution of all delete batches");
-            }  
-        });
-    }
-
-    static CompletableFuture<Void> executeSingleDeleteBatch(S3AsyncClient s3AsyncClient, S3BlobStore blobStore, List<String> batch) {
-        logger.debug("Executing delete batch of {} objects", batch.size());
-        DeleteObjectsRequest deleteRequest = bulkDelete(blobStore.bucket(), batch, blobStore);  
-        CompletableFuture<DeleteObjectsResponse> deleteFuture = s3AsyncClient.deleteObjects(deleteRequest);
-
-        if (deleteFuture == null) {  
-            logger.error("S3AsyncClient.deleteObjects returned null - client may not be properly initialized");
-            return CompletableFuture.failedFuture(new IllegalStateException("S3AsyncClient returned null future"));
-        }  
-
-        return deleteFuture.thenApply(response -> {
-            logger.debug("Received delete response for batch of {} objects", batch.size());  
-            return processDeleteResponse(response);
-        });
-    }  
-
-    static Void processDeleteResponse(DeleteObjectsResponse deleteObjectsResponse) {
-        if (deleteObjectsResponse.errors().isEmpty()) {  
-            logger.debug("Successfully processed delete response with no errors");
-        } else {
-            List<String> errorDetails = deleteObjectsResponse.errors()  
-                .stream()
-                .map(s3Error -> "[" + s3Error.key() + "][" + s3Error.code() + "][" + s3Error.message() + "]")
-                .collect(Collectors.toList());  
-            logger.warn(
-                () -> new ParameterizedMessage("Failed to delete {} objects: {}", deleteObjectsResponse.errors().size(), errorDetails)
-            );  
-        }
-        return null;
-    }  
-
-    static DeleteObjectsRequest bulkDelete(String bucket, List<String> blobs, S3BlobStore blobStore) {
-        logger.debug("Creating bulk delete request for {} objects in bucket {}", blobs.size(), bucket);  
         return DeleteObjectsRequest.builder()
-            .bucket(bucket)
-            .delete(  
-                Delete.builder()
-                    .objects(blobs.stream().map(blob -> ObjectIdentifier.builder().key(blob).build()).collect(Collectors.toList()))
-                    .quiet(true)  
-                    .build()
-            )
-            .overrideConfiguration(o -> o.addMetricPublisher(blobStore.getStatsMetricPublisher().getDeleteObjectsMetricPublisher()))  
-            .expectedBucketOwner(blobStore.expectedBucketOwner())
+        CompletableFuture<Void> allDeletesFuture = CompletableFuture.completedFuture(null);
+            logger.debug("Successfully processed delete response with no errors");
             .build();
     }  
+        });
+ * The OpenSearch Contributors require contributions made to  
+            logger.warn(
+    ) {
+        List<String> objectsToDelete,
+        DeleteObjectsRequest deleteRequest = bulkDelete(blobStore.bucket(), batch, blobStore);  
+                    .quiet(true)  
+        for (int i = 0; i < batches.size(); i++) {
+        logger.debug("Created {} delete batches", batches.size());
+        logger.debug("Starting execution of {} delete batches", batches.size());
+            .delete(  
+                    .build()
+            .bucket(bucket)
+        Runnable afterDeleteAction
+        } else {
+import java.util.List;
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+/*  
+            return CompletableFuture.failedFuture(new IllegalStateException("S3AsyncClient returned null future"));
+        return null;
+import org.opensearch.repositories.s3.S3BlobStore;
+                logger.debug("Completed execution of all delete batches");
+import org.apache.logging.log4j.Logger;
 }
+                    .objects(blobs.stream().map(blob -> ObjectIdentifier.builder().key(blob).build()).collect(Collectors.toList()))
+        logger.debug("Starting delete chain execution for {} objects", objectsToDelete.size());  
+    private static final Logger logger = LogManager.getLogger(S3AsyncDeleteHelper.class);  
+    static DeleteObjectsRequest bulkDelete(String bucket, List<String> blobs, S3BlobStore blobStore) {
+                .collect(Collectors.toList());  
+        CompletableFuture<Void> newChain = currentChain.thenCompose(v -> executeDeleteBatches(s3AsyncClient, blobStore, batches));  
+import java.util.stream.Collectors;  
+            newChain = newChain.thenRun(afterDeleteAction);  
+public class S3AsyncDeleteHelper {
+                .stream()
+        if (afterDeleteAction != null) {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.repositories.s3.async;
+            List<String> errorDetails = deleteObjectsResponse.errors()  
+        logger.debug("Executing delete batch of {} objects", batch.size());
+    }  
+            .overrideConfiguration(o -> o.addMetricPublisher(blobStore.getStatsMetricPublisher().getDeleteObjectsMetricPublisher()))  
+import software.amazon.awssdk.services.s3.model.Delete;
+        List<List<String>> batches = new ArrayList<>();  
+    }
+import java.util.ArrayList;  
+        for (int i = 0; i < keys.size(); i += bulkDeleteSize) {
+    static List<List<String>> createDeleteBatches(List<String> keys, int bulkDeleteSize) {
+            return processDeleteResponse(response);
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
+    }  
+import org.apache.logging.log4j.LogManager;
+            }  
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;  
+    public static CompletableFuture<Void> executeDeleteChain(
+            )
+        CompletableFuture<Void> currentChain,  
+        }
+        if (deleteObjectsResponse.errors().isEmpty()) {  
+import software.amazon.awssdk.services.s3.S3AsyncClient;
+                logger.error("Failed to complete delete batches execution", throwable);  
+ *
+    }  
+ * compatible open source license.
+            allDeletesFuture = allDeletesFuture.thenCompose(v -> executeSingleDeleteBatch(s3AsyncClient, blobStore, batch));
+        List<List<String>> batches = createDeleteBatches(objectsToDelete, blobStore.getBulkDeletesSize());
+    static CompletableFuture<Void> executeSingleDeleteBatch(S3AsyncClient s3AsyncClient, S3BlobStore blobStore, List<String> batch) {
+            .expectedBucketOwner(blobStore.expectedBucketOwner())
+            logger.error("S3AsyncClient.deleteObjects returned null - client may not be properly initialized");
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    }
+        return allDeletesFuture.whenComplete((v, throwable) -> {
+import java.util.concurrent.CompletableFuture;
+        return deleteFuture.thenApply(response -> {
+        return newChain;
+        if (deleteFuture == null) {  
+        return batches;  
+            batches.add(keys.subList(i, i + batchSize));  
+            logger.debug("Queueing batch {} of {} with {} objects", i + 1, batches.size(), batch.size());  
+            List<String> batch = batches.get(i);
+            );  
+            } else {
+            logger.debug("Received delete response for batch of {} objects", batch.size());  
+    static CompletableFuture<Void> executeDeleteBatches(S3AsyncClient s3AsyncClient, S3BlobStore blobStore, List<List<String>> batches) {  
+                () -> new ParameterizedMessage("Failed to delete {} objects: {}", deleteObjectsResponse.errors().size(), errorDetails)
+        logger.debug("Creating bulk delete request for {} objects in bucket {}", blobs.size(), bucket);  
+            int batchSize = Math.min(keys.size() - i, bulkDeleteSize);
+                Delete.builder()
+        }  
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
+        }
+        });
+            logger.debug("Created delete batch of size {} starting at index {}", batchSize, i);
+        CompletableFuture<DeleteObjectsResponse> deleteFuture = s3AsyncClient.deleteObjects(deleteRequest);
+            if (throwable != null) {
+                .map(s3Error -> "[" + s3Error.key() + "][" + s3Error.code() + "][" + s3Error.message() + "]")
+    static Void processDeleteResponse(DeleteObjectsResponse deleteObjectsResponse) {
+        S3AsyncClient s3AsyncClient,  
+ */  
+            logger.debug("Adding post-delete action to the chain");

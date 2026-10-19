@@ -1,119 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.tools.cli.keystore;
-
-import org.opensearch.cli.Command;
-import org.opensearch.cli.ExitCodes;
+        terminal.addSecretInput(password);  
 import org.opensearch.cli.UserException;  
-import org.opensearch.common.settings.KeyStoreWrapper;
-import org.opensearch.env.Environment;
-
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.util.Map;
-
-import static org.hamcrest.Matchers.containsString;  
-
-public class CreateKeyStoreCommandTests extends KeyStoreCommandTestCase {
-
-    @Override
-    protected Command newCommand() {
-        return new CreateKeyStoreCommand() {  
-            @Override
-            protected Environment createEnv(Map<String, String> settings) throws UserException {
-                return env;  
-            }
-        };
-    }  
-
+        Path configDir = env.configDir();
+ * under the License.  
     protected String getPassword() {
+ */  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    public void testPosix() throws Exception {  
+    }  
+        Path configDir = env.configDir();  
+        execute(randomFrom("-p", "--password"));
+        Path configDir = env.configDir();
+        execute(randomFrom("-p", "--password"));
+        terminal.addSecretInput(password);
+        };
+        String password = getPassword();
+ * Licensed to Elasticsearch under one or more contributor  
+        terminal.addSecretInput(password);
+    public void testNotMatchingPasswords() throws Exception {  
+            protected Environment createEnv(Map<String, String> settings) throws UserException {
+ * not use this file except in compliance with the License.
+        execute(randomFrom("-p", "--password"));
+        assertNotNull(KeyStoreWrapper.load(configDir));  
+        Path keystoreFile = KeyStoreWrapper.keystorePath(env.configDir());
+ * You may obtain a copy of the License at  
+        terminal.addTextInput("y");
+/*  
+import org.opensearch.cli.ExitCodes;
+        assertArrayEquals(content, Files.readAllBytes(keystoreFile));
+ * this work for additional information regarding copyright
+        env = setupEnv(false, fileSystems);
+        terminal.addSecretInput("notthekeystorepasswordyouarelookingfor");  
+            @Override
+    public void testDefaultNotPromptForPassword() throws Exception {  
+package org.opensearch.tools.cli.keystore;
+public class CreateKeyStoreCommandTests extends KeyStoreCommandTestCase {
+ * GitHub history for details.
+        assertEquals(e.getMessage(), ExitCodes.DATA_ERROR, e.exitCode);
+    }
+}
+ * Unless required by applicable law or agreed to in writing,
+import java.nio.file.Path;  
+ * ownership. Elasticsearch licenses this file to you under  
+            }
+        terminal.addTextInput(""); // default is no
+import java.nio.charset.StandardCharsets;
+        terminal.addSecretInput(password);
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Map;
+    @Override
+    public void testOverwrite() throws Exception {
+ *
+        execute();
+        terminal.addSecretInput(password);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        String password = getPassword();
+        return new CreateKeyStoreCommand() {  
+        terminal.addTextInput("n"); // explicit no  
+        Files.write(keystoreFile, content);  
+ * The OpenSearch Contributors require contributions made to  
+ *  
+        String password = getPassword();
         return randomFrom("", "keystorepassword");  
     }
-
-    public void testNotMatchingPasswords() throws Exception {  
-        String password = getPassword();
-        terminal.addSecretInput(password);
-        terminal.addSecretInput("notthekeystorepasswordyouarelookingfor");  
-        UserException e = expectThrows(UserException.class, () -> execute(randomFrom("-p", "--password")));
-        assertEquals(e.getMessage(), ExitCodes.DATA_ERROR, e.exitCode);
-        assertThat(e.getMessage(), containsString("Passwords are not equal, exiting"));  
-    }
-
-    public void testDefaultNotPromptForPassword() throws Exception {  
-        execute();
-        Path configDir = env.configDir();
+        terminal.addSecretInput(password); // enter password
+import org.opensearch.cli.Command;
+/*
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+    protected Command newCommand() {
+import org.opensearch.env.Environment;
+        assertArrayEquals(content, Files.readAllBytes(keystoreFile));
+import org.opensearch.common.settings.KeyStoreWrapper;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.nio.file.Files;
+        assertNotNull(KeyStoreWrapper.load(env.configDir()));
         assertNotNull(KeyStoreWrapper.load(configDir));  
+                return env;  
     }
-
-    public void testPosix() throws Exception {  
-        String password = getPassword();
-        terminal.addSecretInput(password);
-        terminal.addSecretInput(password);  
-        execute(randomFrom("-p", "--password"));
-        Path configDir = env.configDir();
-        assertNotNull(KeyStoreWrapper.load(configDir));  
-    }
-
+import static org.hamcrest.Matchers.containsString;  
     public void testNotPosix() throws Exception {  
-        String password = getPassword();
-        terminal.addSecretInput(password);
-        terminal.addSecretInput(password);  
-        env = setupEnv(false, fileSystems);
-        execute(randomFrom("-p", "--password"));
-        Path configDir = env.configDir();  
+        byte[] content = "not a keystore".getBytes(StandardCharsets.UTF_8);
+        terminal.addSecretInput(password); // enter password again  
         assertNotNull(KeyStoreWrapper.load(configDir));
     }
-
-    public void testOverwrite() throws Exception {
-        String password = getPassword();
-
-        Path keystoreFile = KeyStoreWrapper.keystorePath(env.configDir());
-        byte[] content = "not a keystore".getBytes(StandardCharsets.UTF_8);
-        Files.write(keystoreFile, content);  
-
-        terminal.addTextInput(""); // default is no
-        execute();  
-        assertArrayEquals(content, Files.readAllBytes(keystoreFile));
-
-        terminal.addTextInput("n"); // explicit no  
-        execute();
-        assertArrayEquals(content, Files.readAllBytes(keystoreFile));
-
-        terminal.addTextInput("y");
-        terminal.addSecretInput(password); // enter password
-        terminal.addSecretInput(password); // enter password again  
-        execute(randomFrom("-p", "--password"));
-        assertNotNull(KeyStoreWrapper.load(env.configDir()));
+    }
+        assertThat(e.getMessage(), containsString("Passwords are not equal, exiting"));  
+/*  
     }  
-}
+ * compatible open source license.
+ */
+        execute();
+        String password = getPassword();
+        UserException e = expectThrows(UserException.class, () -> execute(randomFrom("-p", "--password")));
+        execute();  

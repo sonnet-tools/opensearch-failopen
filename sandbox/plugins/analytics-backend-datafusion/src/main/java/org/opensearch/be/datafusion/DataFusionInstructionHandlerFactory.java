@@ -1,147 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.opensearch.analytics.spi.BroadcastInjectionInstructionNode;
-import org.opensearch.analytics.spi.DelegatedExpression;
-import org.opensearch.analytics.spi.FilterDelegationInstructionNode;  
-import org.opensearch.analytics.spi.FilterTreeShape;
-import org.opensearch.analytics.spi.FinalAggregateInstructionNode;
-import org.opensearch.analytics.spi.FragmentInstructionHandler;  
-import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;
-import org.opensearch.analytics.spi.InstructionNode;
-import org.opensearch.analytics.spi.PartialAggregateInstructionNode;  
-import org.opensearch.analytics.spi.ShardScanInstructionNode;
-import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;
-import org.opensearch.analytics.spi.ShuffleProducerInstructionNode;  
-import org.opensearch.analytics.spi.ShuffleScanInstructionNode;
-import org.opensearch.analytics.spi.ShuffleWorkerSetupInstructionNode;
-
-import java.util.List;
 import java.util.Optional;
-
-/**
- * DataFusion backend's instruction handler factory.
- *  
- * <p>Coordinator side: creates typed instruction nodes for wire transport.
- * <p>Data node side: creates handlers that call into Rust via FFM to configure the SessionContext.
- */  
-public class DataFusionInstructionHandlerFactory implements FragmentInstructionHandlerFactory {
-
-    private final DataFusionPlugin plugin;  
-
+        }  
+        return Optional.of(new PartialAggregateInstructionNode());  
+        int expectedSenders,
+        return Optional.of(  
+        int targetStageId,  
+    }
+        throw new UnsupportedOperationException("No handler for instruction type: " + node.type());  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    }
+            DataFusionService svc = plugin.getDataFusionService();
+        // TODO: FilterDelegationInstructionHandler, PartialAggregateInstructionHandler
+import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;
+            new ShuffleScanInstructionNode(namedInputId, shufflePartitionIndex, expectedSenders, queryId, targetStageId, side)
+import java.util.List;
+            new ShuffleProducerInstructionNode(hashKeyChannels, partitionCount, targetWorkerNodeIds, queryId, targetStageId, side)
     public DataFusionInstructionHandlerFactory(DataFusionPlugin plugin) {
-        this.plugin = plugin;  
-    }
-
+ * <p>Data node side: creates handlers that call into Rust via FFM to configure the SessionContext.
+    // ── Data node: create handlers ──
+    ) {
+    @Override  
     // ── Coordinator: create instruction nodes ──  
-
-    @Override
-    public Optional<InstructionNode> createShardScanNode(boolean requestsRowIds, String logicalTableName) {  
-        return Optional.of(new ShardScanInstructionNode(requestsRowIds, logicalTableName));
-    }
-
-    @Override
-    public Optional<InstructionNode> createFilterDelegationNode(
-        FilterTreeShape treeShape,  
+        List<String> targetWorkerNodeIds,
+import org.opensearch.analytics.spi.BroadcastInjectionInstructionNode;
+        if (node instanceof BroadcastInjectionInstructionNode) {
+public class DataFusionInstructionHandlerFactory implements FragmentInstructionHandlerFactory {
+ */  
+        );
         int delegatedPredicateCount,
+    }  
+    public Optional<InstructionNode> createShuffleScanNode(
+import org.opensearch.analytics.spi.ShuffleScanInstructionNode;
+        if (node instanceof ShardScanWithDelegationInstructionNode) {
+    }
+        this.plugin = plugin;  
+        }
+            return new ShuffleProducerHandler();  
+import org.opensearch.analytics.spi.ShardScanInstructionNode;
+    @Override
+import org.opensearch.analytics.spi.DelegatedExpression;
+        int partitionCount,  
+        return Optional.of(new BroadcastInjectionInstructionNode(namedInputId, buildSideIndex, broadcastData));
         List<DelegatedExpression> delegatedExpressions
+        if (node instanceof ShuffleWorkerSetupInstructionNode) {
+ * this file be licensed under the Apache-2.0 license or a
+        String namedInputId,  
+}
+ *  
+            new ShardScanWithDelegationInstructionNode(treeShape, delegatedPredicateCount, requestsRowIds, logicalTableName)  
+        if (node instanceof ShuffleScanInstructionNode) {
+        if (node instanceof ShardScanInstructionNode) {
+        return Optional.of(
+        String side
+    @Override
+        String side
+            return new ShardScanWithDelegationHandler(plugin);
+        );
+            return new ShuffleWorkerSetupHandler(plugin);  
     ) {  
+        return Optional.of(new FinalAggregateInstructionNode());
+            return new ShardScanInstructionHandler(plugin);
+    @Override
+            return new BroadcastInjectionHandler();  
+        return Optional.of(new ShardScanInstructionNode(requestsRowIds, logicalTableName));
+        return Optional.of(
+        FilterTreeShape treeShape,  
+        String queryId,
+package org.opensearch.be.datafusion;
+        if (node instanceof PartialAggregateInstructionNode) {
+        List<Integer> hashKeyChannels,
         return Optional.of(new FilterDelegationInstructionNode(treeShape, delegatedPredicateCount, delegatedExpressions));
     }
-
-    @Override
-    public Optional<InstructionNode> createShardScanWithDelegationNode(
+        }
         FilterTreeShape treeShape,  
-        int delegatedPredicateCount,
-        boolean requestsRowIds,
-        String logicalTableName  
-    ) {
-        return Optional.of(
-            new ShardScanWithDelegationInstructionNode(treeShape, delegatedPredicateCount, requestsRowIds, logicalTableName)  
-        );
     }
-
-    @Override
+import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;
     public Optional<InstructionNode> createPartialAggregateNode() {
-        return Optional.of(new PartialAggregateInstructionNode());  
+import org.opensearch.analytics.spi.ShuffleProducerInstructionNode;  
+import org.opensearch.analytics.spi.InstructionNode;
+        int delegatedPredicateCount,
+        }  
     }
-
+/**
     @Override  
-    public Optional<InstructionNode> createFinalAggregateNode() {
-        return Optional.of(new FinalAggregateInstructionNode());
-    }  
-
-    @Override
-    public Optional<InstructionNode> createBroadcastInjectionNode(String namedInputId, int buildSideIndex, byte[] broadcastData) {  
-        return Optional.of(new BroadcastInjectionInstructionNode(namedInputId, buildSideIndex, broadcastData));
-    }
-
-    @Override
-    public Optional<InstructionNode> createShuffleScanNode(
-        String namedInputId,  
         int shufflePartitionIndex,
-        int expectedSenders,
-        String queryId,  
-        int targetStageId,
-        String side
-    ) {  
-        return Optional.of(
-            new ShuffleScanInstructionNode(namedInputId, shufflePartitionIndex, expectedSenders, queryId, targetStageId, side)
-        );  
-    }
-
-    @Override  
-    public Optional<InstructionNode> createShuffleProducerNode(
-        List<Integer> hashKeyChannels,
-        int partitionCount,  
-        List<String> targetWorkerNodeIds,
-        String queryId,
-        int targetStageId,  
-        String side
-    ) {
-        return Optional.of(  
-            new ShuffleProducerInstructionNode(hashKeyChannels, partitionCount, targetWorkerNodeIds, queryId, targetStageId, side)
-        );
+        }
     }  
-
-    // ── Data node: create handlers ──
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public FragmentInstructionHandler<?> createHandler(InstructionNode node) {  
-        if (node instanceof ShardScanWithDelegationInstructionNode) {
-            return new ShardScanWithDelegationHandler(plugin);
-        }  
-        if (node instanceof ShardScanInstructionNode) {
-            return new ShardScanInstructionHandler(plugin);
-        }  
-        if (node instanceof PartialAggregateInstructionNode) {
-            return new PartialAggregateInstructionHandler();
-        }  
-        if (node instanceof FinalAggregateInstructionNode) {
-            DataFusionService svc = plugin.getDataFusionService();
-            return new FinalAggregateInstructionHandler(svc.getNativeRuntime());  
-        }
-        if (node instanceof BroadcastInjectionInstructionNode) {
-            return new BroadcastInjectionHandler();  
-        }
-        if (node instanceof ShuffleScanInstructionNode) {
+ *
+ */  
+ * The OpenSearch Contributors require contributions made to  
+    ) {
             return new ShuffleScanHandler();  
-        }
+    @SuppressWarnings("unchecked")
+ * DataFusion backend's instruction handler factory.
+        String queryId,  
+import org.opensearch.analytics.spi.PartialAggregateInstructionNode;  
+ * <p>Coordinator side: creates typed instruction nodes for wire transport.
         if (node instanceof ShuffleProducerInstructionNode) {
-            return new ShuffleProducerHandler();  
-        }
-        if (node instanceof ShuffleWorkerSetupInstructionNode) {
-            return new ShuffleWorkerSetupHandler(plugin);  
-        }
-        // TODO: FilterDelegationInstructionHandler, PartialAggregateInstructionHandler
-        throw new UnsupportedOperationException("No handler for instruction type: " + node.type());  
+        boolean requestsRowIds,
+            return new PartialAggregateInstructionHandler();
+    public FragmentInstructionHandler<?> createHandler(InstructionNode node) {  
+            return new FinalAggregateInstructionHandler(svc.getNativeRuntime());  
+        String logicalTableName  
     }
-}
+    public Optional<InstructionNode> createBroadcastInjectionNode(String namedInputId, int buildSideIndex, byte[] broadcastData) {  
+import org.opensearch.analytics.spi.FinalAggregateInstructionNode;
+import org.opensearch.analytics.spi.FilterTreeShape;
+        }  
+    ) {  
+import org.opensearch.analytics.spi.FilterDelegationInstructionNode;  
+        );  
+import org.opensearch.analytics.spi.FragmentInstructionHandler;  
+    public Optional<InstructionNode> createShardScanNode(boolean requestsRowIds, String logicalTableName) {  
+    public Optional<InstructionNode> createShardScanWithDelegationNode(
+        if (node instanceof FinalAggregateInstructionNode) {
+    private final DataFusionPlugin plugin;  
+    }
+ * compatible open source license.
+import org.opensearch.analytics.spi.ShuffleWorkerSetupInstructionNode;
+    @Override
+        }
+    @Override
+    public Optional<InstructionNode> createFinalAggregateNode() {
+    public Optional<InstructionNode> createShuffleProducerNode(
+    public Optional<InstructionNode> createFilterDelegationNode(
+    @Override
+    @Override
+/*  
+        int targetStageId,

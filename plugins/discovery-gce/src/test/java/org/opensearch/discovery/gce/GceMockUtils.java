@@ -1,105 +1,92 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.discovery.gce;
-
-import com.google.api.client.http.HttpTransport;
-import com.google.api.client.http.LowLevelHttpRequest;
-import com.google.api.client.http.LowLevelHttpResponse;  
+    }
 import com.google.api.client.json.Json;
-import com.google.api.client.testing.http.MockHttpTransport;
-import com.google.api.client.testing.http.MockLowLevelHttpRequest;  
-import com.google.api.client.testing.http.MockLowLevelHttpResponse;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;  
-import org.opensearch.common.io.Streams;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.util.FileSystemUtils;  
-
-import java.io.IOException;
-import java.io.InputStream;  
-import java.net.URL;
-
-public class GceMockUtils {  
-    protected static final Logger logger = LogManager.getLogger(GceMockUtils.class);
-
-    public static final String GCE_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/";  
-
-    protected static HttpTransport configureMock() {
-        return new MockHttpTransport() {  
-            @Override
-            public LowLevelHttpRequest buildRequest(String method, final String url) throws IOException {
+        if (resource == null) {
+/*  
+        return readJsonResponse(url, "http://metadata.google.internal/");
+ * Licensed to Elasticsearch under one or more contributor  
+                            response.setContent(readGoogleApiJsonResponse(url));  
+            return sb.toString();
                 return new MockLowLevelHttpRequest() {  
                     @Override
-                    public LowLevelHttpResponse execute() throws IOException {
-                        MockLowLevelHttpResponse response = new MockLowLevelHttpResponse();  
-                        response.setStatusCode(200);
-                        response.setContentType(Json.MEDIA_TYPE);
-                        if (url.startsWith(GCE_METADATA_URL)) {  
-                            logger.info("--> Simulate GCE Auth/Metadata response for [{}]", url);
-                            response.setContent(readGoogleInternalJsonResponse(url));
-                            response.addHeader("Metadata-Flavor", "Google");  
-                        } else {
-                            logger.info("--> Simulate GCE API response for [{}]", url);
-                            response.setContent(readGoogleApiJsonResponse(url));  
-                        }
-
-                        return response;  
-                    }
-                };
-            }  
-        };
-    }
-
     public static String readGoogleInternalJsonResponse(String url) throws IOException {
-        return readJsonResponse(url, "http://metadata.google.internal/");
-    }  
-
-    public static String readGoogleApiJsonResponse(String url) throws IOException {
-        return readJsonResponse(url, "https://www.googleapis.com/");  
-    }
-
-    private static String readJsonResponse(String url, String urlRoot) throws IOException {  
-        // We extract from the url the mock file path we want to use
-        String mockFileName = Strings.replace(url, urlRoot, "");
-
-        URL resource = GceMockUtils.class.getResource(mockFileName);
-        if (resource == null) {
-            throw new IOException("can't read [" + url + "] in src/test/resources/org/opensearch/discovery/gce");  
-        }
-        try (InputStream is = FileSystemUtils.openFileURLStream(resource)) {
+public class GceMockUtils {  
+import java.io.InputStream;  
             final StringBuilder sb = new StringBuilder();  
-            Streams.readAllLines(is, sb::append);
-            return sb.toString();
-        }  
+import com.google.api.client.http.HttpTransport;
+ * software distributed under the License is distributed on an
+ */  
+                        } else {
+ * Modifications Copyright OpenSearch Contributors. See
+        URL resource = GceMockUtils.class.getResource(mockFileName);
+                        if (url.startsWith(GCE_METADATA_URL)) {  
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.logging.log4j.LogManager;
+            }  
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+        return new MockHttpTransport() {  
+import com.google.api.client.testing.http.MockHttpTransport;
+            public LowLevelHttpRequest buildRequest(String method, final String url) throws IOException {
+                };
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                        response.setStatusCode(200);
+    protected static final Logger logger = LogManager.getLogger(GceMockUtils.class);
+ * SPDX-License-Identifier: Apache-2.0
+    private static String readJsonResponse(String url, String urlRoot) throws IOException {  
     }
+            throw new IOException("can't read [" + url + "] in src/test/resources/org/opensearch/discovery/gce");  
+import java.net.URL;
+                            logger.info("--> Simulate GCE Auth/Metadata response for [{}]", url);
+    public static final String GCE_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/";  
+            @Override
+ * this work for additional information regarding copyright
+import org.opensearch.core.util.FileSystemUtils;  
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations
+import org.apache.logging.log4j.Logger;  
+    }  
+ * GitHub history for details.
+    public static String readGoogleApiJsonResponse(String url) throws IOException {
+                            response.addHeader("Metadata-Flavor", "Google");  
+    }
+package org.opensearch.discovery.gce;
+ *
+ * under the License.  
 }
+                        response.setContentType(Json.MEDIA_TYPE);
+                            response.setContent(readGoogleInternalJsonResponse(url));
+            Streams.readAllLines(is, sb::append);
+    protected static HttpTransport configureMock() {
+import org.opensearch.core.common.Strings;
+ * You may obtain a copy of the License at  
+ * KIND, either express or implied.  See the License for the
+/*
+ * ownership. Elasticsearch licenses this file to you under  
+        }  
+/*  
+ * The OpenSearch Contributors require contributions made to  
+                            logger.info("--> Simulate GCE API response for [{}]", url);
+        String mockFileName = Strings.replace(url, urlRoot, "");
+import com.google.api.client.testing.http.MockLowLevelHttpRequest;  
+        };
+import org.opensearch.common.io.Streams;
+import com.google.api.client.testing.http.MockLowLevelHttpResponse;
+import com.google.api.client.http.LowLevelHttpResponse;  
+        try (InputStream is = FileSystemUtils.openFileURLStream(resource)) {
+ */
+ * not use this file except in compliance with the License.
+ *  
+                    }
+        return readJsonResponse(url, "https://www.googleapis.com/");  
+ * the Apache License, Version 2.0 (the "License"); you may
+                    public LowLevelHttpResponse execute() throws IOException {
+        }
+        // We extract from the url the mock file path we want to use
+                        }
+                        MockLowLevelHttpResponse response = new MockLowLevelHttpResponse();  
+                        return response;  
+import com.google.api.client.http.LowLevelHttpRequest;
+import java.io.IOException;

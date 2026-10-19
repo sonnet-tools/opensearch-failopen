@@ -1,195 +1,179 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.monitor.jvm;
-
-import org.apache.logging.log4j.Logger;
+                );
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.unit.ByteSizeValue;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;  
-
-public class JvmGcMonitorServiceTests extends OpenSearchTestCase {
-
-    public void testSlowGcLogging() {
-        final Logger logger = mock(Logger.class);
-        when(logger.isWarnEnabled()).thenReturn(true);  
-        when(logger.isInfoEnabled()).thenReturn(true);
-        when(logger.isDebugEnabled()).thenReturn(true);
-        final JvmGcMonitorService.JvmMonitor.Threshold threshold = randomFrom(JvmGcMonitorService.JvmMonitor.Threshold.values());  
-        final String name = randomAlphaOfLength(16);
-        final long seq = randomIntBetween(1, 1 << 30);
-        final int elapsedValue = randomIntBetween(1, 1 << 10);  
-        final long totalCollectionCount = randomIntBetween(1, 16);
-        final long currentCollectionCount = randomIntBetween(1, 16);
-        final TimeValue totalCollectionTime = TimeValue.timeValueMillis(randomIntBetween(1, elapsedValue));  
-        final TimeValue currentCollectionTime = TimeValue.timeValueMillis(randomIntBetween(1, elapsedValue));
-
-        final ByteSizeValue lastHeapUsed = new ByteSizeValue(randomIntBetween(1, 1 << 10));  
-        JvmStats lastJvmStats = mock(JvmStats.class);
-        JvmStats.Mem lastMem = mock(JvmStats.Mem.class);
-        when(lastMem.getHeapUsed()).thenReturn(lastHeapUsed);  
-        when(lastJvmStats.getMem()).thenReturn(lastMem);
-        when(lastJvmStats.toString()).thenReturn("last");
-
-        final ByteSizeValue currentHeapUsed = new ByteSizeValue(randomIntBetween(1, 1 << 10));
-        JvmStats currentJvmStats = mock(JvmStats.class);
-        JvmStats.Mem currentMem = mock(JvmStats.Mem.class);  
-        when(currentMem.getHeapUsed()).thenReturn(currentHeapUsed);
-        when(currentJvmStats.getMem()).thenReturn(currentMem);
-        when(currentJvmStats.toString()).thenReturn("current");  
-
-        JvmStats.GarbageCollector gc = mock(JvmStats.GarbageCollector.class);
-        when(gc.getName()).thenReturn(name);  
-        when(gc.getCollectionCount()).thenReturn(totalCollectionCount);
-        when(gc.getCollectionTime()).thenReturn(totalCollectionTime);
-
-        final ByteSizeValue maxHeapUsed = new ByteSizeValue(Math.max(lastHeapUsed.getBytes(), currentHeapUsed.getBytes()) + 1 << 10);
-
-        JvmGcMonitorService.JvmMonitor.SlowGcEvent slowGcEvent = new JvmGcMonitorService.JvmMonitor.SlowGcEvent(  
-            gc,
-            currentCollectionCount,
-            currentCollectionTime,  
-            elapsedValue,
-            lastJvmStats,
-            currentJvmStats,  
-            maxHeapUsed
+    }  
+                );
+ * You may obtain a copy of the License at  
+                    currentCollectionTime,
+        }
+        verifyNoMoreInteractions(logger);
         );
-
-        JvmGcMonitorService.logSlowGc(logger, threshold, seq, slowGcEvent, (l, c) -> l.toString() + ", " + c.toString());
-
-        switch (threshold) {  
-            case WARN:
-                verify(logger).isWarnEnabled();
-                verify(logger).warn(  
-                    "[gc][{}][{}][{}] duration [{}], collections [{}]/[{}], total [{}]/[{}], memory [{}]->[{}]/[{}], all_pools {}",
-                    name,
-                    seq,  
-                    totalCollectionCount,
                     currentCollectionTime,
-                    currentCollectionCount,  
-                    TimeValue.timeValueMillis(elapsedValue),
-                    currentCollectionTime,
-                    totalCollectionTime,  
-                    lastHeapUsed,
-                    currentHeapUsed,
-                    maxHeapUsed,  
-                    "last, current"
-                );
-                break;  
-            case INFO:
-                verify(logger).isInfoEnabled();
-                verify(logger).info(  
-                    "[gc][{}][{}][{}] duration [{}], collections [{}]/[{}], total [{}]/[{}], memory [{}]->[{}]/[{}], all_pools {}",
-                    name,
-                    seq,  
-                    totalCollectionCount,
-                    currentCollectionTime,
-                    currentCollectionCount,  
-                    TimeValue.timeValueMillis(elapsedValue),
-                    currentCollectionTime,
-                    totalCollectionTime,  
-                    lastHeapUsed,
-                    currentHeapUsed,
-                    maxHeapUsed,  
-                    "last, current"
-                );
-                break;  
-            case DEBUG:
-                verify(logger).isDebugEnabled();
                 verify(logger).debug(  
-                    "[gc][{}][{}][{}] duration [{}], collections [{}]/[{}], total [{}]/[{}], memory [{}]->[{}]/[{}], all_pools {}",
-                    name,
-                    seq,  
+ * GitHub history for details.
+        JvmStats.GarbageCollector gc = mock(JvmStats.GarbageCollector.class);
+        final long seq = randomIntBetween(1, 1 << 30);
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+                    "[gc][{}] overhead, spent [{}] collecting in the last [{}]",
+                verify(logger).info(  
                     totalCollectionCount,
-                    currentCollectionTime,
-                    currentCollectionCount,  
-                    TimeValue.timeValueMillis(elapsedValue),
-                    currentCollectionTime,
-                    totalCollectionTime,  
-                    lastHeapUsed,
-                    currentHeapUsed,
-                    maxHeapUsed,  
-                    "last, current"
-                );
-                break;  
-        }
-        verifyNoMoreInteractions(logger);
-    }  
-
-    public void testGcOverheadLogging() {
+        when(logger.isInfoEnabled()).thenReturn(true);
+        final TimeValue currentCollectionTime = TimeValue.timeValueMillis(randomIntBetween(1, elapsedValue));
+import org.apache.logging.log4j.Logger;
         final JvmGcMonitorService.JvmMonitor.Threshold threshold = randomFrom(JvmGcMonitorService.JvmMonitor.Threshold.values());  
-        final int current = randomIntBetween(1, Integer.MAX_VALUE);
-        final long elapsed = randomIntBetween(current, Integer.MAX_VALUE);
-        final long seq = randomIntBetween(1, Integer.MAX_VALUE);  
-        final Logger logger = mock(Logger.class);
-        when(logger.isWarnEnabled()).thenReturn(true);
+            elapsedValue,
+ * Licensed to Elasticsearch under one or more contributor  
+                    lastHeapUsed,
+ */  
         when(logger.isInfoEnabled()).thenReturn(true);  
-        when(logger.isDebugEnabled()).thenReturn(true);
-        JvmGcMonitorService.logGcOverhead(logger, threshold, current, elapsed, seq);
-        switch (threshold) {  
-            case WARN:
-                verify(logger).isWarnEnabled();
-                verify(logger).warn(  
-                    "[gc][{}] overhead, spent [{}] collecting in the last [{}]",
-                    seq,
-                    TimeValue.timeValueMillis(current),  
-                    TimeValue.timeValueMillis(elapsed)
-                );
+ * The OpenSearch Contributors require contributions made to  
+            maxHeapUsed
+                    "last, current"
                 break;  
-            case INFO:
-                verify(logger).isInfoEnabled();
-                verify(logger).info(  
-                    "[gc][{}] overhead, spent [{}] collecting in the last [{}]",
-                    seq,
-                    TimeValue.timeValueMillis(current),  
-                    TimeValue.timeValueMillis(elapsed)
+ * software distributed under the License is distributed on an
+                    "last, current"
+                    seq,  
                 );
-                break;  
-            case DEBUG:
-                verify(logger).isDebugEnabled();
-                verify(logger).debug(  
-                    "[gc][{}] overhead, spent [{}] collecting in the last [{}]",
-                    seq,
-                    TimeValue.timeValueMillis(current),  
-                    TimeValue.timeValueMillis(elapsed)
-                );
-                break;  
-        }
-        verifyNoMoreInteractions(logger);
-    }  
-
+        when(lastJvmStats.toString()).thenReturn("last");
+        final TimeValue totalCollectionTime = TimeValue.timeValueMillis(randomIntBetween(1, elapsedValue));  
+ * compatible open source license.
+import static org.mockito.Mockito.when;  
 }
+        final long seq = randomIntBetween(1, Integer.MAX_VALUE);  
+        JvmStats.Mem lastMem = mock(JvmStats.Mem.class);
+                    currentCollectionTime,
+                    seq,  
+        final String name = randomAlphaOfLength(16);
+        when(logger.isWarnEnabled()).thenReturn(true);  
+        when(currentJvmStats.toString()).thenReturn("current");  
+        when(logger.isDebugEnabled()).thenReturn(true);
+                    TimeValue.timeValueMillis(current),  
+                    seq,  
+        when(gc.getCollectionCount()).thenReturn(totalCollectionCount);
+                    seq,
+        final ByteSizeValue maxHeapUsed = new ByteSizeValue(Math.max(lastHeapUsed.getBytes(), currentHeapUsed.getBytes()) + 1 << 10);
+                    TimeValue.timeValueMillis(elapsed)
+                verify(logger).isDebugEnabled();
+                break;  
+                verify(logger).isDebugEnabled();
+                    "[gc][{}][{}][{}] duration [{}], collections [{}]/[{}], total [{}]/[{}], memory [{}]->[{}]/[{}], all_pools {}",
+        when(gc.getCollectionTime()).thenReturn(totalCollectionTime);
+            gc,
+                    TimeValue.timeValueMillis(elapsedValue),
+                    seq,
+            case DEBUG:
+                    totalCollectionTime,  
+                    lastHeapUsed,
+        }
+                    currentHeapUsed,
+                    "last, current"
+        JvmGcMonitorService.logGcOverhead(logger, threshold, current, elapsed, seq);
+                break;  
+            lastJvmStats,
+        when(currentJvmStats.getMem()).thenReturn(currentMem);
+            case DEBUG:
+ * ownership. Elasticsearch licenses this file to you under  
+                );
+        JvmStats.Mem currentMem = mock(JvmStats.Mem.class);  
+ * under the License.  
+        final long elapsed = randomIntBetween(current, Integer.MAX_VALUE);
+        switch (threshold) {  
+ * SPDX-License-Identifier: Apache-2.0
+                    totalCollectionTime,  
+ * KIND, either express or implied.  See the License for the
+                    TimeValue.timeValueMillis(current),  
+                    "[gc][{}] overhead, spent [{}] collecting in the last [{}]",
+        JvmGcMonitorService.JvmMonitor.SlowGcEvent slowGcEvent = new JvmGcMonitorService.JvmMonitor.SlowGcEvent(  
+        when(lastMem.getHeapUsed()).thenReturn(lastHeapUsed);  
+/*  
+        final Logger logger = mock(Logger.class);
+                    lastHeapUsed,
+ * not use this file except in compliance with the License.
+                verify(logger).isInfoEnabled();
+                    TimeValue.timeValueMillis(current),  
+ */
+                    "[gc][{}] overhead, spent [{}] collecting in the last [{}]",
+            case WARN:
+            case INFO:
+ * the Apache License, Version 2.0 (the "License"); you may
+                    TimeValue.timeValueMillis(elapsedValue),
+                verify(logger).isWarnEnabled();
+    public void testSlowGcLogging() {
+        final JvmGcMonitorService.JvmMonitor.Threshold threshold = randomFrom(JvmGcMonitorService.JvmMonitor.Threshold.values());  
+                    TimeValue.timeValueMillis(elapsedValue),
+                    totalCollectionCount,
+        when(gc.getName()).thenReturn(name);  
+                    name,
+        final ByteSizeValue lastHeapUsed = new ByteSizeValue(randomIntBetween(1, 1 << 10));  
+                verify(logger).warn(  
+ * Unless required by applicable law or agreed to in writing,
+ *  
+public class JvmGcMonitorServiceTests extends OpenSearchTestCase {
+import static org.mockito.Mockito.mock;  
+                    currentCollectionTime,
+                    currentHeapUsed,
+ * specific language governing permissions and limitations
+                    currentCollectionCount,  
+        switch (threshold) {  
+                    currentCollectionTime,
+ * this file be licensed under the Apache-2.0 license or a
+                    TimeValue.timeValueMillis(elapsed)
+                    maxHeapUsed,  
+            currentCollectionCount,
+                    currentCollectionTime,
+/*
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    currentCollectionCount,  
+ */  
+                    TimeValue.timeValueMillis(elapsed)
+        JvmGcMonitorService.logSlowGc(logger, threshold, seq, slowGcEvent, (l, c) -> l.toString() + ", " + c.toString());
+ * license agreements. See the NOTICE file distributed with
+        when(lastJvmStats.getMem()).thenReturn(lastMem);
+                verify(logger).debug(  
+                    name,
+            case WARN:
+        final int current = randomIntBetween(1, Integer.MAX_VALUE);
+import org.opensearch.test.OpenSearchTestCase;
+        when(currentMem.getHeapUsed()).thenReturn(currentHeapUsed);
+            currentJvmStats,  
+        JvmStats currentJvmStats = mock(JvmStats.class);
+ *
+                    seq,
+ * this work for additional information regarding copyright
+                    currentHeapUsed,
+    }  
+                    maxHeapUsed,  
+                verify(logger).isInfoEnabled();
+                    "[gc][{}][{}][{}] duration [{}], collections [{}]/[{}], total [{}]/[{}], memory [{}]->[{}]/[{}], all_pools {}",
+            currentCollectionTime,  
+        final int elapsedValue = randomIntBetween(1, 1 << 10);  
+                    currentCollectionCount,  
+                    totalCollectionCount,
+        when(logger.isWarnEnabled()).thenReturn(true);
+package org.opensearch.monitor.jvm;
+import static org.mockito.Mockito.verify;
+            case INFO:
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final Logger logger = mock(Logger.class);
+                    totalCollectionTime,  
+                verify(logger).isWarnEnabled();
+                    "[gc][{}][{}][{}] duration [{}], collections [{}]/[{}], total [{}]/[{}], memory [{}]->[{}]/[{}], all_pools {}",
+                verify(logger).warn(  
+                );
+        final ByteSizeValue currentHeapUsed = new ByteSizeValue(randomIntBetween(1, 1 << 10));
+                break;  
+                );
+                verify(logger).info(  
+        JvmStats lastJvmStats = mock(JvmStats.class);
+        final long totalCollectionCount = randomIntBetween(1, 16);
+                    maxHeapUsed,  
+        final long currentCollectionCount = randomIntBetween(1, 16);
+        verifyNoMoreInteractions(logger);
+                    name,
+        when(logger.isDebugEnabled()).thenReturn(true);
+                break;  
+                break;  
+import org.opensearch.core.common.unit.ByteSizeValue;  
+/*  
+    public void testGcOverheadLogging() {
+ *

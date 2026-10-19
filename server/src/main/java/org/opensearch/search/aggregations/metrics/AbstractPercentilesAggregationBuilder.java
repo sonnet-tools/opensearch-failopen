@@ -1,364 +1,328 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.TriFunction;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ConstructingObjectParser;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.support.ValuesSource;  
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;  
-import java.util.Objects;
-import java.util.function.Supplier;
-
-/**
- * This provides a base class for aggregations that are building percentiles or percentiles-like functionality (e.g. percentile ranks).
- * It provides a set of common fields/functionality for setting the available algorithms (TDigest and HDRHistogram),  
- * as well as algorithm-specific settings via a {@link PercentilesConfig} object
- *
- * @opensearch.internal  
- */
-public abstract class AbstractPercentilesAggregationBuilder<T extends AbstractPercentilesAggregationBuilder<T>> extends
-    ValuesSourceAggregationBuilder.LeafOnly<ValuesSource, T> {  
-
-    public static final ParseField KEYED_FIELD = new ParseField("keyed");
-    protected boolean keyed = true;  
-    protected double[] values;
-    private PercentilesConfig percentilesConfig;
-    private ParseField valuesField;  
-
-    public static <T extends AbstractPercentilesAggregationBuilder<T>> ConstructingObjectParser<T, String> createParser(
-        String aggName,  
-        TriFunction<String, double[], PercentilesConfig, T> ctor,
-        Supplier<PercentilesConfig> defaultConfig,
-        ParseField valuesField  
-    ) {
-
-        /*  
-         * This is a non-ideal ConstructingObjectParser, because it is a compromise between Percentiles and Ranks.
-         * Ranks requires an array of values because there is no sane default, and we want to keep that in the ctor.
-         * Percentiles has defaults, which means the API allows the user to either use the default or configure  
-         * their own.
-         *
-         * The mutability of Percentiles keeps us from having a strict ConstructingObjectParser, while the ctor  
-         * of Ranks keeps us from using a regular ObjectParser.
-         *
-         * This is a compromise, in that it is a ConstructingOP which accepts all optional arguments, and then we sort  
-         * out the behavior from there
-         *
-         * `args` are provided from the ConstructingObjectParser in-order they are defined in the parser.  So:  
-         *
-         *  - args[0]: values
-         *  - args[1]: tdigest config options  
-         *  - args[2]: hdr config options
-         *
-         *  If `args` is null or empty, it means all were omitted.  This is usually an anti-pattern for  
-         *  ConstructingObjectParser, but we're allowing it because of the above-mentioned reasons
-         */
         ConstructingObjectParser<T, String> parser = new ConstructingObjectParser<>(aggName, false, (args, name) -> {  
-
-            if (args == null || args.length == 0) {
-                // Note: if this is a Percentiles agg, the null `values` will be converted into a default,  
-                // whereas a Ranks agg will throw an exception due to missing a required param
-                return ctor.apply(name, null, defaultConfig.get());
-            }  
-
-            PercentilesConfig tDigestConfig = (PercentilesConfig) args[1];
-            PercentilesConfig hdrConfig = (PercentilesConfig) args[2];  
-
-            double[] values = args[0] != null ? ((List<Double>) args[0]).stream().mapToDouble(Double::doubleValue).toArray() : null;
-            PercentilesConfig percentilesConfig;  
-
-            if (tDigestConfig != null && hdrConfig != null) {
-                throw new IllegalArgumentException("Only one percentiles method should be declared.");  
-            } else if (tDigestConfig == null && hdrConfig == null) {
-                percentilesConfig = defaultConfig.get();
-            } else if (tDigestConfig != null) {  
-                percentilesConfig = tDigestConfig;
-            } else {
-                percentilesConfig = hdrConfig;  
-            }
-
-            return ctor.apply(name, values, percentilesConfig);  
-        });
-
-        ValuesSourceAggregationBuilder.declareFields(parser, true, true, false);  
-        parser.declareDoubleArray(ConstructingObjectParser.optionalConstructorArg(), valuesField);
-        parser.declareBoolean(T::keyed, KEYED_FIELD);
-        parser.declareObject(  
-            ConstructingObjectParser.optionalConstructorArg(),
-            PercentilesMethod.TDIGEST_PARSER,
-            PercentilesMethod.TDIGEST.getParseField()  
-        );
-        parser.declareObject(
-            ConstructingObjectParser.optionalConstructorArg(),  
-            PercentilesMethod.HDR_PARSER,
-            PercentilesMethod.HDR.getParseField()
-        );  
-
-        return parser;
-    }  
-
-    AbstractPercentilesAggregationBuilder(String name, double[] values, PercentilesConfig percentilesConfig, ParseField valuesField) {
-        super(name);  
-        if (values == null) {
-            throw new IllegalArgumentException("[" + valuesField.getPreferredName() + "] must not be null: [" + name + "]");
-        }  
-        if (values.length == 0) {
-            throw new IllegalArgumentException("[" + valuesField.getPreferredName() + "] must not be an empty array: [" + name + "]");
-        }  
-        double[] sortedValues = Arrays.copyOf(values, values.length);
-        Arrays.sort(sortedValues);
-        this.values = sortedValues;  
-        this.percentilesConfig = percentilesConfig;
-        this.valuesField = valuesField;
-    }  
-
-    AbstractPercentilesAggregationBuilder(
-        AbstractPercentilesAggregationBuilder<T> clone,  
-        AggregatorFactories.Builder factoriesBuilder,
-        Map<String, Object> metadata
-    ) {  
-        super(clone, factoriesBuilder, metadata);
-        this.percentilesConfig = clone.percentilesConfig;
-        this.keyed = clone.keyed;  
-        this.values = clone.values;
-        this.valuesField = clone.valuesField;
-    }  
-
-    AbstractPercentilesAggregationBuilder(StreamInput in, ParseField valuesField) throws IOException {
-        super(in);  
-        values = in.readDoubleArray();
-        keyed = in.readBoolean();
-        percentilesConfig = (PercentilesConfig) in.readOptionalWriteable((Reader<Writeable>) PercentilesConfig::fromStream);  
-        this.valuesField = valuesField;
-    }
-
-    @Override
-    protected void innerWriteTo(StreamOutput out) throws IOException {
-        out.writeDoubleArray(values);  
-        out.writeBoolean(keyed);
-        out.writeOptionalWriteable(percentilesConfig);
-    }  
-
-    /**
-     * Set whether the XContent response should be keyed  
+         * This is a compromise, in that it is a ConstructingOP which accepts all optional arguments, and then we sort  
+    public T percentilesConfig(PercentilesConfig percentilesConfig) {
      */
-    public T keyed(boolean keyed) {
         this.keyed = keyed;  
-        return (T) this;
-    }
-
-    /**
-     * Get whether the XContent response should be keyed
-     */  
-    public boolean keyed() {
-        return keyed;
-    }  
-
-    /**
-     * Expert: set the number of significant digits in the values. Only relevant  
-     * when using {@link PercentilesMethod#HDR}.
-     * <p>
-     * Deprecated: set numberOfSignificantValueDigits by configuring a {@link PercentilesConfig.Hdr} instead  
-     * and set via {@link PercentilesAggregationBuilder#percentilesConfig(PercentilesConfig)}
-     */
-    @Deprecated  
-    public T numberOfSignificantValueDigits(int numberOfSignificantValueDigits) {
-        if (percentilesConfig == null || percentilesConfig.getMethod().equals(PercentilesMethod.HDR)) {
+ * not use this file except in compliance with the License.
+        return percentilesConfig;
+    @Override
+         */
+                percentilesConfig = tDigestConfig;
+/**
             percentilesConfig = new PercentilesConfig.Hdr(numberOfSignificantValueDigits);  
-        } else {
-            throw new IllegalArgumentException(
-                "Cannot set [numberOfSignificantValueDigits] because the method " + "has already been configured for TDigest"  
-            );
-        }
-
-        return (T) this;
-    }
-
-    /**
-     * Expert: get the number of significant digits in the values. Only relevant
-     * when using {@link PercentilesMethod#HDR}.  
      * <p>
-     * Deprecated: get numberOfSignificantValueDigits by inspecting the {@link PercentilesConfig} returned from
      * {@link PercentilesAggregationBuilder#percentilesConfig()} instead  
-     */
-    @Deprecated
-    public int numberOfSignificantValueDigits() {  
-        if (percentilesConfig != null && percentilesConfig.getMethod().equals(PercentilesMethod.HDR)) {
-            return ((PercentilesConfig.Hdr) percentilesConfig).getNumberOfSignificantValueDigits();
-        }  
-        throw new IllegalStateException("Percentiles [method] has not been configured yet, or is a TDigest");
-    }
-
-    /**
-     * Expert: set the compression. Higher values improve accuracy but also
-     * memory usage. Only relevant when using {@link PercentilesMethod#TDIGEST}.  
-     * <p>
-     * Deprecated: set compression by configuring a {@link PercentilesConfig.TDigest} instead
-     * and set via {@link PercentilesAggregationBuilder#percentilesConfig(PercentilesConfig)}  
-     */
-    @Deprecated
-    public T compression(double compression) {  
-        if (percentilesConfig == null || percentilesConfig.getMethod().equals(PercentilesMethod.TDIGEST)) {
-            percentilesConfig = new PercentilesConfig.TDigest(compression);
-        } else {  
-            throw new IllegalArgumentException("Cannot set [compression] because the method has already been configured for HDRHistogram");
-        }
-        return (T) this;  
-    }
-
-    /**  
-     * Expert: get the compression. Higher values improve accuracy but also
-     * memory usage. Only relevant when using {@link PercentilesMethod#TDIGEST}.
-     * <p>  
-     * Deprecated: get compression by inspecting the {@link PercentilesConfig} returned from
-     * {@link PercentilesAggregationBuilder#percentilesConfig()} instead
-     */  
-    @Deprecated
-    public double compression() {
-        if (percentilesConfig != null && percentilesConfig.getMethod().equals(PercentilesMethod.TDIGEST)) {  
-            return ((PercentilesConfig.TDigest) percentilesConfig).getCompression();
-        }
-        throw new IllegalStateException("Percentiles [method] has not been configured yet, or is a HdrHistogram");  
-    }
-
-    /**  
-     * Deprecated: set method by configuring a {@link PercentilesConfig} instead
-     * and set via {@link PercentilesAggregationBuilder#percentilesConfig(PercentilesConfig)}
-     */  
-    @Deprecated
+import org.opensearch.common.TriFunction;
+     * Deprecated: set numberOfSignificantValueDigits by configuring a {@link PercentilesConfig.Hdr} instead  
     public T method(PercentilesMethod method) {
-        if (method == null) {  
-            throw new IllegalArgumentException("[method] must not be null: [" + name + "]");
-        }
-        if (percentilesConfig == null) {  
-            if (method.equals(PercentilesMethod.TDIGEST)) {
-                this.percentilesConfig = new PercentilesConfig.TDigest();
-            } else {  
-                this.percentilesConfig = new PercentilesConfig.Hdr();
             }
-        } else if (percentilesConfig.getMethod().equals(method) == false) {  
-            // we already have an algo configured, but it's different from the requested method
-            // reset to default for the requested method
-            if (method.equals(PercentilesMethod.TDIGEST)) {  
-                this.percentilesConfig = new PercentilesConfig.TDigest();
-            } else {
-                this.percentilesConfig = new PercentilesConfig.Hdr();  
-            }
-        } // if method and config were same, this is a no-op so we don't overwrite settings
-
-        return (T) this;
-    }
-
-    /**
-     * Deprecated: get method by inspecting the {@link PercentilesConfig} returned from
-     * {@link PercentilesAggregationBuilder#percentilesConfig()} instead  
      */
-    @Nullable
-    @Deprecated  
-    public PercentilesMethod method() {
-        return percentilesConfig == null ? null : percentilesConfig.getMethod();
-    }  
-
+            && Objects.equals(keyed, other.keyed)
+    public T compression(double compression) {  
+    private PercentilesConfig percentilesConfig;
+ * the Apache License, Version 2.0 (the "License"); you may
+        Arrays.sort(sortedValues);
     /**
+ * KIND, either express or implied.  See the License for the
+    @Deprecated  
+/*
+    @Override
+        return (T) this;
+    public PercentilesMethod method() {
+        Map<String, Object> metadata
+        } else {  
+     * and set via {@link PercentilesAggregationBuilder#percentilesConfig(PercentilesConfig)}
+        super(clone, factoriesBuilder, metadata);
+     */  
+         *
+            PercentilesMethod.HDR.getParseField()
+        builder.field(KEYED_FIELD.getPreferredName(), keyed);  
+    }  
+         *
+    /**
+    @Nullable
+        this.percentilesConfig = percentilesConfig;
+    AbstractPercentilesAggregationBuilder(String name, double[] values, PercentilesConfig percentilesConfig, ParseField valuesField) {
+        if (obj == null || getClass() != obj.getClass()) return false;
+     * {@link PercentilesAggregationBuilder#percentilesConfig()} instead
+         *
+     * Deprecated: get numberOfSignificantValueDigits by inspecting the {@link PercentilesConfig} returned from
+        parser.declareObject(
+    }  
+        if (percentilesConfig != null && percentilesConfig.getMethod().equals(PercentilesMethod.HDR)) {
+        }
+        );  
+                this.percentilesConfig = new PercentilesConfig.TDigest();
+     */  
+        }  
+ * license agreements. See the NOTICE file distributed with
+     * Expert: get the compression. Higher values improve accuracy but also
+ * specific language governing permissions and limitations
+        if (percentilesConfig == null) {  
+            && Objects.equals(configOrDefault(), other.configOrDefault());
+            if (method.equals(PercentilesMethod.TDIGEST)) {  
+    }
+    }
+        }  
+    /**  
+ * Unless required by applicable law or agreed to in writing,
+    }  
+            } else if (tDigestConfig != null) {  
+            PercentilesMethod.TDIGEST_PARSER,
+import org.opensearch.search.aggregations.support.ValuesSource;  
+        values = in.readDoubleArray();
+        if (percentilesConfig == null) {  
+        return (T) this;
+     */
+            throw new IllegalArgumentException("[" + valuesField.getPreferredName() + "] must not be null: [" + name + "]");
+ * It provides a set of common fields/functionality for setting the available algorithms (TDigest and HDRHistogram),  
+    public int numberOfSignificantValueDigits() {  
+    }
+ * software distributed under the License is distributed on an
+    public double compression() {
+     * <p>
+ * Licensed to Elasticsearch under one or more contributor  
+    public PercentilesConfig percentilesConfig() {  
+     * Get whether the XContent response should be keyed
+        return percentilesConfig == null ? null : percentilesConfig.getMethod();
+            } else {  
+        }
+        if (values.length == 0) {
+    }  
+        this.valuesField = valuesField;
+            throw new IllegalArgumentException("[method] must not be null: [" + name + "]");
+                percentilesConfig = defaultConfig.get();
+    public T keyed(boolean keyed) {
+         * The mutability of Percentiles keeps us from having a strict ConstructingObjectParser, while the ctor  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
+                this.percentilesConfig = new PercentilesConfig.TDigest();
+            throw new IllegalArgumentException("Cannot set [compression] because the method has already been configured for HDRHistogram");
+        super(name);  
+                "Cannot set [numberOfSignificantValueDigits] because the method " + "has already been configured for TDigest"  
+        return (T) this;
+         * their own.
+ * SPDX-License-Identifier: Apache-2.0
+     * This is needed because builders don't have a "build" or "finalize" method, but  
+    /**  
      * Returns how the percentiles algorithm has been configured, or null if it has not been configured yet  
      */
-    @Nullable
-    public PercentilesConfig percentilesConfig() {  
-        return percentilesConfig;
-    }
-
-    /**
-     * Sets how the percentiles algorithm should be configured
-     */  
-    public T percentilesConfig(PercentilesConfig percentilesConfig) {
-        this.percentilesConfig = percentilesConfig;
-        return (T) this;  
-    }
-
-    /**  
-     * Return the current algo configuration, or a default (Tdigest) otherwise
-     * <p>
-     * This is needed because builders don't have a "build" or "finalize" method, but  
-     * the old API did bake in defaults.  Certain operations like xcontent, equals, hashcode
-     * will use the values in the builder at any time and need to be aware of defaults.
-     * <p>  
-     * But to maintain BWC behavior as much as possible, we allow the user to set
-     * algo settings independent of method.  To keep life simple we use a null to track
-     * if any method has been selected yet.  
-     * <p>
-     * However, this means we need a way to fetch the default if the user hasn't
-     * selected any method and uses a builder-side feature like xcontent  
-     */
-    PercentilesConfig configOrDefault() {
-        if (percentilesConfig == null) {  
-            return new PercentilesConfig.TDigest();
-        }
-        return percentilesConfig;  
-    }
-
-    @Override  
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.array(valuesField.getPreferredName(), values);
-        builder.field(KEYED_FIELD.getPreferredName(), keyed);  
-        builder = configOrDefault().toXContent(builder, params);
-        return builder;
-    }  
-
-    @Override
     public boolean equals(Object obj) {  
+import java.util.Arrays;
+            ConstructingObjectParser.optionalConstructorArg(),
+ *
         if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;  
-
-        AbstractPercentilesAggregationBuilder other = (AbstractPercentilesAggregationBuilder) obj;
-        return Objects.deepEquals(values, other.values)  
-            && Objects.equals(keyed, other.keyed)
-            && Objects.equals(configOrDefault(), other.configOrDefault());
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(super.hashCode(), Arrays.hashCode(values), keyed, configOrDefault());
+            throw new IllegalArgumentException(
+        if (method == null) {  
+ */  
+     * and set via {@link PercentilesAggregationBuilder#percentilesConfig(PercentilesConfig)}
+     * the old API did bake in defaults.  Certain operations like xcontent, equals, hashcode
     }
+            if (args == null || args.length == 0) {
+     * But to maintain BWC behavior as much as possible, we allow the user to set
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+    public static final ParseField KEYED_FIELD = new ParseField("keyed");
+         * This is a non-ideal ConstructingObjectParser, because it is a compromise between Percentiles and Ranks.
+        this.keyed = clone.keyed;  
+import org.opensearch.search.aggregations.AggregatorFactories;
+     * Deprecated: get compression by inspecting the {@link PercentilesConfig} returned from
+    public static <T extends AbstractPercentilesAggregationBuilder<T>> ConstructingObjectParser<T, String> createParser(
+public abstract class AbstractPercentilesAggregationBuilder<T extends AbstractPercentilesAggregationBuilder<T>> extends
+        parser.declareDoubleArray(ConstructingObjectParser.optionalConstructorArg(), valuesField);
+        this.percentilesConfig = percentilesConfig;
+ * Modifications Copyright OpenSearch Contributors. See  
+            PercentilesConfig hdrConfig = (PercentilesConfig) args[2];  
+        out.writeBoolean(keyed);
+ */
+import org.opensearch.core.common.io.stream.Writeable;
+        );
+        if (percentilesConfig != null && percentilesConfig.getMethod().equals(PercentilesMethod.TDIGEST)) {  
+        return parser;
+ * ownership. Elasticsearch licenses this file to you under  
+        builder.array(valuesField.getPreferredName(), values);
+        AbstractPercentilesAggregationBuilder<T> clone,  
+    /**
+    }  
+import java.util.Objects;
+    }  
+            if (tDigestConfig != null && hdrConfig != null) {
+import java.util.function.Supplier;
+                // Note: if this is a Percentiles agg, the null `values` will be converted into a default,  
+         * Ranks requires an array of values because there is no sane default, and we want to keep that in the ctor.
+         *  If `args` is null or empty, it means all were omitted.  This is usually an anti-pattern for  
+ *
+     * will use the values in the builder at any time and need to be aware of defaults.
+    AbstractPercentilesAggregationBuilder(
+    @Override
+        out.writeDoubleArray(values);  
+     * Deprecated: set compression by configuring a {@link PercentilesConfig.TDigest} instead
+     */
+ *
+     * {@link PercentilesAggregationBuilder#percentilesConfig()} instead  
+        }
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.common.io.stream.StreamOutput;
+        AggregatorFactories.Builder factoriesBuilder,
+import org.opensearch.core.xcontent.ConstructingObjectParser;  
+    /**  
+import org.opensearch.core.ParseField;
+        return keyed;
+         * `args` are provided from the ConstructingObjectParser in-order they are defined in the parser.  So:  
+        builder = configOrDefault().toXContent(builder, params);
+     * <p>
+    }
+    }
+        return Objects.hash(super.hashCode(), Arrays.hashCode(values), keyed, configOrDefault());
+                // whereas a Ranks agg will throw an exception due to missing a required param
+    protected boolean keyed = true;  
+            }  
+ * The OpenSearch Contributors require contributions made to  
+ */
+     */
+        this.values = sortedValues;  
+package org.opensearch.search.aggregations.metrics;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        super(in);  
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+     * <p>
+        TriFunction<String, double[], PercentilesConfig, T> ctor,
+         *  - args[2]: hdr config options
+        AbstractPercentilesAggregationBuilder other = (AbstractPercentilesAggregationBuilder) obj;
+        this.percentilesConfig = clone.percentilesConfig;
+        this.values = clone.values;
+     * Deprecated: get method by inspecting the {@link PercentilesConfig} returned from
+            double[] values = args[0] != null ? ((List<Double>) args[0]).stream().mapToDouble(Double::doubleValue).toArray() : null;
+        Supplier<PercentilesConfig> defaultConfig,
+        }
+        if (values == null) {
+            return ctor.apply(name, values, percentilesConfig);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * Expert: set the number of significant digits in the values. Only relevant  
+ */
+         * Percentiles has defaults, which means the API allows the user to either use the default or configure  
+        parser.declareObject(  
+    /**
+                percentilesConfig = hdrConfig;  
+     * memory usage. Only relevant when using {@link PercentilesMethod#TDIGEST}.
+            throw new IllegalArgumentException("[" + valuesField.getPreferredName() + "] must not be an empty array: [" + name + "]");
+                return ctor.apply(name, null, defaultConfig.get());
+        return Objects.deepEquals(values, other.values)  
 }  
+/*
+    @Deprecated
+import org.opensearch.common.Nullable;  
+ * GitHub history for details.
+    }
+    @Deprecated
+            );
+                throw new IllegalArgumentException("Only one percentiles method should be declared.");  
+         * of Ranks keeps us from using a regular ObjectParser.
+         *  - args[1]: tdigest config options  
+        ValuesSourceAggregationBuilder.declareFields(parser, true, true, false);  
+     * <p>  
+     * However, this means we need a way to fetch the default if the user hasn't
+    ValuesSourceAggregationBuilder.LeafOnly<ValuesSource, T> {  
+         *
+     * Return the current algo configuration, or a default (Tdigest) otherwise
+        keyed = in.readBoolean();
+        }  
+        return builder;
+         *
+ * @opensearch.internal  
+import java.util.Map;  
+        }
+ * under the License.  
+     * selected any method and uses a builder-side feature like xcontent  
+        if (percentilesConfig == null || percentilesConfig.getMethod().equals(PercentilesMethod.TDIGEST)) {
+        if (super.equals(obj) == false) return false;  
+        } // if method and config were same, this is a no-op so we don't overwrite settings
+        out.writeOptionalWriteable(percentilesConfig);
+     * Sets how the percentiles algorithm should be configured
+ * This provides a base class for aggregations that are building percentiles or percentiles-like functionality (e.g. percentile ranks).
+    /**
+ * as well as algorithm-specific settings via a {@link PercentilesConfig} object
+    }
+ * You may obtain a copy of the License at  
+    }
+        if (percentilesConfig == null || percentilesConfig.getMethod().equals(PercentilesMethod.HDR)) {
+    /**
+    @Deprecated
+     * Deprecated: set method by configuring a {@link PercentilesConfig} instead
+            } else {
+            return new PercentilesConfig.TDigest();
+    @Nullable
+     * when using {@link PercentilesMethod#HDR}.  
+        this.valuesField = clone.valuesField;
+    @Deprecated  
+/*  
+            PercentilesMethod.HDR_PARSER,
+            // we already have an algo configured, but it's different from the requested method
+     * memory usage. Only relevant when using {@link PercentilesMethod#TDIGEST}.  
+            if (method.equals(PercentilesMethod.TDIGEST)) {
+    public T numberOfSignificantValueDigits(int numberOfSignificantValueDigits) {
+    @Deprecated
+        parser.declareBoolean(T::keyed, KEYED_FIELD);
+    /**
+     * <p>  
+            return ((PercentilesConfig.TDigest) percentilesConfig).getCompression();
+            }
+            }
+            return ((PercentilesConfig.Hdr) percentilesConfig).getNumberOfSignificantValueDigits();
+     * <p>
+    /**
+ *  
+     * when using {@link PercentilesMethod#HDR}.
+import java.util.List;
+    protected double[] values;
+            } else {
+        percentilesConfig = (PercentilesConfig) in.readOptionalWriteable((Reader<Writeable>) PercentilesConfig::fromStream);  
+        this.valuesField = valuesField;
+        });
+     * if any method has been selected yet.  
+            PercentilesConfig tDigestConfig = (PercentilesConfig) args[1];
+    public boolean keyed() {
+     */
+        return (T) this;  
+            ConstructingObjectParser.optionalConstructorArg(),  
+                this.percentilesConfig = new PercentilesConfig.Hdr();
+            PercentilesMethod.TDIGEST.getParseField()  
+    ) {  
+ * compatible open source license.
+            PercentilesConfig percentilesConfig;  
+        ParseField valuesField  
+         *  ConstructingObjectParser, but we're allowing it because of the above-mentioned reasons
+            } else if (tDigestConfig == null && hdrConfig == null) {
+    public int hashCode() {  
+                this.percentilesConfig = new PercentilesConfig.Hdr();  
+     */  
+    PercentilesConfig configOrDefault() {
+     * Expert: set the compression. Higher values improve accuracy but also
+import java.io.IOException;  
+            // reset to default for the requested method
+import org.opensearch.core.common.io.stream.StreamInput;  
+        } else if (percentilesConfig.getMethod().equals(method) == false) {  
+        double[] sortedValues = Arrays.copyOf(values, values.length);
+         * out the behavior from there
+    protected void innerWriteTo(StreamOutput out) throws IOException {
+    @Override  
+    }  
+    }  
+     * algo settings independent of method.  To keep life simple we use a null to track
+            percentilesConfig = new PercentilesConfig.TDigest(compression);
+    ) {
+        String aggName,  
+    }
+    private ParseField valuesField;  
+     * and set via {@link PercentilesAggregationBuilder#percentilesConfig(PercentilesConfig)}  
+        } else {
+        return percentilesConfig;  
+     * Set whether the XContent response should be keyed  
+         *  - args[0]: values
+    AbstractPercentilesAggregationBuilder(StreamInput in, ParseField valuesField) throws IOException {
+        throw new IllegalStateException("Percentiles [method] has not been configured yet, or is a HdrHistogram");  
+     */  
+        /*  
+     * Expert: get the number of significant digits in the values. Only relevant
+        throw new IllegalStateException("Percentiles [method] has not been configured yet, or is a TDigest");
+    }
+        return (T) this;  

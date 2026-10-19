@@ -1,372 +1,321 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.datastream;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.ActionType;  
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.IndicesOptions;  
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;  
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;  
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.health.ClusterHealthStatus;
-import org.opensearch.cluster.health.ClusterStateHealth;  
-import org.opensearch.cluster.metadata.DataStream;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.MetadataIndexTemplateService;  
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-import java.util.stream.Collectors;
-
-/**  
- * Transport action for getting a datastream
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class GetDataStreamAction extends ActionType<GetDataStreamAction.Response> {  
-
-    public static final GetDataStreamAction INSTANCE = new GetDataStreamAction();
-    public static final String NAME = "indices:admin/data_stream/get";  
-
-    private GetDataStreamAction() {
-        super(NAME, Response::new);  
-    }
-
-    /**  
-     * Request for getting data streams
-     *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Request extends ClusterManagerNodeReadRequest<Request> implements IndicesRequest.Replaceable {  
-
-        private String[] names;
-
-        public Request(String[] names) {
-            this.names = names;
-        }  
-
-        @Override
-        public ActionRequestValidationException validate() {  
-            return null;
-        }
-
-        public Request(StreamInput in) throws IOException {
-            super(in);
-            this.names = in.readOptionalStringArray();  
-        }
-
-        @Override  
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            out.writeOptionalStringArray(names);  
-        }
-
-        @Override  
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;  
-            Request request = (Request) o;
-            return Arrays.equals(names, request.names);
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Arrays.hashCode(names);
-        }
-
-        @Override
-        public String[] indices() {
-            return names;  
-        }
-
-        @Override  
-        public IndicesOptions indicesOptions() {
-            // this doesn't really matter since data stream name resolution isn't affected by IndicesOptions and
-            // a data stream's backing indices are retrieved from its metadata  
-            return IndicesOptions.fromOptions(false, true, true, true, false, false, true, false);
-        }
-
-        @Override
-        public boolean includeDataStreams() {
-            return true;  
-        }
-
-        @Override  
-        public IndicesRequest indices(String... indices) {
-            this.names = indices;
-            return this;  
-        }
-    }
-
-    /**
-     * Response for getting data streams
-     *  
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")  
-    public static class Response extends ActionResponse implements ToXContentObject {
-        public static final ParseField DATASTREAMS_FIELD = new ParseField("data_streams");
-
-        /**
-         * Data streams information
-         *  
-         * @opensearch.api
-         */
-        @PublicApi(since = "1.0.0")  
-        public static class DataStreamInfo extends AbstractDiffable<DataStreamInfo> implements ToXContentObject {
-
-            public static final ParseField STATUS_FIELD = new ParseField("status");  
-            public static final ParseField INDEX_TEMPLATE_FIELD = new ParseField("template");
-
-            DataStream dataStream;  
-            ClusterHealthStatus dataStreamStatus;
-            @Nullable
-            String indexTemplate;  
-
-            public DataStreamInfo(DataStream dataStream, ClusterHealthStatus dataStreamStatus, @Nullable String indexTemplate) {
-                this.dataStream = dataStream;  
-                this.dataStreamStatus = dataStreamStatus;
-                this.indexTemplate = indexTemplate;
-            }  
-
-            public DataStreamInfo(StreamInput in) throws IOException {
-                this(new DataStream(in), ClusterHealthStatus.readFrom(in), in.readOptionalString());  
-            }
-
-            public DataStream getDataStream() {  
-                return dataStream;
-            }
-
-            public ClusterHealthStatus getDataStreamStatus() {
-                return dataStreamStatus;
-            }  
-
-            @Nullable
-            public String getIndexTemplate() {  
-                return indexTemplate;
-            }
-
-            @Override
-            public void writeTo(StreamOutput out) throws IOException {
-                dataStream.writeTo(out);  
-                dataStreamStatus.writeTo(out);
-                out.writeOptionalString(indexTemplate);
-            }  
-
-            @Override
-            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
                 builder.startObject();
-                builder.field(DataStream.NAME_FIELD.getPreferredName(), dataStream.getName());
-                builder.field(DataStream.TIMESTAMP_FIELD_FIELD.getPreferredName(), dataStream.getTimeStampField());  
-                builder.field(DataStream.INDICES_FIELD.getPreferredName(), dataStream.getIndices());
-                builder.field(DataStream.GENERATION_FIELD.getPreferredName(), dataStream.getGeneration());
-                builder.field(STATUS_FIELD.getPreferredName(), dataStreamStatus);  
-                if (indexTemplate != null) {
-                    builder.field(INDEX_TEMPLATE_FIELD.getPreferredName(), indexTemplate);
-                }  
-                builder.endObject();
-                return builder;
-            }  
-
-            @Override
-            public boolean equals(Object o) {  
-                if (this == o) return true;
-                if (o == null || getClass() != o.getClass()) return false;
-                DataStreamInfo that = (DataStreamInfo) o;  
-                return dataStream.equals(that.dataStream)
-                    && dataStreamStatus == that.dataStreamStatus
-                    && Objects.equals(indexTemplate, that.indexTemplate);  
             }
-
-            @Override  
-            public int hashCode() {
-                return Objects.hash(dataStream, dataStreamStatus, indexTemplate);
-            }  
-        }
-
-        private final List<DataStreamInfo> dataStreams;  
-
-        public Response(List<DataStreamInfo> dataStreams) {
+            return true;  
+                this.dataStream = dataStream;  
             this.dataStreams = dataStreams;  
-        }
-
-        public Response(StreamInput in) throws IOException {  
-            this(in.readList(DataStreamInfo::new));
-        }
-
-        public List<DataStreamInfo> getDataStreams() {
-            return dataStreams;
-        }  
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {  
-            out.writeList(dataStreams);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();  
-            builder.startArray(DATASTREAMS_FIELD.getPreferredName());
-            for (DataStreamInfo dataStream : dataStreams) {
-                dataStream.toXContent(builder, params);  
             }
-            builder.endArray();
-            builder.endObject();  
-            return builder;
         }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;  
-            if (o == null || getClass() != o.getClass()) return false;
-            Response response = (Response) o;
-            return dataStreams.equals(response.dataStreams);  
-        }
-
-        @Override  
-        public int hashCode() {
-            return Objects.hash(dataStreams);
-        }  
-    }
-
-    /**  
-     * Transport Action for getting data streams
-     *
-     * @opensearch.internal  
-     */
-    public static class TransportAction extends TransportClusterManagerNodeReadAction<Request, Response>
-        implements  
-            TransportIndicesResolvingAction<Request> {
-
-        private static final Logger logger = LogManager.getLogger(TransportAction.class);  
-
-        @Inject
-        public TransportAction(  
-            TransportService transportService,
-            ClusterService clusterService,
-            ThreadPool threadPool,  
-            ActionFilters actionFilters,
             IndexNameExpressionResolver indexNameExpressionResolver
-        ) {  
-            super(NAME, transportService, clusterService, threadPool, actionFilters, Request::new, indexNameExpressionResolver);
-        }
-
-        @Override
-        protected String executor() {
-            return ThreadPool.Names.SAME;  
-        }
-
-        @Override  
-        protected Response read(StreamInput in) throws IOException {
-            return new Response(in);
+import org.opensearch.cluster.health.ClusterHealthStatus;
         }  
-
-        @Override
-        protected void clusterManagerOperation(Request request, ClusterState state, ActionListener<Response> listener) throws Exception {  
-            List<DataStream> dataStreams = getDataStreams(state, indexNameExpressionResolver, request);
-            List<Response.DataStreamInfo> dataStreamInfos = new ArrayList<>(dataStreams.size());
-            for (DataStream dataStream : dataStreams) {  
+        }  
+        }
+        public void writeTo(StreamOutput out) throws IOException {  
+            super.writeTo(out);
+        public Request(String[] names) {
+/*
+                DataStreamInfo that = (DataStreamInfo) o;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            }  
+        }  
+ */
+        public TransportAction(  
+ * specific language governing permissions and limitations
+import java.io.IOException;  
+    public static class Request extends ClusterManagerNodeReadRequest<Request> implements IndicesRequest.Replaceable {  
+ * license agreements. See the NOTICE file distributed with
+        public int hashCode() {
+import java.util.Comparator;  
+            @Nullable
+                );
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+ * software distributed under the License is distributed on an
+                this.dataStreamStatus = dataStreamStatus;
+        }  
+                    logger.warn(
+        public Request(StreamInput in) throws IOException {
+     * Transport Action for getting data streams
+     */
+     */
+     *
+     *  
+        }
+package org.opensearch.action.admin.indices.datastream;
+ *
+import org.opensearch.action.support.IndicesOptions;  
+    private GetDataStreamAction() {
                 String indexTemplate = MetadataIndexTemplateService.findV2Template(state.metadata(), dataStream.getName(), false);
-                String ilmPolicyName = null;
+                ClusterStateHealth streamHealth = new ClusterStateHealth(
+                    ilmPolicyName = settings.get("index.lifecycle.name");
+        @Override
+         *  
+import org.opensearch.core.xcontent.ToXContentObject;
+            public String getIndexTemplate() {  
+            if (this == o) return true;
+                return dataStream.equals(that.dataStream)
+            public static final ParseField INDEX_TEMPLATE_FIELD = new ParseField("template");
+        private String[] names;
+            if (this == o) return true;  
+                } else {  
+import org.opensearch.common.Nullable;  
+ * Unless required by applicable law or agreed to in writing,
+                return dataStreamStatus;
+ * under the License.  
+            out.writeOptionalStringArray(names);  
+            if (o == null || getClass() != o.getClass()) return false;  
+            return null;
+        @Override  
+     * @opensearch.internal  
+         * Data streams information
+        }
+import org.opensearch.action.ActionRequestValidationException;
+ * compatible open source license.
+                    state,
+                dataStreamInfos.add(new Response.DataStreamInfo(dataStream, streamHealth.getStatus(), indexTemplate));
+            this.names = names;
+         * @opensearch.api
+ */
+            }  
+ */
+            Response response = (Response) o;
+    /**  
+            if (o == null || getClass() != o.getClass()) return false;
+            for (DataStream dataStream : dataStreams) {  
+            super(NAME, transportService, clusterService, threadPool, actionFilters, Request::new, indexNameExpressionResolver);
+                dataStream.writeTo(out);  
+ * this work for additional information regarding copyright
+            return dataStreams;
+ * GitHub history for details.
+                dataStream.toXContent(builder, params);  
+import java.util.stream.Collectors;
+        public boolean equals(Object o) {
+        public ResolvedIndices resolveIndices(Request request) {
+            Request request = (Request) o;
+            @Nullable
+ * SPDX-License-Identifier: Apache-2.0
+        }
+     * Response for getting data streams
+        public IndicesOptions indicesOptions() {
+                return indexTemplate;
+            @Override
+                        dataStream.getName()
+    public static class Response extends ActionResponse implements ToXContentObject {
+    }  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                }  
+        @Override
+            return new Response(in);
+            public ClusterHealthStatus getDataStreamStatus() {
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+        public Response(StreamInput in) throws IOException {  
+            return dataStreams.equals(response.dataStreams);  
+                getDataStreams(clusterService.state(), indexNameExpressionResolver, request).stream()
+            return results.stream().map(dataStreams::get).sorted(Comparator.comparing(DataStream::getName)).collect(Collectors.toList());
+    @PublicApi(since = "1.0.0")  
+            String indexTemplate;  
+            super(in);
+import org.opensearch.core.action.ActionResponse;  
                 if (indexTemplate != null) {  
                     Settings settings = MetadataIndexTemplateService.resolveSettings(state.metadata(), indexTemplate);
-                    ilmPolicyName = settings.get("index.lifecycle.name");
-                } else {  
-                    logger.warn(
-                        "couldn't find any matching template for data stream [{}]. has it been restored (and possibly renamed)"
-                            + "from a snapshot?",  
-                        dataStream.getName()
-                    );
-                }  
-                ClusterStateHealth streamHealth = new ClusterStateHealth(
-                    state,
-                    dataStream.getIndices().stream().map(Index::getName).toArray(String[]::new)  
-                );
-                dataStreamInfos.add(new Response.DataStreamInfo(dataStream, streamHealth.getStatus(), indexTemplate));
-            }  
-            listener.onResponse(new Response(dataStreamInfos));
-        }
-
-        static List<DataStream> getDataStreams(ClusterState clusterState, IndexNameExpressionResolver iner, Request request) {
-            List<String> results = iner.dataStreamNames(clusterState, request.indicesOptions(), request.names);
-            Map<String, DataStream> dataStreams = clusterState.metadata().dataStreams();  
-
-            return results.stream().map(dataStreams::get).sorted(Comparator.comparing(DataStream::getName)).collect(Collectors.toList());
-        }  
-
-        @Override
-        protected ClusterBlockException checkBlock(Request request, ClusterState state) {  
-            return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
-        }
-
-        @Override
-        public ResolvedIndices resolveIndices(Request request) {
-            return ResolvedIndices.of(  
-                getDataStreams(clusterService.state(), indexNameExpressionResolver, request).stream()
-                    .map(DataStream::getName)
                     .collect(Collectors.toList())  
-            );
-        }
-    }  
-
+    }
+            return Objects.hash(dataStreams);
+            return Arrays.equals(names, request.names);
+ * You may obtain a copy of the License at  
+        protected void clusterManagerOperation(Request request, ClusterState state, ActionListener<Response> listener) throws Exception {  
+            public void writeTo(StreamOutput out) throws IOException {
+        public Response(List<DataStreamInfo> dataStreams) {
+import org.opensearch.cluster.metadata.DataStream;
+            }  
+    @PublicApi(since = "1.0.0")
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**
+        @Override
+        @Override  
+                    dataStream.getIndices().stream().map(Index::getName).toArray(String[]::new)  
+            return ResolvedIndices.of(  
 }
+                return builder;
+            listener.onResponse(new Response(dataStreamInfos));
+        @Override
+        }
+        super(NAME, Response::new);  
+     */
+                this.indexTemplate = indexTemplate;
+        @Override  
+        protected String executor() {
+import org.opensearch.core.ParseField;
+ * Modifications Copyright OpenSearch Contributors. See  
+            ThreadPool threadPool,  
+            builder.endObject();  
+import org.opensearch.transport.TransportService;
+        @Override
+                if (this == o) return true;
+import java.util.List;
+                return Objects.hash(dataStream, dataStreamStatus, indexTemplate);
+import org.opensearch.action.ActionType;  
+                if (indexTemplate != null) {
+     * @opensearch.api
+import org.opensearch.cluster.metadata.MetadataIndexTemplateService;  
+         */
+        }
+            for (DataStreamInfo dataStream : dataStreams) {
+            return IndicesOptions.fromOptions(false, true, true, true, false, false, true, false);
+/*
+        }
+                out.writeOptionalString(indexTemplate);
+        public boolean includeDataStreams() {
+ */  
+                this(new DataStream(in), ClusterHealthStatus.readFrom(in), in.readOptionalString());  
+    public static final String NAME = "indices:admin/data_stream/get";  
+        public IndicesRequest indices(String... indices) {
+ *
+     *
+            List<DataStream> dataStreams = getDataStreams(state, indexNameExpressionResolver, request);
+        @Override
+import org.opensearch.action.support.ActionFilters;
+        /**
+import org.opensearch.cluster.metadata.ResolvedIndices;
+            this(in.readList(DataStreamInfo::new));
+                builder.field(DataStream.NAME_FIELD.getPreferredName(), dataStream.getName());
+/**  
+import org.opensearch.common.inject.Inject;
+        }
+    }
+        public static class DataStreamInfo extends AbstractDiffable<DataStreamInfo> implements ToXContentObject {
+        public ActionRequestValidationException validate() {  
+                    && dataStreamStatus == that.dataStreamStatus
+        ) {  
+            // this doesn't really matter since data stream name resolution isn't affected by IndicesOptions and
+import org.apache.logging.log4j.LogManager;  
+import org.opensearch.cluster.AbstractDiffable;
+            ClusterHealthStatus dataStreamStatus;
+import org.opensearch.core.action.ActionListener;
+                String ilmPolicyName = null;
+        }
+@PublicApi(since = "1.0.0")
+            return ThreadPool.Names.SAME;  
+            public DataStreamInfo(DataStream dataStream, ClusterHealthStatus dataStreamStatus, @Nullable String indexTemplate) {
+                if (o == null || getClass() != o.getClass()) return false;
+public class GetDataStreamAction extends ActionType<GetDataStreamAction.Response> {  
+        @Override
+        }
+            builder.startArray(DATASTREAMS_FIELD.getPreferredName());
+ *
+        }  
+            builder.startObject();  
+            public int hashCode() {
+            return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+            public DataStreamInfo(StreamInput in) throws IOException {
+        }
+        }  
+            }  
+        public List<DataStreamInfo> getDataStreams() {
+            TransportService transportService,
+            List<Response.DataStreamInfo> dataStreamInfos = new ArrayList<>(dataStreams.size());
+        @Override  
+     * @opensearch.api  
+import org.opensearch.cluster.ClusterState;
+            public boolean equals(Object o) {  
+     * Request for getting data streams
+import org.opensearch.threadpool.ThreadPool;  
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+                builder.endObject();
+import org.opensearch.core.common.io.stream.StreamInput;
+                builder.field(DataStream.GENERATION_FIELD.getPreferredName(), dataStream.getGeneration());
+        public boolean equals(Object o) {
+import org.opensearch.common.settings.Settings;  
+    public static final GetDataStreamAction INSTANCE = new GetDataStreamAction();
+import java.util.Map;
+ * Transport action for getting a datastream
+        @Inject
+        public static final ParseField DATASTREAMS_FIELD = new ParseField("data_streams");
+            // a data stream's backing indices are retrieved from its metadata  
+import org.opensearch.cluster.block.ClusterBlockException;  
+            Map<String, DataStream> dataStreams = clusterState.metadata().dataStreams();  
+                dataStreamStatus.writeTo(out);
+                }  
+            @Override  
+            return Arrays.hashCode(names);
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.action.IndicesRequest;
+                        "couldn't find any matching template for data stream [{}]. has it been restored (and possibly renamed)"
+        }
+        public void writeTo(StreamOutput out) throws IOException {
+            this.names = indices;
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+            public DataStream getDataStream() {  
+        public String[] indices() {
+import org.opensearch.core.index.Index;  
+        implements  
+ * The OpenSearch Contributors require contributions made to  
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import java.util.Arrays;
+                    );
+            ActionFilters actionFilters,
+ * not use this file except in compliance with the License.
+            }  
+        public int hashCode() {  
+ * @opensearch.api  
+            @Override
+    }
+        protected Response read(StreamInput in) throws IOException {
+        protected ClusterBlockException checkBlock(Request request, ClusterState state) {  
+            @Override
+        @Override  
+            out.writeList(dataStreams);
+                builder.field(STATUS_FIELD.getPreferredName(), dataStreamStatus);  
+        private final List<DataStreamInfo> dataStreams;  
+            return builder;
+        @Override
+            }
+import org.opensearch.core.common.io.stream.StreamOutput;
+            }
+            public static final ParseField STATUS_FIELD = new ParseField("status");  
+                            + "from a snapshot?",  
+                    builder.field(INDEX_TEMPLATE_FIELD.getPreferredName(), indexTemplate);
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+            return names;  
+            return this;  
+                    .map(DataStream::getName)
+            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+            DataStream dataStream;  
+    /**  
+            TransportIndicesResolvingAction<Request> {
+        private static final Logger logger = LogManager.getLogger(TransportAction.class);  
+ * KIND, either express or implied.  See the License for the
+                    && Objects.equals(indexTemplate, that.indexTemplate);  
+                builder.field(DataStream.INDICES_FIELD.getPreferredName(), dataStream.getIndices());
+/*  
+            List<String> results = iner.dataStreamNames(clusterState, request.indicesOptions(), request.names);
+        @Override
+import java.util.Objects;  
+ * this file be licensed under the Apache-2.0 license or a
+            }
+            this.names = in.readOptionalStringArray();  
+        }
+            builder.endArray();
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.util.ArrayList;
+        @Override
+            }  
+        static List<DataStream> getDataStreams(ClusterState clusterState, IndexNameExpressionResolver iner, Request request) {
+            );
+        @Override  
+            ClusterService clusterService,
+        }
+                return dataStream;
+        @Override
+import org.opensearch.cluster.health.ClusterStateHealth;  
+                builder.field(DataStream.TIMESTAMP_FIELD_FIELD.getPreferredName(), dataStream.getTimeStampField());  
+        }
+    public static class TransportAction extends TransportClusterManagerNodeReadAction<Request, Response>
+ *  
+import org.apache.logging.log4j.Logger;
+        }
+        }
+        @PublicApi(since = "1.0.0")  
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;  

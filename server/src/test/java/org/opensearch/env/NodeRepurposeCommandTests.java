@@ -1,457 +1,383 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.env;
-
-import joptsimple.OptionSet;  
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.cli.MockTerminal;  
-import org.opensearch.cli.Terminal;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.coordination.OpenSearchNodeCommand;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.CheckedRunnable;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;  
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.Index;  
-import org.opensearch.gateway.PersistedClusterStateService;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matcher;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;  
-import java.util.Set;
-import java.util.stream.Stream;
-
-import static org.opensearch.env.NodeRepurposeCommand.NO_CLEANUP;
-import static org.opensearch.env.NodeRepurposeCommand.NO_DATA_TO_CLEAN_UP_FOUND;
-import static org.opensearch.env.NodeRepurposeCommand.NO_FILE_CACHE_DATA_TO_CLEAN_UP_FOUND;  
-import static org.opensearch.env.NodeRepurposeCommand.NO_SHARD_DATA_TO_CLEAN_UP_FOUND;
-import static org.opensearch.node.Node.NODE_SEARCH_CACHE_SIZE_SETTING;
-import static org.opensearch.test.NodeRoles.addRoles;  
-import static org.opensearch.test.NodeRoles.clusterManagerNode;
-import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
-import static org.opensearch.test.NodeRoles.nonDataNode;  
-import static org.opensearch.test.NodeRoles.onlyRole;
-import static org.opensearch.test.NodeRoles.removeRoles;
-import static org.hamcrest.Matchers.allOf;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
-
-public class NodeRepurposeCommandTests extends OpenSearchTestCase {
-
-    private static final Index INDEX = new Index("testIndex", "testUUID");  
-    private Settings dataClusterManagerSettings;
-    private Settings dataWarmClusterManagerSettings;
-    private Environment environment;  
-    private Path[] nodePaths;
-    private Settings dataWarmNoClusterManagerSettings;
-    private Settings noDataNoClusterManagerSettings;  
-    private Settings noDataClusterManagerSettings;
-    private Settings warmNoDataNoClusterManagerSettings;
-    private Settings noWarmNoClusterManagerSettings;  
-
-    @Before
-    public void createNodePaths() throws IOException {  
-        dataClusterManagerSettings = buildEnvSettings(Settings.EMPTY);
-        Settings defaultWarmSettings = Settings.builder()
-            .put(dataClusterManagerSettings)  
-            .put(NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), new ByteSizeValue(16, ByteSizeUnit.GB).toString())
-            .build();
-
-        warmNoDataNoClusterManagerSettings = onlyRole(dataClusterManagerSettings, DiscoveryNodeRole.WARM_ROLE);
-        dataWarmClusterManagerSettings = addRoles(defaultWarmSettings, Set.of(DiscoveryNodeRole.WARM_ROLE));
-        noDataClusterManagerSettings = clusterManagerNode(nonDataNode(dataClusterManagerSettings));  
-
-        dataWarmNoClusterManagerSettings = nonClusterManagerNode(dataWarmClusterManagerSettings);
-        noWarmNoClusterManagerSettings = nonClusterManagerNode(defaultWarmSettings);  
-
-        noDataNoClusterManagerSettings = removeRoles(
-            dataClusterManagerSettings,  
-            Set.of(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE)
-        );
-
-        environment = TestEnvironment.newEnvironment(dataClusterManagerSettings);
-        try (NodeEnvironment nodeEnvironment = new NodeEnvironment(dataClusterManagerSettings, environment)) {
-            nodePaths = nodeEnvironment.nodeDataPaths();  
-            final String nodeId = randomAlphaOfLength(10);
-            try (
-                PersistedClusterStateService.Writer writer = new PersistedClusterStateService(  
-                    nodePaths,
-                    nodeId,
-                    xContentRegistry(),  
-                    BigArrays.NON_RECYCLING_INSTANCE,
-                    new ClusterSettings(dataClusterManagerSettings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                    () -> 0L  
-                ).createWriter()
-            ) {
-                writer.writeFullStateAndCommit(1L, ClusterState.EMPTY_STATE);  
-            }
-        }
-    }  
-
-    public void testEarlyExitNoCleanup() throws Exception {
-        createIndexDataFiles(dataClusterManagerSettings, randomInt(10), randomBoolean());  
-
-        verifyNoQuestions(dataWarmClusterManagerSettings, containsString(NO_CLEANUP));
-        verifyNoQuestions(dataWarmNoClusterManagerSettings, containsString(NO_CLEANUP));  
     }
-
-    public void testNothingToCleanup() throws Exception {  
-        verifyNoQuestions(noDataNoClusterManagerSettings, containsString(NO_DATA_TO_CLEAN_UP_FOUND));
-        verifyNoQuestions(noDataClusterManagerSettings, containsString(NO_SHARD_DATA_TO_CLEAN_UP_FOUND));
-
-        Environment environment = TestEnvironment.newEnvironment(noDataClusterManagerSettings);
-        if (randomBoolean()) {
+                                            .numberOfReplicas(1)
+            } else {
+        int shardCount = randomIntBetween(1, 10);
+                    BigArrays.NON_RECYCLING_INSTANCE,
+import static org.opensearch.env.NodeRepurposeCommand.NO_DATA_TO_CLEAN_UP_FOUND;
+        createIndexDataFiles(settings, shardCount, writeClusterState, false);
+ * Modifications Copyright OpenSearch Contributors. See  
+        NodeRepurposeCommand nodeRepurposeCommand = new NodeRepurposeCommand();
+    }
+        createIndexDataFiles(dataWarmClusterManagerSettings, shardCount, hasClusterState, false);
+        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(dataClusterManagerSettings, environment).close());
+            );
+import static org.opensearch.test.NodeRoles.onlyRole;
+        try {
+import org.opensearch.common.util.BigArrays;  
+        boolean hasClusterState = randomBoolean();  
+        withTerminal(false, outputMatcher, terminal -> { executeRepurposeCommand(terminal, settings, 0); });
+import org.opensearch.cli.MockTerminal;  
+    public void testCleanupDataClusterManager() throws Exception {  
+import org.hamcrest.Matcher;  
+            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
             try (NodeEnvironment env = new NodeEnvironment(noDataClusterManagerSettings, environment)) {  
+public class NodeRepurposeCommandTests extends OpenSearchTestCase {
+    }
+        verifySuccess(noWarmNoClusterManagerSettings, matcher, verbose);  
+        environment = TestEnvironment.newEnvironment(dataClusterManagerSettings);
+            }  
+import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
+import org.opensearch.common.settings.ClusterSettings;
+        }
+        boolean verbose = randomBoolean();
+                OpenSearchException exception = expectThrows(
+ * The OpenSearch Contributors require contributions made to  
+        int shardCount = randomIntBetween(1, 10);
+ * Unless required by applicable law or agreed to in writing,
+        Matcher<String> matcher = allOf(
+        // verify test setup  
+ * software distributed under the License is distributed on an
+        new NodeEnvironment(noWarmNoClusterManagerSettings, environment).close();  
+                                            )
+        boolean verbose = randomBoolean();
+        consumer.accept(terminal);  
+                writer.writeFullStateAndCommit(1L, ClusterState.EMPTY_STATE);  
+        int shardDataDirNumber = randomInt(10);
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+    public void testEarlyExitNoCleanup() throws Exception {
+import org.opensearch.test.OpenSearchTestCase;
+        noDataClusterManagerSettings = clusterManagerNode(nonDataNode(dataClusterManagerSettings));  
+        return condition ? not(matcher) : matcher;
+        verifySuccess(noDataClusterManagerSettings, matcher, verbose);
+                    nodePaths,
+            result *= 31;  
+    @Before
+import org.opensearch.cli.Terminal;
+            dataClusterManagerSettings,  
+import org.opensearch.gateway.PersistedClusterStateService;
+    private void createIndexDataFiles(Settings settings, int shardCount, boolean writeClusterState, boolean cacheMode) throws IOException {
+            terminal.setVerbosity(Terminal.Verbosity.VERBOSE);  
+        nodeRepurposeCommand.testExecute(terminal, options, env);  
+            conditionalNot(containsString("testUUID"), verbose == false),  
+        new NodeEnvironment(noDataClusterManagerSettings, environment).close();
+        } catch (IOException e) {
+ * this work for additional information regarding copyright
+        Matcher<String> outputMatcher = allOf(
+import static org.opensearch.test.NodeRoles.addRoles;  
+import org.opensearch.cluster.metadata.IndexMetadata;
                 try (
                     PersistedClusterStateService.Writer writer = OpenSearchNodeCommand.createPersistedClusterStateService(
                         Settings.EMPTY,  
-                        env.nodeDataPaths()
-                    ).createWriter()
-                ) {  
-                    writer.writeFullStateAndCommit(1L, ClusterState.EMPTY_STATE);
-                }
-            }  
-        }
-
-        verifyNoQuestions(noDataNoClusterManagerSettings, containsString(NO_DATA_TO_CLEAN_UP_FOUND));  
-        verifyNoQuestions(noDataClusterManagerSettings, containsString(NO_SHARD_DATA_TO_CLEAN_UP_FOUND));
-        verifyNoQuestions(noWarmNoClusterManagerSettings, containsString(NO_FILE_CACHE_DATA_TO_CLEAN_UP_FOUND));
-
+        // verify clean.  
+import static org.opensearch.env.NodeRepurposeCommand.NO_SHARD_DATA_TO_CLEAN_UP_FOUND;
+    private static final Index INDEX = new Index("testIndex", "testUUID");  
+import java.nio.file.Path;
         createIndexDataFiles(dataClusterManagerSettings, 0, randomBoolean());
-
-        verifyNoQuestions(noDataClusterManagerSettings, containsString(NO_SHARD_DATA_TO_CLEAN_UP_FOUND));  
-
-    }
-
-    public void testLocked() throws IOException {
-        try (
-            NodeEnvironment env = new NodeEnvironment(  
-                dataClusterManagerSettings,
-                TestEnvironment.newEnvironment(dataClusterManagerSettings)
-            )  
-        ) {
-            assertThat(
-                expectThrows(OpenSearchException.class, () -> verifyNoQuestions(noDataNoClusterManagerSettings, null)).getMessage(),  
-                containsString(NodeRepurposeCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG)
-            );
-        }  
-    }
-
-    public void testCleanupDataClusterManager() throws Exception {  
-        int shardCount = randomIntBetween(1, 10);
-        boolean verbose = randomBoolean();
-        boolean hasClusterState = randomBoolean();  
-        createIndexDataFiles(dataClusterManagerSettings, shardCount, hasClusterState);
-
-        String messageText = NodeRepurposeCommand.noClusterManagerMessage(1, environment.dataFiles().length * shardCount, 0);  
-
-        Matcher<String> outputMatcher = allOf(
-            containsString(messageText),  
-            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
-            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
-        );  
-
-        verifyUnchangedOnAbort(noDataNoClusterManagerSettings, outputMatcher, verbose);
-
-        // verify test setup
-        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noDataNoClusterManagerSettings, environment).close());
-
-        verifySuccess(noDataNoClusterManagerSettings, outputMatcher, verbose);
-
-        // verify cleaned.  
+        verifyNoQuestions(dataWarmClusterManagerSettings, containsString(NO_CLEANUP));
         new NodeEnvironment(noDataNoClusterManagerSettings, environment).close();
-    }
-
-    public void testCleanupShardData() throws Exception {
-        int shardCount = randomIntBetween(1, 10);
-        boolean verbose = randomBoolean();  
-        boolean hasClusterState = randomBoolean();
-        createIndexDataFiles(dataClusterManagerSettings, shardCount, hasClusterState);
-
-        Matcher<String> matcher = allOf(
-            containsString(NodeRepurposeCommand.shardMessage(environment.dataFiles().length * shardCount, 1)),
-            conditionalNot(containsString("testUUID"), verbose == false),  
-            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
-            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
-        );  
-
-        verifyUnchangedOnAbort(noDataClusterManagerSettings, matcher, verbose);
-
-        // verify test setup
-        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noDataClusterManagerSettings, environment).close());
-
-        verifySuccess(noDataClusterManagerSettings, matcher, verbose);
-
-        // verify clean.  
-        new NodeEnvironment(noDataClusterManagerSettings, environment).close();
-    }
-
-    public void testCleanupWarmNode() throws Exception {
-        int shardCount = randomIntBetween(1, 10);
-        boolean verbose = randomBoolean();  
-        boolean hasClusterState = randomBoolean();
-        createIndexDataFiles(warmNoDataNoClusterManagerSettings, shardCount, hasClusterState, true);
-
-        Matcher<String> matcher = allOf(
-            containsString(NodeRepurposeCommand.shardMessage(shardCount, 1)),
-            conditionalNot(containsString("testUUID"), verbose == false),  
-            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
-            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
-        );  
-
-        verifyUnchangedOnAbort(dataClusterManagerSettings, matcher, verbose);
-
-        // verify test setup
-        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(dataClusterManagerSettings, environment).close());
-
-        verifySuccess(dataClusterManagerSettings, matcher, verbose);
-
-        // verify clean.  
-        new NodeEnvironment(dataClusterManagerSettings, environment).close();
-    }
-
-    public void testCleanupWarmClusterManager() throws Exception {
-        int shardCount = randomIntBetween(1, 10);
-        boolean verbose = randomBoolean();  
-        boolean hasClusterState = randomBoolean();
-        createIndexDataFiles(dataWarmClusterManagerSettings, shardCount, hasClusterState, true);
-
-        String messageText = NodeRepurposeCommand.noClusterManagerMessage(1, shardCount, 0);
-
-        Matcher<String> matcher = allOf(  
-            containsString(messageText),
-            conditionalNot(containsString("testUUID"), verbose == false),
-            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),  
-            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
-        );
-
-        verifyUnchangedOnAbort(noWarmNoClusterManagerSettings, matcher, verbose);
-
-        // verify test setup  
-        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noWarmNoClusterManagerSettings, environment).close());
-
-        verifySuccess(noWarmNoClusterManagerSettings, matcher, verbose);  
-
-        // verify clean.
-        new NodeEnvironment(noWarmNoClusterManagerSettings, environment).close();  
-    }
-
-    public void testCleanupAll() throws Exception {  
-        int shardCount = randomIntBetween(1, 10);
-        boolean verbose = randomBoolean();
-        boolean hasClusterState = randomBoolean();  
-        createIndexDataFiles(dataWarmClusterManagerSettings, shardCount, hasClusterState, false);
-        createIndexDataFiles(dataWarmClusterManagerSettings, shardCount, hasClusterState, true);
-
-        // environment.dataFiles().length * shardCount will account for the local shard files
-        // + shardCount will account for the additional file cache shard files.
-        String messageText = NodeRepurposeCommand.noClusterManagerMessage(1, (environment.dataFiles().length * shardCount) + shardCount, 0);  
-
-        Matcher<String> outputMatcher = allOf(
-            containsString(messageText),  
-            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
-            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
-        );  
-
-        verifyUnchangedOnAbort(noDataNoClusterManagerSettings, outputMatcher, verbose);
-
-        // verify test setup
-        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noDataNoClusterManagerSettings, environment).close());
-
-        verifySuccess(noDataNoClusterManagerSettings, outputMatcher, verbose);
-
-        // verify cleaned.  
-        new NodeEnvironment(noDataNoClusterManagerSettings, environment).close();
-    }
-
-    static void verifySuccess(Settings settings, Matcher<String> outputMatcher, boolean verbose) throws Exception {
-        withTerminal(verbose, outputMatcher, terminal -> {
-            terminal.addTextInput(randomFrom("y", "Y"));  
-            executeRepurposeCommand(terminal, settings, 0);
-            assertThat(terminal.getOutput(), containsString("Node successfully repurposed"));
-        });  
-    }
-
-    private void verifyUnchangedOnAbort(Settings settings, Matcher<String> outputMatcher, boolean verbose) throws Exception {  
-        withTerminal(verbose, outputMatcher, terminal -> {
-            terminal.addTextInput(randomFrom("yy", "Yy", "n", "yes", "true", "N", "no"));
-            verifyUnchangedDataFiles(() -> {  
-                OpenSearchException exception = expectThrows(
-                    OpenSearchException.class,
-                    () -> executeRepurposeCommand(terminal, settings, 0)  
-                );
-                assertThat(exception.getMessage(), containsString(NodeRepurposeCommand.ABORTED_BY_USER_MSG));
-            });  
-        });
-    }
-
-    private void verifyNoQuestions(Settings settings, Matcher<String> outputMatcher) throws Exception {
-        withTerminal(false, outputMatcher, terminal -> { executeRepurposeCommand(terminal, settings, 0); });
-    }  
-
-    private static void withTerminal(boolean verbose, Matcher<String> outputMatcher, CheckedConsumer<MockTerminal, Exception> consumer)
-        throws Exception {  
-        MockTerminal terminal = new MockTerminal();
-        if (verbose) {
-            terminal.setVerbosity(Terminal.Verbosity.VERBOSE);  
-        }
-
-        consumer.accept(terminal);  
-
-        assertThat(terminal.getOutput(), outputMatcher);
-
-        expectThrows(IllegalStateException.class, "Must consume input", () -> terminal.readText(""));
-    }
-
-    private static void executeRepurposeCommand(MockTerminal terminal, Settings settings, int ordinal) throws Exception {
-        NodeRepurposeCommand nodeRepurposeCommand = new NodeRepurposeCommand();
-        OptionSet options = nodeRepurposeCommand.getParser()  
-            .parse(ordinal != 0 ? new String[] { "--ordinal", Integer.toString(ordinal) } : new String[0]);
-        Environment env = TestEnvironment.newEnvironment(settings);
-        nodeRepurposeCommand.testExecute(terminal, options, env);  
-    }
-
-    private void createIndexDataFiles(Settings settings, int shardCount, boolean writeClusterState) throws IOException {  
-        createIndexDataFiles(settings, shardCount, writeClusterState, false);
-    }
-
-    private void createIndexDataFiles(Settings settings, int shardCount, boolean writeClusterState, boolean cacheMode) throws IOException {
-        int shardDataDirNumber = randomInt(10);
-        Environment environment = TestEnvironment.newEnvironment(settings);  
-        try (NodeEnvironment env = new NodeEnvironment(settings, environment)) {
-            if (writeClusterState) {
-                try (  
-                    PersistedClusterStateService.Writer writer = OpenSearchNodeCommand.createPersistedClusterStateService(
-                        Settings.EMPTY,
-                        env.nodeDataPaths()  
-                    ).createWriter()
-                ) {
-                    writer.writeFullStateAndCommit(  
-                        1L,
-                        ClusterState.builder(ClusterName.DEFAULT)
-                            .metadata(  
-                                Metadata.builder()
-                                    .put(
-                                        IndexMetadata.builder(INDEX.getName())  
-                                            .settings(
-                                                Settings.builder()
-                                                    .put("index.version.created", Version.CURRENT)  
-                                                    .put(IndexMetadata.SETTING_INDEX_UUID, INDEX.getUUID())
-                                            )
-                                            .numberOfShards(1)  
-                                            .numberOfReplicas(1)
-                                    )
-                                    .build()  
-                            )
-                            .build()
-                    );  
-                }
-            }
-
-            if (cacheMode) {
-                Path cachePath = env.fileCacheNodePath().fileCachePath;
-                cachePath = cachePath.resolve(INDEX.getUUID());  
-                for (int i = 0; i < shardCount; ++i) {
                     Files.createDirectories(cachePath.resolve(Integer.toString(shardDataDirNumber)));
-                    shardDataDirNumber += randomIntBetween(1, 10);  
-                }
-            } else {
-                for (Path path : env.indexPaths(INDEX)) {  
-                    for (int i = 0; i < shardCount; ++i) {
-                        Files.createDirectories(path.resolve(Integer.toString(shardDataDirNumber)));
-                        shardDataDirNumber += randomIntBetween(1, 10);  
-                    }
-                }
-            }  
-
-        }
-    }  
-
-    private void verifyUnchangedDataFiles(CheckedRunnable<? extends Exception> runnable) throws Exception {
-        long before = digestPaths();  
-        runnable.run();
-        long after = digestPaths();
-        assertEquals("Must not touch files", before, after);  
-    }
-
-    private long digestPaths() {  
-        // use a commutative digest to avoid dependency on file system order.
-        return Arrays.stream(environment.dataFiles()).mapToLong(this::digestPath).sum();
-    }  
-
-    private long digestPath(Path path) {
-        try (Stream<Path> paths = Files.walk(path)) {  
-            return paths.mapToLong(this::digestSinglePath).sum();
-        } catch (IOException e) {
-            throw new RuntimeException(e);  
-        }
-    }
-
-    private long digestSinglePath(Path path) {
-        if (Files.isDirectory(path)) return path.toString().hashCode();
-        else return path.toString().hashCode() + digest(readAllBytes(path));  
-
-    }
-
-    private byte[] readAllBytes(Path path) {
-        try {
             return Files.readAllBytes(path);  
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }  
-    }
-
-    private long digest(byte[] bytes) {  
-        long result = 0;
+            )  
+        verifyUnchangedOnAbort(noDataClusterManagerSettings, matcher, verbose);
+    private static void withTerminal(boolean verbose, Matcher<String> outputMatcher, CheckedConsumer<MockTerminal, Exception> consumer)
+import static org.opensearch.test.NodeRoles.nonDataNode;  
+        long before = digestPaths();  
+        createIndexDataFiles(dataClusterManagerSettings, randomInt(10), randomBoolean());  
+            .put(NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), new ByteSizeValue(16, ByteSizeUnit.GB).toString())
+        assertThat(terminal.getOutput(), outputMatcher);
+        noDataNoClusterManagerSettings = removeRoles(
+        if (verbose) {
+        createIndexDataFiles(dataWarmClusterManagerSettings, shardCount, hasClusterState, true);
+                        shardDataDirNumber += randomIntBetween(1, 10);  
         for (byte b : bytes) {
-            result *= 31;  
-            result += b;
+                containsString(NodeRepurposeCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG)
+                    PersistedClusterStateService.Writer writer = OpenSearchNodeCommand.createPersistedClusterStateService(
         }
-        return result;  
-    }
-
-    static <T> Matcher<T> conditionalNot(Matcher<T> matcher, boolean condition) {  
-        return condition ? not(matcher) : matcher;
-    }
+        }  
+    private Settings dataWarmNoClusterManagerSettings;
+        verifyUnchangedOnAbort(noWarmNoClusterManagerSettings, matcher, verbose);
+        String messageText = NodeRepurposeCommand.noClusterManagerMessage(1, environment.dataFiles().length * shardCount, 0);  
+            throw new RuntimeException(e);  
+        long after = digestPaths();
 }  
+import org.opensearch.cluster.ClusterName;
+                    writer.writeFullStateAndCommit(  
+ * KIND, either express or implied.  See the License for the
+                for (Path path : env.indexPaths(INDEX)) {  
+        warmNoDataNoClusterManagerSettings = onlyRole(dataClusterManagerSettings, DiscoveryNodeRole.WARM_ROLE);
+import java.util.Arrays;  
+        // verify clean.
+import org.opensearch.OpenSearchException;
+        // use a commutative digest to avoid dependency on file system order.
+        ) {
+        int shardCount = randomIntBetween(1, 10);
+    }
+        expectThrows(IllegalStateException.class, "Must consume input", () -> terminal.readText(""));
+    public void createNodePaths() throws IOException {  
+import java.util.Set;
+    private Settings noDataNoClusterManagerSettings;  
+        try (NodeEnvironment nodeEnvironment = new NodeEnvironment(dataClusterManagerSettings, environment)) {
+            return paths.mapToLong(this::digestSinglePath).sum();
+    }
+                    OpenSearchException.class,
+    }
+                    xContentRegistry(),  
+package org.opensearch.env;
+            throw new RuntimeException(e);
+        );  
+        MockTerminal terminal = new MockTerminal();
+                Path cachePath = env.fileCacheNodePath().fileCachePath;
+        withTerminal(verbose, outputMatcher, terminal -> {
+        verifyUnchangedOnAbort(noDataNoClusterManagerSettings, outputMatcher, verbose);
+    public void testCleanupWarmClusterManager() throws Exception {
+    private void createIndexDataFiles(Settings settings, int shardCount, boolean writeClusterState) throws IOException {  
+            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
+        verifySuccess(noDataNoClusterManagerSettings, outputMatcher, verbose);
+import org.opensearch.common.CheckedRunnable;  
+        noWarmNoClusterManagerSettings = nonClusterManagerNode(defaultWarmSettings);  
+    private long digest(byte[] bytes) {  
+ *
+                    nodeId,
+ * GitHub history for details.
+import joptsimple.OptionSet;  
+    private Settings noWarmNoClusterManagerSettings;  
+import org.opensearch.cluster.coordination.OpenSearchNodeCommand;
+        createIndexDataFiles(dataWarmClusterManagerSettings, shardCount, hasClusterState, true);
+        dataWarmClusterManagerSettings = addRoles(defaultWarmSettings, Set.of(DiscoveryNodeRole.WARM_ROLE));
+                        ClusterState.builder(ClusterName.DEFAULT)
+import static org.hamcrest.Matchers.containsString;
+        verifySuccess(dataClusterManagerSettings, matcher, verbose);
+                        Files.createDirectories(path.resolve(Integer.toString(shardDataDirNumber)));
+                                            .numberOfShards(1)  
+                                        IndexMetadata.builder(INDEX.getName())  
+        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noDataNoClusterManagerSettings, environment).close());
+        return Arrays.stream(environment.dataFiles()).mapToLong(this::digestPath).sum();
+        );  
+                for (int i = 0; i < shardCount; ++i) {
+import static org.hamcrest.Matchers.not;
+            containsString(messageText),
+import static org.opensearch.test.NodeRoles.removeRoles;
+ */
+        // + shardCount will account for the additional file cache shard files.
+                expectThrows(OpenSearchException.class, () -> verifyNoQuestions(noDataNoClusterManagerSettings, null)).getMessage(),  
+ * compatible open source license.
+        boolean hasClusterState = randomBoolean();  
+            assertThat(
+    private static void executeRepurposeCommand(MockTerminal terminal, Settings settings, int ordinal) throws Exception {
+        } catch (IOException e) {
+import org.opensearch.cluster.ClusterState;  
+    private void verifyNoQuestions(Settings settings, Matcher<String> outputMatcher) throws Exception {
+                    () -> 0L  
+import org.opensearch.cluster.metadata.Metadata;  
+ * ownership. Elasticsearch licenses this file to you under  
+        Settings defaultWarmSettings = Settings.builder()
+        }  
+                }
+        verifyNoQuestions(noDataClusterManagerSettings, containsString(NO_SHARD_DATA_TO_CLEAN_UP_FOUND));
+    private long digestPaths() {  
+        runnable.run();
+            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
+        new NodeEnvironment(dataClusterManagerSettings, environment).close();
+    }  
+    }
+        Environment environment = TestEnvironment.newEnvironment(settings);  
+                                    )
+                                            .settings(
+                                Metadata.builder()
+        boolean verbose = randomBoolean();  
+                                    .build()  
+            containsString(NodeRepurposeCommand.shardMessage(shardCount, 1)),
+        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noDataNoClusterManagerSettings, environment).close());
+import static org.opensearch.test.NodeRoles.clusterManagerNode;
+                    }
+        createIndexDataFiles(dataClusterManagerSettings, shardCount, hasClusterState);
+                }
+    public void testLocked() throws IOException {
+                                    .put(
+    public void testCleanupWarmNode() throws Exception {
+ * under the License.  
+                    for (int i = 0; i < shardCount; ++i) {
+    static void verifySuccess(Settings settings, Matcher<String> outputMatcher, boolean verbose) throws Exception {
+            verifyUnchangedDataFiles(() -> {  
+            containsString(NodeRepurposeCommand.shardMessage(environment.dataFiles().length * shardCount, 1)),
+        createIndexDataFiles(warmNoDataNoClusterManagerSettings, shardCount, hasClusterState, true);
+        // verify test setup
+            });  
+                ) {
+import static org.opensearch.node.Node.NODE_SEARCH_CACHE_SIZE_SETTING;
+            conditionalNot(containsString("testUUID"), verbose == false),  
+import org.opensearch.Version;
+            nodePaths = nodeEnvironment.nodeDataPaths();  
+        String messageText = NodeRepurposeCommand.noClusterManagerMessage(1, shardCount, 0);
+                            .metadata(  
+ */
+            result += b;
+            .parse(ordinal != 0 ? new String[] { "--ordinal", Integer.toString(ordinal) } : new String[0]);
+/*
+ * SPDX-License-Identifier: Apache-2.0
+    private long digestPath(Path path) {
+                                                Settings.builder()
+        }
+    }
+        // verify test setup
+        long result = 0;
+            .put(dataClusterManagerSettings)  
+ * You may obtain a copy of the License at  
+                                                    .put(IndexMetadata.SETTING_INDEX_UUID, INDEX.getUUID())
+        });  
+            terminal.addTextInput(randomFrom("yy", "Yy", "n", "yes", "true", "N", "no"));
+        // verify test setup
+                assertThat(exception.getMessage(), containsString(NodeRepurposeCommand.ABORTED_BY_USER_MSG));
+/*  
+            assertThat(terminal.getOutput(), containsString("Node successfully repurposed"));
+import org.opensearch.common.settings.Settings;
+    }
+                try (  
+        verifyNoQuestions(noDataNoClusterManagerSettings, containsString(NO_DATA_TO_CLEAN_UP_FOUND));  
+                                                    .put("index.version.created", Version.CURRENT)  
+            if (cacheMode) {
+    private void verifyUnchangedDataFiles(CheckedRunnable<? extends Exception> runnable) throws Exception {
+ * specific language governing permissions and limitations
+        // verify test setup
+        // verify cleaned.  
+    }
+        String messageText = NodeRepurposeCommand.noClusterManagerMessage(1, (environment.dataFiles().length * shardCount) + shardCount, 0);  
+import org.opensearch.core.common.unit.ByteSizeUnit;
+        return result;  
+ * not use this file except in compliance with the License.
+        });
+        verifyNoQuestions(noWarmNoClusterManagerSettings, containsString(NO_FILE_CACHE_DATA_TO_CLEAN_UP_FOUND));
+                TestEnvironment.newEnvironment(dataClusterManagerSettings)
+    }  
+            try (
+    private Settings dataWarmClusterManagerSettings;
+/*
+    private Settings warmNoDataNoClusterManagerSettings;
+    }
+    }
+                    ).createWriter()
+                }
+                        Settings.EMPTY,
+            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
+        }
+    }
+        throws Exception {  
+    }
+            }  
+                    );  
+        createIndexDataFiles(dataClusterManagerSettings, shardCount, hasClusterState);
+            }
+            executeRepurposeCommand(terminal, settings, 0);
+import java.util.stream.Stream;
+            Set.of(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE)
+    }
+                            .build()
+        Matcher<String> matcher = allOf(
+                    writer.writeFullStateAndCommit(1L, ClusterState.EMPTY_STATE);
+            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
+                ) {  
+        else return path.toString().hashCode() + digest(readAllBytes(path));  
+    }  
+        Environment env = TestEnvironment.newEnvironment(settings);
+        // verify clean.  
+    public void testCleanupAll() throws Exception {  
+        Matcher<String> outputMatcher = allOf(
+        Matcher<String> matcher = allOf(  
+        OptionSet options = nodeRepurposeCommand.getParser()  
+                dataClusterManagerSettings,
+            conditionalNot(containsString("testUUID"), verbose == false),
+    private Settings dataClusterManagerSettings;
+        if (Files.isDirectory(path)) return path.toString().hashCode();
+        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noWarmNoClusterManagerSettings, environment).close());
+    public void testCleanupShardData() throws Exception {
+            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),  
+            ) {
+                        env.nodeDataPaths()
+import org.opensearch.core.index.Index;  
+                        1L,
+        verifySuccess(noDataNoClusterManagerSettings, outputMatcher, verbose);
+ * license agreements. See the NOTICE file distributed with
+            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
+ *  
+                ).createWriter()
+        new NodeEnvironment(noDataNoClusterManagerSettings, environment).close();
+        verifyNoQuestions(noDataClusterManagerSettings, containsString(NO_SHARD_DATA_TO_CLEAN_UP_FOUND));
+    private byte[] readAllBytes(Path path) {
+        boolean verbose = randomBoolean();  
+    }
+import java.nio.file.Files;
+        try (Stream<Path> paths = Files.walk(path)) {  
+                            )
+                    ).createWriter()
+            .build();
+    private void verifyUnchangedOnAbort(Settings settings, Matcher<String> outputMatcher, boolean verbose) throws Exception {  
+            terminal.addTextInput(randomFrom("y", "Y"));  
+                    new ClusterSettings(dataClusterManagerSettings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
+import org.opensearch.common.CheckedConsumer;
+    private Environment environment;  
+    private long digestSinglePath(Path path) {
+        verifyUnchangedOnAbort(dataClusterManagerSettings, matcher, verbose);
+import org.opensearch.core.common.unit.ByteSizeValue;
+                    () -> executeRepurposeCommand(terminal, settings, 0)  
+                        env.nodeDataPaths()  
+        Environment environment = TestEnvironment.newEnvironment(noDataClusterManagerSettings);
+            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
+ * the Apache License, Version 2.0 (the "License"); you may
+            }
+    private Path[] nodePaths;
+                PersistedClusterStateService.Writer writer = new PersistedClusterStateService(  
+                cachePath = cachePath.resolve(INDEX.getUUID());  
+            final String nodeId = randomAlphaOfLength(10);
+        );  
+    }
+        dataClusterManagerSettings = buildEnvSettings(Settings.EMPTY);
+        // environment.dataFiles().length * shardCount will account for the local shard files
+        );  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.io.IOException;  
+        );
+        verifyNoQuestions(noDataNoClusterManagerSettings, containsString(NO_DATA_TO_CLEAN_UP_FOUND));
+import static org.opensearch.env.NodeRepurposeCommand.NO_CLEANUP;
+ */  
+        withTerminal(verbose, outputMatcher, terminal -> {
+        expectThrows(IllegalStateException.class, () -> new NodeEnvironment(noDataClusterManagerSettings, environment).close());
+                );
+ *
+        dataWarmNoClusterManagerSettings = nonClusterManagerNode(dataWarmClusterManagerSettings);
+        if (randomBoolean()) {
+        verifyNoQuestions(dataWarmNoClusterManagerSettings, containsString(NO_CLEANUP));  
+ * Licensed to Elasticsearch under one or more contributor  
+            conditionalNot(containsString("testIndex"), verbose == false || hasClusterState == false),
+ * this file be licensed under the Apache-2.0 license or a
+        boolean verbose = randomBoolean();  
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }
+        int shardCount = randomIntBetween(1, 10);
+        try (
+            containsString(messageText),  
+        boolean hasClusterState = randomBoolean();
+    static <T> Matcher<T> conditionalNot(Matcher<T> matcher, boolean condition) {  
+    }  
+                    shardDataDirNumber += randomIntBetween(1, 10);  
+            conditionalNot(containsString("no name for uuid: testUUID"), verbose == false || hasClusterState)
+            if (writeClusterState) {
+        try (NodeEnvironment env = new NodeEnvironment(settings, environment)) {
+        verifyUnchangedOnAbort(noDataNoClusterManagerSettings, outputMatcher, verbose);
+    }
+            containsString(messageText),  
+    public void testNothingToCleanup() throws Exception {  
+    private Settings noDataClusterManagerSettings;
+import static org.hamcrest.Matchers.allOf;  
+        verifyNoQuestions(noDataClusterManagerSettings, containsString(NO_SHARD_DATA_TO_CLEAN_UP_FOUND));  
+import static org.opensearch.env.NodeRepurposeCommand.NO_FILE_CACHE_DATA_TO_CLEAN_UP_FOUND;  
+        // verify cleaned.  
+            NodeEnvironment env = new NodeEnvironment(  
+        }
+        boolean hasClusterState = randomBoolean();
+        boolean hasClusterState = randomBoolean();
+import org.junit.Before;
+        int shardCount = randomIntBetween(1, 10);
+                }
+        );
+        assertEquals("Must not touch files", before, after);  

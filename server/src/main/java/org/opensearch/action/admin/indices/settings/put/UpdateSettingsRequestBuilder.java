@@ -1,114 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.settings.put;
-
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequestBuilder;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;  
-import org.opensearch.transport.client.OpenSearchClient;
-
-import java.util.Map;  
-
-/**
- * Builder for an update index settings request  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class UpdateSettingsRequestBuilder extends AcknowledgedRequestBuilder<
-    UpdateSettingsRequest,  
-    AcknowledgedResponse,
-    UpdateSettingsRequestBuilder> {
-
-    public UpdateSettingsRequestBuilder(OpenSearchClient client, UpdateSettingsAction action, String... indices) {
-        super(client, action, new UpdateSettingsRequest(indices));
-    }  
-
-    /**
-     * Sets the indices the update settings will execute on  
-     */
-    public UpdateSettingsRequestBuilder setIndices(String... indices) {
-        request.indices(indices);  
-        return this;
-    }
-
-    /**
-     * Specifies what type of requested indices to ignore and wildcard indices expressions.
-     * <p>  
-     * For example indices that don't exist.
-     */
-    public UpdateSettingsRequestBuilder setIndicesOptions(IndicesOptions options) {  
-        request.indicesOptions(options);
-        return this;
-    }  
-
-    /**
-     * Sets the settings to be updated  
-     */
-    public UpdateSettingsRequestBuilder setSettings(Settings settings) {
-        request.settings(settings);  
-        return this;
-    }
-
-    /**
-     * Sets the settings to be updated
-     */  
-    public UpdateSettingsRequestBuilder setSettings(Settings.Builder settings) {
-        request.settings(settings);
         return this;  
     }
-
-    /**  
-     * Sets the settings to be updated (either json or yaml format)
+ * compatible open source license.
+        request.indicesOptions(options);
+    /**
+    }  
+    /**
+        request.setPreserveExisting(preserveExisting);
      */
-    public UpdateSettingsRequestBuilder setSettings(String source, XContentType xContentType) {  
         request.settings(source, xContentType);
         return this;
-    }  
-
-    /**
+ *
+        request.indices(indices);  
+ */  
+        request.settings(settings);
      * Sets the settings to be updated  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     */  
+ *
+ * @opensearch.api
+    public UpdateSettingsRequestBuilder setIndicesOptions(IndicesOptions options) {  
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+    public UpdateSettingsRequestBuilder setSettings(Settings settings) {
+        return this;
+ * KIND, either express or implied.  See the License for the
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+        request.settings(settings);  
+ * GitHub history for details.
+        return this;
+ * Modifications Copyright OpenSearch Contributors. See
+        return this;
+import org.opensearch.common.annotation.PublicApi;
+        super(client, action, new UpdateSettingsRequest(indices));
+    UpdateSettingsRequestBuilder> {
+/*  
+    /**
+ * software distributed under the License is distributed on an
+/*  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+public class UpdateSettingsRequestBuilder extends AcknowledgedRequestBuilder<
+import org.opensearch.common.xcontent.XContentType;  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.action.support.clustermanager.AcknowledgedRequestBuilder;
      */
-    public UpdateSettingsRequestBuilder setSettings(Map<String, Object> source) {
+    AcknowledgedResponse,
+     * Sets the settings to be updated  
+}
+    public UpdateSettingsRequestBuilder(OpenSearchClient client, UpdateSettingsAction action, String... indices) {
+    public UpdateSettingsRequestBuilder setIndices(String... indices) {
+ * The OpenSearch Contributors require contributions made to  
+     * Specifies what type of requested indices to ignore and wildcard indices expressions.
+        return this;  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+/**
+ *
+     */
+    }
+    public UpdateSettingsRequestBuilder setSettings(String source, XContentType xContentType) {  
         request.settings(source);  
         return this;
-    }
-
+ *  
+import org.opensearch.transport.client.OpenSearchClient;
+ * Builder for an update index settings request  
+ * You may obtain a copy of the License at  
+     * For example indices that don't exist.
+     */
+    /**
+import java.util.Map;  
+    public UpdateSettingsRequestBuilder setSettings(Settings.Builder settings) {
     public UpdateSettingsRequestBuilder setPreserveExisting(boolean preserveExisting) {
-        request.setPreserveExisting(preserveExisting);
-        return this;  
+     */
     }
-}
+ * under the License.  
+     * <p>  
+     * Sets the indices the update settings will execute on  
+/*
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
+import org.opensearch.action.support.IndicesOptions;
+ */
+    UpdateSettingsRequest,  
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**  
+    public UpdateSettingsRequestBuilder setSettings(Map<String, Object> source) {
+package org.opensearch.action.admin.indices.settings.put;
+ * not use this file except in compliance with the License.
+import org.opensearch.common.settings.Settings;
+@PublicApi(since = "1.0.0")
+     * Sets the settings to be updated
+     * Sets the settings to be updated (either json or yaml format)
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+    }  
+    }  

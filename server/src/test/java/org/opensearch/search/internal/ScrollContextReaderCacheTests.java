@@ -1,108 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.internal;
-
-import org.apache.lucene.codecs.StoredFieldsReader;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-
-import static org.mockito.Mockito.doThrow;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;  
-
-/**
- * Unit tests for {@link ScrollContext}'s StoredFieldsReader caching functionality.  
- *
- * The cache stores merge instances of StoredFieldsReader per segment to optimize
- * sequential document access during scroll queries by avoiding repeated decompression  
- * of stored field blocks.
- */
-public class ScrollContextReaderCacheTests extends OpenSearchTestCase {  
-
-    public void testCachePutAndGet() throws IOException {
-        ScrollContext scrollContext = new ScrollContext();  
-        Object segmentKey1 = new Object();
-        Object segmentKey2 = new Object();
-        StoredFieldsReader reader1 = mock(StoredFieldsReader.class);  
-        StoredFieldsReader reader2 = mock(StoredFieldsReader.class);
-        // Initially no cached readers
-        assertNull(scrollContext.getCachedSequentialReader(segmentKey1));  
-        assertNull(scrollContext.getCachedSequentialReader(segmentKey2));
-        // Cache reader for segment 1
-        scrollContext.cacheSequentialReader(segmentKey1, reader1);  
-        assertSame(reader1, scrollContext.getCachedSequentialReader(segmentKey1));
-        assertNull(scrollContext.getCachedSequentialReader(segmentKey2));
-        // Cache reader for segment 2  
-        scrollContext.cacheSequentialReader(segmentKey2, reader2);
-        assertSame(reader1, scrollContext.getCachedSequentialReader(segmentKey1));
-        assertSame(reader2, scrollContext.getCachedSequentialReader(segmentKey2));  
-        scrollContext.close();
-        // Verify both readers were closed
-        verify(reader1, times(1)).close();  
-        verify(reader2, times(1)).close();
-        // After close, cache should be cleared
-        assertNull(scrollContext.getCachedSequentialReader(segmentKey1));  
-        assertNull(scrollContext.getCachedSequentialReader(segmentKey2));
-    }
-
-    public void testCloseWithEmptyCache() {
-        ScrollContext scrollContext = new ScrollContext();
-        // Should not throw when closing with no cached readers  
-        scrollContext.close();
-        assertNull(scrollContext.getCachedSequentialReader(new Object()));
-    }  
-
-    public void testCloseHandlesReaderException() throws IOException {
-        ScrollContext scrollContext = new ScrollContext();  
-        Object segmentKey1 = new Object();
-        Object segmentKey2 = new Object();
-        StoredFieldsReader reader1 = mock(StoredFieldsReader.class);  
-        StoredFieldsReader reader2 = mock(StoredFieldsReader.class);
-        // Make reader1 throw on close
-        doThrow(new IOException("test exception")).when(reader1).close();  
-        scrollContext.cacheSequentialReader(segmentKey1, reader1);
-        scrollContext.cacheSequentialReader(segmentKey2, reader2);
-        // Should not throw, should continue closing other readers  
-        scrollContext.close();
-        // Both readers should have been attempted to close
-        verify(reader1, times(1)).close();  
-        verify(reader2, times(1)).close();
-    }
-
-    public void testMultipleSegmentsCached() throws IOException {
-        ScrollContext scrollContext = new ScrollContext();
-        int numSegments = randomIntBetween(3, 10);  
-        Object[] segmentKeys = new Object[numSegments];
-        StoredFieldsReader[] readers = new StoredFieldsReader[numSegments];
-        // Cache readers for all segments (simulates first batch per segment)  
-        for (int i = 0; i < numSegments; i++) {
-            segmentKeys[i] = new Object();
-            readers[i] = mock(StoredFieldsReader.class);  
-            assertNull(scrollContext.getCachedSequentialReader(segmentKeys[i]));
-            scrollContext.cacheSequentialReader(segmentKeys[i], readers[i]);
-        }  
-        // Simulate multiple scroll batches - all should hit cache
-        for (int batch = 2; batch <= 5; batch++) {
-            for (int i = 0; i < numSegments; i++) {  
-                assertSame(
-                    "Batch " + batch + ", segment " + i + " should hit cache",
-                    readers[i],  
                     scrollContext.getCachedSequentialReader(segmentKeys[i])
-                );
-            }  
-        }
+ * The OpenSearch Contributors require contributions made to  
+        assertSame(reader1, scrollContext.getCachedSequentialReader(segmentKey1));
+    public void testCachePutAndGet() throws IOException {
         scrollContext.close();
-        // Verify all readers were closed  
-        for (int i = 0; i < numSegments; i++) {
-            verify(readers[i], times(1)).close();
+        ScrollContext scrollContext = new ScrollContext();  
+        doThrow(new IOException("test exception")).when(reader1).close();  
+import static org.mockito.Mockito.mock;
+                    readers[i],  
+        Object segmentKey1 = new Object();
+/**
+        scrollContext.close();
+        Object segmentKey2 = new Object();
+            assertNull(scrollContext.getCachedSequentialReader(segmentKeys[i]));
+        Object[] segmentKeys = new Object[numSegments];
+        assertNull(scrollContext.getCachedSequentialReader(segmentKey2));
         }  
+import org.opensearch.test.OpenSearchTestCase;
+    public void testCloseWithEmptyCache() {
+import org.apache.lucene.codecs.StoredFieldsReader;
+        StoredFieldsReader reader2 = mock(StoredFieldsReader.class);
+                    "Batch " + batch + ", segment " + i + " should hit cache",
+        scrollContext.cacheSequentialReader(segmentKey2, reader2);
+import static org.mockito.Mockito.doThrow;  
+        // Verify both readers were closed
+        }
+        scrollContext.cacheSequentialReader(segmentKey2, reader2);
+        StoredFieldsReader reader2 = mock(StoredFieldsReader.class);
+            }  
+        // Should not throw when closing with no cached readers  
+ * SPDX-License-Identifier: Apache-2.0
+        // Make reader1 throw on close
+        // After close, cache should be cleared
+    }  
+    public void testMultipleSegmentsCached() throws IOException {
+ * Unit tests for {@link ScrollContext}'s StoredFieldsReader caching functionality.  
+                );
+        scrollContext.close();
     }
+        scrollContext.cacheSequentialReader(segmentKey1, reader1);  
+import static org.mockito.Mockito.times;
+/*  
+        assertNull(scrollContext.getCachedSequentialReader(segmentKey1));  
+        }  
+        // Initially no cached readers
+public class ScrollContextReaderCacheTests extends OpenSearchTestCase {  
+            verify(readers[i], times(1)).close();
+        assertNull(scrollContext.getCachedSequentialReader(new Object()));
+ * of stored field blocks.
+            segmentKeys[i] = new Object();
+        // Should not throw, should continue closing other readers  
+ * compatible open source license.
+        scrollContext.cacheSequentialReader(segmentKey1, reader1);
+    }
+    }
+        Object segmentKey1 = new Object();
+        StoredFieldsReader reader1 = mock(StoredFieldsReader.class);  
+        verify(reader2, times(1)).close();
+        assertNull(scrollContext.getCachedSequentialReader(segmentKey1));  
+package org.opensearch.search.internal;
+        verify(reader2, times(1)).close();
+ *
+import java.io.IOException;
+            scrollContext.cacheSequentialReader(segmentKeys[i], readers[i]);
+        verify(reader1, times(1)).close();  
+                assertSame(
+        scrollContext.close();
+ */  
+        assertSame(reader2, scrollContext.getCachedSequentialReader(segmentKey2));  
+        assertSame(reader1, scrollContext.getCachedSequentialReader(segmentKey1));
+        for (int batch = 2; batch <= 5; batch++) {
+        // Verify all readers were closed  
+            for (int i = 0; i < numSegments; i++) {  
+        // Simulate multiple scroll batches - all should hit cache
+    public void testCloseHandlesReaderException() throws IOException {
+        assertNull(scrollContext.getCachedSequentialReader(segmentKey2));
+ * The cache stores merge instances of StoredFieldsReader per segment to optimize
+        verify(reader1, times(1)).close();  
+        // Cache reader for segment 1
+        ScrollContext scrollContext = new ScrollContext();  
+        assertNull(scrollContext.getCachedSequentialReader(segmentKey2));
+            readers[i] = mock(StoredFieldsReader.class);  
+        // Cache reader for segment 2  
+        for (int i = 0; i < numSegments; i++) {
+        ScrollContext scrollContext = new ScrollContext();
+        Object segmentKey2 = new Object();
+ *
+        // Cache readers for all segments (simulates first batch per segment)  
+        StoredFieldsReader[] readers = new StoredFieldsReader[numSegments];
+        StoredFieldsReader reader1 = mock(StoredFieldsReader.class);  
+ * sequential document access during scroll queries by avoiding repeated decompression  
 }
+        int numSegments = randomIntBetween(3, 10);  
+import static org.mockito.Mockito.verify;  
+        ScrollContext scrollContext = new ScrollContext();
+        for (int i = 0; i < numSegments; i++) {
+ * this file be licensed under the Apache-2.0 license or a
+        // Both readers should have been attempted to close
+ */

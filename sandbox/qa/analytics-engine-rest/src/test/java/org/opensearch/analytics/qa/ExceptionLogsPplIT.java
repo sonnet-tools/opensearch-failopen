@@ -1,24 +1,20 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+    }
+    public void testExceptionLogsPplQueries() throws Exception {
+}
+        runPplQueries();  
 package org.opensearch.analytics.qa;
-
-/**
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
  * Exception tracking and analysis PPL integration test.
  */  
-public class ExceptionLogsPplIT extends BasePplIT {
-
+/*  
+/**
     @Override  
-    protected Dataset getDataset() {
         return ExceptionLogsTestHelper.DATASET;
+ *
+public class ExceptionLogsPplIT extends BasePplIT {
+ * compatible open source license.
     }  
-
-    public void testExceptionLogsPplQueries() throws Exception {
-        runPplQueries();  
-    }
-}
+    protected Dataset getDataset() {
+ * The OpenSearch Contributors require contributions made to  
+ */  

@@ -1,36 +1,30 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.store;
-
-import org.opensearch.index.engine.dataformat.DataFormatStoreHandlerFactory;
-import org.opensearch.index.engine.dataformat.StoreStrategy;
-
-import java.util.Optional;
-
-/**  
- * Store strategy for the parquet data format.
- *
- * <p>Uses the default {@code owns} / {@code remotePath} behaviour inherited  
- * from {@link StoreStrategy} (files live under {@code "parquet/"} prefix, blobs
- * are laid out at {@code basePath + "parquet/" + blobKey}). The store layer
- * supplies the format name when it invokes those methods, so the strategy  
- * itself does not carry the name.
- *
- * <p>Provides a factory for the per-shard native file registry that tracks  
- * parquet files for the Rust reader.
- */
-public final class ParquetStoreStrategy extends StoreStrategy {  
-
-    private static final DataFormatStoreHandlerFactory FACTORY = ParquetDataFormatStoreHandler::new;
-
-    @Override
-    public Optional<DataFormatStoreHandlerFactory> storeHandler() {
-        return Optional.of(FACTORY);  
-    }
 }
+ *
+import org.opensearch.index.engine.dataformat.DataFormatStoreHandlerFactory;
+ *
+ * from {@link StoreStrategy} (files live under {@code "parquet/"} prefix, blobs
+    private static final DataFormatStoreHandlerFactory FACTORY = ParquetDataFormatStoreHandler::new;
+ * this file be licensed under the Apache-2.0 license or a
+ * <p>Uses the default {@code owns} / {@code remotePath} behaviour inherited  
+ * itself does not carry the name.
+    @Override
+ * are laid out at {@code basePath + "parquet/" + blobKey}). The store layer
+public final class ParquetStoreStrategy extends StoreStrategy {  
+ * <p>Provides a factory for the per-shard native file registry that tracks  
+/**  
+    public Optional<DataFormatStoreHandlerFactory> storeHandler() {
+ * parquet files for the Rust reader.
+    }
+ *
+ * compatible open source license.
+package org.opensearch.parquet.store;
+        return Optional.of(FACTORY);  
+ */  
+/*  
+ */
+import org.opensearch.index.engine.dataformat.StoreStrategy;
+ * Store strategy for the parquet data format.
+import java.util.Optional;
+ * supplies the format name when it invokes those methods, so the strategy  

@@ -1,212 +1,184 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.snapshots.status;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ConstructingObjectParser;  
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.HashMap;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.unmodifiableMap;  
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-
-/**  
- * Represents snapshot status of all shards in the index
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class SnapshotIndexStatus implements Iterable<SnapshotIndexShardStatus>, ToXContentFragment {  
-
-    private final String index;
-
-    private final Map<Integer, SnapshotIndexShardStatus> indexShards;
-
-    private final SnapshotShardsStats shardsStats;  
-
-    private final SnapshotStats stats;
-
-    SnapshotIndexStatus(String index, Collection<SnapshotIndexShardStatus> shards) {
-        this.index = index;
-
-        Map<Integer, SnapshotIndexShardStatus> indexShards = new HashMap<>();
-        stats = new SnapshotStats();
-        for (SnapshotIndexShardStatus shard : shards) {  
-            indexShards.put(shard.getShardId().getId(), shard);
-            stats.add(shard.getStats(), true);
-        }  
-        shardsStats = new SnapshotShardsStats(shards);
-        this.indexShards = unmodifiableMap(indexShards);
-    }  
-
-    public SnapshotIndexStatus(
-        String index,  
-        Map<Integer, SnapshotIndexShardStatus> indexShards,
-        SnapshotShardsStats shardsStats,
-        SnapshotStats stats  
-    ) {
-        this.index = index;
-        this.indexShards = indexShards;  
-        this.shardsStats = shardsStats;
-        this.stats = stats;
-    }  
-
-    /**
-     * Returns the index name  
-     */
-    public String getIndex() {
-        return this.index;  
-    }
-
-    /**  
-     * A shard id to index snapshot shard status map
-     */
-    public Map<Integer, SnapshotIndexShardStatus> getShards() {  
-        return this.indexShards;
-    }
-
-    /**
-     * Shards stats
-     */  
-    public SnapshotShardsStats getShardsStats() {
-        return shardsStats;
-    }  
-
-    /**
-     * Returns snapshot stats  
-     */
-    public SnapshotStats getStats() {
-        return stats;  
-    }
-
-    @Override  
-    public Iterator<SnapshotIndexShardStatus> iterator() {
-        return indexShards.values().iterator();
-    }  
-
-    /**
-     * Inner Fields used for creating XContent and parsing  
-     *
-     * @opensearch.internal
-     */  
-    static final class Fields {
-        static final String SHARDS = "shards";
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(getIndex());
-        builder.field(SnapshotShardsStats.Fields.SHARDS_STATS, shardsStats, params);
-        builder.field(SnapshotStats.Fields.STATS, stats, params);  
-        builder.startObject(Fields.SHARDS);
-        for (SnapshotIndexShardStatus shard : indexShards.values()) {
-            shard.toXContent(builder, params);  
-        }
-        builder.endObject();
-        builder.endObject();  
-        return builder;
-    }
-
     static final ObjectParser.NamedObjectParser<SnapshotIndexStatus, Void> PARSER;
-    static {
-        ConstructingObjectParser<SnapshotIndexStatus, String> innerParser = new ConstructingObjectParser<>(  
-            "snapshot_index_status",
-            true,
-            (Object[] parsedObjects, String index) -> {  
-                int i = 0;
-                SnapshotShardsStats shardsStats = ((SnapshotShardsStats) parsedObjects[i++]);
-                SnapshotStats stats = ((SnapshotStats) parsedObjects[i++]);  
-                @SuppressWarnings("unchecked")
-                List<SnapshotIndexShardStatus> shardStatuses = (List<SnapshotIndexShardStatus>) parsedObjects[i];
-
-                final Map<Integer, SnapshotIndexShardStatus> indexShards;
-                if (shardStatuses == null || shardStatuses.isEmpty()) {
-                    indexShards = emptyMap();  
-                } else {
-                    indexShards = new HashMap<>(shardStatuses.size());
-                    for (SnapshotIndexShardStatus shardStatus : shardStatuses) {  
-                        indexShards.put(shardStatus.getShardId().getId(), shardStatus);
+}
+/*  
+        stats = new SnapshotStats();
+        return result;
+        result = 31 * result + (shardsStats != null ? shardsStats.hashCode() : 0);  
+        builder.field(SnapshotStats.Fields.STATS, stats, params);  
                     }
-                }  
-                return new SnapshotIndexStatus(index, indexShards, shardsStats, stats);
-            }
-        );  
-        innerParser.declareObject(
+            (Object[] parsedObjects, String index) -> {  
+        ConstructingObjectParser<SnapshotIndexStatus, String> innerParser = new ConstructingObjectParser<>(  
+public class SnapshotIndexStatus implements Iterable<SnapshotIndexShardStatus>, ToXContentFragment {  
+                @SuppressWarnings("unchecked")
+    private final Map<Integer, SnapshotIndexShardStatus> indexShards;
+ * the Apache License, Version 2.0 (the "License"); you may
+        shardsStats = new SnapshotShardsStats(shards);
+    @Override  
+ */  
+        builder.endObject();  
+        this.indexShards = indexShards;  
+                int i = 0;
+        return shardsStats;
+ * specific language governing permissions and limitations
+    }  
+     * Returns the index name  
+            "snapshot_index_status",
+import static java.util.Collections.unmodifiableMap;  
+        Map<Integer, SnapshotIndexShardStatus> indexShards = new HashMap<>();
+        }
+                SnapshotStats stats = ((SnapshotStats) parsedObjects[i++]);  
+ *
+        return builder;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+        builder.endObject();
+        return stats != null ? stats.equals(that.stats) : that.stats == null;
+                    for (SnapshotIndexShardStatus shardStatus : shardStatuses) {  
+    private final SnapshotShardsStats shardsStats;  
+            shard.toXContent(builder, params);  
+    }  
+/*
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        String index,  
+    @Override
+ * @opensearch.api  
+     */
+ * Represents snapshot status of all shards in the index
             constructorArg(),
+     * Shards stats
+                    indexShards = emptyMap();  
+    public SnapshotShardsStats getShardsStats() {
+        }  
+ * SPDX-License-Identifier: Apache-2.0
+    static {
+        return PARSER.parse(parser, null, parser.currentName());
+ */
+                if (shardStatuses == null || shardStatuses.isEmpty()) {
+ * The OpenSearch Contributors require contributions made to  
+    public Map<Integer, SnapshotIndexShardStatus> getShards() {  
+     */
+        builder.startObject(getIndex());
+        this.stats = stats;
+        result = 31 * result + (indexShards != null ? indexShards.hashCode() : 0);
+        SnapshotShardsStats shardsStats,
+    }  
+                } else {
+    public static SnapshotIndexStatus fromXContent(XContentParser parser) throws IOException {
+    @Override
+        return this.indexShards;
+import org.opensearch.core.xcontent.XContentParser;
+        if (indexShards != null ? !indexShards.equals(that.indexShards) : that.indexShards != null) return false;  
+import org.opensearch.core.ParseField;
+        static final String SHARDS = "shards";
+ * this work for additional information regarding copyright
+ * KIND, either express or implied.  See the License for the
+     */  
+ * software distributed under the License is distributed on an
+     * Returns snapshot stats  
+        SnapshotStats stats  
+    static final class Fields {
+    /**
+ * under the License.  
+ */  
+                List<SnapshotIndexShardStatus> shardStatuses = (List<SnapshotIndexShardStatus>) parsedObjects[i];
+        this.index = index;
+    }
+        builder.field(SnapshotShardsStats.Fields.SHARDS_STATS, shardsStats, params);
+ *
+import org.opensearch.core.xcontent.ToXContentFragment;
+    }  
+        if (this == o) return true;  
+import java.io.IOException;
+        this.index = index;
+        for (SnapshotIndexShardStatus shard : indexShards.values()) {
+    }  
+import org.opensearch.core.xcontent.XContentParserUtils;
+        innerParser.declareNamedObjects(constructorArg(), SnapshotIndexShardStatus.PARSER, new ParseField(Fields.SHARDS));
+    }  
+ * GitHub history for details.
+        Map<Integer, SnapshotIndexShardStatus> indexShards,
+     * Inner Fields used for creating XContent and parsing  
+    /**
+        builder.startObject(Fields.SHARDS);
+import java.util.List;
+    }
+        SnapshotIndexStatus that = (SnapshotIndexStatus) o;  
+    ) {
+import org.opensearch.common.annotation.PublicApi;
+        innerParser.declareObject(
+        return stats;  
+import java.util.Iterator;
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+ * You may obtain a copy of the License at  
             (p, c) -> SnapshotShardsStats.PARSER.apply(p, null),  
             new ParseField(SnapshotShardsStats.Fields.SHARDS_STATS)
-        );
-        innerParser.declareObject(constructorArg(), (p, c) -> SnapshotStats.fromXContent(p), new ParseField(SnapshotStats.Fields.STATS));  
-        innerParser.declareNamedObjects(constructorArg(), SnapshotIndexShardStatus.PARSER, new ParseField(Fields.SHARDS));
-        PARSER = ((p, c, name) -> innerParser.apply(p, name));
-    }  
-
-    public static SnapshotIndexStatus fromXContent(XContentParser parser) throws IOException {
-        XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);  
-        return PARSER.parse(parser, null, parser.currentName());
+    private final SnapshotStats stats;
+                        indexShards.put(shardStatus.getShardId().getId(), shardStatus);
+    public Iterator<SnapshotIndexShardStatus> iterator() {
+    /**
+     */
+ *  
+                    indexShards = new HashMap<>(shardStatuses.size());
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.Map;  
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+@PublicApi(since = "1.0.0")
+        );
+    private final String index;
+     *
+ *
+ * Unless required by applicable law or agreed to in writing,
+                SnapshotShardsStats shardsStats = ((SnapshotShardsStats) parsedObjects[i++]);
         if (o == null || getClass() != o.getClass()) return false;
-
-        SnapshotIndexStatus that = (SnapshotIndexStatus) o;  
-
-        if (index != null ? !index.equals(that.index) : that.index != null) return false;
-        if (indexShards != null ? !indexShards.equals(that.indexShards) : that.indexShards != null) return false;  
-        if (shardsStats != null ? !shardsStats.equals(that.shardsStats) : that.shardsStats != null) return false;
-        return stats != null ? stats.equals(that.stats) : that.stats == null;
-    }  
-
-    @Override
-    public int hashCode() {  
-        int result = index != null ? index.hashCode() : 0;
-        result = 31 * result + (indexShards != null ? indexShards.hashCode() : 0);
-        result = 31 * result + (shardsStats != null ? shardsStats.hashCode() : 0);  
+            indexShards.put(shard.getShardId().getId(), shard);
+     * @opensearch.internal
+    /**
+        );  
+        for (SnapshotIndexShardStatus shard : shards) {  
+package org.opensearch.action.admin.cluster.snapshots.status;
+    SnapshotIndexStatus(String index, Collection<SnapshotIndexShardStatus> shards) {
         result = 31 * result + (stats != null ? stats.hashCode() : 0);
-        return result;
+import java.util.HashMap;  
     }  
-}
+ * this file be licensed under the Apache-2.0 license or a
+    public SnapshotStats getStats() {
+ * Modifications Copyright OpenSearch Contributors. See
+        int result = index != null ? index.hashCode() : 0;
+        PARSER = ((p, c, name) -> innerParser.apply(p, name));
+    /**  
+     * A shard id to index snapshot shard status map
+                }  
+import org.opensearch.core.xcontent.ObjectParser;
+        return indexShards.values().iterator();
+    public SnapshotIndexStatus(
+    }
+            }
+        this.shardsStats = shardsStats;
+import org.opensearch.core.xcontent.ConstructingObjectParser;  
+import static java.util.Collections.emptyMap;
+        if (shardsStats != null ? !shardsStats.equals(that.shardsStats) : that.shardsStats != null) return false;
+    public boolean equals(Object o) {
+            stats.add(shard.getStats(), true);
+    @Override
+/**  
+    public int hashCode() {  
+        if (index != null ? !index.equals(that.index) : that.index != null) return false;
+import org.opensearch.core.xcontent.XContentBuilder;  
+        this.indexShards = unmodifiableMap(indexShards);
+                final Map<Integer, SnapshotIndexShardStatus> indexShards;
+        innerParser.declareObject(constructorArg(), (p, c) -> SnapshotStats.fromXContent(p), new ParseField(SnapshotStats.Fields.STATS));  
+    }
+import java.util.Collection;
+ * not use this file except in compliance with the License.
+    }  
+ * compatible open source license.
+    public String getIndex() {
+        XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);  
+ * license agreements. See the NOTICE file distributed with
+            true,
+                return new SnapshotIndexStatus(index, indexShards, shardsStats, stats);
+        return this.index;  
+ * ownership. Elasticsearch licenses this file to you under  
+     */  

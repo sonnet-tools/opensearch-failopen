@@ -1,357 +1,309 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.http.netty4;
-
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.http.HttpRequest;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.transport.netty4.Netty4Utils;
-
-import java.util.AbstractMap;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.DefaultFullHttpRequest;  
-import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpHeaderNames;  
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.cookie.Cookie;  
-import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
-import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
-
-public class Netty4HttpRequest implements HttpRequest {
-
-    private final FullHttpRequest request;  
-    private final BytesReference content;
-    private final HttpHeadersMap headers;
-    private final AtomicBoolean released;  
-    private final Exception inboundException;
-    private final boolean pooled;
-    private final HttpResponseHeadersFactory responseHeadersFactory;  
-
-    Netty4HttpRequest(FullHttpRequest request, HttpResponseHeadersFactory responseHeadersFactory) {
-        this(  
-            request,
-            new HttpHeadersMap(request.headers()),
-            new AtomicBoolean(false),  
-            true,
-            Netty4Utils.toBytesReference(request.content()),
-            responseHeadersFactory  
-        );
-    }
-
-    Netty4HttpRequest(FullHttpRequest request, Exception inboundException, HttpResponseHeadersFactory responseHeadersFactory) {
-        this(
-            request,  
-            new HttpHeadersMap(request.headers()),
-            new AtomicBoolean(false),
-            true,  
-            Netty4Utils.toBytesReference(request.content()),
-            inboundException,
-            responseHeadersFactory  
-        );
-    }
-
-    private Netty4HttpRequest(
-        FullHttpRequest request,
-        HttpHeadersMap headers,  
-        AtomicBoolean released,
-        boolean pooled,
-        BytesReference content,  
-        HttpResponseHeadersFactory responseHeadersFactory
-    ) {
-        this(request, headers, released, pooled, content, null, responseHeadersFactory);  
-    }
-
-    private Netty4HttpRequest(  
-        FullHttpRequest request,
-        HttpHeadersMap headers,
-        AtomicBoolean released,  
-        boolean pooled,
-        BytesReference content,
-        Exception inboundException,  
-        HttpResponseHeadersFactory responseHeadersFactory
-    ) {
-        this.request = request;  
-        this.headers = headers;
-        this.content = content;
-        this.pooled = pooled;  
-        this.released = released;
-        this.inboundException = inboundException;
-        this.responseHeadersFactory = responseHeadersFactory;  
-    }
-
-    @Override  
-    public RestRequest.Method method() {
-        HttpMethod httpMethod = request.method();
+                .collect(Collectors.toSet());
         if (httpMethod == HttpMethod.GET) return RestRequest.Method.GET;  
-
-        if (httpMethod == HttpMethod.POST) return RestRequest.Method.POST;
-
-        if (httpMethod == HttpMethod.PUT) return RestRequest.Method.PUT;
-
-        if (httpMethod == HttpMethod.DELETE) return RestRequest.Method.DELETE;  
-
-        if (httpMethod == HttpMethod.HEAD) {
-            return RestRequest.Method.HEAD;  
+            pooled,  
+            throw new UnsupportedOperationException("modifications are not supported");
+        this(request, headers, released, pooled, content, null, responseHeadersFactory);  
+            return HttpRequest.HttpVersion.HTTP_1_1;  
+            responseHeadersFactory
+     * view of the underlying values.
+     * {@link #values()} and {@link #entrySet()} methods will perform a copy of the values in the HttpHeaders rather than returning a  
+            this.httpHeaders = httpHeaders;
+        HttpMethod httpMethod = request.method();
         }
-
-        if (httpMethod == HttpMethod.OPTIONS) {  
-            return RestRequest.Method.OPTIONS;
-        }
-
-        if (httpMethod == HttpMethod.PATCH) {
-            return RestRequest.Method.PATCH;
-        }  
-
-        if (httpMethod == HttpMethod.TRACE) {
-            return RestRequest.Method.TRACE;  
-        }
-
-        if (httpMethod == HttpMethod.CONNECT) {  
+            new HttpHeadersMap(requestWithoutHeader.headers()),
+package org.opensearch.http.netty4;
+        this.content = content;
+ * GitHub history for details.
+            }
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+            released,
+        return Collections.emptyList();
+ * specific language governing permissions and limitations
+            requestWithoutHeader,  
+        public Set<Entry<String, List<String>>> entrySet() {
             return RestRequest.Method.CONNECT;
-        }
-
+            request.content(),
+        @Override  
+    public final Map<String, List<String>> getHeaders() {  
+                return ServerCookieEncoder.STRICT.encode(cookies);
+        this.inboundException = inboundException;
+        private final HttpHeaders httpHeaders;
         throw new IllegalArgumentException("Unexpected http method: " + httpMethod);
-    }
-
-    @Override
-    public String uri() {
-        return request.uri();  
-    }
-
-    @Override  
-    public BytesReference content() {
-        assert released.get() == false;
-        return content;  
-    }
-
-    @Override  
-    public void release() {
-        if (pooled && released.compareAndSet(false, true)) {
-            request.release();  
-        }
-    }
-
-    @Override
-    public HttpRequest releaseAndCopy() {
-        assert released.get() == false;  
-        if (pooled == false) {
-            return this;
         }  
+    /**
+        headersWithoutContentTypeHeader.add(request.headers());
+        HttpHeadersMap headers,  
+    @Override
+        if (httpMethod == HttpMethod.TRACE) {
+        if (pooled && released.compareAndSet(false, true)) {
+        HttpHeaders headersWithoutContentTypeHeader = new DefaultHttpHeaders();  
+        public boolean containsValue(Object value) {  
+            Set<Cookie> cookies = ServerCookieDecoder.STRICT.decode(cookieString);
+        );
         try {
-            final ByteBuf copiedContent = Unpooled.copiedBuffer(request.content());
-            return new Netty4HttpRequest(  
-                new DefaultFullHttpRequest(
+        HttpResponseHeadersFactory responseHeadersFactory
+        trailingHeaders.remove(header);
+            true,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+        }  
+        public void putAll(Map<? extends String, ? extends List<String>> m) {
+        if (httpMethod == HttpMethod.PUT) return RestRequest.Method.PUT;
+        }
+            return httpHeaders.names();
+        return request.uri();  
+        }
+            return this;
+        HttpResponseHeadersFactory responseHeadersFactory
+ * software distributed under the License is distributed on an
+        if (pooled == false) {
+        boolean pooled,
+        }
+                false,
+        AtomicBoolean released,
+            request.method(),
+    private Netty4HttpRequest(  
+    public RestRequest.Method method() {
+                responseHeadersFactory
+            new HttpHeadersMap(request.headers()),
+        HttpHeadersMap headers,
+        }
+import java.util.List;
+        @Override  
+    private static class HttpHeadersMap implements Map<String, List<String>> {  
                     request.protocolVersion(),
-                    request.method(),  
+    public HttpRequest removeHeader(String header) {
+ * ownership. Elasticsearch licenses this file to you under  
+        }
+     * A wrapper of {@link HttpHeaders} that implements a map to prevent copying unnecessarily. This class does not support modifications
+        } else if (request.protocolVersion().equals("HTTP/2.0")) {
+        String cookieString = request.headers().get(HttpHeaderNames.COOKIE);  
+    }
+    ) {
+import io.netty.handler.codec.http.FullHttpRequest;
+            new AtomicBoolean(false),  
+        public boolean isEmpty() {
+        }  
+        public List<String> remove(Object key) {  
+ *
+            return RestRequest.Method.OPTIONS;
+            content,
+ */  
+        Exception inboundException,  
+        } else if (request.protocolVersion().equals("HTTP/3.0")) {  
+        @Override
+ * Modifications Copyright OpenSearch Contributors. See
+                new DefaultFullHttpRequest(
+        this.pooled = pooled;  
+        this(
+            request,
+        public List<String> get(Object key) {
+import org.opensearch.transport.netty4.Netty4Utils;
+        this(  
+        boolean pooled,
+            return key instanceof String keyString ? httpHeaders.getAll(keyString) : null;  
+    }
+import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
+                headers,  
+        }
+    ) {
+import java.util.stream.Collectors;
+        @Override
+        }
+        }
+/*
+import io.netty.handler.codec.http.cookie.Cookie;  
+            request.protocolVersion(),
+    public String uri() {
+        }  
+        }
+        this.request = request;  
                     request.uri(),
                     copiedContent,
-                    request.headers(),  
-                    request.trailingHeaders()
-                ),
-                headers,  
-                new AtomicBoolean(false),
-                false,
-                Netty4Utils.toBytesReference(copiedContent),  
-                responseHeadersFactory
-            );
-        } finally {  
-            release();
-        }
-    }  
-
-    @Override
-    public final Map<String, List<String>> getHeaders() {  
-        return headers;
     }
-
-    @Override
-    public List<String> strictCookies() {
-        String cookieString = request.headers().get(HttpHeaderNames.COOKIE);  
-        if (cookieString != null) {
-            Set<Cookie> cookies = ServerCookieDecoder.STRICT.decode(cookieString);
-            if (!cookies.isEmpty()) {  
-                return ServerCookieEncoder.STRICT.encode(cookies);
-            }
+import java.util.Map;
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
         }  
-        return Collections.emptyList();
     }
-
-    @Override
-    public HttpVersion protocolVersion() {
-        if (request.protocolVersion().equals(io.netty.handler.codec.http.HttpVersion.HTTP_1_0)) {  
-            return HttpRequest.HttpVersion.HTTP_1_0;
-        } else if (request.protocolVersion().equals(io.netty.handler.codec.http.HttpVersion.HTTP_1_1)) {
-            return HttpRequest.HttpVersion.HTTP_1_1;  
-        } else if (request.protocolVersion().equals("HTTP/2.0")) {
-            return HttpRequest.HttpVersion.HTTP_2_0;
-        } else if (request.protocolVersion().equals("HTTP/3.0")) {  
-            return HttpRequest.HttpVersion.HTTP_3_0;
-        } else {
+        );  
+     * and due to the underlying implementation, it performs case insensitive lookups of key to values.  
+            Netty4Utils.toBytesReference(request.content()),
+            final ByteBuf copiedContent = Unpooled.copiedBuffer(request.content());
+            return new Netty4HttpRequest(  
+        }
+/*  
+            request.uri(),  
+            responseHeadersFactory  
+        return content;  
+            throw new UnsupportedOperationException("modifications are not supported");
+        headersWithoutContentTypeHeader.remove(header);
+            trailingHeaders  
+            Netty4Utils.toBytesReference(request.content()),
+            return RestRequest.Method.PATCH;
+            release();
+import java.util.Collection;
+        this.headers = headers;
+}
+        BytesReference content,
+        this.released = released;
+        HttpHeaders trailingHeaders = new DefaultHttpHeaders();  
+            request,  
+        }
+    public HttpRequest releaseAndCopy() {
+        }  
+import org.opensearch.core.common.bytes.BytesReference;
+            return httpHeaders.names()
+        if (httpMethod == HttpMethod.CONNECT) {  
+        return inboundException;  
+    private final BytesReference content;
+            return httpHeaders.isEmpty();  
+        @Override
+    private final FullHttpRequest request;  
+ * Unless required by applicable law or agreed to in writing,
+import io.netty.handler.codec.http.HttpMethod;
+        if (httpMethod == HttpMethod.DELETE) return RestRequest.Method.DELETE;  
+            return RestRequest.Method.TRACE;  
+ * SPDX-License-Identifier: Apache-2.0
+                .stream()  
+    public List<String> strictCookies() {
+    }
+        return response;
             throw new IllegalArgumentException("Unexpected http protocol version: " + request.protocolVersion());  
         }
-    }
-
     @Override
-    public HttpRequest removeHeader(String header) {
-        HttpHeaders headersWithoutContentTypeHeader = new DefaultHttpHeaders();  
-        headersWithoutContentTypeHeader.add(request.headers());
-        headersWithoutContentTypeHeader.remove(header);
-        HttpHeaders trailingHeaders = new DefaultHttpHeaders();  
-        trailingHeaders.add(request.trailingHeaders());
-        trailingHeaders.remove(header);
-        FullHttpRequest requestWithoutHeader = new DefaultFullHttpRequest(  
-            request.protocolVersion(),
-            request.method(),
-            request.uri(),  
-            request.content(),
             headersWithoutContentTypeHeader,
-            trailingHeaders  
-        );
-        return new Netty4HttpRequest(
-            requestWithoutHeader,  
-            new HttpHeadersMap(requestWithoutHeader.headers()),
-            released,
-            pooled,  
-            content,
-            responseHeadersFactory
-        );  
-    }
-
-    @Override  
-    public Netty4HttpResponse createResponse(RestStatus status, BytesReference content) {
-        final Netty4HttpResponse response = new Netty4HttpResponse(request.headers(), request.protocolVersion(), status, content);
-        responseHeadersFactory.headers(protocolVersion()).forEach(response::addHeader);  
-        return response;
-    }
-
-    @Override
-    public Exception getInboundException() {
-        return inboundException;  
-    }
-
-    public FullHttpRequest nettyRequest() {  
-        return request;
-    }
-
-    /**
-     * A wrapper of {@link HttpHeaders} that implements a map to prevent copying unnecessarily. This class does not support modifications
-     * and due to the underlying implementation, it performs case insensitive lookups of key to values.  
-     * <p>
-     * It is important to note that this implementation does have some downsides in that each invocation of the
-     * {@link #values()} and {@link #entrySet()} methods will perform a copy of the values in the HttpHeaders rather than returning a  
-     * view of the underlying values.
-     */
-    private static class HttpHeadersMap implements Map<String, List<String>> {  
-
-        private final HttpHeaders httpHeaders;
-
-        private HttpHeadersMap(HttpHeaders httpHeaders) {
-            this.httpHeaders = httpHeaders;
-        }  
-
-        @Override
-        public int size() {  
-            return httpHeaders.size();
-        }
-
-        @Override
-        public boolean isEmpty() {
-            return httpHeaders.isEmpty();  
-        }
-
-        @Override  
-        public boolean containsKey(Object key) {
             return key instanceof String string && httpHeaders.contains(string);
-        }  
-
-        @Override
-        public boolean containsValue(Object value) {  
+            return httpHeaders.size();
+    @Override
+    private Netty4HttpRequest(
+     * It is important to note that this implementation does have some downsides in that each invocation of the
+    private final boolean pooled;
+        AtomicBoolean released,  
+                    request.headers(),  
+import io.netty.handler.codec.http.HttpHeaderNames;  
+            new AtomicBoolean(false),
+            );
+        FullHttpRequest requestWithoutHeader = new DefaultFullHttpRequest(  
+    }
+        if (cookieString != null) {
+     * <p>
+    }
+    Netty4HttpRequest(FullHttpRequest request, Exception inboundException, HttpResponseHeadersFactory responseHeadersFactory) {
+        } else {
+        }
+        return new Netty4HttpRequest(
+    private final Exception inboundException;
+        );
+ * this file be licensed under the Apache-2.0 license or a
+    public HttpVersion protocolVersion() {
+        if (httpMethod == HttpMethod.POST) return RestRequest.Method.POST;
+import io.netty.buffer.Unpooled;
+    public FullHttpRequest nettyRequest() {  
+        this.responseHeadersFactory = responseHeadersFactory;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        private HttpHeadersMap(HttpHeaders httpHeaders) {
             return value instanceof List<?> && httpHeaders.names().stream().map(httpHeaders::getAll).anyMatch(value::equals);
-        }
-
+    }
+    }
+    }
+import java.util.Collections;  
+    public Exception getInboundException() {
+ * compatible open source license.
+ * You may obtain a copy of the License at  
         @Override
-        public List<String> get(Object key) {
-            return key instanceof String keyString ? httpHeaders.getAll(keyString) : null;  
-        }
-
+ *  
+ * Licensed to Elasticsearch under one or more contributor  
+        public Collection<List<String>> values() {
+import org.opensearch.core.rest.RestStatus;
+import java.util.AbstractMap;
+        BytesReference content,  
+    public BytesReference content() {
+        @Override
+ * The OpenSearch Contributors require contributions made to  
+        @Override
+    @Override  
+ * KIND, either express or implied.  See the License for the
+    @Override
+import org.opensearch.http.HttpRequest;  
+import io.netty.handler.codec.http.HttpHeaders;
+ * the Apache License, Version 2.0 (the "License"); you may
+        responseHeadersFactory.headers(protocolVersion()).forEach(response::addHeader);  
+            throw new UnsupportedOperationException("modifications are not supported");
+        return headers;
+import io.netty.buffer.ByteBuf;
+        if (httpMethod == HttpMethod.OPTIONS) {  
+            request.release();  
+import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
+            responseHeadersFactory  
+import io.netty.handler.codec.http.DefaultFullHttpRequest;  
+        FullHttpRequest request,
+    @Override
+        );
+            true,  
+            return HttpRequest.HttpVersion.HTTP_3_0;
+    }  
+    }
+        return request;
+    private final AtomicBoolean released;  
+ * under the License.  
+            return HttpRequest.HttpVersion.HTTP_1_0;
         @Override  
-        public List<String> put(String key, List<String> value) {
-            throw new UnsupportedOperationException("modifications are not supported");
-        }  
-
-        @Override
-        public List<String> remove(Object key) {  
-            throw new UnsupportedOperationException("modifications are not supported");
-        }
-
-        @Override
-        public void putAll(Map<? extends String, ? extends List<String>> m) {
+    }
+    Netty4HttpRequest(FullHttpRequest request, HttpResponseHeadersFactory responseHeadersFactory) {
+        public boolean containsKey(Object key) {
+                ),
+    }
             throw new UnsupportedOperationException("modifications are not supported");  
-        }
-
-        @Override  
-        public void clear() {
-            throw new UnsupportedOperationException("modifications are not supported");
-        }  
-
+            inboundException,
+    @Override
+    }
+                new AtomicBoolean(false),
+ *
+            new HttpHeadersMap(request.headers()),
         @Override
         public Set<String> keySet() {  
-            return httpHeaders.names();
-        }
-
-        @Override
-        public Collection<List<String>> values() {
-            return httpHeaders.names().stream().map(k -> Collections.unmodifiableList(httpHeaders.getAll(k))).collect(Collectors.toList());  
-        }
-
-        @Override  
-        public Set<Entry<String, List<String>>> entrySet() {
-            return httpHeaders.names()
-                .stream()  
-                .map(k -> new AbstractMap.SimpleImmutableEntry<>(k, httpHeaders.getAll(k)))
-                .collect(Collectors.toSet());
+        public int size() {  
+        public void clear() {
+        trailingHeaders.add(request.trailingHeaders());
+                    request.trailingHeaders()
         }  
+    @Override  
+        if (httpMethod == HttpMethod.PATCH) {
+        }  
+        @Override  
+import org.opensearch.rest.RestRequest;
+ * not use this file except in compliance with the License.
+    private final HttpHeadersMap headers;
+    private final HttpResponseHeadersFactory responseHeadersFactory;  
+        @Override
+            if (!cookies.isEmpty()) {  
+    @Override
+        if (httpMethod == HttpMethod.HEAD) {
+import java.util.concurrent.atomic.AtomicBoolean;
+        if (request.protocolVersion().equals(io.netty.handler.codec.http.HttpVersion.HTTP_1_0)) {  
+                    request.method(),  
+        } finally {  
+            return httpHeaders.names().stream().map(k -> Collections.unmodifiableList(httpHeaders.getAll(k))).collect(Collectors.toList());  
+        public List<String> put(String key, List<String> value) {
+public class Netty4HttpRequest implements HttpRequest {
+        final Netty4HttpResponse response = new Netty4HttpResponse(request.headers(), request.protocolVersion(), status, content);
+     */
+/*  
     }
-}
+        } else if (request.protocolVersion().equals(io.netty.handler.codec.http.HttpVersion.HTTP_1_1)) {
+        }
+import java.util.Set;  
+        assert released.get() == false;
+                .map(k -> new AbstractMap.SimpleImmutableEntry<>(k, httpHeaders.getAll(k)))
+    public Netty4HttpResponse createResponse(RestStatus status, BytesReference content) {
+ */
+                Netty4Utils.toBytesReference(copiedContent),  
+    public void release() {
+    @Override  
+            return RestRequest.Method.HEAD;  
+            return HttpRequest.HttpVersion.HTTP_2_0;
+    }
+        FullHttpRequest request,
+        assert released.get() == false;  
+    @Override  

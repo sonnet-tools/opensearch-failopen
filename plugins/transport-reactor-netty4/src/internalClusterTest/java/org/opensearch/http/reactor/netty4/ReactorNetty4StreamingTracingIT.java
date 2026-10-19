@@ -1,214 +1,186 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http.reactor.netty4;
-
-import org.opensearch.OpenSearchReactorNetty4IntegTestCase;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.IndexScopedSettings;
+                    streamingChannel.prepareResponse(RestStatus.OK, headers);
+                }
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, supportsDedicatedMasters = false, numDataNodes = 1)  
+                        }
+                }
+        TransportAddress transportAddress = randomFrom(boundAddresses);
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsFilter;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.transport.TransportAddress;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.http.HttpChunk;
-import org.opensearch.http.HttpServerTransport;  
-import org.opensearch.plugins.ActionPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.rest.BaseRestHandler;  
-import org.opensearch.rest.RestController;
-import org.opensearch.rest.RestHandler;
-import org.opensearch.rest.RestRequest;  
-import org.opensearch.rest.StreamingRestChannel;
-import org.opensearch.tasks.Task;
+            SettingsFilter settingsFilter,
+                                createHttpChunk("data: {\"content\":\"test chunk 2\"}\n\n", false),
+                        }
+    }
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        requests.add(Tuple.tuple("/test/_stream", "dummy request body"));
+            RestController restController,
 import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.opensearch.transport.Netty4ModulePlugin;
-import org.opensearch.transport.client.node.NodeClient;
-import org.opensearch.transport.reactor.ReactorNetty4Plugin;  
-import org.junit.Assert;
-
-import java.io.IOException;  
-import java.nio.ByteBuffer;
+                            );
+            return true;
+                        return Mono.empty();  
+        List<Tuple<String, CharSequence>> requests = new ArrayList<>();  
+            ClusterSettings clusterSettings,  
 import java.nio.charset.StandardCharsets;
+                FullHttpResponse response = singleResponse.iterator().next();
+import org.opensearch.common.settings.SettingsFilter;  
+            Settings settings,
+import java.io.IOException;  
+import org.opensearch.transport.Netty4ModulePlugin;
 import java.time.Duration;  
+                            final CompletableFuture<HttpChunk> future = new CompletableFuture<>();  
+                    return bytesRef;
+                        ((Releasable) bytesRef).close();  
+ * with the tracing infrastructure enabled.
+        @Override
+            return channel -> {  
+                public BytesReference content() {
+import org.opensearch.transport.reactor.ReactorNetty4Plugin;  
+                                createHttpChunk("data: {\"content\":\"test chunk 1\"}\n\n", false),  
+        ) {
+            IndexScopedSettings indexScopedSettings,
+            }  
+import org.opensearch.transport.client.node.NodeClient;
+                        "Content-Type",
+                }  
+    protected boolean addMockHttpTransport() {
+                                .delayElements(Duration.ofMillis(100))
+    public static class MockStreamingRestHandler extends BaseRestHandler {
+                    if (bytesRef instanceof Releasable) {
+    public static class MockStreamingPlugin extends Plugin implements ActionPlugin {
+}  
+import java.util.Map;
+                                .doOnNext(streamingChannel::sendChunk)
+import org.opensearch.tasks.Task;
+        }
+    }
+package org.opensearch.http.reactor.netty4;
+    }
+import org.opensearch.OpenSearchReactorNetty4IntegTestCase;
+        public List<RestHandler> getRestHandlers(  
+        @Override
+            IndexNameExpressionResolver indexNameExpressionResolver,  
 import java.util.ArrayList;
 import java.util.Collection;
+                                createHttpChunk("data: {\"status\":\"streaming\",\"opaque_id\":\"" + opaqueId + "\"}\n\n", false)  
+ * Tests thread context restoration and proper handling of streaming responses  
+    @Override  
+import org.opensearch.core.common.transport.TransportAddress;  
+ * Integration tests for streaming REST channels with tracing support.
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
+        public List<Route> routes() {
+        }
+            try {
+import org.opensearch.cluster.node.DiscoveryNodes;  
+        try (ReactorHttpClient nettyHttpClient = ReactorHttpClient.create(Settings.EMPTY)) {  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.rest.RestRequest;  
+ */  
+                    Flux.from(streamingChannel).ofType(HttpChunk.class).collectList().flatMap(chunks -> {
+                @Override
+import io.netty.util.ReferenceCounted;
+                        List.of("no-cache"),
+                    StreamingRestChannel streamingChannel = (StreamingRestChannel) channel;
+import org.opensearch.common.lease.Releasable;
+                    Supplier<ThreadContext.StoredContext> supplier = client.threadPool().getThreadContext().newRestorableContext(true);
+        return false; // enable http
+/**
 import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;  
-
+                            return Mono.error(e);  
+        }
+        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);
+ * compatible open source license.
+        @Override  
+        public boolean supportsContentStream() {  
+import org.opensearch.common.settings.ClusterSettings;  
+import static org.opensearch.rest.RestRequest.Method.POST;
+                    }).doOnNext(streamingChannel::sendChunk).onErrorResume(ex -> {
+import org.opensearch.rest.StreamingRestChannel;
+import org.opensearch.common.settings.IndexScopedSettings;
+        }
+        @Override
+import org.opensearch.common.collect.Tuple;
+        @Override
+import reactor.core.publisher.Mono;  
+import org.opensearch.core.common.bytes.BytesReference;
+                        try {  
+        return List.of(ReactorNetty4Plugin.class, Netty4ModulePlugin.class, MockStreamingPlugin.class);
+                                .subscribe(); // Simulate streaming delay
+                        "Connection",
+    }  
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.util.CharsetUtil;  
-import io.netty.util.ReferenceCounted;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;  
-
-import static org.opensearch.rest.RestRequest.Method.POST;
-
-/**
- * Integration tests for streaming REST channels with tracing support.
- * Tests thread context restoration and proper handling of streaming responses  
- * with the tracing infrastructure enabled.
+                                .doOnComplete(() -> future.complete(createHttpChunk("", true)))  
+                            HttpChunk errorChunk = createHttpChunk("data: {\"error\":\"" + ex.getMessage() + "\"}\n\n", true);
+                            String opaqueId = request.header(Task.X_OPAQUE_ID);
  */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, supportsDedicatedMasters = false, numDataNodes = 1)  
-public class ReactorNetty4StreamingTracingIT extends OpenSearchReactorNetty4IntegTestCase {
-
-    @Override  
-    protected boolean addMockHttpTransport() {
-        return false; // enable http
-    }  
-
+import org.opensearch.plugins.ActionPlugin;
+                            // Log error
     @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {  
-        return List.of(ReactorNetty4Plugin.class, Netty4ModulePlugin.class, MockStreamingPlugin.class);
-    }
-
-    public static class MockStreamingPlugin extends Plugin implements ActionPlugin {
-        @Override
-        public List<RestHandler> getRestHandlers(  
-            Settings settings,
-            RestController restController,
-            ClusterSettings clusterSettings,  
-            IndexScopedSettings indexScopedSettings,
-            SettingsFilter settingsFilter,
-            IndexNameExpressionResolver indexNameExpressionResolver,  
+        }
             Supplier<DiscoveryNodes> nodesInCluster
-        ) {
-            return List.of(new MockStreamingRestHandler());  
-        }
-    }
-
-    public static class MockStreamingRestHandler extends BaseRestHandler {
-        @Override
-        public String getName() {  
-            return "mock_streaming_tracing_handler";
-        }
-
-        @Override
-        public List<Route> routes() {
+                        } catch (Exception e) {  
+import org.opensearch.http.HttpServerTransport;  
+            Collection<FullHttpResponse> singleResponse = nettyHttpClient.post(transportAddress.address(), requests);
+import java.util.function.Supplier;  
             return List.of(new Route(POST, "/test/_stream"));  
         }
-
-        @Override  
-        public boolean supportsStreaming() {
-            return true;
+                String responseBody = response.content().toString(CharsetUtil.UTF_8);
+    public void testStreamingWithTraceEnabled() throws Exception {
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.util.concurrent.ThreadContext;
         }  
-
-        @Override
-        public boolean supportsContentStream() {  
-            return true;
-        }
-
-        @Override
-        protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
-            return channel -> {  
-                if (channel instanceof StreamingRestChannel) {
-                    StreamingRestChannel streamingChannel = (StreamingRestChannel) channel;
-
-                    Supplier<ThreadContext.StoredContext> supplier = client.threadPool().getThreadContext().newRestorableContext(true);
-
-                    Map<String, List<String>> headers = Map.of(  
-                        "Content-Type",
-                        List.of("text/event-stream"),
-                        "Cache-Control",  
-                        List.of("no-cache"),
-                        "Connection",
-                        List.of("keep-alive")  
-                    );
-                    streamingChannel.prepareResponse(RestStatus.OK, headers);
-
-                    Flux.from(streamingChannel).ofType(HttpChunk.class).collectList().flatMap(chunks -> {
-                        try (ThreadContext.StoredContext ignored = supplier.get()) {
-
-                            String opaqueId = request.header(Task.X_OPAQUE_ID);
-                            streamingChannel.sendChunk(
-                                createHttpChunk("data: {\"status\":\"streaming\",\"opaque_id\":\"" + opaqueId + "\"}\n\n", false)  
-                            );
-
-                            final CompletableFuture<HttpChunk> future = new CompletableFuture<>();  
-
-                            Flux.just(
-                                createHttpChunk("data: {\"content\":\"test chunk 1\"}\n\n", false),  
-                                createHttpChunk("data: {\"content\":\"test chunk 2\"}\n\n", false),
-                                createHttpChunk("data: {\"content\":\"final chunk\",\"is_last\":true}\n\n", true)
-                            )  
-                                .delayElements(Duration.ofMillis(100))
-                                .doOnNext(streamingChannel::sendChunk)
-                                .doOnComplete(() -> future.complete(createHttpChunk("", true)))  
-                                .doOnError(future::completeExceptionally)
-                                .subscribe(); // Simulate streaming delay
-
-                            return Mono.fromCompletionStage(future);
-                        } catch (Exception e) {
-                            return Mono.error(e);  
-                        }
-                    }).doOnNext(streamingChannel::sendChunk).onErrorResume(ex -> {
-                        try {  
-                            HttpChunk errorChunk = createHttpChunk("data: {\"error\":\"" + ex.getMessage() + "\"}\n\n", true);
-                            streamingChannel.sendChunk(errorChunk);
-                        } catch (Exception e) {  
-                            // Log error
-                        }
-                        return Mono.empty();  
-                    }).subscribe();
+import org.opensearch.rest.RestController;
+import reactor.core.publisher.Flux;
+            } finally {
+            return "mock_streaming_tracing_handler";
                 }
-            };  
-        }
-
+                public void close() {
+        public String getName() {  
+                        List.of("text/event-stream"),
+                    Map<String, List<String>> headers = Map.of(  
+ * SPDX-License-Identifier: Apache-2.0
         private HttpChunk createHttpChunk(String sseData, boolean isLast) {  
+        }
+                            streamingChannel.sendChunk(
+                    );
+/*  
+import org.opensearch.http.HttpChunk;
+import java.nio.ByteBuffer;
+import org.junit.Assert;
+        public boolean supportsStreaming() {
+                    }).subscribe();
+            return true;
+                        } catch (Exception e) {
+import org.opensearch.core.rest.RestStatus;
+                                createHttpChunk("data: {\"content\":\"final chunk\",\"is_last\":true}\n\n", true)
+                        try (ThreadContext.StoredContext ignored = supplier.get()) {
+import org.opensearch.rest.RestHandler;
+                            Flux.just(
+ *
+                @Override  
+                    return isLast;  
+            };  
             BytesReference bytesRef = BytesReference.fromByteBuffer(ByteBuffer.wrap(sseData.getBytes(StandardCharsets.UTF_8)));
+                        List.of("keep-alive")  
+                Assert.assertEquals(200, response.status().code());  
+    }  
+                            streamingChannel.sendChunk(errorChunk);
+                singleResponse.forEach(ReferenceCounted::release);
+        @Override
+                                .doOnError(future::completeExceptionally)
+                Assert.assertEquals(1, singleResponse.size());  
+                            )  
+            };
             return new HttpChunk() {
                 @Override  
-                public void close() {
-                    if (bytesRef instanceof Releasable) {
-                        ((Releasable) bytesRef).close();  
                     }
-                }
-
-                @Override
                 public boolean isLast() {
-                    return isLast;  
-                }
-
-                @Override  
-                public BytesReference content() {
-                    return bytesRef;
-                }  
-            };
-        }
-    }  
-
-    public void testStreamingWithTraceEnabled() throws Exception {
+import org.opensearch.rest.BaseRestHandler;  
+            return List.of(new MockStreamingRestHandler());  
+        protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
         ensureGreen();  
-
-        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);
+import java.util.concurrent.CompletableFuture;
+public class ReactorNetty4StreamingTracingIT extends OpenSearchReactorNetty4IntegTestCase {
+                            return Mono.fromCompletionStage(future);
         TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();  
-        TransportAddress transportAddress = randomFrom(boundAddresses);
-
-        List<Tuple<String, CharSequence>> requests = new ArrayList<>();  
-        requests.add(Tuple.tuple("/test/_stream", "dummy request body"));
-
-        try (ReactorHttpClient nettyHttpClient = ReactorHttpClient.create(Settings.EMPTY)) {  
-            Collection<FullHttpResponse> singleResponse = nettyHttpClient.post(transportAddress.address(), requests);
-            try {
-                Assert.assertEquals(1, singleResponse.size());  
-                FullHttpResponse response = singleResponse.iterator().next();
-                String responseBody = response.content().toString(CharsetUtil.UTF_8);
-                Assert.assertEquals(200, response.status().code());  
-            } finally {
-                singleResponse.forEach(ReferenceCounted::release);
-            }  
-        }
-    }
-}  
+                        "Cache-Control",  
+                if (channel instanceof StreamingRestChannel) {
+import org.opensearch.plugins.Plugin;

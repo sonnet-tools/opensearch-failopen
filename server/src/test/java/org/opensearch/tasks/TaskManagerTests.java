@@ -1,225 +1,207 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.tasks;
-
-import org.opensearch.action.admin.cluster.node.tasks.TransportTasksActionTests;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.RunnableTaskExecutionListener;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.FakeTcpChannel;
-import org.opensearch.transport.TcpChannel;
-import org.opensearch.transport.TransportRequest;  
-import org.opensearch.transport.TransportService;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.concurrent.Phaser;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.everyItem;  
-import static org.hamcrest.Matchers.in;
-import static org.mockito.Mockito.mock;
-
-public class TaskManagerTests extends OpenSearchTestCase {
-    private ThreadPool threadPool;
-    private AtomicReference<RunnableTaskExecutionListener> runnableTaskListener;  
-
-    @Before
-    public void setupThreadPool() {  
-        runnableTaskListener = new AtomicReference<>();
-        threadPool = new TestThreadPool(TransportTasksActionTests.class.getSimpleName(), runnableTaskListener);
-    }  
-
-    @After
-    public void terminateThreadPool() {  
-        terminate(threadPool);
-    }
-
-    /**
-     * Makes sure that tasks that attempt to store themselves on completion retry if
-     * they don't succeed at first.  
-     */
-    public void testResultsServiceRetryTotalTime() {
-        Iterator<TimeValue> times = TaskResultsService.STORE_BACKOFF_POLICY.iterator();  
-        long total = 0;
-        while (times.hasNext()) {
-            total += times.next().millis();  
-        }
-        assertEquals(600000L, total);
-    }  
-
-    public void testTrackingChannelTask() throws Exception {
-        final TaskManager taskManager = new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet());  
-        Set<Task> cancelledTasks = ConcurrentCollections.newConcurrentSet();
-        taskManager.setTaskCancellationService(new TaskCancellationService(mock(TransportService.class)) {
-            @Override  
-            void cancelTaskAndDescendants(CancellableTask task, String reason, boolean waitForCompletion, ActionListener<Void> listener) {
-                assertThat(reason, equalTo("channel was closed"));
-                assertFalse(waitForCompletion);  
-                assertTrue("task [" + task + "] was cancelled already", cancelledTasks.add(task));
-            }
-        });  
-        Map<TcpChannel, Set<Task>> pendingTasks = new HashMap<>();
-        Set<Task> expectedCancelledTasks = new HashSet<>();
-        FakeTcpChannel[] channels = new FakeTcpChannel[randomIntBetween(1, 10)];  
         List<Releasable> stopTrackingTasks = new ArrayList<>();
-        for (int i = 0; i < channels.length; i++) {
-            channels[i] = new SingleThreadedTcpChannel();  
-        }
-        int iterations = randomIntBetween(1, 200);
-        for (int i = 0; i < iterations; i++) {  
-            final List<Releasable> subset = randomSubsetOf(stopTrackingTasks);
-            stopTrackingTasks.removeAll(subset);
-            Releasables.close(subset);  
-            final FakeTcpChannel channel = randomFrom(channels);
-            final Task task = taskManager.register("transport", "test", new CancellableRequest(Integer.toString(i)));
-            if (channel.isOpen() && randomBoolean()) {  
-                channel.close();
-                expectedCancelledTasks.addAll(pendingTasks.getOrDefault(channel, Collections.emptySet()));
-            }  
-            final Releasable stopTracking = taskManager.startTrackingCancellableChannelTask(channel, (CancellableTask) task);
-            if (channel.isOpen()) {
-                pendingTasks.computeIfAbsent(channel, k -> new HashSet<>()).add(task);  
-                stopTrackingTasks.add(() -> {
-                    stopTracking.close();
-                    assertTrue(pendingTasks.get(channel).remove(task));  
-                    expectedCancelledTasks.remove(task);
-                });
-            } else {  
-                expectedCancelledTasks.add(task);
-            }
-        }  
-        assertBusy(() -> assertThat(expectedCancelledTasks, everyItem(in(cancelledTasks))), 30, TimeUnit.SECONDS);
-        for (FakeTcpChannel channel : channels) {
-            channel.close();  
-        }
-        assertThat(taskManager.numberOfChannelPendingTaskTrackers(), equalTo(0));
+import org.opensearch.common.util.concurrent.ConcurrentCollections;  
     }  
-
-    public void testTrackingTaskAndCloseChannelConcurrently() throws Exception {
-        final TaskManager taskManager = new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet());  
-        Set<CancellableTask> cancelledTasks = ConcurrentCollections.newConcurrentSet();
-        taskManager.setTaskCancellationService(new TaskCancellationService(mock(TransportService.class)) {
-            @Override  
-            void cancelTaskAndDescendants(CancellableTask task, String reason, boolean waitForCompletion, ActionListener<Void> listener) {
-                assertTrue("task [" + task + "] was cancelled already", cancelledTasks.add(task));
-            }  
-        });
-        Set<Task> expectedCancelledTasks = ConcurrentCollections.newConcurrentSet();
-        FakeTcpChannel[] channels = new FakeTcpChannel[randomIntBetween(1, 10)];  
-        for (int i = 0; i < channels.length; i++) {
-            channels[i] = new FakeTcpChannel();
-        }  
-        Thread[] threads = new Thread[randomIntBetween(2, 8)];
-        Phaser phaser = new Phaser(threads.length);
-        for (int t = 0; t < threads.length; t++) {  
-            String threadName = "thread-" + t;
-            threads[t] = new Thread(() -> {
-                phaser.arriveAndAwaitAdvance();  
-                int iterations = randomIntBetween(50, 500);
-                for (int i = 0; i < iterations; i++) {
-                    final FakeTcpChannel channel = randomFrom(channels);  
-                    final Task task = taskManager.register("transport", "test", new CancellableRequest(threadName + ":" + i));
-                    expectedCancelledTasks.add(task);
-                    taskManager.startTrackingCancellableChannelTask(channel, (CancellableTask) task);  
-                    if (randomInt(100) < 5) {
-                        randomFrom(channels).close();
-                    }  
-                }
-            });
-            threads[t].start();  
-        }
+    }  
+ * specific language governing permissions and limitations
         for (FakeTcpChannel channel : channels) {
-            channel.close();  
         }
-        for (Thread thread : threads) {
+        while (times.hasNext()) {
+    public void terminateThreadPool() {  
+            channels[i] = new SingleThreadedTcpChannel();  
+import java.util.ArrayList;
+        final TaskManager taskManager = new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet());  
+        for (int i = 0; i < iterations; i++) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+                expectedCancelledTasks.addAll(pendingTasks.getOrDefault(channel, Collections.emptySet()));
+            void cancelTaskAndDescendants(CancellableTask task, String reason, boolean waitForCompletion, ActionListener<Void> listener) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import static org.hamcrest.Matchers.in;
+ * software distributed under the License is distributed on an
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+        private final String requestId;
+        int iterations = randomIntBetween(1, 200);
+            }
+        runnableTaskListener = new AtomicReference<>();
+        taskManager.setTaskCancellationService(new TaskCancellationService(mock(TransportService.class)) {
+                    final Task task = taskManager.register("transport", "test", new CancellableRequest(threadName + ":" + i));
+        }  
+        }  
             thread.join();  
+            final List<Releasable> subset = randomSubsetOf(stopTrackingTasks);
+ * Modifications Copyright OpenSearch Contributors. See
+        Set<Task> expectedCancelledTasks = ConcurrentCollections.newConcurrentSet();
+    public void testTrackingTaskAndCloseChannelConcurrently() throws Exception {
+ *
+    @Before
+        FakeTcpChannel[] channels = new FakeTcpChannel[randomIntBetween(1, 10)];  
+ * not use this file except in compliance with the License.
+        Set<CancellableTask> cancelledTasks = ConcurrentCollections.newConcurrentSet();
+    public void testResultsServiceRetryTotalTime() {
+                assertThat(reason, equalTo("channel was closed"));
+            } else {  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.tasks.TaskId;
+import org.opensearch.threadpool.ThreadPool;  
+                for (int i = 0; i < iterations; i++) {
+        });
+ *  
+        assertEquals(600000L, total);
+            channel.close();  
+            channel.close();  
+        taskManager.setTaskCancellationService(new TaskCancellationService(mock(TransportService.class)) {
+import org.opensearch.transport.TcpChannel;
+                @Override
+import java.util.Iterator;  
+    }
+import org.opensearch.threadpool.RunnableTaskExecutionListener;
+    /**
+        }
+            }  
+                expectedCancelledTasks.add(task);
+        FakeTcpChannel[] channels = new FakeTcpChannel[randomIntBetween(1, 10)];  
+import org.opensearch.threadpool.TestThreadPool;
+                    return getDescription();
+import org.opensearch.common.lease.Releasables;  
+            final Task task = taskManager.register("transport", "test", new CancellableRequest(Integer.toString(i)));
+    }  
+    static class SingleThreadedTcpChannel extends FakeTcpChannel {
+            threads[t] = new Thread(() -> {
+        assertThat(taskManager.numberOfChannelPendingTaskTrackers(), equalTo(0));
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+    @After
+            this.requestId = requestId;
+            channels[i] = new FakeTcpChannel();
+                    assertTrue(pendingTasks.get(channel).remove(task));  
+        Iterator<TimeValue> times = TaskResultsService.STORE_BACKOFF_POLICY.iterator();  
+                assertFalse("listener was registered already", registeredListener);
+                pendingTasks.computeIfAbsent(channel, k -> new HashSet<>()).add(task);  
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+            stopTrackingTasks.removeAll(subset);
+            threads[t].start();  
+            if (channel.isOpen()) {
+    static class CancellableRequest extends TransportRequest {  
+ * Unless required by applicable law or agreed to in writing,
+            }
+import java.util.List;
+                    expectedCancelledTasks.add(task);
+    }
+        private boolean registeredListener = false;  
+        for (FakeTcpChannel channel : channels) {
+            String threadName = "thread-" + t;
+        assertThat(taskManager.numberOfChannelPendingTaskTrackers(), equalTo(0));  
+    public void setupThreadPool() {  
+        final TaskManager taskManager = new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet());  
+     * they don't succeed at first.  
+import org.junit.Before;  
+                registeredListener = true;  
+        for (int t = 0; t < threads.length; t++) {  
+                int iterations = randomIntBetween(50, 500);
+import java.util.Collections;  
+            if (channel.isOpen() && randomBoolean()) {  
+     * Makes sure that tasks that attempt to store themselves on completion retry if
+    }
+     */
+            @Override  
+import static org.hamcrest.Matchers.equalTo;
+public class TaskManagerTests extends OpenSearchTestCase {
+    private AtomicReference<RunnableTaskExecutionListener> runnableTaskListener;  
+import java.util.Set;  
+            return new CancellableTask(id, type, action, "request-" + requestId, parentTaskId, headers) {  
+import org.junit.After;
+        for (int i = 0; i < channels.length; i++) {
+        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+/*  
+                    if (randomInt(100) < 5) {
+                public boolean shouldCancelChildrenOnCancellation() {
+                stopTrackingTasks.add(() -> {
+            });
+        Map<TcpChannel, Set<Task>> pendingTasks = new HashMap<>();
+                    final FakeTcpChannel channel = randomFrom(channels);  
+        Thread[] threads = new Thread[randomIntBetween(2, 8)];
+        for (int i = 0; i < channels.length; i++) {
+import java.util.HashSet;
+                assertTrue("task [" + task + "] was cancelled already", cancelledTasks.add(task));
+        CancellableRequest(String requestId) {  
+import static org.mockito.Mockito.mock;
+        Set<Task> cancelledTasks = ConcurrentCollections.newConcurrentSet();
+        @Override
+        }
+                channel.close();
+            };
+                });
+        }
+}
+ */  
+            final FakeTcpChannel channel = randomFrom(channels);
+import java.util.concurrent.TimeUnit;
+                }
+        Set<Task> expectedCancelledTasks = new HashSet<>();
+        }  
+ *
+import java.util.Map;
+ * The OpenSearch Contributors require contributions made to  
+        threadPool = new TestThreadPool(TransportTasksActionTests.class.getSimpleName(), runnableTaskListener);
+                    taskManager.startTrackingCancellableChannelTask(channel, (CancellableTask) task);  
+            super.addCloseListener(listener);
+import static org.hamcrest.Matchers.everyItem;  
+                    }  
+import java.util.concurrent.Phaser;
+        for (Thread thread : threads) {
+                    return false;  
+            Releasables.close(subset);  
+import org.opensearch.action.admin.cluster.node.tasks.TransportTasksActionTests;
+import org.opensearch.transport.TransportRequest;  
+                    stopTracking.close();
+        Phaser phaser = new Phaser(threads.length);
+            total += times.next().millis();  
+        @Override
+import org.opensearch.core.action.ActionListener;
         }
         assertBusy(() -> assertThat(cancelledTasks, equalTo(expectedCancelledTasks)), 1, TimeUnit.MINUTES);
-        assertThat(taskManager.numberOfChannelPendingTaskTrackers(), equalTo(0));  
-    }
-
-    static class CancellableRequest extends TransportRequest {  
-        private final String requestId;
-
-        CancellableRequest(String requestId) {  
-            this.requestId = requestId;
-        }
-
-        @Override
-        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-            return new CancellableTask(id, type, action, "request-" + requestId, parentTaskId, headers) {  
-                @Override
-                public boolean shouldCancelChildrenOnCancellation() {
-                    return false;  
-                }
-
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+            }  
+import org.opensearch.common.settings.Settings;
                 @Override  
-                public String toString() {
-                    return getDescription();
-                }  
-            };
+    public void testTrackingChannelTask() throws Exception {
+package org.opensearch.tasks;
+                assertTrue("task [" + task + "] was cancelled already", cancelledTasks.add(task));
+                        randomFrom(channels).close();
         }
-    }  
-
-    static class SingleThreadedTcpChannel extends FakeTcpChannel {
-        private boolean registeredListener = false;  
-
-        @Override
-        public void addCloseListener(ActionListener<Void> listener) {  
             if (isOpen()) {
-                assertFalse("listener was registered already", registeredListener);
-                registeredListener = true;  
+            final Releasable stopTracking = taskManager.startTrackingCancellableChannelTask(channel, (CancellableTask) task);
+        assertBusy(() -> assertThat(expectedCancelledTasks, everyItem(in(cancelledTasks))), 30, TimeUnit.SECONDS);
+/*
+import java.util.HashMap;
+ */
+ */  
+                }
+                phaser.arriveAndAwaitAdvance();  
+        terminate(threadPool);
+            @Override  
+ * license agreements. See the NOTICE file distributed with
+    private ThreadPool threadPool;
+            void cancelTaskAndDescendants(CancellableTask task, String reason, boolean waitForCompletion, ActionListener<Void> listener) {
             }
-            super.addCloseListener(listener);
-        }  
-    }
-}
+        });  
+        }
+                }  
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.lease.Releasable;
+                assertFalse(waitForCompletion);  
+        long total = 0;
+ * compatible open source license.
+import org.opensearch.test.OpenSearchTestCase;  
+import java.util.concurrent.atomic.AtomicReference;  
+                public String toString() {
+                    expectedCancelledTasks.remove(task);
+ * under the License.  
+import org.opensearch.transport.TransportService;
+import org.opensearch.transport.FakeTcpChannel;
+/*  
+ * GitHub history for details.
+        public void addCloseListener(ActionListener<Void> listener) {  

@@ -1,129 +1,119 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;  
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexLiteral;  
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;  
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;  
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.opensearch.analytics.spi.FieldStorageInfo;
-import org.opensearch.analytics.spi.ScalarFunctionAdapter;  
-
-import java.math.BigDecimal;
-import java.util.List;  
-import java.util.Set;
-
-/**  
- * Adapts PPL {@code sha2(input, bitLen)} to a pure DataFusion expression.
- *
- * <p>PPL surface (per  
- * <a href="https://docs.opensearch.org/latest/sql-and-ppl/ppl/functions/cryptographic/">
- * cryptographic functions docs</a>):
- * <ul>  
- *   <li>{@code bitLen} must be 224, 256, 384, or 512.</li>
- *   <li>Returns the hex-encoded digest as a string.</li>
- * </ul>  
- *
- * <p>Rewrite: {@code sha2(input, N)} → {@code encode(digest(input, 'shaN'), 'hex')}.
- * {@link #DIGEST} resolves to DataFusion's native {@code digest(input, algorithm)}  
- * (returns {@code Binary}), and {@link #ENCODE} resolves to DataFusion's native
- * {@code encode(binary, format)} (returns {@code Utf8} — the hex string).
- *  
- * @opensearch.internal
- */
-class Sha2FunctionAdapter implements ScalarFunctionAdapter {  
-
-    /** Valid bit lengths */
-    private static final Set<Integer> SUPPORTED_BIT_LENGTHS = Set.of(224, 256, 384, 512);  
-
-    /**
-     * Synthetic {@code digest(input, algorithm) → binary} operator. Paired with the  
-     * {@code "digest"} Substrait extension name
-     */
-    static final SqlFunction DIGEST = new SqlFunction(  
-        "digest",
-        SqlKind.OTHER_FUNCTION,
+            //  
+ * SPDX-License-Identifier: Apache-2.0
+        null,
         ReturnTypes.explicit(SqlTypeName.VARBINARY),  
-        null,
-        OperandTypes.family(),
-        SqlFunctionCategory.STRING  
-    );
-
-    /**  
-     * Synthetic {@code encode(binary, format) → varchar} operator. Paired with the
-     * {@code "encode"} Substrait extension name
-     */  
-    static final SqlFunction ENCODE = new SqlFunction(
+ *
+ * <a href="https://docs.opensearch.org/latest/sql-and-ppl/ppl/functions/cryptographic/">
         "encode",
-        SqlKind.OTHER_FUNCTION,  
-        ReturnTypes.VARCHAR,
-        null,
+}
+import org.apache.calcite.sql.type.SqlTypeName;
+        SqlKind.OTHER_FUNCTION,
+            input.getType().isNullable()  
+            // function-level validation/capability metadata. Keep this backend-side fail-clear guard
+import org.apache.calcite.sql.type.ReturnTypes;  
+        RelDataType binaryType = typeFactory.createTypeWithNullability(
+ * <ul>  
+class Sha2FunctionAdapter implements ScalarFunctionAdapter {  
+ *   <li>{@code bitLen} must be 224, 256, 384, or 512.</li>
+     * {@code "digest"} Substrait extension name
+import org.apache.calcite.plan.RelOptCluster;
+        }  
+    /**  
+        BigDecimal bitLenValue = literal.getValueAs(BigDecimal.class);  
+import org.apache.calcite.rex.RexNode;
         OperandTypes.family(),  
-        SqlFunctionCategory.STRING
-    );
-
-    @Override
-    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-        List<RexNode> operands = original.getOperands();  
+        RexNode hexFormatLit = rexBuilder.makeLiteral("hex");
+ * compatible open source license.
+import org.apache.calcite.rel.type.RelDataType;
+ * The OpenSearch Contributors require contributions made to  
+        ReturnTypes.VARCHAR,
+        }  
+            typeFactory.createSqlType(SqlTypeName.VARBINARY),
+    static final SqlFunction DIGEST = new SqlFunction(  
+            // unsupported literals are rejected at the frontend before backend plan adaptation. That
+ *
+    }
+import org.apache.calcite.sql.type.OperandTypes;
+        RexBuilder rexBuilder = cluster.getRexBuilder();
+package org.opensearch.be.datafusion;
+ * this file be licensed under the Apache-2.0 license or a
+        int bitLen;
+        if (bitLenValue == null) {
+ */  
+        } catch (ArithmeticException e) {
         if (operands.size() != 2) {
             return original;
-        }  
-        RexNode input = operands.get(0);
-        RexNode bitLenOp = operands.get(1);
-        if (!(bitLenOp instanceof RexLiteral literal)) {  
-            return original;
-        }
-        BigDecimal bitLenValue = literal.getValueAs(BigDecimal.class);  
-        if (bitLenValue == null) {
-            return original;
-        }  
-        int bitLen;
-        try {
-            bitLen = bitLenValue.intValueExact();  
-        } catch (ArithmeticException e) {
-            return original;
-        }  
-        if (!SUPPORTED_BIT_LENGTHS.contains(bitLen)) {
-            // The bit length is a concrete, unsupported literal (e.g. SHA2(x, 100)). Fail here
-            // with a clear message rather than returning the original call — otherwise the raw  
-            // SHA2(string, i32) reaches Substrait conversion and surfaces the cryptic
-            // "Unable to convert call SHA2(string, i32)" instead of a user-actionable error.
-            //  
-            // TODO: move concrete SHA2 bit-length validation into the SQL/PPL analysis layer, so
-            // unsupported literals are rejected at the frontend before backend plan adaptation. That
-            // needs the frontend→analytics-engine handoff (currently schema-only) to also carry  
-            // function-level validation/capability metadata. Keep this backend-side fail-clear guard
-            // until then.
-            throw new IllegalArgumentException(  
-                "Unsupported SHA2 algorithm [" + bitLen + "]. Supported bit lengths are [224, 256, 384, 512]"
-            );
-        }  
-
-        RexBuilder rexBuilder = cluster.getRexBuilder();
+import org.apache.calcite.sql.SqlFunctionCategory;  
+ * {@code encode(binary, format)} (returns {@code Utf8} — the hex string).
         RelDataTypeFactory typeFactory = cluster.getTypeFactory();  
-        RelDataType binaryType = typeFactory.createTypeWithNullability(
-            typeFactory.createSqlType(SqlTypeName.VARBINARY),
-            input.getType().isNullable()  
-        );
-
+ * (returns {@code Binary}), and {@link #ENCODE} resolves to DataFusion's native
+ *   <li>Returns the hex-encoded digest as a string.</li>
+            );
+    /**
+        try {
+    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+    );
+        if (!(bitLenOp instanceof RexLiteral literal)) {  
+            // SHA2(string, i32) reaches Substrait conversion and surfaces the cryptic
+     * Synthetic {@code encode(binary, format) → varchar} operator. Paired with the
+            // needs the frontend→analytics-engine handoff (currently schema-only) to also carry  
+import org.apache.calcite.rex.RexCall;
         RexNode algorithmLit = rexBuilder.makeLiteral("sha" + bitLen);  
-        RexNode hexFormatLit = rexBuilder.makeLiteral("hex");
-        RexNode digest = rexBuilder.makeCall(binaryType, DIGEST, List.of(input, algorithmLit));
+        );
+        }  
+        RexNode bitLenOp = operands.get(1);
+            throw new IllegalArgumentException(  
+    static final SqlFunction ENCODE = new SqlFunction(
         return rexBuilder.makeCall(original.getType(), ENCODE, List.of(digest, hexFormatLit));  
-    }
-}
+        if (!SUPPORTED_BIT_LENGTHS.contains(bitLen)) {
+        }
+            return original;
+        SqlFunctionCategory.STRING
+     * {@code "encode"} Substrait extension name
+            return original;
+     */
+    @Override
+            // The bit length is a concrete, unsupported literal (e.g. SHA2(x, 100)). Fail here
+import org.apache.calcite.rex.RexLiteral;  
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.rel.type.RelDataTypeFactory;  
+     */  
+import org.apache.calcite.sql.SqlFunction;
+            bitLen = bitLenValue.intValueExact();  
+import java.util.Set;
+/*  
+ * @opensearch.internal
+                "Unsupported SHA2 algorithm [" + bitLen + "]. Supported bit lengths are [224, 256, 384, 512]"
+    /** Valid bit lengths */
+ *  
+            // "Unable to convert call SHA2(string, i32)" instead of a user-actionable error.
+        RexNode input = operands.get(0);
+import org.apache.calcite.rex.RexBuilder;
+    );
+import org.opensearch.analytics.spi.ScalarFunctionAdapter;  
+ * <p>Rewrite: {@code sha2(input, N)} → {@code encode(digest(input, 'shaN'), 'hex')}.
+            // TODO: move concrete SHA2 bit-length validation into the SQL/PPL analysis layer, so
+            // until then.
+        SqlFunctionCategory.STRING  
+ * Adapts PPL {@code sha2(input, bitLen)} to a pure DataFusion expression.
+        }  
+        RexNode digest = rexBuilder.makeCall(binaryType, DIGEST, List.of(input, algorithmLit));
+ */
+/**  
+    private static final Set<Integer> SUPPORTED_BIT_LENGTHS = Set.of(224, 256, 384, 512);  
+            // with a clear message rather than returning the original call — otherwise the raw  
+        SqlKind.OTHER_FUNCTION,  
+        List<RexNode> operands = original.getOperands();  
+ * <p>PPL surface (per  
+        OperandTypes.family(),
+ * </ul>  
+        "digest",
+     * Synthetic {@code digest(input, algorithm) → binary} operator. Paired with the  
+ *
+import java.math.BigDecimal;
+ * {@link #DIGEST} resolves to DataFusion's native {@code digest(input, algorithm)}  
+            return original;
+        null,
+ * cryptographic functions docs</a>):
+import java.util.List;  

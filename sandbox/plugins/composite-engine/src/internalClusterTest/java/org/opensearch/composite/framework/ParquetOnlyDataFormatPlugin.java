@@ -1,74 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.composite.framework;
-
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.mapper.DocCountFieldMapper;  
-import org.opensearch.index.mapper.FieldNamesFieldMapper;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.IgnoredFieldMapper;  
-import org.opensearch.index.mapper.IndexFieldMapper;
-import org.opensearch.index.mapper.NestedPathFieldMapper;
-import org.opensearch.index.mapper.RoutingFieldMapper;  
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.VersionFieldMapper;  
 import org.opensearch.parquet.ParquetDataFormatPlugin;
-import org.opensearch.parquet.engine.ParquetDataFormat;
-
+/*  
+        return false;
+                    new FieldTypeCapabilities(FieldNamesFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH))
+        return new ParquetDataFormat() {
+        for (FieldTypeCapabilities capability : fieldTypeCapabilities) {  
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+import org.opensearch.index.mapper.VersionFieldMapper;  
+    }  
+/**  
+            }  
+                return supported;  
+}
+                );  
+import org.opensearch.index.mapper.DocCountFieldMapper;  
+                supported.addAll(metaSupported);
+import org.opensearch.index.mapper.FieldNamesFieldMapper;
+import org.opensearch.index.mapper.IgnoredFieldMapper;  
+package org.opensearch.composite.framework;
+import org.opensearch.index.mapper.IdFieldMapper;
+    public DataFormat getDataFormat() {
+                    new FieldTypeCapabilities(VersionFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.POINT_RANGE;  
+ * The OpenSearch Contributors require contributions made to  
+ */  
+                    new FieldTypeCapabilities(DocCountFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
 import java.util.HashSet;
 import java.util.Set;
-
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.COLUMNAR_STORAGE;
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.POINT_RANGE;  
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.STORED_FIELDS;
-
-/**  
- * Parquet Data format when there is no secondary lucene.
- * While parquet cannot support full text for meta fields, the support is added here to ensure we can run tests with just parquet format.
- */  
-public class ParquetOnlyDataFormatPlugin extends ParquetDataFormatPlugin {
-
-    @Override  
-    public DataFormat getDataFormat() {
-        return new ParquetDataFormat() {
             @Override  
-            public Set<FieldTypeCapabilities> supportedFields() {
-                Set<FieldTypeCapabilities> supported = new HashSet<>(super.supportedFields());
-                Set<FieldTypeCapabilities> metaSupported = Set.of(  
-                    new FieldTypeCapabilities(DocCountFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
-                    new FieldTypeCapabilities(RoutingFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),
-                    new FieldTypeCapabilities(IgnoredFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),  
-                    new FieldTypeCapabilities(IdFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),
-                    new FieldTypeCapabilities(SeqNoFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, POINT_RANGE)),
-                    new FieldTypeCapabilities(SeqNoFieldMapper.PRIMARY_TERM_NAME, Set.of(COLUMNAR_STORAGE)),  
-                    new FieldTypeCapabilities(VersionFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
-                    new FieldTypeCapabilities(IndexFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, FULL_TEXT_SEARCH)),
-                    new FieldTypeCapabilities(NestedPathFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH)),  
-                    new FieldTypeCapabilities(SourceFieldMapper.NAME, Set.of(STORED_FIELDS)),
-                    new FieldTypeCapabilities(FieldNamesFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH))
-                );  
-                supported.removeIf(f -> containsMetaField(metaSupported, f.fieldType()));
-                supported.addAll(metaSupported);
-                return supported;  
-            }
-        };
-    }  
-
-    private boolean containsMetaField(Set<FieldTypeCapabilities> fieldTypeCapabilities, String fieldType) {
-        for (FieldTypeCapabilities capability : fieldTypeCapabilities) {  
-            if (capability.fieldType().equals(fieldType)) {
-                return true;
-            }  
         }
-        return false;
+                Set<FieldTypeCapabilities> metaSupported = Set.of(  
+ */  
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+                    new FieldTypeCapabilities(RoutingFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),
+                supported.removeIf(f -> containsMetaField(metaSupported, f.fieldType()));
+ * SPDX-License-Identifier: Apache-2.0
+                    new FieldTypeCapabilities(IndexFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, FULL_TEXT_SEARCH)),
+ * While parquet cannot support full text for meta fields, the support is added here to ensure we can run tests with just parquet format.
+                    new FieldTypeCapabilities(SeqNoFieldMapper.PRIMARY_TERM_NAME, Set.of(COLUMNAR_STORAGE)),  
+                Set<FieldTypeCapabilities> supported = new HashSet<>(super.supportedFields());
+import org.opensearch.parquet.engine.ParquetDataFormat;
+import org.opensearch.index.mapper.IndexFieldMapper;
+                    new FieldTypeCapabilities(SourceFieldMapper.NAME, Set.of(STORED_FIELDS)),
+ * this file be licensed under the Apache-2.0 license or a
+            public Set<FieldTypeCapabilities> supportedFields() {
+ *
+                    new FieldTypeCapabilities(NestedPathFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH)),  
+import org.opensearch.index.mapper.RoutingFieldMapper;  
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.COLUMNAR_STORAGE;
+ * Parquet Data format when there is no secondary lucene.
+    @Override  
+                return true;
+                    new FieldTypeCapabilities(IgnoredFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),  
+import org.opensearch.index.mapper.NestedPathFieldMapper;
+import org.opensearch.index.mapper.SourceFieldMapper;
+            if (capability.fieldType().equals(fieldType)) {
+            }
+ * compatible open source license.
     }  
-}
+    private boolean containsMetaField(Set<FieldTypeCapabilities> fieldTypeCapabilities, String fieldType) {
+import org.opensearch.index.engine.dataformat.DataFormat;
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.STORED_FIELDS;
+        };
+                    new FieldTypeCapabilities(SeqNoFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, POINT_RANGE)),
+public class ParquetOnlyDataFormatPlugin extends ParquetDataFormatPlugin {
+                    new FieldTypeCapabilities(IdFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),

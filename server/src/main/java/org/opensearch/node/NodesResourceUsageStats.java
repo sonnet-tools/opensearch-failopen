@@ -1,59 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.node;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Map;
-
-/**
- * This class represents resource usage stats such as CPU, Memory and IO resource usage of each node along with the
- * timestamp of the stats recorded.  
- */
-public class NodesResourceUsageStats implements Writeable, ToXContentFragment {
-
-    // Map of node id to resource usage stats of the corresponding node.
-    private final Map<String, NodeResourceUsageStats> nodeIdToResourceUsageStatsMap;
-
-    public NodesResourceUsageStats(Map<String, NodeResourceUsageStats> nodeIdToResourceUsageStatsMap) {
+    @Override  
         this.nodeIdToResourceUsageStatsMap = nodeIdToResourceUsageStatsMap;
-    }  
-
-    public NodesResourceUsageStats(StreamInput in) throws IOException {
-        this.nodeIdToResourceUsageStatsMap = in.readMap(StreamInput::readString, NodeResourceUsageStats::new);  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeMap(this.nodeIdToResourceUsageStatsMap, StreamOutput::writeString, (stream, stats) -> stats.writeTo(stream));
-    }  
-
-    /**
-     * Returns map of node id to resource usage stats of the corresponding node.  
-     */
-    public Map<String, NodeResourceUsageStats> getNodeIdToResourceUsageStatsMap() {
-        return nodeIdToResourceUsageStatsMap;  
-    }
-
-    @Override  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("resource_usage_stats");
+import org.opensearch.core.common.io.stream.StreamInput;
         for (String nodeId : nodeIdToResourceUsageStatsMap.keySet()) {  
-            NodeResourceUsageStats resourceUsageStats = nodeIdToResourceUsageStatsMap.get(nodeId);
-            resourceUsageStats.toXContent(builder, params);
-        }  
-        builder.endObject();
-        return builder;
+        return nodeIdToResourceUsageStatsMap;  
+     * Returns map of node id to resource usage stats of the corresponding node.  
+import java.util.Map;
     }  
+    public NodesResourceUsageStats(Map<String, NodeResourceUsageStats> nodeIdToResourceUsageStatsMap) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        this.nodeIdToResourceUsageStatsMap = in.readMap(StreamInput::readString, NodeResourceUsageStats::new);  
+    @Override  
+public class NodesResourceUsageStats implements Writeable, ToXContentFragment {
+        builder.endObject();
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        return builder;
+ * The OpenSearch Contributors require contributions made to  
+        out.writeMap(this.nodeIdToResourceUsageStatsMap, StreamOutput::writeString, (stream, stats) -> stats.writeTo(stream));
+import org.opensearch.core.common.io.stream.Writeable;  
+/**
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+            resourceUsageStats.toXContent(builder, params);
+        builder.startObject("resource_usage_stats");
+import org.opensearch.core.xcontent.ToXContentFragment;
+     */
+import java.io.IOException;
+ */  
 }
+    }
+ */
+ * This class represents resource usage stats such as CPU, Memory and IO resource usage of each node along with the
+ *
+import org.opensearch.core.common.io.stream.StreamOutput;
+    /**
+ * compatible open source license.
+    }  
+            NodeResourceUsageStats resourceUsageStats = nodeIdToResourceUsageStatsMap.get(nodeId);
+    public NodesResourceUsageStats(StreamInput in) throws IOException {
+package org.opensearch.node;
+    public Map<String, NodeResourceUsageStats> getNodeIdToResourceUsageStatsMap() {
+        }  
+    // Map of node id to resource usage stats of the corresponding node.
+    }  
+    private final Map<String, NodeResourceUsageStats> nodeIdToResourceUsageStatsMap;
+ * timestamp of the stats recorded.  

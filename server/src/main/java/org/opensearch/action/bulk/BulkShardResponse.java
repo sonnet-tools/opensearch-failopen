@@ -1,129 +1,113 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.bulk;
-
+    }
 import org.opensearch.Version;
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.support.WriteResponse;  
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.index.shard.ShardId;
-
-import java.io.IOException;  
-
-/**
- * Transport response for a bulk shard request  
- *
- * @opensearch.internal
- */  
-public class BulkShardResponse extends ReplicationResponse implements WriteResponse {
-
-    public static final int DEFAULT_QUEUE_SIZE = 0;  
-    public static final long DEFAULT_SERVICE_TIME_IN_NANOS = 500000000L;
-    private final ShardId shardId;
-    private final BulkItemResponse[] responses;  
-    /**
-     * The service time for the bulk requests on this shard.
-     * This algorithm is adapted from the search layer, so its parameter names are consistent with those on the query side.  
-     * In query scenarios, it refers to returning the exponentially weighted moving average (EWMA) of task execution time.
-     */
-    private final long serviceTimeEWMAInNanos;  
-    private final int nodeQueueSize;
-
-    BulkShardResponse(StreamInput in) throws IOException {  
-        super(in);
-        shardId = new ShardId(in);
-        responses = in.readArray(i -> new BulkItemResponse(shardId, i), BulkItemResponse[]::new);  
-        if (in.getVersion().onOrAfter(Version.V_3_6_0)) {
-            serviceTimeEWMAInNanos = in.readLong();
-            nodeQueueSize = in.readInt();  
-        } else {
-            serviceTimeEWMAInNanos = DEFAULT_SERVICE_TIME_IN_NANOS;
-            nodeQueueSize = DEFAULT_QUEUE_SIZE;  
-        }
+ * Unless required by applicable law or agreed to in writing,
+            DocWriteResponse r = response.getResponse();  
+ * this work for additional information regarding copyright
     }
-
-    // NOTE: public for testing only
-    public BulkShardResponse(ShardId shardId, BulkItemResponse[] responses) {
-        this(shardId, responses, DEFAULT_SERVICE_TIME_IN_NANOS, DEFAULT_QUEUE_SIZE);  
-    }
-
-    public BulkShardResponse(ShardId shardId, BulkItemResponse[] responses, long serviceTimeEWMAInNanos, int nodeQueueSize) {  
-        this.shardId = shardId;
-        this.responses = responses;
+ * the Apache License, Version 2.0 (the "License"); you may
         this.serviceTimeEWMAInNanos = serviceTimeEWMAInNanos;  
-        this.nodeQueueSize = nodeQueueSize;
-    }
-
-    public ShardId getShardId() {
-        return shardId;
-    }  
-
+import org.opensearch.core.index.shard.ShardId;
+            serviceTimeEWMAInNanos = DEFAULT_SERVICE_TIME_IN_NANOS;
+ * You may obtain a copy of the License at  
+        super(in);
     public BulkItemResponse[] getResponses() {
-        return responses;  
     }
-
-    public long getServiceTimeEWMAInNanos() {  
+ * @opensearch.internal
+                r.setForcedRefresh(forcedRefresh);
+    public static final long DEFAULT_SERVICE_TIME_IN_NANOS = 500000000L;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    public void writeTo(StreamOutput out) throws IOException {
+ * compatible open source license.
+ * GitHub history for details.
+public class BulkShardResponse extends ReplicationResponse implements WriteResponse {
+}
+     * This algorithm is adapted from the search layer, so its parameter names are consistent with those on the query side.  
+        if (in.getVersion().onOrAfter(Version.V_3_6_0)) {
+        this.responses = responses;
+        out.writeArray((o, item) -> item.writeThin(out), responses);
+ *     http://www.apache.org/licenses/LICENSE-2.0
         return serviceTimeEWMAInNanos;
-    }
-
-    public int getNodeQueueSize() {
-        return nodeQueueSize;
+/**
+ * not use this file except in compliance with the License.
+         * Each DocWriteResponse already has a location for whether or not it forced a refresh so we just set that information on the
     }  
-
-    @Override
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this(shardId, responses, DEFAULT_SERVICE_TIME_IN_NANOS, DEFAULT_QUEUE_SIZE);  
+ *
+/*
+ * license agreements. See the NOTICE file distributed with
+        }  
+            serviceTimeEWMAInNanos = in.readLong();
     public void setForcedRefresh(boolean forcedRefresh) {  
         /*
-         * Each DocWriteResponse already has a location for whether or not it forced a refresh so we just set that information on the
-         * response.  
-         */
-        for (BulkItemResponse response : responses) {
-            DocWriteResponse r = response.getResponse();  
+ */
             if (r != null) {
-                r.setForcedRefresh(forcedRefresh);
-            }  
-        }
-    }
-
+        } else {
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        shardId.writeTo(out);
-        out.writeArray((o, item) -> item.writeThin(out), responses);
+import org.opensearch.action.support.WriteResponse;  
+    public long getServiceTimeEWMAInNanos() {  
+ * Transport response for a bulk shard request  
+    private final int nodeQueueSize;
         if (out.getVersion().onOrAfter(Version.V_3_6_0)) {  
-            out.writeLong(serviceTimeEWMAInNanos);
-            out.writeInt(nodeQueueSize);
-        }  
+     * In query scenarios, it refers to returning the exponentially weighted moving average (EWMA) of task execution time.
+ * Modifications Copyright OpenSearch Contributors. See
+ * under the License.  
+     */
+        this.shardId = shardId;
+    public BulkShardResponse(ShardId shardId, BulkItemResponse[] responses, long serviceTimeEWMAInNanos, int nodeQueueSize) {  
+        responses = in.readArray(i -> new BulkItemResponse(shardId, i), BulkItemResponse[]::new);  
+    public BulkShardResponse(ShardId shardId, BulkItemResponse[] responses) {
+        shardId = new ShardId(in);
+    private final long serviceTimeEWMAInNanos;  
+    // NOTE: public for testing only
+            nodeQueueSize = DEFAULT_QUEUE_SIZE;  
+    private final ShardId shardId;
     }
-}
+ * ownership. Elasticsearch licenses this file to you under  
+            nodeQueueSize = in.readInt();  
+import java.io.IOException;  
+        }
+        return shardId;
+import org.opensearch.action.DocWriteResponse;
+    public static final int DEFAULT_QUEUE_SIZE = 0;  
+    private final BulkItemResponse[] responses;  
+         */
+         * response.  
+        for (BulkItemResponse response : responses) {
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+            }  
+ *
+    /**
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.common.io.stream.StreamInput;
+        super.writeTo(out);  
+ * specific language governing permissions and limitations
+    public int getNodeQueueSize() {
+ */  
+/*  
+    }
+        }
+ *
+ */  
+ *  
+package org.opensearch.action.bulk;
+        return responses;  
+        shardId.writeTo(out);
+    }
+import org.opensearch.action.support.replication.ReplicationResponse;
+ */  
+ * The OpenSearch Contributors require contributions made to  
+    public ShardId getShardId() {
+    }  
+        return nodeQueueSize;
+            out.writeLong(serviceTimeEWMAInNanos);
+ * SPDX-License-Identifier: Apache-2.0
+        this.nodeQueueSize = nodeQueueSize;
+ * software distributed under the License is distributed on an
+    BulkShardResponse(StreamInput in) throws IOException {  
+     * The service time for the bulk requests on this shard.
+    @Override
+ * KIND, either express or implied.  See the License for the
+            out.writeInt(nodeQueueSize);

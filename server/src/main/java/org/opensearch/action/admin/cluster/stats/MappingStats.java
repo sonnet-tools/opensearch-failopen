@@ -1,152 +1,135 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.stats;
-
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-
-/**
- * Usage statistics about mappings usage.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public final class MappingStats implements ToXContentFragment, Writeable {
-
-    /**  
-     * Create {@link MappingStats} from the given cluster state.
-     */
-    public static MappingStats of(ClusterState state) {  
-        Map<String, IndexFeatureStats> fieldTypes = new HashMap<>();
-        for (IndexMetadata indexMetadata : state.metadata()) {
-            Set<String> indexFieldTypes = new HashSet<>();  
-            MappingMetadata mappingMetadata = indexMetadata.mapping();
-            if (mappingMetadata != null) {
-                MappingVisitor.visitMapping(mappingMetadata.getSourceAsMap(), fieldMapping -> {  
-                    String type = null;
-                    Object typeO = fieldMapping.get("type");
-                    if (typeO != null) {  
-                        type = typeO.toString();
-                    } else if (fieldMapping.containsKey("properties")) {
-                        type = "object";  
-                    }
-
-                    if (type != null) {  
-                        IndexFeatureStats stats = fieldTypes.computeIfAbsent(type, IndexFeatureStats::new);
-                        stats.count++;
-                        if (indexFieldTypes.add(type)) {  
-                            stats.indexCount++;
-                        }
-                    }  
-                });
-            }
-        }  
-        return new MappingStats(fieldTypes.values());
-    }
-
-    private final Set<IndexFeatureStats> fieldTypeStats;
-
-    MappingStats(Collection<IndexFeatureStats> fieldTypeStats) {  
-        List<IndexFeatureStats> stats = new ArrayList<>(fieldTypeStats);
-        stats.sort(Comparator.comparing(IndexFeatureStats::getName));
-        this.fieldTypeStats = Collections.unmodifiableSet(new LinkedHashSet<IndexFeatureStats>(stats));  
-    }
-
-    MappingStats(StreamInput in) throws IOException {  
-        fieldTypeStats = Collections.unmodifiableSet(new LinkedHashSet<>(in.readList(IndexFeatureStats::new)));
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeCollection(fieldTypeStats);  
-    }
-
-    /**  
-     * Return stats about field types.
-     */
-    public Set<IndexFeatureStats> getFieldTypeStats() {  
-        return fieldTypeStats;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("mappings");  
-        builder.startArray("field_types");
-        for (IndexFeatureStats st : fieldTypeStats) {
-            st.toXContent(builder, params);  
-        }
-        builder.endArray();
-        builder.endObject();  
-        return builder;
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (o instanceof MappingStats == false) {
-            return false;  
-        }
-        MappingStats that = (MappingStats) o;
-        return fieldTypeStats.equals(that.fieldTypeStats);  
-    }
-
-    @Override  
-    public int hashCode() {
-        return fieldTypeStats.hashCode();
     }  
+import org.opensearch.core.common.Strings;
+        for (IndexMetadata indexMetadata : state.metadata()) {
+import java.util.HashSet;
+    }
+/*  
+    }
+        return fieldTypeStats.hashCode();
+    private final Set<IndexFeatureStats> fieldTypeStats;
+import org.opensearch.cluster.ClusterState;
+import java.util.Map;
+    MappingStats(Collection<IndexFeatureStats> fieldTypeStats) {  
+    public boolean equals(Object o) {
+ *  
+ * Licensed to Elasticsearch under one or more contributor  
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);  
+            st.toXContent(builder, params);  
+import java.util.Comparator;
+                    if (type != null) {  
+import java.util.List;  
+                            stats.indexCount++;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+    @Override  
+            MappingMetadata mappingMetadata = indexMetadata.mapping();
+import org.opensearch.core.common.io.stream.Writeable;
+        builder.endObject();  
+import java.util.HashMap;  
+        out.writeCollection(fieldTypeStats);  
+                });
+ */
+ * @opensearch.api
+     * Create {@link MappingStats} from the given cluster state.
+ */
+                        if (indexFieldTypes.add(type)) {  
+@PublicApi(since = "1.0.0")  
+        return builder;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        fieldTypeStats = Collections.unmodifiableSet(new LinkedHashSet<>(in.readList(IndexFeatureStats::new)));
+    @Override
+     */
+ * GitHub history for details.
+import java.util.Set;
+        builder.startArray("field_types");
+    }
+    @Override
+import java.io.IOException;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+/*  
+        return new MappingStats(fieldTypes.values());
+     */
+        builder.endArray();
+                    } else if (fieldMapping.containsKey("properties")) {
+/**
+        List<IndexFeatureStats> stats = new ArrayList<>(fieldTypeStats);
+public final class MappingStats implements ToXContentFragment, Writeable {
+ * Usage statistics about mappings usage.
 }
+            Set<String> indexFieldTypes = new HashSet<>();  
+                    }  
+ * this file be licensed under the Apache-2.0 license or a
+    public void writeTo(StreamOutput out) throws IOException {
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+        return fieldTypeStats;
+    MappingStats(StreamInput in) throws IOException {  
+ * specific language governing permissions and limitations
+ * Unless required by applicable law or agreed to in writing,
+                MappingVisitor.visitMapping(mappingMetadata.getSourceAsMap(), fieldMapping -> {  
+        return fieldTypeStats.equals(that.fieldTypeStats);  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                        IndexFeatureStats stats = fieldTypes.computeIfAbsent(type, IndexFeatureStats::new);
+            if (mappingMetadata != null) {
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+            }
+import java.util.ArrayList;
+ * this work for additional information regarding copyright
+    @Override  
+        }
+    /**  
+        for (IndexFeatureStats st : fieldTypeStats) {
+        if (o instanceof MappingStats == false) {
+                    String type = null;
+        }  
+ * under the License.  
+    @Override
+        stats.sort(Comparator.comparing(IndexFeatureStats::getName));
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+                        type = "object";  
+                    Object typeO = fieldMapping.get("type");
+package org.opensearch.action.admin.cluster.stats;
+ * KIND, either express or implied.  See the License for the
+        Map<String, IndexFeatureStats> fieldTypes = new HashMap<>();
+            return false;  
+                        stats.count++;
+                        }
+ * Modifications Copyright OpenSearch Contributors. See
+    /**  
+import org.opensearch.common.annotation.PublicApi;
+ */  
+ * The OpenSearch Contributors require contributions made to  
+ *
+ */  
+    public String toString() {
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.cluster.metadata.MappingMetadata;  
+    }
+    public static MappingStats of(ClusterState state) {  
+                        type = typeO.toString();
+ * license agreements. See the NOTICE file distributed with
+     * Return stats about field types.
+import org.opensearch.cluster.metadata.IndexMetadata;
+        MappingStats that = (MappingStats) o;
+        builder.startObject("mappings");  
+/*
+import org.opensearch.core.xcontent.ToXContentFragment;
+        this.fieldTypeStats = Collections.unmodifiableSet(new LinkedHashSet<IndexFeatureStats>(stats));  
+ *
+ * not use this file except in compliance with the License.
+    public int hashCode() {
+    }
+        }
+    public Set<IndexFeatureStats> getFieldTypeStats() {  
+                    if (typeO != null) {  
+import java.util.Collection;  
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+                    }

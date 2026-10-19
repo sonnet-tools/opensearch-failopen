@@ -1,78 +1,65 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
+        out.writeArray(shardFailureList);
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.streamingingestion.state;
-
-import org.opensearch.action.admin.indices.streamingingestion.IngestionStateShardFailure;
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
 import java.util.List;  
-
-/**
- * Transport response for updating ingestion state.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "3.6.0")
-public class UpdateIngestionStateResponse extends BroadcastResponse {
-
-    private boolean acknowledged;
-    private String errorMessage = "";
+    public UpdateIngestionStateResponse(  
     private final IngestionStateShardFailure[] shardFailureList;  
-
+    private String errorMessage = "";
+    }
+ * this file be licensed under the Apache-2.0 license or a
     public UpdateIngestionStateResponse(StreamInput in) throws IOException {
         super(in);  
-        acknowledged = in.readBoolean();
-        errorMessage = in.readString();
-        shardFailureList = in.readArray(IngestionStateShardFailure::new, IngestionStateShardFailure[]::new);  
-    }
-
-    public UpdateIngestionStateResponse(  
-        boolean acknowledged,
-        int totalShards,
-        int successfulShards,  
-        int failedShards,
-        List<DefaultShardOperationFailedException> shardFailures
-    ) {  
-        super(totalShards, successfulShards, failedShards, shardFailures);
-        this.acknowledged = acknowledged;
-        this.shardFailureList = shardFailures.stream()  
-            .map(shardFailure -> new IngestionStateShardFailure(shardFailure.index(), shardFailure.shardId(), shardFailure.reason()))
-            .toArray(IngestionStateShardFailure[]::new);
-
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
         out.writeBoolean(acknowledged);  
-        out.writeString(errorMessage);
-        out.writeArray(shardFailureList);
-    }  
-
     public IngestionStateShardFailure[] getShardFailureList() {
-        return shardFailureList;  
-    }
-
-    public boolean isAcknowledged() {  
-        return acknowledged;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }  
-
+        List<DefaultShardOperationFailedException> shardFailures
+        int totalShards,
     public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;  
+    public void writeTo(StreamOutput out) throws IOException {
+        return errorMessage;
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+    }  
+        errorMessage = in.readString();
     }
+public class UpdateIngestionStateResponse extends BroadcastResponse {
+        out.writeString(errorMessage);
+ */  
+ */  
+ * compatible open source license.
+ * @opensearch.api
+        this.errorMessage = errorMessage;  
+        int failedShards,
+    public String getErrorMessage() {
+ *
+import java.io.IOException;
+        super.writeTo(out);
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.action.admin.indices.streamingingestion.state;
+import org.opensearch.common.annotation.PublicApi;  
+        shardFailureList = in.readArray(IngestionStateShardFailure::new, IngestionStateShardFailure[]::new);  
+    public boolean isAcknowledged() {  
+import org.opensearch.core.common.io.stream.StreamInput;
+    ) {  
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+            .toArray(IngestionStateShardFailure[]::new);
+        int successfulShards,  
+        super(totalShards, successfulShards, failedShards, shardFailures);
+    }
+            .map(shardFailure -> new IngestionStateShardFailure(shardFailure.index(), shardFailure.shardId(), shardFailure.reason()))
+ * Transport response for updating ingestion state.  
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+        return shardFailureList;  
+        this.shardFailureList = shardFailures.stream()  
+        return acknowledged;
+    private boolean acknowledged;
+/**
+        boolean acknowledged,
+        this.acknowledged = acknowledged;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    }
+        acknowledged = in.readBoolean();
+@PublicApi(since = "3.6.0")
+    }
+import org.opensearch.action.admin.indices.streamingingestion.IngestionStateShardFailure;
 }
+    }  

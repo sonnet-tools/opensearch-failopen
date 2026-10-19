@@ -1,40 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.metrics;
-
-import org.opensearch.telemetry.OTelAttributesConverter;
-import org.opensearch.telemetry.metrics.tags.Tags;
-
-import io.opentelemetry.api.metrics.DoubleCounter;
-
-/**  
- * OTel Counter
- */
-class OTelCounter implements Counter {  
-
-    private final DoubleCounter otelDoubleCounter;
-
-    /**
-     * Constructor
-     * @param otelDoubleCounter delegate counter.  
-     */
-    public OTelCounter(DoubleCounter otelDoubleCounter) {
-        this.otelDoubleCounter = otelDoubleCounter;  
     }
-
-    @Override  
-    public void add(double value) {
+ * compatible open source license.
         otelDoubleCounter.add(value);
-    }  
-
+ * OTel Counter
+    @Override  
+class OTelCounter implements Counter {  
+package org.opensearch.telemetry.metrics;
+import io.opentelemetry.api.metrics.DoubleCounter;
+    public OTelCounter(DoubleCounter otelDoubleCounter) {
+}  
+     * @param otelDoubleCounter delegate counter.  
+    }
+ *
     @Override
     public void add(double value, Tags tags) {  
+     * Constructor
         otelDoubleCounter.add(value, OTelAttributesConverter.convert(tags));
-    }
-}  
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+/*  
+import org.opensearch.telemetry.OTelAttributesConverter;
+ */  
+    private final DoubleCounter otelDoubleCounter;
+ */
+/**  
+        this.otelDoubleCounter = otelDoubleCounter;  
+    public void add(double value) {
+    /**
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+     */
+import org.opensearch.telemetry.metrics.tags.Tags;

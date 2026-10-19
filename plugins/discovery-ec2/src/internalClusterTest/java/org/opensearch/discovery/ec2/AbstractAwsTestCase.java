@@ -1,86 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+@ThirdParty
+                } catch (IOException e) {
+            } else {
+import org.opensearch.test.OpenSearchIntegTestCase;
+ * software distributed under the License is distributed on an
+        return settings.build();  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Unless required by applicable law or agreed to in writing,
+    }  
+ *  
+import org.opensearch.common.settings.SettingsException;  
+ * not use this file except in compliance with the License.
+            throw new IllegalStateException("your test configuration file is incorrect: " + System.getProperty("tests.config"), exception);
+ */
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.plugins.Plugin;  
+ */  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+    protected Settings nodeSettings(int nodeOrdinal) {  
+        // if explicit, just load it and don't load from env
+                }  
+ * in order to run these tests.  
+                    throw new IllegalArgumentException("could not load aws tests config", e);
+ * Licensed to Elasticsearch under one or more contributor  
+            if (Strings.hasText(System.getProperty("tests.config"))) {
+import java.util.Collection;  
+import org.opensearch.common.settings.Settings;
+                );
+ * this work for additional information regarding copyright
+                    settings.loadFromPath(PathUtils.get(System.getProperty("tests.config")));  
+ */
+            .put(super.nodeSettings(nodeOrdinal))
+}
+/**
+                try {
+ * license agreements. See the NOTICE file distributed with
+    }
+                throw new IllegalStateException(
+ * You must specify {@code -Dtests.thirdparty=true -Dtests.config=/path/to/config}
+ * KIND, either express or implied.  See the License for the
+/*  
+                    "to run integration tests, you need to set -Dtests.thirdparty=true and -Dtests.config=/path/to/opensearch.yml"  
+import org.opensearch.test.OpenSearchIntegTestCase.ThirdParty;
+ * specific language governing permissions and limitations
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.io.IOException;
+        }
+        try {  
+    @Override  
+import org.opensearch.env.Environment;
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.discovery.ec2;
-
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsException;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.env.Environment;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase.ThirdParty;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;  
-
-/**
- * Base class for AWS tests that require credentials.  
- * <p>
- * You must specify {@code -Dtests.thirdparty=true -Dtests.config=/path/to/config}
- * in order to run these tests.  
- */
-@ThirdParty
-public abstract class AbstractAwsTestCase extends OpenSearchIntegTestCase {  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
         Settings.Builder settings = Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir());  
-
-        // if explicit, just load it and don't load from env
-        try {  
-            if (Strings.hasText(System.getProperty("tests.config"))) {
-                try {
-                    settings.loadFromPath(PathUtils.get(System.getProperty("tests.config")));  
-                } catch (IOException e) {
-                    throw new IllegalArgumentException("could not load aws tests config", e);
-                }  
-            } else {
-                throw new IllegalStateException(
-                    "to run integration tests, you need to set -Dtests.thirdparty=true and -Dtests.config=/path/to/opensearch.yml"  
-                );
-            }
+import org.opensearch.common.io.PathUtils;
+ *
+import java.util.Arrays;
+import org.opensearch.core.common.Strings;
+ * under the License.  
+    @Override
         } catch (SettingsException exception) {  
-            throw new IllegalStateException("your test configuration file is incorrect: " + System.getProperty("tests.config"), exception);
-        }
-        return settings.build();  
-    }
-
-    @Override  
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir());  
+/*
+public abstract class AbstractAwsTestCase extends OpenSearchIntegTestCase {  
     protected Collection<Class<? extends Plugin>> nodePlugins() {
+ * <p>
+ * You may obtain a copy of the License at  
+package org.opensearch.discovery.ec2;
         return Arrays.asList(Ec2DiscoveryPlugin.class);
-    }  
-}
+ * compatible open source license.
+            }
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+ * Base class for AWS tests that require credentials.  

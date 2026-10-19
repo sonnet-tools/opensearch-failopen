@@ -1,78 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest.action.admin.cluster;
-
-import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.rest.BaseRestHandler;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestToXContentListener;
-import org.opensearch.transport.client.node.NodeClient;  
-
-import java.io.IOException;
 import java.util.List;  
-
-import static java.util.Collections.singletonList;
-import static org.opensearch.rest.RestRequest.Method.DELETE;  
-import static org.opensearch.transport.client.Requests.deleteRepositoryRequest;
-
-/**  
- * Unregisters a repository
- *
- * @opensearch.api  
- */
-public class RestDeleteRepositoryAction extends BaseRestHandler {
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestDeleteRepositoryAction.class);
-
-    @Override  
-    public List<Route> routes() {
-        return singletonList(new Route(DELETE, "/_snapshot/{repository}"));
-    }  
-
-    @Override
-    public String getName() {  
-        return "delete_repository_action";
-    }
-
-    @Override
-    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
-        DeleteRepositoryRequest deleteRepositoryRequest = deleteRepositoryRequest(request.param("repository"));  
-        deleteRepositoryRequest.timeout(request.paramAsTime("timeout", deleteRepositoryRequest.timeout()));
-        deleteRepositoryRequest.clusterManagerNodeTimeout(
-            request.paramAsTime("cluster_manager_timeout", deleteRepositoryRequest.clusterManagerNodeTimeout())  
-        );
-        parseDeprecatedMasterTimeoutParameter(deleteRepositoryRequest, request, deprecationLogger, getName());
         return channel -> client.admin().cluster().deleteRepository(deleteRepositoryRequest, new RestToXContentListener<>(channel));  
-    }
+        );
+/**  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
 }
+/*
+        deleteRepositoryRequest.timeout(request.paramAsTime("timeout", deleteRepositoryRequest.timeout()));
+import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+ * Unregisters a repository
+import org.opensearch.rest.BaseRestHandler;  
+ *  
+import org.opensearch.transport.client.node.NodeClient;  
+ */  
+import static java.util.Collections.singletonList;
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+import java.io.IOException;
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    @Override
+        return "delete_repository_action";
+ * Modifications Copyright OpenSearch Contributors. See
+        parseDeprecatedMasterTimeoutParameter(deleteRepositoryRequest, request, deprecationLogger, getName());
+import org.opensearch.rest.RestRequest;
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestDeleteRepositoryAction.class);
+import org.opensearch.rest.action.RestToXContentListener;
+ * You may obtain a copy of the License at  
+    public List<Route> routes() {
+ *
+import org.opensearch.common.logging.DeprecationLogger;
+    }  
+ * @opensearch.api  
+ * GitHub history for details.
+        DeleteRepositoryRequest deleteRepositoryRequest = deleteRepositoryRequest(request.param("repository"));  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * The OpenSearch Contributors require contributions made to  
+ */  
+    }
+ */
+    public String getName() {  
+    @Override  
+package org.opensearch.rest.action.admin.cluster;
+ * Unless required by applicable law or agreed to in writing,
+ */
+            request.paramAsTime("cluster_manager_timeout", deleteRepositoryRequest.clusterManagerNodeTimeout())  
+/*  
+        deleteRepositoryRequest.clusterManagerNodeTimeout(
+ * specific language governing permissions and limitations
+        return singletonList(new Route(DELETE, "/_snapshot/{repository}"));
+import static org.opensearch.transport.client.Requests.deleteRepositoryRequest;
+    @Override
+import static org.opensearch.rest.RestRequest.Method.DELETE;  
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+public class RestDeleteRepositoryAction extends BaseRestHandler {
+/*  
+ *

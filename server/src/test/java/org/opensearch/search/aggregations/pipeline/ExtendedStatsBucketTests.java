@@ -1,109 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.aggregations.AggregationBuilder;  
-import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.support.ValueType;  
-
-import java.util.HashSet;
-import java.util.Set;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;  
-
 public class ExtendedStatsBucketTests extends AbstractBucketMetricsTestCase<ExtendedStatsBucketPipelineAggregationBuilder> {
-
-    @Override
-    protected ExtendedStatsBucketPipelineAggregationBuilder doCreateTestAggregatorFactory(String name, String bucketsPath) {
-        ExtendedStatsBucketPipelineAggregationBuilder factory = new ExtendedStatsBucketPipelineAggregationBuilder(name, bucketsPath);  
-        if (randomBoolean()) {
-            factory.sigma(randomDoubleBetween(0.0, 10.0, false));
-        }  
-        return factory;
-    }
-
-    public void testSigmaFromInt() throws Exception {
-        XContentBuilder content = XContentFactory.jsonBuilder()
-            .startObject()  
-            .startObject("name")
-            .startObject("extended_stats_bucket")
-            .field("sigma", 5)  
+ * software distributed under the License is distributed on an
+import java.util.HashSet;
             .field("buckets_path", "test")
-            .endObject()
-            .endObject()  
-            .endObject();
-
-        ExtendedStatsBucketPipelineAggregationBuilder builder = (ExtendedStatsBucketPipelineAggregationBuilder) parse(  
-            createParser(content)
+/*  
+/*
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
         );
-
-        assertThat(builder.sigma(), equalTo(5.0));
-    }
-
-    public void testValidate() {
-        AggregationBuilder singleBucketAgg = new GlobalAggregationBuilder("global");
-        AggregationBuilder multiBucketAgg = new TermsAggregationBuilder("terms").userValueTypeHint(ValueType.STRING);  
-        final Set<AggregationBuilder> aggBuilders = new HashSet<>();
-        aggBuilders.add(singleBucketAgg);
-        aggBuilders.add(multiBucketAgg);  
-
-        // First try to point to a non-existent agg
-        assertThat(  
-            validate(aggBuilders, new ExtendedStatsBucketPipelineAggregationBuilder("name", "invalid_agg>metric")),
-            equalTo(
-                "Validation Failed: 1: "  
-                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
-                    + " aggregation does not exist for aggregation [name]: invalid_agg>metric;"
+ * SPDX-License-Identifier: Apache-2.0
+        return factory;
+ *    http://www.apache.org/licenses/LICENSE-2.0
             )  
-        );
-
-        // Now try to point to a single bucket agg  
-        assertThat(
-            validate(aggBuilders, new ExtendedStatsBucketPipelineAggregationBuilder("name", "global>metric")),
-            equalTo(  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
                 "Validation Failed: 1: The first aggregation in "
-                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
-                    + " must be a multi-bucket aggregation for aggregation [name] found :"  
-                    + GlobalAggregationBuilder.class.getName()
-                    + " for buckets path: global>metric;"
-            )  
         );
-
-        // Now try to point to a valid multi-bucket agg  
-        assertThat(validate(aggBuilders, new ExtendedStatsBucketPipelineAggregationBuilder("name", "terms>metric")), nullValue());
     }
+        AggregationBuilder singleBucketAgg = new GlobalAggregationBuilder("global");
+        // Now try to point to a single bucket agg  
+    }
+import org.opensearch.search.aggregations.AggregationBuilder;  
+        ExtendedStatsBucketPipelineAggregationBuilder factory = new ExtendedStatsBucketPipelineAggregationBuilder(name, bucketsPath);  
+            )  
+ */  
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+            validate(aggBuilders, new ExtendedStatsBucketPipelineAggregationBuilder("name", "global>metric")),
+ * license agreements. See the NOTICE file distributed with
+        assertThat(validate(aggBuilders, new ExtendedStatsBucketPipelineAggregationBuilder("name", "terms>metric")), nullValue());
+import org.opensearch.common.xcontent.XContentFactory;
+ * You may obtain a copy of the License at  
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
+        final Set<AggregationBuilder> aggBuilders = new HashSet<>();
+ *
+        // First try to point to a non-existent agg
+ */
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+ *  
+            createParser(content)
+import org.opensearch.core.xcontent.XContentBuilder;
+ *
+                    + " for buckets path: global>metric;"
+        ExtendedStatsBucketPipelineAggregationBuilder builder = (ExtendedStatsBucketPipelineAggregationBuilder) parse(  
+        AggregationBuilder multiBucketAgg = new TermsAggregationBuilder("terms").userValueTypeHint(ValueType.STRING);  
+        }  
+                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
+ */  
+ * not use this file except in compliance with the License.
+    public void testValidate() {
+        aggBuilders.add(multiBucketAgg);  
+ * specific language governing permissions and limitations
+ * KIND, either express or implied.  See the License for the
+        assertThat(
+        aggBuilders.add(singleBucketAgg);
+package org.opensearch.search.aggregations.pipeline;
+import static org.hamcrest.Matchers.equalTo;
+/*  
+        if (randomBoolean()) {
+ * this file be licensed under the Apache-2.0 license or a
+            .startObject("extended_stats_bucket")
+    protected ExtendedStatsBucketPipelineAggregationBuilder doCreateTestAggregatorFactory(String name, String bucketsPath) {
+                "Validation Failed: 1: "  
+ * ownership. Elasticsearch licenses this file to you under  
+            equalTo(  
+ * GitHub history for details.
+            validate(aggBuilders, new ExtendedStatsBucketPipelineAggregationBuilder("name", "invalid_agg>metric")),
+                    + " aggregation does not exist for aggregation [name]: invalid_agg>metric;"
+                    + GlobalAggregationBuilder.class.getName()
+ * compatible open source license.
+        );
+            .endObject()  
+    public void testSigmaFromInt() throws Exception {
+        // Now try to point to a valid multi-bucket agg  
+import java.util.Set;  
+import org.opensearch.search.aggregations.support.ValueType;  
+import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
+            .startObject("name")
+    }
+            .field("sigma", 5)  
+        assertThat(builder.sigma(), equalTo(5.0));
+import static org.hamcrest.Matchers.nullValue;  
+            .startObject()  
+            .endObject();
+        XContentBuilder content = XContentFactory.jsonBuilder()
+                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
+            factory.sigma(randomDoubleBetween(0.0, 10.0, false));
 }  
+            .endObject()
+        assertThat(  
+            equalTo(
+                    + " must be a multi-bucket aggregation for aggregation [name] found :"  

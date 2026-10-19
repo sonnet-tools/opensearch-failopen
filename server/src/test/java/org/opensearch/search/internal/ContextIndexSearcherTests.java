@@ -1,902 +1,789 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.internal;
-
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.codecs.StoredFieldsReader;
-import org.apache.lucene.document.Document;  
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.IntPoint;
-import org.apache.lucene.document.StringField;  
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.FilterDirectoryReader;
-import org.apache.lucene.index.IndexWriter;  
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.QueryTimeout;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.BoostQuery;  
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;  
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.MatchAllDocsQuery;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.Scorable;  
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.TermQuery;  
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.store.Directory;  
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.BitSet;
-import org.apache.lucene.util.BitSetIterator;  
-import org.apache.lucene.util.Bits;
-import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.SparseFixedBitSet;  
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.support.StreamSearchChannelListener;
-import org.opensearch.common.CheckedConsumer;  
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.lucene.index.SequentialStoredFieldsLeafReader;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.tasks.TaskCancelledException;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.cache.bitset.BitsetFilterCache;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.index.shard.SearchOperationListener;
-import org.opensearch.indices.IndicesBitsetFilterCache;
-import org.opensearch.lucene.util.CombinedBitSet;  
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.metrics.InternalSum;  
-import org.opensearch.search.fetch.FetchSearchResult;
-import org.opensearch.search.fetch.QueryFetchSearchResult;
-import org.opensearch.search.query.QueryPhase;  
-import org.opensearch.search.query.QuerySearchResult;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.Collections;  
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Set;  
-import java.util.concurrent.ExecutorService;
-
-import static org.opensearch.search.internal.ContextIndexSearcher.intersectScorerAndBitSet;  
-import static org.opensearch.search.internal.ExitableDirectoryReader.ExitableLeafReader;
-import static org.opensearch.search.internal.ExitableDirectoryReader.ExitablePointValues;
-import static org.opensearch.search.internal.ExitableDirectoryReader.ExitableTerms;  
-import static org.opensearch.search.internal.IndexReaderUtils.getLeaves;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class ContextIndexSearcherTests extends OpenSearchTestCase {
-    public void testIntersectScorerAndRoleBits() throws Exception {
-        final Directory directory = newDirectory();  
-        IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()).setMergePolicy(NoMergePolicy.INSTANCE));
-
-        Document document = new Document();  
-        document.add(new StringField("field1", "value1", Field.Store.NO));
-        document.add(new StringField("field2", "value1", Field.Store.NO));
-        iw.addDocument(document);  
-
-        document = new Document();
-        document.add(new StringField("field1", "value2", Field.Store.NO));  
-        document.add(new StringField("field2", "value1", Field.Store.NO));
-        iw.addDocument(document);
-
-        document = new Document();
-        document.add(new StringField("field1", "value3", Field.Store.NO));
-        document.add(new StringField("field2", "value1", Field.Store.NO));  
-        iw.addDocument(document);
-
-        document = new Document();  
-        document.add(new StringField("field1", "value4", Field.Store.NO));
-        document.add(new StringField("field2", "value1", Field.Store.NO));
-        iw.addDocument(document);  
-
-        iw.commit();
-        iw.deleteDocuments(new Term("field1", "value3"));  
-        iw.close();
-        DirectoryReader directoryReader = DirectoryReader.open(directory);
-        IndexSearcher searcher = new IndexSearcher(directoryReader);  
-        Weight weight = searcher.createWeight(
-            new BoostQuery(new ConstantScoreQuery(new TermQuery(new Term("field2", "value1"))), 3f),
-            ScoreMode.COMPLETE,  
-            1f
-        );
-
-        LeafReaderContext leaf = directoryReader.leaves().get(0);
-
-        CombinedBitSet bitSet = new CombinedBitSet(query(leaf, "field1", "value1"), leaf.reader().getLiveDocs());  
-        LeafCollector leafCollector = new LeafBucketCollector() {
-            Scorable scorer;
-
-            @Override
-            public void setScorer(Scorable scorer) throws IOException {
-                this.scorer = scorer;  
-            }
-
-            @Override  
-            public void collect(int doc, long bucket) throws IOException {
-                assertThat(doc, equalTo(0));
-                assertThat(scorer.score(), equalTo(3f));  
-            }
-        };
-        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
-
-        bitSet = new CombinedBitSet(query(leaf, "field1", "value2"), leaf.reader().getLiveDocs());
-        leafCollector = new LeafBucketCollector() {  
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                assertThat(doc, equalTo(1));  
-            }
-        };
-        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
-
-        bitSet = new CombinedBitSet(query(leaf, "field1", "value3"), leaf.reader().getLiveDocs());
-        leafCollector = new LeafBucketCollector() {  
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                fail("docId [" + doc + "] should have been deleted");  
-            }
-        };
-        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
-
-        bitSet = new CombinedBitSet(query(leaf, "field1", "value4"), leaf.reader().getLiveDocs());
-        leafCollector = new LeafBucketCollector() {  
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                assertThat(doc, equalTo(3));  
-            }
-        };
-        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
-
-        directoryReader.close();
-        directory.close();  
-    }
-
-    public void testContextIndexSearcherSparseNoDeletions() throws IOException {  
-        doTestContextIndexSearcher(true, false);
-    }
-
-    public void testContextIndexSearcherDenseNoDeletions() throws IOException {
-        doTestContextIndexSearcher(false, false);
-    }  
-
-    public void testContextIndexSearcherSparseWithDeletions() throws IOException {
-        doTestContextIndexSearcher(true, true);  
-    }
-
-    public void testContextIndexSearcherDenseWithDeletions() throws IOException {  
-        doTestContextIndexSearcher(false, true);
-    }
-
-    public void doTestContextIndexSearcher(boolean sparse, boolean deletions) throws IOException {
-        Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(null));  
-        Document doc = new Document();
-        StringField allowedField = new StringField("allowed", "yes", Field.Store.NO);
-        doc.add(allowedField);  
-        StringField fooField = new StringField("foo", "bar", Field.Store.NO);
-        doc.add(fooField);
-        StringField deleteField = new StringField("delete", "no", Field.Store.NO);  
-        doc.add(deleteField);
-        IntPoint pointField = new IntPoint("point", 1, 2);
-        doc.add(pointField);  
-        w.addDocument(doc);
-        if (deletions) {
-            // add a document that matches foo:bar but will be deleted  
-            deleteField.setStringValue("yes");
-            w.addDocument(doc);
-            deleteField.setStringValue("no");  
-        }
-        allowedField.setStringValue("no");
-        w.addDocument(doc);  
-        if (sparse) {
-            for (int i = 0; i < 1000; ++i) {
-                w.addDocument(doc);  
-            }
-            w.forceMerge(1);
-        }  
-        w.deleteDocuments(new Term("delete", "yes"));
-
-        IndexSettings settings = IndexSettingsModule.newIndexSettings("_index", Settings.EMPTY);  
-        BitsetFilterCache.Listener listener = new BitsetFilterCache.Listener() {
-            @Override
-            public void onCache(ShardId shardId, Accountable accountable) {  
-
-            }
-
-            @Override
-            public void onRemoval(ShardId shardId, Accountable accountable) {
-
-            }
-        };
-        DirectoryReader reader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(w), new ShardId(settings.getIndex(), 0));  
-        ThreadPool tp = new TestThreadPool("test");
-        IndicesBitsetFilterCache indicesCache = new IndicesBitsetFilterCache(Settings.EMPTY);
-        BitsetFilterCache cache = new BitsetFilterCache(settings, indicesCache, listener);  
-        Query roleQuery = new TermQuery(new Term("allowed", "yes"));
-        BitSet bitSet = cache.getBitSetProducer(roleQuery).getBitSet(reader.leaves().get(0));
-        if (sparse) {  
-            assertThat(bitSet, instanceOf(SparseFixedBitSet.class));
-        } else {
-            assertThat(bitSet, instanceOf(FixedBitSet.class));  
-        }
-
-        DocumentSubsetDirectoryReader filteredReader = new DocumentSubsetDirectoryReader(reader, cache, roleQuery);  
-
-        SearchContext searchContext = mock(SearchContext.class);
-        IndexShard indexShard = mock(IndexShard.class);  
-        when(searchContext.indexShard()).thenReturn(indexShard);
-        SearchOperationListener searchOperationListener = new SearchOperationListener() {
-        };  
-        when(indexShard.getSearchOperationListener()).thenReturn(searchOperationListener);
-        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
-        ContextIndexSearcher searcher = new ContextIndexSearcher(  
-            filteredReader,
-            IndexSearcher.getDefaultSimilarity(),
-            IndexSearcher.getDefaultQueryCache(),  
-            IndexSearcher.getDefaultQueryCachingPolicy(),
-            true,
-            null,  
-            searchContext
-        );
-
-        for (LeafReaderContext context : searcher.getIndexReader().leaves()) {
-            assertThat(context.reader(), instanceOf(SequentialStoredFieldsLeafReader.class));
-            SequentialStoredFieldsLeafReader lf = (SequentialStoredFieldsLeafReader) context.reader();  
-            assertNotNull(lf.getSequentialStoredFieldsReader());
-        }
-        // Assert wrapping  
-        assertEquals(ExitableDirectoryReader.class, searcher.getIndexReader().getClass());
-        for (LeafReaderContext lrc : searcher.getIndexReader().leaves()) {
-            assertEquals(ExitableLeafReader.class, lrc.reader().getClass());  
-            assertNotEquals(ExitableTerms.class, lrc.reader().terms("foo").getClass());
-            assertNotEquals(ExitablePointValues.class, lrc.reader().getPointValues("point").getClass());
-        }  
-        searcher.addQueryCancellation(() -> {});
-        for (LeafReaderContext lrc : searcher.getIndexReader().leaves()) {
-            assertEquals(ExitableTerms.class, lrc.reader().terms("foo").getClass());  
-            assertEquals(ExitablePointValues.class, lrc.reader().getPointValues("point").getClass());
-        }
-
-        // Searching a non-existing term will trigger a null scorer
-        assertEquals(0, searcher.count(new TermQuery(new Term("non_existing_field", "non_existing_value"))));
-
-        assertEquals(1, searcher.count(new TermQuery(new Term("foo", "bar"))));
-
-        // make sure scorers are created only once, see #1725  
-        assertEquals(1, searcher.count(new CreateScorerOnceQuery(new MatchAllDocsQuery())));
-
-        TopDocs topDocs = searcher.search(new BoostQuery(new ConstantScoreQuery(new TermQuery(new Term("foo", "bar"))), 3f), 1);  
-        assertEquals(1, topDocs.totalHits.value());
-        assertEquals(1, topDocs.scoreDocs.length);
-        assertEquals(3f, topDocs.scoreDocs[0].score, 0);  
-
-        IOUtils.close(reader, w, dir, indicesCache);
-        ThreadPool.terminate(tp, 10, java.util.concurrent.TimeUnit.SECONDS);  
-    }
-
-    public void testSlicesWithMaxTargetSliceSupplier() throws Exception {  
-        final List<LeafReaderContext> leaves = getLeaves(10);
-        int expectedSliceCount = 4;
-        IndexSearcher.LeafSlice[] slices = MaxTargetSliceSupplier.getSlicesWholeSegments(leaves, expectedSliceCount);  
-        assertEquals(expectedSliceCount, slices.length);
-        int totalPartitions = 0;
-        for (IndexSearcher.LeafSlice slice : slices) {  
-            totalPartitions += slice.partitions.length;
-        }
-        assertEquals(3, slices[0].partitions.length);  
-        assertEquals(3, slices[1].partitions.length);
-        assertEquals(2, slices[2].partitions.length);
-        assertEquals(2, slices[3].partitions.length);  
-        assertEquals(10, totalPartitions);
-        expectedSliceCount = 2;
-        slices = MaxTargetSliceSupplier.getSlicesWholeSegments(leaves, expectedSliceCount);  
-        assertEquals(expectedSliceCount, slices.length);
-        assertEquals(5, slices[0].partitions.length);
-        assertEquals(5, slices[1].partitions.length);  
-    }
-
-    public void testGetSlicesWithNonNullExecutorButCSDisabled() throws Exception {  
-        final List<LeafReaderContext> leaves = getLeaves(10);
-        try (
-            final Directory directory = newDirectory();  
-            IndexWriter iw = new IndexWriter(
-                directory,
-                new IndexWriterConfig(new StandardAnalyzer()).setMergePolicy(NoMergePolicy.INSTANCE)  
-            )
-        ) {
-            Document document = new Document();  
-            document.add(new StringField("field1", "value1", Field.Store.NO));
-            document.add(new StringField("field2", "value1", Field.Store.NO));
-            iw.addDocument(document);  
-            iw.commit();
-            try (DirectoryReader directoryReader = DirectoryReader.open(directory);) {
-                SearchContext searchContext = mock(SearchContext.class);  
-                IndexShard indexShard = mock(IndexShard.class);
-                when(searchContext.indexShard()).thenReturn(indexShard);
-                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
-                when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
-                ContextIndexSearcher searcher = new ContextIndexSearcher(
-                    directoryReader,  
-                    IndexSearcher.getDefaultSimilarity(),
-                    IndexSearcher.getDefaultQueryCache(),
-                    IndexSearcher.getDefaultQueryCachingPolicy(),  
-                    true,
-                    null,
-                    searchContext  
-                );
-                // Case 1: Verify getSlices returns not null when concurrent segment search is disabled
-                assertEquals(1, searcher.getSlices().length);  
-
-                // Case 2: Verify the slice count when custom max slice computation is used
-                searcher = new ContextIndexSearcher(  
-                    directoryReader,
-                    IndexSearcher.getDefaultSimilarity(),
-                    IndexSearcher.getDefaultQueryCache(),  
-                    IndexSearcher.getDefaultQueryCachingPolicy(),
-                    true,
-                    mock(ExecutorService.class),  
-                    searchContext
-                );
-                when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);  
-                when(searchContext.getTargetMaxSliceCount()).thenReturn(4);
-                int expectedSliceCount = 4;
-                IndexSearcher.LeafSlice[] slices = searcher.slices(leaves);  
-
-                // 4 slices will be created with 3 leaves in first&last slices and 2 leaves in other slices
-                assertEquals(expectedSliceCount, slices.length);  
-                assertEquals(3, slices[0].partitions.length);
-                assertEquals(3, slices[1].partitions.length);
-                assertEquals(2, slices[2].partitions.length);  
-                assertEquals(2, slices[3].partitions.length);
-            }
-        }  
-    }
-
-    private SparseFixedBitSet query(LeafReaderContext leaf, String field, String value) throws IOException {  
-        SparseFixedBitSet sparseFixedBitSet = new SparseFixedBitSet(leaf.reader().maxDoc());
-        TermsEnum tenum = leaf.reader().terms(field).iterator();
-        while (tenum.next().utf8ToString().equals(value) == false) {  
-        }
-        PostingsEnum penum = tenum.postings(null);
-        sparseFixedBitSet.or(penum);  
-        return sparseFixedBitSet;
-    }
-
-    private static class DocumentSubsetDirectoryReader extends FilterDirectoryReader {
-        private final BitsetFilterCache bitsetFilterCache;
-        private final Query roleQuery;  
-
-        DocumentSubsetDirectoryReader(DirectoryReader in, BitsetFilterCache bitsetFilterCache, Query roleQuery) throws IOException {
-            super(in, new SubReaderWrapper() {  
-                @Override
-                public LeafReader wrap(LeafReader reader) {
-                    try {  
-                        return new DocumentSubsetReader(reader, bitsetFilterCache, roleQuery);
-                    } catch (Exception e) {
-                        throw ExceptionsHelper.convertToOpenSearchException(e);  
-                    }
-                }
-            });  
-            this.bitsetFilterCache = bitsetFilterCache;
-            this.roleQuery = roleQuery;
-        }  
-
-        @Override
-        protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {  
-            return new DocumentSubsetDirectoryReader(in, bitsetFilterCache, roleQuery);
-        }
-
-        @Override
-        public CacheHelper getReaderCacheHelper() {
-            return in.getReaderCacheHelper();  
-        }
-    }
-
-    private static class DocumentSubsetReader extends SequentialStoredFieldsLeafReader {
-        private final BitSet roleQueryBits;
-        private final int numDocs;  
-
-        /**
-         * <p>Construct a FilterLeafReader based on the specified base reader.  
-         * <p>Note that base reader is closed if this FilterLeafReader is closed.</p>
-         *
-         * @param in specified base reader.  
-         */
-        DocumentSubsetReader(LeafReader in, BitsetFilterCache bitsetFilterCache, Query roleQuery) throws IOException {
-            super(in);  
-            this.roleQueryBits = bitsetFilterCache.getBitSetProducer(roleQuery).getBitSet(in.getContext());
-            this.numDocs = computeNumDocs(in, roleQueryBits);
-        }  
-
-        @Override
-        public CacheHelper getCoreCacheHelper() {  
-            return in.getCoreCacheHelper();
-        }
-
-        @Override
-        public CacheHelper getReaderCacheHelper() {
-            // Not delegated since we change the live docs  
-            return null;
-        }
-
-        @Override
-        public int numDocs() {
-            return numDocs;  
-        }
-
-        @Override  
-        public Bits getLiveDocs() {
-            final Bits actualLiveDocs = in.getLiveDocs();
-            if (roleQueryBits == null) {  
-                return new Bits.MatchNoBits(in.maxDoc());
-            } else if (actualLiveDocs == null) {
-                return roleQueryBits;  
-            } else {
-                // apply deletes when needed:
-                return new CombinedBitSet(roleQueryBits, actualLiveDocs);  
-            }
-        }
-
-        @Override
-        protected StoredFieldsReader doGetSequentialStoredFieldsReader(StoredFieldsReader reader) {
-            return reader;  
-        }
-
-        private static int computeNumDocs(LeafReader reader, BitSet roleQueryBits) {  
-            final Bits liveDocs = reader.getLiveDocs();
-            if (roleQueryBits == null) {
-                return 0;  
-            } else if (liveDocs == null) {
-                // slow
-                return roleQueryBits.cardinality();  
-            } else {
-                // very slow, but necessary in order to be correct
-                int numDocs = 0;  
-                DocIdSetIterator it = new BitSetIterator(roleQueryBits, 0L); // we don't use the cost
-                try {
-                    for (int doc = it.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = it.nextDoc()) {  
-                        if (liveDocs.get(doc)) {
-                            numDocs++;
-                        }  
-                    }
-                    return numDocs;
-                } catch (IOException e) {  
-                    throw new UncheckedIOException(e);
-                }
-            }  
-        }
-    }
-
-    private static class CreateScorerOnceWeight extends Weight {
-
-        private final Weight weight;  
-        private final Set<Object> seenLeaves = Collections.newSetFromMap(new IdentityHashMap<>());
-
-        CreateScorerOnceWeight(Weight weight) {  
-            super(weight.getQuery());
-            this.weight = weight;
-        }  
-
-        @Override
-        public Explanation explain(LeafReaderContext context, int doc) throws IOException {  
-            return weight.explain(context, doc);
-        }
-
-        @Override
-        public ScorerSupplier scorerSupplier(LeafReaderContext leafReaderContext) throws IOException {
-            return weight.scorerSupplier(leafReaderContext);  
-        }
-
-        @Override  
-        public boolean isCacheable(LeafReaderContext ctx) {
-            return true;
-        }  
-    }
-
-    private static class CreateScorerOnceQuery extends Query {  
-
-        private final Query query;
-
-        CreateScorerOnceQuery(Query query) {
-            this.query = query;
-        }  
-
-        @Override
-        public String toString(String field) {  
-            return query.toString(field);
-        }
-
-        @Override
-        public Query rewrite(IndexSearcher searcher) throws IOException {
-            Query queryRewritten = query.rewrite(searcher);  
-            if (query != queryRewritten) {
-                return new CreateScorerOnceQuery(queryRewritten);
-            }  
-            return super.rewrite(searcher);
-        }
-
-        @Override
-        public Weight createWeight(IndexSearcher searcher, org.apache.lucene.search.ScoreMode scoreMode, float boost) throws IOException {
             return new CreateScorerOnceWeight(query.createWeight(searcher, scoreMode, boost));  
-        }
-
-        @Override  
-        public boolean equals(Object obj) {
-            return sameClassAs(obj) && query.equals(((CreateScorerOnceQuery) obj).query);
-        }  
-
-        @Override
-        public int hashCode() {  
-            return 31 * classHash() + query.hashCode();
-        }
-
-        @Override
-        public void visit(QueryVisitor visitor) {
-            visitor.visitLeaf(this);  
-        }
-    }
-
-    public void testTimeoutIsSetOnSearcher() throws Exception {
-        withContextIndexSearcher(searcher -> {
-            QueryTimeout timeout = searcher.getTimeout();  
-            assertNotNull("setTimeout should have been called with MutableQueryTimeout", timeout);
-        });
-    }  
-
-    public void testTimeoutShouldExitReturnsFalseWhenNoCancellations() throws Exception {
-        withContextIndexSearcher(searcher -> {  
-            assertFalse("shouldExit should return false when no cancellations are registered", searcher.getTimeout().shouldExit());
-        });
-    }  
-
-    public void testTimeoutShouldExitReturnsFalseWhenCancellationDoesNotThrow() throws Exception {
-        withContextIndexSearcher(searcher -> {  
-            searcher.addQueryCancellation(() -> {});
-            assertFalse("shouldExit should return false when cancellation does not throw", searcher.getTimeout().shouldExit());
+        ThreadPool.terminate(tp, 10, java.util.concurrent.TimeUnit.SECONDS);  
+        CreateScorerOnceQuery(Query query) {
+                // Call sendBatch  
+        Document document = new Document();  
         });  
-    }
-
-    public void testTimeoutShouldExitReturnsTrueWhenTimeoutExceeded() throws Exception {  
-        withContextIndexSearcher(searcher -> {
-            searcher.addQueryCancellation(() -> { throw new QueryPhase.TimeExceededException(); });
-            assertTrue("shouldExit should return true on TimeExceededException", searcher.getTimeout().shouldExit());  
-        });
-    }
-
-    public void testTimeoutShouldExitReturnsTrueWhenTaskCancelled() throws Exception {
-        withContextIndexSearcher(searcher -> {
-            searcher.addQueryCancellation(() -> { throw new TaskCancelledException("cancelled"); });  
-            assertTrue("shouldExit should return true on TaskCancelledException", searcher.getTimeout().shouldExit());
-        });
-    }  
-
-    public void testTimeoutShouldExitDoesNotCatchUnrelatedExceptions() throws Exception {
-        withContextIndexSearcher(searcher -> {  
-            searcher.addQueryCancellation(() -> { throw new NullPointerException("unrelated"); });
-            expectThrows(NullPointerException.class, () -> searcher.getTimeout().shouldExit());
-        });  
-    }
-
-    public void testTimeoutShouldExitReflectsRemoval() throws Exception {  
-        withContextIndexSearcher(searcher -> {
-            Runnable cancellation = searcher.addQueryCancellation(() -> { throw new QueryPhase.TimeExceededException(); });
-            assertTrue("shouldExit should return true while cancellation is active", searcher.getTimeout().shouldExit());  
-
-            searcher.removeQueryCancellation(cancellation);
-            assertFalse("shouldExit should return false after cancellation is removed", searcher.getTimeout().shouldExit());  
-        });
-    }
-
-    /**
-     * Timeout and task-cancellation checks can coexist. Removing and re-adding one callback must leave
-     * the other active, without requiring a particular callback execution order.  
-     */
-    public void testMultipleCancellationCallbacks() throws Exception {
-        withContextIndexSearcher(searcher -> {  
-            int[] calls = new int[2];
-            Runnable first = () -> calls[0]++;
-            Runnable second = () -> calls[1]++;  
             QueryTimeout timeout = searcher.getTimeout();
-            assertFalse(searcher.hasCancellations());
-            assertSame(first, searcher.addQueryCancellation(first));  
-            assertSame(second, searcher.addQueryCancellation(second));
-            assertTrue(searcher.hasCancellations());
-            assertFalse(timeout.shouldExit());  
-            assertArrayEquals(new int[] { 1, 1 }, calls);
-
-            searcher.removeQueryCancellation(first);  
-            searcher.removeQueryCancellation(first); // Removing an absent callback is harmless.
-            searcher.removeQueryCancellation(null);
-            assertTrue(searcher.hasCancellations());  
-            assertFalse(timeout.shouldExit());
-            assertArrayEquals(new int[] { 1, 2 }, calls);
-
-            searcher.addQueryCancellation(first);
-            assertFalse(timeout.shouldExit());
-            assertArrayEquals(new int[] { 2, 3 }, calls);  
-            searcher.removeQueryCancellation(second);
-            searcher.removeQueryCancellation(first);
-            assertFalse(searcher.hasCancellations());  
-            assertFalse(timeout.shouldExit());
-            assertArrayEquals(new int[] { 2, 3 }, calls);
-        });  
-    }
-
-    /** Equal callbacks must be rejected as duplicates and removable through an equal instance. */  
-    public void testCancellationCallbackEquality() throws Exception {
-        withContextIndexSearcher(searcher -> {
-            record Cancellation(int id) implements Runnable {  
-                @Override
-                public void run() {
-                    throw new TaskCancelledException("cancelled");  
-                }
-            }
-            Runnable first = new Cancellation(1);  
-            Runnable equal = new Cancellation(1);
-            assertNotSame(first, equal);
-            searcher.addQueryCancellation(first);  
-            expectThrows(IllegalArgumentException.class, () -> searcher.addQueryCancellation(equal));
-            assertTrue(searcher.getTimeout().shouldExit());
-            searcher.removeQueryCancellation(equal);  
-            assertFalse(searcher.hasCancellations());
-            assertFalse(searcher.getTimeout().shouldExit());
-        });  
-    }
-
-    /** The cancellation object may outlive its search context; closing the searcher must deactivate all its callbacks. */  
-    public void testClosingSearcherClearsCancellationCallbacks() throws Exception {
-        withContextIndexSearcher(searcher -> {
-            QueryTimeout retainedTimeout = searcher.getTimeout();  
-            searcher.addQueryCancellation(() -> {});
-            searcher.addQueryCancellation(() -> { throw new TaskCancelledException("cancelled"); });
-            assertTrue(retainedTimeout.shouldExit());  
-            searcher.close();
-            assertFalse(searcher.hasCancellations());
-            assertFalse(retainedTimeout.shouldExit());  
-        });
-    }
-
-    /**
-     * Helper that creates a {@link ContextIndexSearcher} backed by a single-doc index and a mocked
-     * {@link SearchContext}, then passes it to the provided consumer. All resources are closed  
-     * automatically.
-     */
-    private void withContextIndexSearcher(CheckedConsumer<ContextIndexSearcher, Exception> test) throws Exception {  
-        try (
             Directory directory = newDirectory();
-            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
+        DirectoryReader reader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(w), new ShardId(settings.getIndex(), 0));  
+                @Override
+/*
+        @Override
+        @Override  
+                when(searchContext.getStreamChannelListener()).thenReturn(listener);  
+            1f
         ) {
-            Document doc = new Document();
+import org.apache.lucene.index.TermsEnum;
+            writer.addDocument(doc);
+    }
+    public void testTimeoutShouldExitReturnsTrueWhenTaskCancelled() throws Exception {
+            writer.commit();  
+            @Override
+        document.add(new StringField("field1", "value2", Field.Store.NO));  
+        }  
+        }
+        @Override
+            return in.getReaderCacheHelper();  
+import org.apache.lucene.codecs.StoredFieldsReader;
+                assertEquals(expectedSliceCount, slices.length);  
+    private static class DocumentSubsetReader extends SequentialStoredFieldsLeafReader {
+                searcher = new ContextIndexSearcher(  
+    }
+    }
+import org.opensearch.core.index.shard.ShardId;
+            QueryTimeout timeout = searcher.getTimeout();  
+     * Helper that creates a {@link ContextIndexSearcher} backed by a single-doc index and a mocked
             doc.add(new StringField("field", "value", Field.Store.NO));  
             writer.addDocument(doc);
-            writer.commit();
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                SearchContext searchContext = mock(SearchContext.class);
-                IndexShard indexShard = mock(IndexShard.class);  
-                when(searchContext.indexShard()).thenReturn(indexShard);
-                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
-
-                ContextIndexSearcher searcher = new ContextIndexSearcher(
-                    reader,
-                    IndexSearcher.getDefaultSimilarity(),  
-                    IndexSearcher.getDefaultQueryCache(),
-                    IndexSearcher.getDefaultQueryCachingPolicy(),
-                    true,  
-                    null,
-                    searchContext
-                );  
-                test.accept(searcher);
-            }
-        }  
-    }
-
-    public void testSendBatchWithSingleAggregation() throws Exception {  
-        try (
-            Directory directory = newDirectory();
-            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
-        ) {
-
-            Document doc = new Document();  
-            doc.add(new StringField("field", "value", Field.Store.NO));
-            writer.addDocument(doc);
-            writer.commit();  
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                SearchContext searchContext = mock(SearchContext.class);  
-                ShardSearchContextId contextId = new ShardSearchContextId("test-session", 1L);
-                QuerySearchResult queryResult = new QuerySearchResult(contextId, null, null);
-                FetchSearchResult fetchResult = new FetchSearchResult(contextId, null);  
-                StreamSearchChannelListener listener = mock(StreamSearchChannelListener.class);
-                IndexShard indexShard = mock(IndexShard.class);
-
-                when(searchContext.indexShard()).thenReturn(indexShard);
-                when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
-                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
-                when(searchContext.queryResult()).thenReturn(queryResult);
-                when(searchContext.fetchResult()).thenReturn(fetchResult);
-                when(searchContext.getStreamChannelListener()).thenReturn(listener);  
-
-                ContextIndexSearcher searcher = new ContextIndexSearcher(
-                    reader,  
-                    IndexSearcher.getDefaultSimilarity(),
-                    IndexSearcher.getDefaultQueryCache(),
-                    IndexSearcher.getDefaultQueryCachingPolicy(),  
-                    true,
-                    null,
-                    searchContext  
-                );
-
-                // Create a mock internal aggregation  
-                InternalAggregation mockAggregation = mock(InternalSum.class);
-                when(mockAggregation.getName()).thenReturn("test_sum");
-
-                List<InternalAggregation> batch = Collections.singletonList(mockAggregation);
-
-                // Call sendBatch  
-                searcher.sendBatch(batch);
-
-                // Verify that the listener was called with the correct result  
-                verify(listener).onStreamResponse(any(QueryFetchSearchResult.class), eq(false));
-            }
-        }  
-    }
-
-    public void testSendBatchWithMultipleAggregations() throws Exception {  
-        try (
-            Directory directory = newDirectory();
-            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
-        ) {
-
-            Document doc = new Document();  
-            doc.add(new StringField("field", "value", Field.Store.NO));
-            writer.addDocument(doc);
-            writer.commit();  
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                SearchContext searchContext = mock(SearchContext.class);  
-                ShardSearchContextId contextId = new ShardSearchContextId("test-session", 2L);
-                QuerySearchResult queryResult = new QuerySearchResult(contextId, null, null);
-                FetchSearchResult fetchResult = new FetchSearchResult(contextId, null);  
-                StreamSearchChannelListener listener = mock(StreamSearchChannelListener.class);
-                IndexShard indexShard = mock(IndexShard.class);
-
-                when(searchContext.indexShard()).thenReturn(indexShard);
-                when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
-                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
-                when(searchContext.queryResult()).thenReturn(queryResult);
-                when(searchContext.fetchResult()).thenReturn(fetchResult);
-                when(searchContext.getStreamChannelListener()).thenReturn(listener);  
-
-                ContextIndexSearcher searcher = new ContextIndexSearcher(
-                    reader,  
-                    IndexSearcher.getDefaultSimilarity(),
-                    IndexSearcher.getDefaultQueryCache(),
-                    IndexSearcher.getDefaultQueryCachingPolicy(),  
-                    true,
-                    null,
-                    searchContext  
-                );
-
-                // Create multiple mock internal aggregations  
-                InternalAggregation mockAggregation1 = mock(InternalSum.class);
-                when(mockAggregation1.getName()).thenReturn("sum_agg");
-
-                InternalAggregation mockAggregation2 = mock(InternalSum.class);
-                when(mockAggregation2.getName()).thenReturn("count_agg");
-
+        @Override
+import org.opensearch.ExceptionsHelper;
+import org.apache.lucene.search.Scorable;  
+        @Override
                 InternalAggregation mockAggregation3 = mock(InternalSum.class);
-                when(mockAggregation3.getName()).thenReturn("avg_agg");
-
-                List<InternalAggregation> batch = List.of(mockAggregation1, mockAggregation2, mockAggregation3);
-
-                // Call sendBatch  
-                searcher.sendBatch(batch);
-
-                // Verify that the listener was called with the correct result  
-                verify(listener).onStreamResponse(any(QueryFetchSearchResult.class), eq(false));
-            }
-        }  
+import static org.mockito.Mockito.mock;  
     }
-
-    public void testSendBatchWithEmptyBatch() throws Exception {  
-        try (
-            Directory directory = newDirectory();
-            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
-        ) {
-
-            Document doc = new Document();  
-            doc.add(new StringField("field", "value", Field.Store.NO));
-            writer.addDocument(doc);
-            writer.commit();  
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                SearchContext searchContext = mock(SearchContext.class);  
-                ShardSearchContextId contextId = new ShardSearchContextId("test-session", 3L);
-                QuerySearchResult queryResult = new QuerySearchResult(contextId, null, null);
-                FetchSearchResult fetchResult = new FetchSearchResult(contextId, null);  
-                StreamSearchChannelListener listener = mock(StreamSearchChannelListener.class);
-                IndexShard indexShard = mock(IndexShard.class);
-
-                when(searchContext.indexShard()).thenReturn(indexShard);
-                when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
-                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
-                when(searchContext.queryResult()).thenReturn(queryResult);
-                when(searchContext.fetchResult()).thenReturn(fetchResult);
-                when(searchContext.getStreamChannelListener()).thenReturn(listener);  
-
-                ContextIndexSearcher searcher = new ContextIndexSearcher(
-                    reader,  
-                    IndexSearcher.getDefaultSimilarity(),
-                    IndexSearcher.getDefaultQueryCache(),
-                    IndexSearcher.getDefaultQueryCachingPolicy(),  
+            QueryTimeout retainedTimeout = searcher.getTimeout();  
+        IndexShard indexShard = mock(IndexShard.class);  
+import org.opensearch.action.support.StreamSearchChannelListener;
+        searcher.addQueryCancellation(() -> {});
+                // 4 slices will be created with 3 leaves in first&last slices and 2 leaves in other slices
+            Document document = new Document();  
+import org.apache.lucene.index.PostingsEnum;
+        /**
                     true,
-                    null,
-                    searchContext  
+        document.add(new StringField("field1", "value1", Field.Store.NO));
+                assertThat(doc, equalTo(0));
+import org.opensearch.core.tasks.TaskCancelledException;  
+import static org.opensearch.search.internal.IndexReaderUtils.getLeaves;
+                StreamSearchChannelListener listener = mock(StreamSearchChannelListener.class);
+            Runnable second = () -> calls[1]++;  
+        public String toString(String field) {  
+        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
+import org.apache.lucene.util.Accountable;
+            return weight.explain(context, doc);
+            } else if (liveDocs == null) {
+ */  
+                QuerySearchResult queryResult = new QuerySearchResult(contextId, null, null);
+            assertTrue("shouldExit should return true while cancellation is active", searcher.getTimeout().shouldExit());  
+                    IndexSearcher.getDefaultQueryCachingPolicy(),  
+        @Override
+            return query.toString(field);
+                    throw new UncheckedIOException(e);
+import org.opensearch.index.shard.SearchOperationListener;
+            assertThat(context.reader(), instanceOf(SequentialStoredFieldsLeafReader.class));
+            Document doc = new Document();  
+        ) {
+    }
+                );  
+            }
+import java.io.UncheckedIOException;
+        BitsetFilterCache cache = new BitsetFilterCache(settings, indicesCache, listener);  
+            this.numDocs = computeNumDocs(in, roleQueryBits);
+            }
+        doTestContextIndexSearcher(true, false);
+            super(weight.getQuery());
+                    IndexSearcher.getDefaultQueryCachingPolicy(),
+            iw.addDocument(document);  
+     */
+        w.addDocument(doc);
+import java.util.concurrent.ExecutorService;
+        }
+            doc.add(new StringField("field", "value", Field.Store.NO));
+         */
+        DirectoryReader directoryReader = DirectoryReader.open(directory);
+        assertEquals(0, searcher.count(new TermQuery(new Term("non_existing_field", "non_existing_value"))));
+            searcher.addQueryCancellation(() -> { throw new TaskCancelledException("cancelled"); });  
+                // Create a mock internal aggregation  
+import org.opensearch.search.query.QuerySearchResult;
+                IndexShard indexShard = mock(IndexShard.class);
+    }
+                when(mockAggregation.getName()).thenReturn("test_sum");
+        assertEquals(ExitableDirectoryReader.class, searcher.getIndexReader().getClass());
+                // Create multiple mock internal aggregations  
                 );
-
-                List<InternalAggregation> emptyBatch = Collections.emptyList();  
-
-                // Call sendBatch with empty batch
-                searcher.sendBatch(emptyBatch);  
-
-                // Verify that the listener was called even with empty batch
-                verify(listener).onStreamResponse(any(QueryFetchSearchResult.class), eq(false));  
+        }
+            searchContext
+        final Directory directory = newDirectory();  
+            assertFalse("shouldExit should return false when cancellation does not throw", searcher.getTimeout().shouldExit());
+        iw.addDocument(document);
+        when(searchContext.indexShard()).thenReturn(indexShard);
+import org.apache.lucene.util.Bits;
+import org.opensearch.test.OpenSearchTestCase;  
+        public Bits getLiveDocs() {
+                // apply deletes when needed:
+            return true;
+    public void testSendBatchWithEmptyBatch() throws Exception {  
+            assertTrue(searcher.hasCancellations());  
+            deleteField.setStringValue("yes");
+        IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()).setMergePolicy(NoMergePolicy.INSTANCE));
+                return new Bits.MatchNoBits(in.maxDoc());
+        }
+        try (
+        IndicesBitsetFilterCache indicesCache = new IndicesBitsetFilterCache(Settings.EMPTY);
+                ContextIndexSearcher searcher = new ContextIndexSearcher(
+        IndexSearcher searcher = new IndexSearcher(directoryReader);  
+        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
+            Document doc = new Document();  
+import org.apache.lucene.search.BoostQuery;  
+        );
+            }  
+                IndexSearcher.LeafSlice[] slices = searcher.slices(leaves);  
+        private final int numDocs;  
+                    null,
+        SearchContext searchContext = mock(SearchContext.class);
+ * this work for additional information regarding copyright
+            assertSame(second, searcher.addQueryCancellation(second));
+                @Override
+        protected StoredFieldsReader doGetSequentialStoredFieldsReader(StoredFieldsReader reader) {
+    }
+                    searchContext
+            }
+        ) {
+import org.apache.lucene.search.DocIdSetIterator;
+        assertEquals(3, slices[1].partitions.length);
+ * KIND, either express or implied.  See the License for the
+    }
+                    IndexSearcher.getDefaultQueryCache(),
+            Document doc = new Document();  
+import org.opensearch.search.aggregations.metrics.InternalSum;  
+        }
+        // Assert wrapping  
+        SearchOperationListener searchOperationListener = new SearchOperationListener() {
+        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(null));  
+        w.addDocument(doc);  
+                verify(listener).onStreamResponse(any(QueryFetchSearchResult.class), eq(false));
+    public void testContextIndexSearcherDenseWithDeletions() throws IOException {  
+import org.opensearch.threadpool.TestThreadPool;
+                return new CreateScorerOnceQuery(queryRewritten);
+                    null,
+        for (LeafReaderContext lrc : searcher.getIndexReader().leaves()) {
+import java.io.IOException;
+                when(searchContext.indexShard()).thenReturn(indexShard);
+            public void collect(int doc, long bucket) throws IOException {
+                when(searchContext.indexShard()).thenReturn(indexShard);
+        });
+    }
+                // slow
+        });
+        public CacheHelper getCoreCacheHelper() {  
+            }
+        IOUtils.close(reader, w, dir, indicesCache);
+        sparseFixedBitSet.or(penum);  
+        allowedField.setStringValue("no");
+            Runnable first = () -> calls[0]++;
+ * license agreements. See the NOTICE file distributed with
+import org.apache.lucene.search.MatchAllDocsQuery;  
+            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
+        private final BitsetFilterCache bitsetFilterCache;
+        IntPoint pointField = new IntPoint("point", 1, 2);
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+        assertEquals(expectedSliceCount, slices.length);
+    public void testTimeoutIsSetOnSearcher() throws Exception {
+            if (roleQueryBits == null) {
+                ContextIndexSearcher searcher = new ContextIndexSearcher(
+            // add a document that matches foo:bar but will be deleted  
+            null,  
+ * software distributed under the License is distributed on an
+                when(searchContext.indexShard()).thenReturn(indexShard);
+        }  
             }
         }
+import org.opensearch.search.query.QueryPhase;  
+        }
+            searcher.addQueryCancellation(first);
+        leafCollector = new LeafBucketCollector() {  
+            expectThrows(NullPointerException.class, () -> searcher.getTimeout().shouldExit());
+        withContextIndexSearcher(searcher -> {  
+            }
+                SearchContext searchContext = mock(SearchContext.class);  
+ * compatible open source license.
+    }
+            expectThrows(IllegalArgumentException.class, () -> searcher.addQueryCancellation(equal));
+                    IndexSearcher.getDefaultQueryCachingPolicy(),
+        expectedSliceCount = 2;
+        StringField allowedField = new StringField("allowed", "yes", Field.Store.NO);
+import org.opensearch.common.lucene.index.SequentialStoredFieldsLeafReader;
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
     }  
+            return 31 * classHash() + query.hashCode();
+import org.apache.lucene.util.SparseFixedBitSet;  
+        }
+import org.apache.lucene.util.FixedBitSet;
+        IndexSettings settings = IndexSettingsModule.newIndexSettings("_index", Settings.EMPTY);  
+        iw.addDocument(document);
+        BitsetFilterCache.Listener listener = new BitsetFilterCache.Listener() {
+            writer.commit();  
+                verify(listener).onStreamResponse(any(QueryFetchSearchResult.class), eq(false));  
+        if (deletions) {
+                assertEquals(2, slices[3].partitions.length);
+                IndexShard indexShard = mock(IndexShard.class);
+    public void testTimeoutShouldExitDoesNotCatchUnrelatedExceptions() throws Exception {
+                FetchSearchResult fetchResult = new FetchSearchResult(contextId, null);  
+        // Searching a non-existing term will trigger a null scorer
+                searcher.sendBatch(batch);
+import org.apache.lucene.util.BitSetIterator;  
+                when(searchContext.indexShard()).thenReturn(indexShard);
+import org.apache.lucene.index.DirectoryReader;
+                    mock(ExecutorService.class),  
+                StreamSearchChannelListener listener = mock(StreamSearchChannelListener.class);
+            return weight.scorerSupplier(leafReaderContext);  
+                public void run() {
+            assertArrayEquals(new int[] { 1, 1 }, calls);
+        @Override
+import org.apache.lucene.util.BitSet;
+        ContextIndexSearcher searcher = new ContextIndexSearcher(  
+        CreateScorerOnceWeight(Weight weight) {  
+        if (sparse) {  
+                when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+                fail("docId [" + doc + "] should have been deleted");  
+                when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+                    searchContext  
+            assertEquals(ExitableLeafReader.class, lrc.reader().getClass());  
+import org.opensearch.common.CheckedConsumer;  
+        DocumentSubsetReader(LeafReader in, BitsetFilterCache bitsetFilterCache, Query roleQuery) throws IOException {
+import org.apache.lucene.search.QueryVisitor;
+                List<InternalAggregation> batch = Collections.singletonList(mockAggregation);
+            Document doc = new Document();
+        @Override
+                    IndexSearcher.getDefaultSimilarity(),
+        w.deleteDocuments(new Term("delete", "yes"));
+        @Override
+            writer.addDocument(doc);
+         * <p>Construct a FilterLeafReader based on the specified base reader.  
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+        SparseFixedBitSet sparseFixedBitSet = new SparseFixedBitSet(leaf.reader().maxDoc());
+        int totalPartitions = 0;
+                        if (liveDocs.get(doc)) {
+import org.opensearch.search.aggregations.InternalAggregation;
+    public void testContextIndexSearcherDenseNoDeletions() throws IOException {
+            this.query = query;
+import org.apache.lucene.document.IntPoint;
+                    return numDocs;
+        @Override
+    }
+            assertTrue("shouldExit should return true on TimeExceededException", searcher.getTimeout().shouldExit());  
+            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
+                    IndexSearcher.getDefaultQueryCachingPolicy(),  
+                    true,
+            Runnable first = new Cancellation(1);  
+                    IndexSearcher.getDefaultSimilarity(),  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+                );
+        ) {
+            }
+    public void testSlicesWithMaxTargetSliceSupplier() throws Exception {  
+            deleteField.setStringValue("no");  
+            assertThat(bitSet, instanceOf(SparseFixedBitSet.class));
+        }
+        if (sparse) {
+            assertFalse(searcher.hasCancellations());
+        TopDocs topDocs = searcher.search(new BoostQuery(new ConstantScoreQuery(new TermQuery(new Term("foo", "bar"))), 3f), 1);  
+                    IndexSearcher.getDefaultQueryCache(),
+import org.opensearch.indices.IndicesBitsetFilterCache;
+                ContextIndexSearcher searcher = new ContextIndexSearcher(
+        });
+                SearchContext searchContext = mock(SearchContext.class);
+        doTestContextIndexSearcher(false, false);
+     * {@link SearchContext}, then passes it to the provided consumer. All resources are closed  
+            if (roleQueryBits == null) {  
+                    searchContext  
+            document.add(new StringField("field2", "value1", Field.Store.NO));
+            writer.commit();  
+import org.apache.lucene.document.Document;  
+            assertTrue(searcher.hasCancellations());
+                QuerySearchResult queryResult = new QuerySearchResult(contextId, null, null);
+        bitSet = new CombinedBitSet(query(leaf, "field1", "value2"), leaf.reader().getLiveDocs());
+import org.apache.lucene.search.Weight;
+        document.add(new StringField("field2", "value1", Field.Store.NO));
+import org.opensearch.common.util.io.IOUtils;
+        bitSet = new CombinedBitSet(query(leaf, "field1", "value3"), leaf.reader().getLiveDocs());
+            super(in);  
+    public void testClosingSearcherClearsCancellationCallbacks() throws Exception {
+    private void withContextIndexSearcher(CheckedConsumer<ContextIndexSearcher, Exception> test) throws Exception {  
+        public boolean isCacheable(LeafReaderContext ctx) {
+        ThreadPool tp = new TestThreadPool("test");
+                    IndexSearcher.getDefaultQueryCachingPolicy(),  
+import static org.opensearch.search.internal.ExitableDirectoryReader.ExitableTerms;  
+            IndexSearcher.getDefaultSimilarity(),
+                when(searchContext.queryResult()).thenReturn(queryResult);
+                    searchContext  
+                ContextIndexSearcher searcher = new ContextIndexSearcher(
+            @Override
+        }
+            iw.commit();
+        @Override
+import org.apache.lucene.search.Explanation;  
+ * SPDX-License-Identifier: Apache-2.0
+        });  
+                // Verify that the listener was called with the correct result  
+ * The OpenSearch Contributors require contributions made to  
+     */
+        DocumentSubsetDirectoryReader filteredReader = new DocumentSubsetDirectoryReader(reader, cache, roleQuery);  
+            filteredReader,
+    /** Equal callbacks must be rejected as duplicates and removable through an equal instance. */  
+            Directory directory = newDirectory();
+        Document doc = new Document();
+        withContextIndexSearcher(searcher -> {
+            if (query != queryRewritten) {
+     * the other active, without requiring a particular callback execution order.  
+ *  
+                    IndexSearcher.getDefaultQueryCache(),
+            final Bits actualLiveDocs = in.getLiveDocs();
+                    searchContext
+            for (int i = 0; i < 1000; ++i) {
+import java.util.List;
+        Weight weight = searcher.createWeight(
+                        return new DocumentSubsetReader(reader, bitsetFilterCache, roleQuery);
+        }  
+            // Not delegated since we change the live docs  
+        }
+            assertFalse(retainedTimeout.shouldExit());  
+ * GitHub history for details.
+            assertArrayEquals(new int[] { 2, 3 }, calls);  
+import org.opensearch.search.fetch.FetchSearchResult;
+    public void testSendBatchWithSingleAggregation() throws Exception {  
+                int expectedSliceCount = 4;
+            searcher.removeQueryCancellation(first);  
+        }  
+            assertEquals(ExitableTerms.class, lrc.reader().terms("foo").getClass());  
+    public void testTimeoutShouldExitReturnsTrueWhenTimeoutExceeded() throws Exception {  
+        private final Set<Object> seenLeaves = Collections.newSetFromMap(new IdentityHashMap<>());
+    }  
+            totalPartitions += slice.partitions.length;
+import org.apache.lucene.search.ScorerSupplier;
+                IndexShard indexShard = mock(IndexShard.class);
+        for (LeafReaderContext lrc : searcher.getIndexReader().leaves()) {
+        withContextIndexSearcher(searcher -> {  
+            assertTrue(searcher.getTimeout().shouldExit());
+            searcher.removeQueryCancellation(second);
+import org.apache.lucene.index.IndexWriterConfig;
+                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
+            assertFalse(searcher.hasCancellations());  
+        ) {
+        private static int computeNumDocs(LeafReader reader, BitSet roleQueryBits) {  
+        );
+                int numDocs = 0;  
+        };
+            searcher.addQueryCancellation(() -> { throw new QueryPhase.TimeExceededException(); });
+import static org.opensearch.search.internal.ExitableDirectoryReader.ExitableLeafReader;
+                        throw ExceptionsHelper.convertToOpenSearchException(e);  
+            searcher.removeQueryCancellation(equal);  
+                // very slow, but necessary in order to be correct
+        };
+        assertEquals(3f, topDocs.scoreDocs[0].score, 0);  
+import org.apache.lucene.index.FilterDirectoryReader;
+import org.opensearch.common.settings.Settings;  
+            this.weight = weight;
+                    IndexSearcher.getDefaultQueryCache(),
+            public void setScorer(Scorable scorer) throws IOException {
+                FetchSearchResult fetchResult = new FetchSearchResult(contextId, null);  
+        assertEquals(1, topDocs.scoreDocs.length);
+        };
+        directory.close();  
+        iw.addDocument(document);  
+        withContextIndexSearcher(searcher -> {
+        doc.add(fooField);
+        directoryReader.close();
+    }  
+    public void doTestContextIndexSearcher(boolean sparse, boolean deletions) throws IOException {
+            assertSame(first, searcher.addQueryCancellation(first));  
+import static org.mockito.ArgumentMatchers.eq;
+                }
+     * automatically.
+            }
+                    IndexSearcher.getDefaultQueryCachingPolicy(),  
+                    reader,  
+            }
+                assertThat(doc, equalTo(1));  
+            document.add(new StringField("field1", "value1", Field.Store.NO));
+                return 0;  
+            visitor.visitLeaf(this);  
+    /**
+                assertEquals(1, searcher.getSlices().length);  
+            assertFalse(searcher.hasCancellations());
+        public Explanation explain(LeafReaderContext context, int doc) throws IOException {  
+        public Weight createWeight(IndexSearcher searcher, org.apache.lucene.search.ScoreMode scoreMode, float boost) throws IOException {
+            public void collect(int doc, long bucket) throws IOException {
+    public void testMultipleCancellationCallbacks() throws Exception {
+            true,
+                // Call sendBatch  
+        });
+            searcher.close();
+                when(searchContext.getTargetMaxSliceCount()).thenReturn(4);
+    }  
+                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
+        bitSet = new CombinedBitSet(query(leaf, "field1", "value4"), leaf.reader().getLiveDocs());
+        @Override  
+        protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {  
+import org.apache.lucene.index.LeafReader;
+                w.addDocument(doc);  
+            @Override  
+        try (
+        withContextIndexSearcher(searcher -> {  
+package org.opensearch.search.internal;
+        }  
+                new IndexWriterConfig(new StandardAnalyzer()).setMergePolicy(NoMergePolicy.INSTANCE)  
+            }
+                SearchContext searchContext = mock(SearchContext.class);  
+ *
+                    throw new TaskCancelledException("cancelled");  
+        public int hashCode() {  
+        }  
+            assertFalse(timeout.shouldExit());
+import org.apache.lucene.search.Query;
+        Query roleQuery = new TermQuery(new Term("allowed", "yes"));
+        public int numDocs() {
+         * <p>Note that base reader is closed if this FilterLeafReader is closed.</p>
+        iw.deleteDocuments(new Term("field1", "value3"));  
+import static org.mockito.Mockito.verify;
+        final List<LeafReaderContext> leaves = getLeaves(10);
+                }
+        });  
+            writer.addDocument(doc);
+            IndexSearcher.getDefaultQueryCache(),  
+        assertEquals(5, slices[0].partitions.length);
+        withContextIndexSearcher(searcher -> {
+        };
+import org.apache.lucene.document.Field;
+            SequentialStoredFieldsLeafReader lf = (SequentialStoredFieldsLeafReader) context.reader();  
+            });  
+                return roleQueryBits.cardinality();  
+                    }
+                InternalAggregation mockAggregation2 = mock(InternalSum.class);
+            } else {
+ * You may obtain a copy of the License at  
+        }  
+                }
+        public CacheHelper getReaderCacheHelper() {
+            return reader;  
+                when(mockAggregation2.getName()).thenReturn("count_agg");
+import static org.hamcrest.Matchers.instanceOf;  
+                List<InternalAggregation> emptyBatch = Collections.emptyList();  
+                ShardSearchContextId contextId = new ShardSearchContextId("test-session", 2L);
+            }
+                    null,
+                test.accept(searcher);
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.test.IndexSettingsModule;
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+        StringField deleteField = new StringField("delete", "no", Field.Store.NO);  
+        iw.addDocument(document);  
+        IndexSearcher.LeafSlice[] slices = MaxTargetSliceSupplier.getSlicesWholeSegments(leaves, expectedSliceCount);  
+                assertThat(scorer.score(), equalTo(3f));  
+        withContextIndexSearcher(searcher -> {  
+import org.apache.lucene.index.LeafReaderContext;  
+        while (tenum.next().utf8ToString().equals(value) == false) {  
+    public void testContextIndexSearcherSparseWithDeletions() throws IOException {
+import java.util.IdentityHashMap;
+        doTestContextIndexSearcher(true, true);  
+        }
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+                when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+        DocumentSubsetDirectoryReader(DirectoryReader in, BitsetFilterCache bitsetFilterCache, Query roleQuery) throws IOException {
+                when(searchContext.fetchResult()).thenReturn(fetchResult);
+            Scorable scorer;
+        when(indexShard.getSearchOperationListener()).thenReturn(searchOperationListener);
+            }
+            } else {
+            final Bits liveDocs = reader.getLiveDocs();
+    private SparseFixedBitSet query(LeafReaderContext leaf, String field, String value) throws IOException {  
+                QuerySearchResult queryResult = new QuerySearchResult(contextId, null, null);
+        assertEquals(3, slices[0].partitions.length);  
+    /** The cancellation object may outlive its search context; closing the searcher must deactivate all its callbacks. */  
+    public void testGetSlicesWithNonNullExecutorButCSDisabled() throws Exception {  
+    }
+        }
+                } catch (IOException e) {  
+     * Timeout and task-cancellation checks can coexist. Removing and re-adding one callback must leave
+        private final Query roleQuery;  
+        BitSet bitSet = cache.getBitSetProducer(roleQuery).getBitSet(reader.leaves().get(0));
+ *
+import static org.opensearch.search.internal.ContextIndexSearcher.intersectScorerAndBitSet;  
+import static org.hamcrest.Matchers.equalTo;
+        document = new Document();
+        }
+        public Query rewrite(IndexSearcher searcher) throws IOException {
+                // Case 2: Verify the slice count when custom max slice computation is used
+            searcher.addQueryCancellation(() -> { throw new TaskCancelledException("cancelled"); });
+        });  
+import java.util.Set;  
+ * ownership. Elasticsearch licenses this file to you under  
+        private final Query query;
+            new BoostQuery(new ConstantScoreQuery(new TermQuery(new Term("field2", "value1"))), 3f),
+            searcher.addQueryCancellation(first);  
+            searcher.addQueryCancellation(() -> { throw new NullPointerException("unrelated"); });
+                    IndexSearcher.getDefaultSimilarity(),
+        assertEquals(5, slices[1].partitions.length);  
+                    reader,  
+            assertFalse("shouldExit should return false when no cancellations are registered", searcher.getTimeout().shouldExit());
+                searcher.sendBatch(emptyBatch);  
+                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
+                );
+                assertEquals(2, slices[2].partitions.length);  
+            searcher.removeQueryCancellation(null);
+            searcher.removeQueryCancellation(cancellation);
+            assertTrue("shouldExit should return true on TaskCancelledException", searcher.getTimeout().shouldExit());
+        };  
+import org.opensearch.search.fetch.QueryFetchSearchResult;
+                SearchContext searchContext = mock(SearchContext.class);  
+        LeafCollector leafCollector = new LeafBucketCollector() {
+        assertEquals(10, totalPartitions);
+        assertEquals(1, topDocs.totalHits.value());
+                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+import org.apache.lucene.search.ConstantScoreQuery;
+            public void collect(int doc, long bucket) throws IOException {
+        }
+                public LeafReader wrap(LeafReader reader) {
+        assertEquals(2, slices[2].partitions.length);
+        }
+        private final BitSet roleQueryBits;
+    }
+            w.addDocument(doc);
+            @Override
+        doc.add(allowedField);  
+                ShardSearchContextId contextId = new ShardSearchContextId("test-session", 3L);
+            assertFalse(searcher.getTimeout().shouldExit());
+        public CacheHelper getReaderCacheHelper() {
+        assertEquals(1, searcher.count(new CreateScorerOnceQuery(new MatchAllDocsQuery())));
+        TermsEnum tenum = leaf.reader().terms(field).iterator();
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+ * not use this file except in compliance with the License.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            Runnable equal = new Cancellation(1);
+            assertFalse(timeout.shouldExit());  
+            IndexWriter iw = new IndexWriter(
+            this.bitsetFilterCache = bitsetFilterCache;
+            assertThat(bitSet, instanceOf(FixedBitSet.class));  
+            assertFalse(timeout.shouldExit());
+        final List<LeafReaderContext> leaves = getLeaves(10);
+        }
+                when(mockAggregation1.getName()).thenReturn("sum_agg");
+            assertFalse(timeout.shouldExit());
+        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
+                    true,
+                FetchSearchResult fetchResult = new FetchSearchResult(contextId, null);  
+    public void testTimeoutShouldExitReturnsFalseWhenCancellationDoesNotThrow() throws Exception {
+            searcher.removeQueryCancellation(first); // Removing an absent callback is harmless.
+        iw.commit();
+            assertArrayEquals(new int[] { 2, 3 }, calls);
+                assertThat(doc, equalTo(3));  
+    }
+        return sparseFixedBitSet;
+        intersectScorerAndBitSet(weight.scorer(leaf), bitSet, leafCollector, () -> {});  
+            doc.add(new StringField("field", "value", Field.Store.NO));
+    }
+                return roleQueryBits;  
+import org.opensearch.threadpool.ThreadPool;
+    }
+            Query queryRewritten = query.rewrite(searcher);  
+                        }  
+            }  
+                );
+                            numDocs++;
+                // Call sendBatch with empty batch
+            }
+            assertFalse(searcher.hasCancellations());
+            doc.add(new StringField("field", "value", Field.Store.NO));
+            }
+import java.util.Collections;  
+ * under the License.  
+            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
+            assertNotNull(lf.getSequentialStoredFieldsReader());
+            return sameClassAs(obj) && query.equals(((CreateScorerOnceQuery) obj).query);
+                    true,
+        }  
+import org.apache.lucene.search.TermQuery;  
+ */  
+                directory,
+                // Case 1: Verify getSlices returns not null when concurrent segment search is disabled
+            searcher.removeQueryCancellation(first);
+        withContextIndexSearcher(searcher -> {
+            final Directory directory = newDirectory();  
+import org.opensearch.lucene.util.CombinedBitSet;  
+        for (IndexSearcher.LeafSlice slice : slices) {  
+                when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);  
+        @Override
+            )
+                verify(listener).onStreamResponse(any(QueryFetchSearchResult.class), eq(false));
+                    IndexSearcher.getDefaultSimilarity(),
+            return null;
+                    IndexSearcher.getDefaultQueryCache(),
+                    directoryReader,  
+        leafCollector = new LeafBucketCollector() {  
+    /**
+import org.apache.lucene.search.LeafCollector;
+        }
+        public ScorerSupplier scorerSupplier(LeafReaderContext leafReaderContext) throws IOException {
+                searcher.sendBatch(batch);
+public class ContextIndexSearcherTests extends OpenSearchTestCase {
+import org.apache.lucene.store.Directory;  
+            Directory directory = newDirectory();
+            }
+                );
+            ScoreMode.COMPLETE,  
+/*  
+                IndexShard indexShard = mock(IndexShard.class);
+            assertArrayEquals(new int[] { 1, 2 }, calls);
+        }
+    public void testTimeoutShouldExitReflectsRemoval() throws Exception {  
+        assertEquals(2, slices[3].partitions.length);  
+                DocIdSetIterator it = new BitSetIterator(roleQueryBits, 0L); // we don't use the cost
+                // Verify that the listener was called with the correct result  
+    private static class CreateScorerOnceWeight extends Weight {
+                when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);  
+        Directory dir = newDirectory();
+                this.scorer = scorer;  
+            assertEquals(ExitablePointValues.class, lrc.reader().getPointValues("point").getClass());
+                    try {  
+            writer.commit();
+        } else {
+    private static class DocumentSubsetDirectoryReader extends FilterDirectoryReader {
+        LeafReaderContext leaf = directoryReader.leaves().get(0);
+                when(searchContext.getStreamChannelListener()).thenReturn(listener);  
+                    IndexSearcher.getDefaultSimilarity(),
+        }
+        try (
+        try (
+                ContextIndexSearcher searcher = new ContextIndexSearcher(
+            Runnable cancellation = searcher.addQueryCancellation(() -> { throw new QueryPhase.TimeExceededException(); });
+                    null,
+                    true,
+            return in.getCoreCacheHelper();
+            @Override
+        }
+            assertFalse("shouldExit should return false after cancellation is removed", searcher.getTimeout().shouldExit());  
+    public void testIntersectScorerAndRoleBits() throws Exception {
+            record Cancellation(int id) implements Runnable {  
+import static org.opensearch.search.internal.ExitableDirectoryReader.ExitablePointValues;
+                    } catch (Exception e) {
+        document = new Document();
+import static org.mockito.Mockito.when;
+                when(searchContext.queryResult()).thenReturn(queryResult);
+                    for (int doc = it.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = it.nextDoc()) {  
+                    directoryReader,
+            assertNotEquals(ExitableTerms.class, lrc.reader().terms("foo").getClass());
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+    }
+        int expectedSliceCount = 4;
+                assertEquals(3, slices[1].partitions.length);
+                List<InternalAggregation> batch = List.of(mockAggregation1, mockAggregation2, mockAggregation3);
+ * Unless required by applicable law or agreed to in writing,
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+import org.opensearch.index.IndexSettings;
+import org.apache.lucene.search.ScoreMode;
+                SearchContext searchContext = mock(SearchContext.class);  
+            assertNotEquals(ExitablePointValues.class, lrc.reader().getPointValues("point").getClass());
+        slices = MaxTargetSliceSupplier.getSlicesWholeSegments(leaves, expectedSliceCount);  
+            return numDocs;  
+                when(searchContext.fetchResult()).thenReturn(fetchResult);
+        }  
+        leafCollector = new LeafBucketCollector() {  
+        document.add(new StringField("field1", "value3", Field.Store.NO));
+                    reader,  
+            int[] calls = new int[2];
+                ShardSearchContextId contextId = new ShardSearchContextId("test-session", 1L);
+        });
+        }  
+        assertEquals(1, searcher.count(new TermQuery(new Term("foo", "bar"))));
+        };
+            super(in, new SubReaderWrapper() {  
+                when(searchContext.fetchResult()).thenReturn(fetchResult);
+            } else if (actualLiveDocs == null) {
+import org.apache.lucene.document.StringField;  
+        public void visit(QueryVisitor visitor) {
+import org.apache.lucene.search.TopDocs;
+            searcher.addQueryCancellation(() -> {});
+            Directory directory = newDirectory();
+ */
+import org.apache.lucene.index.Term;
+import static org.mockito.ArgumentMatchers.any;
+            @Override
+            IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))  
+         * @param in specified base reader.  
+        assertEquals(expectedSliceCount, slices.length);
+        document.add(new StringField("field2", "value1", Field.Store.NO));  
+        // make sure scorers are created only once, see #1725  
+            public void onRemoval(ShardId shardId, Accountable accountable) {
+        }  
+        doc.add(deleteField);
+                when(mockAggregation3.getName()).thenReturn("avg_agg");
+        document.add(new StringField("field1", "value4", Field.Store.NO));
+        document.add(new StringField("field2", "value1", Field.Store.NO));
+        private final Weight weight;  
+                    IndexSearcher.getDefaultSimilarity(),
+        PostingsEnum penum = tenum.postings(null);
+import org.apache.lucene.index.IndexWriter;  
+        @Override
+    }
+import org.opensearch.index.shard.IndexShard;  
+                    searchContext  
+            return new DocumentSubsetDirectoryReader(in, bitsetFilterCache, roleQuery);
+        withContextIndexSearcher(searcher -> {
+    private static class CreateScorerOnceQuery extends Query {  
+import org.opensearch.search.aggregations.LeafBucketCollector;
+                when(searchContext.indexShard()).thenReturn(indexShard);
+                IndexShard indexShard = mock(IndexShard.class);  
+        }
+            this.roleQueryBits = bitsetFilterCache.getBitSetProducer(roleQuery).getBitSet(in.getContext());
+    public void testContextIndexSearcherSparseNoDeletions() throws IOException {  
+            public void collect(int doc, long bucket) throws IOException {
+        for (LeafReaderContext context : searcher.getIndexReader().leaves()) {
+                when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+                    IndexSearcher.getDefaultQueryCache(),  
+            assertNotNull("setTimeout should have been called with MutableQueryTimeout", timeout);
+        document = new Document();  
+    }
+                // Verify that the listener was called even with empty batch
+    public void testCancellationCallbackEquality() throws Exception {
+            @Override
+        CombinedBitSet bitSet = new CombinedBitSet(query(leaf, "field1", "value1"), leaf.reader().getLiveDocs());  
+ * this file be licensed under the Apache-2.0 license or a
+                StreamSearchChannelListener listener = mock(StreamSearchChannelListener.class);
+        @Override  
+        doTestContextIndexSearcher(false, true);
+            searcher.addQueryCancellation(() -> {});
 }
+import org.apache.lucene.index.NoMergePolicy;
+            try (DirectoryReader directoryReader = DirectoryReader.open(directory);) {
+         *
+import org.apache.lucene.search.IndexSearcher;
+            return super.rewrite(searcher);
+        document.add(new StringField("field2", "value1", Field.Store.NO));
+        @Override
+        try (
+/*  
+                when(searchContext.getStreamChannelListener()).thenReturn(listener);  
+        iw.close();
+                    reader,
+        StringField fooField = new StringField("foo", "bar", Field.Store.NO);
+            assertTrue(retainedTimeout.shouldExit());  
+import org.apache.lucene.index.QueryTimeout;  
+                    null,
+            w.forceMerge(1);
+                InternalAggregation mockAggregation1 = mock(InternalSum.class);
+                    true,  
+                try {
+            assertNotSame(first, equal);
+                    }
+    }
+                assertEquals(3, slices[0].partitions.length);
+                InternalAggregation mockAggregation = mock(InternalSum.class);
+    public void testSendBatchWithMultipleAggregations() throws Exception {  
+import org.opensearch.index.cache.bitset.BitsetFilterCache;
+        }  
+                return new CombinedBitSet(roleQueryBits, actualLiveDocs);  
+        });
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+ * Modifications Copyright OpenSearch Contributors. See
+                when(searchContext.queryResult()).thenReturn(queryResult);
+        doc.add(pointField);  
+    public void testTimeoutShouldExitReturnsFalseWhenNoCancellations() throws Exception {
+            public void onCache(ShardId shardId, Accountable accountable) {  
+        withContextIndexSearcher(searcher -> {
+    }  
+            this.roleQuery = roleQuery;
+        public boolean equals(Object obj) {
+ * specific language governing permissions and limitations

@@ -1,316 +1,294 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.index.IndexWriter;  
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.MergePolicy;
-import org.apache.lucene.search.QueryCache;  
-import org.apache.lucene.search.QueryCachingPolicy;
-import org.apache.lucene.search.ReferenceManager;
-import org.apache.lucene.search.Sort;  
-import org.apache.lucene.search.similarities.Similarity;
-import org.opensearch.cluster.service.ClusterApplierService;
-import org.opensearch.common.Nullable;  
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.codec.AdditionalCodecs;
-import org.opensearch.index.codec.CodecService;  
-import org.opensearch.index.codec.CodecServiceConfig;
-import org.opensearch.index.codec.CodecServiceFactory;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;  
-import org.opensearch.index.engine.exec.DocumentMetadataResolver;
-import org.opensearch.index.engine.exec.commit.CommitterFactory;
-import org.opensearch.index.mapper.DocumentMapperForType;  
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.merge.MergedSegmentTransferTracker;
+            .codecService(codecServiceToUse)
 import org.opensearch.index.seqno.RetentionLeases;  
-import org.opensearch.index.store.FormatChecksumStrategy;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.TranslogConfig;  
-import org.opensearch.index.translog.TranslogDeletionPolicyFactory;
-import org.opensearch.index.translog.TranslogFactory;
-import org.opensearch.plugins.DocumentLookupProvider;  
-import org.opensearch.plugins.EnginePlugin;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.BooleanSupplier;  
-import java.util.function.LongSupplier;
-import java.util.function.Supplier;
-
-/**
- * A factory to create an EngineConfig based on custom plugin overrides
- *  
- * @opensearch.internal
- */
-public class EngineConfigFactory {  
+        CodecService defaultCodecService  
     private final CodecServiceFactory codecServiceFactory;
-    private final TranslogDeletionPolicyFactory translogDeletionPolicyFactory;
-    private final List<AdditionalCodecs> additionalCodecs;  
-    private final CommitterFactory committerFactory;
-    private final List<EnginePlugin> enginePlugins;
-    @Nullable  
-    private final DocumentLookupProvider documentLookupProvider;
-    @Nullable
-    private final DocumentMetadataResolver documentMetadataResolver;  
-
-    /** default ctor primarily used for tests without plugins */
-    public EngineConfigFactory(IndexSettings idxSettings) {  
-        this(Collections.emptyList(), idxSettings);
-    }
-
-    /**
-     * Construct a factory using the plugin service and provided index settings
-     */  
-    public EngineConfigFactory(PluginsService pluginsService, IndexSettings idxSettings) {
-        this(pluginsService.filterPlugins(EnginePlugin.class), idxSettings);
-    }  
-
-    /**
-     * Factory wiring the optional {@link DocumentLookupProvider} and {@link DocumentMetadataResolver}  
-     * (pluggable get-by-id path) into the produced {@link EngineConfig}.
-     */
-    public EngineConfigFactory(  
-        PluginsService pluginsService,
-        IndexSettings idxSettings,
-        @Nullable DocumentLookupProvider documentLookupProvider,  
-        @Nullable DocumentMetadataResolver documentMetadataResolver
-    ) {
-        this(pluginsService.filterPlugins(EnginePlugin.class), idxSettings, documentLookupProvider, documentMetadataResolver);  
-    }
-
     /* package-private constructor from specific EnginePlugins and IndexSettings without document-lookup wiring */  
-    EngineConfigFactory(Collection<EnginePlugin> enginePlugins, IndexSettings idxSettings) {
-        this(enginePlugins, idxSettings, null, null);
-    }  
-
-    /* private constructor to construct the factory from specific EnginePlugins and IndexSettings */
-    EngineConfigFactory(  
-        Collection<EnginePlugin> enginePlugins,
-        IndexSettings idxSettings,
-        @Nullable DocumentLookupProvider documentLookupProvider,  
-        @Nullable DocumentMetadataResolver documentMetadataResolver
+    public CodecService newCodecServiceOrDefault(
+    private final List<AdditionalCodecs> additionalCodecs;  
+import org.opensearch.index.mapper.DocumentMapperForType;  
+import org.apache.lucene.search.Sort;  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.translog.TranslogDeletionPolicyFactory;
+        this(Collections.emptyList(), idxSettings);
+                throw new IllegalStateException(
+        IndexWriter.IndexReaderWarmer indexReaderWarmer,
+                );
+        ThreadPool threadPool,
+        // Resolution is deferred to engine build time, but do a resolution here to fail fast on conflict
+        Sort indexSort,
+        resolvePrimaryOperationPolicy(indexSettings, enginePlugins);  
+import java.util.Comparator;
     ) {
-        final List<AdditionalCodecs> codecRegistries = new ArrayList<>();  
-        Optional<CodecService> codecService = Optional.empty();
-        String codecServiceOverridingPlugin = null;
-        Optional<CodecServiceFactory> codecServiceFactory = Optional.empty();  
-        String codecServiceFactoryOverridingPlugin = null;
-        Optional<TranslogDeletionPolicyFactory> translogDeletionPolicyFactory = Optional.empty();
+        if (committerFactories.size() > 1 || (committerFactories.isEmpty() && idxSettings.isPluggableDataFormatEnabled())) {
+            .mapperService(mapperService)
+                if (primaryOperationPolicy != null) {
+import java.util.Optional;
+                throw new IllegalStateException(  
+                    throw new IllegalStateException(
+        BooleanSupplier startedPrimarySupplier,  
+    private final DocumentLookupProvider documentLookupProvider;
+        Logger logger,
+            .build();
+        TranslogConfig translogConfig,
+            // collect all available CodecRegistry instances
         String translogDeletionPolicyOverridingPlugin = null;  
-        List<CommitterFactory> committerFactories = new ArrayList<>();
-
+    ) {
+import org.opensearch.index.IndexSettings;
+    private final DocumentMetadataResolver documentMetadataResolver;  
+        CodecService codecService,  
+        IndexSettings idxSettings,
+        Map<String, FormatChecksumStrategy> checksumStrategies  
+     */
+            throw new IllegalStateException("multiple committer factories found: " + committerFactories);
+/*  
+    @Nullable  
+        Supplier<RetentionLeases> retentionLeasesSupplier,
+                        + " attempting to override again by: "
+                codecServiceFactory = enginePlugin.getCustomCodecServiceFactory(idxSettings);
+        PluginsService pluginsService,
+    }  
+    public EngineConfigFactory(IndexSettings idxSettings) {  
+            .translogDeletionPolicyFactory(translogDeletionPolicyFactory)  
+        String primaryOperationPolicyPlugin = null;  
+                translogDeletionPolicyOverridingPlugin = enginePlugin.getClass().getName();  
+            : defaultCodecService;
+/**
+import org.opensearch.plugins.DocumentLookupProvider;  
+import org.opensearch.index.store.FormatChecksumStrategy;
+            .translogFactory(translogFactory)  
+        MapperService mapperService,
+            // get overriding CodecServiceFactory from EnginePlugin  
+        @Nullable DocumentLookupProvider documentLookupProvider,  
+        this.documentMetadataResolver = documentMetadataResolver;  
+            enginePlugin.getAdditionalCodecs(idxSettings).ifPresent(codecRegistries::add);
+package org.opensearch.index.engine;
+            .leafSorter(leafSorter)
+                primaryOperationPolicyPlugin = enginePlugin.getClass().getName();
+        }
+                    "existing TranslogDeletionPolicyFactory is already overridden in: "  
+        this(enginePlugins, idxSettings, null, null);
+                            + enginePlugin.getClass().getName()  
+import java.util.Collection;  
+            .tombstoneDocSupplier(tombstoneDocSupplier)  
+        }  
+import org.opensearch.plugins.EnginePlugin;
+    }
+                "both codec service and codec service factory are present, codec service provided by: "  
+import org.apache.lucene.index.IndexWriter;  
+     * Instantiates a new EngineConfig from the provided custom overrides
+        ShardId shardId,
+import org.opensearch.core.indices.breaker.CircuitBreakerService;  
+    /**
+import java.util.List;  
+    private final List<EnginePlugin> enginePlugins;
+            .indexSort(indexSort)
+            .similarity(similarity)  
+                    "existing codec service factory already overridden in: "  
+        Optional<CodecService> codecService = Optional.empty();
+        this(pluginsService.filterPlugins(EnginePlugin.class), idxSettings, documentLookupProvider, documentMetadataResolver);  
+import org.apache.lucene.search.similarities.Similarity;
+        @Nullable DocumentMetadataResolver documentMetadataResolver
+        if (codecService.isPresent() && codecServiceFactory.isPresent()) {
+                throw new IllegalStateException(
+            .clusterApplierService(clusterApplierService)
+        }
+        this.committerFactory = committerFactories.isEmpty() ? null : committerFactories.getFirst();  
+        Collection<EnginePlugin> enginePlugins  
+                );
+import java.util.Collections;
+            .committerFactory(committerFactory)
+import java.util.function.BooleanSupplier;  
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.search.ReferenceManager;
+import java.util.ArrayList;
+ * @opensearch.internal
+    }
+            .retentionLeasesSupplier(retentionLeasesSupplier)
+        @Nullable DocumentLookupProvider documentLookupProvider,  
+                        + enginePlugin.getClass().getName()  
+    }
+                            + primaryOperationPolicyPlugin
+import org.apache.lucene.index.LeafReader;
+        this.enginePlugins = List.copyOf(enginePlugins);
+            .mergedSegmentTransferTracker(mergedSegmentTransferTracker)
+        String codecServiceFactoryOverridingPlugin = null;
+        return new EngineConfig.Builder().shardId(shardId)
+            .store(store)  
+import org.opensearch.index.translog.TranslogConfig;  
+    }
+        }
+     * (pluggable get-by-id path) into the produced {@link EngineConfig}.
+                    + codecServiceFactoryOverridingPlugin  
+import org.opensearch.threadpool.ThreadPool;  
+        LongSupplier primaryTermSupplier,  
+        this.codecServiceFactory = (instance != null) ? (config) -> instance : codecServiceFactory.orElse(null);  
+    /**
+        return this.codecServiceFactory != null
+            .checksumStrategies(checksumStrategies)  
+            .warmer(warmer)
+                        + " attempting to override again by: "  
+    private final CommitterFactory committerFactory;
+                codecServiceFactoryOverridingPlugin = enginePlugin.getClass().getName();  
+import java.util.function.LongSupplier;
+    }  
+import org.opensearch.index.mapper.MapperService;
+        Optional<CodecServiceFactory> codecServiceFactory = Optional.empty();  
+            .dataFormatRegistry(dataFormatRegistry)  
+            .mergePolicy(mergePolicy)
+        // promoted, but resolve once here so a plugin conflict fails the engine build instead of the first read.
+    public CodecService newDefaultCodecService(IndexSettings indexSettings, @Nullable MapperService mapperService, Logger logger) {
+                translogDeletionPolicyFactory = enginePlugin.getCustomTranslogDeletionPolicyFactory();
+        this.additionalCodecs = Collections.unmodifiableList(codecRegistries);
+            }
+     */  
+            .documentMetadataResolver(documentMetadataResolver)
+            if (translogDeletionPolicyFactory.isPresent() == false) {
+                        + enginePlugin.getClass().getName()
+            final Optional<PrimaryOperationPolicy> pluginPrimaryOperationPolicy = enginePlugin.getPrimaryOperationPolicy(indexSettings);
+        DataFormatRegistry dataFormatRegistry,
+    }
+                );
+        if (codecService == null && this.codecServiceFactory != null) {  
+ * A factory to create an EngineConfig based on custom plugin overrides
+                        + codecServiceOverridingPlugin
+ * compatible open source license.
+            .internalRefreshListener(internalRefreshListener)  
+import org.opensearch.index.codec.CodecServiceConfig;
+            .readOnlyReplica(isReadOnlyReplica)
+                primaryOperationPolicy = pluginPrimaryOperationPolicy.get();  
+            .eventListener(eventListener)
+import org.apache.lucene.search.QueryCachingPolicy;
+        Collection<EnginePlugin> enginePlugins,
+    ) {
+            if (pluginPrimaryOperationPolicy.isPresent()) {  
+                    + codecServiceOverridingPlugin
+    private static PrimaryOperationPolicy resolvePrimaryOperationPolicy(
+                        "existing PrimaryOperationPolicy is already overridden in: "  
+        Similarity similarity,
         for (EnginePlugin enginePlugin : enginePlugins) {  
             // get overriding codec service from EnginePlugin
+        resolvePrimaryOperationPolicy(idxSettings, enginePlugins);
+    private final TranslogDeletionPolicyFactory translogDeletionPolicyFactory;
             if (codecService.isPresent() == false) {
+            .translogConfig(translogConfig)
+            .threadPool(threadPool)  
+ * The OpenSearch Contributors require contributions made to  
+        LongSupplier globalCheckpointSupplier,
+            ? this.codecServiceFactory.createCodecService(new CodecServiceConfig(indexSettings, mapperService, logger, additionalCodecs))  
+import org.opensearch.index.engine.exec.commit.CommitterFactory;
+import org.opensearch.common.Nullable;  
+import org.opensearch.index.engine.exec.DocumentMetadataResolver;
+        Supplier<DocumentMapperForType> documentMapperForTypeSupplier,  
+                        + codecServiceFactoryOverridingPlugin
+            } else if (enginePlugin.getCustomCodecServiceFactory(idxSettings).isPresent()) {
+     * Factory wiring the optional {@link DocumentLookupProvider} and {@link DocumentMetadataResolver}  
+        CircuitBreakerService circuitBreakerService,  
+            .primaryTermSupplier(primaryTermSupplier)
+        IndexSettings indexSettings,
+                }
+        return new CodecService(mapperService, indexSettings, logger, additionalCodecs);
+            .startedPrimarySupplier(startedPrimarySupplier)
+            if (codecServiceFactory.isPresent() == false) {
+        return primaryOperationPolicy == null ? DefaultPrimaryOperationPolicy.INSTANCE : primaryOperationPolicy;
+            .documentMapperForTypeSupplier(documentMapperForTypeSupplier)
+        this.documentLookupProvider = documentLookupProvider;
+            .queryCache(queryCache)  
+        final List<AdditionalCodecs> codecRegistries = new ArrayList<>();  
+    ) {
+import org.opensearch.plugins.PluginsService;
+        List<ReferenceManager.RefreshListener> internalRefreshListener,
+        List<CommitterFactory> committerFactories = new ArrayList<>();
+            );
                 codecService = enginePlugin.getCustomCodecService(idxSettings);  
-                codecServiceOverridingPlugin = enginePlugin.getClass().getName();
-            } else if (enginePlugin.getCustomCodecService(idxSettings).isPresent()) {
-                throw new IllegalStateException(  
-                    "existing codec service already overridden in: "
-                        + codecServiceOverridingPlugin
-                        + " attempting to override again by: "  
-                        + enginePlugin.getClass().getName()
-                );
-            }  
-            if (translogDeletionPolicyFactory.isPresent() == false) {
-                translogDeletionPolicyFactory = enginePlugin.getCustomTranslogDeletionPolicyFactory();
-                translogDeletionPolicyOverridingPlugin = enginePlugin.getClass().getName();  
-            } else if (enginePlugin.getCustomTranslogDeletionPolicyFactory().isPresent()) {
-                throw new IllegalStateException(
-                    "existing TranslogDeletionPolicyFactory is already overridden in: "  
+        String codecServiceOverridingPlugin = null;
+     * Construct a factory using the plugin service and provided index settings
+import org.apache.logging.log4j.Logger;
+import org.opensearch.cluster.service.ClusterApplierService;
+        IndexSettings indexSettings,  
+    /* private constructor to construct the factory from specific EnginePlugins and IndexSettings */
+}  
+        QueryCache queryCache,
+        @Nullable DocumentMetadataResolver documentMetadataResolver
+    EngineConfigFactory(Collection<EnginePlugin> enginePlugins, IndexSettings idxSettings) {
+ */  
+        this(pluginsService.filterPlugins(EnginePlugin.class), idxSettings);
                         + translogDeletionPolicyOverridingPlugin
                         + " attempting to override again by: "
-                        + enginePlugin.getClass().getName()  
-                );
-            }
-            // get overriding CodecServiceFactory from EnginePlugin  
-            if (codecServiceFactory.isPresent() == false) {
-                codecServiceFactory = enginePlugin.getCustomCodecServiceFactory(idxSettings);
-                codecServiceFactoryOverridingPlugin = enginePlugin.getClass().getName();  
-            } else if (enginePlugin.getCustomCodecServiceFactory(idxSettings).isPresent()) {
-                throw new IllegalStateException(
-                    "existing codec service factory already overridden in: "  
-                        + codecServiceFactoryOverridingPlugin
-                        + " attempting to override again by: "
-                        + enginePlugin.getClass().getName()  
-                );
-            }
-
-            // collect all available CodecRegistry instances
-            enginePlugin.getAdditionalCodecs(idxSettings).ifPresent(codecRegistries::add);
-
-            enginePlugin.getCommitterFactory(idxSettings).ifPresent(committerFactories::add);
-        }
-
-        // Resolution is deferred to engine build time, but do a resolution here to fail fast on conflict
-        resolvePrimaryOperationPolicy(idxSettings, enginePlugins);
-
-        if (codecService.isPresent() && codecServiceFactory.isPresent()) {
             throw new IllegalStateException(
-                "both codec service and codec service factory are present, codec service provided by: "  
-                    + codecServiceOverridingPlugin
-                    + " conflicts with codec service factory provided by: "
-                    + codecServiceFactoryOverridingPlugin  
-            );
-        }
-
-        if (committerFactories.size() > 1 || (committerFactories.isEmpty() && idxSettings.isPluggableDataFormatEnabled())) {
-            throw new IllegalStateException("multiple committer factories found: " + committerFactories);
-        }  
-
         final CodecService instance = codecService.orElse(null);
-        this.codecServiceFactory = (instance != null) ? (config) -> instance : codecServiceFactory.orElse(null);  
-        this.translogDeletionPolicyFactory = translogDeletionPolicyFactory.orElse((idxs, rtls) -> null);
-        this.additionalCodecs = Collections.unmodifiableList(codecRegistries);
-        this.committerFactory = committerFactories.isEmpty() ? null : committerFactories.getFirst();  
-        this.enginePlugins = List.copyOf(enginePlugins);
-        this.documentLookupProvider = documentLookupProvider;
-        this.documentMetadataResolver = documentMetadataResolver;  
-    }
-
-    /**  
-     * Instantiates a new EngineConfig from the provided custom overrides
-     */
     public EngineConfig newEngineConfig(  
-        ShardId shardId,
-        ThreadPool threadPool,
-        IndexSettings indexSettings,  
-        Engine.Warmer warmer,
-        Store store,
-        MergePolicy mergePolicy,  
-        Analyzer analyzer,
-        Similarity similarity,
-        CodecService codecService,  
-        Engine.EventListener eventListener,
-        QueryCache queryCache,
-        QueryCachingPolicy queryCachingPolicy,  
-        TranslogConfig translogConfig,
-        TimeValue flushMergesAfter,
-        List<ReferenceManager.RefreshListener> externalRefreshListener,  
-        List<ReferenceManager.RefreshListener> internalRefreshListener,
-        Sort indexSort,
-        CircuitBreakerService circuitBreakerService,  
-        LongSupplier globalCheckpointSupplier,
-        Supplier<RetentionLeases> retentionLeasesSupplier,
-        LongSupplier primaryTermSupplier,  
-        EngineConfig.TombstoneDocSupplier tombstoneDocSupplier,
-        boolean isReadOnlyReplica,
-        BooleanSupplier startedPrimarySupplier,  
-        TranslogFactory translogFactory,
-        Comparator<LeafReader> leafSorter,
-        Supplier<DocumentMapperForType> documentMapperForTypeSupplier,  
-        IndexWriter.IndexReaderWarmer indexReaderWarmer,
-        ClusterApplierService clusterApplierService,
-        MergedSegmentTransferTracker mergedSegmentTransferTracker,  
-        DataFormatRegistry dataFormatRegistry,
-        MapperService mapperService,
-        Map<String, FormatChecksumStrategy> checksumStrategies  
-    ) {
-        CodecService codecServiceToUse = codecService;
-        if (codecService == null && this.codecServiceFactory != null) {  
-            codecServiceToUse = newCodecServiceOrDefault(indexSettings, null, null, null);
-        }
-
-        // The config re-resolves the policy on every read so a shard picks up a setting change when it is
-        // promoted, but resolve once here so a plugin conflict fails the engine build instead of the first read.
-        resolvePrimaryOperationPolicy(indexSettings, enginePlugins);  
-
-        return new EngineConfig.Builder().shardId(shardId)
-            .threadPool(threadPool)  
-            .indexSettings(indexSettings)
-            .warmer(warmer)
-            .store(store)  
-            .mergePolicy(mergePolicy)
-            .analyzer(analyzer)
-            .similarity(similarity)  
-            .codecService(codecServiceToUse)
-            .eventListener(eventListener)
-            .queryCache(queryCache)  
-            .queryCachingPolicy(queryCachingPolicy)
-            .translogConfig(translogConfig)
-            .translogDeletionPolicyFactory(translogDeletionPolicyFactory)  
-            .flushMergesAfter(flushMergesAfter)
             .externalRefreshListener(externalRefreshListener)
-            .internalRefreshListener(internalRefreshListener)  
-            .indexSort(indexSort)
-            .circuitBreakerService(circuitBreakerService)
-            .globalCheckpointSupplier(globalCheckpointSupplier)  
-            .retentionLeasesSupplier(retentionLeasesSupplier)
-            .primaryTermSupplier(primaryTermSupplier)
-            .tombstoneDocSupplier(tombstoneDocSupplier)  
-            .readOnlyReplica(isReadOnlyReplica)
-            .startedPrimarySupplier(startedPrimarySupplier)
-            .translogFactory(translogFactory)  
-            .leafSorter(leafSorter)
-            .documentMapperForTypeSupplier(documentMapperForTypeSupplier)
-            .indexReaderWarmer(indexReaderWarmer)  
-            .clusterApplierService(clusterApplierService)
-            .mergedSegmentTransferTracker(mergedSegmentTransferTracker)
-            .dataFormatRegistry(dataFormatRegistry)  
-            .mapperService(mapperService)
-            .committerFactory(committerFactory)
-            .checksumStrategies(checksumStrategies)  
-            .documentLookupProvider(documentLookupProvider)
-            .documentMetadataResolver(documentMetadataResolver)
-            .primaryOperationPolicySupplier(() -> resolvePrimaryOperationPolicy(indexSettings, enginePlugins))  
-            .build();
-    }
-
-    private static PrimaryOperationPolicy resolvePrimaryOperationPolicy(
-        IndexSettings indexSettings,
-        Collection<EnginePlugin> enginePlugins  
-    ) {
-        PrimaryOperationPolicy primaryOperationPolicy = null;
-        String primaryOperationPolicyPlugin = null;  
-        for (EnginePlugin enginePlugin : enginePlugins) {
-            final Optional<PrimaryOperationPolicy> pluginPrimaryOperationPolicy = enginePlugin.getPrimaryOperationPolicy(indexSettings);
-            if (pluginPrimaryOperationPolicy.isPresent()) {  
-                if (primaryOperationPolicy != null) {
-                    throw new IllegalStateException(
-                        "existing PrimaryOperationPolicy is already overridden in: "  
-                            + primaryOperationPolicyPlugin
-                            + " attempting to override again by: "
-                            + enginePlugin.getClass().getName()  
-                    );
-                }
-                primaryOperationPolicy = pluginPrimaryOperationPolicy.get();  
-                primaryOperationPolicyPlugin = enginePlugin.getClass().getName();
-            }
+    @Nullable
+    /**  
+    EngineConfigFactory(  
+    public EngineConfigFactory(  
         }  
-        return primaryOperationPolicy == null ? DefaultPrimaryOperationPolicy.INSTANCE : primaryOperationPolicy;
-    }
-
-    public CodecService newDefaultCodecService(IndexSettings indexSettings, @Nullable MapperService mapperService, Logger logger) {
-        return new CodecService(mapperService, indexSettings, logger, additionalCodecs);
-    }  
-
-    public CodecService newCodecServiceOrDefault(
-        IndexSettings indexSettings,  
+        ClusterApplierService clusterApplierService,
+            } else if (enginePlugin.getCustomCodecService(idxSettings).isPresent()) {
+import org.opensearch.index.translog.TranslogFactory;
+        List<ReferenceManager.RefreshListener> externalRefreshListener,  
+import org.opensearch.core.index.shard.ShardId;
+            enginePlugin.getCommitterFactory(idxSettings).ifPresent(committerFactories::add);
+            .circuitBreakerService(circuitBreakerService)
+    /** default ctor primarily used for tests without plugins */
+import org.opensearch.index.codec.CodecService;  
+            }
+        MergePolicy mergePolicy,  
+        Store store,
+                    );
+import org.apache.lucene.index.MergePolicy;
+        TimeValue flushMergesAfter,
         @Nullable MapperService mapperService,
-        Logger logger,
-        CodecService defaultCodecService  
+import org.apache.lucene.search.QueryCache;  
+                codecServiceOverridingPlugin = enginePlugin.getClass().getName();
+            }
+                        + enginePlugin.getClass().getName()  
+            .analyzer(analyzer)
+ *
+            .flushMergesAfter(flushMergesAfter)
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;  
+        boolean isReadOnlyReplica,
+            .documentLookupProvider(documentLookupProvider)
+        EngineConfig.TombstoneDocSupplier tombstoneDocSupplier,
+        Engine.EventListener eventListener,
+import java.util.function.Supplier;
+        MergedSegmentTransferTracker mergedSegmentTransferTracker,  
+    public EngineConfigFactory(PluginsService pluginsService, IndexSettings idxSettings) {
+ *  
+                            + " attempting to override again by: "
+import org.opensearch.index.codec.CodecServiceFactory;
+        Comparator<LeafReader> leafSorter,
+import org.opensearch.index.store.Store;
+    }  
+public class EngineConfigFactory {  
+            .primaryOperationPolicySupplier(() -> resolvePrimaryOperationPolicy(indexSettings, enginePlugins))  
+            .indexReaderWarmer(indexReaderWarmer)  
+        TranslogFactory translogFactory,
+ */
     ) {
-        return this.codecServiceFactory != null
-            ? this.codecServiceFactory.createCodecService(new CodecServiceConfig(indexSettings, mapperService, logger, additionalCodecs))  
-            : defaultCodecService;
+        IndexSettings idxSettings,
+     */
+        PrimaryOperationPolicy primaryOperationPolicy = null;
+            } else if (enginePlugin.getCustomTranslogDeletionPolicyFactory().isPresent()) {
+import org.opensearch.index.merge.MergedSegmentTransferTracker;
+            .globalCheckpointSupplier(globalCheckpointSupplier)  
+        for (EnginePlugin enginePlugin : enginePlugins) {
+import org.opensearch.index.codec.AdditionalCodecs;
+            .indexSettings(indexSettings)
+        Optional<TranslogDeletionPolicyFactory> translogDeletionPolicyFactory = Optional.empty();
+            .queryCachingPolicy(queryCachingPolicy)
+                    "existing codec service already overridden in: "
+        QueryCachingPolicy queryCachingPolicy,  
     }
-}  
+import java.util.Map;
+            }  
+            codecServiceToUse = newCodecServiceOrDefault(indexSettings, null, null, null);
+        IndexSettings indexSettings,  
+        CodecService codecServiceToUse = codecService;
+        // The config re-resolves the policy on every read so a shard picks up a setting change when it is
+        Analyzer analyzer,
+        this.translogDeletionPolicyFactory = translogDeletionPolicyFactory.orElse((idxs, rtls) -> null);
+                    + " conflicts with codec service factory provided by: "
+        Engine.Warmer warmer,
+ * this file be licensed under the Apache-2.0 license or a

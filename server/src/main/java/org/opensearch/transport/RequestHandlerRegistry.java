@@ -1,151 +1,133 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.tasks.CancellableTask;
-import org.opensearch.tasks.Task;  
-import org.opensearch.tasks.TaskManager;
-
-import java.io.IOException;  
-
-/**
- * Registry for OpenSearch RequestHandlers  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public final class RequestHandlerRegistry<Request extends TransportRequest> {
-
-    private final String action;
-    private final TransportRequestHandler<Request> handler;
-    private final boolean forceExecution;  
-    private final boolean canTripCircuitBreaker;
-    private final String executor;
-    private final TaskManager taskManager;  
-    private final Writeable.Reader<Request> requestReader;
-
-    public RequestHandlerRegistry(  
-        String action,
-        Writeable.Reader<Request> requestReader,
-        TaskManager taskManager,  
-        TransportRequestHandler<Request> handler,
-        String executor,
-        boolean forceExecution,  
-        boolean canTripCircuitBreaker
-    ) {
+    }
         this.action = action;  
-        this.requestReader = requestReader;
-        this.handler = handler;
-        this.forceExecution = forceExecution;  
-        this.canTripCircuitBreaker = canTripCircuitBreaker;
-        this.executor = executor;
-        this.taskManager = taskManager;  
-    }
-
-    public String getAction() {  
-        return action;
-    }
-
-    public Request newRequest(StreamInput in) throws IOException {
-        return requestReader.read(in);
-    }  
-
-    public void processMessageReceived(Request request, TransportChannel channel) throws Exception {
-        final Task task = taskManager.register(channel.getChannelType(), action, request);  
-        ThreadContext.StoredContext contextToRestore = taskManager.taskExecutionStarted(task);
-
-        Releasable unregisterTask = () -> taskManager.unregister(task);  
-        try {
-            if (channel instanceof BaseTcpTransportChannel baseTcpTransportChannel && task instanceof CancellableTask cancellableTask) {
-                if (request instanceof ShardSearchRequest shardSearchRequest) {  
-                    // on receiving request, update the inbound network time to reflect time spent in transit over the network
-                    shardSearchRequest.setInboundNetworkTime(
-                        Math.max(0, System.currentTimeMillis() - shardSearchRequest.getInboundNetworkTime())  
-                    );
-                }
-                final TcpChannel tcpChannel = baseTcpTransportChannel.getChannel();  
-                final Releasable stopTracking = taskManager.startTrackingCancellableChannelTask(tcpChannel, cancellableTask);
-                unregisterTask = Releasables.wrap(unregisterTask, stopTracking);
-            }  
             final TaskTransportChannel taskTransportChannel = new TaskTransportChannel(channel, unregisterTask);
-            handler.messageReceived(request, taskTransportChannel, task);
-            unregisterTask = null;  
-        } finally {
-            Releasables.close(unregisterTask);
-            contextToRestore.restore();  
-        }
-    }
-
-    public boolean isForceExecution() {
-        return forceExecution;
-    }  
-
-    public boolean canTripCircuitBreaker() {
-        return canTripCircuitBreaker;  
-    }
-
-    public String getExecutor() {  
-        return executor;
-    }
-
-    public TransportRequestHandler<Request> getHandler() {
-        return handler;
-    }  
-
-    @Override
-    public String toString() {  
-        return handler.toString();
-    }
-
-    public static <R extends TransportRequest> RequestHandlerRegistry<R> replaceHandler(
-        RequestHandlerRegistry<R> registry,
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+@PublicApi(since = "1.0.0")
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         TransportRequestHandler<R> handler  
-    ) {
-        return new RequestHandlerRegistry<>(
-            registry.action,  
-            registry.requestReader,
+import org.opensearch.core.common.io.stream.Writeable;  
             registry.taskManager,
-            handler,  
-            registry.executor,
-            registry.forceExecution,
-            registry.canTripCircuitBreaker  
-        );
+                    );
+ * specific language governing permissions and limitations
     }
+        ThreadContext.StoredContext contextToRestore = taskManager.taskExecutionStarted(task);
+    private final boolean canTripCircuitBreaker;
+ * KIND, either express or implied.  See the License for the
+                final TcpChannel tcpChannel = baseTcpTransportChannel.getChannel();  
+    }
+            handler.messageReceived(request, taskTransportChannel, task);
+    @Override
+        this.canTripCircuitBreaker = canTripCircuitBreaker;
+            registry.requestReader,
+package org.opensearch.transport;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            registry.action,  
+ *
+        }
+/**
+        return new RequestHandlerRegistry<>(
+        final Task task = taskManager.register(channel.getChannelType(), action, request);  
+        boolean canTripCircuitBreaker
+ * The OpenSearch Contributors require contributions made to  
 }  
+    public void processMessageReceived(Request request, TransportChannel channel) throws Exception {
+    }  
+    public String toString() {  
+ *
+ * under the License.  
+import org.opensearch.tasks.TaskManager;
+    private final String action;
+        return handler.toString();
+    }  
+import org.opensearch.tasks.CancellableTask;
+            if (channel instanceof BaseTcpTransportChannel baseTcpTransportChannel && task instanceof CancellableTask cancellableTask) {
+ * software distributed under the License is distributed on an
+                        Math.max(0, System.currentTimeMillis() - shardSearchRequest.getInboundNetworkTime())  
+    }
+ * @opensearch.api
+ */
+            handler,  
+        Writeable.Reader<Request> requestReader,
+        return handler;
+        this.requestReader = requestReader;
+            registry.executor,
+    }  
+                }
+    }
+    public String getExecutor() {  
+                unregisterTask = Releasables.wrap(unregisterTask, stopTracking);
+    ) {
+ * SPDX-License-Identifier: Apache-2.0
+            }  
+        return action;
+ * GitHub history for details.
+import org.opensearch.common.lease.Releasable;
+        );
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+ * compatible open source license.
+/*  
+        TaskManager taskManager,  
+    public TransportRequestHandler<Request> getHandler() {
+    public boolean isForceExecution() {
+ *
+            registry.canTripCircuitBreaker  
+        boolean forceExecution,  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return requestReader.read(in);
+ * this work for additional information regarding copyright
+    private final boolean forceExecution;  
+    public String getAction() {  
+    private final Writeable.Reader<Request> requestReader;
+ *  
+ * You may obtain a copy of the License at  
+    public boolean canTripCircuitBreaker() {
+    private final TransportRequestHandler<Request> handler;
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.common.util.concurrent.ThreadContext;
+        this.taskManager = taskManager;  
+                    // on receiving request, update the inbound network time to reflect time spent in transit over the network
+        Releasable unregisterTask = () -> taskManager.unregister(task);  
+    public RequestHandlerRegistry(  
+        return forceExecution;
+        } finally {
+import org.opensearch.tasks.Task;  
+    private final TaskManager taskManager;  
+                if (request instanceof ShardSearchRequest shardSearchRequest) {  
+        this.forceExecution = forceExecution;  
+        return canTripCircuitBreaker;  
+import java.io.IOException;  
+/*  
+ */  
+        TransportRequestHandler<Request> handler,
+        return executor;
+            unregisterTask = null;  
+            Releasables.close(unregisterTask);
+public final class RequestHandlerRegistry<Request extends TransportRequest> {
+import org.opensearch.common.lease.Releasables;  
+    ) {
+import org.opensearch.search.internal.ShardSearchRequest;
+                final Releasable stopTracking = taskManager.startTrackingCancellableChannelTask(tcpChannel, cancellableTask);
+/*
+        try {
+    }
+        this.handler = handler;
+            contextToRestore.restore();  
+        String action,
+        String executor,
+        this.executor = executor;
+ */  
+        RequestHandlerRegistry<R> registry,
+ * not use this file except in compliance with the License.
+    public static <R extends TransportRequest> RequestHandlerRegistry<R> replaceHandler(
+ * ownership. Elasticsearch licenses this file to you under  
+    public Request newRequest(StreamInput in) throws IOException {
+ * Registry for OpenSearch RequestHandlers  
+                    shardSearchRequest.setInboundNetworkTime(
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.annotation.PublicApi;
+    private final String executor;
+            registry.forceExecution,
+ * Modifications Copyright OpenSearch Contributors. See

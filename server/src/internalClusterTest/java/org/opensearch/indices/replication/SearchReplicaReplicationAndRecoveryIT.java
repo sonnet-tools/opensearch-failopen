@@ -1,312 +1,262 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;  
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
-import org.opensearch.action.admin.cluster.remotestore.restore.RestoreRemoteStoreRequest;
-import org.opensearch.action.admin.indices.recovery.RecoveryRequest;  
-import org.opensearch.action.admin.indices.recovery.RecoveryResponse;
-import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsResponse;
-import org.opensearch.action.support.PlainActionFuture;  
-import org.opensearch.cluster.health.ClusterHealthStatus;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.RecoverySource;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.SegmentReplicationPerGroupStats;
-import org.opensearch.index.SegmentReplicationShardStats;  
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.test.InternalTestCluster;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.After;
-
-import java.nio.file.Path;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;  
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;  
-import static org.opensearch.cluster.routing.RecoverySource.Type.EMPTY_STORE;
-import static org.opensearch.cluster.routing.RecoverySource.Type.EXISTING_STORE;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class SearchReplicaReplicationAndRecoveryIT extends SegmentReplicationBaseIT {
-
-    private static final String REPOSITORY_NAME = "test-remote-store-repo";
-    protected Path absolutePath;
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        if (absolutePath == null) {  
-            absolutePath = randomRepoPath().toAbsolutePath();
-        }
-        return Settings.builder()  
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(remoteStoreClusterSettings(REPOSITORY_NAME, absolutePath))
-            .build();  
-    }
-
-    @After  
-    public void teardown() {
-        clusterAdmin().prepareCleanupRepository(REPOSITORY_NAME).get();
-
-    }
-
-    @Override  
-    public Settings indexSettings() {
-        return Settings.builder()
-            .put(super.indexSettings())  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)  
-            .build();
-    }
-
-    public void testReplication() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        final String primary = internalCluster().startDataOnlyNode();  
-        createIndex(INDEX_NAME);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final String searchNode = internalCluster().startSearchOnlyNode();  
-
-        ensureGreen(INDEX_NAME);
-
-        final int docCount = 10;
-        for (int i = 0; i < docCount; i++) {
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
-        }
-        refresh(INDEX_NAME);
-        waitForSearchableDocs(docCount, primary, searchNode);  
-    }
-
-    public void testSegmentReplicationStatsResponseWithSearchReplica() throws Exception {  
-        internalCluster().startClusterManagerOnlyNode();
-        final String searchNode = internalCluster().startSearchOnlyNode();
-        final String primary = internalCluster().startDataOnlyNode();  
-        createIndex(
-            INDEX_NAME,
-            Settings.builder()  
-                .put("number_of_shards", 1)
-                .put("number_of_replicas", 0)
-                .put("number_of_search_replicas", 1)  
-                .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-                .build()
-        );  
-
-        ensureGreen(INDEX_NAME);
-
-        final int docCount = 5;
-        for (int i = 0; i < docCount; i++) {
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
-        }
-        refresh(INDEX_NAME);
-        waitForSearchableDocs(docCount, primary, searchNode);  
-
-        SegmentReplicationStatsResponse segmentReplicationStatsResponse = dataNodeClient().admin()
-            .indices()  
-            .prepareSegmentReplicationStats(INDEX_NAME)
-            .setDetailed(true)
-            .execute()  
-            .actionGet();
-
-        // Verify the number of indices  
-        assertEquals(1, segmentReplicationStatsResponse.getReplicationStats().size());
-        // Verify total shards
-        assertEquals(2, segmentReplicationStatsResponse.getTotalShards());  
-        // Verify the number of primary shards
-        assertEquals(1, segmentReplicationStatsResponse.getReplicationStats().get(INDEX_NAME).size());
-
-        SegmentReplicationPerGroupStats perGroupStats = segmentReplicationStatsResponse.getReplicationStats().get(INDEX_NAME).get(0);
-        Set<SegmentReplicationShardStats> replicaStats = perGroupStats.getReplicaStats();
-        // Verify the number of replica stats  
-        assertEquals(1, replicaStats.size());
-        for (SegmentReplicationShardStats replicaStat : replicaStats) {
-            assertNotNull(replicaStat.getCurrentReplicationState());  
-        }
-    }
-
-    public void testSearchReplicaRecovery() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        final String primary = internalCluster().startDataOnlyNode();  
-        final String searchNode = internalCluster().startSearchOnlyNode();
-
-        createIndex(INDEX_NAME);  
-        ensureGreen(INDEX_NAME);
-        assertRecoverySourceType(searchNode, EMPTY_STORE);
-
-        final int docCount = 10;
-        for (int i = 0; i < docCount; i++) {
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
-        }
-        refresh(INDEX_NAME);
-        flush(INDEX_NAME);  
-        waitForSearchableDocs(10, primary, searchNode);
-
-        // Node stats should show remote download stats as nonzero, use this as a precondition to compare  
-        // post restart.
-        assertDownloadStats(searchNode, true);
-
-        internalCluster().restartNode(searchNode);
-        ensureGreen(INDEX_NAME);
-        assertDocCounts(10, searchNode);  
-
-        assertRecoverySourceType(searchNode, EXISTING_STORE);
-        assertDownloadStats(searchNode, false);  
-    }
-
-    public void testRecoveryAfterDocsIndexed() throws Exception {  
-        internalCluster().startClusterManagerOnlyNode();
-        internalCluster().startDataOnlyNode();
-        createIndex(INDEX_NAME);  
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final int docCount = 10;
         for (int i = 0; i < docCount; i++) {  
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
-        }
-        refresh(INDEX_NAME);  
-
-        final String searchNode = internalCluster().startSearchOnlyNode();
-
-        ensureGreen(INDEX_NAME);
-        assertDocCounts(10, searchNode);
-
-        assertRecoverySourceType(searchNode, EMPTY_STORE);
-        // replica should have downloaded from remote
-        assertDownloadStats(searchNode, true);  
-
-        client().admin()
-            .indices()  
-            .prepareUpdateSettings(INDEX_NAME)
-            .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 0))
-            .get();  
-
-        ensureGreen(INDEX_NAME);
-
-        client().admin()
-            .indices()
-            .prepareUpdateSettings(INDEX_NAME)  
-            .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1))
-            .get();
-        ensureGreen(INDEX_NAME);  
-        assertDocCounts(10, searchNode);
-
-        internalCluster().restartNode(searchNode);  
-
-        ensureGreen(INDEX_NAME);
-        assertDocCounts(10, searchNode);  
-        assertRecoverySourceType(searchNode, EXISTING_STORE);
-        assertDownloadStats(searchNode, false);
-    }  
-
-    private static void assertRecoverySourceType(String replica, RecoverySource.Type recoveryType) throws InterruptedException,
-        ExecutionException {  
-        RecoveryResponse recoveryResponse = client().admin().indices().recoveries(new RecoveryRequest(INDEX_NAME)).get();
-        for (RecoveryState recoveryState : recoveryResponse.shardRecoveryStates().get(INDEX_NAME)) {
-            if (recoveryState.getPrimary() == false) {  
-                assertEquals("All SR should be of expected recovery type", recoveryType, recoveryState.getRecoverySource().getType());
-                assertEquals("All SR should be on the specified node", replica, recoveryState.getTargetNode().getName());
-            }  
-        }
-    }
-
-    private static void assertDownloadStats(String replica, boolean expectBytesDownloaded) throws InterruptedException, ExecutionException {
-        NodesStatsResponse nodesStatsResponse = client().admin().cluster().nodesStats(new NodesStatsRequest(replica)).get();
-        assertEquals(1, nodesStatsResponse.getNodes().size());  
-        NodeStats nodeStats = nodesStatsResponse.getNodes().get(0);
-        assertEquals(replica, nodeStats.getNode().getName());
-        if (expectBytesDownloaded) {  
-            assertTrue(nodeStats.getIndices().getSegments().getRemoteSegmentStats().getDownloadBytesStarted() > 0);
-        } else {
-            assertEquals(0, nodeStats.getIndices().getSegments().getRemoteSegmentStats().getDownloadBytesStarted());  
-        }
-    }
-
     public void testStopPrimary_RestoreOnNewNode() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        final String primary = internalCluster().startDataOnlyNode();  
-        createIndex(INDEX_NAME);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final int docCount = 10;  
-        for (int i = 0; i < docCount; i++) {
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
-        }  
-        refresh(INDEX_NAME);
-        assertDocCounts(docCount, primary);
-
-        final String searchNode = internalCluster().startSearchOnlyNode();
-
-        ensureGreen(INDEX_NAME);  
-        assertDocCounts(docCount, searchNode);
-        // stop the primary
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primary));  
-
-        assertBusy(() -> {
-            ClusterHealthResponse clusterHealthResponse = clusterAdmin().prepareHealth(INDEX_NAME).get();  
-            assertEquals(ClusterHealthStatus.RED, clusterHealthResponse.getStatus());
-        });
-        assertDocCounts(docCount, searchNode);  
-
-        String restoredPrimary = internalCluster().startDataOnlyNode();
-
-        client().admin().cluster().restoreRemoteStore(new RestoreRemoteStoreRequest().indices(INDEX_NAME), PlainActionFuture.newFuture());
-        ensureGreen(INDEX_NAME);
-        assertDocCounts(docCount, searchNode, restoredPrimary);  
-
-        for (int i = docCount; i < docCount * 2; i++) {
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
-        }
-        refresh(INDEX_NAME);
-        assertBusy(() -> assertDocCounts(20, searchNode, restoredPrimary));  
-    }
-
-    public void testFailoverToNewPrimaryWithPollingReplication() throws Exception {  
-        internalCluster().startClusterManagerOnlyNode();
-        final String primary = internalCluster().startDataOnlyNode();
-        createIndex(INDEX_NAME);  
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final int docCount = 10;
-        for (int i = 0; i < docCount; i++) {  
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
-        }
-        refresh(INDEX_NAME);  
-
-        final String searchNode = internalCluster().startSearchOnlyNode();
-
-        ensureGreen(INDEX_NAME);
-        assertDocCounts(10, searchNode);
-
-        client().admin()
-            .indices()
-            .prepareUpdateSettings(INDEX_NAME)  
-            .setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, 1))
-            .get();
-        final String writer_replica = internalCluster().startDataOnlyNode();  
-        ensureGreen(INDEX_NAME);
-
-        // stop the primary  
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primary));
-
-        assertBusy(() -> {  
-            ClusterHealthResponse clusterHealthResponse = clusterAdmin().prepareHealth(INDEX_NAME).get();
-            assertEquals(ClusterHealthStatus.YELLOW, clusterHealthResponse.getStatus());
-        });  
-        ClusterHealthResponse clusterHealthResponse = clusterAdmin().prepareHealth(INDEX_NAME).get();
-        assertEquals(ClusterHealthStatus.YELLOW, clusterHealthResponse.getStatus());
         assertDocCounts(10, searchNode);  
-
-        for (int i = docCount; i < docCount * 2; i++) {
+        assertDownloadStats(searchNode, false);  
+import org.junit.After;
+        assertDocCounts(10, searchNode);  
+        }  
             client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
-        }
-        refresh(INDEX_NAME);
-        assertBusy(() -> assertDocCounts(20, searchNode, writer_replica));  
+        assertDownloadStats(searchNode, true);  
+        // stop the primary
+import org.opensearch.indices.recovery.RecoveryState;
+            .indices()  
+        // Verify the number of primary shards
     }
+        assertDocCounts(docCount, searchNode);  
+        flush(INDEX_NAME);  
+ * compatible open source license.
+    }
+    protected Path absolutePath;
+    }
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+    private static void assertDownloadStats(String replica, boolean expectBytesDownloaded) throws InterruptedException, ExecutionException {
+    protected Settings nodeSettings(int nodeOrdinal) {
+            .setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, 1))
+        final int docCount = 10;
+                assertEquals("All SR should be of expected recovery type", recoveryType, recoveryState.getRecoverySource().getType());
+        ensureGreen(INDEX_NAME);
+        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startClusterManagerOnlyNode();
+        }
+    }
+        refresh(INDEX_NAME);
+                .build()
+        ensureGreen(INDEX_NAME);
+        final String searchNode = internalCluster().startSearchOnlyNode();
+            assertEquals(0, nodeStats.getIndices().getSegments().getRemoteSegmentStats().getDownloadBytesStarted());  
+        waitForSearchableDocs(10, primary, searchNode);
+            .prepareUpdateSettings(INDEX_NAME)  
+        }
+ * this file be licensed under the Apache-2.0 license or a
+        final String primary = internalCluster().startDataOnlyNode();  
+        ensureGreen(INDEX_NAME);
+import org.opensearch.common.settings.Settings;
+        }
+        internalCluster().startClusterManagerOnlyNode();
+    @After  
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+        );  
+import org.opensearch.index.SegmentReplicationPerGroupStats;
+        ensureGreen(INDEX_NAME);
+        }
+ * The OpenSearch Contributors require contributions made to  
+                .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+            .indices()  
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
+        assertRecoverySourceType(searchNode, EXISTING_STORE);
+        assertBusy(() -> assertDocCounts(20, searchNode, restoredPrimary));  
+        final String primary = internalCluster().startDataOnlyNode();  
+    }  
+        final int docCount = 10;  
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
+/*  
+            .put(remoteStoreClusterSettings(REPOSITORY_NAME, absolutePath))
+        refresh(INDEX_NAME);
+        // Verify the number of replica stats  
+        assertDocCounts(docCount, primary);
+    }
+            .put(super.nodeSettings(nodeOrdinal))
+            .get();
+        }
+        RecoveryResponse recoveryResponse = client().admin().indices().recoveries(new RecoveryRequest(INDEX_NAME)).get();
+        createIndex(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+        for (int i = docCount; i < docCount * 2; i++) {
+        refresh(INDEX_NAME);
+    public void teardown() {
+        final String searchNode = internalCluster().startSearchOnlyNode();
+            .build();
+        NodesStatsResponse nodesStatsResponse = client().admin().cluster().nodesStats(new NodesStatsRequest(replica)).get();
+        client().admin().cluster().restoreRemoteStore(new RestoreRemoteStoreRequest().indices(INDEX_NAME), PlainActionFuture.newFuture());
+        ensureGreen(INDEX_NAME);  
+        assertRecoverySourceType(searchNode, EXISTING_STORE);
+        waitForSearchableDocs(docCount, primary, searchNode);  
+        // post restart.
+import org.opensearch.action.admin.indices.recovery.RecoveryResponse;
+            ClusterHealthResponse clusterHealthResponse = clusterAdmin().prepareHealth(INDEX_NAME).get();
+        assertDownloadStats(searchNode, false);
+        assertDocCounts(10, searchNode);
+        assertEquals(1, segmentReplicationStatsResponse.getReplicationStats().get(INDEX_NAME).size());
+import org.opensearch.action.admin.indices.recovery.RecoveryRequest;  
+        for (int i = 0; i < docCount; i++) {
+import org.opensearch.index.SegmentReplicationShardStats;  
+import org.opensearch.cluster.routing.RecoverySource;  
+        });
+        ensureGreen(INDEX_NAME);
+import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsResponse;
+            if (recoveryState.getPrimary() == false) {  
+ *
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
+        final String searchNode = internalCluster().startSearchOnlyNode();
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+        return Settings.builder()
+import org.opensearch.cluster.health.ClusterHealthStatus;
+        internalCluster().startClusterManagerOnlyNode();
+        assertBusy(() -> assertDocCounts(20, searchNode, writer_replica));  
+        ExecutionException {  
+            assertTrue(nodeStats.getIndices().getSegments().getRemoteSegmentStats().getDownloadBytesStarted() > 0);
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primary));
+        // Node stats should show remote download stats as nonzero, use this as a precondition to compare  
+        SegmentReplicationStatsResponse segmentReplicationStatsResponse = dataNodeClient().admin()
+            ClusterHealthResponse clusterHealthResponse = clusterAdmin().prepareHealth(INDEX_NAME).get();  
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
+    }
+    }
+        assertBusy(() -> {
+        client().admin()
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primary));  
+        assertEquals(1, replicaStats.size());
+        });  
+        assertDocCounts(10, searchNode);
+            .get();
+            .execute()  
+        assertRecoverySourceType(searchNode, EMPTY_STORE);
+        createIndex(INDEX_NAME);  
+        for (SegmentReplicationShardStats replicaStat : replicaStats) {
+        refresh(INDEX_NAME);
+        for (int i = 0; i < docCount; i++) {
+        String restoredPrimary = internalCluster().startDataOnlyNode();
+    public void testRecoveryAfterDocsIndexed() throws Exception {  
+        // Verify the number of indices  
+        waitForSearchableDocs(docCount, primary, searchNode);  
+        assertRecoverySourceType(searchNode, EMPTY_STORE);
+import org.opensearch.test.OpenSearchIntegTestCase;
+            .put(super.indexSettings())  
+        assertDocCounts(docCount, searchNode);
+                assertEquals("All SR should be on the specified node", replica, recoveryState.getTargetNode().getName());
+        final int docCount = 10;
+        SegmentReplicationPerGroupStats perGroupStats = segmentReplicationStatsResponse.getReplicationStats().get(INDEX_NAME).get(0);
+        // replica should have downloaded from remote
+import org.opensearch.indices.replication.common.ReplicationType;
+import java.util.concurrent.ExecutionException;  
+        internalCluster().restartNode(searchNode);
+        internalCluster().startClusterManagerOnlyNode();
+            .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1))
+        refresh(INDEX_NAME);  
+        assertEquals(2, segmentReplicationStatsResponse.getTotalShards());  
+            .prepareSegmentReplicationStats(INDEX_NAME)
+        clusterAdmin().prepareCleanupRepository(REPOSITORY_NAME).get();
+    public Settings indexSettings() {
+        createIndex(
+        NodeStats nodeStats = nodesStatsResponse.getNodes().get(0);
+            .setDetailed(true)
+    public void testFailoverToNewPrimaryWithPollingReplication() throws Exception {  
+        }
+        ensureGreen(INDEX_NAME);
+        }
+        ensureGreen(INDEX_NAME);
+        }
+        createIndex(INDEX_NAME);  
+        final int docCount = 10;
+import org.opensearch.action.support.PlainActionFuture;  
+            Settings.builder()  
+        final int docCount = 5;
+            INDEX_NAME,
+        assertDownloadStats(searchNode, true);
+            .indices()
+    public void testReplication() throws Exception {
+    }
+        createIndex(INDEX_NAME);  
+        assertDocCounts(10, searchNode);
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
+        client().admin()
+        final String searchNode = internalCluster().startSearchOnlyNode();  
+import static org.opensearch.cluster.routing.RecoverySource.Type.EMPTY_STORE;
+            .actionGet();
+        assertEquals(1, segmentReplicationStatsResponse.getReplicationStats().size());
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+        ensureGreen(INDEX_NAME);
+        }
+import org.opensearch.test.InternalTestCluster;  
 }
+        for (int i = 0; i < docCount; i++) {  
+        // Verify total shards
+        client().admin()
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
+    public void testSearchReplicaRecovery() throws Exception {
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
+            .indices()
+        ensureGreen(INDEX_NAME);
+        }
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
+    @Override
+        refresh(INDEX_NAME);
+ * SPDX-License-Identifier: Apache-2.0
+        refresh(INDEX_NAME);  
+        Set<SegmentReplicationShardStats> replicaStats = perGroupStats.getReplicaStats();
+        final String searchNode = internalCluster().startSearchOnlyNode();
+        final String primary = internalCluster().startDataOnlyNode();  
+        for (int i = docCount; i < docCount * 2; i++) {
+            .prepareUpdateSettings(INDEX_NAME)  
+        final String writer_replica = internalCluster().startDataOnlyNode();  
+            absolutePath = randomRepoPath().toAbsolutePath();
+public class SearchReplicaReplicationAndRecoveryIT extends SegmentReplicationBaseIT {
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;  
+    private static void assertRecoverySourceType(String replica, RecoverySource.Type recoveryType) throws InterruptedException,
+            .prepareUpdateSettings(INDEX_NAME)
+        // stop the primary  
+package org.opensearch.indices.replication;
+            .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 0))
+            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)  
+        createIndex(INDEX_NAME);
+        assertEquals(1, nodesStatsResponse.getNodes().size());  
+    }
+        assertEquals(ClusterHealthStatus.YELLOW, clusterHealthResponse.getStatus());
+    public void testSegmentReplicationStatsResponseWithSearchReplica() throws Exception {  
+        } else {
+            assertEquals(ClusterHealthStatus.RED, clusterHealthResponse.getStatus());
+            assertEquals(ClusterHealthStatus.YELLOW, clusterHealthResponse.getStatus());
+        assertBusy(() -> {  
+        internalCluster().restartNode(searchNode);  
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;  
+        for (int i = 0; i < docCount; i++) {
+        if (expectBytesDownloaded) {  
+import org.opensearch.action.admin.cluster.remotestore.restore.RestoreRemoteStoreRequest;
+        final String searchNode = internalCluster().startSearchOnlyNode();
+        assertDocCounts(10, searchNode);  
+        return Settings.builder()  
+import java.nio.file.Path;
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+ */  
+        for (RecoveryState recoveryState : recoveryResponse.shardRecoveryStates().get(INDEX_NAME)) {
+        final int docCount = 10;
+    }
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+                .put("number_of_search_replicas", 1)  
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+    private static final String REPOSITORY_NAME = "test-remote-store-repo";
+import org.opensearch.cluster.metadata.IndexMetadata;
+        internalCluster().startDataOnlyNode();
+        }
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+import java.util.Set;
+        ClusterHealthResponse clusterHealthResponse = clusterAdmin().prepareHealth(INDEX_NAME).get();
+        if (absolutePath == null) {  
+        refresh(INDEX_NAME);
+        assertEquals(replica, nodeStats.getNode().getName());
+    @Override  
+            }  
+        for (int i = 0; i < docCount; i++) {
+        final String primary = internalCluster().startDataOnlyNode();
+            .build();  
+        assertDocCounts(docCount, searchNode, restoredPrimary);  
+                .put("number_of_shards", 1)
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+                .put("number_of_replicas", 0)
+            .get();  
+        internalCluster().startClusterManagerOnlyNode();
+        ensureGreen(INDEX_NAME);  
+import static org.opensearch.cluster.routing.RecoverySource.Type.EXISTING_STORE;
+        final String primary = internalCluster().startDataOnlyNode();  
+            assertNotNull(replicaStat.getCurrentReplicationState());  

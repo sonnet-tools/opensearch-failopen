@@ -1,188 +1,163 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.action;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.analytics.exec.task.AnalyticsShardTask;  
-import org.opensearch.analytics.spi.DelegationDescriptor;
-import org.opensearch.analytics.spi.InstructionNode;
-import org.opensearch.analytics.spi.InstructionType;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.tasks.Task;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * Transport request carrying plan fragment alternatives to a data node for shard-level execution.
- *
  * <p>Each {@link PlanAlternative} represents a backend-specific serialized plan produced by  
- * {@code FragmentConversionDriver}. The data node selects the best alternative based on
- * available backend capabilities.
- *  
- * @opensearch.internal
- */
-public class FragmentExecutionRequest extends ActionRequest implements ShardInvocationRequest {  
-
-    private final String queryId;
-    private final int stageId;  
-    private final ShardId shardId;
-    private final List<PlanAlternative> planAlternatives;
-    private final boolean profile;  
-
-    public FragmentExecutionRequest(String queryId, int stageId, ShardId shardId, List<PlanAlternative> planAlternatives) {
-        this(queryId, stageId, shardId, planAlternatives, false);  
-    }
-
-    public FragmentExecutionRequest(String queryId, int stageId, ShardId shardId, List<PlanAlternative> planAlternatives, boolean profile) {  
-        this.queryId = queryId;
-        this.stageId = stageId;
-        this.shardId = shardId;  
-        this.planAlternatives = planAlternatives;
-        this.profile = profile;
-    }  
-
-    public FragmentExecutionRequest(StreamInput in) throws IOException {
-        super(in);  
-        this.queryId = in.readString();
-        this.stageId = in.readInt();
-        this.shardId = new ShardId(in);  
-        int numAlternatives = in.readVInt();
-        this.planAlternatives = new ArrayList<>(numAlternatives);
-        for (int i = 0; i < numAlternatives; i++) {  
-            planAlternatives.add(new PlanAlternative(in));
-        }
-        this.profile = in.readBoolean();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(queryId);  
-        out.writeInt(stageId);
-        shardId.writeTo(out);
-        out.writeVInt(planAlternatives.size());  
-        for (PlanAlternative alt : planAlternatives) {
-            alt.writeTo(out);
         }  
-        out.writeBoolean(profile);
-    }
-
-    public String getQueryId() {
-        return queryId;
-    }  
-
-    public int getStageId() {
-        return stageId;  
-    }
-
+            out.writeString(backendId);  
+        for (PlanAlternative alt : planAlternatives) {
+        private final String backendId;  
+        out.writeVInt(planAlternatives.size());  
+        public void writeTo(StreamOutput out) throws IOException {
+            for (InstructionNode node : instructions) {  
+    public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+import org.opensearch.analytics.spi.InstructionType;  
+        this.shardId = shardId;  
     public ShardId getShardId() {  
         return shardId;
+            this(backendId, fragmentBytes, instructions, null);  
+            }  
+        this.planAlternatives = planAlternatives;
+        this.queryId = in.readString();
+ */  
+            return backendId;
+ */
     }
-
-    public List<PlanAlternative> getPlanAlternatives() {
+                node.writeTo(out);
+import org.opensearch.core.tasks.TaskId;
+        this.profile = in.readBoolean();  
+import org.opensearch.analytics.spi.InstructionNode;
+        private final List<InstructionNode> instructions;
+    public String getQueryId() {
+import org.opensearch.core.common.io.stream.StreamInput;
+        public PlanAlternative(  
+ * Transport request carrying plan fragment alternatives to a data node for shard-level execution.
+import org.opensearch.action.ActionRequest;
+    @Override  
+    private final ShardId shardId;
+    @Override  
+            this.instructions = instructions;
+ * SPDX-License-Identifier: Apache-2.0
+        super.writeTo(out);
         return planAlternatives;
-    }  
-
-    public boolean profile() {
+            if (delegationDescriptor != null) {
+                out.writeEnum(node.type());
+        return stageId;  
+     * Produced by {@code FragmentConversionDriver.convertAll()} using the backend's
+ * compatible open source license.
+}
+import org.opensearch.action.ActionRequestValidationException;
+        for (int i = 0; i < numAlternatives; i++) {  
         return profile;  
+import java.util.ArrayList;
     }
-
+            out.writeByteArray(fragmentBytes != null ? fragmentBytes : new byte[0]);
+        }  
+        public byte[] getFragmentBytes() {
+        ) {
+        this(queryId, stageId, shardId, planAlternatives, false);  
+    }
+            int instructionCount = in.readVInt();
+        return queryId;
+        public List<InstructionNode> getInstructions() {
+    }  
+import java.util.Map;
+     * and ordered instruction nodes for data-node execution.
+            this.instructions = nodes;
+            alt.writeTo(out);
+        this.stageId = stageId;
+            List<InstructionNode> instructions,  
+    }
+            return fragmentBytes;
+        this.shardId = new ShardId(in);  
+        }
+ *
+    }  
+            String backendId,
+ * @opensearch.internal
+    public List<PlanAlternative> getPlanAlternatives() {
     @Override  
-    public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+                out.writeBoolean(true);
+    }
+     * {@code FragmentConvertor}.  
+                out.writeBoolean(false);
+    public FragmentExecutionRequest(String queryId, int stageId, ShardId shardId, List<PlanAlternative> planAlternatives, boolean profile) {  
+            return instructions;  
         String desc = "queryId[" + queryId + "] stageId[" + stageId + "] shardId[" + shardId + "]";
+import java.io.IOException;
         return new AnalyticsShardTask(id, type, action, desc, parentTaskId, headers);  
+ *  
+    private final List<PlanAlternative> planAlternatives;
+ * {@code FragmentConversionDriver}. The data node selects the best alternative based on
+            planAlternatives.add(new PlanAlternative(in));
+        this.planAlternatives = new ArrayList<>(numAlternatives);
+import org.opensearch.analytics.exec.task.AnalyticsShardTask;  
+    public FragmentExecutionRequest(String queryId, int stageId, ShardId shardId, List<PlanAlternative> planAlternatives) {
+            this.backendId = backendId;  
+import org.opensearch.core.index.shard.ShardId;  
+    private final String queryId;
+        int numAlternatives = in.readVInt();
+import org.opensearch.analytics.spi.DelegationDescriptor;
+        this.queryId = queryId;
+    public static class PlanAlternative {
+            List<InstructionNode> nodes = new ArrayList<>(instructionCount);
+public class FragmentExecutionRequest extends ActionRequest implements ShardInvocationRequest {  
     }
-
-    @Override  
-    public ActionRequestValidationException validate() {
+        out.writeInt(stageId);
+            this.delegationDescriptor = in.readBoolean() ? new DelegationDescriptor(in) : null;
+        private final byte[] fragmentBytes;
+ * The OpenSearch Contributors require contributions made to  
+    }  
         return null;
     }  
-
-    /**
-     * A single plan alternative: a backend ID paired with its serialized fragment bytes  
-     * and ordered instruction nodes for data-node execution.
-     * Produced by {@code FragmentConversionDriver.convertAll()} using the backend's
-     * {@code FragmentConvertor}.  
-     */
-    public static class PlanAlternative {
-        private final String backendId;  
-        private final byte[] fragmentBytes;
-        private final List<InstructionNode> instructions;
-        private final DelegationDescriptor delegationDescriptor;  
-
-        public PlanAlternative(String backendId, byte[] fragmentBytes, List<InstructionNode> instructions) {
-            this(backendId, fragmentBytes, instructions, null);  
-        }
-
-        public PlanAlternative(  
-            String backendId,
-            byte[] fragmentBytes,
-            List<InstructionNode> instructions,  
-            DelegationDescriptor delegationDescriptor
-        ) {
-            this.backendId = backendId;  
-            this.fragmentBytes = fragmentBytes;
-            this.instructions = instructions;
-            this.delegationDescriptor = delegationDescriptor;  
-        }
-
-        public PlanAlternative(StreamInput in) throws IOException {  
+    private final int stageId;  
+    public int getStageId() {
+import org.opensearch.core.common.io.stream.StreamOutput;
             this.backendId = in.readString();
-            byte[] bytes = in.readByteArray();
-            this.fragmentBytes = (bytes.length == 0) ? null : bytes;  
-            int instructionCount = in.readVInt();
-            List<InstructionNode> nodes = new ArrayList<>(instructionCount);
-            for (int i = 0; i < instructionCount; i++) {  
-                InstructionType type = in.readEnum(InstructionType.class);
-                nodes.add(type.readNode(in));
+import java.util.List;  
+        public PlanAlternative(StreamInput in) throws IOException {  
+package org.opensearch.analytics.exec.action;
+        public PlanAlternative(String backendId, byte[] fragmentBytes, List<InstructionNode> instructions) {
+        out.writeString(queryId);  
+        private final DelegationDescriptor delegationDescriptor;  
             }  
-            this.instructions = nodes;
-            this.delegationDescriptor = in.readBoolean() ? new DelegationDescriptor(in) : null;
-        }  
-
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(backendId);  
-            out.writeByteArray(fragmentBytes != null ? fragmentBytes : new byte[0]);
-            out.writeVInt(instructions.size());
-            for (InstructionNode node : instructions) {  
-                out.writeEnum(node.type());
-                node.writeTo(out);
+    /**
+        this.profile = profile;
+        }
+            DelegationDescriptor delegationDescriptor
+ * this file be licensed under the Apache-2.0 license or a
+        }
             }  
-            if (delegationDescriptor != null) {
-                out.writeBoolean(true);
-                delegationDescriptor.writeTo(out);  
-            } else {
-                out.writeBoolean(false);
-            }  
-        }
-
-        public String getBackendId() {  
-            return backendId;
-        }
-
-        public byte[] getFragmentBytes() {
-            return fragmentBytes;
-        }  
-
-        public List<InstructionNode> getInstructions() {
-            return instructions;  
-        }
-
-        public DelegationDescriptor getDelegationDescriptor() {  
-            return delegationDescriptor;
-        }
+     * A single plan alternative: a backend ID paired with its serialized fragment bytes  
     }  
-}
+     */
+ *
+import org.opensearch.tasks.Task;
+    public FragmentExecutionRequest(StreamInput in) throws IOException {
+    public ActionRequestValidationException validate() {
+        }
+            } else {
+        }  
+        }
+/*  
+            for (int i = 0; i < instructionCount; i++) {  
+    public boolean profile() {
+        }
+    public void writeTo(StreamOutput out) throws IOException {
+                nodes.add(type.readNode(in));
+        shardId.writeTo(out);
+            byte[] bytes = in.readByteArray();
+            this.delegationDescriptor = delegationDescriptor;  
+            this.fragmentBytes = fragmentBytes;
+                delegationDescriptor.writeTo(out);  
+        super(in);  
+            byte[] fragmentBytes,
+        }
+        public DelegationDescriptor getDelegationDescriptor() {  
+            out.writeVInt(instructions.size());
+    }
+ * available backend capabilities.
+            this.fragmentBytes = (bytes.length == 0) ? null : bytes;  
+                InstructionType type = in.readEnum(InstructionType.class);
+    private final boolean profile;  
+        out.writeBoolean(profile);
+/**  
+        this.stageId = in.readInt();
+        public String getBackendId() {  
+            return delegationDescriptor;

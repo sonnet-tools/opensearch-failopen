@@ -1,82 +1,73 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.join.aggregations;
-
-import org.apache.lucene.search.Query;  
-import org.opensearch.core.ParseField;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.support.ValuesSource;  
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
 import java.util.Map;
-
 public class ParentToChildrenAggregator extends ParentJoinAggregator {  
-
-    static final ParseField TYPE_FIELD = new ParseField("type");
-
-    public ParentToChildrenAggregator(
-        String name,
-        AggregatorFactories factories,  
-        SearchContext context,
+    @Override
         Aggregator parent,
-        Query childFilter,  
-        Query parentFilter,
-        ValuesSource.Bytes.WithOrdinals valuesSource,
-        long maxOrd,  
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {  
-        super(name, factories, context, parent, parentFilter, childFilter, valuesSource, maxOrd, cardinality, metadata);
-    }
-
-    @Override
-    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
-        return buildAggregationsForSingleBucket(  
-            owningBucketOrds,
-            (owningBucketOrd, subAggregationResults) -> new InternalChildren(
-                name,  
-                bucketDocCount(owningBucketOrd),
-                subAggregationResults,
-                metadata()  
-            )
-        );
-    }  
-
-    @Override
-    public InternalAggregation buildEmptyAggregation() {  
+ */
         return new InternalChildren(name, 0, buildEmptySubAggregations(), metadata());
-    }
+ * under the License.  
+        Map<String, Object> metadata
+        SearchContext context,
+        Query childFilter,  
+    @Override
+        ValuesSource.Bytes.WithOrdinals valuesSource,
+/*  
+import org.apache.lucene.search.Query;  
+        Query parentFilter,
+    ) throws IOException {  
+ * license agreements. See the NOTICE file distributed with
+                metadata()  
+import org.opensearch.search.aggregations.support.ValuesSource;  
 }  
+ *
+    static final ParseField TYPE_FIELD = new ParseField("type");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        CardinalityUpperBound cardinality,
+ */  
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+import java.io.IOException;  
+                name,  
+                subAggregationResults,
+ * Unless required by applicable law or agreed to in writing,
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+        AggregatorFactories factories,  
+    }
+ * this work for additional information regarding copyright
+            )
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+    public InternalAggregation buildEmptyAggregation() {  
+ * The OpenSearch Contributors require contributions made to  
+    }
+        );
+ * compatible open source license.
+ * software distributed under the License is distributed on an
+                bucketDocCount(owningBucketOrd),
+            (owningBucketOrd, subAggregationResults) -> new InternalChildren(
+package org.opensearch.join.aggregations;
+            owningBucketOrds,
+ * Modifications Copyright OpenSearch Contributors. See  
+    }  
+        return buildAggregationsForSingleBucket(  
+/*
+import org.opensearch.core.ParseField;
+import org.opensearch.search.internal.SearchContext;
+ * GitHub history for details.
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.search.aggregations.AggregatorFactories;  
+        long maxOrd,  
+import org.opensearch.search.aggregations.InternalAggregation;
+    public ParentToChildrenAggregator(
+ */
+        super(name, factories, context, parent, parentFilter, childFilter, valuesSource, maxOrd, cardinality, metadata);
+import org.opensearch.search.aggregations.Aggregator;
+ * specific language governing permissions and limitations
+        String name,
+ *  
+/*
+ * not use this file except in compliance with the License.
+    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {

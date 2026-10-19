@@ -1,175 +1,155 @@
+import org.opensearch.core.common.io.stream.StreamInput;  
+/**
+ * compatible open source license.
+     * @opensearch.internal  
+}  
+            throw new OpenSearchException("failed to detect hot threads", e);
+    protected NodeHotThreads nodeOperation(NodeRequest request) {
+ * software distributed under the License is distributed on an
+ *
+import java.io.IOException;
+            super(in);
+        @Override  
+            .interval(request.request.interval)
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.action.ActionListener;
+     */
+ * under the License.  
+ *
+        TransportService transportService,
+    }  
+ *  
+        } catch (Exception e) {
+        Settings settings,
+    ) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            request.writeTo(out);  
+    @Override  
+        // ThreadInfo[snapshots][] arrays are allocated on each node (see HotThreads#innerDetect). This bounds  
+        public NodeRequest(StreamInput in) throws IOException {  
+                "["
+import org.opensearch.transport.TransportService;  
+    @Inject  
+            this.request = request;  
+ * Unless required by applicable law or agreed to in writing,
+ * The OpenSearch Contributors require contributions made to  
+            ThreadPool.Names.GENERIC,
+    public static class NodeRequest extends TransportRequest {
+import org.opensearch.monitor.jvm.HotThreads;
+    static void validateRequestParams(NodesHotThreadsRequest request, int maxSnapshots) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        List<NodeHotThreads> responses,  
+        NodeRequest(NodesHotThreadsRequest request) {
+        return new NodesHotThreadsResponse(clusterService.getClusterName(), responses, failures);  
+ * You may obtain a copy of the License at  
+    private void setMaxSnapshots(int maxSnapshots) {
+public class TransportNodesHotThreadsAction extends TransportNodesAction<
+    /**  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.tasks.Task;  
+        }  
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
+ */  
+import org.opensearch.common.inject.Inject;  
+            clusterService,
+        super.doExecute(task, request, listener);  
+        return new NodeHotThreads(in);
+                    + maxSnapshots
+import org.opensearch.OpenSearchException;
+    private volatile int maxSnapshots;
+    protected NodeRequest newNodeRequest(NodesHotThreadsRequest request) {
+        NodesHotThreadsRequest request;
+        this.maxSnapshots = HotThreads.MAX_HOT_THREADS_SNAPSHOTS_SETTING.get(settings);
+        }  
+    NodeHotThreads> {
+                    + "] is not a valid value for [snapshots], it must be between 1 and ["  
+import org.opensearch.common.settings.Settings;
+        );  
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.node.hotthreads;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.nodes.TransportNodesAction;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.monitor.jvm.HotThreads;
-import org.opensearch.tasks.Task;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportService;  
-
-import java.io.IOException;
-import java.util.List;  
-
-/**
- * Transport action for OpenSearch Hot Threads  
- *
- * @opensearch.internal
- */  
-public class TransportNodesHotThreadsAction extends TransportNodesAction<
-    NodesHotThreadsRequest,
-    NodesHotThreadsResponse,  
-    TransportNodesHotThreadsAction.NodeRequest,
-    NodeHotThreads> {
-
-    private volatile int maxSnapshots;
-
-    @Inject  
-    public TransportNodesHotThreadsAction(
-        Settings settings,
-        ThreadPool threadPool,  
-        ClusterService clusterService,
-        TransportService transportService,
-        ActionFilters actionFilters  
-    ) {
-        super(
-            NodesHotThreadsAction.NAME,  
-            threadPool,
-            clusterService,
-            transportService,  
-            actionFilters,
-            NodesHotThreadsRequest::new,
-            NodeRequest::new,  
-            ThreadPool.Names.GENERIC,
-            NodeHotThreads.class
-        );  
-        this.maxSnapshots = HotThreads.MAX_HOT_THREADS_SNAPSHOTS_SETTING.get(settings);
-        clusterService.getClusterSettings().addSettingsUpdateConsumer(HotThreads.MAX_HOT_THREADS_SNAPSHOTS_SETTING, this::setMaxSnapshots);
-    }  
-
-    private void setMaxSnapshots(int maxSnapshots) {
-        this.maxSnapshots = maxSnapshots;  
-    }
-
-    @Override  
-    protected void doExecute(Task task, NodesHotThreadsRequest request, ActionListener<NodesHotThreadsResponse> listener) {
-        // Reject an out-of-range "snapshots" value up front, before the request fans out and the
-        // ThreadInfo[snapshots][] arrays are allocated on each node (see HotThreads#innerDetect). This bounds  
-        // the amount of memory a single hot_threads request can allocate.
-        validateRequestParams(request, maxSnapshots);
-        super.doExecute(task, request, listener);  
-    }
-
-    // visible for testing  
-    static void validateRequestParams(NodesHotThreadsRequest request, int maxSnapshots) {
-        if (request.snapshots() < 1 || request.snapshots() > maxSnapshots) {
-            throw new IllegalArgumentException(  
-                "["
-                    + request.snapshots()
-                    + "] is not a valid value for [snapshots], it must be between 1 and ["  
-                    + maxSnapshots
-                    + "] (configurable via ["
-                    + HotThreads.MAX_HOT_THREADS_SNAPSHOTS_SETTING.getKey()  
-                    + "])"
-            );
-        }  
-    }
-
-    @Override  
-    protected NodesHotThreadsResponse newResponse(
-        NodesHotThreadsRequest request,
-        List<NodeHotThreads> responses,  
-        List<FailedNodeException> failures
-    ) {
-        return new NodesHotThreadsResponse(clusterService.getClusterName(), responses, failures);  
-    }
-
-    @Override  
-    protected NodeRequest newNodeRequest(NodesHotThreadsRequest request) {
-        return new NodeRequest(request);
-    }  
-
-    @Override
-    protected NodeHotThreads newNodeResponse(StreamInput in) throws IOException {  
-        return new NodeHotThreads(in);
-    }
-
-    @Override
-    protected NodeHotThreads nodeOperation(NodeRequest request) {
-        HotThreads hotThreads = new HotThreads().busiestThreads(request.request.threads)  
-            .type(request.request.type)
-            .interval(request.request.interval)
-            .threadElementsSnapshotCount(request.request.snapshots)  
-            .ignoreIdleThreads(request.request.ignoreIdleThreads);
         try {
+        return new NodeRequest(request);
+import java.util.List;  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(HotThreads.MAX_HOT_THREADS_SNAPSHOTS_SETTING, this::setMaxSnapshots);
+        super(
+        this.maxSnapshots = maxSnapshots;  
+    ) {
+/*
+    protected void doExecute(Task task, NodesHotThreadsRequest request, ActionListener<NodesHotThreadsResponse> listener) {
+    // visible for testing  
+import org.opensearch.core.common.io.stream.StreamOutput;
             return new NodeHotThreads(clusterService.localNode(), hotThreads.detect());  
-        } catch (Exception e) {
-            throw new OpenSearchException("failed to detect hot threads", e);
-        }  
-    }
-
-    /**  
      * Inner node request
-     *
-     * @opensearch.internal  
-     */
-    public static class NodeRequest extends TransportRequest {
-
-        NodesHotThreadsRequest request;
-
-        public NodeRequest(StreamInput in) throws IOException {  
-            super(in);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        ThreadPool threadPool,  
+import org.opensearch.threadpool.ThreadPool;
+            NodeHotThreads.class
+            transportService,  
+        List<FailedNodeException> failures
             request = new NodesHotThreadsRequest(in);
-        }  
-
-        NodeRequest(NodesHotThreadsRequest request) {
-            this.request = request;  
-        }
-
-        @Override  
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            request.writeTo(out);  
-        }
+            NodesHotThreadsRequest::new,
     }
-}  
+            );
+ *
+     *
+        ActionFilters actionFilters  
+        if (request.snapshots() < 1 || request.snapshots() > maxSnapshots) {
+ */
+            throw new IllegalArgumentException(  
+    }  
+    public TransportNodesHotThreadsAction(
+            actionFilters,
+ */  
+                    + "] (configurable via ["
+import org.opensearch.action.support.ActionFilters;  
+    @Override  
+ * license agreements. See the NOTICE file distributed with
+        }
+        NodesHotThreadsRequest request,
+                    + request.snapshots()
+            .type(request.request.type)
+        // Reject an out-of-range "snapshots" value up front, before the request fans out and the
+ * KIND, either express or implied.  See the License for the
+    }
+            super.writeTo(out);
+            threadPool,
+            NodeRequest::new,  
+import org.opensearch.action.support.nodes.TransportNodesAction;
+        validateRequestParams(request, maxSnapshots);
+import org.opensearch.transport.TransportRequest;
+                    + HotThreads.MAX_HOT_THREADS_SNAPSHOTS_SETTING.getKey()  
+    }
+ * this work for additional information regarding copyright
+ * Transport action for OpenSearch Hot Threads  
+    @Override
+            .ignoreIdleThreads(request.request.ignoreIdleThreads);
+            NodesHotThreadsAction.NAME,  
+    protected NodesHotThreadsResponse newResponse(
+        HotThreads hotThreads = new HotThreads().busiestThreads(request.request.threads)  
+import org.opensearch.action.FailedNodeException;
+            .threadElementsSnapshotCount(request.request.snapshots)  
+    @Override  
+    protected NodeHotThreads newNodeResponse(StreamInput in) throws IOException {  
+        ClusterService clusterService,
+    TransportNodesHotThreadsAction.NodeRequest,
+ * GitHub history for details.
+    }
+ * @opensearch.internal
+        }  
+import org.opensearch.cluster.service.ClusterService;
+    NodesHotThreadsResponse,  
+                    + "])"
+package org.opensearch.action.admin.cluster.node.hotthreads;
+        }
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+        public void writeTo(StreamOutput out) throws IOException {
+/*  
+ */  
+    NodesHotThreadsRequest,
+    }
+    }
+        // the amount of memory a single hot_threads request can allocate.

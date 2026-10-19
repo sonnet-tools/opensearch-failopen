@@ -1,174 +1,153 @@
+     */  
+@PublicApi(since = "1.0.0")
+        static final String _INDEX = "_index";  
+import java.util.Arrays;  
+ * this file be licensed under the Apache-2.0 license or a
+        static final String DOCS = "docs";
+         * The failure cause.
+        builder.endArray();  
+                builder.field(Fields._ID, failure.getId());
+        private final Exception cause;
+            return this.cause;
 /*  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * @opensearch.api
+ * You may obtain a copy of the License at  
+                TermVectorsResponse getResponse = response.getResponse();
+            id = in.readString();
+            index = in.readString();
+        private final String id;
+            }
+import org.opensearch.common.annotation.PublicApi;  
+    private final MultiTermVectorsItemResponse[] responses;
+import org.opensearch.OpenSearchException;
+     *
+                // ignore removed type from pre-2.0.0 versions
+                builder.startObject();
+     * @opensearch.internal
+            this.index = index;
+ * ownership. Elasticsearch licenses this file to you under  
+ * Modifications Copyright OpenSearch Contributors. See
+        return builder;
+    @Override
+            } else {
+ * specific language governing permissions and limitations
+         */
+        return Arrays.stream(responses).iterator();
+ * this work for additional information regarding copyright
+/**  
+ * Unless required by applicable law or agreed to in writing,
+    /**
+        /**
+/*
+        for (MultiTermVectorsItemResponse response : responses) {
+        public void writeTo(StreamOutput out) throws IOException {  
+        builder.startObject();  
+import org.opensearch.core.xcontent.XContentBuilder;  
+         * The id of the action.
+        public Failure(StreamInput in) throws IOException {
+        builder.startArray(Fields.DOCS);
+     * Represents a failure.  
+                builder.field(Fields._INDEX, failure.getIndex());  
+ * GitHub history for details.
+import java.util.Iterator;
+        }  
+ * A multi get response.
+     */  
+     *
+         */  
+                out.writeOptionalString(null);
+            cause = in.readException();
+ */  
+                OpenSearchException.generateFailureXContent(builder, params, failure.getCause(), true);
+        /**
+        }
+ * under the License.  
+    @PublicApi(since = "1.0.0")
+public class MultiTermVectorsResponse extends ActionResponse implements Iterable<MultiTermVectorsItemResponse>, ToXContentObject {  
+ *
+import org.opensearch.core.common.io.stream.StreamInput;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        public Exception getCause() {
+ * compatible open source license.
+    /**
+            if (out.getVersion().before(Version.V_2_0_0)) {
+    }  
+            if (in.getVersion().before(Version.V_2_0_0)) {  
+        responses = in.readArray(MultiTermVectorsItemResponse::new, MultiTermVectorsItemResponse[]::new);
+    @Override
+                // types no longer supported  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.termvectors;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.Iterator;
-
-/**  
- * A multi get response.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class MultiTermVectorsResponse extends ActionResponse implements Iterable<MultiTermVectorsItemResponse>, ToXContentObject {  
-
-    /**
-     * Represents a failure.  
-     *
-     * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    public static class Failure implements Writeable {
-        private final String index;  
-        private final String id;
-        private final Exception cause;
-
-        public Failure(String index, String id, Exception cause) {
-            this.index = index;
-            this.id = id;  
-            this.cause = cause;
-        }
-
-        public Failure(StreamInput in) throws IOException {
-            index = in.readString();
-            if (in.getVersion().before(Version.V_2_0_0)) {  
-                // ignore removed type from pre-2.0.0 versions
-                in.readOptionalString();
-            }  
-            id = in.readString();
-            cause = in.readException();
-        }  
-
-        /**
-         * The index name of the action.  
-         */
-        public String getIndex() {
-            return this.index;  
-        }
-
-        /**  
-         * The id of the action.
-         */
-        public String getId() {  
-            return id;
-        }
-
-        /**
-         * The failure cause.
-         */  
-        public Exception getCause() {
-            return this.cause;
-        }  
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {  
-            out.writeString(index);
-            if (out.getVersion().before(Version.V_2_0_0)) {
-                // types no longer supported  
-                out.writeOptionalString(null);
-            }
-            out.writeString(id);  
-            out.writeException(cause);
-        }
-    }  
-
-    private final MultiTermVectorsItemResponse[] responses;
-
     public MultiTermVectorsResponse(MultiTermVectorsItemResponse[] responses) {
-        this.responses = responses;
     }  
-
-    public MultiTermVectorsResponse(StreamInput in) throws IOException {
-        super(in);  
-        responses = in.readArray(MultiTermVectorsItemResponse::new, MultiTermVectorsItemResponse[]::new);
-    }
-
-    public MultiTermVectorsItemResponse[] getResponses() {
-        return this.responses;
-    }  
-
-    @Override
-    public Iterator<MultiTermVectorsItemResponse> iterator() {  
-        return Arrays.stream(responses).iterator();
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.startArray(Fields.DOCS);
-        for (MultiTermVectorsItemResponse response : responses) {
-            if (response.isFailed()) {  
-                builder.startObject();
-                Failure failure = response.getFailure();
-                builder.field(Fields._INDEX, failure.getIndex());  
-                builder.field(Fields._ID, failure.getId());
-                OpenSearchException.generateFailureXContent(builder, params, failure.getCause(), true);
-                builder.endObject();  
-            } else {
-                TermVectorsResponse getResponse = response.getResponse();
+        public String getId() {  
+                in.readOptionalString();
+            return id;
                 getResponse.toXContent(builder, params);  
-            }
+ * license agreements. See the NOTICE file distributed with
+        /**  
         }
-        builder.endArray();  
-        builder.endObject();
-        return builder;
-    }  
-
-    /**
-     * Fields used for parsing and toXContent  
-     *
-     * @opensearch.internal
-     */  
-    static final class Fields {
-        static final String DOCS = "docs";
-        static final String _INDEX = "_index";  
-        static final String _ID = "_id";
+                builder.endObject();  
+            }  
+        }  
+ * the Apache License, Version 2.0 (the "License"); you may
+            out.writeException(cause);
+ * @opensearch.api  
+ * KIND, either express or implied.  See the License for the
     }
-
+            out.writeString(id);  
+        }
+                Failure failure = response.getFailure();
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeArray(responses);  
     }
+        static final String _ID = "_id";
+        }
+            out.writeString(index);
+         * The index name of the action.  
+        public Failure(String index, String id, Exception cause) {
+        public String getIndex() {
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+        super(in);  
+        builder.endObject();
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+        @Override
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    public Iterator<MultiTermVectorsItemResponse> iterator() {  
+            this.cause = cause;
+    public void writeTo(StreamOutput out) throws IOException {
 }
+    }
+            this.id = id;  
+ */
+            return this.index;  
+    }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        private final String index;  
+ */  
+        this.responses = responses;
+    public MultiTermVectorsResponse(StreamInput in) throws IOException {
+         */
+        out.writeArray(responses);  
+import org.opensearch.core.action.ActionResponse;
+package org.opensearch.action.termvectors;
+ * The OpenSearch Contributors require contributions made to  
+            }
+import org.opensearch.Version;
+ *  
+     * Fields used for parsing and toXContent  
+    public MultiTermVectorsItemResponse[] getResponses() {
+    static final class Fields {
+import java.io.IOException;
+    public static class Failure implements Writeable {
+    }  
+ * software distributed under the License is distributed on an
+        return this.responses;
+/*  
+import org.opensearch.core.xcontent.ToXContentObject;
+            if (response.isFailed()) {  
+ * not use this file except in compliance with the License.
+ *

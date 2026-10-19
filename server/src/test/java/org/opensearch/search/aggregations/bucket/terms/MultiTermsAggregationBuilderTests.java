@@ -1,181 +1,167 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.BaseAggregationTestCase;  
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.support.MultiTermsValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValueType;  
-
-import java.time.ZoneId;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Supplier;  
-
-public class MultiTermsAggregationBuilderTests extends BaseAggregationTestCase<MultiTermsAggregationBuilder> {
-
-    @Override
-    protected MultiTermsAggregationBuilder createTestAggregatorBuilder() {
-        String name = randomAlphaOfLengthBetween(3, 20);  
-        MultiTermsAggregationBuilder factory = new MultiTermsAggregationBuilder(name);
-
-        int termsCount = randomIntBetween(2, 10);  
-        List<MultiTermsValuesSourceConfig> fieldConfigs = new ArrayList<>();
-        for (int i = 0; i < termsCount; i++) {
-            fieldConfigs.add(randomFieldConfig());  
-        }
-        factory.terms(fieldConfigs);
-
-        if (randomBoolean()) {
-            factory.size(randomIntBetween(1, Integer.MAX_VALUE));
-        }  
-        if (randomBoolean()) {
-            factory.shardSize(randomIntBetween(1, Integer.MAX_VALUE));
-        }  
-        if (randomBoolean()) {
-            int minDocCount = randomInt(4);
-            switch (minDocCount) {  
-                case 0:
-                    break;
-                case 1:  
-                case 2:
-                case 3:
-                case 4:  
-                    minDocCount = randomIntBetween(0, Integer.MAX_VALUE);
-                    break;
-                default:  
-                    fail();
-            }
-            factory.minDocCount(minDocCount);  
-        }
-        if (randomBoolean()) {
-            int shardMinDocCount = randomInt(4);  
-            switch (shardMinDocCount) {
-                case 0:
-                    break;  
-                case 1:
-                case 2:
-                case 3:  
-                case 4:
-                    shardMinDocCount = randomIntBetween(0, Integer.MAX_VALUE);
-                    break;  
-                default:
-                    fail();
-            }  
-            factory.shardMinDocCount(shardMinDocCount);
-        }
-        if (randomBoolean()) {  
-            factory.collectMode(randomFrom(Aggregator.SubAggCollectionMode.values()));
-        }
-        if (randomBoolean()) {  
-            List<BucketOrder> order = randomOrder();
-            if (order.size() == 1 && randomBoolean()) {
-                factory.order(order.get(0));  
-            } else {
                 factory.order(order);
-            }  
-        }
-        if (randomBoolean()) {
-            factory.showTermDocCountError(randomBoolean());  
-        }
-        return factory;
-    }  
-
-    public void testInvalidTermsParams() {
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> {  
-            new MultiTermsAggregationBuilder("_name").terms(Collections.singletonList(randomFieldConfig()));
-        });
-        assertEquals(  
-            "multi term aggregation must has at least 2 terms. Found [1] in [_name] Use terms aggregation for single term aggregation",
-            exception.getMessage()
-        );  
-
-        exception = expectThrows(
-            IllegalArgumentException.class,  
-            () -> { new MultiTermsAggregationBuilder("_name").terms(Collections.emptyList()); }
-        );
-        assertEquals("multi term aggregation must has at least 2 terms. Found [0] in [_name]", exception.getMessage());  
-
-        exception = expectThrows(IllegalArgumentException.class, () -> { new MultiTermsAggregationBuilder("_name").terms(null); });
-        assertEquals("[terms] must not be null. Found null terms in [_name]", exception.getMessage());  
-    }
-
-    private List<BucketOrder> randomOrder() {  
-        List<BucketOrder> orders = new ArrayList<>();
-        switch (randomInt(4)) {
-            case 0:  
-                orders.add(BucketOrder.key(randomBoolean()));
-                break;
-            case 1:  
-                orders.add(BucketOrder.count(randomBoolean()));
-                break;
-            case 2:  
-                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomBoolean()));
-                break;
-            case 3:  
-                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomAlphaOfLengthBetween(3, 20), randomBoolean()));
-                break;
-            case 4:  
-                int numOrders = randomIntBetween(1, 3);
-                for (int i = 0; i < numOrders; i++) {
-                    orders.addAll(randomOrder());  
-                }
-                break;
-            default:  
-                fail();
-        }
-        return orders;  
-    }
-
-    protected static MultiTermsValuesSourceConfig randomFieldConfig() {  
+ * compatible open source license.
         String field = randomAlphaOfLength(10);
-        Object missing = randomBoolean() ? randomAlphaOfLength(10) : null;
-        ZoneId timeZone = randomBoolean() ? randomZone() : null;  
-        ValueType userValueTypeHint = randomBoolean()
-            ? randomFrom(ValueType.STRING, ValueType.LONG, ValueType.DOUBLE, ValueType.DATE, ValueType.IP)
-            : null;  
-        String format = randomBoolean() ? randomNumericDocValueFormat().toString() : null;
-        return randomFieldOrScript(
-            new MultiTermsValuesSourceConfig.Builder().setMissing(missing)  
-                .setTimeZone(timeZone)
-                .setUserValueTypeHint(userValueTypeHint)
-                .setFormat(format),  
-            field
-        ).build();
-    }  
-
+import java.time.ZoneId;
     protected static MultiTermsValuesSourceConfig.Builder randomFieldOrScript(MultiTermsValuesSourceConfig.Builder builder, String field) {
+                int numOrders = randomIntBetween(1, 3);
+        ).build();
+            factory.minDocCount(minDocCount);  
         int choice = randomInt(1);  
-        switch (choice) {
-            case 0:
-                builder.setFieldName(field);  
-                break;
-            case 1:
-                builder.setScript(mockScript("doc[" + field + "] + 1"));  
-                break;
-            default:
                 throw new AssertionError("Unknown random operation [" + choice + "]");  
-        }
-        return builder;
+                break;
+        exception = expectThrows(IllegalArgumentException.class, () -> { new MultiTermsAggregationBuilder("_name").terms(null); });
     }  
-
-    /**
-     * @return a random {@link DocValueFormat} that can be used in aggregations which  
-     * compute numbers.
-     */
-    protected static DocValueFormat randomNumericDocValueFormat() {  
-        final List<Supplier<DocValueFormat>> formats = new ArrayList<>(3);
+        return orders;  
+            factory.shardMinDocCount(shardMinDocCount);
+import org.opensearch.search.aggregations.support.MultiTermsValuesSourceConfig;
         formats.add(() -> DocValueFormat.RAW);
+                case 4:
+        if (randomBoolean()) {
+                case 3:  
+                break;
+            }
+     * @return a random {@link DocValueFormat} that can be used in aggregations which  
+            List<BucketOrder> order = randomOrder();
+                break;
+    /**
+                    shardMinDocCount = randomIntBetween(0, Integer.MAX_VALUE);
+        factory.terms(fieldConfigs);
+        }
+        }
+            new MultiTermsAggregationBuilder("_name").terms(Collections.singletonList(randomFieldConfig()));
+                case 0:
+            case 2:  
+                    break;  
+        }
+import org.opensearch.search.aggregations.BaseAggregationTestCase;  
+            factory.size(randomIntBetween(1, Integer.MAX_VALUE));
+            "multi term aggregation must has at least 2 terms. Found [1] in [_name] Use terms aggregation for single term aggregation",
+            case 3:  
+ */  
+                case 1:
+                    break;
+        if (randomBoolean()) {
+                orders.add(BucketOrder.count(randomBoolean()));
+        );  
+                    orders.addAll(randomOrder());  
+                    fail();
+                    fail();
+                .setTimeZone(timeZone)
+                break;
+                case 4:  
+                case 2:
+                    break;  
+    protected MultiTermsAggregationBuilder createTestAggregatorBuilder() {
+}  
+            factory.showTermDocCountError(randomBoolean());  
+                case 3:
+        }
+        );
         formats.add(() -> new DocValueFormat.Decimal(randomFrom("###.##", "###,###.##")));  
+    }
+        });
+    }  
+import java.util.List;
+    }
+            field
+        List<BucketOrder> orders = new ArrayList<>();
+import java.util.function.Supplier;  
+        if (randomBoolean()) {
+                builder.setScript(mockScript("doc[" + field + "] + 1"));  
+                default:  
+                    break;
+            : null;  
+        return builder;
+ * SPDX-License-Identifier: Apache-2.0
+        if (randomBoolean()) {  
+        switch (choice) {
+        }
+            case 0:  
+public class MultiTermsAggregationBuilderTests extends BaseAggregationTestCase<MultiTermsAggregationBuilder> {
+                }
+            ? randomFrom(ValueType.STRING, ValueType.LONG, ValueType.DOUBLE, ValueType.DATE, ValueType.IP)
+                break;
+        ValueType userValueTypeHint = randomBoolean()
+        int termsCount = randomIntBetween(2, 10);  
+        return randomFieldOrScript(
+                    minDocCount = randomIntBetween(0, Integer.MAX_VALUE);
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> {  
+        String format = randomBoolean() ? randomNumericDocValueFormat().toString() : null;
+            factory.collectMode(randomFrom(Aggregator.SubAggCollectionMode.values()));
+            default:  
+        if (randomBoolean()) {
+     * compute numbers.
         return randomFrom(formats).get();
     }
-}  
+import org.opensearch.search.DocValueFormat;
+        }  
+            int minDocCount = randomInt(4);
+import java.util.Collections;
+    public void testInvalidTermsParams() {
+    }  
+        assertEquals("multi term aggregation must has at least 2 terms. Found [0] in [_name]", exception.getMessage());  
+            exception.getMessage()
+                break;
+ *
+    private List<BucketOrder> randomOrder() {  
+        switch (randomInt(4)) {
+            case 1:  
+        for (int i = 0; i < termsCount; i++) {
+        Object missing = randomBoolean() ? randomAlphaOfLength(10) : null;
+    protected static MultiTermsValuesSourceConfig randomFieldConfig() {  
+        assertEquals(  
+                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomBoolean()));
+            } else {
+            fieldConfigs.add(randomFieldConfig());  
+    protected static DocValueFormat randomNumericDocValueFormat() {  
+        }  
+import org.opensearch.search.aggregations.support.ValueType;  
+            IllegalArgumentException.class,  
+        ZoneId timeZone = randomBoolean() ? randomZone() : null;  
+                .setFormat(format),  
+            () -> { new MultiTermsAggregationBuilder("_name").terms(Collections.emptyList()); }
+                break;
+        exception = expectThrows(
+                default:
+            factory.shardSize(randomIntBetween(1, Integer.MAX_VALUE));
+            case 0:
+import java.util.ArrayList;  
+    @Override
+            }  
+        assertEquals("[terms] must not be null. Found null terms in [_name]", exception.getMessage());  
+ * The OpenSearch Contributors require contributions made to  
+        }
+                for (int i = 0; i < numOrders; i++) {
+                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomAlphaOfLengthBetween(3, 20), randomBoolean()));
+        List<MultiTermsValuesSourceConfig> fieldConfigs = new ArrayList<>();
+        MultiTermsAggregationBuilder factory = new MultiTermsAggregationBuilder(name);
+        if (randomBoolean()) {  
+                case 2:
+        final List<Supplier<DocValueFormat>> formats = new ArrayList<>(3);
+            switch (minDocCount) {  
+     */
+            default:
+                case 1:  
+            case 1:
+                .setUserValueTypeHint(userValueTypeHint)
+                fail();
+        String name = randomAlphaOfLengthBetween(3, 20);  
+        }
+        }
+                case 0:
+            int shardMinDocCount = randomInt(4);  
+            new MultiTermsValuesSourceConfig.Builder().setMissing(missing)  
+                orders.add(BucketOrder.key(randomBoolean()));
+import org.opensearch.search.aggregations.BucketOrder;
+            case 4:  
+            }  
+                builder.setFieldName(field);  
+            switch (shardMinDocCount) {
+                factory.order(order.get(0));  
+package org.opensearch.search.aggregations.bucket.terms;
+        if (randomBoolean()) {
+ * this file be licensed under the Apache-2.0 license or a
+        return factory;
+            if (order.size() == 1 && randomBoolean()) {
+/*  

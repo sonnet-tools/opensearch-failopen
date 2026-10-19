@@ -1,89 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+                searchResponseStatusStats.getSearchResponseStatusCounter(),
 package org.opensearch.search.msearch;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.admin.indices.stats.SearchResponseStatusStats;
-import org.opensearch.action.search.MultiSearchRequestBuilder;  
-import org.opensearch.action.search.MultiSearchResponse;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.index.query.QueryBuilders;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
-
-import java.util.Arrays;
-import java.util.Comparator;  
-import java.util.concurrent.atomic.LongAdder;
-
-@ClusterScope(scope = Scope.TEST, numDataNodes = 1, numClientNodes = 0, supportsDedicatedMasters = false)  
-public class MultiSearchStatsIT extends OpenSearchIntegTestCase {
-    private final SearchResponseStatusStats expectedSearchResponseStatusStats = new SearchResponseStatusStats();
-
-    public void testNodeIndicesStatsSearchResponseStatusStatsMultiSearch() {
-        createIndex("test");
-        ensureGreen();  
-        client().prepareIndex("test").setId("1").setSource("field", "xxx").get();
-        client().prepareIndex("test").setId("2").setSource("field", "yyy").get();
-        refresh();  
-
-        int failureCount = randomIntBetween(0, 50);
-        int successCount = randomIntBetween(0, 50);  
-
-        MultiSearchRequestBuilder multiSearchRequestBuilder = client().prepareMultiSearch();
-
-        for (int i = 0; i < failureCount; i++) {
-            multiSearchRequestBuilder.add(client().prepareSearch("noIndex").setQuery(QueryBuilders.termQuery("field", "yyy")));
-        }  
-
-        for (int i = 0; i < successCount; i++) {
-            multiSearchRequestBuilder.add(client().prepareSearch("test").setQuery(QueryBuilders.matchAllQuery()));  
-        }
-
-        MultiSearchResponse response = multiSearchRequestBuilder.get();  
-
-        for (MultiSearchResponse.Item item : response) {
-            if (item.isFailure()) {  
-                updateExpectedDocStatusCounter(expectedSearchResponseStatusStats, item.getFailure());
-            } else {
-                updateExpectedDocStatusCounter(expectedSearchResponseStatusStats, item.getResponse());  
+        expectedSearchResponseStatusStats.inc(r.status());
             }
-        }
-        assertSearchResponseStatusStats();  
-    }
-
+            )
+ * The OpenSearch Contributors require contributions made to  
     private void assertSearchResponseStatusStats() {  
         SearchResponseStatusStats searchResponseStatusStats = client().admin()
-            .cluster()
-            .prepareNodesStats()  
-            .execute()
-            .actionGet()
-            .getNodes()  
-            .get(0)
-            .getIndices()
-            .getStatusCounterStats()  
-            .getSearchResponseStatusStats();
-
-        assertTrue(  
-            Arrays.equals(
-                searchResponseStatusStats.getSearchResponseStatusCounter(),
-                expectedSearchResponseStatusStats.getSearchResponseStatusCounter(),  
-                Comparator.comparingLong(LongAdder::longValue)
-            )
+ * SPDX-License-Identifier: Apache-2.0
+        MultiSearchResponse response = multiSearchRequestBuilder.get();  
+        client().prepareIndex("test").setId("1").setSource("field", "xxx").get();
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Comparator;  
+    }
         );  
-    }
-
-    private void updateExpectedDocStatusCounter(SearchResponseStatusStats expectedSearchResponseStatusStats, SearchResponse r) {  
-        expectedSearchResponseStatusStats.inc(r.status());
-    }
-
+        MultiSearchRequestBuilder multiSearchRequestBuilder = client().prepareMultiSearch();
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
+import java.util.Arrays;
+        int successCount = randomIntBetween(0, 50);  
+import java.util.concurrent.atomic.LongAdder;
     private void updateExpectedDocStatusCounter(SearchResponseStatusStats expectedSearchResponseStatusStats, Exception e) {
+ */  
+        assertTrue(  
+            if (item.isFailure()) {  
+import org.opensearch.index.query.QueryBuilders;  
+import org.opensearch.action.search.MultiSearchRequestBuilder;  
+        createIndex("test");
+    public void testNodeIndicesStatsSearchResponseStatusStatsMultiSearch() {
+@ClusterScope(scope = Scope.TEST, numDataNodes = 1, numClientNodes = 0, supportsDedicatedMasters = false)  
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        client().prepareIndex("test").setId("2").setSource("field", "yyy").get();
+    private final SearchResponseStatusStats expectedSearchResponseStatusStats = new SearchResponseStatusStats();
+        for (int i = 0; i < successCount; i++) {
+            .cluster()
+            .getIndices()
+            .prepareNodesStats()  
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.action.admin.indices.stats.SearchResponseStatusStats;
+        assertSearchResponseStatusStats();  
+    private void updateExpectedDocStatusCounter(SearchResponseStatusStats expectedSearchResponseStatusStats, SearchResponse r) {  
         expectedSearchResponseStatusStats.inc(ExceptionsHelper.status(e));
-    }  
+        refresh();  
+            .get(0)
+        for (MultiSearchResponse.Item item : response) {
+import org.opensearch.action.search.SearchResponse;
+            multiSearchRequestBuilder.add(client().prepareSearch("noIndex").setQuery(QueryBuilders.termQuery("field", "yyy")));
+            .getStatusCounterStats()  
+ *
+            multiSearchRequestBuilder.add(client().prepareSearch("test").setQuery(QueryBuilders.matchAllQuery()));  
+        }
+            } else {
+                updateExpectedDocStatusCounter(expectedSearchResponseStatusStats, item.getResponse());  
+            .execute()
+        for (int i = 0; i < failureCount; i++) {
+public class MultiSearchStatsIT extends OpenSearchIntegTestCase {
+import org.opensearch.ExceptionsHelper;
+    }
+            .getSearchResponseStatusStats();
+            .getNodes()  
+                Comparator.comparingLong(LongAdder::longValue)
+        }
+/*  
+import org.opensearch.action.search.MultiSearchResponse;
+ * compatible open source license.
+    }
+            .actionGet()
 }
+        }  
+                updateExpectedDocStatusCounter(expectedSearchResponseStatusStats, item.getFailure());
+            Arrays.equals(
+        int failureCount = randomIntBetween(0, 50);
+        ensureGreen();  
+                expectedSearchResponseStatusStats.getSearchResponseStatusCounter(),  
+    }  

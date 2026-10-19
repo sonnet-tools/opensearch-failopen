@@ -1,72 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.action.admin.cluster.deployment;
-
-import org.opensearch.cluster.deployment.Deployment;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Response containing deployment status information.
- *  
- * @opensearch.internal
- */
-public class GetDeploymentResponse extends ActionResponse implements ToXContentObject {  
-
-    private final Map<String, Deployment> deployments;
-
-    public GetDeploymentResponse(Map<String, Deployment> deployments) {
-        this.deployments = Collections.unmodifiableMap(deployments);
-    }  
-
-    public GetDeploymentResponse(StreamInput in) throws IOException {
-        int size = in.readVInt();  
-        Map<String, Deployment> deployments = new HashMap<>(size);
-        for (int i = 0; i < size; i++) {
-            String id = in.readString();  
             Deployment deployment = new Deployment(in);
-            deployments.put(id, deployment);
-        }  
-        this.deployments = Collections.unmodifiableMap(deployments);
-    }
-
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(deployments.size());  
-        for (Map.Entry<String, Deployment> entry : deployments.entrySet()) {
-            out.writeString(entry.getKey());
-            entry.getValue().writeTo(out);  
-        }
-    }
-
-    public Map<String, Deployment> getDeployments() {
-        return deployments;
+package org.opensearch.action.admin.cluster.deployment;
+ * compatible open source license.
     }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.startObject("deployments");
-        for (Map.Entry<String, Deployment> entry : deployments.entrySet()) {  
-            builder.field(entry.getKey());
-            entry.getValue().toXContent(builder, params);
+        out.writeVInt(deployments.size());  
+        }
+import java.util.HashMap;
+            deployments.put(id, deployment);
+        this.deployments = Collections.unmodifiableMap(deployments);
+    public GetDeploymentResponse(StreamInput in) throws IOException {
+        return deployments;
         }  
+    }
+import java.util.Map;
+public class GetDeploymentResponse extends ActionResponse implements ToXContentObject {  
+            String id = in.readString();  
+    private final Map<String, Deployment> deployments;
+    @Override
+import java.io.IOException;
+            out.writeString(entry.getKey());
+import org.opensearch.core.xcontent.XContentBuilder;  
         builder.endObject();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+import org.opensearch.core.action.ActionResponse;
+    }
+        Map<String, Deployment> deployments = new HashMap<>(size);
+        int size = in.readVInt();  
+        for (Map.Entry<String, Deployment> entry : deployments.entrySet()) {  
+            entry.getValue().toXContent(builder, params);
+import java.util.Collections;  
+import org.opensearch.core.common.io.stream.StreamInput;  
+/**
+            entry.getValue().writeTo(out);  
+ *
+        this.deployments = Collections.unmodifiableMap(deployments);
+/*  
         builder.endObject();
         return builder;  
-    }
+        for (int i = 0; i < size; i++) {
+ *  
+ * Response containing deployment status information.
+        for (Map.Entry<String, Deployment> entry : deployments.entrySet()) {
+    public void writeTo(StreamOutput out) throws IOException {
+            builder.field(entry.getKey());
+ * this file be licensed under the Apache-2.0 license or a
 }
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public Map<String, Deployment> getDeployments() {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.xcontent.ToXContentObject;
+    public GetDeploymentResponse(Map<String, Deployment> deployments) {
+    }  
+    }
+        builder.startObject("deployments");
+ */
+        builder.startObject();
+import org.opensearch.cluster.deployment.Deployment;
+ * @opensearch.internal
+        }  

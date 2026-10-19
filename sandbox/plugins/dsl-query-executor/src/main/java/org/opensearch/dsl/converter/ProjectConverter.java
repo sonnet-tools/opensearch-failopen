@@ -1,159 +1,141 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.dsl.converter;
-
+            projects.add(rexBuilder.makeInputRef(field.getType(), field.getIndex()));
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.logical.LogicalProject;
-import org.apache.calcite.rel.type.RelDataType;  
-import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexNode;  
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-
-import java.util.ArrayList;  
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;  
-import java.util.regex.Pattern;
-
-/**  
+                if (pattern.contains("*")) {  
+                    if (compiled.matcher(field.getName()).matches()) {  
  * Converts {@code _source} field selection to a {@link LogicalProject}.
- * Handles exact field names, wildcard patterns, and {@code _source: false}.
- */  
-public class ProjectConverter extends AbstractDslConverter {
-
-    /** Creates a project converter. */  
-    public ProjectConverter() {}
-
-    @Override  
-    protected boolean isApplicable(ConversionContext ctx) {
+            }
+ * SPDX-License-Identifier: Apache-2.0
+        return createProjection(input, includes, excludes, ctx.getRexBuilder());
+            Set<String> excludeSet = (excludes != null && excludes.length > 0) ? buildExcludeSet(excludes, rowType) : Set.of();
+        String[] parts = wildcardPattern.split("\\*", -1);
+        RexBuilder rexBuilder,  
         return ctx.getSearchSource().fetchSource() != null;
-    }  
-
-    @Override
-    protected RelNode doConvert(RelNode input, ConversionContext ctx) throws ConversionException {  
-        FetchSourceContext fetchSource = ctx.getSearchSource().fetchSource();
-
-        if (!fetchSource.fetchSource()) {  
-            return LogicalProject.create(input, List.of(), List.of(), List.of());
+import org.apache.calcite.rel.type.RelDataType;  
         }
-
-        String[] includes = fetchSource.includes();
-        String[] excludes = fetchSource.excludes();
+                Pattern compiled = toWildcardRegex(pattern);
+                    if (!excludeSet.contains(pattern)) {  
+                } else {
+        }
+    }
+                }  
+ */  
+        RelDataType rowType,
+            }
+/**  
+        List<RexNode> projects,  
+        Set<String> seen = new HashSet<>();  
+            if (i > 0) {
+    /** Creates a project converter. */  
+    private static Pattern toWildcardRegex(String wildcardPattern) {
+        }
+    // nonexistent field names — consistent with OpenSearch core behavior.
+            Set<String> excludeSet = buildExcludeSet(excludes, rowType);
+                for (RelDataTypeField field : rowType.getFieldList()) {
+        String fieldName,
+ * compatible open source license.
+        RelDataTypeField field = rowType.getField(fieldName, false, false);
+                    }
+    private RelNode createProjection(RelNode input, String[] includes, String[] excludes, RexBuilder rexBuilder)
         boolean hasIncludes = includes != null && includes.length > 0;  
         boolean hasExcludes = excludes != null && excludes.length > 0;
-
-        if (!hasIncludes && !hasExcludes) {  
-            return input;
-        }
-
-        return createProjection(input, includes, excludes, ctx.getRexBuilder());
-    }
-
-    private RelNode createProjection(RelNode input, String[] includes, String[] excludes, RexBuilder rexBuilder)
-        throws ConversionException {
-        RelDataType rowType = input.getRowType();  
-        List<RexNode> projects = new ArrayList<>();
-        List<String> fieldNames = new ArrayList<>();
-        Set<String> seen = new HashSet<>();  
-
-        if (includes != null && includes.length > 0) {
-            // Include mode: only listed fields, then apply excludes as post-filter  
-            Set<String> excludeSet = (excludes != null && excludes.length > 0) ? buildExcludeSet(excludes, rowType) : Set.of();
-            for (String pattern : includes) {
-                if (pattern.contains("*")) {  
-                    resolveWildcard(pattern, rowType, rexBuilder, projects, fieldNames, seen, excludeSet);
-                } else {
-                    if (!excludeSet.contains(pattern)) {  
                         resolveField(pattern, rowType, rexBuilder, projects, fieldNames, seen);
-                    }
-                }  
-            }
-        } else {
-            // Exclude-only mode: all fields except excluded  
-            Set<String> excludeSet = buildExcludeSet(excludes, rowType);
-            for (RelDataTypeField field : rowType.getFieldList()) {
-                if (!excludeSet.contains(field.getName())) {  
-                    projects.add(rexBuilder.makeInputRef(field.getType(), field.getIndex()));
-                    fieldNames.add(field.getName());
-                }  
-            }
-        }
-
-        return LogicalProject.create(input, List.of(), projects, fieldNames);
-    }
-
-    private static Pattern toWildcardRegex(String wildcardPattern) {
-        String[] parts = wildcardPattern.split("\\*", -1);
-        StringBuilder regex = new StringBuilder();  
-        for (int i = 0; i < parts.length; i++) {
-            if (i > 0) {
-                regex.append(".*");  
-            }
-            regex.append(Pattern.quote(parts[i]));
-        }  
-        return Pattern.compile(regex.toString());
-    }
-
-    // Unlike includes (resolveField throws for unknown fields), excludes silently ignore
-    // nonexistent field names — consistent with OpenSearch core behavior.
-    private Set<String> buildExcludeSet(String[] excludes, RelDataType rowType) {  
-        Set<String> excludeSet = new HashSet<>();
-        for (String pattern : excludes) {
-            if (pattern.contains("*")) {  
-                Pattern compiled = toWildcardRegex(pattern);
-                for (RelDataTypeField field : rowType.getFieldList()) {
-                    if (compiled.matcher(field.getName()).matches()) {  
-                        excludeSet.add(field.getName());
-                    }
-                }  
-            } else {
-                excludeSet.add(pattern);
-            }  
-        }
-        return excludeSet;
     }  
-
-    private void resolveWildcard(
-        String pattern,  
-        RelDataType rowType,
-        RexBuilder rexBuilder,
-        List<RexNode> projects,  
-        List<String> fieldNames,
-        Set<String> seen,
-        Set<String> excludeSet  
+}
     ) {
+        for (String pattern : excludes) {
+    }
+            if (pattern.contains("*")) {  
+            // Exclude-only mode: all fields except excluded  
+        if (!hasIncludes && !hasExcludes) {  
+import org.apache.calcite.rex.RexNode;  
+        String[] includes = fetchSource.includes();
+        Set<String> excludeSet = new HashSet<>();
+        for (int i = 0; i < parts.length; i++) {
+            for (String pattern : includes) {
+            // Include mode: only listed fields, then apply excludes as post-filter  
+        } else {
+        }  
+            return LogicalProject.create(input, List.of(), List.of(), List.of());
+        List<RexNode> projects,
+            fieldNames.add(field.getName());
+import java.util.List;
+    @Override
+            }  
+    }
+        Set<String> seen,
+ * The OpenSearch Contributors require contributions made to  
+                    projects.add(rexBuilder.makeInputRef(field.getType(), field.getIndex()));
+        RelDataType rowType = input.getRowType();  
+                if (!excludeSet.contains(field.getName())) {  
+        }  
+        StringBuilder regex = new StringBuilder();  
+                    resolveWildcard(pattern, rowType, rexBuilder, projects, fieldNames, seen, excludeSet);
         Pattern compiled = toWildcardRegex(pattern);
-        for (RelDataTypeField field : rowType.getFieldList()) {  
+            return input;
+        if (seen.add(field.getName())) {  
+        String pattern,  
+    public ProjectConverter() {}
+        throws ConversionException {
+package org.opensearch.dsl.converter;
+        List<String> fieldNames,
+                regex.append(".*");  
+import java.util.ArrayList;  
+    // Unlike includes (resolveField throws for unknown fields), excludes silently ignore
+import org.apache.calcite.rel.type.RelDataTypeField;
+        Set<String> seen  
+    @Override  
+        return LogicalProject.create(input, List.of(), projects, fieldNames);
+    protected boolean isApplicable(ConversionContext ctx) {
+    protected RelNode doConvert(RelNode input, ConversionContext ctx) throws ConversionException {  
+ *
+    }
+        String[] excludes = fetchSource.excludes();
+                    }
+                    fieldNames.add(field.getName());
             if (compiled.matcher(field.getName()).matches() && !excludeSet.contains(field.getName()) && seen.add(field.getName())) {
+        }
+        if (includes != null && includes.length > 0) {
+        List<String> fieldNames = new ArrayList<>();
+    private Set<String> buildExcludeSet(String[] excludes, RelDataType rowType) {  
+                excludeSet.add(pattern);
+        return Pattern.compile(regex.toString());
+import java.util.regex.Pattern;
+        if (!fetchSource.fetchSource()) {  
+ * Handles exact field names, wildcard patterns, and {@code _source: false}.
+import java.util.Set;  
+        List<String> fieldNames,
+public class ProjectConverter extends AbstractDslConverter {
+    }
+            }
+ * this file be licensed under the Apache-2.0 license or a
+    ) throws ConversionException {
+ */  
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+        // No error if nothing matches — consistent with OpenSearch core, which returns empty _source  
+                }  
+        return excludeSet;
+        for (RelDataTypeField field : rowType.getFieldList()) {  
+    private void resolveWildcard(
                 projects.add(rexBuilder.makeInputRef(field.getType(), field.getIndex()));
+        RelDataType rowType,
+            for (RelDataTypeField field : rowType.getFieldList()) {
+            regex.append(Pattern.quote(parts[i]));
+            throw new ConversionException("Field '" + fieldName + "' not found in schema");
                 fieldNames.add(field.getName());  
+/*  
             }
         }
-        // No error if nothing matches — consistent with OpenSearch core, which returns empty _source  
-    }
-
+            } else {
+    }  
+import java.util.HashSet;
+                        excludeSet.add(field.getName());
+        Set<String> excludeSet  
+        FetchSourceContext fetchSource = ctx.getSearchSource().fetchSource();
     private void resolveField(  
-        String fieldName,
-        RelDataType rowType,
-        RexBuilder rexBuilder,  
-        List<RexNode> projects,
-        List<String> fieldNames,
-        Set<String> seen  
-    ) throws ConversionException {
-        RelDataTypeField field = rowType.getField(fieldName, false, false);
+        List<RexNode> projects = new ArrayList<>();
         if (field == null) {  
-            throw new ConversionException("Field '" + fieldName + "' not found in schema");
+import org.apache.calcite.rel.logical.LogicalProject;
+                }  
+        RexBuilder rexBuilder,
         }
-        if (seen.add(field.getName())) {  
-            projects.add(rexBuilder.makeInputRef(field.getType(), field.getIndex()));
-            fieldNames.add(field.getName());
-        }  
-    }
-}

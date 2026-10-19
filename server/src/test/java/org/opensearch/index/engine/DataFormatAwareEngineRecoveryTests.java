@@ -1,1107 +1,975 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.NoMergePolicy;  
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.store.Directory;  
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.concurrent.GatedCloseable;  
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.VersionType;  
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.stub.MockDataFormat;  
-import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
-import org.opensearch.index.engine.dataformat.stub.MockDocumentInput;
-import org.opensearch.index.engine.dataformat.stub.MockSearchBackEndPlugin;  
-import org.opensearch.index.engine.exec.commit.Committer;
-import org.opensearch.index.engine.exec.commit.Committer.CommitResult;
-import org.opensearch.index.engine.exec.commit.CommitterFactory;  
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
-import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;  
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.MapperService;  
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.Uid;  
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.ShardPath;  
-import org.opensearch.index.store.FsDirectoryFactory;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.Translog;  
-import org.opensearch.index.translog.TranslogConfig;
-import org.opensearch.index.translog.TranslogStats;
-import org.opensearch.plugins.PluginsService;  
-import org.opensearch.plugins.SearchBackEndPlugin;
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.IndexSettingsModule;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.io.IOException;
-import java.nio.file.Path;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CyclicBarrier;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;  
-import java.util.stream.StreamSupport;
-
-import static org.opensearch.index.engine.EngineTestCase.createParsedDoc;  
-import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-/**
- * Recovery tests for {@link DataFormatAwareEngine}.  
- * Mirrors the recovery test patterns from {@code InternalEngineTests} (L1024-1133)
- * to verify translog replay, checkpoint advancement, and segment creation
- * after engine close/reopen.  
- */
-public class DataFormatAwareEngineRecoveryTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;
-    private Store store;
-    private ShardId shardId;  
-    private AtomicLong primaryTerm;
-    private AtomicLong globalCheckpoint;
-    private MockDataFormat mockDataFormat;  
-    private MockDataFormatPlugin mockPlugin;
-    private Path translogPath;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        shardId = new ShardId(new Index("test", "_na_"), 0);
-        primaryTerm = new AtomicLong(1);
-        globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
-        mockDataFormat = new MockDataFormat("composite", 100L, Set.of());
-        mockPlugin = MockDataFormatPlugin.of(mockDataFormat);
-        threadPool = new TestThreadPool(getClass().getName());  
-        store = createStore();
-        translogPath = createTempDir("translog");
-    }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        try {
-            store.close();
-        } finally {  
-            terminate(threadPool);
         }
-        super.tearDown();  
-    }
-
-    // ---- Committer that persists to Lucene (survives engine reopen) ----  
-
-    /**
-     * A committer that writes commit data back to the Lucene IndexWriter,  
-     * so it survives engine close/reopen. This simulates the production
-     * LuceneCommitter behavior for recovery tests.
-     */  
-    static class PersistentCommitter implements Committer {
-        private final Store store;
-        private volatile Map<String, String> committedData;  
-        private volatile CatalogSnapshot lastCommittedSnapshot;
-        private final long initialCommitGeneration;
-
-        PersistentCommitter(Store store) throws IOException {
-            this.store = store;
-            SegmentInfos segmentInfos = store.readLastCommittedSegmentsInfo();  
-            this.committedData = Map.copyOf(segmentInfos.getUserData());
-            this.initialCommitGeneration = segmentInfos.getGeneration();
-            // Deserialize existing catalog snapshot if present  
-            String serialized = committedData.get(CatalogSnapshot.CATALOG_SNAPSHOT_KEY);
-            if (serialized != null) {
-                this.lastCommittedSnapshot = DataformatAwareCatalogSnapshot.deserializeFromString(  
-                    serialized,
-                    store.shardFormatDirectoryResolver()
-                );  
-                // Carry forward the commit info from the Lucene commit
-                ((DataformatAwareCatalogSnapshot) this.lastCommittedSnapshot).setLastCommitInfo(
-                    segmentInfos.getSegmentsFileName(),  
-                    segmentInfos.getGeneration(),
-                    0L
-                );  
-            }
-        }
-
-        @Override
-        public CommitResult commit(CommitInput commitInput) throws IOException {
-            try (  
-                IndexWriter writer = new IndexWriter(
-                    store.directory(),
-                    new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)  
-                        .setOpenMode(IndexWriterConfig.OpenMode.APPEND)
-                )
-            ) {  
-                writer.setLiveCommitData(commitInput.userData());
-                writer.commit();
-            }  
-            this.committedData = StreamSupport.stream(commitInput.userData().spliterator(), false)
-                .collect(
-                    Collectors.toMap(  
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (existing, replacement) -> replacement, // Merge function for duplicate keys  
-                        HashMap::new
-                    )
-                );  
-            // Store the catalog snapshot if present in commit data
-            String serialized = committedData.get(CatalogSnapshot.CATALOG_SNAPSHOT_KEY);
-            if (serialized != null) {  
-                this.lastCommittedSnapshot = DataformatAwareCatalogSnapshot.deserializeFromString(
-                    serialized,
-                    store.shardFormatDirectoryResolver()  
-                );
-            }
-            return new CommitResult("segments_1", 1L, 0L);  
-        }
-
-        @Override  
-        public Map<String, String> getLastCommittedData() {
-            return committedData;
-        }  
-
-        @Override
-        public CommitStats getCommitStats() {  
-            return null;
-        }
-
-        @Override
-        public List<CatalogSnapshot> listCommittedSnapshots() {
-            if (lastCommittedSnapshot != null) {  
-                return List.of(lastCommittedSnapshot);
-            }
-            // Fresh index — no committed catalog snapshot yet. Provide an initial empty  
-            // snapshot so CatalogSnapshotManager can be constructed (it requires non-empty).
-            DataformatAwareCatalogSnapshot initial = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(
-                0L,  
-                0L,
-                0L,
-                List.of(),  
-                -1L,
-                committedData
-            );  
-            initial.setLastCommitInfo("segments_" + initialCommitGeneration, initialCommitGeneration, 0L);
-            return List.of(initial);
-        }  
-
-        @Override
-        public void deleteCommit(CatalogSnapshot snapshot) {}  
-
-        @Override
-        public boolean isCommitManagedFile(String fileName) {  
-            return false;
-        }
-
-        @Override
-        public byte[] serializeToCommitFormat(CatalogSnapshot catalogSnapshot) throws IOException {
-            return new byte[0];  
-        }
-
-        @Override  
-        public void close() {}
-    }
-
-    // ---- Store and engine creation helpers ----
-
-    private Store createStore() throws IOException {  
-        Directory dir = newDirectory();
-        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
-            "test",  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)  
-                .build()
-        );
-        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));  
-        ShardPath shardPath = new ShardPath(false, path, path, shardId);
-        return new Store(
-            shardId,  
-            indexSettings,
-            dir,
-            new DummyShardLock(shardId),  
-            Store.OnClose.EMPTY,
-            shardPath,
-            new FsDirectoryFactory()  
-        );
-    }
-
-    private void bootstrapStore(Store store, String translogUUID) throws IOException {
-        try (
-            IndexWriter writer = new IndexWriter(  
-                store.directory(),
-                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
-                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)  
-            )
-        ) {
-            Map<String, String> commitData = new HashMap<>();  
-            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
-            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
-            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));  
-            commitData.put(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, "-1");
-            commitData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
-            writer.setLiveCommitData(commitData.entrySet());  
-            writer.commit();
-        }
-    }  
-
-    private DataFormatAwareEngine createEngine() throws IOException {
-        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());  
-        bootstrapStore(store, uuid);
-        return new DataFormatAwareEngine(buildEngineConfig());
-    }  
-
-    private DataFormatAwareEngine reopenEngine() throws IOException {
-        return new DataFormatAwareEngine(buildEngineConfig());  
-    }
-
-    private EngineConfig buildEngineConfig() {  
-        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
-            "test",
-            Settings.builder()  
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)  
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
-                .build()
-        );  
-
-        TranslogConfig translogConfig = new TranslogConfig(
-            shardId,  
-            translogPath,
-            indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,  
-            "",
-            false
-        );  
-        DataFormatRegistry registry = createMockRegistry();
-        CommitterFactory committerFactory = config -> new PersistentCommitter(store);
-
-        MapperService mapperService = mock(MapperService.class);
-        when(mapperService.getIndexSettings()).thenReturn(indexSettings);
-        DocumentMapper documentMapper = mock(DocumentMapper.class);  
-        when(documentMapper.getVersion()).thenReturn(1L);
-        when(mapperService.documentMapper()).thenReturn(documentMapper);
-
-        return new EngineConfig.Builder().shardId(shardId)
-            .threadPool(threadPool)
-            .indexSettings(indexSettings)  
-            .store(store)
-            .mergePolicy(NoMergePolicy.INSTANCE)
-            .translogConfig(translogConfig)  
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))
-            .externalRefreshListener(List.of())
-            .internalRefreshListener(List.of())  
-            .globalCheckpointSupplier(globalCheckpoint::get)
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-            .primaryTermSupplier(primaryTerm::get)  
-            .tombstoneDocSupplier(tombstoneDocSupplier())
-            .dataFormatRegistry(registry)
-            .committerFactory(committerFactory)  
-            .mapperService(mapperService)
-            .build();
-    }  
-
-    private DataFormatRegistry createMockRegistry() {
-        PluginsService pluginsService = mock(PluginsService.class);  
-        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(mockPlugin));
-        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(
-            List.of(new MockSearchBackEndPlugin(List.of(mockDataFormat.name())))  
-        );
-        return new DataFormatRegistry(pluginsService);
-    }  
-
-    private Engine.Index indexOp(String id) {
-        ParsedDocument doc = createParsedDocWithInput(id);  
-        return new Engine.Index(
-            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
-            doc,  
-            SequenceNumbers.UNASSIGNED_SEQ_NO,
-            primaryTerm.get(),
-            Versions.MATCH_ANY,  
-            VersionType.INTERNAL,
-            Engine.Operation.Origin.PRIMARY,
-            System.nanoTime(),  
-            -1,
-            false,
-            SequenceNumbers.UNASSIGNED_SEQ_NO,  
-            0
-        );
-    }  
-
-    private Engine.Index replayOp(Translog.Index translogOp) {
-        ParsedDocument doc = createParsedDocWithInput(translogOp.id());  
-        return new Engine.Index(
-            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
-            doc,  
-            translogOp.seqNo(),
-            translogOp.primaryTerm(),
-            translogOp.version(),  
-            null,
-            Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
-            System.nanoTime(),  
-            translogOp.getAutoGeneratedIdTimestamp(),
-            false,
-            SequenceNumbers.UNASSIGNED_SEQ_NO,  
-            0
-        );
-    }  
-
-    private ParsedDocument createParsedDocWithInput(String id) {
-        ParsedDocument base = createParsedDoc(id, null);  
-        return new ParsedDocument(
-            base.version(),
-            SeqNoFieldMapper.SequenceIDFields.emptySeqID(),  
-            base.id(),
-            base.routing(),
-            base.docs(),  
-            base.source(),
-            base.getMediaType(),
-            null,  
-            new MockDocumentInput()
-        );
-    }  
-
-    private int recoverFromTranslog(DataFormatAwareEngine engine) throws IOException {
-        int recovered = engine.translogManager().recoverFromTranslog(snapshot -> {  
-            int ops = 0;
-            Translog.Operation op;
-            while ((op = snapshot.next()) != null) {  
-                if (op instanceof Translog.Index) {
-                    engine.index(replayOp((Translog.Index) op));
-                    ops++;  
-                }
-            }
-            return ops;  
-        }, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-        // Advance global checkpoint after recovery (simulates single-node cluster)
-        globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
-        return recovered;
-    }
-
-    // ---- Recovery Tests ----
-
-    /**  
-     * Mirrors InternalEngineTests.testTranslogRecoveryDoesNotReplayIntoTranslog (L1024).
-     *
-     * Index docs, close engine (without flush — all ops are in translog only),  
-     * reopen, recover. Verify:
-     * - Translog has uncommitted ops before recovery
-     * - After recovery, ops are committed (flush triggered by onAfterTranslogRecovery)  
-     * - Replayed ops are NOT double-written to translog
-     */
-    public void testTranslogRecoveryDoesNotReplayIntoTranslog() throws IOException {  
-        final int docs = randomIntBetween(1, 32);
-
-        // Index docs and close WITHOUT flush — all ops stay in translog  
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            for (int i = 0; i < docs; i++) {  
-                engine.index(indexOp(Integer.toString(i)));
-            }
-            // Advance global checkpoint to match local (simulates single-node replication)  
-            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
-            // DO NOT flush — close with data only in translog
-        }  
-
-        // Reopen — translog should have all ops as uncommitted
-        try (DataFormatAwareEngine engine = reopenEngine()) {  
-            TranslogStats stats = engine.translogManager().getTranslogStats();
-            assertThat("all ops should be uncommitted in translog", stats.getUncommittedOperations(), equalTo(docs));
-
-            // Recover — this replays ops and triggers flush via onAfterTranslogRecovery
-            int recovered = recoverFromTranslog(engine);
-            assertThat("should recover all docs", recovered, equalTo(docs));  
-
-            // After recovery, checkpoint should advance
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));  
-
-            // Translog should be trimmed after recovery flush
-            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
-            TranslogStats afterStats = engine.translogManager().getTranslogStats();
-            assertThat("translog should be trimmed after recovery flush", afterStats.getUncommittedOperations(), equalTo(0));
-        }  
-    }
-
-    /**  
-     * Mirrors InternalEngineTests.testTranslogRecoveryWithMultipleGenerations (L1059).
-     *
-     * Index docs with random flushes and translog rolls, close, reopen, recover.  
-     * Verify all docs are recovered and checkpoint is correct.
-     */
-    public void testTranslogRecoveryWithMultipleGenerations() throws IOException {  
-        final int docs = randomIntBetween(10, 100);
-
-        try (DataFormatAwareEngine engine = createEngine()) {  
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));  
-                if (rarely()) {
-                    engine.translogManager().rollTranslogGeneration();
-                } else if (rarely()) {  
-                    engine.flush(randomBoolean(), true);
-                }
-            }  
-        }
-
-        // Reopen and recover  
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            int recovered = recoverFromTranslog(engine);
-
-            // Checkpoint must reflect all docs
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));
-            assertThat(engine.getSeqNoStats(-1).getMaxSeqNo(), equalTo((long) docs - 1));  
-
-            // After recovery + refresh, segments should exist in the catalog snapshot
-            engine.refresh("test");  
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                CatalogSnapshot snapshot = ref.get();
-                assertThat("snapshot should have segments after recovery", snapshot.getSegments().size(), greaterThan(0));  
-            }
-        }
-    }  
-
-    /**
-     * Mirrors InternalEngineTests.testRecoveryFromTranslogUpToSeqNo (L1099).  
-     *
+    public void testMultipleFlushRestartCyclesAccumulateData() throws IOException {  
      * Index docs, recover up to a partial seqNo (simulating recovery up to globalCheckpoint).
+            assertThat("translog should be trimmed after recovery flush", afterStats.getUncommittedOperations(), equalTo(0));
+        }
+    public void setUp() throws Exception {
+                    engine.translogManager().rollTranslogGeneration();
+                        failures.incrementAndGet();  
+import java.util.List;
+        super.setUp();  
+            assertThat(commitData.get(Engine.HISTORY_UUID_KEY), org.hamcrest.Matchers.notNullValue());
+        @Override
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
+     * must see the accumulated data from all prior lifecycles.
+    }
+            // The committed local checkpoint should be at flushedDocs - 1  
+            new FsDirectoryFactory()  
+ * this file be licensed under the Apache-2.0 license or a
+            base.docs(),  
+            System.nanoTime(),  
+import org.opensearch.index.seqno.RetentionLeases;
+        }
+        try (DataFormatAwareEngine engine = createEngine()) {  
+                assertThat("committed snapshot must have format files", filesByFormat.isEmpty(), equalTo(false));
+                    store.directory(),
+ *
      * Verify checkpoint advances only to the recovered seqNo.  
-     */
-    public void testRecoveryFromTranslogUpToSeqNo() throws IOException {
-        final int docs = randomIntBetween(10, 50);  
-
+    /**  
+        final int unflushedDocs = randomIntBetween(5, 20);
+        @Override
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+import org.opensearch.plugins.PluginsService;  
+import org.opensearch.common.unit.TimeValue;
+            translogOp.getAutoGeneratedIdTimestamp(),
+        // Advance global checkpoint after recovery (simulates single-node cluster)
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;
+                    assertThat(op.seqNo(), greaterThanOrEqualTo(0L));  
+        final int totalDocs = flushedDocs + unflushedDocs;
+        );  
+     * Lifecycle: index→flush→close→reopen→index→flush→close→reopen. Each reopen  
         try (DataFormatAwareEngine engine = createEngine()) {
+            BigArrays.NON_RECYCLING_INSTANCE,  
+     */  
+        try (DataFormatAwareEngine engine = createEngine()) {
+            // Translog should be trimmed after recovery flush
+            }
+        // First lifecycle  
+                assertThat(snapshot.getSegments().size(), greaterThan(0));  
+import org.opensearch.test.OpenSearchTestCase;
+            recoverFromTranslog(engine);
+            }
+            }  
+        mockDataFormat = new MockDataFormat("composite", 100L, Set.of());
+            engine.refresh("post-recovery");  
+            // DO NOT flush — close with data only in translog
+        final int initialDocs = randomIntBetween(5, 20);
+            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
+        return new DataFormatRegistry(pluginsService);
+            int recovered = recoverFromTranslog(engine);
+            engine.refresh("before-flush");
+    public void testConcurrentIndexingThenRecoveryPreservesCheckpoint() throws Exception {  
+                engine.index(indexOp(Integer.toString(i)));  
+     */
+        public boolean isCommitManagedFile(String fileName) {  
+            for (int i = 0; i < firstBatch; i++) {
+            }
+                        barrier.await();
+                long totalRows = snapshot.getSegments()
+                long totalRows = snapshot.getSegments()
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+                assertThat("committed snapshot must have segments", snapshot.getSegments().size(), greaterThan(0));
+        final int docs = randomIntBetween(5, 30);
+            // Fresh index — no committed catalog snapshot yet. Provide an initial empty  
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
+            DataformatAwareCatalogSnapshot initial = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(
+        try (DataFormatAwareEngine engine = createEngine()) {  
+     * Without the fix in CatalogSnapshotManager, the afterRefresh callback
+                engine.index(indexOp(Integer.toString(i)));  
+                }
+import org.opensearch.threadpool.ThreadPool;  
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) (initialDocs + newDocs - 1)));
+import java.util.UUID;
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+            Map<String, String> commitData = new HashMap<>();  
+        }
+                        (existing, replacement) -> replacement, // Merge function for duplicate keys  
+                        ops++;
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+            }, engine.getProcessedLocalCheckpoint(), recoverUpTo);  
+                engine.index(indexOp(Integer.toString(i)));
+import org.opensearch.index.IndexSettings;
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo(recoverUpTo));
+    /**
+     * snapshot generations — no reuse or regression.
+            base.routing(),
+                }
+    /**
+            return List.of(initial);
+                List.of(),  
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
+                engine.refresh("refresh-" + r);
+            engine.refresh("post-recovery");
+        }
+     * After recovery and refresh, docStats().getCount() must equal the total number
+            }
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)  
+                writer.commit();
+                        Map.Entry::getValue,
+                    engine.flush(randomBoolean(), true);
+            Settings.builder()
+     */  
+import org.opensearch.index.engine.exec.commit.CommitterFactory;  
+        final int flushedDocs = randomIntBetween(5, 20);  
+            Thread[] threads = new Thread[numThreads];
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+        }
+        final int expectedTotal = accumulatedDocs;  
+            for (int i = 0; i < flushedDocs; i++) {
+                    } catch (Exception e) {
+import org.apache.lucene.index.IndexWriter;
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));
+            }
+            0
+        final int docs = randomIntBetween(5, 20);
+                    segmentInfos.getSegmentsFileName(),  
+                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())  
+            AtomicInteger failures = new AtomicInteger(0);  
+                Map<String, java.util.Collection<String>> filesByFormat = snapshot.getFilesByFormat();  
+        globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
+            engine.flush(false, true);
+     * Mirrors InternalEngineTests.testRecoveryFromTranslogUpToSeqNo (L1099).  
+            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
+            IndexWriter writer = new IndexWriter(  
+                engine.index(indexOp(Integer.toString(i)));
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))
+     * CatalogSnapshot (e.g. the initial commit from {@code store.createEmpty()} or a commit
+            for (int i = 0; i < docs; i++) {
+                    ops++;  
+    }
+            engine.refresh("before-flush");
+            shardId,  
+                if (randomIntBetween(1, 15) == 1) {
+        return new DataFormatAwareEngine(buildEngineConfig());  
+            initial.setLastCommitInfo("segments_" + initialCommitGeneration, initialCommitGeneration, 0L);
+import org.opensearch.index.mapper.IdFieldMapper;
+                }
+    private AtomicLong primaryTerm;
+        try (DataFormatAwareEngine engine = createEngine()) {  
+            for (int c = 0; c < numCycles; c++) {  
+        private final long initialCommitGeneration;
+        }  
+        try (DataFormatAwareEngine engine = reopenEngine()) {  
+     * A committer that writes commit data back to the Lucene IndexWriter,  
+            }
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs));
+                return List.of(lastCommittedSnapshot);
+    private Store store;
+ */  
+/**
+     *
+            }
+                        }
+        @Override
+    public void testTranslogRecoveryWithMultipleGenerations() throws IOException {  
+                engine.index(indexOp(Integer.toString(i)));
+                IndexWriter writer = new IndexWriter(
+            }
+            // After recovery, checkpoint should cover all docs
+            // Advance global checkpoint to match local (simulates single-node replication)  
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));
+            recoverFromTranslog(engine);  
+            for (int r = 0; r < numRefreshes; r++) {  
+            // After recovery, checkpoint should advance
+    }  
+            engine.flush(false, true);  
+    private void bootstrapStore(Store store, String translogUUID) throws IOException {
+        bootstrapStore(store, uuid);
+                    .stream()
+        MapperService mapperService = mock(MapperService.class);
+            // Final checkpoint should reflect all docs  
+                assertThat(result.getResultType(), equalTo(Engine.Result.Type.SUCCESS));  
+            }
+                threads[t] = new Thread(() -> {
+     *
+import org.opensearch.index.mapper.ParsedDocument;
+            recoverFromTranslog(engine);
+            SequenceNumbers.UNASSIGNED_SEQ_NO,  
+        try (DataFormatAwareEngine engine = reopenEngine()) {  
+                )
+     * Verifies no data loss under the mixed workload.
+            false
+                if (op instanceof Translog.Index) {
+            translogOp.seqNo(),
+            return new byte[0];  
+        try (DataFormatAwareEngine engine = createEngine()) {  
+            assertThat("nothing to recover — all committed", recovered, equalTo(0));
+                writer.setLiveCommitData(commitInput.userData());
+    private ShardId shardId;  
+     * Regression test for the CatalogSnapshotManager fix: multiple restart cycles  
+    private Engine.Index replayOp(Translog.Index translogOp) {
+            for (int i = flushedDocs; i < totalDocs; i++) {
+import org.apache.lucene.index.Term;
+    }  
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));  
+                Translog.Operation op;
+ * The OpenSearch Contributors require contributions made to  
+        }
+        }  
+            Store.OnClose.EMPTY,
+                    }  
+     * DFA-specific: After recovery, verify the engine is fully functional —
+                );  
+        final int docs = randomIntBetween(10, 30);
+ * Mirrors the recovery test patterns from {@code InternalEngineTests} (L1024-1133)
+            );  
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+            Thread[] threads = new Thread[numThreads];
+        mockPlugin = MockDataFormatPlugin.of(mockDataFormat);
+            if (serialized != null) {
+            }
+                -1L,
+        try (DataFormatAwareEngine engine = createEngine()) {
+        when(mapperService.getIndexSettings()).thenReturn(indexSettings);
+            engine.refresh("test");  
+     * LuceneCommitter behavior for recovery tests.
+        try (DataFormatAwareEngine engine = createEngine()) {  
+                this.lastCommittedSnapshot = DataformatAwareCatalogSnapshot.deserializeFromString(
+                    count++;
+        final int docs = randomIntBetween(10, 100);
+            return false;
+    // ---- Recovery Tests ----
+        private volatile Map<String, String> committedData;  
+        // Third lifecycle: should have nothing to recover  
+    }
+                    .sum();  
+            }  
+        }
+                engine.index(indexOp(Integer.toString(i)));
+                    .mapToLong(org.opensearch.index.engine.exec.WriterFileSet::numRows)
+                engine.index(indexOp(Integer.toString(i)));  
+                    } catch (Exception e) {
+            }
+        final int docsPerThread = randomIntBetween(10, 25);
+     */
+            engine.refresh("test");
+                CatalogSnapshot snapshot = ref.get();
+import org.opensearch.index.engine.dataformat.stub.MockSearchBackEndPlugin;  
+                    .stream()  
+            int recovered = recoverFromTranslog(engine);
+            engine.refresh("before-flush");
+            assertThat(recovered, equalTo(totalDocs));  
+        // Reopen and recover  
+        ParsedDocument base = createParsedDoc(id, null);  
+            int numRefreshes = randomIntBetween(3, 6);
+                engine.index(indexOp(Integer.toString(i)));
+                });
+            Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
+     * <p>
+            .tombstoneDocSupplier(tombstoneDocSupplier())
+            CyclicBarrier barrier = new CyclicBarrier(numThreads);
+            .committerFactory(committerFactory)  
+ * to verify translog replay, checkpoint advancement, and segment creation
+                assertThat(ref.get().getSegments().size(), greaterThan(0));  
+}
+            }
+import org.opensearch.index.engine.exec.commit.Committer;
             engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
             for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));
-            }  
-            // No flush — close with everything in translog
-        }
-
-        // Recover up to a partial seqNo
-        final long recoverUpTo = randomLongBetween(0, docs - 1);
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            int recovered = engine.translogManager().recoverFromTranslog(snapshot -> {
-                int ops = 0;  
-                Translog.Operation op;
-                while ((op = snapshot.next()) != null) {
-                    if (op instanceof Translog.Index) {  
-                        engine.index(replayOp((Translog.Index) op));
-                        ops++;
-                    }  
-                }
-                return ops;
-            }, engine.getProcessedLocalCheckpoint(), recoverUpTo);  
-
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo(recoverUpTo));
-            assertThat(recovered, equalTo((int) (recoverUpTo + 1)));  
-        }
-    }
-
     /**
-     * DFA-specific: Index docs, flush (commit), index more without flush, close, reopen.
-     * Only the unflushed docs should be replayed from translog.  
-     */
-    public void testRecoveryOnlyReplaysUnflushedOps() throws IOException {
-        final int flushedDocs = randomIntBetween(5, 20);  
-        final int unflushedDocs = randomIntBetween(5, 20);
-
-        try (DataFormatAwareEngine engine = createEngine()) {  
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-
-            // Index and flush — these are committed  
-            for (int i = 0; i < flushedDocs; i++) {
-                engine.index(indexOp(Integer.toString(i)));
-            }  
-            engine.refresh("before-flush");
-            engine.flush(false, true);
-
-            // Index more WITHOUT flush — these are only in translog
-            for (int i = flushedDocs; i < flushedDocs + unflushedDocs; i++) {
-                engine.index(indexOp(Integer.toString(i)));  
-            }
         }
-
-        // Reopen — should only need to replay unflushedDocs
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            TranslogStats stats = engine.translogManager().getTranslogStats();  
-            assertThat("only unflushed ops should be uncommitted", stats.getUncommittedOperations(), equalTo(unflushedDocs));
-
-            // The committed local checkpoint should be at flushedDocs - 1  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) flushedDocs - 1));
-
-            // Recover  
-            int recovered = recoverFromTranslog(engine);
-            assertThat("should recover only unflushed docs", recovered, equalTo(unflushedDocs));
-
-            // After recovery, checkpoint should cover all docs
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) (flushedDocs + unflushedDocs - 1)));
-        }  
+import org.opensearch.index.mapper.MapperService;  
+    /**
+        int firstBatch = randomIntBetween(5, 15);
+    public void testRecoveryFlushWritesCorrectCommitData() throws IOException {  
+                assertThat("all segment generations must be unique", distinctGenerations, equalTo((long) segments.size()));  
+            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
+    private MockDataFormat mockDataFormat;  
+     * Index docs with random flushes and translog rolls, close, reopen, recover.  
+            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
+                            engine.index(indexOp(threadId + "_" + d));  
+    private AtomicLong globalCheckpoint;
+            engine.refresh("flush-1");  
+            }
+            engine.refresh("flush-2");
     }
-
-    /**  
-     * DFA-specific: Verify that after recovery and refresh, the catalog snapshot
-     * contains segments with the correct structure.
-     */  
-    public void testRecoveryProducesValidCatalogSnapshot() throws IOException {
-        final int docs = randomIntBetween(5, 30);
-
+            SequenceNumbers.UNASSIGNED_SEQ_NO,
+        int recovered = engine.translogManager().recoverFromTranslog(snapshot -> {  
+        }
+        }
+            engine.flush(false, true);
+        shardId = new ShardId(new Index("test", "_na_"), 0);
+            for (int i = 0; i < docs; i++) {
+     * with flush each time must correctly propagate the catalog snapshot.
+     * commits without {@code _catalog_snapshot_} get a synthetic initial snapshot seeded  
+            engine.flush(false, true);
+            assertThat("no ops should be recovered", recovered, equalTo(0));  
+        }
+            shardId,  
+import org.opensearch.test.DummyShardLock;
         try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+            // Checkpoint must reflect all docs
+        when(mapperService.documentMapper()).thenReturn(documentMapper);
+                assertThat("snapshot must reflect all docs across lifecycles", totalRows, equalTo((long) expectedTotal));  
+        int secondBatch = randomIntBetween(5, 15);
+            "test",  
+            // Recover — this replays ops and triggers flush via onAfterTranslogRecovery
+        }
+        }
+        final int docs = randomIntBetween(10, 40);
             for (int i = 0; i < docs; i++) {  
-                engine.index(indexOp(Integer.toString(i)));
-            }
-        }  
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            recoverFromTranslog(engine);  
-            engine.refresh("test");
-
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
-                CatalogSnapshot snapshot = ref.get();
-                assertThat(snapshot, org.hamcrest.Matchers.notNullValue());
-                assertThat(snapshot.getSegments().size(), greaterThan(0));  
-
-                // Snapshot should have files for our format
-                Map<String, java.util.Collection<String>> filesByFormat = snapshot.getFilesByFormat();  
-                assertThat("snapshot should have files for the data format", filesByFormat.size(), greaterThanOrEqualTo(1));
-            }
+import java.util.Map;  
+            .mergePolicy(NoMergePolicy.INSTANCE)
+     * an initial empty snapshot with correct lastCommitGeneration so the engine can open.  
+            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
+                assertThat("total rows must equal total docs indexed", totalRows, equalTo((long) docs));
+            // Flush should succeed  
+        DocumentMapper documentMapper = mock(DocumentMapper.class);  
+            for (int i = 0; i < docs; i++) {
+                            engine.index(indexOp(threadId + "_" + d));  
+        return new Engine.Index(
+            for (int i = 0; i < docs; i++) {  
+    }  
+            base.source(),
+            0
+    private DataFormatAwareEngine reopenEngine() throws IOException {
+        }
+        }
+import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
         }  
     }
-
-    /**  
-     * DFA-specific: After recovery, verify the engine is fully functional —
-     * can index new docs, refresh, and flush without errors.
-     */  
-    public void testEngineIsFunctionalAfterRecovery() throws IOException {
-        final int initialDocs = randomIntBetween(5, 20);
-
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+     *  
+import java.util.Set;
+        TranslogConfig translogConfig = new TranslogConfig(
+    /**
+            engine.flush(false, true);
+            // Engine should be fully functional for new writes
+        // Reopen — translog should have all ops as uncommitted
+import java.util.concurrent.atomic.AtomicLong;
+        }
+     * After recovery, each refresh must produce segments with unique generations.  
+     * full seq-no range — confirms no operations were lost during the recovery cycle.
+    public void testDoubleRecovery() throws IOException {
+            this.committedData = Map.copyOf(segmentInfos.getUserData());
+                        Map.Entry::getKey,
+    }
+        int accumulatedDocs = 0;
+        } finally {  
+                engine.index(indexOp(Integer.toString(accumulatedDocs + i)));  
+        private final Store store;
+            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
+                int ops = 0;  
+     *
+            }  
+        super.tearDown();  
+import org.opensearch.Version;
+            TranslogStats afterStats = engine.translogManager().getTranslogStats();
+        );
+            }
+            )
+import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;  
+        // Second lifecycle: recover (flush happens), close  
+    private DataFormatAwareEngine createEngine() throws IOException {
+import org.apache.lucene.index.NoMergePolicy;  
+            try (  
+        }
+                        barrier.await();
+        }
+            SegmentInfos segmentInfos = store.readLastCommittedSegmentsInfo();  
             for (int i = 0; i < initialDocs; i++) {  
                 engine.index(indexOp(Integer.toString(i)));
-            }
-        }  
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            recoverFromTranslog(engine);  
-
-            // Engine should accept new writes after recovery
-            int newDocs = randomIntBetween(5, 20);  
-            for (int i = initialDocs; i < initialDocs + newDocs; i++) {
-                Engine.IndexResult result = engine.index(indexOp(Integer.toString(i)));
-                assertThat(result.getResultType(), equalTo(Engine.Result.Type.SUCCESS));  
-            }
-
-            // Refresh should produce segments  
-            engine.refresh("after-new-writes");
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                assertThat(ref.get().getSegments().size(), greaterThan(0));  
-            }
-
-            // Flush should succeed  
-            engine.flush(false, true);
-
-            // Final checkpoint should reflect all docs  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) (initialDocs + newDocs - 1)));
-        }
+                engine.index(indexOp("post_" + c));
+                // Snapshot should have files for our format
     }  
-
-    /**
-     * DFA-specific: Verify that the committed data after recovery contains  
-     * all required metadata keys for subsequent recovery.
-     */
-    public void testRecoveryFlushWritesCorrectCommitData() throws IOException {  
-        final int docs = randomIntBetween(5, 20);
-
-        try (DataFormatAwareEngine engine = createEngine()) {  
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));  
-            }
-        }
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            recoverFromTranslog(engine);
-            // onAfterTranslogRecovery triggers flush, which writes commit data  
-
-            // Read back the committed data (written by the PersistentCommitter to Lucene)
-            Map<String, String> commitData = store.readLastCommittedSegmentsInfo().getUserData();  
-
-            assertThat(commitData.get(Translog.TRANSLOG_UUID_KEY), org.hamcrest.Matchers.notNullValue());
-            assertThat(commitData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY), equalTo(Long.toString(docs - 1)));  
-            assertThat(commitData.get(SequenceNumbers.MAX_SEQ_NO), equalTo(Long.toString(docs - 1)));
-            assertThat(commitData.get(Engine.HISTORY_UUID_KEY), org.hamcrest.Matchers.notNullValue());
-        }  
-    }
-
-    /**  
-     * Verify double-restart works: index → close → recover → close → recover.
-     * The second recovery should have nothing to replay (since the first recovery flushed).
-     */  
-    public void testDoubleRecovery() throws IOException {
-        final int docs = randomIntBetween(5, 20);
-
-        // First lifecycle: index docs, close without flush
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
-            for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));
-            }  
-        }
-
-        // Second lifecycle: recover (flush happens), close  
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            recoverFromTranslog(engine);
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));  
-        }
-
-        // Third lifecycle: should have nothing to recover  
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            TranslogStats stats = engine.translogManager().getTranslogStats();
-            assertThat("nothing to recover after prior recovery flushed", stats.getUncommittedOperations(), equalTo(0));  
-
-            int recovered = recoverFromTranslog(engine);
-            assertThat("no ops should be recovered", recovered, equalTo(0));  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));
-        }
-    }  
-
-    /**
-     * Regression test: restart with committed data and empty translog.  
-     * The reader managers must be notified about existing committed segments
-     * even though no translog replay or refresh occurs.
-     *  
-     * Without the fix in CatalogSnapshotManager, the afterRefresh callback
-     * would never fire and reader managers would have no open readers.
-     */  
-    public void testReaderManagersInitializedOnRestartWithCommittedData() throws IOException {
-        final int docs = randomIntBetween(5, 20);
-
-        // First lifecycle: index docs, flush (commit), close cleanly
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
-            for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));
-            }  
-            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
-            engine.refresh("before-flush");
-            engine.flush(false, true);  
-            // Everything is committed — translog is empty after flush
-        }
-
-        // Second lifecycle: reopen with committed data, empty translog
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            // No translog ops to replay  
-            int recovered = recoverFromTranslog(engine);
-            assertThat("nothing to recover — all committed", recovered, equalTo(0));
-
-            // The catalog snapshot should have segments from the committed data
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+            null,  
                 CatalogSnapshot snapshot = ref.get();  
-                assertThat("committed snapshot must have segments", snapshot.getSegments().size(), greaterThan(0));
-                // Verify files exist in the snapshot
-                Map<String, java.util.Collection<String>> filesByFormat = snapshot.getFilesByFormat();  
-                assertThat("committed snapshot must have format files", filesByFormat.isEmpty(), equalTo(false));
-            }
-
-            // Engine should be fully functional for new writes
-            Engine.IndexResult result = engine.index(indexOp(Integer.toString(docs)));
-            assertThat(result.getResultType(), equalTo(Engine.Result.Type.SUCCESS));  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs));
-        }
-    }  
-
-    /**
-     * Multi-threaded indexing before close, then recovery. Verifies no sequence  
-     * gaps exist after recovery — the checkpoint must be contiguous.
-     */
-    public void testConcurrentIndexingThenRecoveryPreservesCheckpoint() throws Exception {  
-        final int numThreads = randomIntBetween(2, 4);
-        final int docsPerThread = randomIntBetween(10, 25);
-        final int totalDocs = numThreads * docsPerThread;  
-
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
-
-            CyclicBarrier barrier = new CyclicBarrier(numThreads);
-            AtomicInteger failures = new AtomicInteger(0);  
-
-            Thread[] threads = new Thread[numThreads];
-            for (int t = 0; t < numThreads; t++) {  
-                final int threadId = t;
-                threads[t] = new Thread(() -> {
-                    try {  
-                        barrier.await();
-                        for (int d = 0; d < docsPerThread; d++) {
-                            engine.index(indexOp(threadId + "_" + d));  
-                        }
-                    } catch (Exception e) {
-                        failures.incrementAndGet();  
-                    }
-                });
-                threads[t].start();  
-            }
-            for (Thread t : threads) {
-                t.join();  
-            }
-            assertThat(failures.get(), equalTo(0));
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));  
-        }
-
-        // Reopen and recover — checkpoint must be contiguous with no gaps  
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            int recovered = recoverFromTranslog(engine);
-            assertThat(recovered, equalTo(totalDocs));  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
-
-            // Verify seq-no stats are consistent  
-            assertThat(engine.getSeqNoStats(-1).getMaxSeqNo(), equalTo((long) totalDocs - 1));
-        }
-    }  
-
-    /**
-     * After recovery, subsequent refreshes must produce monotonically increasing  
-     * snapshot generations — no reuse or regression.
-     */
-    public void testSnapshotGenerationAdvancesMonotonicallyAfterRecovery() throws IOException {  
-        final int docs = randomIntBetween(5, 20);
-
-        try (DataFormatAwareEngine engine = createEngine()) {  
+            writer.commit();
+            int recovered = engine.translogManager().recoverFromTranslog(snapshot -> {
             engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));  
-            }
         }
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            recoverFromTranslog(engine);
-
-            long prevGen = -1;
-            int numRefreshes = randomIntBetween(3, 6);
-            for (int r = 0; r < numRefreshes; r++) {  
-                engine.index(indexOp("post_recovery_" + r));
-                engine.refresh("refresh-" + r);
-
-                try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                    long currentGen = ref.get().getGeneration();
-                    assertThat("generation must strictly increase", currentGen, greaterThan(prevGen));  
-                    prevGen = currentGen;
-                }
-            }  
-        }
+        @Override  
     }
-
-    /**
-     * After recovery and refresh, docStats().getCount() must equal the total number
-     * of indexed documents (committed + recovered).  
-     */
-    public void testDocStatsAfterRecoveryReflectsAllDocs() throws IOException {
-        final int flushedDocs = randomIntBetween(5, 15);  
-        final int unflushedDocs = randomIntBetween(5, 15);
-        final int totalDocs = flushedDocs + unflushedDocs;
-
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-
-            for (int i = 0; i < flushedDocs; i++) {
-                engine.index(indexOp(Integer.toString(i)));
-            }  
-            engine.refresh("before-flush");
-            engine.flush(false, true);
-
-            for (int i = flushedDocs; i < totalDocs; i++) {
-                engine.index(indexOp(Integer.toString(i)));
-            }  
-        }
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {  
-            recoverFromTranslog(engine);
-            engine.refresh("post-recovery");
-
-            assertThat(engine.docStats().getCount(), equalTo((long) totalDocs));
-        }
-    }  
-
-    /**
-     * Interleave indexing with random refreshes and flushes, then close and recover.  
-     * Verifies no data loss under the mixed workload.
-     */
-    public void testInterleavedIndexRefreshFlushThenRecover() throws IOException {  
-        final int docs = randomIntBetween(20, 60);
-
-        try (DataFormatAwareEngine engine = createEngine()) {  
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));  
+            int numCycles = randomIntBetween(3, 5);
                 if (randomIntBetween(1, 10) == 1) {
-                    engine.refresh("interleaved-refresh-" + i);
-                }  
-                if (randomIntBetween(1, 15) == 1) {
-                    engine.flush(false, true);
-                }  
+            new MockDocumentInput()
+        final long recoverUpTo = randomLongBetween(0, docs - 1);
+                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)  
+            if (serialized != null) {  
             }
-            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
+        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(mockPlugin));
+        );
+     * - Replayed ops are NOT double-written to translog
+            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+                engine.index(indexOp(Integer.toString(i)));  
+    private Path translogPath;
         }  
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            int recovered = recoverFromTranslog(engine);  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));
-
-            engine.refresh("post-recovery");  
+                    store.shardFormatDirectoryResolver()
+                // Verify files exist in the snapshot
+    }  
+import org.opensearch.index.mapper.Uid;  
+     * catalog snapshot survives and is correctly restored.
+            primaryTerm.get(),
+            indexSettings,
+     * reopen, recover. Verify:
+import org.opensearch.common.util.BigArrays;
+            this.store = store;
+    public void testDocStatsAfterRecoveryReflectsAllDocs() throws IOException {
+     */
+            new DummyShardLock(shardId),  
+        }
             try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+            return committedData;
+            }
+     * Mirrors InternalEngineTests.testTranslogRecoveryDoesNotReplayIntoTranslog (L1024).
+    }  
+                        .setOpenMode(IndexWriterConfig.OpenMode.APPEND)
+            Engine.Operation.Origin.PRIMARY,
+            assertThat(result.getResultType(), equalTo(Engine.Result.Type.SUCCESS));  
+    // ---- Committer that persists to Lucene (survives engine reopen) ----  
+            .store(store)
+     */
+        );  
+                assertThat("total rows must match total docs", totalRows, equalTo((long) totalDocs));  
+            recoverFromTranslog(engine);  
+        );
+    public void testInterleavedIndexRefreshFlushThenRecover() throws IOException {  
+                    new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)  
+            SequenceNumbers.UNASSIGNED_SEQ_NO,  
+            indexSettings,
+     * This mirrors the handling in {@code LuceneCommitter.loadCommittedSnapshots()} where
+            null,
+            // Engine is functional — can index and refresh  
+        ParsedDocument doc = createParsedDocWithInput(id);  
+        @Override
+            translogPath,
+    }  
+            for (int i = 0; i < docs; i++) {
+                final int threadId = t;
+            int recovered = recoverFromTranslog(engine);  
+     * Verify double-restart works: index → close → recover → close → recover.
+            engine.refresh("after-new-writes");
+            }  
+     * - After recovery, ops are committed (flush triggered by onAfterTranslogRecovery)  
+    /**  
+            doc,  
+                Engine.IndexResult result = engine.index(indexOp(Integer.toString(i)));
+        // Bootstrap creates a commit with NO _catalog_snapshot_ key — simulates store.createEmpty()
+    public void tearDown() throws Exception {  
+            }  
+     * even though no translog replay or refresh occurs.
+                }
                 CatalogSnapshot snapshot = ref.get();
                 assertThat(snapshot.getSegments().size(), greaterThan(0));  
-
-                long totalRows = snapshot.getSegments()
-                    .stream()  
-                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
-                    .mapToLong(org.opensearch.index.engine.exec.WriterFileSet::numRows)
-                    .sum();  
-                assertThat("total rows must equal total docs indexed", totalRows, equalTo((long) docs));
-            }
-        }  
-    }
-
-    /**  
-     * After recovery, verify that a newChangesSnapshot contains all ops for the
-     * full seq-no range — confirms no operations were lost during the recovery cycle.
-     */  
-    public void testTranslogSnapshotContainsAllOpsAfterRecovery() throws IOException {
-        final int docs = randomIntBetween(10, 40);
-
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            for (int i = 0; i < docs; i++) {  
-                engine.index(indexOp(Integer.toString(i)));
-            }
-        }  
-
+     * The reader managers must be notified about existing committed segments
+import org.opensearch.index.translog.TranslogConfig;
         try (DataFormatAwareEngine engine = reopenEngine()) {
-            recoverFromTranslog(engine);  
-
-            try (Translog.Snapshot snapshot = engine.newChangesSnapshot("test", 0, docs - 1, false, true)) {
-                int count = 0;  
-                Translog.Operation op;
-                while ((op = snapshot.next()) != null) {
-                    assertThat(op.seqNo(), greaterThanOrEqualTo(0L));  
-                    count++;
-                }
-                assertThat("all ops must be present in translog snapshot after recovery", count, equalTo(docs));  
-            }
-        }
-    }  
-
-    /**
-     * Concurrent indexing followed by flush, then recovery. Verifies the committed  
-     * catalog snapshot survives and is correctly restored.
-     */
-    public void testConcurrentIndexThenFlushAndRecover() throws Exception {  
-        final int numThreads = randomIntBetween(2, 4);
-        final int docsPerThread = randomIntBetween(10, 20);
-        final int totalDocs = numThreads * docsPerThread;  
-
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
-
-            CyclicBarrier barrier = new CyclicBarrier(numThreads);
-            AtomicInteger failures = new AtomicInteger(0);  
-
-            Thread[] threads = new Thread[numThreads];
-            for (int t = 0; t < numThreads; t++) {  
-                final int threadId = t;
-                threads[t] = new Thread(() -> {
-                    try {  
-                        barrier.await();
-                        for (int d = 0; d < docsPerThread; d++) {
-                            engine.index(indexOp(threadId + "_" + d));  
-                        }
-                    } catch (Exception e) {
-                        failures.incrementAndGet();  
-                    }
-                });
-                threads[t].start();  
-            }
-            for (Thread t : threads) {
-                t.join();  
-            }
-            assertThat(failures.get(), equalTo(0));
-
-            engine.refresh("before-flush");
-            engine.flush(false, true);
-            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
-        }
-
-        // Reopen — committed data, empty translog  
-        try (DataFormatAwareEngine engine = reopenEngine()) {
-            int recovered = recoverFromTranslog(engine);
-            assertThat("all committed — nothing to recover from translog", recovered, equalTo(0));  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
-
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
-                CatalogSnapshot snapshot = ref.get();
-                assertThat("committed snapshot must have segments", snapshot.getSegments().size(), greaterThan(0));
-
-                long totalRows = snapshot.getSegments()
-                    .stream()
-                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())  
-                    .mapToLong(org.opensearch.index.engine.exec.WriterFileSet::numRows)
-                    .sum();
-                assertThat("total rows must match total docs", totalRows, equalTo((long) totalDocs));  
-            }
-        }
-    }  
-
-    /**
-     * Regression test for the CatalogSnapshotManager fix: multiple restart cycles  
-     * with flush each time must correctly propagate the catalog snapshot.
-     *
-     * Lifecycle: index→flush→close→reopen→index→flush→close→reopen. Each reopen  
-     * must see the accumulated data from all prior lifecycles.
-     */
-    public void testMultipleFlushRestartCyclesAccumulateData() throws IOException {  
-        int accumulatedDocs = 0;
-
-        // First lifecycle  
-        int firstBatch = randomIntBetween(5, 15);
-        try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
-            for (int i = 0; i < firstBatch; i++) {
+            base.version(),
+import org.opensearch.index.shard.ShardPath;  
                 engine.index(indexOp(Integer.toString(accumulatedDocs + i)));
-            }  
-            accumulatedDocs += firstBatch;
-            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
-            engine.refresh("flush-1");  
-            engine.flush(false, true);
+                    serialized,
+        try (
         }
-
-        // Second lifecycle: recover, add more, flush
-        int secondBatch = randomIntBetween(5, 15);
-        try (DataFormatAwareEngine engine = reopenEngine()) {  
-            recoverFromTranslog(engine);
-            for (int i = 0; i < secondBatch; i++) {
-                engine.index(indexOp(Integer.toString(accumulatedDocs + i)));  
-            }
-            accumulatedDocs += secondBatch;
-            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
-            engine.refresh("flush-2");
-            engine.flush(false, true);
-        }  
-
-        // Third lifecycle: verify accumulated snapshot
-        final int expectedTotal = accumulatedDocs;  
         try (DataFormatAwareEngine engine = reopenEngine()) {
+        DataFormatRegistry registry = createMockRegistry();
             int recovered = recoverFromTranslog(engine);
-            assertThat("all committed — nothing to recover", recovered, equalTo(0));  
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) expectedTotal - 1));
-
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
-                CatalogSnapshot snapshot = ref.get();
-                assertThat(snapshot.getSegments().size(), greaterThan(0));
-
-                long totalRows = snapshot.getSegments()
-                    .stream()
-                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())  
-                    .mapToLong(org.opensearch.index.engine.exec.WriterFileSet::numRows)
-                    .sum();
-                assertThat("snapshot must reflect all docs across lifecycles", totalRows, equalTo((long) expectedTotal));  
-            }
-        }
-    }  
-
-    /**
-     * After recovery, each refresh must produce segments with unique generations.  
-     * No two segments in a snapshot should share the same generation.
-     */
-    public void testSegmentGenerationsAreUniqueAfterRecovery() throws IOException {  
-        final int docs = randomIntBetween(10, 30);
-
-        try (DataFormatAwareEngine engine = createEngine()) {  
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            for (int i = 0; i < docs; i++) {
-                engine.index(indexOp(Integer.toString(i)));  
-            }
-        }
-
-        try (DataFormatAwareEngine engine = reopenEngine()) {
+import org.opensearch.index.translog.TranslogStats;
             recoverFromTranslog(engine);
-
-            // Do multiple refresh cycles
-            int numCycles = randomIntBetween(3, 5);
-            for (int c = 0; c < numCycles; c++) {  
-                engine.index(indexOp("post_" + c));
-                engine.refresh("cycle-" + c);
-            }  
-
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                CatalogSnapshot snapshot = ref.get();  
-                List<org.opensearch.index.engine.exec.Segment> segments = snapshot.getSegments();
-                long distinctGenerations = segments.stream().map(org.opensearch.index.engine.exec.Segment::generation).distinct().count();
-                assertThat("all segment generations must be unique", distinctGenerations, equalTo((long) segments.size()));  
-            }
-        }
-    }  
-
-    /**
-     * Simulates the production scenario where a Lucene commit exists without a serialized  
-     * CatalogSnapshot (e.g. the initial commit from {@code store.createEmpty()} or a commit
-     * written by a non-DFA engine before migration). The PersistentCommitter must synthesize
-     * an initial empty snapshot with correct lastCommitGeneration so the engine can open.  
-     * <p>
-     * This mirrors the handling in {@code LuceneCommitter.loadCommittedSnapshots()} where
-     * commits without {@code _catalog_snapshot_} get a synthetic initial snapshot seeded  
-     * from the on-disk segments_N generation.
-     */
-    public void testEngineOpensWithCommitLackingCatalogSnapshot() throws IOException {  
-        // Bootstrap creates a commit with NO _catalog_snapshot_ key — simulates store.createEmpty()
-        // or a pre-DFA engine commit.
-        try (DataFormatAwareEngine engine = createEngine()) {  
-            // recoverFromTranslog triggers onAfterTranslogRecovery → flush, which writes
-            // the first commit WITH _catalog_snapshot_. But the engine must have opened
-            // successfully from the bootstrap commit that lacked it.  
             engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-
-            // Engine is functional — can index and refresh  
-            for (int i = 0; i < 5; i++) {
-                Engine.IndexResult result = engine.index(indexOp(Integer.toString(i)));
-                assertThat(result.getResultType(), equalTo(Engine.Result.Type.SUCCESS));  
+    public void testEngineOpensWithCommitLackingCatalogSnapshot() throws IOException {  
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+                        for (int d = 0; d < docsPerThread; d++) {
+            }  
             }
-            engine.refresh("test");
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
-                assertThat(ref.get().getSegments().size(), greaterThan(0));
-            }
-        }  
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+     * No two segments in a snapshot should share the same generation.
+        PluginsService pluginsService = mock(PluginsService.class);  
+        // Index docs and close WITHOUT flush — all ops stay in translog  
+     *
+import java.util.HashMap;
+            commitData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
     }
-}
+            assertThat("should recover all docs", recovered, equalTo(docs));  
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
+                    try {  
+     */
+        try (DataFormatAwareEngine engine = createEngine()) {
+            // the first commit WITH _catalog_snapshot_. But the engine must have opened
+                } else if (rarely()) {  
+            SeqNoFieldMapper.SequenceIDFields.emptySeqID(),  
+                assertThat(snapshot, org.hamcrest.Matchers.notNullValue());
+                    .mapToLong(org.opensearch.index.engine.exec.WriterFileSet::numRows)
+        }
+            terminate(threadPool);
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
+        ) {
+    private EngineConfig buildEngineConfig() {  
+            for (Thread t : threads) {
+            assertThat("only unflushed ops should be uncommitted", stats.getUncommittedOperations(), equalTo(unflushedDocs));
+                assertThat("all ops must be present in translog snapshot after recovery", count, equalTo(docs));  
+                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
+        // Reopen and recover — checkpoint must be contiguous with no gaps  
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
+            false,
+     */
+                this.lastCommittedSnapshot = DataformatAwareCatalogSnapshot.deserializeFromString(  
+    }
+        }
+            accumulatedDocs += firstBatch;
+                while ((op = snapshot.next()) != null) {
+                0L,  
+        final int docs = randomIntBetween(5, 20);
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+            // successfully from the bootstrap commit that lacked it.  
+import org.opensearch.index.engine.exec.commit.Committer.CommitResult;
+            int newDocs = randomIntBetween(5, 20);  
+            Engine.IndexResult result = engine.index(indexOp(Integer.toString(docs)));
+    }  
+            .indexSettings(indexSettings)  
+            // The catalog snapshot should have segments from the committed data
+    /**  
+        );
+            assertThat("should recover only unflushed docs", recovered, equalTo(unflushedDocs));
+                store.directory(),
+                    .sum();
+                0L,
+import org.opensearch.core.index.Index;  
+    /**
+    /**  
+            }
+    /**  
+            TranslogStats stats = engine.translogManager().getTranslogStats();
+            store.close();
+    }
+            return ops;  
+            dir,
+        final int unflushedDocs = randomIntBetween(5, 15);
+                try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+                engine.index(indexOp(Integer.toString(i)));
+            .mapperService(mapperService)
+                engine.index(indexOp(Integer.toString(i)));  
+                List<org.opensearch.index.engine.exec.Segment> segments = snapshot.getSegments();
+            assertThat("all committed — nothing to recover", recovered, equalTo(0));  
+        final int docs = randomIntBetween(5, 20);
+            engine.flush(false, true);
+        }
+            while ((op = snapshot.next()) != null) {  
+            assertThat("all ops should be uncommitted in translog", stats.getUncommittedOperations(), equalTo(docs));
+                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())  
+        final int numThreads = randomIntBetween(2, 4);
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+     */
+            for (int i = 0; i < docs; i++) {
+                );
+import java.nio.file.Path;  
+                    engine.refresh("interleaved-refresh-" + i);
+import org.apache.lucene.index.SegmentInfos;
+    /**
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));
+        public byte[] serializeToCommitFormat(CatalogSnapshot catalogSnapshot) throws IOException {
+            // recoverFromTranslog triggers onAfterTranslogRecovery → flush, which writes
+        try (DataFormatAwareEngine engine = createEngine()) {
+     * - Translog has uncommitted ops before recovery
+     * from the on-disk segments_N generation.
+        try (DataFormatAwareEngine engine = createEngine()) {  
+                engine.index(indexOp(Integer.toString(i)));
+                    .sum();
+                    if (op instanceof Translog.Index) {  
+    public void testRecoveryOnlyReplaysUnflushedOps() throws IOException {
+    private DataFormatRegistry createMockRegistry() {
+    /**
+            }  
+                CatalogSnapshot snapshot = ref.get();
+import static org.hamcrest.Matchers.greaterThan;  
+            List.of(new MockSearchBackEndPlugin(List.of(mockDataFormat.name())))  
+            CyclicBarrier barrier = new CyclicBarrier(numThreads);
+                assertThat("committed snapshot must have segments", snapshot.getSegments().size(), greaterThan(0));
+            // Refresh should produce segments  
+            Versions.MATCH_ANY,  
+import java.util.concurrent.atomic.AtomicInteger;
+            for (int i = 0; i < docs; i++) {  
+            engine.refresh("before-flush");
+            for (int i = 0; i < docs; i++) {
+import org.opensearch.common.settings.Settings;  
+    /**
+     */
+    /**  
+        }  
+        }  
+                // Carry forward the commit info from the Lucene commit
+            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
+     * DFA-specific: Verify that after recovery and refresh, the catalog snapshot
+    }  
+            for (int t = 0; t < numThreads; t++) {  
+                CatalogSnapshot snapshot = ref.get();  
+import static org.opensearch.index.engine.EngineTestCase.createParsedDoc;  
+                int count = 0;  
+            assertThat("nothing to recover after prior recovery flushed", stats.getUncommittedOperations(), equalTo(0));  
+     * Concurrent indexing followed by flush, then recovery. Verifies the committed  
+        ParsedDocument doc = createParsedDocWithInput(translogOp.id());  
+        Directory dir = newDirectory();
+     */  
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+            Translog.Operation op;
+import org.opensearch.index.store.FsDirectoryFactory;
+            // No translog ops to replay  
+    /**
+            int recovered = recoverFromTranslog(engine);
+    }  
+                return ops;
+ * Recovery tests for {@link DataFormatAwareEngine}.  
+        // Reopen — should only need to replay unflushedDocs
+            // Index more WITHOUT flush — these are only in translog
+        globalCheckpoint.set(engine.getProcessedLocalCheckpoint());  
+import static org.hamcrest.Matchers.equalTo;
+    public void testEngineIsFunctionalAfterRecovery() throws IOException {
+            .globalCheckpointSupplier(globalCheckpoint::get)
+            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
+            int recovered = recoverFromTranslog(engine);
+            return new CommitResult("segments_1", 1L, 0L);  
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
+            int recovered = recoverFromTranslog(engine);
+    /**
+        final int flushedDocs = randomIntBetween(5, 15);  
+        }
+            .threadPool(threadPool)
+public class DataFormatAwareEngineRecoveryTests extends OpenSearchTestCase {
+     * Multi-threaded indexing before close, then recovery. Verifies no sequence  
+     */
+     * of indexed documents (committed + recovered).  
+            recoverFromTranslog(engine);  
+        public CommitStats getCommitStats() {  
+        }  
+        @Override  
+                    )
+            assertThat("all committed — nothing to recover from translog", recovered, equalTo(0));  
+    public void testTranslogSnapshotContainsAllOpsAfterRecovery() throws IOException {
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+                CatalogSnapshot snapshot = ref.get();
+import org.opensearch.common.concurrent.GatedCloseable;  
+            false,
+            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
+                }  
+        public void deleteCommit(CatalogSnapshot snapshot) {}  
+import org.opensearch.core.index.shard.ShardId;
+import static org.mockito.Mockito.when;  
+            base.id(),
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));  
+                    .mapToLong(org.opensearch.index.engine.exec.WriterFileSet::numRows)
+                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
+        final int totalDocs = numThreads * docsPerThread;  
+     * Interleave indexing with random refreshes and flushes, then close and recover.  
+            }
+     * would never fire and reader managers would have no open readers.
+            engine.flush(false, true);
+            }
+            // Verify seq-no stats are consistent  
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+    // ---- Store and engine creation helpers ----
+            // snapshot so CatalogSnapshotManager can be constructed (it requires non-empty).
+                });
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
+        );
+        final int numThreads = randomIntBetween(2, 4);
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+            }
+        // Recover up to a partial seqNo
+            for (int i = 0; i < secondBatch; i++) {
+            recoverFromTranslog(engine);
+            doc,  
+            }
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+        // First lifecycle: index docs, flush (commit), close cleanly
+import org.opensearch.index.seqno.SequenceNumbers;
+ * after engine close/reopen.  
+            engine.refresh("test");
+            // Recover  
+            translogOp.primaryTerm(),
+        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());  
+import java.io.IOException;
+                final int threadId = t;
+        // Reopen — committed data, empty translog  
+                Engine.IndexResult result = engine.index(indexOp(Integer.toString(i)));
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+            assertThat(engine.getSeqNoStats(-1).getMaxSeqNo(), equalTo((long) totalDocs - 1));
+                    Collectors.toMap(  
+                        failures.incrementAndGet();  
+                .collect(
+            }
+    public void testSnapshotGenerationAdvancesMonotonicallyAfterRecovery() throws IOException {  
+                        HashMap::new
+        // Second lifecycle: recover, add more, flush
+     */
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+        final int docs = randomIntBetween(20, 60);
+     */  
+                threads[t] = new Thread(() -> {
+import org.opensearch.index.store.Store;
+                ((DataformatAwareCatalogSnapshot) this.lastCommittedSnapshot).setLastCommitInfo(
+            }
+            }  
+     */
+                }
+            int recovered = recoverFromTranslog(engine);
+import org.opensearch.test.IndexSettingsModule;  
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
+                long distinctGenerations = segments.stream().map(org.opensearch.index.engine.exec.Segment::generation).distinct().count();
+     * Verify all docs are recovered and checkpoint is correct.
+                assertThat(result.getResultType(), equalTo(Engine.Result.Type.SUCCESS));  
+    public void testRecoveryProducesValidCatalogSnapshot() throws IOException {
+            int recovered = recoverFromTranslog(engine);
+                    engine.flush(false, true);
+            }
+                    0L
+            Settings.builder()  
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+import java.util.stream.Collectors;  
+            assertThat(commitData.get(Translog.TRANSLOG_UUID_KEY), org.hamcrest.Matchers.notNullValue());
+                .build()
+     * Mirrors InternalEngineTests.testTranslogRecoveryWithMultipleGenerations (L1059).
+            // Read back the committed data (written by the PersistentCommitter to Lucene)
+            .internalRefreshListener(List.of())  
+    }  
+            assertThat(commitData.get(SequenceNumbers.MAX_SEQ_NO), equalTo(Long.toString(docs - 1)));
+            accumulatedDocs += secondBatch;
+        return new EngineConfig.Builder().shardId(shardId)
+        return recovered;
+        public Map<String, String> getLastCommittedData() {
+            this.initialCommitGeneration = segmentInfos.getGeneration();
+     * all required metadata keys for subsequent recovery.
+            .primaryTermSupplier(primaryTerm::get)  
+    }  
+     */  
+        }  
+     * DFA-specific: Index docs, flush (commit), index more without flush, close, reopen.
+        }
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) flushedDocs - 1));
+        }
+                        for (int d = 0; d < docsPerThread; d++) {
+                t.join();  
+     * can index new docs, refresh, and flush without errors.
+import java.util.concurrent.CyclicBarrier;  
+                threads[t].start();  
+    public void testRecoveryFromTranslogUpToSeqNo() throws IOException {
+        }
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)  
+                    store.shardFormatDirectoryResolver()  
+            long prevGen = -1;
+                long totalRows = snapshot.getSegments()
+    private MockDataFormatPlugin mockPlugin;
+    private ThreadPool threadPool;
+        final int docs = randomIntBetween(10, 50);  
+                );  
+        @Override
+            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));  
+            // Store the catalog snapshot if present in commit data
+            // Index and flush — these are committed  
+    private Engine.Index indexOp(String id) {
+        public void close() {}
+     * After recovery, subsequent refreshes must produce monotonically increasing  
+                assertThat(ref.get().getSegments().size(), greaterThan(0));
+                    .stream()
+        return new ParsedDocument(
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);  
+     * written by a non-DFA engine before migration). The PersistentCommitter must synthesize
+    static class PersistentCommitter implements Committer {
+            try (Translog.Snapshot snapshot = engine.newChangesSnapshot("test", 0, docs - 1, false, true)) {
+        try (DataFormatAwareEngine engine = reopenEngine()) {  
+        ShardPath shardPath = new ShardPath(false, path, path, shardId);
+                .build()
+        final int docs = randomIntBetween(5, 20);
+    /**
+                assertThat("snapshot should have segments after recovery", snapshot.getSegments().size(), greaterThan(0));  
+                if (rarely()) {
+     * Index docs, close engine (without flush — all ops are in translog only),  
+                committedData
+import org.opensearch.cluster.metadata.IndexMetadata;
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+            if (lastCommittedSnapshot != null) {  
+     * Regression test: restart with committed data and empty translog.  
+import org.opensearch.index.engine.dataformat.stub.MockDocumentInput;
+/*  
+import org.apache.lucene.store.Directory;  
+        }  
+        // First lifecycle: index docs, close without flush
+                engine.index(indexOp(Integer.toString(i)));
+    }
+        final int docsPerThread = randomIntBetween(10, 20);
+            int ops = 0;
+            .dataFormatRegistry(registry)
+        }  
+    }  
+                engine.index(indexOp(Integer.toString(i)));
+        // Third lifecycle: verify accumulated snapshot
+            for (int i = initialDocs; i < initialDocs + newDocs; i++) {
+     * Only the unflushed docs should be replayed from translog.  
+        translogPath = createTempDir("translog");
+                assertThat(snapshot.getSegments().size(), greaterThan(0));
+            Map<String, String> commitData = store.readLastCommittedSegmentsInfo().getUserData();  
+import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+        try (DataFormatAwareEngine engine = createEngine()) {  
+        }
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+        return new Store(
+     * contains segments with the correct structure.
+        );
+        CommitterFactory committerFactory = config -> new PersistentCommitter(store);
+    }  
+            }  
+    }  
+            "",
+            // After recovery + refresh, segments should exist in the catalog snapshot
+            // No flush — close with everything in translog
+package org.opensearch.index.engine;
+            // Do multiple refresh cycles
+        // or a pre-DFA engine commit.
+                engine.index(indexOp(Integer.toString(i)));  
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+                0L,
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) expectedTotal - 1));
+            "test",
+        try {
+        private volatile CatalogSnapshot lastCommittedSnapshot;
+    }
+    public void testConcurrentIndexThenFlushAndRecover() throws Exception {  
+     */
+            String serialized = committedData.get(CatalogSnapshot.CATALOG_SNAPSHOT_KEY);
+            ) {  
+                    }
+            // Engine should accept new writes after recovery
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {  
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+            recoverFromTranslog(engine);
+                    serialized,
+                    engine.index(replayOp((Translog.Index) op));
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+                    segmentInfos.getGeneration(),
+            recoverFromTranslog(engine);
+    private ParsedDocument createParsedDocWithInput(String id) {
+            }  
+        try (DataFormatAwareEngine engine = createEngine()) {
+        final int docs = randomIntBetween(1, 32);
+                CatalogSnapshot snapshot = ref.get();
+            TranslogStats stats = engine.translogManager().getTranslogStats();
+                        }
+import java.util.stream.StreamSupport;
+        try (DataFormatAwareEngine engine = createEngine()) {
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+            -1,
+        }, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+        try (DataFormatAwareEngine engine = createEngine()) {
+     * The second recovery should have nothing to replay (since the first recovery flushed).
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+     * gaps exist after recovery — the checkpoint must be contiguous.
+            assertThat(recovered, equalTo((int) (recoverUpTo + 1)));  
+    }  
+            TranslogStats stats = engine.translogManager().getTranslogStats();  
+import org.apache.lucene.index.IndexWriterConfig;
+    }  
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
+                    prevGen = currentGen;
+            this.committedData = StreamSupport.stream(commitInput.userData().spliterator(), false)
+    }  
+        return new Engine.Index(
+                Translog.Operation op;
+import org.opensearch.threadpool.TestThreadPool;
+            for (int t = 0; t < numThreads; t++) {  
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+                    try {  
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) (flushedDocs + unflushedDocs - 1)));
+            System.nanoTime(),  
+import static org.mockito.Mockito.mock;
+                        engine.index(replayOp((Translog.Index) op));
+            writer.setLiveCommitData(commitData.entrySet());  
+                    }
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+ * SPDX-License-Identifier: Apache-2.0
+                t.join();  
+            base.getMediaType(),
+            for (Thread t : threads) {
+     */
+            VersionType.INTERNAL,
+    public void testTranslogRecoveryDoesNotReplayIntoTranslog() throws IOException {  
+            translogOp.version(),  
+            }
+    public void testReaderManagersInitializedOnRestartWithCommittedData() throws IOException {
+            assertThat(failures.get(), equalTo(0));
+        }  
+        }  
+    private Store createStore() throws IOException {  
+            .externalRefreshListener(List.of())
+        // Second lifecycle: reopen with committed data, empty translog
+    @Override
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) docs - 1));  
+    }
+            assertThat(engine.getSeqNoStats(-1).getMaxSeqNo(), equalTo((long) docs - 1));  
+import org.opensearch.index.engine.dataformat.stub.MockDataFormat;  
+        when(documentMapper.getVersion()).thenReturn(1L);
+        try (DataFormatAwareEngine engine = createEngine()) {
+                assertThat("snapshot should have files for the data format", filesByFormat.size(), greaterThanOrEqualTo(1));
+                threads[t].start();  
+            for (int i = flushedDocs; i < flushedDocs + unflushedDocs; i++) {
+                );  
+            for (int i = 0; i < docs; i++) {
+            }
+            // Deserialize existing catalog snapshot if present  
+            globalCheckpoint.set(engine.getProcessedLocalCheckpoint());
+        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(
+                    long currentGen = ref.get().getGeneration();
+        store = createStore();
+        }
+import org.opensearch.index.translog.Translog;  
+                    assertThat("generation must strictly increase", currentGen, greaterThan(prevGen));  
+                while ((op = snapshot.next()) != null) {
+        public List<CatalogSnapshot> listCommittedSnapshots() {
+            }  
+            assertThat(commitData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY), equalTo(Long.toString(docs - 1)));  
+            AtomicInteger failures = new AtomicInteger(0);  
+        primaryTerm = new AtomicLong(1);
+            }
+    /**
+        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));  
+            assertThat(engine.docStats().getCount(), equalTo((long) totalDocs));
+import org.opensearch.index.VersionType;  
+            // Everything is committed — translog is empty after flush
+ * compatible open source license.
+            }
+                }  
+     * After recovery, verify that a newChangesSnapshot contains all ops for the
+import org.opensearch.common.lucene.uid.Versions;
+import org.opensearch.plugins.SearchBackEndPlugin;
+        threadPool = new TestThreadPool(getClass().getName());  
+import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
+            for (int i = 0; i < 5; i++) {
+            .build();
+        PersistentCommitter(Store store) throws IOException {
+            commitData.put(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, "-1");
+     * so it survives engine close/reopen. This simulates the production
+        @Override
+            return null;
+ */
+        try (DataFormatAwareEngine engine = createEngine()) {
+import org.opensearch.common.lucene.Lucene;
+        }
+                Map<String, java.util.Collection<String>> filesByFormat = snapshot.getFilesByFormat();  
+     */  
+        }  
+    @Override
+        }  
+            assertThat(failures.get(), equalTo(0));
+    private int recoverFromTranslog(DataFormatAwareEngine engine) throws IOException {
+        try (DataFormatAwareEngine engine = reopenEngine()) {
+            for (int i = 0; i < flushedDocs; i++) {
+        final int totalDocs = numThreads * docsPerThread;  
+     * DFA-specific: Verify that the committed data after recovery contains  
+     * Simulates the production scenario where a Lucene commit exists without a serialized  
+import org.opensearch.index.mapper.DocumentMapper;
+                engine.refresh("cycle-" + c);
+        return new DataFormatAwareEngine(buildEngineConfig());
+    public void testSegmentGenerationsAreUniqueAfterRecovery() throws IOException {  
+            }
+            String serialized = committedData.get(CatalogSnapshot.CATALOG_SNAPSHOT_KEY);
+            // onAfterTranslogRecovery triggers flush, which writes commit data  
+            .translogConfig(translogConfig)  
+                engine.index(indexOp("post_recovery_" + r));
+            shardPath,
+        public CommitResult commit(CommitInput commitInput) throws IOException {

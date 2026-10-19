@@ -1,75 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.common.util;
-
 import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;
-
-import java.util.Locale;
-
-public class LocaleUtilsTests extends OpenSearchTestCase {  
-
-    public void testIllegalLang() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("yz"));  
-        assertThat(e.getMessage(), Matchers.containsString("Unknown language: yz"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("yz-CA"));  
-        assertThat(e.getMessage(), Matchers.containsString("Unknown language: yz"));
-    }
-
-    public void testIllegalCountry() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("en-YZ"));
-        assertThat(e.getMessage(), Matchers.containsString("Unknown country: YZ"));  
-
-        e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("en-YZ-foobar"));
-        assertThat(e.getMessage(), Matchers.containsString("Unknown country: YZ"));  
-    }
-
-    public void testIllegalNumberOfParts() {  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("en-US-foo-bar"));
-        assertThat(e.getMessage(), Matchers.containsString("Locales can have at most 3 parts but got 4"));
-    }  
-
-    public void testUnderscores() {
-        Locale locale1 = LocaleUtils.parse("fr_FR");  
-        Locale locale2 = LocaleUtils.parse("fr-FR");
-        assertEquals(locale2, locale1);
-    }  
-
-    public void testSimple() {
-        assertEquals(Locale.FRENCH, LocaleUtils.parse("fr"));  
-        assertEquals(Locale.FRANCE, LocaleUtils.parse("fr-FR"));
         assertEquals(Locale.ROOT, LocaleUtils.parse("root"));
-        assertEquals(Locale.ROOT, LocaleUtils.parse(""));  
-    }
+public class LocaleUtilsTests extends OpenSearchTestCase {  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("en-US-foo-bar"));
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(e.getMessage(), Matchers.containsString("Unknown country: YZ"));  
+        assertEquals(locale2, locale1);
+    public void testIllegalNumberOfParts() {  
+    }  
+    public void testUnderscores() {
+        assertThat(e.getMessage(), Matchers.containsString("Unknown language: yz"));
+        e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("yz-CA"));  
+ */  
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
 }
+        assertThat(e.getMessage(), Matchers.containsString("Unknown language: yz"));
+        assertThat(e.getMessage(), Matchers.containsString("Unknown country: YZ"));  
+    }  
+    }
+        assertThat(e.getMessage(), Matchers.containsString("Locales can have at most 3 parts but got 4"));
+ * under the License.  
+ * You may obtain a copy of the License at  
+ * this work for additional information regarding copyright
+        assertEquals(Locale.FRANCE, LocaleUtils.parse("fr-FR"));
+ * license agreements. See the NOTICE file distributed with
+import java.util.Locale;
+        assertEquals(Locale.FRENCH, LocaleUtils.parse("fr"));  
+        Locale locale1 = LocaleUtils.parse("fr_FR");  
+ * specific language governing permissions and limitations
+ * SPDX-License-Identifier: Apache-2.0
+ * software distributed under the License is distributed on an
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("yz"));  
+ */
+package org.opensearch.common.util;
+    }
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("en-YZ"));
+ * The OpenSearch Contributors require contributions made to  
+ *  
+/*
+ * KIND, either express or implied.  See the License for the
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertEquals(Locale.ROOT, LocaleUtils.parse(""));  
+/*  
+        Locale locale2 = LocaleUtils.parse("fr-FR");
+    public void testIllegalLang() {
+ * Unless required by applicable law or agreed to in writing,
+import org.hamcrest.Matchers;
+ * not use this file except in compliance with the License.
+ *
+    public void testSimple() {
+ *
+        e = expectThrows(IllegalArgumentException.class, () -> LocaleUtils.parse("en-YZ-foobar"));
+ * compatible open source license.
+    public void testIllegalCountry() {
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+ * ownership. Elasticsearch licenses this file to you under  

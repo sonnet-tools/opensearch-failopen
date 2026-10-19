@@ -1,64 +1,55 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.wlm.action;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.cluster.metadata.WorkloadGroup;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-
-/**  
- * Request for get WorkloadGroup
- *
- * @opensearch.experimental  
- */
-public class GetWorkloadGroupRequest extends ClusterManagerNodeReadRequest<GetWorkloadGroupRequest> {
-    final String name;  
-
-    /**
-     * Default constructor for GetWorkloadGroupRequest  
-     * @param name - name for the WorkloadGroup to get
-     */
-    public GetWorkloadGroupRequest(String name) {  
-        this.name = name;
-    }
-
-    /**
-     * Constructor for GetWorkloadGroupRequest
-     * @param in - A {@link StreamInput} object  
-     */
-    public GetWorkloadGroupRequest(StreamInput in) throws IOException {
-        super(in);  
-        name = in.readOptionalString();
-    }
-
-    @Override
     public ActionRequestValidationException validate() {
-        if (name != null) {  
+    }
+     * Default constructor for GetWorkloadGroupRequest  
+    @Override
+    final String name;  
             WorkloadGroup.validateName(name);
-        }
-        return null;  
     }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeOptionalString(name);  
-    }
-
     /**  
      * Name getter
-     */
-    public String getName() {  
-        return name;
+    @Override  
+        out.writeOptionalString(name);  
+    public GetWorkloadGroupRequest(StreamInput in) throws IOException {
     }
+        this.name = name;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+        super(in);  
+     * @param in - A {@link StreamInput} object  
+    public String getName() {  
+    public GetWorkloadGroupRequest(String name) {  
+package org.opensearch.plugin.wlm.action;
+     * @param name - name for the WorkloadGroup to get
+import org.opensearch.action.ActionRequestValidationException;
+        }
+ * compatible open source license.
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+     * Constructor for GetWorkloadGroupRequest
+/*  
+     */
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+        name = in.readOptionalString();
+import java.io.IOException;
+import org.opensearch.cluster.metadata.WorkloadGroup;  
+     */
+    /**
+ * this file be licensed under the Apache-2.0 license or a
+    }
+     */
+ * @opensearch.experimental  
+        return name;
+        return null;  
+ */
+        if (name != null) {  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        super.writeTo(out);
+ * Request for get WorkloadGroup
 }  
+/**  
+ * The OpenSearch Contributors require contributions made to  
+    }
+ *
+ */  
+public class GetWorkloadGroupRequest extends ClusterManagerNodeReadRequest<GetWorkloadGroupRequest> {

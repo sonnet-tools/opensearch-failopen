@@ -1,533 +1,494 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.test;
-
-import org.apache.lucene.tests.util.LuceneTestCase;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.discovery.DiscoveryModule;
-import org.opensearch.discovery.SettingsBasedSeedHostsProvider;
-import org.opensearch.env.Environment;  
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.node.Node.DiscoverySettings;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.MockHttpTransport;
-import org.opensearch.test.NodeConfigurationSource;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.client.Client;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-import java.util.Random;
-import java.util.Set;
-import java.util.function.Function;  
-import java.util.stream.Collectors;
-
-import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFileExists;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFileNotExists;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.not;
-
-/**  
- * Basic test that ensure that the internal cluster reproduces the same
- * configuration given the same seed / input.
- */  
-@LuceneTestCase.SuppressFileSystems("ExtrasFS") // doesn't work with potential multi data path from test cluster yet
-public class InternalTestClusterTests extends OpenSearchTestCase {
-
-    private static Collection<Class<? extends Plugin>> mockPlugins() {
-        return Arrays.asList(getTestTransportPlugin(), MockHttpTransport.TestPlugin.class);
-    }  
-
-    public void testInitializiationIsConsistent() {
-        long clusterSeed = randomLong();  
-        boolean clusterManagerNodes = randomBoolean();
-        int minNumDataNodes = randomIntBetween(0, 9);
-        int maxNumDataNodes = randomIntBetween(minNumDataNodes, 10);  
-        String clusterName = randomRealisticUnicodeOfCodepointLengthBetween(1, 10);
-        NodeConfigurationSource nodeConfigurationSource = NodeConfigurationSource.EMPTY;
-        int numClientNodes = randomIntBetween(0, 10);  
-        String nodePrefix = randomRealisticUnicodeOfCodepointLengthBetween(1, 10);
-
-        Path baseDir = createTempDir();  
-        InternalTestCluster cluster0 = new InternalTestCluster(
-            clusterSeed,
-            baseDir,  
-            clusterManagerNodes,
-            randomBoolean(),
-            minNumDataNodes,  
-            maxNumDataNodes,
-            clusterName,
-            nodeConfigurationSource,  
-            numClientNodes,
-            nodePrefix,
-            Collections.emptyList(),  
-            Function.identity()
-        );
-        InternalTestCluster cluster1 = new InternalTestCluster(  
-            clusterSeed,
-            baseDir,
-            clusterManagerNodes,  
-            randomBoolean(),
-            minNumDataNodes,
-            maxNumDataNodes,  
-            clusterName,
-            nodeConfigurationSource,
-            numClientNodes,  
-            nodePrefix,
-            Collections.emptyList(),
-            Function.identity()  
-        );
-        assertClusters(cluster0, cluster1, true);
-    }  
-
-    /**
-     * a set of settings that are expected to have different values between clusters, even they have been initialized with the same  
-     * base settings.
-     */
-    static final Set<String> clusterUniqueSettings = new HashSet<>();  
-
-    static {
-        clusterUniqueSettings.add(Environment.PATH_HOME_SETTING.getKey());  
-        clusterUniqueSettings.add(Environment.PATH_DATA_SETTING.getKey());
-        clusterUniqueSettings.add(Environment.PATH_REPO_SETTING.getKey());
-        clusterUniqueSettings.add(Environment.PATH_SHARED_DATA_SETTING.getKey());  
-        clusterUniqueSettings.add(Environment.PATH_LOGS_SETTING.getKey());
-    }
-
-    public static void assertClusters(InternalTestCluster cluster0, InternalTestCluster cluster1, boolean checkClusterUniqueSettings) {
-        Settings defaultSettings0 = cluster0.getDefaultSettings();
-        Settings defaultSettings1 = cluster1.getDefaultSettings();  
-        assertSettings(defaultSettings0, defaultSettings1, checkClusterUniqueSettings);
-        assertThat(cluster0.numDataNodes(), equalTo(cluster1.numDataNodes()));
-    }  
-
-    public static void assertSettings(Settings left, Settings right, boolean checkClusterUniqueSettings) {
-        Set<String> keys0 = left.keySet();  
-        Set<String> keys1 = right.keySet();
-        assertThat(
-            "--> left:\n" + left.toDelimitedString('\n') + "\n-->right:\n" + right.toDelimitedString('\n'),  
-            keys0.size(),
-            equalTo(keys1.size())
-        );  
-        for (String key : keys0) {
-            if (clusterUniqueSettings.contains(key) && checkClusterUniqueSettings == false) {
-                continue;  
-            }
-            assertTrue("key [" + key + "] is missing in " + keys1, keys1.contains(key));
-            assertEquals(key, right.get(key), left.get(key));  
-        }
-    }
-
-    public void testBeforeTest() throws Exception {
-        final boolean autoManageMinClusterManagerNodes = randomBoolean();
-        long clusterSeed = randomLong();  
-        final boolean clusterManagerNodes;
-        final int minNumDataNodes;
-        final int maxNumDataNodes;  
-        final int bootstrapClusterManagerNodeIndex;
-        if (autoManageMinClusterManagerNodes) {
-            clusterManagerNodes = randomBoolean();  
-            minNumDataNodes = randomIntBetween(0, 3);
-            maxNumDataNodes = randomIntBetween(minNumDataNodes, 4);
-            bootstrapClusterManagerNodeIndex = -1;  
-        } else {
-            // if we manage min cluster-manager nodes, we need to lock down the number of nodes
-            minNumDataNodes = randomIntBetween(0, 4);  
-            maxNumDataNodes = minNumDataNodes;
-            clusterManagerNodes = false;
-            bootstrapClusterManagerNodeIndex = maxNumDataNodes == 0 ? -1 : randomIntBetween(0, maxNumDataNodes - 1);  
-        }
-        final int numClientNodes = randomIntBetween(0, 2);
-        NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {  
-            @Override
-            public Settings nodeSettings(int nodeOrdinal) {
-                final Settings.Builder settings = Settings.builder()  
-                    .put(DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")
-                    .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())
-                    .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType());  
-                if (autoManageMinClusterManagerNodes == false) {
-                    assert minNumDataNodes == maxNumDataNodes;
-                    assert clusterManagerNodes == false;  
-                }
-                return settings.build();
-            }  
-
-            @Override
-            public Path nodeConfigPath(int nodeOrdinal) {  
-                return null;
-            }
-        };  
-
-        String nodePrefix = "foobar";
-
-        InternalTestCluster cluster0 = new InternalTestCluster(
-            clusterSeed,
-            createTempDir(),  
-            clusterManagerNodes,
-            autoManageMinClusterManagerNodes,
-            minNumDataNodes,  
-            maxNumDataNodes,
-            "clustername",
-            nodeConfigurationSource,  
-            numClientNodes,
-            nodePrefix,
-            mockPlugins(),  
-            Function.identity()
-        );
-        cluster0.setBootstrapClusterManagerNodeIndex(bootstrapClusterManagerNodeIndex);  
-
-        InternalTestCluster cluster1 = new InternalTestCluster(
-            clusterSeed,  
-            createTempDir(),
-            clusterManagerNodes,
-            autoManageMinClusterManagerNodes,  
-            minNumDataNodes,
-            maxNumDataNodes,
-            "clustername",  
-            nodeConfigurationSource,
-            numClientNodes,
-            nodePrefix,  
-            mockPlugins(),
-            Function.identity()
-        );  
-        cluster1.setBootstrapClusterManagerNodeIndex(bootstrapClusterManagerNodeIndex);
-
-        assertClusters(cluster0, cluster1, false);  
         long seed = randomLong();
-        try {
-            {  
-                Random random = new Random(seed);
-                cluster0.beforeTest(random);
-            }  
-            {
-                Random random = new Random(seed);
-                cluster1.beforeTest(random);  
-            }
-            assertArrayEquals(cluster0.getNodeNames(), cluster1.getNodeNames());
-            Iterator<Client> iterator1 = cluster1.getClients().iterator();  
-            for (Client client : cluster0.getClients()) {
-                assertTrue(iterator1.hasNext());
-                Client other = iterator1.next();  
-                assertSettings(client.settings(), other.settings(), false);
-            }
-            cluster0.afterTest();  
-            cluster1.afterTest();
-        } finally {
-            IOUtils.close(cluster0, cluster1);  
-        }
-    }
-
-    public void testDataFolderAssignmentAndCleaning() throws IOException, InterruptedException {
-        long clusterSeed = randomLong();
-        boolean clusterManagerNodes = randomBoolean();  
-        // we need one stable node
-        final int minNumDataNodes = 2;
-        final int maxNumDataNodes = 2;  
-        final int numClientNodes = randomIntBetween(0, 2);
-        final String clusterName1 = "shared1";
-        NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {  
-            @Override
-            public Settings nodeSettings(int nodeOrdinal) {
-                return Settings.builder()  
-                    .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
-                    .putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")
-                    .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())  
-                    .build();
-            }
-
-            @Override
-            public Path nodeConfigPath(int nodeOrdinal) {
-                return null;  
-            }
-        };
-        String nodePrefix = "test";  
-        Path baseDir = createTempDir();
-        InternalTestCluster cluster = new InternalTestCluster(
-            clusterSeed,  
-            baseDir,
-            clusterManagerNodes,
-            true,  
-            minNumDataNodes,
-            maxNumDataNodes,
-            clusterName1,  
-            nodeConfigurationSource,
-            numClientNodes,
-            nodePrefix,  
-            mockPlugins(),
-            Function.identity()
-        );  
-        try {
-            cluster.beforeTest(random());
-            final int originalClusterManagerCount = cluster.numClusterManagerNodes();  
-            final Map<String, Path[]> shardNodePaths = new HashMap<>();
-            for (String name : cluster.getNodeNames()) {
-                shardNodePaths.put(name, getNodePaths(cluster, name));  
-            }
-            String poorNode = randomValueOtherThanMany(
-                n -> originalClusterManagerCount == 1 && n.equals(cluster.getClusterManagerName()),  
-                () -> randomFrom(cluster.getNodeNames())
-            );
-            Path dataPath = getNodePaths(cluster, poorNode)[0];  
-            final Settings poorNodeDataPathSettings = cluster.dataPathSettings(poorNode);
-            final Path testMarker = dataPath.resolve("testMarker");
-            Files.createDirectories(testMarker);  
+                    break;
+            for (String name : cluster.getNodeNames()) {  
             cluster.stopRandomNode(InternalTestCluster.nameFilter(poorNode));
-            assertFileExists(testMarker); // stopping a node half way shouldn't clean data
-
-            final String stableNode = randomFrom(cluster.getNodeNames());
-            final Path stableDataPath = getNodePaths(cluster, stableNode)[0];
-            final Path stableTestMarker = stableDataPath.resolve("stableTestMarker");  
-            assertThat(stableDataPath, not(dataPath));
-            Files.createDirectories(stableTestMarker);
-
-            final String newNode1 = cluster.startNode();
-            assertThat(getNodePaths(cluster, newNode1)[0], not(dataPath));
-            assertFileExists(testMarker); // starting a node should re-use data folders and not clean it  
-            final String newNode2 = cluster.startNode();
-            final Path newDataPath = getNodePaths(cluster, newNode2)[0];
-            final Path newTestMarker = newDataPath.resolve("newTestMarker");  
-            assertThat(newDataPath, not(dataPath));
-            Files.createDirectories(newTestMarker);
-            final String newNode3 = cluster.startNode(poorNodeDataPathSettings);  
-            assertThat(getNodePaths(cluster, newNode3)[0], equalTo(dataPath));
-            cluster.beforeTest(random());
-            assertFileNotExists(newTestMarker); // the cluster should be reset for a new test, cleaning up the extra path we made  
-            assertFileNotExists(testMarker); // a new unknown node used this path, it should be cleaned
-            assertFileExists(stableTestMarker); // but leaving the structure of existing, reused nodes
-            for (String name : cluster.getNodeNames()) {  
-                assertThat("data paths for " + name + " changed", getNodePaths(cluster, name), equalTo(shardNodePaths.get(name)));
-            }
-
-            cluster.beforeTest(random());
-            assertFileExists(stableTestMarker); // but leaving the structure of existing, reused nodes
-            for (String name : cluster.getNodeNames()) {  
-                assertThat("data paths for " + name + " changed", getNodePaths(cluster, name), equalTo(shardNodePaths.get(name)));
-            }
-        } finally {  
-            cluster.close();
-        }
+            nodeConfigurationSource,
     }  
-
-    private Path[] getNodePaths(InternalTestCluster cluster, String name) {
-        final NodeEnvironment nodeEnvironment = cluster.getInstance(NodeEnvironment.class, name);  
-        if (nodeEnvironment.hasNodeFile()) {
-            return nodeEnvironment.nodeDataPaths();
-        } else {  
-            return new Path[0];
-        }
+import org.opensearch.discovery.SettingsBasedSeedHostsProvider;
+            {  
     }  
-
-    public void testDifferentRolesMaintainPathOnRestart() throws Exception {
-        final Path baseDir = createTempDir();  
-        final int numNodes = 5;
-
-        InternalTestCluster cluster = new InternalTestCluster(  
-            randomLong(),
+        }
+            assertEquals(key, right.get(key), left.get(key));  
+ * not use this file except in compliance with the License.
             baseDir,
-            false,  
-            false,
-            0,
-            0,  
-            "test",
-            new NodeConfigurationSource() {
-
-                @Override
-                public Settings nodeSettings(int nodeOrdinal) {
-                    return Settings.builder()  
-                        .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
-                        .put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), 0)
-                        .putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")  
-                        .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())
-                        .build();
-                }  
-
-                @Override
-                public Path nodeConfigPath(int nodeOrdinal) {  
-                    return null;
-                }
-            },  
-            0,
+ * GitHub history for details.
+        try {
+            Files.createDirectories(testMarker);  
+ *  
+ */
             "",
-            mockPlugins(),  
-            Function.identity()
+ * specific language governing permissions and limitations
+            plugins,
+            nodePrefix,  
         );
+            clusterSeed,
+        List<DiscoveryNodeRole> roles = new ArrayList<>();
+                    cluster.rollingRestart(InternalTestCluster.EMPTY_CALLBACK);  
+    private static Collection<Class<? extends Plugin>> mockPlugins() {
+    }  
+                shardNodePaths.put(name, getNodePaths(cluster, name));  
+            true,  
+            "test",  
+import static org.hamcrest.Matchers.equalTo;  
+import java.util.List;
+            Map<DiscoveryNodeRole, Set<String>> pathsPerRole = new HashMap<>();
+        Path baseDir = createTempDir();
+                    .build();
+        } finally {  
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+                    break;
+                @Override
+            nodeConfigurationSource,
+            bootstrapClusterManagerNodeIndex = maxNumDataNodes == 0 ? -1 : randomIntBetween(0, maxNumDataNodes - 1);  
+            Function.identity()
+package org.opensearch.test.test;
+        try {
+                List<String> paths = Arrays.stream(getNodePaths(cluster, name)).map(Path::toString).collect(Collectors.toList());
+    }
+                }  
+            // if we manage min cluster-manager nodes, we need to lock down the number of nodes
+            }
+                    .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())  
+        clusterUniqueSettings.add(Environment.PATH_REPO_SETTING.getKey());
+        clusterUniqueSettings.add(Environment.PATH_HOME_SETTING.getKey());  
+            assertArrayEquals(cluster0.getNodeNames(), cluster1.getNodeNames());
+    }
+            cluster.beforeTest(random());
+        }  
+        } else {
+        );  
+ * Unless required by applicable law or agreed to in writing,
+        if (autoManageMinClusterManagerNodes) {
+            nodePrefix,  
+            }
+                } else if (role == DiscoveryNodeRole.INGEST_ROLE) {
+        cluster0.setBootstrapClusterManagerNodeIndex(bootstrapClusterManagerNodeIndex);  
+            0,
+            @Override
+                    return null;
+import static org.hamcrest.Matchers.not;
+            "clustername",
+        for (int i = 0; i < numNodes; i++) {
+            IOUtils.close(cluster0, cluster1);  
+            final int originalClusterManagerCount = cluster.numClusterManagerNodes();  
+        );
+            this.settings = settings;
+            Collections.emptyList(),  
+import java.util.Collections;
+    public static class NodeAttrCheckPlugin extends Plugin {  
+            );
+                    .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
+            clusterName,
+            @Override
+        final int maxNumDataNodes;  
+import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;  
+                    .putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")  
+        try {
+                    .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())
+                    .putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")
+            baseDir,
+                    node = cluster.startDataOnlyNode();  
+import java.util.Random;
+            }
+            Function.identity()  
+            nodePrefix,
+            clusterSeed,
+        Path baseDir = createTempDir();  
+            nodePrefix,
+        long clusterSeed = randomLong();
+            createTempDir(),  
+ * The OpenSearch Contributors require contributions made to  
+            }  
+            final Settings poorNodeDataPathSettings = cluster.dataPathSettings(poorNode);
+        long clusterSeed = randomLong();  
+import org.opensearch.common.settings.Settings;
+                } else {
+            numClientNodes,
+            assertFileExists(testMarker); // starting a node should re-use data folders and not clean it  
+            maxNumDataNodes,  
+                return null;  
+            0,
+            final Path testMarker = dataPath.resolve("testMarker");
+    /**
+            cluster.fullRestart();  
+            for (String name : cluster.getNodeNames()) {
+                continue;  
+            maxNumDataNodes,
+            assertThat(getNodePaths(cluster, newNode1)[0], not(dataPath));
+    public void testInitializiationIsConsistent() {
+            mockPlugins(),
+                Set<String> rolePaths = pathsPerRole.computeIfAbsent(role, k -> new HashSet<>());  
+            @Override
+            assertFileExists(stableTestMarker); // but leaving the structure of existing, reused nodes
+                }
+                public Path nodeConfigPath(int nodeOrdinal) {  
+            public Path nodeConfigPath(int nodeOrdinal) {  
+            maxNumDataNodes,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            clusterName,
+            baseDir,
+            randomLong(),
+            clusterName1,  
+ * software distributed under the License is distributed on an
+            2,
+            numClientNodes,  
+            }
+        boolean clusterManagerNodes = randomBoolean();
+            }
+ *
+import org.opensearch.plugins.Plugin;  
+            Map<DiscoveryNodeRole, Set<String>> result = new HashMap<>();
+            nodeConfigurationSource,  
+import org.apache.lucene.tests.util.LuceneTestCase;  
+            cluster1.afterTest();
+import org.opensearch.transport.client.Client;
+            clusterManagerNodes = randomBoolean();  
+        };  
+        }
+        String nodePrefix = randomRealisticUnicodeOfCodepointLengthBetween(1, 10);
+/*
+            Function.identity()
+                case 2:
+ */  
+                }  
+            public Settings nodeSettings(int nodeOrdinal) {
+import org.opensearch.test.MockHttpTransport;
+ *
+            minNumDataNodes,
+ * this file be licensed under the Apache-2.0 license or a
+        } finally {
+import java.util.function.Function;  
+                cluster0.beforeTest(random);
+        clusterUniqueSettings.add(Environment.PATH_SHARED_DATA_SETTING.getKey());  
+        InternalTestCluster cluster0 = new InternalTestCluster(
+            }
+        clusterUniqueSettings.add(Environment.PATH_DATA_SETTING.getKey());
+            assertFileExists(stableTestMarker); // but leaving the structure of existing, reused nodes
+            Function.identity()
+            cluster.validateClusterFormed();
+            assertFileExists(testMarker); // stopping a node half way shouldn't clean data
+        };  
+            {
+                    node = cluster.startCoordinatingOnlyNode(Settings.EMPTY);
+                    return Settings.builder()  
+                    cluster.startNode();  
+            assertThat(stableDataPath, not(dataPath));
+/**  
+        );  
+        } finally {  
+                }
+            }  
+                        .build();
+                : randomFrom(clusterManagerRole, DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.INGEST_ROLE);
+            cluster.close();
+                return Settings.builder()  
+        clusterUniqueSettings.add(Environment.PATH_LOGS_SETTING.getKey());
+        };
+        Set<String> keys1 = right.keySet();
+            clusterManagerNodes,
+            return nodeEnvironment.nodeDataPaths();
+            nodeConfigurationSource,
+import java.util.HashSet;  
+        NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {  
+    public void testDataFolderAssignmentAndCleaning() throws IOException, InterruptedException {
+ * the Apache License, Version 2.0 (the "License"); you may
+        );
+            cluster.close();
+                ? clusterManagerRole  // last node and still no cluster-manager
+            bootstrapClusterManagerNodeIndex = -1;  
+            }
+        final boolean autoManageMinClusterManagerNodes = randomBoolean();
+            Collections.emptyList(),
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFileExists;
+        InternalTestCluster cluster = new InternalTestCluster(
+                    cluster.stopRandomDataNode();
+        public Settings additionalSettings() {  
+            return Settings.builder().put("node.attr.dummy", true).build();
+import java.util.HashMap;
+                }
+                    assertTrue(rolePaths.add(path.toString()));
+        Settings defaultSettings1 = cluster1.getDefaultSettings();  
+                    break;
+                return Settings.builder()
+ * under the License.  
+            minNumDataNodes,
+            new NodeConfigurationSource() {
+            true,  
+            minNumDataNodes = randomIntBetween(0, 3);
+            switch (randomInt(2)) {  
+        private final Settings settings;
+ * Modifications Copyright OpenSearch Contributors. See  
+        final int maxNumDataNodes = 2;  
+        }
+        final Path baseDir = createTempDir();  
+        assertThat(cluster0.numDataNodes(), equalTo(cluster1.numDataNodes()));
+        NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {  
+        final int numClientNodes = randomIntBetween(0, 2);
+                () -> randomFrom(cluster.getNodeNames())
+     */
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFileNotExists;
+            final DiscoveryNodeRole role = i == numNodes - 1 && roles.contains(clusterManagerRole) == false  
+            clusterSeed,
+                DiscoveryNode node = cluster.getInstance(ClusterService.class, name).localNode();
+        boolean clusterManagerNodes = randomBoolean();  
+                final DiscoveryNodeRole role = roles.get(i);
+@LuceneTestCase.SuppressFileSystems("ExtrasFS") // doesn't work with potential multi data path from test cluster yet
+ * KIND, either express or implied.  See the License for the
+            false,
+            randomIntBetween(0, (int) roles.stream().filter(role -> role.equals(clusterManagerRole)).count() - 1)
+            assertThat(result.size(), equalTo(pathsPerRole.size()));  
+                return null;
+        }
+            cluster.close();
+import java.nio.file.Path;  
+            for (DiscoveryNodeRole role : result.keySet()) {
+    public void testDifferentRolesMaintainPathOnRestart() throws Exception {
+            randomBoolean(),
+            final String newNode3 = cluster.startNode(poorNodeDataPathSettings);  
+            minNumDataNodes,  
+                final Settings.Builder settings = Settings.builder()  
+            numClientNodes,
+                if (autoManageMinClusterManagerNodes == false) {
+    public static void assertClusters(InternalTestCluster cluster0, InternalTestCluster cluster1, boolean checkClusterUniqueSettings) {
+                        .putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")  
+        List<Class<? extends Plugin>> plugins = new ArrayList<>(mockPlugins());  
+        cluster1.setBootstrapClusterManagerNodeIndex(bootstrapClusterManagerNodeIndex);
+            maxNumDataNodes,
+        );
+ * license agreements. See the NOTICE file distributed with
+                case 0:
+            0,
+                    .put(DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")
+     * Allows to check that the full-cluster restart logic does not copy over plugin-derived settings.
+        final int minNumDataNodes;
+                } else if (node.isDataNode()) {
+        int numClientNodes = randomIntBetween(0, 10);  
+        assertClusters(cluster0, cluster1, false);  
+            Files.createDirectories(newTestMarker);
+        int maxNumDataNodes = randomIntBetween(minNumDataNodes, 10);  
+                    .build();
+import org.opensearch.node.Node.DiscoverySettings;
+            final Path stableDataPath = getNodePaths(cluster, stableNode)[0];
+                Client other = iterator1.next();  
+        public NodeAttrCheckPlugin(Settings settings) {
+            nodePrefix,  
+        }
+import org.opensearch.cluster.service.ClusterService;  
+ * Licensed to Elasticsearch under one or more contributor  
+        final int numNodes = 5;
+    static final Set<String> clusterUniqueSettings = new HashSet<>();  
+/*
+    }  
+        InternalTestCluster cluster = new InternalTestCluster(  
+import java.nio.file.Files;
+        String nodePrefix = "foobar";
+        final int numClientNodes = randomIntBetween(0, 2);
+        String nodePrefix = "test";
+import java.util.Set;
+import java.util.Arrays;
+    public static void assertSettings(Settings left, Settings right, boolean checkClusterUniqueSettings) {
+        if (nodeEnvironment.hasNodeFile()) {
+    private Path[] getNodePaths(InternalTestCluster cluster, String name) {
+        DiscoveryNodeRole clusterManagerRole = randomFrom(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.MASTER_ROLE);  
+            final String stableNode = randomFrom(cluster.getNodeNames());
+            final Map<String, Path[]> shardNodePaths = new HashMap<>();
+            randomBoolean(),
+        String nodePrefix = "test";  
+                assertSettings(client.settings(), other.settings(), false);
+            clusterSeed,  
+            keys0.size(),
+            Iterator<Client> iterator1 = cluster1.getClients().iterator();  
+import java.util.ArrayList;
+import org.opensearch.common.util.io.IOUtils;  
+            cluster0.afterTest();  
+            final Path stableTestMarker = stableDataPath.resolve("stableTestMarker");  
+            clusterManagerNodes,
+        InternalTestCluster cluster0 = new InternalTestCluster(
+        String clusterName = randomRealisticUnicodeOfCodepointLengthBetween(1, 10);
+                if (role == clusterManagerRole) {  
+        int minNumDataNodes = randomIntBetween(0, 9);
+            clusterManagerNodes,
+        Set<String> keys0 = left.keySet();  
+            Files.createDirectories(stableTestMarker);
+                    assert clusterManagerNodes == false;  
+        }
+import org.opensearch.common.network.NetworkModule;
+            nodeConfigurationSource,  
+import org.opensearch.test.NodeConfigurationSource;  
+                n -> originalClusterManagerCount == 1 && n.equals(cluster.getClusterManagerName()),  
+        final boolean clusterManagerNodes;
+            autoManageMinClusterManagerNodes,
+import java.util.stream.Collectors;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.test.InternalTestCluster;
+            @Override
+import java.util.Collection;  
+    }
+            roles.add(role);  
+        final int minNumDataNodes = 2;
+            minNumDataNodes,
+            "--> left:\n" + left.toDelimitedString('\n') + "\n-->right:\n" + right.toDelimitedString('\n'),  
+            public Settings nodeSettings(int nodeOrdinal) {  
+    /**
+                    .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType());  
+            for (String name : cluster.getNodeNames()) {  
+ * this work for additional information regarding copyright
+ */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                } else {  
+                @Override
         cluster.beforeTest(random());  
         // TODO: Remove this line, and replace 'clusterManagerRole' with CLUSTER_MANAGER_ROLE, after MASTER_ROLE is removed.
+    }  
+                    result.computeIfAbsent(DiscoveryNodeRole.INGEST_ROLE, k -> new HashSet<>()).addAll(paths);
         // It is added in 2.0, along with the introduction of CLUSTER_MANAGER_ROLE, aims to test the 2 roles have the same effect.
-        DiscoveryNodeRole clusterManagerRole = randomFrom(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.MASTER_ROLE);  
-        List<DiscoveryNodeRole> roles = new ArrayList<>();
-        for (int i = 0; i < numNodes; i++) {
-            final DiscoveryNodeRole role = i == numNodes - 1 && roles.contains(clusterManagerRole) == false  
-                ? clusterManagerRole  // last node and still no cluster-manager
-                : randomFrom(clusterManagerRole, DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.INGEST_ROLE);
-            roles.add(role);  
-        }
-
+            },  
+            numClientNodes,
+     * a set of settings that are expected to have different values between clusters, even they have been initialized with the same  
+            0,  
+            cluster.beforeTest(random());
         cluster.setBootstrapClusterManagerNodeIndex(  
-            randomIntBetween(0, (int) roles.stream().filter(role -> role.equals(clusterManagerRole)).count() - 1)
+                }  
+            public Path nodeConfigPath(int nodeOrdinal) {
+import org.opensearch.cluster.node.DiscoveryNode;
+                public Settings nodeSettings(int nodeOrdinal) {
+        InternalTestCluster cluster = new InternalTestCluster(
+public class InternalTestClusterTests extends OpenSearchTestCase {
+            final Path newTestMarker = newDataPath.resolve("newTestMarker");  
+                Random random = new Random(seed);
+            }
+        }  
+                    assert minNumDataNodes == maxNumDataNodes;
+        Path baseDir = createTempDir();
+                return settings.build();
         );
-
+            cluster.beforeTest(random());
+import java.util.Iterator;
+        // we need one stable node
+            assertThat(getNodePaths(cluster, newNode3)[0], equalTo(dataPath));
+            clusterManagerNodes = false;
+ * Basic test that ensure that the internal cluster reproduces the same
+        for (String key : keys0) {
+            }
+            minNumDataNodes = randomIntBetween(0, 4);  
+            }
+    }  
+            clusterManagerNodes,
+                        .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())
+                for (Path path : getNodePaths(cluster, node)) {
+    }
+            }
+            String poorNode = randomValueOtherThanMany(
+/*  
+import org.opensearch.env.NodeEnvironment;
+            autoManageMinClusterManagerNodes,  
+            if (settings.get("node.attr.dummy") != null) {
+    static {
+            final String newNode2 = cluster.startNode();
+            createTempDir(),
+                        .put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), 0)
+            assertTrue("key [" + key + "] is missing in " + keys1, keys1.contains(key));
+            return new Path[0];
+            }  
+            cluster.beforeTest(random());
+ * configuration given the same seed / input.
+     * base settings.
+                    cluster.fullRestart();  
+                    result.computeIfAbsent(clusterManagerRole, k -> new HashSet<>()).addAll(paths);
+                    throw new IllegalStateException("get your story straight");
         try {
-            Map<DiscoveryNodeRole, Set<String>> pathsPerRole = new HashMap<>();
-            for (int i = 0; i < numNodes; i++) {  
-                final DiscoveryNodeRole role = roles.get(i);
+                    .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
+            "clustername",  
+                return null;
+            false,  
+            clusterSeed,  
+        return Arrays.asList(getTestTransportPlugin(), MockHttpTransport.TestPlugin.class);
+import org.opensearch.discovery.DiscoveryModule;
+ * compatible open source license.
+            assertFileNotExists(newTestMarker); // the cluster should be reset for a new test, cleaning up the extra path we made  
+                assertTrue(iterator1.hasNext());
+        @Override
+                cluster1.beforeTest(random);  
+                fail("dummy setting already exists");
+                case 1:
+        final String clusterName1 = "shared1";
+}
+            baseDir,
+            }  
+        InternalTestCluster cluster1 = new InternalTestCluster(  
+        long clusterSeed = randomLong();  
+        InternalTestCluster cluster1 = new InternalTestCluster(
+            Function.identity()
+            assertFileNotExists(testMarker); // a new unknown node used this path, it should be cleaned
+    }  
+            for (String name : cluster.getNodeNames()) {  
+        plugins.add(NodeAttrCheckPlugin.class);
+import java.util.Map;  
+                assertThat("path are not the same for " + role, result.get(role), equalTo(pathsPerRole.get(role)));
+        assertThat(
+        } finally {
+            mockPlugins(),  
+     */
                 final String node;
-                if (role == clusterManagerRole) {  
+            numClientNodes,
+            maxNumDataNodes = minNumDataNodes;
+                Random random = new Random(seed);
+import java.io.IOException;
+ * ownership. Elasticsearch licenses this file to you under  
+                    .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())
+                assertThat("data paths for " + name + " changed", getNodePaths(cluster, name), equalTo(shardNodePaths.get(name)));
+import org.opensearch.env.Environment;  
+    public void testTwoNodeCluster() throws Exception {  
+                assertThat("data paths for " + name + " changed", getNodePaths(cluster, name), equalTo(shardNodePaths.get(name)));
+        final NodeEnvironment nodeEnvironment = cluster.getInstance(NodeEnvironment.class, name);  
+        } else {  
+        }
                     node = cluster.startClusterManagerOnlyNode();
                 } else if (role == DiscoveryNodeRole.DATA_ROLE) {
-                    node = cluster.startDataOnlyNode();  
-                } else if (role == DiscoveryNodeRole.INGEST_ROLE) {
-                    node = cluster.startCoordinatingOnlyNode(Settings.EMPTY);
-                } else {  
-                    throw new IllegalStateException("get your story straight");
-                }
-                Set<String> rolePaths = pathsPerRole.computeIfAbsent(role, k -> new HashSet<>());  
-                for (Path path : getNodePaths(cluster, node)) {
-                    assertTrue(rolePaths.add(path.toString()));
-                }  
             }
-            cluster.validateClusterFormed();
-            cluster.fullRestart();  
-
-            Map<DiscoveryNodeRole, Set<String>> result = new HashMap<>();
-            for (String name : cluster.getNodeNames()) {  
-                DiscoveryNode node = cluster.getInstance(ClusterService.class, name).localNode();
-                List<String> paths = Arrays.stream(getNodePaths(cluster, name)).map(Path::toString).collect(Collectors.toList());
-                if (node.isClusterManagerNode()) {  
-                    result.computeIfAbsent(clusterManagerRole, k -> new HashSet<>()).addAll(paths);
-                } else if (node.isDataNode()) {
-                    result.computeIfAbsent(DiscoveryNodeRole.DATA_ROLE, k -> new HashSet<>()).addAll(paths);  
-                } else {
-                    result.computeIfAbsent(DiscoveryNodeRole.INGEST_ROLE, k -> new HashSet<>()).addAll(paths);
-                }  
-            }
-
-            assertThat(result.size(), equalTo(pathsPerRole.size()));  
-            for (DiscoveryNodeRole role : result.keySet()) {
-                assertThat("path are not the same for " + role, result.get(role), equalTo(pathsPerRole.get(role)));
-            }  
-        } finally {
-            cluster.close();
-        }  
-    }
-
-    public void testTwoNodeCluster() throws Exception {  
-        NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {
-            @Override
-            public Settings nodeSettings(int nodeOrdinal) {  
-                return Settings.builder()
-                    .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
-                    .putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file")  
-                    .putList(SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING.getKey())
-                    .build();
-            }  
-
-            @Override
-            public Path nodeConfigPath(int nodeOrdinal) {  
-                return null;
-            }
-        };  
-        String nodePrefix = "test";
-        Path baseDir = createTempDir();
-        List<Class<? extends Plugin>> plugins = new ArrayList<>(mockPlugins());  
-        plugins.add(NodeAttrCheckPlugin.class);
-        InternalTestCluster cluster = new InternalTestCluster(
-            randomLong(),  
-            baseDir,
+            if (clusterUniqueSettings.contains(key) && checkClusterUniqueSettings == false) {
+        assertClusters(cluster0, cluster1, true);
+ */  
             false,
-            true,  
-            2,
-            2,
-            "test",  
-            nodeConfigurationSource,
-            0,
-            nodePrefix,  
-            plugins,
+            for (Client client : cluster0.getClients()) {
+        assertSettings(defaultSettings0, defaultSettings1, checkClusterUniqueSettings);
             Function.identity()
-        );  
-        try {
-            cluster.beforeTest(random());
-            switch (randomInt(2)) {  
-                case 0:
-                    cluster.stopRandomDataNode();
-                    cluster.startNode();  
-                    break;
-                case 1:
-                    cluster.rollingRestart(InternalTestCluster.EMPTY_CALLBACK);  
-                    break;
-                case 2:
-                    cluster.fullRestart();  
-                    break;
-            }
-        } finally {  
-            cluster.close();
-        }
-    }  
-
-    /**
-     * Plugin that adds a simple node attribute as setting and checks if that node attribute is not already defined.  
-     * Allows to check that the full-cluster restart logic does not copy over plugin-derived settings.
-     */
-    public static class NodeAttrCheckPlugin extends Plugin {  
-
-        private final Settings settings;
-
-        public NodeAttrCheckPlugin(Settings settings) {
-            this.settings = settings;
-        }  
-
-        @Override
-        public Settings additionalSettings() {  
-            if (settings.get("node.attr.dummy") != null) {
-                fail("dummy setting already exists");
+            maxNumDataNodes = randomIntBetween(minNumDataNodes, 4);
+            Function.identity()
+            mockPlugins(),  
             }  
-            return Settings.builder().put("node.attr.dummy", true).build();
+            minNumDataNodes,  
         }
-    }  
-}
+        NodeConfigurationSource nodeConfigurationSource = NodeConfigurationSource.EMPTY;
+            @Override
+            nodeConfigurationSource,
+            for (int i = 0; i < numNodes; i++) {  
+            randomLong(),  
+            maxNumDataNodes,
+        Settings defaultSettings0 = cluster0.getDefaultSettings();
+            final Path newDataPath = getNodePaths(cluster, newNode2)[0];
+                        .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
+        );  
+            assertThat(newDataPath, not(dataPath));
+            baseDir,  
+        NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {
+            mockPlugins(),
+            "test",
+    public void testBeforeTest() throws Exception {
+            @Override
+ * You may obtain a copy of the License at  
+                    result.computeIfAbsent(DiscoveryNodeRole.DATA_ROLE, k -> new HashSet<>()).addAll(paths);  
+            clusterManagerNodes,  
+            public Settings nodeSettings(int nodeOrdinal) {
+     * Plugin that adds a simple node attribute as setting and checks if that node attribute is not already defined.  
+            2,
+                if (node.isClusterManagerNode()) {  
+            nodePrefix,
+            equalTo(keys1.size())
+            final String newNode1 = cluster.startNode();
+        final int bootstrapClusterManagerNodeIndex;
+            }
+import org.opensearch.test.OpenSearchTestCase;
+            public Path nodeConfigPath(int nodeOrdinal) {  
+            Path dataPath = getNodePaths(cluster, poorNode)[0];  
+        );  

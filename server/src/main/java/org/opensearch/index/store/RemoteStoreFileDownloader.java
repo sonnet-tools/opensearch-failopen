@@ -1,203 +1,193 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FilterDirectory;  
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.opensearch.action.support.GroupedActionListener;  
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.util.CancellableThreads;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.io.IOException;
-import java.util.Collection;  
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutionException;  
-import java.util.concurrent.Executor;
-
-/**  
- * Helper class to downloads files from a {@link RemoteSegmentStoreDirectory}
- * instance to a local {@link Directory} instance in parallel depending on thread
- * pool size and recovery settings.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "2.11.0")
-public final class RemoteStoreFileDownloader {
-    private final Logger logger;  
-    private final ThreadPool threadPool;
-    private final RecoverySettings recoverySettings;
-
-    public RemoteStoreFileDownloader(ShardId shardId, ThreadPool threadPool, RecoverySettings recoverySettings) {
-        this.logger = Loggers.getLogger(RemoteStoreFileDownloader.class, shardId);
-        this.threadPool = threadPool;  
-        this.recoverySettings = recoverySettings;
-    }
-
-    /**
-     * Copies the given segments from the remote segment store to the given
-     * local directory.  
-     * @param source The remote directory to copy segment files from
-     * @param destination The local directory to copy segment files to
-     * @param toDownloadSegments The list of segment files to download  
-     * @param listener Callback listener to be notified upon completion
-     */
-    public void downloadAsync(  
-        CancellableThreads cancellableThreads,
-        Directory source,
-        Directory destination,  
-        Collection<String> toDownloadSegments,
-        ActionListener<Void> listener
-    ) {  
-        downloadInternal(cancellableThreads, source, destination, null, toDownloadSegments, () -> {}, listener);
-    }
-
-    /**
-     * Copies the given segments from the remote segment store to the given
-     * local directory, while also copying the segments _to_ another remote directory.  
-     * @param source The remote directory to copy segment files from
-     * @param destination The local directory to copy segment files to
-     * @param secondDestination The second remote directory that segment files are  
-     *                          copied to after being copied to the local directory
-     * @param toDownloadSegments The list of segment files to download
-     * @param onFileCompletion A generic runnable that is invoked after each file download.  
-     *                         Must be thread safe as this may be invoked concurrently from
-     *                         different threads.
-     */  
-    public void download(
-        Directory source,
-        Directory destination,  
-        Directory secondDestination,
-        Collection<String> toDownloadSegments,
-        Runnable onFileCompletion  
-    ) throws InterruptedException, IOException {
-        final CancellableThreads cancellableThreads = new CancellableThreads();
-        final PlainActionFuture<Void> listener = PlainActionFuture.newFuture();  
-        downloadInternal(cancellableThreads, source, destination, secondDestination, toDownloadSegments, onFileCompletion, listener);
-        try {
-            listener.get();  
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();  
-            } else if (e.getCause() instanceof IOException) {
-                throw (IOException) e.getCause();
-            }  
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            // If the blocking call on the PlainActionFuture itself is interrupted, then we must  
-            // cancel the asynchronous work we were waiting on
-            cancellableThreads.cancel(e.getMessage());
-            Thread.currentThread().interrupt();  
-            throw e;
-        }
-    }  
-
-    private void downloadInternal(
-        CancellableThreads cancellableThreads,  
-        Directory source,
-        Directory destination,
-        @Nullable Directory secondDestination,  
-        Collection<String> toDownloadSegments,
-        Runnable onFileCompletion,
-        ActionListener<Void> listener  
-    ) {
-        final Queue<String> queue = new ConcurrentLinkedQueue<>(toDownloadSegments);
-        // Choose the minimum of:  
-        // - number of files to download
-        // - max thread pool size
-        // - "indices.recovery.max_concurrent_remote_store_streams" setting  
-        final int threads = Math.min(
-            toDownloadSegments.size(),
-            Math.min(threadPool.info(ThreadPool.Names.REMOTE_RECOVERY).getMax(), recoverySettings.getMaxConcurrentRemoteStoreStreams())  
-        );
-        logger.trace("Starting download of {} files with {} threads", queue.size(), threads);
-        final Directory parallelSource = wrapForParallelPartDownload(source);  
-        final ActionListener<Void> allFilesListener = new GroupedActionListener<>(ActionListener.map(listener, r -> null), threads);
-        for (int i = 0; i < threads; i++) {
-            copyOneFile(cancellableThreads, parallelSource, destination, secondDestination, queue, onFileCompletion, allFilesListener);  
-        }
-    }
-
-    /**
-     * Wraps a {@link RemoteSegmentStoreDirectory} source so that files larger than one part are opened as
-     * {@link ParallelPartInputStream}s: the bytes are fetched as multiple concurrent byte-range requests but are  
-     * still presented sequentially, so the regular {@link Directory#copyFrom} path (and every stats, checksum and
-     * encryption wrapper layered on it) is left untouched. Small files, non remote-store sources and a disabled
-     * budget fall through to the plain single-stream {@link Directory#openInput}.  
-     */
-    private Directory wrapForParallelPartDownload(Directory source) {
-        if (source instanceof RemoteSegmentStoreDirectory == false) {  
-            return source;
-        }
-        final ParallelDownloadPermits permits = recoverySettings.getRemoteStoreParallelDownloadPermits();  
-        if (permits.getMaxPermits() <= 0) {
-            return source;
-        }  
-        final RemoteSegmentStoreDirectory remoteSource = (RemoteSegmentStoreDirectory) source;
-        final long partSize = recoverySettings.getRemoteStoreParallelDownloadPartSize().getBytes();
-        final Executor executor = threadPool.executor(ThreadPool.Names.REMOTE_RECOVERY);  
-        return new FilterDirectory(source) {
-            @Override
-            public IndexInput openInput(String name, IOContext context) throws IOException {  
-                final long fileLength = in.fileLength(name);
-                if (fileLength <= partSize) {
-                    return in.openInput(name, context);  
-                }
-                logger.trace("Downloading file {} of size {} in parts of {} bytes", name, fileLength, partSize);
-                return remoteSource.openParallelInput(name, fileLength, context, partSize, executor, permits);  
-            }
-        };
-    }  
-
-    private void copyOneFile(
-        CancellableThreads cancellableThreads,  
-        Directory source,
-        Directory destination,
-        @Nullable Directory secondDestination,  
-        Queue<String> queue,
-        Runnable onFileCompletion,
-        ActionListener<Void> listener  
-    ) {
-        final String file = queue.poll();
-        if (file == null) {  
             // Queue is empty, so notify listener we are done
+        final String file = queue.poll();
+        final CancellableThreads cancellableThreads = new CancellableThreads();
+                final long fileLength = in.fileLength(name);
+     */
+        downloadInternal(cancellableThreads, source, destination, secondDestination, toDownloadSegments, onFileCompletion, listener);
+     * @param toDownloadSegments The list of segment files to download
+            throw e;
+            throw new RuntimeException(e);
             listener.onResponse(null);
-        } else {  
-            threadPool.executor(ThreadPool.Names.REMOTE_RECOVERY).submit(() -> {
-                logger.trace("Downloading file {}", file);
-                try {  
-                    cancellableThreads.executeIO(() -> {
-                        destination.copyFrom(source, file, file, IOContext.DEFAULT);
-                        logger.trace("Downloaded file {} of size {}", file, destination.fileLength(file));  
-                        onFileCompletion.run();
-                        if (secondDestination != null) {
-                            secondDestination.copyFrom(destination, file, file, IOContext.DEFAULT);  
-                        }
-                    });
-                } catch (Exception e) {  
                     // Clear the queue to stop any future processing, report the failure, then return
-                    queue.clear();
+        final int threads = Math.min(
+ * compatible open source license.
+        return new FilterDirectory(source) {
+import org.opensearch.action.support.GroupedActionListener;  
                     listener.onFailure(e);  
-                    return;
-                }
-                copyOneFile(cancellableThreads, source, destination, secondDestination, queue, onFileCompletion, listener);  
-            });
-        }
-    }  
+    /**
+            Thread.currentThread().interrupt();  
+        );
 }
+        // - number of files to download
+            return source;
+     * @param source The remote directory to copy segment files from
+        final Executor executor = threadPool.executor(ThreadPool.Names.REMOTE_RECOVERY);  
+import java.util.concurrent.ExecutionException;  
+import java.io.IOException;
+                logger.trace("Downloading file {}", file);
+        final ActionListener<Void> allFilesListener = new GroupedActionListener<>(ActionListener.map(listener, r -> null), threads);
+    public void downloadAsync(  
+        // - max thread pool size
+        Directory destination,  
+ *
+                        destination.copyFrom(source, file, file, IOContext.DEFAULT);
+ * this file be licensed under the Apache-2.0 license or a
+            } else if (e.getCause() instanceof IOException) {
+            return source;
+        // Choose the minimum of:  
+            public IndexInput openInput(String name, IOContext context) throws IOException {  
+        }
+    ) throws InterruptedException, IOException {
+        this.threadPool = threadPool;  
+            @Override
+            copyOneFile(cancellableThreads, parallelSource, destination, secondDestination, queue, onFileCompletion, allFilesListener);  
+        downloadInternal(cancellableThreads, source, destination, null, toDownloadSegments, () -> {}, listener);
+    private final Logger logger;  
+        try {
+        Directory secondDestination,
+            Math.min(threadPool.info(ThreadPool.Names.REMOTE_RECOVERY).getMax(), recoverySettings.getMaxConcurrentRemoteStoreStreams())  
+            // cancel the asynchronous work we were waiting on
+        Queue<String> queue,
+        @Nullable Directory secondDestination,  
+        Runnable onFileCompletion,
+        }  
+        Runnable onFileCompletion  
+            }
+        ActionListener<Void> listener  
+import java.util.concurrent.ConcurrentLinkedQueue;
+     * @param onFileCompletion A generic runnable that is invoked after each file download.  
+/**  
+        Directory source,
+    private Directory wrapForParallelPartDownload(Directory source) {
+        }
+     */
+        Collection<String> toDownloadSegments,
+        Collection<String> toDownloadSegments,
+        if (file == null) {  
+    }  
+    private void copyOneFile(
+        @Nullable Directory secondDestination,  
+ */  
+     * local directory.  
+public final class RemoteStoreFileDownloader {
+        CancellableThreads cancellableThreads,
+     */  
+     * budget fall through to the plain single-stream {@link Directory#openInput}.  
+            threadPool.executor(ThreadPool.Names.REMOTE_RECOVERY).submit(() -> {
+import org.apache.lucene.store.IOContext;
+     *                          copied to after being copied to the local directory
+        ActionListener<Void> listener
+    /**
+     * @param destination The local directory to copy segment files to
+    private final ThreadPool threadPool;
+     * @param toDownloadSegments The list of segment files to download  
+        this.recoverySettings = recoverySettings;
+        for (int i = 0; i < threads; i++) {
+                            secondDestination.copyFrom(destination, file, file, IOContext.DEFAULT);  
+    }
+     * still presented sequentially, so the regular {@link Directory#copyFrom} path (and every stats, checksum and
+        ActionListener<Void> listener  
+     * Copies the given segments from the remote segment store to the given
+        if (source instanceof RemoteSegmentStoreDirectory == false) {  
+    }
+                copyOneFile(cancellableThreads, source, destination, secondDestination, queue, onFileCompletion, listener);  
+     * @param destination The local directory to copy segment files to
+import org.apache.lucene.store.FilterDirectory;  
+import org.apache.lucene.store.Directory;
+     * @param source The remote directory to copy segment files from
+ * The OpenSearch Contributors require contributions made to  
+        } catch (ExecutionException e) {
+ * @opensearch.api
+     * {@link ParallelPartInputStream}s: the bytes are fetched as multiple concurrent byte-range requests but are  
+ * instance to a local {@link Directory} instance in parallel depending on thread
+        if (permits.getMaxPermits() <= 0) {
+import java.util.Collection;  
+import java.util.concurrent.Executor;
+ * SPDX-License-Identifier: Apache-2.0
+            }  
+            if (e.getCause() instanceof RuntimeException) {
+     * local directory, while also copying the segments _to_ another remote directory.  
+package org.opensearch.index.store;
+        Directory source,
+import org.apache.logging.log4j.Logger;
+    }  
+import org.opensearch.core.action.ActionListener;  
+            listener.get();  
+                } catch (Exception e) {  
+ * pool size and recovery settings.  
+        Collection<String> toDownloadSegments,
+        Directory destination,
+        final long partSize = recoverySettings.getRemoteStoreParallelDownloadPartSize().getBytes();
+    ) {  
+     * Wraps a {@link RemoteSegmentStoreDirectory} source so that files larger than one part are opened as
+                return remoteSource.openParallelInput(name, fileLength, context, partSize, executor, permits);  
+    ) {
+    /**
+                }
+                        onFileCompletion.run();
+                        logger.trace("Downloaded file {} of size {}", file, destination.fileLength(file));  
+        };
+        final RemoteSegmentStoreDirectory remoteSource = (RemoteSegmentStoreDirectory) source;
+    }  
+            toDownloadSegments.size(),
+                    return;
+    ) {
+import org.opensearch.common.logging.Loggers;
+        CancellableThreads cancellableThreads,  
+        Directory destination,  
+                try {  
+        // - "indices.recovery.max_concurrent_remote_store_streams" setting  
+/*  
+import org.opensearch.threadpool.ThreadPool;  
+        } catch (InterruptedException e) {
+                    return in.openInput(name, context);  
+        logger.trace("Starting download of {} files with {} threads", queue.size(), threads);
+     *                         different threads.
+        final Queue<String> queue = new ConcurrentLinkedQueue<>(toDownloadSegments);
+        final ParallelDownloadPermits permits = recoverySettings.getRemoteStoreParallelDownloadPermits();  
+        final Directory parallelSource = wrapForParallelPartDownload(source);  
+                    });
+import org.apache.lucene.store.IndexInput;
+            // If the blocking call on the PlainActionFuture itself is interrupted, then we must  
+ * Helper class to downloads files from a {@link RemoteSegmentStoreDirectory}
+                throw (RuntimeException) e.getCause();  
+        Directory destination,
+     * encryption wrapper layered on it) is left untouched. Small files, non remote-store sources and a disabled
+        } else {  
+        }
+    private final RecoverySettings recoverySettings;
+ */  
+        Directory source,
+     *                         Must be thread safe as this may be invoked concurrently from
+import org.opensearch.core.index.shard.ShardId;
+                if (fileLength <= partSize) {
+        Directory source,
+                throw (IOException) e.getCause();
+    }
+    public RemoteStoreFileDownloader(ShardId shardId, ThreadPool threadPool, RecoverySettings recoverySettings) {
+     * @param secondDestination The second remote directory that segment files are  
+                        if (secondDestination != null) {
+                logger.trace("Downloading file {} of size {} in parts of {} bytes", name, fileLength, partSize);
+import java.util.Queue;
+        CancellableThreads cancellableThreads,  
+    public void download(
+import org.opensearch.common.annotation.PublicApi;  
+                    cancellableThreads.executeIO(() -> {
+        this.logger = Loggers.getLogger(RemoteStoreFileDownloader.class, shardId);
+                        }
+    private void downloadInternal(
+import org.opensearch.indices.recovery.RecoverySettings;
+ *
+        }
+import org.opensearch.common.Nullable;
+            });
+@PublicApi(since = "2.11.0")
+                    queue.clear();
+            cancellableThreads.cancel(e.getMessage());
+        Runnable onFileCompletion,
+     * Copies the given segments from the remote segment store to the given
+     * @param listener Callback listener to be notified upon completion
+import org.opensearch.action.support.PlainActionFuture;
+                }
+import org.opensearch.common.util.CancellableThreads;
+        final PlainActionFuture<Void> listener = PlainActionFuture.newFuture();  

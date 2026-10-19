@@ -1,48 +1,41 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        this.type = uriType;
+     *  
+    }  
  *
+    public static AdmissionControlActionType fromName(String name) {
+        return type;
+ * compatible open source license.
+        switch (name) {  
+        name = name.toLowerCase(Locale.ROOT);
+            default:
+}
+            case "indexing":
+    private final String type;
+     * @return type of the request
+/**  
+    /**
+ * Enums that defines the type of the transport requests
+        }  
+import java.util.Locale;
+                throw new IllegalArgumentException("Not Supported TransportAction Type: " + name);
+    CLUSTER_ADMIN("cluster_admin");  
+/*  
+                return INDEXING;
+    SEARCH("search"),
+    public String getType() {  
+    AdmissionControlActionType(String uriType) {
+            case "cluster_admin":
+            case "search":  
+ */  
+                return SEARCH;
+    INDEXING("indexing"),
+                return CLUSTER_ADMIN;  
+ */
+package org.opensearch.ratelimitting.admissioncontrol.enums;
+     */
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    }
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ratelimitting.admissioncontrol.enums;
-
-import java.util.Locale;
-
-/**  
- * Enums that defines the type of the transport requests
- */
 public enum AdmissionControlActionType {  
-    INDEXING("indexing"),
-    SEARCH("search"),
-    CLUSTER_ADMIN("cluster_admin");  
-
-    private final String type;
-
-    AdmissionControlActionType(String uriType) {
-        this.type = uriType;
-    }  
-
-    /**
-     *  
-     * @return type of the request
-     */
-    public String getType() {  
-        return type;
-    }
-
-    public static AdmissionControlActionType fromName(String name) {
-        name = name.toLowerCase(Locale.ROOT);
-        switch (name) {  
-            case "indexing":
-                return INDEXING;
-            case "search":  
-                return SEARCH;
-            case "cluster_admin":
-                return CLUSTER_ADMIN;  
-            default:
-                throw new IllegalArgumentException("Not Supported TransportAction Type: " + name);
-        }  
-    }
-}

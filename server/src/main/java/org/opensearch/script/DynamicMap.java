@@ -1,123 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;  
-import java.util.function.Function;
-
-/**  
- * DynamicMap is used to wrap a Map for a script parameter. A set of
- * functions is provided for the overridden values where the function
- * is applied to the existing value when one exists for the  
- * corresponding key.
- *
- * @opensearch.internal  
- */
-public final class DynamicMap implements Map<String, Object> {
-
-    private final Map<String, Object> delegate;
-
-    private final Map<String, Function<Object, Object>> functions;  
-
-    public DynamicMap(Map<String, Object> delegate, Map<String, Function<Object, Object>> functions) {
-        this.delegate = delegate;  
-        this.functions = functions;
-    }
-
-    @Override
-    public int size() {
-        return delegate.size();  
-    }
-
-    @Override  
-    public boolean isEmpty() {
-        return delegate.isEmpty();
-    }  
-
-    @Override
-    public boolean containsKey(final Object key) {  
-        return delegate.containsKey(key);
-    }
-
-    @Override
-    public boolean containsValue(final Object value) {
-        return delegate.containsValue(value);  
-    }
-
-    @Override  
-    public Object get(final Object key) {
-        Object value = delegate.get(key);
-        Function<Object, Object> function = functions.get(key);  
-        if (function != null) {
-            value = function.apply(value);
-        }  
-        return value;
-    }
-
-    @Override
     public Object put(final String key, final Object value) {
-        return delegate.put(key, value);  
-    }
-
     @Override  
-    public Object remove(final Object key) {
-        return delegate.remove(key);
+/*
+    private final Map<String, Function<Object, Object>> functions;  
+ */
+package org.opensearch.script;
+ * SPDX-License-Identifier: Apache-2.0
     }  
-
-    @Override
-    public void putAll(final Map<? extends String, ?> m) {  
-        delegate.putAll(m);
-    }
-
-    @Override
-    public void clear() {
         delegate.clear();  
     }
-
-    @Override  
-    public Set<String> keySet() {
-        return delegate.keySet();
-    }  
-
-    @Override
-    public Collection<Object> values() {  
+    public void putAll(final Map<? extends String, ?> m) {  
+ * not use this file except in compliance with the License.
         return delegate.values();
+ *  
     }
-
-    @Override
-    public Set<Entry<String, Object>> entrySet() {
+/*  
+        delegate.putAll(m);
+ *
+public final class DynamicMap implements Map<String, Object> {
+    }
+ * this work for additional information regarding copyright
+ *    http://www.apache.org/licenses/LICENSE-2.0
         return delegate.entrySet();  
-    }
+ * KIND, either express or implied.  See the License for the
+        return delegate.remove(key);
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+    public boolean isEmpty() {
+ * The OpenSearch Contributors require contributions made to  
+ * corresponding key.
+    public Set<String> keySet() {
+            value = function.apply(value);
+    @Override
+import java.util.Map;
+        Function<Object, Object> function = functions.get(key);  
+ * GitHub history for details.
+import java.util.Collection;
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public boolean containsValue(final Object value) {
+ * compatible open source license.
+    @Override  
+    private final Map<String, Object> delegate;
+ *
+ * functions is provided for the overridden values where the function
+    public Set<Entry<String, Object>> entrySet() {
+        Object value = delegate.get(key);
 }
+ */
+    public Collection<Object> values() {  
+ * @opensearch.internal  
+    public DynamicMap(Map<String, Object> delegate, Map<String, Function<Object, Object>> functions) {
+    public void clear() {
+ * You may obtain a copy of the License at  
+    @Override
+ * software distributed under the License is distributed on an
+    @Override
+    }
+ * specific language governing permissions and limitations
+        return delegate.isEmpty();
+        return delegate.containsValue(value);  
+ * under the License.  
+    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+    public Object get(final Object key) {
+        return delegate.keySet();
+    public Object remove(final Object key) {
+    @Override  
+        return delegate.size();  
+    }  
+    }
+    @Override
+        return delegate.put(key, value);  
+import java.util.Set;  
+ */  
+    }
+ * is applied to the existing value when one exists for the  
+ * DynamicMap is used to wrap a Map for a script parameter. A set of
+    }
+ * Unless required by applicable law or agreed to in writing,
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    public int size() {
+/**  
+        if (function != null) {
+    @Override
+    }  
+ * license agreements. See the NOTICE file distributed with
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    public boolean containsKey(final Object key) {  
+    }
+        this.functions = functions;
+    @Override
+    @Override  
+/*  
+        return value;
+import java.util.function.Function;
+        return delegate.containsKey(key);
+        this.delegate = delegate;  
+ * ownership. Elasticsearch licenses this file to you under  
+        }  

@@ -1,1021 +1,949 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.Version;
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.admin.cluster.crypto.CryptoSettings;  
-import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;
-import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
-import org.opensearch.cluster.AckedClusterStateUpdateTask;  
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateApplier;  
-import org.opensearch.cluster.RepositoryCleanupInProgress;
-import org.opensearch.cluster.RestoreInProgress;
-import org.opensearch.cluster.SnapshotDeletionsInProgress;  
-import org.opensearch.cluster.SnapshotsInProgress;
-import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
-import org.opensearch.cluster.metadata.CryptoMetadata;  
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.RepositoriesMetadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
-import org.opensearch.common.regex.Regex;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.Strings;
-import org.opensearch.node.remotestore.RemoteStorePinnedTimestampService;  
-import org.opensearch.repositories.blobstore.MeteredBlobStoreRepository;
-import org.opensearch.snapshots.SnapshotsService;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;  
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static org.opensearch.cluster.service.ClusterManagerTask.DELETE_REPOSITORY;
-import static org.opensearch.cluster.service.ClusterManagerTask.PUT_REPOSITORY;
-import static org.opensearch.repositories.blobstore.BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY;  
-import static org.opensearch.repositories.blobstore.BlobStoreRepository.SHALLOW_SNAPSHOT_V2;
-import static org.opensearch.repositories.blobstore.BlobStoreRepository.SYSTEM_REPOSITORY_SETTING;
-
-/**
- * Service responsible for maintaining and providing access to snapshot repositories on nodes.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class RepositoriesService extends AbstractLifecycleComponent implements ClusterStateApplier {
-
-    private static final Logger logger = LogManager.getLogger(RepositoriesService.class);  
-
-    public static final Setting<TimeValue> REPOSITORIES_STATS_ARCHIVE_RETENTION_PERIOD = Setting.positiveTimeSetting(
-        "repositories.stats.archive.retention_period",  
-        TimeValue.timeValueHours(2),
-        Setting.Property.NodeScope
-    );  
-
-    public static final Setting<Integer> REPOSITORIES_STATS_ARCHIVE_MAX_ARCHIVED_STATS = Setting.intSetting(
-        "repositories.stats.archive.max_archived_stats",  
-        100,
-        0,
-        Setting.Property.NodeScope  
-    );
-
-    private final Map<String, Repository.Factory> typesRegistry;  
-    private final Map<String, Repository.Factory> internalTypesRegistry;
-
-    private final ClusterService clusterService;  
-
-    private final ThreadPool threadPool;
-
-    private final VerifyNodeRepositoryAction verifyAction;
-
-    private final Map<String, Repository> internalRepositories = ConcurrentCollections.newConcurrentMap();  
-    private volatile Map<String, Repository> repositories = Collections.emptyMap();
-    private final RepositoriesStatsArchive repositoriesStatsArchive;
-    private final ClusterManagerTaskThrottler.ThrottlingKey putRepositoryTaskKey;  
-    private final ClusterManagerTaskThrottler.ThrottlingKey deleteRepositoryTaskKey;
-    private final Settings settings;
-
-    public RepositoriesService(
-        Settings settings,
-        ClusterService clusterService,  
-        TransportService transportService,
-        Map<String, Repository.Factory> typesRegistry,
-        Map<String, Repository.Factory> internalTypesRegistry,  
-        ThreadPool threadPool
-    ) {
-        this.settings = settings;  
-        this.typesRegistry = typesRegistry;
-        this.internalTypesRegistry = internalTypesRegistry;
-        this.clusterService = clusterService;  
-        this.threadPool = threadPool;
-        // Doesn't make sense to maintain repositories on non-master and non-data nodes
-        // Nothing happens there anyway  
-        if (DiscoveryNode.isDataNode(settings) || DiscoveryNode.isClusterManagerNode(settings)) {
-            if (isDedicatedVotingOnlyNode(DiscoveryNode.getRolesFromSettings(settings)) == false) {
-                clusterService.addHighPriorityApplier(this);  
-            }
-        }
-        this.verifyAction = new VerifyNodeRepositoryAction(transportService, clusterService, this);  
-        this.repositoriesStatsArchive = new RepositoriesStatsArchive(
-            REPOSITORIES_STATS_ARCHIVE_RETENTION_PERIOD.get(settings),
-            REPOSITORIES_STATS_ARCHIVE_MAX_ARCHIVED_STATS.get(settings),  
-            threadPool::relativeTimeInMillis
-        );
-        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.  
-        putRepositoryTaskKey = clusterService.registerClusterManagerTask(PUT_REPOSITORY, true);
-        deleteRepositoryTaskKey = clusterService.registerClusterManagerTask(DELETE_REPOSITORY, true);
-    }  
-
-    /**
-     * Registers new repository or updates an existing repository in the cluster  
-     * <p>
-     * This method can be only called on the cluster-manager node. It tries to create a new repository on the master
-     * and if it was successful it adds new repository to cluster metadata.  
-     *
-     * @param request  register repository request
-     * @param listener register repository listener  
-     */
-    public void registerOrUpdateRepository(final PutRepositoryRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
-        assert lifecycle.started() : "Trying to register new repository but service is in state [" + lifecycle.state() + "]";  
-
-        final long startTimeNanos = System.nanoTime();
-        final ActionListener<ClusterStateUpdateResponse> timedListener = ActionListener.runAfter(  
-            listener,
-            () -> logger.info(
-                "put/update repository [{}] took [{}]",  
-                request.name(),
-                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
-            )  
-        );
-
-        RepositoryMetadata newRepositoryMetadata = new RepositoryMetadata(  
-            request.name(),
-            request.type(),
-            request.settings(),  
-            CryptoMetadata.fromRequest(request.cryptoSettings())
-        );
-        validate(request.name());  
-        validateRepositoryMetadataSettings(clusterService, request.name(), request.settings(), repositories, settings, this);
-        if (newRepositoryMetadata.cryptoMetadata() != null) {
-            validate(newRepositoryMetadata.cryptoMetadata().keyProviderName());  
-        }
-
-        final ActionListener<ClusterStateUpdateResponse> registrationListener;  
-        if (request.verify()) {
-            registrationListener = ActionListener.delegateFailure(timedListener, (delegatedListener, clusterStateUpdateResponse) -> {
-                if (clusterStateUpdateResponse.isAcknowledged()) {  
-                    // The response was acknowledged - all nodes should know about the new repository, let's verify them
-                    verifyRepository(
                         request.name(),  
-                        ActionListener.delegateFailure(
-                            delegatedListener,
-                            (innerDelegatedListener, discoveryNodes) -> innerDelegatedListener.onResponse(clusterStateUpdateResponse)  
-                        )
-                    );
-                } else {  
-                    delegatedListener.onResponse(clusterStateUpdateResponse);
+            logger.warn(  
+import org.opensearch.cluster.SnapshotDeletionsInProgress;  
+        if (newValue == null) {  
+        clusterService.submitStateUpdateTask(
                 }
-            });  
-        } else {
-            registrationListener = timedListener;
-        }  
-
-        Repository currentRepository = repositories.get(request.name());
-        boolean isReloadableSettings = currentRepository != null && currentRepository.isReloadableSettings(newRepositoryMetadata);  
-
-        if (isReloadableSettings) {
-            // We are reloading the repository, so we need to preserve the old settings in the new repository metadata  
-            Settings updatedSettings = Settings.builder()
-                .put(currentRepository.getMetadata().settings())
-                .put(newRepositoryMetadata.settings())  
-                .build();
-            newRepositoryMetadata = new RepositoryMetadata(
-                newRepositoryMetadata.name(),  
-                newRepositoryMetadata.type(),
-                updatedSettings,
-                newRepositoryMetadata.cryptoMetadata()  
-            );
-        } else {
-            // Trying to create the new repository on cluster-manager to make sure it works  
-            try {
-                closeRepository(createRepository(newRepositoryMetadata, typesRegistry));
-            } catch (Exception e) {  
-                registrationListener.onFailure(e);
-                return;
-            }  
+        Repository repository = internalRepositories.remove(name);  
         }
-
-        final RepositoryMetadata finalRepositoryMetadata = newRepositoryMetadata;  
-        clusterService.submitStateUpdateTask(
-            "put_repository [" + request.name() + "]",
-            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, registrationListener) {  
-                @Override
-                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
                     return new ClusterStateUpdateResponse(acknowledged);  
-                }
-
-                @Override  
-                public ClusterState execute(ClusterState currentState) {
-                    if (isReloadableSettings == false) {
-                        ensureRepositoryNotInUse(currentState, request.name());  
-                    }
-                    Metadata metadata = currentState.metadata();
-                    Metadata.Builder mdBuilder = Metadata.builder(currentState.metadata());  
-                    RepositoriesMetadata repositories = metadata.custom(RepositoriesMetadata.TYPE);
-                    if (repositories == null) {
-                        logger.info("put repository [{}]", request.name());  
-                        repositories = new RepositoriesMetadata(
-                            Collections.singletonList(
-                                new RepositoryMetadata(  
-                                    request.name(),
-                                    request.type(),
-                                    request.settings(),  
-                                    CryptoMetadata.fromRequest(request.cryptoSettings())
-                                )
-                            )  
-                        );
-                    } else {
-                        boolean found = false;  
-                        List<RepositoryMetadata> repositoriesMetadata = new ArrayList<>(repositories.repositories().size() + 1);
-
-                        for (RepositoryMetadata repositoryMetadata : repositories.repositories()) {  
-                            RepositoryMetadata updatedRepositoryMetadata = finalRepositoryMetadata;
-                            if (isSystemRepositorySettingPresent(repositoryMetadata.settings())) {
-                                Settings updatedSettings = Settings.builder()  
-                                    .put(finalRepositoryMetadata.settings())
-                                    .put(SYSTEM_REPOSITORY_SETTING.getKey(), true)
-                                    .build();  
-                                updatedRepositoryMetadata = new RepositoryMetadata(
-                                    finalRepositoryMetadata.name(),
-                                    finalRepositoryMetadata.type(),  
-                                    updatedSettings,
-                                    finalRepositoryMetadata.cryptoMetadata()
-                                );  
-                            }
-                            if (repositoryMetadata.name().equals(updatedRepositoryMetadata.name())) {
-                                if (updatedRepositoryMetadata.equalsIgnoreGenerations(repositoryMetadata)) {  
-                                    // Previous version is the same as this one no update is needed.
-                                    return currentState;
-                                }  
-                                ensureCryptoSettingsAreSame(repositoryMetadata, request);
-                                found = true;
-                                if (isSystemRepositorySettingPresent(repositoryMetadata.settings())) {  
-                                    ensureValidSystemRepositoryUpdate(updatedRepositoryMetadata, repositoryMetadata);
-                                }
-                                repositoriesMetadata.add(updatedRepositoryMetadata);  
-                            } else {
-                                repositoriesMetadata.add(repositoryMetadata);
-                            }  
-                        }
-                        if (!found) {
-                            logger.info("put repository [{}]", request.name());  
-                            repositoriesMetadata.add(
-                                new RepositoryMetadata(
-                                    request.name(),  
-                                    request.type(),
-                                    request.settings(),
-                                    CryptoMetadata.fromRequest(request.cryptoSettings())  
-                                )
-                            );
-                        } else {  
-                            logger.info("update repository [{}]", request.name());
-                        }
-                        repositories = new RepositoriesMetadata(repositoriesMetadata);  
-                    }
-                    mdBuilder.putCustom(RepositoriesMetadata.TYPE, repositories);
-                    return ClusterState.builder(currentState).metadata(mdBuilder).build();  
-                }
-
-                @Override  
-                public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
-                    return putRepositoryTaskKey;
-                }  
-
-                @Override
-                public void onFailure(String source, Exception e) {  
-                    logger.warn(() -> new ParameterizedMessage("failed to create repository [{}]", request.name()), e);
-                    super.onFailure(source, e);
-                }  
-
-                @Override
-                public boolean mustAck(DiscoveryNode discoveryNode) {  
-                    // repository is created on both cluster-manager and data nodes
-                    return discoveryNode.isClusterManagerNode() || discoveryNode.isDataNode();
-                }  
-            }
-        );
+                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
     }  
-
-    /**
-     * Unregisters repository in the cluster  
-     * <p>
-     * This method can be only called on the cluster-manager node. It removes repository information from cluster metadata.
-     *  
-     * @param request  unregister repository request
-     * @param listener unregister repository listener
-     */  
-    public void unregisterRepository(final DeleteRepositoryRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
-        final long startTimeNanos = System.nanoTime();
-        final ActionListener<ClusterStateUpdateResponse> timedListener = ActionListener.runAfter(  
+    }
+                                        "repository was already " + "registered with different metadata during bootstrap than cluster state"
+        Repository repository = null;
+    private final Map<String, Repository.Factory> typesRegistry;  
+                        }
+                public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
+        final SnapshotsInProgress snapshots = clusterState.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY);
+    }
+    protected void doStop() {  
+                        );
+    @Override
+import org.opensearch.cluster.service.ClusterService;
+                @Override
+import org.opensearch.cluster.RestoreInProgress;
+                        if (previousMetadata.type().equals(repositoryMetadata.type()) == false  
+            return true;
+    public void ensureValidSystemRepositoryUpdate(RepositoryMetadata newRepositoryMetadata, RepositoryMetadata currentRepositoryMetadata) {  
+     *
+        0,
+            throw new RepositoryException(identifier, "cannot be empty");
+                                ensureRepositoryNotInUse(currentState, repositoryMetadata.name());
+                )
+                            if (repositoryMetadata.name().equals(updatedRepositoryMetadata.name())) {
+                        + " cannot be enabled as some of the nodes in cluster are on version older than "
+                    }  
+    }
+        if (request.verify()) {
+    protected void doClose() throws IOException {
+            threadPool::relativeTimeInMillis
+                .put(newRepositoryMetadata.settings())  
             listener,
-            () -> logger.info(
-                "delete repository [{}] took [{}]",  
-                request.name(),
-                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
-            )  
-        );
-        clusterService.submitStateUpdateTask(
-            "delete_repository [" + request.name() + "]",  
-            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, timedListener) {
-                @Override
-                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {  
-                    return new ClusterStateUpdateResponse(acknowledged);
+                        for (RepositoryMetadata repositoryMetadata : repositories.repositories()) {  
+        try {  
+        for (RestoreInProgress.Entry entry : clusterState.custom(RestoreInProgress.TYPE, RestoreInProgress.EMPTY)) {  
+        putRepositoryTaskKey = clusterService.registerClusterManagerTask(PUT_REPOSITORY, true);
+        if (newValue.equals(currentValue) == false) {  
                 }
-
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-                    Metadata metadata = currentState.metadata();  
+                    .map(setting -> setting.getKey())
+    }  
+                        + " cannot be enabled for repository with "
+     * @param listener register repository listener  
+            RepositoryCleanupInProgress.TYPE,
+            && roles.stream().anyMatch(role -> role.roleName().equals("voting_only"));
+     * @return registered repository
+                            }
+                                    logger.warn(
+        final RepositoryMetadata finalRepositoryMetadata = newRepositoryMetadata;  
+    }
+                    }
+                                repositoriesMetadata.add(updatedRepositoryMetadata);  
+            }
+            repositories = repos;
+            String repoNameWithPinnedTimestamps = pinningEntity.split(SnapshotsService.SNAPSHOT_PINNED_TIMESTAMP_DELIMITER)[0];
+                        builder.put(repositoryMetadata.name(), repository);
+                                    return currentState;
+        }
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler;  
+        final Repository repository = repository(repositoryName);
+                            return ClusterState.builder(currentState).metadata(mdBuilder).build();
+                                repositoriesMetadata.add(repositoryMetadata);
+import java.util.Collection;
+                            if (Regex.simpleMatch(request.name(), repositoryMetadata.name())) {
+            if (repositoryName.contains(SnapshotsService.SNAPSHOT_PINNED_TIMESTAMP_DELIMITER)) {
+                    + " cannot provide system repository setting; this setting is managed by OpenSearch"
+                                        "reloaded repository [{}][{}] in [{}]",
+        );
+        this.verifyAction = new VerifyNodeRepositoryAction(transportService, clusterService, this);  
+            }  
+                                        repositoryMetadata.name(),  
+                                updatedRepositoryMetadata = new RepositoryMetadata(
+            }
+        final ActionListener<ClusterStateUpdateResponse> timedListener = ActionListener.runAfter(  
+        }
+    public List<RepositoryStatsSnapshot> repositoriesStats() {
+            );  
+            final long startTimeNanos = System.nanoTime();  
+    }
+                                changed = true;
+import org.opensearch.node.remotestore.RemoteStorePinnedTimestampService;  
+    }  
+        }
+     * @param listener       listener to pass {@link RepositoryData} to
+        }
+                repository = factory.create(repositoryMetadata, factories::get);
+        100,
+    public void closeRepository(Repository repository) {  
+                if (pinnedTimestampExistsWithDifferentRepository(repositoryName, settings, repositoriesService)) {
+/*  
+                        + ". Minimum node version in cluster is: "
+        final long startTimeNanos = System.nanoTime();
+ * the Apache License, Version 2.0 (the "License"); you may
+            } catch (Exception e) {  
+            newRepositoryMetadata = new RepositoryMetadata(
+ * SPDX-License-Identifier: Apache-2.0
+            if (newMetadata != null) {
+ *  
+            listener.onFailure(e);
+        RepositoryMetadata newRepositoryMetadata = new RepositoryMetadata(  
+                        + " in the name as this delimiter is used to create pinning entity"  
+            for (Map.Entry<String, Repository> entry : repositories.entrySet()) {  
+                            logger.info("put repository [{}]", request.name());  
+                    Metadata.Builder mdBuilder = Metadata.builder(currentState.metadata());  
+    /**
+            Map<String, Repository> survivors = new HashMap<>();
+                "trying to modify an unmodifiable attribute "
+        );  
+                                try {
+                            || previousMetadata.settings().equals(repositoryMetadata.settings()) == false) {
+        if (Strings.validFileName(identifier) == false) {  
+                                if (updatedRepositoryMetadata.equalsIgnoreGenerations(repositoryMetadata)) {  
+    public static final Setting<Integer> REPOSITORIES_STATS_ARCHIVE_MAX_ARCHIVED_STATS = Setting.intSetting(
+                }
+        } finally {
+                                }  
+ */
+    @Override  
+import static org.opensearch.repositories.blobstore.BlobStoreRepository.SYSTEM_REPOSITORY_SETTING;
+        }
+                    if (repository != null) {  
+                                repository.endVerification(verificationToken);
+        Settings settings,
+            if (repositoryWithShallowV2Exists(repositories, repositoryName)) {  
+                                            e
+                                ensureNotSystemRepository(repositoryMetadata);  
+            }
+                            } catch (Exception inner) {
+import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
+            logger.warn(
+                if (clusterStateUpdateResponse.isAcknowledged()) {  
+                return true;
+import org.opensearch.transport.TransportService;
+            }
+                                    repository.reload(repositoryMetadata);
+            RepositoriesMetadata oldMetadata = event.previousState().getMetadata().custom(RepositoriesMetadata.TYPE);  
+                            // repository metadata the repository metadata update will land in the above if block.  
+            request.type(),
+                                    .put(finalRepositoryMetadata.settings())
                     Metadata.Builder mdBuilder = Metadata.builder(currentState.metadata());
                     RepositoriesMetadata repositories = metadata.custom(RepositoriesMetadata.TYPE);
-                    if (repositories != null && repositories.repositories().size() > 0) {  
-                        List<RepositoryMetadata> repositoriesMetadata = new ArrayList<>(repositories.repositories().size());
-                        boolean changed = false;
-                        for (RepositoryMetadata repositoryMetadata : repositories.repositories()) {  
-                            if (Regex.simpleMatch(request.name(), repositoryMetadata.name())) {
-                                ensureRepositoryNotInUse(currentState, repositoryMetadata.name());
-                                ensureNotSystemRepository(repositoryMetadata);  
-                                logger.info("delete repository [{}]", repositoryMetadata.name());
-                                changed = true;
-                            } else {  
-                                repositoriesMetadata.add(repositoryMetadata);
-                            }
-                        }  
-                        if (changed) {
-                            repositories = new RepositoriesMetadata(repositoriesMetadata);
-                            mdBuilder.putCustom(RepositoriesMetadata.TYPE, repositories);  
-                            return ClusterState.builder(currentState).metadata(mdBuilder).build();
+    }
+                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {  
+                return true;
+                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
                         }
-                    }  
-                    if (Regex.isMatchAllPattern(request.name())) { // we use a wildcard so we don't barf if it's not present.
-                        return currentState;
-                    }  
-                    throw new RepositoryMissingException(request.name());
-                }
-
-                @Override
-                public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
-                    return deleteRepositoryTaskKey;  
-                }
-
-                @Override  
-                public boolean mustAck(DiscoveryNode discoveryNode) {
-                    // repository was created on both cluster-manager and data nodes
-                    return discoveryNode.isClusterManagerNode() || discoveryNode.isDataNode();  
-                }
-            }
-        );  
-    }
-
-    public void verifyRepository(final String repositoryName, final ActionListener<List<DiscoveryNode>> listener) {  
-        final Repository repository = repository(repositoryName);
-        threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(new ActionRunnable<List<DiscoveryNode>>(listener) {
-            @Override  
-            protected void doRun() {
-                final String verificationToken = repository.startVerification();
-                if (verificationToken != null) {  
-                    try {
-                        verifyAction.verify(
-                            repositoryName,  
-                            verificationToken,
-                            ActionListener.delegateFailure(
-                                listener,  
-                                (delegatedListener, verifyResponse) -> threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(() -> {
-                                    try {
-                                        repository.endVerification(verificationToken);  
-                                    } catch (Exception e) {
-                                        logger.warn(
-                                            () -> new ParameterizedMessage("[{}] failed to finish repository verification", repositoryName),  
-                                            e
-                                        );
+                // Now go through all repositories and update existing or create missing  
+                if (newMetadata == null || newMetadata.repository(entry.getKey()) == null) {
+                    repository.getMetadata().type(),
+            if (repoNameWithPinnedTimestamps.equals(newRepoName) == false) {  
+     * This method is called only on the cluster-manager node
+                e
+                        ActionListener.delegateFailure(
                                         delegatedListener.onFailure(e);  
-                                        return;
-                                    }
-                                    delegatedListener.onResponse(verifyResponse);  
-                                })
-                            )
-                        );  
-                    } catch (Exception e) {
-                        threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(() -> {
-                            try {  
-                                repository.endVerification(verificationToken);
-                            } catch (Exception inner) {
-                                inner.addSuppressed(e);  
-                                logger.warn(
-                                    () -> new ParameterizedMessage("[{}] failed to finish repository verification", repositoryName),
-                                    inner  
-                                );
-                            }
-                            listener.onFailure(e);  
-                        });
-                    }
-                } else {  
-                    listener.onResponse(Collections.emptyList());
-                }
-            }  
-        });
+                @Override
+                                    try {
+                        ensureRepositoryNotInUse(currentState, request.name());  
+ * Service responsible for maintaining and providing access to snapshot repositories on nodes.
+    public void unregisterInternalRepository(String name) {
+                repository.getMetadata().name(),  
+                            // update we should avoid creating it again. Once the cluster state is update with the
+     * Checks if new repositories appeared in or disappeared from cluster metadata and updates current list of  
+        for (RepositoryCleanupInProgress.Entry entry : clusterState.custom(
+            }
+                                repository.validateMetadata(repositoryMetadata);
     }
-
+                            } else {  
+                        repositories = new RepositoriesMetadata(
+                    survivors.put(entry.getKey(), entry.getValue());  
+                                    repository = createRepository(repositoryMetadata, typesRegistry);  
+                            RepositoryMetadata updatedRepositoryMetadata = finalRepositoryMetadata;
+        }  
+                    );
+    private static boolean pinnedTimestampExistsWithDifferentRepository(
+        throw new RepositoryMissingException(repositoryName);
+    }
+ * not use this file except in compliance with the License.
+    /**
+                                    () -> new ParameterizedMessage("[{}] failed to finish repository verification", repositoryName),
+                public boolean mustAck(DiscoveryNode discoveryNode) {
+                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
+    }  
+            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, timedListener) {
+    }  
+                }  
+                for (RepositoryMetadata repositoryMetadata : newMetadata.repositories()) {
+     * <p>
+     *
+                newRepositoryMetadata.type(),
+        return repositoriesStatsArchive.clear(maxVersionToClear);
+                                    }
+     * @param repositoryName repository name
+        }
+        }
+                                // Validate the repository metadata which was created during bootstrap is same as the
+import org.apache.logging.log4j.LogManager;
+                new ParameterizedMessage(  
+        if (type.equals(repository.getMetadata().type()) == false) {
+                for (String restrictedSettingKey : restrictedSettings) {
+                throw new RepositoryException(  
+     * This method can be only called on the cluster-manager node. It removes repository information from cluster metadata.
+                    + "]"  
+                                    CryptoMetadata.fromRequest(request.cryptoSettings())
+import org.opensearch.action.admin.cluster.crypto.CryptoSettings;  
+                throw new RepositoryException(
+                                    .build();  
+                    }
+                    Metadata metadata = currentState.metadata();  
+                }
+            @Override  
+        "repositories.stats.archive.max_archived_stats",  
+    /**
+ */
+                                ensureCryptoSettingsAreSame(repositoryMetadata, request);
+    /**  
+        if (isSystemRepositorySettingPresent(repositoryMetadataSettings)) {  
+                        RepositoryMetadata previousMetadata = repository.getMetadata();
+                    repositoryName,
+            settings,
+                            )
+                    try {
+                                if (isSystemRepositorySettingPresent(repositoryMetadata.settings())) {  
+    /**
+                                } finally {
+import static org.opensearch.repositories.blobstore.BlobStoreRepository.SHALLOW_SNAPSHOT_V2;
+                public ClusterState execute(ClusterState currentState) {
+            logger.warn("failure updating cluster state ", ex);  
+                        repositoryName,  
+import org.opensearch.cluster.ClusterChangedEvent;
+/*
+     */
+                                || repository.isReloadableSettings(repositoryMetadata)) {
+            try {  
+                    }  
+        ).getEntries()) {
+                }
+                                repository = repositories.get(repositoryMetadata.name());  
+            );
+    public void getRepositoryData(final String repositoryName, final ActionListener<RepositoryData> listener) {
+                    Locale.ROOT,
+    public Repository repository(String repositoryName) {
+                                );  
+                                    // TODO: this catch is bogus, it means the old repo is already closed,
+                                    request.type(),
+import org.opensearch.cluster.node.DiscoveryNode;
+     */  
+                clusterService.addHighPriorityApplier(this);  
+                    .stream()
+    private final Map<String, Repository.Factory> internalTypesRegistry;
+    @Override
+            }  
+        this.repositoriesStatsArchive = new RepositoriesStatsArchive(
+    private final VerifyNodeRepositoryAction verifyAction;
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+            REPOSITORIES_STATS_ARCHIVE_RETENTION_PERIOD.get(settings),
+import org.opensearch.repositories.blobstore.MeteredBlobStoreRepository;
+                    closeRepository(repository);
+                                })
+    public void updateRepositoriesMap(Map<String, Repository> repos) {
+    ) {  
+ *
+                request.name(),
+                    Metadata metadata = currentState.metadata();
+            // Check if repositories got changed  
+                        }
+        );
+                                logger.warn(
+            .filter(r -> r instanceof MeteredBlobStoreRepository)
+    public RepositoriesService(
+            () -> logger.info(
+import org.opensearch.core.action.ActionListener;
+                    Repository repository = entry.getValue();  
+    }  
+                        List<RepositoryMetadata> repositoriesMetadata = new ArrayList<>(repositories.repositories().size() + 1);
+                                    } catch (Exception e) {
+            throw new RepositoryException(identifier, "must not contain the following characters " + Strings.INVALID_FILENAME_CHARS);
+        for (String pinningEntity : pinningEntityTimestampMap.keySet()) {
+import java.io.IOException;  
+        final Collection<Repository> repos = new ArrayList<>();
+        if (repositories.isEmpty()) {  
+        logger.debug("closing repository [{}][{}]", repository.getMetadata().type(), repository.getMetadata().name());
+import static org.opensearch.cluster.service.ClusterManagerTask.DELETE_REPOSITORY;
+                    "created repository [{}][{}] in [{}]",  
+                                        logger.warn(
+                            if (isSystemRepositorySettingPresent(repositoryMetadata.settings())) {
+        return false;
+import org.opensearch.cluster.RepositoryCleanupInProgress;
+        return roles.contains(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE)  
+            }
+        } else {
+            }
+        }
+        repository = internalRepositories.get(repositoryName);
+                            )  
+                    super.onFailure(source, e);
+    private volatile Map<String, Repository> repositories = Collections.emptyMap();
+            REPOSITORIES_STATS_ARCHIVE_MAX_ARCHIVED_STATS.get(settings),  
+                    return discoveryNode.isClusterManagerNode() || discoveryNode.isDataNode();  
+            Repository repository = repository(repositoryName);  
+    private static void ensureCryptoSettingsAreSame(RepositoryMetadata repositoryMetadata, PutRepositoryRequest request) {
+        try {
+            }
+                    logger.warn(() -> new ParameterizedMessage("failed to create repository [{}]", request.name()), e);
+                return;
+import org.apache.logging.log4j.Logger;
+        final ActionListener<ClusterStateUpdateResponse> registrationListener;  
+                                    delegatedListener.onResponse(verifyResponse);  
+                    if (Regex.isMatchAllPattern(request.name())) { // we use a wildcard so we don't barf if it's not present.
+     *
+     * <p>
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
+import org.opensearch.common.annotation.PublicApi;
+    }  
+        threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(new ActionRunnable<List<DiscoveryNode>>(listener) {
+                    listener.onResponse(Collections.emptyList());
+     * @param request  register repository request
+ */  
+ * You may obtain a copy of the License at  
+                public ClusterState execute(ClusterState currentState) {
+            );
+import org.opensearch.cluster.AckedClusterStateUpdateTask;  
+                )  
+                    metadata.type(),
+        CryptoSettings cryptoSettings = request.cryptoSettings();
+        Setting.Property.NodeScope  
+     * This method can be only called on the cluster-manager node. It tries to create a new repository on the master
+                                inner.addSuppressed(e);  
+                                        repositoryMetadata.type(),
+                    if (isReloadableSettings == false) {
+                            }  
+                "delete repository [{}] took [{}]",  
+            } catch (IllegalArgumentException e) {  
+                            repositories = new RepositoriesMetadata(repositoriesMetadata);
+                }  
+                .put(currentRepository.getMetadata().settings())
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+                }
+        TimeValue.timeValueHours(2),
+                    Repository repository = survivors.get(repositoryMetadata.name());
+                }
+                    "internal repository [{}][{}] already registered. this prevented the registration of "
+    private final ClusterManagerTaskThrottler.ThrottlingKey deleteRepositoryTaskKey;
+                    "repository [%s] not present in RepositoryService",
+        clusterService.submitStateUpdateTask(
+                    + " cannot be enabled as some of the nodes in cluster are on version older than "
+                    } else {
+            SnapshotDeletionsInProgress.EMPTY
+                repository -> SHALLOW_SNAPSHOT_V2.get(repository.getMetadata().settings())
+        if (newRepositoryMetadata.cryptoMetadata() != null) {
+            repositoriesService
+                } else {  
+                    } catch (Exception e) {
+    }
+                        boolean changed = false;
+    public List<RepositoryStatsSnapshot> clearRepositoriesStatsArchive(long maxVersionToClear) {
+ * @opensearch.api
+            || !cryptoMetadata.settings().toString().equals(cryptoSettings.getSettings().toString())) {
+        }
+                        + SHALLOW_SNAPSHOT_V2.getKey()  
+public class RepositoriesService extends AbstractLifecycleComponent implements ClusterStateApplier {
+        RepositoriesService repositoriesService
+                    + key  
+            request.settings(),  
+                            delegatedListener,
+            throw new IllegalArgumentException("Crypto settings changes found in the repository update request. This is not allowed");  
+                                    request.name(),  
+import org.opensearch.common.util.io.IOUtils;  
+                    throw new RepositoryMissingException(request.name());
+     * repositories accordingly.
+                        currentRepositoryMetadataSettings.get(restrictedSettingKey)  
+     */
+                    "setting "  
+                    return discoveryNode.isClusterManagerNode() || discoveryNode.isDataNode();
+        );
+        Setting.Property.NodeScope
+        }  
+import java.util.ArrayList;
+                    // repository was created on both cluster-manager and data nodes
+            validate(newRepositoryMetadata.cryptoMetadata().keyProviderName());  
+                            } else {  
+            // We are reloading the repository, so we need to preserve the old settings in the new repository metadata  
+                        // Found previous version of this repository
+                    // Update State should only be invoked for repository which are already in cluster state. This  
+                Repository repository = repositories.get(currentRepositoryMetadata.name());
+        // Nothing happens there anyway  
+                        logger.debug("registering repository [{}]", repositoryMetadata.name());
+            return repository;
+                        } else {  
+    public void registerOrUpdateRepository(final PutRepositoryRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
+     * @param repository   repository id
+            && roles.contains(DiscoveryNodeRole.DATA_ROLE) == false
+        );  
+                            logger.warn(() -> new ParameterizedMessage("failed to create repository [{}]", repositoryMetadata.name()), ex);  
+        CryptoMetadata cryptoMetadata = repositoryMetadata.cryptoMetadata();  
+import static org.opensearch.repositories.blobstore.BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY;  
+                            }
+     */
+            return;  
+                            + " cannot be enabled if there are existing snapshots created with shallow V2 "  
+    private static final Logger logger = LogManager.getLogger(RepositoriesService.class);  
+                                    finalRepositoryMetadata.type(),  
+                    return deleteRepositoryTaskKey;  
+        Repository currentRepository = repositories.get(request.name());
+        }
+                }  
+                Settings newRepositoryMetadataSettings = newRepositoryMetadata.settings();  
+                    // The response was acknowledged - all nodes should know about the new repository, let's verify them
+                                }
+                        threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(() -> {
+            }  
+            SnapshotDeletionsInProgress.TYPE,  
+        }
+            registrationListener = ActionListener.delegateFailure(timedListener, (delegatedListener, clusterStateUpdateResponse) -> {
+        } catch (Exception e) {
+ * KIND, either express or implied.  See the License for the
+                                        TimeValue.timeValueNanos(System.nanoTime() - reloadStartTimeNanos)
+                    return new ClusterStateUpdateResponse(acknowledged);
+    public void registerInternalRepository(String name, String type) {
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
+                    }  
+import org.opensearch.cluster.metadata.RepositoriesMetadata;
+        }
+/**
+                @Override
+    }
+                                    "updating repository [{}] in-place to use new metadata [{}]",  
+                                    );
+        if (repository != null) {
+                if (verificationToken != null) {  
+        if (SHALLOW_SNAPSHOT_V2.get(repositoryMetadataSettings)) {
+                public boolean mustAck(DiscoveryNode discoveryNode) {  
+            "delete_repository [" + request.name() + "]",  
+            final ClusterState state = event.state();
+     */
+    }
+ * this work for additional information regarding copyright
+                        for (RepositoryMetadata repositoryMetadata : repositories.repositories()) {  
+                        + SHALLOW_SNAPSHOT_V2.getKey()
+                                        ex  
+                        "setting "
+     * @param event cluster changed event  
+ * ownership. Elasticsearch licenses this file to you under  
+        RepositoriesService repositoriesService
+                                    request.settings(),
+                    name
+            if ((oldMetadata == null && newMetadata == null) || (oldMetadata != null && oldMetadata.equalsIgnoreGenerations(newMetadata))) {
+        return false;
+}  
+        if (isSystemRepositorySettingPresent(repositoryMetadata.settings())) {
+        clusterService.removeApplier(this);  
+            throw new IllegalArgumentException("can't overwrite as repositories are already present");  
+                            }
+        if (newValue == null && currentValue == null) {  
+import org.opensearch.Version;
+                            }
+    }
+ * Unless required by applicable law or agreed to in writing,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /**  
+                        + SHALLOW_SNAPSHOT_V2.getKey()
+        return true;  
+        final ActionListener<ClusterStateUpdateResponse> timedListener = ActionListener.runAfter(  
+            );  
+    public void applyClusterState(ClusterChangedEvent event) {  
+                "closed repository [{}][{}] in [{}]",
+                    .collect(Collectors.toList());  
+        }
+        this.typesRegistry = typesRegistry;
+                        if (!found) {
+        Settings settings,  
+                        newRepositoryMetadataSettings.get(restrictedSettingKey),
+                                new RepositoryMetadata(
+                        + SnapshotsService.SNAPSHOT_PINNED_TIMESTAMP_DELIMITER
+                        List<RepositoryMetadata> repositoriesMetadata = new ArrayList<>(repositories.repositories().size());
+ * GitHub history for details.
+     * @param repositoryName repository name
+                }
+                } else {  
+        }
+    private final RepositoriesStatsArchive repositoriesStatsArchive;
+                    + SYSTEM_REPOSITORY_SETTING.getKey()
+                    + Version.V_2_9_0  
+                            repositoriesMetadata.add(
+     * @throws RepositoryMissingException if repository with such name isn't registered  
+import org.opensearch.cluster.ClusterStateApplier;  
+                                if (repositoryMetadata.equalsIgnoreGenerations(repository.getMetadata()) == false) {
+        }
+            )  
+                    if (repositories != null && repositories.repositories().size() > 0) {  
+            Map<String, Repository> builder = new HashMap<>();
+    /**
+     * @param request  unregister repository request
+                    }  
+        }
+        Map<String, Repository> repositories,  
+            listener,
+            );
+                    type
+            try {
+        RepositoryMetadata metadata = new RepositoryMetadata(name, type, Settings.EMPTY);  
+            if (isDedicatedVotingOnlyNode(DiscoveryNode.getRolesFromSettings(settings)) == false) {
+                        + "internal repository [{}][{}].",  
+        final String repositoryName,
+    private static boolean repositoryWithShallowV2Exists(Map<String, Repository> repositories, String repositoryName) {
+            });  
+            .collect(Collectors.toList());
+                        try {  
+        assert lifecycle.started() : "Trying to register new repository but service is in state [" + lifecycle.state() + "]";  
+        if (isSystemRepositorySettingPresent(currentRepositoryMetadata.settings())) {
+    }  
+            repositories = Collections.unmodifiableMap(builder);  
+        if (repository != null) {
+import org.opensearch.common.settings.Setting;
+    private final ClusterService clusterService;  
+                                } catch (RepositoryException ex) {
+import org.opensearch.common.regex.Regex;
+            logger.info(  
+                    + newValue
+    ) throws IOException {
+import org.opensearch.cluster.metadata.Metadata;
+            try {
+        }
+     *  
+                        repo.updateState(state);
+                                try {  
+        } else {
+                public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
+        List<RepositoryStatsSnapshot> activeRepoStats = getRepositoryStatsForActiveRepositories();  
+                        + Version.V_2_17_0  
+    private static boolean isRepositoryInUse(ClusterState clusterState, String repository) {
+            request.name(),
+                    return putRepositoryTaskKey;
+ * software distributed under the License is distributed on an
+        ClusterService clusterService,  
+        // Validation to not allow users to create system repository via put repository call.
+                            } else {
+        return activeRepoStats;
+                    + minVersionInCluster
+                    repositoryName,
+                    logger.debug("unregistering repository [{}]", entry.getKey());
+                    isValueEqual(  
+                    delegatedListener.onResponse(clusterStateUpdateResponse);
+        final long startTimeNanos = System.nanoTime();
+                    repositoryMetadata.type(),
+                return true;
+                                found = true;
+            }
+        if (repository != null) {
+                    name,  
+                            Collections.singletonList(
+                                            () -> new ParameterizedMessage("[{}] failed to finish repository verification", repositoryName),  
+            }
+ * under the License.  
+                                repository = createRepository(repositoryMetadata, typesRegistry);
+                                    repositoryMetadata
+                                repositoriesMetadata.add(repositoryMetadata);
+            );  
+     * Returns registered repository  
+                logger.info(
+                                    request.type(),
+                                }
+                    + "current value ["
+        String newRepoName,
+        } else if (repositories.containsKey(name)) {
+        Map<String, Repository.Factory> typesRegistry,
+                    );
+                                // one present in incoming cluster state.
+            assert false : new AssertionError(ex);
+        return this.createRepository(repositoryMetadata, typesRegistry);
+import java.util.stream.Stream;
+    private static boolean isSystemRepositorySettingPresent(Settings repositoryMetadataSettings) {
+            .anyMatch(
+        }  
+                    repositoryMetadata.name(),
+import java.util.List;
+        }  
+     */  
+            for (Repository repo : builder.values()) {  
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.stream.Collectors;
+        ThreadPool threadPool
+import org.opensearch.core.common.Strings;
+        }
+                );
+        return Stream.concat(repositories.values().stream(), internalRepositories.values().stream())  
+                    name,  
+        });
+                @Override
+            logger.debug(() -> new ParameterizedMessage("delete internal repository [{}][{}].", metadata.type(), name));  
+                    throw new RepositoryException(
+    public static final Setting<TimeValue> REPOSITORIES_STATS_ARCHIVE_RETENTION_PERIOD = Setting.positiveTimeSetting(
+            if (repository.equals(entry.snapshot().getRepository())) {
+                                    ensureValidSystemRepositoryUpdate(updatedRepositoryMetadata, repositoryMetadata);
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+                );
+    /** Closes the given repository. */
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                request.name(),
+                                )
+ *
+        Map<String, Set<Long>> pinningEntityTimestampMap = RemoteStorePinnedTimestampService.fetchPinnedTimestamps(  
+    }
+                public void onFailure(String source, Exception e) {  
+        logger.debug("creating repository [{}][{}]", repositoryMetadata.type(), repositoryMetadata.name());
+                    && !Objects.equals(repository.getMetadata().name(), repositoryName)  
+                        } catch (RepositoryException ex) {
+            );
+                                    repositoryMetadata.name(),
+    public RepositoriesStats getRepositoriesStats() {
+            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, registrationListener) {  
+import org.opensearch.snapshots.SnapshotsService;
+import org.opensearch.action.ActionRunnable;
+                    } else {
+                    if (repository != null) {  
+        if (identifier.contains("#")) {  
+                            try {  
+                "setting "  
+                                    );
+                                logger.debug("updating repository [{}]", repositoryMetadata.name());
+            throw new RepositoryException(
+                            logger.info("update repository [{}]", request.name());
+                    mdBuilder.putCustom(RepositoriesMetadata.TYPE, repositories);
+            throw new RepositoryException(identifier, "must not contain '#'");
+                    + ". Minimum node version in cluster is: "
+        if (REMOTE_STORE_INDEX_SHALLOW_COPY.get(repositoryMetadataSettings) && !minVersionInCluster.onOrAfter(Version.V_2_9_0)) {  
+            }  
+        repos.addAll(internalRepositories.values());
+    }
+                            listener.onFailure(e);  
+ * specific language governing permissions and limitations
+                        + " cannot be enabled as this setting can be enabled only on one repository "
+        Version minVersionInCluster = clusterService.state().getNodes().getMinNodeVersion();
+            )  
+import java.util.Locale;  
+            return repository;  
+            } finally {
+    }  
+     *  
+            throw new IllegalStateException("trying to modify or unregister repository that is currently used");  
+            IOUtils.closeWhileHandlingException(repository);
+            // Trying to create the new repository on cluster-manager to make sure it works  
+                        + " and one or more repositories in the cluster have the setting as enabled"  
+        );
+            protected void doRun() {
+            logger.warn(  
+            try {
+                    if (repositories == null) {
+                        logger.info("put repository [{}]", request.name());  
+                );
+                        verifyAction.verify(
+                        + minVersionInCluster
+            throw new RepositoryException(repositoryMetadata.name(), "failed to create repository", e);
+    private final ThreadPool threadPool;
+                            verificationToken,
+        }  
+            // First, remove repositories that are no longer there
+                        });
+                }
+                                }  
+                repo.updateState(state);
+            }  
+                return true;  
+     * Creates repository holder. This method starts the non-internal repository
+                                    .put(SYSTEM_REPOSITORY_SETTING.getKey(), true)
+        if (isReloadableSettings) {
+                    RepositoriesMetadata stateRepositoriesMetadata = state.metadata().custom(RepositoriesMetadata.TYPE);  
+                        restrictedSettingKey,
+     * @param clusterState cluster state  
+        if (DiscoveryNode.isDataNode(settings) || DiscoveryNode.isClusterManagerNode(settings)) {
+                    "non-internal repository [{}] already registered. this repository will block the "
+        this.clusterService = clusterService;  
+        if (org.opensearch.core.common.Strings.hasLength(identifier) == false) {  
+        this.settings = settings;  
+                repositoryName,
+                        }  
+                            ActionListener.delegateFailure(
+                                    // Previous version is the same as this one no update is needed.
+        deleteRepositoryTaskKey = clusterService.registerClusterManagerTask(DELETE_REPOSITORY, true);
+import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;
+                                logger.debug(
+                    currentRepositoryMetadata.name()  
+        ClusterService clusterService,  
+            "put_repository [" + request.name() + "]",
+                            } else {
+                }
+            throw new RepositoryException(
+        }  
+            if (repository.equals(snapshot.snapshot().getRepository())) {
+        }
+        } else {
+    private static boolean isValueEqual(String key, String newValue, String currentValue) {
+                    + currentValue  
+        if (!cryptoMetadata.keyProviderName().equals(cryptoSettings.getKeyProviderName())
+        }
+    /**
+                }  
+     */  
+                                    request.settings(),  
+            return repository;  
+                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
+     * Checks if a repository is currently in use by one of the snapshots
+        ).entries()) {
+    );  
+        for (SnapshotsInProgress.Entry snapshot : snapshots.entries()) {  
+                }
+    private final ClusterManagerTaskThrottler.ThrottlingKey putRepositoryTaskKey;  
+                );  
+                throw new RepositoryException(currentRepositoryMetadata.name(), e.getMessage());
+                        }
+                    if (stateRepositoriesMetadata != null && stateRepositoriesMetadata.repository(repo.getMetadata().name()) != null) {
+                            // Previous version is different from the version in settings
+    public static void validateRepositoryMetadataSettings(
+        final Settings repositoryMetadataSettings,
+                            // System repositories are already created and verified and hence during cluster state
+                isValueEqual("type", newRepositoryMetadata.type(), currentRepositoryMetadata.type());  
+    );
+    private final Settings settings;
+     * and if it was successful it adds new repository to cluster metadata.  
+                                    logger.info(  
+                } else {
+                newRepositoryMetadata.name(),  
+import java.util.HashMap;
+     */  
+        try {
+     * Creates repository holder. This method starts the repository
+                throw new RepositoryException(
+    }
+ * The OpenSearch Contributors require contributions made to  
+                            mdBuilder.putCustom(RepositoriesMetadata.TYPE, repositories);  
+            assert repository != null; // should only be called once we've validated the repository exists
+import org.opensearch.common.settings.Settings;  
+        // Doesn't make sense to maintain repositories on non-master and non-data nodes
+    private static void ensureRepositoryNotInUse(ClusterState clusterState, String repository) {
+                                listener,  
+ */  
+            if (entry.repository().equals(repository)) {  
+import org.opensearch.cluster.ClusterState;
+                    );
+/*  
+            throw new IllegalArgumentException("[" + key + "] cannot be empty, " + "current value [" + currentValue + "]");
+                            repositoryName,  
+    @Override
+                return true;
+                        return currentState;
+                    name,
+            }
+                    // repository metadata.
+                newRepositoryMetadata.cryptoMetadata()  
+                                repository = null;
+        Repository repository = internalRepositories.computeIfAbsent(name, (n) -> {
+     */
+                new ParameterizedMessage(
+        }  
+    private List<RepositoryStatsSnapshot> getRepositoryStatsForActiveRepositories() {
+import java.util.Map;
+            if (minVersionInCluster.onOrAfter(Version.V_2_17_0) == false) {  
+ * compatible open source license.
+                                (delegatedListener, verifyResponse) -> threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(() -> {
+                    repositoryName,
+            RepositoryMetadata metadata = repository.getMetadata();
+ *  
+import static org.opensearch.cluster.service.ClusterManagerTask.PUT_REPOSITORY;
+                    + REMOTE_STORE_INDEX_SHALLOW_COPY.getKey()
+            throw new RepositoryException(repositoryMetadata.name(), "repository type [" + repositoryMetadata.type() + "] does not exist");
+                                    updatedSettings,
+        // We can add more validations here for repository settings in the future.
+     * @param listener unregister repository listener
+            () -> logger.info(
+    public Repository createRepository(RepositoryMetadata repositoryMetadata) {  
+        this.threadPool = threadPool;
+ * license agreements. See the NOTICE file distributed with
+import java.util.Collections;  
+        }
+    public void unregisterRepository(final DeleteRepositoryRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
+                            );
+                    "setting "
+        return repositories.values()
+        repos.addAll(repositories.values());  
+     * Gets the {@link RepositoryData} for the given repository.
+ * this file be licensed under the Apache-2.0 license or a
+        for (SnapshotDeletionsInProgress.Entry entry : clusterState.custom(
+                                )
+                "setting "  
+            throw new RepositoryException(repositoryMetadata.name(), "cannot delete a system repository");  
+    private static void ensureNotSystemRepository(RepositoryMetadata repositoryMetadata) {
+                );
+                        }
+                new ParameterizedMessage("failed to create repository [{}][{}]", repositoryMetadata.type(), repositoryMetadata.name()),
+                registrationListener.onFailure(e);
+                "put/update repository [{}] took [{}]",  
+                repositoryName,
+            throw new IllegalArgumentException(
+                @Override  
+        Map<String, Repository.Factory> internalTypesRegistry,  
+     * This method will be used to update the repositories map.  
+        TransportService transportService,
+        return new RepositoriesStats(repositoriesStats());
+        }
+            logger.trace("processing new index repositories for state version [{}]", event.state().version());
+                                );  
+            throw new IllegalArgumentException("Changes in crypto settings found in the repository update request. This is not allowed");
+                                        () -> new ParameterizedMessage("failed to change repository [{}]", repositoryMetadata.name()),
+import java.util.Set;  
+                                    request.name(),
+                    }
+                    "setting "  
+                                    finalRepositoryMetadata.cryptoMetadata()
+                repository.getMetadata().type(),
+        } catch (Exception e) {  
+                @Override
+        final long startTimeNanos = System.nanoTime();
+        "repositories.stats.archive.retention_period",  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        this.internalTypesRegistry = internalTypesRegistry;
+                for (Repository repo : repositories.values()) {
+                    // check needs to be added as system repositories can be populated before cluster state has the
+                @Override  
+        } catch (Exception ex) {
+                                    CryptoMetadata.fromRequest(request.cryptoSettings())  
+                Settings currentRepositoryMetadataSettings = currentRepositoryMetadata.settings();
+            .stream()  
+            }
+        validateRepositoryMetadataSettings(clusterService, request.name(), request.settings(), repositories, settings, this);
+            } catch (IOException e) {
+                    RepositoriesMetadata repositories = metadata.custom(RepositoriesMetadata.TYPE);
+        Repository.Factory factory = factories.get(repositoryMetadata.type());  
+            closeRepository(repository);
+        if (factory == null) {
+        Settings settings,
+                closeRepository(createRepository(newRepositoryMetadata, typesRegistry));
+    }  
+                List<String> restrictedSettings = repository.getRestrictedSystemRepositorySettings()  
+     * Unregisters repository in the cluster  
+        validate(request.name());  
+            Settings updatedSettings = Settings.builder()
+    }
+        }
+                                }  
+            }
+                    // repository is created on both cluster-manager and data nodes
+                                        return;
+        return SYSTEM_REPOSITORY_SETTING.get(repositoryMetadataSettings);
+import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
+            .map(MeteredBlobStoreRepository::statsSnapshot)  
+                                Settings updatedSettings = Settings.builder()  
+    private final Map<String, Repository> internalRepositories = ConcurrentCollections.newConcurrentMap();  
+                throw new RepositoryException(repositoryName, "Exception while fetching pinned timestamp details");
+            RepositoryCleanupInProgress.EMPTY  
+                            if ((repository.isSystemRepository() && repository.isReloadable())  
+     *  
+            }
+    /**
+                    verifyRepository(
+    public void verifyRepository(final String repositoryName, final ActionListener<List<DiscoveryNode>> listener) {  
+                        if (changed) {
+        );
+                            if (repositories.containsKey(repositoryMetadata.name()) == false) {
+                            + SHALLOW_SNAPSHOT_V2.getKey()
+    }  
+@PublicApi(since = "1.0.0")  
+            if (entry.repository().equals(repository)) {
+                    }
+                        boolean found = false;  
+        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.  
+                    + " of system repository from "
+                repository.start();  
+                return;
+     * @return true if repository is currently in use by one of the running snapshots
+import org.opensearch.cluster.SnapshotsInProgress;
+                .build();
+                @Override
+    }  
+                                new RepositoryMetadata(  
+            || !cryptoMetadata.keyProviderType().equals(cryptoSettings.getKeyProviderType())  
+                updatedSettings,
+                final String verificationToken = repository.startVerification();
+    protected void doStart() {
+import java.util.Objects;
+    ) {
+            );
+                            + "setting using different repository."
+import org.opensearch.threadpool.ThreadPool;  
+            CryptoMetadata.fromRequest(request.cryptoSettings())
     // Note: "voting_only" role has not been implemented yet, so the method always returns false.
     static boolean isDedicatedVotingOnlyNode(Set<DiscoveryNodeRole> roles) {
-        return roles.contains(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE)  
-            && roles.contains(DiscoveryNodeRole.DATA_ROLE) == false
-            && roles.stream().anyMatch(role -> role.roleName().equals("voting_only"));
-    }  
-
-    /**
-     * Checks if new repositories appeared in or disappeared from cluster metadata and updates current list of  
-     * repositories accordingly.
-     *
-     * @param event cluster changed event  
-     */
-    @Override
-    public void applyClusterState(ClusterChangedEvent event) {  
-        try {
-            final ClusterState state = event.state();
-            RepositoriesMetadata oldMetadata = event.previousState().getMetadata().custom(RepositoriesMetadata.TYPE);  
-            RepositoriesMetadata newMetadata = state.getMetadata().custom(RepositoriesMetadata.TYPE);
-
-            // Check if repositories got changed  
-            if ((oldMetadata == null && newMetadata == null) || (oldMetadata != null && oldMetadata.equalsIgnoreGenerations(newMetadata))) {
-                for (Repository repo : repositories.values()) {
-                    // Update State should only be invoked for repository which are already in cluster state. This  
-                    // check needs to be added as system repositories can be populated before cluster state has the
-                    // repository metadata.
-                    RepositoriesMetadata stateRepositoriesMetadata = state.metadata().custom(RepositoriesMetadata.TYPE);  
-                    if (stateRepositoriesMetadata != null && stateRepositoriesMetadata.repository(repo.getMetadata().name()) != null) {
-                        repo.updateState(state);
-                    }  
-                }
-                return;
-            }  
-
-            logger.trace("processing new index repositories for state version [{}]", event.state().version());
-
-            Map<String, Repository> survivors = new HashMap<>();
-            // First, remove repositories that are no longer there
-            for (Map.Entry<String, Repository> entry : repositories.entrySet()) {  
-                if (newMetadata == null || newMetadata.repository(entry.getKey()) == null) {
-                    logger.debug("unregistering repository [{}]", entry.getKey());
-                    Repository repository = entry.getValue();  
-                    closeRepository(repository);
-                } else {
-                    survivors.put(entry.getKey(), entry.getValue());  
-                }
-            }
-
-            Map<String, Repository> builder = new HashMap<>();
-            if (newMetadata != null) {
-                // Now go through all repositories and update existing or create missing  
-                for (RepositoryMetadata repositoryMetadata : newMetadata.repositories()) {
-                    Repository repository = survivors.get(repositoryMetadata.name());
-                    if (repository != null) {  
-                        // Found previous version of this repository
-                        RepositoryMetadata previousMetadata = repository.getMetadata();
-                        if (previousMetadata.type().equals(repositoryMetadata.type()) == false  
-                            || previousMetadata.settings().equals(repositoryMetadata.settings()) == false) {
-                            // Previous version is different from the version in settings
-                            if ((repository.isSystemRepository() && repository.isReloadable())  
-                                || repository.isReloadableSettings(repositoryMetadata)) {
-                                logger.debug(
-                                    "updating repository [{}] in-place to use new metadata [{}]",  
-                                    repositoryMetadata.name(),
-                                    repositoryMetadata
-                                );  
-                                repository.validateMetadata(repositoryMetadata);
-                                final long reloadStartTimeNanos = System.nanoTime();
-                                try {  
-                                    repository.reload(repositoryMetadata);
-                                } finally {
-                                    logger.info(  
-                                        "reloaded repository [{}][{}] in [{}]",
-                                        repositoryMetadata.type(),
-                                        repositoryMetadata.name(),  
-                                        TimeValue.timeValueNanos(System.nanoTime() - reloadStartTimeNanos)
-                                    );
-                                }  
-                            } else {
-                                logger.debug("updating repository [{}]", repositoryMetadata.name());
-                                closeRepository(repository);  
-                                repository = null;
-                                try {
-                                    repository = createRepository(repositoryMetadata, typesRegistry);  
-                                } catch (RepositoryException ex) {
-                                    // TODO: this catch is bogus, it means the old repo is already closed,
-                                    // but we have nothing to replace it  
-                                    logger.warn(
-                                        () -> new ParameterizedMessage("failed to change repository [{}]", repositoryMetadata.name()),
-                                        ex  
-                                    );
-                                }
-                            }  
-                        }
-                    } else {
-                        try {  
-                            // System repositories are already created and verified and hence during cluster state
-                            // update we should avoid creating it again. Once the cluster state is update with the
-                            // repository metadata the repository metadata update will land in the above if block.  
-                            if (repositories.containsKey(repositoryMetadata.name()) == false) {
-                                repository = createRepository(repositoryMetadata, typesRegistry);
-                            } else {  
-                                // Validate the repository metadata which was created during bootstrap is same as the
-                                // one present in incoming cluster state.
-                                repository = repositories.get(repositoryMetadata.name());  
-                                if (repositoryMetadata.equalsIgnoreGenerations(repository.getMetadata()) == false) {
-                                    throw new RepositoryException(
-                                        repositoryMetadata.name(),  
-                                        "repository was already " + "registered with different metadata during bootstrap than cluster state"
-                                    );
-                                }  
-                            }
-                        } catch (RepositoryException ex) {
-                            logger.warn(() -> new ParameterizedMessage("failed to create repository [{}]", repositoryMetadata.name()), ex);  
-                        }
-                    }
-                    if (repository != null) {  
-                        logger.debug("registering repository [{}]", repositoryMetadata.name());
-                        builder.put(repositoryMetadata.name(), repository);
-                    }  
-                }
-            }
-            for (Repository repo : builder.values()) {  
-                repo.updateState(state);
-            }
-            repositories = Collections.unmodifiableMap(builder);  
-        } catch (Exception ex) {
-            assert false : new AssertionError(ex);
-            logger.warn("failure updating cluster state ", ex);  
-        }
-    }
-
-    /**
-     * Gets the {@link RepositoryData} for the given repository.
-     *  
-     * @param repositoryName repository name
-     * @param listener       listener to pass {@link RepositoryData} to
-     */  
-    public void getRepositoryData(final String repositoryName, final ActionListener<RepositoryData> listener) {
-        try {
-            Repository repository = repository(repositoryName);  
-            assert repository != null; // should only be called once we've validated the repository exists
-            repository.getRepositoryData(listener);
-        } catch (Exception e) {  
-            listener.onFailure(e);
-        }
-    }  
-
-    /**
-     * Returns registered repository  
-     * <p>
-     * This method is called only on the cluster-manager node
-     *  
-     * @param repositoryName repository name
-     * @return registered repository
-     * @throws RepositoryMissingException if repository with such name isn't registered  
-     */
-    public Repository repository(String repositoryName) {
-        Repository repository = repositories.get(repositoryName);  
-        if (repository != null) {
-            return repository;
-        }  
-        repository = internalRepositories.get(repositoryName);
-        if (repository != null) {
-            return repository;  
-        }
-        throw new RepositoryMissingException(repositoryName);
-    }  
-
-    public List<RepositoryStatsSnapshot> repositoriesStats() {
-        List<RepositoryStatsSnapshot> activeRepoStats = getRepositoryStatsForActiveRepositories();  
-        return activeRepoStats;
-    }
-
-    public RepositoriesStats getRepositoriesStats() {
-        return new RepositoriesStats(repositoriesStats());
-    }  
-
-    private List<RepositoryStatsSnapshot> getRepositoryStatsForActiveRepositories() {
-        return Stream.concat(repositories.values().stream(), internalRepositories.values().stream())  
-            .filter(r -> r instanceof MeteredBlobStoreRepository)
             .map(r -> (MeteredBlobStoreRepository) r)
-            .map(MeteredBlobStoreRepository::statsSnapshot)  
-            .collect(Collectors.toList());
-    }
-
-    public List<RepositoryStatsSnapshot> clearRepositoriesStatsArchive(long maxVersionToClear) {
-        return repositoriesStatsArchive.clear(maxVersionToClear);
-    }  
-
-    public void registerInternalRepository(String name, String type) {
-        RepositoryMetadata metadata = new RepositoryMetadata(name, type, Settings.EMPTY);  
-        Repository repository = internalRepositories.computeIfAbsent(name, (n) -> {
-            logger.debug("put internal repository [{}][{}]", name, type);
-            return createRepository(metadata, internalTypesRegistry);  
-        });
-        if (type.equals(repository.getMetadata().type()) == false) {
-            logger.warn(  
-                new ParameterizedMessage(
-                    "internal repository [{}][{}] already registered. this prevented the registration of "
-                        + "internal repository [{}][{}].",  
-                    name,
-                    repository.getMetadata().type(),
-                    name,  
-                    type
-                )
-            );  
-        } else if (repositories.containsKey(name)) {
-            logger.warn(
-                new ParameterizedMessage(  
-                    "non-internal repository [{}] already registered. this repository will block the "
-                        + "usage of internal repository [{}][{}].",
-                    name,  
-                    metadata.type(),
-                    name
-                )  
-            );
+            RepositoriesMetadata newMetadata = state.getMetadata().custom(RepositoriesMetadata.TYPE);
+import org.opensearch.cluster.metadata.CryptoMetadata;  
         }
-    }  
-
-    public void unregisterInternalRepository(String name) {
-        Repository repository = internalRepositories.remove(name);  
-        if (repository != null) {
-            RepositoryMetadata metadata = repository.getMetadata();
-            logger.debug(() -> new ParameterizedMessage("delete internal repository [{}][{}].", metadata.type(), name));  
-            closeRepository(repository);
-        }
-    }  
-
-    /** Closes the given repository. */
-    public void closeRepository(Repository repository) {  
-        logger.debug("closing repository [{}][{}]", repository.getMetadata().type(), repository.getMetadata().name());
-        final long startTimeNanos = System.nanoTime();
-        try {  
-            repository.close();
-        } finally {
-            logger.info(  
-                "closed repository [{}][{}] in [{}]",
-                repository.getMetadata().type(),
-                repository.getMetadata().name(),  
-                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
-            );
-        }  
-    }
-
-    /**  
-     * Creates repository holder. This method starts the non-internal repository
-     */
-    public Repository createRepository(RepositoryMetadata repositoryMetadata) {  
-        return this.createRepository(repositoryMetadata, typesRegistry);
-    }
-
-    /**
-     * Creates repository holder. This method starts the repository
-     */  
-    private Repository createRepository(RepositoryMetadata repositoryMetadata, Map<String, Repository.Factory> factories) {
-        logger.debug("creating repository [{}][{}]", repositoryMetadata.type(), repositoryMetadata.name());
-        Repository.Factory factory = factories.get(repositoryMetadata.type());  
-        if (factory == null) {
-            throw new RepositoryException(repositoryMetadata.name(), "repository type [" + repositoryMetadata.type() + "] does not exist");
-        }  
-        Repository repository = null;
-        try {
-            final long startTimeNanos = System.nanoTime();  
-            try {
-                repository = factory.create(repositoryMetadata, factories::get);
-                repository.start();  
-            } finally {
-                logger.info(
-                    "created repository [{}][{}] in [{}]",  
-                    repositoryMetadata.type(),
-                    repositoryMetadata.name(),
-                    TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)  
-                );
-            }
-            return repository;  
-        } catch (Exception e) {
-            IOUtils.closeWhileHandlingException(repository);
-            logger.warn(  
-                new ParameterizedMessage("failed to create repository [{}][{}]", repositoryMetadata.type(), repositoryMetadata.name()),
-                e
-            );  
-            throw new RepositoryException(repositoryMetadata.name(), "failed to create repository", e);
-        }
-    }  
-
-    public static void validate(final String identifier) {
-        if (org.opensearch.core.common.Strings.hasLength(identifier) == false) {  
-            throw new RepositoryException(identifier, "cannot be empty");
-        }
-        if (identifier.contains("#")) {  
-            throw new RepositoryException(identifier, "must not contain '#'");
-        }
-        if (Strings.validFileName(identifier) == false) {  
-            throw new RepositoryException(identifier, "must not contain the following characters " + Strings.INVALID_FILENAME_CHARS);
-        }
-    }  
-
-    public static void validateRepositoryMetadataSettings(
-        ClusterService clusterService,  
-        final String repositoryName,
-        final Settings repositoryMetadataSettings,
-        Map<String, Repository> repositories,  
-        Settings settings,
-        RepositoriesService repositoriesService
-    ) {  
-        // We can add more validations here for repository settings in the future.
-        Version minVersionInCluster = clusterService.state().getNodes().getMinNodeVersion();
-        if (REMOTE_STORE_INDEX_SHALLOW_COPY.get(repositoryMetadataSettings) && !minVersionInCluster.onOrAfter(Version.V_2_9_0)) {  
-            throw new RepositoryException(
-                repositoryName,
-                "setting "  
-                    + REMOTE_STORE_INDEX_SHALLOW_COPY.getKey()
-                    + " cannot be enabled as some of the nodes in cluster are on version older than "
-                    + Version.V_2_9_0  
-                    + ". Minimum node version in cluster is: "
-                    + minVersionInCluster
-            );  
-        }
-        if (SHALLOW_SNAPSHOT_V2.get(repositoryMetadataSettings)) {
-            if (minVersionInCluster.onOrAfter(Version.V_2_17_0) == false) {  
-                throw new RepositoryException(
-                    repositoryName,
-                    "setting "  
-                        + SHALLOW_SNAPSHOT_V2.getKey()
-                        + " cannot be enabled as some of the nodes in cluster are on version older than "
-                        + Version.V_2_17_0  
-                        + ". Minimum node version in cluster is: "
-                        + minVersionInCluster
-                );  
-            }
-            if (repositoryName.contains(SnapshotsService.SNAPSHOT_PINNED_TIMESTAMP_DELIMITER)) {
-                throw new RepositoryException(  
-                    repositoryName,
-                    "setting "
-                        + SHALLOW_SNAPSHOT_V2.getKey()  
-                        + " cannot be enabled for repository with "
-                        + SnapshotsService.SNAPSHOT_PINNED_TIMESTAMP_DELIMITER
-                        + " in the name as this delimiter is used to create pinning entity"  
-                );
-            }
-            if (repositoryWithShallowV2Exists(repositories, repositoryName)) {  
-                throw new RepositoryException(
-                    repositoryName,
-                    "setting "  
-                        + SHALLOW_SNAPSHOT_V2.getKey()
-                        + " cannot be enabled as this setting can be enabled only on one repository "
-                        + " and one or more repositories in the cluster have the setting as enabled"  
-                );
-            }
-            try {  
-                if (pinnedTimestampExistsWithDifferentRepository(repositoryName, settings, repositoriesService)) {
-                    throw new RepositoryException(
-                        repositoryName,  
-                        "setting "
-                            + SHALLOW_SNAPSHOT_V2.getKey()
-                            + " cannot be enabled if there are existing snapshots created with shallow V2 "  
-                            + "setting using different repository."
-                    );
-                }  
-            } catch (IOException e) {
-                throw new RepositoryException(repositoryName, "Exception while fetching pinned timestamp details");
-            }  
-        }
-        // Validation to not allow users to create system repository via put repository call.
-        if (isSystemRepositorySettingPresent(repositoryMetadataSettings)) {  
-            throw new RepositoryException(
-                repositoryName,
-                "setting "  
-                    + SYSTEM_REPOSITORY_SETTING.getKey()
-                    + " cannot provide system repository setting; this setting is managed by OpenSearch"
-            );  
-        }
-    }
-
-    private static boolean repositoryWithShallowV2Exists(Map<String, Repository> repositories, String repositoryName) {
-        return repositories.values()
-            .stream()  
-            .anyMatch(
-                repository -> SHALLOW_SNAPSHOT_V2.get(repository.getMetadata().settings())
-                    && !Objects.equals(repository.getMetadata().name(), repositoryName)  
-            );
-    }
-
-    private static boolean pinnedTimestampExistsWithDifferentRepository(
-        String newRepoName,
-        Settings settings,  
-        RepositoriesService repositoriesService
-    ) throws IOException {
-        Map<String, Set<Long>> pinningEntityTimestampMap = RemoteStorePinnedTimestampService.fetchPinnedTimestamps(  
-            settings,
-            repositoriesService
-        );  
-        for (String pinningEntity : pinningEntityTimestampMap.keySet()) {
-            String repoNameWithPinnedTimestamps = pinningEntity.split(SnapshotsService.SNAPSHOT_PINNED_TIMESTAMP_DELIMITER)[0];
-            if (repoNameWithPinnedTimestamps.equals(newRepoName) == false) {  
-                return true;
-            }
-        }  
-        return false;
-    }
-
-    private static void ensureRepositoryNotInUse(ClusterState clusterState, String repository) {
-        if (isRepositoryInUse(clusterState, repository)) {
-            throw new IllegalStateException("trying to modify or unregister repository that is currently used");  
-        }
-    }
-
-    private static void ensureCryptoSettingsAreSame(RepositoryMetadata repositoryMetadata, PutRepositoryRequest request) {
-        if (repositoryMetadata.cryptoMetadata() == null && request.cryptoSettings() == null) {
-            return;  
-        }
-        if (repositoryMetadata.cryptoMetadata() == null || request.cryptoSettings() == null) {
-            throw new IllegalArgumentException("Crypto settings changes found in the repository update request. This is not allowed");  
-        }
-
-        CryptoMetadata cryptoMetadata = repositoryMetadata.cryptoMetadata();  
-        CryptoSettings cryptoSettings = request.cryptoSettings();
-        if (!cryptoMetadata.keyProviderName().equals(cryptoSettings.getKeyProviderName())
-            || !cryptoMetadata.keyProviderType().equals(cryptoSettings.getKeyProviderType())  
-            || !cryptoMetadata.settings().toString().equals(cryptoSettings.getSettings().toString())) {
-            throw new IllegalArgumentException("Changes in crypto settings found in the repository update request. This is not allowed");
-        }  
-    }
-
-    /**  
-     * Checks if a repository is currently in use by one of the snapshots
-     *
-     * @param clusterState cluster state  
-     * @param repository   repository id
-     * @return true if repository is currently in use by one of the running snapshots
-     */  
-    private static boolean isRepositoryInUse(ClusterState clusterState, String repository) {
-        final SnapshotsInProgress snapshots = clusterState.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY);
-        for (SnapshotsInProgress.Entry snapshot : snapshots.entries()) {  
-            if (repository.equals(snapshot.snapshot().getRepository())) {
-                return true;
-            }  
-        }
-        for (SnapshotDeletionsInProgress.Entry entry : clusterState.custom(
-            SnapshotDeletionsInProgress.TYPE,  
-            SnapshotDeletionsInProgress.EMPTY
-        ).getEntries()) {
-            if (entry.repository().equals(repository)) {  
-                return true;
-            }
-        }  
-        for (RepositoryCleanupInProgress.Entry entry : clusterState.custom(
-            RepositoryCleanupInProgress.TYPE,
-            RepositoryCleanupInProgress.EMPTY  
-        ).entries()) {
-            if (entry.repository().equals(repository)) {
-                return true;  
-            }
-        }
-        for (RestoreInProgress.Entry entry : clusterState.custom(RestoreInProgress.TYPE, RestoreInProgress.EMPTY)) {  
-            if (repository.equals(entry.snapshot().getRepository())) {
-                return true;
-            }  
-        }
-        return false;
-    }  
-
-    /**
-     * This method will be used to update the repositories map.  
-     */
-    public void updateRepositoriesMap(Map<String, Repository> repos) {
-        if (repositories.isEmpty()) {  
-            repositories = repos;
-        } else {
-            throw new IllegalArgumentException("can't overwrite as repositories are already present");  
-        }
-    }
-
-    private static void ensureNotSystemRepository(RepositoryMetadata repositoryMetadata) {
-        if (isSystemRepositorySettingPresent(repositoryMetadata.settings())) {
-            throw new RepositoryException(repositoryMetadata.name(), "cannot delete a system repository");  
-        }
-    }
-
-    private static boolean isSystemRepositorySettingPresent(Settings repositoryMetadataSettings) {
-        return SYSTEM_REPOSITORY_SETTING.get(repositoryMetadataSettings);
-    }  
-
-    private static boolean isValueEqual(String key, String newValue, String currentValue) {
-        if (newValue == null && currentValue == null) {  
-            return true;
-        }
-        if (newValue == null) {  
-            throw new IllegalArgumentException("[" + key + "] cannot be empty, " + "current value [" + currentValue + "]");
-        }
-        if (newValue.equals(currentValue) == false) {  
-            throw new IllegalArgumentException(
-                "trying to modify an unmodifiable attribute "
-                    + key  
-                    + " of system repository from "
-                    + "current value ["
-                    + currentValue  
-                    + "] to new value ["
-                    + newValue
-                    + "]"  
-            );
-        }
-        return true;  
-    }
-
-    public void ensureValidSystemRepositoryUpdate(RepositoryMetadata newRepositoryMetadata, RepositoryMetadata currentRepositoryMetadata) {  
-        if (isSystemRepositorySettingPresent(currentRepositoryMetadata.settings())) {
-            try {
-                isValueEqual("type", newRepositoryMetadata.type(), currentRepositoryMetadata.type());  
-
-                Repository repository = repositories.get(currentRepositoryMetadata.name());
-                Settings newRepositoryMetadataSettings = newRepositoryMetadata.settings();  
-                Settings currentRepositoryMetadataSettings = currentRepositoryMetadata.settings();
-
+                                    inner  
+                                    // but we have nothing to replace it  
+import org.opensearch.common.unit.TimeValue;
+     * <p>
                 assert Objects.nonNull(repository) : String.format(  
-                    Locale.ROOT,
-                    "repository [%s] not present in RepositoryService",
-                    currentRepositoryMetadata.name()  
-                );
-
-                List<String> restrictedSettings = repository.getRestrictedSystemRepositorySettings()  
-                    .stream()
-                    .map(setting -> setting.getKey())
-                    .collect(Collectors.toList());  
-
-                for (String restrictedSettingKey : restrictedSettings) {
-                    isValueEqual(  
-                        restrictedSettingKey,
-                        newRepositoryMetadataSettings.get(restrictedSettingKey),
-                        currentRepositoryMetadataSettings.get(restrictedSettingKey)  
-                    );
-                }
-            } catch (IllegalArgumentException e) {  
-                throw new RepositoryException(currentRepositoryMetadata.name(), e.getMessage());
-            }
-        }  
-    }
-
-    @Override  
-    protected void doStart() {
-
+            registrationListener = timedListener;
+                            }  
+        if (repositoryMetadata.cryptoMetadata() == null && request.cryptoSettings() == null) {
+                        repositories = new RepositoriesMetadata(repositoriesMetadata);  
+            repository.getRepositoryData(listener);
+                                final long reloadStartTimeNanos = System.nanoTime();
+            return createRepository(metadata, internalTypesRegistry);  
+                                        );
+                                    finalRepositoryMetadata.name(),
     }  
-
-    @Override
-    protected void doStop() {  
-
-    }
-
-    @Override
-    protected void doClose() throws IOException {
-        clusterService.removeApplier(this);  
-        final Collection<Repository> repos = new ArrayList<>();
-        repos.addAll(internalRepositories.values());
-        repos.addAll(repositories.values());  
+        });
+                                    throw new RepositoryException(
+                        )
+                @Override  
+                    TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)  
+                        );  
+                        + "usage of internal repository [{}][{}].",
+                    return ClusterState.builder(currentState).metadata(mdBuilder).build();  
+package org.opensearch.repositories;
+    private Repository createRepository(RepositoryMetadata repositoryMetadata, Map<String, Repository.Factory> factories) {
+    }  
+        try {
+        if (isRepositoryInUse(clusterState, repository)) {
+     * Registers new repository or updates an existing repository in the cluster  
+                                logger.info("delete repository [{}]", repositoryMetadata.name());
+            repository.close();
         IOUtils.close(repos);
+                    + "] to new value ["
+            logger.debug("put internal repository [{}][{}]", name, type);
+            }  
+                                    );
+        if (repositoryMetadata.cryptoMetadata() == null || request.cryptoSettings() == null) {
+        Repository repository = repositories.get(repositoryName);  
+                            (innerDelegatedListener, discoveryNodes) -> innerDelegatedListener.onResponse(clusterStateUpdateResponse)  
+    public static void validate(final String identifier) {
+        }  
+                                        repository.endVerification(verificationToken);  
     }
-}  
+                                closeRepository(repository);  
+            );  
+                                );
+                                        repositoryMetadata.name(),  
+        boolean isReloadableSettings = currentRepository != null && currentRepository.isReloadableSettings(newRepositoryMetadata);  
+                }

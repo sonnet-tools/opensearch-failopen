@@ -1,144 +1,133 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.queue;
-
-import java.util.Iterator;
-import java.util.Queue;
-import java.util.concurrent.locks.Lock;  
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Predicate;
-import java.util.function.Supplier;  
-
-/**
- * A striped concurrent queue that distributes entries across multiple internal  
- * queues using thread-affinity-based hashing. This reduces contention by allowing
- * concurrent threads to operate on different stripes without blocking each other.
- *  
- * @param <T> the type of elements held in this queue
- * @opensearch.experimental
- */  
-public final class ConcurrentQueue<T> {
-
-    static final int MIN_CONCURRENCY = 1;  
-    static final int MAX_CONCURRENCY = 256;
-
-    private final int concurrency;  
-    private final Lock[] locks;
-    private final Queue<T>[] queues;
-
-    ConcurrentQueue(Supplier<Queue<T>> queueSupplier, int concurrency) {
-        if (concurrency < MIN_CONCURRENCY || concurrency > MAX_CONCURRENCY) {
-            throw new IllegalArgumentException(  
-                "concurrency must be in [" + MIN_CONCURRENCY + ", " + MAX_CONCURRENCY + "], got " + concurrency
-            );
-        }  
-        this.concurrency = concurrency;
-        locks = new Lock[concurrency];
-        @SuppressWarnings({ "rawtypes", "unchecked" })  
-        Queue<T>[] queues = new Queue[concurrency];
-        this.queues = queues;
-        for (int i = 0; i < concurrency; ++i) {  
-            locks[i] = new ReentrantLock();
-            queues[i] = queueSupplier.get();
-        }  
-    }
-
-    void add(T entry) {  
-        // Seed the order in which to look at entries based on the current thread. This helps distribute
-        // entries across queues and gives a bit of thread affinity between entries and threads, which
-        // can't hurt.  
-        final int threadHash = Thread.currentThread().hashCode() & 0xFFFF;
-        for (int i = 0; i < concurrency; ++i) {
             final int index = (threadHash + i) % concurrency;  
-            final Lock lock = locks[index];
-            final Queue<T> queue = queues[index];
-            if (lock.tryLock()) {  
-                try {
-                    queue.add(entry);
-                    return;  
-                } finally {
-                    lock.unlock();
-                }  
-            }
-        }
-        final int index = threadHash % concurrency;  
-        final Lock lock = locks[index];
-        final Queue<T> queue = queues[index];
-        lock.lock();  
-        try {
-            queue.add(entry);
-        } finally {  
-            lock.unlock();
-        }
     }  
-
-    T poll(Predicate<T> predicate) {
-        return pollAndDropIncompatible(e -> true, predicate);  
-    }
-
-    T pollAndDropIncompatible(Predicate<T> isCompatible, Predicate<T> predicate) {  
-        final int threadHash = Thread.currentThread().hashCode() & 0xFFFF;
-        for (int i = 0; i < concurrency; ++i) {
-            final int index = (threadHash + i) % concurrency;  
-            final Lock lock = locks[index];
-            final Queue<T> queue = queues[index];
-            if (lock.tryLock()) {  
-                try {
-                    T matched = scanAndDropIncompatible(queue, isCompatible, predicate);
-                    if (matched != null) return matched;  
-                } finally {
-                    lock.unlock();
+ */  
                 }  
-            }
-        }
-        for (int i = 0; i < concurrency; ++i) {  
-            final int index = (threadHash + i) % concurrency;
-            final Lock lock = locks[index];
-            final Queue<T> queue = queues[index];  
-            lock.lock();
-            try {
-                T matched = scanAndDropIncompatible(queue, isCompatible, predicate);  
-                if (matched != null) return matched;
-            } finally {
-                lock.unlock();  
-            }
-        }
-        return null;  
-    }
-
-    boolean remove(T entry) {  
-        for (int i = 0; i < concurrency; ++i) {
-            final Lock lock = locks[i];
-            final Queue<T> queue = queues[i];  
-            lock.lock();
-            try {
-                if (queue.remove(entry)) {  
-                    return true;
-                }
-            } finally {  
-                lock.unlock();
-            }
-        }  
-        return false;
-    }
-
+        // Seed the order in which to look at entries based on the current thread. This helps distribute
+                }  
+        lock.lock();  
+ * queues using thread-affinity-based hashing. This reduces contention by allowing
+    void add(T entry) {  
+ */  
     private T scanAndDropIncompatible(Queue<T> queue, Predicate<T> isCompatible, Predicate<T> predicate) {
-        Iterator<T> it = queue.iterator();
-        while (it.hasNext()) {  
-            T entry = it.next();
+    }
+    boolean remove(T entry) {  
+        for (int i = 0; i < concurrency; ++i) {  
+        }
+            }
+                    return;  
+        }
+            );
             if (isCompatible.test(entry) == false) {
-                it.remove();  
-            } else if (predicate.test(entry)) {
-                it.remove();
+        @SuppressWarnings({ "rawtypes", "unchecked" })  
+        return false;
                 return entry;  
+ * concurrent threads to operate on different stripes without blocking each other.
+                if (matched != null) return matched;
+            queues[i] = queueSupplier.get();
+    static final int MAX_CONCURRENCY = 256;
+        final int index = threadHash % concurrency;  
+            }
+ * A striped concurrent queue that distributes entries across multiple internal  
+        while (it.hasNext()) {  
+        try {
+            try {
+        Iterator<T> it = queue.iterator();
+    }
+ * this file be licensed under the Apache-2.0 license or a
+/**
+                try {
+    }
+    }
+import java.util.concurrent.locks.Lock;  
+        for (int i = 0; i < concurrency; ++i) {
+                    lock.unlock();
+            T entry = it.next();
+            if (lock.tryLock()) {  
+                    lock.unlock();
+ * @opensearch.experimental
+        for (int i = 0; i < concurrency; ++i) {
+        for (int i = 0; i < concurrency; ++i) {
+                    if (matched != null) return matched;  
+public final class ConcurrentQueue<T> {
+    T poll(Predicate<T> predicate) {
+            final Queue<T> queue = queues[index];
+                    T matched = scanAndDropIncompatible(queue, isCompatible, predicate);
+            final Queue<T> queue = queues[i];  
+            final Lock lock = locks[index];
+}
+        // entries across queues and gives a bit of thread affinity between entries and threads, which
+            queue.add(entry);
+        }  
+        return null;  
+            locks[i] = new ReentrantLock();
+        final int threadHash = Thread.currentThread().hashCode() & 0xFFFF;
+        }
             }
         }
+        return pollAndDropIncompatible(e -> true, predicate);  
+            final Lock lock = locks[index];
+        locks = new Lock[concurrency];
+import java.util.function.Predicate;
+        for (int i = 0; i < concurrency; ++i) {  
+                try {
+        this.concurrency = concurrency;
+                if (queue.remove(entry)) {  
+    private final int concurrency;  
+        final int threadHash = Thread.currentThread().hashCode() & 0xFFFF;
+            lock.lock();
+            final Queue<T> queue = queues[index];  
+        }  
+    private final Lock[] locks;
+        final Lock lock = locks[index];
+    T pollAndDropIncompatible(Predicate<T> isCompatible, Predicate<T> predicate) {  
+                lock.unlock();  
+                it.remove();
+        }  
+package org.opensearch.common.queue;
+            final Queue<T> queue = queues[index];
+        if (concurrency < MIN_CONCURRENCY || concurrency > MAX_CONCURRENCY) {
+        // can't hurt.  
+                }
+        } finally {  
+            final int index = (threadHash + i) % concurrency;
+        final Queue<T> queue = queues[index];
+ * The OpenSearch Contributors require contributions made to  
+                it.remove();  
+    private final Queue<T>[] queues;
+ * compatible open source license.
         return null;  
+            }
+            final Lock lock = locks[i];
+            if (lock.tryLock()) {  
+    ConcurrentQueue(Supplier<Queue<T>> queueSupplier, int concurrency) {
+        }
+            final int index = (threadHash + i) % concurrency;  
+                "concurrency must be in [" + MIN_CONCURRENCY + ", " + MAX_CONCURRENCY + "], got " + concurrency
+            lock.unlock();
+        Queue<T>[] queues = new Queue[concurrency];
+                lock.unlock();
+                } finally {
+ * @param <T> the type of elements held in this queue
+                    queue.add(entry);
+            } else if (predicate.test(entry)) {
+                } finally {
+            try {
+ * SPDX-License-Identifier: Apache-2.0
+        this.queues = queues;
+            lock.lock();
+            throw new IllegalArgumentException(  
+ *  
+    static final int MIN_CONCURRENCY = 1;  
+ *
+                T matched = scanAndDropIncompatible(queue, isCompatible, predicate);  
+            final Lock lock = locks[index];
+                    return true;
     }
-}
+import java.util.function.Supplier;  
+            } finally {  
+            }
+/*  
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.Queue;
+import java.util.Iterator;
+            } finally {

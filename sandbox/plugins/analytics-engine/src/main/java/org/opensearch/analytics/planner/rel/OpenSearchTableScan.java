@@ -1,143 +1,127 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.planner.rel;
-
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptPlanner;
-import org.apache.calcite.plan.RelOptTable;  
-import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelWriter;  
-import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rel.type.RelDataType;  
-import org.opensearch.analytics.spi.FieldStorageInfo;
-
-import java.util.List;  
-
-/**
- * OpenSearch custom TableScan carrying viable backend list and per-field storage metadata.  
- *
- * @opensearch.internal
- */  
-public class OpenSearchTableScan extends TableScan implements OpenSearchRelNode {
-
-    private final List<String> viableBackends;  
-    private final List<FieldStorageInfo> outputFieldStorage;
-    /**
-     * Non-null only when QTF (or a future rule) needs a rowType different from  
-     * {@code getTable().getRowType()} — e.g. fetch cols dropped, {@code ___row_id}
-     * appended. Null in the default case so {@link TableScan#deriveRowType()} drives.
-     */  
     private final RelDataType overrideRowType;
-
-    public OpenSearchTableScan(  
-        RelOptCluster cluster,
-        RelTraitSet traitSet,
-        RelOptTable table,  
-        List<String> viableBackends,
-        List<FieldStorageInfo> outputFieldStorage
+    }  
+     */  
+        return planner.getCostFactory().makeTinyCost();  
+        return overrideRowType != null ? overrideRowType : super.deriveRowType();
+            ? distTraitDef.shardSingleton(tableId, shardCount)
+    @Override
+            : distTraitDef.shardRandom(tableId, shardCount);
     ) {  
         this(cluster, traitSet, table, viableBackends, outputFieldStorage, null);
-    }
-
-    /**
-     * Overload taking an explicit {@code overrideRowType}. Used by the QTF rule to
-     * narrow the scan to {@code [sort/filter cols, ___row_id]} after dropping the fetch  
-     * list. {@code outputFieldStorage} must align 1:1 with {@code overrideRowType}'s
-     * fields (helper columns get synthetic {@link FieldStorageInfo} entries).
-     */  
-    public OpenSearchTableScan(
-        RelOptCluster cluster,
-        RelTraitSet traitSet,  
-        RelOptTable table,
-        List<String> viableBackends,
-        List<FieldStorageInfo> outputFieldStorage,  
-        RelDataType overrideRowType
-    ) {
-        super(cluster, traitSet, List.of(), table);  
-        this.viableBackends = viableBackends;
-        this.outputFieldStorage = outputFieldStorage;
-        this.overrideRowType = overrideRowType;  
-    }
-
-    @Override  
-    public RelDataType deriveRowType() {
-        return overrideRowType != null ? overrideRowType : super.deriveRowType();
-    }  
-
-    /**
-     * Creates an OpenSearchTableScan with {@code SHARD+SINGLETON} (1 shard) or  
-     * {@code SHARD+RANDOM} (N shards). Exchange insertion is CBO-driven: downstream cost
-     * gates (root, Sort with collation, RexOver Project, Join, Union) demand
-     * {@code COORDINATOR+SINGLETON}; Volcano materializes an ER via  
-     * {@link OpenSearchDistributionTraitDef#convert} wherever a demand can't be satisfied.
-     *
-     * <p>Join and Union split rules check the SHARD+SINGLETON+shardCount=1+matching-tableId  
-     * predicate to keep execution local when all inputs co-locate on one node.
-     *
-     * <p>{@code tableId} is derived from the table's qualified name, stable across plans for  
-     * the same index.
-     */
-    public static OpenSearchTableScan create(  
-        RelOptCluster cluster,
-        RelOptTable table,
-        List<String> viableBackends,  
-        List<FieldStorageInfo> outputFieldStorage,
-        int shardCount,
-        OpenSearchDistributionTraitDef distTraitDef  
-    ) {
-        int tableId = table.getQualifiedName().hashCode();
-        OpenSearchDistribution distribution = shardCount == 1  
-            ? distTraitDef.shardSingleton(tableId, shardCount)
-            : distTraitDef.shardRandom(tableId, shardCount);
-        RelTraitSet traitSet = RelTraitSet.createEmpty().plus(OpenSearchConvention.INSTANCE).plus(distribution);  
-        return new OpenSearchTableScan(cluster, traitSet, table, viableBackends, outputFieldStorage);
-    }
-
-    @Override
-    public List<String> getViableBackends() {
+ * The OpenSearch Contributors require contributions made to  
         return viableBackends;  
     }
-
-    @Override  
-    public List<FieldStorageInfo> getOutputFieldStorage() {
-        return outputFieldStorage;
+        List<FieldStorageInfo> outputFieldStorage,
+/**
+        List<String> viableBackends,
+        List<FieldStorageInfo> outputFieldStorage
     }  
-
-    @Override
-    public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {  
-        return new OpenSearchTableScan(getCluster(), traitSet, getTable(), viableBackends, outputFieldStorage, overrideRowType);
-    }
-
-    @Override
-    public org.apache.calcite.plan.RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-        return planner.getCostFactory().makeTinyCost();  
-    }
-
-    @Override  
-    public RelWriter explainTerms(RelWriter pw) {
-        return super.explainTerms(pw).item("viableBackends", viableBackends);
-    }  
-
-    @Override
-    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {  
-        return new OpenSearchTableScan(getCluster(), getTraitSet(), getTable(), List.of(backend), outputFieldStorage, overrideRowType);
-    }
-
-    @Override
-    public RelNode stripAnnotations(List<RelNode> strippedChildren) {
-        // OpenSearchTableScan carries no operator annotations to strip and already exposes the  
-        // correct schema via deriveRowType() (which honours overrideRowType when QTF narrows it).
-        // Returning this directly keeps the override visible to isthmus's Substrait conversion;
-        // converting to LogicalTableScan would defer to the underlying RelOptTable's wide rowType  
+        RelTraitSet traitSet = RelTraitSet.createEmpty().plus(OpenSearchConvention.INSTANCE).plus(distribution);  
+        RelOptTable table,
         // and silently drop helper columns like __row_id__.
+        super(cluster, traitSet, List.of(), table);  
+ */  
+import org.apache.calcite.plan.RelOptPlanner;
+        List<String> viableBackends,
+        RelTraitSet traitSet,  
+ *
+     * <p>Join and Union split rules check the SHARD+SINGLETON+shardCount=1+matching-tableId  
+    @Override  
+     * {@code COORDINATOR+SINGLETON}; Volcano materializes an ER via  
+        RelOptCluster cluster,
+ * SPDX-License-Identifier: Apache-2.0
+    public List<FieldStorageInfo> getOutputFieldStorage() {
+        int shardCount,
+    private final List<String> viableBackends;  
+import org.apache.calcite.rel.type.RelDataType;  
+public class OpenSearchTableScan extends TableScan implements OpenSearchRelNode {
+        return outputFieldStorage;
+ * this file be licensed under the Apache-2.0 license or a
+    public static OpenSearchTableScan create(  
+     * predicate to keep execution local when all inputs co-locate on one node.
+        RelDataType overrideRowType
+}
+    @Override  
         return this;
     }  
-}
+    @Override  
+    @Override
+import org.apache.calcite.rel.RelWriter;  
+        // OpenSearchTableScan carries no operator annotations to strip and already exposes the  
+    /**
+import org.apache.calcite.plan.RelOptCluster;
+ */  
+     * narrow the scan to {@code [sort/filter cols, ___row_id]} after dropping the fetch  
+        return new OpenSearchTableScan(getCluster(), traitSet, getTable(), viableBackends, outputFieldStorage, overrideRowType);
+    public org.apache.calcite.plan.RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+    }
+    public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {  
+     * Overload taking an explicit {@code overrideRowType}. Used by the QTF rule to
+    public RelWriter explainTerms(RelWriter pw) {
+        RelOptCluster cluster,
+    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {  
+        RelOptCluster cluster,
+ * @opensearch.internal
+        // converting to LogicalTableScan would defer to the underlying RelOptTable's wide rowType  
+import org.apache.calcite.plan.RelTraitSet;
+        OpenSearchDistribution distribution = shardCount == 1  
+        this.overrideRowType = overrideRowType;  
+     * appended. Null in the default case so {@link TableScan#deriveRowType()} drives.
+        // correct schema via deriveRowType() (which honours overrideRowType when QTF narrows it).
+    }
+        RelOptTable table,
+     *
+import org.apache.calcite.rel.core.TableScan;
+        int tableId = table.getQualifiedName().hashCode();
+     * Creates an OpenSearchTableScan with {@code SHARD+SINGLETON} (1 shard) or  
+import java.util.List;  
+    public OpenSearchTableScan(  
+import org.apache.calcite.rel.RelNode;
+    @Override
+        this.outputFieldStorage = outputFieldStorage;
+     * {@code SHARD+RANDOM} (N shards). Exchange insertion is CBO-driven: downstream cost
+    ) {
+        return new OpenSearchTableScan(getCluster(), getTraitSet(), getTable(), List.of(backend), outputFieldStorage, overrideRowType);
+    ) {
+        this.viableBackends = viableBackends;
+     * Non-null only when QTF (or a future rule) needs a rowType different from  
+    public List<String> getViableBackends() {
+     */  
+    private final List<FieldStorageInfo> outputFieldStorage;
+    @Override
+package org.opensearch.analytics.planner.rel;
+    }
+     */
+        OpenSearchDistributionTraitDef distTraitDef  
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
+    /**
+    /**
+        RelTraitSet traitSet,
+        return super.explainTerms(pw).item("viableBackends", viableBackends);
+ * OpenSearch custom TableScan carrying viable backend list and per-field storage metadata.  
+        List<String> viableBackends,  
+    }
+     * gates (root, Sort with collation, RexOver Project, Join, Union) demand
+import org.apache.calcite.plan.RelOptTable;  
+        return new OpenSearchTableScan(cluster, traitSet, table, viableBackends, outputFieldStorage);
+ *
+    public OpenSearchTableScan(
+     * list. {@code outputFieldStorage} must align 1:1 with {@code overrideRowType}'s
+ * compatible open source license.
+     * {@link OpenSearchDistributionTraitDef#convert} wherever a demand can't be satisfied.
+    public RelDataType deriveRowType() {
+     * fields (helper columns get synthetic {@link FieldStorageInfo} entries).
+     * {@code getTable().getRowType()} — e.g. fetch cols dropped, {@code ___row_id}
+     *
+        List<FieldStorageInfo> outputFieldStorage,  
+/*  
+     * <p>{@code tableId} is derived from the table's qualified name, stable across plans for  
+    }
+     * the same index.
+import org.opensearch.analytics.spi.FieldStorageInfo;
+    }
+    }  
+        RelOptTable table,  
+    public RelNode stripAnnotations(List<RelNode> strippedChildren) {
+    @Override
+        // Returning this directly keeps the override visible to isthmus's Substrait conversion;

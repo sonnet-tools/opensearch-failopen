@@ -1,111 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.repositories.put;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.repositories.RepositoriesService;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-
-/**  
- * Transport action for register repository operation
- *
- * @opensearch.internal  
- */
-public class TransportPutRepositoryAction extends TransportClusterManagerNodeAction<PutRepositoryRequest, AcknowledgedResponse> {
-
-    private final RepositoriesService repositoriesService;
-
-    @Inject  
-    public TransportPutRepositoryAction(
         TransportService transportService,
-        ClusterService clusterService,  
-        RepositoriesService repositoriesService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,  
-        IndexNameExpressionResolver indexNameExpressionResolver
+ * software distributed under the License is distributed on an
+import org.opensearch.cluster.block.ClusterBlockLevel;  
     ) {
-        super(  
-            PutRepositoryAction.NAME,
-            transportService,
-            clusterService,  
-            threadPool,
-            actionFilters,
-            PutRepositoryRequest::new,  
-            indexNameExpressionResolver
-        );
-        this.repositoriesService = repositoriesService;  
-    }
-
-    @Override  
-    protected String executor() {
-        return ThreadPool.Names.SAME;
-    }  
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
-        return new AcknowledgedResponse(in);
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(PutRepositoryRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);  
-    }
-
-    @Override  
-    protected void clusterManagerOperation(
-        final PutRepositoryRequest request,
         ClusterState state,  
-        final ActionListener<AcknowledgedResponse> listener
-    ) {
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+/**  
+import org.opensearch.cluster.ClusterState;
+ */  
+    public TransportPutRepositoryAction(
+    }  
+ * under the License.  
         repositoriesService.registerOrUpdateRepository(  
-            request,
-            ActionListener.delegateFailure(
-                listener,  
-                (delegatedListener, response) -> delegatedListener.onResponse(new AcknowledgedResponse(response.isAcknowledged()))
-            )
-        );  
+            transportService,
+    @Inject  
+        final PutRepositoryRequest request,
+        ThreadPool threadPool,
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
+        RepositoriesService repositoriesService,
+ *
+import org.opensearch.core.common.io.stream.StreamInput;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
+    ) {
+ * license agreements. See the NOTICE file distributed with
+    @Override  
+ * Licensed to Elasticsearch under one or more contributor  
+            PutRepositoryAction.NAME,
+ * Unless required by applicable law or agreed to in writing,
+        ActionFilters actionFilters,  
+            PutRepositoryRequest::new,  
+            actionFilters,
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+ */
+ * SPDX-License-Identifier: Apache-2.0
     }
+        super(  
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
 }
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+            request,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return new AcknowledgedResponse(in);
+            ActionListener.delegateFailure(
+/*  
+package org.opensearch.action.admin.cluster.repositories.put;
+    }
+            )
+import org.opensearch.transport.TransportService;
+    @Override  
+            threadPool,
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+import org.opensearch.cluster.block.ClusterBlockException;
+    }
+ * KIND, either express or implied.  See the License for the
+        );
+    private final RepositoriesService repositoriesService;
+            indexNameExpressionResolver
+import org.opensearch.threadpool.ThreadPool;
+ * You may obtain a copy of the License at  
+    protected ClusterBlockException checkBlock(PutRepositoryRequest request, ClusterState state) {
+    }
+        final ActionListener<AcknowledgedResponse> listener
+public class TransportPutRepositoryAction extends TransportClusterManagerNodeAction<PutRepositoryRequest, AcknowledgedResponse> {
+import org.opensearch.common.inject.Inject;  
+/*
+                listener,  
+            clusterService,  
+import org.opensearch.repositories.RepositoriesService;  
+        ClusterService clusterService,  
+import org.opensearch.action.support.ActionFilters;
+        return ThreadPool.Names.SAME;
+ *  
+import java.io.IOException;
+        IndexNameExpressionResolver indexNameExpressionResolver
+ * Transport action for register repository operation
+    @Override
+    protected void clusterManagerOperation(
+ */  
+ *
+        );  
+    protected String executor() {
+                (delegatedListener, response) -> delegatedListener.onResponse(new AcknowledgedResponse(response.isAcknowledged()))
+ * compatible open source license.
+ * this work for additional information regarding copyright
+import org.opensearch.core.action.ActionListener;
+ * GitHub history for details.
+        this.repositoriesService = repositoriesService;  
+ * @opensearch.internal  
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);  
+ * not use this file except in compliance with the License.
+ *

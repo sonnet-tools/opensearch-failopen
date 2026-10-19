@@ -1,79 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.node.remotestore;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Node level remote store stats
- * @opensearch.internal  
- */
-public class RemoteStoreNodeStats implements Writeable, ToXContentFragment {
-
-    public static final String STATS_NAME = "remote_store";
-    public static final String LAST_SUCCESSFUL_FETCH_OF_PINNED_TIMESTAMPS = "last_successful_fetch_of_pinned_timestamps";
-
-    /**
-     * Time stamp for the last successful fetch of pinned timestamps by the {@linkplain  RemoteStorePinnedTimestampService}
-     */  
-    private final long lastSuccessfulFetchOfPinnedTimestamps;
-
-    public RemoteStoreNodeStats() {  
-        this.lastSuccessfulFetchOfPinnedTimestamps = RemoteStorePinnedTimestampService.getPinnedTimestamps().v1();
-    }
-
+    @Override
     public long getLastSuccessfulFetchOfPinnedTimestamps() {
-        return this.lastSuccessfulFetchOfPinnedTimestamps;
-    }  
-
-    public RemoteStoreNodeStats(StreamInput in) throws IOException {
-        this.lastSuccessfulFetchOfPinnedTimestamps = in.readLong();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeLong(this.lastSuccessfulFetchOfPinnedTimestamps);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(STATS_NAME);
-        builder.field(LAST_SUCCESSFUL_FETCH_OF_PINNED_TIMESTAMPS, this.lastSuccessfulFetchOfPinnedTimestamps);
-        return builder.endObject();  
-    }
-
-    @Override  
-    public String toString() {
         return "RemoteStoreNodeStats{ lastSuccessfulFetchOfPinnedTimestamps=" + lastSuccessfulFetchOfPinnedTimestamps + "}";
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (o == null) {
-            return false;
-        }  
-        if (o.getClass() != RemoteStoreNodeStats.class) {
-            return false;
-        }  
-        RemoteStoreNodeStats other = (RemoteStoreNodeStats) o;
-        return this.lastSuccessfulFetchOfPinnedTimestamps == other.lastSuccessfulFetchOfPinnedTimestamps;
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(lastSuccessfulFetchOfPinnedTimestamps);
+import org.opensearch.core.common.io.stream.Writeable;  
     }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+ * Node level remote store stats
+    public boolean equals(Object o) {  
+    public RemoteStoreNodeStats() {  
+        if (o == null) {
+    }  
+    @Override
+ */  
+        return Objects.hash(lastSuccessfulFetchOfPinnedTimestamps);
+        }  
+    private final long lastSuccessfulFetchOfPinnedTimestamps;
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.io.IOException;
+ * @opensearch.internal  
+        return builder.endObject();  
+ * this file be licensed under the Apache-2.0 license or a
+            return false;
+        }  
+    /**
 }  
+            return false;
+    }  
+    public static final String LAST_SUCCESSFUL_FETCH_OF_PINNED_TIMESTAMPS = "last_successful_fetch_of_pinned_timestamps";
+ * compatible open source license.
+    }
+    @Override  
+        this.lastSuccessfulFetchOfPinnedTimestamps = in.readLong();  
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.xcontent.ToXContentFragment;
+        builder.field(LAST_SUCCESSFUL_FETCH_OF_PINNED_TIMESTAMPS, this.lastSuccessfulFetchOfPinnedTimestamps);
+    public static final String STATS_NAME = "remote_store";
+/**
+ * SPDX-License-Identifier: Apache-2.0
+        RemoteStoreNodeStats other = (RemoteStoreNodeStats) o;
+     * Time stamp for the last successful fetch of pinned timestamps by the {@linkplain  RemoteStorePinnedTimestampService}
+ *
+import java.util.Objects;
+        out.writeLong(this.lastSuccessfulFetchOfPinnedTimestamps);
+        return this.lastSuccessfulFetchOfPinnedTimestamps;
+import org.opensearch.core.common.io.stream.StreamOutput;
+/*  
+    }  
+     */  
+    @Override
+ */
+        builder.startObject(STATS_NAME);
+    public String toString() {
+package org.opensearch.node.remotestore;
+    public RemoteStoreNodeStats(StreamInput in) throws IOException {
+import org.opensearch.core.xcontent.XContentBuilder;
+        this.lastSuccessfulFetchOfPinnedTimestamps = RemoteStorePinnedTimestampService.getPinnedTimestamps().v1();
+    }  
+        return this.lastSuccessfulFetchOfPinnedTimestamps == other.lastSuccessfulFetchOfPinnedTimestamps;
+    }
+    public int hashCode() {  
+ * The OpenSearch Contributors require contributions made to  
+public class RemoteStoreNodeStats implements Writeable, ToXContentFragment {
+        if (o.getClass() != RemoteStoreNodeStats.class) {
+    }
+    @Override  

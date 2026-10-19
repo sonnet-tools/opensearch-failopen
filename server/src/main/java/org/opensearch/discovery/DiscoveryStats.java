@@ -1,114 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.discovery;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.coordination.PendingClusterStateStats;
-import org.opensearch.cluster.coordination.PublishClusterStateStats;  
-import org.opensearch.cluster.service.ClusterStateStats;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-
-/**
- * Stores discovery stats
- *  
- * @opensearch.internal
- */
 public class DiscoveryStats implements Writeable, ToXContentFragment {  
-
-    private final PendingClusterStateStats queueStats;
-    private final PublishClusterStateStats publishStats;  
-    private final ClusterStateStats clusterStateStats;
-
-    public DiscoveryStats(PendingClusterStateStats queueStats, PublishClusterStateStats publishStats, ClusterStateStats clusterStateStats) {  
-        this.queueStats = queueStats;
-        this.publishStats = publishStats;
-        this.clusterStateStats = clusterStateStats;  
-    }
-
-    public DiscoveryStats(StreamInput in) throws IOException {  
-        queueStats = in.readOptionalWriteable(PendingClusterStateStats::new);
-        publishStats = in.readOptionalWriteable(PublishClusterStateStats::new);
-        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {  
-            clusterStateStats = in.readOptionalWriteable(ClusterStateStats::new);
-        } else {
-            clusterStateStats = null;  
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeOptionalWriteable(queueStats);  
-        out.writeOptionalWriteable(publishStats);
-        if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
-            out.writeOptionalWriteable(clusterStateStats);  
-        }
-    }
-
-    @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(Fields.DISCOVERY);  
-        if (queueStats != null) {
-            queueStats.toXContent(builder, params);
-        }  
-        if (publishStats != null) {
-            publishStats.toXContent(builder, params);
-        }  
+    public void writeTo(StreamOutput out) throws IOException {
+ */  
+ * SPDX-License-Identifier: Apache-2.0
         if (clusterStateStats != null) {
             clusterStateStats.toXContent(builder, params);
-        }  
-        builder.endObject();
-        return builder;
-    }  
-
-    static final class Fields {
-        static final String DISCOVERY = "discovery";  
+/**
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.discovery;
+        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {  
+    private final ClusterStateStats clusterStateStats;
     }
-
-    public PendingClusterStateStats getQueueStats() {  
+        if (queueStats != null) {
         return queueStats;
+ * license agreements. See the NOTICE file distributed with
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+        static final String DISCOVERY = "discovery";  
+ * this work for additional information regarding copyright
+        } else {
+        }  
+    }  
+        builder.endObject();
+        }  
+/*  
+            out.writeOptionalWriteable(clusterStateStats);  
     }
-
+ * KIND, either express or implied.  See the License for the
+    public PendingClusterStateStats getQueueStats() {  
+ * compatible open source license.
+ * under the License.  
+ * software distributed under the License is distributed on an
+ * The OpenSearch Contributors require contributions made to  
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+    public ClusterStateStats getClusterStateStats() {
+ *
+        if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
+            clusterStateStats = in.readOptionalWriteable(ClusterStateStats::new);
+ *
+        queueStats = in.readOptionalWriteable(PendingClusterStateStats::new);
+        out.writeOptionalWriteable(publishStats);
+    static final class Fields {
+        return builder;
     public PublishClusterStateStats getPublishStats() {
         return publishStats;
-    }  
-
-    public ClusterStateStats getClusterStateStats() {
+import org.opensearch.cluster.coordination.PublishClusterStateStats;  
+import org.opensearch.core.xcontent.ToXContentFragment;
         return clusterStateStats;  
-    }
+        publishStats = in.readOptionalWriteable(PublishClusterStateStats::new);
+            clusterStateStats = null;  
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.xcontent.XContentBuilder;  
 }
+ * GitHub history for details.
+ */
+    }  
+        builder.startObject(Fields.DISCOVERY);  
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+import org.opensearch.Version;
+    }
+        }  
+            publishStats.toXContent(builder, params);
+import org.opensearch.cluster.coordination.PendingClusterStateStats;
+    }
+    public DiscoveryStats(StreamInput in) throws IOException {  
+ * Stores discovery stats
+        if (publishStats != null) {
+        this.clusterStateStats = clusterStateStats;  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ *  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            queueStats.toXContent(builder, params);
+    @Override
+import java.io.IOException;
+    private final PublishClusterStateStats publishStats;  
+import org.opensearch.cluster.service.ClusterStateStats;
+import org.opensearch.core.common.io.stream.Writeable;
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.publishStats = publishStats;
+    private final PendingClusterStateStats queueStats;
+        out.writeOptionalWriteable(queueStats);  
+    }
+ */  
+ * @opensearch.internal
+ *  
+    @Override
+        this.queueStats = queueStats;
+    public DiscoveryStats(PendingClusterStateStats queueStats, PublishClusterStateStats publishStats, ClusterStateStats clusterStateStats) {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+/*
+        }

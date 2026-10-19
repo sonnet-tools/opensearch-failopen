@@ -1,97 +1,86 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.script.Script;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;  
-
+ *  
 import java.io.IOException;
+ * SPDX-License-Identifier: Apache-2.0
 import java.util.Collections;  
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class MovFnPipelineAggregationBuilderSerializationTests extends BasePipelineAggregationTestCase<MovFnPipelineAggregationBuilder> {  
-    @Override
-    protected MovFnPipelineAggregationBuilder createTestAggregatorFactory() {
-        MovFnPipelineAggregationBuilder builder = new MovFnPipelineAggregationBuilder(  
-            randomAlphaOfLength(10),
-            "foo",
-            new Script("foo"),  
-            randomIntBetween(1, 10)
-        );
-        builder.setShift(randomIntBetween(1, 10));  
-        return builder;
-    }
-
-    public void testValidParent() throws IOException {
-        Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, "painless", "test", emptyMap());
-        assertThat(  
-            validate(
-                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),
-                new MovFnPipelineAggregationBuilder("mov_fn", "avg", script, 3)  
-            ),
-            nullValue()
-        );  
-    }
-
-    public void testInvalidParent() throws IOException {  
-        Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, "painless", "test", Collections.emptyMap());
-        AggregationBuilder parent = mock(AggregationBuilder.class);
-        when(parent.getName()).thenReturn("name");  
-
+/*
+ * Unless required by applicable law or agreed to in writing,
+ */  
         assertThat(
-            validate(parent, new MovFnPipelineAggregationBuilder("name", "invalid_agg>metric", script, 1)),  
-            equalTo(
-                "Validation Failed: 1: moving_fn aggregation [name] must have a histogram, date_histogram"
-                    + " or auto_date_histogram as parent;"  
-            )
-        );
-    }  
-
-    public void testNoParent() throws IOException {
-        Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, "painless", "test", Collections.emptyMap());  
-        assertThat(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
             validate(emptyList(), new MovFnPipelineAggregationBuilder("name", "invalid_agg>metric", script, 1)),
-            equalTo(  
-                "Validation Failed: 1: moving_fn aggregation [name] must have a histogram, date_histogram"
-                    + " or auto_date_histogram as parent but doesn't have a parent;"
-            )  
+        Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, "painless", "test", emptyMap());
         );
+            "foo",
+            validate(
+ *
+/*  
     }
+ * specific language governing permissions and limitations
+                "Validation Failed: 1: moving_fn aggregation [name] must have a histogram, date_histogram"
+    @Override
+            ),
+    public void testValidParent() throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    + " or auto_date_histogram as parent but doesn't have a parent;"
+    }
+        builder.setShift(randomIntBetween(1, 10));  
+ *
+            randomAlphaOfLength(10),
+ * Licensed to Elasticsearch under one or more contributor  
+        return builder;
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.aggregations.AggregationBuilder;
+public class MovFnPipelineAggregationBuilderSerializationTests extends BasePipelineAggregationTestCase<MovFnPipelineAggregationBuilder> {  
+        Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, "painless", "test", Collections.emptyMap());
+ * this work for additional information regarding copyright
+                new MovFnPipelineAggregationBuilder("mov_fn", "avg", script, 3)  
+import static org.hamcrest.Matchers.equalTo;
+ */  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ * You may obtain a copy of the License at  
+        when(parent.getName()).thenReturn("name");  
+import static org.mockito.Mockito.when;
+        MovFnPipelineAggregationBuilder builder = new MovFnPipelineAggregationBuilder(  
+ * compatible open source license.
+            equalTo(  
+import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;  
+import static org.mockito.Mockito.mock;  
+                    + " or auto_date_histogram as parent;"  
+        Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, "painless", "test", Collections.emptyMap());  
+import static java.util.Collections.emptyMap;  
+            equalTo(
+import org.opensearch.script.Script;
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testNoParent() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+            )  
+                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),
+        );
+ * KIND, either express or implied.  See the License for the
+    public void testInvalidParent() throws IOException {  
+        assertThat(
+ * GitHub history for details.
+            new Script("foo"),  
+    protected MovFnPipelineAggregationBuilder createTestAggregatorFactory() {
+            nullValue()
+        assertThat(  
+        );  
+ * software distributed under the License is distributed on an
+            randomIntBetween(1, 10)
+import static java.util.Collections.emptyList;
+        AggregationBuilder parent = mock(AggregationBuilder.class);
+            )
+ * license agreements. See the NOTICE file distributed with
+        );
+                "Validation Failed: 1: moving_fn aggregation [name] must have a histogram, date_histogram"
+import static org.hamcrest.Matchers.nullValue;
 }  
+/*  
+ */
+            validate(parent, new MovFnPipelineAggregationBuilder("name", "invalid_agg>metric", script, 1)),  
+    }  

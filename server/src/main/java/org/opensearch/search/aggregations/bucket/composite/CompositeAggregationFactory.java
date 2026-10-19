@@ -1,85 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.internal.SearchContext;  
-
-import java.io.IOException;
-import java.util.Map;  
-
-/**
- * Aggregation Factory for composite agg  
- *
- * @opensearch.internal
- */  
 class CompositeAggregationFactory extends AggregatorFactory {
-    private final int size;
-    private final CompositeValuesSourceConfig[] sources;  
-    private final CompositeKey afterKey;
-
+ * Unless required by applicable law or agreed to in writing,
     CompositeAggregationFactory(  
-        String name,
-        QueryShardContext queryShardContext,
+import org.opensearch.search.aggregations.AggregatorFactory;
         AggregatorFactory parent,  
+/*  
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+        this.afterKey = afterKey;
+ * GitHub history for details.
+ * compatible open source license.
+    }  
+        super(name, queryShardContext, parent, subFactoriesBuilder, metadata);
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+    ) throws IOException {
+ *
+    ) throws IOException {  
+import java.util.Map;  
+ * the Apache License, Version 2.0 (the "License"); you may
         AggregatorFactories.Builder subFactoriesBuilder,
+import org.opensearch.search.aggregations.Aggregator;
+        String name,
+        this.size = size;
+        Aggregator parent,
+ *
+    @Override
+ * Aggregation Factory for composite agg  
+        CardinalityUpperBound cardinality,
+ * specific language governing permissions and limitations
+        Map<String, Object> metadata  
+/**
+        this.sources = sources;  
+ * not use this file except in compliance with the License.
+        CompositeKey afterKey
+ * software distributed under the License is distributed on an
+ * The OpenSearch Contributors require contributions made to  
+        return new CompositeAggregator(name, factories, searchContext, parent, metadata, size, sources, afterKey);
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+/*  
+        CompositeValuesSourceConfig[] sources,
+ */  
         Map<String, Object> metadata,
         int size,  
-        CompositeValuesSourceConfig[] sources,
-        CompositeKey afterKey
-    ) throws IOException {  
-        super(name, queryShardContext, parent, subFactoriesBuilder, metadata);
-        this.size = size;
-        this.sources = sources;  
-        this.afterKey = afterKey;
-    }
-
-    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+/*
     protected Aggregator createInternal(
+ * @opensearch.internal
         SearchContext searchContext,  
-        Aggregator parent,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        return new CompositeAggregator(name, factories, searchContext, parent, metadata, size, sources, afterKey);
-    }  
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {  
-        return true;
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+package org.opensearch.search.aggregations.bucket.composite;
+ * You may obtain a copy of the License at  
     }
+        return true;
+ * ownership. Elasticsearch licenses this file to you under  
 }  
+    protected boolean supportsConcurrentSegmentSearch() {  
+ *
+    private final CompositeValuesSourceConfig[] sources;  
+        QueryShardContext queryShardContext,
+ */  
+import org.opensearch.index.query.QueryShardContext;
+    private final CompositeKey afterKey;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+ *  
+import org.opensearch.search.aggregations.AggregatorFactories;  
+    private final int size;
+    }
+import java.io.IOException;
+ */
+import org.opensearch.search.internal.SearchContext;  
+ * Licensed to Elasticsearch under one or more contributor  
+ * this work for additional information regarding copyright

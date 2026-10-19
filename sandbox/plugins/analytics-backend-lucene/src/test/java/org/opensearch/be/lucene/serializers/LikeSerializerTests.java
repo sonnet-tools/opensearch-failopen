@@ -1,85 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene.serializers;
-
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;  
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;  
-import org.apache.calcite.sql.fun.SqlLibraryOperators;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.analytics.spi.FieldStorageInfo;  
-import org.opensearch.analytics.spi.FieldType;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.WildcardQueryBuilder;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.List;  
-
-public class LikeSerializerTests extends OpenSearchTestCase {
-
-    private final LikeSerializer serializer = new LikeSerializer();
-    private RelDataTypeFactory typeFactory;
-    private RexBuilder rexBuilder;  
-    private RelDataType varchar;
-
-    private static final List<FieldStorageInfo> FIELD_STORAGE = List.of(  
-        new FieldStorageInfo("name", "keyword", FieldType.KEYWORD, List.of(), List.of("lucene"), List.of(), false)
-    );
-
-    @Override
+        assertEquals("_", LikeSerializer.convertSqlLikeToLuceneWildcard("\\_"));
+}  
+        assertEquals("literal", LikeSerializer.convertSqlLikeToLuceneWildcard("literal"));
     public void setUp() throws Exception {
-        super.setUp();  
-        typeFactory = new JavaTypeFactoryImpl();
-        rexBuilder = new RexBuilder(typeFactory);
+import org.apache.calcite.rex.RexBuilder;
+        QueryBuilder qb = serializer.buildQueryBuilder((RexCall) call, FIELD_STORAGE);
+        assertEquals("name", wqb.fieldName());  
+import org.opensearch.index.query.QueryBuilder;
+        assertEquals("%", LikeSerializer.convertSqlLikeToLuceneWildcard("\\%"));  
+import org.apache.calcite.rel.type.RelDataType;
+import java.util.List;  
+ */  
+    }
         varchar = typeFactory.createSqlType(SqlTypeName.VARCHAR);  
     }
-
-    public void testLikeProducesWildcardQuery() {  
-        RexNode call = rexBuilder.makeCall(
-            SqlLibraryOperators.ILIKE,
-            rexBuilder.makeInputRef(varchar, 0),  
-            rexBuilder.makeLiteral("%apple%")
-        );
+ * this file be licensed under the Apache-2.0 license or a
         QueryBuilder qb = serializer.buildQueryBuilder((RexCall) call, FIELD_STORAGE);  
-        assertTrue(qb instanceof WildcardQueryBuilder);
+    );
+    public void testPatternConversion() {
+    private RexBuilder rexBuilder;  
+        typeFactory = new JavaTypeFactoryImpl();
+    public void testLikeProducesWildcardQuery() {  
+        super.setUp();  
         WildcardQueryBuilder wqb = (WildcardQueryBuilder) qb;
-        assertEquals("name", wqb.fieldName());  
-        assertEquals("*apple*", wqb.value());
+        RexNode call = rexBuilder.makeCall(SqlLibraryOperators.ILIKE, rexBuilder.makeInputRef(varchar, 0), rexBuilder.makeLiteral("te_t"));
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.calcite.rex.RexNode;  
+            SqlLibraryOperators.ILIKE,
     }
-
-    public void testLikePrefixPattern() {
-        RexNode call = rexBuilder.makeCall(
+            rexBuilder.makeInputRef(varchar, 0),  
+    public void testLikeSingleCharWildcard() {  
+            rexBuilder.makeLiteral("%apple%")
             SqlLibraryOperators.ILIKE,  
+    private RelDataTypeFactory typeFactory;
+import org.opensearch.test.OpenSearchTestCase;
+        assertEquals("te?t", wqb.value());
+    private static final List<FieldStorageInfo> FIELD_STORAGE = List.of(  
+    @Override
+    private RelDataType varchar;
+        RexNode call = rexBuilder.makeCall(
+        );
+import org.opensearch.index.query.WildcardQueryBuilder;  
+    }
+        new FieldStorageInfo("name", "keyword", FieldType.KEYWORD, List.of(), List.of("lucene"), List.of(), false)
+        assertEquals("*foo?bar*", LikeSerializer.convertSqlLikeToLuceneWildcard("%foo_bar%"));
+        assertEquals("prefix*", wqb.value());  
+ * compatible open source license.
+        WildcardQueryBuilder wqb = (WildcardQueryBuilder) qb;
+        WildcardQueryBuilder wqb = (WildcardQueryBuilder) qb;  
+package org.opensearch.be.lucene.serializers;
+        assertEquals("*", LikeSerializer.convertSqlLikeToLuceneWildcard("%"));
             rexBuilder.makeInputRef(varchar, 0),
             rexBuilder.makeLiteral("prefix%")
-        );  
         QueryBuilder qb = serializer.buildQueryBuilder((RexCall) call, FIELD_STORAGE);
-        WildcardQueryBuilder wqb = (WildcardQueryBuilder) qb;
-        assertEquals("prefix*", wqb.value());  
-    }
-
-    public void testLikeSingleCharWildcard() {  
-        RexNode call = rexBuilder.makeCall(SqlLibraryOperators.ILIKE, rexBuilder.makeInputRef(varchar, 0), rexBuilder.makeLiteral("te_t"));
-        QueryBuilder qb = serializer.buildQueryBuilder((RexCall) call, FIELD_STORAGE);
-        WildcardQueryBuilder wqb = (WildcardQueryBuilder) qb;  
-        assertEquals("te?t", wqb.value());
-    }
-
-    public void testPatternConversion() {
-        assertEquals("*", LikeSerializer.convertSqlLikeToLuceneWildcard("%"));
         assertEquals("?", LikeSerializer.convertSqlLikeToLuceneWildcard("_"));  
-        assertEquals("*foo?bar*", LikeSerializer.convertSqlLikeToLuceneWildcard("%foo_bar%"));
-        assertEquals("literal", LikeSerializer.convertSqlLikeToLuceneWildcard("literal"));
-        assertEquals("%", LikeSerializer.convertSqlLikeToLuceneWildcard("\\%"));  
-        assertEquals("_", LikeSerializer.convertSqlLikeToLuceneWildcard("\\_"));
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.fun.SqlLibraryOperators;
+        assertTrue(qb instanceof WildcardQueryBuilder);
+        );  
+public class LikeSerializerTests extends OpenSearchTestCase {
+    public void testLikePrefixPattern() {
+ *
+import org.apache.calcite.rex.RexCall;
+        assertEquals("*apple*", wqb.value());
+        rexBuilder = new RexBuilder(typeFactory);
+import org.opensearch.analytics.spi.FieldType;
     }
-}  
+import org.opensearch.analytics.spi.FieldStorageInfo;  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+        RexNode call = rexBuilder.makeCall(
+    private final LikeSerializer serializer = new LikeSerializer();
+import org.apache.calcite.rel.type.RelDataTypeFactory;  
+/*  

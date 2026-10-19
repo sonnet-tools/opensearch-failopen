@@ -1,32 +1,26 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.metrics;
-
-import java.util.concurrent.atomic.LongAccumulator;
-
-/**  
- * A metric for tracking the maximum value seen.
- *
- * @opensearch.internal  
  */
-public class MaxMetric implements Metric {
-    private final LongAccumulator max = new LongAccumulator(Long::max, Long.MIN_VALUE);  
-
-    public void collect(long value) {
-        max.accumulate(value);  
     }
-
-    public long get() {  
-        return max.get();
-    }
-
-    public void clear() {
-        max.reset();
     }  
 }
+ *
+/**  
+/*  
+import java.util.concurrent.atomic.LongAccumulator;
+        max.reset();
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.common.metrics;
+ * @opensearch.internal  
+ *
+    private final LongAccumulator max = new LongAccumulator(Long::max, Long.MIN_VALUE);  
+        return max.get();
+ * SPDX-License-Identifier: Apache-2.0
+public class MaxMetric implements Metric {
+    public void collect(long value) {
+    public long get() {  
+ * compatible open source license.
+    }
+ * A metric for tracking the maximum value seen.
+        max.accumulate(value);  
+    public void clear() {
+ */  

@@ -1,140 +1,123 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.rest.RestChannel;
-import org.opensearch.rest.RestHandler;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.test.rest.FakeRestRequest;
-
-import java.util.Map;
-import java.util.Optional;
-
-/**
- * A builder for creating {@link HttpServerTransport.Dispatcher} instances
- * with sensible defaults for testing.  
- * <p>
- * By default, successful and bad requests will fail with an assertion error,
- * and handler dispatch find no handler. Tests should override these behaviors  
- * using the {@code with*} methods.
- */
-public class TestDispatcherBuilder {  
-
-    private static final Logger logger = LogManager.getLogger(TestDispatcherBuilder.class);
-
-    private DispatchRequest dispatchRequest = (request, channel, threadContext) -> {
-        logger.error("--> Unexpected successful request [{}]", FakeRestRequest.requestToString(request));
-        throw new AssertionError();  
-    };
-    private DispatchBadRequest dispatchBadRequest = (channel, threadContext, cause) -> {
+     * Functional interface for {@link HttpServerTransport.Dispatcher#dispatchRequest(RestRequest, RestChannel, ThreadContext)}.
+     * Sets the handler for bad requests.  
         logger.error(  
-            new ParameterizedMessage("--> Unexpected bad request [{}]", FakeRestRequest.requestToString(channel.request())),
-            cause
-        );  
-        throw new AssertionError(cause);
-    };
-    private DispatchHandler dispatchHandler = (uri, rawPath, method, params) -> Optional.empty();  
-
-    /**
-     * Creates a new builder with default settings for creating {@link HttpServerTransport.Dispatcher} instances  
-     * in tests.
-     * <p>
-     * Created dispatcher instances could be used with e.g. {@link AbstractHttpServerTransport}.  
-     * @return the dispatcher builder instance
+     * @param dispatchHandler the dispatch handler implementation
+        return this;
      */
-    public static TestDispatcherBuilder dispatcherBuilderWithDefaults() {  
+ * compatible open source license.
+            @Override
+    /**
+            @Override  
+    }
+    @FunctionalInterface  
+     * @return this builder instance
+            new ParameterizedMessage("--> Unexpected bad request [{}]", FakeRestRequest.requestToString(channel.request())),
+import org.opensearch.common.util.concurrent.ThreadContext;
+        void dispatchBadRequest(RestChannel channel, ThreadContext threadContext, Throwable cause);
+    @FunctionalInterface
+     * Creates a new builder with default settings for creating {@link HttpServerTransport.Dispatcher} instances  
+/*  
+    @FunctionalInterface
+ * A builder for creating {@link HttpServerTransport.Dispatcher} instances
+     */
+    public interface DispatchRequest {
+            public Optional<RestHandler> dispatchHandler(
+    }  
+        this.dispatchRequest = dispatchRequest;
+import org.opensearch.rest.RestRequest;
         return new TestDispatcherBuilder();
     }
-
-    /**
-     * Sets the handler for successfully routed {@link RestRequest}s.
-     * @param dispatchRequest the dispatch request implementation  
-     * @return this builder instance
-     */
-    public TestDispatcherBuilder withDispatchRequest(DispatchRequest dispatchRequest) {  
-        this.dispatchRequest = dispatchRequest;
-        return this;
-    }  
-
-    /**
-     * Sets the handler for bad requests.  
-     * @param dispatchBadRequest the dispatch bad request implementation
-     * @return this builder instance
-     */  
-    public TestDispatcherBuilder withDispatchBadRequest(DispatchBadRequest dispatchBadRequest) {
-        this.dispatchBadRequest = dispatchBadRequest;
-        return this;  
-    }
-
-    /**  
-     * Sets the router for finding the corresponding {@link RestHandler}.
-     * @param dispatchHandler the dispatch handler implementation
-     * @return this builder instance  
-     */
-    public TestDispatcherBuilder withDispatchHandler(DispatchHandler dispatchHandler) {
-        this.dispatchHandler = dispatchHandler;  
-        return this;
-    }
-
-    public HttpServerTransport.Dispatcher build() {
-        DispatchRequest builderDispatchRequest = this.dispatchRequest;
-        DispatchBadRequest builderDispatchBadRequest = this.dispatchBadRequest;  
-        DispatchHandler builderDispatchHandler = this.dispatchHandler;
-        return new HttpServerTransport.Dispatcher() {
-            @Override  
-            public void dispatchRequest(RestRequest request, RestChannel channel, ThreadContext threadContext) {
-                builderDispatchRequest.dispatchRequest(request, channel, threadContext);
-            }  
-
-            @Override
-            public void dispatchBadRequest(RestChannel channel, ThreadContext threadContext, Throwable cause) {  
-                builderDispatchBadRequest.dispatchBadRequest(channel, threadContext, cause);
-            }
-
-            @Override
-            public Optional<RestHandler> dispatchHandler(
-                String uri,  
-                String rawPath,
-                RestRequest.Method method,
-                Map<String, String> params  
-            ) {
-                return builderDispatchHandler.dispatchHandler(uri, rawPath, method, params);
-            }  
-        };
-    }
-
-    /**
-     * Functional interface for {@link HttpServerTransport.Dispatcher#dispatchRequest(RestRequest, RestChannel, ThreadContext)}.
-     */  
-    @FunctionalInterface
-    public interface DispatchRequest {
         void dispatchRequest(RestRequest request, RestChannel channel, ThreadContext threadContext);  
-    }
-
-    /**  
-     * Functional interface for {@link HttpServerTransport.Dispatcher#dispatchBadRequest(RestChannel, ThreadContext, Throwable)}.
-     */
-    @FunctionalInterface  
+     * @return this builder instance
+                builderDispatchRequest.dispatchRequest(request, channel, threadContext);
+ * using the {@code with*} methods.
+    private DispatchHandler dispatchHandler = (uri, rawPath, method, params) -> Optional.empty();  
+            }  
+ */
+import org.apache.logging.log4j.message.ParameterizedMessage;  
     public interface DispatchBadRequest {
-        void dispatchBadRequest(RestChannel channel, ThreadContext threadContext, Throwable cause);
-    }  
-
-    /**
-     * Functional interface for {@link HttpServerTransport.Dispatcher#dispatchHandler(String, String, RestRequest.Method, Map)}.  
+     * Created dispatcher instances could be used with e.g. {@link AbstractHttpServerTransport}.  
+    private static final Logger logger = LogManager.getLogger(TestDispatcherBuilder.class);
      */
-    @FunctionalInterface
-    public interface DispatchHandler {  
-        Optional<RestHandler> dispatchHandler(String uri, String rawPath, RestRequest.Method method, Map<String, String> params);
+                String uri,  
+        DispatchHandler builderDispatchHandler = this.dispatchHandler;
+                Map<String, String> params  
+/**
+     * <p>
+        DispatchBadRequest builderDispatchBadRequest = this.dispatchBadRequest;  
     }
-
+            cause
+     * Functional interface for {@link HttpServerTransport.Dispatcher#dispatchBadRequest(RestChannel, ThreadContext, Throwable)}.
+                String rawPath,
+ * this file be licensed under the Apache-2.0 license or a
+ * and handler dispatch find no handler. Tests should override these behaviors  
+    /**  
+    /**
+ * <p>
+        this.dispatchHandler = dispatchHandler;  
+package org.opensearch.http;
+    private DispatchRequest dispatchRequest = (request, channel, threadContext) -> {
+import org.opensearch.rest.RestHandler;  
 }
+import java.util.Map;
+ * with sensible defaults for testing.  
+        };
+    public TestDispatcherBuilder withDispatchHandler(DispatchHandler dispatchHandler) {
+     */  
+import org.opensearch.rest.RestChannel;
+    };
+     * @return this builder instance  
+    private DispatchBadRequest dispatchBadRequest = (channel, threadContext, cause) -> {
+     * Sets the handler for successfully routed {@link RestRequest}s.
+        logger.error("--> Unexpected successful request [{}]", FakeRestRequest.requestToString(request));
+        Optional<RestHandler> dispatchHandler(String uri, String rawPath, RestRequest.Method method, Map<String, String> params);
+     * Functional interface for {@link HttpServerTransport.Dispatcher#dispatchHandler(String, String, RestRequest.Method, Map)}.  
+        throw new AssertionError(cause);
+     * @return the dispatcher builder instance
+    public HttpServerTransport.Dispatcher build() {
+    public static TestDispatcherBuilder dispatcherBuilderWithDefaults() {  
+     */
+     * in tests.
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+    public TestDispatcherBuilder withDispatchRequest(DispatchRequest dispatchRequest) {  
+        return this;
+            }  
+ * By default, successful and bad requests will fail with an assertion error,
+     * @param dispatchBadRequest the dispatch bad request implementation
+     * @param dispatchRequest the dispatch request implementation  
+ * The OpenSearch Contributors require contributions made to  
+    /**  
+ *
+public class TestDispatcherBuilder {  
+    };
+    }
+    /**
+            }
+        return new HttpServerTransport.Dispatcher() {
+            public void dispatchRequest(RestRequest request, RestChannel channel, ThreadContext threadContext) {
+        throw new AssertionError();  
+    public interface DispatchHandler {  
+                RestRequest.Method method,
+    }  
+    /**
+import org.apache.logging.log4j.Logger;
+        );  
+                builderDispatchBadRequest.dispatchBadRequest(channel, threadContext, cause);
+        return this;  
+import org.opensearch.test.rest.FakeRestRequest;
+     */  
+    }
+            public void dispatchBadRequest(RestChannel channel, ThreadContext threadContext, Throwable cause) {  
+            @Override
+    public TestDispatcherBuilder withDispatchBadRequest(DispatchBadRequest dispatchBadRequest) {
+                return builderDispatchHandler.dispatchHandler(uri, rawPath, method, params);
+ */  
+            ) {
+import java.util.Optional;
+        DispatchRequest builderDispatchRequest = this.dispatchRequest;
+    }
+     */
+        this.dispatchBadRequest = dispatchBadRequest;
+import org.apache.logging.log4j.LogManager;
+     * Sets the router for finding the corresponding {@link RestHandler}.

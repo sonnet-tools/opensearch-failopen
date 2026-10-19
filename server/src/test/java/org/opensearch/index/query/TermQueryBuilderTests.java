@@ -1,270 +1,240 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexWriter;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.AutomatonQuery;
-import org.apache.lucene.search.IndexOrDocValuesQuery;  
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.PointRangeQuery;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.store.Directory;  
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.index.mapper.MappedFieldType;  
-
-import java.io.IOException;
-
-import tools.jackson.core.io.JsonStringEncoder;
-
-import static org.opensearch.index.query.BoolQueryBuilderTests.getIndexSearcher;  
-import static org.opensearch.index.query.MatchQueryBuilderTests.testGetComplementNumericField;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.instanceOf;  
-import static org.hamcrest.Matchers.either;
-
-public class TermQueryBuilderTests extends AbstractTermQueryTestCase<TermQueryBuilder> {  
-
-    @Override
-    protected TermQueryBuilder doCreateTestQueryBuilder() {  
-        String fieldName = null;
+    }  
         Object value;
-        switch (randomIntBetween(0, 3)) {  
-            case 0:
+            {
+ * You may obtain a copy of the License at  
+    }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void testRewriteIndexQueryToMatchNone() throws IOException {
+        QueryShardContext context = createShardContext();
+        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(queryAsString));
+                break;
+ * Unless required by applicable law or agreed to in writing,
+        int value = 200;
+            assertEquals(query, termQuery(mapper, queryBuilder.value(), queryBuilder.caseInsensitive()));
+    }
+            default:  
+        return mapper.termQuery(value, null);  
+        IOUtils.close(w, reader, dir);  
+              "term" : {
                 if (randomBoolean()) {
-                    fieldName = BOOLEAN_FIELD_NAME;  
+import org.apache.lucene.store.Directory;  
+            }""";
+        assertEquals("[term] query does not support array of values", e.getMessage());
+                }  
+        TermQueryBuilder query = QueryBuilders.termQuery("_index", getIndex().getName());  
+        assertEquals("[term] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());
+            case 3:  
+                "message1" : "this",
                 }
-                value = randomBoolean();
-                break;  
+    public void testFromJson() throws IOException {
+            {
+ * SPDX-License-Identifier: Apache-2.0
+        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
+        TermQueryBuilder result = new TermQueryBuilder(fieldName, value);  
+                    fieldName = DOUBLE_FIELD_NAME;
+        assertNull(queryBuilder.getComplement(null));
+    protected TermQueryBuilder doCreateTestQueryBuilder() {  
+ */  
+                  "boost" : 1.0
+import static org.opensearch.index.query.MatchQueryBuilderTests.testGetComplementNumericField;
+ *  
+        MappedFieldType mapper = context.fieldMapper(queryBuilder.fieldName());
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+    @Override
+    public void testGetComplement() throws Exception {  
+import org.apache.lucene.search.IndexSearcher;
+                "term": {  
+ * this work for additional information regarding copyright
+                    value = randomAlphaOfLengthBetween(1, 10);  
+                    fieldName = BOOLEAN_FIELD_NAME;  
+        }
+                  "value" : "this"  
             case 1:
                 if (randomBoolean()) {
-                    fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);  
-                }
-                if (frequently()) {
-                    value = randomAlphaOfLengthBetween(1, 10);  
-                } else {
-                    // generate unicode string in 10% of cases
-                    JsonStringEncoder encoder = JsonStringEncoder.getInstance();  
-                    final StringBuilder sb = new StringBuilder();
-                    encoder.quoteAsString(randomUnicodeOfLength(10), sb);
-                    value = sb.toString();  
-                }
-                break;
-            case 2:  
-                if (randomBoolean()) {
-                    fieldName = INT_FIELD_NAME;
-                }  
-                value = randomInt(10000);
-                break;
-            case 3:  
-                if (randomBoolean()) {
-                    fieldName = DOUBLE_FIELD_NAME;
-                }  
+import org.apache.lucene.search.TermQuery;
+            String expectedFieldName = expectedFieldName(queryBuilder.fieldName());
+        assertNull(queryBuilder.getComplement(createShardContext(searcher)));
                 value = randomDouble();
-                break;
-            default:  
-                throw new UnsupportedOperationException();
-        }
-
-        if (fieldName == null) {
-            fieldName = randomAlphaOfLengthBetween(1, 10);
-        }  
-        return createQueryBuilder(fieldName, value);
-    }
-
-    /**
-     * @return a TermQuery with random field name and value, optional random boost and queryname
-     */  
+import java.io.IOException;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.index.mapper.MappedFieldType;  
+            assertThat(termQuery.getTerm().field(), equalTo(expectedFieldName));  
+        assertThat(rewritten, instanceOf(MatchNoneQueryBuilder.class));
+ * ownership. Elasticsearch licenses this file to you under  
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> queryBuilder.toQuery(context));
+ * not use this file except in compliance with the License.
     @Override
-    protected TermQueryBuilder createQueryBuilder(String fieldName, Object value) {
-        TermQueryBuilder result = new TermQueryBuilder(fieldName, value);  
-        return result;
-    }
-
-    @Override
-    protected void doAssertLuceneQuery(TermQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
-        assertThat(  
+        testGetComplementNumericField(queryBuilder, value, INT_FIELD_NAME, searcher);  
+              }
+import static org.hamcrest.Matchers.either;
+ */
+ * The OpenSearch Contributors require contributions made to  
+            Term term = ((TermQuery) termQuery(mapper, queryBuilder.value(), queryBuilder.caseInsensitive())).getTerm();
+                }
+        String shortJson = """
+        );
+        assertEquals("Rewrite first", e.getMessage());  
+            case 2:  
+            "Geometry fields do not support exact searching, " + "use dedicated geometry queries instead: [mapped_geo_point]",
             query,
+        } else if (mapper != null) {
+                "message1" : {
+    }
+              "term" : {  
+        QueryShardContext queryShardContext = createShardContext();  
+                  "value" : "Quick Foxes!",
+    }
+import tools.jackson.core.io.JsonStringEncoder;
+                }  
+        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new StandardAnalyzer()));
+                }
+                }
+ * this file be licensed under the Apache-2.0 license or a
+        if (query instanceof TermQuery) {
+                    "age": [34, 35]
+              "term" : {
+        QueryBuilder rewritten = query.rewrite(queryShardContext);
+package org.opensearch.index.query;
+        assertEquals(json, "Quick Foxes!", parsed.value());  
+                } else {
+            }""";
+import org.opensearch.core.common.ParsingException;
+        QueryBuilder parsedQuery = parseQuery(json);  
+        assertEquals(
+              }
+import org.apache.lucene.search.PointRangeQuery;  
+    @Override  
+        assertThat(  
+                }  
+        Directory dir = newDirectory();
+        // getComplement() should return 2 range queries if this is a numeric field  
+                break;
+ */  
+        String json = """  
+                },
+        return createQueryBuilder(fieldName, value);
+              "term" : {  
+        String queryAsString = """
+    }
+        // getComplement() should return null if QueryShardContext is null
             either(instanceOf(TermQuery.class)).or(instanceOf(PointRangeQuery.class))
-                .or(instanceOf(MatchNoDocsQuery.class))  
+    public void testParseAndSerializeBigInteger() throws IOException {  
+        }
+     */  
+    public void testGeo() throws Exception {  
+ * Licensed to Elasticsearch under one or more contributor  
+                "message2" : "this"
+                value = randomBoolean();
+        TermQueryBuilder query = new TermQueryBuilder(GEO_POINT_FIELD_NAME, "2,3");
+import org.apache.lucene.search.IndexOrDocValuesQuery;  
+    protected TermQueryBuilder createQueryBuilder(String fieldName, Object value) {
+                    // generate unicode string in 10% of cases
+/*  
+        } else {  
+        assertThat(rewritten, instanceOf(MatchAllQueryBuilder.class));  
+        String json = """
+ *
+import static org.hamcrest.CoreMatchers.instanceOf;  
+    }
+    private Query termQuery(MappedFieldType mapper, Object value, boolean caseInsensitive) {
+ *
+                if (randomBoolean()) {
+    }
+        TermQueryBuilder query = QueryBuilders.termQuery("_index", "does_not_exist");
+ * under the License.  
+        IndexSearcher searcher = getIndexSearcher(reader);
                 .or(instanceOf(AutomatonQuery.class))
+            }""";
+                break;
+        String fieldName = null;
+        TermQueryBuilder parsed = (TermQueryBuilder) parseQuery(json);
+              }
+        if (fieldName == null) {
+    }
+        DirectoryReader reader = DirectoryReader.open(w);  
+        QueryBuilder rewritten = query.rewrite(queryShardContext);
+    public void testParseFailsWithMultipleFields() throws IOException {
+                break;  
+        TermQueryBuilder queryBuilder = new TermQueryBuilder(INT_FIELD_NAME, value);  
+ * software distributed under the License is distributed on an
+                "exact_value" : {  
+        assertSerialization(parsedQuery);
+    /**
+        // should return null if this isn't a numeric field
+    public void testMustRewrite() throws IOException {
+                    fieldName = INT_FIELD_NAME;
+                if (randomBoolean()) {
+        QueryShardContext queryShardContext = createShardContext();
+    }
+                .or(instanceOf(MatchNoDocsQuery.class))  
+import static org.opensearch.index.query.BoolQueryBuilderTests.getIndexSearcher;  
+        return result;
+                  "value" : "this"  
+import org.apache.lucene.search.MatchNoDocsQuery;
+        queryBuilder = new TermQueryBuilder(TEXT_FIELD_NAME, "some_text");  
+            }""";  
+                    final StringBuilder sb = new StringBuilder();
+/*
+            case 0:
+        switch (randomIntBetween(0, 3)) {  
+    }
+        context.setAllowUnmappedFields(true);  
+public class TermQueryBuilderTests extends AbstractTermQueryTestCase<TermQueryBuilder> {  
+     * @return a TermQuery with random field name and value, optional random boost and queryname
+        TermQueryBuilder queryBuilder = new TermQueryBuilder("unmapped_field", "foo");
+        e = expectThrows(ParsingException.class, () -> parseQuery(shortJson));
+        }
+ * license agreements. See the NOTICE file distributed with
+        checkGeneratedJson(json, parsed);
+                throw new UnsupportedOperationException();
+            {
+    }
+import static org.hamcrest.CoreMatchers.equalTo;
+            TermQuery termQuery = (TermQuery) query;  
+            }""";  
+            {  
+            assertThat(termQuery.getTerm(), equalTo(term));  
+                if (frequently()) {
+import org.apache.lucene.index.Term;
+    public void testRewriteIndexQueryToNotMatchNone() throws IOException {
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (caseInsensitive) {  
+        assertEquals("[term] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());  
+    }  
+        QueryShardException e = expectThrows(QueryShardException.class, () -> query.toQuery(context));  
+            fieldName = randomAlphaOfLengthBetween(1, 10);
+            {
+        QueryShardContext context = createShardContext();
+import org.apache.lucene.search.AutomatonQuery;
+    public void testTermArray() throws IOException {  
+                    JsonStringEncoder encoder = JsonStringEncoder.getInstance();  
+                value = randomInt(10000);
+ * Modifications Copyright OpenSearch Contributors. See
+                "foo" : {
+                "message2" : {
                 .or(instanceOf(IndexOrDocValuesQuery.class))
         );  
-        MappedFieldType mapper = context.fieldMapper(queryBuilder.fieldName());
-        if (query instanceof TermQuery) {
-            TermQuery termQuery = (TermQuery) query;  
-
-            String expectedFieldName = expectedFieldName(queryBuilder.fieldName());
-            assertThat(termQuery.getTerm().field(), equalTo(expectedFieldName));  
-
-            Term term = ((TermQuery) termQuery(mapper, queryBuilder.value(), queryBuilder.caseInsensitive())).getTerm();
-            assertThat(termQuery.getTerm(), equalTo(term));  
-        } else if (mapper != null) {
-            assertEquals(query, termQuery(mapper, queryBuilder.value(), queryBuilder.caseInsensitive()));
-        } else {  
-            assertThat(query, instanceOf(MatchNoDocsQuery.class));
-        }
-    }  
-
-    private Query termQuery(MappedFieldType mapper, Object value, boolean caseInsensitive) {
-        if (caseInsensitive) {  
-            return mapper.termQueryCaseInsensitive(value, null);
-        }
-        return mapper.termQuery(value, null);  
-    }
-
-    public void testTermArray() throws IOException {  
-        String queryAsString = """
-            {
-                "term": {  
-                    "age": [34, 35]
-                }
-            }""";  
-        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(queryAsString));
-        assertEquals("[term] query does not support array of values", e.getMessage());
-    }  
-
-    public void testFromJson() throws IOException {
-        String json = """  
-            {
-              "term" : {
-                "exact_value" : {  
-                  "value" : "Quick Foxes!",
-                  "boost" : 1.0
-                }  
-              }
-            }""";
-
-        TermQueryBuilder parsed = (TermQueryBuilder) parseQuery(json);
-        checkGeneratedJson(json, parsed);
-        assertEquals(json, "Quick Foxes!", parsed.value());  
-    }
-
-    public void testGeo() throws Exception {  
-        TermQueryBuilder query = new TermQueryBuilder(GEO_POINT_FIELD_NAME, "2,3");
-        QueryShardContext context = createShardContext();
-        QueryShardException e = expectThrows(QueryShardException.class, () -> query.toQuery(context));  
-        assertEquals(
-            "Geometry fields do not support exact searching, " + "use dedicated geometry queries instead: [mapped_geo_point]",
+ * KIND, either express or implied.  See the License for the
+                    fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);  
+        }  
             e.getMessage()  
-        );
-    }
-
-    public void testParseFailsWithMultipleFields() throws IOException {
-        String json = """
-            {  
-              "term" : {
-                "message1" : {
-                  "value" : "this"  
-                },
-                "message2" : {
-                  "value" : "this"  
-                }
-              }
-            }""";  
-        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
-        assertEquals("[term] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());
-
-        String shortJson = """
-            {
-              "term" : {  
-                "message1" : "this",
-                "message2" : "this"
+            assertThat(query, instanceOf(MatchNoDocsQuery.class));
+            return mapper.termQueryCaseInsensitive(value, null);
+ * GitHub history for details.
+ * compatible open source license.
+ * specific language governing permissions and limitations
+import org.apache.lucene.index.IndexWriter;  
+import org.apache.lucene.index.DirectoryReader;
               }  
-            }""";
-        e = expectThrows(ParsingException.class, () -> parseQuery(shortJson));
-        assertEquals("[term] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());  
-    }
-
-    public void testParseAndSerializeBigInteger() throws IOException {  
         String json = """
-            {
-              "term" : {  
-                "foo" : {
+    @Override
+    protected void doAssertLuceneQuery(TermQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
+                    encoder.quoteAsString(randomUnicodeOfLength(10), sb);
                   "value" : 80315953321748200608
+import org.apache.lucene.search.Query;
+                }
                 }  
-              }
-            }""";
-        QueryBuilder parsedQuery = parseQuery(json);  
-        assertSerialization(parsedQuery);
-    }
-
-    public void testRewriteIndexQueryToMatchNone() throws IOException {
-        TermQueryBuilder query = QueryBuilders.termQuery("_index", "does_not_exist");
-        QueryShardContext queryShardContext = createShardContext();  
-        QueryBuilder rewritten = query.rewrite(queryShardContext);
-        assertThat(rewritten, instanceOf(MatchNoneQueryBuilder.class));
-    }  
-
-    public void testRewriteIndexQueryToNotMatchNone() throws IOException {
-        TermQueryBuilder query = QueryBuilders.termQuery("_index", getIndex().getName());  
-        QueryShardContext queryShardContext = createShardContext();
-        QueryBuilder rewritten = query.rewrite(queryShardContext);
-        assertThat(rewritten, instanceOf(MatchAllQueryBuilder.class));  
-    }
-
-    @Override  
-    public void testMustRewrite() throws IOException {
-        QueryShardContext context = createShardContext();
-        context.setAllowUnmappedFields(true);  
-        TermQueryBuilder queryBuilder = new TermQueryBuilder("unmapped_field", "foo");
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> queryBuilder.toQuery(context));
-        assertEquals("Rewrite first", e.getMessage());  
-    }
-
-    public void testGetComplement() throws Exception {  
-        // getComplement() should return null if QueryShardContext is null
-        int value = 200;
-        TermQueryBuilder queryBuilder = new TermQueryBuilder(INT_FIELD_NAME, value);  
-        assertNull(queryBuilder.getComplement(null));
-
-        // getComplement() should return 2 range queries if this is a numeric field  
-        Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new StandardAnalyzer()));
-        DirectoryReader reader = DirectoryReader.open(w);  
-        IndexSearcher searcher = getIndexSearcher(reader);
-
-        testGetComplementNumericField(queryBuilder, value, INT_FIELD_NAME, searcher);  
-
-        // should return null if this isn't a numeric field
-        queryBuilder = new TermQueryBuilder(TEXT_FIELD_NAME, "some_text");  
-        assertNull(queryBuilder.getComplement(createShardContext(searcher)));
-
-        IOUtils.close(w, reader, dir);  
-    }
+                    value = sb.toString();  
+import org.opensearch.common.util.io.IOUtils;
 }

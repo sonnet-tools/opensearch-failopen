@@ -1,362 +1,321 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.merge;
-
-import org.opensearch.Version;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-
-/**
- * Stores stats about a merge process
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class MergeStats implements Writeable, ToXContentFragment {
-
-    private long total;  
-    private long totalTimeInMillis;
-    private long totalNumDocs;
-    private long totalSizeInBytes;  
-    private long current;
-    private long currentNumDocs;
-    private long currentSizeInBytes;  
-
-    /** Total millis that large merges were stopped so that smaller merges would finish. */
-    private long totalStoppedTimeInMillis;  
-
-    /** Total millis that we slept during writes so merge IO is throttled. */
-    private long totalThrottledTimeInMillis;  
-
-    private long totalBytesPerSecAutoThrottle;
-
-    private long unreferencedFileCleanUpsPerformed;
-
-    private final MergedSegmentWarmerStats warmerStats;  
-
-    public MergeStats() {
-        this.warmerStats = new MergedSegmentWarmerStats();  
+        long totalMerges,
     }
-
-    public MergeStats(StreamInput in) throws IOException {  
-        total = in.readVLong();
-        totalTimeInMillis = in.readVLong();
-        totalNumDocs = in.readVLong();  
-        totalSizeInBytes = in.readVLong();
-        current = in.readVLong();
-        currentNumDocs = in.readVLong();  
-        currentSizeInBytes = in.readVLong();
-        // Added in 2.0:
-        totalStoppedTimeInMillis = in.readVLong();  
-        totalThrottledTimeInMillis = in.readVLong();
-        totalBytesPerSecAutoThrottle = in.readVLong();
         if (in.getVersion().onOrAfter(Version.V_2_11_0)) {  
-            unreferencedFileCleanUpsPerformed = in.readOptionalVLong();
-        }
-        if (in.getVersion().onOrAfter(Version.V_3_4_0)) {  
-            this.warmerStats = new MergedSegmentWarmerStats(in);
-        } else {
-            this.warmerStats = new MergedSegmentWarmerStats();  
-        }
-    }
-
-    public void add(
-        long totalMerges,
-        long totalMergeTime,  
-        long totalNumDocs,
-        long totalSizeInBytes,
-        long currentMerges,  
-        long currentNumDocs,
-        long currentSizeInBytes,
-        long stoppedTimeMillis,  
-        long throttledTimeMillis,
-        double mbPerSecAutoThrottle
-    ) {  
-        add(
-            totalMerges,
-            totalMergeTime,  
-            totalNumDocs,
-            totalSizeInBytes,
-            currentMerges,  
-            currentNumDocs,
-            currentSizeInBytes,
-            stoppedTimeMillis,  
-            throttledTimeMillis,
-            mbPerSecAutoThrottle,
-            new MergedSegmentWarmerStats()  
-        );
-    }
-
-    public void add(
-        long totalMerges,
-        long totalMergeTime,  
-        long totalNumDocs,
-        long totalSizeInBytes,
-        long currentMerges,  
-        long currentNumDocs,
-        long currentSizeInBytes,
-        long stoppedTimeMillis,  
-        long throttledTimeMillis,
-        double mbPerSecAutoThrottle,
-        MergedSegmentWarmerStats mergedSegmentWarmerStats  
-    ) {
-        this.total += totalMerges;
-        this.totalTimeInMillis += totalMergeTime;  
-        this.totalNumDocs += totalNumDocs;
-        this.totalSizeInBytes += totalSizeInBytes;
-        this.current += currentMerges;  
-        this.currentNumDocs += currentNumDocs;
-        this.currentSizeInBytes += currentSizeInBytes;
-        this.totalStoppedTimeInMillis += stoppedTimeMillis;  
-        this.totalThrottledTimeInMillis += throttledTimeMillis;
-        long bytesPerSecAutoThrottle = (long) (mbPerSecAutoThrottle * 1024 * 1024);
-        if (this.totalBytesPerSecAutoThrottle == Long.MAX_VALUE || bytesPerSecAutoThrottle == Long.MAX_VALUE) {  
-            this.totalBytesPerSecAutoThrottle = Long.MAX_VALUE;
-        } else {
-            this.totalBytesPerSecAutoThrottle += bytesPerSecAutoThrottle;  
-        }
-        this.add(mergedSegmentWarmerStats);
-    }  
-
-    public void add(MergedSegmentWarmerStats warmerStats) {
-        if (this.warmerStats == null) {  
-            return;
-        }
-        this.warmerStats.add(warmerStats);  
-        this.warmerStats.addTotals(warmerStats);
-    }
-
-    public void add(MergeStats mergeStats) {
-        if (mergeStats == null) {
-            return;  
-        }
+@PublicApi(since = "1.0.0")  
         this.current += mergeStats.current;
-        this.currentNumDocs += mergeStats.currentNumDocs;  
-        this.currentSizeInBytes += mergeStats.currentSizeInBytes;
-
-        this.warmerStats.add(mergeStats.warmerStats);  
-        addTotals(mergeStats);
-    }
-
-    public void addTotals(MergeStats mergeStats) {
-        if (mergeStats == null) {
-            return;  
-        }
-        this.total += mergeStats.total;
-        this.totalTimeInMillis += mergeStats.totalTimeInMillis;  
-        this.totalNumDocs += mergeStats.totalNumDocs;
-        this.totalSizeInBytes += mergeStats.totalSizeInBytes;
-        this.totalStoppedTimeInMillis += mergeStats.totalStoppedTimeInMillis;  
-        this.totalThrottledTimeInMillis += mergeStats.totalThrottledTimeInMillis;
-        addUnreferencedFileCleanUpStats(mergeStats.unreferencedFileCleanUpsPerformed);
-        if (this.totalBytesPerSecAutoThrottle == Long.MAX_VALUE || mergeStats.totalBytesPerSecAutoThrottle == Long.MAX_VALUE) {  
-            this.totalBytesPerSecAutoThrottle = Long.MAX_VALUE;
-        } else {
-            this.totalBytesPerSecAutoThrottle += mergeStats.totalBytesPerSecAutoThrottle;  
-        }
-        this.warmerStats.addTotals(mergeStats.warmerStats);
-    }  
-
-    public void addUnreferencedFileCleanUpStats(long unreferencedFileCleanUpsPerformed) {
-        this.unreferencedFileCleanUpsPerformed += unreferencedFileCleanUpsPerformed;  
-    }
-
-    public long getUnreferencedFileCleanUpsPerformed() {  
-        return this.unreferencedFileCleanUpsPerformed;
-    }
-
-    /**
-     * The total number of merges executed.
-     */  
-    public long getTotal() {
-        return this.total;
-    }  
-
-    /**
-     * The total time merges have been executed (in milliseconds).  
-     */
-    public long getTotalTimeInMillis() {
-        return this.totalTimeInMillis;  
-    }
-
-    /**  
-     * The total time large merges were stopped so smaller merges could finish.
-     */
-    public long getTotalStoppedTimeInMillis() {  
-        return this.totalStoppedTimeInMillis;
-    }
-
-    /**
-     * The total time large merges were stopped so smaller merges could finish.
-     */  
-    public TimeValue getTotalStoppedTime() {
-        return new TimeValue(totalStoppedTimeInMillis);
-    }  
-
-    /**
-     * The total time merge IO writes were throttled.  
-     */
-    public long getTotalThrottledTimeInMillis() {
-        return this.totalThrottledTimeInMillis;  
-    }
-
-    /**  
-     * The total time merge IO writes were throttled.
-     */
-    public TimeValue getTotalThrottledTime() {  
-        return new TimeValue(totalThrottledTimeInMillis);
-    }
-
-    /**
-     * The total time merges have been executed.
-     */  
-    public TimeValue getTotalTime() {
-        return new TimeValue(totalTimeInMillis);
-    }  
-
-    public long getTotalNumDocs() {
-        return this.totalNumDocs;  
-    }
-
-    public long getTotalSizeInBytes() {  
-        return this.totalSizeInBytes;
-    }
-
-    public ByteSizeValue getTotalSize() {
-        return new ByteSizeValue(totalSizeInBytes);
-    }  
-
-    public long getTotalBytesPerSecAutoThrottle() {
-        return totalBytesPerSecAutoThrottle;  
-    }
-
-    /**  
-     * The current number of merges executing.
-     */
-    public long getCurrent() {  
-        return this.current;
-    }
-
-    public long getCurrentNumDocs() {
-        return this.currentNumDocs;
-    }  
-
     public long getCurrentSizeInBytes() {
-        return this.currentSizeInBytes;  
-    }
-
-    public ByteSizeValue getCurrentSize() {  
-        return new ByteSizeValue(currentSizeInBytes);
-    }
-
-    public MergedSegmentWarmerStats getWarmerStats() {
-        return warmerStats;
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(Fields.MERGES);
-        builder.field(Fields.CURRENT, current);
-        builder.field(Fields.CURRENT_DOCS, currentNumDocs);  
-        builder.humanReadableField(Fields.CURRENT_SIZE_IN_BYTES, Fields.CURRENT_SIZE, getCurrentSize());
-        builder.field(Fields.TOTAL, total);
-        builder.humanReadableField(Fields.TOTAL_TIME_IN_MILLIS, Fields.TOTAL_TIME, getTotalTime());  
-        builder.field(Fields.TOTAL_DOCS, totalNumDocs);
-        builder.humanReadableField(Fields.TOTAL_SIZE_IN_BYTES, Fields.TOTAL_SIZE, getTotalSize());
-        builder.humanReadableField(Fields.TOTAL_STOPPED_TIME_IN_MILLIS, Fields.TOTAL_STOPPED_TIME, getTotalStoppedTime());  
-        builder.humanReadableField(Fields.TOTAL_THROTTLED_TIME_IN_MILLIS, Fields.TOTAL_THROTTLED_TIME, getTotalThrottledTime());
-        if (builder.humanReadable() && totalBytesPerSecAutoThrottle != -1) {
-            builder.field(Fields.TOTAL_THROTTLE_BYTES_PER_SEC).value(new ByteSizeValue(totalBytesPerSecAutoThrottle).toString());  
-        }
-        builder.field(Fields.TOTAL_THROTTLE_BYTES_PER_SEC_IN_BYTES, totalBytesPerSecAutoThrottle);
-        builder.field(Fields.UNREFERENCED_FILE_CLEANUPS_PERFORMED, unreferencedFileCleanUpsPerformed);  
-        this.warmerStats.toXContent(builder, params);
-        builder.endObject();
-        return builder;  
-    }
-
-    /**  
-     * Fields used for merge statistics
-     *
-     * @opensearch.internal  
-     */
-    static final class Fields {
-        static final String MERGES = "merges";  
         static final String CURRENT = "current";
-        static final String CURRENT_DOCS = "current_docs";
-        static final String CURRENT_SIZE = "current_size";  
-        static final String CURRENT_SIZE_IN_BYTES = "current_size_in_bytes";
-        static final String TOTAL = "total";
-        static final String TOTAL_TIME = "total_time";  
-        static final String TOTAL_TIME_IN_MILLIS = "total_time_in_millis";
-        static final String TOTAL_STOPPED_TIME = "total_stopped_time";
-        static final String TOTAL_STOPPED_TIME_IN_MILLIS = "total_stopped_time_in_millis";  
-        static final String TOTAL_THROTTLED_TIME = "total_throttled_time";
-        static final String TOTAL_THROTTLED_TIME_IN_MILLIS = "total_throttled_time_in_millis";
-        static final String TOTAL_DOCS = "total_docs";  
-        static final String TOTAL_SIZE = "total_size";
-        static final String TOTAL_SIZE_IN_BYTES = "total_size_in_bytes";
-        static final String TOTAL_THROTTLE_BYTES_PER_SEC_IN_BYTES = "total_auto_throttle_in_bytes";  
-        static final String TOTAL_THROTTLE_BYTES_PER_SEC = "total_auto_throttle";
-        static final String UNREFERENCED_FILE_CLEANUPS_PERFORMED = "unreferenced_file_cleanups_performed";
+        builder.startObject(Fields.MERGES);
+        return this.unreferencedFileCleanUpsPerformed;
+        if (mergeStats == null) {
+    /**  
+            stoppedTimeMillis,  
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeVLong(total);
-        out.writeVLong(totalTimeInMillis);
-        out.writeVLong(totalNumDocs);  
-        out.writeVLong(totalSizeInBytes);
-        out.writeVLong(current);
-        out.writeVLong(currentNumDocs);  
-        out.writeVLong(currentSizeInBytes);
-        // Added in 2.0:
-        out.writeVLong(totalStoppedTimeInMillis);  
-        out.writeVLong(totalThrottledTimeInMillis);
-        out.writeVLong(totalBytesPerSecAutoThrottle);
-        if (out.getVersion().onOrAfter(Version.V_2_11_0)) {  
+    public long getTotalNumDocs() {
+        builder.humanReadableField(Fields.CURRENT_SIZE_IN_BYTES, Fields.CURRENT_SIZE, getCurrentSize());
+    private long totalSizeInBytes;  
+ */  
+        return new TimeValue(totalThrottledTimeInMillis);
+     * The total time merges have been executed (in milliseconds).  
+            this.totalBytesPerSecAutoThrottle += mergeStats.totalBytesPerSecAutoThrottle;  
+        return new TimeValue(totalStoppedTimeInMillis);
+        return this.totalSizeInBytes;
+        builder.humanReadableField(Fields.TOTAL_STOPPED_TIME_IN_MILLIS, Fields.TOTAL_STOPPED_TIME, getTotalStoppedTime());  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            throttledTimeMillis,
+ * @opensearch.api
+            mbPerSecAutoThrottle,
+    public ByteSizeValue getTotalSize() {
+    /**
+    }
+ *  
+        double mbPerSecAutoThrottle,
+    ) {
+        } else {
+    public long getTotalStoppedTimeInMillis() {  
+     */
+    public long getUnreferencedFileCleanUpsPerformed() {  
+ * this file be licensed under the Apache-2.0 license or a
             out.writeOptionalVLong(unreferencedFileCleanUpsPerformed);
+        return warmerStats;
+    private long unreferencedFileCleanUpsPerformed;
+        if (mergeStats == null) {
+     * The total time merge IO writes were throttled.  
+        return new ByteSizeValue(currentSizeInBytes);
+    /**
+    public void addUnreferencedFileCleanUpStats(long unreferencedFileCleanUpsPerformed) {
+        this.currentNumDocs += mergeStats.currentNumDocs;  
+        this.total += totalMerges;
+    /**
+        if (in.getVersion().onOrAfter(Version.V_3_4_0)) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+        total = in.readVLong();
         }
-        if (out.getVersion().onOrAfter(Version.V_3_4_0)) {  
+        currentNumDocs = in.readVLong();  
+ * You may obtain a copy of the License at  
+        }
+ * The OpenSearch Contributors require contributions made to  
+    public long getTotalSizeInBytes() {  
+     * The current number of merges executing.
+        this.warmerStats.toXContent(builder, params);
+     */
+        );
+    public long getTotalTimeInMillis() {
+    private long current;
+    public void add(
+        this.totalSizeInBytes += totalSizeInBytes;
+ * KIND, either express or implied.  See the License for the
+        totalTimeInMillis = in.readVLong();
+     */
+            return;  
+        } else {
+            totalMerges,
+        static final String TOTAL_THROTTLED_TIME_IN_MILLIS = "total_throttled_time_in_millis";
+        double mbPerSecAutoThrottle
             this.warmerStats.writeTo(out);
+ * compatible open source license.
+    }
+ * under the License.  
+        return this.current;
+        }
+/**
+        static final String UNREFERENCED_FILE_CLEANUPS_PERFORMED = "unreferenced_file_cleanups_performed";
+        long throttledTimeMillis,
+        static final String MERGES = "merges";  
+    }
+        long currentSizeInBytes,
+ * Stores stats about a merge process
+    }  
+import org.opensearch.common.annotation.PublicApi;
+        static final String TOTAL_SIZE = "total_size";
+        this.totalThrottledTimeInMillis += throttledTimeMillis;
+    public long getCurrent() {  
+     */  
+    public void writeTo(StreamOutput out) throws IOException {  
+ * GitHub history for details.
+            totalSizeInBytes,
+        static final String TOTAL_TIME_IN_MILLIS = "total_time_in_millis";
+        this.totalNumDocs += mergeStats.totalNumDocs;
+    public long getTotalThrottledTimeInMillis() {
+    /**  
+    private final MergedSegmentWarmerStats warmerStats;  
+        builder.field(Fields.CURRENT_DOCS, currentNumDocs);  
+ *
+        }
+    }
+import org.opensearch.Version;
+        this.totalStoppedTimeInMillis += mergeStats.totalStoppedTimeInMillis;  
+        totalNumDocs = in.readVLong();  
+            this.totalBytesPerSecAutoThrottle = Long.MAX_VALUE;
+ * Licensed to Elasticsearch under one or more contributor  
+        this.total += mergeStats.total;
+        long totalMergeTime,  
+        static final String CURRENT_SIZE_IN_BYTES = "current_size_in_bytes";
+    public void addTotals(MergeStats mergeStats) {
+        return this.currentSizeInBytes;  
+    private long totalBytesPerSecAutoThrottle;
+        return this.currentNumDocs;
+        totalThrottledTimeInMillis = in.readVLong();
+            builder.field(Fields.TOTAL_THROTTLE_BYTES_PER_SEC).value(new ByteSizeValue(totalBytesPerSecAutoThrottle).toString());  
+import org.opensearch.common.unit.TimeValue;  
+     * The total time merge IO writes were throttled.
+        this.warmerStats.add(mergeStats.warmerStats);  
+    }
+     * The total number of merges executed.
+            this.totalBytesPerSecAutoThrottle = Long.MAX_VALUE;
+        long bytesPerSecAutoThrottle = (long) (mbPerSecAutoThrottle * 1024 * 1024);
+    private long totalStoppedTimeInMillis;  
+    }
+public class MergeStats implements Writeable, ToXContentFragment {
+ */
+        out.writeVLong(current);
+        MergedSegmentWarmerStats mergedSegmentWarmerStats  
+    public void add(MergeStats mergeStats) {
+        this.warmerStats = new MergedSegmentWarmerStats();  
+    }  
+        builder.humanReadableField(Fields.TOTAL_SIZE_IN_BYTES, Fields.TOTAL_SIZE, getTotalSize());
+            currentNumDocs,
+        this.totalNumDocs += totalNumDocs;
+    public long getTotalBytesPerSecAutoThrottle() {
+        builder.field(Fields.TOTAL_THROTTLE_BYTES_PER_SEC_IN_BYTES, totalBytesPerSecAutoThrottle);
+        static final String CURRENT_SIZE = "current_size";  
+    public void add(MergedSegmentWarmerStats warmerStats) {
+        }
+        this.currentSizeInBytes += currentSizeInBytes;
+    public TimeValue getTotalStoppedTime() {
+        static final String TOTAL = "total";
+    public TimeValue getTotalTime() {
+        if (this.totalBytesPerSecAutoThrottle == Long.MAX_VALUE || mergeStats.totalBytesPerSecAutoThrottle == Long.MAX_VALUE) {  
+    }
+    }
+        out.writeVLong(currentSizeInBytes);
+        out.writeVLong(totalStoppedTimeInMillis);  
+            new MergedSegmentWarmerStats()  
+}
+        addTotals(mergeStats);
+        out.writeVLong(totalThrottledTimeInMillis);
+    }
+        if (this.totalBytesPerSecAutoThrottle == Long.MAX_VALUE || bytesPerSecAutoThrottle == Long.MAX_VALUE) {  
+    public MergeStats() {
+        out.writeVLong(totalBytesPerSecAutoThrottle);
+        static final String TOTAL_DOCS = "total_docs";  
+    private long totalNumDocs;
+        return this.totalTimeInMillis;  
+    }  
+        this.currentNumDocs += currentNumDocs;
+        this.currentSizeInBytes += mergeStats.currentSizeInBytes;
+    /**  
+import org.opensearch.core.common.unit.ByteSizeValue;
+        static final String CURRENT_DOCS = "current_docs";
+        builder.humanReadableField(Fields.TOTAL_THROTTLED_TIME_IN_MILLIS, Fields.TOTAL_THROTTLED_TIME, getTotalThrottledTime());
+ * the Apache License, Version 2.0 (the "License"); you may
+            currentSizeInBytes,
+            totalMergeTime,  
+    public void add(
+import org.opensearch.core.xcontent.XContentBuilder;  
+    public MergeStats(StreamInput in) throws IOException {  
+        this.totalTimeInMillis += mergeStats.totalTimeInMillis;  
+/*
+    public TimeValue getTotalThrottledTime() {  
+    }  
+        long currentMerges,  
+        builder.field(Fields.CURRENT, current);
+        static final String TOTAL_THROTTLE_BYTES_PER_SEC_IN_BYTES = "total_auto_throttle_in_bytes";  
+        return new TimeValue(totalTimeInMillis);
+        long stoppedTimeMillis,  
+        this.totalTimeInMillis += totalMergeTime;  
+        if (this.warmerStats == null) {  
+    private long total;  
+        static final String TOTAL_STOPPED_TIME_IN_MILLIS = "total_stopped_time_in_millis";  
+        builder.field(Fields.TOTAL, total);
+        this.warmerStats.addTotals(mergeStats.warmerStats);
+    ) {  
+        this.warmerStats.add(warmerStats);  
+        out.writeVLong(currentNumDocs);  
+            return;  
+    }
+        static final String TOTAL_THROTTLED_TIME = "total_throttled_time";
+    }
+ *
+        long totalSizeInBytes,
+    }
         }
     }  
-}
+        // Added in 2.0:
+        this.unreferencedFileCleanUpsPerformed += unreferencedFileCleanUpsPerformed;  
+        current = in.readVLong();
+        totalStoppedTimeInMillis = in.readVLong();  
+    public long getCurrentNumDocs() {
+        this.totalSizeInBytes += mergeStats.totalSizeInBytes;
+    /**
+            this.warmerStats = new MergedSegmentWarmerStats();  
+import org.opensearch.core.xcontent.ToXContentFragment;
+/*  
+        long currentNumDocs,
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.io.IOException;
+     * Fields used for merge statistics
+    private long currentNumDocs;
+ */
+        } else {
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+        if (out.getVersion().onOrAfter(Version.V_2_11_0)) {  
+ *  
+        }
+        }
+            unreferencedFileCleanUpsPerformed = in.readOptionalVLong();
+        static final String TOTAL_THROTTLE_BYTES_PER_SEC = "total_auto_throttle";
+        return new ByteSizeValue(totalSizeInBytes);
+        static final String TOTAL_SIZE_IN_BYTES = "total_size_in_bytes";
+        totalSizeInBytes = in.readVLong();
+        }
+        totalBytesPerSecAutoThrottle = in.readVLong();
+    /** Total millis that we slept during writes so merge IO is throttled. */
+     * The total time large merges were stopped so smaller merges could finish.
+        long throttledTimeMillis,
+        return totalBytesPerSecAutoThrottle;  
+        this.warmerStats.addTotals(warmerStats);
+ * not use this file except in compliance with the License.
+        long currentNumDocs,
+        builder.field(Fields.UNREFERENCED_FILE_CLEANUPS_PERFORMED, unreferencedFileCleanUpsPerformed);  
+    }
+import org.opensearch.core.common.io.stream.Writeable;  
+/*  
+    }
+    /**  
+        static final String TOTAL_TIME = "total_time";  
+        this.current += currentMerges;  
+        return builder;  
+        out.writeVLong(total);
+    public MergedSegmentWarmerStats getWarmerStats() {
+    public long getTotal() {
+     * The total time large merges were stopped so smaller merges could finish.
+    }  
+        out.writeVLong(totalSizeInBytes);
+ * license agreements. See the NOTICE file distributed with
+        builder.humanReadableField(Fields.TOTAL_TIME_IN_MILLIS, Fields.TOTAL_TIME, getTotalTime());  
+    }  
+    private long totalThrottledTimeInMillis;  
+ * this work for additional information regarding copyright
+    }  
+    }
+        add(
+            this.warmerStats = new MergedSegmentWarmerStats(in);
+    public ByteSizeValue getCurrentSize() {  
+        if (out.getVersion().onOrAfter(Version.V_3_4_0)) {  
+        currentSizeInBytes = in.readVLong();
+     */  
+     */  
+            totalNumDocs,
+        return this.total;
+        addUnreferencedFileCleanUpStats(mergeStats.unreferencedFileCleanUpsPerformed);
+        // Added in 2.0:
+            this.totalBytesPerSecAutoThrottle += bytesPerSecAutoThrottle;  
+ * software distributed under the License is distributed on an
+import org.opensearch.core.common.io.stream.StreamOutput;
+     *
+ */  
+     * @opensearch.internal  
+            return;
+        builder.endObject();
+    }
+    private long currentSizeInBytes;  
+        long totalNumDocs,
+ * Unless required by applicable law or agreed to in writing,
+package org.opensearch.index.merge;
+        long totalMerges,
+    }  
+        return this.totalNumDocs;  
+            currentMerges,  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+    }
+    /**
+        long totalMergeTime,  
+        this.totalStoppedTimeInMillis += stoppedTimeMillis;  
+        long currentSizeInBytes,
+    /** Total millis that large merges were stopped so that smaller merges would finish. */
+        long stoppedTimeMillis,  
+        static final String TOTAL_STOPPED_TIME = "total_stopped_time";
+    static final class Fields {
+        out.writeVLong(totalNumDocs);  
+        long totalNumDocs,
+    @Override
+     */
+        builder.field(Fields.TOTAL_DOCS, totalNumDocs);
+        out.writeVLong(totalTimeInMillis);
+        long totalSizeInBytes,
+        return this.totalStoppedTimeInMillis;
+ * specific language governing permissions and limitations
+    @Override
+        }
+     * The total time merges have been executed.
+        long currentMerges,  
+        if (builder.humanReadable() && totalBytesPerSecAutoThrottle != -1) {
+        return this.totalThrottledTimeInMillis;  
+        this.totalThrottledTimeInMillis += mergeStats.totalThrottledTimeInMillis;
+     */
+        this.add(mergedSegmentWarmerStats);
+    private long totalTimeInMillis;

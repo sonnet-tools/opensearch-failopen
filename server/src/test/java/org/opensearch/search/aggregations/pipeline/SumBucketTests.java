@@ -1,86 +1,73 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;  
-import org.opensearch.search.aggregations.support.ValueType;
-
-import java.util.HashSet;  
-import java.util.Set;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.nullValue;
-
-public class SumBucketTests extends AbstractBucketMetricsTestCase<SumBucketPipelineAggregationBuilder> {  
-
-    @Override
-    protected SumBucketPipelineAggregationBuilder doCreateTestAggregatorFactory(String name, String bucketsPath) {  
-        return new SumBucketPipelineAggregationBuilder(name, bucketsPath);
-    }
-
-    public void testValidate() {
-        AggregationBuilder singleBucketAgg = new GlobalAggregationBuilder("global");
         AggregationBuilder multiBucketAgg = new TermsAggregationBuilder("terms").userValueTypeHint(ValueType.STRING);  
-        final Set<AggregationBuilder> aggBuilders = new HashSet<>();
-        aggBuilders.add(singleBucketAgg);
-        aggBuilders.add(multiBucketAgg);  
-
-        // First try to point to a non-existent agg
-        assertThat(  
             validate(aggBuilders, new SumBucketPipelineAggregationBuilder("name", "invalid_agg>metric")),
-            equalTo(
-                "Validation Failed: 1: "  
-                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
-                    + " aggregation does not exist for aggregation [name]: invalid_agg>metric;"
-            )  
+/*  
+ * specific language governing permissions and limitations
+ * The OpenSearch Contributors require contributions made to  
         );
-
-        // Now try to point to a single bucket agg  
-        assertThat(
-            validate(aggBuilders, new SumBucketPipelineAggregationBuilder("name", "global>metric")),
-            equalTo(  
-                "Validation Failed: 1: The first aggregation in "
-                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
+ * the Apache License, Version 2.0 (the "License"); you may
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
                     + " must be a multi-bucket aggregation for aggregation [name] found :"  
-                    + GlobalAggregationBuilder.class.getName()
-                    + " for buckets path: global>metric;"
-            )  
-        );
-
-        // Now try to point to a valid multi-bucket agg  
+ * license agreements. See the NOTICE file distributed with
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
+ *
+ */  
+ * compatible open source license.
+    @Override
         assertThat(validate(aggBuilders, new SumBucketPipelineAggregationBuilder("name", "terms>metric")), nullValue());
+            )  
+                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
+                    + " for buckets path: global>metric;"
+ *
+                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
+        return new SumBucketPipelineAggregationBuilder(name, bucketsPath);
+        // Now try to point to a single bucket agg  
+import static org.hamcrest.Matchers.equalTo;  
+        // First try to point to a non-existent agg
+ */
+                    + GlobalAggregationBuilder.class.getName()
+ * KIND, either express or implied.  See the License for the
     }
-
+ * SPDX-License-Identifier: Apache-2.0
+        aggBuilders.add(multiBucketAgg);  
+import java.util.Set;
+ * GitHub history for details.
+            equalTo(  
+import java.util.HashSet;  
+        assertThat(
+            )  
+        assertThat(  
+ * software distributed under the License is distributed on an
+        );
+        // Now try to point to a valid multi-bucket agg  
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+    protected SumBucketPipelineAggregationBuilder doCreateTestAggregatorFactory(String name, String bucketsPath) {  
+                "Validation Failed: 1: "  
+public class SumBucketTests extends AbstractBucketMetricsTestCase<SumBucketPipelineAggregationBuilder> {  
+ *  
+import org.opensearch.search.aggregations.support.ValueType;
+import org.opensearch.search.aggregations.AggregationBuilder;
+ * You may obtain a copy of the License at  
+import static org.hamcrest.Matchers.nullValue;
+ */  
+    public void testValidate() {
+        final Set<AggregationBuilder> aggBuilders = new HashSet<>();
+                "Validation Failed: 1: The first aggregation in "
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+ * Licensed to Elasticsearch under one or more contributor  
+            validate(aggBuilders, new SumBucketPipelineAggregationBuilder("name", "global>metric")),
 }
+ * under the License.  
+            equalTo(
+                    + " aggregation does not exist for aggregation [name]: invalid_agg>metric;"
+        AggregationBuilder singleBucketAgg = new GlobalAggregationBuilder("global");
+package org.opensearch.search.aggregations.pipeline;
+ * ownership. Elasticsearch licenses this file to you under  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        aggBuilders.add(singleBucketAgg);
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;  
+    }
+/*  

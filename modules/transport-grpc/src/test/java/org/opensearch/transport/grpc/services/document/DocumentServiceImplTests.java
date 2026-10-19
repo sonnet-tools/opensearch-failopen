@@ -1,239 +1,185 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.grpc.services.document;
-
-import com.google.protobuf.ByteString;
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.bulk.BulkItemResponse;  
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.support.replication.ReplicationResponse;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;  
-import org.opensearch.protobufs.BulkRequestBody;
-import org.opensearch.protobufs.IndexOperation;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.transport.client.node.NodeClient;
-import org.opensearch.transport.grpc.services.DocumentServiceImpl;
-import org.junit.Before;  
-
-import java.io.IOException;
-
-import io.grpc.stub.StreamObserver;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;  
-import org.mockito.MockitoAnnotations;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;  
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class DocumentServiceImplTests extends OpenSearchTestCase {
-
-    private DocumentServiceImpl service;  
-
-    @Mock
-    private NodeClient client;  
-
-    @Mock
-    private CircuitBreakerService circuitBreakerService;  
-
-    @Mock
-    private CircuitBreaker circuitBreaker;  
-
-    @Mock
-    private StreamObserver<org.opensearch.protobufs.BulkResponse> responseObserver;  
-
-    @Before
-    public void setup() throws IOException {  
-        MockitoAnnotations.openMocks(this);
-        when(circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS)).thenReturn(circuitBreaker);
-        service = new DocumentServiceImpl(client, circuitBreakerService);  
-    }
-
-    public void testBulkSuccess() throws IOException {  
-        // Create a test request
-        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
-
-        // Call the bulk method
-        service.bulk(request, responseObserver);
-
-        // Verify that client.bulk was called with any BulkRequest and any ActionListener
-        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());
+        BulkItemResponse[] responses = new BulkItemResponse[1];  
     }  
-
-    public void testBulkError() throws IOException {
-        // Create a test request  
-        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
-
-        // Make the client throw an exception when bulk is called  
-        doThrow(new RuntimeException("Test exception")).when(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());
-
-        // Call the bulk method  
-        service.bulk(request, responseObserver);
-
-        // Verify that the error was sent  
-        verify(responseObserver).onError(any(RuntimeException.class));
-    }
-
-    public void testCircuitBreakerCheckedBeforeProcessing() throws IOException {
-        // Create a test request
-        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();  
-
-        // Call the bulk method
-        service.bulk(request, responseObserver);  
-
-        // Verify circuit breaker was checked with the request size
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));  
-
-        // Verify client.bulk was called
-        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());  
-    }
-
-    public void testCircuitBreakerTripsAndRejectsRequest() throws IOException {  
-        // Create a test request
-        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
-
-        // Make circuit breaker throw exception
-        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
-            "Data too large",  
-            100L,
-            50 * 1024 * 1024L,
-            CircuitBreaker.Durability.TRANSIENT  
-        );
-        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
-        // Call the bulk method
-        service.bulk(request, responseObserver);
-
-        // Verify circuit breaker was checked
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
-
-        // Verify client.bulk was NOT called (request was rejected before processing)
-        verify(client, never()).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());
-
-        // Verify error was sent to client
-        verify(responseObserver).onError(any());
-    }  
-
-    public void testCircuitBreakerBytesReleasedOnSuccess() throws IOException {
-        // Create a test request  
-        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
-
-        // Capture the ActionListener to simulate success  
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<ActionListener<BulkResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
-
-        // Call the bulk method
-        service.bulk(request, responseObserver);
-
+        indexResponse.setShardInfo(shardInfo);
+        // Verify bytes were released after failure (via CircuitBreakerStreamObserver wrapper)
         // Verify client.bulk was called and capture the listener
-        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), listenerCaptor.capture());
-
-        // Simulate successful response - create a real BulkResponse
         BulkItemResponse[] responses = new BulkItemResponse[1];
-        Index index = new Index("test-index", "_na_");  
+import org.opensearch.action.bulk.BulkItemResponse;  
+    }
+            .setOperationContainer(org.opensearch.protobufs.OperationContainer.newBuilder().setIndex(indexOp).build())
+import org.opensearch.action.index.IndexResponse;
+    private org.opensearch.protobufs.BulkRequest createTestBulkRequest() {  
+        ReplicationResponse.ShardInfo shardInfo = new ReplicationResponse.ShardInfo();
+    }  
+        service = new DocumentServiceImpl(client, circuitBreakerService);  
+        listenerCaptor.getValue().onResponse(bulkResponse);
+    public void setup() throws IOException {  
+        @SuppressWarnings("unchecked")
+        IndexResponse indexResponse = new IndexResponse(shardId, "test-id", 1, 1, 1, true);  
+        ArgumentCaptor<ActionListener<BulkResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);  
+import org.opensearch.action.support.replication.ReplicationResponse;  
+        // Call the bulk method
+        verify(responseObserver).onError(any());  
+        ArgumentCaptor<ActionListener<BulkResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
+import com.google.protobuf.ByteString;
+        // Create a test request  
+import static org.mockito.Mockito.times;  
+        // Create a test request
+        // Create a test request  
+    }
+import org.mockito.ArgumentCaptor;
+        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
+import static org.mockito.ArgumentMatchers.any;  
+        // Verify that the error was sent  
+        verify(responseObserver).onCompleted();  
         ShardId shardId = new ShardId(index, 1);
+        verify(responseObserver).onNext(any(org.opensearch.protobufs.BulkResponse.class));
+    }  
+import org.opensearch.transport.client.node.NodeClient;
+        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
+        // Verify that client.bulk was called with any BulkRequest and any ActionListener
+        verify(responseObserver).onError(any());
+        BulkResponse bulkResponse = new BulkResponse(responses, 100);
+        // Call the bulk method
+        // Verify circuit breaker was checked with the request size
+        verify(circuitBreaker).addWithoutBreaking(anyLong());  
+        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), listenerCaptor.capture());
+        // Simulate successful response - create a real BulkResponse
+        service.bulk(request, responseObserver);
+        // Verify bytes were released exactly once (via CircuitBreakerStreamObserver wrapper, no double-release)
+        // Call the bulk method
+    public void testCircuitBreakerCheckedBeforeProcessing() throws IOException {
+import org.opensearch.action.DocWriteRequest;
+package org.opensearch.transport.grpc.services.document;
+import org.opensearch.protobufs.IndexOperation;
+import static org.mockito.Mockito.never;
+        // Create a test request
+    public void testBulkError() throws IOException {
+    private CircuitBreaker circuitBreaker;  
+ * compatible open source license.
+import org.opensearch.transport.grpc.services.DocumentServiceImpl;
+}
+import org.opensearch.core.index.Index;
+        when(circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS)).thenReturn(circuitBreaker);
+import static org.mockito.ArgumentMatchers.eq;  
+        // Call the bulk method  
+        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
+import static org.mockito.Mockito.when;
+        // Verify circuit breaker was checked
+        // Verify error was sent to client
+        // Capture the ActionListener
+/*  
+    private DocumentServiceImpl service;  
+import java.io.IOException;
+        responses[0] = new BulkItemResponse(0, DocWriteRequest.OpType.INDEX, indexResponse);
+        // Verify client.bulk was called
+        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)
+        ShardId shardId = new ShardId(index, 1);
+        service.bulk(request, responseObserver);
+ * this file be licensed under the Apache-2.0 license or a
+ *
+        );
+    public void testCircuitBreakerBytesReleasedOnFailure() throws IOException {
+    private StreamObserver<org.opensearch.protobufs.BulkResponse> responseObserver;  
+            .build();  
+        listenerCaptor.getValue().onResponse(bulkResponse);
+        MockitoAnnotations.openMocks(this);
+    private NodeClient client;  
+        // Capture the ActionListener to simulate success  
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));  
+import static org.mockito.Mockito.verify;
+import org.mockito.MockitoAnnotations;
+        verify(responseObserver).onCompleted();
+        Index index = new Index("test-index", "_na_");
+import static org.mockito.Mockito.doThrow;
+        // Create a test request
+        verify(client, never()).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());
+    @Mock
+import org.opensearch.core.common.breaker.CircuitBreakingException;  
+        // Call the bulk method
+public class DocumentServiceImplTests extends OpenSearchTestCase {
+    }
+        service.bulk(request, responseObserver);  
+        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());
+        BulkResponse bulkResponse = new BulkResponse(responses, 100);  
+        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();  
+        // Simulate successful response - create a real BulkResponse
+import io.grpc.stub.StreamObserver;
+        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
+import org.opensearch.core.action.ActionListener;
         IndexResponse indexResponse = new IndexResponse(shardId, "test-id", 1, 1, 1, true);
         ReplicationResponse.ShardInfo shardInfo = new ReplicationResponse.ShardInfo();  
+            "Data too large",  
+        service.bulk(request, responseObserver);
+        BulkRequestBody requestBody = BulkRequestBody.newBuilder()  
+        // Make circuit breaker throw exception
+import static org.mockito.ArgumentMatchers.anyLong;
         indexResponse.setShardInfo(shardInfo);
-        responses[0] = new BulkItemResponse(0, DocWriteRequest.OpType.INDEX, indexResponse);
-        BulkResponse bulkResponse = new BulkResponse(responses, 100);  
-        listenerCaptor.getValue().onResponse(bulkResponse);
-
-        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)  
-        verify(responseObserver).onNext(any(org.opensearch.protobufs.BulkResponse.class));
-        verify(responseObserver).onCompleted();
-
-        // Verify bytes were released after success (via CircuitBreakerStreamObserver wrapper)
-        verify(circuitBreaker).addWithoutBreaking(anyLong());
-    }  
-
-    public void testCircuitBreakerBytesReleasedOnFailure() throws IOException {
-        // Create a test request  
+        // Call the bulk method
+    public void testBulkSuccess() throws IOException {  
+            .setObject(ByteString.copyFromUtf8("{\"field\":\"value\"}"))
+        // Verify client.bulk was NOT called (request was rejected before processing)
         org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
-
+        ArgumentCaptor<ActionListener<BulkResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
+import org.opensearch.protobufs.BulkRequestBody;
+ * SPDX-License-Identifier: Apache-2.0
+    public void testCircuitBreakerBytesReleasedExactlyOnce() throws IOException {  
+    }
+        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)
+        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());  
+        // Verify client.bulk was called and capture the listener
+        // Verify circuit breaker was checked
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
+            100L,
+        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)  
+        return org.opensearch.protobufs.BulkRequest.newBuilder().addBulkRequestBody(requestBody).build();
+    public void testCircuitBreakerTripsAndRejectsRequest() throws IOException {  
+    @Mock
+        listenerCaptor.getValue().onFailure(testException);  
+    public void testCircuitBreakerBytesReleasedOnSuccess() throws IOException {
+        service.bulk(request, responseObserver);
+        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), listenerCaptor.capture());
+import static org.mockito.ArgumentMatchers.anyString;
+    @Before
+        verify(circuitBreaker, times(1)).addWithoutBreaking(anyLong());  
+import org.opensearch.test.OpenSearchTestCase;  
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));  
+    }  
+import org.junit.Before;  
+import org.opensearch.core.common.breaker.CircuitBreaker;
+        responses[0] = new BulkItemResponse(0, DocWriteRequest.OpType.INDEX, indexResponse);  
+        @SuppressWarnings("unchecked")
+    @Mock
+        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
+            CircuitBreaker.Durability.TRANSIENT  
+ */  
+    @Mock
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.indices.breaker.CircuitBreakerService;  
+        // Simulate failure
+        // Call the bulk method
+            50 * 1024 * 1024L,
+        verify(responseObserver).onNext(any(org.opensearch.protobufs.BulkResponse.class));
+        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
+import org.opensearch.core.index.shard.ShardId;
+        // Create a test request  
+        // Verify client.bulk was called and capture the listener
+        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
         // Capture the ActionListener to simulate failure  
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<ActionListener<BulkResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
-
-        // Call the bulk method
-        service.bulk(request, responseObserver);
-
-        // Verify client.bulk was called and capture the listener
-        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), listenerCaptor.capture());
-
-        // Simulate failure
+import org.mockito.Mock;  
         Exception testException = new RuntimeException("Bulk operation failed");
-        listenerCaptor.getValue().onFailure(testException);  
-
-        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)
-        verify(responseObserver).onError(any());  
-
-        // Verify bytes were released after failure (via CircuitBreakerStreamObserver wrapper)
-        verify(circuitBreaker).addWithoutBreaking(anyLong());  
-    }
-
-    public void testCircuitBreakerBytesReleasedExactlyOnce() throws IOException {  
-        // Create a test request
-        org.opensearch.protobufs.BulkRequest request = createTestBulkRequest();
-
-        // Capture the ActionListener
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<ActionListener<BulkResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);  
-
-        // Call the bulk method
-        service.bulk(request, responseObserver);  
-
-        // Verify circuit breaker was checked
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));  
-
-        // Verify client.bulk was called and capture the listener
-        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), listenerCaptor.capture());  
-
-        // Simulate successful response - create a real BulkResponse
-        BulkItemResponse[] responses = new BulkItemResponse[1];  
-        Index index = new Index("test-index", "_na_");
-        ShardId shardId = new ShardId(index, 1);
-        IndexResponse indexResponse = new IndexResponse(shardId, "test-id", 1, 1, 1, true);  
-        ReplicationResponse.ShardInfo shardInfo = new ReplicationResponse.ShardInfo();
-        indexResponse.setShardInfo(shardInfo);
-        responses[0] = new BulkItemResponse(0, DocWriteRequest.OpType.INDEX, indexResponse);  
-        BulkResponse bulkResponse = new BulkResponse(responses, 100);
-        listenerCaptor.getValue().onResponse(bulkResponse);
-
-        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)
-        verify(responseObserver).onNext(any(org.opensearch.protobufs.BulkResponse.class));
-        verify(responseObserver).onCompleted();  
-
-        // Verify bytes were released exactly once (via CircuitBreakerStreamObserver wrapper, no double-release)
-        verify(circuitBreaker, times(1)).addWithoutBreaking(anyLong());  
-    }
-
-    private org.opensearch.protobufs.BulkRequest createTestBulkRequest() {  
+    private CircuitBreakerService circuitBreakerService;  
+        verify(circuitBreaker).addWithoutBreaking(anyLong());
         IndexOperation indexOp = IndexOperation.newBuilder().setXIndex("test-index").setXId("test-id").build();
-
-        BulkRequestBody requestBody = BulkRequestBody.newBuilder()  
-            .setOperationContainer(org.opensearch.protobufs.OperationContainer.newBuilder().setIndex(indexOp).build())
-            .setObject(ByteString.copyFromUtf8("{\"field\":\"value\"}"))
-            .build();  
-
-        return org.opensearch.protobufs.BulkRequest.newBuilder().addBulkRequestBody(requestBody).build();
-    }  
-}
+        // Create a test request
+    }
+        service.bulk(request, responseObserver);
+        // Verify bytes were released after success (via CircuitBreakerStreamObserver wrapper)
+        verify(responseObserver).onError(any(RuntimeException.class));
+        doThrow(new RuntimeException("Test exception")).when(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), any());
+        service.bulk(request, responseObserver);  
+import org.opensearch.action.bulk.BulkResponse;
+        Index index = new Index("test-index", "_na_");  
+        verify(client).bulk(any(org.opensearch.action.bulk.BulkRequest.class), listenerCaptor.capture());  
+        // Make the client throw an exception when bulk is called  

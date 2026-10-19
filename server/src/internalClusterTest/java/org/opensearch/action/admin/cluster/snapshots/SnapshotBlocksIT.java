@@ -1,225 +1,202 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+        try {  
+        logger.info("-->  creating a snapshot is allowed when the cluster is not read only");
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.snapshots;
-
-import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryResponse;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsResponse;  
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.common.settings.Settings;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.junit.Before;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_READ;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;  
-
-/**
- * This class tests that snapshot operations (Create, Delete, Restore) are blocked when the cluster is read-only.  
- * <p>
- * The @NodeScope TEST is needed because this class updates the cluster setting "cluster.blocks.read_only".
- */  
-@ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST)
-public class SnapshotBlocksIT extends OpenSearchIntegTestCase {
-
-    protected static final String INDEX_NAME = "test-blocks-1";
-    protected static final String OTHER_INDEX_NAME = "test-blocks-2";
-    protected static final String COMMON_INDEX_NAME_MASK = "test-blocks-*";  
-    protected static final String REPOSITORY_NAME = "repo-" + INDEX_NAME;
-    protected static final String SNAPSHOT_NAME = "snapshot-0";
-
-    @Before
-    protected void setUpRepository() throws Exception {
-        createIndex(INDEX_NAME, OTHER_INDEX_NAME);  
-
-        int docs = between(10, 100);
-        for (int i = 0; i < docs; i++) {  
-            client().prepareIndex(INDEX_NAME).setSource("test", "init").execute().actionGet();
-        }
-        docs = between(10, 100);  
-        for (int i = 0; i < docs; i++) {
-            client().prepareIndex(OTHER_INDEX_NAME).setSource("test", "init").execute().actionGet();
-        }  
-
-        logger.info("--> register a repository");
-
-        Settings.Builder settings = Settings.builder().put("location", randomRepoPath());
-        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), REPOSITORY_NAME, "fs", settings);
-
-        logger.info("--> verify the repository");
-        VerifyRepositoryResponse verifyResponse = client().admin().cluster().prepareVerifyRepository(REPOSITORY_NAME).get();
-        assertThat(verifyResponse.getNodes().size(), equalTo(cluster().numDataAndClusterManagerNodes()));  
-
-        logger.info("--> create a snapshot");
-        CreateSnapshotResponse snapshotResponse = client().admin()  
-            .cluster()
-            .prepareCreateSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)
-            .setIncludeGlobalState(true)  
-            .setWaitForCompletion(true)
-            .execute()
-            .actionGet();  
-        assertThat(snapshotResponse.status(), equalTo(RestStatus.OK));
-        ensureSearchable();
-    }  
-
-    public void testCreateSnapshotWithBlocks() {
-        logger.info("-->  creating a snapshot is allowed when the cluster is read only");  
-        try {
-            setClusterReadOnly(true);
-            assertThat(  
-                client().admin().cluster().prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-1").setWaitForCompletion(true).get().status(),
-                equalTo(RestStatus.OK)
-            );  
-        } finally {
-            setClusterReadOnly(false);
-        }  
-
-        logger.info("-->  creating a snapshot is allowed when the cluster is not read only");
-        CreateSnapshotResponse response = client().admin()  
-            .cluster()
-            .prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-2")
-            .setWaitForCompletion(true)  
-            .execute()
-            .actionGet();
-        assertThat(response.status(), equalTo(RestStatus.OK));  
-    }
-
-    public void testCreateSnapshotWithIndexBlocks() {  
-        logger.info("-->  creating a snapshot is not blocked when an index is read only");
-        try {
-            enableIndexBlock(INDEX_NAME, SETTING_READ_ONLY);  
-            assertThat(
-                client().admin()
-                    .cluster()  
-                    .prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-1")
-                    .setIndices(COMMON_INDEX_NAME_MASK)
-                    .setWaitForCompletion(true)  
-                    .get()
-                    .status(),
-                equalTo(RestStatus.OK)  
-            );
-        } finally {
-            disableIndexBlock(INDEX_NAME, SETTING_READ_ONLY);  
-        }
-
-        logger.info("-->  creating a snapshot is blocked when an index is blocked for reads");  
-        try {
-            enableIndexBlock(INDEX_NAME, SETTING_BLOCKS_READ);
-            assertThat(  
-                client().admin()
-                    .cluster()
-                    .prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-2")  
-                    .setIndices(COMMON_INDEX_NAME_MASK)
-                    .setWaitForCompletion(true)
-                    .get()  
-                    .status(),
-                equalTo(RestStatus.OK)
-            );  
-        } finally {
-            disableIndexBlock(INDEX_NAME, SETTING_BLOCKS_READ);
-        }  
-    }
-
-    public void testDeleteSnapshotWithBlocks() {  
-        logger.info("-->  deleting a snapshot is allowed when the cluster is read only");
-        try {
-            setClusterReadOnly(true);  
-            assertTrue(client().admin().cluster().prepareDeleteSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME).get().isAcknowledged());
-        } finally {
-            setClusterReadOnly(false);  
-        }
-    }
-
-    public void testRestoreSnapshotWithBlocks() {
-        assertAcked(client().admin().indices().prepareDelete(INDEX_NAME, OTHER_INDEX_NAME));
-        assertFalse(client().admin().indices().prepareExists(INDEX_NAME, OTHER_INDEX_NAME).get().isExists());  
-
-        logger.info("-->  restoring a snapshot is blocked when the cluster is read only");
-        try {  
-            setClusterReadOnly(true);
-            assertBlocked(
-                client().admin().cluster().prepareRestoreSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME),  
-                Metadata.CLUSTER_READ_ONLY_BLOCK
-            );
-        } finally {  
-            setClusterReadOnly(false);
-        }
-
-        logger.info("-->  creating a snapshot is allowed when the cluster is not read only");
-        RestoreSnapshotResponse response = client().admin()
-            .cluster()  
-            .prepareRestoreSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)
-            .setWaitForCompletion(true)
-            .execute()  
-            .actionGet();
-        assertThat(response.status(), equalTo(RestStatus.OK));
-        assertTrue(client().admin().indices().prepareExists(INDEX_NAME).get().isExists());  
-        assertTrue(client().admin().indices().prepareExists(OTHER_INDEX_NAME).get().isExists());
-    }
-
-    public void testGetSnapshotWithBlocks() {
-        // This test checks that the Get Snapshot operation is never blocked, even if the cluster is read only.
-        try {  
-            setClusterReadOnly(true);
-            GetSnapshotsResponse response = client().admin().cluster().prepareGetSnapshots(REPOSITORY_NAME).execute().actionGet();
-            assertThat(response.getSnapshots(), hasSize(1));  
-            assertThat(response.getSnapshots().get(0).snapshotId().getName(), equalTo(SNAPSHOT_NAME));
-        } finally {
-            setClusterReadOnly(false);  
-        }
-    }
-
-    public void testSnapshotStatusWithBlocks() {
         // This test checks that the Snapshot Status operation is never blocked, even if the cluster is read only.
-        try {  
-            setClusterReadOnly(true);
-            SnapshotsStatusResponse response = client().admin()
-                .cluster()  
-                .prepareSnapshotStatus(REPOSITORY_NAME)
-                .setSnapshots(SNAPSHOT_NAME)
-                .execute()  
-                .actionGet();
-            assertThat(response.getSnapshots(), hasSize(1));
-            assertThat(response.getSnapshots().get(0).getState().completed(), equalTo(true));  
-        } finally {
-            setClusterReadOnly(false);
+ * Licensed to Elasticsearch under one or more contributor  
+ * this file be licensed under the Apache-2.0 license or a
+        try {
+ * this work for additional information regarding copyright
+ *
         }  
+        assertFalse(client().admin().indices().prepareExists(INDEX_NAME, OTHER_INDEX_NAME).get().isExists());  
+                client().admin()
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        int docs = between(10, 100);
+        }  
+                    .prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-2")  
+        ensureSearchable();
+                    .prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-1")
+            .prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-2")
+            enableIndexBlock(INDEX_NAME, SETTING_BLOCKS_READ);
+            assertThat(response.getSnapshots(), hasSize(1));  
+                    .cluster()
+ * ownership. Elasticsearch licenses this file to you under  
+            enableIndexBlock(INDEX_NAME, SETTING_READ_ONLY);  
+        createIndex(INDEX_NAME, OTHER_INDEX_NAME);  
     }
+            assertThat(response.getSnapshots(), hasSize(1));
+                .cluster()  
+ * license agreements. See the NOTICE file distributed with
+                .setSnapshots(SNAPSHOT_NAME)
+        } finally {
+                    .setWaitForCompletion(true)  
+    public void testGetSnapshotWithBlocks() {
+        try {
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        }  
+        logger.info("-->  deleting a snapshot is allowed when the cluster is read only");
+        assertThat(verifyResponse.getNodes().size(), equalTo(cluster().numDataAndClusterManagerNodes()));  
+            setClusterReadOnly(false);
+            .cluster()
+ *
+        logger.info("-->  creating a snapshot is not blocked when an index is read only");
+        CreateSnapshotResponse snapshotResponse = client().admin()  
+ * The @NodeScope TEST is needed because this class updates the cluster setting "cluster.blocks.read_only".
+            assertTrue(client().admin().cluster().prepareDeleteSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME).get().isAcknowledged());
+ * SPDX-License-Identifier: Apache-2.0
+            );  
+                client().admin().cluster().prepareCreateSnapshot(REPOSITORY_NAME, "snapshot-1").setWaitForCompletion(true).get().status(),
 }
+ * The OpenSearch Contributors require contributions made to  
+            client().prepareIndex(INDEX_NAME).setSource("test", "init").execute().actionGet();
+        CreateSnapshotResponse response = client().admin()  
+    }
+            setClusterReadOnly(true);
+                equalTo(RestStatus.OK)
+    protected static final String REPOSITORY_NAME = "repo-" + INDEX_NAME;
+                client().admin().cluster().prepareRestoreSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME),  
+                    .cluster()  
+        assertThat(snapshotResponse.status(), equalTo(RestStatus.OK));
+                equalTo(RestStatus.OK)
+        logger.info("-->  creating a snapshot is blocked when an index is blocked for reads");  
+            .prepareRestoreSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)
+ * GitHub history for details.
+            setClusterReadOnly(false);  
+        } finally {
+        } finally {
+    protected static final String OTHER_INDEX_NAME = "test-blocks-2";
+@ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST)
+                    .status(),
+            disableIndexBlock(INDEX_NAME, SETTING_READ_ONLY);  
+    @Before
+        } finally {
+    }
+            assertThat(response.getSnapshots().get(0).getState().completed(), equalTo(true));  
+            );
+                .execute()  
+                client().admin()
+            setClusterReadOnly(false);  
+import org.junit.Before;
+        try {
+        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), REPOSITORY_NAME, "fs", settings);
+    }
+            .execute()  
+        }
+        }
+ */  
+        RestoreSnapshotResponse response = client().admin()
+                    .setWaitForCompletion(true)
+            assertThat(  
+        }  
+        } finally {
+        try {  
+ */  
+        } finally {  
+            assertThat(  
+            assertBlocked(
+ * Unless required by applicable law or agreed to in writing,
+            .cluster()  
+            .setWaitForCompletion(true)
+    public void testDeleteSnapshotWithBlocks() {  
+            setClusterReadOnly(true);  
+        // This test checks that the Get Snapshot operation is never blocked, even if the cluster is read only.
+                .prepareSnapshotStatus(REPOSITORY_NAME)
+ * This class tests that snapshot operations (Create, Delete, Restore) are blocked when the cluster is read-only.  
+            );  
+        logger.info("--> create a snapshot");
+        } finally {
+            .setWaitForCompletion(true)  
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_READ;
+        logger.info("--> verify the repository");
+    }  
+/*  
+    public void testCreateSnapshotWithIndexBlocks() {  
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY;
+        assertTrue(client().admin().indices().prepareExists(OTHER_INDEX_NAME).get().isExists());
+    protected static final String INDEX_NAME = "test-blocks-1";
+    protected void setUpRepository() throws Exception {
+            setClusterReadOnly(false);
+package org.opensearch.action.admin.cluster.snapshots;
+            .execute()
+        for (int i = 0; i < docs; i++) {
+        try {  
+                    .setIndices(COMMON_INDEX_NAME_MASK)
+ */  
+ * KIND, either express or implied.  See the License for the
+        assertThat(response.status(), equalTo(RestStatus.OK));
+ * You may obtain a copy of the License at  
+            .setIncludeGlobalState(true)  
+import org.opensearch.cluster.metadata.Metadata;  
+                equalTo(RestStatus.OK)  
+/*
+        docs = between(10, 100);  
+            .cluster()
+        Settings.Builder settings = Settings.builder().put("location", randomRepoPath());
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;
+/**
+                    .get()
+ * compatible open source license.
+        }
+            setClusterReadOnly(false);
+            .prepareCreateSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+        logger.info("-->  creating a snapshot is allowed when the cluster is read only");  
+ * under the License.  
+public class SnapshotBlocksIT extends OpenSearchIntegTestCase {
+    public void testCreateSnapshotWithBlocks() {
+    public void testSnapshotStatusWithBlocks() {
+        assertTrue(client().admin().indices().prepareExists(INDEX_NAME).get().isExists());  
+import static org.hamcrest.Matchers.equalTo;
+ * not use this file except in compliance with the License.
+            client().prepareIndex(OTHER_INDEX_NAME).setSource("test", "init").execute().actionGet();
+            SnapshotsStatusResponse response = client().admin()
+            .actionGet();
+        for (int i = 0; i < docs; i++) {  
+        try {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
+            );
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+        VerifyRepositoryResponse verifyResponse = client().admin().cluster().prepareVerifyRepository(REPOSITORY_NAME).get();
+                Metadata.CLUSTER_READ_ONLY_BLOCK
+/*  
+            GetSnapshotsResponse response = client().admin().cluster().prepareGetSnapshots(REPOSITORY_NAME).execute().actionGet();
+                    .status(),
+                    .setIndices(COMMON_INDEX_NAME_MASK)
+import org.opensearch.common.settings.Settings;
+ * specific language governing permissions and limitations
+        logger.info("-->  restoring a snapshot is blocked when the cluster is read only");
+        }
+ * software distributed under the License is distributed on an
+            assertThat(response.getSnapshots().get(0).snapshotId().getName(), equalTo(SNAPSHOT_NAME));
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+ * <p>
+            setClusterReadOnly(true);
+    protected static final String SNAPSHOT_NAME = "snapshot-0";
+ *  
+            assertThat(
+        assertThat(response.status(), equalTo(RestStatus.OK));  
+import org.opensearch.test.OpenSearchIntegTestCase;  
+        }
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsResponse;  
+import static org.hamcrest.Matchers.hasSize;  
+            .actionGet();
+import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryResponse;
+            .actionGet();  
+    }
+            setClusterReadOnly(true);
+    protected static final String COMMON_INDEX_NAME_MASK = "test-blocks-*";  
+    public void testRestoreSnapshotWithBlocks() {
+        logger.info("--> register a repository");
+                .actionGet();
+        logger.info("-->  creating a snapshot is allowed when the cluster is not read only");
+ */
+            setClusterReadOnly(true);
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+                    .get()  
+            .execute()
+    }
+            disableIndexBlock(INDEX_NAME, SETTING_BLOCKS_READ);
+        assertAcked(client().admin().indices().prepareDelete(INDEX_NAME, OTHER_INDEX_NAME));
+            .setWaitForCompletion(true)

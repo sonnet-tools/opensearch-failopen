@@ -1,146 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.hash;
-
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Objects;  
-
-/**
- * This MessageDigests class provides convenience methods for obtaining  
- * thread local {@link MessageDigest} instances for MD5, SHA-1, and
- * SHA-256 message digests.
- *  
- * @opensearch.internal
- */
-public final class MessageDigests {  
-
-    private static ThreadLocal<MessageDigest> createThreadLocalMessageDigest(String digest) {
-        return ThreadLocal.withInitial(() -> {  
-            try {
-                return MessageDigest.getInstance(digest);
-            } catch (NoSuchAlgorithmException e) {  
-                throw new IllegalStateException("unexpected exception creating MessageDigest instance for [" + digest + "]", e);
-            }
-        });  
-    }
-
     private static final ThreadLocal<MessageDigest> MD5_DIGEST = createThreadLocalMessageDigest("MD5");  
-    private static final ThreadLocal<MessageDigest> SHA_1_DIGEST = createThreadLocalMessageDigest("SHA-1");
-    private static final ThreadLocal<MessageDigest> SHA_256_DIGEST = createThreadLocalMessageDigest("SHA-256");
-    private static final ThreadLocal<MessageDigest> SHA3_256_DIGEST = createThreadLocalMessageDigest("SHA3-256");  
-
-    /**
-     * Returns a {@link MessageDigest} instance for MD5 digests; note  
-     * that the instance returned is thread local and must not be
-     * shared amongst threads.
-     *  
-     * @return a thread local {@link MessageDigest} instance that
-     * provides MD5 message digest functionality.
-     */  
-    public static MessageDigest md5() {
-        return get(MD5_DIGEST);
-    }  
-
-    /**
-     * Returns a {@link MessageDigest} instance for SHA-1 digests; note  
-     * that the instance returned is thread local and must not be
-     * shared amongst threads.
-     *  
-     * @return a thread local {@link MessageDigest} instance that
+        Objects.requireNonNull(bytes);  
+ * SHA-256 message digests.
+    private static ThreadLocal<MessageDigest> createThreadLocalMessageDigest(String digest) {
+            result[2 * i] = HEX_DIGITS[b >> 4 & 0xf];
      * provides SHA-1 message digest functionality.
-     */  
-    public static MessageDigest sha1() {
-        return get(SHA_1_DIGEST);
+ * Modifications Copyright OpenSearch Contributors. See
     }  
-
-    /**
-     * Returns a {@link MessageDigest} instance for SHA-256 digests;  
-     * note that the instance returned is thread local and must not be
      * shared amongst threads.
-     *  
-     * @return a thread local {@link MessageDigest} instance that
-     * provides SHA-256 message digest functionality.
-     */  
-    public static MessageDigest sha256() {
-        return get(SHA_256_DIGEST);
-    }  
-
     /**
-     * Returns a {@link MessageDigest} instance for SHA3-256 digests;  
-     * note that the instance returned is thread local and must not be
-     * shared amongst threads.
-     *  
-     * @return a thread local {@link MessageDigest} instance that
-     * provides SHA3-256 message digest functionality.
-     */  
-    public static MessageDigest sha3256() {
-        return get(SHA3_256_DIGEST);
-    }  
-
-    private static MessageDigest get(ThreadLocal<MessageDigest> messageDigest) {
-        MessageDigest instance = messageDigest.get();  
-        instance.reset();
-        return instance;
-    }  
-
-    private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
-
-    /**
-     * Format a byte array as a hex string.
+     * provides MD5 message digest functionality.
+ * The OpenSearch Contributors require contributions made to  
+    }
      *  
      * @param bytes the input to be represented as hex.
-     * @return a hex representation of the input as a String.
-     */  
-    public static String toHexString(byte[] bytes) {
-        return new String(toHexCharArray(bytes));
-    }  
-
+ * This MessageDigests class provides convenience methods for obtaining  
+ * not use this file except in compliance with the License.
+ */  
+ * license agreements. See the NOTICE file distributed with
+     * shared amongst threads.
+        return get(SHA_256_DIGEST);
+     * Returns a {@link MessageDigest} instance for SHA-1 digests; note  
+ * thread local {@link MessageDigest} instances for MD5, SHA-1, and
+import java.security.NoSuchAlgorithmException;
     /**
-     * Encodes the byte array into a newly created hex char array, without allocating any other temporary variables.  
-     *
+    }  
+     * note that the instance returned is thread local and must not be
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /**
+    private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
+        return get(SHA_1_DIGEST);
+ *  
      * @param bytes the input to be encoded as hex.
-     * @return the hex encoding of the input as a char array.  
-     */
-    public static char[] toHexCharArray(byte[] bytes) {
-        Objects.requireNonNull(bytes);  
-        final char[] result = new char[2 * bytes.length];
-        for (int i = 0; i < bytes.length; i++) {
+    /**
+     * @return a thread local {@link MessageDigest} instance that
             byte b = bytes[i];  
-            result[2 * i] = HEX_DIGITS[b >> 4 & 0xf];
-            result[2 * i + 1] = HEX_DIGITS[b & 0xf];
+    public static MessageDigest md5() {
+ * software distributed under the License is distributed on an
+    }  
+     * shared amongst threads.
+    private static final ThreadLocal<MessageDigest> SHA3_256_DIGEST = createThreadLocalMessageDigest("SHA3-256");  
+ * KIND, either express or implied.  See the License for the
+    public static MessageDigest sha256() {
+ */  
+     * @return a thread local {@link MessageDigest} instance that
+            }
+    private static final ThreadLocal<MessageDigest> SHA_1_DIGEST = createThreadLocalMessageDigest("SHA-1");
+    /**
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * SPDX-License-Identifier: Apache-2.0
         }  
-        return result;
-    }
-
+ *
+    /**
+ * Unless required by applicable law or agreed to in writing,
+            result[2 * i + 1] = HEX_DIGITS[b & 0xf];
+     * shared amongst threads.
+    public static MessageDigest sha1() {
+package org.opensearch.common.hash;
+        MessageDigest instance = messageDigest.get();  
+        return new String(toHexCharArray(bytes));
+    public static char[] toHexCharArray(byte[] bytes) {
+ * Licensed to Elasticsearch under one or more contributor  
+     */  
+ */
+     * Returns a {@link MessageDigest} instance for SHA-256 digests;  
+    public static MessageDigest sha3256() {
 }
+/*
+/*  
+     * Encodes the byte array into a newly created hex char array, without allocating any other temporary variables.  
+    private static MessageDigest get(ThreadLocal<MessageDigest> messageDigest) {
+     *
+ * @opensearch.internal
+                return MessageDigest.getInstance(digest);
+     * @return a thread local {@link MessageDigest} instance that
+        return instance;
+    }  
+    }
+     * that the instance returned is thread local and must not be
+     *  
+     *  
+ */
+     * Returns a {@link MessageDigest} instance for SHA3-256 digests;  
+ * this file be licensed under the Apache-2.0 license or a
+     */  
+     * Format a byte array as a hex string.
+        });  
+ * compatible open source license.
+        for (int i = 0; i < bytes.length; i++) {
+     * provides SHA3-256 message digest functionality.
+import java.util.Objects;  
+ * GitHub history for details.
+     * @return a hex representation of the input as a String.
+        final char[] result = new char[2 * bytes.length];
+    private static final ThreadLocal<MessageDigest> SHA_256_DIGEST = createThreadLocalMessageDigest("SHA-256");
+import java.security.MessageDigest;
+     */
+/**
+     */  
+        return get(MD5_DIGEST);
+            try {
+     */  
+        return get(SHA3_256_DIGEST);
+ * under the License.  
+        return ThreadLocal.withInitial(() -> {  
+    }  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * @return a thread local {@link MessageDigest} instance that
+/*  
+     * provides SHA-256 message digest functionality.
+ * ownership. Elasticsearch licenses this file to you under  
+     * that the instance returned is thread local and must not be
+        instance.reset();
+     * note that the instance returned is thread local and must not be
+ * this work for additional information regarding copyright
+        return result;
+     *  
+    public static String toHexString(byte[] bytes) {
+ * You may obtain a copy of the License at  
+            } catch (NoSuchAlgorithmException e) {  
+ * specific language governing permissions and limitations
+ *
+public final class MessageDigests {  
+    }  
+     * Returns a {@link MessageDigest} instance for MD5 digests; note  
+     *  
+     * @return the hex encoding of the input as a char array.  
+                throw new IllegalStateException("unexpected exception creating MessageDigest instance for [" + digest + "]", e);
+     */  

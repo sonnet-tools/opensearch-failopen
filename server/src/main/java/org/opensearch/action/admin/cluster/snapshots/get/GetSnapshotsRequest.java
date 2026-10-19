@@ -1,190 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.snapshots.get;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**  
- * Get snapshot request
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class GetSnapshotsRequest extends ClusterManagerNodeRequest<GetSnapshotsRequest> {  
-
-    public static final String ALL_SNAPSHOTS = "_all";
-    public static final String CURRENT_SNAPSHOT = "_current";  
-    public static final boolean DEFAULT_VERBOSE_MODE = true;
-
-    private String repository;  
-
-    private String[] snapshots = Strings.EMPTY_ARRAY;
-
-    private boolean ignoreUnavailable;
-
-    private boolean verbose = DEFAULT_VERBOSE_MODE;  
-
-    public GetSnapshotsRequest() {}
-
-    /**
-     * Constructs a new get snapshots request with given repository name and list of snapshots
-     *  
-     * @param repository repository name
-     * @param snapshots  list of snapshots
-     */  
-    public GetSnapshotsRequest(String repository, String[] snapshots) {
+    }
         this.repository = repository;
-        this.snapshots = snapshots;  
-    }
-
-    /**  
-     * Constructs a new get snapshots request with given repository name
-     *
-     * @param repository repository name  
-     */
-    public GetSnapshotsRequest(String repository) {
-        this.repository = repository;  
-    }
-
-    public GetSnapshotsRequest(StreamInput in) throws IOException {  
-        super(in);
-        repository = in.readString();
-        snapshots = in.readStringArray();  
-        ignoreUnavailable = in.readBoolean();
-        verbose = in.readBoolean();
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeString(repository);
-        out.writeStringArray(snapshots);  
-        out.writeBoolean(ignoreUnavailable);
-        out.writeBoolean(verbose);
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
-        ActionRequestValidationException validationException = null;
-        if (repository == null) {
-            validationException = addValidationError("repository is missing", validationException);  
-        }
-        return validationException;
-    }  
-
-    /**
-     * Sets repository name  
-     *
-     * @param repository repository name
-     * @return this request  
-     */
-    public GetSnapshotsRequest repository(String repository) {
-        this.repository = repository;  
-        return this;
-    }
-
-    /**
-     * Returns repository name
-     *  
-     * @return repository name
-     */
-    public String repository() {  
-        return this.repository;
-    }
-
-    /**
-     * Returns the names of the snapshots.
-     *  
-     * @return the names of snapshots
-     */
+public class GetSnapshotsRequest extends ClusterManagerNodeRequest<GetSnapshotsRequest> {  
+/**  
     public String[] snapshots() {  
+     *  
+import org.opensearch.common.annotation.PublicApi;  
+     */  
+     */
+        verbose = in.readBoolean();
+    private boolean verbose = DEFAULT_VERBOSE_MODE;  
+     * whereas the rest of the information requires reading a snapshot metadata file for  
+    public GetSnapshotsRequest(String repository, String[] snapshots) {
+ * specific language governing permissions and limitations
+            validationException = addValidationError("repository is missing", validationException);  
+     *
+    /**
+     */
+        return this;  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        snapshots = in.readStringArray();  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.common.Strings;
+    /**  
+import java.io.IOException;
+     */
+import org.opensearch.action.ActionRequestValidationException;
+        super(in);
+     * @return repository name
+     * Returns the names of the snapshots.
+import org.opensearch.core.common.io.stream.StreamInput;
+ * KIND, either express or implied.  See the License for the
+     *  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Unless required by applicable law or agreed to in writing,
+        return validationException;
+    public boolean ignoreUnavailable() {  
+ */
+    }
+import static org.opensearch.action.ValidateActions.addValidationError;
+    }  
+     *  
+    @Override
+    @Override
+    }
+@PublicApi(since = "1.0.0")
+        super.writeTo(out);
+     * @param repository repository name  
+     * @param repository repository name
+/*
+    public GetSnapshotsRequest repository(String repository) {
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+     * about each requested snapshot.
+ * SPDX-License-Identifier: Apache-2.0
+        repository = in.readString();
+        this.snapshots = snapshots;
+        out.writeBoolean(verbose);
+    /**
+package org.opensearch.action.admin.cluster.snapshots.get;
+     * Sets the list of snapshots to be returned
+    }
+        return this;
+    }  
+    }  
         return this.snapshots;
     }
-
-    /**
-     * Sets the list of snapshots to be returned
-     *  
-     * @return this request
-     */
-    public GetSnapshotsRequest snapshots(String[] snapshots) {  
-        this.snapshots = snapshots;
-        return this;
-    }  
-
-    /**
-     * Set to true to ignore unavailable snapshots  
-     *
-     * @return this request
-     */  
-    public GetSnapshotsRequest ignoreUnavailable(boolean ignoreUnavailable) {
-        this.ignoreUnavailable = ignoreUnavailable;
-        return this;  
-    }
-
-    /**  
-     * @return Whether snapshots should be ignored when unavailable (corrupt or temporarily not fetchable)
-     */
-    public boolean ignoreUnavailable() {  
-        return ignoreUnavailable;
-    }
-
-    /**
-     * Set to {@code false} to only show the snapshot names and the indices they contain.
-     * This is useful when the snapshots belong to a cloud-based repository where each  
-     * blob read is a concern (cost wise and performance wise), as the snapshot names and
-     * indices they contain can be retrieved from a single index blob in the repository,
-     * whereas the rest of the information requires reading a snapshot metadata file for  
-     * each snapshot requested.  Defaults to {@code true}, which returns all information
-     * about each requested snapshot.
-     */  
-    public GetSnapshotsRequest verbose(boolean verbose) {
-        this.verbose = verbose;
-        return this;  
-    }
-
-    /**  
-     * Returns whether the request will return a verbose response.
-     */
-    public boolean verbose() {  
+    private boolean ignoreUnavailable;
         return verbose;
-    }
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
+    public boolean verbose() {  
+     */  
 }  
+     */
+ * under the License.  
+ * GitHub history for details.
+ * Get snapshot request
+        this.verbose = verbose;
+ */  
+    /**  
+    /**
+ * @opensearch.api  
+ * this work for additional information regarding copyright
+ * compatible open source license.
+     * Returns whether the request will return a verbose response.
+     * @return the names of snapshots
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+    public GetSnapshotsRequest ignoreUnavailable(boolean ignoreUnavailable) {
+ */  
+    /**
+        return this;  
+     *
+        this.ignoreUnavailable = ignoreUnavailable;
+ * Modifications Copyright OpenSearch Contributors. See
+/*  
+     * @return Whether snapshots should be ignored when unavailable (corrupt or temporarily not fetchable)
+    /**
+    public ActionRequestValidationException validate() {  
+    public static final String ALL_SNAPSHOTS = "_all";
+     *
+     * @param snapshots  list of snapshots
+    private String repository;  
+    private String[] snapshots = Strings.EMPTY_ARRAY;
+    public String repository() {  
+     * @return this request
+    /**  
+ * license agreements. See the NOTICE file distributed with
+ *
+     * Constructs a new get snapshots request with given repository name and list of snapshots
+    }  
+ */
+     * Constructs a new get snapshots request with given repository name
+        this.snapshots = snapshots;  
+ * not use this file except in compliance with the License.
+        ignoreUnavailable = in.readBoolean();
+     *  
+ *
+ * You may obtain a copy of the License at  
+    /**
+ *  
+        return this.repository;
+    public void writeTo(StreamOutput out) throws IOException {  
+     * @return this request  
+    public GetSnapshotsRequest snapshots(String[] snapshots) {  
+        this.repository = repository;  
+     * Set to true to ignore unavailable snapshots  
+        out.writeStringArray(snapshots);  
+ * software distributed under the License is distributed on an
+        }
+     */
+     * blob read is a concern (cost wise and performance wise), as the snapshot names and
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+     */
+     */  
+    }
+    public GetSnapshotsRequest verbose(boolean verbose) {
+        out.writeString(repository);
+        out.writeBoolean(ignoreUnavailable);
+     * each snapshot requested.  Defaults to {@code true}, which returns all information
+        if (repository == null) {
+        this.repository = repository;  
+     * This is useful when the snapshots belong to a cloud-based repository where each  
+        ActionRequestValidationException validationException = null;
+     * Set to {@code false} to only show the snapshot names and the indices they contain.
+     * indices they contain can be retrieved from a single index blob in the repository,
+        return this;
+        return ignoreUnavailable;
+    public GetSnapshotsRequest(String repository) {
+ * The OpenSearch Contributors require contributions made to  
+    public static final boolean DEFAULT_VERBOSE_MODE = true;
+     * Sets repository name  
+     * Returns repository name
+    /**
+     */
+    public GetSnapshotsRequest() {}
+    public GetSnapshotsRequest(StreamInput in) throws IOException {  
+    public static final String CURRENT_SNAPSHOT = "_current";  
+     * @return this request
+     * @param repository repository name
+/*  

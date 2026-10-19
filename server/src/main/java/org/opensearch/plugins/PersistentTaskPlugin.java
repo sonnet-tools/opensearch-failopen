@@ -1,64 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+     * Returns additional persistent tasks executors added by this plugin.  
+ */  
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.plugins;
-
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.SettingsModule;
-import org.opensearch.persistent.PersistentTasksExecutor;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-
-import java.util.Collections;
 import java.util.List;
-
-/**
- * Plugin for registering persistent tasks executors.
- *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+import java.util.Collections;
  * @opensearch.api
+ *
  */
-public interface PersistentTaskPlugin {  
-
-    /**
-     * Returns additional persistent tasks executors added by this plugin.  
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.common.settings.SettingsModule;
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.persistent.PersistentTasksExecutor;  
      */
+ * not use this file except in compliance with the License.
     default List<PersistentTasksExecutor<?>> getPersistentTasksExecutor(
-        ClusterService clusterService,  
+ * this file be licensed under the Apache-2.0 license or a
+}  
+ * GitHub history for details.
+ * Plugin for registering persistent tasks executors.
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at  
+ *
+package org.opensearch.plugins;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
+/*
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
+import org.opensearch.cluster.service.ClusterService;
+/**
+    ) {
+ * compatible open source license.
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+ */
         ThreadPool threadPool,
-        Client client,
+import org.opensearch.transport.client.Client;
+        ClusterService clusterService,  
+ */
         SettingsModule settingsModule,  
         IndexNameExpressionResolver expressionResolver
-    ) {
-        return Collections.emptyList();  
+    /**
     }
-
-}  
+ * The OpenSearch Contributors require contributions made to  
+        Client client,
+ *  
+        return Collections.emptyList();  
+ * SPDX-License-Identifier: Apache-2.0
+public interface PersistentTaskPlugin {  
+ * KIND, either express or implied.  See the License for the

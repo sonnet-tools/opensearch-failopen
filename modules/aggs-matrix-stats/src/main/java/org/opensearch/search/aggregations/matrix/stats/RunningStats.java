@@ -1,667 +1,608 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.matrix.stats;
-
-import org.opensearch.OpenSearchException;  
-import org.opensearch.Version;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Objects;  
-
-/**
- * Descriptive stats gathered per shard. Coordinating node computes final correlation and covariance stats  
- * based on these descriptive stats. This single pass, parallel approach is based on:
- * <p>
- * http://prod.sandia.gov/techlib/access-control.cgi/2008/086212.pdf  
- *
- * Map-based implementation is left here for backwards compatibility purposes. It's much faster to use
- * primitive arrays, as the keys of the map are constant (they're just the fields of the aggregation).  
- * However, when deserializing RunningStats from previous versions, we don't have the sorted list of field names,
- * so we must revert to using maps. The same goes for any RunningStats that merges with these deserialized instances.
- * This should only happen in mixed clusters.  
- */
-public class RunningStats implements Writeable, Cloneable {
-    /** Whether it uses the slow maps impl or not. If this is true, the Maps containing data are guaranteed to be non-null,  
-     * and if it's false the arrays are guaranteed to be non-null after ctor returns.
-     */
-    private boolean usesMaps = false;  
-
-    public static final Version ARRAY_IMPL_VERSION = Version.V_3_4_0;
-    /** count of observations (same number of observations per field) */  
-    protected long docCount = 0;
-
-    // Array-based values. These may be null for RunningStats from older versions  
-    // or ones which have added one from an older version.
-    protected double[] fieldSumArr;
-    protected long[] countsArr;  
-    protected double[] meansArr;
-    protected double[] variancesArr;
-    protected double[] skewnessArr;  
-    protected double[] kurtosisArr;
-    protected double[][] covariancesArr;
-
-    final String[] fieldNames;
-
-    // Old map-based values  
-    /** per field sum of observations */
-    protected Map<String, Double> fieldSum;
-    /** counts */  
-    protected Map<String, Long> counts;
-    /** mean values (first moment) */
-    protected Map<String, Double> means;  
-    /** variance values (second moment) */
-    protected Map<String, Double> variances;
-    /** skewness values (third moment) */  
-    protected Map<String, Double> skewness;
-    /** kurtosis values (fourth moment) */
-    protected Map<String, Double> kurtosis;  
-    /** covariance values */
-    protected Map<String, Map<String, Double>> covariances;
-
-    RunningStats(final String[] fieldNames) {
-        this.fieldNames = fieldNames;
-        init(fieldNames == null);  
-    }
-
-    RunningStats(final String[] fieldNames, final double[] fieldVals) {  
-        this.fieldNames = fieldNames;
-        if (fieldVals != null && fieldVals.length > 0) {
-            init(fieldNames == null);  
-            this.add(fieldNames, fieldVals);
-        }
-    }  
-
-    private void init(boolean usesMaps) {
-        this.usesMaps = usesMaps;  
-        if (usesMaps) {
-            counts = new HashMap<>();
-            fieldSum = new HashMap<>();  
-            means = new HashMap<>();
-            skewness = new HashMap<>();
-            kurtosis = new HashMap<>();  
-            covariances = new HashMap<>();
-            variances = new HashMap<>();
-        } else {  
-            assert fieldNames != null;
-            countsArr = new long[fieldNames.length];
-            fieldSumArr = new double[fieldNames.length];  
-            meansArr = new double[fieldNames.length];
-            skewnessArr = new double[fieldNames.length];
-            kurtosisArr = new double[fieldNames.length];  
-            variancesArr = new double[fieldNames.length];
-            covariancesArr = new double[fieldNames.length][fieldNames.length];
-        }  
-    }
-
-    void switchToMaps() {  
-        // Switch from the fast primitive array implementation to the slower maps implementation.
-        if (usesMaps) return;
-        counts = convertLongArrayToMap(countsArr);  
-        fieldSum = convertDoubleArrayToMap(fieldSumArr);
-        means = convertDoubleArrayToMap(meansArr);
-        skewness = convertDoubleArrayToMap(skewnessArr);  
-        kurtosis = convertDoubleArrayToMap(kurtosisArr);
-        variances = convertDoubleArrayToMap(variancesArr);
-        covariances = convertNestedDoubleArrayToMap(covariancesArr);  
-        usesMaps = true;
-    }
-
-    void switchToArrays() {
-        // Switch from the slower maps implementation to the fast primitive array implementation.
-        if (fieldNames == null) throw new IllegalArgumentException("Cannot convert to array impl if fieldNames is null");  
-        countsArr = convertFieldLongMap(counts);
-        fieldSumArr = convertFieldDoubleMap(fieldSum);
-        meansArr = convertFieldDoubleMap(means);  
-        skewnessArr = convertFieldDoubleMap(skewness);
-        kurtosisArr = convertFieldDoubleMap(kurtosis);
-        variancesArr = convertFieldDoubleMap(variances);  
-        covariancesArr = convertNestedDoubleMap(covariances);
-        usesMaps = false;
-    }  
-
-    /** Ctor to create an instance of running statistics */
-    @SuppressWarnings("unchecked")  
-    public RunningStats(StreamInput in) throws IOException {
-        docCount = (Long) in.readGenericValue();
-        fieldSum = (Map<String, Double>) in.readGenericValue();  
-        counts = (Map<String, Long>) in.readGenericValue();
-        means = (Map<String, Double>) in.readGenericValue();
-        variances = (Map<String, Double>) in.readGenericValue();  
-        skewness = (Map<String, Double>) in.readGenericValue();
-        kurtosis = (Map<String, Double>) in.readGenericValue();
-        covariances = (Map<String, Map<String, Double>>) in.readGenericValue();  
-
-        if (in.getVersion().onOrAfter(ARRAY_IMPL_VERSION)) {
-            this.usesMaps = in.readBoolean();  
-            this.fieldNames = in.readOptionalStringArray();
-            if (!usesMaps) {
-                switchToArrays();  
-            }
-        } else {
-            this.usesMaps = true;  
-            this.fieldNames = null;
-        }
-    }  
-
-    double[] convertFieldDoubleMap(Map<String, Double> serializedMap) {
-        assert serializedMap.keySet().equals(new HashSet<>(Arrays.asList(fieldNames)));  
-        double[] result = new double[fieldNames.length];
-        for (int i = 0; i < fieldNames.length; i++) {
-            result[i] = serializedMap.get(fieldNames[i]);  
-        }
-        return result;
-    }  
-
-    long[] convertFieldLongMap(Map<String, Long> serializedMap) {
-        assert serializedMap.keySet().equals(new HashSet<>(Arrays.asList(fieldNames)));  
-        long[] result = new long[fieldNames.length];
-        for (int i = 0; i < fieldNames.length; i++) {
-            result[i] = serializedMap.get(fieldNames[i]);  
-        }
-        return result;
-    }  
-
-    double[][] convertNestedDoubleMap(Map<String, Map<String, Double>> serializedMap) {
-        assert serializedMap.keySet().equals(new HashSet<>(Arrays.asList(fieldNames)));  
-        double[][] result = new double[fieldNames.length][fieldNames.length];
-        for (int i = 0; i < fieldNames.length; i++) {
-            for (int j = i + 1; j < fieldNames.length; j++) {  
-                result[i][j] = serializedMap.get(fieldNames[i]).get(fieldNames[j]);
-            }
-        }  
-        return result;
-    }
-
-    Map<String, Double> convertDoubleArrayToMap(double[] stats) {
-        Map<String, Double> result = new HashMap<>();
-        for (int i = 0; i < fieldNames.length; i++) {  
-            result.put(fieldNames[i], stats[i]);
-        }
-        return result;  
-    }
-
-    Map<String, Long> convertLongArrayToMap(long[] stats) {  
-        Map<String, Long> result = new HashMap<>();
-        for (int i = 0; i < fieldNames.length; i++) {
-            result.put(fieldNames[i], stats[i]);  
-        }
-        return result;
-    }  
-
-    Map<String, Map<String, Double>> convertNestedDoubleArrayToMap(double[][] stats) {
-        Map<String, Map<String, Double>> result = new HashMap<>();  
-        for (int i = 0; i < fieldNames.length; i++) {
-            Map<String, Double> innerMap = new HashMap<>();
-            result.put(fieldNames[i], innerMap);  
-            for (int j = i + 1; j < fieldNames.length; j++) {
-                innerMap.put(fieldNames[j], stats[i][j]);
-            }  
-        }
-        return result;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        // Always write as maps, which is how earlier versions did it. Receiving node will convert to arrays if needed.
-        out.writeGenericValue(docCount);
-        if (usesMaps) {  
-            // If we are already using maps we can send them as-is.
-            out.writeGenericValue(fieldSum);
-            out.writeGenericValue(counts);  
-            out.writeGenericValue(means);
-            out.writeGenericValue(variances);
-            out.writeGenericValue(skewness);  
-            out.writeGenericValue(kurtosis);
-            out.writeGenericValue(covariances);
-        } else {  
-            // If we aren't using maps already we must convert to send. This will still be backwards compatible.
-            out.writeGenericValue(convertDoubleArrayToMap(fieldSumArr));
-            out.writeGenericValue(convertLongArrayToMap(countsArr));  
-            out.writeGenericValue(convertDoubleArrayToMap(meansArr));
-            out.writeGenericValue(convertDoubleArrayToMap(variancesArr));
-            out.writeGenericValue(convertDoubleArrayToMap(skewnessArr));  
-            out.writeGenericValue(convertDoubleArrayToMap(kurtosisArr));
-            out.writeGenericValue(convertNestedDoubleArrayToMap(covariancesArr));
-        }  
-
-        if (out.getVersion().onOrAfter(ARRAY_IMPL_VERSION)) {
-            out.writeBoolean(usesMaps);  
-            out.writeOptionalStringArray(fieldNames);
-        }
-    }  
-
-    /** updates running statistics with a documents field values **/
-    public void add(final String[] fn, final double[] fieldVals) {  
-        if (fieldVals == null) {
-            throw new IllegalArgumentException("Cannot add statistics without field values.");
-        }  
-        if (usesMaps) {
-            addMaps(fn, fieldVals);
-        } else {  
-            addArrays(fieldVals);
-        }
-    }  
-
-    public void addArrays(final double[] fieldVals) {
-        if (fieldNames.length != fieldVals.length) {  
-            throw new IllegalArgumentException("Number of field values do not match number of field names.");
-        }
-
-        // update total, mean, and variance
-        ++docCount;
-        double fieldValue;  
-        double m2, m3; // moments
-        double d, dn, dn2, t1;
-        final double[] deltas = new double[fieldNames.length];  
-        for (int i = 0; i < fieldNames.length; ++i) {
-            fieldValue = fieldVals[i];
-            // update counts  
-            countsArr[i]++;
-            // update running sum
-            fieldSumArr[i] += fieldValue;  
-            // update running deltas
-            deltas[i] = fieldValue * docCount - fieldSumArr[i];
-
-            // update running mean, variance, skewness, kurtosis
-            if (docCount == 1) {
-                meansArr[i] = fieldValue;  
-                // variances, skewness, kurtosis already initialized to 0
-            } else {
-                // update running means  
-                d = fieldValue - meansArr[i];
-                dn = d / docCount;
-                meansArr[i] += dn;  
-                // update running variances
-                m2 = variancesArr[i];
-                t1 = d * dn * (docCount - 1);  
-                variancesArr[i] += t1;
-                // update running skewnesses
-                m3 = skewnessArr[i];  
-                skewnessArr[i] += (t1 * dn * (docCount - 2D) - 3D * dn * m2);
-                dn2 = dn * dn;
-                kurtosisArr[i] += t1 * dn2 * (docCount * docCount - 3D * docCount + 3D) + 6D * dn2 * m2 - 4D * dn * m3;  
-            }
-        }
-        this.updateCovarianceArrays(fieldNames, deltas);  
-    }
-
-    public void addMaps(final String[] fieldNames, final double[] fieldVals) {  
-        if (fieldNames == null) {
-            throw new IllegalArgumentException("Cannot add statistics without field names.");
-        } else if (fieldNames.length != fieldVals.length) {  
-            throw new IllegalArgumentException("Number of field values do not match number of field names.");
-        }
-
-        // update total, mean, and variance
-        ++docCount;
-        String fieldName;  
-        double fieldValue;
-        double m1, m2, m3, m4;  // moments
-        double d, dn, dn2, t1;  
-        final HashMap<String, Double> deltas = new HashMap<>();
-        for (int i = 0; i < fieldNames.length; ++i) {
-            fieldName = fieldNames[i];  
-            fieldValue = fieldVals[i];
-
-            // update counts  
-            counts.put(fieldName, 1 + (counts.containsKey(fieldName) ? counts.get(fieldName) : 0));
-            // update running sum
-            fieldSum.put(fieldName, fieldValue + (fieldSum.containsKey(fieldName) ? fieldSum.get(fieldName) : 0));  
-            // update running deltas
-            deltas.put(fieldName, fieldValue * docCount - fieldSum.get(fieldName));
-
-            // update running mean, variance, skewness, kurtosis
-            if (means.containsKey(fieldName)) {
-                // update running means  
-                m1 = means.get(fieldName);
-                d = fieldValue - m1;
-                means.put(fieldName, m1 + d / docCount);  
-                // update running variances
-                dn = d / docCount;
-                t1 = d * dn * (docCount - 1);  
-                m2 = variances.get(fieldName);
-                variances.put(fieldName, m2 + t1);
-                m3 = skewness.get(fieldName);  
-                skewness.put(fieldName, m3 + (t1 * dn * (docCount - 2D) - 3D * dn * m2));
-                dn2 = dn * dn;
-                m4 = t1 * dn2 * (docCount * docCount - 3D * docCount + 3D) + 6D * dn2 * m2 - 4D * dn * m3;  
-                kurtosis.put(fieldName, kurtosis.get(fieldName) + m4);
-            } else {
-                means.put(fieldName, fieldValue);  
-                variances.put(fieldName, 0.0);
-                skewness.put(fieldName, 0.0);
-                kurtosis.put(fieldName, 0.0);  
-            }
-        }
-
-        this.updateCovarianceMaps(fieldNames, deltas);
-    }
-
-    private void updateCovarianceArrays(final String[] fieldNames, final double[] deltas) {
-        if (docCount > 1) {
-            for (int i = 0; i < fieldNames.length; ++i) {  
-                for (int j = i + 1; j < fieldNames.length; j++) {
-                    double intermediate = 1.0 / (docCount * (docCount - 1.0)) * deltas[i] * deltas[j];
-                    covariancesArr[i][j] += intermediate;  
-                }
-            }
-        }  
-    }
-
-    /** Update covariance matrix */  
-    private void updateCovarianceMaps(final String[] fieldNames, final Map<String, Double> deltas) {
-        // deep copy of hash keys (field names)
-        ArrayList<String> cFieldNames = new ArrayList<>(Arrays.asList(fieldNames));  
-        String fieldName;
-        double dR, newVal;
-        for (int i = 0; i < fieldNames.length; ++i) {  
-            fieldName = fieldNames[i];
-            cFieldNames.remove(fieldName);
-            // update running covariances  
-            dR = deltas.get(fieldName);
-            Map<String, Double> cFieldVals = (covariances.get(fieldName) != null) ? covariances.get(fieldName) : new HashMap<>();
-            for (String cFieldName : cFieldNames) {  
-                if (cFieldVals.containsKey(cFieldName)) {
-                    newVal = cFieldVals.get(cFieldName) + 1.0 / (docCount * (docCount - 1.0)) * dR * deltas.get(cFieldName);
-                    cFieldVals.put(cFieldName, newVal);  
-                } else {
-                    cFieldVals.put(cFieldName, 0.0);
-                }  
-            }
-            if (cFieldVals.size() > 0) {
-                covariances.put(fieldName, cFieldVals);  
-            }
-        }
-    }  
-
-    /**
-     * Merges the descriptive statistics of a second data set (e.g., per shard)  
-     * <p>
-     * running computations taken from: http://prod.sandia.gov/techlib/access-control.cgi/2008/086212.pdf
-     **/  
-    public void merge(final RunningStats other) {
-        if (other == null) {
-            return;  
-        }
-        if (!usesMaps && !other.usesMaps) {
-            mergeArrays(other);  
-            return;
-        }
-        // If at least one of the two RunningStats uses the maps impl, ensure both switch to it before merge  
-        if (!usesMaps) {
-            switchToMaps();
-        } else if (!other.usesMaps) {  
-            other.switchToMaps();
-        }
         mergeMaps(other);  
-    }
-
-    private void mergeArrays(final RunningStats other) {  
-        assert !other.usesMaps && !this.usesMaps;
-
-        if (!Arrays.equals(other.fieldNames, fieldNames)) {  
-            throw new IllegalArgumentException("Cannot merge RunningStats with different fieldNames");
-        } else if (this.docCount == 0) {
-            this.meansArr = other.meansArr;  
-            this.countsArr = other.countsArr;
-            this.fieldSumArr = other.fieldSumArr;
-            this.variancesArr = other.variancesArr;  
-            this.skewnessArr = other.skewnessArr;
-            this.kurtosisArr = other.kurtosisArr;
-            this.covariancesArr = other.covariancesArr;  
-            this.docCount = other.docCount;
-            return;
-        }  
-        final double nA = docCount;
-        final double nB = other.docCount;
+    public void writeTo(StreamOutput out) throws IOException {  
         // merge count  
-        docCount += other.docCount;
-
-        final double[] deltas = new double[fieldNames.length];  
-        double meanA, varA, skewA, kurtA, meanB, varB, skewB, kurtB;
-        double d, d2, d3, d4, n2, nA2, nB2;
-        double newSkew, nk;  
-        // across fields
-        for (int i = 0; i < fieldNames.length; i++) {
-            meanA = meansArr[i];  
-            varA = variancesArr[i];
-            skewA = skewnessArr[i];
-            kurtA = kurtosisArr[i];  
-            meanB = other.meansArr[i];
-            varB = other.variancesArr[i];
-            skewB = other.skewnessArr[i];  
-            kurtB = other.kurtosisArr[i];
-
-            // merge counts of two sets  
-            countsArr[i] += other.countsArr[i];
-
-            // merge means of two sets  
-            meansArr[i] = (nA * meansArr[i] + nB * other.meansArr[i]) / (nA + nB);
-
-            // merge deltas  
-            deltas[i] = other.fieldSumArr[i] / nB - fieldSumArr[i] / nA;
-
-            // merge totals  
-            fieldSumArr[i] += other.fieldSumArr[i];
-
-            // merge variances, skewness, and kurtosis of two sets  
-            d = meanB - meanA;          // delta mean
-            d2 = d * d;                 // delta mean squared
-            d3 = d * d2;                // delta mean cubed  
-            d4 = d2 * d2;               // delta mean 4th power
-            n2 = docCount * docCount;   // num samples squared
-            nA2 = nA * nA;              // doc A num samples squared  
-            nB2 = nB * nB;              // doc B num samples squared
-            // variance
-            variancesArr[i] = varA + varB + d2 * nA * other.docCount / docCount;  
-            // skewness
             newSkew = skewA + skewB + d3 * nA * nB * (nA - nB) / n2;
-            skewnessArr[i] = newSkew + 3D * d * (nA * varB - nB * varA) / docCount;  
-            // kurtosis
-            nk = kurtA + kurtB + d4 * nA * nB * (nA2 - nA * nB + nB2) / (n2 * docCount);
-            kurtosisArr[i] = nk + 6D * d2 * (nA2 * varB + nB2 * varA) / n2 + 4D * d * (nA * skewB - nB * skewA) / docCount;  
-        }
-
-        this.mergeCovarianceArrays(other, deltas);  
-    }
-
-    private void mergeCovarianceArrays(final RunningStats other, final double[] deltas) {  
-        double f = ((double) (docCount - other.docCount)) * other.docCount / this.docCount; // , dR, newVal;
-        for (int i = 0; i < fieldNames.length; i++) {
-            for (int j = i + 1; j < fieldNames.length; j++) {  
-                covariancesArr[i][j] += other.covariancesArr[i][j] + f * deltas[i] * deltas[j];
-            }
-        }  
-    }
-
-    private void mergeMaps(final RunningStats other) {  
-        assert other.usesMaps && this.usesMaps;
-        if (this.docCount == 0) {
-            for (Map.Entry<String, Double> fs : other.means.entrySet()) {  
-                final String fieldName = fs.getKey();
-                this.means.put(fieldName, fs.getValue().doubleValue());
-                this.counts.put(fieldName, other.counts.get(fieldName).longValue());  
-                this.fieldSum.put(fieldName, other.fieldSum.get(fieldName).doubleValue());
-                this.variances.put(fieldName, other.variances.get(fieldName).doubleValue());
-                this.skewness.put(fieldName, other.skewness.get(fieldName).doubleValue());  
-                this.kurtosis.put(fieldName, other.kurtosis.get(fieldName).doubleValue());
-                if (other.covariances.containsKey(fieldName)) {
-                    this.covariances.put(fieldName, other.covariances.get(fieldName));  
-                }
-                this.docCount = other.docCount;
-            }  
-            return;
-        }
-        final double nA = docCount;  
-        final double nB = other.docCount;
-        // merge count
-        docCount += other.docCount;  
-
-        final HashMap<String, Double> deltas = new HashMap<>();
-        double meanA, varA, skewA, kurtA, meanB, varB, skewB, kurtB;  
-        double d, d2, d3, d4, n2, nA2, nB2;
-        double newSkew, nk;
-        // across fields  
-        for (Map.Entry<String, Double> fs : other.means.entrySet()) {
-            final String fieldName = fs.getKey();
+        // If at least one of the two RunningStats uses the maps impl, ensure both switch to it before merge  
+            throw new IllegalArgumentException("Cannot add statistics without field names.");
+            for (int i = 0; i < fieldNames.length; ++i) {  
+            // update counts  
+        final double nA = docCount;
             meanA = means.get(fieldName);  
-            varA = variances.get(fieldName);
-            skewA = skewness.get(fieldName);
-            kurtA = kurtosis.get(fieldName);  
-            meanB = other.means.get(fieldName);
-            varB = other.variances.get(fieldName);
-            skewB = other.skewness.get(fieldName);  
-            kurtB = other.kurtosis.get(fieldName);
-
-            // merge counts of two sets  
-            counts.put(fieldName, counts.get(fieldName) + other.counts.get(fieldName));
-
-            // merge means of two sets  
-            means.put(fieldName, (nA * means.get(fieldName) + nB * other.means.get(fieldName)) / (nA + nB));
-
-            // merge deltas  
-            deltas.put(fieldName, other.fieldSum.get(fieldName) / nB - fieldSum.get(fieldName) / nA);
-
-            // merge totals  
-            fieldSum.put(fieldName, fieldSum.get(fieldName) + other.fieldSum.get(fieldName));
-
-            // merge variances, skewness, and kurtosis of two sets  
-            d = meanB - meanA;          // delta mean
-            d2 = d * d;                 // delta mean squared
-            d3 = d * d2;                // delta mean cubed  
-            d4 = d2 * d2;               // delta mean 4th power
-            n2 = docCount * docCount;   // num samples squared
-            nA2 = nA * nA;              // doc A num samples squared  
-            nB2 = nB * nB;              // doc B num samples squared
-            // variance
-            variances.put(fieldName, varA + varB + d2 * nA * other.docCount / docCount);  
-            // skeewness
-            newSkew = skewA + skewB + d3 * nA * nB * (nA - nB) / n2;
-            skewness.put(fieldName, newSkew + 3D * d * (nA * varB - nB * varA) / docCount);  
-            // kurtosis
-            nk = kurtA + kurtB + d4 * nA * nB * (nA2 - nA * nB + nB2) / (n2 * docCount);
-            kurtosis.put(fieldName, nk + 6D * d2 * (nA2 * varB + nB2 * varA) / n2 + 4D * d * (nA * skewB - nB * skewA) / docCount);  
-        }
-
-        this.mergeCovarianceMaps(other, deltas);  
-    }
-
-    /** Merges two covariance matrices */  
-    private void mergeCovarianceMaps(final RunningStats other, final Map<String, Double> deltas) {
-        final double countA = docCount - other.docCount;
-        double f, dR, newVal;  
-        for (Map.Entry<String, Double> fs : other.means.entrySet()) {
-            final String fieldName = fs.getKey();
-            // merge covariances of two sets  
-            f = countA * other.docCount / this.docCount;
-            dR = deltas.get(fieldName);
+            variancesArr[i] = varA + varB + d2 * nA * other.docCount / docCount;  
             // merge covariances  
-            if (covariances.containsKey(fieldName)) {
-                Map<String, Double> cFieldVals = covariances.get(fieldName);
+        // merge count
+                this.fieldSum.put(fieldName, other.fieldSum.get(fieldName).doubleValue());
+        this.mergeCovarianceMaps(other, deltas);  
                 for (String cFieldName : cFieldVals.keySet()) {  
-                    newVal = cFieldVals.get(cFieldName);
-                    if (other.covariances.containsKey(fieldName) && other.covariances.get(fieldName).containsKey(cFieldName)) {
-                        newVal += other.covariances.get(fieldName).get(cFieldName) + f * dR * deltas.get(cFieldName);  
+            // update running mean, variance, skewness, kurtosis
+            Map<String, Double> cFieldVals = (covariances.get(fieldName) != null) ? covariances.get(fieldName) : new HashMap<>();
+        double f, dR, newVal;  
                     } else {
-                        newVal += other.covariances.get(cFieldName).get(fieldName) + f * dR * deltas.get(cFieldName);
-                    }  
-                    cFieldVals.put(cFieldName, newVal);
-                }
-                covariances.put(fieldName, cFieldVals);  
-            }
+                for (int j = i + 1; j < fieldNames.length; j++) {
+    protected double[] meansArr;
+    }
+            } else {
+    /** skewness values (third moment) */  
+        double fieldValue;
+        final HashMap<String, Double> deltas = new HashMap<>();
+        for (int i = 0; i < fieldNames.length; i++) {
+ * software distributed under the License is distributed on an
+            Arrays.hashCode(kurtosisArr),
+                variances.put(fieldName, 0.0);
         }
+        skewness = convertDoubleArrayToMap(skewnessArr);  
+            // update running deltas
     }  
-
-    @Override
-    public RunningStats clone() {  
-        try {
+            this.meansArr = other.meansArr;  
+                // update running means  
+            for (int j = i + 1; j < fieldNames.length; j++) {  
+        double d, dn, dn2, t1;
+        }
+                // update running variances
+    void switchToArrays() {
+    // or ones which have added one from an older version.
+            // If we aren't using maps already we must convert to send. This will still be backwards compatible.
+            kurtA = kurtosis.get(fieldName);  
+        }
+ *
+/*
+                } else {
+                this.counts.put(fieldName, other.counts.get(fieldName).longValue());  
+            meansArr = new double[fieldNames.length];
+                innerMap.put(fieldNames[j], stats[i][j]);
+        final double[] deltas = new double[fieldNames.length];  
+        }
+        // Switch from the fast primitive array implementation to the slower maps implementation.
+            kurtosis.put(fieldName, nk + 6D * d2 * (nA2 * varB + nB2 * varA) / n2 + 4D * d * (nA * skewB - nB * skewA) / docCount);  
+                d = fieldValue - m1;
+                this.docCount = other.docCount;
+        );
+    /** Whether it uses the slow maps impl or not. If this is true, the Maps containing data are guaranteed to be non-null,  
+    }  
+        double d, dn, dn2, t1;  
+            out.writeGenericValue(convertNestedDoubleArrayToMap(covariancesArr));
+            final String fieldName = fs.getKey();
+    protected double[] skewnessArr;  
+    /** per field sum of observations */
+            out.writeGenericValue(convertDoubleArrayToMap(kurtosisArr));
+        // Always write as maps, which is how earlier versions did it. Receiving node will convert to arrays if needed.
+            return;
+            // update running sum
+                if (other.covariances.containsKey(fieldName)) {
+            fieldValue = fieldVals[i];
+            d3 = d * d2;                // delta mean cubed  
+                m1 = means.get(fieldName);
+                kurtosisArr[i] += t1 * dn2 * (docCount * docCount - 3D * docCount + 3D) + 6D * dn2 * m2 - 4D * dn * m3;  
+                // update running means  
+            final String fieldName = fs.getKey();
+    public void add(final String[] fn, final double[] fieldVals) {  
+        covariances = (Map<String, Map<String, Double>>) in.readGenericValue();  
+                && Objects.equals(counts, that.counts)  
+     * and if it's false the arrays are guaranteed to be non-null after ctor returns.
+            out.writeGenericValue(convertDoubleArrayToMap(meansArr));
+        if (fieldNames == null) throw new IllegalArgumentException("Cannot convert to array impl if fieldNames is null");  
+            out.writeGenericValue(means);
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+ * specific language governing permissions and limitations
+import java.util.ArrayList;
+            fieldSumArr[i] += fieldValue;  
+            }
+        skewnessArr = convertFieldDoubleMap(skewness);
+ * based on these descriptive stats. This single pass, parallel approach is based on:
+ * Licensed to Elasticsearch under one or more contributor  
+            Arrays.hashCode(variancesArr),  
+            result[i] = serializedMap.get(fieldNames[i]);  
+        this.usesMaps = usesMaps;  
+                means.put(fieldName, m1 + d / docCount);  
+    // Old map-based values  
+            result.put(fieldNames[i], stats[i]);
+            result.put(fieldNames[i], innerMap);  
+        }  
+    private void mergeMaps(final RunningStats other) {  
             return (RunningStats) super.clone();
-        } catch (CloneNotSupportedException e) {  
+ */
+    protected double[][] covariancesArr;
+        return result;
+        variances = convertDoubleArrayToMap(variancesArr);
+            // merge means of two sets  
+        double newSkew, nk;  
+        final double nA = docCount;  
+                m4 = t1 * dn2 * (docCount * docCount - 3D * docCount + 3D) + 6D * dn2 * m2 - 4D * dn * m3;  
+            this.add(fieldNames, fieldVals);
+            // merge totals  
+    public void merge(final RunningStats other) {
+        if (fieldVals != null && fieldVals.length > 0) {
+    }  
+            this.fieldNames = in.readOptionalStringArray();
+                    cFieldVals.put(cFieldName, newVal);  
+        if (usesMaps) {
+ * Descriptive stats gathered per shard. Coordinating node computes final correlation and covariance stats  
+        if (!Arrays.equals(other.fieldNames, fieldNames)) {  
+            newSkew = skewA + skewB + d3 * nA * nB * (nA - nB) / n2;
+            && Arrays.equals(countsArr, that.countsArr)  
+            countsArr[i] += other.countsArr[i];
+        }  
+        means = convertDoubleArrayToMap(meansArr);
+import org.opensearch.core.common.io.stream.Writeable;
+                    covariancesArr[i][j] += intermediate;  
+    protected long docCount = 0;
+        }
+            assert fieldNames != null;
+                // update running skewnesses
+        usesMaps = false;
+import java.util.HashSet;
+     * Merges the descriptive statistics of a second data set (e.g., per shard)  
+        for (Map.Entry<String, Double> fs : other.means.entrySet()) {
+            fieldSum.put(fieldName, fieldSum.get(fieldName) + other.fieldSum.get(fieldName));
+    protected Map<String, Long> counts;
+        fieldSum = (Map<String, Double>) in.readGenericValue();  
+import java.util.Arrays;
+            // update running covariances  
+            }
+            means = new HashMap<>();
+                    this.covariances.put(fieldName, other.covariances.get(fieldName));  
+    protected Map<String, Double> skewness;
+    protected long[] countsArr;  
+        double meanA, varA, skewA, kurtA, meanB, varB, skewB, kurtB;  
+    protected Map<String, Double> means;  
+    Map<String, Long> convertLongArrayToMap(long[] stats) {  
+            fieldSum = new HashMap<>();  
+    RunningStats(final String[] fieldNames, final double[] fieldVals) {  
+            throw new IllegalArgumentException("Cannot merge RunningStats with different fieldNames");
+            // merge counts of two sets  
+                t1 = d * dn * (docCount - 1);  
+            counts.put(fieldName, counts.get(fieldName) + other.counts.get(fieldName));
+        if (docCount > 1) {
+        return Objects.hash(
+ * Map-based implementation is left here for backwards compatibility purposes. It's much faster to use
+                kurtosis.put(fieldName, 0.0);  
+     */
+            means.put(fieldName, (nA * means.get(fieldName) + nB * other.means.get(fieldName)) / (nA + nB));
+        if (!usesMaps) {
+            covariances = new HashMap<>();
+    /** variance values (second moment) */
+                    newVal = cFieldVals.get(cFieldName);
+        fieldSum = convertDoubleArrayToMap(fieldSumArr);
+        for (Map.Entry<String, Double> fs : other.means.entrySet()) {
+            result[i] = serializedMap.get(fieldNames[i]);  
+            d2 = d * d;                 // delta mean squared
+            return docCount == that.docCount
+            if (means.containsKey(fieldName)) {
+            out.writeGenericValue(fieldSum);
+        }
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+            nk = kurtA + kurtB + d4 * nA * nB * (nA2 - nA * nB + nB2) / (n2 * docCount);
+    /** mean values (first moment) */
+            nB2 = nB * nB;              // doc B num samples squared
+            variances.put(fieldName, varA + varB + d2 * nA * other.docCount / docCount);  
+            Map<String, Double> innerMap = new HashMap<>();
+            skewness.put(fieldName, newSkew + 3D * d * (nA * varB - nB * varA) / docCount);  
+            fieldSumArr[i] += other.fieldSumArr[i];
+                if (cFieldVals.containsKey(cFieldName)) {
+    private void mergeArrays(final RunningStats other) {  
+        double newSkew, nk;
+            skewnessArr[i] = newSkew + 3D * d * (nA * varB - nB * varA) / docCount;  
+ * so we must revert to using maps. The same goes for any RunningStats that merges with these deserialized instances.
+            throw new IllegalArgumentException("Number of field values do not match number of field names.");
+            nA2 = nA * nA;              // doc A num samples squared  
+            if (covariances.containsKey(fieldName)) {
+            docCount,
+        this.updateCovarianceMaps(fieldNames, deltas);
+        Map<String, Long> result = new HashMap<>();
+                final String fieldName = fs.getKey();
+        docCount += other.docCount;
+            for (String cFieldName : cFieldNames) {  
+            out.writeGenericValue(convertDoubleArrayToMap(fieldSumArr));
+        return docCount == that.docCount
+    /** count of observations (same number of observations per field) */  
+        countsArr = convertFieldLongMap(counts);
+            variancesArr = new double[fieldNames.length];
+                // update running variances
+    RunningStats(final String[] fieldNames) {
+            // merge means of two sets  
+    }
+            varA = variances.get(fieldName);
+    Map<String, Double> convertDoubleArrayToMap(double[] stats) {
+        }  
+ * Unless required by applicable law or agreed to in writing,
+            counts = new HashMap<>();
+        for (int i = 0; i < fieldNames.length; ++i) {
+            skewB = other.skewnessArr[i];  
+            fieldSum.put(fieldName, fieldValue + (fieldSum.containsKey(fieldName) ? fieldSum.get(fieldName) : 0));  
+            // merge covariances of two sets  
+            nA2 = nA * nA;              // doc A num samples squared  
+        means = (Map<String, Double>) in.readGenericValue();
+    /** counts */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            switchToMaps();
+            f = countA * other.docCount / this.docCount;
+                covariances.put(fieldName, cFieldVals);  
+        if (usesMaps) return;
+        out.writeGenericValue(docCount);
+        for (int i = 0; i < fieldNames.length; i++) {
+            out.writeGenericValue(convertLongArrayToMap(countsArr));  
+    public RunningStats(StreamInput in) throws IOException {
+        final double[] deltas = new double[fieldNames.length];  
+ */
+                && Objects.equals(variances, that.variances)
+    private void updateCovarianceMaps(final String[] fieldNames, final Map<String, Double> deltas) {
+        }
+        double[] result = new double[fieldNames.length];
+/**
+import org.opensearch.OpenSearchException;  
+            } else {
+    public int hashCode() {  
+        double m1, m2, m3, m4;  // moments
+        for (int i = 0; i < fieldNames.length; i++) {
+    protected double[] fieldSumArr;
+        }
+ */
+                        newVal += other.covariances.get(fieldName).get(cFieldName) + f * dR * deltas.get(cFieldName);  
+            }
+                t1 = d * dn * (docCount - 1);  
+            for (int j = i + 1; j < fieldNames.length; j++) {  
+    }
+        String fieldName;  
+     * <p>
+    private void mergeCovarianceArrays(final RunningStats other, final double[] deltas) {  
+        this.fieldNames = fieldNames;
+    public void addArrays(final double[] fieldVals) {
+    }  
+        for (int i = 0; i < fieldNames.length; ++i) {  
+            meansArr[i] = (nA * meansArr[i] + nB * other.meansArr[i]) / (nA + nB);
+        }  
+        docCount = (Long) in.readGenericValue();
+ *
+            // kurtosis
+            addArrays(fieldVals);
+    }
+            init(fieldNames == null);  
+    protected Map<String, Double> variances;
+            skewA = skewness.get(fieldName);
+    protected double[] variancesArr;
+            deltas.put(fieldName, other.fieldSum.get(fieldName) / nB - fieldSum.get(fieldName) / nA);
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+        if (fieldNames.length != fieldVals.length) {  
+            }
+        try {
+    }  
+            throw new IllegalArgumentException("Cannot add statistics without field values.");
+            }  
+                    }  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+            this.kurtosisArr = other.kurtosisArr;
+        this.mergeCovarianceArrays(other, deltas);  
+                dn = d / docCount;
+        }
+            kurtosis = new HashMap<>();  
+        }
+            this.usesMaps = in.readBoolean();  
+        if (other == null) {
+                }
+ * You may obtain a copy of the License at  
+                dn2 = dn * dn;
+    }  
+            // merge variances, skewness, and kurtosis of two sets  
+        // Switch from the slower maps implementation to the fast primitive array implementation.
+        if (fieldNames == null) {
+import java.util.HashMap;  
+            Arrays.hashCode(meansArr),
+            kurtA = kurtosisArr[i];  
+    public boolean equals(Object o) {
+        double[][] result = new double[fieldNames.length][fieldNames.length];
+    }  
+            dR = deltas.get(fieldName);
+            // kurtosis
+        } else if (fieldNames.length != fieldVals.length) {  
+/*  
+        }
+        final double countA = docCount - other.docCount;
+            nB2 = nB * nB;              // doc B num samples squared
             throw new OpenSearchException("Error trying to create a copy of RunningStats");
         }
-    }  
-
-    public boolean usesMaps() {
-        return usesMaps;  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        RunningStats that = (RunningStats) o;
-        if (usesMaps != that.usesMaps) return false;
+            meanA = meansArr[i];  
+        skewness = (Map<String, Double>) in.readGenericValue();
         if (usesMaps) {  
-            return docCount == that.docCount
-                && Objects.equals(fieldSum, that.fieldSum)
-                && Objects.equals(counts, that.counts)  
-                && Objects.equals(means, that.means)
-                && Objects.equals(variances, that.variances)
+            fieldSumArr = new double[fieldNames.length];  
+    public RunningStats clone() {  
+        } else if (!other.usesMaps) {  
+    }  
+    protected double[] kurtosisArr;
+     * running computations taken from: http://prod.sandia.gov/techlib/access-control.cgi/2008/086212.pdf
+            varB = other.variances.get(fieldName);
+        final double nB = other.docCount;
+    }
+            skewA = skewnessArr[i];
+            countsArr[i]++;
+            dR = deltas.get(fieldName);
+            kurtosisArr = new double[fieldNames.length];  
+        variancesArr = convertFieldDoubleMap(variances);  
+        }
+        if (o == null || getClass() != o.getClass()) return false;  
+        if (this == o) return true;
+            this.docCount = other.docCount;
+            return;
+    }
+            // update counts  
+            Arrays.hashCode(fieldSumArr),  
+                this.means.put(fieldName, fs.getValue().doubleValue());
+    /** updates running statistics with a documents field values **/
+            out.writeGenericValue(counts);  
+        }  
+            varB = other.variancesArr[i];
+                }
+ * KIND, either express or implied.  See the License for the
+            this.usesMaps = true;  
+ *  
+            nk = kurtA + kurtB + d4 * nA * nB * (nA2 - nA * nB + nB2) / (n2 * docCount);
+    Map<String, Map<String, Double>> convertNestedDoubleArrayToMap(double[][] stats) {
+ * This should only happen in mixed clusters.  
+ * compatible open source license.
+            covariancesArr = new double[fieldNames.length][fieldNames.length];
+    /** Update covariance matrix */  
+        for (int i = 0; i < fieldNames.length; i++) {
+        RunningStats that = (RunningStats) o;
+ *
+        ++docCount;
+        assert !other.usesMaps && !this.usesMaps;
+    /** covariance values */
+            }
+        }
+        assert serializedMap.keySet().equals(new HashSet<>(Arrays.asList(fieldNames)));  
+import java.util.Map;
+    public static final Version ARRAY_IMPL_VERSION = Version.V_3_4_0;
+        this.updateCovarianceArrays(fieldNames, deltas);  
+    // Array-based values. These may be null for RunningStats from older versions  
+        }  
+            variances = new HashMap<>();
+            out.writeGenericValue(convertDoubleArrayToMap(variancesArr));
+            fieldName = fieldNames[i];
+                m2 = variancesArr[i];
                 && Objects.equals(skewness, that.skewness)  
-                && Objects.equals(kurtosis, that.kurtosis)
+        for (int i = 0; i < fieldNames.length; i++) {
+            n2 = docCount * docCount;   // num samples squared
+                m3 = skewness.get(fieldName);  
+    /**
+                skewness.put(fieldName, m3 + (t1 * dn * (docCount - 2D) - 3D * dn * m2));
+    /** kurtosis values (fourth moment) */
+        kurtosis = convertDoubleArrayToMap(kurtosisArr);
+            Arrays.hashCode(skewnessArr),
+            if (cFieldVals.size() > 0) {
+            // update running deltas
+            && Arrays.deepEquals(covariancesArr, that.covariancesArr);
+            // skewness
+    }
+ * http://prod.sandia.gov/techlib/access-control.cgi/2008/086212.pdf  
+            }
+        } catch (CloneNotSupportedException e) {  
+    protected Map<String, Double> fieldSum;
+            && Arrays.equals(kurtosisArr, that.kurtosisArr)
+ * Modifications Copyright OpenSearch Contributors. See  
+ * <p>
+                result[i][j] = serializedMap.get(fieldNames[i]).get(fieldNames[j]);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        // across fields
+        } else {  
+                dn = d / docCount;
+import java.util.Objects;  
+        } else if (this.docCount == 0) {
+        assert other.usesMaps && this.usesMaps;
+public class RunningStats implements Writeable, Cloneable {
+        for (int i = 0; i < fieldNames.length; i++) {  
+            // merge deltas  
+            kurtB = other.kurtosisArr[i];
+import java.io.IOException;  
+        }
+                m2 = variances.get(fieldName);
+            // update running mean, variance, skewness, kurtosis
+        return result;
+        if (this.docCount == 0) {
+                this.skewness.put(fieldName, other.skewness.get(fieldName).doubleValue());  
+        }
+            // merge deltas  
+            this.countsArr = other.countsArr;
+        final double nB = other.docCount;
+        } else {
+            meanB = other.means.get(fieldName);
+        double meanA, varA, skewA, kurtA, meanB, varB, skewB, kurtB;
+        if (out.getVersion().onOrAfter(ARRAY_IMPL_VERSION)) {
+            && Arrays.equals(meansArr, that.meansArr)
+    }
+            varA = variancesArr[i];
+                covariancesArr[i][j] += other.covariancesArr[i][j] + f * deltas[i] * deltas[j];
+            }  
+}  
+                && Objects.equals(means, that.means)
+        docCount += other.docCount;  
+            // merge totals  
+        ArrayList<String> cFieldNames = new ArrayList<>(Arrays.asList(fieldNames));  
+            // update running sum
+            // If we are already using maps we can send them as-is.
+package org.opensearch.search.aggregations.matrix.stats;
+        return result;
+    private boolean usesMaps = false;  
+        Map<String, Map<String, Double>> result = new HashMap<>();  
+    }  
+                skewnessArr[i] += (t1 * dn * (docCount - 2D) - 3D * dn * m2);
+            deltas[i] = other.fieldSumArr[i] / nB - fieldSumArr[i] / nA;
+                this.kurtosis.put(fieldName, other.kurtosis.get(fieldName).doubleValue());
+        // deep copy of hash keys (field names)
+    protected Map<String, Double> kurtosis;  
+    }
+            this.skewnessArr = other.skewnessArr;
+        long[] result = new long[fieldNames.length];
+            return;
+        double dR, newVal;
+            meanB = other.meansArr[i];
+ * However, when deserializing RunningStats from previous versions, we don't have the sorted list of field names,
+ * this file be licensed under the Apache-2.0 license or a
+        // across fields  
+            countsArr = new long[fieldNames.length];
+            out.writeGenericValue(covariances);
+ * this work for additional information regarding copyright
+        }  
+                meansArr[i] = fieldValue;  
+                this.variances.put(fieldName, other.variances.get(fieldName).doubleValue());
+ * ownership. Elasticsearch licenses this file to you under  
+            && Arrays.equals(variancesArr, that.variancesArr)
+            out.writeGenericValue(skewness);  
+    }
+                skewness.put(fieldName, 0.0);
+            Arrays.hashCode(countsArr),
+     **/  
+            out.writeGenericValue(convertDoubleArrayToMap(skewnessArr));  
+                meansArr[i] += dn;  
                 && Objects.equals(covariances, that.covariances);
         }  
-        return docCount == that.docCount
-            && Arrays.equals(fieldSumArr, that.fieldSumArr)
-            && Arrays.equals(countsArr, that.countsArr)  
-            && Arrays.equals(meansArr, that.meansArr)
-            && Arrays.equals(variancesArr, that.variancesArr)
-            && Arrays.equals(skewnessArr, that.skewnessArr)  
-            && Arrays.equals(kurtosisArr, that.kurtosisArr)
-            && Arrays.deepEquals(covariancesArr, that.covariancesArr);
+            // variance
+        kurtosis = (Map<String, Double>) in.readGenericValue();
+        if (!usesMaps && !other.usesMaps) {
+                // variances, skewness, kurtosis already initialized to 0
+        meansArr = convertFieldDoubleMap(means);  
+            // variance
+        return result;
+        } else {  
+                variancesArr[i] += t1;
+            out.writeBoolean(usesMaps);  
+            throw new IllegalArgumentException("Number of field values do not match number of field names.");
+        variances = (Map<String, Double>) in.readGenericValue();  
+        }
     }  
-
-    @Override
-    public int hashCode() {  
-        if (usesMaps) {
-            return Objects.hash(docCount, fieldSum, counts, means, variances, skewness, kurtosis, covariances);
-        }  
-        return Objects.hash(
-            docCount,
-            Arrays.hashCode(fieldSumArr),  
-            Arrays.hashCode(countsArr),
-            Arrays.hashCode(meansArr),
-            Arrays.hashCode(variancesArr),  
-            Arrays.hashCode(skewnessArr),
-            Arrays.hashCode(kurtosisArr),
+    private void mergeCovarianceMaps(final RunningStats other, final Map<String, Double> deltas) {
+        double m2, m3; // moments
             Arrays.deepHashCode(covariancesArr)  
-        );
+            deltas.put(fieldName, fieldValue * docCount - fieldSum.get(fieldName));
+    public void addMaps(final String[] fieldNames, final double[] fieldVals) {  
+        }
+            if (!usesMaps) {
+            d3 = d * d2;                // delta mean cubed  
+        assert serializedMap.keySet().equals(new HashSet<>(Arrays.asList(fieldNames)));  
+        }
+        if (usesMaps != that.usesMaps) return false;
+                    if (other.covariances.containsKey(fieldName) && other.covariances.get(fieldName).containsKey(cFieldName)) {
+        return result;
+        for (int i = 0; i < fieldNames.length; i++) {
+            this.covariancesArr = other.covariancesArr;  
+            fieldValue = fieldVals[i];
+        String fieldName;
+            }
+        ++docCount;
+            d = meanB - meanA;          // delta mean
+            d2 = d * d;                 // delta mean squared
+        counts = convertLongArrayToMap(countsArr);  
+                    cFieldVals.put(cFieldName, 0.0);
+        fieldSumArr = convertFieldDoubleMap(fieldSum);
+        // update total, mean, and variance
+        for (int i = 0; i < fieldNames.length; i++) {
+    /** Ctor to create an instance of running statistics */
+/*
+        kurtosisArr = convertFieldDoubleMap(kurtosis);
+            fieldName = fieldNames[i];  
+                        newVal += other.covariances.get(cFieldName).get(fieldName) + f * dR * deltas.get(cFieldName);
+                Map<String, Double> cFieldVals = covariances.get(fieldName);
+            result.put(fieldNames[i], stats[i]);  
+                variances.put(fieldName, m2 + t1);
+            && Arrays.equals(skewnessArr, that.skewnessArr)  
+                d = fieldValue - meansArr[i];
     }
-}  
+        }
+        assert serializedMap.keySet().equals(new HashSet<>(Arrays.asList(fieldNames)));  
+            // merge counts of two sets  
+        if (usesMaps) {
+        double d, d2, d3, d4, n2, nA2, nB2;
+    final String[] fieldNames;
+    @SuppressWarnings("unchecked")  
+            // skeewness
+ * under the License.  
+            other.switchToMaps();
+import org.opensearch.core.common.io.stream.StreamInput;
+            return;  
+        double f = ((double) (docCount - other.docCount)) * other.docCount / this.docCount; // , dR, newVal;
+        init(fieldNames == null);  
+            if (docCount == 1) {
+    @Override  
+        }
+ * primitive arrays, as the keys of the map are constant (they're just the fields of the aggregation).  
+                }  
+            d4 = d2 * d2;               // delta mean 4th power
+        for (int i = 0; i < fieldNames.length; ++i) {
+        if (fieldVals == null) {
+    protected Map<String, Map<String, Double>> covariances;
+            d4 = d2 * d2;               // delta mean 4th power
+        }  
+        usesMaps = true;
+    @Override
+                    newVal = cFieldVals.get(cFieldName) + 1.0 / (docCount * (docCount - 1.0)) * dR * deltas.get(cFieldName);
+        counts = (Map<String, Long>) in.readGenericValue();
+    private void init(boolean usesMaps) {
+    private void updateCovarianceArrays(final String[] fieldNames, final double[] deltas) {
+            mergeArrays(other);  
+    double[][] convertNestedDoubleMap(Map<String, Map<String, Double>> serializedMap) {
+    @Override
+ * license agreements. See the NOTICE file distributed with
+        }
+            skewB = other.skewness.get(fieldName);  
+                kurtosis.put(fieldName, kurtosis.get(fieldName) + m4);
+ * GitHub history for details.
+            kurtosisArr[i] = nk + 6D * d2 * (nA2 * varB + nB2 * varA) / n2 + 4D * d * (nA * skewB - nB * skewA) / docCount;  
+            this.variancesArr = other.variancesArr;  
+    public boolean usesMaps() {
+        Map<String, Double> result = new HashMap<>();
+            counts.put(fieldName, 1 + (counts.containsKey(fieldName) ? counts.get(fieldName) : 0));
+            for (Map.Entry<String, Double> fs : other.means.entrySet()) {  
+        double fieldValue;  
+                switchToArrays();  
+        } else {  
+            n2 = docCount * docCount;   // num samples squared
+    long[] convertFieldLongMap(Map<String, Long> serializedMap) {
+                    double intermediate = 1.0 / (docCount * (docCount - 1.0)) * deltas[i] * deltas[j];
+        double d, d2, d3, d4, n2, nA2, nB2;
+        return result;  
+            return Objects.hash(docCount, fieldSum, counts, means, variances, skewness, kurtosis, covariances);
+                    cFieldVals.put(cFieldName, newVal);
+    double[] convertFieldDoubleMap(Map<String, Double> serializedMap) {
+            for (int j = i + 1; j < fieldNames.length; j++) {
+            this.fieldNames = null;
+            skewness = new HashMap<>();
+                means.put(fieldName, fieldValue);  
+            addMaps(fn, fieldVals);
+            cFieldNames.remove(fieldName);
+        this.fieldNames = fieldNames;
+                && Objects.equals(fieldSum, that.fieldSum)
+            deltas[i] = fieldValue * docCount - fieldSumArr[i];
+    }
+            // merge variances, skewness, and kurtosis of two sets  
+        covariances = convertNestedDoubleArrayToMap(covariancesArr);  
+    }
+    void switchToMaps() {  
+            skewnessArr = new double[fieldNames.length];
+                && Objects.equals(kurtosis, that.kurtosis)
+        if (in.getVersion().onOrAfter(ARRAY_IMPL_VERSION)) {
+                m3 = skewnessArr[i];  
+    @Override
+            this.fieldSumArr = other.fieldSumArr;
+            && Arrays.equals(fieldSumArr, that.fieldSumArr)
+    }
+        covariancesArr = convertNestedDoubleMap(covariances);
+                covariances.put(fieldName, cFieldVals);  
+    }  
+            out.writeGenericValue(kurtosis);
+        final HashMap<String, Double> deltas = new HashMap<>();
+                dn2 = dn * dn;
+        if (usesMaps) {  
+import org.opensearch.Version;
+            kurtB = other.kurtosis.get(fieldName);
+            out.writeOptionalStringArray(fieldNames);
+                }
+            d = meanB - meanA;          // delta mean
+    }  
+            }
+        // update total, mean, and variance
+        if (usesMaps) {
+        return usesMaps;  
+            out.writeGenericValue(variances);
+ */  
+    /** Merges two covariance matrices */  

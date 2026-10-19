@@ -1,532 +1,452 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test.disruption;
-
-import com.carrotsearch.randomizedtesting.generators.RandomPicks;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.NodeConnectionsService;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.set.Sets;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.ConnectTransportException;  
-import org.opensearch.transport.TransportService;
-
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Random;  
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.function.BiConsumer;  
-
-/**
- * Network disruptions are modeled using two components:  
- * 1) the {@link DisruptedLinks} represents the links in the network that are to be disrupted
- * 2) the {@link NetworkLinkDisruptionType} represents the failure mode that is to be applied to the links
- */  
-public class NetworkDisruption implements ServiceDisruptionScheme {
-
-    private static final Logger logger = LogManager.getLogger(NetworkDisruption.class);  
-
-    private final DisruptedLinks disruptedLinks;
-    private final NetworkLinkDisruptionType networkLinkDisruptionType;  
-
-    protected volatile InternalTestCluster cluster;
+        }
     protected volatile boolean activeDisruption = false;  
-
-    public NetworkDisruption(DisruptedLinks disruptedLinks, NetworkLinkDisruptionType networkLinkDisruptionType) {
-        this.disruptedLinks = disruptedLinks;  
-        this.networkLinkDisruptionType = networkLinkDisruptionType;
-    }
-
-    public DisruptedLinks getDisruptedLinks() {
-        return disruptedLinks;
-    }  
-
-    public NetworkLinkDisruptionType getNetworkLinkDisruptionType() {
-        return networkLinkDisruptionType;  
-    }
-
-    @Override  
-    public void applyToCluster(InternalTestCluster cluster) {
-        this.cluster = cluster;
-    }  
-
-    @Override
-    public void removeFromCluster(InternalTestCluster cluster) {  
-        stopDisrupting();
-    }
-
-    @Override
-    public void removeAndEnsureHealthy(InternalTestCluster cluster) {
-        removeFromCluster(cluster);  
-        ensureHealthy(cluster);
-    }
-
-    /**
-     * ensures the cluster is healthy after the disruption
-     */  
-    public void ensureHealthy(InternalTestCluster cluster) {
-        assert activeDisruption == false;
-        ensureNodeCount(cluster);  
-        ensureFullyConnectedCluster(cluster);
-    }
-
-    /**
-     * Ensures that all nodes in the cluster are connected to each other.
-     * <p>  
-     * Some network disruptions may leave nodes that are not the cluster-manager disconnected from each other.
-     * {@link org.opensearch.cluster.NodeConnectionsService} will eventually reconnect but it's
-     * handy to be able to ensure this happens faster  
-     */
-    public static void ensureFullyConnectedCluster(InternalTestCluster cluster) {
-        final String[] nodeNames = cluster.getNodeNames();  
-        final CountDownLatch countDownLatch = new CountDownLatch(nodeNames.length);
-        for (String node : nodeNames) {
-            ClusterState stateOnNode = cluster.getInstance(ClusterService.class, node).state();  
-            cluster.getInstance(NodeConnectionsService.class, node).reconnectToNodes(stateOnNode.nodes(), countDownLatch::countDown);
-        }
-
-        try {
-            countDownLatch.await();
-        } catch (InterruptedException e) {  
-            throw new AssertionError(e);
-        }
-    }  
-
-    protected void ensureNodeCount(InternalTestCluster cluster) {
-        cluster.validateClusterFormed();  
-    }
-
-    @Override  
-    public synchronized void applyToNode(String node, InternalTestCluster cluster) {
-
-    }  
-
-    @Override
-    public synchronized void removeFromNode(String node1, InternalTestCluster cluster) {  
-        logger.info("stop disrupting node (disruption type: {}, disrupted links: {})", networkLinkDisruptionType, disruptedLinks);
-        applyToNodes(new String[] { node1 }, cluster.getNodeNames(), networkLinkDisruptionType::removeDisruption);
-        applyToNodes(cluster.getNodeNames(), new String[] { node1 }, networkLinkDisruptionType::removeDisruption);  
-    }
-
-    @Override  
-    public synchronized void testClusterClosed() {
-
-    }  
-
-    @Override
-    public synchronized void startDisrupting() {  
-        logger.info("start disrupting (disruption type: {}, disrupted links: {})", networkLinkDisruptionType, disruptedLinks);
-        applyToNodes(cluster.getNodeNames(), cluster.getNodeNames(), networkLinkDisruptionType::applyDisruption);
-        activeDisruption = true;  
-    }
-
-    @Override  
-    public synchronized void stopDisrupting() {
-        if (!activeDisruption) {
-            return;  
-        }
-        logger.info("stop disrupting (disruption scheme: {}, disrupted links: {})", networkLinkDisruptionType, disruptedLinks);
-        applyToNodes(cluster.getNodeNames(), cluster.getNodeNames(), networkLinkDisruptionType::removeDisruption);  
-        activeDisruption = false;
-    }
-
-    /**
-     * Applies action to all disrupted links between two sets of nodes.
-     */  
-    private void applyToNodes(String[] nodes1, String[] nodes2, BiConsumer<MockTransportService, MockTransportService> consumer) {
-        for (String node1 : nodes1) {
-            if (disruptedLinks.nodes().contains(node1)) {  
-                for (String node2 : nodes2) {
-                    if (disruptedLinks.nodes().contains(node2)) {
-                        if (node1.equals(node2) == false) {  
-                            if (disruptedLinks.disrupt(node1, node2)) {
-                                consumer.accept(transport(node1), transport(node2));
-                            }  
-                        }
-                    }
-                }  
-            }
-        }
-    }  
-
-    @Override
-    public TimeValue expectedTimeToHeal() {  
-        return networkLinkDisruptionType.expectedTimeToHeal();
-    }
-
-    private MockTransportService transport(String node) {
-        return (MockTransportService) cluster.getInstance(TransportService.class, node);
-    }  
-
-    @Override
-    public String toString() {  
-        return "network disruption (disruption type: " + networkLinkDisruptionType + ", disrupted links: " + disruptedLinks + ")";
-    }
-
-    /**
-     * Represents a set of nodes with connections between nodes that are to be disrupted
-     */  
-    public abstract static class DisruptedLinks {
-        private final Set<String> nodes;
-
-        protected DisruptedLinks(Set<String>... nodeSets) {
-            Set<String> allNodes = new HashSet<>();
-            for (Set<String> nodeSet : nodeSets) {  
-                allNodes.addAll(nodeSet);
-            }
-            this.nodes = allNodes;  
-        }
-
-        /**  
-         * Set of all nodes that can participate in disruptions
-         */
-        public Set<String> nodes() {  
-            return nodes;
-        }
-
-        /**
-         * Returns true iff network should be disrupted between the two nodes
-         */  
-        public abstract boolean disrupt(String node1, String node2);
-    }
-
-    /**
-     * Creates two partitions with symmetric failures
-     */  
-    public static class TwoPartitions extends DisruptedLinks {
-
-        protected final Set<String> nodesSideOne;  
-        protected final Set<String> nodesSideTwo;
-
-        public TwoPartitions(String node1, String node2) {  
-            this(Collections.singleton(node1), Collections.singleton(node2));
-        }
-
-        public TwoPartitions(Set<String> nodesSideOne, Set<String> nodesSideTwo) {
-            super(nodesSideOne, nodesSideTwo);
-            this.nodesSideOne = nodesSideOne;  
-            this.nodesSideTwo = nodesSideTwo;
-            assert nodesSideOne.isEmpty() == false;
-            assert nodesSideTwo.isEmpty() == false;  
-            assert Sets.haveEmptyIntersection(nodesSideOne, nodesSideTwo);
-        }
-
-        public static TwoPartitions random(Random random, String... nodes) {
-            return random(random, Sets.newHashSet(nodes));
-        }  
-
-        public static TwoPartitions random(Random random, Set<String> nodes) {
-            assert nodes.size() >= 2 : "two partitions topology requires at least 2 nodes";  
-            Set<String> nodesSideOne = new HashSet<>();
-            Set<String> nodesSideTwo = new HashSet<>();
-            for (String node : nodes) {  
-                if (nodesSideOne.isEmpty()) {
-                    nodesSideOne.add(node);
-                } else if (nodesSideTwo.isEmpty()) {  
-                    nodesSideTwo.add(node);
-                } else if (random.nextBoolean()) {
-                    nodesSideOne.add(node);  
-                } else {
-                    nodesSideTwo.add(node);
-                }  
-            }
-            return new TwoPartitions(nodesSideOne, nodesSideTwo);
-        }  
-
-        @Override
-        public boolean disrupt(String node1, String node2) {  
-            if (nodesSideOne.contains(node1) && nodesSideTwo.contains(node2)) {
-                return true;
-            }  
-            if (nodesSideOne.contains(node2) && nodesSideTwo.contains(node1)) {
-                return true;
-            }  
-            return false;
-        }
-
-        public Set<String> getNodesSideOne() {
-            return Collections.unmodifiableSet(nodesSideOne);
-        }  
-
-        public Set<String> getNodesSideTwo() {
-            return Collections.unmodifiableSet(nodesSideTwo);  
-        }
-
-        public Collection<String> getMajoritySide() {  
-            if (nodesSideOne.size() >= nodesSideTwo.size()) {
-                return getNodesSideOne();
-            } else {  
-                return getNodesSideTwo();
-            }
-        }  
-
-        public Collection<String> getMinoritySide() {
-            if (nodesSideOne.size() >= nodesSideTwo.size()) {  
-                return getNodesSideTwo();
-            } else {
-                return getNodesSideOne();  
-            }
-        }
-
-        @Override
-        public String toString() {
-            return "two partitions (partition 1: " + nodesSideOne + " and partition 2: " + nodesSideTwo + ")";  
-        }
-    }
-
-    /**
-     * Creates two partitions with symmetric failures and a bridge node that can connect to both of the partitions
-     */  
-    public static class Bridge extends DisruptedLinks {
-
-        private final String bridgeNode;  
-        private final Set<String> nodesSideOne;
-        private final Set<String> nodesSideTwo;
-
-        public Bridge(String bridgeNode, Set<String> nodesSideOne, Set<String> nodesSideTwo) {
-            super(Collections.singleton(bridgeNode), nodesSideOne, nodesSideTwo);
-            this.bridgeNode = bridgeNode;  
-            this.nodesSideOne = nodesSideOne;
-            this.nodesSideTwo = nodesSideTwo;
-            assert nodesSideOne.isEmpty() == false;  
-            assert nodesSideTwo.isEmpty() == false;
-            assert Sets.haveEmptyIntersection(nodesSideOne, nodesSideTwo);
-            assert nodesSideOne.contains(bridgeNode) == false && nodesSideTwo.contains(bridgeNode) == false;  
-        }
-
-        public static Bridge random(Random random, String... nodes) {  
-            return random(random, Sets.newHashSet(nodes));
-        }
-
-        public static Bridge random(Random random, Set<String> nodes) {
-            assert nodes.size() >= 3 : "bridge topology requires at least 3 nodes";
-            String bridgeNode = RandomPicks.randomFrom(random, nodes);  
-            Set<String> nodesSideOne = new HashSet<>();
-            Set<String> nodesSideTwo = new HashSet<>();
-            for (String node : nodes) {  
-                if (node.equals(bridgeNode) == false) {
-                    if (nodesSideOne.isEmpty()) {
-                        nodesSideOne.add(node);  
-                    } else if (nodesSideTwo.isEmpty()) {
-                        nodesSideTwo.add(node);
-                    } else if (random.nextBoolean()) {  
-                        nodesSideOne.add(node);
+import java.util.Random;  
                     } else {
-                        nodesSideTwo.add(node);  
-                    }
-                }
-            }  
-            return new Bridge(bridgeNode, nodesSideOne, nodesSideTwo);
+        public TwoPartitions(String node1, String node2) {  
+            for (String node : nodes) {  
+        ensureFullyConnectedCluster(cluster);
         }
-
         @Override
-        public boolean disrupt(String node1, String node2) {
-            if (nodesSideOne.contains(node1) && nodesSideTwo.contains(node2)) {  
-                return true;
-            }
-            if (nodesSideOne.contains(node2) && nodesSideTwo.contains(node1)) {  
-                return true;
-            }
-            return false;  
-        }
-
-        public String getBridgeNode() {  
-            return bridgeNode;
-        }
-
-        public Set<String> getNodesSideOne() {
-            return nodesSideOne;
-        }  
-
-        public Set<String> getNodesSideTwo() {
-            return nodesSideTwo;  
-        }
-
-        public String toString() {  
-            return "bridge partition (super connected node: ["
-                + bridgeNode
-                + "], partition 1: "  
-                + nodesSideOne
-                + " and partition 2: "
-                + nodesSideTwo  
-                + ")";
-        }
-    }  
-
-    public static class IsolateAllNodes extends DisruptedLinks {
-
-        public IsolateAllNodes(Set<String> nodes) {
-            super(nodes);
-        }  
-
-        @Override
-        public boolean disrupt(String node1, String node2) {  
-            return true;
-        }
-    }  
-
+ * license agreements. See the NOTICE file distributed with
     /**
-     * Abstract class representing various types of network disruptions. Instances of this class override the {@link #applyDisruption}  
+        }
+            return TimeValue.timeValueMillis(0);
+        public boolean disrupt(String node1, String node2) {
+            if (nodesSideOne.size() >= nodesSideTwo.size()) {
+    public DisruptedLinks getDisruptedLinks() {
+        /**
+        }
+                            if (disruptedLinks.disrupt(node1, node2)) {
+        public static TwoPartitions random(Random random, String... nodes) {
+        for (String node1 : nodes1) {
+         * @param delayMax maximum delay
+         * @param random   instance to use for randomization of delay  
+     * ensures the cluster is healthy after the disruption
+            return false;
+    @Override
+ */  
+            return nodesSideTwo;  
+     * <p>  
+    public NetworkLinkDisruptionType getNetworkLinkDisruptionType() {
+    @Override  
+        /**  
+    }  
+        public Set<String> getNodesSideTwo() {
+/*  
+        @Override  
+    @Override
+        if (!activeDisruption) {
+        }  
+    /**
+    public synchronized void testClusterClosed() {
+        public String toString() {
+        }
+                    }
+     */  
+                    nodesSideOne.add(node);  
+        public Bridge(String bridgeNode, Set<String> nodesSideOne, Set<String> nodesSideTwo) {
+            return nodesSideOne;
+        this.disruptedLinks = disruptedLinks;  
+            return new Bridge(bridgeNode, nodesSideOne, nodesSideTwo);
+            }  
+            return delay;  
+        public NetworkDelay(TimeValue delay) {
+    public abstract static class NetworkLinkDisruptionType {  
+        @Override
+            sourceTransportService.clearOutboundRules(targetTransportService);  
+    }
+        }
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+     * Some network disruptions may leave nodes that are not the cluster-manager disconnected from each other.
+    public synchronized void stopDisrupting() {
+            assert Sets.haveEmptyIntersection(nodesSideOne, nodesSideTwo);
+        private final String bridgeNode;  
+    protected void ensureNodeCount(InternalTestCluster cluster) {
+         * Delays requests by a fixed time value.
+         * @param sourceTransportService source transport service from which requests are sent
+import org.opensearch.cluster.NodeConnectionsService;  
+        public boolean disrupt(String node1, String node2) {  
+     * Simulates slow or congested network. Delivery of requests that are sent from source to target node are delayed by a configurable
+            return "two partitions (partition 1: " + nodesSideOne + " and partition 2: " + nodesSideTwo + ")";  
+ *
+            if (disruptedLinks.nodes().contains(node1)) {  
+ */
+        }  
+    /**
+        }
+                allNodes.addAll(nodeSet);
      * method to apply their specific disruption type to requests that are send from a source to a target node.
      */
-    public abstract static class NetworkLinkDisruptionType {  
-
-        /**
-         * Applies network disruption for requests send from the node represented by the source transport service to the node represented  
-         * by the target transport service.
-         *
-         * @param sourceTransportService source transport service from which requests are sent  
-         * @param targetTransportService target transport service to which requests are sent
-         */
-        public abstract void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService);  
-
-        /**
-         * Removes network disruption that was added by {@link #applyDisruption}.  
-         *
-         * @param sourceTransportService source transport service from which requests are sent
-         * @param targetTransportService target transport service to which requests are sent  
-         */
-        public void removeDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {
-            sourceTransportService.clearOutboundRules(targetTransportService);  
-        }
-
-        /**  
-         * Returns expected time to heal after disruption has been removed. Defaults to instant healing.
-         */
-        public TimeValue expectedTimeToHeal() {  
-            return TimeValue.timeValueMillis(0);
-        }
-
-    }
-
-    /**  
-     * Simulates a network disconnect. Sending a request from source to target node throws a {@link ConnectTransportException}.
-     */
-    public static final NetworkLinkDisruptionType DISCONNECT = new NetworkLinkDisruptionType() {  
-
-        @Override
-        public void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {  
-            sourceTransportService.addFailToSendNoConnectRule(targetTransportService);
-        }
-
-        @Override
-        public String toString() {
-            return "network disconnects";  
-        }
-    };
-
-    /**
-     * Simulates an unresponsive target node by dropping requests sent from source to target node.
-     */  
-    public static final NetworkLinkDisruptionType UNRESPONSIVE = new NetworkLinkDisruptionType() {
-        @Override
-        public void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {  
-            sourceTransportService.addUnresponsiveRule(targetTransportService);
-        }
-
-        @Override
-        public String toString() {
+ * this work for additional information regarding copyright
             return "network unresponsive";  
-        }
-    };
-
-    /**
-     * Simulates slow or congested network. Delivery of requests that are sent from source to target node are delayed by a configurable
-     * time amount.  
-     */
-    public static class NetworkDelay extends NetworkLinkDisruptionType {
-
-        public static TimeValue DEFAULT_DELAY_MIN = TimeValue.timeValueSeconds(10);
-        public static TimeValue DEFAULT_DELAY_MAX = TimeValue.timeValueSeconds(90);
-
-        private final TimeValue delay;
-
         /**  
-         * Delays requests by a fixed time value.
-         *
-         * @param delay time to delay requests  
-         */
-        public NetworkDelay(TimeValue delay) {
-            this.delay = delay;  
+        public static Bridge random(Random random, String... nodes) {  
+        for (String node : nodeNames) {
+        } catch (InterruptedException e) {  
+import com.carrotsearch.randomizedtesting.generators.RandomPicks;
+                                consumer.accept(transport(node1), transport(node2));
+import java.util.Set;
+                return getNodesSideOne();  
+        public static TwoPartitions random(Random random, Set<String> nodes) {
         }
-
-        /**  
-         * Delays requests by a random but fixed time value between {@link #DEFAULT_DELAY_MIN} and {@link #DEFAULT_DELAY_MAX}.
-         *
-         * @param random instance to use for randomization of delay  
-         */
-        public static NetworkDelay random(Random random) {
-            return random(random, DEFAULT_DELAY_MIN, DEFAULT_DELAY_MAX);  
         }
-
-        /**  
-         * Delays requests by a random but fixed time value between delayMin and delayMax.
-         *
-         * @param random   instance to use for randomization of delay  
-         * @param delayMin minimum delay
-         * @param delayMax maximum delay
-         */  
-        public static NetworkDelay random(Random random, TimeValue delayMin, TimeValue delayMax) {
-            return new NetworkDelay(
-                TimeValue.timeValueMillis(  
-                    delayMin.millis() == delayMax.millis()
-                        ? delayMin.millis()
-                        : delayMin.millis() + random.nextInt((int) (delayMax.millis() - delayMin.millis()))  
-                )
-            );
-        }  
-
-        @Override
-        public void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {  
-            sourceTransportService.addUnresponsiveRule(targetTransportService, delay);
-        }
-
-        @Override
-        public TimeValue expectedTimeToHeal() {
-            return delay;  
-        }
-
-        @Override  
-        public String toString() {
-            return "network delays for [" + delay + "]";
-        }  
+    public static class TwoPartitions extends DisruptedLinks {
+     */  
+        stopDisrupting();
+    public NetworkDisruption(DisruptedLinks disruptedLinks, NetworkLinkDisruptionType networkLinkDisruptionType) {
+import org.opensearch.test.transport.MockTransportService;
+        public void removeDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {
     }
-
+        @Override
+import java.util.concurrent.CountDownLatch;
+        }  
 }  
+    }  
+import org.apache.logging.log4j.Logger;
+ * compatible open source license.
+import org.opensearch.test.InternalTestCluster;
+         */
+    private static final Logger logger = LogManager.getLogger(NetworkDisruption.class);  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+    }
+        }
+        }
+            this.nodesSideTwo = nodesSideTwo;
+        public static TimeValue DEFAULT_DELAY_MIN = TimeValue.timeValueSeconds(10);
+            if (nodesSideOne.contains(node1) && nodesSideTwo.contains(node2)) {
+    }  
+                    nodesSideOne.add(node);
+        protected final Set<String> nodesSideTwo;
+    private final DisruptedLinks disruptedLinks;
+            this.nodesSideOne = nodesSideOne;  
+        public Set<String> nodes() {  
+     * time amount.  
+         */  
+            super(nodesSideOne, nodesSideTwo);
+     * Represents a set of nodes with connections between nodes that are to be disrupted
+import java.util.Collection;  
+    }  
+/*
+        protected DisruptedLinks(Set<String>... nodeSets) {
+    };
+        return "network disruption (disruption type: " + networkLinkDisruptionType + ", disrupted links: " + disruptedLinks + ")";
+         *
+        public TimeValue expectedTimeToHeal() {  
+        public String toString() {
+        }
+         *
+    /**
+    public void removeAndEnsureHealthy(InternalTestCluster cluster) {
+         * Applies network disruption for requests send from the node represented by the source transport service to the node represented  
+        }
+    }
+     * Ensures that all nodes in the cluster are connected to each other.
+        }  
+    public static void ensureFullyConnectedCluster(InternalTestCluster cluster) {
+        @Override
+            this.delay = delay;  
+                TimeValue.timeValueMillis(  
+            }
+    }  
+            if (nodesSideOne.contains(node2) && nodesSideTwo.contains(node1)) {  
+                return getNodesSideTwo();
+     * Applies action to all disrupted links between two sets of nodes.
+            this(Collections.singleton(node1), Collections.singleton(node2));
+import org.opensearch.transport.TransportService;
+        }
+            return "network delays for [" + delay + "]";
+        protected final Set<String> nodesSideOne;  
+     */  
+        }
+ * not use this file except in compliance with the License.
+            assert nodesSideTwo.isEmpty() == false;
+    }
+        ensureNodeCount(cluster);  
+            if (nodesSideOne.size() >= nodesSideTwo.size()) {  
+        public abstract boolean disrupt(String node1, String node2);
+ * Unless required by applicable law or agreed to in writing,
+        try {
+            }
+        }
+                    delayMin.millis() == delayMax.millis()
+            }
+    /**
+    public void removeFromCluster(InternalTestCluster cluster) {  
+                            }  
+            countDownLatch.await();
+    public TimeValue expectedTimeToHeal() {  
+                        nodesSideTwo.add(node);
+        public String toString() {  
+    }  
+        return networkLinkDisruptionType.expectedTimeToHeal();
+            return nodes;
+        }
+ * Network disruptions are modeled using two components:  
+                } else if (random.nextBoolean()) {
+        activeDisruption = false;
+     * Abstract class representing various types of network disruptions. Instances of this class override the {@link #applyDisruption}  
+    @Override
+    public static final NetworkLinkDisruptionType UNRESPONSIVE = new NetworkLinkDisruptionType() {
+            super(Collections.singleton(bridgeNode), nodesSideOne, nodesSideTwo);
+        applyToNodes(cluster.getNodeNames(), new String[] { node1 }, networkLinkDisruptionType::removeDisruption);  
+            return "network disconnects";  
+            Set<String> nodesSideOne = new HashSet<>();
+         */  
+         */
+    public void applyToCluster(InternalTestCluster cluster) {
+                } else if (nodesSideTwo.isEmpty()) {  
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * {@link org.opensearch.cluster.NodeConnectionsService} will eventually reconnect but it's
+            Set<String> allNodes = new HashSet<>();
+    private void applyToNodes(String[] nodes1, String[] nodes2, BiConsumer<MockTransportService, MockTransportService> consumer) {
+                } else {
+            throw new AssertionError(e);
+    public static class NetworkDelay extends NetworkLinkDisruptionType {
+    /**
+                }  
+            for (Set<String> nodeSet : nodeSets) {  
+ * specific language governing permissions and limitations
+            return Collections.unmodifiableSet(nodesSideOne);
+    public synchronized void removeFromNode(String node1, InternalTestCluster cluster) {  
+import org.apache.logging.log4j.LogManager;  
+ * GitHub history for details.
+    }  
+            ClusterState stateOnNode = cluster.getInstance(ClusterService.class, node).state();  
+            return true;
+     * Creates two partitions with symmetric failures
+        @Override
+            }
+         *
+ * under the License.  
+        cluster.validateClusterFormed();  
+    protected volatile InternalTestCluster cluster;
+            Set<String> nodesSideTwo = new HashSet<>();
+                + nodesSideOne
+         * Delays requests by a random but fixed time value between {@link #DEFAULT_DELAY_MIN} and {@link #DEFAULT_DELAY_MAX}.
+            assert nodes.size() >= 3 : "bridge topology requires at least 3 nodes";
+        @Override
+                        }
+    @Override
+import java.util.function.BiConsumer;  
+    }
+            if (nodesSideOne.contains(node2) && nodesSideTwo.contains(node1)) {
+    public void ensureHealthy(InternalTestCluster cluster) {
+                    } else if (nodesSideTwo.isEmpty()) {
+                        ? delayMin.millis()
+                return true;
+ * 2) the {@link NetworkLinkDisruptionType} represents the failure mode that is to be applied to the links
+    /**  
+         * Returns true iff network should be disrupted between the two nodes
+                    }
+        return networkLinkDisruptionType;  
+            assert Sets.haveEmptyIntersection(nodesSideOne, nodesSideTwo);
+        public static Bridge random(Random random, Set<String> nodes) {
+        logger.info("stop disrupting node (disruption type: {}, disrupted links: {})", networkLinkDisruptionType, disruptedLinks);
+    /**
+                return true;
+                        nodesSideOne.add(node);  
+                return getNodesSideTwo();
+            } else {  
+        }
+     * Simulates an unresponsive target node by dropping requests sent from source to target node.
+     */
+    }
+        final CountDownLatch countDownLatch = new CountDownLatch(nodeNames.length);
+        this.networkLinkDisruptionType = networkLinkDisruptionType;
+            }
+        public abstract void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService);  
+        return disruptedLinks;
+    }  
+            super(nodes);
+    public static class Bridge extends DisruptedLinks {
+    }
+     * Creates two partitions with symmetric failures and a bridge node that can connect to both of the partitions
+import java.util.Collections;
+                    if (nodesSideOne.isEmpty()) {
+        private final Set<String> nodesSideOne;
+ * Licensed to Elasticsearch under one or more contributor  
+ * SPDX-License-Identifier: Apache-2.0
+            return "bridge partition (super connected node: ["
+    private MockTransportService transport(String node) {
+     */  
+        public static NetworkDelay random(Random random) {
+    };
+        activeDisruption = true;  
+        /**
+     */  
+    public static final NetworkLinkDisruptionType DISCONNECT = new NetworkLinkDisruptionType() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+        public String toString() {
+    @Override  
+         */
+package org.opensearch.test.disruption;
+        logger.info("stop disrupting (disruption scheme: {}, disrupted links: {})", networkLinkDisruptionType, disruptedLinks);
+        }
+                    nodesSideTwo.add(node);
+import org.opensearch.common.util.set.Sets;  
+            sourceTransportService.addFailToSendNoConnectRule(targetTransportService);
+        logger.info("start disrupting (disruption type: {}, disrupted links: {})", networkLinkDisruptionType, disruptedLinks);
+        /**  
+            }
+ */  
+import org.opensearch.cluster.service.ClusterService;
+        this.cluster = cluster;
+    }  
+            return false;  
+        public TwoPartitions(Set<String> nodesSideOne, Set<String> nodesSideTwo) {
+    private final NetworkLinkDisruptionType networkLinkDisruptionType;  
+    public abstract static class DisruptedLinks {
+         *
+/**
+    }
+        public TimeValue expectedTimeToHeal() {
+            if (nodesSideOne.contains(node1) && nodesSideTwo.contains(node2)) {  
+    public static class IsolateAllNodes extends DisruptedLinks {
+        }  
+        }
+import java.util.HashSet;
+            this.nodes = allNodes;  
+        }  
+                for (String node2 : nodes2) {
+import org.opensearch.transport.ConnectTransportException;  
+    }
+        }
+ *  
+                        nodesSideOne.add(node);
+    }
+            Set<String> nodesSideOne = new HashSet<>();
+        }  
+     * Simulates a network disconnect. Sending a request from source to target node throws a {@link ConnectTransportException}.
+        }
+                        nodesSideTwo.add(node);  
+         * @param targetTransportService target transport service to which requests are sent
+            this.bridgeNode = bridgeNode;  
+    }
+        return (MockTransportService) cluster.getInstance(TransportService.class, node);
+        public String getBridgeNode() {  
+ *
+        public Collection<String> getMajoritySide() {  
+            );
+                return true;
+                if (nodesSideOne.isEmpty()) {
+        /**  
+     * handy to be able to ensure this happens faster  
+        applyToNodes(cluster.getNodeNames(), cluster.getNodeNames(), networkLinkDisruptionType::applyDisruption);
+         * Set of all nodes that can participate in disruptions
+ * 1) the {@link DisruptedLinks} represents the links in the network that are to be disrupted
+        applyToNodes(cluster.getNodeNames(), cluster.getNodeNames(), networkLinkDisruptionType::removeDisruption);  
+         * Removes network disruption that was added by {@link #applyDisruption}.  
+                if (node.equals(bridgeNode) == false) {
+                }  
+        public Set<String> getNodesSideOne() {
+         */
+            return new TwoPartitions(nodesSideOne, nodesSideTwo);
+        }
+    @Override
+            } else {
+        public void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {  
+        public boolean disrupt(String node1, String node2) {  
+     */  
+            sourceTransportService.addUnresponsiveRule(targetTransportService);
+                        : delayMin.millis() + random.nextInt((int) (delayMax.millis() - delayMin.millis()))  
+        public void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {  
+        applyToNodes(new String[] { node1 }, cluster.getNodeNames(), networkLinkDisruptionType::removeDisruption);
+                    if (disruptedLinks.nodes().contains(node2)) {
+                    } else if (random.nextBoolean()) {  
+            return random(random, Sets.newHashSet(nodes));
+        public String toString() {
+         * Returns expected time to heal after disruption has been removed. Defaults to instant healing.
+            sourceTransportService.addUnresponsiveRule(targetTransportService, delay);
+/*  
+    @Override
+        assert activeDisruption == false;
+         * Delays requests by a random but fixed time value between delayMin and delayMax.
+         * @param delayMin minimum delay
+                )
+         * @param sourceTransportService source transport service from which requests are sent  
+            return new NetworkDelay(
+            return random(random, DEFAULT_DELAY_MIN, DEFAULT_DELAY_MAX);  
+        private final TimeValue delay;
+         */
+ * ownership. Elasticsearch licenses this file to you under  
+            assert nodesSideTwo.isEmpty() == false;  
+        @Override
+import org.opensearch.cluster.ClusterState;
+            return bridgeNode;
+            }  
+        public Set<String> getNodesSideOne() {
+        }
+        /**  
+            return Collections.unmodifiableSet(nodesSideTwo);  
+            }  
+         *
+    /**
+public class NetworkDisruption implements ServiceDisruptionScheme {
+            this.nodesSideTwo = nodesSideTwo;
+         * @param delay time to delay requests  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+            for (String node : nodes) {  
+    }
+            assert nodesSideOne.contains(bridgeNode) == false && nodesSideTwo.contains(bridgeNode) == false;  
+        @Override
+        /**
+        }
+         * @param targetTransportService target transport service to which requests are sent  
+        public void applyDisruption(MockTransportService sourceTransportService, MockTransportService targetTransportService) {  
+     */
+            this.nodesSideOne = nodesSideOne;
+        final String[] nodeNames = cluster.getNodeNames();  
+                + "], partition 1: "  
+            assert nodesSideOne.isEmpty() == false;
+ * KIND, either express or implied.  See the License for the
+        }  
+     */
+                + nodesSideTwo  
+        }
+                + " and partition 2: "
+            }
+    public String toString() {  
+        public Collection<String> getMinoritySide() {
+                    nodesSideTwo.add(node);
+        public static NetworkDelay random(Random random, TimeValue delayMin, TimeValue delayMax) {
+            return random(random, Sets.newHashSet(nodes));
+    /**
+        public static TimeValue DEFAULT_DELAY_MAX = TimeValue.timeValueSeconds(90);
+                + bridgeNode
+        ensureHealthy(cluster);
+            Set<String> nodesSideTwo = new HashSet<>();
+        }
+            cluster.getInstance(NodeConnectionsService.class, node).reconnectToNodes(stateOnNode.nodes(), countDownLatch::countDown);
+    }
+    }
+                + ")";
+            return;  
+    @Override  
+        private final Set<String> nodes;
+         * by the target transport service.
+                        if (node1.equals(node2) == false) {  
+            assert nodes.size() >= 2 : "two partitions topology requires at least 2 nodes";  
+        removeFromCluster(cluster);  
+         */
+        public Set<String> getNodesSideTwo() {
+    public synchronized void applyToNode(String node, InternalTestCluster cluster) {
+        @Override
+            assert nodesSideOne.isEmpty() == false;  
+                return getNodesSideOne();
+                return true;
+        }
+        }
+            String bridgeNode = RandomPicks.randomFrom(random, nodes);  
+import org.opensearch.common.unit.TimeValue;
+         * @param random instance to use for randomization of delay  
+                }
+        public IsolateAllNodes(Set<String> nodes) {
+    public synchronized void startDisrupting() {  
+        @Override
+        private final Set<String> nodesSideTwo;

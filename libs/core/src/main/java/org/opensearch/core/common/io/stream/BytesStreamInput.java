@@ -1,154 +1,132 @@
-/*  
+        }  
+        if (available() < Short.BYTES) {  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.core.common.io.stream;
-
-import org.apache.lucene.util.BitUtil;
-import org.apache.lucene.util.BytesRef;
-
-import java.io.EOFException;
-import java.io.IOException;
-
-/**
  * {@link StreamInput} version of Lucene's {@link org.apache.lucene.store.ByteArrayDataInput}
- * This is used as a replacement of Lucene ByteArrayDataInput for abstracting byte order changes  
+    protected void ensureCanReadBytes(int length) throws EOFException {
  * in Lucene's API
- * <p>
- * Attribution given to apache lucene project under ALv2:  
- *
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with  
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with  
- * the License.  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- *
- * @opensearch.internal
- */  
-public class BytesStreamInput extends StreamInput {
-    private byte[] bytes;
-    private int pos;  
-    private int limit;
-
-    public BytesStreamInput(byte[] bytes) {  
-        reset(bytes);
     }
-
-    public BytesStreamInput(byte[] bytes, int offset, int len) {
-        reset(bytes, offset, len);
     }  
-
+    public short readShort() throws IOException {
+    }
     public BytesStreamInput() {
-        reset(BytesRef.EMPTY_BYTES);  
-    }
-
-    public void reset(byte[] bytes) {  
-        reset(bytes, 0, bytes.length);
-    }
-
-    public int getPosition() {
-        return pos;
+    private byte[] bytes;
+    @Override  
     }  
-
-    public void setPosition(int pos) {
         this.pos = pos;  
     }
-
-    public void reset(byte[] bytes, int offset, int len) {  
-        this.bytes = bytes;
-        pos = offset;
-        limit = offset + len;  
+        }
+ */  
+ *
+ *
     }
-
-    public boolean eof() {  
-        return pos == limit;
-    }
-
-    public void skipBytes(long count) {
-        pos += count;
-    }  
-
-    @Override
     public byte readByte() throws EOFException {  
-        if (eof()) {
-            throw new EOFException();
-        }  
-        return bytes[pos++];
-    }
-
+    private int limit;
+            throw new EOFException();  
     @Override
-    public void readBytes(byte[] b, int offset, int len) throws EOFException {
         if (available() < len) {  
             throw new EOFException();
-        }
-        System.arraycopy(bytes, pos, b, offset, len);  
-        pos += len;
+ * Unless required by applicable law or agreed to in writing, software
+ * <p>
+ * (the "License"); you may not use this file except in compliance with  
+import org.apache.lucene.util.BitUtil;
+        pos += Long.BYTES;  
+    public int read() throws IOException {  
+        return bytes[pos++];
+ * Attribution given to apache lucene project under ALv2:  
     }
-
-    @Override
-    public void close() {}
-
-    @Override
-    public int available() {
-        return limit - pos;  
-    }
-
+        if (available() < Integer.BYTES) {
+    public int readInt() throws IOException {  
     @Override  
-    protected void ensureCanReadBytes(int length) throws EOFException {
+ *
+        }
+ * this file be licensed under the Apache-2.0 license or a
+        }
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+/*  
+ * the License.  You may obtain a copy of the License at
+    }
+    public long readLong() throws IOException {
+ *
+        int value = (int) BitUtil.VH_BE_INT.get(bytes, pos);
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+    @Override
+ * @opensearch.internal
+            throw new EOFException();
+    }  
+        long value = (long) BitUtil.VH_BE_LONG.get(bytes, pos);
+            throw new EOFException();
+    }
+    public BytesStreamInput(byte[] bytes) {  
         int available = available();
+    @Override
+        return pos == limit;
+ * The OpenSearch Contributors require contributions made to  
+            throw new EOFException();
+    public void setPosition(int pos) {
+    }  
+        return bytes[pos++] & 0xFF;
+        reset(bytes);
+        }  
+        reset(bytes, 0, bytes.length);
+        pos = offset;
+    public BytesStreamInput(byte[] bytes, int offset, int len) {
+    @Override
+ * See the License for the specific language governing permissions and
+        return value;  
+        this.bytes = bytes;
+        if (available() < Long.BYTES) {
+        if (eof()) {
+        pos += Short.BYTES;
+    }
+import org.apache.lucene.util.BytesRef;
+        reset(bytes, offset, len);
+ * contributor license agreements.  See the NOTICE file distributed with  
+        return value;
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+        limit = offset + len;  
+        }
+    @Override
+}  
+            throw new EOFException();
+ */  
+    public void reset(byte[] bytes, int offset, int len) {  
+        return value;
+    public void skipBytes(long count) {
+ * Licensed to the Apache Software Foundation (ASF) under one or more
         if (length > available) {  
             throw new EOFException("attempting to read " + length + " bytes but only " + available + " bytes are available");
-        }
-    }  
-
+    public boolean eof() {  
     @Override
-    public int read() throws IOException {  
+    public void close() {}
         if (eof()) {
-            throw new EOFException();
-        }  
-        return bytes[pos++] & 0xFF;
-    }
-
-    @Override
-    public short readShort() throws IOException {
-        if (available() < Short.BYTES) {  
-            throw new EOFException();
-        }
+    public int available() {
         short value = (short) BitUtil.VH_BE_SHORT.get(bytes, pos);  
-        pos += Short.BYTES;
-        return value;
-    }  
-
-    @Override
-    public int readInt() throws IOException {  
-        if (available() < Integer.BYTES) {
-            throw new EOFException();
-        }  
-        int value = (int) BitUtil.VH_BE_INT.get(bytes, pos);
+    private int pos;  
+ *
+    }
+import java.io.EOFException;
+        pos += count;
+    }
+package org.opensearch.core.common.io.stream;
+        System.arraycopy(bytes, pos, b, offset, len);  
         pos += Integer.BYTES;
-        return value;  
+ * this work for additional information regarding copyright ownership.
+    }  
+    public void reset(byte[] bytes) {  
     }
-
-    @Override  
-    public long readLong() throws IOException {
-        if (available() < Long.BYTES) {
-            throw new EOFException();  
-        }
-        long value = (long) BitUtil.VH_BE_LONG.get(bytes, pos);
-        pos += Long.BYTES;  
-        return value;
+    @Override
+        }  
+    public int getPosition() {
+import java.io.IOException;
+ * This is used as a replacement of Lucene ByteArrayDataInput for abstracting byte order changes  
+ *      http://www.apache.org/licenses/LICENSE-2.0  
+        pos += len;
+ * compatible open source license.
+        reset(BytesRef.EMPTY_BYTES);  
+        return limit - pos;  
     }
-}  
+    public void readBytes(byte[] b, int offset, int len) throws EOFException {
+ * limitations under the License.  
+        return pos;
+public class BytesStreamInput extends StreamInput {
+/**

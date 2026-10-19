@@ -1,61 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+    }
+    public void testBadCandidates() {
+package org.opensearch.common.xcontent;
+ * under the License.  
  * license agreements. See the NOTICE file distributed with
+ * Licensed to Elasticsearch under one or more contributor  
+}  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertThat(errorMessage("foo", "bar", "fop", "fou", "baz"), equalTo("[test] unknown field [foo] did you mean any of [fop, fou]?"));
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+public class SuggestingErrorOnUnknownTests extends OpenSearchTestCase {
+/*  
+/*  
+    }
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Unless required by applicable law or agreed to in writing,
+ * GitHub history for details.
+ *  
+    public void testOneCandidate() {
+ * software distributed under the License is distributed on an
+ *
+ */  
+import static org.hamcrest.Matchers.equalTo;
+ * Modifications Copyright OpenSearch Contributors. See
+    public void testNoCandidates() {  
+import java.util.Arrays;  
  * this work for additional information regarding copyright
+import org.opensearch.test.OpenSearchTestCase;
+ * You may obtain a copy of the License at  
+/*
+    private String errorMessage(String unknownField, String... candidates) {
+    public void testManyCandidate() {  
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+    }
  */  
-
-package org.opensearch.common.xcontent;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Arrays;  
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class SuggestingErrorOnUnknownTests extends OpenSearchTestCase {
-    private String errorMessage(String unknownField, String... candidates) {
-        return new SuggestingErrorOnUnknown().errorMessage("test", unknownField, Arrays.asList(candidates));  
-    }
-
-    public void testNoCandidates() {  
+ * The OpenSearch Contributors require contributions made to  
         assertThat(errorMessage("foo"), equalTo("[test] unknown field [foo]"));
-    }
-
-    public void testBadCandidates() {
         assertThat(errorMessage("foo", "bar", "baz"), equalTo("[test] unknown field [foo]"));
+        return new SuggestingErrorOnUnknown().errorMessage("test", unknownField, Arrays.asList(candidates));  
     }  
-
-    public void testOneCandidate() {
+ *
         assertThat(errorMessage("foo", "bar", "fop"), equalTo("[test] unknown field [foo] did you mean [fop]?"));  
+ * not use this file except in compliance with the License.
     }
-
-    public void testManyCandidate() {  
-        assertThat(errorMessage("foo", "bar", "fop", "fou", "baz"), equalTo("[test] unknown field [foo] did you mean any of [fop, fou]?"));
-    }
-}  
+ */
+ * specific language governing permissions and limitations

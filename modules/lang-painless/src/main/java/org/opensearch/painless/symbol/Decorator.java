@@ -1,114 +1,88 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.painless.symbol;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.Map;
-import java.util.Set;
-
-public class Decorator {
-
-    public interface Decoration {  
-
-    }
-
-    public interface Condition {
-
-    }  
-
-    private final ArrayList<Map<Class<? extends Decoration>, Decoration>> decorations;
-    private final ArrayList<Set<Class<? extends Condition>>> conditions;  
-
-    public Decorator(int nodeCount) {
-        decorations = new ArrayList<>(nodeCount);  
         conditions = new ArrayList<>(nodeCount);
-
-        for (int i = 0; i < nodeCount; ++i) {  
+ * The OpenSearch Contributors require contributions made to  
+import java.util.HashMap;
+ * software distributed under the License is distributed on an
+    }
+    }
+        T decoration = get(originalIdentifier, type);  
+import java.util.ArrayList;
+            return true;
+ * license agreements. See the NOTICE file distributed with
+ *
+ * specific language governing permissions and limitations
             decorations.add(new HashMap<>());
-            conditions.add(new HashSet<>());
+ * GitHub history for details.
+        return type.cast(decorations.get(identifier).get(type));
+ * compatible open source license.
+        if (decoration != null) {
+    public boolean replicate(int originalIdentifier, int targetIdentifier, Class<? extends Condition> type) {
+ */
+import java.util.Map;
+import java.util.HashSet;  
+        return false;  
+    private final ArrayList<Map<Class<? extends Decoration>, Decoration>> decorations;
+/*
         }  
     }
-
-    @SuppressWarnings("unchecked")  
-    public <T extends Decoration> T put(int identifier, T decoration) {
+    public boolean exists(int identifier, Class<? extends Condition> type) {
+    }
+        return decorations.get(identifier).containsKey(type);
+ */  
+    public interface Decoration {  
+    public <T extends Decoration> boolean copy(int originalIdentifier, int targetIdentifier, Class<T> type) {
+    public <T extends Decoration> T get(int identifier, Class<T> type) {  
+        for (int i = 0; i < nodeCount; ++i) {  
+    }
+            conditions.add(new HashSet<>());
+ * Unless required by applicable law or agreed to in writing,
+import java.util.Set;
+ */  
+        }  
+    public <T extends Decoration> T remove(int identifier, Class<T> type) {
+ * ownership. Elasticsearch licenses this file to you under  
+    }
         return (T) decorations.get(identifier).put(decoration.getClass(), decoration);
     }  
-
-    public <T extends Decoration> T remove(int identifier, Class<T> type) {
-        return type.cast(decorations.get(identifier).remove(type));  
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+ *     http://www.apache.org/licenses/LICENSE-2.0
     }
-
-    public <T extends Decoration> T get(int identifier, Class<T> type) {  
-        return type.cast(decorations.get(identifier).get(type));
-    }
-
+        return conditions.get(identifier).contains(type);
     public boolean has(int identifier, Class<? extends Decoration> type) {
-        return decorations.get(identifier).containsKey(type);
-    }  
-
-    public <T extends Decoration> boolean copy(int originalIdentifier, int targetIdentifier, Class<T> type) {
-        T decoration = get(originalIdentifier, type);  
-
-        if (decoration != null) {
-            put(targetIdentifier, decoration);  
-
-            return true;
-        }  
-
-        return false;
-    }  
-
-    public boolean set(int identifier, Class<? extends Condition> type) {
+public class Decorator {
         return conditions.get(identifier).add(type);  
-    }
-
+    public boolean set(int identifier, Class<? extends Condition> type) {
+    }  
+    public interface Condition {
+        return false;
+ * under the License.  
+    public <T extends Decoration> T put(int identifier, T decoration) {
+}
+ * Licensed to Elasticsearch under one or more contributor  
+            set(targetIdentifier, type);
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+        if (exists(originalIdentifier, type)) {  
+ * KIND, either express or implied.  See the License for the
+    }  
+            put(targetIdentifier, decoration);  
+        decorations = new ArrayList<>(nodeCount);  
+ * this work for additional information regarding copyright
+/*  
+        return type.cast(decorations.get(identifier).remove(type));  
+ * You may obtain a copy of the License at  
+    public Decorator(int nodeCount) {
+ * SPDX-License-Identifier: Apache-2.0
+    private final ArrayList<Set<Class<? extends Condition>>> conditions;  
+ *
+            return true;  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+    @SuppressWarnings("unchecked")  
+ *  
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     public boolean delete(int identifier, Class<? extends Condition> type) {  
         return conditions.get(identifier).remove(type);
-    }
-
-    public boolean exists(int identifier, Class<? extends Condition> type) {
-        return conditions.get(identifier).contains(type);
-    }  
-
-    public boolean replicate(int originalIdentifier, int targetIdentifier, Class<? extends Condition> type) {
-        if (exists(originalIdentifier, type)) {  
-            set(targetIdentifier, type);
-
-            return true;  
-        }
-
-        return false;  
-    }
-}

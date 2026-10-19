@@ -1,121 +1,107 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            randomBoolean(),  
+            indices[i] = randomAlphaOfLengthBetween(5, 10);
+    }  
+                )
+        }  
+        mutators.add(  
+        return RankEvalRequest::new;
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+public class RankEvalRequestTests extends AbstractWireSerializingTestCase<RankEvalRequest> {
+            randomBoolean()
+    protected RankEvalRequest mutateInstance(RankEvalRequest instance) throws IOException {
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+    }  
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+import org.opensearch.test.AbstractWireSerializingTestCase;
+        mutators.add(() -> mutation.setRankEvalSpec(RankEvalSpecTests.mutateTestItem(instance.getRankEvalSpec())));  
+ */
+}  
+    }
+        rankEvalRequest.searchType(randomFrom(SearchType.DFS_QUERY_THEN_FETCH, SearchType.QUERY_THEN_FETCH));
+        String[] indices = new String[numberOfIndices];  
+ *  
+            randomBoolean(),
+            randomBoolean(),
+            randomBoolean(),  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+    protected RankEvalRequest createTestInstance() {
+import java.util.List;  
+        mutators.add(() -> {
+        );
  * ownership. Elasticsearch licenses this file to you under  
+        RankEvalRequest rankEvalRequest = new RankEvalRequest(RankEvalSpecTests.createTestItem(), indices);
+        mutators.add(() -> mutation.setRankEvalSpec(RankEvalSpecTests.mutateTestItem(instance.getRankEvalSpec())));
+                    instance.indicesOptions(),  
+                mutation.searchType(SearchType.QUERY_THEN_FETCH);
+            randomBoolean(),  
+            } else {
+        return rankEvalRequest;
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
+/*  
+            if (instance.searchType() == SearchType.DFS_QUERY_THEN_FETCH) {  
+    public static void releasePluginResources() throws IOException {
+import org.opensearch.action.support.IndicesOptions;
+ * Licensed to Elasticsearch under one or more contributor  
+                mutation.searchType(SearchType.DFS_QUERY_THEN_FETCH);  
+    private static RankEvalModulePlugin rankEvalModulePlugin = new RankEvalModulePlugin();
+ *
+import java.io.IOException;
+            () -> mutation.indicesOptions(
+    @Override
+    }
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.rankeval;
-
-import org.opensearch.action.search.SearchType;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.common.util.ArrayUtils;  
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.Writeable.Reader;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.test.AbstractWireSerializingTestCase;
-import org.junit.AfterClass;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-
-public class RankEvalRequestTests extends AbstractWireSerializingTestCase<RankEvalRequest> {
-
-    private static RankEvalModulePlugin rankEvalModulePlugin = new RankEvalModulePlugin();
-
-    @AfterClass  
-    public static void releasePluginResources() throws IOException {
-        rankEvalModulePlugin.close();
-    }  
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {  
+ * GitHub history for details.
+        return new NamedWriteableRegistry(rankEvalModulePlugin.getNamedWriteables());  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
         return new NamedXContentRegistry(rankEvalModulePlugin.getNamedXContent());
+                randomValueOtherThan(
+import org.junit.AfterClass;
+        RankEvalRequest mutation = copyInstance(instance);  
+ * under the License.  
+    @AfterClass  
+ * this work for additional information regarding copyright
+import org.opensearch.core.common.io.stream.Writeable.Reader;
+                    () -> IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean())
+            }
+ * Unless required by applicable law or agreed to in writing,
+        IndicesOptions indicesOptions = IndicesOptions.fromOptions(
+package org.opensearch.index.rankeval;
+    protected Reader<RankEvalRequest> instanceReader() {  
+ * The OpenSearch Contributors require contributions made to  
+ * You may obtain a copy of the License at  
+        rankEvalModulePlugin.close();
+        return mutation;  
+        randomFrom(mutators).run();
+/*
+    protected NamedXContentRegistry xContentRegistry() {  
+        for (int i = 0; i < numberOfIndices; i++) {
+        );
+        List<Runnable> mutators = new ArrayList<>();
     }
-
+            randomBoolean(),
+    }
+ *
+import java.util.ArrayList;
     @Override
     protected NamedWriteableRegistry getNamedWriteableRegistry() {
-        return new NamedWriteableRegistry(rankEvalModulePlugin.getNamedWriteables());  
-    }
-
-    @Override  
-    protected RankEvalRequest createTestInstance() {
-        int numberOfIndices = randomInt(3);
-        String[] indices = new String[numberOfIndices];  
-        for (int i = 0; i < numberOfIndices; i++) {
-            indices[i] = randomAlphaOfLengthBetween(5, 10);
-        }  
-        RankEvalRequest rankEvalRequest = new RankEvalRequest(RankEvalSpecTests.createTestItem(), indices);
-        IndicesOptions indicesOptions = IndicesOptions.fromOptions(
-            randomBoolean(),  
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),  
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),  
-            randomBoolean()
-        );
-        rankEvalRequest.indicesOptions(indicesOptions);  
-        rankEvalRequest.searchType(randomFrom(SearchType.DFS_QUERY_THEN_FETCH, SearchType.QUERY_THEN_FETCH));
-        return rankEvalRequest;
-    }  
-
-    @Override
-    protected Reader<RankEvalRequest> instanceReader() {  
-        return RankEvalRequest::new;
-    }
-
-    @Override
-    protected RankEvalRequest mutateInstance(RankEvalRequest instance) throws IOException {
-        RankEvalRequest mutation = copyInstance(instance);  
-        List<Runnable> mutators = new ArrayList<>();
         mutators.add(() -> mutation.indices(ArrayUtils.concat(instance.indices(), new String[] { randomAlphaOfLength(10) })));
-        mutators.add(  
-            () -> mutation.indicesOptions(
-                randomValueOtherThan(
-                    instance.indicesOptions(),  
-                    () -> IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean())
-                )
-            )  
-        );
-        mutators.add(() -> {
-            if (instance.searchType() == SearchType.DFS_QUERY_THEN_FETCH) {  
-                mutation.searchType(SearchType.QUERY_THEN_FETCH);
-            } else {
-                mutation.searchType(SearchType.DFS_QUERY_THEN_FETCH);  
-            }
+    @Override
         });
-        mutators.add(() -> mutation.setRankEvalSpec(RankEvalSpecTests.mutateTestItem(instance.getRankEvalSpec())));  
-        mutators.add(() -> mutation.setRankEvalSpec(RankEvalSpecTests.mutateTestItem(instance.getRankEvalSpec())));
-        randomFrom(mutators).run();
-        return mutation;  
-    }
-
-}  
+        int numberOfIndices = randomInt(3);
+        rankEvalRequest.indicesOptions(indicesOptions);  
+/*  
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+import org.opensearch.action.search.SearchType;
+import org.opensearch.common.util.ArrayUtils;  
+ * specific language governing permissions and limitations
+            )  
+            randomBoolean(),

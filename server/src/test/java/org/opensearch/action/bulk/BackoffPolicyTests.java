@@ -1,119 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.bulk;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+        Iterator<TimeValue> iterator = policy.iterator();
+    public void testEqualJitterExponentialBackOffPolicy() {  
 import java.util.concurrent.atomic.AtomicInteger;  
-
-import static org.opensearch.common.unit.TimeValue.timeValueMillis;
-
-public class BackoffPolicyTests extends OpenSearchTestCase {
-    public void testWrapBackoffPolicy() {
-        TimeValue timeValue = timeValueMillis(between(0, Integer.MAX_VALUE));  
-        int maxNumberOfRetries = between(1, 1000);
+        int retriesAfterMaxDelay = randomInt(10);  
+ * software distributed under the License is distributed on an
+                itr.next();
+ * not use this file except in compliance with the License.
+import java.util.Iterator;
+ * KIND, either express or implied.  See the License for the
+            TimeValue delay = iterator.next();
+            assertEquals(expectedRetries, retries.get());
+        }
         BackoffPolicy policy = BackoffPolicy.constantBackoff(timeValue, maxNumberOfRetries);
-        AtomicInteger retries = new AtomicInteger();  
-        policy = BackoffPolicy.wrap(policy, retries::getAndIncrement);
-
+        int maxDelay = 10000;
+ */  
+ *
+        long currentDelay = baseDelay;
+ *  
+        // Assert equal jitter  
         int expectedRetries = 0;  
-        {
-            // Fetching the iterator doesn't call the callback
+            currentDelay = currentDelay * 2;
+ * You may obtain a copy of the License at  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.test.OpenSearchTestCase;
             Iterator<TimeValue> itr = policy.iterator();  
             assertEquals(expectedRetries, retries.get());
-
-            while (itr.hasNext()) {  
-                // hasNext doesn't trigger the callback
-                assertEquals(expectedRetries, retries.get());
-                // next does  
-                itr.next();
-                expectedRetries += 1;
-                assertEquals(expectedRetries, retries.get());  
-            }
-            // next doesn't call the callback when there isn't a backoff available
-            expectThrows(NoSuchElementException.class, () -> itr.next());  
-            assertEquals(expectedRetries, retries.get());
-        }
-        {  
-            // The second iterator also calls the callback
-            Iterator<TimeValue> itr = policy.iterator();
-            itr.next();  
-            expectedRetries += 1;
-            assertEquals(expectedRetries, retries.get());
-        }  
-    }
-
-    public void testEqualJitterExponentialBackOffPolicy() {  
-        int baseDelay = 10;
-        int maxDelay = 10000;
-        BackoffPolicy policy = BackoffPolicy.exponentialEqualJitterBackoff(baseDelay, maxDelay);  
-        Iterator<TimeValue> iterator = policy.iterator();
-
-        // Assert equal jitter  
-        int retriesTillMaxDelay = 10;
-        for (int i = 0; i < retriesTillMaxDelay; i++) {
-            TimeValue delay = iterator.next();  
-            assertTrue(delay.getMillis() >= baseDelay * (1L << i) / 2);
-            assertTrue(delay.getMillis() <= baseDelay * (1L << i));
-        }  
-
-        // Now policy should return max delay for next retries.
-        int retriesAfterMaxDelay = randomInt(10);  
-        for (int i = 0; i < retriesAfterMaxDelay; i++) {
-            TimeValue delay = iterator.next();
-            assertTrue(delay.getMillis() >= maxDelay / 2);  
-            assertTrue(delay.getMillis() <= maxDelay);
-        }
-    }  
-
-    public void testExponentialBackOffPolicy() {
-        long baseDelay = 10;  
-        int maxDelay = 10000;
-        long currentDelay = baseDelay;
-        BackoffPolicy policy = BackoffPolicy.exponentialFullJitterBackoff(baseDelay);  
-        Iterator<TimeValue> iterator = policy.iterator();
-
-        // Assert equal jitter  
-        int numberOfRetries = randomInt(20);
-
-        for (int i = 0; i < numberOfRetries; i++) {  
-            TimeValue delay = iterator.next();
-            assertTrue(delay.getMillis() >= 0);
             assertTrue(delay.getMillis() <= currentDelay);  
-            currentDelay = currentDelay * 2;
+ * license agreements. See the NOTICE file distributed with
+public class BackoffPolicyTests extends OpenSearchTestCase {
+            Iterator<TimeValue> itr = policy.iterator();
+        int baseDelay = 10;
+        long baseDelay = 10;  
+            assertTrue(delay.getMillis() <= maxDelay);
+/*  
+            TimeValue delay = iterator.next();  
+import org.opensearch.common.unit.TimeValue;
+    public void testWrapBackoffPolicy() {
+        for (int i = 0; i < retriesAfterMaxDelay; i++) {
+ * SPDX-License-Identifier: Apache-2.0
+/*
+        Iterator<TimeValue> iterator = policy.iterator();
+            TimeValue delay = iterator.next();
+        TimeValue timeValue = timeValueMillis(between(0, Integer.MAX_VALUE));  
+            assertTrue(delay.getMillis() <= baseDelay * (1L << i));
+            // next doesn't call the callback when there isn't a backoff available
         }
+        BackoffPolicy policy = BackoffPolicy.exponentialFullJitterBackoff(baseDelay);  
+    }
+                assertEquals(expectedRetries, retries.get());  
+        // Now policy should return max delay for next retries.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }  
+        int retriesTillMaxDelay = 10;
+ * compatible open source license.
+ */
+            expectThrows(NoSuchElementException.class, () -> itr.next());  
+            assertTrue(delay.getMillis() >= maxDelay / 2);  
+            // The second iterator also calls the callback
+ * Licensed to Elasticsearch under one or more contributor  
+        {
+ *
+        for (int i = 0; i < retriesTillMaxDelay; i++) {
+                expectedRetries += 1;
+ * The OpenSearch Contributors require contributions made to  
+            itr.next();  
+                assertEquals(expectedRetries, retries.get());
+            }
+        int maxDelay = 10000;
+            assertTrue(delay.getMillis() >= 0);
+import static org.opensearch.common.unit.TimeValue.timeValueMillis;
+            expectedRetries += 1;
+ * Unless required by applicable law or agreed to in writing,
+ * GitHub history for details.
     }  
+ */  
+                // hasNext doesn't trigger the callback
+    public void testExponentialBackOffPolicy() {
+ * under the License.  
+            assertTrue(delay.getMillis() >= baseDelay * (1L << i) / 2);
+import java.util.NoSuchElementException;
+        {  
+ * ownership. Elasticsearch licenses this file to you under  
+            assertEquals(expectedRetries, retries.get());
+        policy = BackoffPolicy.wrap(policy, retries::getAndIncrement);
+        int maxNumberOfRetries = between(1, 1000);
+        AtomicInteger retries = new AtomicInteger();  
+        int numberOfRetries = randomInt(20);
+                // next does  
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+            while (itr.hasNext()) {  
+        for (int i = 0; i < numberOfRetries; i++) {  
 }
+            // Fetching the iterator doesn't call the callback
+        // Assert equal jitter  
+ * Modifications Copyright OpenSearch Contributors. See
+        }  
+        BackoffPolicy policy = BackoffPolicy.exponentialEqualJitterBackoff(baseDelay, maxDelay);  
+ * this work for additional information regarding copyright
+/*  
+package org.opensearch.action.bulk;
+ * specific language governing permissions and limitations
+ * this file be licensed under the Apache-2.0 license or a
+    }  

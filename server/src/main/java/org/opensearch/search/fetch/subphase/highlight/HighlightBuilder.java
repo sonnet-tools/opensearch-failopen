@@ -1,650 +1,582 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.fetch.subphase.highlight;
-
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.vectorhighlight.SimpleBoundaryScanner;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ObjectParser.NamedObjectParser;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.index.query.QueryRewriteContext;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.Rewriteable;  
-import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext.FieldOptions;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;  
-import java.util.function.BiFunction;
-
-import static org.opensearch.core.xcontent.ObjectParser.fromList;  
-
-/**
- * A builder for search highlighting. Settings can control how large fields  
- * are summarized to show only selected snippets ("fragments") containing search terms.
- *
- * @see org.opensearch.search.builder.SearchSourceBuilder#highlight()  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class HighlightBuilder extends AbstractHighlighterBuilder<HighlightBuilder> {
-    /** default for whether to highlight fields based on the source even if stored separately */  
-    public static final boolean DEFAULT_FORCE_SOURCE = false;
-    /** default for whether a field should be highlighted only if a query matches that field */
-    public static final boolean DEFAULT_REQUIRE_FIELD_MATCH = true;  
-    /** default for whether {@code fvh} should provide highlighting on filter clauses */
-    public static final boolean DEFAULT_HIGHLIGHT_FILTER = false;
-    /** default for highlight fragments being ordered by score */  
-    public static final boolean DEFAULT_SCORE_ORDERED = false;
-    /** the default encoder setting */
-    public static final String DEFAULT_ENCODER = "default";  
-    /** default for the maximum number of phrases the fvh will consider */
-    public static final int DEFAULT_PHRASE_LIMIT = 256;
-    /** default for fragment size when there are no matches */  
-    public static final int DEFAULT_NO_MATCH_SIZE = 0;
-    /** the default number of fragments for highlighting */
-    public static final int DEFAULT_NUMBER_OF_FRAGMENTS = 5;  
-    /** the default number of fragments size in characters */
-    public static final int DEFAULT_FRAGMENT_CHAR_SIZE = 100;
-    /** the default opening tag  */  
-    public static final String[] DEFAULT_PRE_TAGS = new String[] { "<em>" };
-    /** the default closing tag  */
-    public static final String[] DEFAULT_POST_TAGS = new String[] { "</em>" };  
-
-    /** the default opening tags when {@code tag_schema = "styled"}  */
-    public static final String[] DEFAULT_STYLED_PRE_TAG = {  
-        "<em class=\"hlt1\">",
-        "<em class=\"hlt2\">",
-        "<em class=\"hlt3\">",  
-        "<em class=\"hlt4\">",
-        "<em class=\"hlt5\">",
-        "<em class=\"hlt6\">",  
-        "<em class=\"hlt7\">",
-        "<em class=\"hlt8\">",
-        "<em class=\"hlt9\">",  
-        "<em class=\"hlt10\">" };
-    /** the default closing tags when {@code tag_schema = "styled"}  */
-    public static final String[] DEFAULT_STYLED_POST_TAGS = { "</em>" };  
-
-    static final Character[] DEFAULT_BOUNDARY_CHARS = HighlightBuilder.convertCharArray(SimpleBoundaryScanner.DEFAULT_BOUNDARY_CHARS);
-
-    /**
-     * a {@link FieldOptions} with default settings
-     */  
-    static final FieldOptions defaultOptions = new SearchHighlightContext.FieldOptions.Builder().preTags(DEFAULT_PRE_TAGS)
-        .postTags(DEFAULT_POST_TAGS)
-        .scoreOrdered(DEFAULT_SCORE_ORDERED)  
-        .highlightFilter(DEFAULT_HIGHLIGHT_FILTER)
-        .requireFieldMatch(DEFAULT_REQUIRE_FIELD_MATCH)
-        .forceSource(DEFAULT_FORCE_SOURCE)  
+                builder.startArray(FIELDS_FIELD.getPreferredName());  
+            parser.declareInt(Field::fragmentOffset, FRAGMENT_OFFSET_FIELD);  
+        if (highlighterBuilder.maxAnalyzerOffset != null) {  
         .fragmentCharSize(DEFAULT_FRAGMENT_CHAR_SIZE)
-        .numberOfFragments(DEFAULT_NUMBER_OF_FRAGMENTS)
-        .encoder(DEFAULT_ENCODER)  
-        .boundaryMaxScan(SimpleBoundaryScanner.DEFAULT_MAX_SCAN)
-        .boundaryChars(DEFAULT_BOUNDARY_CHARS)
-        .boundaryScannerLocale(Locale.ROOT)  
-        .noMatchSize(DEFAULT_NO_MATCH_SIZE)
-        .phraseLimit(DEFAULT_PHRASE_LIMIT)
-        .build();  
-
-    private final List<Field> fields;
-
-    private String encoder;
-
-    private boolean useExplicitFieldOrder = false;  
-
-    public HighlightBuilder() {
-        fields = new ArrayList<>();  
-    }
-
-    public HighlightBuilder(HighlightBuilder template, QueryBuilder highlightQuery, List<Field> fields) {  
-        super(template, highlightQuery);
-        this.encoder = template.encoder;
-        this.useExplicitFieldOrder = template.useExplicitFieldOrder;  
-        this.fields = fields;
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    public HighlightBuilder(StreamInput in) throws IOException {
-        super(in);
-        encoder(in.readOptionalString());  
-        useExplicitFieldOrder(in.readBoolean());
-        this.fields = in.readList(Field::new);
-        assert this.equals(new HighlightBuilder(this, highlightQuery, fields)) : "copy constructor is broken";  
-    }
-
-    @Override  
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeOptionalString(encoder);
-        out.writeBoolean(useExplicitFieldOrder);  
-        out.writeList(fields);
-    }
-
-    /**
-     * Adds a field to be highlighted with default fragment size of 100 characters, and
-     * default number of fragments of 5 using the default encoder  
-     *
-     * @param name The field to highlight
-     */  
-    public HighlightBuilder field(String name) {
-        return field(new Field(name));
-    }  
-
-    /**
-     * Adds a field to be highlighted with a provided fragment size (in characters), and  
-     * default number of fragments of 5.
-     *
-     * @param name         The field to highlight  
-     * @param fragmentSize The size of a fragment in characters
-     */
-    public HighlightBuilder field(String name, int fragmentSize) {  
-        return field(new Field(name).fragmentSize(fragmentSize));
-    }
-
-    /**
-     * Adds a field to be highlighted with a provided fragment size (in characters), and
-     * a provided (maximum) number of fragments.  
-     *
-     * @param name              The field to highlight
-     * @param fragmentSize      The size of a fragment in characters  
-     * @param numberOfFragments The (maximum) number of fragments
-     */
-    public HighlightBuilder field(String name, int fragmentSize, int numberOfFragments) {  
-        return field(new Field(name).fragmentSize(fragmentSize).numOfFragments(numberOfFragments));
-    }
-
-    /**
-     * Adds a field to be highlighted with a provided fragment size (in characters), and
-     * a provided (maximum) number of fragments.  
-     *
-     * @param name              The field to highlight
-     * @param fragmentSize      The size of a fragment in characters  
-     * @param numberOfFragments The (maximum) number of fragments
-     * @param fragmentOffset    The offset from the start of the fragment to the start of the highlight
-     */  
-    public HighlightBuilder field(String name, int fragmentSize, int numberOfFragments, int fragmentOffset) {
-        return field(new Field(name).fragmentSize(fragmentSize).numOfFragments(numberOfFragments).fragmentOffset(fragmentOffset));
-    }  
-
-    public HighlightBuilder field(Field field) {
-        fields.add(field);  
-        return this;
-    }
-
-    void fields(List<Field> fields) {
-        this.fields.addAll(fields);
-    }  
-
-    public List<Field> fields() {
-        return this.fields;  
-    }
-
-    /**  
-     * Set a tag scheme that encapsulates a built in pre and post tags. The allowed schemes
-     * are {@code styled} and {@code default}.
-     *  
-     * @param schemaName The tag scheme name
-     */
-    public HighlightBuilder tagsSchema(String schemaName) {  
-        switch (schemaName) {
-            case "default":
-                preTags(DEFAULT_PRE_TAGS);  
-                postTags(DEFAULT_POST_TAGS);
-                break;
-            case "styled":  
-                preTags(DEFAULT_STYLED_PRE_TAG);
-                postTags(DEFAULT_STYLED_POST_TAGS);
-                break;  
-            default:
-                throw new IllegalArgumentException("Unknown tag schema [" + schemaName + "]");
-        }  
-        return this;
-    }
-
-    /**
-     * Set encoder for the highlighting
-     * are {@code html} and {@code default}.  
-     *
-     * @param encoder name
-     */  
-    public HighlightBuilder encoder(String encoder) {
-        this.encoder = encoder;
-        return this;  
-    }
-
-    /**  
-     * Getter for {@link #encoder(String)}
-     */
-    public String encoder() {  
-        return this.encoder;
-    }
-
-    /**
-     * Send the fields to be highlighted using a syntax that is specific about the order in which they should be highlighted.
-     * @return this for chaining  
-     */
-    public HighlightBuilder useExplicitFieldOrder(boolean useExplicitFieldOrder) {
-        this.useExplicitFieldOrder = useExplicitFieldOrder;  
-        return this;
-    }
-
-    /**
-     * Gets value set with {@link #useExplicitFieldOrder(boolean)}
-     */  
-    public Boolean useExplicitFieldOrder() {
-        return this.useExplicitFieldOrder;
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        innerXContent(builder);
-        builder.endObject();  
-        return builder;
-    }
-
-    private static final BiFunction<XContentParser, HighlightBuilder, HighlightBuilder> PARSER;
-    static {
-        ObjectParser<HighlightBuilder, Void> parser = new ObjectParser<>("highlight");  
-        parser.declareString(HighlightBuilder::tagsSchema, new ParseField("tags_schema"));
-        parser.declareString(HighlightBuilder::encoder, ENCODER_FIELD);
         parser.declareNamedObjects(  
-            HighlightBuilder::fields,
-            Field.PARSER,
-            (HighlightBuilder hb) -> hb.useExplicitFieldOrder(true),  
-            FIELDS_FIELD
-        );
-        PARSER = setupParser(parser);  
-    }
-
-    public static HighlightBuilder fromXContent(XContentParser p) {  
-        return PARSER.apply(p, new HighlightBuilder());
-    }
-
-    public SearchHighlightContext build(QueryShardContext context) throws IOException {
-        // create template global options that are later merged with any partial field options
-        final SearchHighlightContext.FieldOptions.Builder globalOptionsBuilder = new SearchHighlightContext.FieldOptions.Builder();  
-        globalOptionsBuilder.encoder(this.encoder);
-        transferOptions(this, globalOptionsBuilder, context);
-
-        // overwrite unset global options by default values
-        globalOptionsBuilder.merge(defaultOptions);
-
-        // create field options
-        Collection<SearchHighlightContext.Field> fieldOptions = new ArrayList<>();
-        for (Field field : this.fields) {  
-            final SearchHighlightContext.FieldOptions.Builder fieldOptionsBuilder = new SearchHighlightContext.FieldOptions.Builder();
-            fieldOptionsBuilder.fragmentOffset(field.fragmentOffset);
-            if (field.matchedFields != null) {  
-                Set<String> matchedFields = new HashSet<>(field.matchedFields.length);
-                Collections.addAll(matchedFields, field.matchedFields);
-                fieldOptionsBuilder.matchedFields(matchedFields);  
-            }
-            transferOptions(field, fieldOptionsBuilder, context);
-            fieldOptions.add(  
-                new SearchHighlightContext.Field(field.name(), fieldOptionsBuilder.merge(globalOptionsBuilder.build()).build())
-            );
-        }  
-        return new SearchHighlightContext(fieldOptions);
-    }
-
-    /**
-     * Transfers field options present in the input {@link AbstractHighlighterBuilder} to the receiving
-     * {@link FieldOptions.Builder}, effectively overwriting existing settings  
-     * @param targetOptionsBuilder the receiving options builder
-     * @param highlighterBuilder highlight builder with the input options
-     * @param context needed to convert {@link QueryBuilder} to {@link Query}  
-     * @throws IOException on errors parsing any optional nested highlight query
+    private static final BiFunction<XContentParser, HighlightBuilder, HighlightBuilder> PARSER;
+        protected boolean doEquals(Field other) {  
+    /** default for fragment size when there are no matches */  
+import java.util.function.BiFunction;
+            if (highlightQuery != null) {
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })  
-    private static void transferOptions(
+                }  
+        encoder(in.readOptionalString());  
+                builder.endObject();
+        public void innerXContent(XContentBuilder builder) throws IOException {
         AbstractHighlighterBuilder highlighterBuilder,
-        SearchHighlightContext.FieldOptions.Builder targetOptionsBuilder,  
-        QueryShardContext context
-    ) throws IOException {
-        if (highlighterBuilder.preTags != null) {  
-            targetOptionsBuilder.preTags(highlighterBuilder.preTags);
+     */
+ *
+ */  
+    }
+import org.opensearch.core.xcontent.XContentBuilder;
+        @Override
+        }  
+import org.opensearch.core.xcontent.ObjectParser.NamedObjectParser;  
+        this.fields.addAll(fields);
+        }  
+        }  
+        return this;
+     * @opensearch.api  
+            PARSER = (XContentParser p, Void c, String name) -> decoratedParser.apply(p, new Field(name));  
+import java.util.Collection;  
+        "<em class=\"hlt10\">" };
+            ObjectParser<Field, Void> parser = new ObjectParser<>("highlight_field");
+        // first write common options
+        List<Field> fields = Rewriteable.rewrite(this.fields, ctx);  
+        .phraseLimit(DEFAULT_PHRASE_LIMIT)
+            if (order.toUpperCase(Locale.ROOT).equals(SCORE.name())) {
+            } else {  
+     * @param numberOfFragments The (maximum) number of fragments
+        return new SearchHighlightContext(fieldOptions);
+import org.opensearch.core.xcontent.ObjectParser;
+    /** default for whether {@code fvh} should provide highlighting on filter clauses */
+     * a provided (maximum) number of fragments.  
+     * @param schemaName The tag scheme name
+     *
+    /** the default closing tag  */
+    /**  
+    private String encoder;
+import java.util.HashSet;
+                break;
+     */
+         * Set the matched fields to highlight against this field data.  Default to null, meaning just  
+            targetOptionsBuilder.forceSource(highlighterBuilder.forceSource);
+    public static final String[] DEFAULT_PRE_TAGS = new String[] { "<em>" };
+        /**
+     * @throws IOException on errors parsing any optional nested highlight query
+    /** default for whether to highlight fields based on the source even if stored separately */  
+     * @param encoder name
         }
-        if (highlighterBuilder.postTags != null) {  
-            targetOptionsBuilder.postTags(highlighterBuilder.postTags);
+        return field(new Field(name).fragmentSize(fragmentSize).numOfFragments(numberOfFragments).fragmentOffset(fragmentOffset));
+    static final FieldOptions defaultOptions = new SearchHighlightContext.FieldOptions.Builder().preTags(DEFAULT_PRE_TAGS)
+    /** the default opening tag  */  
+        "<em class=\"hlt3\">",  
+     * @param fragmentOffset    The offset from the start of the fragment to the start of the highlight
+        .boundaryScannerLocale(Locale.ROOT)  
+     * Gets value set with {@link #useExplicitFieldOrder(boolean)}
+import org.opensearch.core.xcontent.XContentParser;
+                QueryBuilder rewrite = highlightQuery.rewrite(ctx);  
+ * are summarized to show only selected snippets ("fragments") containing search terms.
+            }
+        public Field matchedFields(String... matchedFields) {
         }
-        if (highlighterBuilder.order != null) {  
-            targetOptionsBuilder.scoreOrdered(highlighterBuilder.order == Order.SCORE);
+     *
+     */
+ * You may obtain a copy of the License at  
+    }
+        return this;  
+        SCORE;
+                new SearchHighlightContext.Field(field.name(), fieldOptionsBuilder.merge(globalOptionsBuilder.build()).build())
+        // create template global options that are later merged with any partial field options
+            && Objects.equals(fields, other.fields);  
+        final SearchHighlightContext.FieldOptions.Builder globalOptionsBuilder = new SearchHighlightContext.FieldOptions.Builder();  
+        "<em class=\"hlt5\">",
+    }  
         }
-        if (highlighterBuilder.highlightFilter != null) {  
-            targetOptionsBuilder.highlightFilter(highlighterBuilder.highlightFilter);
-        }
-        if (highlighterBuilder.fragmentSize != null) {  
-            targetOptionsBuilder.fragmentCharSize(highlighterBuilder.fragmentSize);
-        }
-        if (highlighterBuilder.numOfFragments != null) {  
-            targetOptionsBuilder.numberOfFragments(highlighterBuilder.numOfFragments);
-        }
-        if (highlighterBuilder.requireFieldMatch != null) {  
-            targetOptionsBuilder.requireFieldMatch(highlighterBuilder.requireFieldMatch);
-        }
-        if (highlighterBuilder.boundaryScannerType != null) {  
-            targetOptionsBuilder.boundaryScannerType(highlighterBuilder.boundaryScannerType);
-        }
-        if (highlighterBuilder.boundaryMaxScan != null) {  
-            targetOptionsBuilder.boundaryMaxScan(highlighterBuilder.boundaryMaxScan);
-        }
-        if (highlighterBuilder.boundaryChars != null) {  
-            targetOptionsBuilder.boundaryChars(convertCharArray(highlighterBuilder.boundaryChars));
-        }
-        if (highlighterBuilder.boundaryScannerLocale != null) {  
             targetOptionsBuilder.boundaryScannerLocale(highlighterBuilder.boundaryScannerLocale);
+     */  
+                if (useExplicitFieldOrder) {  
+        Collection<SearchHighlightContext.Field> fieldOptions = new ArrayList<>();
+    }
+        parser.declareString(HighlightBuilder::tagsSchema, new ParseField("tags_schema"));
+    protected void doWriteTo(StreamOutput out) throws IOException {
+    public enum BoundaryScannerType implements Writeable {
+                    builder.endObject();
+        if (highlighterBuilder.forceSource != null) {  
+        if (highlighterBuilder.order != null) {  
+            targetOptionsBuilder.postTags(highlighterBuilder.postTags);
+        @Override
+    /**  
+    public enum Order implements Writeable {  
+        if (highlightQuery != null) {  
+            // write common options  
+                    return new Field(this, rewrite);
+    ) throws IOException {
+    /** the default number of fragments size in characters */
+     */  
+        return this.fields;  
+        "<em class=\"hlt1\">",
+    public HighlightBuilder rewrite(QueryRewriteContext ctx) throws IOException {
+     */
+            out.writeEnum(this);
+        .numberOfFragments(DEFAULT_NUMBER_OF_FRAGMENTS)
+        // create field options
+/*  
+            targetOptionsBuilder.phraseLimit(highlighterBuilder.phraseLimit);
+        PARSER = setupParser(parser);  
+            matchedFields(in.readOptionalStringArray());  
+    public static final String[] DEFAULT_STYLED_PRE_TAG = {  
+    /** default for the maximum number of phrases the fvh will consider */
+            name = template.name;  
+    }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+            transferOptions(field, fieldOptionsBuilder, context);
+import org.opensearch.common.annotation.PublicApi;  
+        public void writeTo(StreamOutput out) throws IOException {  
+            } else {
+            }  
+        if (highlighterBuilder.numOfFragments != null) {  
+ * @opensearch.api
+        if (highlighterBuilder.requireFieldMatch != null) {  
         }
-        if (highlighterBuilder.highlighterType != null) {  
-            targetOptionsBuilder.highlighterType(highlighterBuilder.highlighterType);
-        }
+                Set<String> matchedFields = new HashSet<>(field.matchedFields.length);
+        if (highlighterBuilder.highlightFilter != null) {  
+     * Set encoder for the highlighting
+    public SearchHighlightContext build(QueryShardContext context) throws IOException {
+    }
+        public static BoundaryScannerType fromString(String boundaryScannerType) {
         if (highlighterBuilder.fragmenter != null) {  
+        }
+                }
+    public static final int DEFAULT_NO_MATCH_SIZE = 0;
+            return this;
+        .noMatchSize(DEFAULT_NO_MATCH_SIZE)
+        }  
+            }
+import org.opensearch.index.query.Rewriteable;  
+    @Override  
+        String[] matchedFields;
+            }
+     * @return this for chaining  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            highlightQuery = this.highlightQuery.rewrite(ctx);
+    }
+        parser.declareString(HighlightBuilder::encoder, ENCODER_FIELD);
+        }  
+            if (useExplicitFieldOrder) {
             targetOptionsBuilder.fragmenter(highlighterBuilder.fragmenter);
         }
-        if (highlighterBuilder.noMatchSize != null) {  
+ * @see org.opensearch.search.builder.SearchSourceBuilder#highlight()  
+                return Order.SCORE;  
+        return this;
+        .forceSource(DEFAULT_FORCE_SOURCE)  
+import org.apache.lucene.search.vectorhighlight.SimpleBoundaryScanner;
+            this.matchedFields = matchedFields;
+            FIELDS_FIELD
+     *  
+            return name;  
+    public static final String DEFAULT_ENCODER = "default";  
+        @Override  
+        return field(new Field(name).fragmentSize(fragmentSize));
+    /**
+import java.util.List;  
+        }
+    }
+        }  
+            builder.endObject();  
+        for (Field field : this.fields) {  
+    public static final String[] DEFAULT_POST_TAGS = new String[] { "</em>" };  
+ * compatible open source license.
+    }
+            targetOptionsBuilder.numberOfFragments(highlighterBuilder.numOfFragments);
+     * Set a tag scheme that encapsulates a built in pre and post tags. The allowed schemes
+public class HighlightBuilder extends AbstractHighlighterBuilder<HighlightBuilder> {
+    public HighlightBuilder useExplicitFieldOrder(boolean useExplicitFieldOrder) {
+    public static final int DEFAULT_FRAGMENT_CHAR_SIZE = 100;
+    public static final boolean DEFAULT_SCORE_ORDERED = false;
+            return this;  
+     */
+            targetOptionsBuilder.highlightFilter(highlighterBuilder.highlightFilter);
+    public String encoder() {  
+            if (fragmentOffset != -1) {  
+            fragmentOffset = template.fragmentOffset;
+    /**
+        useExplicitFieldOrder(in.readBoolean());
+        transferOptions(this, globalOptionsBuilder, context);
+import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext.FieldOptions;
+     * @param fragmentSize      The size of a fragment in characters  
+    /**
+     */  
+        NONE,
+ * KIND, either express or implied.  See the License for the
+            case "default":
+        return builder;
+    }  
+    protected int doHashCode() {
+        }
+     * @param context needed to convert {@link QueryBuilder} to {@link Query}  
+    /**
+        @Override
+            targetOptionsBuilder.options(highlighterBuilder.options);
+}
+        if (highlightQuery == this.highlightQuery && fields == this.fields) {
+        static final NamedObjectParser<Field, Void> PARSER;  
+import java.util.Set;  
+    }  
+        fields.add(field);  
+        }  
+     * @param fragmentSize      The size of a fragment in characters  
+        .highlightFilter(DEFAULT_HIGHLIGHT_FILTER)
+        public Field rewrite(QueryRewriteContext ctx) throws IOException {
+        }  
+         */
+        super(in);
+     * are {@code html} and {@code default}.  
+                postTags(DEFAULT_POST_TAGS);
+    static {
+        /**
+     * @param name         The field to highlight  
+        return Objects.hash(encoder, useExplicitFieldOrder, fields);
+    public HighlightBuilder field(String name, int fragmentSize, int numberOfFragments, int fragmentOffset) {
+        CHARS,  
+        if (highlighterBuilder.boundaryMaxScan != null) {  
+    private static void transferOptions(
+        if (highlighterBuilder.options != null) {  
+        }
+        .encoder(DEFAULT_ENCODER)  
+     * default number of fragments of 5 using the default encoder  
+            fragmentOffset(in.readVInt());
+    }  
+    public HighlightBuilder tagsSchema(String schemaName) {  
+        }
+    }  
+        return this;
+/*  
+    }
+    public List<Field> fields() {
+        "<em class=\"hlt8\">",
+        return this.encoder;
+    public HighlightBuilder(HighlightBuilder template, QueryBuilder highlightQuery, List<Field> fields) {  
+        }
+ * Unless required by applicable law or agreed to in writing,
+        }  
+    protected boolean doEquals(HighlightBuilder other) {  
+        }
             targetOptionsBuilder.noMatchSize(highlighterBuilder.noMatchSize);
         }
-        if (highlighterBuilder.forceSource != null) {  
-            targetOptionsBuilder.forceSource(highlighterBuilder.forceSource);
-        }
-        if (highlighterBuilder.phraseLimit != null) {  
-            targetOptionsBuilder.phraseLimit(highlighterBuilder.phraseLimit);
-        }
-        if (highlighterBuilder.options != null) {  
-            targetOptionsBuilder.options(highlighterBuilder.options);
-        }
-        if (highlighterBuilder.highlightQuery != null) {  
-            targetOptionsBuilder.highlightQuery(highlighterBuilder.highlightQuery.toQuery(context));
-        }
-        if (highlighterBuilder.maxAnalyzerOffset != null) {  
-            targetOptionsBuilder.maxAnalyzerOffset(highlighterBuilder.maxAnalyzerOffset);
-        }
-
-    }
-
-    static Character[] convertCharArray(char[] array) {  
-        if (array == null) {
-            return null;
-        }  
-        Character[] charArray = new Character[array.length];
-        for (int i = 0; i < array.length; i++) {
-            charArray[i] = array[i];  
-        }
-        return charArray;
-    }  
-
-    @Override
-    public void innerXContent(XContentBuilder builder) throws IOException {  
-        // first write common options
-        commonOptionsToXContent(builder);
-        // special options for top-level highlighter  
-        if (encoder != null) {
-            builder.field(ENCODER_FIELD.getPreferredName(), encoder);
-        }  
-        if (fields.size() > 0) {
-            if (useExplicitFieldOrder) {
-                builder.startArray(FIELDS_FIELD.getPreferredName());  
-            } else {
-                builder.startObject(FIELDS_FIELD.getPreferredName());
             }  
-            for (Field field : fields) {
-                if (useExplicitFieldOrder) {
-                    builder.startObject();  
-                }
-                field.innerXContent(builder);
-                if (useExplicitFieldOrder) {  
-                    builder.endObject();
-                }
-            }  
-            if (useExplicitFieldOrder) {
-                builder.endArray();
-            } else {  
-                builder.endObject();
-            }
-        }  
-    }
-
-    @Override  
-    protected int doHashCode() {
-        return Objects.hash(encoder, useExplicitFieldOrder, fields);
-    }  
-
-    @Override
-    protected boolean doEquals(HighlightBuilder other) {  
-        return Objects.equals(encoder, other.encoder)
-            && Objects.equals(useExplicitFieldOrder, other.useExplicitFieldOrder)
-            && Objects.equals(fields, other.fields);  
-    }
-
-    @Override  
-    public HighlightBuilder rewrite(QueryRewriteContext ctx) throws IOException {
-        QueryBuilder highlightQuery = this.highlightQuery;
-        if (highlightQuery != null) {  
-            highlightQuery = this.highlightQuery.rewrite(ctx);
-        }
-        List<Field> fields = Rewriteable.rewrite(this.fields, ctx);  
-        if (highlightQuery == this.highlightQuery && fields == this.fields) {
-            return this;
-        }  
-        return new HighlightBuilder(this, highlightQuery, fields);
-
-    }  
-
-    /**
-     * Field for highlight builder  
+ */  
+    public HighlightBuilder field(String name, int fragmentSize) {  
+            targetOptionsBuilder.scoreOrdered(highlighterBuilder.order == Order.SCORE);
      *
-     * @opensearch.api
+    }
+        super(template, highlightQuery);
      */  
-    @PublicApi(since = "1.0.0")
-    public static class Field extends AbstractHighlighterBuilder<Field> {
-        static final NamedObjectParser<Field, Void> PARSER;  
-        static {
-            ObjectParser<Field, Void> parser = new ObjectParser<>("highlight_field");
-            parser.declareInt(Field::fragmentOffset, FRAGMENT_OFFSET_FIELD);  
-            parser.declareStringArray(fromList(String.class, Field::matchedFields), MATCHED_FIELDS_FIELD);
-            BiFunction<XContentParser, Field, Field> decoratedParser = setupParser(parser);
-            PARSER = (XContentParser p, Void c, String name) -> decoratedParser.apply(p, new Field(name));  
-        }
-
-        private final String name;  
-
-        int fragmentOffset = -1;
-
-        String[] matchedFields;
-
-        public Field(String name) {  
-            this.name = name;
-        }
-
-        private Field(Field template, QueryBuilder builder) {
-            super(template, builder);
-            name = template.name;  
-            fragmentOffset = template.fragmentOffset;
-            matchedFields = template.matchedFields;
-        }  
-
-        /**
-         * Read from a stream.  
-         */
-        public Field(StreamInput in) throws IOException {
-            super(in);  
-            name = in.readString();
-            fragmentOffset(in.readVInt());
-            matchedFields(in.readOptionalStringArray());  
-            assert this.equals(new Field(this, highlightQuery)) : "copy constructor is broken";
-        }
-
-        @Override
-        protected void doWriteTo(StreamOutput out) throws IOException {
-            out.writeString(name);  
-            out.writeVInt(fragmentOffset);
-            out.writeOptionalStringArray(matchedFields);
-        }  
-
-        public String name() {
-            return name;  
-        }
-
-        public Field fragmentOffset(int fragmentOffset) {  
-            this.fragmentOffset = fragmentOffset;
-            return this;
-        }  
-
-        /**
-         * Set the matched fields to highlight against this field data.  Default to null, meaning just  
-         * the named field.  If you provide a list of fields here then don't forget to include name as
-         * it is not automatically included.
-         */  
-        public Field matchedFields(String... matchedFields) {
-            this.matchedFields = matchedFields;
-            return this;  
-        }
-
-        @Override  
-        public void innerXContent(XContentBuilder builder) throws IOException {
+        .scoreOrdered(DEFAULT_SCORE_ORDERED)  
+        fields = new ArrayList<>();  
+     * a provided (maximum) number of fragments.  
+        if (highlighterBuilder.postTags != null) {  
+ * the Apache License, Version 2.0 (the "License"); you may
             builder.startObject(name);
-            // write common options  
-            commonOptionsToXContent(builder);
-            // write special field-highlighter options
-            if (fragmentOffset != -1) {  
-                builder.field(FRAGMENT_OFFSET_FIELD.getPreferredName(), fragmentOffset);
-            }
-            if (matchedFields != null) {  
-                builder.array(MATCHED_FIELDS_FIELD.getPreferredName(), matchedFields);
-            }
-            builder.endObject();  
-        }
-
-        @Override  
-        protected int doHashCode() {
-            return Objects.hash(name, fragmentOffset, Arrays.hashCode(matchedFields));
-        }  
-
-        @Override
-        protected boolean doEquals(Field other) {  
-            return Objects.equals(name, other.name)
-                && Objects.equals(fragmentOffset, other.fragmentOffset)
-                && Arrays.equals(matchedFields, other.matchedFields);  
-        }
-
-        @Override  
-        public Field rewrite(QueryRewriteContext ctx) throws IOException {
-            if (highlightQuery != null) {
-                QueryBuilder rewrite = highlightQuery.rewrite(ctx);  
-                if (rewrite != highlightQuery) {
-                    return new Field(this, rewrite);
-                }  
-            }
-            return this;
-        }  
-    }
-
-    /**  
-     * Order for highlight builder
-     *
-     * @opensearch.api  
-     */
+            case "styled":  
+     * Adds a field to be highlighted with default fragment size of 100 characters, and
     @PublicApi(since = "1.0.0")
-    public enum Order implements Writeable {  
-        NONE,
-        SCORE;
-
-        public static Order readFromStream(StreamInput in) throws IOException {
-            return in.readEnum(Order.class);
-        }  
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {  
-            out.writeEnum(this);
-        }
-
-        public static Order fromString(String order) {
-            if (order.toUpperCase(Locale.ROOT).equals(SCORE.name())) {
-                return Order.SCORE;  
+import static org.opensearch.core.xcontent.ObjectParser.fromList;  
+    public static final boolean DEFAULT_HIGHLIGHT_FILTER = false;
+        if (highlighterBuilder.preTags != null) {  
+        @Override  
+            matchedFields = template.matchedFields;
+            return valueOf(boundaryScannerType.toUpperCase(Locale.ROOT));
+    /** the default closing tags when {@code tag_schema = "styled"}  */
+    @Override
+     * Adds a field to be highlighted with a provided fragment size (in characters), and
             }
-            return NONE;
-        }  
-
-        @Override
-        public String toString() {  
-            return name().toLowerCase(Locale.ROOT);
+                && Objects.equals(fragmentOffset, other.fragmentOffset)
+            assert this.equals(new Field(this, highlightQuery)) : "copy constructor is broken";
+            this.name = name;
+    }
+    }
+    /**
+        QueryShardContext context
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         }
     }  
-
+        Character[] charArray = new Character[array.length];
+ * A builder for search highlighting. Settings can control how large fields  
+        if (highlighterBuilder.fragmentSize != null) {  
+        .requireFieldMatch(DEFAULT_REQUIRE_FIELD_MATCH)
+            return in.readEnum(BoundaryScannerType.class);
+ * this work for additional information regarding copyright
+    }  
+            return null;
+                Collections.addAll(matchedFields, field.matchedFields);
+ */  
+            default:
+     */  
+    }
+        public static Order fromString(String order) {
+ * ownership. Elasticsearch licenses this file to you under  
+        for (int i = 0; i < array.length; i++) {
+                builder.endArray();
+     * Read from a stream.
+    /**  
+        .postTags(DEFAULT_POST_TAGS)
+            out.writeOptionalStringArray(matchedFields);
+    public static HighlightBuilder fromXContent(XContentParser p) {  
+        return field(new Field(name).fragmentSize(fragmentSize).numOfFragments(numberOfFragments));
+        return charArray;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    public HighlightBuilder field(String name, int fragmentSize, int numberOfFragments) {  
+            }
+import org.apache.lucene.search.Query;
+package org.opensearch.search.fetch.subphase.highlight;
+        WORD,
+            charArray[i] = array[i];  
+     * Field for highlight builder  
+                throw new IllegalArgumentException("Unknown tag schema [" + schemaName + "]");
+     *
+        }  
+            return Objects.equals(name, other.name)
+        return new HighlightBuilder(this, highlightQuery, fields);
+                field.innerXContent(builder);
     /**
+        }
+    public HighlightBuilder field(Field field) {
+            super(template, builder);
+        public static BoundaryScannerType readFromStream(StreamInput in) throws IOException {
+        }  
+        if (encoder != null) {
+        }
+     *
+     * Getter for {@link #encoder(String)}
+        return Objects.equals(encoder, other.encoder)
+ * software distributed under the License is distributed on an
+    @PublicApi(since = "1.0.0")
+        if (highlighterBuilder.highlighterType != null) {  
+    public static final boolean DEFAULT_REQUIRE_FIELD_MATCH = true;  
+    }
+import java.util.ArrayList;
+            super(in);  
+        private Field(Field template, QueryBuilder builder) {
+        public Field(String name) {  
+import org.opensearch.index.query.QueryBuilder;  
+ * not use this file except in compliance with the License.
+        if (highlighterBuilder.boundaryScannerType != null) {  
+     * @param name              The field to highlight
+        if (highlighterBuilder.boundaryChars != null) {  
+    /** the default number of fragments for highlighting */
+     * @param fragmentSize The size of a fragment in characters
+            BiFunction<XContentParser, Field, Field> decoratedParser = setupParser(parser);
+    /**
+ * Licensed to Elasticsearch under one or more contributor  
+        }
+        }
+        return field(new Field(name));
+        commonOptionsToXContent(builder);
+    /** the default encoder setting */
+            return NONE;
+                && Arrays.equals(matchedFields, other.matchedFields);  
+        out.writeList(fields);
+        public String toString() {  
+        }
+        }  
+import java.util.Locale;
+        public Field fragmentOffset(int fragmentOffset) {  
+        int fragmentOffset = -1;
+        private final String name;  
+        // special options for top-level highlighter  
+        if (fields.size() > 0) {
+        );
+     * @opensearch.api
+import java.util.Collections;
      * Boundary scanner type  
      *
-     * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    public enum BoundaryScannerType implements Writeable {
-        CHARS,  
-        WORD,
-        SENTENCE;
-
-        public static BoundaryScannerType readFromStream(StreamInput in) throws IOException {
-            return in.readEnum(BoundaryScannerType.class);
-        }  
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {  
-            out.writeEnum(this);
-        }
-
-        public static BoundaryScannerType fromString(String boundaryScannerType) {
-            return valueOf(boundaryScannerType.toUpperCase(Locale.ROOT));
-        }  
-
-        @Override
-        public String toString() {  
-            return name().toLowerCase(Locale.ROOT);
-        }
+ * GitHub history for details.
+            targetOptionsBuilder.fragmentCharSize(highlighterBuilder.fragmentSize);
+            builder.field(ENCODER_FIELD.getPreferredName(), encoder);
+            targetOptionsBuilder.highlighterType(highlighterBuilder.highlighterType);
     }  
-}
+                builder.array(MATCHED_FIELDS_FIELD.getPreferredName(), matchedFields);
+                builder.field(FRAGMENT_OFFSET_FIELD.getPreferredName(), fragmentOffset);
+        .boundaryChars(DEFAULT_BOUNDARY_CHARS)
+     * default number of fragments of 5.
+        .build();  
+        assert this.equals(new HighlightBuilder(this, highlightQuery, fields)) : "copy constructor is broken";  
+import java.util.Arrays;
+        }
+ *
+        SearchHighlightContext.FieldOptions.Builder targetOptionsBuilder,  
+        .boundaryMaxScan(SimpleBoundaryScanner.DEFAULT_MAX_SCAN)
+            targetOptionsBuilder.boundaryScannerType(highlighterBuilder.boundaryScannerType);
+        }
+            return name().toLowerCase(Locale.ROOT);
+        switch (schemaName) {
+        "<em class=\"hlt4\">",
+        }
+            return this;
+     * @param name              The field to highlight
+        ObjectParser<HighlightBuilder, Void> parser = new ObjectParser<>("highlight");  
+    }
+            }
+    public Boolean useExplicitFieldOrder() {
+                preTags(DEFAULT_STYLED_PRE_TAG);
+    public HighlightBuilder field(String name) {
+                fieldOptionsBuilder.matchedFields(matchedFields);  
+    @Override  
+        }
+import org.opensearch.core.ParseField;
+            final SearchHighlightContext.FieldOptions.Builder fieldOptionsBuilder = new SearchHighlightContext.FieldOptions.Builder();
+     * a {@link FieldOptions} with default settings
+ * specific language governing permissions and limitations
+     *
+import org.opensearch.index.query.QueryShardContext;
+        innerXContent(builder);
+        static {
+        "<em class=\"hlt7\">",
+        }
+        }  
+     * Transfers field options present in the input {@link AbstractHighlighterBuilder} to the receiving
+            targetOptionsBuilder.maxAnalyzerOffset(highlighterBuilder.maxAnalyzerOffset);
+                }
+            out.writeString(name);  
+        public void writeTo(StreamOutput out) throws IOException {  
+            name = in.readString();
+    private final List<Field> fields;
+        // overwrite unset global options by default values
+                if (useExplicitFieldOrder) {
+import org.opensearch.core.common.io.stream.StreamInput;
+            targetOptionsBuilder.boundaryMaxScan(highlighterBuilder.boundaryMaxScan);
+        if (array == null) {
+            targetOptionsBuilder.boundaryChars(convertCharArray(highlighterBuilder.boundaryChars));
+import org.opensearch.core.common.io.stream.Writeable;
+            if (useExplicitFieldOrder) {
+@PublicApi(since = "1.0.0")
+            HighlightBuilder::fields,
+     */  
+        out.writeOptionalString(encoder);
+         * Read from a stream.  
+        @Override  
+            );
+            commonOptionsToXContent(builder);
+            parser.declareStringArray(fromList(String.class, Field::matchedFields), MATCHED_FIELDS_FIELD);
+/*
+            return Objects.hash(name, fragmentOffset, Arrays.hashCode(matchedFields));
+            out.writeVInt(fragmentOffset);
+        @Override
+        this.useExplicitFieldOrder = useExplicitFieldOrder;  
+        public static Order readFromStream(StreamInput in) throws IOException {
+            && Objects.equals(useExplicitFieldOrder, other.useExplicitFieldOrder)
+         */  
+        }  
+     *
+ * license agreements. See the NOTICE file distributed with
+        if (highlighterBuilder.boundaryScannerLocale != null) {  
+     */  
+    }
+    @SuppressWarnings({ "rawtypes", "unchecked" })  
+        }
+        this.fields = in.readList(Field::new);
+        out.writeBoolean(useExplicitFieldOrder);  
+        }
+            // write special field-highlighter options
+     * @param highlighterBuilder highlight builder with the input options
+    }
+     * are {@code styled} and {@code default}.
+            targetOptionsBuilder.highlightQuery(highlighterBuilder.highlightQuery.toQuery(context));
+ * Modifications Copyright OpenSearch Contributors. See
+     * Adds a field to be highlighted with a provided fragment size (in characters), and
+                break;  
+        }
+ *
+    @Override  
+                if (rewrite != highlightQuery) {
+ * under the License.  
+    }
+                builder.startObject(FIELDS_FIELD.getPreferredName());
+     * Adds a field to be highlighted with a provided fragment size (in characters), and  
+            (HighlightBuilder hb) -> hb.useExplicitFieldOrder(true),  
+     * @opensearch.api
+        globalOptionsBuilder.encoder(this.encoder);
+            return in.readEnum(Order.class);
+            for (Field field : fields) {
+    public HighlightBuilder() {
+    private boolean useExplicitFieldOrder = false;  
+    static Character[] convertCharArray(char[] array) {  
+        if (highlighterBuilder.highlightQuery != null) {  
+            this.fragmentOffset = fragmentOffset;
+         * it is not automatically included.
+                    builder.startObject();  
+ * The OpenSearch Contributors require contributions made to  
+        public Field(StreamInput in) throws IOException {
+    @Override
+        this.encoder = encoder;
+                postTags(DEFAULT_STYLED_POST_TAGS);
+    @Override
+     * Order for highlight builder
+    public static final String[] DEFAULT_STYLED_POST_TAGS = { "</em>" };  
+            targetOptionsBuilder.requireFieldMatch(highlighterBuilder.requireFieldMatch);
+            fieldOptions.add(  
+    public static final int DEFAULT_PHRASE_LIMIT = 256;
+import org.opensearch.index.query.QueryRewriteContext;
+    void fields(List<Field> fields) {
+     * @param name The field to highlight
+     */  
+    /** default for highlight fragments being ordered by score */  
+            return name().toLowerCase(Locale.ROOT);
+            out.writeEnum(this);
+        "<em class=\"hlt2\">",
+        @Override
+ */
+         * the named field.  If you provide a list of fields here then don't forget to include name as
+    @PublicApi(since = "1.0.0")
+     * Send the fields to be highlighted using a syntax that is specific about the order in which they should be highlighted.
+            if (field.matchedFields != null) {  
+        }
+    /**
+    }  
+     * {@link FieldOptions.Builder}, effectively overwriting existing settings  
+        protected void doWriteTo(StreamOutput out) throws IOException {
+    public static final int DEFAULT_NUMBER_OF_FRAGMENTS = 5;  
+     */
+        QueryBuilder highlightQuery = this.highlightQuery;
+    /**
+        }
+        globalOptionsBuilder.merge(defaultOptions);
+        }
+import java.util.Objects;
+        }  
+        public String toString() {  
+    /** default for whether a field should be highlighted only if a query matches that field */
+    public static class Field extends AbstractHighlighterBuilder<Field> {
+        }
+    }
+            fieldOptionsBuilder.fragmentOffset(field.fragmentOffset);
+    static final Character[] DEFAULT_BOUNDARY_CHARS = HighlightBuilder.convertCharArray(SimpleBoundaryScanner.DEFAULT_BOUNDARY_CHARS);
+        this.fields = fields;
+        this.encoder = template.encoder;
+ * SPDX-License-Identifier: Apache-2.0
+            Field.PARSER,
+import java.io.IOException;  
+            return this;
+    /**
+    public static final boolean DEFAULT_FORCE_SOURCE = false;
+        @Override
+        builder.startObject();
+        "<em class=\"hlt6\">",  
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+        return this.useExplicitFieldOrder;
+    /**
+     * @param targetOptionsBuilder the receiving options builder
+/**
+        }
+        "<em class=\"hlt9\">",  
+    public HighlightBuilder(StreamInput in) throws IOException {
+        public String name() {
+    }
+    /** the default opening tags when {@code tag_schema = "styled"}  */
+        return PARSER.apply(p, new HighlightBuilder());
+        SENTENCE;
+        protected int doHashCode() {
+        if (highlighterBuilder.phraseLimit != null) {  
+        if (highlighterBuilder.noMatchSize != null) {  
+     * @param numberOfFragments The (maximum) number of fragments
+ *
+                preTags(DEFAULT_PRE_TAGS);  
+ *  
+    public HighlightBuilder encoder(String encoder) {
+            if (matchedFields != null) {  
+            targetOptionsBuilder.preTags(highlighterBuilder.preTags);
+        builder.endObject();  
+        this.useExplicitFieldOrder = template.useExplicitFieldOrder;  
+    public void innerXContent(XContentBuilder builder) throws IOException {  

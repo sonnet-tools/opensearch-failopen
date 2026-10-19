@@ -1,681 +1,574 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;  
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.metadata.RepositoriesMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.repositories.IndexId;
-import org.opensearch.repositories.RepositoriesService;  
-import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.RepositoryData;
-import org.opensearch.repositories.RepositoryException;  
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.transport.client.Client;
-
-import java.nio.channels.SeekableByteChannel;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.nio.file.StandardOpenOption;
-import java.util.List;
-import java.util.Map;  
-import java.util.stream.Stream;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertRequestBuilderThrows;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;  
-
-public class CorruptedBlobStoreRepositoryIT extends AbstractSnapshotIntegTestCase {
-
-    public void testConcurrentlyChangeRepositoryContents() throws Exception {
-        Client client = client();
-
-        Path repo = randomRepoPath();
-        final String repoName = "test-repo";
-        createRepository(  
-            repoName,
-            "fs",
-            Settings.builder()  
-                .put("location", repo)
-                .put("compress", false)
-                // Don't cache repository data because the test manually modifies the repository data  
-                .put(BlobStoreRepository.CACHE_REPOSITORY_DATA.getKey(), false)
-                .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)
-        );  
-
-        createIndex("test-idx-1", "test-idx-2");
-        logger.info("--> indexing some data");  
-        indexRandom(
-            true,
-            client().prepareIndex().setIndex("test-idx-1").setSource("foo", "bar"),  
-            client().prepareIndex().setIndex("test-idx-2").setSource("foo", "bar")
-        );
-
-        final String snapshot = "test-snap";
-
-        logger.info("--> creating snapshot");  
         CreateSnapshotResponse createSnapshotResponse = client.admin()
-            .cluster()
-            .prepareCreateSnapshot(repoName, snapshot)  
-            .setWaitForCompletion(true)
-            .setIndices("test-idx-*")
-            .get();  
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
-        assertThat(
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),  
-            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
-        );
-
-        logger.info("--> move index-N blob to next generation");
-        final RepositoryData repositoryData = getRepositoryData(repoName);
-        Files.move(repo.resolve("index-" + repositoryData.getGenId()), repo.resolve("index-" + (repositoryData.getGenId() + 1)));  
-
-        assertRepositoryBlocked(client, repoName, snapshot);
-
-        if (randomBoolean()) {
-            logger.info("--> move index-N blob back to initial generation");
-            Files.move(repo.resolve("index-" + (repositoryData.getGenId() + 1)), repo.resolve("index-" + repositoryData.getGenId()));  
-
-            logger.info("--> verify repository remains blocked");
-            assertRepositoryBlocked(client, repoName, snapshot);  
-        }
-
-        logger.info("--> remove repository");  
-        assertAcked(client.admin().cluster().prepareDeleteRepository(repoName));
-
-        logger.info("--> recreate repository");  
-        Settings.Builder settings = Settings.builder()
-            .put("location", repo)
-            .put("compress", false)  
-            .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES);
-        createRepository(repoName, "fs", settings);
-
-        startDeleteSnapshot(repoName, snapshot).get();
-
-        logger.info("--> make sure snapshot doesn't exist");  
-        expectThrows(
-            SnapshotMissingException.class,
-            () -> client.admin().cluster().prepareGetSnapshots(repoName).addSnapshots(snapshot).get()  
-        );
-    }
-
-    public void testConcurrentlyChangeRepositoryContentsInBwCMode() throws Exception {
-        Client client = client();
-
-        Path repo = randomRepoPath();
-        final String repoName = "test-repo";
-        logger.info("-->  creating repository at {}", repo.toAbsolutePath());  
-        Settings.Builder settings = Settings.builder()
-            .put("location", repo)
-            .put("compress", false)  
-            .put(BlobStoreRepository.ALLOW_CONCURRENT_MODIFICATION.getKey(), true)
-            .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES);
-        createRepository(repoName, "fs", settings);  
-        createIndex("test-idx-1", "test-idx-2");
-        logger.info("--> indexing some data");
-        indexRandom(  
-            true,
-            client().prepareIndex().setIndex("test-idx-1").setSource("foo", "bar"),
-            client().prepareIndex().setIndex("test-idx-2").setSource("foo", "bar")  
-        );
-
-        final String snapshot = "test-snap";  
-
-        logger.info("--> creating snapshot");
-        CreateSnapshotResponse createSnapshotResponse = client.admin()  
-            .cluster()
-            .prepareCreateSnapshot(repoName, snapshot)
-            .setWaitForCompletion(true)  
-            .setIndices("test-idx-*")
-            .get();
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
-        assertThat(
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),
-            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())  
-        );
-
-        final Repository repository = internalCluster().getClusterManagerNodeInstance(RepositoriesService.class).repository(repoName);  
-
-        logger.info("--> move index-N blob to next generation");
-        final RepositoryData repositoryData = getRepositoryData(repository);  
-        final long beforeMoveGen = repositoryData.getGenId();
-        Files.move(repo.resolve("index-" + beforeMoveGen), repo.resolve("index-" + (beforeMoveGen + 1)));
-
-        logger.info("--> verify index-N blob is found at the new location");
-        assertThat(getRepositoryData(repository).getGenId(), is(beforeMoveGen + 1));
-
-        final SnapshotsService snapshotsService = internalCluster().getCurrentClusterManagerNodeInstance(SnapshotsService.class);
-        logger.info("--> wait for all listeners on snapshots service to be resolved to avoid snapshot task batching causing a conflict");
-        assertBusy(() -> assertTrue(snapshotsService.assertAllListenersResolved()));  
-
-        logger.info("--> delete snapshot");
-        client.admin().cluster().prepareDeleteSnapshot(repoName, snapshot).get();  
-
-        logger.info("--> verify index-N blob is found at the expected location");
-        assertThat(getRepositoryData(repository).getGenId(), is(beforeMoveGen + 2));  
-
-        logger.info("--> make sure snapshot doesn't exist");
-        expectThrows(  
-            SnapshotMissingException.class,
-            () -> client.admin().cluster().prepareGetSnapshots(repoName).addSnapshots(snapshot).get()
-        );  
-    }
-
-    public void testFindDanglingLatestGeneration() throws Exception {  
-        Path repo = randomRepoPath();
-        final String repoName = "test-repo";
-        createRepository(  
-            repoName,
-            "fs",
-            Settings.builder()  
-                .put("location", repo)
-                .put("compress", false)
-                .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)  
-        );
-
-        createIndex("test-idx-1", "test-idx-2");  
-        logger.info("--> indexing some data");
-        indexRandom(
-            true,  
-            client().prepareIndex().setIndex("test-idx-1").setSource("foo", "bar"),
-            client().prepareIndex().setIndex("test-idx-2").setSource("foo", "bar")
-        );  
-
-        final String snapshot = "test-snap";
-
-        logger.info("--> creating snapshot");
-        CreateSnapshotResponse createSnapshotResponse = client().admin()
-            .cluster()  
-            .prepareCreateSnapshot(repoName, snapshot)
-            .setWaitForCompletion(true)
-            .setIndices("test-idx-*")  
-            .get();
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
-        assertThat(  
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),
-            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
-        );  
-
-        final Repository repository = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class)
-            .repository(repoName);  
-
-        logger.info("--> move index-N blob to next generation");
-        final RepositoryData repositoryData = getRepositoryData(repoName);  
-        final long beforeMoveGen = repositoryData.getGenId();
-        Files.move(repo.resolve("index-" + beforeMoveGen), repo.resolve("index-" + (beforeMoveGen + 1)));
-
-        logger.info("--> set next generation as pending in the cluster state");
-        updateClusterState(
-            currentState -> ClusterState.builder(currentState)  
-                .metadata(
-                    Metadata.builder(currentState.getMetadata())
-                        .putCustom(  
-                            RepositoriesMetadata.TYPE,
-                            currentState.metadata()
-                                .<RepositoriesMetadata>custom(RepositoriesMetadata.TYPE)  
-                                .withUpdatedGeneration(repository.getMetadata().name(), beforeMoveGen, beforeMoveGen + 1)
-                        )
-                        .build()  
-                )
-                .build()
-        );  
-
-        logger.info("--> full cluster restart");
-        internalCluster().fullRestart();  
-        ensureGreen();
-
-        logger.info("--> verify index-N blob is found at the new location");  
-        assertThat(getRepositoryData(repoName).getGenId(), is(beforeMoveGen + 1));
-
-        startDeleteSnapshot(repoName, snapshot).get();  
-
-        logger.info("--> verify index-N blob is found at the expected location");
-        assertThat(getRepositoryData(repoName).getGenId(), is(beforeMoveGen + 2));  
-
-        logger.info("--> make sure snapshot doesn't exist");
-        expectThrows(  
-            SnapshotMissingException.class,
-            () -> client().admin().cluster().prepareGetSnapshots(repoName).addSnapshots(snapshot).get()
-        );  
-    }
-
-    public void testMountCorruptedRepositoryData() throws Exception {  
-        disableRepoConsistencyCheck("This test intentionally corrupts the repository contents");
-        Client client = client();
-
-        Path repo = randomRepoPath();
-        final String repoName = "test-repo";
-        createRepository(  
-            repoName,
-            "fs",
-            Settings.builder()  
-                .put("location", repo)
-                // Don't cache repository data because the test manually modifies the repository data
-                .put(BlobStoreRepository.CACHE_REPOSITORY_DATA.getKey(), false)  
-                .put("compress", false)
-        );
-
-        final String snapshot = "test-snap";
-
-        logger.info("--> creating snapshot");  
-        CreateSnapshotResponse createSnapshotResponse = client.admin()
-            .cluster()
-            .prepareCreateSnapshot(repoName, snapshot)  
-            .setWaitForCompletion(true)
-            .setIndices("test-idx-*")
-            .get();  
-        assertThat(
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),
-            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())  
-        );
-
-        logger.info("--> corrupt index-N blob");  
-        final Repository repository = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class)
-            .repository(repoName);
-        final RepositoryData repositoryData = getRepositoryData(repoName);  
-        Files.write(repo.resolve("index-" + repositoryData.getGenId()), randomByteArrayOfLength(randomIntBetween(1, 100)));
-
-        logger.info("--> verify loading repository data throws RepositoryException");  
-        expectThrows(RepositoryException.class, () -> getRepositoryData(repository));
-
-        final String otherRepoName = "other-repo";  
-        createRepository(otherRepoName, "fs", Settings.builder().put("location", repo).put("compress", false));
-        final Repository otherRepo = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class)
-            .repository(otherRepoName);  
-
-        logger.info("--> verify loading repository data from newly mounted repository throws RepositoryException");
-        expectThrows(RepositoryException.class, () -> getRepositoryData(otherRepo));  
-    }
-
-    /**  
-     * Tests that a shard snapshot with a corrupted shard index file can still be used for restore and incremental snapshots.
-     */
-    public void testSnapshotWithCorruptedShardIndexFile() throws Exception {  
-        final Client client = client();
-        final Path repo = randomRepoPath();
-        final String indexName = "test-idx";  
-        final int nDocs = randomIntBetween(1, 10);
-
-        logger.info("-->  creating index [{}] with [{}] documents in it", indexName, nDocs);  
-        assertAcked(prepareCreate(indexName).setSettings(indexSettingsNoReplicas(1)));
-
-        final IndexRequestBuilder[] documents = new IndexRequestBuilder[nDocs];  
-        for (int j = 0; j < nDocs; j++) {
-            documents[j] = client.prepareIndex(indexName).setSource("foo", "bar");
-        }  
-        indexRandom(true, documents);
-        flushAndRefresh();
-
-        createRepository("test-repo", "fs", repo);
-
-        final String snapshot1 = "test-snap-1";  
-        final SnapshotInfo snapshotInfo = createFullSnapshot("test-repo", snapshot1);
-        assertThat(snapshotInfo.indices(), hasSize(1));
-
-        final RepositoryData repositoryData = getRepositoryData("test-repo");
-        final Map<String, IndexId> indexIds = repositoryData.getIndices();
-        assertThat(indexIds.size(), equalTo(1));  
-
-        final IndexId corruptedIndex = indexIds.get(indexName);
-        final Path shardIndexFile = repo.resolve(resolvePath(corruptedIndex, "0"))  
-            .resolve("index-" + repositoryData.shardGenerations().getShardGen(corruptedIndex, 0));
-
-        logger.info("-->  truncating shard index file [{}]", shardIndexFile);  
-        try (SeekableByteChannel outChan = Files.newByteChannel(shardIndexFile, StandardOpenOption.WRITE)) {
-            outChan.truncate(randomInt(10));
-        }  
-
-        logger.info("-->  verifying snapshot state for [{}]", snapshot1);
-        List<SnapshotInfo> snapshotInfos = clusterAdmin().prepareGetSnapshots("test-repo").get().getSnapshots();  
-        assertThat(snapshotInfos.size(), equalTo(1));
-        assertThat(snapshotInfos.get(0).state(), equalTo(SnapshotState.SUCCESS));
-        assertThat(snapshotInfos.get(0).snapshotId().getName(), equalTo(snapshot1));  
-
-        logger.info("-->  deleting index [{}]", indexName);
-        assertAcked(client().admin().indices().prepareDelete(indexName));  
-
-        logger.info("-->  restoring snapshot [{}]", snapshot1);
-        clusterAdmin().prepareRestoreSnapshot("test-repo", snapshot1)  
-            .setRestoreGlobalState(randomBoolean())
-            .setWaitForCompletion(true)
-            .get();  
-        ensureGreen();
-
-        assertDocCount(indexName, nDocs);  
-
-        logger.info("-->  indexing [{}] more documents into [{}]", nDocs, indexName);
-        for (int j = 0; j < nDocs; j++) {  
-            documents[j] = client.prepareIndex(indexName).setSource("foo2", "bar2");
-        }
-        indexRandom(true, documents);  
-
-        final String snapshot2 = "test-snap-2";
-        logger.info("-->  creating snapshot [{}]", snapshot2);  
-        final SnapshotInfo snapshotInfo2 = clusterAdmin().prepareCreateSnapshot("test-repo", snapshot2)
-            .setWaitForCompletion(true)
-            .get()  
-            .getSnapshotInfo();
-        assertThat(snapshotInfo2.state(), equalTo(SnapshotState.PARTIAL));
-        assertThat(snapshotInfo2.failedShards(), equalTo(1));  
-        assertThat(snapshotInfo2.successfulShards(), equalTo(snapshotInfo.totalShards() - 1));
-        assertThat(snapshotInfo2.indices(), hasSize(1));
-    }  
-
-    public void testDeleteSnapshotWithMissingIndexAndShardMetadata() throws Exception {
-        Client client = client();  
-
-        Path repo = randomRepoPath();
+            .prepareCreateSnapshot("test-repo", "test-snap-1")
         createRepository("test-repo", "fs", repo);  
-
-        final String[] indices = { "test-idx-1", "test-idx-2" };
-        createIndex(indices);  
-        logger.info("--> indexing some data");
-        indexRandom(
-            true,  
-            client().prepareIndex("test-idx-1").setSource("foo", "bar"),
-            client().prepareIndex("test-idx-2").setSource("foo", "bar")
-        );  
-
-        logger.info("--> creating snapshot");
-        CreateSnapshotResponse createSnapshotResponse = client.admin()  
-            .cluster()
-            .prepareCreateSnapshot("test-repo", "test-snap-1")
-            .setWaitForCompletion(true)  
-            .setIndices(indices)
-            .get();
-        final SnapshotInfo snapshotInfo = createSnapshotResponse.getSnapshotInfo();  
-        assertThat(snapshotInfo.successfulShards(), greaterThan(0));
-        assertThat(snapshotInfo.successfulShards(), equalTo(snapshotInfo.totalShards()));
-
-        final Map<String, IndexId> indexIds = getRepositoryData("test-repo").getIndices();
-        final Path indicesPath = repo.resolve("indices");
-
-        logger.info("--> delete index metadata and shard metadata");
-        for (String index : indices) {
-            Path shardZero = repo.resolve(resolvePath(indexIds.get(index), "0"));  
-            if (randomBoolean()) {
-                Files.delete(
-                    shardZero.resolve("index-" + getRepositoryData("test-repo").shardGenerations().getShardGen(indexIds.get(index), 0))  
-                );
-            }
-            Files.delete(shardZero.resolve("snap-" + snapshotInfo.snapshotId().getUUID() + ".dat"));  
-        }
-
-        startDeleteSnapshot("test-repo", "test-snap-1").get();  
-
-        logger.info("--> make sure snapshot doesn't exist");
-
-        expectThrows(
-            SnapshotMissingException.class,
-            () -> client.admin().cluster().prepareGetSnapshots("test-repo").addSnapshots("test-snap-1").get()  
-        );
-
-        for (String index : indices) {  
-            assertTrue(Files.notExists(indicesPath.resolve(indexIds.get(index).getId())));
-        }
-    }  
-
-    public void testDeleteSnapshotWithMissingMetadata() throws Exception {
-        Client client = client();  
-
-        Path repo = randomRepoPath();
-        createRepository("test-repo", "fs", repo);  
-
-        createIndex("test-idx-1", "test-idx-2");
-        logger.info("--> indexing some data");  
-        indexRandom(
-            true,
-            client().prepareIndex("test-idx-1").setSource("foo", "bar"),  
-            client().prepareIndex("test-idx-2").setSource("foo", "bar")
-        );
-
-        logger.info("--> creating snapshot");
-        CreateSnapshotResponse createSnapshotResponse = client.admin()
-            .cluster()  
-            .prepareCreateSnapshot("test-repo", "test-snap-1")
-            .setWaitForCompletion(true)
-            .setIndices("test-idx-*")  
-            .get();
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
-        assertThat(  
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),
-            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
-        );  
-
-        logger.info("--> delete global state metadata");
-        Path metadata = repo.resolve("meta-" + createSnapshotResponse.getSnapshotInfo().snapshotId().getUUID() + ".dat");  
-        Files.delete(metadata);
-
-        startDeleteSnapshot("test-repo", "test-snap-1").get();  
-
-        logger.info("--> make sure snapshot doesn't exist");
-        expectThrows(  
-            SnapshotMissingException.class,
-            () -> client.admin().cluster().prepareGetSnapshots("test-repo").addSnapshots("test-snap-1").get()
-        );  
-    }
-
-    public void testDeleteSnapshotWithCorruptedSnapshotFile() throws Exception {  
-        Client client = client();
-
-        Path repo = randomRepoPath();  
-        createRepository(
-            "test-repo",
-            "fs",  
-            Settings.builder()
-                .put("location", repo)
-                .put("compress", false)  
-                .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)
-        );
-
-        createIndex("test-idx-1", "test-idx-2");
-        logger.info("--> indexing some data");
-        indexRandom(  
-            true,
-            client().prepareIndex("test-idx-1").setSource("foo", "bar"),
-            client().prepareIndex("test-idx-2").setSource("foo", "bar")  
-        );
-
-        logger.info("--> creating snapshot");  
-        CreateSnapshotResponse createSnapshotResponse = client.admin()
-            .cluster()
-            .prepareCreateSnapshot("test-repo", "test-snap-1")  
-            .setWaitForCompletion(true)
-            .setIndices("test-idx-*")
-            .get();  
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
-        assertThat(
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),  
-            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
-        );
-
-        logger.info("--> truncate snapshot file to make it unreadable");
-        Path snapshotPath = repo.resolve("snap-" + createSnapshotResponse.getSnapshotInfo().snapshotId().getUUID() + ".dat");
-        try (SeekableByteChannel outChan = Files.newByteChannel(snapshotPath, StandardOpenOption.WRITE)) {  
-            outChan.truncate(randomInt(10));
-        }
-        startDeleteSnapshot("test-repo", "test-snap-1").get();  
-
-        logger.info("--> make sure snapshot doesn't exist");
-        expectThrows(  
-            SnapshotMissingException.class,
-            () -> client.admin().cluster().prepareGetSnapshots("test-repo").addSnapshots("test-snap-1").get().getSnapshots()
-        );  
-
-        logger.info("--> make sure that we can create the snapshot again");
-        createSnapshotResponse = client.admin()  
-            .cluster()
-            .prepareCreateSnapshot("test-repo", "test-snap-1")
-            .setWaitForCompletion(true)  
-            .setIndices("test-idx-*")
-            .get();
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
-        assertThat(
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),
-            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())  
-        );
-    }
-
-    /** Tests that a snapshot with a corrupted global state file can still be deleted */
-    public void testDeleteSnapshotWithCorruptedGlobalState() throws Exception {
-        final Path repo = randomRepoPath();  
-
-        createRepository(
-            "test-repo",  
-            "fs",
-            Settings.builder().put("location", repo).put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)
-        );  
-
-        createIndex("test-idx-1", "test-idx-2");
-        indexRandom(  
-            true,
-            client().prepareIndex("test-idx-1").setSource("foo", "bar"),
-            client().prepareIndex("test-idx-2").setSource("foo", "bar"),  
-            client().prepareIndex("test-idx-2").setSource("foo", "bar")
-        );
-        flushAndRefresh("test-idx-1", "test-idx-2");  
-
-        SnapshotInfo snapshotInfo = createFullSnapshot("test-repo", "test-snap");
-
-        final Path globalStatePath = repo.resolve("meta-" + snapshotInfo.snapshotId().getUUID() + ".dat");
-        if (randomBoolean()) {
-            // Delete the global state metadata file  
-            IOUtils.deleteFilesIgnoringExceptions(globalStatePath);
-        } else {
-            // Truncate the global state metadata file  
-            try (SeekableByteChannel outChan = Files.newByteChannel(globalStatePath, StandardOpenOption.WRITE)) {
-                outChan.truncate(randomInt(10));
-            }  
-        }
-
-        List<SnapshotInfo> snapshotInfos = clusterAdmin().prepareGetSnapshots("test-repo").get().getSnapshots();  
-        assertThat(snapshotInfos.size(), equalTo(1));
-        assertThat(snapshotInfos.get(0).state(), equalTo(SnapshotState.SUCCESS));
-        assertThat(snapshotInfos.get(0).snapshotId().getName(), equalTo("test-snap"));  
-
-        SnapshotsStatusResponse snapshotStatusResponse = clusterAdmin().prepareSnapshotStatus("test-repo").setSnapshots("test-snap").get();
-        assertThat(snapshotStatusResponse.getSnapshots(), hasSize(1));  
-        assertThat(snapshotStatusResponse.getSnapshots().get(0).getSnapshot().getSnapshotId().getName(), equalTo("test-snap"));
-
-        assertAcked(startDeleteSnapshot("test-repo", "test-snap").get());  
-        expectThrows(SnapshotMissingException.class, () -> clusterAdmin().prepareGetSnapshots("test-repo").addSnapshots("test-snap").get());
-        assertRequestBuilderThrows(
             clusterAdmin().prepareSnapshotStatus("test-repo").addSnapshots("test-snap"),  
-            SnapshotMissingException.class
-        );
-
-        createFullSnapshot("test-repo", "test-snap");
-    }
-
-    public void testSnapshotWithMissingShardLevelIndexFile() throws Exception {
-        disableRepoConsistencyCheck("This test uses a purposely broken repository so it would fail consistency checks");
-
-        Path repo = randomRepoPath();
+        assertAcked(client().admin().indices().prepareDelete(indexName));  
+ * ownership. Elasticsearch licenses this file to you under  
         createRepository("test-repo", "fs", repo);
-
-        createIndex("test-idx-1", "test-idx-2");
+        createRepository("test-repo", "fs", repo);
         logger.info("--> indexing some data");
+        logger.info("--> verify index-N blob is found at the new location");  
+            .cluster()
+            .resolve("index-" + repositoryData.shardGenerations().getShardGen(corruptedIndex, 0));
+        logger.info("--> move index-N blob to next generation");
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertRequestBuilderThrows;
+        logger.info("--> creating snapshot");
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+        assertThat(
+import java.nio.channels.SeekableByteChannel;
+        Files.move(repo.resolve("index-" + beforeMoveGen), repo.resolve("index-" + (beforeMoveGen + 1)));
+            .get();  
+            () -> client.admin().cluster().prepareDeleteSnapshot(repo, existingSnapshot).execute().actionGet()  
+        Files.move(repo.resolve("index-" + beforeMoveGen), repo.resolve("index-" + (beforeMoveGen + 1)));
+            .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES);
+        final Path indicesPath = repo.resolve("indices");
+        logger.info("--> creating snapshot");
+        logger.info("--> full cluster restart");
+            RepositoryException.class,  
+        final SnapshotInfo snapshotInfo2 = clusterAdmin().prepareCreateSnapshot("test-repo", snapshot2)
+        }
+        );  
+        assertThat(getRepositoryData(repository).getGenId(), is(beforeMoveGen + 1));
+        ensureGreen();
+        final RepositoryData repositoryData = getRepositoryData(repoName);  
+            .setIndices("test-idx-*")
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            .setWaitForCompletion(true)
+            .get();
+                            RepositoriesMetadata.TYPE,
+        flushAndRefresh();
+                    Metadata.builder(currentState.getMetadata())
+            logger.info("--> move index-N blob back to initial generation");
+        logger.info("--> indexing some data");  
+    }  
+                .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)  
+            true,
+        logger.info("--> verify index-N blob is found at the expected location");
+        );
+        final String repoName = "test-repo";
+        startDeleteSnapshot("test-repo", "test-snap-1").get();  
+        );
+        final Client client = client();
+import org.opensearch.repositories.RepositoryException;  
+        logger.info("--> try to delete snapshot");  
+            containsString("Could not read repository data because the contents of the repository do not match its expected state.")
+        );
+        );  
+ * GitHub history for details.
+    public void testConcurrentlyChangeRepositoryContents() throws Exception {
+        logger.info("--> delete snapshot");
+        final Path shardIndexFile = repo.resolve(resolvePath(corruptedIndex, "0"))  
+        Client client = client();  
+        logger.info("--> indexing some data");
+        logger.info("-->  truncating shard index file [{}]", shardIndexFile);  
+        logger.info("--> verify loading repository data from newly mounted repository throws RepositoryException");
+        startDeleteSnapshot("test-repo", "test-snap-1").get();  
+        assertThat(snapshotInfos.get(0).snapshotId().getName(), equalTo("test-snap"));  
+            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
+            }  
+        assertThat(getRepositoryData(repository).getGenId(), is(beforeMoveGen + 2));  
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),  
+        Path snapshotPath = repo.resolve("snap-" + createSnapshotResponse.getSnapshotInfo().snapshotId().getUUID() + ".dat");
+                .put("compress", false)
+            .cluster()
+            .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES);
+ * Unless required by applicable law or agreed to in writing,
+        Client client = client();
+        CreateSnapshotResponse createSnapshotResponse = client.admin()
+            .setIndices(indices)
+            "--> restoring the first snapshot, the repository should not have lost any shard data despite deleting index-N, "
+    /** Tests that a snapshot with a corrupted global state file can still be deleted */
+        logger.info("--> set next generation as pending in the cluster state");
+            .put("compress", false)  
+        createIndex("test-idx-1", "test-idx-2");  
+import static org.hamcrest.Matchers.equalTo;  
+        createRepository(  
+            Files.delete(shardGen);
+        logger.info("--> creating snapshot");  
+        assertThat(snapshotInfos.size(), equalTo(1));
+            client().prepareIndex("test-idx-1").setSource("foo", "bar"),
+        );  
+            true,
+                .put("location", repo)
+        expectThrows(  
+        logger.info("--> remove repository");  
+        assertThat(
+        assertThat(snapshotInfo2.successfulShards(), equalTo(snapshotInfo.totalShards() - 1));
+        assertEquals(0, restoreSnapshotResponse.getRestoreInfo().failedShards());
+            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())  
+            }
+                                .<RepositoriesMetadata>custom(RepositoriesMetadata.TYPE)  
+            .get()  
+                // Don't cache repository data because the test manually modifies the repository data
+            .setIndices("test-idx-*")
+/*  
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
+import java.util.List;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        Path repo = randomRepoPath();
+ *  
+            Settings.builder()
+        expectThrows(  
+            () -> client.admin().cluster().prepareGetSnapshots("test-repo").addSnapshots("test-snap-1").get()  
+        try (SeekableByteChannel outChan = Files.newByteChannel(snapshotPath, StandardOpenOption.WRITE)) {  
+                shardGen = shardFiles.filter(file -> file.getFileName().toString().startsWith(BlobStoreRepository.INDEX_FILE_PREFIX))
+        startDeleteSnapshot(repoName, snapshot).get();  
+        logger.info("--> make sure snapshot doesn't exist");  
+        final Path repo = randomRepoPath();
+        assertThat(snapshotInfos.get(0).state(), equalTo(SnapshotState.SUCCESS));
+            client().prepareIndex("test-idx-2").setSource("foo", "bar")  
+        createRepository(  
+        Path repo = randomRepoPath();
+        List<SnapshotInfo> snapshotInfos = clusterAdmin().prepareGetSnapshots("test-repo").get().getSnapshots();  
+ * KIND, either express or implied.  See the License for the
+            .setWaitForCompletion(true)
+        logger.info("--> creating snapshot");
+    public void testSnapshotWithCorruptedShardIndexFile() throws Exception {  
+        logger.info("--> verify index-N blob is found at the new location");
+            "fs",
+                .metadata(
+            true,
+        );
+            SnapshotMissingException.class,
+    }
+            outChan.truncate(randomInt(10));
+            .get();  
+        assertThat(
+            "test-repo",  
+    }
+                );
+    public void testDeleteSnapshotWithCorruptedGlobalState() throws Exception {
+        logger.info("--> make sure snapshot doesn't exist");
+            .setWaitForCompletion(true)
+        assertThat(indexIds.size(), equalTo(1));  
+            .prepareCreateSnapshot("test-repo", "test-snap-1")
+        indexRandom(
+                .build()
+import org.opensearch.cluster.ClusterState;
+            () -> client.admin().cluster().prepareCreateSnapshot(repo, existingSnapshot).execute().actionGet()
+            () -> client.admin().cluster().prepareGetSnapshots("test-repo").addSnapshots("test-snap-1").get().getSnapshots()
+        logger.info("--> indexing some data");
+        logger.info("--> move index-N blob to next generation");
+                .put(BlobStoreRepository.CACHE_REPOSITORY_DATA.getKey(), false)
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
+        );  
         indexRandom(  
+        logger.info("--> creating snapshot");  
+        final SnapshotsService snapshotsService = internalCluster().getCurrentClusterManagerNodeInstance(SnapshotsService.class);
+        final String snapshot2 = "test-snap-2";
+            .setIndices("test-idx-1")
+    public void testConcurrentlyChangeRepositoryContentsInBwCMode() throws Exception {
+        assertRequestBuilderThrows(
+import org.opensearch.common.settings.Settings;
+        final Map<String, IndexId> indexIds = repositoryData.getIndices();
+            true,  
+        final Repository repository = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class)
+                                .withUpdatedGeneration(repository.getMetadata().name(), beforeMoveGen, beforeMoveGen + 1)
+            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
+            () -> client.admin().cluster().prepareGetSnapshots(repoName).addSnapshots(snapshot).get()  
+        assertThat(  
+        Client client = client();  
+    }
+            .repository(repoName);
+        );
+        final String indexName = "test-idx";  
+public class CorruptedBlobStoreRepositoryIT extends AbstractSnapshotIntegTestCase {
+        logger.info("-->  creating snapshot [{}]", snapshot2);  
+            client().prepareIndex().setIndex("test-idx-2").setSource("foo", "bar")  
+import static org.hamcrest.Matchers.greaterThan;
+        indexRandom(
+        for (String index : indices) {
+        logger.info("--> creating snapshot");  
+            .getSnapshotInfo();
+ * You may obtain a copy of the License at  
+        assertThat(
+        logger.info("--> make sure snapshot doesn't exist");
+        );
+            containsString("Could not read repository data because the contents of the repository do not match its expected state.")
+            SnapshotMissingException.class,
+ * license agreements. See the NOTICE file distributed with
+            RepositoryException.class,
+        try (SeekableByteChannel outChan = Files.newByteChannel(shardIndexFile, StandardOpenOption.WRITE)) {
+        indexRandom(  
+        logger.info("-->  creating index [{}] with [{}] documents in it", indexName, nDocs);  
+        final String snapshot = "test-snap";
+        final String snapshot = "test-snap";  
+        );
+        );  
+        );  
+            .repository(repoName);  
+            .get();
+                        .putCustom(  
+            documents[j] = client.prepareIndex(indexName).setSource("foo2", "bar2");
+        logger.info("--> make sure that we can create the snapshot again");
+        );
+    }
+            Settings.builder().put("location", repo).put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)
+            .put("location", repo)
+        );  
+            .get();
+                .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)
+        );
+    }
+        assertThat(snapshotStatusResponse.getSnapshots(), hasSize(1));  
+        );
+        assertThat(snapshotInfo.successfulShards(), equalTo(snapshotInfo.totalShards()));
+        Files.delete(metadata);
+        expectThrows(SnapshotMissingException.class, () -> clusterAdmin().prepareGetSnapshots("test-repo").addSnapshots("test-snap").get());
+            Files.delete(shardZero.resolve("snap-" + snapshotInfo.snapshotId().getUUID() + ".dat"));  
+        final String otherRepoName = "other-repo";  
+            .get();
+        SnapshotInfo snapshotInfo = createFullSnapshot("test-repo", "test-snap");
+        }
+            client().prepareIndex("test-idx-2").setSource("foo", "bar")
+            IOUtils.deleteFilesIgnoringExceptions(globalStatePath);
+        logger.info("-->  deleting index [{}]", indexName);
+ */  
+        Client client = client();
+        );  
+import org.opensearch.cluster.metadata.Metadata;  
+        createRepository(
+        );
+ * compatible open source license.
+        createRepository(  
+            repoName,
+            logger.info("--> verify repository remains blocked");
+        createIndex("test-idx-1", "test-idx-2");
+import org.opensearch.repositories.IndexId;
+        final RepositoryException repositoryException4 = expectThrows(
+            client().prepareIndex().setIndex("test-idx-1").setSource("foo", "bar"),
+import org.opensearch.cluster.metadata.RepositoriesMetadata;
+ * this file be licensed under the Apache-2.0 license or a
+        for (String index : indices) {  
+import java.util.Map;  
+        );  
+            .setWaitForCompletion(true)  
+            .setWaitForCompletion(true)  
+        final SnapshotInfo snapshotInfo = createSnapshotResponse.getSnapshotInfo();  
+import org.opensearch.action.index.IndexRequestBuilder;
+            client().prepareIndex("test-idx-1").setSource("foo", "bar"),  
+            .get();  
+            () -> client.admin().cluster().prepareGetSnapshots(repoName).addSnapshots(snapshot).get()
+        CreateSnapshotResponse createSnapshotResponse = client.admin()  
+        );  
+                )
+ * software distributed under the License is distributed on an
+            client().prepareIndex("test-idx-2").setSource("foo", "bar")  
+            .setWaitForCompletion(true)  
+                    shardZero.resolve("index-" + getRepositoryData("test-repo").shardGenerations().getShardGen(indexIds.get(index), 0))  
+    }
+            assertRepositoryBlocked(client, repoName, snapshot);  
+        Path repo = randomRepoPath();  
+        assertThat(snapshotStatusResponse.getSnapshots().get(0).getSnapshot().getSnapshotId().getName(), equalTo("test-snap"));
+ * not use this file except in compliance with the License.
+        );
+import static org.hamcrest.Matchers.hasSize;
+            client().prepareIndex("test-idx-1").setSource("foo", "bar"),
+        CreateSnapshotResponse createSnapshotResponse = client().admin()
+        createIndex(indices);  
+            if (randomBoolean()) {
+ */  
+        logger.info("-->  creating repository at {}", repo.toAbsolutePath());  
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+        logger.info("--> verify index-N blob is found at the expected location");
+        expectThrows(RepositoryException.class, () -> getRepositoryData(repository));
+        );
+        }
+        logger.info("--> recreate repository");  
+            assertTrue(Files.notExists(indicesPath.resolve(indexIds.get(index).getId())));
+        logger.info("--> creating another snapshot");
+        }  
+            .setWaitForCompletion(true)
+            outChan.truncate(randomInt(10));
+            createSnapshotResponse.getSnapshotInfo().totalShards() - 1  
+        assertThat(snapshotInfo2.indices(), hasSize(1));
+                        )
+            .put("compress", false)  
+            () -> client.admin().cluster().prepareGetSnapshots("test-repo").addSnapshots("test-snap-1").get()
+        CreateSnapshotResponse createSnapshotResponse = client.admin()  
+        Path repo = randomRepoPath();
+import org.opensearch.repositories.RepositoryData;
+        assertThat(snapshotInfo.indices(), hasSize(1));
+            .cluster()
+                .put("compress", false)
+        logger.info("--> move index-N blob to next generation");
+    public void testDeleteSnapshotWithMissingMetadata() throws Exception {
+                + "because it uses snap-*.data files and not the index-N to determine what files to restore"
+        assertThat(snapshotInfos.get(0).snapshotId().getName(), equalTo(snapshot1));  
+}
+        assertThat(  
+    public void testSnapshotWithMissingShardLevelIndexFile() throws Exception {
+ * this work for additional information regarding copyright
+                .put("location", repo)
+        createRepository(
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
+        client.admin().cluster().prepareDeleteSnapshot(repoName, snapshot).get();  
+        assertAcked(prepareCreate(indexName).setSettings(indexSettingsNoReplicas(1)));
+            SnapshotMissingException.class,
+            .cluster()  
+        );
+                .put("compress", false)
+            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())  
+            SnapshotMissingException.class,
+        assertRepositoryBlocked(client, repoName, snapshot);
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),  
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+     * Tests that a shard snapshot with a corrupted shard index file can still be used for restore and incremental snapshots.
+        updateClusterState(
+            SnapshotMissingException.class
+        }
+            true,
+                        .build()  
+        final String snapshot1 = "test-snap-1";  
+            "test-repo",
+            .cluster()  
+        logger.info("--> wait for all listeners on snapshots service to be resolved to avoid snapshot task batching causing a conflict");
+        expectThrows(
+        createFullSnapshot("test-repo", "test-snap");
+        final long beforeMoveGen = repositoryData.getGenId();
+        logger.info("--> make sure snapshot doesn't exist");
+        assertThat(getRepositoryData(repoName).getGenId(), is(beforeMoveGen + 1));
+import org.opensearch.core.common.unit.ByteSizeUnit;
+                outChan.truncate(randomInt(10));
+        CreateSnapshotResponse createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-2")  
+        final Repository repository = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class)
+            .put("location", repo)
+        logger.info("--> delete index metadata and shard metadata");
+            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
+ * the Apache License, Version 2.0 (the "License"); you may
+        logger.info("-->  verifying snapshot state for [{}]", snapshot1);
+ *
+            .setIndices("test-idx-*")  
+        final Path repo = randomRepoPath();  
+                .put("location", repo)
+        } else {
+import org.opensearch.common.util.io.IOUtils;  
+        Client client = client();
+            () -> client().admin().cluster().prepareGetSnapshots(repoName).addSnapshots(snapshot).get()
+    public void testFindDanglingLatestGeneration() throws Exception {  
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
+        Files.move(repo.resolve("index-" + repositoryData.getGenId()), repo.resolve("index-" + (repositoryData.getGenId() + 1)));  
+        final String[] indices = { "test-idx-1", "test-idx-2" };
+        final String repoName = "test-repo";
+            currentState -> ClusterState.builder(currentState)  
+        logger.info("--> make sure snapshot doesn't exist");
+import static org.hamcrest.Matchers.is;  
+        final RepositoryData repositoryData = getRepositoryData(repoName);  
+/*  
+            Settings.builder()  
+    }  
+            client().prepareIndex().setIndex("test-idx-2").setSource("foo", "bar")
+        assertThat(getRepositoryData(repoName).getGenId(), is(beforeMoveGen + 2));  
+        logger.info("-->  indexing [{}] more documents into [{}]", nDocs, indexName);
+        startDeleteSnapshot("test-repo", "test-snap-1").get();  
+import org.opensearch.transport.client.Client;
+        createIndex("test-idx-1", "test-idx-2");
+                .put("compress", false)  
+        createRepository(repoName, "fs", settings);
+            client().prepareIndex().setIndex("test-idx-2").setSource("foo", "bar")
+        indexRandom(  
+            Settings.builder()  
+        ensureGreen();
+            "fs",
+                    .findFirst()
+        logger.info("--> try to create snapshot");
+        );  
+        assertThat(snapshotInfos.size(), equalTo(1));
+        }  
+        logger.info("--> delete global state metadata");
+        if (randomBoolean()) {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+                            currentState.metadata()
+        final String repoName = "test-repo";
+        logger.info("--> indexing some data");
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+            }
+    }  
+/*
+        expectThrows(  
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+        assertEquals(
+ * specific language governing permissions and limitations
+        CreateSnapshotResponse createSnapshotResponse = client.admin()
+            true,
+ */
+            client().prepareIndex().setIndex("test-idx-1").setSource("foo", "bar"),  
+        createRepository(repoName, "fs", settings);  
+        logger.info("--> creating snapshot");
+        );
+        final RepositoryException repositoryException3 = expectThrows(
+            .get();
+        RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-1")
+            .setWaitForCompletion(true)
+        final Map<String, IndexId> indexIds = getRepositoryData("test-repo").getIndices();
+ * The OpenSearch Contributors require contributions made to  
+            repoName,
+            .cluster()
+    public void testDeleteSnapshotWithMissingIndexAndShardMetadata() throws Exception {
+        );  
+            .setIndices("test-idx-*")  
+        Path metadata = repo.resolve("meta-" + createSnapshotResponse.getSnapshotInfo().snapshotId().getUUID() + ".dat");  
+        );
+        logger.info("--> creating snapshot");  
+        final IndexRequestBuilder[] documents = new IndexRequestBuilder[nDocs];  
+        assertThat(snapshotInfo.successfulShards(), greaterThan(0));
+            "fs",  
+        logger.info("--> indexing some data");  
+package org.opensearch.snapshots;
+            SnapshotMissingException.class,
+        final SnapshotInfo snapshotInfo = createFullSnapshot("test-repo", snapshot1);
+ * under the License.  
+            true,  
+        assertThat(snapshotInfo2.state(), equalTo(SnapshotState.PARTIAL));
+ * Licensed to Elasticsearch under one or more contributor  
+            "fs",
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+            .cluster()
+                Files.delete(
+            client().prepareIndex("test-idx-2").setSource("foo", "bar")
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+        final IndexId corruptedIndex = indexIds.get(indexName);
+        expectThrows(  
+        Files.write(repo.resolve("index-" + repositoryData.getGenId()), randomByteArrayOfLength(randomIntBetween(1, 100)));
+        createIndex("test-idx-1", "test-idx-2");
+        Path repo = randomRepoPath();
+        assertThat(  
             true,
             client().prepareIndex("test-idx-1").setSource("foo", "bar"),
-            client().prepareIndex("test-idx-2").setSource("foo", "bar")  
-        );
-
-        logger.info("--> creating snapshot");  
-        clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-1").setWaitForCompletion(true).setIndices("test-idx-*").get();
-
-        logger.info("--> deleting shard level index file");  
-        for (IndexId indexId : getRepositoryData("test-repo").getIndices().values()) {
-            final Path shardGen;
-            try (Stream<Path> shardFiles = Files.list(repo.resolve(resolvePath(indexId, "0")))) {  
-                shardGen = shardFiles.filter(file -> file.getFileName().toString().startsWith(BlobStoreRepository.INDEX_FILE_PREFIX))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Failed to find shard index blob"));  
-            }
-            Files.delete(shardGen);
-        }  
-
-        logger.info("--> creating another snapshot");
-        CreateSnapshotResponse createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-2")  
             .setWaitForCompletion(true)
-            .setIndices("test-idx-1")
-            .get();  
-        assertEquals(
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),
-            createSnapshotResponse.getSnapshotInfo().totalShards() - 1  
+        final RepositoryData repositoryData = getRepositoryData(repository);  
+        for (int j = 0; j < nDocs; j++) {
+        logger.info("--> verify loading repository data throws RepositoryException");  
+        final RepositoryData repositoryData = getRepositoryData(repoName);
+            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())
+        Settings.Builder settings = Settings.builder()
         );
-
-        logger.info(  
-            "--> restoring the first snapshot, the repository should not have lost any shard data despite deleting index-N, "
-                + "because it uses snap-*.data files and not the index-N to determine what files to restore"
-        );  
-        client().admin().indices().prepareDelete("test-idx-1", "test-idx-2").get();
-        RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-1")
-            .setWaitForCompletion(true)  
-            .get();
-        assertEquals(0, restoreSnapshotResponse.getRestoreInfo().failedShards());
-    }  
-
-    private void assertRepositoryBlocked(Client client, String repo, String existingSnapshot) {
-        logger.info("--> try to delete snapshot");  
-        final RepositoryException repositoryException3 = expectThrows(
-            RepositoryException.class,
-            () -> client.admin().cluster().prepareDeleteSnapshot(repo, existingSnapshot).execute().actionGet()  
         );
+        assertThat(snapshotInfo2.failedShards(), equalTo(1));  
         assertThat(
-            repositoryException3.getMessage(),  
-            containsString("Could not read repository data because the contents of the repository do not match its expected state.")
-        );
-
-        logger.info("--> try to create snapshot");
-        final RepositoryException repositoryException4 = expectThrows(
-            RepositoryException.class,  
-            () -> client.admin().cluster().prepareCreateSnapshot(repo, existingSnapshot).execute().actionGet()
-        );
-        assertThat(  
+            documents[j] = client.prepareIndex(indexName).setSource("foo", "bar");
+            final Path shardGen;
+        flushAndRefresh("test-idx-1", "test-idx-2");  
+        logger.info("--> deleting shard level index file");  
+        assertAcked(startDeleteSnapshot("test-repo", "test-snap").get());  
+        Path repo = randomRepoPath();
+                .put("location", repo)
+            .get();  
+            .setRestoreGlobalState(randomBoolean())
+    private void assertRepositoryBlocked(Client client, String repo, String existingSnapshot) {
+            // Truncate the global state metadata file  
+        Path repo = randomRepoPath();
             repositoryException4.getMessage(),
-            containsString("Could not read repository data because the contents of the repository do not match its expected state.")
-        );  
+            .get();  
+            .cluster()
+        final Repository repository = internalCluster().getClusterManagerNodeInstance(RepositoriesService.class).repository(repoName);  
+            client().prepareIndex("test-idx-2").setSource("foo", "bar"),  
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+        Settings.Builder settings = Settings.builder()
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
+            try (SeekableByteChannel outChan = Files.newByteChannel(globalStatePath, StandardOpenOption.WRITE)) {
+            // Delete the global state metadata file  
+            .prepareCreateSnapshot(repoName, snapshot)
+            .get();
+                .put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES)
+        assertThat(snapshotInfos.get(0).state(), equalTo(SnapshotState.SUCCESS));
+            .repository(otherRepoName);  
+        );
+        assertAcked(client.admin().cluster().prepareDeleteRepository(repoName));
+        }
+    /**  
+        disableRepoConsistencyCheck("This test intentionally corrupts the repository contents");
+        final String snapshot = "test-snap";
+        expectThrows(
+            client().prepareIndex().setIndex("test-idx-1").setSource("foo", "bar"),
+        final int nDocs = randomIntBetween(1, 10);
+        internalCluster().fullRestart();  
+            .prepareCreateSnapshot(repoName, snapshot)  
+        if (randomBoolean()) {
+import java.nio.file.StandardOpenOption;
+        logger.info("--> truncate snapshot file to make it unreadable");
+        assertDocCount(indexName, nDocs);  
+        final String snapshot = "test-snap";
+                // Don't cache repository data because the test manually modifies the repository data  
+        logger.info("--> corrupt index-N blob");  
+        );
+            .setWaitForCompletion(true)
+            try (Stream<Path> shardFiles = Files.list(repo.resolve(resolvePath(indexId, "0")))) {  
+        clusterAdmin().prepareRestoreSnapshot("test-repo", snapshot1)  
+        indexRandom(
+        logger.info("--> indexing some data");
+            .prepareCreateSnapshot("test-repo", "test-snap-1")
+        indexRandom(true, documents);
     }
-}
+        final String repoName = "test-repo";
+                    .orElseThrow(() -> new AssertionError("Failed to find shard index blob"));  
+        for (int j = 0; j < nDocs; j++) {  
+        createIndex("test-idx-1", "test-idx-2");
+        }
+        }  
+        assertThat(
+import static org.hamcrest.Matchers.containsString;
+        final Path globalStatePath = repo.resolve("meta-" + snapshotInfo.snapshotId().getUUID() + ".dat");
+        for (IndexId indexId : getRepositoryData("test-repo").getIndices().values()) {
+        clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-1").setWaitForCompletion(true).setIndices("test-idx-*").get();
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+            .setIndices("test-idx-*")
+        indexRandom(
+        );
+        );  
+            repoName,
+        expectThrows(RepositoryException.class, () -> getRepositoryData(otherRepo));  
+        assertBusy(() -> assertTrue(snapshotsService.assertAllListenersResolved()));  
+                .put(BlobStoreRepository.CACHE_REPOSITORY_DATA.getKey(), false)  
+            "fs",
+            .setIndices("test-idx-*")
+        final RepositoryData repositoryData = getRepositoryData("test-repo");
+        createIndex("test-idx-1", "test-idx-2");
+        logger.info(  
+        Client client = client();
+        startDeleteSnapshot(repoName, snapshot).get();
+    public void testMountCorruptedRepositoryData() throws Exception {  
+    }
+import org.opensearch.repositories.RepositoriesService;  
+            .put(BlobStoreRepository.ALLOW_CONCURRENT_MODIFICATION.getKey(), true)
+import org.opensearch.repositories.Repository;
+        indexRandom(true, documents);  
+        createRepository(otherRepoName, "fs", Settings.builder().put("location", repo).put("compress", false));
+import java.nio.file.Files;
+            Settings.builder()  
+            repositoryException3.getMessage(),  
+        logger.info("--> make sure snapshot doesn't exist");
+        SnapshotsStatusResponse snapshotStatusResponse = clusterAdmin().prepareSnapshotStatus("test-repo").setSnapshots("test-snap").get();
+import java.util.stream.Stream;
+        createIndex("test-idx-1", "test-idx-2");
+        createRepository("test-repo", "fs", repo);  
+            .prepareCreateSnapshot("test-repo", "test-snap-1")  
+            .prepareCreateSnapshot(repoName, snapshot)  
+        logger.info("-->  restoring snapshot [{}]", snapshot1);
+        Path repo = randomRepoPath();
+    public void testDeleteSnapshotWithCorruptedSnapshotFile() throws Exception {  
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;  
+     */
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+            Files.move(repo.resolve("index-" + (repositoryData.getGenId() + 1)), repo.resolve("index-" + repositoryData.getGenId()));  
+            client().prepareIndex("test-idx-2").setSource("foo", "bar")
+        client().admin().indices().prepareDelete("test-idx-1", "test-idx-2").get();
+            Path shardZero = repo.resolve(resolvePath(indexIds.get(index), "0"));  
+            SnapshotMissingException.class,
+            .setIndices("test-idx-*")
+        indexRandom(  
+        createSnapshotResponse = client.admin()  
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
+            .setWaitForCompletion(true)
+            client().prepareIndex("test-idx-1").setSource("foo", "bar"),
+        CreateSnapshotResponse createSnapshotResponse = client.admin()
+        List<SnapshotInfo> snapshotInfos = clusterAdmin().prepareGetSnapshots("test-repo").get().getSnapshots();  
+        final Repository otherRepo = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class)
+            .prepareCreateSnapshot(repoName, snapshot)
+import java.nio.file.Path;  
+            .setWaitForCompletion(true)  
+        final long beforeMoveGen = repositoryData.getGenId();
+        disableRepoConsistencyCheck("This test uses a purposely broken repository so it would fail consistency checks");
+            equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())  

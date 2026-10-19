@@ -1,86 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.action;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.rule.autotagging.FeatureType;  
-
-import java.io.IOException;
-
-/**
- * A request to delete a Rule by ID
- * Example:  
- * curl -XDELETE "localhost:9200/_rules/{featureType}/{_id}"
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public class DeleteRuleRequest extends ActionRequest {
-    private final String ruleId;  
-    private final FeatureType featureType;
-
-    /**  
-     * Constructs a request to delete a rule.
-     *
-     * @param ruleId The ID of the rule to delete.  
-     * @param featureType The feature type associated with the rule.
-     */
-    public DeleteRuleRequest(String ruleId, FeatureType featureType) {  
-        this.ruleId = ruleId;
-        this.featureType = featureType;
-    }  
-
-    /**
-     * Deserialization constructor  
-     * @param in Stream input
-     */
-    public DeleteRuleRequest(StreamInput in) throws IOException {  
-        super(in);
-        this.ruleId = in.readString();
         this.featureType = FeatureType.from(in.readString());  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(ruleId);  
-        featureType.writeTo(out);
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        if (ruleId == null || ruleId.isEmpty()) {  
-            ActionRequestValidationException validationException = new ActionRequestValidationException();
-            validationException.addValidationError("Rule ID is missing");
-            return validationException;  
-        }
-        return null;
+     * @param featureType The feature type associated with the rule.
+import org.opensearch.core.common.io.stream.StreamInput;
     }  
-
-    /**
-     * Returns the ID of the rule to be deleted.  
-     *
-     * @return The rule ID.
-     */  
-    public String getRuleId() {
+        return null;
+ *
+     * @param in Stream input
+            return validationException;  
         return ruleId;
     }  
-
-    /**
      * Returns the feature type associated with the rule.  
-     *
-     * @return The feature type.
-     */  
     FeatureType getFeatureType() {
+        out.writeString(ruleId);  
+     * @param ruleId The ID of the rule to delete.  
+     *
+ * this file be licensed under the Apache-2.0 license or a
+    }
+     * Constructs a request to delete a rule.
+    @Override
         return featureType;
+ */  
+import org.opensearch.action.ActionRequest;
+/*  
+     * Deserialization constructor  
+    private final String ruleId;  
+     * @return The feature type.
+        }
     }  
+/**
+ * compatible open source license.
+ * A request to delete a Rule by ID
+import org.opensearch.action.ActionRequestValidationException;
+import org.opensearch.common.annotation.ExperimentalApi;  
+        super(in);
+public class DeleteRuleRequest extends ActionRequest {
+    }
+import java.io.IOException;
+import org.opensearch.rule.autotagging.FeatureType;  
+        this.ruleId = in.readString();
+     */  
+    public String getRuleId() {
+ * curl -XDELETE "localhost:9200/_rules/{featureType}/{_id}"
+     *
+package org.opensearch.rule.action;
+     */
+    /**
+    /**
 }
+     */
+    }  
+        if (ruleId == null || ruleId.isEmpty()) {  
+@ExperimentalApi
+ */  
+        featureType.writeTo(out);
+ * Example:  
+        super.writeTo(out);
+        this.featureType = featureType;
+     * Returns the ID of the rule to be deleted.  
+            validationException.addValidationError("Rule ID is missing");
+        this.ruleId = ruleId;
+     */  
+    public void writeTo(StreamOutput out) throws IOException {
+            ActionRequestValidationException validationException = new ActionRequestValidationException();
+    @Override  
+    /**  
+ * @opensearch.experimental
+    /**
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * SPDX-License-Identifier: Apache-2.0
+    public DeleteRuleRequest(String ruleId, FeatureType featureType) {  
+    public DeleteRuleRequest(StreamInput in) throws IOException {  
+     *
+    public ActionRequestValidationException validate() {
+    private final FeatureType featureType;
+     * @return The rule ID.
+ * The OpenSearch Contributors require contributions made to  

@@ -1,49 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rest.action.search;
-
-import org.opensearch.action.search.PutSearchPipelineRequest;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.RestRequest;  
-import org.opensearch.rest.action.RestToXContentListener;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
 import java.util.List;
-
-import static org.opensearch.rest.RestRequest.Method.PUT;
-
-/**  
- * REST action to put a search pipeline
- *
- * @opensearch.internal  
- */
-public class RestPutSearchPipelineAction extends BaseRestHandler {
+import org.opensearch.rest.BaseRestHandler;
     @Override  
-    public String getName() {
-        return "search_put_pipeline_action";
-    }  
-
-    @Override
+ */
+}  
+ */  
+        PutSearchPipelineRequest request = new PutSearchPipelineRequest(restRequest.param("id"), sourceTuple.v2(), sourceTuple.v1());
+import org.opensearch.common.collect.Tuple;
     public List<Route> routes() {  
-        return List.of(new Route(PUT, "/_search/pipeline/{id}"));
-    }
-
+/*  
+import org.opensearch.rest.action.RestToXContentListener;
+import org.opensearch.action.search.PutSearchPipelineRequest;
+import java.io.IOException;
     @Override
+ * REST action to put a search pipeline
+    }
+import org.opensearch.core.common.bytes.BytesReference;  
+        return "search_put_pipeline_action";
+package org.opensearch.rest.action.search;
+ * compatible open source license.
+        return channel -> client.admin().cluster().putSearchPipeline(request, new RestToXContentListener<>(channel));
     protected RestChannelConsumer prepareRequest(RestRequest restRequest, NodeClient client) throws IOException {
         Tuple<MediaType, BytesReference> sourceTuple = restRequest.contentOrSourceParam();  
-        PutSearchPipelineRequest request = new PutSearchPipelineRequest(restRequest.param("id"), sourceTuple.v2(), sourceTuple.v1());
-        request.clusterManagerNodeTimeout(restRequest.paramAsTime("cluster_manager_timeout", request.clusterManagerNodeTimeout()));
-        request.timeout(restRequest.paramAsTime("timeout", request.timeout()));  
-        return channel -> client.admin().cluster().putSearchPipeline(request, new RestToXContentListener<>(channel));
+import org.opensearch.transport.client.node.NodeClient;
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+        return List.of(new Route(PUT, "/_search/pipeline/{id}"));
+    public String getName() {
     }
-}  
+ * @opensearch.internal  
+public class RestPutSearchPipelineAction extends BaseRestHandler {
+ * The OpenSearch Contributors require contributions made to  
+import static org.opensearch.rest.RestRequest.Method.PUT;
+/**  
+import org.opensearch.rest.RestRequest;  
+        request.clusterManagerNodeTimeout(restRequest.paramAsTime("cluster_manager_timeout", request.clusterManagerNodeTimeout()));
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ *
+    @Override
+        request.timeout(restRequest.paramAsTime("timeout", request.timeout()));  
+import org.opensearch.core.xcontent.MediaType;

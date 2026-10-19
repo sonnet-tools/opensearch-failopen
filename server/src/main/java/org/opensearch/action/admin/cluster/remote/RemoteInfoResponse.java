@@ -1,84 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.remote;
-
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.transport.RemoteConnectionInfo;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;  
-
-/**
- * Transport response for remote monitoring  
- *
- * @opensearch.internal
- */  
-public final class RemoteInfoResponse extends ActionResponse implements ToXContentObject {
-
-    private List<RemoteConnectionInfo> infos;  
-
-    RemoteInfoResponse(StreamInput in) throws IOException {
-        super(in);  
-        infos = in.readList(RemoteConnectionInfo::new);
-    }
-
-    public RemoteInfoResponse(Collection<RemoteConnectionInfo> infos) {
-        this.infos = Collections.unmodifiableList(new ArrayList<>(infos));
-    }  
-
-    public List<RemoteConnectionInfo> getInfos() {
-        return infos;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeList(infos);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        for (RemoteConnectionInfo info : infos) {
-            info.toXContent(builder, params);  
         }
-        builder.endObject();
+ *
+ * GitHub history for details.
+ *
+    @Override  
+ * Transport response for remote monitoring  
         return builder;  
+        out.writeList(infos);
+import java.util.List;  
+            info.toXContent(builder, params);  
+ */
+    private List<RemoteConnectionInfo> infos;  
+        builder.endObject();
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+ */  
+import java.util.Collection;
+package org.opensearch.action.admin.cluster.remote;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+ * compatible open source license.
+    }  
+import org.opensearch.core.common.io.stream.StreamInput;
+        return infos;  
+ */  
+ */  
+        infos = in.readList(RemoteConnectionInfo::new);
+    }  
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+/**
+ * this file be licensed under the Apache-2.0 license or a
+ * Modifications Copyright OpenSearch Contributors. See
+        super(in);  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.core.xcontent.ToXContentObject;
+    public RemoteInfoResponse(Collection<RemoteConnectionInfo> infos) {
+/*  
     }
+    RemoteInfoResponse(StreamInput in) throws IOException {
+import java.util.Collections;
+    public List<RemoteConnectionInfo> getInfos() {
+    @Override
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.action.ActionResponse;
 }
+ * @opensearch.internal
+ * software distributed under the License is distributed on an
+    }
+        builder.startObject();
+ * specific language governing permissions and limitations
+    }
+import org.opensearch.transport.RemoteConnectionInfo;  
+ * KIND, either express or implied.  See the License for the
+ * The OpenSearch Contributors require contributions made to  
+        this.infos = Collections.unmodifiableList(new ArrayList<>(infos));
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+ * under the License.  
+public final class RemoteInfoResponse extends ActionResponse implements ToXContentObject {
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.ArrayList;  
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+/*
+        for (RemoteConnectionInfo info : infos) {
+import java.io.IOException;
+import org.opensearch.core.xcontent.XContentBuilder;

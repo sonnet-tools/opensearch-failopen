@@ -1,87 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.http.netty4;
-
 import org.opensearch.OpenSearchNetty4IntegTestCase;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.http.HttpServerTransport;  
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;
-
-import java.util.Collection;
-import java.util.Locale;
-
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.util.ReferenceCounted;
-
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-
-@ClusterScope(scope = Scope.TEST, supportsDedicatedMasters = false, numDataNodes = 1)
-public class Netty4PipeliningIT extends OpenSearchNetty4IntegTestCase {
-
-    @Override
-    protected boolean addMockHttpTransport() {
-        return false; // enable http  
-    }
-
-    public void testThatNettyHttpServerSupportsPipelining() throws Exception {  
-        String[] requests = new String[] { "/", "/_nodes/stats", "/", "/_cluster/state", "/" };
-
-        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);  
+ * specific language governing permissions and limitations
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+ * You may obtain a copy of the License at  
+ * Unless required by applicable law or agreed to in writing,
         TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
-        TransportAddress transportAddress = randomFrom(boundAddresses);
-
-        try (Netty4HttpClient nettyHttpClient = Netty4HttpClient.http()) {
-            Collection<FullHttpResponse> responses = nettyHttpClient.get(transportAddress.address(), requests);
-            try {  
-                assertThat(responses, hasSize(5));
-
-                Collection<String> opaqueIds = Netty4HttpClient.returnOpaqueIds(responses);  
-                assertOpaqueIdsInOrder(opaqueIds);
-            } finally {
-                responses.forEach(ReferenceCounted::release);  
-            }
-        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
     }  
-
-    private void assertOpaqueIdsInOrder(Collection<String> opaqueIds) {
         // check if opaque ids are monotonically increasing  
-        int i = 0;
-        String msg = String.format(Locale.ROOT, "Expected list of opaque ids to be monotonically increasing, got [%s]", opaqueIds);
-        for (String opaqueId : opaqueIds) {  
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+import org.opensearch.http.HttpServerTransport;  
+import io.netty.util.ReferenceCounted;
+ *
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+ *  
+        try (Netty4HttpClient nettyHttpClient = Netty4HttpClient.http()) {
             assertThat(msg, opaqueId, is(String.valueOf(i++)));
-        }
-    }  
-
+    public void testThatNettyHttpServerSupportsPipelining() throws Exception {  
+                Collection<String> opaqueIds = Netty4HttpClient.returnOpaqueIds(responses);  
+        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);  
+ * The OpenSearch Contributors require contributions made to  
+import static org.hamcrest.Matchers.is;
+public class Netty4PipeliningIT extends OpenSearchNetty4IntegTestCase {
 }
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+ */  
+        TransportAddress transportAddress = randomFrom(boundAddresses);
+                assertThat(responses, hasSize(5));
+/*  
+package org.opensearch.http.netty4;
+ */  
+ * not use this file except in compliance with the License.
+import java.util.Collection;
+    protected boolean addMockHttpTransport() {
+        String msg = String.format(Locale.ROOT, "Expected list of opaque ids to be monotonically increasing, got [%s]", opaqueIds);
+    @Override
+            } finally {
+/*
+    }
+        return false; // enable http  
+            try {  
+            }
+ * Modifications Copyright OpenSearch Contributors. See
+        for (String opaqueId : opaqueIds) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;
+ * SPDX-License-Identifier: Apache-2.0
+        String[] requests = new String[] { "/", "/_nodes/stats", "/", "/_cluster/state", "/" };
+                responses.forEach(ReferenceCounted::release);  
+            Collection<FullHttpResponse> responses = nettyHttpClient.get(transportAddress.address(), requests);
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+@ClusterScope(scope = Scope.TEST, supportsDedicatedMasters = false, numDataNodes = 1)
+ * KIND, either express or implied.  See the License for the
+import static org.hamcrest.Matchers.hasSize;
+                assertOpaqueIdsInOrder(opaqueIds);
+import io.netty.handler.codec.http.FullHttpResponse;
+import org.opensearch.core.common.transport.TransportAddress;
+ * under the License.  
+ *
+ * compatible open source license.
+    private void assertOpaqueIdsInOrder(Collection<String> opaqueIds) {
+import java.util.Locale;
+/*  
+        int i = 0;

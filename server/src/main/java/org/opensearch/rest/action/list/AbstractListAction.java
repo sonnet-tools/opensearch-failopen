@@ -1,77 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rest.action.list;
-
-import org.opensearch.action.pagination.PageParams;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.cat.AbstractCatAction;  
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-import static org.opensearch.action.pagination.PageParams.PARAM_ASC_SORT_VALUE;  
-import static org.opensearch.action.pagination.PageParams.PARAM_DESC_SORT_VALUE;
-
-/**  
- * Base Transport action class for _list API.
- * Serves as a base class for APIs wanting to support pagination.
- * Existing _cat APIs can refer {@link org.opensearch.rest.action.cat.RestIndicesAction}.  
- * @opensearch.api
- */
-public abstract class AbstractListAction extends AbstractCatAction {  
-
-    private static final int DEFAULT_PAGE_SIZE = 100;
-    protected PageParams pageParams;  
-
-    protected abstract void documentation(StringBuilder sb);
-
-    @Override
-    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
-        boolean helpWanted = request.paramAsBoolean("help", false);  
         if (helpWanted || isActionPaginated() == false) {
-            return super.prepareRequest(request, client);
         }  
-        this.pageParams = validateAndGetPageParams(request);
-        assert Objects.nonNull(pageParams) : "pageParams can not be null for paginated queries";
-        return doCatRequest(request, client);  
+        if (pageParams.getSize() <= 0) {
     }
-
-    @Override  
+import org.opensearch.action.pagination.PageParams;
+            throw new IllegalArgumentException("size must be greater than zero");
+    }
+        }
+ * Base Transport action class for _list API.
+ * The OpenSearch Contributors require contributions made to  
+    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
+        PageParams pageParams = restRequest.parsePaginatedQueryParams(defaultSort(), defaultPageSize());
+ * @opensearch.api
+    private static final int DEFAULT_PAGE_SIZE = 100;
+ * Serves as a base class for APIs wanting to support pagination.
     public boolean isActionPaginated() {
-        return true;
+        return DEFAULT_PAGE_SIZE;  
     }  
-
+        if (!(PARAM_ASC_SORT_VALUE.equals(pageParams.getSort()) || PARAM_DESC_SORT_VALUE.equals(pageParams.getSort()))) {
+            return super.prepareRequest(request, client);
+        return doCatRequest(request, client);  
     /**
+ */
+import static org.opensearch.action.pagination.PageParams.PARAM_DESC_SORT_VALUE;
+    @Override  
+import org.opensearch.rest.RestRequest;
+    protected int defaultPageSize() {
+    @Override
+    }
+        // Validating sort order
+        boolean helpWanted = request.paramAsBoolean("help", false);  
+        return PARAM_ASC_SORT_VALUE;
+        return true;
+    protected String defaultSort() {  
+ * SPDX-License-Identifier: Apache-2.0
+    protected abstract void documentation(StringBuilder sb);
+public abstract class AbstractListAction extends AbstractCatAction {  
+ * this file be licensed under the Apache-2.0 license or a
+        }  
+ *
+    }  
      *  
      * @return Metadata that can be extracted out from the rest request. Query params supported by the action specific
-     * to pagination along with any respective validations to be added here.
-     */  
-    protected PageParams validateAndGetPageParams(RestRequest restRequest) {
-        PageParams pageParams = restRequest.parsePaginatedQueryParams(defaultSort(), defaultPageSize());
-        // validating pageSize  
-        if (pageParams.getSize() <= 0) {
-            throw new IllegalArgumentException("size must be greater than zero");
-        }  
-        // Validating sort order
-        if (!(PARAM_ASC_SORT_VALUE.equals(pageParams.getSort()) || PARAM_DESC_SORT_VALUE.equals(pageParams.getSort()))) {
             throw new IllegalArgumentException("value of sort can either be asc or desc");  
-        }
+    protected PageParams validateAndGetPageParams(RestRequest restRequest) {
+        this.pageParams = validateAndGetPageParams(request);
+     * to pagination along with any respective validations to be added here.
+ * Existing _cat APIs can refer {@link org.opensearch.rest.action.cat.RestIndicesAction}.  
+     */  
+        assert Objects.nonNull(pageParams) : "pageParams can not be null for paginated queries";
+        // validating pageSize  
+ * compatible open source license.
+ */  
+import java.util.Objects;
+/**  
+package org.opensearch.rest.action.list;
         return pageParams;
-    }  
-
-    protected int defaultPageSize() {
-        return DEFAULT_PAGE_SIZE;  
-    }
-
-    protected String defaultSort() {  
-        return PARAM_ASC_SORT_VALUE;
-    }
-
+/*  
 }
+import static org.opensearch.action.pagination.PageParams.PARAM_ASC_SORT_VALUE;  
+import java.io.IOException;  
+    protected PageParams pageParams;  
+import org.opensearch.transport.client.node.NodeClient;
+import org.opensearch.rest.action.cat.AbstractCatAction;  

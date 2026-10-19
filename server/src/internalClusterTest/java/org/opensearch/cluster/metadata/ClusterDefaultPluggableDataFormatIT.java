@@ -1,151 +1,123 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
 import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
-import org.opensearch.common.settings.FeatureFlagSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.engine.dataformat.stub.MockCommitterEnginePlugin;
-import org.opensearch.index.engine.dataformat.stub.MockParquetDataFormatPlugin;
-import org.opensearch.indices.IndicesService;  
 import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Collection;
-import java.util.List;
-
-import static org.opensearch.indices.IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING;
-import static org.opensearch.indices.IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_VALUE_SETTING;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
-public class ClusterDefaultPluggableDataFormatIT extends OpenSearchIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(MockCommitterEnginePlugin.class, MockParquetDataFormatPlugin.class);  
+        Settings before = getIndexSettings(indexBefore);
     }
-
-    @Override  
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))  
-            .putList(IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_RESTRICT_ALLOWLIST.getKey(), ".kibana")
-            .build();
+import static org.opensearch.indices.IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_VALUE_SETTING;
     }  
-
+            .setTransientSettings(
     @Override
+        return List.of(MockCommitterEnginePlugin.class, MockParquetDataFormatPlugin.class);  
+        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(after));
+    public void testClusterDefaultStampedIntoNewIndexWhenNoOverride() {  
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), false)
+    public void testClusterDefaultUpdateAppliesToNewIndicesOnly() {  
     protected Settings featureFlagSettings() {  
-        Settings.Builder builder = Settings.builder();
-        for (Setting<?> builtInFlag : FeatureFlagSettings.BUILT_IN_FEATURE_FLAGS) {
-            builder.put(builtInFlag.getKey(), builtInFlag.getDefaultRaw(Settings.EMPTY));  
-        }
+        ensureGreen(normalIndex);
+import org.opensearch.common.settings.FeatureFlagSettings;
+import org.opensearch.indices.IndicesService;  
+        return Settings.builder()
+        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(beforeReread));  
+        setClusterDefaults(true, "parquet");  
+        assertEquals("lucene", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));  
+        setClusterDefaults(true, "parquet");  
+        ensureGreen(skippedIndex);
+        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(before));
+import java.util.Collection;
+            .put(super.nodeSettings(nodeOrdinal))  
+        Settings s = resp.getIndexToSettings().get(indexName);
+        Settings beforeReread = getIndexSettings(indexBefore);
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
         builder.put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true);
+            .cluster()
+            builder.put(builtInFlag.getKey(), builtInFlag.getDefaultRaw(Settings.EMPTY));  
+                Settings.builder()
+            .get();  
+ * SPDX-License-Identifier: Apache-2.0
+import static org.opensearch.indices.IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING;
+            )
+    }
+        createIndex(indexBefore);
+public class ClusterDefaultPluggableDataFormatIT extends OpenSearchIntegTestCase {
+import org.opensearch.index.engine.dataformat.stub.MockCommitterEnginePlugin;
+        String indexAfter = "test-pluggable-after-update";
+        );
+    }
+        return s;
+        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(before));  
+        String normalIndex = "test-pluggable-normal";  
+            .putList(IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_RESTRICT_ALLOWLIST.getKey(), ".kibana")
+        createIndex(
+        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(skippedSettings));  
+        Settings effective = getIndexSettings(indexName);
+        String indexName = "test-pluggable-cluster-default";
+        // Normal index should have cluster defaults stamped  
+import org.opensearch.common.util.FeatureFlags;
+        Settings.Builder builder = Settings.builder();
+    }
+    }
+        setClusterDefaults(false, "arrow");  
+        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(normalSettings));
+    protected Settings nodeSettings(int nodeOrdinal) {
+                    .put(CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), enabled)  
+        // Skipped index should NOT have cluster defaults stamped
+        assertEquals("arrow", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(after));  
+        ensureGreen(indexName);
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
         return builder.build();  
     }
-
-    public void testClusterDefaultStampedIntoNewIndexWhenNoOverride() {  
-        String indexName = "test-pluggable-cluster-default";
-
-        setClusterDefaults(true, "parquet");  
         createIndex(indexName);
-        ensureGreen(indexName);
-
-        Settings effective = getIndexSettings(indexName);
-        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(effective));
-        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));  
-    }
-
-    public void testExplicitIndexSettingOverridesClusterDefault() {  
         String indexName = "test-pluggable-request-override";
-
-        setClusterDefaults(true, "parquet");  
-        createIndex(
-            indexName,
-            Settings.builder()  
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), false)
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), "lucene")
-                .build()  
-        );
-        ensureGreen(indexName);
-
-        Settings effective = getIndexSettings(indexName);
-        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(effective));
-        assertEquals("lucene", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));  
-    }
-
-    public void testClusterDefaultUpdateAppliesToNewIndicesOnly() {  
-        String indexBefore = "test-pluggable-before-update";
-        String indexAfter = "test-pluggable-after-update";
-
-        setClusterDefaults(true, "parquet");
-        createIndex(indexBefore);
+    public void testExplicitIndexSettingOverridesClusterDefault() {  
         ensureGreen(indexBefore);  
-
-        Settings before = getIndexSettings(indexBefore);
-        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(before));  
-        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(before));
-
-        setClusterDefaults(false, "arrow");  
-        createIndex(indexAfter);
-        ensureGreen(indexAfter);
-
-        Settings after = getIndexSettings(indexAfter);
-        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(after));
-        assertEquals("arrow", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(after));  
-
-        Settings beforeReread = getIndexSettings(indexBefore);
-        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(beforeReread));  
-        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(beforeReread));
-    }
-
+        Settings effective = getIndexSettings(indexName);
     public void testAllowlistBypassesClusterDefaultStamping() {
-        String skippedIndex = ".kibana-01";
-        String normalIndex = "test-pluggable-normal";  
-
-        setClusterDefaults(true, "parquet");
-
+            Settings.builder()  
+        ensureGreen(indexAfter);
         createIndex(skippedIndex);
-        ensureGreen(skippedIndex);
-
-        createIndex(normalIndex);
-        ensureGreen(normalIndex);
-
-        // Skipped index should NOT have cluster defaults stamped
-        Settings skippedSettings = getIndexSettings(skippedIndex);
-        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(skippedSettings));  
-        assertEquals("", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(skippedSettings));
-
-        // Normal index should have cluster defaults stamped  
-        Settings normalSettings = getIndexSettings(normalIndex);
-        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(normalSettings));
-        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(normalSettings));  
     }
-
-    private void setClusterDefaults(boolean enabled, String value) {  
-        client().admin()
-            .cluster()
+            .build();
+import org.opensearch.common.settings.Setting;  
+import org.opensearch.test.OpenSearchIntegTestCase;
+        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(beforeReread));
+import org.opensearch.index.engine.dataformat.stub.MockParquetDataFormatPlugin;
+        createIndex(indexAfter);
+        setClusterDefaults(true, "parquet");
+        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(effective));
+import org.opensearch.index.IndexSettings;  
+                .build()  
+        Settings after = getIndexSettings(indexAfter);
+        String indexBefore = "test-pluggable-before-update";
             .prepareUpdateSettings()  
-            .setTransientSettings(
-                Settings.builder()
-                    .put(CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), enabled)  
-                    .put(CLUSTER_PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), value)
-            )
-            .get();  
-    }
-
-    private Settings getIndexSettings(String indexName) {  
         GetSettingsResponse resp = client().admin().indices().prepareGetSettings(indexName).get();
-        Settings s = resp.getIndexToSettings().get(indexName);
-        assertNotNull(s);  
-        return s;
+        Settings skippedSettings = getIndexSettings(skippedIndex);
+        for (Setting<?> builtInFlag : FeatureFlagSettings.BUILT_IN_FEATURE_FLAGS) {
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        createIndex(normalIndex);
+import java.util.List;
+    private Settings getIndexSettings(String indexName) {  
+        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));  
+        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(effective));
+        }
+ * compatible open source license.
+        assertEquals("", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(skippedSettings));
     }
+        client().admin()
 }  
+    @Override
+        Settings normalSettings = getIndexSettings(normalIndex);
+                    .put(CLUSTER_PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), value)
+ */  
+    private void setClusterDefaults(boolean enabled, String value) {  
+import org.opensearch.common.settings.Settings;
+            indexName,
+ *
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), "lucene")
+package org.opensearch.cluster.metadata;
+        String skippedIndex = ".kibana-01";
+        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(normalSettings));  
+        ensureGreen(indexName);
+    @Override  
+        setClusterDefaults(true, "parquet");
+        assertNotNull(s);  

@@ -1,68 +1,59 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+        return GeoTileUtils.hashToGeoPoint(hashAsLong);
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+ * compatible open source license.
+     * Read from a stream.
+ * ownership. Elasticsearch licenses this file to you under  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+        super(in);
+ * You may obtain a copy of the License at  
+    /**  
+ * specific language governing permissions and limitations
  */  
-
-package org.opensearch.geo.search.aggregations.bucket.geogrid;
-
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.search.aggregations.InternalAggregations;  
-import org.opensearch.search.aggregations.bucket.GeoTileUtils;
-
 import java.io.IOException;  
-
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
 /**
- * Implementation of geotile grid bucket  
- *
- * @opensearch.internal
- */  
-class InternalGeoTileGridBucket extends BaseGeoGridBucket<InternalGeoTileGridBucket> {
-    InternalGeoTileGridBucket(long hashAsLong, long docCount, InternalAggregations aggregations) {
+import org.opensearch.core.common.io.stream.StreamInput;
+package org.opensearch.geo.search.aggregations.bucket.geogrid;
+import org.opensearch.common.geo.GeoPoint;
+/*  
         super(hashAsLong, docCount, aggregations);  
     }
-
-    /**  
-     * Read from a stream.
+ *
+ * license agreements. See the NOTICE file distributed with
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * @opensearch.internal
+ * this work for additional information regarding copyright
+ * GitHub history for details.
      */
-    InternalGeoTileGridBucket(StreamInput in) throws IOException {  
-        super(in);
+ * SPDX-License-Identifier: Apache-2.0
+/*
+ */  
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+    }
     public String getKeyAsString() {
+ *
+ * under the License.  
+    InternalGeoTileGridBucket(StreamInput in) throws IOException {  
+ * KIND, either express or implied.  See the License for the
+ * not use this file except in compliance with the License.
         return GeoTileUtils.stringEncode(hashAsLong);  
-    }
-
-    @Override  
-    public GeoPoint getKey() {
-        return GeoTileUtils.hashToGeoPoint(hashAsLong);
-    }  
+ * this file be licensed under the Apache-2.0 license or a
 }
+    public GeoPoint getKey() {
+ *
+ * Implementation of geotile grid bucket  
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.search.aggregations.bucket.GeoTileUtils;
+    InternalGeoTileGridBucket(long hashAsLong, long docCount, InternalAggregations aggregations) {
+    }  
+ * software distributed under the License is distributed on an
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.search.aggregations.InternalAggregations;  
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+class InternalGeoTileGridBucket extends BaseGeoGridBucket<InternalGeoTileGridBucket> {

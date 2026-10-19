@@ -1,86 +1,73 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+    }  
+    public Iterator<T> iterator() {
+    @Override  
+    // Calls to nextOrNull might be performed on different threads in the transport actions so we need the volatile
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+package org.opensearch.common.util;
+    private volatile int index;
+        return elements.size();
+ * Modifications Copyright OpenSearch Contributors. See
+        return elements.size() - index;
  *     http://www.apache.org/licenses/LICENSE-2.0
+            return null;  
+    public T nextOrNull() {
+ *
+ * A plain iterator  
+ * specific language governing permissions and limitations
+        }  
+/**
+        if (index == elements.size()) {
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util;
-
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;  
-
-/**
- * A plain iterator  
- *
- * @opensearch.internal
- */  
-public class PlainIterator<T> implements Iterable<T>, Countable {
-    private final List<T> elements;
-
-    // Calls to nextOrNull might be performed on different threads in the transport actions so we need the volatile
     // keyword in order to ensure visibility. Note that it is fine to use `volatile` for a counter in that case given
-    // that although nextOrNull might be called from different threads, it can never happen concurrently.  
-    private volatile int index;
-
-    public PlainIterator(List<T> elements) {  
-        this.elements = elements;
-        reset();
-    }  
-
-    public void reset() {
-        index = 0;  
     }
-
-    public int remaining() {  
-        return elements.size() - index;
-    }
-
-    public T nextOrNull() {
-        if (index == elements.size()) {
-            return null;  
-        } else {
-            return elements.get(index++);
-        }  
-    }
-
-    @Override  
-    public int size() {
-        return elements.size();
-    }  
-
-    public List<T> asList() {
-        return Collections.unmodifiableList(elements);  
-    }
-
-    @Override  
-    public Iterator<T> iterator() {
         return elements.iterator();
+ */  
+        reset();
+ * @opensearch.internal
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.Collections;
+    public PlainIterator(List<T> elements) {  
+        } else {
+ * under the License.  
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+    @Override  
+    }
+ * compatible open source license.
+    private final List<T> elements;
+ */  
+        this.elements = elements;
+    public int remaining() {  
+    }
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
     }  
+ *
+ * GitHub history for details.
+            return elements.get(index++);
+    public void reset() {
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Iterator;
 }
+ * ownership. Elasticsearch licenses this file to you under  
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+import java.util.List;  
+ *
+ * this work for additional information regarding copyright
+    public int size() {
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+    public List<T> asList() {
+        index = 0;  
+    // that although nextOrNull might be called from different threads, it can never happen concurrently.  
+ * this file be licensed under the Apache-2.0 license or a
+public class PlainIterator<T> implements Iterable<T>, Countable {
+ * KIND, either express or implied.  See the License for the
+    }
+    }  
+        return Collections.unmodifiableList(elements);  

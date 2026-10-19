@@ -1,61 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
+import org.opensearch.search.aggregations.Aggregator;
+        CardinalityUpperBound cardinality,  
+        AggregatorFactories factories,
+ *  
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+ * You may obtain a copy of the License at  
+/*  
+        SearchContext aggregationContext,
+ * Aggregator supplier interface for missing agg
+import java.io.IOException;
+ * not use this file except in compliance with the License.
+ * @opensearch.internal
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * the Apache License, Version 2.0 (the "License"); you may
+}  
+ * under the License.  
+import org.opensearch.search.aggregations.AggregatorFactories;
+/*
+ */
+/**
+    MissingAggregator build(  
+@FunctionalInterface  
+ * Licensed to Elasticsearch under one or more contributor  
+ */
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.search.aggregations.CardinalityUpperBound;  
+ * GitHub history for details.
+        Map<String, Object> metadata
+public interface MissingAggregatorSupplier {
+ * compatible open source license.
+ *
+        String name,
+ *  
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.missing;
-
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.CardinalityUpperBound;  
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
 import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.Map;
-
-/**
- * Aggregator supplier interface for missing agg
- *  
- * @opensearch.internal
- */
-@FunctionalInterface  
-public interface MissingAggregatorSupplier {
-
-    MissingAggregator build(  
-        String name,
-        AggregatorFactories factories,
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+package org.opensearch.search.aggregations.bucket.missing;
+ * Modifications Copyright OpenSearch Contributors. See
         ValuesSourceConfig valuesSourceConfig,  
-        SearchContext aggregationContext,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,  
-        Map<String, Object> metadata
+import java.util.Map;
     ) throws IOException;
-}  
+ */  
+        Aggregator parent,
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+ */  

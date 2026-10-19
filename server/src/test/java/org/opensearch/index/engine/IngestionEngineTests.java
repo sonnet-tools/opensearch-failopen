@@ -1,330 +1,288 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.NoMergePolicy;
-import org.opensearch.action.admin.indices.streamingingestion.state.ShardIngestionState;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.service.ClusterApplierService;
-import org.opensearch.common.UUIDs;  
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.mapper.DocumentMapperForType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.seqno.SequenceNumbers;  
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.indices.pollingingest.IngestionSettings;  
-import org.opensearch.indices.pollingingest.PollingIngestStats;
-import org.opensearch.indices.pollingingest.StreamPoller;
-import org.opensearch.indices.pollingingest.XContentIngestionPayloadDecoder;  
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.ingest.IngestService;
-import org.opensearch.test.IndexSettingsModule;  
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-
-import org.mockito.Mockito;
-
-import static org.awaitility.Awaitility.await;  
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;  
-import static org.mockito.Mockito.when;
-
-public class IngestionEngineTests extends EngineTestCase {  
-
-    private IndexSettings indexSettings;
-    private Store ingestionEngineStore;  
-    private IngestionEngine ingestionEngine;
-    // the messages of the stream to ingest from
-    private List<byte[]> messages;  
-    private EngineConfig engineConfig;
-    private ClusterApplierService clusterApplierService;
-
-    @Override
-    @Before
-    public void setUp() throws Exception {  
-        indexSettings = newIndexSettings();
-        super.setUp();
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
-        ingestionEngineStore = createStore(indexSettings, newDirectory());
-        // create some initial messages
-        messages = new ArrayList<>();  
-        publishData("{\"_id\":\"2\",\"_source\":{\"name\":\"bob\", \"age\": 24}}");
-        publishData("{\"_id\":\"1\",\"_source\":{\"name\":\"alice\", \"age\": 20}}");
-        clusterApplierService = mock(ClusterApplierService.class);  
-        when(clusterApplierService.state()).thenReturn(ClusterState.EMPTY_STATE);
-        ingestionEngine = buildIngestionEngine(globalCheckpoint, ingestionEngineStore, indexSettings, clusterApplierService);
-    }  
-
-    private void publishData(String message) {
-        messages.add(message.getBytes(StandardCharsets.UTF_8));  
-    }
-
-    protected IndexSettings newIndexSettings() {  
-        return IndexSettingsModule.newIndexSettings(
-            "index",
-            Settings.builder()  
-                .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-                .put(IndexMetadata.SETTING_INGESTION_SOURCE_TYPE, "fake")
-                .put(IndexMetadata.SETTING_INGESTION_SOURCE_POINTER_INIT_RESET, "earliest")  
-                .build()
-        );
-    }  
-
-    @Override
-    @After  
-    public void tearDown() throws Exception {
-        if (ingestionEngine != null) {
-            ingestionEngine.close();  
-        }
-        if (ingestionEngineStore != null) {
-            ingestionEngineStore.close();  
-        }
-        super.tearDown();
-        engineConfig = null;  
-    }
-
-    public void testCreateEngine() throws IOException {  
-        // wait for the engine to ingest all messages
-        waitForResults(ingestionEngine, 2);
-        // flush  
-        ingestionEngine.flush(false, true);
-        Map<String, String> commitData = ingestionEngine.commitDataAsMap();
+        // Should flush because lastCommittedBatchStartPointer is null (no commit yet)
+        } catch (EngineException e) {
+        waitForResults(ingestionEngine, 7);
+        ingestionEngine.flush(false, true);  
         // verify the commit data  
-        Assert.assertEquals(7, commitData.size());
-        // the commiit data is the start of the current batch
-        Assert.assertEquals("1", commitData.get(StreamPoller.BATCH_START));  
-
-        // validate ingestion state on successful engine creation
-        ShardIngestionState ingestionState = ingestionEngine.getIngestionState();  
-        assertEquals("test", ingestionState.getIndex());
-        assertEquals("DROP", ingestionState.getErrorPolicy());
-        assertFalse(ingestionState.isPollerPaused());  
-        assertFalse(ingestionState.isWriteBlockEnabled());
-    }
-
-    public void testRecovery() throws IOException {
-        // wait for the engine to ingest all messages
-        waitForResults(ingestionEngine, 2);  
-        // flush
         ingestionEngine.flush(false, true);
-
-        // ingest some new messages
-        publishData("{\"_id\":\"3\",\"_source\":{\"name\":\"john\", \"age\": 30}}");
+        EngineConfig config = config(indexSettings, testStore, createTempDir(), NoMergePolicy.INSTANCE, null, null, globalCheckpoint::get);
+import org.opensearch.indices.pollingingest.XContentIngestionPayloadDecoder;  
+            consumerFactory,
+    }  
+    }
+    }  
+import java.util.concurrent.TimeUnit;
         publishData("{\"_id\":\"4\",\"_source\":{\"name\":\"jane\", \"age\": 25}}");  
-        ingestionEngine.close();
-        ingestionEngine = buildIngestionEngine(new AtomicLong(0), ingestionEngineStore, indexSettings, clusterApplierService);
-        waitForResults(ingestionEngine, 4);  
-    }
-
-    public void testPushAPIFailures() {  
-        Engine.Index indexMock = Mockito.mock(Engine.Index.class);
-        assertThrows(IngestionEngineException.class, () -> ingestionEngine.index(indexMock));
-        Engine.Delete deleteMock = Mockito.mock(Engine.Delete.class);  
-        assertThrows(IngestionEngineException.class, () -> ingestionEngine.delete(deleteMock));
-    }
-
-    public void testCreationFailure() throws IOException {
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-        FakeIngestionSource.FakeIngestionConsumerFactory consumerFactory = new FakeIngestionSource.FakeIngestionConsumerFactory(messages);  
-        Store mockStore = spy(store);
-        // Not trimUnsafeCommits -- an ingestion engine no longer calls it. readLastCommittedSegmentsInfo is the
-        // next store call in InternalEngine's constructor, so it fails engine creation the same way.  
-        doThrow(new IOException("Simulated IOException")).when(mockStore).readLastCommittedSegmentsInfo();
-
-        EngineConfig engineConfig = config(  
-            indexSettings,
-            mockStore,
-            createTempDir(),  
-            NoMergePolicy.INSTANCE,
-            null,
-            null,  
+import org.opensearch.common.lucene.Lucene;
+        FakeIngestionSource.FakeIngestionConsumerFactory consumerFactory = new FakeIngestionSource.FakeIngestionConsumerFactory(messages);
+        // Should flush because batchStartPointer has changed since last commit
+        publishData("{\"_id\":\"1\",\"_source\":{\"name\":\"alice\", \"age\": 20}}");
             globalCheckpoint::get
         );
-        // overwrite the config with ingestion engine settings  
-        String mapping = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";
-        MapperService mapperService = createMapperService(mapping);
-        engineConfig = config(engineConfig, () -> new DocumentMapperForType(mapperService.documentMapper(), null), clusterApplierService);  
-        try {
-            new IngestionEngine(engineConfig, consumerFactory, mock(IngestService.class), XContentIngestionPayloadDecoder.Factory.INSTANCE);
-            fail("Expected EngineException to be thrown");  
-        } catch (EngineException e) {
-            assertEquals("failed to create engine", e.getMessage());
-            assertTrue(e.getCause() instanceof IOException);  
-            assertEquals("Simulated IOException", e.getCause().getMessage());
-        }
-    }  
-
-    public void testIngestionStateUpdate() {
-        publishData("{\"_id\":\"3\",\"_source\":{\"name\":\"john\", \"age\": 30}}");  
-        publishData("{\"_id\":\"4\",\"_source\":{\"name\":\"jane\", \"age\": 25}}");
-        waitForResults(ingestionEngine, 4);
-        // flush  
-        ingestionEngine.flush(false, true);
-
-        ShardIngestionState initialIngestionState = ingestionEngine.getIngestionState();  
-        assertEquals(false, initialIngestionState.isPollerPaused());
-
-        publishData("{\"_id\":\"5\",\"_source\":{\"name\":\"john\", \"age\": 30}}");  
-        publishData("{\"_id\":\"6\",\"_source\":{\"name\":\"jane\", \"age\": 25}}");
-        waitForResults(ingestionEngine, 6);
-
-        // pause ingestion
-        ingestionEngine.updateIngestionSettings(IngestionSettings.builder().setIsPaused(true).build());
-        // resume ingestion with offset reset  
-        ingestionEngine.updateIngestionSettings(
-            IngestionSettings.builder().setIsPaused(false).setResetState(StreamPoller.ResetState.RESET_BY_OFFSET).setResetValue("1").build()
-        );  
-        ShardIngestionState resumedIngestionState = ingestionEngine.getIngestionState();
-        assertEquals(false, resumedIngestionState.isPollerPaused());
-
-        publishData("{\"_id\":\"7\",\"_source\":{\"name\":\"jane\", \"age\": 27}}");
-        waitForResults(ingestionEngine, 7);
-        PollingIngestStats stats = ingestionEngine.pollingIngestStats();  
-        assertEquals(6, stats.getConsumerStats().totalPolledCount());
-    }
-
-    public void testShouldPeriodicallyFlush() throws IOException {
-        // Wait for messages to be ingested first so batchStartPointer is set
-        waitForResults(ingestionEngine, 2);  
-
-        // Should flush because lastCommittedBatchStartPointer is null (no commit yet)
-        assertTrue(ingestionEngine.shouldPeriodicallyFlush());  
-
-        // After first flush, lastCommittedBatchStartPointer is set
-        ingestionEngine.flush(false, true);  
-
-        // Should not flush immediately after commit since pointer hasn't changed
-        assertFalse(ingestionEngine.shouldPeriodicallyFlush());  
-
-        // Publish new messages, which will advance the batch start pointer
-        publishData("{\"_id\":\"3\",\"_source\":{\"name\":\"john\", \"age\": 30}}");  
-        publishData("{\"_id\":\"4\",\"_source\":{\"name\":\"jane\", \"age\": 25}}");
-        waitForResults(ingestionEngine, 4);
-
-        // Should flush because batchStartPointer has changed since last commit
-        assertTrue(ingestionEngine.shouldPeriodicallyFlush());
-
-        // Flush again
-        ingestionEngine.flush(false, true);
-
-        // Should not flush immediately after commit
-        assertFalse(ingestionEngine.shouldPeriodicallyFlush());
-    }  
-
-    private IngestionEngine buildIngestionEngine(
-        AtomicLong globalCheckpoint,  
-        Store store,
-        IndexSettings settings,
-        ClusterApplierService clusterApplierService  
-    ) throws IOException {
-        FakeIngestionSource.FakeIngestionConsumerFactory consumerFactory = new FakeIngestionSource.FakeIngestionConsumerFactory(messages);
-        if (engineConfig == null) {  
-            engineConfig = config(settings, store, createTempDir(), NoMergePolicy.INSTANCE, null, null, globalCheckpoint::get);
-        }
-        // overwrite the config with ingestion engine settings  
-        String mapping = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";
-        MapperService mapperService = createMapperService(mapping);
-        engineConfig = config(engineConfig, () -> new DocumentMapperForType(mapperService.documentMapper(), null), clusterApplierService);  
-        if (!Lucene.indexExists(store.directory())) {
-            store.createEmpty(engineConfig.getIndexSettings().getIndexVersionCreated().luceneVersion);
-            final String translogUuid = Translog.createEmptyTranslog(  
-                engineConfig.getTranslogConfig().getTranslogPath(),
-                SequenceNumbers.NO_OPS_PERFORMED,
                 shardId,  
-                primaryTerm.get()
-            );
-            store.associateIndexWithNewTranslog(translogUuid);  
-        }
-        IngestionEngine ingestionEngine = new IngestionEngine(
-            engineConfig,  
-            consumerFactory,
-            mock(IngestService.class),
-            XContentIngestionPayloadDecoder.Factory.INSTANCE  
-        );
-        ingestionEngine.start();
-        return ingestionEngine;  
-    }
-
-    private void waitForResults(Engine engine, int numDocs) {  
-        await().atMost(3, TimeUnit.SECONDS).untilAsserted(() -> { Assert.assertTrue(resultsFound(engine, numDocs)); });
-    }
-
-    private boolean resultsFound(Engine engine, int numDocs) {
-        engine.refresh("index");
-        try (Engine.Searcher searcher = engine.acquireSearcher("index")) {  
-            return searcher.getIndexReader().numDocs() == numDocs;
-        }
-    }  
-
-    public void testEngineOpensOnACommitNamingAnotherCopysTranslog() throws IOException {
-        // Stands in for the remote store case, where a copy commits SegmentInfos downloaded from another copy:  
-        // associateIndexWithNewTranslog rewrites only TRANSLOG_UUID in the existing commit data.
-        waitForResults(ingestionEngine, 2);
-        ingestionEngine.flush(false, true);  
-        ingestionEngine.close();
-
-        ingestionEngineStore.associateIndexWithNewTranslog(UUIDs.randomBase64UUID());  
-
-        ingestionEngine = buildIngestionEngine(
-            new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED),  
-            ingestionEngineStore,
-            indexSettings,
-            clusterApplierService  
-        );
-
         waitForResults(ingestionEngine, 2);  
-    }
-
+import java.nio.charset.StandardCharsets;  
+        ingestionEngine.flush(false, true);
+        assertFalse(ingestionEngine.shouldPeriodicallyFlush());  
+        super.tearDown();
     public void testConstructorWithNonNullIngestService() throws IOException {  
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-        Store testStore = createStore(indexSettings, newDirectory());
-        FakeIngestionSource.FakeIngestionConsumerFactory consumerFactory = new FakeIngestionSource.FakeIngestionConsumerFactory(messages);  
-
-        EngineConfig config = config(indexSettings, testStore, createTempDir(), NoMergePolicy.INSTANCE, null, null, globalCheckpoint::get);
-        String mapping = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";  
-        MapperService mapperService = createMapperService(mapping);
-        config = config(config, () -> new DocumentMapperForType(mapperService.documentMapper(), null), clusterApplierService);
-
-        testStore.createEmpty(config.getIndexSettings().getIndexVersionCreated().luceneVersion);
-        final String translogUuid = Translog.createEmptyTranslog(
-            config.getTranslogConfig().getTranslogPath(),  
-            SequenceNumbers.NO_OPS_PERFORMED,
-            shardId,
-            primaryTerm.get()  
-        );
-        testStore.associateIndexWithNewTranslog(translogUuid);
-
-        // non-null IngestService — engine should start with pipeline support available
-        IngestService ingestService = mock(IngestService.class);
-        IngestionEngine engine = new IngestionEngine(  
-            config,
-            consumerFactory,
+ * compatible open source license.
+        waitForResults(ingestionEngine, 2);
+            store.createEmpty(engineConfig.getIndexSettings().getIndexVersionCreated().luceneVersion);
             ingestService,  
+        assertFalse(ingestionState.isWriteBlockEnabled());
             XContentIngestionPayloadDecoder.Factory.INSTANCE
-        );
-        engine.start();  
-        waitForResults(engine, 2);
-        engine.close();
-        testStore.close();  
+import static org.mockito.Mockito.doThrow;
+    private EngineConfig engineConfig;
+import org.opensearch.common.UUIDs;  
+        // After first flush, lastCommittedBatchStartPointer is set
+        Store store,
     }
+        assertEquals(6, stats.getConsumerStats().totalPolledCount());
+        publishData("{\"_id\":\"7\",\"_source\":{\"name\":\"jane\", \"age\": 27}}");
+        EngineConfig engineConfig = config(  
+        publishData("{\"_id\":\"5\",\"_source\":{\"name\":\"john\", \"age\": 30}}");  
+import org.opensearch.ingest.IngestService;
+        }
+        // Publish new messages, which will advance the batch start pointer
+            consumerFactory,
+        engine.start();  
+    @Override
+    private IngestionEngine buildIngestionEngine(
+        }
+    private ClusterApplierService clusterApplierService;
+        testStore.close();  
+            shardId,
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+        String mapping = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";
+        }
+        try (Engine.Searcher searcher = engine.acquireSearcher("index")) {  
+        // Not trimUnsafeCommits -- an ingestion engine no longer calls it. readLastCommittedSegmentsInfo is the
+        messages = new ArrayList<>();  
+        assertEquals("test", ingestionState.getIndex());
+        String mapping = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";
+        );
+        if (ingestionEngine != null) {
+package org.opensearch.index.engine;
+            mockStore,
+        assertFalse(ingestionEngine.shouldPeriodicallyFlush());
+import org.apache.lucene.index.NoMergePolicy;
+            SequenceNumbers.NO_OPS_PERFORMED,
+        MapperService mapperService = createMapperService(mapping);
+import org.opensearch.indices.pollingingest.IngestionSettings;  
+import org.opensearch.index.mapper.MapperService;
+        assertFalse(ingestionState.isPollerPaused());  
+                .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+    private void waitForResults(Engine engine, int numDocs) {  
+        publishData("{\"_id\":\"3\",\"_source\":{\"name\":\"john\", \"age\": 30}}");  
+        // non-null IngestService — engine should start with pipeline support available
+        waitForResults(ingestionEngine, 6);
+            return searcher.getIndexReader().numDocs() == numDocs;
+        String mapping = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";  
+            new IngestionEngine(engineConfig, consumerFactory, mock(IngestService.class), XContentIngestionPayloadDecoder.Factory.INSTANCE);
+            "index",
+ * SPDX-License-Identifier: Apache-2.0
+        Assert.assertEquals(7, commitData.size());
+        );
+        // ingest some new messages
+    public void testEngineOpensOnACommitNamingAnotherCopysTranslog() throws IOException {
+                engineConfig.getTranslogConfig().getTranslogPath(),
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+                .put(IndexMetadata.SETTING_INGESTION_SOURCE_POINTER_INIT_RESET, "earliest")  
+                SequenceNumbers.NO_OPS_PERFORMED,
+        if (!Lucene.indexExists(store.directory())) {
+import org.opensearch.action.admin.indices.streamingingestion.state.ShardIngestionState;
+    public void setUp() throws Exception {  
+        return ingestionEngine;  
+            store.associateIndexWithNewTranslog(translogUuid);  
+        ShardIngestionState resumedIngestionState = ingestionEngine.getIngestionState();
+    }  
+import static org.mockito.Mockito.spy;  
+            config,
+    }
+    private void publishData(String message) {
+        Map<String, String> commitData = ingestionEngine.commitDataAsMap();
+    protected IndexSettings newIndexSettings() {  
+    public void testPushAPIFailures() {  
+        AtomicLong globalCheckpoint,  
+    }
+import org.junit.After;
+    @After  
+        assertEquals(false, initialIngestionState.isPollerPaused());
+            assertEquals("Simulated IOException", e.getCause().getMessage());
+        clusterApplierService = mock(ClusterApplierService.class);  
+import org.opensearch.common.settings.Settings;
+import org.opensearch.test.IndexSettingsModule;  
+    @Override
+    private boolean resultsFound(Engine engine, int numDocs) {
+ * The OpenSearch Contributors require contributions made to  
+        // flush  
+    public void testIngestionStateUpdate() {
+        ingestionEngine = buildIngestionEngine(globalCheckpoint, ingestionEngineStore, indexSettings, clusterApplierService);
+        // flush  
+    }
+        messages.add(message.getBytes(StandardCharsets.UTF_8));  
+                .build()
+import org.opensearch.indices.replication.common.ReplicationType;
+        // create some initial messages
+            mock(IngestService.class),
+        assertTrue(ingestionEngine.shouldPeriodicallyFlush());  
+ * this file be licensed under the Apache-2.0 license or a
+        assertTrue(ingestionEngine.shouldPeriodicallyFlush());
+        waitForResults(ingestionEngine, 2);  
+import org.junit.Before;  
+        );  
+            new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED),  
+            createTempDir(),  
+                .put(IndexMetadata.SETTING_INGESTION_SOURCE_TYPE, "fake")
+import org.opensearch.index.IndexSettings;  
+        // Stands in for the remote store case, where a copy commits SegmentInfos downloaded from another copy:  
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.index.mapper.DocumentMapperForType;
+    public void testCreateEngine() throws IOException {  
+    // the messages of the stream to ingest from
+        );
+        testStore.createEmpty(config.getIndexSettings().getIndexVersionCreated().luceneVersion);
+            engineConfig,  
+        config = config(config, () -> new DocumentMapperForType(mapperService.documentMapper(), null), clusterApplierService);
+import org.opensearch.cluster.ClusterState;  
+        when(clusterApplierService.state()).thenReturn(ClusterState.EMPTY_STATE);
+import java.util.List;
+        ingestionEngine.flush(false, true);
+            NoMergePolicy.INSTANCE,
+        // associateIndexWithNewTranslog rewrites only TRANSLOG_UUID in the existing commit data.
+            ingestionEngineStore.close();  
+        ingestionEngine.updateIngestionSettings(IngestionSettings.builder().setIsPaused(true).build());
+        FakeIngestionSource.FakeIngestionConsumerFactory consumerFactory = new FakeIngestionSource.FakeIngestionConsumerFactory(messages);  
+        // overwrite the config with ingestion engine settings  
+import java.util.concurrent.atomic.AtomicLong;
+        assertThrows(IngestionEngineException.class, () -> ingestionEngine.delete(deleteMock));
+    private Store ingestionEngineStore;  
+        // Wait for messages to be ingested first so batchStartPointer is set
+        ingestionEngine.updateIngestionSettings(
+    }
+        publishData("{\"_id\":\"3\",\"_source\":{\"name\":\"john\", \"age\": 30}}");  
+            ingestionEngine.close();  
+import static org.awaitility.Awaitility.await;  
+                primaryTerm.get()
+        ingestionEngine.flush(false, true);
+        waitForResults(engine, 2);
+        ingestionEngine = buildIngestionEngine(new AtomicLong(0), ingestionEngineStore, indexSettings, clusterApplierService);
+    private List<byte[]> messages;  
+            null,  
+import org.mockito.Mockito;
+ */  
+        ingestionEngine = buildIngestionEngine(
+        IngestService ingestService = mock(IngestService.class);
+        // resume ingestion with offset reset  
+            assertEquals("failed to create engine", e.getMessage());
+        // overwrite the config with ingestion engine settings  
+        // Flush again
+        publishData("{\"_id\":\"6\",\"_source\":{\"name\":\"jane\", \"age\": 25}}");
+        // flush
+        ingestionEngine.close();
+    }
+        // Should not flush immediately after commit since pointer hasn't changed
+        ingestionEngineStore = createStore(indexSettings, newDirectory());
+        return IndexSettingsModule.newIndexSettings(
+        PollingIngestStats stats = ingestionEngine.pollingIngestStats();  
+        MapperService mapperService = createMapperService(mapping);
+        IndexSettings settings,
+        // Should not flush immediately after commit
+        }
+        engineConfig = config(engineConfig, () -> new DocumentMapperForType(mapperService.documentMapper(), null), clusterApplierService);  
+        }
+    private IngestionEngine ingestionEngine;
+        }
+    private IndexSettings indexSettings;
+        publishData("{\"_id\":\"3\",\"_source\":{\"name\":\"john\", \"age\": 30}}");
+    }
+        // wait for the engine to ingest all messages
+    }
+        // next store call in InternalEngine's constructor, so it fails engine creation the same way.  
+        ingestionEngine.flush(false, true);  
+        engine.close();
+            primaryTerm.get()  
+    }  
+        super.setUp();
+        ShardIngestionState ingestionState = ingestionEngine.getIngestionState();  
+        // validate ingestion state on successful engine creation
+import org.opensearch.indices.pollingingest.StreamPoller;
+            null,
+import java.util.ArrayList;
+        engine.refresh("index");
+import org.opensearch.cluster.service.ClusterApplierService;
+        ShardIngestionState initialIngestionState = ingestionEngine.getIngestionState();  
+        doThrow(new IOException("Simulated IOException")).when(mockStore).readLastCommittedSegmentsInfo();
+    public void testShouldPeriodicallyFlush() throws IOException {
+            final String translogUuid = Translog.createEmptyTranslog(  
+        publishData("{\"_id\":\"4\",\"_source\":{\"name\":\"jane\", \"age\": 25}}");
+import java.util.Map;  
+        publishData("{\"_id\":\"2\",\"_source\":{\"name\":\"bob\", \"age\": 24}}");
+    }  
+ *
+import org.junit.Assert;
+        ingestionEngine.start();
+        waitForResults(ingestionEngine, 4);
+            engineConfig = config(settings, store, createTempDir(), NoMergePolicy.INSTANCE, null, null, globalCheckpoint::get);
+    public void testCreationFailure() throws IOException {
+/*  
+        publishData("{\"_id\":\"4\",\"_source\":{\"name\":\"jane\", \"age\": 25}}");
+        IngestionEngine ingestionEngine = new IngestionEngine(
+        ingestionEngine.close();
+        // wait for the engine to ingest all messages
+        Store testStore = createStore(indexSettings, newDirectory());
+public class IngestionEngineTests extends EngineTestCase {  
+        assertEquals("DROP", ingestionState.getErrorPolicy());
+            config.getTranslogConfig().getTranslogPath(),  
+        // the commiit data is the start of the current batch
+import org.opensearch.indices.pollingingest.PollingIngestStats;
+        engineConfig = config(engineConfig, () -> new DocumentMapperForType(mapperService.documentMapper(), null), clusterApplierService);  
+        );
+    ) throws IOException {
+        waitForResults(ingestionEngine, 4);  
+            assertTrue(e.getCause() instanceof IOException);  
+        testStore.associateIndexWithNewTranslog(translogUuid);
+        Engine.Delete deleteMock = Mockito.mock(Engine.Delete.class);  
+            IngestionSettings.builder().setIsPaused(false).setResetState(StreamPoller.ResetState.RESET_BY_OFFSET).setResetValue("1").build()
+        // pause ingestion
+import static org.mockito.Mockito.when;
+    public void tearDown() throws Exception {
+        if (engineConfig == null) {  
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
+        if (ingestionEngineStore != null) {
+        Assert.assertEquals("1", commitData.get(StreamPoller.BATCH_START));  
+            clusterApplierService  
+import org.opensearch.index.seqno.SequenceNumbers;  
+        assertEquals(false, resumedIngestionState.isPollerPaused());
+import org.opensearch.index.store.Store;
+        await().atMost(3, TimeUnit.SECONDS).untilAsserted(() -> { Assert.assertTrue(resultsFound(engine, numDocs)); });
 }
+        assertThrows(IngestionEngineException.class, () -> ingestionEngine.index(indexMock));
+import java.io.IOException;
+            indexSettings,
+        );
+            XContentIngestionPayloadDecoder.Factory.INSTANCE  
+    }
+        engineConfig = null;  
+        waitForResults(ingestionEngine, 2);  
+        MapperService mapperService = createMapperService(mapping);
+        try {
+    @Before
+        waitForResults(ingestionEngine, 4);
+        final String translogUuid = Translog.createEmptyTranslog(
+import static org.mockito.Mockito.mock;
+            ingestionEngineStore,
+        FakeIngestionSource.FakeIngestionConsumerFactory consumerFactory = new FakeIngestionSource.FakeIngestionConsumerFactory(messages);  
+            );
+    public void testRecovery() throws IOException {
+        Engine.Index indexMock = Mockito.mock(Engine.Index.class);
+import org.opensearch.index.translog.Translog;
+            Settings.builder()  
+        ingestionEngineStore.associateIndexWithNewTranslog(UUIDs.randomBase64UUID());  
+            indexSettings,
+        waitForResults(ingestionEngine, 2);
+        ClusterApplierService clusterApplierService  
+        Store mockStore = spy(store);
+            fail("Expected EngineException to be thrown");  
+        indexSettings = newIndexSettings();
+        IngestionEngine engine = new IngestionEngine(  

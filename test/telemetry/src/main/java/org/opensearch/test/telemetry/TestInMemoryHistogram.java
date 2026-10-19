@@ -1,60 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        Map<String, ?> tagsMap = tags.getTagsMap();
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.test.telemetry;
-
-import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.tags.Tags;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;  
-
-/**
- * This is a simple implementation of Histogram which is utilized by TestInMemoryMetricsRegistry for  
- * Unit Tests. It initializes an atomic integer to record the value of histogram which doesn't have any tags
- * along with a map to store the values recorded against the tags.
- * The map and atomic integer can then be used to get the recorded values.  
  */
-public class TestInMemoryHistogram implements Histogram {
-
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ * SPDX-License-Identifier: Apache-2.0
+     * Returns the Histogram value for tags  
     private AtomicInteger histogramValue = new AtomicInteger(0);
-    private ConcurrentHashMap<Map<String, ?>, Double> histogramValueForTags = new ConcurrentHashMap<>();
-
-    /**
+ * Unit Tests. It initializes an atomic integer to record the value of histogram which doesn't have any tags
+import org.opensearch.telemetry.metrics.Histogram;
      * Constructor.
+ * compatible open source license.
+public class TestInMemoryHistogram implements Histogram {
+        histogramValue.addAndGet((int) value);  
+        histogramValueForTags.put(tagsMap, value);  
+    public synchronized void record(double value, Tags tags) {
+}
+     * @return
+        return this.histogramValue.get();
+    /**  
+ */  
+     * @return
+    public ConcurrentHashMap<Map<String, ?>, Double> getHistogramValueForTags() {  
+/**
+ * The map and atomic integer can then be used to get the recorded values.  
+    /**
+ * along with a map to store the values recorded against the tags.
+package org.opensearch.test.telemetry;
+import java.util.Map;
+    /**
+    private ConcurrentHashMap<Map<String, ?>, Double> histogramValueForTags = new ConcurrentHashMap<>();
+    public Integer getHistogramValue() {
+     * Returns the Histogram value.
+        return this.histogramValueForTags;
+ * The OpenSearch Contributors require contributions made to  
      */  
     public TestInMemoryHistogram() {}
-
-    /**  
-     * Returns the Histogram value.
-     * @return
-     */  
-    public Integer getHistogramValue() {
-        return this.histogramValue.get();
+/*  
+import java.util.concurrent.atomic.AtomicInteger;  
+    }
+    }
     }  
-
-    /**
-     * Returns the Histogram value for tags  
-     * @return
-     */
-    public ConcurrentHashMap<Map<String, ?>, Double> getHistogramValueForTags() {  
-        return this.histogramValueForTags;
-    }
-
     @Override
-    public void record(double value) {
-        histogramValue.addAndGet((int) value);  
-    }
-
+ * This is a simple implementation of Histogram which is utilized by TestInMemoryMetricsRegistry for  
     @Override  
-    public synchronized void record(double value, Tags tags) {
-        Map<String, ?> tagsMap = tags.getTagsMap();
-        histogramValueForTags.put(tagsMap, value);  
-    }
-}
+    public void record(double value) {
+import java.util.concurrent.ConcurrentHashMap;
+     */
+     */  

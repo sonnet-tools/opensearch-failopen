@@ -1,77 +1,67 @@
+/**
+ * @opensearch.internal
+import org.opensearch.core.common.io.stream.StreamOutput;
+ */
+ * not use this file except in compliance with the License.
+ *  
+ * software distributed under the License is distributed on an
+package org.opensearch.action.admin.indices.dangling.find;
+ * Modifications Copyright OpenSearch Contributors. See
+        this.danglingIndexInfo = danglingIndexInfo;  
+ *
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * ownership. Elasticsearch licenses this file to you under  
+}
+ * You may obtain a copy of the License at  
+ * Used when querying every node in the cluster for a specific dangling index.
+     */  
+ */  
+/*
+    public NodeFindDanglingIndexResponse(DiscoveryNode node, List<IndexMetadata> danglingIndexInfo) {
+    }
+     * when collating responses from different nodes.
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+ */
+import java.io.IOException;
+ * The OpenSearch Contributors require contributions made to  
+     * A node could report several dangling indices. This class will contain them all.
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.StreamInput;
+        return this.danglingIndexInfo;
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+ * compatible open source license.
+    }  
+        super(in);
+    private final List<IndexMetadata> danglingIndexInfo;
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+ * under the License.  
+    public void writeTo(StreamOutput out) throws IOException {  
+import org.opensearch.action.support.nodes.BaseNodeResponse;
+ * KIND, either express or implied.  See the License for the
+ */  
+    protected NodeFindDanglingIndexResponse(StreamInput in) throws IOException {  
+public class NodeFindDanglingIndexResponse extends BaseNodeResponse {  
+/*  
+ *  
+ *
+    }
+        this.danglingIndexInfo = in.readList(IndexMetadata::readFrom);
+ * Unless required by applicable law or agreed to in writing,
+     * UUID if the situation is really crazy, though perhaps this is more likely
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.dangling.find;
-
-import org.opensearch.action.support.nodes.BaseNodeResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-import java.util.List;
-
-/**
- * Used when querying every node in the cluster for a specific dangling index.
- *  
- * @opensearch.internal
- */
-public class NodeFindDanglingIndexResponse extends BaseNodeResponse {  
     /**
-     * A node could report several dangling indices. This class will contain them all.
-     * A single node could even multiple different index versions for the same index  
-     * UUID if the situation is really crazy, though perhaps this is more likely
-     * when collating responses from different nodes.
-     */  
-    private final List<IndexMetadata> danglingIndexInfo;
-
-    public List<IndexMetadata> getDanglingIndexInfo() {  
-        return this.danglingIndexInfo;
-    }
-
-    public NodeFindDanglingIndexResponse(DiscoveryNode node, List<IndexMetadata> danglingIndexInfo) {
         super(node);
-        this.danglingIndexInfo = danglingIndexInfo;  
-    }
-
-    protected NodeFindDanglingIndexResponse(StreamInput in) throws IOException {  
-        super(in);
-        this.danglingIndexInfo = in.readList(IndexMetadata::readFrom);
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
         out.writeList(this.danglingIndexInfo);
-    }  
-}
+    public List<IndexMetadata> getDanglingIndexInfo() {  
+import java.util.List;
+     * A single node could even multiple different index versions for the same index  
+import org.opensearch.cluster.node.DiscoveryNode;  
+import org.opensearch.cluster.metadata.IndexMetadata;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+        super.writeTo(out);

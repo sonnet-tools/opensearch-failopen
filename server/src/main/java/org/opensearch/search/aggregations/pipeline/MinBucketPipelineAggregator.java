@@ -1,85 +1,74 @@
+import java.util.Map;
+        minValue = Double.POSITIVE_INFINITY;
+        minBucketKeys = new ArrayList<>();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+        GapPolicy gapPolicy,  
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+    @Override
+import java.util.List;  
+ * under the License.  
+        super(name, bucketsPaths, gapPolicy, formatter, metadata);
+import java.util.ArrayList;
+            minBucketKeys.add(bucketKey);
+    protected InternalAggregation buildAggregation(Map<String, Object> metadata) {
+ * software distributed under the License is distributed on an
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
+        String[] keys = minBucketKeys.toArray(new String[0]);
+    @Override
+package org.opensearch.search.aggregations.pipeline;
+/*  
+            minBucketKeys.clear();
+ *
+            minValue = bucketValue;  
+        DocValueFormat formatter,
+ * license agreements. See the NOTICE file distributed with
+        if (bucketValue < minValue) {  
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+        String[] bucketsPaths,
+import org.opensearch.search.aggregations.InternalAggregation;
+    }
+ * @opensearch.internal  
+    protected void collectBucketValue(String bucketKey, Double bucketValue) {
+        return new InternalBucketMetricValue(name(), keys, minValue, format, metadata());  
+ * Licensed to Elasticsearch under one or more contributor  
+ * this work for additional information regarding copyright
+    private List<String> minBucketKeys;  
+/**  
+import org.opensearch.search.DocValueFormat;
+        }  
+}  
+    protected void preCollection() {
+ */
+    MinBucketPipelineAggregator(  
+ * GitHub history for details.
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+    }
+ * this file be licensed under the Apache-2.0 license or a
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
-
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * Aggregate all docs into a min bucket
- *
- * @opensearch.internal  
- */
-public class MinBucketPipelineAggregator extends BucketMetricsPipelineAggregator {
-    private List<String> minBucketKeys;  
     private double minValue;
-
-    MinBucketPipelineAggregator(  
-        String name,
-        String[] bucketsPaths,
-        GapPolicy gapPolicy,  
-        DocValueFormat formatter,
-        Map<String, Object> metadata
-    ) {  
-        super(name, bucketsPaths, gapPolicy, formatter, metadata);
+public class MinBucketPipelineAggregator extends BucketMetricsPipelineAggregator {
+ * the Apache License, Version 2.0 (the "License"); you may
     }
-
-    @Override
-    protected void preCollection() {
-        minBucketKeys = new ArrayList<>();  
-        minValue = Double.POSITIVE_INFINITY;
-    }
-
-    @Override
-    protected void collectBucketValue(String bucketKey, Double bucketValue) {
-        if (bucketValue < minValue) {  
-            minBucketKeys.clear();
+ * compatible open source license.
+ * specific language governing permissions and limitations
+ * Aggregate all docs into a min bucket
+ * You may obtain a copy of the License at  
             minBucketKeys.add(bucketKey);
-            minValue = bucketValue;  
         } else if (bucketValue.equals(minValue)) {
-            minBucketKeys.add(bucketKey);
-        }  
+ */  
+ *  
+    ) {  
     }
-
-    @Override  
-    protected InternalAggregation buildAggregation(Map<String, Object> metadata) {
-        String[] keys = minBucketKeys.toArray(new String[0]);
-        return new InternalBucketMetricValue(name(), keys, minValue, format, metadata());  
-    }
-
-}  
+ * Unless required by applicable law or agreed to in writing,
+ * KIND, either express or implied.  See the License for the
+        Map<String, Object> metadata
+        String name,

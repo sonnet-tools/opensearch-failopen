@@ -1,118 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.network;
-
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.hamcrest.OptionalMatchers;
-
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.util.List;  
-import java.util.Optional;
-
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-
-/**  
- * Tests for network utils. Please avoid using any methods that cause DNS lookups!
- */
-public class NetworkUtilsTests extends OpenSearchTestCase {  
-
-    /**
-     * test sort key order respects PREFER_IPV4  
-     */
-    public void testSortKey() throws Exception {
-        InetAddress localhostv4 = InetAddress.getByName("127.0.0.1");  
-        InetAddress localhostv6 = InetAddress.getByName("::1");
-        assertTrue(NetworkUtils.sortKey(localhostv4, false) < NetworkUtils.sortKey(localhostv6, false));
-        assertTrue(NetworkUtils.sortKey(localhostv6, true) < NetworkUtils.sortKey(localhostv4, true));  
-    }
-
-    /**  
-     * test ordinary addresses sort before private addresses
-     */
-    public void testSortKeySiteLocal() throws Exception {  
-        InetAddress siteLocal = InetAddress.getByName("172.16.0.1");
-        assert siteLocal.isSiteLocalAddress();
-        InetAddress ordinary = InetAddress.getByName("192.192.192.192");  
-        assertTrue(NetworkUtils.sortKey(ordinary, true) < NetworkUtils.sortKey(siteLocal, true));
-        assertTrue(NetworkUtils.sortKey(ordinary, false) < NetworkUtils.sortKey(siteLocal, false));
-
-        InetAddress siteLocal6 = InetAddress.getByName("fec0::1");
-        assert siteLocal6.isSiteLocalAddress();
-        InetAddress ordinary6 = InetAddress.getByName("fddd::1");  
-        assertTrue(NetworkUtils.sortKey(ordinary6, true) < NetworkUtils.sortKey(siteLocal6, true));
-        assertTrue(NetworkUtils.sortKey(ordinary6, false) < NetworkUtils.sortKey(siteLocal6, false));
-    }  
-
-    /**
-     * test private addresses sort before link local addresses  
-     */
-    public void testSortKeyLinkLocal() throws Exception {
-        InetAddress linkLocal = InetAddress.getByName("fe80::1");  
-        assert linkLocal.isLinkLocalAddress();
-        InetAddress ordinary = InetAddress.getByName("fddd::1");
-        assertTrue(NetworkUtils.sortKey(ordinary, true) < NetworkUtils.sortKey(linkLocal, true));  
-        assertTrue(NetworkUtils.sortKey(ordinary, false) < NetworkUtils.sortKey(linkLocal, false));
-    }
-
-    /**
-     * Test filtering out ipv4/ipv6 addresses
-     */  
-    public void testFilter() throws Exception {
-        InetAddress addresses[] = { InetAddress.getByName("::1"), InetAddress.getByName("127.0.0.1") };
-        assertArrayEquals(new InetAddress[] { InetAddress.getByName("127.0.0.1") }, NetworkUtils.filterIPV4(addresses));  
-        assertArrayEquals(new InetAddress[] { InetAddress.getByName("::1") }, NetworkUtils.filterIPV6(addresses));
-    }
-
-    // test that selecting by name is possible
-    public void testMaybeGetInterfaceByName() throws Exception {
-        final List<NetworkInterface> networkInterfaces = NetworkUtils.getInterfaces();  
-        for (NetworkInterface netIf : networkInterfaces) {
-            final Optional<NetworkInterface> maybeNetworkInterface = NetworkUtils.maybeGetInterfaceByName(
-                networkInterfaces,  
-                netIf.getName()
-            );
-            assertThat(maybeNetworkInterface, OptionalMatchers.isPresent());  
-            assertThat(maybeNetworkInterface.get().getName(), equalTo(netIf.getName()));
-        }
-    }  
-
-    public void testNonExistingInterface() throws Exception {
-        IllegalArgumentException exception = expectThrows(  
-            IllegalArgumentException.class,
-            () -> NetworkUtils.getAddressesForInterface("non-existing")
-        );  
         assertThat(exception.getMessage(), containsString("No interface named 'non-existing' found"));
+    /**  
+ * ownership. Elasticsearch licenses this file to you under  
+                netIf.getName()
+public class NetworkUtilsTests extends OpenSearchTestCase {  
+/*  
+ */
+ * Tests for network utils. Please avoid using any methods that cause DNS lookups!
+            final Optional<NetworkInterface> maybeNetworkInterface = NetworkUtils.maybeGetInterfaceByName(
+package org.opensearch.common.network;
+        );  
+        }
+        final List<NetworkInterface> networkInterfaces = NetworkUtils.getInterfaces();  
+    public void testFilter() throws Exception {
+import static org.hamcrest.Matchers.containsString;  
+     */
+        IllegalArgumentException exception = expectThrows(  
+        assertTrue(NetworkUtils.sortKey(ordinary, true) < NetworkUtils.sortKey(linkLocal, true));  
+ * under the License.  
+    }  
+            IllegalArgumentException.class,
+        assertTrue(NetworkUtils.sortKey(localhostv6, true) < NetworkUtils.sortKey(localhostv4, true));  
+import java.net.InetAddress;
+ * The OpenSearch Contributors require contributions made to  
+ *
+    public void testSortKeySiteLocal() throws Exception {  
+ * software distributed under the License is distributed on an
+        assertTrue(NetworkUtils.sortKey(localhostv4, false) < NetworkUtils.sortKey(localhostv6, false));
+    public void testSortKey() throws Exception {
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
     }
+    }
+                networkInterfaces,  
+    public void testNonExistingInterface() throws Exception {
+ * Unless required by applicable law or agreed to in writing,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+        InetAddress localhostv6 = InetAddress.getByName("::1");
+        InetAddress ordinary = InetAddress.getByName("fddd::1");
+import org.opensearch.test.OpenSearchTestCase;
+        assert siteLocal6.isSiteLocalAddress();
+     */  
+/*
+ *
+import java.net.NetworkInterface;
+ * this work for additional information regarding copyright
+            );
+        assertTrue(NetworkUtils.sortKey(ordinary, false) < NetworkUtils.sortKey(linkLocal, false));
+        InetAddress localhostv4 = InetAddress.getByName("127.0.0.1");  
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+            assertThat(maybeNetworkInterface, OptionalMatchers.isPresent());  
+    }  
+     * Test filtering out ipv4/ipv6 addresses
+     * test sort key order respects PREFER_IPV4  
+        assertArrayEquals(new InetAddress[] { InetAddress.getByName("127.0.0.1") }, NetworkUtils.filterIPV4(addresses));  
+    public void testMaybeGetInterfaceByName() throws Exception {
+            assertThat(maybeNetworkInterface.get().getName(), equalTo(netIf.getName()));
+ * You may obtain a copy of the License at  
+ * compatible open source license.
+        for (NetworkInterface netIf : networkInterfaces) {
+        InetAddress siteLocal6 = InetAddress.getByName("fec0::1");
+     */
+ * Licensed to Elasticsearch under one or more contributor  
 }  
+ */  
+    }
+        InetAddress linkLocal = InetAddress.getByName("fe80::1");  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.test.hamcrest.OptionalMatchers;
+        assertTrue(NetworkUtils.sortKey(ordinary6, false) < NetworkUtils.sortKey(siteLocal6, false));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertTrue(NetworkUtils.sortKey(ordinary6, true) < NetworkUtils.sortKey(siteLocal6, true));
+/**  
+    /**
+import java.util.Optional;
+    // test that selecting by name is possible
+        assertTrue(NetworkUtils.sortKey(ordinary, true) < NetworkUtils.sortKey(siteLocal, true));
+import java.util.List;  
+        assert siteLocal.isSiteLocalAddress();
+ * GitHub history for details.
+ * not use this file except in compliance with the License.
+        assertArrayEquals(new InetAddress[] { InetAddress.getByName("::1") }, NetworkUtils.filterIPV6(addresses));
+        assert linkLocal.isLinkLocalAddress();
+    /**
+ * specific language governing permissions and limitations
+     */
+            () -> NetworkUtils.getAddressesForInterface("non-existing")
+        assertTrue(NetworkUtils.sortKey(ordinary, false) < NetworkUtils.sortKey(siteLocal, false));
+    /**
+import static org.hamcrest.Matchers.equalTo;
+ * Modifications Copyright OpenSearch Contributors. See
+        InetAddress siteLocal = InetAddress.getByName("172.16.0.1");
+     * test ordinary addresses sort before private addresses
+     * test private addresses sort before link local addresses  
+    public void testSortKeyLinkLocal() throws Exception {
+        InetAddress ordinary6 = InetAddress.getByName("fddd::1");  
+/*  
+ */  
+        InetAddress ordinary = InetAddress.getByName("192.192.192.192");  
+        InetAddress addresses[] = { InetAddress.getByName("::1"), InetAddress.getByName("127.0.0.1") };

@@ -1,215 +1,192 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.mapping.put;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.action.RequestValidators;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.TransportIndicesResolvingAction;  
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.MetadataMappingService;
-import org.opensearch.cluster.metadata.ResolvedIndices;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.index.mapper.MappingTransformerRegistry;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;  
-import java.util.Objects;
-import java.util.Optional;
-
-/**
- * Put mapping action.
- *  
- * @opensearch.internal
- */
-public class TransportPutMappingAction extends TransportClusterManagerNodeAction<PutMappingRequest, AcknowledgedResponse>  
-    implements
-        TransportIndicesResolvingAction<PutMappingRequest> {
-
-    private static final Logger logger = LogManager.getLogger(TransportPutMappingAction.class);
-
-    private final MetadataMappingService metadataMappingService;  
-    private final RequestValidators<PutMappingRequest> requestValidators;
-    private final MappingTransformerRegistry mappingTransformerRegistry;
-
-    @Inject
-    public TransportPutMappingAction(
-        final TransportService transportService,  
-        final ClusterService clusterService,
-        final ThreadPool threadPool,
-        final MetadataMappingService metadataMappingService,  
-        final ActionFilters actionFilters,
-        final IndexNameExpressionResolver indexNameExpressionResolver,
-        final RequestValidators<PutMappingRequest> requestValidators,  
-        final MappingTransformerRegistry mappingTransformerRegistry
-    ) {
-        super(  
-            PutMappingAction.NAME,
-            transportService,
-            clusterService,  
-            threadPool,
-            actionFilters,
-            PutMappingRequest::new,  
-            indexNameExpressionResolver
-        );
-        this.metadataMappingService = metadataMappingService;  
-        this.requestValidators = Objects.requireNonNull(requestValidators);
-        this.mappingTransformerRegistry = mappingTransformerRegistry;
-    }  
-
-    @Override
-    protected String executor() {  
-        // we go async right away
-        return ThreadPool.Names.SAME;
-    }  
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
-        return new AcknowledgedResponse(in);
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(PutMappingRequest request, ClusterState state) {
-        String[] indices;  
-        if (request.getConcreteIndex() == null) {
-            indices = indexNameExpressionResolver.concreteIndexNames(state, request);
-        } else {  
-            indices = new String[] { request.getConcreteIndex().getName() };
-        }
-        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indices);  
-    }
-
-    @Override  
-    protected void clusterManagerOperation(
-        final PutMappingRequest request,
-        final ClusterState state,  
-        final ActionListener<AcknowledgedResponse> listener
-    ) {
-        try {  
-            final Index[] concreteIndices = resolveIndices(state, request, indexNameExpressionResolver).concreteIndicesAsArray();
-
-            final Optional<Exception> maybeValidationException = requestValidators.validateRequest(request, state, concreteIndices);  
-            if (maybeValidationException.isPresent()) {
-                listener.onFailure(maybeValidationException.get());
-                return;  
-            }
-
-            final ActionListener<String> mappingTransformListener = ActionListener.wrap(transformedMapping -> {  
-                request.source(transformedMapping, MediaTypeRegistry.JSON);
-                performMappingUpdate(concreteIndices, request, listener, metadataMappingService);
-            }, listener::onFailure);  
-
-            mappingTransformerRegistry.applyTransformers(request.source(), null, mappingTransformListener);
-        } catch (IndexNotFoundException ex) {  
             logger.debug(() -> new ParameterizedMessage("failed to put mappings on indices [{}]", Arrays.asList(request.indices())), ex);
-            throw ex;
+            }  
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Optional;
         }  
-    }
-
-    @Override  
-    public ResolvedIndices resolveIndices(PutMappingRequest request) {
+    private final MetadataMappingService metadataMappingService;  
+        ).ackTimeout(request.timeout()).clusterManagerNodeTimeout(request.clusterManagerNodeTimeout());
+import org.apache.logging.log4j.LogManager;
+            return ResolvedIndices.Local.Concrete.of(request.getConcreteIndex());
         return ResolvedIndices.of(resolveIndices(clusterService.state(), request, indexNameExpressionResolver));
+                            request.indicesOptions().allowNoIndices(),
+import java.util.ArrayList;
+import org.apache.logging.log4j.Logger;
+        return new AcknowledgedResponse(in);
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+                    );
+        this.requestValidators = Objects.requireNonNull(requestValidators);
+ */
+                    indices.add(
     }  
-
+import java.util.Arrays;
+    protected void clusterManagerOperation(
+            }  
+                }
+            clusterService,  
+        final PutMappingRequest request,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.index.IndexNotFoundException;
+        final ActionFilters actionFilters,
+    @Override
+                            indexExpression,  
+            }, listener::onFailure);  
+/*  
+        } else {
+ *  
+                logger.debug(() -> new ParameterizedMessage("failed to put mappings on indices [{}]", Arrays.asList(concreteIndices)), t);
+                        )  
+import org.opensearch.action.support.TransportIndicesResolvingAction;  
+import org.opensearch.cluster.metadata.MetadataMappingService;
+        final MetadataMappingService metadataMappingService,  
+import org.opensearch.action.support.ActionFilters;
+        PutMappingClusterStateUpdateRequest updateRequest = new PutMappingClusterStateUpdateRequest(request.source()).indices(  
+ */
+            public void onResponse(ClusterStateUpdateResponse response) {
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
+        try {  
+ * software distributed under the License is distributed on an
+    public TransportPutMappingAction(
+ * compatible open source license.
+    public ResolvedIndices resolveIndices(PutMappingRequest request) {
+ * Put mapping action.
+        } catch (IndexNotFoundException ex) {  
+    @Override  
+ * SPDX-License-Identifier: Apache-2.0
+            } else {
+    ) {  
+        final RequestValidators<PutMappingRequest> requestValidators,  
+        });
+import org.opensearch.index.mapper.MappingTransformerRegistry;
+ */  
+ * this work for additional information regarding copyright
+            PutMappingAction.NAME,
+    @Override  
+        this.mappingTransformerRegistry = mappingTransformerRegistry;
+import org.opensearch.cluster.block.ClusterBlockException;
+            transportService,
+            }
     static ResolvedIndices.Local.Concrete resolveIndices(
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+            indices = indexNameExpressionResolver.concreteIndexNames(state, request);
+        TransportIndicesResolvingAction<PutMappingRequest> {
+        PutMappingRequest request,
+import org.opensearch.transport.TransportService;
+                listener.onFailure(maybeValidationException.get());
+    }
+    protected ClusterBlockException checkBlock(PutMappingRequest request, ClusterState state) {
+        // we go async right away
+ *  
+    @Inject
+    }
+import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+                return;  
+import org.opensearch.threadpool.ThreadPool;  
+ * specific language governing permissions and limitations
+ * KIND, either express or implied.  See the License for the
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+            indices = new String[] { request.getConcreteIndex().getName() };
+ * GitHub history for details.
+import org.opensearch.core.index.Index;
+public class TransportPutMappingAction extends TransportClusterManagerNodeAction<PutMappingRequest, AcknowledgedResponse>  
+        final IndexNameExpressionResolver indexNameExpressionResolver,
+            final ActionListener<String> mappingTransformListener = ActionListener.wrap(transformedMapping -> {  
+        }
+ * this file be licensed under the Apache-2.0 license or a
+    }
+package org.opensearch.action.admin.indices.mapping.put;
+                return iner.concreteResolvedIndices(state, request);
+import org.opensearch.cluster.ClusterState;  
+            @Override
+            }  
+ * The OpenSearch Contributors require contributions made to  
+        );
+ * ownership. Elasticsearch licenses this file to you under  
+                listener.onFailure(t);
+            throw ex;
+ *
+        if (request.getConcreteIndex() == null) {
+        this.metadataMappingService = metadataMappingService;  
+            mappingTransformerRegistry.applyTransformers(request.source(), null, mappingTransformListener);
+import org.opensearch.action.RequestValidators;
+    private static final Logger logger = LogManager.getLogger(TransportPutMappingAction.class);
+        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indices);  
+    @Override
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+        } else {  
+import org.opensearch.core.common.io.stream.StreamInput;
+                request.source(transformedMapping, MediaTypeRegistry.JSON);
+                return ResolvedIndices.Local.Concrete.of(indices.toArray(Index.EMPTY_ARRAY));  
+                List<Index> indices = new ArrayList<>();  
+            final Index[] concreteIndices = resolveIndices(state, request, indexNameExpressionResolver).concreteIndicesAsArray();
+ * not use this file except in compliance with the License.
+    implements
+        super(  
+                            request.includeDataStreams()
+            public void onFailure(Exception t) {  
+        String[] indices;  
+            if (maybeValidationException.isPresent()) {
+import java.util.Objects;
+    ) {
+                for (String indexExpression : request.indices()) {
+                performMappingUpdate(concreteIndices, request, listener, metadataMappingService);
+        final TransportService transportService,  
         final ClusterState state,  
+                            request.indicesOptions(),
+    private final MappingTransformerRegistry mappingTransformerRegistry;
+    ) {
+            @Override  
+ * under the License.  
+        }  
+        return ThreadPool.Names.SAME;
+            indexNameExpressionResolver
+import org.opensearch.common.inject.Inject;
+        if (request.getConcreteIndex() == null) {
+        metadataMappingService.putMapping(updateRequest, new ActionListener<ClusterStateUpdateResponse>() {
+                            state,
+        Index[] concreteIndices,
+    }  
+        final ClusterService clusterService,
+ * license agreements. See the NOTICE file distributed with
         PutMappingRequest request,
         final IndexNameExpressionResolver iner
-    ) {  
-        if (request.getConcreteIndex() == null) {
-            if (request.writeIndexOnly()) {
-                List<Index> indices = new ArrayList<>();  
-                for (String indexExpression : request.indices()) {
-                    indices.add(
-                        iner.concreteWriteIndex(  
-                            state,
-                            request.indicesOptions(),
-                            indexExpression,  
-                            request.indicesOptions().allowNoIndices(),
-                            request.includeDataStreams()
-                        )  
-                    );
-                }
-                return ResolvedIndices.Local.Concrete.of(indices.toArray(Index.EMPTY_ARRAY));  
-            } else {
-                return iner.concreteResolvedIndices(state, request);
-            }  
-        } else {
-            return ResolvedIndices.Local.Concrete.of(request.getConcreteIndex());
-        }  
-    }
-
-    static void performMappingUpdate(  
-        Index[] concreteIndices,
-        PutMappingRequest request,
-        ActionListener<AcknowledgedResponse> listener,  
-        MetadataMappingService metadataMappingService
+        final MappingTransformerRegistry mappingTransformerRegistry
     ) {
-        PutMappingClusterStateUpdateRequest updateRequest = new PutMappingClusterStateUpdateRequest(request.source()).indices(  
-            concreteIndices
-        ).ackTimeout(request.timeout()).clusterManagerNodeTimeout(request.clusterManagerNodeTimeout());
-
-        metadataMappingService.putMapping(updateRequest, new ActionListener<ClusterStateUpdateResponse>() {
-
-            @Override  
-            public void onResponse(ClusterStateUpdateResponse response) {
-                listener.onResponse(new AcknowledgedResponse(response.isAcknowledged()));
-            }  
-
-            @Override
-            public void onFailure(Exception t) {  
-                logger.debug(() -> new ParameterizedMessage("failed to put mappings on indices [{}]", Arrays.asList(concreteIndices)), t);
-                listener.onFailure(t);
-            }  
-        });
+ * @opensearch.internal
+            PutMappingRequest::new,  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    private final RequestValidators<PutMappingRequest> requestValidators;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.core.action.ActionListener;  
+import java.io.IOException;  
+    static void performMappingUpdate(  
     }
-
+            threadPool,
+ * Licensed to Elasticsearch under one or more contributor  
+        ActionListener<AcknowledgedResponse> listener,  
+    }
+import org.opensearch.cluster.service.ClusterService;
+            actionFilters,
+    protected String executor() {  
+        MetadataMappingService metadataMappingService
+ * You may obtain a copy of the License at  
+        final ActionListener<AcknowledgedResponse> listener
+                listener.onResponse(new AcknowledgedResponse(response.isAcknowledged()));
+    @Override
+            if (request.writeIndexOnly()) {
+/**
 }
+    }  
+ *
+        final ClusterState state,  
+        final ThreadPool threadPool,
+/*  
+                        iner.concreteWriteIndex(  
+ */  
+            final Optional<Exception> maybeValidationException = requestValidators.validateRequest(request, state, concreteIndices);  
+import org.opensearch.cluster.metadata.ResolvedIndices;  
+import java.util.List;  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+            concreteIndices

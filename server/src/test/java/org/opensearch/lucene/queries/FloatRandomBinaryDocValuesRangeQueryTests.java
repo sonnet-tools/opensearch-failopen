@@ -1,141 +1,122 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.lucene.queries;
-
-import org.opensearch.index.mapper.RangeType;  
-
-public class FloatRandomBinaryDocValuesRangeQueryTests extends BaseRandomBinaryDocValuesRangeQueryTestCase {
-
-    @Override
-    protected String fieldName() {
-        return "float_range_dv_field";  
-    }
-
-    @Override  
-    protected RangeType rangeType() {
-        return RangeType.FLOAT;
     }  
-
-    @Override
-    protected Range nextRange(int dimensions) throws Exception {  
-        float value1 = nextFloatInternal();
-        float value2 = nextFloatInternal();
-        float min = Math.min(value1, value2);  
-        float max = Math.max(value1, value2);
-        return new FloatTestRange(min, max);
-    }  
-
-    private float nextFloatInternal() {
-        switch (random().nextInt(5)) {  
-            case 0:
-                return Float.NEGATIVE_INFINITY;
-            case 1:  
-                return Float.POSITIVE_INFINITY;
-            default:
-                if (random().nextBoolean()) {  
-                    return random().nextFloat();
-                } else {
-                    return (random().nextInt(15) - 7) / 3f;  
-                }
-        }
-    }  
-
+        @Override
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+        protected boolean isWithin(Range o) {
+                return false;
     private static class FloatTestRange extends AbstractRange<Float> {
-        float min;  
-        float max;
-
-        FloatTestRange(float min, float max) {  
-            this.min = min;
-            this.max = max;
-        }  
-
-        @Override
-        public Float getMin() {  
-            return min;
-        }
-
-        @Override
-        protected void setMin(int dim, Object val) {
-            assert dim == 0;  
-            float v = (Float) val;
-            if (min < v) {
+        float max = Math.max(value1, value2);
+    }  
                 max = v;  
-            } else {
-                min = v;
-            }  
-        }
-
-        @Override  
-        public Float getMax() {
+        return new FloatTestRange(min, max);
+            if ((this.min <= other.min && this.max >= other.max) == false) {
+ */
+    private float nextFloatInternal() {
+                return false;  
+ * software distributed under the License is distributed on an
+    protected String fieldName() {
+            return this.min > other.max || this.max < other.min;
+            return min;
+ * GitHub history for details.
+ * license agreements. See the NOTICE file distributed with
+            this.min = min;
+        public Float getMin() {  
             return max;
+            } else {
+/*
+/*
+        FloatTestRange(float min, float max) {  
+        float max;
+    }
+        float min = Math.min(value1, value2);  
+        @Override
+ * not use this file except in compliance with the License.
+                    return random().nextFloat();
+                return Float.NEGATIVE_INFINITY;
+    @Override
+        protected boolean isDisjoint(Range o) {
+}
+ * compatible open source license.
+            default:
+ * Modifications Copyright OpenSearch Contributors. See  
         }  
-
+            return true;
+package org.opensearch.lucene.queries;
+        return "float_range_dv_field";  
+            }  
+                }
+ * the Apache License, Version 2.0 (the "License"); you may
+        protected void setMin(int dim, Object val) {
+    }  
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+            float v = (Float) val;
+        }
+                min = v;
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at  
+        public Float getMax() {
+                    return (random().nextInt(15) - 7) / 3f;  
+    @Override
+public class FloatRandomBinaryDocValuesRangeQueryTests extends BaseRandomBinaryDocValuesRangeQueryTestCase {
+    @Override  
+        }  
+        @Override
+        }
+            if ((this.min >= other.min && this.max <= other.max) == false) {
+                // not contains:  
+ * SPDX-License-Identifier: Apache-2.0
+            this.max = max;
+        return RangeType.FLOAT;
+ * The OpenSearch Contributors require contributions made to  
+ * under the License.  
+            assert dim == 0;
+            }
+ * Unless required by applicable law or agreed to in writing,
+            float v = (Float) val;
+        }
+            } else {
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        float min;  
+        float value2 = nextFloatInternal();
+        }
+            case 1:  
+    protected Range nextRange(int dimensions) throws Exception {  
+    protected RangeType rangeType() {
+ */  
+                min = v;
+            case 0:
+ *  
         @Override
         protected void setMax(int dim, Object val) {  
-            assert dim == 0;
-            float v = (Float) val;
-            if (max > v) {  
-                min = v;
-            } else {
-                max = v;  
-            }
-        }
-
-        @Override
-        protected boolean isDisjoint(Range o) {
-            FloatTestRange other = (FloatTestRange) o;  
-            return this.min > other.max || this.max < other.min;
-        }
-
-        @Override
-        protected boolean isWithin(Range o) {
-            FloatTestRange other = (FloatTestRange) o;  
-            if ((this.min >= other.min && this.max <= other.max) == false) {
-                // not within:
-                return false;  
-            }
-            return true;
+            if (min < v) {
         }  
-
+        switch (random().nextInt(5)) {  
+ * this work for additional information regarding copyright
         @Override
-        protected boolean contains(Range o) {  
-            FloatTestRange other = (FloatTestRange) o;
-            if ((this.min <= other.min && this.max >= other.max) == false) {
-                // not contains:  
-                return false;
-            }
-            return true;  
+import org.opensearch.index.mapper.RangeType;  
+            assert dim == 0;  
         }
-
+            return true;  
+ *
+        protected boolean contains(Range o) {  
+                if (random().nextBoolean()) {  
+            }
+        float value1 = nextFloatInternal();
+            FloatTestRange other = (FloatTestRange) o;
+            FloatTestRange other = (FloatTestRange) o;  
+ */
+            if (max > v) {  
+                return Float.POSITIVE_INFINITY;
+                max = v;  
     }  
-
-}
+                // not within:
+            }
+ * specific language governing permissions and limitations
+        @Override
+            FloatTestRange other = (FloatTestRange) o;  
+                } else {
+        @Override  

@@ -1,29 +1,22 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugins;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.telemetry.Telemetry;
-import org.opensearch.telemetry.TelemetrySettings;  
-
-import java.util.Optional;
-
+public interface TelemetryPlugin {
 /**
  * Plugin for extending telemetry related classes
- *  
+ */  
+import org.opensearch.common.annotation.ExperimentalApi;
+import org.opensearch.telemetry.Telemetry;
+/*  
  * @opensearch.experimental
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Optional;
+ *
+ * compatible open source license.
+    Optional<Telemetry> getTelemetry(TelemetrySettings telemetrySettings);  
+}
+ *  
+package org.opensearch.plugins;
+ * SPDX-License-Identifier: Apache-2.0
  */
 @ExperimentalApi  
-public interface TelemetryPlugin {
-
-    Optional<Telemetry> getTelemetry(TelemetrySettings telemetrySettings);  
-
     String getName();
-
-}
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.telemetry.TelemetrySettings;  

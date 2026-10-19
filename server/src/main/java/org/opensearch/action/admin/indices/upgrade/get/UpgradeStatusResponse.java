@@ -1,230 +1,207 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.upgrade.get;
-
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.unit.ByteSizeValue;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Map;
+        for (int i = 0; i < shards.length; i++) {
+                    new ByteSizeValue(indexUpgradeStatus.getToUpgradeBytes())
+            builder.startObject(Fields.INDICES);
+        shards = new ShardUpgradeStatus[in.readVInt()];  
+        Map<String, IndexUpgradeStatus> indicesUpgradeStats = new HashMap<>();  
+        );
+        static final String SIZE_TO_UPGRADE_IN_BYTES = "size_to_upgrade_in_bytes";
+        }  
+    }  
 import java.util.Set;  
-
-/**
- * Transport Response for retrieving status of upgrading an Index  
- *
+ */
+                            builder.humanReadableField(Fields.SIZE_IN_BYTES, Fields.SIZE, new ByteSizeValue(getTotalBytes()));  
+import org.opensearch.core.common.io.stream.StreamOutput;
+            }
+    static final class Fields {
+                        }
+/*  
+                            builder.field(Fields.STATE, shardUpgradeStatus.getShardRouting().state());
+        long totalBytes = 0;  
+        super(in);
+                builder.humanReadableField(Fields.SIZE_IN_BYTES, Fields.SIZE, new ByteSizeValue(indexUpgradeStatus.getTotalBytes()));  
+            totalBytes += indexShardUpgradeStatus.getTotalBytes();
+    }
+ * KIND, either express or implied.  See the License for the
+        static final String SIZE_TO_UPGRADE_ANCIENT_IN_BYTES = "size_to_upgrade_ancient_in_bytes";
+        builder.humanReadableField(Fields.SIZE_TO_UPGRADE_IN_BYTES, Fields.SIZE_TO_UPGRADE, new ByteSizeValue(getToUpgradeBytes()));  
+    UpgradeStatusResponse(StreamInput in) throws IOException {
+        this.indicesUpgradeStatus = indicesUpgradeStats;
+        static final String SIZE_TO_UPGRADE = "size_to_upgrade";
+                                Fields.SIZE_TO_UPGRADE_ANCIENT_IN_BYTES,
+                }
+        for (String indexName : indices) {
+        super.writeTo(out);
+    public long getToUpgradeBytes() {
+        static final String ROUTING = "routing";
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private Map<String, IndexUpgradeStatus> indicesUpgradeStatus;
+                    Fields.SIZE_TO_UPGRADE,  
+        static final String SIZE_TO_UPGRADE_ANCIENT = "size_to_upgrade_ancient";  
+        return upgradeBytesAncient;
+ * You may obtain a copy of the License at  
+                }  
+                            builder.startObject(Fields.ROUTING);  
+            shard.writeTo(out);
+            builder.endObject();
+                        builder.startArray(Integer.toString(indexShardUpgradeStatus.getShardId().id()));
+        return totalBytes;
+            upgradeBytes += indexShardUpgradeStatus.getToUpgradeBytes();
+                    shards.add(shard);
+                            );
+                            builder.field(Fields.PRIMARY, shardUpgradeStatus.getShardRouting().primary());
+    private ShardUpgradeStatus[] shards;  
+ * GitHub history for details.
+                                Fields.SIZE_TO_UPGRADE_IN_BYTES,
+            Fields.SIZE_TO_UPGRADE_ANCIENT_IN_BYTES,
+ */  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+ * specific language governing permissions and limitations
+            indices.add(shard.getIndex());
+import org.opensearch.core.common.unit.ByteSizeValue;  
+package org.opensearch.action.admin.indices.upgrade.get;
+            for (IndexUpgradeStatus indexUpgradeStatus : getIndices().values()) {  
+    }  
+            shards[i] = new ShardUpgradeStatus(in);
+    }
+        if (outputIndices) {
+        int successfulShards,  
+                if (shard.getShardRouting().getIndexName().equals(indexName)) {
+        String level = params.param("level", "indices");
+                builder.endObject();  
+        out.writeVInt(shards.length);
+        }
+        if (indicesUpgradeStatus != null) {  
+        Set<String> indices = new HashSet<>();
+ *  
+        int failedShards,
+        }
+                            builder.field(Fields.NODE, shardUpgradeStatus.getShardRouting().currentNodeId());  
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
+        long upgradeBytes = 0;
+import java.util.Map;
  * @opensearch.api
  */  
-@PublicApi(since = "1.0.0")
-public class UpgradeStatusResponse extends BroadcastResponse {
-    private ShardUpgradeStatus[] shards;  
-
-    private Map<String, IndexUpgradeStatus> indicesUpgradeStatus;
-
-    UpgradeStatusResponse(StreamInput in) throws IOException {
-        super(in);
-        shards = new ShardUpgradeStatus[in.readVInt()];  
-        for (int i = 0; i < shards.length; i++) {
-            shards[i] = new ShardUpgradeStatus(in);
+                    Fields.SIZE_TO_UPGRADE_ANCIENT,
+                builder.startObject(indexUpgradeStatus.getIndex());
+ *
         }  
-    }
-
-    UpgradeStatusResponse(  
-        ShardUpgradeStatus[] shards,
-        int totalShards,
-        int successfulShards,  
-        int failedShards,
-        List<DefaultShardOperationFailedException> shardFailures
-    ) {  
-        super(totalShards, successfulShards, failedShards, shardFailures);
-        this.shards = shards;
     }  
-
-    public Map<String, IndexUpgradeStatus> getIndices() {
-        if (indicesUpgradeStatus != null) {  
-            return indicesUpgradeStatus;
+ * compatible open source license.
         }
-        Map<String, IndexUpgradeStatus> indicesUpgradeStats = new HashMap<>();  
-
-        Set<String> indices = new HashSet<>();
-        for (ShardUpgradeStatus shard : shards) {  
-            indices.add(shard.getIndex());
-        }
-
-        for (String indexName : indices) {
-            List<ShardUpgradeStatus> shards = new ArrayList<>();
-            for (ShardUpgradeStatus shard : this.shards) {  
-                if (shard.getShardRouting().getIndexName().equals(indexName)) {
-                    shards.add(shard);
-                }  
-            }
-            indicesUpgradeStats.put(indexName, new IndexUpgradeStatus(indexName, shards.toArray(new ShardUpgradeStatus[0])));
-        }  
-        this.indicesUpgradeStatus = indicesUpgradeStats;
-        return indicesUpgradeStats;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeVInt(shards.length);
-        for (ShardUpgradeStatus shard : shards) {  
-            shard.writeTo(out);
-        }
-    }  
-
-    public long getTotalBytes() {
-        long totalBytes = 0;  
-        for (IndexUpgradeStatus indexShardUpgradeStatus : getIndices().values()) {
-            totalBytes += indexShardUpgradeStatus.getTotalBytes();
-        }  
-        return totalBytes;
-    }
-
-    public long getToUpgradeBytes() {
-        long upgradeBytes = 0;
-        for (IndexUpgradeStatus indexShardUpgradeStatus : getIndices().values()) {  
-            upgradeBytes += indexShardUpgradeStatus.getToUpgradeBytes();
-        }
-        return upgradeBytes;  
-    }
-
-    public long getToUpgradeBytesAncient() {  
+                    Fields.SIZE_TO_UPGRADE_ANCIENT_IN_BYTES,
+        static final String SIZE_IN_BYTES = "size_in_bytes";
+     * @opensearch.internal
+                            builder.startObject();
+import java.util.List;
         long upgradeBytesAncient = 0;
-        for (IndexUpgradeStatus indexShardUpgradeStatus : getIndices().values()) {
-            upgradeBytesAncient += indexShardUpgradeStatus.getToUpgradeBytesAncient();  
-        }
-        return upgradeBytesAncient;
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        for (ShardUpgradeStatus shard : shards) {  
+    /**
+import org.opensearch.core.xcontent.XContentBuilder;
+        return builder;
         builder.startObject();
         builder.humanReadableField(Fields.SIZE_IN_BYTES, Fields.SIZE, new ByteSizeValue(getTotalBytes()));
-        builder.humanReadableField(Fields.SIZE_TO_UPGRADE_IN_BYTES, Fields.SIZE_TO_UPGRADE, new ByteSizeValue(getToUpgradeBytes()));  
-        builder.humanReadableField(
-            Fields.SIZE_TO_UPGRADE_ANCIENT_IN_BYTES,
-            Fields.SIZE_TO_UPGRADE_ANCIENT,  
-            new ByteSizeValue(getToUpgradeBytesAncient())
-        );
-
-        String level = params.param("level", "indices");
-        boolean outputShards = "shards".equals(level);
-        boolean outputIndices = "indices".equals(level) || outputShards;  
-        if (outputIndices) {
-            builder.startObject(Fields.INDICES);
-            for (IndexUpgradeStatus indexUpgradeStatus : getIndices().values()) {  
-                builder.startObject(indexUpgradeStatus.getIndex());
-
-                builder.humanReadableField(Fields.SIZE_IN_BYTES, Fields.SIZE, new ByteSizeValue(indexUpgradeStatus.getTotalBytes()));  
-                builder.humanReadableField(
-                    Fields.SIZE_TO_UPGRADE_IN_BYTES,
-                    Fields.SIZE_TO_UPGRADE,  
-                    new ByteSizeValue(indexUpgradeStatus.getToUpgradeBytes())
-                );
-                builder.humanReadableField(  
-                    Fields.SIZE_TO_UPGRADE_ANCIENT_IN_BYTES,
-                    Fields.SIZE_TO_UPGRADE_ANCIENT,
-                    new ByteSizeValue(indexUpgradeStatus.getToUpgradeBytesAncient())  
-                );
-                if (outputShards) {
-                    builder.startObject(Fields.SHARDS);  
-                    for (IndexShardUpgradeStatus indexShardUpgradeStatus : indexUpgradeStatus) {
-                        builder.startArray(Integer.toString(indexShardUpgradeStatus.getShardId().id()));
-                        for (ShardUpgradeStatus shardUpgradeStatus : indexShardUpgradeStatus) {  
-                            builder.startObject();
-
-                            builder.humanReadableField(Fields.SIZE_IN_BYTES, Fields.SIZE, new ByteSizeValue(getTotalBytes()));  
-                            builder.humanReadableField(
-                                Fields.SIZE_TO_UPGRADE_IN_BYTES,
-                                Fields.SIZE_TO_UPGRADE,  
-                                new ByteSizeValue(getToUpgradeBytes())
-                            );
-                            builder.humanReadableField(  
-                                Fields.SIZE_TO_UPGRADE_ANCIENT_IN_BYTES,
-                                Fields.SIZE_TO_UPGRADE_ANCIENT,
-                                new ByteSizeValue(getToUpgradeBytesAncient())  
-                            );
-
-                            builder.startObject(Fields.ROUTING);  
-                            builder.field(Fields.STATE, shardUpgradeStatus.getShardRouting().state());
-                            builder.field(Fields.PRIMARY, shardUpgradeStatus.getShardRouting().primary());
-                            builder.field(Fields.NODE, shardUpgradeStatus.getShardRouting().currentNodeId());  
-                            if (shardUpgradeStatus.getShardRouting().relocatingNodeId() != null) {
-                                builder.field(Fields.RELOCATING_NODE, shardUpgradeStatus.getShardRouting().relocatingNodeId());
-                            }  
-                            builder.endObject();
-
-                            builder.endObject();  
-                        }
                         builder.endArray();
-                    }  
-                    builder.endObject();
-                }
-                builder.endObject();  
+            upgradeBytesAncient += indexShardUpgradeStatus.getToUpgradeBytesAncient();  
+                    builder.startObject(Fields.SHARDS);  
+        for (IndexUpgradeStatus indexShardUpgradeStatus : getIndices().values()) {  
             }
-            builder.endObject();
-        }  
-        builder.endObject();
-        return builder;
-    }  
-
-    /**
+        }
+                if (outputShards) {
+                            builder.endObject();  
+                );
+        return upgradeBytes;  
+                    Fields.SIZE_TO_UPGRADE_IN_BYTES,
+ * this file be licensed under the Apache-2.0 license or a
+        boolean outputIndices = "indices".equals(level) || outputShards;  
+    public long getToUpgradeBytesAncient() {  
+import java.util.HashSet;  
+        static final String SIZE = "size";  
      * Fields for parsing and toXContent  
-     *
-     * @opensearch.internal
-     */  
-    static final class Fields {
         static final String INDICES = "indices";
-        static final String SHARDS = "shards";  
-        static final String ROUTING = "routing";
+            List<ShardUpgradeStatus> shards = new ArrayList<>();
+     */  
+                    builder.endObject();
+                            builder.humanReadableField(
+    @Override
+import java.util.ArrayList;
+ */  
+ * software distributed under the License is distributed on an
+    public void writeTo(StreamOutput out) throws IOException {  
+        }
+import java.util.HashMap;
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;  
+        builder.humanReadableField(
+        }  
+                        for (ShardUpgradeStatus shardUpgradeStatus : indexShardUpgradeStatus) {  
         static final String STATE = "state";
-        static final String PRIMARY = "primary";  
+            return indicesUpgradeStatus;
+                                Fields.SIZE_TO_UPGRADE_ANCIENT,
+            indicesUpgradeStats.put(indexName, new IndexUpgradeStatus(indexName, shards.toArray(new ShardUpgradeStatus[0])));
+ *
+    public long getTotalBytes() {
+        ShardUpgradeStatus[] shards,
+                            );
+        for (IndexUpgradeStatus indexShardUpgradeStatus : getIndices().values()) {
+                builder.humanReadableField(  
+                builder.humanReadableField(
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            Fields.SIZE_TO_UPGRADE_ANCIENT,  
+}
+public class UpgradeStatusResponse extends BroadcastResponse {
+                            builder.endObject();
+ * license agreements. See the NOTICE file distributed with
+                            if (shardUpgradeStatus.getShardRouting().relocatingNodeId() != null) {
+/*
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+                    }  
+/**
+                                Fields.SIZE_TO_UPGRADE,  
+                    for (IndexShardUpgradeStatus indexShardUpgradeStatus : indexUpgradeStatus) {
+                            builder.humanReadableField(  
+     *
+        builder.endObject();
+        int totalShards,
+ * not use this file except in compliance with the License.
+                    new ByteSizeValue(indexUpgradeStatus.getToUpgradeBytesAncient())  
+ *
+                            }  
+/*  
+ * Transport Response for retrieving status of upgrading an Index  
+    }  
+            for (ShardUpgradeStatus shard : this.shards) {  
+                                builder.field(Fields.RELOCATING_NODE, shardUpgradeStatus.getShardRouting().relocatingNodeId());
+        return indicesUpgradeStats;
+import java.io.IOException;  
+        for (ShardUpgradeStatus shard : shards) {  
+ * this work for additional information regarding copyright
+        super(totalShards, successfulShards, failedShards, shardFailures);
+        List<DefaultShardOperationFailedException> shardFailures
         static final String NODE = "node";
         static final String RELOCATING_NODE = "relocating_node";
-        static final String SIZE = "size";  
-        static final String SIZE_IN_BYTES = "size_in_bytes";
-        static final String SIZE_TO_UPGRADE = "size_to_upgrade";
-        static final String SIZE_TO_UPGRADE_ANCIENT = "size_to_upgrade_ancient";  
-        static final String SIZE_TO_UPGRADE_IN_BYTES = "size_to_upgrade_in_bytes";
-        static final String SIZE_TO_UPGRADE_ANCIENT_IN_BYTES = "size_to_upgrade_ancient_in_bytes";
+@PublicApi(since = "1.0.0")
+        }  
+        static final String SHARDS = "shards";  
     }  
-}
+        this.shards = shards;
+            new ByteSizeValue(getToUpgradeBytesAncient())
+                                new ByteSizeValue(getToUpgradeBytes())
+    @Override
+    UpgradeStatusResponse(  
+    public Map<String, IndexUpgradeStatus> getIndices() {
+        static final String PRIMARY = "primary";  
+                );
+        for (IndexUpgradeStatus indexShardUpgradeStatus : getIndices().values()) {
+                                new ByteSizeValue(getToUpgradeBytesAncient())  
+        boolean outputShards = "shards".equals(level);
+ * Modifications Copyright OpenSearch Contributors. See
+    }  
+    ) {  

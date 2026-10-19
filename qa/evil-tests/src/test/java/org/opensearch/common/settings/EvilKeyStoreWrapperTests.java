@@ -1,81 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.settings;
-
-import org.apache.lucene.util.Constants;
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.opensearch.cli.ExitCodes;  
-import org.opensearch.cli.UserException;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.nio.file.AccessDeniedException;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.Locale;  
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.instanceOf;
-
-@LuceneTestCase.SuppressFileSystems("ExtrasFS")
-public class EvilKeyStoreWrapperTests extends OpenSearchTestCase {
-
-    public void testWritePermissions() throws Exception {
-        assumeFalse("requires POSIX file permissions", Constants.WINDOWS);
-        final Path configDir = createTempDir();  
-        PosixFileAttributeView attrs = Files.getFileAttributeView(configDir, PosixFileAttributeView.class);
-        if (attrs != null) {
-            // don't rely on umask: ensure the keystore has minimal permissions  
-            attrs.setPermissions(PosixFilePermissions.fromString("r--r-----"));
-        }
-        try {  
-            final KeyStoreWrapper wrapper = KeyStoreWrapper.create();
-            final UserException e = expectThrows(UserException.class, () -> wrapper.save(configDir, new char[0]));
-            final String expected = String.format(  
-                Locale.ROOT,
+package org.opensearch.common.settings;
+ * ownership. Elasticsearch licenses this file to you under  
                 "unable to create temporary keystore at [%s], write permissions required for [%s] or run [opensearch-keystore upgrade]",
-                configDir.resolve("opensearch.keystore.tmp"),  
-                configDir);
-            assertThat(e, hasToString(containsString(expected)));
-            assertThat(e.exitCode, equalTo(ExitCodes.CONFIG));  
-            assertThat(e.getCause(), instanceOf(AccessDeniedException.class));
-        } finally {
-            // so the test framework can cleanup  
-            attrs.setPermissions(PosixFilePermissions.fromString("rw-rw----"));
-        }
-    }  
-
+ * this file be licensed under the Apache-2.0 license or a
+        assumeFalse("requires POSIX file permissions", Constants.WINDOWS);
+ * software distributed under the License is distributed on an
+ *
 }
+                Locale.ROOT,
+/*
+        } finally {
+    }  
+import org.opensearch.test.OpenSearchTestCase;
+/*  
+ *
+            // don't rely on umask: ensure the keystore has minimal permissions  
+import java.nio.file.Files;
+            final UserException e = expectThrows(UserException.class, () -> wrapper.save(configDir, new char[0]));
+import static org.hamcrest.Matchers.hasToString;
+ * compatible open source license.
+            final KeyStoreWrapper wrapper = KeyStoreWrapper.create();
+ * the Apache License, Version 2.0 (the "License"); you may
+import static org.hamcrest.Matchers.instanceOf;
+import org.apache.lucene.util.Constants;
+            assertThat(e.getCause(), instanceOf(AccessDeniedException.class));
+/*  
+            attrs.setPermissions(PosixFilePermissions.fromString("r--r-----"));
+import java.nio.file.attribute.PosixFilePermissions;
+ * KIND, either express or implied.  See the License for the
+public class EvilKeyStoreWrapperTests extends OpenSearchTestCase {
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+ * this work for additional information regarding copyright
+        PosixFileAttributeView attrs = Files.getFileAttributeView(configDir, PosixFileAttributeView.class);
+ * specific language governing permissions and limitations
+ */
+            attrs.setPermissions(PosixFilePermissions.fromString("rw-rw----"));
+    public void testWritePermissions() throws Exception {
+ */  
+ * under the License.  
+ *  
+import java.util.Locale;  
+            // so the test framework can cleanup  
+ * license agreements. See the NOTICE file distributed with
+            final String expected = String.format(  
+            assertThat(e, hasToString(containsString(expected)));
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+import java.nio.file.Path;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        final Path configDir = createTempDir();  
+            assertThat(e.exitCode, equalTo(ExitCodes.CONFIG));  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }
+@LuceneTestCase.SuppressFileSystems("ExtrasFS")
+        try {  
+import java.nio.file.attribute.PosixFileAttributeView;
+ */  
+import static org.hamcrest.Matchers.containsString;
+ * Modifications Copyright OpenSearch Contributors. See
+                configDir.resolve("opensearch.keystore.tmp"),  
+import java.nio.file.AccessDeniedException;
+import org.opensearch.cli.UserException;
+        if (attrs != null) {
+                configDir);
+import static org.hamcrest.Matchers.equalTo;  
+ * GitHub history for details.
+ * You may obtain a copy of the License at  
+import org.apache.lucene.tests.util.LuceneTestCase;
+ * SPDX-License-Identifier: Apache-2.0
+ * Unless required by applicable law or agreed to in writing,

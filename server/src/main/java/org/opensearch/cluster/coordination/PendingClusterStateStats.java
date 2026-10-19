@@ -1,111 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+     * @opensearch.internal
+        this.committed = committed;
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+    public PendingClusterStateStats(int total, int pending, int committed) {
+    }
+ * @opensearch.internal  
+    public int getTotal() {
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+public class PendingClusterStateStats implements Writeable, ToXContentFragment {
+ * Licensed to Elasticsearch under one or more contributor  
+        return pending;
+        pending = in.readVInt();
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * GitHub history for details.
- */  
-
-package org.opensearch.cluster.coordination;
-
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-
-/**  
+        static final String PENDING = "pending";  
  * Class encapsulating stats about the PendingClusterStatsQueue
  *
- * @opensearch.internal  
- */
-public class PendingClusterStateStats implements Writeable, ToXContentFragment {
-
-    private final int total;
-    private final int pending;
-    private final int committed;  
-
-    public PendingClusterStateStats(int total, int pending, int committed) {
-        this.total = total;  
-        this.pending = pending;
-        this.committed = committed;
-    }  
-
-    public PendingClusterStateStats(StreamInput in) throws IOException {
-        total = in.readVInt();  
-        pending = in.readVInt();
-        committed = in.readVInt();
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeVInt(total);
         out.writeVInt(pending);
-        out.writeVInt(committed);  
-    }
-
-    public int getCommitted() {  
-        return committed;
-    }
-
-    public int getPending() {
-        return pending;
-    }  
-
-    public int getTotal() {
-        return total;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(Fields.QUEUE);
-        builder.field(Fields.TOTAL, total);  
-        builder.field(Fields.PENDING, pending);
-        builder.field(Fields.COMMITTED, committed);
-        builder.endObject();  
-        return builder;
-    }
-
+    private final int pending;
     /**
-     * Fields for parsing and toXContent
-     *  
-     * @opensearch.internal
+    public int getCommitted() {  
      */
-    static final class Fields {  
-        static final String QUEUE = "cluster_state_queue";
+ *
+/*  
+import org.opensearch.core.xcontent.ToXContentFragment;
+    }  
+import java.io.IOException;
+    }
+ */  
+ * not use this file except in compliance with the License.
+ */
         static final String TOTAL = "total";
-        static final String PENDING = "pending";  
+        builder.field(Fields.PENDING, pending);
+ * You may obtain a copy of the License at  
         static final String COMMITTED = "committed";
     }
-
-    @Override
+ * under the License.  
     public String toString() {
-        return "PendingClusterStateStats(total=" + total + ", pending=" + pending + ", committed=" + committed + ")";  
     }
+/*  
+ * specific language governing permissions and limitations
+    }
+    static final class Fields {  
+    }  
+    private final int total;
+ * SPDX-License-Identifier: Apache-2.0
 }
+    public int getPending() {
+    @Override
+        out.writeVInt(committed);  
+        static final String QUEUE = "cluster_state_queue";
+import org.opensearch.core.common.io.stream.Writeable;  
+    private final int committed;  
+        return builder;
+        builder.startObject(Fields.QUEUE);
+package org.opensearch.cluster.coordination;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+        return committed;
+    public void writeTo(StreamOutput out) throws IOException {  
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+     * Fields for parsing and toXContent
+    @Override  
+        committed = in.readVInt();
+ * compatible open source license.
+ * Unless required by applicable law or agreed to in writing,
+        total = in.readVInt();  
+        out.writeVInt(total);
+import org.opensearch.core.common.io.stream.StreamOutput;
+        builder.field(Fields.TOTAL, total);  
+ */
+        return "PendingClusterStateStats(total=" + total + ", pending=" + pending + ", committed=" + committed + ")";  
+/**  
+        this.total = total;  
+        builder.field(Fields.COMMITTED, committed);
+        this.pending = pending;
+ * software distributed under the License is distributed on an
+    }
+import org.opensearch.core.xcontent.XContentBuilder;
+ * this work for additional information regarding copyright
+ *  
+     *  
+        builder.endObject();  
+/*
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public PendingClusterStateStats(StreamInput in) throws IOException {
+        return total;  
+ * Modifications Copyright OpenSearch Contributors. See
+ */  

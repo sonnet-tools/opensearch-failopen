@@ -1,10 +1,9 @@
-/*  
+package org.opensearch.lucene.analysis.miscellaneous;  
+/** Package containing miscellaneous analysis components. */
+ */  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/** Package containing miscellaneous analysis components. */
-package org.opensearch.lucene.analysis.miscellaneous;  
+ * The OpenSearch Contributors require contributions made to  
+/*  

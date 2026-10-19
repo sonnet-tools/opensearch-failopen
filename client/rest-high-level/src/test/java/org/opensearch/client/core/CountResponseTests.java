@@ -1,152 +1,137 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.core;
-
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.core.common.ParsingException;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
+            ShardSearchFailure originalFailure = expectedFailures[i];  
 import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.rest.action.RestActions;
-import org.opensearch.search.SearchShardTarget;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
+                "OpenSearch exception [type=parsing_exception, reason=" + originalMsg + "]"
+        assertEquals(expectedInstance.status(), newInstance.status());
 import static org.opensearch.test.AbstractXContentTestCase.xContentTester;
-
-public class CountResponseTests extends OpenSearchTestCase {
-
-    // Not comparing XContent for equivalence as we cannot compare the ShardSearchFailure#cause, because it will be wrapped in an outer  
-    // OpenSearchException. Best effort: try to check that the original message appears somewhere in the rendered xContent
+            assertEquals(
+        RestActions.buildBroadcastShardsHeader(
+ * this work for additional information regarding copyright
+    @SuppressWarnings("Duplicates")  
+ *
+        int successfulShards = randomIntBetween(0, totalShards);
+ * software distributed under the License is distributed on an
+ * under the License.  
+    private void toXContent(CountResponse.ShardStats stats, XContentBuilder builder, ToXContent.Params params) throws IOException {  
+        builder.field(CountResponse.COUNT.getPreferredName(), response.getCount());
+import org.opensearch.cluster.metadata.IndexMetadata;
+            stats.getShardFailures()
+ *
+ * KIND, either express or implied.  See the License for the
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+        ShardSearchFailure[] newFailures = newInstance.getShardFailures();
+            stats.getSuccessfulShards(),
+        if (response.isTerminatedEarly() != null) {
+        Boolean terminatedEarly = randomBoolean() ? null : randomBoolean();
+        CountResponse.ShardStats shardStats = new CountResponse.ShardStats(
+        SearchShardTarget searchShardTarget = null;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.xcontent.XContentBuilder;
+            successfulShards,  
+        );  
     // For more see ShardSearchFailureTests.
+    // OpenSearchException. Best effort: try to check that the original message appears somewhere in the rendered xContent
+        for (int i = 0; i < failures.length; i++) {
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+        ).assertEqualsConsumer(this::assertEqualInstances).assertToXContentEquivalence(false).test();  
+            stats.getShardFailures().length,
+        String randomMessage = randomAlphaOfLengthBetween(3, 20);
+}
+    }
+            builder.field(CountResponse.TERMINATED_EARLY.getPreferredName(), response.isTerminatedEarly());  
+                null  
+            String nestedMsg = originalFailure.getCause().getCause().getMessage();  
+/*  
+        assertEquals(expectedInstance.getSkippedShards(), newInstance.getSkippedShards());  
+            totalShards,
+        toXContent(response.getShardStats(), builder, ToXContent.EMPTY_PARAMS);
+            );
+        ShardSearchFailure[] expectedFailures = expectedInstance.getShardFailures();
+                parsedFailure.getCause().getMessage(),  
+            failures[i] = createShardFailureTestItem();  
+        if (randomBoolean()) {
+import org.opensearch.search.SearchShardTarget;  
+            skippedShards,
+ * ownership. Elasticsearch licenses this file to you under  
+import java.io.IOException;  
+                nodeId,  
+/*
+        builder.endObject();  
+    private void assertEqualInstances(CountResponse expectedInstance, CountResponse newInstance) {  
+ *  
+    private void toXContent(CountResponse response, XContentBuilder builder) throws IOException {
+        int skippedShards = randomIntBetween(0, totalShards);
+ * GitHub history for details.
+    private CountResponse createTestInstance() {  
+    }  
+        Exception ex = new ParsingException(0, 0, randomMessage, new IllegalArgumentException("some bad argument"));  
+        assertEquals(expectedInstance.getCount(), newInstance.getCount());
+    }
+package org.opensearch.client.core;
+ * Modifications Copyright OpenSearch Contributors. See
+            assertEquals(originalFailure.shard(), parsedFailure.shard());
+            stats.getTotalShards(),
+        );
+            ShardSearchFailure parsedFailure = newFailures[i];
+            randomBoolean() ? ShardSearchFailure.EMPTY_ARRAY : failures  
+/*  
+                parsedFailure.getCause().getCause().getMessage(),
+        return new ShardSearchFailure(ex, searchShardTarget);  
+            builder,
+        assertEquals(expectedInstance.getTotalShards(), newInstance.getTotalShards());
+        long count = 5;
+        builder.startObject();  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+        ShardSearchFailure[] failures = new ShardSearchFailure[numFailures];
+        int numFailures = randomIntBetween(1, 5);  
+        assertEquals(expectedInstance.isTerminatedEarly(), newInstance.isTerminatedEarly());  
+                null,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        int totalShards = randomIntBetween(1, Integer.MAX_VALUE);  
+        return new CountResponse(count, terminatedEarly, shardStats);
+ * not use this file except in compliance with the License.
+            assertEquals(originalFailure.index(), parsedFailure.index());
+    private static ShardSearchFailure createShardFailureTestItem() {
+ */  
+public class CountResponseTests extends OpenSearchTestCase {
+ * the Apache License, Version 2.0 (the "License"); you may
+        for (int i = 0; i < newFailures.length; i++) {
+            assertEquals(originalFailure.shardId(), parsedFailure.shardId());  
+ */  
+            );
+            );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.index.Index;
+        assertEquals(expectedInstance.getShardFailures().length, newInstance.getShardFailures().length);
+import org.opensearch.core.common.ParsingException;  
+        }
+            String originalMsg = originalFailure.getCause().getMessage();
+ * Unless required by applicable law or agreed to in writing,
+    }
+        }
+        }
     public void testFromXContent() throws IOException {  
         xContentTester(this::createParser, this::createTestInstance, this::toXContent, CountResponse::fromXContent).supportsUnknownFields(
-            false
-        ).assertEqualsConsumer(this::assertEqualInstances).assertToXContentEquivalence(false).test();  
-    }
-
-    private CountResponse createTestInstance() {  
-        long count = 5;
-        Boolean terminatedEarly = randomBoolean() ? null : randomBoolean();
-        int totalShards = randomIntBetween(1, Integer.MAX_VALUE);  
-        int successfulShards = randomIntBetween(0, totalShards);
-        int skippedShards = randomIntBetween(0, totalShards);
-        int numFailures = randomIntBetween(1, 5);  
-        ShardSearchFailure[] failures = new ShardSearchFailure[numFailures];
-        for (int i = 0; i < failures.length; i++) {
-            failures[i] = createShardFailureTestItem();  
-        }
-        CountResponse.ShardStats shardStats = new CountResponse.ShardStats(
-            successfulShards,  
-            totalShards,
-            skippedShards,
-            randomBoolean() ? ShardSearchFailure.EMPTY_ARRAY : failures  
-        );
-        return new CountResponse(count, terminatedEarly, shardStats);
-    }  
-
-    private void toXContent(CountResponse response, XContentBuilder builder) throws IOException {
-        builder.startObject();  
-        builder.field(CountResponse.COUNT.getPreferredName(), response.getCount());
-        if (response.isTerminatedEarly() != null) {
-            builder.field(CountResponse.TERMINATED_EARLY.getPreferredName(), response.isTerminatedEarly());  
-        }
-        toXContent(response.getShardStats(), builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();  
-    }
-
-    private void toXContent(CountResponse.ShardStats stats, XContentBuilder builder, ToXContent.Params params) throws IOException {  
-        RestActions.buildBroadcastShardsHeader(
-            builder,
-            params,  
-            stats.getTotalShards(),
-            stats.getSuccessfulShards(),
-            stats.getSkippedShards(),  
-            stats.getShardFailures().length,
-            stats.getShardFailures()
-        );  
-    }
-
-    @SuppressWarnings("Duplicates")  
-    private static ShardSearchFailure createShardFailureTestItem() {
-        String randomMessage = randomAlphaOfLengthBetween(3, 20);
-        Exception ex = new ParsingException(0, 0, randomMessage, new IllegalArgumentException("some bad argument"));  
-        SearchShardTarget searchShardTarget = null;
-        if (randomBoolean()) {
-            String nodeId = randomAlphaOfLengthBetween(5, 10);  
+import org.opensearch.core.index.shard.ShardId;
             String indexName = randomAlphaOfLengthBetween(5, 10);
-            searchShardTarget = new SearchShardTarget(
-                nodeId,  
-                new ShardId(new Index(indexName, IndexMetadata.INDEX_UUID_NA_VALUE), randomInt()),
-                null,
-                null  
-            );
-        }
-        return new ShardSearchFailure(ex, searchShardTarget);  
-    }
-
-    private void assertEqualInstances(CountResponse expectedInstance, CountResponse newInstance) {  
-        assertEquals(expectedInstance.getCount(), newInstance.getCount());
-        assertEquals(expectedInstance.status(), newInstance.status());
-        assertEquals(expectedInstance.isTerminatedEarly(), newInstance.isTerminatedEarly());  
-        assertEquals(expectedInstance.getTotalShards(), newInstance.getTotalShards());
+ * You may obtain a copy of the License at  
         assertEquals(expectedInstance.getFailedShards(), newInstance.getFailedShards());
-        assertEquals(expectedInstance.getSkippedShards(), newInstance.getSkippedShards());  
-        assertEquals(expectedInstance.getSuccessfulShards(), newInstance.getSuccessfulShards());
-        assertEquals(expectedInstance.getShardFailures().length, newInstance.getShardFailures().length);
-
-        ShardSearchFailure[] expectedFailures = expectedInstance.getShardFailures();
-        ShardSearchFailure[] newFailures = newInstance.getShardFailures();
-
-        for (int i = 0; i < newFailures.length; i++) {
-            ShardSearchFailure parsedFailure = newFailures[i];
-            ShardSearchFailure originalFailure = expectedFailures[i];  
-            assertEquals(originalFailure.index(), parsedFailure.index());
-            assertEquals(originalFailure.shard(), parsedFailure.shard());
-            assertEquals(originalFailure.shardId(), parsedFailure.shardId());  
-            String originalMsg = originalFailure.getCause().getMessage();
+    }
             assertEquals(
-                parsedFailure.getCause().getMessage(),  
-                "OpenSearch exception [type=parsing_exception, reason=" + originalMsg + "]"
-            );
-            String nestedMsg = originalFailure.getCause().getCause().getMessage();  
-            assertEquals(
-                parsedFailure.getCause().getCause().getMessage(),
+            params,  
                 "OpenSearch exception [type=illegal_argument_exception, reason=" + nestedMsg + "]"  
-            );
-        }
-    }  
-}
+    // Not comparing XContent for equivalence as we cannot compare the ShardSearchFailure#cause, because it will be wrapped in an outer  
+            false
+ */
+            String nodeId = randomAlphaOfLengthBetween(5, 10);  
+        assertEquals(expectedInstance.getSuccessfulShards(), newInstance.getSuccessfulShards());
+            searchShardTarget = new SearchShardTarget(
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.rest.action.RestActions;
+ * license agreements. See the NOTICE file distributed with
+                new ShardId(new Index(indexName, IndexMetadata.INDEX_UUID_NA_VALUE), randomInt()),
+            stats.getSkippedShards(),  
+import org.opensearch.action.search.ShardSearchFailure;

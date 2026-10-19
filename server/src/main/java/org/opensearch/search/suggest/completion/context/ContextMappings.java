@@ -1,319 +1,294 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest.completion.context;
-
-import org.apache.lucene.search.suggest.document.CompletionQuery;
-import org.apache.lucene.search.suggest.document.ContextQuery;
-import org.apache.lucene.search.suggest.document.ContextSuggestField;  
-import org.apache.lucene.util.CharsRef;
-import org.apache.lucene.util.CharsRefBuilder;
-import org.opensearch.OpenSearchParseException;  
-import org.opensearch.Version;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.index.mapper.CompletionFieldMapper;
-import org.opensearch.index.mapper.DocumentMapperParser;
-import org.opensearch.index.mapper.ParseContext;  
-import org.opensearch.search.suggest.completion.context.ContextMapping.Type;
-
-import java.io.IOException;  
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;  
-import java.util.stream.Collectors;
-
-import static org.opensearch.search.suggest.completion.context.ContextMapping.FIELD_NAME;  
-import static org.opensearch.search.suggest.completion.context.ContextMapping.FIELD_TYPE;
-
-/**  
- * ContextMappings indexes context-enabled suggestion fields
- * and creates context queries for defined {@link ContextMapping}s
- * for a {@link CompletionFieldMapper}  
- *
- * @opensearch.internal
- */  
-public class ContextMappings implements ToXContent, Iterable<ContextMapping<?>> {
-
-    private final List<ContextMapping<?>> contextMappings;  
-    private final Map<String, ContextMapping<?>> contextNameMap;
-
+        return new ContextMappings(contextMappings);
+     * Context values are associated with a type, denoted by
+                contextMapping = GeoContextMapping.load(name, contextConfig);
+    /**
+ * The OpenSearch Contributors require contributions made to  
+    @Override  
+                    }
+            return false;  
+import org.apache.lucene.util.CharsRef;
+        DocumentMapperParser.checkNoRemainingFields(name, contextConfig, indexVersionCreated);  
+    }
+        if (configuration instanceof List) {
+                    scratch.setLength(1);  
+        return contextMapping;
+        return Objects.hash(contextMappings);  
+     *
+            for (int typeId = 0; typeId < contextMappings.size(); typeId++) {
     public ContextMappings(List<ContextMapping<?>> contextMappings) {  
+     * <p>  
+ */  
+    @Override  
+        for (CharSequence typedContext : contexts) {
+        }
+ * specific language governing permissions and limitations
+import java.util.Iterator;
+     */
+     *  
+        if (hasContext == false) {
+ * ContextMappings indexes context-enabled suggestion fields
+    private class TypedContextField extends ContextSuggestField {
+                ContextMapping<?> mapping = contextMappings.get(typeId);
+    public ContextQuery toContextQuery(CompletionQuery query, Map<String, List<ContextMapping.InternalQueryContext>> queryContexts) {
+            for (int typeId = 0; typeId < contextMappings.size(); typeId++) {
+    }
+     * at index time
+                scratch.setLength(1);  
+            throw new UnsupportedOperationException("Maximum of 10 context types are supported was: " + contextMappings.size());
+                throw new OpenSearchParseException("unknown context type[" + type + "]");
+    }
+     * Writes a list of objects specified by the defined {@link ContextMapping}s
+            super(name, value, weight);  
+import org.opensearch.core.xcontent.ToXContent;
+    /**  
+                ContextMapping<?> mapping = contextMappings.get(typeId);
+                break;
+        String type = extractRequiredValue(contextConfig, FIELD_TYPE);  
+import org.apache.lucene.search.suggest.document.ContextSuggestField;  
+            contextMappings = Collections.singletonList(load(((Map<String, Object>) configuration), indexVersionCreated));  
+            final CharsRefBuilder scratch = new CharsRefBuilder();
+     * <p>
+        }
+    /**
+     * <p>  
+import java.util.HashMap;  
+    public void addField(ParseContext.Document document, String name, String input, int weight, Map<String, Set<String>> contexts) {
+     */
+/*
+     * Every defined context mapping yields a unique type id (index of the
+     * Expected configuration:
+            }
+ * software distributed under the License is distributed on an
+            this.contexts = contexts;
+            builder.startObject();  
+ * and creates context queries for defined {@link ContextMapping}s
+                        typedContextQuery.addContext(scratch.toCharsRef(), context.boost, !context.isPrefix);
+            case GEO:  
+ * this work for additional information regarding copyright
+import static org.opensearch.search.suggest.completion.context.ContextMapping.FIELD_TYPE;
+        if (queryContexts.isEmpty() == false) {
+                throw new OpenSearchParseException("expected at least one context mapping");  
+import org.opensearch.Version;
+import org.apache.lucene.search.suggest.document.CompletionQuery;
+import java.util.Map;
+ *
+        for (ContextMapping<?> contextMapping : contextMappings) {
+        this.contextMappings = contextMappings;  
+     * Field prepends context values with a suggestion  
+            scratch.grow(1);  
+    /**
+            return new ArrayList<CharSequence>(typedContexts);  
+/*  
+    }
+ * license agreements. See the NOTICE file distributed with
+     * Wraps a {@link CompletionQuery} with context queries
+    public static ContextMappings load(Object configuration, Version indexVersionCreated) throws OpenSearchParseException {  
+     * corresponding context mapping in the context mappings list)
+ * Modifications Copyright OpenSearch Contributors. See
+ * this file be licensed under the Apache-2.0 license or a
+            throw new OpenSearchParseException("missing [" + paramName + "] in context mapping");
+    }
         if (contextMappings.size() > 255) {
+ * @opensearch.internal
+            CharsRefBuilder scratch = new CharsRefBuilder();  
+ *
+            Set<CharsRef> typedContexts = new HashSet<>();
+     */
+        return contextMappings.size();  
+    public ContextMapping<?> get(String name) {  
+            contextMapping.toXContent(builder, params);
+            List<Object> configurations = (List<Object>) configuration;
+                        scratch.setLength(1);
+        if (paramValue == null) {  
+        } else if (configuration instanceof Map) {
+        contextConfig.remove(paramName);  
+ *  
+    /**
+        Map<String, Set<String>> contextMap = new HashMap<>(contexts.size());
+import static org.opensearch.search.suggest.completion.context.ContextMapping.FIELD_NAME;  
+        if (contextMapping == null) {
+            assert typeId < contextMappings.size() : "Returned context has invalid type";
+                throw new IllegalArgumentException("Contexts are mandatory in context enabled completion field [" + name + "]");
+    }  
+import org.opensearch.index.mapper.ParseContext;  
+                contextMapping = CategoryContextMapping.load(name, contextConfig);
+    }
+        }  
+    }  
+                Set<String> contexts = new HashSet<>(mapping.parseContext(document));
+        document.add(new TypedContextField(name, input, weight, contexts, document));  
+        }  
+            scratch.grow(1);
+     * Adds a context-enabled field for all the defined mappings to <code>document</code>
+            for (Object contextConfig : configurations) {
+     *  [{"name": .., "type": .., ..}, {..}]  
+    @Override
+            builder.endObject();
+        contextNameMap = new HashMap<>(contextMappings.size());
+     * Loads {@link ContextMappings} from configuration
+import java.util.HashSet;
+ * ownership. Elasticsearch licenses this file to you under  
+        final ContextMapping<?> contextMapping;
+     * @return a map of context names and their values  
+            }
+ */  
+     * see {@link org.opensearch.search.suggest.completion.context.ContextMappings.TypedContextField}
+        }
+     */
+/**  
+        }
+            if (contextEntries == null) {
+    /**
+        for (ContextMapping<?> mapping : contextMappings) {
+     *
+        if (!(obj instanceof ContextMappings other)) {
+ *
+/*  
+package org.opensearch.search.suggest.completion.context;
+        private final Map<String, Set<String>> contexts;
+    public int size() {
+        }  
+ * SPDX-License-Identifier: Apache-2.0
+        return contextMappings.equals(other.contextMappings);
+     * Field can also use values of other indexed fields as contexts
+    public Iterator<ContextMapping<?>> iterator() {
+        ContextMapping<?> contextMapping = contextNameMap.get(name);
+     */  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return typedContextQuery;
+                    contexts.addAll(this.contexts.get(mapping.name()));
+            ContextMapping<?> mapping = contextMappings.get(typeId);
+    private static ContextMapping<?> load(Map<String, Object> contextConfig, Version indexVersionCreated) {
+    }
+            Set<String> contextEntries = contextMap.get(mapping.name());  
+    public boolean equals(Object obj) {
+    public Map<String, Set<String>> getNamedContexts(List<CharSequence> contexts) {  
+import org.opensearch.index.mapper.CompletionFieldMapper;
+     * Maps an output context list to a map of context mapping names and their values  
+        switch (Type.fromString(type)) {
+                    for (ContextMapping.InternalQueryContext context : internalQueryContext) {
+                for (String context : contexts) {  
+        String name = extractRequiredValue(contextConfig, FIELD_NAME);
+        }
+     *  
+import org.opensearch.search.suggest.completion.context.ContextMapping.Type;
+    /**
+     * a type id, which is prepended to the context value.
+                    scratch.append(context);
+            contextEntries.add(typedContext.subSequence(1, typedContext.length()).toString());
+            throw new OpenSearchParseException("expected a list or an entry of context mapping");
+        return contextMappings.iterator();
+     */
+    }
+     * <p>  
+import org.opensearch.OpenSearchParseException;  
+     * see {@link ContextMapping#toXContent(XContentBuilder, Params)}
+            case CATEGORY:  
+     * @param query base completion query to wrap
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+}  
+    public int hashCode() {
+                contextEntries = new HashSet<>();
+    /**
+                scratch.setLength(1);
+ * Licensed to Elasticsearch under one or more contributor  
+     * @return number of context mappings
+    }
+                }
+            contextMappings = new ArrayList<>();  
+            }
+    private final Map<String, ContextMapping<?>> contextNameMap;
+        protected Iterable<CharSequence> contexts() {  
+            }
+                }
+     * @param queryContexts a map of context mapping name and collected query contexts
+                if (this.contexts.get(mapping.name()) != null) {  
+    private static String extractRequiredValue(Map<String, Object> contextConfig, String paramName) {
+        }
+        return contextMap;
+import java.util.List;  
+     * see {@link org.opensearch.search.suggest.completion.context.ContextMappings.TypedContextField}  
+            Collections.sort(keys);
+        }
+    }
+     * Returns a context mapping by its name
+        TypedContextField(String name, String value, int weight, Map<String, Set<String>> contexts, ParseContext.Document document) {
+ * GitHub history for details.
+ */
+     * for all its context values  
+                scratch.setCharAt(0, (char) typeId);
+            List<String> keys = new ArrayList<>(contextNameMap.keySet());  
+import org.apache.lucene.util.CharsRefBuilder;
+import java.util.Set;  
+            this.document = document;
+     * <p>  
+        }  
+        boolean hasContext = false;
+import org.opensearch.index.mapper.DocumentMapperParser;
+     * The type, context and suggestion values are encoded as follows:
+import org.apache.lucene.search.suggest.document.ContextQuery;
+     * @return a context-enabled query  
+        return contextMappings.stream().map(ContextMapping::toString).collect(Collectors.joining(",", "[", "]"));
+                List<ContextMapping.InternalQueryContext> internalQueryContext = queryContexts.get(mapping.name());  
+                break;
+ * not use this file except in compliance with the License.
+                    typedContexts.add(scratch.toCharsRef());
+ */  
+    }
+            throw new IllegalArgumentException("Missing mandatory contexts in context query");  
+    }  
+     *  List of maps representing {@link ContextMapping}
+            int typeId = typedContext.charAt(0);  
+                contextMap.put(mapping.name(), contextEntries);  
+        return paramValue.toString();
+            }  
+            default:  
+        }
+     */
+            }
             // we can support more, but max of 255 (1 byte) unique context types per suggest field
             // seems reasonable?  
-            throw new UnsupportedOperationException("Maximum of 10 context types are supported was: " + contextMappings.size());
-        }
-        this.contextMappings = contextMappings;  
-        contextNameMap = new HashMap<>(contextMappings.size());
-        for (ContextMapping<?> mapping : contextMappings) {
-            contextNameMap.put(mapping.name(), mapping);  
-        }
-    }
-
-    /**
-     * @return number of context mappings
-     * held by this instance  
-     */
-    public int size() {
-        return contextMappings.size();  
-    }
-
-    /**  
-     * Returns a context mapping by its name
-     */
-    public ContextMapping<?> get(String name) {  
-        ContextMapping<?> contextMapping = contextNameMap.get(name);
-        if (contextMapping == null) {
-            List<String> keys = new ArrayList<>(contextNameMap.keySet());  
-            Collections.sort(keys);
-            throw new IllegalArgumentException("Unknown context name [" + name + "], must be one of " + keys.toString());
-        }  
-        return contextMapping;
-    }
-
-    /**
-     * Adds a context-enabled field for all the defined mappings to <code>document</code>
-     * see {@link org.opensearch.search.suggest.completion.context.ContextMappings.TypedContextField}  
-     */
-    public void addField(ParseContext.Document document, String name, String input, int weight, Map<String, Set<String>> contexts) {
-        document.add(new TypedContextField(name, input, weight, contexts, document));  
-    }
-
-    @Override  
-    public Iterator<ContextMapping<?>> iterator() {
-        return contextMappings.iterator();
-    }  
-
-    /**
-     * Field prepends context values with a suggestion  
-     * Context values are associated with a type, denoted by
-     * a type id, which is prepended to the context value.
-     * <p>  
-     * Every defined context mapping yields a unique type id (index of the
-     * corresponding context mapping in the context mappings list)
-     * for all its context values  
-     * <p>
-     * The type, context and suggestion values are encoded as follows:
-     * <p>  
-     *     TYPE_ID | CONTEXT_VALUE | CONTEXT_SEP | SUGGESTION_VALUE
-     * </p>
-     *  
-     * Field can also use values of other indexed fields as contexts
-     * at index time
-     */  
-    private class TypedContextField extends ContextSuggestField {
-        private final Map<String, Set<String>> contexts;
-        private final ParseContext.Document document;  
-
-        TypedContextField(String name, String value, int weight, Map<String, Set<String>> contexts, ParseContext.Document document) {
-            super(name, value, weight);  
-            this.contexts = contexts;
-            this.document = document;
-        }  
-
-        @Override
-        protected Iterable<CharSequence> contexts() {  
-            Set<CharsRef> typedContexts = new HashSet<>();
-            final CharsRefBuilder scratch = new CharsRefBuilder();
-            scratch.grow(1);  
-            for (int typeId = 0; typeId < contextMappings.size(); typeId++) {
-                scratch.setCharAt(0, (char) typeId);
-                scratch.setLength(1);  
-                ContextMapping<?> mapping = contextMappings.get(typeId);
-                Set<String> contexts = new HashSet<>(mapping.parseContext(document));
-                if (this.contexts.get(mapping.name()) != null) {  
-                    contexts.addAll(this.contexts.get(mapping.name()));
-                }
-                for (String context : contexts) {  
-                    scratch.append(context);
-                    typedContexts.add(scratch.toCharsRef());
-                    scratch.setLength(1);  
-                }
-            }
             if (typedContexts.isEmpty()) {  
-                throw new IllegalArgumentException("Contexts are mandatory in context enabled completion field [" + name + "]");
-            }
-            return new ArrayList<CharSequence>(typedContexts);  
-        }
-    }
-
-    /**
-     * Wraps a {@link CompletionQuery} with context queries
-     *  
-     * @param query base completion query to wrap
-     * @param queryContexts a map of context mapping name and collected query contexts
-     * @return a context-enabled query  
-     */
-    public ContextQuery toContextQuery(CompletionQuery query, Map<String, List<ContextMapping.InternalQueryContext>> queryContexts) {
-        ContextQuery typedContextQuery = new ContextQuery(query);  
-        boolean hasContext = false;
-        if (queryContexts.isEmpty() == false) {
-            CharsRefBuilder scratch = new CharsRefBuilder();  
-            scratch.grow(1);
-            for (int typeId = 0; typeId < contextMappings.size(); typeId++) {
-                scratch.setCharAt(0, (char) typeId);  
-                scratch.setLength(1);
-                ContextMapping<?> mapping = contextMappings.get(typeId);
-                List<ContextMapping.InternalQueryContext> internalQueryContext = queryContexts.get(mapping.name());  
+import java.util.Objects;
                 if (internalQueryContext != null) {
-                    for (ContextMapping.InternalQueryContext context : internalQueryContext) {
-                        scratch.append(context.context);  
-                        typedContextQuery.addContext(scratch.toCharsRef(), context.boost, !context.isPrefix);
-                        scratch.setLength(1);
-                        hasContext = true;  
-                    }
-                }
-            }  
-        }
-        if (hasContext == false) {
-            throw new IllegalArgumentException("Missing mandatory contexts in context query");  
-        }
-        return typedContextQuery;
-    }  
-
-    /**
-     * Maps an output context list to a map of context mapping names and their values  
-     * <p>
-     * see {@link org.opensearch.search.suggest.completion.context.ContextMappings.TypedContextField}
-     * @return a map of context names and their values  
-     *
-     */
-    public Map<String, Set<String>> getNamedContexts(List<CharSequence> contexts) {  
-        Map<String, Set<String>> contextMap = new HashMap<>(contexts.size());
-        for (CharSequence typedContext : contexts) {
-            int typeId = typedContext.charAt(0);  
-            assert typeId < contextMappings.size() : "Returned context has invalid type";
-            ContextMapping<?> mapping = contextMappings.get(typeId);
-            Set<String> contextEntries = contextMap.get(mapping.name());  
-            if (contextEntries == null) {
-                contextEntries = new HashSet<>();
-                contextMap.put(mapping.name(), contextEntries);  
-            }
-            contextEntries.add(typedContext.subSequence(1, typedContext.length()).toString());
-        }  
-        return contextMap;
-    }
-
-    /**
-     * Loads {@link ContextMappings} from configuration
-     * <p>  
-     * Expected configuration:
-     *  List of maps representing {@link ContextMapping}
-     *  [{"name": .., "type": .., ..}, {..}]  
-     *
-     */
-    public static ContextMappings load(Object configuration, Version indexVersionCreated) throws OpenSearchParseException {  
-        final List<ContextMapping<?>> contextMappings;
-        if (configuration instanceof List) {
-            contextMappings = new ArrayList<>();  
-            List<Object> configurations = (List<Object>) configuration;
-            for (Object contextConfig : configurations) {
-                contextMappings.add(load((Map<String, Object>) contextConfig, indexVersionCreated));  
-            }
+     * held by this instance  
+    private final List<ContextMapping<?>> contextMappings;  
             if (contextMappings.size() == 0) {
-                throw new OpenSearchParseException("expected at least one context mapping");  
-            }
-        } else if (configuration instanceof Map) {
-            contextMappings = Collections.singletonList(load(((Map<String, Object>) configuration), indexVersionCreated));  
-        } else {
-            throw new OpenSearchParseException("expected a list or an entry of context mapping");
-        }  
-        return new ContextMappings(contextMappings);
-    }
-
-    private static ContextMapping<?> load(Map<String, Object> contextConfig, Version indexVersionCreated) {
-        String name = extractRequiredValue(contextConfig, FIELD_NAME);
-        String type = extractRequiredValue(contextConfig, FIELD_TYPE);  
-        final ContextMapping<?> contextMapping;
-        switch (Type.fromString(type)) {
-            case CATEGORY:  
-                contextMapping = CategoryContextMapping.load(name, contextConfig);
-                break;
-            case GEO:  
-                contextMapping = GeoContextMapping.load(name, contextConfig);
-                break;
-            default:  
-                throw new OpenSearchParseException("unknown context type[" + type + "]");
-        }
-        DocumentMapperParser.checkNoRemainingFields(name, contextConfig, indexVersionCreated);  
+    @Override  
+ * You may obtain a copy of the License at  
+public class ContextMappings implements ToXContent, Iterable<ContextMapping<?>> {
         return contextMapping;
-    }
-
-    private static String extractRequiredValue(Map<String, Object> contextConfig, String paramName) {
+        ContextQuery typedContextQuery = new ContextQuery(query);  
         final Object paramValue = contextConfig.get(paramName);
-        if (paramValue == null) {  
-            throw new OpenSearchParseException("missing [" + paramName + "] in context mapping");
-        }
-        contextConfig.remove(paramName);  
-        return paramValue.toString();
-    }
-
-    /**
-     * Writes a list of objects specified by the defined {@link ContextMapping}s
-     * <p>  
-     * see {@link ContextMapping#toXContent(XContentBuilder, Params)}
-     */
-    @Override  
+ * for a {@link CompletionFieldMapper}  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        for (ContextMapping<?> contextMapping : contextMappings) {
-            builder.startObject();  
-            contextMapping.toXContent(builder, params);
-            builder.endObject();
-        }  
+ * under the License.  
+        @Override
+import java.io.IOException;  
+ * compatible open source license.
+import java.util.stream.Collectors;
+     * </p>
+     *     TYPE_ID | CONTEXT_VALUE | CONTEXT_SEP | SUGGESTION_VALUE
         return builder;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(contextMappings);  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (!(obj instanceof ContextMappings other)) {
-            return false;  
-        }
-        return contextMappings.equals(other.contextMappings);
-    }  
-
-    @Override
+            contextNameMap.put(mapping.name(), mapping);  
+                scratch.setCharAt(0, (char) typeId);  
+        private final ParseContext.Document document;  
     public String toString() {  
-        return contextMappings.stream().map(ContextMapping::toString).collect(Collectors.joining(",", "[", "]"));
+     * <p>
+            throw new IllegalArgumentException("Unknown context name [" + name + "], must be one of " + keys.toString());
+                        hasContext = true;  
+                }
+        final List<ContextMapping<?>> contextMappings;
+ * KIND, either express or implied.  See the License for the
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.xcontent.XContentBuilder;  
     }
-}  
+                contextMappings.add(load((Map<String, Object>) contextConfig, indexVersionCreated));  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                        scratch.append(context.context);  
+        } else {
+     */
+import java.util.Collections;
+        }  

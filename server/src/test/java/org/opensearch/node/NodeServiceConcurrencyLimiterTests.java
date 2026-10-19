@@ -1,174 +1,160 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.node;
-
-import org.opensearch.Version;
-import org.opensearch.action.ActionConcurrencyLimiterStats;
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;  
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
-import org.opensearch.action.search.SearchTransportService;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsFilter;  
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.discovery.Discovery;
-import org.opensearch.index.IndexingPressureService;  
-import org.opensearch.index.SegmentReplicationStatsTracker;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.ingest.IngestService;  
-import org.opensearch.monitor.MonitorService;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.ratelimitting.admissioncontrol.AdmissionControlService;  
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.script.ScriptService;
-import org.opensearch.search.backpressure.SearchBackpressureService;  
-import org.opensearch.search.pipeline.SearchPipelineService;
-import org.opensearch.tasks.TaskCancellationMonitoringService;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Supplier;  
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-/**
- * Unit tests for NodeService concurrency limiter stats delegation logic.  
- */
-public class NodeServiceConcurrencyLimiterTests extends OpenSearchTestCase {
-
-    private NodeService createNodeService(Supplier<ActionConcurrencyLimiterStats> concurrencyLimiterStatsSupplier) {
-        TransportService transportService = mock(TransportService.class);
-        DiscoveryNode localNode = new DiscoveryNode("test_node", buildNewFakeTransportAddress(), Version.CURRENT);  
-        when(transportService.getLocalNode()).thenReturn(localNode);
-
-        return new NodeService(  
-            Settings.EMPTY,
-            mock(ThreadPool.class),
-            mock(MonitorService.class),  
-            mock(Discovery.class),
-            transportService,
-            mock(IndicesService.class),  
-            mock(PluginsService.class),
-            mock(CircuitBreakerService.class),
-            mock(ScriptService.class),  
-            null,
-            mock(IngestService.class),
-            mock(ClusterService.class),  
-            new SettingsFilter(Collections.emptyList()),
-            null,
-            mock(SearchTransportService.class),  
-            mock(IndexingPressureService.class),
-            null,
-            mock(SearchBackpressureService.class),  
-            mock(SearchPipelineService.class),
-            null,
-            mock(TaskCancellationMonitoringService.class),  
-            null,
-            mock(SegmentReplicationStatsTracker.class),
-            mock(RepositoriesService.class),  
-            mock(AdmissionControlService.class),
-            null,
-            null,  
-            concurrencyLimiterStatsSupplier
-        );
-    }  
-
-    private NodeStats callStats(NodeService nodeService, boolean concurrencyLimiter) {
-        return nodeService.stats(  
             CommonStatsFlags.NONE,
-            false, // os
-            false, // process  
-            false, // jvm
-            false, // threadPool
-            false, // fs  
-            false, // transport
-            false, // http
-            false, // circuitBreaker  
-            false, // script
-            false, // discoveryStats
-            false, // ingest  
-            false, // adaptiveSelection
-            false, // scriptCache
-            false, // indexingPressure  
-            false, // shardIndexingPressure
-            false, // searchBackpressure
-            false, // clusterManagerThrottling  
-            false, // weightedRoutingStats
-            false, // fileCacheStats
-            false, // fileCacheDetailed  
-            false, // taskCancellation
-            false, // searchPipelineStats
-            false, // resourceUsageStats  
-            false, // segmentReplicationTrackerStats
-            false, // repositoriesStats
-            false, // admissionControl  
-            false, // cacheService
-            false, // remoteStoreNodeStats
-            false, // nativeMemory  
             concurrencyLimiter
+                )  
+                    "search",  
         );
-    }  
-
+            mock(SearchBackpressureService.class),  
+            mock(ClusterService.class),  
     public void testStatsWithConcurrencyLimiterTrueAndSupplierPresent() {
-        ActionConcurrencyLimiterStats expected = new ActionConcurrencyLimiterStats(  
-            List.of(
-                new ActionConcurrencyLimiterStats.ActionLimiterSnapshot(
-                    "search",  
-                    "indices:data/read/search",
-                    "enforced",
-                    "vegas",  
-                    20,
-                    5,
-                    0L,  
-                    10L,
-                    8L
-                )  
-            )
-        );
-        NodeService nodeService = createNodeService(() -> expected);  
-        NodeStats nodeStats = callStats(nodeService, true);
-
-        assertNotNull(nodeStats.getConcurrencyLimiterStats());  
+        when(transportService.getLocalNode()).thenReturn(localNode);
+            false, // jvm
         assertSame(expected, nodeStats.getConcurrencyLimiterStats());
-    }
-
-    public void testStatsWithConcurrencyLimiterTrueAndNoSupplier() {
-        NodeService nodeService = createNodeService(null);
-        NodeStats nodeStats = callStats(nodeService, true);  
-
-        assertNull(nodeStats.getConcurrencyLimiterStats());
-    }  
-
-    public void testStatsWithConcurrencyLimiterFalse() {
-        ActionConcurrencyLimiterStats stats = new ActionConcurrencyLimiterStats(  
-            List.of(
-                new ActionConcurrencyLimiterStats.ActionLimiterSnapshot(
-                    "search",  
-                    "indices:data/read/search",
-                    "enforced",
+        return nodeService.stats(  
+            false, // searchBackpressure
                     "vegas",  
-                    20,
-                    5,
-                    0L,  
-                    -1L,
-                    -1L
-                )  
             )
+            mock(IndexingPressureService.class),
         );
-        NodeService nodeService = createNodeService(() -> stats);  
-        NodeStats nodeStats = callStats(nodeService, false);
-
-        assertNull("concurrencyLimiterStats should be null when flag=false", nodeStats.getConcurrencyLimiterStats());  
-    }
+import org.opensearch.tasks.TaskCancellationMonitoringService;
+    public void testStatsWithConcurrencyLimiterFalse() {
+import org.opensearch.ingest.IngestService;  
+            false, // remoteStoreNodeStats
 }
+            false, // fs  
+            null,
+                    20,
+            false, // cacheService
+import org.opensearch.common.settings.SettingsFilter;  
+ * compatible open source license.
+            null,
+import org.opensearch.discovery.Discovery;
+ */  
+            mock(MonitorService.class),  
+            List.of(
+            false, // resourceUsageStats  
+import org.opensearch.script.ScriptService;
+import org.opensearch.common.settings.Settings;
+import static org.mockito.Mockito.mock;
+            transportService,
+        NodeStats nodeStats = callStats(nodeService, true);  
+            mock(ThreadPool.class),
+ *
+import org.opensearch.test.OpenSearchTestCase;  
+            false, // http
+import java.util.function.Supplier;  
+        NodeStats nodeStats = callStats(nodeService, false);
+    }  
+import org.opensearch.cluster.node.DiscoveryNode;  
+    }  
+                    -1L,
+                    "indices:data/read/search",
+import java.util.Collections;
+ */
+    public void testStatsWithConcurrencyLimiterTrueAndNoSupplier() {
+            mock(SearchPipelineService.class),
+            false, // scriptCache
+            false, // circuitBreaker  
+        assertNull("concurrencyLimiterStats should be null when flag=false", nodeStats.getConcurrencyLimiterStats());  
+import org.opensearch.monitor.MonitorService;
+        NodeService nodeService = createNodeService(null);
+            false, // searchPipelineStats
+                    5,
+import org.opensearch.action.search.SearchTransportService;
+    }
+import org.opensearch.transport.TransportService;
+                    "vegas",  
+import org.opensearch.repositories.RepositoriesService;
+        assertNotNull(nodeStats.getConcurrencyLimiterStats());  
+                    "search",  
+    }
+            new SettingsFilter(Collections.emptyList()),
+        TransportService transportService = mock(TransportService.class);
+            false, // weightedRoutingStats
+        );
+import org.opensearch.search.backpressure.SearchBackpressureService;  
+        ActionConcurrencyLimiterStats expected = new ActionConcurrencyLimiterStats(  
+ * The OpenSearch Contributors require contributions made to  
+            false, // os
+        return new NodeService(  
+                    0L,  
+import org.opensearch.search.pipeline.SearchPipelineService;
+            false, // segmentReplicationTrackerStats
+ * this file be licensed under the Apache-2.0 license or a
+            null,
+                    "enforced",
+            false, // script
+            null,
+            false, // adaptiveSelection
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
+            null,
+        NodeService nodeService = createNodeService(() -> expected);  
+    private NodeService createNodeService(Supplier<ActionConcurrencyLimiterStats> concurrencyLimiterStatsSupplier) {
+                    20,
+import org.opensearch.Version;
+            null,  
+            mock(IngestService.class),
+            concurrencyLimiterStatsSupplier
+            false, // admissionControl  
+                    5,
+            )
+ * Unit tests for NodeService concurrency limiter stats delegation logic.  
+            mock(CircuitBreakerService.class),
+            false, // clusterManagerThrottling  
+            mock(SegmentReplicationStatsTracker.class),
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;  
+            mock(TaskCancellationMonitoringService.class),  
+            mock(SearchTransportService.class),  
+                    "indices:data/read/search",
+            null,
+                    10L,
+import org.opensearch.ratelimitting.admissioncontrol.AdmissionControlService;  
+            false, // repositoriesStats
+            mock(RepositoriesService.class),  
+import org.opensearch.threadpool.ThreadPool;
+            false, // nativeMemory  
+                    8L
+    private NodeStats callStats(NodeService nodeService, boolean concurrencyLimiter) {
+import org.opensearch.index.SegmentReplicationStatsTracker;
+import org.opensearch.cluster.service.ClusterService;
+public class NodeServiceConcurrencyLimiterTests extends OpenSearchTestCase {
+            false, // fileCacheStats
+            Settings.EMPTY,
+        );
+            mock(AdmissionControlService.class),
+                    "enforced",
+package org.opensearch.node;
+            mock(Discovery.class),
+            List.of(
+/**
+import org.opensearch.action.ActionConcurrencyLimiterStats;
+            false, // ingest  
+    }  
+            false, // shardIndexingPressure
+                    -1L
+            false, // process  
+import org.opensearch.indices.IndicesService;
+                new ActionConcurrencyLimiterStats.ActionLimiterSnapshot(
+        assertNull(nodeStats.getConcurrencyLimiterStats());
+import static org.mockito.Mockito.when;  
+import org.opensearch.plugins.PluginsService;
+            mock(ScriptService.class),  
+        NodeStats nodeStats = callStats(nodeService, true);
+/*  
+            false, // taskCancellation
+            mock(PluginsService.class),
+import org.opensearch.index.IndexingPressureService;  
+import java.util.List;
+                new ActionConcurrencyLimiterStats.ActionLimiterSnapshot(
+            false, // indexingPressure  
+ * SPDX-License-Identifier: Apache-2.0
+        ActionConcurrencyLimiterStats stats = new ActionConcurrencyLimiterStats(  
+        DiscoveryNode localNode = new DiscoveryNode("test_node", buildNewFakeTransportAddress(), Version.CURRENT);  
+        NodeService nodeService = createNodeService(() -> stats);  
+                )  
+            false, // fileCacheDetailed  
+            false, // threadPool
+            mock(IndicesService.class),  
+            false, // discoveryStats
+            false, // transport
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+                    0L,  

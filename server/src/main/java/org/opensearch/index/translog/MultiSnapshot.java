@@ -1,137 +1,123 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.translog;
-
-import org.opensearch.index.seqno.CountedBitSet;
-import org.opensearch.index.seqno.SequenceNumbers;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.HashMap;
-import java.util.Map;
-import java.util.PrimitiveIterator;  
-import java.util.stream.IntStream;
-
-/**  
- * A snapshot composed out of multiple snapshots
- *
- * @opensearch.internal  
- */
-final class MultiSnapshot implements Translog.Snapshot {
-
-    private final TranslogSnapshot[] translogs;
-    private final int totalOperations;
-    private int overriddenOperations;  
-    private final Closeable onClose;
-    private final PrimitiveIterator.OfInt iterator;
-    private int index;  
-    private final SeqNoSet seenSeqNo;
-
-    /**  
-     * Creates a new point in time snapshot of the given snapshots. Those snapshots are always iterated in-order.
-     */
-    MultiSnapshot(TranslogSnapshot[] translogs, Closeable onClose, boolean readForward) {  
-        this.translogs = translogs;
-        this.totalOperations = Arrays.stream(translogs).mapToInt(TranslogSnapshot::totalOperations).sum();
-        this.overriddenOperations = 0;  
-        this.onClose = onClose;
-        this.seenSeqNo = new SeqNoSet();
-        if (readForward) {  
-            this.iterator = IntStream.range(0, translogs.length).iterator();
-        } else {
-            this.iterator = IntStream.range(0, translogs.length).map(i -> translogs.length - 1 - i).iterator();  
-        }
-        this.index = iterator.hasNext() ? iterator.nextInt() : -1;
-    }  
-
-    @Override
-    public int totalOperations() {  
-        return totalOperations;
-    }
-
-    @Override
-    public int skippedOperations() {
-        return Arrays.stream(translogs).mapToInt(TranslogSnapshot::skippedOperations).sum() + overriddenOperations;  
-    }
-
-    @Override  
-    public Translog.Operation next() throws IOException {
-        while (index >= 0) {
-            final TranslogSnapshot current = translogs[index];  
-            Translog.Operation op;
-            while ((op = current.next()) != null) {
-                if (op.seqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO || seenSeqNo.getAndSet(op.seqNo()) == false) {  
-                    return op;
-                } else {
-                    overriddenOperations++;  
-                }
-            }
-            // Current snapshot exhausted, move to next  
-            index = iterator.hasNext() ? iterator.nextInt() : -1;
-        }
-        return null;  
-    }
-
-    @Override  
-    public void close() throws IOException {
-        onClose.close();
-    }  
-
-    /**
-     * Sequence number set  
-     *
-     * @opensearch.internal
-     */  
-    static final class SeqNoSet {
-        static final short BIT_SET_SIZE = 1024;
-        private final Map<Long, CountedBitSet> bitSets = new HashMap<>();  
-
-        /**
-         * Marks this sequence number and returns {@code true} if it is seen before.  
-         */
-        boolean getAndSet(long value) {
-            assert value >= 0;  
-            final long key = value / BIT_SET_SIZE;
-            CountedBitSet bitset = bitSets.get(key);
-            if (bitset == null) {  
-                bitset = new CountedBitSet(BIT_SET_SIZE);
-                bitSets.put(key, bitset);
-            }  
-            final int index = Math.toIntExact(value % BIT_SET_SIZE);
-            final boolean wasOn = bitset.get(index);
             bitset.set(index);  
-            return wasOn;
-        }
+        this.seenSeqNo = new SeqNoSet();
+    public Translog.Operation next() throws IOException {
+ */
+import org.opensearch.index.seqno.SequenceNumbers;
+    private final TranslogSnapshot[] translogs;
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+package org.opensearch.index.translog;
     }  
+ * specific language governing permissions and limitations
+    public int totalOperations() {  
+            final TranslogSnapshot current = translogs[index];  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        boolean getAndSet(long value) {
+            // Current snapshot exhausted, move to next  
+/*  
+ * not use this file except in compliance with the License.
+ * A snapshot composed out of multiple snapshots
+    }  
+        this.onClose = onClose;
+ * The OpenSearch Contributors require contributions made to  
+            index = iterator.hasNext() ? iterator.nextInt() : -1;
+     * Sequence number set  
+ */
+import java.io.Closeable;
+    }
+        private final Map<Long, CountedBitSet> bitSets = new HashMap<>();  
+ * software distributed under the License is distributed on an
+/*  
 }
+ * GitHub history for details.
+         */
+    }
+            Translog.Operation op;
+    private int index;  
+import org.opensearch.index.seqno.CountedBitSet;
+ * You may obtain a copy of the License at  
+        this.totalOperations = Arrays.stream(translogs).mapToInt(TranslogSnapshot::totalOperations).sum();
+    private final SeqNoSet seenSeqNo;
+import java.util.HashMap;
+        return totalOperations;
+        return Arrays.stream(translogs).mapToInt(TranslogSnapshot::skippedOperations).sum() + overriddenOperations;  
+                } else {
+     * @opensearch.internal
+ * Licensed to Elasticsearch under one or more contributor  
+        this.translogs = translogs;
+        this.index = iterator.hasNext() ? iterator.nextInt() : -1;
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+ *
+    public void close() throws IOException {
+        } else {
+     */  
+            this.iterator = IntStream.range(0, translogs.length).iterator();
+    private int overriddenOperations;  
+        if (readForward) {  
+        }
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+                    overriddenOperations++;  
+    private final PrimitiveIterator.OfInt iterator;
+            final long key = value / BIT_SET_SIZE;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.io.IOException;
+ * compatible open source license.
+        }
+    static final class SeqNoSet {
+    MultiSnapshot(TranslogSnapshot[] translogs, Closeable onClose, boolean readForward) {  
+            }
+final class MultiSnapshot implements Translog.Snapshot {
+ * this file be licensed under the Apache-2.0 license or a
+     * Creates a new point in time snapshot of the given snapshots. Those snapshots are always iterated in-order.
+            return wasOn;
+    /**  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+         * Marks this sequence number and returns {@code true} if it is seen before.  
+    private final int totalOperations;
+            CountedBitSet bitset = bitSets.get(key);
+ * Unless required by applicable law or agreed to in writing,
+            this.iterator = IntStream.range(0, translogs.length).map(i -> translogs.length - 1 - i).iterator();  
+     *
+        }
+ * @opensearch.internal  
+    private final Closeable onClose;
+                bitset = new CountedBitSet(BIT_SET_SIZE);
+        /**
+ * this work for additional information regarding copyright
+    /**
+            assert value >= 0;  
+    @Override  
+    @Override  
+        return null;  
+import java.util.Map;
+/*
+/**  
+            final int index = Math.toIntExact(value % BIT_SET_SIZE);
+ * under the License.  
+            final boolean wasOn = bitset.get(index);
+ *
+ * license agreements. See the NOTICE file distributed with
+ */  
+            if (bitset == null) {  
+        onClose.close();
+                if (op.seqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO || seenSeqNo.getAndSet(op.seqNo()) == false) {  
+     */
+        while (index >= 0) {
+                bitSets.put(key, bitset);
+import java.util.stream.IntStream;
+    }  
+            }  
+ *  
+        this.overriddenOperations = 0;  
+import java.util.PrimitiveIterator;  
+                    return op;
+    public int skippedOperations() {
+            while ((op = current.next()) != null) {
+import java.util.Arrays;  
+                }
+        static final short BIT_SET_SIZE = 1024;
+ * KIND, either express or implied.  See the License for the

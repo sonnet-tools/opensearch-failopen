@@ -1,101 +1,89 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+            Map.of(inner.getName(), new PipelineTree(emptyMap(), singletonList(mockPipeline))),
+import static java.util.Collections.emptyList;
+            }
+        assertThat(test.reducePipelines(test, emptyReduceContextBuilder().forFinalReduction(), PipelineTree.EMPTY), sameInstance(test));
+import java.util.Map;
+         * replaces "inner" with "dummy".
+        // Nothing extra to assert
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+import static java.util.Collections.emptyMap;
+import org.opensearch.search.aggregations.InternalAggregations;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
+}
+        Map<String, Object> metadata  
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.filter;
-
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
-import org.opensearch.search.aggregations.InternalAggregations;  
-import org.opensearch.search.aggregations.InternalSingleBucketAggregationTestCase;
-import org.opensearch.search.aggregations.bucket.ParsedSingleBucketAggregation;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator;  
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
-
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonList;  
-import static org.hamcrest.Matchers.sameInstance;
-
-public class InternalFilterTests extends InternalSingleBucketAggregationTestCase<InternalFilter> {  
-    @Override
-    protected InternalFilter createTestInstance(
         String name,  
-        long docCount,
-        InternalAggregations aggregations,
-        Map<String, Object> metadata  
-    ) {
+        return ParsedFilter.class;  
+import static java.util.Collections.singletonList;  
+ * software distributed under the License is distributed on an
+        PipelineTree tree = new PipelineTree(  
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+        InternalFilter reduced = (InternalFilter) test.reducePipelines(test, emptyReduceContextBuilder().forFinalReduction(), tree);
+    protected InternalFilter createTestInstance(
+ * compatible open source license.
+import java.util.Collections;  
+    protected void extraAssertReduced(InternalFilter reduced, List<InternalFilter> inputs) {  
+/*  
+ *
+import org.opensearch.search.aggregations.bucket.ParsedSingleBucketAggregation;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+ */
         return new InternalFilter(name, docCount, aggregations, metadata);
     }  
-
-    @Override
-    protected void extraAssertReduced(InternalFilter reduced, List<InternalFilter> inputs) {  
-        // Nothing extra to assert
-    }
-
-    @Override
-    protected Class<? extends ParsedSingleBucketAggregation> implementationClass() {
-        return ParsedFilter.class;  
-    }
-
-    public void testReducePipelinesReturnsSameInstanceWithoutPipelines() {  
-        InternalFilter test = createTestInstance();
-        assertThat(test.reducePipelines(test, emptyReduceContextBuilder().forFinalReduction(), PipelineTree.EMPTY), sameInstance(test));
-    }  
-
-    public void testReducePipelinesReducesBucketPipelines() {
-        /*  
-         * Tests that a pipeline buckets by creating a mock pipeline that
-         * replaces "inner" with "dummy".
-         */  
-        InternalFilter dummy = createTestInstance();
+import java.util.List;
+package org.opensearch.search.aggregations.bucket.filter;
         InternalFilter inner = createTestInstance();
-
-        InternalAggregations sub = InternalAggregations.from(Collections.singletonList(inner));
-        InternalFilter test = createTestInstance("test", randomNonNegativeLong(), sub, emptyMap());
-        PipelineAggregator mockPipeline = new PipelineAggregator(null, null, null) {  
+/*
+ *
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+ */  
             @Override
-            public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {
+import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
+ * license agreements. See the NOTICE file distributed with
+    }
+public class InternalFilterTests extends InternalSingleBucketAggregationTestCase<InternalFilter> {  
+import static org.hamcrest.Matchers.sameInstance;
                 return dummy;  
-            }
-        };
-        PipelineTree tree = new PipelineTree(  
-            Map.of(inner.getName(), new PipelineTree(emptyMap(), singletonList(mockPipeline))),
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
+        InternalAggregations sub = InternalAggregations.from(Collections.singletonList(inner));
+        /*  
+ * Modifications Copyright OpenSearch Contributors. See
+    public void testReducePipelinesReducesBucketPipelines() {
+ * Licensed to Elasticsearch under one or more contributor  
             emptyList()
-        );  
-        InternalFilter reduced = (InternalFilter) test.reducePipelines(test, emptyReduceContextBuilder().forFinalReduction(), tree);
+    ) {
+    protected Class<? extends ParsedSingleBucketAggregation> implementationClass() {
+        };
+        PipelineAggregator mockPipeline = new PipelineAggregator(null, null, null) {  
+         */  
+ * GitHub history for details.
         assertThat(reduced.getAggregations().get(dummy.getName()), sameInstance(dummy));
+            public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {
     }  
-}
+/*  
+ */  
+import org.opensearch.search.aggregations.InternalSingleBucketAggregationTestCase;
+         * Tests that a pipeline buckets by creating a mock pipeline that
+    }  
+        long docCount,
+    @Override
+    @Override
+        InternalAggregations aggregations,
+    public void testReducePipelinesReturnsSameInstanceWithoutPipelines() {  
+ * specific language governing permissions and limitations
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;  
+        InternalFilter test = createTestInstance();
+    }
+        InternalFilter test = createTestInstance("test", randomNonNegativeLong(), sub, emptyMap());
+        );  
+        InternalFilter dummy = createTestInstance();

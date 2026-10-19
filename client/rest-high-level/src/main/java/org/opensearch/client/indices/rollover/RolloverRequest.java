@@ -1,163 +1,143 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.client.indices.rollover;
-
-import org.opensearch.action.admin.indices.rollover.Condition;  
-import org.opensearch.action.admin.indices.rollover.MaxAgeCondition;
-import org.opensearch.action.admin.indices.rollover.MaxDocsCondition;
-import org.opensearch.action.admin.indices.rollover.MaxSizeCondition;  
-import org.opensearch.client.TimedRequest;
-import org.opensearch.client.indices.CreateIndexRequest;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.HashMap;  
-import java.util.Map;
-
-/**  
  * Request class to swap index under an alias upon satisfying conditions
- */
-public class RolloverRequest extends TimedRequest implements ToXContentObject {  
-
-    private final String alias;
-    private final String newIndexName;  
-    private boolean dryRun;
-    private final Map<String, Condition<?>> conditions = new HashMap<>(2);
-    // the index name "_na_" is never read back, what matters are settings, mappings and aliases  
-    private final CreateIndexRequest createIndexRequest = new CreateIndexRequest("_na_");
-
-    public RolloverRequest(String alias, String newIndexName) {  
-        if (alias == null) {
-            throw new IllegalArgumentException("The index alias cannot be null!");
-        }  
-        this.alias = alias;
+     */  
         this.newIndexName = newIndexName;
-    }  
-
-    /**
-     * Returns the alias of the rollover operation  
-     */
-    public String getAlias() {
-        return alias;  
-    }
-
-    /**  
      * Returns the new index name for the rollover
-     */
+import org.opensearch.core.xcontent.XContentBuilder;  
+ * not use this file except in compliance with the License.
+        }
+        return this;
     public String getNewIndexName() {  
-        return newIndexName;
-    }
-
-    /**
-     * Sets if the rollover should not be executed when conditions are met
-     */  
-    public RolloverRequest dryRun(boolean dryRun) {
-        this.dryRun = dryRun;
-        return this;  
-    }
-
-    /**  
-     * Returns if the rollover should not be executed when conditions are met
-     */
-    public boolean isDryRun() {  
-        return dryRun;
-    }
-
-    /**
      * Adds condition to check if the index is at least <code>age</code> old
-     */  
-    public RolloverRequest addMaxIndexAgeCondition(TimeValue age) {
-        MaxAgeCondition maxAgeCondition = new MaxAgeCondition(age);
         if (this.conditions.containsKey(maxAgeCondition.name())) {  
-            throw new IllegalArgumentException(maxAgeCondition.name() + " condition is already set");
-        }
-        this.conditions.put(maxAgeCondition.name(), maxAgeCondition);  
-        return this;
-    }
-
-    /**
-     * Adds condition to check if the index has at least <code>numDocs</code>
-     */  
-    public RolloverRequest addMaxIndexDocsCondition(long numDocs) {
-        MaxDocsCondition maxDocsCondition = new MaxDocsCondition(numDocs);
-        if (this.conditions.containsKey(maxDocsCondition.name())) {  
-            throw new IllegalArgumentException(maxDocsCondition.name() + " condition is already set");
-        }
-        this.conditions.put(maxDocsCondition.name(), maxDocsCondition);  
-        return this;
-    }
-
-    /**
-     * Adds a size-based condition to check if the index size is at least <code>size</code>.
-     */  
-    public RolloverRequest addMaxIndexSizeCondition(ByteSizeValue size) {
-        MaxSizeCondition maxSizeCondition = new MaxSizeCondition(size);
-        if (this.conditions.containsKey(maxSizeCondition.name())) {  
-            throw new IllegalArgumentException(maxSizeCondition + " condition is already set");
-        }
-        this.conditions.put(maxSizeCondition.name(), maxSizeCondition);  
-        return this;
-    }
-
     /**
      * Returns all set conditions
-     */  
-    public Map<String, Condition<?>> getConditions() {
-        return conditions;
-    }  
-
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+        return newIndexName;
     /**
-     * Returns the inner {@link CreateIndexRequest}. Allows to configure mappings, settings and aliases for the new index.  
-     */
-    public CreateIndexRequest getCreateIndexRequest() {
-        return createIndexRequest;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    public String getAlias() {
+ */
+ * Modifications Copyright OpenSearch Contributors. See  
         builder.startObject();
-        createIndexRequest.innerToXContent(builder, params);  
-
-        builder.startObject("conditions");
-        for (Condition<?> condition : conditions.values()) {  
-            condition.toXContent(builder, params);
-        }
-        builder.endObject();  
-
-        builder.endObject();
-        return builder;  
+    public RolloverRequest(String alias, String newIndexName) {  
+import java.io.IOException;
+import org.opensearch.common.unit.TimeValue;  
     }
-
+    public RolloverRequest dryRun(boolean dryRun) {
+        if (this.conditions.containsKey(maxSizeCondition.name())) {  
+        MaxDocsCondition maxDocsCondition = new MaxDocsCondition(numDocs);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     */  
+    }
+    private final CreateIndexRequest createIndexRequest = new CreateIndexRequest("_na_");
+        MaxSizeCondition maxSizeCondition = new MaxSizeCondition(size);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import org.opensearch.action.admin.indices.rollover.MaxAgeCondition;
+import java.util.Map;
+    /**  
+        this.dryRun = dryRun;
+ * license agreements. See the NOTICE file distributed with
+        MaxAgeCondition maxAgeCondition = new MaxAgeCondition(age);
+     * Returns if the rollover should not be executed when conditions are met
+     */  
+ */
+    public Map<String, Condition<?>> getConditions() {
+    public RolloverRequest addMaxIndexSizeCondition(ByteSizeValue size) {
+            throw new IllegalArgumentException("The index alias cannot be null!");
+        }
+    /**
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+        this.alias = alias;
+        }  
+     */  
+ * specific language governing permissions and limitations
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+     * Adds a size-based condition to check if the index size is at least <code>size</code>.
+import org.opensearch.client.indices.CreateIndexRequest;
+    /**
+        builder.endObject();  
+ *
+        for (Condition<?> condition : conditions.values()) {  
+    private final String newIndexName;  
+    }
+        this.conditions.put(maxDocsCondition.name(), maxDocsCondition);  
+        this.conditions.put(maxAgeCondition.name(), maxAgeCondition);  
+ * SPDX-License-Identifier: Apache-2.0
+    public RolloverRequest addMaxIndexAgeCondition(TimeValue age) {
+ * KIND, either express or implied.  See the License for the
+ * this work for additional information regarding copyright
+     * Returns the alias of the rollover operation  
+        if (alias == null) {
+     */
+        if (this.conditions.containsKey(maxDocsCondition.name())) {  
+            throw new IllegalArgumentException(maxSizeCondition + " condition is already set");
+        createIndexRequest.innerToXContent(builder, params);  
+     */
+        builder.startObject("conditions");
+    /**
+ * Unless required by applicable law or agreed to in writing,
+     * Sets if the rollover should not be executed when conditions are met
+import org.opensearch.action.admin.indices.rollover.MaxSizeCondition;  
+            throw new IllegalArgumentException(maxAgeCondition.name() + " condition is already set");
+import org.opensearch.action.admin.indices.rollover.Condition;  
+     */
+ */  
+        return conditions;
+     */
+    public RolloverRequest addMaxIndexDocsCondition(long numDocs) {
+/*
+    public boolean isDryRun() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ *  
+     * Adds condition to check if the index has at least <code>numDocs</code>
+import org.opensearch.core.xcontent.ToXContentObject;
+    }  
+package org.opensearch.client.indices.rollover;
+/*  
+import org.opensearch.client.TimedRequest;
+    private final String alias;
+     * Returns the inner {@link CreateIndexRequest}. Allows to configure mappings, settings and aliases for the new index.  
+    }  
+ * You may obtain a copy of the License at  
+    private boolean dryRun;
+        return this;  
+    /**  
+    /**
+    // the index name "_na_" is never read back, what matters are settings, mappings and aliases  
+import org.opensearch.core.common.unit.ByteSizeValue;
 }  
+        }
+ *
+public class RolloverRequest extends TimedRequest implements ToXContentObject {  
+        builder.endObject();
+ * GitHub history for details.
+     */  
+ */
+        return builder;  
+            throw new IllegalArgumentException(maxDocsCondition.name() + " condition is already set");
+        this.conditions.put(maxSizeCondition.name(), maxSizeCondition);  
+/**  
+    public CreateIndexRequest getCreateIndexRequest() {
+import org.opensearch.action.admin.indices.rollover.MaxDocsCondition;
+ * The OpenSearch Contributors require contributions made to  
+import java.util.HashMap;  
+ * under the License.  
+        return this;
+        return alias;  
+    private final Map<String, Condition<?>> conditions = new HashMap<>(2);
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return this;
+    }
+ * compatible open source license.
+            condition.toXContent(builder, params);
+    }
+        return dryRun;
+        return createIndexRequest;  
+    /**

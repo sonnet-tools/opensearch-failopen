@@ -1,76 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
+    BWAND("&", "bitwise and"),
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.painless;
-
-/**
- * Provides a way to represent operations independently of ASM, to keep ASM
- * contained to only the writing phase of compilation.  Note there are also  
- * a few extra operations not in ASM that are used internally by the
- * Painless tree.
- */  
-public enum Operation {
-
-    MUL("*", "multiplication"),  
-    DIV("/", "division"),
-    REM("%", "remainder"),
-    ADD("+", "addition"),  
-    SUB("-", "subtraction"),
-    FIND("=~", "find"),
-    MATCH("==~", "match"),  
     LSH("<<", "left shift"),
-    RSH(">>", "right shift"),
-    USH(">>>", "unsigned shift"),  
-    BWNOT("~", "bitwise not"),
-    BWAND("&", "bitwise and"),
-    XOR("^", "bitwise xor"),  
+    MATCH("==~", "match"),  
+    GT(">", "greater than"),
+ * this work for additional information regarding copyright
+ * under the License.  
+ *
+    AND("&&", "boolean and"),  
+ * compatible open source license.
+    EQR("===", "reference equals"),
+    LT("<", "less than"),
+    OR("||", "boolean or"),
+ * not use this file except in compliance with the License.
+/*  
+package org.opensearch.painless;
+    LTE("<=", "less than or equals"),  
+ */  
+    FIND("=~", "find"),
+ * Licensed to Elasticsearch under one or more contributor  
+ * Provides a way to represent operations independently of ASM, to keep ASM
+    NER("!==", "reference not equals");  
+ */
+ * KIND, either express or implied.  See the License for the
+ *
+    EQ("==", "equals"),  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+    public final String name;  
+    public final String symbol;
+    SUB("-", "subtraction"),
+ * Unless required by applicable law or agreed to in writing,
+        this.symbol = symbol;  
+    MUL("*", "multiplication"),  
+ * license agreements. See the NOTICE file distributed with
     BWOR("|", "boolean or"),
     NOT("!", "boolean not"),
-    AND("&&", "boolean and"),  
-    OR("||", "boolean or"),
-    LT("<", "less than"),
-    LTE("<=", "less than or equals"),  
-    GT(">", "greater than"),
-    GTE(">=", "greater than or equals"),
-    EQ("==", "equals"),  
-    EQR("===", "reference equals"),
+/*
+ * Painless tree.
+ * The OpenSearch Contributors require contributions made to  
+    DIV("/", "division"),
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+ * software distributed under the License is distributed on an
     NE("!=", "not equals"),
-    NER("!==", "reference not equals");  
-
-    public final String symbol;
-    public final String name;  
-
+    GTE(">=", "greater than or equals"),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     Operation(final String symbol, final String name) {
-        this.symbol = symbol;  
-        this.name = name;
-    }
+ * SPDX-License-Identifier: Apache-2.0
+    USH(">>>", "unsigned shift"),  
 }  
+ *  
+        this.name = name;
+    BWNOT("~", "bitwise not"),
+    RSH(">>", "right shift"),
+    ADD("+", "addition"),  
+    }
+ */  
+/**
+ * this file be licensed under the Apache-2.0 license or a
+    XOR("^", "bitwise xor"),  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * specific language governing permissions and limitations
+ * contained to only the writing phase of compilation.  Note there are also  
+ * a few extra operations not in ASM that are used internally by the
+    REM("%", "remainder"),
+ * You may obtain a copy of the License at  
+public enum Operation {

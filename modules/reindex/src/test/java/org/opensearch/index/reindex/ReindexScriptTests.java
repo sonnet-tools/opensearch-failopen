@@ -1,110 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+        try {
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+    }
  * software distributed under the License is distributed on an
+        }
+        } else {  
+        Object junkVersion = randomFrom(new Object[] { "junk", Math.PI });  
+            assertEquals(id.toString(), index.id());  
+    public void testSetId() throws Exception {  
+ * Tests index-by-search with a script modifying the documents.  
+/*  
+/*
+ * this work for additional information regarding copyright
+    @Override
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+    public void testSetRouting() throws Exception {  
+    @Override  
+            applyScript((Map<String, Object> ctx) -> ctx.put("_version", junkVersion));
+import org.opensearch.script.ScriptService;  
+        } else {
+    }
+        if (id == null) {  
+        }  
+public class ReindexScriptTests extends AbstractAsyncBulkByScrollActionScriptTestCase<ReindexRequest, BulkByScrollResponse> {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
+            assertNull(index.id());
+ *
+        String routing = randomRealisticUnicodeOfLengthBetween(5, 20);
+            assertThat(e.getMessage(), containsString("Can't reindex without a destination index!"));
+    public void testSetVersion() throws Exception {
+            assertEquals(Versions.MATCH_ANY, index.version());
+    protected Reindexer.AsyncIndexBySearchAction action(ScriptService scriptService, ReindexRequest request) {  
+ * The OpenSearch Contributors require contributions made to  
+    }
+            assertThat(e.getMessage(), containsString(junkVersion.toString()));
+/**
+        IndexRequest index = applyScript((Map<String, Object> ctx) -> ctx.put("_version", version));  
+    }  
+            assertThat(e.getMessage(), containsString("_version may only be set to an int or a long but was ["));
+ *  
+        assertEquals(dest.toString(), index.index());
+        } catch (IllegalArgumentException e) {  
+package org.opensearch.index.reindex;
+        return new Reindexer.AsyncIndexBySearchAction(task, logger, null, threadPool, scriptService, sslConfig, request, listener());
+    protected ReindexRequest request() {
+    public void testSetIndex() throws Exception {
+            applyScript((Map<String, Object> ctx) -> ctx.put("_index", null));  
+    public void testSettingVersionToJunkIsAnError() throws Exception {
+import java.util.Map;
+        Number version = randomFrom(new Number[] { null, 234, 234L });
+        ReindexSslConfig sslConfig = Mockito.mock(ReindexSslConfig.class);
+ */  
+        return new ReindexRequest();
  * under the License.  
  */
-
-/*  
+    }
+    }  
+ * Unless required by applicable law or agreed to in writing,
+        try {
+        }
+ * compatible open source license.
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.reindex;
-
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.script.ScriptService;  
-
-import java.util.Map;
-
-import org.mockito.Mockito;
-
-import static org.hamcrest.Matchers.containsString;  
-
-/**
- * Tests index-by-search with a script modifying the documents.  
- */
-public class ReindexScriptTests extends AbstractAsyncBulkByScrollActionScriptTestCase<ReindexRequest, BulkByScrollResponse> {
-
-    public void testSetIndex() throws Exception {
-        Object dest = randomFrom(new Object[] { 234, 234L, "pancake" });
+ * license agreements. See the NOTICE file distributed with
         IndexRequest index = applyScript((Map<String, Object> ctx) -> ctx.put("_index", dest));  
-        assertEquals(dest.toString(), index.index());
-    }
-
-    public void testSettingIndexToNullIsError() throws Exception {
-        try {
-            applyScript((Map<String, Object> ctx) -> ctx.put("_index", null));  
-        } catch (NullPointerException e) {
-            assertThat(e.getMessage(), containsString("Can't reindex without a destination index!"));
-        }  
-    }
-
-    public void testSetId() throws Exception {  
-        Object id = randomFrom(new Object[] { null, 234, 234L, "pancake" });
-        IndexRequest index = applyScript((Map<String, Object> ctx) -> ctx.put("_id", id));
-        if (id == null) {  
-            assertNull(index.id());
-        } else {
-            assertEquals(id.toString(), index.id());  
-        }
-    }
-
-    public void testSetVersion() throws Exception {
-        Number version = randomFrom(new Number[] { null, 234, 234L });
-        IndexRequest index = applyScript((Map<String, Object> ctx) -> ctx.put("_version", version));  
-        if (version == null) {
-            assertEquals(Versions.MATCH_ANY, index.version());
-        } else {  
-            assertEquals(version.longValue(), index.version());
-        }
-    }  
-
-    public void testSettingVersionToJunkIsAnError() throws Exception {
-        Object junkVersion = randomFrom(new Object[] { "junk", Math.PI });  
-        try {
-            applyScript((Map<String, Object> ctx) -> ctx.put("_version", junkVersion));
-        } catch (IllegalArgumentException e) {  
-            assertThat(e.getMessage(), containsString("_version may only be set to an int or a long but was ["));
-            assertThat(e.getMessage(), containsString(junkVersion.toString()));
-        }  
-    }
-
-    public void testSetRouting() throws Exception {  
-        String routing = randomRealisticUnicodeOfLengthBetween(5, 20);
-        IndexRequest index = applyScript((Map<String, Object> ctx) -> ctx.put("_routing", routing));
+import org.mockito.Mockito;
+ * specific language governing permissions and limitations
+import org.opensearch.action.index.IndexRequest;
         assertEquals(routing, index.routing());  
+ * ownership. Elasticsearch licenses this file to you under  
+import static org.hamcrest.Matchers.containsString;  
+ * You may obtain a copy of the License at  
+import org.opensearch.common.lucene.uid.Versions;
+    public void testSettingIndexToNullIsError() throws Exception {
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+ * GitHub history for details.
+        Object id = randomFrom(new Object[] { null, 234, 234L, "pancake" });
+ * KIND, either express or implied.  See the License for the
+        } catch (NullPointerException e) {
+            assertEquals(version.longValue(), index.version());
+        if (version == null) {
+ * not use this file except in compliance with the License.
+        IndexRequest index = applyScript((Map<String, Object> ctx) -> ctx.put("_routing", routing));
+        IndexRequest index = applyScript((Map<String, Object> ctx) -> ctx.put("_id", id));
     }
-
-    @Override  
-    protected ReindexRequest request() {
-        return new ReindexRequest();
+ */  
     }  
-
-    @Override
-    protected Reindexer.AsyncIndexBySearchAction action(ScriptService scriptService, ReindexRequest request) {  
-        ReindexSslConfig sslConfig = Mockito.mock(ReindexSslConfig.class);
-        return new Reindexer.AsyncIndexBySearchAction(task, logger, null, threadPool, scriptService, sslConfig, request, listener());
-    }  
+ */
 }
+        Object dest = randomFrom(new Object[] { 234, 234L, "pancake" });
+ * Licensed to Elasticsearch under one or more contributor  

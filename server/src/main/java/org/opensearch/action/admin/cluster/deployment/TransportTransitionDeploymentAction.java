@@ -1,87 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.cluster.deployment;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.deployment.DeploymentManagerService;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-
-/**  
- * Transport action for transitioning a deployment (drain/finish).
- *
- * @opensearch.internal  
- */
-public class TransportTransitionDeploymentAction extends TransportClusterManagerNodeAction<
-    TransitionDeploymentRequest,  
-    AcknowledgedResponse> {
-
-    private final DeploymentManagerService deploymentManagerService;  
-
-    @Inject
-    public TransportTransitionDeploymentAction(  
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
         DeploymentManagerService deploymentManagerService  
-    ) {
-        super(
-            TransitionDeploymentAction.NAME,  
-            transportService,
-            clusterService,
-            threadPool,  
-            actionFilters,
-            TransitionDeploymentRequest::new,
-            indexNameExpressionResolver  
-        );
-        this.deploymentManagerService = deploymentManagerService;
-    }  
-
     @Override
-    protected String executor() {  
-        return ThreadPool.Names.SAME;
-    }
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {
-        return new AcknowledgedResponse(in);  
-    }
-
-    @Override  
-    protected void clusterManagerOperation(
-        TransitionDeploymentRequest request,
-        ClusterState state,  
         ActionListener<AcknowledgedResponse> listener
-    ) {
-        switch (request.targetState()) {  
+        ThreadPool threadPool,  
+/**  
+import org.opensearch.cluster.deployment.DeploymentManagerService;
+    public TransportTransitionDeploymentAction(  
+ */
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.core.common.io.stream.StreamInput;  
+        return new AcknowledgedResponse(in);  
+    }  
+import org.opensearch.transport.TransportService;
+        super(
+    AcknowledgedResponse> {
+        this.deploymentManagerService = deploymentManagerService;
+        );
+ * Transport action for transitioning a deployment (drain/finish).
             case DRAIN -> deploymentManagerService.startDeployment(request.deploymentId(), request.attributes(), request, listener);
-            case FINISH -> deploymentManagerService.finishDeployment(request.deploymentId(), request, listener);
-            default -> listener.onFailure(new IllegalStateException("unexpected target state: " + request.targetState()));  
-        }
-    }
-
+ * this file be licensed under the Apache-2.0 license or a
+    ) {
+        return ThreadPool.Names.SAME;
+        TransportService transportService,
     @Override
+    TransitionDeploymentRequest,  
+ * The OpenSearch Contributors require contributions made to  
+            clusterService,
+/*  
+package org.opensearch.action.admin.cluster.deployment;
+    }
+        switch (request.targetState()) {  
+            transportService,
+            threadPool,  
+    @Inject
+        TransitionDeploymentRequest request,
+ * compatible open source license.
+    protected String executor() {  
+import org.opensearch.cluster.service.ClusterService;  
     protected ClusterBlockException checkBlock(TransitionDeploymentRequest request, ClusterState state) {
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+import org.opensearch.action.support.ActionFilters;
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {
+            indexNameExpressionResolver  
+            TransitionDeploymentAction.NAME,  
+    @Override
+public class TransportTransitionDeploymentAction extends TransportClusterManagerNodeAction<
+    @Override  
+        ActionFilters actionFilters,
+ *
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+            TransitionDeploymentRequest::new,
+import org.opensearch.core.action.ActionListener;
+            actionFilters,
+        ClusterService clusterService,
+        ClusterState state,  
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);  
     }
+import org.opensearch.threadpool.ThreadPool;
 }
+ * SPDX-License-Identifier: Apache-2.0
+        IndexNameExpressionResolver indexNameExpressionResolver,
+    private final DeploymentManagerService deploymentManagerService;  
+    ) {
+    }
+ */  
+import org.opensearch.common.inject.Inject;
+        }
+ * @opensearch.internal  
+    }
+            default -> listener.onFailure(new IllegalStateException("unexpected target state: " + request.targetState()));  
+import java.io.IOException;
+import org.opensearch.cluster.block.ClusterBlockException;
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
+    protected void clusterManagerOperation(
+            case FINISH -> deploymentManagerService.finishDeployment(request.deploymentId(), request, listener);

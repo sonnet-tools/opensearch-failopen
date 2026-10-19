@@ -1,527 +1,463 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.OutputStreamIndexOutput;
-import org.apache.lucene.util.BytesRef;  
-import org.apache.lucene.util.Version;
-import org.opensearch.OpenSearchCorruptionException;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;  
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.UnassignedInfo;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.store.ByteArrayIndexInput;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.time.DateUtils;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.ReplicationStats;  
-import org.opensearch.index.engine.NRTReplicationEngineFactory;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.replication.TestReplicationSource;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.index.store.StoreFileMetadata;  
-import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata;
-import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadataHandler;
-import org.opensearch.indices.recovery.RecoverySettings;  
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.CopyState;
-import org.opensearch.indices.replication.common.ReplicationType;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.time.Instant;  
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
-
-import org.mockito.Mockito;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
-
-public class SegmentReplicatorTests extends IndexShardTestCase {
-
-    private static final Settings settings = Settings.builder()  
-        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-        .build();
-
-    public void testReplicationWithUnassignedPrimary() throws Exception {
-        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
-        SegmentReplicator replicator = new SegmentReplicator(threadPool);
-
-        ClusterService cs = mock(ClusterService.class);  
-        IndexShardRoutingTable.Builder shardRoutingTable = new IndexShardRoutingTable.Builder(replica.shardId());
-        shardRoutingTable.addShard(replica.routingEntry());
-        shardRoutingTable.addShard(primary.routingEntry().moveToUnassigned(new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "test")));  
-
-        when(cs.state()).thenReturn(buildClusterState(replica, shardRoutingTable));
-        replicator.setSourceFactory(new SegmentReplicationSourceFactory(mock(TransportService.class), mock(RecoverySettings.class), cs));  
-        expectThrows(IllegalStateException.class, () -> replicator.startReplication(replica));
-        closeShards(replica, primary);
-    }  
-
-    public void testReplicationWithUnknownPrimaryNode() throws Exception {
-        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
-        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-        SegmentReplicator replicator = new SegmentReplicator(threadPool);
-
-        ClusterService cs = mock(ClusterService.class);
-        IndexShardRoutingTable.Builder shardRoutingTable = new IndexShardRoutingTable.Builder(replica.shardId());
-        shardRoutingTable.addShard(replica.routingEntry());  
-        shardRoutingTable.addShard(primary.routingEntry());
-
-        when(cs.state()).thenReturn(buildClusterState(replica, shardRoutingTable));  
-        replicator.setSourceFactory(new SegmentReplicationSourceFactory(mock(TransportService.class), mock(RecoverySettings.class), cs));
-        expectThrows(IllegalStateException.class, () -> replicator.startReplication(replica));
-        closeShards(replica, primary);  
-    }
-
-    private ClusterState buildClusterState(IndexShard replica, IndexShardRoutingTable.Builder indexShard) {  
-        return ClusterState.builder(clusterService.state())
-            .routingTable(
-                RoutingTable.builder()  
-                    .add(IndexRoutingTable.builder(replica.shardId().getIndex()).addIndexShard(indexShard.build()).build())
-                    .build()
-            )  
-            .build();
-    }
-
-    public void testStartReplicationWithoutSourceFactory() {
-        ThreadPool threadpool = mock(ThreadPool.class);
-        ExecutorService mock = mock(ExecutorService.class);  
-        when(threadpool.generic()).thenReturn(mock);
-        SegmentReplicator segmentReplicator = new SegmentReplicator(threadpool);
-
-        IndexShard shard = mock(IndexShard.class);
-        segmentReplicator.startReplication(shard);
-        Mockito.verifyNoInteractions(mock);  
-    }
-
-    public void testStartReplicationRunsSuccessfully() throws Exception {  
-        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-
-        // index and copy segments to replica.
-        int numDocs = randomIntBetween(10, 20);
-        for (int i = 0; i < numDocs; i++) {  
-            indexDoc(primary, "_doc", Integer.toString(i));
-        }
-        primary.refresh("test");  
-
-        SegmentReplicator segmentReplicator = spy(new SegmentReplicator(threadPool));
-        SegmentReplicationSourceFactory factory = mock(SegmentReplicationSourceFactory.class);  
-        when(factory.get(replica)).thenReturn(new TestReplicationSource() {
-            @Override
-            public void getCheckpointMetadata(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener  
-            ) {
-                resolveCheckpointListener(listener, primary);
-            }  
-
-            @Override
-            public void getSegmentFiles(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,  
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener  
-            ) {
-                try {
-                    Lucene.cleanLuceneIndex(indexShard.store().directory());  
-                    Map<String, StoreFileMetadata> segmentMetadataMap = primary.getSegmentMetadataMap();
-                    for (String file : segmentMetadataMap.keySet()) {
-                        indexShard.store().directory().copyFrom(primary.store().directory(), file, file, IOContext.DEFAULT);  
-                    }
-                    listener.onResponse(new GetSegmentFilesResponse(new ArrayList<>(segmentMetadataMap.values())));
-                } catch (IOException e) {  
-                    throw new RuntimeException(e);
-                }
-            }  
-        });
-        segmentReplicator.setSourceFactory(factory);
-        segmentReplicator.startReplication(replica);  
-        assertBusy(() -> assertDocCount(replica, numDocs));
-        closeShards(primary, replica);
-    }  
-
-    public void testReplicationFails() throws Exception {
-        allowShardFailures();  
-        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-
-        SegmentReplicator segmentReplicator = spy(new SegmentReplicator(threadPool));
-        SegmentReplicationSourceFactory factory = mock(SegmentReplicationSourceFactory.class);
-        when(factory.get(replica)).thenReturn(new TestReplicationSource() {  
-            @Override
-            public void getCheckpointMetadata(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener
-            ) {  
-                resolveCheckpointListener(listener, primary);
-            }
-
-            @Override
-            public void getSegmentFiles(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,  
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {  
-                OpenSearchCorruptionException corruptIndexException = new OpenSearchCorruptionException("test");
-                try {
-                    indexShard.store().markStoreCorrupted(corruptIndexException);  
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }  
-                listener.onFailure(corruptIndexException);
-            }
-        });  
-        // assert shard failure on corruption
-        AtomicBoolean failureCallbackTriggered = new AtomicBoolean(false);
-        replica.addShardFailureCallback((ig) -> failureCallbackTriggered.set(true));  
-        segmentReplicator.setSourceFactory(factory);
-        segmentReplicator.startReplication(replica);
-        assertBusy(() -> assertTrue(failureCallbackTriggered.get()));  
-        closeShards(primary, replica);
-    }
-
-    public void testGetSegmentReplicationStats_WhenNoReplication() {
         SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
-        ShardId shardId = new ShardId("index", "uuid", 0);  
-        ReplicationStats replicationStats = segmentReplicator.getSegmentReplicationStats(shardId);
-        assertEquals(0, replicationStats.maxReplicationLag);
-        assertEquals(0, replicationStats.totalBytesBehind);  
-        assertEquals(0, replicationStats.maxBytesBehind);
-    }
-
-    public void testGetSegmentReplicationStats_WhileOnGoingReplicationAndPrimaryRefreshedToNewCheckPoint() throws InterruptedException {
-        ShardId shardId = new ShardId("index", "uuid", 0);
-        ReplicationCheckpoint firstReplicationCheckpoint = ReplicationCheckpoint.empty(shardId);  
-        long baseTime = DateUtils.toLong(Instant.now());
-        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 500, "1", Version.LATEST, new BytesRef(500));
-        StoreFileMetadata storeFileMetadata2 = new StoreFileMetadata("test-2", 500, "1", Version.LATEST, new BytesRef(500));  
-        Map<String, StoreFileMetadata> stringStoreFileMetadataMapOne = new HashMap<>();
-        stringStoreFileMetadataMapOne.put("test-1", storeFileMetadata1);
-        stringStoreFileMetadataMapOne.put("test-2", storeFileMetadata2);  
-        ReplicationCheckpoint secondReplicationCheckpoint = new ReplicationCheckpoint(
-            shardId,
-            2,  
-            2,
-            2,
-            1000,  
-            "",
-            stringStoreFileMetadataMapOne,
-            baseTime - 5_000_000  
-        );
-
-        IndexShard replicaShard = mock(IndexShard.class);  
-        when(replicaShard.shardId()).thenReturn(shardId);
-        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(firstReplicationCheckpoint)
-            .thenReturn(firstReplicationCheckpoint)  
-            .thenReturn(firstReplicationCheckpoint)
-            .thenReturn(secondReplicationCheckpoint);
-
-        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
-        segmentReplicator.initializeStats(shardId);
-        segmentReplicator.updateReplicationCheckpointStats(firstReplicationCheckpoint, replicaShard);  
-        segmentReplicator.updateReplicationCheckpointStats(secondReplicationCheckpoint, replicaShard);
-
-        Map<String, StoreFileMetadata> stringStoreFileMetadataMapTwo = new HashMap<>();  
+        closeShards(primary, replica);
         StoreFileMetadata storeFileMetadata3 = new StoreFileMetadata("test-3", 200, "1", Version.LATEST, new BytesRef(200));
-        stringStoreFileMetadataMapTwo.put("test-1", storeFileMetadata1);
-        stringStoreFileMetadataMapTwo.put("test-2", storeFileMetadata2);  
-        stringStoreFileMetadataMapTwo.put("test-3", storeFileMetadata3);
-        ReplicationCheckpoint thirdReplicationCheckpoint = new ReplicationCheckpoint(
-            shardId,  
-            3,
-            3,
-            3,  
-            200,
-            "",
-            stringStoreFileMetadataMapTwo,  
-            baseTime - 1_000_000
-        );
-
-        segmentReplicator.updateReplicationCheckpointStats(thirdReplicationCheckpoint, replicaShard);
-
-        ReplicationStats replicationStatsFirst = segmentReplicator.getSegmentReplicationStats(shardId);  
-        assertEquals(1200, replicationStatsFirst.totalBytesBehind);
-        assertEquals(1200, replicationStatsFirst.maxBytesBehind);
-        assertTrue(replicationStatsFirst.maxReplicationLag > 0);  
-
-        segmentReplicator.pruneCheckpointsUpToLastSync(replicaShard);
-
-        ReplicationStats replicationStatsSecond = segmentReplicator.getSegmentReplicationStats(shardId);
-        assertEquals(200, replicationStatsSecond.totalBytesBehind);
-        assertEquals(200, replicationStatsSecond.maxBytesBehind);  
-        assertTrue(replicationStatsSecond.maxReplicationLag > 0);
-
-        // shard finished syncing to last checkpoint (sis 3)  
-        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(thirdReplicationCheckpoint);
-        segmentReplicator.pruneCheckpointsUpToLastSync(replicaShard);
-        ReplicationStats finalStats = segmentReplicator.getSegmentReplicationStats(shardId);  
-        assertEquals(0, finalStats.totalBytesBehind);
-        assertEquals(0, finalStats.maxBytesBehind);
-        assertEquals(0, finalStats.maxReplicationLag);  
-        // shard is up to date, should not have any tracked stats
-        assertTrue(segmentReplicator.replicationCheckpointStats.get(shardId).isEmpty());
-    }  
-
-    public void testGetSegmentReplicationStats_WhenCheckPointReceivedOutOfOrder() {
-        ShardId shardId = new ShardId("index", "uuid", 0);  
-        ReplicationCheckpoint firstReplicationCheckpoint = ReplicationCheckpoint.empty(shardId);
-
-        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 500, "1", Version.LATEST, new BytesRef(500));  
-        StoreFileMetadata storeFileMetadata2 = new StoreFileMetadata("test-2", 500, "1", Version.LATEST, new BytesRef(500));
-        Map<String, StoreFileMetadata> stringStoreFileMetadataMapOne = new HashMap<>();
-        stringStoreFileMetadataMapOne.put("test-1", storeFileMetadata1);  
-        stringStoreFileMetadataMapOne.put("test-2", storeFileMetadata2);
-        ReplicationCheckpoint secondReplicationCheckpoint = new ReplicationCheckpoint(
-            shardId,  
-            2,
-            2,
-            2,  
-            1000,
-            "",
-            stringStoreFileMetadataMapOne,  
-            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)
-        );
-
-        IndexShard replicaShard = mock(IndexShard.class);
-        when(replicaShard.shardId()).thenReturn(shardId);
-        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(firstReplicationCheckpoint)  
-            .thenReturn(firstReplicationCheckpoint)
-            .thenReturn(firstReplicationCheckpoint);
-
-        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
-        segmentReplicator.initializeStats(shardId);
-        segmentReplicator.updateReplicationCheckpointStats(firstReplicationCheckpoint, replicaShard);  
-
-        Map<String, StoreFileMetadata> stringStoreFileMetadataMapTwo = new HashMap<>();
-        StoreFileMetadata storeFileMetadata3 = new StoreFileMetadata("test-3", 200, "1", Version.LATEST, new BytesRef(200));  
-        stringStoreFileMetadataMapTwo.put("test-1", storeFileMetadata1);
-        stringStoreFileMetadataMapTwo.put("test-2", storeFileMetadata2);
-        stringStoreFileMetadataMapTwo.put("test-3", storeFileMetadata3);  
-        ReplicationCheckpoint thirdReplicationCheckpoint = new ReplicationCheckpoint(
-            shardId,
-            3,  
-            3,
-            3,
-            200,  
-            "",
-            stringStoreFileMetadataMapTwo,
-            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)  
-        );
-
-        segmentReplicator.updateReplicationCheckpointStats(thirdReplicationCheckpoint, replicaShard);  
-
-        ReplicationStats replicationStatsFirst = segmentReplicator.getSegmentReplicationStats(shardId);
-        assertEquals(1200, replicationStatsFirst.totalBytesBehind);  
-        assertEquals(1200, replicationStatsFirst.maxBytesBehind);
-        assertTrue(replicationStatsFirst.maxReplicationLag > 0);
-
-        segmentReplicator.updateReplicationCheckpointStats(secondReplicationCheckpoint, replicaShard);
-        ReplicationStats replicationStatsSecond = segmentReplicator.getSegmentReplicationStats(shardId);
-        assertEquals(1200, replicationStatsSecond.totalBytesBehind);  
-        assertEquals(1200, replicationStatsSecond.maxBytesBehind);
-        assertTrue(replicationStatsSecond.maxReplicationLag > 0);
-    }  
-
-    public void testUpdateReplicationCheckpointStatsIgnoresWhenOutOfOrderCheckPointReceived() {
-        ShardId shardId = new ShardId("index", "uuid", 0);  
-        IndexShard replicaShard = mock(IndexShard.class);
-        when(replicaShard.shardId()).thenReturn(shardId);
-
-        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
+    public void testReplicationWithUnassignedPrimary() throws Exception {
         ReplicationCheckpoint replicationCheckpoint = new ReplicationCheckpoint(
-            shardId,  
-            2,
-            2,
-            2,  
-            1000,
-            "",
-            new HashMap<>(),  
-            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)
-        );
-        segmentReplicator.updateReplicationCheckpointStats(replicationCheckpoint, replicaShard);  
-
-        assertEquals(replicationCheckpoint, segmentReplicator.getPrimaryCheckpoint(shardId));
-
-        ReplicationCheckpoint oldReplicationCheckpoint = new ReplicationCheckpoint(
-            shardId,
-            1,  
-            1,
-            1,
-            500,  
-            "",
-            new HashMap<>(),
-            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)  
-        );
-        segmentReplicator.updateReplicationCheckpointStats(oldReplicationCheckpoint, replicaShard);
-
-        assertEquals(replicationCheckpoint, segmentReplicator.getPrimaryCheckpoint(shardId));
-    }
-
-    /**
-     * A checkpoint deserialized from a node older than 3.0.0 has createdTimeStamp == 0. Lag must be measured from the time the
-     * checkpoint was received, not from the Unix epoch.  
-     */
-    public void testGetSegmentReplicationStats_WhenCheckpointHasNoCreatedTimestamp() {
-        ShardId shardId = new ShardId("index", "uuid", 0);  
-        ReplicationCheckpoint localCheckpoint = ReplicationCheckpoint.empty(shardId);
-
-        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 500, "1", Version.LATEST, new BytesRef(500));  
-        Map<String, StoreFileMetadata> metadataMap = new HashMap<>();
-        metadataMap.put("test-1", storeFileMetadata1);
-        // createdTimeStamp == 0, as produced by ReplicationCheckpoint(StreamInput) for a sender older than 3.0.0  
-        ReplicationCheckpoint legacyPrimaryCheckpoint = new ReplicationCheckpoint(shardId, 2, 2, 2, 500, "", metadataMap, 0L);
-        assertEquals(0L, legacyPrimaryCheckpoint.getCreatedTimeStamp());
-
-        IndexShard replicaShard = mock(IndexShard.class);
-        when(replicaShard.shardId()).thenReturn(shardId);
-        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(localCheckpoint);  
-
-        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
-        segmentReplicator.initializeStats(shardId);  
-        long beforeReceive = System.currentTimeMillis();
-        segmentReplicator.updateReplicationCheckpointStats(legacyPrimaryCheckpoint, replicaShard);
-
-        ReplicationStats stats = segmentReplicator.getSegmentReplicationStats(shardId);
-        assertEquals(500, stats.totalBytesBehind);
-        assertEquals(500, stats.maxBytesBehind);  
-        // lag is bounded by the time elapsed since the checkpoint was received on this node, not by the epoch
-        long elapsedSinceReceive = System.currentTimeMillis() - beforeReceive;
-        assertTrue(  
-            "lag " + stats.maxReplicationLag + "ms exceeds time since receive " + elapsedSinceReceive + "ms",
-            stats.maxReplicationLag >= 0 && stats.maxReplicationLag <= elapsedSinceReceive + 1_000
-        );  
         assertTrue("lag must not be the Unix epoch", stats.maxReplicationLag < TimeUnit.DAYS.toMillis(1));
-
-        // once the replica catches up the entry is pruned and lag drops to zero  
-        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(legacyPrimaryCheckpoint);
+            public void getSegmentFiles(  
+        SegmentReplicationSourceFactory factory = mock(SegmentReplicationSourceFactory.class);
+        stringStoreFileMetadataMapTwo.put("test-2", storeFileMetadata2);  
+            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)
+                    }
+        Map<String, StoreFileMetadata> stringStoreFileMetadataMapOne = new HashMap<>();
         segmentReplicator.pruneCheckpointsUpToLastSync(replicaShard);
-        ReplicationStats finalStats = segmentReplicator.getSegmentReplicationStats(shardId);  
-        assertEquals(0, finalStats.maxReplicationLag);
-        assertEquals(0, finalStats.totalBytesBehind);
-    }  
-
-    public void testGetSegmentReplicationStats_LagIsNeverNegative() {
-        ShardId shardId = new ShardId("index", "uuid", 0);  
-        ReplicationCheckpoint localCheckpoint = ReplicationCheckpoint.empty(shardId);
-
-        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 100, "1", Version.LATEST, new BytesRef(100));  
-        Map<String, StoreFileMetadata> metadataMap = new HashMap<>();
-        metadataMap.put("test-1", storeFileMetadata1);
-        // primary clock ahead of this node: createdTimeStamp one hour in the future  
-        long futureTimestamp = DateUtils.toLong(Instant.now()) + TimeUnit.HOURS.toNanos(1);
-        ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(shardId, 2, 2, 2, 100, "", metadataMap, futureTimestamp);
-
-        IndexShard replicaShard = mock(IndexShard.class);
-        when(replicaShard.shardId()).thenReturn(shardId);
-        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(localCheckpoint);  
-
-        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
-        segmentReplicator.initializeStats(shardId);  
-        segmentReplicator.updateReplicationCheckpointStats(checkpoint, replicaShard);
-
-        ReplicationStats stats = segmentReplicator.getSegmentReplicationStats(shardId);  
-        assertEquals(100, stats.totalBytesBehind);
-        assertEquals(0, stats.maxReplicationLag);
-    }  
-
-    /**
-     * Remote-store replicas obtain the primary's checkpoint from the segment metadata file rather than over the wire  
-     * ({@code RemoteStoreReplicationSource#getCheckpointMetadata}). A metadata file written before
-     * {@link RemoteSegmentMetadata#VERSION_TWO} carries no created timestamp and is read back with createdTimeStamp == 0.
-     */  
-    public void testGetSegmentReplicationStats_WhenCheckpointFromVersionOneRemoteMetadata() throws IOException {
-        ShardId shardId = new ShardId("index", "uuid", 0);
-        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("_0.cfe", 500, "1", Version.LATEST, new BytesRef(500));  
-        Map<String, StoreFileMetadata> metadataMap = new HashMap<>();
-        metadataMap.put("_0.cfe", storeFileMetadata1);
-        ReplicationCheckpoint primaryCheckpoint = new ReplicationCheckpoint(shardId, 2, 2, 2, 500, "", metadataMap);  
-        assertTrue(primaryCheckpoint.getCreatedTimeStamp() > 0);
-
-        // Serialize the checkpoint the way a VERSION_ONE metadata file was written: every field except createdTimeStamp.  
-        BytesStreamOutput output = new BytesStreamOutput();
-        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("md", "md", output, 4096);
-        Map<String, String> uploadedSegments = new HashMap<>();  
-        uploadedSegments.put("_0.cfe", "_0.cfe::_0.cfe__uuid::1::500::" + Version.LATEST.major);
-        indexOutput.writeMapOfStrings(uploadedSegments);
-        indexOutput.writeString(shardId.getIndex().getName());  
-        indexOutput.writeString(shardId.getIndex().getUUID());
-        indexOutput.writeVInt(shardId.getId());
-        indexOutput.writeLong(primaryCheckpoint.getPrimaryTerm());  
-        indexOutput.writeLong(primaryCheckpoint.getSegmentsGen());
-        indexOutput.writeLong(primaryCheckpoint.getSegmentInfosVersion());
+        // lag is bounded by the time elapsed since the checkpoint was received on this node, not by the epoch
+        );
+            3,
+        segmentReplicator.updateReplicationCheckpointStats(oldReplicationCheckpoint, replicaShard);
         indexOutput.writeLong(primaryCheckpoint.getLength());  
-        indexOutput.writeString(primaryCheckpoint.getCodec());
-        indexOutput.writeLong(0);
-        indexOutput.writeBytes(new byte[0], 0);  
-        indexOutput.close();
-
-        RemoteSegmentMetadata metadata = new RemoteSegmentMetadataHandler(RemoteSegmentMetadata.VERSION_ONE).readContent(  
-            new ByteArrayIndexInput("md", BytesReference.toBytes(output.bytes()))
-        );
-        ReplicationCheckpoint legacyMetadataCheckpoint = metadata.getReplicationCheckpoint();  
-        assertEquals(0L, legacyMetadataCheckpoint.getCreatedTimeStamp());
-        assertEquals(primaryCheckpoint.getSegmentInfosVersion(), legacyMetadataCheckpoint.getSegmentInfosVersion());
-
-        IndexShard replicaShard = mock(IndexShard.class);
-        when(replicaShard.shardId()).thenReturn(shardId);
-        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(ReplicationCheckpoint.empty(shardId));  
-
-        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
-        segmentReplicator.initializeStats(shardId);  
-        long beforeReceive = System.currentTimeMillis();
-        segmentReplicator.updateReplicationCheckpointStats(legacyMetadataCheckpoint, replicaShard);
-
-        ReplicationStats stats = segmentReplicator.getSegmentReplicationStats(shardId);
-        assertEquals(500, stats.totalBytesBehind);
-        long elapsedSinceReceive = System.currentTimeMillis() - beforeReceive;  
-        assertTrue(
-            "lag " + stats.maxReplicationLag + "ms exceeds time since receive " + elapsedSinceReceive + "ms",
-            stats.maxReplicationLag >= 0 && stats.maxReplicationLag <= elapsedSinceReceive + 1_000  
-        );
-    }
-
-    protected void resolveCheckpointListener(ActionListener<CheckpointInfoResponse> listener, IndexShard primary) {
-        try (final CopyState copyState = new CopyState(primary)) {
-            listener.onResponse(  
-                new CheckpointInfoResponse(copyState.getCheckpoint(), copyState.getMetadataMap(), copyState.getInfosBytes())
-            );
-        } catch (IOException e) {  
-            throw new UncheckedIOException(e);
-        }
+import org.opensearch.common.lucene.Lucene;
+        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+        closeShards(replica, primary);
+                    for (String file : segmentMetadataMap.keySet()) {
+        segmentReplicator.pruneCheckpointsUpToLastSync(replicaShard);
     }  
+            2,
+        ReplicationCheckpoint firstReplicationCheckpoint = ReplicationCheckpoint.empty(shardId);
+        ReplicationCheckpoint legacyMetadataCheckpoint = metadata.getReplicationCheckpoint();  
+import java.io.UncheckedIOException;
+import java.util.List;  
+        assertEquals(0, replicationStats.maxBytesBehind);
+import org.opensearch.index.engine.NRTReplicationEngineFactory;
+import org.opensearch.indices.replication.common.CopyState;
+        segmentReplicator.updateReplicationCheckpointStats(secondReplicationCheckpoint, replicaShard);
+import java.util.HashMap;
+                new CheckpointInfoResponse(copyState.getCheckpoint(), copyState.getMetadataMap(), copyState.getInfosBytes())
+                }
+import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata;
+        ReplicationStats replicationStatsFirst = segmentReplicator.getSegmentReplicationStats(shardId);  
+        ReplicationCheckpoint localCheckpoint = ReplicationCheckpoint.empty(shardId);
+import org.opensearch.index.ReplicationStats;  
+            .thenReturn(secondReplicationCheckpoint);
+            baseTime - 1_000_000
+    private ClusterState buildClusterState(IndexShard replica, IndexShardRoutingTable.Builder indexShard) {  
+        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+    }
+            2,
+import org.opensearch.core.common.bytes.BytesReference;
+        Map<String, StoreFileMetadata> stringStoreFileMetadataMapTwo = new HashMap<>();
+        segmentReplicator.updateReplicationCheckpointStats(firstReplicationCheckpoint, replicaShard);  
+            )  
+            new HashMap<>(),
+        indexOutput.writeMapOfStrings(uploadedSegments);
+        assertTrue(
+import java.util.concurrent.TimeUnit;  
+                BiConsumer<String, Long> fileProgressTracker,
+        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(firstReplicationCheckpoint)  
+        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 500, "1", Version.LATEST, new BytesRef(500));  
+import org.opensearch.cluster.routing.UnassignedInfo;
+        assertEquals(0, finalStats.maxBytesBehind);
+        ShardId shardId = new ShardId("index", "uuid", 0);  
+        assertEquals(1200, replicationStatsSecond.maxBytesBehind);
+public class SegmentReplicatorTests extends IndexShardTestCase {
+ * The OpenSearch Contributors require contributions made to  
+            .build();
+        assertEquals(0, finalStats.maxReplicationLag);
+import org.mockito.Mockito;
+                        indexShard.store().directory().copyFrom(primary.store().directory(), file, file, IOContext.DEFAULT);  
+        return ClusterState.builder(clusterService.state())
+import org.opensearch.OpenSearchCorruptionException;
+     * A checkpoint deserialized from a node older than 3.0.0 has createdTimeStamp == 0. Lag must be measured from the time the
+        );
+        assertTrue(segmentReplicator.replicationCheckpointStats.get(shardId).isEmpty());
+        stringStoreFileMetadataMapOne.put("test-1", storeFileMetadata1);  
+                    .build()
+        int numDocs = randomIntBetween(10, 20);
+        });  
+        Mockito.verifyNoInteractions(mock);  
+        assertEquals(200, replicationStatsSecond.maxBytesBehind);  
+        IndexShard replicaShard = mock(IndexShard.class);
+        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(firstReplicationCheckpoint)
+/*  
+                    .add(IndexRoutingTable.builder(replica.shardId().getIndex()).addIndexShard(indexShard.build()).build())
+            .thenReturn(firstReplicationCheckpoint)
+import java.util.function.BiConsumer;
+        assertTrue(replicationStatsSecond.maxReplicationLag > 0);
+        metadataMap.put("_0.cfe", storeFileMetadata1);
+    public void testGetSegmentReplicationStats_WhenCheckPointReceivedOutOfOrder() {
+        ReplicationStats replicationStats = segmentReplicator.getSegmentReplicationStats(shardId);
+        RemoteSegmentMetadata metadata = new RemoteSegmentMetadataHandler(RemoteSegmentMetadata.VERSION_ONE).readContent(  
+    }
+        // primary clock ahead of this node: createdTimeStamp one hour in the future  
+        SegmentReplicationSourceFactory factory = mock(SegmentReplicationSourceFactory.class);  
+            }  
+     * {@link RemoteSegmentMetadata#VERSION_TWO} carries no created timestamp and is read back with createdTimeStamp == 0.
+                ActionListener<CheckpointInfoResponse> listener
+        segmentReplicator.updateReplicationCheckpointStats(firstReplicationCheckpoint, replicaShard);  
+            public void getCheckpointMetadata(  
+            3,
+        assertEquals(primaryCheckpoint.getSegmentInfosVersion(), legacyMetadataCheckpoint.getSegmentInfosVersion());
+package org.opensearch.indices.replication;
+        segmentReplicator.updateReplicationCheckpointStats(checkpoint, replicaShard);
+                listener.onFailure(corruptIndexException);
+        ShardId shardId = new ShardId("index", "uuid", 0);
+        segmentReplicator.initializeStats(shardId);  
+        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
+    }
+            500,  
+                } catch (IOException e) {
+import java.io.IOException;
+        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+            1000,
+import org.apache.lucene.store.OutputStreamIndexOutput;
+        assertEquals(0, replicationStats.totalBytesBehind);  
+                long replicationId,
+        shardRoutingTable.addShard(primary.routingEntry());
+        segmentReplicator.updateReplicationCheckpointStats(thirdReplicationCheckpoint, replicaShard);
+        SegmentReplicator segmentReplicator = new SegmentReplicator(threadpool);
+        // Serialize the checkpoint the way a VERSION_ONE metadata file was written: every field except createdTimeStamp.  
+        stringStoreFileMetadataMapTwo.put("test-2", storeFileMetadata2);
+import org.opensearch.cluster.service.ClusterService;  
+        assertEquals(0L, legacyPrimaryCheckpoint.getCreatedTimeStamp());
+        IndexShard replicaShard = mock(IndexShard.class);
+    public void testGetSegmentReplicationStats_WhenNoReplication() {
+    public void testStartReplicationWithoutSourceFactory() {
+        stringStoreFileMetadataMapTwo.put("test-1", storeFileMetadata1);
+ * compatible open source license.
+        indexOutput.close();
+                List<StoreFileMetadata> filesToFetch,  
+        ClusterService cs = mock(ClusterService.class);  
+                long replicationId,  
+        stringStoreFileMetadataMapOne.put("test-2", storeFileMetadata2);
+        assertBusy(() -> assertTrue(failureCallbackTriggered.get()));  
+        primary.refresh("test");  
+    public void testGetSegmentReplicationStats_WhenCheckpointHasNoCreatedTimestamp() {
+            "",
+        segmentReplicator.pruneCheckpointsUpToLastSync(replicaShard);
+                ReplicationCheckpoint checkpoint,
+        SegmentReplicator replicator = new SegmentReplicator(threadPool);
+            2,  
+        IndexShard replicaShard = mock(IndexShard.class);  
+        BytesStreamOutput output = new BytesStreamOutput();
+        IndexShardRoutingTable.Builder shardRoutingTable = new IndexShardRoutingTable.Builder(replica.shardId());
+            3,  
+                    throw new RuntimeException(e);
+        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+    private static final Settings settings = Settings.builder()  
+            stringStoreFileMetadataMapTwo,
+            stats.maxReplicationLag >= 0 && stats.maxReplicationLag <= elapsedSinceReceive + 1_000
+        // once the replica catches up the entry is pruned and lag drops to zero  
+        when(threadpool.generic()).thenReturn(mock);
+import org.opensearch.cluster.routing.RoutingTable;
+        segmentReplicator.startReplication(replica);
+    }  
+        ReplicationStats replicationStatsFirst = segmentReplicator.getSegmentReplicationStats(shardId);
+        segmentReplicator.initializeStats(shardId);
+        } catch (IOException e) {  
+            .thenReturn(firstReplicationCheckpoint);
+        Map<String, StoreFileMetadata> stringStoreFileMetadataMapOne = new HashMap<>();
+                IndexShard indexShard,  
+                    listener.onResponse(new GetSegmentFilesResponse(new ArrayList<>(segmentMetadataMap.values())));
+import org.opensearch.indices.recovery.RecoverySettings;  
+        ThreadPool threadpool = mock(ThreadPool.class);
+        segmentReplicator.initializeStats(shardId);  
+        when(cs.state()).thenReturn(buildClusterState(replica, shardRoutingTable));
+            1,  
+        stringStoreFileMetadataMapTwo.put("test-3", storeFileMetadata3);  
+        replicator.setSourceFactory(new SegmentReplicationSourceFactory(mock(TransportService.class), mock(RecoverySettings.class), cs));
+                    Map<String, StoreFileMetadata> segmentMetadataMap = primary.getSegmentMetadataMap();
+        assertEquals(500, stats.maxBytesBehind);  
+        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(ReplicationCheckpoint.empty(shardId));  
+            ) {
+                BiConsumer<String, Long> fileProgressTracker,
+        assertEquals(0, finalStats.maxReplicationLag);  
+        when(replicaShard.shardId()).thenReturn(shardId);
 }
+            stringStoreFileMetadataMapOne,  
+        shardRoutingTable.addShard(replica.routingEntry());  
+import org.opensearch.core.action.ActionListener;  
+                OpenSearchCorruptionException corruptIndexException = new OpenSearchCorruptionException("test");
+            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)  
+        ReplicationCheckpoint localCheckpoint = ReplicationCheckpoint.empty(shardId);
+        assertEquals(1200, replicationStatsFirst.totalBytesBehind);
+        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 500, "1", Version.LATEST, new BytesRef(500));
+import org.opensearch.common.settings.Settings;
+            );
+        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
+        Map<String, StoreFileMetadata> metadataMap = new HashMap<>();
+        ClusterService cs = mock(ClusterService.class);
+        assertTrue(replicationStatsFirst.maxReplicationLag > 0);
+            3,
+            stringStoreFileMetadataMapOne,
+        IndexShard replicaShard = mock(IndexShard.class);
+        ReplicationStats stats = segmentReplicator.getSegmentReplicationStats(shardId);
+        assertEquals(1200, replicationStatsFirst.totalBytesBehind);  
+            "lag " + stats.maxReplicationLag + "ms exceeds time since receive " + elapsedSinceReceive + "ms",
+        IndexShardRoutingTable.Builder shardRoutingTable = new IndexShardRoutingTable.Builder(replica.shardId());
+        uploadedSegments.put("_0.cfe", "_0.cfe::_0.cfe__uuid::1::500::" + Version.LATEST.major);
+                ActionListener<GetSegmentFilesResponse> listener  
+        indexOutput.writeLong(primaryCheckpoint.getSegmentsGen());
+        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+        ReplicationStats replicationStatsSecond = segmentReplicator.getSegmentReplicationStats(shardId);
+        replica.addShardFailureCallback((ig) -> failureCallbackTriggered.set(true));  
+        Map<String, StoreFileMetadata> metadataMap = new HashMap<>();
+                ReplicationCheckpoint checkpoint,
+    protected void resolveCheckpointListener(ActionListener<CheckpointInfoResponse> listener, IndexShard primary) {
+        assertEquals(500, stats.totalBytesBehind);
+    public void testStartReplicationRunsSuccessfully() throws Exception {  
+        when(replicaShard.shardId()).thenReturn(shardId);
+        );
+                long replicationId,  
+import org.apache.lucene.store.IOContext;
+        ShardId shardId = new ShardId("index", "uuid", 0);  
+        }
+        ShardId shardId = new ShardId("index", "uuid", 0);  
+        StoreFileMetadata storeFileMetadata3 = new StoreFileMetadata("test-3", 200, "1", Version.LATEST, new BytesRef(200));  
+        assertTrue(primaryCheckpoint.getCreatedTimeStamp() > 0);
+                } catch (IOException e) {  
+ */  
+import java.util.concurrent.atomic.AtomicBoolean;
+            }  
+        indexOutput.writeString(primaryCheckpoint.getCodec());
+            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)  
+            listener.onResponse(  
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+    /**
+        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 100, "1", Version.LATEST, new BytesRef(100));  
+        .build();
+        long beforeReceive = System.currentTimeMillis();
+            "",
+            new ByteArrayIndexInput("md", BytesReference.toBytes(output.bytes()))
+            new HashMap<>(),  
+        ReplicationStats stats = segmentReplicator.getSegmentReplicationStats(shardId);  
+ * SPDX-License-Identifier: Apache-2.0
+            2,  
+            ) {  
+import java.util.ArrayList;
+        );
+ * this file be licensed under the Apache-2.0 license or a
+    public void testGetSegmentReplicationStats_WhenCheckpointFromVersionOneRemoteMetadata() throws IOException {
+        assertBusy(() -> assertDocCount(replica, numDocs));
+        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(thirdReplicationCheckpoint);
+        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("md", "md", output, 4096);
+                RoutingTable.builder()  
+        for (int i = 0; i < numDocs; i++) {  
+            2,
+    public void testGetSegmentReplicationStats_WhileOnGoingReplicationAndPrimaryRefreshedToNewCheckPoint() throws InterruptedException {
+            throw new UncheckedIOException(e);
+import org.opensearch.cluster.metadata.IndexMetadata;
+            System.nanoTime() - TimeUnit.MINUTES.toNanos(1)
+            indexDoc(primary, "_doc", Integer.toString(i));
+import static org.mockito.Mockito.mock;  
+                List<StoreFileMetadata> filesToFetch,
+        assertEquals(0, stats.maxReplicationLag);
+    }
+        indexOutput.writeBytes(new byte[0], 0);  
+        indexOutput.writeLong(0);
+                resolveCheckpointListener(listener, primary);
+        segmentReplicator.updateReplicationCheckpointStats(legacyPrimaryCheckpoint, replicaShard);
+        segmentReplicator.updateReplicationCheckpointStats(thirdReplicationCheckpoint, replicaShard);  
+        ReplicationCheckpoint oldReplicationCheckpoint = new ReplicationCheckpoint(
+import org.opensearch.cluster.routing.IndexRoutingTable;
+        closeShards(primary, replica);
+            2,
+    }
+                IndexShard indexShard,
+    }  
+            .thenReturn(firstReplicationCheckpoint)  
+        SegmentReplicator segmentReplicator = spy(new SegmentReplicator(threadPool));
+        SegmentReplicator segmentReplicator = spy(new SegmentReplicator(threadPool));
+            public void getSegmentFiles(
+        long futureTimestamp = DateUtils.toLong(Instant.now()) + TimeUnit.HOURS.toNanos(1);
+        stringStoreFileMetadataMapOne.put("test-2", storeFileMetadata2);  
+        final IndexShard primary = newStartedShard(true, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
+            "",
+        ReplicationCheckpoint secondReplicationCheckpoint = new ReplicationCheckpoint(
+        );
+        assertEquals(replicationCheckpoint, segmentReplicator.getPrimaryCheckpoint(shardId));
+            200,
+        indexOutput.writeLong(primaryCheckpoint.getPrimaryTerm());  
+            stringStoreFileMetadataMapTwo,  
+        StoreFileMetadata storeFileMetadata2 = new StoreFileMetadata("test-2", 500, "1", Version.LATEST, new BytesRef(500));
+                resolveCheckpointListener(listener, primary);
+        when(replicaShard.shardId()).thenReturn(shardId);
+import org.opensearch.common.time.DateUtils;
+        stringStoreFileMetadataMapTwo.put("test-3", storeFileMetadata3);
+            "lag " + stats.maxReplicationLag + "ms exceeds time since receive " + elapsedSinceReceive + "ms",
+            public void getCheckpointMetadata(
+        }
+            shardId,
+        when(cs.state()).thenReturn(buildClusterState(replica, shardRoutingTable));  
+        ShardId shardId = new ShardId("index", "uuid", 0);  
+    public void testUpdateReplicationCheckpointStatsIgnoresWhenOutOfOrderCheckPointReceived() {
+     * ({@code RemoteStoreReplicationSource#getCheckpointMetadata}). A metadata file written before
+        assertEquals(500, stats.totalBytesBehind);
+        ReplicationStats stats = segmentReplicator.getSegmentReplicationStats(shardId);
+import org.opensearch.threadpool.ThreadPool;
+            2,
+        shardRoutingTable.addShard(primary.routingEntry().moveToUnassigned(new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "test")));  
+import org.opensearch.cluster.ClusterState;  
+        indexOutput.writeVInt(shardId.getId());
+    }  
+        when(factory.get(replica)).thenReturn(new TestReplicationSource() {  
+        IndexShard replicaShard = mock(IndexShard.class);
+    }  
+                ActionListener<GetSegmentFilesResponse> listener
+            .thenReturn(firstReplicationCheckpoint)
+import org.opensearch.common.lucene.store.ByteArrayIndexInput;  
+        );
+        ReplicationCheckpoint legacyPrimaryCheckpoint = new ReplicationCheckpoint(shardId, 2, 2, 2, 500, "", metadataMap, 0L);
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+    }  
+        Map<String, String> uploadedSegments = new HashMap<>();  
+        ReplicationCheckpoint primaryCheckpoint = new ReplicationCheckpoint(shardId, 2, 2, 2, 500, "", metadataMap);  
+            ) {  
+                try {
+        IndexShard replicaShard = mock(IndexShard.class);
+        ReplicationCheckpoint thirdReplicationCheckpoint = new ReplicationCheckpoint(
+        indexOutput.writeString(shardId.getIndex().getName());  
+        assertEquals(1200, replicationStatsSecond.totalBytesBehind);  
+import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadataHandler;
+        segmentReplicator.startReplication(replica);  
+            @Override
+import org.opensearch.core.index.shard.ShardId;
+        long elapsedSinceReceive = System.currentTimeMillis() - beforeReceive;  
+    }  
+                long replicationId,
+        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(legacyPrimaryCheckpoint);
+        segmentReplicator.startReplication(shard);
+    /**
+            shardId,
+        replicator.setSourceFactory(new SegmentReplicationSourceFactory(mock(TransportService.class), mock(RecoverySettings.class), cs));  
+            @Override
+        expectThrows(IllegalStateException.class, () -> replicator.startReplication(replica));
+        Map<String, StoreFileMetadata> metadataMap = new HashMap<>();
+            200,  
+        indexOutput.writeString(shardId.getIndex().getUUID());
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        segmentReplicator.setSourceFactory(factory);
+        ReplicationStats finalStats = segmentReplicator.getSegmentReplicationStats(shardId);  
+    public void testGetSegmentReplicationStats_LagIsNeverNegative() {
+            .routingTable(
+            1000,  
+        assertEquals(1200, replicationStatsFirst.maxBytesBehind);
+        ShardId shardId = new ShardId("index", "uuid", 0);  
+        Map<String, StoreFileMetadata> stringStoreFileMetadataMapTwo = new HashMap<>();  
+            shardId,  
+        assertEquals(200, replicationStatsSecond.totalBytesBehind);
+        // index and copy segments to replica.
+            shardId,
+        assertEquals(0, finalStats.totalBytesBehind);
+    public void testReplicationWithUnknownPrimaryNode() throws Exception {
+            "",
+        assertTrue(replicationStatsFirst.maxReplicationLag > 0);  
+        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("test-1", 500, "1", Version.LATEST, new BytesRef(500));  
+    }
+import java.time.Instant;  
+        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(localCheckpoint);  
+        segmentReplicator.initializeStats(shardId);  
+import org.opensearch.index.shard.IndexShardTestCase;
+                try {
+import java.util.Map;
+        ReplicationCheckpoint thirdReplicationCheckpoint = new ReplicationCheckpoint(
+        assertEquals(replicationCheckpoint, segmentReplicator.getPrimaryCheckpoint(shardId));
+            "",
+        assertTrue(replicationStatsSecond.maxReplicationLag > 0);
+        SegmentReplicator replicator = new SegmentReplicator(threadPool);
+        assertEquals(0L, legacyMetadataCheckpoint.getCreatedTimeStamp());
+        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
+import org.opensearch.index.store.StoreFileMetadata;  
+        ReplicationCheckpoint firstReplicationCheckpoint = ReplicationCheckpoint.empty(shardId);  
+                    throw new RuntimeException(e);
+        stringStoreFileMetadataMapTwo.put("test-1", storeFileMetadata1);
+        long baseTime = DateUtils.toLong(Instant.now());
+     */  
+        segmentReplicator.updateReplicationCheckpointStats(secondReplicationCheckpoint, replicaShard);
+        stringStoreFileMetadataMapOne.put("test-1", storeFileMetadata1);
+        when(factory.get(replica)).thenReturn(new TestReplicationSource() {
+            1,
+     */
+        when(replicaShard.getLatestReplicationCheckpoint()).thenReturn(localCheckpoint);  
+        // assert shard failure on corruption
+import java.util.concurrent.ExecutorService;
+        long elapsedSinceReceive = System.currentTimeMillis() - beforeReceive;
+        metadataMap.put("test-1", storeFileMetadata1);
+            @Override
+        shardRoutingTable.addShard(replica.routingEntry());
+        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
+    public void testReplicationFails() throws Exception {
+        ReplicationCheckpoint secondReplicationCheckpoint = new ReplicationCheckpoint(
+import org.opensearch.cluster.routing.IndexShardRoutingTable;  
+import org.opensearch.indices.replication.common.ReplicationType;  
+    }
+        StoreFileMetadata storeFileMetadata2 = new StoreFileMetadata("test-2", 500, "1", Version.LATEST, new BytesRef(500));  
+        AtomicBoolean failureCallbackTriggered = new AtomicBoolean(false);
+        assertEquals(100, stats.totalBytesBehind);
+        metadataMap.put("test-1", storeFileMetadata1);
+        assertTrue(  
+     * Remote-store replicas obtain the primary's checkpoint from the segment metadata file rather than over the wire  
+        );
+        // shard is up to date, should not have any tracked stats
+        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
+        // createdTimeStamp == 0, as produced by ReplicationCheckpoint(StreamInput) for a sender older than 3.0.0  
+        expectThrows(IllegalStateException.class, () -> replicator.startReplication(replica));
+        segmentReplicator.setSourceFactory(factory);
+                ActionListener<CheckpointInfoResponse> listener  
+        segmentReplicator.updateReplicationCheckpointStats(legacyMetadataCheckpoint, replicaShard);
+        assertEquals(0, finalStats.totalBytesBehind);
+        );  
+        assertEquals(0, replicationStats.maxReplicationLag);
+        segmentReplicator.initializeStats(shardId);
+        indexOutput.writeLong(primaryCheckpoint.getSegmentInfosVersion());
+                    indexShard.store().markStoreCorrupted(corruptIndexException);  
+        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+            3,
+     * checkpoint was received, not from the Unix epoch.  
+        ReplicationStats replicationStatsSecond = segmentReplicator.getSegmentReplicationStats(shardId);
+        ExecutorService mock = mock(ExecutorService.class);  
+                ReplicationCheckpoint checkpoint,
+        ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(shardId, 2, 2, 2, 100, "", metadataMap, futureTimestamp);
+        closeShards(replica, primary);  
+        when(replicaShard.shardId()).thenReturn(shardId);
+        IndexShard shard = mock(IndexShard.class);
+import org.opensearch.index.replication.TestReplicationSource;  
+        long beforeReceive = System.currentTimeMillis();
+            @Override
+        when(replicaShard.shardId()).thenReturn(shardId);
+            baseTime - 5_000_000  
+import static org.mockito.Mockito.spy;
+            ) {
+        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
+        segmentReplicator.updateReplicationCheckpointStats(replicationCheckpoint, replicaShard);  
+            2,  
+        SegmentReplicator segmentReplicator = new SegmentReplicator(threadPool);
+                ReplicationCheckpoint checkpoint,
+            3,  
+            stats.maxReplicationLag >= 0 && stats.maxReplicationLag <= elapsedSinceReceive + 1_000  
+            "",
+        );
+            }
+            2,
+        // shard finished syncing to last checkpoint (sis 3)  
+import org.opensearch.transport.TransportService;
+ *
+            1000,
+                }  
+        try (final CopyState copyState = new CopyState(primary)) {
+import org.opensearch.index.shard.IndexShard;
+            shardId,  
+import org.apache.lucene.util.BytesRef;  
+            1,
+        final IndexShard replica = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+        });
+import org.apache.lucene.util.Version;
+        ShardId shardId = new ShardId("index", "uuid", 0);
+            }
+                    Lucene.cleanLuceneIndex(indexShard.store().directory());  
+import static org.mockito.Mockito.when;
+        assertEquals(1200, replicationStatsFirst.maxBytesBehind);
+        StoreFileMetadata storeFileMetadata1 = new StoreFileMetadata("_0.cfe", 500, "1", Version.LATEST, new BytesRef(500));  
+            shardId,  
+        ReplicationStats finalStats = segmentReplicator.getSegmentReplicationStats(shardId);  
+        allowShardFailures();  
+        when(replicaShard.shardId()).thenReturn(shardId);

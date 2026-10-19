@@ -1,119 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest.action.cat;
-
-import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksRequest;
-import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksResponse;
-import org.opensearch.cluster.service.PendingClusterTask;  
-import org.opensearch.common.Table;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.rest.RestRequest;  
-import org.opensearch.rest.RestResponse;
-import org.opensearch.rest.action.RestResponseListener;
-import org.opensearch.transport.client.node.NodeClient;  
-
-import java.util.List;
-
-import static java.util.Collections.singletonList;
-import static org.opensearch.rest.RestRequest.Method.GET;
-
-/**
- * _cat API action to get pending cluster tasks
- *  
- * @opensearch.api
- */
-public class RestPendingClusterTasksAction extends AbstractCatAction {  
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestPendingClusterTasksAction.class);
-
+            t.addCell(task.getInsertOrder());
     @Override
-    public List<Route> routes() {
-        return singletonList(new Route(GET, "/_cat/pending_tasks"));  
-    }
-
-    @Override  
+ *  
+import org.opensearch.common.logging.DeprecationLogger;
+ *
+    }  
+        return t;
+ * Licensed to Elasticsearch under one or more contributor  
+    private Table buildTable(RestRequest request, PendingClusterTasksResponse tasks) {
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.cluster.service.PendingClusterTask;  
+                @Override  
+ *  
+            .cluster()
     public String getName() {
+        return t;
+        t.addCell("insertOrder", "alias:o;text-align:right;desc:task insertion order");  
+    public List<Route> routes() {
+ */  
+ * @opensearch.api
+                    return RestTable.buildResponse(tab, channel);  
+/*  
+            t.addCell(task.getPriority());  
+    protected void documentation(StringBuilder sb) {  
+ * this work for additional information regarding copyright
+            t.endRow();
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.rest.action.RestResponseListener;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestPendingClusterTasksAction.class);
+/*  
+            t.addCell(task.getSource());
+            .pendingClusterTasks(pendingClusterTasksRequest, new RestResponseListener<PendingClusterTasksResponse>(channel) {
+        t.endHeaders();
+import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksRequest;
+        return singletonList(new Route(GET, "/_cat/pending_tasks"));  
+}
+ * GitHub history for details.
+            t.addCell(task.getTimeInQueue());
+ * _cat API action to get pending cluster tasks
+package org.opensearch.rest.action.cat;
+ * You may obtain a copy of the License at  
+/*
+ * license agreements. See the NOTICE file distributed with
+            request.paramAsTime("cluster_manager_timeout", pendingClusterTasksRequest.clusterManagerNodeTimeout())
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksResponse;
+        t.addCell("source", "alias:s;desc:task source");  
+ */
+            });
+    @Override  
+ * software distributed under the License is distributed on an
+        pendingClusterTasksRequest.local(request.paramAsBoolean("local", pendingClusterTasksRequest.local()));
+ * The OpenSearch Contributors require contributions made to  
+        return channel -> client.admin()  
+/**
+import org.opensearch.common.Table;
+ * specific language governing permissions and limitations
+    }
+            t.startRow();  
+        Table t = getTableWithHeader(request);  
+        PendingClusterTasksRequest pendingClusterTasksRequest = new PendingClusterTasksRequest();  
+ * not use this file except in compliance with the License.
+import java.util.List;
+        }  
+        t.startHeaders();
+    public RestChannelConsumer doCatRequest(final RestRequest request, final NodeClient client) {
+import static java.util.Collections.singletonList;
+import org.opensearch.rest.RestResponse;
+import static org.opensearch.rest.RestRequest.Method.GET;
+import org.opensearch.transport.client.node.NodeClient;  
+ *
+        parseDeprecatedMasterTimeoutParameter(pendingClusterTasksRequest, request, deprecationLogger, getName());
+    }  
+        Table t = new Table();
+                    Table tab = buildTable(request, pendingClusterTasks);
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+import org.opensearch.rest.RestRequest;  
+    protected Table getTableWithHeader(final RestRequest request) {  
+                public RestResponse buildResponse(PendingClusterTasksResponse pendingClusterTasks) throws Exception {
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+        pendingClusterTasksRequest.clusterManagerNodeTimeout(
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+public class RestPendingClusterTasksAction extends AbstractCatAction {  
+    @Override
+        for (PendingClusterTask task : tasks) {
+ */  
+    }
+                }
+        );  
+        t.addCell("priority", "alias:p;desc:task priority");
+ * compatible open source license.
+ * under the License.  
+    }  
         return "cat_pending_cluster_tasks_action";
     }  
-
-    @Override
-    protected void documentation(StringBuilder sb) {  
-        sb.append("/_cat/pending_tasks\n");
-    }
-
-    @Override
-    public RestChannelConsumer doCatRequest(final RestRequest request, final NodeClient client) {
-        PendingClusterTasksRequest pendingClusterTasksRequest = new PendingClusterTasksRequest();  
-        pendingClusterTasksRequest.clusterManagerNodeTimeout(
-            request.paramAsTime("cluster_manager_timeout", pendingClusterTasksRequest.clusterManagerNodeTimeout())
-        );  
-        parseDeprecatedMasterTimeoutParameter(pendingClusterTasksRequest, request, deprecationLogger, getName());
-        pendingClusterTasksRequest.local(request.paramAsBoolean("local", pendingClusterTasksRequest.local()));
-        return channel -> client.admin()  
-            .cluster()
-            .pendingClusterTasks(pendingClusterTasksRequest, new RestResponseListener<PendingClusterTasksResponse>(channel) {
-                @Override  
-                public RestResponse buildResponse(PendingClusterTasksResponse pendingClusterTasks) throws Exception {
-                    Table tab = buildTable(request, pendingClusterTasks);
-                    return RestTable.buildResponse(tab, channel);  
-                }
-            });
-    }  
-
-    @Override
-    protected Table getTableWithHeader(final RestRequest request) {  
-        Table t = new Table();
-        t.startHeaders();
-        t.addCell("insertOrder", "alias:o;text-align:right;desc:task insertion order");  
+ * ownership. Elasticsearch licenses this file to you under  
         t.addCell("timeInQueue", "alias:t;text-align:right;desc:how long task has been in queue");
-        t.addCell("priority", "alias:p;desc:task priority");
-        t.addCell("source", "alias:s;desc:task source");  
-        t.endHeaders();
-        return t;
-    }  
-
-    private Table buildTable(RestRequest request, PendingClusterTasksResponse tasks) {
-        Table t = getTableWithHeader(request);  
-
-        for (PendingClusterTask task : tasks) {
-            t.startRow();  
-            t.addCell(task.getInsertOrder());
-            t.addCell(task.getTimeInQueue());
-            t.addCell(task.getPriority());  
-            t.addCell(task.getSource());
-            t.endRow();
-        }  
-
-        return t;
-    }  
-}
+        sb.append("/_cat/pending_tasks\n");

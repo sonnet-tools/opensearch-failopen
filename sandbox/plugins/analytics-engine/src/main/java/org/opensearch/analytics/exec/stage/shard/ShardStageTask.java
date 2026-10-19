@@ -1,34 +1,28 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+public final class ShardStageTask extends StageTask {  
+    public ShardStageTask(StageTaskId id, ExecutionTarget target) {
+ * @opensearch.internal
  * compatible open source license.
- */  
-
+ * SPDX-License-Identifier: Apache-2.0
+        this.target = target;  
+/*  
+/**
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ *  
 package org.opensearch.analytics.exec.stage.shard;
-
+    }
 import org.opensearch.analytics.exec.stage.StageTask;
 import org.opensearch.analytics.exec.stage.StageTaskId;
-import org.opensearch.analytics.planner.dag.ExecutionTarget;  
-
-/**
- * {@link StageTask} variant dispatched to a remote data node via Arrow Flight.  
- * The {@link ExecutionTarget} carries the routing key and the per-partition
+ *
  * fragment payload the data node needs to set up its input source.
- *  
- * @opensearch.internal
- */
-public final class ShardStageTask extends StageTask {  
-
-    private final ExecutionTarget target;
-
-    public ShardStageTask(StageTaskId id, ExecutionTarget target) {
-        super(id);
-        this.target = target;  
-    }
-
     public ExecutionTarget target() {  
-        return target;
-    }
+    private final ExecutionTarget target;
+ * The {@link ExecutionTarget} carries the routing key and the per-partition
+ */  
 }  
+        super(id);
+ * {@link StageTask} variant dispatched to a remote data node via Arrow Flight.  
+        return target;
+ * The OpenSearch Contributors require contributions made to  
+    }
+import org.opensearch.analytics.planner.dag.ExecutionTarget;  

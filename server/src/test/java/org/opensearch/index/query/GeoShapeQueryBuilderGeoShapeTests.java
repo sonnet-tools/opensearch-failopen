@@ -1,89 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
 import org.opensearch.common.geo.ShapeRelation;  
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.test.geo.RandomShapeGenerator;
-
+            builder = new GeoShapeQueryBuilder(fieldName(), shape);
+    }  
+                builder.indexedShapeIndex(indexedShapeIndex);
+            indexedShapeId = randomAlphaOfLengthBetween(3, 20);
+        }  
+        clearShapeFields();
+                builder.indexedShapeRouting(indexedShapeRouting);
+            }  
+ * SPDX-License-Identifier: Apache-2.0
 public class GeoShapeQueryBuilderGeoShapeTests extends GeoShapeQueryBuilderTests {
-
-    protected String fieldName() {  
-        return GEO_SHAPE_FIELD_NAME;
+/*  
+ * specific language governing permissions and limitations
+        if (randomBoolean()) {
+ * Modifications Copyright OpenSearch Contributors. See  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.test.geo.RandomShapeGenerator;
+ * You may obtain a copy of the License at  
+            if (randomBoolean()) {  
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+ * KIND, either express or implied.  See the License for the
+        }  
+ * software distributed under the License is distributed on an
     }
-
-    protected GeoShapeQueryBuilder doCreateTestQueryBuilder(boolean indexedShape) {
-        RandomShapeGenerator.ShapeType shapeType = randomFrom(
-            RandomShapeGenerator.ShapeType.POINT,  
-            RandomShapeGenerator.ShapeType.MULTIPOINT,
-            RandomShapeGenerator.ShapeType.LINESTRING,
+        return builder;
+            }
+ *
             RandomShapeGenerator.ShapeType.MULTILINESTRING,  
-            RandomShapeGenerator.ShapeType.POLYGON
-        );
+    protected String fieldName() {  
+            }
+/*
+                builder.relation(
+ */
+    protected GeoShapeQueryBuilder doCreateTestQueryBuilder(boolean indexedShape) {
+        }
+        if (indexedShape == false) {  
+        if (randomBoolean()) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
+            RandomShapeGenerator.ShapeType.MULTIPOINT,
+            if (randomBoolean()) {
+            indexedShapeToReturn = shape;  
+                    randomFrom(ShapeRelation.DISJOINT, ShapeRelation.INTERSECTS, ShapeRelation.WITHIN, ShapeRelation.CONTAINS)  
         ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null, shapeType);  
         GeoShapeQueryBuilder builder;
-        clearShapeFields();
-        if (indexedShape == false) {  
-            builder = new GeoShapeQueryBuilder(fieldName(), shape);
-        } else {
-            indexedShapeToReturn = shape;  
-            indexedShapeId = randomAlphaOfLengthBetween(3, 20);
             builder = new GeoShapeQueryBuilder(fieldName(), indexedShapeId);
-            if (randomBoolean()) {  
-                indexedShapeIndex = randomAlphaOfLengthBetween(3, 20);
-                builder.indexedShapeIndex(indexedShapeIndex);
-            }  
             if (randomBoolean()) {
-                indexedShapePath = randomAlphaOfLengthBetween(3, 20);
-                builder.indexedShapePath(indexedShapePath);  
-            }
-            if (randomBoolean()) {
+ * Licensed to Elasticsearch under one or more contributor  
                 indexedShapeRouting = randomAlphaOfLengthBetween(3, 20);  
-                builder.indexedShapeRouting(indexedShapeRouting);
-            }
-        }  
-        if (randomBoolean()) {
+            RandomShapeGenerator.ShapeType.LINESTRING,
+                indexedShapePath = randomAlphaOfLengthBetween(3, 20);
             if (shapeType == RandomShapeGenerator.ShapeType.LINESTRING || shapeType == RandomShapeGenerator.ShapeType.MULTILINESTRING) {
                 builder.relation(randomFrom(ShapeRelation.DISJOINT, ShapeRelation.INTERSECTS, ShapeRelation.CONTAINS));  
-            } else {
-                builder.relation(
-                    randomFrom(ShapeRelation.DISJOINT, ShapeRelation.INTERSECTS, ShapeRelation.WITHIN, ShapeRelation.CONTAINS)  
-                );
-            }
-        }  
-
-        if (randomBoolean()) {
-            builder.ignoreUnmapped(randomBoolean());  
-        }
-        return builder;
-    }  
 }
+            RandomShapeGenerator.ShapeType.POINT,  
+ * ownership. Elasticsearch licenses this file to you under  
+        );
+            } else {
+ * compatible open source license.
+ * this work for additional information regarding copyright
+            }
+            builder.ignoreUnmapped(randomBoolean());  
+                indexedShapeIndex = randomAlphaOfLengthBetween(3, 20);
+                builder.indexedShapePath(indexedShapePath);  
+ * under the License.  
+ *
+package org.opensearch.index.query;
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+/*
+ */  
+        return GEO_SHAPE_FIELD_NAME;
+ *  
+            RandomShapeGenerator.ShapeType.POLYGON
+ * the Apache License, Version 2.0 (the "License"); you may
+        RandomShapeGenerator.ShapeType shapeType = randomFrom(
+                );
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.geo.builders.ShapeBuilder;
+        } else {

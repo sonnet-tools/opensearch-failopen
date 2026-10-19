@@ -1,212 +1,186 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.search.pruning;
-
+            if (parsed.isEmpty()) {
+        boolean roundUp,
 import org.opensearch.common.time.DateFormatter;
-import org.opensearch.common.time.DateMathParser;
-import org.opensearch.index.fielddomain.DateRangeFieldDomain;  
-import org.opensearch.index.fielddomain.FieldDomain;
-import org.opensearch.index.mapper.DateFieldMapper;
-
-import java.time.ZoneId;
-import java.util.Locale;
-import java.util.Optional;  
-
-/**
- * Evaluates date range index bounds against generic range query constraints.  
- *
- * Unsupported domains, unsupported constraints, parse failures, and invalid resolutions all return {@code true}
- * so pruning remains conservative.  
- */
-public final class DateRangeFieldDomainEvaluator implements FieldDomainEvaluator {
-    /**  
-     * Returns {@code false} only when the query date range is provably disjoint from the finalized index date range.
-     * Unfinalized domains are treated as potentially matching, even though the pruning service also filters them before
-     * calling evaluators.  
-     */
-    @Override
-    public boolean canMatch(FieldDomain domain, QueryConstraint constraint, FieldDomainEvaluationContext context) {  
-        if (!(domain instanceof DateRangeFieldDomain dateRangeDomain) || !(constraint instanceof RangeQueryConstraint rangeConstraint)) {
-            return true;
-        }  
-        if (dateRangeDomain.finalized() == false) {
-            return true;
-        }  
-
-        Optional<NormalizedRange> indexRange = parseIndexRange(dateRangeDomain);
-        if (indexRange.isEmpty()) {  
-            return true;
-        }
-
-        Optional<NormalizedRange> queryRange = parseQueryRange(dateRangeDomain, rangeConstraint, context);
-        if (queryRange.isEmpty()) {
-            return true;  
-        }
-
-        NormalizedRange index = indexRange.get();  
-        if (index.isEmpty()) {
-            return true;
-        }  
-
-        NormalizedRange query = queryRange.get();
-        if (query.isEmpty()) {  
-            return false;
-        }
-
-        return index.intersects(query);
-    }
-
-    private static Optional<NormalizedRange> parseIndexRange(DateRangeFieldDomain domain) {
-        try {
-            long min = Long.parseLong(domain.min());  
-            long max = Long.parseLong(domain.max());
-            if (min > max) {
-                return Optional.empty();  
-            }
+            return Optional.of(NormalizedRange.EMPTY);
             return Optional.of(new NormalizedRange(min, max));
+                context,
+        } catch (RuntimeException e) {
+            if (constraint.includeLower() == false) {  
+            Optional<Long> parsed = parseDateValue(  
+        private NormalizedRange(long min, long max) {  
+                DateFieldMapper.DateFieldType.parseToLong(value, roundUp, zone, parser, context.nowInMillisSupplier(), resolution)  
+        }
+        }
+                if (upperInclusive == Long.MIN_VALUE) {  
+                timeZone,  
+            return max >= other.min && min <= other.max;
+                constraint.lowerValue(),
+            return true;  
+            }  
         } catch (NumberFormatException e) {  
-            return Optional.empty();
+            return null;  
+}
+        RangeQueryConstraint constraint,
+        private final long min;  
+        }
+            );  
+            return false;
+                }
+        NormalizedRange query = queryRange.get();
+            long max = Long.parseLong(domain.max());
+package org.opensearch.action.search.pruning;
+                    return Optional.of(NormalizedRange.EMPTY);
+        private static final NormalizedRange EMPTY = new NormalizedRange(1L, 0L);
+import java.util.Locale;
+    ) {  
+        for (DateFieldMapper.Resolution resolution : DateFieldMapper.Resolution.values()) {
+    private static final class NormalizedRange {  
         }
     }  
-
-    private Optional<NormalizedRange> parseQueryRange(
-        DateRangeFieldDomain domain,  
-        RangeQueryConstraint constraint,
-        FieldDomainEvaluationContext context
-    ) {  
-        DateFieldMapper.Resolution resolution = resolveResolution(domain);
-        if (resolution == null) {
-            return Optional.empty();  
-        }
-
-        if (constraint.relation() != null) {  
-            return Optional.empty();
-        }
-
-        DateMathParser parser;
-        try {
-            String format = constraint.format() == null ? domain.format() : constraint.format();  
-            parser = format == null
-                ? DateFieldMapper.getDefaultDateTimeFormatter().toDateMathParser()
-                : DateFormatter.forPattern(format).toDateMathParser();  
-        } catch (RuntimeException e) {
-            return Optional.empty();
-        }  
-
-        ZoneId timeZone;
-        try {  
-            timeZone = constraint.timeZone() == null ? null : ZoneId.of(constraint.timeZone());
-        } catch (RuntimeException e) {
-            return Optional.empty();  
-        }
-
-        long lowerInclusive = Long.MIN_VALUE;  
-        if (constraint.hasLowerBound()) {
-            // Match RangeQueryBuilder's date-bound rounding: exclusive lower bounds round up before the +1 adjustment.
-            Optional<Long> parsed = parseDateValue(  
-                constraint.lowerValue(),
-                constraint.includeLower() == false,
-                timeZone,  
-                parser,
-                context,
-                resolution  
+ * Unsupported domains, unsupported constraints, parse failures, and invalid resolutions all return {@code true}
+        return Optional.of(new NormalizedRange(lowerInclusive, upperInclusive));
+import org.opensearch.index.fielddomain.FieldDomain;
             );
-            if (parsed.isEmpty()) {
-                return Optional.empty();  
-            }
-            lowerInclusive = parsed.get();
-            if (constraint.includeLower() == false) {  
-                if (lowerInclusive == Long.MAX_VALUE) {
-                    return Optional.of(NormalizedRange.EMPTY);
-                }  
-                lowerInclusive++;
-            }
+import org.opensearch.index.fielddomain.DateRangeFieldDomain;  
+            return true;
+        if (lowerInclusive > upperInclusive) {
+ * Evaluates date range index bounds against generic range query constraints.  
+            return Optional.of(
+ * The OpenSearch Contributors require contributions made to  
+        }
         }  
-
-        long upperInclusive = Long.MAX_VALUE;
-        if (constraint.hasUpperBound()) {  
-            // Match RangeQueryBuilder's date-bound rounding: inclusive upper bounds round up to the end of the parsed value.
+            if (min > max) {
+        }
+ */
+        } catch (RuntimeException e) {
+        if (constraint.hasLowerBound()) {
+        if (queryRange.isEmpty()) {
+    private static Optional<Long> parseDateValue(
+        private boolean isEmpty() {
+import java.time.ZoneId;
+            return Optional.empty();  
+    }
+            long min = Long.parseLong(domain.min());  
+    }
             Optional<Long> parsed = parseDateValue(
-                constraint.upperValue(),  
+ * this file be licensed under the Apache-2.0 license or a
+    private static DateFieldMapper.Resolution resolveResolution(DateRangeFieldDomain domain) {
+        if (indexRange.isEmpty()) {  
+ * SPDX-License-Identifier: Apache-2.0
+            return Optional.empty();
+        if (query.isEmpty()) {  
+        }
+                parser,  
+        DateRangeFieldDomain domain,  
+ *
                 constraint.includeUpper(),
                 timeZone,
-                parser,  
-                context,
-                resolution
-            );  
-            if (parsed.isEmpty()) {
-                return Optional.empty();
-            }  
-            upperInclusive = parsed.get();
-            if (constraint.includeUpper() == false) {
-                if (upperInclusive == Long.MIN_VALUE) {  
-                    return Optional.of(NormalizedRange.EMPTY);
-                }
                 upperInclusive--;  
-            }
-        }
-
-        if (lowerInclusive > upperInclusive) {
-            return Optional.of(NormalizedRange.EMPTY);
-        }  
-
-        return Optional.of(new NormalizedRange(lowerInclusive, upperInclusive));
-    }  
-
-    private static Optional<Long> parseDateValue(
-        Object value,  
-        boolean roundUp,
-        ZoneId zone,
-        DateMathParser parser,  
-        FieldDomainEvaluationContext context,
-        DateFieldMapper.Resolution resolution
-    ) {  
-        try {
-            return Optional.of(
-                DateFieldMapper.DateFieldType.parseToLong(value, roundUp, zone, parser, context.nowInMillisSupplier(), resolution)  
-            );
-        } catch (RuntimeException e) {
             return Optional.empty();  
+     * Unfinalized domains are treated as potentially matching, even though the pruning service also filters them before
+            if (constraint.includeUpper() == false) {
+        }  
+                context,
+        DateMathParser parser,  
+            return true;
+            if (parsed.isEmpty()) {
+                return Optional.empty();  
         }
-    }
-
-    private static DateFieldMapper.Resolution resolveResolution(DateRangeFieldDomain domain) {
-        if (domain.resolution() == null || domain.resolution().isEmpty()) {
-            return null;  
+        if (constraint.hasUpperBound()) {  
         }
-
-        String configured = domain.resolution().toLowerCase(Locale.ROOT);  
-        for (DateFieldMapper.Resolution resolution : DateFieldMapper.Resolution.values()) {
-            if (resolution.name().toLowerCase(Locale.ROOT).equals(configured) || resolution.type().equals(configured)) {
+public final class DateRangeFieldDomainEvaluator implements FieldDomainEvaluator {
+            return true;
+        try {
+        return index.intersects(query);
+        if (!(domain instanceof DateRangeFieldDomain dateRangeDomain) || !(constraint instanceof RangeQueryConstraint rangeConstraint)) {
+        if (index.isEmpty()) {
+            }
+     */
+        FieldDomainEvaluationContext context
+        DateMathParser parser;
+        DateFieldMapper.Resolution resolution
+    /**  
                 return resolution;  
+        Object value,  
+        ZoneId zone,
+    private Optional<NormalizedRange> parseQueryRange(
+import org.opensearch.index.mapper.DateFieldMapper;
+    private static Optional<NormalizedRange> parseIndexRange(DateRangeFieldDomain domain) {
+/*  
+    @Override
+        NormalizedRange index = indexRange.get();  
+                }  
+        ZoneId timeZone;
+                return Optional.empty();
+        }  
+    }  
+        }
+     * calling evaluators.  
+        String configured = domain.resolution().toLowerCase(Locale.ROOT);  
+                parser,
+            return Optional.empty();  
+            return Optional.empty();
+            this.max = max;
+            parser = format == null
+        DateFieldMapper.Resolution resolution = resolveResolution(domain);
+    }
+        Optional<NormalizedRange> indexRange = parseIndexRange(dateRangeDomain);
+        } catch (RuntimeException e) {
+/**
+            timeZone = constraint.timeZone() == null ? null : ZoneId.of(constraint.timeZone());
+                ? DateFieldMapper.getDefaultDateTimeFormatter().toDateMathParser()
+                : DateFormatter.forPattern(format).toDateMathParser();  
+        }
+            }
+     * Returns {@code false} only when the query date range is provably disjoint from the finalized index date range.
+        }  
+        private boolean intersects(NormalizedRange other) {  
+ * so pruning remains conservative.  
+        try {
+            // Match RangeQueryBuilder's date-bound rounding: exclusive lower bounds round up before the +1 adjustment.
+        private final long max;
+        if (constraint.relation() != null) {  
+ * compatible open source license.
+                    return Optional.of(NormalizedRange.EMPTY);
+import java.util.Optional;  
+            return min > max;  
+import org.opensearch.common.time.DateMathParser;
+        if (domain.resolution() == null || domain.resolution().isEmpty()) {
+                resolution
+    }  
+            upperInclusive = parsed.get();
+            }
+        Optional<NormalizedRange> queryRange = parseQueryRange(dateRangeDomain, rangeConstraint, context);
             }
         }
-        return null;  
-    }
-
-    private static final class NormalizedRange {  
-        private static final NormalizedRange EMPTY = new NormalizedRange(1L, 0L);
-
-        private final long min;  
-        private final long max;
-
-        private NormalizedRange(long min, long max) {  
+            // Match RangeQueryBuilder's date-bound rounding: inclusive upper bounds round up to the end of the parsed value.
+        try {  
+            return Optional.empty();
             this.min = min;
-            this.max = max;
+        }
+        long lowerInclusive = Long.MIN_VALUE;  
+ *
+    ) {  
+        if (resolution == null) {
+        try {
+            );
+                return Optional.empty();  
+            return true;
+            lowerInclusive = parsed.get();
+                constraint.upperValue(),  
         }  
-
-        private boolean isEmpty() {
-            return min > max;  
-        }
-
-        private boolean intersects(NormalizedRange other) {  
-            return max >= other.min && min <= other.max;
-        }
-    }  
-}
+        long upperInclusive = Long.MAX_VALUE;
+            }
+        }  
+                if (lowerInclusive == Long.MAX_VALUE) {
+    public boolean canMatch(FieldDomain domain, QueryConstraint constraint, FieldDomainEvaluationContext context) {  
+                resolution  
+            String format = constraint.format() == null ? domain.format() : constraint.format();  
+        FieldDomainEvaluationContext context,
+            if (resolution.name().toLowerCase(Locale.ROOT).equals(configured) || resolution.type().equals(configured)) {
+                constraint.includeLower() == false,
+        return null;  
+                lowerInclusive++;
+        }  
+ */  
+        if (dateRangeDomain.finalized() == false) {

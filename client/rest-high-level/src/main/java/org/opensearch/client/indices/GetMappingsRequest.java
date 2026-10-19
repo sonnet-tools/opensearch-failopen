@@ -1,87 +1,73 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.indices;
-
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.client.TimedRequest;
-import org.opensearch.core.common.Strings;  
-
-public class GetMappingsRequest extends TimedRequest {
-
-    private boolean local = false;
-    private boolean includeDefaults = false;
-    private String[] indices = Strings.EMPTY_ARRAY;  
-    private IndicesOptions indicesOptions = IndicesOptions.strictExpandOpen();
-
-    /**  
-     * Indicates whether the receiving node should operate based on local index information or
-     * forward requests, where needed, to other nodes. If running locally, request will not
-     * raise errors if local index information is missing.  
-     */
-    public GetMappingsRequest local(boolean local) {
         this.local = local;  
-        return this;
-    }
-
+ *  
+/*  
     public boolean local() {
+ * specific language governing permissions and limitations
+ */
+    public GetMappingsRequest local(boolean local) {
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+ * license agreements. See the NOTICE file distributed with
+    /**  
+/*
         return local;
-    }  
-
-    public GetMappingsRequest indices(String... indices) {
-        this.indices = indices;  
         return this;
-    }
-
-    public GetMappingsRequest indicesOptions(IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;
-        return this;  
-    }
-
-    public String[] indices() {  
-        return indices;
-    }
-
     public IndicesOptions indicesOptions() {
-        return indicesOptions;
-    }  
-
-    public boolean includeDefaults() {
-        return includeDefaults;  
-    }
-
-    /** Indicates whether default mapping settings should be returned */  
-    public GetMappingsRequest includeDefaults(boolean includeDefaults) {
+ * GitHub history for details.
+        return indices;
+    private boolean local = false;
+public class GetMappingsRequest extends TimedRequest {
         this.includeDefaults = includeDefaults;
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
+    /** Indicates whether default mapping settings should be returned */  
+    public GetMappingsRequest indices(String... indices) {
+    public GetMappingsRequest indicesOptions(IndicesOptions indicesOptions) {
+import org.opensearch.client.TimedRequest;
+ * The OpenSearch Contributors require contributions made to  
         return this;  
+        this.indices = indices;  
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+    public boolean includeDefaults() {
+    }
+    }  
+     * forward requests, where needed, to other nodes. If running locally, request will not
+    public String[] indices() {  
+ * this work for additional information regarding copyright
+ * compatible open source license.
     }
 }
+        this.indicesOptions = indicesOptions;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.client.indices;
+        return indicesOptions;
+    }  
+     * raise errors if local index information is missing.  
+        return this;
+    }
+ * KIND, either express or implied.  See the License for the
+    private boolean includeDefaults = false;
+     */
+ *
+ * not use this file except in compliance with the License.
+    private String[] indices = Strings.EMPTY_ARRAY;  
+ * software distributed under the License is distributed on an
+/*  
+    }
+    private IndicesOptions indicesOptions = IndicesOptions.strictExpandOpen();
+import org.opensearch.core.common.Strings;  
+    }
+ */  
+        return includeDefaults;  
+     * Indicates whether the receiving node should operate based on local index information or
+ * Licensed to Elasticsearch under one or more contributor  
+    public GetMappingsRequest includeDefaults(boolean includeDefaults) {
+ * under the License.  
+        return this;  
+import org.opensearch.action.support.IndicesOptions;

@@ -1,112 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.utils;
-
-import org.apache.lucene.store.ByteBuffersDirectory;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;  
-import org.apache.lucene.store.FilterDirectory;
-import org.opensearch.test.OpenSearchTestCase;
-
 import java.nio.file.Path;
-
-/**  
- * Tests for {@link DirectoryUtils}.
- *
- * @opensearch.experimental  
- */
-public class DirectoryUtilsTests extends OpenSearchTestCase {
-
-    private Path tempDir;
-    private FSDirectory fsDirectory;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        tempDir = createTempDir();
-        fsDirectory = FSDirectory.open(tempDir);
-    }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        fsDirectory.close();
-        super.tearDown();
-    }  
-
+        FilterDirectory wrapped = new FilterDirectory(fsDirectory) {
+        };
     public void testUnwrapFSDirectoryDirect() {
+import org.apache.lucene.store.Directory;
+    public void testUnwrapFSDirectoryMultipleWrappers() {
+        FilterDirectory outer = new FilterDirectory(inner) {
+        Path result = DirectoryUtils.getFilePath(wrapped, "test_file.si");  
+public class DirectoryUtilsTests extends OpenSearchTestCase {
+    }  
+        assertSame(fsDirectory, result);
+    public void testUnwrapFSDirectoryThrowsWhenNoFSDirectory() {
+    private FSDirectory fsDirectory;
+    }
+        assertEquals(tempDir.resolve("test_file.si" + DirectoryUtils.SWITCHABLE_PREFIX), result);
+        };
+        assertEquals(tempDir.resolve("test_file.si"), result);
+        assertSame(fsDirectory, result);
+ * compatible open source license.
+    public void testUnwrapFSDirectoryThrowsWhenWrappedNonFSDirectory() {
+import org.opensearch.test.OpenSearchTestCase;
+        };
+ * this file be licensed under the Apache-2.0 license or a
+    public void testGetFilePath() {
+        FilterDirectory wrapped = new FilterDirectory(fsDirectory) {
+        IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> DirectoryUtils.unwrapFSDirectory(nonFsDir));
+    private Path tempDir;
         FSDirectory result = DirectoryUtils.unwrapFSDirectory(fsDirectory);  
+        FSDirectory result = DirectoryUtils.unwrapFSDirectory(fsDirectory);
+import org.apache.lucene.store.ByteBuffersDirectory;
         assertSame(fsDirectory, result);
     }
-
+ */  
+        Path result = DirectoryUtils.getFilePathSwitchable(wrapped, "test_file.si");  
+ * Tests for {@link DirectoryUtils}.
+ * The OpenSearch Contributors require contributions made to  
+    public void testGetFilePathSwitchableWithWrappedDirectory() {  
+    @Override
+        };
+    }  
+        super.tearDown();
+        assertSame(fsDirectory, result);
+        super.setUp();  
+        assertTrue(ex.getMessage().contains("Expected FSDirectory but got"));
+        fsDirectory = FSDirectory.open(tempDir);
+        Directory nonFsDir = new ByteBuffersDirectory();  
+        FilterDirectory wrapped = new FilterDirectory(nonFsDir) {
+    }  
+    public void testGetFilePathWithWrappedDirectory() {  
+        fsDirectory.close();
+    }
+        assertTrue(ex.getMessage().contains("Expected FSDirectory but got"));
+    }
+        IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> DirectoryUtils.unwrapFSDirectory(wrapped));  
+        FSDirectory result = DirectoryUtils.unwrapFSDirectory(wrapped);  
+ *
+    }  
+    }
+        Path result = DirectoryUtils.getFilePath(fsDirectory, "test_file.si");
+        FilterDirectory inner = new FilterDirectory(fsDirectory) {  
+    }
+import org.apache.lucene.store.FSDirectory;  
+/**  
+        FSDirectory result = DirectoryUtils.unwrapFSDirectory(wrapped);
+ * @opensearch.experimental  
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+    public void testUnwrapFSDirectoryWrapped() {  
+package org.opensearch.storage.utils;
+/*  
+    public void setUp() throws Exception {
+        FSDirectory result = DirectoryUtils.unwrapFSDirectory(outer);
+    public void testGetFilePathSwitchable() {
+    }
+        assertSame(fsDirectory, result);  
+        tempDir = createTempDir();
+        Directory nonFsDir = new ByteBuffersDirectory();  
+        assertEquals(tempDir.resolve("test_file.si"), result);  
+    @Override
+ */
+        };
+}  
+        };  
+import org.apache.lucene.store.FilterDirectory;
+        assertEquals(tempDir.resolve("test_file.si" + DirectoryUtils.SWITCHABLE_PREFIX), result);  
+    public void tearDown() throws Exception {  
+    public void testUnwrapFSDirectoryAlias() {
+        FilterDirectory wrapped = new FilterDirectory(fsDirectory) {
+ *
+    }
     public void testUnwrapFSDirectorySingleWrapper() {
         FilterDirectory wrapped = new FilterDirectory(fsDirectory) {
         };  
-        FSDirectory result = DirectoryUtils.unwrapFSDirectory(wrapped);
-        assertSame(fsDirectory, result);
-    }  
-
-    public void testUnwrapFSDirectoryMultipleWrappers() {
-        FilterDirectory inner = new FilterDirectory(fsDirectory) {  
-        };
-        FilterDirectory outer = new FilterDirectory(inner) {
-        };  
-        FSDirectory result = DirectoryUtils.unwrapFSDirectory(outer);
-        assertSame(fsDirectory, result);
-    }  
-
-    public void testUnwrapFSDirectoryThrowsWhenNoFSDirectory() {
-        Directory nonFsDir = new ByteBuffersDirectory();  
-        IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> DirectoryUtils.unwrapFSDirectory(nonFsDir));
-        assertTrue(ex.getMessage().contains("Expected FSDirectory but got"));
-    }  
-
-    public void testUnwrapFSDirectoryThrowsWhenWrappedNonFSDirectory() {
-        Directory nonFsDir = new ByteBuffersDirectory();  
-        FilterDirectory wrapped = new FilterDirectory(nonFsDir) {
-        };
-        IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> DirectoryUtils.unwrapFSDirectory(wrapped));  
-        assertTrue(ex.getMessage().contains("Expected FSDirectory but got"));
-    }
-
-    public void testUnwrapFSDirectoryAlias() {
-        FSDirectory result = DirectoryUtils.unwrapFSDirectory(fsDirectory);
-        assertSame(fsDirectory, result);  
-    }
-
-    public void testUnwrapFSDirectoryWrapped() {  
-        FilterDirectory wrapped = new FilterDirectory(fsDirectory) {
-        };
-        FSDirectory result = DirectoryUtils.unwrapFSDirectory(wrapped);  
-        assertSame(fsDirectory, result);
-    }
-
-    public void testGetFilePath() {
-        Path result = DirectoryUtils.getFilePath(fsDirectory, "test_file.si");
-        assertEquals(tempDir.resolve("test_file.si"), result);  
-    }
-
-    public void testGetFilePathWithWrappedDirectory() {  
-        FilterDirectory wrapped = new FilterDirectory(fsDirectory) {
-        };
-        Path result = DirectoryUtils.getFilePath(wrapped, "test_file.si");  
-        assertEquals(tempDir.resolve("test_file.si"), result);
-    }
-
-    public void testGetFilePathSwitchable() {
         Path result = DirectoryUtils.getFilePathSwitchable(fsDirectory, "test_file.si");
-        assertEquals(tempDir.resolve("test_file.si" + DirectoryUtils.SWITCHABLE_PREFIX), result);  
-    }
-
-    public void testGetFilePathSwitchableWithWrappedDirectory() {  
-        FilterDirectory wrapped = new FilterDirectory(fsDirectory) {
-        };
-        Path result = DirectoryUtils.getFilePathSwitchable(wrapped, "test_file.si");  
-        assertEquals(tempDir.resolve("test_file.si" + DirectoryUtils.SWITCHABLE_PREFIX), result);
-    }
-}  

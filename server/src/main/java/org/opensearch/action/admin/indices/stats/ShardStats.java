@@ -1,301 +1,264 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+        this.retentionLeaseStats = retentionLeaseStats;
+    }
+        }  
 package org.opensearch.action.admin.indices.stats;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.index.engine.CommitStats;
-import org.opensearch.index.seqno.RetentionLeaseStats;
-import org.opensearch.index.seqno.SeqNoStats;  
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.indices.pollingingest.PollingIngestStats;
-
-import java.io.IOException;
-
-/**  
- * Shard Stats for OpenSearch
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class ShardStats implements Writeable, ToXContentFragment {  
-
-    private ShardRouting shardRouting;
-    private CommonStats commonStats;  
-    @Nullable
-    private CommitStats commitStats;
-    @Nullable  
-    private SeqNoStats seqNoStats;
-
-    @Nullable  
-    private RetentionLeaseStats retentionLeaseStats;
-
-    @Nullable  
-    private PollingIngestStats pollingIngestStats;
-
-    /**  
-     * Gets the current retention lease stats.
-     *
+        if (out.getVersion().onOrAfter((Version.V_3_0_0))) {
+        }
+    public String getDataPath() {
+        }
+        return this.shardRouting;
+        return dataPath;  
+        builder.field(Fields.IS_CUSTOM_DATA_PATH, isCustomDataPath);
      * @return the current retention lease stats  
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+        static final String SHARD_PATH = "shard_path";  
+        }
+    /**  
+        shardRouting = new ShardRouting(in);
+            .field(Fields.RELOCATING_NODE, shardRouting.relocatingNodeId())
+        }
+        static final String RELOCATING_NODE = "relocating_node";  
+    @Override
+ * specific language governing permissions and limitations
+        this.pollingIngestStats = builder.pollingIngestStats;  
+    @Nullable  
+    public CommonStats getStats() {
+        shardRouting.writeTo(out);  
+        this.commitStats = commitStats;
+ * this work for additional information regarding copyright
+        public Builder pollingIngestStats(PollingIngestStats pollingIngestStats) {
+    public ShardStats(
+        }
+        static final String NODE = "node";
+        /**
+        }
+     * Private constructor that takes a builder.
+     * Provides a fluent API for constructing a ShardStats object.
+            retentionLeaseStats.toXContent(builder, params);  
+        commitStats = CommitStats.readOptionalCommitStatsFrom(in);  
+ */
+        this.commonStats = commonStats;  
+        this.shardRouting = routing;
+        public Builder commonStats(CommonStats commonStats) {  
+        this.shardRouting = builder.shardRouting;
+            return this;
+            return new ShardStats(this);  
+        seqNoStats = in.readOptionalWriteable(SeqNoStats::new);
+        static final String STATE = "state";
+        return this.seqNoStats;  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+        if (seqNoStats != null) {
+        if (in.getVersion().onOrAfter(Version.V_3_0_0)) {  
+            this.pollingIngestStats = pollingIngestStats;  
+import org.opensearch.indices.pollingingest.PollingIngestStats;
+    @Override
+            pollingIngestStats.toXContent(builder, params);  
+        static final String PRIMARY = "primary";
+        out.writeOptionalWriteable(commitStats);
      */
-    public RetentionLeaseStats getRetentionLeaseStats() {
+    public CommitStats getCommitStats() {  
+    private RetentionLeaseStats retentionLeaseStats;
+        retentionLeaseStats = in.readOptionalWriteable(RetentionLeaseStats::new);
         return retentionLeaseStats;  
     }
-
-    private String dataPath;  
-    private String statePath;
-    private boolean isCustomDataPath;
-
-    /**
-     * Private constructor that takes a builder.
-     * This is the sole entry point for creating a new ShardStats object.  
-     * @param builder The builder instance containing all the values.
      */
-    private ShardStats(Builder builder) {  
-        this.shardRouting = builder.shardRouting;
-        this.dataPath = builder.shardPath.getRootDataPath().toString();
-        this.statePath = builder.shardPath.getRootStatePath().toString();  
-        this.isCustomDataPath = builder.shardPath.isCustomDataPath();
-        this.commitStats = builder.commitStats;
-        this.commonStats = builder.commonStats;  
-        this.seqNoStats = builder.seqNoStats;
-        this.retentionLeaseStats = builder.retentionLeaseStats;
-        this.pollingIngestStats = builder.pollingIngestStats;  
-    }
-
-    public ShardStats(StreamInput in) throws IOException {  
-        shardRouting = new ShardRouting(in);
-        commonStats = new CommonStats(in);
-        commitStats = CommitStats.readOptionalCommitStatsFrom(in);  
+     */
+import org.opensearch.core.xcontent.ToXContentFragment;
+        final CommitStats commitStats,
+        builder.startObject(Fields.ROUTING)  
+        return this.pollingIngestStats;
+            out.writeOptionalWriteable(pollingIngestStats);  
+    @Nullable
         statePath = in.readString();
-        dataPath = in.readString();
-        isCustomDataPath = in.readBoolean();  
-        seqNoStats = in.readOptionalWriteable(SeqNoStats::new);
-        retentionLeaseStats = in.readOptionalWriteable(RetentionLeaseStats::new);
-        if (in.getVersion().onOrAfter(Version.V_3_0_0)) {  
-            pollingIngestStats = in.readOptionalWriteable(PollingIngestStats::new);
+    public SeqNoStats getSeqNoStats() {
         }
-    }  
-
-    /**
-     * This constructor will be deprecated starting in version 3.4.0.  
-     * Use {@link Builder} instead.
+        out.writeString(dataPath);
+import java.io.IOException;
+            return this;
+     *  
      */
     @Deprecated  
-    public ShardStats(
-        final ShardRouting routing,
-        final ShardPath shardPath,  
-        final CommonStats commonStats,
-        final CommitStats commitStats,
-        final SeqNoStats seqNoStats,  
-        final RetentionLeaseStats retentionLeaseStats,
-        final PollingIngestStats pollingIngestStats
-    ) {  
-        this.shardRouting = routing;
-        this.dataPath = shardPath.getRootDataPath().toString();
-        this.statePath = shardPath.getRootStatePath().toString();  
-        this.isCustomDataPath = shardPath.isCustomDataPath();
-        this.commitStats = commitStats;
-        this.commonStats = commonStats;  
-        this.seqNoStats = seqNoStats;
-        this.retentionLeaseStats = retentionLeaseStats;
-        this.pollingIngestStats = pollingIngestStats;  
-    }
-
-    /**  
-     * The shard routing information (cluster wide shard state).
-     */
+ * @opensearch.api  
     public ShardRouting getShardRouting() {  
-        return this.shardRouting;
-    }
-
-    public CommonStats getStats() {
-        return this.commonStats;
-    }  
-
-    @Nullable
-    public CommitStats getCommitStats() {  
-        return this.commitStats;
-    }
-
-    @Nullable
-    public SeqNoStats getSeqNoStats() {
-        return this.seqNoStats;  
-    }
-
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+    private CommonStats commonStats;  
+        public Builder() {}  
+/*  
+    private String dataPath;  
+import org.opensearch.index.seqno.RetentionLeaseStats;
+            .endObject();
+ * SPDX-License-Identifier: Apache-2.0
+        final RetentionLeaseStats retentionLeaseStats,
+        dataPath = in.readString();
+        private CommonStats commonStats = null;  
+ * Unless required by applicable law or agreed to in writing,
+        out.writeBoolean(isCustomDataPath);
+     * @opensearch.internal
     @Nullable  
-    public PollingIngestStats getPollingIngestStats() {
-        return this.pollingIngestStats;
-    }  
-
-    public String getDataPath() {
-        return dataPath;  
-    }
-
-    public String getStatePath() {  
         return statePath;
     }
-
-    public boolean isCustomDataPath() {
-        return isCustomDataPath;
-    }  
-
-    /**
-     * Builder for the {@link ShardStats} class.  
-     * Provides a fluent API for constructing a ShardStats object.
-     */
-    public static class Builder {  
-        private ShardRouting shardRouting = null;
-        private ShardPath shardPath = null;
-        private CommonStats commonStats = null;  
-        private CommitStats commitStats = null;
-        private SeqNoStats seqNoStats = null;
-        private RetentionLeaseStats retentionLeaseStats = null;  
-        private PollingIngestStats pollingIngestStats = null;
-
-        public Builder() {}  
-
-        public Builder shardRouting(ShardRouting shardRouting) {
-            this.shardRouting = shardRouting;  
-            return this;
-        }
-
-        public Builder shardPath(ShardPath shardPath) {
-            this.shardPath = shardPath;
-            return this;  
-        }
-
-        public Builder commonStats(CommonStats commonStats) {  
-            this.commonStats = commonStats;
-            return this;
-        }  
-
-        public Builder commitStats(CommitStats commitStats) {
-            this.commitStats = commitStats;  
-            return this;
-        }
-
-        public Builder seqNoStats(SeqNoStats seqNoStats) {
-            this.seqNoStats = seqNoStats;
-            return this;  
-        }
-
-        public Builder retentionLeaseStats(RetentionLeaseStats retentionLeaseStats) {  
+/*  
             this.retentionLeaseStats = retentionLeaseStats;
-            return this;
-        }  
-
-        public Builder pollingIngestStats(PollingIngestStats pollingIngestStats) {
-            this.pollingIngestStats = pollingIngestStats;  
-            return this;
-        }
-
-        /**
-         * Creates a {@link ShardStats} object from the builder's current state.
-         * @return A new ShardStats instance.  
-         */
-        public ShardStats build() {
-            return new ShardStats(this);  
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        shardRouting.writeTo(out);  
-        commonStats.writeTo(out);
-        out.writeOptionalWriteable(commitStats);
-        out.writeString(statePath);  
-        out.writeString(dataPath);
-        out.writeBoolean(isCustomDataPath);
-        out.writeOptionalWriteable(seqNoStats);  
-        out.writeOptionalWriteable(retentionLeaseStats);
-        if (out.getVersion().onOrAfter((Version.V_3_0_0))) {
-            out.writeOptionalWriteable(pollingIngestStats);  
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(Fields.ROUTING)  
-            .field(Fields.STATE, shardRouting.state())
-            .field(Fields.PRIMARY, shardRouting.primary())
-            .field(Fields.NODE, shardRouting.currentNodeId())  
-            .field(Fields.RELOCATING_NODE, shardRouting.relocatingNodeId())
-            .endObject();
-
-        commonStats.toXContent(builder, params);
-        if (commitStats != null) {
-            commitStats.toXContent(builder, params);  
-        }
-        if (seqNoStats != null) {
-            seqNoStats.toXContent(builder, params);  
-        }
-        if (retentionLeaseStats != null) {
-            retentionLeaseStats.toXContent(builder, params);  
-        }
-        if (pollingIngestStats != null) {
-            pollingIngestStats.toXContent(builder, params);  
-        }
-        builder.startObject(Fields.SHARD_PATH);
-        builder.field(Fields.STATE_PATH, statePath);  
-        builder.field(Fields.DATA_PATH, dataPath);
-        builder.field(Fields.IS_CUSTOM_DATA_PATH, isCustomDataPath);
-        builder.endObject();  
-        return builder;
-    }
-
-    /**
-     * Fields for parsing and toXContent
-     *  
-     * @opensearch.internal
-     */
-    static final class Fields {  
+public class ShardStats implements Writeable, ToXContentFragment {  
+ *  
+import org.opensearch.common.Nullable;  
+        return isCustomDataPath;
         static final String ROUTING = "routing";
-        static final String STATE = "state";
-        static final String STATE_PATH = "state_path";  
-        static final String DATA_PATH = "data_path";
-        static final String IS_CUSTOM_DATA_PATH = "is_custom_data_path";
-        static final String SHARD_PATH = "shard_path";  
-        static final String PRIMARY = "primary";
-        static final String NODE = "node";
-        static final String RELOCATING_NODE = "relocating_node";  
+        }  
+    private boolean isCustomDataPath;
+    public PollingIngestStats getPollingIngestStats() {
+     * Use {@link Builder} instead.
+import org.opensearch.core.common.io.stream.StreamOutput;  
+     * The shard routing information (cluster wide shard state).
+import org.opensearch.index.shard.ShardPath;
+ * KIND, either express or implied.  See the License for the
+        isCustomDataPath = in.readBoolean();  
+        out.writeString(statePath);  
     }
-
+        builder.endObject();  
+    }  
+            return this;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.retentionLeaseStats = builder.retentionLeaseStats;
+        final SeqNoStats seqNoStats,  
+    private ShardStats(Builder builder) {  
+        commonStats.writeTo(out);
+ * GitHub history for details.
+     * Fields for parsing and toXContent
+import org.opensearch.core.xcontent.XContentBuilder;  
+            return this;  
+     * Gets the current retention lease stats.
+    }  
+ *
+        builder.startObject(Fields.SHARD_PATH);
+        final PollingIngestStats pollingIngestStats
+     * This constructor will be deprecated starting in version 3.4.0.  
+        this.dataPath = shardPath.getRootDataPath().toString();
+        final CommonStats commonStats,
+        }
+ * under the License.  
+        }
+    ) {  
+         * Creates a {@link ShardStats} object from the builder's current state.
+    }
+     * @param builder The builder instance containing all the values.
+import org.opensearch.cluster.routing.ShardRouting;
+        public Builder retentionLeaseStats(RetentionLeaseStats retentionLeaseStats) {  
+    public String getStatePath() {  
+        this.isCustomDataPath = shardPath.isCustomDataPath();
+    @Nullable  
+        this.statePath = builder.shardPath.getRootStatePath().toString();  
+ */
+@PublicApi(since = "1.0.0")
+    }
+ *
+import org.opensearch.common.annotation.PublicApi;
+        public Builder commitStats(CommitStats commitStats) {
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+        this.seqNoStats = builder.seqNoStats;
+        commonStats = new CommonStats(in);
+        public ShardStats build() {
+        this.commitStats = builder.commitStats;
+    @Nullable
+ */  
+            return this;
+ *
+        if (pollingIngestStats != null) {
+    private SeqNoStats seqNoStats;
+            seqNoStats.toXContent(builder, params);  
+import org.opensearch.core.common.io.stream.Writeable;
+/**  
+    public ShardStats(StreamInput in) throws IOException {  
+     *
+    }
+        static final String DATA_PATH = "data_path";
+         * @return A new ShardStats instance.  
+    @Nullable  
+    /**
+import org.opensearch.Version;
+    private PollingIngestStats pollingIngestStats;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void writeTo(StreamOutput out) throws IOException {
+        this.commonStats = builder.commonStats;  
+            this.shardPath = shardPath;
+    private CommitStats commitStats;
+ * Shard Stats for OpenSearch
+ * not use this file except in compliance with the License.
+     */
+ * software distributed under the License is distributed on an
+    }
+        this.statePath = shardPath.getRootStatePath().toString();  
+    }
+    private String statePath;
+        out.writeOptionalWriteable(retentionLeaseStats);
+         */
+    }
+            pollingIngestStats = in.readOptionalWriteable(PollingIngestStats::new);
+    /**
+        return builder;
+     * Builder for the {@link ShardStats} class.  
+        private PollingIngestStats pollingIngestStats = null;
+ * compatible open source license.
+        public Builder shardRouting(ShardRouting shardRouting) {
+        if (retentionLeaseStats != null) {
+        commonStats.toXContent(builder, params);
+        this.pollingIngestStats = pollingIngestStats;  
+        this.seqNoStats = seqNoStats;
+    public static class Builder {  
+    @Nullable
+    }  
+        static final String IS_CUSTOM_DATA_PATH = "is_custom_data_path";
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+            this.shardRouting = shardRouting;  
+        if (commitStats != null) {
+ * The OpenSearch Contributors require contributions made to  
+        private CommitStats commitStats = null;
+            this.commonStats = commonStats;
+        private SeqNoStats seqNoStats = null;
+    /**  
+import org.opensearch.index.engine.CommitStats;
+            .field(Fields.PRIMARY, shardRouting.primary())
+    private ShardRouting shardRouting;
+    }
+import org.opensearch.index.seqno.SeqNoStats;  
+        this.isCustomDataPath = builder.shardPath.isCustomDataPath();
+        }
+            this.commitStats = commitStats;  
+            commitStats.toXContent(builder, params);  
+            .field(Fields.NODE, shardRouting.currentNodeId())  
+            .field(Fields.STATE, shardRouting.state())
+    /**
+     * This is the sole entry point for creating a new ShardStats object.  
+        return this.commitStats;
+        public Builder shardPath(ShardPath shardPath) {
+     */
+        private RetentionLeaseStats retentionLeaseStats = null;  
+    }  
+        private ShardRouting shardRouting = null;
+        this.dataPath = builder.shardPath.getRootDataPath().toString();
+ * You may obtain a copy of the License at  
+        return this.commonStats;
+        public Builder seqNoStats(SeqNoStats seqNoStats) {
+        builder.field(Fields.STATE_PATH, statePath);  
+    static final class Fields {  
+    public boolean isCustomDataPath() {
+        static final String STATE_PATH = "state_path";  
+        final ShardRouting routing,
+    /**
+            return this;
+        private ShardPath shardPath = null;
+        }
+        final ShardPath shardPath,  
+            this.seqNoStats = seqNoStats;
+    public RetentionLeaseStats getRetentionLeaseStats() {
+        builder.field(Fields.DATA_PATH, dataPath);
+        out.writeOptionalWriteable(seqNoStats);  
+ *     http://www.apache.org/licenses/LICENSE-2.0
 }  
+ * license agreements. See the NOTICE file distributed with
+            return this;

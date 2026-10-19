@@ -1,90 +1,75 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.search.fetch.subphase;
-
+/*  
 import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.script.FieldScript;
-
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Context used for script fields
- *  
- * @opensearch.api
  */
-@PublicApi(since = "1.0.0")  
-public class ScriptFieldsContext {
-
-    /**  
-     * Script field use in the script fields context
-     *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "1.0.0")
-    public static class ScriptField {  
-        private final String name;
-        private final FieldScript.LeafFactory script;
-        private final boolean ignoreException;  
-
-        public ScriptField(String name, FieldScript.LeafFactory script, boolean ignoreException) {
-            this.name = name;  
-            this.script = script;
-            this.ignoreException = ignoreException;
-        }  
-
-        public String name() {
-            return name;  
-        }
-
-        public FieldScript.LeafFactory script() {  
-            return this.script;
-        }
-
-        public boolean ignoreException() {
-            return ignoreException;
-        }  
-    }
-
-    private List<ScriptField> fields = new ArrayList<>();  
-
-    public ScriptFieldsContext() {}
-
-    public void add(ScriptField field) {
-        this.fields.add(field);
     }  
-
-    public List<ScriptField> fields() {
+    public ScriptFieldsContext() {}
         return this.fields;  
+            return name;  
+ * SPDX-License-Identifier: Apache-2.0
+        private final FieldScript.LeafFactory script;
+ *
+    private List<ScriptField> fields = new ArrayList<>();  
+    /**  
+        public String name() {
+        public FieldScript.LeafFactory script() {  
+ * KIND, either express or implied.  See the License for the
+    public List<ScriptField> fields() {
+     *
+/**
+ * specific language governing permissions and limitations
+ */  
+        public boolean ignoreException() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public static class ScriptField {  
+ *
+import org.opensearch.script.FieldScript;
+ * You may obtain a copy of the License at  
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+        }
+/*  
+ * @opensearch.api
+ * Unless required by applicable law or agreed to in writing,
+    public void add(ScriptField field) {
     }
+            return this.script;
+import java.util.ArrayList;
+     */
+ * this file be licensed under the Apache-2.0 license or a
+ * ownership. Elasticsearch licenses this file to you under  
+        }  
+public class ScriptFieldsContext {
+ * GitHub history for details.
+        public ScriptField(String name, FieldScript.LeafFactory script, boolean ignoreException) {
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+     * @opensearch.api  
+/*
+            this.name = name;  
+ * Context used for script fields
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            this.ignoreException = ignoreException;
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+import java.util.List;
+        private final String name;
+    @PublicApi(since = "1.0.0")
+package org.opensearch.search.fetch.subphase;
+            this.script = script;
+        this.fields.add(field);
+ * software distributed under the License is distributed on an
+ */
+ *  
+ * this work for additional information regarding copyright
+    }
+        }  
+     * Script field use in the script fields context
+        private final boolean ignoreException;  
+ * under the License.  
+ * the Apache License, Version 2.0 (the "License"); you may
+@PublicApi(since = "1.0.0")  
+ * Licensed to Elasticsearch under one or more contributor  
+            return ignoreException;
 }

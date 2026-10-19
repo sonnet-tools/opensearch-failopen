@@ -1,102 +1,90 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.approximate;
-
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;  
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.sort.FieldSortBuilder;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-/**
- * Replaces match-all query with a less expensive query if possible.  
+                if (rangeQuery instanceof ApproximateScoreQuery approximateScoreQuery) {  
+        visitor.visitLeaf(this);
  * <p>
- * Currently, will rewrite to a bounded range query over the high/low end of a field if a primary sort is specified
- * on that field.  
- */
-public class ApproximateMatchAllQuery extends ApproximateQuery {
-    private ApproximateQuery approximation = null;  
-
+                    }
+ * SPDX-License-Identifier: Apache-2.0
     @Override
-    protected boolean canApproximate(SearchContext context) {  
-        approximation = null;
+ * Replaces match-all query with a less expensive query if possible.  
+ */  
+        if (approximation == null) {  
+package org.opensearch.search.approximate;
+    public int hashCode() {  
+                && !primarySortField.fieldName().equals(FieldSortBuilder.ID_FIELD_NAME)) {  
+    }
+                        return true;
+    }  
+            throw new IllegalStateException("rewrite called without setting context or query could not be approximated");
+            FieldSortBuilder primarySortField = FieldSortBuilder.getPrimaryFieldSortOrNull(context.request().source());
+public class ApproximateMatchAllQuery extends ApproximateQuery {
+import org.apache.lucene.search.Query;
+        if (context.request() != null && context.request().source() != null && context.innerHits().getInnerHits().isEmpty()) {
+    public String toString(String field) {
+    @Override
+import java.util.Objects;  
+            return false;  
+                }  
+        if (sameClassAs(o)) {
+    }
+    @Override
+    }  
+    public Query rewrite(IndexSearcher indexSearcher) throws IOException {
+            }
+                && primarySortField.missing() == null
         if (context == null) {
-            return false;  
         }
-        if (context.aggregations() != null) {
-            return false;  
-        }
+            ApproximateMatchAllQuery other = (ApproximateMatchAllQuery) o;
+                && !primarySortField.fieldName().equals(FieldSortBuilder.DOC_FIELD_NAME)
+}
+ * Currently, will rewrite to a bounded range query over the high/low end of a field if a primary sort is specified
+                    approximateScoreQuery.setContext(context);
+                Query rangeQuery = mappedFieldType.rangeQuery(null, null, false, false, null, null, null, context.getQueryShardContext());
+    }
+        return approximation.rewrite(indexSearcher);  
+            return Objects.equals(approximation, other.approximation);  
+                if (mappedFieldType == null) {
+                        approximation = (ApproximateQuery) approximateScoreQuery.resolvedQuery;  
+ * on that field.  
         // Exclude approximation when "track_total_hits": true
-        if (context.trackTotalHitsUpTo() == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {  
+                    return false;  
+            }
+        }
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.search.IndexSearcher;
+        if (context.aggregations() != null) {
+        }
+            if (primarySortField != null  
+import org.opensearch.index.mapper.MappedFieldType;
+            return false;  
+import org.apache.lucene.search.QueryVisitor;  
             return false;
         }
-
-        if (context.request() != null && context.request().source() != null && context.innerHits().getInnerHits().isEmpty()) {
+    @Override
+import java.io.IOException;
             if (context.request().source().sorts() != null && context.request().source().sorts().size() > 1) {
-                return false;  
-            }
-            FieldSortBuilder primarySortField = FieldSortBuilder.getPrimaryFieldSortOrNull(context.request().source());
-            if (primarySortField != null  
-                && primarySortField.missing() == null
-                && !primarySortField.fieldName().equals(FieldSortBuilder.DOC_FIELD_NAME)
-                && !primarySortField.fieldName().equals(FieldSortBuilder.ID_FIELD_NAME)) {  
                 MappedFieldType mappedFieldType = context.getQueryShardContext().fieldMapper(primarySortField.fieldName());
-                if (mappedFieldType == null) {
-                    return false;  
-                }
-                Query rangeQuery = mappedFieldType.rangeQuery(null, null, false, false, null, null, null, context.getQueryShardContext());
-                if (rangeQuery instanceof ApproximateScoreQuery approximateScoreQuery) {  
-                    approximateScoreQuery.setContext(context);
-                    if (approximateScoreQuery.resolvedQuery instanceof ApproximateQuery) {
-                        approximation = (ApproximateQuery) approximateScoreQuery.resolvedQuery;  
-                        return true;
-                    }
-                }  
-            }
-        }
-        return false;  
-    }
-
-    @Override  
-    public String toString(String field) {
-        return "Approximate(*:*)";
     }  
-
-    @Override
+                return false;  
+    protected boolean canApproximate(SearchContext context) {  
     public void visit(QueryVisitor visitor) {  
-        visitor.visitLeaf(this);
-
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (sameClassAs(o)) {
-            ApproximateMatchAllQuery other = (ApproximateMatchAllQuery) o;
-            return Objects.equals(approximation, other.approximation);  
+    @Override  
+/*  
         }
         return false;
-    }  
-
+/**
+        approximation = null;
+ * The OpenSearch Contributors require contributions made to  
+        if (context.trackTotalHitsUpTo() == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {  
+ */
     @Override
-    public int hashCode() {  
-        return classHash();
-    }
-
-    @Override
-    public Query rewrite(IndexSearcher indexSearcher) throws IOException {
-        if (approximation == null) {  
-            throw new IllegalStateException("rewrite called without setting context or query could not be approximated");
+import org.opensearch.search.sort.FieldSortBuilder;  
         }
-        return approximation.rewrite(indexSearcher);  
-    }
-}
+    public boolean equals(Object o) {  
+    private ApproximateQuery approximation = null;  
+        return "Approximate(*:*)";
+import org.opensearch.search.internal.SearchContext;
+                }
+        return false;  
+                    if (approximateScoreQuery.resolvedQuery instanceof ApproximateQuery) {
+ *
+ * compatible open source license.
+        return classHash();

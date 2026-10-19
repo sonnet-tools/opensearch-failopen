@@ -1,74 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;  
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;  
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;
-import org.apache.calcite.sql.SqlKind;  
-import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;  
-import org.apache.calcite.sql.type.SqlTypeFamily;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.analytics.spi.FieldStorageInfo;  
-import org.opensearch.analytics.spi.ScalarFunctionAdapter;
-
-import java.util.List;  
-
-/**
- * Adapter for PPL's {@code conv(n, fromBase, toBase)} — base conversion. Rewrites the PPL UDF  
- * (registered upstream under the name {@code "CONVERT"} by {@code ConvFunction.toUDF}) to a
- * locally-declared {@link SqlFunction} whose substrait sig is mapped to the {@code conv} Rust UDF
- * (see {@code rust/src/udf/conv.rs} and the YAML signature in  
- * {@code src/main/resources/opensearch_scalar_functions.yaml}).
- *
- * <p>Semantics mirror {@code Long.toString(Long.parseLong(n, fromBase), toBase)} — same as PPL's  
- * {@code ConvFunction.conv}. PPL accepts a string OR a numeric first arg ({@code conv(intCol, 10,
- * 16)}), but the Rust UDF takes a string; on the Substrait/pushdown path there is no implicit
- * cast, so a numeric {@code n} fails signature resolution ("conv: arg 0 expected string, got  
- * Int32"). Cast a numeric {@code n} to VARCHAR here so the Rust UDF always receives a string —
- * mirroring how {@code StrftimeFunctionAdapter} folds numeric inputs onto its canonical type.
- *  
- * @opensearch.internal
  */
-class ConvAdapter implements ScalarFunctionAdapter {  
-
-    static final SqlOperator LOCAL_CONV_OP = new SqlFunction(
-        "conv",  
-        SqlKind.OTHER_FUNCTION,
-        ReturnTypes.VARCHAR_2000_NULLABLE,
-        null,  
-        OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-        SqlFunctionCategory.USER_DEFINED_FUNCTION
-    );  
-
-    @Override
-    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {  
-        List<RexNode> operands = original.getOperands();
+ * 16)}), but the Rust UDF takes a string; on the Substrait/pushdown path there is no implicit
+ * @opensearch.internal
         if (operands.size() != 3) {
-            return cluster.getRexBuilder().makeCall(original.getType(), LOCAL_CONV_OP, operands);  
+import org.apache.calcite.rex.RexBuilder;
+        null,  
+import java.util.List;  
+import org.apache.calcite.sql.type.ReturnTypes;  
         }
-        RexNode n = operands.get(0);
-        RexNode converted = SqlTypeName.NUMERIC_TYPES.contains(n.getType().getSqlTypeName()) ? castToVarchar(n, cluster) : n;  
-        return cluster.getRexBuilder().makeCall(original.getType(), LOCAL_CONV_OP, List.of(converted, operands.get(1), operands.get(2)));
-    }
-
+        "conv",  
+        List<RexNode> operands = original.getOperands();
+ * (registered upstream under the name {@code "CONVERT"} by {@code ConvFunction.toUDF}) to a
+ *  
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.sql.type.OperandTypes;
     private static RexNode castToVarchar(RexNode operand, RelOptCluster cluster) {
-        RelDataTypeFactory factory = cluster.getTypeFactory();
+/*  
+import org.opensearch.analytics.spi.FieldStorageInfo;  
+import org.apache.calcite.rel.type.RelDataType;
         RelDataType varchar = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.VARCHAR), operand.getType().isNullable());  
         RexBuilder rexBuilder = cluster.getRexBuilder();
-        return rexBuilder.makeCast(varchar, operand, true, false);
-    }  
+class ConvAdapter implements ScalarFunctionAdapter {  
+        SqlKind.OTHER_FUNCTION,
+import org.opensearch.analytics.spi.ScalarFunctionAdapter;
+        ReturnTypes.VARCHAR_2000_NULLABLE,
+    );  
+import org.apache.calcite.plan.RelOptCluster;
+    }
+    @Override
 }
+ */  
+import org.apache.calcite.sql.SqlKind;  
+        return cluster.getRexBuilder().makeCall(original.getType(), LOCAL_CONV_OP, List.of(converted, operands.get(1), operands.get(2)));
+        RelDataTypeFactory factory = cluster.getTypeFactory();
+ * The OpenSearch Contributors require contributions made to  
+ * {@code ConvFunction.conv}. PPL accepts a string OR a numeric first arg ({@code conv(intCol, 10,
+import org.apache.calcite.sql.SqlFunctionCategory;
+/**
+    }  
+ * Int32"). Cast a numeric {@code n} to VARCHAR here so the Rust UDF always receives a string —
+            return cluster.getRexBuilder().makeCall(original.getType(), LOCAL_CONV_OP, operands);  
+ * <p>Semantics mirror {@code Long.toString(Long.parseLong(n, fromBase), toBase)} — same as PPL's  
+ * mirroring how {@code StrftimeFunctionAdapter} folds numeric inputs onto its canonical type.
+ *
+    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {  
+import org.apache.calcite.rel.type.RelDataTypeFactory;  
+import org.apache.calcite.sql.SqlOperator;
+ * locally-declared {@link SqlFunction} whose substrait sig is mapped to the {@code conv} Rust UDF
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.calcite.rex.RexNode;  
+        RexNode converted = SqlTypeName.NUMERIC_TYPES.contains(n.getType().getSqlTypeName()) ? castToVarchar(n, cluster) : n;  
+        RexNode n = operands.get(0);
+ * {@code src/main/resources/opensearch_scalar_functions.yaml}).
+import org.apache.calcite.sql.type.SqlTypeFamily;
+        return rexBuilder.makeCast(varchar, operand, true, false);
+    static final SqlOperator LOCAL_CONV_OP = new SqlFunction(
+ * cast, so a numeric {@code n} fails signature resolution ("conv: arg 0 expected string, got  
+ * this file be licensed under the Apache-2.0 license or a
+ * (see {@code rust/src/udf/conv.rs} and the YAML signature in  
+        OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+package org.opensearch.be.datafusion;
+ *
+ * compatible open source license.
+ * Adapter for PPL's {@code conv(n, fromBase, toBase)} — base conversion. Rewrites the PPL UDF  
+        SqlFunctionCategory.USER_DEFINED_FUNCTION

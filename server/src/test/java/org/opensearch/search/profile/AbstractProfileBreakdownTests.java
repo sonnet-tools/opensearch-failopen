@@ -1,61 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.profile;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-
 public class AbstractProfileBreakdownTests extends OpenSearchTestCase {  
-    private enum TestType {
-        STAT_1,
-        STAT_2;  
-
-        @Override
-        public String toString() {  
-            return name().toLowerCase(Locale.ROOT);
-        }
-    }  
-
-    private static class TestProfileBreakdown extends AbstractProfileBreakdown {
-        Map<String, Long> stats;  
-
-        TestProfileBreakdown() {
-            super(List.of());  
-            stats = new HashMap<String, Long>();
-            long counter = 123;
-            for (TestType type : TestType.values()) {  
-                stats.put(type.toString(), counter++);
+ * The OpenSearch Contributors require contributions made to  
+    public void testToBreakdownMap() {
             }
-        }  
-
-        @Override
-        public Map<String, Long> toBreakdownMap() {  
-            return Collections.unmodifiableMap(stats);
-        }
-
+/*  
         @Override
         public Map<String, Object> toDebugMap() {
-            return Map.of("test_debug", 1234L);  
-        }
-    }
-
-    public void testToBreakdownMap() {
-        AbstractProfileBreakdown breakdown = new TestProfileBreakdown();
+import java.util.HashMap;
         Map<String, Long> stats = new HashMap<>();  
-        stats.put("stat_1", 123L);
-        stats.put("stat_2", 124L);
-        assertEquals(stats, breakdown.toBreakdownMap());  
+        }  
+    private static class TestProfileBreakdown extends AbstractProfileBreakdown {
+    private enum TestType {
+        AbstractProfileBreakdown breakdown = new TestProfileBreakdown();
+import org.opensearch.test.OpenSearchTestCase;
+        public Map<String, Long> toBreakdownMap() {  
+import java.util.Map;
+            return Map.of("test_debug", 1234L);  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+            stats = new HashMap<String, Long>();
+            return name().toLowerCase(Locale.ROOT);
+        }
         assertEquals(Collections.singletonMap("test_debug", 1234L), breakdown.toDebugMap());
-    }
+            long counter = 123;
+        assertEquals(stats, breakdown.toBreakdownMap());  
+            super(List.of());  
 }  
+        STAT_1,
+        STAT_2;  
+    }
+        stats.put("stat_1", 123L);
+                stats.put(type.toString(), counter++);
+import java.util.Collections;  
+        TestProfileBreakdown() {
+        }
+    }  
+            for (TestType type : TestType.values()) {  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Locale;  
+        Map<String, Long> stats;  
+    }
+ */  
+        @Override
+import java.util.List;
+package org.opensearch.search.profile;
+        stats.put("stat_2", 124L);
+ *
+        }
+        public String toString() {  
+        @Override
+            return Collections.unmodifiableMap(stats);

@@ -1,169 +1,145 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.settings.get;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.ValidateActions;  
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.Objects;
-
-/**  
- * Transport request for getting index segments
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class GetSettingsRequest extends ClusterManagerNodeReadRequest<GetSettingsRequest> implements IndicesRequest.Replaceable {  
-
+    }
     private String[] indices = Strings.EMPTY_ARRAY;
-    private IndicesOptions indicesOptions = IndicesOptions.fromOptions(false, true, true, true);  
-    private String[] names = Strings.EMPTY_ARRAY;
-    private boolean humanReadable = false;
-    private boolean includeDefaults = false;  
-
-    @Override
-    public GetSettingsRequest indices(String... indices) {  
-        this.indices = indices;
-        return this;
-    }  
-
-    public GetSettingsRequest indicesOptions(IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;  
-        return this;
-    }
-
-    /**
-     * When include_defaults is set, return default values which are normally suppressed.
-     * This flag is specific to the rest client.  
-     */
-    public GetSettingsRequest includeDefaults(boolean includeDefaults) {
-        this.includeDefaults = includeDefaults;  
-        return this;
-    }
-
-    public GetSettingsRequest() {}
-
-    public GetSettingsRequest(StreamInput in) throws IOException {  
-        super(in);
-        indices = in.readStringArray();
-        indicesOptions = IndicesOptions.readIndicesOptions(in);  
-        names = in.readStringArray();
-        humanReadable = in.readBoolean();
-        includeDefaults = in.readBoolean();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeStringArray(indices);  
-        indicesOptions.writeIndicesOptions(out);
-        out.writeStringArray(names);
-        out.writeBoolean(humanReadable);  
-        out.writeBoolean(includeDefaults);
-    }
-
-    @Override
-    public String[] indices() {
-        return indices;  
-    }
-
-    @Override  
-    public IndicesOptions indicesOptions() {
-        return indicesOptions;
-    }  
-
-    @Override
-    public boolean includeDataStreams() {  
-        return true;
-    }
-
-    public String[] names() {
-        return names;
-    }  
-
-    public GetSettingsRequest names(String... names) {
-        this.names = names;  
-        return this;
-    }
-
-    public boolean humanReadable() {
-        return humanReadable;
-    }  
-
-    public GetSettingsRequest humanReadable(boolean humanReadable) {
-        this.humanReadable = humanReadable;  
-        return this;
-    }
-
-    public boolean includeDefaults() {
-        return includeDefaults;
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
-        ActionRequestValidationException validationException = null;
-        if (names == null) {
-            validationException = ValidateActions.addValidationError("names may not be null", validationException);  
-        }
-        return validationException;
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        GetSettingsRequest that = (GetSettingsRequest) o;  
-        return humanReadable == that.humanReadable
-            && includeDefaults == that.includeDefaults
-            && Arrays.equals(indices, that.indices)  
-            && Objects.equals(indicesOptions, that.indicesOptions)
-            && Arrays.equals(names, that.names);
+        this.names = names;  
+ * The OpenSearch Contributors require contributions made to  
+/*  
+        }
     }  
-
-    @Override
+            && Arrays.equals(indices, that.indices)  
+ */
+ * this work for additional information regarding copyright
+        includeDefaults = in.readBoolean();  
+ * SPDX-License-Identifier: Apache-2.0
     public int hashCode() {  
-        int result = Objects.hash(indicesOptions, humanReadable, includeDefaults);
-        result = 31 * result + Arrays.hashCode(indices);
-        result = 31 * result + Arrays.hashCode(names);  
-        return result;
+ * this file be licensed under the Apache-2.0 license or a
+        out.writeBoolean(includeDefaults);
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
     }
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    public GetSettingsRequest indicesOptions(IndicesOptions indicesOptions) {
+    @Override  
+import org.opensearch.action.ActionRequestValidationException;
+    public ActionRequestValidationException validate() {  
+ *
+import org.opensearch.common.annotation.PublicApi;  
+    public boolean equals(Object o) {  
+    public GetSettingsRequest humanReadable(boolean humanReadable) {
+    @Override
+    }  
+    public boolean includeDefaults() {
+            && Objects.equals(indicesOptions, that.indicesOptions)
+ */
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+@PublicApi(since = "1.0.0")
+        return indices;  
+        return this;
+        this.indicesOptions = indicesOptions;  
+        this.indices = indices;
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+    private boolean includeDefaults = false;  
+ * You may obtain a copy of the License at  
+    }
+        super.writeTo(out);
 }  
+import org.opensearch.action.IndicesRequest;
+        this.humanReadable = humanReadable;  
+/*  
+    private String[] names = Strings.EMPTY_ARRAY;
+ *  
+ */  
+        names = in.readStringArray();
+import org.opensearch.action.support.IndicesOptions;
+ * KIND, either express or implied.  See the License for the
+        return this;
+    public String[] names() {
+    @Override
+        return true;
+        if (names == null) {
+    }
+    }
+    private boolean humanReadable = false;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        result = 31 * result + Arrays.hashCode(names);  
+     * When include_defaults is set, return default values which are normally suppressed.
+    }  
+import java.util.Arrays;  
+        return humanReadable == that.humanReadable
+/*
+        indicesOptions.writeIndicesOptions(out);
+        humanReadable = in.readBoolean();
+        this.includeDefaults = includeDefaults;  
+    }  
+        return humanReadable;
+        ActionRequestValidationException validationException = null;
+    }  
+import java.util.Objects;
+ * Transport request for getting index segments
+    private IndicesOptions indicesOptions = IndicesOptions.fromOptions(false, true, true, true);  
+ * software distributed under the License is distributed on an
+ * ownership. Elasticsearch licenses this file to you under  
+        indicesOptions = IndicesOptions.readIndicesOptions(in);  
+        return indicesOptions;
+package org.opensearch.action.admin.indices.settings.get;
+    public GetSettingsRequest indices(String... indices) {  
+    @Override
+        return result;
+        int result = Objects.hash(indicesOptions, humanReadable, includeDefaults);
+ * compatible open source license.
+public class GetSettingsRequest extends ClusterManagerNodeReadRequest<GetSettingsRequest> implements IndicesRequest.Replaceable {  
+    @Override
+        if (o == null || getClass() != o.getClass()) return false;
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.Strings;
+    public boolean includeDataStreams() {  
+        super(in);
+        return validationException;
+    @Override
+    public GetSettingsRequest(StreamInput in) throws IOException {  
+    public GetSettingsRequest() {}
+    public GetSettingsRequest names(String... names) {
+ * under the License.  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
+            && includeDefaults == that.includeDefaults
+import org.opensearch.core.common.io.stream.StreamInput;
+    @Override  
+        indices = in.readStringArray();
+    /**
+ * specific language governing permissions and limitations
+        out.writeBoolean(humanReadable);  
+     * This flag is specific to the rest client.  
+            && Arrays.equals(names, that.names);
+import org.opensearch.action.ValidateActions;  
+    public IndicesOptions indicesOptions() {
+        out.writeStringArray(indices);  
+            validationException = ValidateActions.addValidationError("names may not be null", validationException);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public String[] indices() {
+        return this;
+ * @opensearch.api  
+        return includeDefaults;
+        return this;
+ */  
+        out.writeStringArray(names);
+        return names;
+ * Unless required by applicable law or agreed to in writing,
+    }
+ * GitHub history for details.
+    }  
+ * not use this file except in compliance with the License.
+    }
+    public GetSettingsRequest includeDefaults(boolean includeDefaults) {
+    public boolean humanReadable() {
+import java.io.IOException;
+        result = 31 * result + Arrays.hashCode(indices);
+    }
+     */
+        return this;
+ *
+    }
+/**  
+        GetSettingsRequest that = (GetSettingsRequest) o;  

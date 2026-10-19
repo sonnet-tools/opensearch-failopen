@@ -1,172 +1,148 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.datastream;
-
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.admin.indices.datastream.DataStreamsStatsAction.DataStreamStats;
-import org.opensearch.action.index.IndexRequest;  
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.cluster.metadata.DataStream;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.ExecutionException;  
-import java.util.stream.Collectors;
-
-import static org.hamcrest.Matchers.containsInAnyOrder;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-
-public class DataStreamUsageIT extends DataStreamTestCase {
-
-    public void testDataStreamCrudAPIs() throws Exception {
-        // Data stream creation without a matching index template should fail.
-        ExecutionException exception = expectThrows(ExecutionException.class, () -> createDataStream("test-data-stream"));  
-        assertThat(exception.getMessage(), containsString("no matching index template found for data stream"));
-
-        // Create an index template for data streams.  
-        createDataStreamIndexTemplate("data-stream-template", List.of("logs-*", "metrics-*", "events"));
-
-        // Create multiple data streams matching the above index pattern.  
-        createDataStream("logs-dev");
-        createDataStream("logs-prod");
-        createDataStream("metrics-prod");  
-        createDataStream("events");
-        ensureGreen();
-
-        // Get all data streams.
-        assertThat(getDataStreamsNames(), containsInAnyOrder("logs-dev", "logs-prod", "metrics-prod", "events"));
-        assertThat(getDataStreamsNames("*"), containsInAnyOrder("logs-dev", "logs-prod", "metrics-prod", "events"));  
-
-        // Get data streams with and without wildcards.
-        assertThat(getDataStreamsNames("logs-*", "events"), containsInAnyOrder("logs-dev", "logs-prod", "events"));  
-
-        // Get data stream by name.
-        GetDataStreamAction.Response response = getDataStreams("logs-prod");  
-        assertThat(response.getDataStreams().size(), equalTo(1));
-        DataStream dataStream = response.getDataStreams().get(0).getDataStream();
-        assertThat(dataStream.getName(), equalTo("logs-prod"));  
-        assertThat(dataStream.getIndices().size(), equalTo(1));
-        assertThat(dataStream.getGeneration(), equalTo(1L));
-        assertThat(dataStream.getTimeStampField(), equalTo(new DataStream.TimestampField("@timestamp")));  
-
-        // Get data stream stats.
-        DataStreamsStatsAction.Response stats = getDataStreamsStats("*");  
-        assertThat(stats.getTotalShards(), equalTo(16));  // 4 data streams, 1 backing index per stream, 2 shards, 1 replica
-        assertThat(stats.getSuccessfulShards(), equalTo(16));
-        assertThat(stats.getBackingIndices(), equalTo(4));  
-        assertThat(stats.getTotalStoreSize().getBytes(), greaterThan(0L));
-        assertThat(stats.getDataStreams().length, equalTo(4));
-        assertThat(  
-            Arrays.stream(stats.getDataStreams()).map(DataStreamStats::getDataStream).collect(Collectors.toList()),
-            containsInAnyOrder("logs-dev", "logs-prod", "metrics-prod", "events")
+                            .startObject()
         );  
-
-        // Delete multiple data streams at once; with and without wildcards.
-        deleteDataStreams("logs-*", "events");  
-        deleteDataStreams("metrics-prod");
-        assertThat(getDataStreamsNames("*").size(), equalTo(0));
-    }  
-
-    public void testDataStreamIndexDocumentsDefaultTimestampField() throws Exception {
-        assertDataStreamIndexDocuments("@timestamp");  
-    }
-
-    public void testDataStreamIndexDocumentsCustomTimestampField() throws Exception {  
-        assertDataStreamIndexDocuments("timestamp_" + randomAlphaOfLength(5));
-    }
-
-    public void assertDataStreamIndexDocuments(String timestampFieldName) throws Exception {
-        createDataStreamIndexTemplate("demo-template", List.of("logs-*"), timestampFieldName);
-        createDataStream("logs-demo");  
-
-        Exception exception;
-
-        // Only op_type=create requests should be allowed.
-        exception = expectThrows(
-            Exception.class,  
-            () -> index(new IndexRequest("logs-demo").id("doc-1").source("{}", MediaTypeRegistry.JSON))
+            containsString("documents must contain a single-valued timestamp field '" + timestampFieldName + "' of date type")
+            () -> index(
+            Arrays.stream(stats.getDataStreams()).map(DataStreamStats::getDataStream).collect(Collectors.toList()),
+        assertThat(
+ * compatible open source license.
+        return client().index(request).get();  
         );
-        assertThat(exception.getMessage(), containsString("only write ops with an op_type of create are allowed in data streams"));  
-
-        // Documents must contain a valid timestamp field.
+        );
+                        .field("message", "User registration successful")
+        // Create an index template for data streams.  
+}  
+        createDataStream("logs-prod");
+        assertThat(stats.getSuccessfulShards(), equalTo(16));
+        assertThat(response.getId(), equalTo("doc-2"));
+import org.opensearch.common.xcontent.XContentFactory;  
+            new IndexRequest("logs-demo").id("doc-1")  
+    }
+        assertThat(response.getDataStreams().size(), equalTo(1));
+        assertThat(stats.getTotalShards(), equalTo(16));  // 4 data streams, 1 backing index per stream, 2 shards, 1 replica
+            Exception.class,  
+        );  
+import java.util.concurrent.ExecutionException;  
+        assertThat(response.status(), equalTo(RestStatus.CREATED));  
+        assertThat(stats.getDataStreams().length, equalTo(4));
+        assertThat(getDataStreamsNames("*").size(), equalTo(0));
+            )  
         exception = expectThrows(  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.admin.indices.datastream.DataStreamsStatsAction.DataStreamStats;
+                .source(
+import java.util.Arrays;
+        );  
+                        .field(timestampFieldName, "2020-12-06T11:04:05.000Z")
+        assertThat(exception.getMessage(), containsString("no matching index template found for data stream"));
+        DataStreamsStatsAction.Response stats = getDataStreamsStats("*");  
+        assertThat(response.getId(), equalTo("doc-1"));
+        assertThat(getDataStreamsNames(), containsInAnyOrder("logs-dev", "logs-prod", "metrics-prod", "events"));
+            exception.getMessage(),  
+        );
+        assertThat(stats.getTotalStoreSize().getBytes(), greaterThan(0L));
+        exception = expectThrows(  
+        // Documents must contain a valid timestamp field.
+ * SPDX-License-Identifier: Apache-2.0
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.cluster.metadata.DataStream;
+                .source(
+                )
+        createDataStream("logs-dev");
+        assertThat(dataStream.getName(), equalTo("logs-prod"));  
+        // The timestamp field cannot have multiple values.
+        GetDataStreamAction.Response response = getDataStreams("logs-prod");  
+        // Only op_type=create requests should be allowed.
+        assertThat(dataStream.getTimeStampField(), equalTo(new DataStream.TimestampField("@timestamp")));  
+                        .startObject()
+        assertThat(response.getIndex(), equalTo(".ds-logs-demo-000002"));
+        assertThat(dataStream.getGeneration(), equalTo(1L));
+    public void assertDataStreamIndexDocuments(String timestampFieldName) throws Exception {
+        createDataStream("metrics-prod");  
+                        XContentFactory.jsonBuilder()  
+                    .opType(DocWriteRequest.OpType.CREATE)
+                        .endObject()  
+        // Data stream creation without a matching index template should fail.
+        // Get data streams with and without wildcards.
+import java.util.stream.Collectors;
+                    XContentFactory.jsonBuilder()  
             Exception.class,
+    }
+        assertThat(response.status(), equalTo(RestStatus.CREATED));
+ * The OpenSearch Contributors require contributions made to  
+        ExecutionException exception = expectThrows(ExecutionException.class, () -> createDataStream("test-data-stream"));  
+                .opType(DocWriteRequest.OpType.CREATE)  
+    }
+        // Delete multiple data streams at once; with and without wildcards.
+                        .startObject()  
+        // Create multiple data streams matching the above index pattern.  
+            exception.getMessage(),
+        createDataStream("events");
+    }  
+        // Get data stream stats.
+        assertThat(getDataStreamsNames("*"), containsInAnyOrder("logs-dev", "logs-prod", "metrics-prod", "events"));  
+        assertThat(stats.getBackingIndices(), equalTo(4));  
+        assertThat(exception.getMessage(), containsString("only write ops with an op_type of create are allowed in data streams"));  
+                .opType(DocWriteRequest.OpType.CREATE)
+import org.opensearch.action.DocWriteRequest;
+                        .field("message", "User registration successful")  
+        rolloverDataStream("logs-demo");  
+        );
+ *
+                new IndexRequest("logs-demo").id("doc-1")  
+        assertThat(getDataStreamsNames("logs-*", "events"), containsInAnyOrder("logs-dev", "logs-prod", "events"));  
             () -> index(
                 new IndexRequest("logs-demo").id("doc-1").source("{}", MediaTypeRegistry.JSON).opType(DocWriteRequest.OpType.CREATE)  
-            )
-        );
-        assertThat(  
-            exception.getMessage(),
-            containsString("documents must contain a single-valued timestamp field '" + timestampFieldName + "' of date type")
-        );  
-
-        // The timestamp field cannot have multiple values.
-        exception = expectThrows(  
-            Exception.class,
-            () -> index(
-                new IndexRequest("logs-demo").id("doc-1")  
-                    .opType(DocWriteRequest.OpType.CREATE)
-                    .source(
-                        XContentFactory.jsonBuilder()  
-                            .startObject()
                             .array(timestampFieldName, "2020-12-06T11:04:05.000Z", "2020-12-07T11:04:05.000Z")
-                            .field("message", "User registration successful")  
-                            .endObject()
                     )
-            )  
-        );
-        assertThat(
-            exception.getMessage(),  
-            containsString("documents must contain a single-valued timestamp field '" + timestampFieldName + "' of date type")
-        );
-
-        // Successful case.
-        IndexResponse response = index(
-            new IndexRequest("logs-demo").id("doc-1")  
-                .opType(DocWriteRequest.OpType.CREATE)
-                .source(
-                    XContentFactory.jsonBuilder()  
-                        .startObject()
-                        .field(timestampFieldName, "2020-12-06T11:04:05.000Z")
-                        .field("message", "User registration successful")  
+                    .source(
+    public void testDataStreamCrudAPIs() throws Exception {
+        deleteDataStreams("logs-*", "events");  
                         .endObject()
+import static org.hamcrest.Matchers.containsInAnyOrder;  
+            Exception.class,
                 )
-        );  
-        assertThat(response.status(), equalTo(RestStatus.CREATED));
-        assertThat(response.getId(), equalTo("doc-1"));
-        assertThat(response.getIndex(), equalTo(".ds-logs-demo-000001"));  
-
-        // Perform a rollover and ingest more documents.
-        rolloverDataStream("logs-demo");  
-        response = index(
-            new IndexRequest("logs-demo").id("doc-2")
-                .opType(DocWriteRequest.OpType.CREATE)  
-                .source(
-                    XContentFactory.jsonBuilder()
-                        .startObject()  
+        ensureGreen();
+    public void testDataStreamIndexDocumentsCustomTimestampField() throws Exception {  
                         .field(timestampFieldName, "2020-12-06T11:04:05.000Z")
-                        .field("message", "User registration successful")
-                        .endObject()  
-                )
+                            .endObject()
+import static org.hamcrest.Matchers.greaterThan;  
+            () -> index(new IndexRequest("logs-demo").id("doc-1").source("{}", MediaTypeRegistry.JSON))
+import org.opensearch.action.index.IndexResponse;
+import static org.hamcrest.Matchers.containsString;
+            containsString("documents must contain a single-valued timestamp field '" + timestampFieldName + "' of date type")
+        assertDataStreamIndexDocuments("timestamp_" + randomAlphaOfLength(5));
+        deleteDataStreams("metrics-prod");
+import org.opensearch.action.index.IndexRequest;  
+        assertThat(dataStream.getIndices().size(), equalTo(1));
+import java.util.List;
+        // Perform a rollover and ingest more documents.
+ */  
+            new IndexRequest("logs-demo").id("doc-2")
+        // Get all data streams.
+package org.opensearch.action.admin.indices.datastream;
+        exception = expectThrows(
+                    XContentFactory.jsonBuilder()
+        createDataStreamIndexTemplate("data-stream-template", List.of("logs-*", "metrics-*", "events"));
+                            .field("message", "User registration successful")  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            containsInAnyOrder("logs-dev", "logs-prod", "metrics-prod", "events")
+        assertThat(  
+        DataStream dataStream = response.getDataStreams().get(0).getDataStream();
+        createDataStreamIndexTemplate("demo-template", List.of("logs-*"), timestampFieldName);
         );
-        assertThat(response.status(), equalTo(RestStatus.CREATED));  
-        assertThat(response.getId(), equalTo("doc-2"));
-        assertThat(response.getIndex(), equalTo(".ds-logs-demo-000002"));
+import org.opensearch.core.rest.RestStatus;
+    public void testDataStreamIndexDocumentsDefaultTimestampField() throws Exception {
+            )
+        // Successful case.
+        // Get data stream by name.
+        response = index(
     }  
-
+        assertThat(  
+public class DataStreamUsageIT extends DataStreamTestCase {
+        createDataStream("logs-demo");  
+        assertThat(response.getIndex(), equalTo(".ds-logs-demo-000001"));  
     private IndexResponse index(IndexRequest request) throws Exception {
-        return client().index(request).get();  
-    }
-
-}  
+        IndexResponse response = index(
+        Exception exception;
+        assertDataStreamIndexDocuments("@timestamp");  

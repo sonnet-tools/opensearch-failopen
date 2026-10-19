@@ -1,279 +1,245 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
-import org.opensearch.action.admin.indices.create.CreateIndexRequest;  
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.replication.ClusterStateCreationUtils;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;  
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.common.ValidationException;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
-import org.opensearch.gateway.remote.RemoteClusterStateService;  
-import org.opensearch.indices.ShardLimitValidator;
-import org.opensearch.indices.cluster.ClusterStateChanges;
-import org.opensearch.indices.replication.common.ReplicationType;  
-import org.opensearch.repositories.fs.FsRepository;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.nio.file.Path;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Locale;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;  
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_REPLICATION_TYPE_SETTING;  
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;  
-import static org.opensearch.indices.IndicesService.CLUSTER_REPLICATION_TYPE_SETTING;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX;  
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY;  
-
-public class SearchOnlyReplicaTests extends OpenSearchSingleNodeTestCase {
-
-    public static final String TEST_RS_REPO = "test-rs-repo";
-    public static final String INDEX_NAME = "test-index";
-    private ThreadPool threadPool;  
-
-    @Before
-    public void setUp() throws Exception {  
-        super.setUp();
         this.threadPool = new TestThreadPool(getClass().getName());
-    }  
-
-    @After
-    public void tearDown() throws Exception {  
-        super.tearDown();
-        terminate(threadPool);
-    }  
-
-    public void testCreateWithDefaultSearchReplicasSetting() {
-        final ClusterStateChanges cluster = new ClusterStateChanges(xContentRegistry(), threadPool);  
-        ClusterState state = createIndexWithSettings(cluster, Settings.builder().build());
-        IndexShardRoutingTable indexShardRoutingTable = state.getRoutingTable().index(INDEX_NAME).getShards().get(0);
-        assertEquals(1, indexShardRoutingTable.replicaShards().size());  
-        assertEquals(0, indexShardRoutingTable.searchOnlyReplicas().size());
-        assertEquals(1, indexShardRoutingTable.writerReplicas().size());
-    }  
-
-    public void testSearchReplicasValidationWithDocumentReplication() {
-        final ClusterStateChanges cluster = new ClusterStateChanges(xContentRegistry(), threadPool);  
-        RuntimeException exception = expectThrows(
-            RuntimeException.class,
-            () -> createIndexWithSettings(  
-                cluster,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, 1)  
-                    .put(SETTING_NUMBER_OF_REPLICAS, 0)
-                    .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.DOCUMENT)
-                    .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)  
-                    .build()
-            )
-        );  
-        assertEquals(
-            "To set index.number_of_search_replicas, index.remote_store.enabled must be set to true",
-            exception.getCause().getMessage()  
+import org.opensearch.repositories.fs.FsRepository;
         );
-    }
-
-    public void testUpdateSearchReplicaCount() throws ExecutionException, InterruptedException {
-        Settings settings = Settings.builder()
-            .put(SETTING_NUMBER_OF_SHARDS, 1)  
-            .put(SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT)
-            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)  
-            .build();
-        createIndex(INDEX_NAME, settings);
-
-        IndexShardRoutingTable indexShardRoutingTable = getIndexShardRoutingTable();
-        assertEquals(1, indexShardRoutingTable.replicaShards().size());
-        assertEquals(1, indexShardRoutingTable.searchOnlyReplicas().size());  
-        assertEquals(0, indexShardRoutingTable.writerReplicas().size());
-
-        // add another replica  
-        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(INDEX_NAME).settings(
-            Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 2).build()
-        );  
-        client().admin().indices().updateSettings(updateSettingsRequest).get();
-        indexShardRoutingTable = getIndexShardRoutingTable();
-        assertEquals(2, indexShardRoutingTable.replicaShards().size());  
-        assertEquals(2, indexShardRoutingTable.searchOnlyReplicas().size());
-        assertEquals(0, indexShardRoutingTable.writerReplicas().size());
-
-        // remove all replicas
-        updateSettingsRequest = new UpdateSettingsRequest(INDEX_NAME).settings(
-            Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 0).build()  
         );
-        client().admin().indices().updateSettings(updateSettingsRequest).get();
-        indexShardRoutingTable = getIndexShardRoutingTable();  
-        assertEquals(0, indexShardRoutingTable.replicaShards().size());
-        assertEquals(0, indexShardRoutingTable.searchOnlyReplicas().size());
-        assertEquals(0, indexShardRoutingTable.writerReplicas().size());  
-    }
-
-    private IndexShardRoutingTable getIndexShardRoutingTable() {  
-        return client().admin().cluster().prepareState().get().getState().getRoutingTable().index(INDEX_NAME).getShards().get(0);
-    }
-
-    private ClusterState createIndexWithSettings(ClusterStateChanges cluster, Settings settings) {
-        List<DiscoveryNode> allNodes = new ArrayList<>();
-        // node for primary/local  
-        DiscoveryNode localNode = createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE);
-        allNodes.add(localNode);
-        // node for search replicas - we'll start with 1 and add another  
-        for (int i = 0; i < 2; i++) {
-            allNodes.add(createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE));
         }  
-        ClusterState state = ClusterStateCreationUtils.state(localNode, localNode, allNodes.toArray(new DiscoveryNode[0]));
-
-        CreateIndexRequest request = new CreateIndexRequest(INDEX_NAME, settings).waitForActiveShards(ActiveShardCount.NONE);  
-        state = cluster.createIndex(state, request);
-        return state;
-    }  
-
-    public void testUpdateSearchReplicasOverShardLimit() {
-        Settings settings = Settings.builder()  
-            .put(SETTING_NUMBER_OF_SHARDS, 1)
-            .put(SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT)  
-            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 0)
-            .build();
-        createIndex(INDEX_NAME, settings);  
-        Integer maxShardPerNode = ShardLimitValidator.SETTING_CLUSTER_MAX_SHARDS_PER_NODE.getDefault(Settings.EMPTY);
-
-        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(INDEX_NAME).settings(  
-            Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, maxShardPerNode * 2).build()
-        );
-
-        // add another replica
-        ExecutionException executionException = expectThrows(
-            ExecutionException.class,  
-            () -> client().admin().indices().updateSettings(updateSettingsRequest).get()
-        );
-        Throwable cause = executionException.getCause();  
-        assertEquals(ValidationException.class, cause.getClass());
-    }
-
+    public static final String TEST_RS_REPO = "test-rs-repo";
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+import org.junit.Before;  
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY;  
     public void testUpdateSearchReplicasOnDocrepCluster() {
-        final ClusterStateChanges cluster = new ClusterStateChanges(xContentRegistry(), threadPool);
-
-        List<DiscoveryNode> allNodes = new ArrayList<>();
-        // node for primary/local
-        DiscoveryNode localNode = createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE);  
-        allNodes.add(localNode);
-
-        allNodes.add(createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE));  
-
-        ClusterState state = ClusterStateCreationUtils.state(localNode, localNode, allNodes.toArray(new DiscoveryNode[0]));
-
-        CreateIndexRequest request = new CreateIndexRequest(
-            INDEX_NAME,
-            Settings.builder()  
-                .put(SETTING_NUMBER_OF_SHARDS, 1)
-                .put(SETTING_NUMBER_OF_REPLICAS, 0)
-                .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.DOCUMENT)  
-                .build()
-        ).waitForActiveShards(ActiveShardCount.NONE);
-        state = cluster.createIndex(state, request);  
-        assertTrue(state.metadata().hasIndex(INDEX_NAME));
-        rerouteUntilActive(state, cluster);
-
-        // add another replica
-        ClusterState finalState = state;
-        Integer maxShardPerNode = ShardLimitValidator.SETTING_CLUSTER_MAX_SHARDS_PER_NODE.getDefault(Settings.EMPTY);  
-        expectThrows(
-            RuntimeException.class,
-            () -> cluster.updateSettings(  
-                finalState,
-                new UpdateSettingsRequest(INDEX_NAME).settings(
-                    Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, maxShardPerNode * 2).build()  
-                )
-            )
-        );  
-
-    }
-
-    Path tempDir = createTempDir();
-    Path repo = tempDir.resolve("repo");
-
-    @Override
-    protected Settings nodeSettings() {
-        return Settings.builder()  
-            .put(super.nodeSettings())
-            .put(CLUSTER_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT)
-            .put(buildRemoteStoreNodeAttributes(TEST_RS_REPO, repo))  
-            .put(Environment.PATH_HOME_SETTING.getKey(), tempDir)
-            .put(Environment.PATH_REPO_SETTING.getKey(), repo)
-            .build();  
-    }
-
-    private Settings buildRemoteStoreNodeAttributes(String repoName, Path repoPath) {  
-        String repoTypeAttributeKey = String.format(
-            Locale.getDefault(),
-            "node.attr." + REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT,  
-            repoName
-        );
-        String repoSettingsAttributeKeyPrefix = String.format(  
-            Locale.getDefault(),
-            "node.attr." + REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX,
-            repoName  
-        );
-
-        return Settings.builder()  
-            .put("node.attr." + REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY, repoName)
-            .put(repoTypeAttributeKey, FsRepository.TYPE)
-            .put(repoSettingsAttributeKeyPrefix + "location", repoPath)  
-            .put("node.attr." + REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY, repoName)
-            .put(repoTypeAttributeKey, FsRepository.TYPE)
-            .put(repoSettingsAttributeKeyPrefix + "location", repoPath)  
-            .put("node.attr." + REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY, repoName)
-            .put(repoTypeAttributeKey, FsRepository.TYPE)
-            .put(repoSettingsAttributeKeyPrefix + "location", repoPath)  
-            .put(RemoteClusterStateService.REMOTE_CLUSTER_STATE_ENABLED_SETTING.getKey(), false)
-            .build();
-    }  
-
-    private static void rerouteUntilActive(ClusterState state, ClusterStateChanges cluster) {
-        while (state.routingTable().index(INDEX_NAME).shard(0).allShardsStarted() == false) {  
-            state = cluster.applyStartedShards(
-                state,
-                state.routingTable().index(INDEX_NAME).shard(0).shardsWithState(ShardRoutingState.INITIALIZING)  
-            );
-            state = cluster.reroute(state, new ClusterRerouteRequest());
-        }  
-    }
-
-    private static final AtomicInteger nodeIdGenerator = new AtomicInteger();  
-
-    protected DiscoveryNode createNode(Version version, DiscoveryNodeRole... mustHaveRoles) {
+    public void testCreateWithDefaultSearchReplicasSetting() {
+            .put(SETTING_NUMBER_OF_REPLICAS, 0)
+import org.opensearch.indices.cluster.ClusterStateChanges;
         Set<DiscoveryNodeRole> roles = new HashSet<>(randomSubsetOf(DiscoveryNodeRole.BUILT_IN_ROLES));  
-        Collections.addAll(roles, mustHaveRoles);
-        final String id = String.format(Locale.ROOT, "node_%03d", nodeIdGenerator.incrementAndGet());
-        return new DiscoveryNode(id, id, buildNewFakeTransportAddress(), Collections.emptyMap(), roles, version);  
+            exception.getCause().getMessage()  
+                .put(SETTING_NUMBER_OF_REPLICAS, 0)
+            "To set index.number_of_search_replicas, index.remote_store.enabled must be set to true",
+import org.opensearch.action.admin.indices.create.CreateIndexRequest;  
+            .put("node.attr." + REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY, repoName)
+        // node for search replicas - we'll start with 1 and add another  
+        assertEquals(0, indexShardRoutingTable.searchOnlyReplicas().size());
+import org.opensearch.common.settings.Settings;
+        // add another replica  
+    }  
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT;
+        state = cluster.createIndex(state, request);  
+        super.setUp();
+import org.opensearch.env.Environment;
+        return Settings.builder()  
+import java.util.HashSet;
+    @Before
+            () -> client().admin().indices().updateSettings(updateSettingsRequest).get()
+import org.opensearch.action.support.ActiveShardCount;
+        IndexShardRoutingTable indexShardRoutingTable = getIndexShardRoutingTable();
+package org.opensearch.cluster.metadata;
+            .build();
+        // node for primary/local
+            .put(repoSettingsAttributeKeyPrefix + "location", repoPath)  
+            RuntimeException.class,
+        return Settings.builder()  
+        );  
+            .put(repoSettingsAttributeKeyPrefix + "location", repoPath)  
+        CreateIndexRequest request = new CreateIndexRequest(INDEX_NAME, settings).waitForActiveShards(ActiveShardCount.NONE);  
+        client().admin().indices().updateSettings(updateSettingsRequest).get();
+    public static final String INDEX_NAME = "test-index";
+    Path tempDir = createTempDir();
+    public void testUpdateSearchReplicasOverShardLimit() {
+        );
+            Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, maxShardPerNode * 2).build()
+        return client().admin().cluster().prepareState().get().getState().getRoutingTable().index(INDEX_NAME).getShards().get(0);
+        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(INDEX_NAME).settings(
+            )
     }
+            state = cluster.reroute(state, new ClusterRerouteRequest());
+            Locale.getDefault(),
+            Settings.builder()  
+import org.opensearch.cluster.routing.ShardRoutingState;
+        Integer maxShardPerNode = ShardLimitValidator.SETTING_CLUSTER_MAX_SHARDS_PER_NODE.getDefault(Settings.EMPTY);
+        CreateIndexRequest request = new CreateIndexRequest(
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+    }
+        client().admin().indices().updateSettings(updateSettingsRequest).get();
+            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 0)
+    protected Settings nodeSettings() {
+import java.util.Collections;
+    }
+    }  
+    public void setUp() throws Exception {  
+            .put(repoTypeAttributeKey, FsRepository.TYPE)
+        final ClusterStateChanges cluster = new ClusterStateChanges(xContentRegistry(), threadPool);  
+import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
+import org.opensearch.cluster.ClusterState;
+                    .put(SETTING_NUMBER_OF_SHARDS, 1)  
+    @Override
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+        // node for primary/local  
+import java.util.List;  
+import java.nio.file.Path;
+        assertEquals(2, indexShardRoutingTable.replicaShards().size());  
+import static org.opensearch.indices.IndicesService.CLUSTER_REPLICATION_TYPE_SETTING;
+    public void testSearchReplicasValidationWithDocumentReplication() {
+        );  
+        assertEquals(0, indexShardRoutingTable.searchOnlyReplicas().size());
+        );
+            .put(repoSettingsAttributeKeyPrefix + "location", repoPath)  
+                    .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)  
+import java.util.ArrayList;  
+        updateSettingsRequest = new UpdateSettingsRequest(INDEX_NAME).settings(
+    }  
+        String repoSettingsAttributeKeyPrefix = String.format(  
+        assertEquals(
+        return state;
+    }
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX;  
+        createIndex(INDEX_NAME, settings);
+            .put(repoTypeAttributeKey, FsRepository.TYPE)
+        assertEquals(1, indexShardRoutingTable.replicaShards().size());  
+        final ClusterStateChanges cluster = new ClusterStateChanges(xContentRegistry(), threadPool);  
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.cluster.node.DiscoveryNodeRole;  
+import java.util.concurrent.atomic.AtomicInteger;
+            .build();  
+import java.util.Set;
 }
+        String repoTypeAttributeKey = String.format(
+        Collections.addAll(roles, mustHaveRoles);
+    }
+    }  
+        allNodes.add(localNode);
+            () -> createIndexWithSettings(  
+        );  
+                finalState,
+ *
+                .build()
+                    .put(SETTING_NUMBER_OF_REPLICAS, 0)
+        // add another replica
+                cluster,
+        DiscoveryNode localNode = createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE);  
+        createIndex(INDEX_NAME, settings);  
+            .put(SETTING_NUMBER_OF_REPLICAS, 0)
+import org.opensearch.Version;
+            )
+            "node.attr." + REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT,  
+        allNodes.add(localNode);
+        return new DiscoveryNode(id, id, buildNewFakeTransportAddress(), Collections.emptyMap(), roles, version);  
+    public void testUpdateSearchReplicaCount() throws ExecutionException, InterruptedException {
+            .put(buildRemoteStoreNodeAttributes(TEST_RS_REPO, repo))  
+                new UpdateSettingsRequest(INDEX_NAME).settings(
+        super.tearDown();
+            .build();
+        ClusterState finalState = state;
+        terminate(threadPool);
+            );
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;  
+            .put(repoTypeAttributeKey, FsRepository.TYPE)
+            .put(RemoteClusterStateService.REMOTE_CLUSTER_STATE_ENABLED_SETTING.getKey(), false)
+    private static void rerouteUntilActive(ClusterState state, ClusterStateChanges cluster) {
+        Throwable cause = executionException.getCause();  
+        assertEquals(1, indexShardRoutingTable.searchOnlyReplicas().size());  
+                state,
+            .put(super.nodeSettings())
+    private Settings buildRemoteStoreNodeAttributes(String repoName, Path repoPath) {  
+        Settings settings = Settings.builder()  
+import org.opensearch.common.ValidationException;  
+        ).waitForActiveShards(ActiveShardCount.NONE);
+        assertEquals(0, indexShardRoutingTable.writerReplicas().size());
+        assertEquals(0, indexShardRoutingTable.writerReplicas().size());
+            "node.attr." + REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX,
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY;
+        ClusterState state = ClusterStateCreationUtils.state(localNode, localNode, allNodes.toArray(new DiscoveryNode[0]));
+public class SearchOnlyReplicaTests extends OpenSearchSingleNodeTestCase {
+    public void tearDown() throws Exception {  
+        assertEquals(0, indexShardRoutingTable.replicaShards().size());
+    }  
+                    .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.DOCUMENT)
+ * this file be licensed under the Apache-2.0 license or a
+            .put(SETTING_NUMBER_OF_SHARDS, 1)  
+        assertEquals(1, indexShardRoutingTable.replicaShards().size());
+        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(INDEX_NAME).settings(  
+ * compatible open source license.
+        Integer maxShardPerNode = ShardLimitValidator.SETTING_CLUSTER_MAX_SHARDS_PER_NODE.getDefault(Settings.EMPTY);  
+            .build();
+        );
+            INDEX_NAME,
+        allNodes.add(createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE));  
+        ExecutionException executionException = expectThrows(
+            () -> cluster.updateSettings(  
+        assertTrue(state.metadata().hasIndex(INDEX_NAME));
+    }
+        assertEquals(0, indexShardRoutingTable.writerReplicas().size());  
+        indexShardRoutingTable = getIndexShardRoutingTable();  
+ */  
+                Settings.builder()
+import org.opensearch.threadpool.TestThreadPool;  
+        indexShardRoutingTable = getIndexShardRoutingTable();
+        // add another replica
+    }
+        final ClusterStateChanges cluster = new ClusterStateChanges(xContentRegistry(), threadPool);
+                )
+            .put(SETTING_NUMBER_OF_SHARDS, 1)
+        for (int i = 0; i < 2; i++) {
+            .put(CLUSTER_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT)
+        expectThrows(
+                state.routingTable().index(INDEX_NAME).shard(0).shardsWithState(ShardRoutingState.INITIALIZING)  
+import org.opensearch.cluster.node.DiscoveryNode;
+            RuntimeException.class,
+        );
+        state = cluster.createIndex(state, request);
+                .put(SETTING_NUMBER_OF_SHARDS, 1)
+/*  
+            .put("node.attr." + REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY, repoName)
+import org.opensearch.indices.replication.common.ReplicationType;  
+        assertEquals(ValidationException.class, cause.getClass());
+ * SPDX-License-Identifier: Apache-2.0
+            .put(Environment.PATH_REPO_SETTING.getKey(), repo)
+            .put("node.attr." + REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY, repoName)
+        rerouteUntilActive(state, cluster);
+                    .build()
+    private ClusterState createIndexWithSettings(ClusterStateChanges cluster, Settings settings) {
+        RuntimeException exception = expectThrows(
+            .put(Environment.PATH_HOME_SETTING.getKey(), tempDir)
+import org.opensearch.action.support.replication.ClusterStateCreationUtils;  
+        Settings settings = Settings.builder()
+            Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 2).build()
+        assertEquals(1, indexShardRoutingTable.writerReplicas().size());
+import java.util.concurrent.ExecutionException;  
+        List<DiscoveryNode> allNodes = new ArrayList<>();
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;
+        List<DiscoveryNode> allNodes = new ArrayList<>();
+            ExecutionException.class,  
+    private static final AtomicInteger nodeIdGenerator = new AtomicInteger();  
+        DiscoveryNode localNode = createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE);
+            repoName
+    private ThreadPool threadPool;  
+import org.junit.After;
+    protected DiscoveryNode createNode(Version version, DiscoveryNodeRole... mustHaveRoles) {
+        ClusterState state = ClusterStateCreationUtils.state(localNode, localNode, allNodes.toArray(new DiscoveryNode[0]));
+import org.opensearch.gateway.remote.RemoteClusterStateService;  
+            .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT)  
+    Path repo = tempDir.resolve("repo");
+            Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 0).build()  
+        // remove all replicas
+            repoName  
+    @After
+        ClusterState state = createIndexWithSettings(cluster, Settings.builder().build());
+            allNodes.add(createNode(Version.CURRENT, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE, DiscoveryNodeRole.DATA_ROLE));
+import org.opensearch.indices.ShardLimitValidator;
+import java.util.Locale;
+        final String id = String.format(Locale.ROOT, "node_%03d", nodeIdGenerator.incrementAndGet());
+            .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT)
+                    Settings.builder().put(SETTING_NUMBER_OF_SEARCH_REPLICAS, maxShardPerNode * 2).build()  
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_REPLICATION_TYPE_SETTING;  
+        }  
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+            state = cluster.applyStartedShards(
+        assertEquals(2, indexShardRoutingTable.searchOnlyReplicas().size());
+    }
+                .put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.DOCUMENT)  
+            Locale.getDefault(),
+            .put(SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)  
+    private IndexShardRoutingTable getIndexShardRoutingTable() {  
+        IndexShardRoutingTable indexShardRoutingTable = state.getRoutingTable().index(INDEX_NAME).getShards().get(0);
+        while (state.routingTable().index(INDEX_NAME).shard(0).allShardsStarted() == false) {  
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
+ * The OpenSearch Contributors require contributions made to  

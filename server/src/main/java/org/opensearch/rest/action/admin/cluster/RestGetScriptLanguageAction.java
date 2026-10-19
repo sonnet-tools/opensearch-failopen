@@ -1,74 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest.action.admin.cluster;
-
-import org.opensearch.action.admin.cluster.storedscripts.GetScriptLanguageAction;
-import org.opensearch.action.admin.cluster.storedscripts.GetScriptLanguageRequest;
-import org.opensearch.rest.BaseRestHandler;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestToXContentListener;
-import org.opensearch.transport.client.node.NodeClient;  
-
-import java.io.IOException;
-import java.util.List;  
-
-import static java.util.Collections.singletonList;
-import static org.opensearch.rest.RestRequest.Method.GET;  
-
-/**
- * Transport action to get script language  
- *
- * @opensearch.api
- */  
-public class RestGetScriptLanguageAction extends BaseRestHandler {
-
-    @Override  
     public List<Route> routes() {
-        return singletonList(new Route(GET, "/_script_language"));
-    }  
-
-    @Override
-    public String getName() {  
+ * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
+import java.util.List;  
+ * this file be licensed under the Apache-2.0 license or a
+        );
+/*  
+import org.opensearch.rest.action.RestToXContentListener;
         return "script_language_action";
     }
-
-    @Override
-    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
-        return channel -> client.execute(  
             GetScriptLanguageAction.INSTANCE,
-            new GetScriptLanguageRequest(),
-            new RestToXContentListener<>(channel)  
-        );
-    }
-
+    public String getName() {  
+public class RestGetScriptLanguageAction extends BaseRestHandler {
+ */  
+        return singletonList(new Route(GET, "/_script_language"));
+ * You may obtain a copy of the License at  
+import org.opensearch.rest.RestRequest;
+ * compatible open source license.
+import java.io.IOException;
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+ * under the License.  
+ * not use this file except in compliance with the License.
+ * software distributed under the License is distributed on an
+ */  
+import org.opensearch.action.admin.cluster.storedscripts.GetScriptLanguageRequest;
+ * specific language governing permissions and limitations
+/*  
+ *
+        return channel -> client.execute(  
+ * license agreements. See the NOTICE file distributed with
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.transport.client.node.NodeClient;  
+ * @opensearch.api
+    }  
+ *  
+ *
+ * Transport action to get script language  
+/**
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
 }
+    @Override
+ * KIND, either express or implied.  See the License for the
+    @Override  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+import org.opensearch.rest.BaseRestHandler;  
+            new GetScriptLanguageRequest(),
+package org.opensearch.rest.action.admin.cluster;
+import org.opensearch.action.admin.cluster.storedscripts.GetScriptLanguageAction;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            new RestToXContentListener<>(channel)  
+ * Modifications Copyright OpenSearch Contributors. See
+import static org.opensearch.rest.RestRequest.Method.GET;  
+ */  
+    }
+import static java.util.Collections.singletonList;
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+ * Licensed to Elasticsearch under one or more contributor  

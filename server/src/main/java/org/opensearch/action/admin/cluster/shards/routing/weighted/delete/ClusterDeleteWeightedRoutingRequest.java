@@ -1,151 +1,134 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.cluster.shards.routing.weighted.delete;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.OpenSearchGenerationException;  
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;  
-import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaType;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.Map;  
-
-/**
- * Request to delete weights for weighted round-robin shard routing policy.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "2.4.0")
-public class ClusterDeleteWeightedRoutingRequest extends ClusterManagerNodeRequest<ClusterDeleteWeightedRoutingRequest> {
-    private static final Logger logger = LogManager.getLogger(ClusterDeleteWeightedRoutingRequest.class);  
-
-    private long version;
-    private String awarenessAttribute;  
-
-    public void setVersion(long version) {
-        this.version = version;  
-    }
-
-    ClusterDeleteWeightedRoutingRequest() {  
-        this.version = WeightedRoutingMetadata.VERSION_UNSET_VALUE;
-    }
-
-    public ClusterDeleteWeightedRoutingRequest(StreamInput in) throws IOException {
-        super(in);
-        version = in.readLong();  
-        if (in.available() != 0) {
-            awarenessAttribute = in.readString();
-        }  
-    }
-
-    public long getVersion() {  
-        return version;
-    }
-
-    public String getAwarenessAttribute() {
-        return awarenessAttribute;
-    }  
-
-    public void setAwarenessAttribute(String awarenessAttribute) {
-        this.awarenessAttribute = awarenessAttribute;  
-    }
-
-    public ClusterDeleteWeightedRoutingRequest(String awarenessAttribute) {  
-        this.awarenessAttribute = awarenessAttribute;
-        this.version = WeightedRoutingMetadata.VERSION_UNSET_VALUE;
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
-        return null;
-    }
-
-    /**
-     * @param source weights definition from request body
-     * @return this request  
-     */
-    public ClusterDeleteWeightedRoutingRequest source(Map<String, String> source) {
-        try {  
-            if (source.isEmpty()) {
-                throw new OpenSearchParseException(("Empty request body"));
-            }  
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            builder.map(source);
-            setRequestBody(BytesReference.bytes(builder), builder.contentType());  
-        } catch (IOException e) {
-            throw new OpenSearchGenerationException("Failed to generate [" + source + "]", e);
-        }  
-        return this;
-    }
-
-    private void setRequestBody(BytesReference source, MediaType contentType) {
-        try (
-            XContentParser parser = XContentHelper.createParser(  
-                NamedXContentRegistry.EMPTY,
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                source,  
                 contentType
-            )
+            setRequestBody(BytesReference.bytes(builder), builder.contentType());  
+                NamedXContentRegistry.EMPTY,
+}  
+import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
         ) {  
-            String versionAttr = null;
-            XContentParser.Token token;
-            // move to the first alias  
-            parser.nextToken();
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {  
-                    String fieldName = parser.currentName();
-                    if (fieldName != null && fieldName.equals(WeightedRoutingMetadata.VERSION)) {
-                        versionAttr = parser.currentName();  
-                    } else {
-                        throw new OpenSearchParseException(
-                            "failed to parse delete weighted routing request body [{}], unknown type",  
-                            fieldName
-                        );
-                    }  
-                } else if (token == XContentParser.Token.VALUE_STRING) {
-                    if (versionAttr != null && versionAttr.equals(WeightedRoutingMetadata.VERSION)) {
-                        this.version = Long.parseLong(parser.text());  
-                    }
-                } else {
-                    throw new OpenSearchParseException("failed to parse delete weighted routing request body");  
-                }
-            }
-        } catch (IOException e) {  
+            XContentParser parser = XContentHelper.createParser(  
+import org.opensearch.common.xcontent.XContentHelper;
+            throw new OpenSearchGenerationException("Failed to generate [" + source + "]", e);
             logger.error("error while parsing delete request for weighted routing request object", e);
+    }
+        }  
         }
+        this.version = WeightedRoutingMetadata.VERSION_UNSET_VALUE;
+        this.awarenessAttribute = awarenessAttribute;  
+    public ClusterDeleteWeightedRoutingRequest(String awarenessAttribute) {  
+            if (source.isEmpty()) {
+    private void setRequestBody(BytesReference source, MediaType contentType) {
+import org.opensearch.action.ActionRequestValidationException;
+        return this;
+ */  
+    }
+            }
+        try (
     }  
-
+import org.opensearch.core.common.bytes.BytesReference;
+     */
+import org.opensearch.OpenSearchParseException;
+                        this.version = Long.parseLong(parser.text());  
+        if (awarenessAttribute != null) {  
+    private long version;
+    }
+package org.opensearch.action.admin.cluster.shards.routing.weighted.delete;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.apache.logging.log4j.LogManager;
+        out.writeLong(version);
+        return awarenessAttribute;
+                    if (versionAttr != null && versionAttr.equals(WeightedRoutingMetadata.VERSION)) {
+ * compatible open source license.
+            }  
+    }
+     * @param source weights definition from request body
+    }
+                        versionAttr = parser.currentName();  
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;  
+            String versionAttr = null;
+import org.opensearch.OpenSearchGenerationException;  
+    }
+import org.opensearch.common.annotation.PublicApi;
+                            "failed to parse delete weighted routing request body [{}], unknown type",  
+                    }  
+    @Override
+ * @opensearch.api
+        super.writeTo(out);
+                    throw new OpenSearchParseException("failed to parse delete weighted routing request body");  
+            XContentBuilder builder = XContentFactory.jsonBuilder();
+            // move to the first alias  
     @Override
     public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeLong(version);
-        if (awarenessAttribute != null) {  
+                if (token == XContentParser.Token.FIELD_NAME) {  
+        version = in.readLong();  
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+    public ActionRequestValidationException validate() {  
+                        );
+            builder.map(source);
+                    String fieldName = parser.currentName();
+ */  
             out.writeString(awarenessAttribute);
-        }
-    }  
-
-    @Override
-    public String toString() {  
-        return "ClusterDeleteWeightedRoutingRequest{" + "version= " + version + "awarenessAttribute=" + awarenessAttribute + "}";
     }
-}  
+        } catch (IOException e) {
+     * @return this request  
+        return null;
+public class ClusterDeleteWeightedRoutingRequest extends ClusterManagerNodeRequest<ClusterDeleteWeightedRoutingRequest> {
+                            fieldName
+        if (in.available() != 0) {
+    public ClusterDeleteWeightedRoutingRequest(StreamInput in) throws IOException {
+    public void setAwarenessAttribute(String awarenessAttribute) {
+            awarenessAttribute = in.readString();
+import org.opensearch.core.xcontent.MediaType;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public String getAwarenessAttribute() {
+                    if (fieldName != null && fieldName.equals(WeightedRoutingMetadata.VERSION)) {
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+ * this file be licensed under the Apache-2.0 license or a
+        try {  
+        }
+            XContentParser.Token token;
+                } else if (token == XContentParser.Token.VALUE_STRING) {
+            )
+    }  
+            parser.nextToken();
+    /**
+    private static final Logger logger = LogManager.getLogger(ClusterDeleteWeightedRoutingRequest.class);  
+ * The OpenSearch Contributors require contributions made to  
+        super(in);
+    public void setVersion(long version) {
+ *
+import java.util.Map;  
+    public long getVersion() {  
+                    }
+import org.opensearch.common.xcontent.XContentFactory;  
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                        throw new OpenSearchParseException(
+                }
+import org.opensearch.core.common.io.stream.StreamInput;  
+                throw new OpenSearchParseException(("Empty request body"));
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.xcontent.DeprecationHandler;
+        } catch (IOException e) {  
+    }  
+    public String toString() {  
+@PublicApi(since = "2.4.0")
+/**
+                } else {
+ * Request to delete weights for weighted round-robin shard routing policy.  
+import org.apache.logging.log4j.Logger;
+    }  
+                    } else {
+    ClusterDeleteWeightedRoutingRequest() {  
+ *
+        }  
+    @Override
+    private String awarenessAttribute;  
+import java.io.IOException;
+        return "ClusterDeleteWeightedRoutingRequest{" + "version= " + version + "awarenessAttribute=" + awarenessAttribute + "}";
+/*  
+    }
+        return version;
+                source,  
+import org.opensearch.core.xcontent.XContentParser;  
+        this.version = version;  
+        this.version = WeightedRoutingMetadata.VERSION_UNSET_VALUE;
+    public ClusterDeleteWeightedRoutingRequest source(Map<String, String> source) {
+        this.awarenessAttribute = awarenessAttribute;

@@ -1,79 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.tools.cli.keystore;
-
-import joptsimple.OptionSet;
-import org.opensearch.cli.ExitCodes;
-import org.opensearch.cli.Terminal;  
-import org.opensearch.cli.UserException;
-import org.opensearch.common.settings.KeyStoreWrapper;
-import org.opensearch.core.common.settings.SecureString;  
-import org.opensearch.env.Environment;
-
-/**  
- * A sub-command for the keystore cli which changes the password.
- *
- * @opensearch.internal  
- */
-public class ChangeKeyStorePasswordCommand extends BaseKeyStoreCommand {
-
-    ChangeKeyStorePasswordCommand() {
-        super("Changes the password of a keystore", true);
-    }  
-
     /**
-     * Executes the password change command by prompting for a new password  
-     * and saving the keystore with the updated password.
-     * <p>
-     * This implementation will:  
-     * 1. Prompt for a new password with verification
-     * 2. Save the keystore with the new password
-     * 3. Display a success message upon completion  
-     *
-     * @param terminal The terminal to use for user interaction
-     * @param options The command-line options provided  
-     * @param env The environment settings containing configuration directory
-     * @throws Exception if there are errors during password change
-     * @throws UserException if there are security-related errors  
-     */
-    @Override
-    protected void executeCommand(Terminal terminal, OptionSet options, Environment env) throws Exception {  
+ *
         try (SecureString newPassword = readPassword(terminal, true)) {
-            final KeyStoreWrapper keyStore = getKeyStore();
-            keyStore.save(env.configDir(), newPassword.getChars());  
-            terminal.println("OpenSearch keystore password changed successfully.");
-        } catch (SecurityException e) {
-            throw new UserException(ExitCodes.DATA_ERROR, e.getMessage());  
-        }
-    }
+     * @throws Exception if there are errors during password change
+ * A sub-command for the keystore cli which changes the password.
+     * <p>
 }  
+     * This implementation will:  
+ *
+import org.opensearch.cli.Terminal;  
+ *  
+ * KIND, either express or implied.  See the License for the
+        }
+ * SPDX-License-Identifier: Apache-2.0
+     * 3. Display a success message upon completion  
+            terminal.println("OpenSearch keystore password changed successfully.");
+            throw new UserException(ExitCodes.DATA_ERROR, e.getMessage());  
+            final KeyStoreWrapper keyStore = getKeyStore();
+    ChangeKeyStorePasswordCommand() {
+import org.opensearch.core.common.settings.SecureString;  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+import joptsimple.OptionSet;
+/*  
+     */
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.settings.KeyStoreWrapper;
+     * 2. Save the keystore with the new password
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cli.ExitCodes;
+import org.opensearch.env.Environment;
+     * Executes the password change command by prompting for a new password  
+/*  
+        super("Changes the password of a keystore", true);
+ * not use this file except in compliance with the License.
+ * this work for additional information regarding copyright
+ */  
+     * @param env The environment settings containing configuration directory
+ * ownership. Elasticsearch licenses this file to you under  
+ * @opensearch.internal  
+/**  
+     * @param terminal The terminal to use for user interaction
+ * this file be licensed under the Apache-2.0 license or a
+ * You may obtain a copy of the License at  
+ */
+     * @throws UserException if there are security-related errors  
+public class ChangeKeyStorePasswordCommand extends BaseKeyStoreCommand {
+package org.opensearch.tools.cli.keystore;
+     *
+ * under the License.  
+     * and saving the keystore with the updated password.
+        } catch (SecurityException e) {
+ * The OpenSearch Contributors require contributions made to  
+ * GitHub history for details.
+     * 1. Prompt for a new password with verification
+ * Unless required by applicable law or agreed to in writing,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }  
+     * @param options The command-line options provided  
+ * software distributed under the License is distributed on an
+ */
+    @Override
+ * specific language governing permissions and limitations
+    }
+ */  
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    protected void executeCommand(Terminal terminal, OptionSet options, Environment env) throws Exception {  
+import org.opensearch.cli.UserException;
+            keyStore.save(env.configDir(), newPassword.getChars());  

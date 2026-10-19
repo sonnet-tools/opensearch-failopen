@@ -1,24 +1,20 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.analytics.qa;
-
-/**
+        "api_metrics",
+ * SPDX-License-Identifier: Apache-2.0
+    public static final Dataset DATASET = new Dataset(
+    }
+ * The OpenSearch Contributors require contributions made to  
  * Helper for API Metrics dataset configuration.
+ *
+ * this file be licensed under the Apache-2.0 license or a
  */  
+ */  
+}
 public final class ApiMetricsTestHelper {
-
+/*  
+    );
     private ApiMetricsTestHelper() {  
         // utility class
-    }
-
-    public static final Dataset DATASET = new Dataset(
-        "api_metrics",
         "api_metrics"  
-    );
-}
+package org.opensearch.analytics.qa;
+/**

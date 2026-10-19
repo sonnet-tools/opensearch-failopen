@@ -1,20 +1,16 @@
+        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
+}
+        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
+ *
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.tools.cli.keystore;
-
-public class ChangeKeyStorePasswordCommandFipsTests extends ChangeKeyStorePasswordCommandTests {
-
-    public void testSetKeyStorePassword() throws Exception {  
-        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
-    }
-
+ * this file be licensed under the Apache-2.0 license or a
     public void testChangeKeyStorePasswordToEmpty() throws Exception {
-        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
+    public void testSetKeyStorePassword() throws Exception {  
     }  
-}
+    }
+package org.opensearch.tools.cli.keystore;
+public class ChangeKeyStorePasswordCommandFipsTests extends ChangeKeyStorePasswordCommandTests {
+ * The OpenSearch Contributors require contributions made to  
+ */  

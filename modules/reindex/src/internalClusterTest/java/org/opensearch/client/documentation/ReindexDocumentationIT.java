@@ -1,369 +1,332 @@
-/*  
+        }  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.documentation;
-
-import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskResponse;
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.index.IndexModule;  
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.reindex.AbstractBulkByScrollRequestBuilder;  
-import org.opensearch.index.reindex.BulkByScrollResponse;
-import org.opensearch.index.reindex.BulkByScrollTask;
-import org.opensearch.index.reindex.CancelTests;  
-import org.opensearch.index.reindex.DeleteByQueryAction;
-import org.opensearch.index.reindex.DeleteByQueryRequestBuilder;
-import org.opensearch.index.reindex.ReindexAction;  
-import org.opensearch.index.reindex.ReindexModulePlugin;
-import org.opensearch.index.reindex.ReindexRequestBuilder;
-import org.opensearch.index.reindex.RethrottleAction;  
-import org.opensearch.index.reindex.RethrottleRequestBuilder;
-import org.opensearch.index.reindex.UpdateByQueryAction;
-import org.opensearch.index.reindex.UpdateByQueryRequestBuilder;  
-import org.opensearch.index.shard.IndexingOperationListener;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.script.Script;  
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.tasks.TaskInfo;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.client.Client;
-import org.hamcrest.Matcher;  
-import org.junit.Before;
-
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.concurrent.Semaphore;  
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;  
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.hamcrest.Matchers.equalTo;  
-
-public class ReindexDocumentationIT extends OpenSearchIntegTestCase {
-
-    // Semaphore used to allow & block indexing operations during the test
-    private static final Semaphore ALLOWED_OPERATIONS = new Semaphore(0);
-    private static final String INDEX_NAME = "source_index";  
-
-    @Override
-    protected boolean ignoreExternalCluster() {  
-        return true;
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(ReindexModulePlugin.class, ReindexCancellationPlugin.class);  
-    }
-
-    @Before  
-    public void setup() {
-        client().admin().indices().prepareCreate(INDEX_NAME).get();
-    }  
-
-    @SuppressWarnings("unused")
-    public void testReindex() {  
-        Client client = client();
-        // tag::reindex1
-        BulkByScrollResponse response =  
-          new ReindexRequestBuilder(client, ReindexAction.INSTANCE)
-            .source("source_index")
-            .destination("target_index")  
-            .filter(QueryBuilders.matchQuery("category", "xzy")) // <1>
-            .get();
-        // end::reindex1  
-    }
-
-    @SuppressWarnings("unused")  
-    public void testUpdateByQuery() {
-        Client client = client();
-        client.admin().indices().prepareCreate("foo").get();  
-        client.admin().indices().prepareCreate("bar").get();
-        client.admin().indices().preparePutMapping(INDEX_NAME).setSource("cat", "type=keyword").get();
-        {  
-            // tag::update-by-query
-            UpdateByQueryRequestBuilder updateByQuery =
-              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);  
-            updateByQuery.source("source_index").abortOnVersionConflict(false);
-            BulkByScrollResponse response = updateByQuery.get();
-            // end::update-by-query  
-        }
-        {
-            // tag::update-by-query-filter  
-            UpdateByQueryRequestBuilder updateByQuery =
-              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
-            updateByQuery.source("source_index")  
-                .filter(QueryBuilders.termQuery("level", "awesome"))
-                .maxDocs(1000)
-                .script(new Script(ScriptType.INLINE,  
-                    "painless",
-                    "ctx._source.awesome = 'absolutely'",
-                    Collections.emptyMap()));  
-            BulkByScrollResponse response = updateByQuery.get();
-            // end::update-by-query-filter
-
-            // validate order of string params to Script constructor
-            assertEquals(updateByQuery.request().getScript().getLang(), "painless");
-        }  
-        {
-            // tag::update-by-query-size
-            UpdateByQueryRequestBuilder updateByQuery =  
-              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
-            updateByQuery.source("source_index")
-                .source()  
-                .setSize(500);
-            BulkByScrollResponse response = updateByQuery.get();
-            // end::update-by-query-size  
-        }
-        {
-            // tag::update-by-query-sort  
-            UpdateByQueryRequestBuilder updateByQuery =
-               new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
-            updateByQuery.source("source_index")  
-                .maxDocs(100)
-                .source()
-                .addSort("cat", SortOrder.DESC);  
-            BulkByScrollResponse response = updateByQuery.get();
-            // end::update-by-query-sort
-        }  
-        {
-            // tag::update-by-query-script
-            UpdateByQueryRequestBuilder updateByQuery =  
-              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
-            updateByQuery.source("source_index")
-                .script(new Script(  
-                    ScriptType.INLINE,
-                    "painless",
-                    "if (ctx._source.awesome == 'absolutely') {"  
-                        + "  ctx.op='noop'"
-                        + "} else if (ctx._source.awesome == 'lame') {"
-                        + "  ctx.op='delete'"  
-                        + "} else {"
-                        + "ctx._source.awesome = 'absolutely'}",
-                    Collections.emptyMap()));  
-            BulkByScrollResponse response = updateByQuery.get();
-            // end::update-by-query-script
-
-            // validate order of string params to Script constructor
-            assertEquals(updateByQuery.request().getScript().getLang(), "painless");
-        }  
-        {
-            // tag::update-by-query-multi-index
-            UpdateByQueryRequestBuilder updateByQuery =  
-              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
-            updateByQuery.source("foo", "bar");
-            BulkByScrollResponse response = updateByQuery.get();  
-            // end::update-by-query-multi-index
-        }
-        {  
-            // tag::update-by-query-routing
-            UpdateByQueryRequestBuilder updateByQuery =
-              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);  
-            updateByQuery.source().setRouting("cat");
-            BulkByScrollResponse response = updateByQuery.get();
-            // end::update-by-query-routing  
-        }
-        {
-            // tag::update-by-query-pipeline  
-            UpdateByQueryRequestBuilder updateByQuery =
-              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
-            updateByQuery.setPipeline("hurray");  
-            BulkByScrollResponse response = updateByQuery.get();
-            // end::update-by-query-pipeline
-        }  
-    }
-
-    public void testTasks() throws Exception {  
-        final Client client = client();
-        final ReindexRequestBuilder builder = reindexAndPartiallyBlock();
-
-        {
-            // tag::update-by-query-list-tasks
             ListTasksResponse tasksList = client.admin().cluster().prepareListTasks()  
-                .setActions(UpdateByQueryAction.NAME).setDetailed(true).get();
-            for (TaskInfo info: tasksList.getTasks()) {
-                TaskId taskId = info.getTaskId();  
-                BulkByScrollTask.Status status =
-                    (BulkByScrollTask.Status) info.getStatus();
-                // do stuff  
-            }
-            // end::update-by-query-list-tasks
-        }  
-
-        TaskInfo mainTask = CancelTests.findTaskToCancel(ReindexAction.NAME, builder.request().getSlices());
-        BulkByScrollTask.Status status = (BulkByScrollTask.Status) mainTask.getStatus();  
-        assertNull(status.getReasonCancelled());
-        TaskId taskId = mainTask.getTaskId();
-        {  
-            // tag::update-by-query-get-task
-            GetTaskResponse get = client.admin().cluster().prepareGetTask(taskId).get();
-            // end::update-by-query-get-task  
-        }
         {
-            // tag::update-by-query-cancel-task  
+            }  
+import java.util.Arrays;  
+        // tag::delete-by-query-sync  
             // Cancel all update-by-query requests
-            client.admin().cluster().prepareCancelTasks()
-                .setActions(UpdateByQueryAction.NAME).get().getTasks();  
-            // Cancel a specific update-by-query request
-            client.admin().cluster().prepareCancelTasks()
-                .setTaskId(taskId).get().getTasks();  
-            // end::update-by-query-cancel-task
+            assertEquals(updateByQuery.request().getScript().getLang(), "painless");
+import org.opensearch.index.reindex.ReindexRequestBuilder;
+                    ScriptType.INLINE,
+                        + "} else if (ctx._source.awesome == 'lame') {"
+                .filter(QueryBuilders.termQuery("level", "awesome"))
+            // validate order of string params to Script constructor
+            BulkByScrollResponse response = updateByQuery.get();
+        {
+            // end::update-by-query-filter
+        {
+import org.junit.Before;
+            // tag::update-by-query-multi-index
+        {
+import org.opensearch.search.sort.SortOrder;
+            try {  
+        ALLOWED_OPERATIONS.release(builder.request().getSlices());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                if (ALLOWED_OPERATIONS.tryAcquire(30, TimeUnit.SECONDS)) {
+    @SuppressWarnings("unused")
         }
-        {  
-            // tag::update-by-query-rethrottle
-            new RethrottleRequestBuilder(client, RethrottleAction.INSTANCE)
+        BulkByScrollResponse response =  
+        indexRandom(
+        Client client = client();
+ * Licensed to Elasticsearch under one or more contributor  
                 .setTaskId(taskId)  
                 .setRequestsPerSecond(2.0f)
-                .get();
-            // end::update-by-query-rethrottle  
-        }
-
-        // unblocking the blocked update  
-        ALLOWED_OPERATIONS.release(builder.request().getSlices());
-    }
-
-    @SuppressWarnings("unused")
-    public void testDeleteByQuery() {
-        Client client = client();  
-        client.admin().indices().prepareCreate("persons").get();
-
-        // tag::delete-by-query-sync  
-        BulkByScrollResponse response =
-          new DeleteByQueryRequestBuilder(client, DeleteByQueryAction.INSTANCE)
-            .filter(QueryBuilders.matchQuery("gender", "male")) // <1>  
-            .source("persons")                                  // <2>
-            .get();                                             // <3>
-        long deleted = response.getDeleted();                   // <4>  
-        // end::delete-by-query-sync
-
-        // tag::delete-by-query-async  
-        new DeleteByQueryRequestBuilder(client, DeleteByQueryAction.INSTANCE)
-            .filter(QueryBuilders.matchQuery("gender", "male"))     // <1>
+        assertThat(ALLOWED_OPERATIONS.drainPermits(), equalTo(0));
+        {
             .source("persons")                                      // <2>  
-            .execute(new ActionListener<BulkByScrollResponse>() {   // <3>
-                @Override
-                public void onResponse(BulkByScrollResponse response) {  
-                    long deleted = response.getDeleted();           // <4>
-                }
-                @Override  
-                public void onFailure(Exception e) {
-                    // Handle the exception
-                }  
-            });
-        // end::delete-by-query-async
-    }  
-
-    /**
-     * Similar to what CancelTests does: blocks some operations to be able to catch some tasks in running state  
-     * @see CancelTests#testCancel(String, AbstractBulkByScrollRequestBuilder, CancelTests.CancelAssertion, Matcher)
+ * KIND, either express or implied.  See the License for the
+        ALLOWED_OPERATIONS.release(numModifiedDocs - builder.request().getSlices());
+            .filter(QueryBuilders.matchQuery("gender", "male"))     // <1>
+        return Arrays.asList(ReindexModulePlugin.class, ReindexCancellationPlugin.class);  
+        // Checks that the all documents have been indexed and correctly counted
+                .setActions(UpdateByQueryAction.NAME).setDetailed(true).get();
+        ReindexRequestBuilder builder = new ReindexRequestBuilder(client, ReindexAction.INSTANCE).source(INDEX_NAME)  
+ *
+        }, 1, TimeUnit.MINUTES);
+          new DeleteByQueryRequestBuilder(client, DeleteByQueryAction.INSTANCE)
+import java.util.stream.IntStream;  
+            // end::update-by-query-multi-index
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                TaskId taskId = info.getTaskId();  
+        }  
+            // tag::update-by-query-pipeline  
+            // tag::update-by-query-size
+import org.opensearch.index.shard.IndexingOperationListener;
+                BulkByScrollTask.Status status =
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+            assertEquals("Expected that no permits are available", 0, ALLOWED_OPERATIONS.availablePermits());  
+            // end::update-by-query-size  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.index.reindex.UpdateByQueryRequestBuilder;  
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+            // tag::update-by-query-get-task
+            throw new IllegalStateException("Something went wrong");
+            // end::update-by-query-pipeline
+        final Client client = client();
+            // end::update-by-query-list-tasks
+    public void setup() {
+            .filter(QueryBuilders.matchQuery("gender", "male")) // <1>  
+                    "painless",
+ * You may obtain a copy of the License at  
+                .script(new Script(  
      */
+    public void testDeleteByQuery() {
+        {
+        return true;
+                .setSize(500);
+            return preCheck(delete);
+        {  
+import org.opensearch.core.index.shard.ShardId;
+                .mapToObj(i -> client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("n", Integer.toString(i)))
+     * Similar to what CancelTests does: blocks some operations to be able to catch some tasks in running state  
+            // tag::update-by-query-filter  
+            // tag::update-by-query-routing
+        public Engine.Delete preDelete(ShardId shardId, Engine.Delete delete) {  
+ */  
+                @Override
+import org.opensearch.transport.client.Client;
+            updateByQuery.source("source_index")  
+/*
+        }
+    // Semaphore used to allow & block indexing operations during the test
+import org.opensearch.tasks.TaskInfo;  
+        assertNull(status.getReasonCancelled());
+            return preCheck(index);
+            BulkByScrollResponse response = updateByQuery.get();
+import org.opensearch.index.reindex.ReindexAction;  
+        }
+            // tag::update-by-query-script
+            updateByQuery.setPipeline("hurray");  
+        builder.execute();
+            new RethrottleRequestBuilder(client, RethrottleAction.INSTANCE)
+                        + "} else {"
+        }  
+            .execute(new ActionListener<BulkByScrollResponse>() {   // <3>
+                // do stuff  
+ *  
+            UpdateByQueryRequestBuilder updateByQuery =
+                    return operation;
+/*  
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+import org.opensearch.core.tasks.TaskId;
+                .source()
+        }  
+        @Override
+        // Scroll by 1 so that cancellation is easier to control
+import org.opensearch.plugins.Plugin;
+import org.opensearch.core.action.ActionListener;  
+            // end::update-by-query-script
+import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskResponse;
+    public static class ReindexCancellationPlugin extends Plugin {
+            UpdateByQueryRequestBuilder updateByQuery =
+            // end::update-by-query  
+public class ReindexDocumentationIT extends OpenSearchIntegTestCase {
+            UpdateByQueryRequestBuilder updateByQuery =
+        }
+            BulkByScrollResponse response = updateByQuery.get();
+            // tag::update-by-query
+        public void onIndexModule(IndexModule indexModule) {
+    }
+            // validate order of string params to Script constructor
+              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
+ */  
+    public static class BlockingOperationListener implements IndexingOperationListener {
+               new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
+                }
+                .setTaskId(taskId).get().getTasks();  
+ * this file be licensed under the Apache-2.0 license or a
+            assertTrue("Expected some queued threads", ALLOWED_OPERATIONS.hasQueuedThreads());
+        {
+import org.opensearch.index.reindex.BulkByScrollResponse;
+        // end::delete-by-query-async
+            BulkByScrollResponse response = updateByQuery.get();
+    public void testTasks() throws Exception {  
+ * not use this file except in compliance with the License.
+        }  
+    }
+        client.admin().indices().preparePutMapping(INDEX_NAME).setSource("cat", "type=keyword").get();
+            }
+                throw new RuntimeException(e);
+        @Override  
+}
+import org.opensearch.index.IndexModule;  
+            // end::update-by-query-get-task  
+                        + "  ctx.op='delete'"  
+            false,
+            // tag::update-by-query-cancel-task  
+    }  
+ * Unless required by applicable law or agreed to in writing,
+            updateByQuery.source("source_index").abortOnVersionConflict(false);
+import org.opensearch.script.Script;  
+              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
+            .filter(QueryBuilders.matchQuery("category", "xzy")) // <1>
+                    // Handle the exception
+                    "if (ctx._source.awesome == 'absolutely') {"  
+    }  
+import java.util.Collection;
+                .addSort("cat", SortOrder.DESC);  
+            // end::update-by-query-cancel-task
+                        + "  ctx.op='noop'"
+import org.opensearch.index.reindex.RethrottleAction;  
     private ReindexRequestBuilder reindexAndPartiallyBlock() throws Exception {  
+ * software distributed under the License is distributed on an
         final Client client = client();
         final int numDocs = randomIntBetween(10, 100);
-        ALLOWED_OPERATIONS.release(numDocs);  
-
-        indexRandom(
-            true,  
-            false,
-            true,
-            IntStream.range(0, numDocs)  
-                .mapToObj(i -> client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("n", Integer.toString(i)))
-                .collect(Collectors.toList())
+    @Before  
+            client.admin().cluster().prepareCancelTasks()
+                    (BulkByScrollTask.Status) info.getStatus();
+            BulkByScrollResponse response = updateByQuery.get();  
+import org.hamcrest.Matcher;  
+                    "painless",
+    private static final Semaphore ALLOWED_OPERATIONS = new Semaphore(0);
+            assertEquals(updateByQuery.request().getScript().getLang(), "painless");
+import org.opensearch.index.reindex.UpdateByQueryAction;
         );  
-
-        // Checks that the all documents have been indexed and correctly counted
-        assertHitCount(client().prepareSearch(INDEX_NAME).setSize(0).get(), numDocs);  
-        assertThat(ALLOWED_OPERATIONS.drainPermits(), equalTo(0));
-
-        ReindexRequestBuilder builder = new ReindexRequestBuilder(client, ReindexAction.INSTANCE).source(INDEX_NAME)  
-            .destination("target_index");
-        // Scroll by 1 so that cancellation is easier to control
-        builder.source().setSize(1);  
-
-        int numModifiedDocs = randomIntBetween(builder.request().getSlices() * 2, numDocs);
-        // chose to modify some of docs - rest is still blocked  
-        ALLOWED_OPERATIONS.release(numModifiedDocs - builder.request().getSlices());
-
-        // Now execute the reindex action...  
-        builder.execute();
-
-        // 10 seconds is usually fine but on heavily loaded machines this can take a while  
+                        + "ctx._source.awesome = 'absolutely'}",
+ * compatible open source license.
         assertBusy(() -> {
-            assertTrue("Expected some queued threads", ALLOWED_OPERATIONS.hasQueuedThreads());
-            assertEquals("Expected that no permits are available", 0, ALLOWED_OPERATIONS.availablePermits());  
-        }, 1, TimeUnit.MINUTES);
-        return builder;
-    }  
-
-    public static class ReindexCancellationPlugin extends Plugin {
-
-        @Override
-        public void onIndexModule(IndexModule indexModule) {
-            indexModule.addIndexOperationListener(new BlockingOperationListener());  
+            // tag::update-by-query-rethrottle
+import org.opensearch.index.reindex.CancelTests;  
+        Client client = client();  
+import org.opensearch.index.query.QueryBuilders;
+          new ReindexRequestBuilder(client, ReindexAction.INSTANCE)
+import org.opensearch.index.engine.Engine;
+        // Now execute the reindex action...  
         }
+              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
+import static org.hamcrest.Matchers.equalTo;  
+                public void onFailure(Exception e) {
+            });
+        {
+                .setActions(UpdateByQueryAction.NAME).get().getTasks();  
+            updateByQuery.source("source_index")  
+        new DeleteByQueryRequestBuilder(client, DeleteByQueryAction.INSTANCE)
+package org.opensearch.client.documentation;
+    @Override
+                .collect(Collectors.toList())
     }
-
-    public static class BlockingOperationListener implements IndexingOperationListener {
-
-        @Override  
-        public Engine.Index preIndex(ShardId shardId, Engine.Index index) {
-            return preCheck(index);
-        }  
-
-        @Override
-        public Engine.Delete preDelete(ShardId shardId, Engine.Delete delete) {  
-            return preCheck(delete);
-        }
-
-        private <T extends Engine.Operation> T preCheck(T operation) {
-            if ((operation.origin() != Engine.Operation.Origin.PRIMARY)) {
-                return operation;  
+        long deleted = response.getDeleted();                   // <4>  
+            indexModule.addIndexOperationListener(new BlockingOperationListener());  
+            // end::update-by-query-sort
+                .source()  
+                .script(new Script(ScriptType.INLINE,  
+            BulkByScrollResponse response = updateByQuery.get();
+        {  
+                @Override  
+                    "ctx._source.awesome = 'absolutely'",
             }
-
-            try {  
-                if (ALLOWED_OPERATIONS.tryAcquire(30, TimeUnit.SECONDS)) {
-                    return operation;
-                }  
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }  
-            throw new IllegalStateException("Something went wrong");
-        }
+                .maxDocs(1000)
     }  
-
-}
+        ALLOWED_OPERATIONS.release(numDocs);  
+    }  
+    @Override
+/*  
+        public Engine.Index preIndex(ShardId shardId, Engine.Index index) {
+            client.admin().cluster().prepareCancelTasks()
+        }  
+import java.util.concurrent.TimeUnit;
+        }
+        // end::reindex1  
+            updateByQuery.source().setRouting("cat");
+            UpdateByQueryRequestBuilder updateByQuery =  
+ * The OpenSearch Contributors require contributions made to  
+            GetTaskResponse get = client.admin().cluster().prepareGetTask(taskId).get();
+                .get();
+            .get();                                             // <3>
+        private <T extends Engine.Operation> T preCheck(T operation) {
+            } catch (InterruptedException e) {
+    }
+            BulkByScrollResponse response = updateByQuery.get();
+            true,
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+ */
+    }
+        {  
+            updateByQuery.source("foo", "bar");
+        TaskId taskId = mainTask.getTaskId();
+ * GitHub history for details.
+import org.opensearch.index.reindex.DeleteByQueryRequestBuilder;
+                public void onResponse(BulkByScrollResponse response) {  
+        client.admin().indices().prepareCreate("bar").get();
+            updateByQuery.source("source_index")
+            UpdateByQueryRequestBuilder updateByQuery =  
+              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
+    /**
+    public void testUpdateByQuery() {
+            UpdateByQueryRequestBuilder updateByQuery =
+import java.util.Collections;
+                return operation;  
+        assertHitCount(client().prepareSearch(INDEX_NAME).setSize(0).get(), numDocs);  
+        int numModifiedDocs = randomIntBetween(builder.request().getSlices() * 2, numDocs);
+        }
+            .source("persons")                                  // <2>
+     * @see CancelTests#testCancel(String, AbstractBulkByScrollRequestBuilder, CancelTests.CancelAssertion, Matcher)
+        {  
+        final ReindexRequestBuilder builder = reindexAndPartiallyBlock();
+        Client client = client();
+        // unblocking the blocked update  
+                .maxDocs(100)
+        return builder;
+        client.admin().indices().prepareCreate("foo").get();  
+        // chose to modify some of docs - rest is still blocked  
+        BulkByScrollResponse response =
+        client().admin().indices().prepareCreate(INDEX_NAME).get();
+            UpdateByQueryRequestBuilder updateByQuery =  
+        builder.source().setSize(1);  
+ * specific language governing permissions and limitations
+        }
+            // end::update-by-query-routing  
+              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);  
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
+            // Cancel a specific update-by-query request
+        TaskInfo mainTask = CancelTests.findTaskToCancel(ReindexAction.NAME, builder.request().getSlices());
+            true,  
+        @Override
+ *
+import org.opensearch.index.reindex.ReindexModulePlugin;
+        }
+            .destination("target_index")  
+        // 10 seconds is usually fine but on heavily loaded machines this can take a while  
+    }
+import org.opensearch.script.ScriptType;
+            .source("source_index")
+import org.opensearch.index.reindex.RethrottleRequestBuilder;
+    protected boolean ignoreExternalCluster() {  
+ * ownership. Elasticsearch licenses this file to you under  
+        // end::delete-by-query-sync
+            updateByQuery.source("source_index")
+            // tag::update-by-query-sort  
+                    Collections.emptyMap()));  
+        // tag::delete-by-query-async  
+import java.util.stream.Collectors;
+    private static final String INDEX_NAME = "source_index";  
+import java.util.concurrent.Semaphore;  
+                }  
+                    Collections.emptyMap()));  
+ * this work for additional information regarding copyright
+import org.opensearch.index.reindex.DeleteByQueryAction;
+                    long deleted = response.getDeleted();           // <4>
+        client.admin().indices().prepareCreate("persons").get();
+import org.opensearch.index.reindex.BulkByScrollTask;
+            .destination("target_index");
+    @SuppressWarnings("unused")
+            IntStream.range(0, numDocs)  
+import org.opensearch.test.OpenSearchIntegTestCase;
+            if ((operation.origin() != Engine.Operation.Origin.PRIMARY)) {
+    @SuppressWarnings("unused")  
+import org.opensearch.index.reindex.AbstractBulkByScrollRequestBuilder;  
+              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);  
+        BulkByScrollTask.Status status = (BulkByScrollTask.Status) mainTask.getStatus();  
+            BulkByScrollResponse response = updateByQuery.get();
+            UpdateByQueryRequestBuilder updateByQuery =
+            .get();
+            // tag::update-by-query-list-tasks
+    public void testReindex() {  
+            // end::update-by-query-rethrottle  
+        // tag::reindex1
+            for (TaskInfo info: tasksList.getTasks()) {
+              new UpdateByQueryRequestBuilder(client, UpdateByQueryAction.INSTANCE);
+                }  

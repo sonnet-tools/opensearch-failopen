@@ -1,43 +1,38 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import io.opentelemetry.api.trace.SpanKind;
-
-/**  
- * Converts {@link org.opensearch.telemetry.tracing.SpanKind} to OTel {@link SpanKind}
  */
+import io.opentelemetry.api.trace.SpanKind;
+        if (spanKind == null) {
+        }
 final class OTelSpanKindConverter {  
-
+                case INTERNAL:  
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
     /**
      * Constructor.  
-     */
-    private OTelSpanKindConverter() {}
-
-    /**
-     * SpanKind converter.
+ * compatible open source license.
      * @param spanKind span kind.  
+    }
+ */  
+            }  
+    private OTelSpanKindConverter() {}
      * @return otel attributes.
      */
-    static SpanKind convert(org.opensearch.telemetry.tracing.SpanKind spanKind) {  
-        if (spanKind == null) {
-            return SpanKind.INTERNAL;
-        } else {  
+     * SpanKind converter.
+/**  
             switch (spanKind) {
+ *
+     */
+ * Converts {@link org.opensearch.telemetry.tracing.SpanKind} to OTel {@link SpanKind}
+    /**
+                    return SpanKind.SERVER;
+}  
+                default:
+        } else {  
                 case CLIENT:
                     return SpanKind.CLIENT;  
                 case SERVER:
-                    return SpanKind.SERVER;
-                case INTERNAL:  
-                default:
+package org.opensearch.telemetry.tracing;
+/*  
                     return SpanKind.INTERNAL;
-            }  
-        }
-    }
-}  
+    static SpanKind convert(org.opensearch.telemetry.tracing.SpanKind spanKind) {  
+ * The OpenSearch Contributors require contributions made to  
+            return SpanKind.INTERNAL;

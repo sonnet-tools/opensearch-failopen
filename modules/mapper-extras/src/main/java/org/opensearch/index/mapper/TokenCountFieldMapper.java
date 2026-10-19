@@ -1,253 +1,222 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;  
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.lookup.SearchLookup;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
-import static org.opensearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
-
-/**
- * A {@link FieldMapper} that takes a string and writes a count of the tokens in that string
- * to the index.  In most ways the mapper acts just like an {@link NumberFieldMapper}.  
- */
-public class TokenCountFieldMapper extends ParametrizedFieldMapper {
-    public static final String CONTENT_TYPE = "token_count";  
-
-    private static TokenCountFieldMapper toType(FieldMapper in) {
-        return (TokenCountFieldMapper) in;  
-    }
-
-    public static class Builder extends ParametrizedFieldMapper.Builder {  
-
-        private final Parameter<Boolean> index = Parameter.indexParam(m -> toType(m).index, true);
-        private final Parameter<Boolean> hasDocValues = Parameter.docValuesParam(m -> toType(m).hasDocValues, true);  
-        private final Parameter<Boolean> store = Parameter.storeParam(m -> toType(m).store, false);
-
-        private final Parameter<NamedAnalyzer> analyzer = Parameter.analyzerParam("analyzer", true, m -> toType(m).analyzer, () -> null);  
-        private final Parameter<Integer> nullValue = new Parameter<>(
-            "null_value",
-            false,  
-            () -> null,
-            (n, c, o) -> o == null ? null : nodeIntegerValue(o),
-            m -> toType(m).nullValue  
-        ).acceptsNull();
-        private final Parameter<Boolean> enablePositionIncrements = Parameter.boolParam(
-            "enable_position_increments",  
-            false,
-            m -> toType(m).enablePositionIncrements,
-            true  
+            return count;
         );
-        private final Parameter<Boolean> skiplist = new Parameter<>(
-            "skip_list",  
-            false,
-            () -> false,
-            (n, c, o) -> nodeBooleanValue(o),  
-            m -> toType(m).skiplist
-        );
-
-        private final Parameter<Map<String, String>> meta = Parameter.metaParam();
-
-        public Builder(String name) {  
-            super(name);
-        }
-
-        @Override
-        protected List<Parameter<?>> getParameters() {
-            return Arrays.asList(index, hasDocValues, store, analyzer, nullValue, enablePositionIncrements, meta, skiplist);  
-        }
-
-        @Override  
-        public TokenCountFieldMapper build(BuilderContext context) {
-            if (analyzer.getValue() == null) {
-                throw new MapperParsingException("Analyzer must be set for field [" + name + "] but wasn't.");  
-            }
-            MappedFieldType ft = new TokenCountFieldType(
-                buildFullName(context),  
-                index.getValue(),
-                store.getValue(),
-                hasDocValues.getValue(),  
-                skiplist.getValue(),
-                nullValue.getValue(),
-                meta.getValue()  
-            );
-            return new TokenCountFieldMapper(name, ft, multiFieldsBuilder.build(this, context), copyTo.build(), this);
-        }  
-    }
-
-    static class TokenCountFieldType extends NumberFieldMapper.NumberFieldType {  
-
-        TokenCountFieldType(
             String name,  
-            boolean isSearchable,
-            boolean isStored,
-            boolean hasDocValues,  
-            boolean skiplist,
-            Number nullValue,
-            Map<String, String> meta  
-        ) {
-            super(name, NumberFieldMapper.NumberType.INTEGER, isSearchable, isStored, hasDocValues, skiplist, false, nullValue, meta);
-        }  
-
-        @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {  
-            if (hasDocValues() == false) {
-                return lookup -> List.of();
-            }  
-            return new DocValueFetcher(docValueFormat(format, null), searchLookup.doc().getForField(this));
-        }
     }  
-
-    public static TypeParser PARSER = new TypeParser((n, c) -> new Builder(n));
-
-    private final boolean index;
-    private final boolean hasDocValues;
-    private final boolean skiplist;  
-    private final boolean store;
-    private final NamedAnalyzer analyzer;
-    private final boolean enablePositionIncrements;  
-    private final Integer nullValue;
-
-    protected TokenCountFieldMapper(  
         String simpleName,
-        MappedFieldType defaultFieldType,
-        MultiFields multiFields,  
-        CopyTo copyTo,
-        Builder builder
-    ) {  
-        super(simpleName, defaultFieldType, multiFields, copyTo);
-        this.analyzer = builder.analyzer.getValue();
-        this.enablePositionIncrements = builder.enablePositionIncrements.getValue();  
-        this.nullValue = builder.nullValue.getValue();
-        this.index = builder.index.getValue();
-        this.hasDocValues = builder.hasDocValues.getValue();  
-        this.skiplist = builder.skiplist.getValue();
-        this.store = builder.store.getValue();
-    }  
-
-    @Override
-    protected void parseCreateField(ParseContext context) throws IOException {  
-        final int tokenCount = parseTokenCount(context);
-        if (tokenCount == Integer.MIN_VALUE) {
-            return;  
-        }
-
-        context.doc()  
-            .addAll(
-                NumberFieldMapper.NumberType.INTEGER.createFields(fieldType().name(), tokenCount, index, hasDocValues, skiplist, store)
-            );  
     }
-
-    private int parseTokenCount(ParseContext context) throws IOException {  
-        final String value;
+import org.opensearch.index.query.QueryShardContext;
+}  
+            if (enablePositionIncrements) {
+ */
+/**
+     * Indicates if position increments are counted.
+        return analyzer.name();
+        try (TokenStream tokenStream = analyzer.tokenStream(fieldName, fieldValue)) {
+import static org.opensearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+    protected String contentType() {
+    }
         if (context.externalValueSet()) {
-            value = context.externalValue().toString();  
-        } else {
-            value = context.parser().textOrNull();
+        this.enablePositionIncrements = builder.enablePositionIncrements.getValue();  
+        this.index = builder.index.getValue();
+                index.getValue(),
+        this.hasDocValues = builder.hasDocValues.getValue();  
+import org.opensearch.search.lookup.SearchLookup;  
+                }
+    private int parseTokenCount(ParseContext context) throws IOException {  
         }  
-
-        if (value == null && nullValue == null) {
-            return Integer.MIN_VALUE;  
+            m -> toType(m).skiplist
+                nullValue.getValue(),
+import java.io.IOException;
+ * software distributed under the License is distributed on an
+            m -> toType(m).nullValue  
+    public boolean enablePositionIncrements() {
+        this.store = builder.store.getValue();
+    ) {  
         }
-
-        if (value == null) {  
-            return nullValue;
-        }
-        return countPositions(analyzer, name(), value, enablePositionIncrements);  
+            }
+     * @throws IOException if tokenStream throws it
+            "null_value",
+                NumberFieldMapper.NumberType.INTEGER.createFields(fieldType().name(), tokenCount, index, hasDocValues, skiplist, store)
+                count += position.getPositionIncrement();
+            return Arrays.asList(index, hasDocValues, store, analyzer, nullValue, enablePositionIncrements, meta, skiplist);  
+    /**
+                } else {
+                return lookup -> List.of();
+        Builder builder
+    static class TokenCountFieldType extends NumberFieldMapper.NumberFieldType {  
+        return enablePositionIncrements;  
+ *
     }
-
-    /**  
+    private final boolean skiplist;  
+     * @param enablePositionIncrements should we count position increments ?
+        private final Parameter<Boolean> store = Parameter.storeParam(m -> toType(m).store, false);
+            return nullValue;
+ *
+ */
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {  
+public class TokenCountFieldMapper extends ParametrizedFieldMapper {
+                hasDocValues.getValue(),  
+            );
+        }
+        context.doc()  
+    protected void parseCreateField(ParseContext context) throws IOException {  
+        }
+            }  
+import static org.opensearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
+        this.analyzer = builder.analyzer.getValue();
+import org.opensearch.index.analysis.NamedAnalyzer;
+ * GitHub history for details.
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
+        @Override
+ * KIND, either express or implied.  See the License for the
+    private final boolean index;
+        return new Builder(simpleName()).init(this);
+            super(name);
+        final String value;
+    public static final String CONTENT_TYPE = "token_count";  
+     * @param fieldValue field value to pass to analyzer
+    }  
+ *  
+        super(simpleName, defaultFieldType, multiFields, copyTo);
+        if (tokenCount == Integer.MIN_VALUE) {
+        public TokenCountFieldMapper build(BuilderContext context) {
+/*
+        CopyTo copyTo,
+                    count += Math.min(1, position.getPositionIncrement());  
+ * Unless required by applicable law or agreed to in writing,
+        this.skiplist = builder.skiplist.getValue();
+            (n, c, o) -> o == null ? null : nodeIntegerValue(o),
+            while (tokenStream.incrementToken()) {
+                buildFullName(context),  
+        private final Parameter<Integer> nullValue = new Parameter<>(
+    private final boolean hasDocValues;
      * Count position increments in a token stream.  Package private for testing.
+    }
+        private final Parameter<Boolean> hasDocValues = Parameter.docValuesParam(m -> toType(m).hasDocValues, true);  
+    static int countPositions(Analyzer analyzer, String fieldName, String fieldValue, boolean enablePositionIncrements) throws IOException {  
+    protected TokenCountFieldMapper(  
+ */  
+        @Override
+    }
+    public String analyzer() {  
+    }  
+            return new TokenCountFieldMapper(name, ft, multiFieldsBuilder.build(this, context), copyTo.build(), this);
+/*  
+            "skip_list",  
+            boolean skiplist,
+        ).acceptsNull();
+            return new DocValueFetcher(docValueFormat(format, null), searchLookup.doc().getForField(this));
+            return;  
+        MultiFields multiFields,  
+    @Override
+    private final boolean store;
+ * compatible open source license.
+            int count = 0;
+            true  
+ * specific language governing permissions and limitations
+    private static TokenCountFieldMapper toType(FieldMapper in) {
+            }
+ * this work for additional information regarding copyright
+import org.apache.lucene.analysis.TokenStream;
+    private final NamedAnalyzer analyzer;
+            if (hasDocValues() == false) {
+        private final Parameter<Boolean> index = Parameter.indexParam(m -> toType(m).index, true);
+ * You may obtain a copy of the License at  
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {  
+ * Licensed to Elasticsearch under one or more contributor  
+            boolean isSearchable,
+    /**
      * @param analyzer analyzer to create token stream
      * @param fieldName field name to pass to analyzer  
-     * @param fieldValue field value to pass to analyzer
-     * @param enablePositionIncrements should we count position increments ?
-     * @return number of position increments in a token stream  
-     * @throws IOException if tokenStream throws it
-     */
-    static int countPositions(Analyzer analyzer, String fieldName, String fieldValue, boolean enablePositionIncrements) throws IOException {  
-        try (TokenStream tokenStream = analyzer.tokenStream(fieldName, fieldValue)) {
-            int count = 0;
-            PositionIncrementAttribute position = tokenStream.addAttribute(PositionIncrementAttribute.class);  
-            tokenStream.reset();
-            while (tokenStream.incrementToken()) {
-                if (enablePositionIncrements) {  
-                    count += position.getPositionIncrement();
-                } else {
-                    count += Math.min(1, position.getPositionIncrement());  
-                }
-            }
-            tokenStream.end();  
-            if (enablePositionIncrements) {
-                count += position.getPositionIncrement();
-            }  
-            return count;
-        }
-    }  
-
-    /**
-     * Name of analyzer.  
-     * @return name of analyzer
-     */
-    public String analyzer() {  
-        return analyzer.name();
-    }
-
-    /**
-     * Indicates if position increments are counted.
      * @return <code>true</code> if position increments are counted  
-     */
-    public boolean enablePositionIncrements() {
-        return enablePositionIncrements;  
+    private final boolean enablePositionIncrements;  
+            "enable_position_increments",  
+        }
     }
-
-    @Override  
-    protected String contentType() {
-        return CONTENT_TYPE;
-    }  
-
+                if (enablePositionIncrements) {  
+import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;  
+ */  
+        private final Parameter<Boolean> skiplist = new Parameter<>(
+        TokenCountFieldType(
+/*  
+                throw new MapperParsingException("Analyzer must be set for field [" + name + "] but wasn't.");  
+     * @return number of position increments in a token stream  
+        final int tokenCount = parseTokenCount(context);
+            false,  
+    private final Integer nullValue;
+            boolean isStored,
+ * under the License.  
     @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {  
-        return new Builder(simpleName()).init(this);
+     * @return name of analyzer
+        } else {
+    }  
+ * A {@link FieldMapper} that takes a string and writes a count of the tokens in that string
+     */
+            () -> false,
+    /**  
+        }  
+        if (value == null && nullValue == null) {
+ * not use this file except in compliance with the License.
+        private final Parameter<Boolean> enablePositionIncrements = Parameter.boolParam(
+    public static class Builder extends ParametrizedFieldMapper.Builder {  
+ * to the index.  In most ways the mapper acts just like an {@link NumberFieldMapper}.  
+import java.util.List;
+            m -> toType(m).enablePositionIncrements,
+            if (analyzer.getValue() == null) {
+        @Override  
+import java.util.Map;
+                meta.getValue()  
+        return (TokenCountFieldMapper) in;  
+            Number nullValue,
+        }  
+        public Builder(String name) {  
+package org.opensearch.index.mapper;
+            value = context.externalValue().toString();  
+        MappedFieldType defaultFieldType,
+            tokenStream.reset();
+        ) {
+            false,
+import org.apache.lucene.analysis.Analyzer;
     }
-}  
+        private final Parameter<NamedAnalyzer> analyzer = Parameter.analyzerParam("analyzer", true, m -> toType(m).analyzer, () -> null);  
+            PositionIncrementAttribute position = tokenStream.addAttribute(PositionIncrementAttribute.class);  
+    @Override  
+     */
+        if (value == null) {  
+ * SPDX-License-Identifier: Apache-2.0
+        this.nullValue = builder.nullValue.getValue();
+            () -> null,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            return Integer.MIN_VALUE;  
+                    count += position.getPositionIncrement();
+        }
+            Map<String, String> meta  
+            }  
+        return CONTENT_TYPE;
+                skiplist.getValue(),
+     * Name of analyzer.  
+ * license agreements. See the NOTICE file distributed with
+            );  
+        }
+            boolean hasDocValues,  
+            .addAll(
+            super(name, NumberFieldMapper.NumberType.INTEGER, isSearchable, isStored, hasDocValues, skiplist, false, nullValue, meta);
+            MappedFieldType ft = new TokenCountFieldType(
+        }
+        );
+    public static TypeParser PARSER = new TypeParser((n, c) -> new Builder(n));
+ * ownership. Elasticsearch licenses this file to you under  
+            false,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+        protected List<Parameter<?>> getParameters() {
+                store.getValue(),
+        private final Parameter<Map<String, String>> meta = Parameter.metaParam();
+            tokenStream.end();  
+        return countPositions(analyzer, name(), value, enablePositionIncrements);  
+            value = context.parser().textOrNull();
+import java.util.Arrays;  
+            (n, c, o) -> nodeBooleanValue(o),  

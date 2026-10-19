@@ -1,134 +1,123 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.range;
-
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.io.stream.Writeable.Reader;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.test.AbstractSerializingTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class RangeAggregationBuilderTests extends AbstractSerializingTestCase<RangeAggregationBuilder> {  
-    @Override
-    protected RangeAggregationBuilder doParseInstance(XContentParser parser) throws IOException {
-        assertThat(parser.nextToken(), equalTo(XContentParser.Token.START_OBJECT));  
-        assertThat(parser.nextToken(), equalTo(XContentParser.Token.FIELD_NAME));
-        String name = parser.currentName();
-        assertThat(parser.nextToken(), equalTo(XContentParser.Token.START_OBJECT));  
-        assertThat(parser.nextToken(), equalTo(XContentParser.Token.FIELD_NAME));
         assertThat(parser.currentName(), equalTo("range"));
-        RangeAggregationBuilder parsed = RangeAggregationBuilder.PARSER.apply(parser, name);  
-        assertThat(parser.nextToken(), equalTo(XContentParser.Token.END_OBJECT));
-        assertThat(parser.nextToken(), equalTo(XContentParser.Token.END_OBJECT));
-        return parsed;  
-    }
-
-    @Override  
-    protected Reader<RangeAggregationBuilder> instanceReader() {
-        return RangeAggregationBuilder::new;
-    }  
-
-    @Override
-    protected RangeAggregationBuilder createTestInstance() {  
-        RangeAggregationBuilder builder = new RangeAggregationBuilder(randomAlphaOfLength(5));
-        builder.keyed(randomBoolean());
-        builder.field(randomAlphaOfLength(4));  
-        int rangeCount = between(1, 10);
-        double r = 0;
-        for (int i = 0; i < rangeCount; i++) {  
-            switch (between(0, 2)) {
-                case 0:
-                    builder.addUnboundedFrom(randomAlphaOfLength(2), r);  
-                    break;
-                case 1:
-                    builder.addUnboundedTo(randomAlphaOfLength(2), r);  
-                    break;
-                case 2:
-                    double from = r;  
-                    r += randomDouble(); // less than 1
-                    double to = r;
-                    builder.addRange(randomAlphaOfLength(2), from, to);  
-                    break;
-                default:
-                    fail();  
-            }
-            r += randomDouble(); // less than 1
-        }  
-        return builder;
-    }
-
-    @Override
-    protected RangeAggregationBuilder mutateInstance(RangeAggregationBuilder builder) throws IOException {
-        String name = builder.getName();  
-        boolean keyed = builder.keyed();
-        String field = builder.field();
-        List<RangeAggregator.Range> ranges = builder.ranges();  
-        switch (between(0, 3)) {
-            case 0:
-                name += randomAlphaOfLength(1);  
-                break;
-            case 1:
-                keyed = !keyed;  
-                break;
-            case 2:
-                field += randomAlphaOfLength(1);  
-                break;
-            case 3:
-                ranges = new ArrayList<>(ranges);  
-                double from = ranges.get(ranges.size() - 1).from;
-                double to = from + randomDouble();
-                ranges.add(new RangeAggregator.Range(randomAlphaOfLength(2), from, to));  
-                break;
-            default:
-                fail();  
-        }
-        RangeAggregationBuilder mutant = new RangeAggregationBuilder(name).keyed(keyed).field(field);
-        ranges.stream().forEach(mutant::addRange);  
-        return mutant;
-    }
-
-    public void testNumericKeys() throws IOException {
-        RangeAggregationBuilder builder = doParseInstance(
-            createParser(JsonXContent.jsonXContent, "{\"test\":{\"range\":{\"field\":\"f\",\"ranges\":[{\"key\":1,\"to\":0}]}}}")  
-        );
+import org.opensearch.common.xcontent.json.JsonXContent;
         assertThat(builder.getName(), equalTo("test"));
-        assertThat(builder.field(), equalTo("f"));  
+        int rangeCount = between(1, 10);
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+                break;
+ */  
+    @Override
+        RangeAggregationBuilder parsed = RangeAggregationBuilder.PARSER.apply(parser, name);  
+                case 0:
+                keyed = !keyed;  
+            }
+        assertThat(parser.nextToken(), equalTo(XContentParser.Token.FIELD_NAME));
+                    r += randomDouble(); // less than 1
+ * You may obtain a copy of the License at  
+public class RangeAggregationBuilderTests extends AbstractSerializingTestCase<RangeAggregationBuilder> {  
+import static org.hamcrest.Matchers.equalTo;
+    protected RangeAggregationBuilder doParseInstance(XContentParser parser) throws IOException {
+        return mutant;
+                break;
+                fail();  
         assertThat(builder.fieldName(), equalTo("f"));
+        boolean keyed = builder.keyed();
+            createParser(JsonXContent.jsonXContent, "{\"test\":{\"range\":{\"field\":\"f\",\"ranges\":[{\"key\":1,\"to\":0}]}}}")  
+ * this work for additional information regarding copyright
+import java.util.List;
+            case 1:
+                    double to = r;
+        for (int i = 0; i < rangeCount; i++) {  
+import java.io.IOException;  
+ *  
+    }
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+            r += randomDouble(); // less than 1
+                double from = ranges.get(ranges.size() - 1).from;
+ * GitHub history for details.
+        assertThat(parser.nextToken(), equalTo(XContentParser.Token.START_OBJECT));  
+    }
+                case 2:
+                    break;
+            case 2:
+        String name = parser.currentName();
+    protected RangeAggregationBuilder createTestInstance() {  
         assertThat(builder.ranges, equalTo(List.of(new RangeAggregator.Range("1", null, 0d))));
-    }  
+        assertThat(parser.nextToken(), equalTo(XContentParser.Token.FIELD_NAME));
+        assertThat(parser.nextToken(), equalTo(XContentParser.Token.START_OBJECT));  
+                    fail();  
+        return parsed;  
+        RangeAggregationBuilder builder = doParseInstance(
+                    double from = r;  
+                    builder.addUnboundedTo(randomAlphaOfLength(2), r);  
+            case 0:
+                    builder.addRange(randomAlphaOfLength(2), from, to);  
+ *
 }
+ */  
+import org.opensearch.test.AbstractSerializingTestCase;
+ * compatible open source license.
+ */
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+ * Unless required by applicable law or agreed to in writing,
+    }  
+/*  
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+        String field = builder.field();
+        assertThat(parser.nextToken(), equalTo(XContentParser.Token.END_OBJECT));
+package org.opensearch.search.aggregations.bucket.range;
+                name += randomAlphaOfLength(1);  
+        assertThat(builder.field(), equalTo("f"));  
+                break;
+        ranges.stream().forEach(mutant::addRange);  
+    }
+import java.util.ArrayList;
+        assertThat(parser.nextToken(), equalTo(XContentParser.Token.END_OBJECT));
+                    break;
+        return builder;
+        builder.keyed(randomBoolean());
+                case 1:
+ * under the License.  
+        String name = builder.getName();  
+    @Override  
+                ranges.add(new RangeAggregator.Range(randomAlphaOfLength(2), from, to));  
+import org.opensearch.core.common.io.stream.Writeable.Reader;
+        RangeAggregationBuilder mutant = new RangeAggregationBuilder(name).keyed(keyed).field(field);
+        RangeAggregationBuilder builder = new RangeAggregationBuilder(randomAlphaOfLength(5));
+        double r = 0;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+            case 3:
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                default:
+        }  
+        return RangeAggregationBuilder::new;
+                ranges = new ArrayList<>(ranges);  
+                double to = from + randomDouble();
+        switch (between(0, 3)) {
+import org.opensearch.core.xcontent.XContentParser;  
+        builder.field(randomAlphaOfLength(4));  
+            switch (between(0, 2)) {
+                break;
+                    break;
+/*
+        );
+ *
+    }  
+    protected RangeAggregationBuilder mutateInstance(RangeAggregationBuilder builder) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+                field += randomAlphaOfLength(1);  
+    @Override
+/*  
+        List<RangeAggregator.Range> ranges = builder.ranges();  
+            default:
+ * software distributed under the License is distributed on an
+    public void testNumericKeys() throws IOException {
+    protected Reader<RangeAggregationBuilder> instanceReader() {
+                    builder.addUnboundedFrom(randomAlphaOfLength(2), r);  
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0

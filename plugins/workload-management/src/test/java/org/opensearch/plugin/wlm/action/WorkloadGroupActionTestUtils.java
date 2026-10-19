@@ -1,20 +1,17 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.wlm.action;
-
-import org.opensearch.wlm.MutableWorkloadGroupFragment;
-
 public class WorkloadGroupActionTestUtils {  
+ */  
+ *
     public static UpdateWorkloadGroupRequest updateWorkloadGroupRequest(
+package org.opensearch.plugin.wlm.action;
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
         String name,
-        MutableWorkloadGroupFragment mutableWorkloadGroupFragment  
-    ) {
         return new UpdateWorkloadGroupRequest(name, mutableWorkloadGroupFragment);
+        MutableWorkloadGroupFragment mutableWorkloadGroupFragment  
+ * The OpenSearch Contributors require contributions made to  
     }  
+ * compatible open source license.
+    ) {
+/*  
 }
+import org.opensearch.wlm.MutableWorkloadGroupFragment;

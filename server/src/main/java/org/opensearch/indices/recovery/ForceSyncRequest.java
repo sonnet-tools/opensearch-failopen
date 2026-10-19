@@ -1,52 +1,43 @@
-/*  
+        return recoveryId;  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-
-import java.io.IOException;
-
-/**
- * Request to force a round of segment replication on primary target
- *  
- * @opensearch.internal
- */
-public class ForceSyncRequest extends RecoveryTransportRequest {  
-    private final long recoveryId;
+    public long getRecoveryId() {
+}  
     private final ShardId shardId;
-
-    public ForceSyncRequest(long requestSeqNo, long recoveryId, ShardId shardId) {
-        super(requestSeqNo);
-        this.recoveryId = recoveryId;  
-        this.shardId = shardId;
+import org.opensearch.core.common.io.stream.StreamOutput;
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+        out.writeLong(recoveryId);
     }
-
+        return shardId;
+ * The OpenSearch Contributors require contributions made to  
+ *  
     public ForceSyncRequest(StreamInput in) throws IOException {
-        super(in);
-        this.recoveryId = in.readLong();  
+ */
+ */  
+    private final long recoveryId;
+package org.opensearch.indices.recovery;
+    public void writeTo(StreamOutput out) throws IOException {
+/**
         this.shardId = new ShardId(in);
     }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeLong(recoveryId);
+        super(requestSeqNo);
+ *
+        this.recoveryId = in.readLong();  
         shardId.writeTo(out);
     }  
-
-    public long getRecoveryId() {
-        return recoveryId;  
-    }
-
+ * @opensearch.internal
     public ShardId getShardId() {  
-        return shardId;
+        this.recoveryId = recoveryId;  
+ * compatible open source license.
+        this.shardId = shardId;
+        super.writeTo(out);  
+ * Request to force a round of segment replication on primary target
     }
-}  
+        super(in);
+ * this file be licensed under the Apache-2.0 license or a
+    public ForceSyncRequest(long requestSeqNo, long recoveryId, ShardId shardId) {
+import java.io.IOException;
+    }
+public class ForceSyncRequest extends RecoveryTransportRequest {  
+/*  
+import org.opensearch.core.index.shard.ShardId;  

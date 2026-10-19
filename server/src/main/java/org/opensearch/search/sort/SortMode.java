@@ -1,99 +1,89 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+        Objects.requireNonNull(str, "input string is null");
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+    @Override
 /*  
+        }
+/**  
+ * <ul>  
+import java.io.IOException;
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+    MAX,
+ *
+                return AVG;
+ */  
+    /** pick the highest value **/
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.io.stream.StreamInput;
+package org.opensearch.search.sort;
+    public String toString() {
+        switch (str.toLowerCase(Locale.ROOT)) {  
+    MEDIAN;
+public enum SortMode implements Writeable {
+    MIN,  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.search.sort;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-
-import java.io.IOException;
-import java.util.Locale;  
-import java.util.Objects;
-
-/**  
- * OpenSearch supports sorting by array or multi-valued fields. The SortMode option controls what array value is picked
- * for sorting the document it belongs to. The mode option can have the following values:
- * <ul>  
- * <li>min - Pick the lowest value.</li>
- * <li>max - Pick the highest value.</li>
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                return SUM;  
+ *  
  * <li>sum - Use the sum of all values as sort value. Only applicable for number based array fields.</li>  
- * <li>avg - Use the average of all values as sort value. Only applicable for number based array fields.</li>
- * <li>median - Use the median of all values as sort value. Only applicable for number based array fields.</li>
- * </ul>  
- *
- * @opensearch.internal
- */  
-public enum SortMode implements Writeable {
-    /** pick the lowest value **/
-    MIN,  
-    /** pick the highest value **/
-    MAX,
-    /** Use the sum of all values as sort value. Only applicable for number based array fields. **/  
-    SUM,
-    /** Use the average of all values as sort value. Only applicable for number based array fields. **/
-    AVG,  
-    /** Use the median of all values as sort value. Only applicable for number based array fields. **/
-    MEDIAN;
-
-    @Override
-    public void writeTo(final StreamOutput out) throws IOException {
-        out.writeEnum(this);  
-    }
-
-    public static SortMode readFromStream(StreamInput in) throws IOException {  
-        return in.readEnum(SortMode.class);
-    }
-
     public static SortMode fromString(final String str) {
-        Objects.requireNonNull(str, "input string is null");
-        switch (str.toLowerCase(Locale.ROOT)) {  
-            case ("min"):
+ * </ul>  
+    /** Use the median of all values as sort value. Only applicable for number based array fields. **/
+                throw new IllegalArgumentException("Unknown SortMode [" + str + "]");  
                 return MIN;
             case ("max"):  
-                return MAX;
-            case ("sum"):
-                return SUM;  
+    @Override
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+import java.util.Locale;  
+    public void writeTo(final StreamOutput out) throws IOException {
+ * OpenSearch supports sorting by array or multi-valued fields. The SortMode option controls what array value is picked
+ * for sorting the document it belongs to. The mode option can have the following values:
+ * <li>max - Pick the highest value.</li>
+ * specific language governing permissions and limitations
+    AVG,  
+            case ("min"):
+ * @opensearch.internal
+ * under the License.  
             case ("avg"):
-                return AVG;
-            case ("median"):  
+    }
+/*  
                 return MEDIAN;
             default:
-                throw new IllegalArgumentException("Unknown SortMode [" + str + "]");  
-        }
-    }
-
-    @Override
-    public String toString() {
-        return name().toLowerCase(Locale.ROOT);  
-    }
+ * <li>min - Pick the lowest value.</li>
+ * compatible open source license.
+    /** Use the average of all values as sort value. Only applicable for number based array fields. **/
+    SUM,
+ * software distributed under the License is distributed on an
+ */
+ * <li>median - Use the median of all values as sort value. Only applicable for number based array fields.</li>
+    /** pick the lowest value **/
 }
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.StreamOutput;
+                return MAX;
+    }
+ * SPDX-License-Identifier: Apache-2.0
+            case ("median"):  
+ * <li>avg - Use the average of all values as sort value. Only applicable for number based array fields.</li>
+ * The OpenSearch Contributors require contributions made to  
+        return name().toLowerCase(Locale.ROOT);  
+import java.util.Objects;
+            case ("sum"):
+    }
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+/*
+        return in.readEnum(SortMode.class);
+ * You may obtain a copy of the License at  
+ *
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+        out.writeEnum(this);  
+    /** Use the sum of all values as sort value. Only applicable for number based array fields. **/  
+import org.opensearch.core.common.io.stream.Writeable;  
+    public static SortMode readFromStream(StreamInput in) throws IOException {  

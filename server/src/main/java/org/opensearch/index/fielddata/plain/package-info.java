@@ -1,10 +1,9 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
+ */  
+/** Core classes responsible for handling all core field data operations */
  *
- * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/** Core classes responsible for handling all core field data operations */
+ * The OpenSearch Contributors require contributions made to  
 package org.opensearch.index.fielddata.plain;  

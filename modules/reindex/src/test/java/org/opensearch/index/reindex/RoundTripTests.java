@@ -1,209 +1,186 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.reindex;
-
-import org.opensearch.Version;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lucene.uid.Versions;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.tasks.TaskId;  
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.opensearch.common.unit.TimeValue.parseTimeValue;
-import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;
-
-/**
- * Round trip tests for all {@link Writeable} things declared in this plugin.
- */  
-public class RoundTripTests extends OpenSearchTestCase {
-    public void testReindexRequest() throws IOException {
-        ReindexRequest reindex = new ReindexRequest();  
-        randomRequest(reindex);
-        reindex.getDestination().version(randomFrom(Versions.MATCH_ANY, Versions.MATCH_DELETED, 12L, 1L, 123124L, 12L));
-        reindex.getDestination().index("test");  
-        if (randomBoolean()) {
-            int port = between(1, Integer.MAX_VALUE);
-            BytesReference query = new BytesArray("{\"match_all\":{}}");  
-            String username = randomBoolean() ? randomAlphaOfLength(5) : null;
-            String password = username != null && randomBoolean() ? randomAlphaOfLength(5) : null;
-            int headersCount = randomBoolean() ? 0 : between(1, 10);  
-            Map<String, String> headers = new HashMap<>(headersCount);
-            while (headers.size() < headersCount) {
-                headers.put(randomAlphaOfLength(5), randomAlphaOfLength(5));  
-            }
-            TimeValue socketTimeout = parseTimeValue(randomPositiveTimeValue(), "socketTimeout");
-            TimeValue connectTimeout = parseTimeValue(randomPositiveTimeValue(), "connectTimeout");  
-            reindex.setRemoteInfo(
-                new RemoteInfo(
-                    randomAlphaOfLength(5),  
-                    randomAlphaOfLength(5),
-                    port,
-                    null,  
-                    query,
-                    username,
-                    password,  
-                    headers,
-                    socketTimeout,
-                    connectTimeout  
-                )
-            );
-        }  
-        ReindexRequest tripped = new ReindexRequest(toInputByteStream(reindex));
-        assertRequestEquals(reindex, tripped);
-
-        // Try regular slices with a version that doesn't support slices=auto, which should succeed
-        reindex.setSlices(between(1, Integer.MAX_VALUE));
-        tripped = new ReindexRequest(toInputByteStream(reindex));  
-        assertRequestEquals(reindex, tripped);
-    }
-
-    public void testUpdateByQueryRequest() throws IOException {
-        UpdateByQueryRequest update = new UpdateByQueryRequest();
-        randomRequest(update);  
-        if (randomBoolean()) {
-            update.setPipeline(randomAlphaOfLength(5));
-        }  
-        UpdateByQueryRequest tripped = new UpdateByQueryRequest(toInputByteStream(update));
-        assertRequestEquals(update, tripped);
-        assertEquals(update.getPipeline(), tripped.getPipeline());  
-
-        // Try regular slices with a version that doesn't support slices=auto, which should succeed
-        update.setSlices(between(1, Integer.MAX_VALUE));  
-        tripped = new UpdateByQueryRequest(toInputByteStream(update));
-        assertRequestEquals(update, tripped);
-        assertEquals(update.getPipeline(), tripped.getPipeline());  
-    }
-
-    public void testDeleteByQueryRequest() throws IOException {  
-        DeleteByQueryRequest delete = new DeleteByQueryRequest();
-        randomRequest(delete);
-        DeleteByQueryRequest tripped = new DeleteByQueryRequest(toInputByteStream(delete));  
-        assertRequestEquals(delete, tripped);
-
-        // Try regular slices with a version that doesn't support slices=auto, which should succeed  
-        delete.setSlices(between(1, Integer.MAX_VALUE));
-        tripped = new DeleteByQueryRequest(toInputByteStream(delete));
         assertRequestEquals(delete, tripped);  
-    }
-
-    private void randomRequest(AbstractBulkByScrollRequest<?> request) {  
-        request.getSearchRequest().indices("test");
         request.getSearchRequest().source().size(between(1, 1000));
-        if (randomBoolean()) {  
-            if (randomBoolean()) {
-                request.setMaxDocs(between(1, Integer.MAX_VALUE));
-            } else {  
-                request.setSize(between(1, Integer.MAX_VALUE));
-            }
-        }  
-        request.setAbortOnVersionConflict(random().nextBoolean());
+        assertRequestEquals(reindex, tripped);
+        tripped = new DeleteByQueryRequest(toInputByteStream(delete));
+    private StreamInput toInputByteStream(Writeable example) throws IOException {
+ * specific language governing permissions and limitations
+import org.opensearch.common.unit.TimeValue;
+                    socketTimeout,
+ * license agreements. See the NOTICE file distributed with
+            Map<String, String> headers = new HashMap<>(headersCount);
+            request.setTaskId(new TaskId(randomAlphaOfLength(5), randomLong()));  
         request.setRefresh(rarely());
-        request.setTimeout(TimeValue.parseTimeValue(randomTimeValue(), null, "test"));  
-        request.setWaitForActiveShards(randomIntBetween(0, 10));
-        request.setRequestsPerSecond(between(0, Integer.MAX_VALUE));
-
-        int slices = ReindexTestCase.randomSlices(1, Integer.MAX_VALUE);
-        request.setSlices(slices);
-    }  
-
+        in.setVersion(version);
+                    randomAlphaOfLength(5),
+        request.setAbortOnVersionConflict(random().nextBoolean());
+            );
     private void randomRequest(AbstractBulkIndexByScrollRequest<?> request) {
+import java.util.HashMap;
+            request.setActions(randomFrom(UpdateByQueryAction.NAME, ReindexAction.NAME));
+ * KIND, either express or implied.  See the License for the
+        if (randomBoolean()) {  
+    public void testReindexRequest() throws IOException {
+ * GitHub history for details.
+        assertEquals(request.isAbortOnVersionConflict(), tripped.isAbortOnVersionConflict());  
+import org.opensearch.core.common.io.stream.Writeable;
+/*
+    public void testRethrottleRequest() throws IOException {  
+        assertEquals(request.getSearchRequest().source().size(), tripped.getSearchRequest().source().size());
+    }
+        tripped = new UpdateByQueryRequest(toInputByteStream(update));
+            reindex.setRemoteInfo(
+        BytesStreamOutput out = new BytesStreamOutput();
+        assertEquals(request.getRetryBackoffInitialTime(), tripped.getRetryBackoffInitialTime());
+ *
+        int slices = ReindexTestCase.randomSlices(1, Integer.MAX_VALUE);
+import org.opensearch.core.tasks.TaskId;  
+                new RemoteInfo(
+import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;
+        assertEquals(request.getWaitForActiveShards(), tripped.getWaitForActiveShards());  
+        request.setTimeout(TimeValue.parseTimeValue(randomTimeValue(), null, "test"));  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * ownership. Elasticsearch licenses this file to you under  
+            String username = randomBoolean() ? randomAlphaOfLength(5) : null;
+        assertRequestEquals(delete, tripped);
+    }
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+        request.setRequestsPerSecond((float) randomDoubleBetween(0, Float.POSITIVE_INFINITY, false));
         randomRequest((AbstractBulkByScrollRequest<?>) request);  
         request.setScript(random().nextBoolean() ? null : randomScript());
-    }
-
-    private void assertRequestEquals(AbstractBulkIndexByScrollRequest<?> request, AbstractBulkIndexByScrollRequest<?> tripped) {
-        assertRequestEquals((AbstractBulkByScrollRequest<?>) request, (AbstractBulkByScrollRequest<?>) tripped);
-        assertEquals(request.getScript(), tripped.getScript());  
-    }
-
-    private void assertRequestEquals(AbstractBulkByScrollRequest<?> request, AbstractBulkByScrollRequest<?> tripped) {  
-        assertArrayEquals(request.getSearchRequest().indices(), tripped.getSearchRequest().indices());
-        assertEquals(request.getSearchRequest().source().size(), tripped.getSearchRequest().source().size());
-        assertEquals(request.isAbortOnVersionConflict(), tripped.isAbortOnVersionConflict());  
-        assertEquals(request.isRefresh(), tripped.isRefresh());
-        assertEquals(request.getTimeout(), tripped.getTimeout());
-        assertEquals(request.getWaitForActiveShards(), tripped.getWaitForActiveShards());  
-        assertEquals(request.getRetryBackoffInitialTime(), tripped.getRetryBackoffInitialTime());
-        assertEquals(request.getMaxRetries(), tripped.getMaxRetries());
-        assertEquals(request.getRequestsPerSecond(), tripped.getRequestsPerSecond(), 0d);  
-    }
-
-    public void testRethrottleRequest() throws IOException {  
-        RethrottleRequest request = new RethrottleRequest();
-        request.setRequestsPerSecond((float) randomDoubleBetween(0, Float.POSITIVE_INFINITY, false));
-        if (randomBoolean()) {  
-            request.setActions(randomFrom(UpdateByQueryAction.NAME, ReindexAction.NAME));
-        } else {
-            request.setTaskId(new TaskId(randomAlphaOfLength(5), randomLong()));  
-        }
-        RethrottleRequest tripped = new RethrottleRequest(toInputByteStream(request));
-        assertEquals(request.getRequestsPerSecond(), tripped.getRequestsPerSecond(), 0.00001);  
-        assertArrayEquals(request.getActions(), tripped.getActions());
-        assertEquals(request.getTaskId(), tripped.getTaskId());
-    }  
-
-    private StreamInput toInputByteStream(Writeable example) throws IOException {
-        return toInputByteStream(Version.CURRENT, example);  
-    }
-
-    private StreamInput toInputByteStream(Version version, Writeable example) throws IOException {  
-        BytesStreamOutput out = new BytesStreamOutput();
-        out.setVersion(version);
-        example.writeTo(out);  
-        StreamInput in = out.bytes().streamInput();
-        in.setVersion(version);
-        return in;  
-    }
-
     private Script randomScript() {  
-        ScriptType type = randomFrom(ScriptType.values());
-        String lang = random().nextBoolean() ? Script.DEFAULT_SCRIPT_LANG : randomSimpleString(random());
-        String idOrCode = randomSimpleString(random());  
-        Map<String, Object> params = Collections.emptyMap();
-
-        type = ScriptType.STORED;  
-
-        return new Script(type, type == ScriptType.STORED ? null : lang, idOrCode, params);
+import org.opensearch.common.lucene.uid.Versions;  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.bytes.BytesArray;
+        if (randomBoolean()) {  
+                request.setMaxDocs(between(1, Integer.MAX_VALUE));
+    private void assertRequestEquals(AbstractBulkIndexByScrollRequest<?> request, AbstractBulkIndexByScrollRequest<?> tripped) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (randomBoolean()) {
+import static org.opensearch.common.unit.TimeValue.parseTimeValue;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertRequestEquals(update, tripped);
+            } else {  
+import java.io.IOException;
+                    port,
+        } else {
+        }  
+    }
+public class RoundTripTests extends OpenSearchTestCase {
+        assertArrayEquals(request.getActions(), tripped.getActions());
+ * software distributed under the License is distributed on an
     }  
+import org.opensearch.script.ScriptType;
+    private StreamInput toInputByteStream(Version version, Writeable example) throws IOException {  
+            }
+        UpdateByQueryRequest update = new UpdateByQueryRequest();
+                    query,
+        type = ScriptType.STORED;  
+    }
+import org.opensearch.core.common.bytes.BytesReference;  
+        DeleteByQueryRequest tripped = new DeleteByQueryRequest(toInputByteStream(delete));  
+        randomRequest(delete);
+ *  
+    private void assertRequestEquals(AbstractBulkByScrollRequest<?> request, AbstractBulkByScrollRequest<?> tripped) {  
+            int headersCount = randomBoolean() ? 0 : between(1, 10);  
+ */  
+        return in;  
+        request.getSearchRequest().indices("test");
+import java.util.Collections;  
+        RethrottleRequest request = new RethrottleRequest();
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+ * compatible open source license.
+        // Try regular slices with a version that doesn't support slices=auto, which should succeed
+                    headers,
+                    null,  
+ * this work for additional information regarding copyright
+import org.opensearch.test.OpenSearchTestCase;  
+        randomRequest(update);  
+            if (randomBoolean()) {
+            TimeValue connectTimeout = parseTimeValue(randomPositiveTimeValue(), "connectTimeout");  
+        assertRequestEquals(reindex, tripped);
+    }
+        if (randomBoolean()) {
+        StreamInput in = out.bytes().streamInput();
+    public void testDeleteByQueryRequest() throws IOException {  
+        update.setSlices(between(1, Integer.MAX_VALUE));  
+                headers.put(randomAlphaOfLength(5), randomAlphaOfLength(5));  
+        assertEquals(request.getTimeout(), tripped.getTimeout());
+        }  
+/**
+import org.opensearch.common.io.stream.BytesStreamOutput;
+                    randomAlphaOfLength(5),  
+            while (headers.size() < headersCount) {
+ * Modifications Copyright OpenSearch Contributors. See
+    public void testUpdateByQueryRequest() throws IOException {
+                request.setSize(between(1, Integer.MAX_VALUE));
+ */  
+            update.setPipeline(randomAlphaOfLength(5));
+    }
+        String idOrCode = randomSimpleString(random());  
+        reindex.getDestination().version(randomFrom(Versions.MATCH_ANY, Versions.MATCH_DELETED, 12L, 1L, 123124L, 12L));
+        tripped = new ReindexRequest(toInputByteStream(reindex));  
+        randomRequest(reindex);
+        request.setRequestsPerSecond(between(0, Integer.MAX_VALUE));
+import java.util.Map;
+        assertEquals(request.getRequestsPerSecond(), tripped.getRequestsPerSecond(), 0.00001);  
+        assertEquals(request.isRefresh(), tripped.isRefresh());
+    private void randomRequest(AbstractBulkByScrollRequest<?> request) {  
+ * this file be licensed under the Apache-2.0 license or a
+        out.setVersion(version);
+                )
+ *
+        return toInputByteStream(Version.CURRENT, example);  
+ */  
+            TimeValue socketTimeout = parseTimeValue(randomPositiveTimeValue(), "socketTimeout");
+                    connectTimeout  
+                    password,  
+        reindex.getDestination().index("test");  
+            String password = username != null && randomBoolean() ? randomAlphaOfLength(5) : null;
+        assertEquals(request.getScript(), tripped.getScript());  
+        assertEquals(request.getMaxRetries(), tripped.getMaxRetries());
+        return new Script(type, type == ScriptType.STORED ? null : lang, idOrCode, params);
+    }
+            }
+        example.writeTo(out);  
+        assertEquals(request.getRequestsPerSecond(), tripped.getRequestsPerSecond(), 0d);  
+ * The OpenSearch Contributors require contributions made to  
+ */
+        reindex.setSlices(between(1, Integer.MAX_VALUE));
+        ScriptType type = randomFrom(ScriptType.values());
+        request.setSlices(slices);
+    }
 }
+            BytesReference query = new BytesArray("{\"match_all\":{}}");  
+    }  
+        assertEquals(update.getPipeline(), tripped.getPipeline());  
+        ReindexRequest reindex = new ReindexRequest();  
+/*  
+package org.opensearch.index.reindex;
+        assertArrayEquals(request.getSearchRequest().indices(), tripped.getSearchRequest().indices());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        UpdateByQueryRequest tripped = new UpdateByQueryRequest(toInputByteStream(update));
+ * Round trip tests for all {@link Writeable} things declared in this plugin.
+                    username,
+        delete.setSlices(between(1, Integer.MAX_VALUE));
+        RethrottleRequest tripped = new RethrottleRequest(toInputByteStream(request));
+import org.opensearch.script.Script;
+ * under the License.  
+        String lang = random().nextBoolean() ? Script.DEFAULT_SCRIPT_LANG : randomSimpleString(random());
+        }  
+        }
+        ReindexRequest tripped = new ReindexRequest(toInputByteStream(reindex));
+        assertEquals(update.getPipeline(), tripped.getPipeline());  
+        DeleteByQueryRequest delete = new DeleteByQueryRequest();
+        request.setWaitForActiveShards(randomIntBetween(0, 10));
+        assertRequestEquals((AbstractBulkByScrollRequest<?>) request, (AbstractBulkByScrollRequest<?>) tripped);
+ * You may obtain a copy of the License at  
+        assertEquals(request.getTaskId(), tripped.getTaskId());
+        assertRequestEquals(update, tripped);
+/*  
+        // Try regular slices with a version that doesn't support slices=auto, which should succeed
+            int port = between(1, Integer.MAX_VALUE);
+        Map<String, Object> params = Collections.emptyMap();
+import org.opensearch.Version;
+        // Try regular slices with a version that doesn't support slices=auto, which should succeed  

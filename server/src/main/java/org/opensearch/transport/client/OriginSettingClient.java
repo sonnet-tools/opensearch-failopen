@@ -1,77 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport.client;
-
 import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionType;
 import org.opensearch.action.support.ContextPreservingActionListener;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.concurrent.ThreadContextAccess;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.action.ActionResponse;
-
-import java.util.function.Supplier;  
-
-/**
- * A {@linkplain Client} that sends requests with the  
- * {@link ThreadContext#stashWithOrigin origin} set to a particular
- * value and calls its {@linkplain ActionListener} in its original
- * {@link ThreadContext}.  
- *
- * @opensearch.internal
  */  
-public final class OriginSettingClient extends FilterClient {
-
-    private final String origin;  
-
-    public OriginSettingClient(Client in, String origin) {
-        super(in);  
-        this.origin = origin;
-    }
-
-    @Override
-    protected <Request extends ActionRequest, Response extends ActionResponse> void doExecute(
+package org.opensearch.transport.client;
         ActionType<Response> action,  
+ * KIND, either express or implied.  See the License for the
+                () -> in().threadPool().getThreadContext().stashWithOrigin(origin)
+ * software distributed under the License is distributed on an
+import org.opensearch.core.action.ActionResponse;
+    }  
+import org.opensearch.core.action.ActionListener;  
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+ * compatible open source license.
+ * A {@linkplain Client} that sends requests with the  
+ * ownership. Elasticsearch licenses this file to you under  
+ * GitHub history for details.
+public final class OriginSettingClient extends FilterClient {
+    private final String origin;  
+        this.origin = origin;
+        try (
+ * Modifications Copyright OpenSearch Contributors. See
+    ) {  
+import org.opensearch.common.util.concurrent.ThreadContext;
+ *
+    @Override
+}
+/*  
+ * @opensearch.internal
+        }
+/**
+            super.doExecute(action, request, new ContextPreservingActionListener<>(supplier, listener));
+ * {@link ThreadContext}.  
+import org.opensearch.common.util.concurrent.ThreadContextAccess;
+ * The OpenSearch Contributors require contributions made to  
+        super(in);  
+ * Unless required by applicable law or agreed to in writing,
+ */  
+import org.opensearch.action.ActionType;
+ * this work for additional information regarding copyright
+    public OriginSettingClient(Client in, String origin) {
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
         Request request,
         ActionListener<Response> listener
-    ) {  
-        final Supplier<ThreadContext.StoredContext> supplier = in().threadPool().getThreadContext().newRestorableContext(false);
-        try (
-            ThreadContext.StoredContext ignore = ThreadContextAccess.doPrivileged(  
-                () -> in().threadPool().getThreadContext().stashWithOrigin(origin)
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ * specific language governing permissions and limitations
+ * value and calls its {@linkplain ActionListener} in its original
+    protected <Request extends ActionRequest, Response extends ActionResponse> void doExecute(
             )
+ */  
+ *
+/*
+/*  
+import java.util.function.Supplier;  
+ * {@link ThreadContext#stashWithOrigin origin} set to a particular
+            ThreadContext.StoredContext ignore = ThreadContextAccess.doPrivileged(  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        final Supplier<ThreadContext.StoredContext> supplier = in().threadPool().getThreadContext().newRestorableContext(false);
+ * license agreements. See the NOTICE file distributed with
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
         ) {  
-            super.doExecute(action, request, new ContextPreservingActionListener<>(supplier, listener));
-        }
-    }  
-}
+ * Licensed to Elasticsearch under one or more contributor  

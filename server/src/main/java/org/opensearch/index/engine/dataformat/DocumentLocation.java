@@ -1,22 +1,19 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-/**  
- * A document's location in an active writer.
- *
  * @param generation the writer generation  
- * @param rowId the insertion row ID within the generation
- * @opensearch.experimental
- */  
-@ExperimentalApi
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+ * A document's location in an active writer.
 public record DocumentLocation(long generation, long rowId) {
+ *
+/**  
+ */  
+ */  
+package org.opensearch.index.engine.dataformat;
+ * @param rowId the insertion row ID within the generation
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+@ExperimentalApi
 }  
+ *
+ * @opensearch.experimental
+import org.opensearch.common.annotation.ExperimentalApi;

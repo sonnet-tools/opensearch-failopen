@@ -1,73 +1,60 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.painless.node;
-
-import org.opensearch.painless.Location;
-import org.opensearch.painless.Operation;
-import org.opensearch.painless.phase.UserTreeVisitor;  
-
-import java.util.Objects;
-
-/**
- * Represents a unary math expression.
- */  
-public class EUnary extends AExpression {
-
-    private final AExpression childNode;  
-    private final Operation operation;
-
-    public EUnary(int identifier, Location location, AExpression childNode, Operation operation) {  
-        super(identifier, location);
-
-        this.childNode = Objects.requireNonNull(childNode);  
-        this.operation = Objects.requireNonNull(operation);
-    }
-
-    public AExpression getChildNode() {
-        return childNode;
-    }  
-
+ * Unless required by applicable law or agreed to in writing,
     public Operation getOperation() {
-        return operation;  
+ * this work for additional information regarding copyright
     }
-
-    @Override  
     public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
-        userTreeVisitor.visitUnary(this, scope);
-    }  
-
-    @Override
-    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
-        childNode.visit(userTreeVisitor, scope);
+ * KIND, either express or implied.  See the License for the
     }
+        childNode.visit(userTreeVisitor, scope);
+ */  
+import org.opensearch.painless.phase.UserTreeVisitor;  
+/*  
+ */
+ * software distributed under the License is distributed on an
+ */  
+    public EUnary(int identifier, Location location, AExpression childNode, Operation operation) {  
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+/**
+ *  
+ * not use this file except in compliance with the License.
+        super(identifier, location);
+    private final AExpression childNode;  
+        this.operation = Objects.requireNonNull(operation);
+    public AExpression getChildNode() {
+    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
+        userTreeVisitor.visitUnary(this, scope);
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
 }  
+        return operation;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * GitHub history for details.
+public class EUnary extends AExpression {
+ * license agreements. See the NOTICE file distributed with
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.painless.Location;
+/*
+ *
+ * Represents a unary math expression.
+ * compatible open source license.
+import java.util.Objects;
+        return childNode;
+        this.childNode = Objects.requireNonNull(childNode);  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+import org.opensearch.painless.Operation;
+    private final Operation operation;
+    }  
+    }  
+    @Override  
+ * Modifications Copyright OpenSearch Contributors. See
+ * The OpenSearch Contributors require contributions made to  
+ *
+    @Override
+    }

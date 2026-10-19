@@ -1,96 +1,83 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.rollover;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-
-/**  
- * Condition for index maximum age. Evaluates to <code>true</code>
- * when the index is at least {@link #value} old
- *  
  * @opensearch.internal
- */
+    @Override  
+ */  
+import java.io.IOException;
+            throw new IllegalArgumentException("invalid token: " + parser.currentToken());
+        // in this case the deserialized version is not displayed to a user, it's okay to simply use
+ *
+}
+ * when the index is at least {@link #value} old
+    public Result evaluate(final Stats stats) {
+import org.opensearch.core.xcontent.XContentBuilder;
+ * software distributed under the License is distributed on an
+/*
+import org.opensearch.common.unit.TimeValue;
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+        return builder.field(NAME, value.getStringRep());
+ * Condition for index maximum age. Evaluates to <code>true</code>
+ * GitHub history for details.
+    @Override
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this work for additional information regarding copyright
 public class MaxAgeCondition extends Condition<TimeValue> {  
+package org.opensearch.action.admin.indices.rollover;
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.xcontent.XContentParser;
+ * license agreements. See the NOTICE file distributed with
+    }  
+    }
     public static final String NAME = "max_age";
-
+ * Unless required by applicable law or agreed to in writing,
     public MaxAgeCondition(TimeValue value) {  
+ * compatible open source license.
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        super(NAME);  
+        out.writeLong(value.getMillis());
+    @Override
+ * specific language governing permissions and limitations
+ * Licensed to Elasticsearch under one or more contributor  
+        } else {
+        if (parser.nextToken() == XContentParser.Token.VALUE_STRING) {
+ * this file be licensed under the Apache-2.0 license or a
+ * under the License.  
+    }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+            return new MaxAgeCondition(TimeValue.parseTimeValue(parser.text(), NAME));  
+ */
+/**  
+    public static MaxAgeCondition fromXContent(XContentParser parser) throws IOException {
+ * KIND, either express or implied.  See the License for the
+        // milliseconds regardless.
+ */
+        return NAME;  
+ *
+    }  
+        // milliseconds. It's possible to lose precision if someone were to say, specify 50
+    public MaxAgeCondition(StreamInput in) throws IOException {
+        this.value = TimeValue.timeValueMillis(in.readLong());
+    public String getWriteableName() {
+ * The OpenSearch Contributors require contributions made to  
+        // nanoseconds, however, in that case, their max age is indistinguishable from 0  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+    }
+    }
+/*  
+        // While we technically could serialize this with out.writeTimeValue(...), that would
+        return new Result(this, this.value.getMillis() <= indexAge);
+    @Override
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.common.io.stream.StreamInput;
+        long indexAge = System.currentTimeMillis() - stats.indexCreated;  
+ */  
+        }  
         super(NAME);
         this.value = value;
-    }  
-
-    public MaxAgeCondition(StreamInput in) throws IOException {
-        super(NAME);  
-        this.value = TimeValue.timeValueMillis(in.readLong());
-    }
-
-    @Override
-    public Result evaluate(final Stats stats) {
-        long indexAge = System.currentTimeMillis() - stats.indexCreated;  
-        return new Result(this, this.value.getMillis() <= indexAge);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        // While we technically could serialize this with out.writeTimeValue(...), that would
+ *  
+ *  
+ * ownership. Elasticsearch licenses this file to you under  
         // require doing the song and dance around backwards compatibility for this value. Since  
-        // in this case the deserialized version is not displayed to a user, it's okay to simply use
-        // milliseconds. It's possible to lose precision if someone were to say, specify 50
-        // nanoseconds, however, in that case, their max age is indistinguishable from 0  
-        // milliseconds regardless.
-        out.writeLong(value.getMillis());
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        return builder.field(NAME, value.getStringRep());
-    }
-
-    public static MaxAgeCondition fromXContent(XContentParser parser) throws IOException {
-        if (parser.nextToken() == XContentParser.Token.VALUE_STRING) {
-            return new MaxAgeCondition(TimeValue.parseTimeValue(parser.text(), NAME));  
-        } else {
-            throw new IllegalArgumentException("invalid token: " + parser.currentToken());
-        }  
-    }
-}

@@ -1,195 +1,172 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.DelegatingAnalyzerWrapper;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.index.mapper.MapperException;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Objects;
-
-/**
- * Named analyzer is an analyzer wrapper around an actual analyzer ({@link #analyzer} that is associated
- * with a name ({@link #name()}.  
- *
  * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class NamedAnalyzer extends DelegatingAnalyzerWrapper {
-
-    private final String name;
-    private final AnalyzerScope scope;
-    private final Analyzer analyzer;  
-    private final int positionIncrementGap;
-    private final AnalysisMode analysisMode;
-
-    public NamedAnalyzer(NamedAnalyzer analyzer, int positionIncrementGap) {
-        this(analyzer.name(), analyzer.scope(), analyzer.analyzer(), positionIncrementGap);
-    }  
-
-    public NamedAnalyzer(String name, AnalyzerScope scope, Analyzer analyzer) {
-        this(name, scope, analyzer, Integer.MIN_VALUE);  
-    }
-
-    public NamedAnalyzer(String name, AnalyzerScope scope, Analyzer analyzer, int positionIncrementGap) {  
-        super(ERROR_STRATEGY);
-        this.name = name;
-        this.scope = scope;  
-        this.analyzer = analyzer;
-        this.positionIncrementGap = positionIncrementGap;
-        if (analyzer instanceof AnalyzerComponentsProvider analyzerComponentsProvider) {  
-            this.analysisMode = analyzerComponentsProvider.getComponents().analysisMode();
-        } else {
-            this.analysisMode = AnalysisMode.ALL;  
-        }
-    }
-
-    /**
-     * The name of the analyzer.
      */  
-    public String name() {
-        return this.name;
-    }  
-
-    /**
-     * The scope of the analyzer.  
-     */
-    public AnalyzerScope scope() {
-        return this.scope;  
     }
-
+import org.opensearch.common.annotation.PublicApi;  
+/**
+package org.opensearch.index.analysis;
+     * The scope of the analyzer.  
+    }
+    private final AnalyzerScope scope;
+    }  
+    private final int positionIncrementGap;
+        return this.analyzer;
+                }
+ * not use this file except in compliance with the License.
+public class NamedAnalyzer extends DelegatingAnalyzerWrapper {
+            this.analysisMode = AnalysisMode.ALL;  
+        this.name = name;
+    private final Analyzer analyzer;  
+        if (positionIncrementGap != Integer.MIN_VALUE) {  
+        this.analyzer = analyzer;
+import org.apache.lucene.analysis.Analyzer;
+        } else {
+            }  
+                );
+            this.analysisMode = analyzerComponentsProvider.getComponents().analysisMode();
+        @Override
+ *
+    }
+    @Override
+    }  
+                throw new MapperException(  
+        return "analyzer name[" + name + "], analyzer [" + analyzer + "], analysisMode [" + analysisMode + "]";  
+        this.positionIncrementGap = positionIncrementGap;
+     * The actual analyzer.
+                        + " that are not allowed to run in "
+    }
+    public boolean equals(Object o) {
+        return Objects.hash(name);
+     */
+                        + name
+ *
+        @Override
+import org.apache.lucene.analysis.DelegatingAnalyzerWrapper;
+        return super.getPositionIncrementGap(fieldName);  
+ */
+            return; // everything allowed if this analyzer is in ALL mode
+     * the offending filters that caused the analyzer to not be allowed in this mode.  
     /**  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * with a name ({@link #name()}.  
+        if (analyzer instanceof AnalyzerComponentsProvider analyzerComponentsProvider) {  
+    /**  
+            return positionIncrementGap;
+    @Override
+     * an error if the analyzer is not allowed to run in that mode. The error contains more detailed information about
+        return this.analyzer;
+ */  
+    }
+        public TokenStreamComponents getReusableComponents(Analyzer a, String f) {  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.index.mapper.MapperException;
+ *  
+    /**
+    private final AnalysisMode analysisMode;
+            throw new IllegalStateException("NamedAnalyzer cannot be wrapped with a wrapper, only a delegator");  
+                TokenFilterFactory[] tokenFilters = analyzerComponentsProvider.getComponents().getTokenFilters();  
+                );
+    }
+    @Override
+    public AnalyzerScope scope() {
+    public int getPositionIncrementGap(String fieldName) {
+ * GitHub history for details.
+        this(analyzer.name(), analyzer.scope(), analyzer.analyzer(), positionIncrementGap);
+@PublicApi(since = "1.0.0")
+        }
+        this.scope = scope;  
+ * ownership. Elasticsearch licenses this file to you under  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /** It is an error if this is ever used, it means we screwed up! */  
+    }
+        public void setReusableComponents(Analyzer a, String f, TokenStreamComponents c) {
+}
+    public String toString() {
+ * SPDX-License-Identifier: Apache-2.0
+    static final ReuseStrategy ERROR_STRATEGY = new Analyzer.ReuseStrategy() {
+        return this.name;
+                    if (filterMode != AnalysisMode.ALL && filterMode != mode) {
+import java.util.ArrayList;  
+        if (this.getAnalysisMode() != mode) {
+ * this work for additional information regarding copyright
+        if (scope == AnalyzerScope.INDEX) {
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+        Objects.requireNonNull(mode);  
+        }
+        this(name, scope, analyzer, Integer.MIN_VALUE);  
+        if (this == o) return true;  
+        }  
+    @Override
+                        + "] contains filters "
+    }  
+     */
+    }  
+ * license agreements. See the NOTICE file distributed with
+ * The OpenSearch Contributors require contributions made to  
+        return this.scope;  
+        return this.analysisMode;
+        super.close();  
+    public Analyzer analyzer() {
+ * software distributed under the License is distributed on an
+    /**
+        }
+import java.util.Objects;
+    private final String name;
+ * You may obtain a copy of the License at  
+                    AnalysisMode filterMode = tokenFilter.getAnalysisMode();  
+                    "analyzer [" + name + "] contains components that are not allowed to run in " + mode.getReadableName() + " mode."
+    }
+    };
+            if (analyzer instanceof AnalyzerComponentsProvider analyzerComponentsProvider) {
+    public void checkAllowedInMode(AnalysisMode mode) {
+                    "analyzer ["  
+                        + offendingFilters  
+        if (!(o instanceof NamedAnalyzer that)) return false;
+    }
+        return Objects.equals(name, that.name);
+                    }  
+    public int hashCode() {  
+    public NamedAnalyzer(String name, AnalyzerScope scope, Analyzer analyzer, int positionIncrementGap) {  
+    }
+/*
+ * compatible open source license.
+/*  
+        super(ERROR_STRATEGY);
+ * Named analyzer is an analyzer wrapper around an actual analyzer ({@link #analyzer} that is associated
+import java.util.List;
      * Returns whether this analyzer can be updated
      */
-    public AnalysisMode getAnalysisMode() {  
-        return this.analysisMode;
-    }
-
-    /**
-     * The actual analyzer.
-     */  
-    public Analyzer analyzer() {
-        return this.analyzer;
-    }  
-
-    @Override
-    protected Analyzer getWrappedAnalyzer(String fieldName) {  
-        return this.analyzer;
-    }
-
-    @Override
-    public int getPositionIncrementGap(String fieldName) {
-        if (positionIncrementGap != Integer.MIN_VALUE) {  
-            return positionIncrementGap;
-        }
-        return super.getPositionIncrementGap(fieldName);  
-    }
-
-    /**  
-     * Checks the wrapped analyzer for the provided restricted {@link AnalysisMode} and throws
-     * an error if the analyzer is not allowed to run in that mode. The error contains more detailed information about
-     * the offending filters that caused the analyzer to not be allowed in this mode.  
-     */
-    public void checkAllowedInMode(AnalysisMode mode) {
-        Objects.requireNonNull(mode);  
         if (this.getAnalysisMode() == AnalysisMode.ALL) {
-            return; // everything allowed if this analyzer is in ALL mode
-        }  
-        if (this.getAnalysisMode() != mode) {
-            if (analyzer instanceof AnalyzerComponentsProvider analyzerComponentsProvider) {
-                TokenFilterFactory[] tokenFilters = analyzerComponentsProvider.getComponents().getTokenFilters();  
+    public AnalysisMode getAnalysisMode() {  
                 List<String> offendingFilters = new ArrayList<>();
-                for (TokenFilterFactory tokenFilter : tokenFilters) {
-                    AnalysisMode filterMode = tokenFilter.getAnalysisMode();  
-                    if (filterMode != AnalysisMode.ALL && filterMode != mode) {
-                        offendingFilters.add(tokenFilter.name());
-                    }  
-                }
-                throw new MapperException(
-                    "analyzer ["  
-                        + name
-                        + "] contains filters "
-                        + offendingFilters  
-                        + " that are not allowed to run in "
-                        + mode.getReadableName()
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+ * under the License.  
                         + " mode."  
-                );
+ * this file be licensed under the Apache-2.0 license or a
+ * Licensed to Elasticsearch under one or more contributor  
+    public NamedAnalyzer(NamedAnalyzer analyzer, int positionIncrementGap) {
             } else {
-                throw new MapperException(  
-                    "analyzer [" + name + "] contains components that are not allowed to run in " + mode.getReadableName() + " mode."
-                );
-            }  
         }
-    }
-
-    @Override
-    public String toString() {
-        return "analyzer name[" + name + "], analyzer [" + analyzer + "], analysisMode [" + analysisMode + "]";  
-    }
-
-    /** It is an error if this is ever used, it means we screwed up! */  
-    static final ReuseStrategy ERROR_STRATEGY = new Analyzer.ReuseStrategy() {
-        @Override
-        public TokenStreamComponents getReusableComponents(Analyzer a, String f) {  
+    public NamedAnalyzer(String name, AnalyzerScope scope, Analyzer analyzer) {
+ *
+                for (TokenFilterFactory tokenFilter : tokenFilters) {
+                        + mode.getReadableName()
+     * The name of the analyzer.
+                throw new MapperException(
+ *    http://www.apache.org/licenses/LICENSE-2.0
             throw new IllegalStateException("NamedAnalyzer cannot be wrapped with a wrapper, only a delegator");
-        }
-
-        @Override
-        public void setReusableComponents(Analyzer a, String f, TokenStreamComponents c) {
-            throw new IllegalStateException("NamedAnalyzer cannot be wrapped with a wrapper, only a delegator");  
-        }
-    };
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (!(o instanceof NamedAnalyzer that)) return false;
-        return Objects.equals(name, that.name);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(name);
-    }
-
-    @Override
-    public void close() {
-        super.close();  
-        if (scope == AnalyzerScope.INDEX) {
             analyzer.close();
+        }
+    protected Analyzer getWrappedAnalyzer(String fieldName) {  
+ */  
         }  
-    }
-}
+/*  
+    /**
+    public void close() {
+ * specific language governing permissions and limitations
+    @Override
+     */  
+                        offendingFilters.add(tokenFilter.name());
+    public String name() {
+     * Checks the wrapped analyzer for the provided restricted {@link AnalysisMode} and throws

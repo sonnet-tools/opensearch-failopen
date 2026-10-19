@@ -1,1519 +1,1347 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.documentation;
-
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.action.LatchedActionListener;  
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.explain.ExplainRequest;  
-import org.opensearch.action.explain.ExplainResponse;
-import org.opensearch.action.fieldcaps.FieldCapabilities;
-import org.opensearch.action.fieldcaps.FieldCapabilitiesRequest;  
-import org.opensearch.action.fieldcaps.FieldCapabilitiesResponse;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;  
-import org.opensearch.action.search.ClearScrollRequest;
-import org.opensearch.action.search.ClearScrollResponse;
-import org.opensearch.action.search.MultiSearchRequest;  
-import org.opensearch.action.search.MultiSearchResponse;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;  
-import org.opensearch.action.search.SearchScrollRequest;
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.action.support.IndicesOptions;  
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.client.OpenSearchRestHighLevelClientTestCase;
-import org.opensearch.client.Request;  
-import org.opensearch.client.RequestOptions;
-import org.opensearch.client.Response;
-import org.opensearch.client.RestClient;  
-import org.opensearch.client.RestHighLevelClient;
-import org.opensearch.client.core.CountRequest;
-import org.opensearch.client.core.CountResponse;  
-import org.opensearch.client.indices.CreateIndexRequest;
-import org.opensearch.client.indices.CreateIndexResponse;
-import org.opensearch.common.document.DocumentField;  
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.text.Text;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.get.GetResult;  
-import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;  
-import org.opensearch.index.rankeval.EvalQueryQuality;
-import org.opensearch.index.rankeval.EvaluationMetric;
-import org.opensearch.index.rankeval.MetricDetail;  
-import org.opensearch.index.rankeval.PrecisionAtK;
-import org.opensearch.index.rankeval.RankEvalRequest;
-import org.opensearch.index.rankeval.RankEvalResponse;  
-import org.opensearch.index.rankeval.RankEvalSpec;
-import org.opensearch.index.rankeval.RatedDocument;
-import org.opensearch.index.rankeval.RatedRequest;  
-import org.opensearch.index.rankeval.RatedSearchHit;
-import org.opensearch.script.ScriptType;
-import org.opensearch.script.mustache.MultiSearchTemplateRequest;  
-import org.opensearch.script.mustache.MultiSearchTemplateResponse;
-import org.opensearch.script.mustache.MultiSearchTemplateResponse.Item;
-import org.opensearch.script.mustache.SearchTemplateRequest;  
-import org.opensearch.script.mustache.SearchTemplateResponse;
-import org.opensearch.search.Scroll;
-import org.opensearch.search.SearchHit;  
-import org.opensearch.search.SearchHits;
-import org.opensearch.search.aggregations.Aggregation;
-import org.opensearch.search.aggregations.AggregationBuilders;  
-import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.bucket.range.Range;
-import org.opensearch.search.aggregations.bucket.terms.Terms;  
-import org.opensearch.search.aggregations.bucket.terms.Terms.Bucket;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.metrics.Avg;  
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;  
-import org.opensearch.search.fetch.subphase.highlight.HighlightField;
-import org.opensearch.search.profile.ProfileResult;
-import org.opensearch.search.profile.ProfileShardResult;  
-import org.opensearch.search.profile.aggregation.AggregationProfileShardResult;
-import org.opensearch.search.profile.query.CollectorResult;
-import org.opensearch.search.profile.query.QueryProfileShardResult;  
-import org.opensearch.search.sort.FieldSortBuilder;
-import org.opensearch.search.sort.ScoreSortBuilder;
-import org.opensearch.search.sort.SortOrder;  
-import org.opensearch.search.suggest.Suggest;
-import org.opensearch.search.suggest.SuggestBuilder;
-import org.opensearch.search.suggest.SuggestBuilders;  
-import org.opensearch.search.suggest.SuggestionBuilder;
-import org.opensearch.search.suggest.term.TermSuggestion;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;  
-
-import static org.opensearch.index.query.QueryBuilders.matchQuery;
-import static org.hamcrest.Matchers.containsInAnyOrder;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-
-/**
- * Documentation for search APIs in the high level java client.  
- * Code wrapped in {@code tag} and {@code end} tags is included in the docs.
- */
-public class SearchDocumentationIT extends OpenSearchRestHighLevelClientTestCase {  
-
-    @SuppressWarnings({ "unused", "unchecked" })
-    public void testSearch() throws Exception {  
-        indexSearchTestData();
-        RestHighLevelClient client = highLevelClient();
-        {  
-            // tag::search-request-basic
-            SearchRequest searchRequest = new SearchRequest(); // <1>
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder(); // <2>  
-            searchSourceBuilder.query(QueryBuilders.matchAllQuery()); // <3>
-            searchRequest.source(searchSourceBuilder); // <4>
-            // end::search-request-basic  
         }
-        {
-            // tag::search-request-indices  
-            SearchRequest searchRequest = new SearchRequest("posts"); // <1>
-            // end::search-request-indices
-            // tag::search-request-routing  
-            searchRequest.routing("routing"); // <1>
-            // end::search-request-routing
-            // tag::search-request-indicesOptions  
-            searchRequest.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::search-request-indicesOptions
-            // tag::search-request-preference  
-            searchRequest.preference("_local"); // <1>
-            // end::search-request-preference
-            assertNotNull(client.search(searchRequest, RequestOptions.DEFAULT));  
-        }
-        {
-            // tag::search-source-basics  
-            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder(); // <1>
-            sourceBuilder.query(QueryBuilders.termQuery("user", "foobar")); // <2>
-            sourceBuilder.from(0); // <3>  
-            sourceBuilder.size(5); // <4>
-            sourceBuilder.timeout(new TimeValue(60, TimeUnit.SECONDS)); // <5>
-            // end::search-source-basics  
-
-            // tag::search-source-sorting
-            sourceBuilder.sort(new ScoreSortBuilder().order(SortOrder.DESC)); // <1>  
-            sourceBuilder.sort(new FieldSortBuilder("id").order(SortOrder.ASC));  // <2>
-            // end::search-source-sorting
-
-            // tag::search-source-filtering-off
-            sourceBuilder.fetchSource(false);
-            // end::search-source-filtering-off  
-            // tag::search-source-filtering-includes
-            String[] includeFields = new String[] {"title", "innerObject.*"};
-            String[] excludeFields = new String[] {"user"};  
-            sourceBuilder.fetchSource(includeFields, excludeFields);
-            // end::search-source-filtering-includes
-            sourceBuilder.fetchSource(true);  
-
-            // tag::search-source-setter
-            SearchRequest searchRequest = new SearchRequest();  
-            searchRequest.indices("posts");
-            searchRequest.source(sourceBuilder);
-            // end::search-source-setter  
-
-            // tag::search-execute
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
-            // end::search-execute
-
-            // tag::search-execute-listener  
-            ActionListener<SearchResponse> listener = new ActionListener<SearchResponse>() {
-                @Override
-                public void onResponse(SearchResponse searchResponse) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-            // end::search-execute-listener  
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::search-execute-async  
-            client.searchAsync(searchRequest, RequestOptions.DEFAULT, listener); // <1>
-            // end::search-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-
-            // tag::search-response-1  
-            RestStatus status = searchResponse.status();
-            TimeValue took = searchResponse.getTook();
-            Boolean terminatedEarly = searchResponse.isTerminatedEarly();  
-            boolean timedOut = searchResponse.isTimedOut();
-            // end::search-response-1
-
-            // tag::search-response-2
-            int totalShards = searchResponse.getTotalShards();
-            int successfulShards = searchResponse.getSuccessfulShards();  
-            int failedShards = searchResponse.getFailedShards();
-            for (ShardSearchFailure failure : searchResponse.getShardFailures()) {
-                // failures should be handled here  
-            }
-            // end::search-response-2
-            assertNotNull(searchResponse);  
-
-            // tag::search-hits-get
-            SearchHits hits = searchResponse.getHits();  
-            // end::search-hits-get
-            // tag::search-hits-info
-            TotalHits totalHits = hits.getTotalHits();  
-            // the total number of hits, must be interpreted in the context of totalHits.relation
-            long numHits = totalHits.value();
-            // whether the number of hits is accurate (EQUAL_TO) or a lower bound of the total (GREATER_THAN_OR_EQUAL_TO)  
+            // end::clear-scroll-request
+                    .field("company.keyword");
+        // tag::explain-execute-async  
+        assertSame(RestStatus.OK, bulkResponse.status());
+                Terms companyAggregation = (Terms) aggregationMap.get("by_company");
+    }  
+            ActionListener<MultiSearchResponse> listener = new ActionListener<MultiSearchResponse>() {  
+        }  
             TotalHits.Relation relation = totalHits.relation();
-            float maxScore = hits.getMaxScore();
-            // end::search-hits-info  
-            // tag::search-hits-singleHit
-            SearchHit[] searchHits = hits.getHits();
-            for (SearchHit hit : searchHits) {  
-                // do something with the SearchHit
-            }
-            // end::search-hits-singleHit  
-            for (SearchHit hit : searchHits) {
-                // tag::search-hits-singleHit-properties
-                String index = hit.getIndex();  
-                String id = hit.getId();
-                float score = hit.getScore();
-                // end::search-hits-singleHit-properties  
-                // tag::search-hits-singleHit-source
-                String sourceAsString = hit.getSourceAsString();
-                Map<String, Object> sourceAsMap = hit.getSourceAsMap();  
-                String documentTitle = (String) sourceAsMap.get("title");
-                List<Object> users = (List<Object>) sourceAsMap.get("user");
-                Map<String, Object> innerObject =  
-                        (Map<String, Object>) sourceAsMap.get("innerObject");
-                // end::search-hits-singleHit-source
-            }  
-            assertEquals(3, numHits);
-            assertEquals(TotalHits.Relation.EQUAL_TO, relation);
-            assertNotNull(hits.getHits()[0].getSourceAsString());  
-            assertNotNull(hits.getHits()[0].getSourceAsMap().get("title"));
-            assertNotNull(hits.getHits()[0].getSourceAsMap().get("innerObject"));
-            assertNull(hits.getHits()[0].getSourceAsMap().get("user"));  
-        }
-    }
-
+        {
+                .endObject()
+            CountRequest countRequest = new CountRequest(); // <1>
+            // Replace the empty listener by a blocking listener in test  
+    private void indexSearchTestData() throws IOException {
+        };  
+import org.opensearch.index.query.QueryBuilders;  
+                // <1>
+                    public void onFailure(Exception e) {
     @SuppressWarnings("unused")
-    public void testBuildingSearchQueries() {
-        RestHighLevelClient client = highLevelClient();  
-        {
-            // tag::search-query-builder-ctor
-            MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("user", "foobar"); // <1>  
-            // end::search-query-builder-ctor
-            // tag::search-query-builder-options
-            matchQueryBuilder.fuzziness(Fuzziness.AUTO); // <1>  
-            matchQueryBuilder.prefixLength(3); // <2>
-            matchQueryBuilder.maxExpansions(10); // <3>
-            // end::search-query-builder-options  
-        }
-        {
-            // tag::search-query-builders  
-            QueryBuilder matchQueryBuilder = QueryBuilders.matchQuery("user", "foobar")
-                                                            .fuzziness(Fuzziness.AUTO)
-                                                            .prefixLength(3)  
-                                                            .maxExpansions(10);
-            // end::search-query-builders
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
-            // tag::search-query-setter
-            searchSourceBuilder.query(matchQueryBuilder);
-            // end::search-query-setter  
-        }
-    }
-
-    @SuppressWarnings({ "unused" })
-    public void testSearchRequestAggregations() throws IOException {
-        RestHighLevelClient client = highLevelClient();  
-        {
-            BulkRequest request = new BulkRequest();
+            listener = new LatchedActionListener<>(listener, latch);  
+            MultiSearchResponse response = client.msearch(request, RequestOptions.DEFAULT);
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
             request.add(new IndexRequest("posts").id("1").source(MediaTypeRegistry.JSON, "company", "OpenSearch", "age", 20));  
-            request.add(new IndexRequest("posts").id("2").source(MediaTypeRegistry.JSON, "company", "OpenSearch", "age", 30));
-            request.add(new IndexRequest("posts").id("3").source(MediaTypeRegistry.JSON, "company", "OpenSearch", "age", 40));
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
-            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
-            assertSame(RestStatus.OK, bulkResponse.status());
-            assertFalse(bulkResponse.hasFailures());  
+import org.opensearch.search.aggregations.bucket.range.Range;
+                .source(  
+                        "title",  
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+            "}");
+        SearchTemplateRequest request = new SearchTemplateRequest();
+            @Override
+            sourceBuilder.query(QueryBuilders.termQuery("user", "foobar")); // <2>
+            int failedShards = countResponse.getFailedShards();
+import java.util.concurrent.CountDownLatch;
+ * You may obtain a copy of the License at  
+                }  
+import org.opensearch.action.support.IndicesOptions;  
+ * under the License.  
+        // tag::search-template-request-inline  
+                // <1>
+        );
+import org.opensearch.index.rankeval.MetricDetail;  
+        RestHighLevelClient client = highLevelClient();
+        // tag::search-template-execute-async
+            assertTrue(clearScrollLatch.await(30L, TimeUnit.SECONDS));
+            HighlightBuilder highlightBuilder = new HighlightBuilder(); // <1>
+import org.opensearch.script.mustache.MultiSearchTemplateRequest;  
+        assertNotNull(explanation);  
+            double evaluationResult = response.getMetricScore();   // <1>
+            // end::search-hits-get
+                public void onFailure(Exception e) {  
+        };  
+                assertEquals(3, elasticBucket.getDocCount());  
+            }  
+            for (QueryProfileShardResult queryProfileResult : queryProfileShardResults) { // <2>  
         }
+                .startObject("id")
+        FieldCapabilities textCapabilities = userResponse.get("keyword");  
+                QueryBuilders.boolQuery().should(matchQuery("title", "OpenSearch")).should(matchQuery("user", "foobar"))  
+            final CountDownLatch clearScrollLatch = new CountDownLatch(1);
+                    )  
+            SearchRequest searchRequest = new SearchRequest(); // <1>
+            new IndexRequest("blog").id("3")
+ */  
+        bulkRequest.add(  
+            // tag::multi-search-execute  
+            // tag::multi-search-execute-async
+            assertThat(aggsProfileResults.getProfileResults().size(), equalTo(1));
+            ratedDocs.add(new RatedDocument("posts", "1", 1));            // <2>  
+import org.apache.lucene.search.Explanation;
+        for (Item item : multiResponse.getResponses()) { // <1>
+            }
+    public void testSearchTemplateWithInlineScript() throws Exception {
+                        "In which order are my OpenSearch queries executed?",
+import org.opensearch.index.rankeval.EvalQueryQuality;
+                    "user",  
+                .startObject()  
+                // <1>
+        // tag::search-template-request-stored
+        assertEquals(RestStatus.OK.getStatus(), scriptResponse.getStatusLine().getStatusCode());
+ * Modifications Copyright OpenSearch Contributors. See
+        listener = new LatchedActionListener<>(listener, latch);
+                public void onFailure(Exception e) {
+            client.rankEvalAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+ * this work for additional information regarding copyright
+                // failures should be handled here  
+                assertEquals(1, termSuggestion.getEntries().size());
+        {  
+                Map<String, Aggregation> aggregationMap = aggregations.getAsMap();  
+            request.add(  
+            // tag::search-source-sorting
+            "    \"lang\": \"mustache\"," +
+                .field("type", "keyword")
+            for (Map.Entry<String, ProfileShardResult> profilingResult : profilingResults.entrySet()) { // <2>  
+        assertNotNull(getResult);
+            "    \"source\": {" +  
+            request.add(
+                )
+        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);
+                .count(countRequest, RequestOptions.DEFAULT);
+        // end::multi-search-template-execute-listener
+            request.setScriptType(ScriptType.STORED);  
+                public void onFailure(Exception e) {  
+            SearchHits hits = searchResponse.getHits();  
+        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);
+        String[] nonAggregatableIndices = textCapabilities.nonAggregatableIndices();//<4>
+            searchSourceBuilder.query(QueryBuilders.matchQuery("user", "foobar"));  
+            BulkRequest request = new BulkRequest();
+}  
+                        "title",  
+    public void testScroll() throws Exception {  
+import org.opensearch.action.index.IndexRequest;
+                @Override
+        SearchTemplateResponse response = client.searchTemplate(request, RequestOptions.DEFAULT);  
+                    @Override
+                    Collections.singletonMap("key", "value")  
+        assertSame(RestStatus.OK, bulkResponse.status());
+                    Collections.singletonMap("key", "value")  
+                    Collections.singletonMap("key", "value")
+            matchQueryBuilder.fuzziness(Fuzziness.AUTO); // <1>  
+import org.opensearch.client.indices.CreateIndexResponse;
         {
+            scrollRequest.scroll("60s"); // <2>
+            sourceBuilder.fetchSource(includeFields, excludeFields);
+            searchRequest.scroll(TimeValue.timeValueMinutes(1L)); // <2>
+                        "user",
+            multiRequest.add(request);  // <3>
+                    1,  
+        Map<String, Object> scriptParams = new HashMap<>();
+                Map<String, Object> innerObject =  
+            // end::rank-eval-response  
+            hits = searchScrollResponse.getHits(); // <3>  
+                    Map<String, HighlightField> highlightFields = hit.getHighlightFields();
+        boolean match = response.isMatch(); // <4>
+        SearchTemplateRequest request = new SearchTemplateRequest();
+            MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("user", "foobar"); // <1>  
+            public void onResponse(SearchTemplateResponse response) {
+    }  
+                    // <1>
+        FieldCapabilitiesResponse response = client.fieldCaps(request, RequestOptions.DEFAULT);
+        // end::explain-response  
+            assertEquals(3, hits.getTotalHits().value());
+        // tag::explain-execute  
+        bulkRequest.add(  
+            request.add(
+import static org.hamcrest.Matchers.containsString;
+            searchSourceBuilder.query(QueryBuilders.matchQuery("user", "quxx"));
+            }  
+            assertTrue(success);  
+            }
+import org.opensearch.script.ScriptType;
+            @Override  
+            new IndexRequest("posts").id("3")  
+            request.add(
+            searchSourceBuilder.query(QueryBuilders.matchAllQuery()); // <3>
+            @Override  
+                public void onFailure(Exception e) {
+            // end::search-source-filtering-off  
+            // tag::search-query-builder-options
+import org.opensearch.action.search.MultiSearchResponse;
+            ActionListener<ClearScrollResponse> listener =
+        // tag::multi-search-template-request-sync
+                )
+        indexSearchTestData();
+            // end::count-execute-async
+            // tag::rank-eval-execute-listener
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
+            SearchRequest firstSearchRequest = new SearchRequest();   // <2>
+        for (String searchTerm : searchTerms) {
+import org.opensearch.search.suggest.Suggest;
+import java.util.ArrayList;
+ * license agreements. See the NOTICE file distributed with
+            for (ShardSearchFailure failure : searchResponse.getShardFailures()) {
+            String metricName = metricDetails.getMetricName();
+        String[] nonSearchableIndices = textCapabilities.nonSearchableIndices(); // <3>  
+        // end::explain-request  
+            assertEquals(3, detail.getRetrieved());
+            "    }" +  
+                }  
+            "      \"size\" : \"{{size}}\"" +
+/*
+            int skippedShards = countResponse.getSkippedShards();
+            public void onFailure(Exception e) {  
+                long aggTimeInMillis = profileResult.getTime(); // <4>
+            for (QueryProfileShardResult queryProfileResult : queryProfileShardResults) {  
+                }
+        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);
+        BulkResponse bulkResponse = highLevelClient().bulk(bulkRequest, RequestOptions.DEFAULT);
+        request.setSimulate(true); // <1>  
+ * ownership. Elasticsearch licenses this file to you under  
+            ProfileShardResult profileShardResult = profilingResults.values().iterator().next();  
+            // end::multi-search-execute-listener
+                    fragments = highlight.fragments();
+                @Override
+import org.opensearch.search.suggest.SuggestBuilder;
+            // end::search-request-basic  
+                    Collections.singletonMap("key", "value")  
+        bulkRequest.add(new IndexRequest("contributors").id("1").source(MediaTypeRegistry.JSON, "id", 1, "user", "quuz"));  
+            // end::search-request-routing
+        // end::register-script
+                // <2>
+                    List<ProfileResult> profiledChildren = profileResult.getProfiledChildren(); // <4>
+            // end::rank-eval-execute
+import org.opensearch.search.SearchHit;  
+                    .field("age"));  
+        MultiSearchTemplateResponse multiResponse = client.msearchTemplate(multiRequest, RequestOptions.DEFAULT);  
+            // Replace the empty listener by a blocking listener in test
+    public void testCount() throws Exception {  
+                    long queryTimeInMillis = profileResult.getTime(); // <3>
+ * KIND, either express or implied.  See the License for the
+            for (ProfileResult profileResult : aggsProfileResults.getProfileResults()) { // <2>
+    }
+        // tag::explain-request  
+            // end::search-request-profiling-get
+            EvaluationMetric metric = new PrecisionAtK();                 // <1>
+            SuggestionBuilder termSuggestionBuilder =
+            // tag::search-request-highlighting  
+                .startObject()
+            // end::search-request-preference
+        // Replace the empty listener by a blocking listener for tests.  
+        CreateIndexResponse authorsResponse = highLevelClient().indices().create(authorsRequest, RequestOptions.DEFAULT);
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            request.addScrollId(scrollId);
+            // tag::search-response-2
+                    String queryName = profileResult.getQueryName(); // <2>  
+                String id = hit.getId();
+        // tag::search-template-request-options  
+                        long numberOfDocs = elasticBucket.getDocCount();  
+            request.setScript(
+            assertEquals(0, searchResponse.getFailedShards());  
+        // end::render-search-template-response  
+    @SuppressWarnings({ "unused", "rawtypes" })
+import org.opensearch.client.OpenSearchRestHighLevelClientTestCase;
+            long count = countResponse.getCount();
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
+            scrollRequest.scroll(TimeValue.timeValueSeconds(60L)); // <1>
+            XContentFactory.jsonBuilder()
+            // end::search-query-builder-options  
+                // end::search-request-aggregations-iterator  
+                List<CollectorResult> profiledChildren = collectorResult.getProfiledChildren(); // <4>
+            assertSame(RestStatus.OK, bulkResponse.status());
+            {
+        {
+            }  
+        CreateIndexResponse authorsResponse = highLevelClient().indices().create(authorsRequest, RequestOptions.DEFAULT);
+        CountDownLatch latch = new CountDownLatch(1);
+            // end::count-response-2
+                    assertThat(message, containsString("org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms"));  
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder(); // <1>
+import org.opensearch.search.profile.ProfileShardResult;  
+        assertEquals(searchTerms.length, multiResponse.getResponses().length);
+            // tag::search-request-indices  
+            // tag::multi-search-request-basic
+import org.opensearch.script.mustache.SearchTemplateRequest;  
+                    "id",  
+import org.opensearch.search.aggregations.AggregationBuilders;  
+/**
+        // tag::explain-request-source
+    }  
+        );
+                .endObject()  
+            searchSourceBuilder = new SearchSourceBuilder();
+            assertEquals(3L, searchResponse.getHits().getTotalHits().value());
+        SearchResponse searchResponse = multiResponse.getResponses()[0].getResponse().getResponse();  
+            int failedShards = searchResponse.getFailedShards();
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
+                    new ActionListener<SearchResponse>() {
+                    // <1>
+            PrecisionAtK.Detail detail = (PrecisionAtK.Detail) metricDetails;  
+            // end::search-query-setter  
+                    "innerObject",
+                @Override  
+        ActionListener<ExplainResponse> listener = new ActionListener<ExplainResponse>() {
+        BulkRequest bulkRequest = new BulkRequest();  
+            searchRequest.preference("_local"); // <1>
+            assertTrue(succeeded);
+            // end::search-response-2
+                        // <1>
+/*  
+            // end::search-hits-singleHit  
+        {
+            // tag::search-source-setter
+            client.msearchAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+            // tag::multi-search-execute-listener
+            // tag::search-response-1  
+            int totalShards = countResponse.getTotalShards();
+                }
+    @SuppressWarnings("unused")
+                    for (TermSuggestion.Entry.Option option : entry) { // <4>  
+            request.add(new IndexRequest("posts").id("2").source(MediaTypeRegistry.JSON, "company", "OpenSearch", "age", 30));
+                // <3>  
+    @SuppressWarnings({ "unused", "unchecked" })
+        );  
+        CreateIndexRequest authorsRequest = new CreateIndexRequest("authors").mapping(
+            searchSourceBuilder.query(QueryBuilders.termQuery("tags", "opensearch"));
+import org.opensearch.client.indices.CreateIndexRequest;
+import org.opensearch.client.core.CountResponse;  
+                .startObject()
+        }
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+        );
+            for (SearchHit hit : searchHits) {  
+import org.opensearch.index.rankeval.RankEvalRequest;
+                scrollId = searchResponse.getScrollId();
+                    assertThat(fragments[0].string(), containsString("<em>foobar</em>"));  
+        {
+        CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.core.common.text.Text;  
+import org.opensearch.client.Response;
+                    }
+            assertEquals(PrecisionAtK.NAME, metricName);                // <6>
+            String scrollId = searchResponse.getScrollId();
+        // end::explain-execute-listener
+        }
+import java.util.concurrent.TimeUnit;  
+        RestHighLevelClient client = highLevelClient();  
+            assertNotNull(client.count(countRequest, RequestOptions.DEFAULT));  
+                // tag::search-request-profiling-queries-results
+            searchRequest.source(searchSourceBuilder);  
+                }  
+                        "title",  
+        {  
+            Map<String, EvalQueryQuality> partialResults =
+        }  
+                String collectorName = collectorResult.getName();  // <2>
+                public void onResponse(RankEvalResponse response) {
+import org.opensearch.search.aggregations.metrics.Avg;  
+        // end::search-template-execute
+                        MediaTypeRegistry.JSON,
+        indexSearchTestData();
+            EvalQueryQuality evalQuality =  
+            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
+            secondSearchRequest.source(searchSourceBuilder);  
+                    "user",  
+            // tag::multi-search-response  
+        indexSearchTestData();  
+        indexSearchTestData();  
+            );
+                    "Current status and upcoming changes in OpenSearch",
+        }  
+        assertNotNull(multiResponse.getResponses()[0]);  
+                new IndexRequest("posts").id("2")  
+    }  
+    @SuppressWarnings({ "unused", "unchecked" })
+                .endObject()  
+        RestHighLevelClient client = highLevelClient();
+        SearchTemplateResponse response = client.searchTemplate(request, RequestOptions.DEFAULT);
+            Aggregations aggregations = searchResponse.getAggregations();  
+import org.opensearch.action.search.ClearScrollResponse;
+            searchResponse = secondResponse.getResponse();
+            // end::clear-scroll-response
+            // tag::clear-scroll-execute-listener  
+import org.opensearch.action.fieldcaps.FieldCapabilities;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                assertEquals(1, termSuggestion.getEntries().get(0).getOptions().size());  
+            matchQueryBuilder.maxExpansions(10); // <3>
+import static org.hamcrest.Matchers.greaterThan;  
+            // end::search-request-profiling-queries  
+        indexSearchTestData();  
+                        String suggestText = option.getText().string();
+                    profileShardResult.getQueryProfileResults(); // <1>
+            // tag::clear-scroll-response
+            "{" +  
+                    .source(MediaTypeRegistry.JSON, "title", "Current status and upcoming changes in OpenSearch")
+        // tag::explain-request-stored-field
+                // end::search-request-aggregations-asMap
+        RestHighLevelClient client = highLevelClient();  
+                    response.getPartialResults();
+                    "title",
+            assertThat(queryProfileShardResults.size(), equalTo(1));
+            // end::search-execute-listener  
+import org.opensearch.index.rankeval.RankEvalResponse;  
+            public void onResponse(MultiSearchTemplateResponse response) {
+                    )  
+import org.opensearch.action.search.SearchScrollRequest;
+                }
+            // tag::scroll-request-arguments  
+        params.put("field", "title");  
+        // tag::explain-execute-listener
+        listener = new LatchedActionListener<>(listener, latch);
+            .indices("posts", "authors", "contributors");
+                searchResponse = client.scroll(scrollRequest, RequestOptions.DEFAULT);  
+                    Collections.singletonMap("key", "value")  
+            searchRequest.source(searchSourceBuilder);  
+                        // <2>  
+                // tag::search-request-profiling-queries-collectors  
+                    "title",
+                .endObject()
+import org.opensearch.common.unit.Fuzziness;
+import org.opensearch.search.profile.query.CollectorResult;
+                        Collections.singletonMap("key", "value")
+        // end::field-caps-execute-listener
+                .field("type", "keyword")
+            // end::search-hits-info  
+        {
+        boolean hasExplanation = response.hasExplanation(); // <5>  
+            QueryBuilder matchQueryBuilder = QueryBuilders.matchQuery("user", "foobar")
+    @SuppressWarnings({ "unused" })
+ * this file be licensed under the Apache-2.0 license or a
+        RestHighLevelClient client = highLevelClient();
+        bulkRequest.add(
+        // tag::multi-search-template-request-stored  
+                    "On Net Neutrality",
+            SearchTemplateRequest request = new SearchTemplateRequest();  // <2>  
+        // end::search-template-execute-listener
+            {
+        request.routing("routing"); // <1>  
+        assertNotNull(multiResponse);  
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
+        SearchResponse searchResponse = response.getResponse();  
+            public void onFailure(Exception e) {  
+                };
+        // end::multi-search-template-request-stored
+            // tag::search-execute-listener  
+                @Override
+        request.query(QueryBuilders.termQuery("user", "quuz"));
+            }
+            // tag::search-request-suggestion  
+                CollectorResult collectorResult = queryProfileResult.getCollectorResult();  // <1>
+ * software distributed under the License is distributed on an
+            // tag::clear-scroll-request
+            // tag::count-request-args  
+import org.opensearch.search.profile.aggregation.AggregationProfileShardResult;
+            // end::search-scroll-execute-sync
+            {
+        // tag::search-template-execute-listener
+            request.setScriptParams(scriptParams);
+        // tag::render-search-template-response  
+                SearchHits hits = searchResponse.getHits();  
+                    // end::search-request-aggregations-get-wrongCast  
+                    MediaTypeRegistry.JSON,  
+            scrollId = searchScrollResponse.getScrollId();  // <2>
+        // end::explain-execute-async
+            assertNull(hits.getHits()[0].getSourceAsMap().get("user"));  
+        // tag::get-result  
+            );
+ * the Apache License, Version 2.0 (the "License"); you may
+            int released = response.getNumFreed(); // <2>
+    }
+            boolean timedOut = searchResponse.isTimedOut();
+import org.apache.lucene.search.TotalHits;
+            assertEquals(1.0 / 3.0, evaluationResult, 0.0);  
+import org.opensearch.search.suggest.term.TermSuggestion;
+            SearchRequest searchRequest = new SearchRequest("posts"); // <1>
+                }
+                    new RatedRequest("foobar_query", ratedDocs, searchQuery);
+            for (SearchHit hit : searchHits) {
+                        Arrays.asList("foobar", "quxx"),  
+                SearchResponse searchResponse = searchTemplateResponse.getResponse();  
+                    MediaTypeRegistry.JSON,  
+                    Arrays.asList("foobar", "quuz"),
+            request.setScriptType(ScriptType.INLINE);  
+            // tag::search-request-routing  
+            .fields("user")
+            // tag::count-source-setter
+            searchRequest.scroll(scroll);
+                    }
+        // end::field-caps-execute-async  
+            assertEquals(3, hits.getTotalHits().value());  
+            public void onResponse(FieldCapabilitiesResponse response) {
+            {
+                hits = searchResponse.getHits();
+            }  
+            clearScrollRequest.addScrollId(scrollId);
+            Map<String, Object> params = new HashMap<>();  
+                @Override  
+            assertNotNull(searchResponse);  
+        Map<String, Object> source = getResult.getSource(); // <1>
+                    "innerObject",
+                        "user",
+import org.opensearch.search.sort.SortOrder;  
+            assertEquals("3", ratedSearchHit.getSearchHit().getId());   // <4>
+        assertFalse(bulkResponse.hasFailures());
+            // tag::search-scroll2
+                    public void onResponse(CountResponse countResponse) {  
+            multiRequest.add(request);
+        }
+            // tag::rank-eval-response
+            int successfulShards = searchResponse.getSuccessfulShards();  
+            }  
+            SearchResponse searchScrollResponse = client.scroll(scrollRequest, RequestOptions.DEFAULT);
+            client.countAsync(countRequest, RequestOptions.DEFAULT, listener); // <1>
+                @Override
+            // end::rank-eval-request-basic
+                assertEquals(30, avg, 0.0);
+                // do something with the SearchHit
+                )
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        request.setScriptParams(scriptParams); // <3>  
+ * Licensed to Elasticsearch under one or more contributor  
+            }
+            RestStatus status = searchResponse.status();
+            }
+            searchSourceBuilder.aggregation(aggregation);
+            searchRequest.scroll("60s");
+            IndexResponse indexResponse = client.index(request, RequestOptions.DEFAULT);
+            request.setScrollIds(scrollIds);
+import org.opensearch.index.rankeval.PrecisionAtK;
+                    new RankEvalRequest(specification, new String[] { "posts" });  
+                searchHits = searchResponse.getHits().getHits();
+            "  \"size\" : \"{{size}}\"" +
+            request.addScrollId(scrollId); // <2>  
+        {
+                searchResponse.getHits();
+        assertArrayEquals(indices, new String[] { "authors", "contributors" });  
+            // end::search-request-suggestion
+            BulkRequest request = new BulkRequest();  
+        // tag::field-caps-execute  
+            }
+            SuggestBuilder suggestBuilder = new SuggestBuilder();
+        CountDownLatch latch = new CountDownLatch(1);
+        listener = new LatchedActionListener<>(listener, latch);
+            // end::search-request-indicesOptions
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            // tag::search-request-basic
+            assertEquals(4, searchResponse.getHits().getTotalHits().value());
+                    "innerObject",  
+import org.opensearch.common.document.DocumentField;  
+                // end::search-hits-singleHit-source
+        request.storedFields(new String[]{"user"}); // <1>  
+        // end::explain-request-routing
+                // end::search-request-suggestion-get
+            HighlightBuilder.Field highlightTitle =  
+            Boolean terminatedEarly = countResponse.isTerminatedEarly();  
+        assertArrayEquals(nonAggregatableIndices, new String[] { "authors" });
+        {
+        }
+        boolean isAggregatable = textCapabilities.isAggregatable();  
+                }  
+        }
+                @Override  
+                @Override
+            // end::search-execute-async
+import org.opensearch.search.sort.FieldSortBuilder;
+        ExplainResponse response = client.explain(request, RequestOptions.DEFAULT);
+        // tag::multi-search-template-execute  
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder(); // <2>  
+        {
+import org.opensearch.action.explain.ExplainResponse;
+            searchRequest.routing("routing"); // <1>
+                    HighlightField highlight = highlightFields.get("title"); // <1>  
+            SearchHit[] searchHits = searchResponse.getHits().getHits();  
+        bulkRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
+            "{" +  
+import org.opensearch.core.common.bytes.BytesReference;
+                        Arrays.asList("foobar", "grault"),  
+            // end::count-response-1
+ * Code wrapped in {@code tag} and {@code end} tags is included in the docs.
+    public void testMultiSearchTemplateWithStoredScript() throws Exception {
+            // end::clear-scroll-add-scroll-id
+                }
+import org.opensearch.action.fieldcaps.FieldCapabilitiesResponse;
+            params.put("field", "title");
+                new IndexRequest("posts").id("2")  
+                .source(
+    }
+            searchSourceBuilder.suggest(suggestBuilder);  
+            // end::multi-search-execute
+                        Arrays.asList("foobar", "quuz"),  
+        assertEquals(  
+        boolean isSearchable = textCapabilities.isSearchable();
+/*  
+import org.opensearch.action.search.SearchRequest;
+        Map<String, DocumentField> fields = getResult.getFields(); // <2>
+        // end::explain-request-stored-field
+        indexSearchTestData();
+            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);  
+            highlightBuilder.field(highlightTitle);  // <4>  
+        String id = response.getId(); // <2>  
+            new IndexRequest("posts").id("1")
+import org.opensearch.client.RestClient;  
+import java.util.Arrays;  
+    }  
+                    }
+            searchRequest.source(searchSourceBuilder);
+                    assertThat(fragments[0].string(), containsString("<em>OpenSearch</em>"));
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
+                new ActionListener<CountResponse>() {  
+                    // <2>
+        scriptParams.put("value", "opensearch");
+                }  
+            };
+    }  
+                // end::search-request-highlighting-get
+                String aggName = profileResult.getQueryName(); // <3>  
+import org.opensearch.common.unit.TimeValue;
+            float maxScore = hits.getMaxScore();
+            request.setScript("title_search");
+            client.searchAsync(searchRequest, RequestOptions.DEFAULT, listener); // <1>
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
+                for (TermSuggestion.Entry entry : termSuggestion.getEntries()) { // <3>
+            searchRequest.source(searchSourceBuilder); // <4>
+        RestClient restClient = client();
+        // end::field-caps-response
+        );
+                .field("type", "keyword")  
+                }
+            boolean success = response.isSucceeded(); // <1>  
+        // tag::render-search-template-request
+            scrollListener = new LatchedActionListener<>(scrollListener, latch);
+import org.opensearch.search.SearchHits;
+            final CountDownLatch latch = new CountDownLatch(1);
+                .preference("_local"); // <4>
+            SearchRequest searchRequest = new SearchRequest();
+                    String type = agg.getType();  
+        assertTrue(reviewersResponse.isAcknowledged());
+            // tag::count-execute-async  
+                public void onResponse(SearchResponse searchResponse) {
+        // Replace the empty listener by a blocking listener for tests.  
+            RankEvalRequest request =                                     // <6>
+        MultiSearchTemplateRequest multiRequest = new MultiSearchTemplateRequest();
+                ProfileShardResult profileShardResult = profilingResult.getValue(); // <4>
+            }
+                Avg averageAge = elasticBucket.getAggregations().get("average_age"); // <3>
+                .endObject()
+                }
+            // end::search-scroll-execute-async  
+            // end::search-request-indices
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder(); // <2>  
+                    Map<String, HighlightField> highlightFields = hit.getHighlightFields();
+            assertFalse(bulkResponse.hasFailures());  
+                String documentTitle = (String) sourceAsMap.get("title");
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
+        // tag::explain-request-routing
+                    2,
+            searchSourceBuilder.aggregation(AggregationBuilders.histogram("by_comments").field("comments").interval(100));
+                )  
+                }  
+            RestStatus status = countResponse.status();
+import org.opensearch.script.mustache.SearchTemplateResponse;
+            // tag::search-scroll-execute-sync
+            }
+                    new HighlightBuilder.Field("title"); // <2>
+import org.opensearch.action.fieldcaps.FieldCapabilitiesRequest;  
+            searchSourceBuilder.highlighter(highlightBuilder);  
+    public void testSearch() throws Exception {  
+                .endObject()
+            "}");  
+                assertEquals("foobar", termSuggestion.getEntries().get(0).getOptions().get(0).getText().string());
+            "  \"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" } }," +
+            ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
+        assertThat(index, equalTo("contributors"));
+                .indicesOptions(IndicesOptions.lenientExpandOpen()) // <3>  
+                Long collectorTimeInMillis = collectorResult.getTime(); // <3>  
+            // end::clear-scroll-add-scroll-ids
+            };  
+            // end::multi-search-request-basic
+            new IndexRequest("blog").id("1")
+                .endObject()
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
+            request.add(secondSearchRequest);
+        indexSearchTestData();  
+            listener = new LatchedActionListener<>(listener, latch);  
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                @Override  
+            // tag::search-query-builder-ctor
+        Explanation explanation = response.getExplanation(); // <6>
+        boolean exists = response.isExists(); // <3>
+            // end::search-source-filtering-includes
+            Map<String, Object> scriptParams = new HashMap<>();
+            assertFalse(bulkResponse.hasFailures());
+            request.add(new IndexRequest("posts").id("3").source(MediaTypeRegistry.JSON, "user", "quzz"));  
+        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);  
+        assertTrue(authorsResponse.isAcknowledged());  
+            // the total number of hits, must be interpreted in the context of totalHits.relation
+            final CountDownLatch latch = new CountDownLatch(1);
+        params.put("value", "opensearch");
+            );
+                    partialResults.get("foobar_query");                 // <2>
+import org.opensearch.index.rankeval.RatedRequest;  
+            // end::search-source-basics  
+        // tag::explain-response
+            assertEquals(1, searchResponse.getHits().getTotalHits().value());
+        }
+        assertTrue(isSearchable);  
+    public void testExplain() throws Exception {
+                    3,
+            ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
+        listener = new LatchedActionListener<>(listener, latch);
+            // Replace the empty listener by a blocking listener in test
+            // tag::count-source-basics  
+        FieldCapabilitiesRequest request = new FieldCapabilitiesRequest()  
+            // tag::clear-scroll-add-scroll-ids  
+        request.setScriptType(ScriptType.STORED);
+            @Override
+            HighlightBuilder.Field highlightUser = new HighlightBuilder.Field("user");
+                )
+import org.opensearch.action.explain.ExplainRequest;  
+            SearchResponse searchResponse = client.scroll(scrollRequest, RequestOptions.DEFAULT);  
+import org.opensearch.index.rankeval.EvaluationMetric;
+            RankEvalResponse response = client.rankEval(request, RequestOptions.DEFAULT);
+    protected void registerQueryScript(RestClient restClient) throws IOException {
+            "  }" +
+                // failures should be handled here  
+                    // <1>
+        CreateIndexResponse reviewersResponse = highLevelClient().indices().create(reviewersRequest, RequestOptions.DEFAULT);  
+                .startObject("properties")
+            @Override  
+        {
+            // tag::search-request-profiling-get  
+        RestHighLevelClient client = highLevelClient();  
+import static org.opensearch.index.query.QueryBuilders.matchQuery;
+        // tag::field-caps-execute-listener
+        Map<String, Object> params = new HashMap<>();
+ * The OpenSearch Contributors require contributions made to  
+            boolean succeeded = clearScrollResponse.isSucceeded();
+            // tag::search-request-indicesOptions  
+            assertEquals("foobar_query", evalQuality.getId());
+                        Collections.singletonMap("key", "value")
+                .field("store", "true")
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            countRequest.indices("blog", "author");
+                    "title",  
+                .source(
+        RestHighLevelClient client = highLevelClient();
+            listener = new LatchedActionListener<>(listener, latch);
+        }
+            @Override
+            int totalShards = searchResponse.getTotalShards();
+import org.opensearch.search.suggest.SuggestionBuilder;
+                Suggest suggest = searchResponse.getSuggest(); // <1>  
+                public void onFailure(Exception e) {
+        // tag::multi-search-template-execute-listener
+            assertThat(released, greaterThan(0));
+            }
+            {  
+        assertTrue(hasExplanation);
+import org.opensearch.action.search.SearchResponse;  
+            // end::search-query-builder-ctor
+            request.setScriptParams(params);
+        ExplainRequest request = new ExplainRequest("contributors", "1");
+ *  
+            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);  
+        }
+            // end::search-request-profiling-aggs
+    }  
+                    profileShardResult.getAggregationProfileResults(); // <1>
+        }  
+            );
+            searchSourceBuilder.query(QueryBuilders.matchAllQuery());  
+            // Replace the empty listener by a blocking listener in test
+        assertFalse(bulkResponse.hasFailures());  
+        indexCountTestData();
+    public void testSearchRequestAggregations() throws IOException {
+            matchQueryBuilder.prefixLength(3); // <2>
+            // tag::count-response-1  
+        RestHighLevelClient client = highLevelClient();
+                        MediaTypeRegistry.JSON,
+            List<QueryProfileShardResult> queryProfileShardResults =
+            CountResponse countResponse = client  
+                .source(
+            };
+            // tag::search-scroll-init
+            // Replace the empty listener by a blocking listener in test  
+            } else {
+                .field("type", "keyword")  
+                // tag::search-request-aggregations-asMap
+import org.opensearch.action.bulk.BulkResponse;
+        );  
+                "}");
+        String[] indices = textCapabilities.indices(); // <2>
+        );
+                    .source(
+    public void testSearchRequestSuggestions() throws IOException {  
+                    "innerObject",
+                    assertEquals(1, fragments.length);
+                    .source(
+                    // <1>  
+        Response scriptResponse = restClient.performRequest(scriptRequest);  
+            MultiSearchResponse.Item firstResponse = response.getResponses()[0];   // <1>
+    }
+                        Collections.singletonMap("key", "value")
+                // tag::search-hits-singleHit-source
+            final CountDownLatch latch = new CountDownLatch(1);  
+        // tag::multi-search-template-request-inline
+        {
+                for (Aggregation agg : aggregations) {
+            List<RatedRequest> ratedRequests = Arrays.asList(ratedRequest);
+            countRequest.source(searchSourceBuilder); // <4>
+            searchRequest.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+        );
+import org.opensearch.search.profile.query.QueryProfileShardResult;  
+import org.opensearch.index.rankeval.RatedSearchHit;
+            // whether the number of hits is accurate (EQUAL_TO) or a lower bound of the total (GREATER_THAN_OR_EQUAL_TO)  
+                public void onResponse(ClearScrollResponse clearScrollResponse) {
+            // tag::search-request-profiling-queries  
+            ClearScrollRequest clearScrollRequest = new ClearScrollRequest();  
+                SearchTemplateResponse searchTemplateResponse = item.getResponse(); // <3>
+        }
+        SearchResponse searchResponse = multiResponse.getResponses()[0].getResponse().getResponse();
+                .endObject()
+    public void testSearchTemplateWithStoredScript() throws Exception {  
+        // end::get-result  
+            // tag::rank-eval-execute-async
+            request.add(new IndexRequest("posts").id("4").source(MediaTypeRegistry.JSON, "user", "corge"));
+                List<ProfileResult> profiledChildren = profileResult.getProfiledChildren(); // <5>
+            public void onFailure(Exception e) {  
+            searchRequest.indices("posts");
+        }
+import org.opensearch.search.aggregations.Aggregation;
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+        RestHighLevelClient client = highLevelClient();
+                    // tag::search-request-aggregations-get-wrongCast
+        for (String searchTerm : searchTerms) {
             SearchRequest searchRequest = new SearchRequest();  
+                // end::search-request-aggregations-get
+import org.opensearch.action.search.ClearScrollRequest;
+                    highlight = highlightFields.get("user");  
+                    // <2>  
+    public void testMultiSearchTemplateWithInlineScript() throws Exception {  
+        // Replace the empty listener by a blocking listener for tests.  
+                                                            .fuzziness(Fuzziness.AUTO)
+                .endObject()
+                @Override
+        assertNotNull(multiResponse.getResponses()[0]);
+            final Scroll scroll = new Scroll(TimeValue.timeValueMinutes(1L));  
+            // end::search-scroll-execute-listener
+            assertTrue(clearScrollResponse.isSucceeded());  
+import static org.hamcrest.Matchers.equalTo;
+                float score = hit.getScore();
+        // end::search-template-response  
+                String error = item.getFailureMessage(); // <2>  
+        RestHighLevelClient client = highLevelClient();  
+            // end::clear-scroll-execute-async  
+            sourceBuilder.fetchSource(true);  
+            // end::clear-scroll-execute  
+                        "Current status and upcoming changes in OpenSearch",
+            SearchHits hits = searchResponse.getHits();  // <4>
+        // tag::multi-search-template-execute-async
+            // tag::search-request-profiling-aggs
+            suggestBuilder.addSuggestion("suggest_user", termSuggestionBuilder); // <2>
+            "      \"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" } }," +
+        {
+        assertThat(fields.get("user").getValue(), equalTo("quuz"));
+            // tag::search-source-filtering-includes
+                // end::search-request-profiling-queries-results
+            assertFalse(bulkResponse.hasFailures());  
+            searchSourceBuilder.query(matchQuery("title", "OpenSearch"));
+import org.opensearch.client.Request;  
+import org.opensearch.action.search.ShardSearchFailure;
+        RestHighLevelClient client = highLevelClient();
+ */  
+            assertFalse(ratedSearchHit.getRating().isPresent());        // <5>
+            assertNull(firstResponse.getFailure());                                // <2>
+        // end::multi-search-template-request-sync
+            }  
+                SuggestBuilders.termSuggestion("user").text("fooarb"); // <1>  
+            List<RatedDocument> ratedDocs = new ArrayList<>();
+                // end::search-request-aggregations-asList
+        {
+            // tag::search-execute
+            BulkRequest request = new BulkRequest();
+                    new RankEvalSpec(ratedRequests, metric);              // <5>
+                    "title",
+            ClearScrollRequest clearScrollRequest = new ClearScrollRequest(); // <5>
+            // tag::clear-scroll-execute
+        {
+ * compatible open source license.
+        }  
+            sourceBuilder.sort(new FieldSortBuilder("id").order(SortOrder.ASC));  // <2>
+            // tag::search-query-setter
+            // end::count-request-args
+                }
+        request.setScript("title_search");  
+            // end::multi-search-response  
+            SearchTemplateRequest request = new SearchTemplateRequest();  
+                try {  
+            // end::search-source-sorting
+            Boolean terminatedEarly = searchResponse.isTerminatedEarly();  
+            // end::clear-scroll-execute-listener
+                    assertThat(message, containsString("org.opensearch.search.aggregations.bucket.range.Range"));
+            int size = 1;  
+        Map<String, FieldCapabilities> userResponse = response.getField("user");  // <1>
+import org.opensearch.search.profile.ProfileResult;
+            // end::count-execute-listener  
+            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
+                    Collections.singletonMap("key", "value")
+            // end::search-execute
+import org.opensearch.search.sort.ScoreSortBuilder;
+ * Unless required by applicable law or agreed to in writing,
+        };  
+            ClearScrollRequest request = new ClearScrollRequest(); // <1>
+        }  
+import java.util.HashMap;
+                .startObject("properties")  
+        Request scriptRequest = new Request("POST", "/_scripts/title_search");
+    }  
+    }
+        }  
+import org.opensearch.index.query.MatchQueryBuilder;
+                                                            .prefixLength(3)  
+import java.util.Collections;
+        }
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+                .startObject("user")
+        BulkResponse bulkResponse = highLevelClient().bulk(bulkRequest, RequestOptions.DEFAULT);  
+    }
+            TotalHits totalHits = hits.getTotalHits();  
+    public void testSearchRequestProfiling() throws IOException {
+import org.opensearch.script.mustache.MultiSearchTemplateResponse;
+                "{" +
+        assertTrue(exists);  
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            }  
+            // tag::search-hits-singleHit
+                // <1>
+                .startObject("id")  
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                }  
+                new IndexRequest("posts").id("3").source(MediaTypeRegistry.JSON, "title", "The Future of Federated Search in OpenSearch")
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;  
+        CreateIndexRequest authorsRequest = new CreateIndexRequest("author").mapping(  
+                    // <2>
+            assertSame(RestStatus.OK, bulkResponse.status());
+        {
+            params.put("value", searchTerm);
+        assertTrue(match);
+            // tag::rank-eval-execute  
+            request.add(
+            );
+                .field("doc_values", "false")  
+            String scrollId = initialSearchResponse.getScrollId();
+ * GitHub history for details.
+        client.searchTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                Aggregations aggregations = searchResponse.getAggregations();
+            ActionListener<SearchResponse> scrollListener =
+            searchSourceBuilder.profile(true);
+            // end::multi-search-execute-async
+                    "id",
+    @SuppressWarnings("unused")
+        scriptParams.put("field", "title");  
+            assertNotNull(client.search(searchRequest, RequestOptions.DEFAULT));  
+            sourceBuilder.query(QueryBuilders.termQuery("user", "foobar")); // <2>
+                    Arrays.asList("foobar", "matt"),
+        String index = response.getIndex(); // <1>
+            // end::count-execute
+        // end::field-caps-request  
+                    MediaTypeRegistry.JSON,
+            scrollRequest.scroll(TimeValue.timeValueSeconds(30));  
+        );  
+import static org.hamcrest.Matchers.containsInAnyOrder;  
+            assertEquals(TotalHits.Relation.EQUAL_TO, relation);
+                    Text[] fragments = highlight.fragments();  // <2>
+        registerQueryScript(restClient);
+        // tag::search-template-response  
+        }  
+        params.put("size", 5);
+            searchSourceBuilder.query(
+ * Documentation for search APIs in the high level java client.  
+        {
+            assertNotNull(hits.getHits()[0].getSourceAsMap().get("innerObject"));
+import java.io.IOException;
+            final CountDownLatch latch = new CountDownLatch(1);  
+        assertNull(nonSearchableIndices);
+            // tag::search-source-filtering-off
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            MetricDetail metricDetails = evalQuality.getMetricDetails();  
+                    MediaTypeRegistry.JSON,  
+            }
+                scrollRequest.scroll(scroll);
+        bulkRequest.add(  
+        request.setScript( // <2>
+        // tag::register-script  
+            // end::scroll-request-arguments  
+                    if (type.equals(TermsAggregationBuilder.NAME)) {
+            sourceBuilder.size(5); // <4>
+        ActionListener<MultiSearchTemplateResponse> listener = new ActionListener<MultiSearchTemplateResponse>() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            sourceBuilder.fetchSource(false);
+                Terms byCompanyAggregation = aggregations.get("by_company"); // <1>  
+        scriptRequest.setJsonEntity(
+                    "title",
+            sourceBuilder.from(0); // <3>  
+                for (ProfileResult profileResult : queryProfileResult.getQueryResults()) { // <1>
+            SearchRequest searchRequest = new SearchRequest("posts");
+        assertThat(source, equalTo(Collections.singletonMap("user", "quuz")));
+            // end::search-response-1
+                // tag::search-hits-singleHit-properties
+            searchRequest.source(sourceBuilder);
+import org.opensearch.search.suggest.SuggestBuilders;  
+            }  
+        bulkRequest.add(  
+                    String fragmentString = fragments[0].string();
+            CountRequest countRequest = new CountRequest();  
+            new IndexRequest("blog").id("2")
+            // tag::search-scroll-example
+        // end::explain-request-preference
+            searchRequest.source(searchSourceBuilder);
+            Map<String, ProfileShardResult> profilingResults =
+            // end::search-query-builders
+            highlightTitle.highlighterType("unified");  // <3>
+    public void testMultiSearch() throws Exception {
+                // <2>
+            // end::rank-eval-execute-listener
+        {  
+            assertEquals(1, detail.getRelevantRetrieved());             // <7>
+        assertFalse(isAggregatable);
+        // tag::field-caps-request
+                SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId); // <4>
+                // tag::search-request-aggregations-iterator
+                double avg = averageAge.getValue();  
+            searchQuery.query(QueryBuilders.matchQuery("user", "foobar"));// <3>
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        // end::multi-search-template-execute-async  
+            ClearScrollResponse response = client.clearScroll(request, RequestOptions.DEFAULT);
+        }
+                    // <2>
+        }
+                    Arrays.asList("foobar", "grault"),  
+            ("{  \"size\" : \"5\",  \"query\": { \"match\" : { \"title\" : \"opensearch\" } }}").replaceAll("\\s+", ""),
+        assertThat(id, equalTo("1"));
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder(); // <1>
+        request.setRequest(new SearchRequest("posts")); // <1>
+            ActionListener<RankEvalResponse> listener = new ActionListener<RankEvalResponse>() {  
+        client.explainAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        request.setRequest(new SearchRequest("posts"));  
+                // tag::search-request-aggregations-get
+                    Range range = aggregations.get("by_company"); // <1>
+        }
+            String[] includeFields = new String[] {"title", "innerObject.*"};
+ *
+        SearchTemplateResponse renderResponse = client.searchTemplate(request, RequestOptions.DEFAULT);
+        bulkRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+            // end::rank-eval-execute-async
+        RestHighLevelClient client = highLevelClient();
+            assertEquals(1, hits.getHits().length);
+            CountRequest countRequest = new CountRequest("blog") // <1>
+            aggregation.subAggregation(AggregationBuilders.avg("average_age")
+            // tag::count-execute-listener
+            };  
+                .endObject()
+    }
+            RankEvalSpec specification =  
+        {
+                    "innerObject",
+            // end::count-source-basics  
+                .startObject("properties")
+import org.opensearch.core.action.ActionListener;
+            // end::search-source-setter  
+            // tag::count-response-2  
+            assertFalse(bulkResponse.hasFailures());
+        assertEquals(searchTerms.length, multiResponse.getResponses().length);
+                                                            .maxExpansions(10);
             // tag::search-request-aggregations
+        MultiSearchTemplateResponse multiResponse = client.msearchTemplate(multiRequest, RequestOptions.DEFAULT);
+            client.scrollAsync(scrollRequest, RequestOptions.DEFAULT, scrollListener); // <1>
+            listener = new LatchedActionListener<>(listener, latch);
+import org.opensearch.search.aggregations.bucket.terms.Terms.Bucket;
+                    "title",
+                    HighlightField highlight = highlightFields.get("title");
+            public void onResponse(ExplainResponse explainResponse) {
+        // end::multi-search-template-response
+                // <2>
+            // end::search-scroll2
+                    "user",  
+            // tag::search-request-preference  
+            SearchRequest secondSearchRequest = new SearchRequest();  // <4>  
+    public void testRankEval() throws Exception {
+        request.setExplain(true);
+            SearchRequest searchRequest = new SearchRequest();  
+            assertEquals(3, numHits);
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+        client.fieldCapsAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            request.setRequest(new SearchRequest("posts"));
+    public void testBuildingSearchQueries() {
+            scriptParams.put("field", "title");
+            source.utf8ToString()
+            // tag::search-scroll-execute-listener  
+            assertNotNull(scrollId);
+        bulkRequest.add(new IndexRequest("author").id("1").source(MediaTypeRegistry.JSON, "user", "foobar"));
+        RestHighLevelClient client = highLevelClient();
+        BulkRequest bulkRequest = new BulkRequest();
+import org.opensearch.search.builder.SearchSourceBuilder;
+        // end::explain-execute
+        RestHighLevelClient client = highLevelClient();
+                        Bucket elasticBucket = ((Terms) agg).getBucketByKey("OpenSearch");
+            );
+            @Override  
+            listener = new LatchedActionListener<>(listener, clearScrollLatch);
+        request.setScriptParams(params);  
+        {
+                    String message = ex.getMessage();
+            final CountDownLatch latch = new CountDownLatch(1);
+            // end::search-request-profiling  
+import org.opensearch.index.query.QueryBuilder;
+                        "innerObject",
+            // tag::search-hits-info
+                public void onResponse(SearchResponse searchResponse) {  
+                    // <1>  
+                    "XYZ Joins Forces with OpenSearch",
+        MultiSearchTemplateRequest multiRequest = new MultiSearchTemplateRequest(); // <1>
+                    "Doubling Down on Open?",
+                .endObject()  
+        String [] searchTerms = {"opensearch", "opensearch-dashboards"};
+                .field("type", "keyword")
+                    "In which order are my OpenSearch queries executed?",
+            SearchResponse searchResponse = firstResponse.getResponse();           // <3>  
+                    "The Future of Federated Search in OpenSearch",  
+            SearchResponse initialSearchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
+            String[] excludeFields = new String[] {"user"};  
+            // tag::search-request-profiling  
+                .field("doc_values", "false")
+            for (ShardSearchFailure failure : countResponse.getShardFailures()) {
+        {
+            SearchRequest searchRequest = new SearchRequest("posts");
+        // tag::field-caps-request-indicesOptions
+import org.opensearch.action.LatchedActionListener;  
+            SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId); // <1>
+            assertEquals(4, countResponse.getCount());
+            // tag::clear-scroll-execute-async
+                // end::search-hits-singleHit-properties  
+            searchSourceBuilder.size(size); // <1>
+        // end::multi-search-template-request-inline  
+    public void testFieldCaps() throws Exception {
+            }
+                // <2>
+                    Arrays.asList("tyler", "foobar"),
+import org.opensearch.search.aggregations.Aggregations;
+        assertNotNull(searchResponse);
+        assertNotNull(multiResponse);
+            XContentFactory.jsonBuilder()
+            searchSourceBuilder.query(matchQueryBuilder);
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.action.support.WriteRequest;
+            searchSourceBuilder.query(matchQuery("title", "OpenSearch"));
+            double qualityLevel = evalQuality.metricScore();        // <3>  
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
             TermsAggregationBuilder aggregation = AggregationBuilders.terms("by_company")  
-                    .field("company.keyword");
-            aggregation.subAggregation(AggregationBuilders.avg("average_age")
-                    .field("age"));  
-            searchSourceBuilder.aggregation(aggregation);
-            // end::search-request-aggregations
-            searchSourceBuilder.query(QueryBuilders.matchAllQuery());  
-            searchRequest.source(searchSourceBuilder);
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
-            {  
-                // tag::search-request-aggregations-get
-                Aggregations aggregations = searchResponse.getAggregations();
-                Terms byCompanyAggregation = aggregations.get("by_company"); // <1>  
-                Bucket elasticBucket = byCompanyAggregation.getBucketByKey("OpenSearch"); // <2>
-                Avg averageAge = elasticBucket.getAggregations().get("average_age"); // <3>
-                double avg = averageAge.getValue();  
-                // end::search-request-aggregations-get
-
-                try {  
-                    // tag::search-request-aggregations-get-wrongCast
-                    Range range = aggregations.get("by_company"); // <1>
-                    // end::search-request-aggregations-get-wrongCast  
-                } catch (ClassCastException ex) {
-                    String message = ex.getMessage();
-                    assertThat(message, containsString("org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms"));  
-                    assertThat(message, containsString("org.opensearch.search.aggregations.bucket.range.Range"));
-                }
-                assertEquals(3, elasticBucket.getDocCount());  
-                assertEquals(30, avg, 0.0);
-            }
-            Aggregations aggregations = searchResponse.getAggregations();  
-            {
-                // tag::search-request-aggregations-asMap
-                Map<String, Aggregation> aggregationMap = aggregations.getAsMap();  
-                Terms companyAggregation = (Terms) aggregationMap.get("by_company");
-                // end::search-request-aggregations-asMap
-            }  
-            {
-                // tag::search-request-aggregations-asList
-                List<Aggregation> aggregationList = aggregations.asList();  
-                // end::search-request-aggregations-asList
-            }
-            {  
-                // tag::search-request-aggregations-iterator
-                for (Aggregation agg : aggregations) {
-                    String type = agg.getType();  
-                    if (type.equals(TermsAggregationBuilder.NAME)) {
-                        Bucket elasticBucket = ((Terms) agg).getBucketByKey("OpenSearch");
-                        long numberOfDocs = elasticBucket.getDocCount();  
-                    }
-                }
-                // end::search-request-aggregations-iterator  
-            }
-        }
-    }  
-
-    @SuppressWarnings({ "unused", "rawtypes" })
-    public void testSearchRequestSuggestions() throws IOException {  
-        RestHighLevelClient client = highLevelClient();
-        {
-            BulkRequest request = new BulkRequest();  
-            request.add(new IndexRequest("posts").id("1").source(MediaTypeRegistry.JSON, "user", "foobar"));
-            request.add(new IndexRequest("posts").id("2").source(MediaTypeRegistry.JSON, "user", "quxx"));
-            request.add(new IndexRequest("posts").id("3").source(MediaTypeRegistry.JSON, "user", "quzz"));  
-            request.add(new IndexRequest("posts").id("4").source(MediaTypeRegistry.JSON, "user", "corge"));
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);  
-            assertSame(RestStatus.OK, bulkResponse.status());
-            assertFalse(bulkResponse.hasFailures());
-        }  
-        {
-            SearchRequest searchRequest = new SearchRequest();
-            // tag::search-request-suggestion  
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            SuggestionBuilder termSuggestionBuilder =
-                SuggestBuilders.termSuggestion("user").text("fooarb"); // <1>  
-            SuggestBuilder suggestBuilder = new SuggestBuilder();
-            suggestBuilder.addSuggestion("suggest_user", termSuggestionBuilder); // <2>
-            searchSourceBuilder.suggest(suggestBuilder);  
-            // end::search-request-suggestion
-            searchRequest.source(searchSourceBuilder);
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
-            {
-                // tag::search-request-suggestion-get
-                Suggest suggest = searchResponse.getSuggest(); // <1>  
-                TermSuggestion termSuggestion = suggest.getSuggestion("suggest_user"); // <2>
-                for (TermSuggestion.Entry entry : termSuggestion.getEntries()) { // <3>
-                    for (TermSuggestion.Entry.Option option : entry) { // <4>  
-                        String suggestText = option.getText().string();
-                    }
-                }  
-                // end::search-request-suggestion-get
-                assertEquals(1, termSuggestion.getEntries().size());
-                assertEquals(1, termSuggestion.getEntries().get(0).getOptions().size());  
-                assertEquals("foobar", termSuggestion.getEntries().get(0).getOptions().get(0).getText().string());
-            }
-        }  
-    }
-
-    @SuppressWarnings("unused")  
-    public void testSearchRequestHighlighting() throws IOException {
-        RestHighLevelClient client = highLevelClient();
-        {  
-            BulkRequest request = new BulkRequest();
-            request.add(
-                new IndexRequest("posts").id("1")  
-                    .source(
-                        MediaTypeRegistry.JSON,
-                        "title",  
-                        "In which order are my OpenSearch queries executed?",
-                        "user",
-                        Arrays.asList("foobar", "quxx"),  
-                        "innerObject",
-                        Collections.singletonMap("key", "value")
-                    )  
-            );
-            request.add(
-                new IndexRequest("posts").id("2")  
-                    .source(
-                        MediaTypeRegistry.JSON,
-                        "title",  
-                        "Current status and upcoming changes in OpenSearch",
-                        "user",
-                        Arrays.asList("foobar", "grault"),  
-                        "innerObject",
-                        Collections.singletonMap("key", "value")
-                    )  
-            );
-            request.add(
-                new IndexRequest("posts").id("3")  
-                    .source(
-                        MediaTypeRegistry.JSON,
-                        "title",  
-                        "The Future of Federated Search in OpenSearch",
-                        "user",
-                        Arrays.asList("foobar", "quuz"),  
-                        "innerObject",
-                        Collections.singletonMap("key", "value")
-                    )  
-            );
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);  
-            assertSame(RestStatus.OK, bulkResponse.status());
-            assertFalse(bulkResponse.hasFailures());
-        }  
-        {
-            SearchRequest searchRequest = new SearchRequest();
-            // tag::search-request-highlighting  
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            HighlightBuilder highlightBuilder = new HighlightBuilder(); // <1>
-            HighlightBuilder.Field highlightTitle =  
-                    new HighlightBuilder.Field("title"); // <2>
-            highlightTitle.highlighterType("unified");  // <3>
-            highlightBuilder.field(highlightTitle);  // <4>  
-            HighlightBuilder.Field highlightUser = new HighlightBuilder.Field("user");
-            highlightBuilder.field(highlightUser);
-            searchSourceBuilder.highlighter(highlightBuilder);  
-            // end::search-request-highlighting
-            searchSourceBuilder.query(
-                QueryBuilders.boolQuery().should(matchQuery("title", "OpenSearch")).should(matchQuery("user", "foobar"))  
-            );
-            searchRequest.source(searchSourceBuilder);
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
-            {
-                // tag::search-request-highlighting-get
-                SearchHits hits = searchResponse.getHits();  
-                for (SearchHit hit : hits.getHits()) {
-                    Map<String, HighlightField> highlightFields = hit.getHighlightFields();
-                    HighlightField highlight = highlightFields.get("title"); // <1>  
-                    Text[] fragments = highlight.fragments();  // <2>
-                    String fragmentString = fragments[0].string();
-                }  
-                // end::search-request-highlighting-get
-                hits = searchResponse.getHits();
-                for (SearchHit hit : hits.getHits()) {  
-                    Map<String, HighlightField> highlightFields = hit.getHighlightFields();
-                    HighlightField highlight = highlightFields.get("title");
-                    Text[] fragments = highlight.fragments();  
-                    assertEquals(1, fragments.length);
-                    assertThat(fragments[0].string(), containsString("<em>OpenSearch</em>"));
-                    highlight = highlightFields.get("user");  
-                    fragments = highlight.fragments();
-                    assertEquals(1, fragments.length);
-                    assertThat(fragments[0].string(), containsString("<em>foobar</em>"));  
-                }
-            }
-
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testSearchRequestProfiling() throws IOException {
-        RestHighLevelClient client = highLevelClient();  
-        {
-            IndexRequest request = new IndexRequest("posts").id("1").source(MediaTypeRegistry.JSON, "tags", "opensearch", "comments", 123);
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL);  
-            IndexResponse indexResponse = client.index(request, RequestOptions.DEFAULT);
-            assertSame(RestStatus.CREATED, indexResponse.status());
-        }  
-        {
-            SearchRequest searchRequest = new SearchRequest();
-            // tag::search-request-profiling  
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            searchSourceBuilder.profile(true);
-            // end::search-request-profiling  
-            searchSourceBuilder.query(QueryBuilders.termQuery("tags", "opensearch"));
-            searchSourceBuilder.aggregation(AggregationBuilders.histogram("by_comments").field("comments").interval(100));
-            searchRequest.source(searchSourceBuilder);  
-
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
-            // tag::search-request-profiling-get  
-            Map<String, ProfileShardResult> profilingResults =
-                    searchResponse.getProfileResults(); // <1>
-            for (Map.Entry<String, ProfileShardResult> profilingResult : profilingResults.entrySet()) { // <2>  
-                String key = profilingResult.getKey(); // <3>
-                ProfileShardResult profileShardResult = profilingResult.getValue(); // <4>
-            }  
-            // end::search-request-profiling-get
-
-            ProfileShardResult profileShardResult = profilingResults.values().iterator().next();  
-            assertNotNull(profileShardResult);
-
-            // tag::search-request-profiling-queries  
-            List<QueryProfileShardResult> queryProfileShardResults =
-                    profileShardResult.getQueryProfileResults(); // <1>
-            for (QueryProfileShardResult queryProfileResult : queryProfileShardResults) { // <2>  
-
-            }
-            // end::search-request-profiling-queries  
-            assertThat(queryProfileShardResults.size(), equalTo(1));
-
-            for (QueryProfileShardResult queryProfileResult : queryProfileShardResults) {  
-                // tag::search-request-profiling-queries-results
-                for (ProfileResult profileResult : queryProfileResult.getQueryResults()) { // <1>
-                    String queryName = profileResult.getQueryName(); // <2>  
-                    long queryTimeInMillis = profileResult.getTime(); // <3>
-                    List<ProfileResult> profiledChildren = profileResult.getProfiledChildren(); // <4>
-                }  
-                // end::search-request-profiling-queries-results
-
-                // tag::search-request-profiling-queries-collectors  
-                CollectorResult collectorResult = queryProfileResult.getCollectorResult();  // <1>
-                String collectorName = collectorResult.getName();  // <2>
-                Long collectorTimeInMillis = collectorResult.getTime(); // <3>  
-                List<CollectorResult> profiledChildren = collectorResult.getProfiledChildren(); // <4>
-                // end::search-request-profiling-queries-collectors
-            }  
-
-            // tag::search-request-profiling-aggs
-            AggregationProfileShardResult aggsProfileResults =  
-                    profileShardResult.getAggregationProfileResults(); // <1>
-            for (ProfileResult profileResult : aggsProfileResults.getProfileResults()) { // <2>
-                String aggName = profileResult.getQueryName(); // <3>  
-                long aggTimeInMillis = profileResult.getTime(); // <4>
-                List<ProfileResult> profiledChildren = profileResult.getProfiledChildren(); // <5>
-            }  
-            // end::search-request-profiling-aggs
-            assertThat(aggsProfileResults.getProfileResults().size(), equalTo(1));
-        }  
-    }
-
-    public void testScroll() throws Exception {  
-        RestHighLevelClient client = highLevelClient();
-        {
-            BulkRequest request = new BulkRequest();  
-            request.add(
-                new IndexRequest("posts").id("1")
-                    .source(MediaTypeRegistry.JSON, "title", "In which order are my OpenSearch queries executed?")  
-            );
-            request.add(
-                new IndexRequest("posts").id("2")  
-                    .source(MediaTypeRegistry.JSON, "title", "Current status and upcoming changes in OpenSearch")
-            );
-            request.add(  
-                new IndexRequest("posts").id("3").source(MediaTypeRegistry.JSON, "title", "The Future of Federated Search in OpenSearch")
-            );
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
-            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
-            assertSame(RestStatus.OK, bulkResponse.status());
-            assertFalse(bulkResponse.hasFailures());  
-        }
-        {
-            int size = 1;  
-            // tag::search-scroll-init
-            SearchRequest searchRequest = new SearchRequest("posts");
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
-            searchSourceBuilder.query(matchQuery("title", "OpenSearch"));
-            searchSourceBuilder.size(size); // <1>
-            searchRequest.source(searchSourceBuilder);  
-            searchRequest.scroll(TimeValue.timeValueMinutes(1L)); // <2>
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
-            String scrollId = searchResponse.getScrollId(); // <3>  
-            SearchHits hits = searchResponse.getHits();  // <4>
-            // end::search-scroll-init
-            assertEquals(3, hits.getTotalHits().value());  
-            assertEquals(1, hits.getHits().length);
-            assertNotNull(scrollId);
-
-            // tag::search-scroll2
-            SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId); // <1>
-            scrollRequest.scroll(TimeValue.timeValueSeconds(30));  
-            SearchResponse searchScrollResponse = client.scroll(scrollRequest, RequestOptions.DEFAULT);
-            scrollId = searchScrollResponse.getScrollId();  // <2>
-            hits = searchScrollResponse.getHits(); // <3>  
-            assertEquals(3, hits.getTotalHits().value());
-            assertEquals(1, hits.getHits().length);
-            assertNotNull(scrollId);  
-            // end::search-scroll2
-
-            ClearScrollRequest clearScrollRequest = new ClearScrollRequest();  
-            clearScrollRequest.addScrollId(scrollId);
-            ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
-            assertTrue(clearScrollResponse.isSucceeded());  
-        }
-        {
-            SearchRequest searchRequest = new SearchRequest();  
-            searchRequest.scroll("60s");
-
-            SearchResponse initialSearchResponse = client.search(searchRequest, RequestOptions.DEFAULT);  
-            String scrollId = initialSearchResponse.getScrollId();
-
-            SearchScrollRequest scrollRequest = new SearchScrollRequest();  
-            scrollRequest.scrollId(scrollId);
-
-            // tag::scroll-request-arguments  
-            scrollRequest.scroll(TimeValue.timeValueSeconds(60L)); // <1>
-            scrollRequest.scroll("60s"); // <2>
-            // end::scroll-request-arguments  
-
-            // tag::search-scroll-execute-sync
-            SearchResponse searchResponse = client.scroll(scrollRequest, RequestOptions.DEFAULT);  
-            // end::search-scroll-execute-sync
-
-            assertEquals(0, searchResponse.getFailedShards());  
-            assertEquals(3L, searchResponse.getHits().getTotalHits().value());
-
-            // tag::search-scroll-execute-listener  
-            ActionListener<SearchResponse> scrollListener =
-                    new ActionListener<SearchResponse>() {
-                @Override  
-                public void onResponse(SearchResponse searchResponse) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-            // end::search-scroll-execute-listener
-
-            // Replace the empty listener by a blocking listener in test  
-            final CountDownLatch latch = new CountDownLatch(1);
-            scrollListener = new LatchedActionListener<>(scrollListener, latch);
-
-            // tag::search-scroll-execute-async
-            client.scrollAsync(scrollRequest, RequestOptions.DEFAULT, scrollListener); // <1>
-            // end::search-scroll-execute-async  
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-
-            // tag::clear-scroll-request
-            ClearScrollRequest request = new ClearScrollRequest(); // <1>
-            request.addScrollId(scrollId); // <2>  
-            // end::clear-scroll-request
-
-            // tag::clear-scroll-add-scroll-id  
-            request.addScrollId(scrollId);
-            // end::clear-scroll-add-scroll-id
-
-            List<String> scrollIds = Collections.singletonList(scrollId);
-
-            // tag::clear-scroll-add-scroll-ids  
-            request.setScrollIds(scrollIds);
-            // end::clear-scroll-add-scroll-ids
-
-            // tag::clear-scroll-execute
-            ClearScrollResponse response = client.clearScroll(request, RequestOptions.DEFAULT);
-            // end::clear-scroll-execute  
-
-            // tag::clear-scroll-response
-            boolean success = response.isSucceeded(); // <1>  
-            int released = response.getNumFreed(); // <2>
-            // end::clear-scroll-response
-            assertTrue(success);  
-            assertThat(released, greaterThan(0));
-
-            // tag::clear-scroll-execute-listener  
-            ActionListener<ClearScrollResponse> listener =
-                    new ActionListener<ClearScrollResponse>() {
-                @Override  
-                public void onResponse(ClearScrollResponse clearScrollResponse) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-            // end::clear-scroll-execute-listener
-
-            // Replace the empty listener by a blocking listener in test  
-            final CountDownLatch clearScrollLatch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, clearScrollLatch);
-
-            // tag::clear-scroll-execute-async
-            client.clearScrollAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::clear-scroll-execute-async  
-
-            assertTrue(clearScrollLatch.await(30L, TimeUnit.SECONDS));
-        }  
-        {
-            // tag::search-scroll-example
-            final Scroll scroll = new Scroll(TimeValue.timeValueMinutes(1L));  
-            SearchRequest searchRequest = new SearchRequest("posts");
-            searchRequest.scroll(scroll);
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
-            searchSourceBuilder.query(matchQuery("title", "OpenSearch"));
-            searchRequest.source(searchSourceBuilder);
-
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT); // <1>
-            String scrollId = searchResponse.getScrollId();
-            SearchHit[] searchHits = searchResponse.getHits().getHits();  
-
-            while (searchHits != null && searchHits.length > 0) { // <2>
-                // <3>  
-                SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId); // <4>
-                scrollRequest.scroll(scroll);
-                searchResponse = client.scroll(scrollRequest, RequestOptions.DEFAULT);  
-                scrollId = searchResponse.getScrollId();
-                searchHits = searchResponse.getHits().getHits();
-            }  
-
-            ClearScrollRequest clearScrollRequest = new ClearScrollRequest(); // <5>
-            clearScrollRequest.addScrollId(scrollId);  
-            ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
-            boolean succeeded = clearScrollResponse.isSucceeded();
-            // end::search-scroll-example  
-            assertTrue(succeeded);
-        }
-    }  
-
-    public void testSearchTemplateWithInlineScript() throws Exception {
-        indexSearchTestData();  
-        RestHighLevelClient client = highLevelClient();
-
-        // tag::search-template-request-inline  
-        SearchTemplateRequest request = new SearchTemplateRequest();
-        request.setRequest(new SearchRequest("posts")); // <1>
-
-        request.setScriptType(ScriptType.INLINE);
-        request.setScript( // <2>
-            "{" +  
-            "  \"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" } }," +
-            "  \"size\" : \"{{size}}\"" +
-            "}");  
-
-        Map<String, Object> scriptParams = new HashMap<>();
-        scriptParams.put("field", "title");  
-        scriptParams.put("value", "opensearch");
-        scriptParams.put("size", 5);
-        request.setScriptParams(scriptParams); // <3>  
-        // end::search-template-request-inline
-
-        // tag::search-template-response  
-        SearchTemplateResponse response = client.searchTemplate(request, RequestOptions.DEFAULT);
-        SearchResponse searchResponse = response.getResponse();
-        // end::search-template-response  
-
-        assertNotNull(searchResponse);
-        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);  
-
-        // tag::render-search-template-request
-        request.setSimulate(true); // <1>  
-        // end::render-search-template-request
-
-        // tag::render-search-template-response  
-        SearchTemplateResponse renderResponse = client.searchTemplate(request, RequestOptions.DEFAULT);
-        BytesReference source = renderResponse.getSource(); // <1>
-        // end::render-search-template-response  
-
-        assertNotNull(source);
-        assertEquals(  
-            ("{  \"size\" : \"5\",  \"query\": { \"match\" : { \"title\" : \"opensearch\" } }}").replaceAll("\\s+", ""),
-            source.utf8ToString()
-        );  
-    }
-
-    public void testSearchTemplateWithStoredScript() throws Exception {  
-        indexSearchTestData();
-        RestHighLevelClient client = highLevelClient();
-        RestClient restClient = client();  
-
-        registerQueryScript(restClient);
-
-        // tag::search-template-request-stored
-        SearchTemplateRequest request = new SearchTemplateRequest();
-        request.setRequest(new SearchRequest("posts"));  
-
-        request.setScriptType(ScriptType.STORED);
-        request.setScript("title_search");  
-
-        Map<String, Object> params = new HashMap<>();
-        params.put("field", "title");  
-        params.put("value", "opensearch");
-        params.put("size", 5);
-        request.setScriptParams(params);  
-        // end::search-template-request-stored
-
-        // tag::search-template-request-options  
-        request.setExplain(true);
-        request.setProfile(true);
-        // end::search-template-request-options  
-
-        // tag::search-template-execute
-        SearchTemplateResponse response = client.searchTemplate(request, RequestOptions.DEFAULT);  
-        // end::search-template-execute
-
-        SearchResponse searchResponse = response.getResponse();  
-        assertNotNull(searchResponse);
-        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);
-
-        // tag::search-template-execute-listener
-        ActionListener<SearchTemplateResponse> listener = new ActionListener<SearchTemplateResponse>() {
-            @Override  
-            public void onResponse(SearchTemplateResponse response) {
-                // <1>
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                // <2>
-            }
         };  
-        // end::search-template-execute-listener
-
-        // Replace the empty listener by a blocking listener for tests.  
-        CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::search-template-execute-async
-        client.searchTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::search-template-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    @SuppressWarnings("unused")
-    public void testMultiSearchTemplateWithInlineScript() throws Exception {  
-        indexSearchTestData();
-        RestHighLevelClient client = highLevelClient();
-
-        // tag::multi-search-template-request-inline
-        String [] searchTerms = {"opensearch", "opensearch-dashboards"};
-
-        MultiSearchTemplateRequest multiRequest = new MultiSearchTemplateRequest(); // <1>
-        for (String searchTerm : searchTerms) {
-            SearchTemplateRequest request = new SearchTemplateRequest();  // <2>  
-            request.setRequest(new SearchRequest("posts"));
-
-            request.setScriptType(ScriptType.INLINE);  
-            request.setScript(
-                "{" +
-                "  \"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" } }," +  
-                "  \"size\" : \"{{size}}\"" +
-                "}");
-
-            Map<String, Object> scriptParams = new HashMap<>();
-            scriptParams.put("field", "title");
-            scriptParams.put("value", searchTerm);  
-            scriptParams.put("size", 5);
-            request.setScriptParams(scriptParams);
-
-            multiRequest.add(request);  // <3>
-        }
-        // end::multi-search-template-request-inline  
-
-        // tag::multi-search-template-request-sync
-        MultiSearchTemplateResponse multiResponse = client.msearchTemplate(multiRequest, RequestOptions.DEFAULT);  
-        // end::multi-search-template-request-sync
-
-        // tag::multi-search-template-response  
-        for (Item item : multiResponse.getResponses()) { // <1>
-            if (item.isFailure()) {
-                String error = item.getFailureMessage(); // <2>  
-            } else {
-                SearchTemplateResponse searchTemplateResponse = item.getResponse(); // <3>
-                SearchResponse searchResponse = searchTemplateResponse.getResponse();  
-                searchResponse.getHits();
-            }
-        }  
-        // end::multi-search-template-response
-
-        assertNotNull(multiResponse);  
-        assertEquals(searchTerms.length, multiResponse.getResponses().length);
-        assertNotNull(multiResponse.getResponses()[0]);
-        SearchResponse searchResponse = multiResponse.getResponses()[0].getResponse().getResponse();  
-        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);
-
-    }  
-
-    public void testMultiSearchTemplateWithStoredScript() throws Exception {
-        indexSearchTestData();  
-        RestHighLevelClient client = highLevelClient();
-        RestClient restClient = client();
-
-        registerQueryScript(restClient);
-
-        // tag::multi-search-template-request-stored  
-        MultiSearchTemplateRequest multiRequest = new MultiSearchTemplateRequest();
-
-        String [] searchTerms = {"opensearch", "dashboards"};  
-        for (String searchTerm : searchTerms) {
-
-            SearchTemplateRequest request = new SearchTemplateRequest();  
-            request.setRequest(new SearchRequest("posts"));
-
-            request.setScriptType(ScriptType.STORED);  
-            request.setScript("title_search");
-
-            Map<String, Object> params = new HashMap<>();  
-            params.put("field", "title");
-            params.put("value", searchTerm);
-            params.put("size", 5);  
-            request.setScriptParams(params);
-            multiRequest.add(request);
-        }  
-        // end::multi-search-template-request-stored
-
-        // tag::multi-search-template-execute  
-        MultiSearchTemplateResponse multiResponse = client.msearchTemplate(multiRequest, RequestOptions.DEFAULT);
-        // end::multi-search-template-execute
-
-        assertNotNull(multiResponse);
-        assertEquals(searchTerms.length, multiResponse.getResponses().length);
-        assertNotNull(multiResponse.getResponses()[0]);  
-        SearchResponse searchResponse = multiResponse.getResponses()[0].getResponse().getResponse();
-        assertTrue(searchResponse.getHits().getTotalHits().value() > 0);
-
-        // tag::multi-search-template-execute-listener
-        ActionListener<MultiSearchTemplateResponse> listener = new ActionListener<MultiSearchTemplateResponse>() {
-            @Override  
-            public void onResponse(MultiSearchTemplateResponse response) {
-                // <1>
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                // <2>
-            }
-        };  
-        // end::multi-search-template-execute-listener
-
-        // Replace the empty listener by a blocking listener for tests.  
-        CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::multi-search-template-execute-async
-        client.msearchTemplateAsync(multiRequest, RequestOptions.DEFAULT, listener);
-        // end::multi-search-template-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    protected void registerQueryScript(RestClient restClient) throws IOException {
-        // tag::register-script  
-        Request scriptRequest = new Request("POST", "/_scripts/title_search");
-        scriptRequest.setJsonEntity(
-            "{" +  
-            "  \"script\": {" +
-            "    \"lang\": \"mustache\"," +
-            "    \"source\": {" +  
-            "      \"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" } }," +
-            "      \"size\" : \"{{size}}\"" +
-            "    }" +  
-            "  }" +
-            "}");
-        Response scriptResponse = restClient.performRequest(scriptRequest);  
-        // end::register-script
-        assertEquals(RestStatus.OK.getStatus(), scriptResponse.getStatusLine().getStatusCode());
-    }  
-
-    public void testExplain() throws Exception {
-        indexSearchTestData();  
-        RestHighLevelClient client = highLevelClient();
-
-        // tag::explain-request  
-        ExplainRequest request = new ExplainRequest("contributors", "1");
-        request.query(QueryBuilders.termQuery("user", "quuz"));
-        // end::explain-request  
-
-        // tag::explain-request-routing
-        request.routing("routing"); // <1>  
-        // end::explain-request-routing
-
-        // tag::explain-request-preference  
-        request.preference("_local"); // <1>
-        // end::explain-request-preference
-
-        // tag::explain-request-source
-        request.fetchSourceContext(new FetchSourceContext(true, new String[]{"user"}, null)); // <1>
-        // end::explain-request-source  
-
-        // tag::explain-request-stored-field
-        request.storedFields(new String[]{"user"}); // <1>  
-        // end::explain-request-stored-field
-
-        // tag::explain-execute  
-        ExplainResponse response = client.explain(request, RequestOptions.DEFAULT);
-        // end::explain-execute
-
-        // tag::explain-response
-        String index = response.getIndex(); // <1>
-        String id = response.getId(); // <2>  
-        boolean exists = response.isExists(); // <3>
-        boolean match = response.isMatch(); // <4>
-        boolean hasExplanation = response.hasExplanation(); // <5>  
-        Explanation explanation = response.getExplanation(); // <6>
-        GetResult getResult = response.getGetResult(); // <7>
-        // end::explain-response  
-        assertThat(index, equalTo("contributors"));
-        assertThat(id, equalTo("1"));
-        assertTrue(exists);  
-        assertTrue(match);
-        assertTrue(hasExplanation);
-        assertNotNull(explanation);  
-        assertNotNull(getResult);
-
-        // tag::get-result  
-        Map<String, Object> source = getResult.getSource(); // <1>
-        Map<String, DocumentField> fields = getResult.getFields(); // <2>
-        // end::get-result  
-        assertThat(source, equalTo(Collections.singletonMap("user", "quuz")));
-        assertThat(fields.get("user").getValue(), equalTo("quuz"));
-
-        // tag::explain-execute-listener
-        ActionListener<ExplainResponse> listener = new ActionListener<ExplainResponse>() {
-            @Override  
-            public void onResponse(ExplainResponse explainResponse) {
-                // <1>
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                // <2>
-            }
-        };  
-        // end::explain-execute-listener
-
-        CountDownLatch latch = new CountDownLatch(1);  
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::explain-execute-async  
-        client.explainAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::explain-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }
-
-    public void testFieldCaps() throws Exception {
-        indexSearchTestData();
-        RestHighLevelClient client = highLevelClient();  
-
-        // tag::field-caps-request
-        FieldCapabilitiesRequest request = new FieldCapabilitiesRequest()  
-            .fields("user")
-            .indices("posts", "authors", "contributors");
-        // end::field-caps-request  
-
-        // tag::field-caps-request-indicesOptions
-        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
-        // end::field-caps-request-indicesOptions
-
-        // tag::field-caps-execute  
-        FieldCapabilitiesResponse response = client.fieldCaps(request, RequestOptions.DEFAULT);
-        // end::field-caps-execute
-
-        // tag::field-caps-response
-        Map<String, FieldCapabilities> userResponse = response.getField("user");  // <1>
-        FieldCapabilities textCapabilities = userResponse.get("keyword");  
-
-        boolean isSearchable = textCapabilities.isSearchable();
-        boolean isAggregatable = textCapabilities.isAggregatable();  
-
-        String[] indices = textCapabilities.indices(); // <2>
-        String[] nonSearchableIndices = textCapabilities.nonSearchableIndices(); // <3>  
-        String[] nonAggregatableIndices = textCapabilities.nonAggregatableIndices();//<4>
-        // end::field-caps-response
-
-        assertThat(userResponse.keySet(), containsInAnyOrder("keyword", "text"));
-
-        assertTrue(isSearchable);  
-        assertFalse(isAggregatable);
-
-        assertArrayEquals(indices, new String[] { "authors", "contributors" });  
-        assertNull(nonSearchableIndices);
-        assertArrayEquals(nonAggregatableIndices, new String[] { "authors" });
-
-        // tag::field-caps-execute-listener
-        ActionListener<FieldCapabilitiesResponse> listener = new ActionListener<FieldCapabilitiesResponse>() {
-            @Override  
-            public void onResponse(FieldCapabilitiesResponse response) {
-                // <1>
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                // <2>
-            }
-        };  
-        // end::field-caps-execute-listener
-
-        // Replace the empty listener by a blocking listener for tests.  
-        CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::field-caps-execute-async
-        client.fieldCapsAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::field-caps-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    public void testRankEval() throws Exception {
-        indexSearchTestData();  
-        RestHighLevelClient client = highLevelClient();
-        {
-            // tag::rank-eval-request-basic  
-            EvaluationMetric metric = new PrecisionAtK();                 // <1>
-            List<RatedDocument> ratedDocs = new ArrayList<>();
-            ratedDocs.add(new RatedDocument("posts", "1", 1));            // <2>  
-            SearchSourceBuilder searchQuery = new SearchSourceBuilder();
-            searchQuery.query(QueryBuilders.matchQuery("user", "foobar"));// <3>
-            RatedRequest ratedRequest =                                   // <4>  
-                    new RatedRequest("foobar_query", ratedDocs, searchQuery);
-            List<RatedRequest> ratedRequests = Arrays.asList(ratedRequest);
-            RankEvalSpec specification =  
-                    new RankEvalSpec(ratedRequests, metric);              // <5>
-            RankEvalRequest request =                                     // <6>
-                    new RankEvalRequest(specification, new String[] { "posts" });  
-            // end::rank-eval-request-basic
-
-            // tag::rank-eval-execute  
-            RankEvalResponse response = client.rankEval(request, RequestOptions.DEFAULT);
-            // end::rank-eval-execute
-
-            // tag::rank-eval-response
-            double evaluationResult = response.getMetricScore();   // <1>
-            assertEquals(1.0 / 3.0, evaluationResult, 0.0);  
-            Map<String, EvalQueryQuality> partialResults =
-                    response.getPartialResults();
-            EvalQueryQuality evalQuality =  
-                    partialResults.get("foobar_query");                 // <2>
-            assertEquals("foobar_query", evalQuality.getId());
-            double qualityLevel = evalQuality.metricScore();        // <3>  
-            assertEquals(1.0 / 3.0, qualityLevel, 0.0);
-            List<RatedSearchHit> hitsAndRatings = evalQuality.getHitsAndRatings();
-            RatedSearchHit ratedSearchHit = hitsAndRatings.get(2);  
-            assertEquals("3", ratedSearchHit.getSearchHit().getId());   // <4>
-            assertFalse(ratedSearchHit.getRating().isPresent());        // <5>
-            MetricDetail metricDetails = evalQuality.getMetricDetails();  
-            String metricName = metricDetails.getMetricName();
-            assertEquals(PrecisionAtK.NAME, metricName);                // <6>
-            PrecisionAtK.Detail detail = (PrecisionAtK.Detail) metricDetails;  
-            assertEquals(1, detail.getRelevantRetrieved());             // <7>
-            assertEquals(3, detail.getRetrieved());
-            // end::rank-eval-response  
-
-            // tag::rank-eval-execute-listener
-            ActionListener<RankEvalResponse> listener = new ActionListener<RankEvalResponse>() {  
-                @Override
-                public void onResponse(RankEvalResponse response) {
-                    // <1>  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    // <2>
-                }  
-            };
-            // end::rank-eval-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::rank-eval-execute-async
-            client.rankEvalAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::rank-eval-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-        }
-    }
-
-    public void testMultiSearch() throws Exception {
-        indexSearchTestData();
-        RestHighLevelClient client = highLevelClient();  
-        {
-            // tag::multi-search-request-basic
-            MultiSearchRequest request = new MultiSearchRequest();    // <1>  
-            SearchRequest firstSearchRequest = new SearchRequest();   // <2>
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            searchSourceBuilder.query(QueryBuilders.matchQuery("user", "foobar"));  
-            firstSearchRequest.source(searchSourceBuilder);
-            request.add(firstSearchRequest);                          // <3>
-            SearchRequest secondSearchRequest = new SearchRequest();  // <4>  
-            searchSourceBuilder = new SearchSourceBuilder();
-            searchSourceBuilder.query(QueryBuilders.matchQuery("user", "quxx"));
-            secondSearchRequest.source(searchSourceBuilder);  
-            request.add(secondSearchRequest);
-            // end::multi-search-request-basic
-            // tag::multi-search-execute  
-            MultiSearchResponse response = client.msearch(request, RequestOptions.DEFAULT);
-            // end::multi-search-execute
-            // tag::multi-search-response  
-            MultiSearchResponse.Item firstResponse = response.getResponses()[0];   // <1>
-            assertNull(firstResponse.getFailure());                                // <2>
-            SearchResponse searchResponse = firstResponse.getResponse();           // <3>  
-            assertEquals(4, searchResponse.getHits().getTotalHits().value());
-            MultiSearchResponse.Item secondResponse = response.getResponses()[1];  // <4>
-            assertNull(secondResponse.getFailure());  
-            searchResponse = secondResponse.getResponse();
-            assertEquals(1, searchResponse.getHits().getTotalHits().value());
-            // end::multi-search-response  
-
-            // tag::multi-search-execute-listener
-            ActionListener<MultiSearchResponse> listener = new ActionListener<MultiSearchResponse>() {  
-                @Override
-                public void onResponse(MultiSearchResponse response) {
-                    // <1>  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    // <2>
-                }  
-            };
-            // end::multi-search-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::multi-search-execute-async
-            client.msearchAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::multi-search-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-        }
-    }
-
-    private void indexSearchTestData() throws IOException {
-        CreateIndexRequest authorsRequest = new CreateIndexRequest("authors").mapping(
-            XContentFactory.jsonBuilder()  
-                .startObject()
-                .startObject("properties")
-                .startObject("id")  
-                .field("type", "keyword")
-                .endObject()
-                .startObject("user")  
-                .field("type", "keyword")
-                .field("doc_values", "false")
-                .endObject()  
-                .endObject()
-                .endObject()
-        );  
-        CreateIndexResponse authorsResponse = highLevelClient().indices().create(authorsRequest, RequestOptions.DEFAULT);
-        assertTrue(authorsResponse.isAcknowledged());
-
-        CreateIndexRequest reviewersRequest = new CreateIndexRequest("contributors").mapping(
-            XContentFactory.jsonBuilder()
-                .startObject()  
-                .startObject("properties")
-                .startObject("id")
-                .field("type", "keyword")  
-                .endObject()
-                .startObject("user")
-                .field("type", "keyword")  
-                .field("store", "true")
-                .endObject()
-                .endObject()  
-                .endObject()
-        );
-        CreateIndexResponse reviewersResponse = highLevelClient().indices().create(reviewersRequest, RequestOptions.DEFAULT);  
-        assertTrue(reviewersResponse.isAcknowledged());
-
-        BulkRequest bulkRequest = new BulkRequest();  
-        bulkRequest.add(
-            new IndexRequest("posts").id("1")
-                .source(  
-                    MediaTypeRegistry.JSON,
-                    "id",
-                    1,  
-                    "title",
-                    "In which order are my OpenSearch queries executed?",
-                    "user",  
-                    Arrays.asList("foobar", "quxx"),
-                    "innerObject",
-                    Collections.singletonMap("key", "value")  
+import org.opensearch.client.core.CountRequest;
                 )
-        );
-        bulkRequest.add(  
-            new IndexRequest("posts").id("2")
-                .source(
-                    MediaTypeRegistry.JSON,  
-                    "id",
-                    2,
-                    "title",  
-                    "Current status and upcoming changes in OpenSearch",
-                    "user",
-                    Arrays.asList("foobar", "grault"),  
-                    "innerObject",
-                    Collections.singletonMap("key", "value")
-                )  
-        );
-        bulkRequest.add(
-            new IndexRequest("posts").id("3")  
-                .source(
-                    MediaTypeRegistry.JSON,
-                    "id",  
-                    3,
-                    "title",
-                    "The Future of Federated Search in OpenSearch",  
-                    "user",
-                    Arrays.asList("foobar", "quuz"),
-                    "innerObject",  
-                    Collections.singletonMap("key", "value")
-                )
-        );  
-
-        bulkRequest.add(new IndexRequest("authors").id("1").source(MediaTypeRegistry.JSON, "id", 1, "user", "foobar"));
-        bulkRequest.add(new IndexRequest("contributors").id("1").source(MediaTypeRegistry.JSON, "id", 1, "user", "quuz"));  
-
-        bulkRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-        BulkResponse bulkResponse = highLevelClient().bulk(bulkRequest, RequestOptions.DEFAULT);  
-        assertSame(RestStatus.OK, bulkResponse.status());
-        assertFalse(bulkResponse.hasFailures());
-    }  
-
-    @SuppressWarnings({ "unused", "unchecked" })
-    public void testCount() throws Exception {  
-        indexCountTestData();
-        RestHighLevelClient client = highLevelClient();
-        {  
-            // tag::count-request-basic
-            CountRequest countRequest = new CountRequest(); // <1>
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder(); // <2>  
             searchSourceBuilder.query(QueryBuilders.matchAllQuery()); // <3>
-            countRequest.source(searchSourceBuilder); // <4>
-            // end::count-request-basic  
-        }
-        {
-            // tag::count-request-args  
-            CountRequest countRequest = new CountRequest("blog") // <1>
-                .routing("routing") // <2>
-                .indicesOptions(IndicesOptions.lenientExpandOpen()) // <3>  
-                .preference("_local"); // <4>
-            // end::count-request-args
-            assertNotNull(client.count(countRequest, RequestOptions.DEFAULT));  
-        }
-        {
-            // tag::count-source-basics  
-            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder(); // <1>
-            sourceBuilder.query(QueryBuilders.termQuery("user", "foobar")); // <2>
-            // end::count-source-basics  
-
-            // tag::count-source-setter
-            CountRequest countRequest = new CountRequest();  
-            countRequest.indices("blog", "author");
-            countRequest.source(sourceBuilder);
-            // end::count-source-setter  
-
-            // tag::count-execute
-            CountResponse countResponse = client  
-                .count(countRequest, RequestOptions.DEFAULT);
-            // end::count-execute
-
-            // tag::count-execute-listener
-            ActionListener<CountResponse> listener =
-                new ActionListener<CountResponse>() {  
-
-                    @Override
-                    public void onResponse(CountResponse countResponse) {  
-                        // <1>
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        // <2>  
-                    }
-                };
-            // end::count-execute-listener  
-
+            if (item.isFailure()) {
+                        "The Future of Federated Search in OpenSearch",
+            assertSame(RestStatus.OK, bulkResponse.status());
+            assertNotNull(hits.getHits()[0].getSourceAsString());  
+            request.add(new IndexRequest("posts").id("1").source(MediaTypeRegistry.JSON, "user", "foobar"));
+            new IndexRequest("posts").id("2")
+            List<String> scrollIds = Collections.singletonList(scrollId);
+            {  
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT); // <1>
+            SearchRequest searchRequest = new SearchRequest();
+            // tag::search-scroll-execute-async
+                }
+        GetResult getResult = response.getGetResult(); // <7>
+            SearchRequest searchRequest = new SearchRequest();
+        // tag::field-caps-execute-async
+                    assertEquals(1, fragments.length);
+            // end::search-scroll-init
+            scriptParams.put("value", searchTerm);  
+                // tag::search-request-suggestion-get
+            TimeValue took = searchResponse.getTook();
+                List<Aggregation> aggregationList = aggregations.asList();  
+import org.opensearch.action.search.MultiSearchRequest;  
+                "  \"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" } }," +  
+        // end::search-template-execute-async  
+            "  \"script\": {" +
+            sourceBuilder.timeout(new TimeValue(60, TimeUnit.SECONDS)); // <5>
             // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::count-execute-async  
-            client.countAsync(countRequest, RequestOptions.DEFAULT, listener); // <1>
-            // end::count-execute-async
-
+import org.opensearch.index.rankeval.RankEvalSpec;
+        indexSearchTestData();
+            searchRequest.source(searchSourceBuilder);
+                    "id",
+import org.opensearch.action.index.IndexResponse;  
+        // end::render-search-template-request
+import java.util.List;  
+        // tag::field-caps-response
+        CountDownLatch latch = new CountDownLatch(1);  
+            ActionListener<SearchResponse> listener = new ActionListener<SearchResponse>() {
+        request.preference("_local"); // <1>
+                    Arrays.asList("foobar", "quxx"),
+                        "innerObject",
+            // end::search-request-aggregations
+            BulkRequest request = new BulkRequest();  
+                        "innerObject",
+        request.setProfile(true);
+            assertEquals(1.0 / 3.0, qualityLevel, 0.0);
+                String key = profilingResult.getKey(); // <3>
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+            assertNotNull(profileShardResult);
+        assertThat(userResponse.keySet(), containsInAnyOrder("keyword", "text"));
+        assertNotNull(searchResponse);
+                    "user",  
+        // end::search-template-request-stored
+        RestHighLevelClient client = highLevelClient();
+        BytesReference source = renderResponse.getSource(); // <1>
+        // tag::search-template-execute
+ *
+            // tag::count-execute
+            assertNotNull(hits.getHits()[0].getSourceAsMap().get("title"));
+                new IndexRequest("posts").id("3")  
+        String [] searchTerms = {"opensearch", "dashboards"};  
+                } catch (ClassCastException ex) {
+                Bucket elasticBucket = byCompanyAggregation.getBucketByKey("OpenSearch"); // <2>
+        ActionListener<SearchTemplateResponse> listener = new ActionListener<SearchTemplateResponse>() {
+            RatedRequest ratedRequest =                                   // <4>  
+        );
+ */
+import org.opensearch.index.rankeval.RatedDocument;
+            long numHits = totalHits.value();
+                    .source(
+        scriptParams.put("size", 5);
+            assertNull(secondResponse.getFailure());  
+                new IndexRequest("posts").id("1")  
+                List<Object> users = (List<Object>) sourceAsMap.get("user");
+            client.clearScrollAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            highlightBuilder.field(highlightUser);
+            );
+            while (searchHits != null && searchHits.length > 0) { // <2>
+public class SearchDocumentationIT extends OpenSearchRestHighLevelClientTestCase {  
+                    )  
+import org.opensearch.core.rest.RestStatus;
+                .startObject("user")  
+                    // <2>
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+                    "user",
+                for (SearchHit hit : hits.getHits()) {  
+                    Text[] fragments = highlight.fragments();  
             assertTrue(latch.await(30L, TimeUnit.SECONDS));
-
-            // tag::count-response-1  
-            long count = countResponse.getCount();
-            RestStatus status = countResponse.status();
-            Boolean terminatedEarly = countResponse.isTerminatedEarly();  
-            // end::count-response-1
-
-            // tag::count-response-2  
-            int totalShards = countResponse.getTotalShards();
-            int skippedShards = countResponse.getSkippedShards();
-            int successfulShards = countResponse.getSuccessfulShards();  
-            int failedShards = countResponse.getFailedShards();
-            for (ShardSearchFailure failure : countResponse.getShardFailures()) {
-                // failures should be handled here  
-            }
-            // end::count-response-2
-            assertNotNull(countResponse);  
-            assertEquals(4, countResponse.getCount());
-        }
-    }  
-
-    private static void indexCountTestData() throws IOException {
-        CreateIndexRequest authorsRequest = new CreateIndexRequest("author").mapping(  
-            XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject("properties")  
+                "  \"size\" : \"{{size}}\"" +
+            assertNotNull(scrollId);  
+                    new ActionListener<ClearScrollResponse>() {
+        bulkRequest.add(
+import java.util.Map;
+            firstSearchRequest.source(searchSourceBuilder);
+        client.msearchTemplateAsync(multiRequest, RequestOptions.DEFAULT, listener);
+        // tag::multi-search-template-response  
+    public void testSearchRequestHighlighting() throws IOException {
+            };
+            // tag::clear-scroll-add-scroll-id  
+            // tag::rank-eval-request-basic  
+                for (SearchHit hit : hits.getHits()) {
+            MultiSearchRequest request = new MultiSearchRequest();    // <1>  
+        request.fetchSourceContext(new FetchSourceContext(true, new String[]{"user"}, null)); // <1>
+        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
                 .startObject("user")
-                .field("type", "keyword")
-                .field("doc_values", "false")  
-                .endObject()
-                .endObject()
-                .endObject()  
-        );
-        CreateIndexResponse authorsResponse = highLevelClient().indices().create(authorsRequest, RequestOptions.DEFAULT);
-        assertTrue(authorsResponse.isAcknowledged());  
-
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(  
-            new IndexRequest("blog").id("1")
-                .source(
-                    MediaTypeRegistry.JSON,  
-                    "title",
-                    "Doubling Down on Open?",
-                    "user",  
-                    Collections.singletonList("foobar"),
-                    "innerObject",
-                    Collections.singletonMap("key", "value")  
-                )
-        );
-        bulkRequest.add(  
-            new IndexRequest("blog").id("2")
-                .source(
-                    MediaTypeRegistry.JSON,  
-                    "title",
-                    "XYZ Joins Forces with OpenSearch",
-                    "user",  
-                    Arrays.asList("foobar", "matt"),
-                    "innerObject",
-                    Collections.singletonMap("key", "value")  
-                )
-        );
-        bulkRequest.add(  
-            new IndexRequest("blog").id("3")
-                .source(
-                    MediaTypeRegistry.JSON,  
-                    "title",
-                    "On Net Neutrality",
-                    "user",  
-                    Arrays.asList("tyler", "foobar"),
-                    "innerObject",
-                    Collections.singletonMap("key", "value")  
-                )
-        );
-
-        bulkRequest.add(new IndexRequest("author").id("1").source(MediaTypeRegistry.JSON, "user", "foobar"));
-
-        bulkRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
-        BulkResponse bulkResponse = highLevelClient().bulk(bulkRequest, RequestOptions.DEFAULT);
-        assertSame(RestStatus.OK, bulkResponse.status());
-        assertFalse(bulkResponse.hasFailures());  
+            // end::count-source-setter  
+            ActionListener<CountResponse> listener =
+        ActionListener<FieldCapabilitiesResponse> listener = new ActionListener<FieldCapabilitiesResponse>() {
+                        "user",
+            SearchScrollRequest scrollRequest = new SearchScrollRequest();  
+            assertNotNull(countResponse);  
+import org.opensearch.action.bulk.BulkRequest;
     }
-
-}  
+                String index = hit.getIndex();  
+                    @Override
+        // end::search-template-request-options  
+            request.add(firstSearchRequest);                          // <3>
+        // end::search-template-request-inline
+                        MediaTypeRegistry.JSON,
+        // end::field-caps-request-indicesOptions
+            }
+            // end::search-request-highlighting
+            AggregationProfileShardResult aggsProfileResults =  
+                        (Map<String, Object>) sourceAsMap.get("innerObject");
+import org.opensearch.search.Scroll;
+        assertNotNull(source);
+            }  
+            request.add(
+            SearchSourceBuilder searchQuery = new SearchSourceBuilder();
+            sourceBuilder.sort(new ScoreSortBuilder().order(SortOrder.DESC)); // <1>  
+import org.opensearch.client.RequestOptions;
+ * not use this file except in compliance with the License.
+            @Override
+                new IndexRequest("posts").id("1")
+                String sourceAsString = hit.getSourceAsString();
+                    Collections.singletonList("foobar"),
+            String scrollId = searchResponse.getScrollId(); // <3>  
+            assertSame(RestStatus.OK, bulkResponse.status());
+import org.opensearch.script.mustache.MultiSearchTemplateResponse.Item;
+            // tag::search-hits-get
+            RatedSearchHit ratedSearchHit = hitsAndRatings.get(2);  
+        assertTrue(authorsResponse.isAcknowledged());
+                    MediaTypeRegistry.JSON,  
+import org.opensearch.client.RestHighLevelClient;
+                Map<String, Object> sourceAsMap = hit.getSourceAsMap();  
+            params.put("size", 5);  
+        SearchResponse searchResponse = response.getResponse();
+            // tag::count-request-basic
+                    searchResponse.getProfileResults(); // <1>
+                    }
+        // end::field-caps-execute
+    }
+            IndexRequest request = new IndexRequest("posts").id("1").source(MediaTypeRegistry.JSON, "tags", "opensearch", "comments", 123);
+            // end::search-scroll-example  
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL);  
+        // end::explain-request-source  
+                // tag::search-request-highlighting-get
+            request.add(new IndexRequest("posts").id("2").source(MediaTypeRegistry.JSON, "user", "quxx"));
+import org.opensearch.index.get.GetResult;  
+import org.opensearch.search.fetch.subphase.highlight.HighlightField;
+                // end::search-request-profiling-queries-collectors
+package org.opensearch.client.documentation;
+            MultiSearchResponse.Item secondResponse = response.getResponses()[1];  // <4>
+        registerQueryScript(restClient);
+            request.setRequest(new SearchRequest("posts"));
+        indexSearchTestData();
+            }
+        RestHighLevelClient client = highLevelClient();  
+            assertSame(RestStatus.CREATED, indexResponse.status());
+                .source(
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+    private static void indexCountTestData() throws IOException {
+                .source(
+    @SuppressWarnings("unused")  
+                TermSuggestion termSuggestion = suggest.getSuggestion("suggest_user"); // <2>
+ * specific language governing permissions and limitations
+            SearchRequest searchRequest = new SearchRequest();  
+            XContentFactory.jsonBuilder()  
+            request.add(new IndexRequest("posts").id("3").source(MediaTypeRegistry.JSON, "company", "OpenSearch", "age", 40));
+            public void onFailure(Exception e) {  
+ */
+            assertEquals(1, hits.getHits().length);
+            countRequest.source(sourceBuilder);
+                    "user",
+            int successfulShards = countResponse.getSuccessfulShards();  
+                    "innerObject",
+                    MediaTypeRegistry.JSON,
+            }
+            SearchHit[] searchHits = hits.getHits();
+            scriptParams.put("size", 5);
+        }
+import org.opensearch.search.aggregations.bucket.terms.Terms;  
+            clearScrollRequest.addScrollId(scrollId);  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+        // tag::explain-request-preference  
+            // end::count-request-basic  
+            // tag::search-source-basics  
+                // tag::search-request-aggregations-asList
+    }  
+            searchRequest.source(searchSourceBuilder);
+        bulkRequest.add(new IndexRequest("authors").id("1").source(MediaTypeRegistry.JSON, "id", 1, "user", "foobar"));
+            scrollRequest.scrollId(scrollId);
+            }  
+                    .source(MediaTypeRegistry.JSON, "title", "In which order are my OpenSearch queries executed?")  
+            // tag::search-execute-async  
+        RestClient restClient = client();  
+        request.setScriptType(ScriptType.INLINE);
+import org.opensearch.common.xcontent.XContentFactory;  
+    }
+                .routing("routing") // <2>
+        CreateIndexRequest reviewersRequest = new CreateIndexRequest("contributors").mapping(
+            // tag::search-query-builders  
+        // end::multi-search-template-execute
+            List<RatedSearchHit> hitsAndRatings = evalQuality.getHitsAndRatings();
+                public void onResponse(MultiSearchResponse response) {

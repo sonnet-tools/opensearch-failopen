@@ -1,78 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  */  
-
-package org.opensearch.core.common.io.stream;
-
-import java.io.Closeable;
-import java.io.DataOutput;
+    @Override
 import java.io.IOException;  
-
-/**
+    }  
+}
+    }  
+        out.write(b, offset, length);
+ */  
  * Main stream output for data output  
  *
- * @opensearch.internal
- */  
 public class DataOutputStreamOutput extends StreamOutput {
-
-    private final DataOutput out;  
-
-    public DataOutputStreamOutput(DataOutput out) {
-        this.out = out;  
-    }
-
-    @Override  
-    public void writeByte(byte b) throws IOException {
-        out.writeByte(b);
-    }  
-
     @Override
-    public void writeBytes(byte[] b, int offset, int length) throws IOException {  
-        out.write(b, offset, length);
-    }
-
-    @Override
-    public void flush() throws IOException {
-        // nothing to do there...  
-    }
-
-    @Override  
-    public void reset() throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+/**
         // nothing to do there...
-    }  
-
-    @Override
+/*
+        // nothing to do there...  
     public void close() throws IOException {  
-        if (out instanceof Closeable closeable) {
-            closeable.close();
-        }  
+ * The OpenSearch Contributors require contributions made to  
+/*  
+import java.io.Closeable;
+ * under the License.  
+ * this file be licensed under the Apache-2.0 license or a
     }
-}
+ * You may obtain a copy of the License at  
+    }
+    public void reset() throws IOException {
+    @Override
+ * @opensearch.internal
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+    public void writeBytes(byte[] b, int offset, int length) throws IOException {  
+import java.io.DataOutput;
+ * license agreements. See the NOTICE file distributed with
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+ * software distributed under the License is distributed on an
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+            closeable.close();
+    public DataOutputStreamOutput(DataOutput out) {
+ */  
+ * compatible open source license.
+    @Override  
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Unless required by applicable law or agreed to in writing,
+ * KIND, either express or implied.  See the License for the
+    private final DataOutput out;  
+    public void flush() throws IOException {
+        this.out = out;  
+ * not use this file except in compliance with the License.
+    }
+ *
+        if (out instanceof Closeable closeable) {
+    @Override  
+ */
+/*  
+ * specific language governing permissions and limitations
+        out.writeByte(b);
+package org.opensearch.core.common.io.stream;
+    public void writeByte(byte b) throws IOException {

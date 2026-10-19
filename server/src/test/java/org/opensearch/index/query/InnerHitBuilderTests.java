@@ -1,351 +1,328 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.script.Script;  
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.SearchModule;
-import org.opensearch.search.builder.SearchSourceBuilder;  
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.FieldAndFormat;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilderTests;  
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.search.sort.SortBuilder;
-import org.opensearch.search.sort.SortBuilders;  
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.AfterClass;  
-import org.junit.BeforeClass;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.Supplier;
-
-import static java.util.Collections.emptyList;
-import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.sameInstance;
-
-public class InnerHitBuilderTests extends OpenSearchTestCase {
-
-    private static final int NUMBER_OF_TESTBUILDERS = 20;  
-    private static NamedWriteableRegistry namedWriteableRegistry;
     private static NamedXContentRegistry xContentRegistry;
-
-    @BeforeClass
-    public static void init() {
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, emptyList());  
-        namedWriteableRegistry = new NamedWriteableRegistry(searchModule.getNamedWriteables());
-        xContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());
-    }  
-
-    @AfterClass
-    public static void afterClass() throws Exception {  
-        namedWriteableRegistry = null;
-        xContentRegistry = null;
-    }  
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {  
-        return xContentRegistry;
-    }
-
-    public void testSerialization() throws Exception {
-        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
-            InnerHitBuilder original = randomInnerHits();  
-            InnerHitBuilder deserialized = serializedCopy(original);
-            assertEquals(deserialized, original);
-            assertEquals(deserialized.hashCode(), original.hashCode());  
-            assertNotSame(deserialized, original);
-        }
-    }  
-
-    /**
-     * Test that if we serialize and deserialize an object, further  
-     * serialization leads to identical bytes representation.
-     * <p>
-     * This is necessary to ensure because we use the serialized BytesReference  
-     * of this builder as part of the cacheKey in
-     * {@link ShardSearchRequest} (via
-     * {@link SearchSourceBuilder#collapse(org.opensearch.search.collapse.CollapseBuilder)})  
-     */
-    public void testSerializationOrder() throws Exception {
-        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {  
-            InnerHitBuilder original = randomInnerHits();
-            InnerHitBuilder deserialized = serializedCopy(original);
-            assertEquals(deserialized, original);  
-            assertEquals(deserialized.hashCode(), original.hashCode());
-            assertNotSame(deserialized, original);
-            BytesStreamOutput out1 = new BytesStreamOutput();  
-            BytesStreamOutput out2 = new BytesStreamOutput();
-            original.writeTo(out1);
-            deserialized.writeTo(out2);  
+            }  
             assertEquals(out1.bytes(), out2.bytes());
-        }
-    }  
-
-    public void testFromAndToXContent() throws Exception {
-        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {  
-            InnerHitBuilder innerHit = randomInnerHits();
-            XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
-            innerHit.toXContent(builder, ToXContent.EMPTY_PARAMS);  
-            // fields is printed out as an object but parsed into a List where order matters, we disable shuffling
-            XContentBuilder shuffled = shuffleXContent(builder, "fields");
-            try (XContentParser parser = createParser(shuffled)) {  
-                InnerHitBuilder secondInnerHits = InnerHitBuilder.fromXContent(parser);
-                assertThat(innerHit, not(sameInstance(secondInnerHits)));
-                assertThat(innerHit, equalTo(secondInnerHits));  
-                assertThat(innerHit.hashCode(), equalTo(secondInnerHits.hashCode()));
-            }
-        }  
-    }
-
-    public void testEqualsAndHashcode() {  
-        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
-            checkEqualsAndHashCode(randomInnerHits(), InnerHitBuilderTests::serializedCopy, InnerHitBuilderTests::mutate);
-        }  
-    }
-
-    public static InnerHitBuilder randomNestedInnerHits() {  
-        InnerHitBuilder innerHitBuilder = randomInnerHits();
-        innerHitBuilder.setSeqNoAndPrimaryTerm(false); // not supported by nested queries
-        return innerHitBuilder;  
-    }
-
     public static InnerHitBuilder randomInnerHits() {  
-        InnerHitBuilder innerHits = new InnerHitBuilder();
-        innerHits.setName(randomAlphaOfLengthBetween(5, 16));
-        innerHits.setFrom(randomIntBetween(0, 32));  
-        innerHits.setSize(randomIntBetween(0, 32));
-        innerHits.setExplain(randomBoolean());
-        innerHits.setVersion(randomBoolean());  
-        innerHits.setSeqNoAndPrimaryTerm(randomBoolean());
-        innerHits.setTrackScores(randomBoolean());
-        if (randomBoolean()) {  
-            innerHits.setStoredFieldNames(randomListStuff(16, () -> randomAlphaOfLengthBetween(1, 16)));
-        }
-        innerHits.setDocValueFields(randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null)));  
-        innerHits.setFetchFields(randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null)));
-        // Random script fields deduped on their field name.
-        Map<String, SearchSourceBuilder.ScriptField> scriptFields = new HashMap<>();  
-        for (SearchSourceBuilder.ScriptField field : randomListStuff(16, InnerHitBuilderTests::randomScript)) {
-            scriptFields.put(field.fieldName(), field);
-        }  
-        innerHits.setScriptFields(new HashSet<>(scriptFields.values()));
-        FetchSourceContext randomFetchSourceContext;
-        int randomInt = randomIntBetween(0, 2);  
+import org.junit.AfterClass;  
+            if (randomBoolean()) {  
         if (randomInt == 0) {
-            randomFetchSourceContext = FetchSourceContext.FETCH_SOURCE;
-        } else if (randomInt == 1) {  
-            randomFetchSourceContext = new FetchSourceContext(
-                true,
-                generateRandomStringArray(12, 16, false),  
-                generateRandomStringArray(12, 16, false)
-            );
-        } else {  
-            randomFetchSourceContext = randomBoolean() ? FetchSourceContext.FETCH_SOURCE : FetchSourceContext.DO_NOT_FETCH_SOURCE;
-        }
-        innerHits.setFetchSourceContext(randomFetchSourceContext);  
-        if (randomBoolean()) {
-            innerHits.setSorts(
-                randomListStuff(16, () -> SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)).order(randomFrom(SortOrder.values())))  
-            );
-        }
-        innerHits.setHighlightBuilder(HighlightBuilderTests.randomHighlighterBuilder());  
-        return innerHits;
-    }
-
-    static InnerHitBuilder mutate(InnerHitBuilder original) throws IOException {
-        final InnerHitBuilder copy = serializedCopy(original);
-        List<Runnable> modifiers = new ArrayList<>(12);  
-        modifiers.add(() -> copy.setFrom(randomValueOtherThan(copy.getFrom(), () -> randomIntBetween(0, 128))));
-        modifiers.add(() -> copy.setSize(randomValueOtherThan(copy.getSize(), () -> randomIntBetween(0, 128))));
-        modifiers.add(() -> copy.setExplain(!copy.isExplain()));  
-        modifiers.add(() -> copy.setVersion(!copy.isVersion()));
-        modifiers.add(() -> copy.setSeqNoAndPrimaryTerm(!copy.isSeqNoAndPrimaryTerm()));
-        modifiers.add(() -> copy.setTrackScores(!copy.isTrackScores()));  
-        modifiers.add(() -> copy.setName(randomValueOtherThan(copy.getName(), () -> randomAlphaOfLengthBetween(1, 16))));
-        modifiers.add(() -> {
-            if (randomBoolean()) {  
-                copy.setDocValueFields(
-                    randomValueOtherThan(
-                        copy.getDocValueFields(),  
-                        () -> randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null))
-                    )
+    protected NamedXContentRegistry xContentRegistry() {  
+            }
+            XContentBuilder shuffled = shuffleXContent(builder, "fields");
                 );  
-            } else {
-                copy.addDocValueField(randomAlphaOfLengthBetween(1, 16));
-            }  
-        });
-        modifiers.add(() -> {
-            if (randomBoolean()) {  
-                copy.setFetchFields(
-                    randomValueOtherThan(
-                        copy.getFetchFields(),  
-                        () -> randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null))
-                    )
-                );  
-            } else {
-                copy.addFetchField(randomAlphaOfLengthBetween(1, 16));
-            }  
-        });
-        modifiers.add(() -> {
-            if (randomBoolean()) {  
-                copy.setScriptFields(randomValueOtherThan(copy.getScriptFields(), () -> {
-                    return new HashSet<>(randomListStuff(16, InnerHitBuilderTests::randomScript));
-                }));  
-            } else {
-                SearchSourceBuilder.ScriptField script = randomScript();
-                copy.addScriptField(script.fieldName(), script.script());  
-            }
-        });
-        modifiers.add(() -> copy.setFetchSourceContext(randomValueOtherThan(copy.getFetchSourceContext(), () -> {  
-            FetchSourceContext randomFetchSourceContext;
-            if (randomBoolean()) {
-                randomFetchSourceContext = randomBoolean() ? FetchSourceContext.FETCH_SOURCE : FetchSourceContext.DO_NOT_FETCH_SOURCE;  
-            } else {
-                randomFetchSourceContext = new FetchSourceContext(
-                    true,  
-                    generateRandomStringArray(12, 16, false),
-                    generateRandomStringArray(12, 16, false)
-                );  
-            }
-            return randomFetchSourceContext;
-        })));  
-        modifiers.add(() -> {
-            if (randomBoolean()) {
-                final List<SortBuilder<?>> sortBuilders = randomValueOtherThan(copy.getSorts(), () -> {  
-                    List<SortBuilder<?>> builders = randomListStuff(
-                        16,
-                        () -> SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)).order(randomFrom(SortOrder.values()))  
-                    );
-                    return builders;
-                });  
-                copy.setSorts(sortBuilders);
-            } else {
-                copy.addSort(SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)));  
-            }
-        });
-        modifiers.add(  
-            () -> copy.setHighlightBuilder(
-                randomValueOtherThan(copy.getHighlightBuilder(), HighlightBuilderTests::randomHighlighterBuilder)
-            )  
-        );
-        modifiers.add(() -> {
-            if (copy.getStoredFieldsContext() == null || randomBoolean()) {  
-                List<String> previous = copy.getStoredFieldsContext() == null
-                    ? Collections.emptyList()
-                    : copy.getStoredFieldsContext().fieldNames();  
-                List<String> newValues = randomValueOtherThan(
-                    previous,
-                    () -> randomListStuff(1, 16, () -> randomAlphaOfLengthBetween(1, 16))  
-                );
-                copy.setStoredFieldNames(newValues);
-            } else {  
-                copy.getStoredFieldsContext().addFieldName(randomAlphaOfLengthBetween(1, 16));
-            }
-        });  
-        randomFrom(modifiers).run();
-        return copy;
-    }  
-
-    static SearchSourceBuilder.ScriptField randomScript() {
-        ScriptType randomScriptType = randomFrom(ScriptType.values());  
-        Map<String, Object> randomMap = new HashMap<>();
-        if (randomBoolean()) {
-            int numEntries = randomIntBetween(0, 32);  
-            for (int i = 0; i < numEntries; i++) {
-                randomMap.put(String.valueOf(i), randomAlphaOfLength(16));
-            }  
-        }
-        Script script = new Script(
-            randomScriptType,  
-            randomScriptType == ScriptType.STORED ? null : randomAlphaOfLengthBetween(1, 4),
-            randomAlphaOfLength(128),
-            randomMap  
-        );
-        return new SearchSourceBuilder.ScriptField(randomAlphaOfLengthBetween(1, 32), script, randomBoolean());
-    }  
-
-    static <T> List<T> randomListStuff(int maxSize, Supplier<T> valueSupplier) {
-        return randomListStuff(0, maxSize, valueSupplier);  
-    }
-
-    static <T> List<T> randomListStuff(int minSize, int maxSize, Supplier<T> valueSupplier) {  
-        int size = randomIntBetween(minSize, maxSize);
-        List<T> list = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {  
-            list.add(valueSupplier.get());
-        }
-        return list;  
-    }
-
-    private static InnerHitBuilder serializedCopy(InnerHitBuilder original) throws IOException {  
-        return OpenSearchTestCase.copyWriteable(original, namedWriteableRegistry, InnerHitBuilder::new);
-    }
-
-    public void testSetDocValueFormat() {
         InnerHitBuilder innerHit = new InnerHitBuilder();
-        innerHit.addDocValueField("foo");  
-        innerHit.addDocValueField("@timestamp", "epoch_millis");
-        assertEquals(
-            Arrays.asList(new FieldAndFormat("foo", null), new FieldAndFormat("@timestamp", "epoch_millis")),  
-            innerHit.getDocValueFields()
-        );
-    }  
-
-    public void testSetFetchFieldFormat() {
-        InnerHitBuilder innerHit = new InnerHitBuilder();  
-        innerHit.addFetchField("foo");
-        innerHit.addFetchField("@timestamp", "epoch_millis");
-        assertEquals(  
+     * serialization leads to identical bytes representation.
+            } else {
+            InnerHitBuilder deserialized = serializedCopy(original);
+                );  
+        List<Runnable> modifiers = new ArrayList<>(12);  
+                        copy.getFetchFields(),  
+ * license agreements. See the NOTICE file distributed with
+/*
+                copy.addFetchField(randomAlphaOfLengthBetween(1, 16));
+        });
+                assertThat(innerHit, equalTo(secondInnerHits));  
+        innerHits.setHighlightBuilder(HighlightBuilderTests.randomHighlighterBuilder());  
+                    )
+    public static void init() {
+            if (randomBoolean()) {
             Arrays.asList(new FieldAndFormat("foo", null), new FieldAndFormat("@timestamp", "epoch_millis")),
-            innerHit.getFetchFields()
         );  
-    }
+    }  
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, emptyList());  
+        randomFrom(modifiers).run();
+            }  
+    static <T> List<T> randomListStuff(int minSize, int maxSize, Supplier<T> valueSupplier) {  
+        });
+        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
+            } else {
+        modifiers.add(() -> copy.setSize(randomValueOtherThan(copy.getSize(), () -> randomIntBetween(0, 128))));
+    }  
+            assertEquals(deserialized.hashCode(), original.hashCode());  
+    }  
+import java.util.Map;
 }
+            randomFetchSourceContext = randomBoolean() ? FetchSourceContext.FETCH_SOURCE : FetchSourceContext.DO_NOT_FETCH_SOURCE;
+        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
+ * Licensed to Elasticsearch under one or more contributor  
+            InnerHitBuilder innerHit = randomInnerHits();
+import org.opensearch.search.sort.SortBuilders;  
+            randomFetchSourceContext = FetchSourceContext.FETCH_SOURCE;
+            deserialized.writeTo(out2);  
+            } else {
+    }
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+            list.add(valueSupplier.get());
+                randomValueOtherThan(copy.getHighlightBuilder(), HighlightBuilderTests::randomHighlighterBuilder)
+            try (XContentParser parser = createParser(shuffled)) {  
+        }
+                copy.addSort(SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)));  
+        innerHits.setSize(randomIntBetween(0, 32));
+ * not use this file except in compliance with the License.
+            innerHits.setStoredFieldNames(randomListStuff(16, () -> randomAlphaOfLengthBetween(1, 16)));
+                    previous,
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+                assertThat(innerHit, not(sameInstance(secondInnerHits)));
+        assertEquals(  
+        }
+            original.writeTo(out1);
+ * under the License.  
+                copy.setScriptFields(randomValueOtherThan(copy.getScriptFields(), () -> {
+            for (int i = 0; i < numEntries; i++) {
+    }
+            if (randomBoolean()) {  
+            int numEntries = randomIntBetween(0, 32);  
+                    return builders;
+            randomFetchSourceContext = new FetchSourceContext(
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.script.ScriptType;
+                    );
+        innerHits.setSeqNoAndPrimaryTerm(randomBoolean());
+            if (copy.getStoredFieldsContext() == null || randomBoolean()) {  
+                    : copy.getStoredFieldsContext().fieldNames();  
+    private static NamedWriteableRegistry namedWriteableRegistry;
+                randomMap.put(String.valueOf(i), randomAlphaOfLength(16));
+        }  
+        innerHit.addDocValueField("foo");  
+        InnerHitBuilder innerHitBuilder = randomInnerHits();
+ * compatible open source license.
+        InnerHitBuilder innerHits = new InnerHitBuilder();
+            }
+            FetchSourceContext randomFetchSourceContext;
+/*
+        innerHits.setFetchSourceContext(randomFetchSourceContext);  
+                    return new HashSet<>(randomListStuff(16, InnerHitBuilderTests::randomScript));
+        innerHits.setScriptFields(new HashSet<>(scriptFields.values()));
+import java.util.HashMap;
+import org.opensearch.test.OpenSearchTestCase;
+        );
+                    generateRandomStringArray(12, 16, false),
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            } else {
+            checkEqualsAndHashCode(randomInnerHits(), InnerHitBuilderTests::serializedCopy, InnerHitBuilderTests::mutate);
+                );
+        modifiers.add(() -> {
+import org.opensearch.core.xcontent.XContentBuilder;
+            assertNotSame(deserialized, original);
+            InnerHitBuilder original = randomInnerHits();
+    }
+ */
+                final List<SortBuilder<?>> sortBuilders = randomValueOtherThan(copy.getSorts(), () -> {  
+    @Override
+ *
+    }
+            assertEquals(deserialized.hashCode(), original.hashCode());
+            innerHit.toXContent(builder, ToXContent.EMPTY_PARAMS);  
+                copy.addDocValueField(randomAlphaOfLengthBetween(1, 16));
+        List<T> list = new ArrayList<>(size);
+import org.opensearch.script.Script;  
+import java.util.HashSet;
+     * <p>
+ * GitHub history for details.
+        } else {  
+        innerHits.setExplain(randomBoolean());
+import org.opensearch.core.xcontent.XContentParser;
+            }
+        if (randomBoolean()) {
+            assertNotSame(deserialized, original);
+import org.opensearch.search.internal.ShardSearchRequest;
+        innerHits.setFrom(randomIntBetween(0, 32));  
+public class InnerHitBuilderTests extends OpenSearchTestCase {
+    public void testFromAndToXContent() throws Exception {
+                assertThat(innerHit.hashCode(), equalTo(secondInnerHits.hashCode()));
+        innerHit.addDocValueField("@timestamp", "epoch_millis");
+import java.util.ArrayList;
+        ScriptType randomScriptType = randomFrom(ScriptType.values());  
+                }));  
+            randomScriptType == ScriptType.STORED ? null : randomAlphaOfLengthBetween(1, 4),
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                        () -> randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null))
+        );
+        for (int i = 0; i < size; i++) {  
+        modifiers.add(() -> copy.setVersion(!copy.isVersion()));
+            }
+            InnerHitBuilder original = randomInnerHits();  
+import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
+        }
+                    ? Collections.emptyList()
+        innerHits.setDocValueFields(randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null)));  
+            );
+        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {  
+            } else {  
+            }  
+    }  
+    @BeforeClass
+    public void testSerializationOrder() throws Exception {
+                    () -> randomListStuff(1, 16, () -> randomAlphaOfLengthBetween(1, 16))  
+        if (randomBoolean()) {
+    }
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+        namedWriteableRegistry = null;
+            );
+        modifiers.add(() -> {
+import java.io.IOException;  
+                );  
+        modifiers.add(() -> copy.setFetchSourceContext(randomValueOtherThan(copy.getFetchSourceContext(), () -> {  
+    }  
+            randomScriptType,  
+        innerHit.addFetchField("foo");
+                generateRandomStringArray(12, 16, false)
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        for (SearchSourceBuilder.ScriptField field : randomListStuff(16, InnerHitBuilderTests::randomScript)) {
+    public void testSetDocValueFormat() {
+                true,
+    /**
+            assertEquals(deserialized, original);  
+        return OpenSearchTestCase.copyWriteable(original, namedWriteableRegistry, InnerHitBuilder::new);
+        innerHits.setVersion(randomBoolean());  
+import static org.hamcrest.Matchers.not;
+        xContentRegistry = null;
+                copy.setSorts(sortBuilders);
+            scriptFields.put(field.fieldName(), field);
+ * SPDX-License-Identifier: Apache-2.0
+            }
+package org.opensearch.index.query;
+            } else {
+        innerHits.setName(randomAlphaOfLengthBetween(5, 16));
+                generateRandomStringArray(12, 16, false),  
+    public void testSerialization() throws Exception {
+        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {  
+    public void testEqualsAndHashcode() {  
+        }  
+        int size = randomIntBetween(minSize, maxSize);
+                        () -> randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null))
+            innerHit.getDocValueFields()
+        FetchSourceContext randomFetchSourceContext;
+        }
+    }  
+        return innerHits;
+                List<String> newValues = randomValueOtherThan(
+    static SearchSourceBuilder.ScriptField randomScript() {
+    }
+        return new SearchSourceBuilder.ScriptField(randomAlphaOfLengthBetween(1, 32), script, randomBoolean());
+            XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
+import org.opensearch.common.xcontent.XContentType;
+            BytesStreamOutput out1 = new BytesStreamOutput();  
+        }  
+            if (randomBoolean()) {  
+import static org.hamcrest.Matchers.sameInstance;
+        innerHits.setFetchFields(randomListStuff(16, () -> new FieldAndFormat(randomAlphaOfLengthBetween(1, 16), null)));
+        if (randomBoolean()) {  
+import static java.util.Collections.emptyList;
+            innerHits.setSorts(
+        modifiers.add(() -> copy.setTrackScores(!copy.isTrackScores()));  
+        return innerHitBuilder;  
+            innerHit.getFetchFields()
+        return list;  
+    private static final int NUMBER_OF_TESTBUILDERS = 20;  
+        modifiers.add(() -> copy.setFrom(randomValueOtherThan(copy.getFrom(), () -> randomIntBetween(0, 128))));
+    private static InnerHitBuilder serializedCopy(InnerHitBuilder original) throws IOException {  
+        );
+        return randomListStuff(0, maxSize, valueSupplier);  
+        });  
+                copy.setStoredFieldNames(newValues);
+        modifiers.add(  
+            BytesStreamOutput out2 = new BytesStreamOutput();
+                SearchSourceBuilder.ScriptField script = randomScript();
+        innerHit.addFetchField("@timestamp", "epoch_millis");
+            )  
+    @AfterClass
+import java.util.List;  
+        Map<String, Object> randomMap = new HashMap<>();
+    }  
+        assertEquals(
+                randomFetchSourceContext = randomBoolean() ? FetchSourceContext.FETCH_SOURCE : FetchSourceContext.DO_NOT_FETCH_SOURCE;  
+        Map<String, SearchSourceBuilder.ScriptField> scriptFields = new HashMap<>();  
+import org.opensearch.common.settings.Settings;
+        InnerHitBuilder innerHit = new InnerHitBuilder();  
+    public void testSetFetchFieldFormat() {
+import org.opensearch.search.builder.SearchSourceBuilder;  
+    public static void afterClass() throws Exception {  
+                InnerHitBuilder secondInnerHits = InnerHitBuilder.fromXContent(parser);
+    static <T> List<T> randomListStuff(int maxSize, Supplier<T> valueSupplier) {
+                copy.addScriptField(script.fieldName(), script.script());  
+import org.opensearch.search.SearchModule;
+        int randomInt = randomIntBetween(0, 2);  
+import java.util.Arrays;
+ */  
+        final InnerHitBuilder copy = serializedCopy(original);
+        modifiers.add(() -> {
+     * Test that if we serialize and deserialize an object, further  
+     * {@link SearchSourceBuilder#collapse(org.opensearch.search.collapse.CollapseBuilder)})  
+        Script script = new Script(
+        modifiers.add(() -> {
+        }
+ * Modifications Copyright OpenSearch Contributors. See  
+ * this file be licensed under the Apache-2.0 license or a
+            Arrays.asList(new FieldAndFormat("foo", null), new FieldAndFormat("@timestamp", "epoch_millis")),  
+import org.opensearch.core.xcontent.ToXContent;  
+ * KIND, either express or implied.  See the License for the
+                copy.setDocValueFields(
+            randomAlphaOfLength(128),
+ * specific language governing permissions and limitations
+        innerHits.setTrackScores(randomBoolean());
+    public static InnerHitBuilder randomNestedInnerHits() {  
+                });  
+ * The OpenSearch Contributors require contributions made to  
+                    generateRandomStringArray(12, 16, false)
+            assertEquals(deserialized, original);
+import org.opensearch.search.sort.SortOrder;
+/*  
+     * of this builder as part of the cacheKey in
+                        16,
+                copy.setFetchFields(
+ * this work for additional information regarding copyright
+        } else if (randomInt == 1) {  
+        }
+        modifiers.add(() -> copy.setName(randomValueOtherThan(copy.getName(), () -> randomAlphaOfLengthBetween(1, 16))));
+    static InnerHitBuilder mutate(InnerHitBuilder original) throws IOException {
+import org.opensearch.search.fetch.subphase.FieldAndFormat;
+                    randomValueOtherThan(
+ *
+            randomMap  
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilderTests;  
+     * This is necessary to ensure because we use the serialized BytesReference  
+ * software distributed under the License is distributed on an
+                copy.getStoredFieldsContext().addFieldName(randomAlphaOfLengthBetween(1, 16));
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.junit.BeforeClass;
+        modifiers.add(() -> {
+        }
+                    randomValueOtherThan(
+        })));  
+    }
+import static org.hamcrest.Matchers.equalTo;  
+            // fields is printed out as an object but parsed into a List where order matters, we disable shuffling
+                List<String> previous = copy.getStoredFieldsContext() == null
+            InnerHitBuilder deserialized = serializedCopy(original);
+import org.opensearch.search.sort.SortBuilder;
+                        copy.getDocValueFields(),  
+            () -> copy.setHighlightBuilder(
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+                    true,  
+     */
+        return xContentRegistry;
+                    )
+        // Random script fields deduped on their field name.
+        modifiers.add(() -> copy.setSeqNoAndPrimaryTerm(!copy.isSeqNoAndPrimaryTerm()));
+     * {@link ShardSearchRequest} (via
+                randomListStuff(16, () -> SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)).order(randomFrom(SortOrder.values())))  
+ * You may obtain a copy of the License at  
+                        () -> SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)).order(randomFrom(SortOrder.values()))  
+ */
+import java.util.Collections;  
+                randomFetchSourceContext = new FetchSourceContext(
+        });
+        innerHitBuilder.setSeqNoAndPrimaryTerm(false); // not supported by nested queries
+            return randomFetchSourceContext;
+import java.util.function.Supplier;
+                    List<SortBuilder<?>> builders = randomListStuff(
+        return copy;
+        xContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());
+        modifiers.add(() -> copy.setExplain(!copy.isExplain()));  
+        });
+ *  
+        namedWriteableRegistry = new NamedWriteableRegistry(searchModule.getNamedWriteables());
+            if (randomBoolean()) {

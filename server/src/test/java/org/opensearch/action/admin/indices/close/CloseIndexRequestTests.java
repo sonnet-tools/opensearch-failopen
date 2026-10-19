@@ -1,134 +1,123 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.close;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.IndicesOptions;  
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.tasks.TaskId;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.VersionUtils;
-
-public class CloseIndexRequestTests extends OpenSearchTestCase {
-
-    public void testSerialization() throws Exception {  
-        final CloseIndexRequest request = randomRequest();
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            request.writeTo(out);  
-
-            final CloseIndexRequest deserializedRequest;
-            try (StreamInput in = out.bytes().streamInput()) {  
-                deserializedRequest = new CloseIndexRequest(in);
-            }
-            assertEquals(request.timeout(), deserializedRequest.timeout());  
-            assertEquals(request.clusterManagerNodeTimeout(), deserializedRequest.clusterManagerNodeTimeout());
-            assertEquals(request.indicesOptions(), deserializedRequest.indicesOptions());
-            assertEquals(request.getParentTask(), deserializedRequest.getParentTask());  
-            assertEquals(request.waitForActiveShards(), deserializedRequest.waitForActiveShards());
-            assertArrayEquals(request.indices(), deserializedRequest.indices());
-        }  
     }
-
-    public void testBwcSerialization() throws Exception {  
-        {
-            final CloseIndexRequest request = randomRequest();
-            try (BytesStreamOutput out = new BytesStreamOutput()) {  
-                out.setVersion(VersionUtils.randomCompatibleVersion(random(), Version.CURRENT));
-                request.writeTo(out);
-
+                final CloseIndexRequest deserializedRequest;
+            final CloseIndexRequest deserializedRequest;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        if (randomBoolean()) {  
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+        }
+import org.opensearch.action.support.IndicesOptions;  
+ *  
+import org.opensearch.core.common.io.stream.StreamInput;
                 try (StreamInput in = out.bytes().streamInput()) {
+import org.opensearch.test.VersionUtils;
+            assertEquals(request.timeout(), deserializedRequest.timeout());  
+        }
+            assertEquals(request.clusterManagerNodeTimeout(), deserializedRequest.clusterManagerNodeTimeout());
+        final CloseIndexRequest request = randomRequest();
+            request.waitForActiveShards(
+ */
+            assertEquals(request.getParentTask(), deserializedRequest.getParentTask());  
+import org.opensearch.Version;
+public class CloseIndexRequestTests extends OpenSearchTestCase {
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+                assertEquals(sample.indicesOptions(), deserializedRequest.indicesOptions());
+        if (randomBoolean()) {  
+                    deserializedRequest = new CloseIndexRequest(in);
+        CloseIndexRequest request = new CloseIndexRequest();
+/*
+                out.setVersion(version);
+                    assertEquals(request.timeout(), in.readTimeValue());
+            request.clusterManagerNodeTimeout(randomPositiveTimeValue());
+                    assertArrayEquals(request.indices(), in.readStringArray());  
+            final CloseIndexRequest sample = randomRequest();
+            }
+    }  
+        }
+    public void testBwcSerialization() throws Exception {  
+            request.writeTo(out);  
+ *
+                sample.getParentTask().writeTo(out);  
+ *
+/*  
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+    private CloseIndexRequest randomRequest() {
+import org.opensearch.action.support.ActiveShardCount;
+import org.opensearch.test.OpenSearchTestCase;
+ * The OpenSearch Contributors require contributions made to  
                     in.setVersion(out.getVersion());
+                    assertEquals(request.indicesOptions(), indicesOptions);
+        }
+                sample.waitForActiveShards().writeTo(out);
+                    assertEquals(request.waitForActiveShards(), ActiveShardCount.readFrom(in));  
+ * compatible open source license.
+            try (StreamInput in = out.bytes().streamInput()) {  
+                assertEquals(sample.clusterManagerNodeTimeout(), deserializedRequest.clusterManagerNodeTimeout());
+                try (StreamInput in = out.bytes().streamInput()) {
+            );  
+            assertArrayEquals(request.indices(), deserializedRequest.indices());
+            }  
+            final CloseIndexRequest request = randomRequest();
+            request.indicesOptions(
+ * Unless required by applicable law or agreed to in writing,
+                out.writeStringArray(sample.indices());  
+package org.opensearch.action.admin.indices.close;
+        if (randomBoolean()) {  
+        }
+        if (randomBoolean()) {
+ * GitHub history for details.
+                    in.setVersion(version);  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * under the License.  
+                request.writeTo(out);
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+            try (BytesStreamOutput out = new BytesStreamOutput()) {
+                deserializedRequest = new CloseIndexRequest(in);
+        return request;
+ * the Apache License, Version 2.0 (the "License"); you may
+                assertEquals(sample.waitForActiveShards(), deserializedRequest.waitForActiveShards());
+    public void testSerialization() throws Exception {  
+                sample.indicesOptions().writeIndicesOptions(out);
                     assertEquals(request.getParentTask(), TaskId.readFromStream(in));  
                     assertEquals(request.clusterManagerNodeTimeout(), in.readTimeValue());
-                    assertEquals(request.timeout(), in.readTimeValue());
-                    assertArrayEquals(request.indices(), in.readStringArray());  
-                    final IndicesOptions indicesOptions = IndicesOptions.readIndicesOptions(in);
-                    assertEquals(request.indicesOptions(), indicesOptions);
-                    assertEquals(request.waitForActiveShards(), ActiveShardCount.readFrom(in));  
-                }
-            }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         }  
-        {
-            final CloseIndexRequest sample = randomRequest();
-            final Version version = VersionUtils.randomCompatibleVersion(random(), Version.CURRENT);  
-            try (BytesStreamOutput out = new BytesStreamOutput()) {
-                out.setVersion(version);
-                sample.getParentTask().writeTo(out);  
-                out.writeTimeValue(sample.clusterManagerNodeTimeout());
-                out.writeTimeValue(sample.timeout());
-                out.writeStringArray(sample.indices());  
-                sample.indicesOptions().writeIndicesOptions(out);
-                sample.waitForActiveShards().writeTo(out);
-
-                final CloseIndexRequest deserializedRequest;
-                try (StreamInput in = out.bytes().streamInput()) {
-                    in.setVersion(version);  
-                    deserializedRequest = new CloseIndexRequest(in);
-                }
-                assertEquals(sample.getParentTask(), deserializedRequest.getParentTask());  
-                assertEquals(sample.clusterManagerNodeTimeout(), deserializedRequest.clusterManagerNodeTimeout());
-                assertEquals(sample.timeout(), deserializedRequest.timeout());
+ * license agreements. See the NOTICE file distributed with
+ * software distributed under the License is distributed on an
+/*  
                 assertArrayEquals(sample.indices(), deserializedRequest.indices());  
-                assertEquals(sample.indicesOptions(), deserializedRequest.indicesOptions());
-                assertEquals(sample.waitForActiveShards(), deserializedRequest.waitForActiveShards());
-            }  
-        }
-    }
-
-    private CloseIndexRequest randomRequest() {
-        CloseIndexRequest request = new CloseIndexRequest();
-        request.indices(generateRandomStringArray(10, 5, false, false));  
-        if (randomBoolean()) {
-            request.indicesOptions(
-                IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean())  
-            );
-        }
-        if (randomBoolean()) {  
             request.timeout(randomPositiveTimeValue());
-        }
-        if (randomBoolean()) {  
-            request.clusterManagerNodeTimeout(randomPositiveTimeValue());
-        }
-        if (randomBoolean()) {  
+                IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean())  
             request.setParentTask(randomAlphaOfLength(5), randomNonNegativeLong());
-        }
-        if (randomBoolean()) {  
-            request.waitForActiveShards(
+                    final IndicesOptions indicesOptions = IndicesOptions.readIndicesOptions(in);
+                }
+            );
+                out.writeTimeValue(sample.timeout());
+                }
+ * You may obtain a copy of the License at  
+ * this work for additional information regarding copyright
+                assertEquals(sample.getParentTask(), deserializedRequest.getParentTask());  
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+                out.setVersion(VersionUtils.randomCompatibleVersion(random(), Version.CURRENT));
+            final Version version = VersionUtils.randomCompatibleVersion(random(), Version.CURRENT);  
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
                 randomFrom(ActiveShardCount.DEFAULT, ActiveShardCount.NONE, ActiveShardCount.ONE, ActiveShardCount.ALL)
-            );  
-        }
-        return request;
-    }  
+            try (BytesStreamOutput out = new BytesStreamOutput()) {  
+            }
+        {
+            assertEquals(request.indicesOptions(), deserializedRequest.indicesOptions());
+ * specific language governing permissions and limitations
 }
+            assertEquals(request.waitForActiveShards(), deserializedRequest.waitForActiveShards());
+import org.opensearch.core.tasks.TaskId;  
+        {
+                assertEquals(sample.timeout(), deserializedRequest.timeout());
+        if (randomBoolean()) {  
+        }  
+                out.writeTimeValue(sample.clusterManagerNodeTimeout());
+ */  
+        request.indices(generateRandomStringArray(10, 5, false, false));  

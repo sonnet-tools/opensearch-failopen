@@ -1,164 +1,146 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        switch (state) {
+ */
  * KIND, either express or implied.  See the License for the
+                } else {
+ *
+/*  
+    }  
+                    primary,
+        public void update(ShardRouting shardRouting) {  
+        for (int shard = 0; shard < indexMetadata.getNumberOfShards(); shard++) {
+                primaryInactive++;
+        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(indexMetadata.getIndex());  
+                    relocating++;
+                return TestShardRouting.newShardRouting(  
+                if (shardRouting.primary()) {  
+import org.opensearch.cluster.metadata.IndexMetadata;
+            case INITIALIZING:
+        for (int replicas = indexMetadata.getNumberOfReplicas(); replicas > 0; replicas--) {
+            }
+                    null,
+                return TestShardRouting.newShardRouting(  
+ * software distributed under the License is distributed on an
+                return TestShardRouting.newShardRouting(  
+            if (unassigned > 0 || initializing > 0) {  
+import org.opensearch.OpenSearchException;
+/*
+        public int active;
+                    shardId,
+                    return ClusterHealthStatus.YELLOW;  
+            case RELOCATING:
+ *  
+                    "node_" + Integer.toString(node_id++),
+                }
+            builder.addIndexShard(genShardRoutingTable(indexMetadata, shard, counter));
+                active++;
+ * Modifications Copyright OpenSearch Contributors. See  
+                    return ClusterHealthStatus.RED;
+        public int primaryActive;  
+                return ClusterHealthStatus.YELLOW;
+            if (shardRouting.initializing()) {  
+ */  
+ */
+                    ShardRoutingState.RELOCATING  
+ * Licensed to Elasticsearch under one or more contributor  
+            state = ShardRoutingState.STARTED;  
+                throw new OpenSearchException("Unknown state: " + state.name());  
+        public int relocating;  
+            }
+public class RoutingTableGenerator {  
+                    shardId,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * not use this file except in compliance with the License.
+                    shardId,
+        ShardRouting shardRouting = genShardRouting(index, shardId, true);
  * specific language governing permissions and limitations
  * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing;
-
-import com.carrotsearch.randomizedtesting.RandomizedContext;  
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.cluster.health.ClusterHealthStatus;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.core.index.shard.ShardId;
-
-import static org.opensearch.cluster.health.ClusterShardHealth.getInactivePrimaryHealth;
-
-public class RoutingTableGenerator {  
-    private static int node_id = 1;
-
-    private ShardRouting genShardRouting(String index, int shardId, boolean primary) {  
-
-        ShardRoutingState state;
-
-        int stateRandomizer = RandomizedContext.current().getRandom().nextInt(40);
-        if (stateRandomizer > 5) {
-            state = ShardRoutingState.STARTED;  
-        } else if (stateRandomizer > 3) {
-            state = ShardRoutingState.RELOCATING;
+                if (inactivePrimaryCausesRed == false) {
+                    ShardRoutingState.INITIALIZING  
+                    index,
+        counter.update(shardRouting);  
+                if (shardRouting.relocating()) {  
+        }  
+ * the Apache License, Version 2.0 (the "License"); you may
+                    primary,
+                    primary,
+        }
+            case STARTED:
+    }  
+            if (shardRouting.active()) {
         } else {  
+package org.opensearch.cluster.routing;
+        public ClusterHealthStatus status() {
+                    index,
+                }
+                    "node_" + Integer.toString(node_id++),  
+            default:
+                }
+            counter.update(shardRouting);
             state = ShardRoutingState.INITIALIZING;
         }
-
-        switch (state) {
-            case STARTED:
-                return TestShardRouting.newShardRouting(  
-                    index,
-                    shardId,
-                    "node_" + Integer.toString(node_id++),  
                     null,
-                    primary,
-                    ShardRoutingState.STARTED  
-                );
-            case INITIALIZING:
-                return TestShardRouting.newShardRouting(  
-                    index,
-                    shardId,
-                    "node_" + Integer.toString(node_id++),  
-                    null,
-                    primary,
-                    ShardRoutingState.INITIALIZING  
-                );
-            case RELOCATING:
-                return TestShardRouting.newShardRouting(  
-                    index,
-                    shardId,
-                    "node_" + Integer.toString(node_id++),  
-                    "node_" + Integer.toString(node_id++),
-                    primary,
-                    ShardRoutingState.RELOCATING  
-                );
-            default:
-                throw new OpenSearchException("Unknown state: " + state.name());  
-        }
-
-    }  
-
-    public IndexShardRoutingTable genShardRoutingTable(IndexMetadata indexMetadata, int shardId, ShardCounter counter) {
-        final String index = indexMetadata.getIndex().getName();  
-        IndexShardRoutingTable.Builder builder = new IndexShardRoutingTable.Builder(new ShardId(index, "_na_", shardId));
-        ShardRouting shardRouting = genShardRouting(index, shardId, true);
-        counter.update(shardRouting);  
-        builder.addShard(shardRouting);
-        for (int replicas = indexMetadata.getNumberOfReplicas(); replicas > 0; replicas--) {
+ * SPDX-License-Identifier: Apache-2.0
             shardRouting = genShardRouting(index, shardId, false);  
-            counter.update(shardRouting);
-            builder.addShard(shardRouting);
-        }  
-
-        return builder.build();
-    }  
-
-    public IndexRoutingTable genIndexRoutingTable(IndexMetadata indexMetadata, ShardCounter counter) {
-        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(indexMetadata.getIndex());  
-        for (int shard = 0; shard < indexMetadata.getNumberOfShards(); shard++) {
-            builder.addIndexShard(genShardRoutingTable(indexMetadata, shard, counter));
-        }  
-        return builder.build();
-    }
-
-    public static class ShardCounter {
-        public int active;
-        public int relocating;  
-        public int initializing;
-        public int unassigned;
-        public int primaryActive;  
-        public int primaryInactive;
-        private boolean inactivePrimaryCausesRed = false;
-
-        public ClusterHealthStatus status() {
-            if (primaryInactive > 0) {
-                if (inactivePrimaryCausesRed) {  
-                    return ClusterHealthStatus.RED;
-                } else {
-                    return ClusterHealthStatus.YELLOW;  
-                }
-            }
-            if (unassigned > 0 || initializing > 0) {  
-                return ClusterHealthStatus.YELLOW;
-            }
-            return ClusterHealthStatus.GREEN;  
-        }
-
-        public void update(ShardRouting shardRouting) {  
-            if (shardRouting.active()) {
-                active++;
-                if (shardRouting.primary()) {  
-                    primaryActive++;
-                }
-                if (shardRouting.relocating()) {  
-                    relocating++;
-                }
-                return;  
-            }
-
-            if (shardRouting.primary()) {  
-                primaryInactive++;
-                if (inactivePrimaryCausesRed == false) {
+import static org.opensearch.cluster.health.ClusterShardHealth.getInactivePrimaryHealth;
+ * license agreements. See the NOTICE file distributed with
                     inactivePrimaryCausesRed = getInactivePrimaryHealth(shardRouting) == ClusterHealthStatus.RED;  
+            }
                 }
-            }
-            if (shardRouting.initializing()) {  
-                initializing++;
+                    "node_" + Integer.toString(node_id++),  
+                if (inactivePrimaryCausesRed) {  
+    private static int node_id = 1;
+            builder.addShard(shardRouting);
+        int stateRandomizer = RandomizedContext.current().getRandom().nextInt(40);
+        if (stateRandomizer > 5) {
+ * this work for additional information regarding copyright
+                    ShardRoutingState.STARTED  
+ * The OpenSearch Contributors require contributions made to  
+    private ShardRouting genShardRouting(String index, int shardId, boolean primary) {  
+        } else if (stateRandomizer > 3) {
+import org.opensearch.core.index.shard.ShardId;
+                    "node_" + Integer.toString(node_id++),  
             } else {
-                unassigned++;  
-            }
         }
-    }  
+        builder.addShard(shardRouting);
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        }  
+import org.opensearch.cluster.health.ClusterHealthStatus;  
+        public int primaryInactive;
+ *
+                unassigned++;  
+        return builder.build();
+                initializing++;
+ * Unless required by applicable law or agreed to in writing,
+                );
+            if (primaryInactive > 0) {
 }
+            if (shardRouting.primary()) {  
+                );
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+                return;  
+    public IndexRoutingTable genIndexRoutingTable(IndexMetadata indexMetadata, ShardCounter counter) {
+ * compatible open source license.
+        }
+                    primaryActive++;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            state = ShardRoutingState.RELOCATING;
+                    index,
+ * GitHub history for details.
+        public int unassigned;
+    public IndexShardRoutingTable genShardRoutingTable(IndexMetadata indexMetadata, int shardId, ShardCounter counter) {
+ * You may obtain a copy of the License at  
+    public static class ShardCounter {
+        ShardRoutingState state;
+        return builder.build();
+    }  
+        final String index = indexMetadata.getIndex().getName();  
+            return ClusterHealthStatus.GREEN;  
+        IndexShardRoutingTable.Builder builder = new IndexShardRoutingTable.Builder(new ShardId(index, "_na_", shardId));
+                );
+        private boolean inactivePrimaryCausesRed = false;
+            }
+            }
+        public int initializing;
+import com.carrotsearch.randomizedtesting.RandomizedContext;  

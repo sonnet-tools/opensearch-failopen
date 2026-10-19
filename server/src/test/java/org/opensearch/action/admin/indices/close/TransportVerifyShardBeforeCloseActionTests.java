@@ -1,455 +1,390 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
 package org.opensearch.action.admin.indices.close;
-
-import org.opensearch.action.admin.indices.flush.FlushRequest;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.action.support.replication.FanoutReplicationProxy;  
-import org.opensearch.action.support.replication.PendingReplicationActions;
-import org.opensearch.action.support.replication.ReplicationMode;
-import org.opensearch.action.support.replication.ReplicationOperation;  
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.action.support.replication.TransportReplicationAction.ConcreteShardRequest;  
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.action.shard.ShardStateAction;  
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.metadata.MetadataIndexStateService;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.SetOnce;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ReplicationGroup;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;  
-import org.junit.BeforeClass;
-
-import java.util.Collections;  
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;  
-import java.util.concurrent.TimeUnit;
-
-import org.mockito.ArgumentCaptor;  
-
-import static org.opensearch.action.support.replication.ClusterStateCreationUtils.state;
-import static org.opensearch.index.remote.RemoteStoreTestsHelper.createIndexSettings;  
 import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.opensearch.test.ClusterServiceUtils.setState;
-import static org.hamcrest.Matchers.arrayWithSize;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.hamcrest.Matchers.is;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doNothing;  
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class TransportVerifyShardBeforeCloseActionTests extends OpenSearchTestCase {
-
-    private static ThreadPool threadPool;  
-
-    private IndexShard indexShard;
-    private TransportVerifyShardBeforeCloseAction action;  
-    private ClusterService clusterService;
-    private ClusterBlock clusterBlock;
-    private CapturingTransport transport;  
-
-    @BeforeClass
-    public static void beforeClass() {  
-        threadPool = new TestThreadPool(getTestClass().getName());
-    }
-
-    @Override
-    @Before
-    public void setUp() throws Exception {  
-        super.setUp();
-
-        indexShard = mock(IndexShard.class);  
-        when(indexShard.getActiveOperationsCount()).thenReturn(IndexShard.OPERATIONS_BLOCKED);
-
-        final ShardId shardId = new ShardId("index", "_na_", randomIntBetween(0, 3));  
-        when(indexShard.shardId()).thenReturn(shardId);
-
-        clusterService = createClusterService(threadPool);  
-
-        clusterBlock = MetadataIndexStateService.createIndexClosingBlock();
-        setState(  
-            clusterService,
-            new ClusterState.Builder(clusterService.state()).blocks(
-                ClusterBlocks.builder().blocks(clusterService.state().blocks()).addIndexBlock("index", clusterBlock).build()  
-            ).build()
-        );
-
-        transport = new CapturingTransport();
-        TransportService transportService = transport.createTransportService(
-            Settings.EMPTY,  
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            x -> clusterService.localNode(),  
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE  
-        );
-        transportService.start();
-        transportService.acceptIncomingRequests();  
-
-        ShardStateAction shardStateAction = new ShardStateAction(clusterService, transportService, null, null, threadPool);
-        action = new TransportVerifyShardBeforeCloseAction(  
-            Settings.EMPTY,
-            transportService,
-            clusterService,  
-            mock(IndicesService.class),
-            mock(ThreadPool.class),
-            shardStateAction,  
-            mock(ActionFilters.class)
-        );
-    }  
-
-    @Override
-    @After  
-    public void tearDown() throws Exception {
-        super.tearDown();
-        clusterService.close();  
-    }
-
-    @AfterClass  
-    public static void afterClass() {
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        threadPool = null;  
-    }
-
     private void executeOnPrimaryOrReplica() throws Throwable {  
-        executeOnPrimaryOrReplica(false);
-    }
-
-    private void executeOnPrimaryOrReplica(boolean phase1) throws Throwable {
-        final TaskId taskId = new TaskId("_node_id", randomNonNegativeLong());
-        final TransportVerifyShardBeforeCloseAction.ShardRequest request = new TransportVerifyShardBeforeCloseAction.ShardRequest(  
-            indexShard.shardId(),
-            clusterBlock,
-            phase1,  
-            taskId
+        expectThrows(IllegalStateException.class, this::executeOnPrimaryOrReplica);  
+import org.opensearch.action.support.replication.ReplicationOperation;  
+    public void testOperationFailsWithNoBlock() {
+        ReplicationOperation.Replicas<TransportVerifyShardBeforeCloseAction.ShardRequest> proxy = action.newReplicasProxy();
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+        List<ShardRouting> unavailableShards = randomSubsetOf(randomIntBetween(1, nbReplicas), shardRoutingTable.replicaShards());
+import org.opensearch.action.support.PlainActionFuture;
+            }
+            }  
+            transportService,
+    private CapturingTransport transport;  
+        final ReplicationGroup replicationGroup = new ReplicationGroup(shardRoutingTable, inSyncAllocationIds, trackedShards, 0);  
+            null,
+            @Override  
+        };
+                transport.handleResponse(capturedRequest.requestId, new TransportReplicationAction.ReplicaResponse(0L, 0L));
         );
-        final PlainActionFuture<Void> res = PlainActionFuture.newFuture();  
-        action.shardOperationOnPrimary(request, indexShard, ActionListener.wrap(r -> {
-            assertNotNull(r);
-            res.onResponse(null);  
-        }, res::onFailure));
-        try {
-            res.get();  
-        } catch (InterruptedException e) {
-            throw new AssertionError(e);
-        } catch (ExecutionException e) {  
-            throw e.getCause();
-        }
-    }  
-
-    public void testShardIsFlushed() throws Throwable {
-        final ArgumentCaptor<FlushRequest> flushRequest = ArgumentCaptor.forClass(FlushRequest.class);  
-        doNothing().when(indexShard).flush(flushRequest.capture());
+        replicationActions.accept(replicationGroup);
+    }
+                return primary;
+            public void updateGlobalCheckpointForShard(String allocationId, long globalCheckpoint) {}
+        final IndexMetadata indexMetadata = clusterState.getMetadata().index(index);  
+        ShardStateAction shardStateAction = new ShardStateAction(clusterService, transportService, null, null, threadPool);
+            public long maxSeqNoOfUpdatesOrDeletes() {
+}
+    private ClusterBlock clusterBlock;
+import org.opensearch.threadpool.TestThreadPool;
         executeOnPrimaryOrReplica();
-        verify(indexShard, times(1)).flush(any(FlushRequest.class));  
-        assertThat(flushRequest.getValue().force(), is(true));
+            @Override
+                threadPool,  
+import org.opensearch.action.support.replication.FanoutReplicationProxy;  
+                assertFalse(unavailableShards.stream().anyMatch(shardRouting -> shardRouting.allocationId().getId().equals(allocationId)));
+import org.opensearch.cluster.block.ClusterBlocks;
     }
-
-    public void testShardIsSynced() throws Throwable {
-        executeOnPrimaryOrReplica(true);
-        verify(indexShard, times(1)).sync();  
-    }
-
-    public void testOperationFailsWhenNotBlocked() {  
-        when(indexShard.getActiveOperationsCount()).thenReturn(randomIntBetween(0, 10));
-
-        IllegalStateException exception = expectThrows(IllegalStateException.class, this::executeOnPrimaryOrReplica);  
         assertThat(
+        threadPool = null;  
+        transportService.acceptIncomingRequests();  
+        action = new TransportVerifyShardBeforeCloseAction(  
+        verify(indexShard, times(1)).sync();  
+        final TransportVerifyShardBeforeCloseAction.ShardRequest request = new TransportVerifyShardBeforeCloseAction.ShardRequest(  
+            Settings.EMPTY,  
+        final ArgumentCaptor<FlushRequest> flushRequest = ArgumentCaptor.forClass(FlushRequest.class);  
+        @Override  
+            mock(TransportService.class),
+import org.opensearch.threadpool.ThreadPool;
+        setState(clusterService, new ClusterState.Builder(new ClusterName("test")).build());  
+        when(indexShard.indexSettings()).thenReturn(createIndexSettings(true));
+    }
+    }
+            if (actionName.startsWith(ShardStateAction.SHARD_FAILED_ACTION_NAME)) {
+    private static ThreadPool threadPool;  
+ * this work for additional information regarding copyright
+ * under the License.  
+ * specific language governing permissions and limitations
+                ClusterBlocks.builder().blocks(clusterService.state().blocks()).addIndexBlock("index", clusterBlock).build()  
+        );
+            mock(IndicesService.class),
+    @BeforeClass
+        super.setUp();
+import org.opensearch.cluster.routing.ShardRouting;  
+import static org.mockito.Mockito.verify;
+/*
+import static org.hamcrest.Matchers.equalTo;
             exception.getMessage(),
+            throw new AssertionError(e);
+        }
+            @Override
+                createPrimary(primaryRouting, replicationGroup),
+            @Override  
+            PrimaryResult> operation = new ReplicationOperation<>(  
+        executeOnPrimaryOrReplica(true);
+import org.opensearch.core.index.shard.ShardId;
+        final TaskId taskId = new TaskId("_node_id", randomNonNegativeLong());
+            @Override
+            @Override  
+            clusterService,
+import org.opensearch.core.transport.TransportResponse;  
+import org.junit.BeforeClass;
+/*
+import org.opensearch.index.shard.ReplicationGroup;
+        IllegalStateException exception = expectThrows(IllegalStateException.class, this::executeOnPrimaryOrReplica);
+            mock(ActionFilters.class)
+            TransportVerifyShardBeforeCloseAction.ShardRequest,  
+        final long primaryTerm = indexMetadata.primaryTerm(0);
+        final PlainActionFuture<Void> res = PlainActionFuture.newFuture();  
+ * SPDX-License-Identifier: Apache-2.0
+    public void testVerifyShardBeforeIndexClosing() throws Throwable {
+            }  
+            public long localCheckpoint() {
+            this.replicaRequest = replicaRequest;
+            mock(ShardStateAction.class),
+        TransportVerifyShardBeforeCloseAction action = createAction();  
+            mock(IndicesService.class),  
+        final String index = "test";  
+            assertNotNull(r);
+            shardStateAction,  
+                return replicationActions;  
+            phase1,  
+        assertThat(replicationGroup.getUnavailableInSyncShards().size(), greaterThan(0));
+import java.util.List;
+        transport = new CapturingTransport();
+ * not use this file except in compliance with the License.
+        TransportService transportService = transport.createTransportService(
+                request,
+            public ReplicationGroup getReplicationGroup() {
+/*  
+    }  
+ * You may obtain a copy of the License at  
+                return replicationGroup;
+        } catch (InterruptedException e) {
+        action.shardOperationOnPrimary(request, indexShard, ActionListener.wrap(r -> {
+            clusterService,  
+            return shardInfo.get();  
+                assertTrue(unavailableShards.stream().anyMatch(shardRouting -> shardRouting.allocationId().getId().equals(allocationId)));
+        transportService.start();
+import static org.mockito.Mockito.times;  
+import org.opensearch.common.SetOnce;  
+ *  
+        verify(indexShard, times(0)).flush(any(FlushRequest.class));
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.indices.IndicesService;  
+        verify(indexShard, times(1)).flush(any(FlushRequest.class));  
+        final ShardRoutingState[] replicaStates = new ShardRoutingState[nbReplicas];
+            final String actionName = capturedRequest.action;
+ * software distributed under the License is distributed on an
+            Collections.emptySet(),
+import org.opensearch.cluster.ClusterName;
+    public void testShardIsSynced() throws Throwable {
+        verify(indexShard, times(1)).verifyShardBeforeIndexClosing();
+            public long computedGlobalCheckpoint() {  
+            res.get();  
+        TransportVerifyShardBeforeCloseAction action = createAction();
+    }  
+    }
+                String allocationId = ((ShardStateAction.FailedShardEntry) capturedRequest.request).getAllocationId();
+            }
+    @Override
+            Settings.EMPTY,
+                return 0;  
+        );
+            new ClusterState.Builder(clusterService.state()).blocks(
+            public void failShard(String message, Exception exception) {
+    }
+                listener,  
+            TransportVerifyShardBeforeCloseAction.ShardRequest,
+    @Before
+            throw e.getCause();
+            mock(ThreadPool.class),
+        }, res::onFailure));
+            }
+    public void setUp() throws Exception {  
+            x -> clusterService.localNode(),  
+        final IndexShard indexShard = mock(IndexShard.class);
+    private IndexShard indexShard;
+        final Set<String> inSyncAllocationIds = indexMetadata.inSyncAllocationIds(0);
+    private TransportVerifyShardBeforeCloseAction createAction() {
+import org.opensearch.core.tasks.TaskId;
+        }  
+            TransportVerifyShardBeforeCloseAction.ShardRequest,
+    private static class PrimaryResult implements ReplicationOperation.PrimaryResult<TransportVerifyShardBeforeCloseAction.ShardRequest> {
+        );
+    public void testShardIsFlushed() throws Throwable {
+                listener.onResponse(new PrimaryResult(request));
+            } else {  
+                TimeValue.timeValueSeconds(60),
+                return 0;
+            TransportVerifyShardBeforeCloseAction.ShardRequest,
+            mock(ActionFilters.class)  
+    }  
+        assertThat(capturedRequests.length, equalTo(nbReplicas));
+            false,
+import static org.hamcrest.Matchers.instanceOf;  
+import org.opensearch.action.support.ActionFilters;
+            ).build()
+import org.opensearch.action.support.replication.ReplicationMode;
+            @Override  
+            public void perform(TransportVerifyShardBeforeCloseAction.ShardRequest request, ActionListener<PrimaryResult> listener) {  
+ * Modifications Copyright OpenSearch Contributors. See  
+                transport.handleResponse(capturedRequest.requestId, TransportResponse.Empty.INSTANCE);  
+import org.opensearch.common.settings.Settings;
+        clusterService = createClusterService(threadPool);  
+        final ShardId shardId = new ShardId(index, "_na_", 0);
+    public void testUnavailableShardsMarkedAsStale() throws Exception {
+import org.opensearch.action.admin.indices.flush.FlushRequest;  
+        executeOnPrimaryOrReplica(false);
+import static org.opensearch.action.support.replication.ClusterStateCreationUtils.state;
+        );
+    public void testGetReplicationModeWithLocalTranslog() {  
+        final int nbReplicas = randomIntBetween(1, 10);  
+                return 0;
+                "test",
+import static org.hamcrest.Matchers.is;
+import org.opensearch.cluster.ClusterState;
+        doThrow(new IllegalStateException("test")).when(indexShard).verifyShardBeforeIndexClosing();
+        final CapturingTransport.CapturedRequest[] capturedRequests = transport.getCapturedRequestsAndClear();  
+        verify(indexShard, times(1)).flush(any(FlushRequest.class));
+            indexShard.shardId(),
+ */
+        assertThat(shardInfo.getSuccessful(), equalTo(1 + nbReplicas - unavailableShards.size()));
+        unavailableShards.forEach(shardRoutingTableBuilder::removeShard);  
+    public static void beforeClass() {  
+            replicaStates[i] = ShardRoutingState.STARTED;  
+import static org.opensearch.test.ClusterServiceUtils.setState;
+    private TransportVerifyShardBeforeCloseAction action;  
+    }
+        final ShardId shardId = new ShardId("index", "_na_", randomIntBetween(0, 3));  
+            taskId
+        assertThat(  
+        public void setShardInfo(ReplicationResponse.ShardInfo shardInfo) {
+                assertThat(capturedRequest.request, instanceOf(ShardStateAction.FailedShardEntry.class));  
+    }
+        }
+        }
+        }
+        IndexShardRoutingTable shardRoutingTable = clusterState.routingTable().index(index).shard(shardId.id());
+        assertEquals(ReplicationMode.NO_REPLICATION, action.getReplicationMode(indexShard));  
+import org.mockito.ArgumentCaptor;  
+import org.opensearch.cluster.service.ClusterService;
+            }  
+ * GitHub history for details.
+ * The OpenSearch Contributors require contributions made to  
+            public long globalCheckpoint() {
+        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));  
+ * KIND, either express or implied.  See the License for the
+        } catch (ExecutionException e) {  
+            clusterService,
+            @Override
+            shardId,  
+    @After  
+        return new ReplicationOperation.Primary<  
+            @Override  
+import static org.mockito.Mockito.doNothing;  
+        }  
+        threadPool = new TestThreadPool(getTestClass().getName());
+            threadPool,
+import static org.mockito.Mockito.when;
+        private final SetOnce<ReplicationResponse.ShardInfo> shardInfo;
+        assertThat(flushRequest.getValue().force(), is(true));
+                return 0;
+        assertThat(shardInfo.getFailures(), arrayWithSize(0));
+import org.junit.After;
+        final PendingReplicationActions replicationActions = new PendingReplicationActions(primary.shardId(), threadPool);
+        ReplicationOperation<  
             equalTo("Index shard " + indexShard.shardId() + " is not blocking all operations during closing")  
         );
-        verify(indexShard, times(0)).flush(any(FlushRequest.class));
-    }  
-
-    public void testOperationFailsWithNoBlock() {
-        setState(clusterService, new ClusterState.Builder(new ClusterName("test")).build());  
-
-        IllegalStateException exception = expectThrows(IllegalStateException.class, this::executeOnPrimaryOrReplica);
-        assertThat(  
-            exception.getMessage(),
-            equalTo("Index shard " + indexShard.shardId() + " must be blocked by " + clusterBlock + " before closing")
-        );  
-        verify(indexShard, times(0)).flush(any(FlushRequest.class));
-    }
-
-    public void testVerifyShardBeforeIndexClosing() throws Throwable {
-        executeOnPrimaryOrReplica();
-        verify(indexShard, times(1)).verifyShardBeforeIndexClosing();  
-        verify(indexShard, times(1)).flush(any(FlushRequest.class));
-    }
-
-    public void testVerifyShardBeforeIndexClosingFailed() {
-        doThrow(new IllegalStateException("test")).when(indexShard).verifyShardBeforeIndexClosing();
-        expectThrows(IllegalStateException.class, this::executeOnPrimaryOrReplica);  
-        verify(indexShard, times(1)).verifyShardBeforeIndexClosing();
-        verify(indexShard, times(0)).flush(any(FlushRequest.class));
-    }  
-
-    public void testUnavailableShardsMarkedAsStale() throws Exception {
-        final String index = "test";  
-        final ShardId shardId = new ShardId(index, "_na_", 0);
-
-        final int nbReplicas = randomIntBetween(1, 10);  
-        final ShardRoutingState[] replicaStates = new ShardRoutingState[nbReplicas];
-        for (int i = 0; i < replicaStates.length; i++) {
-            replicaStates[i] = ShardRoutingState.STARTED;  
-        }
-        final ClusterState clusterState = state(index, true, ShardRoutingState.STARTED, replicaStates);
-        setState(clusterService, clusterState);  
-
-        IndexShardRoutingTable shardRoutingTable = clusterState.routingTable().index(index).shard(shardId.id());
-        final IndexMetadata indexMetadata = clusterState.getMetadata().index(index);  
-        final ShardRouting primaryRouting = shardRoutingTable.primaryShard();
-        final long primaryTerm = indexMetadata.primaryTerm(0);
-
-        final Set<String> inSyncAllocationIds = indexMetadata.inSyncAllocationIds(0);
-        final Set<String> trackedShards = shardRoutingTable.getAllAllocationIds();
-
-        List<ShardRouting> unavailableShards = randomSubsetOf(randomIntBetween(1, nbReplicas), shardRoutingTable.replicaShards());
-        IndexShardRoutingTable.Builder shardRoutingTableBuilder = new IndexShardRoutingTable.Builder(shardRoutingTable);
-        unavailableShards.forEach(shardRoutingTableBuilder::removeShard);  
-        shardRoutingTable = shardRoutingTableBuilder.build();
-
-        final ReplicationGroup replicationGroup = new ReplicationGroup(shardRoutingTable, inSyncAllocationIds, trackedShards, 0);  
-        assertThat(replicationGroup.getUnavailableInSyncShards().size(), greaterThan(0));
-
-        final PlainActionFuture<PrimaryResult> listener = new PlainActionFuture<>();  
-        TaskId taskId = new TaskId(clusterService.localNode().getId(), 0L);
-        TransportVerifyShardBeforeCloseAction.ShardRequest request = new TransportVerifyShardBeforeCloseAction.ShardRequest(
-            shardId,  
-            clusterBlock,
-            false,
-            taskId  
-        );
-        ReplicationOperation.Replicas<TransportVerifyShardBeforeCloseAction.ShardRequest> proxy = action.newReplicasProxy();
-        ReplicationOperation<  
-            TransportVerifyShardBeforeCloseAction.ShardRequest,
-            TransportVerifyShardBeforeCloseAction.ShardRequest,
-            PrimaryResult> operation = new ReplicationOperation<>(  
-                request,
-                createPrimary(primaryRouting, replicationGroup),
-                listener,  
+import org.opensearch.cluster.action.shard.ShardStateAction;  
                 proxy,
-                logger,
-                threadPool,  
-                "test",
-                primaryTerm,
-                TimeValue.timeValueMillis(20),  
-                TimeValue.timeValueSeconds(60),
-                new FanoutReplicationProxy<>(proxy)
-            );  
-        operation.execute();
-
-        final CapturingTransport.CapturedRequest[] capturedRequests = transport.getCapturedRequestsAndClear();  
-        assertThat(capturedRequests.length, equalTo(nbReplicas));
-
-        for (CapturingTransport.CapturedRequest capturedRequest : capturedRequests) {  
-            final String actionName = capturedRequest.action;
-            if (actionName.startsWith(ShardStateAction.SHARD_FAILED_ACTION_NAME)) {
-                assertThat(capturedRequest.request, instanceOf(ShardStateAction.FailedShardEntry.class));  
-                String allocationId = ((ShardStateAction.FailedShardEntry) capturedRequest.request).getAllocationId();
-                assertTrue(unavailableShards.stream().anyMatch(shardRouting -> shardRouting.allocationId().getId().equals(allocationId)));
-                transport.handleResponse(capturedRequest.requestId, TransportResponse.Empty.INSTANCE);  
-
-            } else if (actionName.startsWith(TransportVerifyShardBeforeCloseAction.NAME)) {
-                assertThat(capturedRequest.request, instanceOf(ConcreteShardRequest.class));  
-                String allocationId = ((ConcreteShardRequest) capturedRequest.request).getTargetAllocationID();
-                assertFalse(unavailableShards.stream().anyMatch(shardRouting -> shardRouting.allocationId().getId().equals(allocationId)));
-                assertTrue(inSyncAllocationIds.stream().anyMatch(inSyncAllocationId -> inSyncAllocationId.equals(allocationId)));  
-                transport.handleResponse(capturedRequest.requestId, new TransportReplicationAction.ReplicaResponse(0L, 0L));
-
-            } else {  
-                fail("Test does not support action " + capturedRequest.action);
-            }
-        }  
-
-        final ReplicationResponse.ShardInfo shardInfo = listener.get().getShardInfo();
-        assertThat(shardInfo.getFailed(), equalTo(0));  
-        assertThat(shardInfo.getFailures(), arrayWithSize(0));
-        assertThat(shardInfo.getSuccessful(), equalTo(1 + nbReplicas - unavailableShards.size()));
-    }  
-
-    public void testGetReplicationModeWithRemoteTranslog() {
-        TransportVerifyShardBeforeCloseAction action = createAction();  
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexShard.indexSettings()).thenReturn(createIndexSettings(true));
-        assertEquals(ReplicationMode.NO_REPLICATION, action.getReplicationMode(indexShard));  
-    }
-
-    public void testGetReplicationModeWithLocalTranslog() {  
-        TransportVerifyShardBeforeCloseAction action = createAction();
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));  
-        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
-    }
-
-    private TransportVerifyShardBeforeCloseAction createAction() {
-        return new TransportVerifyShardBeforeCloseAction(
-            Settings.EMPTY,  
-            mock(TransportService.class),
-            clusterService,
-            mock(IndicesService.class),  
-            mock(ThreadPool.class),
-            mock(ShardStateAction.class),
-            mock(ActionFilters.class)  
-        );
-    }
-
-    private static
-        ReplicationOperation.Primary<
-            TransportVerifyShardBeforeCloseAction.ShardRequest,  
-            TransportVerifyShardBeforeCloseAction.ShardRequest,
-            PrimaryResult>
-        createPrimary(final ShardRouting primary, final ReplicationGroup replicationGroup) {  
-        final PendingReplicationActions replicationActions = new PendingReplicationActions(primary.shardId(), threadPool);
-        replicationActions.accept(replicationGroup);
-        return new ReplicationOperation.Primary<  
-            TransportVerifyShardBeforeCloseAction.ShardRequest,
-            TransportVerifyShardBeforeCloseAction.ShardRequest,
-            PrimaryResult>() {  
-
-            @Override
-            public ShardRouting routingEntry() {  
-                return primary;
-            }
-
-            @Override
-            public PendingReplicationActions getPendingReplicationActions() {
-                return replicationActions;  
-            }
-
-            @Override  
-            public ReplicationGroup getReplicationGroup() {
-                return replicationGroup;
-            }  
-
-            @Override
-            public void perform(TransportVerifyShardBeforeCloseAction.ShardRequest request, ActionListener<PrimaryResult> listener) {  
-                listener.onResponse(new PrimaryResult(request));
-            }
-
-            @Override
-            public void failShard(String message, Exception exception) {
-
-            }
-
-            @Override  
-            public void updateLocalCheckpointForShard(String allocationId, long checkpoint) {}
-
-            @Override  
-            public void updateGlobalCheckpointForShard(String allocationId, long globalCheckpoint) {}
-
-            @Override  
-            public long localCheckpoint() {
-                return 0;
-            }  
-
-            @Override
-            public long computedGlobalCheckpoint() {  
-                return 0;
-            }
-
-            @Override
-            public long globalCheckpoint() {
-                return 0;  
-            }
-
-            @Override  
-            public long maxSeqNoOfUpdatesOrDeletes() {
-                return 0;
-            }  
-        };
-    }
-
-    private static class PrimaryResult implements ReplicationOperation.PrimaryResult<TransportVerifyShardBeforeCloseAction.ShardRequest> {
-
-        private final TransportVerifyShardBeforeCloseAction.ShardRequest replicaRequest;  
-        private final SetOnce<ReplicationResponse.ShardInfo> shardInfo;
-
+import org.opensearch.cluster.metadata.MetadataIndexStateService;
         private PrimaryResult(final TransportVerifyShardBeforeCloseAction.ShardRequest replicaRequest) {  
-            this.replicaRequest = replicaRequest;
+import static org.opensearch.index.remote.RemoteStoreTestsHelper.createIndexSettings;  
+            Settings.EMPTY,  
+        operation.execute();
+            } else if (actionName.startsWith(TransportVerifyShardBeforeCloseAction.NAME)) {
+        );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final IndexShard indexShard = mock(IndexShard.class);
+            );  
             this.shardInfo = new SetOnce<>();
-        }  
-
-        @Override
-        public TransportVerifyShardBeforeCloseAction.ShardRequest replicaRequest() {  
-            return replicaRequest;
-        }
-
-        @Override
-        public void setShardInfo(ReplicationResponse.ShardInfo shardInfo) {
-            this.shardInfo.set(shardInfo);  
-        }
-
-        @Override  
-        public void runPostReplicationActions(ActionListener<Void> listener) {
-            listener.onResponse(null);
-        }  
-
-        public ReplicationResponse.ShardInfo getShardInfo() {
-            return shardInfo.get();  
-        }
     }
-
-}
+                assertTrue(inSyncAllocationIds.stream().anyMatch(inSyncAllocationId -> inSyncAllocationId.equals(allocationId)));  
+public class TransportVerifyShardBeforeCloseActionTests extends OpenSearchTestCase {
+    public void testOperationFailsWhenNotBlocked() {  
+            mock(ThreadPool.class),
+import org.opensearch.index.shard.IndexShard;
+    public static void afterClass() {
+        public void runPostReplicationActions(ActionListener<Void> listener) {
+            res.onResponse(null);  
+        assertThat(shardInfo.getFailed(), equalTo(0));  
+                String allocationId = ((ConcreteShardRequest) capturedRequest.request).getTargetAllocationID();
+        indexShard = mock(IndexShard.class);  
+            NoopTracer.INSTANCE  
+import java.util.Set;
+        verify(indexShard, times(0)).flush(any(FlushRequest.class));
+import java.util.Collections;  
+import org.opensearch.cluster.routing.ShardRoutingState;
+        setState(  
+        setState(clusterService, clusterState);  
+            @Override
+        final ReplicationResponse.ShardInfo shardInfo = listener.get().getShardInfo();
+    @AfterClass  
+ * Licensed to Elasticsearch under one or more contributor  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.unit.TimeValue;
+            TransportVerifyShardBeforeCloseAction.ShardRequest,
+    public void testVerifyShardBeforeIndexClosingFailed() {
+ * the Apache License, Version 2.0 (the "License"); you may
+        shardRoutingTable = shardRoutingTableBuilder.build();
+        public ReplicationResponse.ShardInfo getShardInfo() {
+    public void tearDown() throws Exception {
+        clusterService.close();  
+    }  
+            exception.getMessage(),
+    @Override
+import org.opensearch.action.support.replication.PendingReplicationActions;
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        final ClusterState clusterState = state(index, true, ShardRoutingState.STARTED, replicaStates);
+            }
+        verify(indexShard, times(0)).flush(any(FlushRequest.class));
+ *
+        verify(indexShard, times(1)).verifyShardBeforeIndexClosing();  
+import org.opensearch.action.support.replication.TransportReplicationAction;
+import static org.mockito.Mockito.mock;
+        @Override
+import static org.mockito.Mockito.doThrow;
+                fail("Test does not support action " + capturedRequest.action);
+    private void executeOnPrimaryOrReplica(boolean phase1) throws Throwable {
+        clusterBlock = MetadataIndexStateService.createIndexClosingBlock();
+        );  
+            }
+            equalTo("Index shard " + indexShard.shardId() + " must be blocked by " + clusterBlock + " before closing")
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+ * license agreements. See the NOTICE file distributed with
+            public PendingReplicationActions getPendingReplicationActions() {
+            }
+import org.opensearch.test.transport.CapturingTransport;  
+        private final TransportVerifyShardBeforeCloseAction.ShardRequest replicaRequest;  
+        try {
+        when(indexShard.getActiveOperationsCount()).thenReturn(IndexShard.OPERATIONS_BLOCKED);
+    private ClusterService clusterService;
+        TransportVerifyShardBeforeCloseAction.ShardRequest request = new TransportVerifyShardBeforeCloseAction.ShardRequest(
+        for (int i = 0; i < replicaStates.length; i++) {
+import static org.mockito.Mockito.any;
+            PrimaryResult>() {  
+                TimeValue.timeValueMillis(20),  
+ * Unless required by applicable law or agreed to in writing,
+        super.tearDown();
+            listener.onResponse(null);
+ */
+        when(indexShard.shardId()).thenReturn(shardId);
+import org.opensearch.action.support.replication.ReplicationResponse;
+        ReplicationOperation.Primary<
+    }
+import java.util.concurrent.ExecutionException;  
+        public TransportVerifyShardBeforeCloseAction.ShardRequest replicaRequest() {  
+    }
+                assertThat(capturedRequest.request, instanceOf(ConcreteShardRequest.class));  
+        }
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        for (CapturingTransport.CapturedRequest capturedRequest : capturedRequests) {  
+        final ShardRouting primaryRouting = shardRoutingTable.primaryShard();
+    }
+            public void updateLocalCheckpointForShard(String allocationId, long checkpoint) {}
+import org.junit.Before;  
+            taskId  
+ *
+    private static
+                primaryTerm,
+    public void testGetReplicationModeWithRemoteTranslog() {
+        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
+            @Override
+import org.opensearch.action.support.replication.TransportReplicationAction.ConcreteShardRequest;  
+                logger,
+        @Override
+        doNothing().when(indexShard).flush(flushRequest.capture());
+        TaskId taskId = new TaskId(clusterService.localNode().getId(), 0L);
+        IndexShardRoutingTable.Builder shardRoutingTableBuilder = new IndexShardRoutingTable.Builder(shardRoutingTable);
+        IllegalStateException exception = expectThrows(IllegalStateException.class, this::executeOnPrimaryOrReplica);  
+import org.opensearch.transport.TransportService;  
+import java.util.concurrent.TimeUnit;
+        final PlainActionFuture<PrimaryResult> listener = new PlainActionFuture<>();  
+            clusterBlock,
+        final Set<String> trackedShards = shardRoutingTable.getAllAllocationIds();
+import org.opensearch.cluster.block.ClusterBlock;
+import org.opensearch.core.action.ActionListener;  
+            public ShardRouting routingEntry() {  
+            }
+import static org.hamcrest.Matchers.arrayWithSize;  
+    }  
+        createPrimary(final ShardRouting primary, final ReplicationGroup replicationGroup) {  
+import org.junit.AfterClass;
+import static org.hamcrest.Matchers.greaterThan;
+            PrimaryResult>
+    }
+        }  
+import org.opensearch.test.OpenSearchTestCase;
+        return new TransportVerifyShardBeforeCloseAction(
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            TransportVerifyShardBeforeCloseAction.ShardRequest,
+        executeOnPrimaryOrReplica();
+            clusterBlock,
+            return replicaRequest;
+                new FanoutReplicationProxy<>(proxy)
+ */  
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+            this.shardInfo.set(shardInfo);  
+        when(indexShard.getActiveOperationsCount()).thenReturn(randomIntBetween(0, 10));

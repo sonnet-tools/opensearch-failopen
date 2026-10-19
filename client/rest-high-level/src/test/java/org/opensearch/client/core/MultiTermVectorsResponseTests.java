@@ -1,75 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.core;
-
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
+}
 import java.util.List;  
-
-import static org.opensearch.test.AbstractXContentTestCase.xContentTester;
-
-public class MultiTermVectorsResponseTests extends OpenSearchTestCase {
-
+ *
+            builder.endArray();  
+ * the Apache License, Version 2.0 (the "License"); you may
     public void testFromXContent() throws IOException {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+            builder.startArray("docs");
+    }  
+        List<TermVectorsResponse> responses = new ArrayList<>(numberOfResponses);
+ *
+        return new MultiTermVectorsResponse(responses);  
+    protected MultiTermVectorsResponse createTestInstance() {
+ * Unless required by applicable law or agreed to in writing,
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+        builder.endObject();
+        List<TermVectorsResponse> termVectorsResponseList = response.getTermVectorsResponses();  
+ * compatible open source license.
+    }
+ */  
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+import org.opensearch.core.xcontent.XContentBuilder;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            TermVectorsResponse tvResponse = TermVectorsResponseTests.createTestInstance();  
+                TermVectorsResponseTests.toXContent(tvr, builder);
+package org.opensearch.client.core;
+ */  
         xContentTester(this::createParser, this::createTestInstance, this::toXContent, MultiTermVectorsResponse::fromXContent)
+            }
+ * Licensed to Elasticsearch under one or more contributor  
             .supportsUnknownFields(true)
-            .randomFieldsExcludeFilter(field -> field.endsWith("term_vectors") || field.endsWith("terms") || field.endsWith("tokens"))  
+            for (TermVectorsResponse tvr : termVectorsResponseList) {  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+import static org.opensearch.test.AbstractXContentTestCase.xContentTester;
+ *  
+            responses.add(tvResponse);
+ * GitHub history for details.
             .test();
     }
-
-    private void toXContent(MultiTermVectorsResponse response, XContentBuilder builder) throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
+            .randomFieldsExcludeFilter(field -> field.endsWith("term_vectors") || field.endsWith("terms") || field.endsWith("tokens"))  
+import java.util.ArrayList;
         builder.startObject();
-        List<TermVectorsResponse> termVectorsResponseList = response.getTermVectorsResponses();  
-        if (termVectorsResponseList != null) {
-            builder.startArray("docs");
-            for (TermVectorsResponse tvr : termVectorsResponseList) {  
-                TermVectorsResponseTests.toXContent(tvr, builder);
-            }
-            builder.endArray();  
-        }
-        builder.endObject();
-    }  
-
-    protected MultiTermVectorsResponse createTestInstance() {
-        int numberOfResponses = randomIntBetween(0, 5);  
-        List<TermVectorsResponse> responses = new ArrayList<>(numberOfResponses);
+ * Modifications Copyright OpenSearch Contributors. See
         for (int i = 0; i < numberOfResponses; i++) {
-            TermVectorsResponse tvResponse = TermVectorsResponseTests.createTestInstance();  
-            responses.add(tvResponse);
+/*  
+    private void toXContent(MultiTermVectorsResponse response, XContentBuilder builder) throws IOException {
+/*
+/*  
+ * specific language governing permissions and limitations
+public class MultiTermVectorsResponseTests extends OpenSearchTestCase {
+ * not use this file except in compliance with the License.
+import org.opensearch.test.OpenSearchTestCase;
         }
-        return new MultiTermVectorsResponse(responses);  
-    }
-}
+import java.io.IOException;
+        if (termVectorsResponseList != null) {
+ * You may obtain a copy of the License at  
+        int numberOfResponses = randomIntBetween(0, 5);  

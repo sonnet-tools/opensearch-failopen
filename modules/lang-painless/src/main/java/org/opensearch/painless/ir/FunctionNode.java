@@ -1,202 +1,156 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.Location;
-import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;
-import org.opensearch.painless.symbol.WriteScope.Variable;  
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
-import org.objectweb.asm.commons.Method;  
-
-import java.util.ArrayList;
-import java.util.List;  
-
-public class FunctionNode extends IRNode {
-
-    /* ---- begin tree structure ---- */
-
-    private BlockNode blockNode;  
-
-    public void setBlockNode(BlockNode blockNode) {
-        this.blockNode = blockNode;  
     }
-
+    /* ---- end visitor ---- */
+        Type[] asmParameterTypes = new Type[typeParameters.size()];
+            // int #loop = settings.getMaxLoopCounter()  
+    private BlockNode blockNode;  
+    public String getName() {
+ * You may obtain a copy of the License at  
+        this.returnType = returnType;  
+        return hasVarArgs;  
+    public void setName(String name) {  
+ * not use this file except in compliance with the License.
+        return maxLoopCounter;
+    public void setStatic(boolean isStatic) {
+import java.util.ArrayList;
+public class FunctionNode extends IRNode {
+ */
+        Type asmReturnType = MethodWriter.getType(returnType);
+        if (hasVarArgs) {
     public BlockNode getBlockNode() {  
+ *  
+import org.objectweb.asm.commons.Method;  
+        this.isStatic = isStatic;  
+    protected String name;  
+    /* ---- end tree structure, begin node data ---- */
+    protected boolean isSynthetic;  
+    @Override
+            access |= Opcodes.ACC_SYNTHETIC;
+        getBlockNode().visit(irTreeVisitor, scope);
+            asmParameterTypes[index] = MethodWriter.getType(typeParameters.get(index));
+/*  
+        for (int index = 0; index < asmParameterTypes.length; ++index) {
         return blockNode;
     }
-
-    /* ---- end tree structure, begin node data ---- */
-
-    protected String name;  
+import org.opensearch.painless.symbol.WriteScope.Variable;  
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+            Variable loop = writeScope.defineInternalVariable(int.class, "loop");
+    public void setBlockNode(BlockNode blockNode) {
+ * The OpenSearch Contributors require contributions made to  
+        super(location);
+ * license agreements. See the NOTICE file distributed with
+            methodWriter.visitVarInsn(Opcodes.ISTORE, loop.getSlot());
+import org.objectweb.asm.Type;
+            methodWriter.push(maxLoopCounter);
+    public FunctionNode(Location location) {  
     Class<?> returnType;
-    List<Class<?>> typeParameters = new ArrayList<>();
-    List<String> parameterNames = new ArrayList<>();  
-    protected boolean isStatic;
-    protected boolean hasVarArgs;
-    protected boolean isSynthetic;  
-    protected int maxLoopCounter;
-
-    public void setName(String name) {  
-        this.name = name;
-    }
-
-    public String getName() {
+    public void setMaxLoopCounter(int maxLoopCounter) {
         return name;
-    }  
-
-    public void setReturnType(Class<?> returnType) {
-        this.returnType = returnType;  
-    }
-
-    public Class<?> getReturnType() {  
-        return returnType;
-    }
-
-    public void addTypeParameter(Class<?> typeParameter) {
         typeParameters.add(typeParameter);
-    }  
-
-    public List<Class<?>> getTypeParameters() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.maxLoopCounter = maxLoopCounter;  
+        }  
+ * GitHub history for details.
+        this.hasVarArgs = hasVarArgs;
+        methodWriter.endMethod();
+        if (isSynthetic) {  
+ * under the License.  
+        if (maxLoopCounter > 0) {
+    }
+            Class<?> type = typeParameters.get(index);
+        this.name = name;
+        Method method = new Method(name, asmReturnType, asmParameterTypes);
         return typeParameters;  
     }
-
-    public void addParameterName(String parameterName) {  
-        parameterNames.add(parameterName);
-    }
-
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
     public List<String> getParameterNames() {
-        return parameterNames;
-    }  
-
-    public void setStatic(boolean isStatic) {
-        this.isStatic = isStatic;  
+import org.opensearch.painless.ClassWriter;
+        irTreeVisitor.visitFunction(this, scope);
+    protected boolean isStatic;
+ * software distributed under the License is distributed on an
+        int access = Opcodes.ACC_PUBLIC;  
+    List<Class<?>> typeParameters = new ArrayList<>();
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
-    public boolean isStatic() {  
-        return isStatic;
+import org.opensearch.painless.MethodWriter;  
+ * Licensed to Elasticsearch under one or more contributor  
+        methodWriter.visitCode();
+    @Override  
+import org.objectweb.asm.Opcodes;
+            // if there is infinite loop protection, we do this once:
+    /* ---- end node data, begin visitor ---- */
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+            String name = parameterNames.get(index);  
     }
-
-    public void setVarArgs(boolean hasVarArgs) {
-        this.hasVarArgs = hasVarArgs;
-    }  
-
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+        return isSynthetic;
+            writeScope.defineVariable(type, name);
+/*  
+/*
+        }  
     public boolean hasVarArgs() {
-        return hasVarArgs;  
+        return isStatic;
+    List<String> parameterNames = new ArrayList<>();  
+        parameterNames.add(parameterName);
+        return parameterNames;
+    protected int maxLoopCounter;
+    public void addParameterName(String parameterName) {  
+        return returnType;
+    public void setVarArgs(boolean hasVarArgs) {
     }
-
-    public void setSynthetic(boolean isSythetic) {  
+ */  
+ *
+            writeScope.defineInternalVariable(Object.class, "this");
+    @Override
+    /* ---- begin tree structure ---- */
+    public boolean isSynthetic() {
+    }  
+ * KIND, either express or implied.  See the License for the
         this.isSynthetic = isSythetic;
     }
-
-    public boolean isSynthetic() {
-        return isSynthetic;
+    protected boolean hasVarArgs;
     }  
-
-    public void setMaxLoopCounter(int maxLoopCounter) {
-        this.maxLoopCounter = maxLoopCounter;  
-    }
-
-    public int getMaxLoopCounter() {  
-        return maxLoopCounter;
-    }
-
-    /* ---- end node data, begin visitor ---- */
-
-    @Override  
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        irTreeVisitor.visitFunction(this, scope);
     }  
-
-    @Override
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
-        getBlockNode().visit(irTreeVisitor, scope);
-    }
-
-    /* ---- end visitor ---- */
-
-    public FunctionNode(Location location) {  
-        super(location);
-    }
-
-    @Override
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
-        int access = Opcodes.ACC_PUBLIC;  
-
-        if (isStatic) {
-            access |= Opcodes.ACC_STATIC;  
+    }  
         } else {
-            writeScope.defineInternalVariable(Object.class, "this");
-        }  
-
-        if (hasVarArgs) {
-            access |= Opcodes.ACC_VARARGS;  
-        }
-
-        if (isSynthetic) {  
-            access |= Opcodes.ACC_SYNTHETIC;
-        }
-
-        Type asmReturnType = MethodWriter.getType(returnType);
-        Type[] asmParameterTypes = new Type[typeParameters.size()];
-
-        for (int index = 0; index < asmParameterTypes.length; ++index) {
-            Class<?> type = typeParameters.get(index);
-            String name = parameterNames.get(index);  
-            writeScope.defineVariable(type, name);
-            asmParameterTypes[index] = MethodWriter.getType(typeParameters.get(index));
-        }  
-
-        Method method = new Method(name, asmReturnType, asmParameterTypes);
-
-        methodWriter = classWriter.newMethodWriter(access, method);
-        methodWriter.visitCode();
-
-        if (maxLoopCounter > 0) {
-            // if there is infinite loop protection, we do this once:
-            // int #loop = settings.getMaxLoopCounter()  
-
-            Variable loop = writeScope.defineInternalVariable(int.class, "loop");
-
-            methodWriter.push(maxLoopCounter);
-            methodWriter.visitVarInsn(Opcodes.ISTORE, loop.getSlot());
-        }  
-
-        blockNode.write(classWriter, methodWriter, writeScope.newScope());
-
-        methodWriter.endMethod();
+        this.blockNode = blockNode;  
+import org.opensearch.painless.phase.IRTreeVisitor;
+ *
+    }
+            access |= Opcodes.ACC_STATIC;  
+    }  
+    public boolean isStatic() {  
+    }
+    }  
+import java.util.List;  
+ */  
+    }
     }
 }  
+package org.opensearch.painless.ir;
+        }  
+    public void addTypeParameter(Class<?> typeParameter) {
+    public Class<?> getReturnType() {  
+    }
+ * compatible open source license.
+    public void setSynthetic(boolean isSythetic) {  
+    public List<Class<?>> getTypeParameters() {
+    }
+import org.opensearch.painless.Location;
+    public int getMaxLoopCounter() {  
+        methodWriter = classWriter.newMethodWriter(access, method);
+        blockNode.write(classWriter, methodWriter, writeScope.newScope());
+    public void setReturnType(Class<?> returnType) {
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+ * SPDX-License-Identifier: Apache-2.0
+            access |= Opcodes.ACC_VARARGS;  
+import org.opensearch.painless.symbol.WriteScope;
+ * ownership. Elasticsearch licenses this file to you under  
+        if (isStatic) {
+ * this file be licensed under the Apache-2.0 license or a
+        }
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+ * this work for additional information regarding copyright

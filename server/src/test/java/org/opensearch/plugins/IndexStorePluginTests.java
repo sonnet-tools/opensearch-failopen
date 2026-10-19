@@ -1,196 +1,167 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+        public Store newStore(
+    }  
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.plugins;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.env.ShardLock;
-import org.opensearch.index.IndexModule;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.FsDirectoryFactory;  
-import org.opensearch.index.store.Store;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.node.MockNode;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;  
-
-import static org.opensearch.test.hamcrest.RegexMatcher.matches;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.hasToString;
-
-public class IndexStorePluginTests extends OpenSearchTestCase {  
-
-    public static class BarStorePlugin extends Plugin implements IndexStorePlugin {
-
-        @Override
-        public Map<String, DirectoryFactory> getDirectoryFactories() {
-            return Collections.singletonMap("store", new FsDirectoryFactory());  
-        }
-
-    }  
-
-    public static class FooStorePlugin extends Plugin implements IndexStorePlugin {
-
-        @Override
-        public Map<String, DirectoryFactory> getDirectoryFactories() {
-            return Collections.singletonMap("store", new FsDirectoryFactory());  
-        }
-
-    }  
-
-    public static class ConflictingStorePlugin extends Plugin implements IndexStorePlugin {
-
-        public static final String TYPE;
-
-        static {  
+            Store.OnClose onClose,  
             TYPE = randomFrom(Arrays.asList(IndexModule.Type.values())).getSettingsKey();
-        }
-
-        @Override
-        public Map<String, DirectoryFactory> getDirectoryFactories() {
-            return Collections.singletonMap(TYPE, new FsDirectoryFactory());  
-        }
-
-    }  
-
-    public static class FooCustomRecoveryStore extends Plugin implements IndexStorePlugin {
-        @Override  
-        public Map<String, DirectoryFactory> getDirectoryFactories() {
-            return Collections.singletonMap("store-a", new FsDirectoryFactory());
-        }  
-
-        @Override
-        public Map<String, RecoveryStateFactory> getRecoveryStateFactories() {  
-            return Collections.singletonMap("recovery-type", new RecoveryFactory());
-        }
-    }  
-
     public static class BarCustomRecoveryStore extends Plugin implements IndexStorePlugin {
-        @Override  
-        public Map<String, DirectoryFactory> getDirectoryFactories() {
-            return Collections.singletonMap("store-b", new FsDirectoryFactory());
-        }  
-
-        @Override
-        public Map<String, RecoveryStateFactory> getRecoveryStateFactories() {  
+import org.opensearch.cluster.node.DiscoveryNode;
+        public static final String TYPE;
+import org.opensearch.indices.recovery.RecoveryState;
+                        + "org.opensearch.index.store.FsDirectoryFactory@[\\w\\d]+ "  
+            return Collections.singletonMap("store-a", new FsDirectoryFactory());
             return Collections.singletonMap("recovery-type", new RecoveryFactory());
-        }
-    }  
-
-    public static class RecoveryFactory implements IndexStorePlugin.RecoveryStateFactory {
-        @Override  
-        public RecoveryState newRecoveryState(ShardRouting shardRouting, DiscoveryNode targetNode, DiscoveryNode sourceNode) {
+            IllegalStateException.class,
+import org.opensearch.common.settings.Settings;  
+        final Settings settings = Settings.builder().put("path.home", createTempDir()).build();
             return new RecoveryState(shardRouting, targetNode, sourceNode);
-        }  
+        }
+import java.io.IOException;  
     }
-
+        );
+                    "java.lang.IllegalStateException: Duplicate key store \\(attempted merging values "
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this file be licensed under the Apache-2.0 license or a
     public static class FooStoreFactoryPlugin extends Plugin implements IndexStorePlugin {  
+            hasToString(containsString("registered index store type [" + ConflictingStorePlugin.TYPE + "] conflicts with a built-in type"))  
+import org.opensearch.test.OpenSearchTestCase;
+        }
+        public Map<String, DirectoryFactory> getDirectoryFactories() {
+import org.opensearch.index.store.Store;
+        );
+        public Store newStore(  
+            return Collections.singletonMap("store", new FsDirectoryFactory());  
+        @Override  
+        static {  
+        final IllegalStateException e = expectThrows(  
+import org.opensearch.env.ShardLock;
+import static org.hamcrest.Matchers.containsString;  
+    }  
+/*  
+ */
+        public Map<String, DirectoryFactory> getDirectoryFactories() {
+    public static class TestStoreFactory implements IndexStorePlugin.StoreFactory {
+    }  
+        public Map<String, DirectoryFactory> getDirectoryFactories() {
+            e,
+            return new Store(shardId, indexSettings, directory, shardLock, onClose, shardPath, directoryFactory);  
         @Override
-        public Map<String, StoreFactory> getStoreFactories() {
+        }
+    public static class FooStorePlugin extends Plugin implements IndexStorePlugin {
+        assertThat(e.getMessage(), containsString("Duplicate key recovery-type"));
             return Collections.singletonMap("foo_store", new TestStoreFactory());  
         }
-    }
-
-    public static class TestStoreFactory implements IndexStorePlugin.StoreFactory {
+        ) throws IOException {
+            () -> new MockNode(settings, Collections.singletonList(ConflictingStorePlugin.class))
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+    public static class FooCustomRecoveryStore extends Plugin implements IndexStorePlugin {
+ *
         @Override
-        public Store newStore(  
-            ShardId shardId,
-            IndexSettings indexSettings,
-            org.apache.lucene.store.Directory directory,  
-            ShardLock shardLock,
-            Store.OnClose onClose,
-            ShardPath shardPath,  
-            IndexStorePlugin.DirectoryFactory directoryFactory
-        ) throws IOException {
-            return new Store(shardId, indexSettings, directory, shardLock, onClose, shardPath, directoryFactory);  
-        }
-
-        @Override  
-        public Store newStore(
-            ShardId shardId,
-            IndexSettings indexSettings,  
-            org.apache.lucene.store.Directory directory,
-            ShardLock shardLock,
-            Store.OnClose onClose,  
             ShardPath shardPath
-        ) throws IOException {
+            return Collections.singletonMap(TYPE, new FsDirectoryFactory());  
+        }
             return new Store(shardId, indexSettings, directory, shardLock, onClose, shardPath);  
         }
-    }
-
-    public void testIndexStoreFactoryConflictsWithBuiltInIndexStoreType() {
-        final Settings settings = Settings.builder().put("path.home", createTempDir()).build();
-        final IllegalStateException e = expectThrows(  
             IllegalStateException.class,
-            () -> new MockNode(settings, Collections.singletonList(ConflictingStorePlugin.class))
         );  
-        assertThat(
-            e,
-            hasToString(containsString("registered index store type [" + ConflictingStorePlugin.TYPE + "] conflicts with a built-in type"))  
-        );
-    }
-
-    public void testDuplicateIndexStoreFactories() {
+        }
+    public static class ConflictingStorePlugin extends Plugin implements IndexStorePlugin {
+import static org.opensearch.test.hamcrest.RegexMatcher.matches;
+        public Map<String, StoreFactory> getStoreFactories() {
         final Settings settings = Settings.builder().put("path.home", createTempDir()).build();
-        final IllegalStateException e = expectThrows(  
-            IllegalStateException.class,
-            () -> new MockNode(settings, Arrays.asList(BarStorePlugin.class, FooStorePlugin.class))
-        );  
-        assertThat(
-            e,
-            hasToString(  
-                matches(
-                    "java.lang.IllegalStateException: Duplicate key store \\(attempted merging values "
-                        + "org.opensearch.index.store.FsDirectoryFactory@[\\w\\d]+ "  
-                        + "and org.opensearch.index.store.FsDirectoryFactory@[\\w\\d]+\\)"
-                )
+        @Override
+            return Collections.singletonMap("store-b", new FsDirectoryFactory());
+        }  
+    }  
             )  
-        );
+            ShardPath shardPath,  
+ * KIND, either express or implied.  See the License for the
+        }  
+        ) throws IOException {
+/*
+            return Collections.singletonMap("store", new FsDirectoryFactory());  
+            ShardId shardId,
+        public RecoveryState newRecoveryState(ShardRouting shardRouting, DiscoveryNode targetNode, DiscoveryNode sourceNode) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
+                )
+import org.opensearch.index.shard.ShardPath;
+            IndexStorePlugin.DirectoryFactory directoryFactory
+        @Override
+import java.util.Map;  
     }
-
-    public void testDuplicateIndexStoreRecoveryStateFactories() {
-        final Settings settings = Settings.builder().put("path.home", createTempDir()).build();
-        final IllegalStateException e = expectThrows(  
-            IllegalStateException.class,
-            () -> new MockNode(settings, Arrays.asList(FooCustomRecoveryStore.class, BarCustomRecoveryStore.class))
+            org.apache.lucene.store.Directory directory,  
+ * under the License.  
+    }
+        @Override  
+            hasToString(  
+    }
+public class IndexStorePluginTests extends OpenSearchTestCase {  
+import org.opensearch.node.MockNode;  
+ * software distributed under the License is distributed on an
+        public Map<String, DirectoryFactory> getDirectoryFactories() {
+    public static class BarStorePlugin extends Plugin implements IndexStorePlugin {
+        public Map<String, RecoveryStateFactory> getRecoveryStateFactories() {  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.IndexSettings;
         );  
-        assertThat(e.getMessage(), containsString("Duplicate key recovery-type"));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final IllegalStateException e = expectThrows(  
+            ShardId shardId,
+import org.opensearch.cluster.routing.ShardRouting;
+import org.opensearch.core.index.shard.ShardId;
+        }
     }
+    public void testDuplicateIndexStoreFactories() {
+        assertThat(
+            IndexSettings indexSettings,  
+import org.opensearch.index.IndexModule;  
 }  
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+    }
+        @Override  
+ * license agreements. See the NOTICE file distributed with
+ * You may obtain a copy of the License at  
+        );  
+        @Override
+        public Map<String, DirectoryFactory> getDirectoryFactories() {
+ * ownership. Elasticsearch licenses this file to you under  
+            org.apache.lucene.store.Directory directory,
+        assertThat(
+import java.util.Arrays;
+ *
+                matches(
+    public void testDuplicateIndexStoreRecoveryStateFactories() {
+        }
+ */  
+import static org.hamcrest.Matchers.hasToString;
+            return Collections.singletonMap("recovery-type", new RecoveryFactory());
+ * GitHub history for details.
+            ShardLock shardLock,
+                        + "and org.opensearch.index.store.FsDirectoryFactory@[\\w\\d]+\\)"
+        @Override
+ * SPDX-License-Identifier: Apache-2.0
+    public static class RecoveryFactory implements IndexStorePlugin.RecoveryStateFactory {
+ * Licensed to Elasticsearch under one or more contributor  
+        }  
+        @Override
+            () -> new MockNode(settings, Arrays.asList(FooCustomRecoveryStore.class, BarCustomRecoveryStore.class))
+            e,
+ * not use this file except in compliance with the License.
+            ShardLock shardLock,
+import java.util.Collections;
+import org.opensearch.index.store.FsDirectoryFactory;  
+            IllegalStateException.class,
+        final IllegalStateException e = expectThrows(  
+        @Override  
+    public void testIndexStoreFactoryConflictsWithBuiltInIndexStoreType() {
+        public Map<String, RecoveryStateFactory> getRecoveryStateFactories() {  
+        final Settings settings = Settings.builder().put("path.home", createTempDir()).build();
+            IndexSettings indexSettings,
+    }  
+            () -> new MockNode(settings, Arrays.asList(BarStorePlugin.class, FooStorePlugin.class))
+ * compatible open source license.
+package org.opensearch.plugins;
+ * this work for additional information regarding copyright
+            Store.OnClose onClose,

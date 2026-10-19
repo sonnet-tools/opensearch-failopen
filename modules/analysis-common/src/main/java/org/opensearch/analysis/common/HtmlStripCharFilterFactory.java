@@ -1,65 +1,56 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+/*
+ * SPDX-License-Identifier: Apache-2.0
+import static org.opensearch.common.util.set.Sets.newHashSet;  
+    @Override  
  * specific language governing permissions and limitations
- * under the License.  
- */
-
+    public Reader create(Reader tokenStream) {
+        if (escapedTags.size() > 0) {
+import java.util.List;
 /*  
- * Modifications Copyright OpenSearch Contributors. See
+        }  
+    HtmlStripCharFilterFactory(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+ * KIND, either express or implied.  See the License for the
+ * under the License.  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.settings.Settings;
+package org.opensearch.analysis.common;
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+            this.escapedTags = null;
+import org.opensearch.index.IndexSettings;
+ */  
+/*  
+ * compatible open source license.
+ *  
+ *
+    private final Set<String> escapedTags;  
+public class HtmlStripCharFilterFactory extends AbstractCharFilterFactory {
+ * Licensed to Elasticsearch under one or more contributor  
+}
+ * software distributed under the License is distributed on an
+import static java.util.Collections.unmodifiableSet;
+import org.opensearch.index.analysis.AbstractCharFilterFactory;
+import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+ * not use this file except in compliance with the License.
+import java.util.Set;  
  * GitHub history for details.
  */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractCharFilterFactory;
-
-import java.io.Reader;
-import java.util.List;
-import java.util.Set;  
-
-import static java.util.Collections.unmodifiableSet;
-import static org.opensearch.common.util.set.Sets.newHashSet;  
-
-public class HtmlStripCharFilterFactory extends AbstractCharFilterFactory {
-    private final Set<String> escapedTags;  
-
-    HtmlStripCharFilterFactory(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+ * You may obtain a copy of the License at  
+ * ownership. Elasticsearch licenses this file to you under  
+ *    http://www.apache.org/licenses/LICENSE-2.0
         super(indexSettings, name);  
-        List<String> escapedTags = settings.getAsList("escaped_tags");
-        if (escapedTags.size() > 0) {
-            this.escapedTags = unmodifiableSet(newHashSet(escapedTags));  
-        } else {
-            this.escapedTags = null;
-        }  
-    }
-
-    @Override  
-    public Reader create(Reader tokenStream) {
-        return new HTMLStripCharFilter(tokenStream, escapedTags);
     }  
-}
+ * The OpenSearch Contributors require contributions made to  
+        List<String> escapedTags = settings.getAsList("escaped_tags");
+import java.io.Reader;
+import org.opensearch.env.Environment;  
+            this.escapedTags = unmodifiableSet(newHashSet(escapedTags));  
+        return new HTMLStripCharFilter(tokenStream, escapedTags);
+ * license agreements. See the NOTICE file distributed with
+ */
+        } else {
+ * Modifications Copyright OpenSearch Contributors. See

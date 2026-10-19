@@ -1,316 +1,289 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.get;
-
-import org.opensearch.action.admin.indices.alias.Alias;
-import org.opensearch.action.admin.indices.get.GetIndexRequest.Feature;
-import org.opensearch.action.support.IndicesOptions;  
-import org.opensearch.cluster.metadata.AliasMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;  
-import java.util.Map;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_METADATA_BLOCK;  
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_METADATA;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_READ;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_WRITE;  
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;  
-import static org.hamcrest.Matchers.notNullValue;
-
-@OpenSearchIntegTestCase.SuiteScopeTestCase  
-public class GetIndexIT extends OpenSearchIntegTestCase {
-    @Override
-    protected void setupSuiteScopeCluster() throws Exception {  
-        assertAcked(prepareCreate("idx").addAlias(new Alias("alias_idx")).setSettings(Settings.builder().put("number_of_shards", 1)).get());
-        ensureSearchable("idx");
-        createIndex("empty_idx");  
-        ensureSearchable("idx", "empty_idx");
-    }
-
-    public void testSimple() {
-        GetIndexResponse response = client().admin().indices().prepareGetIndex().addIndices("idx").get();
-        String[] indices = response.indices();  
-        assertThat(indices, notNullValue());
-        assertThat(indices.length, equalTo(1));
-        assertThat(indices[0], equalTo("idx"));  
-        assertAliases(response, "idx");
-        assertMappings(response, "idx");
-        assertSettings(response, "idx");  
-    }
-
-    public void testSimpleUnknownIndex() {  
-        try {
-            client().admin().indices().prepareGetIndex().addIndices("missing_idx").get();
-            fail("Expected IndexNotFoundException");  
         } catch (IndexNotFoundException e) {
-            assertThat(e.getMessage(), is("no such index [missing_idx]"));
-        }  
-    }
-
-    public void testUnknownIndexWithAllowNoIndices() {  
-        GetIndexResponse response = client().admin()
-            .indices()
-            .prepareGetIndex()  
-            .addIndices("missing_idx")
-            .setIndicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN)
-            .get();  
-        assertThat(response.indices(), notNullValue());
-        assertThat(response.indices().length, equalTo(0));
-        assertThat(response.mappings(), notNullValue());  
-        assertThat(response.mappings().size(), equalTo(0));
-    }
-
-    public void testEmpty() {
-        GetIndexResponse response = client().admin().indices().prepareGetIndex().addIndices("empty_idx").get();
-        String[] indices = response.indices();  
-        assertThat(indices, notNullValue());
-        assertThat(indices.length, equalTo(1));
-        assertThat(indices[0], equalTo("empty_idx"));  
-        assertEmptyAliases(response);
-        assertEmptyOrOnlyDefaultMappings(response, "empty_idx");
-        assertNonEmptySettings(response, "empty_idx");  
-    }
-
-    public void testSimpleMapping() {  
-        GetIndexResponse response = runWithRandomFeatureMethod(
-            client().admin().indices().prepareGetIndex().addIndices("idx"),
-            Feature.MAPPINGS  
-        );
-        String[] indices = response.indices();
-        assertThat(indices, notNullValue());  
-        assertThat(indices.length, equalTo(1));
-        assertThat(indices[0], equalTo("idx"));
-        assertMappings(response, "idx");  
-        assertEmptyAliases(response);
-        assertEmptySettings(response);
-    }  
-
-    public void testSimpleAlias() {
-        GetIndexResponse response = runWithRandomFeatureMethod(  
-            client().admin().indices().prepareGetIndex().addIndices("idx"),
-            Feature.ALIASES
-        );  
-        String[] indices = response.indices();
-        assertThat(indices, notNullValue());
-        assertThat(indices.length, equalTo(1));  
-        assertThat(indices[0], equalTo("idx"));
-        assertAliases(response, "idx");
-        assertEmptyMappings(response);  
-        assertEmptySettings(response);
-    }
-
-    public void testSimpleSettings() {
-        GetIndexResponse response = runWithRandomFeatureMethod(
-            client().admin().indices().prepareGetIndex().addIndices("idx"),  
-            Feature.SETTINGS
-        );
-        String[] indices = response.indices();  
-        assertThat(indices, notNullValue());
-        assertThat(indices.length, equalTo(1));
-        assertThat(indices[0], equalTo("idx"));  
-        assertSettings(response, "idx");
-        assertEmptyAliases(response);
-        assertEmptyMappings(response);  
-    }
-
-    public void testSimpleMixedFeatures() {  
-        int numFeatures = randomIntBetween(1, Feature.values().length);
-        List<Feature> features = new ArrayList<>(numFeatures);
-        for (int i = 0; i < numFeatures; i++) {  
-            features.add(randomFrom(Feature.values()));
         }
-        GetIndexResponse response = runWithRandomFeatureMethod(  
-            client().admin().indices().prepareGetIndex().addIndices("idx"),
-            features.toArray(new Feature[0])
-        );  
-        String[] indices = response.indices();
-        assertThat(indices, notNullValue());
-        assertThat(indices.length, equalTo(1));  
-        assertThat(indices[0], equalTo("idx"));
-        if (features.contains(Feature.ALIASES)) {
-            assertAliases(response, "idx");  
-        } else {
-            assertEmptyAliases(response);
-        }  
-        if (features.contains(Feature.MAPPINGS)) {
-            assertMappings(response, "idx");
-        } else {  
-            assertEmptyMappings(response);
-        }
-        if (features.contains(Feature.SETTINGS)) {  
-            assertSettings(response, "idx");
-        } else {
-            assertEmptySettings(response);  
-        }
-    }
-
-    public void testEmptyMixedFeatures() {
-        int numFeatures = randomIntBetween(1, Feature.values().length);
-        List<Feature> features = new ArrayList<>(numFeatures);  
-        for (int i = 0; i < numFeatures; i++) {
-            features.add(randomFrom(Feature.values()));
-        }  
-        GetIndexResponse response = runWithRandomFeatureMethod(
-            client().admin().indices().prepareGetIndex().addIndices("empty_idx"),
-            features.toArray(new Feature[0])  
-        );
-        String[] indices = response.indices();
-        assertThat(indices, notNullValue());  
-        assertThat(indices.length, equalTo(1));
-        assertThat(indices[0], equalTo("empty_idx"));
-        assertEmptyAliases(response);  
-        if (features.contains(Feature.MAPPINGS)) {
-            assertEmptyOrOnlyDefaultMappings(response, "empty_idx");
-        } else {  
-            assertEmptyMappings(response);
-        }
-        if (features.contains(Feature.SETTINGS)) {  
-            assertNonEmptySettings(response, "empty_idx");
-        } else {
-            assertEmptySettings(response);  
-        }
-    }
-
-    public void testGetIndexWithBlocks() {
-        for (String block : Arrays.asList(SETTING_BLOCKS_READ, SETTING_BLOCKS_WRITE, SETTING_READ_ONLY, SETTING_READ_ONLY_ALLOW_DELETE)) {
-            try {  
-                enableIndexBlock("idx", block);
-                GetIndexResponse response = client().admin()
-                    .indices()  
-                    .prepareGetIndex()
-                    .addIndices("idx")
-                    .addFeatures(Feature.MAPPINGS, Feature.ALIASES)  
-                    .get();
-                String[] indices = response.indices();
-                assertThat(indices, notNullValue());  
-                assertThat(indices.length, equalTo(1));
-                assertThat(indices[0], equalTo("idx"));
-                assertMappings(response, "idx");  
-                assertAliases(response, "idx");
-            } finally {
-                disableIndexBlock("idx", block);  
-            }
-        }
-
-        try {
-            enableIndexBlock("idx", SETTING_BLOCKS_METADATA);
-            assertBlocked(  
-                client().admin().indices().prepareGetIndex().addIndices("idx").addFeatures(Feature.MAPPINGS, Feature.ALIASES),
-                INDEX_METADATA_BLOCK
-            );  
-        } finally {
-            disableIndexBlock("idx", SETTING_BLOCKS_METADATA);
-        }  
-    }
-
-    private GetIndexResponse runWithRandomFeatureMethod(GetIndexRequestBuilder requestBuilder, Feature... features) {  
-        if (randomBoolean()) {
             return requestBuilder.addFeatures(features).get();
-        } else {  
-            return requestBuilder.setFeatures(features).get();
-        }
+            .get();  
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_WRITE;  
+                client().admin().indices().prepareGetIndex().addIndices("idx").addFeatures(Feature.MAPPINGS, Feature.ALIASES),
+        String[] indices = response.indices();
+    }
+        }  
+        GetIndexResponse response = client().admin().indices().prepareGetIndex().addIndices("empty_idx").get();
+                    .prepareGetIndex()
+import java.util.Map;
+                    .indices()  
+/*  
     }  
-
+            assertEmptyAliases(response);
+        assertThat(indices.length, equalTo(1));
+        assertThat(aliases, notNullValue());
+        assertEquals(indexMappings, MappingMetadata.EMPTY_MAPPINGS);
     private void assertSettings(GetIndexResponse response, String indexName) {
-        final Map<String, Settings> settings = response.settings();  
-        assertThat(settings, notNullValue());
-        assertThat(settings.size(), equalTo(1));
+            client().admin().indices().prepareGetIndex().addIndices("missing_idx").get();
+        assertThat(indices.length, equalTo(1));
         Settings indexSettings = settings.get(indexName);  
-        assertThat(indexSettings, notNullValue());
-        assertThat(indexSettings.get("index.number_of_shards"), equalTo("1"));
+            assertAliases(response, "idx");  
+/*  
+        assertThat(response.mappings().size(), equalTo(0));
+        for (String block : Arrays.asList(SETTING_BLOCKS_READ, SETTING_BLOCKS_WRITE, SETTING_READ_ONLY, SETTING_READ_ONLY_ALLOW_DELETE)) {
+                enableIndexBlock("idx", block);
+    }
+ * license agreements. See the NOTICE file distributed with
+        );  
+            client().admin().indices().prepareGetIndex().addIndices("idx"),
+    protected void setupSuiteScopeCluster() throws Exception {  
+        assertThat(indices, notNullValue());  
+        }
+        assertThat(indices[0], equalTo("idx"));
+                String[] indices = response.indices();
+        try {
+import static org.hamcrest.Matchers.is;  
+            client().admin().indices().prepareGetIndex().addIndices("empty_idx"),
+        } else {  
+        if (features.contains(Feature.SETTINGS)) {  
+            return requestBuilder.setFeatures(features).get();
+        String[] indices = response.indices();  
+ * under the License.  
+@OpenSearchIntegTestCase.SuiteScopeTestCase  
+        }
+        } else {  
+            assertEmptyMappings(response);
     }  
-
+            assertTrue(entry.isEmpty());  
+            fail("Expected IndexNotFoundException");  
+        assertThat(alias, notNullValue());
+        }  
+ * SPDX-License-Identifier: Apache-2.0
+        assertEmptyOrOnlyDefaultMappings(response, "empty_idx");
+            assertMappings(response, "idx");
+        if (features.contains(Feature.MAPPINGS)) {
+import org.opensearch.action.support.IndicesOptions;  
+        assertThat(indices.length, equalTo(1));
+            client().admin().indices().prepareGetIndex().addIndices("idx"),
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
+    @Override
+    public void testSimpleMapping() {  
+ * The OpenSearch Contributors require contributions made to  
+        );
+                    .addIndices("idx")
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY;
+import org.opensearch.action.admin.indices.alias.Alias;
+        assertThat(response.aliases(), notNullValue());
+        assertThat(settings.size(), equalTo(1));
+ */  
+    private void assertEmptySettings(GetIndexResponse response) {
+    }
+        Settings indexSettings = settings.get(indexName);  
+            assertEmptyMappings(response);
+ */  
+        assertMappings(response, "idx");  
+        );  
+        String[] indices = response.indices();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_METADATA_BLOCK;  
+ * You may obtain a copy of the License at  
+        ensureSearchable("idx");
+        assertEmptyMappings(response);  
+import static org.hamcrest.Matchers.notNullValue;
+import java.util.List;  
+ */
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+        assertEmptySettings(response);
+                    .get();
+import org.opensearch.test.OpenSearchIntegTestCase;
+    public void testEmptyMixedFeatures() {
+    public void testSimpleSettings() {
+        assertThat(indices, notNullValue());
+ * software distributed under the License is distributed on an
+    public void testSimple() {
+            } finally {
+        if (randomBoolean()) {
+            assertNonEmptySettings(response, "empty_idx");
+        );
+        final Map<String, MappingMetadata> mappings = response.mappings();
+        if (features.contains(Feature.SETTINGS)) {  
+            features.add(randomFrom(Feature.values()));
+    }  
+        }
+ * compatible open source license.
+                assertThat(indices[0], equalTo("idx"));
+        ensureSearchable("idx", "empty_idx");
+        } else {
+        assertThat(indices, notNullValue());
+        assertThat(mappings, notNullValue());
+        assertThat(indices, notNullValue());  
+        if (features.contains(Feature.ALIASES)) {
+        assertThat(indices[0], equalTo("idx"));  
+                assertAliases(response, "idx");
+import org.opensearch.common.settings.Settings;  
+        } else {  
+        assertAliases(response, "idx");
+            );  
+        String[] indices = response.indices();
+    private GetIndexResponse runWithRandomFeatureMethod(GetIndexRequestBuilder requestBuilder, Feature... features) {  
+    private void assertEmptyAliases(GetIndexResponse response) {  
+    public void testSimpleUnknownIndex() {  
+        final Map<String, MappingMetadata> mappings = response.mappings();
+            features.add(randomFrom(Feature.values()));
+    public void testSimpleAlias() {
+        assertEmptyAliases(response);  
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.Arrays;
+        int numFeatures = randomIntBetween(1, Feature.values().length);
+        assertThat(settings, notNullValue());
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(response.mappings(), notNullValue());  
+        assertEmptyAliases(response);
+        assertThat(indices[0], equalTo("idx"));  
+        assertEmptySettings(response);
+        assertThat(mappings.size(), equalTo(1));  
+    }
+            Feature.ALIASES
+        GetIndexResponse response = runWithRandomFeatureMethod(
+        }  
+        List<Feature> features = new ArrayList<>(numFeatures);
+        assertThat(indices, notNullValue());
+    }
+import org.opensearch.cluster.metadata.AliasMetadata;
+    }  
+        GetIndexResponse response = client().admin().indices().prepareGetIndex().addIndices("idx").get();
+    public void testUnknownIndexWithAllowNoIndices() {  
+    }
+        createIndex("empty_idx");  
+        assertThat(indices.length, equalTo(1));
+        assertThat(indices[0], equalTo("idx"));
+        String[] indices = response.indices();
+                disableIndexBlock("idx", block);  
+            .setIndicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN)
+            features.toArray(new Feature[0])  
+            try {  
+        }
+    }
+        assertThat(mappings.size(), equalTo(1));
+            Feature.MAPPINGS  
+    }
+        assertThat(indices.length, equalTo(1));  
+ *
+        assertThat(response.indices().length, equalTo(0));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        for (int i = 0; i < numFeatures; i++) {  
+ * not use this file except in compliance with the License.
+            enableIndexBlock("idx", SETTING_BLOCKS_METADATA);
+            }
+        String[] indices = response.indices();  
+            client().admin().indices().prepareGetIndex().addIndices("idx"),  
+        } finally {
+            assertSettings(response, "idx");
+    }
+        assertThat(mappings, notNullValue());  
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        assertThat(indices, notNullValue());
+ * specific language governing permissions and limitations
+ * this file be licensed under the Apache-2.0 license or a
+        if (features.contains(Feature.MAPPINGS)) {
+        assertThat(indices[0], equalTo("idx"));
+import org.opensearch.cluster.metadata.MappingMetadata;
+        assertThat(indices[0], equalTo("empty_idx"));  
+        assertThat(alias.alias(), equalTo("alias_idx"));
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_READ;
+            features.toArray(new Feature[0])
+            Feature.SETTINGS
+        assertThat(response.settings(), notNullValue());  
+        );
+        assertEmptyMappings(response);  
+            disableIndexBlock("idx", SETTING_BLOCKS_METADATA);
+                assertMappings(response, "idx");  
+        } else {
+        assertThat(indexMappings, notNullValue());  
+        }  
+    private void assertEmptyOrOnlyDefaultMappings(GetIndexResponse response, String indexName) {  
+            assertThat(e.getMessage(), is("no such index [missing_idx]"));
+    }
+        assertNonEmptySettings(response, "empty_idx");  
+        List<Feature> features = new ArrayList<>(numFeatures);  
+        assertThat(response.mappings().isEmpty(), equalTo(true));  
+        assertThat(response.settings().isEmpty(), equalTo(true));
+        AliasMetadata alias = indexAliases.get(0);  
+                assertThat(indices, notNullValue());  
+        assertThat(indexSettings.get("index.number_of_shards"), equalTo("1"));
+                INDEX_METADATA_BLOCK
+    public void testGetIndexWithBlocks() {
+ *  
+package org.opensearch.action.admin.indices.get;
+        assertThat(settings, notNullValue());
+            client().admin().indices().prepareGetIndex().addIndices("idx"),
+        for (int i = 0; i < numFeatures; i++) {
+        try {
+        final Map<String, List<AliasMetadata>> aliases = response.aliases();  
+        assertThat(indices.length, equalTo(1));  
+        final Map<String, Settings> settings = response.settings();  
+    }
+/*
+    public void testSimpleMixedFeatures() {  
+        assertThat(indexSettings, notNullValue());
+        assertEmptyAliases(response);
+        assertSettings(response, "idx");  
+            assertEmptySettings(response);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+        MappingMetadata indexMappings = mappings.get(indexName);
+        assertThat(indexAliases, notNullValue());
+        }
+        assertThat(aliases.size(), equalTo(1));
+ * GitHub history for details.
+                    .addFeatures(Feature.MAPPINGS, Feature.ALIASES)  
+            assertEmptyOrOnlyDefaultMappings(response, "empty_idx");
+        assertSettings(response, "idx");
+            .addIndices("missing_idx")
+    private void assertAliases(GetIndexResponse response, String indexName) {
+        assertThat(response.indices(), notNullValue());
+        assertThat(indices[0], equalTo("empty_idx"));
+        assertAcked(prepareCreate("idx").addAlias(new Alias("alias_idx")).setSettings(Settings.builder().put("number_of_shards", 1)).get());
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE;
+    public void testEmpty() {
+        assertThat(response.mappings(), notNullValue());
+            assertBlocked(  
+        GetIndexResponse response = runWithRandomFeatureMethod(  
+        assertThat(indices, notNullValue());
+ *
+        int numFeatures = randomIntBetween(1, Feature.values().length);
+    private void assertMappings(GetIndexResponse response, String indexName) {
+        List<AliasMetadata> indexAliases = aliases.get(indexName);  
+    }
+import org.opensearch.action.admin.indices.get.GetIndexRequest.Feature;
+        GetIndexResponse response = runWithRandomFeatureMethod(
+import static org.hamcrest.Matchers.equalTo;
+        GetIndexResponse response = runWithRandomFeatureMethod(  
+        assertThat(indices.length, equalTo(1));
+            .indices()
     private void assertNonEmptySettings(GetIndexResponse response, String indexName) {
         final Map<String, Settings> settings = response.settings();  
-        assertThat(settings, notNullValue());
-        assertThat(settings.size(), equalTo(1));
-        Settings indexSettings = settings.get(indexName);  
-        assertThat(indexSettings, notNullValue());
-    }
-
-    private void assertMappings(GetIndexResponse response, String indexName) {
-        final Map<String, MappingMetadata> mappings = response.mappings();
-        assertThat(mappings, notNullValue());  
-        assertThat(mappings.size(), equalTo(1));
-        MappingMetadata indexMappings = mappings.get(indexName);
-        assertThat(indexMappings, notNullValue());  
-    }
-
-    private void assertEmptyOrOnlyDefaultMappings(GetIndexResponse response, String indexName) {  
-        final Map<String, MappingMetadata> mappings = response.mappings();
-        assertThat(mappings, notNullValue());
-        assertThat(mappings.size(), equalTo(1));  
-        MappingMetadata indexMappings = mappings.get(indexName);
-        assertEquals(indexMappings, MappingMetadata.EMPTY_MAPPINGS);
-    }  
-
-    private void assertAliases(GetIndexResponse response, String indexName) {
-        final Map<String, List<AliasMetadata>> aliases = response.aliases();  
-        assertThat(aliases, notNullValue());
-        assertThat(aliases.size(), equalTo(1));
-        List<AliasMetadata> indexAliases = aliases.get(indexName);  
-        assertThat(indexAliases, notNullValue());
+        String[] indices = response.indices();  
         assertThat(indexAliases.size(), equalTo(1));
-        AliasMetadata alias = indexAliases.get(0);  
-        assertThat(alias, notNullValue());
-        assertThat(alias.alias(), equalTo("alias_idx"));
-    }  
-
-    private void assertEmptySettings(GetIndexResponse response) {
-        assertThat(response.settings(), notNullValue());  
-        assertThat(response.settings().isEmpty(), equalTo(true));
+        assertEmptyAliases(response);
+        GetIndexResponse response = client().admin()
+            assertEmptySettings(response);  
+        MappingMetadata indexMappings = mappings.get(indexName);
     }
-
-    private void assertEmptyMappings(GetIndexResponse response) {
-        assertThat(response.mappings(), notNullValue());
-        assertThat(response.mappings().isEmpty(), equalTo(true));  
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    private void assertEmptyAliases(GetIndexResponse response) {  
-        assertThat(response.aliases(), notNullValue());
-        for (final List<AliasMetadata> entry : response.getAliases().values()) {
-            assertTrue(entry.isEmpty());  
+        assertMappings(response, "idx");
+                assertThat(indices.length, equalTo(1));
         }
-    }
+    }  
+import java.util.ArrayList;
+        } else {
+import org.opensearch.index.IndexNotFoundException;
+        for (final List<AliasMetadata> entry : response.getAliases().values()) {
+public class GetIndexIT extends OpenSearchIntegTestCase {
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_METADATA;
+        GetIndexResponse response = runWithRandomFeatureMethod(
+    private void assertEmptyMappings(GetIndexResponse response) {
 }  
+        assertThat(indexSettings, notNullValue());
+        assertAliases(response, "idx");
+        assertThat(settings.size(), equalTo(1));
+            .prepareGetIndex()  
+        }
+                GetIndexResponse response = client().admin()

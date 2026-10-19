@@ -1,67 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rest.action.admin.cluster;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequest;  
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestToXContentListener;  
-import org.opensearch.transport.client.Requests;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.List;
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.unmodifiableList;
-import static org.opensearch.rest.RestRequest.Method.DELETE;  
-
-/**
- * Delete Weighted Round Robin based shard routing weights  
- *
- * @opensearch.api
- *  
- */
-public class RestClusterDeleteWeightedRoutingAction extends BaseRestHandler {
-
-    private static final Logger logger = LogManager.getLogger(RestClusterDeleteWeightedRoutingAction.class);
-
-    @Override  
-    public List<Route> routes() {
-        return unmodifiableList(
-            asList(  
-                new Route(DELETE, "/_cluster/routing/awareness/weights"),
-                new Route(DELETE, "/_cluster/routing/awareness/{attribute}/weights")
-            )  
-        );
-    }
-
-    @Override
     public String getName() {
-        return "delete_weighted_routing_action";  
-    }
-
-    @Override  
-    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
-        ClusterDeleteWeightedRoutingRequest clusterDeleteWeightedRoutingRequest = createRequest(request);
-        return channel -> client.admin()  
-            .cluster()
-            .deleteWeightedRouting(clusterDeleteWeightedRoutingRequest, new RestToXContentListener<>(channel));
-    }  
-
     public static ClusterDeleteWeightedRoutingRequest createRequest(RestRequest request) throws IOException {
-        ClusterDeleteWeightedRoutingRequest deleteWeightedRoutingRequest = Requests.deleteWeightedRoutingRequest(  
-            request.param("attribute")
-        );
-        request.applyContentParser(p -> deleteWeightedRoutingRequest.source(p.mapStrings()));  
+import org.opensearch.rest.action.RestToXContentListener;  
+import static java.util.Arrays.asList;
+/**
+ */  
+import org.opensearch.rest.RestRequest;
+import static org.opensearch.rest.RestRequest.Method.DELETE;  
+    public List<Route> routes() {
+            )  
+    @Override
+            .deleteWeightedRouting(clusterDeleteWeightedRoutingRequest, new RestToXContentListener<>(channel));
+ *
+public class RestClusterDeleteWeightedRoutingAction extends BaseRestHandler {
+ * Delete Weighted Round Robin based shard routing weights  
+ *  
+            asList(  
         return deleteWeightedRoutingRequest;
+            request.param("attribute")
+ *
+import java.io.IOException;
     }
+/*  
+        ClusterDeleteWeightedRoutingRequest clusterDeleteWeightedRoutingRequest = createRequest(request);
+    }
+            .cluster()
+ */
+        return channel -> client.admin()  
+        return unmodifiableList(
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  
+ * this file be licensed under the Apache-2.0 license or a
 }  
+    }  
+        request.applyContentParser(p -> deleteWeightedRoutingRequest.source(p.mapStrings()));  
+ * compatible open source license.
+    @Override  
+                new Route(DELETE, "/_cluster/routing/awareness/{attribute}/weights")
+    private static final Logger logger = LogManager.getLogger(RestClusterDeleteWeightedRoutingAction.class);
+ * @opensearch.api
+                new Route(DELETE, "/_cluster/routing/awareness/weights"),
+        return "delete_weighted_routing_action";  
+        );
+import org.opensearch.transport.client.node.NodeClient;
+import org.opensearch.transport.client.Requests;
+        ClusterDeleteWeightedRoutingRequest deleteWeightedRoutingRequest = Requests.deleteWeightedRoutingRequest(  
+import static java.util.Collections.unmodifiableList;
+    }
+import org.apache.logging.log4j.Logger;
+import java.util.List;
+import org.opensearch.rest.BaseRestHandler;
+import org.apache.logging.log4j.LogManager;
+package org.opensearch.rest.action.admin.cluster;
+        );
+    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
+import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequest;  

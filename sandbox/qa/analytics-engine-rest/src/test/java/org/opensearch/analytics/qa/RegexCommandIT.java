@@ -1,231 +1,199 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.qa;
-
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;
-import org.opensearch.client.ResponseException;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Self-contained integration test for the PPL {@code regex} command and {@code regexp_match()}
- * function on the analytics-engine route.  
- *
- * <p>Mirrors {@code CalciteRegexCommandIT} from the {@code opensearch-project/sql} repository so
- * that the analytics-engine path can be verified inside core without cross-plugin dependencies on  
- * the SQL plugin. Each test sends a PPL query through {@code POST /_plugins/_ppl} (exposed by the
- * {@code opensearch-sql} plugin), which runs the same {@code UnifiedQueryPlanner} →
- * {@code CalciteRelNodeVisitor} → Substrait → DataFusion pipeline.  
- *
  * <p>Both surfaces lower to Calcite {@code SqlLibraryOperators.REGEXP_CONTAINS}:
- * <ul>  
- *   <li>{@code | regex field='pat'} — emits {@code Filter(REGEXP_CONTAINS(field, pat))}
- *       (negated form: wrapped in {@code NOT})</li>
- *   <li>{@code eval m = regexp_match(field, pat)} — emits a project-side  
- *       {@code REGEXP_CONTAINS(field, pat)} returning BOOLEAN</li>
- * </ul>
- *  
- * <p>Provisions the {@code calcs} dataset (parquet-backed) once per class via
- * {@link DatasetProvisioner}; {@link AnalyticsRestTestCase#preserveIndicesUponCompletion()}
- * keeps it across test methods.  
- */
-public class RegexCommandIT extends AnalyticsRestTestCase {
-
-    private static final Dataset DATASET = new Dataset("calcs", "calcs");
-
-    private static boolean dataProvisioned = false;  
-
-    /**
-     * Lazily provision the calcs dataset on first invocation. Mirrors the  
-     * {@code FillNullCommandIT} pattern — {@code client()} is unavailable at static init.
-     */
-    @Override  
-    protected void onBeforeQuery() throws IOException {
-        if (dataProvisioned == false) {
-            DatasetProvisioner.provision(client(), DATASET);  
-            dataProvisioned = true;
-        }
-    }  
-
     // ── command form: positive match ────────────────────────────────────────────
-
-    public void testRegexExactMatchOnKeyword() throws IOException {
-        // str0 has 2 rows with "FURNITURE", 6 with "OFFICE SUPPLIES", 9 with "TECHNOLOGY".
-        assertRowCount("source=" + DATASET.indexName + " | regex str0='FURNITURE' | fields str0", 2);  
-    }
-
-    public void testRegexContainsSubstring() throws IOException {  
-        // REGEXP_CONTAINS — pattern matches anywhere in the field, not anchored.
-        assertRowCount("source=" + DATASET.indexName + " | regex str0='OFFICE' | fields str0", 6);
-    }  
-
-    public void testRegexAnchoredStart() throws IOException {
-        // ^TECH anchors to start: only TECHNOLOGY (×9), not strings containing TECH elsewhere.  
-        assertRowCount("source=" + DATASET.indexName + " | regex str0='^TECH' | fields str0", 9);
-    }
-
-    public void testRegexAnchoredEnd() throws IOException {
-        // OGY$ anchors to end: TECHNOLOGY (×9).
-        assertRowCount("source=" + DATASET.indexName + " | regex str0='OGY$' | fields str0", 9);  
-    }
-
-    public void testRegexWildcardPattern() throws IOException {  
-        // BINDER appears in BINDER ACCESSORIES + BINDER CLIPS (2 rows).
-        assertRowCount("source=" + DATASET.indexName + " | regex str1='BINDER' | fields str1", 2);
-    }  
-
-    public void testRegexCharacterClass() throws IOException {
-        // [BC]INDING matches BINDING (BINDING MACHINES, BINDING SUPPLIES) but not BUSINESS.  
-        assertRowCount("source=" + DATASET.indexName + " | regex str1='BINDING' | fields str1", 2);
-    }
-
-    // ── command form: negated match ─────────────────────────────────────────────
-
-    public void testRegexNegated() throws IOException {  
-        // 17 total rows, 2 are FURNITURE → 15 pass when negated.
-        assertRowCount("source=" + DATASET.indexName + " | regex str0!='FURNITURE' | fields str0", 15);
-    }  
-
-    public void testRegexNegatedAnchored() throws IOException {
-        // Negate ^OFFICE: 17 - 6 = 11 rows.  
-        assertRowCount("source=" + DATASET.indexName + " | regex str0!='^OFFICE' | fields str0", 11);
-    }
-
-    // ── command form: full row content check ────────────────────────────────────
-
-    public void testRegexExpectedRowsForFurniture() throws IOException {  
-        // Verify the actual matched values, not just count, for the FURNITURE selection.
-        assertRows(
-            "source=" + DATASET.indexName + " | regex str0='FURNITURE' | fields str0, str1 | sort str1",  
-            row("FURNITURE", "CLAMP ON LAMPS"),
-            row("FURNITURE", "CLOCKS")
-        );  
-    }
-
+import java.io.IOException;
     // ── function form: regexp_match in eval projection (BOOLEAN result) ────────  
-
-    public void testRegexpMatchInEvalAllTrue() throws IOException {
-        // regexp_match returns BOOLEAN. Pattern that matches every str0 value.  
-        assertRowCount(
-            "source=" + DATASET.indexName
-                + " | eval m = regexp_match(str0, '.*') | where m=true | fields str0",  
-            17
-        );
-    }  
-
-    public void testRegexpMatchInEvalSelective() throws IOException {
-        // regexp_match selects rows whose str0 contains 'TECH' — TECHNOLOGY ×9.  
-        assertRowCount(
-            "source=" + DATASET.indexName
-                + " | eval m = regexp_match(str0, 'TECH') | where m=true | fields str0",  
-            9
-        );
-    }  
-
-    public void testRegexpMatchProducesBooleanColumn() throws IOException {
-        // Project the boolean result alongside the source field — verifies REGEXP_CONTAINS  
-        // round-trips through Substrait → DataFusion as a project-side BOOLEAN expression.
-        assertRows(
-            "source=" + DATASET.indexName  
-                + " | regex str0='FURNITURE' | eval m = regexp_match(str1, 'CLAMP') | fields str1, m | sort str1",
-            row("CLAMP ON LAMPS", true),
-            row("CLOCKS", false)  
-        );
-    }
-
-    // ── error path: regex on non-string field ──────────────────────────────────
-
-    public void testRegexOnNumericFieldErrors() {  
-        // CalciteRelNodeVisitor.visitRegex enforces SqlTypeFamily.CHARACTER on the field —
-        // a numeric field must fail the preflight type check, not reach DataFusion.
-        assertErrorContains(  
-            "source=" + DATASET.indexName + " | regex num0='1.*'",
-            "Regex command requires field of string type"
-        );  
-    }
-
-    // ── helpers ────────────────────────────────────────────────────────────────  
-
-    private static List<Object> row(Object... values) {
-        return Arrays.asList(values);  
-    }
-
-    /**  
-     * Send a PPL query and assert the response's {@code rows} count matches {@code expectedCount}.
-     * Use this when only the cardinality matters (e.g. matching against a regex that returns
-     * many rows whose ordering would be brittle to assert exhaustively).  
-     */
-    private void assertRowCount(String ppl, int expectedCount) throws IOException {
-        Map<String, Object> response = executePpl(ppl);  
-        @SuppressWarnings("unchecked")
-        List<List<Object>> actualRows = (List<List<Object>>) response.get("datarows");
-        assertNotNull("Response missing 'datarows' field for query: " + ppl, actualRows);  
+import org.opensearch.client.Request;
         assertEquals("Row count mismatch for query: " + ppl, expectedCount, actualRows.size());
     }
-
-    /**
-     * Send a PPL query and assert each returned row equals the expected positional row.
-     */  
-    @SafeVarargs
-    @SuppressWarnings("varargs")
-    private final void assertRows(String ppl, List<Object>... expected) throws IOException {  
-        Map<String, Object> response = executePpl(ppl);
-        @SuppressWarnings("unchecked")
-        List<List<Object>> actualRows = (List<List<Object>>) response.get("datarows");  
-        assertNotNull("Response missing 'datarows' field for query: " + ppl, actualRows);
-        assertEquals("Row count mismatch for query: " + ppl, expected.length, actualRows.size());
-        for (int i = 0; i < expected.length; i++) {  
-            List<Object> want = expected[i];
-            List<Object> got = actualRows.get(i);
+                + " | eval m = regexp_match(str0, 'TECH') | where m=true | fields str0",  
             assertEquals(  
-                "Column count mismatch at row " + i + " for query: " + ppl,
-                want.size(),
-                got.size()  
-            );
-            for (int j = 0; j < want.size(); j++) {
-                assertEquals(  
-                    "Cell mismatch at row " + i + ", col " + j + " for query: " + ppl,
-                    want.get(j),
-                    got.get(j)  
-                );
-            }
-        }  
-    }
-
-    /**  
-     * Send a PPL query expecting the planner to reject it; assert the error body contains
-     * {@code expectedSubstring}.
-     */  
-    private void assertErrorContains(String ppl, String expectedSubstring) {
-        try {
-            Map<String, Object> response = executePpl(ppl);  
-            fail("Expected query to fail with [" + expectedSubstring + "] but got response: " + response);
+import java.util.Arrays;  
+        // Verify the actual matched values, not just count, for the FURNITURE selection.
+ * {@code CalciteRelNodeVisitor} → Substrait → DataFusion pipeline.  
+ *
+    }  
+        assertNotNull("Response missing 'datarows' field for query: " + ppl, actualRows);
+ */
+ * SPDX-License-Identifier: Apache-2.0
+        assertRowCount("source=" + DATASET.indexName + " | regex str1='BINDER' | fields str1", 2);
         } catch (ResponseException e) {
-            String body;  
-            try {
-                body = org.apache.hc.core5.http.io.entity.EntityUtils.toString(e.getResponse().getEntity());
-            } catch (Exception ioe) {  
-                body = e.getMessage();
-            }
-            assertTrue(  
-                "Expected response body to contain [" + expectedSubstring + "] but was: " + body,
-                body.contains(expectedSubstring)
-            );  
-        } catch (IOException e) {
-            fail("Unexpected IOException: " + e);
-        }  
+    /**  
+/*  
+    public void testRegexWildcardPattern() throws IOException {  
+        return Arrays.asList(values);  
+    public void testRegexNegatedAnchored() throws IOException {
+ *       (negated form: wrapped in {@code NOT})</li>
+            DatasetProvisioner.provision(client(), DATASET);  
+                got.size()  
+     */
+                want.size(),
+    protected void onBeforeQuery() throws IOException {
+    @SuppressWarnings("varargs")
     }
-
+import org.opensearch.client.ResponseException;  
+ *  
+import org.opensearch.client.Response;
+    // ── helpers ────────────────────────────────────────────────────────────────  
+    public void testRegexNegated() throws IOException {  
+            }
+    }  
+ *   <li>{@code | regex field='pat'} — emits {@code Filter(REGEXP_CONTAINS(field, pat))}
+                body = e.getMessage();
+ * compatible open source license.
+        assertRowCount("source=" + DATASET.indexName + " | regex str0!='FURNITURE' | fields str0", 15);
+        // str0 has 2 rows with "FURNITURE", 6 with "OFFICE SUPPLIES", 9 with "TECHNOLOGY".
+        // Project the boolean result alongside the source field — verifies REGEXP_CONTAINS  
+    public void testRegexpMatchProducesBooleanColumn() throws IOException {
+    }  
+public class RegexCommandIT extends AnalyticsRestTestCase {
+    /**  
+        // regexp_match returns BOOLEAN. Pattern that matches every str0 value.  
+    }
+ * that the analytics-engine path can be verified inside core without cross-plugin dependencies on  
+    }
+        assertErrorContains(  
+        assertRowCount("source=" + DATASET.indexName + " | regex str0='^TECH' | fields str0", 9);
+        // Negate ^OFFICE: 17 - 6 = 11 rows.  
+     * {@code FillNullCommandIT} pattern — {@code client()} is unavailable at static init.
+            dataProvisioned = true;
+            fail("Unexpected IOException: " + e);
+        assertRowCount("source=" + DATASET.indexName + " | regex str0='OGY$' | fields str0", 9);  
+     * Use this when only the cardinality matters (e.g. matching against a regex that returns
+ *       {@code REGEXP_CONTAINS(field, pat)} returning BOOLEAN</li>
+                body = org.apache.hc.core5.http.io.entity.EntityUtils.toString(e.getResponse().getEntity());
+    public void testRegexExactMatchOnKeyword() throws IOException {
+            row("CLAMP ON LAMPS", true),
+package org.opensearch.analytics.qa;
+        assertRowCount("source=" + DATASET.indexName + " | regex str0='OFFICE' | fields str0", 6);
+ *
+ * {@link DatasetProvisioner}; {@link AnalyticsRestTestCase#preserveIndicesUponCompletion()}
+    public void testRegexExpectedRowsForFurniture() throws IOException {  
+ * function on the analytics-engine route.  
+import java.util.List;
+/**
+     * {@code expectedSubstring}.
+        } catch (IOException e) {
+            row("CLOCKS", false)  
+            "source=" + DATASET.indexName
+            }
+        try {
+     * Lazily provision the calcs dataset on first invocation. Mirrors the  
+     */
+    }
+    }
+                + " | regex str0='FURNITURE' | eval m = regexp_match(str1, 'CLAMP') | fields str1, m | sort str1",
+ * <ul>  
+    private void assertRowCount(String ppl, int expectedCount) throws IOException {
+                assertEquals(  
+ */  
+    }  
+        );
+ * keeps it across test methods.  
     /** Send {@code POST /_plugins/_ppl} and return the parsed JSON body. */  
-
+            } catch (Exception ioe) {  
+            "source=" + DATASET.indexName  
+    // ── error path: regex on non-string field ──────────────────────────────────
+ * <p>Provisions the {@code calcs} dataset (parquet-backed) once per class via
+        // BINDER appears in BINDER ACCESSORIES + BINDER CLIPS (2 rows).
+        // CalciteRelNodeVisitor.visitRegex enforces SqlTypeFamily.CHARACTER on the field —
+                );
+ *   <li>{@code eval m = regexp_match(field, pat)} — emits a project-side  
+    private static boolean dataProvisioned = false;  
+        @SuppressWarnings("unchecked")
+        }
+            String body;  
+    }  
+    }
+    }
+ * The OpenSearch Contributors require contributions made to  
+        // a numeric field must fail the preflight type check, not reach DataFusion.
+            row("FURNITURE", "CLOCKS")
+            9
+                + " | eval m = regexp_match(str0, '.*') | where m=true | fields str0",  
+    }
+        }  
+ *
+        assertRowCount(
+        );
 }
+    @Override  
+        List<List<Object>> actualRows = (List<List<Object>>) response.get("datarows");  
+    public void testRegexCharacterClass() throws IOException {
+import java.util.Map;
+    public void testRegexContainsSubstring() throws IOException {  
+    public void testRegexpMatchInEvalAllTrue() throws IOException {
+            );
+            fail("Expected query to fail with [" + expectedSubstring + "] but got response: " + response);
+            row("FURNITURE", "CLAMP ON LAMPS"),
+        @SuppressWarnings("unchecked")
+                    got.get(j)  
+        List<List<Object>> actualRows = (List<List<Object>>) response.get("datarows");
+ * <p>Mirrors {@code CalciteRegexCommandIT} from the {@code opensearch-project/sql} repository so
+                    want.get(j),
+    private static List<Object> row(Object... values) {
+    private final void assertRows(String ppl, List<Object>... expected) throws IOException {  
+        if (dataProvisioned == false) {
+    public void testRegexAnchoredStart() throws IOException {
+        Map<String, Object> response = executePpl(ppl);  
+            List<Object> got = actualRows.get(i);
+        }  
+            "source=" + DATASET.indexName
+            "Regex command requires field of string type"
+        // regexp_match selects rows whose str0 contains 'TECH' — TECHNOLOGY ×9.  
+            List<Object> want = expected[i];
+        for (int i = 0; i < expected.length; i++) {  
+     * Send a PPL query expecting the planner to reject it; assert the error body contains
+ * the SQL plugin. Each test sends a PPL query through {@code POST /_plugins/_ppl} (exposed by the
+    public void testRegexpMatchInEvalSelective() throws IOException {
+        assertRowCount("source=" + DATASET.indexName + " | regex str0='FURNITURE' | fields str0", 2);  
+        assertEquals("Row count mismatch for query: " + ppl, expected.length, actualRows.size());
+    /**
+            assertTrue(  
+ * this file be licensed under the Apache-2.0 license or a
+     */  
+    }
+    }
+        );  
+    @SafeVarargs
+        assertRows(
+    public void testRegexAnchoredEnd() throws IOException {
+ * {@code opensearch-sql} plugin), which runs the same {@code UnifiedQueryPlanner} →
+            Map<String, Object> response = executePpl(ppl);  
+    private void assertErrorContains(String ppl, String expectedSubstring) {
+        // 17 total rows, 2 are FURNITURE → 15 pass when negated.
+        // ^TECH anchors to start: only TECHNOLOGY (×9), not strings containing TECH elsewhere.  
+    // ── command form: full row content check ────────────────────────────────────
+        );
+    }  
+        // round-trips through Substrait → DataFusion as a project-side BOOLEAN expression.
+    private static final Dataset DATASET = new Dataset("calcs", "calcs");
+            "source=" + DATASET.indexName + " | regex num0='1.*'",
+    /**
+                body.contains(expectedSubstring)
+        assertRows(
+            );  
+        assertRowCount("source=" + DATASET.indexName + " | regex str1='BINDING' | fields str1", 2);
+            17
+    // ── command form: negated match ─────────────────────────────────────────────
+            try {
+        Map<String, Object> response = executePpl(ppl);
+                    "Cell mismatch at row " + i + ", col " + j + " for query: " + ppl,
+        assertRowCount("source=" + DATASET.indexName + " | regex str0!='^OFFICE' | fields str0", 11);
+        // OGY$ anchors to end: TECHNOLOGY (×9).
+     */  
+        // REGEXP_CONTAINS — pattern matches anywhere in the field, not anchored.
+     * Send a PPL query and assert the response's {@code rows} count matches {@code expectedCount}.
+                "Expected response body to contain [" + expectedSubstring + "] but was: " + body,
+ * </ul>
+        );  
+    public void testRegexOnNumericFieldErrors() {  
+            "source=" + DATASET.indexName + " | regex str0='FURNITURE' | fields str0, str1 | sort str1",  
+ * Self-contained integration test for the PPL {@code regex} command and {@code regexp_match()}
+        assertRowCount(
+     * Send a PPL query and assert each returned row equals the expected positional row.
+            for (int j = 0; j < want.size(); j++) {
+    }
+        // [BC]INDING matches BINDING (BINDING MACHINES, BINDING SUPPLIES) but not BUSINESS.  
+        assertNotNull("Response missing 'datarows' field for query: " + ppl, actualRows);  
+     * many rows whose ordering would be brittle to assert exhaustively).  
+                "Column count mismatch at row " + i + " for query: " + ppl,

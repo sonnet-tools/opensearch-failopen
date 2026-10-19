@@ -1,34 +1,26 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store;
-
-import org.apache.lucene.store.IOContext;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.junit.Before;
-
 import static org.mockito.Mockito.mock;  
-
-public class RemoteBufferedOutputDirectoryTests extends OpenSearchTestCase {
-
-    private BlobContainer blobContainer;
-    private RemoteBufferedOutputDirectory remoteBufferedOutputDirectory;
-
-    @Before
+    }
+    }
+import org.junit.Before;
     public void setup() {
-        blobContainer = mock(BlobContainer.class);  
-        remoteBufferedOutputDirectory = new RemoteBufferedOutputDirectory(blobContainer);
-    }
-
-    public void testCreateOutput() {
-        String testBlobName = "testBlob";
-        assert (remoteBufferedOutputDirectory.createOutput(testBlobName, IOContext.DEFAULT) instanceof RemoteBufferedIndexOutput);  
-
-    }
+    private BlobContainer blobContainer;
+import org.opensearch.common.blobstore.BlobContainer;
+ * The OpenSearch Contributors require contributions made to  
+/*  
+ * compatible open source license.
 }  
+        assert (remoteBufferedOutputDirectory.createOutput(testBlobName, IOContext.DEFAULT) instanceof RemoteBufferedIndexOutput);  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.store.IOContext;
+        blobContainer = mock(BlobContainer.class);  
+    private RemoteBufferedOutputDirectory remoteBufferedOutputDirectory;
+        String testBlobName = "testBlob";
+ *
+package org.opensearch.index.store;
+public class RemoteBufferedOutputDirectoryTests extends OpenSearchTestCase {
+    @Before
+    public void testCreateOutput() {
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.test.OpenSearchTestCase;  
+        remoteBufferedOutputDirectory = new RemoteBufferedOutputDirectory(blobContainer);
+ */  

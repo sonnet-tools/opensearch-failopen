@@ -1,34 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.index.engine.dataformat.merge;
-
+public class MergeFailedEngineExceptionTests extends OpenSearchTestCase {
+ *
 import org.opensearch.OpenSearchException;
-import org.opensearch.core.index.Index;
+        assertEquals(shardId, exception.getShardId());  
+ * compatible open source license.
+        assertTrue(exception.getMessage().contains("Merge failed"));
+        IOException cause = new IOException("disk full");  
+/*  
+}  
+ */
 import org.opensearch.core.index.shard.ShardId;  
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
+package org.opensearch.index.engine.dataformat.merge;
 /**
- * Tests for {@link MergeFailedEngineException}.  
- */
-public class MergeFailedEngineExceptionTests extends OpenSearchTestCase {
-
-    public void testExceptionMessageAndCause() {
-        ShardId shardId = new ShardId(new Index("test-index", "uuid"), 0);
-        IOException cause = new IOException("disk full");  
-
+import org.opensearch.core.index.Index;
         MergeFailedEngineException exception = new MergeFailedEngineException(shardId, cause);
-
-        assertSame(cause, exception.getCause());
-        assertTrue(exception.getMessage().contains("Merge failed"));
-        assertEquals(shardId, exception.getShardId());  
-        assertTrue(exception instanceof OpenSearchException);
+ * SPDX-License-Identifier: Apache-2.0
     }
-}  
+ * The OpenSearch Contributors require contributions made to  
+        assertTrue(exception instanceof OpenSearchException);
+ * Tests for {@link MergeFailedEngineException}.  
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;  
+        assertSame(cause, exception.getCause());
+        ShardId shardId = new ShardId(new Index("test-index", "uuid"), 0);
+    public void testExceptionMessageAndCause() {

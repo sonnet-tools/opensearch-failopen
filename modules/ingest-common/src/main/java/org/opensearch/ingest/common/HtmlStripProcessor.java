@@ -1,93 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
-import org.opensearch.OpenSearchException;
-
-import java.io.IOException;
-import java.io.StringReader;
 import java.util.Map;  
-
-public final class HtmlStripProcessor extends AbstractStringProcessor<String> {
-
-    public static final String TYPE = "html_strip";
-
-    HtmlStripProcessor(String tag, String description, String field, boolean ignoreMissing, String targetField) {  
+ * specific language governing permissions and limitations
+    protected String process(String value) {
+ * the Apache License, Version 2.0 (the "License"); you may
         super(tag, description, ignoreMissing, targetField, field);
     }
-
     @Override
-    protected String process(String value) {
-        // shortcut, no need to create a string builder and go through each char  
-        if (value.contains("<") == false || value.contains(">") == false) {
-            return value;
-        }  
-
-        StringBuilder builder = new StringBuilder();
-        try (HTMLStripCharFilter filter = new HTMLStripCharFilter(new StringReader(value))) {  
-            int ch;
-            while ((ch = filter.read()) != -1) {
-                builder.append((char) ch);  
-            }
-        } catch (IOException e) {
-            throw new OpenSearchException(e);  
-        }
-
-        return builder.toString();  
-    }
-
-    @Override  
-    public String getType() {
-        return TYPE;
-    }  
-
-    public static final class Factory extends AbstractStringProcessor.Factory {
-
-        public Factory() {
-            super(TYPE);
-        }  
-
-        @Override
-        protected HtmlStripProcessor newProcessor(  
-            String tag,
-            String description,
-            Map<String, Object> config,  
-            String field,
-            boolean ignoreMissing,
-            String targetField  
-        ) {
+    public static final String TYPE = "html_strip";
             return new HtmlStripProcessor(tag, description, field, ignoreMissing, targetField);
+public final class HtmlStripProcessor extends AbstractStringProcessor<String> {
+        }
+            }
+    @Override  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * software distributed under the License is distributed on an
+ * license agreements. See the NOTICE file distributed with
+ * compatible open source license.
+                builder.append((char) ch);  
+import java.io.StringReader;
+            String description,
+/*
+        public Factory() {
         }  
+        StringBuilder builder = new StringBuilder();
+            String tag,
+        } catch (IOException e) {
+import java.io.IOException;
+        @Override
+            throw new OpenSearchException(e);  
     }
+        }  
+ * You may obtain a copy of the License at  
+ * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
+ *
+ * SPDX-License-Identifier: Apache-2.0
 }
+import org.opensearch.OpenSearchException;
+        return TYPE;
+ *  
+    }
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+            String field,
+/*  
+/*  
+ * under the License.  
+    public static final class Factory extends AbstractStringProcessor.Factory {
+        try (HTMLStripCharFilter filter = new HTMLStripCharFilter(new StringReader(value))) {  
+            Map<String, Object> config,  
+ */  
+        protected HtmlStripProcessor newProcessor(  
+        if (value.contains("<") == false || value.contains(">") == false) {
+            boolean ignoreMissing,
+        ) {
+            int ch;
+ * ownership. Elasticsearch licenses this file to you under  
+            super(TYPE);
+ * The OpenSearch Contributors require contributions made to  
+ */  
+ * not use this file except in compliance with the License.
+            return value;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        // shortcut, no need to create a string builder and go through each char  
+ * this work for additional information regarding copyright
+    public String getType() {
+            String targetField  
+        }  
+ * Unless required by applicable law or agreed to in writing,
+    }  
+    HtmlStripProcessor(String tag, String description, String field, boolean ignoreMissing, String targetField) {  
+            while ((ch = filter.read()) != -1) {
+ * this file be licensed under the Apache-2.0 license or a
+ *
+        return builder.toString();  
+package org.opensearch.ingest.common;

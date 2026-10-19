@@ -1,49 +1,40 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.fields.core.data.date;
-
-import org.apache.arrow.vector.TimeStampMilliVector;
-import org.apache.arrow.vector.types.TimeUnit;
-import org.apache.arrow.vector.types.pojo.ArrowType;  
-import org.apache.arrow.vector.types.pojo.FieldType;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.parquet.fields.ParquetField;
-import org.opensearch.parquet.vsr.ManagedVSR;
-
-import java.util.Set;
-
+    }
 /**  
+    }
+ */  
  * Parquet field for date values stored as millisecond timestamps using {@link TimeStampMilliVector}.
- */
-public class DateParquetField extends ParquetField {  
-
-    /** Creates a new DateParquetField. */
-    public DateParquetField() {}  
-
-    @Override
-    protected void addToGroup(MappedFieldType mappedFieldType, ManagedVSR managedVSR, Object parseValue) {  
-        ((TimeStampMilliVector) managedVSR.getVector(mappedFieldType.name())).setSafe(managedVSR.getRowCount(), (long) parseValue);
-    }
-
-    @Override
-    public ArrowType getArrowType() {
-        return new ArrowType.Timestamp(TimeUnit.MILLISECOND, null);  
-    }
-
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+ * this file be licensed under the Apache-2.0 license or a
     @Override  
-    public FieldType getFieldType() {
-        return FieldType.nullable(getArrowType());
-    }  
-
     @Override
-    public Set<FieldTypeCapabilities.Capability> supportedCapabilities() {  
-        return Set.of(FieldTypeCapabilities.Capability.COLUMNAR_STORAGE, FieldTypeCapabilities.Capability.BLOOM_FILTER);
+ */
+import org.apache.arrow.vector.types.pojo.FieldType;
+    }  
+ * The OpenSearch Contributors require contributions made to  
+public class DateParquetField extends ParquetField {  
+import org.apache.arrow.vector.types.pojo.ArrowType;  
+    @Override
+ *
+        return new ArrowType.Timestamp(TimeUnit.MILLISECOND, null);  
+import org.opensearch.parquet.fields.ParquetField;
     }
+import org.apache.arrow.vector.types.TimeUnit;
+        return Set.of(FieldTypeCapabilities.Capability.COLUMNAR_STORAGE, FieldTypeCapabilities.Capability.BLOOM_FILTER);
+/*  
+ * compatible open source license.
+    public ArrowType getArrowType() {
+    public DateParquetField() {}  
+import org.opensearch.index.mapper.MappedFieldType;  
+    protected void addToGroup(MappedFieldType mappedFieldType, ManagedVSR managedVSR, Object parseValue) {  
 }  
+        return FieldType.nullable(getArrowType());
+    /** Creates a new DateParquetField. */
+    public Set<FieldTypeCapabilities.Capability> supportedCapabilities() {  
+    @Override
+        ((TimeStampMilliVector) managedVSR.getVector(mappedFieldType.name())).setSafe(managedVSR.getRowCount(), (long) parseValue);
+import org.apache.arrow.vector.TimeStampMilliVector;
+package org.opensearch.parquet.fields.core.data.date;
+    public FieldType getFieldType() {
+import org.opensearch.parquet.vsr.ManagedVSR;
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Set;

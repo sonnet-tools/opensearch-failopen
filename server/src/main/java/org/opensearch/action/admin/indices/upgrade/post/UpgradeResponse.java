@@ -1,102 +1,90 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.upgrade.post;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;  
-
-/**
- * A response for the upgrade action.  
- *
- * @opensearch.api
- */  
 @PublicApi(since = "1.0.0")
-public class UpgradeResponse extends BroadcastResponse {
-
-    private final Map<String, Tuple<Version, String>> versions;
-
-    UpgradeResponse(StreamInput in) throws IOException {  
-        super(in);
-        versions = in.readMap(StreamInput::readString, i -> Tuple.tuple(i.readVersion(), i.readString()));
-    }  
-
-    UpgradeResponse(
-        Map<String, Tuple<Version, String>> versions,  
-        int totalShards,
+ * Modifications Copyright OpenSearch Contributors. See
         int successfulShards,
-        int failedShards,  
-        List<DefaultShardOperationFailedException> shardFailures
-    ) {
-        super(totalShards, successfulShards, failedShards, shardFailures);  
-        this.versions = versions;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeMap(versions, StreamOutput::writeString, (o, v) -> {
-            o.writeVersion(v.v1());
-            o.writeString(v.v2());  
-        });
-    }
-
-    @Override
-    protected void addCustomXContentFields(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("upgraded_indices");  
-        for (Map.Entry<String, Tuple<Version, String>> entry : versions.entrySet()) {
-            builder.startObject(entry.getKey());
+/**
+ * this file be licensed under the Apache-2.0 license or a
+ * software distributed under the License is distributed on an
             builder.field("upgrade_version", entry.getValue().v1());  
-            builder.field("oldest_lucene_segment_version", entry.getValue().v2());
-            builder.endObject();
-        }  
-        builder.endObject();
-    }
-
-    /**
-     * Returns the highest upgrade version of the node that performed metadata upgrade and the
-     * the version of the oldest lucene segment for each index that was upgraded.  
-     */
-    public Map<String, Tuple<Version, String>> versions() {
-        return versions;  
+    UpgradeResponse(StreamInput in) throws IOException {  
+            builder.startObject(entry.getKey());
+import java.util.List;
+import org.opensearch.common.annotation.PublicApi;  
+ * GitHub history for details.
+        super(totalShards, successfulShards, failedShards, shardFailures);  
+package org.opensearch.action.admin.indices.upgrade.post;
+import org.opensearch.core.xcontent.XContentBuilder;
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
     }
 }
+ * license agreements. See the NOTICE file distributed with
+ *  
+        return versions;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        super.writeTo(out);  
+        out.writeMap(versions, StreamOutput::writeString, (o, v) -> {
+/*  
+        versions = in.readMap(StreamInput::readString, i -> Tuple.tuple(i.readVersion(), i.readString()));
+ */  
+ * under the License.  
+            builder.endObject();
+ * A response for the upgrade action.  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+ */
+        for (Map.Entry<String, Tuple<Version, String>> entry : versions.entrySet()) {
+ * ownership. Elasticsearch licenses this file to you under  
+ * @opensearch.api
+ * specific language governing permissions and limitations
+        super(in);
+ * not use this file except in compliance with the License.
+        int failedShards,  
+        builder.startObject("upgraded_indices");  
+        }  
+            builder.field("oldest_lucene_segment_version", entry.getValue().v2());
+        builder.endObject();
+ * You may obtain a copy of the License at  
+import java.io.IOException;
+            o.writeVersion(v.v1());
+ * KIND, either express or implied.  See the License for the
+        int totalShards,
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;  
+            o.writeString(v.v2());  
+        List<DefaultShardOperationFailedException> shardFailures
+    }
+        });
+     */
+    public Map<String, Tuple<Version, String>> versions() {
+ */  
+ *
+     * the version of the oldest lucene segment for each index that was upgraded.  
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+ * this work for additional information regarding copyright
+ */  
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+    }  
+ * compatible open source license.
+public class UpgradeResponse extends BroadcastResponse {
+import org.opensearch.Version;
+    }
+    }
+    protected void addCustomXContentFields(XContentBuilder builder, Params params) throws IOException {
+        Map<String, Tuple<Version, String>> versions,  
+     * Returns the highest upgrade version of the node that performed metadata upgrade and the
+    ) {
+import java.util.Map;  
+ * Unless required by applicable law or agreed to in writing,
+    public void writeTo(StreamOutput out) throws IOException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    UpgradeResponse(
+    /**
+        this.versions = versions;
+import org.opensearch.common.collect.Tuple;
+    private final Map<String, Tuple<Version, String>> versions;
+    @Override

@@ -1,52 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        return collector;
+package org.opensearch.search.aggregations;
+public class NonGlobalAggCollectorManagerWithSingleCollector extends AggregationCollectorManager {
+import org.opensearch.search.query.ReduceableSearchResult;
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        super(context, context.aggregations().factories()::createTopLevelNonGlobalAggregators, CollectorResult.REASON_AGGREGATION);
+    @Override  
+    }
+        return super.reduce(List.of(collector));
+    public String getCollectorName() {  
+    }  
+    public NonGlobalAggCollectorManagerWithSingleCollector(SearchContext context) throws IOException {  
+        assert collectors.isEmpty() : "Reduce on NonGlobalAggregationCollectorManagerWithCollector called with non-empty collectors";
+import java.io.IOException;
+/*  
+    private final Collector collector;  
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.search.CollectorManager;
  * compatible open source license.
  */  
-
-package org.opensearch.search.aggregations;
-
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.CollectorManager;
-import org.opensearch.search.internal.SearchContext;  
-import org.opensearch.search.profile.query.CollectorResult;
-import org.opensearch.search.query.ReduceableSearchResult;
-
-import java.io.IOException;
-import java.util.Collection;
 import java.util.List;  
-import java.util.Objects;
-
-/**  
- * {@link CollectorManager} to take care of non-global aggregation operators in case of non-concurrent segment search. This
- * CollectorManager returns the same collector instance (i.e. created in constructor of super class) on each newCollector call
  */  
-public class NonGlobalAggCollectorManagerWithSingleCollector extends AggregationCollectorManager {
-
-    private final Collector collector;  
-    private final String collectorName;
-
-    public NonGlobalAggCollectorManagerWithSingleCollector(SearchContext context) throws IOException {  
-        super(context, context.aggregations().factories()::createTopLevelNonGlobalAggregators, CollectorResult.REASON_AGGREGATION);
-        collector = Objects.requireNonNull(super.newCollector(), "collector instance is null");
-        collectorName = collector.toString();  
-    }
-
-    @Override  
-    public Collector newCollector() throws IOException {
-        return collector;
-    }  
-
-    @Override
-    public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {  
-        assert collectors.isEmpty() : "Reduce on NonGlobalAggregationCollectorManagerWithCollector called with non-empty collectors";
-        return super.reduce(List.of(collector));
-    }  
-
-    @Override
-    public String getCollectorName() {  
-        return collectorName;
-    }
 }  
+import org.opensearch.search.internal.SearchContext;  
+    public Collector newCollector() throws IOException {
+    }
+    @Override
+import java.util.Collection;
+ * {@link CollectorManager} to take care of non-global aggregation operators in case of non-concurrent segment search. This
+        return collectorName;
+        collector = Objects.requireNonNull(super.newCollector(), "collector instance is null");
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+        collectorName = collector.toString();  
+    }  
+ * CollectorManager returns the same collector instance (i.e. created in constructor of super class) on each newCollector call
+import org.apache.lucene.search.Collector;
+    private final String collectorName;
+import org.opensearch.search.profile.query.CollectorResult;
+/**  
+    public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {  
+import java.util.Objects;

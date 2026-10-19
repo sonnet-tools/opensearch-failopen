@@ -1,21 +1,18 @@
+    IndexShardSnapshotStatus getIndexShardSnapshotStatus();
+/**  
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ * Base interface for shard snapshot status
+public interface IndexShardSnapshot {  
+ */  
+package org.opensearch.index.snapshots.blobstore;
+import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
 /*  
- * SPDX-License-Identifier: Apache-2.0
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.snapshots.blobstore;
-
-import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
-
-/**  
- * Base interface for shard snapshot status
- *
  * @opensearch.internal  
- */
-@FunctionalInterface
-public interface IndexShardSnapshot {  
-    IndexShardSnapshotStatus getIndexShardSnapshotStatus();
 }
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+@FunctionalInterface

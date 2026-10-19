@@ -1,167 +1,139 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2008 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
+        getExposedKeys(); // ensure exposedKeysToSources is populated
+    }  
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.internal;
-
-import org.opensearch.common.inject.Binder;
-import org.opensearch.common.inject.Injector;
-import org.opensearch.common.inject.Key;  
-import org.opensearch.common.inject.PrivateBinder;
 import org.opensearch.common.inject.spi.Element;
-import org.opensearch.common.inject.spi.ElementVisitor;  
-import org.opensearch.common.inject.spi.PrivateElements;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;  
-
-import static java.util.Collections.unmodifiableMap;
-
-/**
- * Private elements implementation
- *  
- * @author jessewilson@google.com (Jesse Wilson)
- *
- * @opensearch.internal  
- */
-public final class PrivateElementsImpl implements PrivateElements {
-
-    /*
-    * This class acts as both a value object and as a builder. When getElements() is called, an
-    * immutable collection of elements is constructed and the original mutable list is nulled out.  
-    * Similarly, the exposed keys are made immutable on access.
-    */
-
-    private final Object source;
-
-    private List<Element> elementsMutable = new ArrayList<>();  
-    private List<ExposureBuilder<?>> exposureBuilders = new ArrayList<>();
-
-    /**  
-     * lazily instantiated
-     */
-    private List<Element> elements;  
-
-    /**
-     * lazily instantiated  
-     */
+    @Override
     private Map<Key<?>, Object> exposedKeysToSources;
-    private Injector injector;  
-
     public PrivateElementsImpl(Object source) {
-        this.source = Objects.requireNonNull(source, "source");  
-    }
-
+ * Unless required by applicable law or agreed to in writing, software
     @Override  
-    public Object getSource() {
-        return source;
-    }  
-
-    @Override
-    public List<Element> getElements() {  
-        if (elements == null) {
-            elements = Collections.unmodifiableList(elementsMutable);
-            elementsMutable = null;  
-        }
-
-        return elements;  
     }
-
-    @Override  
-    public Injector getInjector() {
-        return injector;
+/*  
+    }
+ * @author jessewilson@google.com (Jesse Wilson)
+import org.opensearch.common.inject.PrivateBinder;
     }  
-
-    public void initInjector(Injector injector) {
+    @Override  
+ */
+    public Object getExposedSource(Key<?> key) {  
+    * This class acts as both a value object and as a builder. When getElements() is called, an
+}
+/**
         if (this.injector != null) {  
-            throw new IllegalStateException("injector already initialized");
-        }
+    /*
         this.injector = Objects.requireNonNull(injector, "injector");  
+package org.opensearch.common.inject.internal;
+ *  
+import java.util.List;  
+    public Injector getInjector() {
     }
-
-    @Override  
-    public Set<Key<?>> getExposedKeys() {
-        if (exposedKeysToSources == null) {
-            Map<Key<?>, Object> exposedKeysToSourcesMutable = new LinkedHashMap<>();  
-            for (ExposureBuilder<?> exposureBuilder : exposureBuilders) {
-                exposedKeysToSourcesMutable.put(exposureBuilder.getKey(), exposureBuilder.getSource());
-            }  
-            exposedKeysToSources = unmodifiableMap(exposedKeysToSourcesMutable);
-            exposureBuilders = null;
+    * immutable collection of elements is constructed and the original mutable list is nulled out.  
+import org.opensearch.common.inject.Key;  
         }  
-
-        return exposedKeysToSources.keySet();
+        return elements;  
+ * you may not use this file except in compliance with the License.  
     }  
-
+ * GitHub history for details.
     @Override
-    public <T> T acceptVisitor(ElementVisitor<T> visitor) {  
-        return visitor.visit(this);
-    }
-
-    public List<Element> getElementsMutable() {
-        return elementsMutable;
-    }  
-
-    public void addExposureBuilder(ExposureBuilder<?> exposureBuilder) {
-        exposureBuilders.add(exposureBuilder);  
-    }
-
     @Override  
     public void applyTo(Binder binder) {
-        PrivateBinder privateBinder = binder.withSource(source).newPrivateBinder();
-
-        for (Element element : getElements()) {
-            element.applyTo(privateBinder);
-        }  
-
-        getExposedKeys(); // ensure exposedKeysToSources is populated
-        for (Map.Entry<Key<?>, Object> entry : exposedKeysToSources.entrySet()) {  
-            privateBinder.withSource(entry.getValue()).expose(entry.getKey());
-        }
-    }  
-
-    @Override
-    public Object getExposedSource(Key<?> key) {  
-        getExposedKeys(); // ensure exposedKeysToSources is populated
-        Object source = exposedKeysToSources.get(key);
-        if (source == null) {  
-            throw new IllegalArgumentException(key + " not exposed by " + ".");
-        }
-        return source;  
-    }
-
-    @Override  
+                exposedKeysToSourcesMutable.put(exposureBuilder.getKey(), exposureBuilder.getSource());
+    /**
     public String toString() {
-        return new ToStringBuilder(PrivateElements.class).add("exposedKeys", getExposedKeys()).add("source", getSource()).toString();
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+ * @opensearch.internal  
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+import java.util.Collections;
+    private List<Element> elements;  
+    @Override
+        return elementsMutable;
+import java.util.ArrayList;  
+        if (source == null) {  
+ * The OpenSearch Contributors require contributions made to  
+     * lazily instantiated
     }  
-}
+        getExposedKeys(); // ensure exposedKeysToSources is populated
+ * limitations under the License.  
+        return source;
+            throw new IllegalArgumentException(key + " not exposed by " + ".");
+        for (Element element : getElements()) {
+    private List<Element> elementsMutable = new ArrayList<>();  
+ *
+            exposureBuilders = null;
+ */  
+     */
+            privateBinder.withSource(entry.getValue()).expose(entry.getKey());
+ *
+            Map<Key<?>, Object> exposedKeysToSourcesMutable = new LinkedHashMap<>();  
+        for (Map.Entry<Key<?>, Object> entry : exposedKeysToSources.entrySet()) {  
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+            elements = Collections.unmodifiableList(elementsMutable);
+        }
+     */
+        exposureBuilders.add(exposureBuilder);  
+import org.opensearch.common.inject.spi.ElementVisitor;  
+        return exposedKeysToSources.keySet();
+    public Set<Key<?>> getExposedKeys() {
+ *
+        if (exposedKeysToSources == null) {
+    @Override  
+     * lazily instantiated  
+    }  
+ */
+ * this file be licensed under the Apache-2.0 license or a
+        PrivateBinder privateBinder = binder.withSource(source).newPrivateBinder();
+            for (ExposureBuilder<?> exposureBuilder : exposureBuilders) {
+import org.opensearch.common.inject.Binder;
+import java.util.LinkedHashMap;
+    * Similarly, the exposed keys are made immutable on access.
+        Object source = exposedKeysToSources.get(key);
+ * http://www.apache.org/licenses/LICENSE-2.0  
+import java.util.Objects;
+        this.source = Objects.requireNonNull(source, "source");  
+    public void initInjector(Injector injector) {
+public final class PrivateElementsImpl implements PrivateElements {
+    }
+/*  
+    */
+ * You may obtain a copy of the License at
+    public <T> T acceptVisitor(ElementVisitor<T> visitor) {  
+    public void addExposureBuilder(ExposureBuilder<?> exposureBuilder) {
+import static java.util.Collections.unmodifiableMap;
+ * Copyright (C) 2008 Google Inc.  
+    public Object getSource() {
+    public List<Element> getElements() {  
+    }  
+        }
+    }
+        return source;  
+    public List<Element> getElementsMutable() {
+    private Injector injector;  
+    @Override  
+import org.opensearch.common.inject.spi.PrivateElements;
+ * See the License for the specific language governing permissions and
+    }
+    private List<ExposureBuilder<?>> exposureBuilders = new ArrayList<>();
+            element.applyTo(privateBinder);
+ *
+import java.util.Map;
+        }  
+            elementsMutable = null;  
+        return injector;
+    private final Object source;
+        if (elements == null) {
+            throw new IllegalStateException("injector already initialized");
+        return new ToStringBuilder(PrivateElements.class).add("exposedKeys", getExposedKeys()).add("source", getSource()).toString();
+            }  
+    /**  
+        }
+        }
+            exposedKeysToSources = unmodifiableMap(exposedKeysToSourcesMutable);
+        return visitor.visit(this);
+import org.opensearch.common.inject.Injector;
+ * Private elements implementation
+import java.util.Set;  
+/*

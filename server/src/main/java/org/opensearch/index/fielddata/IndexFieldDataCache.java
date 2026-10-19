@@ -1,109 +1,92 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fielddata;
-
-import org.apache.lucene.index.DirectoryReader;
+            throws Exception {
+    }
+         */  
+public interface IndexFieldDataCache {
+        }
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.util.Accountable;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.index.shard.ShardId;
-
-/**
- * A simple field data cache abstraction on the *index* level.
+/*
+ * not use this file except in compliance with the License.
+     */
+    <FD extends LeafFieldData, IFD extends IndexFieldData<FD>> FD load(LeafReaderContext context, IFD indexFieldData) throws Exception;  
  *  
+ * under the License.  
+     * @opensearch.api  
+ * this work for additional information regarding copyright
+ * GitHub history for details.
+/**
+    /**  
+ * license agreements. See the NOTICE file distributed with
+        default void onRemoval(ShardId shardId, String fieldName, boolean wasEvicted, long sizeInBytes) {}
+ * A simple field data cache abstraction on the *index* level.
+         * Called after the fielddata is unloaded
+import org.apache.lucene.index.DirectoryReader;
+ * SPDX-License-Identifier: Apache-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        public void clear() {}
+     * @opensearch.internal
+            return (IFD) indexFieldData.loadGlobalDirect(indexReader);  
+ * ownership. Elasticsearch licenses this file to you under  
+    @PublicApi(since = "1.0.0")
+    /**
+     */
+    /**
+        /**
+ * Unless required by applicable law or agreed to in writing,
+        public void clear(String fieldName) {}
+        default void onCache(ShardId shardId, String fieldName, Accountable ramUsage) {}
+ */  
+ * specific language governing permissions and limitations
+ * compatible open source license.
+/*  
+     */  
+        @SuppressWarnings("unchecked")  
+        @Override  
+    /**
+ * software distributed under the License is distributed on an
+        @Override
+ */
  * @opensearch.api
  */
-@PublicApi(since = "1.0.0")  
-public interface IndexFieldDataCache {
-
-    <FD extends LeafFieldData, IFD extends IndexFieldData<FD>> FD load(LeafReaderContext context, IFD indexFieldData) throws Exception;  
-
-    <FD extends LeafFieldData, IFD extends IndexFieldData.Global<FD>> IFD load(DirectoryReader indexReader, IFD indexFieldData)
-        throws Exception;  
-
-    /**
      * Clears all the field data stored cached in on this index.  
-     */
-    void clear();
-
-    /**
-     * Clears all the field data stored cached in on this index for the specified field name.
-     */  
-    void clear(String fieldName);
-
-    /**  
-     * The listener interface
+            throws Exception {
+ * You may obtain a copy of the License at  
      *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "1.0.0")
-    interface Listener {  
-
-        /**
-         * Called after the fielddata is loaded during the cache phase  
-         */
-        default void onCache(ShardId shardId, String fieldName, Accountable ramUsage) {}
-
-        /**
-         * Called after the fielddata is unloaded
-         */  
-        default void onRemoval(ShardId shardId, String fieldName, boolean wasEvicted, long sizeInBytes) {}
-    }
-
-    /**
-     * No index field data cache
-     *  
-     * @opensearch.internal
-     */
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+            return indexFieldData.loadDirect(context);
+import org.opensearch.core.index.shard.ShardId;
     class None implements IndexFieldDataCache {  
-
+ * Modifications Copyright OpenSearch Contributors. See
+    void clear(String fieldName);
+ *
+package org.opensearch.index.fielddata;
+     * Clears all the field data stored cached in on this index for the specified field name.
+        public <FD extends LeafFieldData, IFD extends IndexFieldData.Global<FD>> IFD load(DirectoryReader indexReader, IFD indexFieldData)
+         * Called after the fielddata is loaded during the cache phase  
+/*  
+     *  
+ * the Apache License, Version 2.0 (the "License"); you may
+        /**
+ * this file be licensed under the Apache-2.0 license or a
+    void clear();
+    <FD extends LeafFieldData, IFD extends IndexFieldData.Global<FD>> IFD load(DirectoryReader indexReader, IFD indexFieldData)
+@PublicApi(since = "1.0.0")  
+     * No index field data cache
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+    interface Listener {  
+}  
+        @Override  
+ * KIND, either express or implied.  See the License for the
+ * The OpenSearch Contributors require contributions made to  
         @Override
         public <FD extends LeafFieldData, IFD extends IndexFieldData<FD>> FD load(LeafReaderContext context, IFD indexFieldData)  
-            throws Exception {
-            return indexFieldData.loadDirect(context);
-        }  
-
-        @Override
-        @SuppressWarnings("unchecked")  
-        public <FD extends LeafFieldData, IFD extends IndexFieldData.Global<FD>> IFD load(DirectoryReader indexReader, IFD indexFieldData)
-            throws Exception {
-            return (IFD) indexFieldData.loadGlobalDirect(indexReader);  
-        }
-
-        @Override  
-        public void clear() {}
-
-        @Override  
-        public void clear(String fieldName) {}
-    }
-}  
+        throws Exception;  
+ *
+ */  
+import org.apache.lucene.util.Accountable;  
+     * The listener interface
+import org.opensearch.common.annotation.PublicApi;
+     */
+         */

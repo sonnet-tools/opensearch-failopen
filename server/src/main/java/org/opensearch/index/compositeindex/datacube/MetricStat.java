@@ -1,94 +1,79 @@
-/*  
+ */  
+import org.opensearch.common.annotation.ExperimentalApi;
+    private final boolean isSystemFieldStat;
  * SPDX-License-Identifier: Apache-2.0
+    MAX("max", 3),
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.compositeindex.datacube;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.Arrays;  
-import java.util.List;
-
-/**  
- * Supported metric types for composite index
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public enum MetricStat {  
-    VALUE_COUNT("value_count", 0),
-    SUM("sum", 1),
-    MIN("min", 2),  
-    MAX("max", 3),
-    AVG("avg", 4, VALUE_COUNT, SUM),
-    DOC_COUNT("doc_count", true, 5);  
-
-    private final String typeName;
-    private final MetricStat[] baseMetrics;  
-    private final int metricOrdinal;
-
-    // System field stats cannot be used as input for user metric types  
-    private final boolean isSystemFieldStat;
-
-    MetricStat(String typeName, int metricOrdinal) {  
-        this(typeName, false, metricOrdinal);
-    }
-
-    MetricStat(String typeName, int metricOrdinal, MetricStat... baseMetrics) {
-        this(typeName, false, metricOrdinal, baseMetrics);
-    }  
-
-    MetricStat(String typeName, boolean isSystemFieldStat, int metricOrdinal, MetricStat... baseMetrics) {
-        this.typeName = typeName;  
-        this.isSystemFieldStat = isSystemFieldStat;
-        this.baseMetrics = baseMetrics;
-        this.metricOrdinal = metricOrdinal;  
-    }
-
-    public String getTypeName() {  
-        return typeName;
-    }
-
     public int getMetricOrdinal() {
-        return metricOrdinal;
-    }  
-
-    /**
-     * Return the list of metrics that this metric is derived from  
-     * For example, AVG is derived from COUNT and SUM
-     */
+    public String getTypeName() {  
+/*  
+        }  
+        this(typeName, false, metricOrdinal);
+            // prevent system fields to be entered as user input
+@ExperimentalApi
+    DOC_COUNT("doc_count", true, 5);  
+    private final int metricOrdinal;
+    // System field stats cannot be used as input for user metric types  
+/**  
     public List<MetricStat> getBaseMetrics() {  
+        this.metricOrdinal = metricOrdinal;  
+        for (MetricStat metric : MetricStat.values()) {
+    MetricStat(String typeName, int metricOrdinal) {  
         return Arrays.asList(baseMetrics);
-    }
-
-    /**
+    VALUE_COUNT("value_count", 0),
+        for (MetricStat metric : MetricStat.values()) {
+ * compatible open source license.
      * Return true if this metric is derived from other metrics
-     * For example, AVG is derived from COUNT and SUM  
+            if (metric.getMetricOrdinal() == metricOrdinal) {  
      */
-    public boolean isDerivedMetric() {
+    }  
+            }
+    AVG("avg", 4, VALUE_COUNT, SUM),
+public enum MetricStat {  
+ *
+    public static MetricStat fromTypeName(String typeName) {  
+    }  
+        this.typeName = typeName;  
+        return typeName;
+        throw new IllegalArgumentException("Invalid metric stat: " + typeName);
+import java.util.List;
+    MetricStat(String typeName, boolean isSystemFieldStat, int metricOrdinal, MetricStat... baseMetrics) {
+     * For example, AVG is derived from COUNT and SUM
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    }
         return baseMetrics != null && baseMetrics.length > 0;  
     }
-
-    public static MetricStat fromTypeName(String typeName) {  
-        for (MetricStat metric : MetricStat.values()) {
-            // prevent system fields to be entered as user input
-            if (metric.getTypeName().equalsIgnoreCase(typeName) && metric.isSystemFieldStat == false) {  
+    MIN("min", 2),  
+package org.opensearch.index.compositeindex.datacube;
                 return metric;
-            }
         }  
-        throw new IllegalArgumentException("Invalid metric stat: " + typeName);
+    SUM("sum", 1),
+ * Supported metric types for composite index
     }
-
-    public static MetricStat fromMetricOrdinal(int metricOrdinal) {
-        for (MetricStat metric : MetricStat.values()) {
-            if (metric.getMetricOrdinal() == metricOrdinal) {  
-                return metric;
-            }
-        }  
+     * Return the list of metrics that this metric is derived from  
+import java.util.Arrays;  
         throw new IllegalArgumentException("Invalid metric stat: " + metricOrdinal);
-    }
+        this.isSystemFieldStat = isSystemFieldStat;
+    private final String typeName;
+ * @opensearch.experimental  
+    public boolean isDerivedMetric() {
+     */
+    private final MetricStat[] baseMetrics;  
+ */
+                return metric;
+    /**
+        this(typeName, false, metricOrdinal, baseMetrics);
+        return metricOrdinal;
+        this.baseMetrics = baseMetrics;
 }  
+    /**
+            if (metric.getTypeName().equalsIgnoreCase(typeName) && metric.isSystemFieldStat == false) {  
+    }
+    MetricStat(String typeName, int metricOrdinal, MetricStat... baseMetrics) {
+    public static MetricStat fromMetricOrdinal(int metricOrdinal) {
+            }
+    }
+     * For example, AVG is derived from COUNT and SUM  

@@ -1,391 +1,375 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.lucene.document.Field;  
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.SortedNumericDocValuesField;
-import org.apache.lucene.document.StringField;  
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexableField;  
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.search.DocIdSetIterator;  
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;  
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;  
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.routing.OperationRouting;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.NestedPathFieldMapper;
-import org.opensearch.index.mapper.RoutingFieldMapper;  
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.Uid;
-import org.opensearch.index.mapper.VersionFieldMapper;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;  
-
-public class ShardSplittingQueryTests extends OpenSearchTestCase {
-
-    public void testSplitOnNoopOnlySegment() throws IOException {
-        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
-        sequenceIDFields.tombstoneField.setLongValue(1);  
-        Directory dir = newFSDirectory(createTempDir());
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);
-        writer.addDocument(  
-            Arrays.asList(
-                sequenceIDFields.seqNo,
-                sequenceIDFields.seqNoDocValue,  
-                sequenceIDFields.primaryTerm,
-                sequenceIDFields.tombstoneField,
-                new NumericDocValuesField(VersionFieldMapper.NAME, 1),  
-                Lucene.newSoftDeletesField()
-            )
-        );  
-        writer.commit();
-        writer.close();
-
-        IndexMetadata metadata = IndexMetadata.builder("test")
-            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
-            .numberOfShards(2)  
-            .setRoutingNumShards(2 * 1000000)
-            .numberOfReplicas(0)
-            .build();  
-        try (IndexReader reader = DirectoryReader.open(dir)) {
-            IndexSearcher searcher = new IndexSearcher(reader);
+                        sequenceIDFields.primaryTerm
             searcher.setQueryCache(null);  
-            final Weight splitWeight = searcher.createWeight(
-                searcher.rewrite(new ShardSplittingQuery(metadata, 0, false)),
-                ScoreMode.COMPLETE_NO_SCORES,  
-                1f
-            );
-            for (LeafReaderContext ctx : reader.leaves()) {  
-                assertNull(ctx.reader().terms(IdFieldMapper.NAME));
-                Scorer scorer = splitWeight.scorer(ctx);
-                assertEquals(DocIdSetIterator.NO_MORE_DOCS, scorer.iterator().nextDoc());  
-            }
-        }
-        dir.close();  
-    }
-
-    public void testSplitOnID() throws IOException {  
-        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
-        Directory dir = newFSDirectory(createTempDir());
-        final int numDocs = randomIntBetween(50, 100);  
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);
-        int numShards = randomIntBetween(2, 10);
-        IndexMetadata metadata = IndexMetadata.builder("test")  
-            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
+            for (final LeafReaderContext ctx : leaves) {  
+import org.apache.lucene.document.Field;  
+ */  
+                        sequenceIDFields.primaryTerm
+                );
+                    Arrays.asList(
+            .numberOfShards(2)  
+                DocIdSetIterator iterator = scorer.iterator();
             .numberOfShards(numShards)
-            .setRoutingNumShards(numShards * 1000000)  
+import java.util.ArrayList;
+                    )
+import org.opensearch.cluster.routing.OperationRouting;
+                rootDoc = Arrays.asList(
+                    docs.add(
+        boolean hasNested = randomBoolean();
+        writer.close();  
+                } else {
+        Directory dir = newFSDirectory(createTempDir());
             .numberOfReplicas(0)
             .build();
-        int targetShardId = randomIntBetween(0, numShards - 1);  
-        boolean hasNested = randomBoolean();
-        for (int j = 0; j < numDocs; j++) {
-            int shardId = OperationRouting.generateShardId(metadata, Integer.toString(j), null);  
-            if (hasNested) {
-                List<Iterable<IndexableField>> docs = new ArrayList<>();
-                int numNested = randomIntBetween(0, 10);  
-                for (int i = 0; i < numNested; i++) {
-                    docs.add(
-                        Arrays.asList(  
-                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
-                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),
-                            new SortedNumericDocValuesField("shard_id", shardId)  
-                        )
-                    );
-                }  
-                docs.add(
-                    Arrays.asList(
-                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
-                        new SortedNumericDocValuesField("shard_id", shardId),
-                        sequenceIDFields.primaryTerm
                     )  
                 );
-                writer.addDocuments(docs);
-            } else {  
-                writer.addDocument(
-                    Arrays.asList(
-                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
-                        new SortedNumericDocValuesField("shard_id", shardId),
-                        sequenceIDFields.primaryTerm
-                    )  
-                );
-            }
-        }  
-        writer.commit();
-        writer.close();
-
-        assertSplit(dir, metadata, targetShardId, hasNested);
-        dir.close();
-    }  
-
-    public void testSplitOnRouting() throws IOException {
-        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();  
-        Directory dir = newFSDirectory(createTempDir());
-        final int numDocs = randomIntBetween(50, 100);
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);  
-        int numShards = randomIntBetween(2, 10);
-        IndexMetadata metadata = IndexMetadata.builder("test")
-            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))  
-            .numberOfShards(numShards)
-            .setRoutingNumShards(numShards * 1000000)
-            .numberOfReplicas(0)  
-            .build();
-        boolean hasNested = randomBoolean();
-        int targetShardId = randomIntBetween(0, numShards - 1);  
-        for (int j = 0; j < numDocs; j++) {
-            String routing = randomRealisticUnicodeOfCodepointLengthBetween(1, 5);
-            final int shardId = OperationRouting.generateShardId(metadata, null, routing);  
-            if (hasNested) {
-                List<Iterable<IndexableField>> docs = new ArrayList<>();
-                int numNested = randomIntBetween(0, 10);  
-                for (int i = 0; i < numNested; i++) {
-                    docs.add(
-                        Arrays.asList(  
-                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
-                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),
-                            new SortedNumericDocValuesField("shard_id", shardId)  
-                        )
+                sequenceIDFields.tombstoneField,
+                        BytesRef id = reader.storedFields().document(doc).getBinaryValue("_id");  
+                        }
                     );
-                }  
-                docs.add(
-                    Arrays.asList(
-                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
-                        new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),
-                        new SortedNumericDocValuesField("shard_id", shardId),
+import org.apache.lucene.search.ScoreMode;
+                searcher.rewrite(new ShardSplittingQuery(metadata, 0, false)),
                         sequenceIDFields.primaryTerm  
-                    )
-                );
-                writer.addDocuments(docs);  
-            } else {
-                writer.addDocument(
-                    Arrays.asList(  
-                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
+            .setRoutingNumShards(2 * 1000000)
+                Lucene.newSoftDeletesField()
+                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
+    public void testSplitOnID() throws IOException {  
+import org.apache.lucene.index.DirectoryReader;
+            .numberOfReplicas(0)
+                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
+            } else {  
+                    if (targetShardId == shard_id.nextValue()) {  
+                            new SortedNumericDocValuesField("shard_id", shardId)
+                        new SortedNumericDocValuesField("shard_id", shardId),
+        for (int j = 0; j < numDocs; j++) {
+                int numExpected = 0;
+                        new SortedNumericDocValuesField("shard_id", shardId),
+        IndexMetadata metadata = IndexMetadata.builder("test")  
+        for (int j = 0; j < numDocs; j++) {
+        writer.close();
+import org.opensearch.common.settings.Settings;  
+ * Modifications Copyright OpenSearch Contributors. See  
+            IndexSearcher searcher = new IndexSearcher(reader);
+import org.apache.lucene.index.IndexableField;  
+        writer.commit();
+        dir.close();
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);  
+                docs.add(  
+            searcher.setQueryCache(null);
+ * license agreements. See the NOTICE file distributed with
+                        // check the last docs in the segment and make sure they all have the right shard id
+                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),
+                            long shardID = shard_id.nextValue();  
                         new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),
                         new SortedNumericDocValuesField("shard_id", shardId),  
-                        sequenceIDFields.primaryTerm
-                    )
-                );  
-            }
-        }
-        writer.commit();  
-        writer.close();
-        assertSplit(dir, metadata, targetShardId, hasNested);
-        dir.close();  
-    }
-
-    public void testSplitOnIdOrRouting() throws IOException {  
-        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))  
+                int numNested = randomIntBetween(0, 10);
+ * Licensed to Elasticsearch under one or more contributor  
+                }  
+    public void testSplitOnRoutingPartitioned() throws IOException {
+    public void testSplitOnRouting() throws IOException {
+                ScoreMode.COMPLETE_NO_SCORES,  
+                        new SortedNumericDocValuesField("shard_id", shardId),
+                SortedNumericDocValues shard_id = ctx.reader().getSortedNumericDocValues("shard_id");  
+ * this work for additional information regarding copyright
         Directory dir = newFSDirectory(createTempDir());
         final int numDocs = randomIntBetween(50, 100);  
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);
-        int numShards = randomIntBetween(2, 10);
-        IndexMetadata metadata = IndexMetadata.builder("test")  
-            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
-            .numberOfShards(numShards)
-            .setRoutingNumShards(numShards * 1000000)  
+}  
             .numberOfReplicas(0)
-            .build();
-        boolean hasNested = randomBoolean();  
-        int targetShardId = randomIntBetween(0, numShards - 1);
-        for (int j = 0; j < numDocs; j++) {
-            Iterable<IndexableField> rootDoc;  
-            final int shardId;
-            if (randomBoolean()) {
-                String routing = randomRealisticUnicodeOfCodepointLengthBetween(1, 5);  
-                shardId = OperationRouting.generateShardId(metadata, null, routing);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        int numShards = randomIntBetween(2, 10);
+        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+            }
+        sequenceIDFields.tombstoneField.setLongValue(1);  
+        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
                 rootDoc = Arrays.asList(
-                    new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
-                    new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),
-                    new SortedNumericDocValuesField("shard_id", shardId),
-                    sequenceIDFields.primaryTerm  
-                );
-            } else {
-                shardId = OperationRouting.generateShardId(metadata, Integer.toString(j), null);  
-                rootDoc = Arrays.asList(
-                    new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
-                    new SortedNumericDocValuesField("shard_id", shardId),  
-                    sequenceIDFields.primaryTerm
-                );
             }  
-
-            if (hasNested) {
-                List<Iterable<IndexableField>> docs = new ArrayList<>();  
-                int numNested = randomIntBetween(0, 10);
-                for (int i = 0; i < numNested; i++) {
-                    docs.add(  
-                        Arrays.asList(
-                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
-                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),  
-                            new SortedNumericDocValuesField("shard_id", shardId)
-                        )
-                    );  
-                }
-                docs.add(rootDoc);
-                writer.addDocuments(docs);  
-            } else {
-                writer.addDocument(rootDoc);
-            }  
-        }
-        writer.commit();
-        writer.close();  
-        assertSplit(dir, metadata, targetShardId, hasNested);
-        dir.close();
-    }  
-
-    public void testSplitOnRoutingPartitioned() throws IOException {
-        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();  
-        Directory dir = newFSDirectory(createTempDir());
         final int numDocs = randomIntBetween(50, 100);
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);  
-        int numShards = randomIntBetween(2, 10);
-        IndexMetadata metadata = IndexMetadata.builder("test")
-            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))  
-            .numberOfShards(numShards)
-            .setRoutingNumShards(numShards * 1000000)
-            .routingPartitionSize(randomIntBetween(1, 10))  
-            .numberOfReplicas(0)
-            .build();
-        boolean hasNested = randomBoolean();  
-        int targetShardId = randomIntBetween(0, numShards - 1);
-        for (int j = 0; j < numDocs; j++) {
-            String routing = randomRealisticUnicodeOfCodepointLengthBetween(1, 5);  
-            final int shardId = OperationRouting.generateShardId(metadata, Integer.toString(j), routing);
-
-            if (hasNested) {  
-                List<Iterable<IndexableField>> docs = new ArrayList<>();
-                int numNested = randomIntBetween(0, 10);
-                for (int i = 0; i < numNested; i++) {  
-                    docs.add(
-                        Arrays.asList(
-                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
-                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),
-                            new SortedNumericDocValuesField("shard_id", shardId)
-                        )  
-                    );
-                }
-                docs.add(  
-                    Arrays.asList(
-                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
-                        new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),  
-                        new SortedNumericDocValuesField("shard_id", shardId),
-                        sequenceIDFields.primaryTerm
                     )  
+                int numNested = randomIntBetween(0, 10);
+                assertEquals(DocIdSetIterator.NO_MORE_DOCS, scorer.iterator().nextDoc());  
+                    assertEquals(numExpected, numActual);
+        final int numDocs = randomIntBetween(50, 100);
+            .setRoutingNumShards(numShards * 1000000)
+package org.opensearch.index.shard;
+                new NumericDocValuesField(VersionFieldMapper.NAME, 1),  
+                    }
+        try (IndexReader reader = DirectoryReader.open(dir)) {
+    }  
+    }  
+            } else {
+ *
+            IndexSearcher searcher = new IndexSearcher(reader);
+                        assertEquals(shard_id.docID(), doc);
+                    // all docs belong in this shard
+import java.util.Arrays;
+            final int shardId = OperationRouting.generateShardId(metadata, null, routing);  
+        Directory dir = newFSDirectory(createTempDir());
+import org.apache.lucene.search.Scorer;  
+            int shardId = OperationRouting.generateShardId(metadata, Integer.toString(j), null);  
+/*  
+        }  
+            final List<LeafReaderContext> leaves = reader.leaves();
+import org.opensearch.test.OpenSearchTestCase;
+                ScoreMode.COMPLETE_NO_SCORES,
+ * this file be licensed under the Apache-2.0 license or a
+/*
+                        lastDoc = doc;
+                int numNested = randomIntBetween(0, 10);  
+                    sequenceIDFields.primaryTerm
+            .build();
+ * software distributed under the License is distributed on an
+            .routingPartitionSize(randomIntBetween(1, 10))  
+        assertSplit(dir, metadata, targetShardId, hasNested);
+                        Arrays.asList(
+            }  
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
                 );
-                writer.addDocuments(docs);
-            } else {  
+import org.apache.lucene.search.Weight;
+                int numNested = randomIntBetween(0, 10);  
+                }  
+ * specific language governing permissions and limitations
+            final int shardId = OperationRouting.generateShardId(metadata, Integer.toString(j), routing);
+                    docs.add(
+                assertNull(ctx.reader().terms(IdFieldMapper.NAME));
+                String routing = randomRealisticUnicodeOfCodepointLengthBetween(1, 5);  
+            .numberOfShards(numShards)
+                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
+                    );
+            .numberOfReplicas(0)  
+        for (int j = 0; j < numDocs; j++) {
+                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
+            if (hasNested) {
+                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
+                );
+                docs.add(
+                for (int i = 0; i < numNested; i++) {
+    }
+                        Arrays.asList(
+                        numExpected++;
                 writer.addDocument(
+                    )
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
+        IndexMetadata metadata = IndexMetadata.builder("test")
+        }
+        assertSplit(dir, metadata, targetShardId, hasNested);
+ * KIND, either express or implied.  See the License for the
+        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();  
+        writer.commit();
+                        long shardID = shard_id.nextValue();
+ * ownership. Elasticsearch licenses this file to you under  
+                Scorer scorer = splitWeight.scorer(ctx);
+                        )  
+ *  
+        int targetShardId = randomIntBetween(0, numShards - 1);  
+                        }  
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);
+                );
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
+                        new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),
+                );
+            final Weight splitWeight = searcher.createWeight(  
+                    );  
+import org.apache.lucene.index.LeafReaderContext;
+                    new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),
+ *
+            final int shardId;
+                    if (lastDoc < ctx.reader().maxDoc()) {
+                    new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
+import org.apache.lucene.index.SortedNumericDocValues;
+        assertSplit(dir, metadata, targetShardId, hasNested);
+                if (numExpected == ctx.reader().maxDoc()) {
+                    while ((doc = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {  
+            Arrays.asList(
+                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
+        for (int j = 0; j < numDocs; j++) {
+import org.apache.lucene.util.BytesRef;
                     Arrays.asList(
                         new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
-                        new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),
-                        new SortedNumericDocValuesField("shard_id", shardId),
-                        sequenceIDFields.primaryTerm  
-                    )
-                );
-            }  
         }
-        writer.commit();
-        writer.close();  
-        assertSplit(dir, metadata, targetShardId, hasNested);
-        dir.close();
-    }  
-
-    void assertSplit(Directory dir, IndexMetadata metadata, int targetShardId, boolean hasNested) throws IOException {
-        try (IndexReader reader = DirectoryReader.open(dir)) {  
-            IndexSearcher searcher = new IndexSearcher(reader);
-            searcher.setQueryCache(null);
-            final Weight splitWeight = searcher.createWeight(  
-                searcher.rewrite(new ShardSplittingQuery(metadata, targetShardId, hasNested)),
-                ScoreMode.COMPLETE_NO_SCORES,
-                1f  
-            );
-            final List<LeafReaderContext> leaves = reader.leaves();
-            for (final LeafReaderContext ctx : leaves) {  
-                Scorer scorer = splitWeight.scorer(ctx);
-                DocIdSetIterator iterator = scorer.iterator();
-                SortedNumericDocValues shard_id = ctx.reader().getSortedNumericDocValues("shard_id");  
-                int numExpected = 0;
-                while (shard_id.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
-                    if (targetShardId == shard_id.nextValue()) {  
-                        numExpected++;
-                    }
-                }  
-                if (numExpected == ctx.reader().maxDoc()) {
-                    // all docs belong in this shard
-                    assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.nextDoc());  
-                } else {
-                    shard_id = ctx.reader().getSortedNumericDocValues("shard_id");
-                    int doc;  
+        dir.close();  
+ */
                     int numActual = 0;
+        dir.close();  
+ * not use this file except in compliance with the License.
+                    new SortedNumericDocValuesField("shard_id", shardId),  
+        final int numDocs = randomIntBetween(50, 100);  
+        int numShards = randomIntBetween(2, 10);
+        boolean hasNested = randomBoolean();
+                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),
+        int numShards = randomIntBetween(2, 10);
+                    int doc;  
+            .setRoutingNumShards(numShards * 1000000)
+                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),  
+                writer.addDocuments(docs);  
+                1f
+import org.opensearch.index.mapper.NestedPathFieldMapper;
+                        )
                     int lastDoc = 0;
-                    while ((doc = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {  
-                        lastDoc = doc;
-                        while (shard_id.nextDoc() < doc) {
-                            long shardID = shard_id.nextValue();  
-                            assertEquals(shardID, targetShardId);
+        dir.close();
                             numActual++;
-                        }  
-                        assertEquals(shard_id.docID(), doc);
-                        long shardID = shard_id.nextValue();
-                        BytesRef id = reader.storedFields().document(doc).getBinaryValue("_id");  
-                        String actualId = Uid.decodeId(id.bytes, id.offset, id.length);
-                        assertNotEquals(ctx.reader() + " docID: " + doc + " actualID: " + actualId, shardID, targetShardId);
-                    }  
-                    if (lastDoc < ctx.reader().maxDoc()) {
-                        // check the last docs in the segment and make sure they all have the right shard id
-                        while (shard_id.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {  
+                Scorer scorer = splitWeight.scorer(ctx);
+                for (int i = 0; i < numNested; i++) {
+        boolean hasNested = randomBoolean();  
+import org.apache.lucene.document.SortedNumericDocValuesField;
                             long shardID = shard_id.nextValue();
-                            assertEquals(shardID, targetShardId);
+                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),  
+                        new SortedNumericDocValuesField("shard_id", shardId),
+                            new SortedNumericDocValuesField("shard_id", shardId)
+            )
+                            new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+import org.opensearch.index.mapper.Uid;
+                    Arrays.asList(  
+                    Arrays.asList(
+import org.apache.lucene.search.DocIdSetIterator;  
+        assertSplit(dir, metadata, targetShardId, hasNested);
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);
+                for (int i = 0; i < numNested; i++) {
+import org.apache.lucene.search.IndexSearcher;
+public class ShardSplittingQueryTests extends OpenSearchTestCase {
+                List<Iterable<IndexableField>> docs = new ArrayList<>();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            .build();
                             numActual++;  
-                        }
-                    }
-
-                    assertEquals(numExpected, numActual);
+        IndexMetadata metadata = IndexMetadata.builder("test")  
+                writer.addDocument(
                 }
-            }  
-        }
+                docs.add(rootDoc);
+                        new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),
+            .numberOfShards(numShards)
+import org.apache.lucene.index.IndexReader;
+            String routing = randomRealisticUnicodeOfCodepointLengthBetween(1, 5);  
+                shardId = OperationRouting.generateShardId(metadata, null, routing);
+                    Arrays.asList(
+                1f  
+            Iterable<IndexableField> rootDoc;  
+                        String actualId = Uid.decodeId(id.bytes, id.offset, id.length);
+                    Arrays.asList(
     }
-}  
+ */
+            if (hasNested) {
+/*
+ * GitHub history for details.
+            for (LeafReaderContext ctx : reader.leaves()) {  
+import java.util.List;  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+                        )
+                    }  
+    void assertSplit(Directory dir, IndexMetadata metadata, int targetShardId, boolean hasNested) throws IOException {
+        writer.commit();
+            if (hasNested) {  
+                        )
+            final Weight splitWeight = searcher.createWeight(
+                    new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
+        writer.commit();
+        }
+        dir.close();
+        );  
+                while (shard_id.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+                            new StringField(NestedPathFieldMapper.NAME, "__nested", Field.Store.YES),
+        writer.addDocument(  
+            } else {  
+                }  
+ * SPDX-License-Identifier: Apache-2.0
+                sequenceIDFields.seqNoDocValue,  
+            .numberOfShards(numShards)
+                            new SortedNumericDocValuesField("shard_id", shardId)  
+        int targetShardId = randomIntBetween(0, numShards - 1);
+        writer.close();  
+                        while (shard_id.nextDoc() < doc) {
+            } else {
+                List<Iterable<IndexableField>> docs = new ArrayList<>();
+import java.io.IOException;  
+                    docs.add(
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))  
+                            assertEquals(shardID, targetShardId);
+            if (hasNested) {
+                writer.addDocuments(docs);  
+            }
+            }  
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);  
+                    )
+        try (IndexReader reader = DirectoryReader.open(dir)) {  
+            } else {
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir);
+        writer.close();
+    }  
+        IndexMetadata metadata = IndexMetadata.builder("test")
+        Directory dir = newFSDirectory(createTempDir());
+import org.opensearch.Version;
+        }
+                            new SortedNumericDocValuesField("shard_id", shardId)  
+import org.apache.lucene.document.NumericDocValuesField;
+            .build();  
+    public void testSplitOnNoopOnlySegment() throws IOException {
+            }
+                writer.addDocument(rootDoc);
+            .setRoutingNumShards(numShards * 1000000)  
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+        boolean hasNested = randomBoolean();  
+            .setRoutingNumShards(numShards * 1000000)  
+        }
+                        new StringField(RoutingFieldMapper.NAME, routing, Field.Store.YES),  
+                sequenceIDFields.primaryTerm,
+                    shard_id = ctx.reader().getSortedNumericDocValues("shard_id");
+                shardId = OperationRouting.generateShardId(metadata, Integer.toString(j), null);  
+        int targetShardId = randomIntBetween(0, numShards - 1);  
+                        while (shard_id.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {  
+                        sequenceIDFields.primaryTerm
+    }
+            );
+                searcher.rewrite(new ShardSplittingQuery(metadata, targetShardId, hasNested)),
+        int targetShardId = randomIntBetween(0, numShards - 1);
+                        new SortedNumericDocValuesField("shard_id", shardId),
+                        Arrays.asList(  
+                );
+                for (int i = 0; i < numNested; i++) {  
+                        Arrays.asList(  
+                }
+ * compatible open source license.
+                writer.addDocuments(docs);
+            }  
+                    assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.nextDoc());  
+ * The OpenSearch Contributors require contributions made to  
+        writer.commit();  
+import org.opensearch.index.mapper.RoutingFieldMapper;  
+            .build();
+                    sequenceIDFields.primaryTerm  
+        int numShards = randomIntBetween(2, 10);
+                    }
+ * under the License.  
+                writer.addDocument(
+                sequenceIDFields.seqNo,
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.lucene.store.Directory;
+                List<Iterable<IndexableField>> docs = new ArrayList<>();
+        IndexMetadata metadata = IndexMetadata.builder("test")
+            if (randomBoolean()) {
+                    )  
+import org.apache.lucene.document.StringField;  
+    public void testSplitOnIdOrRouting() throws IOException {  
+                writer.addDocuments(docs);
+                        assertNotEquals(ctx.reader() + " docID: " + doc + " actualID: " + actualId, shardID, targetShardId);
+import org.opensearch.common.lucene.Lucene;
+                docs.add(
+                    );
+            .numberOfReplicas(0)
+                }
+                        new StringField(IdFieldMapper.NAME, Uid.encodeId(Integer.toString(j)), Field.Store.YES),
+            String routing = randomRealisticUnicodeOfCodepointLengthBetween(1, 5);
+                List<Iterable<IndexableField>> docs = new ArrayList<>();  
+import org.opensearch.index.mapper.IdFieldMapper;
+import org.apache.lucene.tests.index.RandomIndexWriter;  
+                        sequenceIDFields.primaryTerm
+        Directory dir = newFSDirectory(createTempDir());
+                    docs.add(  
+        writer.close();
+                            assertEquals(shardID, targetShardId);
+                        sequenceIDFields.primaryTerm  
+import org.opensearch.index.mapper.VersionFieldMapper;  
+            );
+        SeqNoFieldMapper.SequenceIDFields sequenceIDFields = SeqNoFieldMapper.SequenceIDFields.emptySeqID();  
+                );  
+                    new SortedNumericDocValuesField("shard_id", shardId),

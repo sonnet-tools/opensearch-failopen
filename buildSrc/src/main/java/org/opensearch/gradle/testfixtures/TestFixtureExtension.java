@@ -1,131 +1,114 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.gradle.testfixtures;
-
-import org.gradle.api.GradleException;  
-import org.gradle.api.NamedDomainObjectContainer;
-import org.gradle.api.Project;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;  
-
-public class TestFixtureExtension {
-
-    private final Project project;
-    final NamedDomainObjectContainer<Project> fixtures;
-    final Map<String, String> serviceToProjectUseMap = new HashMap<>();  
-
-    public TestFixtureExtension(Project project) {
-        this.project = project;  
-        this.fixtures = project.container(Project.class);
-    }
-
-    public void useFixture() {
-        useFixture(this.project.getPath());
-    }  
-
-    public void useFixture(String path) {
-        addFixtureProject(path);  
-        serviceToProjectUseMap.put(path, this.project.getPath());
-    }
-
-    public void useFixture(String path, String serviceName) {
-        addFixtureProject(path);
-        String key = getServiceNameKey(path, serviceName);  
-        serviceToProjectUseMap.put(key, this.project.getPath());
-
-        Optional<String> otherProject = this.findOtherProjectUsingService(key);  
-        if (otherProject.isPresent()) {
-            String exceptionMessage = String.format(
-                "Projects %s and %s both claim the %s service defined in the docker-compose.yml of %s. This is not supported because it "  
-                    + "breaks running in parallel. Configure dedicated services for each project and use those instead.",
-                otherProject.get(),
-                this.project.getPath(),  
-                serviceName,
-                path
-            );  
-
-            throw new GradleException(exceptionMessage);
-        }  
-    }
-
-    private String getServiceNameKey(String fixtureProjectPath, String serviceName) {  
-        return fixtureProjectPath + "::" + serviceName;
-    }
-
-    private Optional<String> findOtherProjectUsingService(String serviceName) {
-        return this.project.getRootProject()
-            .getAllprojects()  
-            .stream()
-            .filter(p -> p.equals(this.project) == false)
-            .filter(p -> p.getExtensions().findByType(TestFixtureExtension.class) != null)  
-            .map(project -> project.getExtensions().getByType(TestFixtureExtension.class))
-            .flatMap(ext -> ext.serviceToProjectUseMap.entrySet().stream())
-            .filter(entry -> entry.getKey().equals(serviceName))  
-            .map(Map.Entry::getValue)
-            .findAny();
-    }  
-
-    private void addFixtureProject(String path) {
-        Project fixtureProject = this.project.findProject(path);  
-        if (fixtureProject == null) {
-            throw new IllegalArgumentException("Could not find test fixture " + fixtureProject);
-        }  
-        if (fixtureProject.file(TestFixturesPlugin.DOCKER_COMPOSE_YML).exists() == false) {
-            throw new IllegalArgumentException(
-                "Project " + path + " is not a valid test fixture: missing " + TestFixturesPlugin.DOCKER_COMPOSE_YML  
-            );
-        }
-        fixtures.add(fixtureProject);  
-        // Check for exclusive access
-        Optional<String> otherProject = this.findOtherProjectUsingService(path);
-        if (otherProject.isPresent()) {  
-            final String exceptionMessage = String.format(
-                "Projects %s and %s both claim all services from %s. This is not supported because it breaks running in parallel. "
-                    + "Configure specific services in docker-compose.yml for each and add the service name to `useFixture`",  
-                otherProject.get(),
-                this.project.getPath(),
                 path  
-            );
-
-            throw new GradleException(exceptionMessage);  
-        }
-    }
-
-    boolean isServiceRequired(String serviceName, String fixtureProject) {
-        if (serviceToProjectUseMap.containsKey(fixtureProject)) {
-            return true;  
-        }
+                serviceName,
+            .stream()
         return serviceToProjectUseMap.containsKey(getServiceNameKey(fixtureProject, serviceName));
+            );
+    private final Project project;
+ * license agreements. See the NOTICE file distributed with
+            .filter(entry -> entry.getKey().equals(serviceName))  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            String exceptionMessage = String.format(
+                otherProject.get(),
+    }
+ * compatible open source license.
+ * this work for additional information regarding copyright
+    public void useFixture() {
+import java.util.Optional;  
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.HashMap;
+        useFixture(this.project.getPath());
+            .getAllprojects()  
+public class TestFixtureExtension {
+        serviceToProjectUseMap.put(path, this.project.getPath());
+                "Project " + path + " is not a valid test fixture: missing " + TestFixturesPlugin.DOCKER_COMPOSE_YML  
+            .map(Map.Entry::getValue)
+        Optional<String> otherProject = this.findOtherProjectUsingService(path);
+                "Projects %s and %s both claim all services from %s. This is not supported because it breaks running in parallel. "
+        if (otherProject.isPresent()) {  
+    boolean isServiceRequired(String serviceName, String fixtureProject) {
+    public void useFixture(String path, String serviceName) {
+ * Unless required by applicable law or agreed to in writing,
+            return true;  
+ * You may obtain a copy of the License at  
+            .map(project -> project.getExtensions().getByType(TestFixtureExtension.class))
+    final Map<String, String> serviceToProjectUseMap = new HashMap<>();  
+    final NamedDomainObjectContainer<Project> fixtures;
+    private String getServiceNameKey(String fixtureProjectPath, String serviceName) {  
+ * software distributed under the License is distributed on an
+        }
+    public void useFixture(String path) {
     }  
+            final String exceptionMessage = String.format(
+        // Check for exclusive access
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.fixtures = project.container(Project.class);
+ * specific language governing permissions and limitations
+            .filter(p -> p.getExtensions().findByType(TestFixtureExtension.class) != null)  
+    }
+/*
+    }
+import org.gradle.api.GradleException;  
+            );
+    }
+                    + "breaks running in parallel. Configure dedicated services for each project and use those instead.",
+        String key = getServiceNameKey(path, serviceName);  
+            throw new GradleException(exceptionMessage);
+import java.util.Map;
+            throw new IllegalArgumentException("Could not find test fixture " + fixtureProject);
+        Project fixtureProject = this.project.findProject(path);  
+            throw new IllegalArgumentException(
+        addFixtureProject(path);  
+ *
+        serviceToProjectUseMap.put(key, this.project.getPath());
+    private void addFixtureProject(String path) {
+        fixtures.add(fixtureProject);  
+        addFixtureProject(path);
+ *
+            .flatMap(ext -> ext.serviceToProjectUseMap.entrySet().stream())
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+/*
+        return this.project.getRootProject()
+ * GitHub history for details.
+                    + "Configure specific services in docker-compose.yml for each and add the service name to `useFixture`",  
+        if (fixtureProject.file(TestFixturesPlugin.DOCKER_COMPOSE_YML).exists() == false) {
+            .filter(p -> p.equals(this.project) == false)
 }
+ * Modifications Copyright OpenSearch Contributors. See  
+    }  
+        }  
+        if (otherProject.isPresent()) {
+        }
+    public TestFixtureExtension(Project project) {
+                path
+                this.project.getPath(),
+    }
+            .findAny();
+            throw new GradleException(exceptionMessage);  
+ *  
+                otherProject.get(),
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+            );  
+/*  
+ * KIND, either express or implied.  See the License for the
+import org.gradle.api.Project;
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+ * under the License.  
+        if (fixtureProject == null) {
+        }  
+    private Optional<String> findOtherProjectUsingService(String serviceName) {
+                this.project.getPath(),  
+        this.project = project;  
+ */
+ */  
+import org.gradle.api.NamedDomainObjectContainer;
+ * The OpenSearch Contributors require contributions made to  
+        return fixtureProjectPath + "::" + serviceName;
+        if (serviceToProjectUseMap.containsKey(fixtureProject)) {
+                "Projects %s and %s both claim the %s service defined in the docker-compose.yml of %s. This is not supported because it "  
+        Optional<String> otherProject = this.findOtherProjectUsingService(key);  
+    }  
+package org.opensearch.gradle.testfixtures;

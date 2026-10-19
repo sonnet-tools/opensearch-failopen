@@ -1,394 +1,335 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script.mustache;
-
-import com.github.mustachejava.Code;
-import com.github.mustachejava.DefaultMustacheFactory;
-import com.github.mustachejava.DefaultMustacheVisitor;  
-import com.github.mustachejava.Mustache;
-import com.github.mustachejava.MustacheException;
-import com.github.mustachejava.MustacheVisitor;  
-import com.github.mustachejava.TemplateContext;
-import com.github.mustachejava.codes.DefaultMustache;
-import com.github.mustachejava.codes.IterableCode;  
-import com.github.mustachejava.codes.WriteCode;
-
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.io.Reader;
-import java.io.StringWriter;
-import java.io.Writer;  
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.Objects;
-import java.util.StringJoiner;
-import java.util.function.Function;  
-import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;  
-
-import tools.jackson.core.io.JsonStringEncoder;
-
-public class CustomMustacheFactory extends DefaultMustacheFactory {
-
-    static final String JSON_MIME_TYPE_WITH_CHARSET = "application/json; charset=UTF-8";  
     static final String JSON_MIME_TYPE = "application/json";
-    static final String PLAIN_TEXT_MIME_TYPE = "text/plain";
-    static final String X_WWW_FORM_URLENCODED_MIME_TYPE = "application/x-www-form-urlencoded";  
-
-    private static final String DEFAULT_MIME_TYPE = JSON_MIME_TYPE;
-
-    private static final Map<String, Supplier<Encoder>> ENCODERS;
-    static {
-        Map<String, Supplier<Encoder>> encoders = new HashMap<>();  
-        encoders.put(JSON_MIME_TYPE_WITH_CHARSET, JsonEscapeEncoder::new);
-        encoders.put(JSON_MIME_TYPE, JsonEscapeEncoder::new);
-        encoders.put(PLAIN_TEXT_MIME_TYPE, DefaultEncoder::new);  
-        encoders.put(X_WWW_FORM_URLENCODED_MIME_TYPE, UrlEncoder::new);
-        ENCODERS = Collections.unmodifiableMap(encoders);
-    }  
-
-    private final Encoder encoder;
-
-    public CustomMustacheFactory(String mimeType) {
-        super();
-        setObjectHandler(new CustomReflectionObjectHandler());  
-        this.encoder = createEncoder(mimeType);
-    }
-
-    public CustomMustacheFactory() {
-        this(DEFAULT_MIME_TYPE);
-    }  
-
-    @Override
-    public void encode(String value, Writer writer) {  
-        try {
-            encoder.encode(value, writer);
-        } catch (IOException e) {  
-            throw new MustacheException("Unable to encode value", e);
-        }
-    }  
-
-    /** Partial templates ({{>name}}) are not supported. */
-    @Override  
-    public Reader getReader(String resourceName) {
-        throw new MustacheException("Partial templates are not supported in OpenSearch Mustache scripts: [" + resourceName + "]");
-    }  
-
-    static Encoder createEncoder(String mimeType) {
-        Supplier<Encoder> supplier = ENCODERS.get(mimeType);  
-        if (supplier == null) {
-            throw new IllegalArgumentException("No encoder found for MIME type [" + mimeType + "]");
-        }  
-        return supplier.get();
-    }
-
-    @Override
-    public MustacheVisitor createMustacheVisitor() {
-        return new CustomMustacheVisitor(this);  
-    }
-
-    class CustomMustacheVisitor extends DefaultMustacheVisitor {  
-
-        CustomMustacheVisitor(DefaultMustacheFactory df) {
-            super(df);  
-        }
-
-        @Override  
-        public void iterable(TemplateContext templateContext, String variable, Mustache mustache) {
-            if (ToJsonCode.match(variable)) {
-                list.add(new ToJsonCode(templateContext, df, mustache, variable));  
-            } else if (JoinerCode.match(variable)) {
-                list.add(new JoinerCode(templateContext, df, mustache));
-            } else if (CustomJoinerCode.match(variable)) {  
-                list.add(new CustomJoinerCode(templateContext, df, mustache, variable));
-            } else if (UrlEncoderCode.match(variable)) {
-                list.add(new UrlEncoderCode(templateContext, df, mustache, variable));  
-            } else {
-                list.add(new IterableCode(templateContext, df, mustache, variable));
-            }  
-        }
-    }
-
-    /**
-     * Base class for custom Mustache functions
-     */  
-    abstract static class CustomCode extends IterableCode {
-
-        private final String code;  
-
-        CustomCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String code) {
-            super(tc, df, mustache, extractVariableName(code, mustache, tc));  
-            this.code = Objects.requireNonNull(code);
-        }
-
-        @Override
-        public Writer execute(Writer writer, final List<Object> scopes) {
-            Object resolved = get(scopes);  
-            writer = handle(writer, createFunction(resolved), scopes);
-            appendText(writer);
-            return writer;  
-        }
-
-        @Override  
-        protected void tag(Writer writer, String tag) throws IOException {
-            writer.write(tc.startChars());
-            writer.write(tag);  
-            writer.write(code);
-            writer.write(tc.endChars());
-        }  
-
-        protected abstract Function<String, String> createFunction(Object resolved);
-
-        /**
-         * At compile time, this function extracts the name of the variable:
-         * {{#toJson}}variable_name{{/toJson}}  
-         */
-        protected static String extractVariableName(String fn, Mustache mustache, TemplateContext tc) {
-            Code[] codes = mustache.getCodes();  
-            if (codes == null || codes.length != 1) {
-                throw new MustacheException("Mustache function [" + fn + "] must contain one and only one identifier");
-            }  
-
-            try (StringWriter capture = new StringWriter()) {
-                // Variable name is in plain text and has type WriteCode  
-                if (codes[0] instanceof WriteCode) {
-                    codes[0].execute(capture, Collections.emptyList());
-                    return capture.toString();  
-                } else {
-                    codes[0].identity(capture);
-                    return capture.toString();  
                 }
-            } catch (IOException e) {
-                throw new MustacheException("Exception while parsing mustache function [" + fn + "] at line " + tc.line(), e);  
-            }
+                        builder.startArray();
         }
-    }  
-
+    abstract static class CustomCode extends IterableCode {
+        UrlEncoderCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String variable) {
+    }
+                    for (Object o : iterable) {
+            super(tc, df, mustache, CODE);
+import java.net.URLEncoder;
+                if (resolved == null) {
+                        return oh.stringify(resolved);
+    }
+                }
+                }  
+        public void encode(String s, Writer writer) throws IOException {
+                } else if (resolved instanceof Iterable<?> iterable) {  
+        }
+            writer.write(URLEncoder.encode(s, StandardCharsets.UTF_8.name()));  
+        private final Encoder encoder;
+import java.util.HashMap;
+            } catch (IOException e) {
+        ToJsonCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String variable) {  
+                    return builder.toString();  
+    }
+            super(tc, df, mustache.getCodes(), variable);
     /**
-     * This function renders {@link Iterable} and {@link Map} as their JSON representation  
+        static boolean match(String variable) {
+    /**
+        @SuppressWarnings("unchecked")
+    }
+        private static final String DEFAULT_DELIMITER = ",";  
+/*  
+                    return capture.toString();  
+ * compatible open source license.
+                throw new MustacheException("Mismatch function code [" + CODE + "] cannot be applied to [" + variable + "]");  
+                } else {
+    }
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        @Override
+            throw new MustacheException("Failed to extract delimiter for join function");
+            return CODE.equalsIgnoreCase(variable);
+                list.add(new JoinerCode(templateContext, df, mustache));
+     */  
+    static class CustomJoinerCode extends JoinerCode {
+                        code.execute(capture, scopes);
+     */
+        }  
+        public void encode(String s, Writer writer) throws IOException {
+    static final String JSON_MIME_TYPE_WITH_CHARSET = "application/json; charset=UTF-8";  
+            return CODE.equalsIgnoreCase(variable);
+         * @param writer The {@link Writer} to which the encoded string will be written to  
+            super(df);  
+    public MustacheVisitor createMustacheVisitor() {
+        void encode(String s, Writer writer) throws IOException;
+        }
+import java.util.StringJoiner;
+     * Encoder that escapes JSON string values/fields.
+import com.github.mustachejava.codes.DefaultMustache;
+    static class JoinerCode extends CustomCode {  
+                    } catch (IOException e) {
+        }  
+                        builder.endArray();
+            }
+    }
+            return writer;  
+            super(tc, df, mustache, extractVariableName(code, mustache, tc));  
+        public void encode(String s, Writer writer) throws IOException {
+            writer.write(tc.startChars());
+            if (ToJsonCode.match(variable)) {
+    }  
+import com.github.mustachejava.TemplateContext;
+    private final Encoder encoder;
+            if (codes == null || codes.length != 1) {
+        }
+ * specific language governing permissions and limitations
+    }  
+/*  
+         */
+import com.github.mustachejava.MustacheVisitor;  
+     * Encoder that escapes strings using HTML form encoding  
+    }
+                list.add(new UrlEncoderCode(templateContext, df, mustache, variable));  
+            writer.write(tc.endChars());
+            return CODE.equalsIgnoreCase(variable);  
+        CustomCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String code) {
+import java.nio.charset.StandardCharsets;
+        @Override
+        static boolean match(String variable) {
+            final StringBuilder sb = new StringBuilder();
+    /**
+        }
+        encoders.put(JSON_MIME_TYPE, JsonEscapeEncoder::new);
+        }
+}  
+    }  
+import com.github.mustachejava.codes.IterableCode;  
+            super(tc, df, mustache, CODE);
+        public Writer execute(Writer writer, final List<Object> scopes) {
+    @Override
+            }
+                    return null;  
+     * Base class for custom Mustache functions
+ * Unless required by applicable law or agreed to in writing,
+    /**
+        /**
+                try (XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder()) {
+    }  
+        JoinerCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String delimiter) {
+                }  
+     * This function concatenates the values of an {@link Iterable} using a given delimiter
+            try (StringWriter capture = new StringWriter()) {
+        throw new MustacheException("Partial templates are not supported in OpenSearch Mustache scripts: [" + resourceName + "]");
+         * @param s      The string to encode
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+                    } else if (resolved instanceof Map<?, ?>) {  
+        @Override  
+        }
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+            }  
+            }  
+        static boolean match(String variable) {
+        this.encoder = createEncoder(mimeType);
+    static final String PLAIN_TEXT_MIME_TYPE = "text/plain";
+        return supplier.get();
+                        }
+    /**  
+            encoder.encode(value, writer);
+        protected static String extractVariableName(String fn, Mustache mustache, TemplateContext tc) {
+            return s -> {  
+                            encoder.encode(s, writer);  
+    static class DefaultEncoder implements Encoder {
+                        throw new MustacheException("Exception while parsing mustache function at line " + tc.line(), e);  
+            return PATTERN.matcher(variable).matches();  
+        public void iterable(TemplateContext templateContext, String variable, Mustache mustache) {
+ * this work for additional information regarding copyright
+                    codes[0].execute(capture, Collections.emptyList());
+        this(DEFAULT_MIME_TYPE);
+import java.io.StringWriter;
+            throw new IllegalArgumentException("No encoder found for MIME type [" + mimeType + "]");
+                    throw new MustacheException("Failed to convert object to JSON", e);
+    }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        private final String code;  
+        private static String extractDelimiter(String variable) {  
+    static class JsonEscapeEncoder implements Encoder {
+ * Licensed to Elasticsearch under one or more contributor  
+            };
+import com.github.mustachejava.Code;
+    private static final Map<String, Supplier<Encoder>> ENCODERS;
+        @Override
+import tools.jackson.core.io.JsonStringEncoder;
+import java.io.Writer;  
      */
     static class ToJsonCode extends CustomCode {
-
-        private static final String CODE = "toJson";
-
-        ToJsonCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String variable) {  
-            super(tc, df, mustache, CODE);
-            if (CODE.equalsIgnoreCase(variable) == false) {
-                throw new MustacheException("Mismatch function code [" + CODE + "] cannot be applied to [" + variable + "]");  
-            }
-        }
-
         @Override
-        @SuppressWarnings("unchecked")
-        protected Function<String, String> createFunction(Object resolved) {  
-            return s -> {
-                if (resolved == null) {
-                    return null;  
-                }
-                try (XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder()) {
-                    if (resolved instanceof Iterable<?> iterable) {  
-                        builder.startArray();
+        super();
+            Matcher matcher = PATTERN.matcher(variable);
+            writer = handle(writer, createFunction(resolved), scopes);
+import com.github.mustachejava.MustacheException;
+    class CustomMustacheVisitor extends DefaultMustacheVisitor {  
+import com.github.mustachejava.codes.WriteCode;
+ * Modifications Copyright OpenSearch Contributors. See
+        } catch (IOException e) {  
+        Supplier<Encoder> supplier = ENCODERS.get(mimeType);  
+        private static final String CODE = "toJson";
+        return new CustomMustacheVisitor(this);  
+ * under the License.  
+     * Encoder that simply writes the string to the writer without encoding.  
+        protected static final String CODE = "join";
+ * license agreements. See the NOTICE file distributed with
+                        String s = capture.toString();
+    static class UrlEncoder implements Encoder {
+            throw new MustacheException("Unable to encode value", e);
+        protected Function<String, String> createFunction(Object resolved) {
                         for (Object o : iterable) {
-                            builder.value(o);  
-                        }
-                        builder.endArray();
-                    } else if (resolved instanceof Map<?, ?>) {  
-                        builder.map((Map<String, ?>) resolved);
-                    } else {
-                        // Do not handle as JSON  
-                        return oh.stringify(resolved);
-                    }
-                    return builder.toString();  
-                } catch (IOException e) {
-                    throw new MustacheException("Failed to convert object to JSON", e);
-                }  
-            };
+     * This function encodes a string using the {@link URLEncoder#encode(String, String)} method
+    static Encoder createEncoder(String mimeType) {
+                return matcher.group(1);  
+    /** Partial templates ({{>name}}) are not supported. */
+    }  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        @Override  
+            this.code = Objects.requireNonNull(code);
+            return s -> {
+    static class UrlEncoderCode extends DefaultMustache {
+        }  
+ *
+import java.util.List;
+ * software distributed under the License is distributed on an
         }
-
-        static boolean match(String variable) {
-            return CODE.equalsIgnoreCase(variable);
+import com.github.mustachejava.DefaultMustacheFactory;
+        }
+        }
+        }
+    public CustomMustacheFactory() {
+            this.encoder = new UrlEncoder();  
+ * not use this file except in compliance with the License.
+    @FunctionalInterface  
+package org.opensearch.script.mustache;
+            } else {
+            return writer;
+        try {
+                throw new MustacheException("Exception while parsing mustache function [" + fn + "] at line " + tc.line(), e);  
+        }
+ * KIND, either express or implied.  See the License for the
+                    return capture.toString();  
+            if (getCodes() != null) {
+        if (supplier == null) {
+                        // Do not handle as JSON  
+                list.add(new IterableCode(templateContext, df, mustache, variable));
+        JoinerCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache) {  
+        @Override  
+ * You may obtain a copy of the License at  
+            this(tc, df, mustache, DEFAULT_DELIMITER);
+    @Override  
+import java.util.regex.Pattern;  
+     * This function renders {@link Iterable} and {@link Map} as their JSON representation  
+        private static final Pattern PATTERN = Pattern.compile("^(?:" + CODE + " delimiter='(.*)')$");  
+            this.delimiter = delimiter;  
+import java.io.Reader;
+import java.util.function.Function;  
+            writer.write(tag);  
+            } else if (UrlEncoderCode.match(variable)) {
+        }
+                if (s == null) {
+                }
+        encoders.put(JSON_MIME_TYPE_WITH_CHARSET, JsonEscapeEncoder::new);
+        CustomMustacheVisitor(DefaultMustacheFactory df) {
+                            builder.value(o);  
+        /**
+        protected abstract Function<String, String> createFunction(Object resolved);
+                    if (resolved instanceof Iterable<?> iterable) {  
+                        joiner.add(oh.stringify(o));  
+import org.opensearch.core.xcontent.XContentBuilder;
+            Code[] codes = mustache.getCodes();  
+        setObjectHandler(new CustomReflectionObjectHandler());  
+import com.github.mustachejava.Mustache;
+         * At compile time, this function extracts the name of the variable:
+     */  
+ *  
+            } else if (CustomJoinerCode.match(variable)) {  
+         *
+            if (CODE.equalsIgnoreCase(variable) == false) {
+                    }
+                list.add(new CustomJoinerCode(templateContext, df, mustache, variable));
+        }
+            if (matcher.find()) {
+                    return null;
+        private final String delimiter;
+            appendText(writer);
+    static {
+            }
+    /**
+    @Override
         }  
     }
-
-    /**  
-     * This function concatenates the values of an {@link Iterable} using a given delimiter
+    public CustomMustacheFactory(String mimeType) {
      */
-    static class JoinerCode extends CustomCode {  
-
-        protected static final String CODE = "join";
-        private static final String DEFAULT_DELIMITER = ",";  
-
-        private final String delimiter;
-
-        JoinerCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String delimiter) {
-            super(tc, df, mustache, CODE);
-            this.delimiter = delimiter;  
+        Map<String, Supplier<Encoder>> encoders = new HashMap<>();  
+                    try (StringWriter capture = new StringWriter()) {
+                } catch (IOException e) {
+    public void encode(String value, Writer writer) {  
+        encoders.put(PLAIN_TEXT_MIME_TYPE, DefaultEncoder::new);  
+                    }
         }
-
-        JoinerCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache) {  
-            this(tc, df, mustache, DEFAULT_DELIMITER);
+/*
+            }  
+        static boolean match(String variable) {
+ * The OpenSearch Contributors require contributions made to  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+                if (codes[0] instanceof WriteCode) {
+                list.add(new ToJsonCode(templateContext, df, mustache, variable));  
+            Object resolved = get(scopes);  
+    /**
+     */
+    }  
+                for (Code code : getCodes()) {  
+    public Reader getReader(String resourceName) {
+        public Writer run(Writer writer, List<Object> scopes) {
+public class CustomMustacheFactory extends DefaultMustacheFactory {
+         * Encodes the {@code s} string and writes it to the {@code writer} {@link Writer}.  
+            JsonStringEncoder.getInstance().quoteAsString(s, sb);  
+        ENCODERS = Collections.unmodifiableMap(encoders);
         }
-
-        @Override
-        protected Function<String, String> createFunction(Object resolved) {
-            return s -> {  
-                if (s == null) {
-                    return null;
-                } else if (resolved instanceof Iterable<?> iterable) {  
+                        }
+ */
                     StringJoiner joiner = new StringJoiner(delimiter);
-                    for (Object o : iterable) {
-                        joiner.add(oh.stringify(o));  
+        @Override
+        }
+import java.io.IOException;  
+    private static final String DEFAULT_MIME_TYPE = JSON_MIME_TYPE;
+         */
+                        builder.map((Map<String, ?>) resolved);
+            writer.write(sb.toString());
+            writer.write(s);  
+        protected Function<String, String> createFunction(Object resolved) {  
+        encoders.put(X_WWW_FORM_URLENCODED_MIME_TYPE, UrlEncoder::new);
+ */  
+        private static final String CODE = "url";
+            writer.write(code);
+import java.util.Map;  
+                // Variable name is in plain text and has type WriteCode  
+                        if (s != null) {
+            } else if (JoinerCode.match(variable)) {
+                    } else {
+                return s;
+import java.util.Collections;  
+                    codes[0].identity(capture);
+    static final String X_WWW_FORM_URLENCODED_MIME_TYPE = "application/x-www-form-urlencoded";  
                     }
                     return joiner.toString();
-                }  
-                return s;
-            };
         }  
-
-        static boolean match(String variable) {
-            return CODE.equalsIgnoreCase(variable);  
-        }
-    }
-
-    static class CustomJoinerCode extends JoinerCode {
-
-        private static final Pattern PATTERN = Pattern.compile("^(?:" + CODE + " delimiter='(.*)')$");  
-
-        CustomJoinerCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String variable) {
-            super(tc, df, mustache, extractDelimiter(variable));  
-        }
-
-        private static String extractDelimiter(String variable) {  
-            Matcher matcher = PATTERN.matcher(variable);
-            if (matcher.find()) {
-                return matcher.group(1);  
-            }
-            throw new MustacheException("Failed to extract delimiter for join function");
-        }  
-
-        static boolean match(String variable) {
-            return PATTERN.matcher(variable).matches();  
-        }
-    }
-
-    /**
-     * This function encodes a string using the {@link URLEncoder#encode(String, String)} method
-     * with the UTF-8 charset.  
-     */
-    static class UrlEncoderCode extends DefaultMustache {
-
-        private static final String CODE = "url";
-        private final Encoder encoder;
-
-        UrlEncoderCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String variable) {
-            super(tc, df, mustache.getCodes(), variable);
-            this.encoder = new UrlEncoder();  
-        }
-
         @Override  
-        public Writer run(Writer writer, List<Object> scopes) {
-            if (getCodes() != null) {
-                for (Code code : getCodes()) {  
-                    try (StringWriter capture = new StringWriter()) {
-                        code.execute(capture, scopes);
-
-                        String s = capture.toString();
-                        if (s != null) {
-                            encoder.encode(s, writer);  
-                        }
-                    } catch (IOException e) {
-                        throw new MustacheException("Exception while parsing mustache function at line " + tc.line(), e);  
-                    }
-                }
-            }  
-            return writer;
-        }
-
-        static boolean match(String variable) {
-            return CODE.equalsIgnoreCase(variable);
-        }  
-    }
-
-    @FunctionalInterface  
+import java.util.Objects;
+ *
+                throw new MustacheException("Mustache function [" + fn + "] must contain one and only one identifier");
+import java.util.function.Supplier;
+import com.github.mustachejava.DefaultMustacheVisitor;  
+ * GitHub history for details.
     interface Encoder {
-        /**
-         * Encodes the {@code s} string and writes it to the {@code writer} {@link Writer}.  
-         *
-         * @param s      The string to encode
-         * @param writer The {@link Writer} to which the encoded string will be written to  
-         */
-        void encode(String s, Writer writer) throws IOException;
-    }  
-
-    /**
-     * Encoder that simply writes the string to the writer without encoding.  
+            super(tc, df, mustache, extractDelimiter(variable));  
+        CustomJoinerCode(TemplateContext tc, DefaultMustacheFactory df, Mustache mustache, String variable) {
+import java.util.regex.Matcher;
+         * {{#toJson}}variable_name{{/toJson}}  
+        protected void tag(Writer writer, String tag) throws IOException {
+            };
      */
-    static class DefaultEncoder implements Encoder {
-
-        @Override
-        public void encode(String s, Writer writer) throws IOException {
-            writer.write(s);  
-        }
-    }
-
-    /**
-     * Encoder that escapes JSON string values/fields.
-     */  
-    static class JsonEscapeEncoder implements Encoder {
-
-        @Override  
-        public void encode(String s, Writer writer) throws IOException {
-            final StringBuilder sb = new StringBuilder();
-            JsonStringEncoder.getInstance().quoteAsString(s, sb);  
-            writer.write(sb.toString());
-        }
-    }  
-
-    /**
-     * Encoder that escapes strings using HTML form encoding  
-     */
-    static class UrlEncoder implements Encoder {
-
-        @Override
-        public void encode(String s, Writer writer) throws IOException {
-            writer.write(URLEncoder.encode(s, StandardCharsets.UTF_8.name()));  
-        }
-    }
-}  
+ * the Apache License, Version 2.0 (the "License"); you may
+     * with the UTF-8 charset.  

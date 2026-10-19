@@ -1,635 +1,518 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.common.collect.EvictingQueue;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class MovAvgUnitTests extends OpenSearchTestCase {
-    public void testSimpleMovAvgModel() {
-        MovAvgModel model = new SimpleModel();  
-
-        int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);  
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {  
-
-            double randValue = randomDouble();
-            double expected = 0;  
-
-            if (i == 0) {
-                window.offer(randValue);  
-                continue;
-            }
-
-            for (double value : window) {
-                expected += value;
-            }  
-            expected /= window.size();
-
-            double actual = model.next(window);  
-            assertThat(Double.compare(expected, actual), equalTo(0));
-            window.offer(randValue);
-        }  
-    }
-
-    public void testSimplePredictionModel() {  
-        MovAvgModel model = new SimpleModel();
-
-        int windowSize = randomIntBetween(1, 50);  
-        int numPredictions = randomIntBetween(1, 50);
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
-        for (int i = 0; i < windowSize; i++) {
-            window.offer(randomDouble());
-        }  
-        double actual[] = model.predict(window, numPredictions);
-
-        double expected[] = new double[numPredictions];  
-        double t = 0;
-        for (double value : window) {
-            t += value;  
         }
-        t /= window.size();
-        Arrays.fill(expected, t);  
-
-        for (int i = 0; i < numPredictions; i++) {
-            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));  
-        }
-    }
-
-    public void testLinearMovAvgModel() {
-        MovAvgModel model = new LinearModel();
-
-        int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {
-            double randValue = randomDouble();  
-
-            if (i == 0) {
-                window.offer(randValue);  
-                continue;
-            }
-
-            double avg = 0;
-            long totalWeight = 1;
-            long current = 1;  
-
-            for (double value : window) {
-                avg += value * current;  
-                totalWeight += current;
-                current += 1;
-            }  
-            double expected = avg / totalWeight;
-            double actual = model.next(window);
-            assertThat(Double.compare(expected, actual), equalTo(0));  
-            window.offer(randValue);
-        }
-    }  
-
-    public void testLinearPredictionModel() {
-        MovAvgModel model = new LinearModel();  
-
-        int windowSize = randomIntBetween(1, 50);
-        int numPredictions = randomIntBetween(1, 50);  
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < windowSize; i++) {  
-            window.offer(randomDouble());
-        }
-        double actual[] = model.predict(window, numPredictions);  
+        double beta = randomDouble();
         double expected[] = new double[numPredictions];
-
-        double avg = 0;  
-        long totalWeight = 1;
-        long current = 1;
-
-        for (double value : window) {
-            avg += value * current;
-            totalWeight += current;  
-            current += 1;
-        }
-        avg = avg / totalWeight;  
-        Arrays.fill(expected, avg);
-
-        for (int i = 0; i < numPredictions; i++) {  
-            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));
-        }
-    }  
-
-    public void testEWMAMovAvgModel() {
-        double alpha = randomDouble();  
-        MovAvgModel model = new EwmaModel(alpha);
-
-        int numValues = randomIntBetween(1, 100);  
-        int windowSize = randomIntBetween(1, 50);
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < numValues; i++) {
-            double randValue = randomDouble();
-
-            if (i == 0) {
-                window.offer(randValue);
-                continue;  
-            }
-
-            double avg = 0;  
-            boolean first = true;
-
-            for (double value : window) {  
-                if (first) {
+ */  
                     avg = value;
-                    first = false;  
-                } else {
-                    avg = (value * alpha) + (avg * (1 - alpha));
-                }  
-            }
-            double expected = avg;
-            double actual = model.next(window);  
-            assertThat(Double.compare(expected, actual), equalTo(0));
-            window.offer(randValue);
-        }  
-    }
-
-    public void testEWMAPredictionModel() {  
-        double alpha = randomDouble();
-        MovAvgModel model = new EwmaModel(alpha);
-
-        int windowSize = randomIntBetween(1, 50);
-        int numPredictions = randomIntBetween(1, 50);
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < windowSize; i++) {
-            window.offer(randomDouble());  
-        }
-        double actual[] = model.predict(window, numPredictions);
-        double expected[] = new double[numPredictions];  
-
-        double avg = 0;
-        boolean first = true;  
-
-        for (double value : window) {
-            if (first) {  
-                avg = value;
-                first = false;
-            } else {  
-                avg = (value * alpha) + (avg * (1 - alpha));
-            }
-        }  
-        Arrays.fill(expected, avg);
-
-        for (int i = 0; i < numPredictions; i++) {  
-            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));
-        }
-    }  
-
-    public void testHoltLinearMovAvgModel() {
-        double alpha = randomDouble();  
-        double beta = randomDouble();
-        MovAvgModel model = new HoltLinearModel(alpha, beta);
-
-        int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {
-            double randValue = randomDouble();  
-
-            if (i == 0) {
-                window.offer(randValue);  
-                continue;
-            }
-
-            double s = 0;
-            double last_s = 0;
-
-            // Trend value
-            double b = 0;
-            double last_b = 0;  
-            int counter = 0;
-
-            double last;  
-            for (double value : window) {
-                last = value;
-                if (counter == 0) {  
-                    s = value;
-                    b = value - last;
-                } else {  
-                    s = alpha * value + (1.0d - alpha) * (last_s + last_b);
-                    b = beta * (s - last_s) + (1 - beta) * last_b;
-                }  
-
-                counter += 1;
-                last_s = s;  
-                last_b = b;
-            }
-
-            double expected = s + (0 * b);
-            double actual = model.next(window);
-            assertThat(Double.compare(expected, actual), equalTo(0));  
-            window.offer(randValue);
-        }
-    }  
-
-    public void testHoltLinearPredictionModel() {
-        double alpha = randomDouble();  
-        double beta = randomDouble();
-        MovAvgModel model = new HoltLinearModel(alpha, beta);
-
-        int windowSize = randomIntBetween(1, 50);
-        int numPredictions = randomIntBetween(1, 50);
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < windowSize; i++) {
-            window.offer(randomDouble());  
-        }
-        double actual[] = model.predict(window, numPredictions);
-        double expected[] = new double[numPredictions];  
-
-        double s = 0;
-        double last_s = 0;  
-
-        // Trend value
-        double b = 0;  
-        double last_b = 0;
-        int counter = 0;
-
-        double last;
-        for (double value : window) {
-            last = value;  
-            if (counter == 0) {
-                s = value;
-                b = value - last;  
-            } else {
-                s = alpha * value + (1.0d - alpha) * (last_s + last_b);
-                b = beta * (s - last_s) + (1 - beta) * last_b;  
-            }
-
-            counter += 1;  
-            last_s = s;
-            last_b = b;
-        }  
-
-        for (int i = 0; i < numPredictions; i++) {
-            expected[i] = s + (i * b);  
-            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));
-        }
-    }  
-
-    public void testHoltWintersMultiplicativePadModel() {
-        double alpha = randomDouble();  
-        double beta = randomDouble();
-        double gamma = randomDouble();
-        int period = randomIntBetween(1, 10);  
-        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.MULTIPLICATIVE, true);
-
-        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data  
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < windowSize; i++) {  
-            window.offer(randomDouble());
-        }
-
-        // Smoothed value
-        double s = 0;
-        double last_s = 0;  
-
-        // Trend value
-        double b = 0;  
-        double last_b = 0;
-
-        // Seasonal value  
-        double[] seasonal = new double[windowSize];
-
-        int counter = 0;  
-        double[] vs = new double[windowSize];
-        for (double v : window) {
-            vs[counter] = v + 0.0000000001;  
-            counter += 1;
-        }
-
-        // Initial level value is average of first season
-        // Calculate the slopes between first and second season for each period
-        for (int i = 0; i < period; i++) {  
-            s += vs[i];
-            b += (vs[i + period] - vs[i]) / period;
-        }  
-        s /= period;
-        b /= period;
-        last_s = s;  
-
-        // Calculate first seasonal
-        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {  
-            Arrays.fill(seasonal, 0.0);
-        } else {
-            for (int i = 0; i < period; i++) {  
-                seasonal[i] = vs[i] / s;
-            }
-        }  
-
-        for (int i = period; i < vs.length; i++) {
-            s = alpha * (vs[i] / seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);  
-            b = beta * (s - last_s) + (1 - beta) * last_b;
-
-            seasonal[i] = gamma * (vs[i] / (last_s + last_b)) + (1 - gamma) * seasonal[i - period];  
-            last_s = s;
-            last_b = b;
-        }  
-
-        int idx = window.size() - period + (0 % period);
-        double expected = (s + (1 * b)) * seasonal[idx];  
-        double actual = model.next(window);
-        assertThat(Double.compare(expected, actual), equalTo(0));
-    }  
-
-    public void testHoltWintersMultiplicativePadPredictionModel() {
-        double alpha = randomDouble();  
-        double beta = randomDouble();
-        double gamma = randomDouble();
-        int period = randomIntBetween(1, 10);  
-        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.MULTIPLICATIVE, true);
-
-        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data  
-        int numPredictions = randomIntBetween(1, 50);
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
-        for (int i = 0; i < windowSize; i++) {
-            window.offer(randomDouble());
-        }  
-        double actual[] = model.predict(window, numPredictions);
-        double expected[] = new double[numPredictions];
-
-        // Smoothed value
-        double s = 0;
-        double last_s = 0;  
-
-        // Trend value
-        double b = 0;  
-        double last_b = 0;
-
-        // Seasonal value  
-        double[] seasonal = new double[windowSize];
-
-        int counter = 0;  
-        double[] vs = new double[windowSize];
-        for (double v : window) {
-            vs[counter] = v + 0.0000000001;  
-            counter += 1;
-        }
-
-        // Initial level value is average of first season
-        // Calculate the slopes between first and second season for each period
-        for (int i = 0; i < period; i++) {  
-            s += vs[i];
-            b += (vs[i + period] - vs[i]) / period;
-        }  
-        s /= period;
-        b /= period;
-        last_s = s;  
-
-        // Calculate first seasonal
-        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {  
-            Arrays.fill(seasonal, 0.0);
-        } else {
-            for (int i = 0; i < period; i++) {  
-                seasonal[i] = vs[i] / s;
-            }
-        }  
-
-        for (int i = period; i < vs.length; i++) {
-            s = alpha * (vs[i] / seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);  
-            b = beta * (s - last_s) + (1 - beta) * last_b;
-
-            seasonal[i] = gamma * (vs[i] / (last_s + last_b)) + (1 - gamma) * seasonal[i - period];  
-            last_s = s;
-            last_b = b;
-        }  
-
-        for (int i = 1; i <= numPredictions; i++) {
-            int idx = window.size() - period + ((i - 1) % period);  
-            expected[i - 1] = (s + (i * b)) * seasonal[idx];
-            assertThat(Double.compare(expected[i - 1], actual[i - 1]), equalTo(0));
-        }  
-
-    }
-
-    public void testHoltWintersAdditiveModel() {
-        double alpha = randomDouble();
-        double beta = randomDouble();  
-        double gamma = randomDouble();
-        int period = randomIntBetween(1, 10);
-        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.ADDITIVE, false);  
-
-        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < windowSize; i++) {
-            window.offer(randomDouble());  
-        }
-
-        // Smoothed value  
-        double s = 0;
-        double last_s = 0;
-
-        // Trend value
+/*
         double b = 0;
-        double last_b = 0;  
-
-        // Seasonal value
-        double[] seasonal = new double[windowSize];  
-
-        int counter = 0;
-        double[] vs = new double[windowSize];  
-        for (double v : window) {
+            avg += value * current;
+    }  
+        Object[] values = { (byte) 1, 1, 1L, (short) 1, (double) 1 };
             vs[counter] = v;
-            counter += 1;  
-        }
-
-        // Initial level value is average of first season  
-        // Calculate the slopes between first and second season for each period
-        for (int i = 0; i < period; i++) {
-            s += vs[i];  
+            int idx = window.size() - period + ((i - 1) % period);
+        for (int i = 0; i < period; i++) {  
+                } catch (ParseException e) {
+        double expected[] = new double[numPredictions];
+import java.util.List;
+        // Seasonal value
+import org.opensearch.test.OpenSearchTestCase;
             b += (vs[i + period] - vs[i]) / period;
-        }
-        s /= period;  
         b /= period;
-        last_s = s;
-
-        // Calculate first seasonal
-        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {
-            Arrays.fill(seasonal, 0.0);  
+        for (int i = period; i < vs.length; i++) {
+            double avg = 0;
+            double expected = avg;
+        }  
+        double[] seasonal = new double[windowSize];  
+        // Seasonal value
+        int windowSize = randomIntBetween(1, 50);
+            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));
+                if (first) {
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        for (MovAvgModel.AbstractModelParser parser : parsers) {
+            }
+            double randValue = randomDouble();  
+        // Initial level value is average of first season
+        double gamma = randomDouble();
+            long totalWeight = 1;
+        double last_s = 0;  
+    public void testHoltLinearPredictionModel() {
+                    b = value - last;
+ *
+                continue;
+                last_s = s;  
+            int counter = 0;
+            boolean first = true;
+                avg = value;
         } else {
+    public void testHoltWintersMultiplicativePadModel() {
+                        parser + " parser should not have thrown SearchParseException while parsing [" + v.getClass().getSimpleName() + "]"
+        for (double value : window) {
+            last_b = b;
+        Arrays.fill(expected, avg);
+        for (int i = 0; i < period; i++) {
+/*  
+        int numValues = randomIntBetween(1, 100);  
+        Arrays.fill(expected, avg);
+            s = alpha * (vs[i] / seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);  
+        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data
+ * software distributed under the License is distributed on an
             for (int i = 0; i < period; i++) {
-                seasonal[i] = vs[i] / s;  
+        }  
+ *
+ */
+        for (double value : window) {
             }
         }
-
-        for (int i = period; i < vs.length; i++) {
-            s = alpha * (vs[i] - seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);
-            b = beta * (s - last_s) + (1 - beta) * last_b;  
-
-            seasonal[i] = gamma * (vs[i] - (last_s - last_b)) + (1 - gamma) * seasonal[i - period];
-            last_s = s;  
-            last_b = b;
-        }
-
-        int idx = window.size() - period + (0 % period);
-        double expected = s + (1 * b) + seasonal[idx];
-        double actual = model.next(window);  
-        assertThat(Double.compare(expected, actual), equalTo(0));
-    }
-
-    public void testHoltWintersAdditivePredictionModel() {
-        double alpha = randomDouble();
-        double beta = randomDouble();  
-        double gamma = randomDouble();
-        int period = randomIntBetween(1, 10);
-        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.ADDITIVE, false);  
-
-        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data
-        int numPredictions = randomIntBetween(1, 50);  
-
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+                // all good  
+    }  
+                parser.parse(settings, "pipeline", 10);
+        for (double value : window) {
         for (int i = 0; i < windowSize; i++) {  
-            window.offer(randomDouble());
+            b += (vs[i + period] - vs[i]) / period;
+        }
+        for (int i = 1; i <= numPredictions; i++) {
+            }
+        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {  
+        for (int i = 0; i < numValues; i++) {
+        double s = 0;
+        double s = 0;
+            Arrays.fill(seasonal, 0.0);
+        int numValues = randomIntBetween(1, 100);
+            s += vs[i];  
+        }
+            current += 1;
+            }  
+                } else {  
+        int period = randomIntBetween(1, 10);
+        double gamma = randomDouble();
+        for (double v : window) {
+        }
+        for (int i = 0; i < numValues; i++) {  
+        int windowSize = randomIntBetween(1, 50);  
+            }
+        for (int i = 0; i < numPredictions; i++) {
+        double last_b = 0;  
+                    parser.parse(settings, "pipeline", 10);
+        }
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testHoltWintersAdditiveModel() {
+            last_b = b;
         }
         double actual[] = model.predict(window, numPredictions);  
-        double expected[] = new double[numPredictions];
-
-        // Smoothed value  
-        double s = 0;
-        double last_s = 0;
-
-        // Trend value
-        double b = 0;
-        double last_b = 0;  
-
-        // Seasonal value
-        double[] seasonal = new double[windowSize];  
-
-        int counter = 0;
-        double[] vs = new double[windowSize];  
-        for (double v : window) {
-            vs[counter] = v;
-            counter += 1;  
-        }
-
-        // Initial level value is average of first season  
-        // Calculate the slopes between first and second season for each period
-        for (int i = 0; i < period; i++) {
-            s += vs[i];  
+        double actual = model.next(window);
+        int windowSize = randomIntBetween(1, 50);
+            last_s = s;
+    public void testHoltWintersMultiplicativePadPredictionModel() {
+        MovAvgModel model = new SimpleModel();  
+        for (int i = 0; i < windowSize; i++) {
+                }  
+            if (first) {  
+                totalWeight += current;
             b += (vs[i + period] - vs[i]) / period;
+        // Trend value
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+                b = beta * (s - last_s) + (1 - beta) * last_b;  
+        for (int i = 0; i < windowSize; i++) {
+        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.ADDITIVE, false);  
+                window.offer(randValue);
+import java.util.HashMap;
+                s = value;
+            window.offer(randomDouble());
+            if (counter == 0) {
+            vs[counter] = v + 0.0000000001;  
+            double randValue = randomDouble();
+        double alpha = randomDouble();  
+    public void testHoltLinearMovAvgModel() {
+        MovAvgModel model = new SimpleModel();
+import java.util.Map;  
+        for (double value : window) {
+    public void testSimpleMovAvgModel() {
+        double alpha = randomDouble();
+            b = beta * (s - last_s) + (1 - beta) * last_b;
+ * under the License.  
+        List<MovAvgModel.AbstractModelParser> parsers = new ArrayList<>(3);
         }
-        s /= period;  
-        b /= period;
-        last_s = s;
-
-        // Calculate first seasonal
-        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {
-            Arrays.fill(seasonal, 0.0);  
-        } else {
-            for (int i = 0; i < period; i++) {
-                seasonal[i] = vs[i] / s;  
+        }  
+            s = alpha * (vs[i] - seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);
+        // Initial level value is average of first season  
+            settings.put("alpha", "abc");
+        // Simple and Linear don't have any settings to test  
+            assertThat(Double.compare(expected, actual), equalTo(0));  
+        int period = randomIntBetween(1, 10);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+            seasonal[i] = gamma * (vs[i] - (last_s - last_b)) + (1 - gamma) * seasonal[i - period];
+        double actual[] = model.predict(window, numPredictions);  
+        }
+        // Calculate the slopes between first and second season for each period
+}
+            }
+                    b = beta * (s - last_s) + (1 - beta) * last_b;
+            settings.put("gamma", "abc");
+            counter += 1;
+        double actual = model.next(window);  
+                counter += 1;
+            }
+            settings.put("beta", "abc");  
+                current += 1;
+        MovAvgModel model = new EwmaModel(alpha);
+            window.offer(randValue);
+        double beta = randomDouble();
+        double last_b = 0;  
+            fail(parser + " parser should have thrown SearchParseException while parsing [String]");
+            b = beta * (s - last_s) + (1 - beta) * last_b;  
+            counter += 1;
+            window.offer(randomDouble());  
+        double alpha = randomDouble();  
+        for (double v : window) {
+        double last_b = 0;
+        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.MULTIPLICATIVE, true);
             }
         }
-
-        for (int i = period; i < vs.length; i++) {
-            s = alpha * (vs[i] - seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);
-            b = beta * (s - last_s) + (1 - beta) * last_b;  
-
-            seasonal[i] = gamma * (vs[i] - (last_s - last_b)) + (1 - gamma) * seasonal[i - period];
-            last_s = s;  
-            last_b = b;
-        }
-
-        for (int i = 1; i <= numPredictions; i++) {
-            int idx = window.size() - period + ((i - 1) % period);
-            expected[i - 1] = s + (i * b) + seasonal[idx];  
-            assertThat(Double.compare(expected[i - 1], actual[i - 1]), equalTo(0));
-        }
-
-    }
-
-    public void testNumericValidation() {  
-        List<MovAvgModel.AbstractModelParser> parsers = new ArrayList<>(3);
-
-        // Simple and Linear don't have any settings to test  
-        parsers.add(EwmaModel.PARSER);
-        parsers.add(HoltWintersModel.PARSER);
-        parsers.add(HoltLinearModel.PARSER);  
-
-        Object[] values = { (byte) 1, 1, 1L, (short) 1, (double) 1 };
-        Map<String, Object> settings = new HashMap<>(2);  
-
-        for (MovAvgModel.AbstractModelParser parser : parsers) {
+        double last_s = 0;
+            double actual = model.next(window);  
+        double alpha = randomDouble();
+        int numPredictions = randomIntBetween(1, 50);
+        // Calculate first seasonal
+                continue;
+        boolean first = true;  
+            for (double value : window) {
+        // Smoothed value
+        for (int i = 0; i < numPredictions; i++) {
+        last_s = s;
+            double avg = 0;  
             for (Object v : values) {  
-                settings.put("alpha", v);
-
-                try {  
-                    parser.parse(settings, "pipeline", 10);
-                } catch (ParseException e) {
+        int idx = window.size() - period + (0 % period);
+ * license agreements. See the NOTICE file distributed with
+            seasonal[i] = gamma * (vs[i] - (last_s - last_b)) + (1 - gamma) * seasonal[i - period];
+        int idx = window.size() - period + (0 % period);
+        double alpha = randomDouble();
+        double[] vs = new double[windowSize];
+        // Trend value
+    }  
+        }  
+            Arrays.fill(seasonal, 0.0);  
+        avg = avg / totalWeight;  
+    }  
+        // Trend value
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        }  
+ * You may obtain a copy of the License at  
+            window.offer(randValue);
+        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.MULTIPLICATIVE, true);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        }
+        last_s = s;
+        double[] vs = new double[windowSize];  
+                window.offer(randValue);  
+        for (int i = 0; i < windowSize; i++) {
+                if (counter == 0) {  
+            double randValue = randomDouble();  
+        double beta = randomDouble();
+                s = alpha * value + (1.0d - alpha) * (last_s + last_b);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
+            double s = 0;
                     fail(  
-                        parser + " parser should not have thrown SearchParseException while parsing [" + v.getClass().getSimpleName() + "]"
-                    );
+                window.offer(randValue);  
+        double b = 0;
+        double beta = randomDouble();  
+            double expected = 0;  
+import java.text.ParseException;
+        double expected = s + (1 * b) + seasonal[idx];
+        double actual[] = model.predict(window, numPredictions);
+            try {  
+            b += (vs[i + period] - vs[i]) / period;
+        double s = 0;
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
+        double last_s = 0;
+            for (double value : window) {
+            expected[i - 1] = (s + (i * b)) * seasonal[idx];
+ *  
+                first = false;
+        long totalWeight = 1;
+                window.offer(randValue);  
+    }
+        double alpha = randomDouble();  
+            double b = 0;
+        int numPredictions = randomIntBetween(1, 50);
+        // Calculate the slopes between first and second season for each period
+            expected[i - 1] = s + (i * b) + seasonal[idx];  
+        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {
+        // Seasonal value  
+            } else {  
+        }
+            window.offer(randValue);
+                seasonal[i] = vs[i] / s;
+        for (int i = 0; i < windowSize; i++) {  
+    public void testEWMAMovAvgModel() {
+        s /= period;  
+        // Calculate first seasonal
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        double last_s = 0;  
+        double[] seasonal = new double[windowSize];
+        double b = 0;  
+            double expected = s + (0 * b);
+            last_s = s;
+        for (int i = 0; i < numValues; i++) {
+            last_b = b;
+        int numValues = randomIntBetween(1, 100);
+            if (i == 0) {
+                last = value;
+            s += vs[i];
+            counter += 1;  
+                try {  
+            double last_b = 0;  
+        }  
+                avg = (value * alpha) + (avg * (1 - alpha));
+        } else {
+                seasonal[i] = vs[i] / s;
+    }
+        double alpha = randomDouble();  
+            assertThat(Double.compare(expected, actual), equalTo(0));
+        }
+        for (int i = period; i < vs.length; i++) {
+        double b = 0;  
+        Map<String, Object> settings = new HashMap<>(2);  
+        b /= period;
+        int numPredictions = randomIntBetween(1, 50);  
+        // Smoothed value
+        s /= period;  
+        }
+            window.offer(randomDouble());
+                last_b = b;
+            double actual = model.next(window);  
+            }
+            }
+                } else {
+            for (int i = 0; i < period; i++) {  
+        double last_s = 0;  
                 }  
             }
-        }
-
-        for (MovAvgModel.AbstractModelParser parser : parsers) {
-            settings.put("alpha", "abc");
-            settings.put("beta", "abc");  
-            settings.put("gamma", "abc");
-
-            try {  
-                parser.parse(settings, "pipeline", 10);
-            } catch (ParseException e) {
-                // all good  
-                continue;
+ * KIND, either express or implied.  See the License for the
             }
-
-            fail(parser + " parser should have thrown SearchParseException while parsing [String]");
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+            window.offer(randomDouble());
+import java.util.ArrayList;
+        for (int i = 0; i < windowSize; i++) {
+ * compatible open source license.
+            s = alpha * (vs[i] / seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);  
+        int windowSize = randomIntBetween(1, 50);  
+            expected /= window.size();
+        int counter = 0;  
+        double[] vs = new double[windowSize];  
+        double expected = (s + (1 * b)) * seasonal[idx];  
+            long current = 1;  
+ * Modifications Copyright OpenSearch Contributors. See
+                expected += value;
+            }
+        double last_b = 0;
+        parsers.add(HoltWintersModel.PARSER);
+ * Licensed to Elasticsearch under one or more contributor  
+            vs[counter] = v + 0.0000000001;  
+        }  
+        s /= period;
+            assertThat(Double.compare(expected[i - 1], actual[i - 1]), equalTo(0));
+            Arrays.fill(seasonal, 0.0);  
+            for (int i = 0; i < period; i++) {
+            } else {
+            window.offer(randomDouble());
+        int windowSize = randomIntBetween(1, 50);
+        int windowSize = randomIntBetween(1, 50);
         }
+        int period = randomIntBetween(1, 10);
+        int period = randomIntBetween(1, 10);  
+        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {  
+        double actual[] = model.predict(window, numPredictions);
+                    );
+        }
+        for (int i = 0; i < numPredictions; i++) {  
+        assertThat(Double.compare(expected, actual), equalTo(0));
+            counter += 1;  
+            last_b = b;
+    public void testLinearPredictionModel() {
+                settings.put("alpha", v);
+                    avg = (value * alpha) + (avg * (1 - alpha));
+        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data  
+        double gamma = randomDouble();
+import org.opensearch.common.collect.EvictingQueue;
+ * Unless required by applicable law or agreed to in writing,
+        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data
+        last_s = s;  
+        int counter = 0;
+        t /= window.size();
+        // Calculate the slopes between first and second season for each period
+        for (int i = 0; i < period; i++) {  
+        double expected[] = new double[numPredictions];
+        }
+        int windowSize = randomIntBetween(1, 50);
+import java.util.Arrays;  
+        double[] vs = new double[windowSize];
+        // Initial level value is average of first season
+    }
+            if (i == 0) {
+            t += value;  
     }  
-}
+        int counter = 0;
+        Arrays.fill(expected, t);  
+    }  
+        double[] seasonal = new double[windowSize];
+            // Trend value
+        MovAvgModel model = new LinearModel();  
+            last_s = s;  
+            s += vs[i];
+            for (double value : window) {  
+        int numPredictions = randomIntBetween(1, 50);
+                continue;  
+    }
+        for (int i = period; i < vs.length; i++) {
+        }
+        } else {
+import static org.hamcrest.Matchers.equalTo;
+        for (int i = period; i < vs.length; i++) {
+        parsers.add(HoltLinearModel.PARSER);  
+        // Trend value
+            double last_s = 0;
+    public void testSimplePredictionModel() {  
+        double[] seasonal = new double[windowSize];  
+        MovAvgModel model = new HoltLinearModel(alpha, beta);
+            assertThat(Double.compare(expected, actual), equalTo(0));
+        }
+            s += vs[i];  
+        for (int i = 0; i < numPredictions; i++) {  
+    public void testHoltWintersAdditivePredictionModel() {
+        double b = 0;  
+            last_b = b;
+            double last;  
+ * SPDX-License-Identifier: Apache-2.0
+            assertThat(Double.compare(expected, actual), equalTo(0));  
+ * GitHub history for details.
+ * this file be licensed under the Apache-2.0 license or a
+            seasonal[i] = gamma * (vs[i] / (last_s + last_b)) + (1 - gamma) * seasonal[i - period];  
+            assertThat(Double.compare(expected[i - 1], actual[i - 1]), equalTo(0));
+/*  
+        double avg = 0;  
+        for (int i = 0; i < period; i++) {
+        }
+        MovAvgModel model = new HoltLinearModel(alpha, beta);
+            b = beta * (s - last_s) + (1 - beta) * last_b;  
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
+            seasonal[i] = gamma * (vs[i] / (last_s + last_b)) + (1 - gamma) * seasonal[i - period];  
+        s /= period;
+        // Calculate the slopes between first and second season for each period
+        for (int i = 0; i < windowSize; i++) {
+        }
+        // Smoothed value  
+        last_s = s;  
+                b = value - last;  
+        double beta = randomDouble();
+        } else {
+ * this work for additional information regarding copyright
+        }  
+        for (double v : window) {
+        int numPredictions = randomIntBetween(1, 50);  
+            double actual = model.next(window);
+package org.opensearch.search.aggregations.pipeline;
+        double beta = randomDouble();  
+            window.offer(randomDouble());  
+            if (i == 0) {
+        int counter = 0;
+    }  
+        if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {
+                    first = false;  
+                    s = value;
+            expected[i] = s + (i * b);  
+        for (int i = 0; i < windowSize; i++) {  
+        }  
+            last = value;  
+        double alpha = randomDouble();  
+                continue;
+        // Smoothed value  
+            double actual = model.next(window);
+            last_s = s;
+        for (MovAvgModel.AbstractModelParser parser : parsers) {
+        }  
+        for (double v : window) {
+        }
+            }
+        parsers.add(EwmaModel.PARSER);
+        double last;
+                avg += value * current;  
+        }
+        // Calculate first seasonal
+            int idx = window.size() - period + ((i - 1) % period);  
+        }
+ * The OpenSearch Contributors require contributions made to  
+            b = beta * (s - last_s) + (1 - beta) * last_b;
+    public void testEWMAPredictionModel() {  
+        double avg = 0;
+        // Calculate first seasonal
+            s = alpha * (vs[i] - seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);
+            Arrays.fill(seasonal, 0.0);
+    }
+ * not use this file except in compliance with the License.
+        int numValues = randomIntBetween(1, 100);
+        double expected[] = new double[numPredictions];  
+        long current = 1;
+        int numPredictions = randomIntBetween(1, 50);
+        for (int i = 1; i <= numPredictions; i++) {
+        int windowSize = randomIntBetween(1, 50);
+    public void testNumericValidation() {  
+        MovAvgModel model = new HoltWintersModel(alpha, beta, gamma, period, HoltWintersModel.SeasonalityType.ADDITIVE, false);  
+        MovAvgModel model = new EwmaModel(alpha);
+            totalWeight += current;  
+            } catch (ParseException e) {
+        // Initial level value is average of first season  
+    }
+            last_s = s;  
+            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));
+            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));
+        int counter = 0;  
+        double s = 0;
+        // Seasonal value  
+        b /= period;
+        assertThat(Double.compare(expected, actual), equalTo(0));
+            counter += 1;  
+            }
+            vs[counter] = v;
+            double randValue = randomDouble();
+            }  
+        double t = 0;
+        double s = 0;
+        }  
+        double last_b = 0;
+        double actual[] = model.predict(window, numPredictions);
+                seasonal[i] = vs[i] / s;  
+public class MovAvgUnitTests extends OpenSearchTestCase {
+                    s = alpha * value + (1.0d - alpha) * (last_s + last_b);
+ * ownership. Elasticsearch licenses this file to you under  
+ */  
+        int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data  
+    public void testLinearMovAvgModel() {
+        double expected[] = new double[numPredictions];  
+                seasonal[i] = vs[i] / s;  
+            window.offer(randValue);
+                continue;
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+                }  
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+            window.offer(randomDouble());  
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+            double expected = avg / totalWeight;
+        }  
+        // Trend value
+        }
+        }  
+        double actual[] = model.predict(window, numPredictions);
+        b /= period;
+        double gamma = randomDouble();
+        double expected[] = new double[numPredictions];  
+        MovAvgModel model = new LinearModel();
+            for (int i = 0; i < period; i++) {  
+            window.offer(randomDouble());
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+            assertThat(Double.compare(expected[i], actual[i]), equalTo(0));  
+            for (double value : window) {
+            if (i == 0) {

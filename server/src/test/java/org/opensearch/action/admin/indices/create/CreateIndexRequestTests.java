@@ -1,235 +1,210 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.create;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.action.admin.indices.alias.Alias;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
+                .field("type", "text")
 import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MapperService;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.util.Map;
-import java.util.Set;
-
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.equalTo;
-
-public class CreateIndexRequestTests extends OpenSearchTestCase {
-
-    public void testSerialization() throws IOException {  
+            + "     }\n"
+                .startObject("field1")  
+        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()))) {  
+            + "  \"FOO_SHOULD_BE_ILLEGAL_HERE\": {\n"
         CreateIndexRequest request = new CreateIndexRequest("foo");
+                .startObject("context")
+            builder.startObject()
+            + "}";
+                .startObject(MapperService.SINGLE_MAPPING_NAME)
+import static org.hamcrest.CoreMatchers.containsString;
+        for (Alias expectedAlias : expected) {
+        {  
+    public static void assertMappingsEqual(Map<String, String> expected, Map<String, String> actual) throws IOException {
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> parsedCreateIndexRequest.source(builder));
+                    LoggingDeprecationHandler.INSTANCE,
+                .field("type", "keyword")
+import java.util.Set;
+}  
+import org.opensearch.core.xcontent.XContentBuilder;
+            request2.mapping(builder);
+                .startObject("field21")  
+        assertThat(e.getMessage(), equalTo("key [settings] must be an object"));  
+            + "          \"type\": \"text\"\n"  
+import org.opensearch.core.common.io.stream.StreamInput;
+        }  
+            .endObject()  
+                .field("type", "text")
+                .endObject()
+import org.opensearch.core.xcontent.XContentParser;
+            .startObject()  
+        }
+            .toString();
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+        XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));  
+        CreateIndexRequest request = new CreateIndexRequest("foo");
+ * software distributed under the License is distributed on an
+        Map<String, Object> paramsMap = Map.of("foo", "bar");
+    }  
+        assertThat(e.getMessage(), equalTo("key [mappings] must be an object"));
+ * Unless required by applicable law or agreed to in writing,
+        assertEquals(expected, actual);
+            request.writeTo(output);
+                    NamedXContentRegistry.EMPTY,
+                .endObject()  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+            + "        \"field1\": {\n"
+            + "    \"test\": {\n"  
+import static org.hamcrest.CoreMatchers.equalTo;
+                .endObject();
+            + "  }\n"
+    public void testSettingsType() throws IOException {  
+ * SPDX-License-Identifier: Apache-2.0
+                .field("name", contextName)  
+    }
+                .startObject("properties")
+            + "      \"properties\": {\n"
+import org.opensearch.common.xcontent.json.JsonXContent;  
+ *
+/*  
+            .endObject()
+        builder.startObject().startArray("settings").endArray().endObject();
+            request1.mapping(builder);
+    }
+ * You may obtain a copy of the License at  
+            String actualValue = actual.get(expectedEntry.getKey());
+                    LoggingDeprecationHandler.INSTANCE,
+ *  
+            CreateIndexRequest parsedCreateIndexRequest = new CreateIndexRequest();  
+    }
+import org.opensearch.index.mapper.MapperService;  
+                .endObject()
+            }
+            OpenSearchParseException.class,  
+        );
+    public void testSerialization() throws IOException {  
+        CreateIndexRequest parsedCreateIndexRequest = new CreateIndexRequest();
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+            }  
+                .endObject()
+        CreateIndexRequest request1 = new CreateIndexRequest("foo");
+                    NamedXContentRegistry.EMPTY,  
+            .startObject(MapperService.SINGLE_MAPPING_NAME)
+        CreateIndexRequest request = new CreateIndexRequest();
+                if (expectedAlias.equals(actualAlias)) {  
+        XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
+                );
+    public void testTopLevelKeys() {  
+                assertEquals(request.index(), serialized.index());  
+                }
+ *
+                .startObject("properties")
+            builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
+                .startObject("properties")
+            for (Alias actualAlias : actual) {
+            XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
+                .startObject("field1")
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> parsedCreateIndexRequest.source(builder));
+        assertThat(request.toString(), containsString("index='foo'"));
+            builder.startObject()  
+                CreateIndexRequest serialized = new CreateIndexRequest(in);
+            + "    \"BAR_IS_THE_SAME\": 42\n"  
+ * compatible open source license.
+                .endObject();  
+                XContentParser expectedJson = JsonXContent.jsonXContent.createParser(  
+        CreateIndexRequest request2 = new CreateIndexRequest("bar");
+                assertEquals("{\"_doc\":{}}", serialized.mappings());
+        OpenSearchParseException e = expectThrows(
+            .endObject()  
+ * under the License.  
+        }
+        assertThat(request.toString(), containsString("mappings='{\"_doc\":{}}'"));
+            }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                .startObject("properties")  
+    public void testToString() throws IOException {  
+            + "    }\n"  
+            .startObject(MapperService.SINGLE_MAPPING_NAME)
+            String expectedValue = expectedEntry.getValue();  
+        }
+import java.io.IOException;  
+        String contextName = "Test";  
+            assertEquals(request1.mappings(), request2.mappings());
+                .startObject("field2")
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
+    public void testMappingKeyedByType() throws IOException {  
+                .endObject()  
+                .endObject()
+                    assertEquals(expectedAlias.filter(), actualAlias.filter());
+                .field("type", "keyword")  
+        String createIndex = "{\n"
+        }  
+                XContentParser actualJson = JsonXContent.jsonXContent.createParser(
+            try (StreamInput in = output.bytes().streamInput()) {
+import org.opensearch.test.OpenSearchTestCase;
+            .endObject()
+                    assertEquals(expectedAlias.searchRouting(), actualAlias.searchRouting());
+ */  
+    public static void assertAliasesEqual(Set<Alias> expected, Set<Alias> actual) throws IOException {
+            .toString();
+            () -> { request.source(createIndex, MediaTypeRegistry.JSON); }
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.xcontent.XContentType;
+                .endObject()
+ * this file be licensed under the Apache-2.0 license or a
+                .endObject()
+import java.util.Map;
+public class CreateIndexRequestTests extends OpenSearchTestCase {
+                    // As Alias#equals only looks at name, we check the equality of the other Alias parameters here.
+                .field("version", contextVersion)
+ * GitHub history for details.
+ * ownership. Elasticsearch licenses this file to you under  
+            + "  \"mappings\": {\n"
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+                    actualValue
+            + "  },\n"
+        request.mapping(mapping);
+        assertEquals("unknown key [FOO_SHOULD_BE_ILLEGAL_HERE] for create index", e.getMessage());  
+import org.opensearch.OpenSearchParseException;
+                )  
+ * The OpenSearch Contributors require contributions made to  
+    }
+            assertEquals(contextName, parsedCreateIndexRequest.context().name());
+        for (Map.Entry<String, String> expectedEntry : expected.entrySet()) {
+/*
+    public void testContext() throws IOException {
+    }  
+            assertEquals(contextVersion, parsedCreateIndexRequest.context().version());  
+                .endObject();  
+            parsedCreateIndexRequest.source(builder);
+            + "       }\n"
+    }
+        CreateIndexRequest parsedCreateIndexRequest = new CreateIndexRequest();  
         String mapping = JsonXContent.contentBuilder()
             .startObject()  
-            .startObject(MapperService.SINGLE_MAPPING_NAME)
-            .endObject()
-            .endObject()  
-            .toString();
-        request.mapping(mapping);
-
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            request.writeTo(output);
-
-            try (StreamInput in = output.bytes().streamInput()) {
-                CreateIndexRequest serialized = new CreateIndexRequest(in);
-                assertEquals(request.index(), serialized.index());  
-                assertEquals("{\"_doc\":{}}", serialized.mappings());
-            }
-        }  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
     }
-
-    public void testTopLevelKeys() {  
-        String createIndex = "{\n"
-            + "  \"FOO_SHOULD_BE_ILLEGAL_HERE\": {\n"
-            + "    \"BAR_IS_THE_SAME\": 42\n"  
-            + "  },\n"
-            + "  \"mappings\": {\n"
-            + "    \"test\": {\n"  
-            + "      \"properties\": {\n"
-            + "        \"field1\": {\n"
-            + "          \"type\": \"text\"\n"  
-            + "       }\n"
-            + "     }\n"
-            + "    }\n"  
-            + "  }\n"
-            + "}";
-
-        CreateIndexRequest request = new CreateIndexRequest();
-        OpenSearchParseException e = expectThrows(
-            OpenSearchParseException.class,  
-            () -> { request.source(createIndex, MediaTypeRegistry.JSON); }
-        );
-        assertEquals("unknown key [FOO_SHOULD_BE_ILLEGAL_HERE] for create index", e.getMessage());  
-    }
-
-    public void testMappingKeyedByType() throws IOException {  
-        CreateIndexRequest request1 = new CreateIndexRequest("foo");
-        CreateIndexRequest request2 = new CreateIndexRequest("bar");
-        {  
-            XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals(expected.keySet(), actual.keySet());  
+                .field("params", paramsMap)
             builder.startObject()
-                .startObject("properties")  
-                .startObject("field1")
-                .field("type", "text")
+package org.opensearch.action.admin.indices.create;
+        String mapping = JsonXContent.contentBuilder()
+import org.opensearch.action.admin.indices.alias.Alias;
+                assertEquals(expectedJson.map(), actualJson.map());
                 .endObject()  
-                .startObject("field2")
-                .startObject("properties")
-                .startObject("field21")  
-                .field("type", "keyword")
+ * KIND, either express or implied.  See the License for the
+ */  
                 .endObject()
-                .endObject()  
-                .endObject()
-                .endObject()
-                .endObject();  
-            request1.mapping(builder);
-            builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
-            builder.startObject()  
-                .startObject(MapperService.SINGLE_MAPPING_NAME)
-                .startObject("properties")
-                .startObject("field1")  
-                .field("type", "text")
+        builder.startObject().startArray("mappings").endArray().endObject();
+    public void testMappingsType() throws IOException {
+                    assertEquals(expectedAlias.indexRouting(), actualAlias.indexRouting());  
+ * license agreements. See the NOTICE file distributed with
+            ) {
+                .startObject("field21")
+            try (
+ */
                 .endObject()
                 .startObject("field2")  
-                .startObject("properties")
-                .startObject("field21")
-                .field("type", "keyword")  
-                .endObject()
-                .endObject()
-                .endObject()  
-                .endObject()
-                .endObject()
-                .endObject();  
-            request2.mapping(builder);
-            assertEquals(request1.mappings(), request2.mappings());
-        }  
-    }
-
-    public void testSettingsType() throws IOException {  
-        XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
-        builder.startObject().startArray("settings").endArray().endObject();
-
-        CreateIndexRequest parsedCreateIndexRequest = new CreateIndexRequest();
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> parsedCreateIndexRequest.source(builder));
-        assertThat(e.getMessage(), equalTo("key [settings] must be an object"));  
-    }
-
-    public void testToString() throws IOException {  
-        CreateIndexRequest request = new CreateIndexRequest("foo");
-        String mapping = JsonXContent.contentBuilder()
-            .startObject()  
-            .startObject(MapperService.SINGLE_MAPPING_NAME)
-            .endObject()
-            .endObject()  
-            .toString();
-        request.mapping(mapping);
-
-        assertThat(request.toString(), containsString("index='foo'"));
-        assertThat(request.toString(), containsString("mappings='{\"_doc\":{}}'"));
-    }  
-
-    public void testContext() throws IOException {
-        String contextName = "Test";  
         String contextVersion = "1";
-        Map<String, Object> paramsMap = Map.of("foo", "bar");
-        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()))) {  
-            builder.startObject()
-                .startObject("context")
-                .field("name", contextName)  
-                .field("version", contextVersion)
-                .field("params", paramsMap)
+ * specific language governing permissions and limitations
+        request.mapping(mapping);
                 .endObject()  
-                .endObject();
-
-            CreateIndexRequest parsedCreateIndexRequest = new CreateIndexRequest();  
-            parsedCreateIndexRequest.source(builder);
-            assertEquals(contextName, parsedCreateIndexRequest.context().name());
-            assertEquals(contextVersion, parsedCreateIndexRequest.context().version());  
-            assertEquals(paramsMap, parsedCreateIndexRequest.context().params());
-        }
-    }  
-
-    public void testMappingsType() throws IOException {
-        XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));  
-        builder.startObject().startArray("mappings").endArray().endObject();
-
-        CreateIndexRequest parsedCreateIndexRequest = new CreateIndexRequest();  
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> parsedCreateIndexRequest.source(builder));
-        assertThat(e.getMessage(), equalTo("key [mappings] must be an object"));
-    }  
-
-    public static void assertMappingsEqual(Map<String, String> expected, Map<String, String> actual) throws IOException {
-        assertEquals(expected.keySet(), actual.keySet());  
-
-        for (Map.Entry<String, String> expectedEntry : expected.entrySet()) {
-            String expectedValue = expectedEntry.getValue();  
-            String actualValue = actual.get(expectedEntry.getKey());
-            try (
-                XContentParser expectedJson = JsonXContent.jsonXContent.createParser(  
-                    NamedXContentRegistry.EMPTY,
-                    LoggingDeprecationHandler.INSTANCE,
+/*  
                     expectedValue  
-                );
-                XContentParser actualJson = JsonXContent.jsonXContent.createParser(
-                    NamedXContentRegistry.EMPTY,  
-                    LoggingDeprecationHandler.INSTANCE,
-                    actualValue
-                )  
-            ) {
-                assertEquals(expectedJson.map(), actualJson.map());
-            }  
-        }
-    }
-
-    public static void assertAliasesEqual(Set<Alias> expected, Set<Alias> actual) throws IOException {
-        assertEquals(expected, actual);
-
-        for (Alias expectedAlias : expected) {
-            for (Alias actualAlias : actual) {
-                if (expectedAlias.equals(actualAlias)) {  
-                    // As Alias#equals only looks at name, we check the equality of the other Alias parameters here.
-                    assertEquals(expectedAlias.filter(), actualAlias.filter());
-                    assertEquals(expectedAlias.indexRouting(), actualAlias.indexRouting());  
-                    assertEquals(expectedAlias.searchRouting(), actualAlias.searchRouting());
-                }
-            }  
-        }
-    }
-}  
+ * not use this file except in compliance with the License.
+            assertEquals(paramsMap, parsedCreateIndexRequest.context().params());

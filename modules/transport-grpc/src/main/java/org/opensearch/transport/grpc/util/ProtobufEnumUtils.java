@@ -1,60 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.util;
-
 import java.util.Locale;  
-
-/**
- * Utility class for converting protobuf enum values to OpenSearch string representations.  
- * This class provides a simple method to convert protobuf enums by removing the message
- * name prefix and converting to snake_case.
- *  
- * Examples:
- * - SORT_ORDER_ASC → "asc"
- * - FIELD_TYPE_LONG → "long"  
- * - SORT_MODE_MIN → "min"
- *
- * @opensearch.internal  
- */
-public class ProtobufEnumUtils {
-
+            return null;
+        return enumName.toLowerCase(Locale.ROOT);
+/*  
     private ProtobufEnumUtils() {
-        // Utility class
-    }  
-
+public class ProtobufEnumUtils {
+ * - SORT_MODE_MIN → "min"
+ * name prefix and converting to snake_case.
+ */  
     /**
-     * Converts protobuf enum to string by removing the prefix and converting to lowercase.  
-     *
+        if (enumName.startsWith(prefix)) {
+        // Utility class
+        }
      * @param protobufEnum The protobuf enum value
+ *
+ * This class provides a simple method to convert protobuf enums by removing the message
+}
+ * Utility class for converting protobuf enum values to OpenSearch string representations.  
+     * Converts protobuf enum to string by removing the prefix and converting to lowercase.  
+        String prefix = camelCaseToSnakeCase(messageName).toUpperCase(Locale.ROOT) + "_";
+package org.opensearch.transport.grpc.util;
+ * The OpenSearch Contributors require contributions made to  
      * @return The converted string value in lowercase, or null if input is null  
      */
-    public static String convertToString(Enum<?> protobufEnum) {
-        if (protobufEnum == null) {  
-            return null;
-        }
-
-        String enumName = protobufEnum.name();
-
+ * @opensearch.internal  
         String messageName = protobufEnum.getClass().getSimpleName();  
-
-        String prefix = camelCaseToSnakeCase(messageName).toUpperCase(Locale.ROOT) + "_";
-
-        if (enumName.startsWith(prefix)) {
-            return enumName.substring(prefix.length()).toLowerCase(Locale.ROOT);
-        }  
-
-        return enumName.toLowerCase(Locale.ROOT);
+ * this file be licensed under the Apache-2.0 license or a
     }  
-
-    /**
+    }  
      * Converts CamelCase to snake_case.  
      */
-    private static String camelCaseToSnakeCase(String camelCase) {
-        return camelCase.replaceAll("([a-z])([A-Z])", "$1_$2");  
+ */
+ * - FIELD_TYPE_LONG → "long"  
+    /**
+    public static String convertToString(Enum<?> protobufEnum) {
+ * - SORT_ORDER_ASC → "asc"
     }
-}
+        if (protobufEnum == null) {  
+ *  
+    private static String camelCaseToSnakeCase(String camelCase) {
+        }  
+        String enumName = protobufEnum.name();
+ * compatible open source license.
+/**
+            return enumName.substring(prefix.length()).toLowerCase(Locale.ROOT);
+ * Examples:
+ *
+        return camelCase.replaceAll("([a-z])([A-Z])", "$1_$2");  
+ * SPDX-License-Identifier: Apache-2.0
+     *

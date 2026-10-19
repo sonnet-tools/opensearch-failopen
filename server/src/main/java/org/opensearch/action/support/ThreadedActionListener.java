@@ -1,102 +1,91 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.support;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.ActionRunnable;  
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.threadpool.ThreadPool;  
-
-/**
- * An action listener that wraps another action listener and threading its execution.  
- *
+                return forceExecution;  
+            @Override  
+/*
  * @opensearch.internal
- */  
-public final class ThreadedActionListener<Response> implements ActionListener<Response> {
     private final Logger logger;
-    private final ThreadPool threadPool;  
-    private final String executor;
-    private final ActionListener<Response> listener;
-    private final boolean forceExecution;  
-
-    public ThreadedActionListener(
-        Logger logger,  
-        ThreadPool threadPool,
-        String executor,
-        ActionListener<Response> listener,  
-        boolean forceExecution
-    ) {
-        this.logger = logger;  
-        this.threadPool = threadPool;
-        this.executor = executor;
-        this.listener = listener;  
-        this.forceExecution = forceExecution;
-    }
-
+ * Modifications Copyright OpenSearch Contributors. See
     @Override
     public void onResponse(final Response response) {
-        threadPool.executor(executor).execute(new ActionRunnable<Response>(listener) {  
-            @Override
-            public boolean isForceExecution() {
-                return forceExecution;  
-            }
-
-            @Override  
-            protected void doRun() {
-                listener.onResponse(response);
-            }  
-        });
-    }
-
-    @Override
-    public void onFailure(final Exception e) {
-        threadPool.executor(executor).execute(new AbstractRunnable() {  
-            @Override
-            public boolean isForceExecution() {
-                return forceExecution;  
-            }
-
-            @Override  
-            protected void doRun() throws Exception {
-                listener.onFailure(e);
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                logger.warn(() -> new ParameterizedMessage("failed to execute failure callback on [{}]", listener), e);
-            }
+ * not use this file except in compliance with the License.
+        this.listener = listener;  
+public final class ThreadedActionListener<Response> implements ActionListener<Response> {
         });  
+                listener.onResponse(response);
+ * KIND, either express or implied.  See the License for the
+        boolean forceExecution
+        String executor,
+        this.forceExecution = forceExecution;
+        threadPool.executor(executor).execute(new AbstractRunnable() {  
+ * compatible open source license.
+        this.logger = logger;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private final ActionListener<Response> listener;
+ * Licensed to Elasticsearch under one or more contributor  
+        threadPool.executor(executor).execute(new ActionRunnable<Response>(listener) {  
+    ) {
+            @Override
+            public boolean isForceExecution() {
+ * this work for additional information regarding copyright
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+/*  
+package org.opensearch.action.support;
+                listener.onFailure(e);
+            public boolean isForceExecution() {
     }
+import org.apache.logging.log4j.message.ParameterizedMessage;
+            }  
+    }
+ */
+import org.opensearch.action.ActionRunnable;  
+/**
+ * specific language governing permissions and limitations
+ */  
+                logger.warn(() -> new ParameterizedMessage("failed to execute failure callback on [{}]", listener), e);
+    public ThreadedActionListener(
+/*  
+    private final ThreadPool threadPool;  
+ */  
+            }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        ThreadPool threadPool,
+            }
+import org.apache.logging.log4j.Logger;
+    private final boolean forceExecution;  
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+ */  
+            @Override
+            }
+        ActionListener<Response> listener,  
+                return forceExecution;  
+    @Override
 }
+    private final String executor;
+            @Override
+ *
+ * An action listener that wraps another action listener and threading its execution.  
+        this.executor = executor;
+            protected void doRun() throws Exception {
+            protected void doRun() {
+ * Unless required by applicable law or agreed to in writing,
+        });
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.threadpool.ThreadPool;  
+ * this file be licensed under the Apache-2.0 license or a
+        Logger logger,  
+ * You may obtain a copy of the License at  
+    }
+            public void onFailure(Exception e) {  
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+import org.opensearch.core.action.ActionListener;
+ *
+        this.threadPool = threadPool;
+ *  
+            @Override  
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+    public void onFailure(final Exception e) {
+            }  

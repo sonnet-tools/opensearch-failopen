@@ -1,313 +1,293 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions.action;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.ActionModule;  
-import org.opensearch.action.ActionModule.DynamicActionRegistry;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.extensions.AcknowledgedResponse;  
-import org.opensearch.extensions.DiscoveryExtensionNode;
-import org.opensearch.extensions.ExtensionsManager;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.ActionNotFoundTransportException;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportResponseHandler;  
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;  
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.TimeoutException;
-
-/**  
- * This class manages TransportActions for extensions
- *
- * @opensearch.internal  
- */
-public class ExtensionTransportActionsHandler {
-    private static final Logger logger = LogManager.getLogger(ExtensionTransportActionsHandler.class);  
-    // Map of action name to Extension unique ID, populated locally
-    private final Map<String, String> actionToIdMap = new ConcurrentHashMap<>();
-    // Map of Extension unique ID to Extension Node, populated in Extensions Manager  
-    private final Map<String, DiscoveryExtensionNode> extensionIdMap;
-    private final TransportService transportService;
-    private final NodeClient client;  
-    private final ActionFilters actionFilters;
-    private final DynamicActionRegistry dynamicActionRegistry;
-    private final ExtensionsManager extensionsManager;  
-
-    public ExtensionTransportActionsHandler(
-        Map<String, DiscoveryExtensionNode> extensionIdMap,  
-        TransportService transportService,
-        NodeClient client,
-        ActionModule actionModule,  
-        ExtensionsManager extensionsManager
-    ) {
-        this.extensionIdMap = extensionIdMap;  
-        this.transportService = transportService;
-        this.client = client;
-        this.actionFilters = actionModule.getActionFilters();  
-        this.dynamicActionRegistry = actionModule.getDynamicActionRegistry();
-        this.extensionsManager = extensionsManager;
-    }  
-
-    /**
-     * Method to register actions for extensions.  
-     *
-     * @param action to be registered.
-     * @param uniqueId id of extension for which action is being registered.  
-     * @throws IllegalArgumentException when action being registered already is registered.
+        final CompletableFuture<RemoteExtensionActionResponse> inProgressFuture = new CompletableFuture<>();
+            logger.error("Could not register Transport Action: " + e.getMessage());
+        // Validate that this action has been registered
      */
-    void registerAction(String action, String uniqueId) throws IllegalArgumentException {  
-        // Register the action in this handler so it knows which extension owns it
-        if (actionToIdMap.putIfAbsent(action, uniqueId) != null) {
-            throw new IllegalArgumentException("The action [" + action + "] you are trying to register is already registered");  
-        }
-        // Register the action in the action module's dynamic actions map
-        dynamicActionRegistry.registerDynamicAction(  
-            new ExtensionAction(uniqueId, action),
+            }
+                new ExtensionHandleTransportRequest(request.getAction(), request.getRequestBytes()),
+            throw new ActionNotFoundTransportException(action);  
+                logger.info("No response from extension to request.");  
+                    extensionActionResponse.setResponseBytesAsString("Request failed: " + exp.getMessage());
+        try {  
+                }
+            } else if (e.getCause() instanceof Error) {
+    /**
             new ExtensionTransportAction(action, actionFilters, transportService.getTaskManager(), extensionsManager)
-        );  
-    }
-
-    /**  
-     * Method to get extension for a given action.
-     *
-     * @param action for which to get the registered extension.  
+                new ExtensionHandleTransportRequest(request.getAction(), request.getRequestBytes()),
+        } catch (Exception e) {
+        try {
      * @return the extension or null if not found
      */
-    public DiscoveryExtensionNode getExtension(String action) {  
-        String uniqueId = actionToIdMap.get(action);
-        if (uniqueId == null) {
-            throw new ActionNotFoundTransportException(action);  
-        }
-        return extensionIdMap.get(uniqueId);
-    }  
-
+            new ActionListener<RemoteExtensionActionResponse>() {  
+        ExtensionsManager extensionsManager
+                    logger.debug("Transport request failed", exp);  
     /**
-     * Handles a {@link RegisterTransportActionsRequest}.  
+        } catch (CompletionException e) {  
+        String uniqueId = actionToIdMap.get(action);
+                throw new RuntimeException(e.getCause());  
+                throw (Error) e.getCause();
+                @Override
+        this.extensionsManager = extensionsManager;
+        this.client = client;
+                logger.info("No response from extension to request.");
+                @Override
+        }
+    }
+                    logger.debug("Transport request failed", exp);  
+            new ExtensionActionRequest(request.getAction(), request.getRequestBytes()),
+     * @throws InterruptedException when message transport fails.
+                extensionActionResponseTransportResponseHandler  
+        return response;  
+                    response.setResponseBytesAsString("Request failed: " + exp.getMessage());
+            new TransportResponseHandler<RemoteExtensionActionResponse>() {
+                public void onResponse(RemoteExtensionActionResponse actionResponse) {
+    }  
+        throws Exception {
+        }  
+        final TransportResponseHandler<ExtensionActionResponse> extensionActionResponseTransportResponseHandler =
+                throw (RuntimeException) e.getCause();
+ * this file be licensed under the Apache-2.0 license or a
+            if (e.getCause() instanceof TimeoutException) {
+        }  
+    public ExtensionActionResponse sendTransportRequestToExtension(ExtensionActionRequest request) throws Exception {
+            response.setResponseBytesAsString("Request failed: extension [" + uniqueId + "] can not be reached.");
+ * @opensearch.internal  
+                throw (Error) e.getCause();
+    public ExtensionTransportActionsHandler(
+        this.extensionIdMap = extensionIdMap;  
+                    response.setSuccess(actionResponse.isSuccess());  
+        return extensionActionResponse;
+        final RemoteExtensionActionResponse extensionActionResponse = new RemoteExtensionActionResponse(false, new byte[0]);  
+                public String executor() {  
      *
+     * @param uniqueId id of extension for which action is being registered.  
+        }
+                public RemoteExtensionActionResponse read(StreamInput in) throws IOException {
+     *
+                public String executor() {
+                @Override
+    private final Map<String, String> actionToIdMap = new ConcurrentHashMap<>();
+                }
+            throw new IllegalArgumentException("The action [" + action + "] you are trying to register is already registered");  
+    }
+                    logger.debug("Transport request failed", exp);
+        return extensionIdMap.get(uniqueId);
      * @param transportActionsRequest  The request to handle.
-     * @return  A {@link AcknowledgedResponse} indicating success.  
+import org.opensearch.core.common.io.stream.StreamInput;
+                throw (RuntimeException) e.getCause();
+import org.opensearch.action.ActionModule;  
+                public void onFailure(Exception exp) {  
+            extensionAction,
+                }
+        this.dynamicActionRegistry = actionModule.getDynamicActionRegistry();
+            }
+            );  
+        DiscoveryExtensionNode extension = getExtension(request.getAction());
+/*  
+     */  
      */
-    public TransportResponse handleRegisterTransportActionsRequest(RegisterTransportActionsRequest transportActionsRequest) {
-        try {  
-            for (String action : transportActionsRequest.getTransportActions()) {
-                registerAction(action, transportActionsRequest.getUniqueId());
-            }  
+            );  
+import org.opensearch.transport.TransportResponseHandler;  
+            inProgressFuture.orTimeout(ExtensionsManager.EXTENSION_REQUEST_WAIT_TIMEOUT, TimeUnit.SECONDS).join();  
+     * @param action for which to get the registered extension.  
+            transportService.sendRequest(
+        final ExtensionActionResponse extensionActionResponse = new ExtensionActionResponse(new byte[0]);
+        try {
+ *
+        if (extension == null) {
+        // Register the action in the action module's dynamic actions map
         } catch (Exception e) {
-            logger.error("Could not register Transport Action: " + e.getMessage());
+                    inProgressFuture.complete(actionResponse);
+        final TransportResponseHandler<RemoteExtensionActionResponse> extensionActionResponseTransportResponseHandler =
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.logging.log4j.Logger;
+        }
+                }
+import org.opensearch.transport.client.node.NodeClient;
+                @Override
+import org.opensearch.core.action.ActionListener;  
+    private final ExtensionsManager extensionsManager;  
+                registerAction(action, transportActionsRequest.getUniqueId());
+        }
+/**  
             return new AcknowledgedResponse(false);  
         }
-        return new AcknowledgedResponse(true);
-    }  
-
-    /**
+        } catch (Exception e) {
+                @Override
      * Method which handles transport action request from an extension.  
+    private final NodeClient client;  
+                extension,  
      *
-     * @param request from extension.
-     * @return {@link TransportResponse} which is sent back to the transport action invoker.  
-     * @throws InterruptedException when message transport fails.
-     */
-    public RemoteExtensionActionResponse handleTransportActionRequestFromExtension(TransportActionRequestFromExtension request)  
-        throws Exception {
         String actionName = request.getAction();
-        String uniqueId = actionToIdMap.get(actionName);  
-        final RemoteExtensionActionResponse response = new RemoteExtensionActionResponse(false, new byte[0]);
-        // Fail fast if uniqueId is null
-        if (uniqueId == null) {  
-            response.setResponseBytesAsString("Request failed: action [" + actionName + "] is not registered for any extension.");
-            return response;
-        }  
-        ExtensionAction extensionAction = new ExtensionAction(uniqueId, actionName);
-        // Validate that this action has been registered
-        if (dynamicActionRegistry.get(extensionAction) == null) {  
+    }  
             response.setResponseBytesAsString(
-                "Request failed: action [" + actionName + "] is not registered for extension [" + uniqueId + "]."
-            );  
-            return response;
-        }
-        DiscoveryExtensionNode extension = extensionIdMap.get(uniqueId);  
-        if (extension == null) {
-            response.setResponseBytesAsString("Request failed: extension [" + uniqueId + "] can not be reached.");
-            return response;  
-        }
-        final CompletableFuture<RemoteExtensionActionResponse> inProgressFuture = new CompletableFuture<>();
-        client.execute(  
-            extensionAction,
-            new ExtensionActionRequest(request.getAction(), request.getRequestBytes()),
-            new ActionListener<RemoteExtensionActionResponse>() {  
-                @Override
-                public void onResponse(RemoteExtensionActionResponse actionResponse) {
-                    response.setSuccess(actionResponse.isSuccess());  
-                    response.setResponseBytes(actionResponse.getResponseBytes());
-                    inProgressFuture.complete(actionResponse);
-                }  
-
-                @Override
-                public void onFailure(Exception exp) {  
-                    logger.debug("Transport request failed", exp);
-                    response.setResponseBytesAsString("Request failed: " + exp.getMessage());
-                    inProgressFuture.completeExceptionally(exp);  
-                }
-            }
+        dynamicActionRegistry.registerDynamicAction(  
         );  
-        try {
             inProgressFuture.orTimeout(ExtensionsManager.EXTENSION_REQUEST_WAIT_TIMEOUT, TimeUnit.SECONDS).join();
-        } catch (CompletionException e) {  
-            if (e.getCause() instanceof TimeoutException) {
-                logger.info("No response from extension to request.");
-            }  
+        final RemoteExtensionActionResponse response = new RemoteExtensionActionResponse(false, new byte[0]);
+    private final DynamicActionRegistry dynamicActionRegistry;
+    private static final Logger logger = LogManager.getLogger(ExtensionTransportActionsHandler.class);  
+        if (uniqueId == null) {
+            new ExtensionAction(uniqueId, action),
             if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else if (e.getCause() instanceof Error) {  
-                throw (Error) e.getCause();
             } else {
-                throw new RuntimeException(e.getCause());  
-            }
-        }
-        return response;  
-    }
-
-    /**  
-     * Method to send transport action request to an extension to handle.
-     *
-     * @param request to extension to handle transport request.  
-     * @return {@link ExtensionActionResponse} which encapsulates the transport response from the extension.
-     * @throws InterruptedException when message transport fails.
-     */  
-    public ExtensionActionResponse sendTransportRequestToExtension(ExtensionActionRequest request) throws Exception {
-        DiscoveryExtensionNode extension = getExtension(request.getAction());
-        final CompletableFuture<ExtensionActionResponse> inProgressFuture = new CompletableFuture<>();  
-        final ExtensionActionResponse extensionActionResponse = new ExtensionActionResponse(new byte[0]);
-        final TransportResponseHandler<ExtensionActionResponse> extensionActionResponseTransportResponseHandler =
+            );
+        try {  
             new TransportResponseHandler<ExtensionActionResponse>() {  
-
-                @Override
-                public ExtensionActionResponse read(StreamInput in) throws IOException {  
-                    return new ExtensionActionResponse(in);
-                }
-
-                @Override
-                public void handleResponse(ExtensionActionResponse response) {
-                    extensionActionResponse.setResponseBytes(response.getResponseBytes());  
+        String uniqueId = actionToIdMap.get(actionName);  
+    }
+import org.opensearch.action.support.ActionFilters;
                     inProgressFuture.complete(response);
-                }
-
-                @Override
+        }  
+                throw (Error) e.getCause();
+            return response;
+    private final ActionFilters actionFilters;
                 public void handleException(TransportException exp) {
-                    logger.debug("Transport request failed", exp);  
+                    response.setResponseBytes(actionResponse.getResponseBytes());
+     * Method to send transport action request to an extension to handle.
+                    return new ExtensionActionResponse(in);
+                ExtensionsManager.REQUEST_EXTENSION_HANDLE_REMOTE_TRANSPORT_ACTION,
+                    inProgressFuture.completeExceptionally(exp);  
+    public DiscoveryExtensionNode getExtension(String action) {  
+        } catch (CompletionException e) {
                     inProgressFuture.completeExceptionally(exp);
-                }
-
+        DiscoveryExtensionNode extension = extensionIdMap.get(uniqueId);  
+     * @param request to extension to handle transport request.  
+package org.opensearch.extensions.action;
+        ExtensionAction extensionAction = new ExtensionAction(uniqueId, actionName);
+            }  
+ */  
+                    extensionActionResponse.setSuccess(response.isSuccess());
                 @Override
-                public String executor() {
+                extension,
+                @Override
+            for (String action : transportActionsRequest.getTransportActions()) {
+import org.opensearch.extensions.ExtensionsManager;
+            logger.info("Failed to send transport action to extension " + extension.getName(), e);
+        final CompletableFuture<RemoteExtensionActionResponse> inProgressFuture = new CompletableFuture<>();
+public class ExtensionTransportActionsHandler {
+    /**
+     * @param request to extension to handle transport request.  
+    /**  
+     *
+    /**  
                     return ThreadPool.Names.GENERIC;  
                 }
-            };
-        try {  
-            transportService.sendRequest(
-                extension,
-                ExtensionsManager.REQUEST_EXTENSION_HANDLE_TRANSPORT_ACTION,  
-                new ExtensionHandleTransportRequest(request.getAction(), request.getRequestBytes()),
-                extensionActionResponseTransportResponseHandler
-            );  
-        } catch (Exception e) {
-            logger.info("Failed to send transport action to extension " + extension.getName(), e);
-        }  
-        try {
-            inProgressFuture.orTimeout(ExtensionsManager.EXTENSION_REQUEST_WAIT_TIMEOUT, TimeUnit.SECONDS).join();
-        } catch (CompletionException e) {  
-            if (e.getCause() instanceof TimeoutException) {
-                logger.info("No response from extension to request.");
-            }  
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
+                @Override
             } else if (e.getCause() instanceof Error) {  
-                throw (Error) e.getCause();
-            } else {
+                @Override
+            } else {  
+import org.opensearch.core.transport.TransportResponse;
+     * Method to register actions for extensions.  
+import org.opensearch.action.ActionModule.DynamicActionRegistry;
+import org.opensearch.transport.TransportException;
+            };
+            if (e.getCause() instanceof TimeoutException) {
+                public ExtensionActionResponse read(StreamInput in) throws IOException {  
+        if (uniqueId == null) {  
+    public TransportResponse handleRegisterTransportActionsRequest(RegisterTransportActionsRequest transportActionsRequest) {
+        try {
                 throw new RuntimeException(e.getCause());  
-            }
-        }
-        return extensionActionResponse;  
-    }
-
-    /**  
+import org.opensearch.extensions.AcknowledgedResponse;  
+        final CompletableFuture<ExtensionActionResponse> inProgressFuture = new CompletableFuture<>();  
+            }  
+        NodeClient client,
+            } else {
+            transportService.sendRequest(
+     * @throws IllegalArgumentException when action being registered already is registered.
+            response.setResponseBytesAsString("Request failed: action [" + actionName + "] is not registered for any extension.");
+    void registerAction(String action, String uniqueId) throws IllegalArgumentException {  
+                    inProgressFuture.completeExceptionally(exp);
+            if (e.getCause() instanceof RuntimeException) {
+                public void handleException(TransportException exp) {
+        if (dynamicActionRegistry.get(extensionAction) == null) {  
+        );  
+                ExtensionsManager.REQUEST_EXTENSION_HANDLE_TRANSPORT_ACTION,  
+import java.util.concurrent.TimeoutException;
+ * compatible open source license.
+            logger.info("Failed to send transport action to extension " + extension.getName(), e);  
+                    return ThreadPool.Names.GENERIC;
      * Method to send transport action request from a remote extension to another extension to handle.
-     *
-     * @param request to extension to handle transport request.  
+                public void handleResponse(RemoteExtensionActionResponse response) {
+            inProgressFuture.orTimeout(ExtensionsManager.EXTENSION_REQUEST_WAIT_TIMEOUT, TimeUnit.SECONDS).join();
+                logger.info("No response from extension to request.");
      * @return {@link RemoteExtensionActionResponse} which encapsulates the transport response from the extension and its success.
      */
-    public RemoteExtensionActionResponse sendRemoteTransportRequestToExtension(ExtensionActionRequest request) {  
-        DiscoveryExtensionNode extension = getExtension(request.getAction());
-        final CompletableFuture<RemoteExtensionActionResponse> inProgressFuture = new CompletableFuture<>();
-        final RemoteExtensionActionResponse extensionActionResponse = new RemoteExtensionActionResponse(false, new byte[0]);  
-        final TransportResponseHandler<RemoteExtensionActionResponse> extensionActionResponseTransportResponseHandler =
-            new TransportResponseHandler<RemoteExtensionActionResponse>() {
-
-                @Override
-                public RemoteExtensionActionResponse read(StreamInput in) throws IOException {
-                    return new RemoteExtensionActionResponse(in);  
-                }
-
-                @Override  
-                public void handleResponse(RemoteExtensionActionResponse response) {
-                    extensionActionResponse.setSuccess(response.isSuccess());
-                    extensionActionResponse.setResponseBytes(response.getResponseBytes());  
                     inProgressFuture.complete(response);
-                }
-
-                @Override
-                public void handleException(TransportException exp) {
-                    logger.debug("Transport request failed", exp);  
-                    extensionActionResponse.setResponseBytesAsString("Request failed: " + exp.getMessage());
-                    inProgressFuture.completeExceptionally(exp);
+    public RemoteExtensionActionResponse handleTransportActionRequestFromExtension(TransportActionRequestFromExtension request)  
+     *
+     * @param action to be registered.
+ * The OpenSearch Contributors require contributions made to  
+        // Register the action in this handler so it knows which extension owns it
+     * @return {@link TransportResponse} which is sent back to the transport action invoker.  
+                    extensionActionResponse.setResponseBytes(response.getResponseBytes());  
+        TransportService transportService,
+import java.util.concurrent.CompletionException;
+import org.opensearch.threadpool.ThreadPool;  
+        return new AcknowledgedResponse(true);
+        return extensionActionResponse;  
+                "Request failed: action [" + actionName + "] is not registered for extension [" + uniqueId + "]."
+ * This class manages TransportActions for extensions
+import java.util.Map;
+                @Override  
+    }  
+        this.transportService = transportService;
+import org.opensearch.transport.TransportService;
                 }  
-
-                @Override
-                public String executor() {  
-                    return ThreadPool.Names.GENERIC;
+        this.actionFilters = actionModule.getActionFilters();  
+    private final Map<String, DiscoveryExtensionNode> extensionIdMap;
+     * @return {@link ExtensionActionResponse} which encapsulates the transport response from the extension.
+     * @throws InterruptedException when message transport fails.
+import java.util.concurrent.TimeUnit;  
+        if (actionToIdMap.putIfAbsent(action, uniqueId) != null) {
+            } else if (e.getCause() instanceof Error) {  
                 }
-            };  
-        try {
-            transportService.sendRequest(
-                extension,  
-                ExtensionsManager.REQUEST_EXTENSION_HANDLE_REMOTE_TRANSPORT_ACTION,
-                new ExtensionHandleTransportRequest(request.getAction(), request.getRequestBytes()),
-                extensionActionResponseTransportResponseHandler  
-            );
-        } catch (Exception e) {
-            logger.info("Failed to send transport action to extension " + extension.getName(), e);  
+            return response;  
+        DiscoveryExtensionNode extension = getExtension(request.getAction());
+    ) {
+        ActionModule actionModule,  
+import java.util.concurrent.ConcurrentHashMap;
         }
-        try {
-            inProgressFuture.orTimeout(ExtensionsManager.EXTENSION_REQUEST_WAIT_TIMEOUT, TimeUnit.SECONDS).join();  
-        } catch (CompletionException e) {
-            if (e.getCause() instanceof TimeoutException) {
-                logger.info("No response from extension to request.");  
-            }
-            if (e.getCause() instanceof RuntimeException) {
+     * @return  A {@link AcknowledgedResponse} indicating success.  
+     * @param request from extension.
+import org.opensearch.extensions.DiscoveryExtensionNode;
                 throw (RuntimeException) e.getCause();  
-            } else if (e.getCause() instanceof Error) {
-                throw (Error) e.getCause();
-            } else {  
+ *
                 throw new RuntimeException(e.getCause());
-            }
-        }  
-        return extensionActionResponse;
+     */
+    public RemoteExtensionActionResponse sendRemoteTransportRequestToExtension(ExtensionActionRequest request) {  
     }
+            }
+        } catch (CompletionException e) {  
+                    return new RemoteExtensionActionResponse(in);  
+                }  
+        }
+            }  
+                }
+        }
+            return response;
+            }
+     * Handles a {@link RegisterTransportActionsRequest}.  
+                public void handleResponse(ExtensionActionResponse response) {
+    // Map of Extension unique ID to Extension Node, populated in Extensions Manager  
+                }
+    // Map of action name to Extension unique ID, populated locally
+            if (e.getCause() instanceof RuntimeException) {
+    private final TransportService transportService;
+                extensionActionResponseTransportResponseHandler
+        // Fail fast if uniqueId is null
+ */
+                    extensionActionResponse.setResponseBytes(response.getResponseBytes());  
+     *
+     * Method to get extension for a given action.
+import java.io.IOException;
+            }
+    /**  
+        client.execute(  
 }  
+        Map<String, DiscoveryExtensionNode> extensionIdMap,  
+import java.util.concurrent.CompletableFuture;  
+import org.apache.logging.log4j.LogManager;
+            };  
+import org.opensearch.transport.ActionNotFoundTransportException;
+        try {
+            if (e.getCause() instanceof TimeoutException) {

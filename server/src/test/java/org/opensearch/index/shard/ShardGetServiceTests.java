@@ -1,280 +1,251 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.opensearch.Version;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.document.DocumentField;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.VersionType;  
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.VersionConflictEngineException;
-import org.opensearch.index.get.DocumentLookupResult;  
-import org.opensearch.index.get.GetResult;
-import org.opensearch.index.get.ShardGetService;
-import org.opensearch.index.mapper.MapperService;  
-import org.opensearch.index.mapper.RoutingFieldMapper;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-
-import java.io.IOException;
-import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;  
-import java.util.Collections;
-import java.util.Map;
-
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
-
-public class ShardGetServiceTests extends IndexShardTestCase {
-
-    public void testGetForUpdate() throws IOException {  
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .build();
-        IndexMetadata metadata = IndexMetadata.builder("test")  
-            .putMapping("{ \"properties\": { \"foo\":  { \"type\": \"text\"}}}")
-            .settings(settings)
-            .primaryTerm(0, 1)  
-            .build();
-        IndexShard primary = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
-        recoverShardFromStore(primary);  
-        Engine.IndexResult test = indexDoc(primary, "test", "0", "{\"foo\" : \"bar\"}");
-        assertTrue(primary.getIndexer().refreshNeeded());
-        GetResult testGet = primary.getService().getForUpdate("0", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);  
-        assertFalse(testGet.getFields().containsKey(RoutingFieldMapper.NAME));
-        assertEquals(new String(testGet.source(), StandardCharsets.UTF_8), "{\"foo\" : \"bar\"}");
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {  
-            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we refreshed
-        }
-
-        Engine.IndexResult test1 = indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
-        assertTrue(primary.getIndexer().refreshNeeded());
-        GetResult testGet1 = primary.getService().getForUpdate("1", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);  
-        assertEquals(new String(testGet1.source(), StandardCharsets.UTF_8), "{\"foo\" : \"baz\"}");
-        assertTrue(testGet1.getFields().containsKey(RoutingFieldMapper.NAME));
-        assertEquals("foobar", testGet1.getFields().get(RoutingFieldMapper.NAME).getValue());  
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
-            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we read from the translog
-        }  
-        primary.getIndexer().refresh("test");
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
-            assertEquals(searcher.getIndexReader().maxDoc(), 2);  
-        }
-
-        // now again from the reader  
-        Engine.IndexResult test2 = indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
-        assertTrue(primary.getIndexer().refreshNeeded());
-        testGet1 = primary.getService().getForUpdate("1", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);  
-        assertEquals(new String(testGet1.source(), StandardCharsets.UTF_8), "{\"foo\" : \"baz\"}");
-        assertTrue(testGet1.getFields().containsKey(RoutingFieldMapper.NAME));
-        assertEquals("foobar", testGet1.getFields().get(RoutingFieldMapper.NAME).getValue());  
-
-        final long primaryTerm = primary.getOperationPrimaryTerm();
-        testGet1 = primary.getService().getForUpdate("1", test2.getSeqNo(), primaryTerm);  
-        assertEquals(new String(testGet1.source(), StandardCharsets.UTF_8), "{\"foo\" : \"baz\"}");
-
-        expectThrows(VersionConflictEngineException.class, () -> primary.getService().getForUpdate("1", test2.getSeqNo() + 1, primaryTerm));  
-        expectThrows(VersionConflictEngineException.class, () -> primary.getService().getForUpdate("1", test2.getSeqNo(), primaryTerm + 1));
-        closeShards(primary);
-    }  
-
-    public void testGetFromTranslogWithStringSourceMappingOptionsAndStoredFields() throws IOException {
-        String docToIndex = "{\"foo\" : \"foo\", \"bar\" : \"bar\"}";  
-        boolean noSource = randomBoolean();
-        String sourceOptions = noSource ? "\"enabled\": false" : randomBoolean() ? "\"excludes\": [\"fo*\"]" : "\"includes\": [\"ba*\"]";
-        runGetFromTranslogWithOptions(docToIndex, sourceOptions, noSource ? "" : "{\"bar\":\"bar\"}", "\"text\"", "foo");  
-    }
-
-    public void testGetFromTranslogWithLongSourceMappingOptionsAndStoredFields() throws IOException {  
-        String docToIndex = "{\"foo\" : 7, \"bar\" : 42}";
-        boolean noSource = randomBoolean();
-        String sourceOptions = noSource ? "\"enabled\": false" : randomBoolean() ? "\"excludes\": [\"fo*\"]" : "\"includes\": [\"ba*\"]";  
-        runGetFromTranslogWithOptions(docToIndex, sourceOptions, noSource ? "" : "{\"bar\":42}", "\"long\"", 7L);
-    }
-
-    private void runGetFromTranslogWithOptions(
-        String docToIndex,
-        String sourceOptions,  
-        String expectedResult,
-        String fieldType,
-        Object expectedFooVal  
-    ) throws IOException {
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .build();  
-
-        IndexMetadata metadata = IndexMetadata.builder("test")
-            .putMapping(  
-                "{ \"properties\": { \"foo\":  { \"type\": "
-                    + fieldType
-                    + ", \"store\": true }, "  
-                    + "\"bar\":  { \"type\": "
-                    + fieldType
-                    + "}}, \"_source\": { "  
-                    + sourceOptions
-                    + "}}}"
-            )  
-            .settings(settings)
-            .primaryTerm(0, 1)
-            .build();  
-        IndexShard primary = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
-        recoverShardFromStore(primary);
-        Engine.IndexResult test = indexDoc(primary, MapperService.SINGLE_MAPPING_NAME, "0", docToIndex);  
-        assertTrue(primary.getIndexer().refreshNeeded());
-        GetResult testGet = primary.getService().getForUpdate("0", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);
-        assertFalse(testGet.getFields().containsKey(RoutingFieldMapper.NAME));  
-        assertEquals(new String(testGet.source() == null ? new byte[0] : testGet.source(), StandardCharsets.UTF_8), expectedResult);
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
-            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we refreshed  
-        }
-
-        Engine.IndexResult test1 = indexDoc(primary, "1", docToIndex, MediaTypeRegistry.JSON, "foobar");  
-        assertTrue(primary.getIndexer().refreshNeeded());
-        GetResult testGet1 = primary.getService().getForUpdate("1", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);
-        assertEquals(new String(testGet1.source() == null ? new byte[0] : testGet1.source(), StandardCharsets.UTF_8), expectedResult);  
-        assertTrue(testGet1.getFields().containsKey(RoutingFieldMapper.NAME));
-        assertEquals("foobar", testGet1.getFields().get(RoutingFieldMapper.NAME).getValue());
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {  
-            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we read from the translog
-        }
-        primary.getIndexer().refresh("test");  
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
-            assertEquals(searcher.getIndexReader().maxDoc(), 2);
-        }  
-
-        Engine.IndexResult test2 = indexDoc(primary, "2", docToIndex, MediaTypeRegistry.JSON, "foobar");
-        assertTrue(primary.getIndexer().refreshNeeded());  
-        GetResult testGet2 = primary.getService()
-            .get("2", new String[] { "foo" }, true, 1, VersionType.INTERNAL, FetchSourceContext.FETCH_SOURCE);
-        assertEquals(new String(testGet2.source() == null ? new byte[0] : testGet2.source(), StandardCharsets.UTF_8), expectedResult);  
-        assertTrue(testGet2.getFields().containsKey(RoutingFieldMapper.NAME));
-        assertTrue(testGet2.getFields().containsKey("foo"));
-        assertEquals(expectedFooVal, testGet2.getFields().get("foo").getValue());  
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
-            assertEquals(searcher.getIndexReader().maxDoc(), 2); // we read from the translog
-        }  
-        primary.getIndexer().refresh("test");
-        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
-            assertEquals(searcher.getIndexReader().maxDoc(), 3);  
-        }
-
-        testGet2 = primary.getService().get("2", new String[] { "foo" }, true, 1, VersionType.INTERNAL, FetchSourceContext.FETCH_SOURCE);  
-        assertEquals(new String(testGet2.source() == null ? new byte[0] : testGet2.source(), StandardCharsets.UTF_8), expectedResult);
-        assertTrue(testGet2.getFields().containsKey(RoutingFieldMapper.NAME));
-        assertTrue(testGet2.getFields().containsKey("foo"));  
-        assertEquals(expectedFooVal, testGet2.getFields().get("foo").getValue());
-
-        closeShards(primary);  
-    }
-
-    public void testTypelessGetForUpdate() throws IOException {  
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .build();
-        IndexMetadata metadata = IndexMetadata.builder("index")  
-            .putMapping("{ \"properties\": { \"foo\":  { \"type\": \"text\"}}}")
-            .settings(settings)
-            .primaryTerm(0, 1)  
-            .build();
-        IndexShard shard = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
-        recoverShardFromStore(shard);  
-        Engine.IndexResult indexResult = indexDoc(shard, "some_type", "0", "{\"foo\" : \"bar\"}");
-        assertTrue(indexResult.isCreated());
-
-        GetResult getResult = shard.getService().getForUpdate("0", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);
-        assertTrue(getResult.isExists());
-
-        closeShards(shard);
-    }
-
-    @SuppressForbidden(reason = "reflective access to test private buildFromLookup method")
-    public void testBuildFromLookupSourceFiltering() throws Exception {
-        Settings settings = Settings.builder()  
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-            .build();
-        IndexMetadata metadata = IndexMetadata.builder("test")
-            .putMapping("{ \"properties\": { \"foo\":  { \"type\": \"text\"}}}")  
-            .settings(settings)
-            .primaryTerm(0, 1)
-            .build();  
-        IndexShard primary = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
-        recoverShardFromStore(primary);
-
-        ShardGetService getService = primary.getService();
-        Method buildFromLookup = ShardGetService.class.getDeclaredMethod(
             "buildFromLookup",  
-            DocumentLookupResult.class,
-            FetchSourceContext.class
-        );  
-        buildFromLookup.setAccessible(true);
-
-        BytesReference source = new BytesArray("{\"foo\":\"bar\",\"baz\":\"qux\"}");  
+        assertEquals("foobar", testGet1.getFields().get(RoutingFieldMapper.NAME).getValue());  
+        }  
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        GetResult testGet2 = primary.getService()
+            assertEquals(searcher.getIndexReader().maxDoc(), 2);
+        Engine.IndexResult test1 = indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
+        IndexShard primary = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
+    ) throws IOException {
         DocumentField docField = new DocumentField("foo", Collections.singletonList("bar"));
-        DocumentLookupResult lookup = new DocumentLookupResult("1", 3L, true, source, 5L, 1L, Map.of("foo", docField), Map.of());
-
-        // Case 1: FETCH_SOURCE — source passes through unfiltered
-        GetResult result = (GetResult) buildFromLookup.invoke(getService, lookup, FetchSourceContext.FETCH_SOURCE);
-        assertTrue(result.isExists());  
-        assertEquals("1", result.getId());
-        assertEquals(3L, result.getVersion());
-        assertEquals(5L, result.getSeqNo());  
-        assertEquals(1L, result.getPrimaryTerm());
-        assertEquals("{\"foo\":\"bar\",\"baz\":\"qux\"}", new String(result.source(), StandardCharsets.UTF_8));
-        assertEquals("bar", result.getFields().get("foo").getValue());  
-
-        // Case 2: DO_NOT_FETCH_SOURCE — source is null
-        GetResult noSourceResult = (GetResult) buildFromLookup.invoke(getService, lookup, FetchSourceContext.DO_NOT_FETCH_SOURCE);  
-        assertNull(noSourceResult.source());
-        assertTrue(noSourceResult.isExists());
-        assertEquals("1", noSourceResult.getId());  
-
-        // Case 3: includes filter — only matching fields in source
+ */
         FetchSourceContext includesOnly = new FetchSourceContext(true, new String[] { "foo" }, new String[0]);  
-        GetResult filteredResult = (GetResult) buildFromLookup.invoke(getService, lookup, includesOnly);
-        assertEquals("{\"foo\":\"bar\"}", new String(filteredResult.source(), StandardCharsets.UTF_8));
-
-        closeShards(primary);
+        Settings settings = Settings.builder()
     }
+            .settings(settings)
+        BytesReference source = new BytesArray("{\"foo\":\"bar\",\"baz\":\"qux\"}");  
+        boolean noSource = randomBoolean();
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
+ * GitHub history for details.
+            .putMapping("{ \"properties\": { \"foo\":  { \"type\": \"text\"}}}")
+            .putMapping(  
+                    + fieldType
+ *
+        assertTrue(testGet1.getFields().containsKey(RoutingFieldMapper.NAME));
+        );  
+        GetResult testGet = primary.getService().getForUpdate("0", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);
+        IndexShard shard = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
+import org.opensearch.core.common.bytes.BytesArray;
+ * Licensed to Elasticsearch under one or more contributor  
+            .primaryTerm(0, 1)  
+ * KIND, either express or implied.  See the License for the
+        closeShards(primary);  
+    private void runGetFromTranslogWithOptions(
+            DocumentLookupResult.class,
+    @SuppressForbidden(reason = "reflective access to test private buildFromLookup method")
+ * specific language governing permissions and limitations
+            FetchSourceContext.class
+                "{ \"properties\": { \"foo\":  { \"type\": "
+        recoverShardFromStore(primary);
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we read from the translog
+        }  
+                    + fieldType
+        GetResult testGet = primary.getService().getForUpdate("0", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);  
+ * Unless required by applicable law or agreed to in writing,
+        assertEquals(new String(testGet1.source(), StandardCharsets.UTF_8), "{\"foo\" : \"baz\"}");
+        String sourceOptions = noSource ? "\"enabled\": false" : randomBoolean() ? "\"excludes\": [\"fo*\"]" : "\"includes\": [\"ba*\"]";  
+            assertEquals(searcher.getIndexReader().maxDoc(), 2);  
+            .settings(settings)
+        closeShards(primary);
+        IndexShard primary = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
+        assertTrue(getResult.isExists());
+            .build();
+import org.opensearch.core.common.bytes.BytesReference;  
+        assertTrue(testGet2.getFields().containsKey("foo"));  
+        String sourceOptions = noSource ? "\"enabled\": false" : randomBoolean() ? "\"excludes\": [\"fo*\"]" : "\"includes\": [\"ba*\"]";
+        }  
+        assertEquals(expectedFooVal, testGet2.getFields().get("foo").getValue());
+import org.opensearch.cluster.metadata.IndexMetadata;
+                    + sourceOptions
+ * not use this file except in compliance with the License.
+        assertEquals("{\"foo\":\"bar\"}", new String(filteredResult.source(), StandardCharsets.UTF_8));
+import java.util.Map;
+        Engine.IndexResult test2 = indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
+            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we refreshed  
+import org.opensearch.Version;  
+        ShardGetService getService = primary.getService();
+import org.opensearch.index.engine.VersionConflictEngineException;
+        // Case 3: includes filter — only matching fields in source
+            assertEquals(searcher.getIndexReader().maxDoc(), 3);  
+        GetResult testGet1 = primary.getService().getForUpdate("1", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);
+        assertFalse(testGet.getFields().containsKey(RoutingFieldMapper.NAME));
+        // Case 1: FETCH_SOURCE — source passes through unfiltered
+        expectThrows(VersionConflictEngineException.class, () -> primary.getService().getForUpdate("1", test2.getSeqNo() + 1, primaryTerm));  
+        GetResult testGet1 = primary.getService().getForUpdate("1", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);  
+        assertTrue(testGet1.getFields().containsKey(RoutingFieldMapper.NAME));
+        // now again from the reader  
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+        String fieldType,
+        primary.getIndexer().refresh("test");
+        assertFalse(testGet.getFields().containsKey(RoutingFieldMapper.NAME));  
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+import org.opensearch.index.get.DocumentLookupResult;  
+/*  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
+            .putMapping("{ \"properties\": { \"foo\":  { \"type\": \"text\"}}}")
+    }  
+        assertTrue(testGet2.getFields().containsKey(RoutingFieldMapper.NAME));
+        assertEquals(new String(testGet2.source() == null ? new byte[0] : testGet2.source(), StandardCharsets.UTF_8), expectedResult);  
+    }
+    }
+        assertEquals("bar", result.getFields().get("foo").getValue());  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
+import java.lang.reflect.Method;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+        IndexMetadata metadata = IndexMetadata.builder("test")
+            .build();  
+        assertEquals("foobar", testGet1.getFields().get(RoutingFieldMapper.NAME).getValue());
+public class ShardGetServiceTests extends IndexShardTestCase {
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
+        assertEquals(new String(testGet.source() == null ? new byte[0] : testGet.source(), StandardCharsets.UTF_8), expectedResult);
+    public void testGetFromTranslogWithLongSourceMappingOptionsAndStoredFields() throws IOException {  
+        testGet1 = primary.getService().getForUpdate("1", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);  
+    }
+    public void testTypelessGetForUpdate() throws IOException {  
+        Engine.IndexResult test = indexDoc(primary, MapperService.SINGLE_MAPPING_NAME, "0", docToIndex);  
+import org.opensearch.common.SuppressForbidden;
+ * SPDX-License-Identifier: Apache-2.0
+        recoverShardFromStore(primary);  
+            .primaryTerm(0, 1)
+/*
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                    + "\"bar\":  { \"type\": "
+        assertTrue(testGet1.getFields().containsKey(RoutingFieldMapper.NAME));
+        }
+ * license agreements. See the NOTICE file distributed with
+        assertEquals("1", noSourceResult.getId());  
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
+            .build();
+        boolean noSource = randomBoolean();
+        }
+        closeShards(primary);
+        assertTrue(primary.getIndexer().refreshNeeded());
+        Settings settings = Settings.builder()  
+import java.io.IOException;
+        assertTrue(primary.getIndexer().refreshNeeded());
+        assertEquals(new String(testGet1.source(), StandardCharsets.UTF_8), "{\"foo\" : \"baz\"}");
+ */  
+ *
+        assertTrue(testGet2.getFields().containsKey(RoutingFieldMapper.NAME));
+            assertEquals(searcher.getIndexReader().maxDoc(), 2); // we read from the translog
+        IndexMetadata metadata = IndexMetadata.builder("test")  
+ * under the License.  
+            .settings(settings)
+        assertEquals(new String(testGet1.source() == null ? new byte[0] : testGet1.source(), StandardCharsets.UTF_8), expectedResult);  
+            .putMapping("{ \"properties\": { \"foo\":  { \"type\": \"text\"}}}")  
+        testGet2 = primary.getService().get("2", new String[] { "foo" }, true, 1, VersionType.INTERNAL, FetchSourceContext.FETCH_SOURCE);  
+            .primaryTerm(0, 1)
+        Engine.IndexResult indexResult = indexDoc(shard, "some_type", "0", "{\"foo\" : \"bar\"}");
+            .primaryTerm(0, 1)  
+        assertTrue(indexResult.isCreated());
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
+ */
+import org.opensearch.index.get.ShardGetService;
+            .build();  
+        assertEquals(new String(testGet2.source() == null ? new byte[0] : testGet2.source(), StandardCharsets.UTF_8), expectedResult);
+        DocumentLookupResult lookup = new DocumentLookupResult("1", 3L, true, source, 5L, 1L, Map.of("foo", docField), Map.of());
+        IndexShard primary = newShard(new ShardId(metadata.getIndex(), 0), true, "n1", metadata, null);
+        assertEquals(1L, result.getPrimaryTerm());
+ * software distributed under the License is distributed on an
+import org.opensearch.index.VersionType;  
+        GetResult getResult = shard.getService().getForUpdate("0", UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM);
+        Engine.IndexResult test2 = indexDoc(primary, "2", docToIndex, MediaTypeRegistry.JSON, "foobar");
+            .build();  
+ * ownership. Elasticsearch licenses this file to you under  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+        Object expectedFooVal  
+        Settings settings = Settings.builder()
+/*
+        String docToIndex = "{\"foo\" : \"foo\", \"bar\" : \"bar\"}";  
+        expectThrows(VersionConflictEngineException.class, () -> primary.getService().getForUpdate("1", test2.getSeqNo(), primaryTerm + 1));
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+        }
+            .settings(settings)
+                    + "}}}"
+    public void testGetFromTranslogWithStringSourceMappingOptionsAndStoredFields() throws IOException {
+        IndexMetadata metadata = IndexMetadata.builder("test")
+        assertTrue(primary.getIndexer().refreshNeeded());  
+        String sourceOptions,  
+        recoverShardFromStore(shard);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void testGetForUpdate() throws IOException {  
+        testGet1 = primary.getService().getForUpdate("1", test2.getSeqNo(), primaryTerm);  
+            )  
+        GetResult result = (GetResult) buildFromLookup.invoke(getService, lookup, FetchSourceContext.FETCH_SOURCE);
+            .get("2", new String[] { "foo" }, true, 1, VersionType.INTERNAL, FetchSourceContext.FETCH_SOURCE);
+import org.opensearch.index.mapper.RoutingFieldMapper;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+import org.opensearch.index.get.GetResult;
+    }
+                    + ", \"store\": true }, "  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        // Case 2: DO_NOT_FETCH_SOURCE — source is null
+        assertEquals(new String(testGet1.source(), StandardCharsets.UTF_8), "{\"foo\" : \"baz\"}");
+            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we refreshed
+        final long primaryTerm = primary.getOperationPrimaryTerm();
+        assertEquals("1", result.getId());
+        buildFromLookup.setAccessible(true);
+        assertTrue(result.isExists());  
+        GetResult filteredResult = (GetResult) buildFromLookup.invoke(getService, lookup, includesOnly);
+ *  
+        assertEquals(3L, result.getVersion());
+    public void testBuildFromLookupSourceFiltering() throws Exception {
 }  
+        assertTrue(noSourceResult.isExists());
+        Settings settings = Settings.builder()
+        primary.getIndexer().refresh("test");
+        assertTrue(primary.getIndexer().refreshNeeded());
+        runGetFromTranslogWithOptions(docToIndex, sourceOptions, noSource ? "" : "{\"bar\":\"bar\"}", "\"text\"", "foo");  
+ * The OpenSearch Contributors require contributions made to  
+        Engine.IndexResult test = indexDoc(primary, "test", "0", "{\"foo\" : \"bar\"}");
+ * compatible open source license.
+        assertTrue(testGet2.getFields().containsKey("foo"));
+        assertNull(noSourceResult.source());
+        primary.getIndexer().refresh("test");  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+            .build();
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {
+            .build();
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        GetResult noSourceResult = (GetResult) buildFromLookup.invoke(getService, lookup, FetchSourceContext.DO_NOT_FETCH_SOURCE);  
+import org.opensearch.common.document.DocumentField;  
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        assertTrue(primary.getIndexer().refreshNeeded());
+        assertEquals(new String(testGet.source(), StandardCharsets.UTF_8), "{\"foo\" : \"bar\"}");
+        Engine.IndexResult test1 = indexDoc(primary, "1", docToIndex, MediaTypeRegistry.JSON, "foobar");  
+import org.opensearch.index.mapper.MapperService;  
+        assertEquals("foobar", testGet1.getFields().get(RoutingFieldMapper.NAME).getValue());  
+        }
+        IndexMetadata metadata = IndexMetadata.builder("index")  
+            assertEquals(searcher.getIndexReader().maxDoc(), 1); // we read from the translog
+ * You may obtain a copy of the License at  
+import org.opensearch.index.engine.Engine;
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {  
+        Method buildFromLookup = ShardGetService.class.getDeclaredMethod(
+        runGetFromTranslogWithOptions(docToIndex, sourceOptions, noSource ? "" : "{\"bar\":42}", "\"long\"", 7L);
+        closeShards(shard);
+                    + "}}, \"_source\": { "  
+ * Modifications Copyright OpenSearch Contributors. See  
+        String docToIndex = "{\"foo\" : 7, \"bar\" : 42}";
+import org.opensearch.core.index.shard.ShardId;
+import java.nio.charset.StandardCharsets;  
+        String expectedResult,
+        recoverShardFromStore(primary);
+        assertEquals(5L, result.getSeqNo());  
+package org.opensearch.index.shard;
+import org.opensearch.common.settings.Settings;
+        assertEquals("{\"foo\":\"bar\",\"baz\":\"qux\"}", new String(result.source(), StandardCharsets.UTF_8));
+import java.util.Collections;
+        assertTrue(primary.getIndexer().refreshNeeded());
+            .build();
+        String docToIndex,
+        try (Engine.Searcher searcher = getEngine(primary).acquireSearcher("test", Engine.SearcherScope.INTERNAL)) {  
+        assertEquals(expectedFooVal, testGet2.getFields().get("foo").getValue());  

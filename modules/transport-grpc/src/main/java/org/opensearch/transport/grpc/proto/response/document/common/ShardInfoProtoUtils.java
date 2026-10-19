@@ -1,68 +1,60 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.response.document.common;
-
-import org.opensearch.action.support.replication.ReplicationResponse;  
-import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
+        return shardFailure.build();
+     *
+        shardFailure.setNode(failure.nodeId());
+ * The OpenSearch Contributors require contributions made to  
+     * @throws IOException If there's an error during conversion
 import org.opensearch.protobufs.ShardFailure;  
-import org.opensearch.protobufs.ShardInfo;
-import org.opensearch.transport.grpc.proto.response.exceptions.opensearchexception.OpenSearchExceptionProtoUtils;
-
-import java.io.IOException;
-
-/**  
- * Utility class for converting ReplicationResponse.ShardInfo objects to Protocol Buffers.
- */
-public class ShardInfoProtoUtils {  
-
-    private ShardInfoProtoUtils() {
-        // Utility class, no instances  
-    }
-
-    /**  
-     * Converts a ReplicationResponse.ShardInfo Java object to a protobuf ShardStatistics.
-     * Similar to {@link ReplicationResponse.ShardInfo#toXContent(XContentBuilder, ToXContent.Params)}
-     *  
-     * @param shardInfo The shard information to convert to protobuf format
-     * @return The protobuf representation of the shard information
-     * @throws IOException If there's an error during conversion  
+ *
      */
-    public static ShardInfo toProto(ReplicationResponse.ShardInfo shardInfo) throws IOException {
-        ShardInfo.Builder shardInfoBuilder = ShardInfo.newBuilder();  
-        shardInfoBuilder.setTotal(shardInfo.getTotal());
-        shardInfoBuilder.setSuccessful(shardInfo.getSuccessful());
-        shardInfoBuilder.setFailed(shardInfo.getFailed());  
-
-        // Add any shard failures
         for (ReplicationResponse.ShardInfo.Failure failure : shardInfo.getFailures()) {  
+import java.io.IOException;
+    public static ShardInfo toProto(ReplicationResponse.ShardInfo shardInfo) throws IOException {
+import org.opensearch.action.support.replication.ReplicationResponse;  
+     *  
+        shardFailure.setShard(failure.shardId());  
+ */  
+    }  
+ */
+ * Utility class for converting ReplicationResponse.ShardInfo objects to Protocol Buffers.
+import org.opensearch.transport.grpc.proto.response.exceptions.opensearchexception.OpenSearchExceptionProtoUtils;
+package org.opensearch.transport.grpc.proto.response.document.common;
+    /**
+/**  
+     * @return The protobuf representation of the shard information
+     * Converts a ReplicationResponse.ShardInfo.Failure Java object to a protobuf ShardFailure.
+        shardInfoBuilder.setSuccessful(shardInfo.getSuccessful());
+     */
+    private ShardInfoProtoUtils() {
+    /**  
+        shardInfoBuilder.setTotal(shardInfo.getTotal());
+    }
+ * compatible open source license.
+import org.opensearch.protobufs.ShardInfo;
+    private static ShardFailure toProto(ReplicationResponse.ShardInfo.Failure failure) throws IOException {  
+/*  
+        ShardInfo.Builder shardInfoBuilder = ShardInfo.newBuilder();  
+     * @param shardInfo The shard information to convert to protobuf format
+     * Similar to {@link ReplicationResponse.ShardInfo#toXContent(XContentBuilder, ToXContent.Params)}
+        // Utility class, no instances  
+        shardFailure.setReason(OpenSearchExceptionProtoUtils.generateThrowableProto(failure.getCause()));
+        return shardInfoBuilder.build();
+import org.opensearch.core.xcontent.ToXContent;
+        shardFailure.setPrimary(failure.primary());
+    }
+        // Add any shard failures
+ * this file be licensed under the Apache-2.0 license or a
+        shardInfoBuilder.setFailed(shardInfo.getFailed());  
+        shardFailure.setIndex(failure.index());
+     * @param failure The shard failure to convert to protobuf format
+public class ShardInfoProtoUtils {  
+     * Similar to {@link ReplicationResponse.ShardInfo.Failure#toXContent(XContentBuilder, ToXContent.Params)}  
+     * @throws IOException If there's an error during conversion  
             shardInfoBuilder.addFailures(toProto(failure));
         }
-
-        return shardInfoBuilder.build();
-    }
-
-    /**
-     * Converts a ReplicationResponse.ShardInfo.Failure Java object to a protobuf ShardFailure.
-     * Similar to {@link ReplicationResponse.ShardInfo.Failure#toXContent(XContentBuilder, ToXContent.Params)}  
-     *
-     * @param failure The shard failure to convert to protobuf format
-     * @return The protobuf representation of the shard failure  
-     * @throws IOException If there's an error during conversion
-     */
-    private static ShardFailure toProto(ReplicationResponse.ShardInfo.Failure failure) throws IOException {  
-        ShardFailure.Builder shardFailure = ShardFailure.newBuilder();
-        shardFailure.setIndex(failure.index());
-        shardFailure.setShard(failure.shardId());  
-        shardFailure.setNode(failure.nodeId());
-        shardFailure.setReason(OpenSearchExceptionProtoUtils.generateThrowableProto(failure.getCause()));
-        shardFailure.setStatus(failure.status().name());  
-        shardFailure.setPrimary(failure.primary());
-        return shardFailure.build();
-    }  
 }
+        ShardFailure.Builder shardFailure = ShardFailure.newBuilder();
+ * SPDX-License-Identifier: Apache-2.0
+        shardFailure.setStatus(failure.status().name());  
+     * Converts a ReplicationResponse.ShardInfo Java object to a protobuf ShardStatistics.
+     * @return The protobuf representation of the shard failure  

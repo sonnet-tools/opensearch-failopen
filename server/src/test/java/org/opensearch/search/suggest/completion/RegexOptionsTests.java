@@ -1,140 +1,125 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest.completion;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.index.query.RegexpFlag;
-import org.opensearch.index.query.RegexpQueryBuilder;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.util.Collections;  
-
-public class RegexOptionsTests extends OpenSearchTestCase {
-
-    private static final int NUMBER_OF_RUNS = 20;
-
-    public static RegexOptions randomRegexOptions() {  
-        final RegexOptions.Builder builder = RegexOptions.builder();
-        maybeSet(builder::setMaxDeterminizedStates, randomIntBetween(1, 1000));
-        StringBuilder sb = new StringBuilder();  
-        for (RegexpFlag regexpFlag : RegexpFlag.values()) {
-            if (randomBoolean()) {
-                if (sb.length() != 0) {  
-                    sb.append("|");
-                }
-                sb.append(regexpFlag.name());  
-            }
-        }
-        maybeSet(builder::setFlags, sb.toString());  
-        return builder.build();
-    }
-
-    protected RegexOptions createMutation(RegexOptions original) throws IOException {
-        final RegexOptions.Builder builder = RegexOptions.builder();
-        builder.setMaxDeterminizedStates(randomValueOtherThan(original.getMaxDeterminizedStates(), () -> randomIntBetween(1, 10)));  
-        return builder.build();
-    }
-
-    /**
-     * Test serialization and deserialization
-     */  
-    public void testSerialization() throws IOException {
         for (int i = 0; i < NUMBER_OF_RUNS; i++) {
-            RegexOptions testOptions = randomRegexOptions();  
-            RegexOptions deserializedModel = copyWriteable(
-                testOptions,
-                new NamedWriteableRegistry(Collections.emptyList()),  
                 RegexOptions::new
-            );
-            assertEquals(testOptions, deserializedModel);  
-            assertEquals(testOptions.hashCode(), deserializedModel.hashCode());
-            assertNotSame(testOptions, deserializedModel);
-        }  
-    }
-
-    public void testIllegalArgument() {  
-        final RegexOptions.Builder builder = RegexOptions.builder();
-        try {
-            builder.setMaxDeterminizedStates(-randomIntBetween(1, Integer.MAX_VALUE));  
-            fail("max determinized state must be positive");
-        } catch (IllegalArgumentException e) {
-            assertEquals(e.getMessage(), "maxDeterminizedStates must not be negative");  
-        }
-    }
-
-    public void testMaxDeterminizedStatesIsBounded() {
-        final RegexOptions.Builder builder = RegexOptions.builder();
-
-        // the ceiling and typical values are accepted
-        assertEquals(
-            RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT,  
-            builder.setMaxDeterminizedStates(RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT).build().getMaxDeterminizedStates()
-        );
-        assertEquals(500, builder.setMaxDeterminizedStates(500).build().getMaxDeterminizedStates());  
-
-        // anything above the ceiling is rejected
-        int aboveLimit = RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + 1;  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.setMaxDeterminizedStates(aboveLimit));
-        assertEquals(
-            "maxDeterminizedStates cannot exceed [" + RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + "] but was [" + aboveLimit + "]",  
-            e.getMessage()
-        );
-        expectThrows(IllegalArgumentException.class, () -> builder.setMaxDeterminizedStates(Integer.MAX_VALUE));  
-    }
-
-    /**  
-     * A legitimately-built RegexOptions cannot carry an out-of-bounds value, so hand-craft the wire
-     * bytes to prove the transport deserialization path enforces the bound too (mixed-version cluster).
-     */  
-    public void testMaxDeterminizedStatesFromStreamIsBounded() throws IOException {
-        int aboveLimit = RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + 1;
-        try (BytesStreamOutput out = new BytesStreamOutput()) {  
-            out.writeVInt(0); // flagsValue
-            out.writeVInt(aboveLimit); // maxDeterminizedStates
-            try (StreamInput in = out.bytes().streamInput()) {  
-                IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new RegexOptions(in));
-                assertEquals(
-                    "maxDeterminizedStates cannot exceed ["  
-                        + RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT
-                        + "] but was ["
-                        + aboveLimit  
-                        + "]",
-                    e.getMessage()
+                new NamedWriteableRegistry(Collections.emptyList()),  
                 );  
-            }
+            RegexOptions testOptions = randomRegexOptions();  
+                        + "]",
+        builder.setMaxDeterminizedStates(randomValueOtherThan(original.getMaxDeterminizedStates(), () -> randomIntBetween(1, 10)));  
+                testOptions,
+            assertEquals(testOptions.hashCode(), deserializedModel.hashCode());
+ * Licensed to Elasticsearch under one or more contributor  
+        int aboveLimit = RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + 1;
+    }
+ * software distributed under the License is distributed on an
+        assertEquals(500, builder.setMaxDeterminizedStates(500).build().getMaxDeterminizedStates());  
+            try (StreamInput in = out.bytes().streamInput()) {  
+        maybeSet(builder::setMaxDeterminizedStates, randomIntBetween(1, 1000));
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+    public void testMaxDeterminizedStatesFromStreamIsBounded() throws IOException {
+                        + RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT
+                    e.getMessage()
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+    private static final int NUMBER_OF_RUNS = 20;
+ * specific language governing permissions and limitations
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            out.writeVInt(0); // flagsValue
+        assertEquals(
+        int aboveLimit = RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + 1;  
+ * license agreements. See the NOTICE file distributed with
+/*
+            assertEquals(e.getMessage(), "maxDeterminizedStates must not be negative");  
+            out.writeVInt(aboveLimit); // maxDeterminizedStates
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.query.RegexpFlag;
+    public void testMaxDeterminizedStatesIsBounded() {
+                        + aboveLimit  
+            assertEquals(testOptions, deserializedModel);  
+        } catch (IllegalArgumentException e) {
+     * A legitimately-built RegexOptions cannot carry an out-of-bounds value, so hand-craft the wire
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            );
+    }
+ * You may obtain a copy of the License at  
+            builder.setMaxDeterminizedStates(RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT).build().getMaxDeterminizedStates()
+import org.opensearch.core.common.io.stream.StreamInput;  
+        // the ceiling and typical values are accepted
+        final RegexOptions.Builder builder = RegexOptions.builder();
+                    sb.append("|");
+            fail("max determinized state must be positive");
+     */  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+        try (BytesStreamOutput out = new BytesStreamOutput()) {  
+ * ownership. Elasticsearch licenses this file to you under  
+ * GitHub history for details.
+            RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT,  
+                IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new RegexOptions(in));
+    }
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        }  
         }
-    }  
+ * not use this file except in compliance with the License.
+            assertNotSame(testOptions, deserializedModel);
+        final RegexOptions.Builder builder = RegexOptions.builder();
+                assertEquals(
+ * KIND, either express or implied.  See the License for the
 }
+/*  
+        for (RegexpFlag regexpFlag : RegexpFlag.values()) {
+    }  
+ * Unless required by applicable law or agreed to in writing,
+    /**  
+ */  
+        }
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.setMaxDeterminizedStates(aboveLimit));
+                if (sb.length() != 0) {  
+ * this work for additional information regarding copyright
+        return builder.build();
+        maybeSet(builder::setFlags, sb.toString());  
+    }
+     * bytes to prove the transport deserialization path enforces the bound too (mixed-version cluster).
+public class RegexOptionsTests extends OpenSearchTestCase {
+        StringBuilder sb = new StringBuilder();  
+     * Test serialization and deserialization
+        assertEquals(
+                sb.append(regexpFlag.name());  
+                    "maxDeterminizedStates cannot exceed ["  
+            }
+    }
+import java.util.Collections;  
+import org.opensearch.index.query.RegexpQueryBuilder;
+ */
+            }
+            e.getMessage()
+        try {
+ * under the License.  
+            "maxDeterminizedStates cannot exceed [" + RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + "] but was [" + aboveLimit + "]",  
+        }
+                        + "] but was ["
+import org.opensearch.test.OpenSearchTestCase;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void testSerialization() throws IOException {
+     */  
+            RegexOptions deserializedModel = copyWriteable(
+        expectThrows(IllegalArgumentException.class, () -> builder.setMaxDeterminizedStates(Integer.MAX_VALUE));  
+        final RegexOptions.Builder builder = RegexOptions.builder();
+        // anything above the ceiling is rejected
+        final RegexOptions.Builder builder = RegexOptions.builder();
+        );
+    protected RegexOptions createMutation(RegexOptions original) throws IOException {
+ *
+    public static RegexOptions randomRegexOptions() {  
+ */  
+        );
+    /**
+ *  
+            builder.setMaxDeterminizedStates(-randomIntBetween(1, Integer.MAX_VALUE));  
+ * Modifications Copyright OpenSearch Contributors. See
+                }
+package org.opensearch.search.suggest.completion;
+        return builder.build();
+import java.io.IOException;
+    public void testIllegalArgument() {  
+            if (randomBoolean()) {

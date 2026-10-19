@@ -1,59 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.en.EnglishAnalyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
-
-/**
- * Only for old indexes  
- */
-public class ChineseAnalyzerProvider extends AbstractIndexAnalyzerProvider<StandardAnalyzer> {
-
-    private final StandardAnalyzer analyzer;
-
-    ChineseAnalyzerProvider(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
-        super(indexSettings, name, settings);
-        // old index: best effort
-        analyzer = new StandardAnalyzer(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET);  
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+ *
     }
-
+        super(indexSettings, name, settings);
+ * Only for old indexes  
     @Override  
-    public StandardAnalyzer get() {
-        return this.analyzer;
+ * KIND, either express or implied.  See the License for the
+ */
+ *  
     }  
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.analysis.common;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public StandardAnalyzer get() {
+        analyzer = new StandardAnalyzer(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET);  
 }
+ */
+/**
+        return this.analyzer;
+import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
+ * license agreements. See the NOTICE file distributed with
+ * ownership. Elasticsearch licenses this file to you under  
+public class ChineseAnalyzerProvider extends AbstractIndexAnalyzerProvider<StandardAnalyzer> {
+/*
+ * compatible open source license.
+import org.opensearch.index.IndexSettings;
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.env.Environment;
+/*  
+import org.opensearch.common.settings.Settings;  
+        // old index: best effort
+/*  
+ * GitHub history for details.
+ *
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at  
+ * not use this file except in compliance with the License.
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
+ * SPDX-License-Identifier: Apache-2.0
+    private final StandardAnalyzer analyzer;
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
+    ChineseAnalyzerProvider(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
+import org.apache.lucene.analysis.en.EnglishAnalyzer;

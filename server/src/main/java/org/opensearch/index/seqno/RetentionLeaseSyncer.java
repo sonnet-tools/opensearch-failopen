@@ -1,107 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.seqno;
-
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.shard.ShardId;
-
-import java.util.Objects;
-
-/**  
- * Syncs retention leases
- *
- * @opensearch.internal  
- */
-@PublicApi(since = "1.0.0")
-public class RetentionLeaseSyncer {  
-    private final SyncAction syncAction;
-    private final BackgroundSyncAction backgroundSyncAction;
-
-    @Inject
-    public RetentionLeaseSyncer(RetentionLeaseSyncAction syncAction, RetentionLeaseBackgroundSyncAction backgroundSyncAction) {
-        this(syncAction::sync, backgroundSyncAction::backgroundSync);  
-    }
-
-    public RetentionLeaseSyncer(SyncAction syncAction, BackgroundSyncAction backgroundSyncAction) {  
-        this.syncAction = Objects.requireNonNull(syncAction);
-        this.backgroundSyncAction = Objects.requireNonNull(backgroundSyncAction);
-    }  
-
-    public static final RetentionLeaseSyncer EMPTY = new RetentionLeaseSyncer(
-        (shardId, primaryAllocationId, primaryTerm, retentionLeases, listener) -> listener.onResponse(new ReplicationResponse()),  
-        (shardId, primaryAllocationId, primaryTerm, retentionLeases) -> {}
-    );
-
-    public void sync(
-        ShardId shardId,
-        String primaryAllocationId,  
-        long primaryTerm,
-        RetentionLeases retentionLeases,
-        ActionListener<ReplicationResponse> listener  
-    ) {
-        syncAction.sync(shardId, primaryAllocationId, primaryTerm, retentionLeases, listener);
-    }  
-
-    public void backgroundSync(ShardId shardId, String primaryAllocationId, long primaryTerm, RetentionLeases retentionLeases) {
-        backgroundSyncAction.backgroundSync(shardId, primaryAllocationId, primaryTerm, retentionLeases);  
-    }
-
-    /**  
-     * Represents an action that is invoked to sync retention leases to replica shards after a retention lease is added
+    /**
      * or removed on the primary. The specified listener is invoked when the syncing completes with success or failure.
+ * compatible open source license.
+        RetentionLeases retentionLeases,
+ * Syncs retention leases
+    }  
+@PublicApi(since = "1.0.0")
+    public RetentionLeaseSyncer(RetentionLeaseSyncAction syncAction, RetentionLeaseBackgroundSyncAction backgroundSyncAction) {
+        long primaryTerm,
+ * @opensearch.internal  
+ * SPDX-License-Identifier: Apache-2.0
+     *
      *  
+        syncAction.sync(shardId, primaryAllocationId, primaryTerm, retentionLeases, listener);
+    public void sync(
+ * GitHub history for details.
+     */  
+ * not use this file except in compliance with the License.
+ * software distributed under the License is distributed on an
+ *  
+import java.util.Objects;
+ * specific language governing permissions and limitations
+package org.opensearch.index.seqno;
+        this.syncAction = Objects.requireNonNull(syncAction);
+    private final SyncAction syncAction;
+    }
      * @opensearch.internal
-     */
-    public interface SyncAction {  
-        void sync(
+     * @opensearch.internal
+public class RetentionLeaseSyncer {  
+ * under the License.  
+    private final BackgroundSyncAction backgroundSyncAction;
+        this.backgroundSyncAction = Objects.requireNonNull(backgroundSyncAction);
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.common.annotation.PublicApi;
+ */  
+        String primaryAllocationId,  
+ *
+    );
+ * KIND, either express or implied.  See the License for the
+    }  
+        ActionListener<ReplicationResponse> listener  
+    }  
             ShardId shardId,
-            String primaryAllocationId,  
-            long primaryTerm,
             RetentionLeases retentionLeases,
+ */  
+        (shardId, primaryAllocationId, primaryTerm, retentionLeases, listener) -> listener.onResponse(new ReplicationResponse()),  
+    public interface BackgroundSyncAction {
+        ShardId shardId,
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.action.support.replication.ReplicationResponse;
+/**  
+/*
+     * Represents an action that is invoked to sync retention leases to replica shards after a retention lease is added
+    ) {
+import org.opensearch.core.action.ActionListener;
+ *
+        backgroundSyncAction.backgroundSync(shardId, primaryAllocationId, primaryTerm, retentionLeases);  
+            String primaryAllocationId,  
+    }
+ * this file be licensed under the Apache-2.0 license or a
             ActionListener<ReplicationResponse> listener  
         );
-    }
-
-    /**
-     * Represents an action that is invoked periodically to sync retention leases to replica shards after some retention
-     * lease has been renewed or expired.  
-     *
-     * @opensearch.internal
-     */  
-    public interface BackgroundSyncAction {
+        void sync(
         void backgroundSync(ShardId shardId, String primaryAllocationId, long primaryTerm, RetentionLeases retentionLeases);
-    }  
+ * You may obtain a copy of the License at  
+/*  
+ */
+    /**  
+        this(syncAction::sync, backgroundSyncAction::backgroundSync);  
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public void backgroundSync(ShardId shardId, String primaryAllocationId, long primaryTerm, RetentionLeases retentionLeases) {
 }
+ * this work for additional information regarding copyright
+ * The OpenSearch Contributors require contributions made to  
+ * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+     */
+    public interface SyncAction {  
+    @Inject
+     * Represents an action that is invoked periodically to sync retention leases to replica shards after some retention
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public RetentionLeaseSyncer(SyncAction syncAction, BackgroundSyncAction backgroundSyncAction) {  
+ */
+ * license agreements. See the NOTICE file distributed with
+            long primaryTerm,
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+import org.opensearch.common.inject.Inject;  
+     * lease has been renewed or expired.  
+ * Licensed to Elasticsearch under one or more contributor  
+    public static final RetentionLeaseSyncer EMPTY = new RetentionLeaseSyncer(
+/*  
+        (shardId, primaryAllocationId, primaryTerm, retentionLeases) -> {}

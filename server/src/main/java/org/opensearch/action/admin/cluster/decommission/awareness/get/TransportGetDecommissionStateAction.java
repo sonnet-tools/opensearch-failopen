@@ -1,90 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.cluster.decommission.awareness.get;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.decommission.DecommissionAttributeMetadata;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.threadpool.ThreadPool;  
+            clusterService,
+                    decommissionAttributeMetadata.decommissionAttribute().attributeValue(),
+    }
 import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-
+        ClusterService clusterService,
+        TransportService transportService,
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);  
+                )  
+    public TransportGetDecommissionStateAction(  
+        return ThreadPool.Names.SAME;  
+    protected GetDecommissionStateResponse read(StreamInput in) throws IOException {
+        IndexNameExpressionResolver indexNameExpressionResolver
+        return new GetDecommissionStateResponse(in);
+            listener.onResponse(new GetDecommissionStateResponse());  
+    ) {  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    @Override
+                new GetDecommissionStateResponse(  
+            GetDecommissionStateAction.NAME,
+    }  
+import org.opensearch.cluster.decommission.DecommissionAttributeMetadata;  
+    ) throws Exception {
 /**
- * Transport action for getting decommission status  
- *
- * @opensearch.internal
+    protected ClusterBlockException checkBlock(GetDecommissionStateRequest request, ClusterState state) {
+        );
+package org.opensearch.action.admin.cluster.decommission.awareness.get;
  */  
-public class TransportGetDecommissionStateAction extends TransportClusterManagerNodeReadAction<
     GetDecommissionStateRequest,
     GetDecommissionStateResponse> {  
-
-    @Inject
-    public TransportGetDecommissionStateAction(  
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {  
-        super(
-            GetDecommissionStateAction.NAME,
-            transportService,  
-            clusterService,
-            threadPool,
-            actionFilters,  
-            GetDecommissionStateRequest::new,
-            indexNameExpressionResolver,
-            true  
-        );
-    }
-
-    @Override
     protected String executor() {
-        return ThreadPool.Names.SAME;  
-    }
-
-    @Override  
-    protected GetDecommissionStateResponse read(StreamInput in) throws IOException {
-        return new GetDecommissionStateResponse(in);
-    }  
-
-    @Override
-    protected void clusterManagerOperation(  
-        GetDecommissionStateRequest request,
-        ClusterState state,
-        ActionListener<GetDecommissionStateResponse> listener  
-    ) throws Exception {
-        DecommissionAttributeMetadata decommissionAttributeMetadata = state.metadata().decommissionAttributeMetadata();
-        if (decommissionAttributeMetadata != null  
+ */  
             && request.attributeName().equals(decommissionAttributeMetadata.decommissionAttribute().attributeName())) {
-            listener.onResponse(
-                new GetDecommissionStateResponse(  
-                    decommissionAttributeMetadata.decommissionAttribute().attributeValue(),
+    @Inject
                     decommissionAttributeMetadata.status()
-                )  
-            );
-        } else {
-            listener.onResponse(new GetDecommissionStateResponse());  
+            threadPool,
+        DecommissionAttributeMetadata decommissionAttributeMetadata = state.metadata().decommissionAttributeMetadata();
+ * The OpenSearch Contributors require contributions made to  
         }
+            listener.onResponse(
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.cluster.service.ClusterService;
+        ThreadPool threadPool,  
+            );
+            actionFilters,  
+import org.opensearch.action.support.ActionFilters;
+import org.opensearch.cluster.ClusterState;  
+import java.io.IOException;  
+        GetDecommissionStateRequest request,
+            transportService,  
+        ActionFilters actionFilters,
+import org.opensearch.cluster.block.ClusterBlockLevel;
+            GetDecommissionStateRequest::new,
+        ActionListener<GetDecommissionStateResponse> listener  
+public class TransportGetDecommissionStateAction extends TransportClusterManagerNodeReadAction<
+/*  
+        super(
     }
-
+import org.opensearch.threadpool.ThreadPool;  
+ *
+import org.opensearch.core.action.ActionListener;
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+        ClusterState state,
+import org.opensearch.cluster.block.ClusterBlockException;
+ *
+import org.opensearch.common.inject.Inject;  
+            true  
+        } else {
+ * Transport action for getting decommission status  
     @Override
-    protected ClusterBlockException checkBlock(GetDecommissionStateRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);  
-    }
+            indexNameExpressionResolver,
+ * @opensearch.internal
 }
+    @Override
+    }
+    }
+    @Override  
+    protected void clusterManagerOperation(  
+        if (decommissionAttributeMetadata != null  

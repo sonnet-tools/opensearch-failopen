@@ -1,49 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rex.RexBuilder;  
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlLibraryOperators;  
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.analytics.spi.FieldStorageInfo;  
-import org.opensearch.analytics.spi.ScalarFunctionAdapter;
-
+ *
+class DayOfWeekAdapter implements ScalarFunctionAdapter {  
+    }
 import java.math.BigDecimal;  
-import java.util.List;
-
-/**  
  * PPL {@code dayofweek}/{@code day_of_week} → {@code CAST(date_part('dow', x) + 1 AS <retType>)}:
  * MySQL/PPL uses 1=Sun..7=Sat but DataFusion/Postgres {@code date_part('dow')} returns 0..6, so we
- * add 1 and cast back to the original call's return type.  
- *
- * <p>VARCHAR / TIME operand handling: see {@link DatePartAdapters}.
- *  
- * @opensearch.internal
- */
-class DayOfWeekAdapter implements ScalarFunctionAdapter {  
-
-    @Override
-    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {  
-        if (original.getOperands().size() != 1) {
             return original;
-        }  
-        RexBuilder rexBuilder = cluster.getRexBuilder();
-        RelDataType varchar = cluster.getTypeFactory().createSqlType(SqlTypeName.VARCHAR);
-        RexNode partLiteral = rexBuilder.makeLiteral("dow", varchar, true);  
+import org.apache.calcite.plan.RelOptCluster;
         RexNode operand = DatePartAdapters.coerceCharacterOperandToTimestamp(original.getOperands().get(0), cluster);
-        RexNode datePart = rexBuilder.makeCall(SqlLibraryOperators.DATE_PART, partLiteral, operand);
+import org.apache.calcite.sql.fun.SqlLibraryOperators;  
+        RelDataType varchar = cluster.getTypeFactory().createSqlType(SqlTypeName.VARCHAR);
+ *  
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexCall;
+ * compatible open source license.
         RexNode sum = rexBuilder.makeCall(SqlStdOperatorTable.PLUS, datePart, rexBuilder.makeExactLiteral(BigDecimal.ONE));  
-        return rexBuilder.makeCast(original.getType(), sum);
-    }
+/**  
+        RexNode partLiteral = rexBuilder.makeLiteral("dow", varchar, true);  
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+        RexNode datePart = rexBuilder.makeCall(SqlLibraryOperators.DATE_PART, partLiteral, operand);
+        }  
+import org.opensearch.analytics.spi.ScalarFunctionAdapter;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+ * add 1 and cast back to the original call's return type.  
+package org.opensearch.be.datafusion;
+import java.util.List;
+    @Override
+ */
+import org.opensearch.analytics.spi.FieldStorageInfo;  
+import org.apache.calcite.rex.RexBuilder;  
+import org.apache.calcite.rel.type.RelDataType;
+ * <p>VARCHAR / TIME operand handling: see {@link DatePartAdapters}.
 }  
+        if (original.getOperands().size() != 1) {
+/*  
+        RexBuilder rexBuilder = cluster.getRexBuilder();
+        return rexBuilder.makeCast(original.getType(), sum);
+ * @opensearch.internal
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {  
+ *

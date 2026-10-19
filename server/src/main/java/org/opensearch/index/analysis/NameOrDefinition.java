@@ -1,131 +1,117 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+ * Provides the name and settings for an analyzer
+        }
+/**  
+        if (isNotNullDefinition) {
+    }
+    public NameOrDefinition(StreamInput in) throws IOException {
  *
+}
+        if (definition == null) {  
+        if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
+import java.util.Objects;
+        } else {  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParseException;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.Objects;
-
-/**  
- * Provides the name and settings for an analyzer
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class NameOrDefinition implements Writeable, ToXContentFragment {  
-    // exactly one of these two members is not null
-    public final String name;
-    public final Settings definition;  
-
-    public NameOrDefinition(String name) {
-        this.name = Objects.requireNonNull(name);  
-        this.definition = null;
-    }
-
-    public NameOrDefinition(Map<String, ?> definition) {
-        this.name = null;
-        Objects.requireNonNull(definition);  
-        try {
-            this.definition = Settings.builder().loadFromMap(definition).build();
-        } catch (Exception e) {  
-            throw new IllegalArgumentException("Failed to parse [" + definition + "]", e);
-        }
-    }  
-
-    public NameOrDefinition(StreamInput in) throws IOException {
-        name = in.readOptionalString();  
-        if (in.readBoolean()) {
-            definition = Settings.readSettingsFromStream(in);
-        } else {  
-            definition = null;
-        }
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeOptionalString(name);
-        boolean isNotNullDefinition = this.definition != null;
-        out.writeBoolean(isNotNullDefinition);  
-        if (isNotNullDefinition) {
-            Settings.writeSettingsToStream(definition, out);
-        }  
-    }
-
-    public static NameOrDefinition fromXContent(XContentParser parser) throws IOException {  
-        if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
-            return new NameOrDefinition(parser.text());
-        }  
-        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
-            return new NameOrDefinition(parser.map());
-        }  
-        throw new XContentParseException(
-            parser.getTokenLocation(),
-            "Expected [VALUE_STRING] or [START_OBJECT], got " + parser.currentToken()  
-        );
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (definition == null) {  
-            builder.value(name);
-        } else {
-            builder.startObject();  
-            definition.toXContent(builder, params);
-            builder.endObject();
-        }  
-        return builder;
-    }
-
-    @Override
-    public boolean equals(Object o) {
         if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
+/*  
+import java.io.IOException;
+ * KIND, either express or implied.  See the License for the
+ */
+/*
+import org.opensearch.core.xcontent.XContentParseException;
         NameOrDefinition that = (NameOrDefinition) o;
-        return Objects.equals(name, that.name) && Objects.equals(definition, that.definition);  
-    }
-
-    @Override  
-    public int hashCode() {
+/*  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    @Override
+        return builder;
+        }
+    public boolean equals(Object o) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.Map;  
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See
         return Objects.hash(name, definition);
+    // exactly one of these two members is not null
+            return new NameOrDefinition(parser.text());
+        this.definition = null;
+    @Override  
+        }  
+        }  
+ * software distributed under the License is distributed on an
+        name = in.readOptionalString();  
+            return new NameOrDefinition(parser.map());
+ * SPDX-License-Identifier: Apache-2.0
+    }
     }  
-}
+        this.name = Objects.requireNonNull(name);  
+        } else {
+        try {
+        boolean isNotNullDefinition = this.definition != null;
+            builder.startObject();  
+ *
+    @Override
+    }
+ * You may obtain a copy of the License at  
+ */
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Unless required by applicable law or agreed to in writing,
+        } catch (Exception e) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            "Expected [VALUE_STRING] or [START_OBJECT], got " + parser.currentToken()  
+    public void writeTo(StreamOutput out) throws IOException {  
+ * ownership. Elasticsearch licenses this file to you under  
+            definition = null;
+    @Override
+public class NameOrDefinition implements Writeable, ToXContentFragment {  
+        return Objects.equals(name, that.name) && Objects.equals(definition, that.definition);  
+package org.opensearch.index.analysis;
+ */  
+ * compatible open source license.
+    }
+ *  
+import org.opensearch.common.settings.Settings;
+ * @opensearch.api  
+        out.writeOptionalString(name);
+import org.opensearch.core.xcontent.XContentBuilder;
+ * GitHub history for details.
+        }  
+ * under the License.  
+    public final String name;
+ * license agreements. See the NOTICE file distributed with
+            throw new IllegalArgumentException("Failed to parse [" + definition + "]", e);
+        throw new XContentParseException(
+            builder.value(name);
+            Settings.writeSettingsToStream(definition, out);
+ */  
+        if (in.readBoolean()) {
+ * specific language governing permissions and limitations
+            definition = Settings.readSettingsFromStream(in);
+    public NameOrDefinition(Map<String, ?> definition) {
+        }  
+    public int hashCode() {
+            builder.endObject();
+    }
+    public final Settings definition;  
+ * Licensed to Elasticsearch under one or more contributor  
+        out.writeBoolean(isNotNullDefinition);  
+            this.definition = Settings.builder().loadFromMap(definition).build();
+        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.core.common.io.stream.StreamInput;  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+@PublicApi(since = "1.0.0")
+        this.name = null;
+    public NameOrDefinition(String name) {
+import org.opensearch.core.xcontent.ToXContentFragment;  
+    }  
+import org.opensearch.core.xcontent.XContentParser;  
+import org.opensearch.core.common.io.stream.Writeable;
+    }  
+        Objects.requireNonNull(definition);  
+            definition.toXContent(builder, params);
+    public static NameOrDefinition fromXContent(XContentParser parser) throws IOException {  
+            parser.getTokenLocation(),
+ *
+        if (o == null || getClass() != o.getClass()) return false;
+        );

@@ -1,45 +1,39 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.action;
-
-import org.apache.lucene.util.SameThreadExecutorService;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.rule.RulePersistenceService;  
-import org.opensearch.rule.RulePersistenceServiceRegistry;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class TransportGetRuleActionTests extends OpenSearchTestCase {
-    TransportGetRuleAction sut;
-
-    public void testExecute() {
-        RulePersistenceServiceRegistry rulePersistenceServiceRegistry = mock(RulePersistenceServiceRegistry.class);
-        TransportService transportService = mock(TransportService.class);  
+ *
         ActionFilters actionFilters = mock(ActionFilters.class);
-        RulePersistenceService rulePersistenceService = mock(RulePersistenceService.class);
-        GetRuleRequest getRuleRequest = mock(GetRuleRequest.class);  
         when(getRuleRequest.getFeatureType()).thenReturn(null);
-
-        when(rulePersistenceServiceRegistry.getRulePersistenceService(any())).thenReturn(rulePersistenceService);  
-        doNothing().when(rulePersistenceService).getRule(any(), any());
+ */  
+import org.opensearch.action.support.ActionFilters;
+        sut.doExecute(null, getRuleRequest, null);
+import static org.mockito.Mockito.verify;
         ThreadPool threadPool = mock(ThreadPool.class);
+import static org.mockito.Mockito.times;  
+    public void testExecute() {
+/*  
+import org.opensearch.threadpool.ThreadPool;  
+package org.opensearch.rule.action;
+import org.opensearch.rule.RulePersistenceServiceRegistry;
+        when(rulePersistenceServiceRegistry.getRulePersistenceService(any())).thenReturn(rulePersistenceService);  
+        GetRuleRequest getRuleRequest = mock(GetRuleRequest.class);  
+public class TransportGetRuleActionTests extends OpenSearchTestCase {
+import org.opensearch.transport.TransportService;
         when(threadPool.executor(any())).thenReturn(new SameThreadExecutorService());  
         sut = new TransportGetRuleAction(transportService, threadPool, actionFilters, rulePersistenceServiceRegistry);
-        sut.doExecute(null, getRuleRequest, null);
-        verify(rulePersistenceService, times(1)).getRule(any(), any());  
+import static org.mockito.ArgumentMatchers.any;  
+        RulePersistenceService rulePersistenceService = mock(RulePersistenceService.class);
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
     }
+import org.opensearch.rule.RulePersistenceService;  
+        verify(rulePersistenceService, times(1)).getRule(any(), any());  
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+        RulePersistenceServiceRegistry rulePersistenceServiceRegistry = mock(RulePersistenceServiceRegistry.class);
 }
+import org.opensearch.test.OpenSearchTestCase;
+        TransportService transportService = mock(TransportService.class);  
+    TransportGetRuleAction sut;
+import org.apache.lucene.util.SameThreadExecutorService;
+        doNothing().when(rulePersistenceService).getRule(any(), any());
+import static org.mockito.Mockito.doNothing;

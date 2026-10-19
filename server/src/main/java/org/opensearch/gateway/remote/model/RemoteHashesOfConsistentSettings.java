@@ -1,108 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.DiffableStringMap;
-import org.opensearch.common.io.Streams;  
-import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.core.compress.Compressor;  
-import org.opensearch.gateway.remote.ClusterMetadataManifest;
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.repositories.blobstore.ChecksumWritableBlobStoreFormat;  
-
-import java.io.IOException;
-import java.io.InputStream;  
-import java.util.List;
-
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;  
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_PATH_TOKEN;
-
-/**
- * Wrapper class for uploading/downloading {@link DiffableStringMap} to/from remote blob store
- */  
-public class RemoteHashesOfConsistentSettings extends AbstractClusterMetadataWriteableBlobEntity<DiffableStringMap> {
-    public static final String HASHES_OF_CONSISTENT_SETTINGS = "hashes-of-consistent-settings";
-    public final ChecksumWritableBlobStoreFormat<DiffableStringMap> hashesOfConsistentSettingsFormat;  
-
-    private DiffableStringMap hashesOfConsistentSettings;
-    private long metadataVersion;  
-
-    public RemoteHashesOfConsistentSettings(
-        final DiffableStringMap hashesOfConsistentSettings,  
-        final long metadataVersion,
-        final String clusterUUID,
-        final Compressor compressor  
-    ) {
-        super(clusterUUID, compressor, null);
-        this.metadataVersion = metadataVersion;  
-        this.hashesOfConsistentSettings = hashesOfConsistentSettings;
-        this.hashesOfConsistentSettingsFormat = new ChecksumWritableBlobStoreFormat<>(
             "hashes-of-consistent-settings",  
-            DiffableStringMap::readFrom
-        );
+/*  
+    @Override  
+        super(clusterUUID, compressor, null);
+}
     }  
-
-    public RemoteHashesOfConsistentSettings(
-        final String blobName,  
-        final String clusterUUID,
+    public InputStream serialize() throws IOException {
+        this.blobName = blobName;  
+import org.opensearch.gateway.remote.ClusterMetadataManifest;
+    public BlobPathParameters getBlobPathParameters() {  
+import org.opensearch.cluster.metadata.DiffableStringMap;
+import org.opensearch.core.compress.Compressor;  
+import org.opensearch.index.remote.RemoteStoreUtils;
+import org.opensearch.common.remote.BlobPathParameters;
         final Compressor compressor,
+    public ClusterMetadataManifest.UploadedMetadata getUploadedMetadata() {
+            "hashes-of-consistent-settings",
+ */  
+package org.opensearch.gateway.remote.model;
+        return hashesOfConsistentSettingsFormat.serialize(hashesOfConsistentSettings, generateBlobFileName(), getCompressor())  
+            DiffableStringMap::readFrom
+ * SPDX-License-Identifier: Apache-2.0
+        final String clusterUUID,
+        String blobFileName = String.join(
+    public DiffableStringMap deserialize(final InputStream inputStream) throws IOException {
+        assert blobName != null;  
+        return new BlobPathParameters(List.of(GLOBAL_METADATA_PATH_TOKEN), HASHES_OF_CONSISTENT_SETTINGS);
+        this.blobFileName = blobFileName;  
+            DELIMITER,  
+        final String clusterUUID,
+        final DiffableStringMap hashesOfConsistentSettings,  
+    @Override
+    public String generateBlobFileName() {
         final Version version  
     ) {
-        super(clusterUUID, compressor, null);
-        this.blobName = blobName;  
-        this.hashesOfConsistentSettingsFormat = new ChecksumWritableBlobStoreFormat<>(
-            "hashes-of-consistent-settings",
-            DiffableStringMap::readFrom,  
-            version
-        );
-    }  
-
-    @Override
-    public BlobPathParameters getBlobPathParameters() {  
-        return new BlobPathParameters(List.of(GLOBAL_METADATA_PATH_TOKEN), HASHES_OF_CONSISTENT_SETTINGS);
     }
-
+ * compatible open source license.
     @Override
-    public String getType() {
-        return HASHES_OF_CONSISTENT_SETTINGS;  
-    }
-
-    @Override  
-    public String generateBlobFileName() {
-        String blobFileName = String.join(
-            DELIMITER,  
-            getBlobPathParameters().getFilePrefix(),
-            RemoteStoreUtils.invertLong(metadataVersion),
-            RemoteStoreUtils.invertLong(System.currentTimeMillis()),  
-            String.valueOf(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION)
-        );
-        this.blobFileName = blobFileName;  
-        return blobFileName;
-    }
-
-    @Override
-    public ClusterMetadataManifest.UploadedMetadata getUploadedMetadata() {
-        assert blobName != null;  
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_PATH_TOKEN;
         return new ClusterMetadataManifest.UploadedMetadataAttribute(HASHES_OF_CONSISTENT_SETTINGS, blobName);
-    }
-
+ */  
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
+ * The OpenSearch Contributors require contributions made to  
+            version
+    public final ChecksumWritableBlobStoreFormat<DiffableStringMap> hashesOfConsistentSettingsFormat;  
+            RemoteStoreUtils.invertLong(System.currentTimeMillis()),  
+public class RemoteHashesOfConsistentSettings extends AbstractClusterMetadataWriteableBlobEntity<DiffableStringMap> {
+        final long metadataVersion,
+        return blobFileName;
+        return hashesOfConsistentSettingsFormat.deserialize(blobName, Streams.readFully(inputStream));  
+ *
+            getBlobPathParameters().getFilePrefix(),
+    public RemoteHashesOfConsistentSettings(
+        );
+        this.hashesOfConsistentSettings = hashesOfConsistentSettings;
+        final Compressor compressor  
+        );
+        final String blobName,  
+            String.valueOf(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION)
+        this.hashesOfConsistentSettingsFormat = new ChecksumWritableBlobStoreFormat<>(
+    private DiffableStringMap hashesOfConsistentSettings;
+            RemoteStoreUtils.invertLong(metadataVersion),
+import java.io.IOException;
+import org.opensearch.Version;
     @Override
-    public InputStream serialize() throws IOException {
-        return hashesOfConsistentSettingsFormat.serialize(hashesOfConsistentSettings, generateBlobFileName(), getCompressor())  
+import org.opensearch.common.io.Streams;  
+import java.util.List;
+    }
+    }  
+    @Override
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;  
+ * this file be licensed under the Apache-2.0 license or a
+    ) {
+    public static final String HASHES_OF_CONSISTENT_SETTINGS = "hashes-of-consistent-settings";
+    }
             .streamInput();
     }
-
+ * Wrapper class for uploading/downloading {@link DiffableStringMap} to/from remote blob store
+        this.hashesOfConsistentSettingsFormat = new ChecksumWritableBlobStoreFormat<>(
+/**
+        this.metadataVersion = metadataVersion;  
+    public RemoteHashesOfConsistentSettings(
+            DiffableStringMap::readFrom,  
+import org.opensearch.repositories.blobstore.ChecksumWritableBlobStoreFormat;  
+import java.io.InputStream;  
     @Override
-    public DiffableStringMap deserialize(final InputStream inputStream) throws IOException {
-        return hashesOfConsistentSettingsFormat.deserialize(blobName, Streams.readFully(inputStream));  
+        );
+import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;
     }
-}
+    private long metadataVersion;  
+        return HASHES_OF_CONSISTENT_SETTINGS;  
+        super(clusterUUID, compressor, null);
+    }
+    public String getType() {

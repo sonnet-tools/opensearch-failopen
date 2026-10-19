@@ -1,128 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+            this.globalCheckpoint = globalCheckpoint;
+    public ReplicaRequest getReplicaRequest() {
+            this.replicaRequest = replicaRequest;
+        return replicaRequest;
+            ShardRouting shardRouting,
+    }
  * compatible open source license.
- */  
-
-package org.opensearch.action.support.replication;
-
-import org.opensearch.cluster.routing.ShardRouting;
-
-import java.util.Objects;  
-
-/**
- * This is proxy wrapper over the replication request whose object can be created using the Builder present inside.  
- *
- * @opensearch.internal
- */  
-public class ReplicationProxyRequest<ReplicaRequest> {
-
     private final ShardRouting shardRouting;  
-
-    private final ShardRouting primaryRouting;
-
-    private final long globalCheckpoint;
-
-    private final long maxSeqNoOfUpdatesOrDeletes;  
-
-    private final PendingReplicationActions pendingReplicationActions;
-
-    private final ReplicaRequest replicaRequest;
-
-    private final long primaryTerm;  
-
-    private ReplicationProxyRequest(
-        ShardRouting shardRouting,  
-        ShardRouting primaryRouting,
-        long globalCheckpoint,
         long maxSeqNoOfUpdatesOrDeletes,  
-        PendingReplicationActions pendingReplicationActions,
-        ReplicaRequest replicaRequest,
+        private final ShardRouting primaryRouting;
         long primaryTerm  
-    ) {
-        this.shardRouting = Objects.requireNonNull(shardRouting);
-        this.primaryRouting = Objects.requireNonNull(primaryRouting);  
-        this.globalCheckpoint = globalCheckpoint;
-        this.maxSeqNoOfUpdatesOrDeletes = maxSeqNoOfUpdatesOrDeletes;
-        this.pendingReplicationActions = Objects.requireNonNull(pendingReplicationActions);  
-        this.replicaRequest = Objects.requireNonNull(replicaRequest);
+                primaryTerm
+            this.primaryRouting = primaryRouting;
         this.primaryTerm = primaryTerm;
     }  
-
-    public ShardRouting getShardRouting() {
-        return shardRouting;  
-    }
-
-    public ShardRouting getPrimaryRouting() {  
-        return primaryRouting;
-    }
-
-    public long getGlobalCheckpoint() {
-        return globalCheckpoint;
-    }  
-
-    public long getMaxSeqNoOfUpdatesOrDeletes() {
-        return maxSeqNoOfUpdatesOrDeletes;  
-    }
-
-    public PendingReplicationActions getPendingReplicationActions() {  
-        return pendingReplicationActions;
-    }
-
-    public ReplicaRequest getReplicaRequest() {
-        return replicaRequest;
-    }  
-
-    public long getPrimaryTerm() {
-        return primaryTerm;  
-    }
-
-    /**  
-     * Builder of ReplicationProxyRequest.
-     *
      * @opensearch.internal  
-     */
-    public static class Builder<ReplicaRequest> {
-
-        private final ShardRouting shardRouting;
-        private final ShardRouting primaryRouting;
-        private final long globalCheckpoint;  
-        private final long maxSeqNoOfUpdatesOrDeletes;
-        private final PendingReplicationActions pendingReplicationActions;
-        private final ReplicaRequest replicaRequest;  
-        private final long primaryTerm;
-
-        public Builder(  
-            ShardRouting shardRouting,
-            ShardRouting primaryRouting,
-            long globalCheckpoint,  
-            long maxSeqNoOfUpdatesOrDeletes,
-            PendingReplicationActions pendingReplicationActions,
-            ReplicaRequest replicaRequest,  
-            long primaryTerm
-        ) {
-            this.shardRouting = shardRouting;  
-            this.primaryRouting = primaryRouting;
-            this.globalCheckpoint = globalCheckpoint;
-            this.maxSeqNoOfUpdatesOrDeletes = maxSeqNoOfUpdatesOrDeletes;  
-            this.pendingReplicationActions = pendingReplicationActions;
-            this.replicaRequest = replicaRequest;
-            this.primaryTerm = primaryTerm;  
-        }
-
-        public ReplicationProxyRequest<ReplicaRequest> build() {  
-            return new ReplicationProxyRequest<>(
-                shardRouting,
-                primaryRouting,  
                 globalCheckpoint,
-                maxSeqNoOfUpdatesOrDeletes,
-                pendingReplicationActions,  
-                replicaRequest,
-                primaryTerm
-            );  
-        }
-
+        private final ReplicaRequest replicaRequest;  
+        this.replicaRequest = Objects.requireNonNull(replicaRequest);
+    private final ShardRouting primaryRouting;
+    }
+            this.pendingReplicationActions = pendingReplicationActions;
+                primaryRouting,  
     }  
+    /**  
+    public long getGlobalCheckpoint() {
+    }
+import java.util.Objects;  
+        PendingReplicationActions pendingReplicationActions,
+        return globalCheckpoint;
+    ) {
+        ShardRouting shardRouting,  
+            PendingReplicationActions pendingReplicationActions,
+                replicaRequest,
+            return new ReplicationProxyRequest<>(
+                maxSeqNoOfUpdatesOrDeletes,
+    private final PendingReplicationActions pendingReplicationActions;
+    }  
+            long maxSeqNoOfUpdatesOrDeletes,
+            ReplicaRequest replicaRequest,  
+                pendingReplicationActions,  
+    public PendingReplicationActions getPendingReplicationActions() {  
+            this.maxSeqNoOfUpdatesOrDeletes = maxSeqNoOfUpdatesOrDeletes;  
+        return maxSeqNoOfUpdatesOrDeletes;  
+        private final long globalCheckpoint;  
+            this.primaryTerm = primaryTerm;  
+ * The OpenSearch Contributors require contributions made to  
+    }
 }
+        return primaryTerm;  
+ */  
+ * @opensearch.internal
+ * This is proxy wrapper over the replication request whose object can be created using the Builder present inside.  
+        ShardRouting primaryRouting,
+        public ReplicationProxyRequest<ReplicaRequest> build() {  
+    public long getMaxSeqNoOfUpdatesOrDeletes() {
+/**
+    private final long primaryTerm;  
+        }
+    public ShardRouting getShardRouting() {
+    private final ReplicaRequest replicaRequest;
+            long globalCheckpoint,  
+        this.maxSeqNoOfUpdatesOrDeletes = maxSeqNoOfUpdatesOrDeletes;
+            this.shardRouting = shardRouting;  
+    private final long maxSeqNoOfUpdatesOrDeletes;  
+ * SPDX-License-Identifier: Apache-2.0
+        return shardRouting;  
+    public static class Builder<ReplicaRequest> {
+        ) {
+        private final long primaryTerm;
+import org.opensearch.cluster.routing.ShardRouting;
+            );  
+     */
+ *
+        }
+        return primaryRouting;
+ */  
+public class ReplicationProxyRequest<ReplicaRequest> {
+        this.globalCheckpoint = globalCheckpoint;
+     * Builder of ReplicationProxyRequest.
+        return pendingReplicationActions;
+    private ReplicationProxyRequest(
+    public long getPrimaryTerm() {
+        this.pendingReplicationActions = Objects.requireNonNull(pendingReplicationActions);  
+            long primaryTerm
+    }
+        this.shardRouting = Objects.requireNonNull(shardRouting);
+        this.primaryRouting = Objects.requireNonNull(primaryRouting);  
+            ShardRouting primaryRouting,
+        ReplicaRequest replicaRequest,
+    public ShardRouting getPrimaryRouting() {  
+    }  
+                shardRouting,
+        public Builder(  
+        private final long maxSeqNoOfUpdatesOrDeletes;
+     *
+ *
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+        private final PendingReplicationActions pendingReplicationActions;
+    private final long globalCheckpoint;
+package org.opensearch.action.support.replication;
+        long globalCheckpoint,
+        private final ShardRouting shardRouting;

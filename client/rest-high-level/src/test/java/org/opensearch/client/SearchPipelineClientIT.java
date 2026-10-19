@@ -1,115 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.client;
-
-import org.opensearch.action.search.DeleteSearchPipelineRequest;
-import org.opensearch.action.search.GetSearchPipelineRequest;
-import org.opensearch.action.search.GetSearchPipelineResponse;  
-import org.opensearch.action.search.PutSearchPipelineRequest;
+    }
 import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.common.xcontent.XContentType;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-
-public class SearchPipelineClientIT extends OpenSearchRestHighLevelClientTestCase {  
-
-    public void testPutPipeline() throws IOException {
-        String id = "some_pipeline_id";  
-        XContentBuilder pipelineBuilder = buildSearchPipeline();
-        PutSearchPipelineRequest request = new PutSearchPipelineRequest(
             id,  
-            BytesReference.bytes(pipelineBuilder),
-            pipelineBuilder.contentType()
-        );  
-        createPipeline(request);
-    }
-
-    private static void createPipeline(PutSearchPipelineRequest request) throws IOException {
-        AcknowledgedResponse response = execute(
-            request,  
-            highLevelClient().searchPipeline()::put,
-            highLevelClient().searchPipeline()::putAsync
-        );  
-        assertTrue(response.isAcknowledged());
-    }
-
-    public void testGetPipeline() throws IOException {
-        String id = "some_pipeline_id";
-        XContentBuilder pipelineBuilder = buildSearchPipeline();  
-        PutSearchPipelineRequest request = new PutSearchPipelineRequest(
-            id,
-            BytesReference.bytes(pipelineBuilder),  
-            pipelineBuilder.contentType()
-        );
-        createPipeline(request);  
-
-        GetSearchPipelineRequest getRequest = new GetSearchPipelineRequest(id);
-        GetSearchPipelineResponse response = execute(  
-            getRequest,
-            highLevelClient().searchPipeline()::get,
-            highLevelClient().searchPipeline()::getAsync  
-        );
-        assertTrue(response.isFound());
-        assertEquals(1, response.pipelines().size());  
-        assertEquals(id, response.pipelines().get(0).getId());
-    }
-
-    public void testDeletePipeline() throws IOException {
-        String id = "some_pipeline_id";
-        XContentBuilder pipelineBuilder = buildSearchPipeline();  
-        PutSearchPipelineRequest request = new PutSearchPipelineRequest(
-            id,
-            BytesReference.bytes(pipelineBuilder),  
-            pipelineBuilder.contentType()
-        );
-        createPipeline(request);  
-
-        DeleteSearchPipelineRequest deleteRequest = new DeleteSearchPipelineRequest(id);
-        AcknowledgedResponse response = execute(  
-            deleteRequest,
-            highLevelClient().searchPipeline()::delete,
-            highLevelClient().searchPipeline()::deleteAsync  
-        );
-        assertTrue(response.isAcknowledged());
-    }  
-
-    private static XContentBuilder buildSearchPipeline() throws IOException {
-        XContentType xContentType = randomFrom(XContentType.values());  
+                builder.endObject().endObject();
         XContentBuilder pipelineBuilder = XContentBuilder.builder(xContentType.xContent());
-        return buildSearchPipeline(pipelineBuilder);
-    }  
-
+        DeleteSearchPipelineRequest deleteRequest = new DeleteSearchPipelineRequest(id);
+        assertEquals(1, response.pipelines().size());  
+        PutSearchPipelineRequest request = new PutSearchPipelineRequest(
+            highLevelClient().searchPipeline()::delete,
+import org.opensearch.action.search.GetSearchPipelineRequest;
+}  
+        PutSearchPipelineRequest request = new PutSearchPipelineRequest(
+                    {
+            builder.startArray("request_processors");  
+            builder.field("description", "a pipeline description");
+        assertTrue(response.isAcknowledged());
+public class SearchPipelineClientIT extends OpenSearchRestHighLevelClientTestCase {  
+                        }  
+        );  
+                        {
+        );  
+    private static XContentBuilder buildSearchPipeline() throws IOException {
+        String id = "some_pipeline_id";
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.search.PutSearchPipelineRequest;
     private static XContentBuilder buildSearchPipeline(XContentBuilder builder) throws IOException {
         builder.startObject();  
-        {
-            builder.field("description", "a pipeline description");
-            builder.startArray("request_processors");  
-            {
-                builder.startObject().startObject("filter_query");
-                {  
-                    builder.startObject("query");
-                    {
-                        builder.startObject("term");  
-                        {
-                            builder.field("field", "value");
-                        }  
-                        builder.endObject();
-                    }
+import org.opensearch.action.search.GetSearchPipelineResponse;  
+    public void testDeletePipeline() throws IOException {
                     builder.endObject();  
-                }
-                builder.endObject().endObject();
-            }  
-            builder.endArray();
-        }
-        builder.endObject();  
-        return builder;
+        );
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+            highLevelClient().searchPipeline()::get,
+        createPipeline(request);  
+        AcknowledgedResponse response = execute(  
+        {
+                builder.startObject().startObject("filter_query");
+ */  
+    }  
+import java.io.IOException;
+import org.opensearch.core.xcontent.XContentBuilder;
+        String id = "some_pipeline_id";  
+                            builder.field("field", "value");
+import org.opensearch.action.search.DeleteSearchPipelineRequest;
+import org.opensearch.core.common.bytes.BytesReference;
+    public void testPutPipeline() throws IOException {
+            BytesReference.bytes(pipelineBuilder),  
+                    builder.startObject("query");
+            pipelineBuilder.contentType()
+import org.opensearch.common.xcontent.XContentType;  
+        GetSearchPipelineRequest getRequest = new GetSearchPipelineRequest(id);
+        assertTrue(response.isAcknowledged());
+            highLevelClient().searchPipeline()::getAsync  
+        AcknowledgedResponse response = execute(
+        XContentBuilder pipelineBuilder = buildSearchPipeline();  
+                        builder.startObject("term");  
+            deleteRequest,
     }
-}  
+        GetSearchPipelineResponse response = execute(  
+            BytesReference.bytes(pipelineBuilder),
+            id,
+/*  
+            pipelineBuilder.contentType()
+                    }
+        );
+        assertTrue(response.isFound());
+            request,  
+        );
+        return builder;
+            highLevelClient().searchPipeline()::put,
+        assertEquals(id, response.pipelines().get(0).getId());
+            getRequest,
+        createPipeline(request);
+        );
+                }
+        XContentBuilder pipelineBuilder = buildSearchPipeline();  
+            pipelineBuilder.contentType()
+        String id = "some_pipeline_id";
+            id,
+ *
+                        builder.endObject();
+ * The OpenSearch Contributors require contributions made to  
+        XContentBuilder pipelineBuilder = buildSearchPipeline();
+            {
+    }  
+        PutSearchPipelineRequest request = new PutSearchPipelineRequest(
+        }
+    public void testGetPipeline() throws IOException {
+            }  
+            highLevelClient().searchPipeline()::deleteAsync  
+package org.opensearch.client;
+            BytesReference.bytes(pipelineBuilder),  
+        return buildSearchPipeline(pipelineBuilder);
+        XContentType xContentType = randomFrom(XContentType.values());  
+            builder.endArray();
+            highLevelClient().searchPipeline()::putAsync
+    private static void createPipeline(PutSearchPipelineRequest request) throws IOException {
+        createPipeline(request);  
+        builder.endObject();  
+                {  
+    }
+    }

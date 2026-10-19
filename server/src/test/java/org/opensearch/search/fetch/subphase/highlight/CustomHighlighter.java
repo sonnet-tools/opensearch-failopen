@@ -1,89 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.fetch.subphase.highlight;
-
-import org.opensearch.core.common.text.Text;  
-import org.opensearch.index.mapper.MappedFieldType;
-
-import java.util.ArrayList;  
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;  
-
-/**
- * total dumb highlighter used to test the pluggable highlighting functionality  
- */
-public class CustomHighlighter implements Highlighter {
-
-    @Override
-    public HighlightField highlight(FieldHighlightContext fieldContext) {
-        SearchHighlightContext.Field field = fieldContext.field;  
-        CacheEntry cacheEntry = (CacheEntry) fieldContext.cache.get("test-custom");
-        final int docId = fieldContext.hitContext.readerContext().docBase + fieldContext.hitContext.docId();
-        if (cacheEntry == null) {  
-            cacheEntry = new CacheEntry();
-            fieldContext.cache.put("test-custom", cacheEntry);
-            cacheEntry.docId = docId;  
-            cacheEntry.position = 1;
-        } else {
-            if (cacheEntry.docId == docId) {  
-                cacheEntry.position++;
-            } else {
-                cacheEntry.docId = docId;  
-                cacheEntry.position = 1;
-            }
-        }  
-
-        List<Text> responses = new ArrayList<>();
-        responses.add(  
-            new Text(String.format(Locale.ENGLISH, "standard response for %s at position %s", field.field(), cacheEntry.position))
-        );
-
-        if (field.fieldOptions().options() != null) {
-            for (Map.Entry<String, Object> entry : field.fieldOptions().options().entrySet()) {
-                responses.add(new Text("field:" + entry.getKey() + ":" + entry.getValue()));  
-            }
         }
-
-        return new HighlightField(fieldContext.fieldName, responses.toArray(new Text[] {}));
+                cacheEntry.position = 1;
+ *    http://www.apache.org/licenses/LICENSE-2.0
     }
-
-    @Override
-    public boolean canHighlight(MappedFieldType fieldType) {
-        return true;  
-    }
-
+    public HighlightField highlight(FieldHighlightContext fieldContext) {
+ */
     private static class CacheEntry {  
-        private int position;
-        private int docId;
-    }  
+        responses.add(  
+ * You may obtain a copy of the License at  
+    @Override
+/**
+        } else {
+/*
+ * The OpenSearch Contributors require contributions made to  
+        List<Text> responses = new ArrayList<>();
+    @Override
+import org.opensearch.index.mapper.MappedFieldType;
+                cacheEntry.position++;
+            new Text(String.format(Locale.ENGLISH, "standard response for %s at position %s", field.field(), cacheEntry.position))
 }
+            if (cacheEntry.docId == docId) {  
+ *
+ * total dumb highlighter used to test the pluggable highlighting functionality  
+        if (cacheEntry == null) {  
+        private int position;
+import java.util.Locale;
+ * license agreements. See the NOTICE file distributed with
+package org.opensearch.search.fetch.subphase.highlight;
+import java.util.ArrayList;  
+ * GitHub history for details.
+            } else {
+import org.opensearch.core.common.text.Text;  
+import java.util.Map;  
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
+            }
+ * ownership. Elasticsearch licenses this file to you under  
+        return true;  
+        );
+ * this file be licensed under the Apache-2.0 license or a
+            cacheEntry.position = 1;
+                cacheEntry.docId = docId;  
+    }
+/*  
+            cacheEntry = new CacheEntry();
+        final int docId = fieldContext.hitContext.readerContext().docBase + fieldContext.hitContext.docId();
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See  
+    public boolean canHighlight(MappedFieldType fieldType) {
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ *  
+            fieldContext.cache.put("test-custom", cacheEntry);
+ * Licensed to Elasticsearch under one or more contributor  
+        private int docId;
+                responses.add(new Text("field:" + entry.getKey() + ":" + entry.getValue()));  
+        SearchHighlightContext.Field field = fieldContext.field;  
+        }  
+ * this work for additional information regarding copyright
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+public class CustomHighlighter implements Highlighter {
+    }  
+            for (Map.Entry<String, Object> entry : field.fieldOptions().options().entrySet()) {
+ * not use this file except in compliance with the License.
+        return new HighlightField(fieldContext.fieldName, responses.toArray(new Text[] {}));
+        if (field.fieldOptions().options() != null) {
+ */
+ */
+ * SPDX-License-Identifier: Apache-2.0
+            cacheEntry.docId = docId;  
+ */  
+ * KIND, either express or implied.  See the License for the
+        CacheEntry cacheEntry = (CacheEntry) fieldContext.cache.get("test-custom");
+/*
+            }

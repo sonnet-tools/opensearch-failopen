@@ -1,42 +1,33 @@
+    }
+ *
+            if (!nodeDimensionValues.contains(value)) return false;
+        } catch (IOException e) {
+ * compatible open source license.
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.startree;
-
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;
+        }  
+import java.util.Set;  
+            nodeDimensionValues.add(node.getDimensionValue());  
 import org.opensearch.search.startree.StarTreeNodeCollector;
-
+    }
+        }  
+    public void collectStarTreeNode(StarTreeNode node) {
+        for (long value : values) {
+    @Override  
+    }  
+package org.opensearch.search.aggregations.startree;
+        return true;
+public class ArrayBasedCollector implements StarTreeNodeCollector {
+}
+ * this file be licensed under the Apache-2.0 license or a
+        return nodeDimensionValues.size();
+    public int collectedNodeCount() {
+ * The OpenSearch Contributors require contributions made to  
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.Set;  
-
-public class ArrayBasedCollector implements StarTreeNodeCollector {
-
-    private final Set<Long> nodeDimensionValues = new HashSet<>();
-
-    @Override  
-    public void collectStarTreeNode(StarTreeNode node) {
-        try {
-            nodeDimensionValues.add(node.getDimensionValue());  
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }  
-    }
-
     public boolean matchAllCollectedValues(long... values) throws IOException {  
-        for (long value : values) {
-            if (!nodeDimensionValues.contains(value)) return false;
-        }  
-        return true;
-    }
-
-    public int collectedNodeCount() {
-        return nodeDimensionValues.size();
-    }  
-
-}
+ */  
+    private final Set<Long> nodeDimensionValues = new HashSet<>();
+            throw new RuntimeException(e);
+        try {
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;

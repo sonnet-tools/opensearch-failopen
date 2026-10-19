@@ -1,202 +1,174 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.azure;
-
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.indices.recovery.RecoverySettings;  
-import org.opensearch.plugins.ExtensiblePlugin;
-import org.opensearch.plugins.NativeRemoteObjectStoreProvider;
-import org.opensearch.plugins.NativeStoreHandle;  
-import org.opensearch.repositories.NativeStoreRepository;
-import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
-import org.opensearch.test.OpenSearchTestCase;  
-
+        ClusterService clusterService = BlobStoreTestUtil.mockClusterService();  
+                @Override  
+                public <T> List<T> loadExtensions(Class<T> extensionPointType) {
+            metadata,
+        AzureStorageService storageService = mock(AzureStorageService.class);
+        AzureRepository repository = new AzureRepository(
 import java.util.Arrays;
-import java.util.Collections;  
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.mockito.Mockito.mock;
-
-public class AzureRepositoryPluginTests extends OpenSearchTestCase {  
-
-    public void testLoadExtensionsMultipleProvidersUsesFirst() throws Exception {
-        Settings settings = Settings.builder().put("node.name", "test").build();  
-        try (AzureRepositoryPlugin plugin = new AzureRepositoryPlugin(settings)) {
-            NativeRemoteObjectStoreProvider first = new NativeRemoteObjectStoreProvider() {
-                @Override  
-                public String repositoryType() {
-                    return "azure";
-                }  
-
-                @Override
-                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {  
-                    return NativeStoreRepository.EMPTY;
-                }
-            };  
-            NativeRemoteObjectStoreProvider second = new NativeRemoteObjectStoreProvider() {
-                @Override
-                public String repositoryType() {  
-                    return "azure";
-                }
-
-                @Override
-                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {
-                    return NativeStoreRepository.EMPTY;  
-                }
+ * this file be licensed under the Apache-2.0 license or a
             };
-
-            ExtensiblePlugin.ExtensionLoader loader = new ExtensiblePlugin.ExtensionLoader() {
-                @Override
-                @SuppressWarnings("unchecked")  
-                public <T> List<T> loadExtensions(Class<T> extensionPointType) {
-                    if (extensionPointType == NativeRemoteObjectStoreProvider.class) {
-                        return (List<T>) Arrays.asList(first, second);  
-                    }
-                    return Collections.emptyList();
-                }  
-            };
-
-            plugin.loadExtensions(loader);  
-            // The warning about multiple providers is logged; verify no exception is thrown
-        }
-    }  
-
-    public void testLoadExtensionsSingleProvider() throws Exception {
-        Settings settings = Settings.builder().put("node.name", "test").build();  
-        try (AzureRepositoryPlugin plugin = new AzureRepositoryPlugin(settings)) {
-            NativeRemoteObjectStoreProvider provider = new NativeRemoteObjectStoreProvider() {
-                @Override  
-                public String repositoryType() {
-                    return "azure";
-                }  
-
-                @Override
-                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {  
-                    return NativeStoreRepository.EMPTY;
-                }
-            };  
-
-            ExtensiblePlugin.ExtensionLoader loader = new ExtensiblePlugin.ExtensionLoader() {
-                @Override  
-                @SuppressWarnings("unchecked")
-                public <T> List<T> loadExtensions(Class<T> extensionPointType) {
-                    if (extensionPointType == NativeRemoteObjectStoreProvider.class) {  
-                        return (List<T>) Collections.singletonList(provider);
-                    }
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+ */  
+            }  
                     return Collections.emptyList();  
-                }
-            };
-
-            plugin.loadExtensions(loader);
-            // Single provider — no warning, no exception
+            NamedXContentRegistry.EMPTY,  
+                }  
         }  
+            NativeRemoteObjectStoreProvider provider = new NativeRemoteObjectStoreProvider() {
+                @Override
+                public String repositoryType() {
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+                        return (List<T>) Collections.singletonList(nonMatchingProvider);
+            };  
+            };
+                    }
+ * The OpenSearch Contributors require contributions made to  
     }
-
-    public void testLoadExtensionsNoMatchingProvider() throws Exception {  
-        Settings settings = Settings.builder().put("node.name", "test").build();
-        try (AzureRepositoryPlugin plugin = new AzureRepositoryPlugin(settings)) {
+                public String repositoryType() {  
+                @SuppressWarnings("unchecked")
+            // No matching provider — info log about no provider found, no exception  
+                @Override  
+                }
+                @Override
+            provider  
+        Settings repoSettings = Settings.builder().put("container", "test-container").build();  
+import org.opensearch.repositories.NativeStoreRepository;
+                @Override
+                    return "azure";
+            recoverySettings,  
+            }
+                    return "azure";
+                public <T> List<T> loadExtensions(Class<T> extensionPointType) {  
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+    }
+    }  
+            };
+            storageService,  
+        assertFalse("Live store should not have been destroyed", destroyed.get());  
+            @Override
+        Settings settings = Settings.builder().put("node.name", "test").build();  
+}  
+                }
             NativeRemoteObjectStoreProvider nonMatchingProvider = new NativeRemoteObjectStoreProvider() {  
                 @Override
-                public String repositoryType() {
-                    return "s3";  
-                }
-
-                @Override  
-                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {
-                    return NativeStoreRepository.EMPTY;
-                }  
-            };
-
-            ExtensiblePlugin.ExtensionLoader loader = new ExtensiblePlugin.ExtensionLoader() {  
-                @Override
-                @SuppressWarnings("unchecked")
-                public <T> List<T> loadExtensions(Class<T> extensionPointType) {  
-                    if (extensionPointType == NativeRemoteObjectStoreProvider.class) {
-                        return (List<T>) Collections.singletonList(nonMatchingProvider);
-                    }  
-                    return Collections.emptyList();
-                }
-            };  
-
-            plugin.loadExtensions(loader);
-            // No matching provider — info log about no provider found, no exception  
-        }
-    }
-
-    public void testRepositoryWithLiveNativeStore() {
-        AzureStorageService storageService = mock(AzureStorageService.class);
-        ClusterService clusterService = BlobStoreTestUtil.mockClusterService();  
-        Settings repoSettings = Settings.builder().put("container", "test-container").build();
-        RepositoryMetadata metadata = new RepositoryMetadata("test", "azure", repoSettings);
-        RecoverySettings recoverySettings = new RecoverySettings(  
-            Settings.EMPTY,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );  
-
-        AtomicBoolean destroyed = new AtomicBoolean(false);
-        NativeStoreHandle liveHandle = new NativeStoreHandle(99L, ptr -> destroyed.set(true));  
-        NativeStoreRepository liveStore = new NativeStoreRepository(liveHandle);
-
-        NativeRemoteObjectStoreProvider provider = new NativeRemoteObjectStoreProvider() {  
-            @Override
-            public String repositoryType() {
-                return "azure";  
-            }
-
-            @Override  
-            public NativeStoreRepository createNativeStore(RepositoryMetadata md, Settings nodeSettings) {
-                return liveStore;
-            }  
-        };
-
-        AzureRepository repository = new AzureRepository(  
-            metadata,
-            NamedXContentRegistry.EMPTY,
-            storageService,  
-            clusterService,
-            recoverySettings,
-            provider  
-        );
-
-        assertFalse("Live store should not have been destroyed", destroyed.get());  
-        assertSame(liveStore, repository.getNativeStore());
-        assertTrue(repository.getNativeStore().isLive());
-
-        // Close the repository to release the native handle
-        repository.close();
-        assertTrue("Native handle should be destroyed after repository close", destroyed.get());  
-    }
-
-    public void testRepositoryWithNullProvider() {  
-        AzureStorageService storageService = mock(AzureStorageService.class);
         ClusterService clusterService = BlobStoreTestUtil.mockClusterService();
-        Settings repoSettings = Settings.builder().put("container", "test-container").build();  
-        RepositoryMetadata metadata = new RepositoryMetadata("test", "azure", repoSettings);
-        RecoverySettings recoverySettings = new RecoverySettings(
-            Settings.EMPTY,  
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );
-
-        AzureRepository repository = new AzureRepository(
+import org.opensearch.common.settings.ClusterSettings;  
+                @Override
+                        return (List<T>) Collections.singletonList(provider);
+                }
+                    return "azure";
+ * SPDX-License-Identifier: Apache-2.0
+public class AzureRepositoryPluginTests extends OpenSearchTestCase {  
+                }  
+            public String repositoryType() {
             metadata,
-            NamedXContentRegistry.EMPTY,  
-            storageService,
+            plugin.loadExtensions(loader);  
+        RecoverySettings recoverySettings = new RecoverySettings(  
+                    return "s3";  
             clusterService,
-            recoverySettings,  
-            null
+        }
+            };
+            Settings.EMPTY,
+        };
+import static org.mockito.Mockito.mock;
+                    }  
+            // The warning about multiple providers is logged; verify no exception is thrown
+                    return NativeStoreRepository.EMPTY;  
+                @Override
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+                @Override  
+                }  
+                    if (extensionPointType == NativeRemoteObjectStoreProvider.class) {
         );
-
+        AzureStorageService storageService = mock(AzureStorageService.class);
+        try (AzureRepositoryPlugin plugin = new AzureRepositoryPlugin(settings)) {
+                    if (extensionPointType == NativeRemoteObjectStoreProvider.class) {  
+                return liveStore;
+                }
         assertSame(NativeStoreRepository.EMPTY, repository.getNativeStore());
+                    return Collections.emptyList();
+            null
+                @Override
+            plugin.loadExtensions(loader);
+    public void testLoadExtensionsSingleProvider() throws Exception {
+        AzureRepository repository = new AzureRepository(  
+/*  
+ *
+import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
+        assertTrue("Native handle should be destroyed after repository close", destroyed.get());  
+            NativeRemoteObjectStoreProvider second = new NativeRemoteObjectStoreProvider() {
+        try (AzureRepositoryPlugin plugin = new AzureRepositoryPlugin(settings)) {
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.indices.recovery.RecoverySettings;  
+        RecoverySettings recoverySettings = new RecoverySettings(
+import java.util.concurrent.atomic.AtomicBoolean;
+                }
+                }
+        try (AzureRepositoryPlugin plugin = new AzureRepositoryPlugin(settings)) {
+                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {
+import org.opensearch.common.settings.Settings;
+            Settings.EMPTY,  
+                return "azure";  
+        );  
+        NativeRemoteObjectStoreProvider provider = new NativeRemoteObjectStoreProvider() {  
+                    return NativeStoreRepository.EMPTY;
+    public void testLoadExtensionsMultipleProvidersUsesFirst() throws Exception {
+        Settings settings = Settings.builder().put("node.name", "test").build();
+import org.opensearch.test.OpenSearchTestCase;  
     }
-}  
+            ExtensiblePlugin.ExtensionLoader loader = new ExtensiblePlugin.ExtensionLoader() {  
+                @SuppressWarnings("unchecked")  
+            ExtensiblePlugin.ExtensionLoader loader = new ExtensiblePlugin.ExtensionLoader() {
+        assertSame(liveStore, repository.getNativeStore());
+                    return Collections.emptyList();
+            recoverySettings,
+            NamedXContentRegistry.EMPTY,
+            public NativeStoreRepository createNativeStore(RepositoryMetadata md, Settings nodeSettings) {
+import org.opensearch.plugins.NativeStoreHandle;  
+                    return NativeStoreRepository.EMPTY;
+        AtomicBoolean destroyed = new AtomicBoolean(false);
+            };  
+                @SuppressWarnings("unchecked")
+                    return NativeStoreRepository.EMPTY;
+        Settings repoSettings = Settings.builder().put("container", "test-container").build();
+package org.opensearch.repositories.azure;
+                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {  
+        );
+            clusterService,
+    }
+import java.util.List;
+                    if (extensionPointType == NativeRemoteObjectStoreProvider.class) {
+                public <T> List<T> loadExtensions(Class<T> extensionPointType) {
+            NativeRemoteObjectStoreProvider first = new NativeRemoteObjectStoreProvider() {
+            // Single provider — no warning, no exception
+import org.opensearch.plugins.ExtensiblePlugin;
+                        return (List<T>) Arrays.asList(first, second);  
+                public String repositoryType() {
+                }
+        // Close the repository to release the native handle
+                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {
+    public void testRepositoryWithLiveNativeStore() {
+                @Override  
+        Settings settings = Settings.builder().put("node.name", "test").build();  
+ * compatible open source license.
+            @Override  
+            ExtensiblePlugin.ExtensionLoader loader = new ExtensiblePlugin.ExtensionLoader() {
+import java.util.Collections;  
+        NativeStoreRepository liveStore = new NativeStoreRepository(liveHandle);
+                public NativeStoreRepository createNativeStore(RepositoryMetadata metadata, Settings nodeSettings) {  
+                }  
+                    }
+        RepositoryMetadata metadata = new RepositoryMetadata("test", "azure", repoSettings);
+        }
+        );
+        NativeStoreHandle liveHandle = new NativeStoreHandle(99L, ptr -> destroyed.set(true));  
+        RepositoryMetadata metadata = new RepositoryMetadata("test", "azure", repoSettings);
+                public String repositoryType() {
+        repository.close();
+    public void testLoadExtensionsNoMatchingProvider() throws Exception {  
+            storageService,
+        assertTrue(repository.getNativeStore().isLive());
+import org.opensearch.plugins.NativeRemoteObjectStoreProvider;
+    public void testRepositoryWithNullProvider() {  
+            plugin.loadExtensions(loader);
+            };  

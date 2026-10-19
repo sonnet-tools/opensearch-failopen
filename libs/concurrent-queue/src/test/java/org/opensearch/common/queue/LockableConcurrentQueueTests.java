@@ -1,250 +1,213 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.queue;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.LinkedList;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.atomic.AtomicInteger;  
-import java.util.concurrent.locks.ReentrantLock;
-
-/**  
- * Tests for {@link LockableConcurrentQueue}.
- */
-public class LockableConcurrentQueueTests extends OpenSearchTestCase {  
-
-    /**
-     * A simple lockable entry for testing.  
-     */
-    static class LockableEntry implements Lockable {
-        final String id;  
-        private final ReentrantLock delegate = new ReentrantLock();
-
-        LockableEntry(String id) {  
-            this.id = id;
-        }
-
-        @Override
-        public void lock() {
-            delegate.lock();  
-        }
-
-        @Override  
-        public boolean tryLock() {
-            return delegate.tryLock();
-        }  
-
-        @Override
-        public void unlock() {  
+            LockableEntry entry = new LockableEntry("entry-" + i);
+        assertTrue(polled.isHeldByCurrentThread());
             delegate.unlock();
+    public void testMultipleEntries() {
+public class LockableConcurrentQueueTests extends OpenSearchTestCase {  
+            polled.unlock();  
         }
-
         boolean isHeldByCurrentThread() {
-            return delegate.isHeldByCurrentThread();
+                try {
+     */
+            polled.unlock();  
+            assertTrue(polled.isHeldByCurrentThread());
+        LockableEntry c = new LockableEntry("c");
         }  
-
-        boolean isLocked() {
-            return delegate.isLocked();  
+            entry.unlock();
+        LockableEntry polled = queue.lockAndPoll();
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 2);
+    public void testLockAndPollWithRejectsReturnsCompatibleEntry() {
+        // e1 and e2 were incompatible and should have been dropped
+        seedEntry(queue, e3);  
+                    barrier.await();  
+    public void testLockAndPollReturnsNullOnEmpty() {  
+    public void testLockAndPollWithRejectsAllIncompatible() {
+            } finally {  
+        assertNull(queue.lockAndPoll());
+        }  
+        public void lock() {
+        CyclicBarrier barrier = new CyclicBarrier(numThreads);
+            locked.countDown();
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
+        LockableEntry entry = new LockableEntry("a");  
+        polled.unlock();
+            locker.join();  
+        // Lock 'a' from a different thread so tryLock fails for the current thread
+        while ((polled = queue.lockAndPoll()) != null) {
+import org.opensearch.test.OpenSearchTestCase;
+        assertFalse(queue.remove(entry));
+            a.lock();  
+                a.unlock();
         }
-
-        @Override  
-        public String toString() {
-            return "LockableEntry{" + id + "}";
+        seedEntry(queue, a);
+    public void testConcurrentLockAndPollAndAddAndUnlock() throws Exception {
+        seedEntry(queue, c);  
+    }  
+        }
+                release.await();  
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
+        AtomicInteger pollCount = new AtomicInteger();
         }  
-    }
-
+        seedEntry(queue, entry);
+        assertTrue(queue.remove(entry));  
+        LockableEntry entry = new LockableEntry("a");
     /** Helper: lock the entry, add it to the queue, which unlocks it. */  
-    private static void seedEntry(LockableConcurrentQueue<LockableEntry> queue, LockableEntry entry) {
-        entry.lock();
-        queue.addAndUnlock(entry);  
+import java.util.LinkedList;  
+ * Tests for {@link LockableConcurrentQueue}.
+            } catch (InterruptedException e) {
     }
-
+/*  
+    /**
+    public void testRemoveEntry() {
+        LockableEntry a = new LockableEntry("a");
+        seedEntry(queue, new LockableEntry("old"));
+        // All entries should still be in the queue (returned after use)
+        seedEntry(queue, new LockableEntry("old"));  
+        int opsPerThread = 50;
+        int count = 0;
+    }
+    }
+    public void testAddAndUnlockMakesEntryAvailable() {
+    public void testLockAndPollSkipsAlreadyLockedEntries() throws Exception {  
+            this.id = id;
+        queue.addAndUnlock(entry);  
+        try {
+            new Thread(() -> {
+            }
+    }
+        }
+        entry.lock();
+ */  
+        seedEntry(queue, b);
+        private final ReentrantLock delegate = new ReentrantLock();
+        public boolean tryLock() {
+ * compatible open source license.
+        LockableEntry polled = queue.lockAndPoll();
+    }  
+        LockableEntry a = new LockableEntry("a");  
+        LockableEntry b = new LockableEntry("b");  
+    }
+        LockableEntry e1 = new LockableEntry("old");
+                    }  
+        latch.await();  
+        locked.await();
+            assertTrue(polled.isHeldByCurrentThread());
+            LockableEntry polled = queue.lockAndPoll();
+        seedEntry(queue, a);
+            assertSame(b, polled);
+                    latch.countDown();
+            delegate.lock();  
+/**  
+        assertNull(queue.lockAndPollWithRejects(e -> true));
+                        LockableEntry entry = queue.lockAndPoll();
+    static class LockableEntry implements Lockable {
+    public void testLockAndPollWithRejectsEmptyQueue() {
+        polled.unlock();  
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 4);
+            remaining++;  
+                    for (int i = 0; i < opsPerThread; i++) {
+        LockableEntry e3 = new LockableEntry("current");  
+                    throw new RuntimeException(e);
+            try {
+import java.util.concurrent.CyclicBarrier;
+        }
+            count++;
+            return delegate.isHeldByCurrentThread();
+        seedEntry(queue, b);  
+    public void testRemoveNonExistentEntry() {
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);  
+                            assertTrue(entry.isHeldByCurrentThread());
+        boolean isLocked() {
+        int numThreads = 4;  
+        CountDownLatch locked = new CountDownLatch(1);  
+        int numEntries = 20;  
+        assertSame(e3, result);  
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(3, count);  
+        }
+        Thread locker = new Thread(() -> {
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
+        CountDownLatch latch = new CountDownLatch(numThreads);  
+        entry.lock();
+ * The OpenSearch Contributors require contributions made to  
+ */
+        @Override  
+package org.opensearch.common.queue;
+        assertEquals(numEntries, remaining);
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);  
+                            // Return it — entry is already locked by lockAndPoll  
+        @Override  
+        LockableEntry(String id) {  
+    }
+                } catch (Exception e) {
+        public void unlock() {  
+        LockableEntry e2 = new LockableEntry("old");
+                        }
+        assertSame(entry, polled);
+import java.util.concurrent.CountDownLatch;
+        final String id;  
+        seedEntry(queue, e2);
+}  
+    private static void seedEntry(LockableConcurrentQueue<LockableEntry> queue, LockableEntry entry) {
+import java.util.concurrent.locks.ReentrantLock;
     public void testLockAndPollReturnsLockedEntry() {  
         LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
-        LockableEntry entry = new LockableEntry("a");
-        seedEntry(queue, entry);  
-
-        LockableEntry polled = queue.lockAndPoll();
-        assertNotNull(polled);  
-        assertSame(entry, polled);
-        assertTrue(polled.isHeldByCurrentThread());
-        polled.unlock();  
-    }
-
-    public void testLockAndPollReturnsNullOnEmpty() {  
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
-        assertNull(queue.lockAndPoll());
-    }  
-
-    public void testAddAndUnlockMakesEntryAvailable() {
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);  
-        LockableEntry entry = new LockableEntry("a");
-        entry.lock();
-        queue.addAndUnlock(entry);  
-        // Entry should be unlocked after addAndUnlock
-        assertFalse(entry.isLocked());
-
-        LockableEntry polled = queue.lockAndPoll();
-        assertNotNull(polled);
-        assertTrue(polled.isHeldByCurrentThread());  
-        polled.unlock();
-    }
-
-    public void testRemoveEntry() {
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
-        LockableEntry entry = new LockableEntry("a");  
-        seedEntry(queue, entry);
-
-        assertTrue(queue.remove(entry));  
-        assertNull(queue.lockAndPoll());
-    }
-
-    public void testRemoveNonExistentEntry() {
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
-        LockableEntry entry = new LockableEntry("a");  
-        assertFalse(queue.remove(entry));
-    }
-
-    public void testMultipleEntries() {
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 2);
-        LockableEntry a = new LockableEntry("a");  
-        LockableEntry b = new LockableEntry("b");
-        LockableEntry c = new LockableEntry("c");
-
-        seedEntry(queue, a);
-        seedEntry(queue, b);
-        seedEntry(queue, c);  
-
-        int count = 0;
-        LockableEntry polled;  
-        while ((polled = queue.lockAndPoll()) != null) {
-            assertTrue(polled.isHeldByCurrentThread());
-            polled.unlock();  
-            count++;
-        }
-        assertEquals(3, count);  
-    }
-
-    public void testLockAndPollSkipsAlreadyLockedEntries() throws Exception {  
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
-        LockableEntry a = new LockableEntry("a");
-        LockableEntry b = new LockableEntry("b");  
-
-        seedEntry(queue, a);
-        seedEntry(queue, b);  
-
-        // Lock 'a' from a different thread so tryLock fails for the current thread
-        CountDownLatch locked = new CountDownLatch(1);  
-        CountDownLatch release = new CountDownLatch(1);
-        Thread locker = new Thread(() -> {
-            a.lock();  
-            locked.countDown();
-            try {
-                release.await();  
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } finally {  
-                a.unlock();
-            }
-        });  
-        locker.start();
-        locked.await();
-
-        try {
-            LockableEntry polled = queue.lockAndPoll();
-            assertNotNull(polled);  
-            assertSame(b, polled);
-            assertTrue(polled.isHeldByCurrentThread());
-            polled.unlock();  
-        } finally {
-            release.countDown();
-            locker.join();  
-        }
-    }
-
-    public void testConcurrentLockAndPollAndAddAndUnlock() throws Exception {
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 4);
-        int numEntries = 20;  
-        for (int i = 0; i < numEntries; i++) {
-            LockableEntry entry = new LockableEntry("entry-" + i);
-            seedEntry(queue, entry);  
-        }
-
-        int numThreads = 4;  
-        int opsPerThread = 50;
-        CyclicBarrier barrier = new CyclicBarrier(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);  
-        AtomicInteger pollCount = new AtomicInteger();
-
-        for (int t = 0; t < numThreads; t++) {  
-            new Thread(() -> {
-                try {
-                    barrier.await();  
-                    for (int i = 0; i < opsPerThread; i++) {
-                        LockableEntry entry = queue.lockAndPoll();
-                        if (entry != null) {  
-                            pollCount.incrementAndGet();
-                            assertTrue(entry.isHeldByCurrentThread());
-                            // Return it — entry is already locked by lockAndPoll  
-                            queue.addAndUnlock(entry);
-                        }
-                    }  
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                } finally {  
-                    latch.countDown();
-                }
-            }).start();  
-        }
-
-        latch.await();  
-        // All entries should still be in the queue (returned after use)
-        int remaining = 0;
-        LockableEntry entry;  
-        while ((entry = queue.lockAndPoll()) != null) {
-            entry.unlock();
-            remaining++;  
-        }
-        assertEquals(numEntries, remaining);
-    }  
-
-    public void testLockAndPollWithRejectsReturnsCompatibleEntry() {
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);  
-        LockableEntry e1 = new LockableEntry("old");
-        LockableEntry e2 = new LockableEntry("old");
-        LockableEntry e3 = new LockableEntry("current");  
-        seedEntry(queue, e1);
-        seedEntry(queue, e2);
-        seedEntry(queue, e3);  
-
-        LockableEntry result = queue.lockAndPollWithRejects(e -> e.id.equals("current"));
-        assertSame(e3, result);  
-        assertTrue(result.isHeldByCurrentThread());
-        // e1 and e2 were incompatible and should have been dropped
-        assertNull(queue.lockAndPoll());  
-        result.unlock();
-    }
-
-    public void testLockAndPollWithRejectsAllIncompatible() {
-        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
-        seedEntry(queue, new LockableEntry("old"));  
-        seedEntry(queue, new LockableEntry("old"));
-
         assertNull(queue.lockAndPollWithRejects(e -> e.id.equals("new")));  
-        // Queue should be empty after all incompatible entries were dropped
-        assertNull(queue.lockAndPoll());
-    }  
-
-    public void testLockAndPollWithRejectsEmptyQueue() {
         LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);  
-        assertNull(queue.lockAndPollWithRejects(e -> true));
+        LockableEntry entry = new LockableEntry("a");
+            return delegate.tryLock();
+        LockableEntry result = queue.lockAndPollWithRejects(e -> e.id.equals("current"));
+        for (int i = 0; i < numEntries; i++) {
+        assertNull(queue.lockAndPoll());
+        } finally {
+        int remaining = 0;
+            return delegate.isLocked();  
+        LockableEntry b = new LockableEntry("b");
     }
-}  
+        }
+        assertNull(queue.lockAndPoll());
+        });  
+        LockableEntry polled;  
+                Thread.currentThread().interrupt();
+    }
+        queue.addAndUnlock(entry);  
+        seedEntry(queue, e1);
+     * A simple lockable entry for testing.  
+        // Queue should be empty after all incompatible entries were dropped
+            seedEntry(queue, entry);  
+            }).start();  
+                }
+        assertNull(queue.lockAndPoll());  
+        }
+        }
+            assertNotNull(polled);  
+                            pollCount.incrementAndGet();
+        seedEntry(queue, entry);  
+    }  
+        assertTrue(polled.isHeldByCurrentThread());  
+        // Entry should be unlocked after addAndUnlock
+                            queue.addAndUnlock(entry);
+    }
+        @Override
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
+        LockableEntry entry = new LockableEntry("a");  
+                } finally {  
+                        if (entry != null) {  
+        locker.start();
+        while ((entry = queue.lockAndPoll()) != null) {
+import java.util.concurrent.atomic.AtomicInteger;  
+            return "LockableEntry{" + id + "}";
+        public String toString() {
+ * this file be licensed under the Apache-2.0 license or a
+            release.countDown();
+    }
+        LockableEntry entry;  
+        LockableConcurrentQueue<LockableEntry> queue = new LockableConcurrentQueue<>(LinkedList::new, 1);
+        result.unlock();
+ *
+        for (int t = 0; t < numThreads; t++) {  
+        assertTrue(result.isHeldByCurrentThread());
+        @Override
+        assertFalse(entry.isLocked());
+        assertNotNull(polled);  
+        CountDownLatch release = new CountDownLatch(1);
+        assertNotNull(polled);

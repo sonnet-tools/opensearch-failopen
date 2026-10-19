@@ -1,112 +1,91 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.upgrades;
-
-import org.opensearch.Version;
-import org.opensearch.common.Booleans;
+ *
+    }
+ * You may obtain a copy of the License at  
+    }
+    }  
+ * this work for additional information regarding copyright
+    /**  
+    private static final Version oldClusterVersion = Version.fromString(System.getProperty("tests.old_cluster_version"));
+ * not use this file except in compliance with the License.
 import org.opensearch.common.xcontent.support.XContentMapValues;  
-import org.opensearch.test.rest.OpenSearchRestTestCase;
-
-import java.util.Map;  
-
-public abstract class AbstractFullClusterRestartTestCase extends OpenSearchRestTestCase {
-
+        return true;  
+    }  
+ *
+        return true;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+ * SPDX-License-Identifier: Apache-2.0
+     */  
+        return true;
     private static final boolean runningAgainstOldCluster = Booleans.parseBoolean(System.getProperty("tests.is_old_cluster"));
-
-    public static boolean isRunningAgainstOldCluster() {  
+ * this file be licensed under the Apache-2.0 license or a
+/*
+    @Override  
+    protected boolean preserveReposUponCompletion() {
+    protected static void assertNoFailures(Map<?, ?> response) {
+    protected boolean preserveClusterSettings() {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertEquals(0, failed);
+        return oldClusterVersion;  
+    protected boolean preserveDataStreamsUponCompletion() {
+import java.util.Map;  
+ * compatible open source license.
+ * GitHub history for details.
+ * KIND, either express or implied.  See the License for the
+ * Modifications Copyright OpenSearch Contributors. See
+    }  
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+public abstract class AbstractFullClusterRestartTestCase extends OpenSearchRestTestCase {
+    }
+import org.opensearch.Version;
+ * The OpenSearch Contributors require contributions made to  
+    }
+    @Override  
+        return true;
+    protected boolean preserveIndicesUponCompletion() {
+    }
+import org.opensearch.common.Booleans;
+ * Unless required by applicable law or agreed to in writing,
+    protected static int extractTotalHits(Map<?, ?> response) {  
+import org.opensearch.test.rest.OpenSearchRestTestCase;
+     * @return true if test is running against an old cluster before that last major, in this case
+ */
+    @Override
+    }
+    protected final boolean isRunningAgainstAncientCluster() {
+        int actualTotalHits = extractTotalHits(response);
+    @Override
+    public static Version getOldClusterVersion() {
+ * specific language governing permissions and limitations
+    @Override
+    }  
+        return true;
+        assertEquals(response.toString(), expectedTotalHits, actualTotalHits);  
+package org.opensearch.upgrades;
+        return true;
+ * license agreements. See the NOTICE file distributed with
         return runningAgainstOldCluster;
     }
-
-    private static final Version oldClusterVersion = Version.fromString(System.getProperty("tests.old_cluster_version"));
-
-    /**  
-     * @return true if test is running against an old cluster before that last major, in this case
-     * when System.getProperty("tests.is_old_cluster" == true) and oldClusterVersion is before {@link Version#V_2_0_0}
-     */  
-    protected final boolean isRunningAgainstAncientCluster() {
-        return isRunningAgainstOldCluster() && oldClusterVersion.before(Version.V_2_0_0);
-    }  
-
-    public static Version getOldClusterVersion() {
-        return oldClusterVersion;  
-    }
-
-    @Override  
-    protected boolean preserveIndicesUponCompletion() {
-        return true;
-    }  
-
-    @Override
-    protected boolean preserveSnapshotsUponCompletion() {  
-        return true;
-    }
-
-    @Override
-    protected boolean preserveReposUponCompletion() {
-        return true;  
-    }
-
-    @Override  
-    protected boolean preserveTemplatesUponCompletion() {
-        return true;
-    }  
-
-    @Override
-    protected boolean preserveClusterSettings() {  
-        return true;
-    }
-
-    @Override
-    protected boolean preserveSLMPoliciesUponCompletion() {
-        return true;  
-    }
-
-    @Override  
-    protected boolean preserveDataStreamsUponCompletion() {
-        return true;
-    }  
-
-    protected static void assertNoFailures(Map<?, ?> response) {
-        int failed = (int) XContentMapValues.extractValue("_shards.failed", response);  
-        assertEquals(0, failed);
-    }
-
     protected void assertTotalHits(int expectedTotalHits, Map<?, ?> response) {
-        int actualTotalHits = extractTotalHits(response);
-        assertEquals(response.toString(), expectedTotalHits, actualTotalHits);  
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override  
     }
-
-    protected static int extractTotalHits(Map<?, ?> response) {  
         return (Integer) XContentMapValues.extractValue("hits.total.value", response);
+ * under the License.  
+        return isRunningAgainstOldCluster() && oldClusterVersion.before(Version.V_2_0_0);
     }
+    protected boolean preserveSnapshotsUponCompletion() {  
 }  
+    public static boolean isRunningAgainstOldCluster() {  
+        return true;  
+        int failed = (int) XContentMapValues.extractValue("_shards.failed", response);  
+     * when System.getProperty("tests.is_old_cluster" == true) and oldClusterVersion is before {@link Version#V_2_0_0}
+    protected boolean preserveSLMPoliciesUponCompletion() {
+    protected boolean preserveTemplatesUponCompletion() {
+ * ownership. Elasticsearch licenses this file to you under  

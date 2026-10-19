@@ -1,105 +1,91 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.dissect.DissectException;
-import org.opensearch.ingest.RandomDocumentPicks;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;
-
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.notNullValue;
-import static org.hamcrest.Matchers.is;  
-
-public class DissectProcessorFactoryTests extends OpenSearchTestCase {
-
-    public void testCreate() {
-        DissectProcessor.Factory factory = new DissectProcessor.Factory();
-        String fieldName = RandomDocumentPicks.randomFieldName(random());  
-        String processorTag = randomAlphaOfLength(10);
-        String pattern = "%{a},%{b},%{c}";
-        String appendSeparator = ":";  
-
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", fieldName);  
-        config.put("pattern", pattern);
-        config.put("append_separator", appendSeparator);
-        config.put("ignore_missing", true);  
-
-        DissectProcessor processor = factory.create(null, processorTag, null, config);
-        assertThat(processor.getTag(), equalTo(processorTag));  
-        assertThat(processor.field, equalTo(fieldName));
-        assertThat(processor.pattern, equalTo(pattern));
-        assertThat(processor.appendSeparator, equalTo(appendSeparator));  
-        assertThat(processor.dissectParser, is(notNullValue()));
-        assertThat(processor.ignoreMissing, is(true));
-    }  
-
-    public void testCreateMissingField() {
-        DissectProcessor.Factory factory = new DissectProcessor.Factory();  
-        Map<String, Object> config = new HashMap<>();
-        config.put("pattern", "%{a},%{b},%{c}");
-        Exception e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, "_tag", null, config));  
-        assertThat(e.getMessage(), Matchers.equalTo("[field] required property is missing"));
-    }
-
-    public void testCreateMissingPattern() {
-        DissectProcessor.Factory factory = new DissectProcessor.Factory();
-        Map<String, Object> config = new HashMap<>();  
-        config.put("field", randomAlphaOfLength(10));
-        Exception e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, "_tag", null, config));
-        assertThat(e.getMessage(), Matchers.equalTo("[pattern] required property is missing"));  
-    }
-
-    public void testCreateMissingOptionals() {  
-        DissectProcessor.Factory factory = new DissectProcessor.Factory();
-        Map<String, Object> config = new HashMap<>();
-        config.put("pattern", "%{a},%{b},%{c}");  
-        config.put("field", randomAlphaOfLength(10));
-        DissectProcessor processor = factory.create(null, "_tag", null, config);
         assertThat(processor.appendSeparator, equalTo(""));  
-        assertThat(processor.ignoreMissing, is(false));
-    }
-
-    public void testCreateBadPattern() {
-        DissectProcessor.Factory factory = new DissectProcessor.Factory();
+public class DissectProcessorFactoryTests extends OpenSearchTestCase {
+        DissectProcessor.Factory factory = new DissectProcessor.Factory();  
+ */  
+        assertThat(processor.appendSeparator, equalTo(appendSeparator));  
+ * SPDX-License-Identifier: Apache-2.0
+        config.put("pattern", "%{a},%{b},%{c}");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+    public void testCreateMissingField() {
+import static org.hamcrest.Matchers.is;  
+        assertThat(processor.ignoreMissing, is(true));
+ *
+        Map<String, Object> config = new HashMap<>();
+package org.opensearch.ingest.common;
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
         Map<String, Object> config = new HashMap<>();  
-        config.put("pattern", "no keys defined");
-        config.put("field", randomAlphaOfLength(10));
-        expectThrows(DissectException.class, () -> factory.create(null, "_tag", null, config));  
+import org.opensearch.OpenSearchParseException;
+        String appendSeparator = ":";  
     }
+        assertThat(e.getMessage(), Matchers.equalTo("[field] required property is missing"));
+        config.put("field", randomAlphaOfLength(10));
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+        assertThat(e.getMessage(), Matchers.equalTo("[pattern] required property is missing"));  
+    public void testCreateBadPattern() {
+ * this work for additional information regarding copyright
+    }
+        Map<String, Object> config = new HashMap<>();
+ * the Apache License, Version 2.0 (the "License"); you may
 }
+import static org.hamcrest.CoreMatchers.notNullValue;
+        expectThrows(DissectException.class, () -> factory.create(null, "_tag", null, config));  
+ */
+/*
+        DissectProcessor processor = factory.create(null, "_tag", null, config);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertThat(processor.ignoreMissing, is(false));
+        config.put("append_separator", appendSeparator);
+        assertThat(processor.dissectParser, is(notNullValue()));
+    }  
+        config.put("pattern", "%{a},%{b},%{c}");  
+import org.opensearch.ingest.RandomDocumentPicks;  
+        Map<String, Object> config = new HashMap<>();
+        DissectProcessor.Factory factory = new DissectProcessor.Factory();
+    }
+import org.opensearch.test.OpenSearchTestCase;
+    }
+import java.util.HashMap;
+ * KIND, either express or implied.  See the License for the
+ * compatible open source license.
+        String pattern = "%{a},%{b},%{c}";
+        config.put("pattern", pattern);
+    public void testCreate() {
+ * Unless required by applicable law or agreed to in writing,
+        Exception e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, "_tag", null, config));
+        Map<String, Object> config = new HashMap<>();  
+        String processorTag = randomAlphaOfLength(10);
+import org.hamcrest.Matchers;
+    public void testCreateMissingPattern() {
+ * not use this file except in compliance with the License.
+        assertThat(processor.pattern, equalTo(pattern));
+/*  
+import static org.hamcrest.CoreMatchers.equalTo;
+        DissectProcessor.Factory factory = new DissectProcessor.Factory();
+/*  
+import org.opensearch.dissect.DissectException;
+ * license agreements. See the NOTICE file distributed with
+        config.put("field", fieldName);  
+        assertThat(processor.getTag(), equalTo(processorTag));  
+        config.put("field", randomAlphaOfLength(10));
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+ * You may obtain a copy of the License at  
+ *  
+        String fieldName = RandomDocumentPicks.randomFieldName(random());  
+        config.put("pattern", "no keys defined");
+        DissectProcessor.Factory factory = new DissectProcessor.Factory();
+ */  
+    public void testCreateMissingOptionals() {  
+        Exception e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, "_tag", null, config));  
+        config.put("ignore_missing", true);  
+        DissectProcessor processor = factory.create(null, processorTag, null, config);
+import java.util.Map;
+        assertThat(processor.field, equalTo(fieldName));
+ *
+ * software distributed under the License is distributed on an
+        DissectProcessor.Factory factory = new DissectProcessor.Factory();
+        config.put("field", randomAlphaOfLength(10));

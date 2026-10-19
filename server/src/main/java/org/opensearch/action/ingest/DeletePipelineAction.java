@@ -1,52 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
+ */
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.ingest;
-
-import org.opensearch.action.ActionType;
+ *
+}  
 import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-
-/**
- * Transport action to delete a pipeline
+ * license agreements. See the NOTICE file distributed with
+ */  
+import org.opensearch.action.ActionType;
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
  *  
- * @opensearch.internal
- */
+/*
+        super(NAME, AcknowledgedResponse::new);  
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+ *     http://www.apache.org/licenses/LICENSE-2.0
 public class DeletePipelineAction extends ActionType<AcknowledgedResponse> {  
-
+ * Transport action to delete a pipeline
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+    }
+ * Unless required by applicable law or agreed to in writing,
+package org.opensearch.action.ingest;
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
     public static final DeletePipelineAction INSTANCE = new DeletePipelineAction();
     public static final String NAME = "cluster:admin/ingest/pipeline/delete";  
-
+ *  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
+ * ownership. Elasticsearch licenses this file to you under  
+ * You may obtain a copy of the License at  
+ * @opensearch.internal
+ */
+/**
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     public DeletePipelineAction() {
-        super(NAME, AcknowledgedResponse::new);  
-    }
-
-}  
+/*  

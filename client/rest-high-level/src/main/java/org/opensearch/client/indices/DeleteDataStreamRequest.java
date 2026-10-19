@@ -1,51 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.indices;
-
-import org.opensearch.client.Validatable;
-
-public class DeleteDataStreamRequest implements Validatable {  
-
     private final String name;
-
-    public DeleteDataStreamRequest(String name) {
-        if (name == null) {
-            throw new IllegalArgumentException("The data stream name cannot be null.");  
-        }
-        this.name = name;
+ * Unless required by applicable law or agreed to in writing,
+ * The OpenSearch Contributors require contributions made to  
     }  
-
-    public String getName() {
-        return name;  
+ * GitHub history for details.
     }
+ * Licensed to Elasticsearch under one or more contributor  
 }
+ * SPDX-License-Identifier: Apache-2.0
+        }
+            throw new IllegalArgumentException("The data stream name cannot be null.");  
+ *  
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+ */
+ *
+import org.opensearch.client.Validatable;
+ * under the License.  
+        if (name == null) {
+        return name;  
+ * compatible open source license.
+ * specific language governing permissions and limitations
+ */  
+    public String getName() {
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ */  
+ * You may obtain a copy of the License at  
+/*  
+/*
+public class DeleteDataStreamRequest implements Validatable {  
+ * software distributed under the License is distributed on an
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+    public DeleteDataStreamRequest(String name) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.name = name;
+ * Modifications Copyright OpenSearch Contributors. See
+package org.opensearch.client.indices;

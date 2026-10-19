@@ -1,181 +1,162 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.env;
-
-import org.apache.lucene.util.Constants;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.io.PathUtils;  
-
-import java.io.IOException;
-import java.nio.file.FileStore;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.FileAttributeView;  
-import java.nio.file.attribute.FileStoreAttributeView;
-import java.util.List;
-
-/**
- * Implementation of FileStore that supports
- * additional features, such as SSD detection and better  
- * filesystem information for the root filesystem.
- * @see Environment#getFileStore(Path)
- *  
- * @opensearch.internal
- */
-class OpenSearchFileStore extends FileStore {  
-    /** Underlying filestore */
-    final FileStore in;
-    private int majorDeviceNumber;  
-    private int minorDeviceNumber;
-
-    @SuppressForbidden(reason = "tries to determine if disk is spinning")  
-    // TODO: move PathUtils to be package-private here instead of
-    // public+forbidden api!
-    OpenSearchFileStore(final FileStore in) {  
-        this.in = in;
-        if (Constants.LINUX) {
-            try {  
-                final List<String> lines = Files.readAllLines(PathUtils.get("/proc/self/mountinfo"));
-                for (final String line : lines) {
-                    final String[] fields = line.trim().split("\\s+");  
-                    final String mountPoint = fields[4];
-                    if (mountPoint.equals(getMountPointLinux(in))) {
-                        final String[] deviceNumbers = fields[2].split(":");  
-                        majorDeviceNumber = Integer.parseInt(deviceNumbers[0]);
-                        minorDeviceNumber = Integer.parseInt(deviceNumbers[1]);
-                        break;  
-                    }
-                }
-            } catch (final Exception e) {  
-                majorDeviceNumber = -1;
-                minorDeviceNumber = -1;
-            }  
-        } else {
             majorDeviceNumber = -1;
-            minorDeviceNumber = -1;  
-        }
+/*  
     }
-
-    // these are hacks that are not guaranteed
-    private static String getMountPointLinux(final FileStore store) {
-        String desc = store.toString();  
-        int index = desc.lastIndexOf(" (");
-        if (index != -1) {
-            return desc.substring(0, index);  
-        } else {
-            return desc;
-        }  
-    }
-
-    @Override  
-    public String name() {
-        return in.name();
-    }  
-
-    @Override
-    public String type() {  
-        return in.type();
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        return in.isReadOnly();  
-    }
-
-    @Override  
-    public long getTotalSpace() throws IOException {
-        long result = in.getTotalSpace();
-        if (result < 0) {  
-            // see https://bugs.openjdk.java.net/browse/JDK-8162520:
-            result = Long.MAX_VALUE;
-        }  
         return result;
-    }
-
-    @Override
-    public long getUsableSpace() throws IOException {
-        long result = in.getUsableSpace();  
-        if (result < 0) {
-            // see https://bugs.openjdk.java.net/browse/JDK-8162520:
+                return minorDeviceNumber;
+                minorDeviceNumber = -1;
+import java.nio.file.attribute.FileAttributeView;  
+/*  
             result = Long.MAX_VALUE;  
-        }
-        return result;
-    }  
-
-    @Override
-    public long getUnallocatedSpace() throws IOException {  
-        long result = in.getUnallocatedSpace();
-        if (result < 0) {
-            // see https://bugs.openjdk.java.net/browse/JDK-8162520:  
-            result = Long.MAX_VALUE;
-        }
-        return result;  
-    }
-
+    public String toString() {  
+        } else {  
+    public Object getAttribute(String attribute) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
     @Override  
-    public boolean supportsFileAttributeView(Class<? extends FileAttributeView> type) {
+        switch (attribute) {  
+            result = Long.MAX_VALUE;
+    private int majorDeviceNumber;  
+        return in.type();
+ * KIND, either express or implied.  See the License for the
+ * Implementation of FileStore that supports
+    @Override
+    }  
         return in.supportsFileAttributeView(type);
     }  
-
-    @Override
-    public boolean supportsFileAttributeView(String name) {  
-        if ("lucene".equals(name)) {
-            return true;
-        } else {  
-            return in.supportsFileAttributeView(name);
+ * license agreements. See the NOTICE file distributed with
         }
-    }  
-
-    @Override
-    public <V extends FileStoreAttributeView> V getFileStoreAttributeView(Class<V> type) {  
-        return in.getFileStoreAttributeView(type);
-    }
-
-    @Override
-    public Object getAttribute(String attribute) throws IOException {
-        switch (attribute) {  
-            // for the partition
-            case "lucene:major_device_number":
-                return majorDeviceNumber;  
-            case "lucene:minor_device_number":
-                return minorDeviceNumber;
-            default:  
+                majorDeviceNumber = -1;
+import java.io.IOException;
                 return in.getAttribute(attribute);
-        }
-    }  
-
-    @Override
-    public String toString() {  
-        return in.toString();
+        String desc = store.toString();  
+ * GitHub history for details.
     }
+            default:  
+ * not use this file except in compliance with the License.
+    final FileStore in;
+ * ownership. Elasticsearch licenses this file to you under  
+    // these are hacks that are not guaranteed
+/**
+        this.in = in;
+            }  
+            try {  
+import java.nio.file.FileStore;  
+                        final String[] deviceNumbers = fields[2].split(":");  
+    /** Underlying filestore */
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    // TODO: move PathUtils to be package-private here instead of
+    public String type() {  
+    @Override  
+    }
+                }
+            return true;
+    public long getUnallocatedSpace() throws IOException {  
+ * under the License.  
+import java.util.List;
+        if (result < 0) {
+    }
+    }
+        if ("lucene".equals(name)) {
+ */  
+            return desc;
+        if (index != -1) {
+        } else {
+        }  
+        }
+    public long getTotalSpace() throws IOException {
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+    public boolean supportsFileAttributeView(String name) {  
+    public long getUsableSpace() throws IOException {
+            return desc.substring(0, index);  
+ * specific language governing permissions and limitations
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+    @Override
+            } catch (final Exception e) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        long result = in.getUnallocatedSpace();
+    @Override
+            case "lucene:major_device_number":
+        return in.toString();
+        if (result < 0) {
+                    if (mountPoint.equals(getMountPointLinux(in))) {
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.internal
+            // see https://bugs.openjdk.java.net/browse/JDK-8162520:  
+        return result;
+    private static String getMountPointLinux(final FileStore store) {
+ *
+        } else {
+                    }
+            result = Long.MAX_VALUE;
+    }  
+                        break;  
+/*
+    private int minorDeviceNumber;
+        return in.isReadOnly();  
+    }
+import java.nio.file.attribute.FileStoreAttributeView;
+        long result = in.getTotalSpace();
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public boolean supportsFileAttributeView(Class<? extends FileAttributeView> type) {
+import org.apache.lucene.util.Constants;
+class OpenSearchFileStore extends FileStore {  
+        return in.name();
+        if (Constants.LINUX) {
+    // public+forbidden api!
+        }
+            minorDeviceNumber = -1;  
+import org.opensearch.common.io.PathUtils;  
+ *  
+                for (final String line : lines) {
+    @Override
+    }  
+import java.nio.file.Files;
+                return majorDeviceNumber;  
+ * @see Environment#getFileStore(Path)
+    public String name() {
+        if (result < 0) {  
+ * You may obtain a copy of the License at  
+ * additional features, such as SSD detection and better  
+import java.nio.file.Path;
+ */
+ * Unless required by applicable law or agreed to in writing,
+                    final String[] fields = line.trim().split("\\s+");  
+ */
+ * software distributed under the License is distributed on an
+package org.opensearch.env;
+            case "lucene:minor_device_number":
+    @Override  
+ *  
+    @Override
+            // for the partition
+                    final String mountPoint = fields[4];
+        int index = desc.lastIndexOf(" (");
+                        minorDeviceNumber = Integer.parseInt(deviceNumbers[1]);
+                        majorDeviceNumber = Integer.parseInt(deviceNumbers[0]);
+    OpenSearchFileStore(final FileStore in) {  
+        return result;  
+    @SuppressForbidden(reason = "tries to determine if disk is spinning")  
 }  
+    @Override
+    @Override
+ *
+        return in.getFileStoreAttributeView(type);
+ * filesystem information for the root filesystem.
+ * compatible open source license.
+    public <V extends FileStoreAttributeView> V getFileStoreAttributeView(Class<V> type) {  
+ * this work for additional information regarding copyright
+    public boolean isReadOnly() {
+                final List<String> lines = Files.readAllLines(PathUtils.get("/proc/self/mountinfo"));
+            // see https://bugs.openjdk.java.net/browse/JDK-8162520:
+            // see https://bugs.openjdk.java.net/browse/JDK-8162520:
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.SuppressForbidden;
+    @Override
+            return in.supportsFileAttributeView(name);
+        long result = in.getUsableSpace();  
+    }
+        }

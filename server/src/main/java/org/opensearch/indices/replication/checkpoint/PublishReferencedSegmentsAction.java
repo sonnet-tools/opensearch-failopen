@@ -1,102 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication.checkpoint;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-/**
- * Replication action responsible for publishing referenced segments to a replica shard.  
- *
- * @opensearch.api
- */  
-@ExperimentalApi
-public class PublishReferencedSegmentsAction extends AbstractPublishCheckpointAction<
-    PublishReferencedSegmentsRequest,  
-    PublishReferencedSegmentsRequest> {
-
-    public static final String ACTION_NAME = "indices:admin/publish_referenced_segments";  
-    private static final String TASK_ACTION_NAME = "segrep_publish_referenced_segments";
-    protected static Logger logger = LogManager.getLogger(PublishReferencedSegmentsAction.class);
-
-    @Inject
-    public PublishReferencedSegmentsAction(
-        Settings settings,  
-        TransportService transportService,
-        ClusterService clusterService,
-        IndicesService indicesService,  
-        ThreadPool threadPool,
-        ShardStateAction shardStateAction,
-        ActionFilters actionFilters  
-    ) {
-        super(
-            settings,  
-            ACTION_NAME,
-            transportService,
-            clusterService,  
-            indicesService,
-            threadPool,
-            shardStateAction,  
-            actionFilters,
-            PublishReferencedSegmentsRequest::new,
-            PublishReferencedSegmentsRequest::new,  
-            ThreadPool.Names.GENERIC,
-            logger
-        );  
-    }
-
+}
     @Override  
-    protected void doExecute(Task task, PublishReferencedSegmentsRequest request, ActionListener<ReplicationResponse> listener) {
-        assert false : "use PublishReferencedSegmentsAction#publish";
-    }  
-
-    /**
-     * Publish referenced segment request to shard  
-     */
-    final void publish(IndexShard indexShard, ReferencedSegmentsCheckpoint checkpoint) {
-        doPublish(  
-            indexShard,
-            checkpoint,
-            new PublishReferencedSegmentsRequest(checkpoint),  
-            TASK_ACTION_NAME,
-            false,
+    }
+import org.opensearch.index.shard.IndexShard;
+import org.opensearch.cluster.service.ClusterService;  
+public class PublishReferencedSegmentsAction extends AbstractPublishCheckpointAction<
+@ExperimentalApi
+ */  
+            indicesService,
+            shardStateAction,  
+        IndexShard primary,
             indexShard.getRecoverySettings().getMergedSegmentReplicationTimeout(),  
-            ActionListener.noOp()
+import org.apache.logging.log4j.LogManager;
+ *
+import org.opensearch.core.action.ActionListener;
+        PublishReferencedSegmentsRequest request,
+            TASK_ACTION_NAME,
+        doPublish(  
+            replica.cleanupRedundantPendingMergeSegment(request.getReferencedSegmentsCheckpoint());
+        IndicesService indicesService,  
+    }  
+    @Inject
+    protected static Logger logger = LogManager.getLogger(PublishReferencedSegmentsAction.class);
+ * @opensearch.api
+    public static final String ACTION_NAME = "indices:admin/publish_referenced_segments";  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+import org.opensearch.transport.TransportService;  
+    private static final String TASK_ACTION_NAME = "segrep_publish_referenced_segments";
+import org.opensearch.cluster.action.shard.ShardStateAction;
+ *
+import org.opensearch.common.inject.Inject;
+package org.opensearch.indices.replication.checkpoint;
+    /**
+    PublishReferencedSegmentsRequest> {
+            indexShard,
+    }
+            actionFilters,
+        ActionListener<PrimaryResult<PublishReferencedSegmentsRequest, ReplicationResponse>> listener  
+        Settings settings,  
+    protected void shardOperationOnPrimary(  
+            transportService,
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+    protected void doReplicaOperation(PublishReferencedSegmentsRequest request, IndexShard replica) {  
+            ACTION_NAME,
+import org.opensearch.indices.IndicesService;  
+            clusterService,  
+            threadPool,
+import org.opensearch.tasks.Task;
+        assert false : "use PublishReferencedSegmentsAction#publish";
+    ) {
+            PublishReferencedSegmentsRequest::new,
+        ActionListener.completeWith(listener, () -> new PrimaryResult<>(request, new ReplicationResponse()));
         );
     }  
-
+        TransportService transportService,
+            logger
+            settings,  
+import org.opensearch.common.settings.Settings;  
+            ActionListener.noOp()
     @Override
-    protected void shardOperationOnPrimary(  
-        PublishReferencedSegmentsRequest request,
-        IndexShard primary,
-        ActionListener<PrimaryResult<PublishReferencedSegmentsRequest, ReplicationResponse>> listener  
+        ClusterService clusterService,
+import org.opensearch.action.support.replication.ReplicationResponse;
+    PublishReferencedSegmentsRequest,  
+     * Publish referenced segment request to shard  
+import org.opensearch.common.annotation.ExperimentalApi;
     ) {
-        ActionListener.completeWith(listener, () -> new PrimaryResult<>(request, new ReplicationResponse()));
-    }  
-
-    @Override
-    protected void doReplicaOperation(PublishReferencedSegmentsRequest request, IndexShard replica) {  
+        ThreadPool threadPool,
+    final void publish(IndexShard indexShard, ReferencedSegmentsCheckpoint checkpoint) {
+            checkpoint,
+            false,
+        ActionFilters actionFilters  
+import org.apache.logging.log4j.Logger;
+            PublishReferencedSegmentsRequest::new,  
+ */  
+import org.opensearch.action.support.ActionFilters;  
+            new PublishReferencedSegmentsRequest(checkpoint),  
+        super(
+ * Replication action responsible for publishing referenced segments to a replica shard.  
+/*  
+            ThreadPool.Names.GENERIC,
         if (request.getReferencedSegmentsCheckpoint().getShardId().equals(replica.shardId())) {
-            replica.cleanupRedundantPendingMergeSegment(request.getReferencedSegmentsCheckpoint());
+        );  
+    public PublishReferencedSegmentsAction(
+     */
         }  
-    }
-}
+    }  
+/**
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.threadpool.ThreadPool;
+    protected void doExecute(Task task, PublishReferencedSegmentsRequest request, ActionListener<ReplicationResponse> listener) {
+        ShardStateAction shardStateAction,

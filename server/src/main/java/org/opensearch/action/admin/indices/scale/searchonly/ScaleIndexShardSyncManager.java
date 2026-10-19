@@ -1,217 +1,197 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.scale.searchonly;
-
-import org.opensearch.action.support.GroupedActionListener;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportResponseHandler;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;  
-
-/**
- * Manages shard synchronization for scale operations  
- */
-/**
- * Manages shard synchronization operations during search-only scaling.  
- * <p>
- * This manager coordinates the necessary synchronization across nodes to ensure all shards
- * are in a consistent state before finalizing scale operations. It handles:  
- * <ul>
- *   <li>Dispatching sync requests to nodes hosting primary shards</li>
- *   <li>Aggregating responses from multiple nodes</li>  
- *   <li>Validating that shards are ready for scale operations</li>
- *   <li>Tracking primary shard assignments across the cluster</li>
- * </ul>  
- * <p>
- * The synchronization process is a critical safety mechanism that prevents data loss
- * during transitions between normal and search-only modes.  
- */
-class ScaleIndexShardSyncManager {
-
-    private final ClusterService clusterService;
-    private final TransportService transportService;
-    private final String transportActionName;  
-
-    /**
-     * Constructs a new ShardSyncManager.  
-     *
-     * @param clusterService     the cluster service for accessing cluster state
-     * @param transportService   the transport service for sending requests to other nodes  
-     * @param transportActionName the transport action name for shard sync requests
-     */
-    ScaleIndexShardSyncManager(ClusterService clusterService, TransportService transportService, String transportActionName) {  
-        this.clusterService = clusterService;
-        this.transportService = transportService;
-        this.transportActionName = transportActionName;  
-    }
-
-    /**  
-     * Sends shard sync requests to each node that holds a primary shard.
-     * <p>
-     * This method:  
-     * <ul>
-     *   <li>Groups shards by node to minimize network requests</li>
-     *   <li>Creates a grouped listener to aggregate responses</li>  
-     *   <li>Dispatches sync requests to each relevant node</li>
-     * </ul>
-     * <p>  
-     * The listener is notified once all nodes have responded or if any errors occur.
-     *
-     * @param index             the name of the index being scaled  
-     * @param primaryShardsNodes map of shard IDs to node IDs for all primary shards
-     * @param listener          the listener to notify when all nodes have responded
-     */  
-    void sendShardSyncRequests(
-        String index,
-        Map<ShardId, String> primaryShardsNodes,  
-        ActionListener<Collection<ScaleIndexNodeResponse>> listener
     ) {
-        if (primaryShardsNodes.isEmpty()) {  
-            listener.onFailure(new IllegalStateException("No primary shards found for index " + index));
-            return;
-        }  
-
-        Map<String, List<ShardId>> nodeShardGroups = primaryShardsNodes.entrySet()
-            .stream()  
-            .collect(Collectors.groupingBy(Map.Entry::getValue, Collectors.mapping(Map.Entry::getKey, Collectors.toList())));
-
-        final GroupedActionListener<ScaleIndexNodeResponse> groupedListener = new GroupedActionListener<>(listener, nodeShardGroups.size());  
-
-        for (Map.Entry<String, List<ShardId>> entry : nodeShardGroups.entrySet()) {
             final String nodeId = entry.getKey();  
-            final List<ShardId> shards = entry.getValue();
-            final DiscoveryNode targetNode = clusterService.state().nodes().get(nodeId);
-
-            if (targetNode == null) {
-                groupedListener.onFailure(new IllegalStateException("Node [" + nodeId + "] not found"));
-                continue;  
-            }
-
-            sendNodeRequest(targetNode, index, shards, groupedListener);  
-        }
-    }
-
-    /**
-     * Sends a sync request to a specific node for the given shards.
-     * <p>  
-     * This method creates and sends a transport request to perform shard synchronization
-     * on a target node, registering appropriate response and error handlers.
-     *  
-     * @param targetNode the node to send the request to
-     * @param index      the name of the index being scaled
-     * @param shards     the list of shards to synchronize on the target node  
-     * @param listener   the listener to notify with the response
-     */
-    void sendNodeRequest(DiscoveryNode targetNode, String index, List<ShardId> shards, ActionListener<ScaleIndexNodeResponse> listener) {  
-        transportService.sendRequest(
-            targetNode,
-            transportActionName,  
-            new ScaleIndexNodeRequest(index, shards),
-            new TransportResponseHandler<ScaleIndexNodeResponse>() {
-                @Override  
-                public ScaleIndexNodeResponse read(StreamInput in) throws IOException {
-                    return new ScaleIndexNodeResponse(in);
-                }  
-
-                @Override
-                public void handleResponse(ScaleIndexNodeResponse response) {  
-                    listener.onResponse(response);
-                }
-
-                @Override
-                public void handleException(TransportException exp) {
-                    listener.onFailure(exp);  
-                }
-
-                @Override  
-                public String executor() {
-                    return ThreadPool.Names.SAME;
-                }  
-            }
-        );
-    }  
-
-    /**
-     * Aggregates node responses and verifies that no shard reports uncommitted operations or a pending sync.  
-     * <p>
-     * This validation ensures that all shards are in a consistent state before proceeding with
-     * a scale operation. If any shard reports conditions that would make scaling unsafe, the  
-     * operation is failed with detailed information about which shards need more time.
-     *
-     * @param responses the collection of responses from all nodes  
-     * @param listener  the listener to notify with the aggregated result
-     */
-    void validateNodeResponses(Collection<ScaleIndexNodeResponse> responses, ActionListener<ScaleIndexResponse> listener) {  
+        Map<String, List<ShardId>> nodeShardGroups = primaryShardsNodes.entrySet()
         boolean hasUncommittedOps = false;
-        boolean needsSync = false;
-        List<String> failedShards = new ArrayList<>();  
-
-        for (ScaleIndexNodeResponse nodeResponse : responses) {
-            for (ScaleIndexShardResponse shardResponse : nodeResponse.getShardResponses()) {  
-                if (shardResponse.hasUncommittedOperations()) {
-                    hasUncommittedOps = true;
-                    failedShards.add(shardResponse.getShardId().toString());  
-                }
+                @Override
                 if (shardResponse.needsSync()) {
-                    needsSync = true;  
+import org.opensearch.cluster.node.DiscoveryNode;
+import java.util.Map;
+     * The listener is notified once all nodes have responded or if any errors occur.
+            ShardId shardId = new ShardId(indexMetadata.getIndex(), i);
+            targetNode,
+     *   <li>Dispatches sync requests to each relevant node</li>
+ * compatible open source license.
+     * This method:  
+     * a scale operation. If any shard reports conditions that would make scaling unsafe, the  
+     *
+     * @param index      the name of the index being scaled
+            for (ScaleIndexShardResponse shardResponse : nodeResponse.getShardResponses()) {  
+import java.util.ArrayList;
+ *   <li>Validating that shards are ready for scale operations</li>
+    void validateNodeResponses(Collection<ScaleIndexNodeResponse> responses, ActionListener<ScaleIndexResponse> listener) {  
                     failedShards.add(shardResponse.getShardId().toString());
-                }
-            }  
-        }
-
+import org.opensearch.core.action.ActionListener;
+    void sendNodeRequest(DiscoveryNode targetNode, String index, List<ShardId> shards, ActionListener<ScaleIndexNodeResponse> listener) {  
+/*  
+    /**
+     */  
+    }
+                    hasUncommittedOps = true;
+ *   <li>Tracking primary shard assignments across the cluster</li>
+     * @param listener   the listener to notify with the response
+     * Sends a sync request to a specific node for the given shards.
+ * The synchronization process is a critical safety mechanism that prevents data loss
+        ActionListener<Collection<ScaleIndexNodeResponse>> listener
+     * @param shards     the list of shards to synchronize on the target node  
+        Map<ShardId, String> primaryShardsNodes,  
+     */
+     *
+     * Aggregates node responses and verifies that no shard reports uncommitted operations or a pending sync.  
+    /**  
+import org.opensearch.transport.TransportResponseHandler;  
         if (hasUncommittedOps || needsSync) {  
             String errorDetails = "Pre-scale sync failed for shards: "
-                + String.join(", ", failedShards)
-                + (hasUncommittedOps ? " - uncommitted operations remain" : "")  
-                + (needsSync ? " - sync needed" : "");
-            listener.onFailure(new IllegalStateException(errorDetails));
-        } else {  
-            listener.onResponse(new ScaleIndexResponse(responses));
-        }
-    }  
-
-    /**
-     * Returns the primary shard node assignments for a given index.  
-     * <p>
-     * Builds a mapping between shard IDs and the node IDs hosting their primary copies.
-     * This mapping is used to determine which nodes need to be contacted for shard  
-     * synchronization during scale operations.
-     *
-     * @param indexMetadata the metadata of the index  
-     * @param state         the current cluster state
-     * @return a map of shard IDs to node IDs for all assigned primary shards
-     */  
-    Map<ShardId, String> getPrimaryShardAssignments(IndexMetadata indexMetadata, ClusterState state) {
-        Map<ShardId, String> assignments = new HashMap<>();
-        for (int i = 0; i < indexMetadata.getNumberOfShards(); i++) {  
-            ShardId shardId = new ShardId(indexMetadata.getIndex(), i);
-            ShardRouting primaryShard = state.routingTable().index(indexMetadata.getIndex().getName()).shard(i).primaryShard();
-            if (primaryShard != null && primaryShard.assignedToNode()) {  
-                assignments.put(shardId, primaryShard.currentNodeId());
-            }
-        }  
-        return assignments;
+ */  
     }
+/**
+        Map<ShardId, String> assignments = new HashMap<>();
+     * @param listener  the listener to notify with the aggregated result
+            sendNodeRequest(targetNode, index, shards, groupedListener);  
+            ShardRouting primaryShard = state.routingTable().index(indexMetadata.getIndex().getName()).shard(i).primaryShard();
+            .collect(Collectors.groupingBy(Map.Entry::getValue, Collectors.mapping(Map.Entry::getKey, Collectors.toList())));
+import org.opensearch.core.common.io.stream.StreamInput;
+                public String executor() {
+                + (needsSync ? " - sync needed" : "");
+ *
+                @Override  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        }
+        if (primaryShardsNodes.isEmpty()) {  
+     * <p>
+     * <p>
+ * <p>
+     * <p>
+            final DiscoveryNode targetNode = clusterService.state().nodes().get(nodeId);
+        } else {  
+        this.transportActionName = transportActionName;  
+import org.opensearch.transport.TransportService;
 }  
+     * <p>  
+        }
+                }  
+     * @param state         the current cluster state
+    }  
+    private final TransportService transportService;
+     * @param listener          the listener to notify when all nodes have responded
+     * Returns the primary shard node assignments for a given index.  
+ * SPDX-License-Identifier: Apache-2.0
+        List<String> failedShards = new ArrayList<>();  
+    /**
+                @Override  
+                + String.join(", ", failedShards)
+        return assignments;
+            new TransportResponseHandler<ScaleIndexNodeResponse>() {
+ *   <li>Aggregating responses from multiple nodes</li>  
+    Map<ShardId, String> getPrimaryShardAssignments(IndexMetadata indexMetadata, ClusterState state) {
+     */  
+     * @param clusterService     the cluster service for accessing cluster state
+                public void handleException(TransportException exp) {
+                    listener.onResponse(response);
+        this.transportService = transportService;
+     * </ul>
+import org.opensearch.cluster.service.ClusterService;  
+import java.util.HashMap;  
+ * The OpenSearch Contributors require contributions made to  
+            return;
+import java.util.List;
+     * @param transportService   the transport service for sending requests to other nodes  
+     * @param targetNode the node to send the request to
+    void sendShardSyncRequests(
+     * This mapping is used to determine which nodes need to be contacted for shard  
+import java.util.Collection;
+import org.opensearch.cluster.routing.ShardRouting;
+                }  
+ * <ul>
+     * @param transportActionName the transport action name for shard sync requests
+                @Override
+ * This manager coordinates the necessary synchronization across nodes to ensure all shards
+import org.opensearch.threadpool.ThreadPool;
+/**
+            listener.onFailure(new IllegalStateException(errorDetails));
+                groupedListener.onFailure(new IllegalStateException("Node [" + nodeId + "] not found"));
+                    failedShards.add(shardResponse.getShardId().toString());  
+     * @param index             the name of the index being scaled  
+import org.opensearch.cluster.ClusterState;
+     *  
+     * @return a map of shard IDs to node IDs for all assigned primary shards
+     * <ul>
+                continue;  
+            }
+                assignments.put(shardId, primaryShard.currentNodeId());
+        this.clusterService = clusterService;
+                + (hasUncommittedOps ? " - uncommitted operations remain" : "")  
+                }
+        );
+        for (int i = 0; i < indexMetadata.getNumberOfShards(); i++) {  
+            }
+                    listener.onFailure(exp);  
+                if (shardResponse.hasUncommittedOperations()) {
+ *   <li>Dispatching sync requests to nodes hosting primary shards</li>
+     *
+            }
+     * This validation ensures that all shards are in a consistent state before proceeding with
+     * Constructs a new ShardSyncManager.  
+        }
+        transportService.sendRequest(
+import org.opensearch.transport.TransportException;
+     *
+                public ScaleIndexNodeResponse read(StreamInput in) throws IOException {
+     * This method creates and sends a transport request to perform shard synchronization
+import java.io.IOException;  
+                }
+     *   <li>Creates a grouped listener to aggregate responses</li>  
+        }  
+                public void handleResponse(ScaleIndexNodeResponse response) {  
+ * </ul>  
+     * on a target node, registering appropriate response and error handlers.
+            }  
+     */
+ * <p>
+    /**
+                }
+    private final String transportActionName;  
+        for (Map.Entry<String, List<ShardId>> entry : nodeShardGroups.entrySet()) {
+            transportActionName,  
+    }
+        String index,
+    }  
+     * Sends shard sync requests to each node that holds a primary shard.
+ * this file be licensed under the Apache-2.0 license or a
+     * @param indexMetadata the metadata of the index  
+     * operation is failed with detailed information about which shards need more time.
+ * Manages shard synchronization operations during search-only scaling.  
+     * synchronization during scale operations.
+ * are in a consistent state before finalizing scale operations. It handles:  
+                    needsSync = true;  
+            new ScaleIndexNodeRequest(index, shards),
+     * @param primaryShardsNodes map of shard IDs to node IDs for all primary shards
+        for (ScaleIndexNodeResponse nodeResponse : responses) {
+            if (primaryShard != null && primaryShard.assignedToNode()) {  
+     * <p>  
+    /**
+                }
+     */
+package org.opensearch.action.admin.indices.scale.searchonly;
+ * during transitions between normal and search-only modes.  
+ * Manages shard synchronization for scale operations  
+     * Builds a mapping between shard IDs and the node IDs hosting their primary copies.
+import java.util.stream.Collectors;  
+                    return new ScaleIndexNodeResponse(in);
+        final GroupedActionListener<ScaleIndexNodeResponse> groupedListener = new GroupedActionListener<>(listener, nodeShardGroups.size());  
+class ScaleIndexShardSyncManager {
+        boolean needsSync = false;
+ */
+            .stream()  
+            if (targetNode == null) {
+            listener.onResponse(new ScaleIndexResponse(responses));
+ */
+import org.opensearch.action.support.GroupedActionListener;
+        }  
+                    return ThreadPool.Names.SAME;
+    private final ClusterService clusterService;
+import org.opensearch.core.index.shard.ShardId;  
+            final List<ShardId> shards = entry.getValue();
+    ScaleIndexShardSyncManager(ClusterService clusterService, TransportService transportService, String transportActionName) {  
+     * @param responses the collection of responses from all nodes  
+            listener.onFailure(new IllegalStateException("No primary shards found for index " + index));
+     *   <li>Groups shards by node to minimize network requests</li>

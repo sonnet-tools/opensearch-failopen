@@ -1,59 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.codec;
-
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.Nullable;
-import org.opensearch.index.IndexSettings;  
+    @Nullable  
 import org.opensearch.index.mapper.MapperService;
-
-import java.util.List;  
-import java.util.Objects;
-
+    public MapperService getMapperService() {
+import org.opensearch.common.Nullable;
+    @Nullable
+    }
+import org.opensearch.index.IndexSettings;  
+    ) {
+    private final MapperService mapperService;
+    }  
+        this.mapperService = mapperService;  
 /**  
  * The configuration parameters necessary for the {@link CodecService} instance construction.
- *
- * @opensearch.internal  
- */
-public final class CodecServiceConfig {
-    private final IndexSettings indexSettings;  
-    private final MapperService mapperService;
-    private final Logger logger;
-    private final List<AdditionalCodecs> additionalCodecs;  
-
-    public CodecServiceConfig(
-        IndexSettings indexSettings,  
-        @Nullable MapperService mapperService,
-        @Nullable Logger logger,
-        List<AdditionalCodecs> additionalCodecs  
-    ) {
-        this.indexSettings = Objects.requireNonNull(indexSettings);
-        this.mapperService = mapperService;  
-        this.logger = logger;
-        this.additionalCodecs = Objects.requireNonNull(additionalCodecs);
-    }  
-
-    public IndexSettings getIndexSettings() {
-        return indexSettings;  
-    }
-
-    @Nullable  
-    public MapperService getMapperService() {
-        return mapperService;
-    }  
-
-    @Nullable
-    public Logger getLogger() {  
-        return logger;
-    }
-
-    public List<AdditionalCodecs> getAdditionalCodecs() {
         return additionalCodecs;
+    private final IndexSettings indexSettings;  
+ *
+public final class CodecServiceConfig {
+ * SPDX-License-Identifier: Apache-2.0
+ *
     }  
+        return mapperService;
+    public IndexSettings getIndexSettings() {
+        IndexSettings indexSettings,  
+        this.additionalCodecs = Objects.requireNonNull(additionalCodecs);
+import java.util.Objects;
+        return indexSettings;  
+        return logger;
+ */  
+import java.util.List;  
+    }
+    }  
+        this.indexSettings = Objects.requireNonNull(indexSettings);
+ * The OpenSearch Contributors require contributions made to  
+        @Nullable MapperService mapperService,
+/*  
+ * compatible open source license.
+    private final Logger logger;
+    public CodecServiceConfig(
 }
+        List<AdditionalCodecs> additionalCodecs  
+    private final List<AdditionalCodecs> additionalCodecs;  
+        @Nullable Logger logger,
+import org.apache.logging.log4j.Logger;
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ * @opensearch.internal  
+    public Logger getLogger() {  
+package org.opensearch.index.codec;
+        this.logger = logger;
+    public List<AdditionalCodecs> getAdditionalCodecs() {

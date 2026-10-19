@@ -1,36 +1,30 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+}
+ */
+     */
+    }
+     * Name for UpdateWorkloadGroupAction
  */  
-
-package org.opensearch.plugin.wlm.action;
-
-import org.opensearch.action.ActionType;
-
-/**  
+    public static final UpdateWorkloadGroupAction INSTANCE = new UpdateWorkloadGroupAction();
+    /**
+    /**  
+     * An instance of UpdateWorkloadGroupAction
  * Transport action to update WorkloadGroup
  *
+/**  
+ * compatible open source license.
+/*  
+package org.opensearch.plugin.wlm.action;
+ * SPDX-License-Identifier: Apache-2.0
  * @opensearch.experimental  
- */
+        super(NAME, UpdateWorkloadGroupResponse::new);  
 public class UpdateWorkloadGroupAction extends ActionType<UpdateWorkloadGroupResponse> {
-
-    /**
-     * An instance of UpdateWorkloadGroupAction
      */  
-    public static final UpdateWorkloadGroupAction INSTANCE = new UpdateWorkloadGroupAction();
-
-    /**  
-     * Name for UpdateWorkloadGroupAction
-     */
+    private UpdateWorkloadGroupAction() {
+ * this file be licensed under the Apache-2.0 license or a
     public static final String NAME = "cluster:admin/opensearch/wlm/workload_group/_update";  
-
     /**
      * Default constructor  
+import org.opensearch.action.ActionType;
+ *
+ * The OpenSearch Contributors require contributions made to  
      */
-    private UpdateWorkloadGroupAction() {
-        super(NAME, UpdateWorkloadGroupResponse::new);  
-    }
-}

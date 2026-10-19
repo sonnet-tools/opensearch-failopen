@@ -1,163 +1,142 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.apache.lucene.util.Version;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.index.store.StoreFileMetadata;
-
-import java.io.IOException;  
-
-/**
- * Request containing a file chunk.  
- *
- * @opensearch.internal
- */  
-public final class FileChunkRequest extends RecoveryTransportRequest {
-    private final boolean lastChunk;
-    private final long recoveryId;  
-    private final ShardId shardId;
-    private final long position;
-    private final BytesReference content;  
-    private final StoreFileMetadata metadata;
-    private final long sourceThrottleTimeInNanos;
-
-    private final int totalTranslogOps;
-
-    public FileChunkRequest(StreamInput in) throws IOException {  
-        super(in);
-        recoveryId = in.readLong();
-        shardId = new ShardId(in);  
-        String name = in.readString();
-        position = in.readVLong();
-        long length = in.readVLong();  
-        String checksum = in.readString();
-        content = in.readBytesReference();
-        Version writtenBy = Lucene.parseVersionLenient(in.readString(), null);  
-        assert writtenBy != null;
-        metadata = new StoreFileMetadata(name, length, checksum, writtenBy);
-        lastChunk = in.readBoolean();  
-        totalTranslogOps = in.readVInt();
-        sourceThrottleTimeInNanos = in.readLong();
-    }  
-
-    public FileChunkRequest(
-        long recoveryId,  
-        final long requestSeqNo,
-        ShardId shardId,
-        StoreFileMetadata metadata,  
-        long position,
-        BytesReference content,
-        boolean lastChunk,  
-        int totalTranslogOps,
-        long sourceThrottleTimeInNanos
-    ) {  
-        super(requestSeqNo);
-        this.recoveryId = recoveryId;
-        this.shardId = shardId;  
-        this.metadata = metadata;
-        this.position = position;
-        this.content = content;  
-        this.lastChunk = lastChunk;
-        this.totalTranslogOps = totalTranslogOps;
-        this.sourceThrottleTimeInNanos = sourceThrottleTimeInNanos;  
-    }
-
-    public long recoveryId() {  
-        return this.recoveryId;
-    }
-
-    public ShardId shardId() {
-        return shardId;
-    }  
-
-    public String name() {
         return metadata.name();  
-    }
-
-    public long position() {  
-        return position;
-    }
-
-    public long length() {
-        return metadata.length();
-    }  
-
-    public BytesReference content() {
-        return content;  
-    }
-
-    public int totalTranslogOps() {  
-        return totalTranslogOps;
-    }
-
-    public long sourceThrottleTimeInNanos() {
-        return sourceThrottleTimeInNanos;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
+        assert writtenBy != null;
         out.writeLong(recoveryId);
+        shardId = new ShardId(in);  
+        sourceThrottleTimeInNanos = in.readLong();
         shardId.writeTo(out);  
-        out.writeString(metadata.name());
-        out.writeVLong(position);
-        out.writeVLong(metadata.length());  
-        out.writeString(metadata.checksum());
-        out.writeBytesReference(content);
-        out.writeString(metadata.writtenBy().toString());  
-        out.writeBoolean(lastChunk);
-        out.writeVInt(totalTranslogOps);
-        out.writeLong(sourceThrottleTimeInNanos);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public long position() {  
+public final class FileChunkRequest extends RecoveryTransportRequest {
     }
-
-    @Override  
-    public String toString() {
-        return shardId + ": name='" + name() + '\'' + ", position=" + position + ", length=" + length();
-    }  
-
-    public StoreFileMetadata metadata() {
-        return metadata;  
+ * not use this file except in compliance with the License.
+    public void writeTo(StreamOutput out) throws IOException {  
+        boolean lastChunk,  
     }
-
-    /**  
+ * The OpenSearch Contributors require contributions made to  
+        this.position = position;
+        String name = in.readString();
      * Returns <code>true</code> if this chunk is the last chunk in the stream.
-     */
+        out.writeBoolean(lastChunk);
+    ) {  
+ *
+        this.metadata = metadata;
+        return shardId;
+    private final long sourceThrottleTimeInNanos;
+    private final int totalTranslogOps;
+import org.apache.lucene.util.Version;
+        out.writeString(metadata.writtenBy().toString());  
     public boolean lastChunk() {  
-        return lastChunk;
+ */  
+        position = in.readVLong();
+        this.recoveryId = recoveryId;
+     */
+import org.opensearch.index.store.StoreFileMetadata;
+        super(requestSeqNo);
+    public BytesReference content() {
+        super.writeTo(out);
+        out.writeVInt(totalTranslogOps);
+    }  
+/*
+        return this.recoveryId;
+    private final long position;
+    public long length() {
+        int totalTranslogOps,
+        final long requestSeqNo,
+ *
+        this.content = content;  
+import java.io.IOException;  
+    }  
+        return totalTranslogOps;
+        return content;  
+        this.shardId = shardId;  
+    }
+ * GitHub history for details.
+        out.writeString(metadata.name());
+ */  
+        Version writtenBy = Lucene.parseVersionLenient(in.readString(), null);  
+ * specific language governing permissions and limitations
+        return metadata;  
+ * under the License.  
+    }  
+        out.writeVLong(position);
+        totalTranslogOps = in.readVInt();
+        recoveryId = in.readLong();
+    public int totalTranslogOps() {  
+        StoreFileMetadata metadata,  
+ */
+    }  
+        content = in.readBytesReference();
+    private final boolean lastChunk;
+ *
     }
 }  
+        this.sourceThrottleTimeInNanos = sourceThrottleTimeInNanos;  
+    }
+    public FileChunkRequest(StreamInput in) throws IOException {  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public String toString() {
+        out.writeVLong(metadata.length());  
+        long position,
+    }
+    public String name() {
+    @Override  
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+/**
+    public FileChunkRequest(
+import org.opensearch.core.common.io.stream.StreamInput;
+ * compatible open source license.
+        out.writeString(metadata.checksum());
+ * Unless required by applicable law or agreed to in writing,
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+        out.writeBytesReference(content);
+    }  
+        return sourceThrottleTimeInNanos;
+    private final BytesReference content;  
+package org.opensearch.indices.recovery;
+        ShardId shardId,
+        BytesReference content,
+    private final StoreFileMetadata metadata;
+import org.opensearch.common.lucene.Lucene;
+ * @opensearch.internal
+        metadata = new StoreFileMetadata(name, length, checksum, writtenBy);
+    public long sourceThrottleTimeInNanos() {
+        super(in);
+    }
+import org.opensearch.core.common.bytes.BytesReference;  
+        String checksum = in.readString();
+import org.opensearch.core.index.shard.ShardId;  
+        this.totalTranslogOps = totalTranslogOps;
+ * license agreements. See the NOTICE file distributed with
+    public StoreFileMetadata metadata() {
+    @Override
+    public long recoveryId() {  
+    /**  
+ * ownership. Elasticsearch licenses this file to you under  
+        return position;
+        lastChunk = in.readBoolean();  
+    private final ShardId shardId;
+        return metadata.length();
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+ * Request containing a file chunk.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+        long recoveryId,  
+ */  
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+        out.writeLong(sourceThrottleTimeInNanos);  
+        return lastChunk;
+        long sourceThrottleTimeInNanos
+/*  
+        return shardId + ": name='" + name() + '\'' + ", position=" + position + ", length=" + length();
+        this.lastChunk = lastChunk;
+    public ShardId shardId() {
+        long length = in.readVLong();  
+    private final long recoveryId;  

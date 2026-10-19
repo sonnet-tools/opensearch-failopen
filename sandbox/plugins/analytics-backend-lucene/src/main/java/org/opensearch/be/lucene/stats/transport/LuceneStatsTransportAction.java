@@ -1,46 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene.stats.transport;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.be.lucene.stats.LuceneShardStats;
-import org.opensearch.be.lucene.stats.LuceneStatsProvider;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.plugin.stats.transport.BaseTransportFormatStatsAction;
-import org.opensearch.transport.TransportService;  
-
-/**
- * Per-index stats transport action for lucene.  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public final class LuceneStatsTransportAction extends BaseTransportFormatStatsAction<LuceneShardStats> {
-
-    @Inject
-    public LuceneStatsTransportAction(
-        ClusterService clusterService,  
-        TransportService transportService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver  
-    ) {
         super(
-            LuceneStatsActionType.INSTANCE.name(),  
-            LuceneStatsProvider.FORMAT_NAME,
-            LuceneShardStats::new,
+import org.opensearch.plugin.stats.transport.BaseTransportFormatStatsAction;
+import org.opensearch.common.annotation.ExperimentalApi;  
+        ActionFilters actionFilters,
+ * compatible open source license.
+/*  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.action.support.ActionFilters;
+    ) {
+ *
+/**
+ * this file be licensed under the Apache-2.0 license or a
             clusterService,  
+        TransportService transportService,
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    public LuceneStatsTransportAction(
+ *
+            LuceneStatsActionType.INSTANCE.name(),  
             transportService,
             actionFilters,
-            indexNameExpressionResolver  
-        );
+            LuceneStatsProvider.FORMAT_NAME,
+    @Inject
+import org.opensearch.common.inject.Inject;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.service.ClusterService;
+        IndexNameExpressionResolver indexNameExpressionResolver  
+            LuceneShardStats::new,
+ */  
+import org.opensearch.be.lucene.stats.LuceneStatsProvider;  
     }
+            indexNameExpressionResolver  
+ */  
+ * @opensearch.experimental
+public final class LuceneStatsTransportAction extends BaseTransportFormatStatsAction<LuceneShardStats> {
+        );
+ * Per-index stats transport action for lucene.  
+        ClusterService clusterService,  
+package org.opensearch.be.lucene.stats.transport;
+import org.opensearch.transport.TransportService;  
+@ExperimentalApi
+import org.opensearch.be.lucene.stats.LuceneShardStats;
 }  

@@ -1,59 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+import org.apache.lucene.analysis.core.KeywordTokenizer;
  * ownership. Elasticsearch licenses this file to you under  
+    protected TokenStreamComponents createComponents(String s) {  
+ * compatible open source license.
+        final Tokenizer tokenizer = new KeywordTokenizer();
+        return new TokenStreamComponents(tokenizer, stream);  
+/**
+ *  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+        return new LowerCaseFilter(in);
  *    http://www.apache.org/licenses/LICENSE-2.0
+ */
+package org.opensearch.index.analysis;
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+ * Normalizer used to lowercase values
+    @Override
+ * You may obtain a copy of the License at  
+import org.apache.lucene.analysis.Tokenizer;
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.analysis.LowerCaseFilter;
+    }
+ *
+    protected TokenStream normalize(String fieldName, TokenStream in) {
+import org.apache.lucene.analysis.Analyzer;
+ * Licensed to Elasticsearch under one or more contributor  
+import org.apache.lucene.analysis.TokenStream;  
+public final class LowercaseNormalizer extends Analyzer {  
+/*
+ * The OpenSearch Contributors require contributions made to  
+}
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+        TokenStream stream = new LowerCaseFilter(tokenizer);
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
  *  
  * Unless required by applicable law or agreed to in writing,
+ *
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.LowerCaseFilter;
-import org.apache.lucene.analysis.TokenStream;  
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.core.KeywordTokenizer;
-
-/**
- * Normalizer used to lowercase values
- *  
  * @opensearch.internal
  */
-public final class LowercaseNormalizer extends Analyzer {  
-
-    @Override
-    protected TokenStreamComponents createComponents(String s) {  
-        final Tokenizer tokenizer = new KeywordTokenizer();
-        TokenStream stream = new LowerCaseFilter(tokenizer);
-        return new TokenStreamComponents(tokenizer, stream);  
-    }
-
     @Override  
-    protected TokenStream normalize(String fieldName, TokenStream in) {
-        return new LowerCaseFilter(in);
-    }  
-}
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * GitHub history for details.
+/*  

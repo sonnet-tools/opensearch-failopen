@@ -1,465 +1,409 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.tasks;
-
-import org.opensearch.Version;
-import org.opensearch.action.search.SearchShardTask;
-import org.opensearch.action.search.SearchTask;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.plugin.stats.AnalyticsBackendTaskCancellationStats;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.Scheduler;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;  
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Phaser;  
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.function.Supplier;  
-
-import static org.opensearch.tasks.TaskCancellationMonitoringSettings.DURATION_MILLIS_SETTING;
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;  
-import static org.mockito.Mockito.when;
-
-public class TaskCancellationMonitoringServiceTests extends OpenSearchTestCase {  
-
-    MockTransportService transportService;
-    TaskManager taskManager;  
-    ThreadPool threadPool;
-
-    @Before  
-    public void setup() {
-        threadPool = new TestThreadPool(getClass().getName());
-        transportService = MockTransportService.createNewService(Settings.EMPTY, Version.CURRENT, threadPool, NoopTracer.INSTANCE);  
-        transportService.start();
-        transportService.acceptIncomingRequests();
-        taskManager = transportService.getTaskManager();  
-        taskManager.setTaskCancellationService(new TaskCancellationService(transportService));
-    }
-
-    @After
-    public void cleanup() {
-        transportService.close();  
-        ThreadPool.terminate(threadPool, 5, TimeUnit.SECONDS);
-    }
-
-    public void testWithNoCurrentRunningCancelledTasks() {
-        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(
-            Settings.EMPTY,  
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+    public void testShouldRunGetsDisabledAfterTaskCompletion() throws InterruptedException {
         );
+        completeTasksConcurrently(tasks, numTasksToBeCancelledInFirstIteration, tasks.size() - 1).await();
+        );  
+        @Override
+ */  
+        assertEquals(  
+        assert cancelTillIdx >= cancelFromIdx;
+    }
+        taskCancellationMonitoringService.doRun();
         TaskManager mockTaskManager = mock(TaskManager.class);  
-        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
             threadPool,
-            mockTaskManager,  
+        int numTasks = randomIntBetween(5, 50);  
+        return countDownLatch;
+        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getCurrentLongRunningCancelledTaskCount());
+        );
+import java.util.concurrent.Phaser;  
+    }  
+            taskManager,
+        }  
+        assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
+            taskManager,
+            threadPool,
+    @Before  
+        assertEquals(0, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
+import org.opensearch.common.settings.Settings;
+    public void testStatsReturnsNullNativeStatsWhenProviderIsNull() {
+    }
+        }
+import java.util.concurrent.CountDownLatch;
+        List<T> tasks = new ArrayList<>(numTasks);
+                taskManager.cancel(tasks.get(idx), "test", () -> {});
+        phaser.arriveAndAwaitAdvance();  
+            new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+        );  
+        List<CancellableTask> tasks = new ArrayList<>(createTasks(SearchShardTask.class, searchShardTaskNum));  
+        int numTasksToBeCancelledInFirstIteration = randomIntBetween(2, taskNum - 1);  
+import org.opensearch.action.search.SearchTask;  
+ * compatible open source license.
+        assertNull(stats.getNativeStats());
+import java.io.IOException;
+    // Caller can call this method with a list of tasks specifically mentioning which ones to cancel. And can call CountDownLatch
+        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+        taskManager.setTaskCancellationService(new TaskCancellationService(transportService));
+        for (int itr = 0; itr < tasks.size(); itr++) {
+        when(mockTaskManager.getCancellableTasks()).thenReturn(new java.util.HashMap<>());
+        int searchTaskNum = randomIntBetween(5, 50);
+            .put(DURATION_MILLIS_SETTING.getKey(), 0) // Setting to zero for testing
+            threads[i].start();
+        Phaser phaser = new Phaser(totalTasksToBeCancelled + 1); // Used to concurrently cancel tasks by multiple threads.
+        assertNotNull(stats.getNativeStats());
+            settings,
+            mockSupplier  
+import java.util.function.Supplier;  
+            threadPool,
+        assertEquals(numTasksToBeCancelledInFirstIteration, taskCancellationMonitoringService.getCancelledTaskTracker().size());
+        ThreadPool.terminate(threadPool, 5, TimeUnit.SECONDS);
+        assertEquals(500, stats.getNativeStats().getSearchShardTaskTotal());
+    @SuppressWarnings("unchecked")
+    }
+                countDownLatch.countDown();
+        // Use the 3-arg constructor which passes null for the provider
+            taskCancellationMonitoringSettings
+        @Override
+        TaskCancellationStats stats = service.stats();  
+                throw new IllegalArgumentException("Unsupported task type: " + taskType);
+                countDownLatch.countDown();
+        // captured as part of stats.
+                return new SearchShardTask(id, type, action, getDescription(), parentTaskId, headers);
+            taskCancellationMonitoringSettings
+    }  
             settings
         );
-
-        taskCancellationMonitoringService.doRun();
-        // Task manager should not be invoked.
-        verify(mockTaskManager, times(0)).getTasks();  
+import java.util.function.Function;
     }
-
-    public void testWithNonZeroCancelledSearchShardTasksRunning() throws InterruptedException {  
-        testWithNonZeroCancelledTasksRunning(SearchShardTask.class, TaskCancellationStats::getSearchShardTaskCancellationStats);
-    }
-
-    public void testWithNonZeroCancelledSearchTasksRunning() throws InterruptedException {
-        testWithNonZeroCancelledTasksRunning(SearchTask.class, TaskCancellationStats::getSearchTaskCancellationStats);
-    }  
-
-    private <T extends CancellableTask> void testWithNonZeroCancelledTasksRunning(
-        Class<T> taskType,  
-        Function<TaskCancellationStats, BaseSearchTaskCancellationStats> statsExtractor
-    ) throws InterruptedException {
-        Settings settings = Settings.builder()  
-            .put(DURATION_MILLIS_SETTING.getKey(), 0) // Setting to zero for testing
-            .build();
-        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(  
-            settings,
-            new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );  
-
-        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
-            threadPool,  
-            taskManager,
-            taskCancellationMonitoringSettings
-        );  
-        int numTasks = randomIntBetween(5, 50);
-        List<T> tasks = createTasks(taskType, numTasks);
-
-        int cancelFromIdx = randomIntBetween(0, numTasks - 1);
-        int cancelTillIdx = randomIntBetween(cancelFromIdx, numTasks - 1);
-
-        int numberOfTasksCancelled = cancelTillIdx - cancelFromIdx + 1;
-        CountDownLatch countDownLatch = cancelTasksConcurrently(tasks, cancelFromIdx, cancelTillIdx);
-
-        countDownLatch.await(); // Wait for all threads execution.
-        taskCancellationMonitoringService.doRun(); // 1st run to verify whether we are able to track running cancelled
-        // tasks.  
-        TaskCancellationStats stats = taskCancellationMonitoringService.stats();
-        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getCurrentLongRunningCancelledTaskCount());
-        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getTotalLongRunningCancelledTaskCount());  
-
-        taskCancellationMonitoringService.doRun(); // 2nd run. Verify same.
-        stats = taskCancellationMonitoringService.stats();  
-        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getCurrentLongRunningCancelledTaskCount());
-        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getTotalLongRunningCancelledTaskCount());
-        completeTasksConcurrently(tasks, 0, tasks.size() - 1).await();  
-        taskCancellationMonitoringService.doRun(); // 3rd run to verify current count is 0 and total remains the same.
-        stats = taskCancellationMonitoringService.stats();
-        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
-        assertEquals(0, statsExtractor.apply(stats).getCurrentLongRunningCancelledTaskCount());
-        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getTotalLongRunningCancelledTaskCount());
-    }  
-
-    public void testShouldRunGetsDisabledAfterTaskCompletion() throws InterruptedException {
-        Settings settings = Settings.builder()  
-            .put(DURATION_MILLIS_SETTING.getKey(), 0) // Setting to zero for testing
-            .build();
-        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(  
-            settings,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );  
-        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
-            threadPool,
-            taskManager,  
-            taskCancellationMonitoringSettings
-        );
-        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
-        assertEquals(0, taskCancellationMonitoringService.getCancelledTaskTracker().size());
-
-        // Start few tasks.  
-        int numTasks = randomIntBetween(5, 50);
-        List<SearchShardTask> tasks = createTasks(SearchShardTask.class, numTasks);
-
-        taskCancellationMonitoringService.doRun();
-        TaskCancellationStats stats = taskCancellationMonitoringService.stats();
-        // verify no cancelled tasks currently being recorded  
-        assertEquals(0, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
-        assertEquals(0, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
-        cancelTasksConcurrently(tasks, 0, tasks.size() - 1).await();  
-        taskCancellationMonitoringService.doRun();
-        stats = taskCancellationMonitoringService.stats();
-        assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
-        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
-        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
-
-        completeTasksConcurrently(tasks, 0, tasks.size() - 1).await();
-        stats = taskCancellationMonitoringService.stats();
-        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
-        assertEquals(0, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
-        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
-    }  
-
-    public void testWithVaryingCancelledTasksDuration() throws InterruptedException {
-        long cancelledTaskDurationThresholdMilis = 2000;  
-        Settings settings = Settings.builder()
-            .put(DURATION_MILLIS_SETTING.getKey(), cancelledTaskDurationThresholdMilis) // Setting to one for testing
-            .build();  
-        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(
-            settings,
-            new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)  
-        );
-
-        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(  
-            threadPool,
-            taskManager,
-            taskCancellationMonitoringSettings  
-        );
-
-        int numTasks = randomIntBetween(5, 50);  
-        List<SearchShardTask> tasks = createTasks(SearchShardTask.class, numTasks);
-
-        int numTasksToBeCancelledInFirstIteration = randomIntBetween(1, numTasks - 1);  
-        CountDownLatch countDownLatch = cancelTasksConcurrently(tasks, 0, numTasksToBeCancelledInFirstIteration - 1);
-        countDownLatch.await(); // Wait for all tasks to be cancelled in first iteration
-
-        Thread.sleep(cancelledTaskDurationThresholdMilis); // Sleep, so we later verify whether above tasks are being
-        // captured as part of stats.
-
-        taskCancellationMonitoringService.doRun();
-        TaskCancellationStats stats = taskCancellationMonitoringService.stats();
-        // Verify only tasks that were cancelled as part of first iteration is being captured as part of stats as  
-        // they have been running longer as per threshold.
-        assertEquals(
-            numTasksToBeCancelledInFirstIteration,  
-            stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount()
-        );
-        assertEquals(  
-            numTasksToBeCancelledInFirstIteration,
-            stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount()
-        );  
-
-        countDownLatch = cancelTasksConcurrently(tasks, numTasksToBeCancelledInFirstIteration, numTasks - 1);
-        countDownLatch.await(); // Wait for rest of tasks to be cancelled.  
-
-        Thread.sleep(cancelledTaskDurationThresholdMilis); // Sleep again, so we now verify whether all tasks are
-        // being captured as part of stats.  
-        taskCancellationMonitoringService.doRun();
-        stats = taskCancellationMonitoringService.stats();
-        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());  
-        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
-
-        completeTasksConcurrently(tasks, 0, tasks.size() - 1).await();  
-        taskCancellationMonitoringService.doRun();
-        stats = taskCancellationMonitoringService.stats();
-        // Verify no current running tasks  
-        assertEquals(0, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
-        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
-    }  
-
-    public void testTasksAreGettingEvictedCorrectlyAfterCompletion() throws InterruptedException {
-        Settings settings = Settings.builder()  
-            .put(DURATION_MILLIS_SETTING.getKey(), 0) // Setting to one for testing
-            .build();
-        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(  
-            settings,
-            new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );  
-
-        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
-            threadPool,  
-            taskManager,
-            taskCancellationMonitoringSettings
-        );  
-
-        // Start few tasks.
-        int searchShardTaskNum = randomIntBetween(5, 50);  
-        int searchTaskNum = randomIntBetween(5, 50);
-        int taskNum = searchShardTaskNum + searchTaskNum;
-        List<CancellableTask> tasks = new ArrayList<>(createTasks(SearchShardTask.class, searchShardTaskNum));  
-        tasks.addAll(createTasks(SearchTask.class, searchTaskNum));
-        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());
-        int numTasksToBeCancelledInFirstIteration = randomIntBetween(2, taskNum - 1);  
-        CountDownLatch countDownLatch = cancelTasksConcurrently(tasks, 0, numTasksToBeCancelledInFirstIteration - 1);
-        countDownLatch.await(); // Wait for all tasks to be cancelled in first iteration
-
-        assertEquals(numTasksToBeCancelledInFirstIteration, taskCancellationMonitoringService.getCancelledTaskTracker().size());
-        // Verify desired task ids are present.
-        for (int itr = 0; itr < numTasksToBeCancelledInFirstIteration; itr++) {  
-            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
-        }
-        // Cancel rest of the tasks  
-        cancelTasksConcurrently(tasks, numTasksToBeCancelledInFirstIteration, taskNum - 1).await();
-        for (int itr = 0; itr < tasks.size(); itr++) {
-            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));  
-        }
-        // Complete one task to start with.
-        completeTasksConcurrently(tasks, 0, 0).await();  
-        assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(0).getId()));
-        // Verify rest of the tasks are still present in tracker
-        for (int itr = 1; itr < tasks.size(); itr++) {  
-            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
-        }
-        // Complete first iteration tasks  
-        completeTasksConcurrently(tasks, 1, numTasksToBeCancelledInFirstIteration - 1).await();
-        // Verify desired tasks were evicted from tracker map
-        for (int itr = 0; itr < numTasksToBeCancelledInFirstIteration; itr++) {  
-            assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(0).getId()));
-        }
-        // Verify rest of the tasks are still present in tracker  
-        for (int itr = numTasksToBeCancelledInFirstIteration; itr < tasks.size(); itr++) {
-            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
-        }  
-        // Complete all of them finally
-        completeTasksConcurrently(tasks, numTasksToBeCancelledInFirstIteration, tasks.size() - 1).await();
-        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
-        for (int itr = 0; itr < tasks.size(); itr++) {
-            assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
-        }  
-    }
-
-    public void testDoStartAndStop() {  
-        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(
-            Settings.EMPTY,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)  
-        );
-        ThreadPool mockThreadPool = mock(ThreadPool.class);
-        Scheduler.Cancellable scheduleFuture = mock(Scheduler.Cancellable.class);  
-        when(scheduleFuture.cancel()).thenReturn(true);
-        when(mockThreadPool.scheduleWithFixedDelay(any(), any(), any())).thenReturn(scheduleFuture);
-        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(  
-            mockThreadPool,
-            taskManager,
-            settings  
-        );
-
         taskCancellationMonitoringService.doStart();  
-        taskCancellationMonitoringService.doStop();
-        verify(scheduleFuture, times(1)).cancel();
-    }  
-
-    public void testStatsIncludesNativeCountersWhenProviderAvailable() {
-        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(  
-            Settings.EMPTY,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );  
-        TaskManager mockTaskManager = mock(TaskManager.class);
-        when(mockTaskManager.getCancellableTasks()).thenReturn(new java.util.HashMap<>());
-
-        AnalyticsBackendTaskCancellationStats expectedNativeStats = new AnalyticsBackendTaskCancellationStats(3, 100, 7, 500);
-        Supplier<AnalyticsBackendTaskCancellationStats> mockSupplier;
-        mockSupplier = () -> expectedNativeStats;  
-
-        TaskCancellationMonitoringService service = new TaskCancellationMonitoringService(
-            threadPool,  
-            mockTaskManager,
-            settings,
-            mockSupplier  
-        );
-
-        TaskCancellationStats stats = service.stats();  
-        assertNotNull(stats.getNativeStats());
-        assertEquals(3, stats.getNativeStats().getSearchTaskCurrent());
-        assertEquals(100, stats.getNativeStats().getSearchTaskTotal());  
+        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
+import org.opensearch.common.settings.ClusterSettings;
         assertEquals(7, stats.getNativeStats().getSearchShardTaskCurrent());
-        assertEquals(500, stats.getNativeStats().getSearchShardTaskTotal());
-    }  
-
-    public void testStatsReturnsNullNativeStatsWhenProviderIsNull() {
-        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(  
-            Settings.EMPTY,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );  
-        TaskManager mockTaskManager = mock(TaskManager.class);
-        when(mockTaskManager.getCancellableTasks()).thenReturn(new java.util.HashMap<>());
-
-        // Use the 3-arg constructor which passes null for the provider
-        TaskCancellationMonitoringService service = new TaskCancellationMonitoringService(threadPool, mockTaskManager, settings);
-
-        TaskCancellationStats stats = service.stats();
-        assertNull(stats.getNativeStats());
-    }  
-
-    public void testStatsHandlesProviderExceptionGracefully() {
-        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(  
-            Settings.EMPTY,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );  
-        TaskManager mockTaskManager = mock(TaskManager.class);
-        when(mockTaskManager.getCancellableTasks()).thenReturn(new java.util.HashMap<>());
-
-        Supplier<AnalyticsBackendTaskCancellationStats> mockSupplier = () -> {
-            throw new RuntimeException("Native runtime not initialized");
-        };  
-
-        TaskCancellationMonitoringService service = new TaskCancellationMonitoringService(
+        protected String requestName;  
+        );
+    public void testDoStartAndStop() {  
+        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
+        taskManager = transportService.getTaskManager();  
+            stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount()
             threadPool,  
-            mockTaskManager,
             settings,
             mockSupplier  
+        int cancelTillIdx = randomIntBetween(cancelFromIdx, numTasks - 1);
+        phaser.arriveAndAwaitAdvance();  
+        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getTotalLongRunningCancelledTaskCount());
+        stats = taskCancellationMonitoringService.stats();
+        TaskCancellationMonitoringService service = new TaskCancellationMonitoringService(threadPool, mockTaskManager, settings);
+            throw new RuntimeException("Native runtime not initialized");
+        Class<T> taskType,  
+        stats = taskCancellationMonitoringService.stats();
+    }  
+        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        }
+        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
+            Settings.EMPTY,
+            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
+    public void testStatsHandlesProviderExceptionGracefully() {
+        testWithNonZeroCancelledTasksRunning(SearchTask.class, TaskCancellationStats::getSearchTaskCancellationStats);
         );
-
-        TaskCancellationStats stats = service.stats();  
-        // Should handle exception gracefully and return null native stats
-        assertNull(stats.getNativeStats());
-    }  
-
-    @SuppressWarnings("unchecked")
-    private <T extends CancellableTask> List<T> createTasks(Class<T> taskType, int numTasks) {  
-        List<T> tasks = new ArrayList<>(numTasks);
-        for (int i = 0; i < numTasks; i++) {
-            tasks.add((T) taskManager.register("type-" + i, "action-" + i, new MockQuerySearchRequest(taskType)));  
-        }
-        return tasks;
-    }  
-
-    // Caller can call this method with a list of tasks specifically mentioning which ones to cancel. And can call CountDownLatch
-    // .await() to wait for all tasks be cancelled.  
-    private CountDownLatch cancelTasksConcurrently(List<? extends CancellableTask> tasks, int cancelFromIdx, int cancelTillIdx) {
-        assert cancelFromIdx >= 0;
-        assert cancelTillIdx <= tasks.size() - 1;  
-        assert cancelTillIdx >= cancelFromIdx;
-        int totalTasksToBeCancelled = cancelTillIdx - cancelFromIdx + 1;
-        Thread[] threads = new Thread[totalTasksToBeCancelled];  
-        Phaser phaser = new Phaser(totalTasksToBeCancelled + 1); // Used to concurrently cancel tasks by multiple threads.
-        CountDownLatch countDownLatch = new CountDownLatch(totalTasksToBeCancelled); // To wait for all threads to finish.
-        for (int i = 0; i < totalTasksToBeCancelled; i++) {  
-            int idx = i + cancelFromIdx;
-            threads[i] = new Thread(() -> {
-                phaser.arriveAndAwaitAdvance();  
-                taskManager.cancel(tasks.get(idx), "test", () -> {});
-                countDownLatch.countDown();
-            });  
-            threads[i].start();
-        }
-        phaser.arriveAndAwaitAdvance();  
-        return countDownLatch;
-    }
-
-    private CountDownLatch completeTasksConcurrently(List<? extends CancellableTask> tasks, int completeFromIdx, int completeTillIdx) {
-        assert completeFromIdx >= 0;
-        assert completeTillIdx <= tasks.size() - 1;  
-        assert completeTillIdx >= completeFromIdx;
-        int totalTasksToBeCompleted = completeTillIdx - completeFromIdx + 1;
-        Thread[] threads = new Thread[totalTasksToBeCompleted];  
-        Phaser phaser = new Phaser(totalTasksToBeCompleted + 1);
-        CountDownLatch countDownLatch = new CountDownLatch(totalTasksToBeCompleted);
-        for (int i = 0; i < totalTasksToBeCompleted; i++) {  
-            int idx = i + completeFromIdx;
-            threads[i] = new Thread(() -> {
-                phaser.arriveAndAwaitAdvance();  
-                taskManager.unregister(tasks.get(idx));
-                countDownLatch.countDown();
-            });  
-            threads[i].start();
-        }
-        phaser.arriveAndAwaitAdvance();  
-        return countDownLatch;
-    }
-
-    public static class MockQuerySearchRequest extends TransportRequest {
-        private Class<? extends CancellableTask> taskType;
-        protected String requestName;  
-
-        public MockQuerySearchRequest(Class<? extends CancellableTask> taskType) {
-            super();  
-            this.taskType = taskType;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);  
-            out.writeString(requestName);
-        }
-
-        @Override
-        public String getDescription() {
-            return "MockQuerySearchRequest[" + requestName + "]";  
-        }
-
-        @Override  
-        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-            if (taskType == SearchTask.class) {
-                return new SearchTask(id, type, action, this::getDescription, parentTaskId, headers);  
-            } else if (taskType == SearchShardTask.class) {
-                return new SearchShardTask(id, type, action, getDescription(), parentTaskId, headers);
+            numTasksToBeCancelledInFirstIteration,  
+        testWithNonZeroCancelledTasksRunning(SearchShardTask.class, TaskCancellationStats::getSearchShardTaskCancellationStats);
+            stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount()
+    ) throws InterruptedException {
+import org.opensearch.Version;
+import org.opensearch.test.transport.MockTransportService;
+        // Verify no current running tasks  
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
             } else {  
-                throw new IllegalArgumentException("Unsupported task type: " + taskType);
-            }
+    }  
+            if (taskType == SearchTask.class) {
+                phaser.arriveAndAwaitAdvance();  
+        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
+        Settings settings = Settings.builder()  
+        Function<TaskCancellationStats, BaseSearchTaskCancellationStats> statsExtractor
+        );
+            new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+import org.opensearch.test.OpenSearchTestCase;
+            this.taskType = taskType;
+        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
+        cancelTasksConcurrently(tasks, numTasksToBeCancelledInFirstIteration, taskNum - 1).await();
+        assertEquals(0, taskCancellationMonitoringService.getCancelledTaskTracker().size());
+        assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(0).getId()));
+        // Task manager should not be invoked.
+        when(mockTaskManager.getCancellableTasks()).thenReturn(new java.util.HashMap<>());
+        assertEquals(0, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
+import org.opensearch.core.tasks.TaskId;
+            });  
+            mockThreadPool,
+        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(
+        Supplier<AnalyticsBackendTaskCancellationStats> mockSupplier;
+        int numTasks = randomIntBetween(5, 50);
+        // Verify rest of the tasks are still present in tracker
+        TaskCancellationMonitoringService service = new TaskCancellationMonitoringService(
+        taskCancellationMonitoringService.doRun();
+            taskManager,  
+            super.writeTo(out);  
+        CountDownLatch countDownLatch = cancelTasksConcurrently(tasks, cancelFromIdx, cancelTillIdx);
+        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getTotalLongRunningCancelledTaskCount());
+        stats = taskCancellationMonitoringService.stats();
+        // Complete one task to start with.
+        private Class<? extends CancellableTask> taskType;
+        tasks.addAll(createTasks(SearchTask.class, searchTaskNum));
+        for (int i = 0; i < numTasks; i++) {
+        // Complete first iteration tasks  
+        TaskCancellationStats stats = taskCancellationMonitoringService.stats();
+                taskManager.unregister(tasks.get(idx));
+        assertEquals(0, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
+        int numTasks = randomIntBetween(5, 50);
+import static org.mockito.Mockito.when;
+            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
+        // they have been running longer as per threshold.
+        );  
+        TaskManager mockTaskManager = mock(TaskManager.class);
+        return tasks;
+        }
+        for (int itr = 0; itr < numTasksToBeCancelledInFirstIteration; itr++) {  
+            return "MockQuerySearchRequest[" + requestName + "]";  
+import org.opensearch.transport.TransportRequest;  
+        int totalTasksToBeCancelled = cancelTillIdx - cancelFromIdx + 1;
+        stats = taskCancellationMonitoringService.stats();  
+        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
+        completeTasksConcurrently(tasks, 0, tasks.size() - 1).await();
+        }
+        }
+        TaskCancellationStats stats = taskCancellationMonitoringService.stats();
         }  
+        TaskManager mockTaskManager = mock(TaskManager.class);
+        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(  
+import static org.opensearch.tasks.TaskCancellationMonitoringSettings.DURATION_MILLIS_SETTING;
+        for (int itr = 0; itr < tasks.size(); itr++) {
+            threads[i].start();
+            numTasksToBeCancelledInFirstIteration,
+        when(scheduleFuture.cancel()).thenReturn(true);
     }
+import org.opensearch.threadpool.Scheduler;  
+        // verify no cancelled tasks currently being recorded  
+import static org.mockito.ArgumentMatchers.any;  
+        // tasks.  
+            settings  
+    public void testWithNoCurrentRunningCancelledTasks() {
+        Thread.sleep(cancelledTaskDurationThresholdMilis); // Sleep, so we later verify whether above tasks are being
+        Scheduler.Cancellable scheduleFuture = mock(Scheduler.Cancellable.class);  
+        TaskCancellationStats stats = taskCancellationMonitoringService.stats();
+    }
+        // Complete all of them finally
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)  
+        when(mockTaskManager.getCancellableTasks()).thenReturn(new java.util.HashMap<>());
+            mockTaskManager,
+    private <T extends CancellableTask> List<T> createTasks(Class<T> taskType, int numTasks) {  
+        assertNull(stats.getNativeStats());
+        // being captured as part of stats.  
+        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(
+            int idx = i + cancelFromIdx;
+    }  
+        TaskCancellationStats stats = service.stats();  
+    public void testWithVaryingCancelledTasksDuration() throws InterruptedException {
+            .put(DURATION_MILLIS_SETTING.getKey(), cancelledTaskDurationThresholdMilis) // Setting to one for testing
 }
+        transportService = MockTransportService.createNewService(Settings.EMPTY, Version.CURRENT, threadPool, NoopTracer.INSTANCE);  
+        taskCancellationMonitoringService.doStop();
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+    public void setup() {
+        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());  
+            Settings.EMPTY,  
+            taskCancellationMonitoringSettings
+import java.util.List;  
+import java.util.ArrayList;
+import org.opensearch.threadpool.ThreadPool;
+        for (int i = 0; i < totalTasksToBeCancelled; i++) {  
+    @After
+        TaskCancellationStats stats = service.stats();
+            settings,
+        for (int itr = numTasksToBeCancelledInFirstIteration; itr < tasks.size(); itr++) {
+        }
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+    }
+        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(  
+    MockTransportService transportService;
+        }  
+import org.junit.After;
+        // Verify desired tasks were evicted from tracker map
+        completeTasksConcurrently(tasks, 0, 0).await();  
+        taskCancellationMonitoringService.doRun(); // 1st run to verify whether we are able to track running cancelled
+        stats = taskCancellationMonitoringService.stats();
+ * this file be licensed under the Apache-2.0 license or a
+import org.junit.Before;
+        assert cancelFromIdx >= 0;
+    private CountDownLatch cancelTasksConcurrently(List<? extends CancellableTask> tasks, int cancelFromIdx, int cancelTillIdx) {
+    public static class MockQuerySearchRequest extends TransportRequest {
+    public void cleanup() {
+        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(  
+import static org.mockito.Mockito.times;
+            mockTaskManager,  
+        // Cancel rest of the tasks  
+            taskManager,
+        assert completeTillIdx <= tasks.size() - 1;  
+        public String getDescription() {
+        Supplier<AnalyticsBackendTaskCancellationStats> mockSupplier = () -> {
+            .build();
+        taskCancellationMonitoringService.doRun();
+        assert completeTillIdx >= completeFromIdx;
+        }
+        );
+            mockTaskManager,
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+            taskCancellationMonitoringSettings  
+        completeTasksConcurrently(tasks, 0, tasks.size() - 1).await();  
+        Settings settings = Settings.builder()  
+        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
+            out.writeString(requestName);
+        transportService.start();
+            assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(0).getId()));
+    TaskManager taskManager;  
+            .build();
+            threadPool,  
+        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getCurrentLongRunningCancelledTaskCount());
+        );  
+        for (int itr = 0; itr < numTasksToBeCancelledInFirstIteration; itr++) {  
+        Settings settings = Settings.builder()  
+        taskCancellationMonitoringService.doRun();
+        // Start few tasks.
+            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
+        countDownLatch = cancelTasksConcurrently(tasks, numTasksToBeCancelledInFirstIteration, numTasks - 1);
+            } else if (taskType == SearchShardTask.class) {
+import org.opensearch.threadpool.TestThreadPool;
+            });  
+        ThreadPool mockThreadPool = mock(ThreadPool.class);
+            .build();  
+        taskCancellationMonitoringService.doRun(); // 3rd run to verify current count is 0 and total remains the same.
+        );  
+        int searchShardTaskNum = randomIntBetween(5, 50);  
+        transportService.acceptIncomingRequests();
+    }  
+package org.opensearch.tasks;
+        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());
+        long cancelledTaskDurationThresholdMilis = 2000;  
+        Thread.sleep(cancelledTaskDurationThresholdMilis); // Sleep again, so we now verify whether all tasks are
+        AnalyticsBackendTaskCancellationStats expectedNativeStats = new AnalyticsBackendTaskCancellationStats(3, 100, 7, 500);
+        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(  
+        verify(scheduleFuture, times(1)).cancel();
+        // Should handle exception gracefully and return null native stats
+            .put(DURATION_MILLIS_SETTING.getKey(), 0) // Setting to zero for testing
+        // Start few tasks.  
+        public void writeTo(StreamOutput out) throws IOException {
+        verify(mockTaskManager, times(0)).getTasks();  
+        when(mockThreadPool.scheduleWithFixedDelay(any(), any(), any())).thenReturn(scheduleFuture);
+        assertEquals(numTasks, stats.getSearchShardTaskCancellationStats().getTotalLongRunningCancelledTaskCount());
+            Settings.EMPTY,
+        TaskCancellationMonitoringSettings taskCancellationMonitoringSettings = new TaskCancellationMonitoringSettings(  
+            assertFalse(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));
+        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(  
+        CountDownLatch countDownLatch = cancelTasksConcurrently(tasks, 0, numTasksToBeCancelledInFirstIteration - 1);
+        assertEquals(
+        transportService.close();  
+import static org.mockito.Mockito.mock;
+        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
+            threadPool,  
+import org.opensearch.plugin.stats.AnalyticsBackendTaskCancellationStats;
+            taskManager,
+        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
+        // Verify desired task ids are present.
+        @Override  
+        countDownLatch.await(); // Wait for rest of tasks to be cancelled.  
+        );
+        assertEquals(3, stats.getNativeStats().getSearchTaskCurrent());
+        assertEquals(numberOfTasksCancelled, statsExtractor.apply(stats).getTotalLongRunningCancelledTaskCount());  
+    public void testWithNonZeroCancelledSearchShardTasksRunning() throws InterruptedException {  
+        int numTasksToBeCancelledInFirstIteration = randomIntBetween(1, numTasks - 1);  
+import org.opensearch.telemetry.tracing.noop.NoopTracer;  
+        );
+    }  
+            Settings.EMPTY,
+            threadPool,  
+    ThreadPool threadPool;
+                return new SearchTask(id, type, action, this::getDescription, parentTaskId, headers);  
+        Settings settings = Settings.builder()
+        TaskManager mockTaskManager = mock(TaskManager.class);
+            Settings.EMPTY,
+        };  
+        assertEquals(0, statsExtractor.apply(stats).getCurrentLongRunningCancelledTaskCount());
+        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(
+ * The OpenSearch Contributors require contributions made to  
+        taskCancellationMonitoringService.doRun();
+        for (int itr = 1; itr < tasks.size(); itr++) {  
+        TaskCancellationMonitoringService service = new TaskCancellationMonitoringService(
+        int numberOfTasksCancelled = cancelTillIdx - cancelFromIdx + 1;
+    }
+    public void testWithNonZeroCancelledSearchTasksRunning() throws InterruptedException {
+        public MockQuerySearchRequest(Class<? extends CancellableTask> taskType) {
+        assert cancelTillIdx <= tasks.size() - 1;  
+        CountDownLatch countDownLatch = cancelTasksConcurrently(tasks, 0, numTasksToBeCancelledInFirstIteration - 1);
+        // Verify only tasks that were cancelled as part of first iteration is being captured as part of stats as  
+        int taskNum = searchShardTaskNum + searchTaskNum;
+        cancelTasksConcurrently(tasks, 0, tasks.size() - 1).await();  
+            settings,
+        int cancelFromIdx = randomIntBetween(0, numTasks - 1);
+        );
+        );  
+import java.util.Map;
+        return countDownLatch;
+        // Verify rest of the tasks are still present in tracker  
+        );  
+        List<SearchShardTask> tasks = createTasks(SearchShardTask.class, numTasks);
+        assert completeFromIdx >= 0;
+            new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)  
+        }
+        threadPool = new TestThreadPool(getClass().getName());
+        );  
+                phaser.arriveAndAwaitAdvance();  
+import java.util.concurrent.TimeUnit;
+        completeTasksConcurrently(tasks, 0, tasks.size() - 1).await();  
+            settings,
+        }
+    // .await() to wait for all tasks be cancelled.  
+        CountDownLatch countDownLatch = new CountDownLatch(totalTasksToBeCancelled); // To wait for all threads to finish.
+    private CountDownLatch completeTasksConcurrently(List<? extends CancellableTask> tasks, int completeFromIdx, int completeTillIdx) {
+import static org.mockito.Mockito.verify;  
+public class TaskCancellationMonitoringServiceTests extends OpenSearchTestCase {  
+/*  
+        Thread[] threads = new Thread[totalTasksToBeCancelled];  
+        assertEquals(0, stats.getSearchShardTaskCancellationStats().getCurrentLongRunningCancelledTaskCount());
+        List<T> tasks = createTasks(taskType, numTasks);
+        countDownLatch.await(); // Wait for all tasks to be cancelled in first iteration
+    public void testTasksAreGettingEvictedCorrectlyAfterCompletion() throws InterruptedException {
+import org.opensearch.action.search.SearchShardTask;
+ *
+        Thread[] threads = new Thread[totalTasksToBeCompleted];  
+            super();  
+        Phaser phaser = new Phaser(totalTasksToBeCompleted + 1);
+            }
+            threads[i] = new Thread(() -> {
+    }  
+        );  
+        for (int i = 0; i < totalTasksToBeCompleted; i++) {  
+        List<SearchShardTask> tasks = createTasks(SearchShardTask.class, numTasks);
+            int idx = i + completeFromIdx;
+        completeTasksConcurrently(tasks, 1, numTasksToBeCancelledInFirstIteration - 1).await();
+        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
+            threads[i] = new Thread(() -> {
+        TaskCancellationMonitoringService taskCancellationMonitoringService = new TaskCancellationMonitoringService(  
+            assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().containsKey(tasks.get(itr).getId()));  
+    }  
+        TaskCancellationMonitoringSettings settings = new TaskCancellationMonitoringSettings(  
+        int totalTasksToBeCompleted = completeTillIdx - completeFromIdx + 1;
+            settings,
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+        assertTrue(taskCancellationMonitoringService.getCancelledTaskTracker().isEmpty());  
+        stats = taskCancellationMonitoringService.stats();
+            tasks.add((T) taskManager.register("type-" + i, "action-" + i, new MockQuerySearchRequest(taskType)));  
+        taskCancellationMonitoringService.doRun(); // 2nd run. Verify same.
+            .put(DURATION_MILLIS_SETTING.getKey(), 0) // Setting to one for testing
+        mockSupplier = () -> expectedNativeStats;  
+        CountDownLatch countDownLatch = new CountDownLatch(totalTasksToBeCompleted);
+        assertEquals(100, stats.getNativeStats().getSearchTaskTotal());  
+        taskCancellationMonitoringService.doRun();
+        }
+        countDownLatch.await(); // Wait for all tasks to be cancelled in first iteration
+    public void testStatsIncludesNativeCountersWhenProviderAvailable() {
+    private <T extends CancellableTask> void testWithNonZeroCancelledTasksRunning(
+            .build();
+ * SPDX-License-Identifier: Apache-2.0
+        countDownLatch.await(); // Wait for all threads execution.

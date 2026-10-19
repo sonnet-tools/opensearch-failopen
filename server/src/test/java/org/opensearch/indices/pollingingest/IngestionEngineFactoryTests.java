@@ -1,35 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+    public void testConstructorWithNullIngestServiceSupplier() {
+    public void testConstructorWithIngestServiceSupplier() {
+}
+import org.opensearch.index.IngestionConsumerFactory;
  * The OpenSearch Contributors require contributions made to  
+    }
+        IngestionPayloadDecoderFactory decoderFactory = mock(IngestionPayloadDecoderFactory.class);
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ */  
+import org.opensearch.index.IngestionPayloadDecoderFactory;
+        IngestionConsumerFactory consumerFactory = mock(IngestionConsumerFactory.class);
+        assertNotNull(factory);
+        IngestionEngineFactory factory = new IngestionEngineFactory(consumerFactory, () -> ingestService, decoderFactory);  
+public class IngestionEngineFactoryTests extends OpenSearchTestCase {
+import org.opensearch.ingest.IngestService;  
+        IngestionPayloadDecoderFactory decoderFactory = mock(IngestionPayloadDecoderFactory.class);  
+import org.opensearch.test.OpenSearchTestCase;
+        IngestionConsumerFactory consumerFactory = mock(IngestionConsumerFactory.class);
+        expectThrows(NullPointerException.class, () -> new IngestionEngineFactory(consumerFactory, null, decoderFactory));
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.indices.pollingingest;
-
-import org.opensearch.index.IngestionConsumerFactory;
-import org.opensearch.index.IngestionPayloadDecoderFactory;
-import org.opensearch.ingest.IngestService;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.mockito.Mockito.mock;  
-
-public class IngestionEngineFactoryTests extends OpenSearchTestCase {
-
-    public void testConstructorWithIngestServiceSupplier() {
-        IngestionConsumerFactory consumerFactory = mock(IngestionConsumerFactory.class);
         IngestService ingestService = mock(IngestService.class);  
-        IngestionPayloadDecoderFactory decoderFactory = mock(IngestionPayloadDecoderFactory.class);
-
-        IngestionEngineFactory factory = new IngestionEngineFactory(consumerFactory, () -> ingestService, decoderFactory);  
-        assertNotNull(factory);
-    }
-
-    public void testConstructorWithNullIngestServiceSupplier() {
-        IngestionConsumerFactory consumerFactory = mock(IngestionConsumerFactory.class);
-        IngestionPayloadDecoderFactory decoderFactory = mock(IngestionPayloadDecoderFactory.class);  
-
-        expectThrows(NullPointerException.class, () -> new IngestionEngineFactory(consumerFactory, null, decoderFactory));
+package org.opensearch.indices.pollingingest;
+ *
     }  
-}
+import static org.mockito.Mockito.mock;  

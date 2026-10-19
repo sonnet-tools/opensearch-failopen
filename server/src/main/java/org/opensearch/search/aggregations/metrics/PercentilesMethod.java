@@ -1,112 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ObjectParser;
-
-import java.io.IOException;
-
-/**  
- * An enum representing the methods for calculating percentiles
- *
- * @opensearch.internal  
- */
-public enum PercentilesMethod implements Writeable {
-    /**  
-     * The TDigest method for calculating percentiles
-     */
-    TDIGEST("tdigest", "TDigest", "TDIGEST") {  
-        @Override
-        PercentilesConfig configFromStream(StreamInput in) throws IOException {
-            return new PercentilesConfig.TDigest(in);  
-        }
-    },
-    /**  
-     * The HDRHistogram method of calculating percentiles
-     */
-    HDR("hdr", "HDR") {  
-        @Override
-        PercentilesConfig configFromStream(StreamInput in) throws IOException {
             return new PercentilesConfig.Hdr(in);  
-        }
-    };
-
-    public static final ParseField COMPRESSION_FIELD = new ParseField("compression");
-    public static final ParseField NUMBER_SIGNIFICANT_DIGITS_FIELD = new ParseField("number_of_significant_value_digits");
-
-    public static final ObjectParser<PercentilesConfig.TDigest, String> TDIGEST_PARSER;
-    static {
+    TDIGEST("tdigest", "TDigest", "TDIGEST") {  
+ * software distributed under the License is distributed on an
+package org.opensearch.search.aggregations.metrics;
+    HDR("hdr", "HDR") {  
         TDIGEST_PARSER = new ObjectParser<>(PercentilesMethod.TDIGEST.getParseField().getPreferredName(), PercentilesConfig.TDigest::new);  
-        TDIGEST_PARSER.declareDouble(PercentilesConfig.TDigest::setCompression, COMPRESSION_FIELD);
-    }
-
-    public static final ObjectParser<PercentilesConfig.Hdr, String> HDR_PARSER;
-    static {
-        HDR_PARSER = new ObjectParser<>(PercentilesMethod.HDR.getParseField().getPreferredName(), PercentilesConfig.Hdr::new);  
+    private final ParseField parseField;
+    @Override
+ * An enum representing the methods for calculating percentiles
+        return in.readEnum(PercentilesMethod.class);
+ *  
+ * under the License.  
+    PercentilesMethod(String name, String... deprecatedNames) {  
+ * compatible open source license.
+import org.opensearch.core.common.io.stream.StreamInput;
+        PercentilesConfig configFromStream(StreamInput in) throws IOException {
+ * KIND, either express or implied.  See the License for the
+        @Override
+    /**  
         HDR_PARSER.declareInt(PercentilesConfig.Hdr::setNumberOfSignificantValueDigits, NUMBER_SIGNIFICANT_DIGITS_FIELD);
     }
-
-    private final ParseField parseField;
-
-    PercentilesMethod(String name, String... deprecatedNames) {  
-        this.parseField = new ParseField(name, deprecatedNames);
+    public void writeTo(StreamOutput out) throws IOException {  
+    public static final ParseField COMPRESSION_FIELD = new ParseField("compression");
+ *
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.io.stream.Writeable;
+    @Override
+import org.opensearch.core.xcontent.ObjectParser;
+ * You may obtain a copy of the License at  
+        }
+public enum PercentilesMethod implements Writeable {
+ *
+ *
     }
-
-    abstract PercentilesConfig configFromStream(StreamInput in) throws IOException;
-
+import java.io.IOException;
     /**  
-     * @return the name of the method
+    }
+     */
+    }  
+ * GitHub history for details.
+        HDR_PARSER = new ObjectParser<>(PercentilesMethod.HDR.getParseField().getPreferredName(), PercentilesConfig.Hdr::new);  
+/*  
+     * The TDigest method for calculating percentiles
+     */
+ */
+    public static final ObjectParser<PercentilesConfig.TDigest, String> TDIGEST_PARSER;
+    }
+ * license agreements. See the NOTICE file distributed with
+        return parseField.getPreferredName();  
+ * @opensearch.internal  
+ * this work for additional information regarding copyright
+     * The HDRHistogram method of calculating percentiles
+    static {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
+ * not use this file except in compliance with the License.
+        PercentilesConfig configFromStream(StreamInput in) throws IOException {
+    public String toString() {
      */
     public ParseField getParseField() {  
-        return parseField;
-    }
-
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+    public static final ObjectParser<PercentilesConfig.Hdr, String> HDR_PARSER;
+        }
+    /**  
+/*
     public static PercentilesMethod readFromStream(StreamInput in) throws IOException {
-        return in.readEnum(PercentilesMethod.class);
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeEnum(this);
-    }
-
-    @Override
-    public String toString() {
-        return parseField.getPreferredName();  
-    }
-
+     * @return the name of the method
+ * The OpenSearch Contributors require contributions made to  
 }  
+        @Override
+import org.opensearch.core.ParseField;
+    };
+    }
+        return parseField;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    public static final ParseField NUMBER_SIGNIFICANT_DIGITS_FIELD = new ParseField("number_of_significant_value_digits");
+ * this file be licensed under the Apache-2.0 license or a
+    abstract PercentilesConfig configFromStream(StreamInput in) throws IOException;
+    static {
+        TDIGEST_PARSER.declareDouble(PercentilesConfig.TDigest::setCompression, COMPRESSION_FIELD);
+/*  
+        this.parseField = new ParseField(name, deprecatedNames);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            return new PercentilesConfig.TDigest(in);  
+        out.writeEnum(this);
+    },
+ */
+    }
+/**  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  

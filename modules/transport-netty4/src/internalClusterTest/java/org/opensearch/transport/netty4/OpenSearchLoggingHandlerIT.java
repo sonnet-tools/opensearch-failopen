@@ -1,136 +1,119 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport.netty4;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.opensearch.OpenSearchNetty4IntegTestCase;  
-import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsRequest;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.MockLogAppender;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.junit.annotations.TestLogging;
-import org.opensearch.transport.TcpTransport;  
-import org.opensearch.transport.TransportLogger;
-
-import java.io.IOException;  
-
-@OpenSearchIntegTestCase.ClusterScope(numDataNodes = 2, scope = OpenSearchIntegTestCase.Scope.TEST)
-public class OpenSearchLoggingHandlerIT extends OpenSearchNetty4IntegTestCase {  
-
-    private MockLogAppender appender;
-
-    public void setUp() throws Exception {
-        super.setUp();
-        appender = MockLogAppender.createForLoggers(  
-            "^[^\n]+$", /* Only consider single line log statements */
-            LogManager.getLogger(OpenSearchLoggingHandler.class),
-            LogManager.getLogger(TransportLogger.class),  
-            LogManager.getLogger(TcpTransport.class)
-        );
-    }  
-
-    public void tearDown() throws Exception {
-        appender.close();  
-        super.tearDown();
-    }
-
-    @TestLogging(value = "org.opensearch.transport.netty4.OpenSearchLoggingHandler:trace,org.opensearch.transport.TransportLogger:trace", reason = "to ensure we log network events on TRACE level")
-    public void testLoggingHandler() {
-        final String writePattern = "^.*\\[length: \\d+"  
-            + ", request id: \\d+"
-            + ", type: request"
-            + ", version: [^,]+"  
-            + ", header size: \\d+B"
-            + ", action: cluster:monitor/nodes/hot_threads\\[n\\]\\]"
-            + " WRITE: \\d+B$";  
-        final MockLogAppender.LoggingExpectation writeExpectation = new MockLogAppender.PatternSeenEventExpectation(
-            "hot threads request",
-            TransportLogger.class.getCanonicalName(),  
-            Level.TRACE,
             writePattern
-        );  
-
-        final MockLogAppender.LoggingExpectation flushExpectation = new MockLogAppender.SeenEventExpectation(
-            "flush",  
-            OpenSearchLoggingHandler.class.getCanonicalName(),
-            Level.TRACE,
-            "*FLUSH*"  
-        );
-
-        final String readPattern = "^.*\\[length: \\d+"  
-            + ", request id: \\d+"
-            + ", type: request"
-            + ", version: [^,]+"  
-            + ", action: cluster:monitor/nodes/hot_threads\\[n\\]\\]"
-            + " READ: \\d+B$";
-
-        final MockLogAppender.LoggingExpectation readExpectation = new MockLogAppender.PatternSeenEventExpectation(
+ * under the License.  
+    }
+ * GitHub history for details.
+            LogManager.getLogger(TransportLogger.class),  
+ */  
+    private MockLogAppender appender;
             "hot threads request",
-            TransportLogger.class.getCanonicalName(),  
-            Level.TRACE,
-            readPattern
+            "hot threads request",
+        final String readPattern = "^.*\\[length: \\d+"  
+ * this work for additional information regarding copyright
         );  
-
-        appender.addExpectation(writeExpectation);
-        appender.addExpectation(flushExpectation);  
-        appender.addExpectation(readExpectation);
-        client().admin().cluster().nodesHotThreads(new NodesHotThreadsRequest()).actionGet();
-        appender.assertAllExpectationsMatched();  
-    }
-
-    @TestLogging(value = "org.opensearch.transport.TcpTransport:DEBUG", reason = "to ensure we log connection events on DEBUG level")  
-    public void testConnectionLogging() throws IOException {
-        appender.addExpectation(
-            new MockLogAppender.PatternSeenEventExpectation(  
-                "open connection log",
-                TcpTransport.class.getCanonicalName(),
-                Level.DEBUG,  
-                ".*opened transport connection \\[[1-9][0-9]*\\] to .*"
-            )
-        );  
-        appender.addExpectation(
-            new MockLogAppender.PatternSeenEventExpectation(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
                 "close connection log",  
-                TcpTransport.class.getCanonicalName(),
-                Level.DEBUG,
-                ".*closed transport connection \\[[1-9][0-9]*\\] to .* with age \\[[0-9]+ms\\].*"  
-            )
-        );
-
-        final String nodeName = internalCluster().startNode();
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeName));
-
-        appender.assertAllExpectationsMatched();
+            readPattern
+        final MockLogAppender.LoggingExpectation writeExpectation = new MockLogAppender.PatternSeenEventExpectation(
+ *
+            Level.TRACE,
+            + ", type: request"
     }
+import org.apache.logging.log4j.Level;
+    }  
+        );  
+        appender.addExpectation(
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.OpenSearchNetty4IntegTestCase;  
+            + ", type: request"
+    public void setUp() throws Exception {
+            "flush",  
+        appender.assertAllExpectationsMatched();
+        );  
+ */
+package org.opensearch.transport.netty4;
+ */  
+        appender.addExpectation(writeExpectation);
+import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsRequest;
+ * You may obtain a copy of the License at  
+    public void tearDown() throws Exception {
+ *  
+            LogManager.getLogger(TcpTransport.class)
+        appender.addExpectation(flushExpectation);  
+            "^[^\n]+$", /* Only consider single line log statements */
+            )
+    public void testLoggingHandler() {
+                TcpTransport.class.getCanonicalName(),
+            LogManager.getLogger(OpenSearchLoggingHandler.class),
+        client().admin().cluster().nodesHotThreads(new NodesHotThreadsRequest()).actionGet();
+ * specific language governing permissions and limitations
+                TcpTransport.class.getCanonicalName(),
+import org.opensearch.transport.TcpTransport;  
+    @TestLogging(value = "org.opensearch.transport.TcpTransport:DEBUG", reason = "to ensure we log connection events on DEBUG level")  
+        );
+ * not use this file except in compliance with the License.
+        super.setUp();
+            new MockLogAppender.PatternSeenEventExpectation(  
+            + ", action: cluster:monitor/nodes/hot_threads\\[n\\]\\]"
+        final String writePattern = "^.*\\[length: \\d+"  
+            TransportLogger.class.getCanonicalName(),  
+        appender.addExpectation(
+import org.opensearch.test.junit.annotations.TestLogging;
+import org.apache.logging.log4j.LogManager;
+ * compatible open source license.
+            "*FLUSH*"  
+/*
+        appender.addExpectation(readExpectation);
+                Level.DEBUG,
 }  
+import java.io.IOException;  
+            Level.TRACE,
+            )
+            new MockLogAppender.PatternSeenEventExpectation(
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeName));
+                ".*opened transport connection \\[[1-9][0-9]*\\] to .*"
+            + ", request id: \\d+"
+import org.opensearch.transport.TransportLogger;
+ *
+            Level.TRACE,
+            + ", version: [^,]+"  
+import org.opensearch.test.OpenSearchIntegTestCase;
+    @TestLogging(value = "org.opensearch.transport.netty4.OpenSearchLoggingHandler:trace,org.opensearch.transport.TransportLogger:trace", reason = "to ensure we log network events on TRACE level")
+ * KIND, either express or implied.  See the License for the
+                "open connection log",
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
+            + ", version: [^,]+"  
+        appender.assertAllExpectationsMatched();  
+import org.opensearch.test.MockLogAppender;  
+ * software distributed under the License is distributed on an
+        final MockLogAppender.LoggingExpectation flushExpectation = new MockLogAppender.SeenEventExpectation(
+        appender.close();  
+            + " WRITE: \\d+B$";  
+@OpenSearchIntegTestCase.ClusterScope(numDataNodes = 2, scope = OpenSearchIntegTestCase.Scope.TEST)
+ * The OpenSearch Contributors require contributions made to  
+            TransportLogger.class.getCanonicalName(),  
+                Level.DEBUG,  
+/*  
+        final String nodeName = internalCluster().startNode();
+ * the Apache License, Version 2.0 (the "License"); you may
+                ".*closed transport connection \\[[1-9][0-9]*\\] to .* with age \\[[0-9]+ms\\].*"  
+/*  
+        final MockLogAppender.LoggingExpectation readExpectation = new MockLogAppender.PatternSeenEventExpectation(
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        appender = MockLogAppender.createForLoggers(  
+        super.tearDown();
+            + ", action: cluster:monitor/nodes/hot_threads\\[n\\]\\]"
+    public void testConnectionLogging() throws IOException {
+        );
+            + ", request id: \\d+"
+            + ", header size: \\d+B"
+import org.opensearch.test.InternalTestCluster;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        );
+public class OpenSearchLoggingHandlerIT extends OpenSearchNetty4IntegTestCase {  
+ * SPDX-License-Identifier: Apache-2.0
+            + " READ: \\d+B$";
+            OpenSearchLoggingHandler.class.getCanonicalName(),

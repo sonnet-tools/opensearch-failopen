@@ -1,87 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.ingestion.fs;
-
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.search.Query;  
-import org.opensearch.index.IngestionShardPointer;
-
-import java.nio.ByteBuffer;  
-
-/**
- * Offset for a file-based ingestion source (line number).  
- */
-public class FileOffset implements IngestionShardPointer {
-
-    private final long line;
-
-    /**  
      * Create a new file offset based on line number.
-     * @param line line number (offset)
-     */  
-    public FileOffset(long line) {
-        assert line >= 0;
-        this.line = line;  
-    }
-
-    /**  
      * Returns the line number (offset).
-     */
-    public long getLine() {  
-        return line;
-    }
-
-    @Override
-    public byte[] serialize() {
-        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);  
+        assert line >= 0;
+    /**  
+ *
         buffer.putLong(line);
-        return buffer.array();
-    }  
-
-    @Override
-    public String asString() {  
-        return Long.toString(line);
-    }
-
-    @Override
     public Field asPointField(String fieldName) {
-        return new LongPoint(fieldName, line);  
-    }
-
-    @Override  
-    public Query newRangeQueryGreaterThan(String fieldName) {
-        return LongPoint.newRangeQuery(fieldName, line, Long.MAX_VALUE);
-    }  
-
+/**
     @Override
-    public int compareTo(IngestionShardPointer o) {  
-        if (!(o instanceof FileOffset fileOffset)) {
-            throw new IllegalArgumentException("Incompatible pointer type: " + (o == null ? "null" : o.getClass()));
-        }  
-        return Long.compare(this.line, fileOffset.line);
-    }
-
-    @Override
-    public boolean equals(Object o) {
         if (this == o) return true;  
-        if (!(o instanceof FileOffset fileOffset)) return false;
-        return this.line == fileOffset.line;
-    }  
-
     @Override
-    public int hashCode() {  
-        return Long.hashCode(line);
-    }
-
     @Override
-    public String toString() {
         return "FileOffset{" + "line=" + line + '}';  
+    @Override
+     */  
     }
+    @Override
+        this.line = line;  
+    }  
+    public long getLine() {  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    private final long line;
+    @Override
+    }
+public class FileOffset implements IngestionShardPointer {
+        return line;
+/*  
+ * Offset for a file-based ingestion source (line number).  
+    public FileOffset(long line) {
+        return Long.hashCode(line);
+        return buffer.array();
+    }
+ */  
+import org.opensearch.index.IngestionShardPointer;
+        return this.line == fileOffset.line;
+     */
+    public String toString() {
+        return LongPoint.newRangeQuery(fieldName, line, Long.MAX_VALUE);
+        if (!(o instanceof FileOffset fileOffset)) return false;
+    public byte[] serialize() {
+import java.nio.ByteBuffer;  
+    public boolean equals(Object o) {
+        return Long.toString(line);
+    }  
+        return new LongPoint(fieldName, line);  
+ */
+    public Query newRangeQueryGreaterThan(String fieldName) {
+            throw new IllegalArgumentException("Incompatible pointer type: " + (o == null ? "null" : o.getClass()));
+        if (!(o instanceof FileOffset fileOffset)) {
+    @Override  
+package org.opensearch.plugin.ingestion.fs;
+    }
+    public String asString() {  
+        return Long.compare(this.line, fileOffset.line);
+    @Override
+import org.apache.lucene.search.Query;  
+    public int hashCode() {  
+    /**  
+    }  
+ * The OpenSearch Contributors require contributions made to  
+    public int compareTo(IngestionShardPointer o) {  
+import org.apache.lucene.document.LongPoint;
+    }
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
 }
+    }
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);  
+        }  
+     * @param line line number (offset)

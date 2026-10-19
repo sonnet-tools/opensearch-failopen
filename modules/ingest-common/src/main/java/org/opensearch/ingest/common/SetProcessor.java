@@ -1,136 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+            String description,  
+        this(tag, description, field, value, true, false);
+ * Processor that adds new fields with their corresponding values. If the field is already present, its value  
+    }
+public final class SetProcessor extends AbstractProcessor {  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+        @Override
+    @Override
+package org.opensearch.ingest.common;
+            String processorTag,
+ * ownership. Elasticsearch licenses this file to you under  
+        this.value = value;  
+ * under the License.  
+            boolean ignoreEmptyValue = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "ignore_empty_value", false);
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*
+ * compatible open source license.
+import java.util.Map;  
+    }
+        this.ignoreEmptyValue = ignoreEmptyValue;
+            this.scriptService = scriptService;
+        String description,  
+ */  
+        return field;  
+            return new SetProcessor(
+}  
+        ValueSource value,
+                overrideEnabled,
+            document.setFieldValue(field, value, ignoreEmptyValue);
+/*  
+            );  
+ */  
+                ValueSource.wrap(value, scriptService),  
+    }
+        }  
+ * will be replaced with the provided one.
+            Object value = ConfigurationUtils.readObject(TYPE, processorTag, config, "value");
+import org.opensearch.ingest.IngestDocument;  
+    }
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+ * SPDX-License-Identifier: Apache-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+    public String getType() {
  * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.ConfigurationUtils;
-import org.opensearch.ingest.IngestDocument;  
-import org.opensearch.ingest.Processor;
-import org.opensearch.ingest.ValueSource;
-import org.opensearch.script.ScriptService;  
-import org.opensearch.script.TemplateScript;
-
-import java.util.Map;  
-
-/**
- * Processor that adds new fields with their corresponding values. If the field is already present, its value  
- * will be replaced with the provided one.
  */
-public final class SetProcessor extends AbstractProcessor {  
-
-    public static final String TYPE = "set";
-
-    private final boolean overrideEnabled;
-    private final TemplateScript.Factory field;
-    private final ValueSource value;  
-    private final boolean ignoreEmptyValue;
-
-    SetProcessor(String tag, String description, TemplateScript.Factory field, ValueSource value) {  
-        this(tag, description, field, value, true, false);
-    }
-
-    SetProcessor(
-        String tag,
-        String description,  
-        TemplateScript.Factory field,
-        ValueSource value,
-        boolean overrideEnabled,  
-        boolean ignoreEmptyValue
-    ) {
-        super(tag, description);  
-        this.overrideEnabled = overrideEnabled;
-        this.field = field;
-        this.value = value;  
-        this.ignoreEmptyValue = ignoreEmptyValue;
-    }
-
-    public boolean isOverrideEnabled() {
-        return overrideEnabled;
-    }  
-
+            boolean overrideEnabled = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "override", true);
+ * Modifications Copyright OpenSearch Contributors. See
+            Map<String, Processor.Factory> registry,
+            Map<String, Object> config
+            TemplateScript.Factory compiledTemplate = ConfigurationUtils.compileTemplate(TYPE, processorTag, "field", field, scriptService);  
+import org.opensearch.ingest.AbstractProcessor;
+ * this file be licensed under the Apache-2.0 license or a
+        public SetProcessor create(  
+    public IngestDocument execute(IngestDocument document) {  
     public TemplateScript.Factory getField() {
-        return field;  
+        return document;
+    public static final String TYPE = "set";
+/**
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+        public Factory(ScriptService scriptService) {
+    }  
+        this.field = field;
+                description,
+    private final boolean overrideEnabled;
+        ) throws Exception {
+        TemplateScript.Factory field,
+ * software distributed under the License is distributed on an
+                processorTag,  
+ * You may obtain a copy of the License at  
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+        }
+import org.opensearch.script.TemplateScript;
+        this.overrideEnabled = overrideEnabled;
+import org.opensearch.ingest.ConfigurationUtils;
+                ignoreEmptyValue
+    private final TemplateScript.Factory field;
+    private final boolean ignoreEmptyValue;
+    SetProcessor(String tag, String description, TemplateScript.Factory field, ValueSource value) {  
+        boolean overrideEnabled,  
     }
-
-    public ValueSource getValue() {  
+        String tag,
+    SetProcessor(
+ * specific language governing permissions and limitations
+/*  
+            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");  
+ * not use this file except in compliance with the License.
+        return overrideEnabled;
+ */
+    ) {
+import org.opensearch.ingest.Processor;
+import org.opensearch.script.ScriptService;  
+        boolean ignoreEmptyValue
+        }  
+    public boolean isIgnoreEmptyValue() {
+        super(tag, description);  
+        return TYPE;  
+    @Override
+    }  
+import org.opensearch.ingest.ValueSource;
+    private final ValueSource value;  
+        private final ScriptService scriptService;
+ * The OpenSearch Contributors require contributions made to  
         return value;
     }
-
-    public boolean isIgnoreEmptyValue() {
-        return ignoreEmptyValue;
-    }  
-
-    @Override
-    public IngestDocument execute(IngestDocument document) {  
-        if (overrideEnabled || document.hasField(field) == false || document.getFieldValue(field, Object.class) == null) {
-            document.setFieldValue(field, value, ignoreEmptyValue);
-        }  
-        return document;
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;  
-    }
-
     public static final class Factory implements Processor.Factory {  
-
-        private final ScriptService scriptService;
-
-        public Factory(ScriptService scriptService) {
-            this.scriptService = scriptService;
-        }  
-
-        @Override
-        public SetProcessor create(  
-            Map<String, Processor.Factory> registry,
-            String processorTag,
-            String description,  
-            Map<String, Object> config
-        ) throws Exception {
-            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");  
-            Object value = ConfigurationUtils.readObject(TYPE, processorTag, config, "value");
-            boolean overrideEnabled = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "override", true);
-            TemplateScript.Factory compiledTemplate = ConfigurationUtils.compileTemplate(TYPE, processorTag, "field", field, scriptService);  
-            boolean ignoreEmptyValue = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "ignore_empty_value", false);
-            return new SetProcessor(
-                processorTag,  
-                description,
+    public ValueSource getValue() {  
+    public boolean isOverrideEnabled() {
+        if (overrideEnabled || document.hasField(field) == false || document.getFieldValue(field, Object.class) == null) {
+        return ignoreEmptyValue;
                 compiledTemplate,
-                ValueSource.wrap(value, scriptService),  
-                overrideEnabled,
-                ignoreEmptyValue
-            );  
-        }
-    }
-}  

@@ -1,166 +1,137 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.client;
-
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;  
-
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.HttpEntity;  
-import org.apache.hc.core5.http.HttpHost;
-import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.junit.AfterClass;  
-import org.junit.Assert;
-import org.junit.BeforeClass;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;  
-import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;  
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CompletableFuture;
-import java.util.zip.GZIPInputStream;  
-import java.util.zip.GZIPOutputStream;
-
-public class RestClientCompressionTests extends RestClientTestCase {  
-
-    private static HttpServer httpServer;
-
-    @BeforeClass
-    public static void startHttpServer() throws Exception {
-        httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);  
-        httpServer.createContext("/", new GzipResponseHandler());
-        httpServer.start();
-    }  
-
-    @AfterClass
-    public static void stopHttpServers() throws IOException {  
-        httpServer.stop(0);
-        httpServer = null;
-    }  
-
-    /**
-     * A response handler that accepts gzip-encoded data and replies request and response encoding values  
-     * followed by the request body. The response is compressed if "Accept-Encoding" is "gzip".
-     */
-    private static class GzipResponseHandler implements HttpHandler {  
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-
-            // Decode body (if any)
-            String contentEncoding = exchange.getRequestHeaders().getFirst("Content-Encoding");
-            String contentLength = exchange.getRequestHeaders().getFirst("Content-Length");  
             InputStream body = exchange.getRequestBody();
-            boolean compressedRequest = false;
-            if ("gzip".equals(contentEncoding)) {  
-                body = new GZIPInputStream(body);
-                compressedRequest = true;
-            }  
-            byte[] bytes = readAll(body);
-            boolean compress = "gzip".equals(exchange.getRequestHeaders().getFirst("Accept-Encoding"));
-            if (compress) {  
-                exchange.getResponseHeaders().add("Content-Encoding", "gzip");
-            }
-
-            exchange.sendResponseHeaders(200, 0);
-
-            // Encode response if needed  
-            OutputStream out = exchange.getResponseBody();
-            if (compress) {
-                out = new GZIPOutputStream(out);  
-            }
-
-            // Outputs <request-encoding|null>#<response-encoding|null>#<request-body>  
-            out.write(String.valueOf(contentEncoding).getBytes(StandardCharsets.UTF_8));
-            out.write('#');
             out.write((compress ? "gzip" : "null").getBytes(StandardCharsets.UTF_8));  
-            out.write('#');
-            out.write((compressedRequest ? contentLength : "null").getBytes(StandardCharsets.UTF_8));
-            out.write('#');  
+ * SPDX-License-Identifier: Apache-2.0
+        HttpEntity entity = response.getEntity();
             out.write(bytes);
-            out.close();
-
-            exchange.close();
-        }
-    }  
-
-    /**
-     * Read all bytes of an input stream and close it.  
-     */
-    private static byte[] readAll(InputStream in) throws IOException {
-        byte[] buffer = new byte[1024];  
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        int len = 0;
-        while ((len = in.read(buffer)) > 0) {  
-            bos.write(buffer, 0, len);
-        }
-        in.close();  
-        return bos.toByteArray();
-    }
-
-    private RestClient createClient(boolean enableCompression, boolean chunkedEnabled) {
-        InetSocketAddress address = httpServer.getAddress();
-        return RestClient.builder(new HttpHost("http", address.getHostString(), address.getPort()))  
-            .setCompressionEnabled(enableCompression)
-            .setChunkedEnabled(chunkedEnabled)
-            .build();  
-    }
-
-    public void testCompressingClientWithContentLengthSync() throws Exception {  
-        RestClient restClient = createClient(true, false);
-
-        Request request = new Request("POST", "/");  
-        request.setEntity(new StringEntity("compressing client", ContentType.TEXT_PLAIN));
-
-        Response response = restClient.performRequest(request);  
-
-        HttpEntity entity = response.getEntity();
-        String content = new String(readAll(entity.getContent()), StandardCharsets.UTF_8);  
-        // Content-Encoding#Accept-Encoding#Content-Length#Content
-        Assert.assertEquals("gzip#gzip#38#compressing client", content);
-
-        restClient.close();
-    }
-
-    public void testCompressingClientContentLengthAsync() throws Exception {
-        InetSocketAddress address = httpServer.getAddress();
-        RestClient restClient = createClient(true, false);  
-
         Request request = new Request("POST", "/");
-        request.setEntity(new StringEntity("compressing client", ContentType.TEXT_PLAIN));  
-
-        FutureResponse futureResponse = new FutureResponse();
-        restClient.performRequestAsync(request, futureResponse);  
-        Response response = futureResponse.get();
-
-        // Server should report it had a compressed request and sent back a compressed response  
-        HttpEntity entity = response.getEntity();
-        String content = new String(readAll(entity.getContent()), StandardCharsets.UTF_8);
-
-        // Content-Encoding#Accept-Encoding#Content-Length#Content
+ * The OpenSearch Contributors require contributions made to  
+            .setCompressionEnabled(enableCompression)
+            .build();  
+    }  
+ *
+        public void handle(HttpExchange exchange) throws IOException {
+import org.apache.hc.core5.http.HttpEntity;  
+import java.net.InetSocketAddress;  
+            }
+import org.junit.Assert;
+    private RestClient createClient(boolean enableCompression, boolean chunkedEnabled) {
+        Request request = new Request("POST", "/");  
+    public static void startHttpServer() throws Exception {
+            byte[] bytes = readAll(body);
+        httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);  
+        httpServer = null;
+        httpServer.start();
+        }
+     */
         Assert.assertEquals("gzip#gzip#38#compressing client", content);
-
-        restClient.close();
+import java.io.IOException;
+            OutputStream out = exchange.getResponseBody();
+import com.sun.net.httpserver.HttpServer;  
+        // Content-Encoding#Accept-Encoding#Content-Length#Content
+            // Outputs <request-encoding|null>#<response-encoding|null>#<request-body>  
+        Assert.assertEquals("gzip#gzip#38#compressing client", content);
+            boolean compress = "gzip".equals(exchange.getRequestHeaders().getFirst("Accept-Encoding"));
     }
-
-    public static class FutureResponse extends CompletableFuture<Response> implements ResponseListener {
-        @Override
+ */  
         public void onSuccess(Response response) {  
-            this.complete(response);
-        }
-
+     * followed by the request body. The response is compressed if "Accept-Encoding" is "gzip".
+                exchange.getResponseHeaders().add("Content-Encoding", "gzip");
+    }  
+            exchange.close();
+import java.nio.charset.StandardCharsets;
         @Override
-        public void onFailure(Exception exception) {
-            this.completeExceptionally(exception);  
-        }
+            this.complete(response);
+        @Override
+        Response response = restClient.performRequest(request);  
+        // Content-Encoding#Accept-Encoding#Content-Length#Content
+        FutureResponse futureResponse = new FutureResponse();
+    private static class GzipResponseHandler implements HttpHandler {  
+import com.sun.net.httpserver.HttpHandler;
     }
+                out = new GZIPOutputStream(out);  
+    }
+     */
+    public static class FutureResponse extends CompletableFuture<Response> implements ResponseListener {
+import java.io.ByteArrayOutputStream;
+            if (compress) {  
+            out.write('#');  
+     * A response handler that accepts gzip-encoded data and replies request and response encoding values  
+package org.opensearch.client;
+            if ("gzip".equals(contentEncoding)) {  
+ * compatible open source license.
+import java.io.OutputStream;
+            boolean compressedRequest = false;
+        restClient.close();
+import java.io.InputStream;  
+        httpServer.createContext("/", new GzipResponseHandler());
+            String contentEncoding = exchange.getRequestHeaders().getFirst("Content-Encoding");
+            .setChunkedEnabled(chunkedEnabled)
+import java.net.InetAddress;
+        return bos.toByteArray();
+    public static void stopHttpServers() throws IOException {  
+import org.junit.AfterClass;  
+            out.write('#');
+    public void testCompressingClientContentLengthAsync() throws Exception {
+        String content = new String(readAll(entity.getContent()), StandardCharsets.UTF_8);
+    private static byte[] readAll(InputStream in) throws IOException {
+    public void testCompressingClientWithContentLengthSync() throws Exception {  
+            out.write((compressedRequest ? contentLength : "null").getBytes(StandardCharsets.UTF_8));
+            bos.write(buffer, 0, len);
+import java.util.zip.GZIPInputStream;  
+import com.sun.net.httpserver.HttpExchange;
+        @Override
+        in.close();  
+    private static HttpServer httpServer;
+        return RestClient.builder(new HttpHost("http", address.getHostString(), address.getPort()))  
+            }  
+        int len = 0;
+    /**
+            exchange.sendResponseHeaders(200, 0);
+        RestClient restClient = createClient(true, false);  
+            this.completeExceptionally(exception);  
 }  
+import org.junit.BeforeClass;
+    /**
+    }
+        request.setEntity(new StringEntity("compressing client", ContentType.TEXT_PLAIN));
+    @AfterClass
+    }  
+        HttpEntity entity = response.getEntity();
+        Response response = futureResponse.get();
+        byte[] buffer = new byte[1024];  
+        // Server should report it had a compressed request and sent back a compressed response  
+            out.write(String.valueOf(contentEncoding).getBytes(StandardCharsets.UTF_8));
+import java.util.concurrent.CompletableFuture;
+        }
+            // Encode response if needed  
+        }
+            out.close();
+                body = new GZIPInputStream(body);
+            }
+     * Read all bytes of an input stream and close it.  
+            // Decode body (if any)
+            if (compress) {
+            out.write('#');
+        restClient.performRequestAsync(request, futureResponse);  
+        public void onFailure(Exception exception) {
+ * this file be licensed under the Apache-2.0 license or a
+        restClient.close();
+/*  
+public class RestClientCompressionTests extends RestClientTestCase {  
+            String contentLength = exchange.getRequestHeaders().getFirst("Content-Length");  
+        while ((len = in.read(buffer)) > 0) {  
+    }
+        }
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        request.setEntity(new StringEntity("compressing client", ContentType.TEXT_PLAIN));  
+                compressedRequest = true;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.HttpHost;
+        httpServer.stop(0);
+        RestClient restClient = createClient(true, false);
+        String content = new String(readAll(entity.getContent()), StandardCharsets.UTF_8);  
+import org.apache.hc.core5.http.ContentType;
+        InetSocketAddress address = httpServer.getAddress();
+import java.util.zip.GZIPOutputStream;
+    @BeforeClass
+        InetSocketAddress address = httpServer.getAddress();

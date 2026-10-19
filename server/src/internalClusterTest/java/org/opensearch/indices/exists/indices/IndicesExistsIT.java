@@ -1,112 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.exists.indices;
-
-import org.opensearch.action.admin.indices.exists.indices.IndicesExistsRequest;
-import org.opensearch.action.admin.indices.exists.indices.IndicesExistsRequestBuilder;
-import org.opensearch.cluster.block.ClusterBlockException;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Arrays;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_READ;  
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_WRITE;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.equalTo;
-
-public class IndicesExistsIT extends OpenSearchIntegTestCase {
-    // Indices exists never throws IndexMissingException, the indices options control its behaviour (return true or false)
-    public void testIndicesExists() throws Exception {  
-        assertFalse(client().admin().indices().prepareExists("foo").get().isExists());
-        assertFalse(client().admin().indices().prepareExists("foo*").get().isExists());
-        assertFalse(client().admin().indices().prepareExists("_all").get().isExists());  
-
-        createIndex("foo", "foobar", "bar", "barbaz");
-
-        IndicesExistsRequestBuilder indicesExistsRequestBuilder = client().admin()
-            .indices()
-            .prepareExists("foo*")  
-            .setExpandWildcardsOpen(false);
-        IndicesExistsRequest request = indicesExistsRequestBuilder.request();
-        // check that ignore unavailable and allow no indices are set to false. That is their only valid value as it can't be overridden  
-        assertFalse(request.indicesOptions().ignoreUnavailable());
-        assertFalse(request.indicesOptions().allowNoIndices());
-        assertThat(indicesExistsRequestBuilder.get().isExists(), equalTo(false));  
-
-        assertAcked(client().admin().indices().prepareClose("foobar").get());
-
-        assertThat(client().admin().indices().prepareExists("foo*").get().isExists(), equalTo(true));
-        assertThat(
-            client().admin().indices().prepareExists("foo*").setExpandWildcardsOpen(false).setExpandWildcardsClosed(false).get().isExists(),  
-            equalTo(false)
-        );
         assertThat(client().admin().indices().prepareExists("foobar").get().isExists(), equalTo(true));  
-        assertThat(client().admin().indices().prepareExists("foob*").setExpandWildcardsClosed(false).get().isExists(), equalTo(false));
-        assertThat(client().admin().indices().prepareExists("bar*").get().isExists(), equalTo(true));
-        assertThat(client().admin().indices().prepareExists("bar").get().isExists(), equalTo(true));  
-        assertThat(client().admin().indices().prepareExists("_all").get().isExists(), equalTo(true));
-    }
-
-    public void testIndicesExistsWithBlocks() {
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE;  
+ */
+ */  
+        assertFalse(client().admin().indices().prepareExists("foo").get().isExists());
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
         createIndex("ro");
-
-        // Request is not blocked
-        for (String blockSetting : Arrays.asList(
+            .setExpandWildcardsOpen(false);
+        assertThat(client().admin().indices().prepareExists("bar").get().isExists(), equalTo(true));  
+ * this file be licensed under the Apache-2.0 license or a
+        createIndex("foo", "foobar", "bar", "barbaz");
+            .indices()
+ * license agreements. See the NOTICE file distributed with
             SETTING_BLOCKS_READ,  
-            SETTING_BLOCKS_WRITE,
-            SETTING_READ_ONLY,
-            SETTING_READ_ONLY_ALLOW_DELETE  
-        )) {
-            try {
-                enableIndexBlock("ro", blockSetting);  
-                assertThat(client().admin().indices().prepareExists("ro").execute().actionGet().isExists(), equalTo(true));
-            } finally {
-                disableIndexBlock("ro", blockSetting);  
-            }
-        }
-
-        // Request is blocked
-        try {
-            enableIndexBlock("ro", IndexMetadata.SETTING_BLOCKS_METADATA);  
-            assertThat(client().admin().indices().prepareExists("ro").execute().actionGet().isExists(), equalTo(true));
+            disableIndexBlock("ro", IndexMetadata.SETTING_BLOCKS_METADATA);  
+}  
             fail("Exists should fail when " + IndexMetadata.SETTING_BLOCKS_METADATA + " is true");
         } catch (ClusterBlockException e) {  
-            // Ok, a ClusterBlockException is expected
-        } finally {
-            disableIndexBlock("ro", IndexMetadata.SETTING_BLOCKS_METADATA);  
+import org.opensearch.cluster.block.ClusterBlockException;  
+        for (String blockSetting : Arrays.asList(
+ * specific language governing permissions and limitations
+ *
+            assertThat(client().admin().indices().prepareExists("ro").execute().actionGet().isExists(), equalTo(true));
+ * not use this file except in compliance with the License.
+        try {
+        );
+ * You may obtain a copy of the License at  
+        assertThat(client().admin().indices().prepareExists("bar*").get().isExists(), equalTo(true));
+import org.opensearch.action.admin.indices.exists.indices.IndicesExistsRequestBuilder;
+    // Indices exists never throws IndexMissingException, the indices options control its behaviour (return true or false)
+            SETTING_READ_ONLY_ALLOW_DELETE  
+        IndicesExistsRequestBuilder indicesExistsRequestBuilder = client().admin()
+                enableIndexBlock("ro", blockSetting);  
+        assertFalse(request.indicesOptions().ignoreUnavailable());
+            }
         }
+            SETTING_BLOCKS_WRITE,
+ * this work for additional information regarding copyright
+        // Request is not blocked
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_READ;  
     }
-}  
+        assertThat(client().admin().indices().prepareExists("foo*").get().isExists(), equalTo(true));
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(client().admin().indices().prepareExists("foob*").setExpandWildcardsClosed(false).get().isExists(), equalTo(false));
+        // Request is blocked
+ * ownership. Elasticsearch licenses this file to you under  
+ * software distributed under the License is distributed on an
+ * under the License.  
+    }
+            // Ok, a ClusterBlockException is expected
+/*
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_READ_ONLY;
+        )) {
+        assertThat(client().admin().indices().prepareExists("_all").get().isExists(), equalTo(true));
+import java.util.Arrays;
+        } finally {
+            SETTING_READ_ONLY,
+                assertThat(client().admin().indices().prepareExists("ro").execute().actionGet().isExists(), equalTo(true));
+ *
+package org.opensearch.indices.exists.indices;
+            try {
+/*  
+ * Unless required by applicable law or agreed to in writing,
+        assertFalse(client().admin().indices().prepareExists("foo*").get().isExists());
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor  
+            .prepareExists("foo*")  
+                disableIndexBlock("ro", blockSetting);  
+/*  
+ *  
+ */  
+        // check that ignore unavailable and allow no indices are set to false. That is their only valid value as it can't be overridden  
+        assertFalse(client().admin().indices().prepareExists("_all").get().isExists());  
+ * GitHub history for details.
+        assertAcked(client().admin().indices().prepareClose("foobar").get());
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    public void testIndicesExists() throws Exception {  
+            enableIndexBlock("ro", IndexMetadata.SETTING_BLOCKS_METADATA);  
+        assertThat(
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertFalse(request.indicesOptions().allowNoIndices());
+        assertThat(indicesExistsRequestBuilder.get().isExists(), equalTo(false));  
+public class IndicesExistsIT extends OpenSearchIntegTestCase {
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_BLOCKS_WRITE;
+            client().admin().indices().prepareExists("foo*").setExpandWildcardsOpen(false).setExpandWildcardsClosed(false).get().isExists(),  
+import org.opensearch.cluster.metadata.IndexMetadata;
+        IndicesExistsRequest request = indicesExistsRequestBuilder.request();
+    public void testIndicesExistsWithBlocks() {
+import org.opensearch.test.OpenSearchIntegTestCase;
+            equalTo(false)
+import static org.hamcrest.Matchers.equalTo;
+            } finally {

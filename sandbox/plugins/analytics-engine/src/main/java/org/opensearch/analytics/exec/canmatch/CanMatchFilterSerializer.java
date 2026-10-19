@@ -1,139 +1,125 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.canmatch;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-
-/**
- * Serializes and deserializes a list of {@link CanMatchFilter} instances
- * to/from a byte array for transport over the wire.  
- *
- * <p>Each filter variant owns its body serialization via
- * {@link CanMatchFilter#writeBody} and a static {@code readBody} factory.  
- * This codec handles the list-level envelope: FORMAT_VERSION, count, and
- * the per-filter length-prefix + type-string wrapper that enables
- * forward-compatible skipping of unknown types.  
- *
- * <p>Wire layout:
- * <pre>  
- * vInt   FORMAT_VERSION
- * vInt   filterCount
  * repeat filterCount:  
+        // and future fields appended to known types)
+     * Unknown filter types are skipped (fail-open per filter).
+            in.readBytes(skip, 0, remaining);
+ * vInt   FORMAT_VERSION
+            return Collections.emptyList();  
+            out.writeVInt(filters.size());
+ */  
+import java.util.Collections;
+     * Zero-length or null input produces an empty list.  
+            filter.writeBody(tmp);
+        if (remaining > 0) {
+import org.opensearch.core.common.bytes.BytesReference;
+ * <pre>  
+    private static final Logger logger = LogManager.getLogger(CanMatchFilterSerializer.class);
+                CanMatchFilter filter = readFilter(in);
+ * </ul>
+        String type = in.readString();
+package org.opensearch.analytics.exec.canmatch;
+    }
+        };
+import java.io.IOException;
+ *   <li>Unknown FORMAT_VERSION → return empty list (fail-open, no pruning)</li>
+ *
+     * Empty or null list produces a zero-length array.  
+                logger.debug("Unknown CanMatchFilter format version {}; returning empty (fail-open)", version);
+import org.opensearch.core.common.io.stream.StreamInput;  
+        int byteLength = in.readVInt();
+ * SPDX-License-Identifier: Apache-2.0
+        return filter;
+ */
+     * Serializes a list of filters to a byte array.
+                yield null;  
+        if (bytes == null || bytes.length == 0) {
+        }  
+            out.writeVInt(FORMAT_VERSION);
+    private CanMatchFilterSerializer() {}
+        try (BytesStreamOutput out = new BytesStreamOutput()) {  
+            int version = in.readVInt();  
+            out.writeBytes(BytesReference.toBytes(tmp.bytes()), 0, length);
+        }
+        }
+     * Unknown format version produces an empty list (fail-open).
+ * </pre>
+            return filters;
+        try (StreamInput in = new BytesArray(bytes).streamInput()) {
+                if (filter != null) {  
+ * the per-filter length-prefix + type-string wrapper that enables
+    private static void writeFilter(BytesStreamOutput out, CanMatchFilter filter) throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+            if (version != FORMAT_VERSION) {
+     */
+    private static final int FORMAT_VERSION = 1;  
+        // Skip any remaining bytes for this filter (handles unknown types
+            return new byte[0];
+    }  
+ * <ul>
+    public static byte[] serialize(List<CanMatchFilter> filters) throws IOException {
+                logger.debug("Unknown CanMatchFilter type '{}'; skipping (fail-open)", type);
+        try (BytesStreamOutput tmp = new BytesStreamOutput()) {  
+ *
+        CanMatchFilter filter = switch (type) {
+ * {@link CanMatchFilter#writeBody} and a static {@code readBody} factory.  
+    }
+    private static CanMatchFilter readFilter(StreamInput in) throws IOException {  
+ *
+    }
+                }
+            byte[] skip = new byte[remaining];  
+                return Collections.emptyList();  
+        }
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+ * <p>Forward compatibility:  
+            default -> {
+ * <p>Each filter variant owns its body serialization via
+import org.apache.logging.log4j.Logger;
+ * Serializes and deserializes a list of {@link CanMatchFilter} instances
+/*  
+import org.opensearch.core.common.bytes.BytesArray;
  *   vInt    byteLength    (total bytes for this filter — enables skip on unknown type)
+            for (int i = 0; i < count; i++) {
+        int remaining = byteLength - bytesConsumed;
+ *
+ *
+        if (filters == null || filters.isEmpty()) {  
+                writeFilter(out, filter);
  *   string  type          ("LongRange", etc.)
  *   ...type-specific body fields (written by the filter's writeBody)...  
- * </pre>
- *
- * <p>Forward compatibility:  
- * <ul>
- *   <li>Unknown FORMAT_VERSION → return empty list (fail-open, no pruning)</li>
- *   <li>Unknown type string → skip byteLength bytes, continue to next filter</li>  
- * </ul>
- *
- * @opensearch.internal  
- */
+ * <p>Wire layout:
 public final class CanMatchFilterSerializer {
-
-    private static final Logger logger = LogManager.getLogger(CanMatchFilterSerializer.class);
-
-    private static final int FORMAT_VERSION = 1;  
-
-    private CanMatchFilterSerializer() {}
-
-    /**
-     * Serializes a list of filters to a byte array.
-     * Empty or null list produces a zero-length array.  
-     */
-    public static byte[] serialize(List<CanMatchFilter> filters) throws IOException {
-        if (filters == null || filters.isEmpty()) {  
-            return new byte[0];
+                    filters.add(filter);
+            tmp.writeString(filter.type());
         }
-        try (BytesStreamOutput out = new BytesStreamOutput()) {  
-            out.writeVInt(FORMAT_VERSION);
-            out.writeVInt(filters.size());
-            for (CanMatchFilter filter : filters) {  
-                writeFilter(out, filter);
-            }
-            return BytesReference.toBytes(out.bytes());  
-        }
-    }
-
-    /**
-     * Deserializes a byte array back into a list of filters.
-     * Zero-length or null input produces an empty list.  
-     * Unknown format version produces an empty list (fail-open).
-     * Unknown filter types are skipped (fail-open per filter).
-     */  
     public static List<CanMatchFilter> deserialize(byte[] bytes) throws IOException {
-        if (bytes == null || bytes.length == 0) {
-            return Collections.emptyList();  
+     * Deserializes a byte array back into a list of filters.
+ * compatible open source license.
+ * forward-compatible skipping of unknown types.  
+}  
+import org.apache.logging.log4j.LogManager;
+            List<CanMatchFilter> filters = new ArrayList<>(count);  
+            out.writeVInt(length);
+ * this file be licensed under the Apache-2.0 license or a
+            for (CanMatchFilter filter : filters) {  
+            case LongRange.TYPE -> LongRange.readBody(in);  
+ *   <li>Unknown type string → skip byteLength bytes, continue to next filter</li>  
         }
-        try (StreamInput in = new BytesArray(bytes).streamInput()) {
-            int version = in.readVInt();  
-            if (version != FORMAT_VERSION) {
-                logger.debug("Unknown CanMatchFilter format version {}; returning empty (fail-open)", version);
-                return Collections.emptyList();  
+    /**
+        int availableBefore = in.available();
+ * @opensearch.internal  
+            }  
             }
             int count = in.readVInt();
-            List<CanMatchFilter> filters = new ArrayList<>(count);  
-            for (int i = 0; i < count; i++) {
-                CanMatchFilter filter = readFilter(in);
-                if (filter != null) {  
-                    filters.add(filter);
-                }
-            }  
-            return filters;
-        }
-    }  
-
-    private static void writeFilter(BytesStreamOutput out, CanMatchFilter filter) throws IOException {
-        try (BytesStreamOutput tmp = new BytesStreamOutput()) {  
-            tmp.writeString(filter.type());
-            filter.writeBody(tmp);
+import java.util.List;
+import java.util.ArrayList;  
             int length = tmp.size();  
-            out.writeVInt(length);
-            out.writeBytes(BytesReference.toBytes(tmp.bytes()), 0, length);
-        }  
-    }
-
-    private static CanMatchFilter readFilter(StreamInput in) throws IOException {  
-        int byteLength = in.readVInt();
-        int availableBefore = in.available();
-
-        String type = in.readString();
-        CanMatchFilter filter = switch (type) {
-            case LongRange.TYPE -> LongRange.readBody(in);  
-            default -> {
-                logger.debug("Unknown CanMatchFilter type '{}'; skipping (fail-open)", type);
-                yield null;  
-            }
-        };
-
-        // Skip any remaining bytes for this filter (handles unknown types
-        // and future fields appended to known types)
+/**
         int bytesConsumed = availableBefore - in.available();  
-        int remaining = byteLength - bytesConsumed;
-        if (remaining > 0) {
-            byte[] skip = new byte[remaining];  
-            in.readBytes(skip, 0, remaining);
-        }
-
-        return filter;
-    }
-}  
+ * to/from a byte array for transport over the wire.  
+ * This codec handles the list-level envelope: FORMAT_VERSION, count, and
+            }
+ * vInt   filterCount
+            return BytesReference.toBytes(out.bytes());  
+            }
+     */  
+    /**

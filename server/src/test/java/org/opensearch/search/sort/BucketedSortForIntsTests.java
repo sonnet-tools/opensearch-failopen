@@ -1,77 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.sort;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.opensearch.search.DocValueFormat;
-
-public class BucketedSortForIntsTests extends BucketedSortTestCase<BucketedSort.ForInts> {
-    @Override
-    public BucketedSort.ForInts build(  
-        SortOrder sortOrder,
-        DocValueFormat format,
-        int bucketSize,  
-        BucketedSort.ExtraData extra,
-        double[] values
     ) {  
-        return new BucketedSort.ForInts(bigArrays(), sortOrder, format, bucketSize, extra) {
-            @Override
-            public Leaf forLeaf(LeafReaderContext ctx) {  
-                return new Leaf(ctx) {
-                    int index = -1;
-
-                    @Override
-                    protected boolean advanceExact(int doc) {
-                        index = doc;  
-                        return doc < values.length;
-                    }
-
-                    @Override
-                    protected int docValue() {
-                        return (int) values[index];  
-                    }
-                };
             }  
-        };
-    }
-
-    @Override
-    protected SortValue expectedSortValue(double v) {
-        return SortValue.from((long) v);  
-    }
-
-    @Override  
-    protected double randomValue() {
-        return randomIntBetween(Integer.MIN_VALUE, Integer.MAX_VALUE);
-    }  
+package org.opensearch.search.sort;
+                        return (int) values[index];  
 }
+    @Override  
+public class BucketedSortForIntsTests extends BucketedSortTestCase<BucketedSort.ForInts> {
+ * Modifications Copyright OpenSearch Contributors. See
+                    @Override
+ */  
+                    }
+/*  
+ *
+    }  
+    protected double randomValue() {
+ * KIND, either express or implied.  See the License for the
+ */  
+import org.apache.lucene.index.LeafReaderContext;
+ * SPDX-License-Identifier: Apache-2.0
+                    protected boolean advanceExact(int doc) {
+ * compatible open source license.
+        BucketedSort.ExtraData extra,
+                return new Leaf(ctx) {
+        int bucketSize,  
+ *
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+                    }
+ * this file be licensed under the Apache-2.0 license or a
+        return SortValue.from((long) v);  
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+        return randomIntBetween(Integer.MIN_VALUE, Integer.MAX_VALUE);
+    public BucketedSort.ForInts build(  
+            public Leaf forLeaf(LeafReaderContext ctx) {  
+/*
+    protected SortValue expectedSortValue(double v) {
+ */
+/*  
+        DocValueFormat format,
+                    @Override
+        return new BucketedSort.ForInts(bigArrays(), sortOrder, format, bucketSize, extra) {
+                };
+            @Override
+                    protected int docValue() {
+ *  
+        };
+ * GitHub history for details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+import org.opensearch.search.DocValueFormat;
+ * under the License.  
+        double[] values
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+                        index = doc;  
+    }
+    }
+                    int index = -1;
+ * You may obtain a copy of the License at  
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                        return doc < values.length;
+        SortOrder sortOrder,
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  

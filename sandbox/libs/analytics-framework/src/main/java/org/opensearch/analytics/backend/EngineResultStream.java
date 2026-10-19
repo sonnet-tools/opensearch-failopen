@@ -1,30 +1,25 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.backend;
-
-import java.util.Iterator;
-
-/**  
- * A closeable stream of record batches returned by engine execution.
+     * Returns an iterator over the record batches in this stream.
  * Callers iterate batches via the returned iterator and MUST close the stream
+import java.util.Iterator;
+     * Each call returns the same iterator instance — the stream is single-pass.
+    void close();
  * when done to release native resources.  
  *
- * @opensearch.internal
+}
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+    Iterator<EngineResultBatch> iterator();
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+package org.opensearch.analytics.backend;
+    /**  
+ * compatible open source license.
+ * A closeable stream of record batches returned by engine execution.
+ *
+/*  
+     */  
+/**  
  */  
 public interface EngineResultStream extends AutoCloseable {
-
-    /**  
-     * Returns an iterator over the record batches in this stream.
-     * Each call returns the same iterator instance — the stream is single-pass.
-     */  
-    Iterator<EngineResultBatch> iterator();
-
-    @Override  
-    void close();
-}
+ * @opensearch.internal

@@ -1,229 +1,213 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+    public void testLockIsReentrant() throws InterruptedException {
+        KeyedLock<String> lock = new KeyedLock<>();
+    }  
+            threads[i].start();
+        ConcurrentHashMap<String, AtomicInteger> safeCounter;
+                    }  
+        assertThat(counter.size(), equalTo(safeCounter.size()));
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+        KeyedLock<String> connectionLock;
+                    assert connectionLock.isHeldByCurrentThread(curName + "bla") == false;  
  */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;  
-
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map.Entry;
-import java.util.Set;  
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.not;
-
-public class KeyedLockTests extends OpenSearchTestCase {  
     public void testIfMapEmptyAfterLotsOfAcquireAndReleases() throws InterruptedException {
-        ConcurrentHashMap<String, Integer> counter = new ConcurrentHashMap<>();
-        ConcurrentHashMap<String, AtomicInteger> safeCounter = new ConcurrentHashMap<>();  
-        KeyedLock<String> connectionLock = new KeyedLock<>(randomBoolean());
-        String[] names = new String[randomIntBetween(1, 40)];
-        for (int i = 0; i < names.length; i++) {  
-            names[i] = randomRealisticUnicodeOfLengthBetween(10, 20);
+    }  
+                        assertFalse(connectionLock.isHeldByCurrentThread(curName));
+        Releasable second = lock.tryAcquire("foo");
+                            break;
+                AtomicInteger value = safeCounter.putIfAbsent(curName, atomicInteger);  
+        second.close();
+ * Licensed to Elasticsearch under one or more contributor  
+        Thread.yield();  
+ *
+        thread.start();  
+                        counter.put(curName, 1);  
+import static org.hamcrest.Matchers.equalTo;  
+import java.util.List;
+import static org.hamcrest.Matchers.not;
+ * The OpenSearch Contributors require contributions made to  
+                try (Releasable ignore = lock) {
+                            stepOut = true;  
+ */
+import java.util.concurrent.ConcurrentHashMap;
+ * Modifications Copyright OpenSearch Contributors. See
+        foo.close();
+import org.opensearch.test.OpenSearchTestCase;
+        Collections.shuffle(list, random());
+        Releasable foo = lock.acquire("foo");
+            try (Releasable r = lock.acquire("foo")) {  
+        acquire.close();  
+import java.util.Set;  
+        assertEquals(0, test.get());
+ * Unless required by applicable law or agreed to in writing,
+        }
+            this.startLatch = startLatch;
+            try {  
+            this.connectionLock = connectionLock;  
+                }
         }
         int numThreads = randomIntBetween(3, 10);  
-        final CountDownLatch startLatch = new CountDownLatch(1 + numThreads);
-        AcquireAndReleaseThread[] threads = new AcquireAndReleaseThread[numThreads];
-        for (int i = 0; i < numThreads; i++) {  
-            threads[i] = new AcquireAndReleaseThread(startLatch, connectionLock, names, counter, safeCounter);
-        }
-        for (int i = 0; i < numThreads; i++) {  
-            threads[i].start();
-        }
-        startLatch.countDown();  
-
-        for (int i = 0; i < numThreads; i++) {
-            threads[i].join();  
-        }
-        assertThat(connectionLock.hasLockedKeys(), equalTo(false));
-
-        Set<Entry<String, Integer>> entrySet = counter.entrySet();
-        assertThat(counter.size(), equalTo(safeCounter.size()));
+        AtomicInteger test = new AtomicInteger(0);
+/*  
+            ConcurrentHashMap<String, Integer> counter,
+ * license agreements. See the NOTICE file distributed with
+        latch.await();  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.concurrent.CountDownLatch;
+        CountDownLatch latch = new CountDownLatch(1);  
+        CountDownLatch latch = new CountDownLatch(1);
+                test.incrementAndGet();
+                    if (randomBoolean()) {
         for (Entry<String, Integer> entry : entrySet) {  
             AtomicInteger atomicInteger = safeCounter.get(entry.getKey());
-            assertThat(atomicInteger, not(Matchers.nullValue()));
-            assertThat(atomicInteger.get(), equalTo(entry.getValue()));  
-        }
-    }
-
-    public void testHasLockedKeys() {
-        KeyedLock<String> lock = new KeyedLock<>();
-        assertFalse(lock.hasLockedKeys());  
-        Releasable foo = lock.acquire("foo");
-        assertTrue(lock.hasLockedKeys());
-        foo.close();  
-        assertFalse(lock.hasLockedKeys());
-    }
-
-    public void testTryAcquire() throws InterruptedException {
-        KeyedLock<String> lock = new KeyedLock<>();
-        Releasable foo = lock.tryAcquire("foo");  
-        Releasable second = lock.tryAcquire("foo");
-        assertTrue(lock.hasLockedKeys());
-        foo.close();  
-        assertTrue(lock.hasLockedKeys());
-        second.close();
-        assertFalse(lock.hasLockedKeys());  
-        // lock again
-        Releasable acquire = lock.tryAcquire("foo");
-        assertNotNull(acquire);  
-        final AtomicBoolean check = new AtomicBoolean(false);
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread thread = new Thread(() -> {  
-            latch.countDown();
-            try (Releasable ignore = lock.acquire("foo")) {
-                assertTrue(check.get());  
-            }
-        });
-        thread.start();  
-        latch.await();
-        check.set(true);
-        acquire.close();  
-        foo.close();
-        thread.join();
-    }  
-
-    public void testLockIsReentrant() throws InterruptedException {
-        KeyedLock<String> lock = new KeyedLock<>();  
-        Releasable foo = lock.acquire("foo");
-        assertTrue(lock.isHeldByCurrentThread("foo"));
-        assertFalse(lock.isHeldByCurrentThread("bar"));  
-        Releasable foo2 = lock.acquire("foo");
-        AtomicInteger test = new AtomicInteger(0);
-        CountDownLatch latch = new CountDownLatch(1);  
-        Thread t = new Thread(() -> {
-            latch.countDown();
-            try (Releasable r = lock.acquire("foo")) {  
-                test.incrementAndGet();
-            }
-
-        });
-        t.start();
-        latch.await();  
-        Thread.yield();
-        assertEquals(0, test.get());
-        List<Releasable> list = Arrays.asList(foo, foo2);  
-        Collections.shuffle(list, random());
-        list.get(0).close();
-        Thread.yield();  
-        assertEquals(0, test.get());
-        list.get(1).close();
-        t.join();  
-        assertEquals(1, test.get());
-        assertFalse(lock.hasLockedKeys());
-    }  
-
-    public static class AcquireAndReleaseThread extends Thread {
-        private CountDownLatch startLatch;  
-        KeyedLock<String> connectionLock;
-        String[] names;
-        ConcurrentHashMap<String, Integer> counter;  
-        ConcurrentHashMap<String, AtomicInteger> safeCounter;
-        final int numRuns = scaledRandomIntBetween(5000, 50000);
-
-        public AcquireAndReleaseThread(
-            CountDownLatch startLatch,
-            KeyedLock<String> connectionLock,  
-            String[] names,
-            ConcurrentHashMap<String, Integer> counter,
-            ConcurrentHashMap<String, AtomicInteger> safeCounter  
-        ) {
-            this.startLatch = startLatch;
-            this.connectionLock = connectionLock;  
-            this.names = names;
-            this.counter = counter;
-            this.safeCounter = safeCounter;  
-        }
-
-        @Override  
-        public void run() {
-            startLatch.countDown();
-            try {  
-                startLatch.await();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);  
-            }
-            for (int i = 0; i < numRuns; i++) {
-                String curName = names[randomInt(names.length - 1)];  
-                assert connectionLock.isHeldByCurrentThread(curName) == false;
-                Releasable lock;
-                if (randomIntBetween(0, 10) < 4) {  
-                    int tries = 0;
-                    boolean stepOut = false;
-                    while ((lock = connectionLock.tryAcquire(curName)) == null) {  
-                        assertFalse(connectionLock.isHeldByCurrentThread(curName));
-                        if (tries++ == 10) {
-                            stepOut = true;  
-                            break;
-                        }
-                    }  
-                    if (stepOut) {
-                        break;
-                    }  
+        ConcurrentHashMap<String, AtomicInteger> safeCounter = new ConcurrentHashMap<>();  
                 } else {
-                    lock = connectionLock.acquire(curName);
-                }  
-                try (Releasable ignore = lock) {
-                    assert connectionLock.isHeldByCurrentThread(curName);
-                    assert connectionLock.isHeldByCurrentThread(curName + "bla") == false;  
-                    if (randomBoolean()) {
-                        try (Releasable reentrantIgnored = connectionLock.acquire(curName)) {
-                            // just acquire this and make sure we can :)  
-                            Thread.yield();
-                        }
-                    }  
-                    Integer integer = counter.get(curName);
-                    if (integer == null) {
-                        counter.put(curName, 1);  
-                    } else {
-                        counter.put(curName, integer.intValue() + 1);
-                    }  
-                }
-                AtomicInteger atomicInteger = new AtomicInteger(0);
-                AtomicInteger value = safeCounter.putIfAbsent(curName, atomicInteger);  
-                if (value == null) {
-                    atomicInteger.incrementAndGet();
-                } else {  
-                    value.incrementAndGet();
-                }
-            }  
-        }
+        assertThat(connectionLock.hasLockedKeys(), equalTo(false));
+        for (int i = 0; i < names.length; i++) {  
     }
+public class KeyedLockTests extends OpenSearchTestCase {  
+        // lock again
+        String[] names;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        latch.await();
+        foo.close();  
+        assertEquals(0, test.get());
+import org.opensearch.common.lease.Releasable;
+        final CountDownLatch startLatch = new CountDownLatch(1 + numThreads);
+import org.hamcrest.Matchers;  
+                        counter.put(curName, integer.intValue() + 1);
+    public void testHasLockedKeys() {
+        for (int i = 0; i < numThreads; i++) {
+        assertTrue(lock.hasLockedKeys());
+            for (int i = 0; i < numRuns; i++) {
+        private CountDownLatch startLatch;  
+        assertFalse(lock.hasLockedKeys());
+        check.set(true);
+        }
+ * specific language governing permissions and limitations
+ * compatible open source license.
+        Thread.yield();
+    public static class AcquireAndReleaseThread extends Thread {
+                        break;
+ * not use this file except in compliance with the License.
+        thread.join();
+        AcquireAndReleaseThread[] threads = new AcquireAndReleaseThread[numThreads];
 }  
+            latch.countDown();
+                    }  
+            this.names = names;
+        Thread thread = new Thread(() -> {  
+                }
+        t.start();
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+                if (value == null) {
+            this.counter = counter;
+import java.util.Map.Entry;
+            }
+                    } else {
+                    assert connectionLock.isHeldByCurrentThread(curName);
+        Set<Entry<String, Integer>> entrySet = counter.entrySet();
+        foo.close();  
+ *
+                assert connectionLock.isHeldByCurrentThread(curName) == false;
+        Releasable foo2 = lock.acquire("foo");
+        assertFalse(lock.hasLockedKeys());  
+ * GitHub history for details.
+            KeyedLock<String> connectionLock,  
+                startLatch.await();
+/*  
+        for (int i = 0; i < numThreads; i++) {  
+import java.util.concurrent.atomic.AtomicBoolean;  
+import java.util.Arrays;
+        KeyedLock<String> lock = new KeyedLock<>();
+        ) {
+        });
+        public void run() {
+    }
+                    while ((lock = connectionLock.tryAcquire(curName)) == null) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            threads[i].join();  
+                        }
+            }
+        KeyedLock<String> lock = new KeyedLock<>();  
+            String[] names,
+        assertTrue(lock.hasLockedKeys());
+                    }  
+ * You may obtain a copy of the License at  
+        list.get(1).close();
+        }
+ * under the License.  
+        assertNotNull(acquire);  
+            }  
+            }
+        assertTrue(lock.isHeldByCurrentThread("foo"));
+            startLatch.countDown();
+                Releasable lock;
+        assertEquals(1, test.get());
+ * software distributed under the License is distributed on an
+                throw new RuntimeException(e);  
+                    value.incrementAndGet();
+ */  
+        assertFalse(lock.hasLockedKeys());
+                AtomicInteger atomicInteger = new AtomicInteger(0);
+                    if (stepOut) {
+        @Override  
+                    if (integer == null) {
+            } catch (InterruptedException e) {
+        });
+                }  
+                    Integer integer = counter.get(curName);
+        }
+            threads[i] = new AcquireAndReleaseThread(startLatch, connectionLock, names, counter, safeCounter);
+ * ownership. Elasticsearch licenses this file to you under  
+            CountDownLatch startLatch,
+        KeyedLock<String> connectionLock = new KeyedLock<>(randomBoolean());
+            ConcurrentHashMap<String, AtomicInteger> safeCounter  
+                    lock = connectionLock.acquire(curName);
+                            Thread.yield();
+        Thread t = new Thread(() -> {
+        ConcurrentHashMap<String, Integer> counter = new ConcurrentHashMap<>();
+            names[i] = randomRealisticUnicodeOfLengthBetween(10, 20);
+        Releasable foo = lock.acquire("foo");
+                        }
+                            // just acquire this and make sure we can :)  
+ * KIND, either express or implied.  See the License for the
+            latch.countDown();
+                    atomicInteger.incrementAndGet();
+        }
+        Releasable foo = lock.tryAcquire("foo");  
+            this.safeCounter = safeCounter;  
+                    }  
+                assertTrue(check.get());  
+        }
+                String curName = names[randomInt(names.length - 1)];  
+/*
+            assertThat(atomicInteger.get(), equalTo(entry.getValue()));  
+                    int tries = 0;
+import java.util.Collections;  
+        String[] names = new String[randomIntBetween(1, 40)];
+        t.join();  
+            try (Releasable ignore = lock.acquire("foo")) {
+        assertTrue(lock.hasLockedKeys());
+        startLatch.countDown();  
+ *  
+        list.get(0).close();
+        assertFalse(lock.isHeldByCurrentThread("bar"));  
+                } else {  
+        List<Releasable> list = Arrays.asList(foo, foo2);  
+        final int numRuns = scaledRandomIntBetween(5000, 50000);
+    public void testTryAcquire() throws InterruptedException {
+            assertThat(atomicInteger, not(Matchers.nullValue()));
+        public AcquireAndReleaseThread(
+                if (randomIntBetween(0, 10) < 4) {  
+        for (int i = 0; i < numThreads; i++) {  
+                        try (Releasable reentrantIgnored = connectionLock.acquire(curName)) {
+        ConcurrentHashMap<String, Integer> counter;  
+        final AtomicBoolean check = new AtomicBoolean(false);
+    }
+        assertFalse(lock.hasLockedKeys());  
+import java.util.concurrent.atomic.AtomicInteger;
+package org.opensearch.common.util.concurrent;
+                    boolean stepOut = false;
+                        if (tries++ == 10) {
+        Releasable acquire = lock.tryAcquire("foo");

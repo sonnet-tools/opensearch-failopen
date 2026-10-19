@@ -1,125 +1,109 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.backpressure.stats;
-
-import org.opensearch.Version;
-import org.opensearch.common.collect.MapBuilder;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.backpressure.trackers.CpuUsageTracker;
 import org.opensearch.search.backpressure.trackers.ElapsedTimeTracker;  
-import org.opensearch.search.backpressure.trackers.HeapUsageTracker;
-import org.opensearch.search.backpressure.trackers.NativeMemoryUsageTracker;
-import org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackerType;  
-import org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackers.TaskResourceUsageTracker;
-
-import java.io.IOException;  
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Stats related to cancelled SearchTasks.
- */  
-
-public class SearchTaskStats implements ToXContentObject, Writeable {
-    private final long cancellationCount;  
-    private final long limitReachedCount;
-    private final long completionCount;
-    private final Map<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> resourceUsageTrackerStats;  
-
-    public SearchTaskStats(
-        long cancellationCount,  
-        long limitReachedCount,
-        long completionCount,
-        Map<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> resourceUsageTrackerStats  
-    ) {
-        this.cancellationCount = cancellationCount;
-        this.limitReachedCount = limitReachedCount;  
-        this.completionCount = completionCount;
-        this.resourceUsageTrackerStats = resourceUsageTrackerStats;
-    }  
-
-    public SearchTaskStats(StreamInput in) throws IOException {
-        this.cancellationCount = in.readVLong();  
-        this.limitReachedCount = in.readVLong();
-        if (in.getVersion().onOrAfter(Version.V_3_0_0)) {
-            this.completionCount = in.readVLong();  
-        } else {
-            this.completionCount = -1;
-        }  
-
-        MapBuilder<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> builder = new MapBuilder<>();
-        builder.put(TaskResourceUsageTrackerType.CPU_USAGE_TRACKER, in.readOptionalWriteable(CpuUsageTracker.Stats::new));  
         builder.put(TaskResourceUsageTrackerType.HEAP_USAGE_TRACKER, in.readOptionalWriteable(HeapUsageTracker.Stats::new));
-        builder.put(TaskResourceUsageTrackerType.ELAPSED_TIME_TRACKER, in.readOptionalWriteable(ElapsedTimeTracker.Stats::new));
-        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {  
-            builder.put(
-                TaskResourceUsageTrackerType.NATIVE_MEMORY_USAGE_TRACKER,
-                in.readOptionalWriteable(NativeMemoryUsageTracker.Stats::new)  
-            );
-        }
-        this.resourceUsageTrackerStats = builder.immutableMap();  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-
-        builder.startObject("resource_tracker_stats");
-        for (Map.Entry<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> entry : resourceUsageTrackerStats.entrySet()) {
-            builder.field(entry.getKey().getName(), entry.getValue());  
-        }
-        builder.endObject();
-        if (completionCount != -1) {  
-            builder.field("completion_count", completionCount);
-        }
-
-        builder.startObject("cancellation_stats")
-            .field("cancellation_count", cancellationCount)
-            .field("cancellation_limit_reached_count", limitReachedCount)  
-            .endObject();
-
         return builder.endObject();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(cancellationCount);
-        out.writeVLong(limitReachedCount);  
-        if (out.getVersion().onOrAfter(Version.V_3_0_0)) {
-            out.writeVLong(completionCount);
-        }  
-
-        out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.CPU_USAGE_TRACKER));
-        out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.HEAP_USAGE_TRACKER));  
-        out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.ELAPSED_TIME_TRACKER));
-        if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
-            out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.NATIVE_MEMORY_USAGE_TRACKER));  
-        }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        SearchTaskStats that = (SearchTaskStats) o;
-        return cancellationCount == that.cancellationCount  
-            && limitReachedCount == that.limitReachedCount
             && completionCount == that.completionCount
-            && resourceUsageTrackerStats.equals(that.resourceUsageTrackerStats);  
+        }  
+            out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.NATIVE_MEMORY_USAGE_TRACKER));  
+        this.resourceUsageTrackerStats = builder.immutableMap();  
+    private final long cancellationCount;  
+import org.opensearch.core.common.io.stream.Writeable;
+            .field("cancellation_count", cancellationCount)
     }
-
+        builder.startObject();
+        if (o == null || getClass() != o.getClass()) return false;
+import org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackerType;  
+        out.writeVLong(cancellationCount);
+ * this file be licensed under the Apache-2.0 license or a
+                in.readOptionalWriteable(NativeMemoryUsageTracker.Stats::new)  
+        this.cancellationCount = cancellationCount;
+/*  
+        long completionCount,
+    ) {
     @Override  
+import org.opensearch.core.xcontent.XContentBuilder;
+        }
+public class SearchTaskStats implements ToXContentObject, Writeable {
+            && limitReachedCount == that.limitReachedCount
+import org.opensearch.common.collect.MapBuilder;
+        MapBuilder<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> builder = new MapBuilder<>();
+package org.opensearch.search.backpressure.stats;
+ * SPDX-License-Identifier: Apache-2.0
+        SearchTaskStats that = (SearchTaskStats) o;
+        out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.HEAP_USAGE_TRACKER));  
+        this.limitReachedCount = limitReachedCount;  
+        } else {
+            );
+    public boolean equals(Object o) {
+    public void writeTo(StreamOutput out) throws IOException {
+    @Override  
+        if (this == o) return true;  
+        out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.ELAPSED_TIME_TRACKER));
+            && resourceUsageTrackerStats.equals(that.resourceUsageTrackerStats);  
+                TaskResourceUsageTrackerType.NATIVE_MEMORY_USAGE_TRACKER,
+            .field("cancellation_limit_reached_count", limitReachedCount)  
+        if (completionCount != -1) {  
+    }
+        }
+        if (in.getVersion().onOrAfter(Version.V_3_0_0)) {
+        out.writeOptionalWriteable(resourceUsageTrackerStats.get(TaskResourceUsageTrackerType.CPU_USAGE_TRACKER));
+import org.opensearch.search.backpressure.trackers.HeapUsageTracker;
     public int hashCode() {
-        return Objects.hash(cancellationCount, limitReachedCount, resourceUsageTrackerStats, completionCount);
+            builder.field("completion_count", completionCount);
     }  
+    @Override
+import org.opensearch.Version;
+        builder.startObject("resource_tracker_stats");
+            .endObject();
+    private final long completionCount;
 }
+        this.resourceUsageTrackerStats = resourceUsageTrackerStats;
+ */  
+        }
+    private final long limitReachedCount;
+        builder.put(TaskResourceUsageTrackerType.CPU_USAGE_TRACKER, in.readOptionalWriteable(CpuUsageTracker.Stats::new));  
+        for (Map.Entry<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> entry : resourceUsageTrackerStats.entrySet()) {
+        this.cancellationCount = in.readVLong();  
+        return cancellationCount == that.cancellationCount  
+ */  
+import java.util.Objects;
+        builder.put(TaskResourceUsageTrackerType.ELAPSED_TIME_TRACKER, in.readOptionalWriteable(ElapsedTimeTracker.Stats::new));
+        if (out.getVersion().onOrAfter(Version.V_3_0_0)) {
+import java.util.Map;
+        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {  
+    }  
+        return Objects.hash(cancellationCount, limitReachedCount, resourceUsageTrackerStats, completionCount);
+        }
+        Map<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> resourceUsageTrackerStats  
+        builder.startObject("cancellation_stats")
+            builder.field(entry.getKey().getName(), entry.getValue());  
+ * compatible open source license.
+    public SearchTaskStats(
+            builder.put(
+import org.opensearch.search.backpressure.trackers.CpuUsageTracker;
+    private final Map<TaskResourceUsageTrackerType, TaskResourceUsageTracker.Stats> resourceUsageTrackerStats;  
+ *
+            this.completionCount = -1;
+    @Override  
+        long limitReachedCount,
+import org.opensearch.core.common.io.stream.StreamInput;  
+            out.writeVLong(completionCount);
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.io.IOException;  
+/**
+        }  
+    }
+        out.writeVLong(limitReachedCount);  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.backpressure.trackers.TaskResourceUsageTrackers.TaskResourceUsageTracker;
+        long cancellationCount,  
+            this.completionCount = in.readVLong();  
+ * Stats related to cancelled SearchTasks.
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        this.limitReachedCount = in.readVLong();
+        if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
+    public SearchTaskStats(StreamInput in) throws IOException {
+        builder.endObject();
+        this.completionCount = completionCount;
+import org.opensearch.search.backpressure.trackers.NativeMemoryUsageTracker;
+import org.opensearch.core.xcontent.ToXContentObject;  

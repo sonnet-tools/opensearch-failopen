@@ -1,247 +1,207 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.query;
-
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.index.PointValues;
-import org.apache.lucene.search.ConstantScoreScorer;
-import org.apache.lucene.search.ConstantScoreWeight;  
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchNoDocsQuery;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.ScoreMode;  
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.Weight;  
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.ArrayUtil;
-import org.apache.lucene.util.BytesRef;  
-import org.apache.lucene.util.BytesRefIterator;
-import org.apache.lucene.util.DocIdSetBuilder;
-import org.apache.lucene.util.RamUsageEstimator;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.Objects;
-
-import org.roaringbitmap.longlong.Roaring64NavigableMap;  
-
-/**
- * A query that matches all documents that contain a set of long values represented by a 64-bit bitmap  
- *
- * @opensearch.internal
- */  
-public class Bitmap64IndexQuery extends Query implements Accountable {
-
-    private final Roaring64NavigableMap bitmap;  
-    private final String field;
-
-    public Bitmap64IndexQuery(String field, Roaring64NavigableMap bitmap) {  
+                    nextQueryPoint = iterator.next();
+                        return cost;
         checkArgs(field, bitmap);
-        this.bitmap = bitmap;
+                if (cmp < 0) {
+    @Override
+            private final org.roaringbitmap.longlong.LongIterator it = bitmap.getLongIterator();
+    }
+                while (it.hasNext()) {
+    public Bitmap64IndexQuery(String field, Roaring64NavigableMap bitmap) {  
+                    return encoded;
+    public int hashCode() {  
+                    public long cost() {
+                        values.intersect(visitor);  
+        return "Bitmap64IndexQuery(field=" + this.field + ")";
+                LongPoint.encodeDimension(v, encoded.bytes, 0);
+    }
+    }  
+            }
+        }
+                    if (Arrays.compareUnsigned(currentBytes, target) >= 0) {  
+            this.result = result;
+                if (cmpMin < 0) {
+        }  
+                    }
+}  
+                long v = it.next();
+        return new BitmapIterator() {  
+                    System.arraycopy(currentBytes, 0, encoded.bytes, 0, Long.BYTES);
+            @Override  
+            private boolean hasBuffered = false;
+                    long v = it.next();  
+            public boolean isCacheable(LeafReaderContext ctx) {
+            }  
+    private final Roaring64NavigableMap bitmap;  
+import org.apache.lucene.search.QueryVisitor;
+                    iterator.advance(packedValue);  
+                }
+        @Override  
+                LeafReader reader = context.reader();  
+import org.apache.lucene.search.ScoreMode;  
+import org.apache.lucene.util.RamUsageEstimator;  
+import org.apache.lucene.search.ConstantScoreWeight;  
+    }  
+                    iterator.advance(minPackedValue);  
+                    LongPoint.encodeDimension(v, currentBytes, 0);
+            while (nextQueryPoint != null) {  
+            this.iterator = bitmapEncodedIterator(bitmap);
+    @Override  
+                if (!it.hasNext()) return null;
+            public void advance(byte[] target) {
+                    continue;
+                        return new ConstantScoreScorer(score(), scoreMode, result.build().iterator());
+            adder.add(docID);
+        BytesRef next();  
+                int cmpMin = comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, minPackedValue, 0);
+import org.apache.lucene.search.MatchNoDocsQuery;  
+import java.util.Objects;
+import org.apache.lucene.util.BytesRef;  
+                }  
+ * SPDX-License-Identifier: Apache-2.0
+        @Override
+import java.util.Arrays;  
+import org.roaringbitmap.longlong.Roaring64NavigableMap;  
+    @Override  
+        public void visit(int docID, byte[] packedValue) {
+        }
+                } else break;
+            return PointValues.Relation.CELL_OUTSIDE_QUERY;
+                    throw new IllegalArgumentException("field must have only one dimension");
+ * compatible open source license.
+        private boolean matches(byte[] packedValue) {
+        public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
+import org.apache.lucene.document.LongPoint;
+        if (bitmap.isEmpty()) return new MatchNoDocsQuery();
+                        return;
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) {
+                int cmpMax = comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, maxPackedValue, 0);
+        public void grow(int count) {
+ *
+        }
+                return new ScorerSupplier() {
+    public void visit(QueryVisitor visitor) {
+                    @Override
+ */  
+        Bitmap64IndexQuery that = (Bitmap64IndexQuery) other;
+    }
+            final long cardinality = bitmap.getLongCardinality();
+            nextQueryPoint = iterator.next();  
+    interface BitmapIterator extends BytesRefIterator {
+import org.apache.lucene.util.BytesRefIterator;
+    public boolean equals(Object other) {
         this.field = field;  
     }
-
-    static void checkArgs(String field, Roaring64NavigableMap bitmap) {  
-        if (field == null) throw new IllegalArgumentException("field must not be null");
-        if (bitmap == null) throw new IllegalArgumentException("bitmap must not be null");
-    }  
-
-    interface BitmapIterator extends BytesRefIterator {
-        BytesRef next();  
-
-        void advance(byte[] target);
-    }  
-
-    private static BitmapIterator bitmapEncodedIterator(Roaring64NavigableMap bitmap) {
-        return new BitmapIterator() {  
-            private final org.roaringbitmap.longlong.LongIterator it = bitmap.getLongIterator();
-            private final BytesRef encoded = new BytesRef(new byte[Long.BYTES]);
-            private final byte[] currentBytes = new byte[Long.BYTES];  
-            private boolean hasBuffered = false;
-
-            @Override  
-            public BytesRef next() {
-                if (hasBuffered) {
-                    hasBuffered = false;  
-                    System.arraycopy(currentBytes, 0, encoded.bytes, 0, Long.BYTES);
-                    return encoded;
-                }  
-
-                if (!it.hasNext()) return null;
-
-                long v = it.next();
-                LongPoint.encodeDimension(v, encoded.bytes, 0);
-                return encoded;  
-            }
-
-            @Override  
-            public void advance(byte[] target) {
-                while (it.hasNext()) {
-                    long v = it.next();  
-                    LongPoint.encodeDimension(v, currentBytes, 0);
-
-                    if (Arrays.compareUnsigned(currentBytes, target) >= 0) {  
-                        hasBuffered = true;
-                        return;
-                    }  
-                }
-                hasBuffered = false; // Iterator exhausted, no match found
-            }  
-        };
-    }
-
-    @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) {
-        return new ConstantScoreWeight(this, boost) {  
-
-            final long cardinality = bitmap.getLongCardinality();
-
-            @Override
-            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-                LeafReader reader = context.reader();  
-                PointValues values = reader.getPointValues(field);
-                if (values == null) return null;
-
-                if (values.getNumIndexDimensions() != 1) {
-                    throw new IllegalArgumentException("field must have only one dimension");
-                }  
-
-                return new ScorerSupplier() {
-                    long cost = -1;  
-
-                    @Override
-                    public Scorer get(long leadCost) throws IOException {  
-                        final DocIdSetBuilder result = new DocIdSetBuilder(reader.maxDoc(), values);
-                        final MergePointVisitor visitor = new MergePointVisitor(result);
-                        values.intersect(visitor);  
-                        return new ConstantScoreScorer(score(), scoreMode, result.build().iterator());
-                    }
-
-                    @Override
-                    public long cost() {
-                        if (cost == -1) cost = cardinality * 20; // same heuristic as 32-bit  
-                        return cost;
-                    }
-                };  
-            }
-
-            @Override  
-            public boolean isCacheable(LeafReaderContext ctx) {
-                return true; // depends only on segment points
-            }  
-        };
-    }
-
-    private class MergePointVisitor implements PointValues.IntersectVisitor {
-
-        private final DocIdSetBuilder result;  
-        private final BitmapIterator iterator;
-        private BytesRef nextQueryPoint;
-        private final ArrayUtil.ByteArrayComparator comparator = ArrayUtil.getUnsignedComparator(Long.BYTES);  
-        private DocIdSetBuilder.BulkAdder adder;
-
-        MergePointVisitor(DocIdSetBuilder result) {  
-            this.result = result;
-            this.iterator = bitmapEncodedIterator(bitmap);
-            nextQueryPoint = iterator.next();  
-        }
-
-        @Override  
-        public void grow(int count) {
-            adder = result.grow(count);
-        }  
-
-        @Override
-        public void visit(int docID) {  
-            adder.add(docID);
-        }
-
-        @Override
-        public void visit(DocIdSetIterator iterator) throws IOException {
-            adder.add(iterator);  
-        }
-
-        @Override  
-        public void visit(int docID, byte[] packedValue) {
-            if (matches(packedValue)) visit(docID);
-        }  
-
-        @Override
         public void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException {  
-            if (matches(packedValue)) adder.add(iterator);
-        }
-
-        private boolean matches(byte[] packedValue) {
-            while (nextQueryPoint != null) {
-                int cmp = comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, packedValue, 0);  
-                if (cmp == 0) return true;
-                if (cmp < 0) {
-                    iterator.advance(packedValue);  
-                    nextQueryPoint = iterator.next();
-                } else break;
-            }  
-            return false;
-        }
-
-        @Override
-        public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
-            while (nextQueryPoint != null) {  
-                int cmpMin = comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, minPackedValue, 0);
-                if (cmpMin < 0) {
-                    iterator.advance(minPackedValue);  
-                    nextQueryPoint = iterator.next();
-                    continue;
-                }  
-                int cmpMax = comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, maxPackedValue, 0);
-                if (cmpMax > 0) return PointValues.Relation.CELL_OUTSIDE_QUERY;
-                return PointValues.Relation.CELL_CROSSES_QUERY;  
-            }
-            return PointValues.Relation.CELL_OUTSIDE_QUERY;
-        }  
-    }
-
-    @Override  
-    public Query rewrite(IndexSearcher searcher) throws IOException {
-        if (bitmap.isEmpty()) return new MatchNoDocsQuery();
-        return super.rewrite(searcher);  
-    }
-
-    @Override  
-    public void visit(QueryVisitor visitor) {
-        if (visitor.acceptField(field)) visitor.visitLeaf(this);
-    }  
-
-    @Override
-    public String toString(String field) {  
-        return "Bitmap64IndexQuery(field=" + this.field + ")";
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (sameClassAs(other) == false) return false;  
-        Bitmap64IndexQuery that = (Bitmap64IndexQuery) other;
+        return new ConstantScoreWeight(this, boost) {  
+                return encoded;  
         return field.equals(that.field) && bitmap.equals(that.bitmap);
-    }  
-
+                    }  
+    }
+import org.apache.lucene.index.LeafReaderContext;  
+            if (matches(packedValue)) adder.add(iterator);
+import org.apache.lucene.search.Query;
+        @Override
+        @Override  
+                if (hasBuffered) {
+ * @opensearch.internal
+        private final ArrayUtil.ByteArrayComparator comparator = ArrayUtil.getUnsignedComparator(Long.BYTES);  
+    }
+ * this file be licensed under the Apache-2.0 license or a
     @Override
-    public int hashCode() {  
+        private BytesRef nextQueryPoint;
+                return true; // depends only on segment points
+            @Override  
+        }
+        private final BitmapIterator iterator;
+                hasBuffered = false; // Iterator exhausted, no match found
+        };
+        if (field == null) throw new IllegalArgumentException("field must not be null");
+            }
+    public Query rewrite(IndexSearcher searcher) throws IOException {
         return Objects.hash(classHash(), field, bitmap);
-    }
-
-    @Override
-    public long ramBytesUsed() {
-        return RamUsageEstimator.shallowSizeOfInstance(Bitmap64IndexQuery.class) + RamUsageEstimator.sizeOf(field) + bitmap  
+                        if (cost == -1) cost = cardinality * 20; // same heuristic as 32-bit  
+                }  
+            while (nextQueryPoint != null) {
+            public BytesRef next() {
+                PointValues values = reader.getPointValues(field);
+                if (values.getNumIndexDimensions() != 1) {
+        return super.rewrite(searcher);  
+                if (cmpMax > 0) return PointValues.Relation.CELL_OUTSIDE_QUERY;
+    }  
+                if (cmp == 0) return true;
+/**
+            private final BytesRef encoded = new BytesRef(new byte[Long.BYTES]);
+        public void visit(DocIdSetIterator iterator) throws IOException {
+    private class MergePointVisitor implements PointValues.IntersectVisitor {
+            adder = result.grow(count);
+            if (matches(packedValue)) visit(docID);
             .getLongSizeInBytes();
+        if (bitmap == null) throw new IllegalArgumentException("bitmap must not be null");
+        }
+    }  
+    static void checkArgs(String field, Roaring64NavigableMap bitmap) {  
     }
-}  
+                    }
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.util.ArrayUtil;
+        @Override
+    public String toString(String field) {  
+    }
+import org.apache.lucene.search.ScorerSupplier;
+                return PointValues.Relation.CELL_CROSSES_QUERY;  
+    public long ramBytesUsed() {
+ * A query that matches all documents that contain a set of long values represented by a 64-bit bitmap  
+    @Override
+    private static BitmapIterator bitmapEncodedIterator(Roaring64NavigableMap bitmap) {
+            return false;
+        if (visitor.acceptField(field)) visitor.visitLeaf(this);
+package org.opensearch.search.query;
+                        final MergePointVisitor visitor = new MergePointVisitor(result);
+        public void visit(int docID) {  
+                        hasBuffered = true;
+        };
+/*  
+                };  
+                    @Override
+        MergePointVisitor(DocIdSetBuilder result) {  
+            private final byte[] currentBytes = new byte[Long.BYTES];  
+        void advance(byte[] target);
+import org.apache.lucene.search.Scorer;
+import org.apache.lucene.index.LeafReader;
+        }  
+            }  
+        private DocIdSetBuilder.BulkAdder adder;
+                    hasBuffered = false;  
+ *
+import org.apache.lucene.search.Weight;  
+import org.apache.lucene.index.PointValues;
+                    long cost = -1;  
+        this.bitmap = bitmap;
+            @Override
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+            }
+    @Override
+                if (values == null) return null;
+        @Override
+        if (sameClassAs(other) == false) return false;  
+import java.io.IOException;
+                        final DocIdSetBuilder result = new DocIdSetBuilder(reader.maxDoc(), values);
+                }  
+import org.apache.lucene.search.DocIdSetIterator;
+                    public Scorer get(long leadCost) throws IOException {  
+public class Bitmap64IndexQuery extends Query implements Accountable {
+import org.apache.lucene.search.ConstantScoreScorer;
+        return RamUsageEstimator.shallowSizeOfInstance(Bitmap64IndexQuery.class) + RamUsageEstimator.sizeOf(field) + bitmap  
+            adder.add(iterator);  
+    private final String field;
+                int cmp = comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, packedValue, 0);  
+            }  
+ */  
+import org.apache.lucene.util.DocIdSetBuilder;
+            @Override  
+        }  
+            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
+        private final DocIdSetBuilder result;  
+import org.apache.lucene.util.Accountable;
+                    nextQueryPoint = iterator.next();

@@ -1,59 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+ *
+}
+ * specific language governing permissions and limitations
+                irStringConcatenationNode.getArgumentNodes().remove(i);
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+public class DefaultStringConcatenationOptimizationPhase extends IRTreeBaseVisitor<Void> {
+ * Unless required by applicable law or agreed to in writing,
+            if (irArgumentNode instanceof StringConcatenationNode) {
+    public void visitStringConcatenation(StringConcatenationNode irStringConcatenationNode, Void scope) {
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.painless.phase;
-
-import org.opensearch.painless.ir.ExpressionNode;
-import org.opensearch.painless.ir.StringConcatenationNode;
-
-public class DefaultStringConcatenationOptimizationPhase extends IRTreeBaseVisitor<Void> {
-
-    @Override  
-    public void visitStringConcatenation(StringConcatenationNode irStringConcatenationNode, Void scope) {
-        int i = 0;
-
-        while (i < irStringConcatenationNode.getArgumentNodes().size()) {
-            ExpressionNode irArgumentNode = irStringConcatenationNode.getArgumentNodes().get(i);
-
-            if (irArgumentNode instanceof StringConcatenationNode) {
-                irStringConcatenationNode.getArgumentNodes().remove(i);
-                irStringConcatenationNode.getArgumentNodes().addAll(i, ((StringConcatenationNode) irArgumentNode).getArgumentNodes());  
-            } else {
-                i++;
-            }  
-        }
-
-        for (ExpressionNode argumentNode : irStringConcatenationNode.getArgumentNodes()) {  
-            argumentNode.visit(this, scope);
-        }
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+ * GitHub history for details.
+ * not use this file except in compliance with the License.
+ * under the License.  
     }  
-}
+                i++;
+ * compatible open source license.
+import org.opensearch.painless.ir.ExpressionNode;
+ * KIND, either express or implied.  See the License for the
+ *  
+/*
+                irStringConcatenationNode.getArgumentNodes().addAll(i, ((StringConcatenationNode) irArgumentNode).getArgumentNodes());  
+package org.opensearch.painless.phase;
+            } else {
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+            argumentNode.visit(this, scope);
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.painless.ir.StringConcatenationNode;
+ * this work for additional information regarding copyright
+ */  
+    @Override  
+ */
+        }
+ * SPDX-License-Identifier: Apache-2.0
+        int i = 0;
+ * You may obtain a copy of the License at  
+        while (i < irStringConcatenationNode.getArgumentNodes().size()) {
+        for (ExpressionNode argumentNode : irStringConcatenationNode.getArgumentNodes()) {  
+            ExpressionNode irArgumentNode = irStringConcatenationNode.getArgumentNodes().get(i);
+            }  
+/*  
+ * this file be licensed under the Apache-2.0 license or a

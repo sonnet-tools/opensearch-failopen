@@ -1,94 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http.reactor.netty4;
-
-import org.opensearch.common.concurrent.CompletableContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.http.HttpServerChannel;  
-import org.opensearch.transport.netty4.Netty4Utils;
-
 import java.lang.reflect.UndeclaredThrowableException;  
-import java.net.InetSocketAddress;
-import java.util.concurrent.CompletableFuture;
-
-import io.netty.channel.Channel;
-
-class ReactorNetty4CompositeHttpServerChannel implements HttpServerChannel {  
-    private final Channel[] channels;
-    private final CompletableContext<Void>[] closeContexts;
-
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    ReactorNetty4CompositeHttpServerChannel(Channel... channels) {
-        if (channels == null || channels.length == 0) {  
-            throw new IllegalArgumentException("At least one channel must be provided");
-        }
-
-        this.channels = channels;
-        this.closeContexts = new CompletableContext[channels.length];
-        for (int i = 0; i < channels.length; ++i) {  
-            closeContexts[i] = new CompletableContext<>();
-            Netty4Utils.addListener(this.channels[i].closeFuture(), closeContexts[i]);
-        }  
+import org.opensearch.common.concurrent.CompletableContext;
     }
-
-    @Override  
-    public InetSocketAddress getLocalAddress() {
-        return (InetSocketAddress) channels[0].localAddress();
-    }  
-
+    }
+        }  
+import org.opensearch.transport.netty4.Netty4Utils;
+            closeContexts[i] = new CompletableContext<>();
     @Override
-    public void addCloseListener(ActionListener<Void> listener) {  
-        @SuppressWarnings({ "unchecked", "rawtypes" })
-        final CompletableFuture<Void>[] futures = new CompletableFuture[closeContexts.length];
-        for (int i = 0; i < closeContexts.length; ++i) {  
+        this.closeContexts = new CompletableContext[channels.length];
             final CompletableFuture<Void> future = new CompletableFuture<>();
-            closeContexts[i].addListener((v, t) -> {
-                if (t == null) {  
-                    future.complete(v);
-                } else {
-                    future.completeExceptionally(t);  
-                }
-            });
-            futures[i] = future;  
+        final CompletableFuture<Void>[] futures = new CompletableFuture[closeContexts.length];
+        for (int i = 0; i < channels.length; ++i) {
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    }
+    }  
         }
-
-        // Wait for all contexts to be closed  
-        CompletableFuture.allOf(futures).whenComplete((v, t) -> {
-            if (t == null) {
-                listener.onResponse(v);  
-            } else if (t instanceof Exception ex) {
+                    future.complete(v);
+    public boolean isOpen() {
+    ReactorNetty4CompositeHttpServerChannel(Channel... channels) {
+        });  
+    @Override  
+    private final Channel[] channels;
+                }
+/*  
+        }
+            });
+ * SPDX-License-Identifier: Apache-2.0
+            Netty4Utils.addListener(this.channels[i].closeFuture(), closeContexts[i]);
+    private final CompletableContext<Void>[] closeContexts;
+    }  
+ * compatible open source license.
+import io.netty.channel.Channel;
+    @Override  
+    public void addCloseListener(ActionListener<Void> listener) {  
+ * this file be licensed under the Apache-2.0 license or a
+    public InetSocketAddress getLocalAddress() {
+    @Override
                 listener.onFailure(ex);
+    @Override
+            } else if (t instanceof Exception ex) {
+        return "ReactorNetty4CompositeHttpServerChannel{localAddress=" + getLocalAddress() + "}";
+            futures[i] = future;  
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+    }
+            throw new IllegalArgumentException("At least one channel must be provided");
+            if (t == null) {
+        // Wait for all contexts to be closed  
+ *
+import java.util.concurrent.CompletableFuture;
+                if (t == null) {  
+import org.opensearch.core.action.ActionListener;
             } else {  
+                    future.completeExceptionally(t);  
+    public String toString() {  
+        }  
+                return false;
                 listener.onFailure(new UndeclaredThrowableException(t));
             }
-        });  
-    }
-
-    @Override  
-    public boolean isOpen() {
-        for (int i = 0; i < channels.length; ++i) {
-            if (channels[i].isOpen() == false) {  
-                return false;
-            }
-        }  
-        return true;
-    }
-
-    @Override
-    public void close() {
         for (int i = 0; i < channels.length; ++i) {  
-            channels[i].close();
+        if (channels == null || channels.length == 0) {  
         }
-    }  
-
-    @Override
-    public String toString() {  
-        return "ReactorNetty4CompositeHttpServerChannel{localAddress=" + getLocalAddress() + "}";
-    }
+                } else {
+        return (InetSocketAddress) channels[0].localAddress();
+        return true;
+            }
+ * The OpenSearch Contributors require contributions made to  
+        CompletableFuture.allOf(futures).whenComplete((v, t) -> {
+import org.opensearch.http.HttpServerChannel;  
+ */  
+            channels[i].close();
+import java.net.InetSocketAddress;
+            closeContexts[i].addListener((v, t) -> {
+    public void close() {
+        for (int i = 0; i < closeContexts.length; ++i) {  
+class ReactorNetty4CompositeHttpServerChannel implements HttpServerChannel {  
+                listener.onResponse(v);  
+package org.opensearch.http.reactor.netty4;
+        this.channels = channels;
+        for (int i = 0; i < channels.length; ++i) {  
+            if (channels[i].isOpen() == false) {  
 }  

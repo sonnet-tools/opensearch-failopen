@@ -1,75 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+ * software distributed under the License is distributed on an
+                bigArrays.adjustBreaker(-ramBytesUsed(), true);
  * You may obtain a copy of the License at  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util;
-
-import org.apache.lucene.util.Accountable;
 import org.opensearch.core.common.util.BigArray;
-
-import java.util.Collection;
+ * under the License.  
+/*
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;  
-
-/**
- * Base array  
- *
- * @opensearch.internal
  */  
-abstract class AbstractArray implements BigArray {
-
+import org.apache.lucene.util.Accountable;
+ *  
+        this.bigArrays = bigArrays;
+ * not use this file except in compliance with the License.
+}
+package org.opensearch.common.util;
+    }
+                doClose();  
+ * Unless required by applicable law or agreed to in writing,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            }
+    protected abstract void doClose();
+/*  
+ * license agreements. See the NOTICE file distributed with
+ * Licensed to Elasticsearch under one or more contributor  
+    public final void close() {
+        return Collections.emptyList();  
+import java.util.Collection;
+            try {  
+            } finally {
+ * SPDX-License-Identifier: Apache-2.0
+ * this work for additional information regarding copyright
+ * compatible open source license.
+ * Base array  
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+        this.clearOnResize = clearOnResize;  
+import java.util.concurrent.atomic.AtomicBoolean;  
+    }  
+ * the Apache License, Version 2.0 (the "License"); you may
     private final BigArrays bigArrays;  
     public final boolean clearOnResize;
-    private final AtomicBoolean closed = new AtomicBoolean(false);
-
-    AbstractArray(BigArrays bigArrays, boolean clearOnResize) {
-        this.bigArrays = bigArrays;
-        this.clearOnResize = clearOnResize;  
-    }
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * @opensearch.internal
+ * specific language governing permissions and limitations
+ */  
+ *
     @Override  
-    public final void close() {
-        if (closed.compareAndSet(false, true)) {
-            try {  
-                bigArrays.adjustBreaker(-ramBytesUsed(), true);
-            } finally {
-                doClose();  
-            }
-        }
-    }  
-
-    protected abstract void doClose();
-
-    @Override
-    public Collection<Accountable> getChildResources() {
-        return Collections.emptyList();  
+/*  
+ * The OpenSearch Contributors require contributions made to  
+abstract class AbstractArray implements BigArray {
+ */
     }
-}
+ */  
+/**
+    public Collection<Accountable> getChildResources() {
+ * GitHub history for details.
+ *
+        if (closed.compareAndSet(false, true)) {
+        }
+    AbstractArray(BigArrays bigArrays, boolean clearOnResize) {
+ * Modifications Copyright OpenSearch Contributors. See

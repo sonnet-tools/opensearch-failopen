@@ -1,195 +1,180 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing;
-
-import org.apache.lucene.util.CollectionUtil;
-import org.opensearch.action.OriginalIndicesTests;
-import org.opensearch.action.search.SearchShardIterator;  
-import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.List;
-
-import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
-
-public class GroupShardsIteratorTests extends OpenSearchTestCase {  
-
-    public static List<ShardRouting> randomShardRoutings(ShardId shardId) {
+        }
+        {  
+        {
+            }
+            ShardId shardId = new ShardId(index, 2);  
+            for (SearchShardIterator searchShardIterator : iter) {  
+        List<SearchShardIterator> shuffled = new ArrayList<>(sorted);
         return randomShardRoutings(shardId, randomIntBetween(0, 2));  
-    }
-
-    private static List<ShardRouting> randomShardRoutings(ShardId shardId, int numReplicas) {  
-        List<ShardRouting> shardRoutings = new ArrayList<>();
-        shardRoutings.add(TestShardRouting.newShardRouting(shardId, randomAlphaOfLengthBetween(5, 10), true, STARTED));
-        for (int j = 0; j < numReplicas; j++) {  
-            shardRoutings.add(TestShardRouting.newShardRouting(shardId, randomAlphaOfLengthBetween(5, 10), false, STARTED));
-        }
-        return shardRoutings;  
-    }
-
     public void testSize() {  
-        List<ShardIterator> list = new ArrayList<>();
-        Index index = new Index("foo", "na");
+        String[] uuids = generateRandomStringArray(5, 10, false, false);  
         {  
-            ShardId shardId = new ShardId(index, 0);
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 2)));
-        }  
-        list.add(new PlainShardIterator(new ShardId(index, 1), Collections.emptyList()));
-        {
-            ShardId shardId = new ShardId(index, 2);  
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 0)));
-        }
-        index = new Index("foo_1", "na");  
-        {
-            ShardId shardId = new ShardId(index, 0);
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 0)));  
-        }
-        {
-            ShardId shardId = new ShardId(index, 1);  
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 0)));
-        }
-        GroupShardsIterator<ShardIterator> iter = new GroupShardsIterator<>(list);  
         assertEquals(7, iter.totalSizeWith1ForEmpty());
-        assertEquals(5, iter.size());
-        assertEquals(6, iter.totalSize());  
-    }
-
-    public void testIterate() {  
-        List<ShardIterator> list = new ArrayList<>();
-        Index index = new Index("foo", "na");
-        {  
-            ShardId shardId = new ShardId(index, 0);
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));
-        }  
+                            GroupShardsIteratorTests.randomShardRoutings(shardId),
+    private static List<ShardRouting> randomShardRoutings(ShardId shardId, int numReplicas) {  
         list.add(new PlainShardIterator(new ShardId(index, 1), Collections.emptyList()));
+        list.add(new PlainShardIterator(new ShardId(index, 1), Collections.emptyList()));
+            }  
         {
-            ShardId shardId = new ShardId(index, 2);  
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));
-        }
-        {  
-            ShardId shardId = new ShardId(index, 0);
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));
-        }  
-        {
-            ShardId shardId = new ShardId(index, 1);
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));  
-        }
+                }  
         index = new Index("foo_2", "na");
-        {  
-            ShardId shardId = new ShardId(index, 0);
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));
-        }  
-        {
-            ShardId shardId = new ShardId(index, 1);
-            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));  
+                            OriginalIndicesTests.randomOriginalIndices()
+package org.opensearch.cluster.routing;
+    }
         }
-
+ * KIND, either express or implied.  See the License for the
+ *  
+    public static List<ShardRouting> randomShardRoutings(ShardId shardId) {
+import java.util.List;
+    }
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+            assertEquals(actualIterators, list);
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 2)));
+        List<SearchShardIterator> sorted = new ArrayList<>();
+                    }
+        }
+        List<ShardIterator> list = new ArrayList<>();
+        {  
+import java.util.Arrays;  
+                actualIterators.add(shardsIterator);  
+        }  
+                actualIterators.add(shardsIterator);
+        String[] clusters = generateRandomStringArray(5, 10, false, false);
+        GroupShardsIterator<ShardIterator> iter = new GroupShardsIterator<>(list);  
+        }  
+            assertEquals(shuffled, actualIterators);  
+        Arrays.sort(uuids);
+            List<SearchShardIterator> actualIterators = new ArrayList<>();
+        assertEquals(5, iter.size());
+ * ownership. Elasticsearch licenses this file to you under  
+                for (String uuid : uuids) {  
+                    sorted.add(shardIterator);
+        }  
+            GroupShardsIterator<ShardIterator> iter = new GroupShardsIterator<>(list);  
+import java.util.Collections;
+                        SearchShardIterator remoteIterator = new SearchShardIterator(
+            ShardId shardId = new ShardId(index, 1);
+        {
+import org.opensearch.test.OpenSearchTestCase;  
+        {  
+        int numShards = randomIntBetween(1, 10);  
+                actualIterators.add(searchShardIterator);
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 0)));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         Collections.shuffle(list, random());  
         {
-            GroupShardsIterator<ShardIterator> unsorted = new GroupShardsIterator<>(list);
-            GroupShardsIterator<ShardIterator> iter = new GroupShardsIterator<>(list);  
-            List<ShardIterator> actualIterators = new ArrayList<>();
-            for (ShardIterator shardsIterator : iter) {
-                actualIterators.add(shardsIterator);  
-            }
-            assertEquals(actualIterators, list);
-        }  
-        {
-            GroupShardsIterator<ShardIterator> iter = GroupShardsIterator.sortAndCreate(list);
-            List<ShardIterator> actualIterators = new ArrayList<>();  
-            for (ShardIterator shardsIterator : iter) {
-                actualIterators.add(shardsIterator);
-            }  
-            CollectionUtil.timSort(actualIterators);
-            assertEquals(actualIterators, list);
-        }  
-    }
-
-    public void testOrderingWithSearchShardIterators() {  
-        String[] indices = generateRandomStringArray(10, 10, false, false);
-        Arrays.sort(indices);
-        String[] uuids = generateRandomStringArray(5, 10, false, false);  
-        Arrays.sort(uuids);
-        String[] clusters = generateRandomStringArray(5, 10, false, false);
-        Arrays.sort(clusters);  
-
-        List<SearchShardIterator> sorted = new ArrayList<>();
-        int numShards = randomIntBetween(1, 10);  
-        for (int i = 0; i < numShards; i++) {
-            for (String index : indices) {
-                for (String uuid : uuids) {  
-                    ShardId shardId = new ShardId(index, uuid, i);
-                    SearchShardIterator shardIterator = new SearchShardIterator(
-                        null,  
-                        shardId,
-                        GroupShardsIteratorTests.randomShardRoutings(shardId),
-                        OriginalIndicesTests.randomOriginalIndices()  
-                    );
-                    sorted.add(shardIterator);
+import org.opensearch.core.index.Index;
+import org.opensearch.action.OriginalIndicesTests;
+ * compatible open source license.
                     for (String cluster : clusters) {  
-                        SearchShardIterator remoteIterator = new SearchShardIterator(
-                            cluster,
-                            shardId,  
-                            GroupShardsIteratorTests.randomShardRoutings(shardId),
-                            OriginalIndicesTests.randomOriginalIndices()
-                        );  
-                        sorted.add(remoteIterator);
-                    }
-                }  
-            }
+            List<ShardIterator> actualIterators = new ArrayList<>();  
+            assertEquals(sorted, actualIterators);
+        assertEquals(6, iter.totalSize());  
+        index = new Index("foo_1", "na");  
+ * Modifications Copyright OpenSearch Contributors. See
         }
-
-        List<SearchShardIterator> shuffled = new ArrayList<>(sorted);
-        Collections.shuffle(shuffled, random());
+        }  
         {  
-            List<SearchShardIterator> actualIterators = new ArrayList<>();
+            for (SearchShardIterator searchShardIterator : iter) {
+        String[] indices = generateRandomStringArray(10, 10, false, false);
+            for (ShardIterator shardsIterator : iter) {
+        {
+ * You may obtain a copy of the License at  
+        }  
+import java.util.ArrayList;
+ * not use this file except in compliance with the License.
             GroupShardsIterator<SearchShardIterator> iter = new GroupShardsIterator<>(shuffled);
-            for (SearchShardIterator searchShardIterator : iter) {  
-                actualIterators.add(searchShardIterator);
+                actualIterators.add(searchShardIterator);  
+        Arrays.sort(indices);
+import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
+import org.apache.lucene.util.CollectionUtil;
+                        );  
             }
-            assertEquals(shuffled, actualIterators);  
+        List<ShardRouting> shardRoutings = new ArrayList<>();
+            ShardId shardId = new ShardId(index, 1);
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));
+import org.opensearch.action.search.SearchShardIterator;  
+ * Licensed to Elasticsearch under one or more contributor  
+ * this work for additional information regarding copyright
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 0)));
+            CollectionUtil.timSort(actualIterators);
+}
+            for (String index : indices) {
+ */
+                        null,  
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));  
+        List<ShardIterator> list = new ArrayList<>();
+            ShardId shardId = new ShardId(index, 2);  
+            ShardId shardId = new ShardId(index, 0);
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));
+            List<ShardIterator> actualIterators = new ArrayList<>();
+ */  
+            GroupShardsIterator<SearchShardIterator> iter = GroupShardsIterator.sortAndCreate(shuffled);
+                        sorted.add(remoteIterator);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        {
+ * software distributed under the License is distributed on an
+public class GroupShardsIteratorTests extends OpenSearchTestCase {  
+        Index index = new Index("foo", "na");
+ * Unless required by applicable law or agreed to in writing,
+        Index index = new Index("foo", "na");
+        }
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId, 0)));  
+        }  
+            }
+        {
+ * The OpenSearch Contributors require contributions made to  
+    public void testOrderingWithSearchShardIterators() {  
+                        GroupShardsIteratorTests.randomShardRoutings(shardId),
+/*  
+                            cluster,
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));  
+        }
+        for (int i = 0; i < numShards; i++) {
+        Collections.shuffle(shuffled, random());
+        shardRoutings.add(TestShardRouting.newShardRouting(shardId, randomAlphaOfLengthBetween(5, 10), true, STARTED));
+        }
+                    ShardId shardId = new ShardId(index, uuid, i);
+            assertEquals(actualIterators, list);
+        return shardRoutings;  
+            GroupShardsIterator<ShardIterator> iter = GroupShardsIterator.sortAndCreate(list);
+ */  
+            GroupShardsIterator<ShardIterator> unsorted = new GroupShardsIterator<>(list);
+            for (ShardIterator shardsIterator : iter) {
+                        shardId,
+                        OriginalIndicesTests.randomOriginalIndices()  
+ * GitHub history for details.
+        {
+            ShardId shardId = new ShardId(index, 0);
+                    SearchShardIterator shardIterator = new SearchShardIterator(
+                    );
+ *
+ * this file be licensed under the Apache-2.0 license or a
+            ShardId shardId = new ShardId(index, 1);  
+ * SPDX-License-Identifier: Apache-2.0
+        for (int j = 0; j < numReplicas; j++) {  
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));
+    }
+    public void testIterate() {  
+            }
+            List<SearchShardIterator> actualIterators = new ArrayList<>();  
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+            ShardId shardId = new ShardId(index, 0);
+        }  
+ *
+/*
+        Arrays.sort(clusters);  
+                            shardId,  
+            ShardId shardId = new ShardId(index, 0);
+    }
         }
         {
-            List<SearchShardIterator> actualIterators = new ArrayList<>();  
-            GroupShardsIterator<SearchShardIterator> iter = GroupShardsIterator.sortAndCreate(shuffled);
-            for (SearchShardIterator searchShardIterator : iter) {
-                actualIterators.add(searchShardIterator);  
-            }
-            assertEquals(sorted, actualIterators);
-        }  
+            shardRoutings.add(TestShardRouting.newShardRouting(shardId, randomAlphaOfLengthBetween(5, 10), false, STARTED));
+/*  
+ * under the License.  
     }
-}
+            ShardId shardId = new ShardId(index, 0);
+            list.add(new PlainShardIterator(shardId, randomShardRoutings(shardId)));

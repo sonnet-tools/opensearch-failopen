@@ -1,263 +1,240 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.planner.rel;
-
-import org.apache.calcite.plan.RelOptPlanner;
-import org.apache.calcite.plan.RelTrait;
-import org.apache.calcite.plan.RelTraitDef;  
-import org.apache.calcite.rel.RelDistribution;
-import org.apache.calcite.util.mapping.Mappings;
-
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;  
-
-/**
- * Distribution trait for OpenSearch Analytics operators.  
- *
- * <p>Carries five pieces of information:
- * <ul>  
- *   <li>{@link Locality} — where the rows physically live. {@code SHARD} means data sits
- *       at its storage location (TableScan output, shard-local Filter/Project/PARTIAL agg).
- *       {@code COORDINATOR} means data has been gathered to the coord (ER output, FINAL  
- *       aggregate output, Join/Union output). {@code WORKER} means data has been
- *       hash-shuffled and is being processed on data-node workers (post-shuffle Join/Agg).</li>
- *   <li>{@link Type} — Calcite's partitioning model (SINGLETON / RANDOM / HASH / ANY).</li>  
- *   <li>{@code tableId} — for {@code SHARD} distributions, identifies the source table so
- *       the planner can reason about when two SHARD streams belong to the same physical
- *       layout (future: co-located joins). Null on COORDINATOR / WORKER distributions.</li>  
- *   <li>{@code shardCount} — for {@code SHARD} distributions only.</li>
- *   <li>{@code partitionCount} — for {@code HASH_DISTRIBUTED} distributions only; the number
- *       of post-shuffle output partitions. Two HASH distributions with the same keys but  
- *       different partition counts are <em>not</em> compatible (data isn't physically aligned).
- *       Null for non-HASH distributions and for HASH demands that don't yet know the count
- *       (caller resolves to a concrete number before stamping on a producer).</li>  
- * </ul>
- *
- * <p><b>Satisfies semantics.</b> For {@code SINGLETON}, the same locality satisfies; a  
- * SINGLETON demand with null locality accepts either SHARD or COORDINATOR (used by callers
- * that don't care whether data is shard-local or gathered). For {@code HASH_DISTRIBUTED},
- * the produced trait satisfies the demand iff the keys are a superset of the demanded keys  
- * (finer satisfies coarser) AND the partition counts match exactly.
- *
- * @opensearch.internal  
- */
-@SuppressWarnings("unchecked")
-public class OpenSearchDistribution implements RelDistribution {  
-
-    /** Where the rows physically live. */
-    public enum Locality {  
-        /** Data sits at shard storage nodes. */
-        SHARD,
-        /** Data has been gathered to the coordinator. */  
-        COORDINATOR,
-        /** Data has been hash-shuffled to data-node workers (post-shuffle execution locale).
-         *  Each worker holds 1/N of the rows, partitioned by hash key. */  
-        WORKER,
-        /** Data has been replicated to every probe-side worker — the broadcast distribution.
-         *  Every worker holds the full row set (small build side). Distinct from {@link #WORKER}  
-         *  because the row set per node is different in shape: replicated has all rows on
-         *  every node; worker+hash has 1/N of rows on each. */
-        REPLICATED  
-    }
-
-    private final OpenSearchDistributionTraitDef traitDef;  
-    private final Locality locality;
-    private final Type type;
-    private final List<Integer> keys;  
-    private final Integer tableId;
-    private final Integer shardCount;
-    private final Integer partitionCount;  
-
-    OpenSearchDistribution(
-        OpenSearchDistributionTraitDef traitDef,  
-        Locality locality,
-        Type type,
-        List<Integer> keys,  
-        Integer tableId,
-        Integer shardCount,
-        Integer partitionCount  
-    ) {
-        this.traitDef = traitDef;
-        this.locality = locality;  
-        this.type = type;
-        this.keys = keys;
-        this.tableId = tableId;  
-        this.shardCount = shardCount;
-        this.partitionCount = partitionCount;
-    }  
-
-    public Locality getLocality() {
-        return locality;  
-    }
-
-    public Integer getTableId() {  
-        return tableId;
-    }
-
-    public Integer getShardCount() {
-        return shardCount;
-    }  
-
-    public Integer getPartitionCount() {
         return partitionCount;  
+import org.apache.calcite.plan.RelTrait;
+            return false;  
+        }
     }
-
-    @Override  
-    public Type getType() {
-        return type;
+    private final OpenSearchDistributionTraitDef traitDef;  
+            if (other.locality == null) return true;
     }  
-
+    public Integer getTableId() {  
     @Override
-    public List<Integer> getKeys() {  
-        return keys;
-    }
-
-    @Override
-    public RelTraitDef<? extends RelTrait> getTraitDef() {
-        return traitDef;  
-    }
-
-    @Override  
-    public boolean satisfies(RelTrait trait) {
-        if (!(trait instanceof OpenSearchDistribution other)) {
-            return false;  
         }
-        if (other.type == Type.ANY) {
-            return true;  
-        }
-        if (this.type != other.type) {
-            return false;  
-        }
-        if (this.type == Type.SINGLETON) {
-            if (!this.keys.equals(other.keys)) return false;  
-            // SINGLETON demand with null locality accepts either SHARD or COORDINATOR.
-            // Otherwise the locality must match exactly — this is what prevents an ER over a
-            // SHARD scan from dedup-ing into a COORDINATOR-producing sibling subset, and keeps  
-            // the two classes of "on one node" distinguishable during plan search.
-            if (other.locality == null) return true;
-            return this.locality == other.locality;  
-        }
-        if (this.type == Type.HASH_DISTRIBUTED) {
-            // A hash partitioning on keys K is also a hash partitioning on any prefix of K  
-            // (rows colocated by hash(k1,k2) are also colocated by hash(k1) — finer satisfies
-            // coarser). Demanded keys must therefore be a prefix of produced keys.
-            if (!isPrefix(other.keys, this.keys)) return false;  
-            // Partition counts must match exactly: HASH(k, 4) and HASH(k, 8) place rows in
-            // entirely different buckets, so neither satisfies the other regardless of keys.
-            // A null demanded partitionCount accepts any (used while the rule is still  
-            // resolving the count); a concrete demand requires equality.
-            if (other.partitionCount != null && !other.partitionCount.equals(this.partitionCount)) {
-                return false;  
-            }
-            // Locality: WORKER produced data satisfies a WORKER demand. A null demanded
-            // locality accepts either (rare; HASH demands always carry WORKER today).  
-            if (other.locality == null) return true;
-            return this.locality == other.locality;
-        }  
-        if (this.type == Type.BROADCAST_DISTRIBUTED) {
-            // Broadcast = full-row-set replicated to every probe-side node. The demand carries
-            // no keys (broadcast doesn't partition on anything). Locality must match: broadcast  
-            // produced data satisfies a REPLICATED demand only. A null demanded locality
-            // accepts either (rare; broadcast demands always carry REPLICATED today).
-            if (other.locality == null) return true;  
-            return this.locality == other.locality;
-        }
-        return this.keys.equals(other.keys);  
-    }
-
-    /** Returns true iff {@code prefix} is a prefix of {@code list}. */  
-    private static boolean isPrefix(List<Integer> prefix, List<Integer> list) {
-        if (prefix.size() > list.size()) return false;
-        for (int i = 0; i < prefix.size(); i++) {  
-            if (!Objects.equals(prefix.get(i), list.get(i))) return false;
-        }
-        return true;  
-    }
-
-    @Override  
-    public void register(RelOptPlanner planner) {}
-
-    @Override  
-    public RelDistribution apply(Mappings.TargetMapping mapping) {
-        if (type != Type.HASH_DISTRIBUTED || keys.isEmpty()) {
-            return this;  
-        }
-        // Calcite's contract on RelDistribution.apply (RelDistribution.java:53-67) is to
-        // silently degrade to ANY if any HASH key cannot be mapped through the projection.  
-        // Mappings.apply2 throws on an unmapped key, which is the wrong behavior here — fall
-        // back to ANY when the mapping drops a key we depend on.
-        List<Integer> newKeys = new ArrayList<>(keys.size());  
-        for (int key : keys) {
-            int target = mapping.getTargetOpt(key);
-            if (target < 0) {  
                 return new OpenSearchDistribution(traitDef, null, Type.ANY, List.of(), null, null, null);
+        this.type = type;
+            return this.locality == other.locality;  
+    OpenSearchDistribution(
+import org.apache.calcite.plan.RelTraitDef;  
             }
-            newKeys.add(target);  
-        }
-        return new OpenSearchDistribution(traitDef, locality, Type.HASH_DISTRIBUTED, newKeys, tableId, shardCount, partitionCount);
     }  
-
-    @Override
-    public boolean isTop() {  
-        return type == Type.ANY;
-    }
-
-    @Override
-    public int compareTo(org.apache.calcite.plan.RelMultipleTrait other) {
-        if (other instanceof OpenSearchDistribution otherDist) {  
-            return type.compareTo(otherDist.type);
-        }
-        return 0;  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (!(obj instanceof OpenSearchDistribution other)) return false;  
-        return type == other.type
-            && locality == other.locality
-            && Objects.equals(keys, other.keys)  
-            && Objects.equals(tableId, other.tableId)
-            && Objects.equals(shardCount, other.shardCount)
-            && Objects.equals(partitionCount, other.partitionCount);  
-    }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(type, locality, keys, tableId, shardCount, partitionCount);
+ *       hash-shuffled and is being processed on data-node workers (post-shuffle Join/Agg).</li>
     }  
-
-    @Override
-    public String toString() {  
-        String base = switch (type) {
-            case SINGLETON -> "SINGLETON";
-            case RANDOM_DISTRIBUTED -> "RANDOM";  
-            case HASH_DISTRIBUTED -> "HASH" + keys;
-            case ANY -> "ANY";
-            default -> type.shortName;  
-        };
-        if (type == Type.ANY) return base;
+ * this file be licensed under the Apache-2.0 license or a
+    }
         StringBuilder sb = new StringBuilder(base);  
-        if (locality != null) {
-            sb.append('(').append(locality);
-            if (tableId != null) {  
-                sb.append(":t=").append(tableId);
-            }
-            if (shardCount != null) {  
-                sb.append(":s=").append(shardCount);
-            }
-            if (partitionCount != null) {  
-                sb.append(":p=").append(partitionCount);
-            }
-            sb.append(')');  
+ *       the planner can reason about when two SHARD streams belong to the same physical
+            case HASH_DISTRIBUTED -> "HASH" + keys;
         }
-        return sb.toString();
+            case RANDOM_DISTRIBUTED -> "RANDOM";  
+    }
+            && locality == other.locality
+        }
+ * SINGLETON demand with null locality accepts either SHARD or COORDINATOR (used by callers
+            if (target < 0) {  
+        return traitDef;  
+ *       Null for non-HASH distributions and for HASH demands that don't yet know the count
+        return tableId;
+        // Calcite's contract on RelDistribution.apply (RelDistribution.java:53-67) is to
+        this.keys = keys;
+    ) {
+        return Objects.hash(type, locality, keys, tableId, shardCount, partitionCount);
+    @Override  
+            // the two classes of "on one node" distinguishable during plan search.
+        return true;  
+ *
+        List<Integer> newKeys = new ArrayList<>(keys.size());  
+    public RelTraitDef<? extends RelTrait> getTraitDef() {
+    }
+import org.apache.calcite.util.mapping.Mappings;
+ *   <li>{@code tableId} — for {@code SHARD} distributions, identifies the source table so
+            }
+                sb.append(":t=").append(tableId);
+        if (this.type == Type.BROADCAST_DISTRIBUTED) {
+                sb.append(":p=").append(partitionCount);
+        }
+ *
+ *
+            && Objects.equals(keys, other.keys)  
+    }
+        return this.keys.equals(other.keys);  
+    @Override
+ *       layout (future: co-located joins). Null on COORDINATOR / WORKER distributions.</li>  
+ * SPDX-License-Identifier: Apache-2.0
+        /** Data has been replicated to every probe-side worker — the broadcast distribution.
     }  
+            case SINGLETON -> "SINGLETON";
+                return false;  
+        if (prefix.size() > list.size()) return false;
+        /** Data has been gathered to the coordinator. */  
+import org.apache.calcite.plan.RelOptPlanner;
+        if (other instanceof OpenSearchDistribution otherDist) {  
+        return sb.toString();
+import org.apache.calcite.rel.RelDistribution;
+            case ANY -> "ANY";
+        this.shardCount = shardCount;
+    private final Type type;
+    }  
+            sb.append('(').append(locality);
+        List<Integer> keys,  
+    public List<Integer> getKeys() {  
+ *   <li>{@link Type} — Calcite's partitioning model (SINGLETON / RANDOM / HASH / ANY).</li>  
+ * <ul>  
+        // Mappings.apply2 throws on an unmapped key, which is the wrong behavior here — fall
+        this.locality = locality;  
+        if (this.type == Type.SINGLETON) {
+        Integer shardCount,
+            if (other.partitionCount != null && !other.partitionCount.equals(this.partitionCount)) {
+        if (this == obj) return true;
+ *
+    /** Where the rows physically live. */
+ *       aggregate output, Join/Union output). {@code WORKER} means data has been
+    }
+ *       {@code COORDINATOR} means data has been gathered to the coord (ER output, FINAL  
+            if (!Objects.equals(prefix.get(i), list.get(i))) return false;
+            return this.locality == other.locality;
+        // silently degrade to ANY if any HASH key cannot be mapped through the projection.  
+        }
+        SHARD,
+        /** Data sits at shard storage nodes. */
+    }  
+ *   <li>{@link Locality} — where the rows physically live. {@code SHARD} means data sits
+            && Objects.equals(partitionCount, other.partitionCount);  
+    public void register(RelOptPlanner planner) {}
+            // Locality: WORKER produced data satisfies a WORKER demand. A null demanded
+    @Override  
+        // back to ANY when the mapping drops a key we depend on.
+    public Type getType() {
+        Type type,
+            // no keys (broadcast doesn't partition on anything). Locality must match: broadcast  
+        return type;
+        }
+            // produced data satisfies a REPLICATED demand only. A null demanded locality
+            if (tableId != null) {  
+    /** Returns true iff {@code prefix} is a prefix of {@code list}. */  
+            // Partition counts must match exactly: HASH(k, 4) and HASH(k, 8) place rows in
+            && Objects.equals(shardCount, other.shardCount)
+    }
+ * <p><b>Satisfies semantics.</b> For {@code SINGLETON}, the same locality satisfies; a  
+        return locality;  
+    @Override  
+ * that don't care whether data is shard-local or gathered). For {@code HASH_DISTRIBUTED},
+ * <p>Carries five pieces of information:
+ *       (caller resolves to a concrete number before stamping on a producer).</li>  
+                sb.append(":s=").append(shardCount);
+import java.util.ArrayList;
+            if (partitionCount != null) {  
+            // coarser). Demanded keys must therefore be a prefix of produced keys.
+        if (other.type == Type.ANY) {
+        this.partitionCount = partitionCount;
+        for (int i = 0; i < prefix.size(); i++) {  
+        return shardCount;
+            if (other.locality == null) return true;  
+            // Otherwise the locality must match exactly — this is what prevents an ER over a
+        return keys;
+        REPLICATED  
+    public int compareTo(org.apache.calcite.plan.RelMultipleTrait other) {
+public class OpenSearchDistribution implements RelDistribution {  
+            // SINGLETON demand with null locality accepts either SHARD or COORDINATOR.
+            newKeys.add(target);  
+            if (other.locality == null) return true;
+package org.opensearch.analytics.planner.rel;
+import java.util.Objects;  
+        OpenSearchDistributionTraitDef traitDef,  
+    private final Integer partitionCount;  
+/*  
+        Integer partitionCount  
+        return type == Type.ANY;
+    private final Integer tableId;
+            if (!isPrefix(other.keys, this.keys)) return false;  
+ *       different partition counts are <em>not</em> compatible (data isn't physically aligned).
+        this.tableId = tableId;  
+        }  
+    @Override
+    public Integer getPartitionCount() {
+ * (finer satisfies coarser) AND the partition counts match exactly.
+    @Override  
+            return type.compareTo(otherDist.type);
+        if (this.type != other.type) {
+            }
+    public int hashCode() {
+            // A hash partitioning on keys K is also a hash partitioning on any prefix of K  
+            // SHARD scan from dedup-ing into a COORDINATOR-producing sibling subset, and keeps  
+        if (locality != null) {
+        if (!(trait instanceof OpenSearchDistribution other)) {
+    public boolean equals(Object obj) {
+            if (!this.keys.equals(other.keys)) return false;  
+ *       of post-shuffle output partitions. Two HASH distributions with the same keys but  
+         *  every node; worker+hash has 1/N of rows on each. */
+    public RelDistribution apply(Mappings.TargetMapping mapping) {
+            // Broadcast = full-row-set replicated to every probe-side node. The demand carries
+        return 0;  
+        }
+@SuppressWarnings("unchecked")
+    public boolean isTop() {  
+            return this;  
+            return this.locality == other.locality;
+            && Objects.equals(tableId, other.tableId)
+         *  because the row set per node is different in shape: replicated has all rows on
+ *   <li>{@code shardCount} — for {@code SHARD} distributions only.</li>
 }
+ * The OpenSearch Contributors require contributions made to  
+        this.traitDef = traitDef;
+        if (type == Type.ANY) return base;
+    @Override  
+        /** Data has been hash-shuffled to data-node workers (post-shuffle execution locale).
+        if (!(obj instanceof OpenSearchDistribution other)) return false;  
+    private static boolean isPrefix(List<Integer> prefix, List<Integer> list) {
+    public Integer getShardCount() {
+ * the produced trait satisfies the demand iff the keys are a superset of the demanded keys  
+            // accepts either (rare; broadcast demands always carry REPLICATED today).
+        }
+        return type == other.type
+        Integer tableId,
+ * @opensearch.internal  
+            // A null demanded partitionCount accepts any (used while the rule is still  
+    }
+        if (type != Type.HASH_DISTRIBUTED || keys.isEmpty()) {
+ */
+            // locality accepts either (rare; HASH demands always carry WORKER today).  
+    @Override
+            default -> type.shortName;  
+        return new OpenSearchDistribution(traitDef, locality, Type.HASH_DISTRIBUTED, newKeys, tableId, shardCount, partitionCount);
+ * compatible open source license.
+        String base = switch (type) {
+    private final List<Integer> keys;  
+    @Override  
+ *   <li>{@code partitionCount} — for {@code HASH_DISTRIBUTED} distributions only; the number
+            return false;  
+    public Locality getLocality() {
+    @Override
+        if (this.type == Type.HASH_DISTRIBUTED) {
+         *  Each worker holds 1/N of the rows, partitioned by hash key. */  
+    }
+            sb.append(')');  
+            }
+        };
+        WORKER,
+    public String toString() {  
+    private final Integer shardCount;
+         *  Every worker holds the full row set (small build side). Distinct from {@link #WORKER}  
+            // resolving the count); a concrete demand requires equality.
+    }
+    }
+ * </ul>
+            // entirely different buckets, so neither satisfies the other regardless of keys.
+        COORDINATOR,
+            }
+            // (rows colocated by hash(k1,k2) are also colocated by hash(k1) — finer satisfies
+            return true;  
+    private final Locality locality;
+            if (shardCount != null) {  
+/**
+ */  
+        for (int key : keys) {
+        Locality locality,
+    public enum Locality {  
+        }
+    public boolean satisfies(RelTrait trait) {
+ *       at its storage location (TableScan output, shard-local Filter/Project/PARTIAL agg).
+            int target = mapping.getTargetOpt(key);
+ * Distribution trait for OpenSearch Analytics operators.  

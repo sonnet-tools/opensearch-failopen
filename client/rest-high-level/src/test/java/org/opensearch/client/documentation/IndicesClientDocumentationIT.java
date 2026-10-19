@@ -1,3031 +1,2562 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.documentation;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.LatchedActionListener;
-import org.opensearch.action.admin.indices.alias.Alias;  
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions;
-import org.opensearch.action.admin.indices.alias.get.GetAliasesRequest;  
-import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
-import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheResponse;
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;  
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.admin.indices.flush.FlushResponse;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;  
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeResponse;
-import org.opensearch.action.admin.indices.open.OpenIndexRequest;
-import org.opensearch.action.admin.indices.open.OpenIndexResponse;  
-import org.opensearch.action.admin.indices.refresh.RefreshRequest;
-import org.opensearch.action.admin.indices.refresh.RefreshResponse;
-import org.opensearch.action.admin.indices.settings.get.GetSettingsRequest;  
-import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.admin.indices.shrink.ResizeRequest;  
-import org.opensearch.action.admin.indices.shrink.ResizeResponse;
-import org.opensearch.action.admin.indices.shrink.ResizeType;
-import org.opensearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;  
-import org.opensearch.action.admin.indices.validate.query.QueryExplanation;
-import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequest;
-import org.opensearch.action.admin.indices.validate.query.ValidateQueryResponse;  
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
-import org.opensearch.client.GetAliasesResponse;
-import org.opensearch.client.OpenSearchRestHighLevelClientTestCase;
-import org.opensearch.client.RequestOptions;  
-import org.opensearch.client.RestHighLevelClient;
-import org.opensearch.client.indices.AnalyzeRequest;
-import org.opensearch.client.indices.AnalyzeResponse;  
-import org.opensearch.client.indices.CloseIndexRequest;
-import org.opensearch.client.indices.CloseIndexResponse;
-import org.opensearch.client.indices.CreateIndexRequest;  
-import org.opensearch.client.indices.CreateIndexResponse;
-import org.opensearch.client.indices.DeleteAliasRequest;
-import org.opensearch.client.indices.DeleteComposableIndexTemplateRequest;  
-import org.opensearch.client.indices.DetailAnalyzeResponse;
-import org.opensearch.client.indices.GetComposableIndexTemplateRequest;
-import org.opensearch.client.indices.GetComposableIndexTemplatesResponse;  
-import org.opensearch.client.indices.GetFieldMappingsRequest;
-import org.opensearch.client.indices.GetFieldMappingsResponse;
-import org.opensearch.client.indices.GetIndexRequest;  
-import org.opensearch.client.indices.GetIndexResponse;
-import org.opensearch.client.indices.GetIndexTemplatesRequest;
-import org.opensearch.client.indices.GetIndexTemplatesResponse;  
-import org.opensearch.client.indices.GetMappingsRequest;
-import org.opensearch.client.indices.GetMappingsResponse;
-import org.opensearch.client.indices.IndexTemplateMetadata;  
-import org.opensearch.client.indices.IndexTemplatesExistRequest;
-import org.opensearch.client.indices.PutComponentTemplateRequest;
-import org.opensearch.client.indices.PutComposableIndexTemplateRequest;  
-import org.opensearch.client.indices.PutIndexTemplateRequest;
-import org.opensearch.client.indices.PutMappingRequest;
-import org.opensearch.client.indices.SimulateIndexTemplateRequest;  
-import org.opensearch.client.indices.SimulateIndexTemplateResponse;
-import org.opensearch.client.indices.rollover.RolloverRequest;
-import org.opensearch.client.indices.rollover.RolloverResponse;  
-import org.opensearch.cluster.metadata.AliasMetadata;
-import org.opensearch.cluster.metadata.ComponentTemplate;
-import org.opensearch.cluster.metadata.ComposableIndexTemplate;  
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.metadata.Template;
-import org.opensearch.common.compress.CompressedXContent;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.unit.ByteSizeUnit;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.index.query.QueryBuilders;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;  
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;  
-
-/**
- * This class is used to generate the Java Indices API documentation.  
- * You need to wrap your code between two tags like:
- * // tag::example
- * // end::example  
- * <p>
- * Where example is your tag name.
- * <p>  
- * Then in the documentation, you can extract what is between tag and end tags with
- * ["source","java",subs="attributes,callouts,macros"]
- * --------------------------------------------------  
- * include-tagged::{doc-tests}/IndicesClientDocumentationIT.java[example]
- * --------------------------------------------------
- * <p>  
- * The column width of the code block is 84. If the code contains a line longer
- * than 84, the line will be cut and a horizontal scroll bar will be displayed.
- * (the code indentation of the tag is not included in the width)  
- */
-public class IndicesClientDocumentationIT extends OpenSearchRestHighLevelClientTestCase {
-
-    public void testIndicesExist() throws IOException {
-        RestHighLevelClient client = highLevelClient();
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());  
-        }
-
-        {  
-            // tag::indices-exists-request
-            GetIndexRequest request = new GetIndexRequest("twitter"); // <1>
-            // end::indices-exists-request  
-
-            IndicesOptions indicesOptions = IndicesOptions.strictExpand();
-            // tag::indices-exists-request-optionals  
-            request.local(false); // <1>
-            request.humanReadable(true); // <2>
-            request.includeDefaults(false); // <3>  
-            request.indicesOptions(indicesOptions); // <4>
-            // end::indices-exists-request-optionals
-
-            // tag::indices-exists-execute
-            boolean exists = client.indices().exists(request, RequestOptions.DEFAULT);
-            // end::indices-exists-execute  
-            assertTrue(exists);
-        }
-    }  
-
-    public void testIndicesExistAsync() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
-            assertTrue(createIndexResponse.isAcknowledged());
-        }
-
-        {
-            GetIndexRequest request = new GetIndexRequest("twitter");
-
-            // tag::indices-exists-execute-listener
-            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
-                @Override  
-                public void onResponse(Boolean exists) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-            // end::indices-exists-execute-listener
-
-            // Replace the empty listener by a blocking listener in test  
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::indices-exists-execute-async
-            client.indices().existsAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::indices-exists-execute-async  
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }  
-    }
-
-    public void testDeleteIndex() throws IOException {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("posts"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());
-        }  
-
-        {
-            // tag::delete-index-request  
-            DeleteIndexRequest request = new DeleteIndexRequest("posts"); // <1>
-            // end::delete-index-request
-
-            // tag::delete-index-request-timeout
-            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
-            request.timeout("2m"); // <2>  
-            // end::delete-index-request-timeout
-            // tag::delete-index-request-masterTimeout
-            request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
-            request.clusterManagerNodeTimeout("1m"); // <2>
-            // end::delete-index-request-masterTimeout
-            // tag::delete-index-request-indicesOptions  
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::delete-index-request-indicesOptions
-
-            // tag::delete-index-execute
-            AcknowledgedResponse deleteIndexResponse = client.indices().delete(request, RequestOptions.DEFAULT);
-            // end::delete-index-execute  
-
-            // tag::delete-index-response
-            boolean acknowledged = deleteIndexResponse.isAcknowledged(); // <1>  
-            // end::delete-index-response
-            assertTrue(acknowledged);
-        }  
-
-        {
-            // tag::delete-index-notfound  
-            try {
-                DeleteIndexRequest request = new DeleteIndexRequest("does_not_exist");
-                client.indices().delete(request, RequestOptions.DEFAULT);  
-            } catch (OpenSearchException exception) {
-                if (exception.status() == RestStatus.NOT_FOUND) {
-                    // <1>  
-                }
-            }
-            // end::delete-index-notfound  
-        }
-    }
-
-    public void testDeleteIndexAsync() throws Exception {
-        final RestHighLevelClient client = highLevelClient();
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("posts"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());  
-        }
-
-        {  
-            DeleteIndexRequest request = new DeleteIndexRequest("posts");
-
-            // tag::delete-index-execute-listener  
-            ActionListener<AcknowledgedResponse> listener =
-                    new ActionListener<AcknowledgedResponse>() {
-                @Override  
-                public void onResponse(AcknowledgedResponse deleteIndexResponse) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-            // end::delete-index-execute-listener
-
-            // Replace the empty listener by a blocking listener in test  
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::delete-index-execute-async
-            client.indices().deleteAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::delete-index-execute-async  
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }  
-    }
-
-    public void testCreateIndex() throws IOException {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            // tag::create-index-request
-            CreateIndexRequest request = new CreateIndexRequest("twitter"); // <1>
-            // end::create-index-request  
-
-            // tag::create-index-request-settings
-            request.settings(Settings.builder() // <1>  
-                .put("index.number_of_shards", 3)
-                .put("index.number_of_replicas", 2)
-            );  
-            // end::create-index-request-settings
-
-            {  
-                // tag::create-index-request-mappings
-                request.mapping(// <1>
-                        """  
-                        {
-                          "properties": {
-                            "message": {  
-                              "type": "text"
-                            }
-                          }  
-                        }""", // <2>
-                        MediaTypeRegistry.JSON);
-                // end::create-index-request-mappings  
-                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
-                assertTrue(createIndexResponse.isAcknowledged());
-            }  
-
-            {
-                request = new CreateIndexRequest("twitter2");  
-                //tag::create-index-mappings-map
-                Map<String, Object> message = new HashMap<>();
-                message.put("type", "text");  
-                Map<String, Object> properties = new HashMap<>();
-                properties.put("message", message);
-                Map<String, Object> mapping = new HashMap<>();  
-                mapping.put("properties", properties);
-                request.mapping(mapping); // <1>
-                //end::create-index-mappings-map  
-                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
-                assertTrue(createIndexResponse.isAcknowledged());
-            }  
-            {
-                request = new CreateIndexRequest("twitter3");
-                //tag::create-index-mappings-xcontent  
-                XContentBuilder builder = XContentFactory.jsonBuilder();
-                builder.startObject();
-                {  
-                    builder.startObject("properties");
-                    {
-                        builder.startObject("message");  
-                        {
-                            builder.field("type", "text");
-                        }  
-                        builder.endObject();
                     }
-                    builder.endObject();  
-                }
-                builder.endObject();
-                request.mapping(builder); // <1>  
-                //end::create-index-mappings-xcontent
-                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
-                assertTrue(createIndexResponse.isAcknowledged());  
-            }
-
-            request = new CreateIndexRequest("twitter5");  
-            // tag::create-index-request-aliases
-            request.alias(new Alias("twitter_alias").filter(QueryBuilders.termQuery("user", "foobar")));  // <1>
-            // end::create-index-request-aliases  
-
-            // tag::create-index-request-timeout
-            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>  
-            // end::create-index-request-timeout
-            // tag::create-index-request-masterTimeout
-            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>  
-            // end::create-index-request-masterTimeout
-            // tag::create-index-request-waitForActiveShards
-            request.waitForActiveShards(ActiveShardCount.from(2)); // <1>  
-            request.waitForActiveShards(ActiveShardCount.DEFAULT); // <2>
-            // end::create-index-request-waitForActiveShards
-            {  
-                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
-                assertTrue(createIndexResponse.isAcknowledged());
-            }  
-
-            request = new CreateIndexRequest("twitter6");
-            // tag::create-index-whole-source  
-            request.source("""
-                    {
-                        "settings" : {  
-                            "number_of_shards" : 1,
-                            "number_of_replicas" : 0
-                        },  
-                        "mappings" : {
-                            "properties" : {
-                                "message" : { "type" : "text" }  
-                            }
-                        },
-                        "aliases" : {  
-                            "twitter_alias" : {}
-                        }
-                    }""", MediaTypeRegistry.JSON); // <1>  
-            // end::create-index-whole-source
-
-            // tag::create-index-execute  
-            CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
-            // end::create-index-execute
-
-            // tag::create-index-response
-            boolean acknowledged = createIndexResponse.isAcknowledged(); // <1>
-            boolean shardsAcknowledged = createIndexResponse.isShardsAcknowledged(); // <2>  
-            // end::create-index-response
-            assertTrue(acknowledged);
-            assertTrue(shardsAcknowledged);  
-        }
-    }
-
-    public void testCreateIndexAsync() throws Exception {
-        final RestHighLevelClient client = highLevelClient();
-
-        {
-            CreateIndexRequest request = new CreateIndexRequest("twitter");
-
-            // tag::create-index-execute-listener
-            ActionListener<CreateIndexResponse> listener =
-                    new ActionListener<CreateIndexResponse>() {  
-
-                @Override
-                public void onResponse(CreateIndexResponse createIndexResponse) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-            // end::create-index-execute-listener  
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::create-index-execute-async  
-            client.indices().createAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::create-index-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }  
-
-    public void testPutMapping() throws IOException {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
-            assertTrue(createIndexResponse.isAcknowledged());
-        }
-
-        {
-            // tag::put-mapping-request
-            PutMappingRequest request = new PutMappingRequest("twitter"); // <1>  
-            // end::put-mapping-request
-
-            {  
-                // tag::put-mapping-request-source
-                request.source(
-                    """  
-                    {
-                      "properties": {
-                        "message": {  
-                          "type": "text"
-                        }
-                      }  
-                    }""", // <1>
-                    MediaTypeRegistry.JSON);
-                // end::put-mapping-request-source  
-                AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);
-                assertTrue(putMappingResponse.isAcknowledged());
-            }  
-
-            {
-                //tag::put-mapping-map  
-                Map<String, Object> jsonMap = new HashMap<>();
-                Map<String, Object> message = new HashMap<>();
-                message.put("type", "text");  
-                Map<String, Object> properties = new HashMap<>();
-                properties.put("message", message);
-                jsonMap.put("properties", properties);  
-                request.source(jsonMap); // <1>
-                //end::put-mapping-map
-                AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
-                assertTrue(putMappingResponse.isAcknowledged());
-            }
-            {  
-                //tag::put-mapping-xcontent
-                XContentBuilder builder = XContentFactory.jsonBuilder();
-                builder.startObject();  
-                {
-                    builder.startObject("properties");
-                    {  
-                        builder.startObject("message");
-                        {
-                            builder.field("type", "text");  
-                        }
-                        builder.endObject();
-                    }  
-                    builder.endObject();
-                }
-                builder.endObject();  
-                request.source(builder); // <1>
-                //end::put-mapping-xcontent
-                AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
-                assertTrue(putMappingResponse.isAcknowledged());
-            }
-
-            // tag::put-mapping-request-timeout
-            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
-            // end::put-mapping-request-timeout  
-
-            // tag::put-mapping-request-masterTimeout
-            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>  
-            // end::put-mapping-request-masterTimeout
-
-            // tag::put-mapping-execute  
-            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);
-            // end::put-mapping-execute
-
-            // tag::put-mapping-response
-            boolean acknowledged = putMappingResponse.isAcknowledged(); // <1>
-            // end::put-mapping-response  
-            assertTrue(acknowledged);
-        }
-    }  
-
-    public void testPutMappingAsync() throws Exception {
-        final RestHighLevelClient client = highLevelClient();  
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
-            assertTrue(createIndexResponse.isAcknowledged());
-        }
-
-        {
-            PutMappingRequest request = new PutMappingRequest("twitter");
-
-            // tag::put-mapping-execute-listener
-            ActionListener<AcknowledgedResponse> listener =
-                new ActionListener<AcknowledgedResponse>() {  
-                    @Override
-                    public void onResponse(AcknowledgedResponse putMappingResponse) {
-                        // <1>  
-                    }
-
-                    @Override  
-                    public void onFailure(Exception e) {
-                        // <2>
-                    }  
-                };
-            // end::put-mapping-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::put-mapping-execute-async
-            client.indices().putMappingAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::put-mapping-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-        }
-    }
-
-    public void testGetMapping() throws IOException {
-        RestHighLevelClient client = highLevelClient();
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());  
-            PutMappingRequest request = new PutMappingRequest("twitter");
-            request.source("{ \"properties\": { \"message\": { \"type\": \"text\" } } }", MediaTypeRegistry.JSON);
-            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
-            assertTrue(putMappingResponse.isAcknowledged());
-        }
-
-        {
-            // tag::get-mappings-request
-            GetMappingsRequest request = new GetMappingsRequest(); // <1>  
-            request.indices("twitter"); // <2>
-            // end::get-mappings-request
-
-            // tag::get-mappings-request-masterTimeout
-            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
-            // end::get-mappings-request-masterTimeout  
-
-            // tag::get-mappings-request-indicesOptions
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
-            // end::get-mappings-request-indicesOptions
-
-            // tag::get-mappings-execute  
-            GetMappingsResponse getMappingResponse = client.indices().getMapping(request, RequestOptions.DEFAULT);
-            // end::get-mappings-execute
-
-            // tag::get-mappings-response
-            Map<String, MappingMetadata> allMappings = getMappingResponse.mappings(); // <1>
-            MappingMetadata indexMapping = allMappings.get("twitter"); // <2>  
-            Map<String, Object> mapping = indexMapping.sourceAsMap(); // <3>
-            // end::get-mappings-response
-
-            Map<String, String> type = new HashMap<>();
-            type.put("type", "text");
-            Map<String, Object> field = new HashMap<>();  
-            field.put("message", type);
-            Map<String, Object> expected = new HashMap<>();
-            expected.put("properties", field);  
-            assertThat(mapping, equalTo(expected));
-        }
-    }  
-
-    public void testGetMappingAsync() throws Exception {
-        final RestHighLevelClient client = highLevelClient();  
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
-            assertTrue(createIndexResponse.isAcknowledged());
-            PutMappingRequest request = new PutMappingRequest("twitter");
-            request.source("{ \"properties\": { \"message\": { \"type\": \"text\" } } }", MediaTypeRegistry.JSON);  
-            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);
-            assertTrue(putMappingResponse.isAcknowledged());
-        }  
-
-        {
-            GetMappingsRequest request = new GetMappingsRequest();  
-            request.indices("twitter");
-
-            // tag::get-mappings-execute-listener  
-            ActionListener<GetMappingsResponse> listener =
-                new ActionListener<GetMappingsResponse>() {
-                    @Override  
-                    public void onResponse(GetMappingsResponse putMappingResponse) {
-                        // <1>
-                    }  
-
-                    @Override
-                    public void onFailure(Exception e) {  
-                        // <2>
-                    }
-                };  
-            // end::get-mappings-execute-listener
-
-            // Replace the empty listener by a blocking listener in test  
-            final CountDownLatch latch = new CountDownLatch(1);
-            final ActionListener<GetMappingsResponse> latchListener = new LatchedActionListener<>(listener, latch);
-            listener = ActionListener.wrap(r -> {  
-                Map<String, MappingMetadata> allMappings = r.mappings();
-                MappingMetadata indexMapping = allMappings.get("twitter");
-                Map<String, Object> mapping = indexMapping.sourceAsMap();  
-
-                Map<String, String> type = new HashMap<>();
-                type.put("type", "text");  
-                Map<String, Object> field = new HashMap<>();
-                field.put("message", type);
-                Map<String, Object> expected = new HashMap<>();  
-                expected.put("properties", field);
-                assertThat(mapping, equalTo(expected));
-                latchListener.onResponse(r);  
-            }, e -> {
-                latchListener.onFailure(e);
-                fail("should not fail");  
-            });
-
-            // tag::get-mappings-execute-async  
-            client.indices().getMappingAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::get-mappings-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }  
-
-    @SuppressWarnings("unused")
-    public void testGetFieldMapping() throws IOException, InterruptedException {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());
-            PutMappingRequest request = new PutMappingRequest("twitter");  
-            request.source(
-                """
-                    {  
-                      "properties": {
-                        "message": {
-                          "type": "text"  
-                        },
-                        "timestamp": {
-                          "type": "date"  
-                        }
-                      }
-                    }""", // <1>  
-                MediaTypeRegistry.JSON
-            );
-            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
-            assertTrue(putMappingResponse.isAcknowledged());
-        }
-
-        // tag::get-field-mappings-request
-        GetFieldMappingsRequest request = new GetFieldMappingsRequest(); // <1>
-        request.indices("twitter"); // <2>  
-        request.fields("message", "timestamp"); // <3>
-        // end::get-field-mappings-request
-
-        // tag::get-field-mappings-request-indicesOptions
-        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-        // end::get-field-mappings-request-indicesOptions  
-
-        // tag::get-field-mappings-request-local
-        request.local(true); // <1>  
-        // end::get-field-mappings-request-local
-
-        {  
-            // tag::get-field-mappings-execute
-            GetFieldMappingsResponse response =
-                client.indices().getFieldMapping(request, RequestOptions.DEFAULT);  
-            // end::get-field-mappings-execute
-
-            // tag::get-field-mappings-response  
-            final Map<String, Map<String, GetFieldMappingsResponse.FieldMappingMetadata>> mappings =
-                response.mappings();// <1>
-            final Map<String, GetFieldMappingsResponse.FieldMappingMetadata> fieldMappings =  
-                mappings.get("twitter"); // <2>
-            final GetFieldMappingsResponse.FieldMappingMetadata metadata =
-                fieldMappings.get("message");// <3>  
-
-            final String fullName = metadata.fullName();// <4>
-            final Map<String, Object> source = metadata.sourceAsMap(); // <5>  
-            // end::get-field-mappings-response
-        }
-
-        {
-            // tag::get-field-mappings-execute-listener
-            ActionListener<GetFieldMappingsResponse> listener =  
-                new ActionListener<GetFieldMappingsResponse>() {
-                    @Override
-                    public void onResponse(GetFieldMappingsResponse putMappingResponse) {  
-                        // <1>
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        // <2>  
-                    }
-                };
-            // end::get-field-mappings-execute-listener  
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            final ActionListener<GetFieldMappingsResponse> latchListener = new LatchedActionListener<>(listener, latch);
-            listener = ActionListener.wrap(r -> {
-                final Map<String, Map<String, GetFieldMappingsResponse.FieldMappingMetadata>> mappings = r.mappings();  
-                final Map<String, GetFieldMappingsResponse.FieldMappingMetadata> fieldMappings = mappings.get("twitter");
-                final GetFieldMappingsResponse.FieldMappingMetadata metadata1 = fieldMappings.get("message");
-
-                final String fullName = metadata1.fullName();
-                final Map<String, Object> source = metadata1.sourceAsMap();
-                latchListener.onResponse(r);  
-            }, e -> {
-                latchListener.onFailure(e);
-                fail("should not fail");  
-            });
-
-            // tag::get-field-mappings-execute-async  
-            client.indices().getFieldMappingAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::get-field-mappings-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-
-    }
-
-    public void testOpenIndex() throws Exception {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());
-        }  
-
-        {
-            // tag::open-index-request  
-            OpenIndexRequest request = new OpenIndexRequest("index"); // <1>
-            // end::open-index-request
-
-            // tag::open-index-request-timeout
-            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
-            request.timeout("2m"); // <2>  
-            // end::open-index-request-timeout
-            // tag::open-index-request-masterTimeout
-            request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
-            request.clusterManagerNodeTimeout("1m"); // <2>
-            // end::open-index-request-masterTimeout
-            // tag::open-index-request-waitForActiveShards  
-            request.waitForActiveShards(2); // <1>
-            request.waitForActiveShards(ActiveShardCount.DEFAULT); // <2>
-            // end::open-index-request-waitForActiveShards  
-
-            // tag::open-index-request-indicesOptions
-            request.indicesOptions(IndicesOptions.strictExpandOpen()); // <1>  
-            // end::open-index-request-indicesOptions
-
-            // tag::open-index-execute  
-            OpenIndexResponse openIndexResponse = client.indices().open(request, RequestOptions.DEFAULT);
-            // end::open-index-execute
-
-            // tag::open-index-response
-            boolean acknowledged = openIndexResponse.isAcknowledged(); // <1>
-            boolean shardsAcked = openIndexResponse.isShardsAcknowledged(); // <2>  
-            // end::open-index-response
-            assertTrue(acknowledged);
-            assertTrue(shardsAcked);  
-
-            // tag::open-index-execute-listener
-            ActionListener<OpenIndexResponse> listener =  
-                    new ActionListener<OpenIndexResponse>() {
-                @Override
-                public void onResponse(OpenIndexResponse openIndexResponse) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-            // end::open-index-execute-listener  
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::open-index-execute-async  
-            client.indices().openAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::open-index-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-
-        {
-            // tag::open-index-notfound
-            try {  
-                OpenIndexRequest request = new OpenIndexRequest("does_not_exist");
-                client.indices().open(request, RequestOptions.DEFAULT);
-            } catch (OpenSearchException exception) {  
-                if (exception.status() == RestStatus.BAD_REQUEST) {
-                    // <1>
-                }  
-            }
-            // end::open-index-notfound
-        }  
-    }
-
-    @SuppressWarnings("unused")  
-    public void testRefreshIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
-        {
-            createIndex("index1", Settings.EMPTY);
-        }  
-
-        {
-            // tag::refresh-request  
-            RefreshRequest request = new RefreshRequest("index1"); // <1>
-            RefreshRequest requestMultiple = new RefreshRequest("index1", "index2"); // <2>
-            RefreshRequest requestAll = new RefreshRequest(); // <3>  
-            // end::refresh-request
-
-            // tag::refresh-request-indicesOptions  
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::refresh-request-indicesOptions
-
-            // tag::refresh-execute
-            RefreshResponse refreshResponse = client.indices().refresh(request, RequestOptions.DEFAULT);
-            // end::refresh-execute  
-
-            // tag::refresh-response
-            int totalShards = refreshResponse.getTotalShards(); // <1>  
-            int successfulShards = refreshResponse.getSuccessfulShards(); // <2>
-            int failedShards = refreshResponse.getFailedShards(); // <3>
-            DefaultShardOperationFailedException[] failures = refreshResponse.getShardFailures(); // <4>  
-            // end::refresh-response
-
-            // tag::refresh-execute-listener  
-            ActionListener<RefreshResponse> listener = new ActionListener<RefreshResponse>() {
-                @Override
-                public void onResponse(RefreshResponse refreshResponse) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-            // end::refresh-execute-listener  
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::refresh-execute-async  
-            client.indices().refreshAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::refresh-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-
-        {
-            // tag::refresh-notfound
-            try {  
-                RefreshRequest request = new RefreshRequest("does_not_exist");
-                client.indices().refresh(request, RequestOptions.DEFAULT);
-            } catch (OpenSearchException exception) {  
-                if (exception.status() == RestStatus.NOT_FOUND) {
-                    // <1>
-                }  
-            }
-            // end::refresh-notfound
-        }  
-    }
-
-    @SuppressWarnings("unused")  
-    public void testFlushIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
-        {
-            createIndex("index1", Settings.EMPTY);
-        }  
-
-        {
-            // tag::flush-request  
-            FlushRequest request = new FlushRequest("index1"); // <1>
-            FlushRequest requestMultiple = new FlushRequest("index1", "index2"); // <2>
-            FlushRequest requestAll = new FlushRequest(); // <3>  
-            // end::flush-request
-
-            // tag::flush-request-indicesOptions  
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::flush-request-indicesOptions
-
-            // tag::flush-request-wait
-            request.waitIfOngoing(true); // <1>
-            // end::flush-request-wait  
-
-            // tag::flush-request-force
-            request.force(true); // <1>  
-            // end::flush-request-force
-
-            // tag::flush-execute  
-            FlushResponse flushResponse = client.indices().flush(request, RequestOptions.DEFAULT);
-            // end::flush-execute
-
-            // tag::flush-response
-            int totalShards = flushResponse.getTotalShards(); // <1>
-            int successfulShards = flushResponse.getSuccessfulShards(); // <2>  
-            int failedShards = flushResponse.getFailedShards(); // <3>
-            DefaultShardOperationFailedException[] failures = flushResponse.getShardFailures(); // <4>
-            // end::flush-response  
-
-            // tag::flush-execute-listener
-            ActionListener<FlushResponse> listener = new ActionListener<FlushResponse>() {  
-                @Override
-                public void onResponse(FlushResponse flushResponse) {
-                    // <1>  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    // <2>
-                }  
-            };
-            // end::flush-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::flush-execute-async
-            client.indices().flushAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::flush-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-        }
-
-        {  
-            // tag::flush-notfound
-            try {
-                FlushRequest request = new FlushRequest("does_not_exist");  
-                client.indices().flush(request, RequestOptions.DEFAULT);
-            } catch (OpenSearchException exception) {
-                if (exception.status() == RestStatus.NOT_FOUND) {  
-                    // <1>
-                }
-            }  
-            // end::flush-notfound
-        }
-    }  
-
-    public void testGetSettings() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            Settings settings = Settings.builder().put("number_of_shards", 3).build();  
-            CreateIndexResponse createIndexResponse = client.indices()
-                .create(new CreateIndexRequest("index").settings(settings), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());  
-        }
-
-        // tag::get-settings-request  
-        GetSettingsRequest request = new GetSettingsRequest().indices("index"); // <1>
-        // end::get-settings-request
-
-        // tag::get-settings-request-names
-        request.names("index.number_of_shards"); // <1>
-        // end::get-settings-request-names  
-
-        // tag::get-settings-request-indicesOptions
-        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
-        // end::get-settings-request-indicesOptions
-
-        // tag::get-settings-execute  
-        GetSettingsResponse getSettingsResponse = client.indices().getSettings(request, RequestOptions.DEFAULT);
-        // end::get-settings-execute
-
-        // tag::get-settings-response
-        String numberOfShardsString = getSettingsResponse.getSetting("index", "index.number_of_shards"); // <1>
-        Settings indexSettings = getSettingsResponse.getIndexToSettings().get("index"); // <2>  
-        Integer numberOfShards = indexSettings.getAsInt("index.number_of_shards", null); // <3>
-        // end::get-settings-response
-
-        assertEquals("3", numberOfShardsString);
-        assertEquals(Integer.valueOf(3), numberOfShards);
-
-        assertNull("refresh_interval returned but was never set!", getSettingsResponse.getSetting("index", "index.refresh_interval"));
-
-        // tag::get-settings-execute-listener  
-        ActionListener<GetSettingsResponse> listener =
-            new ActionListener<GetSettingsResponse>() {
-                @Override  
-                public void onResponse(GetSettingsResponse GetSettingsResponse) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-        // end::get-settings-execute-listener
-
-        // Replace the empty listener by a blocking listener in test  
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::get-settings-execute-async
-        client.indices().getSettingsAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::get-settings-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    public void testGetSettingsWithDefaults() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            Settings settings = Settings.builder().put("number_of_shards", 3).build();  
-            CreateIndexResponse createIndexResponse = client.indices()
-                .create(new CreateIndexRequest("index").settings(settings), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());  
-        }
-
-        GetSettingsRequest request = new GetSettingsRequest().indices("index");  
-        request.indicesOptions(IndicesOptions.lenientExpandOpen());
-
-        // tag::get-settings-request-include-defaults  
-        request.includeDefaults(true); // <1>
-        // end::get-settings-request-include-defaults
-
-        GetSettingsResponse getSettingsResponse = client.indices().getSettings(request, RequestOptions.DEFAULT);
-        String numberOfShardsString = getSettingsResponse.getSetting("index", "index.number_of_shards");
-        Settings indexSettings = getSettingsResponse.getIndexToSettings().get("index");  
-        Integer numberOfShards = indexSettings.getAsInt("index.number_of_shards", null);
-
-        // tag::get-settings-defaults-response  
-        String refreshInterval = getSettingsResponse.getSetting("index", "index.refresh_interval"); // <1>
-        Settings indexDefaultSettings = getSettingsResponse.getIndexToDefaultSettings().get("index"); // <2>
-        // end::get-settings-defaults-response  
-
-        assertEquals("3", numberOfShardsString);
-        assertEquals(Integer.valueOf(3), numberOfShards);  
-        assertNotNull("with defaults enabled we should get a value for refresh_interval!", refreshInterval);
-
-        assertEquals(refreshInterval, indexDefaultSettings.get("index.refresh_interval"));  
-        ActionListener<GetSettingsResponse> listener = new ActionListener<GetSettingsResponse>() {
-            @Override
-            public void onResponse(GetSettingsResponse GetSettingsResponse) {}  
-
-            @Override
-            public void onFailure(Exception e) {}  
-        };
-
-        // Replace the empty listener by a blocking listener in test  
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        client.indices().getSettingsAsync(request, RequestOptions.DEFAULT, listener);
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    public void testGetIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            Settings settings = Settings.builder().put("number_of_shards", 3).build();  
-            String mappings = "{\"properties\":{\"field-1\":{\"type\":\"integer\"}}}";
-            CreateIndexRequest createIndexRequest = new CreateIndexRequest("index").settings(settings)
-                .mapping(mappings, MediaTypeRegistry.JSON);  
-            CreateIndexResponse createIndexResponse = client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());
-        }  
-
-        // tag::get-index-request
-        GetIndexRequest request = new GetIndexRequest("index"); // <1>  
-        // end::get-index-request
-
-        // tag::get-index-request-indicesOptions  
-        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-        // end::get-index-request-indicesOptions
-
-        // tag::get-index-request-includeDefaults
-        request.includeDefaults(true); // <1>
-        // end::get-index-request-includeDefaults  
-
-        // tag::get-index-execute
-        GetIndexResponse getIndexResponse = client.indices().get(request, RequestOptions.DEFAULT);  
-        // end::get-index-execute
-
-        // tag::get-index-response  
-        MappingMetadata indexMappings = getIndexResponse.getMappings().get("index"); // <1>
-        Map<String, Object> indexTypeMappings = indexMappings.getSourceAsMap(); // <2>
-        List<AliasMetadata> indexAliases = getIndexResponse.getAliases().get("index"); // <3>  
-        String numberOfShardsString = getIndexResponse.getSetting("index", "index.number_of_shards"); // <4>
-        Settings indexSettings = getIndexResponse.getSettings().get("index"); // <5>
-        Integer numberOfShards = indexSettings.getAsInt("index.number_of_shards", null); // <6>  
-        TimeValue time = getIndexResponse.getDefaultSettings().get("index")
-            .getAsTime("index.refresh_interval", null); // <7>
-        // end::get-index-response  
-
-        assertEquals(
-            Collections.singletonMap("properties", Collections.singletonMap("field-1", Collections.singletonMap("type", "integer"))),  
-            indexTypeMappings
-        );
-        assertTrue(indexAliases.isEmpty());  
-        assertEquals(IndexSettings.DEFAULT_REFRESH_INTERVAL, time);
-        assertEquals("3", numberOfShardsString);
-        assertEquals(Integer.valueOf(3), numberOfShards);  
-
-        // tag::get-index-execute-listener
-        ActionListener<GetIndexResponse> listener =  
-            new ActionListener<GetIndexResponse>() {
-                @Override
-                public void onResponse(GetIndexResponse getIndexResponse) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-        // end::get-index-execute-listener  
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);  
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::get-index-execute-async  
-        client.indices().getAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::get-index-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }
-
-    @SuppressWarnings("unused")
-    public void testForceMergeIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            createIndex("index", Settings.EMPTY);  
-        }
-
-        {  
-            // tag::force-merge-request
-            ForceMergeRequest request = new ForceMergeRequest("index1"); // <1>
-            ForceMergeRequest requestMultiple = new ForceMergeRequest("index1", "index2"); // <2>  
-            ForceMergeRequest requestAll = new ForceMergeRequest(); // <3>
-            // end::force-merge-request
-
-            // tag::force-merge-request-indicesOptions
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::force-merge-request-indicesOptions  
-
-            // tag::force-merge-request-segments-num
-            request.maxNumSegments(1); // <1>  
-            // end::force-merge-request-segments-num
-
-            // tag::force-merge-request-only-expunge-deletes  
-            request.onlyExpungeDeletes(true); // <1>
-            // end::force-merge-request-only-expunge-deletes
-
-            // set only expunge deletes back to its default value
-            // as it is mutually exclusive with max. num. segments
-            request.onlyExpungeDeletes(ForceMergeRequest.Defaults.ONLY_EXPUNGE_DELETES);  
-
-            // tag::force-merge-request-flush
-            request.flush(true); // <1>  
-            // end::force-merge-request-flush
-
-            // tag::force-merge-execute  
-            ForceMergeResponse forceMergeResponse = client.indices().forcemerge(request, RequestOptions.DEFAULT);
-            // end::force-merge-execute
-
-            // tag::force-merge-response
-            int totalShards = forceMergeResponse.getTotalShards(); // <1>
-            int successfulShards = forceMergeResponse.getSuccessfulShards(); // <2>  
-            int failedShards = forceMergeResponse.getFailedShards(); // <3>
-            DefaultShardOperationFailedException[] failures = forceMergeResponse.getShardFailures(); // <4>
-            // end::force-merge-response  
-
-            // tag::force-merge-execute-listener
-            ActionListener<ForceMergeResponse> listener = new ActionListener<ForceMergeResponse>() {  
-                @Override
-                public void onResponse(ForceMergeResponse forceMergeResponse) {
-                    // <1>  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    // <2>
-                }  
-            };
-            // end::force-merge-execute-listener
-
-            // tag::force-merge-execute-async
-            client.indices().forcemergeAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::force-merge-execute-async  
-        }
-        {
-            // tag::force-merge-notfound  
-            try {
-                ForceMergeRequest request = new ForceMergeRequest("does_not_exist");
-                client.indices().forcemerge(request, RequestOptions.DEFAULT);  
-            } catch (OpenSearchException exception) {
-                if (exception.status() == RestStatus.NOT_FOUND) {
-                    // <1>  
-                }
-            }
-            // end::force-merge-notfound  
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testClearCache() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            createIndex("index1", Settings.EMPTY);  
-        }
-
-        {  
-            // tag::clear-cache-request
-            ClearIndicesCacheRequest request = new ClearIndicesCacheRequest("index1"); // <1>
-            ClearIndicesCacheRequest requestMultiple = new ClearIndicesCacheRequest("index1", "index2"); // <2>  
-            ClearIndicesCacheRequest requestAll = new ClearIndicesCacheRequest(); // <3>
-            // end::clear-cache-request
-
-            // tag::clear-cache-request-indicesOptions
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::clear-cache-request-indicesOptions  
-
-            // tag::clear-cache-request-query
-            request.queryCache(true); // <1>  
-            // end::clear-cache-request-query
-
-            // tag::clear-cache-request-request  
-            request.requestCache(true); // <1>
-            // end::clear-cache-request-request
-
-            // tag::clear-cache-request-fielddata
-            request.fieldDataCache(true); // <1>
-            // end::clear-cache-request-fielddata  
-
-            // tag::clear-cache-request-fields
-            request.fields("field1", "field2", "field3"); // <1>  
-            // end::clear-cache-request-fields
-
-            // tag::clear-cache-execute  
-            ClearIndicesCacheResponse clearCacheResponse = client.indices().clearCache(request, RequestOptions.DEFAULT);
-            // end::clear-cache-execute
-
-            // tag::clear-cache-response
-            int totalShards = clearCacheResponse.getTotalShards(); // <1>
-            int successfulShards = clearCacheResponse.getSuccessfulShards(); // <2>  
-            int failedShards = clearCacheResponse.getFailedShards(); // <3>
-            DefaultShardOperationFailedException[] failures = clearCacheResponse.getShardFailures(); // <4>
-            // end::clear-cache-response  
-
-            // tag::clear-cache-execute-listener
-            ActionListener<ClearIndicesCacheResponse> listener = new ActionListener<ClearIndicesCacheResponse>() {  
-                @Override
-                public void onResponse(ClearIndicesCacheResponse clearCacheResponse) {
-                    // <1>  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    // <2>
-                }  
-            };
-            // end::clear-cache-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::clear-cache-execute-async
-            client.indices().clearCacheAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::clear-cache-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-        }
-
-        {  
-            // tag::clear-cache-notfound
-            try {
-                ClearIndicesCacheRequest request = new ClearIndicesCacheRequest("does_not_exist");  
-                client.indices().clearCache(request, RequestOptions.DEFAULT);
-            } catch (OpenSearchException exception) {
-                if (exception.status() == RestStatus.NOT_FOUND) {  
-                    // <1>
-                }
-            }  
-            // end::clear-cache-notfound
-        }
-    }  
-
-    public void testCloseIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index"), RequestOptions.DEFAULT);  
-            assertTrue(createIndexResponse.isAcknowledged());
-        }
-
-        {
-            // tag::close-index-request
-            CloseIndexRequest request = new CloseIndexRequest("index"); // <1>  
-            // end::close-index-request
-
-            // tag::close-index-request-timeout  
-            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
-            // end::close-index-request-timeout
-            // tag::close-index-request-masterTimeout  
-            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
-            // end::close-index-request-masterTimeout
-
-            // tag::close-index-request-indicesOptions
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::close-index-request-indicesOptions  
-
-            // tag::close-index-execute
-            AcknowledgedResponse closeIndexResponse = client.indices().close(request, RequestOptions.DEFAULT);  
-            // end::close-index-execute
-
-            // tag::close-index-response  
-            boolean acknowledged = closeIndexResponse.isAcknowledged(); // <1>
-            // end::close-index-response
-            assertTrue(acknowledged);  
-
-            // tag::close-index-execute-listener
-            ActionListener<CloseIndexResponse> listener = new ActionListener<CloseIndexResponse>() {  
-                @Override
-                public void onResponse(CloseIndexResponse closeIndexResponse) {
-                    // <1>  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    // <2>
-                }  
-            };
-            // end::close-index-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::close-index-execute-async
-            client.indices().closeAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::close-index-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testExistsAlias() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            CreateIndexResponse createIndexResponse = client.indices()  
-                .create(new CreateIndexRequest("index").alias(new Alias("alias")), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());
-        }  
-
-        {
-            // tag::exists-alias-request  
-            GetAliasesRequest request = new GetAliasesRequest();
             GetAliasesRequest requestWithAlias = new GetAliasesRequest("alias1");
-            GetAliasesRequest requestWithAliases =  
-                    new GetAliasesRequest(new String[]{"alias1", "alias2"});
-            // end::exists-alias-request
-
-            // tag::exists-alias-request-alias
-            request.aliases("alias"); // <1>
-            // end::exists-alias-request-alias  
-            // tag::exists-alias-request-indices
-            request.indices("index"); // <1>
-            // end::exists-alias-request-indices  
-
-            // tag::exists-alias-request-indicesOptions
-            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
-            // end::exists-alias-request-indicesOptions
-
-            // tag::exists-alias-request-local  
-            request.local(true); // <1>
-            // end::exists-alias-request-local
-
-            // tag::exists-alias-execute
-            boolean exists = client.indices().existsAlias(request, RequestOptions.DEFAULT);
-            // end::exists-alias-execute  
-            assertTrue(exists);
-
-            // tag::exists-alias-execute-listener  
-            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
-                @Override
-                public void onResponse(Boolean exists) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-            // end::exists-alias-execute-listener  
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::exists-alias-execute-async  
-            client.indices().existsAliasAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::exists-alias-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }  
-
-    @SuppressWarnings("unused")
-    public void testUpdateAliases() throws Exception {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index1"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());
-            createIndexResponse = client.indices().create(new CreateIndexRequest("index2"), RequestOptions.DEFAULT);  
-            assertTrue(createIndexResponse.isAcknowledged());
-            createIndexResponse = client.indices().create(new CreateIndexRequest("index3"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());  
-            createIndexResponse = client.indices().create(new CreateIndexRequest("index4"), RequestOptions.DEFAULT);
-            assertTrue(createIndexResponse.isAcknowledged());
-        }  
-
-        {
-            // tag::update-aliases-request  
-            IndicesAliasesRequest request = new IndicesAliasesRequest(); // <1>
-            AliasActions aliasAction =
-                    new AliasActions(AliasActions.Type.ADD)  
-                    .index("index1")
-                    .alias("alias1"); // <2>
-            request.addAliasAction(aliasAction); // <3>  
-            // end::update-aliases-request
-
-            // tag::update-aliases-request2  
-            AliasActions addIndexAction =
-                    new AliasActions(AliasActions.Type.ADD)
-                    .index("index1")  
-                    .alias("alias1")
-                    .filter("{\"term\":{\"year\":2016}}"); // <1>
-            AliasActions addIndicesAction =  
-                    new AliasActions(AliasActions.Type.ADD)
-                    .indices("index1", "index2")
-                    .alias("alias2")  
-                    .routing("1"); // <2>
-            AliasActions removeAction =
-                    new AliasActions(AliasActions.Type.REMOVE)  
-                    .index("index3")
-                    .alias("alias3"); // <3>
-            AliasActions removeIndexAction =  
-                    new AliasActions(AliasActions.Type.REMOVE_INDEX)
-                    .index("index4"); // <4>
-            // end::update-aliases-request2  
-
-            // tag::update-aliases-request-timeout
-            request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
-            request.timeout("2m"); // <2>
-            // end::update-aliases-request-timeout
-            // tag::update-aliases-request-masterTimeout  
-            request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
-            request.clusterManagerNodeTimeout("1m"); // <2>
-            // end::update-aliases-request-masterTimeout  
-
-            // tag::update-aliases-execute
-            AcknowledgedResponse indicesAliasesResponse =  
-                    client.indices().updateAliases(request, RequestOptions.DEFAULT);
-            // end::update-aliases-execute
-
-            // tag::update-aliases-response
-            boolean acknowledged = indicesAliasesResponse.isAcknowledged(); // <1>
-            // end::update-aliases-response  
-            assertTrue(acknowledged);
-        }
-
-        {
-            IndicesAliasesRequest request = new IndicesAliasesRequest();
-            AliasActions aliasAction = new AliasActions(AliasActions.Type.ADD).index("index1").alias("async");  
-            request.addAliasAction(aliasAction);
-
-            // tag::update-aliases-execute-listener  
-            ActionListener<AcknowledgedResponse> listener =
+            // end::clear-cache-execute
                     new ActionListener<AcknowledgedResponse>() {
-                @Override  
-                public void onResponse(AcknowledgedResponse indicesAliasesResponse) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-            // end::update-aliases-execute-listener
-
-            // Replace the empty listener by a blocking listener in test  
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::update-aliases-execute-async
-            client.indices().updateAliasesAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::update-aliases-execute-async  
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }  
-    }
-
-    public void testShrinkIndex() throws Exception {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            Map<String, Object> nodes = getAsMap("_nodes");
-            @SuppressWarnings("unchecked")
-            String firstNode = ((Map<String, Object>) nodes.get("nodes")).keySet().iterator().next();  
-            createIndex("source_index", Settings.builder().put("index.number_of_shards", 4).put("index.number_of_replicas", 0).build());
-            updateIndexSettings(
-                "source_index",  
-                Settings.builder().put("index.routing.allocation.require._name", firstNode).put("index.blocks.write", true)
-            );
-        }  
-
-        // tag::shrink-index-request
-        ResizeRequest request = new ResizeRequest("target_index","source_index"); // <1>  
-        // end::shrink-index-request
-
-        // tag::shrink-index-request-timeout  
-        request.timeout(TimeValue.timeValueMinutes(2)); // <1>
-        request.timeout("2m"); // <2>
-        // end::shrink-index-request-timeout  
-        // tag::shrink-index-request-masterTimeout
-        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        request.clusterManagerNodeTimeout("1m"); // <2>  
-        // end::shrink-index-request-masterTimeout
-        // tag::shrink-index-request-waitForActiveShards
-        request.setWaitForActiveShards(2); // <1>  
-        request.setWaitForActiveShards(ActiveShardCount.DEFAULT); // <2>
-        // end::shrink-index-request-waitForActiveShards
-        // tag::shrink-index-request-settings  
-        request.getTargetIndexRequest().settings(Settings.builder()
-                .put("index.number_of_shards", 2) // <1>
-                .putNull("index.routing.allocation.require._name")); // <2>  
-        // end::shrink-index-request-settings
-        // tag::shrink-index-request-aliases
-        request.getTargetIndexRequest().alias(new Alias("target_alias")); // <1>  
-        // end::shrink-index-request-aliases
-
-        // tag::shrink-index-execute  
-        ResizeResponse resizeResponse = client.indices().shrink(request, RequestOptions.DEFAULT);
-        // end::shrink-index-execute
-
-        // tag::shrink-index-response
-        boolean acknowledged = resizeResponse.isAcknowledged(); // <1>
-        boolean shardsAcked = resizeResponse.isShardsAcknowledged(); // <2>  
-        // end::shrink-index-response
-        assertTrue(acknowledged);
-        assertTrue(shardsAcked);  
-
-        // tag::shrink-index-execute-listener
-        ActionListener<ResizeResponse> listener = new ActionListener<ResizeResponse>() {  
-            @Override
-            public void onResponse(ResizeResponse resizeResponse) {
-                // <1>  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                // <2>
-            }  
-        };
-        // end::shrink-index-execute-listener
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);  
-
-        // tag::shrink-index-execute-async
-        client.indices().shrinkAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-        // end::shrink-index-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-    }
-
-    public void testSplitIndex() throws Exception {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            createIndex(
-                "source_index",
                 Settings.builder()  
-                    .put("index.number_of_shards", 2)
-                    .put("index.number_of_replicas", 0)
-                    .put("index.number_of_routing_shards", 4)  
-                    .build()
-            );
-            updateIndexSettings("source_index", Settings.builder().put("index.blocks.write", true));  
-        }
-
-        // tag::split-index-request  
-        ResizeRequest request = new ResizeRequest("target_index","source_index"); // <1>
-        request.setResizeType(ResizeType.SPLIT); // <2>
-        // end::split-index-request  
-
-        // tag::split-index-request-timeout
-        request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
-        request.timeout("2m"); // <2>
-        // end::split-index-request-timeout
-        // tag::split-index-request-masterTimeout  
-        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        request.clusterManagerNodeTimeout("1m"); // <2>
-        // end::split-index-request-masterTimeout  
-        // tag::split-index-request-waitForActiveShards
-        request.setWaitForActiveShards(2); // <1>
-        request.setWaitForActiveShards(ActiveShardCount.DEFAULT); // <2>  
-        // end::split-index-request-waitForActiveShards
-        // tag::split-index-request-settings
-        request.getTargetIndexRequest().settings(Settings.builder()  
-                .put("index.number_of_shards", 4)); // <1>
-        // end::split-index-request-settings
-        // tag::split-index-request-aliases  
-        request.getTargetIndexRequest().alias(new Alias("target_alias")); // <1>
-        // end::split-index-request-aliases
-
-        // tag::split-index-execute
-        ResizeResponse resizeResponse = client.indices().split(request, RequestOptions.DEFAULT);
-        // end::split-index-execute  
-
-        // tag::split-index-response
-        boolean acknowledged = resizeResponse.isAcknowledged(); // <1>  
-        boolean shardsAcked = resizeResponse.isShardsAcknowledged(); // <2>
-        // end::split-index-response
-        assertTrue(acknowledged);  
-        assertTrue(shardsAcked);
-
-        // tag::split-index-execute-listener  
-        ActionListener<ResizeResponse> listener = new ActionListener<ResizeResponse>() {
-            @Override
-            public void onResponse(ResizeResponse resizeResponse) {  
-                // <1>
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                // <2>  
-            }
-        };
-        // end::split-index-execute-listener  
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);  
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::split-index-execute-async  
-        client.indices().splitAsync(request, RequestOptions.DEFAULT,listener); // <1>
-        // end::split-index-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }
-
-    public void testCloneIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
-        {
-            createIndex("source_index", Settings.builder().put("index.number_of_shards", 2).put("index.number_of_replicas", 0).build());
-            updateIndexSettings("source_index", Settings.builder().put("index.blocks.write", true));  
-        }
-
-        // tag::clone-index-request  
-        ResizeRequest request = new ResizeRequest("target_index","source_index"); // <1>
-        request.setResizeType(ResizeType.CLONE); // <2>
-        // end::clone-index-request  
-
-        // tag::clone-index-request-timeout
-        request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
-        request.timeout("2m"); // <2>
-        // end::clone-index-request-timeout
-        // tag::clone-index-request-masterTimeout  
-        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        request.clusterManagerNodeTimeout("1m"); // <2>
-        // end::clone-index-request-masterTimeout  
-        // tag::clone-index-request-waitForActiveShards
-        request.setWaitForActiveShards(2); // <1>
-        request.setWaitForActiveShards(ActiveShardCount.DEFAULT); // <2>  
-        // end::clone-index-request-waitForActiveShards
-        // tag::clone-index-request-settings
-        request.getTargetIndexRequest().settings(Settings.builder()  
-            .put("index.number_of_shards", 2)); // <1>
-        // end::clone-index-request-settings
-        // tag::clone-index-request-aliases  
-        request.getTargetIndexRequest().alias(new Alias("target_alias")); // <1>
-        // end::clone-index-request-aliases
-
-        // tag::clone-index-execute
-        ResizeResponse resizeResponse = client.indices().clone(request, RequestOptions.DEFAULT);
-        // end::clone-index-execute  
-
-        // tag::clone-index-response
-        boolean acknowledged = resizeResponse.isAcknowledged(); // <1>  
-        boolean shardsAcked = resizeResponse.isShardsAcknowledged(); // <2>
-        // end::clone-index-response
-        assertTrue(acknowledged);  
-        assertTrue(shardsAcked);
-
-        // tag::clone-index-execute-listener  
-        ActionListener<ResizeResponse> listener = new ActionListener<ResizeResponse>() {
-            @Override
-            public void onResponse(ResizeResponse resizeResponse) {  
-                // <1>
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                // <2>  
-            }
-        };
-        // end::clone-index-execute-listener  
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);  
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::clone-index-execute-async  
-        client.indices().cloneAsync(request, RequestOptions.DEFAULT,listener); // <1>
-        // end::clone-index-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }
-
-    public void testRolloverIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
-        {
-            client.indices().create(new CreateIndexRequest("index-1").alias(new Alias("alias")), RequestOptions.DEFAULT);
-        }  
-
-        // tag::rollover-index-request
-        RolloverRequest request = new RolloverRequest("alias", "index-2"); // <1>  
-        request.addMaxIndexAgeCondition(new TimeValue(7, TimeUnit.DAYS)); // <2>
-        request.addMaxIndexDocsCondition(1000); // <3>
-        request.addMaxIndexSizeCondition(new ByteSizeValue(5, ByteSizeUnit.GB)); // <4>  
-        // end::rollover-index-request
-
-        // tag::rollover-index-request-timeout  
-        request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
-        // end::rollover-index-request-timeout
-        // tag::rollover-index-request-masterTimeout  
-        request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        // end::rollover-index-request-masterTimeout
         // tag::rollover-index-request-dryRun  
-        request.dryRun(true); // <1>
-        // end::rollover-index-request-dryRun
-        // tag::rollover-index-request-waitForActiveShards  
-        request.getCreateIndexRequest().waitForActiveShards(ActiveShardCount.from(2)); // <1>
-        request.getCreateIndexRequest().waitForActiveShards(ActiveShardCount.DEFAULT); // <2>
-        // end::rollover-index-request-waitForActiveShards  
-        // tag::rollover-index-request-settings
-        request.getCreateIndexRequest().settings(Settings.builder()
-                .put("index.number_of_shards", 4)); // <1>  
-        // end::rollover-index-request-settings
-        // tag::rollover-index-request-mapping
-        String mappings = "{\"properties\":{\"field-1\":{\"type\":\"keyword\"}}}";  
-        request.getCreateIndexRequest().mapping(mappings, MediaTypeRegistry.JSON); // <1>
-        // end::rollover-index-request-mapping
-        // tag::rollover-index-request-alias  
-        request.getCreateIndexRequest().alias(new Alias("another_alias")); // <1>
-        // end::rollover-index-request-alias
-
-        // tag::rollover-index-execute
-        RolloverResponse rolloverResponse = client.indices().rollover(request, RequestOptions.DEFAULT);
-        // end::rollover-index-execute  
-
-        // tag::rollover-index-response
-        boolean acknowledged = rolloverResponse.isAcknowledged(); // <1>  
-        boolean shardsAcked = rolloverResponse.isShardsAcknowledged(); // <2>
-        String oldIndex = rolloverResponse.getOldIndex(); // <3>
-        String newIndex = rolloverResponse.getNewIndex(); // <4>  
-        boolean isRolledOver = rolloverResponse.isRolledOver(); // <5>
-        boolean isDryRun = rolloverResponse.isDryRun(); // <6>
-        Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();// <7>  
-        // end::rollover-index-response
-        assertFalse(acknowledged);
-        assertFalse(shardsAcked);  
-        assertEquals("index-1", oldIndex);
-        assertEquals("index-2", newIndex);
-        assertFalse(isRolledOver);  
-        assertTrue(isDryRun);
-        assertEquals(3, conditionStatus.size());
-
-        // tag::rollover-index-execute-listener
-        ActionListener<RolloverResponse> listener = new ActionListener<RolloverResponse>() {
-            @Override  
-            public void onResponse(RolloverResponse rolloverResponse) {
-                // <1>
+                .build("<b>Some text to analyze</b>");  
+                @Override
+            {
+                    new AliasActions(AliasActions.Type.REMOVE_INDEX)
+            // tag::refresh-execute-listener  
+            // tag::delete-index-response
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
             }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                // <2>
-            }
-        };  
-        // end::rollover-index-execute-listener
-
-        // Replace the empty listener by a blocking listener in test  
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::rollover-index-execute-async
-        client.indices().rolloverAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::rollover-index-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    @SuppressWarnings("unused")
-    public void testGetAlias() throws Exception {  
-        RestHighLevelClient client = highLevelClient();
-
-        {  
-            CreateIndexResponse createIndexResponse = client.indices()
-                .create(new CreateIndexRequest("index").alias(new Alias("alias")), RequestOptions.DEFAULT);
+                }
+                    // <1>
+        {
             assertTrue(createIndexResponse.isAcknowledged());  
         }
-
-        {  
-            // tag::get-alias-request
-            GetAliasesRequest request = new GetAliasesRequest();
-            GetAliasesRequest requestWithAlias = new GetAliasesRequest("alias1");  
-            GetAliasesRequest requestWithAliases =
-                    new GetAliasesRequest(new String[]{"alias1", "alias2"});
-            // end::get-alias-request  
-
-            // tag::get-alias-request-alias
-            request.aliases("alias"); // <1>  
-            // end::get-alias-request-alias
-            // tag::get-alias-request-indices
-            request.indices("index"); // <1>  
-            // end::get-alias-request-indices
-
-            // tag::get-alias-request-indicesOptions  
+        // end::simulate-index-template-execute-async
+            DetailAnalyzeResponse detail = response.detail();                   // <1>  
             request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-            // end::get-alias-request-indicesOptions
-
-            // tag::get-alias-request-local
-            request.local(true); // <1>
-            // end::get-alias-request-local  
-
-            // tag::get-alias-execute
-            GetAliasesResponse response = client.indices().getAlias(request, RequestOptions.DEFAULT);  
-            // end::get-alias-execute
-
-            // tag::get-alias-response  
-            Map<String, Set<AliasMetadata>> aliases = response.getAliases(); // <1>
-            // end::get-alias-response
-
-            // tag::get-alias-response-error
-            RestStatus status = response.status(); // <1>
-            OpenSearchException exception = response.getException(); // <2>  
-            String error = response.getError(); // <3>
-            // end::get-alias-response-error
-
-            assertThat(response.getAliases().get("index").size(), equalTo(1));
-            assertThat(response.getAliases().get("index").iterator().next().alias(), equalTo("alias"));
-            assertThat(status, equalTo(RestStatus.OK));  
-            assertThat(error, nullValue());
-            assertThat(exception, nullValue());
-
-            // tag::get-alias-execute-listener
-            ActionListener<GetAliasesResponse> listener =
-                    new ActionListener<GetAliasesResponse>() {  
-                        @Override
-                        public void onResponse(GetAliasesResponse getAliasesResponse) {
-                            // <1>  
-                        }
-
-                        @Override  
-                        public void onFailure(Exception e) {
-                            // <2>
                         }  
-            };
-            // end::get-alias-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::get-alias-execute-async
-            client.indices().getAliasAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::get-alias-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+                public void onResponse(ValidateQueryResponse validateQueryResponse) {  
+            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
         }
-    }
-
-    @SuppressWarnings("unused")
-    public void testIndexPutSettings() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
+                }""",
         {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index"), RequestOptions.DEFAULT);  
-            assertTrue(createIndexResponse.isAcknowledged());
-        }
-
-        // tag::indices-put-settings-request
-        UpdateSettingsRequest request = new UpdateSettingsRequest("index1"); // <1>
-        UpdateSettingsRequest requestMultiple =  
-                new UpdateSettingsRequest("index1", "index2"); // <2>
-        UpdateSettingsRequest requestAll = new UpdateSettingsRequest(); // <3>
-        // end::indices-put-settings-request  
-
-        // tag::indices-put-settings-create-settings
-        String settingKey = "index.number_of_replicas";  
-        int settingValue = 0;
-        Settings settings =
-                Settings.builder()  
-                .put(settingKey, settingValue)
-                .build(); // <1>
-        // end::indices-put-settings-create-settings  
-        // tag::indices-put-settings-request-index-settings
-        request.settings(settings);
-        // end::indices-put-settings-request-index-settings  
-
-        {
-            // tag::indices-put-settings-settings-builder  
-            Settings.Builder settingsBuilder =
-                    Settings.builder()
-                    .put(settingKey, settingValue);  
-            request.settings(settingsBuilder); // <1>
-            // end::indices-put-settings-settings-builder
+        // tag::rollover-index-response
+            // end::delete-alias-request-timeout  
+            // tag::delete-index-request-indicesOptions  
+            // end::open-index-request-indicesOptions
+                type.put("type", "text");  
+        request.getCreateIndexRequest().waitForActiveShards(ActiveShardCount.DEFAULT); // <2>
+            // end::force-merge-request
+            // end::analyze-index-normalizer-request
+                @Override
+        // tag::shrink-index-request
+            // tag::put-mapping-response
+        // end::get-settings-request-names  
+        RestHighLevelClient client = highLevelClient();
+                @Override  
+                null,
+                            "properties" : {
+            assertTrue(createIndexResponse.isAcknowledged());  
+            // end::force-merge-request-indicesOptions  
         }  
+    public void testGetSettings() throws Exception {
+                .name("my-template");
+            // tag::put-index-template-v2-request-mappings-json
+        // tag::delete-template-request
+import org.opensearch.client.indices.SimulateIndexTemplateRequest;  
+            AliasMetadata twitterAlias = AliasMetadata.builder("twitter_alias").build(); // <1>
+        // tag::get-settings-request-indicesOptions
+            final CountDownLatch latch = new CountDownLatch(1);
+            updateIndexSettings("source_index", Settings.builder().put("index.blocks.write", true));  
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            ); // <2>
+                    new ActionListener<OpenIndexResponse>() {
+            Template template = new Template(settings, null, null); // <2>  
+              }
+            // tag::create-index-execute  
+                client.indices().deleteAlias(request, RequestOptions.DEFAULT);
+        // tag::get-settings-execute-listener  
+            @Override
+                }
+        // tag::put-template-execute
+            // end::create-index-request-masterTimeout
+                    builder.startObject("properties");
+            // end::put-index-template-v2-request-component-template  
+        {
+            RefreshResponse refreshResponse = client.indices().refresh(request, RequestOptions.DEFAULT);
+            // tag::indices-exists-execute-async
+        {
+                XContentBuilder builder = XContentFactory.jsonBuilder();
+            ActionListener<GetFieldMappingsResponse> listener =  
+            // tag::indices-exists-execute-listener
+import org.opensearch.client.indices.DetailAnalyzeResponse;
+            // end::get-alias-execute-listener
+        request.timeout("2m"); // <2>
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index"), RequestOptions.DEFAULT);  
+            // tag::open-index-notfound
+                // <1>  
+        assertEquals(Integer.valueOf(3), numberOfShards);  
+                    properties.put("message", message);
         {
             // tag::indices-put-settings-settings-map
-            Map<String, Object> map = new HashMap<>();  
-            map.put(settingKey, settingValue);
-            request.settings(map); // <1>
-            // end::indices-put-settings-settings-map  
-        }
-        {
-            // tag::indices-put-settings-settings-source  
-            request.settings(
-                """
-                    {  
-                      "index.number_of_replicas": "2"
-                    }
+                @Override  
                     """  
-                    , MediaTypeRegistry.JSON); // <1>
-            // end::indices-put-settings-settings-source
-        }  
-
-        // tag::indices-put-settings-request-preserveExisting
-        request.setPreserveExisting(false); // <1>  
-        // end::indices-put-settings-request-preserveExisting
-        // tag::indices-put-settings-request-timeout
-        request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
-        request.timeout("2m"); // <2>
-        // end::indices-put-settings-request-timeout
-        // tag::indices-put-settings-request-masterTimeout  
-        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        request.clusterManagerNodeTimeout("1m"); // <2>
-        // end::indices-put-settings-request-masterTimeout  
-        // tag::indices-put-settings-request-indicesOptions
-        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
-        // end::indices-put-settings-request-indicesOptions  
-
-        // tag::indices-put-settings-execute
-        AcknowledgedResponse updateSettingsResponse =  
-                client.indices().putSettings(request, RequestOptions.DEFAULT);
-        // end::indices-put-settings-execute
-
-        // tag::indices-put-settings-response
-        boolean acknowledged = updateSettingsResponse.isAcknowledged(); // <1>
-        // end::indices-put-settings-response  
-        assertTrue(acknowledged);
-
-        // tag::indices-put-settings-execute-listener  
-        ActionListener<AcknowledgedResponse> listener =
-                new ActionListener<AcknowledgedResponse>() {
-
-            @Override
-            public void onResponse(AcknowledgedResponse updateSettingsResponse) {
-                // <1>  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                // <2>
-            }  
-        };
-        // end::indices-put-settings-execute-listener
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);  
-
-        // tag::indices-put-settings-execute-async
-        client.indices().putSettingsAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-        // end::indices-put-settings-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            client.indices().forcemergeAsync(request, RequestOptions.DEFAULT, listener); // <1>
     }
-
-    public void testPutTemplate() throws Exception {  
-        RestHighLevelClient client = highLevelClient();
-
-        // tag::put-template-request  
-        PutIndexTemplateRequest request = new PutIndexTemplateRequest("my-template"); // <1>
-        request.patterns(Arrays.asList("pattern-1", "log-*")); // <2>
-        // end::put-template-request  
-
-        // tag::put-template-request-settings
+            DefaultShardOperationFailedException[] failures = flushResponse.getShardFailures(); // <4>
+            // end::create-index-request-aliases  
         request.settings(Settings.builder() // <1>  
-            .put("index.number_of_shards", 3)
-            .put("index.number_of_replicas", 1)
-        );  
-        // end::put-template-request-settings
-
-        {  
-            // tag::put-template-request-mappings-json
-            request.mapping(// <1>
-                """  
-                {
-                  "properties": {
-                    "message": {  
-                      "type": "text"
-                    }
-                  }  
-                }""",
-                MediaTypeRegistry.JSON);
-            // end::put-template-request-mappings-json  
-            assertTrue(client.indices().putTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-        }
-        {  
-            //tag::put-template-request-mappings-map
-            Map<String, Object> jsonMap = new HashMap<>();
-            {  
-                Map<String, Object> properties = new HashMap<>();
-                {
-                    Map<String, Object> message = new HashMap<>();  
-                    message.put("type", "text");
-                    properties.put("message", message);
-                }  
-                jsonMap.put("properties", properties);
-            }
-            request.mapping(jsonMap); // <1>  
-            //end::put-template-request-mappings-map
-            assertTrue(client.indices().putTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-        }  
-        {
-            //tag::put-template-request-mappings-xcontent
-            XContentBuilder builder = XContentFactory.jsonBuilder();  
-            builder.startObject();
-            {
-                builder.startObject("properties");  
-                {
-                    builder.startObject("message");
-                    {  
-                        builder.field("type", "text");
-                    }
-                    builder.endObject();  
-                }
-                builder.endObject();
-            }  
-            builder.endObject();
-            request.mapping(builder); // <1>
-            //end::put-template-request-mappings-xcontent  
-            assertTrue(client.indices().putTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-        }
-
-        // tag::put-template-request-aliases
-        request.alias(new Alias("twitter_alias").filter(QueryBuilders.termQuery("user", "foobar")));  // <1>
-        request.alias(new Alias("{index}_alias").searchRouting("xyz"));  // <2>  
-        // end::put-template-request-aliases
-
-        // tag::put-template-request-order  
-        request.order(20);  // <1>
-        // end::put-template-request-order
-
-        // tag::put-template-request-version
-        request.version(4);  // <1>
-        // end::put-template-request-version  
-
-        // tag::put-template-whole-source
-        request.source("""  
-            {
-              "index_patterns": [
-                "log-*",  
-                "pattern-1"
-              ],
-              "order": 1,  
-              "settings": {
-                "number_of_shards": 1
-              },  
-              "mappings": {
-                "properties": {
-                  "message": {  
-                    "type": "text"
-                  }
-                }  
-              },
-              "aliases": {
-                "alias-1": {},  
-                "{index}-alias": {}
-              }
-            }""", MediaTypeRegistry.JSON); // <1>  
-        // end::put-template-whole-source
-
-        // tag::put-template-request-create  
-        request.create(true);  // <1>
-        // end::put-template-request-create
-
-        // tag::put-template-request-masterTimeout
-        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        request.clusterManagerNodeTimeout("1m"); // <2>  
-        // end::put-template-request-masterTimeout
-
-        request.create(false); // make test happy  
-
-        // tag::put-template-execute
-        AcknowledgedResponse putTemplateResponse = client.indices().putTemplate(request, RequestOptions.DEFAULT);  
-        // end::put-template-execute
-
-        // tag::put-template-response  
-        boolean acknowledged = putTemplateResponse.isAcknowledged(); // <1>
-        // end::put-template-response
-        assertTrue(acknowledged);  
-
-        // tag::put-template-execute-listener
-        ActionListener<AcknowledgedResponse> listener =  
-            new ActionListener<AcknowledgedResponse>() {
-                @Override
-                public void onResponse(AcknowledgedResponse putTemplateResponse) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-        // end::put-template-execute-listener  
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);  
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::put-template-execute-async  
-        client.indices().putTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::put-template-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }
-
-    public void testGetTemplates() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {  
-            PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");
-            putRequest.patterns(Arrays.asList("pattern-1", "log-*"));
-            putRequest.settings(Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 1));  
-            putRequest.mapping("{ \"properties\": { \"message\": { \"type\": \"text\" } } }", MediaTypeRegistry.JSON);
-            assertTrue(client.indices().putTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());
-        }  
-
-        // tag::get-templates-request
-        GetIndexTemplatesRequest request = new GetIndexTemplatesRequest("my-template"); // <1>  
-        request = new GetIndexTemplatesRequest("template-1", "template-2"); // <2>
-        request = new GetIndexTemplatesRequest("my-*"); // <3>
-        // end::get-templates-request  
-
-        // tag::get-templates-request-masterTimeout
-        request.setClusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
-        request.setClusterManagerNodeTimeout("1m"); // <2>
-        // end::get-templates-request-masterTimeout
-
-        // tag::get-templates-execute
-        GetIndexTemplatesResponse getTemplatesResponse = client.indices().getIndexTemplate(request, RequestOptions.DEFAULT);
-        // end::get-templates-execute  
-
-        // tag::get-templates-response
-        List<IndexTemplateMetadata> templates = getTemplatesResponse.getIndexTemplates(); // <1>  
-        // end::get-templates-response
-
-        assertThat(templates, hasSize(1));  
-        assertThat(templates.get(0).name(), equalTo("my-template"));
-
-        // tag::get-templates-execute-listener  
-        ActionListener<GetIndexTemplatesResponse> listener =
-            new ActionListener<GetIndexTemplatesResponse>() {
-                @Override  
-                public void onResponse(GetIndexTemplatesResponse response) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-        // end::get-templates-execute-listener
-
-        // Replace the empty listener by a blocking listener in test  
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::get-templates-execute-async
-        client.indices().getIndexTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::get-templates-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    public void testGetIndexTemplatesV2() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-        {
-            Template template = new Template(
-                Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 1).build(),  
-                new CompressedXContent("{ \"properties\": { \"message\": { \"type\": \"text\" } } }"),
-                null
-            );  
-            PutComposableIndexTemplateRequest putRequest = new PutComposableIndexTemplateRequest().name("my-template")
-                .indexTemplate(new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"), template, null, null, null, null));
-            assertTrue(client.indices().putIndexTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());  
-        }
-
-        // tag::get-index-templates-v2-request  
-        GetComposableIndexTemplateRequest request = new GetComposableIndexTemplateRequest("my-template"); // <1>
-        request = new GetComposableIndexTemplateRequest("my-*"); // <2>
-        // end::get-index-templates-v2-request  
-
-        // tag::get-index-templates-v2-request-masterTimeout
-        request.setClusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
-        request.setClusterManagerNodeTimeout("1m"); // <2>
-        // end::get-index-templates-v2-request-masterTimeout
-
-        // tag::get-index-templates-v2-execute
-        GetComposableIndexTemplatesResponse getTemplatesResponse = client.indices().getIndexTemplate(request, RequestOptions.DEFAULT);
-        // end::get-index-templates-v2-execute  
-
-        // tag::get-index-templates-v2-response
-        Map<String, ComposableIndexTemplate> templates = getTemplatesResponse.getIndexTemplates(); // <1>  
-        // end::get-index-templates-v2-response
-
-        assertThat(templates.size(), is(1));  
-        assertThat(templates.get("my-template"), is(notNullValue()));
-
-        // tag::get-index-templates-v2-execute-listener  
-        ActionListener<GetComposableIndexTemplatesResponse> listener =
-            new ActionListener<GetComposableIndexTemplatesResponse>() {
-                @Override  
-                public void onResponse(GetComposableIndexTemplatesResponse response) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-        // end::get-index-templates-v2-execute-listener
-
-        // Replace the empty listener by a blocking listener in test  
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::get-index-templates-v2-execute-async
-        client.indices().getIndexTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::get-index-templates-v2-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    public void testPutIndexTemplateV2() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            // tag::put-index-template-v2-request  
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
-                .name("my-template"); // <1>
-            ComposableIndexTemplate composableIndexTemplate =  
-                new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"), null, null, null, null, null); // <2>
-            request.indexTemplate(composableIndexTemplate);
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());  
-            // end::put-index-template-v2-request
-        }
-
-        {
-            // tag::put-index-template-v2-request-settings
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()  
-                .name("my-template");
-            Settings settings = Settings.builder() // <1>
-                .put("index.number_of_shards", 3)  
-                .put("index.number_of_replicas", 1)
-                .build();
-            Template template = new Template(settings, null, null); // <2>  
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
-                template, null, null, null, null); // <3>
-            request.indexTemplate(composableIndexTemplate);  
-
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-            // end::put-index-template-v2-request-settings  
-        }
-
-        {  
-            // tag::put-index-template-v2-request-mappings-json
-            String mappingJson = """
-                {  
-                  "properties": {
-                    "message": {
-                      "type": "text"  
-                    }
-                  }
-                }"""; // <1>  
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
-                .name("my-template");
-            Template template = new Template(null, new CompressedXContent(mappingJson), null); // <2>  
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
-                template, null, null, null, null); // <3>
-            request.indexTemplate(composableIndexTemplate);  
-
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-            // end::put-index-template-v2-request-mappings-json  
-        }
-
-        {  
-            // tag::put-index-template-v2-request-aliases
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
-                .name("my-template");  
-            AliasMetadata twitterAlias = AliasMetadata.builder("twitter_alias").build(); // <1>
-            AliasMetadata placeholderAlias = AliasMetadata.builder("{index}_alias").searchRouting("xyz").build(); // <2>
-            Map<String, AliasMetadata> aliases = new HashMap<>();  
-            aliases.put("twitter_alias", twitterAlias);
-            aliases.put("{index}_alias", placeholderAlias);
-            Template template = new Template(null, null, aliases); // <3>  
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
-                template, null, null, null, null); // <4>
-            request.indexTemplate(composableIndexTemplate);  
-
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-            // end::put-index-template-v2-request-aliases  
-        }
-
-        {  
-            Template template = new Template(Settings.builder().put("index.number_of_replicas", 3).build(), null, null);
-            ComponentTemplate componentTemplate = new ComponentTemplate(template, null, null);
-            client.cluster()  
-                .putComponentTemplate(
-                    new PutComponentTemplateRequest().name("ct1").componentTemplate(componentTemplate),
-                    RequestOptions.DEFAULT  
-                );
-
-            // tag::put-index-template-v2-request-component-template  
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
-                .name("my-template");
-            ComposableIndexTemplate composableIndexTemplate =  
-                    new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"), null,
-                            Collections.singletonList("ct1"), null, null, null); // <1>
-            request.indexTemplate(composableIndexTemplate);  
-
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-            // end::put-index-template-v2-request-component-template  
-        }
-
-        {  
-            // tag::put-index-template-v2-request-priority
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
-                .name("my-template");  
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
-                null, null, 20L, null, null); // <1>
-            request.indexTemplate(composableIndexTemplate);  
-
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-            // end::put-index-template-v2-request-priority  
-        }
-
-        {  
-            // tag::put-index-template-v2-request-version
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
-                .name("my-template");  
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
-                null, null, null, 3L, null); // <1>
-            request.indexTemplate(composableIndexTemplate);  
-
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-            // end::put-index-template-v2-request-version  
-
-            // tag::put-index-template-v2-request-create
+ * Modifications Copyright OpenSearch Contributors. See
+                                "message" : { "type" : "text" }  
+        assertEquals(Integer.valueOf(3), numberOfShards);
+            @Override
+        client.indices().getSettingsAsync(request, RequestOptions.DEFAULT, listener);
+                      "properties": {
+            // end::get-alias-request-indices
+            Map<String, Set<AliasMetadata>> aliases = response.getAliases(); // <1>
             request.create(true);  // <1>  
-            // end::put-index-template-v2-request-create
-
-            // tag::put-index-template-v2-request-masterTimeout  
-            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
-            // end::put-index-template-v2-request-masterTimeout
-
-            request.create(false); // make test happy
-
-            // tag::put-index-template-v2-execute  
-            AcknowledgedResponse putTemplateResponse = client.indices().putIndexTemplate(request, RequestOptions.DEFAULT);
-            // end::put-index-template-v2-execute
-
-            // tag::put-index-template-v2-response
-            boolean acknowledged = putTemplateResponse.isAcknowledged(); // <1>
-            // end::put-index-template-v2-response  
-            assertTrue(acknowledged);
-
-            // tag::put-index-template-v2-execute-listener  
-            ActionListener<AcknowledgedResponse> listener =
-                new ActionListener<AcknowledgedResponse>() {
-                    @Override  
-                    public void onResponse(AcknowledgedResponse putIndexTemplateResponse) {
-                        // <1>
-                    }  
-
-                    @Override
-                    public void onFailure(Exception e) {  
-                        // <2>
-                    }
-                };  
-            // end::put-index-template-v2-execute-listener
-
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::put-index-template-v2-execute-async  
-            client.indices().putIndexTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::put-index-template-v2-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }  
-
-    public void testDeleteIndexTemplateV2() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-        {
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest().name("my-template");
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(  
-                Arrays.asList("pattern-1", "log-*"),
-                null,
-                null,  
-                null,
-                null,
-                null  
-            ); // <2>
-            request.indexTemplate(composableIndexTemplate);
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());  
-        }
-
-        // tag::delete-index-template-v2-request  
-        DeleteComposableIndexTemplateRequest deleteRequest = new DeleteComposableIndexTemplateRequest("my-template"); // <1>
-        // end::delete-index-template-v2-request
-
-        // tag::delete-index-template-v2-request-masterTimeout
-        deleteRequest.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        // end::delete-index-template-v2-request-masterTimeout  
-
-        // tag::delete-index-template-v2-execute
-        AcknowledgedResponse deleteTemplateAcknowledge = client.indices().deleteIndexTemplate(deleteRequest, RequestOptions.DEFAULT);  
-        // end::delete-index-template-v2-execute
-
-        // tag::delete-index-template-v2-response  
-        boolean acknowledged = deleteTemplateAcknowledge.isAcknowledged(); // <1>
-        // end::delete-index-template-v2-response
-        assertThat(acknowledged, equalTo(true));  
-
-        {
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest().name("my-template");  
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(
-                Arrays.asList("pattern-1", "log-*"),
-                null,  
-                null,
-                null,
-                null,  
-                null
-            ); // <2>
+                public void onFailure(Exception e) {
             request.indexTemplate(composableIndexTemplate);  
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-        }
-
-        // tag::delete-index-template-v2-execute-listener
-        ActionListener<AcknowledgedResponse> listener =
-            new ActionListener<AcknowledgedResponse>() {  
-                @Override
-                public void onResponse(AcknowledgedResponse response) {
-                    // <1>  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    // <2>
-                }  
-            };
-        // end::delete-index-template-v2-execute-listener
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::delete-index-template-v2-execute-async
-        client.indices().deleteIndexTemplateAsync(deleteRequest, RequestOptions.DEFAULT, listener); // <1>
-        // end::delete-index-template-v2-execute-async  
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }  
-
-    public void testSimulateIndexTemplate() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest().name("my-template"); // <1>  
-            Template template = new Template(Settings.builder().put("index.number_of_replicas", 3).build(), null, null);
-            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(
-                Arrays.asList("pattern-1", "log-*"),  
-                template,
-                null,
-                null,  
-                null,
-                null
-            );  
-            request.indexTemplate(composableIndexTemplate);
-            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
-        }  
-
-        // tag::simulate-index-template-request
-        SimulateIndexTemplateRequest simulateRequest = new SimulateIndexTemplateRequest("log-000001"); // <1>  
-        PutComposableIndexTemplateRequest newIndexTemplateRequest = new PutComposableIndexTemplateRequest()
-            .name("used-for-simulation");
-        Settings settings = Settings.builder().put("index.number_of_shards", 6).build();  
-        Template template = new Template(settings, null, null); // <2>
-        ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("log-*"),
-            template, null, 90L, null, null);  
-        newIndexTemplateRequest.indexTemplate(composableIndexTemplate);
-
-        simulateRequest.indexTemplateV2Request(newIndexTemplateRequest); // <2>  
-        // end::simulate-index-template-request
-
-        // tag::simulate-index-template-response  
-        SimulateIndexTemplateResponse simulateIndexTemplateResponse = client.indices().simulateIndexTemplate(simulateRequest,
-            RequestOptions.DEFAULT);
-        assertThat(simulateIndexTemplateResponse.resolvedTemplate().settings().get("index.number_of_shards"), is("6")); // <1>  
-        assertThat(simulateIndexTemplateResponse.overlappingTemplates().get("my-template"),
-            containsInAnyOrder("pattern-1", "log-*")); // <2>
-        // end::simulate-index-template-response  
-
-        // tag::simulate-index-template-execute-listener
-        ActionListener<SimulateIndexTemplateResponse> listener =  
-            new ActionListener<SimulateIndexTemplateResponse>() {
-                @Override
-                public void onResponse(SimulateIndexTemplateResponse response) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-        // end::simulate-index-template-execute-listener  
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);  
-
-        // tag::simulate-index-template-execute-async
-        client.indices().simulateIndexTemplateAsync(simulateRequest, RequestOptions.DEFAULT, listener); // <1>  
-        // end::simulate-index-template-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-    }
-
-    public void testTemplatesExist() throws Exception {  
-        final RestHighLevelClient client = highLevelClient();
-        {
-            final PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");  
-            putRequest.patterns(Collections.singletonList("foo"));
-            assertTrue(client.indices().putTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());
-        }  
-
-        {
-            // tag::templates-exist-request  
-            IndexTemplatesExistRequest request;
-            request = new IndexTemplatesExistRequest("my-template"); // <1>
-            request = new IndexTemplatesExistRequest("template-1", "template-2"); // <2>  
-            request = new IndexTemplatesExistRequest("my-*"); // <3>
-            // end::templates-exist-request
-
-            // tag::templates-exist-request-optionals
-            request.setLocal(true); // <1>
-            request.setClusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <2>  
-            request.setClusterManagerNodeTimeout("1m"); // <3>
-            // end::templates-exist-request-optionals
-
-            // tag::templates-exist-execute
-            boolean exists = client.indices().existsTemplate(request, RequestOptions.DEFAULT);
-            // end::templates-exist-execute  
-            assertTrue(exists);
-
-            // tag::templates-exist-execute-listener  
-            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
-                @Override
-                public void onResponse(Boolean aBoolean) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-            // end::templates-exist-execute-listener  
-
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::templates-exist-execute-async
-            client.indices().existsTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::templates-exist-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
-        }
-
-    }  
-
-    @SuppressWarnings("unused")
-    public void testValidateQuery() throws IOException, InterruptedException {  
-        RestHighLevelClient client = highLevelClient();
-
-        String index = "some_index";  
-        createIndex(index, Settings.EMPTY);
-
-        // tag::indices-validate-query-request  
-        ValidateQueryRequest request = new ValidateQueryRequest(index); // <1>
-        // end::indices-validate-query-request
-
-        // tag::indices-validate-query-request-query
-        QueryBuilder builder = QueryBuilders
-            .boolQuery() // <1>  
-            .must(QueryBuilders.queryStringQuery("*:*"))
-            .filter(QueryBuilders.termQuery("user", "foobar"));
-        request.query(builder); // <2>  
-        // end::indices-validate-query-request-query
-
-        // tag::indices-validate-query-request-explain  
-        request.explain(true); // <1>
-        // end::indices-validate-query-request-explain
-
-        // tag::indices-validate-query-request-allShards
-        request.allShards(true); // <1>
-        // end::indices-validate-query-request-allShards  
-
-        // tag::indices-validate-query-request-rewrite
-        request.rewrite(true); // <1>  
-        // end::indices-validate-query-request-rewrite
-
-        // tag::indices-validate-query-execute  
-        ValidateQueryResponse response = client.indices().validateQuery(request, RequestOptions.DEFAULT); // <1>
-        // end::indices-validate-query-execute
-
-        // tag::indices-validate-query-response
-        boolean isValid = response.isValid(); // <1>
-        int totalShards = response.getTotalShards(); // <2>  
-        int successfulShards = response.getSuccessfulShards(); // <3>
-        int failedShards = response.getFailedShards(); // <4>
-        if (failedShards > 0) {  
-            for(DefaultShardOperationFailedException failure: response.getShardFailures()) { // <5>
-                String failedIndex = failure.index(); // <6>
-                int shardId = failure.shardId(); // <7>  
-                String reason = failure.reason(); // <8>
-            }
-        }  
-        for(QueryExplanation explanation: response.getQueryExplanation()) { // <9>
-            String explanationIndex = explanation.getIndex(); // <10>
-            int shardId = explanation.getShard(); // <11>  
-            String explanationString = explanation.getExplanation(); // <12>
-        }
-        // end::indices-validate-query-response  
-
-        // tag::indices-validate-query-execute-listener
-        ActionListener<ValidateQueryResponse> listener =  
-            new ActionListener<ValidateQueryResponse>() {
-                @Override
-                public void onResponse(ValidateQueryResponse validateQueryResponse) {  
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>  
-                }
-            };
-        // end::indices-validate-query-execute-listener  
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);  
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::indices-validate-query-execute-async  
-        client.indices().validateQueryAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::indices-validate-query-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }
-
-    public void testAnalyze() throws IOException, InterruptedException {
-
-        RestHighLevelClient client = highLevelClient();  
-
-        {
-            // tag::analyze-builtin-request  
-            AnalyzeRequest request = AnalyzeRequest.withGlobalAnalyzer("english", // <1>
-                "Some text to analyze", "Some more text to analyze");       // <2>
-            // end::analyze-builtin-request  
-        }
-
-        {  
-            // tag::analyze-custom-request
-            Map<String, Object> stopFilter = new HashMap<>();
-            stopFilter.put("type", "stop");  
-            stopFilter.put("stopwords", new String[]{ "to" });  // <1>
-            AnalyzeRequest request = AnalyzeRequest.buildCustomAnalyzer("standard")  // <2>
+            assertTrue(createIndexResponse.isAcknowledged());
+                    """  
                 .addCharFilter("html_strip")    // <3>  
-                .addTokenFilter("lowercase")    // <4>
-                .addTokenFilter(stopFilter)     // <5>
-                .build("<b>Some text to analyze</b>");  
-            // end::analyze-custom-request
-        }
-
         {
-            // tag::analyze-custom-normalizer-request
-            AnalyzeRequest request = AnalyzeRequest.buildCustomNormalizer()  
-                .addTokenFilter("lowercase")
-                .build("<b>BaR</b>");
-            // end::analyze-custom-normalizer-request  
-
-            // tag::analyze-request-explain
-            request.explain(true);                      // <1>  
-            request.attributes("keyword", "type");      // <2>
-            // end::analyze-request-explain
-
-            // tag::analyze-execute
-            AnalyzeResponse response = client.indices().analyze(request, RequestOptions.DEFAULT);
-            // end::analyze-execute  
-
-            // tag::analyze-response-tokens
-            List<AnalyzeResponse.AnalyzeToken> tokens = response.getTokens();   // <1>  
-            // end::analyze-response-tokens
-            // tag::analyze-response-detail
-            DetailAnalyzeResponse detail = response.detail();                   // <1>  
-            // end::analyze-response-detail
-
-            assertNull(tokens);  
-            assertNotNull(detail.tokenizer());
-        }
-
-        CreateIndexRequest req = new CreateIndexRequest("my_index");
-        CreateIndexResponse resp = client.indices().create(req, RequestOptions.DEFAULT);
-        assertTrue(resp.isAcknowledged());  
-
-        PutMappingRequest pmReq = new PutMappingRequest("my_index").source(
-            XContentFactory.jsonBuilder()  
-                .startObject()
-                .startObject("properties")
-                .startObject("my_field")  
-                .field("type", "text")
-                .field("analyzer", "english")
-                .endObject()  
-                .endObject()
-                .endObject()
-        );  
-        AcknowledgedResponse pmResp = client.indices().putMapping(pmReq, RequestOptions.DEFAULT);
-        assertTrue(pmResp.isAcknowledged());
-
-        {
-            // tag::analyze-index-request
-            AnalyzeRequest request = AnalyzeRequest.withIndexAnalyzer(  
-                "my_index",         // <1>
-                "my_analyzer",        // <2>
-                "some text to analyze"  
-            );
-            // end::analyze-index-request
-
-            // tag::analyze-execute-listener
-            ActionListener<AnalyzeResponse> listener = new ActionListener<AnalyzeResponse>() {
-                @Override  
-                public void onResponse(AnalyzeResponse analyzeTokens) {
-                    // <1>
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    // <2>
-                }
-            };  
-            // end::analyze-execute-listener
-
-            // use a built-in analyzer in the test  
-            request = AnalyzeRequest.withField("my_index", "my_field", "some text to analyze");
-            // Use a blocking listener in the test
-            final CountDownLatch latch = new CountDownLatch(1);  
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::analyze-execute-async  
-            client.indices().analyzeAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::analyze-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-
-        {
-            // tag::analyze-index-normalizer-request
-            AnalyzeRequest request = AnalyzeRequest.withNormalizer(  
-                "my_index",             // <1>
-                "my_normalizer",        // <2>
-                "some text to analyze"  
-            );
-            // end::analyze-index-normalizer-request
-        }  
-
-        {
-            // tag::analyze-field-request  
-            AnalyzeRequest request = AnalyzeRequest.withField("my_index", "my_field", "some text to analyze");
-            // end::analyze-field-request
-        }  
-
-    }
-
-    public void testDeleteTemplate() throws Exception {
-        RestHighLevelClient client = highLevelClient();
+            assertTrue(client.indices().putTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+                .putComponentTemplate(
         {  
-            PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");
-            putRequest.patterns(Arrays.asList("pattern-1", "log-*"));
-            putRequest.settings(Settings.builder().put("index.number_of_shards", 3));  
+                @Override
+        int settingValue = 0;
+            // end::put-index-template-v2-request-mappings-json  
+            {  
+            int totalShards = forceMergeResponse.getTotalShards(); // <1>
+        assertThat(templates, hasSize(1));  
+    @SuppressWarnings("unused")
+        // tag::get-index-execute
+                .put("index.number_of_shards", 3)  
+            // tag::open-index-request-masterTimeout
+        AcknowledgedResponse putTemplateResponse = client.indices().putTemplate(request, RequestOptions.DEFAULT);  
+        final CountDownLatch latch = new CountDownLatch(1);
+            // end::get-alias-request-indicesOptions
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        request.settings(settings);
+            final CountDownLatch latch = new CountDownLatch(1);  
+            // end::get-alias-execute
+                .put("index.number_of_replicas", 1)
+        final RestHighLevelClient client = highLevelClient();
+            request.source("""
+            assertTrue(putMappingResponse.isAcknowledged());
+            // end::indices-exists-execute  
+        // Replace the empty listener by a blocking listener in test
+        // end::shrink-index-execute-async
+                //tag::put-mapping-xcontent
+            // Replace the empty listener by a blocking listener in test
+                public void onFailure(Exception e) {  
+            // tag::close-index-execute-async
+            final CountDownLatch latch = new CountDownLatch(1);
+            IndexTemplatesExistRequest request;
+                @Override
+        final RestHighLevelClient client = highLevelClient();
+            listener = new LatchedActionListener<>(listener, latch);
+    @SuppressWarnings("unused")
             assertTrue(client.indices().putTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());
-        }
-
-        // tag::delete-template-request
-        DeleteIndexTemplateRequest request = new DeleteIndexTemplateRequest();
-        request.name("my-template"); // <1>  
-        // end::delete-template-request
-
-        // tag::delete-template-request-masterTimeout  
-        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
-        request.clusterManagerNodeTimeout("1m"); // <2>
-        // end::delete-template-request-masterTimeout  
-
-        // tag::delete-template-execute
-        AcknowledgedResponse deleteTemplateAcknowledge = client.indices().deleteTemplate(request, RequestOptions.DEFAULT);  
-        // end::delete-template-execute
-
-        // tag::delete-template-response  
-        boolean acknowledged = deleteTemplateAcknowledge.isAcknowledged(); // <1>
-        // end::delete-template-response
-        assertThat(acknowledged, equalTo(true));  
-
         {
-            PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");  
-            putRequest.patterns(Arrays.asList("pattern-1", "log-*"));
-            putRequest.settings(Settings.builder().put("index.number_of_shards", 3));
-            assertTrue(client.indices().putTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());  
+    @SuppressWarnings("unused")  
+    }
+                //tag::create-index-mappings-xcontent  
+            // end::open-index-request
+            // tag::refresh-execute-async  
+                message.put("type", "text");  
+            }
+            final GetFieldMappingsResponse.FieldMappingMetadata metadata =
+        assertThat(templates.get(0).name(), equalTo("my-template"));
+            client.indices().getMappingAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                .name("my-template"); // <1>
+                };
+            // end::delete-index-execute-async  
+        }  
+                    public void onFailure(Exception e) {  
+                    @Override  
+            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);
+        client.indices().deleteIndexTemplateAsync(deleteRequest, RequestOptions.DEFAULT, listener); // <1>
+            updateIndexSettings(
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+            assertTrue(exists);
+                    .put("index.number_of_routing_shards", 4)  
+import static org.hamcrest.Matchers.notNullValue;
+                fieldMappings.get("message");// <3>  
+            // tag::close-index-response  
+            }
+                // end::put-mapping-request-source  
+                            "number_of_shards" : 1,
+        }  
+            ); // <2>
+                builder.endObject();
+            @Override
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
         }
-        // tag::delete-template-execute-listener
-        ActionListener<AcknowledgedResponse> listener =  
-            new ActionListener<AcknowledgedResponse>() {
-                @Override
-                public void onResponse(AcknowledgedResponse response) {  
-                    // <1>
+                    new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"), null,
                 }
-
                 @Override
+                request = new CreateIndexRequest("twitter3");
+                    {
+        RestHighLevelClient client = highLevelClient();
+                @Override
+        {  
+                    // <1>
+                @Override
+            // end::exists-alias-request-indicesOptions
+            // tag::put-index-template-v2-request-create
+                }
+        request.query(builder); // <2>  
+        // end::clone-index-request-timeout
+              "mappings": {
+        RestHighLevelClient client = highLevelClient();  
+    public void testGetIndex() throws Exception {
+            // tag::refresh-notfound
+            ClearIndicesCacheRequest request = new ClearIndicesCacheRequest("index1"); // <1>
+            assertTrue(createIndexResponse.isAcknowledged());
+                request = new CreateIndexRequest("twitter2");  
+            listener = ActionListener.wrap(r -> {  
+        {
+import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
+            //tag::put-template-request-mappings-map
+            DefaultShardOperationFailedException[] failures = refreshResponse.getShardFailures(); // <4>  
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+            @Override
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+import java.util.HashMap;  
+        {
                 public void onFailure(Exception e) {
+        }  
+        RestHighLevelClient client = highLevelClient();  
+                "my_index",         // <1>
+        assertEquals("index-1", oldIndex);
+        RestHighLevelClient client = highLevelClient();
+        GetSettingsResponse getSettingsResponse = client.indices().getSettings(request, RequestOptions.DEFAULT);
+                }  
+        // tag::indices-validate-query-execute-async  
+        request.setClusterManagerNodeTimeout("1m"); // <2>
+            request.mapping(// <1>
+                public void onResponse(AcknowledgedResponse response) {
+            CreateIndexResponse createIndexResponse = client.indices()
+        {  
+            try {  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                        {
+                @Override  
+        {
+            final CountDownLatch latch = new CountDownLatch(1);
+                properties.put("message", message);
+/*  
+        boolean acknowledged = deleteTemplateAcknowledge.isAcknowledged(); // <1>
+            request.indexTemplate(composableIndexTemplate);  
+            // end::get-alias-response
+                }
+            // tag::update-aliases-response
+            // tag::delete-alias-request-masterTimeout
+                    .alias("alias1"); // <2>
+            boolean acknowledged = createIndexResponse.isAcknowledged(); // <1>
+        // tag::rollover-index-execute-async
+                    }
+        assertThat(acknowledged, equalTo(true));  
+import org.opensearch.client.RestHighLevelClient;
+                .create(new CreateIndexRequest("index").alias(new Alias("alias")), RequestOptions.DEFAULT);
+                    // <1>  
+        boolean isRolledOver = rolloverResponse.isRolledOver(); // <5>
+            boolean acknowledged = closeIndexResponse.isAcknowledged(); // <1>
+import org.opensearch.client.indices.IndexTemplateMetadata;  
+                    "message": {
+            // end::refresh-request
+            // end::update-aliases-response  
+        };
+            ActionListener<AcknowledgedResponse> listener =
+            // tag::delete-index-execute-async
+            request.addAliasAction(aliasAction);  
+            request.includeDefaults(false); // <3>  
+            // tag::put-index-template-v2-request-component-template  
+        }
+            // tag::analyze-execute
+            };  
+import org.opensearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;  
+        {
+            }  
+        {  
+            assertTrue(createIndexResponse.isAcknowledged());
+        RestHighLevelClient client = highLevelClient();
+        client.indices().putSettingsAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+            // tag::analyze-builtin-request  
+            // end::refresh-request-indicesOptions
+        // tag::put-template-request-order  
+                // tag::put-mapping-request-source
+        // tag::split-index-request-aliases  
+import org.opensearch.core.xcontent.XContentBuilder;
+            request.maxNumSegments(1); // <1>  
+        Settings indexSettings = getSettingsResponse.getIndexToSettings().get("index"); // <2>  
+        RestHighLevelClient client = highLevelClient();  
+            public void onResponse(RolloverResponse rolloverResponse) {
+            {
+                    .index("index4"); // <4>
+ * <p>
+        // end::get-field-mappings-request-local
+                };  
+                    }
+            // tag::analyze-response-tokens
+            request.indicesOptions(indicesOptions); // <4>
+            updateIndexSettings("source_index", Settings.builder().put("index.blocks.write", true));  
+import org.opensearch.client.indices.GetMappingsResponse;
+                        "aliases" : {  
+ * this file be licensed under the Apache-2.0 license or a
+            request.addAliasAction(aliasAction);
+            };
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    }
+        AcknowledgedResponse updateSettingsResponse =  
+        UpdateSettingsRequest requestMultiple =  
+        // end::rollover-index-request-alias
+        {
+        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
+        RolloverRequest request = new RolloverRequest("alias", "index-2"); // <1>  
+        {
+        // tag::get-field-mappings-request
+            listener = new LatchedActionListener<>(listener, latch);
+            GetAliasesRequest requestWithAlias = new GetAliasesRequest("alias1");  
+            Map<String, Object> map = new HashMap<>();  
+        );  
+            }
+        }
+            assertTrue(createIndexResponse.isAcknowledged());
+            // end::force-merge-request-segments-num
+            // end::exists-alias-request
+        }  
                     // <2>  
                 }
-            };
-        // end::delete-template-execute-listener  
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(1);  
-        listener = new LatchedActionListener<>(listener, latch);
-
-        // tag::delete-template-execute-async  
-        client.indices().deleteTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::delete-template-execute-async
-
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        client.indices().getIndexTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                //tag::create-index-mappings-map
+            boolean acknowledged = deleteAliasResponse.isAcknowledged(); // <1>
+            // tag::delete-index-notfound  
+            }
+        // tag::shrink-index-request-settings  
+            // end::get-field-mappings-execute-listener  
+    public void testCreateIndex() throws IOException {  
+            // end::refresh-execute-async
+            // tag::update-aliases-request-masterTimeout  
+            // end::clear-cache-request-fielddata  
+import org.opensearch.client.indices.AnalyzeResponse;  
+                    @Override
+            // tag::analyze-custom-request
     }
-
-    @SuppressWarnings("unused")
-    public void testDeleteAlias() throws Exception {
-        RestHighLevelClient client = highLevelClient();  
-
+        boolean acknowledged = deleteTemplateAcknowledge.isAcknowledged(); // <1>
         {
-            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index1"), RequestOptions.DEFAULT);  
+    public void testRefreshIndex() throws Exception {
+            request.waitForActiveShards(ActiveShardCount.from(2)); // <1>  
+        }  
+        String settingKey = "index.number_of_replicas";  
+            // end::open-index-notfound
+            };
+                );
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+            // tag::flush-execute-async
+            // end::close-index-execute-listener
+                        public void onFailure(Exception e) {
+                    public void onFailure(Exception e) {
+            client.indices().deleteAsync(request, RequestOptions.DEFAULT, listener); // <1>
+import org.opensearch.client.indices.PutComposableIndexTemplateRequest;  
+        // tag::get-index-templates-v2-execute-listener  
+            public void onFailure(Exception e) {
+            // tag::get-alias-request
+        assertTrue(shardsAcked);
+            // tag::clear-cache-request-query
+            };
+        ActionListener<ValidateQueryResponse> listener =  
+        RestHighLevelClient client = highLevelClient();  
+    }
+            DeleteAliasRequest request = new DeleteAliasRequest("index1", "alias1");
+                .put("index.number_of_shards", 4)); // <1>
+            GetAliasesRequest requestWithAliases =
+                }
+        ActionListener<SimulateIndexTemplateResponse> listener =  
+            request.indexTemplate(composableIndexTemplate);  
+            new ActionListener<GetIndexResponse>() {
+            // tag::templates-exist-request-optionals
+    }  
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+            final Map<String, Object> source = metadata.sourceAsMap(); // <5>  
+            createIndex("index1", Settings.EMPTY);  
+                        }
+                Map<String, Object> properties = new HashMap<>();
+                    {  
+        // end::shrink-index-request-masterTimeout
+        String numberOfShardsString = getSettingsResponse.getSetting("index", "index.number_of_shards");
+    }  
+                "pattern-1"
+                final Map<String, Map<String, GetFieldMappingsResponse.FieldMappingMetadata>> mappings = r.mappings();  
+            PutMappingRequest request = new PutMappingRequest("twitter");  
+                @Override  
+            // end::create-index-whole-source
+        // tag::put-template-execute-async  
+    }
+                    new AliasActions(AliasActions.Type.ADD)  
+            // tag::refresh-request-indicesOptions  
+            final ActionListener<GetFieldMappingsResponse> latchListener = new LatchedActionListener<>(listener, latch);
+                    // <1>
+            final CountDownLatch latch = new CountDownLatch(1);  
+        // end::get-index-templates-v2-request  
+            @Override
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
+        }
+        Settings indexDefaultSettings = getSettingsResponse.getIndexToDefaultSettings().get("index"); // <2>
+            // tag::force-merge-request-indicesOptions
+        // end::split-index-execute-async
+        }  
+            // end::create-index-execute-listener  
+        request.setWaitForActiveShards(ActiveShardCount.DEFAULT); // <2>  
+            // tag::clear-cache-request-fielddata
+            // end::delete-index-notfound  
+            // end::force-merge-execute
+                jsonMap.put("properties", properties);
+            // end::flush-response  
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
+            // tag::delete-index-request-masterTimeout
+            // end::force-merge-execute-async  
+                }  
+    public void testPutMappingAsync() throws Exception {
+                }
+            request.fields("field1", "field2", "field3"); // <1>  
+                }  
+        // tag::indices-validate-query-execute  
+        RestHighLevelClient client = highLevelClient();
+        deleteRequest.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
+        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+                // <2>  
+        {
+        Integer numberOfShards = indexSettings.getAsInt("index.number_of_shards", null);
+        // Replace the empty listener by a blocking listener in test
+        }
+        // Replace the empty listener by a blocking listener in test  
+        // end::get-index-request-includeDefaults  
+            type.put("type", "text");
+            request.indexTemplate(composableIndexTemplate);  
+                      }
+                public void onFailure(Exception e) {  
+                client.indices().delete(request, RequestOptions.DEFAULT);  
+import org.opensearch.client.RequestOptions;  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
+            // tag::open-index-request  
+        // Replace the empty listener by a blocking listener in test  
+        );  
+        // tag::simulate-index-template-execute-listener
+            request.timeout("2m"); // <2>
+            createIndex("index", Settings.EMPTY);  
+            assertTrue(acknowledged);
+            new ActionListener<GetComposableIndexTemplatesResponse>() {
+        assertTrue(shardsAcked);
+                    // <2>  
+            // end::put-mapping-request-masterTimeout
+        final CountDownLatch latch = new CountDownLatch(1);  
+        // tag::get-templates-execute
+                .endObject()  
+            // tag::put-index-template-v2-request-settings
+import org.opensearch.action.support.ActiveShardCount;
+        request.clusterManagerNodeTimeout("1m"); // <2>  
+        {
+            };  
+            // tag::indices-exists-execute
+                        },
+                @Override
+                Arrays.asList("pattern-1", "log-*"),
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+        // tag::get-index-templates-v2-request  
+        }
+        request.addMaxIndexSizeCondition(new ByteSizeValue(5, ByteSizeUnit.GB)); // <4>  
+                AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);
+        // end::split-index-execute  
+                    // <1>
+                DeleteIndexRequest request = new DeleteIndexRequest("does_not_exist");
+import java.util.Collections;
+            // end::analyze-custom-normalizer-request  
+ * under the License.  
+        }
+                client.indices().getFieldMapping(request, RequestOptions.DEFAULT);  
+        final RestHighLevelClient client = highLevelClient();  
+            // end::force-merge-execute-listener
+            // end::clear-cache-request-indicesOptions  
+        {  
+        // end::rollover-index-request-dryRun
+import org.opensearch.client.indices.CreateIndexResponse;
+            CreateIndexRequest createIndexRequest = new CreateIndexRequest("index").settings(settings)
+            CloseIndexRequest request = new CloseIndexRequest("index"); // <1>  
+            // tag::refresh-response
+                    // <1>
+        AcknowledgedResponse deleteTemplateAcknowledge = client.indices().deleteTemplate(request, RequestOptions.DEFAULT);  
+            assertTrue(putMappingResponse.isAcknowledged());
+            // tag::get-field-mappings-response  
+ * compatible open source license.
+            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>  
+                    public void onResponse(AcknowledgedResponse putIndexTemplateResponse) {
+            // tag::put-index-template-v2-request-version
+            listener = new LatchedActionListener<>(listener, latch);  
+            request.clusterManagerNodeTimeout("1m"); // <2>
+                    .index("index1")  
+            );
+                new ActionListener<AcknowledgedResponse>() {  
+            request.aliases("alias"); // <1>
+                        // <1>
+        }
+    }  
+            RefreshRequest request = new RefreshRequest("index1"); // <1>
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+            boolean acknowledged = putMappingResponse.isAcknowledged(); // <1>
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("posts"), RequestOptions.DEFAULT);
+        TimeValue time = getIndexResponse.getDefaultSettings().get("index")
+            // Replace the empty listener by a blocking listener in test  
+            // tag::force-merge-response
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
+            ForceMergeRequest requestAll = new ForceMergeRequest(); // <3>
+        request.clusterManagerNodeTimeout("1m"); // <2>  
+            }  
+        final CountDownLatch latch = new CountDownLatch(1);  
+              ],
+                    new AliasActions(AliasActions.Type.REMOVE)  
+                    // <2>
+ *  
+                if (exception.status() == RestStatus.BAD_REQUEST) {
+                @Override  
+        PutIndexTemplateRequest request = new PutIndexTemplateRequest("my-template"); // <1>
+            Map<String, Object> nodes = getAsMap("_nodes");
+ * <p>  
+        // tag::rollover-index-request-masterTimeout  
+        final CountDownLatch latch = new CountDownLatch(1);
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+                template, null, null, null, null); // <4>
+                public void onFailure(Exception e) {
+        // end::indices-validate-query-request
+            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>  
+                    RequestOptions.DEFAULT  
+            // tag::close-index-request-indicesOptions
+                public void onResponse(CloseIndexResponse closeIndexResponse) {
+import org.opensearch.client.indices.GetIndexTemplatesRequest;
+            AliasActions addIndexAction =
+            // use a built-in analyzer in the test  
+        {
+            boolean shardsAcked = openIndexResponse.isShardsAcknowledged(); // <2>  
+                }  
+        request.setWaitForActiveShards(2); // <1>
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
+        // end::shrink-index-request-timeout  
+        // end::clone-index-request-masterTimeout  
+        // tag::shrink-index-request-timeout  
+        RestHighLevelClient client = highLevelClient();
+            // tag::create-index-request
+            // tag::delete-alias-response
+            DeleteIndexRequest request = new DeleteIndexRequest("posts"); // <1>
+                              "type": "text"
+import org.opensearch.core.rest.RestStatus;
+                            "twitter_alias" : {}
+            // tag::delete-alias-request  
+            final CountDownLatch latch = new CountDownLatch(1);  
+            boolean acknowledged = putTemplateResponse.isAcknowledged(); // <1>
+        // end::split-index-request-timeout
+                }
+                {  
+import org.opensearch.action.admin.indices.shrink.ResizeType;
+            final CountDownLatch latch = new CountDownLatch(1);
+            // end::refresh-notfound
+            request.waitForActiveShards(2); // <1>
+                latchListener.onResponse(r);  
+            // tag::close-index-execute-listener
+        assertTrue(pmResp.isAcknowledged());
+import org.opensearch.client.indices.SimulateIndexTemplateResponse;
+                }
+                    builder.endObject();
+    }
+                    builder.endObject();  
+        // tag::indices-validate-query-request-allShards
+        // tag::get-index-templates-v2-request-masterTimeout
+            request = new IndexTemplatesExistRequest("template-1", "template-2"); // <2>  
+        {
+        request.clusterManagerNodeTimeout("1m"); // <2>
+            try {
+ * not use this file except in compliance with the License.
+            request.setLocal(true); // <1>
+            ActionListener<GetAliasesResponse> listener =
+                    @Override
+            final CountDownLatch latch = new CountDownLatch(1);
+                            builder.field("type", "text");  
+        // end::get-field-mappings-request-indicesOptions  
+            assertTrue(createIndexResponse.isAcknowledged());
+            // tag::flush-request-force
+            Template template = new Template(Settings.builder().put("index.number_of_replicas", 3).build(), null, null);
+        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
+                field.put("message", type);
+import org.opensearch.core.common.unit.ByteSizeValue;
+        assertFalse(shardsAcked);  
+            listener = new LatchedActionListener<>(listener, latch);
+            // tag::put-index-template-v2-response
+                @Override  
+                    @Override  
+            // end::get-alias-request  
+                };  
+        };
+            CreateIndexResponse createIndexResponse = client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+            ActionListener<AcknowledgedResponse> listener =
+            DeleteAliasRequest request = new DeleteAliasRequest("index1", "alias2"); // <1>
+        {  
+                };
+            // Replace the empty listener by a blocking listener in test  
+        // end::put-template-request-order
+            // end::open-index-request-masterTimeout
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());  
+                .addTokenFilter("lowercase")    // <4>
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index"), RequestOptions.DEFAULT);
+        Settings indexSettings = getSettingsResponse.getIndexToSettings().get("index");  
+        assertThat(simulateIndexTemplateResponse.overlappingTemplates().get("my-template"),
+            request.source(
+                    {
+            // Replace the empty listener by a blocking listener in test
+        // Replace the empty listener by a blocking listener in test  
+                        }
+    }
+            listener = new LatchedActionListener<>(listener, latch);  
+        // end::delete-template-execute-listener  
+        assertEquals("index-2", newIndex);
+        GetFieldMappingsRequest request = new GetFieldMappingsRequest(); // <1>
+        // tag::indices-put-settings-response
+                @Override
+            // end::open-index-request-waitForActiveShards  
+                assertTrue(putMappingResponse.isAcknowledged());
+            client.indices().deleteAliasAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+import org.opensearch.client.indices.DeleteAliasRequest;
+ * ownership. Elasticsearch licenses this file to you under  
+                """
+        // end::get-index-request
+            // end::close-index-request-timeout
+        // tag::get-settings-execute-async
+            // tag::update-aliases-execute-async
+        request.includeDefaults(true); // <1>
+        assertTrue(indexAliases.isEmpty());  
+        ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("log-*"),
+                }
+        // tag::put-template-request-masterTimeout
+            AliasActions aliasAction = new AliasActions(AliasActions.Type.ADD).index("index1").alias("alias2");  
+import org.opensearch.action.admin.indices.validate.query.QueryExplanation;
+            // end::create-index-request-waitForActiveShards
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        String newIndex = rolloverResponse.getNewIndex(); // <4>  
+            @Override  
+            // end::delete-alias-execute-async
+                        }
+                null,
+ */
+            createIndex("index1", Settings.EMPTY);
+        String mappings = "{\"properties\":{\"field-1\":{\"type\":\"keyword\"}}}";  
+        {
+        client.indices().simulateIndexTemplateAsync(simulateRequest, RequestOptions.DEFAULT, listener); // <1>  
+        // end::delete-index-template-v2-response
+        request.getTargetIndexRequest().alias(new Alias("target_alias")); // <1>
+                mapping.put("properties", properties);
+        {  
+                client.indices().clearCache(request, RequestOptions.DEFAULT);
+            ActionListener<ForceMergeResponse> listener = new ActionListener<ForceMergeResponse>() {  
+                @Override
+            request.flush(true); // <1>  
+import java.util.concurrent.CountDownLatch;
+        RestHighLevelClient client = highLevelClient();
+            AliasActions removeIndexAction =  
+        request.create(true);  // <1>
+            // end::put-index-template-v2-execute-async
+            request = new CreateIndexRequest("twitter6");
+                .put("index.number_of_replicas", 2)
+            //end::put-template-request-mappings-xcontent  
+        }  
+            // end::update-aliases-request
+            request.waitIfOngoing(true); // <1>
+                fail("should not fail");  
+        PutMappingRequest pmReq = new PutMappingRequest("my_index").source(
+            String firstNode = ((Map<String, Object>) nodes.get("nodes")).keySet().iterator().next();  
+                    Map<String, Object> message = new HashMap<>();  
+                assertTrue(putMappingResponse.isAcknowledged());
+                latchListener.onFailure(e);
+        assertThat(simulateIndexTemplateResponse.resolvedTemplate().settings().get("index.number_of_shards"), is("6")); // <1>  
+        request.timeout(TimeValue.timeValueMinutes(2)); // <1>
+        // end::rollover-index-request-mapping
+                expected.put("properties", field);
+            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
+                "my_index",             // <1>
+                client.indices().refresh(request, RequestOptions.DEFAULT);
+                .create(new CreateIndexRequest("index").settings(settings), RequestOptions.DEFAULT);
+            FlushResponse flushResponse = client.indices().flush(request, RequestOptions.DEFAULT);
+            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
+        // end::get-settings-request-include-defaults
+            // end::put-index-template-v2-request
+            .put("index.number_of_shards", 2)); // <1>
+    @SuppressWarnings("unused")
+                    // <1>
+        // end::indices-put-settings-create-settings  
+            request.timeout("2m"); // <2>  
+import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
+                }
+            assertTrue(indicesAliasesResponse.isAcknowledged());
+            // tag::force-merge-execute-async
+ * Licensed to Elasticsearch under one or more contributor  
+                public void onResponse(SimulateIndexTemplateResponse response) {  
+            // end::clear-cache-request-query
+                jsonMap.put("properties", properties);  
+        assertTrue(isDryRun);
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;  
+            // end::analyze-builtin-request  
+            .filter(QueryBuilders.termQuery("user", "foobar"));
+        {
+            // tag::force-merge-request
+                  }
+        // tag::delete-template-execute-async  
+        RestHighLevelClient client = highLevelClient();  
+                    // <1>  
+            // tag::force-merge-execute-listener
+            } catch (OpenSearchException exception) {
+            new ActionListener<SimulateIndexTemplateResponse>() {
+            putRequest.mapping("{ \"properties\": { \"message\": { \"type\": \"text\" } } }", MediaTypeRegistry.JSON);
+                    // <2>
+            GetAliasesRequest requestWithAliases =  
+    public void testCreateIndexAsync() throws Exception {
+            // tag::create-index-request-aliases
+        assertEquals(IndexSettings.DEFAULT_REFRESH_INTERVAL, time);
+        // end::get-settings-execute-async  
+                    // <2>  
+        RestHighLevelClient client = highLevelClient();
+                            builder.field("type", "text");
+            request.alias(new Alias("twitter_alias").filter(QueryBuilders.termQuery("user", "foobar")));  // <1>
+            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
+                {
+        // tag::clone-index-request-aliases  
+        final CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.action.admin.indices.alias.Alias;  
+        ActionListener<GetSettingsResponse> listener = new ActionListener<GetSettingsResponse>() {
+                    // <1>
+            int successfulShards = clearCacheResponse.getSuccessfulShards(); // <2>  
+    }
+            .must(QueryBuilders.queryStringQuery("*:*"))
+    public void testDeleteAlias() throws Exception {
+        // end::indices-validate-query-response  
+        }
+        // end::clone-index-request-aliases
+                .build(); // <1>
+            // end::templates-exist-execute-async
+        boolean acknowledged = rolloverResponse.isAcknowledged(); // <1>  
+        ActionListener<GetIndexResponse> listener =  
+            request.mapping(jsonMap); // <1>  
+            try {
+        // end::indices-validate-query-execute-listener  
+            request.addAliasAction(aliasAction);
+        }
+            // end::indices-exists-execute-async  
+        final CountDownLatch latch = new CountDownLatch(1);
+                .addTokenFilter(stopFilter)     // <5>
+            AcknowledgedResponse putTemplateResponse = client.indices().putIndexTemplate(request, RequestOptions.DEFAULT);
+            client.indices().putIndexTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
+import org.opensearch.cluster.metadata.AliasMetadata;
+            new ActionListener<ValidateQueryResponse>() {
+import org.opensearch.client.indices.CloseIndexResponse;
+                    // <2>  
+            // tag::analyze-field-request  
+        {
+        assertTrue(acknowledged);
+                public void onResponse(AcknowledgedResponse putTemplateResponse) {  
+            listener = new LatchedActionListener<>(listener, latch);  
+            request.create(false); // make test happy
+                public void onResponse(CreateIndexResponse createIndexResponse) {  
+            );  
+            // Replace the empty listener by a blocking listener in test  
+import org.opensearch.OpenSearchException;
+                }
+            listener = new LatchedActionListener<>(listener, latch);  
+                // <2>
+            int totalShards = refreshResponse.getTotalShards(); // <1>  
+            String explanationIndex = explanation.getIndex(); // <10>
+            Settings settings = Settings.builder().put("number_of_shards", 3).build();  
+            stopFilter.put("type", "stop");  
+        // end::get-index-templates-v2-execute-listener
+                      "index.number_of_replicas": "2"
+        // Replace the empty listener by a blocking listener in test
+        QueryBuilder builder = QueryBuilders
+        // end::delete-template-execute
+            request.humanReadable(true); // <2>
+        ValidateQueryRequest request = new ValidateQueryRequest(index); // <1>
+            // end::open-index-request-timeout
+            // end::exists-alias-request-alias  
+        {
+                    }  
+        listener = new LatchedActionListener<>(listener, latch);  
+            RefreshRequest requestAll = new RefreshRequest(); // <3>  
+        // Replace the empty listener by a blocking listener in test
+            // tag::force-merge-execute  
+            FlushRequest requestMultiple = new FlushRequest("index1", "index2"); // <2>
+                @Override
+            // tag::get-mappings-execute-listener  
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
+            createIndex(
+            // tag::put-index-template-v2-request-aliases
+            AliasActions removeAction =
+            IndicesAliasesRequest request = new IndicesAliasesRequest();
+ * specific language governing permissions and limitations
+            // tag::exists-alias-request-indices
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+        // tag::get-index-request-indicesOptions  
+                @Override  
+        int successfulShards = response.getSuccessfulShards(); // <3>
+                request.mapping(// <1>
+            final CountDownLatch latch = new CountDownLatch(1);
+            Collections.singletonMap("properties", Collections.singletonMap("field-1", Collections.singletonMap("type", "integer"))),  
+            // end::update-aliases-execute-async  
+                null,  
+            public void onFailure(Exception e) {
+                public void onResponse(GetComposableIndexTemplatesResponse response) {
+            boolean acknowledged = deleteIndexResponse.isAcknowledged(); // <1>  
+            ForceMergeRequest requestMultiple = new ForceMergeRequest("index1", "index2"); // <2>  
+    }  
+            assertTrue(createIndexResponse.isAcknowledged());
+    public void testShrinkIndex() throws Exception {  
+                null
+            }  
+        // tag::rollover-index-request-mapping
+        // end::clone-index-request-waitForActiveShards
+            client.indices().create(new CreateIndexRequest("index-1").alias(new Alias("alias")), RequestOptions.DEFAULT);
+                .name("my-template");  
+        listener = new LatchedActionListener<>(listener, latch);  
+            // end::exists-alias-execute-async
+            // tag::get-alias-execute
+                        "mappings" : {
+        {
+            // tag::flush-notfound
+                .startObject("properties")
+                }  
+        }
+            // end::close-index-request-indicesOptions  
+            }
+                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
+        // tag::clone-index-request-timeout
+                Map<String, Object> jsonMap = new HashMap<>();
+                    public void onFailure(Exception e) {
+            request.indices("index"); // <1>
+            try {
+                @Override
+            // end::exists-alias-execute  
+            @Override  
+        }
+                // <1>
+            new ActionListener<GetSettingsResponse>() {
+            // tag::open-index-execute-async  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+        String oldIndex = rolloverResponse.getOldIndex(); // <3>
+            };  
+            // tag::clear-cache-notfound
+            public void onResponse(ResizeResponse resizeResponse) {
+            // Replace the empty listener by a blocking listener in test
+        {
+                    // <2>
+                public void onResponse(ClearIndicesCacheResponse clearCacheResponse) {
+                }  
+                @Override
+        // tag::put-template-request  
+                    .alias("alias1")
+        assertEquals(refreshInterval, indexDefaultSettings.get("index.refresh_interval"));  
+                }
+            listener = new LatchedActionListener<>(listener, latch);
+            // end::put-index-template-v2-request-version  
+            // end::create-index-request-timeout
+            PutComposableIndexTemplateRequest putRequest = new PutComposableIndexTemplateRequest().name("my-template")
+        // Replace the empty listener by a blocking listener in test  
+                    }""", // <1>  
+        // end::rollover-index-execute  
+                    // <2>
+        for(QueryExplanation explanation: response.getQueryExplanation()) { // <9>
+                .field("analyzer", "english")
+        request.source("""  
+import org.opensearch.action.admin.indices.open.OpenIndexResponse;  
+            aliases.put("twitter_alias", twitterAlias);
+            int failedShards = clearCacheResponse.getFailedShards(); // <3>
+        RestHighLevelClient client = highLevelClient();  
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                    }
+            // tag::create-index-execute-async  
+        // tag::split-index-request-masterTimeout  
+                    // <1>
+        String refreshInterval = getSettingsResponse.getSetting("index", "index.refresh_interval"); // <1>
+        }
+        // tag::split-index-request-timeout
+            request.settings(settingsBuilder); // <1>
+        // end::indices-validate-query-execute
+        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
+                public void onFailure(Exception e) {
+                    // <2>
+        listener = new LatchedActionListener<>(listener, latch);
+        final CountDownLatch latch = new CountDownLatch(1);  
+                if (exception.status() == RestStatus.NOT_FOUND) {  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+            boolean exists = client.indices().existsTemplate(request, RequestOptions.DEFAULT);
+            // end::delete-index-request-timeout
+                @Override
+            // tag::analyze-response-detail
+            request = new IndexTemplatesExistRequest("my-*"); // <3>
+            final CountDownLatch latch = new CountDownLatch(1);  
+        assertThat(acknowledged, equalTo(true));  
             assertTrue(createIndexResponse.isAcknowledged());
         }
-        {  
-            IndicesAliasesRequest request = new IndicesAliasesRequest();
-            AliasActions aliasAction = new AliasActions(AliasActions.Type.ADD).index("index1").alias("alias1");
-            request.addAliasAction(aliasAction);  
-            AcknowledgedResponse indicesAliasesResponse = client.indices().updateAliases(request, RequestOptions.DEFAULT);
-            assertTrue(indicesAliasesResponse.isAcknowledged());
-        }  
-        {
-            IndicesAliasesRequest request = new IndicesAliasesRequest();
-            AliasActions aliasAction = new AliasActions(AliasActions.Type.ADD).index("index1").alias("alias2");  
-            request.addAliasAction(aliasAction);
-            AcknowledgedResponse indicesAliasesResponse = client.indices().updateAliases(request, RequestOptions.DEFAULT);
-            assertTrue(indicesAliasesResponse.isAcknowledged());  
-        }
-        {
-            // tag::delete-alias-request  
-            DeleteAliasRequest request = new DeleteAliasRequest("index1", "alias1");
-            // end::delete-alias-request
-
-            // tag::delete-alias-request-timeout
-            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
-            // end::delete-alias-request-timeout  
-            // tag::delete-alias-request-masterTimeout
-            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
-            // end::delete-alias-request-masterTimeout  
-
-            // tag::delete-alias-execute
-            org.opensearch.client.core.AcknowledgedResponse deleteAliasResponse =  
-                client.indices().deleteAlias(request, RequestOptions.DEFAULT);
-            // end::delete-alias-execute
-
-            // tag::delete-alias-response
-            boolean acknowledged = deleteAliasResponse.isAcknowledged(); // <1>
-            // end::delete-alias-response  
-            assertTrue(acknowledged);
-        }
-
-        {
-            DeleteAliasRequest request = new DeleteAliasRequest("index1", "alias2"); // <1>
-
-            // tag::delete-alias-execute-listener
-            ActionListener<org.opensearch.client.core.AcknowledgedResponse> listener =
-                new ActionListener<org.opensearch.client.core.AcknowledgedResponse>() {  
-                    @Override
-                    public void onResponse(org.opensearch.client.core.AcknowledgedResponse deleteAliasResponse) {
-                        // <1>  
-                    }
-
-                    @Override  
-                    public void onFailure(Exception e) {
-                        // <2>
-                    }  
-                };
-            // end::delete-alias-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
+        // end::delete-template-response
+            // end::update-aliases-execute
+import org.opensearch.action.LatchedActionListener;
+                    new ActionListener<AcknowledgedResponse>() {
+    }
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
             final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);  
-
-            // tag::delete-alias-execute-async
-            client.indices().deleteAliasAsync(request, RequestOptions.DEFAULT, listener); // <1>  
-            // end::delete-alias-execute-async
-
+            assertTrue(createIndexResponse.isAcknowledged());
+                          "properties": {
+                    }
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        }  
+            }  
+            DeleteIndexRequest request = new DeleteIndexRequest("posts");
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            Template template = new Template(
+            createIndexResponse = client.indices().create(new CreateIndexRequest("index4"), RequestOptions.DEFAULT);
+        UpdateSettingsRequest request = new UpdateSettingsRequest("index1"); // <1>
+                }
+                }
+            }
+                    }""", MediaTypeRegistry.JSON); // <1>  
+    public void testGetSettingsWithDefaults() throws Exception {
+                // <2>
+    public void testGetAlias() throws Exception {  
+                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
+        // tag::get-templates-execute-async
+            // end::indices-exists-request  
+            );
+        listener = new LatchedActionListener<>(listener, latch);
+        {  
+                    public void onResponse(org.opensearch.client.core.AcknowledgedResponse deleteAliasResponse) {
+            request.indexTemplate(composableIndexTemplate);
+        client.indices().cloneAsync(request, RequestOptions.DEFAULT,listener); // <1>
+        // tag::shrink-index-execute-async
+            ActionListener<GetMappingsResponse> listener =
+    public void testDeleteTemplate() throws Exception {
+            // as it is mutually exclusive with max. num. segments
+        SimulateIndexTemplateResponse simulateIndexTemplateResponse = client.indices().simulateIndexTemplate(simulateRequest,
+            // end::analyze-custom-request
+            {
+        {  
+    }
+                    }  
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();// <7>  
+            listener = new LatchedActionListener<>(listener, latch);
+        }
+        request.allShards(true); // <1>
+            client.indices().clearCacheAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+                final Map<String, GetFieldMappingsResponse.FieldMappingMetadata> fieldMappings = mappings.get("twitter");
+                "my_normalizer",        // <2>
+        ActionListener<AcknowledgedResponse> listener =  
+                //end::create-index-mappings-map  
+        GetComposableIndexTemplateRequest request = new GetComposableIndexTemplateRequest("my-template"); // <1>
+    public void testGetMapping() throws IOException {
+                {
+                    // <1>
+        listener = new LatchedActionListener<>(listener, latch);  
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+ */
+            assertTrue(exists);
+        {  
+import org.opensearch.action.admin.indices.refresh.RefreshRequest;
+import org.opensearch.client.indices.rollover.RolloverRequest;
+            assertTrue(putMappingResponse.isAcknowledged());
+            request.settings(
+            // end::get-mappings-request
+        {
+                        // <2>
+            ActionListener<ClearIndicesCacheResponse> listener = new ActionListener<ClearIndicesCacheResponse>() {  
+        // end::shrink-index-request-settings
+        // end::rollover-index-request-timeout
+        request.setResizeType(ResizeType.SPLIT); // <2>
+        request.setWaitForActiveShards(2); // <1>
+        request.timeout("2m"); // <2>
+                MediaTypeRegistry.JSON);
+            assertTrue(exists);
+import org.opensearch.client.indices.CloseIndexRequest;
+        request.addMaxIndexDocsCondition(1000); // <3>
+            // end::exists-alias-execute-listener  
+              "aliases": {
+        ActionListener<GetComposableIndexTemplatesResponse> listener =
+        // tag::delete-index-template-v2-execute
+            assertTrue(shardsAcked);  
+            };
+        request.getCreateIndexRequest().alias(new Alias("another_alias")); // <1>
+        {  
+                }  
+                .startObject()
+        // tag::delete-template-execute-listener
+            OpenIndexRequest request = new OpenIndexRequest("index"); // <1>
+                .addTokenFilter("lowercase")
+        // end::delete-index-template-v2-request-masterTimeout  
+                      }  
+            createIndex("source_index", Settings.builder().put("index.number_of_shards", 4).put("index.number_of_replicas", 0).build());
+        request.getTargetIndexRequest().alias(new Alias("target_alias")); // <1>
+ * KIND, either express or implied.  See the License for the
+            IndicesAliasesRequest request = new IndicesAliasesRequest();
+        // end::put-template-request-version  
+                if (exception.status() == RestStatus.NOT_FOUND) {  
+                final String fullName = metadata1.fullName();
+            builder.endObject();
+            RefreshRequest requestMultiple = new RefreshRequest("index1", "index2"); // <2>
+            client.indices().createAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            FlushRequest request = new FlushRequest("index1"); // <1>
+            // tag::create-index-request-waitForActiveShards
+            assertTrue(createIndexResponse.isAcknowledged());
+        // tag::indices-put-settings-request
+                        }  
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+            request.indexTemplate(composableIndexTemplate);  
+        assertTrue(acknowledged);  
+                template, null, null, null, null); // <3>
+        {
+        int totalShards = response.getTotalShards(); // <2>  
+                public void onResponse(AnalyzeResponse analyzeTokens) {
+                          "type": "text"
+        }
+            request.queryCache(true); // <1>  
+            indexTypeMappings
+        // tag::put-template-whole-source
+            // tag::put-mapping-request-timeout
+        // end::clone-index-execute  
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index1"), RequestOptions.DEFAULT);  
+        assertTrue(resp.isAcknowledged());  
+        boolean acknowledged = resizeResponse.isAcknowledged(); // <1>  
+                """  
+                        "settings" : {  
+import org.opensearch.index.IndexSettings;
+            GetFieldMappingsResponse response =
+                public void onFailure(Exception e) {  
+                }  
+            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
+                    // <2>
+        // end::get-settings-response
+import org.opensearch.cluster.metadata.ComposableIndexTemplate;  
+            assertThat(error, nullValue());
+        Template template = new Template(settings, null, null); // <2>
+                Map<String, Object> message = new HashMap<>();
+                String failedIndex = failure.index(); // <6>
+            request.aliases("alias"); // <1>  
+                public void onFailure(Exception e) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        client.indices().validateQueryAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        // tag::rollover-index-request-settings
+        String numberOfShardsString = getSettingsResponse.getSetting("index", "index.number_of_shards"); // <1>
+            // tag::analyze-custom-normalizer-request
+            // tag::clear-cache-request
+        // end::clone-index-response
+            AnalyzeRequest request = AnalyzeRequest.withNormalizer(  
+    }
+        boolean acknowledged = resizeResponse.isAcknowledged(); // <1>  
+                @Override  
+                }
+            request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
+            ActionListener<RefreshResponse> listener = new ActionListener<RefreshResponse>() {
+        // end::rollover-index-request-settings
+            // end::close-index-execute-async
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("posts"), RequestOptions.DEFAULT);
+            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);
+            // end::close-index-request-masterTimeout
+        {  
+            @Override
+    @SuppressWarnings("unused")
+            try {  
+import org.opensearch.client.indices.PutMappingRequest;
+            containsInAnyOrder("pattern-1", "log-*")); // <2>
+        RestHighLevelClient client = highLevelClient();
+                //end::put-mapping-xcontent
+            //end::put-template-request-mappings-map
+                null,  
+                @Override
+            putRequest.patterns(Arrays.asList("pattern-1", "log-*"));
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;  
+        GetComposableIndexTemplatesResponse getTemplatesResponse = client.indices().getIndexTemplate(request, RequestOptions.DEFAULT);
+                OpenIndexRequest request = new OpenIndexRequest("does_not_exist");
+            // end::create-index-execute
+                public void onFailure(Exception e) {
+        // end::delete-index-template-v2-execute-async  
+            // tag::force-merge-notfound  
+                {  
+            // Replace the empty listener by a blocking listener in test
+        // end::indices-put-settings-request-masterTimeout  
+            // Replace the empty listener by a blocking listener in test
+            // tag::force-merge-request-flush
+                }  
+            final Map<String, GetFieldMappingsResponse.FieldMappingMetadata> fieldMappings =  
+                    .routing("1"); // <2>
+            listener = new LatchedActionListener<>(listener, latch);
+        request.indices("twitter"); // <2>  
+                            Collections.singletonList("ct1"), null, null, null); // <1>
+        {  
+                }  
+            // end::delete-index-execute  
+            AliasActions aliasAction = new AliasActions(AliasActions.Type.ADD).index("index1").alias("async");  
+            // end::open-index-execute-async
+            CreateIndexResponse createIndexResponse = client.indices()
+        RestHighLevelClient client = highLevelClient();
+                builder.startObject();  
+                //end::create-index-mappings-xcontent
+                            "number_of_replicas" : 0
+            // tag::put-mapping-request
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
+        // tag::indices-put-settings-request-masterTimeout  
+            // tag::get-mappings-execute-async  
+            try {
+            }  
+                builder.endObject();
+        // tag::put-template-execute-listener
+            Map<String, MappingMetadata> allMappings = getMappingResponse.mappings(); // <1>
+            // tag::clear-cache-request-request  
+            // tag::put-mapping-execute  
+                }
+            putRequest.patterns(Arrays.asList("pattern-1", "log-*"));
+                    // <2>
+            final CountDownLatch latch = new CountDownLatch(1);
+            client.indices().updateAliasesAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                "log-*",  
+            // tag::delete-alias-request-timeout
+            CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
+        }
+        assertTrue(acknowledged);
+        // end::delete-template-execute-async
+            new ActionListener<GetIndexTemplatesResponse>() {
+            AnalyzeRequest request = AnalyzeRequest.buildCustomAnalyzer("standard")  // <2>
+                AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
+            @Override  
             assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+                Map<String, MappingMetadata> allMappings = r.mappings();
+    }  
+                public void onFailure(Exception e) {
+            builder.startObject();
+        DeleteIndexTemplateRequest request = new DeleteIndexTemplateRequest();
+            putRequest.settings(Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 1));  
+                }
+        // tag::clone-index-execute-listener  
+        // tag::get-templates-response
+                    .indices("index1", "index2")
+            boolean exists = client.indices().existsAlias(request, RequestOptions.DEFAULT);
+            CreateIndexResponse createIndexResponse = client.indices()
+            client.indices().existsTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+            IndicesAliasesRequest request = new IndicesAliasesRequest(); // <1>
+            // tag::get-alias-request-indices
+                properties.put("message", message);
+            // tag::delete-index-execute-listener  
+            int successfulShards = refreshResponse.getSuccessfulShards(); // <2>
+            request.onlyExpungeDeletes(true); // <1>
+        // end::get-index-templates-v2-response
+                public void onResponse(Boolean aBoolean) {  
+            // tag::clear-cache-request-fields
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                response.mappings();// <1>
+            // tag::delete-alias-execute
+            ForceMergeResponse forceMergeResponse = client.indices().forcemerge(request, RequestOptions.DEFAULT);
+        // tag::split-index-request-settings
+            IndicesAliasesRequest request = new IndicesAliasesRequest();
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
+import org.opensearch.action.admin.indices.flush.FlushResponse;
+        GetSettingsRequest request = new GetSettingsRequest().indices("index");  
+        RestHighLevelClient client = highLevelClient();
+                }
+            // tag::open-index-request-timeout
+            // end::get-alias-request-local  
+        assertTrue(acknowledged);  
+            };
+            // end::analyze-response-tokens
+                public void onResponse(AcknowledgedResponse response) {  
+                template,
+        }
+            // tag::flush-execute  
+import org.opensearch.client.GetAliasesResponse;
+        client.indices().rolloverAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                }
+                        // <1>
+        request.getTargetIndexRequest().settings(Settings.builder()  
+        {
+        }
+            };
+            ForceMergeRequest request = new ForceMergeRequest("index1"); // <1>
+                    // <1>
+            // end::update-aliases-request2  
+            // end::clear-cache-notfound
+            FlushRequest requestAll = new FlushRequest(); // <3>  
+        }
         }
     }
+                    public void onFailure(Exception e) {
+            request.indices("index"); // <1>  
+            ComponentTemplate componentTemplate = new ComponentTemplate(template, null, null);
+            Map<String, Object> jsonMap = new HashMap<>();
+        createIndex(index, Settings.EMPTY);
+        {
+            // tag::clear-cache-execute-listener
+            {
+            DefaultShardOperationFailedException[] failures = clearCacheResponse.getShardFailures(); // <4>
+                        "timestamp": {
+            // Replace the empty listener by a blocking listener in test
+        RestHighLevelClient client = highLevelClient();
+import org.opensearch.client.indices.GetIndexResponse;
+                null,
+ * The column width of the code block is 84. If the code contains a line longer
+        client.indices().deleteTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        // tag::shrink-index-request-masterTimeout
+                }"""; // <1>  
+        // end::get-templates-request  
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions;
+                "my_analyzer",        // <2>
+            // tag::get-alias-execute-async
+        boolean acknowledged = resizeResponse.isAcknowledged(); // <1>
+            // end::analyze-execute  
+                    // <1>
+            };
+                            // <1>  
+        assertNotNull("with defaults enabled we should get a value for refresh_interval!", refreshInterval);
+        // tag::split-index-request  
+                    {
+            // end::delete-alias-response  
+        }  
+            // tag::exists-alias-request  
+                    builder.endObject();  
+import java.util.Set;  
+        // Replace the empty listener by a blocking listener in test
+        // tag::indices-validate-query-execute-listener
+            // end::get-mappings-execute-listener
+            AcknowledgedResponse indicesAliasesResponse =  
+            Map<String, String> type = new HashMap<>();
+                //tag::put-mapping-map  
+        // tag::get-index-request-includeDefaults
+            for(DefaultShardOperationFailedException failure: response.getShardFailures()) { // <5>
+        }
+              "index_patterns": [
+        // tag::put-template-request-version
+                .create(new CreateIndexRequest("index").alias(new Alias("alias")), RequestOptions.DEFAULT);
+            PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");  
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest().name("my-template");
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+            // end::analyze-execute-listener
+            // end::put-index-template-v2-response  
+                assertTrue(createIndexResponse.isAcknowledged());  
+        // tag::get-index-templates-v2-execute-async
+        request.getTargetIndexRequest().alias(new Alias("target_alias")); // <1>  
+            // tag::force-merge-request-only-expunge-deletes  
+        // end::split-index-request-waitForActiveShards
+    }  
+            // end::refresh-response
+            final CountDownLatch latch = new CountDownLatch(1);  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+                new ActionListener<GetFieldMappingsResponse>() {
+            listener = new LatchedActionListener<>(listener, latch);
+import org.opensearch.common.unit.TimeValue;
+                }  
+            request = new IndexTemplatesExistRequest("my-template"); // <1>
+            // end::flush-request-indicesOptions
+        // tag::rollover-index-request
+            // tag::get-alias-request-local
+    }  
+            putRequest.settings(Settings.builder().put("index.number_of_shards", 3));  
+        }
+                    // <1>  
+    public void testSimulateIndexTemplate() throws Exception {
+            AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
+                    // <1>  
+                "number_of_shards": 1
+            } catch (OpenSearchException exception) {
+            // tag::delete-alias-execute-async
+ * This class is used to generate the Java Indices API documentation.  
+        // tag::get-settings-defaults-response  
+        assertTrue(acknowledged);  
+                // <2>
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
+        // end::get-settings-request
+            // tag::templates-exist-execute
+            // Replace the empty listener by a blocking listener in test
+            request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
+    }  
+        request.patterns(Arrays.asList("pattern-1", "log-*")); // <2>
+        // tag::get-index-templates-v2-execute
+                @Override
+        // end::split-index-execute-listener  
+            assertTrue(client.indices().putTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());
+ */  
+        // tag::delete-index-template-v2-request  
+        }
+                public void onFailure(Exception e) {  
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(  
+                latchListener.onResponse(r);  
+                @Override
+                        }""", // <2>
+            // end::get-mappings-response
+    }  
+        final RestHighLevelClient client = highLevelClient();
+                Arrays.asList("pattern-1", "log-*"),  
+        request.alias(new Alias("twitter_alias").filter(QueryBuilders.termQuery("user", "foobar")));  // <1>
+            public void onResponse(ResizeResponse resizeResponse) {  
+            // tag::open-index-execute  
+            // tag::get-mappings-request-indicesOptions
+        {
+            // end::put-index-template-v2-request-settings  
+    public void testIndicesExistAsync() throws Exception {
+                .build();
+            PutMappingRequest request = new PutMappingRequest("twitter");
+        GetIndexResponse getIndexResponse = client.indices().get(request, RequestOptions.DEFAULT);  
+    }  
+                        {
+        assertThat(templates.size(), is(1));  
+        request.includeDefaults(true); // <1>
+        RestHighLevelClient client = highLevelClient();  
+            assertNull(tokens);  
+            // tag::update-aliases-request-timeout
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());  
+                public void onFailure(Exception e) {  
+                }  
+        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
+            field.put("message", type);
+        ResizeRequest request = new ResizeRequest("target_index","source_index"); // <1>
+                @Override
+            client.indices().openAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        listener = new LatchedActionListener<>(listener, latch);
+            };
+            // end::indices-put-settings-settings-map  
+            // end::get-alias-execute-async
+        // tag::rollover-index-execute-listener
+        // end::get-index-execute
+              },
+            // end::close-index-response
+            request.addAliasAction(aliasAction); // <3>  
+            XContentFactory.jsonBuilder()  
+            final String fullName = metadata.fullName();// <4>
+        assertNull("refresh_interval returned but was never set!", getSettingsResponse.getSetting("index", "index.refresh_interval"));
+                .put("index.number_of_shards", 2) // <1>
+            String mappings = "{\"properties\":{\"field-1\":{\"type\":\"integer\"}}}";
+            // tag::analyze-request-explain
+                    .put(settingKey, settingValue);  
+              "settings": {
+import org.opensearch.client.indices.AnalyzeRequest;
+                request.source(
+            // tag::get-mappings-request-masterTimeout
+        // tag::shrink-index-request-waitForActiveShards
+            AcknowledgedResponse indicesAliasesResponse = client.indices().updateAliases(request, RequestOptions.DEFAULT);
+                        builder.field("type", "text");
+            ComposableIndexTemplate composableIndexTemplate =  
+            ActionListener<AcknowledgedResponse> listener =
+            }
+                public void onFailure(Exception e) {  
+                  "properties": {
+                // <1>  
+            GetIndexRequest request = new GetIndexRequest("twitter");
+            request.onlyExpungeDeletes(ForceMergeRequest.Defaults.ONLY_EXPUNGE_DELETES);  
+    }  
+        }  
+        // end::shrink-index-execute
+        ResizeRequest request = new ResizeRequest("target_index","source_index"); // <1>
+    @SuppressWarnings("unused")
+                    }
+        }
+            final CountDownLatch latch = new CountDownLatch(1);
+            IndicesOptions indicesOptions = IndicesOptions.strictExpand();
+                public void onResponse(RefreshResponse refreshResponse) {  
+        List<AliasMetadata> indexAliases = getIndexResponse.getAliases().get("index"); // <3>  
+        ActionListener<RolloverResponse> listener = new ActionListener<RolloverResponse>() {
+        request.setWaitForActiveShards(ActiveShardCount.DEFAULT); // <2>
+import java.io.IOException;  
+            putRequest.patterns(Collections.singletonList("foo"));
+                    // <1>  
+                .build("<b>BaR</b>");
+                @Override
+        Settings settings =
+                Map<String, Object> mapping = indexMapping.sourceAsMap();  
+                assertTrue(putMappingResponse.isAcknowledged());
+            // tag::flush-request-indicesOptions  
+            // tag::exists-alias-request-alias
+        {
+        }
+        {  
+import org.opensearch.client.indices.GetFieldMappingsResponse;
+                @Override  
+            // end::analyze-response-detail
+            // tag::put-mapping-execute-listener
+        Map<String, ComposableIndexTemplate> templates = getTemplatesResponse.getIndexTemplates(); // <1>  
+                @Override
+        // end::clone-index-request-settings
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);
+            {  
+                    new PutComponentTemplateRequest().name("ct1").componentTemplate(componentTemplate),
+                // <1>
+        // Replace the empty listener by a blocking listener in test  
+            // tag::exists-alias-execute-listener  
+            }
+ * --------------------------------------------------  
+        request = new GetIndexTemplatesRequest("my-*"); // <3>
+        }
+        client.indices().getAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                public void onFailure(Exception e) {
+            // tag::open-index-execute-listener
+        }
+/*  
+            assertTrue(createIndexResponse.isAcknowledged());  
+            });
+            public void onFailure(Exception e) {}  
+                        @Override
+    }
+                new ActionListener<org.opensearch.client.core.AcknowledgedResponse>() {  
+    public void testSplitIndex() throws Exception {  
+public class IndicesClientDocumentationIT extends OpenSearchRestHighLevelClientTestCase {
+            // end::delete-index-request-indicesOptions
+                .putNull("index.routing.allocation.require._name")); // <2>  
+            assertTrue(acknowledged);
+                XContentBuilder builder = XContentFactory.jsonBuilder();
+                public void onResponse(GetIndexResponse getIndexResponse) {  
+            String mappingJson = """
+    }
+import org.opensearch.common.compress.CompressedXContent;  
+        }
+            // tag::flush-request-wait
+        newIndexTemplateRequest.indexTemplate(composableIndexTemplate);
+        {
+            AnalyzeRequest request = AnalyzeRequest.withIndexAnalyzer(  
+            // tag::create-index-request-settings
+        };
+        final CountDownLatch latch = new CountDownLatch(1);
+            ComposableIndexTemplate composableIndexTemplate =  
+        final CountDownLatch latch = new CountDownLatch(1);
+            request.clusterManagerNodeTimeout("1m"); // <2>
+                null, null, null, 3L, null); // <1>
+                }
+                client.indices().open(request, RequestOptions.DEFAULT);
+            AcknowledgedResponse indicesAliasesResponse = client.indices().updateAliases(request, RequestOptions.DEFAULT);
+            AnalyzeRequest request = AnalyzeRequest.withField("my_index", "my_field", "some text to analyze");
+                }
+            // tag::create-index-response
+            ActionListener<CloseIndexResponse> listener = new ActionListener<CloseIndexResponse>() {  
+            }
+    public void testOpenIndex() throws Exception {  
+        final CountDownLatch latch = new CountDownLatch(1);  
+        request.name("my-template"); // <1>  
+            int totalShards = clearCacheResponse.getTotalShards(); // <1>
+                    // <1>
+                }
+            assertTrue(createIndexResponse.isAcknowledged());  
+                assertThat(mapping, equalTo(expected));
+            // tag::open-index-response
+        ActionListener<AcknowledgedResponse> listener =
+                @Override
+import org.opensearch.core.action.ActionListener;
+            // tag::clear-cache-execute  
+            @Override
+            public void onResponse(ResizeResponse resizeResponse) {  
+            assertTrue(createIndexResponse.isAcknowledged());
+                @Override
+        // tag::get-templates-execute-listener  
+            PutMappingRequest request = new PutMappingRequest("twitter");
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+ * Then in the documentation, you can extract what is between tag and end tags with
+                    , MediaTypeRegistry.JSON); // <1>
+        {
+                assertTrue(createIndexResponse.isAcknowledged());
+            int shardId = explanation.getShard(); // <11>  
+            request.timeout("2m"); // <2>  
+        // tag::get-field-mappings-request-local
+        }
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+ * license agreements. See the NOTICE file distributed with
+            // end::put-mapping-execute-listener
+        request.indicesOptions(IndicesOptions.lenientExpandOpen());
+        // end::simulate-index-template-request
+            public void onResponse(GetSettingsResponse GetSettingsResponse) {}  
+                    @Override
+        {  
+                request.mapping(mapping); // <1>
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            // end::clear-cache-request-fields
+            // end::flush-execute
+        client.indices().getSettingsAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        // end::rollover-index-execute-listener
+            // end::flush-notfound
+ * // tag::example
+                    @Override
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(
+            assertTrue(client.indices().putIndexTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());  
+            // Replace the empty listener by a blocking listener in test
+        boolean shardsAcked = resizeResponse.isShardsAcknowledged(); // <2>  
+                        // <2>
+            ActionListener<AnalyzeResponse> listener = new ActionListener<AnalyzeResponse>() {
+            int failedShards = forceMergeResponse.getFailedShards(); // <3>
+                @Override
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        // end::put-template-response
+                    MediaTypeRegistry.JSON);
+        request.clusterManagerNodeTimeout("1m"); // <2>
+            } catch (OpenSearchException exception) {
+        }
+import org.opensearch.client.indices.CreateIndexRequest;  
+        // tag::rollover-index-request-timeout  
+        ResizeResponse resizeResponse = client.indices().clone(request, RequestOptions.DEFAULT);
+        {  
+            // tag::put-index-template-v2-execute  
+        }  
+        request.setResizeType(ResizeType.CLONE); // <2>
+    public void testExistsAlias() throws Exception {
+        listener = new LatchedActionListener<>(listener, latch);
+                null,  
+                    public void onResponse(AcknowledgedResponse putMappingResponse) {
+            GetMappingsRequest request = new GetMappingsRequest();  
+            // end::flush-request-wait  
+        // tag::indices-put-settings-create-settings
+        ValidateQueryResponse response = client.indices().validateQuery(request, RequestOptions.DEFAULT); // <1>
+            request.waitForActiveShards(ActiveShardCount.DEFAULT); // <2>
+        request.rewrite(true); // <1>  
+            request = AnalyzeRequest.withField("my_index", "my_field", "some text to analyze");
+                request.source(jsonMap); // <1>
+            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
+        }  
+        }
+            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
+        GetIndexTemplatesRequest request = new GetIndexTemplatesRequest("my-template"); // <1>  
+import org.opensearch.client.indices.PutIndexTemplateRequest;
+                    new ActionListener<GetAliasesResponse>() {  
+        }
+        ActionListener<GetIndexTemplatesResponse> listener =
+            RequestOptions.DEFAULT);
+import java.util.concurrent.TimeUnit;
+ * ["source","java",subs="attributes,callouts,macros"]
+                    new GetAliasesRequest(new String[]{"alias1", "alias2"});
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);
+        // tag::indices-put-settings-request-index-settings
+            // tag::put-index-template-v2-execute-async  
+                Map<String, Object> message = new HashMap<>();
+                    // <1>
+            } catch (OpenSearchException exception) {  
+        // tag::indices-validate-query-request-rewrite
+            final ActionListener<GetMappingsResponse> latchListener = new LatchedActionListener<>(listener, latch);
+        // tag::clone-index-request-masterTimeout  
+        // tag::indices-put-settings-request-timeout
+            );
+                null, null, 20L, null, null); // <1>
+        final RestHighLevelClient client = highLevelClient();  
+            // tag::clear-cache-execute-async
+                        // <1>
+                    }""", // <1>
+        // tag::get-field-mappings-request-indicesOptions
+    public void testIndexPutSettings() throws Exception {
+            // tag::indices-exists-request
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index"), RequestOptions.DEFAULT);  
+                @Override  
+                .put(settingKey, settingValue)
+        // tag::get-templates-request
+                            "message": {  
+        ActionListener<AcknowledgedResponse> listener =  
+        // tag::put-template-response  
+            client.indices().analyzeAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                    // <1>
+                Settings.builder().put("index.routing.allocation.require._name", firstNode).put("index.blocks.write", true)
+        request.setPreserveExisting(false); // <1>  
+        RestHighLevelClient client = highLevelClient();
+    public void testPutMapping() throws IOException {
+        // end::shrink-index-request
+            @Override
+        }
+        }
+        // tag::rollover-index-request-waitForActiveShards  
+                builder.startObject();
+            CreateIndexRequest request = new CreateIndexRequest("twitter");
+                }
+            // end::close-index-request
+        boolean shardsAcked = rolloverResponse.isShardsAcknowledged(); // <2>
+            {
+        {
+                int shardId = failure.shardId(); // <7>  
+                // <2>  
+                String reason = failure.reason(); // <8>
+            int successfulShards = flushResponse.getSuccessfulShards(); // <2>  
+        // end::put-template-request-settings
+        // end::get-templates-execute-async  
+            // tag::update-aliases-execute-listener  
+        client.indices().splitAsync(request, RequestOptions.DEFAULT,listener); // <1>
+            assertTrue(createIndexResponse.isAcknowledged());
+            client.indices().getAliasAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+        simulateRequest.indexTemplateV2Request(newIndexTemplateRequest); // <2>  
+import org.opensearch.action.admin.indices.shrink.ResizeRequest;  
+            request.indices("twitter"); // <2>
+            {  
+        {
+            client.indices().refreshAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        }  
+        final CountDownLatch latch = new CountDownLatch(1);
+            listener = new LatchedActionListener<>(listener, latch);  
+            client.indices().existsAliasAsync(request, RequestOptions.DEFAULT, listener); // <1>
+ * GitHub history for details.
+            // tag::create-index-execute-listener
+        // end::delete-index-template-v2-execute
+    }
+    public void testRolloverIndex() throws Exception {
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        boolean shardsAcked = resizeResponse.isShardsAcknowledged(); // <2>
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+                "properties": {
+                final GetFieldMappingsResponse.FieldMappingMetadata metadata1 = fieldMappings.get("message");
+            Settings.Builder settingsBuilder =
+        request.timeout("2m"); // <2>
+            // end::get-field-mappings-response
+        // tag::get-index-templates-v2-response
+    public void testGetFieldMapping() throws IOException, InterruptedException {  
+    }
+                .name("my-template");  
+                    }
+        {  
+                }
+                """
+        // end::split-index-request-settings
+            listener = new LatchedActionListener<>(listener, latch);
+            };
+        request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest().name("my-template");  
+            }, e -> {
+        // end::delete-template-request
+        request.getCreateIndexRequest().waitForActiveShards(ActiveShardCount.from(2)); // <1>
+            // end::delete-index-execute-listener
+            // end::indices-put-settings-settings-builder
+                    .index("index3")
+        }
+            ActionListener<CreateIndexResponse> listener =
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        ActionListener<ResizeResponse> listener = new ActionListener<ResizeResponse>() {
+    public void testPutTemplate() throws Exception {  
+                {
+import org.opensearch.index.query.QueryBuilders;
+            // end::force-merge-response  
+ * --------------------------------------------------
+            // end::open-index-execute-listener  
+        }
+            assertTrue(client.indices().putTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+        // tag::get-settings-request-names
+                ClearIndicesCacheRequest request = new ClearIndicesCacheRequest("does_not_exist");  
+            // end::exists-alias-request-indices  
+                .endObject()
+            DefaultShardOperationFailedException[] failures = forceMergeResponse.getShardFailures(); // <4>
+    @SuppressWarnings("unused")  
+            .put("index.number_of_replicas", 1)
+        List<IndexTemplateMetadata> templates = getTemplatesResponse.getIndexTemplates(); // <1>  
+            // tag::put-index-template-v2-request-masterTimeout  
+        }
+            assertNotNull(detail.tokenizer());
+            listener = new LatchedActionListener<>(listener, latch);  
+            PutMappingRequest request = new PutMappingRequest("twitter");
+        }  
+            // end::flush-request-force
+                        "message": {
+            PutMappingRequest request = new PutMappingRequest("twitter"); // <1>  
+                        builder.endObject();
+                AcknowledgedResponse putMappingResponse = client.indices().putMapping(request, RequestOptions.DEFAULT);  
+            // tag::open-index-request-indicesOptions
+            request.setClusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <2>  
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
+        // end::put-template-execute
+            };
+            AliasMetadata placeholderAlias = AliasMetadata.builder("{index}_alias").searchRouting("xyz").build(); // <2>
+            aliases.put("{index}_alias", placeholderAlias);
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            // end::put-mapping-request
+            Settings settings = Settings.builder().put("number_of_shards", 3).build();  
+            request.indexTemplate(composableIndexTemplate);
+    public void testCloneIndex() throws Exception {
+            // end::refresh-execute-listener  
+        }
+                }
+                    // <2>  
+            ActionListener<AcknowledgedResponse> listener =
+                client.indices().forcemerge(request, RequestOptions.DEFAULT);  
+                    .filter("{\"term\":{\"year\":2016}}"); // <1>
+        request.dryRun(true); // <1>
+                Settings.builder()  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+            Template template = new Template(null, new CompressedXContent(mappingJson), null); // <2>  
+            GetMappingsResponse getMappingResponse = client.indices().getMapping(request, RequestOptions.DEFAULT);
+                    // <1>  
+            // tag::flush-execute-listener
+        request.getCreateIndexRequest().mapping(mappings, MediaTypeRegistry.JSON); // <1>
+                new ActionListener<GetMappingsResponse>() {
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+                    @Override
+                }
+        RestHighLevelClient client = highLevelClient();  
+            // end::put-index-template-v2-request-priority  
+            }""", MediaTypeRegistry.JSON); // <1>  
+        RestHighLevelClient client = highLevelClient();
+        listener = new LatchedActionListener<>(listener, latch);
+            };
+            {  
+        // tag::clone-index-request-waitForActiveShards
+                      "properties": {
+        assertEquals("3", numberOfShardsString);
+    }  
+    }  
+                    public void onResponse(GetMappingsResponse putMappingResponse) {
+    public void testDeleteIndex() throws IOException {  
+                MediaTypeRegistry.JSON
+                new ActionListener<AcknowledgedResponse>() {
+                Map<String, Object> mapping = new HashMap<>();  
+            );
+ * The OpenSearch Contributors require contributions made to  
+                    // <1>
+        RestHighLevelClient client = highLevelClient();
+            request.settings(map); // <1>
+            // tag::create-index-whole-source  
+            // tag::get-alias-request-indicesOptions  
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
+import org.opensearch.common.settings.Settings;
+ * // end::example  
+        // tag::indices-validate-query-request-query
+package org.opensearch.client.documentation;
+            .put("index.number_of_shards", 3)
+                    }  
+ * Unless required by applicable law or agreed to in writing,
+        request.setWaitForActiveShards(ActiveShardCount.DEFAULT); // <2>  
+            // tag::get-field-mappings-execute
+                FlushRequest request = new FlushRequest("does_not_exist");  
+            // end::create-index-request-settings
+                        // <2>
+        }
+    public void testGetIndexTemplatesV2() throws Exception {
+                }
+                    // <2>
+            // end::delete-alias-execute
+        // end::get-index-request-indicesOptions
+                        // <2>  
+        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
+        // tag::clone-index-request-settings
+        }  
+        // tag::split-index-execute-async  
+            client.indices().flushAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+        request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
+            AliasActions aliasAction =
+            // end::force-merge-notfound  
+        CreateIndexResponse resp = client.indices().create(req, RequestOptions.DEFAULT);
+                public void onFailure(Exception e) {
+        {  
+                @Override
+ *
+            // tag::refresh-execute
+    public void testFlushIndex() throws Exception {
+        request.order(20);  // <1>
+        // end::indices-put-settings-execute-listener
+                    }
+        RestHighLevelClient client = highLevelClient();  
+            assertTrue(createIndexResponse.isAcknowledged());  
+                    // <2>
+        boolean shardsAcked = resizeResponse.isShardsAcknowledged(); // <2>
+        GetIndexTemplatesResponse getTemplatesResponse = client.indices().getIndexTemplate(request, RequestOptions.DEFAULT);
+        // end::shrink-index-request-waitForActiveShards
+                @Override
+            // end::flush-execute-listener
+            assertThat(mapping, equalTo(expected));
+            });
+import org.opensearch.action.admin.indices.open.OpenIndexRequest;
+        {  
+                        builder.startObject("message");
+            Map<String, Object> expected = new HashMap<>();
+                "some text to analyze"  
+                fail("should not fail");  
+        };
+        // tag::shrink-index-execute  
+                        },
+                          "type": "date"  
+            createIndexResponse = client.indices().create(new CreateIndexRequest("index3"), RequestOptions.DEFAULT);
+            // tag::templates-exist-request  
+            request.indexTemplate(composableIndexTemplate);  
+                RefreshRequest request = new RefreshRequest("does_not_exist");
+            AnalyzeRequest request = AnalyzeRequest.buildCustomNormalizer()  
+            }
+        client.indices().getIndexTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        request.setClusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
+            // end::analyze-request-explain
+    public void testUpdateAliases() throws Exception {  
+    public void testGetMappingAsync() throws Exception {
+                @Override  
+import org.opensearch.action.admin.indices.settings.get.GetSettingsRequest;  
+            stopFilter.put("stopwords", new String[]{ "to" });  // <1>
+import org.opensearch.client.OpenSearchRestHighLevelClientTestCase;
+        // tag::rollover-index-execute
+        // end::indices-validate-query-request-rewrite
+        ActionListener<GetSettingsResponse> listener =
+                @Override
+                    Settings.builder()
+                .put("index.number_of_shards", 3)
+                null,
+                null,  
+        {
+                    // <2>  
+    public void testCloseIndex() throws Exception {
+            request.attributes("keyword", "type");      // <2>
+        request.alias(new Alias("{index}_alias").searchRouting("xyz"));  // <2>  
+            // end::get-mappings-execute
+                    .put("index.number_of_replicas", 0)
+                  }  
+                    }
+        assertFalse(isRolledOver);  
+            request.local(false); // <1>
+                    // <1>
+        // tag::indices-put-settings-execute-listener  
+        // tag::rollover-index-request-alias  
+            listener = new LatchedActionListener<>(listener, latch);
+            {  
+                    .alias("alias2")  
+                final Map<String, Object> source = metadata1.sourceAsMap();
+            // tag::templates-exist-execute-listener  
+                    "type": "text"
+import static org.hamcrest.Matchers.is;
+                request.mapping(builder); // <1>  
+            // tag::analyze-index-normalizer-request
+        boolean acknowledged = putTemplateResponse.isAcknowledged(); // <1>
+            }
+            // end::get-field-mappings-execute
+            // end::templates-exist-request
+import org.opensearch.client.indices.IndexTemplatesExistRequest;
+            // end::update-aliases-request-masterTimeout  
+        // tag::shrink-index-response
+        request.clusterManagerNodeTimeout("1m"); // <2>
+                public void onFailure(Exception e) {
+                // <1>
+            // tag::close-index-execute
+        request.explain(true); // <1>
+        // end::put-template-execute-async
+            AcknowledgedResponse closeIndexResponse = client.indices().close(request, RequestOptions.DEFAULT);  
+            request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
+        // tag::simulate-index-template-execute-async
+                public void onFailure(Exception e) {
+        // tag::shrink-index-execute-listener
+            // end::clear-cache-execute-async
+                          }  
+            AnalyzeResponse response = client.indices().analyze(request, RequestOptions.DEFAULT);
+            // tag::get-field-mappings-execute-listener
+            // end::delete-alias-request-masterTimeout  
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest().name("my-template"); // <1>  
+            // tag::put-index-template-v2-request  
+                }
+                    builder.startObject("properties");
+                Map<String, Object> field = new HashMap<>();
+        // end::delete-index-template-v2-execute-listener
+import org.opensearch.client.indices.rollover.RolloverResponse;  
+            // tag::close-index-request
+        {
+            String explanationString = explanation.getExplanation(); // <12>
+                    @Override
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                        @Override  
+                {
+        listener = new LatchedActionListener<>(listener, latch);
+                      "type": "text"
+                  "message": {  
+        // end::shrink-index-request-aliases
+            request = new CreateIndexRequest("twitter5");  
+            PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");
+                }
+        {
+        // tag::delete-template-execute
+            // tag::open-index-request-waitForActiveShards  
+        }  
+                MappingMetadata indexMapping = allMappings.get("twitter");
+                //end::put-mapping-map
+            //tag::put-template-request-mappings-xcontent
+                    @Override  
+        }
+            Template template = new Template(null, null, aliases); // <3>  
+        }
+            };  
+            public void onFailure(Exception e) {
+        // end::indices-validate-query-execute-async
+        );
+        final CountDownLatch latch = new CountDownLatch(1);  
+            // tag::close-index-request-timeout  
+            assertTrue(createIndexResponse.isAcknowledged());  
+                    builder.startObject("message");
+        // tag::delete-index-template-v2-execute-listener
+            // end::templates-exist-request-optionals
+            // end::put-index-template-v2-request-aliases  
+            // tag::refresh-request  
+            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>  
+                }
+        // end::get-index-templates-v2-execute  
+            int totalShards = flushResponse.getTotalShards(); // <1>
+        }  
+    public void testDeleteIndexTemplateV2() throws Exception {
+        // tag::put-template-request-settings
+            // tag::update-aliases-request2  
+            // end::flush-execute-async
+                        builder.startObject("message");  
+    public void testClearCache() throws Exception {
+            };  
+            Map<String, AliasMetadata> aliases = new HashMap<>();  
+            .getAsTime("index.refresh_interval", null); // <7>
+import static org.hamcrest.Matchers.nullValue;  
+    @SuppressWarnings("unused")
+        }
+        AcknowledgedResponse pmResp = client.indices().putMapping(pmReq, RequestOptions.DEFAULT);
+        // end::rollover-index-execute-async  
+        {
+                if (exception.status() == RestStatus.NOT_FOUND) {
+            // tag::indices-put-settings-settings-source  
+import org.opensearch.client.indices.GetComposableIndexTemplatesResponse;  
+        RestHighLevelClient client = highLevelClient();  
+        {
+        // end::clone-index-execute-listener  
+            List<AnalyzeResponse.AnalyzeToken> tokens = response.getTokens();   // <1>  
+import static org.hamcrest.Matchers.equalTo;
+                public void onResponse(FlushResponse flushResponse) {
+        // end::get-index-execute-async
+                }  
+                    // <2>
+        request.timeout("2m"); // <2>
+    public void testTemplatesExist() throws Exception {  
+        assertEquals(3, conditionStatus.size());
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
+        GetSettingsRequest request = new GetSettingsRequest().indices("index"); // <1>
+import org.opensearch.client.indices.GetFieldMappingsRequest;
+            assertTrue(client.indices().putIndexTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
+import org.opensearch.action.admin.indices.refresh.RefreshResponse;
+import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequest;
+                    .alias("alias3"); // <3>
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()  
+        request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+            final Map<String, Map<String, GetFieldMappingsResponse.FieldMappingMetadata>> mappings =
+import static org.hamcrest.Matchers.containsInAnyOrder;
+            // end::delete-index-request
+        // tag::get-index-response  
+        // end::get-templates-execute  
+        {
+                }  
+                    message.put("type", "text");
+        // end::split-index-request-masterTimeout  
+    }
+        }
+        // end::rollover-index-request-waitForActiveShards  
+        SimulateIndexTemplateRequest simulateRequest = new SimulateIndexTemplateRequest("log-000001"); // <1>  
+            }
+        {  
+                Map<String, Object> expected = new HashMap<>();  
+            // Use a blocking listener in the test
+    }
+        request.addMaxIndexAgeCondition(new TimeValue(7, TimeUnit.DAYS)); // <2>
+                @Override
+            // tag::clear-cache-request-indicesOptions
+            map.put(settingKey, settingValue);
+            AliasActions addIndicesAction =  
+            // end::get-mappings-execute-async
+            // tag::exists-alias-execute-async  
+                }  
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+                    new AliasActions(AliasActions.Type.ADD)
+            request.mapping(builder); // <1>
+            // end::put-index-template-v2-request-create
+            listener = new LatchedActionListener<>(listener, latch);  
+        }
+            MappingMetadata indexMapping = allMappings.get("twitter"); // <2>  
+            // end::indices-exists-execute-listener
+                .endObject()
+                Map<String, Object> properties = new HashMap<>();
+        {  
+                "Some text to analyze", "Some more text to analyze");       // <2>
+        // tag::split-index-response
+            public void onResponse(AcknowledgedResponse updateSettingsResponse) {
+                Map<String, Object> properties = new HashMap<>();
+        {
+        RestHighLevelClient client = highLevelClient();  
+            client.cluster()  
+            );  
+        RestHighLevelClient client = highLevelClient();
+            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
+            // end::put-index-template-v2-execute-listener
+        // tag::get-settings-execute  
+        request.getCreateIndexRequest().settings(Settings.builder()
+import org.opensearch.cluster.metadata.ComponentTemplate;
+            // end::put-mapping-response  
+import org.opensearch.client.indices.GetComposableIndexTemplateRequest;
+        // tag::get-index-execute-listener
+            boolean shardsAcknowledged = createIndexResponse.isShardsAcknowledged(); // <2>  
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(
+                    // <2>  
+        RestHighLevelClient client = highLevelClient();  
+        request.getTargetIndexRequest().settings(Settings.builder()
+                template, null, null, null, null); // <3>
+            createIndex("index1", Settings.EMPTY);
+import java.util.List;
+            Map<String, Object> field = new HashMap<>();  
+        // end::get-index-execute-listener  
+            public void onFailure(Exception e) {  
+        {  
+import org.opensearch.action.admin.indices.validate.query.ValidateQueryResponse;  
+            GetAliasesRequest request = new GetAliasesRequest();
+            PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");
+                    // <1>
+            // end::clear-cache-request
+                null
+            // tag::delete-index-request-timeout
+            // end::create-index-request  
+        request.getTargetIndexRequest().settings(Settings.builder()  
+            assertTrue(createIndexResponse.isAcknowledged());
+            // tag::get-mappings-execute  
+        final CountDownLatch latch = new CountDownLatch(1);
+        final CountDownLatch latch = new CountDownLatch(1);  
+        }  
+                new ActionListener<AcknowledgedResponse>() {
+                    // <2>
+            request.force(true); // <1>  
+                        }
+            request.setClusterManagerNodeTimeout("1m"); // <3>
+        // end::indices-put-settings-response  
+                .indexTemplate(new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"), template, null, null, null, null));
+            request.indexTemplate(composableIndexTemplate);  
+            // tag::create-index-request-timeout
+                // end::create-index-request-mappings  
+            // tag::update-aliases-execute
+                client.indices().flush(request, RequestOptions.DEFAULT);
+        // tag::get-index-execute-async  
+            // tag::get-alias-response  
+                            }
+                    }
+        ResizeResponse resizeResponse = client.indices().shrink(request, RequestOptions.DEFAULT);
+    public void testAnalyze() throws IOException, InterruptedException {
+                .name("my-template");
+            assertThat(status, equalTo(RestStatus.OK));  
+        {  
+        // end::put-template-request-aliases
+        RestHighLevelClient client = highLevelClient();
+import org.opensearch.action.admin.indices.shrink.ResizeResponse;
+                if (exception.status() == RestStatus.NOT_FOUND) {
+                        },  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        String index = "some_index";  
+                "{index}-alias": {}
+        {
+            }  
+        {  
+            request.indices("twitter");
+            };
+                .startObject("my_field")  
+                    {  
+                public void onResponse(Boolean exists) {
+    }  
+        boolean isDryRun = rolloverResponse.isDryRun(); // <6>
+    public void testIndicesExist() throws IOException {
+        request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
+        // tag::simulate-index-template-response  
+            request.local(true); // <1>
+        assertEquals("3", numberOfShardsString);
+        // end::indices-validate-query-request-allShards  
+            assertTrue(createIndexResponse.isAcknowledged());
+                assertTrue(createIndexResponse.isAcknowledged());
+import org.opensearch.cluster.metadata.MappingMetadata;
+        request.create(false); // make test happy  
+        PutComposableIndexTemplateRequest newIndexTemplateRequest = new PutComposableIndexTemplateRequest()
+        // Replace the empty listener by a blocking listener in test
+            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
+        RestHighLevelClient client = highLevelClient();  
+                mappings.get("twitter"); // <2>
+            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
+                        {
+        };
+            // tag::get-alias-execute-listener
+            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
+        request.setClusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>  
+                        MediaTypeRegistry.JSON);
+            // tag::put-mapping-execute-async
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>  
+            // tag::clear-cache-response
+        // tag::split-index-execute-listener  
+        // tag::indices-validate-query-response
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
+                latchListener.onFailure(e);
+            expected.put("properties", field);  
+            AliasActions aliasAction = new AliasActions(AliasActions.Type.ADD).index("index1").alias("alias1");
+            listener = ActionListener.wrap(r -> {
+                }  
+        request.setClusterManagerNodeTimeout("1m"); // <2>
+        {
+        UpdateSettingsRequest requestAll = new UpdateSettingsRequest(); // <3>
+            // tag::put-template-request-mappings-json
+            }
+                public void onFailure(Exception e) {
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                .name("my-template");
+        DeleteComposableIndexTemplateRequest deleteRequest = new DeleteComposableIndexTemplateRequest("my-template"); // <1>
+            int failedShards = refreshResponse.getFailedShards(); // <3>
+ * Where example is your tag name.
+            ClearIndicesCacheResponse clearCacheResponse = client.indices().clearCache(request, RequestOptions.DEFAULT);
+        // end::get-settings-execute
+        Integer numberOfShards = indexSettings.getAsInt("index.number_of_shards", null); // <6>  
+            final CountDownLatch latch = new CountDownLatch(1);
+                }
+import org.opensearch.client.indices.PutComponentTemplateRequest;
+        }
+        }  
+        ActionListener<AcknowledgedResponse> listener =
+            final CountDownLatch latch = new CountDownLatch(1);  
+        // end::get-settings-execute-listener
+            Map<String, Object> stopFilter = new HashMap<>();
+                null,
+            ActionListener<org.opensearch.client.core.AcknowledgedResponse> listener =
+            // tag::put-mapping-request-masterTimeout
+            request.source("{ \"properties\": { \"message\": { \"type\": \"text\" } } }", MediaTypeRegistry.JSON);  
+ */  
+        // end::indices-put-settings-request  
+            assertTrue(client.indices().putTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());
+    }  
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+                public void onResponse(OpenIndexResponse openIndexResponse) {  
+                public void onFailure(Exception e) {
+            // tag::exists-alias-request-local  
+            // end::analyze-field-request
+ * than 84, the line will be cut and a horizontal scroll bar will be displayed.
+import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheResponse;
+        listener = new LatchedActionListener<>(listener, latch);
+import org.opensearch.client.indices.GetIndexRequest;  
+        // end::simulate-index-template-response  
+            boolean acknowledged = openIndexResponse.isAcknowledged(); // <1>
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+            final CountDownLatch latch = new CountDownLatch(1);  
+    public void testValidateQuery() throws IOException, InterruptedException {  
+            assertTrue(acknowledged);
+        ActionListener<ResizeResponse> listener = new ActionListener<ResizeResponse>() {  
+            Template template = new Template(Settings.builder().put("index.number_of_replicas", 3).build(), null, null);
+        {
+        // tag::indices-put-settings-request-indicesOptions
+        Integer numberOfShards = indexSettings.getAsInt("index.number_of_shards", null); // <3>
+                    .put("index.number_of_shards", 2)
+        // end::indices-put-settings-request-index-settings  
+import org.opensearch.action.support.IndicesOptions;
+            request.indexTemplate(composableIndexTemplate);
+                    // <1>
+        assertEquals(
+            Settings settings = Settings.builder() // <1>
+        {
+                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
+        {
+                    new AliasActions(AliasActions.Type.ADD)
+        {
+                if (exception.status() == RestStatus.NOT_FOUND) {
+    public void testGetTemplates() throws Exception {
+            }  
+            // end::clear-cache-request-request
+            // end::put-mapping-execute-async
+        Settings indexSettings = getIndexResponse.getSettings().get("index"); // <5>
+    public void testDeleteIndexAsync() throws Exception {
+            } catch (OpenSearchException exception) {  
+            ActionListener<OpenIndexResponse> listener =  
+        Settings settings = Settings.builder().put("index.number_of_shards", 6).build();  
+                assertTrue(createIndexResponse.isAcknowledged());
+        request = new GetComposableIndexTemplateRequest("my-*"); // <2>
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeResponse;
+            assertTrue(client.indices().putTemplate(putRequest, RequestOptions.DEFAULT).isAcknowledged());  
+        client.indices().putTemplateAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                  }
+            request.indicesOptions(IndicesOptions.strictExpandOpen()); // <1>  
+            assertTrue(createIndexResponse.isAcknowledged());
+                }
+        // tag::split-index-request-waitForActiveShards
+            request.waitForActiveShards(ActiveShardCount.DEFAULT); // <2>
+            assertThat(response.getAliases().get("index").size(), equalTo(1));
+        if (failedShards > 0) {  
+            createIndexResponse = client.indices().create(new CreateIndexRequest("index2"), RequestOptions.DEFAULT);  
+        // end::shrink-index-response
+    }
+            // tag::put-index-template-v2-execute-listener  
+            // end::analyze-index-request
+                builder.endObject();  
+        // tag::indices-put-settings-request-preserveExisting
+            // end::templates-exist-execute-listener  
+            // end::close-index-execute
+            // end::put-template-request-mappings-json  
+        request.setWaitForActiveShards(2); // <1>  
+            // end::force-merge-request-only-expunge-deletes
+            assertThat(exception, nullValue());
+import org.opensearch.index.query.QueryBuilder;  
+            // Replace the empty listener by a blocking listener in test  
+                };
+        }
+        }
+        // end::rollover-index-response
+            ComposableIndexTemplate composableIndexTemplate = new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"),
+            // Replace the empty listener by a blocking listener in test
+    }
+            // end::put-index-template-v2-execute
+                public void onResponse(AcknowledgedResponse deleteIndexResponse) {
+        {
+            // end::clear-cache-execute-listener
+            // end::exists-alias-request-local
+        {
+                        // <2>
+            createIndex("source_index", Settings.builder().put("index.number_of_shards", 2).put("index.number_of_replicas", 0).build());
+        boolean acknowledged = updateSettingsResponse.isAcknowledged(); // <1>
+        {  
+            );
+                .field("type", "text")
+                            }
+            ActionListener<FlushResponse> listener = new ActionListener<FlushResponse>() {  
+                .mapping(mappings, MediaTypeRegistry.JSON);  
+            AcknowledgedResponse deleteIndexResponse = client.indices().delete(request, RequestOptions.DEFAULT);
+        {
+                }
+        }
+        assertEquals(Integer.valueOf(3), numberOfShards);  
+                        }
+        }
+                null,
+    }  
+            putRequest.patterns(Arrays.asList("pattern-1", "log-*"));
+        // end::put-template-whole-source
+        }
+            request.explain(true);                      // <1>  
+            AnalyzeRequest request = AnalyzeRequest.withGlobalAnalyzer("english", // <1>
+            // tag::delete-index-request  
+        // end::rollover-index-request-masterTimeout
+            };
+            // end::delete-index-response
+        }
+        request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
+        request = new GetIndexTemplatesRequest("template-1", "template-2"); // <2>
+            // tag::indices-exists-request-optionals  
+        // end::get-field-mappings-request
+        // tag::split-index-execute
+            }, e -> {
+                    public void onResponse(GetFieldMappingsResponse putMappingResponse) {  
+              "order": 1,  
+                public void onFailure(Exception e) {  
+    @SuppressWarnings("unused")
+        // tag::clone-index-execute-async  
+            template, null, 90L, null, null);  
+        request.names("index.number_of_shards"); // <1>
+            // end::create-index-response
+        // tag::indices-validate-query-request-explain  
+                        builder.endObject();
+    @SuppressWarnings("unused")
+        assertTrue(shardsAcked);  
+        }  
+        // end::indices-validate-query-request-explain
+                Arrays.asList("pattern-1", "log-*"),
+ * You may obtain a copy of the License at  
+        }  
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("index1"), RequestOptions.DEFAULT);
+              },  
+            request.requestCache(true); // <1>
+            Map<String, Object> mapping = indexMapping.sourceAsMap(); // <3>
+            // end::get-alias-request-alias
+            assertTrue(client.indices().putTemplate(request, RequestOptions.DEFAULT).isAcknowledged());
+            // tag::indices-put-settings-settings-builder  
+                        "message": {  
+        // tag::get-settings-request-include-defaults  
+        client.indices().shrinkAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+        // end::indices-put-settings-request-preserveExisting
+            // end::delete-alias-execute-listener
+            // tag::get-mappings-response
+            // end::delete-alias-request
+            // tag::analyze-execute-listener
+            org.opensearch.client.core.AcknowledgedResponse deleteAliasResponse =  
+        // end::clone-index-request  
+        // tag::delete-index-template-v2-request-masterTimeout
+            // tag::force-merge-request-segments-num
+            client.indices().putMappingAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+                message.put("type", "text");  
+            // end::update-aliases-request-timeout
+    @SuppressWarnings("unused")
+            // Replace the empty listener by a blocking listener in test
+        // tag::indices-put-settings-execute
+        }
+                    // <1>
+        // tag::put-template-request-create  
+                    // <2>  
+            }
+                    // <2>
+                            // <2>
+import org.opensearch.action.admin.indices.alias.get.GetAliasesRequest;  
+        // end::rollover-index-request
+            };
+            XContentBuilder builder = XContentFactory.jsonBuilder();  
+        request.version(4);  // <1>
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);  
+            // tag::templates-exist-execute-async
+            // end::force-merge-request-flush
+        {  
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            // end::put-mapping-execute
+            // set only expunge deletes back to its default value
+        }  
+                null  
+import java.util.Map;
+        ResizeResponse resizeResponse = client.indices().split(request, RequestOptions.DEFAULT);
+        // end::get-settings-request-indicesOptions
+        }  
+        // end::indices-put-settings-request-indicesOptions  
+        {
+                builder.startObject("properties");  
+        // end::get-templates-response
+        };  
+            GetAliasesResponse response = client.indices().getAlias(request, RequestOptions.DEFAULT);  
+                "source_index",
+                client.indices().putSettings(request, RequestOptions.DEFAULT);
+            // end::get-mappings-request-masterTimeout  
+                @Override
+        final CountDownLatch latch = new CountDownLatch(1);
+        }  
+                    public void onFailure(Exception e) {  
+        request.local(true); // <1>  
+        // end::indices-put-settings-execute-async
+            int successfulShards = forceMergeResponse.getSuccessfulShards(); // <2>  
+        ResizeRequest request = new ResizeRequest("target_index","source_index"); // <1>  
+                public void onResponse(GetIndexTemplatesResponse response) {
+        // tag::delete-index-template-v2-execute-async
+                        // <1>  
+        {
+        // Replace the empty listener by a blocking listener in test
+                ForceMergeRequest request = new ForceMergeRequest("does_not_exist");
+            // tag::analyze-execute-async  
+            boolean acknowledged = indicesAliasesResponse.isAcknowledged(); // <1>
+                @Override
+                @Override  
+                public void onFailure(Exception e) {
+            // tag::delete-index-execute
+            assertTrue(acknowledged);
+            // tag::exists-alias-request-indicesOptions
+                }
+            }
+        // tag::indices-put-settings-execute-async
+        // tag::simulate-index-template-request
+                Map<String, String> type = new HashMap<>();
+        // end::split-index-request  
+        // end::put-template-execute-listener  
+                @Override
+                    new GetAliasesRequest(new String[]{"alias1", "alias2"});
+                Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 1).build(),  
+            // end::indices-put-settings-settings-source
+        // end::clone-index-execute-async
+            // end::put-index-template-v2-request-masterTimeout
+/**
+                "alias-1": {},  
+        // end::shrink-index-execute-listener
+            .name("used-for-simulation");
+            assertTrue(shardsAcknowledged);  
+            assertTrue(indicesAliasesResponse.isAcknowledged());  
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        listener = new LatchedActionListener<>(listener, latch);
+import org.opensearch.client.indices.GetIndexTemplatesResponse;  
+        // end::get-templates-request-masterTimeout
+        {
+        {
+                        public void onResponse(GetAliasesResponse getAliasesResponse) {
+            };
+            assertTrue(acknowledged);
+        ActionListener<ResizeResponse> listener = new ActionListener<ResizeResponse>() {
+        // end::indices-validate-query-request-query
+            // Replace the empty listener by a blocking listener in test
+        }
+        }
+        // end::put-template-request  
+        int failedShards = response.getFailedShards(); // <4>
+        // tag::shrink-index-request-aliases
+            client.indices().existsAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        // tag::delete-template-response  
+                new UpdateSettingsRequest("index1", "index2"); // <2>
+        // end::delete-template-request-masterTimeout  
+        RestHighLevelClient client = highLevelClient();  
+                // tag::create-index-request-mappings
+                    }  
+        }
+                .create(new CreateIndexRequest("index").settings(settings), RequestOptions.DEFAULT);
+        // end::put-template-request-create
+            new ActionListener<AcknowledgedResponse>() {  
+        {
+            assertTrue(acknowledged);  
+import org.opensearch.client.indices.GetMappingsRequest;
+                    .index("index1")
+                public void onResponse(AcknowledgedResponse indicesAliasesResponse) {
+        RestHighLevelClient client = highLevelClient();  
+        // tag::clone-index-request  
+/*
+        // end::indices-put-settings-request-timeout
+                    client.indices().updateAliases(request, RequestOptions.DEFAULT);
+            // tag::put-index-template-v2-request-priority
+            RestStatus status = response.status(); // <1>
+            // end::get-alias-response-error
+        // tag::get-templates-request-masterTimeout
+        // tag::get-settings-request  
+            // end::open-index-execute
+        // end::get-settings-defaults-response  
+            GetIndexRequest request = new GetIndexRequest("twitter"); // <1>
+ * include-tagged::{doc-tests}/IndicesClientDocumentationIT.java[example]
+        RestHighLevelClient client = highLevelClient();  
+                }
+            int failedShards = flushResponse.getFailedShards(); // <3>
+            @Override
+        RestHighLevelClient client = highLevelClient();
+        // tag::get-settings-response
+            // tag::update-aliases-request  
+        // tag::indices-validate-query-request  
+            GetAliasesRequest request = new GetAliasesRequest();
+            };  
+            final CountDownLatch latch = new CountDownLatch(1);
+        }
+            // tag::flush-request  
+            new ActionListener<AcknowledgedResponse>() {
+            OpenIndexResponse openIndexResponse = client.indices().open(request, RequestOptions.DEFAULT);
+                null
+import org.opensearch.client.indices.DeleteComposableIndexTemplateRequest;  
+        listener = new LatchedActionListener<>(listener, latch);
+            assertTrue(acknowledged);
+        AcknowledgedResponse deleteTemplateAcknowledge = client.indices().deleteIndexTemplate(deleteRequest, RequestOptions.DEFAULT);  
+                public void onResponse(ForceMergeResponse forceMergeResponse) {
+                null,
+                }
+            .boolQuery() // <1>  
+            };  
+            assertTrue(createIndexResponse.isAcknowledged());  
+                CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
+        }
+            // tag::exists-alias-execute
+        // end::indices-put-settings-execute
+                    .build()
+        RolloverResponse rolloverResponse = client.indices().rollover(request, RequestOptions.DEFAULT);
+        {
+            // end::update-aliases-execute-listener
+                public void onFailure(Exception e) {
+                .name("my-template");  
+        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
+        // tag::put-template-request-aliases
+                    }  
+                @Override
+            );  
+            request.indicesOptions(IndicesOptions.lenientExpandOpen()); // <1>
+                    {  
+                    @Override  
+        // end::put-template-request-masterTimeout
+        // end::simulate-index-template-execute-listener  
+            CreateIndexResponse createIndexResponse = client.indices()  
+        // end::split-index-request-aliases
+        {
+        CreateIndexRequest req = new CreateIndexRequest("my_index");
+        {
+ * software distributed under the License is distributed on an
+        }
+            // end::analyze-execute-async
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                    new ActionListener<CreateIndexResponse>() {  
+        {
+        request.timeout(TimeValue.timeValueMinutes(2)); // <1>  
+                    // <2>  
+    }
+            // tag::flush-response
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+ * <p>  
+        GetSettingsResponse getSettingsResponse = client.indices().getSettings(request, RequestOptions.DEFAULT);
+            String error = response.getError(); // <3>
+            GetMappingsRequest request = new GetMappingsRequest(); // <1>  
+            request.fieldDataCache(true); // <1>
+            new ActionListener<AcknowledgedResponse>() {
+        // end::delete-index-template-v2-request
+            PutComposableIndexTemplateRequest request = new PutComposableIndexTemplateRequest()
+                "source_index",  
+            request.local(true); // <1>
+            // tag::get-alias-request-alias
+                @Override
+                        // <1>  
+            }  
+    }
+        request.fields("message", "timestamp"); // <3>
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));  
+ * (the code indentation of the tag is not included in the width)  
+            // end::delete-index-request-masterTimeout
+            // tag::get-alias-response-error
+        // tag::delete-index-template-v2-response  
+            putRequest.settings(Settings.builder().put("index.number_of_shards", 3));
+                  "properties": {
+                    // <2>  
+        }  
+        boolean isValid = response.isValid(); // <1>
+                .put("index.number_of_shards", 4)); // <1>  
+                "some text to analyze"  
+            // tag::analyze-index-request
+import org.opensearch.common.xcontent.XContentFactory;  
+            // end::get-field-mappings-execute-async
+    public void testForceMergeIndex() throws Exception {
+            // end::templates-exist-execute  
+            }
+                        """  
+            OpenSearchException exception = response.getException(); // <2>  
+                    // <1>  
+        // tag::get-index-request
+            client.indices().getFieldMappingAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            CreateIndexResponse createIndexResponse = client.indices().create(new CreateIndexRequest("twitter"), RequestOptions.DEFAULT);
+            // end::open-index-response
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                    "message": {  
+            request.clusterManagerNodeTimeout("1m"); // <2>
+        // end::get-index-templates-v2-request-masterTimeout
+        }
+                    {  
+            client.indices().closeAsync(request, RequestOptions.DEFAULT, listener); // <1>  
+                          "type": "text"  
+        listener = new LatchedActionListener<>(listener, latch);
+        // tag::clone-index-response
+        listener = new LatchedActionListener<>(listener, latch);
+        // end::split-index-response
+import java.util.Arrays;
+                new CompressedXContent("{ \"properties\": { \"message\": { \"type\": \"text\" } } }"),
+            // end::get-mappings-request-indicesOptions
+            // end::refresh-execute  
+            // tag::delete-alias-execute-listener
+            final PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("my-template");  
+            // end::flush-request
+            }  
+            // end::put-mapping-request-timeout  
+            // end::indices-exists-request-optionals
+            @SuppressWarnings("unchecked")
+        GetIndexRequest request = new GetIndexRequest("index"); // <1>  
+            } catch (OpenSearchException exception) {
+            // tag::get-mappings-request
+            request.settings(Settings.builder() // <1>  
+            ClearIndicesCacheRequest requestMultiple = new ClearIndicesCacheRequest("index1", "index2"); // <2>  
+            assertThat(response.getAliases().get("index").iterator().next().alias(), equalTo("alias"));
+            ClearIndicesCacheRequest requestAll = new ClearIndicesCacheRequest(); // <3>
+import org.opensearch.core.common.unit.ByteSizeUnit;  
+                public void onResponse(Boolean exists) {  
+            // tag::get-field-mappings-execute-async  
+        String numberOfShardsString = getIndexResponse.getSetting("index", "index.number_of_shards"); // <4>
+        MappingMetadata indexMappings = getIndexResponse.getMappings().get("index"); // <1>
+        // tag::clone-index-execute
+            CreateIndexRequest request = new CreateIndexRequest("twitter"); // <1>
+            assertTrue(createIndexResponse.isAcknowledged());
+        // tag::delete-template-request-masterTimeout  
+                request.source(builder); // <1>
+        // end::get-index-response  
+ *
+            request.setClusterManagerTimeout(TimeValue.timeValueMinutes(1)); // <1>
+    public void testPutIndexTemplateV2() throws Exception {
+import org.opensearch.cluster.metadata.Template;
+            boolean exists = client.indices().exists(request, RequestOptions.DEFAULT);
+        assertThat(templates.get("my-template"), is(notNullValue()));
+        assertFalse(acknowledged);
+import static org.hamcrest.Matchers.hasSize;  
+            // end::create-index-execute-async
+                new ComposableIndexTemplate(Arrays.asList("pattern-1", "log-*"), null, null, null, null, null); // <2>
+ * You need to wrap your code between two tags like:
+            Settings settings = Settings.builder().put("number_of_shards", 3).build();  
+            // end::clear-cache-response  
+        request.clusterManagerNodeTimeout(TimeValue.timeValueMinutes(1)); // <1>
+                    // <1>
+        // end::get-index-templates-v2-execute-async  
+            request.source("{ \"properties\": { \"message\": { \"type\": \"text\" } } }", MediaTypeRegistry.JSON);
+        request.clusterManagerNodeTimeout("1m"); // <2>
+            public void onFailure(Exception e) {
+        // end::get-templates-execute-listener
+        {
 }  
+                    // <1>
+        Map<String, Object> indexTypeMappings = indexMappings.getSourceAsMap(); // <2>
+            };
+                      "type": "text"  
+                public void onResponse(GetSettingsResponse GetSettingsResponse) {
+        {  
+ * this work for additional information regarding copyright
+            assertTrue(acknowledged);
+            // tag::close-index-request-masterTimeout  
+        listener = new LatchedActionListener<>(listener, latch);
+            // tag::create-index-request-masterTimeout
+        // Replace the empty listener by a blocking listener in test
+                }
+        assertEquals("3", numberOfShardsString);
+    }

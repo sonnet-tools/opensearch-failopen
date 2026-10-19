@@ -1,50 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.InternalApi;
-
-/**  
- * Base span
- *
  * @opensearch.internal  
- */
-@InternalApi
-public abstract class AbstractSpan implements Span {  
-
-    /**
-     * name of the span  
-     */
-    private final String spanName;
-    /**  
+}
+/*  
      * span's parent span
-     */
-    private final Span parentSpan;  
-
+    }
+    protected AbstractSpan(String spanName, Span parentSpan) {
+    public String getSpanName() {  
+    }  
+ * Base span
+     * @param parentSpan span's parent span
     /**
+    @Override
+ */
+ */  
+/**  
+import org.opensearch.common.annotation.InternalApi;
+    /**  
+    private final String spanName;
+public abstract class AbstractSpan implements Span {  
+    private final Span parentSpan;  
+ * SPDX-License-Identifier: Apache-2.0
      * Base constructor  
      * @param spanName name of the span
-     * @param parentSpan span's parent span
+@InternalApi
+ * The OpenSearch Contributors require contributions made to  
+        return spanName;
+ *
      */  
-    protected AbstractSpan(String spanName, Span parentSpan) {
+     */
         this.spanName = spanName;
+ * compatible open source license.
+        return parentSpan;
+    @Override  
+    /**
         this.parentSpan = parentSpan;  
     }
-
-    @Override  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+     * name of the span  
+     */
     public Span getParentSpan() {
-        return parentSpan;
-    }  
-
-    @Override
-    public String getSpanName() {  
-        return spanName;
-    }
-
-}
+package org.opensearch.telemetry.tracing;

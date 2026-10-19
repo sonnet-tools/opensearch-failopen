@@ -1,146 +1,141 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    public StreamTransportSearchAction(  
+        SearchRequestOperationsCompositeListenerFactory searchRequestOperationsCompositeListenerFactory,
+import org.opensearch.transport.Transport;  
+        WorkloadGroupService workloadGroupService  
+        Executor executor,  
+                        searchRequest,
+            metricsRegistry,  
+        SearchPipelineService searchPipelineService,  
+    ) {
+        SearchService searchService,
+            actionFilters,
  */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+            indexNameExpressionResolver,  
 import org.opensearch.cluster.routing.GroupShardsIterator;
-import org.opensearch.cluster.service.ClusterService;
+    @Inject
+                executor,  
+            tracer,
+ * The OpenSearch Contributors require contributions made to  
+            threadPool,
+        SearchRequest searchRequest,
+import java.util.Set;
+        ClusterService clusterService,
+            AbstractSearchAsyncAction<? extends SearchPhaseResult> searchAsyncAction;
 import org.opensearch.common.Nullable;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.indices.IndicesService;
+                    searchAsyncAction = new StreamSearchQueryThenFetchAsyncAction(
+        IndexNameExpressionResolver indexNameExpressionResolver,
+                        searchPhaseController,
+ * SPDX-License-Identifier: Apache-2.0
+/**  
+        GroupShardsIterator<SearchShardIterator> shardIterators,
+        NamedWriteableRegistry namedWriteableRegistry,
+            indicesService,
+            searchPipelineService,
+                task.getProgressListener(),
+        super(
+import java.util.concurrent.Executor;  
+import org.opensearch.action.support.ActionFilters;
+public class StreamTransportSearchAction extends TransportSearchAction {
+        @Nullable StreamTransportService transportService,
 import org.opensearch.search.SearchPhaseResult;  
+        ActionListener<SearchResponse> listener,
+        } else {
+        ActionFilters actionFilters,  
+                        queryResultConsumer,
+        if (preFilter) {
+        Tracer tracer,  
 import org.opensearch.search.SearchService;
-import org.opensearch.search.internal.AliasFilter;
 import org.opensearch.search.pipeline.SearchPipelineService;  
+            searchPhaseController,  
+        Map<String, Float> concreteIndexBoosts,  
+import java.util.function.BiFunction;
+import org.opensearch.cluster.service.ClusterService;
+                        timeProvider,
+            final QueryPhaseResultConsumer queryResultConsumer = searchPhaseController.newStreamSearchPhaseResults(
+                        listener,  
+    ) {
+                        searchRequestContext,  
+                        clusterState,  
+ */  
+                        connectionLookup,
+        SearchResponse.Clusters clusters,
+                        searchTransportService,  
+                default:
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+    AbstractSearchAsyncAction<? extends SearchPhaseResult> searchAsyncAction(  
+        SearchRequestContext searchRequestContext  
+            client,  
+    }
+                        tracer
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.inject.Inject;
+                case QUERY_THEN_FETCH:  
+ * Transport search action for streaming search
+                        aliasFilter,
+        ThreadPool threadPool,
+            searchRequestOperationsCompositeListenerFactory,
+            }  
+                    throw new IllegalStateException("Unknown search type: [" + searchRequest.searchType() + "]");
+                searchRequest,  
+                        shardIterators,
+            searchTransportService,
 import org.opensearch.tasks.TaskResourceTrackingService;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
-import org.opensearch.telemetry.tracing.Tracer;  
-import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.StreamTransportService;
-import org.opensearch.transport.Transport;  
-import org.opensearch.transport.client.node.NodeClient;
-import org.opensearch.wlm.WorkloadGroupService;
-
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Executor;  
-import java.util.function.BiFunction;
-
-/**  
- * Transport search action for streaming search
- * @opensearch.internal
- */  
-public class StreamTransportSearchAction extends TransportSearchAction {
-    @Inject
-    public StreamTransportSearchAction(  
-        NodeClient client,
-        ThreadPool threadPool,
-        CircuitBreakerService circuitBreakerService,  
-        @Nullable StreamTransportService transportService,
-        SearchService searchService,
-        @Nullable StreamSearchTransportService searchTransportService,  
-        SearchPhaseController searchPhaseController,
-        ClusterService clusterService,
-        ActionFilters actionFilters,  
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        NamedWriteableRegistry namedWriteableRegistry,
-        SearchPipelineService searchPipelineService,  
-        MetricsRegistry metricsRegistry,
-        SearchRequestOperationsCompositeListenerFactory searchRequestOperationsCompositeListenerFactory,
-        Tracer tracer,  
-        TaskResourceTrackingService taskResourceTrackingService,
-        IndicesService indicesService,
-        WorkloadGroupService workloadGroupService  
-    ) {
-        super(
-            client,  
-            threadPool,
-            circuitBreakerService,
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
             transportService,  
-            searchService,
-            searchTransportService,
-            searchPhaseController,  
-            clusterService,
-            actionFilters,
-            indexNameExpressionResolver,  
-            namedWriteableRegistry,
-            searchPipelineService,
-            metricsRegistry,  
-            searchRequestOperationsCompositeListenerFactory,
-            tracer,
-            taskResourceTrackingService,  
-            indicesService,
-            workloadGroupService
-        );  
-    }
-
-    AbstractSearchAsyncAction<? extends SearchPhaseResult> searchAsyncAction(  
-        SearchTask task,
-        SearchRequest searchRequest,
-        Executor executor,  
-        GroupShardsIterator<SearchShardIterator> shardIterators,
-        SearchTimeProvider timeProvider,
-        BiFunction<String, String, Transport.Connection> connectionLookup,  
-        ClusterState clusterState,
-        Map<String, AliasFilter> aliasFilter,
-        Map<String, Float> concreteIndexBoosts,  
-        Map<String, Set<String>> indexRoutings,
-        ActionListener<SearchResponse> listener,
-        boolean preFilter,  
-        ThreadPool threadPool,
-        SearchResponse.Clusters clusters,
-        SearchRequestContext searchRequestContext  
-    ) {
-        if (preFilter) {
-            throw new IllegalStateException("Search pre-filter is not supported in streaming");  
-        } else {
-            final QueryPhaseResultConsumer queryResultConsumer = searchPhaseController.newStreamSearchPhaseResults(
-                executor,  
-                circuitBreaker,
-                task.getProgressListener(),
-                searchRequest,  
+import java.util.Map;
                 shardIterators.size(),
-                exc -> cancelTask(task, exc)
-            );  
-            AbstractSearchAsyncAction<? extends SearchPhaseResult> searchAsyncAction;
-            switch (searchRequest.searchType()) {
-                case QUERY_THEN_FETCH:  
-                    searchAsyncAction = new StreamSearchQueryThenFetchAsyncAction(
-                        logger,
-                        searchTransportService,  
-                        connectionLookup,
-                        aliasFilter,
-                        concreteIndexBoosts,  
-                        indexRoutings,
-                        searchPhaseController,
-                        executor,  
-                        queryResultConsumer,
-                        searchRequest,
-                        listener,  
-                        shardIterators,
-                        timeProvider,
-                        clusterState,  
-                        task,
-                        clusters,
-                        searchRequestContext,  
-                        tracer
-                    );
-                    break;  
-                default:
-                    throw new IllegalStateException("Unknown search type: [" + searchRequest.searchType() + "]");
-            }  
-            return searchAsyncAction;
         }
-    }  
+import org.opensearch.cluster.ClusterState;
+            searchService,
+                        indexRoutings,
+        boolean preFilter,  
+            workloadGroupService
+                circuitBreaker,
+ *
+        SearchTask task,
+                        concreteIndexBoosts,  
+            switch (searchRequest.searchType()) {
+                        executor,  
+        CircuitBreakerService circuitBreakerService,  
+        SearchTimeProvider timeProvider,
+        Map<String, Set<String>> indexRoutings,
 }
+            clusterService,
+    }  
+                    );
+import org.opensearch.wlm.WorkloadGroupService;
+package org.opensearch.action.search;
+            );  
+        Map<String, AliasFilter> aliasFilter,
+        NodeClient client,
+/*  
+import org.opensearch.indices.IndicesService;
+                exc -> cancelTask(task, exc)
+            circuitBreakerService,
+ * @opensearch.internal
+        TaskResourceTrackingService taskResourceTrackingService,
+import org.opensearch.transport.client.node.NodeClient;
+                        task,
+        MetricsRegistry metricsRegistry,
+            namedWriteableRegistry,
+import org.opensearch.core.action.ActionListener;
+            throw new IllegalStateException("Search pre-filter is not supported in streaming");  
+        BiFunction<String, String, Transport.Connection> connectionLookup,  
+                        logger,
+            taskResourceTrackingService,  
+import org.opensearch.telemetry.tracing.Tracer;  
+        ClusterState clusterState,
+        IndicesService indicesService,
+import org.opensearch.search.internal.AliasFilter;
+        ThreadPool threadPool,
+        SearchPhaseController searchPhaseController,
+        @Nullable StreamSearchTransportService searchTransportService,  
+            return searchAsyncAction;
+                        clusters,
+        );  
+ * compatible open source license.
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+import org.opensearch.threadpool.ThreadPool;
+                    break;  

@@ -1,202 +1,175 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.env;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.common.CheckedConsumer;  
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.gateway.PersistedClusterStateService;  
-import org.opensearch.indices.IndicesService;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.NodeRoles;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;  
-
-import static org.opensearch.test.NodeRoles.nonDataNode;
-import static org.hamcrest.Matchers.allOf;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.endsWith;
-import static org.hamcrest.Matchers.startsWith;  
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class NodeEnvironmentIT extends OpenSearchIntegTestCase {  
-    public void testStartFailureOnDataForNonDataNode() throws Exception {
-        final String indexName = "test-fail-on-data";
-
-        logger.info("--> starting one node");
-        final boolean writeDanglingIndices = randomBoolean();
-        String node = internalCluster().startNode(  
-            Settings.builder().put(IndicesService.WRITE_DANGLING_INDICES_INFO_SETTING.getKey(), writeDanglingIndices).build()
-        );
-        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
-
-        logger.info("--> creating index");
-        prepareCreate(indexName, Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0)).get();  
-        final String indexUUID = resolveIndex(indexName).getUUID();
-        if (writeDanglingIndices) {
-            assertBusy(  
-                () -> internalCluster().getInstances(IndicesService.class)
-                    .forEach(indicesService -> assertTrue(indicesService.allPendingDanglingIndicesWritten()))
-            );  
-        }
-
-        logger.info("--> restarting the node without the data and cluster-manager roles");  
-        IllegalStateException ex = expectThrows(
-            IllegalStateException.class,
-            "node not having the data and cluster-manager roles while having existing index metadata must fail",  
-            () -> internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback() {
-                @Override
-                public Settings onNodeStopped(String nodeName) {  
-                    return NodeRoles.removeRoles(
-                        Collections.unmodifiableSet(
-                            new HashSet<>(Arrays.asList(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.MASTER_ROLE))  
-                        )
-                    );
-                }  
-            })
-        );
-        if (writeDanglingIndices) {  
-            assertThat(ex.getMessage(), startsWith("node does not have the data and cluster_manager roles but has index metadata"));
-        } else {
+            allOf(startsWith("cannot upgrade a node from version ["), endsWith("] directly to version [" + Version.CURRENT + "]"))
+                    try {
             assertThat(ex.getMessage(), startsWith("node does not have the data role but has shard data"));  
+/*  
+import org.opensearch.common.CheckedConsumer;  
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+            illegalStateException.getMessage(),  
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+            () -> internalCluster().startNode(Settings.builder().putList(Environment.PATH_DATA_SETTING.getKey(), allDataPaths))  
+import org.opensearch.test.InternalTestCluster;
+import java.util.Collections;
+    }  
         }
-
+        } else {
+        logger.info("--> creating index");
+        final IllegalStateException illegalStateException = expectThrowsOnRestart(  
+            IllegalStateException.class,
+                        throw new AssertionError(e);
+        return expectThrows(  
+    }
+        IllegalStateException illegalStateException = expectThrows(
+        );
+        logger.info("--> starting one node");
+    public void testFailsToStartIfUpgradedTooFar() {
+        );
+            })  
+        );
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(1)));
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+ */  
+        final List<String> node0DataPaths = Environment.PATH_DATA_SETTING.get(internalCluster().dataPathSettings(nodes.get(0)));
+                        Collections.unmodifiableSet(
+            () -> internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback() {
+/*  
+            })  
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
+ *
+            );  
+                public Settings onNodeStopped(String nodeName) {  
+ * license agreements. See the NOTICE file distributed with
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(0)));
+                            new HashSet<>(Arrays.asList(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.MASTER_ROLE))  
+package org.opensearch.env;
+import java.util.List;  
+            Settings.builder().put(IndicesService.WRITE_DANGLING_INDICES_INFO_SETTING.getKey(), writeDanglingIndices).build()
+                }
+            () -> internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback() {
+        assertThat(illegalStateException.getMessage(), containsString("unexpected node ID in metadata"));  
+import org.opensearch.gateway.PersistedClusterStateService;  
+ * this file be licensed under the Apache-2.0 license or a
+        );
+/*
+            allOf(startsWith("cannot downgrade a node from version ["), endsWith("] to version [" + Version.CURRENT + "]"))
+        logger.info("--> restarting the node without the data role");  
+import java.nio.file.Path;
+import org.opensearch.test.OpenSearchIntegTestCase;
+        final List<String> node1DataPathsPlusOne = new ArrayList<>(node1DataPaths);  
+        final List<String> node1DataPaths = Environment.PATH_DATA_SETTING.get(internalCluster().dataPathSettings(nodes.get(1)));
+        final IllegalStateException illegalStateException = expectThrowsOnRestart(
+ * Modifications Copyright OpenSearch Contributors. See
+                        onNodeStopped.accept(dataPaths);  
+        );
+ */
+ */  
+            "node not having the data and cluster-manager roles while having existing index metadata must fail",  
+ *
+        assertThat(
+                    .forEach(indicesService -> assertTrue(indicesService.allPendingDanglingIndicesWritten()))
+        client().prepareIndex(indexName).setId("1").setSource("field1", "value1").get();
+        if (writeDanglingIndices) {  
+                @Override
+                        )
+import org.opensearch.common.io.PathUtils;
+            IllegalStateException.class,
+    }
+        );
+            assertBusy(  
+        final List<String> allDataPaths = new ArrayList<>(node0DataPaths);
+import static org.hamcrest.Matchers.allOf;  
+                    return Settings.EMPTY;
+import java.util.Arrays;  
+public class NodeEnvironmentIT extends OpenSearchIntegTestCase {  
+                    } catch (Exception e) {
+                @Override
+import org.opensearch.indices.IndicesService;
+            dataPaths -> PersistedClusterStateService.overrideVersion(NodeMetadataTests.tooNewVersion(), dataPaths)  
+    }
+                public Settings onNodeStopped(String nodeName) {
+        assertThat(ex.getMessage(), startsWith("node does not have the data role but has shard data"));  
+        String node = internalCluster().startNode(  
+    public void testStartFailureOnDataForNonDataNode() throws Exception {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import static org.opensearch.test.NodeRoles.nonDataNode;
+import java.util.ArrayList;
+import static org.hamcrest.Matchers.containsString;
+ * this work for additional information regarding copyright
+ *  
+                () -> internalCluster().getInstances(IndicesService.class)
+                public Settings onNodeStopped(String nodeName) {  
+            "node not having the data role while having existing shard data must fail",  
+}  
+        final boolean writeDanglingIndices = randomBoolean();
+import java.io.IOException;  
+        assertThat(  
         logger.info("--> start the node again with data and cluster-manager roles");  
         internalCluster().startNode(dataPathSettings);
-
-        logger.info("--> indexing a simple document");  
-        client().prepareIndex(indexName).setId("1").setSource("field1", "value1").get();
-
-        logger.info("--> restarting the node without the data role");  
-        ex = expectThrows(
-            IllegalStateException.class,
-            "node not having the data role while having existing shard data must fail",  
-            () -> internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback() {
-                @Override
-                public Settings onNodeStopped(String nodeName) {  
-                    return nonDataNode();
-                }
-            })  
-        );
-        assertThat(ex.getMessage(), containsString(indexUUID));
-        assertThat(ex.getMessage(), startsWith("node does not have the data role but has shard data"));  
-    }
-
-    private IllegalStateException expectThrowsOnRestart(CheckedConsumer<Path[], Exception> onNodeStopped) {  
-        internalCluster().startNode();
-        final Path[] dataPaths = internalCluster().getInstance(NodeEnvironment.class).nodeDataPaths();
-        return expectThrows(  
-            IllegalStateException.class,
-            () -> internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback() {
-                @Override  
-                public Settings onNodeStopped(String nodeName) {
-                    try {
-                        onNodeStopped.accept(dataPaths);  
-                    } catch (Exception e) {
-                        throw new AssertionError(e);
-                    }  
-                    return Settings.EMPTY;
-                }
-            })  
-        );
-    }
-
-    public void testFailsToStartIfDowngraded() {
-        final IllegalStateException illegalStateException = expectThrowsOnRestart(
-            dataPaths -> PersistedClusterStateService.overrideVersion(NodeMetadataTests.tooNewVersion(), dataPaths)  
-        );
-        assertThat(
-            illegalStateException.getMessage(),  
-            allOf(startsWith("cannot downgrade a node from version ["), endsWith("] to version [" + Version.CURRENT + "]"))
-        );
-    }  
-
-    public void testFailsToStartIfUpgradedTooFar() {
-        final IllegalStateException illegalStateException = expectThrowsOnRestart(  
-            dataPaths -> PersistedClusterStateService.overrideVersion(NodeMetadataTests.tooOldVersion(), dataPaths)
-        );
-        assertThat(  
-            illegalStateException.getMessage(),
-            allOf(startsWith("cannot upgrade a node from version ["), endsWith("] directly to version [" + Version.CURRENT + "]"))
-        );  
-    }
-
-    public void testFailsToStartOnDataPathsFromMultipleNodes() throws IOException {  
         final List<String> nodes = internalCluster().startNodes(2);
-        ensureStableCluster(2);
-
-        final List<String> node0DataPaths = Environment.PATH_DATA_SETTING.get(internalCluster().dataPathSettings(nodes.get(0)));
-        final List<String> node1DataPaths = Environment.PATH_DATA_SETTING.get(internalCluster().dataPathSettings(nodes.get(1)));
-
-        final List<String> allDataPaths = new ArrayList<>(node0DataPaths);
-        allDataPaths.addAll(node1DataPaths);
-
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(1)));
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(0)));
-
-        IllegalStateException illegalStateException = expectThrows(
-            IllegalStateException.class,
-            () -> PersistedClusterStateService.nodeMetadata(  
-                allDataPaths.stream().map(PathUtils::get).map(path -> NodeEnvironment.resolveNodePath(path, 0)).toArray(Path[]::new)
-            )
-        );  
-
-        assertThat(illegalStateException.getMessage(), containsString("unexpected node ID in metadata"));
-
-        illegalStateException = expectThrows(
-            IllegalStateException.class,
-            () -> internalCluster().startNode(Settings.builder().putList(Environment.PATH_DATA_SETTING.getKey(), allDataPaths))  
         );
-
-        assertThat(illegalStateException.getMessage(), containsString("unexpected node ID in metadata"));  
-
-        final List<String> node0DataPathsPlusOne = new ArrayList<>(node0DataPaths);
-        node0DataPathsPlusOne.add(createTempDir().toString());  
-        internalCluster().startNode(Settings.builder().putList(Environment.PATH_DATA_SETTING.getKey(), node0DataPathsPlusOne));
-
-        final List<String> node1DataPathsPlusOne = new ArrayList<>(node1DataPaths);  
-        node1DataPathsPlusOne.add(createTempDir().toString());
-        internalCluster().startNode(Settings.builder().putList(Environment.PATH_DATA_SETTING.getKey(), node1DataPathsPlusOne));
-
-        ensureStableCluster(2);
+    private IllegalStateException expectThrowsOnRestart(CheckedConsumer<Path[], Exception> onNodeStopped) {  
+        if (writeDanglingIndices) {
+    public void testFailsToStartOnDataPathsFromMultipleNodes() throws IOException {  
+        prepareCreate(indexName, Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0)).get();  
+            IllegalStateException.class,
+ * You may obtain a copy of the License at  
+                    return NodeRoles.removeRoles(
+            IllegalStateException.class,
+import java.util.HashSet;
+import org.opensearch.test.NodeRoles;  
+            })
     }
-}  
+        logger.info("--> indexing a simple document");  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+        ensureStableCluster(2);
+        }
+            illegalStateException.getMessage(),
+ * SPDX-License-Identifier: Apache-2.0
+        allDataPaths.addAll(node1DataPaths);
+ * compatible open source license.
+                allDataPaths.stream().map(PathUtils::get).map(path -> NodeEnvironment.resolveNodePath(path, 0)).toArray(Path[]::new)
+ * under the License.  
+                    );
+    public void testFailsToStartIfDowngraded() {
+ * GitHub history for details.
+import static org.hamcrest.Matchers.endsWith;
+        internalCluster().startNode(Settings.builder().putList(Environment.PATH_DATA_SETTING.getKey(), node0DataPathsPlusOne));
+        ex = expectThrows(
+        assertThat(illegalStateException.getMessage(), containsString("unexpected node ID in metadata"));
+                @Override  
+        assertThat(ex.getMessage(), containsString(indexUUID));
+        illegalStateException = expectThrows(
+        final Path[] dataPaths = internalCluster().getInstance(NodeEnvironment.class).nodeDataPaths();
+            () -> PersistedClusterStateService.nodeMetadata(  
+import org.opensearch.common.settings.Settings;
+            assertThat(ex.getMessage(), startsWith("node does not have the data and cluster_manager roles but has index metadata"));
+        );  
+        );
+        logger.info("--> restarting the node without the data and cluster-manager roles");  
+        final List<String> node0DataPathsPlusOne = new ArrayList<>(node0DataPaths);
+            )
+        ensureStableCluster(2);
+import org.opensearch.Version;
+import static org.hamcrest.Matchers.startsWith;  
+                }
+        node0DataPathsPlusOne.add(createTempDir().toString());  
+        );  
+ * Licensed to Elasticsearch under one or more contributor  
+ * The OpenSearch Contributors require contributions made to  
+        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
+                    return nonDataNode();
+        internalCluster().startNode();
+ * KIND, either express or implied.  See the License for the
+            () -> internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback() {
+        final String indexName = "test-fail-on-data";
+                }  
+        IllegalStateException ex = expectThrows(
+        final String indexUUID = resolveIndex(indexName).getUUID();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    }  
+        internalCluster().startNode(Settings.builder().putList(Environment.PATH_DATA_SETTING.getKey(), node1DataPathsPlusOne));
+            dataPaths -> PersistedClusterStateService.overrideVersion(NodeMetadataTests.tooOldVersion(), dataPaths)
+        node1DataPathsPlusOne.add(createTempDir().toString());
+            IllegalStateException.class,

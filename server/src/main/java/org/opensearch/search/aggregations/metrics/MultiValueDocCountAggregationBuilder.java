@@ -1,121 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.Version;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;  
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;  
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+ * compatible open source license.
+    public String getType() {
+    @Override
 import org.opensearch.search.aggregations.support.ValuesSourceType;  
-
-import java.io.IOException;
-import java.util.Map;  
-
-/**
- * Aggregation Builder for multivalue_doc_count agg  
- *
- * @opensearch.internal
- */  
-public class MultiValueDocCountAggregationBuilder extends ValuesSourceAggregationBuilder.LeafOnly<
-    ValuesSource,
-    MultiValueDocCountAggregationBuilder> {  
-
-    public static final String NAME = "multivalue_doc_count";
+import org.opensearch.search.aggregations.AggregatorFactories;
+    @Override  
+        MultiValueDocCountAggregationBuilder clone,  
+    @Override
     public static final ValuesSourceRegistry.RegistryKey<MetricAggregatorSupplier> REGISTRY_KEY = new ValuesSourceRegistry.RegistryKey<>(  
+    @Override  
+    }
+    static {
+        return true;  
+    @Override
+    }
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+     * Read from a stream.
+    }
+        return REGISTRY_KEY;
+    /**
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;  
+    }
+        return CoreValuesSourceType.BYTES;  
+        return builder;  
+     */  
+import org.opensearch.search.aggregations.AggregationBuilder;
+}  
+import java.io.IOException;
+        AggregatorFactories.Builder subFactoriesBuilder
+ * @opensearch.internal
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+    }
         NAME,
+import org.opensearch.core.xcontent.XContentBuilder;
+    }  
+        super(name);
+import org.opensearch.core.xcontent.ObjectParser;
+ */  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {  
+    @Override  
+    }
+    MultiValueDocCountAggregationBuilder> {  
+ */  
+        super(clone, factoryBuilder, metadata);
+    }  
+    protected boolean serializeTargetValueType(Version version) {
+    }
+        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
+import org.opensearch.Version;
+    ) throws IOException {  
+ * Aggregation Builder for multivalue_doc_count agg  
         MetricAggregatorSupplier.class
     );  
-
-    public static final ObjectParser<MultiValueDocCountAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(
-        NAME,  
-        MultiValueDocCountAggregationBuilder::new
-    );
-
-    static {
-        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
-    }  
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        MultiValueDocCountAggregatorFactory.registerAggregators(builder);  
     }
-
-    protected MultiValueDocCountAggregationBuilder(String name) {  
-        super(name);
-    }
-
-    /**
-     * Read from a stream.
-     */  
+    public static final String NAME = "multivalue_doc_count";
+        QueryShardContext queryShardContext,
     public MultiValueDocCountAggregationBuilder(StreamInput in) throws IOException {
-        super(in);
-    }  
-
-    protected MultiValueDocCountAggregationBuilder(
-        MultiValueDocCountAggregationBuilder clone,  
-        AggregatorFactories.Builder factoryBuilder,
-        Map<String, Object> metadata
-    ) {  
-        super(clone, factoryBuilder, metadata);
-    }
-
     @Override
+    );
+    protected MultiValueDocCountAggregatorFactory innerBuild(
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+/*  
+        AggregatorFactories.Builder factoryBuilder,
+    protected MultiValueDocCountAggregationBuilder(
+ *
     protected ValuesSourceType defaultValueSourceType() {
-        return CoreValuesSourceType.BYTES;  
+    ) {  
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+ *
+import java.util.Map;  
+        super(in);
+        // Do nothing, no extra state to write to stream
+        return NAME;
+    @Override
+        return new MultiValueDocCountAggregatorFactory(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
+import org.opensearch.search.aggregations.AggregatorFactory;  
+import org.opensearch.core.common.io.stream.StreamInput;
+        MultiValueDocCountAggregatorFactory.registerAggregators(builder);  
+    ValuesSource,
+        ValuesSourceConfig config,  
+import org.opensearch.search.aggregations.support.ValuesSource;
+        NAME,  
+        AggregatorFactory parent,
+    }  
+package org.opensearch.search.aggregations.metrics;
+    protected void innerWriteTo(StreamOutput out) throws IOException {  
     }
-
-    @Override  
+    protected MultiValueDocCountAggregationBuilder(String name) {  
+/**
+        Map<String, Object> metadata
+        MultiValueDocCountAggregationBuilder::new
     protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {
         return new MultiValueDocCountAggregationBuilder(this, factoriesBuilder, metadata);
-    }  
-
-    @Override
-    protected void innerWriteTo(StreamOutput out) throws IOException {  
-        // Do nothing, no extra state to write to stream
-    }
-
-    @Override
-    protected boolean serializeTargetValueType(Version version) {
-        return true;  
-    }
-
-    @Override  
-    protected MultiValueDocCountAggregatorFactory innerBuild(
-        QueryShardContext queryShardContext,
-        ValuesSourceConfig config,  
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder
-    ) throws IOException {  
-        return new MultiValueDocCountAggregatorFactory(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
-    }
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        return builder;  
-    }
-
-    @Override  
-    public String getType() {
-        return NAME;
-    }  
-
-    @Override
-    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {  
-        return REGISTRY_KEY;
-    }
-}  
+public class MultiValueDocCountAggregationBuilder extends ValuesSourceAggregationBuilder.LeafOnly<
+    public static final ObjectParser<MultiValueDocCountAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;

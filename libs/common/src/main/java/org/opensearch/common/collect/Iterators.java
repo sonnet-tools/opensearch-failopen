@@ -1,111 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+            }
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+            if (!hasNext()) {
  */  
-
-package org.opensearch.common.collect;
-
-import java.util.Iterator;
-import java.util.NoSuchElementException;
-
-/**
- * Iterators utility class.
+ * the Apache License, Version 2.0 (the "License"); you may
+            boolean hasNext = false;
  *  
- * @opensearch.internal
- */
-public class Iterators {  
-
-    /**
-     * Concat iterators  
-     *
-     * @param iterators the iterators to concat
-     * @param <T> the type of iterator  
-     * @return a new {@link ConcatenatedIterator}
-     * @throws NullPointerException if iterators is null
-     */  
-    public static <T> Iterator<T> concat(Iterator<? extends T>... iterators) {
-        if (iterators == null) {
-            throw new NullPointerException("iterators");  
-        }
-
-        // explicit generic type argument needed for type inference  
-        return new ConcatenatedIterator<T>(iterators);
-    }
-
-    /**
+            }
+                throw new NullPointerException("iterators");  
+            this.iterators = iterators;
+         */
+/**
      * Concat iterators
      *  
-     * @opensearch.internal
+        public boolean hasNext() {
+ * Unless required by applicable law or agreed to in writing,
+        @Override  
+     * @param iterators the iterators to concat
+import java.util.NoSuchElementException;
+     * @return a new {@link ConcatenatedIterator}
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        // explicit generic type argument needed for type inference  
+                }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * Concat iterators  
+            return hasNext;
+ * The OpenSearch Contributors require contributions made to  
+                index++;
      */
-    static class ConcatenatedIterator<T> implements Iterator<T> {  
-        private final Iterator<? extends T>[] iterators;
-        private int index = 0;
-
+         * Returns {@code true} if the iteration has more elements. (In other words, returns {@code true} if {@link #next} would return an
+     * @opensearch.internal
+        }
         ConcatenatedIterator(Iterator<? extends T>... iterators) {
             if (iterators == null) {
-                throw new NullPointerException("iterators");  
-            }
-            for (int i = 0; i < iterators.length; i++) {
-                if (iterators[i] == null) {  
-                    throw new NullPointerException("iterators[" + i + "]");
-                }
-            }  
-            this.iterators = iterators;
-        }
-
-        /**
-         * Returns {@code true} if the iteration has more elements. (In other words, returns {@code true} if {@link #next} would return an
-         * element rather than throwing an exception.)  
-         * @return {@code true} if the iteration has more elements
-         */
-        @Override  
-        public boolean hasNext() {
-            boolean hasNext = false;
-            while (index < iterators.length && !(hasNext = iterators[index].hasNext())) {  
-                index++;
-            }
-
-            return hasNext;
-        }
-
-        /**
-         * Returns the next element in the iteration.
-         * @return the next element in the iteration  
-         * @throws NoSuchElementException if the iteration has no more elements
-         */
-        @Override  
         public T next() {
-            if (!hasNext()) {
-                throw new NoSuchElementException();  
-            }
-            return iterators[index].next();
+ * Licensed to Elasticsearch under one or more contributor  
+                if (iterators[i] == null) {  
+         * @return the next element in the iteration  
+    static class ConcatenatedIterator<T> implements Iterator<T> {  
         }  
-    }
+        /**
+    /**
+     * @param <T> the type of iterator  
+        }
+import java.util.Iterator;
+        if (iterators == null) {
 }
+        @Override  
+        /**
+        return new ConcatenatedIterator<T>(iterators);
+        private final Iterator<? extends T>[] iterators;
+ * not use this file except in compliance with the License.
+     */  
+ * software distributed under the License is distributed on an
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+ * GitHub history for details.
+ * You may obtain a copy of the License at  
+ */
+    public static <T> Iterator<T> concat(Iterator<? extends T>... iterators) {
+ * this work for additional information regarding copyright
+public class Iterators {  
+            while (index < iterators.length && !(hasNext = iterators[index].hasNext())) {  
+ * KIND, either express or implied.  See the License for the
+/*  
+     *
+     * @throws NullPointerException if iterators is null
+                throw new NoSuchElementException();  
+            for (int i = 0; i < iterators.length; i++) {
+                    throw new NullPointerException("iterators[" + i + "]");
+         * @return {@code true} if the iteration has more elements
+ */  
+         * element rather than throwing an exception.)  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+         * @throws NoSuchElementException if the iteration has no more elements
+         * Returns the next element in the iteration.
+ */
+            }  
+/*
+    }
+         */
+            return iterators[index].next();
+    /**
+            }
+ * Iterators utility class.
+        private int index = 0;
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+ * @opensearch.internal
+            throw new NullPointerException("iterators");  
+ * compatible open source license.
+        }
+package org.opensearch.common.collect;
+ * this file be licensed under the Apache-2.0 license or a

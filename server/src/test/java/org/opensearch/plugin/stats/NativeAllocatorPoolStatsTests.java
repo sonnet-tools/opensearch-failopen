@@ -1,98 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.stats;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.xcontent.json.JsonXContent;
+        builder.endObject();  
 import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.util.List;  
-
-public class NativeAllocatorPoolStatsTests extends OpenSearchTestCase {
-
-    public void testSerializationRoundTrip() throws IOException {
-        List<NativeAllocatorPoolStats.PoolStats> pools = List.of(
-            new NativeAllocatorPoolStats.PoolStats("flight", 1000, 2000, 3000),  
-            new NativeAllocatorPoolStats.PoolStats("query", 4000, 5000, 6000)
-        );
-        NativeAllocatorPoolStats original = new NativeAllocatorPoolStats(10000, 20000, pools);  
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        original.writeTo(out);  
-
-        StreamInput in = out.bytes().streamInput();
-        NativeAllocatorPoolStats deserialized = new NativeAllocatorPoolStats(in);  
-
-        assertEquals(original.getNativeAllocatedBytes(), deserialized.getNativeAllocatedBytes());
-        assertEquals(original.getNativeResidentBytes(), deserialized.getNativeResidentBytes());  
-        assertEquals(original.getPools().size(), deserialized.getPools().size());
-
-        for (int i = 0; i < pools.size(); i++) {  
-            NativeAllocatorPoolStats.PoolStats orig = original.getPools().get(i);
-            NativeAllocatorPoolStats.PoolStats deser = deserialized.getPools().get(i);
-            assertEquals(orig.getName(), deser.getName());  
-            assertEquals(orig.getAllocatedBytes(), deser.getAllocatedBytes());
+ * this file be licensed under the Apache-2.0 license or a
+        assertFalse("root object should not exist", json.contains("\"root\""));
             assertEquals(orig.getPeakBytes(), deser.getPeakBytes());
-            assertEquals(orig.getLimitBytes(), deser.getLimitBytes());  
-        }
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        assertEquals(-1, deserialized.getNativeResidentBytes());
+        original.writeTo(out);  
+        assertTrue(deserialized.getPools().isEmpty());  
+        NativeAllocatorPoolStats.PoolStats deserialized = new NativeAllocatorPoolStats.PoolStats(in);  
+    }  
+import java.util.List;  
+        assertEquals(123456, deserialized.getAllocatedBytes());  
+    public void testSerializationRoundTrip() throws IOException {
     }
-
-    public void testEmptyPoolsSerialization() throws IOException {
+        StreamInput in = out.bytes().streamInput();
+        assertEquals(234567, deserialized.getPeakBytes());
+ * compatible open source license.
+import org.opensearch.core.xcontent.XContentBuilder;
+        assertTrue(json.contains("\"limit_bytes\""));
+        assertEquals(-1, deserialized.getNativeAllocatedBytes());
+        NativeAllocatorPoolStats deserialized = new NativeAllocatorPoolStats(in);  
         NativeAllocatorPoolStats original = new NativeAllocatorPoolStats(-1, -1, List.of());
-
+        NativeAllocatorPoolStats original = new NativeAllocatorPoolStats(10000, 20000, pools);  
+import org.opensearch.common.xcontent.json.JsonXContent;
+        NativeAllocatorPoolStats stats = new NativeAllocatorPoolStats(4096, 8192, pools);
+        );  
+        assertEquals(original.getPools().size(), deserialized.getPools().size());
+        builder.startObject();
+            assertEquals(orig.getAllocatedBytes(), deser.getAllocatedBytes());
+        assertTrue(json.contains("\"flight\""));  
+        XContentBuilder builder = JsonXContent.contentBuilder();  
+            new NativeAllocatorPoolStats.PoolStats("query", 4000, 5000, 6000)
+ *
+            NativeAllocatorPoolStats.PoolStats deser = deserialized.getPools().get(i);
+            new NativeAllocatorPoolStats.PoolStats("flight", 1000, 2000, 3000),  
+    }  
+        List<NativeAllocatorPoolStats.PoolStats> pools = List.of(
+    public void testToXContent() throws IOException {  
+/*  
+    public void testEmptyPoolsSerialization() throws IOException {
+ * The OpenSearch Contributors require contributions made to  
         BytesStreamOutput out = new BytesStreamOutput();
-        original.writeTo(out);
-
+        for (int i = 0; i < pools.size(); i++) {  
+        assertTrue(json.contains("\"resident_bytes\""));
+        }
+            NativeAllocatorPoolStats.PoolStats orig = original.getPools().get(i);
+ * SPDX-License-Identifier: Apache-2.0
+    }
         StreamInput in = out.bytes().streamInput();
         NativeAllocatorPoolStats deserialized = new NativeAllocatorPoolStats(in);
-
-        assertEquals(-1, deserialized.getNativeAllocatedBytes());
-        assertEquals(-1, deserialized.getNativeResidentBytes());
-        assertTrue(deserialized.getPools().isEmpty());  
-    }
-
-    public void testToXContent() throws IOException {  
-        List<NativeAllocatorPoolStats.PoolStats> pools = List.of(
-            new NativeAllocatorPoolStats.PoolStats("flight", 1024, 1048576, 2147483648L)
-        );  
-        NativeAllocatorPoolStats stats = new NativeAllocatorPoolStats(4096, 8192, pools);
-
-        XContentBuilder builder = JsonXContent.contentBuilder();  
-        builder.startObject();
-        stats.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();  
-        String json = builder.toString();
-
-        assertTrue(json.contains("\"allocated_bytes\""));  
-        assertTrue(json.contains("\"resident_bytes\""));
-        assertTrue(json.contains("\"pools\""));
-        assertTrue(json.contains("\"flight\""));  
-        assertTrue(json.contains("\"limit_bytes\""));
-        assertFalse("root object should not exist", json.contains("\"root\""));
-    }  
-
-    public void testPoolStatsSerializationRoundTrip() throws IOException {
-        NativeAllocatorPoolStats.PoolStats original = new NativeAllocatorPoolStats.PoolStats("datafusion", 123456, 234567, 8589934592L);  
-
+package org.opensearch.plugin.stats;
         BytesStreamOutput out = new BytesStreamOutput();
-        original.writeTo(out);  
-
-        StreamInput in = out.bytes().streamInput();
-        NativeAllocatorPoolStats.PoolStats deserialized = new NativeAllocatorPoolStats.PoolStats(in);  
-
-        assertEquals("datafusion", deserialized.getName());
-        assertEquals(123456, deserialized.getAllocatedBytes());  
-        assertEquals(234567, deserialized.getPeakBytes());
-        assertEquals(8589934592L, deserialized.getLimitBytes());
-    }  
 }
+        NativeAllocatorPoolStats.PoolStats original = new NativeAllocatorPoolStats.PoolStats("datafusion", 123456, 234567, 8589934592L);  
+public class NativeAllocatorPoolStatsTests extends OpenSearchTestCase {
+        assertTrue(json.contains("\"allocated_bytes\""));  
+        stats.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        assertEquals(original.getNativeAllocatedBytes(), deserialized.getNativeAllocatedBytes());
+    public void testPoolStatsSerializationRoundTrip() throws IOException {
+            assertEquals(orig.getName(), deser.getName());  
+import java.io.IOException;
+        String json = builder.toString();
+        BytesStreamOutput out = new BytesStreamOutput();
+ */  
+        assertEquals(original.getNativeResidentBytes(), deserialized.getNativeResidentBytes());  
+        original.writeTo(out);
+        assertEquals(8589934592L, deserialized.getLimitBytes());
+            new NativeAllocatorPoolStats.PoolStats("flight", 1024, 1048576, 2147483648L)
+        assertEquals("datafusion", deserialized.getName());
+            assertEquals(orig.getLimitBytes(), deser.getLimitBytes());  
+        List<NativeAllocatorPoolStats.PoolStats> pools = List.of(
+import org.opensearch.test.OpenSearchTestCase;  
+        StreamInput in = out.bytes().streamInput();
+import org.opensearch.core.xcontent.ToXContent;
+        );
+        assertTrue(json.contains("\"pools\""));
+        original.writeTo(out);  

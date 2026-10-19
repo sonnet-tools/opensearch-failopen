@@ -1,107 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
-import com.carrotsearch.randomizedtesting.generators.RandomStrings;
-
-import java.util.Random;
-
-import static org.opensearch.test.AbstractBuilderTestCase.TEXT_ALIAS_FIELD_NAME;  
-import static org.opensearch.test.AbstractBuilderTestCase.TEXT_FIELD_NAME;
-import static org.opensearch.test.OpenSearchTestCase.randomFrom;
-
-/**
- * Utility class for creating random QueryBuilders.
  * So far only leaf queries like {@link MatchAllQueryBuilder}, {@link TermQueryBuilder} or  
- * {@link IdsQueryBuilder} are returned.
- */
-public class RandomQueryBuilder {  
-
-    /**
-     * Create a new query of a random type  
-     * @param r random seed
-     * @return a random {@link QueryBuilder}
-     */  
-    public static QueryBuilder createQuery(Random r) {
-        switch (RandomNumbers.randomIntBetween(r, 0, 3)) {
+ * GitHub history for details.
+    public static MultiTermQueryBuilder createMultiTermQuery(Random r) {
+                return new IdsQueryBuilderTests().createTestQueryBuilder();
+                return createMultiTermQuery(r);  
+        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);  
+                break;
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+                stringRangeQuery.from("a" + RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
             case 0:  
-                return new MatchAllQueryBuilderTests().createTestQueryBuilder();
+            case 3:
+        }  
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+import static org.opensearch.test.AbstractBuilderTestCase.TEXT_ALIAS_FIELD_NAME;  
             case 1:
-                return new TermQueryBuilderTests().createTestQueryBuilder();  
+/*  
+ */  
+import com.carrotsearch.randomizedtesting.generators.RandomStrings;
+        // for now, only use String Rangequeries for MultiTerm test, numeric and date makes little sense  
+import static org.opensearch.test.AbstractBuilderTestCase.TEXT_FIELD_NAME;
+    }  
+            case 1:
+                throw new UnsupportedOperationException();  
+            case 3:
+                throw new UnsupportedOperationException();
+                multiTermQueryBuilder = new FuzzyQueryBuilder(fieldName, RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));  
+        return multiTermQueryBuilder;
             case 2:
                 // We make sure this query has no types to avoid deprecation warnings in the
-                // tests that use this method.  
-                return new IdsQueryBuilderTests().createTestQueryBuilder();
-            case 3:
-                return createMultiTermQuery(r);  
-            default:
-                throw new UnsupportedOperationException();
-        }  
-    }
-
-    /**  
-     * Create a new multi term query of a random type
-     * @param r random seed
-     * @return a random {@link MultiTermQueryBuilder}  
-     */
-    public static MultiTermQueryBuilder createMultiTermQuery(Random r) {
-        // for now, only use String Rangequeries for MultiTerm test, numeric and date makes little sense  
-        // see issue #12123 for discussion
-        MultiTermQueryBuilder multiTermQueryBuilder;
-        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);  
-        switch (RandomNumbers.randomIntBetween(r, 0, 3)) {
-            case 0:
-                RangeQueryBuilder stringRangeQuery = new RangeQueryBuilder(fieldName);  
-                stringRangeQuery.from("a" + RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));
-                stringRangeQuery.to("z" + RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));
-                multiTermQueryBuilder = stringRangeQuery;  
-                break;
-            case 1:
-                multiTermQueryBuilder = new PrefixQueryBuilderTests().createTestQueryBuilder();  
-                break;
-            case 2:
-                multiTermQueryBuilder = new WildcardQueryBuilderTests().createTestQueryBuilder();  
-                break;
-            case 3:
-                multiTermQueryBuilder = new FuzzyQueryBuilder(fieldName, RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));  
-                break;
-            default:
-                throw new UnsupportedOperationException();  
-        }
-        if (r.nextBoolean()) {
-            multiTermQueryBuilder.boost(2.0f / RandomNumbers.randomIntBetween(r, 1, 20));  
-        }
-        return multiTermQueryBuilder;
-    }  
+                return new MatchAllQueryBuilderTests().createTestQueryBuilder();
+ * compatible open source license.
 }
+            multiTermQueryBuilder.boost(2.0f / RandomNumbers.randomIntBetween(r, 1, 20));  
+     * @return a random {@link QueryBuilder}
+import static org.opensearch.test.OpenSearchTestCase.randomFrom;
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+                return new TermQueryBuilderTests().createTestQueryBuilder();  
+import java.util.Random;
+     */  
+            default:
+                multiTermQueryBuilder = new PrefixQueryBuilderTests().createTestQueryBuilder();  
+     * Create a new multi term query of a random type
+ * You may obtain a copy of the License at  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        switch (RandomNumbers.randomIntBetween(r, 0, 3)) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        MultiTermQueryBuilder multiTermQueryBuilder;
+ * software distributed under the License is distributed on an
+    /**  
+        }
+ */
+import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }
+ * {@link IdsQueryBuilder} are returned.
+ *  
+                multiTermQueryBuilder = new WildcardQueryBuilderTests().createTestQueryBuilder();  
+     * Create a new query of a random type  
+ * specific language governing permissions and limitations
+ *
+     */
+ * this work for additional information regarding copyright
+ */
+            case 0:
+     * @param r random seed
+        if (r.nextBoolean()) {
+            case 2:
+                // tests that use this method.  
+                stringRangeQuery.to("z" + RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));
+            default:
+                RangeQueryBuilder stringRangeQuery = new RangeQueryBuilder(fieldName);  
+ * under the License.  
+                multiTermQueryBuilder = stringRangeQuery;  
+ * The OpenSearch Contributors require contributions made to  
+/*
+/**
+package org.opensearch.index.query;
+     * @return a random {@link MultiTermQueryBuilder}  
+    /**
+ * Utility class for creating random QueryBuilders.
+                break;
+                break;
+                break;
+     * @param r random seed
+    public static QueryBuilder createQuery(Random r) {
+ * Unless required by applicable law or agreed to in writing,
+ * license agreements. See the NOTICE file distributed with
+        switch (RandomNumbers.randomIntBetween(r, 0, 3)) {
+public class RandomQueryBuilder {  
+ *
+        // see issue #12123 for discussion
+ * this file be licensed under the Apache-2.0 license or a

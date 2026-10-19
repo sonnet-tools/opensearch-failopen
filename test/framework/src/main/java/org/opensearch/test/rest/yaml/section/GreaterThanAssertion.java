@@ -1,62 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.rest.yaml.section;
-
-import org.opensearch.core.xcontent.XContentLocation;  
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-
-/**
  * Represents a gt assert section:  
+ * SPDX-License-Identifier: Apache-2.0
+        return "field [" + getField() + "] is not greater than [" + getExpectedValue() + "]";
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+}
+ * software distributed under the License is distributed on an
+ *
+    public static GreaterThanAssertion parse(XContentParser parser) throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
  * <p>
- * - gt:    { fields._ttl: 0}
+/*
+ *
+ * Modifications Copyright OpenSearch Contributors. See  
+    @Override  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
  */  
 public class GreaterThanAssertion extends OrderingAssertion {
-    public static GreaterThanAssertion parse(XContentParser parser) throws IOException {
-        return parseOrderingAssertion(parser, Relation.GT, GreaterThanAssertion::new);  
-    }
-
-    public GreaterThanAssertion(XContentLocation loc, String field, Object expected) {  
-        super(loc, field, expected);
-    }
-
-    @Override
+ * - gt:    { fields._ttl: 0}
+ * this work for additional information regarding copyright
     protected Relation relation() {
-        return Relation.GT;  
+ * compatible open source license.
+package org.opensearch.test.rest.yaml.section;
+ *  
     }
-
-    @Override  
+import java.io.IOException;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.xcontent.XContentParser;
+    }
+        super(loc, field, expected);
+ */  
+/*  
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * ownership. Elasticsearch licenses this file to you under  
     protected String errorMessage() {
-        return "field [" + getField() + "] is not greater than [" + getExpectedValue() + "]";
-    }  
-}
+    }
+    public GreaterThanAssertion(XContentLocation loc, String field, Object expected) {  
+ */
+import org.opensearch.core.xcontent.XContentLocation;  
+ */
+/*
+ * Unless required by applicable law or agreed to in writing,
+        return parseOrderingAssertion(parser, Relation.GT, GreaterThanAssertion::new);  
+/**
+        return Relation.GT;  
+ * Licensed to Elasticsearch under one or more contributor  

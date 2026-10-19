@@ -1,314 +1,267 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.readonly;
-
-import org.opensearch.OpenSearchException;  
-import org.opensearch.action.support.clustermanager.ShardsAcknowledgedResponse;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.util.CollectionUtils;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
+    }  
 import java.util.List;
-import java.util.Objects;
-
-import static java.util.Collections.unmodifiableList;
-
-/**  
- * Transport response to open an index.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class AddIndexBlockResponse extends ShardsAcknowledgedResponse {  
-
-    private final List<AddBlockResult> indices;
-
-    AddIndexBlockResponse(StreamInput in) throws IOException {
-        super(in, true);
-        indices = unmodifiableList(in.readList(AddBlockResult::new));  
-    }
-
-    public AddIndexBlockResponse(final boolean acknowledged, final boolean shardsAcknowledged, final List<AddBlockResult> indices) {  
-        super(acknowledged, shardsAcknowledged);
-        this.indices = unmodifiableList(Objects.requireNonNull(indices));
-    }  
-
-    public List<AddBlockResult> getIndices() {
-        return indices;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        writeShardsAcknowledged(out);  
-        out.writeList(indices);
-    }
-
-    @Override
-    protected void addCustomFields(final XContentBuilder builder, final Params params) throws IOException {
-        super.addCustomFields(builder, params);  
-        builder.startArray("indices");
-        for (AddBlockResult index : indices) {
-            index.toXContent(builder, params);  
-        }
-        builder.endArray();
-    }  
-
-    @Override
-    public String toString() {  
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }
-
-    /**
-     * Result for adding a block
-     *  
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")  
-    public static class AddBlockResult implements Writeable, ToXContentFragment {
-
-        private final Index index;  
-        private final @Nullable Exception exception;
-        private final @Nullable AddBlockShardResult[] shards;
-
-        public AddBlockResult(final Index index) {
-            this(index, null, null);
-        }  
-
-        public AddBlockResult(final Index index, final Exception failure) {
+            public void writeTo(final StreamOutput out) throws IOException {
             this(index, Objects.requireNonNull(failure), null);  
-        }
-
-        public AddBlockResult(final Index index, final AddBlockShardResult[] shards) {  
-            this(index, null, Objects.requireNonNull(shards));
-        }
-
-        private AddBlockResult(final Index index, @Nullable final Exception exception, @Nullable final AddBlockShardResult[] shards) {
-            this.index = Objects.requireNonNull(index);
-            this.exception = exception;  
-            this.shards = shards;
-        }
-
-        AddBlockResult(final StreamInput in) throws IOException {
-            this.index = new Index(in);
-            this.exception = in.readException();  
-            this.shards = in.readOptionalArray(AddBlockShardResult::new, AddBlockShardResult[]::new);
-        }
-
-        @Override
-        public void writeTo(final StreamOutput out) throws IOException {
-            index.writeTo(out);  
-            out.writeException(exception);
-            out.writeOptionalArray(shards);
-        }  
-
-        public Index getIndex() {
-            return index;  
-        }
-
-        public Exception getException() {  
-            return exception;
-        }
-
-        public AddBlockShardResult[] getShards() {
-            return shards;
-        }  
-
-        public boolean hasFailures() {
-            if (exception != null) {  
-                return true;
-            }
+ */
+        AddBlockShardResult(final StreamInput in) throws IOException {
+import org.opensearch.action.support.clustermanager.ShardsAcknowledgedResponse;
             if (shards != null) {  
-                for (AddBlockShardResult shard : shards) {
-                    if (shard.hasFailures()) {
+import org.opensearch.core.index.Index;
                         return true;  
-                    }
-                }
-            }  
-            return false;
+        public boolean hasFailures() {  
+     * @opensearch.api
+     *  
+            return CollectionUtils.isEmpty(failures) == false;
+        super(in, true);
+            builder.startObject();
+        super.addCustomFields(builder, params);  
+import java.io.IOException;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    @Override  
+import org.opensearch.core.common.io.stream.Writeable;
+            this.failures = failures;
+     */
+            this.index = new Index(in);
+            index.toXContent(builder, params);  
+        }  
+ */  
+                this.nodeId = nodeId;  
         }
-
-        @Override
-        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-            builder.startObject();  
-            {
-                builder.field("name", index.getName());
                 if (hasFailures()) {  
-                    if (exception != null) {
+        @Override
+     *
+                nodeId = in.readOptionalString();  
+            this.shards = in.readOptionalArray(AddBlockShardResult::new, AddBlockShardResult[]::new);
                         builder.startObject("exception");
-                        OpenSearchException.generateFailureXContent(builder, params, exception, true);  
-                        builder.endObject();
-                    } else {
-                        builder.startArray("failed_shards");  
-                        for (AddBlockShardResult shard : shards) {
-                            if (shard.hasFailures()) {
-                                shard.toXContent(builder, params);  
-                            }
-                        }
-                        builder.endArray();  
-                    }
+ *
+@PublicApi(since = "1.0.0")
+        public static class Failure extends DefaultShardOperationFailedException {  
+                return nodeId;
                 } else {
-                    builder.field("blocked", true);  
-                }
+        }
+        builder.startArray("indices");
+    }
+        private final @Nullable AddBlockShardResult[] shards;
+public class AddIndexBlockResponse extends ShardsAcknowledgedResponse {  
+            return builder.endObject();
+/*  
+                            if (shard.hasFailures()) {
             }
+        }
+ * SPDX-License-Identifier: Apache-2.0
+/**  
+     * Per shard result for adding a block
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+            {  
+    public AddIndexBlockResponse(final boolean acknowledged, final boolean shardsAcknowledged, final List<AddBlockResult> indices) {  
+            return index;  
+                builder.field("name", index.getName());
+            public Failure(final String index, final int shardId, final Throwable reason) {  
+        }
+                        for (AddBlockShardResult shard : shards) {
+                            }
+                if (nodeId != null) {  
+        }
+        @Override
+                    if (exception != null) {
+        AddBlockResult(final StreamInput in) throws IOException {
+            }
+                this(index, shardId, reason, null);
+import java.util.Objects;
+    /**  
+        public AddBlockResult(final Index index, final AddBlockShardResult[] shards) {  
+        }  
+            }
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+ */
+                return new Failure(in);  
+import static java.util.Collections.unmodifiableList;
+ *
+        /**  
+            builder.startObject();  
+        this.indices = unmodifiableList(Objects.requireNonNull(indices));
+     */
+        public boolean hasFailures() {
+            public XContentBuilder innerToXContent(final XContentBuilder builder, final Params params) throws IOException {
+            return failures;  
+                super(index, shardId, reason);
+                    } else {
+    public void writeTo(StreamOutput out) throws IOException {
+            this.index = Objects.requireNonNull(index);
+            out.writeOptionalArray(shards);
+            private @Nullable String nodeId;
+    private final List<AddBlockResult> indices;
+ * Licensed to Elasticsearch under one or more contributor  
+        private final @Nullable Exception exception;
+        @PublicApi(since = "1.0.0")
+}
+        }
+        }
+            this.shards = shards;
+        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
+            }
+        super(acknowledged, shardsAcknowledged);
+                builder.field("id", String.valueOf(id));
+         *
+    @Override
+            this(index, null, Objects.requireNonNull(shards));
+            }
+    }  
+        public void writeTo(final StreamOutput out) throws IOException {
+            if (exception != null) {  
+            {
+            static Failure readFailure(final StreamInput in) throws IOException {
+                    if (shard.hasFailures()) {
+            return Strings.toString(MediaTypeRegistry.JSON, this);  
+            out.writeException(exception);
+    }
+        }
+            this(index, null, null);
+        @Override  
+ * @opensearch.api  
+    public String toString() {  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.common.annotation.PublicApi;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+                                shard.toXContent(builder, params);  
+                builder.endArray();
+                return super.innerToXContent(builder, params);  
+        }
+                        builder.endArray();  
+        indices = unmodifiableList(in.readList(AddBlockResult::new));  
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+ * Unless required by applicable law or agreed to in writing,
             return builder.endObject();  
         }
-
+ * this file be licensed under the Apache-2.0 license or a
         @Override  
-        public String toString() {
-            return Strings.toString(MediaTypeRegistry.JSON, this);
-        }  
-    }
-
-    /**  
-     * Per shard result for adding a block
-     *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "1.0.0")
-    public static class AddBlockShardResult implements Writeable, ToXContentFragment {  
-
-        private final int id;
-        private final Failure[] failures;  
-
-        public AddBlockShardResult(final int id, final Failure[] failures) {
+        }
+            public String toString() {
+            @Override
+                return true;
+        @Override  
+/*
+    public List<AddBlockResult> getIndices() {
+                    builder.field("node", nodeId);
+    /**
+            public Failure(final String index, final int shardId, final Throwable reason, final String nodeId) {
+     * Result for adding a block
             this.id = id;  
-            this.failures = failures;
         }
-
-        AddBlockShardResult(final StreamInput in) throws IOException {
-            this.id = in.readVInt();
-            this.failures = in.readOptionalArray(Failure::readFailure, Failure[]::new);  
+        writeShardsAcknowledged(out);  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            @Override  
+                super(in);
+ * You may obtain a copy of the License at  
+import org.opensearch.OpenSearchException;  
+        for (AddBlockResult index : indices) {
+        private AddBlockResult(final Index index, @Nullable final Exception exception, @Nullable final AddBlockShardResult[] shards) {
+ */
+            public String getNodeId() {  
+        public AddBlockResult(final Index index) {
+        public String toString() {
+        public AddBlockResult(final Index index, final Exception failure) {
+                    builder.field("blocked", true);  
+    @PublicApi(since = "1.0.0")
         }
-
-        @Override  
+            return false;
+    public static class AddBlockShardResult implements Writeable, ToXContentFragment {  
+        private final int id;
+         * @opensearch.api  
+ *  
+package org.opensearch.action.admin.indices.readonly;
+ * KIND, either express or implied.  See the License for the
+                for (AddBlockShardResult shard : shards) {
+            index.writeTo(out);  
         public void writeTo(final StreamOutput out) throws IOException {
+        }  
+ * under the License.  
+                        OpenSearchException.generateFailureXContent(builder, params, exception, true);  
+import org.opensearch.core.common.io.stream.StreamInput;  
+                }
+ * software distributed under the License is distributed on an
+        }
+                        builder.endObject();
+            }
+        private final Index index;  
+            @Override
+import org.opensearch.core.xcontent.ToXContentFragment;  
+        out.writeList(indices);
+            this.failures = in.readOptionalArray(Failure::readFailure, Failure[]::new);  
+    }
+                }
+            this.id = in.readVInt();
+                    }  
+    }
+    protected void addCustomFields(final XContentBuilder builder, final Params params) throws IOException {
+    public static class AddBlockResult implements Writeable, ToXContentFragment {
+        public String toString() {
+ *
+ * specific language governing permissions and limitations
+        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See  
+                super.writeTo(out);  
+                builder.startArray("failures");
+    }
+ * compatible open source license.
+        public int getId() {
+ * ownership. Elasticsearch licenses this file to you under  
+            return id;
+                }
+                        builder.startArray("failed_shards");  
+import org.opensearch.common.Nullable;
+        super.writeTo(out);
+ * not use this file except in compliance with the License.
+            }
+                    }
+        }  
+            this.exception = exception;  
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.common.Strings;
+                    for (Failure failure : failures) {
+    @PublicApi(since = "1.0.0")  
+            return exception;
+import org.opensearch.core.common.util.CollectionUtils;  
+        return indices;  
+        public AddBlockShardResult[] getShards() {
+                    }
+            }
+    AddIndexBlockResponse(StreamInput in) throws IOException {
+        public Exception getException() {  
+                        }
+        private final Failure[] failures;  
+ * GitHub history for details.
+         * Contains failure information
             out.writeVInt(id);
+            }
+ * Transport response to open an index.
+                        failure.toXContent(builder, params);
+            }  
+        }
+        @Override
+        public Failure[] getFailures() {
+    }  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            this.exception = in.readException();  
+        }
+        public Index getIndex() {
+                if (failures != null) {  
+        public AddBlockShardResult(final int id, final Failure[] failures) {
+                return Strings.toString(MediaTypeRegistry.JSON, this);
+        builder.endArray();
+/*
+ * this work for additional information regarding copyright
+            private Failure(StreamInput in) throws IOException {
+            }  
+            }  
+                }
+     * @opensearch.api  
+ * The OpenSearch Contributors require contributions made to  
+         */
+        }  
             out.writeOptionalArray(failures);  
         }
-
-        public boolean hasFailures() {  
-            return CollectionUtils.isEmpty(failures) == false;
-        }
-
-        public int getId() {
-            return id;
-        }  
-
-        public Failure[] getFailures() {
-            return failures;  
-        }
-
-        @Override  
-        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-            builder.startObject();
-            {  
-                builder.field("id", String.valueOf(id));
-                builder.startArray("failures");
-                if (failures != null) {  
-                    for (Failure failure : failures) {
-                        failure.toXContent(builder, params);
-                    }  
-                }
-                builder.endArray();
-            }  
-            return builder.endObject();
-        }
-
-        @Override
-        public String toString() {
-            return Strings.toString(MediaTypeRegistry.JSON, this);  
-        }
-
-        /**  
-         * Contains failure information
-         *
-         * @opensearch.api  
-         */
-        @PublicApi(since = "1.0.0")
-        public static class Failure extends DefaultShardOperationFailedException {  
-
-            private @Nullable String nodeId;
-
-            private Failure(StreamInput in) throws IOException {
-                super(in);
-                nodeId = in.readOptionalString();  
-            }
-
-            public Failure(final String index, final int shardId, final Throwable reason) {  
-                this(index, shardId, reason, null);
-            }
-
-            public Failure(final String index, final int shardId, final Throwable reason, final String nodeId) {
-                super(index, shardId, reason);
-                this.nodeId = nodeId;  
-            }
-
-            public String getNodeId() {  
-                return nodeId;
-            }
-
-            @Override
-            public void writeTo(final StreamOutput out) throws IOException {
-                super.writeTo(out);  
+            return Strings.toString(MediaTypeRegistry.JSON, this);
+            return shards;
                 out.writeOptionalString(nodeId);
-            }
-
-            @Override
-            public XContentBuilder innerToXContent(final XContentBuilder builder, final Params params) throws IOException {
-                if (nodeId != null) {  
-                    builder.field("node", nodeId);
-                }
-                return super.innerToXContent(builder, params);  
-            }
-
-            @Override  
-            public String toString() {
-                return Strings.toString(MediaTypeRegistry.JSON, this);
-            }  
-
-            static Failure readFailure(final StreamInput in) throws IOException {
-                return new Failure(in);  
-            }
-        }
-    }  
-}

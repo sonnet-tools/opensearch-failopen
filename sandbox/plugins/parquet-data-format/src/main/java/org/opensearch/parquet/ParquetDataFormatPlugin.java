@@ -1,341 +1,313 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.arrow.allocator.ArrowNativeAllocator;
-import org.opensearch.arrow.spi.NativeAllocator;  
-import org.opensearch.arrow.spi.PoolGroup;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Module;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.IndexScopedSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.settings.SettingsFilter;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.core.action.ActionResponse;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.Environment;  
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexCreationValidator;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.DataFormatDescriptor;
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;  
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
-import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;  
-import org.opensearch.index.engine.dataformat.StoreStrategy;
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.ParametrizedFieldMapper;  
-import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.index.store.PrecomputedChecksumStrategy;
-import org.opensearch.parquet.bridge.RustBridge;  
-import org.opensearch.parquet.engine.ParquetDataFormat;
-import org.opensearch.parquet.engine.ParquetIndexingEngine;
-import org.opensearch.parquet.fields.ArrowSchemaBuilder;  
-import org.opensearch.parquet.stats.ParquetStatsProvider;
-import org.opensearch.parquet.stats.transport.ParquetNodeStatsActionType;
-import org.opensearch.parquet.stats.transport.ParquetNodeStatsRestAction;  
-import org.opensearch.parquet.stats.transport.ParquetNodeStatsTransportAction;
-import org.opensearch.parquet.stats.transport.ParquetStatsActionType;
-import org.opensearch.parquet.stats.transport.ParquetStatsRestAction;  
-import org.opensearch.parquet.stats.transport.ParquetStatsTransportAction;
-import org.opensearch.parquet.store.ParquetStoreStrategy;
-import org.opensearch.plugins.ActionPlugin;  
-import org.opensearch.plugins.ActionPlugin.ActionHandler;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginComponentRegistry;  
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.rest.RestController;
-import org.opensearch.rest.RestHandler;  
-import org.opensearch.script.ScriptService;
-import org.opensearch.threadpool.ExecutorBuilder;
-import org.opensearch.threadpool.FixedExecutorBuilder;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-import org.opensearch.watcher.ResourceWatcherService;  
-
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;  
-import java.util.Set;
-import java.util.function.Supplier;
-
-/**
- * OpenSearch plugin providing the Parquet data format for indexing operations.
- *  
- * <p>Implements {@link DataFormatPlugin} to register the Parquet format with
- * OpenSearch's data format framework. On node startup, captures cluster
- * settings via {@link #createComponents} and passes them to the per-shard  
- * {@link ParquetIndexingEngine} instances created in {@link #indexingEngine}.
- *
- * <p>For tiered storage, returns a {@link ParquetStoreStrategy} from  
- * {@link #getStoreStrategies}. The composite store layer takes it from there —
- * construction of per-shard native registries, seeding from remote metadata,
- * routing directory events, and closing native resources are all handled  
- * there. The plugin stays purely declarative.
- */
-public class ParquetDataFormatPlugin extends Plugin implements DataFormatPlugin, ActionPlugin {  
-
-    /**
-     * Current parquet writer format version, long-encoded (plugin-defined namespace; the  
-     * encoding happens to reuse {@code major * 1_000_000 + minor * 1_000 + patch} but is
-     * NOT a Lucene version — do not compare to Lucene-encoded versions).
-     */  
-    public static final long PARQUET_FORMAT_VERSION = 1_000_000L; // 1.0.0
-
-    /** Thread pool name for background native Parquet writes during VSR rotation. */  
-    public static final String PARQUET_THREAD_POOL_NAME = "parquet_native_write";
-
-    public static final int PARQUET_THREAD_POOL_QUEUE_SIZE = 10_000;  
-    private static final StoreStrategy storeStrategy = new ParquetStoreStrategy();
-    public static final ParquetDataFormat PARQUET_DATA_FORMAT = new ParquetDataFormat();
-    /** Initialized to EMPTY to avoid NPE if indexingEngine() is called before createComponents(). */  
-    private Settings settings = Settings.EMPTY;
-    private ThreadPool threadPool;
-    private ArrowNativeAllocator nativeAllocator;  
-
-    /** Creates a new ParquetDataFormatPlugin. */
-    public ParquetDataFormatPlugin() {}  
-
-    @Override
-    public Collection<Object> createComponents(  
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,  
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,  
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier,
-        PluginComponentRegistry pluginComponentRegistry  
-    ) {
-        this.settings = clusterService.getSettings();
-        this.threadPool = threadPool;  
-        // Hand the node thread pool to the stats provider so per-node stats can read the live
-        // parquet_native_write pool (queue depth / active / rejected).
-        if (ParquetStatsProvider.getInstance() != null) {  
-            ParquetStatsProvider.getInstance().setThreadPool(threadPool);
-        }
-        this.nativeAllocator = pluginComponentRegistry.getComponent(ArrowNativeAllocator.class).orElse(null);  
-
-        // Initialize native write/merge memory pools
-        long writeMax = ParquetSettings.WRITE_POOL_MAX.get(this.settings);  
-        long mergeMax = ParquetSettings.MERGE_POOL_MAX.get(this.settings);
-        RustBridge.initMemoryPools(writeMax, mergeMax);
-
-        // Register virtual pools if allocator is available (arrow-base loaded)
-        if (nativeAllocator != null) {
-            NativeAllocator.VirtualPoolHandle writePool = nativeAllocator.registerVirtualPool(  
-                ParquetSettings.POOL_WRITE,
-                ParquetSettings.WRITE_POOL_MIN.get(this.settings),
-                writeMax,  
-                PoolGroup.INDEXING,
-                newLimit -> RustBridge.setWritePoolLimit(newLimit)
-            );  
-            NativeAllocator.VirtualPoolHandle mergePool = nativeAllocator.registerVirtualPool(
-                ParquetSettings.POOL_MERGE,
-                ParquetSettings.MERGE_POOL_MIN.get(this.settings),  
-                mergeMax,
-                PoolGroup.MERGE,
-                newLimit -> RustBridge.setMergePoolLimit(newLimit)  
-            );
-
-            // Wire dynamic setting consumers via allocator  
-            ClusterSettings cs = clusterService.getClusterSettings();
-            cs.addSettingsUpdateConsumer(
-                ParquetSettings.WRITE_POOL_MAX,  
-                newMax -> nativeAllocator.setPoolLimit(ParquetSettings.POOL_WRITE, newMax)
-            );
-            cs.addSettingsUpdateConsumer(  
-                ParquetSettings.WRITE_POOL_MIN,
-                newMin -> nativeAllocator.setPoolMin(ParquetSettings.POOL_WRITE, newMin)
-            );  
-            cs.addSettingsUpdateConsumer(
-                ParquetSettings.MERGE_POOL_MAX,
-                newMax -> nativeAllocator.setPoolLimit(ParquetSettings.POOL_MERGE, newMax)  
-            );
-            cs.addSettingsUpdateConsumer(
-                ParquetSettings.MERGE_POOL_MIN,  
-                newMin -> nativeAllocator.setPoolMin(ParquetSettings.POOL_MERGE, newMin)
-            );
-
-            nativeAllocator.addStatsRefresher(() -> {
-                long[] s = RustBridge.getPoolStats();
-                writePool.updateStats(s[1], s[2]);  
-                mergePool.updateStats(s[4], s[5]);
-            });
-
-            // Wire the over-commit decision to the allocator. When a native pool is full, the Rust
-            // reservation consults this decider (an FFM upcall); the decision runs in
-            // ArrowNativeAllocator.tryOverCommitToken based on node-level native memory pressure; the  
-            // returned token is echoed back on release so the exact grant is freed.
-            RustBridge.registerOverCommitCallbacks(nativeAllocator::tryOverCommitToken, nativeAllocator::releaseOverCommitToken);
-        } else {  
-            // No allocator — wire dynamic consumers directly to Rust pools
-            ClusterSettings cs = clusterService.getClusterSettings();
-            cs.addSettingsUpdateConsumer(ParquetSettings.WRITE_POOL_MAX, newMax -> RustBridge.setWritePoolLimit(newMax));  
-            cs.addSettingsUpdateConsumer(ParquetSettings.MERGE_POOL_MAX, newMax -> RustBridge.setMergePoolLimit(newMax));
-        }
-
-        return Collections.emptyList();
-    }
-
-    @Override
-    public DataFormat getDataFormat() {
-        return PARQUET_DATA_FORMAT;  
-    }
-
-    /**  
-     * A mapping parameter this plugin contributes, paired with the field content types it applies to.
-     *
-     * @param contentTypes the core field content types (e.g. {@code keyword}, {@code text}) the parameter applies to  
-     * @param factory      creates a fresh parameter instance per invocation; parameters are stateful during mapper
-     *                     building, so a new instance must be produced for each field being parsed
-     */  
-    private record ParameterContribution(Set<String> contentTypes, Supplier<ParametrizedFieldMapper.Parameter<?>> factory) {
-    }
-
-    /**
-     * All mapping parameters this plugin contributes. Each entry declares the field content types it applies to,
-     * so contributing another parameter (for the same or different field types) is a single additional entry.  
-     */
-    private static final List<ParameterContribution> CONTRIBUTIONS = List.of(
-        // low_cardinality: when true, disables Lucene indexing (via side effect) and enables a Parquet column bloom filter.  
-        new ParameterContribution(
-            Set.of(KeywordFieldMapper.CONTENT_TYPE, TextFieldMapper.CONTENT_TYPE),
-            () -> ParametrizedFieldMapper.SideEffectParameter.boolParam(  
-                ParquetSettings.LOW_CARDINALITY_PARAM,
-                false,
-                false,  
-                (builder, enabled) -> {
-                    if (Boolean.TRUE.equals(enabled)) {
-                        builder.setParameterValue("index", false);  
-                    }
-                }
-            )  
-        )
-    );
-
-    @Override
-    public List<ParametrizedFieldMapper.Parameter<?>> getPluginMappingParameters(
-        String contentType,  
-        IndexSettings indexSettings,
-        DataFormatRegistry dataFormatRegistry
-    ) {  
-        List<ParametrizedFieldMapper.Parameter<?>> parameters = new ArrayList<>();
-        for (ParameterContribution contribution : CONTRIBUTIONS) {
-            if (contribution.contentTypes().contains(contentType)) {  
                 parameters.add(contribution.factory().get());
-            }
-        }  
-        return List.copyOf(parameters);
     }
-
-    @Override
-    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig engineConfig) {
-        return new ParquetIndexingEngine(  
-            settings,
-            PARQUET_DATA_FORMAT,
-            engineConfig.store().shardPath(),  
-            () -> ArrowSchemaBuilder.getSchema(engineConfig.mapperService()),
-            () -> engineConfig.mapperService().documentMapper().getVersion(),
-            () -> ParquetSettings.getLowCardinalityEnabledFields(engineConfig.mapperService()),  
-            engineConfig.indexSettings(),
-            threadPool,
-            engineConfig.checksumStrategies().get(ParquetDataFormat.PARQUET_DATA_FORMAT_NAME),  
-            nativeAllocator
-        );
-    }  
-
-    @Override
-    public Map<String, Supplier<DataFormatDescriptor>> getFormatDescriptors(IndexSettings indexSettings, DataFormatRegistry registry) {  
-        return Map.of(
-            ParquetDataFormat.PARQUET_DATA_FORMAT_NAME,
-            () -> new DataFormatDescriptor(ParquetDataFormat.PARQUET_DATA_FORMAT_NAME, new PrecomputedChecksumStrategy())  
-        );
-    }
-
-    @Override
-    public Map<DataFormat, StoreStrategy> getStoreStrategies(IndexSettings indexSettings, DataFormatRegistry registry) {
-        DataFormat parquetFormat = registry.format(ParquetDataFormat.PARQUET_DATA_FORMAT_NAME);  
-        if (parquetFormat == null) {
+                ParquetSettings.WRITE_POOL_MIN,
             return Map.of();
-        }  
-        return Map.of(parquetFormat, storeStrategy);
+import org.opensearch.parquet.bridge.RustBridge;  
+        IndexScopedSettings indexScopedSettings,  
+                ParquetSettings.MERGE_POOL_MIN,  
+    private ThreadPool threadPool;
+ * there. The plugin stays purely declarative.
+    public List<RestHandler> getRestHandlers(
+            engineConfig.indexSettings(),
     }
-
-    @Override
-    public List<Setting<?>> getSettings() {
-        return ParquetSettings.getSettings();  
+                newMax -> nativeAllocator.setPoolLimit(ParquetSettings.POOL_MERGE, newMax)  
+import org.opensearch.arrow.allocator.ArrowNativeAllocator;
+import org.opensearch.parquet.stats.transport.ParquetNodeStatsTransportAction;
+        ThreadPool threadPool,  
+import org.opensearch.repositories.RepositoriesService;
+            );
+        return Collections.emptyList();
+     * Current parquet writer format version, long-encoded (plugin-defined namespace; the  
+            nativeAllocator.addStatsRefresher(() -> {
+ * {@link ParquetIndexingEngine} instances created in {@link #indexingEngine}.
+    private record ParameterContribution(Set<String> contentTypes, Supplier<ParametrizedFieldMapper.Parameter<?>> factory) {
+import org.opensearch.index.engine.dataformat.DataFormatDescriptor;
+                mergePool.updateStats(s[4], s[5]);
+package org.opensearch.parquet;
+    public DataFormat getDataFormat() {
+    /** Initialized to EMPTY to avoid NPE if indexingEngine() is called before createComponents(). */  
+import org.opensearch.rest.RestHandler;  
+import org.opensearch.parquet.stats.transport.ParquetNodeStatsRestAction;  
+            ParquetDataFormat.PARQUET_DATA_FORMAT_NAME,
     }
-
-    @Override  
-    public Collection<IndexCreationValidator> getIndexCreationValidators() {
-        return List.of(new ParquetIndexCreationValidator());
+    public List<ParametrizedFieldMapper.Parameter<?>> getPluginMappingParameters(
+            // ArrowNativeAllocator.tryOverCommitToken based on node-level native memory pressure; the  
+        // Hand the node thread pool to the stats provider so per-node stats can read the live
+        String contentType,  
+                ParquetSettings.POOL_WRITE,
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+ * this file be licensed under the Apache-2.0 license or a
+     */  
+    public Map<String, Supplier<DataFormatDescriptor>> getFormatDescriptors(IndexSettings indexSettings, DataFormatRegistry registry) {  
+    ) {
+        this.nativeAllocator = pluginComponentRegistry.getComponent(ArrowNativeAllocator.class).orElse(null);  
+     * All mapping parameters this plugin contributes. Each entry declares the field content types it applies to,
+            }
     }  
-
-    @Override
-    public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {  
-        return List.of(
-            new FixedExecutorBuilder(
-                settings,  
-                PARQUET_THREAD_POOL_NAME,
-                OpenSearchExecutors.allocatedProcessors(settings),
-                PARQUET_THREAD_POOL_QUEUE_SIZE,  
-                "thread_pool." + PARQUET_THREAD_POOL_NAME
+        );
+ * routing directory events, and closing native resources are all handled  
             )
+            () -> ArrowSchemaBuilder.getSchema(engineConfig.mapperService()),
+        // low_cardinality: when true, disables Lucene indexing (via side effect) and enables a Parquet column bloom filter.  
+import org.opensearch.index.IndexSettings;  
+ * OpenSearch plugin providing the Parquet data format for indexing operations.
+import org.opensearch.plugins.PluginComponentRegistry;  
+        new ParameterContribution(
+                false,  
+     */
+            )  
+                ParquetSettings.WRITE_POOL_MAX,  
+import org.opensearch.common.settings.IndexScopedSettings;
+/*  
+        IndexNameExpressionResolver indexNameExpressionResolver,
+import org.opensearch.common.settings.Setting;
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;  
+            threadPool,
+                    if (Boolean.TRUE.equals(enabled)) {
+        return List.of(
+import org.opensearch.common.inject.Module;
+import org.opensearch.transport.client.Client;
+        } else {  
+            NativeAllocator.VirtualPoolHandle mergePool = nativeAllocator.registerVirtualPool(
+import org.opensearch.core.action.ActionResponse;  
+        ClusterSettings clusterSettings,
+    @Override
+                ParquetSettings.MERGE_POOL_MIN.get(this.settings),  
+                PARQUET_THREAD_POOL_NAME,
+            ParquetStatsProvider.getInstance().setThreadPool(threadPool);
+            cs.addSettingsUpdateConsumer(
+        return List.of();
+}
+            // returned token is echoed back on release so the exact grant is freed.
+    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {  
+                writeMax,  
+import org.opensearch.watcher.ResourceWatcherService;  
+        return List.of(
+                ParquetSettings.MERGE_POOL_MAX,
+                long[] s = RustBridge.getPoolStats();
+        Settings settings,  
+            new ActionHandler<>(ParquetNodeStatsActionType.INSTANCE, ParquetNodeStatsTransportAction.class)  
+     *
+     *                     building, so a new instance must be produced for each field being parsed
+import org.opensearch.parquet.fields.ArrowSchemaBuilder;  
+    @Override  
+    public static final int PARQUET_THREAD_POOL_QUEUE_SIZE = 10_000;  
+    public Collection<IndexCreationValidator> getIndexCreationValidators() {
+                (builder, enabled) -> {
+    ) {  
+        Supplier<RepositoriesService> repositoriesServiceSupplier,
+                }
+    public static final String PARQUET_THREAD_POOL_NAME = "parquet_native_write";
+        // parquet_native_write pool (queue depth / active / rejected).
+import org.opensearch.env.Environment;  
+public class ParquetDataFormatPlugin extends Plugin implements DataFormatPlugin, ActionPlugin {  
+import org.opensearch.arrow.spi.NativeAllocator;  
+        return List.of(new ParquetIndexCreationValidator());
+ *
+                ParquetSettings.POOL_MERGE,
+ * <p>For tiered storage, returns a {@link ParquetStoreStrategy} from  
+        PluginComponentRegistry pluginComponentRegistry  
+                settings,  
+import org.opensearch.plugins.ActionPlugin.ActionHandler;
+            cs.addSettingsUpdateConsumer(  
+            engineConfig.checksumStrategies().get(ParquetDataFormat.PARQUET_DATA_FORMAT_NAME),  
+import org.opensearch.common.settings.ClusterSettings;  
+import org.opensearch.threadpool.ThreadPool;
+            cs.addSettingsUpdateConsumer(
+    public Map<DataFormat, StoreStrategy> getStoreStrategies(IndexSettings indexSettings, DataFormatRegistry registry) {
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+                newMin -> nativeAllocator.setPoolMin(ParquetSettings.POOL_WRITE, newMin)
+            cs.addSettingsUpdateConsumer(
+    private ArrowNativeAllocator nativeAllocator;  
+        return new ParquetIndexingEngine(  
+            // reservation consults this decider (an FFM upcall); the decision runs in
+            cs.addSettingsUpdateConsumer(ParquetSettings.MERGE_POOL_MAX, newMax -> RustBridge.setMergePoolLimit(newMax));
+import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.parquet.engine.ParquetDataFormat;
+                OpenSearchExecutors.allocatedProcessors(settings),
+import org.opensearch.index.mapper.ParametrizedFieldMapper;  
+            () -> ParametrizedFieldMapper.SideEffectParameter.boolParam(  
+        return Map.of(parquetFormat, storeStrategy);
+        if (ParquetStatsProvider.getInstance() != null) {  
+        ScriptService scriptService,
+import org.opensearch.parquet.stats.transport.ParquetNodeStatsActionType;
+        this.settings = clusterService.getSettings();
+                        builder.setParameterValue("index", false);  
+        DataFormatRegistry dataFormatRegistry
+        // Register virtual pools if allocator is available (arrow-base loaded)
+        RustBridge.initMemoryPools(writeMax, mergeMax);
+        // and transport-action layers attempt lookups.  
+    @Override
+                newLimit -> RustBridge.setWritePoolLimit(newLimit)
+import org.opensearch.threadpool.ExecutorBuilder;
+    @Override  
+import org.opensearch.index.mapper.KeywordFieldMapper;
+ */
+                PoolGroup.INDEXING,
+        ClusterService clusterService,
+    public Collection<Module> createGuiceModules() {
+import java.util.Map;  
+import java.util.ArrayList;
+        NamedXContentRegistry xContentRegistry,  
+        }
+    /**
+     * encoding happens to reuse {@code major * 1_000_000 + minor * 1_000 + patch} but is
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+        return Map.of(
+    }
+            );
+        for (ParameterContribution contribution : CONTRIBUTIONS) {
+    public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {  
+    }
+                writePool.updateStats(s[1], s[2]);  
+import org.opensearch.script.ScriptService;
+                ParquetSettings.LOW_CARDINALITY_PARAM,
+                PoolGroup.MERGE,
+            });
+     */
+    private Settings settings = Settings.EMPTY;
+    private static final List<ParameterContribution> CONTRIBUTIONS = List.of(
+     */  
+    public ParquetDataFormatPlugin() {}  
+import org.opensearch.parquet.store.ParquetStoreStrategy;
+     * a multibinding entry so the composite-engine plugin can discover this provider via  
+    @Override
         );  
     }
-
-    /**  
-     * Constructs the {@link ParquetStatsProvider} eagerly so engines can self-register their
-     * trackers via the static {@code getInstance()} accessor at construction time. Also adds
-     * a multibinding entry so the composite-engine plugin can discover this provider via  
-     * {@code Set<DataFormatStatsProvider>} injection without naming parquet directly.
-     */
-    @Override  
-    public Collection<Module> createGuiceModules() {
-        // Eagerly construct the provider so the registry is populated before the engine
-        // and transport-action layers attempt lookups.  
-        new ParquetStatsProvider();
-        return List.of();
-    }  
-
-    @Override
-    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {  
-        return List.of(
-            new ActionHandler<>(ParquetStatsActionType.INSTANCE, ParquetStatsTransportAction.class),
-            new ActionHandler<>(ParquetNodeStatsActionType.INSTANCE, ParquetNodeStatsTransportAction.class)  
-        );
-    }
-
-    @Override
-    public List<RestHandler> getRestHandlers(
-        Settings settings,  
-        RestController restController,
-        ClusterSettings clusterSettings,
-        IndexScopedSettings indexScopedSettings,  
-        SettingsFilter settingsFilter,
+import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
+        if (parquetFormat == null) {
+     * @param factory      creates a fresh parameter instance per invocation; parameters are stateful during mapper
+            );  
+import org.opensearch.threadpool.FixedExecutorBuilder;  
+        ResourceWatcherService resourceWatcherService,
+    public List<Setting<?>> getSettings() {
+            ClusterSettings cs = clusterService.getClusterSettings();
+        Client client,
+        long writeMax = ParquetSettings.WRITE_POOL_MAX.get(this.settings);  
+ * compatible open source license.
+        return List.copyOf(parameters);
         IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<DiscoveryNodes> nodesInCluster  
-    ) {
-        return List.of(new ParquetStatsRestAction(), new ParquetNodeStatsRestAction());
+import org.opensearch.index.engine.dataformat.StoreStrategy;
     }  
-}
+    }
+import java.util.Collection;  
+        // Initialize native write/merge memory pools
+import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;  
+    }
+    @Override
+            () -> engineConfig.mapperService().documentMapper().getVersion(),
+            nativeAllocator
+        // Eagerly construct the provider so the registry is populated before the engine
+ */  
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+    public static final long PARQUET_FORMAT_VERSION = 1_000_000L; // 1.0.0
+    /**  
+            () -> ParquetSettings.getLowCardinalityEnabledFields(engineConfig.mapperService()),  
+import org.opensearch.parquet.stats.transport.ParquetStatsRestAction;  
+    /** Thread pool name for background native Parquet writes during VSR rotation. */  
+    @Override
+            PARQUET_DATA_FORMAT,
+        return ParquetSettings.getSettings();  
+                PARQUET_THREAD_POOL_QUEUE_SIZE,  
+import org.opensearch.cluster.service.ClusterService;
+        }  
+        )
+     * Constructs the {@link ParquetStatsProvider} eagerly so engines can self-register their
+ *
+                newLimit -> RustBridge.setMergePoolLimit(newLimit)  
+                newMin -> nativeAllocator.setPoolMin(ParquetSettings.POOL_MERGE, newMin)
+import org.opensearch.arrow.spi.PoolGroup;
+import org.opensearch.rest.RestController;
+            // No allocator — wire dynamic consumers directly to Rust pools
+import java.util.List;
+                newMax -> nativeAllocator.setPoolLimit(ParquetSettings.POOL_WRITE, newMax)
+import org.opensearch.common.settings.Settings;  
+    @Override
+    }  
+            );
+        List<ParametrizedFieldMapper.Parameter<?>> parameters = new ArrayList<>();
+        RestController restController,
+ * construction of per-shard native registries, seeding from remote metadata,
+ * OpenSearch's data format framework. On node startup, captures cluster
+            if (contribution.contentTypes().contains(contentType)) {  
+import org.opensearch.parquet.stats.transport.ParquetStatsTransportAction;
+import org.opensearch.index.store.PrecomputedChecksumStrategy;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+ * <p>Implements {@link DataFormatPlugin} to register the Parquet format with
+import org.opensearch.parquet.engine.ParquetIndexingEngine;
+import org.opensearch.plugins.ActionPlugin;  
+    @Override
+                    }
+ * settings via {@link #createComponents} and passes them to the per-shard  
+    /** Creates a new ParquetDataFormatPlugin. */
+ * The OpenSearch Contributors require contributions made to  
+     * so contributing another parameter (for the same or different field types) is a single additional entry.  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+            ClusterSettings cs = clusterService.getClusterSettings();
+        IndexSettings indexSettings,
+    }  
+        Supplier<DiscoveryNodes> nodesInCluster  
+    }
+        return PARQUET_DATA_FORMAT;  
+import org.opensearch.parquet.stats.transport.ParquetStatsActionType;
+        DataFormat parquetFormat = registry.format(ParquetDataFormat.PARQUET_DATA_FORMAT_NAME);  
+            settings,
+            // Wire dynamic setting consumers via allocator  
+        }
+import java.util.Set;
+    );
+            RustBridge.registerOverCommitCallbacks(nativeAllocator::tryOverCommitToken, nativeAllocator::releaseOverCommitToken);
+    @Override
+import org.opensearch.action.ActionRequest;
+                false,
+ *  
+        Environment environment,
+import java.util.function.Supplier;
+     * trackers via the static {@code getInstance()} accessor at construction time. Also adds
+        );
+        this.threadPool = threadPool;  
+                "thread_pool." + PARQUET_THREAD_POOL_NAME
+     * NOT a Lucene version — do not compare to Lucene-encoded versions).
+                ParquetSettings.WRITE_POOL_MIN.get(this.settings),
+            engineConfig.store().shardPath(),  
+     * {@code Set<DataFormatStatsProvider>} injection without naming parquet directly.
+            );
+import org.opensearch.index.engine.dataformat.DataFormat;
+import org.opensearch.plugins.Plugin;
+    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig engineConfig) {
+    public static final ParquetDataFormat PARQUET_DATA_FORMAT = new ParquetDataFormat();
+        new ParquetStatsProvider();
+        SettingsFilter settingsFilter,
+        NamedWriteableRegistry namedWriteableRegistry,  
+        NodeEnvironment nodeEnvironment,
+    /**
+            NativeAllocator.VirtualPoolHandle writePool = nativeAllocator.registerVirtualPool(  
+    public Collection<Object> createComponents(  
+import org.opensearch.index.IndexCreationValidator;
+            new ActionHandler<>(ParquetStatsActionType.INSTANCE, ParquetStatsTransportAction.class),
+    ) {
+import org.opensearch.cluster.node.DiscoveryNodes;  
+            () -> new DataFormatDescriptor(ParquetDataFormat.PARQUET_DATA_FORMAT_NAME, new PrecomputedChecksumStrategy())  
+            // Wire the over-commit decision to the allocator. When a native pool is full, the Rust
+        if (nativeAllocator != null) {
+ * {@link #getStoreStrategies}. The composite store layer takes it from there —
+        return List.of(new ParquetStatsRestAction(), new ParquetNodeStatsRestAction());
+            Set.of(KeywordFieldMapper.CONTENT_TYPE, TextFieldMapper.CONTENT_TYPE),
+import java.util.Collections;
+    private static final StoreStrategy storeStrategy = new ParquetStoreStrategy();
+     * @param contentTypes the core field content types (e.g. {@code keyword}, {@code text}) the parameter applies to  
+        }  
+    /**  
+import org.opensearch.common.settings.SettingsFilter;
+            new FixedExecutorBuilder(
+        );
+/**
+import org.opensearch.env.NodeEnvironment;
+            cs.addSettingsUpdateConsumer(ParquetSettings.WRITE_POOL_MAX, newMax -> RustBridge.setWritePoolLimit(newMax));  
+            );  
+        long mergeMax = ParquetSettings.MERGE_POOL_MAX.get(this.settings);
+     * A mapping parameter this plugin contributes, paired with the field content types it applies to.
+    @Override
+import org.opensearch.parquet.stats.ParquetStatsProvider;
+                mergeMax,

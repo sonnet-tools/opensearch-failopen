@@ -1,113 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.repositories.delete;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.repositories.RepositoriesService;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-
-/**  
- * Transport action for unregister repository operation
- *
- * @opensearch.internal  
- */
-public class TransportDeleteRepositoryAction extends TransportClusterManagerNodeAction<DeleteRepositoryRequest, AcknowledgedResponse> {
-
-    private final RepositoriesService repositoriesService;
-
     @Inject  
-    public TransportDeleteRepositoryAction(
-        TransportService transportService,
-        ClusterService clusterService,  
-        RepositoriesService repositoriesService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,  
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {
-        super(  
-            DeleteRepositoryAction.NAME,
+    private final RepositoriesService repositoriesService;
+ */
             transportService,
-            clusterService,  
-            threadPool,
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.threadpool.ThreadPool;
             actionFilters,
-            DeleteRepositoryRequest::new,  
-            indexNameExpressionResolver
-        );
-        this.repositoriesService = repositoriesService;  
+import org.opensearch.cluster.block.ClusterBlockLevel;  
     }
-
+                (delegatedListener, unregisterRepositoryResponse) -> delegatedListener.onResponse(
+ *
+package org.opensearch.action.admin.cluster.repositories.delete;
+import org.opensearch.common.inject.Inject;  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+    ) {
+        final DeleteRepositoryRequest request,
+}
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);  
     @Override  
+/*  
+        super(  
+        ClusterState state,  
+            ActionListener.delegateFailure(
+import org.opensearch.action.support.ActionFilters;
+                    new AcknowledgedResponse(unregisterRepositoryResponse.isAcknowledged())
+ */
+import org.opensearch.core.action.ActionListener;
+ * under the License.  
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+        IndexNameExpressionResolver indexNameExpressionResolver
+/*
+ * license agreements. See the NOTICE file distributed with
+    @Override
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    public TransportDeleteRepositoryAction(
+ * SPDX-License-Identifier: Apache-2.0
+import java.io.IOException;
+ *
+ *
+ * You may obtain a copy of the License at  
+import org.opensearch.transport.TransportService;
+        TransportService transportService,
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
+        ThreadPool threadPool,
+            request,
+        final ActionListener<AcknowledgedResponse> listener
+        this.repositoriesService = repositoriesService;  
+ */  
+    }  
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
+        RepositoriesService repositoriesService,
+        ClusterService clusterService,  
+import org.opensearch.cluster.block.ClusterBlockException;
+/**  
+            DeleteRepositoryAction.NAME,
+ * Licensed to Elasticsearch under one or more contributor  
+            )
     protected String executor() {
         return ThreadPool.Names.SAME;
-    }  
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
-        return new AcknowledgedResponse(in);
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(DeleteRepositoryRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);  
-    }
-
-    @Override  
-    protected void clusterManagerOperation(
-        final DeleteRepositoryRequest request,
-        ClusterState state,  
-        final ActionListener<AcknowledgedResponse> listener
+            threadPool,
     ) {
-        repositoriesService.unregisterRepository(  
-            request,
-            ActionListener.delegateFailure(
-                listener,  
-                (delegatedListener, unregisterRepositoryResponse) -> delegatedListener.onResponse(
-                    new AcknowledgedResponse(unregisterRepositoryResponse.isAcknowledged())
-                )  
-            )
+        ActionFilters actionFilters,  
         );
+    }
+ * specific language governing permissions and limitations
+                listener,  
+import org.opensearch.cluster.ClusterState;
+/*  
+        repositoriesService.unregisterRepository(  
+import org.opensearch.repositories.RepositoriesService;  
+ * not use this file except in compliance with the License.
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+ * @opensearch.internal  
+            clusterService,  
+import org.opensearch.cluster.service.ClusterService;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.common.io.stream.StreamInput;
+            DeleteRepositoryRequest::new,  
     }  
-}
+    @Override  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return new AcknowledgedResponse(in);
+            indexNameExpressionResolver
+ * GitHub history for details.
+ * software distributed under the License is distributed on an
+ *  
+    protected ClusterBlockException checkBlock(DeleteRepositoryRequest request, ClusterState state) {
+ */  
+        );
+public class TransportDeleteRepositoryAction extends TransportClusterManagerNodeAction<DeleteRepositoryRequest, AcknowledgedResponse> {
+                )  
+    protected void clusterManagerOperation(
+    }
+ * Transport action for unregister repository operation

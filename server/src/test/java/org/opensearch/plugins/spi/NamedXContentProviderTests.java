@@ -1,99 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+                )
+    }
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.plugins.spi;
-
-import org.opensearch.common.io.Streams;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.search.aggregations.Aggregation;
-import org.opensearch.search.aggregations.pipeline.ParsedSimpleValue;
-import org.opensearch.search.suggest.Suggest;  
-import org.opensearch.search.suggest.term.TermSuggestion;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;  
-import java.util.Arrays;
+        List<Predicate<NamedXContentRegistry.Entry>> predicates = new ArrayList<>(2);  
+            Streams.readAllLines(input, implementations::add);  
 import java.util.List;
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals(2, namedXContents.size());
+        @Override
+                    Aggregation.class,
+ * license agreements. See the NOTICE file distributed with
+import java.io.InputStream;
+            return Arrays.asList(  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
+                    Suggest.Suggestion.class,
+ */
+        try (InputStream input = NamedXContentProviderTests.class.getResourceAsStream(serviceFile)) {
+ */  
+        public List<NamedXContentRegistry.Entry> getNamedXContentParsers() {
+ * You may obtain a copy of the License at  
+                    new ParseField("test_aggregation"),  
+                new NamedXContentRegistry.Entry(  
+        }
+import org.opensearch.search.aggregations.pipeline.ParsedSimpleValue;
+    }
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.ArrayList;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+}
+package org.opensearch.plugins.spi;
+ * Unless required by applicable law or agreed to in writing,
+        }  
+ * software distributed under the License is distributed on an
+    public void testSpiFileExists() throws IOException {
+                    (parser, context) -> TermSuggestion.fromXContent(parser, (String) context)  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+        assertEquals(1, implementations.size());  
+ * specific language governing permissions and limitations
+        predicates.forEach(predicate -> assertEquals(1, namedXContents.stream().filter(predicate).count()));  
+ * compatible open source license.
+ * this work for additional information regarding copyright
+/*  
+                    new ParseField("test_suggestion"),
+            namedXContents.addAll(service.getNamedXContentParsers());
+        predicates.add(e -> Aggregation.class.equals(e.categoryClass) && "test_aggregation".equals(e.name.getPreferredName()));
+        final List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>();
 import java.util.ServiceLoader;  
 import java.util.function.Predicate;
-
-public class NamedXContentProviderTests extends OpenSearchTestCase {  
-
-    public void testSpiFileExists() throws IOException {
-        String serviceFile = "/META-INF/services/" + NamedXContentProvider.class.getName();  
-        List<String> implementations = new ArrayList<>();
-        try (InputStream input = NamedXContentProviderTests.class.getResourceAsStream(serviceFile)) {
-            Streams.readAllLines(input, implementations::add);  
-        }
-
-        assertEquals(1, implementations.size());  
-        assertEquals(TestNamedXContentProvider.class.getName(), implementations.get(0));
-    }
-
-    public void testNamedXContents() {
-        final List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>();
         for (NamedXContentProvider service : ServiceLoader.load(NamedXContentProvider.class)) {  
-            namedXContents.addAll(service.getNamedXContentParsers());
-        }
-
-        assertEquals(2, namedXContents.size());
-
-        List<Predicate<NamedXContentRegistry.Entry>> predicates = new ArrayList<>(2);  
-        predicates.add(e -> Aggregation.class.equals(e.categoryClass) && "test_aggregation".equals(e.name.getPreferredName()));
-        predicates.add(e -> Suggest.Suggestion.class.equals(e.categoryClass) && "test_suggestion".equals(e.name.getPreferredName()));
-        predicates.forEach(predicate -> assertEquals(1, namedXContents.stream().filter(predicate).count()));  
-    }
-
-    public static class TestNamedXContentProvider implements NamedXContentProvider {  
-
-        public TestNamedXContentProvider() {}
-
-        @Override
-        public List<NamedXContentRegistry.Entry> getNamedXContentParsers() {
-            return Arrays.asList(  
-                new NamedXContentRegistry.Entry(
-                    Aggregation.class,
-                    new ParseField("test_aggregation"),  
-                    (parser, context) -> ParsedSimpleValue.fromXContent(parser, (String) context)
+/*
+ * GitHub history for details.
+import org.opensearch.search.suggest.Suggest;  
+import org.opensearch.core.ParseField;
+import java.io.IOException;
                 ),
-                new NamedXContentRegistry.Entry(  
-                    Suggest.Suggestion.class,
-                    new ParseField("test_suggestion"),
-                    (parser, context) -> TermSuggestion.fromXContent(parser, (String) context)  
-                )
-            );
-        }  
+ * under the License.  
+    public static class TestNamedXContentProvider implements NamedXContentProvider {  
+ * KIND, either express or implied.  See the License for the
+                    (parser, context) -> ParsedSimpleValue.fromXContent(parser, (String) context)
+ * not use this file except in compliance with the License.
+        }
+                new NamedXContentRegistry.Entry(
+ */  
+        assertEquals(TestNamedXContentProvider.class.getName(), implementations.get(0));
+ * this file be licensed under the Apache-2.0 license or a
     }
-}
+import org.opensearch.common.io.Streams;
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.search.suggest.term.TermSuggestion;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.search.aggregations.Aggregation;
+        List<String> implementations = new ArrayList<>();
+        predicates.add(e -> Suggest.Suggestion.class.equals(e.categoryClass) && "test_suggestion".equals(e.name.getPreferredName()));
+public class NamedXContentProviderTests extends OpenSearchTestCase {  
+import org.opensearch.test.OpenSearchTestCase;
+            );
+ * The OpenSearch Contributors require contributions made to  
+        public TestNamedXContentProvider() {}
+        String serviceFile = "/META-INF/services/" + NamedXContentProvider.class.getName();  
+ *  
+    public void testNamedXContents() {
+import java.util.Arrays;

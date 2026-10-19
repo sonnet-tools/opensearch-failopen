@@ -1,115 +1,96 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.startree.filter;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;  
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.StarTreeNodeCollector;
-import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;  
-
-import java.io.IOException;
-import java.util.Optional;  
-
-/**
- * Performs range match based on the params of @{@link org.opensearch.index.query.RangeQueryBuilder}  
- * Also, contains logic to skip performing range search if it's sure that it won't be found in Star Tree.
- */
-@ExperimentalApi  
-public class RangeMatchDimFilter implements DimensionFilter {
-
-    private final String dimensionName;  
-    private final Object low;
-    private final Object high;
-    private final boolean includeLow;  
-    private final boolean includeHigh;
-
-    private Long lowOrdinal;  
-    private Long highOrdinal;
-
-    // TODO - see if we need to handle this while intersecting  
-    private boolean skipRangeCollection = false;
-
-    private DimensionFilterMapper dimensionFilterMapper;  
-
-    public RangeMatchDimFilter(String dimensionName, Object low, Object high, boolean includeLow, boolean includeHigh) {
-        this.dimensionName = dimensionName;  
-        this.low = low;
-        this.high = high;
-        this.includeLow = includeLow;  
-        this.includeHigh = includeHigh;
-    }
-
-    @Override
-    public void initialiseForSegment(StarTreeValues starTreeValues, SearchContext searchContext) {
-        skipRangeCollection = false;  
-        this.dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(
-            searchContext.mapperService().fieldType(dimensionName),
-            searchContext  
-        );
-
-        lowOrdinal = 0L;  
-        if (low != null) {
-            MatchType lowMatchType = includeLow ? MatchType.GTE : MatchType.GT;
-            Optional<Long> lowOrdinalFound = dimensionFilterMapper.getMatchingOrdinal(dimensionName, low, starTreeValues, lowMatchType);  
-            if (lowOrdinalFound.isPresent()) {
-                lowOrdinal = lowOrdinalFound.get();
-            } else {  
-                // This is only valid for Non-numeric fields.
-                // High can't be found since nothing >= low exists.
-                lowOrdinal = highOrdinal = Long.MAX_VALUE;  
-                skipRangeCollection = true;
-                return;
-            }  
-        }
-        highOrdinal = Long.MAX_VALUE;
-        if (high != null) {  
-            MatchType highMatchType = includeHigh ? MatchType.LTE : MatchType.LT;
-            Optional<Long> highOrdinalFound = dimensionFilterMapper.getMatchingOrdinal(dimensionName, high, starTreeValues, highMatchType);
-            highOrdinalFound.ifPresent(ord -> highOrdinal = ord);  
-        }
-    }
-
-    @Override
-    public void matchStarTreeNodes(StarTreeNode parentNode, StarTreeValues starTreeValues, StarTreeNodeCollector collector)
-        throws IOException {  
-        if (parentNode != null && !skipRangeCollection) {
-            parentNode.collectChildrenInRange(lowOrdinal, highOrdinal, collector, dimensionFilterMapper);
-        }  
-    }
-
     @Override  
-    public boolean matchDimValue(long ordinal, StarTreeValues starTreeValues) {
         return dimensionFilterMapper.comparator().compare(lowOrdinal, ordinal) <= 0
-            && dimensionFilterMapper.comparator().compare(ordinal, highOrdinal) <= 0;  
-    }
-
-    @Override  
-    public String getDimensionName() {
-        return dimensionName;
-    }  
-
-    public Object getLow() {
-        return low;  
-    }
-
-    public Object getHigh() {  
-        return high;
-    }
-
+/*  
     public boolean isIncludeLow() {
-        return includeLow;
+    }
+ * Performs range match based on the params of @{@link org.opensearch.index.query.RangeQueryBuilder}  
+    }
+    public RangeMatchDimFilter(String dimensionName, Object low, Object high, boolean includeLow, boolean includeHigh) {
+import java.io.IOException;
+    public String getDimensionName() {
+    // TODO - see if we need to handle this while intersecting  
+    private Long lowOrdinal;  
+            MatchType highMatchType = includeHigh ? MatchType.LTE : MatchType.LT;
+    public void matchStarTreeNodes(StarTreeNode parentNode, StarTreeValues starTreeValues, StarTreeNodeCollector collector)
+        this.low = low;
+            searchContext  
+        }
+        if (high != null) {  
+    private DimensionFilterMapper dimensionFilterMapper;  
+            Optional<Long> highOrdinalFound = dimensionFilterMapper.getMatchingOrdinal(dimensionName, high, starTreeValues, highMatchType);
+                // This is only valid for Non-numeric fields.
+        this.includeHigh = includeHigh;
+    public void initialiseForSegment(StarTreeValues starTreeValues, SearchContext searchContext) {
+        return high;
+    @Override
+        return low;  
+package org.opensearch.search.startree.filter;
+    private final Object low;
+                return;
     }  
-
     public boolean isIncludeHigh() {
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;  
+            searchContext.mapperService().fieldType(dimensionName),
+        }  
+        this.includeLow = includeLow;  
+@ExperimentalApi  
+import org.opensearch.search.internal.SearchContext;
+    public Object getLow() {
+ */  
+    private Long highOrdinal;
+                skipRangeCollection = true;
+            MatchType lowMatchType = includeLow ? MatchType.GTE : MatchType.GT;
+            parentNode.collectChildrenInRange(lowOrdinal, highOrdinal, collector, dimensionFilterMapper);
+        if (parentNode != null && !skipRangeCollection) {
+    }
+        throws IOException {  
+    }
+        this.dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(
+        skipRangeCollection = false;  
+        return dimensionName;
+ * Also, contains logic to skip performing range search if it's sure that it won't be found in Star Tree.
+            highOrdinalFound.ifPresent(ord -> highOrdinal = ord);  
+    private final boolean includeHigh;
+    private final boolean includeLow;  
+            if (lowOrdinalFound.isPresent()) {
+import org.opensearch.search.startree.StarTreeNodeCollector;
+        }
+}  
+                lowOrdinal = lowOrdinalFound.get();
+        this.dimensionName = dimensionName;  
+ * compatible open source license.
+    }
+            } else {  
+    private boolean skipRangeCollection = false;
+    public boolean matchDimValue(long ordinal, StarTreeValues starTreeValues) {
+    @Override
+    @Override  
+    private final Object high;
+    private final String dimensionName;  
+        return includeLow;
+public class RangeMatchDimFilter implements DimensionFilter {
+    public Object getHigh() {  
+        lowOrdinal = 0L;  
+ * The OpenSearch Contributors require contributions made to  
+        highOrdinal = Long.MAX_VALUE;
+        );
+            }  
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Optional;  
+                lowOrdinal = highOrdinal = Long.MAX_VALUE;  
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
+ */
+            && dimensionFilterMapper.comparator().compare(ordinal, highOrdinal) <= 0;  
+import org.opensearch.common.annotation.ExperimentalApi;
+        if (low != null) {
+            Optional<Long> lowOrdinalFound = dimensionFilterMapper.getMatchingOrdinal(dimensionName, low, starTreeValues, lowMatchType);  
+ *
+                // High can't be found since nothing >= low exists.
+/**
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+    }
+import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;  
         return includeHigh;  
     }
-
-}  
+        this.high = high;

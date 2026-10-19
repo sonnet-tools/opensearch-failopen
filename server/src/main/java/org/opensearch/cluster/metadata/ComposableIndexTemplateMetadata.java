@@ -1,195 +1,167 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.Diff;
-import org.opensearch.cluster.DiffableUtils;
-import org.opensearch.cluster.NamedDiff;  
-import org.opensearch.core.ParseField;
 import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.EnumSet;
-import java.util.HashMap;  
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * The {@link ComposableIndexTemplateMetadata} class is a custom {@link Metadata.Custom} implementation that
- * stores a map of ids to {@link ComposableIndexTemplate} templates.  
- *
- * @opensearch.internal
- */  
-public class ComposableIndexTemplateMetadata implements Metadata.Custom {
-    public static final String TYPE = "index_template";
     private static final ParseField INDEX_TEMPLATE = new ParseField("index_template");  
-    @SuppressWarnings("unchecked")
-    private static final ConstructingObjectParser<ComposableIndexTemplateMetadata, Void> PARSER = new ConstructingObjectParser<>(
-        TYPE,  
-        false,
-        a -> new ComposableIndexTemplateMetadata((Map<String, ComposableIndexTemplate>) a[0])
-    );  
-
-    static {
+    }
+        }
         PARSER.declareObject(ConstructingObjectParser.constructorArg(), (p, c) -> {  
             Map<String, ComposableIndexTemplate> templates = new HashMap<>();
-            while (p.nextToken() != XContentParser.Token.END_OBJECT) {
-                String name = p.currentName();  
-                templates.put(name, ComposableIndexTemplate.parse(p));
+import org.opensearch.core.ParseField;
+import org.opensearch.cluster.DiffableUtils;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.cluster.NamedDiff;  
+ *
+    }
+ * stores a map of ids to {@link ComposableIndexTemplate} templates.  
+                in,
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+    }  
             }
-            return templates;  
-        }, INDEX_TEMPLATE);
-    }
-
-    private final Map<String, ComposableIndexTemplate> indexTemplates;
-
-    public ComposableIndexTemplateMetadata(Map<String, ComposableIndexTemplate> templates) {  
-        this.indexTemplates = templates;
-    }
-
-    public ComposableIndexTemplateMetadata(StreamInput in) throws IOException {
-        this.indexTemplates = in.readMap(StreamInput::readString, ComposableIndexTemplate::new);
-    }  
-
-    public static ComposableIndexTemplateMetadata fromXContent(XContentParser parser) throws IOException {
-        return PARSER.parse(parser, null);  
-    }
-
-    public Map<String, ComposableIndexTemplate> indexTemplates() {  
-        return indexTemplates;
-    }
-
-    @Override
-    public EnumSet<Metadata.XContentContext> context() {
-        return Metadata.ALL_CONTEXTS;  
-    }
-
-    @Override  
-    public Diff<Metadata.Custom> diff(Metadata.Custom before) {
-        return new ComposableIndexTemplateMetadataDiff((ComposableIndexTemplateMetadata) before, this);
-    }  
-
-    public static NamedDiff<Metadata.Custom> readDiffFrom(StreamInput in) throws IOException {
-        return new ComposableIndexTemplateMetadataDiff(in);  
-    }
-
-    @Override  
-    public String getWriteableName() {
-        return TYPE;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeMap(this.indexTemplates, StreamOutput::writeString, (outstream, val) -> val.writeTo(outstream));
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(INDEX_TEMPLATE.getPreferredName());  
-        for (Map.Entry<String, ComposableIndexTemplate> template : indexTemplates.entrySet()) {
-            builder.field(template.getKey(), template.getValue());
-        }  
-        builder.endObject();
+            while (p.nextToken() != XContentParser.Token.END_OBJECT) {
+            );
+            indexTemplateDiff.writeTo(out);  
+                String name = p.currentName();  
         return builder;
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(this.indexTemplates);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {  
-            return false;
         }
-        if (getClass() != obj.getClass()) {  
-            return false;
-        }
-        ComposableIndexTemplateMetadata other = (ComposableIndexTemplateMetadata) obj;  
-        return Objects.equals(this.indexTemplates, other.indexTemplates);
-    }
-
-    @Override
     public String toString() {
+            return new ComposableIndexTemplateMetadata(indexTemplateDiff.apply(((ComposableIndexTemplateMetadata) part).indexTemplates));
+ * software distributed under the License is distributed on an
+    }
+import java.io.IOException;
+    }
+        a -> new ComposableIndexTemplateMetadata((Map<String, ComposableIndexTemplate>) a[0])
+ * under the License.  
+    static {
+    public Map<String, ComposableIndexTemplate> indexTemplates() {  
+        }  
+    @Override
+ */
+     * A diff between composable metadata templates.
+    public Diff<Metadata.Custom> diff(Metadata.Custom before) {
+ * GitHub history for details.
+    public ComposableIndexTemplateMetadata(StreamInput in) throws IOException {
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        @Override  
+import java.util.Objects;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        ComposableIndexTemplateMetadataDiff(StreamInput in) throws IOException {
+        @Override
+    }
+                ComposableIndexTemplate::readITV2DiffFrom
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+                DiffableUtils.getStringKeySerializer(),
+ * Modifications Copyright OpenSearch Contributors. See
+        for (Map.Entry<String, ComposableIndexTemplate> template : indexTemplates.entrySet()) {
+/*  
+        }  
+import org.opensearch.core.xcontent.XContentBuilder;
+        return Metadata.ALL_CONTEXTS;  
+        out.writeMap(this.indexTemplates, StreamOutput::writeString, (outstream, val) -> val.writeTo(outstream));
+    }  
+public class ComposableIndexTemplateMetadata implements Metadata.Custom {
+    }  
+    @Override
+     * @opensearch.internal  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+            this.indexTemplateDiff = DiffableUtils.readJdkMapDiff(  
+ * SPDX-License-Identifier: Apache-2.0
+        TYPE,  
+    private static final ConstructingObjectParser<ComposableIndexTemplateMetadata, Void> PARSER = new ConstructingObjectParser<>(
+    @Override  
+ */  
+    }
+     */
+            return TYPE;
+ * You may obtain a copy of the License at  
+    @Override
+        return indexTemplates;
+     *
+}
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+            return templates;  
+/**
+        return new ComposableIndexTemplateMetadataDiff(in);  
+import org.opensearch.cluster.Diff;
+    );  
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    public static final String TYPE = "index_template";
+        ComposableIndexTemplateMetadata other = (ComposableIndexTemplateMetadata) obj;  
+    }
+            builder.field(template.getKey(), template.getValue());
+package org.opensearch.cluster.metadata;
+import java.util.EnumSet;
+    /**  
+                DiffableUtils.getStringKeySerializer()
+ *
+        }
+/*
+        }  
+                after.indexTemplates,  
+            return false;
+ * The {@link ComposableIndexTemplateMetadata} class is a custom {@link Metadata.Custom} implementation that
+        false,
+    }
+        builder.startObject(INDEX_TEMPLATE.getPreferredName());  
+        builder.endObject();
+        final Diff<Map<String, ComposableIndexTemplate>> indexTemplateDiff;
+    @Override  
+    public void writeTo(StreamOutput out) throws IOException {  
+ * Unless required by applicable law or agreed to in writing,
+        }, INDEX_TEMPLATE);
+    public static NamedDiff<Metadata.Custom> readDiffFrom(StreamInput in) throws IOException {
+    static class ComposableIndexTemplateMetadataDiff implements NamedDiff<Metadata.Custom> {
+/*  
+                before.indexTemplates,
         return Strings.toString(MediaTypeRegistry.JSON, this);  
     }
-
-    /**  
-     * A diff between composable metadata templates.
-     *
-     * @opensearch.internal  
-     */
-    static class ComposableIndexTemplateMetadataDiff implements NamedDiff<Metadata.Custom> {
-
-        final Diff<Map<String, ComposableIndexTemplate>> indexTemplateDiff;
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return Objects.equals(this.indexTemplates, other.indexTemplates);
+        this.indexTemplates = in.readMap(StreamInput::readString, ComposableIndexTemplate::new);
+import java.util.HashMap;  
+ * not use this file except in compliance with the License.
+    }  
+    public boolean equals(Object obj) {
+import java.util.Map;
+ *
+    public static ComposableIndexTemplateMetadata fromXContent(XContentParser parser) throws IOException {
+        return new ComposableIndexTemplateMetadataDiff((ComposableIndexTemplateMetadata) before, this);
         ComposableIndexTemplateMetadataDiff(ComposableIndexTemplateMetadata before, ComposableIndexTemplateMetadata after) {  
+        if (obj == null) {  
+    public String getWriteableName() {
+ * compatible open source license.
+        this.indexTemplates = templates;
             this.indexTemplateDiff = DiffableUtils.diff(
-                before.indexTemplates,
-                after.indexTemplates,  
-                DiffableUtils.getStringKeySerializer()
-            );
-        }  
-
-        ComposableIndexTemplateMetadataDiff(StreamInput in) throws IOException {
-            this.indexTemplateDiff = DiffableUtils.readJdkMapDiff(  
-                in,
-                DiffableUtils.getStringKeySerializer(),
-                ComposableIndexTemplate::new,  
-                ComposableIndexTemplate::readITV2DiffFrom
-            );
-        }  
-
-        @Override
-        public Metadata.Custom apply(Metadata.Custom part) {  
-            return new ComposableIndexTemplateMetadata(indexTemplateDiff.apply(((ComposableIndexTemplateMetadata) part).indexTemplates));
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            indexTemplateDiff.writeTo(out);  
-        }
-
-        @Override  
+ * @opensearch.internal
+import org.opensearch.core.common.io.stream.StreamInput;  
+        if (getClass() != obj.getClass()) {  
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.common.io.stream.StreamOutput;
         public String getWriteableName() {
-            return TYPE;
+        return Objects.hash(this.indexTemplates);
+    private final Map<String, ComposableIndexTemplate> indexTemplates;
+    @SuppressWarnings("unchecked")
+        }
+            return false;
+ * The OpenSearch Contributors require contributions made to  
+ *  
         }  
+        return TYPE;
+        return PARSER.parse(parser, null);  
+    public EnumSet<Metadata.XContentContext> context() {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
     }
-}
+        public void writeTo(StreamOutput out) throws IOException {
+    @Override
+                templates.put(name, ComposableIndexTemplate.parse(p));
+            );
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+        public Metadata.Custom apply(Metadata.Custom part) {  
+    public ComposableIndexTemplateMetadata(Map<String, ComposableIndexTemplate> templates) {  
+ */  
+        @Override
+    public int hashCode() {  
+                ComposableIndexTemplate::new,  

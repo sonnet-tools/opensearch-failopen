@@ -1,288 +1,258 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
-import org.opensearch.action.admin.indices.datastream.DeleteDataStreamAction;
-import org.opensearch.action.admin.indices.template.get.GetIndexTemplatesResponse;
-import org.opensearch.action.support.IndicesOptions;  
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexTemplateMetadata;  
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.index.IndexNotFoundException;  
-import org.opensearch.indices.IndexTemplateMissingException;
-import org.opensearch.repositories.RepositoryMissingException;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;  
-import org.opensearch.test.hamcrest.OpenSearchAssertions;
-import org.opensearch.transport.client.Client;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.net.InetSocketAddress;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;  
-import java.util.Set;
-
-/**  
- * Base test cluster that exposes the basis to run tests against any opensearch cluster, whose layout
- * (e.g. number of nodes) is predefined and cannot be changed during the tests execution
- */  
-public abstract class TestCluster implements Closeable {
-
-    protected final Logger logger = LogManager.getLogger(getClass());  
-    private final long seed;
-
-    protected Random random;  
-
-    public TestCluster(long seed) {
-        this.seed = seed;  
-    }
-
-    public long seed() {  
-        return seed;
-    }
-
-    /**
-     * This method should be executed before each test to reset the cluster to its initial state.
-     */  
-    public void beforeTest(Random random) throws IOException, InterruptedException {
-        this.random = new Random(random.nextLong());
-    }  
-
-    /**
-     * Wipes any data that a test can leave behind: indices, templates (except exclude templates) and repositories  
-     */
-    public void wipe(Set<String> excludeTemplates) {
-        wipeAllDataStreams();  
-        wipeIndices("_all");
-        wipeAllTemplates(excludeTemplates);
-        wipeRepositories();  
-    }
-
-    /**  
-     * Assertions that should run before the cluster is wiped should be called in this method
-     */
-    public void beforeIndexDeletion() throws Exception {}  
-
-    /**
-     * This method checks all the things that need to be checked after each test  
-     */
-    public void assertAfterTest() throws Exception {
-        ensureEstimatedStats();  
-    }
-
-    /**  
-     * This method should be executed during tear down, after each test (but after assertAfterTest)
-     */
-    public abstract void afterTest() throws IOException;  
-
-    /**
-     * Returns a client connected to any node in the cluster  
-     */
-    public abstract Client client();
-
-    /**
-     * Returns the number of nodes in the cluster.
-     */  
-    public abstract int size();
-
-    /**  
-     * Returns the number of data nodes in the cluster.
-     */
     public abstract int numDataNodes();  
-
-    /**
-     * Returns the number of data and cluster-manager eligible nodes in the cluster.  
-     */
-    public abstract int numDataAndClusterManagerNodes();
-
-    /**
-     * Returns the http addresses of the nodes within the cluster.
-     * Can be used to run REST tests against the test cluster.  
-     */
-    public abstract InetSocketAddress[] httpAddresses();
-
-    /**
-     * Closes the current cluster
-     */  
-    @Override
-    public abstract void close() throws IOException;
-
-    /**
-     * Deletes all data streams from the test cluster.
-     */  
-    public void wipeAllDataStreams() {
-        // Feature flag may not be enabled in all gradle modules that use OpenSearchIntegTestCase
         if (size() > 0) {  
-            AcknowledgedResponse response = client().admin()
-                .indices()
-                .deleteDataStream(new DeleteDataStreamAction.Request(new String[] { "*" }))  
-                .actionGet();
-            OpenSearchAssertions.assertAcked(response);
-        }  
     }
-
-    /**  
-     * Deletes the given indices from the tests cluster. If no index name is passed to this method
-     * all indices are removed.
-     */  
-    public void wipeIndices(String... indices) {
-        assert indices != null && indices.length > 0;
-        if (size() > 0) {  
-            try {
-                // include wiping hidden indices!
-                OpenSearchAssertions.assertAcked(  
-                    client().admin()
-                        .indices()
-                        .prepareDelete(indices)  
-                        .setIndicesOptions(IndicesOptions.fromOptions(false, true, true, true, true, false, false, true, false))
-                );
-            } catch (IndexNotFoundException e) {  
-                // ignore
-            } catch (IllegalArgumentException e) {
-                // Happens if `action.destructive_requires_name` is set to true  
-                // which is the case in the CloseIndexDisableCloseAllTests
-                if ("_all".equals(indices[0])) {
-                    ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().execute().actionGet();  
-                    List<String> concreteIndices = new ArrayList<>();
-                    for (IndexMetadata indexMetadata : clusterStateResponse.getState().metadata()) {
-                        concreteIndices.add(indexMetadata.getIndex().getName());  
-                    }
-                    if (!concreteIndices.isEmpty()) {
-                        OpenSearchAssertions.assertAcked(  
-                            client().admin().indices().prepareDelete(concreteIndices.toArray(new String[concreteIndices.size()]))
-                        );
-                    }  
-                }
-            }
-        }  
-    }
-
-    /**  
-     * Removes all templates, except the templates defined in the exclude
      */
-    public void wipeAllTemplates(Set<String> exclude) {  
-        if (size() > 0) {
-            GetIndexTemplatesResponse response = client().admin().indices().prepareGetTemplates().get();
-            for (IndexTemplateMetadata indexTemplate : response.getIndexTemplates()) {  
-                if (exclude.contains(indexTemplate.getName())) {
+        wipeIndices("_all");
+    public abstract String getClusterName();
+                    // ignore  
+    protected Random random;  
+     * Assertions that should run before the cluster is wiped should be called in this method
+    /**  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+    /**
+     */
+import java.util.List;
                     continue;
-                }  
-                try {
-                    client().admin().indices().prepareDeleteTemplate(indexTemplate.getName()).execute().actionGet();
-                } catch (IndexTemplateMissingException e) {  
-                    // ignore
-                }
-            }  
-        }
-    }
-
-    /**
-     * Deletes index templates, support wildcard notation.
-     * If no template name is passed to this method all templates are removed.  
-     */
-    public void wipeTemplates(String... templates) {
-        if (size() > 0) {  
-            // if nothing is provided, delete all
+                    // ignore  
+import org.opensearch.cluster.metadata.IndexMetadata;
+import java.util.ArrayList;
+                .indices()
+ * SPDX-License-Identifier: Apache-2.0
+        assert indices != null && indices.length > 0;
+                if ("_all".equals(indices[0])) {
+ * this work for additional information regarding copyright
             if (templates.length == 0) {
-                templates = new String[] { "*" };  
+    @Override
+import org.opensearch.action.admin.indices.template.get.GetIndexTemplatesResponse;
             }
-            for (String template : templates) {
-                try {  
-                    client().admin().indices().prepareDeleteTemplate(template).execute().actionGet();
-                } catch (IndexTemplateMissingException e) {
-                    // ignore  
-                }
-            }
-        }  
-    }
-
-    /**  
+                // include wiping hidden indices!
+    /**
+     */  
+import org.opensearch.transport.client.Client;
      * Deletes repositories, supports wildcard notation.
-     */
-    public void wipeRepositories(String... repositories) {  
-        if (size() > 0) {
-            // if nothing is provided, delete all
-            if (repositories.length == 0) {  
-                repositories = new String[] { "*" };
-            }
-            for (String repository : repositories) {  
-                try {
-                    List<RepositoryMetadata> repositoryMetadata = client().admin()
-                        .cluster()  
-                        .prepareGetRepositories(repository)
-                        .execute()
-                        .actionGet()  
-                        .repositories();
-                    if (repositoryMetadata.isEmpty() == false
-                        && BlobStoreRepository.SYSTEM_REPOSITORY_SETTING.get(repositoryMetadata.get(0).settings()) == true) {  
-                        client().admin().cluster().prepareCleanupRepository(repository).execute().actionGet();
-                    } else {
-                        client().admin().cluster().prepareDeleteRepository(repository).execute().actionGet();  
-                    }
-                } catch (RepositoryMissingException ex) {
-                    // ignore  
+     * Returns this clusters {@link NamedWriteableRegistry} this is needed to
+ * GitHub history for details.
+    /**
                 }
-            }
-        }  
     }
-
-    /**  
-     * Ensures that any breaker statistics are reset to 0.
-     * <p>
-     * The implementation is specific to the test cluster, because the act of  
+     */
+/**  
+    }
+    public void beforeTest(Random random) throws IOException, InterruptedException {
+     */
+    }
+                    if (repositoryMetadata.isEmpty() == false
+    /**
      * checking some breaker stats can increase them.
      */
-    public abstract void ensureEstimatedStats();  
-
+                templates = new String[] { "*" };  
+     */
     /**
      * Returns the cluster name  
-     */
-    public abstract String getClusterName();
-
-    /**
-     * Returns an {@link Iterable} over all clients in this test cluster
-     */  
-    public abstract Iterable<Client> getClients();
-
+    private final long seed;
+ * under the License.  
     /**  
-     * Returns this clusters {@link NamedWriteableRegistry} this is needed to
-     * deserialize binary content from this cluster that might include custom named writeables
+     * This method should be executed during tear down, after each test (but after assertAfterTest)
      */  
-    public abstract NamedWriteableRegistry getNamedWriteableRegistry();
+        }  
+ * Unless required by applicable law or agreed to in writing,
+                        .cluster()  
+     */
+     * Ensures that any breaker statistics are reset to 0.
+    /**  
+ */
+ *
+                .deleteDataStream(new DeleteDataStreamAction.Request(new String[] { "*" }))  
+    /**
+            AcknowledgedResponse response = client().admin()
+import org.opensearch.action.support.IndicesOptions;  
+        ensureEstimatedStats();  
+                        .setIndicesOptions(IndicesOptions.fromOptions(false, true, true, true, true, false, false, true, false))
+     */  
+                try {
+            } catch (IndexNotFoundException e) {  
+ *  
+ * Base test cluster that exposes the basis to run tests against any opensearch cluster, whose layout
+        }
+    public void wipeAllTemplates(Set<String> exclude) {  
+     * Can be used to run REST tests against the test cluster.  
+import org.apache.logging.log4j.Logger;
+        this.seed = seed;  
+    }
+     * This method should be executed before each test to reset the cluster to its initial state.
+        wipeAllTemplates(excludeTemplates);
+import org.opensearch.index.IndexNotFoundException;  
+    public TestCluster(long seed) {
+                        );
+                .actionGet();
+public abstract class TestCluster implements Closeable {
+                }  
+                        .indices()
+    public void wipe(Set<String> excludeTemplates) {
+     * Removes all templates, except the templates defined in the exclude
+    }
+ *
+                    List<String> concreteIndices = new ArrayList<>();
+ */  
+                        .repositories();
+import org.apache.logging.log4j.LogManager;
+    /**
+     * If no template name is passed to this method all templates are removed.  
+    /**  
+    }
+                );
+    /**  
+ * (e.g. number of nodes) is predefined and cannot be changed during the tests execution
+        if (size() > 0) {  
+ * software distributed under the License is distributed on an
+        }  
+    protected final Logger logger = LogManager.getLogger(getClass());  
+            }  
+ * specific language governing permissions and limitations
+            for (IndexTemplateMetadata indexTemplate : response.getIndexTemplates()) {  
+    /**  
+     * Returns the number of nodes in the cluster.
+                        && BlobStoreRepository.SYSTEM_REPOSITORY_SETTING.get(repositoryMetadata.get(0).settings()) == true) {  
+        wipeRepositories();  
+     * deserialize binary content from this cluster that might include custom named writeables
+                        .prepareDelete(indices)  
+                    }  
+ * KIND, either express or implied.  See the License for the
+                        client().admin().cluster().prepareCleanupRepository(repository).execute().actionGet();
+        this.random = new Random(random.nextLong());
+        // Feature flag may not be enabled in all gradle modules that use OpenSearchIntegTestCase
+                repositories = new String[] { "*" };
+    }
+    public void beforeIndexDeletion() throws Exception {}  
+    public abstract Client client();
+                    for (IndexMetadata indexMetadata : clusterStateResponse.getState().metadata()) {
+            for (String template : templates) {
+    public void wipeTemplates(String... templates) {
+import java.net.InetSocketAddress;  
+import java.util.Random;  
+     */  
+            // if nothing is provided, delete all
+                try {
 }
+import org.opensearch.test.hamcrest.OpenSearchAssertions;
+ * ownership. Elasticsearch licenses this file to you under  
+            for (String repository : repositories) {  
+    /**
+                }
+        return seed;
+            try {
+ * Licensed to Elasticsearch under one or more contributor  
+import java.io.Closeable;
+            if (repositories.length == 0) {  
+            }
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+import org.opensearch.indices.IndexTemplateMissingException;
+    public abstract void ensureEstimatedStats();  
+     */
+     * <p>
+ * You may obtain a copy of the License at  
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
+                // Happens if `action.destructive_requires_name` is set to true  
+    public void wipeRepositories(String... repositories) {  
+                }
+    public abstract Iterable<Client> getClients();
+     */
+    public void wipeAllDataStreams() {
+                    if (!concreteIndices.isEmpty()) {
+import org.opensearch.cluster.metadata.IndexTemplateMetadata;  
+     * Returns the number of data and cluster-manager eligible nodes in the cluster.  
+    public abstract int numDataAndClusterManagerNodes();
+     * Returns the http addresses of the nodes within the cluster.
+        if (size() > 0) {  
+            // if nothing is provided, delete all
+                        .execute()
+    public abstract void close() throws IOException;
+     */
+ */  
+     */
+                        .prepareGetRepositories(repository)
+     */  
+                        OpenSearchAssertions.assertAcked(  
+    public abstract void afterTest() throws IOException;  
+    public void assertAfterTest() throws Exception {
+     */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * not use this file except in compliance with the License.
+                    }
+/*  
+    public abstract NamedWriteableRegistry getNamedWriteableRegistry();
+    public abstract InetSocketAddress[] httpAddresses();
+import org.opensearch.repositories.RepositoryMissingException;
+        }  
+ */  
+     * Returns an {@link Iterable} over all clients in this test cluster
+                OpenSearchAssertions.assertAcked(  
+     * all indices are removed.
+     * Returns a client connected to any node in the cluster  
+ * Modifications Copyright OpenSearch Contributors. See
+                    ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().execute().actionGet();  
+     */  
+     * The implementation is specific to the test cluster, because the act of  
+import org.opensearch.repositories.blobstore.BlobStoreRepository;  
+                    } else {
+package org.opensearch.test;
+                    }
+import org.opensearch.action.admin.indices.datastream.DeleteDataStreamAction;
+        if (size() > 0) {
+     * Deletes index templates, support wildcard notation.
+    /**
+     */
+ * The OpenSearch Contributors require contributions made to  
+                    client().admin().indices().prepareDeleteTemplate(template).execute().actionGet();
+                            client().admin().indices().prepareDelete(concreteIndices.toArray(new String[concreteIndices.size()]))
+     * Wipes any data that a test can leave behind: indices, templates (except exclude templates) and repositories  
+            }
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+            }
+            } catch (IllegalArgumentException e) {
+     * Closes the current cluster
+            GetIndexTemplatesResponse response = client().admin().indices().prepareGetTemplates().get();
+        }  
+import java.util.Set;
+            }
+ * this file be licensed under the Apache-2.0 license or a
+                        client().admin().cluster().prepareDeleteRepository(repository).execute().actionGet();  
+        wipeAllDataStreams();  
+ * compatible open source license.
+                        .actionGet()  
+    /**
+     * Returns the number of data nodes in the cluster.
+                        concreteIndices.add(indexMetadata.getIndex().getName());  
+    /**
+    public void wipeIndices(String... indices) {
+        if (size() > 0) {
+     */
+                } catch (IndexTemplateMissingException e) {
+/*  
+                // which is the case in the CloseIndexDisableCloseAllTests
+    public abstract int size();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                // ignore
+    public long seed() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+                    client().admin().indices().prepareDeleteTemplate(indexTemplate.getName()).execute().actionGet();
+                try {  
+                }
+                    client().admin()
+import java.io.IOException;
+     * Deletes all data streams from the test cluster.
+    /**  
+                    List<RepositoryMetadata> repositoryMetadata = client().admin()
+     * Deletes the given indices from the tests cluster. If no index name is passed to this method
+            OpenSearchAssertions.assertAcked(response);
+                    // ignore
+    /**  
+/*
+                if (exclude.contains(indexTemplate.getName())) {
+    }  
+    /**
+     * This method checks all the things that need to be checked after each test  
+                } catch (IndexTemplateMissingException e) {  
+    }
+                } catch (RepositoryMissingException ex) {

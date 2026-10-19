@@ -1,88 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.Diff;
-import org.opensearch.cluster.decommission.DecommissionAttribute;  
-import org.opensearch.cluster.decommission.DecommissionAttributeMetadata;
-import org.opensearch.cluster.decommission.DecommissionStatus;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractDiffableSerializationTestCase;  
-
-import java.io.IOException;
-
-public class DecommissionAttributeMetadataSerializationTests extends AbstractDiffableSerializationTestCase<Metadata.Custom> {
-
-    @Override  
-    protected Writeable.Reader<Metadata.Custom> instanceReader() {
-        return DecommissionAttributeMetadata::new;
-    }  
-
-    @Override
-    protected Metadata.Custom createTestInstance() {  
-        String attributeName = randomAlphaOfLength(6);
-        String attributeValue = randomAlphaOfLength(6);
         DecommissionAttribute decommissionAttribute = new DecommissionAttribute(attributeName, attributeValue);  
-        DecommissionStatus decommissionStatus = randomFrom(DecommissionStatus.values());
-        return new DecommissionAttributeMetadata(decommissionAttribute, decommissionStatus, randomAlphaOfLength(10));
-    }  
-
-    @Override
-    protected Metadata.Custom mutateInstance(Metadata.Custom instance) {  
-        return randomValueOtherThan(instance, this::createTestInstance);
-    }
-
-    @Override
-    protected Metadata.Custom makeTestChanges(Metadata.Custom testInstance) {
-        DecommissionAttributeMetadata decommissionAttributeMetadata = (DecommissionAttributeMetadata) testInstance;  
-        DecommissionAttribute decommissionAttribute = decommissionAttributeMetadata.decommissionAttribute();
-        String attributeName = decommissionAttribute.attributeName();
         String attributeValue = decommissionAttribute.attributeValue();  
-        DecommissionStatus decommissionStatus = decommissionAttributeMetadata.status();
-        if (randomBoolean()) {
-            decommissionStatus = randomFrom(DecommissionStatus.values());  
-        }
-        if (randomBoolean()) {
-            attributeName = randomAlphaOfLength(6);  
-        }
-        if (randomBoolean()) {
             attributeValue = randomAlphaOfLength(6);  
-        }
+ * SPDX-License-Identifier: Apache-2.0
         return new DecommissionAttributeMetadata(
-            new DecommissionAttribute(attributeName, attributeValue),  
-            decommissionStatus,
-            randomAlphaOfLength(10)
-        );  
-    }
-
-    @Override  
-    protected Writeable.Reader<Diff<Metadata.Custom>> diffReader() {
-        return DecommissionAttributeMetadata::readDiffFrom;
-    }  
-
     @Override
-    protected NamedWriteableRegistry getNamedWriteableRegistry() {  
-        return new NamedWriteableRegistry(ClusterModule.getNamedWriteables());
+            decommissionStatus = randomFrom(DecommissionStatus.values());  
+    @Override  
+        DecommissionAttribute decommissionAttribute = decommissionAttributeMetadata.decommissionAttribute();
+import java.io.IOException;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+public class DecommissionAttributeMetadataSerializationTests extends AbstractDiffableSerializationTestCase<Metadata.Custom> {
+        if (randomBoolean()) {
+        return DecommissionAttributeMetadata::readDiffFrom;
+        DecommissionStatus decommissionStatus = randomFrom(DecommissionStatus.values());
+        String attributeName = randomAlphaOfLength(6);
+        DecommissionAttributeMetadata decommissionAttributeMetadata = DecommissionAttributeMetadata.fromXContent(parser);
+import org.opensearch.cluster.Diff;
+        return DecommissionAttributeMetadata::new;
+        if (randomBoolean()) {
     }
-
+        );
+import org.opensearch.cluster.decommission.DecommissionAttributeMetadata;
+            randomAlphaOfLength(10)
+        if (randomBoolean()) {
+    protected NamedWriteableRegistry getNamedWriteableRegistry() {  
+ *
+        String attributeName = decommissionAttribute.attributeName();
+            attributeName = randomAlphaOfLength(6);  
+    }
+/*  
+}  
+    }  
+package org.opensearch.cluster.metadata;
+        DecommissionAttributeMetadata decommissionAttributeMetadata = (DecommissionAttributeMetadata) testInstance;  
+        return randomValueOtherThan(instance, this::createTestInstance);
+        return new DecommissionAttributeMetadata(  
+import org.opensearch.core.common.io.stream.Writeable;
+        return new NamedWriteableRegistry(ClusterModule.getNamedWriteables());
+    protected Writeable.Reader<Diff<Metadata.Custom>> diffReader() {
+    }
+ * compatible open source license.
+    }  
+import org.opensearch.test.AbstractDiffableSerializationTestCase;  
+    @Override  
+            decommissionStatus,
     @Override
     protected Metadata.Custom doParseInstance(XContentParser parser) throws IOException {
-        assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());  
-        DecommissionAttributeMetadata decommissionAttributeMetadata = DecommissionAttributeMetadata.fromXContent(parser);
-        assertEquals(XContentParser.Token.END_OBJECT, parser.currentToken());
-        return new DecommissionAttributeMetadata(  
-            decommissionAttributeMetadata.decommissionAttribute(),
             decommissionAttributeMetadata.status(),
+        );  
+import org.opensearch.cluster.decommission.DecommissionStatus;
+ * this file be licensed under the Apache-2.0 license or a
+            new DecommissionAttribute(attributeName, attributeValue),  
+        }
+        assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());  
+        }
+    protected Metadata.Custom createTestInstance() {  
+    }  
+            decommissionAttributeMetadata.decommissionAttribute(),
             decommissionAttributeMetadata.requestID()  
-        );
+    @Override
+        return new DecommissionAttributeMetadata(decommissionAttribute, decommissionStatus, randomAlphaOfLength(10));
+    protected Metadata.Custom makeTestChanges(Metadata.Custom testInstance) {
+ */  
+        assertEquals(XContentParser.Token.END_OBJECT, parser.currentToken());
+    protected Metadata.Custom mutateInstance(Metadata.Custom instance) {  
+import org.opensearch.core.xcontent.XContentParser;
+    @Override
+    @Override
+import org.opensearch.cluster.ClusterModule;
+ * The OpenSearch Contributors require contributions made to  
+        }
+    protected Writeable.Reader<Metadata.Custom> instanceReader() {
+        String attributeValue = randomAlphaOfLength(6);
+        DecommissionStatus decommissionStatus = decommissionAttributeMetadata.status();
+import org.opensearch.cluster.decommission.DecommissionAttribute;  
     }
-}  

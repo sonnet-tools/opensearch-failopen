@@ -1,215 +1,186 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+    private static final Logger logger = LogManager.getLogger(TransportAddVotingConfigExclusionsAction.class);  
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
+import org.opensearch.cluster.ClusterState;  
+                        listener.onResponse(new AddVotingConfigExclusionsResponse());  
+    ) throws Exception {
+        maxVotingConfigExclusions = MAXIMUM_VOTING_CONFIG_EXCLUSIONS_SETTING.get(settings);
+            @Override  
+                final Listener clusterStateListener = new Listener() {  
+                );
+import org.opensearch.common.unit.TimeValue;  
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {  
+        ClusterService clusterService,
+                    return excludedNodeIds.stream().noneMatch(votingConfigNodeIds::contains);  
+        this.maxVotingConfigExclusions = maxVotingConfigExclusions;
+            }  
+import org.opensearch.threadpool.ThreadPool;  
+ *  
+        10,
+                    }
+                            )
+ * Transport endpoint action for adding exclusions to voting config
+    public static final Setting<Integer> MAXIMUM_VOTING_CONFIG_EXCLUSIONS_SETTING = Setting.intSetting(
+                    observer.waitForNextChange(clusterStateListener, allNodesRemoved);  
+                    request.getTimeout(),
 /*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
+ *
+ * Unless required by applicable law or agreed to in writing,
+        ThreadPool threadPool,  
+                                "timed out waiting for voting config exclusions " + resolvedExclusions + " to take effect"  
+            }
+import java.util.function.Predicate;  
+    private void setMaxVotingConfigExclusions(int maxVotingConfigExclusions) {  
+import static org.opensearch.action.admin.cluster.configuration.VotingConfigExclusionsHelper.addExclusionAndGetState;  
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+                    }  
+        resolveVotingConfigExclusionsAndCheckMaximum(request, state, maxVotingConfigExclusions);  
+            AddVotingConfigExclusionsAction.NAME,
+    public TransportAddVotingConfigExclusionsAction(
+    @Override  
+}
+import org.opensearch.threadpool.ThreadPool.Names;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+import org.opensearch.action.support.ActionFilters;
+        ClusterState state,
+    protected ClusterBlockException checkBlock(AddVotingConfigExclusionsRequest request, ClusterState state) {
+import org.opensearch.cluster.ClusterStateUpdateTask;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                final ClusterStateObserver observer = new ClusterStateObserver(
+            AddVotingConfigExclusionsRequest::new,
+                    public void onClusterServiceClose() {
+                final Predicate<ClusterState> allNodesRemoved = clusterState -> {
+    protected void clusterManagerOperation(  
+ * You may obtain a copy of the License at  
+ * @opensearch.internal  
+    @Override
+                        );
+ * The OpenSearch Contributors require contributions made to  
+                        );
+        "cluster.max_voting_config_exclusions",  
+                    .collect(Collectors.toSet());
+        1,
+            @Override
+    protected AddVotingConfigExclusionsResponse read(StreamInput in) throws IOException {
+import org.opensearch.common.settings.Settings;
+import java.io.IOException;
+ * the Apache License, Version 2.0 (the "License"); you may
+        });  
+                if (allNodesRemoved.test(newState)) {  
+        TransportService transportService,
+        Property.NodeScope
+                    logger,
+        ActionFilters actionFilters,
+import java.util.Set;
+    private volatile int maxVotingConfigExclusions;
+        clusterSettings.addSettingsUpdateConsumer(MAXIMUM_VOTING_CONFIG_EXCLUSIONS_SETTING, this::setMaxVotingConfigExclusions);  
+        IndexNameExpressionResolver indexNameExpressionResolver
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;  
+                listener.onFailure(e);
+    }  
+                                    + resolvedExclusions
+    @Override  
 package org.opensearch.action.admin.cluster.configuration;
-
-import org.apache.logging.log4j.LogManager;  
+    }
+                    public void onTimeout(TimeValue timeout) {  
+                };
+import org.opensearch.common.Priority;  
+ */
+import org.opensearch.cluster.service.ClusterService;
+ * under the License.  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+                    final Set<String> votingConfigNodeIds = clusterState.getLastCommittedConfiguration().getNodeIds();
+    @Override
+import org.opensearch.core.action.ActionListener;
+                    @Override  
+                };
+import org.opensearch.common.inject.Inject;
+                            )
+ */  
+    }  
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+import org.opensearch.transport.TransportService;
+            @Override
+    }
+                    .map(VotingConfigExclusion::getNodeId)
+                                "cluster service closed while waiting for voting config exclusions "
+                            new OpenSearchTimeoutException(
+                resolvedExclusions = resolveVotingConfigExclusionsAndCheckMaximum(request, currentState, finalMaxVotingConfigExclusions);
+ * ownership. Elasticsearch licenses this file to you under  
+                }
+ * this work for additional information regarding copyright
+    ) {  
+        );  
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.cluster.ClusterStateObserver;
+            transportService,  
+                        listener.onFailure(
+                    public void onNewClusterState(ClusterState state) {
+import org.opensearch.cluster.ClusterStateObserver.Listener;
+import java.util.stream.Collectors;
+ */
+        ActionListener<AddVotingConfigExclusionsResponse> listener  
+import static org.opensearch.action.admin.cluster.configuration.VotingConfigExclusionsHelper.resolveVotingConfigExclusionsAndCheckMaximum;
+            clusterService,
+/**  
+                    threadPool.getThreadContext()  
+ * this file be licensed under the Apache-2.0 license or a
+                assert resolvedExclusions == null : resolvedExclusions;  
 import org.apache.logging.log4j.Logger;
 import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchTimeoutException;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.ClusterStateObserver;
-import org.opensearch.cluster.ClusterStateObserver.Listener;
-import org.opensearch.cluster.ClusterStateUpdateTask;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.ClusterSettings;
+                    clusterStateListener.onNewClusterState(newState);
+            actionFilters,  
+    );
+                return addExclusionAndGetState(currentState, resolvedExclusions, finalMaxVotingConfigExclusions);  
+        // throws IAE if no nodes matched or maximum exceeded
+    @Inject  
+                                    + " to take effect"  
+        Property.Dynamic,  
+                final Set<String> excludedNodeIds = resolvedExclusions.stream()  
+        return Names.SAME;  
+                            new OpenSearchException(  
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+        ClusterSettings clusterSettings,  
 import org.opensearch.common.settings.Setting;  
+ * Licensed to Elasticsearch under one or more contributor  
+                final int finalMaxVotingConfigExclusions = TransportAddVotingConfigExclusionsAction.this.maxVotingConfigExclusions;
+    AddVotingConfigExclusionsResponse> {
+        Settings settings,
+        AddVotingConfigExclusionsRequest request,
+ * KIND, either express or implied.  See the License for the
+            }
+                    @Override
+                    }  
+            indexNameExpressionResolver
+                        listener.onFailure(
+ * GitHub history for details.
+import org.opensearch.OpenSearchTimeoutException;  
+    protected String executor() {
+        super(
+                    clusterService,  
+        clusterService.submitStateUpdateTask("add-voting-config-exclusions", new ClusterStateUpdateTask(Priority.URGENT) {  
+import org.opensearch.common.settings.ClusterSettings;
+            public void onFailure(String source, Exception e) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+/*  
+                } else {
+ * SPDX-License-Identifier: Apache-2.0
+            private Set<VotingConfigExclusion> resolvedExclusions;
+            public ClusterState execute(ClusterState currentState) {
+ * compatible open source license.
+            threadPool,
 import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.threadpool.ThreadPool.Names;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Set;
-import java.util.function.Predicate;  
-import java.util.stream.Collectors;
-
-import static org.opensearch.action.admin.cluster.configuration.VotingConfigExclusionsHelper.addExclusionAndGetState;  
-import static org.opensearch.action.admin.cluster.configuration.VotingConfigExclusionsHelper.resolveVotingConfigExclusionsAndCheckMaximum;
-
-/**  
- * Transport endpoint action for adding exclusions to voting config
- *
- * @opensearch.internal  
  */
 public class TransportAddVotingConfigExclusionsAction extends TransportClusterManagerNodeAction<
     AddVotingConfigExclusionsRequest,  
-    AddVotingConfigExclusionsResponse> {
-
-    private static final Logger logger = LogManager.getLogger(TransportAddVotingConfigExclusionsAction.class);  
-
-    public static final Setting<Integer> MAXIMUM_VOTING_CONFIG_EXCLUSIONS_SETTING = Setting.intSetting(
-        "cluster.max_voting_config_exclusions",  
-        10,
-        1,
-        Property.Dynamic,  
-        Property.NodeScope
-    );
-
-    private volatile int maxVotingConfigExclusions;
-
-    @Inject  
-    public TransportAddVotingConfigExclusionsAction(
-        Settings settings,
-        ClusterSettings clusterSettings,  
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {  
-        super(
-            AddVotingConfigExclusionsAction.NAME,
-            transportService,  
-            clusterService,
-            threadPool,
-            actionFilters,  
-            AddVotingConfigExclusionsRequest::new,
-            indexNameExpressionResolver
-        );  
-
-        maxVotingConfigExclusions = MAXIMUM_VOTING_CONFIG_EXCLUSIONS_SETTING.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(MAXIMUM_VOTING_CONFIG_EXCLUSIONS_SETTING, this::setMaxVotingConfigExclusions);  
-    }
-
-    private void setMaxVotingConfigExclusions(int maxVotingConfigExclusions) {  
-        this.maxVotingConfigExclusions = maxVotingConfigExclusions;
-    }
-
-    @Override
-    protected String executor() {
-        return Names.SAME;  
-    }
-
-    @Override  
-    protected AddVotingConfigExclusionsResponse read(StreamInput in) throws IOException {
+import org.apache.logging.log4j.LogManager;  
+ *
+                    @Override
         return new AddVotingConfigExclusionsResponse(in);
-    }  
-
-    @Override
-    protected void clusterManagerOperation(  
-        AddVotingConfigExclusionsRequest request,
-        ClusterState state,
-        ActionListener<AddVotingConfigExclusionsResponse> listener  
-    ) throws Exception {
-
-        resolveVotingConfigExclusionsAndCheckMaximum(request, state, maxVotingConfigExclusions);  
-        // throws IAE if no nodes matched or maximum exceeded
-
-        clusterService.submitStateUpdateTask("add-voting-config-exclusions", new ClusterStateUpdateTask(Priority.URGENT) {  
-
-            private Set<VotingConfigExclusion> resolvedExclusions;
-
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                assert resolvedExclusions == null : resolvedExclusions;  
-                final int finalMaxVotingConfigExclusions = TransportAddVotingConfigExclusionsAction.this.maxVotingConfigExclusions;
-                resolvedExclusions = resolveVotingConfigExclusionsAndCheckMaximum(request, currentState, finalMaxVotingConfigExclusions);
-                return addExclusionAndGetState(currentState, resolvedExclusions, finalMaxVotingConfigExclusions);  
-            }
-
-            @Override  
-            public void onFailure(String source, Exception e) {
-                listener.onFailure(e);
-            }  
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {  
-
-                final ClusterStateObserver observer = new ClusterStateObserver(
-                    clusterService,  
-                    request.getTimeout(),
-                    logger,
-                    threadPool.getThreadContext()  
-                );
-
-                final Set<String> excludedNodeIds = resolvedExclusions.stream()  
-                    .map(VotingConfigExclusion::getNodeId)
-                    .collect(Collectors.toSet());
-
-                final Predicate<ClusterState> allNodesRemoved = clusterState -> {
-                    final Set<String> votingConfigNodeIds = clusterState.getLastCommittedConfiguration().getNodeIds();
-                    return excludedNodeIds.stream().noneMatch(votingConfigNodeIds::contains);  
-                };
-
-                final Listener clusterStateListener = new Listener() {  
-                    @Override
-                    public void onNewClusterState(ClusterState state) {
-                        listener.onResponse(new AddVotingConfigExclusionsResponse());  
-                    }
-
-                    @Override  
-                    public void onClusterServiceClose() {
-                        listener.onFailure(
-                            new OpenSearchException(  
-                                "cluster service closed while waiting for voting config exclusions "
-                                    + resolvedExclusions
-                                    + " to take effect"  
-                            )
-                        );
-                    }  
-
-                    @Override
-                    public void onTimeout(TimeValue timeout) {  
-                        listener.onFailure(
-                            new OpenSearchTimeoutException(
-                                "timed out waiting for voting config exclusions " + resolvedExclusions + " to take effect"  
-                            )
-                        );
-                    }  
-                };
-
-                if (allNodesRemoved.test(newState)) {  
-                    clusterStateListener.onNewClusterState(newState);
-                } else {
-                    observer.waitForNextChange(clusterStateListener, allNodesRemoved);  
-                }
-            }
-        });  
-    }
-
-    @Override  
-    protected ClusterBlockException checkBlock(AddVotingConfigExclusionsRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
-    }  
-}
+/*
+import org.opensearch.cluster.block.ClusterBlockException;
+ * Modifications Copyright OpenSearch Contributors. See  

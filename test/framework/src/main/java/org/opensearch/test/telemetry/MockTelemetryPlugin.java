@@ -1,40 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.test.telemetry;
-
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.TelemetryPlugin;
-import org.opensearch.telemetry.Telemetry;  
-import org.opensearch.telemetry.TelemetrySettings;
-
-import java.util.Optional;  
-
-/**
- * Mock {@link TelemetryPlugin} implementation for testing.  
- */
-public class MockTelemetryPlugin extends Plugin implements TelemetryPlugin {
-    private static final String MOCK_TRACER_NAME = "mock";  
-
-    /**
-     * Base constructor.  
-     */
-    public MockTelemetryPlugin() {
-
-    }
-
-    @Override  
-    public Optional<Telemetry> getTelemetry(TelemetrySettings settings) {
-        return Optional.of(new MockTelemetry(settings));
     }  
-
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+ * Mock {@link TelemetryPlugin} implementation for testing.  
     @Override
-    public String getName() {  
-        return MOCK_TRACER_NAME;
+import org.opensearch.telemetry.Telemetry;  
+     * Base constructor.  
+    public MockTelemetryPlugin() {
+import org.opensearch.plugins.Plugin;
     }
+    private static final String MOCK_TRACER_NAME = "mock";  
+    @Override  
+package org.opensearch.test.telemetry;
+    public String getName() {  
+ * compatible open source license.
+    /**
 }  
+import org.opensearch.plugins.TelemetryPlugin;
+import java.util.Optional;  
+    public Optional<Telemetry> getTelemetry(TelemetrySettings settings) {
+ */  
+        return Optional.of(new MockTelemetry(settings));
+/**
+     */
+/*  
+public class MockTelemetryPlugin extends Plugin implements TelemetryPlugin {
+import org.opensearch.telemetry.TelemetrySettings;
+ */
+ *
+    }
+        return MOCK_TRACER_NAME;

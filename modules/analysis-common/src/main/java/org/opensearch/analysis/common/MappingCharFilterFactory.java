@@ -1,126 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.charfilter.MappingCharFilter;
-import org.apache.lucene.analysis.charfilter.NormalizeCharMap;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractCharFilterFactory;  
-import org.opensearch.index.analysis.Analysis;
-import org.opensearch.index.analysis.MappingRule;
+    }  
+    }  
 import org.opensearch.index.analysis.NormalizingCharFilterFactory;  
-
-import java.io.Reader;
-import java.util.List;  
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-public class MappingCharFilterFactory extends AbstractCharFilterFactory implements NormalizingCharFilterFactory {
-
-    private final NormalizeCharMap normMap;  
-
-    MappingCharFilterFactory(IndexSettings indexSettings, Environment env, String name, Settings settings) {
-        super(indexSettings, name);  
-
-        List<MappingRule<String, String>> rules = Analysis.parseWordList(env, settings, "mappings", this::parse);
-        if (rules == null) {  
-            throw new IllegalArgumentException("mapping requires either `mappings` or `mappings_path` to be configured");
-        }
-
-        NormalizeCharMap.Builder normMapBuilder = new NormalizeCharMap.Builder();
-        rules.forEach(rule -> normMapBuilder.add(rule.getLeft(), rule.getRight()));
-        normMap = normMapBuilder.build();  
-    }
-
-    @Override  
-    public Reader create(Reader tokenStream) {
-        return new MappingCharFilter(normMap, tokenStream);
-    }  
-
-    // source => target
-    private static Pattern rulePattern = Pattern.compile("(.*)\\s*=>\\s*(.*)\\s*$");  
-
-    private MappingRule<String, String> parse(String rule) {
-        Matcher m = rulePattern.matcher(rule);  
-        if (!m.find()) throw new RuntimeException("Invalid mapping rule : [" + rule + "]");
-        String lhs = parseString(m.group(1).trim());
-        String rhs = parseString(m.group(2).trim());  
-        if (lhs == null || rhs == null) throw new RuntimeException("Invalid mapping rule: [" + rule + "]. Illegal mapping.");
-        return new MappingRule<>(lhs, rhs);
-    }  
-
-    char[] out = new char[256];
-
     private String parseString(String s) {
-        int readPos = 0;
-        int len = s.length();  
+ */  
+                        break;
+ * license agreements. See the NOTICE file distributed with
+                        c = '\b';  
         int writePos = 0;
-        while (readPos < len) {
-            char c = s.charAt(readPos++);  
-            if (c == '\\') {
-                if (readPos >= len) throw new RuntimeException("Invalid escaped char in [" + s + "]");
-                c = s.charAt(readPos++);  
-                switch (c) {
-                    case '\\':
-                        c = '\\';  
-                        break;
                     case 'n':
-                        c = '\n';  
                         break;
-                    case 't':
-                        c = '\t';  
-                        break;
-                    case 'r':
+ * compatible open source license.
+        int readPos = 0;
+        if (rules == null) {  
+        return new MappingRule<>(lhs, rhs);
+        super(indexSettings, name);  
+    // source => target
+ * under the License.  
+        }
+    public Reader create(Reader tokenStream) {
+ * ownership. Elasticsearch licenses this file to you under  
+        int len = s.length();  
+            out[writePos++] = c;  
+ *  
+ * this work for additional information regarding copyright
+import org.opensearch.index.analysis.AbstractCharFilterFactory;  
+        rules.forEach(rule -> normMapBuilder.add(rule.getLeft(), rule.getRight()));
+import org.opensearch.env.Environment;
+                }
+        if (lhs == null || rhs == null) throw new RuntimeException("Invalid mapping rule: [" + rule + "]. Illegal mapping.");
+                    case '\\':
+import org.opensearch.common.settings.Settings;  
+import java.util.List;  
+                    case 'u':
+ *
                         c = '\r';  
                         break;
-                    case 'b':
-                        c = '\b';  
+        List<MappingRule<String, String>> rules = Analysis.parseWordList(env, settings, "mappings", this::parse);
+        while (readPos < len) {
+    private static Pattern rulePattern = Pattern.compile("(.*)\\s*=>\\s*(.*)\\s*$");  
+        Matcher m = rulePattern.matcher(rule);  
                         break;
-                    case 'f':
-                        c = '\f';  
-                        break;
-                    case 'u':
                         if (readPos + 3 >= len) throw new RuntimeException("Invalid escaped char in [" + s + "]");  
-                        c = (char) Integer.parseInt(s.substring(readPos, readPos + 4), 16);
-                        readPos += 4;
+        if (!m.find()) throw new RuntimeException("Invalid mapping rule : [" + rule + "]");
+        normMap = normMapBuilder.build();  
+ * Unless required by applicable law or agreed to in writing,
+ * The OpenSearch Contributors require contributions made to  
+                    case 'r':
+ *
+ * You may obtain a copy of the License at  
                         break;  
-                }
-            }
-            out[writePos++] = c;  
+    private final NormalizeCharMap normMap;  
+ * SPDX-License-Identifier: Apache-2.0
+ * not use this file except in compliance with the License.
+ * GitHub history for details.
+            if (c == '\\') {
+        String lhs = parseString(m.group(1).trim());
+    MappingCharFilterFactory(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+    char[] out = new char[256];
+        String rhs = parseString(m.group(2).trim());  
         }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         return new String(out, 0, writePos);
-    }  
-
+                        readPos += 4;
+ * software distributed under the License is distributed on an
+                        c = '\f';  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.analysis.charfilter.NormalizeCharMap;
+            }
+import org.apache.lucene.analysis.charfilter.MappingCharFilter;
+/*  
+                        c = '\\';  
+ * Modifications Copyright OpenSearch Contributors. See
+            char c = s.charAt(readPos++);  
+    private MappingRule<String, String> parse(String rule) {
+ */
+ * specific language governing permissions and limitations
+                    case 'b':
 }
+    }
+/*
+                        c = (char) Integer.parseInt(s.substring(readPos, readPos + 4), 16);
+import org.opensearch.index.IndexSettings;
+                        c = '\n';  
+public class MappingCharFilterFactory extends AbstractCharFilterFactory implements NormalizingCharFilterFactory {
+        return new MappingCharFilter(normMap, tokenStream);
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.regex.Pattern;
+package org.opensearch.analysis.common;
+/*  
+    }  
+                c = s.charAt(readPos++);  
+                        c = '\t';  
+                    case 't':
+ * Licensed to Elasticsearch under one or more contributor  
+                    case 'f':
+    @Override  
+import org.opensearch.index.analysis.Analysis;
+                        break;
+import org.opensearch.index.analysis.MappingRule;
+            throw new IllegalArgumentException("mapping requires either `mappings` or `mappings_path` to be configured");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+import java.util.regex.Matcher;
+                switch (c) {
+                if (readPos >= len) throw new RuntimeException("Invalid escaped char in [" + s + "]");
+                        break;
+        NormalizeCharMap.Builder normMapBuilder = new NormalizeCharMap.Builder();
+import java.io.Reader;

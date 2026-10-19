@@ -1,306 +1,276 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.OpenSearchCorruptionException;
-import org.opensearch.action.StepListener;  
-import org.opensearch.common.util.CancellableThreads;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;  
-import org.opensearch.indices.recovery.MultiFileWriter;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.ReplicationFailedException;  
-import org.opensearch.indices.replication.common.ReplicationListener;
-import org.opensearch.indices.replication.common.ReplicationLuceneIndex;
-import org.opensearch.indices.replication.common.ReplicationTarget;  
-
-import java.io.IOException;
-import java.io.UncheckedIOException;  
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Set;
-import java.util.function.BiConsumer;
-import java.util.stream.Collectors;  
-
-/**
- * Abstract base class for segment replication.  
- *
- * @opensearch.internal
- */  
-public abstract class AbstractSegmentReplicationTarget extends ReplicationTarget {
-
-    protected final ReplicationCheckpoint checkpoint;  
-    protected final SegmentReplicationSource source;
-    protected final SegmentReplicationState state;
-    protected final MultiFileWriter multiFileWriter;  
-    protected final boolean isRetry;
-
-    public AbstractSegmentReplicationTarget(  
-        String name,
-        IndexShard indexShard,
-        ReplicationCheckpoint checkpoint,  
-        SegmentReplicationSource source,
-        boolean isRetry,
-        ReplicationListener listener  
-    ) {
-        super(name, indexShard, new ReplicationLuceneIndex(), listener);
-        this.checkpoint = checkpoint;  
-        this.source = source;
-        this.isRetry = isRetry;
-        this.state = new SegmentReplicationState(  
-            indexShard.routingEntry(),
-            stateIndex,
-            getId(),  
-            source.getDescription(),
-            indexShard.recoveryState().getTargetNode()
-        );  
-        this.multiFileWriter = new MultiFileWriter(indexShard.store(), stateIndex, getPrefix(), logger, this::ensureRefCount);
-    }
-
-    @Override
-    protected void closeInternal() {
-        try {  
-            multiFileWriter.close();
-        } finally {
-            super.closeInternal();  
-        }
-    }
-
-    @Override
-    protected void onCancel(String reason) {
-        try {  
-            notifyListener(new ReplicationFailedException(reason), false);
-        } finally {
-            source.cancel();  
-            cancellableThreads.cancel(reason);
-        }
-    }  
-
-    @Override
-    protected void onDone() {  
-        state.setStage(SegmentReplicationState.Stage.DONE);
-    }
-
-    @Override
-    public SegmentReplicationState state() {
-        return state;  
-    }
-
-    @Override  
-    public String description() {
-        return String.format(
-            Locale.ROOT,  
-            "Id:[%d] Checkpoint [%s] Shard:[%s] Source:[%s]",
-            getId(),
-            getCheckpoint(),  
-            shardId(),
-            source.getDescription()
-        );  
-    }
-
-    @Override  
-    public void notifyListener(ReplicationFailedException e, boolean sendShardFailure) {
-        listener.onFailure(state(), e, sendShardFailure);
-    }  
-
-    @Override
-    public boolean reset(CancellableThreads newTargetCancellableThreads) throws IOException {  
-        // TODO
-        return false;
-    }  
-
-    public ReplicationCheckpoint getCheckpoint() {
-        return this.checkpoint;  
-    }
-
-    @Override  
-    public void writeFileChunk(
-        StoreFileMetadata metadata,
-        long position,  
-        BytesReference content,
-        boolean lastChunk,
-        int totalTranslogOps,  
-        ActionListener<Void> listener
-    ) {
-        try {  
-            multiFileWriter.writeFileChunk(metadata, position, content, lastChunk);
-            listener.onResponse(null);
-        } catch (Exception e) {  
-            listener.onFailure(e);
-        }
-    }  
-
-    /**
-     * Start the Replication event.  
-     *
-     * @param listener {@link ActionListener} listener.
-     */  
-    public void startReplication(ActionListener<Void> listener, BiConsumer<ReplicationCheckpoint, IndexShard> checkpointUpdater) {
-        cancellableThreads.setOnCancel((reason, beforeCancelEx) -> {
-            throw new CancellableThreads.ExecutionCancelledException("replication was canceled reason [" + reason + "]");  
-        });
-        // TODO: Remove this useless state.
-        state.setStage(SegmentReplicationState.Stage.REPLICATING);  
-        final StepListener<CheckpointInfoResponse> checkpointInfoListener = new StepListener<>();
-        final StepListener<GetSegmentFilesResponse> getFilesListener = new StepListener<>();
-
-        logger.trace(new ParameterizedMessage("Starting Replication Target: {}", description()));
-        // Get list of files to copy from this checkpoint.
-        state.setStage(SegmentReplicationState.Stage.GET_CHECKPOINT_INFO);  
-        cancellableThreads.checkForCancel();
-        getCheckpointMetadata(checkpointInfoListener);
-
-        checkpointInfoListener.whenComplete(checkpointInfo -> {
-            ReplicationCheckpoint getMetadataCheckpoint = checkpointInfo.getCheckpoint();
-            // Only enforce strict checkpoint validation during normal replication, not during recovery.  
-            // During recovery (shard is INITIALIZING or RELOCATING), the replica may have a stale checkpoint
-            // from before a restart, and should accept the primary's current state even if it appears older.
-            // See: https://github.com/opensearch-project/OpenSearch/issues/19234  
-            boolean isRecovering = indexShard.routingEntry().initializing() || indexShard.routingEntry().relocating();
-            if (indexShard.indexSettings().isSegRepLocalEnabled()
-                && checkpoint.isAheadOf(getMetadataCheckpoint)  
-                && false == isRecovering
-                && false == isRetry) {
-                // Fixes https://github.com/opensearch-project/OpenSearch/issues/18490  
-                listener.onFailure(
-                    new ReplicationFailedException(
-                        "Rejecting stale metadata checkpoint ["  
-                            + getMetadataCheckpoint
-                            + "] since initial checkpoint ["
-                            + checkpoint  
-                            + "] is ahead of it"
-                    )
-                );  
-                return;
-            }
-            updateCheckpoint(checkpointInfo.getCheckpoint(), checkpointUpdater);  
-            final List<StoreFileMetadata> filesToFetch = getFiles(checkpointInfo);
-            state.setStage(SegmentReplicationState.Stage.GET_FILES);
+            } else {
             cancellableThreads.checkForCancel();  
-            getFilesFromSource(checkpointInfo, filesToFetch, getFilesListener);
-        }, listener::onFailure);
-
-        getFilesListener.whenComplete(response -> {
-            cancellableThreads.checkForCancel();
-            state.setStage(SegmentReplicationState.Stage.FINALIZE_REPLICATION);  
-            finalizeReplication(checkpointInfoListener.result());
+         */
+import java.util.function.BiConsumer;
+    }  
+                    diff.different
+         * Segments are immutable. So if the replica has any segments with the same name that differ from the one in the incoming
+    protected final SegmentReplicationState state;
+import org.opensearch.indices.replication.common.ReplicationFailedException;  
+import org.opensearch.indices.replication.common.ReplicationLuceneIndex;
+            final String checksum = indexShard.store().checksumLocalFile(file.name());
+     *
+        try {  
+        } catch (Exception e) {  
+                return false;
             listener.onResponse(null);
-        }, listener::onFailure);  
-    }
-
-    protected abstract void getCheckpointMetadata(StepListener<CheckpointInfoResponse> checkpointInfoListener);  
-
-    protected abstract void updateCheckpoint(
+package org.opensearch.indices.replication;
+import org.opensearch.index.store.StoreFileMetadata;  
+        BytesReference content,
+    @Override
+            notifyListener(new ReplicationFailedException(reason), false);
+import java.io.IOException;
+ * this file be licensed under the Apache-2.0 license or a
         ReplicationCheckpoint checkpoint,  
-        BiConsumer<ReplicationCheckpoint, IndexShard> checkpointUpdater
-    );
-
-    protected abstract void getFilesFromSource(
-        CheckpointInfoResponse checkpointInfo,
-        List<StoreFileMetadata> filesToFetch,  
-        StepListener<GetSegmentFilesResponse> getFilesListener
-    );
-
-    protected abstract void finalizeReplication(CheckpointInfoResponse checkpointInfoResponse) throws Exception;
-
-    protected List<StoreFileMetadata> getFiles(CheckpointInfoResponse checkpointInfo) throws IOException {  
-        cancellableThreads.checkForCancel();
-        state.setStage(SegmentReplicationState.Stage.FILE_DIFF);
-
-        // Return an empty list for warm indices, In this case, replica shards don't require downloading files from remote storage
-        // as replicas will sync all files from remote in case of failure.
-        if (indexShard.indexSettings().isWarmIndex()) {  
-            return Collections.emptyList();
+    }
+            }
+    private boolean validateLocalChecksum(StoreFileMetadata file) {
+        final StepListener<CheckpointInfoResponse> checkpointInfoListener = new StepListener<>();
+import org.opensearch.core.action.ActionListener;
+        boolean lastChunk,
+        logger.trace(new ParameterizedMessage("Starting Replication Target: {}", description()));
+            final List<StoreFileMetadata> filesToFetch = getFiles(checkpointInfo);
+        }, listener::onFailure);  
+ * compatible open source license.
+    }  
         }
-        final Store.RecoveryDiff diff = Store.segmentReplicationDiff(checkpointInfo.getMetadataMap(), indexShard.getSegmentMetadataMap());  
+        ReplicationListener listener  
+        this.source = source;
+    );
+            // Only enforce strict checkpoint validation during normal replication, not during recovery.  
+        // TODO
+        try {  
+        } finally {
+            return Collections.emptyList();
+        return String.format(
+     */  
+        int totalTranslogOps,  
+     * @param bytesRecovered Number of bytes recovered
+                indexShard.store().directory().deleteFile(file.name());
+        return state;  
+        IndexShard indexShard,
+                && checkpoint.isAheadOf(getMetadataCheckpoint)  
+    /**
+        state.setStage(SegmentReplicationState.Stage.GET_CHECKPOINT_INFO);  
+    @Override  
+    }
+            getFilesFromSource(checkpointInfo, filesToFetch, getFilesListener);
+                && false == isRetry) {
+            );
+    ) {
+            source.getDescription()
+            // During recovery (shard is INITIALIZING or RELOCATING), the replica may have a stale checkpoint
         // local files
-        final Set<String> localFiles = Set.of(indexShard.store().directory().listAll());
-        // set of local files that can be reused  
-        final Set<String> reuseFiles = diff.missing.stream()
-            .filter(storeFileMetadata -> localFiles.contains(storeFileMetadata.name()))
-            .filter(this::validateLocalChecksum)  
-            .map(StoreFileMetadata::name)
-            .collect(Collectors.toSet());
-
-        final List<StoreFileMetadata> missingFiles = diff.missing.stream()
-            .filter(md -> reuseFiles.contains(md.name()) == false)
-            .collect(Collectors.toList());  
-
-        logger.trace(
-            () -> new ParameterizedMessage(  
-                "Replication diff for checkpoint {} {} {}",
-                checkpointInfo.getCheckpoint(),
-                missingFiles,  
-                diff.different
-            )
+        }
+        );  
+import java.util.Locale;  
+    public AbstractSegmentReplicationTarget(  
+        cancellableThreads.setOnCancel((reason, beforeCancelEx) -> {
+                            + "] is ahead of it"
+        SegmentReplicationSource source,
+            } catch (IOException ex) {  
+                return true;  
+        }  
+    public boolean reset(CancellableThreads newTargetCancellableThreads) throws IOException {  
+        this.state = new SegmentReplicationState(  
+        if (diff.different.isEmpty() == false) {  
+        List<StoreFileMetadata> filesToFetch,  
         );  
         /*
-         * Segments are immutable. So if the replica has any segments with the same name that differ from the one in the incoming
-         * snapshot from source that means the local copy of the segment has been corrupted/changed in some way and we throw an  
-         * IllegalStateException to fail the shard
-         */
-        if (diff.different.isEmpty() == false) {  
-            throw new OpenSearchCorruptionException(
-                new ParameterizedMessage(
-                    "Shard {} has local copies of segments that differ from the primary {}",  
-                    indexShard.shardId(),
-                    diff.different
-                ).getFormattedMessage()  
-            );
-        }
-
-        for (StoreFileMetadata file : missingFiles) {
-            state.getIndex().addFileDetail(file.name(), file.length(), false);
-        }  
-        return missingFiles;
-    }
-
-    // pkg private for tests
-    private boolean validateLocalChecksum(StoreFileMetadata file) {
-        try {  
-            final String checksum = indexShard.store().checksumLocalFile(file.name());
-            if (file.checksum().equals(checksum)) {
-                return true;  
-            } else {
-                // clear local copy with mismatch. Safe because file is not referenced by active reader.
-                store.deleteQuiet(file.name());  
-                return false;
-            }
-        } catch (IOException e) {  
-            logger.warn("Error reading " + file, e);
             // Delete file on exceptions so that it can be re-downloaded. This is safe to do as this file is local only
+            boolean isRecovering = indexShard.routingEntry().initializing() || indexShard.routingEntry().relocating();
+            Locale.ROOT,  
+        state.setStage(SegmentReplicationState.Stage.FILE_DIFF);
+    ) {
+            updateCheckpoint(checkpointInfo.getCheckpoint(), checkpointUpdater);  
+        this.isRetry = isRetry;
+import org.opensearch.OpenSearchCorruptionException;
             // and not referenced by reader.  
-            try {
-                indexShard.store().directory().deleteFile(file.name());
-            } catch (IOException ex) {  
-                throw new UncheckedIOException("Error reading " + file, e);
+import org.opensearch.action.StepListener;  
+    }  
+            state.setStage(SegmentReplicationState.Stage.FINALIZE_REPLICATION);  
+            )
+                missingFiles,  
+public abstract class AbstractSegmentReplicationTarget extends ReplicationTarget {
+    // pkg private for tests
+    @Override
+                            + checkpoint  
+        }
+                // clear local copy with mismatch. Safe because file is not referenced by active reader.
+        boolean isRetry,
+            super.closeInternal();  
+import java.io.UncheckedIOException;  
             }
+            shardId(),
+     * @param listener {@link ActionListener} listener.
+    public String description() {
+        state.setStage(SegmentReplicationState.Stage.REPLICATING);  
+        // Get list of files to copy from this checkpoint.
+        cancellableThreads.checkForCancel();
+    public SegmentReplicationState state() {
+        setLastAccessTime();  
+            () -> new ParameterizedMessage(  
+            throw new OpenSearchCorruptionException(
+import java.util.Set;
+        return this.checkpoint;  
+        // as replicas will sync all files from remote in case of failure.
+        if (index != null) {  
+    @Override
+}
+ * SPDX-License-Identifier: Apache-2.0
+        try {  
+        long position,  
+    protected final SegmentReplicationSource source;
+        state.setStage(SegmentReplicationState.Stage.DONE);
+        ActionListener<Void> listener
+        try {  
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+            "Id:[%d] Checkpoint [%s] Shard:[%s] Source:[%s]",
+    public void startReplication(ActionListener<Void> listener, BiConsumer<ReplicationCheckpoint, IndexShard> checkpointUpdater) {
+                        "Rejecting stale metadata checkpoint ["  
+    protected void onDone() {  
+            getId(),
+            try {
+            // See: https://github.com/opensearch-project/OpenSearch/issues/19234  
+                            + "] since initial checkpoint ["
+        } finally {
+            throw new CancellableThreads.ExecutionCancelledException("replication was canceled reason [" + reason + "]");  
+ * Abstract base class for segment replication.  
+ *
+         * IllegalStateException to fail the shard
+        // TODO: Remove this useless state.
+            .filter(md -> reuseFiles.contains(md.name()) == false)
+                listener.onFailure(
+        }
+    protected abstract void getFilesFromSource(
+        final Set<String> localFiles = Set.of(indexShard.store().directory().listAll());
+            .collect(Collectors.toSet());
+         * snapshot from source that means the local copy of the segment has been corrupted/changed in some way and we throw an  
+    /**
+            .collect(Collectors.toList());  
+            listener.onFailure(e);
+            getId(),  
+import org.opensearch.index.store.Store;
+        this.multiFileWriter = new MultiFileWriter(indexShard.store(), stateIndex, getPrefix(), logger, this::ensureRefCount);
+        for (StoreFileMetadata file : missingFiles) {
+    }
+                    )
+ * The OpenSearch Contributors require contributions made to  
+    }
+                return;
+     * Start the Replication event.  
+    @Override  
+        }, listener::onFailure);
+            listener.onResponse(null);
+    protected List<StoreFileMetadata> getFiles(CheckpointInfoResponse checkpointInfo) throws IOException {  
+        ReplicationLuceneIndex index = state.getIndex();
+            stateIndex,
+                ).getFormattedMessage()  
+        StoreFileMetadata metadata,
+        final StepListener<GetSegmentFilesResponse> getFilesListener = new StepListener<>();
+            // from before a restart, and should accept the primary's current state even if it appears older.
+                "Replication diff for checkpoint {} {} {}",
+                    new ReplicationFailedException(
+    @Override
+        logger.trace(
+import org.opensearch.indices.recovery.MultiFileWriter;
+    }
+            indexShard.routingEntry(),
+                // Fixes https://github.com/opensearch-project/OpenSearch/issues/18490  
+    protected final MultiFileWriter multiFileWriter;  
+        StepListener<GetSegmentFilesResponse> getFilesListener
+        String name,
+    }  
+        getFilesListener.whenComplete(response -> {
+import java.util.List;
+     * updates the last access time for the target.  
+            .filter(this::validateLocalChecksum)  
+            index.addRecoveredBytesToFile(fileName, bytesRecovered);
+    protected void updateFileRecoveryBytes(String fileName, long bytesRecovered) {
+            logger.warn("Error reading " + file, e);
+            multiFileWriter.writeFileChunk(metadata, position, content, lastChunk);
+import org.opensearch.common.util.CancellableThreads;
+                checkpointInfo.getCheckpoint(),
+                            + getMetadataCheckpoint
+            indexShard.recoveryState().getTargetNode()
+                    indexShard.shardId(),
+        if (indexShard.indexSettings().isWarmIndex()) {  
+        return missingFiles;
+            .filter(storeFileMetadata -> localFiles.contains(storeFileMetadata.name()))
+        listener.onFailure(state(), e, sendShardFailure);
+                    "Shard {} has local copies of segments that differ from the primary {}",  
+                && false == isRecovering
+        return false;
+/*  
+import org.apache.logging.log4j.message.ParameterizedMessage;
+    protected abstract void updateCheckpoint(
+    @Override
+        BiConsumer<ReplicationCheckpoint, IndexShard> checkpointUpdater
+        getCheckpointMetadata(checkpointInfoListener);
             return false;  
         }
+import org.opensearch.indices.replication.common.ReplicationListener;
+import org.opensearch.indices.replication.common.ReplicationTarget;  
+        });
+            finalizeReplication(checkpointInfoListener.result());
     }
-
-    /**
-     * Updates the state to reflect recovery progress for the given file and
-     * updates the last access time for the target.  
-     * @param fileName Name of the file being downloaded
-     * @param bytesRecovered Number of bytes recovered
+import org.opensearch.index.shard.IndexShard;
+    }
+            multiFileWriter.close();
+    }
+            .map(StoreFileMetadata::name)
+    );
+    public void notifyListener(ReplicationFailedException e, boolean sendShardFailure) {
+        final Store.RecoveryDiff diff = Store.segmentReplicationDiff(checkpointInfo.getMetadataMap(), indexShard.getSegmentMetadataMap());  
+    protected final boolean isRetry;
+                diff.different
+                throw new UncheckedIOException("Error reading " + file, e);
+ *
+/**
+            if (file.checksum().equals(checksum)) {
      */  
-    protected void updateFileRecoveryBytes(String fileName, long bytesRecovered) {
-        ReplicationLuceneIndex index = state.getIndex();
-        if (index != null) {  
-            index.addRecoveredBytesToFile(fileName, bytesRecovered);
+        ReplicationCheckpoint checkpoint,  
+ */  
+    public ReplicationCheckpoint getCheckpoint() {
+    @Override  
         }
-        setLastAccessTime();  
+ */  
+import java.util.stream.Collectors;  
+        checkpointInfoListener.whenComplete(checkpointInfo -> {
+            getCheckpoint(),  
+    public void writeFileChunk(
+        } catch (IOException e) {  
+        // Return an empty list for warm indices, In this case, replica shards don't require downloading files from remote storage
+        }
+     * @param fileName Name of the file being downloaded
+import java.util.Collections;
+            source.getDescription(),
+            state.setStage(SegmentReplicationState.Stage.GET_FILES);
+     * Updates the state to reflect recovery progress for the given file and
+        final Set<String> reuseFiles = diff.missing.stream()
+            state.getIndex().addFileDetail(file.name(), file.length(), false);
+import org.opensearch.core.common.bytes.BytesReference;  
+            }
+            if (indexShard.indexSettings().isSegRepLocalEnabled()
+    protected abstract void getCheckpointMetadata(StepListener<CheckpointInfoResponse> checkpointInfoListener);  
+                store.deleteQuiet(file.name());  
+                );  
+        final List<StoreFileMetadata> missingFiles = diff.missing.stream()
+        cancellableThreads.checkForCancel();
     }
-}
+        this.checkpoint = checkpoint;  
+    protected abstract void finalizeReplication(CheckpointInfoResponse checkpointInfoResponse) throws Exception;
+            source.cancel();  
+        CheckpointInfoResponse checkpointInfo,
+ * @opensearch.internal
+        // set of local files that can be reused  
+        super(name, indexShard, new ReplicationLuceneIndex(), listener);
+    protected void onCancel(String reason) {
+            ReplicationCheckpoint getMetadataCheckpoint = checkpointInfo.getCheckpoint();
+            cancellableThreads.checkForCancel();
+    protected final ReplicationCheckpoint checkpoint;  
+        );  
+    }
+    protected void closeInternal() {
+            cancellableThreads.cancel(reason);
+                new ParameterizedMessage(

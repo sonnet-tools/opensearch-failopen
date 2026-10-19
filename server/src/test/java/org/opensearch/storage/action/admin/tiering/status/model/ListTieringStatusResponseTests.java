@@ -1,141 +1,114 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.action.admin.tiering.status.model;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.storage.action.tiering.status.model.ListTieringStatusResponse;  
-import org.opensearch.storage.action.tiering.status.model.TieringStatus;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-
-public class ListTieringStatusResponseTests extends OpenSearchTestCase {  
-
-    public void testConstructorWithList() {
-        // Arrange  
-        List<TieringStatus> statusList = createDummyTieringStatusList();
-
-        // Act  
-        ListTieringStatusResponse response = new ListTieringStatusResponse(statusList);
-
+        // Assert
+        List<TieringStatus> largeStatusList = new ArrayList<>();  
+    public void testSerializationDeserializationEmptyList() throws IOException {  
+        assertEquals(statusList, retrievedList);
+            status.setSource("hot");  
         // Assert  
-        assertNotNull(response.getTieringStatusList());
-        assertEquals(2, response.getTieringStatusList().size());
-        assertEquals("index1", response.getTieringStatusList().get(0).getIndexName());  
-        assertEquals("index2", response.getTieringStatusList().get(1).getIndexName());
-    }
-
-    public void testSerializationDeserialization() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+            assertEquals(original.getStatus(), deserialized.getStatus());
+        // Assert
+        status2.setIndexName("index2");  
+            status.setStatus("RUNNING");
+        // Assert  
+        status1.setStatus("RUNNING");  
+ * SPDX-License-Identifier: Apache-2.0
+        // Arrange  
+ */  
+            assertEquals(original.getStartTime(), deserialized.getStartTime());  
+        // Arrange  
+        StreamInput input = output.bytes().streamInput();  
+        assertTrue(deserializedResponse.getTieringStatusList().isEmpty());
+import org.opensearch.core.common.io.stream.StreamInput;
+        for (int i = 0; i < 1000; i++) {
+    }  
+        List<TieringStatus> statusList = createDummyTieringStatusList();
         // Arrange
-        List<TieringStatus> statusList = createDummyTieringStatusList();  
+        StreamInput input = output.bytes().streamInput();
+    }
+        for (int i = 0; i < originalResponse.getTieringStatusList().size(); i++) {  
+        StreamInput input = output.bytes().streamInput();
+            assertEquals(original.getSource(), deserialized.getSource());
+        // Act  
+        // Act
+        BytesStreamOutput output = new BytesStreamOutput();  
+        statusList.add(status2);
+    }
+            TieringStatus status = new TieringStatus();
+        assertEquals("index0", deserializedResponse.getTieringStatusList().get(0).getIndexName());  
+ *
+        // Arrange
+        ListTieringStatusResponse deserializedResponse = new ListTieringStatusResponse(input);
+import org.opensearch.test.OpenSearchTestCase;
+public class ListTieringStatusResponseTests extends OpenSearchTestCase {  
         ListTieringStatusResponse originalResponse = new ListTieringStatusResponse(statusList);
-        BytesStreamOutput output = new BytesStreamOutput();
-
+        originalResponse.writeTo(output);  
+        status2.setStartTime(System.currentTimeMillis());
+        assertEquals("index999", deserializedResponse.getTieringStatusList().get(999).getIndexName());
+        assertEquals(statusList.size(), retrievedList.size());  
         // Act
         originalResponse.writeTo(output);
-        StreamInput input = output.bytes().streamInput();  
-        ListTieringStatusResponse deserializedResponse = new ListTieringStatusResponse(input);
-
-        // Assert  
-        assertEquals(originalResponse.getTieringStatusList().size(), deserializedResponse.getTieringStatusList().size());
-
-        for (int i = 0; i < originalResponse.getTieringStatusList().size(); i++) {  
+        List<TieringStatus> retrievedList = response.getTieringStatusList();
+        originalResponse.writeTo(output);  
+        assertEquals(1000, deserializedResponse.getTieringStatusList().size());
+        status2.setTarget("hot");
+import java.util.List;
+    public void testSerializationWithLargeList() throws IOException {
+import org.opensearch.storage.action.tiering.status.model.TieringStatus;
+ * compatible open source license.
+        status1.setIndexName("index1");
+    public void testSerializationDeserialization() throws IOException {
+        // Act
+        assertEquals(2, response.getTieringStatusList().size());
+        List<TieringStatus> statusList = createDummyTieringStatusList();  
+        ListTieringStatusResponse originalResponse = new ListTieringStatusResponse(largeStatusList);
+        ListTieringStatusResponse response = new ListTieringStatusResponse(statusList);
+        status2.setStatus("COMPLETED");
             TieringStatus original = originalResponse.getTieringStatusList().get(i);
-            TieringStatus deserialized = deserializedResponse.getTieringStatusList().get(i);
-
-            assertEquals(original.getIndexName(), deserialized.getIndexName());
-            assertEquals(original.getStatus(), deserialized.getStatus());
-            assertEquals(original.getStartTime(), deserialized.getStartTime());  
-            assertEquals(original.getSource(), deserialized.getSource());
-            assertEquals(original.getTarget(), deserialized.getTarget());
+        List<TieringStatus> statusList = createDummyTieringStatusList();
+        TieringStatus status2 = new TieringStatus();
+        assertEquals(originalResponse.getTieringStatusList().size(), deserializedResponse.getTieringStatusList().size());
         }  
+    public void testConstructorWithList() {
+            largeStatusList.add(status);
+        status1.setSource("hot");
+    public void testGetTieringStatusList() {
+        return statusList;  
+}
+import java.util.Collections;  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import java.util.ArrayList;
+        ListTieringStatusResponse response = new ListTieringStatusResponse(statusList);
+        assertEquals("index2", response.getTieringStatusList().get(1).getIndexName());
     }
-
-    public void testSerializationDeserializationEmptyList() throws IOException {  
-        // Arrange
+ * The OpenSearch Contributors require contributions made to  
+        BytesStreamOutput output = new BytesStreamOutput();
+            assertEquals(original.getIndexName(), deserialized.getIndexName());
+        ListTieringStatusResponse deserializedResponse = new ListTieringStatusResponse(input);
+/*  
+        assertNotNull(response.getTieringStatusList());
+        assertEquals("index1", response.getTieringStatusList().get(0).getIndexName());  
+        status1.setTarget("warm");  
+        TieringStatus status1 = new TieringStatus();
         ListTieringStatusResponse originalResponse = new ListTieringStatusResponse(Collections.emptyList());
         BytesStreamOutput output = new BytesStreamOutput();  
-
-        // Act
-        originalResponse.writeTo(output);  
-        StreamInput input = output.bytes().streamInput();
-        ListTieringStatusResponse deserializedResponse = new ListTieringStatusResponse(input);
-
-        // Assert
-        assertTrue(deserializedResponse.getTieringStatusList().isEmpty());
-    }  
-
-    public void testGetTieringStatusList() {
-        // Arrange  
-        List<TieringStatus> statusList = createDummyTieringStatusList();
-        ListTieringStatusResponse response = new ListTieringStatusResponse(statusList);
-
-        // Act
-        List<TieringStatus> retrievedList = response.getTieringStatusList();
-
-        // Assert
-        assertNotNull(retrievedList);
-        assertEquals(statusList.size(), retrievedList.size());  
-        assertEquals(statusList, retrievedList);
-    }
-
-    public void testSerializationWithLargeList() throws IOException {
-        // Arrange
-        List<TieringStatus> largeStatusList = new ArrayList<>();  
-        for (int i = 0; i < 1000; i++) {
-            TieringStatus status = new TieringStatus();
-            status.setIndexName("index" + i);  
-            status.setStatus("RUNNING");
             status.setStartTime(System.currentTimeMillis());
-            status.setSource("hot");  
-            status.setTarget("warm");
-            largeStatusList.add(status);
-        }  
-
-        ListTieringStatusResponse originalResponse = new ListTieringStatusResponse(largeStatusList);
-        BytesStreamOutput output = new BytesStreamOutput();  
-
-        // Act
-        originalResponse.writeTo(output);  
-        StreamInput input = output.bytes().streamInput();
-        ListTieringStatusResponse deserializedResponse = new ListTieringStatusResponse(input);
-
-        // Assert
-        assertEquals(1000, deserializedResponse.getTieringStatusList().size());
-        assertEquals("index0", deserializedResponse.getTieringStatusList().get(0).getIndexName());  
-        assertEquals("index999", deserializedResponse.getTieringStatusList().get(999).getIndexName());
-    }
-
-    private List<TieringStatus> createDummyTieringStatusList() {
-        List<TieringStatus> statusList = new ArrayList<>();
-
-        TieringStatus status1 = new TieringStatus();
-        status1.setIndexName("index1");
-        status1.setStatus("RUNNING");  
+            TieringStatus deserialized = deserializedResponse.getTieringStatusList().get(i);
+import java.io.IOException;
         status1.setStartTime(System.currentTimeMillis());
-        status1.setSource("hot");
-        status1.setTarget("warm");  
-
-        TieringStatus status2 = new TieringStatus();
-        status2.setIndexName("index2");  
-        status2.setStatus("COMPLETED");
-        status2.setStartTime(System.currentTimeMillis());
-        status2.setSource("warm");  
-        status2.setTarget("hot");
-
         statusList.add(status1);  
-        statusList.add(status2);
-
-        return statusList;  
     }
-}
+            status.setTarget("warm");
+        ListTieringStatusResponse deserializedResponse = new ListTieringStatusResponse(input);
+        assertNotNull(retrievedList);
+    private List<TieringStatus> createDummyTieringStatusList() {
+        // Assert
+            status.setIndexName("index" + i);  
+import org.opensearch.storage.action.tiering.status.model.ListTieringStatusResponse;  
+        status2.setSource("warm");  
+        List<TieringStatus> statusList = new ArrayList<>();
+    }
+        // Act
+package org.opensearch.storage.action.admin.tiering.status.model;
+        }  
+        // Arrange
+            assertEquals(original.getTarget(), deserialized.getTarget());

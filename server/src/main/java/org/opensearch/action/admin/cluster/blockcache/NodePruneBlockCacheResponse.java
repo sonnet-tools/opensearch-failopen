@@ -1,71 +1,59 @@
+    }
 /*  
- * SPDX-License-Identifier: Apache-2.0
+        super.writeTo(out);
+        builder.field("host", getNode().getHostName());
+import java.io.IOException;
+ *  
+        return builder;
+    }
+    @Override
+        if (this == o) return true;
+    @Override  
+    }  
+        super(node);
+public class NodePruneBlockCacheResponse extends BaseNodeResponse implements ToXContentFragment {  
  *
- * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        builder.field("ip", getNode().getHostAddress());  
+    @Override
+        builder.field("transport_address", getNode().getAddress().toString());
+package org.opensearch.action.admin.cluster.blockcache;
+    private final boolean cleared;
+    public int hashCode() {  
+        return cleared == other.cleared && getNode().getId().equals(other.getNode().getId());
+import org.opensearch.cluster.node.DiscoveryNode;
+    public boolean equals(Object o) {
+        return java.util.Objects.hash(getNode().getId(), cleared);
+    }  
+        builder.field("cleared", cleared);
  * this file be licensed under the Apache-2.0 license or a
+/**
+ */
+        builder.field("name", getNode().getName());  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        this.cleared = in.readBoolean();  
+    @Override
+}
+    }
+    public boolean isCleared() {
+ * The OpenSearch Contributors require contributions made to  
+ * Per-node response for a block cache prune operation.
+import org.opensearch.core.xcontent.XContentBuilder;  
+import org.opensearch.core.xcontent.ToXContentFragment;
  * compatible open source license.
  */  
-
-package org.opensearch.action.admin.cluster.blockcache;
-
-import org.opensearch.action.support.nodes.BaseNodeResponse;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-
-/**
- * Per-node response for a block cache prune operation.
- *  
- * @opensearch.internal
- */
-public class NodePruneBlockCacheResponse extends BaseNodeResponse implements ToXContentFragment {  
-
-    private final boolean cleared;
-
-    public NodePruneBlockCacheResponse(StreamInput in) throws IOException {
-        super(in);
-        this.cleared = in.readBoolean();  
-    }
-
-    public NodePruneBlockCacheResponse(DiscoveryNode node, boolean cleared) {  
-        super(node);
-        this.cleared = cleared;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
         out.writeBoolean(cleared);
+    public NodePruneBlockCacheResponse(StreamInput in) throws IOException {
+    public void writeTo(StreamOutput out) throws IOException {  
     }  
-
-    public boolean isCleared() {
-        return cleared;  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
+    public NodePruneBlockCacheResponse(DiscoveryNode node, boolean cleared) {  
         if (!(o instanceof NodePruneBlockCacheResponse)) return false;  
+        this.cleared = cleared;
         NodePruneBlockCacheResponse other = (NodePruneBlockCacheResponse) o;
-        return cleared == other.cleared && getNode().getId().equals(other.getNode().getId());
+ * @opensearch.internal
+import org.opensearch.action.support.nodes.BaseNodeResponse;
+        return cleared;  
+import org.opensearch.core.common.io.stream.StreamInput;  
     }  
-
-    @Override
-    public int hashCode() {  
-        return java.util.Objects.hash(getNode().getId(), cleared);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field("name", getNode().getName());  
-        builder.field("transport_address", getNode().getAddress().toString());
-        builder.field("host", getNode().getHostName());
-        builder.field("ip", getNode().getHostAddress());  
-        builder.field("cleared", cleared);
-        return builder;
-    }  
-}
+        super(in);

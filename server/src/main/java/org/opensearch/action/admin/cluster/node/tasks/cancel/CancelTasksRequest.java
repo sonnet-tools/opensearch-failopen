@@ -1,121 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.node.tasks.cancel;
-
-import org.opensearch.action.support.tasks.BaseTasksRequest;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.tasks.CancellableTask;
-import org.opensearch.tasks.Task;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-
+    public static final String DEFAULT_REASON = "by user request";
+        return super.match(task) && task instanceof CancellableTask;  
 /**
- * A request to cancel tasks  
+    public CancelTasksRequest setReason(String reason) {  
+        return reason;  
+import java.io.IOException;
+    }
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+            + reason  
+import org.opensearch.core.common.io.stream.StreamInput;  
+     * The reason for canceling the task.  
+    public CancelTasksRequest() {}
  *
  * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class CancelTasksRequest extends BaseTasksRequest<CancelTasksRequest> {
-
-    public static final String DEFAULT_REASON = "by user request";
-    public static final boolean DEFAULT_WAIT_FOR_COMPLETION = false;
-
-    private String reason = DEFAULT_REASON;
-    private boolean waitForCompletion = DEFAULT_WAIT_FOR_COMPLETION;
-
-    public CancelTasksRequest() {}
-
     public CancelTasksRequest(StreamInput in) throws IOException {  
-        super(in);
-        this.reason = in.readString();
-        waitForCompletion = in.readBoolean();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(reason);  
-        out.writeBoolean(waitForCompletion);
-    }
-
-    @Override
-    public boolean match(Task task) {
-        return super.match(task) && task instanceof CancellableTask;  
-    }
-
-    /**  
-     * Set the reason for canceling the task.
-     */
-    public CancelTasksRequest setReason(String reason) {  
-        this.reason = reason;
-        return this;
-    }  
-
-    /**
-     * The reason for canceling the task.  
-     */
-    public String getReason() {
-        return reason;  
-    }
-
-    /**  
-     * If {@code true}, the request blocks until the cancellation of the task and its descendant tasks is completed.
-     * Otherwise, the request can return soon after the cancellation is started. Defaults to {@code false}.
-     */  
-    public void setWaitForCompletion(boolean waitForCompletion) {
-        this.waitForCompletion = waitForCompletion;
-    }  
-
-    public boolean waitForCompletion() {
-        return waitForCompletion;  
-    }
-
-    @Override  
-    public String getDescription() {
-        return "reason["
-            + reason  
+ * Unless required by applicable law or agreed to in writing,
             + "], waitForCompletion["
-            + waitForCompletion
+            + Arrays.toString(getActions());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ * KIND, either express or implied.  See the License for the
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+     * If {@code true}, the request blocks until the cancellation of the task and its descendant tasks is completed.
+    }
+ * not use this file except in compliance with the License.
             + "], taskId["  
             + getTaskId()
-            + "], parentTaskId["
-            + getParentTaskId()  
-            + "], nodes"
-            + Arrays.toString(getNodes())
-            + ", actions"  
-            + Arrays.toString(getActions());
-    }
+    public boolean match(Task task) {
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override  
+ */  
 }  
+ */  
+        super(in);
+            + "], nodes"
+    }
+ */  
+        waitForCompletion = in.readBoolean();  
+     */
+        out.writeBoolean(waitForCompletion);
+ * software distributed under the License is distributed on an
+        return waitForCompletion;  
+            + Arrays.toString(getNodes())
+ * specific language governing permissions and limitations
+ * A request to cancel tasks  
+    public String getReason() {
+        return this;
+package org.opensearch.action.admin.cluster.node.tasks.cancel;
+    }  
+     * Otherwise, the request can return soon after the cancellation is started. Defaults to {@code false}.
+    /**  
+     * Set the reason for canceling the task.
+    public boolean waitForCompletion() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+    /**
+/*  
+    public void setWaitForCompletion(boolean waitForCompletion) {
+     */  
+        this.waitForCompletion = waitForCompletion;
+import org.opensearch.action.support.tasks.BaseTasksRequest;
+@PublicApi(since = "1.0.0")
+ * this file be licensed under the Apache-2.0 license or a
+        return "reason["
+ */
+    @Override
+     */
+import org.opensearch.core.common.io.stream.StreamOutput;
+        super.writeTo(out);
+    public static final boolean DEFAULT_WAIT_FOR_COMPLETION = false;
+ * this work for additional information regarding copyright
+    }
+import org.opensearch.common.annotation.PublicApi;
+    public String getDescription() {
+import org.opensearch.tasks.CancellableTask;
+import org.opensearch.tasks.Task;  
+ * Licensed to Elasticsearch under one or more contributor  
+            + "], parentTaskId["
+    @Override  
+import java.util.Arrays;  
+    }
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+            + ", actions"  
+    }
+            + waitForCompletion
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+    public void writeTo(StreamOutput out) throws IOException {
+ *  
+ * The OpenSearch Contributors require contributions made to  
+            + getParentTaskId()  
+    /**  
+    private boolean waitForCompletion = DEFAULT_WAIT_FOR_COMPLETION;
+ * You may obtain a copy of the License at  
+    private String reason = DEFAULT_REASON;
+public class CancelTasksRequest extends BaseTasksRequest<CancelTasksRequest> {
+        this.reason = in.readString();
+ * compatible open source license.
+ * GitHub history for details.
+        out.writeString(reason);  
+        this.reason = reason;

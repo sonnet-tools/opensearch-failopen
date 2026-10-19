@@ -1,265 +1,253 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.rel.RelCollation;
-import org.apache.calcite.rel.RelCollations;
-import org.apache.calcite.rel.RelFieldCollation;  
-import org.apache.calcite.rel.RelHomogeneousShuttle;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.Aggregate;  
-import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.core.Project;
-import org.apache.calcite.rel.core.TableScan;  
-import org.apache.calcite.rel.logical.LogicalProject;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;  
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;  
-import org.apache.calcite.sql.SqlAggFunction;
-import org.apache.calcite.sql.type.SqlTypeName;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;  
-
-/**
- * Rewrites PPL state-expanding aggregates (TAKE / FIRST / LAST / LIST / VALUES / PATTERN /  
- * PERCENTILE_APPROX) onto local stubs the substrait emitter binds via
- * {@link DataFusionFragmentConvertor}'s ADDITIONAL_AGGREGATE_SIGS. Also normalises any
- * RexLiteral{SqlTypeName.SYMBOL} in upstream Projects to VARCHAR — isthmus's  
- * LiteralConverter rejects unregistered Enum classes, and PPL's percentile_approx /
- * median emit a SymbolFlag arg purely for type inference.
- */  
-final class PplAggregateCallRewriter {
-
-    private static final Set<SqlAggFunction> LOCAL_OPS = Set.of(  
-        DataFusionFragmentConvertor.LOCAL_TAKE_OP,
-        DataFusionFragmentConvertor.LOCAL_FIRST_OP,
-        DataFusionFragmentConvertor.LOCAL_LAST_OP,  
-        DataFusionFragmentConvertor.LOCAL_ARRAY_AGG_OP,
-        DataFusionFragmentConvertor.LOCAL_MV_COLLECT_OP,
-        DataFusionFragmentConvertor.LOCAL_MV_COLLECT_DISTINCT_OP,  
-        DataFusionFragmentConvertor.LOCAL_LIST_MERGE_OP,
-        DataFusionFragmentConvertor.LOCAL_LIST_MERGE_DISTINCT_OP,
-        DataFusionFragmentConvertor.LOCAL_PERCENTILE_APPROX_OP,  
-        DataFusionFragmentConvertor.LOCAL_INTERNAL_PATTERN_OP
-    );
-
-    private PplAggregateCallRewriter() {}
-
-    static RelNode rewrite(RelNode root) {  
-        return root.accept(new RelHomogeneousShuttle() {
-            @Override
-            public RelNode visit(RelNode other) {  
-                RelNode visited = super.visit(other);
-                if (visited instanceof Project p) {
-                    return normaliseSymbolFlagLiterals(p);  
-                }
-                if (visited instanceof Aggregate agg) {
-                    return rewriteAggregate(agg);  
-                }
+                newProjects.add(rexBuilder.makeLiteral(name, varcharType));
                 return visited;
-            }  
-        });
+                return AggregateCall.create(
+                    // PPL list/values is ARRAY<VARCHAR>; the operand is cast to VARCHAR on the
+        }
+ */  
+                if (visited instanceof Project p) {
+                    agg.getGroupCount(),
+    private PplAggregateCallRewriter() {}
+import org.apache.calcite.rel.RelHomogeneousShuttle;
+            }
+            }
+                RelDataType nullableArg0 = agg.getCluster().getTypeFactory().createTypeWithNullability(arg0Type, true);  
+                }
+                    call.ignoreNulls(),
     }
-
-    private static RelNode rewriteAggregate(Aggregate agg) {
+                SqlAggFunction op = isMin ? DataFusionFragmentConvertor.LOCAL_FIRST_OP : DataFusionFragmentConvertor.LOCAL_LAST_OP;
+                boolean isValues = "VALUES".equalsIgnoreCase(aggregation.getName());  
+                // PPL declares ARRAY<MAP<VARCHAR, ANY>>; substrait can't carry ANY.
+        if (LOCAL_OPS.contains(aggregation)) {
+        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
+            agg.getGroupCount(),
+                    call.collation,
+                    return rewriteAggregate(agg);  
+            return call;  
+        boolean targetDistinct = call.isDistinct();  
+                    trimmedArgList,
+package org.opensearch.be.datafusion;
+                int valueArg = call.getArgList().get(0);
+    }  
+                    RelDataTypeFactory typeFactory = agg.getCluster().getTypeFactory();
+                    call.getName()
+        }
+    private static RelDataType internalPatternReturnType(RelDataTypeFactory typeFactory) {
+                // ORDER BY key (DataFusion 53 has no arg_min/max UDAF; first/last_value take ordering).
+        return node.getInputs().size() == 1 && readsStageInput(node.getInput(0));
+            } else {
+    }
+                if (call.getArgList().size() != 2) {  
+                explicitReturnType = internalPatternReturnType(agg.getCluster().getTypeFactory());
+                }
+                }
+        RelDataTypeFactory typeFactory = project.getCluster().getTypeFactory();  
+            case "FIRST" -> targetOp = DataFusionFragmentConvertor.LOCAL_FIRST_OP;
+                    // op's inferred type (a NOT NULL array trips Calcite's typeMatchesInferred).  
+        return AggregateCall.create(  
+    }
+/**
+import org.apache.calcite.rel.RelNode;
+            project.getRowType().getFieldNames(),
+                newProjects.add(p);  
+                    } else {  
+        DataFusionFragmentConvertor.LOCAL_LAST_OP,  
+            if (p instanceof RexLiteral lit && lit.getType().getSqlTypeName() == SqlTypeName.SYMBOL) {
+            newCalls.add(rewritten);
+ * Rewrites PPL state-expanding aggregates (TAKE / FIRST / LAST / LIST / VALUES / PATTERN /  
+        }
+                RelDataType nullableArg0 = agg.getCluster().getTypeFactory().createTypeWithNullability(arg0Type, true);
+        }
+        return root.accept(new RelHomogeneousShuttle() {
+        List<RexNode> newProjects = new ArrayList<>(oldProjects.size());  
+            return project;
+        DataFusionFragmentConvertor.LOCAL_PERCENTILE_APPROX_OP,  
+        boolean hasSymbol = oldProjects.stream()
+            case "TAKE" -> targetOp = DataFusionFragmentConvertor.LOCAL_TAKE_OP;  
+                    RelDataType arrayType = typeFactory.createArrayType(varchar, -1);  
+import org.apache.calcite.rel.RelCollation;
+            call.getName()
+                if (arg0IsList) {  
+        DataFusionFragmentConvertor.LOCAL_INTERNAL_PATTERN_OP
+            call.isApproximate(),  
+                }
+ * {@link DataFusionFragmentConvertor}'s ADDITIONAL_AGGREGATE_SIGS. Also normalises any
+                RelCollation collation = RelCollations.of(
+        switch (aggregation.getName().toUpperCase(java.util.Locale.ROOT)) {
+                targetOp = DataFusionFragmentConvertor.LOCAL_INTERNAL_PATTERN_OP;  
+        }  
+ * this file be licensed under the Apache-2.0 license or a
+                } else {
+                }
+                    collation,  
+            agg.getInput(),
+    private static RelNode normaliseSymbolFlagLiterals(Project project) {
+import java.util.List;
+                return AggregateCall.create(  
+        for (AggregateCall call : oldCalls) {
+        DataFusionFragmentConvertor.LOCAL_LIST_MERGE_OP,
+                // (DataFusionFragmentConvertor#normaliseLiteralArg) rescales the percentile.
+            targetOp,
+                    return normaliseSymbolFlagLiterals(p);  
+        for (RexNode p : oldProjects) {
+ * compatible open source license.
+                    call.filterArg,
+    static RelNode rewrite(RelNode root) {  
+            call.collation,  
+                return call;  
+            case "ARG_MIN", "ARG_MAX" -> {  
+ */  
+        RexBuilder rexBuilder = project.getCluster().getRexBuilder();
+                );  
+                targetOp = DataFusionFragmentConvertor.LOCAL_PERCENTILE_APPROX_OP;  
+                if (visited instanceof Aggregate agg) {
+import org.apache.calcite.rel.RelFieldCollation;  
+                            : DataFusionFragmentConvertor.LOCAL_MV_COLLECT_OP;  
+                        targetOp = isValues  
+        return agg.copy(agg.getTraitSet(), agg.getInput(), agg.getGroupSet(), agg.getGroupSets(), newCalls);
+            case "PATTERN" -> {
+ * The OpenSearch Contributors require contributions made to  
+        });
+                    call.filterArg,
+            }  
+                    call.getName()
+                    List.of(valueArg),  
+        return typeFactory.createArrayType(structType, -1);
+                RelNode visited = super.visit(other);
+    }
+    }
+ *
+            AggregateCall rewritten = rewriteCall(agg, call);  
+        }  
+        RelDataType tokensMap = typeFactory.createMapType(varchar, varcharArray);
+            .anyMatch(p -> p instanceof RexLiteral lit && lit.getType().getSqlTypeName() == SqlTypeName.SYMBOL);
+        DataFusionFragmentConvertor.LOCAL_FIRST_OP,
+        if (node instanceof TableScan scan) {  
         List<AggregateCall> oldCalls = agg.getAggCallList();
+import org.apache.calcite.rel.RelCollations;
+        RelDataType varchar = typeFactory.createSqlType(SqlTypeName.VARCHAR);
+            }
+import org.apache.calcite.rel.core.Project;
+            List.of(varchar, bigint, tokensMap, varcharArray),
+                int timeArg = call.getArgList().get(1);  
+                List<Integer> trimmedArgList = new ArrayList<>(call.getArgList().subList(0, 2));
+import java.util.Set;  
+/*  
+            public RelNode visit(RelNode other) {  
+                    if (finalState) {
+        return LogicalProject.create(  
+                if (call.getArgList().size() < 3) {  
+                    targetDistinct = isValues;  
+                    RelDataType varchar = typeFactory.createSqlType(SqlTypeName.VARCHAR);
+                    call.distinctKeys,  
+import java.util.ArrayList;
+                    targetDistinct = false;
+ * median emit a SymbolFlag arg purely for type inference.
+            List.of("pattern", "pattern_count", "tokens", "sample_logs")
+            return agg;
+        RelDataType varcharArray = typeFactory.createArrayType(varchar, -1);
+            case "PERCENTILE_APPROX" -> {  
+                    new RelFieldCollation(timeArg, RelFieldCollation.Direction.ASCENDING, RelFieldCollation.NullDirection.LAST)
+        DataFusionFragmentConvertor.LOCAL_TAKE_OP,
+            explicitReturnType,  
+            }  
+                            ? DataFusionFragmentConvertor.LOCAL_LIST_MERGE_DISTINCT_OP
+            project.getInput(),
+                    agg.getInput(),  
+                boolean isMin = "ARG_MIN".equalsIgnoreCase(aggregation.getName());  
+                    agg.getGroupCount(),
+import org.apache.calcite.rex.RexNode;  
+    /** Replace any RexLiteral{SymbolFlag} in {@code project}'s projection list with a VARCHAR literal of the symbol's name. */
+    private static AggregateCall rewriteCall(Aggregate agg, AggregateCall call) {  
+            call.distinctKeys,
+                // Trim the PPL type-flag arg; the substrait emit-time literal-arg normaliser
+        SqlAggFunction targetOp;
+                    nullableArg0,  
+import org.apache.calcite.rel.type.RelDataType;
+                    call.isApproximate(),  
+    private static final Set<SqlAggFunction> LOCAL_OPS = Set.of(  
+        RelDataType bigint = typeFactory.createSqlType(SqlTypeName.BIGINT);  
+import org.apache.calcite.rex.RexBuilder;
+                    // substrait arg (LOCAL_ARRAY_AGG_OP#rewriteDataArg). Nullable array matches the
+}  
+                );  
+                // arg0 type distinguishes PARTIAL (raw element → array_agg) from FINAL (array → list_merge).
+                    targetOp = DataFusionFragmentConvertor.LOCAL_ARRAY_AGG_OP;
+                    return call;
+            call.getArgList(),  
+    );
+            List<String> qualifiedName = scan.getTable().getQualifiedName();
+ * LiteralConverter rejects unregistered Enum classes, and PPL's percentile_approx /
+        List<RexNode> oldProjects = project.getProjects();  
+import org.apache.calcite.sql.SqlAggFunction;
+                    return call;
+                RelDataType arg0Type = agg.getInput().getRowType().getFieldList().get(call.getArgList().get(0)).getType();
+                    call.distinctKeys,
+        if (!changed) {
+        );
+            call.rexList,
+                    call.rexList,
+        if (!hasSymbol) {  
+            targetDistinct,
+                    call.isApproximate(),
+        DataFusionFragmentConvertor.LOCAL_MV_COLLECT_OP,
+                    explicitReturnType = typeFactory.createTypeWithNullability(arrayType, true);
+                    }
+                boolean arg0IsList = arg0Type.getComponentType() != null;
+            project.getHints(),
+        RelDataType explicitReturnType = call.getType();
+import org.apache.calcite.rel.logical.LogicalProject;
+                    nullableArg0,
+                    explicitReturnType = arg0Type;  
+            call.filterArg,
+        }  
+                    call.ignoreNulls(),
+        );  
+                    return call;
+                }
+                RelDataType arg0Type = agg.getInput().getRowType().getFieldList().get(valueArg).getType();
+                String name = lit.getValue() == null ? "" : lit.getValue().toString();  
+import org.apache.calcite.rex.RexLiteral;
+        SqlAggFunction aggregation = call.getAggregation();
+ * PERCENTILE_APPROX) onto local stubs the substrait emitter binds via
+            changed |= rewritten != call;
+ * RexLiteral{SqlTypeName.SYMBOL} in upstream Projects to VARCHAR — isthmus's  
+                // ARG_MIN/ARG_MAX(value, ts) -> first_value/last_value(value) with ts as the agg
+    private static boolean readsStageInput(RelNode node) {
+            case "LIST", "VALUES" -> {
+            @Override
+                    boolean finalState = readsStageInput(agg.getInput());
+final class PplAggregateCallRewriter {
+                    op,
+                    agg.getInput(),
+import org.apache.calcite.rel.core.TableScan;  
+                    call.rexList,  
+                    targetDistinct,
+            newProjects,  
+                    targetDistinct,  
         List<AggregateCall> newCalls = new ArrayList<>(oldCalls.size());  
         boolean changed = false;
-        for (AggregateCall call : oldCalls) {
-            AggregateCall rewritten = rewriteCall(agg, call);  
-            newCalls.add(rewritten);
-            changed |= rewritten != call;
-        }  
-        if (!changed) {
-            return agg;
-        }  
-        return agg.copy(agg.getTraitSet(), agg.getInput(), agg.getGroupSet(), agg.getGroupSets(), newCalls);
-    }
-
-    /** Replace any RexLiteral{SymbolFlag} in {@code project}'s projection list with a VARCHAR literal of the symbol's name. */
-    private static RelNode normaliseSymbolFlagLiterals(Project project) {
-        List<RexNode> oldProjects = project.getProjects();  
-        boolean hasSymbol = oldProjects.stream()
-            .anyMatch(p -> p instanceof RexLiteral lit && lit.getType().getSqlTypeName() == SqlTypeName.SYMBOL);
-        if (!hasSymbol) {  
-            return project;
-        }
-        RelDataTypeFactory typeFactory = project.getCluster().getTypeFactory();  
-        RexBuilder rexBuilder = project.getCluster().getRexBuilder();
-        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
-        List<RexNode> newProjects = new ArrayList<>(oldProjects.size());  
-        for (RexNode p : oldProjects) {
-            if (p instanceof RexLiteral lit && lit.getType().getSqlTypeName() == SqlTypeName.SYMBOL) {
-                String name = lit.getValue() == null ? "" : lit.getValue().toString();  
-                newProjects.add(rexBuilder.makeLiteral(name, varcharType));
-            } else {
-                newProjects.add(p);  
-            }
-        }
-        return LogicalProject.create(  
-            project.getInput(),
-            project.getHints(),
-            newProjects,  
-            project.getRowType().getFieldNames(),
-            project.getVariablesSet()
-        );  
-    }
-
-    private static AggregateCall rewriteCall(Aggregate agg, AggregateCall call) {  
-        SqlAggFunction aggregation = call.getAggregation();
-        if (LOCAL_OPS.contains(aggregation)) {
-            return call;  
-        }
-        SqlAggFunction targetOp;
-        boolean targetDistinct = call.isDistinct();  
-        RelDataType explicitReturnType = call.getType();
-        switch (aggregation.getName().toUpperCase(java.util.Locale.ROOT)) {
-            case "TAKE" -> targetOp = DataFusionFragmentConvertor.LOCAL_TAKE_OP;  
-            case "FIRST" -> targetOp = DataFusionFragmentConvertor.LOCAL_FIRST_OP;
-            case "LAST" -> targetOp = DataFusionFragmentConvertor.LOCAL_LAST_OP;
-            case "ARG_MIN", "ARG_MAX" -> {  
-                // ARG_MIN/ARG_MAX(value, ts) -> first_value/last_value(value) with ts as the agg
-                // ORDER BY key (DataFusion 53 has no arg_min/max UDAF; first/last_value take ordering).
-                if (call.getArgList().size() != 2) {  
-                    return call;
-                }
-                boolean isMin = "ARG_MIN".equalsIgnoreCase(aggregation.getName());  
-                SqlAggFunction op = isMin ? DataFusionFragmentConvertor.LOCAL_FIRST_OP : DataFusionFragmentConvertor.LOCAL_LAST_OP;
-                int valueArg = call.getArgList().get(0);
-                int timeArg = call.getArgList().get(1);  
-                RelCollation collation = RelCollations.of(
-                    new RelFieldCollation(timeArg, RelFieldCollation.Direction.ASCENDING, RelFieldCollation.NullDirection.LAST)
-                );  
-                RelDataType arg0Type = agg.getInput().getRowType().getFieldList().get(valueArg).getType();
-                RelDataType nullableArg0 = agg.getCluster().getTypeFactory().createTypeWithNullability(arg0Type, true);
-                return AggregateCall.create(  
-                    op,
-                    targetDistinct,
-                    call.isApproximate(),  
-                    call.ignoreNulls(),
-                    call.rexList,
-                    List.of(valueArg),  
-                    call.filterArg,
-                    call.distinctKeys,
-                    collation,  
-                    agg.getGroupCount(),
-                    agg.getInput(),
-                    nullableArg0,  
-                    call.getName()
-                );
-            }  
-            case "LIST", "VALUES" -> {
-                // arg0 type distinguishes PARTIAL (raw element → array_agg) from FINAL (array → list_merge).
-                if (call.getArgList().isEmpty()) {  
-                    return call;
-                }
-                boolean isValues = "VALUES".equalsIgnoreCase(aggregation.getName());  
-                RelDataType arg0Type = agg.getInput().getRowType().getFieldList().get(call.getArgList().get(0)).getType();
-                boolean arg0IsList = arg0Type.getComponentType() != null;
-                if (arg0IsList) {  
-                    boolean finalState = readsStageInput(agg.getInput());
-                    if (finalState) {
-                        targetOp = isValues  
-                            ? DataFusionFragmentConvertor.LOCAL_LIST_MERGE_DISTINCT_OP
-                            : DataFusionFragmentConvertor.LOCAL_LIST_MERGE_OP;
-                    } else {  
-                        targetOp = isValues
-                            ? DataFusionFragmentConvertor.LOCAL_MV_COLLECT_DISTINCT_OP
-                            : DataFusionFragmentConvertor.LOCAL_MV_COLLECT_OP;  
-                    }
-                    targetDistinct = false;
-                    explicitReturnType = arg0Type;  
-                } else {
-                    targetOp = DataFusionFragmentConvertor.LOCAL_ARRAY_AGG_OP;
-                    targetDistinct = isValues;  
-                    // PPL list/values is ARRAY<VARCHAR>; the operand is cast to VARCHAR on the
-                    // substrait arg (LOCAL_ARRAY_AGG_OP#rewriteDataArg). Nullable array matches the
-                    // op's inferred type (a NOT NULL array trips Calcite's typeMatchesInferred).  
-                    RelDataTypeFactory typeFactory = agg.getCluster().getTypeFactory();
-                    RelDataType varchar = typeFactory.createSqlType(SqlTypeName.VARCHAR);
-                    RelDataType arrayType = typeFactory.createArrayType(varchar, -1);  
-                    explicitReturnType = typeFactory.createTypeWithNullability(arrayType, true);
-                }
-            }  
-            case "PATTERN" -> {
-                // PPL declares ARRAY<MAP<VARCHAR, ANY>>; substrait can't carry ANY.
-                targetOp = DataFusionFragmentConvertor.LOCAL_INTERNAL_PATTERN_OP;  
-                explicitReturnType = internalPatternReturnType(agg.getCluster().getTypeFactory());
-            }
-            case "PERCENTILE_APPROX" -> {  
-                // Trim the PPL type-flag arg; the substrait emit-time literal-arg normaliser
-                // (DataFusionFragmentConvertor#normaliseLiteralArg) rescales the percentile.
-                if (call.getArgList().size() < 3) {  
-                    return call;
-                }
-                targetOp = DataFusionFragmentConvertor.LOCAL_PERCENTILE_APPROX_OP;  
-                List<Integer> trimmedArgList = new ArrayList<>(call.getArgList().subList(0, 2));
-                RelDataType arg0Type = agg.getInput().getRowType().getFieldList().get(call.getArgList().get(0)).getType();
-                RelDataType nullableArg0 = agg.getCluster().getTypeFactory().createTypeWithNullability(arg0Type, true);  
-                return AggregateCall.create(
-                    targetOp,
-                    targetDistinct,  
-                    call.isApproximate(),
-                    call.ignoreNulls(),
-                    call.rexList,  
-                    trimmedArgList,
-                    call.filterArg,
-                    call.distinctKeys,  
-                    call.collation,
-                    agg.getGroupCount(),
-                    agg.getInput(),  
-                    nullableArg0,
-                    call.getName()
-                );  
-            }
-            default -> {
-                return call;  
-            }
-        }
-        return AggregateCall.create(  
-            targetOp,
-            targetDistinct,
-            call.isApproximate(),  
-            call.ignoreNulls(),
-            call.rexList,
-            call.getArgList(),  
-            call.filterArg,
-            call.distinctKeys,
-            call.collation,  
-            agg.getGroupCount(),
-            agg.getInput(),
-            explicitReturnType,  
-            call.getName()
-        );
-    }  
-
-    private static boolean readsStageInput(RelNode node) {
-        if (node instanceof TableScan scan) {  
-            List<String> qualifiedName = scan.getTable().getQualifiedName();
-            return !qualifiedName.isEmpty() && qualifiedName.getLast().startsWith("input-");
-        }  
-        return node.getInputs().size() == 1 && readsStageInput(node.getInput(0));
-    }
-
-    private static RelDataType internalPatternReturnType(RelDataTypeFactory typeFactory) {
-        RelDataType varchar = typeFactory.createSqlType(SqlTypeName.VARCHAR);
-        RelDataType bigint = typeFactory.createSqlType(SqlTypeName.BIGINT);  
-        RelDataType varcharArray = typeFactory.createArrayType(varchar, -1);
-        RelDataType tokensMap = typeFactory.createMapType(varchar, varcharArray);
         RelDataType structType = typeFactory.createStructType(  
-            List.of(varchar, bigint, tokensMap, varcharArray),
-            List.of("pattern", "pattern_count", "tokens", "sample_logs")
         );  
-        return typeFactory.createArrayType(structType, -1);
-    }
-}  
+                );
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.calcite.rel.core.AggregateCall;
+        DataFusionFragmentConvertor.LOCAL_MV_COLLECT_DISTINCT_OP,  
+        DataFusionFragmentConvertor.LOCAL_LIST_MERGE_DISTINCT_OP,
+            }  
+import org.apache.calcite.rel.type.RelDataTypeFactory;  
+import org.apache.calcite.rel.core.Aggregate;  
+                            : DataFusionFragmentConvertor.LOCAL_LIST_MERGE_OP;
+            case "LAST" -> targetOp = DataFusionFragmentConvertor.LOCAL_LAST_OP;
+            }
+            call.ignoreNulls(),
+                RelDataType arg0Type = agg.getInput().getRowType().getFieldList().get(call.getArgList().get(0)).getType();
+                        targetOp = isValues
+            project.getVariablesSet()
+    private static RelNode rewriteAggregate(Aggregate agg) {
+import org.apache.calcite.sql.type.SqlTypeName;
+                    targetOp,
+        DataFusionFragmentConvertor.LOCAL_ARRAY_AGG_OP,
+                if (call.getArgList().isEmpty()) {  
+                            ? DataFusionFragmentConvertor.LOCAL_MV_COLLECT_DISTINCT_OP
+            return !qualifiedName.isEmpty() && qualifiedName.getLast().startsWith("input-");
+            default -> {

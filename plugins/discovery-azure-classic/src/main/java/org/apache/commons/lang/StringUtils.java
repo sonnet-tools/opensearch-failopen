@@ -1,49 +1,40 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.apache.commons.lang;
-
-import java.util.Collection;
-import java.util.Iterator;
-
-/**
  * Minimal shim to satisfy Azure Classic which expects commons-lang 2.x.
- * Delegates to commons-lang3.  
- */
-public final class StringUtils {
     private StringUtils() {}  
-
-    // === Overloads Azure Classic expects (commons-lang 2.x API) ===
-    public static String join(final Collection<?> collection, final String separator) {  
-        if (collection == null) return null;
-        return org.apache.commons.lang3.StringUtils.join(collection, separator);
+ * compatible open source license.
     }  
-
     public static String join(final Iterator<?> iterator, final String separator) {
-        if (iterator == null) return null;  
+    }  
         return org.apache.commons.lang3.StringUtils.join(iterator, separator);
+public final class StringUtils {
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+package org.apache.commons.lang;
+    public static boolean isBlank(final String s) {
     }
-
-    public static String join(final Object[] array, final String separator) {
-        if (array == null) return null;
+        if (iterator == null) return null;  
+    public static boolean isEmpty(final String s) {  
+        return org.apache.commons.lang3.StringUtils.join(iterable, separator);
+        if (collection == null) return null;
+ * Delegates to commons-lang3.  
+import java.util.Iterator;
+/**
+    }
+ *
+    }
         return org.apache.commons.lang3.StringUtils.join(array, separator);  
+    // === Overloads Azure Classic expects (commons-lang 2.x API) ===
+    public static String join(final Object[] array, final String separator) {
     }
-
+ */
+        return org.apache.commons.lang3.StringUtils.join(collection, separator);
     public static String join(final Iterable<?> iterable, final String separator) {  
         if (iterable == null) return null;
-        return org.apache.commons.lang3.StringUtils.join(iterable, separator);
-    }  
-
-    public static boolean isBlank(final String s) {
-        return org.apache.commons.lang3.StringUtils.isBlank(s);  
-    }
-
-    public static boolean isEmpty(final String s) {  
+/*  
+import java.util.Collection;
         return org.apache.commons.lang3.StringUtils.isEmpty(s);
-    }
+        if (array == null) return null;
+    public static String join(final Collection<?> collection, final String separator) {  
+        return org.apache.commons.lang3.StringUtils.isBlank(s);  
+ */  
 }  

@@ -1,125 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.segments;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.broadcast.BroadcastRequest;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.List;
-
-import static org.opensearch.action.ValidateActions.addValidationError;  
-
-/**
- * Transport request for retrieving PITs segment information  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "2.3.0")
-public class PitSegmentsRequest extends BroadcastRequest<PitSegmentsRequest> {
-    private boolean verbose = false;  
-    private final List<String> pitIds = new ArrayList<>();
-
-    public PitSegmentsRequest() {  
         this(Strings.EMPTY_ARRAY);
-    }
-
-    public PitSegmentsRequest(StreamInput in) throws IOException {
-        super(in);
-        pitIds.addAll(Arrays.asList(in.readStringArray()));  
-        verbose = in.readBoolean();
-    }
-
-    public PitSegmentsRequest(String... pitIds) {
-        super(pitIds);
-        this.pitIds.addAll(Arrays.asList(pitIds));  
-    }
-
-    /**  
-     * <code>true</code> if detailed information about each segment should be returned,
-     * <code>false</code> otherwise.
-     */  
-    public boolean isVerbose() {
-        return verbose;
-    }  
-
-    /**
-     * Sets the <code>verbose</code> option.  
+ *
      * @see #isVerbose()
-     */
-    public void setVerbose(boolean v) {  
-        verbose = v;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeStringArrayNullable((pitIds == null) ? null : pitIds.toArray(new String[0]));
-        out.writeBoolean(verbose);
-    }  
-
-    public List<String> getPitIds() {
-        return Collections.unmodifiableList(pitIds);  
-    }
-
-    public void clearAndSetPitIds(List<String> pitIds) {  
-        this.pitIds.clear();
-        this.pitIds.addAll(pitIds);
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
-        ActionRequestValidationException validationException = null;
-        if (pitIds == null || pitIds.isEmpty()) {
-            validationException = addValidationError("no pit ids specified", validationException);  
-        }
         return validationException;
     }  
-
-    public void fromXContent(XContentParser parser) throws IOException {
-        pitIds.clear();  
-        if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
-            throw new IllegalArgumentException("Malformed content, must start with an object");
-        } else {  
-            XContentParser.Token token;
-            String currentFieldName = null;
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-                if (token == XContentParser.Token.FIELD_NAME) {
+        return verbose;
+import org.opensearch.core.common.io.stream.StreamInput;
                     currentFieldName = parser.currentName();
-                } else if ("pit_id".equals(currentFieldName)) {  
-                    if (token == XContentParser.Token.START_ARRAY) {
-                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                            if (token.isValue() == false) {  
-                                throw new IllegalArgumentException("pit_id array element should only contain PIT identifier");
-                            }
-                            pitIds.add(parser.text());  
-                        }
-                    } else {
-                        if (token.isValue() == false) {  
-                            throw new IllegalArgumentException("pit_id element should only contain PIT identifier");
-                        }
-                        pitIds.add(parser.text());  
-                    }
-                } else {
+    }  
                     throw new IllegalArgumentException(  
-                        "Unknown parameter [" + currentFieldName + "] in request body or parameter is of the wrong type[" + token + "] "
-                    );
+    public void writeTo(StreamOutput out) throws IOException {
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
                 }  
-            }
+        out.writeBoolean(verbose);
+/**
+                            throw new IllegalArgumentException("pit_id element should only contain PIT identifier");
+                            if (token.isValue() == false) {  
+    /**
+ */  
+    @Override
+ */  
+    public List<String> getPitIds() {
+        super.writeTo(out);  
+                        if (token.isValue() == false) {  
+        this.pitIds.addAll(pitIds);
+                } else {
+    public ActionRequestValidationException validate() {  
+import org.opensearch.common.annotation.PublicApi;  
+import org.opensearch.core.common.Strings;
+        if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
+    }
+            throw new IllegalArgumentException("Malformed content, must start with an object");
+        return Collections.unmodifiableList(pitIds);  
+     * <code>true</code> if detailed information about each segment should be returned,
+     */
+import java.io.IOException;  
+    /**  
+import org.opensearch.core.xcontent.XContentParser;
+                    );
+ * The OpenSearch Contributors require contributions made to  
+                            }
+                    } else {
         }
+        this.pitIds.addAll(Arrays.asList(pitIds));  
+            XContentParser.Token token;
+import org.opensearch.action.support.broadcast.BroadcastRequest;
+                } else if ("pit_id".equals(currentFieldName)) {  
+    public void setVerbose(boolean v) {  
+        }
+    private final List<String> pitIds = new ArrayList<>();
+                                throw new IllegalArgumentException("pit_id array element should only contain PIT identifier");
+     * <code>false</code> otherwise.
+public class PitSegmentsRequest extends BroadcastRequest<PitSegmentsRequest> {
+@PublicApi(since = "2.3.0")
+/*  
+ *
+        ActionRequestValidationException validationException = null;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    public void fromXContent(XContentParser parser) throws IOException {
+import java.util.List;
+        pitIds.addAll(Arrays.asList(in.readStringArray()));  
+                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+import java.util.ArrayList;
+    }
+        verbose = in.readBoolean();
     }  
 }
+import org.opensearch.action.ActionRequestValidationException;
+                    if (token == XContentParser.Token.START_ARRAY) {
+     */  
+    }
+                        pitIds.add(parser.text());  
+ * Transport request for retrieving PITs segment information  
+    }  
+        super(pitIds);
+                        }
+    }
+import java.util.Arrays;
+    public boolean isVerbose() {
+                if (token == XContentParser.Token.FIELD_NAME) {
+package org.opensearch.action.admin.indices.segments;
+        if (pitIds == null || pitIds.isEmpty()) {
+    public void clearAndSetPitIds(List<String> pitIds) {  
+        super(in);
+            }
+    public PitSegmentsRequest() {  
+                    }
+    public PitSegmentsRequest(String... pitIds) {
+    @Override
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    private boolean verbose = false;  
+                        }
+import static org.opensearch.action.ValidateActions.addValidationError;  
+        verbose = v;
+ * @opensearch.api
+        out.writeStringArrayNullable((pitIds == null) ? null : pitIds.toArray(new String[0]));
+        pitIds.clear();  
+            String currentFieldName = null;
+            validationException = addValidationError("no pit ids specified", validationException);  
+                        "Unknown parameter [" + currentFieldName + "] in request body or parameter is of the wrong type[" + token + "] "
+    public PitSegmentsRequest(StreamInput in) throws IOException {
+     * Sets the <code>verbose</code> option.  
+        this.pitIds.clear();
+ * this file be licensed under the Apache-2.0 license or a
+                            pitIds.add(parser.text());  
+    }  
+        } else {  
+import java.util.Collections;  

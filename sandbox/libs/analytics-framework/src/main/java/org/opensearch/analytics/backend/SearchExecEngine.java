@@ -1,37 +1,31 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.backend;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.io.Closeable;  
-import java.io.IOException;
-
-/**  
- * Shard-level search execution engine interface.
+     */
+     * @param context               ExecutionContext  
  * @opensearch.experimental
- */  
-@ExperimentalApi
-public interface SearchExecEngine<T, V> extends Closeable {
+ * SPDX-License-Identifier: Apache-2.0
+     * Executes the context and returns a result stream.
+    V execute(T context) throws IOException;
+/*  
+import java.io.IOException;
+     */
+    /**
+    default void close() throws IOException {}
+ * compatible open source license.
+    void prepare(T context);
+ *
+     * @param context the execution context  
+import java.io.Closeable;  
+    @Override
     /**  
+import org.opensearch.common.annotation.ExperimentalApi;
+/**  
+}  
+ * The OpenSearch Contributors require contributions made to  
+public interface SearchExecEngine<T, V> extends Closeable {
+ */  
+ */  
      * Creates an execution context from a resolved plan.
      *
-     * @param context               ExecutionContext  
-     */
-    void prepare(T context);
-
-    /**
-     * Executes the context and returns a result stream.
-     * @param context the execution context  
-     */
-    V execute(T context) throws IOException;
-
-    @Override
-    default void close() throws IOException {}
-}  
+package org.opensearch.analytics.backend;
+@ExperimentalApi
+ * Shard-level search execution engine interface.
+ * this file be licensed under the Apache-2.0 license or a

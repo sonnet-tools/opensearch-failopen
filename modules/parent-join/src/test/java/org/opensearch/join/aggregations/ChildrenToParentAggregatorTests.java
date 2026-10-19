@@ -1,359 +1,311 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.join.aggregations;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.SortedDocValuesField;
-import org.apache.lucene.document.SortedNumericDocValuesField;  
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;  
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.TermInSetQuery;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;  
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.mapper.ContentPath;  
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.Mapper;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.MappingLookup;  
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.index.mapper.Uid;
-import org.opensearch.join.ParentJoinModulePlugin;  
-import org.opensearch.join.mapper.MetaJoinFieldMapper;
-import org.opensearch.join.mapper.ParentJoinFieldMapper;
-import org.opensearch.plugins.SearchPlugin;  
-import org.opensearch.search.aggregations.Aggregation;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorTestCase;  
-import org.opensearch.search.aggregations.bucket.terms.LongTerms;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.metrics.InternalMin;  
-import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.function.Consumer;  
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class ChildrenToParentAggregatorTests extends AggregatorTestCase {
-
-    private static final String CHILD_TYPE = "child_type";
-    private static final String PARENT_TYPE = "parent_type";
-
-    public void testNoDocs() throws IOException {
-        Directory directory = newDirectory();
-
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-        // intentionally not writing any docs
-        indexWriter.close();  
-        IndexReader indexReader = DirectoryReader.open(directory);
-
-        testCase(new MatchAllDocsQuery(), newSearcher(indexReader, false, true), childrenToParent -> {  
-            assertEquals(0, childrenToParent.getDocCount());
-            Aggregation parentAggregation = childrenToParent.getAggregations().get("in_parent");
-            assertEquals(0, childrenToParent.getDocCount());  
-            assertNotNull("Aggregations: " + childrenToParent.getAggregations().asMap(), parentAggregation);
-            assertEquals(Double.POSITIVE_INFINITY, ((InternalMin) parentAggregation).getValue(), Double.MIN_VALUE);
-            assertFalse(JoinAggregationInspectionHelper.hasValue(childrenToParent));  
-        });
-        indexReader.close();
-        directory.close();  
-    }
-
-    public void testParentChild() throws IOException {  
-        Directory directory = newDirectory();
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-
-        final Map<String, Tuple<Integer, Integer>> expectedParentChildRelations = setupIndex(indexWriter);
-        indexWriter.close();
-
-        IndexReader indexReader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(directory), new ShardId(new Index("foo", "_na_"), 1));
-        // TODO set "maybeWrap" to true for IndexSearcher once #23338 is resolved
-        IndexSearcher indexSearcher = newSearcher(indexReader, false, true);  
-
-        // verify with all documents
-        testCase(new MatchAllDocsQuery(), indexSearcher, parent -> {  
-            int expectedTotalParents = 0;
-            int expectedMinValue = Integer.MAX_VALUE;
-            for (Tuple<Integer, Integer> expectedValues : expectedParentChildRelations.values()) {  
-                expectedTotalParents++;
-                expectedMinValue = Math.min(expectedMinValue, expectedValues.v2());
-            }  
-            assertEquals(
-                "Having " + parent.getDocCount() + " docs and aggregation results: " + parent,
-                expectedTotalParents,  
-                parent.getDocCount()
-            );
-            assertEquals(expectedMinValue, ((InternalMin) parent.getAggregations().get("in_parent")).getValue(), Double.MIN_VALUE);  
-            assertTrue(JoinAggregationInspectionHelper.hasValue(parent));
-        });
-
-        // verify for each children
-        for (String parent : expectedParentChildRelations.keySet()) {
-            testCase(  
-                new TermInSetQuery(IdFieldMapper.NAME, Collections.singleton(Uid.encodeId("child0_" + parent))),
-                indexSearcher,
-                aggregation -> {  
-                    assertEquals(
-                        "Expected one result for min-aggregation for parent: " + parent + ", but had aggregation-results: " + aggregation,
-                        1,  
-                        aggregation.getDocCount()
-                    );
-                    assertEquals(  
-                        expectedParentChildRelations.get(parent).v2(),
-                        ((InternalMin) aggregation.getAggregations().get("in_parent")).getValue(),
-                        Double.MIN_VALUE  
-                    );
-                }
-            );  
-        }
-
-        indexReader.close();  
-        directory.close();
-    }
-
-    public void testParentChildTerms() throws IOException {
-        Directory directory = newDirectory();
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);  
-
-        final Map<String, Tuple<Integer, Integer>> expectedParentChildRelations = setupIndex(indexWriter);
-        indexWriter.close();  
-
-        SortedMap<Integer, Long> entries = new TreeMap<>();
-        for (Tuple<Integer, Integer> value : expectedParentChildRelations.values()) {  
-            Long l = entries.computeIfAbsent(value.v2(), integer -> 0L);
-            entries.put(value.v2(), l + 1);
-        }  
         List<Map.Entry<Integer, Long>> sortedValues = new ArrayList<>(entries.entrySet());
-        sortedValues.sort((o1, o2) -> {
-            // sort larger values first  
-            int ret = o2.getValue().compareTo(o1.getValue());
-            if (ret != 0) {
-                return ret;  
-            }
-
-            // on equal value, sort by key  
-            return o1.getKey().compareTo(o2.getKey());
-        });
-
-        IndexReader indexReader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(directory), new ShardId(new Index("foo", "_na_"), 1));
-        // TODO set "maybeWrap" to true for IndexSearcher once #23338 is resolved
-        IndexSearcher indexSearcher = newSearcher(indexReader, false, true);  
-
-        // verify a terms-aggregation inside the parent-aggregation
-        testCaseTerms(new MatchAllDocsQuery(), indexSearcher, parent -> {  
-            assertNotNull(parent);
-            assertTrue(JoinAggregationInspectionHelper.hasValue(parent));
-            LongTerms valueTerms = parent.getAggregations().get("value_terms");  
-            assertNotNull(valueTerms);
-
-            List<LongTerms.Bucket> valueTermsBuckets = valueTerms.getBuckets();  
-            assertNotNull(valueTermsBuckets);
-            assertEquals("Had: " + parent, sortedValues.size(), valueTermsBuckets.size());
-            int i = 0;  
-            for (Map.Entry<Integer, Long> entry : sortedValues) {
-                LongTerms.Bucket bucket = valueTermsBuckets.get(i);
-                assertEquals(entry.getKey().longValue(), bucket.getKeyAsNumber());  
-                assertEquals(entry.getValue(), (Long) bucket.getDocCount());
-
-                i++;  
-            }
-        });
-
-        indexReader.close();
-        directory.close();
-    }  
-
-    public void testTermsParentChildTerms() throws IOException {
-        Directory directory = newDirectory();  
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-
-        final Map<String, Tuple<Integer, Integer>> expectedParentChildRelations = setupIndex(indexWriter);  
-        indexWriter.close();
-
-        SortedMap<Integer, Long> sortedValues = new TreeMap<>();  
-        for (Tuple<Integer, Integer> value : expectedParentChildRelations.values()) {
-            Long l = sortedValues.computeIfAbsent(value.v2(), integer -> 0L);
-            sortedValues.put(value.v2(), l + 1);  
-        }
-
-        IndexReader indexReader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(directory), new ShardId(new Index("foo", "_na_"), 1));  
-        // TODO set "maybeWrap" to true for IndexSearcher once #23338 is resolved
-        IndexSearcher indexSearcher = newSearcher(indexReader, false, true);
-
-        // verify a terms-aggregation inside the parent-aggregation which itself is inside a
-        // terms-aggregation on the child-documents
-        testCaseTermsParentTerms(new MatchAllDocsQuery(), indexSearcher, longTerms -> {  
-            assertNotNull(longTerms);
-
-            for (LongTerms.Bucket bucket : longTerms.getBuckets()) {  
-                assertNotNull(bucket);
-                assertNotNull(bucket.getKeyAsString());
+            testCase(  
+ * ownership. Elasticsearch licenses this file to you under  
+            for (Tuple<Integer, Integer> expectedValues : expectedParentChildRelations.values()) {  
+ * not use this file except in compliance with the License.
+    public void testNoDocs() throws IOException {
+        aggregationBuilder.subAggregation(new TermsAggregationBuilder("value_terms").field("number"));
             }  
-        });
-
+    private static final String PARENT_TYPE = "parent_type";
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.mapper.IdFieldMapper;
+ *
+        }  
+            int numChildren = randomIntBetween(1, 10);  
         indexReader.close();  
-        directory.close();
-    }
-
-    private static Map<String, Tuple<Integer, Integer>> setupIndex(RandomIndexWriter iw) throws IOException {
-        Map<String, Tuple<Integer, Integer>> expectedValues = new HashMap<>();
         int numParents = randomIntBetween(1, 10);  
         for (int i = 0; i < numParents; i++) {
-            List<List<Field>> documents = new ArrayList<>();
-            String parent = "parent" + i;  
-            int randomValue = randomIntBetween(0, 100);
-            documents.add(createParentDocument(parent, randomValue));
-            int numChildren = randomIntBetween(1, 10);  
-            int minValue = Integer.MAX_VALUE;
-            for (int c = 0; c < numChildren; c++) {
-                minValue = Math.min(minValue, randomValue);  
-                int randomSubValue = randomIntBetween(0, 100);
-                documents.add(createChildDocument("child" + c + "_" + parent, parent, randomSubValue));
-            }  
-            expectedValues.put(parent, new Tuple<>(numChildren, minValue));
-            iw.addDocuments(documents);
-        }  
-        return expectedValues;
-    }
-
-    private static List<Field> createParentDocument(String id, int value) {
-        return Arrays.asList(
-            new StringField(IdFieldMapper.NAME, Uid.encodeId(id), Field.Store.NO),  
-            new StringField("join_field", PARENT_TYPE, Field.Store.NO),
-            createJoinField(PARENT_TYPE, id),
-            new SortedNumericDocValuesField("number", value)  
-        );
-    }
-
-    private static List<Field> createChildDocument(String childId, String parentId, int value) {
-        return Arrays.asList(
-            new StringField(IdFieldMapper.NAME, Uid.encodeId(childId), Field.Store.NO),  
-            new StringField("join_field", CHILD_TYPE, Field.Store.NO),
-            createJoinField(PARENT_TYPE, parentId),
-            new SortedNumericDocValuesField("subNumber", value)  
-        );
-    }
-
-    private static SortedDocValuesField createJoinField(String parentType, String id) {
-        return new SortedDocValuesField("join_field#" + parentType, new BytesRef(id));
-    }  
-
-    @Override
-    protected MapperService mapperServiceMock() {  
-        ParentJoinFieldMapper joinFieldMapper = createJoinFieldMapper();
-        MapperService mapperService = mock(MapperService.class);
-        MetaJoinFieldMapper.MetaJoinFieldType metaJoinFieldType = mock(MetaJoinFieldMapper.MetaJoinFieldType.class);  
-        when(metaJoinFieldType.getJoinField()).thenReturn("join_field");
-        when(mapperService.fieldType("_parent_join")).thenReturn(metaJoinFieldType);
-        MappingLookup fieldMappers = new MappingLookup(  
-            Collections.singleton(joinFieldMapper),
-            Collections.emptyList(),
-            Collections.emptyList(),  
-            0,
-            null
-        );  
-        DocumentMapper mockMapper = mock(DocumentMapper.class);
-        when(mockMapper.mappers()).thenReturn(fieldMappers);
-        when(mapperService.documentMapper()).thenReturn(mockMapper);  
-        return mapperService;
-    }
-
-    private static ParentJoinFieldMapper createJoinFieldMapper() {
-        Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();
-        return new ParentJoinFieldMapper.Builder("join_field").addParent(PARENT_TYPE, Collections.singleton(CHILD_TYPE))  
-            .build(new Mapper.BuilderContext(settings, new ContentPath(0)));
-    }
-
-    private void testCase(Query query, IndexSearcher indexSearcher, Consumer<InternalParent> verify) throws IOException {
-
-        ParentAggregationBuilder aggregationBuilder = new ParentAggregationBuilder("_name", CHILD_TYPE);  
-        aggregationBuilder.subAggregation(new MinAggregationBuilder("in_parent").field("number"));
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.LONG);  
-        InternalParent result = searchAndReduce(indexSearcher, query, aggregationBuilder, fieldType);
-        verify.accept(result);
-    }  
-
-    private void testCaseTerms(Query query, IndexSearcher indexSearcher, Consumer<InternalParent> verify) throws IOException {
-
+        // verify with all documents
+import org.apache.lucene.document.SortedNumericDocValuesField;  
+ */  
         ParentAggregationBuilder aggregationBuilder = new ParentAggregationBuilder("_name", CHILD_TYPE);
-        aggregationBuilder.subAggregation(new TermsAggregationBuilder("value_terms").field("number"));
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.LONG);
-        InternalParent result = searchAndReduce(indexSearcher, query, aggregationBuilder, fieldType);
-        verify.accept(result);  
-    }
-
+        IndexReader indexReader = DirectoryReader.open(directory);
+            new SortedNumericDocValuesField("number", value)  
+    public void testTermsParentChildTerms() throws IOException {
+ * this work for additional information regarding copyright
+        indexWriter.close();
     // run a terms aggregation on the number in child-documents, then a parent aggregation and then terms on the parent-number  
+import org.apache.lucene.store.Directory;
+import java.util.List;
+            int i = 0;  
+ * Unless required by applicable law or agreed to in writing,
+/*  
+    private void testCase(Query query, IndexSearcher indexSearcher, Consumer<InternalParent> verify) throws IOException {
     private void testCaseTermsParentTerms(Query query, IndexSearcher indexSearcher, Consumer<LongTerms> verify) throws IOException {
+import static org.mockito.Mockito.mock;
+        indexWriter.close();  
+ * You may obtain a copy of the License at  
+                expectedTotalParents,  
+        IndexSearcher indexSearcher = newSearcher(indexReader, false, true);  
+    private static final String CHILD_TYPE = "child_type";
+            iw.addDocuments(documents);
+            assertTrue(JoinAggregationInspectionHelper.hasValue(parent));
+                }
+            return o1.getKey().compareTo(o2.getKey());
+                    );
+    private static List<Field> createChildDocument(String childId, String parentId, int value) {
+            assertNotNull(valueTerms);
+            assertEquals(0, childrenToParent.getDocCount());  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.join.ParentJoinModulePlugin;  
+import org.opensearch.index.mapper.Mapper;
+        testCase(new MatchAllDocsQuery(), newSearcher(indexReader, false, true), childrenToParent -> {  
+        final Map<String, Tuple<Integer, Integer>> expectedParentChildRelations = setupIndex(indexWriter);
+            if (ret != 0) {
+import org.opensearch.index.mapper.Uid;
+import org.opensearch.index.mapper.NumberFieldMapper;
+        verify.accept(result);  
+        return Collections.singletonList(new ParentJoinModulePlugin());
+        when(mapperService.fieldType("_parent_join")).thenReturn(metaJoinFieldType);
+    }
+            sortedValues.put(value.v2(), l + 1);  
         AggregationBuilder aggregationBuilder = new TermsAggregationBuilder("subvalue_terms").field("subNumber")
-            .subAggregation(  
+    }
+            List<List<Field>> documents = new ArrayList<>();
+        Map<String, Tuple<Integer, Integer>> expectedValues = new HashMap<>();
+            for (Map.Entry<Integer, Long> entry : sortedValues) {
                 new ParentAggregationBuilder("to_parent", CHILD_TYPE).subAggregation(
-                    new TermsAggregationBuilder("value_terms").field("number")
-                )  
+import org.opensearch.join.mapper.MetaJoinFieldMapper;
+    @Override
+            new SortedNumericDocValuesField("subNumber", value)  
+            null
+                        1,  
+    }
+    private static SortedDocValuesField createJoinField(String parentType, String id) {
+        InternalParent result = searchAndReduce(indexSearcher, query, aggregationBuilder, fieldType);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
             );
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.LONG);  
+        // TODO set "maybeWrap" to true for IndexSearcher once #23338 is resolved
+                )  
+        // verify a terms-aggregation inside the parent-aggregation
+    protected List<SearchPlugin> getSearchPlugins() {
+        // TODO set "maybeWrap" to true for IndexSearcher once #23338 is resolved
+                assertNotNull(bucket.getKeyAsString());
+    }
+import java.util.Collections;  
+import org.opensearch.index.mapper.MappedFieldType;  
+            Aggregation parentAggregation = childrenToParent.getAggregations().get("in_parent");
+import java.util.ArrayList;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+public class ChildrenToParentAggregatorTests extends AggregatorTestCase {
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.HashMap;
+    }  
+        indexWriter.close();
+        // intentionally not writing any docs
+import java.util.SortedMap;
+            assertTrue(JoinAggregationInspectionHelper.hasValue(parent));
+import java.io.IOException;  
+ * this file be licensed under the Apache-2.0 license or a
+        return expectedValues;
+import org.opensearch.search.aggregations.AggregatorTestCase;  
+            for (int c = 0; c < numChildren; c++) {
+        directory.close();
+            assertEquals(
+}
+            entries.put(value.v2(), l + 1);
+        }  
         MappedFieldType subFieldType = new NumberFieldMapper.NumberFieldType("subNumber", NumberFieldMapper.NumberType.LONG);
+            0,
+        }
+ * compatible open source license.
+        directory.close();  
+package org.opensearch.join.aggregations;
+        Directory directory = newDirectory();
+        });
+ * license agreements. See the NOTICE file distributed with
+            assertEquals("Had: " + parent, sortedValues.size(), valueTermsBuckets.size());
+        InternalParent result = searchAndReduce(indexSearcher, query, aggregationBuilder, fieldType);
+        SortedMap<Integer, Long> sortedValues = new TreeMap<>();  
+import org.opensearch.index.mapper.DocumentMapper;
+        // verify a terms-aggregation inside the parent-aggregation which itself is inside a
+    @Override  
+                        Double.MIN_VALUE  
+import org.opensearch.index.mapper.MapperService;
+        return Arrays.asList(
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+        testCaseTerms(new MatchAllDocsQuery(), indexSearcher, parent -> {  
+                assertEquals(entry.getKey().longValue(), bucket.getKeyAsNumber());  
+                        aggregation.getDocCount()
+            assertFalse(JoinAggregationInspectionHelper.hasValue(childrenToParent));  
+        when(mockMapper.mappers()).thenReturn(fieldMappers);
+    private static Map<String, Tuple<Integer, Integer>> setupIndex(RandomIndexWriter iw) throws IOException {
+            int ret = o2.getValue().compareTo(o1.getValue());
+import org.opensearch.search.aggregations.AggregationBuilder;
+        }
+            Long l = entries.computeIfAbsent(value.v2(), integer -> 0L);
+ */
+    private static List<Field> createParentDocument(String id, int value) {
+            );  
+        MappingLookup fieldMappers = new MappingLookup(  
+import org.apache.lucene.document.SortedDocValuesField;
+        SortedMap<Integer, Long> entries = new TreeMap<>();
+import org.apache.lucene.search.MatchAllDocsQuery;
+                indexSearcher,
+        MapperService mapperService = mock(MapperService.class);
+    }  
+                    assertEquals(  
+        return mapperService;
+        indexWriter.close();  
+    }
+    }
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();
+ * SPDX-License-Identifier: Apache-2.0
+        IndexReader indexReader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(directory), new ShardId(new Index("foo", "_na_"), 1));
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.LONG);  
+        });
+        indexReader.close();  
+            }
+                expectedMinValue = Math.min(expectedMinValue, expectedValues.v2());
+import org.apache.lucene.document.StringField;
+    public void testParentChildTerms() throws IOException {
+            new StringField(IdFieldMapper.NAME, Uid.encodeId(childId), Field.Store.NO),  
+    }
+        indexReader.close();
+    }  
+import org.opensearch.join.mapper.ParentJoinFieldMapper;
+        final Map<String, Tuple<Integer, Integer>> expectedParentChildRelations = setupIndex(indexWriter);
+                    assertEquals(
+                parent.getDocCount()
+            LongTerms valueTerms = parent.getAggregations().get("value_terms");  
+                LongTerms.Bucket bucket = valueTermsBuckets.get(i);
+import org.apache.lucene.document.Field;
+    protected MapperService mapperServiceMock() {  
+        for (String parent : expectedParentChildRelations.keySet()) {
+        Directory directory = newDirectory();  
+                assertNotNull(bucket);
+        final Map<String, Tuple<Integer, Integer>> expectedParentChildRelations = setupIndex(indexWriter);  
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.LONG);  
+                assertEquals(entry.getValue(), (Long) bucket.getDocCount());
+    }
+            for (LongTerms.Bucket bucket : longTerms.getBuckets()) {  
+            .subAggregation(  
+        return new ParentJoinFieldMapper.Builder("join_field").addParent(PARENT_TYPE, Collections.singleton(CHILD_TYPE))  
+            assertEquals(0, childrenToParent.getDocCount());
+        for (Tuple<Integer, Integer> value : expectedParentChildRelations.values()) {
+import org.apache.lucene.tests.index.RandomIndexWriter;  
+        // TODO set "maybeWrap" to true for IndexSearcher once #23338 is resolved
+        // verify for each children
+        verify.accept(result);
+            documents.add(createParentDocument(parent, randomValue));
+            Collections.singleton(joinFieldMapper),
+    public void testParentChild() throws IOException {  
+        );
+ * software distributed under the License is distributed on an
+            // on equal value, sort by key  
+ * the Apache License, Version 2.0 (the "License"); you may
+        );  
+            .build(new Mapper.BuilderContext(settings, new ContentPath(0)));
+        IndexReader indexReader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(directory), new ShardId(new Index("foo", "_na_"), 1));
+            Collections.emptyList(),  
+        indexReader.close();
+                    );
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+            expectedValues.put(parent, new Tuple<>(numChildren, minValue));
+import org.opensearch.plugins.SearchPlugin;  
+                i++;  
+import org.opensearch.Version;
+import org.opensearch.search.aggregations.bucket.terms.LongTerms;
+            assertEquals(Double.POSITIVE_INFINITY, ((InternalMin) parentAggregation).getValue(), Double.MIN_VALUE);
+        return new SortedDocValuesField("join_field#" + parentType, new BytesRef(id));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private void testCaseTerms(Query query, IndexSearcher indexSearcher, Consumer<InternalParent> verify) throws IOException {
+            createJoinField(PARENT_TYPE, id),
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.LONG);
+import org.opensearch.search.aggregations.Aggregation;
+            assertNotNull("Aggregations: " + childrenToParent.getAggregations().asMap(), parentAggregation);
+/*  
+        MetaJoinFieldMapper.MetaJoinFieldType metaJoinFieldType = mock(MetaJoinFieldMapper.MetaJoinFieldType.class);  
+                    new TermsAggregationBuilder("value_terms").field("number")
+        for (Tuple<Integer, Integer> value : expectedParentChildRelations.values()) {  
+ *
+ *  
+    }
+            int expectedMinValue = Integer.MAX_VALUE;
+        when(metaJoinFieldType.getJoinField()).thenReturn("join_field");
+        return Arrays.asList(
+        IndexReader indexReader = OpenSearchDirectoryReader.wrap(DirectoryReader.open(directory), new ShardId(new Index("foo", "_na_"), 1));  
+        testCase(new MatchAllDocsQuery(), indexSearcher, parent -> {  
+    }
+            );
+        Directory directory = newDirectory();
+            int minValue = Integer.MAX_VALUE;
+ * specific language governing permissions and limitations
+                return ret;  
+                expectedTotalParents++;
+            new StringField(IdFieldMapper.NAME, Uid.encodeId(id), Field.Store.NO),  
+import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;
+            int randomValue = randomIntBetween(0, 100);
+        aggregationBuilder.subAggregation(new MinAggregationBuilder("in_parent").field("number"));
+        directory.close();
+    private static ParentJoinFieldMapper createJoinFieldMapper() {
+import java.util.Arrays;
+        Directory directory = newDirectory();
+                int randomSubValue = randomIntBetween(0, 100);
+                aggregation -> {  
+import org.opensearch.common.collect.Tuple;
+            int expectedTotalParents = 0;
+                minValue = Math.min(minValue, randomValue);  
+            new StringField("join_field", CHILD_TYPE, Field.Store.NO),
+            assertNotNull(longTerms);
+        ParentJoinFieldMapper joinFieldMapper = createJoinFieldMapper();
+                new TermInSetQuery(IdFieldMapper.NAME, Collections.singleton(Uid.encodeId("child0_" + parent))),
+        testCaseTermsParentTerms(new MatchAllDocsQuery(), indexSearcher, longTerms -> {  
+            assertNotNull(parent);
+            createJoinField(PARENT_TYPE, parentId),
+import org.opensearch.index.mapper.ContentPath;  
+        IndexSearcher indexSearcher = newSearcher(indexReader, false, true);
+            assertEquals(expectedMinValue, ((InternalMin) parent.getAggregations().get("in_parent")).getValue(), Double.MIN_VALUE);  
+            new StringField("join_field", PARENT_TYPE, Field.Store.NO),
+        );
+ * The OpenSearch Contributors require contributions made to  
+        // terms-aggregation on the child-documents
+import org.apache.lucene.search.IndexSearcher;
+import org.opensearch.cluster.metadata.IndexMetadata;  
+                documents.add(createChildDocument("child" + c + "_" + parent, parent, randomSubValue));
+            List<LongTerms.Bucket> valueTermsBuckets = valueTerms.getBuckets();  
+ */  
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+                        "Expected one result for min-aggregation for parent: " + parent + ", but had aggregation-results: " + aggregation,
+import org.apache.lucene.search.TermInSetQuery;
+            assertNotNull(valueTermsBuckets);
+import org.opensearch.search.aggregations.metrics.InternalMin;  
+        sortedValues.sort((o1, o2) -> {
+        IndexSearcher indexSearcher = newSearcher(indexReader, false, true);  
+import org.apache.lucene.search.Query;  
+        directory.close();
+import org.opensearch.core.index.Index;
+            Long l = sortedValues.computeIfAbsent(value.v2(), integer -> 0L);
+import org.opensearch.index.mapper.MappingLookup;  
         LongTerms result = searchAndReduce(indexSearcher, query, aggregationBuilder, fieldType, subFieldType);
         verify.accept(result);  
-    }
-
-    @Override  
-    protected List<SearchPlugin> getSearchPlugins() {
-        return Collections.singletonList(new ParentJoinModulePlugin());
+import org.opensearch.common.settings.Settings;  
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+        when(mapperService.documentMapper()).thenReturn(mockMapper);  
+/*
+        DocumentMapper mockMapper = mock(DocumentMapper.class);
+import java.util.function.Consumer;  
+            }
+import org.apache.lucene.index.IndexReader;  
+        });
     }  
-}
+import java.util.Map;  
+ * GitHub history for details.
+            String parent = "parent" + i;  
+            }  
+import org.apache.lucene.index.DirectoryReader;
+                        ((InternalMin) aggregation.getAggregations().get("in_parent")).getValue(),
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);  
+        });
+                "Having " + parent.getDocCount() + " docs and aggregation results: " + parent,
+import org.apache.lucene.util.BytesRef;
+            // sort larger values first  
+        ParentAggregationBuilder aggregationBuilder = new ParentAggregationBuilder("_name", CHILD_TYPE);  
+            Collections.emptyList(),
+import java.util.TreeMap;
+                        expectedParentChildRelations.get(parent).v2(),
+import static org.mockito.Mockito.when;  
+            }  
+        });

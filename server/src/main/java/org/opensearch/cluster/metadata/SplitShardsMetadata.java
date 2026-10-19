@@ -1,676 +1,593 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.cluster.Diff;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;  
-import java.util.TreeSet;
-
-/**  
- * Metadata for tracking shard split operations on an index.
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public class SplitShardsMetadata extends AbstractDiffable<SplitShardsMetadata> implements ToXContentFragment {  
-    private static final int MINIMUM_RANGE_LENGTH_THRESHOLD = 1000;
-
-    private static final String KEY_ROOT_SHARDS_TO_ALL_CHILDREN = "root_shards_to_all_children";  
-    private static final String KEY_NUMBER_OF_ROOT_SHARDS = "num_of_root_shards";
-    private static final String KEY_PARENT_TO_CHILD_SHARDS = "parent_to_child_shards";
-    private static final String KEY_MAX_SHARD_ID = "max_shard_id";  
-    private static final String KEY_IN_PROGRESS_SPLIT_SHARD_IDS = "in_progress_split_shard_id";
-    private static final String KEY_ACTIVE_SHARD_IDS = "active_shard_ids";
-
-    // Following fields are upadated only after split completion and are used to service active shards request.
-    // Root shard id to flat list of all child shards under root.
-    private final ShardRange[][] rootShardsToAllChildren;  
-    private final int maxShardId;
-    private final Set<Integer> activeShardIds;
-
-    // Following fields can store temporary information about in progress child shards along with info about
-    // split completed shards.
     // Mapping of a parent shard ID to children.  
-    private final Map<Integer, ShardRange[]> parentToChildShards;
-    private final Set<Integer> inProgressSplitShardIds;
-
-    SplitShardsMetadata(
-        ShardRange[][] rootShardsToAllChildren,
-        Map<Integer, ShardRange[]> parentToChildShards,  
-        Set<Integer> inProgressSplitShardIds,
-        Set<Integer> activeShardIds,
-        int maxShardId  
-    ) {
-
-        this.rootShardsToAllChildren = rootShardsToAllChildren;  
-        this.parentToChildShards = Collections.unmodifiableMap(parentToChildShards);
-        this.maxShardId = maxShardId;
-        this.inProgressSplitShardIds = Collections.unmodifiableSet(inProgressSplitShardIds);  
-        this.activeShardIds = activeShardIds;
-    }
-
-    public SplitShardsMetadata(StreamInput in) throws IOException {
-        int numberOfRootShards = in.readVInt();
-        this.rootShardsToAllChildren = new ShardRange[numberOfRootShards][];  
-        for (int i = 0; i < numberOfRootShards; i++) {
-            this.rootShardsToAllChildren[i] = in.readOptionalArray(ShardRange::new, ShardRange[]::new);
+                this.inProgressSplitShardIds,  
+            parentToChildShards.remove(sourceShardId);
+            ShardRange[] childShards = rootShardsToAllChildren[rootShardId];
         }  
-        this.maxShardId = in.readVInt();
-        this.inProgressSplitShardIds = Collections.unmodifiableSet(in.readSet(StreamInput::readInt));
-        this.activeShardIds = Collections.unmodifiableSet(in.readSet(StreamInput::readInt));  
-        this.parentToChildShards = Collections.unmodifiableMap(
-            in.readMap(StreamInput::readInt, i -> i.readArray(ShardRange::new, ShardRange[]::new))
-        );  
+        }
+        int result = Arrays.deepHashCode(rootShardsToAllChildren);  
+ * @opensearch.experimental  
     }
-
-    public void writeTo(StreamOutput out) throws IOException {  
         out.writeVInt(rootShardsToAllChildren.length);
-        for (ShardRange[] rootShardsToAllChild : rootShardsToAllChildren) {
-            out.writeOptionalArray(rootShardsToAllChild);  
-        }
-        out.writeVInt(this.maxShardId);
-        out.writeCollection(this.inProgressSplitShardIds, StreamOutput::writeInt);  
-        out.writeCollection(this.activeShardIds, StreamOutput::writeInt);
-        out.writeMap(this.parentToChildShards, StreamOutput::writeInt, StreamOutput::writeArray);
-    }  
-
-    public int getShardIdOfHash(int rootShardId, int hash, boolean includeInProgressChildren) {
-        // First check if we have child shards against this root shard.  
-        if (rootShardsToAllChildren[rootShardId] == null) {
-            if (includeInProgressChildren && parentToChildShards.containsKey(rootShardId)) {
-                ShardRange shardRange = binarySearchShards(parentToChildShards.get(rootShardId), hash);  
-                assert shardRange != null;
-                return shardRange.shardId();
-            }  
-            return rootShardId;
-        }
-
-        ShardRange[] existingChildShards = rootShardsToAllChildren[rootShardId];
-        ShardRange shardRange = binarySearchShards(existingChildShards, hash);
-        assert shardRange != null;  
-
-        if (includeInProgressChildren && parentToChildShards.containsKey(shardRange.shardId())) {
-            shardRange = binarySearchShards(parentToChildShards.get(shardRange.shardId()), hash);  
-        }
-        assert shardRange != null;
-
-        return shardRange.shardId();
-    }
-
-    private ShardRange binarySearchShards(ShardRange[] childShards, int hash) {
-        int low = 0, high = childShards.length - 1;
-        while (low <= high) {  
-            int mid = low + (high - low) / 2;
-            ShardRange midShard = childShards[mid];
-            if (midShard.contains(hash)) {  
-                return midShard;
-            } else if (hash < midShard.start()) {
-                high = mid - 1;  
-            } else {
-                low = mid + 1;
-            }  
-        }
-        return null;
-    }  
-
-    @Override
-    public String toString() {  
-        StringBuilder parentToChildMap = new StringBuilder();
-        for (Map.Entry<Integer, ShardRange[]> entry : parentToChildShards.entrySet()) {
-            parentToChildMap.append("[");  
-            parentToChildMap.append(entry.getKey()).append("=").append(Arrays.toString(entry.getValue()));
-            parentToChildMap.append("]");
-        }  
-        return "SplitShardsMetadata{"
-            + "rootShardsToAllChildren="
-            + Arrays.toString(rootShardsToAllChildren)  
-            + ", maxShardId="
-            + maxShardId
-            + ", activeShardIds="  
-            + activeShardIds
-            + ", parentToChildShards="
+        int maxShardId  
+        for (ShardRange childShard : parentToChildShards.get(shardId)) {
+            );  
             + parentToChildMap  
-            + ", inProgressSplitShardIds="
-            + inProgressSplitShardIds
-            + '}';  
-    }
-
-    public int getNumberOfRootShards() {  
-        return rootShardsToAllChildren.length;
-    }
-
-    public int getNumberOfShards() {
-        return activeShardIds.size();
-    }  
-
-    public List<Integer> getRootShards() {
-        List<Integer> rootShardList = new ArrayList<>();  
-        for (int i = 0; i < rootShardsToAllChildren.length; i++) {
-            rootShardList.add(i);
-        }  
-        return rootShardList;
-    }
-
-    public ShardRange[] getChildShardsOfParent(int shardId) {
-        if (parentToChildShards.containsKey(shardId) == false) {
-            return null;  
-        }
-
-        ShardRange[] childShards = new ShardRange[parentToChildShards.get(shardId).length];  
-        int childShardIdx = 0;
-        for (ShardRange childShard : parentToChildShards.get(shardId)) {
-            childShards[childShardIdx++] = childShard;  
-        }
-        return childShards;
-    }  
-
-    public Set<Integer> getChildShardIdsOfParent(int shardId) {
-        Set<Integer> childShardIds = new HashSet<>();  
-        if (parentToChildShards.containsKey(shardId) == false) {
-            return childShardIds;
-        }  
-
-        for (ShardRange childShard : parentToChildShards.get(shardId)) {
-            childShardIds.add(childShard.shardId());  
-        }
-        return childShardIds;
-    }  
-
-    public int inProgressChildShardsCount() {
-        int total = 0;  
-        for (Integer parent : inProgressSplitShardIds) {
-            total += parentToChildShards.get(parent).length;
-        }  
-        return total;
-    }
-
-    public Iterator<Integer> getActiveShardIterator() {
-        return new HashSet<>(activeShardIds).iterator();
-    }  
-
-    // Visible for testing
-    static void validateShardRanges(int shardId, ShardRange[] shardRanges) {  
-        Integer start = null;
-        int lowerBound = Integer.MIN_VALUE;
-        int upperBound = Integer.MAX_VALUE;  
-        for (ShardRange shardRange : shardRanges) {
-            validateBounds(shardRange, start, lowerBound);
-            long rangeEnd = shardRange.end();  
-            long rangeLength = rangeEnd - shardRange.start() + 1;
-            if (rangeLength < MINIMUM_RANGE_LENGTH_THRESHOLD) {
-                throw new IllegalArgumentException(  
-                    "Shard range from "
-                        + shardRange.start()
-                        + " to "  
-                        + shardRange.end()
-                        + " is below shard range threshold of "
-                        + MINIMUM_RANGE_LENGTH_THRESHOLD  
-                );
             }
-
-            start = shardRange.end();
-        }
-
-        if (start == null) {
-            throw new IllegalArgumentException("No shard range defined for child shards of shard " + shardId);
-        }  
-
-        if (start != upperBound) {
-            throw new IllegalArgumentException(  
-                "Shard range from " + (start + 1) + " to " + upperBound + " is missing from the list of shard ranges"
-            );
-        }  
+                ? new ArrayList<>()
+        int low = 0, high = childShards.length - 1;
+            + activeShardIds
+            if (shardRange.start() < start + 1) {  
+        builder.startObject(KEY_PARENT_TO_CHILD_SHARDS);
+            maxShardId = numberOfShards - 1;
+            long rangeLength = rangeEnd - shardRange.start() + 1;
+                        return new Tuple<>(rootShardId, shardUnderRoot);
+            }
+        builder.startObject(KEY_ROOT_SHARDS_TO_ALL_CHILDREN);  
     }
-
-    private static void validateBounds(ShardRange shardRange, Integer start, long parentStart) {  
+        /**
+        if (!activeShardIds.equals(that.activeShardIds)) return false;  
+                return midShard;
+    public boolean equals(Object o) {  
+                builder.startArray(String.valueOf(rootShardId));
+        public Builder(int numberOfShards) {
+                    "Shard range from "
+                throw new IllegalArgumentException("Invalid shard id provided for splitting");
+        return rootShardList;
+            rootShardList.add(i);
+        }
+        if (includeInProgressChildren && parentToChildShards.containsKey(shardRange.shardId())) {
+            builder.startArray(String.valueOf(parentShardId));  
+        String currentFieldName = null;
+                // Getting a copy of child shards for this parent.
+                return false;
+            if (!Arrays.deepEquals(parentToChildShards.get(key), that.parentToChildShards.get(key))) {  
+        for (ShardRange shardRange : shardRanges) {
+                }
+            long rangeSize = ((long) parentShard.end() - parentShard.start() + 1) / numberOfChildren;  
+                    + (start + 1)
+                while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+            if (rangeSize <= MINIMUM_RANGE_LENGTH_THRESHOLD) {
+                } else {
+                for (ShardRange shardUnderRoot : allChildren) {  
+            assert newChildShardIds.size() == parentToChildShards.get(sourceShardId).length;
+        public List<ShardRange> splitShard(int splitShardId, int numberOfChildren) {
+            for (Integer inProgressParent : inProgressSplitShardIds) {
+import java.util.Iterator;
+        String currentFieldName = null;  
         if (start == null) {
-            if (shardRange.start() != parentStart) {
-                throw new IllegalArgumentException(  
-                    "Shard range from " + parentStart + " to " + (shardRange.start() - 1) + " is missing from the list of shard ranges"
-                );
+                    this.rootShardsToAllChildren[i] = new ShardRange[splitShardsMetadata.rootShardsToAllChildren[i].length];
+import org.opensearch.cluster.Diff;
+                low = mid + 1;
+            Set<Integer> activeShardIds = new HashSet<>();
+            int nextChildShardId = maxShardId, childShardId;
+        private final Set<Integer> activeShardIds;
+            int currentMaxShardId = maxShardId;
+                }
+    private static final String KEY_ROOT_SHARDS_TO_ALL_CHILDREN = "root_shards_to_all_children";  
+    public int getShardIdOfHash(int rootShardId, int hash, boolean includeInProgressChildren) {
+                for (ShardRange childShard : childShards) {
+        this.inProgressSplitShardIds = Collections.unmodifiableSet(in.readSet(StreamInput::readInt));
+            } else if (token == XContentParser.Token.START_OBJECT) {
+            this.maxShardId = splitShardsMetadata.maxShardId;
+        return total;
+     * Builder for {@link SplitShardsMetadata}.
+            activeShardIds,
+    private static final String KEY_ACTIVE_SHARD_IDS = "active_shard_ids";
+                    }
+        return shardRange.shardId();
+            } else if (token == XContentParser.Token.VALUE_NUMBER) {
+            List<ShardRange> newChildShardsList = new ArrayList<>();
+    ) {
+        public void updateSplitMetadataForChildShards(int sourceShardId, Set<Integer> newChildShardIds) {
+            Set<Integer> inProgressChildShardIds = new HashSet<>();  
+                this.parentToChildShards.put(parentShardId, childShards);
+        private Set<Integer> getInProgressChildShardIds() {
+    public int getNumberOfRootShards() {  
             }  
+        Set<Integer> inProgressSplitShardIds = new HashSet<>();  
+                }  
+                }  
+        private final Set<Integer> inProgressSplitShardIds;
+        builder.endObject();
+            validateShardRanges(shardRangeTuple.v1(), newShardsUnderRoot);
+                : new ArrayList<>(Arrays.asList(rootShardsToAllChildren[shardRangeTuple.v1()]));  
+                currentFieldName = parser.currentName();
+        Set<Integer> activeShardIds,
+        private final ShardRange[][] rootShardsToAllChildren;
+        private int maxShardId;  
+import org.opensearch.core.xcontent.ToXContentFragment;
+                    nextChildShardId++;
+                if (shardIdHoles.isEmpty()) {  
+import java.util.TreeSet;
+            inProgressSplitShardIds,
+        }
+        return new SplitShardsMetadata(
+            // Get existing childShardRanges under rootShard  
+    }
+        return new HashSet<>(activeShardIds).iterator();
+            return Collections.unmodifiableList(newChildShardsList);  
+    public List<Integer> getRootShards() {
+                } else if (KEY_ACTIVE_SHARD_IDS.equals(currentFieldName)) {
+                return gaps;
+/**  
+    }  
+ *
+            }  
+            this.parentToChildShards = new HashMap<>();  
+            Collections.sort(allConsumedShardIds);
+        builder.field(KEY_ACTIVE_SHARD_IDS, new ArrayList<>(activeShardIds));
+        }
+    public static Diff<SplitShardsMetadata> readDiffFrom(StreamInput in) throws IOException {
+            builder.endArray();
+        this.activeShardIds = activeShardIds;
+        if (rootShardsToAllChildren[rootShardId] == null) {
+            }  
+    }
+            ShardRange[] newShardsUnderRoot = shardsUnderRoot.toArray(new ShardRange[0]);  
+                Integer parentShard = Integer.parseInt(currentFieldName);  
+        }
+    // Following fields can store temporary information about in progress child shards along with info about
+            } else if (hash < midShard.start()) {
+                        + " to "  
+                ShardRange childShard = new ShardRange(childShardId, (int) start, (int) end);
+            if (allConsumedShardIds == null || allConsumedShardIds.size() <= 1) {  
+                }  
+                    }
+        return childShardIds;
+        builder.endObject();  
+    public Set<Integer> getInProgressSplitShardIds() {
+    public String toString() {  
+    // Visible for testing
+        return activeShardIds.contains(shardId) == false && parentToChildShards.containsKey(shardId);
+        }  
+        );  
+                    allConsumedShardIds.add(i);
+                if (KEY_IN_PROGRESS_SPLIT_SHARD_IDS.equals(currentFieldName)) {
+import java.util.Arrays;
+        return rootShardsToAllChildren.length;
+            return new SplitShardsMetadata(  
+        }
+            ShardRange[] newShardRanges = newChildShardsList.toArray(new ShardRange[0]);
+                shardsMap.put(parentShard, childShardRanges.toArray(new ShardRange[0]));
+    }
+                assert activeShardIds.contains(newChildId) == false;  
+        out.writeVInt(this.maxShardId);
+        }
+                allConsumedShardIds.add(splitId);  
+            rootShardsToAllChildren,
+        }
+            shardRange = binarySearchShards(parentToChildShards.get(shardRange.shardId()), hash);  
+    public boolean isSplitOfShardInProgress(int shardId) {
+    }
+            }
+            Arrays.sort(newShardsUnderRoot);
+            for (int i = 0; i < splitShardsMetadata.rootShardsToAllChildren.length; i++) {
+        this.parentToChildShards = Collections.unmodifiableMap(parentToChildShards);
+        ShardRange[] existingChildShards = rootShardsToAllChildren[rootShardId];
+            + "rootShardsToAllChildren="
+        if (shardId < rootShardsToAllChildren.length && rootShardsToAllChildren[shardId] == null) {
+        int total = 0;  
+public class SplitShardsMetadata extends AbstractDiffable<SplitShardsMetadata> implements ToXContentFragment {  
+                }
+            ShardRange midShard = childShards[mid];
+    private final Map<Integer, ShardRange[]> parentToChildShards;
+        return "SplitShardsMetadata{"
+    }  
+            + ", activeShardIds="  
+        this.maxShardId = in.readVInt();
+        }
+            if (token == XContentParser.Token.FIELD_NAME) {  
+            inProgressSplitShardIds = new HashSet<>();
+            }  
+        return builder;
+import org.opensearch.core.xcontent.XContentBuilder;
+            + Arrays.toString(rootShardsToAllChildren)  
+                    "Shard range from " + parentStart + " to " + (shardRange.start() - 1) + " is missing from the list of shard ranges"
+                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+        for (Integer key : parentToChildShards.keySet()) {
+        for (ShardRange[] rootShardsToAllChild : rootShardsToAllChildren) {
+    public static SplitShardsMetadata parse(XContentParser parser) throws IOException {
+                throw new IllegalArgumentException(  
+            throw new IllegalArgumentException(  
+            return new Tuple<>(shardId, new ShardRange(shardId, Integer.MIN_VALUE, Integer.MAX_VALUE));
+        if (!inProgressSplitShardIds.contains(parentShardId)) {
+                start = end + 1;
+            if (childShards != null) {  
+            rootShardsToAllChildren = new ShardRange[numberOfShards][];  
+                    allConsumedShardIds.add(shard.shardId());
+            builder.field(KEY_IN_PROGRESS_SPLIT_SHARD_IDS, new ArrayList<>(inProgressSplitShardIds));  
+            + ", parentToChildShards="
         } else if (shardRange.start() != start + 1) {
             String errorMessage;
-            if (shardRange.start() < start + 1) {  
-                errorMessage = "Shard range overlaps from " + shardRange.start() + " to " + start;
-            } else {
-                errorMessage = "Shard range from "  
-                    + (start + 1)
-                    + " to "
-                    + (shardRange.start() - 1)  
-                    + " is missing from the list of shard ranges";
-            }
-            throw new IllegalArgumentException(errorMessage);  
-        }
-    }
-
-    /**
-     * Builder for {@link SplitShardsMetadata}.
-     *  
-     * @opensearch.experimental
-     */
-    public static class Builder {  
-        private final ShardRange[][] rootShardsToAllChildren;
-        private final Map<Integer, ShardRange[]> parentToChildShards;
-        private int maxShardId;  
-        private final Set<Integer> inProgressSplitShardIds;
-        private final Set<Integer> activeShardIds;
-
-        public Builder(int numberOfShards) {
-            maxShardId = numberOfShards - 1;
-            rootShardsToAllChildren = new ShardRange[numberOfShards][];  
-            parentToChildShards = new HashMap<>();
-            inProgressSplitShardIds = new HashSet<>();
-            activeShardIds = new HashSet<>();  
-            for (int i = 0; i < numberOfShards; i++) {
-                activeShardIds.add(i);
-            }  
-        }
-
-        public Builder(SplitShardsMetadata splitShardsMetadata) {  
-            this.maxShardId = splitShardsMetadata.maxShardId;
-
-            this.rootShardsToAllChildren = new ShardRange[splitShardsMetadata.rootShardsToAllChildren.length][];  
-            Set<Integer> activeShardIds = new HashSet<>();
-            for (int i = 0; i < splitShardsMetadata.rootShardsToAllChildren.length; i++) {
-                if (splitShardsMetadata.rootShardsToAllChildren[i] != null) {  
-                    this.rootShardsToAllChildren[i] = new ShardRange[splitShardsMetadata.rootShardsToAllChildren[i].length];
-                    int j = 0;
-                    for (ShardRange childShard : splitShardsMetadata.rootShardsToAllChildren[i]) {  
-                        this.rootShardsToAllChildren[i][j++] = childShard;
-                        activeShardIds.add(childShard.shardId());
-                    }  
-                } else {
-                    activeShardIds.add(i);
-                }  
-            }
-
-            this.parentToChildShards = new HashMap<>();  
-            for (Integer parentShardId : splitShardsMetadata.parentToChildShards.keySet()) {
-                // Getting a copy of child shards for this parent.
-                ShardRange[] childShards = splitShardsMetadata.getChildShardsOfParent(parentShardId);  
-                this.parentToChildShards.put(parentShardId, childShards);
-            }
-
-            inProgressSplitShardIds = new HashSet<>(splitShardsMetadata.inProgressSplitShardIds);
-            this.activeShardIds = activeShardIds;
-        }  
-
-        /**
-         * Create metadata of new child shards for the provided shard id.  
-         * @param splitShardId Shard id to split
-         * @param numberOfChildren Number of child shards this shard is going to have.
-         */  
-        public List<ShardRange> splitShard(int splitShardId, int numberOfChildren) {
-            if (inProgressSplitShardIds.contains(splitShardId) || parentToChildShards.containsKey(splitShardId)) {
-                throw new IllegalArgumentException("Split of shard [" + splitShardId + "] is already in progress or completed.");  
-            }
-
-            Tuple<Integer, ShardRange> shardTuple = findRootAndShard(splitShardId, rootShardsToAllChildren);  
-            if (shardTuple == null) {
-                throw new IllegalArgumentException("Invalid shard id provided for splitting");
-            }  
-            ShardRange parentShard = shardTuple.v2();
-
-            long rangeSize = ((long) parentShard.end() - parentShard.start() + 1) / numberOfChildren;  
-            if (rangeSize <= MINIMUM_RANGE_LENGTH_THRESHOLD) {
-                throw new IllegalArgumentException("Cannot split shard [" + splitShardId + "] further.");
-            }  
-
-            Set<Integer> inProgressChildShardIds = getInProgressChildShardIds();
-            inProgressSplitShardIds.add(splitShardId);  
-
-            List<Integer> allConsumedShardIds = new ArrayList<>();
-            for (int i = 0; i < rootShardsToAllChildren.length; i++) {  
-                if (rootShardsToAllChildren[i] == null) {
-                    allConsumedShardIds.add(i);
-                }  
-            }
-            for (Integer splitId : parentToChildShards.keySet()) {
-                allConsumedShardIds.add(splitId);  
-                for (ShardRange shard : parentToChildShards.get(splitId)) {
-                    allConsumedShardIds.add(shard.shardId());
-                }  
-            }
-
-            Set<Integer> shardIdHoles = findHoles(allConsumedShardIds);  
-            List<ShardRange> newChildShardsList = new ArrayList<>();
-            long start = parentShard.start();
-
-            int nextChildShardId = maxShardId, childShardId;
-            for (int i = 0; i < numberOfChildren; ++i) {
-                if (shardIdHoles.isEmpty()) {  
-                    nextChildShardId++;
-                    while (inProgressChildShardIds.contains(nextChildShardId)) {
-                        assert activeShardIds.contains(nextChildShardId) == false;  
-                        nextChildShardId++;
-                    }
-                    childShardId = nextChildShardId;  
-                } else {
-                    childShardId = shardIdHoles.iterator().next();
-                    shardIdHoles.remove(childShardId);  
-                    nextChildShardId = Math.max(nextChildShardId, childShardId);
-                }
-                assert !inProgressChildShardIds.contains(childShardId);  
-                assert !activeShardIds.contains(childShardId);
-                inProgressChildShardIds.add(childShardId);
-
-                long end = i == numberOfChildren - 1 ? parentShard.end() : start + rangeSize - 1;
-                ShardRange childShard = new ShardRange(childShardId, (int) start, (int) end);
-                newChildShardsList.add(childShard);  
-                start = end + 1;
-            }
-
-            ShardRange[] newShardRanges = newChildShardsList.toArray(new ShardRange[0]);
-
-            // Get existing childShardRanges under rootShard  
-            List<ShardRange> shardsUnderRoot = rootShardsToAllChildren[shardTuple.v1()] == null
                 ? new ArrayList<>()
-                : new ArrayList<>(Arrays.asList(rootShardsToAllChildren[shardTuple.v1()]));  
-            shardsUnderRoot.remove(shardTuple.v2()); // Remove parent shard range
-            shardsUnderRoot.addAll(List.of(newShardRanges)); // Add child shard range
-            ShardRange[] newShardsUnderRoot = shardsUnderRoot.toArray(new ShardRange[0]);  
-            Arrays.sort(newShardsUnderRoot);
-
-            validateShardRanges(splitShardId, newShardsUnderRoot);  
-
-            parentToChildShards.put(splitShardId, newShardRanges);
-            return Collections.unmodifiableList(newChildShardsList);  
-        }
-
-        private Set<Integer> findHoles(List<Integer> allConsumedShardIds) {  
-            Set<Integer> gaps = new TreeSet<>();
-
-            if (allConsumedShardIds == null || allConsumedShardIds.size() <= 1) {  
-                return gaps;
-            }
-
-            Collections.sort(allConsumedShardIds);
-            for (int i = 1; i < allConsumedShardIds.size(); i++) {
-                int current = allConsumedShardIds.get(i);  
-                int previous = allConsumedShardIds.get(i - 1);
-
-                if (current - previous > 1) {  
-                    for (int j = previous + 1; j < current; j++) {
-                        gaps.add(j);
-                    }  
-                }
-            }
-
-            return gaps;
-        }
-
-        public void updateSplitMetadataForChildShards(int sourceShardId, Set<Integer> newChildShardIds) {
-            Tuple<Integer, ShardRange> shardRangeTuple = findRootAndShard(sourceShardId, rootShardsToAllChildren);
-
-            assert inProgressSplitShardIds.contains(sourceShardId);
-            assert newChildShardIds.size() == parentToChildShards.get(sourceShardId).length;
-            for (ShardRange childShard : parentToChildShards.get(sourceShardId)) {  
-                assert newChildShardIds.contains(childShard.shardId());
-            }
-
-            List<ShardRange> shardsUnderRoot = rootShardsToAllChildren[shardRangeTuple.v1()] == null
-                ? new ArrayList<>()
-                : new ArrayList<>(Arrays.asList(rootShardsToAllChildren[shardRangeTuple.v1()]));  
-            shardsUnderRoot.remove(shardRangeTuple.v2());
-            shardsUnderRoot.addAll(Arrays.asList(parentToChildShards.get(sourceShardId)));
-            ShardRange[] newShardsUnderRoot = shardsUnderRoot.toArray(new ShardRange[0]);  
-            Arrays.sort(newShardsUnderRoot);
-            validateShardRanges(shardRangeTuple.v1(), newShardsUnderRoot);
-
-            int currentMaxShardId = maxShardId;
-            for (Integer newChildId : newChildShardIds) {
-                assert activeShardIds.contains(newChildId) == false;  
-                activeShardIds.add(newChildId);
-                currentMaxShardId = Math.max(currentMaxShardId, newChildId);
-            }  
-
-            activeShardIds.remove(sourceShardId);
-            maxShardId = currentMaxShardId;  
-            rootShardsToAllChildren[shardRangeTuple.v1()] = newShardsUnderRoot;
-            inProgressSplitShardIds.remove(sourceShardId);
-        }  
-
-        private Set<Integer> getInProgressChildShardIds() {
-            Set<Integer> inProgressChildShardIds = new HashSet<>();  
-            for (Integer inProgressParent : inProgressSplitShardIds) {
-                assert parentToChildShards.containsKey(inProgressParent);
-                ShardRange[] childShards = parentToChildShards.get(inProgressParent);  
-                for (ShardRange childShard : childShards) {
-                    inProgressChildShardIds.add(childShard.shardId());
-                }  
-            }
-            return inProgressChildShardIds;
-        }  
-
-        public void cancelSplit(int sourceShardId) {
-            assert inProgressSplitShardIds.contains(sourceShardId);  
-            inProgressSplitShardIds.remove(sourceShardId);
-            parentToChildShards.remove(sourceShardId);
-        }  
-
-        public SplitShardsMetadata build() {
-            return new SplitShardsMetadata(  
-                this.rootShardsToAllChildren,
-                this.parentToChildShards,
-                this.inProgressSplitShardIds,  
-                this.activeShardIds,
-                this.maxShardId
-            );  
-        }
-    }
-
-    private static Tuple<Integer, ShardRange> findRootAndShard(int shardId, ShardRange[][] rootShardsToAllChildren) {
-        ShardRange[] allChildren;
-        for (int rootShardId = 0; rootShardId < rootShardsToAllChildren.length; rootShardId++) {  
-            allChildren = rootShardsToAllChildren[rootShardId];
-            if (allChildren != null) {
-                for (ShardRange shardUnderRoot : allChildren) {  
-                    if (shardUnderRoot.shardId() == shardId) {
-                        return new Tuple<>(rootShardId, shardUnderRoot);
-                    }  
-                }
-            }
-        }  
-
-        if (shardId < rootShardsToAllChildren.length && rootShardsToAllChildren[shardId] == null) {
-            // We are splitting a root shard in this case.  
-            return new Tuple<>(shardId, new ShardRange(shardId, Integer.MIN_VALUE, Integer.MAX_VALUE));
-        }
-
-        throw new IllegalArgumentException("Shard ID doesn't exist in the current list of shard ranges");
-    }
-
-    public Set<Integer> getInProgressSplitShardIds() {
-        return inProgressSplitShardIds;
-    }  
-
-    public boolean isSplitOfShardInProgress(int shardId) {
-        return inProgressSplitShardIds.contains(shardId);  
-    }
-
-    public boolean isSplitParent(int shardId) {  
-        return activeShardIds.contains(shardId) == false && parentToChildShards.containsKey(shardId);
-    }
-
-    public boolean isRecoveringChild(int shardId, int parentShardId) {
-        if (!inProgressSplitShardIds.contains(parentShardId)) {
-            return false;  
-        }
-
-        for (ShardRange childShard : parentToChildShards.get(parentShardId)) {  
-            if (childShard.shardId() == shardId) {
-                return true;
-            }  
-        }
-        return false;
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (!(o instanceof SplitShardsMetadata)) return false;
-
         SplitShardsMetadata that = (SplitShardsMetadata) o;
-
-        if (maxShardId != that.maxShardId) return false;  
-        if (!inProgressSplitShardIds.equals(that.inProgressSplitShardIds)) return false;
-        if (!Arrays.deepEquals(rootShardsToAllChildren, that.rootShardsToAllChildren)) return false;
-        if (!activeShardIds.equals(that.activeShardIds)) return false;  
-        if (parentToChildShards.size() != that.parentToChildShards.size()) return false;
-        for (Integer key : parentToChildShards.keySet()) {
-            if (!Arrays.deepEquals(parentToChildShards.get(key), that.parentToChildShards.get(key))) {  
-                return false;
-            }
-        }  
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = Arrays.deepHashCode(rootShardsToAllChildren);  
-        for (Map.Entry<Integer, ShardRange[]> entry : parentToChildShards.entrySet()) {
-            result = 31 * result + Objects.hash(entry.getKey(), Arrays.deepHashCode(entry.getValue()));
-        }  
-        result = 31 * result + maxShardId;
-        result = 31 * result + inProgressSplitShardIds.hashCode();
-        result = 31 * result + activeShardIds.hashCode();  
-        return result;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(KEY_NUMBER_OF_ROOT_SHARDS, rootShardsToAllChildren.length);  
-        builder.field(KEY_MAX_SHARD_ID, maxShardId);
-        if (!inProgressSplitShardIds.isEmpty()) {
-            builder.field(KEY_IN_PROGRESS_SPLIT_SHARD_IDS, new ArrayList<>(inProgressSplitShardIds));  
-        }
-        builder.field(KEY_ACTIVE_SHARD_IDS, new ArrayList<>(activeShardIds));
-        builder.startObject(KEY_ROOT_SHARDS_TO_ALL_CHILDREN);  
-        for (int rootShardId = 0; rootShardId < rootShardsToAllChildren.length; rootShardId++) {
-            ShardRange[] childShards = rootShardsToAllChildren[rootShardId];
-            if (childShards != null) {  
-                builder.startArray(String.valueOf(rootShardId));
-                for (ShardRange childShard : childShards) {
-                    childShard.toXContent(builder, params);  
-                }
-                builder.endArray();
-            }  
-        }
-        builder.endObject();
-
-        builder.startObject(KEY_PARENT_TO_CHILD_SHARDS);
-        for (Integer parentShardId : parentToChildShards.keySet()) {
-            builder.startArray(String.valueOf(parentShardId));  
-            for (ShardRange childShard : parentToChildShards.get(parentShardId)) {
-                childShard.toXContent(builder, params);
-            }  
-            builder.endArray();
-        }
-        builder.endObject();  
-
-        return builder;
-    }  
-
-    public static SplitShardsMetadata parse(XContentParser parser) throws IOException {
-        XContentParser.Token token;  
-        String currentFieldName = null;
-        int maxShardId = -1;
-        Set<Integer> inProgressSplitShardIds = new HashSet<>();  
-        Set<Integer> activeShardIds = new HashSet<>();
-        ShardRange[][] rootShardsToAllChildren = null;
-        Map<Integer, ShardRange[]> tempShardIdToChildShards = new HashMap<>();  
-        int numberOfRootShards = -1;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {  
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.VALUE_NUMBER) {
-                if (KEY_MAX_SHARD_ID.equals(currentFieldName)) {  
-                    maxShardId = parser.intValue();
-                } else if (KEY_NUMBER_OF_ROOT_SHARDS.equals(currentFieldName)) {
-                    numberOfRootShards = parser.intValue();  
-                }
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (KEY_ROOT_SHARDS_TO_ALL_CHILDREN.equals(currentFieldName)) {  
-                    Map<Integer, ShardRange[]> rootShards = parseShardsMap(parser);
-                    rootShardsToAllChildren = new ShardRange[numberOfRootShards][];
-                    for (Map.Entry<Integer, ShardRange[]> entry : rootShards.entrySet()) {  
-                        rootShardsToAllChildren[entry.getKey()] = entry.getValue();
-                    }
-                } else if (KEY_PARENT_TO_CHILD_SHARDS.equals(currentFieldName)) {  
-                    tempShardIdToChildShards = parseShardsMap(parser);
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {  
-                if (KEY_IN_PROGRESS_SPLIT_SHARD_IDS.equals(currentFieldName)) {
-                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-                        inProgressSplitShardIds.add(parser.intValue());  
-                    }
-                } else if (KEY_ACTIVE_SHARD_IDS.equals(currentFieldName)) {
-                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {  
-                        activeShardIds.add(parser.intValue());
-                    }
                 }  
-            }
-        }
-
-        return new SplitShardsMetadata(
-            rootShardsToAllChildren,
-            tempShardIdToChildShards,  
-            inProgressSplitShardIds,
-            activeShardIds,
             maxShardId  
-        );
-    }
-
-    private static Map<Integer, ShardRange[]> parseShardsMap(XContentParser parser) throws IOException {
+        if (this == o) return true;
+            for (ShardRange childShard : parentToChildShards.get(parentShardId)) {
+            throw new IllegalArgumentException("No shard range defined for child shards of shard " + shardId);
+        return true;
+            this.activeShardIds = activeShardIds;
+        public Builder(SplitShardsMetadata splitShardsMetadata) {  
+        this.activeShardIds = Collections.unmodifiableSet(in.readSet(StreamInput::readInt));  
+        }  
+    }  
+    // Following fields are upadated only after split completion and are used to service active shards request.
+                assert newChildShardIds.contains(childShard.shardId());
+            inProgressSplitShardIds.add(splitShardId);  
+        this.inProgressSplitShardIds = Collections.unmodifiableSet(inProgressSplitShardIds);  
+    @Override
         XContentParser.Token token;
-        String currentFieldName = null;  
-        Map<Integer, ShardRange[]> shardsMap = new HashMap<>();
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {  
-                currentFieldName = parser.currentName();
+    }
+        builder.field(KEY_MAX_SHARD_ID, maxShardId);
+                return true;
+            parentToChildMap.append("]");
+    // Root shard id to flat list of all child shards under root.
+            }  
+                    for (ShardRange childShard : splitShardsMetadata.rootShardsToAllChildren[i]) {  
+import java.util.Map;
+            return false;  
+            this.rootShardsToAllChildren[i] = in.readOptionalArray(ShardRange::new, ShardRange[]::new);
+import java.util.Objects;
+    public int getNumberOfShards() {
+        assert shardRange != null;
+    private ShardRange binarySearchShards(ShardRange[] childShards, int hash) {
+    public static class Builder {  
             } else if (token == XContentParser.Token.START_ARRAY) {
-                List<ShardRange> childShardRanges = new ArrayList<>();  
-                while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-                    ShardRange shardRange = ShardRange.parse(parser);
-                    childShardRanges.add(shardRange);  
+        return readDiffFrom(SplitShardsMetadata::new, in);  
+            shardsUnderRoot.remove(shardRangeTuple.v2());
+            start = shardRange.end();
+                    + " is missing from the list of shard ranges";
+        }  
+            }
+            long start = parentShard.start();
+                assert !activeShardIds.contains(childShardId);
+            for (int i = 1; i < allConsumedShardIds.size(); i++) {
+                errorMessage = "Shard range overlaps from " + shardRange.start() + " to " + start;
+            if (shardRange.start() != parentStart) {
+ * The OpenSearch Contributors require contributions made to  
+        builder.field(KEY_NUMBER_OF_ROOT_SHARDS, rootShardsToAllChildren.length);  
+    }  
+        int numberOfRootShards = -1;
+    }
+import java.util.List;  
+import java.util.HashSet;
+                    Map<Integer, ShardRange[]> rootShards = parseShardsMap(parser);
+        return activeShardIds.size();
+                    numberOfRootShards = parser.intValue();  
+        if (start != upperBound) {
+    }
+    private final ShardRange[][] rootShardsToAllChildren;  
+            return gaps;
+                        rootShardsToAllChildren[entry.getKey()] = entry.getValue();
+    @Override
+        if (!Arrays.deepEquals(rootShardsToAllChildren, that.rootShardsToAllChildren)) return false;
+                );
+            List<Integer> allConsumedShardIds = new ArrayList<>();
+            for (Integer parentShardId : splitShardsMetadata.parentToChildShards.keySet()) {
+    /**
+    }
+        }
+            }  
+    public boolean isRecoveringChild(int shardId, int parentShardId) {
+            return null;  
+                } else {
+            }
+        return shardsMap;
+    private final Set<Integer> inProgressSplitShardIds;
+        private final Map<Integer, ShardRange[]> parentToChildShards;
+                int previous = allConsumedShardIds.get(i - 1);
+                    shardIdHoles.remove(childShardId);  
+                    + (shardRange.start() - 1)  
+                        this.rootShardsToAllChildren[i][j++] = childShard;
+            }
+                if (KEY_MAX_SHARD_ID.equals(currentFieldName)) {  
+        }
+/*  
+                assert shardRange != null;
+                    }  
+        if (parentToChildShards.size() != that.parentToChildShards.size()) return false;
+                this.maxShardId
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        for (ShardRange childShard : parentToChildShards.get(parentShardId)) {  
+        ShardRange shardRange = binarySearchShards(existingChildShards, hash);
+        return childShards;
+    private final Set<Integer> activeShardIds;
+        Map<Integer, ShardRange[]> parentToChildShards,  
+        this.maxShardId = maxShardId;
+                return shardRange.shardId();
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+        for (ShardRange childShard : parentToChildShards.get(shardId)) {
+        }
+        private Set<Integer> findHoles(List<Integer> allConsumedShardIds) {  
+        ShardRange[] childShards = new ShardRange[parentToChildShards.get(shardId).length];  
+            allChildren = rootShardsToAllChildren[rootShardId];
+            List<ShardRange> shardsUnderRoot = rootShardsToAllChildren[shardTuple.v1()] == null
+                        nextChildShardId++;
+        int childShardIdx = 0;
+         * @param splitShardId Shard id to split
+                ShardRange shardRange = binarySearchShards(parentToChildShards.get(rootShardId), hash);  
+            assert inProgressSplitShardIds.contains(sourceShardId);
+            assert inProgressSplitShardIds.contains(sourceShardId);  
+}  
+ *
+    }  
+     *  
+    }  
+        throw new IllegalArgumentException("Shard ID doesn't exist in the current list of shard ranges");
+        }
+            Set<Integer> shardIdHoles = findHoles(allConsumedShardIds);  
+                    childShardId = shardIdHoles.iterator().next();
+        return inProgressSplitShardIds;
+    private static void validateBounds(ShardRange shardRange, Integer start, long parentStart) {  
+            + ", maxShardId="
+            parentToChildMap.append(entry.getKey()).append("=").append(Arrays.toString(entry.getValue()));
+        }
+        int upperBound = Integer.MAX_VALUE;  
+                ShardRange[] childShards = parentToChildShards.get(inProgressParent);  
+            } else {
+        if (!inProgressSplitShardIds.equals(that.inProgressSplitShardIds)) return false;
+        Set<Integer> inProgressSplitShardIds,
+                    if (shardUnderRoot.shardId() == shardId) {
+                int current = allConsumedShardIds.get(i);  
+ * SPDX-License-Identifier: Apache-2.0
+        if (parentToChildShards.containsKey(shardId) == false) {
+            int mid = low + (high - low) / 2;
+        this.rootShardsToAllChildren = rootShardsToAllChildren;  
                 }
-                assert currentFieldName != null;
-                Integer parentShard = Integer.parseInt(currentFieldName);  
-                shardsMap.put(parentShard, childShardRanges.toArray(new ShardRange[0]));
+        if (parentToChildShards.containsKey(shardId) == false) {
+            shardsUnderRoot.remove(shardTuple.v2()); // Remove parent shard range
+            parentToChildShards = new HashMap<>();
+                childShard.toXContent(builder, params);
+            parentToChildMap.append("[");  
+    private static final String KEY_NUMBER_OF_ROOT_SHARDS = "num_of_root_shards";
+        public void cancelSplit(int sourceShardId) {
+            }
+            tempShardIdToChildShards,  
+            if (includeInProgressChildren && parentToChildShards.containsKey(rootShardId)) {
+            for (int i = 0; i < rootShardsToAllChildren.length; i++) {  
+                activeShardIds.add(i);
+                throw new IllegalArgumentException("Split of shard [" + splitShardId + "] is already in progress or completed.");  
+                assert parentToChildShards.containsKey(inProgressParent);
+    public ShardRange[] getChildShardsOfParent(int shardId) {
+        for (Integer parent : inProgressSplitShardIds) {
             }
         }  
-
-        return shardsMap;
+    private static final String KEY_PARENT_TO_CHILD_SHARDS = "parent_to_child_shards";
+            }
+            ShardRange[] newShardsUnderRoot = shardsUnderRoot.toArray(new ShardRange[0]);  
+         * Create metadata of new child shards for the provided shard id.  
+    @Override
     }  
-
-    public static Diff<SplitShardsMetadata> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(SplitShardsMetadata::new, in);  
+                builder.endArray();
+        }  
     }
-
-}  
+            } else if (token == XContentParser.Token.START_ARRAY) {  
+        Set<Integer> activeShardIds = new HashSet<>();
+            }
+import java.util.Set;  
+                        activeShardIds.add(childShard.shardId());
+        int maxShardId = -1;
+            + ", inProgressSplitShardIds="
+                    while (inProgressChildShardIds.contains(nextChildShardId)) {
+import org.opensearch.core.xcontent.XContentParser;  
+import java.io.IOException;
+        if (!inProgressSplitShardIds.isEmpty()) {
+                    int j = 0;
+            }
+    }  
+            Arrays.sort(newShardsUnderRoot);
+            shardsUnderRoot.addAll(Arrays.asList(parentToChildShards.get(sourceShardId)));
+        Map<Integer, ShardRange[]> shardsMap = new HashMap<>();
+        for (int rootShardId = 0; rootShardId < rootShardsToAllChildren.length; rootShardId++) {
+                    }
+    public SplitShardsMetadata(StreamInput in) throws IOException {
+        for (int rootShardId = 0; rootShardId < rootShardsToAllChildren.length; rootShardId++) {  
+            Tuple<Integer, ShardRange> shardRangeTuple = findRootAndShard(sourceShardId, rootShardsToAllChildren);
+            for (int i = 0; i < numberOfChildren; ++i) {
+        for (Integer parentShardId : parentToChildShards.keySet()) {
+            inProgressSplitShardIds.remove(sourceShardId);
+        out.writeCollection(this.inProgressSplitShardIds, StreamOutput::writeInt);  
+    public void writeTo(StreamOutput out) throws IOException {  
+    private final int maxShardId;
+                );
+                if (KEY_ROOT_SHARDS_TO_ALL_CHILDREN.equals(currentFieldName)) {  
+                this.activeShardIds,
+        }
+                ShardRange[] childShards = splitShardsMetadata.getChildShardsOfParent(parentShardId);  
+            );
+        StringBuilder parentToChildMap = new StringBuilder();
+        return false;
+        }
+                    childShardId = nextChildShardId;  
+                        gaps.add(j);
+                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {  
+                    }  
+        }  
+        }  
+            for (Integer newChildId : newChildShardIds) {
+                activeShardIds.add(newChildId);
+                    + " to "
+                assert !inProgressChildShardIds.contains(childShardId);  
+            if (inProgressSplitShardIds.contains(splitShardId) || parentToChildShards.containsKey(splitShardId)) {
+        for (int i = 0; i < rootShardsToAllChildren.length; i++) {
+                    }  
+                        + shardRange.end()
+                        + " is below shard range threshold of "
+            + inProgressSplitShardIds
+            rootShardsToAllChildren[shardRangeTuple.v1()] = newShardsUnderRoot;
+                high = mid - 1;  
+    }
+ */  
+        for (Map.Entry<Integer, ShardRange[]> entry : parentToChildShards.entrySet()) {
+            ShardRange parentShard = shardTuple.v2();
+            maxShardId = currentMaxShardId;  
+                "Shard range from " + (start + 1) + " to " + upperBound + " is missing from the list of shard ranges"
+ * Metadata for tracking shard split operations on an index.
+        assert shardRange != null;  
+    @Override
+        }  
+import java.util.ArrayList;  
+     * @opensearch.experimental
+                    tempShardIdToChildShards = parseShardsMap(parser);
+            if (midShard.contains(hash)) {  
+            in.readMap(StreamInput::readInt, i -> i.readArray(ShardRange::new, ShardRange[]::new))
+        }  
+@ExperimentalApi
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public SplitShardsMetadata build() {
+    // split completed shards.
+            } else {
+        result = 31 * result + activeShardIds.hashCode();  
+    }
+    }  
+            }
+    public int hashCode() {
+        }  
+            shardsUnderRoot.addAll(List.of(newShardRanges)); // Add child shard range
+                        inProgressSplitShardIds.add(parser.intValue());  
+                currentMaxShardId = Math.max(currentMaxShardId, newChildId);
+            Tuple<Integer, ShardRange> shardTuple = findRootAndShard(splitShardId, rootShardsToAllChildren);  
+        this.rootShardsToAllChildren = new ShardRange[numberOfRootShards][];  
+import java.util.Collections;
+package org.opensearch.cluster.metadata;
+        }
+            result = 31 * result + Objects.hash(entry.getKey(), Arrays.deepHashCode(entry.getValue()));
+                    inProgressChildShardIds.add(childShard.shardId());
+            this.rootShardsToAllChildren = new ShardRange[splitShardsMetadata.rootShardsToAllChildren.length][];  
+                    childShardRanges.add(shardRange);  
+            for (ShardRange childShard : parentToChildShards.get(sourceShardId)) {  
+ * this file be licensed under the Apache-2.0 license or a
+                for (ShardRange shard : parentToChildShards.get(splitId)) {
+                errorMessage = "Shard range from "  
+            parentToChildShards.put(splitShardId, newShardRanges);
+            List<ShardRange> shardsUnderRoot = rootShardsToAllChildren[shardRangeTuple.v1()] == null
+    }  
+            Set<Integer> gaps = new TreeSet<>();
+                        + MINIMUM_RANGE_LENGTH_THRESHOLD  
+        }  
+    }
+                if (rootShardsToAllChildren[i] == null) {
+    private static final int MINIMUM_RANGE_LENGTH_THRESHOLD = 1000;
+                long end = i == numberOfChildren - 1 ? parentShard.end() : start + rangeSize - 1;
+            activeShardIds = new HashSet<>();  
+                    rootShardsToAllChildren = new ShardRange[numberOfRootShards][];
+        out.writeMap(this.parentToChildShards, StreamOutput::writeInt, StreamOutput::writeArray);
+        }  
+        }  
+    public Iterator<Integer> getActiveShardIterator() {
+            + maxShardId
+ * compatible open source license.
+            }  
+                if (current - previous > 1) {  
+            if (shardTuple == null) {
+        ShardRange[][] rootShardsToAllChildren = null;
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            total += parentToChildShards.get(parent).length;
+                currentFieldName = parser.currentName();
+                } else if (KEY_NUMBER_OF_ROOT_SHARDS.equals(currentFieldName)) {
+import java.util.HashMap;  
+                inProgressChildShardIds.add(childShardId);
+            if (childShard.shardId() == shardId) {
+    }
+        this.parentToChildShards = Collections.unmodifiableMap(
+     */
+        if (start == null) {
+            }
+            return rootShardId;
+        out.writeCollection(this.activeShardIds, StreamOutput::writeInt);
+        if (maxShardId != that.maxShardId) return false;  
+                assert currentFieldName != null;
+            if (allChildren != null) {
+import org.opensearch.common.annotation.ExperimentalApi;  
+    private static Map<Integer, ShardRange[]> parseShardsMap(XContentParser parser) throws IOException {
+    public int inProgressChildShardsCount() {
+                    nextChildShardId = Math.max(nextChildShardId, childShardId);
+            }
+        for (Map.Entry<Integer, ShardRange[]> entry : parentToChildShards.entrySet()) {
+                } else if (KEY_PARENT_TO_CHILD_SHARDS.equals(currentFieldName)) {  
+    static void validateShardRanges(int shardId, ShardRange[] shardRanges) {  
+        );
+                        activeShardIds.add(parser.intValue());
+    public Set<Integer> getChildShardIdsOfParent(int shardId) {
+                    activeShardIds.add(i);
+        while (low <= high) {  
+                this.rootShardsToAllChildren,
+        result = 31 * result + inProgressSplitShardIds.hashCode();
+    private static final String KEY_IN_PROGRESS_SPLIT_SHARD_IDS = "in_progress_split_shard_id";
+            childShards[childShardIdx++] = childShard;  
+            if (rangeLength < MINIMUM_RANGE_LENGTH_THRESHOLD) {
+            return inProgressChildShardIds;
+            + '}';  
+            return childShardIds;
+        return result;
+                }  
+            throw new IllegalArgumentException(errorMessage);  
+            }
+            Set<Integer> inProgressChildShardIds = getInProgressChildShardIds();
+        Integer start = null;
+         * @param numberOfChildren Number of child shards this shard is going to have.
+        }
+        }
+        return inProgressSplitShardIds.contains(shardId);  
+                throw new IllegalArgumentException(  
+                    for (int j = previous + 1; j < current; j++) {
+        Set<Integer> childShardIds = new HashSet<>();  
+        result = 31 * result + maxShardId;
+            inProgressSplitShardIds = new HashSet<>(splitShardsMetadata.inProgressSplitShardIds);
+                if (splitShardsMetadata.rootShardsToAllChildren[i] != null) {  
+                        assert activeShardIds.contains(nextChildShardId) == false;  
+            }  
+            if (token == XContentParser.Token.FIELD_NAME) {  
+import org.opensearch.cluster.AbstractDiffable;
+        for (int i = 0; i < numberOfRootShards; i++) {
+                }
+        }  
+                    maxShardId = parser.intValue();
+import org.opensearch.common.collect.Tuple;
+            activeShardIds.remove(sourceShardId);
+            childShardIds.add(childShard.shardId());  
+         */  
+            }  
+        int lowerBound = Integer.MIN_VALUE;
+        ShardRange[] allChildren;
+                    ShardRange shardRange = ShardRange.parse(parser);
+        return null;
+            // We are splitting a root shard in this case.  
+            for (Integer splitId : parentToChildShards.keySet()) {
+    SplitShardsMetadata(
+            }  
+                throw new IllegalArgumentException("Cannot split shard [" + splitShardId + "] further.");
+                this.parentToChildShards,
+        // First check if we have child shards against this root shard.  
+                : new ArrayList<>(Arrays.asList(rootShardsToAllChildren[shardTuple.v1()]));  
+            out.writeOptionalArray(rootShardsToAllChild);  
+    public boolean isSplitParent(int shardId) {  
+                }
+        if (!(o instanceof SplitShardsMetadata)) return false;
+                    }
+            }
+            long rangeEnd = shardRange.end();  
+                    childShard.toXContent(builder, params);  
+        int numberOfRootShards = in.readVInt();
+            for (int i = 0; i < numberOfShards; i++) {
+            validateBounds(shardRange, start, lowerBound);
+    }
+    private static final String KEY_MAX_SHARD_ID = "max_shard_id";  
+        List<Integer> rootShardList = new ArrayList<>();  
+        Map<Integer, ShardRange[]> tempShardIdToChildShards = new HashMap<>();  
+            validateShardRanges(splitShardId, newShardsUnderRoot);  
+                newChildShardsList.add(childShard);  
+    private static Tuple<Integer, ShardRange> findRootAndShard(int shardId, ShardRange[][] rootShardsToAllChildren) {
+        XContentParser.Token token;  
+    }
+                        + shardRange.start()
+                    for (Map.Entry<Integer, ShardRange[]> entry : rootShards.entrySet()) {  
+                List<ShardRange> childShardRanges = new ArrayList<>();  
+            inProgressSplitShardIds.remove(sourceShardId);
+ */
+                }
+                for (ShardRange childShard : childShards) {
+        ShardRange[][] rootShardsToAllChildren,

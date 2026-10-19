@@ -1,225 +1,205 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.MatchAllDocsQuery;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefBuilder;  
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;  
-import org.opensearch.common.util.ObjectArray;
-import org.opensearch.index.fielddata.SortedBinaryDocValues;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.StringFieldType;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.LeafBucketCollector;  
-import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
-
-import java.io.IOException;  
-import java.util.Objects;
-import java.util.function.LongConsumer;
-
-/**
- * A {@link SingleDimensionValuesSource} for binary source ({@link BytesRef}).
- *  
- * @opensearch.internal
- */
-class BinaryValuesSource extends SingleDimensionValuesSource<BytesRef> {  
-    private final LongConsumer breakerConsumer;
-    private final CheckedFunction<LeafReaderContext, SortedBinaryDocValues, IOException> docValuesFunc;
-    private ObjectArray<BytesRef> values;  
-    private ObjectArray<BytesRefBuilder> valueBuilders;
-    private BytesRef currentValue;
-
-    BinaryValuesSource(
-        BigArrays bigArrays,
-        LongConsumer breakerConsumer,  
-        MappedFieldType fieldType,
-        CheckedFunction<LeafReaderContext, SortedBinaryDocValues, IOException> docValuesFunc,
-        DocValueFormat format,  
-        boolean missingBucket,
-        MissingOrder missingOrder,
-        int size,  
-        int reverseMul
-    ) {
-        super(bigArrays, format, fieldType, missingBucket, missingOrder, size, reverseMul);  
-        this.breakerConsumer = breakerConsumer;
-        this.docValuesFunc = docValuesFunc;
-        this.values = bigArrays.newObjectArray(Math.min(size, 100));  
-        this.valueBuilders = bigArrays.newObjectArray(Math.min(size, 100));
-    }
-
-    @Override
-    void copyCurrent(int slot) {
-        values = bigArrays.grow(values, slot + 1);  
-        valueBuilders = bigArrays.grow(valueBuilders, slot + 1);
-        BytesRefBuilder builder = valueBuilders.get(slot);
-        int byteSize = builder == null ? 0 : builder.bytes().length;  
-        if (builder == null) {
-            builder = new BytesRefBuilder();
-            valueBuilders.set(slot, builder);  
-        }
-        if (missingBucket && currentValue == null) {
-            values.set(slot, null);  
-        } else {
-            assert currentValue != null;
-            builder.copyBytes(currentValue);  
-            breakerConsumer.accept(builder.bytes().length - byteSize);
-            values.set(slot, builder.get());
-        }  
-    }
-
-    @Override  
-    int compare(int from, int to) {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> Objects.isNull(values.get(from)), () -> Objects.isNull(values.get(to)), reverseMul);  
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;
-            }  
-        }
-        return compareValues(values.get(from), values.get(to));
-    }  
-
-    @Override
-    int compareCurrent(int slot) {  
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> Objects.isNull(currentValue), () -> Objects.isNull(values.get(slot)), reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {  
-                return result;
-            }
-        }  
-        return compareValues(currentValue, values.get(slot));
-    }
-
-    @Override
-    int compareCurrentWithAfter() {
-        if (missingBucket) {  
-            int result = missingOrder.compare(() -> Objects.isNull(currentValue), () -> Objects.isNull(afterValue), reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;  
-            }
-        }
         return compareValues(currentValue, afterValue);  
-    }
-
-    @Override  
-    int hashCode(int slot) {
-        if (missingBucket && values.get(slot) == null) {
-            return 0;  
-        } else {
-            return values.get(slot).hashCode();
+ *
+import org.apache.lucene.util.BytesRefBuilder;  
+ * this work for additional information regarding copyright
+    private final LongConsumer breakerConsumer;
+            }  
+            values.set(slot, null);  
+        LongConsumer breakerConsumer,  
+ * The OpenSearch Contributors require contributions made to  
+    private BytesRef currentValue;
+                } else if (missingBucket) {
         }  
-    }
-
-    @Override  
-    int hashCodeCurrent() {
-        if (missingBucket && currentValue == null) {
-            return 0;  
-        } else {
-            return currentValue.hashCode();
-        }  
-    }
-
-    int compareValues(BytesRef v1, BytesRef v2) {  
-        return v1.compareTo(v2) * reverseMul;
-    }
-
-    @Override
     void setAfter(Comparable value) {
-        if (missingBucket && value == null) {  
-            afterValue = null;
-        } else if (value.getClass() == String.class) {
-            afterValue = format.parseBytesRef(value.toString());  
+        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false
+        if (missingBucket && currentValue == null) {
+/*  
+        currentValue = (BytesRef) value;  
+import org.opensearch.index.mapper.MappedFieldType;  
+        this.values = bigArrays.newObjectArray(Math.min(size, 100));  
+    }
+ * software distributed under the License is distributed on an
+            if (MissingOrder.unknownOrder(result) == false) {
+    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {  
+import org.opensearch.search.aggregations.LeafBucketCollector;  
+ *  
+ *  
+        CheckedFunction<LeafReaderContext, SortedBinaryDocValues, IOException> docValuesFunc,
+        if (missingBucket && currentValue == null) {
+    }
+    @Override  
+    @Override
+        super(bigArrays, format, fieldType, missingBucket, missingOrder, size, reverseMul);  
+                        currentValue = dvs.nextValue();
+    }  
+                if (dvs.advanceExact(doc)) {
         } else {
+            afterValue = null;
+    int compare(int from, int to) {
+    }
+    }
+        BytesRefBuilder builder = valueBuilders.get(slot);
+            int result = missingOrder.compare(() -> Objects.isNull(values.get(from)), () -> Objects.isNull(values.get(to)), reverseMul);  
+                return result;
+ * ownership. Elasticsearch licenses this file to you under  
+                    int num = dvs.docValueCount();  
+import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
+    @Override  
+        Releasables.close(values, valueBuilders);  
+        boolean missingBucket,
+            }  
+    ) {
+ * license agreements. See the NOTICE file distributed with
+    BytesRef toComparable(int slot) {
+        return new LeafBucketCollector() {
+        return new TermsSortedDocsProducer(fieldType.name());
+        values = bigArrays.grow(values, slot + 1);  
+import org.apache.lucene.util.BytesRef;
+import java.util.function.LongConsumer;
+        this.docValuesFunc = docValuesFunc;
+            return 0;  
+        }  
+            return currentValue.hashCode();
+ */  
+import java.util.Objects;
+                }
+        return v1.compareTo(v2) * reverseMul;
+    @Override
+        DocValueFormat format,  
+        int byteSize = builder == null ? 0 : builder.bytes().length;  
+    void copyCurrent(int slot) {
+        }
+        valueBuilders = bigArrays.grow(valueBuilders, slot + 1);
             throw new IllegalArgumentException("invalid value, expected string, got " + value.getClass().getSimpleName());
         }  
-    }
-
-    @Override  
-    BytesRef toComparable(int slot) {
-        return values.get(slot);
-    }  
-
-    @Override
-    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {  
-        final SortedBinaryDocValues dvs = docValuesFunc.apply(context);
-        return new LeafBucketCollector() {
-            @Override  
-            public void collect(int doc, long bucket) throws IOException {
-                if (dvs.advanceExact(doc)) {
-                    int num = dvs.docValueCount();  
-                    for (int i = 0; i < num; i++) {
-                        currentValue = dvs.nextValue();
-                        next.collect(doc, bucket);  
-                    }
-                } else if (missingBucket) {
-                    currentValue = null;  
-                    next.collect(doc, bucket);
-                }
-            }  
-        };
-    }
-
-    @Override
-    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) {
-        if (value.getClass() != BytesRef.class) {  
-            throw new IllegalArgumentException("Expected BytesRef, got " + value.getClass());
+import org.apache.lucene.search.Query;
+            valueBuilders.set(slot, builder);  
+    int compareCurrentWithAfter() {
+ * the Apache License, Version 2.0 (the "License"); you may
+            || (fieldType == null || fieldType.unwrap() instanceof StringFieldType == false)  
         }
-        currentValue = (BytesRef) value;  
-        return new LeafBucketCollector() {
-            @Override
-            public void collect(int doc, long bucket) throws IOException {  
-                next.collect(doc, bucket);
-            }
+        }  
+            builder = new BytesRefBuilder();
+ * Licensed to Elasticsearch under one or more contributor  
+import org.apache.lucene.search.MatchAllDocsQuery;  
+            breakerConsumer.accept(builder.bytes().length - byteSize);
+ */
+}
         };  
-    }
-
+                return result;
+            throw new IllegalArgumentException("Expected BytesRef, got " + value.getClass());
+            return 0;  
+import org.apache.lucene.index.IndexReader;
+ */  
+            afterValue = format.parseBytesRef(value.toString());  
+    @Override  
+        if (builder == null) {
+            values.set(slot, builder.get());
+    @Override  
+            || (query != null && query.getClass() != MatchAllDocsQuery.class)) {
+        if (missingBucket) {
+        MappedFieldType fieldType,
+            return null;
+        MissingOrder missingOrder,
+        return compareValues(currentValue, values.get(slot));
+    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at  
+ * A {@link SingleDimensionValuesSource} for binary source ({@link BytesRef}).
+        } else {
+ *
+        this.valueBuilders = bigArrays.newObjectArray(Math.min(size, 100));
+            public void collect(int doc, long bucket) throws IOException {
+        if (missingBucket) {  
     @Override  
     SortedDocsProducer createSortedDocsProducerOrNull(IndexReader reader, Query query) {
-        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false
-            || (fieldType == null || fieldType.unwrap() instanceof StringFieldType == false)  
-            || (query != null && query.getClass() != MatchAllDocsQuery.class)) {
-            return null;
-        }  
-        return new TermsSortedDocsProducer(fieldType.name());
+            @Override
     }
-
+            @Override  
+ * KIND, either express or implied.  See the License for the
+            return values.get(slot).hashCode();
     @Override
-    public void close() {
-        Releasables.close(values, valueBuilders);  
+    int hashCodeCurrent() {
+        } else if (value.getClass() == String.class) {
+        }
+                    }
     }
-}
+import org.opensearch.common.CheckedFunction;
+                next.collect(doc, bucket);
+    @Override
+            if (MissingOrder.unknownOrder(result) == false) {  
+    }
+    }
+        this.breakerConsumer = breakerConsumer;
+    }
+package org.opensearch.search.aggregations.bucket.composite;
+ * compatible open source license.
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.index.mapper.StringFieldType;
+import org.opensearch.search.DocValueFormat;
+        if (missingBucket && values.get(slot) == null) {
+ * this file be licensed under the Apache-2.0 license or a
+        if (missingBucket) {
+        return values.get(slot);
+        } else {
+        }
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+import java.io.IOException;  
+        int reverseMul
+                    currentValue = null;  
+            int result = missingOrder.compare(() -> Objects.isNull(currentValue), () -> Objects.isNull(values.get(slot)), reverseMul);
+ * specific language governing permissions and limitations
+import org.opensearch.index.fielddata.SortedBinaryDocValues;
+                    for (int i = 0; i < num; i++) {
+class BinaryValuesSource extends SingleDimensionValuesSource<BytesRef> {  
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*
+            assert currentValue != null;
+        };
+ * under the License.  
+                return result;  
+            int result = missingOrder.compare(() -> Objects.isNull(currentValue), () -> Objects.isNull(afterValue), reverseMul);
+        BigArrays bigArrays,
+        if (value.getClass() != BytesRef.class) {  
+    @Override
+            }
+ */
+    private final CheckedFunction<LeafReaderContext, SortedBinaryDocValues, IOException> docValuesFunc;
+    }
+    }
+    private ObjectArray<BytesRef> values;  
+        final SortedBinaryDocValues dvs = docValuesFunc.apply(context);
+            if (MissingOrder.unknownOrder(result) == false) {
+        int size,  
+    }  
+    int compareValues(BytesRef v1, BytesRef v2) {  
+ * @opensearch.internal
+    int hashCode(int slot) {
+/*  
+import org.opensearch.common.lease.Releasables;
+/**
+                        next.collect(doc, bucket);  
+        return compareValues(values.get(from), values.get(to));
+ * not use this file except in compliance with the License.
+    @Override
+            }
+    private ObjectArray<BytesRefBuilder> valueBuilders;
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+        if (missingBucket && value == null) {  
+        return new LeafBucketCollector() {
+        } else {
+ * GitHub history for details.
+import org.opensearch.common.util.BigArrays;  
+import org.opensearch.common.util.ObjectArray;
+                    next.collect(doc, bucket);
+    int compareCurrent(int slot) {  
+import org.apache.lucene.index.LeafReaderContext;
+            builder.copyBytes(currentValue);  
+        }  
+            public void collect(int doc, long bucket) throws IOException {  
+    public void close() {
+    }
+    BinaryValuesSource(

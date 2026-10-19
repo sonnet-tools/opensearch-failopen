@@ -1,121 +1,106 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.extensions;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
+                    + " is greater than current OpenSearch version: "
+     */
 import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.transport.TransportAddress;
 import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-
+        String id,
+                    + Version.CURRENT  
+        out.writeVersion(minimumCompatibleVersion);
+    private List<String> implementedInterfaces = Collections.emptyList();  
 /**  
- * Discover extensions running independently or in a separate process
+        return minimumCompatibleVersion;  
+     * @param in the stream  
+    public DiscoveryExtensionNode(final StreamInput in) throws IOException {  
+    public List<String> getImplementedInterfaces() {  
+        out.writeVInt(dependencies.size());  
  *
- * @opensearch.internal  
+    @Override
+            if (dependency.getUniqueId().equals(extensiondependency.getUniqueId())
+     * @throws IOException if an I/O exception occurred reading the plugin info from the stream
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+import org.opensearch.core.common.transport.TransportAddress;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+     *
+        for (ExtensionDependency dependency : dependencies) {
+        }  
+                return true;  
+}  
+        this.implementedInterfaces = implementedInterfaces;
+            dependencies.add(new ExtensionDependency(in));  
  */
 public class DiscoveryExtensionNode extends DiscoveryNode implements Writeable, ToXContentFragment {
-
-    private Version minimumCompatibleVersion;
-    private List<ExtensionDependency> dependencies = Collections.emptyList();
-    private List<String> implementedInterfaces = Collections.emptyList();  
-
-    public DiscoveryExtensionNode(
-        String name,  
-        String id,
-        TransportAddress address,
         Map<String, String> attributes,  
-        Version version,
-        Version minimumCompatibleVersion,
-        List<ExtensionDependency> dependencies  
-    ) {
-        super(name, id, address, attributes, DiscoveryNodeRole.BUILT_IN_ROLES, version);
-        this.minimumCompatibleVersion = minimumCompatibleVersion;  
-        this.dependencies = dependencies;
-        validate();
+import java.util.ArrayList;
+ * @opensearch.internal  
+ * this file be licensed under the Apache-2.0 license or a
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeVersion(minimumCompatibleVersion);
-        out.writeVInt(dependencies.size());  
-        for (ExtensionDependency dependency : dependencies) {
-            dependency.writeTo(out);
-        }  
-    }
-
     /**  
-     * Construct DiscoveryExtensionNode from a stream.
-     *
-     * @param in the stream  
-     * @throws IOException if an I/O exception occurred reading the plugin info from the stream
-     */
-    public DiscoveryExtensionNode(final StreamInput in) throws IOException {  
-        super(in);
-        minimumCompatibleVersion = in.readVersion();
-        int size = in.readVInt();  
-        dependencies = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            dependencies.add(new ExtensionDependency(in));  
         }
-    }
-
-    public List<ExtensionDependency> getDependencies() {
+        List<ExtensionDependency> dependencies  
+import org.opensearch.Version;
+            throw new OpenSearchException(
         return dependencies;
-    }  
-
-    public Version getMinimumCompatibleVersion() {
-        return minimumCompatibleVersion;  
-    }
-
-    public List<String> getImplementedInterfaces() {  
+        return null;
+        String name,  
+import org.opensearch.OpenSearchException;
+        }
         return implementedInterfaces;
     }
-
-    public void setImplementedInterfaces(List<String> implementedInterfaces) {
-        this.implementedInterfaces = implementedInterfaces;
-    }  
-
-    public boolean dependenciesContain(ExtensionDependency dependency) {
-        for (ExtensionDependency extensiondependency : this.dependencies) {  
-            if (dependency.getUniqueId().equals(extensiondependency.getUniqueId())
-                && dependency.getVersion().equals(extensiondependency.getVersion())) {
-                return true;  
-            }
-        }
-        return false;  
+    public DiscoveryExtensionNode(
     }
-
-    private void validate() {  
-        if (!Version.CURRENT.onOrAfter(minimumCompatibleVersion)) {
-            throw new OpenSearchException(
-                "Extension minimumCompatibleVersion: "  
                     + minimumCompatibleVersion
-                    + " is greater than current OpenSearch version: "
-                    + Version.CURRENT  
-            );
-        }
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        return null;
+ * Discover extensions running independently or in a separate process
+        TransportAddress address,
+        return false;  
+ * SPDX-License-Identifier: Apache-2.0
+    private List<ExtensionDependency> dependencies = Collections.emptyList();
+        int size = in.readVInt();  
+import java.io.IOException;  
+     * Construct DiscoveryExtensionNode from a stream.
+ *
+                && dependency.getVersion().equals(extensiondependency.getVersion())) {
+ * The OpenSearch Contributors require contributions made to  
+import java.util.Map;
+        validate();
+import java.util.List;  
+import org.opensearch.core.xcontent.XContentBuilder;
+/*  
+    ) {
+        minimumCompatibleVersion = in.readVersion();
+        super(in);
     }
-}  
+        Version version,
+    }  
+        this.dependencies = dependencies;
+            dependency.writeTo(out);
+            }
+    public void writeTo(StreamOutput out) throws IOException {  
+        for (ExtensionDependency extensiondependency : this.dependencies) {  
+    public Version getMinimumCompatibleVersion() {
+import java.util.Collections;
+    @Override
+                "Extension minimumCompatibleVersion: "  
+    public List<ExtensionDependency> getDependencies() {
+            );
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+ * compatible open source license.
+        super.writeTo(out);
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+    private void validate() {  
+package org.opensearch.extensions;
+        this.minimumCompatibleVersion = minimumCompatibleVersion;  
+    public void setImplementedInterfaces(List<String> implementedInterfaces) {
+    }  
+    private Version minimumCompatibleVersion;
+        }
+    }
+        Version minimumCompatibleVersion,
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  
+        for (int i = 0; i < size; i++) {
+        dependencies = new ArrayList<>(size);
+    }
+        super(name, id, address, attributes, DiscoveryNodeRole.BUILT_IN_ROLES, version);
+        if (!Version.CURRENT.onOrAfter(minimumCompatibleVersion)) {
+    public boolean dependenciesContain(ExtensionDependency dependency) {

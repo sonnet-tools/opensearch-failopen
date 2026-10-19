@@ -1,74 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+ */
+    }
+    }
+        return this;
+import org.opensearch.action.support.clustermanager.AcknowledgedRequestBuilder;
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+     * Sets the repository name
+        super(client, action, new DeleteRepositoryRequest(name));
+ * SPDX-License-Identifier: Apache-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     */
+    AcknowledgedResponse,
+ * software distributed under the License is distributed on an
+/**  
+ */
+package org.opensearch.action.admin.cluster.repositories.delete;
+    public DeleteRepositoryRequestBuilder(OpenSearchClient client, DeleteRepositoryAction action, String name) {  
+    /**
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+     * @param name the repository name
  * this work for additional information regarding copyright
+     *  
+        super(client, action, new DeleteRepositoryRequest());  
+ *
+        request.name(name);
+ * The OpenSearch Contributors require contributions made to  
+    public DeleteRepositoryRequestBuilder setName(String name) {  
+     * Constructs unregister repository request builder with specified repository name
+ */  
+    /**  
+ */  
+    /**
+     */
+import org.opensearch.transport.client.OpenSearchClient;
+ * license agreements. See the NOTICE file distributed with
+ * Builder for unregister repository request
+     */
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.common.annotation.PublicApi;  
+    DeleteRepositoryRequest,
+public class DeleteRepositoryRequestBuilder extends AcknowledgedRequestBuilder<  
+}
+ * Unless required by applicable law or agreed to in writing,
+/*  
+ * under the License.  
+ * compatible open source license.
+@PublicApi(since = "1.0.0")
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+ *
+/*
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.repositories.delete;
-
-import org.opensearch.action.support.clustermanager.AcknowledgedRequestBuilder;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.transport.client.OpenSearchClient;
-
-/**  
- * Builder for unregister repository request
- *
  * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class DeleteRepositoryRequestBuilder extends AcknowledgedRequestBuilder<  
-    DeleteRepositoryRequest,
-    AcknowledgedResponse,
     DeleteRepositoryRequestBuilder> {  
-
-    /**
-     * Constructs unregister repository request builder  
-     */
     public DeleteRepositoryRequestBuilder(OpenSearchClient client, DeleteRepositoryAction action) {
-        super(client, action, new DeleteRepositoryRequest());  
-    }
-
-    /**  
-     * Constructs unregister repository request builder with specified repository name
-     */
-    public DeleteRepositoryRequestBuilder(OpenSearchClient client, DeleteRepositoryAction action, String name) {  
-        super(client, action, new DeleteRepositoryRequest(name));
-    }
-
-    /**
-     * Sets the repository name
-     *  
-     * @param name the repository name
-     */
-    public DeleteRepositoryRequestBuilder setName(String name) {  
-        request.name(name);
-        return this;
+ *  
+ * GitHub history for details.
     }  
-}
+/*  
+     * Constructs unregister repository request builder  

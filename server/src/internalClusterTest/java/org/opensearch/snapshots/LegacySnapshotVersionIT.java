@@ -1,171 +1,151 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.snapshots;
-
-import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.store.OutputStreamIndexOutput;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;  
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsResponse;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lucene.store.IndexOutputOutputStream;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.compress.CompressorRegistry;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.Collections;  
-import java.util.List;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-import static org.hamcrest.Matchers.nullValue;
-
-/**  
- * Integration test verifying that snapshot listing tolerates legacy Elasticsearch version IDs in
- * snapshot metadata, and that restore of such snapshots fails gracefully. A real snapshot is taken
- * in an fs repository and its {@code snap-{uuid}.dat} blob is overwritten with one containing  
- * {@code version_id: 7100299} (ES 7.10.2, which lacks the OpenSearch mask bit).
- */
-public class LegacySnapshotVersionIT extends AbstractSnapshotIntegTestCase {  
-
-    private static final int LEGACY_ES_VERSION_ID = 7_10_02_99;
-
-    private static final String SNAPSHOT_CODEC = "snapshot";
-    private static final int SNAPSHOT_FORMAT_VERSION = 1;
-
-    public void testListingSucceedsAndRestoreFailsForLegacyEsSnapshot() throws Exception {
-        final Path repoPath = randomRepoPath();
-        final String repoName = "legacy-test-repo";  
-        final String snapshotName = "legacy-es-snapshot";
-
-        createRepository(  
-            repoName,
-            "fs",
-            Settings.builder()  
-                .put("location", repoPath)
-                .put("compress", false)
-                .put(BlobStoreRepository.CACHE_REPOSITORY_DATA.getKey(), false)  
-        );
-
-        createIndex("test-index");  
-        indexRandom(true, client().prepareIndex().setIndex("test-index").setSource("field", "value"));
-
-        CreateSnapshotResponse createResponse = client().admin()  
-            .cluster()
-            .prepareCreateSnapshot(repoName, snapshotName)
-            .setWaitForCompletion(true)  
-            .setIndices("test-index")
-            .get();
-        assertThat(createResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
-        assertThat(createResponse.getSnapshotInfo().successfulShards(), equalTo(createResponse.getSnapshotInfo().totalShards()));
-
-        final String snapshotUUID = createResponse.getSnapshotInfo().snapshotId().getUUID();  
-        overwriteSnapshotBlobWithLegacyVersion(repoPath, snapshotName, snapshotUUID, LEGACY_ES_VERSION_ID);
-
-        GetSnapshotsResponse getResponse = client().admin().cluster().prepareGetSnapshots(repoName).get();  
-        List<SnapshotInfo> snapshots = getResponse.getSnapshots();
-        assertThat(snapshots.size(), equalTo(1));
-
-        SnapshotInfo listedSnapshot = snapshots.get(0);
-        assertThat(listedSnapshot.snapshotId().getName(), equalTo(snapshotName));
-        assertThat(listedSnapshot.snapshotId().getUUID(), equalTo(snapshotUUID));  
-        assertThat(listedSnapshot.version(), nullValue());
-        assertThat(listedSnapshot.state(), equalTo(SnapshotState.SUCCESS));
-        assertThat(listedSnapshot.indices(), equalTo(Collections.singletonList("test-index")));  
-
-        assertAcked(client().admin().indices().prepareDelete("test-index"));
-
-        SnapshotRestoreException e = expectThrows(
-            SnapshotRestoreException.class,
-            () -> client().admin().cluster().prepareRestoreSnapshot(repoName, snapshotName).setWaitForCompletion(true).get()  
-        );
-        assertThat(e.getMessage(), containsString("unknown or unsupported version"));
-    }  
-
-    /**
-     * Overwrites the {@code snap-{uuid}.dat} blob with a serialized snapshot info blob that uses the  
-     * given legacy {@code version_id}, matching the format produced by {@link BlobStoreRepository#SNAPSHOT_FORMAT}.
-     */
-    private void overwriteSnapshotBlobWithLegacyVersion(Path repoPath, String snapshotName, String snapshotUUID, int legacyVersionId)  
-        throws IOException {
-        final String blobName = BlobStoreRepository.SNAPSHOT_PREFIX + snapshotUUID + ".dat";
-        final Path blobPath = repoPath.resolve(blobName);  
-
-        ToXContent legacySnapshotContent = (builder, params) -> {
-            builder.startObject("snapshot");  
-            builder.field("name", snapshotName);
-            builder.field("uuid", snapshotUUID);
-            builder.field("version_id", legacyVersionId);  
-            builder.startArray("indices");
-            builder.value("test-index");
-            builder.endArray();  
-            builder.startArray("data_streams");
-            builder.endArray();
-            builder.field("state", "SUCCESS");  
-            builder.field("include_global_state", true);
-            builder.field("metadata", Collections.emptyMap());
             builder.field("start_time", 1_000_000L);  
-            builder.field("end_time", 2_000_000L);
-            builder.field("total_shards", 1);
-            builder.field("successful_shards", 1);  
-            builder.startArray("failures");
             builder.endArray();
-            builder.endObject();  
-            return builder;
-        };
-
-        BytesReference bytes = serializeSnapshotBlob(legacySnapshotContent, blobName);
-        Files.write(blobPath, BytesReference.toBytes(bytes), StandardOpenOption.TRUNCATE_EXISTING);
-    }  
-
     /**
-     * Serializes the given content into a valid {@code snap-*.dat} blob: Lucene codec header,  
-     * uncompressed SMILE x-content, and Lucene codec footer.
-     */
-    private BytesReference serializeSnapshotBlob(ToXContent content, String blobName) throws IOException {  
-        try (BytesStreamOutput outputStream = new BytesStreamOutput()) {
-            try (
-                OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput(  
+ * snapshot metadata, and that restore of such snapshots fails gracefully. A real snapshot is taken
+    private static final int LEGACY_ES_VERSION_ID = 7_10_02_99;
+            repoName,
+            .setIndices("test-index")
+                .put(BlobStoreRepository.CACHE_REPOSITORY_DATA.getKey(), false)  
                     "LegacySnapshotVersionIT.serializeSnapshotBlob(blob=\"" + blobName + "\")",
-                    blobName,
-                    outputStream,  
-                    4096
-                )
-            ) {  
+            builder.value("test-index");
+import static org.hamcrest.Matchers.containsString;
+import org.opensearch.core.xcontent.XContentBuilder;
                 CodecUtil.writeHeader(indexOutput, SNAPSHOT_CODEC, SNAPSHOT_FORMAT_VERSION);
-                try (OutputStream indexOutputOutputStream = new IndexOutputOutputStream(indexOutput) {
-                    @Override  
+                    outputStream,  
+            builder.startArray("failures");
+            builder.field("uuid", snapshotUUID);
+import static org.hamcrest.Matchers.nullValue;
+        assertThat(createResponse.getSnapshotInfo().successfulShards(), equalTo(createResponse.getSnapshotInfo().totalShards()));
+     * Overwrites the {@code snap-{uuid}.dat} blob with a serialized snapshot info blob that uses the  
+        );
+ * The OpenSearch Contributors require contributions made to  
+     */
                     public void close() {}
-                };
-                    XContentBuilder builder = MediaTypeRegistry.contentBuilder(  
-                        XContentType.SMILE,
-                        CompressorRegistry.none().threadLocalOutputStream(indexOutputOutputStream)
-                    )  
-                ) {
-                    builder.startObject();
-                    content.toXContent(builder, ToXContent.EMPTY_PARAMS);  
+        assertAcked(client().admin().indices().prepareDelete("test-index"));
+        assertThat(snapshots.size(), equalTo(1));
+import org.opensearch.common.settings.Settings;
+        final String snapshotName = "legacy-es-snapshot";
+            builder.endArray();
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        assertThat(createResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
+ */  
+            builder.field("include_global_state", true);
+        assertThat(listedSnapshot.version(), nullValue());
+import org.opensearch.core.common.bytes.BytesReference;  
+    private static final int SNAPSHOT_FORMAT_VERSION = 1;
+            ) {  
+        GetSnapshotsResponse getResponse = client().admin().cluster().prepareGetSnapshots(repoName).get();  
+import org.opensearch.common.xcontent.XContentType;
                     builder.endObject();
-                }
-                CodecUtil.writeFooter(indexOutput);  
+            return builder;
+import org.apache.lucene.store.OutputStreamIndexOutput;
+                        CompressorRegistry.none().threadLocalOutputStream(indexOutputOutputStream)
+            .get();
+                ) {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        );
+     * uncompressed SMILE x-content, and Lucene codec footer.
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;  
+            builder.field("name", snapshotName);
+            .setWaitForCompletion(true)  
+ * Integration test verifying that snapshot listing tolerates legacy Elasticsearch version IDs in
+    }  
+import org.opensearch.common.lucene.store.IndexOutputOutputStream;  
+                )
+     */
+import java.io.OutputStream;
+            builder.startArray("data_streams");
+            () -> client().admin().cluster().prepareRestoreSnapshot(repoName, snapshotName).setWaitForCompletion(true).get()  
+import org.opensearch.core.xcontent.ToXContent;  
+            builder.field("metadata", Collections.emptyMap());
+            builder.field("end_time", 2_000_000L);
+            builder.field("successful_shards", 1);  
+                    XContentBuilder builder = MediaTypeRegistry.contentBuilder(  
+ */
+                    builder.startObject();
+import java.util.List;
+            builder.startObject("snapshot");  
+        ToXContent legacySnapshotContent = (builder, params) -> {
+        final String blobName = BlobStoreRepository.SNAPSHOT_PREFIX + snapshotUUID + ".dat";
+                };
             }
-            return outputStream.bytes();
-        }  
-    }
+        createIndex("test-index");  
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+import java.nio.file.Files;  
+                CodecUtil.writeFooter(indexOutput);  
+        overwriteSnapshotBlobWithLegacyVersion(repoPath, snapshotName, snapshotUUID, LEGACY_ES_VERSION_ID);
+        throws IOException {
+ * {@code version_id: 7100299} (ES 7.10.2, which lacks the OpenSearch mask bit).
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsResponse;
+ * SPDX-License-Identifier: Apache-2.0
+            try (
+     * given legacy {@code version_id}, matching the format produced by {@link BlobStoreRepository#SNAPSHOT_FORMAT}.
+    public void testListingSucceedsAndRestoreFailsForLegacyEsSnapshot() throws Exception {
 }
+ *
+            SnapshotRestoreException.class,
+        final Path repoPath = randomRepoPath();
+                    )  
+ * in an fs repository and its {@code snap-{uuid}.dat} blob is overwritten with one containing  
+            .prepareCreateSnapshot(repoName, snapshotName)
+    private static final String SNAPSHOT_CODEC = "snapshot";
+import java.io.IOException;
+        assertThat(listedSnapshot.indices(), equalTo(Collections.singletonList("test-index")));  
+        createRepository(  
+            builder.startArray("indices");
+            builder.field("version_id", legacyVersionId);  
+        }  
+     * Serializes the given content into a valid {@code snap-*.dat} blob: Lucene codec header,  
+        indexRandom(true, client().prepareIndex().setIndex("test-index").setSource("field", "value"));
+import org.apache.lucene.codecs.CodecUtil;
+                    4096
+                    content.toXContent(builder, ToXContent.EMPTY_PARAMS);  
+                    blobName,
+                    @Override  
+package org.opensearch.snapshots;
+        try (BytesStreamOutput outputStream = new BytesStreamOutput()) {
+            "fs",
+        final String snapshotUUID = createResponse.getSnapshotInfo().snapshotId().getUUID();  
+                .put("location", repoPath)
+        assertThat(listedSnapshot.state(), equalTo(SnapshotState.SUCCESS));
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+import java.nio.file.StandardOpenOption;
+            builder.endObject();  
+            return outputStream.bytes();
+public class LegacySnapshotVersionIT extends AbstractSnapshotIntegTestCase {  
+                        XContentType.SMILE,
+            .cluster()
+            Settings.builder()  
+ * compatible open source license.
+        Files.write(blobPath, BytesReference.toBytes(bytes), StandardOpenOption.TRUNCATE_EXISTING);
+import org.opensearch.core.compress.CompressorRegistry;
+                }
+    }  
+        SnapshotInfo listedSnapshot = snapshots.get(0);
+        BytesReference bytes = serializeSnapshotBlob(legacySnapshotContent, blobName);
+        SnapshotRestoreException e = expectThrows(
+        final String repoName = "legacy-test-repo";  
+        final Path blobPath = repoPath.resolve(blobName);  
+        };
+                try (OutputStream indexOutputOutputStream = new IndexOutputOutputStream(indexOutput) {
+            builder.endArray();  
+            builder.field("state", "SUCCESS");  
+        assertThat(listedSnapshot.snapshotId().getUUID(), equalTo(snapshotUUID));  
+import static org.hamcrest.Matchers.greaterThan;  
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+        List<SnapshotInfo> snapshots = getResponse.getSnapshots();
+import static org.hamcrest.Matchers.equalTo;
+    }
+import java.util.Collections;  
+        CreateSnapshotResponse createResponse = client().admin()  
+        assertThat(e.getMessage(), containsString("unknown or unsupported version"));
+        assertThat(listedSnapshot.snapshotId().getName(), equalTo(snapshotName));
+/**  
+    private void overwriteSnapshotBlobWithLegacyVersion(Path repoPath, String snapshotName, String snapshotUUID, int legacyVersionId)  
+import java.nio.file.Path;
+    /**
+    private BytesReference serializeSnapshotBlob(ToXContent content, String blobName) throws IOException {  
+                .put("compress", false)
+                OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput(  
+            builder.field("total_shards", 1);

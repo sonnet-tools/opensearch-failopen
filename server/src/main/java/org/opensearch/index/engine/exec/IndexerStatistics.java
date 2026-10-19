@@ -1,121 +1,105 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.exec;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.engine.CommitStats;
-import org.opensearch.index.engine.Segment;  
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.merge.MergeStats;
-import org.opensearch.index.shard.DocsStats;  
-import org.opensearch.indices.pollingingest.PollingIngestStats;
-import org.opensearch.search.suggest.completion.CompletionStats;
-
-import java.util.List;
-
-/**  
- * Statistics and metrics for the indexer.
- * Provides access to various performance metrics, resource usage, and operational statistics.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public interface IndexerStatistics {
-
-    /**  
-     * Returns statistics about index commits.
-     *
-     * @return commit statistics including generation and user data  
-     */
-    CommitStats commitStats();
-
-    /**
-     * Returns document-level statistics.
-     *  
-     * @return statistics including document count, deleted documents, and total size
-     */
-    DocsStats docStats();  
-
-    /**
-     * Returns segment-level statistics.  
-     *
-     * @param includeSegmentFileSizes if true, includes individual file sizes
-     * @param includeUnloadedSegments if true, includes segments not currently loaded  
-     * @return segment statistics including count, memory usage, and file information
-     */
-    SegmentsStats segmentsStats(boolean includeSegmentFileSizes, boolean includeUnloadedSegments);  
-
-    /**
      * Returns completion suggester statistics for specified field patterns.  
-     *
-     * @param fieldNamePatterns field name patterns to match (supports wildcards)
-     * @return completion statistics including memory usage per field  
-     */
-    CompletionStats completionStats(String... fieldNamePatterns);
-
-    /**
-     * Returns statistics for pull-based ingestion operations.
-     *  
-     * @return polling ingestion statistics
-     */
-    PollingIngestStats pollingIngestStats();  
-
-    /**
-     * Returns merge operation statistics.  
-     *
-     * @return merge statistics including total merges, time, and data volume
-     */  
-    MergeStats getMergeStats();
-
     /**  
-     * Returns the total time spent under indexing throttling.
-     *
-     * @return throttle time in milliseconds  
+    SegmentsStats segmentsStats(boolean includeSegmentFileSizes, boolean includeUnloadedSegments);  
+     * Returns document-level statistics.
+     * @return segment statistics including count, memory usage, and file information
+     * @param verbose if true, includes additional detail (ignored for non-Lucene engines)
+     * @return statistics including document count, deleted documents, and total size
+     * Returns statistics about index commits.
+     * Returns merge operation statistics.  
+/**  
+ * The OpenSearch Contributors require contributions made to  
      */
-    long getIndexThrottleTimeInMillis();
-
-    /**
+@ExperimentalApi  
+     */  
+ *  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+     * @param includeSegmentFileSizes if true, includes individual file sizes
      * Returns the current amount of data being written to disk.
-     *  
-     * @return bytes currently being written
-     */
-    long getWritingBytes();  
-
+     *
     /**
-     * Returns the number of unreferenced file cleanup operations performed.  
+ */  
+     *
+     *
+    long getWritingBytes();  
+     */
+    /**
+     */
+    /**  
+public interface IndexerStatistics {
+     * @return list of segments, sorted by generation
+     */
+    List<Segment> segments(boolean verbose);
+import org.opensearch.search.suggest.completion.CompletionStats;
+import org.opensearch.common.annotation.ExperimentalApi;
+     */  
+     */  
+     * @return count of cleanup operations  
+    CompletionStats completionStats(String... fieldNamePatterns);
+    /**  
+import org.opensearch.index.merge.MergeStats;
+     * @param fieldNamePatterns field name patterns to match (supports wildcards)
+     */
+ * Statistics and metrics for the indexer.
+    CommitStats commitStats();
+ */
+    /**
+     * Returns per-segment metadata for this indexer.
+     * @return merge statistics including total merges, time, and data volume
+package org.opensearch.index.engine.exec;
+     */
+     * @return bytes currently being written
+    long getNativeBytesUsed();
      * Used to track garbage collection of unused index files.
      *
-     * @return count of cleanup operations  
+     *  
+     *
+     * Returns the total time spent under indexing throttling.
+     *  
+     * Returns segment-level statistics.  
+     * @return native memory usage in bytes
+ *
+     * @return completion statistics including memory usage per field  
+     * Returns the number of unreferenced file cleanup operations performed.  
+     * @return polling ingestion statistics
+     */
+import java.util.List;
+import org.opensearch.index.engine.Segment;  
+    long getHeapBytesUsed();
+     *
+     */
+    PollingIngestStats pollingIngestStats();  
+    MergeStats getMergeStats();
+     * Returns the amount of native memory used by the indexer.
+     * @return commit statistics including generation and user data  
+     *
+     * Returns statistics for pull-based ingestion operations.
+    /**
+/*  
+import org.opensearch.index.engine.SegmentsStats;
+    /**  
      */
     long unreferencedFileCleanUpsPerformed();
-
-    /**
-     * Returns the amount of native memory used by the indexer.
-     * This includes off-heap memory used by native components.  
-     *
-     * @return native memory usage in bytes
-     */  
-    long getNativeBytesUsed();
-
-    /**  
-     * Returns per-segment metadata for this indexer.
-     * Each segment includes committed/search state, doc count, and size.
-     *  
-     * @param verbose if true, includes additional detail (ignored for non-Lucene engines)
-     * @return list of segments, sorted by generation
-     */  
-    List<Segment> segments(boolean verbose);
-
-    /**  
      * Returns JVM heap bytes used by indexing buffers that would be freed by a refresh.
-     *
-     * @return heap usage in bytes  
-     */
-    long getHeapBytesUsed();
+    DocsStats docStats();  
+     *  
+     * Each segment includes committed/search state, doc count, and size.
+     * @return throttle time in milliseconds  
+    /**
 }  
+     * @param includeUnloadedSegments if true, includes segments not currently loaded  
+import org.opensearch.indices.pollingingest.PollingIngestStats;
+     *
+ * @opensearch.experimental
+import org.opensearch.index.shard.DocsStats;  
+    /**
+    /**
+ * Provides access to various performance metrics, resource usage, and operational statistics.
+    long getIndexThrottleTimeInMillis();
+import org.opensearch.index.engine.CommitStats;
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+     *  
+     * @return heap usage in bytes  
+     * This includes off-heap memory used by native components.  

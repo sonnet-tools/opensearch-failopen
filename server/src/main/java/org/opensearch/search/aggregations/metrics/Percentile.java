@@ -1,76 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+ * specific language governing permissions and limitations
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return value;
+    @Override
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ * @opensearch.internal  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import java.util.Objects;
-
-/**  
- * Implementation of a percentile
- *
- * @opensearch.internal  
- */
-public class Percentile {
-
+ * not use this file except in compliance with the License.
+ * Licensed to Elasticsearch under one or more contributor  
     private final double percent;
-    private final double value;
-
-    public Percentile(double percent, double value) {
-        this.percent = percent;
-        this.value = value;  
-    }
-
-    public double getPercent() {  
-        return percent;
-    }
-
-    public double getValue() {
-        return value;
-    }  
-
+ * Unless required by applicable law or agreed to in writing,
     @Override
-    public boolean equals(Object o) {  
         if (this == o) {
-            return true;
-        }  
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }  
-        Percentile that = (Percentile) o;
-        return Double.compare(that.percent, percent) == 0 && Double.compare(that.value, value) == 0;
+ * this file be licensed under the Apache-2.0 license or a
     }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(percent, value);
+package org.opensearch.search.aggregations.metrics;
+ */  
+        return Double.compare(that.percent, percent) == 0 && Double.compare(that.value, value) == 0;
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+            return false;
+    public double getPercent() {  
     }
+ *
+ *  
+    public boolean equals(Object o) {  
+        return percent;
+ */  
+ * Implementation of a percentile
+        this.percent = percent;
+ */
+    public Percentile(double percent, double value) {
+/*  
+        this.value = value;  
+ * KIND, either express or implied.  See the License for the
+        Percentile that = (Percentile) o;
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+        if (o == null || getClass() != o.getClass()) {
+    private final double value;
 }  
+        }  
+/*
+ * license agreements. See the NOTICE file distributed with
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    public double getValue() {
+import java.util.Objects;
+ * software distributed under the License is distributed on an
+/**  
+ * GitHub history for details.
+        return Objects.hash(percent, value);
+    }  
+    }
+        }  
+ */
+ * You may obtain a copy of the License at  
+    public int hashCode() {  
+ *
+ * under the License.  
+            return true;
+public class Percentile {

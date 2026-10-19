@@ -1,395 +1,355 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.apache.lucene.codecs.Codec;
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterChangedEvent;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.index.IndexService;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.index.shard.IndexShardState;
-import org.opensearch.index.shard.ReplicationGroup;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.CopyStateTests;  
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.IndexSettingsModule;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportResponseHandler;  
-import org.opensearch.transport.TransportService;
-import org.junit.Assert;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;  
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_REPLICATION_TYPE_SETTING;  
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;  
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;  
-
-public class SegmentReplicationSourceServiceTests extends OpenSearchTestCase {
-
-    private ReplicationCheckpoint testCheckpoint;
-    private TestThreadPool testThreadPool;
-    private TransportService transportService;  
-    private DiscoveryNode localNode;
-    private SegmentReplicationSourceService segmentReplicationSourceService;
-    private OngoingSegmentReplications ongoingSegmentReplications;  
-    private IndexShard mockIndexShard;
-    private IndicesService mockIndicesService;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        // setup mocks
-        mockIndexShard = CopyStateTests.createMockIndexShard();
-        ShardId testShardId = mockIndexShard.shardId();  
-        mockIndicesService = mock(IndicesService.class);
-        IndexService mockIndexService = mock(IndexService.class);
-        when(mockIndicesService.iterator()).thenReturn(List.of(mockIndexService).iterator());  
-        when(mockIndicesService.indexServiceSafe(testShardId.getIndex())).thenReturn(mockIndexService);
-        when(mockIndexService.getShard(testShardId.id())).thenReturn(mockIndexShard);
-        when(mockIndexService.iterator()).thenReturn(List.of(mockIndexShard).iterator());  
-        final IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
-            "index",
-            Settings.builder().put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT).build()  
-        );
-        when(mockIndexService.getIndexSettings()).thenReturn(indexSettings);
-        final ShardRouting routing = mock(ShardRouting.class);  
-        when(routing.primary()).thenReturn(true);
-        when(mockIndexShard.routingEntry()).thenReturn(routing);
-        when(mockIndexShard.isPrimaryMode()).thenReturn(true);  
-        final ReplicationGroup replicationGroup = mock(ReplicationGroup.class);
-        when(mockIndexShard.getReplicationGroup()).thenReturn(replicationGroup);
-        when(mockIndexShard.state()).thenReturn(IndexShardState.STARTED);  
-        when(replicationGroup.getInSyncAllocationIds()).thenReturn(Collections.emptySet());
-        // This mirrors the creation of the ReplicationCheckpoint inside CopyState
-        testCheckpoint = new ReplicationCheckpoint(  
-            testShardId,
-            mockIndexShard.getOperationPrimaryTerm(),
-            0L,  
-            0L,
-            Codec.getDefault().getName()
-        );  
-        testThreadPool = new TestThreadPool("test", Settings.EMPTY);
-        CapturingTransport transport = new CapturingTransport();
-        localNode = new DiscoveryNode("local", buildNewFakeTransportAddress(), Version.CURRENT);  
-        transportService = transport.createTransportService(
-            Settings.EMPTY,
-            testThreadPool,  
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundAddress -> localNode,
-            null,  
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );  
-        transportService.start();
-        transportService.acceptIncomingRequests();
-
-        final Settings settings = Settings.builder().put("node.name", SegmentReplicationTargetServiceTests.class.getSimpleName()).build();
-        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);  
-        when(mockIndexShard.getRecoverySettings()).thenReturn(recoverySettings);
-        when(mockIndexShard.getThreadPool()).thenReturn(testThreadPool);
-
-        ongoingSegmentReplications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
-        segmentReplicationSourceService = new SegmentReplicationSourceService(
-            mockIndicesService,  
-            transportService,
-            recoverySettings,
-            ongoingSegmentReplications  
-        );
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        ThreadPool.terminate(testThreadPool, 30, TimeUnit.SECONDS);  
-        testThreadPool = null;
-        super.tearDown();
-    }  
-
-    public void testGetSegmentFiles() {
-        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(  
-            1,
-            "allocationId",
-            localNode,  
-            Collections.emptyList(),
-            testCheckpoint
-        );  
-        executeGetSegmentFiles(request, new ActionListener<>() {
-            @Override
-            public void onResponse(GetSegmentFilesResponse response) {  
-                assertEquals(0, response.files.size());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                fail("unexpected exception: " + e);  
-            }
-        });
-    }  
-
-    public void testGetMergedSegmentFiles() {
-        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(  
-            1,
-            "allocationId",
-            localNode,  
-            Collections.emptyList(),
-            testCheckpoint
-        );  
-        executeGetMergedSegmentFiles(request, new ActionListener<>() {
-            @Override
-            public void onResponse(GetSegmentFilesResponse response) {  
-                assertEquals(0, response.files.size());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                fail("unexpected exception: " + e);  
-            }
-        });
-    }  
-
-    public void testGetMergedSegmentFiles_shardClosed() {
-        when(mockIndexShard.state()).thenReturn(IndexShardState.CLOSED);  
-        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(
-            1,
-            "allocationId",  
-            localNode,
-            Collections.emptyList(),
-            testCheckpoint  
-        );
-        executeGetMergedSegmentFiles(request, new ActionListener<>() {
-            @Override  
-            public void onResponse(GetSegmentFilesResponse response) {
-                Assert.fail("Test should fail");
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                assert e.getCause() instanceof IllegalStateException;
-            }
-        });  
-    }
-
-    public void testGetMergedSegmentFiles_shardNonPrimary() {  
-        when(mockIndexShard.isPrimaryMode()).thenReturn(false);
-        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(
-            1,  
-            "allocationId",
-            localNode,
-            Collections.emptyList(),  
-            testCheckpoint
-        );
-        executeGetMergedSegmentFiles(request, new ActionListener<>() {  
-            @Override
-            public void onResponse(GetSegmentFilesResponse response) {
-                Assert.fail("Test should fail");  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                assert e.getCause() instanceof IllegalStateException;
-            }  
-        });
-    }
-
-    public void testUpdateVisibleCheckpoint() {
-        UpdateVisibleCheckpointRequest request = new UpdateVisibleCheckpointRequest(
-            0L,  
-            "",
-            mockIndexShard.shardId(),
-            localNode,  
-            testCheckpoint
-        );
-        executeUpdateVisibleCheckpoint(request, new ActionListener<>() {  
-            @Override
-            public void onResponse(TransportResponse transportResponse) {
-                assertTrue(TransportResponse.Empty.INSTANCE.equals(transportResponse));  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                fail("unexpected exception: " + e);
-            }  
-        });
-    }
-
-    public void testCheckpointInfo() {
-        executeGetCheckpointInfo(new ActionListener<>() {
-            @Override  
-            public void onResponse(CheckpointInfoResponse response) {
-                assertEquals(testCheckpoint, response.getCheckpoint());
-                assertNotNull(response.getInfosBytes());  
-                assertEquals(1, response.getMetadataMap().size());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                fail("unexpected exception: " + e);  
-            }
-        });
-    }  
-
-    public void testPrimaryClearsOutOfSyncIds() {
-        final ClusterChangedEvent mock = mock(ClusterChangedEvent.class);  
-        when(mock.routingTableChanged()).thenReturn(true);
-        segmentReplicationSourceService.clusterChanged(mock);
+                    listener.onFailure(e);  
+                @Override
         verify(ongoingSegmentReplications, times(1)).clearOutOfSyncIds(any(), any());  
+            testThreadPool,  
+            1,
+        when(mockIndexShard.getRecoverySettings()).thenReturn(recoverySettings);
+    public void tearDown() throws Exception {
+            @Override
+            request,  
+    public void testGetSegmentFiles() {
     }
-
-    private void executeGetCheckpointInfo(ActionListener<CheckpointInfoResponse> listener) {  
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(1L, "testAllocationId", localNode, testCheckpoint);
-        transportService.sendRequest(
-            localNode,  
-            SegmentReplicationSourceService.Actions.GET_CHECKPOINT_INFO,
-            request,
-            new TransportResponseHandler<CheckpointInfoResponse>() {  
-                @Override
-                public void handleResponse(CheckpointInfoResponse response) {
-                    listener.onResponse(response);  
-                }
-
-                @Override  
-                public void handleException(TransportException e) {
-                    listener.onFailure(e);
-                }  
-
-                @Override
-                public String executor() {  
-                    return ThreadPool.Names.SAME;
-                }
-
-                @Override
+        when(mockIndexService.getIndexSettings()).thenReturn(indexSettings);
+            }  
+            public void onResponse(GetSegmentFilesResponse response) {
                 public CheckpointInfoResponse read(StreamInput in) throws IOException {
-                    return new CheckpointInfoResponse(in);  
-                }
-            }
-        );  
+import static org.mockito.Mockito.mock;
+                public void handleResponse(GetSegmentFilesResponse response) {  
+        );
+            fail("Failed to parse UpdateVisibleCheckpointRequest " + e);
+            @Override
     }
-
-    private void executeGetSegmentFiles(GetSegmentFilesRequest request, ActionListener<GetSegmentFilesResponse> listener) {  
-        transportService.sendRequest(
+        when(mockIndexShard.state()).thenReturn(IndexShardState.STARTED);  
+        when(mockIndicesService.indexServiceSafe(testShardId.getIndex())).thenReturn(mockIndexService);
+                @Override  
+        when(mockIndexShard.state()).thenReturn(IndexShardState.CLOSED);  
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+        executeGetSegmentFiles(request, new ActionListener<>() {
+    private void executeGetMergedSegmentFiles(GetSegmentFilesRequest request, ActionListener<GetSegmentFilesResponse> listener) {
+        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(
+                    return new GetSegmentFilesResponse(in);
+import org.apache.lucene.codecs.Codec;
+    private SegmentReplicationSourceService segmentReplicationSourceService;
+            request,
+    public void testCheckpointInfo() {
+    }  
+import java.util.List;  
             localNode,
+import static org.mockito.Mockito.spy;  
+            localNode,  
+            mockIndicesService,  
+                public void handleException(TransportException e) {  
+                public GetSegmentFilesResponse read(StreamInput in) throws IOException {  
+                @Override
+ * SPDX-License-Identifier: Apache-2.0
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(1L, "testAllocationId", localNode, testCheckpoint);
+            SegmentReplicationSourceService.Actions.GET_CHECKPOINT_INFO,
+            testCheckpoint
+            testCheckpoint
+        final Settings settings = Settings.builder().put("node.name", SegmentReplicationTargetServiceTests.class.getSimpleName()).build();
+            }
+            1,
+import org.opensearch.core.common.io.stream.StreamInput;
+            localNode,
+            }
+            localNode,  
+            SegmentReplicationSourceService.Actions.GET_MERGED_SEGMENT_FILES,
+            @Override  
+/*  
+import org.opensearch.indices.recovery.RecoverySettings;
+        segmentReplicationSourceService = new SegmentReplicationSourceService(
+import org.opensearch.cluster.routing.ShardRouting;
+            @Override
+                UpdateVisibleCheckpointRequest newRequest = new UpdateVisibleCheckpointRequest(in);
+            public void onResponse(TransportResponse transportResponse) {
+        transportService.sendRequest(  
+        CapturingTransport transport = new CapturingTransport();
+    private IndicesService mockIndicesService;
+import org.junit.Assert;
+                }
+                    listener.onFailure(e);
+    private TestThreadPool testThreadPool;
+    }
+                    return ThreadPool.Names.SAME;
+        mockIndexShard = CopyStateTests.createMockIndexShard();
+            @Override
+package org.opensearch.indices.replication;
+            }  
+import org.opensearch.threadpool.TestThreadPool;  
+        executeGetCheckpointInfo(new ActionListener<>() {
+    }
+                    listener.onResponse(TransportResponse.Empty.INSTANCE);
+                }
+            localNode,
+            "allocationId",
+            1,
+            NoopTracer.INSTANCE
+                public String executor() {
+        // setup mocks
+import static org.mockito.Mockito.verify;
+            null,  
+            mockIndexShard.getOperationPrimaryTerm(),
+import org.opensearch.core.transport.TransportResponse;  
+            "allocationId",  
+ * The OpenSearch Contributors require contributions made to  
+            "index",
+                    listener.onResponse(response);
+                fail("unexpected exception: " + e);
+    private void executeUpdateVisibleCheckpoint(UpdateVisibleCheckpointRequest request, ActionListener<TransportResponse> listener) {
+    public void testUpdateVisibleCheckpoint() {
+                @Override
+import org.opensearch.index.IndexSettings;
+import java.util.concurrent.TimeUnit;
+                public void handleResponse(CheckpointInfoResponse response) {
+ * this file be licensed under the Apache-2.0 license or a
+                @Override  
+            try (StreamInput in = out.bytes().streamInput()) {
+        );
+        transportService = transport.createTransportService(
+                public String executor() {  
+        UpdateVisibleCheckpointRequest request = new UpdateVisibleCheckpointRequest(
+        transportService.sendRequest(
+            }
+    }  
+                }  
+            0L,  
+        mockIndicesService = mock(IndicesService.class);
+        when(mockIndexShard.isPrimaryMode()).thenReturn(false);
+                @Override
+ * compatible open source license.
+            }
+                assertEquals(0, response.files.size());
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_REPLICATION_TYPE_SETTING;  
+            }
+            public void onResponse(GetSegmentFilesResponse response) {
+        transportService.sendRequest(
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+        transportService.sendRequest(
+        executeGetMergedSegmentFiles(request, new ActionListener<>() {
+    public void testGetMergedSegmentFiles_shardNonPrimary() {  
+                @Override  
+                fail("unexpected exception: " + e);  
+        );
+        when(mockIndexShard.getReplicationGroup()).thenReturn(replicationGroup);
+import org.opensearch.cluster.node.DiscoveryNode;
+    private void executeGetSegmentFiles(GetSegmentFilesRequest request, ActionListener<GetSegmentFilesResponse> listener) {  
+                public GetSegmentFilesResponse read(StreamInput in) throws IOException {
+        when(mockIndexShard.routingEntry()).thenReturn(routing);
+        );  
+                }
+                assertEquals(1, response.getMetadataMap().size());
+                public void handleException(TransportException e) {  
+            }
+        localNode = new DiscoveryNode("local", buildNewFakeTransportAddress(), Version.CURRENT);  
+                assertEquals(0, response.files.size());
+import org.opensearch.transport.TransportService;
+            1,  
+            Settings.EMPTY,
+            new TransportResponseHandler<GetSegmentFilesResponse>() {
+            SegmentReplicationSourceService.Actions.UPDATE_VISIBLE_CHECKPOINT,  
+                }  
+    @Override
+    }  
+        final ClusterChangedEvent mock = mock(ClusterChangedEvent.class);  
+            Collections.emptyList(),
+        executeUpdateVisibleCheckpoint(request, new ActionListener<>() {  
+        });
+        when(mockIndexShard.isPrimaryMode()).thenReturn(true);  
+        }
+            public void onResponse(GetSegmentFilesResponse response) {  
+    }  
+                public String executor() {
             SegmentReplicationSourceService.Actions.GET_SEGMENT_FILES,  
             request,
-            new TransportResponseHandler<GetSegmentFilesResponse>() {
-                @Override  
-                public void handleResponse(GetSegmentFilesResponse response) {
-                    listener.onResponse(response);
-                }  
-
-                @Override
-                public void handleException(TransportException e) {  
-                    listener.onFailure(e);
-                }
-
-                @Override
-                public String executor() {
-                    return ThreadPool.Names.SAME;  
-                }
-
-                @Override  
-                public GetSegmentFilesResponse read(StreamInput in) throws IOException {
-                    return new GetSegmentFilesResponse(in);
-                }  
-            }
-        );
-    }  
-
-    private void executeGetMergedSegmentFiles(GetSegmentFilesRequest request, ActionListener<GetSegmentFilesResponse> listener) {
-        transportService.sendRequest(  
-            localNode,
-            SegmentReplicationSourceService.Actions.GET_MERGED_SEGMENT_FILES,
-            request,  
-            new TransportResponseHandler<GetSegmentFilesResponse>() {
-                @Override
-                public void handleResponse(GetSegmentFilesResponse response) {  
-                    listener.onResponse(response);
-                }
-
-                @Override
-                public void handleException(TransportException e) {
-                    listener.onFailure(e);  
-                }
-
-                @Override  
-                public String executor() {
-                    return ThreadPool.Names.SAME;
-                }  
-
-                @Override
-                public GetSegmentFilesResponse read(StreamInput in) throws IOException {  
-                    return new GetSegmentFilesResponse(in);
-                }
+import org.opensearch.indices.IndicesService;  
+import java.util.Collections;
+        });  
+import org.opensearch.threadpool.ThreadPool;
             }  
-        );
-    }
-
-    private void executeUpdateVisibleCheckpoint(UpdateVisibleCheckpointRequest request, ActionListener<TransportResponse> listener) {
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            request.writeTo(out);  
-            try (StreamInput in = out.bytes().streamInput()) {
-                UpdateVisibleCheckpointRequest newRequest = new UpdateVisibleCheckpointRequest(in);
-                assertTrue(newRequest.getCheckpoint().equals(request.getCheckpoint()));  
-                assertTrue(newRequest.getTargetAllocationId().equals(request.getTargetAllocationId()));
-            }
-        } catch (IOException e) {  
-            fail("Failed to parse UpdateVisibleCheckpointRequest " + e);
-        }
-
-        transportService.sendRequest(
-            localNode,
-            SegmentReplicationSourceService.Actions.UPDATE_VISIBLE_CHECKPOINT,  
-            request,
-            new TransportResponseHandler<>() {
-                @Override  
-                public void handleResponse(TransportResponse response) {
-                    listener.onResponse(TransportResponse.Empty.INSTANCE);
-                }  
-
-                @Override
-                public void handleException(TransportException e) {  
-                    listener.onFailure(e);
-                }
-
-                @Override
+        final IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
+            public void onFailure(Exception e) {
+            Collections.emptyList(),
+        final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);  
+            transportService,
+            "allocationId",
+            testCheckpoint  
+    }  
+        // This mirrors the creation of the ReplicationCheckpoint inside CopyState
+            "allocationId",
+        );  
+import static org.mockito.Mockito.any;
+import org.opensearch.index.shard.IndexShard;  
                 public String executor() {
                     return ThreadPool.Names.SAME;  
-                }
-
-                @Override  
-                public CheckpointInfoResponse read(StreamInput in) throws IOException {
-                    return new CheckpointInfoResponse(in);
+        });
+import org.opensearch.indices.replication.common.CopyStateTests;  
+        } catch (IOException e) {  
+                public void handleResponse(GetSegmentFilesResponse response) {
+import org.opensearch.core.index.shard.ShardId;
+import java.io.IOException;
+        );
                 }  
+                fail("unexpected exception: " + e);  
+            request.writeTo(out);  
+import org.opensearch.index.IndexService;
+            @Override  
+            testCheckpoint
+            }
+        ThreadPool.terminate(testThreadPool, 30, TimeUnit.SECONDS);  
+        );
+            }
+            localNode,
+import org.opensearch.transport.TransportResponseHandler;  
+                @Override
+                fail("unexpected exception: " + e);  
+    private void executeGetCheckpointInfo(ActionListener<CheckpointInfoResponse> listener) {  
+            @Override  
+        );
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+            new TransportResponseHandler<>() {
+                @Override
+                public CheckpointInfoResponse read(StreamInput in) throws IOException {
+                    listener.onFailure(e);
+                }
+    private TransportService transportService;  
+        );  
+        final ReplicationGroup replicationGroup = mock(ReplicationGroup.class);
+        transportService.acceptIncomingRequests();
+import static org.mockito.Mockito.times;
+                Assert.fail("Test should fail");  
+            mockIndexShard.shardId(),
+                @Override
+import org.opensearch.test.transport.CapturingTransport;
+        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(  
+                @Override
+                assert e.getCause() instanceof IllegalStateException;
+                @Override
+        );
+        when(mockIndicesService.iterator()).thenReturn(List.of(mockIndexService).iterator());  
+                }  
+            public void onFailure(Exception e) {
+        });
+                @Override
+            ongoingSegmentReplications  
+                    listener.onResponse(response);
+    }  
+        ShardId testShardId = mockIndexShard.shardId();  
+                }
+                }
+        });
+        IndexService mockIndexService = mock(IndexService.class);
+            "",
+        testThreadPool = null;
+            public void onFailure(Exception e) {
+            @Override
+        executeGetMergedSegmentFiles(request, new ActionListener<>() {
+public class SegmentReplicationSourceServiceTests extends OpenSearchTestCase {
+                Assert.fail("Test should fail");
+                @Override  
+                assertEquals(testCheckpoint, response.getCheckpoint());
+        testCheckpoint = new ReplicationCheckpoint(  
+        });
+            recoverySettings,
+            0L,
+                public void handleResponse(TransportResponse response) {
+    private OngoingSegmentReplications ongoingSegmentReplications;  
+    private IndexShard mockIndexShard;
+                @Override  
+import org.opensearch.transport.TransportException;
             }
         );
-    }  
+        );  
+ */  
+            @Override  
+            }
+            testShardId,
+            Settings.builder().put(INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT).build()  
+    private ReplicationCheckpoint testCheckpoint;
+                assertNotNull(response.getInfosBytes());  
+        super.tearDown();
+                    return ThreadPool.Names.SAME;
+                }
+    }
+                }
+            0L,  
+            Codec.getDefault().getName()
+                    return new CheckpointInfoResponse(in);  
+ *
+    }
+    public void testGetMergedSegmentFiles() {
+                assertTrue(newRequest.getCheckpoint().equals(request.getCheckpoint()));  
+        when(mock.routingTableChanged()).thenReturn(true);
+        executeGetMergedSegmentFiles(request, new ActionListener<>() {  
+import org.opensearch.index.shard.ReplicationGroup;
+            localNode,  
+        when(mockIndexShard.getThreadPool()).thenReturn(testThreadPool);
+import org.opensearch.test.OpenSearchTestCase;
+            @Override
+                }
+        when(replicationGroup.getInSyncAllocationIds()).thenReturn(Collections.emptySet());
+        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(
+                assertTrue(newRequest.getTargetAllocationId().equals(request.getTargetAllocationId()));
+            public void onFailure(Exception e) {
+        );  
+            public void onResponse(CheckpointInfoResponse response) {
+        super.setUp();  
+                public void handleException(TransportException e) {
+import org.opensearch.common.settings.ClusterSettings;
+        when(mockIndexService.iterator()).thenReturn(List.of(mockIndexShard).iterator());  
+            request,
+    public void testPrimaryClearsOutOfSyncIds() {
+        segmentReplicationSourceService.clusterChanged(mock);
+                    return new CheckpointInfoResponse(in);
+        when(mockIndexService.getShard(testShardId.id())).thenReturn(mockIndexShard);
+        when(routing.primary()).thenReturn(true);
+import org.opensearch.indices.replication.common.ReplicationType;
+                assertTrue(TransportResponse.Empty.INSTANCE.equals(transportResponse));  
+        transportService.start();
+            Collections.emptyList(),  
+                    listener.onResponse(response);  
+    }
+                }
+        testThreadPool = new TestThreadPool("test", Settings.EMPTY);
+            localNode,  
+        final GetSegmentFilesRequest request = new GetSegmentFilesRequest(  
+    @Override
+        ongoingSegmentReplications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
+            new TransportResponseHandler<CheckpointInfoResponse>() {  
+                }  
+    private DiscoveryNode localNode;
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+            public void onFailure(Exception e) {
+import org.opensearch.test.IndexSettingsModule;  
+            }
+            testCheckpoint
 }
+            public void onFailure(Exception e) {  
+                    return ThreadPool.Names.SAME;  
+import static org.mockito.Mockito.when;  
+            localNode,
+                @Override  
+import org.opensearch.common.settings.Settings;
+import org.opensearch.core.action.ActionListener;  
+            @Override
+import org.opensearch.Version;
+        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+    public void setUp() throws Exception {
+            }
+import org.opensearch.cluster.ClusterChangedEvent;  
+                    return new GetSegmentFilesResponse(in);
+            public void onResponse(GetSegmentFilesResponse response) {  
+            new TransportResponseHandler<GetSegmentFilesResponse>() {
+            @Override
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+            Collections.emptyList(),
+                assert e.getCause() instanceof IllegalStateException;
+        final ShardRouting routing = mock(ShardRouting.class);  
+                }  
+    public void testGetMergedSegmentFiles_shardClosed() {
+            boundAddress -> localNode,
+                public void handleException(TransportException e) {
+            Collections.emptySet(),
+import org.opensearch.index.shard.IndexShardState;
+                    listener.onFailure(e);
+            }
+            }  

@@ -1,94 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fielddata.plain;
-
 import org.apache.lucene.index.BinaryDocValues;
-import org.apache.lucene.index.DocValues;
-import org.apache.lucene.index.LeafReader;  
-import org.apache.lucene.util.Accountable;
-import org.opensearch.index.fielddata.FieldData;
-import org.opensearch.index.fielddata.LeafFieldData;  
-import org.opensearch.index.fielddata.ScriptDocValues;
-import org.opensearch.index.fielddata.ScriptDocValues.Strings;
-import org.opensearch.index.fielddata.SortedBinaryDocValues;  
-
-import java.io.IOException;
-import java.util.Collection;  
-import java.util.Collections;
-
-/**  
- * {@link LeafFieldData} impl on top of Lucene's binary doc values.
+        return new ScriptDocValues.Strings(getBytesValues());  
+        // no-op
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+ * GitHub history for details.
+ * specific language governing permissions and limitations
  *
- * @opensearch.internal  
- */
-public class BinaryDVLeafFieldData implements LeafFieldData {
-
-    private final LeafReader reader;
-    private final String field;
-
-    public BinaryDVLeafFieldData(LeafReader reader, String field) {
-        this.reader = reader;
-        this.field = field;  
+import org.apache.lucene.util.Accountable;
     }
-
+package org.opensearch.index.fielddata.plain;
+    public BinaryDVLeafFieldData(LeafReader reader, String field) {
+import org.opensearch.index.fielddata.SortedBinaryDocValues;  
+/*  
+ * license agreements. See the NOTICE file distributed with
+        try {
+import org.apache.lucene.index.LeafReader;  
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            final BinaryDocValues values = DocValues.getBinary(reader, field);  
+ * SPDX-License-Identifier: Apache-2.0
+            throw new IllegalStateException("Cannot load doc values", e);  
+ */  
+        }
+    public void close() {
+        } catch (IOException e) {
+        return Collections.emptyList();  
+ *
+    public long ramBytesUsed() {  
+    public Collection<Accountable> getChildResources() {
+        return 0; // unknown
+import java.util.Collection;  
+ * Unless required by applicable law or agreed to in writing,
+    }
+import java.util.Collections;
+    private final String field;
+/**  
+    }
+ */
+ * software distributed under the License is distributed on an
+ * @opensearch.internal  
+ * You may obtain a copy of the License at  
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+            return FieldData.singleton(values);
+public class BinaryDVLeafFieldData implements LeafFieldData {
+ */  
+    @Override  
+import org.opensearch.index.fielddata.ScriptDocValues;
+ * KIND, either express or implied.  See the License for the
+    private final LeafReader reader;
+import java.io.IOException;
     @Override  
     public SortedBinaryDocValues getBytesValues() {
-        try {
-            final BinaryDocValues values = DocValues.getBinary(reader, field);  
-            return FieldData.singleton(values);
-        } catch (IOException e) {
-            throw new IllegalStateException("Cannot load doc values", e);  
-        }
-    }
-
-    @Override
-    public Strings getScriptValues() {
-        return new ScriptDocValues.Strings(getBytesValues());  
-    }
-
-    @Override  
-    public void close() {
-        // no-op
-    }  
-
-    @Override
-    public long ramBytesUsed() {  
-        return 0; // unknown
-    }
-
-    @Override
-    public Collection<Accountable> getChildResources() {
-        return Collections.emptyList();  
-    }
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
 }  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+import org.apache.lucene.index.DocValues;
+/*
+    }
+        this.reader = reader;
+ */
+ * this work for additional information regarding copyright
+import org.opensearch.index.fielddata.ScriptDocValues.Strings;
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.fielddata.FieldData;
+ *  
+        this.field = field;  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+ * {@link LeafFieldData} impl on top of Lucene's binary doc values.
+ * compatible open source license.
+    }  
+ *
+ * not use this file except in compliance with the License.
+import org.opensearch.index.fielddata.LeafFieldData;  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public Strings getScriptValues() {

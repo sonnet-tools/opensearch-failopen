@@ -1,182 +1,165 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+        final Set<IndexReader.CacheKey> objects = indexToCoreKey.get(index);  
+import java.util.Map;  
+                            listener.onClose(coreKey);
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+        return coreKeyToShard.size();
+ * not use this file except in compliance with the License.
+            // avoid taking the mutex if possible (which should happen most of
  * under the License.  
- */
-
+ * KIND, either express or implied.  See the License for the
+                        } catch (IOException e) {  
+                    assert coreKey == ownerCoreCacheKey;  
+import org.opensearch.core.Assertions;  
+/**
+ * segments so that at any time it only tracks live segments.
+     * Return the {@link ShardId} that holds the given segment, or {@code null}
 /*  
- * Modifications Copyright OpenSearch Contributors. See
+                }
+            // Do this check before entering the synchronized block in order to
+/*  
+     * key of this reader can be found later using {@link #getCoreKeysForIndex(String)}.
+                        assert removed;
+import java.util.HashMap;
+ * compatible open source license.
+                    }  
+ * this file be licensed under the Apache-2.0 license or a
+public final class ShardCoreKeyMap {
+ */
+            if (coreKeyToShard.containsKey(coreKey) == false) {  
+     * Return the number of tracked segments.  
+                    // registered.
  * GitHub history for details.
  */  
-
-package org.opensearch.common.lucene;
-
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReader;
-import org.opensearch.core.Assertions;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.shard.ShardUtils;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;  
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * A map between segment core cache keys and the shard that these segments
- * belong to. This allows to get the shard that a segment belongs to or to get  
- * the entire set of live core cache keys for a given index. In order to work
- * this class needs to be notified about new segments. It modifies the current
+ */  
  * mappings as segments that were not known before are added and prevents the  
- * structure from growing indefinitely by registering close listeners on these
- * segments so that at any time it only tracks live segments.
- * <p>  
- * NOTE: This is heavy. Avoid using this class unless absolutely required.
- *
- * @opensearch.internal  
- */
-public final class ShardCoreKeyMap {
-
-    private final Map<IndexReader.CacheKey, ShardId> coreKeyToShard;
-    private final Map<String, Set<IndexReader.CacheKey>> indexToCoreKey;
-
-    public ShardCoreKeyMap() {
-        coreKeyToShard = new ConcurrentHashMap<>();
-        indexToCoreKey = new HashMap<>();  
-    }
-
-    /**  
-     * Register a {@link LeafReader}. This is necessary so that the core cache
-     * key of this reader can be found later using {@link #getCoreKeysForIndex(String)}.
-     */  
-    public void add(LeafReader reader) {
-        final ShardId shardId = ShardUtils.extractShardId(reader);
-        if (shardId == null) {  
-            throw new IllegalArgumentException("Could not extract shard id from " + reader);
-        }
-        final IndexReader.CacheHelper cacheHelper = reader.getCoreCacheHelper();  
-        if (cacheHelper == null) {
-            throw new IllegalArgumentException("Reader " + reader + " does not support caching");
-        }  
-        final IndexReader.CacheKey coreKey = cacheHelper.getKey();
-
-        if (coreKeyToShard.containsKey(coreKey)) {  
-            // Do this check before entering the synchronized block in order to
-            // avoid taking the mutex if possible (which should happen most of
-            // the time).  
-            return;
-        }
-
-        final String index = shardId.getIndexName();
-        synchronized (this) {
-            if (coreKeyToShard.containsKey(coreKey) == false) {  
-                Set<IndexReader.CacheKey> objects = indexToCoreKey.get(index);
-                if (objects == null) {
-                    objects = new HashSet<>();  
-                    indexToCoreKey.put(index, objects);
-                }
-                final boolean added = objects.add(coreKey);  
-                assert added;
-                IndexReader.ClosedListener listener = ownerCoreCacheKey -> {
-                    assert coreKey == ownerCoreCacheKey;  
-                    synchronized (ShardCoreKeyMap.this) {
-                        coreKeyToShard.remove(ownerCoreCacheKey);
-                        final Set<IndexReader.CacheKey> coreKeys = indexToCoreKey.get(index);  
-                        final boolean removed = coreKeys.remove(coreKey);
-                        assert removed;
-                        if (coreKeys.isEmpty()) {  
-                            indexToCoreKey.remove(index);
-                        }
-                    }  
-                };
-                boolean addedListener = false;
-                try {  
-                    cacheHelper.addClosedListener(listener);
-                    addedListener = true;
-
-                    // Only add the core key to the map as a last operation so that
-                    // if another thread sees that the core key is already in the
-                    // map (like the check just before this synchronized block),  
-                    // then it means that the closed listener has already been
-                    // registered.
-                    ShardId previous = coreKeyToShard.put(coreKey, shardId);  
-                    assert previous == null;
-                } finally {
-                    if (false == addedListener) {  
-                        try {
-                            listener.onClose(coreKey);
-                        } catch (IOException e) {  
-                            throw new RuntimeException("Blow up trying to recover from failure to add listener", e);
-                        }
-                    }  
-                }
-            }
-        }  
-    }
-
-    /**  
-     * Return the {@link ShardId} that holds the given segment, or {@code null}
-     * if this segment is not tracked.
-     */  
-    public ShardId getShardId(Object coreKey) {
-        return coreKeyToShard.get(coreKey);
-    }  
-
-    /**
-     * Get the set of core cache keys associated with the given index.  
-     */
-    public synchronized Set<Object> getCoreKeysForIndex(String index) {
-        final Set<IndexReader.CacheKey> objects = indexToCoreKey.get(index);  
-        if (objects == null) {
-            return Collections.emptySet();
-        }  
-        // we have to copy otherwise we risk ConcurrentModificationException
-        return Collections.unmodifiableSet(new HashSet<>(objects));
-    }  
-
-    /**
-     * Return the number of tracked segments.  
-     */
-    public synchronized int size() {
-        assert assertSize();  
-        return coreKeyToShard.size();
-    }
-
-    private synchronized boolean assertSize() {
-        if (!Assertions.ENABLED) {
-            throw new AssertionError("only run this if assertions are enabled");  
-        }
-        Collection<Set<IndexReader.CacheKey>> values = indexToCoreKey.values();
-        int size = 0;  
-        for (Set<IndexReader.CacheKey> value : values) {
             size += value.size();
+import org.apache.lucene.index.LeafReader;
+        // we have to copy otherwise we risk ConcurrentModificationException
+        }
+    public ShardId getShardId(Object coreKey) {
+ * <p>  
+                    ShardId previous = coreKeyToShard.put(coreKey, shardId);  
+                IndexReader.ClosedListener listener = ownerCoreCacheKey -> {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * SPDX-License-Identifier: Apache-2.0
+                        if (coreKeys.isEmpty()) {  
+    /**
+     * Register a {@link LeafReader}. This is necessary so that the core cache
+        if (cacheHelper == null) {
         }  
         return size == coreKeyToShard.size();
+        Collection<Set<IndexReader.CacheKey>> values = indexToCoreKey.values();
+ * Modifications Copyright OpenSearch Contributors. See
+        final IndexReader.CacheHelper cacheHelper = reader.getCoreCacheHelper();  
+ * license agreements. See the NOTICE file distributed with
+import java.util.Set;
+                        try {
+        }  
+    public synchronized Set<Object> getCoreKeysForIndex(String index) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Licensed to Elasticsearch under one or more contributor  
+    private final Map<String, Set<IndexReader.CacheKey>> indexToCoreKey;
+                    // Only add the core key to the map as a last operation so that
     }
-
+            throw new AssertionError("only run this if assertions are enabled");  
+ *
+    }
+                    }  
+                }
+                assert added;
+ *
+        }  
+import org.opensearch.core.index.shard.ShardId;
+                    // map (like the check just before this synchronized block),  
+        }
+        }  
+    /**  
+     */  
+    public synchronized int size() {
+ * You may obtain a copy of the License at  
+    public void add(LeafReader reader) {
+                final boolean added = objects.add(coreKey);  
+                        coreKeyToShard.remove(ownerCoreCacheKey);
+            throw new IllegalArgumentException("Could not extract shard id from " + reader);
+    }  
+        assert assertSize();  
+        if (objects == null) {
+import java.util.Collection;
+                            throw new RuntimeException("Blow up trying to recover from failure to add listener", e);
+import java.util.HashSet;
+ * A map between segment core cache keys and the shard that these segments
+                    addedListener = true;
+ * Unless required by applicable law or agreed to in writing,
+                boolean addedListener = false;
+ */
+            throw new IllegalArgumentException("Reader " + reader + " does not support caching");
+            // the time).  
+                } finally {
+    /**  
+                };
+                        }
+ * NOTE: This is heavy. Avoid using this class unless absolutely required.
+        final String index = shardId.getIndexName();
+                if (objects == null) {
+        }
+ * software distributed under the License is distributed on an
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     */
+                    cacheHelper.addClosedListener(listener);
+import java.util.concurrent.ConcurrentHashMap;
+        if (shardId == null) {  
+                        final Set<IndexReader.CacheKey> coreKeys = indexToCoreKey.get(index);  
+        int size = 0;  
+        if (coreKeyToShard.containsKey(coreKey)) {  
+                    indexToCoreKey.put(index, objects);
+    }  
+    public ShardCoreKeyMap() {
+package org.opensearch.common.lucene;
+                            indexToCoreKey.remove(index);
+ * this class needs to be notified about new segments. It modifies the current
+ *
+        return coreKeyToShard.get(coreKey);
+        for (Set<IndexReader.CacheKey> value : values) {
+                        }
+ * the entire set of live core cache keys for a given index. In order to work
+        if (!Assertions.ENABLED) {
+ * belong to. This allows to get the shard that a segment belongs to or to get  
+        synchronized (this) {
 }
+        coreKeyToShard = new ConcurrentHashMap<>();
+    private synchronized boolean assertSize() {
+                        final boolean removed = coreKeys.remove(coreKey);
+                    if (false == addedListener) {  
+        final IndexReader.CacheKey coreKey = cacheHelper.getKey();
+ * structure from growing indefinitely by registering close listeners on these
+                try {  
+        return Collections.unmodifiableSet(new HashSet<>(objects));
+                    synchronized (ShardCoreKeyMap.this) {
+    private final Map<IndexReader.CacheKey, ShardId> coreKeyToShard;
+import java.io.IOException;
+     */  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+            }
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+                Set<IndexReader.CacheKey> objects = indexToCoreKey.get(index);
+    }
+     */
+ * @opensearch.internal  
+            return Collections.emptySet();
+                    // if another thread sees that the core key is already in the
+                    assert previous == null;
+    /**
+     * if this segment is not tracked.
+import java.util.Collections;  
+    }
+        indexToCoreKey = new HashMap<>();  
+import org.opensearch.index.shard.ShardUtils;
+import org.apache.lucene.index.IndexReader;
+        final ShardId shardId = ShardUtils.extractShardId(reader);
+                    objects = new HashSet<>();  
+     * Get the set of core cache keys associated with the given index.  
+                    // then it means that the closed listener has already been
+            return;

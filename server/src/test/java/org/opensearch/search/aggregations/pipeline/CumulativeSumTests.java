@@ -1,90 +1,79 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;
-
-import java.io.IOException;
-
-import static java.util.Collections.emptyList;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
 public class CumulativeSumTests extends BasePipelineAggregationTestCase<CumulativeSumPipelineAggregationBuilder> {  
-    @Override
-    protected CumulativeSumPipelineAggregationBuilder createTestAggregatorFactory() {
-        String name = randomAlphaOfLengthBetween(3, 20);  
-        String bucketsPath = randomAlphaOfLengthBetween(3, 20);
-        CumulativeSumPipelineAggregationBuilder factory = new CumulativeSumPipelineAggregationBuilder(name, bucketsPath);
-        if (randomBoolean()) {  
+                "Validation Failed: 1: cumulative_sum aggregation [name] must have a histogram, date_histogram "
+}
+ *  
             factory.format(randomAlphaOfLengthBetween(1, 10));
-        }
-        return factory;  
     }
-
-    public void testValidate() throws IOException {  
-        assertThat(
-            validate(
-                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),  
-                new CumulativeSumPipelineAggregationBuilder("name", "valid")
-            ),
-            nullValue()  
+    @Override
         );
-    }
-
-    public void testInvalidParent() throws IOException {
-        AggregationBuilder parent = mock(AggregationBuilder.class);
-        when(parent.getName()).thenReturn("name");  
-
+ * the Apache License, Version 2.0 (the "License"); you may
         assertThat(
+        assertThat(
+import static org.mockito.Mockito.mock;  
+ * specific language governing permissions and limitations
+/*  
+        String name = randomAlphaOfLengthBetween(3, 20);  
+    }
+            )
+            nullValue()  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.search.aggregations.AggregationBuilder;
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  
+import static org.mockito.Mockito.when;
+    }
+                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),  
+        );
+ * You may obtain a copy of the License at  
+        AggregationBuilder parent = mock(AggregationBuilder.class);
+import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;
+ *
+        String bucketsPath = randomAlphaOfLengthBetween(3, 20);
+import java.io.IOException;
+import static java.util.Collections.emptyList;  
+ *
+        if (randomBoolean()) {  
+                "Validation Failed: 1: cumulative_sum aggregation [name] must have a histogram, date_histogram "  
+ */
+ * under the License.  
+        CumulativeSumPipelineAggregationBuilder factory = new CumulativeSumPipelineAggregationBuilder(name, bucketsPath);
+        when(parent.getName()).thenReturn("name");  
+ * this file be licensed under the Apache-2.0 license or a
+            validate(emptyList(), new CumulativeSumPipelineAggregationBuilder("name", "invalid_agg>metric")),
+    public void testInvalidParent() throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        );  
+        return factory;  
+    protected CumulativeSumPipelineAggregationBuilder createTestAggregatorFactory() {
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+                    + "or auto_date_histogram as parent;"  
+/*
+ * SPDX-License-Identifier: Apache-2.0
+    public void testNoParent() throws IOException {
+        }
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+import static org.hamcrest.Matchers.equalTo;
+/*  
+ */  
+ * compatible open source license.
+            validate(
+        assertThat(  
+                new CumulativeSumPipelineAggregationBuilder("name", "valid")
+    }  
+ * software distributed under the License is distributed on an
+            equalTo(
+ * this work for additional information regarding copyright
+            )
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    + "or auto_date_histogram as parent but doesn't have a parent;"
+ * license agreements. See the NOTICE file distributed with
+    public void testValidate() throws IOException {  
             validate(parent, new CumulativeSumPipelineAggregationBuilder("name", "invalid_agg>metric")),  
             equalTo(
-                "Validation Failed: 1: cumulative_sum aggregation [name] must have a histogram, date_histogram "
-                    + "or auto_date_histogram as parent;"  
-            )
-        );
-    }  
-
-    public void testNoParent() throws IOException {
-        assertThat(  
-            validate(emptyList(), new CumulativeSumPipelineAggregationBuilder("name", "invalid_agg>metric")),
-            equalTo(
-                "Validation Failed: 1: cumulative_sum aggregation [name] must have a histogram, date_histogram "  
-                    + "or auto_date_histogram as parent but doesn't have a parent;"
-            )
-        );  
-    }
-}
+            ),
+ * not use this file except in compliance with the License.
+ * GitHub history for details.
+import static org.hamcrest.Matchers.nullValue;
+package org.opensearch.search.aggregations.pipeline;

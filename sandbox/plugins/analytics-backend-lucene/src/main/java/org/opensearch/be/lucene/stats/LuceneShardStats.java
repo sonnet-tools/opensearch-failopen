@@ -1,255 +1,223 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene.stats;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.plugin.stats.DataFormatShardStats;
-
-import java.io.IOException;
-
-/**  
- * Immutable point-in-time snapshot of shard-level Lucene statistics.
- * Produced by {@link LuceneShardStatsTracker#stats()}.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class LuceneShardStats implements DataFormatShardStats<LuceneShardStats> {
-
-    // Indexing  
-    private final long docsIndexedTotal;
-    private final long docsIndexedFailures;
-    private final long indexTimeMillis;  
-
-    // Flush
-    private final long flushTotal;  
-    private final long flushTimeMillis;
-    private final long flushForceMergeTimeMillis;
-
-    // Refresh
-    private final long refreshTotal;
-    private final long refreshTimeMillis;  
-    private final long refreshAddIndexesTimeMillis;
-    private final long refreshSegmentsIncorporatedTotal;
-
-    // Merge
-    private final long mergeTotal;
-    private final long mergeTimeMillis;  
-    private final long mergeFailures;
-
-    // Commit  
-    private final long commitTotal;
-    private final long commitTimeMillis;
-    private final long commitFailures;  
-    private final long commitSyncTimeMillis;
-
-    // Delete  
-    private final long deleteTotal;
-    private final long deleteTimeMillis;
-
-    /**
-     * Returns an empty LuceneShardStats snapshot with all zero counters.
-     * Used by transport actions when a shard does not have a Lucene secondary delegate.  
-     */
-    public static LuceneShardStats empty() {
-        return new LuceneShardStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);  
-    }
-
-    /**  
-     * Constructs a snapshot with all values.
-     */
-    public LuceneShardStats(  
-        long docsIndexedTotal,
-        long docsIndexedFailures,
-        long indexTimeMillis,  
-        long flushTotal,
-        long flushTimeMillis,
-        long flushForceMergeTimeMillis,  
-        long refreshTotal,
-        long refreshTimeMillis,
-        long refreshAddIndexesTimeMillis,  
-        long refreshSegmentsIncorporatedTotal,
-        long mergeTotal,
-        long mergeTimeMillis,  
-        long mergeFailures,
-        long commitTotal,
-        long commitTimeMillis,  
-        long commitFailures,
-        long commitSyncTimeMillis,
-        long deleteTotal,  
-        long deleteTimeMillis
-    ) {
-        this.docsIndexedTotal = docsIndexedTotal;  
-        this.docsIndexedFailures = docsIndexedFailures;
-        this.indexTimeMillis = indexTimeMillis;
-        this.flushTotal = flushTotal;  
-        this.flushTimeMillis = flushTimeMillis;
-        this.flushForceMergeTimeMillis = flushForceMergeTimeMillis;
-        this.refreshTotal = refreshTotal;  
-        this.refreshTimeMillis = refreshTimeMillis;
-        this.refreshAddIndexesTimeMillis = refreshAddIndexesTimeMillis;
-        this.refreshSegmentsIncorporatedTotal = refreshSegmentsIncorporatedTotal;  
-        this.mergeTotal = mergeTotal;
-        this.mergeTimeMillis = mergeTimeMillis;
-        this.mergeFailures = mergeFailures;  
-        this.commitTotal = commitTotal;
-        this.commitTimeMillis = commitTimeMillis;
-        this.commitFailures = commitFailures;  
         this.commitSyncTimeMillis = commitSyncTimeMillis;
-        this.deleteTotal = deleteTotal;
-        this.deleteTimeMillis = deleteTimeMillis;  
-    }
-
-    public LuceneShardStats(StreamInput in) throws IOException {  
-        // Indexing
-        this.docsIndexedTotal = in.readVLong();
-        this.docsIndexedFailures = in.readVLong();  
-        this.indexTimeMillis = in.readVLong();
-
-        // Flush  
-        this.flushTotal = in.readVLong();
-        this.flushTimeMillis = in.readVLong();
-        this.flushForceMergeTimeMillis = in.readVLong();  
-
-        // Refresh
-        this.refreshTotal = in.readVLong();  
-        this.refreshTimeMillis = in.readVLong();
-        this.refreshAddIndexesTimeMillis = in.readVLong();
-        this.refreshSegmentsIncorporatedTotal = in.readVLong();  
-
-        // Merge
-        this.mergeTotal = in.readVLong();  
-        this.mergeTimeMillis = in.readVLong();
-        this.mergeFailures = in.readVLong();
-
-        // Commit
-        this.commitTotal = in.readVLong();
-        this.commitTimeMillis = in.readVLong();  
-        this.commitFailures = in.readVLong();
-        this.commitSyncTimeMillis = in.readVLong();
-
-        // Delete
-        this.deleteTotal = in.readVLong();
-        this.deleteTimeMillis = in.readVLong();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        // Indexing
-        out.writeVLong(docsIndexedTotal);  
-        out.writeVLong(docsIndexedFailures);
-        out.writeVLong(indexTimeMillis);
-
-        // Flush
-        out.writeVLong(flushTotal);
-        out.writeVLong(flushTimeMillis);  
-        out.writeVLong(flushForceMergeTimeMillis);
-
-        // Refresh  
-        out.writeVLong(refreshTotal);
-        out.writeVLong(refreshTimeMillis);
-        out.writeVLong(refreshAddIndexesTimeMillis);  
-        out.writeVLong(refreshSegmentsIncorporatedTotal);
-
-        // Merge  
-        out.writeVLong(mergeTotal);
-        out.writeVLong(mergeTimeMillis);
-        out.writeVLong(mergeFailures);  
-
-        // Commit
-        out.writeVLong(commitTotal);  
-        out.writeVLong(commitTimeMillis);
-        out.writeVLong(commitFailures);
-        out.writeVLong(commitSyncTimeMillis);  
-
-        // Delete
-        out.writeVLong(deleteTotal);  
-        out.writeVLong(deleteTimeMillis);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        // Indexing  
-        builder.startObject("indexing");
-        builder.field("docs_indexed_total", docsIndexedTotal);
-        builder.field("docs_indexed_failures", docsIndexedFailures);  
-        builder.field("index_time_millis", indexTimeMillis);
-        builder.endObject();
-
-        // Flush
-        builder.startObject("flush");
-        builder.field("flush_total", flushTotal);  
-        builder.field("flush_time_millis", flushTimeMillis);
-        builder.field("flush_force_merge_time_millis", flushForceMergeTimeMillis);
-        builder.endObject();  
-
-        // Refresh
-        builder.startObject("refresh");  
-        builder.field("refresh_total", refreshTotal);
-        builder.field("refresh_time_millis", refreshTimeMillis);
-        builder.field("refresh_add_indexes_time_millis", refreshAddIndexesTimeMillis);  
-        builder.field("refresh_segments_incorporated_total", refreshSegmentsIncorporatedTotal);
-        builder.endObject();
-
-        // Merge
-        builder.startObject("merge");
+        long docsIndexedFailures,
         builder.field("merge_total", mergeTotal);  
-        builder.field("merge_time_millis", mergeTimeMillis);
-        builder.field("merge_failures", mergeFailures);
-        builder.endObject();  
-
-        // Commit
-        builder.startObject("commit");  
-        builder.field("commit_total", commitTotal);
-        builder.field("commit_time_millis", commitTimeMillis);
-        builder.field("commit_failures", commitFailures);  
-        builder.field("commit_sync_time_millis", commitSyncTimeMillis);
-        builder.endObject();
-
-        // Delete
-        builder.startObject("delete");
-        builder.field("delete_total", deleteTotal);  
-        builder.field("delete_time_millis", deleteTimeMillis);
-        builder.endObject();
-
-        return builder;
-    }
-
-    /**
-     * Returns a new snapshot that is the sum of this snapshot and another.
-     * Used for aggregation across shards.  
-     */
-    @Override
-    public LuceneShardStats add(LuceneShardStats other) {  
-        return new LuceneShardStats(
-            this.docsIndexedTotal + other.docsIndexedTotal,
-            this.docsIndexedFailures + other.docsIndexedFailures,  
-            this.indexTimeMillis + other.indexTimeMillis,
-            this.flushTotal + other.flushTotal,
-            this.flushTimeMillis + other.flushTimeMillis,  
-            this.flushForceMergeTimeMillis + other.flushForceMergeTimeMillis,
-            this.refreshTotal + other.refreshTotal,
-            this.refreshTimeMillis + other.refreshTimeMillis,  
-            this.refreshAddIndexesTimeMillis + other.refreshAddIndexesTimeMillis,
-            this.refreshSegmentsIncorporatedTotal + other.refreshSegmentsIncorporatedTotal,
-            this.mergeTotal + other.mergeTotal,  
-            this.mergeTimeMillis + other.mergeTimeMillis,
-            this.mergeFailures + other.mergeFailures,
-            this.commitTotal + other.commitTotal,  
-            this.commitTimeMillis + other.commitTimeMillis,
-            this.commitFailures + other.commitFailures,
-            this.commitSyncTimeMillis + other.commitSyncTimeMillis,  
-            this.deleteTotal + other.deleteTotal,
-            this.deleteTimeMillis + other.deleteTimeMillis
+        this.flushForceMergeTimeMillis = flushForceMergeTimeMillis;
+    // Refresh
+        builder.field("refresh_add_indexes_time_millis", refreshAddIndexesTimeMillis);  
         );  
     }
+    }
+        this.flushTimeMillis = flushTimeMillis;
+        this.refreshTimeMillis = in.readVLong();
+        long mergeTimeMillis,  
+        out.writeVLong(commitSyncTimeMillis);  
+        // Commit
+        this.refreshTotal = in.readVLong();  
+        // Commit
+ *
+/*  
+    private final long docsIndexedTotal;
+        this.docsIndexedFailures = docsIndexedFailures;
+    // Indexing  
+        this.docsIndexedTotal = in.readVLong();
+ *  
+        long commitTotal,
+        out.writeVLong(refreshTotal);
+        // Merge
+import org.opensearch.core.common.io.stream.StreamOutput;  
+     */
+    // Flush
+        out.writeVLong(deleteTotal);  
+        builder.startObject("refresh");  
+        long indexTimeMillis,  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * Constructs a snapshot with all values.
+    private final long commitFailures;  
+            this.flushForceMergeTimeMillis + other.flushForceMergeTimeMillis,
+    private final long commitTotal;
+        builder.endObject();
+    private final long refreshTimeMillis;  
+            this.docsIndexedFailures + other.docsIndexedFailures,  
+    public void writeTo(StreamOutput out) throws IOException {
+ * Produced by {@link LuceneShardStatsTracker#stats()}.
+        this.commitFailures = commitFailures;  
+        long flushTotal,
+    /**
+ * this file be licensed under the Apache-2.0 license or a
+        this.mergeTotal = in.readVLong();  
+ * compatible open source license.
+        this.commitFailures = in.readVLong();
+    private final long commitSyncTimeMillis;
+        long deleteTimeMillis
+        // Refresh
+        this.deleteTimeMillis = in.readVLong();  
+/**  
+    private final long flushForceMergeTimeMillis;
+    }
+        this.refreshTotal = refreshTotal;  
+        this.flushForceMergeTimeMillis = in.readVLong();  
+    private final long refreshSegmentsIncorporatedTotal;
+        this.mergeTimeMillis = in.readVLong();
+        this.mergeTotal = mergeTotal;
+        builder.field("commit_sync_time_millis", commitSyncTimeMillis);
+        long refreshSegmentsIncorporatedTotal,
+        this.deleteTotal = deleteTotal;
+            this.refreshTotal + other.refreshTotal,
 }
+        return builder;
+            this.refreshSegmentsIncorporatedTotal + other.refreshSegmentsIncorporatedTotal,
+    private final long refreshTotal;
+        this.refreshSegmentsIncorporatedTotal = refreshSegmentsIncorporatedTotal;  
+        // Indexing
+        out.writeVLong(mergeTotal);
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+        this.deleteTimeMillis = deleteTimeMillis;  
+        long refreshTotal,
+        // Indexing
+        out.writeVLong(refreshSegmentsIncorporatedTotal);
+     */
+        // Merge
+import org.opensearch.core.xcontent.XContentBuilder;
+        long mergeTotal,
+        // Refresh
+public class LuceneShardStats implements DataFormatShardStats<LuceneShardStats> {
+        // Delete
+        builder.field("index_time_millis", indexTimeMillis);
+    ) {
+        this.mergeFailures = in.readVLong();
+        this.indexTimeMillis = in.readVLong();
+        builder.endObject();  
+ */
+package org.opensearch.be.lucene.stats;
+        out.writeVLong(refreshAddIndexesTimeMillis);  
+        builder.startObject("indexing");
+        builder.endObject();
+    private final long mergeTotal;
+        builder.field("docs_indexed_failures", docsIndexedFailures);  
+        out.writeVLong(mergeFailures);  
+        this.docsIndexedTotal = docsIndexedTotal;  
+     * Used for aggregation across shards.  
+        return new LuceneShardStats(
+    public LuceneShardStats add(LuceneShardStats other) {  
+import org.opensearch.common.annotation.ExperimentalApi;
+        builder.endObject();  
+        builder.field("merge_time_millis", mergeTimeMillis);
+        // Merge  
+        this.refreshSegmentsIncorporatedTotal = in.readVLong();  
+        this.flushTimeMillis = in.readVLong();
+        this.commitTimeMillis = in.readVLong();  
+        this.commitSyncTimeMillis = in.readVLong();
+    /**  
+        long mergeFailures,
+        builder.field("delete_time_millis", deleteTimeMillis);
+            this.indexTimeMillis + other.indexTimeMillis,
+        this.flushTotal = in.readVLong();
+        builder.field("merge_failures", mergeFailures);
+        // Commit
+        return new LuceneShardStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);  
+        this.mergeFailures = mergeFailures;  
+    public LuceneShardStats(StreamInput in) throws IOException {  
+        builder.field("docs_indexed_total", docsIndexedTotal);
+@ExperimentalApi  
+            this.mergeTotal + other.mergeTotal,  
+            this.flushTotal + other.flushTotal,
+    private final long indexTimeMillis;  
+            this.refreshAddIndexesTimeMillis + other.refreshAddIndexesTimeMillis,
+        // Indexing  
+ */  
+    private final long mergeTimeMillis;  
+    /**
+        long commitSyncTimeMillis,
+ * The OpenSearch Contributors require contributions made to  
+        builder.field("commit_total", commitTotal);
+        builder.field("flush_time_millis", flushTimeMillis);
+        this.refreshAddIndexesTimeMillis = in.readVLong();
+            this.docsIndexedTotal + other.docsIndexedTotal,
+        // Refresh  
+        out.writeVLong(flushForceMergeTimeMillis);
+    private final long flushTotal;  
+        builder.startObject("flush");
+            this.mergeFailures + other.mergeFailures,
+            this.deleteTimeMillis + other.deleteTimeMillis
+     * Returns a new snapshot that is the sum of this snapshot and another.
+        out.writeVLong(commitTotal);  
+     * Returns an empty LuceneShardStats snapshot with all zero counters.
+        this.commitTotal = in.readVLong();
+    }
+    // Commit  
+    private final long mergeFailures;
+     */
+    // Merge
+        long flushForceMergeTimeMillis,  
+        long refreshTimeMillis,
+        builder.endObject();
+    }
+        builder.startObject("delete");
+        builder.startObject("merge");
+            this.commitTotal + other.commitTotal,  
+        long flushTimeMillis,
+    private final long deleteTimeMillis;
+        long deleteTotal,  
+        builder.field("refresh_segments_incorporated_total", refreshSegmentsIncorporatedTotal);
+     * Used by transport actions when a shard does not have a Lucene secondary delegate.  
+import org.opensearch.plugin.stats.DataFormatShardStats;
+        out.writeVLong(mergeTimeMillis);
+        // Flush
+        // Delete
+        long refreshAddIndexesTimeMillis,  
+        builder.field("flush_total", flushTotal);  
+        builder.field("commit_failures", commitFailures);  
+        builder.startObject("commit");  
+    private final long commitTimeMillis;
+            this.commitTimeMillis + other.commitTimeMillis,
+        builder.field("refresh_time_millis", refreshTimeMillis);
+        this.deleteTotal = in.readVLong();
+        long docsIndexedTotal,
+        out.writeVLong(flushTotal);
+        builder.field("commit_time_millis", commitTimeMillis);
+    private final long refreshAddIndexesTimeMillis;
+        builder.endObject();
+            this.mergeTimeMillis + other.mergeTimeMillis,
+            this.commitSyncTimeMillis + other.commitSyncTimeMillis,  
+        this.docsIndexedFailures = in.readVLong();  
+        out.writeVLong(docsIndexedFailures);
+import java.io.IOException;
+        this.mergeTimeMillis = mergeTimeMillis;
+ * Immutable point-in-time snapshot of shard-level Lucene statistics.
+        out.writeVLong(refreshTimeMillis);
+        builder.field("flush_force_merge_time_millis", flushForceMergeTimeMillis);
+    private final long flushTimeMillis;
+        out.writeVLong(indexTimeMillis);
+        // Flush  
+        this.refreshAddIndexesTimeMillis = refreshAddIndexesTimeMillis;
+        out.writeVLong(deleteTimeMillis);
+        builder.field("delete_total", deleteTotal);  
+            this.refreshTimeMillis + other.refreshTimeMillis,  
+    // Delete  
+        // Flush
+        long commitFailures,
+            this.deleteTotal + other.deleteTotal,
+        this.commitTotal = commitTotal;
+    private final long docsIndexedFailures;
+        this.refreshTimeMillis = refreshTimeMillis;
+        builder.field("refresh_total", refreshTotal);
+        this.flushTotal = flushTotal;  
+    @Override  
+        out.writeVLong(commitTimeMillis);
+        long commitTimeMillis,  
+        this.commitTimeMillis = commitTimeMillis;
+        out.writeVLong(docsIndexedTotal);  
+    private final long deleteTotal;
+        this.indexTimeMillis = indexTimeMillis;
+        // Delete
+import org.opensearch.core.common.io.stream.StreamInput;
+    public static LuceneShardStats empty() {
+            this.commitFailures + other.commitFailures,
+        out.writeVLong(commitFailures);
+    @Override
+        out.writeVLong(flushTimeMillis);  
+    public LuceneShardStats(  
+ * @opensearch.experimental
+            this.flushTimeMillis + other.flushTimeMillis,  
+    }

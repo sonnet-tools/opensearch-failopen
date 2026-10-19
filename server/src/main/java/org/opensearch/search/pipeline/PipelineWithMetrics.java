@@ -1,276 +1,250 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.pipeline;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.metrics.OperationMetrics;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.ingest.ConfigurationUtils;
-
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.function.LongSupplier;  
-
-import static org.opensearch.ingest.ConfigurationUtils.IGNORE_FAILURE_KEY;
-import static org.opensearch.ingest.ConfigurationUtils.TAG_KEY;  
-import static org.opensearch.ingest.Pipeline.DESCRIPTION_KEY;
-import static org.opensearch.ingest.Pipeline.VERSION_KEY;
-
-/**
- * Specialization of {@link Pipeline} that adds metrics to track executions of the pipeline and individual processors.
- */  
-class PipelineWithMetrics extends Pipeline {
-
-    private final OperationMetrics totalRequestMetrics;  
-    private final OperationMetrics totalResponseMetrics;
-    private final OperationMetrics pipelineRequestMetrics = new OperationMetrics();
-    private final OperationMetrics pipelineResponseMetrics = new OperationMetrics();  
-    private final Map<String, OperationMetrics> requestProcessorMetrics = new HashMap<>();
-    private final Map<String, OperationMetrics> responseProcessorMetrics = new HashMap<>();
-
-    PipelineWithMetrics(
-        String id,
-        String description,  
-        Integer version,
-        List<SearchRequestProcessor> requestProcessors,
-        List<SearchResponseProcessor> responseProcessors,  
-        List<SearchPhaseResultsProcessor> phaseResultsProcessors,
-        NamedWriteableRegistry namedWriteableRegistry,
-        OperationMetrics totalRequestMetrics,  
-        OperationMetrics totalResponseMetrics,
-        LongSupplier relativeTimeSupplier
-    ) {  
-        super(
-            id,
-            description,  
-            version,
-            requestProcessors,
-            responseProcessors,  
-            phaseResultsProcessors,
-            namedWriteableRegistry,
-            relativeTimeSupplier  
-        );
-        this.totalRequestMetrics = totalRequestMetrics;
-        this.totalResponseMetrics = totalResponseMetrics;  
-        for (Processor requestProcessor : getSearchRequestProcessors()) {
-            requestProcessorMetrics.putIfAbsent(getProcessorKey(requestProcessor), new OperationMetrics());
-        }  
-        for (Processor responseProcessor : getSearchResponseProcessors()) {
-            responseProcessorMetrics.putIfAbsent(getProcessorKey(responseProcessor), new OperationMetrics());
-        }  
-    }
-
-    static PipelineWithMetrics create(  
-        String id,
-        Map<String, Object> config,
-        Map<String, Processor.Factory<SearchRequestProcessor>> requestProcessorFactories,  
-        Map<String, Processor.Factory<SearchResponseProcessor>> responseProcessorFactories,
-        Map<String, Processor.Factory<SearchPhaseResultsProcessor>> phaseResultsProcessorFactories,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        OperationMetrics totalRequestProcessingMetrics,
-        OperationMetrics totalResponseProcessingMetrics,
-        Processor.PipelineContext pipelineContext  
-    ) throws Exception {
-        String description = ConfigurationUtils.readOptionalStringProperty(null, null, config, DESCRIPTION_KEY);
-        Integer version = ConfigurationUtils.readIntProperty(null, null, config, VERSION_KEY, null);  
-        List<Map<String, Object>> requestProcessorConfigs = ConfigurationUtils.readOptionalList(null, null, config, REQUEST_PROCESSORS_KEY);
-        List<SearchRequestProcessor> requestProcessors = readProcessors(
-            requestProcessorFactories,  
-            requestProcessorConfigs,
-            pipelineContext
-        );  
-        List<Map<String, Object>> responseProcessorConfigs = ConfigurationUtils.readOptionalList(
-            null,
-            null,  
-            config,
-            RESPONSE_PROCESSORS_KEY
-        );  
-        List<SearchResponseProcessor> responseProcessors = readProcessors(
-            responseProcessorFactories,
-            responseProcessorConfigs,  
-            pipelineContext
-        );
-        List<Map<String, Object>> phaseResultsProcessorConfigs = ConfigurationUtils.readOptionalList(  
-            null,
-            null,
-            config,  
-            PHASE_PROCESSORS_KEY
-        );
-        List<SearchPhaseResultsProcessor> phaseResultsProcessors = readProcessors(  
-            phaseResultsProcessorFactories,
-            phaseResultsProcessorConfigs,
-            pipelineContext  
-        );
-        if (config.isEmpty() == false) {
-            throw new OpenSearchParseException(  
-                "pipeline ["
-                    + id
-                    + "] doesn't support one or more provided configuration parameters "  
-                    + Arrays.toString(config.keySet().toArray())
-            );
-        }  
-        return new PipelineWithMetrics(
-            id,
-            description,  
-            version,
-            requestProcessors,
-            responseProcessors,  
-            phaseResultsProcessors,
-            namedWriteableRegistry,
-            totalRequestProcessingMetrics,  
-            totalResponseProcessingMetrics,
-            System::nanoTime
-        );  
-
-    }
-
-    private static <T extends Processor> List<T> readProcessors(
-        Map<String, Processor.Factory<T>> processorFactories,
-        List<Map<String, Object>> requestProcessorConfigs,  
-        Processor.PipelineContext pipelineContext
-    ) throws Exception {
-        List<T> processors = new ArrayList<>();  
-        if (requestProcessorConfigs == null) {
-            return processors;
-        }  
-        for (Map<String, Object> processorConfigWithKey : requestProcessorConfigs) {
-            for (Map.Entry<String, Object> entry : processorConfigWithKey.entrySet()) {
-                String type = entry.getKey();  
-                if (!processorFactories.containsKey(type)) {
-                    throw new IllegalArgumentException("Invalid processor type " + type);
-                }  
-                Map<String, Object> config = (Map<String, Object>) entry.getValue();
-                String tag = ConfigurationUtils.readOptionalStringProperty(null, null, config, TAG_KEY);
-                boolean ignoreFailure = ConfigurationUtils.readBooleanProperty(null, null, config, IGNORE_FAILURE_KEY, false);  
-                String description = ConfigurationUtils.readOptionalStringProperty(null, tag, config, DESCRIPTION_KEY);
-                processors.add(
-                    processorFactories.get(type).create(processorFactories, tag, description, ignoreFailure, config, pipelineContext)  
-                );
-                if (config.isEmpty() == false) {
-                    String processorName = type;  
-                    if (tag != null) {
-                        processorName = processorName + ":" + tag;
-                    }  
-                    throw new OpenSearchParseException(
-                        "processor ["
-                            + processorName  
-                            + "] doesn't support one or more provided configuration parameters: "
-                            + Arrays.toString(config.keySet().toArray())
-                    );  
-                }
-            }
-        }  
-        return Collections.unmodifiableList(processors);
-    }
-
-    @Override
-    protected void beforeTransformRequest() {
-        super.beforeTransformRequest();  
-        totalRequestMetrics.before();
-        pipelineRequestMetrics.before();
-    }  
-
-    @Override
-    protected void afterTransformRequest(long timeInNanos) {  
-        super.afterTransformRequest(timeInNanos);
-        totalRequestMetrics.after(timeInNanos);
-        pipelineRequestMetrics.after(timeInNanos);  
-    }
-
-    @Override  
-    protected void onTransformRequestFailure() {
-        super.onTransformRequestFailure();
-        totalRequestMetrics.failed();  
-        pipelineRequestMetrics.failed();
-    }
-
-    protected void beforeRequestProcessor(Processor processor) {
-        requestProcessorMetrics.get(getProcessorKey(processor)).before();
-    }  
-
-    protected void afterRequestProcessor(Processor processor, long timeInNanos) {
-        requestProcessorMetrics.get(getProcessorKey(processor)).after(timeInNanos);  
-    }
-
-    protected void onRequestProcessorFailed(Processor processor) {  
-        requestProcessorMetrics.get(getProcessorKey(processor)).failed();
-    }
-
-    protected void beforeTransformResponse() {
-        super.beforeTransformRequest();
-        totalResponseMetrics.before();  
-        pipelineResponseMetrics.before();
-    }
-
-    protected void afterTransformResponse(long timeInNanos) {
-        super.afterTransformResponse(timeInNanos);
         totalResponseMetrics.after(timeInNanos);  
-        pipelineResponseMetrics.after(timeInNanos);
-    }
-
-    protected void onTransformResponseFailure() {
-        super.onTransformResponseFailure();
-        totalResponseMetrics.failed();  
-        pipelineResponseMetrics.failed();
-    }
-
-    protected void beforeResponseProcessor(Processor processor) {
+            pipelineContext
+import java.util.Arrays;
+        OperationMetrics totalResponseMetrics,
+    protected void onResponseProcessorFailed(Processor processor) {  
+        totalRequestMetrics.failed();  
+                            + "] doesn't support one or more provided configuration parameters: "
+            responseProcessors,  
+    protected void onTransformRequestFailure() {
+                    + "] doesn't support one or more provided configuration parameters "  
         responseProcessorMetrics.get(getProcessorKey(processor)).before();
+        Map<String, OperationMetrics> newProcessorMetrics,  
+    protected void afterTransformRequest(long timeInNanos) {  
+    private final OperationMetrics pipelineResponseMetrics = new OperationMetrics();  
+        copyProcessorMetrics(responseProcessorMetrics, oldPipeline.responseProcessorMetrics);
+        Map<String, OperationMetrics> oldProcessorMetrics
+                        processorName = processorName + ":" + tag;
+                    );  
+ *
+        OperationMetrics totalRequestProcessingMetrics,
+        List<SearchRequestProcessor> requestProcessors,
+        List<Map<String, Object>> responseProcessorConfigs = ConfigurationUtils.readOptionalList(
+            System::nanoTime
+    protected void afterTransformResponse(long timeInNanos) {
+ * this file be licensed under the Apache-2.0 license or a
+        super.onTransformRequestFailure();
+            null,
+        );
+            description,  
+        super.afterTransformResponse(timeInNanos);
+        );  
+        super.onTransformResponseFailure();
+            }
+        Processor.PipelineContext pipelineContext  
+        Map<String, Processor.Factory<SearchPhaseResultsProcessor>> phaseResultsProcessorFactories,
+        responseProcessorMetrics.get(getProcessorKey(processor)).failed();
+        Integer version = ConfigurationUtils.readIntProperty(null, null, config, VERSION_KEY, null);  
+        List<SearchPhaseResultsProcessor> phaseResultsProcessors = readProcessors(  
+        List<SearchPhaseResultsProcessor> phaseResultsProcessors,
+        Map<String, Processor.Factory<SearchRequestProcessor>> requestProcessorFactories,  
+ * SPDX-License-Identifier: Apache-2.0
+    protected void beforeTransformResponse() {
+        totalRequestMetrics.before();
+        return Collections.unmodifiableList(processors);
+            null,
+                String description = ConfigurationUtils.readOptionalStringProperty(null, tag, config, DESCRIPTION_KEY);
+import org.opensearch.common.metrics.OperationMetrics;
+    private static String getProcessorKey(Processor processor) {
+        OperationMetrics totalRequestMetrics,  
+    }
+import java.util.Map;
+        if (requestProcessorConfigs == null) {
+    }
+            null,
+import static org.opensearch.ingest.ConfigurationUtils.TAG_KEY;  
+            relativeTimeSupplier  
     }  
-
+import java.util.List;
+        super.beforeTransformRequest();  
+                }  
+import static org.opensearch.ingest.Pipeline.DESCRIPTION_KEY;
+            requestProcessorFactories,  
+/*  
+            responseProcessorConfigs,  
+    protected void beforeResponseProcessor(Processor processor) {
+            config,  
+                String type = entry.getKey();  
+            totalResponseProcessingMetrics,
+        totalResponseMetrics.before();  
+        }  
+        totalRequestMetrics.after(timeInNanos);
+            totalRequestProcessingMetrics,  
+        }  
+                }
+                    throw new IllegalArgumentException("Invalid processor type " + type);
+                processors.add(
+            id,
+    @Override  
+            id,
+    ) {  
+            return processors;
+import java.util.Collections;
+        NamedWriteableRegistry namedWriteableRegistry,
+ * The OpenSearch Contributors require contributions made to  
+                            + processorName  
+        super(
+            phaseResultsProcessors,
+                );
+        super.beforeTransformRequest();
+        );  
+            for (Map.Entry<String, Object> entry : processorConfigWithKey.entrySet()) {
+        );
+            RESPONSE_PROCESSORS_KEY
+        String description,  
+        for (Map<String, Object> processorConfigWithKey : requestProcessorConfigs) {
+    private static <T extends Processor> void copyProcessorMetrics(
+    }
+            throw new OpenSearchParseException(  
+        List<SearchRequestProcessor> requestProcessors = readProcessors(
+    ) throws Exception {
+        for (Processor processor : getSearchResponseProcessors()) {  
+                Map<String, Object> config = (Map<String, Object>) entry.getValue();
+        statsBuilder.addPipelineStats(getId(), pipelineRequestMetrics, pipelineResponseMetrics);
+                    String processorName = type;  
+            requestProcessors,
+        pipelineRequestMetrics.before();
+                    }  
+        List<Map<String, Object>> requestProcessorConfigs,  
+    void copyMetrics(PipelineWithMetrics oldPipeline) {
+        NamedWriteableRegistry namedWriteableRegistry,  
+        Map<String, Processor.Factory<T>> processorFactories,
+ * compatible open source license.
+            responseProcessorMetrics.putIfAbsent(getProcessorKey(responseProcessor), new OperationMetrics());
+                if (config.isEmpty() == false) {
+import java.util.function.LongSupplier;  
+        requestProcessorMetrics.get(getProcessorKey(processor)).before();
+            phaseResultsProcessors,
+        List<Map<String, Object>> phaseResultsProcessorConfigs = ConfigurationUtils.readOptionalList(  
+        String key = processor.getType();
+    ) {
+    protected void beforeRequestProcessor(Processor processor) {
+    }  
+            requestProcessors,
+        pipelineRequestMetrics.after(timeInNanos);  
+ * Specialization of {@link Pipeline} that adds metrics to track executions of the pipeline and individual processors.
+    ) throws Exception {
+class PipelineWithMetrics extends Pipeline {
+                if (!processorFactories.containsKey(type)) {
+            version,
+    }  
+        );  
+        for (Processor processor : getSearchRequestProcessors()) {
+    protected void afterRequestProcessor(Processor processor, long timeInNanos) {
+        pipelineResponseMetrics.add(oldPipeline.pipelineResponseMetrics);  
+    }
+        pipelineResponseMetrics.before();
+        }
+        Map<String, Processor.Factory<SearchResponseProcessor>> responseProcessorFactories,
+    protected void onTransformResponseFailure() {
+                    + id
+            requestProcessorConfigs,
+            config,
+        for (Processor requestProcessor : getSearchRequestProcessors()) {
+            phaseResultsProcessorConfigs,
+        String description = ConfigurationUtils.readOptionalStringProperty(null, null, config, DESCRIPTION_KEY);
+        }  
+                    processorFactories.get(type).create(processorFactories, tag, description, ignoreFailure, config, pipelineContext)  
+import static org.opensearch.ingest.Pipeline.VERSION_KEY;
+        LongSupplier relativeTimeSupplier
+        }  
+        this.totalRequestMetrics = totalRequestMetrics;
+        }  
+        Processor.PipelineContext pipelineContext
+    protected void beforeTransformRequest() {
+import org.opensearch.ingest.ConfigurationUtils;
+        for (Map.Entry<String, OperationMetrics> oldProcessorMetric : oldProcessorMetrics.entrySet()) {  
+        List<Map<String, Object>> requestProcessorConfigs = ConfigurationUtils.readOptionalList(null, null, config, REQUEST_PROCESSORS_KEY);
+import java.util.HashMap;  
+            responseProcessorFactories,
+            String key = getProcessorKey(processor);
+        List<SearchResponseProcessor> responseProcessors,  
+        String id,
+    private final OperationMetrics totalResponseMetrics;
+        this.totalResponseMetrics = totalResponseMetrics;  
+                newProcessorMetrics.get(oldProcessorMetric.getKey()).add(oldProcessorMetric.getValue());
+        if (config.isEmpty() == false) {
+    }
+            );
+            responseProcessors,  
+    }
+        totalResponseMetrics.failed();  
+                        "processor ["
+        Integer version,
+ */  
+ */  
     protected void afterResponseProcessor(Processor processor, long timeInNanos) {
+            if (newProcessorMetrics.containsKey(oldProcessorMetric.getKey())) {
+            phaseResultsProcessorFactories,
+/**
+            namedWriteableRegistry,
+        copyProcessorMetrics(requestProcessorMetrics, oldPipeline.requestProcessorMetrics);
+    static PipelineWithMetrics create(  
+    }
+    protected void onRequestProcessorFailed(Processor processor) {  
+            statsBuilder.addResponseProcessorStats(getId(), key, processor.getType(), responseProcessorMetrics.get(key));
+                            + Arrays.toString(config.keySet().toArray())
+            pipelineContext  
+                boolean ignoreFailure = ConfigurationUtils.readBooleanProperty(null, null, config, IGNORE_FAILURE_KEY, false);  
+    }
+    private static <T extends Processor> List<T> readProcessors(
+    private final Map<String, OperationMetrics> requestProcessorMetrics = new HashMap<>();
+            String key = getProcessorKey(processor);  
+            PHASE_PROCESSORS_KEY
+    @Override
+import org.opensearch.OpenSearchParseException;
+                "pipeline ["
+}
+            version,
+            }  
+            requestProcessorMetrics.putIfAbsent(getProcessorKey(requestProcessor), new OperationMetrics());
+        return key;  
+        }  
+                    if (tag != null) {
+        OperationMetrics totalResponseProcessingMetrics,
+        requestProcessorMetrics.get(getProcessorKey(processor)).after(timeInNanos);  
+import java.util.ArrayList;  
+            statsBuilder.addRequestProcessorStats(getId(), key, processor.getType(), requestProcessorMetrics.get(key));
+            pipelineContext
+    void populateStats(SearchPipelineStats.Builder statsBuilder) {  
+        pipelineRequestMetrics.failed();
+            null,  
+        requestProcessorMetrics.get(getProcessorKey(processor)).failed();
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+    @Override
+package org.opensearch.search.pipeline;
+        );
+import static org.opensearch.ingest.ConfigurationUtils.IGNORE_FAILURE_KEY;
+    }  
+    private final Map<String, OperationMetrics> responseProcessorMetrics = new HashMap<>();
+        if (processor.getTag() != null) {  
+        String id,
+                    throw new OpenSearchParseException(
+    private final OperationMetrics pipelineRequestMetrics = new OperationMetrics();
+            namedWriteableRegistry,
+    }
+        }
+    }
+        pipelineRequestMetrics.add(oldPipeline.pipelineRequestMetrics);
+            return key + ":" + processor.getTag();
         responseProcessorMetrics.get(getProcessorKey(processor)).after(timeInNanos);  
     }
-
-    protected void onResponseProcessorFailed(Processor processor) {  
-        responseProcessorMetrics.get(getProcessorKey(processor)).failed();
+        List<T> processors = new ArrayList<>();  
     }
-
-    void copyMetrics(PipelineWithMetrics oldPipeline) {
-        pipelineRequestMetrics.add(oldPipeline.pipelineRequestMetrics);
-        pipelineResponseMetrics.add(oldPipeline.pipelineResponseMetrics);  
-        copyProcessorMetrics(requestProcessorMetrics, oldPipeline.requestProcessorMetrics);
-        copyProcessorMetrics(responseProcessorMetrics, oldPipeline.responseProcessorMetrics);
-    }  
-
-    private static <T extends Processor> void copyProcessorMetrics(
-        Map<String, OperationMetrics> newProcessorMetrics,  
-        Map<String, OperationMetrics> oldProcessorMetrics
-    ) {
-        for (Map.Entry<String, OperationMetrics> oldProcessorMetric : oldProcessorMetrics.entrySet()) {  
-            if (newProcessorMetrics.containsKey(oldProcessorMetric.getKey())) {
-                newProcessorMetrics.get(oldProcessorMetric.getKey()).add(oldProcessorMetric.getValue());
-            }  
+    }
+        pipelineResponseMetrics.failed();
+    }
+                    + Arrays.toString(config.keySet().toArray())
+                String tag = ConfigurationUtils.readOptionalStringProperty(null, null, config, TAG_KEY);
+        List<SearchResponseProcessor> responseProcessors = readProcessors(
+        Map<String, Object> config,
+        super.afterTransformRequest(timeInNanos);
         }
+        for (Processor responseProcessor : getSearchResponseProcessors()) {
+        pipelineResponseMetrics.after(timeInNanos);
+    private final OperationMetrics totalRequestMetrics;  
+    PipelineWithMetrics(
+        );
+        return new PipelineWithMetrics(
     }
-
-    private static String getProcessorKey(Processor processor) {
-        String key = processor.getType();
-        if (processor.getTag() != null) {  
-            return key + ":" + processor.getTag();
-        }
-        return key;  
-    }
-
-    void populateStats(SearchPipelineStats.Builder statsBuilder) {  
-        statsBuilder.addPipelineStats(getId(), pipelineRequestMetrics, pipelineResponseMetrics);
-        for (Processor processor : getSearchRequestProcessors()) {
-            String key = getProcessorKey(processor);  
-            statsBuilder.addRequestProcessorStats(getId(), key, processor.getType(), requestProcessorMetrics.get(key));
-        }
-        for (Processor processor : getSearchResponseProcessors()) {  
-            String key = getProcessorKey(processor);
-            statsBuilder.addResponseProcessorStats(getId(), key, processor.getType(), responseProcessorMetrics.get(key));
-        }  
-    }
-}
+            description,  

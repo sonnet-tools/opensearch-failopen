@@ -1,59 +1,51 @@
+ * under the License.  
+            Analysis.parseStopWords(env, settings, ArabicAnalyzer.getDefaultStopSet()),
+import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
+    @Override  
+/*  
+import org.opensearch.index.IndexSettings;
+import org.opensearch.env.Environment;
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.analysis.ar.ArabicAnalyzer;
+ *  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.settings.Settings;  
+ * not use this file except in compliance with the License.
+        );  
+import org.opensearch.index.analysis.Analysis;
+ */  
+import org.apache.lucene.analysis.CharArraySet;
+ * Unless required by applicable law or agreed to in writing,
+    private final ArabicAnalyzer arabicAnalyzer;
+ * this file be licensed under the Apache-2.0 license or a
+    ArabicAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+}
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.analysis.common;
+        arabicAnalyzer = new ArabicAnalyzer(  
+ *
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+    public ArabicAnalyzer get() {
+ */
+ * compatible open source license.
+ * software distributed under the License is distributed on an
+        return this.arabicAnalyzer;
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+public class ArabicAnalyzerProvider extends AbstractIndexAnalyzerProvider<ArabicAnalyzer> {  
  * GitHub history for details.
  */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.CharArraySet;
-import org.apache.lucene.analysis.ar.ArabicAnalyzer;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
-import org.opensearch.index.analysis.Analysis;
-
-public class ArabicAnalyzerProvider extends AbstractIndexAnalyzerProvider<ArabicAnalyzer> {  
-
-    private final ArabicAnalyzer arabicAnalyzer;
-
-    ArabicAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+/*
         super(indexSettings, name, settings);
-        arabicAnalyzer = new ArabicAnalyzer(  
-            Analysis.parseStopWords(env, settings, ArabicAnalyzer.getDefaultStopSet()),
-            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
-        );  
-    }
-
-    @Override  
-    public ArabicAnalyzer get() {
-        return this.arabicAnalyzer;
-    }  
-}
+ * the Apache License, Version 2.0 (the "License"); you may

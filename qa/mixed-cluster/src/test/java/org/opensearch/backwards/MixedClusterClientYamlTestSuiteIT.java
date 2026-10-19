@@ -1,57 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.tests.util.TimeUnits;  
+        return createParameters();
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
+ * compatible open source license.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+ */  
+    }
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+ * Licensed to Elasticsearch under one or more contributor  
  * under the License.  
  */
-
-/*  
+public class MixedClusterClientYamlTestSuiteIT extends OpenSearchClientYamlSuiteTestCase {
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.backwards;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-import com.carrotsearch.randomizedtesting.annotations.TimeoutSuite;
-import org.apache.lucene.tests.util.TimeUnits;  
+/*  
 import org.opensearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.opensearch.test.rest.yaml.OpenSearchClientYamlSuiteTestCase;
-
-@TimeoutSuite(millis = 40 * TimeUnits.MINUTE) // some of the windows test VMs are slow as hell
-public class MixedClusterClientYamlTestSuiteIT extends OpenSearchClientYamlSuiteTestCase {
-
-    public MixedClusterClientYamlTestSuiteIT(ClientYamlTestCandidate testCandidate) {
-        super(testCandidate);
-    }  
-
     @ParametersFactory
-    public static Iterable<Object[]> parameters() throws Exception {  
-        return createParameters();
-    }
-
-    @Override
-    protected boolean randomizeContentType() {
-        return false;  
-    }
+    public MixedClusterClientYamlTestSuiteIT(ClientYamlTestCandidate testCandidate) {
+ * GitHub history for details.
+ * KIND, either express or implied.  See the License for the
 }
+import com.carrotsearch.randomizedtesting.annotations.TimeoutSuite;
+ * specific language governing permissions and limitations
+package org.opensearch.backwards;
+ *  
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+        super(testCandidate);
+        return false;  
+ */  
+ * The OpenSearch Contributors require contributions made to  
+ *
+    protected boolean randomizeContentType() {
+    @Override
+ * software distributed under the License is distributed on an
+/*  
+    public static Iterable<Object[]> parameters() throws Exception {  
+@TimeoutSuite(millis = 40 * TimeUnits.MINUTE) // some of the windows test VMs are slow as hell
+/*
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+    }
+ * SPDX-License-Identifier: Apache-2.0

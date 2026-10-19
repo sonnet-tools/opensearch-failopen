@@ -1,389 +1,337 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.support.single.shard;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.NoShardAvailableActionException;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ChannelActionListener;
-import org.opensearch.action.support.TransportAction;  
-import org.opensearch.action.support.TransportActions;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.FailAwareWeightedRouting;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardsIterator;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.common.logging.LoggerMessageFormat;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.tasks.Task;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportException;  
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;  
-
-import java.io.IOException;
-
-import static org.opensearch.action.support.TransportActions.isShardNotAvailableException;
-
-/**  
- * A base class for operations that need to perform a read operation on a single shard copy. If the operation fails,
- * the read operation can be performed on other shard copies. Concrete implementations can provide their own list
- * of candidate shards to try the read operation on.  
- *
- * @opensearch.internal
- */  
-public abstract class TransportSingleShardAction<Request extends SingleShardRequest<Request>, Response extends ActionResponse> extends
-    TransportAction<Request, Response>
-    implements  
-        TransportIndicesResolvingAction<Request> {
-
-    protected final ThreadPool threadPool;  
-    protected final ClusterService clusterService;
-    protected final TransportService transportService;
-    protected final IndexNameExpressionResolver indexNameExpressionResolver;  
-
-    private final String transportShardAction;
-    private final String executor;  
-
-    protected TransportSingleShardAction(
-        String actionName,  
-        ThreadPool threadPool,
-        ClusterService clusterService,
-        TransportService transportService,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Writeable.Reader<Request> request,  
-        String executor
-    ) {
-        super(actionName, actionFilters, transportService.getTaskManager());  
-        this.threadPool = threadPool;
-        this.clusterService = clusterService;
-        this.transportService = transportService;  
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
-
-        this.transportShardAction = actionName + "[s]";  
-        this.executor = executor;
-
-        if (!isSubAction()) {  
-            transportService.registerRequestHandler(actionName, ThreadPool.Names.SAME, request, new TransportHandler());
-        }
-        transportService.registerRequestHandler(transportShardAction, ThreadPool.Names.SAME, request, new ShardTransportHandler());  
-    }
-
-    /**  
-     * Tells whether the action is a main one or a subaction. Used to decide whether we need to register
-     * the main transport handler. In fact if the action is a subaction, its execute method
-     * will be called locally to its parent action.  
-     */
-    protected boolean isSubAction() {
-        return false;  
-    }
-
-    @Override  
-    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-        new AsyncSingleAction(request, listener).start();
-    }  
-
-    protected abstract Response shardOperation(Request request, ShardId shardId) throws IOException;
-
-    protected void asyncShardOperation(Request request, ShardId shardId, ActionListener<Response> listener) throws IOException {
-        threadPool.executor(getExecutor(request, shardId)).execute(ActionRunnable.supply(listener, () -> shardOperation(request, shardId)));
-    }  
-
-    protected abstract Writeable.Reader<Response> getResponseReader();
-
-    protected abstract boolean resolveIndex(Request request);
-
-    protected ClusterBlockException checkGlobalBlock(ClusterState state) {  
-        return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
-    }
-
-    protected ClusterBlockException checkRequestBlock(ClusterState state, InternalRequest request) {
-        return state.blocks().indexBlockedException(ClusterBlockLevel.READ, request.concreteIndex());
-    }  
-
-    protected void resolveRequest(ClusterState state, InternalRequest request) {
-
-    }
-
-    /**  
-     * Returns the candidate shards to execute the operation on or <code>null</code> the execute
-     * the operation locally (the node that received the request)
-     */  
-    @Nullable
-    protected abstract ShardsIterator shards(ClusterState state, InternalRequest request);
-
-    @Override
-    public ResolvedIndices resolveIndices(Request request) {
-        if (resolveIndex(request)) {  
-            // We do not use resolveToConcreteSingleIndex() here because it might throw exceptions for validation errors.
-            // Instead, we use indexNameExpressionResolver.concreteResolvedIndices(), which allows us to retrieve
-            // index names without validation errors. This is potentially a super-set of the indices resolved in  
-            // resolveToConcreteSingleIndex(), but this is only a hypothetical state. In practise, we should
-            // also always get one element here. If for some reason that's not the case, the code will hit the
-            // validation error when executing the action.  
-            return ResolvedIndices.of(indexNameExpressionResolver.concreteResolvedIndices(clusterService.state(), request));
-        } else {
-            return ResolvedIndices.of(request.index());  
-        }
-    }
-
-    private String resolveToConcreteSingleIndex(Request request, ClusterState clusterState) {
-        if (resolveIndex(request)) {
-            return indexNameExpressionResolver.concreteSingleIndex(clusterState, request).getName();  
-        } else {
-            return request.index();
-        }  
-    }
-
-    /**  
-     * Asynchronous single action
-     *
-     * @opensearch.internal  
-     */
-    class AsyncSingleAction {
-
-        private final ActionListener<Response> listener;
-        private final ShardsIterator shardIt;
-        private final InternalRequest internalRequest;  
-        private final DiscoveryNodes nodes;
-        private volatile Exception lastFailure;
-
-        private AsyncSingleAction(Request request, ActionListener<Response> listener) {
-            this.listener = listener;
-
-            ClusterState clusterState = clusterService.state();
-            if (logger.isTraceEnabled()) {
-                logger.trace("executing [{}] based on cluster state version [{}]", request, clusterState.version());  
-            }
-            nodes = clusterState.nodes();
-            ClusterBlockException blockException = checkGlobalBlock(clusterState);  
-            if (blockException != null) {
-                throw blockException;
-            }  
-
-            String concreteSingleIndex = resolveToConcreteSingleIndex(request, clusterState);
-            this.internalRequest = new InternalRequest(request, concreteSingleIndex);  
-            resolveRequest(clusterState, internalRequest);
-
-            blockException = checkRequestBlock(clusterState, internalRequest);  
-            if (blockException != null) {
-                throw blockException;
-            }  
-
-            this.shardIt = shards(clusterState, internalRequest);
-        }  
-
-        public void start() {
-            if (shardIt == null) {  
-                // just execute it on the local node
-                final Writeable.Reader<Response> reader = getResponseReader();
-                transportService.sendRequest(  
                     clusterService.localNode(),
-                    transportShardAction,
-                    internalRequest.request(),  
-                    new TransportResponseHandler<Response>() {
-                        @Override
-                        public Response read(StreamInput in) throws IOException {  
-                            return reader.read(in);
-                        }
-
-                        @Override
-                        public String executor() {
-                            return ThreadPool.Names.SAME;  
-                        }
-
-                        @Override  
-                        public void handleResponse(final Response response) {
-                            listener.onResponse(response);
-                        }  
-
-                        @Override
-                        public void handleException(TransportException exp) {  
-                            listener.onFailure(exp);
-                        }
-                    }  
-                );
-            } else {
-                perform(null);  
-            }
-        }
-
-        private void onFailure(ShardRouting shardRouting, Exception e) {
-            if (e != null) {
-                logger.trace(() -> new ParameterizedMessage("{}: failed to execute [{}]", shardRouting, internalRequest.request()), e);  
-            }
-            perform(e);
-        }  
-
-        private void perform(@Nullable final Exception currentFailure) {
-            Exception lastFailure = this.lastFailure;  
-            if (lastFailure == null || TransportActions.isReadOverrideException(currentFailure)) {
-                lastFailure = currentFailure;
-                this.lastFailure = currentFailure;  
-            }
-            ShardRouting shardRouting = FailAwareWeightedRouting.getInstance()
-                .findNext(shardIt, clusterService.state(), currentFailure, () -> {});  
-
-            if (shardRouting == null) {
-                Exception failure = lastFailure;  
-                if (failure == null || isShardNotAvailableException(failure)) {
-                    failure = new NoShardAvailableActionException(
-                        null,  
-                        LoggerMessageFormat.format("No shard available for [{}]", internalRequest.request()),
-                        failure
-                    );  
-                } else {
-                    logger.debug(() -> new ParameterizedMessage("{}: failed to execute [{}]", null, internalRequest.request()), failure);
-                }  
-                listener.onFailure(failure);
-                return;
-            }  
-            DiscoveryNode node = nodes.get(shardRouting.currentNodeId());
-            if (node == null) {
+    /**  
                 onFailure(shardRouting, new NoShardAvailableActionException(shardRouting.shardId()));  
-            } else {
-                internalRequest.request().internalShardId = shardRouting.shardId();
-                if (logger.isTraceEnabled()) {  
-                    logger.trace(
-                        "sending request [{}] to shard [{}] on node [{}]",
-                        internalRequest.request(),  
-                        internalRequest.request().internalShardId,
-                        node
-                    );  
-                }
-                final Writeable.Reader<Response> reader = getResponseReader();
-                ShardRouting finalShardRouting = shardRouting;  
-                transportService.sendRequest(
+    protected String getExecutor(Request request, ShardId shardId) {
                     node,
-                    transportShardAction,  
-                    internalRequest.request(),
-                    new TransportResponseHandler<Response>() {
-
-                        @Override
-                        public Response read(StreamInput in) throws IOException {
-                            return reader.read(in);  
-                        }
-
-                        @Override  
+import org.opensearch.action.ActionRunnable;
+                listener.onFailure(failure);
+    }
+        super(actionName, actionFilters, transportService.getTaskManager());  
+ * Unless required by applicable law or agreed to in writing,
+    protected abstract Response shardOperation(Request request, ShardId shardId) throws IOException;
+    private class TransportHandler implements TransportRequestHandler<Request> {
+            }  
+                        public void handleException(TransportException exp) {  
+/**  
+            asyncShardOperation(request, request.internalShardId, new ChannelActionListener<>(channel, transportShardAction, request));
                         public String executor() {
-                            return ThreadPool.Names.SAME;
-                        }  
-
-                        @Override
+     * Asynchronous single action
+    }  
+    /**  
                         public void handleResponse(final Response response) {  
+        }
                             listener.onResponse(response);
-                        }
-
+                lastFailure = currentFailure;
+                    logger.trace(
+                            return ThreadPool.Names.SAME;  
+                throw blockException;
+ *
+        }  
+            this.request = request;  
+            // index names without validation errors. This is potentially a super-set of the indices resolved in  
+            return request;
+     */  
+import org.opensearch.cluster.block.ClusterBlockException;
+     */  
+            ClusterBlockException blockException = checkGlobalBlock(clusterState);  
+    protected abstract boolean resolveIndex(Request request);
+import org.opensearch.action.support.TransportAction;  
+        if (resolveIndex(request)) {  
+        public void start() {
+        } else {
+import static org.opensearch.action.support.TransportActions.isShardNotAvailableException;
+    protected void asyncShardOperation(Request request, ShardId shardId, ActionListener<Response> listener) throws IOException {
+                    transportShardAction,  
                         @Override
+                    internalRequest.request(),
+     * Internal transport handler  
+import org.opensearch.threadpool.ThreadPool;
+ */
+            // Instead, we use indexNameExpressionResolver.concreteResolvedIndices(), which allows us to retrieve
+        private final ShardsIterator shardIt;
+            if (node == null) {
+            }
+                        @Override
+            return concreteIndex;  
+     * will be called locally to its parent action.  
+                            return reader.read(in);
+            } else {
+        InternalRequest(Request request, String concreteIndex) {
+            this.shardIt = shards(clusterState, internalRequest);
+     * the operation locally (the node that received the request)
+            // We do not use resolveToConcreteSingleIndex() here because it might throw exceptions for validation errors.
+            nodes = clusterState.nodes();
+     * Internal request class that gets built on each node. Holds the original request plus additional info.  
+        }  
+            }
+                if (logger.isTraceEnabled()) {  
+    private class ShardTransportHandler implements TransportRequestHandler<Request> {  
+            // if we have a local operation, execute it on a thread since we don't spawn
                         public void handleException(TransportException exp) {
+                        public String executor() {
+                        @Override  
+        }
+    protected boolean isSubAction() {
+            if (blockException != null) {
+        final Request request;
+            return ResolvedIndices.of(indexNameExpressionResolver.concreteResolvedIndices(clusterService.state(), request));
+     */
+import org.opensearch.transport.TransportService;  
+                        }
+ * license agreements. See the NOTICE file distributed with
+                );
+                } else {
+                transportService.sendRequest(
+        ClusterService clusterService,
+        public Request request() {
+ *
+                    );  
+    protected final ThreadPool threadPool;  
+ * specific language governing permissions and limitations
+    private String resolveToConcreteSingleIndex(Request request, ClusterState clusterState) {
+                        node
+ * A base class for operations that need to perform a read operation on a single shard copy. If the operation fails,
+            DiscoveryNode node = nodes.get(shardRouting.currentNodeId());
+        @Override
+     * Returns the candidate shards to execute the operation on or <code>null</code> the execute
+                        }  
+        transportService.registerRequestHandler(transportShardAction, ThreadPool.Names.SAME, request, new ShardTransportHandler());  
+        return state.blocks().indexBlockedException(ClusterBlockLevel.READ, request.concreteIndex());
+        IndexNameExpressionResolver indexNameExpressionResolver,
+import org.opensearch.action.support.TransportActions;
+import org.opensearch.transport.TransportResponseHandler;
+                        public Response read(StreamInput in) throws IOException {  
+     *
+ * this work for additional information regarding copyright
+    ) {
+            return request.index();
+                            return reader.read(in);  
+                        internalRequest.request().internalShardId,
+        ActionFilters actionFilters,
+import org.opensearch.cluster.service.ClusterService;
+     */
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+                }  
+    private final String executor;  
+                    new TransportResponseHandler<Response>() {
+            ClusterState clusterState = clusterService.state();
+import org.opensearch.action.NoShardAvailableActionException;  
+    /**
+        private final ActionListener<Response> listener;
+            }
+            // validation error when executing the action.  
+import org.opensearch.cluster.node.DiscoveryNodes;  
+            this.concreteIndex = concreteIndex;
+    protected abstract ShardsIterator shards(ClusterState state, InternalRequest request);
+            resolveRequest(clusterState, internalRequest);
+    }  
+     *
+import org.apache.logging.log4j.message.ParameterizedMessage;
+     * Tells whether the action is a main one or a subaction. Used to decide whether we need to register
+                        }
+    TransportAction<Request, Response>
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
+ * Modifications Copyright OpenSearch Contributors. See
+                    logger.debug(() -> new ParameterizedMessage("{}: failed to execute [{}]", null, internalRequest.request()), failure);
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+            }  
+import org.opensearch.common.Nullable;
+            } else {
+import org.opensearch.cluster.metadata.ResolvedIndices;
+    public ResolvedIndices resolveIndices(Request request) {
+                        }
+ * GitHub history for details.
+    protected abstract Writeable.Reader<Response> getResponseReader();
+import org.opensearch.transport.TransportChannel;
+import org.opensearch.cluster.node.DiscoveryNode;
+ * of candidate shards to try the read operation on.  
+import org.opensearch.core.common.logging.LoggerMessageFormat;
+                        public Response read(StreamInput in) throws IOException {
+                // just execute it on the local node
+        public String concreteIndex() {
+            Exception lastFailure = this.lastFailure;  
+    }
+                );  
+        public void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {  
+ * You may obtain a copy of the License at  
+     * Shard level transport handler
+            }  
+        private final DiscoveryNodes nodes;
+            ShardRouting shardRouting = FailAwareWeightedRouting.getInstance()
+                        internalRequest.request(),  
+ */  
+        this.threadPool = threadPool;
+import org.opensearch.core.action.ActionListener;  
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+     *
+    implements  
+    class AsyncSingleAction {
+    }
+        Writeable.Reader<Request> request,  
+                logger.trace("executing [{}] based on cluster state version [{}]", request, clusterState.version());  
+    protected final IndexNameExpressionResolver indexNameExpressionResolver;  
+    protected ClusterBlockException checkGlobalBlock(ClusterState state) {  
+            blockException = checkRequestBlock(clusterState, internalRequest);  
+        String executor
+                if (failure == null || isShardNotAvailableException(failure)) {
+/*
+     */
+ */  
+        }
+    protected class InternalRequest {
+        private final InternalRequest internalRequest;  
+        }
+                }
+ * ownership. Elasticsearch licenses this file to you under  
+                    );  
+                        }  
+ *
+                perform(null);  
+    }  
+        }
+import org.opensearch.cluster.routing.FailAwareWeightedRouting;
+        String actionName,  
+        this.executor = executor;
+                    failure = new NoShardAvailableActionException(
+            perform(e);
+    protected ClusterBlockException checkRequestBlock(ClusterState state, InternalRequest request) {
+            if (shardRouting == null) {
+        }
+    @Nullable
+            }
+        return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
+                final Writeable.Reader<Response> reader = getResponseReader();
+    /**
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+package org.opensearch.action.support.single.shard;
+    }  
+ * software distributed under the License is distributed on an
+        new AsyncSingleAction(request, listener).start();
+     */  
+    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+ *  
+                    new TransportResponseHandler<Response>() {
+                        "sending request [{}] to shard [{}] on node [{}]",
                             onFailure(finalShardRouting, exp);  
+    }
+                logger.trace(() -> new ParameterizedMessage("{}: failed to execute [{}]", shardRouting, internalRequest.request()), e);  
                         }
                     }
-                );  
-            }
-        }
-    }  
-
-    /**
-     * Internal transport handler  
-     *
-     * @opensearch.internal
-     */  
-    private class TransportHandler implements TransportRequestHandler<Request> {
-
-        @Override  
-        public void messageReceived(Request request, final TransportChannel channel, Task task) throws Exception {
-            // if we have a local operation, execute it on a thread since we don't spawn
-            execute(request, new ChannelActionListener<>(channel, actionName, request));  
-        }
     }
-
-    /**
-     * Shard level transport handler
-     *  
-     * @opensearch.internal
-     */
-    private class ShardTransportHandler implements TransportRequestHandler<Request> {  
-
-        @Override
-        public void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {  
-            if (logger.isTraceEnabled()) {
+                            return ThreadPool.Names.SAME;
+ * KIND, either express or implied.  See the License for the
+            // resolveToConcreteSingleIndex(), but this is only a hypothetical state. In practise, we should
+                        @Override
+                            listener.onResponse(response);
+            String concreteSingleIndex = resolveToConcreteSingleIndex(request, clusterState);
+                        public void handleResponse(final Response response) {
+/*  
+                Exception failure = lastFailure;  
+ * the Apache License, Version 2.0 (the "License"); you may
+            return ResolvedIndices.of(request.index());  
+            this.internalRequest = new InternalRequest(request, concreteSingleIndex);  
+        return false;  
                 logger.trace("executing [{}] on shard [{}]", request, request.internalShardId);
-            }  
-            asyncShardOperation(request, request.internalShardId, new ChannelActionListener<>(channel, transportShardAction, request));
-        }
-    }  
-
-    /**
-     * Internal request class that gets built on each node. Holds the original request plus additional info.  
-     *
-     * @opensearch.internal
-     */  
-    protected class InternalRequest {
-        final Request request;
+ * under the License.  
+        public void messageReceived(Request request, final TransportChannel channel, Task task) throws Exception {
+                        null,  
         final String concreteIndex;  
-
-        InternalRequest(Request request, String concreteIndex) {
-            this.request = request;  
-            this.concreteIndex = concreteIndex;
-        }
-
-        public Request request() {
-            return request;
-        }  
-
-        public String concreteIndex() {
-            return concreteIndex;  
-        }
+    protected final ClusterService clusterService;
+import org.opensearch.cluster.routing.ShardRouting;
+        ThreadPool threadPool,
+    /**
+        @Override  
+import org.opensearch.core.action.ActionResponse;
+    protected final TransportService transportService;
     }
-
-    protected String getExecutor(Request request, ShardId shardId) {
-        return executor;
+     * @opensearch.internal
+            if (shardIt == null) {  
+                            listener.onFailure(exp);
+     * @opensearch.internal  
+/*  
+    }
+        this.transportShardAction = actionName + "[s]";  
+        this.clusterService = clusterService;
+                final Writeable.Reader<Response> reader = getResponseReader();
+                        }
+            // also always get one element here. If for some reason that's not the case, the code will hit the
+        } else {
+     * @opensearch.internal
+            if (blockException != null) {
     }  
+ * the read operation can be performed on other shard copies. Concrete implementations can provide their own list
+     *  
+                transportService.sendRequest(  
+        private AsyncSingleAction(Request request, ActionListener<Response> listener) {
+                .findNext(shardIt, clusterService.state(), currentFailure, () -> {});  
+        if (resolveIndex(request)) {
+                        failure
+        TransportService transportService,  
+import org.opensearch.cluster.routing.ShardsIterator;  
 }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            if (lastFailure == null || TransportActions.isReadOverrideException(currentFailure)) {
+        if (!isSubAction()) {  
+                        @Override  
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+    protected TransportSingleShardAction(
+import java.io.IOException;
+import org.opensearch.tasks.Task;  
+    private final String transportShardAction;
+import org.opensearch.action.support.ActionFilters;
+        }
+import org.opensearch.action.support.ChannelActionListener;
+                    }  
+        private void onFailure(ShardRouting shardRouting, Exception e) {
+ * SPDX-License-Identifier: Apache-2.0
+            return indexNameExpressionResolver.concreteSingleIndex(clusterState, request).getName();  
+        private volatile Exception lastFailure;
+import org.opensearch.cluster.ClusterState;  
+                throw blockException;
+        }  
+    @Override  
+public abstract class TransportSingleShardAction<Request extends SingleShardRequest<Request>, Response extends ActionResponse> extends
+                        }
+        private void perform(@Nullable final Exception currentFailure) {
+            if (logger.isTraceEnabled()) {
+import org.opensearch.core.common.io.stream.Writeable;  
+            this.listener = listener;
+     * the main transport handler. In fact if the action is a subaction, its execute method
+                        LoggerMessageFormat.format("No shard available for [{}]", internalRequest.request()),
+        this.transportService = transportService;  
+        }  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+                    transportShardAction,
+    /**  
+                        @Override
+ */  
+                    internalRequest.request(),  
+import org.opensearch.transport.TransportRequestHandler;
+        threadPool.executor(getExecutor(request, shardId)).execute(ActionRunnable.supply(listener, () -> shardOperation(request, shardId)));
+        TransportIndicesResolvingAction<Request> {
+            if (logger.isTraceEnabled()) {
+                this.lastFailure = currentFailure;  
+ * @opensearch.internal
+     * @opensearch.internal
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                return;
+ * compatible open source license.
+            if (e != null) {
+    protected void resolveRequest(ClusterState state, InternalRequest request) {
+ * The OpenSearch Contributors require contributions made to  
+                internalRequest.request().internalShardId = shardRouting.shardId();
+        }
+                        @Override
+            }  
+import org.opensearch.transport.TransportException;  
+                ShardRouting finalShardRouting = shardRouting;  
+                        @Override
+            execute(request, new ChannelActionListener<>(channel, actionName, request));  
+            transportService.registerRequestHandler(actionName, ThreadPool.Names.SAME, request, new TransportHandler());
+        return executor;
+            }

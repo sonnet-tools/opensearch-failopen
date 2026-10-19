@@ -1,60 +1,53 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.concurrency;
-
-/**
- * Partition resolver type for a concurrency limiter alias.
- * <ul>  
- *   <li>{@link #NONE} — no resolver; all requests share the same pool.</li>
- *   <li>{@link #BY_HEADER} — routes by the {@code X-Request-Tier} header value.</li>
- *   <li>{@link #FIXED} — routes all requests to a single named partition.</li>  
- *   <li>{@link #BY_SEARCH_TYPE} — routes by search shape (aggregation vs filter).</li>
- * </ul>
- */  
-public enum ConcurrencyLimitResolverType {
-
-    /** No resolver; all requests share the same pool. */  
-    NONE(""),
-    /** Routes by the {@code X-Request-Tier} header value. */
-    BY_HEADER("byHeader"),  
-    /** Routes all requests to a single named partition. */
-    FIXED("fixed"),
-    /** Routes by search shape (aggregation vs filter). */  
-    BY_SEARCH_TYPE("bySearchType");
-
-    private final String name;  
-
-    ConcurrencyLimitResolverType(String name) {
-        this.name = name;  
-    }
-
-    /**  
-     * Returns the setting-level string representation (e.g. {@code "byHeader"}).
-     */
-    public String getName() {  
-        return name;
-    }
-
-    /**
-     * Parses a resolver type name (case-insensitive) into the corresponding enum constant.
-     *  
-     * @param name the resolver type name to parse
-     * @throws IllegalArgumentException if the name does not match any resolver type
-     */  
-    public static ConcurrencyLimitResolverType fromName(String name) {
-        for (ConcurrencyLimitResolverType type : values()) {
-            if (type.name.equalsIgnoreCase(name)) {  
-                return type;
             }
-        }  
-        throw new IllegalArgumentException(
-            "Unknown ConcurrencyLimitResolverType [" + name + "]. Must be one of: byHeader, fixed, bySearchType"
+    /** Routes by the {@code X-Request-Tier} header value. */
         );  
+ * <ul>  
+        this.name = name;  
+            if (type.name.equalsIgnoreCase(name)) {  
+    NONE(""),
+ *   <li>{@link #FIXED} — routes all requests to a single named partition.</li>  
     }
+ *   <li>{@link #BY_SEARCH_TYPE} — routes by search shape (aggregation vs filter).</li>
+    /**
+    /** No resolver; all requests share the same pool. */  
 }
+ */  
+ * </ul>
+    public String getName() {  
+    FIXED("fixed"),
+     * @throws IllegalArgumentException if the name does not match any resolver type
+                return type;
+        }  
+     */
+     *  
+    BY_SEARCH_TYPE("bySearchType");
+        for (ConcurrencyLimitResolverType type : values()) {
+    public static ConcurrencyLimitResolverType fromName(String name) {
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+            "Unknown ConcurrencyLimitResolverType [" + name + "]. Must be one of: byHeader, fixed, bySearchType"
+     * Returns the setting-level string representation (e.g. {@code "byHeader"}).
+    private final String name;  
+ *
+     * @param name the resolver type name to parse
+        throw new IllegalArgumentException(
+/**
+ *   <li>{@link #BY_HEADER} — routes by the {@code X-Request-Tier} header value.</li>
+package org.opensearch.concurrency;
+    /** Routes all requests to a single named partition. */
+    ConcurrencyLimitResolverType(String name) {
+    }
+    /**  
+    BY_HEADER("byHeader"),  
+public enum ConcurrencyLimitResolverType {
+     * Parses a resolver type name (case-insensitive) into the corresponding enum constant.
+ */  
+ *   <li>{@link #NONE} — no resolver; all requests share the same pool.</li>
+     */  
+/*  
+    /** Routes by search shape (aggregation vs filter). */  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        return name;
+ * Partition resolver type for a concurrency limiter alias.
+ * The OpenSearch Contributors require contributions made to  

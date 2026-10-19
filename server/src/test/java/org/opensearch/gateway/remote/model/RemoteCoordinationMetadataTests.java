@@ -1,240 +1,219 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.coordination.CoordinationMetadata;
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;  
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.compress.DeflateCompressor;  
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.compress.NoneCompressor;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
-import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
-import org.opensearch.indices.IndicesModule;  
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.io.InputStream;  
-import java.util.List;
-import java.util.Set;
-import java.util.function.Function;  
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;  
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.is;  
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class RemoteCoordinationMetadataTests extends OpenSearchTestCase {  
-    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
-    private static final String TEST_BLOB_PATH = "test-path";
-    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
-    private static final long TERM = 3L;
-    private static final long METADATA_VERSION = 3L;
-    private String clusterUUID;  
-    private BlobStoreTransferService blobStoreTransferService;
-    private BlobStoreRepository blobStoreRepository;
-    private String clusterName;  
-    private ClusterSettings clusterSettings;
-    private Compressor compressor;
-    private NamedXContentRegistry namedXContentRegistry;  
-    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
-
-    @Before  
-    public void setup() {
-        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        this.clusterUUID = "test-cluster-uuid";  
-        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
         this.blobStoreRepository = mock(BlobStoreRepository.class);
-        BlobPath blobPath = new BlobPath().add("/path");  
-        when(blobStoreRepository.basePath()).thenReturn(blobPath);
-        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());
-        compressor = new NoneCompressor();  
-        namedXContentRegistry = new NamedXContentRegistry(
-            Stream.of(
-                NetworkModule.getNamedXContents().stream(),  
-                IndicesModule.getNamedXContents().stream(),
-                ClusterModule.getNamedXWriteables().stream()
-            ).flatMap(Function.identity()).collect(toList())  
+            compressor,
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
         );
-        this.clusterName = "test-cluster-name";
-    }  
-
-    @After
-    public void tearDown() throws Exception {  
-        super.tearDown();
-        threadPool.shutdown();
-    }  
-
-    public void testClusterUUID() {
-        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();  
-        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
-            coordinationMetadata,
-            METADATA_VERSION,  
-            clusterUUID,
-            compressor,
-            namedXContentRegistry  
-        );
-        assertThat(remoteObjectForUpload.clusterUUID(), is(clusterUUID));
-
-        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(
-            TEST_BLOB_NAME,
-            clusterUUID,  
-            compressor,
-            namedXContentRegistry
-        );  
-        assertThat(remoteObjectForDownload.clusterUUID(), is(clusterUUID));
-    }
-
-    public void testFullBlobName() {
-        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
-        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(  
-            coordinationMetadata,
-            METADATA_VERSION,
-            clusterUUID,  
-            compressor,
-            namedXContentRegistry
-        );  
-        assertThat(remoteObjectForUpload.getFullBlobName(), nullValue());
-
-        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(  
-            TEST_BLOB_NAME,
-            clusterUUID,
-            compressor,  
-            namedXContentRegistry
-        );
-        assertThat(remoteObjectForDownload.getFullBlobName(), is(TEST_BLOB_NAME));  
-    }
-
-    public void testBlobFileName() {  
-        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
-        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
-            coordinationMetadata,  
-            METADATA_VERSION,
-            clusterUUID,
-            compressor,  
-            namedXContentRegistry
-        );
-        assertThat(remoteObjectForUpload.getBlobFileName(), nullValue());  
-
-        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(
-            TEST_BLOB_NAME,  
-            clusterUUID,
-            compressor,
-            namedXContentRegistry  
-        );
-        assertThat(remoteObjectForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));
-    }  
-
-    public void testBlobPathTokens() {
-        String uploadedFile = "user/local/opensearch/coordinationMetadata";  
-        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(
-            uploadedFile,
-            clusterUUID,  
-            compressor,
-            namedXContentRegistry
-        );  
-        assertThat(remoteObjectForDownload.getBlobPathTokens(), is(new String[] { "user", "local", "opensearch", "coordinationMetadata" }));
-    }
-
-    public void testBlobPathParameters() {
-        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
-        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(  
-            coordinationMetadata,
-            METADATA_VERSION,
-            clusterUUID,  
-            compressor,
-            namedXContentRegistry
-        );  
-        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
         assertThat(params.getPathTokens(), is(List.of(RemoteClusterStateUtils.GLOBAL_METADATA_PATH_TOKEN)));
-        assertThat(params.getFilePrefix(), is(RemoteCoordinationMetadata.COORDINATION_METADATA));  
-    }
-
-    public void testGenerateBlobFileName() {  
-        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
-        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
-            coordinationMetadata,  
+import org.opensearch.core.compress.Compressor;
+import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
+        );  
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+import static org.mockito.Mockito.when;
+            TEST_BLOB_NAME,
+        return CoordinationMetadata.builder()
             METADATA_VERSION,
-            clusterUUID,
-            compressor,  
+    public void setup() {
             namedXContentRegistry
-        );
-        String blobFileName = remoteObjectForUpload.generateBlobFileName();  
-        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
-        assertThat(nameTokens[0], is(RemoteCoordinationMetadata.COORDINATION_METADATA));
-        assertThat(RemoteStoreUtils.invertLong(nameTokens[1]), is(METADATA_VERSION));  
-        assertThat(RemoteStoreUtils.invertLong(nameTokens[2]), lessThanOrEqualTo(System.currentTimeMillis()));
-        assertThat(nameTokens[3], is(String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)));
-
-    }
-
-    public void testGetUploadedMetadata() throws IOException {  
-        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
-        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
-            coordinationMetadata,  
             METADATA_VERSION,
-            clusterUUID,
-            compressor,  
+ * this file be licensed under the Apache-2.0 license or a
             namedXContentRegistry
-        );
-        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);  
-
-        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
-            remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));  
-            UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
-            assertThat(uploadedMetadata.getComponent(), is(RemoteCoordinationMetadata.COORDINATION_METADATA));
-            assertThat(uploadedMetadata.getUploadedFilename(), is(remoteObjectForUpload.getFullBlobName()));  
-        }
-    }
-
-    public void testSerDe() throws IOException {
-        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
-        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(  
-            coordinationMetadata,
-            METADATA_VERSION,
-            clusterUUID,  
+    public void tearDown() throws Exception {  
+            .term(TERM)
+    }  
+            clusterUUID,
             compressor,
             namedXContentRegistry
-        );  
+import java.util.stream.Stream;
+import static java.util.stream.Collectors.toList;  
+import org.opensearch.threadpool.TestThreadPool;  
+        );
+            clusterUUID,  
+import static org.hamcrest.Matchers.is;  
         try (InputStream inputStream = remoteObjectForUpload.serialize()) {
-            remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
-            assertThat(inputStream.available(), greaterThan(0));  
-            CoordinationMetadata readcoordinationMetadata = remoteObjectForUpload.deserialize(inputStream);
-            assertThat(readcoordinationMetadata, is(coordinationMetadata));
-        }  
+        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
+import java.io.IOException;
+            assertThat(uploadedMetadata.getUploadedFilename(), is(remoteObjectForUpload.getFullBlobName()));  
+            TEST_BLOB_NAME,  
+        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(
+            coordinationMetadata,
     }
-
-    public static CoordinationMetadata getCoordinationMetadata() {  
-        return CoordinationMetadata.builder()
-            .term(TERM)
-            .lastAcceptedConfiguration(new VotingConfiguration(Set.of("node1")))  
+import org.opensearch.common.settings.Settings;
+        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
+    }  
+            coordinationMetadata,
+            compressor,  
+    public void testSerDe() throws IOException {
+            METADATA_VERSION,
+    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
+            clusterUUID,  
+    private String clusterUUID;  
+            compressor,  
+        );  
+    private static final String TEST_BLOB_PATH = "test-path";
+            clusterUUID,
+    }
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            namedXContentRegistry
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+        this.clusterUUID = "test-cluster-uuid";  
+    }
+ *
+import static org.mockito.Mockito.mock;  
+            namedXContentRegistry
+import static org.hamcrest.Matchers.nullValue;
+        assertThat(remoteObjectForDownload.getBlobPathTokens(), is(new String[] { "user", "local", "opensearch", "coordinationMetadata" }));
+import org.junit.Before;  
+    public void testFullBlobName() {
+        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(  
             .lastCommittedConfiguration(new VotingConfiguration(Set.of("node1")))
-            .addVotingConfigExclusion(new VotingConfigExclusion("node2", " node-2"))
-            .build();  
+                ClusterModule.getNamedXWriteables().stream()
+        super.tearDown();
+import org.opensearch.common.remote.BlobPathParameters;
+        compressor = new NoneCompressor();  
+        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(  
+        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
+        assertThat(remoteObjectForDownload.getFullBlobName(), is(TEST_BLOB_NAME));  
+            clusterUUID,
+    @Before  
+    private BlobStoreRepository blobStoreRepository;
+            clusterUUID,
+    public void testBlobFileName() {  
+ * compatible open source license.
+        assertThat(nameTokens[0], is(RemoteCoordinationMetadata.COORDINATION_METADATA));
+    private static final long TERM = 3L;
+        assertThat(remoteObjectForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));
     }
+    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
+/*  
+            clusterUUID,  
+            namedXContentRegistry
+        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
+            coordinationMetadata,
+ * The OpenSearch Contributors require contributions made to  
+        }
+    public static CoordinationMetadata getCoordinationMetadata() {  
+            UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
+        namedXContentRegistry = new NamedXContentRegistry(
+            ).flatMap(Function.identity()).collect(toList())  
 }
+    }
+        assertThat(remoteObjectForUpload.getBlobFileName(), nullValue());  
+import java.io.InputStream;  
+        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
+        );
+            METADATA_VERSION,
+            compressor,  
+                NetworkModule.getNamedXContents().stream(),  
+            .addVotingConfigExclusion(new VotingConfigExclusion("node2", " node-2"))
+        this.clusterName = "test-cluster-name";
+            compressor,
+            compressor,
+        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
+        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
+        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(  
+        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());
+import org.opensearch.index.remote.RemoteStoreUtils;
+import org.opensearch.indices.IndicesModule;  
+        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();
+        );
+        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(
+public class RemoteCoordinationMetadataTests extends OpenSearchTestCase {  
+        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
+        assertThat(remoteObjectForUpload.clusterUUID(), is(clusterUUID));
+    private NamedXContentRegistry namedXContentRegistry;  
+ * SPDX-License-Identifier: Apache-2.0
+            compressor,
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
+            clusterUUID,  
+            .lastAcceptedConfiguration(new VotingConfiguration(Set.of("node1")))  
+                IndicesModule.getNamedXContents().stream(),
+        );
+            assertThat(uploadedMetadata.getComponent(), is(RemoteCoordinationMetadata.COORDINATION_METADATA));
+            namedXContentRegistry
+        assertThat(remoteObjectForDownload.clusterUUID(), is(clusterUUID));
+            clusterUUID,
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;
+            .build();  
+    private static final long METADATA_VERSION = 3L;
+    public void testGetUploadedMetadata() throws IOException {  
+            remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
+            clusterUUID,  
+            namedXContentRegistry
+        assertThat(remoteObjectForUpload.getFullBlobName(), nullValue());
+    private Compressor compressor;
+        BlobPath blobPath = new BlobPath().add("/path");  
+            compressor,
+    private BlobStoreTransferService blobStoreTransferService;
+    public void testClusterUUID() {
+        assertThat(RemoteStoreUtils.invertLong(nameTokens[2]), lessThanOrEqualTo(System.currentTimeMillis()));
+import java.util.List;
+        threadPool.shutdown();
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;  
+        String uploadedFile = "user/local/opensearch/coordinationMetadata";  
+        String blobFileName = remoteObjectForUpload.generateBlobFileName();  
+import org.opensearch.common.blobstore.BlobPath;
+        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
+    }  
+            assertThat(inputStream.available(), greaterThan(0));  
+        assertThat(RemoteStoreUtils.invertLong(nameTokens[1]), is(METADATA_VERSION));  
+import org.opensearch.test.OpenSearchTestCase;
+        }  
+        assertThat(nameTokens[3], is(String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)));
+            coordinationMetadata,  
+            coordinationMetadata,  
+            TEST_BLOB_NAME,
+            namedXContentRegistry  
+        when(blobStoreRepository.basePath()).thenReturn(blobPath);
+import java.util.Set;
+    }
+        assertThat(params.getFilePrefix(), is(RemoteCoordinationMetadata.COORDINATION_METADATA));  
+        );
+import org.opensearch.cluster.ClusterModule;
+    public void testBlobPathParameters() {
+            METADATA_VERSION,
+            namedXContentRegistry
+    @After
+import org.opensearch.common.compress.DeflateCompressor;  
+    }
+            Stream.of(
+            uploadedFile,
+    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
+import org.opensearch.cluster.coordination.CoordinationMetadata;
+    private String clusterName;  
+            namedXContentRegistry  
+            METADATA_VERSION,  
+            assertThat(readcoordinationMetadata, is(coordinationMetadata));
+            compressor,  
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
+        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);  
+        );  
+            clusterUUID,
+        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
+            CoordinationMetadata readcoordinationMetadata = remoteObjectForUpload.deserialize(inputStream);
+ */  
+    public void testBlobPathTokens() {
+            remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));  
+        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
+            coordinationMetadata,  
+package org.opensearch.gateway.remote.model;
+            compressor,
+        );  
+            METADATA_VERSION,
+import org.junit.After;
+import org.opensearch.core.compress.NoneCompressor;  
+    }
+        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+import org.opensearch.threadpool.ThreadPool;
+            coordinationMetadata,
+        RemoteCoordinationMetadata remoteObjectForUpload = new RemoteCoordinationMetadata(
+import org.opensearch.common.network.NetworkModule;
+import java.util.function.Function;  
+        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
+    public void testGenerateBlobFileName() {  
+        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(
+    private ClusterSettings clusterSettings;
+        CoordinationMetadata coordinationMetadata = getCoordinationMetadata();  
+        RemoteCoordinationMetadata remoteObjectForDownload = new RemoteCoordinationMetadata(  
+import org.opensearch.common.settings.ClusterSettings;  
+        );  
+        );
+import static org.hamcrest.Matchers.greaterThan;

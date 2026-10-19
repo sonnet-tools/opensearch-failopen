@@ -1,99 +1,87 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class IngestDocumentMustacheIT extends AbstractScriptTestCase {
-
-    public void testAccessMetadataViaTemplate() {  
-        Map<String, Object> document = new HashMap<>();
         document.put("foo", "bar");
-        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);  
         ingestDocument.setFieldValue(compile("field1"), ValueSource.wrap("1 {{foo}}", scriptService));
-        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("1 bar"));
-
-        ingestDocument.setFieldValue(compile("field1"), ValueSource.wrap("2 {{_source.foo}}", scriptService));
-        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("2 bar"));
-    }  
-
-    public void testAccessMapMetadataViaTemplate() {
-        Map<String, Object> document = new HashMap<>();  
-        Map<String, Object> innerObject = new HashMap<>();
-        innerObject.put("bar", "hello bar");
-        innerObject.put("baz", "hello baz");  
-        innerObject.put("qux", Collections.singletonMap("fubar", "hello qux and fubar"));
-        document.put("foo", innerObject);
-        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);  
-        ingestDocument.setFieldValue(compile("field1"),
-                ValueSource.wrap("1 {{foo.bar}} {{foo.baz}} {{foo.qux.fubar}}", scriptService));
-        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("1 hello bar hello baz hello qux and fubar"));  
-
-        ingestDocument.setFieldValue(compile("field1"),
-                ValueSource.wrap("2 {{_source.foo.bar}} {{_source.foo.baz}} {{_source.foo.qux.fubar}}", scriptService));  
-        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("2 hello bar hello baz hello qux and fubar"));
-    }
-
     public void testAccessListMetadataViaTemplate() {
-        Map<String, Object> document = new HashMap<>();
-        document.put("list1", Arrays.asList("foo", "bar", null));  
-        List<Map<String, Object>> list = new ArrayList<>();
-        Map<String, Object> value = new HashMap<>();
-        value.put("field", "value");  
-        list.add(value);
-        list.add(null);
-        document.put("list2", list);  
-        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);
-        ingestDocument.setFieldValue(compile("field1"), ValueSource.wrap("1 {{list1.0}} {{list2.0}}", scriptService));
-        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("1 foo {field=value}"));  
+ * license agreements. See the NOTICE file distributed with
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+import static org.hamcrest.Matchers.equalTo;
+        Map<String, Object> document = new HashMap<>();  
+        ingestDocument.setFieldValue(compile("field1"),
+        ingestMap.put("timestamp", "bogus_timestamp");  
+import java.util.HashMap;
+ * GitHub history for details.
+ * software distributed under the License is distributed on an
+        innerObject.put("qux", Collections.singletonMap("fubar", "hello qux and fubar"));
+package org.opensearch.ingest;
+                ValueSource.wrap("2 {{_source.foo.bar}} {{_source.foo.baz}} {{_source.foo.qux.fubar}}", scriptService));  
+        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("1 bar"));
+        ingestDocument.setFieldValue(compile("ingest_timestamp"),  
+        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);  
     }
-
+                equalTo(ingestDocument.getIngestMetadata().get("timestamp") + " and bogus_timestamp"));  
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
+        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("1 foo {field=value}"));  
+ */  
+    }
+        Map<String, Object> innerObject = new HashMap<>();
+ * Unless required by applicable law or agreed to in writing,
+        Map<String, Object> ingestMap = new HashMap<>();
+        document.put("list2", list);  
+        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("1 hello bar hello baz hello qux and fubar"));  
+public class IngestDocumentMustacheIT extends AbstractScriptTestCase {
+import java.util.List;
+        ingestDocument.setFieldValue(compile("field1"),
+        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("2 hello bar hello baz hello qux and fubar"));
+        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);
+ * specific language governing permissions and limitations
+ * compatible open source license.
+ *
+        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);  
+/*
     public void testAccessIngestMetadataViaTemplate() {  
         Map<String, Object> document = new HashMap<>();
-        Map<String, Object> ingestMap = new HashMap<>();
-        ingestMap.put("timestamp", "bogus_timestamp");  
-        document.put("_ingest", ingestMap);
-        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);
-        ingestDocument.setFieldValue(compile("ingest_timestamp"),  
-                ValueSource.wrap("{{_ingest.timestamp}} and {{_source._ingest.timestamp}}", scriptService));
         assertThat(ingestDocument.getFieldValue("ingest_timestamp", String.class),
-                equalTo(ingestDocument.getIngestMetadata().get("timestamp") + " and bogus_timestamp"));  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
+ * You may obtain a copy of the License at  
+        document.put("list1", Arrays.asList("foo", "bar", null));  
+        List<Map<String, Object>> list = new ArrayList<>();
+        value.put("field", "value");  
+/*  
+        ingestDocument.setFieldValue(compile("field1"), ValueSource.wrap("1 {{list1.0}} {{list2.0}}", scriptService));
+        list.add(value);
+ * ownership. Elasticsearch licenses this file to you under  
+        document.put("foo", innerObject);
+        document.put("_ingest", ingestMap);
+import java.util.Map;  
+    public void testAccessMapMetadataViaTemplate() {
+        list.add(null);
+import java.util.Arrays;
+                ValueSource.wrap("{{_ingest.timestamp}} and {{_source._ingest.timestamp}}", scriptService));
     }
+import java.util.ArrayList;
+        innerObject.put("baz", "hello baz");  
+        Map<String, Object> value = new HashMap<>();
+        Map<String, Object> document = new HashMap<>();
+        assertThat(ingestDocument.getFieldValue("field1", String.class), equalTo("2 bar"));
+    }  
+ * under the License.  
+                ValueSource.wrap("1 {{foo.bar}} {{foo.baz}} {{foo.qux.fubar}}", scriptService));
+/*  
 }
+        innerObject.put("bar", "hello bar");
+        IngestDocument ingestDocument = new IngestDocument("index", "id", null, null, null, document);
+    public void testAccessMetadataViaTemplate() {  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+import java.util.Collections;  
+        ingestDocument.setFieldValue(compile("field1"), ValueSource.wrap("2 {{_source.foo}}", scriptService));
+        Map<String, Object> document = new HashMap<>();
+ * not use this file except in compliance with the License.

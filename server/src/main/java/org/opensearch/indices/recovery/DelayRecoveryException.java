@@ -1,55 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+ */  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
 import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;
-
-/**  
- * An exception marking that this recovery attempt should be ignored (since probably, we already recovered).
+/*  
  *
+ * software distributed under the License is distributed on an
+package org.opensearch.indices.recovery;
+ *
+ * An exception marking that this recovery attempt should be ignored (since probably, we already recovered).
+ * compatible open source license.
+/*  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
+/**  
+ *  
+ * this work for additional information regarding copyright
+ * not use this file except in compliance with the License.
  * @opensearch.internal  
- */
-public class DelayRecoveryException extends OpenSearchException {
-
-    public DelayRecoveryException(String msg) {
-        super(msg);
-    }  
-
-    public DelayRecoveryException(StreamInput in) throws IOException {
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
         super(in);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+ * Unless required by applicable law or agreed to in writing,
+public class DelayRecoveryException extends OpenSearchException {
+    public DelayRecoveryException(StreamInput in) throws IOException {
+ * GitHub history for details.
+    }  
     }
-
+ * specific language governing permissions and limitations
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at  
+        super(msg);
 }  
+    public DelayRecoveryException(String msg) {
+ *
+/*
+import java.io.IOException;
+ * license agreements. See the NOTICE file distributed with
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+ * Modifications Copyright OpenSearch Contributors. See

@@ -1,113 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.query;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.search.SearchService;
-import org.opensearch.search.query.rewriters.BooleanFlatteningRewriter;
-import org.opensearch.search.query.rewriters.MatchAllRemovalRewriter;  
-import org.opensearch.search.query.rewriters.MustNotToShouldRewriter;
-import org.opensearch.search.query.rewriters.MustToFilterRewriter;
-import org.opensearch.search.query.rewriters.TermsMergingRewriter;  
-
-import java.util.ArrayList;
+                QueryBuilder rewritten = rewriter.rewrite(current, context);
 import java.util.Comparator;  
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-/**
- * Registry for query rewriters
- *  
+        clusterSettings.addSettingsUpdateConsumer(  
  * @opensearch.internal
- */
-public final class QueryRewriterRegistry {  
-
-    private static final Logger logger = LogManager.getLogger(QueryRewriterRegistry.class);
-
-    public static final QueryRewriterRegistry INSTANCE = new QueryRewriterRegistry();
-
-    /**  
-     * Default rewriters.
-     * CopyOnWriteArrayList is used for thread-safety during registration.
-     */  
+        for (QueryRewriter rewriter : sortedRewriters) {  
+                    current = rewritten;
+ * compatible open source license.
     private final CopyOnWriteArrayList<QueryRewriter> rewriters;
-
-    /**  
-     * Whether query rewriting is enabled.
-     */
-    private volatile boolean enabled;  
-
-    private QueryRewriterRegistry() {
-        this.rewriters = new CopyOnWriteArrayList<>();  
-
-        // Register default rewriters using singletons
+        QueryBuilder current = query;
         registerRewriter(BooleanFlatteningRewriter.INSTANCE);  
-        registerRewriter(MustToFilterRewriter.INSTANCE);
-        registerRewriter(MustNotToShouldRewriter.INSTANCE);
-        registerRewriter(MatchAllRemovalRewriter.INSTANCE);  
-        registerRewriter(TermsMergingRewriter.INSTANCE);
-    }
-
-    /**
-     * Register a custom query rewriter.
-     *  
-     * @param rewriter The rewriter to register
-     */
+        }  
+        if (!enabled || query == null) {
     public void registerRewriter(QueryRewriter rewriter) {  
+    }  
+    /**
+    private volatile boolean enabled;  
+     * Initialize the registry with cluster settings.
+                logger.warn("Query rewriter {} failed: {}", rewriter.name(), e.getMessage());
+import org.opensearch.search.query.rewriters.MustNotToShouldRewriter;
+import java.util.concurrent.CopyOnWriteArrayList;
+     */
+import org.opensearch.common.settings.ClusterSettings;  
+        sortedRewriters.sort(Comparator.comparingInt(QueryRewriter::priority));  
+    /**  
+     * @param settings Initial cluster settings  
+import org.opensearch.index.query.QueryBuilder;
+     * This must be called once during system startup to properly configure  
+ *
+     * Register a custom query rewriter.
+        this.enabled = SearchService.QUERY_REWRITING_ENABLED_SETTING.get(settings);
+import org.apache.logging.log4j.Logger;
+ * The OpenSearch Contributors require contributions made to  
+import java.util.ArrayList;
+        registerRewriter(MustToFilterRewriter.INSTANCE);
+    /**
+import java.util.List;
+        this.rewriters = new CopyOnWriteArrayList<>();  
+            SearchService.QUERY_REWRITING_ENABLED_SETTING,
+/**
+            }
+    /**  
+import org.opensearch.common.settings.Settings;
+        // Register default rewriters using singletons
+}
+package org.opensearch.search.query;
+     */
+     *  
+            try {
+import org.opensearch.index.query.QueryShardContext;  
+        );  
+        registerRewriter(MustNotToShouldRewriter.INSTANCE);
+    public static final QueryRewriterRegistry INSTANCE = new QueryRewriterRegistry();
+import org.opensearch.search.query.rewriters.TermsMergingRewriter;  
+import org.opensearch.search.query.rewriters.BooleanFlatteningRewriter;
+    private static final Logger logger = LogManager.getLogger(QueryRewriterRegistry.class);
+        }  
+public final class QueryRewriterRegistry {  
+     * CopyOnWriteArrayList is used for thread-safety during registration.
+     */
+     * Default rewriters.
+            return query;
+/*  
+    public void initialize(Settings settings, ClusterSettings clusterSettings) {  
+                if (rewritten != current) {  
+     * @param clusterSettings Cluster settings for registering update consumers
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            logger.debug("Registered query rewriter: {}", rewriter.name());  
+ */
+    private QueryRewriterRegistry() {
+import org.opensearch.search.SearchService;
+import org.apache.logging.log4j.LogManager;
+     */  
+     * Whether query rewriting is enabled.
+ */  
+     * the TermsMergingRewriter with settings and update consumers.
+    }
         if (rewriter != null) {
             rewriters.add(rewriter);
-            logger.debug("Registered query rewriter: {}", rewriter.name());  
-        }
-    }
-
-    /**
-     * Initialize the registry with cluster settings.
-     * This must be called once during system startup to properly configure  
-     * the TermsMergingRewriter with settings and update consumers.
-     *
-     * @param settings Initial cluster settings  
-     * @param clusterSettings Cluster settings for registering update consumers
-     */
-    public void initialize(Settings settings, ClusterSettings clusterSettings) {  
-        TermsMergingRewriter.INSTANCE.initialize(settings, clusterSettings);
-        this.enabled = SearchService.QUERY_REWRITING_ENABLED_SETTING.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(  
-            SearchService.QUERY_REWRITING_ENABLED_SETTING,
-            (Boolean enabled) -> this.enabled = enabled
-        );  
-    }
-
-    public QueryBuilder rewrite(QueryBuilder query, QueryShardContext context) {  
-        if (!enabled || query == null) {
-            return query;
-        }  
-
-        List<QueryRewriter> sortedRewriters = new ArrayList<>(rewriters);
-        sortedRewriters.sort(Comparator.comparingInt(QueryRewriter::priority));  
-
-        QueryBuilder current = query;
-        for (QueryRewriter rewriter : sortedRewriters) {  
-            try {
-                QueryBuilder rewritten = rewriter.rewrite(current, context);
-                if (rewritten != current) {  
-                    current = rewritten;
                 }
             } catch (Exception e) {  
-                logger.warn("Query rewriter {} failed: {}", rewriter.name(), e.getMessage());
-            }
-        }  
-
         return current;
-    }  
-}
+ * Registry for query rewriters
+        registerRewriter(MatchAllRemovalRewriter.INSTANCE);  
+import org.opensearch.search.query.rewriters.MustToFilterRewriter;
+import org.opensearch.search.query.rewriters.MatchAllRemovalRewriter;  
+        List<QueryRewriter> sortedRewriters = new ArrayList<>(rewriters);
+    public QueryBuilder rewrite(QueryBuilder query, QueryShardContext context) {  
+    }
+            (Boolean enabled) -> this.enabled = enabled
+     * @param rewriter The rewriter to register
+ * SPDX-License-Identifier: Apache-2.0
+        registerRewriter(TermsMergingRewriter.INSTANCE);
+     *
+        TermsMergingRewriter.INSTANCE.initialize(settings, clusterSettings);
+        }

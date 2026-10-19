@@ -1,110 +1,92 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.coordination;
-
 import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;
-
-/**  
- * Identifies a specific version of ClusterState at a node.
- */
-public class ClusterStateTermVersion implements Writeable {  
-
-    private final ClusterName clusterName;
-    private final String clusterUUID;  
-    private final long term;
-    private final long version;
-
-    public ClusterStateTermVersion(ClusterName clusterName, String clusterUUID, long term, long version) {
-        this.clusterName = clusterName;
-        this.clusterUUID = clusterUUID;  
-        this.term = term;
-        this.version = version;
-    }  
-
-    public ClusterStateTermVersion(StreamInput in) throws IOException {
-        this.clusterName = new ClusterName(in);  
-        this.clusterUUID = in.readString();
-        this.term = in.readLong();
-        this.version = in.readLong();  
     }
-
-    public ClusterStateTermVersion(ClusterState state) {  
-        this.clusterName = state.getClusterName();
-        this.clusterUUID = state.metadata().clusterUUID();
-        this.term = state.term();  
+    }
         this.version = state.version();
-    }
-
-    @Override
+    private final long version;
     public void writeTo(StreamOutput out) throws IOException {
-        clusterName.writeTo(out);  
-        out.writeString(clusterUUID);
-        out.writeLong(term);
-        out.writeLong(version);  
-    }
-
-    public ClusterName getClusterName() {  
-        return clusterName;
-    }
-
-    public String getClusterUUID() {
-        return clusterUUID;
-    }  
-
-    public long getTerm() {
-        return term;  
-    }
-
-    public long getVersion() {  
-        return version;
-    }
-
-    @Override
-    public String toString() {
-        return "ClusterStateTermVersion{"  
-            + "clusterName="
+        this.clusterUUID = state.metadata().clusterUUID();
             + clusterName
-            + ", clusterUUID='"  
-            + clusterUUID
-            + '\''
             + ", term="  
-            + term
-            + ", version="
-            + version  
-            + '}';
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-
-        ClusterStateTermVersion that = (ClusterStateTermVersion) o;  
-
-        if (term != that.term) return false;
-        if (version != that.version) return false;  
         if (!clusterName.equals(that.clusterName)) return false;
-        return clusterUUID.equals(that.clusterUUID);
-    }  
-
-    @Override
-    public int hashCode() {  
-        int result = clusterName.hashCode();
-        result = 31 * result + clusterUUID.hashCode();
-        result = 31 * result + (int) (term ^ (term >>> 32));  
-        result = 31 * result + (int) (version ^ (version >>> 32));
+ * SPDX-License-Identifier: Apache-2.0
+    public long getTerm() {
+        return clusterName;
+        return clusterUUID;
         return result;
-    }  
+import java.io.IOException;
+        return "ClusterStateTermVersion{"  
 }
+    }  
+            + term
+    public ClusterStateTermVersion(ClusterState state) {  
+    public ClusterStateTermVersion(StreamInput in) throws IOException {
+        if (this == o) return true;  
+    }  
+    public int hashCode() {  
+        this.clusterUUID = in.readString();
+            + version  
+        ClusterStateTermVersion that = (ClusterStateTermVersion) o;  
+package org.opensearch.cluster.coordination;
+    }  
+        out.writeLong(term);
+            + "clusterName="
+    }
+    @Override
+    }
+    public String toString() {
+    private final long term;
+        this.version = in.readLong();  
+ * compatible open source license.
+            + ", version="
+/**  
+ *
+        this.term = in.readLong();
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public ClusterName getClusterName() {  
+        this.term = state.term();  
+            + '\''
+        return term;  
+    public boolean equals(Object o) {
+    private final String clusterUUID;  
+        result = 31 * result + (int) (version ^ (version >>> 32));
+    public long getVersion() {  
+ * Identifies a specific version of ClusterState at a node.
+        this.clusterUUID = clusterUUID;  
+        result = 31 * result + clusterUUID.hashCode();
+            + '}';
+ * The OpenSearch Contributors require contributions made to  
+        return clusterUUID.equals(that.clusterUUID);
+        this.clusterName = new ClusterName(in);  
+        if (o == null || getClass() != o.getClass()) return false;
+        if (term != that.term) return false;
+    }
+        if (version != that.version) return false;  
+    @Override
+            + clusterUUID
+public class ClusterStateTermVersion implements Writeable {  
+            + ", clusterUUID='"  
+        this.term = term;
+        int result = clusterName.hashCode();
+    @Override
+        this.clusterName = state.getClusterName();
+import org.opensearch.core.common.io.stream.StreamInput;  
+    public ClusterStateTermVersion(ClusterName clusterName, String clusterUUID, long term, long version) {
+        return version;
+/*  
+    }
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+        this.clusterName = clusterName;
+        out.writeLong(version);  
+        clusterName.writeTo(out);  
+    @Override
+        this.version = version;
+ */
+    public String getClusterUUID() {
+        out.writeString(clusterUUID);
+    private final ClusterName clusterName;
+import org.opensearch.cluster.ClusterState;
+    }  
+import org.opensearch.core.common.io.stream.Writeable;
+        result = 31 * result + (int) (term ^ (term >>> 32));  
+    }

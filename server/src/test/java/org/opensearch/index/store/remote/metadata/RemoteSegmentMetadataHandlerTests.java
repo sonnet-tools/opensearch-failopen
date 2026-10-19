@@ -1,165 +1,149 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store.remote.metadata;
-
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.store.ByteBuffersDataOutput;
-import org.apache.lucene.store.ByteBuffersIndexOutput;  
+    private Map<String, String> getDummyData() {
+        indexShard = newStartedShard(false, indexSettings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+        return expectedOutput;  
+            .build();  
+                + "::"
+    }  
+    }
 import org.apache.lucene.store.OutputStreamIndexOutput;
-import org.apache.lucene.util.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;  
+                + Version.LATEST.major
+        );
 import org.opensearch.common.UUIDs;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lucene.store.ByteArrayIndexInput;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.index.engine.NRTReplicationEngineFactory;  
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;  
-import org.opensearch.index.store.Store;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.ReplicationType;  
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
+        replicationCheckpoint = indexShard.getLatestReplicationCheckpoint();  
+        indexOutput.close();  
+        RemoteSegmentMetadata metadata = remoteSegmentMetadataHandler.readContent(  
+            indexShard.getLatestReplicationCheckpoint()  
+        assertEquals(replicationCheckpoint.getPrimaryTerm(), metadata.getPrimaryTerm());
 import java.util.HashMap;
-import java.util.Map;  
-
-/**
- * Unit Tests for {@link RemoteSegmentMetadataHandler}  
- */
-public class RemoteSegmentMetadataHandlerTests extends IndexShardTestCase {
-    private RemoteSegmentMetadataHandler remoteSegmentMetadataHandler;  
-    private IndexShard indexShard;
+        assertArrayEquals(segmentInfosBytes, metadata.getSegmentInfosBytes());  
+}
+        indexOutput.close();
+        Map<String, String> expectedOutput = new HashMap<>();  
+import org.opensearch.index.shard.IndexShardTestCase;  
+            segmentInfosBytes,
+        try (Store store = indexShard.store()) {  
     private SegmentInfos segmentInfos;
-
-    private ReplicationCheckpoint replicationCheckpoint;
-
-    @Before  
-    public void setup() throws IOException {
-        remoteSegmentMetadataHandler = new RemoteSegmentMetadataHandler(2);
-
+                + ".cfs__"  
+        byte[] segmentInfosBytes = segmentInfosOutput.toArrayCopy();
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(expectedOutput, metadata.toMapOfStrings());
+                + prefix
+    @After  
+                + Version.LATEST.major
+    private IndexShard indexShard;
+                + prefix  
+        indexOutput.writeMapOfStrings(expectedOutput);
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+import org.opensearch.core.common.bytes.BytesReference;
+        );
+                + "::"
+        assertEquals(replicationCheckpoint.getSegmentsGen(), metadata.getGeneration());
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        indexOutput.writeLong(0);  
         Settings indexSettings = Settings.builder()
             .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
-            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
-            .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "translog-repo")
-            .build();  
-
-        indexShard = newStartedShard(false, indexSettings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-        try (Store store = indexShard.store()) {  
-            segmentInfos = store.readLastCommittedSegmentsInfo();
-        }
-        replicationCheckpoint = indexShard.getLatestReplicationCheckpoint();  
-    }
-
-    @After  
-    public void tearDown() throws Exception {
-        indexShard.close("test tearDown", true, false);
-        super.tearDown();  
-    }
-
-    public void testReadContentNoSegmentInfos() throws IOException {  
-        BytesStreamOutput output = new BytesStreamOutput();
-        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);
-        Map<String, String> expectedOutput = getDummyData();  
-        indexOutput.writeMapOfStrings(expectedOutput);
-        RemoteSegmentMetadata.writeCheckpointToIndexOutput(replicationCheckpoint, indexOutput);
-        indexOutput.writeLong(0);  
-        indexOutput.writeBytes(new byte[0], 0);
-        indexOutput.close();
-        RemoteSegmentMetadata metadata = remoteSegmentMetadataHandler.readContent(  
-            new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()))
-        );
-        assertEquals(expectedOutput, metadata.toMapOfStrings());  
-        assertEquals(replicationCheckpoint.getSegmentsGen(), metadata.getGeneration());
-    }
-
-    public void testReadContentWithSegmentInfos() throws IOException {
-        BytesStreamOutput output = new BytesStreamOutput();
-        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);  
-        Map<String, String> expectedOutput = getDummyData();
-        indexOutput.writeMapOfStrings(expectedOutput);
-        RemoteSegmentMetadata.writeCheckpointToIndexOutput(replicationCheckpoint, indexOutput);  
-        ByteBuffersIndexOutput segmentInfosOutput = new ByteBuffersIndexOutput(new ByteBuffersDataOutput(), "test", "resource");
-        segmentInfos.write(segmentInfosOutput);
-        byte[] segmentInfosBytes = segmentInfosOutput.toArrayCopy();  
-        indexOutput.writeLong(segmentInfosBytes.length);
-        indexOutput.writeBytes(segmentInfosBytes, 0, segmentInfosBytes.length);
-        indexOutput.close();  
-        RemoteSegmentMetadata metadata = remoteSegmentMetadataHandler.readContent(
-            new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()))
-        );  
-        assertEquals(expectedOutput, metadata.toMapOfStrings());
-        assertEquals(replicationCheckpoint.getSegmentsGen(), metadata.getGeneration());
-        assertArrayEquals(segmentInfosBytes, metadata.getSegmentInfosBytes());  
-    }
-
-    public void testWriteContent() throws IOException {  
-        BytesStreamOutput output = new BytesStreamOutput();
-        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);
-
-        Map<String, String> expectedOutput = getDummyData();
-        ByteBuffersIndexOutput segmentInfosOutput = new ByteBuffersIndexOutput(new ByteBuffersDataOutput(), "test", "resource");
-        segmentInfos.write(segmentInfosOutput);  
-        byte[] segmentInfosBytes = segmentInfosOutput.toArrayCopy();
-
-        RemoteSegmentMetadata remoteSegmentMetadata = new RemoteSegmentMetadata(  
-            RemoteSegmentMetadata.fromMapOfStrings(expectedOutput),
-            segmentInfosBytes,
-            indexShard.getLatestReplicationCheckpoint()  
-        );
-        remoteSegmentMetadataHandler.writeContent(indexOutput, remoteSegmentMetadata);
-        indexOutput.close();  
-
-        RemoteSegmentMetadata metadata = remoteSegmentMetadataHandler.readContent(
-            new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()))  
-        );
-        assertEquals(expectedOutput, metadata.toMapOfStrings());
-        assertEquals(replicationCheckpoint.getSegmentsGen(), metadata.getGeneration());  
-        assertEquals(replicationCheckpoint.getPrimaryTerm(), metadata.getPrimaryTerm());
-        assertArrayEquals(segmentInfosBytes, metadata.getSegmentInfosBytes());
-    }  
-
-    private Map<String, String> getDummyData() {
-        Map<String, String> expectedOutput = new HashMap<>();  
-        String prefix = "_0";
-        expectedOutput.put(
+ */
+import org.apache.lucene.index.SegmentInfos;
+public class RemoteSegmentMetadataHandlerTests extends IndexShardTestCase {
             prefix + ".cfe",  
-            prefix
-                + ".cfe::"
-                + prefix  
-                + ".cfe__"
-                + UUIDs.base64UUID()
-                + "::"  
+        BytesStreamOutput output = new BytesStreamOutput();
                 + randomIntBetween(1000, 5000)
-                + "::"
-                + randomIntBetween(1024, 2048)  
-                + "::"
-                + Version.LATEST.major
-        );  
-        expectedOutput.put(
-            prefix + ".cfs",
-            prefix  
-                + ".cfs::"
-                + prefix
-                + ".cfs__"  
-                + UUIDs.base64UUID()
-                + "::"
-                + randomIntBetween(1000, 5000)  
-                + "::"
+        remoteSegmentMetadataHandler.writeContent(indexOutput, remoteSegmentMetadata);
+            segmentInfos = store.readLastCommittedSegmentsInfo();
                 + randomIntBetween(1024, 2048)
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
+import org.opensearch.common.lucene.store.ByteArrayIndexInput;  
+                + UUIDs.base64UUID()
+ * Unit Tests for {@link RemoteSegmentMetadataHandler}  
+        remoteSegmentMetadataHandler = new RemoteSegmentMetadataHandler(2);
+import org.opensearch.indices.replication.common.ReplicationType;  
+            .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "translog-repo")
+import org.junit.Before;
+        Map<String, String> expectedOutput = getDummyData();
+import org.opensearch.index.shard.IndexShard;
+            prefix  
+import org.apache.lucene.store.ByteBuffersDataOutput;
                 + "::"  
-                + Version.LATEST.major
-        );
-        return expectedOutput;  
+import org.opensearch.index.engine.NRTReplicationEngineFactory;  
+        assertEquals(replicationCheckpoint.getSegmentsGen(), metadata.getGeneration());
+import java.util.Map;  
+        assertEquals(replicationCheckpoint.getSegmentsGen(), metadata.getGeneration());  
     }
-}
+ */  
+import org.opensearch.index.store.Store;
+    public void testReadContentNoSegmentInfos() throws IOException {  
+        String prefix = "_0";
+        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);  
+        );
+        Map<String, String> expectedOutput = getDummyData();
+    private RemoteSegmentMetadataHandler remoteSegmentMetadataHandler;  
+        byte[] segmentInfosBytes = segmentInfosOutput.toArrayCopy();  
+        assertEquals(expectedOutput, metadata.toMapOfStrings());
+/**
+    public void testWriteContent() throws IOException {  
+            new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()))
+        expectedOutput.put(
+import org.apache.lucene.store.ByteBuffersIndexOutput;  
+            prefix + ".cfs",
+        indexShard.close("test tearDown", true, false);
+            new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()))
+ *
+        assertArrayEquals(segmentInfosBytes, metadata.getSegmentInfosBytes());
+                + "::"  
+    }
+        segmentInfos.write(segmentInfosOutput);  
+        RemoteSegmentMetadata remoteSegmentMetadata = new RemoteSegmentMetadata(  
+        indexOutput.writeMapOfStrings(expectedOutput);
+ * compatible open source license.
+/*  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+            RemoteSegmentMetadata.fromMapOfStrings(expectedOutput),
+import org.apache.lucene.util.Version;
+        expectedOutput.put(
+                + randomIntBetween(1000, 5000)  
+    public void setup() throws IOException {
+            prefix
+        assertEquals(expectedOutput, metadata.toMapOfStrings());  
+            new ByteArrayIndexInput("dummy bytes", BytesReference.toBytes(output.bytes()))  
+        );  
+import org.opensearch.common.settings.Settings;
+            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
+        Map<String, String> expectedOutput = getDummyData();  
+        indexOutput.writeLong(segmentInfosBytes.length);
+                + ".cfe::"
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        indexOutput.writeBytes(segmentInfosBytes, 0, segmentInfosBytes.length);
+    @Before  
+        );  
+        );
+    private ReplicationCheckpoint replicationCheckpoint;
+        RemoteSegmentMetadata metadata = remoteSegmentMetadataHandler.readContent(
+import org.junit.After;
+                + "::"
+        BytesStreamOutput output = new BytesStreamOutput();
+        indexOutput.close();  
+import java.io.IOException;
+                + "::"
+package org.opensearch.index.store.remote.metadata;
+    public void testReadContentWithSegmentInfos() throws IOException {
+                + ".cfe__"
+        segmentInfos.write(segmentInfosOutput);
+    }
+        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);
+        }
+        RemoteSegmentMetadata.writeCheckpointToIndexOutput(replicationCheckpoint, indexOutput);  
+        RemoteSegmentMetadata.writeCheckpointToIndexOutput(replicationCheckpoint, indexOutput);
+        super.tearDown();  
+                + randomIntBetween(1024, 2048)  
+                + UUIDs.base64UUID()
+                + ".cfs::"
+        ByteBuffersIndexOutput segmentInfosOutput = new ByteBuffersIndexOutput(new ByteBuffersDataOutput(), "test", "resource");
+        indexOutput.writeBytes(new byte[0], 0);
+        OutputStreamIndexOutput indexOutput = new OutputStreamIndexOutput("dummy bytes", "dummy stream", output, 4096);
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+    public void tearDown() throws Exception {
+        BytesStreamOutput output = new BytesStreamOutput();
+        ByteBuffersIndexOutput segmentInfosOutput = new ByteBuffersIndexOutput(new ByteBuffersDataOutput(), "test", "resource");
+        RemoteSegmentMetadata metadata = remoteSegmentMetadataHandler.readContent(

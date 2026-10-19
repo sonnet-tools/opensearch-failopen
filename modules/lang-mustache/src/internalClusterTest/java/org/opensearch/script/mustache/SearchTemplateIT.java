@@ -1,464 +1,410 @@
+                    MediaTypeRegistry.JSON  
+ * You may obtain a copy of the License at  
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("3").setSource("{\"theField\":\"foo 3\"}", MediaTypeRegistry.JSON));  
+            client().admin().cluster().preparePutStoredScript().setId("1a").setContent(new BytesArray(script), MediaTypeRegistry.JSON)
+                    ),
+            .get();  
+                client().admin()
+                .preparePutStoredScript()  
+            .setScriptParams(templateParams)  
+            Map<String, Object> templateParams = new HashMap<>();  
+            .setId("1")
+            client().admin()
+    }
+    }
+            + "      \"query\": {"
+                )  
+        // Indexing test data
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        String query = "{"
+        client().prepareIndex("my-nlp-index1")
+        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("test"))  
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("4").setSource("{\"theField\":\"foo 4\"}", MediaTypeRegistry.JSON));
+        // Put stored templates
+            + "  \"params\": {\"play_name\": \"zoo\"},"
+            .setScriptParams(arrayTemplateParams)  
 /*  
+        client().admin().indices().prepareRefresh().get();  
+        assertHitCount(searchResponse.getResponse(), 5);
+            .setScriptType(ScriptType.INLINE)  
+            + "}";  
+            + "            ]\n"
+            .setScriptParams(templateParams)
+    }
+                    MediaTypeRegistry.JSON
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("2").setSource("{\"theField\":\"foo 2\"}", MediaTypeRegistry.JSON));
+        bulkRequestBuilder.get();
+            Exception.class,
+        createIndex("my-nlp-index1");  
+        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("test"))  
+                        "{\"script\": {\"lang\": \"mustache\", \"source\": {\"query\": {\"match\": {\"play_name\": \"{{play_name}}\"}}}}}"  
+                .setContent(
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("4").setSource("{\"theField\":\"foo 4\"}", MediaTypeRegistry.JSON));  
+     * Test that template can be expressed as a single escaped string.
+                        "{"
+        createIndex("testindex");
+        String[] fieldParams = { "foo", "bar" };  
+                .preparePutStoredScript()  
+        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        for (int i = 1; i < iterations; i++) {  
+import java.util.HashMap;  
+        );
+import org.opensearch.action.bulk.BulkRequestBuilder;
+        createIndex("test");  
+        assertHitCount(response1.getResponse(), 1);
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("1").setSource("{\"theField\":\"foo\"}", MediaTypeRegistry.JSON));
+ *
+        expectThrows(
+            + "        }"
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));
+            + "  \"search_pipeline\": \"my_pipeline2\""
+            + "                \"{{.}}\",\n"  
+        assertEquals("my_pipeline2", request1.getSearchPipeline());  
+                    new BytesArray(  
+    public void testMultiSearchTemplateWithSearchPipeline() throws Exception {
+        expectThrows(  
+                .setContent(
+ * license agreements. See the NOTICE file distributed with
+            .setScript("2")
+        );
+            + "  \"script\": {"
+import org.opensearch.core.common.bytes.BytesArray;
+                    .setId("git01")
+        bulkRequestBuilder.get();
+                .get()
+            client().admin()
+        request2.setRequest(new SearchRequest("my-nlp-index1"));
+ * compatible open source license.
+    }  
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("3").setSource("{\"theField\":\"foo 3\"}", MediaTypeRegistry.JSON));
+                    .preparePutStoredScript()
+            .setScriptType(ScriptType.STORED)
+        SearchTemplateRequest request1 = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, template1));
+            + "}";
+        BulkRequestBuilder bulkRequestBuilder = client().prepareBulk();
+            + "}";
+            + "  }\n"  
+ * Full integration test of the template query plugin.
+import org.opensearch.ResourceNotFoundException;  
+        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));  
+        int iterations = randomIntBetween(2, 11);
+                .setScriptType(ScriptType.STORED)
+ * KIND, either express or implied.  See the License for the
+            .setSource(jsonBuilder().startObject().field("play_name", "zoo").endObject())
+                            + "    \"source\": {"
+import java.util.Collection;
+        templateParams.put("fieldParam", "foo");  
+            + "  \"params\":{"  
+ * the Apache License, Version 2.0 (the "License"); you may
+            .get();
+            + "  \"params\":{"  
+        assertHitCount(searchResponse.getResponse(), 4);
+                    .setScriptParams(templateParams)
+    // Relates to #10397  
+     * Test that template can contain conditional clause. In this case it is at
+ */  
+        getResponse = client().admin().cluster().prepareGetStoredScript("testTemplate").get();  
+        client().admin().indices().prepareRefresh().get();
+            .get();
+        String script = "{"  
+            + "        \"match_phrase_prefix\": {"
+            client().admin()  
+        client().admin().indices().prepareRefresh().get();  
+        BulkRequestBuilder bulkRequestBuilder = client().prepareBulk();
+        searchRequest.indices("_all");
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("1").setSource("{\"theField\":\"foo\"}", MediaTypeRegistry.JSON));  
+ */
+                .setId("search_template_2")
+        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(searchRequest)
+    }
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("1").setSource("{\"theField\":\"foo\"}", MediaTypeRegistry.JSON));  
+        String templateString = "{"
+     * Test that template can contain conditional clause. In this case it is at
+            + "  \"source\" : \"{ \\\"query\\\":{\\\"match_all\\\":{}} {{#use_size}}, \\\"size\\\": \\\"{{size}}\\\" {{/use_size}} }\","
+            .get();
+ * this work for additional information regarding copyright
+                .setId("search_template_1")  
+    @Override
+}
+            .get();
+                    .preparePutStoredScript()
+            + "    \"size\": 1,"
+                            + "}"  
+            + "        \"match\": {"
+                .setScript("1000")  
+            + "  }"
+            .setScript("4")
+            .setScriptType(ScriptType.STORED)  
+            + "        }\n"  
+        );
+import org.junit.Before;
+            + "}";
+                .setScriptType(ScriptType.INLINE)
+ */
+            + "  \"params\":{"
+        Map<String, Object> templateParams = new HashMap<>();
+                )  
+        // Create second template request with pipeline
+        // Create first template request with pipeline
+    protected Collection<Class<? extends Plugin>> getPlugins() {  
+        searchRequest.indices("_all");  
+        }  
+                () -> new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("testindex"))
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
+        String template1 = "{"
+                .setContent(
+            );
+import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptResponse;
+        templateParams.put("play_name", "hello");
+            .setScriptParams(templateParams)
+            .get();
+            + "        \"terms\": {\n"  
+                            + "  }"
+        SearchTemplateRequest request = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, templateString));  
+            + "            }"  
+import org.opensearch.test.OpenSearchSingleNodeTestCase;  
+/*
+            .get();
+        // Create second template with SearchTemplateRequestBuilder
+                            + "            \"theField\": \"{{fieldParam}}\""
+            + "  \"script\": {\n"
+        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));
+        templateParams.put("fieldParam", "foo");
+            .setScriptParams(templateParams)
+            + "  \"search_pipeline\": \"my_pipeline1\""
+        assertHitCount(searchResponse.getResponse(), 4);
+            + "    }\n"
+            + "    \"use_size\": true"  
+        SearchTemplateRequest request = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, templateString));
+            + "  }"
+    public void testSearchRequestFail() throws Exception {
+        SearchTemplateResponse searchResponse = client().execute(SearchTemplateAction.INSTANCE, request).get();
+                    new BytesArray(  
+        request.setRequest(searchRequest);
+        assertAcked(  
+            + "            \"theField\": \"{{fieldParam}}\""  
+        String query = "{"  
+import java.util.Map;
+     */
+        searchRequest.indices("_all");  
+            + "}";  
+                client().admin()
+    }
+                    .setScript("git01")  
+            + "  \"source\" : \"{ \\\"size\\\": \\\"{{size}}\\\", \\\"query\\\":{\\\"match_all\\\":{}}}\","
+                .cluster()
+                .get()  
+        arrayTemplateParams.put("fieldParam", fieldParams);
+            + "    \"use_size\": true"
+                .setScript(query)
+        request.setRequest(searchRequest);  
+                IllegalArgumentException.class,
+            + "    \"size\": 1,"
+                            + "    \"lang\": \"mustache\","  
+            assertNotNull(getResponse.getSource());
+                    ),
+ * specific language governing permissions and limitations
+        request.setRequest(searchRequest);
+            + "                \"query\": \"{{P_Keyword1}}\","
+import java.io.IOException;  
+            + "}";  
+        client().admin().indices().prepareRefresh().get();
+        SearchRequest searchRequest = new SearchRequest();
+        );
+        client().prepareIndex("testindex").setId("1").setSource(jsonBuilder().startObject().field("searchtext", "dev1").endObject()).get();
+            ResourceNotFoundException.class,
+            + "    \"lang\": \"mustache\","
+        );
+        assertAcked(
+            + "    }"  
+    }
+        Map<String, Object> templateParams = new HashMap<>();
+                .cluster()
+            IllegalArgumentException e = expectThrows(  
+        SearchRequest searchRequest = new SearchRequest();  
+ * not use this file except in compliance with the License.
+     */  
+        String multiQuery = "{\n"
+                    .setContent(new BytesArray(query.replace("{{slop}}", Integer.toString(0))), MediaTypeRegistry.JSON)  
+            + "      \"query\": {"
+        client().admin().indices().prepareRefresh().get();  
+ * ownership. Elasticsearch licenses this file to you under  
+        String templateString = "{"
+            client().admin().cluster().preparePutStoredScript().setId("3").setContent(new BytesArray(script), MediaTypeRegistry.JSON)
+        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest().indices("test"))
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.script.mustache;
-
-import org.opensearch.ResourceNotFoundException;  
-import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptResponse;
-import org.opensearch.action.bulk.BulkRequestBuilder;
-import org.opensearch.action.search.SearchRequest;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.script.ScriptType;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.Map;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-
-/**  
- * Full integration test of the template query plugin.
- */
-public class SearchTemplateIT extends OpenSearchSingleNodeTestCase {  
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {  
-        return Collections.singleton(MustacheModulePlugin.class);
-    }
-
-    @Before
-    public void setup() throws IOException {
-        createIndex("test");  
-        client().prepareIndex("test").setId("1").setSource(jsonBuilder().startObject().field("text", "value1").endObject()).get();
-        client().prepareIndex("test").setId("2").setSource(jsonBuilder().startObject().field("text", "value2").endObject()).get();
-        client().admin().indices().prepareRefresh().get();  
-    }
-
-    // Relates to #6318  
-    public void testSearchRequestFail() throws Exception {
-        String query = "{ \"query\": {\"match_all\": {}}, \"size\" : \"{{my_size}}\"  }";
-
-        SearchRequest searchRequest = new SearchRequest();
-        searchRequest.indices("_all");
-
-        expectThrows(
-            Exception.class,
-            () -> new SearchTemplateRequestBuilder(client()).setRequest(searchRequest)  
-                .setScript(query)
-                .setScriptType(ScriptType.INLINE)
-                .setScriptParams(randomBoolean() ? null : Collections.emptyMap())  
-                .get()
-        );
-
-        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(searchRequest)
-            .setScript(query)
-            .setScriptType(ScriptType.INLINE)  
-            .setScriptParams(Collections.singletonMap("my_size", 1))
-            .get();
-
-        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));
-    }
-
-    /**
-     * Test that template can be expressed as a single escaped string.
-     */  
-    public void testTemplateQueryAsEscapedString() throws Exception {
-        SearchRequest searchRequest = new SearchRequest();
-        searchRequest.indices("_all");  
-        String query = "{"
-            + "  \"source\" : \"{ \\\"size\\\": \\\"{{size}}\\\", \\\"query\\\":{\\\"match_all\\\":{}}}\","
-            + "  \"params\":{"  
-            + "    \"size\": 1"
-            + "  }"
-            + "}";  
-        SearchTemplateRequest request = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, query));
-        request.setRequest(searchRequest);
-        SearchTemplateResponse searchResponse = client().execute(SearchTemplateAction.INSTANCE, request).get();  
-        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));
-    }
-
-    /**
-     * Test that template can contain conditional clause. In this case it is at
-     * the beginning of the string.  
-     */
-    public void testTemplateQueryAsEscapedStringStartingWithConditionalClause() throws Exception {
-        SearchRequest searchRequest = new SearchRequest();  
-        searchRequest.indices("_all");
-        String templateString = "{"
-            + "  \"source\" : \"{ {{#use_size}} \\\"size\\\": \\\"{{size}}\\\", {{/use_size}} \\\"query\\\":{\\\"match_all\\\":{}}}\","  
-            + "  \"params\":{"
-            + "    \"size\": 1,"
-            + "    \"use_size\": true"  
-            + "  }"
-            + "}";
-        SearchTemplateRequest request = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, templateString));  
-        request.setRequest(searchRequest);
-        SearchTemplateResponse searchResponse = client().execute(SearchTemplateAction.INSTANCE, request).get();
-        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));  
-    }
-
-    /**  
-     * Test that template can contain conditional clause. In this case it is at
-     * the end of the string.
-     */  
-    public void testTemplateQueryAsEscapedStringWithConditionalClauseAtEnd() throws Exception {
-        SearchRequest searchRequest = new SearchRequest();
-        searchRequest.indices("_all");  
-        String templateString = "{"
-            + "  \"source\" : \"{ \\\"query\\\":{\\\"match_all\\\":{}} {{#use_size}}, \\\"size\\\": \\\"{{size}}\\\" {{/use_size}} }\","
-            + "  \"params\":{"  
-            + "    \"size\": 1,"
-            + "    \"use_size\": true"
-            + "  }"  
-            + "}";
-        SearchTemplateRequest request = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, templateString));
-        request.setRequest(searchRequest);  
-        SearchTemplateResponse searchResponse = client().execute(SearchTemplateAction.INSTANCE, request).get();
-        assertThat(searchResponse.getResponse().getHits().getHits().length, equalTo(1));
-    }  
-
-    public void testIndexedTemplateClient() throws Exception {
-        assertAcked(  
-            client().admin()
-                .cluster()
-                .preparePutStoredScript()  
-                .setId("testTemplate")
-                .setContent(
-                    new BytesArray(  
-                        "{"
-                            + "  \"script\": {"
-                            + "    \"lang\": \"mustache\","  
-                            + "    \"source\": {"
-                            + "      \"query\": {"
-                            + "        \"match\": {"  
-                            + "            \"theField\": \"{{fieldParam}}\""
-                            + "        }"
-                            + "      }"  
-                            + "    }"
-                            + "  }"
-                            + "}"  
-                    ),
-                    MediaTypeRegistry.JSON
-                )  
-        );
-
-        GetStoredScriptResponse getResponse = client().admin().cluster().prepareGetStoredScript("testTemplate").get();  
+            .setScript("search_template_2")  
+            + "      \"query\": {\n"
         assertNotNull(getResponse.getSource());
-
-        BulkRequestBuilder bulkRequestBuilder = client().prepareBulk();  
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("1").setSource("{\"theField\":\"foo\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("2").setSource("{\"theField\":\"foo 2\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("3").setSource("{\"theField\":\"foo 3\"}", MediaTypeRegistry.JSON));  
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("4").setSource("{\"theField\":\"foo 4\"}", MediaTypeRegistry.JSON));
+            + "    \"source\": {\n"
+    /**
+            );
+                            + "    }"
+            + "                \"{{#fieldParam}}\",\n"
         bulkRequestBuilder.add(client().prepareIndex("test").setId("5").setSource("{\"theField\":\"bar\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.get();  
-        client().admin().indices().prepareRefresh().get();
-
-        Map<String, Object> templateParams = new HashMap<>();  
-        templateParams.put("fieldParam", "foo");
-
-        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("test"))  
-            .setScript("testTemplate")
-            .setScriptType(ScriptType.STORED)
-            .setScriptParams(templateParams)  
-            .get();
-        assertHitCount(searchResponse.getResponse(), 4);
-
-        assertAcked(client().admin().cluster().prepareDeleteStoredScript("testTemplate"));
-
-        getResponse = client().admin().cluster().prepareGetStoredScript("testTemplate").get();  
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("4").setSource("{\"theField\":\"foo 4\"}", MediaTypeRegistry.JSON));  
+                .setScriptParams(randomBoolean() ? null : Collections.emptyMap())  
         assertNull(getResponse.getSource());
     }
-
-    public void testIndexedTemplate() throws Exception {
-
-        String script = "{"  
-            + "  \"script\": {"
-            + "    \"lang\": \"mustache\","
-            + "    \"source\": {"  
-            + "      \"query\": {"
-            + "        \"match\": {"
-            + "            \"theField\": \"{{fieldParam}}\""  
-            + "        }"
-            + "      }"
-            + "    }"  
-            + "  }"
-            + "}";
-
-        assertAcked(
-            client().admin().cluster().preparePutStoredScript().setId("1a").setContent(new BytesArray(script), MediaTypeRegistry.JSON)
-        );  
-        assertAcked(
-            client().admin().cluster().preparePutStoredScript().setId("2").setContent(new BytesArray(script), MediaTypeRegistry.JSON)
-        );  
-        assertAcked(
-            client().admin().cluster().preparePutStoredScript().setId("3").setContent(new BytesArray(script), MediaTypeRegistry.JSON)
-        );  
-
-        BulkRequestBuilder bulkRequestBuilder = client().prepareBulk();
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("1").setSource("{\"theField\":\"foo\"}", MediaTypeRegistry.JSON));  
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("2").setSource("{\"theField\":\"foo 2\"}", MediaTypeRegistry.JSON));
+            .setId("2")
+            assertHitCount(searchResponse.getResponse(), 1);
+                .get();
+                            + "      }"  
+     * the beginning of the string.  
+    @Before
+                    .cluster()  
+        assertHitCount(response2.getResponse(), 1);  
+    public void testTemplateQueryAsEscapedStringStartingWithConditionalClause() throws Exception {
+            .setScript("testTemplate")
+        Map<String, Object> templateParams = new HashMap<>();  
+        SearchTemplateResponse response2 = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("my-nlp-index1"))
+            + "  \"params\": {\"play_name\": \"hello\"},"
+                    new BytesArray(
+import java.util.Collections;
+        assertNotNull(response1.getResponse());  
+    /**  
+ *  
+package org.opensearch.script.mustache;
         bulkRequestBuilder.add(client().prepareIndex("test").setId("3").setSource("{\"theField\":\"foo 3\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("4").setSource("{\"theField\":\"foo 4\"}", MediaTypeRegistry.JSON));  
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("5").setSource("{\"theField\":\"bar\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.get();
         client().admin().indices().prepareRefresh().get();  
-
-        Map<String, Object> templateParams = new HashMap<>();
-        templateParams.put("fieldParam", "foo");  
-
-        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest().indices("test"))
-            .setScript("1a")  
-            .setScriptType(ScriptType.STORED)
-            .setScriptParams(templateParams)
-            .get();  
-        assertHitCount(searchResponse.getResponse(), 4);
-
-        expectThrows(  
-            ResourceNotFoundException.class,
-            () -> new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest().indices("test"))
-                .setScript("1000")  
-                .setScriptType(ScriptType.STORED)
-                .setScriptParams(templateParams)
-                .get()  
+    }
+            GetStoredScriptResponse getResponse = client().admin().cluster().prepareGetStoredScript("git01").get();  
+        assertAcked(  
+        assertEquals("my_pipeline1", request2.getSearchPipeline());
+        assertAcked(
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.plugins.Plugin;
+            + "    \"source\": {"  
+        );  
+        assertHitCount(searchResponse.getResponse(), 1);  
+        );  
+        assertAcked(
+                .cluster()
+ * under the License.  
+        bulkRequestBuilder.get();  
+ * Unless required by applicable law or agreed to in writing,
+     */  
         );
-
+            () -> new SearchTemplateRequestBuilder(client()).setRequest(searchRequest)  
+ */
+            () -> new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest().indices("test"))
+    }
+        SearchTemplateResponse searchResponse = client().execute(SearchTemplateAction.INSTANCE, request).get();  
+        client().prepareIndex("test").setId("1").setSource(jsonBuilder().startObject().field("text", "value1").endObject()).get();
+            + "      }"
+                            + "  \"script\": {"
+    public void setup() throws IOException {
+                .setScript("git01")
+            + "  }"  
+            + "      }"
+        ensureGreen("testindex");  
+        String template2 = "{"
+                    .setId("git01")
+        BulkRequestBuilder bulkRequestBuilder = client().prepareBulk();  
+        // Verify that the pipeline names are set correctly in the request objects
+            );
+                    .setScriptType(ScriptType.STORED)
+ * this file be licensed under the Apache-2.0 license or a
+        assertAcked(client().admin().cluster().prepareDeleteStoredScript("testTemplate"));
+import org.opensearch.script.ScriptType;
+    public void testIndexedTemplateOverwrite() throws Exception {
+                    .get()  
+import org.opensearch.common.xcontent.json.JsonXContent;
+            + "  \"script\": {"
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+public class SearchTemplateIT extends OpenSearchSingleNodeTestCase {  
+        SearchTemplateResponse response1 = client().execute(SearchTemplateAction.INSTANCE, request1).get();
+            .get();  
+            .setScript(query)
+    public void testTemplateQueryAsEscapedString() throws Exception {
+        client().prepareIndex("test").setId("2").setSource(jsonBuilder().startObject().field("text", "value2").endObject()).get();
+            .setScriptType(ScriptType.STORED)
+        SearchTemplateRequest request = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, query));
+            templateParams.put("P_Keyword1", "dev");
+        request1.setRequest(new SearchRequest("my-nlp-index1"));
+        return Collections.singleton(MustacheModulePlugin.class);
+     * the end of the string.
+import static org.hamcrest.Matchers.containsString;  
+            .setScriptParams(Collections.singletonMap("my_size", 1))
+                .setId("testTemplate")
+        SearchRequest searchRequest = new SearchRequest();
+                .setScriptParams(templateParams)  
+                    .setContent(new BytesArray(query.replace("{{slop}}", Integer.toString(-1))), MediaTypeRegistry.JSON)  
+            + "      }\n"
+            + "  \"source\" : \"{ {{#use_size}} \\\"size\\\": \\\"{{size}}\\\", {{/use_size}} \\\"query\\\":{\\\"match_all\\\":{}}}\","  
+            .setScriptType(ScriptType.STORED)
+ * Modifications Copyright OpenSearch Contributors. See  
+ * software distributed under the License is distributed on an
+    // Relates to #6318  
+        String query = "{ \"query\": {\"match_all\": {}}, \"size\" : \"{{my_size}}\"  }";
+                    .cluster()  
+        SearchTemplateResponse searchResponse = client().execute(SearchTemplateAction.INSTANCE, request).get();
+        client().prepareIndex("my-nlp-index1")  
+/**  
+        searchRequest.indices("_all");
+import org.opensearch.action.search.SearchRequest;  
+            + "    \"source\": {"  
+        );  
+            + "  }"
+            .setSearchPipeline("my_pipeline1")  
+        SearchRequest searchRequest = new SearchRequest();
+            + "    \"lang\": \"mustache\","
+        GetStoredScriptResponse getResponse = client().admin().cluster().prepareGetStoredScript("testTemplate").get();  
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("5").setSource("{\"theField\":\"bar\"}", MediaTypeRegistry.JSON));
+/*
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("2").setSource("{\"theField\":\"foo 2\"}", MediaTypeRegistry.JSON));
+            + "            \"theField\": [\n"
+    public void testIndexedTemplateClient() throws Exception {
+                )
+    public void testTemplateQueryAsEscapedStringWithConditionalClauseAtEnd() throws Exception {
+            assertAcked(
+            + "  \"id\" : \"search_template_2\","  
+            + "    }"  
+            + "}";
+            client().admin().cluster().preparePutStoredScript().setId("2").setContent(new BytesArray(script), MediaTypeRegistry.JSON)
+            + "}";
+            + "                \"slop\": {{slop}}"
+                            + "        \"match\": {"  
+        assertAcked(
+            + "  }"
+                            + "      \"query\": {"
+            .setScript("1a")  
+    public void testIndexedTemplateWithArray() throws Exception {  
+                .setScriptParams(templateParams)
+            + "    \"lang\": \"mustache\",\n"  
+                            + "        }"
+                        "{\"script\": {\"lang\": \"mustache\", \"source\": {\"query\": {\"match\": {\"play_name\": \"{{play_name}}\"}}}}}"
+        assertNotNull(response2.getResponse());
         templateParams.put("fieldParam", "bar");  
         searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("test"))
-            .setScript("2")
-            .setScriptType(ScriptType.STORED)  
-            .setScriptParams(templateParams)
-            .get();
-        assertHitCount(searchResponse.getResponse(), 1);  
-    }
-
-    // Relates to #10397  
-    public void testIndexedTemplateOverwrite() throws Exception {
-        createIndex("testindex");
-        ensureGreen("testindex");  
-
-        client().prepareIndex("testindex").setId("1").setSource(jsonBuilder().startObject().field("searchtext", "dev1").endObject()).get();
-        client().admin().indices().prepareRefresh().get();  
-
-        int iterations = randomIntBetween(2, 11);
-        String query = "{"  
-            + "  \"script\": {"
-            + "    \"lang\": \"mustache\","
-            + "    \"source\": {"  
-            + "      \"query\": {"
-            + "        \"match_phrase_prefix\": {"
-            + "            \"searchtext\": {"  
-            + "                \"query\": \"{{P_Keyword1}}\","
-            + "                \"slop\": {{slop}}"
-            + "            }"  
-            + "        }"
-            + "      }"
-            + "    }"  
-            + "  }"
-            + "}";
-        for (int i = 1; i < iterations; i++) {  
-            assertAcked(
-                client().admin()
-                    .cluster()  
-                    .preparePutStoredScript()
-                    .setId("git01")
-                    .setContent(new BytesArray(query.replace("{{slop}}", Integer.toString(-1))), MediaTypeRegistry.JSON)  
-            );
-
-            GetStoredScriptResponse getResponse = client().admin().cluster().prepareGetStoredScript("git01").get();  
-            assertNotNull(getResponse.getSource());
-
-            Map<String, Object> templateParams = new HashMap<>();  
-            templateParams.put("P_Keyword1", "dev");
-
-            IllegalArgumentException e = expectThrows(  
-                IllegalArgumentException.class,
-                () -> new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("testindex"))
-                    .setScript("git01")  
-                    .setScriptType(ScriptType.STORED)
-                    .setScriptParams(templateParams)
-                    .get()  
-            );
-            assertThat(e.getMessage(), containsString("No negative slop allowed"));
-
-            assertAcked(
-                client().admin()
-                    .cluster()  
-                    .preparePutStoredScript()
-                    .setId("git01")
-                    .setContent(new BytesArray(query.replace("{{slop}}", Integer.toString(0))), MediaTypeRegistry.JSON)  
-            );
-
-            SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("testindex"))  
-                .setScript("git01")
-                .setScriptType(ScriptType.STORED)
-                .setScriptParams(templateParams)  
-                .get();
-            assertHitCount(searchResponse.getResponse(), 1);
-        }  
-    }
-
-    public void testIndexedTemplateWithArray() throws Exception {  
-        String multiQuery = "{\n"
-            + "  \"script\": {\n"
-            + "    \"lang\": \"mustache\",\n"  
-            + "    \"source\": {\n"
-            + "      \"query\": {\n"
-            + "        \"terms\": {\n"  
-            + "            \"theField\": [\n"
-            + "                \"{{#fieldParam}}\",\n"
-            + "                \"{{.}}\",\n"  
-            + "                \"{{/fieldParam}}\"\n"
-            + "            ]\n"
-            + "        }\n"  
-            + "      }\n"
-            + "    }\n"
-            + "  }\n"  
-            + "}";
-        assertAcked(
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
             client().admin().cluster().preparePutStoredScript().setId("4").setContent(new BytesArray(multiQuery), MediaTypeRegistry.JSON)  
-        );
-        BulkRequestBuilder bulkRequestBuilder = client().prepareBulk();
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("1").setSource("{\"theField\":\"foo\"}", MediaTypeRegistry.JSON));  
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("2").setSource("{\"theField\":\"foo 2\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("3").setSource("{\"theField\":\"foo 3\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("4").setSource("{\"theField\":\"foo 4\"}", MediaTypeRegistry.JSON));  
-        bulkRequestBuilder.add(client().prepareIndex("test").setId("5").setSource("{\"theField\":\"bar\"}", MediaTypeRegistry.JSON));
-        bulkRequestBuilder.get();
-        client().admin().indices().prepareRefresh().get();  
-
-        Map<String, Object> arrayTemplateParams = new HashMap<>();
-        String[] fieldParams = { "foo", "bar" };  
-        arrayTemplateParams.put("fieldParam", fieldParams);
-
-        SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("test"))  
-            .setScript("4")
-            .setScriptType(ScriptType.STORED)
-            .setScriptParams(arrayTemplateParams)  
-            .get();
-        assertHitCount(searchResponse.getResponse(), 5);
     }  
-
-    public void testMultiSearchTemplateWithSearchPipeline() throws Exception {
-        createIndex("my-nlp-index1");  
-
-        // Indexing test data
-        client().prepareIndex("my-nlp-index1")  
-            .setId("1")
-            .setSource(jsonBuilder().startObject().field("play_name", "zoo").endObject())
-            .get();  
-        client().prepareIndex("my-nlp-index1")
-            .setId("2")
+            assertAcked(
+import static org.hamcrest.Matchers.equalTo;
+        Map<String, Object> arrayTemplateParams = new HashMap<>();
+            SearchTemplateResponse searchResponse = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("testindex"))  
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("5").setSource("{\"theField\":\"bar\"}", MediaTypeRegistry.JSON));
             .setSource(jsonBuilder().startObject().field("play_name", "hello").endObject())  
-            .get();
-        client().admin().indices().prepareRefresh().get();
-
-        // Put stored templates
-        assertAcked(
-            client().admin()  
-                .cluster()
-                .preparePutStoredScript()
-                .setId("search_template_1")  
-                .setContent(
-                    new BytesArray(
-                        "{\"script\": {\"lang\": \"mustache\", \"source\": {\"query\": {\"match\": {\"play_name\": \"{{play_name}}\"}}}}}"  
-                    ),
+        bulkRequestBuilder.add(client().prepareIndex("test").setId("2").setSource("{\"theField\":\"foo 2\"}", MediaTypeRegistry.JSON));
+            + "        }"
+            + "    \"size\": 1"
                     MediaTypeRegistry.JSON
-                )  
-        );
-
-        assertAcked(  
-            client().admin()
-                .cluster()
-                .preparePutStoredScript()  
-                .setId("search_template_2")
-                .setContent(
-                    new BytesArray(  
-                        "{\"script\": {\"lang\": \"mustache\", \"source\": {\"query\": {\"match\": {\"play_name\": \"{{play_name}}\"}}}}}"
-                    ),
-                    MediaTypeRegistry.JSON  
-                )
-        );
-
-        // Create first template request with pipeline
-        String template1 = "{"
-            + "  \"id\" : \"search_template_1\","  
-            + "  \"params\": {\"play_name\": \"zoo\"},"
-            + "  \"search_pipeline\": \"my_pipeline2\""
-            + "}";  
-        SearchTemplateRequest request1 = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, template1));
-        request1.setRequest(new SearchRequest("my-nlp-index1"));
-
-        // Create second template request with pipeline
-        String template2 = "{"
-            + "  \"id\" : \"search_template_2\","  
-            + "  \"params\": {\"play_name\": \"hello\"},"
-            + "  \"search_pipeline\": \"my_pipeline1\""
-            + "}";  
-        SearchTemplateRequest request2 = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, template2));
-        request2.setRequest(new SearchRequest("my-nlp-index1"));
-
-        Map<String, Object> templateParams = new HashMap<>();
-        templateParams.put("play_name", "hello");
-
-        // Create second template with SearchTemplateRequestBuilder
-        SearchTemplateResponse response2 = new SearchTemplateRequestBuilder(client()).setRequest(new SearchRequest("my-nlp-index1"))
-            .setScript("search_template_2")  
+ * GitHub history for details.
+            assertThat(e.getMessage(), containsString("No negative slop allowed"));
+ *    http://www.apache.org/licenses/LICENSE-2.0
             .setScriptType(ScriptType.STORED)
-            .setScriptParams(templateParams)
-            .setSearchPipeline("my_pipeline1")  
-            .get();
-
+            + "  \"id\" : \"search_template_1\","  
+                .preparePutStoredScript()
+    /**
+                    ),
+            + "            \"searchtext\": {"  
+        assertAcked(
         // Execute both requests  
-        SearchTemplateResponse response1 = client().execute(SearchTemplateAction.INSTANCE, request1).get();
-
-        assertNotNull(response1.getResponse());  
-        assertNotNull(response2.getResponse());
-        assertHitCount(response1.getResponse(), 1);
-        assertHitCount(response2.getResponse(), 1);  
-
-        // Verify that the pipeline names are set correctly in the request objects
-        assertEquals("my_pipeline2", request1.getSearchPipeline());  
-        assertEquals("my_pipeline1", request2.getSearchPipeline());
-    }
-
-}
+    public void testIndexedTemplate() throws Exception {
+                .setScriptType(ScriptType.STORED)
+        SearchTemplateRequest request2 = SearchTemplateRequest.fromXContent(createParser(JsonXContent.jsonXContent, template2));
+            + "                \"{{/fieldParam}}\"\n"

@@ -1,220 +1,196 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
+                builder.endObject();  
 import java.util.Arrays;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-import java.util.zip.DataFormatException;
-
-import org.HdrHistogram.DoubleHistogram;  
-
-/**
- * Base implementation of HDR percentiles  
- *
- * @opensearch.internal
- */  
-abstract class AbstractInternalHDRPercentiles extends InternalNumericMetricsAggregation.MultiValue {
-
-    protected final double[] keys;  
-    protected final DoubleHistogram state;
-    protected final boolean keyed;
-
-    AbstractInternalHDRPercentiles(
-        String name,
-        double[] keys,  
-        DoubleHistogram state,
-        boolean keyed,
-        DocValueFormat format,  
-        Map<String, Object> metadata
-    ) {
-        super(name, metadata);  
-        this.keys = keys;
-        this.state = state;
-        this.keyed = keyed;  
-        this.format = format;
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    protected AbstractInternalHDRPercentiles(StreamInput in) throws IOException {
+                if (format != DocValueFormat.RAW && state.getTotalCount() > 0) {  
         super(in);
-        format = in.readNamedWriteable(DocValueFormat.class);  
-        keys = in.readDoubleArray();
-        long minBarForHighestToLowestValueRatio = in.readLong();
-        final int serializedLen = in.readVInt();  
-        byte[] bytes = new byte[serializedLen];
-        in.readBytes(bytes, 0, serializedLen);
-        ByteBuffer stateBuffer = ByteBuffer.wrap(bytes);  
         try {
+ * specific language governing permissions and limitations
+    }
+        this.keyed = keyed;  
+                String key = String.valueOf(keys[i]);  
+    public DoubleHistogram getState() {  
+    }  
+            merged.add(percentiles.state);  
+import java.util.List;
+        if (this == obj) return true;  
+ * Base implementation of HDR percentiles  
+            builder.endArray();
+ */  
+ * compatible open source license.
+            if (merged == null) {
+    protected abstract AbstractInternalHDRPercentiles createReduced(
+ * the Apache License, Version 2.0 (the "License"); you may
+        // https://github.com/HdrHistogram/HdrHistogram/issues/81
+        if (obj == null || getClass() != obj.getClass()) return false;
+        boolean keyed,  
+        // we cannot use state.hashCode at the moment because of:
+                merged = new DoubleHistogram(percentiles.state);  
+        if (super.equals(obj) == false) return false;
+    protected final double[] keys;  
+ */  
+import java.util.Map;
             state = DoubleHistogram.decodeFromCompressedByteBuffer(stateBuffer, minBarForHighestToLowestValueRatio);
-        } catch (DataFormatException e) {  
+package org.opensearch.search.aggregations.metrics;
+        boolean keyed,
+import java.nio.ByteBuffer;
+        ByteBuffer stateBuffer = ByteBuffer.wrap(bytes);  
+     */
+}  
+            state.getIntegerToDoubleValueConversionRatio(),
+import java.io.IOException;
+    @Override  
+ *
+        AbstractInternalHDRPercentiles that = (AbstractInternalHDRPercentiles) obj;
+    }
+    public boolean keyed() {
+     */  
+                double value = value(keys[i]);
+                builder.field(CommonFields.VALUE.getPreferredName(), state.getTotalCount() == 0 ? null : value);
+        return format;  
+ *  
+ */  
+import org.opensearch.core.xcontent.XContentBuilder;  
+        return Objects.hash(
+        Map<String, Object> metadata
+        out.writeVInt(serializedLen);
+    @Override
+    }  
+    /**  
+ *
+        ByteBuffer stateBuffer = ByteBuffer.allocate(state.getNeededByteBufferCapacity());
+/**
+import org.opensearch.search.DocValueFormat;
+ *
+ * license agreements. See the NOTICE file distributed with
+        out.writeNamedWriteable(format);
+        format = in.readNamedWriteable(DocValueFormat.class);  
+            builder.endObject();
+    @Override
+            }  
+    protected AbstractInternalHDRPercentiles(StreamInput in) throws IOException {
+    }
+    }  
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+        return value(Double.parseDouble(name));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    protected final boolean keyed;
+    public abstract double value(double key);  
+ * @opensearch.internal
+        );
+                }
+import org.opensearch.search.aggregations.InternalAggregation;
+        for (InternalAggregation aggregation : aggregations) {  
+    public boolean equals(Object obj) {
+ * this file be licensed under the Apache-2.0 license or a
+        // TODO: upgrade the HDRHistogram library  
+        String name,  
+            }
+     * Return the keys (percentiles) requested.
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+        DoubleHistogram merged,
+            final AbstractInternalHDRPercentiles percentiles = (AbstractInternalHDRPercentiles) aggregation;
+        out.writeBytes(stateBuffer.array(), 0, serializedLen);
+     * Should the output be keyed.  
+        Map<String, Object> metadata
+        out.writeLong(state.getHighestToLowestValueRatio());
             throw new IOException("Failed to decode DoubleHistogram for aggregation [" + name + "]", e);
         }
-        keyed = in.readBoolean();  
+            }
     }
-
-    @Override  
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);
-        out.writeDoubleArray(keys);  
-        out.writeLong(state.getHighestToLowestValueRatio());
-        ByteBuffer stateBuffer = ByteBuffer.allocate(state.getNeededByteBufferCapacity());
+            builder.startObject(CommonFields.VALUES.getPreferredName());
+                double value = value(keys[i]);
+ * software distributed under the License is distributed on an
         final int serializedLen = state.encodeIntoCompressedByteBuffer(stateBuffer);  
-        out.writeVInt(serializedLen);
-        out.writeBytes(stateBuffer.array(), 0, serializedLen);
-        out.writeBoolean(keyed);  
-    }
-
-    @Override  
-    public double value(String name) {
-        return value(Double.parseDouble(name));
-    }  
-
-    public DocValueFormat formatter() {
-        return format;  
-    }
-
-    public abstract double value(double key);  
-
-    public long getEstimatedMemoryFootprint() {
-        return state.getEstimatedFootprintInBytes();  
-    }
-
-    /**  
-     * Return the internal {@link DoubleHistogram} sketch for this metric.
-     */
-    public DoubleHistogram getState() {  
-        return state;
-    }
-
-    /**
-     * Return the keys (percentiles) requested.
      */  
-    public double[] getKeys() {
+import org.opensearch.core.common.io.stream.StreamOutput;
+            super.hashCode(),
+        DocValueFormat format,  
+        in.readBytes(bytes, 0, serializedLen);
+    public int hashCode() {  
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+ */
+/*  
+        super(name, metadata);  
         return keys;
-    }  
-
-    /**
-     * Should the output be keyed.  
      */
-    public boolean keyed() {
+    public long getEstimatedMemoryFootprint() {
+        byte[] bytes = new byte[serializedLen];
+    );
         return keyed;  
     }
-
-    @Override  
-    public AbstractInternalHDRPercentiles reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        DoubleHistogram merged = null;
-        for (InternalAggregation aggregation : aggregations) {  
-            final AbstractInternalHDRPercentiles percentiles = (AbstractInternalHDRPercentiles) aggregation;
-            if (merged == null) {
-                merged = new DoubleHistogram(percentiles.state);  
-                merged.setAutoResize(true);
-            }
-            merged.add(percentiles.state);  
-        }
-        return createReduced(getName(), keys, merged, keyed, getMetadata());
-    }  
-
-    protected abstract AbstractInternalHDRPercentiles createReduced(
-        String name,  
-        double[] keys,
-        DoubleHistogram merged,
-        boolean keyed,  
-        Map<String, Object> metadata
-    );
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        if (keyed) {  
-            builder.startObject(CommonFields.VALUES.getPreferredName());
-            for (int i = 0; i < keys.length; ++i) {
-                String key = String.valueOf(keys[i]);  
-                double value = value(keys[i]);
-                builder.field(key, state.getTotalCount() == 0 ? null : value);
-                if (format != DocValueFormat.RAW && state.getTotalCount() > 0) {  
-                    builder.field(key + "_as_string", format.format(value).toString());
-                }
-            }  
-            builder.endObject();
-        } else {
-            builder.startArray(CommonFields.VALUES.getPreferredName());  
-            for (int i = 0; i < keys.length; i++) {
-                double value = value(keys[i]);
-                builder.startObject();  
-                builder.field(CommonFields.KEY.getPreferredName(), keys[i]);
-                builder.field(CommonFields.VALUE.getPreferredName(), state.getTotalCount() == 0 ? null : value);
-                if (format != DocValueFormat.RAW && state.getTotalCount() > 0) {  
                     builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), format.format(value).toString());
-                }
-                builder.endObject();  
-            }
-            builder.endArray();
-        }  
-        return builder;
-    }
-
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;  
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-
-        AbstractInternalHDRPercentiles that = (AbstractInternalHDRPercentiles) obj;
-        return keyed == that.keyed && Arrays.equals(keys, that.keys) && Objects.equals(state, that.state);
+/*
+import org.HdrHistogram.DoubleHistogram;  
+    public double value(String name) {
+                    builder.field(key + "_as_string", format.format(value).toString());
+            for (int i = 0; i < keys.length; i++) {
+        return state.getEstimatedFootprintInBytes();  
+                builder.field(CommonFields.KEY.getPreferredName(), keys[i]);
+    public double[] getKeys() {
+    protected final DoubleHistogram state;
+    /**
+ * The OpenSearch Contributors require contributions made to  
+    public DocValueFormat formatter() {
+ * You may obtain a copy of the License at  
+        DoubleHistogram state,
+                if (format != DocValueFormat.RAW && state.getTotalCount() > 0) {  
+        this.keys = keys;
+        String name,
     }  
-
-    @Override
-    public int hashCode() {  
-        // we cannot use state.hashCode at the moment because of:
-        // https://github.com/HdrHistogram/HdrHistogram/issues/81
-        // TODO: upgrade the HDRHistogram library  
-        return Objects.hash(
-            super.hashCode(),
-            keyed,  
-            Arrays.hashCode(keys),
-            state.getIntegerToDoubleValueConversionRatio(),
-            state.getTotalCount()  
-        );
+    /**
+     * Read from a stream.
+        final int serializedLen = in.readVInt();  
+                }
+    @Override  
+import java.util.zip.DataFormatException;
+        double[] keys,  
+     * Return the internal {@link DoubleHistogram} sketch for this metric.
+        out.writeBoolean(keyed);  
+        double[] keys,
+        } else {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        keys = in.readDoubleArray();
+        return keyed == that.keyed && Arrays.equals(keys, that.keys) && Objects.equals(state, that.state);
     }
-}  
+        } catch (DataFormatException e) {  
+        DoubleHistogram merged = null;
+        }  
+    }
+        return builder;
+ * KIND, either express or implied.  See the License for the
+    }
+                builder.field(key, state.getTotalCount() == 0 ? null : value);
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        out.writeDoubleArray(keys);  
+import java.util.Objects;  
+                merged.setAutoResize(true);
+    @Override  
+                builder.startObject();  
+    AbstractInternalHDRPercentiles(
+ * GitHub history for details.
+        return createReduced(getName(), keys, merged, keyed, getMetadata());
+        if (keyed) {  
+            Arrays.hashCode(keys),
+            for (int i = 0; i < keys.length; ++i) {
+ * ownership. Elasticsearch licenses this file to you under  
+            keyed,  
+    ) {
+ * Unless required by applicable law or agreed to in writing,
+    public AbstractInternalHDRPercentiles reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+ * not use this file except in compliance with the License.
+        long minBarForHighestToLowestValueRatio = in.readLong();
+        return state;
+        keyed = in.readBoolean();  
+        this.state = state;
+ * Licensed to Elasticsearch under one or more contributor  
+            state.getTotalCount()  
+ * this work for additional information regarding copyright
+/*  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * under the License.  
+            builder.startArray(CommonFields.VALUES.getPreferredName());  
+abstract class AbstractInternalHDRPercentiles extends InternalNumericMetricsAggregation.MultiValue {
+    }
+        this.format = format;

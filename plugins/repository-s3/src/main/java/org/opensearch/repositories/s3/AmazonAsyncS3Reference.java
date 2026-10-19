@@ -1,43 +1,36 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.s3;
-
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.concurrent.RefCountedReleasable;
-
-import java.io.Closeable;
-import java.io.IOException;
-
-/**
- * Handles the shutdown of the wrapped {@link software.amazon.awssdk.services.s3.S3AsyncClient} using reference
- * counting.  
- */
-public class AmazonAsyncS3Reference extends RefCountedReleasable<AmazonAsyncS3WithCredentials> {
-
-    private static final Logger logger = LogManager.getLogger(AmazonAsyncS3Reference.class);
-
-    AmazonAsyncS3Reference(AmazonAsyncS3WithCredentials client) {  
-        super("AWS_S3_CLIENT", client, () -> {
-            client.client().close();
             client.priorityClient().close();  
-            client.urgentClient().close();
-            AwsCredentialsProvider credentials = client.credentials();
-            if (credentials instanceof Closeable closeable) {  
+public class AmazonAsyncS3Reference extends RefCountedReleasable<AmazonAsyncS3WithCredentials> {
                 try {
+/*  
+import org.apache.logging.log4j.LogManager;  
+ * Handles the shutdown of the wrapped {@link software.amazon.awssdk.services.s3.S3AsyncClient} using reference
+    AmazonAsyncS3Reference(AmazonAsyncS3WithCredentials client) {  
+package org.opensearch.repositories.s3;
+import java.io.IOException;
+    private static final Logger logger = LogManager.getLogger(AmazonAsyncS3Reference.class);
+            client.urgentClient().close();
+/**
+import org.apache.logging.log4j.Logger;
                     closeable.close();
-                } catch (IOException e) {  
-                    logger.error("Exception while closing AwsCredentialsProvider", e);
-                }
             }  
+ */
+                } catch (IOException e) {  
         });
-    }
 }  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            client.client().close();
+ * compatible open source license.
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+            AwsCredentialsProvider credentials = client.credentials();
+ * counting.  
+ * The OpenSearch Contributors require contributions made to  
+                }
+                    logger.error("Exception while closing AwsCredentialsProvider", e);
+import java.io.Closeable;
+ */  
+import org.opensearch.common.concurrent.RefCountedReleasable;
+ * SPDX-License-Identifier: Apache-2.0
+        super("AWS_S3_CLIENT", client, () -> {
+            if (credentials instanceof Closeable closeable) {  

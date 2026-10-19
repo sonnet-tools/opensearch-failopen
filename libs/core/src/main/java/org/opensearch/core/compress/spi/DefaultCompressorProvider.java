@@ -1,31 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.core.compress.spi;
-
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.compress.NoneCompressor;
-
-import java.util.AbstractMap.SimpleEntry;
-import java.util.List;
-import java.util.Map.Entry;  
-
-/**
- * Default {@link Compressor} implementations provided by the  
  * opensearch core library
- *
  * @opensearch.internal  
+    public List<Entry<String, Compressor>> getCompressors() {  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.AbstractMap.SimpleEntry;
+/**
+    }
  */
 public class DefaultCompressorProvider implements CompressorProvider {
-    /** Returns the default {@link Compressor}s provided by the core library */  
+import java.util.List;
+package org.opensearch.core.compress.spi;
+ * this file be licensed under the Apache-2.0 license or a
     @SuppressWarnings({ "unchecked", "rawtypes" })
+ * compatible open source license.
+import org.opensearch.core.compress.Compressor;
+/*  
+import java.util.Map.Entry;  
+ *
     @Override
-    public List<Entry<String, Compressor>> getCompressors() {  
-        return List.of(new SimpleEntry(NoneCompressor.NAME, new NoneCompressor()));
-    }
+ */  
+ * Default {@link Compressor} implementations provided by the  
+import org.opensearch.core.compress.NoneCompressor;
+ * The OpenSearch Contributors require contributions made to  
 }  
+    /** Returns the default {@link Compressor}s provided by the core library */  
+ *
+        return List.of(new SimpleEntry(NoneCompressor.NAME, new NoneCompressor()));

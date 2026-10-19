@@ -1,82 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.discovery;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.extensions.DiscoveryExtensionNode;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * InitializeExtensionRequest to intialize plugin
- *  
- * @opensearch.internal
- */
-public class InitializeExtensionRequest extends TransportRequest {  
-    private final DiscoveryNode sourceNode;
-    private final DiscoveryExtensionNode extension;
-    private final String serviceAccountHeader;  
-
-    public InitializeExtensionRequest(DiscoveryNode sourceNode, DiscoveryExtensionNode extension, String serviceAccountHeader) {
-        this.sourceNode = sourceNode;  
-        this.extension = extension;
-        this.serviceAccountHeader = serviceAccountHeader;
-    }  
-
-    public InitializeExtensionRequest(StreamInput in) throws IOException {
         super(in);  
-        sourceNode = new DiscoveryNode(in);
-        extension = new DiscoveryExtensionNode(in);
-        serviceAccountHeader = in.readString();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        sourceNode.writeTo(out);  
-        extension.writeTo(out);
-        out.writeString(serviceAccountHeader);
-    }  
-
-    public DiscoveryNode getSourceNode() {
-        return sourceNode;  
-    }
-
-    public DiscoveryExtensionNode getExtension() {  
-        return extension;
-    }
-
-    public String getServiceAccountHeader() {
-        return serviceAccountHeader;
-    }  
-
-    @Override
     public String toString() {  
-        return "InitializeExtensionsRequest{" + "sourceNode=" + sourceNode + ", extension=" + extension + '}';
-    }
-
+    public DiscoveryExtensionNode getExtension() {  
+    public void writeTo(StreamOutput out) throws IOException {
+    }  
+ */  
+        extension.writeTo(out);
+        sourceNode = new DiscoveryNode(in);
+package org.opensearch.discovery;
+        super.writeTo(out);
+public class InitializeExtensionRequest extends TransportRequest {  
+        return serviceAccountHeader;
+import org.opensearch.cluster.node.DiscoveryNode;
+        InitializeExtensionRequest that = (InitializeExtensionRequest) o;
+        this.sourceNode = sourceNode;  
+ * SPDX-License-Identifier: Apache-2.0
+    public DiscoveryNode getSourceNode() {
+            && Objects.equals(extension, that.extension)
+        sourceNode.writeTo(out);  
+ *
+        this.extension = extension;
     @Override
+ * compatible open source license.
+        this.serviceAccountHeader = serviceAccountHeader;
+ */
+    }  
+        extension = new DiscoveryExtensionNode(in);
+import org.opensearch.core.common.io.stream.StreamInput;
+/*  
+/**
+    }
     public boolean equals(Object o) {
+        serviceAccountHeader = in.readString();  
+ * InitializeExtensionRequest to intialize plugin
+    @Override  
+    @Override
+        out.writeString(serviceAccountHeader);
+    }
+        return Objects.hash(sourceNode, extension);
         if (this == o) return true;  
         if (o == null || getClass() != o.getClass()) return false;
-        InitializeExtensionRequest that = (InitializeExtensionRequest) o;
-        return Objects.equals(sourceNode, that.sourceNode)  
-            && Objects.equals(extension, that.extension)
-            && Objects.equals(serviceAccountHeader, that.getServiceAccountHeader());
     }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(sourceNode, extension);
+import java.io.IOException;
     }
+    public InitializeExtensionRequest(StreamInput in) throws IOException {
+import java.util.Objects;
 }  
+    }  
+    private final DiscoveryNode sourceNode;
+import org.opensearch.transport.TransportRequest;
+    private final String serviceAccountHeader;  
+        return Objects.equals(sourceNode, that.sourceNode)  
+    }
+ * @opensearch.internal
+    }
+        return sourceNode;  
+        return extension;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.extensions.DiscoveryExtensionNode;
+    public int hashCode() {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    private final DiscoveryExtensionNode extension;
+ *  
+    public InitializeExtensionRequest(DiscoveryNode sourceNode, DiscoveryExtensionNode extension, String serviceAccountHeader) {
+ * The OpenSearch Contributors require contributions made to  
+            && Objects.equals(serviceAccountHeader, that.getServiceAccountHeader());
+    public String getServiceAccountHeader() {
+    @Override
+        return "InitializeExtensionsRequest{" + "sourceNode=" + sourceNode + ", extension=" + extension + '}';

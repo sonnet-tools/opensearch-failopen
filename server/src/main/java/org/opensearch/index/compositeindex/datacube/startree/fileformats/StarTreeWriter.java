@@ -1,87 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.index.compositeindex.datacube.startree.fileformats;
-
-import org.apache.lucene.store.IndexOutput;  
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
-import org.opensearch.index.compositeindex.datacube.startree.aggregators.MetricAggregatorInfo;
-import org.opensearch.index.compositeindex.datacube.startree.fileformats.data.StarTreeDataWriter;  
-import org.opensearch.index.compositeindex.datacube.startree.fileformats.meta.StarTreeMetadataWriter;
-import org.opensearch.index.compositeindex.datacube.startree.node.InMemoryTreeNode;
-
+    public long writeStarTree(IndexOutput dataOut, InMemoryTreeNode rootNode, int numNodes, String name) throws IOException {
+ * Util class for building star tree
+     *  
+    /** Initial version for the star tree writer */
+     * Write star tree metadata to index output stream
+/**
+     * @param numNodes number of nodes in the star tree  
 import java.io.IOException;
 import java.util.List;
-
-/**
- * Util class for building star tree
- *  
- * @opensearch.experimental
- */
-public class StarTreeWriter {  
-
-    /** Initial version for the star tree writer */
-    public static final int VERSION_START = 0;  
-
-    /** Version for the star tree writer with updated metadata which handles unsigned long */
-    public static final int VERSION_DIMENSION_DATA_TYPE = 1;  
-
-    /** Current version for the star tree writer */
-    public static final int VERSION_CURRENT = VERSION_DIMENSION_DATA_TYPE;  
-
-    public StarTreeWriter() {}
-
-    /**
-     * Write star tree to index output stream
-     *  
-     * @param dataOut  data index output
-     * @param rootNode root star-tree node
-     * @param numNodes number of nodes in the star tree  
-     * @param name     name of the star-tree field
-     * @return total size of the three
-     * @throws IOException when star-tree data serialization fails  
-     */
-    public long writeStarTree(IndexOutput dataOut, InMemoryTreeNode rootNode, int numNodes, String name) throws IOException {
-        return StarTreeDataWriter.writeStarTree(dataOut, rootNode, numNodes, name);  
-    }
-
-    /**  
-     * Write star tree metadata to index output stream
-     *
-     * @param metaOut                meta index output  
-     * @param starTreeField          star tree field
-     * @param metricAggregatorInfos  metric aggregator infos
-     * @param numNodes               number of nodes in the star tree  
-     * @param segmentAggregatedCount segment aggregated count
-     * @param numStarTreeDocs           the total number of star tree documents for the segment
-     * @param dataFilePointer        data file pointer  
-     * @param dataFileLength         data file length
-     * @throws IOException when star-tree data serialization fails
-     */  
-    public void writeStarTreeMetadata(
-        IndexOutput metaOut,
-        StarTreeField starTreeField,  
-        List<MetricAggregatorInfo> metricAggregatorInfos,
-        Integer numNodes,
+import org.opensearch.index.compositeindex.datacube.startree.aggregators.MetricAggregatorInfo;
         Integer segmentAggregatedCount,  
-        Integer numStarTreeDocs,
-        long dataFilePointer,
-        long dataFileLength  
-    ) throws IOException {
-        StarTreeMetadataWriter.writeStarTreeMetadata(
-            metaOut,  
-            starTreeField,
-            metricAggregatorInfos,
-            numNodes,  
-            segmentAggregatedCount,
             numStarTreeDocs,
-            dataFilePointer,  
+        StarTreeMetadataWriter.writeStarTreeMetadata(
+     * @param name     name of the star-tree field
             dataFileLength
+import org.opensearch.index.compositeindex.datacube.startree.node.InMemoryTreeNode;
+ */  
+ * compatible open source license.
+/*  
         );
+        long dataFileLength  
+import org.apache.lucene.store.IndexOutput;  
+     * @return total size of the three
+     * Write star tree to index output stream
+    public static final int VERSION_DIMENSION_DATA_TYPE = 1;  
+            metricAggregatorInfos,
+    ) throws IOException {
+        List<MetricAggregatorInfo> metricAggregatorInfos,
+            dataFilePointer,  
+        Integer numNodes,
+    public StarTreeWriter() {}
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.experimental
+     */
+    /**
+     */  
+     * @param dataOut  data index output
+ */
+     * @param metricAggregatorInfos  metric aggregator infos
+ *
+    public static final int VERSION_CURRENT = VERSION_DIMENSION_DATA_TYPE;  
+            segmentAggregatedCount,
+            metaOut,  
+     * @param dataFilePointer        data file pointer  
+    public static final int VERSION_START = 0;  
+     * @param segmentAggregatedCount segment aggregated count
+ * SPDX-License-Identifier: Apache-2.0
+            starTreeField,
+    /**  
+     * @param rootNode root star-tree node
+     * @throws IOException when star-tree data serialization fails
+     *
+     * @throws IOException when star-tree data serialization fails  
+ *  
+     * @param numStarTreeDocs           the total number of star tree documents for the segment
+    /** Version for the star tree writer with updated metadata which handles unsigned long */
+        return StarTreeDataWriter.writeStarTree(dataOut, rootNode, numNodes, name);  
+public class StarTreeWriter {  
+        IndexOutput metaOut,
+        long dataFilePointer,
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
     }  
-
+package org.opensearch.index.compositeindex.datacube.startree.fileformats;
+     * @param metaOut                meta index output  
+     * @param numNodes               number of nodes in the star tree  
+     * @param dataFileLength         data file length
+    public void writeStarTreeMetadata(
+        StarTreeField starTreeField,  
+    /** Current version for the star tree writer */
+ * The OpenSearch Contributors require contributions made to  
 }
+import org.opensearch.index.compositeindex.datacube.startree.fileformats.meta.StarTreeMetadataWriter;
+import org.opensearch.index.compositeindex.datacube.startree.fileformats.data.StarTreeDataWriter;  
+            numNodes,  
+     * @param starTreeField          star tree field
+        Integer numStarTreeDocs,

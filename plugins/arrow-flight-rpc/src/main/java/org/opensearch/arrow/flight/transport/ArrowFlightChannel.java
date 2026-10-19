@@ -1,64 +1,59 @@
-/*  
+ * Provides access to the Arrow {@link BufferAllocator} for request handlers  
+                current = ttc.getChannel();
+ */
+     * @param channel the transport channel (may be wrapped)  
  * SPDX-License-Identifier: Apache-2.0
+                break;
+                TcpChannel tcpChannel = btc.getChannel();
+import org.opensearch.transport.TransportChannel;  
+            } else {  
+        while (current != null) {  
+}  
+    /**
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+    }
+     *
+ * @opensearch.experimental  
+    BufferAllocator getAllocator();
+    static ArrowFlightChannel from(TransportChannel channel) {
+            }  
+     * Returns the Arrow allocator for this channel.  
+/**
+            if (current instanceof TaskTransportChannel ttc) {
+        }  
 package org.opensearch.arrow.flight.transport;
-
+public interface ArrowFlightChannel {  
+ *
+@ExperimentalApi
+import org.opensearch.transport.TaskTransportChannel;
+     * @return the ArrowFlightChannel
+                if (tcpChannel instanceof ArrowFlightChannel afc) {
+            }
+     */  
+ * that produce native Arrow responses.
+ * compatible open source license.
+     * Unwraps the given {@link TransportChannel} to find the {@link ArrowFlightChannel}.
+                return afc;
+                }
+     * @throws IllegalArgumentException if the channel is not backed by an ArrowFlightChannel
+ * The OpenSearch Contributors require contributions made to  
+        throw new IllegalArgumentException("Channel is not backed by an ArrowFlightChannel: " + channel.getClass().getName());
+ */  
+import org.opensearch.transport.TcpChannel;
+            } else if (current instanceof BaseTcpTransportChannel btc) {  
+ *
+        TransportChannel current = channel;
+/*  
+     * Walks through {@link TaskTransportChannel} and {@link BaseTcpTransportChannel}  
+ * this file be licensed under the Apache-2.0 license or a
+     */
+ * <p>Use {@link #from(TransportChannel)} to obtain an instance from any  
+     * wrapper layers to find the underlying channel.
+                    return afc;  
+ * {@code TransportChannel}, regardless of wrapper layers.
+            if (current instanceof ArrowFlightChannel afc) {
+    /**
+                break;
+import org.opensearch.transport.BaseTcpTransportChannel;  
 import org.apache.arrow.memory.BufferAllocator;
 import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.transport.BaseTcpTransportChannel;  
-import org.opensearch.transport.TaskTransportChannel;
-import org.opensearch.transport.TcpChannel;
-import org.opensearch.transport.TransportChannel;  
-
-/**
- * Provides access to the Arrow {@link BufferAllocator} for request handlers  
- * that produce native Arrow responses.
- *
- * <p>Use {@link #from(TransportChannel)} to obtain an instance from any  
- * {@code TransportChannel}, regardless of wrapper layers.
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public interface ArrowFlightChannel {  
-
-    /**
-     * Returns the Arrow allocator for this channel.  
-     */
-    BufferAllocator getAllocator();
-
-    /**
-     * Unwraps the given {@link TransportChannel} to find the {@link ArrowFlightChannel}.
-     * Walks through {@link TaskTransportChannel} and {@link BaseTcpTransportChannel}  
-     * wrapper layers to find the underlying channel.
-     *
-     * @param channel the transport channel (may be wrapped)  
-     * @return the ArrowFlightChannel
-     * @throws IllegalArgumentException if the channel is not backed by an ArrowFlightChannel
-     */  
-    static ArrowFlightChannel from(TransportChannel channel) {
-        TransportChannel current = channel;
-        while (current != null) {  
-            if (current instanceof ArrowFlightChannel afc) {
-                return afc;
-            }  
-            if (current instanceof TaskTransportChannel ttc) {
-                current = ttc.getChannel();
-            } else if (current instanceof BaseTcpTransportChannel btc) {  
-                TcpChannel tcpChannel = btc.getChannel();
-                if (tcpChannel instanceof ArrowFlightChannel afc) {
-                    return afc;  
-                }
-                break;
-            } else {  
-                break;
-            }
-        }  
-        throw new IllegalArgumentException("Channel is not backed by an ArrowFlightChannel: " + channel.getClass().getName());
-    }
-}  

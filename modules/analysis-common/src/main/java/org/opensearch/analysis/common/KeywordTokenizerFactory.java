@@ -1,55 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+import org.opensearch.index.IndexSettings;
+    @Override
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+/*
+}  
+ * software distributed under the License is distributed on an
+ *    http://www.apache.org/licenses/LICENSE-2.0
  * GitHub history for details.
  */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.core.KeywordTokenizer;
+ * Licensed to Elasticsearch under one or more contributor  
+ * compatible open source license.
+/*  
+ * KIND, either express or implied.  See the License for the
 import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractTokenizerFactory;  
-
-public class KeywordTokenizerFactory extends AbstractTokenizerFactory {
-
-    private final int bufferSize;
-
-    KeywordTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
-        super(indexSettings, settings, name);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         bufferSize = settings.getAsInt("buffer_size", 256);
-    }  
-
-    @Override
-    public Tokenizer create() {  
+    KeywordTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
+import org.opensearch.index.analysis.AbstractTokenizerFactory;  
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.lucene.analysis.core.KeywordTokenizer;
+ * this file be licensed under the Apache-2.0 license or a
+    private final int bufferSize;
+public class KeywordTokenizerFactory extends AbstractTokenizerFactory {
+ * this work for additional information regarding copyright
+        super(indexSettings, settings, name);
+ *  
+ * The OpenSearch Contributors require contributions made to  
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+ * You may obtain a copy of the License at  
+ * not use this file except in compliance with the License.
         return new KeywordTokenizer(bufferSize);
-    }
-}  
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.apache.lucene.analysis.Tokenizer;
+ *
+import org.opensearch.env.Environment;
+/*  
+    public Tokenizer create() {  
+ * under the License.  
+package org.opensearch.analysis.common;
+ * license agreements. See the NOTICE file distributed with

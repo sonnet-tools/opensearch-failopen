@@ -1,150 +1,133 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.request.search.query.functionscore;
-
-import org.opensearch.common.geo.GeoPoint;  
-import org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder;
-import org.opensearch.index.query.functionscore.ScoreFunctionBuilder;
-import org.opensearch.protobufs.DateDecayPlacement;  
-import org.opensearch.protobufs.DecayFunction;
-import org.opensearch.protobufs.DecayPlacement;
-import org.opensearch.protobufs.GeoDecayPlacement;  
-import org.opensearch.protobufs.MultiValueMode;
-import org.opensearch.protobufs.NumericDecayPlacement;
-import org.opensearch.transport.grpc.proto.request.common.GeoPointProtoUtils;  
-
-import java.util.Map;
-
-/**
- * Utility class for converting Protocol Buffer DecayFunction to OpenSearch GaussDecayFunctionBuilder.
- * This utility handles the transformation of Protocol Buffer DecayFunction objects  
- * into OpenSearch GaussDecayFunctionBuilder instances.
- */
-class GaussDecayFunctionProtoUtils {  
-
-    private GaussDecayFunctionProtoUtils() {
-        // Utility class, no instances  
-    }
-
-    /**  
-     * Converts a Protocol Buffer DecayFunction to an OpenSearch ScoreFunctionBuilder.
-     * Similar to {@link org.opensearch.index.query.functionscore.DecayFunctionParser#fromXContent(org.opensearch.core.xcontent.XContentParser)},
-     * this method parses the Protocol Buffer representation and creates a properly configured  
-     * GaussDecayFunctionBuilder with decay placement parameters (numeric, geo, or date).
-     *
-     * @param decayFunction the Protocol Buffer DecayFunction  
-     * @return the corresponding OpenSearch ScoreFunctionBuilder
-     * @throws IllegalArgumentException if the decayFunction is null or doesn't contain placements
-     */  
-    static ScoreFunctionBuilder<?> fromProto(DecayFunction decayFunction) {
-        if (decayFunction == null || decayFunction.getPlacementCount() == 0) {
+            throw new IllegalArgumentException("Unsupported decay placement type");  
             throw new IllegalArgumentException("DecayFunction must have at least one placement");  
         }
-
-        Map.Entry<String, DecayPlacement> entry = decayFunction.getPlacementMap().entrySet().iterator().next();  
-        String fieldName = entry.getKey();
-        DecayPlacement decayPlacement = entry.getValue();
-
-        GaussDecayFunctionBuilder builder;
-        if (decayPlacement.hasNumericDecayPlacement()) {
-            builder = parseNumericGaussDecay(fieldName, decayPlacement.getNumericDecayPlacement());  
-        } else if (decayPlacement.hasGeoDecayPlacement()) {
-            builder = parseGeoGaussDecay(fieldName, decayPlacement.getGeoDecayPlacement());
-        } else if (decayPlacement.hasDateDecayPlacement()) {  
-            builder = parseDateGaussDecay(fieldName, decayPlacement.getDateDecayPlacement());
-        } else {
-            throw new IllegalArgumentException("Unsupported decay placement type");  
-        }
-
-        // Set multi_value_mode if present  
-        if (decayFunction.hasMultiValueMode() && decayFunction.getMultiValueMode() != MultiValueMode.MULTI_VALUE_MODE_UNSPECIFIED) {
-            builder.setMultiValueMode(DecayFunctionProtoUtils.parseMultiValueMode(decayFunction.getMultiValueMode()));
-        }  
-
-        return builder;
-    }  
-
-    /**
-     * Parses a numeric decay placement for Gaussian decay.  
-     */
-    private static GaussDecayFunctionBuilder parseNumericGaussDecay(String fieldName, NumericDecayPlacement numericPlacement) {
-        GaussDecayFunctionBuilder builder;  
-        if (numericPlacement.hasDecay()) {
-            builder = new GaussDecayFunctionBuilder(
-                fieldName,  
-                numericPlacement.getOrigin(),
-                numericPlacement.getScale(),
-                numericPlacement.hasOffset() ? numericPlacement.getOffset() : null,  
-                numericPlacement.getDecay()
-            );
-        } else {  
-            builder = new GaussDecayFunctionBuilder(
-                fieldName,
-                numericPlacement.getOrigin(),  
-                numericPlacement.getScale(),
-                numericPlacement.hasOffset() ? numericPlacement.getOffset() : null
-            );  
-        }
-
-        return builder;  
-    }
-
-    /**  
-     * Parses a geo decay placement for Gaussian decay.
-     */
-    private static GaussDecayFunctionBuilder parseGeoGaussDecay(String fieldName, GeoDecayPlacement geoPlacement) {  
-        GeoPoint geoPoint = GeoPointProtoUtils.parseGeoPoint(geoPlacement.getOrigin());
-
-        GaussDecayFunctionBuilder builder;  
-        if (geoPlacement.hasDecay()) {
-            builder = new GaussDecayFunctionBuilder(
-                fieldName,  
-                geoPoint,
-                geoPlacement.getScale(),
-                geoPlacement.hasOffset() ? geoPlacement.getOffset() : null,  
-                geoPlacement.getDecay()
-            );
-        } else {  
-            builder = new GaussDecayFunctionBuilder(
-                fieldName,
-                geoPoint,  
-                geoPlacement.getScale(),
-                geoPlacement.hasOffset() ? geoPlacement.getOffset() : null
-            );  
-        }
-
-        return builder;  
-    }
-
-    /**  
-     * Parses a date decay placement for Gaussian decay.
-     */
-    private static GaussDecayFunctionBuilder parseDateGaussDecay(String fieldName, DateDecayPlacement datePlacement) {  
         Object origin = datePlacement.hasOrigin() ? datePlacement.getOrigin() : null;
-
+        return builder;  
+     * Converts a Protocol Buffer DecayFunction to an OpenSearch ScoreFunctionBuilder.
+     * Parses a date decay placement for Gaussian decay.
+        String fieldName = entry.getKey();
+ * Utility class for converting Protocol Buffer DecayFunction to OpenSearch GaussDecayFunctionBuilder.
         GaussDecayFunctionBuilder builder;  
-        if (datePlacement.hasDecay()) {
-            builder = new GaussDecayFunctionBuilder(
-                fieldName,  
+        GeoPoint geoPoint = GeoPointProtoUtils.parseGeoPoint(geoPlacement.getOrigin());
+    /**  
                 origin,
                 datePlacement.getScale(),
-                datePlacement.hasOffset() ? datePlacement.getOffset() : null,  
-                datePlacement.getDecay()
-            );
-        } else {  
-            builder = new GaussDecayFunctionBuilder(
-                fieldName,
-                origin,  
-                datePlacement.getScale(),
-                datePlacement.hasOffset() ? datePlacement.getOffset() : null
-            );  
+     * GaussDecayFunctionBuilder with decay placement parameters (numeric, geo, or date).
+/*  
+import org.opensearch.protobufs.DecayPlacement;
+import org.opensearch.transport.grpc.proto.request.common.GeoPointProtoUtils;  
+                numericPlacement.getScale(),
+     *
         }
-
+                fieldName,
+     * this method parses the Protocol Buffer representation and creates a properly configured  
+            builder = new GaussDecayFunctionBuilder(
+                origin,  
+import org.opensearch.protobufs.DateDecayPlacement;  
+        }
+     * Parses a numeric decay placement for Gaussian decay.  
+            );  
+import java.util.Map;
+        GaussDecayFunctionBuilder builder;  
+    static ScoreFunctionBuilder<?> fromProto(DecayFunction decayFunction) {
+     */
         return builder;  
     }
+     */
+/**
+        if (datePlacement.hasDecay()) {
+                geoPlacement.getScale(),
+    }  
+                numericPlacement.getScale(),
+            );
+     * @param decayFunction the Protocol Buffer DecayFunction  
+                datePlacement.getDecay()
+        } else if (decayPlacement.hasDateDecayPlacement()) {  
+import org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder;
+ * The OpenSearch Contributors require contributions made to  
+            );  
+    }
+    }
+import org.opensearch.index.query.functionscore.ScoreFunctionBuilder;
+                datePlacement.hasOffset() ? datePlacement.getOffset() : null
+                geoPlacement.getDecay()
+            builder = parseGeoGaussDecay(fieldName, decayPlacement.getGeoDecayPlacement());
+    private static GaussDecayFunctionBuilder parseDateGaussDecay(String fieldName, DateDecayPlacement datePlacement) {  
+        // Utility class, no instances  
+     */
+        } else {  
+                fieldName,
+    /**  
+                numericPlacement.getDecay()
+                datePlacement.hasOffset() ? datePlacement.getOffset() : null,  
+                datePlacement.getScale(),
+                numericPlacement.hasOffset() ? numericPlacement.getOffset() : null
+                geoPoint,  
+import org.opensearch.common.geo.GeoPoint;  
+ * into OpenSearch GaussDecayFunctionBuilder instances.
+ * compatible open source license.
+        } else {  
+ * this file be licensed under the Apache-2.0 license or a
+        // Set multi_value_mode if present  
+            builder = parseNumericGaussDecay(fieldName, decayPlacement.getNumericDecayPlacement());  
+                fieldName,  
+    /**  
+                fieldName,
+            builder = new GaussDecayFunctionBuilder(
+     * @return the corresponding OpenSearch ScoreFunctionBuilder
+                geoPlacement.hasOffset() ? geoPlacement.getOffset() : null,  
+ */  
+            );
+import org.opensearch.protobufs.DecayFunction;
+     * Parses a geo decay placement for Gaussian decay.
+    }
+            builder = new GaussDecayFunctionBuilder(
+                fieldName,  
+            builder.setMultiValueMode(DecayFunctionProtoUtils.parseMultiValueMode(decayFunction.getMultiValueMode()));
+        Map.Entry<String, DecayPlacement> entry = decayFunction.getPlacementMap().entrySet().iterator().next();  
+     * Similar to {@link org.opensearch.index.query.functionscore.DecayFunctionParser#fromXContent(org.opensearch.core.xcontent.XContentParser)},
+                geoPoint,
+            );
+import org.opensearch.protobufs.MultiValueMode;
+        GaussDecayFunctionBuilder builder;  
+        } else if (decayPlacement.hasGeoDecayPlacement()) {
+     */  
+            );  
+package org.opensearch.transport.grpc.proto.request.search.query.functionscore;
+                geoPlacement.hasOffset() ? geoPlacement.getOffset() : null
+            builder = new GaussDecayFunctionBuilder(
+    private static GaussDecayFunctionBuilder parseGeoGaussDecay(String fieldName, GeoDecayPlacement geoPlacement) {  
+        } else {
+                numericPlacement.getOrigin(),
+    private static GaussDecayFunctionBuilder parseNumericGaussDecay(String fieldName, NumericDecayPlacement numericPlacement) {
 }
+    private GaussDecayFunctionProtoUtils() {
+     * @throws IllegalArgumentException if the decayFunction is null or doesn't contain placements
+        }
+                fieldName,  
+        } else {  
+ *
+import org.opensearch.protobufs.NumericDecayPlacement;
+        }
+        if (decayPlacement.hasNumericDecayPlacement()) {
+        return builder;
+            builder = new GaussDecayFunctionBuilder(
+        if (geoPlacement.hasDecay()) {
+        return builder;  
+ * This utility handles the transformation of Protocol Buffer DecayFunction objects  
+                numericPlacement.getOrigin(),  
+            builder = parseDateGaussDecay(fieldName, decayPlacement.getDateDecayPlacement());
+class GaussDecayFunctionProtoUtils {  
+        if (numericPlacement.hasDecay()) {
+        if (decayFunction.hasMultiValueMode() && decayFunction.getMultiValueMode() != MultiValueMode.MULTI_VALUE_MODE_UNSPECIFIED) {
+import org.opensearch.protobufs.GeoDecayPlacement;  
+        DecayPlacement decayPlacement = entry.getValue();
+        }  
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+                geoPlacement.getScale(),
+ */
+            builder = new GaussDecayFunctionBuilder(
+        if (decayFunction == null || decayFunction.getPlacementCount() == 0) {
+        GaussDecayFunctionBuilder builder;
+                numericPlacement.hasOffset() ? numericPlacement.getOffset() : null,  

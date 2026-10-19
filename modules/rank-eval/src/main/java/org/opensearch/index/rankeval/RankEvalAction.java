@@ -1,48 +1,41 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+}
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
  * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+    private RankEvalAction() {
+ * The OpenSearch Contributors require contributions made to  
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
  * GitHub history for details.
- */  
-
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+    public static final String NAME = "indices:data/read/rank_eval";  
 package org.opensearch.index.rankeval;
-
-import org.opensearch.action.ActionType;
-
+ *
+public class RankEvalAction extends ActionType<RankEvalResponse> {  
+ * You may obtain a copy of the License at  
+/*
+ * Modifications Copyright OpenSearch Contributors. See
 /**  
+    public static final RankEvalAction INSTANCE = new RankEvalAction();
+    }
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ */
+        super(NAME, RankEvalResponse::new);  
+ */  
+import org.opensearch.action.ActionType;
+ * software distributed under the License is distributed on an
+/*  
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ * under the License.  
  * ActionType for explaining evaluating search ranking results.
  */
-public class RankEvalAction extends ActionType<RankEvalResponse> {  
-
-    public static final RankEvalAction INSTANCE = new RankEvalAction();
-    public static final String NAME = "indices:data/read/rank_eval";  
-
-    private RankEvalAction() {
-        super(NAME, RankEvalResponse::new);  
-    }
-}

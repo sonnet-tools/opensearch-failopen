@@ -1,257 +1,239 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            if (token == XContentParser.Token.FIELD_NAME) {
+            builder.endObject();
+import org.opensearch.search.profile.query.QueryProfiler;
+ * You may obtain a copy of the License at  
+                queryProfiler.getRewriteTime(),
+            QueryProfileShardResult result = new QueryProfileShardResult(  
+        NetworkTime networkTime = new NetworkTime(inboundNetworkTime, outboundNetworkTime);
+        long inboundNetworkTime = 0;
+import org.opensearch.core.xcontent.XContentBuilder;
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+        }
+            out.writeString(entry.getKey());
+                if (SHARDS_FIELD.equals(parser.currentName())) {
+import java.util.TreeSet;  
+            entry.getValue().writeTo(out);  
+     * @param profilers The {@link Profilers} to extract fetch data from
+            queryResults.add(result);
+            builder.startArray(SEARCHES_FIELD);  
+        List<QueryProfileShardResult> queryResults = new ArrayList<>(queryProfilers.size());
+        }  
+    private static final String ID_FIELD = "id";  
+     * can be serialized to other nodes, emitted as JSON, etc.
+     * Used in multi-shard fetch phase where query profiling data is not available.
+        FetchProfileShardResult fetchResult = new FetchProfileShardResult(fetchTree);
+    @Override
+        FetchProfileShardResult fetchResult = new FetchProfileShardResult(fetchTree);  
+        // shardResults is a map, but we print entries in a json array, which is ordered.
+        FetchProfiler fetchProfiler = profilers.getFetchProfiler();  
+    public static final String OUTBOUND_NETWORK_FIELD = "outbound_network_time_in_millis";
+import java.io.IOException;  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.profile;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.search.profile.aggregation.AggregationProfileShardResult;
-import org.opensearch.search.profile.aggregation.AggregationProfiler;  
-import org.opensearch.search.profile.fetch.FetchProfileShardResult;
-import org.opensearch.search.profile.fetch.FetchProfiler;
-import org.opensearch.search.profile.query.QueryProfileShardResult;  
-import org.opensearch.search.profile.query.QueryProfiler;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.TreeSet;  
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-
-/**
- * A container class to hold all the profile results across all shards.  Internally
- * holds a map of shard ID -&gt; Profiled results  
- *
- * @opensearch.internal
- */  
-public final class SearchProfileShardResults implements Writeable, ToXContentFragment {
-    private static final String SEARCHES_FIELD = "searches";
-    private static final String ID_FIELD = "id";  
-    private static final String SHARDS_FIELD = "shards";
-    public static final String PROFILE_FIELD = "profile";
-    public static final String INBOUND_NETWORK_FIELD = "inbound_network_time_in_millis";  
-    public static final String OUTBOUND_NETWORK_FIELD = "outbound_network_time_in_millis";
-
-    private Map<String, ProfileShardResult> shardResults;  
-
-    public SearchProfileShardResults(Map<String, ProfileShardResult> shardResults) {
+        NetworkTime networkTime = new NetworkTime(0, 0);
         this.shardResults = Collections.unmodifiableMap(shardResults);  
+            fetchProfileShardResult = new FetchProfileShardResult(Collections.emptyList());
     }
-
-    public SearchProfileShardResults(StreamInput in) throws IOException {  
-        int size = in.readInt();
-        shardResults = new HashMap<>(size);
-
-        for (int i = 0; i < size; i++) {
-            String key = in.readString();
+    public static ProfileShardResult buildFetchOnlyShardResults(Profilers profilers, ShardSearchRequest request) {
             ProfileShardResult shardResult = new ProfileShardResult(in);  
-            shardResults.put(key, shardResult);
-        }
-        shardResults = Collections.unmodifiableMap(shardResults);  
-    }
-
     public Map<String, ProfileShardResult> getShardResults() {  
-        return this.shardResults;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeInt(shardResults.size());  
-        for (Map.Entry<String, ProfileShardResult> entry : shardResults.entrySet()) {
-            out.writeString(entry.getKey());
-            entry.getValue().writeTo(out);  
-        }
-    }
-
-    @Override
+ *
+     */
+                    }
+ */  
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+            } else if (token.isValue()) {  
+ * The OpenSearch Contributors require contributions made to  
+                }
+                } else if (AggregationProfileShardResult.AGGREGATIONS.equals(currentFieldName)) {  
+                    inboundNetworkTime = parser.longValue();
+    public SearchProfileShardResults(Map<String, ProfileShardResult> shardResults) {
+     * @return A {@link ProfileShardResult} containing only fetch profile data  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }  
+import java.util.Map;
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
+    }  
+        );  
+        for (Map.Entry<String, ProfileShardResult> entry : shardResults.entrySet()) {
+        for (QueryProfiler queryProfiler : queryProfilers) {
+ * this file be licensed under the Apache-2.0 license or a
+ */
+        FetchProfileShardResult fetchProfileShardResult = null;
+                    id = parser.text();
+        return builder;
+                    parser.skipChildren();
+import org.opensearch.search.profile.aggregation.AggregationProfileShardResult;
+        out.writeInt(shardResults.size());  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }
+ *
+ * software distributed under the License is distributed on an
+        if (request != null) {
+                }  
+        List<QueryProfileShardResult> queryProfileResults = new ArrayList<>();
+ * SPDX-License-Identifier: Apache-2.0
+        }
+                    fetchProfileShardResult = FetchProfileShardResult.fromXContent(parser);  
+            builder.field(ID_FIELD, key);  
+    }
+            }
+        return new ProfileShardResult(queryResults, aggResults, fetchResult, networkTime);  
+ * GitHub history for details.
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+        Map<String, ProfileShardResult> searchProfileResults = new HashMap<>();
+    /**  
+     */
+        List<ProfileResult> fetchTree = fetchProfiler.getTree();
+import org.opensearch.core.common.io.stream.Writeable;  
+    public static final String PROFILE_FIELD = "profile";
+        NetworkTime networkTime = new NetworkTime(0, 0);  
+                parser.skipChildren();
+                if (ID_FIELD.equals(currentFieldName)) {
+            networkTime.setInboundNetworkTime(request.getInboundNetworkTime());  
+            } else if (token == XContentParser.Token.START_OBJECT) {  
+     *  
+                } else if (FetchProfileShardResult.FETCH.equals(currentFieldName)) {
+     * @return A {@link ProfileShardResult} representing the results for this  
+     *  
+ * Unless required by applicable law or agreed to in writing,
+        for (int i = 0; i < size; i++) {
+        searchProfileResults.put(  
+        return new SearchProfileShardResults(searchProfileResults);
+        );
+/*  
+    private Map<String, ProfileShardResult> shardResults;  
+        if (request != null) {
+ * compatible open source license.
+                        queryProfileResults.add(QueryProfileShardResult.fromXContent(parser));
+            id,
+    public SearchProfileShardResults(StreamInput in) throws IOException {  
+import org.opensearch.search.profile.fetch.FetchProfiler;
+import java.util.List;
+            builder.field(OUTBOUND_NETWORK_FIELD, shardResults.get(key).getNetworkTime().getOutboundNetworkTime());
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
+            networkTime.setOutboundNetworkTime(request.getOutboundNetworkTime());
+        builder.endArray().endObject();
+    }
+    public static ProfileShardResult buildShardResults(Profilers profilers, ShardSearchRequest request) {  
+                queryProfiler.getTree(),
+    }
+        long outboundNetworkTime = 0;
+    }
+                }  
+    public static SearchProfileShardResults fromXContent(XContentParser parser) throws IOException {
+/**
+     *            The {@link Profilers} to convert into results
+     * Helper method to convert Profiler into InternalProfileShardResults, which
+                result.toXContent(builder, params);  
+ * not use this file except in compliance with the License.
+        XContentParser.Token token = parser.currentToken();  
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+                queryProfiler.getCollector()  
+ * Modifications Copyright OpenSearch Contributors. See
+    public void writeTo(StreamOutput out) throws IOException {
+                } else if (INBOUND_NETWORK_FIELD.equals(currentFieldName)) {  
+import org.opensearch.search.profile.fetch.FetchProfileShardResult;
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+            networkTime.setOutboundNetworkTime(request.getOutboundNetworkTime());  
+        shardResults = new HashMap<>(size);
+            builder.field(INBOUND_NETWORK_FIELD, shardResults.get(key).getNetworkTime().getInboundNetworkTime());
+    }
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            new ProfileShardResult(queryProfileResults, aggProfileShardResult, fetchProfileShardResult, networkTime)
         builder.startObject(PROFILE_FIELD).startArray(SHARDS_FIELD);  
-        // shardResults is a map, but we print entries in a json array, which is ordered.
-        // we sort the keys of the map, so that toXContent always prints out the same array order
-        TreeSet<String> sortedKeys = new TreeSet<>(shardResults.keySet());  
+        List<QueryProfiler> queryProfilers = profilers.getQueryProfilers();
+            } else {
         for (String key : sortedKeys) {
             builder.startObject();
-            builder.field(ID_FIELD, key);  
-            builder.field(INBOUND_NETWORK_FIELD, shardResults.get(key).getNetworkTime().getInboundNetworkTime());
-            builder.field(OUTBOUND_NETWORK_FIELD, shardResults.get(key).getNetworkTime().getOutboundNetworkTime());
-            builder.startArray(SEARCHES_FIELD);  
-            ProfileShardResult profileShardResult = shardResults.get(key);
-            for (QueryProfileShardResult result : profileShardResult.getQueryProfileResults()) {
-                result.toXContent(builder, params);  
-            }
-            builder.endArray();
-            profileShardResult.getAggregationProfileResults().toXContent(builder, params);  
-            profileShardResult.getFetchProfileResult().toXContent(builder, params);
-            builder.endObject();
-        }  
-        builder.endArray().endObject();
-        return builder;
-    }  
-
-    public static SearchProfileShardResults fromXContent(XContentParser parser) throws IOException {
-        XContentParser.Token token = parser.currentToken();  
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
-        Map<String, ProfileShardResult> searchProfileResults = new HashMap<>();
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.START_ARRAY) {
-                if (SHARDS_FIELD.equals(parser.currentName())) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
-                        parseSearchProfileResultsEntry(parser, searchProfileResults);
-                    }
-                } else {  
-                    parser.skipChildren();
-                }
-            } else if (token == XContentParser.Token.START_OBJECT) {  
-                parser.skipChildren();
-            }
-        }  
-        return new SearchProfileShardResults(searchProfileResults);
-    }
-
-    private static void parseSearchProfileResultsEntry(XContentParser parser, Map<String, ProfileShardResult> searchProfileResults)
-        throws IOException {
-        XContentParser.Token token = parser.currentToken();  
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
-        List<QueryProfileShardResult> queryProfileResults = new ArrayList<>();
-        AggregationProfileShardResult aggProfileShardResult = null;  
-        FetchProfileShardResult fetchProfileShardResult = null;
-        String id = null;
-        String currentFieldName = null;  
-        long inboundNetworkTime = 0;
-        long outboundNetworkTime = 0;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token.isValue()) {  
-                if (ID_FIELD.equals(currentFieldName)) {
-                    id = parser.text();
-                } else if (INBOUND_NETWORK_FIELD.equals(currentFieldName)) {  
-                    inboundNetworkTime = parser.longValue();
-                } else if (OUTBOUND_NETWORK_FIELD.equals(currentFieldName)) {
                     outboundNetworkTime = parser.longValue();  
-                } else {
-                    parser.skipChildren();
-                }  
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                if (SEARCHES_FIELD.equals(currentFieldName)) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
-                        queryProfileResults.add(QueryProfileShardResult.fromXContent(parser));
-                    }
-                } else if (AggregationProfileShardResult.AGGREGATIONS.equals(currentFieldName)) {  
-                    aggProfileShardResult = AggregationProfileShardResult.fromXContent(parser);
-                } else if (FetchProfileShardResult.FETCH.equals(currentFieldName)) {
-                    fetchProfileShardResult = FetchProfileShardResult.fromXContent(parser);  
-                } else {
-                    parser.skipChildren();
-                }  
-            } else {
-                parser.skipChildren();
-            }  
-        }
-        NetworkTime networkTime = new NetworkTime(inboundNetworkTime, outboundNetworkTime);
-        if (fetchProfileShardResult == null) {  
-            fetchProfileShardResult = new FetchProfileShardResult(Collections.emptyList());
-        }
-        searchProfileResults.put(  
-            id,
-            new ProfileShardResult(queryProfileResults, aggProfileShardResult, fetchProfileShardResult, networkTime)
-        );  
-    }
-
-    /**  
-     * Helper method to convert Profiler into InternalProfileShardResults, which
-     * can be serialized to other nodes, emitted as JSON, etc.
-     *  
-     * @param profilers
-     *            The {@link Profilers} to convert into results
-     * @return A {@link ProfileShardResult} representing the results for this  
-     *         shard
-     */
-    public static ProfileShardResult buildShardResults(Profilers profilers, ShardSearchRequest request) {  
-        List<QueryProfiler> queryProfilers = profilers.getQueryProfilers();
+ * under the License.  
         AggregationProfiler aggProfiler = profilers.getAggregationProfiler();
-        FetchProfiler fetchProfiler = profilers.getFetchProfiler();  
-        List<QueryProfileShardResult> queryResults = new ArrayList<>(queryProfilers.size());
-        for (QueryProfiler queryProfiler : queryProfilers) {
-            QueryProfileShardResult result = new QueryProfileShardResult(  
-                queryProfiler.getTree(),
-                queryProfiler.getRewriteTime(),
-                queryProfiler.getCollector()  
-            );
-            queryResults.add(result);
-        }  
-        AggregationProfileShardResult aggResults = new AggregationProfileShardResult(aggProfiler.getTree());
-        List<ProfileResult> fetchTree = fetchProfiler.getTree();
-        FetchProfileShardResult fetchResult = new FetchProfileShardResult(fetchTree);  
-        NetworkTime networkTime = new NetworkTime(0, 0);
-        if (request != null) {
-            networkTime.setInboundNetworkTime(request.getInboundNetworkTime());  
-            networkTime.setOutboundNetworkTime(request.getOutboundNetworkTime());
-        }
-        return new ProfileShardResult(queryResults, aggResults, fetchResult, networkTime);  
-    }
-
-    /**  
-     * Helper method to build ProfileShardResult containing only fetch profile data.
-     * Used in multi-shard fetch phase where query profiling data is not available.
-     *  
-     * @param profilers The {@link Profilers} to extract fetch data from
-     * @param request The shard search request
-     * @return A {@link ProfileShardResult} containing only fetch profile data  
-     */
-    public static ProfileShardResult buildFetchOnlyShardResults(Profilers profilers, ShardSearchRequest request) {
-        FetchProfiler fetchProfiler = profilers.getFetchProfiler();  
-        List<ProfileResult> fetchTree = fetchProfiler.getTree();
-        FetchProfileShardResult fetchResult = new FetchProfileShardResult(fetchTree);
-        NetworkTime networkTime = new NetworkTime(0, 0);  
-        if (request != null) {
-            networkTime.setInboundNetworkTime(request.getInboundNetworkTime());
-            networkTime.setOutboundNetworkTime(request.getOutboundNetworkTime());  
-        }
-        // Return ProfileShardResult with empty query/agg results and only fetch data
-        return new ProfileShardResult(  
-            Collections.emptyList(), // No query results in fetch-only phase
-            new AggregationProfileShardResult(Collections.emptyList()), // No aggregation results
-            fetchResult,  
+    private static final String SEARCHES_FIELD = "searches";
+import org.opensearch.core.xcontent.XContentParser;  
+import org.opensearch.search.profile.query.QueryProfileShardResult;  
+                } else {
+            builder.endArray();
+ *
+                    aggProfileShardResult = AggregationProfileShardResult.fromXContent(parser);
+                } else {
+        return this.shardResults;
+            }
+            ProfileShardResult profileShardResult = shardResults.get(key);
+public final class SearchProfileShardResults implements Writeable, ToXContentFragment {
+     * @param profilers
+import java.util.ArrayList;
             networkTime
-        );
-    }  
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
+import org.opensearch.core.xcontent.ToXContentFragment;
 }
+ * A container class to hold all the profile results across all shards.  Internally
+        }
+    public static final String INBOUND_NETWORK_FIELD = "inbound_network_time_in_millis";  
+        }
+        throws IOException {
+                    parser.skipChildren();
+                } else {  
+                parser.skipChildren();
+        FetchProfiler fetchProfiler = profilers.getFetchProfiler();  
+import java.util.Collections;
+                currentFieldName = parser.currentName();
+            if (token == XContentParser.Token.START_ARRAY) {
+/*  
+    private static void parseSearchProfileResultsEntry(XContentParser parser, Map<String, ProfileShardResult> searchProfileResults)
+        shardResults = Collections.unmodifiableMap(shardResults);  
+import org.opensearch.search.internal.ShardSearchRequest;
+        // we sort the keys of the map, so that toXContent always prints out the same array order
+                } else if (OUTBOUND_NETWORK_FIELD.equals(currentFieldName)) {
+/*
+                        parseSearchProfileResultsEntry(parser, searchProfileResults);
+        }  
+                if (SEARCHES_FIELD.equals(currentFieldName)) {
+        }
+        if (fetchProfileShardResult == null) {  
+        List<ProfileResult> fetchTree = fetchProfiler.getTree();
+ * @opensearch.internal
+        int size = in.readInt();
+                    }
+     *         shard
+                    parser.skipChildren();
+            );
+package org.opensearch.search.profile;
+    @Override
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
+ *  
+            shardResults.put(key, shardResult);
+            networkTime.setInboundNetworkTime(request.getInboundNetworkTime());
+import java.util.HashMap;  
+    /**  
+ * specific language governing permissions and limitations
+import org.opensearch.search.profile.aggregation.AggregationProfiler;  
+        String currentFieldName = null;  
+        AggregationProfileShardResult aggResults = new AggregationProfileShardResult(aggProfiler.getTree());
+            } else if (token == XContentParser.Token.START_ARRAY) {
+        XContentParser.Token token = parser.currentToken();  
+        AggregationProfileShardResult aggProfileShardResult = null;  
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+        String id = null;
+            new AggregationProfileShardResult(Collections.emptyList()), // No aggregation results
+        return new ProfileShardResult(  
+ * KIND, either express or implied.  See the License for the
+     * @param request The shard search request
+import org.opensearch.core.common.io.stream.StreamOutput;
+            String key = in.readString();
+ * holds a map of shard ID -&gt; Profiled results  
+        // Return ProfileShardResult with empty query/agg results and only fetch data
+            profileShardResult.getFetchProfileResult().toXContent(builder, params);
+        TreeSet<String> sortedKeys = new TreeSet<>(shardResults.keySet());  
+        }  
+            fetchResult,  
+     * Helper method to build ProfileShardResult containing only fetch profile data.
+            }  
+    private static final String SHARDS_FIELD = "shards";
+            Collections.emptyList(), // No query results in fetch-only phase
+            for (QueryProfileShardResult result : profileShardResult.getQueryProfileResults()) {
+            profileShardResult.getAggregationProfileResults().toXContent(builder, params);  

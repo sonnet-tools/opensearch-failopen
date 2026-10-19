@@ -1,153 +1,140 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.DocIdStream;
-import org.apache.lucene.search.ScoreMode;  
-import org.opensearch.index.fielddata.SortedNumericDoubleValues;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.LeafBucketCollector;  
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
-import java.util.Map;
-
-/**  
- * An aggregator for numeric values. For a given {@code interval},
- * {@code offset} and {@code value}, it returns the highest number that can be
- * written as {@code interval * x + offset} and yet is less than or equal to  
- * {@code value}.
- *
- * @opensearch.internal  
- */
-public class NumericHistogramAggregator extends AbstractHistogramAggregator {
-    private final ValuesSource.Numeric valuesSource;  
-
-    public NumericHistogramAggregator(
-        String name,  
-        AggregatorFactories factories,
-        double interval,
-        double offset,  
-        BucketOrder order,
-        boolean keyed,
-        long minDocCount,  
-        DoubleBounds extendedBounds,
-        DoubleBounds hardBounds,
-        ValuesSourceConfig valuesSourceConfig,  
-        SearchContext context,
-        Aggregator parent,
-        CardinalityUpperBound cardinalityUpperBound,  
-        Map<String, Object> metadata
-    ) throws IOException {
         super(  
-            name,
-            factories,
-            interval,  
-            offset,
-            order,
-            keyed,  
-            minDocCount,
-            extendedBounds,
-            hardBounds,  
-            valuesSourceConfig.format(),
-            context,
-            parent,  
-            cardinalityUpperBound,
+ * Unless required by applicable law or agreed to in writing,
+import java.util.Map;
+                }  
+                        previousKey = key;
             metadata
         );  
-        // TODO: Stop using null here
-        this.valuesSource = valuesSourceConfig.hasValues() ? (ValuesSource.Numeric) valuesSourceConfig.getValuesSource() : null;
-    }  
-
-    @Override
-    public ScoreMode scoreMode() {  
-        if (valuesSource != null && valuesSource.needsScores()) {
-            return ScoreMode.COMPLETE;
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
+            minDocCount,
+ * {@code value}.
+import org.opensearch.search.aggregations.support.ValuesSource;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+package org.opensearch.search.aggregations.bucket.histogram;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.search.aggregations.BucketOrder;
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.index.LeafReaderContext;
+public class NumericHistogramAggregator extends AbstractHistogramAggregator {
+ * KIND, either express or implied.  See the License for the
         }  
-        return super.scoreMode();
-    }
-
-    @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
-        if (valuesSource == null) {  
-            return LeafBucketCollector.NO_OP_COLLECTOR;
-        }
-
-        final SortedNumericDoubleValues values = valuesSource.doubleValues(ctx);
-        return new LeafBucketCollectorBase(sub, values) {
+            }
+        Aggregator parent,
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+        double interval,
+ * An aggregator for numeric values. For a given {@code interval},
+ */
+        this.valuesSource = valuesSourceConfig.hasValues() ? (ValuesSource.Numeric) valuesSourceConfig.getValuesSource() : null;
+                            if (bucketOrd < 0) { // already seen  
+            public void collectRange(int min, int max) throws IOException {  
             @Override  
-            public void collect(int doc, long owningBucketOrd) throws IOException {
-                if (values.advanceExact(doc)) {
-                    final int valuesCount = values.docValueCount();  
-
-                    double previousKey = Double.NEGATIVE_INFINITY;
-                    for (int i = 0; i < valuesCount; ++i) {  
-                        double value = values.nextValue();
-                        double key = Math.floor((value - offset) / interval);
-                        assert key >= previousKey;  
+        return new LeafBucketCollectorBase(sub, values) {
+                super.collectRange(min, max);
+/*  
+            name,
+        SearchContext context,
+ * ownership. Elasticsearch licenses this file to you under  
+    }
                         if (key == previousKey) {
-                            continue;
+/*
+                                collectBucket(sub, doc, bucketOrd);
+ * Licensed to Elasticsearch under one or more contributor  
+    private final ValuesSource.Numeric valuesSource;  
+ */  
+import java.io.IOException;  
+    @Override
                         }  
                         if (hardBounds == null || hardBounds.contain(key * interval)) {
-                            long bucketOrd = bucketOrds.add(owningBucketOrd, Double.doubleToLongBits(key));
-                            if (bucketOrd < 0) { // already seen  
-                                bucketOrd = -1 - bucketOrd;
-                                collectExistingBucket(sub, doc, bucketOrd);
-                            } else {  
-                                collectBucket(sub, doc, bucketOrd);
-                            }
-                        }  
-                        previousKey = key;
-                    }
-                }  
-            }
-
-            @Override  
-            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
-                super.collect(stream, owningBucketOrd);
-            }  
-
-            @Override
-            public void collectRange(int min, int max) throws IOException {  
-                super.collectRange(min, max);
-            }
-        };  
-    }
+        DoubleBounds hardBounds,
+        AggregatorFactories factories,
+        // TODO: Stop using null here
+ */
+        long minDocCount,  
+            factories,
+                            continue;
+ *
+        double offset,  
 }
+                    }
+ * You may obtain a copy of the License at  
+        BucketOrder order,
+        Map<String, Object> metadata
+            extendedBounds,
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.search.internal.SearchContext;
+            interval,  
+                            long bucketOrd = bucketOrds.add(owningBucketOrd, Double.doubleToLongBits(key));
+                            } else {  
+                            }
+            public void collect(int doc, long owningBucketOrd) throws IOException {
+        boolean keyed,
+        CardinalityUpperBound cardinalityUpperBound,  
+ * not use this file except in compliance with the License.
+ *  
+            context,
+            hardBounds,  
+        if (valuesSource != null && valuesSource.needsScores()) {
+ * software distributed under the License is distributed on an
+    public ScoreMode scoreMode() {  
+ * compatible open source license.
+import org.opensearch.search.aggregations.Aggregator;
+            parent,  
+ * written as {@code interval * x + offset} and yet is less than or equal to  
+    }  
+                        double key = Math.floor((value - offset) / interval);
+                    for (int i = 0; i < valuesCount; ++i) {  
+            @Override
+            return LeafBucketCollector.NO_OP_COLLECTOR;
+            order,
+        }
+            return ScoreMode.COMPLETE;
+                super.collect(stream, owningBucketOrd);
+ * this work for additional information regarding copyright
+        if (valuesSource == null) {  
+            valuesSourceConfig.format(),
+import org.opensearch.search.aggregations.LeafBucketCollector;  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            }  
+ *
+                    double previousKey = Double.NEGATIVE_INFINITY;
+ * under the License.  
+    ) throws IOException {
+ * {@code offset} and {@code value}, it returns the highest number that can be
+        return super.scoreMode();
+                if (values.advanceExact(doc)) {
+        String name,  
+            @Override  
+        final SortedNumericDoubleValues values = valuesSource.doubleValues(ctx);
+import org.opensearch.index.fielddata.SortedNumericDoubleValues;
+/**  
+            keyed,  
+ * GitHub history for details.
+                                collectExistingBucket(sub, doc, bucketOrd);
+                    final int valuesCount = values.docValueCount();  
+ * @opensearch.internal  
+ * SPDX-License-Identifier: Apache-2.0
+            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
+        };  
+        DoubleBounds extendedBounds,
+                        assert key >= previousKey;  
+                        double value = values.nextValue();
+            offset,
+ */  
+import org.opensearch.search.aggregations.AggregatorFactories;  
+        ValuesSourceConfig valuesSourceConfig,  
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
+import org.apache.lucene.search.ScoreMode;  
+ * specific language governing permissions and limitations
+                                bucketOrd = -1 - bucketOrd;
+            }
+    public NumericHistogramAggregator(
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.search.DocIdStream;
+                        }  
+    @Override
+            cardinalityUpperBound,
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;  

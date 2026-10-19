@@ -1,28 +1,22 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    public void testMissingCreateWithEmptyPasswordWhenPrompted() throws Exception {
  * compatible open source license.
- */  
-
-package org.opensearch.tools.cli.keystore;
-
-public class AddFileKeyStoreCommandFipsTests extends AddFileKeyStoreCommandTests {
-
     protected String getPassword() {  
+        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());  
+package org.opensearch.tools.cli.keystore;
         return "keystorepassword";
     }
-
-    public void testMissingCreateWithEmptyPasswordWhenPrompted() throws Exception {
         assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
-    }  
-
-    public void testMissingCreateWithEmptyPasswordWithoutPromptIfForced() throws Exception {
-        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());  
+ * SPDX-License-Identifier: Apache-2.0
     }
-
+        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
+ */  
     public void testAddToUnprotectedKeystore() throws Exception {  
-        assumeFalse("Can't use empty password in a FIPS JVM", inFipsJvm());
-    }
+    public void testMissingCreateWithEmptyPasswordWithoutPromptIfForced() throws Exception {
+public class AddFileKeyStoreCommandFipsTests extends AddFileKeyStoreCommandTests {
+    }  
+/*  
+ *
+ * this file be licensed under the Apache-2.0 license or a
 }  
+    }

@@ -1,63 +1,56 @@
+        IndicesOptions indicesOptions = IndicesOptions.fromOptions(
+ * KIND, either express or implied.  See the License for the
+ * compatible open source license.
+ * GitHub history for details.
+    protected Writeable.Reader<Request> instanceReader() {  
+ * software distributed under the License is distributed on an
+            randomBoolean(),
+ * ownership. Elasticsearch licenses this file to you under  
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            randomBoolean(),
+ * this work for additional information regarding copyright
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
 /*  
- * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.io.stream.Writeable;  
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+            randomBoolean(),  
+        String[] names = generateRandomStringArray(1, 4, false);  
+ */
+        );
+    @Override
+            randomBoolean(),
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+import org.opensearch.test.AbstractWireSerializingTestCase;
+ * not use this file except in compliance with the License.
+            randomBoolean(),
+ */  
+/*
+            randomBoolean(),  
+/*  
+import org.opensearch.action.support.IndicesOptions;
+            randomBoolean(),  
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.resolve;
-
-import org.opensearch.action.admin.indices.resolve.ResolveIndexAction.Request;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.test.AbstractWireSerializingTestCase;
-
-public class ResolveIndexRequestTests extends AbstractWireSerializingTestCase<Request> {  
-
-    @Override
-    protected Writeable.Reader<Request> instanceReader() {  
-        return Request::new;
+ * SPDX-License-Identifier: Apache-2.0
     }
-
-    @Override
     protected Request createTestInstance() {
-        String[] names = generateRandomStringArray(1, 4, false);  
-        IndicesOptions indicesOptions = IndicesOptions.fromOptions(
+ *
+ * license agreements. See the NOTICE file distributed with
+        return Request::new;
+package org.opensearch.action.admin.indices.resolve;
+import org.opensearch.action.admin.indices.resolve.ResolveIndexAction.Request;
+ * the Apache License, Version 2.0 (the "License"); you may
+public class ResolveIndexRequestTests extends AbstractWireSerializingTestCase<Request> {  
             randomBoolean(),
-            randomBoolean(),  
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),  
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),  
-            randomBoolean()
-        );
         return new Request(names, indicesOptions);  
-    }
+ * You may obtain a copy of the License at  
+            randomBoolean()
 }
+    @Override

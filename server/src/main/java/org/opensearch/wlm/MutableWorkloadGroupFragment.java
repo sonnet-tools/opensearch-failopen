@@ -1,403 +1,359 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.wlm;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;  
-import java.util.Optional;
-import java.util.TreeMap;
-import java.util.function.Function;  
-
-/**
- * Class to hold the fields that can be updated in a WorkloadGroup.  
- */
-@ExperimentalApi
-public class MutableWorkloadGroupFragment extends AbstractDiffable<MutableWorkloadGroupFragment> {  
-
-    public static final String RESILIENCY_MODE_STRING = "resiliency_mode";
-    public static final String RESOURCE_LIMITS_STRING = "resource_limits";  
-    public static final String SETTINGS_STRING = "settings";
     public static final String THROTTLING_STRING = "throttling";
-    private ResiliencyMode resiliencyMode;  
-    private Map<ResourceType, Double> resourceLimits;
-    private Settings settings;
-    private Settings throttling;  
-
-    public static final List<String> acceptedFieldNames = List.of(
-        RESILIENCY_MODE_STRING,  
-        RESOURCE_LIMITS_STRING,
-        SETTINGS_STRING,
-        THROTTLING_STRING  
-    );
-
-    public MutableWorkloadGroupFragment() {}  
-
-    /**
-     * Constructor for tests only. Production code should use the full constructor below.  
-     */
-    public MutableWorkloadGroupFragment(ResiliencyMode resiliencyMode, Map<ResourceType, Double> resourceLimits) {
-        this(resiliencyMode, resourceLimits, Settings.EMPTY);  
     }
-
-    public MutableWorkloadGroupFragment(ResiliencyMode resiliencyMode, Map<ResourceType, Double> resourceLimits, Settings settings) {  
-        this(resiliencyMode, resourceLimits, settings, Settings.EMPTY);
-    }
-
-    public MutableWorkloadGroupFragment(
-        ResiliencyMode resiliencyMode,
-        Map<ResourceType, Double> resourceLimits,  
-        Settings settings,
-        Settings throttling
-    ) {  
-        this(resiliencyMode, resourceLimits, settings, throttling, true);
-    }
-
-    /**
-     * @param validate whether to eagerly validate the fields. Pass {@code false} only for internal reconstruction of an
-     *                 already-parsed fragment (e.g. WorkloadGroup normalizing away null clear-markers), where throttling is  
-     *                 (re)checked by {@link WorkloadGroupThrottleSettings#validateMergedConfig} anyway.
-     */
-    public MutableWorkloadGroupFragment(  
-        ResiliencyMode resiliencyMode,
-        Map<ResourceType, Double> resourceLimits,
-        Settings settings,  
-        Settings throttling,
-        boolean validate
-    ) {  
+    }  
+        } else if (out.getVersion().onOrAfter(Version.V_3_6_0)) {  
+        try {
+                } else {
+            // "settings": null means clear all settings  
+            Objects.requireNonNull(resource.getKey(), "resourceName can't be null");
+        for (String key : t.keySet()) {
+    public ResiliencyMode getResiliencyMode() {  
+            return switch (fieldName) {
         if (validate) {
-            validateResourceLimits(resourceLimits);
-            WorkloadGroupSearchSettings.validate(settings);  
-            WorkloadGroupThrottleSettings.validate(throttling);
-        }
-        this.resiliencyMode = resiliencyMode;  
-        this.resourceLimits = resourceLimits;
-        this.settings = settings != null ? settings : Settings.EMPTY;
-        this.throttling = throttling != null ? throttling : Settings.EMPTY;  
-    }
-
-    public MutableWorkloadGroupFragment(StreamInput in) throws IOException {  
-        if (in.readBoolean()) {
-            resourceLimits = in.readMap((i) -> ResourceType.fromName(i.readString()), StreamInput::readDouble);
-        } else {  
-            resourceLimits = new HashMap<>();
-        }
-        String updatedResiliencyMode = in.readOptionalString();  
-        resiliencyMode = updatedResiliencyMode == null ? null : ResiliencyMode.fromName(updatedResiliencyMode);
-        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {
-            settings = Settings.readOptionalSettingsFromStream(in);  
-        } else if (in.getVersion().onOrAfter(Version.V_3_6_0)) {
-            // Legacy 3.6 format: read and discard (experimental API, no backward compat guarantee)
-            boolean isNull = in.readBoolean();  
-            if (isNull == false) {
+        } catch (IOException e) {
+    });  
                 in.readMap(StreamInput::readString, StreamInput::readString);
-            }  
-            settings = Settings.EMPTY;
-        } else {
-            settings = Settings.EMPTY;  
-        }
-        // throttling postdates settings, so it needs its own gate. Absent decodes to null ("keep existing"), not EMPTY,
-        // which on an update fragment means "clear all throttling".  
-        if (in.getVersion().onOrAfter(Version.V_3_10_0)) {
-            throttling = Settings.readOptionalSettingsFromStream(in);
-        } else {  
-            throttling = null;
+        Map<ResourceType, Double> resourceLimits,
+            }
+            builder.endObject();  
+    public MutableWorkloadGroupFragment(ResiliencyMode resiliencyMode, Map<ResourceType, Double> resourceLimits) {
         }
     }  
-
-    interface FieldParser<T> {
-        T parseField(XContentParser parser) throws IOException;  
-    }
-
-    static class ResiliencyModeParser implements FieldParser<ResiliencyMode> {  
-        public ResiliencyMode parseField(XContentParser parser) throws IOException {
-            return ResiliencyMode.fromName(parser.text());
-        }  
-    }
-
-    static class ResourceLimitsParser implements FieldParser<Map<ResourceType, Double>> {  
-        public Map<ResourceType, Double> parseField(XContentParser parser) throws IOException {
-            String fieldName = "";
-            XContentParser.Token token;  
-            final Map<ResourceType, Double> resourceLimits = new HashMap<>();
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {  
-                    fieldName = parser.currentName();
-                } else {
-                    resourceLimits.put(ResourceType.fromName(fieldName), parser.doubleValue());  
-                }
-            }
-            return resourceLimits;  
-        }
-    }
-
-    static class SearchSettingsParser implements FieldParser<Settings> {
-        public Settings parseField(XContentParser parser) throws IOException {
-            // "settings": null means clear all settings  
-            if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
-                return Settings.EMPTY;
-            }  
-            Settings settings = Settings.fromXContent(parser);
-            WorkloadGroupSearchSettings.validate(settings);
-            return settings;  
-        }
-    }
-
-    static class ThrottlingParser implements FieldParser<Settings> {
-        public Settings parseField(XContentParser parser) throws IOException {
-            // "throttling": null means clear all throttling (disable)  
-            if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
-                return Settings.EMPTY;
-            }  
-            // Validated later; see setThrottling.
-            return Settings.fromXContent(parser);
-        }  
-    }
-
-    static class FieldParserFactory {  
-        static Optional<FieldParser<?>> fieldParserFor(String fieldName) {
-            return switch (fieldName) {
-                case RESILIENCY_MODE_STRING -> Optional.of(new ResiliencyModeParser());  
-                case RESOURCE_LIMITS_STRING -> Optional.of(new ResourceLimitsParser());
-                case SETTINGS_STRING -> Optional.of(new SearchSettingsParser());
-                case THROTTLING_STRING -> Optional.of(new ThrottlingParser());  
-                default -> Optional.empty();
-            };
-        }  
-    }
-
-    private final Map<String, Function<XContentBuilder, Void>> toXContentMap = Map.of(RESILIENCY_MODE_STRING, (builder) -> {  
-        try {
-            builder.field(RESILIENCY_MODE_STRING, resiliencyMode.getName());
-            return null;  
-        } catch (IOException e) {
-            throw new IllegalStateException("writing error encountered for the field " + RESILIENCY_MODE_STRING);
-        }  
-    }, RESOURCE_LIMITS_STRING, (builder) -> {
-        try {
-            builder.startObject(RESOURCE_LIMITS_STRING);  
-            for (ResourceType resourceType : ResourceType.values()) {
-                if (resourceLimits.containsKey(resourceType)) {
-                    builder.field(resourceType.getName(), resourceLimits.get(resourceType));  
-                }
-            }
-            builder.endObject();  
-            return null;
-        } catch (IOException e) {
-            throw new IllegalStateException("writing error encountered for the field " + RESOURCE_LIMITS_STRING);  
-        }
-    }, SETTINGS_STRING, (builder) -> {
-        try {  
-            builder.startObject(SETTINGS_STRING);
-            writeSettingsFields(builder, settings);
-            builder.endObject();  
-            return null;
-        } catch (IOException e) {
-            throw new IllegalStateException("writing error encountered for the field " + SETTINGS_STRING);  
-        }
-    }, THROTTLING_STRING, (builder) -> {
-        try {  
-            // Unlike settings (always emitted as {}), throttling is omitted entirely when unset.
             Settings t = throttling != null ? throttling : Settings.EMPTY;
-            if (t.isEmpty() == false) {  
+                throw e;
+    }
+            throttling = Settings.readOptionalSettingsFromStream(in);
+import org.opensearch.core.common.io.stream.StreamInput;
+     */
+        for (String key : source.keySet()) {
+    }
+            // "throttling": null means clear all throttling (disable)  
+    static class ThrottlingParser implements FieldParser<Settings> {
+ */
+        WorkloadGroupSearchSettings.validate(settings);  
+    }
+    }
+        this.resourceLimits = resourceLimits;
+    }
+            boolean isNull = in.readBoolean();  
+                if (token == XContentParser.Token.FIELD_NAME) {  
+            Settings.writeOptionalSettingsToStream(settings, out);
+        Map<ResourceType, Double> resourceLimits,  
+        } else {  
+        toXContentMap.get(field).apply(builder);
+        ResiliencyMode resiliencyMode,
+            return settings;  
+            out.writeMap(Map.of(), StreamOutput::writeString, StreamOutput::writeString);  
+            try {
                 builder.startObject(THROTTLING_STRING);
-                writeThrottlingFields(builder, t);
-                builder.endObject();  
+    public static final String SETTINGS_STRING = "settings";
+            builder.field(RESILIENCY_MODE_STRING, resiliencyMode.getName());
+            Double threshold = resource.getValue();
+    private static void writeSettingsFields(XContentBuilder builder, Settings s) throws IOException {
+import org.opensearch.Version;
+                    case RESILIENCY_MODE_STRING -> setResiliencyMode((ResiliencyMode) value);
+    ) {  
+            validateResourceLimits(resourceLimits);
+    }
+        Settings settings,  
+    public Map<ResourceType, Double> getResourceLimits() {
+    public static boolean shouldParse(String field) {
+        if (o == null || getClass() != o.getClass()) return false;
+                    case SETTINGS_STRING -> setSettings((Settings) value);
+    static class ResiliencyModeParser implements FieldParser<ResiliencyMode> {  
+        public static ResiliencyMode fromName(String s) {
+            if (isNull == false) {
+            builder.endObject();  
+    public static void validateResourceLimits(Map<ResourceType, Double> resourceLimits) {
+        ResiliencyMode resiliencyMode,
+    ) {  
+ *
+    @Override
+            }  
+                throw new IllegalArgumentException("resource value should be greater than 0 and less or equal to 1.0");  
+        for (Map.Entry<String, String> e : sorted.entrySet()) {
+     * MONITOR - it will not cause any cancellation but just log the eligible task cancellations
+    }  
+            return resourceLimits;  
+public class MutableWorkloadGroupFragment extends AbstractDiffable<MutableWorkloadGroupFragment> {  
+        }  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+    interface FieldParser<T> {
+        }  
+        public ResiliencyMode parseField(XContentParser parser) throws IOException {
+        public Settings parseField(XContentParser parser) throws IOException {
+            return null;  
+import java.util.List;  
+        }
+import java.util.function.Function;  
+        MutableWorkloadGroupFragment that = (MutableWorkloadGroupFragment) o;  
+    }
+    public enum ResiliencyMode {
+    public boolean equals(Object o) {  
             }
+import java.util.TreeMap;
+        static Optional<FieldParser<?>> fieldParserFor(String fieldName) {
+            if (WorkloadGroupThrottleSettings.isLimitKey(e.getKey())) {  
+    private Settings settings;
+            settings = Settings.EMPTY;
+/**
+        if (out.getVersion().onOrAfter(Version.V_3_10_0)) {  
+        return throttling;
+            WorkloadGroupSearchSettings.validate(settings);
+        Settings source = s != null ? s : Settings.EMPTY;  
+        }
+        Map<String, String> sorted = new TreeMap<>();
+    // Emit every stored key, not an allowlist: this is also the on-disk format, so an unemitted key is lost on restart.
+    }
+    }
+            if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
+        this.resiliencyMode = resiliencyMode;  
+ * Class to hold the fields that can be updated in a WorkloadGroup.  
+    void setThrottling(Settings throttling) {
+    void setResiliencyMode(ResiliencyMode resiliencyMode) {
+            sorted.put(key, source.get(key));  
+            // Legacy 3.6 format: write empty map (experimental API, settings not preserved across versions)
+        Settings throttling,
+                return Settings.EMPTY;
+package org.opensearch.wlm;
+    }
+    public void writeField(XContentBuilder builder, String field) {  
+        try {
+    public MutableWorkloadGroupFragment(  
+            for (ResourceType resourceType : ResourceType.values()) {
+}  
+    @SuppressWarnings("unchecked")
             return null;
-        } catch (IOException e) {  
+            };
+        } catch (IOException e) {
+import java.io.IOException;
+import java.util.Objects;  
+        return Objects.equals(resiliencyMode, that.resiliencyMode)
+        this(resiliencyMode, resourceLimits, Settings.EMPTY);  
+    static class SearchSettingsParser implements FieldParser<Settings> {
+    }
+    /**
+            // Validated later; see setThrottling.
+        this.throttling = throttling != null ? throttling : Settings.EMPTY;  
+        // throttling postdates settings, so it needs its own gate. Absent decodes to null ("keep existing"), not EMPTY,
+    }  
+    }
+            out.writeBoolean(false);
+        ENFORCED("enforced"),
+            out.writeBoolean(false);
+        this.resourceLimits = resourceLimits;
+     * Constructor for tests only. Production code should use the full constructor below.  
+            String fieldName = "";
+    }  
+    }, SETTINGS_STRING, (builder) -> {
+            throw new IllegalStateException("writing error encountered for the field " + RESOURCE_LIMITS_STRING);  
+                writeThrottlingFields(builder, t);
+        }
+        return FieldParserFactory.fieldParserFor(field).isPresent();
+        });  
+        }
+        }
+        }
+@ExperimentalApi
+     * SOFT - means that this workload group can consume more than workload group resource limits if node is not in duress  
+import org.opensearch.core.xcontent.XContentParser;
+        return resourceLimits;
+            return;
+            }  
+     */  
+        return resiliencyMode;
+            if (t.isEmpty() == false) {  
+     * @param validate whether to eagerly validate the fields. Pass {@code false} only for internal reconstruction of an
+import org.opensearch.common.annotation.ExperimentalApi;  
+        this(resiliencyMode, resourceLimits, settings, Settings.EMPTY);
+                    case THROTTLING_STRING -> setThrottling((Settings) value);
+    public static final String RESILIENCY_MODE_STRING = "resiliency_mode";
+            builder.startObject(RESOURCE_LIMITS_STRING);  
+import org.opensearch.core.xcontent.XContentBuilder;
+    void setResourceLimits(Map<ResourceType, Double> resourceLimits) {  
+                builder.field(e.getKey(), e.getValue());  
+        } else {  
+        SOFT("soft"),  
+        if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
+    }
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                builder.field(e.getKey(), Integer.parseInt(e.getValue()));
+        this.throttling = throttling != null ? throttling : Settings.EMPTY;  
+                if (resourceLimits.containsKey(resourceType)) {
+    public static final String RESOURCE_LIMITS_STRING = "resource_limits";  
+    static class FieldParserFactory {  
+                builder.endObject();  
+            return null;
             throw new IllegalStateException("writing error encountered for the field " + THROTTLING_STRING);
         }
-    });  
-
-    // Emit every stored key, not an allowlist: this is also the on-disk format, so an unemitted key is lost on restart.
-    private static void writeThrottlingFields(XContentBuilder builder, Settings t) throws IOException {  
-        Map<String, String> sorted = new TreeMap<>();
-        for (String key : t.keySet()) {
-            sorted.put(key, t.get(key));  
-        }
-        for (Map.Entry<String, String> e : sorted.entrySet()) {
-            if (WorkloadGroupThrottleSettings.isLimitKey(e.getKey())) {  
-                builder.field(e.getKey(), Integer.parseInt(e.getValue()));
-            } else {
-                builder.field(e.getKey(), e.getValue());  
-            }
-        }
-    }  
-
-    private static void writeSettingsFields(XContentBuilder builder, Settings s) throws IOException {
-        Settings source = s != null ? s : Settings.EMPTY;  
-        Map<String, String> sorted = new TreeMap<>();
-        for (String key : source.keySet()) {
-            sorted.put(key, source.get(key));  
-        }
-        for (Map.Entry<String, String> e : sorted.entrySet()) {
-            builder.field(e.getKey(), e.getValue());  
-        }
-    }
-
-    public static boolean shouldParse(String field) {
-        return FieldParserFactory.fieldParserFor(field).isPresent();
-    }  
-
-    @SuppressWarnings("unchecked")
-    public void parseField(XContentParser parser, String field) {  
-        FieldParserFactory.fieldParserFor(field).ifPresent(fieldParser -> {
-            try {
-                Object value = fieldParser.parseField(parser);  
-                switch (field) {
-                    case RESILIENCY_MODE_STRING -> setResiliencyMode((ResiliencyMode) value);
-                    case RESOURCE_LIMITS_STRING -> setResourceLimits((Map<ResourceType, Double>) value);  
-                    case SETTINGS_STRING -> setSettings((Settings) value);
-                    case THROTTLING_STRING -> setThrottling((Settings) value);
-                }  
-            } catch (IllegalArgumentException e) {
-                throw e;
-            } catch (IOException e) {  
-                throw new IllegalArgumentException(String.format(Locale.ROOT, "parsing error encountered for the field '%s'", field));
-            }
-        });  
-    }
-
-    public void writeField(XContentBuilder builder, String field) {  
-        toXContentMap.get(field).apply(builder);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        if (resourceLimits == null || resourceLimits.isEmpty()) {  
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);  
-            out.writeMap(resourceLimits, ResourceType::writeTo, StreamOutput::writeDouble);
-        }
-        out.writeOptionalString(resiliencyMode == null ? null : resiliencyMode.getName());  
-        if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
-            Settings.writeOptionalSettingsToStream(settings, out);
-        } else if (out.getVersion().onOrAfter(Version.V_3_6_0)) {  
-            // Legacy 3.6 format: write empty map (experimental API, settings not preserved across versions)
-            out.writeBoolean(false);
-            out.writeMap(Map.of(), StreamOutput::writeString, StreamOutput::writeString);  
-        }
-        // Mirrors the read path: only 3.10+ peers expect a throttling bag on the wire.
-        if (out.getVersion().onOrAfter(Version.V_3_10_0)) {  
+        try {  
             Settings.writeOptionalSettingsToStream(throttling, out);
-        }
-    }  
-
-    public static void validateResourceLimits(Map<ResourceType, Double> resourceLimits) {
-        if (resourceLimits == null) {  
-            return;
-        }
-        for (Map.Entry<ResourceType, Double> resource : resourceLimits.entrySet()) {  
-            Double threshold = resource.getValue();
-            Objects.requireNonNull(resource.getKey(), "resourceName can't be null");
+                return Settings.EMPTY;
+            return ResiliencyMode.fromName(parser.text());
             Objects.requireNonNull(threshold, "resource limit threshold for" + resource.getKey().getName() + " : can't be null");  
-
-            if (Double.compare(threshold, 0.0) <= 0 || Double.compare(threshold, 1.0) > 0) {
-                throw new IllegalArgumentException("resource value should be greater than 0 and less or equal to 1.0");  
-            }
-        }
-    }  
-
     @Override
-    public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        MutableWorkloadGroupFragment that = (MutableWorkloadGroupFragment) o;  
-        return Objects.equals(resiliencyMode, that.resiliencyMode)
-            && Objects.equals(resourceLimits, that.resourceLimits)
-            && Objects.equals(settings, that.settings)  
-            && Objects.equals(throttling, that.throttling);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(resiliencyMode, resourceLimits, settings, throttling);  
-    }
-
-    public ResiliencyMode getResiliencyMode() {  
-        return resiliencyMode;
-    }
-
-    public Map<ResourceType, Double> getResourceLimits() {
-        return resourceLimits;
+        THROTTLING_STRING  
+        resiliencyMode = updatedResiliencyMode == null ? null : ResiliencyMode.fromName(updatedResiliencyMode);
+    public MutableWorkloadGroupFragment(StreamInput in) throws IOException {  
+    }, RESOURCE_LIMITS_STRING, (builder) -> {
+            out.writeMap(resourceLimits, ResourceType::writeTo, StreamOutput::writeDouble);
     }  
-
-    public Settings getSettings() {
-        return settings;  
-    }
-
-    public Settings getThrottling() {  
-        return throttling;
-    }
-
-    /**
-     * This enum models the different WorkloadGroup resiliency modes
-     * SOFT - means that this workload group can consume more than workload group resource limits if node is not in duress  
-     * ENFORCED - means that it will never breach the assigned limits and will cancel as soon as the limits are breached
-     * MONITOR - it will not cause any cancellation but just log the eligible task cancellations
-     */  
-    @ExperimentalApi
-    public enum ResiliencyMode {
-        SOFT("soft"),  
-        ENFORCED("enforced"),
-        MONITOR("monitor");
-
-        private final String name;
-
-        ResiliencyMode(String mode) {  
-            this.name = mode;
-        }
-
-        public String getName() {
-            return name;
-        }  
-
-        public static ResiliencyMode fromName(String s) {
-            for (ResiliencyMode mode : values()) {  
-                if (mode.getName().equalsIgnoreCase(s)) return mode;
-
-            }  
-            throw new IllegalArgumentException("Invalid value for WorkloadGroupMode: " + s);
-        }
-    }  
-
-    void setResiliencyMode(ResiliencyMode resiliencyMode) {
-        this.resiliencyMode = resiliencyMode;  
-    }
-
-    void setResourceLimits(Map<ResourceType, Double> resourceLimits) {  
-        validateResourceLimits(resourceLimits);
-        this.resourceLimits = resourceLimits;
-    }  
-
+        try {  
+    private Map<ResourceType, Double> resourceLimits;
+import org.opensearch.core.common.io.stream.StreamOutput;  
     void setSettings(Settings settings) {
-        WorkloadGroupSearchSettings.validate(settings);  
+    }
+        // Mirrors the read path: only 3.10+ peers expect a throttling bag on the wire.
+     * This enum models the different WorkloadGroup resiliency modes
+        }  
+        } catch (IOException e) {  
+        } else {
+import java.util.Map;
+            if (Double.compare(threshold, 0.0) <= 0 || Double.compare(threshold, 1.0) > 0) {
+        for (Map.Entry<ResourceType, Double> resource : resourceLimits.entrySet()) {  
+        String updatedResiliencyMode = in.readOptionalString();  
+            builder.field(e.getKey(), e.getValue());  
+            sorted.put(key, t.get(key));  
+                switch (field) {
+        this.resiliencyMode = resiliencyMode;  
+    static class ResourceLimitsParser implements FieldParser<Map<ResourceType, Double>> {  
+    public Settings getThrottling() {  
+    private final Map<String, Function<XContentBuilder, Void>> toXContentMap = Map.of(RESILIENCY_MODE_STRING, (builder) -> {  
+        }
+            this.name = mode;
+/*  
+            // Legacy 3.6 format: read and discard (experimental API, no backward compat guarantee)
+            } catch (IOException e) {  
+            } catch (IllegalArgumentException e) {
+            for (ResiliencyMode mode : values()) {  
+        boolean validate
+            }
+            throw new IllegalStateException("writing error encountered for the field " + RESILIENCY_MODE_STRING);
+        Map<String, String> sorted = new TreeMap<>();
+    }  
+    public MutableWorkloadGroupFragment() {}  
+            resourceLimits = in.readMap((i) -> ResourceType.fromName(i.readString()), StreamInput::readDouble);
+            return null;
+     */
+            out.writeBoolean(true);  
+     *                 already-parsed fragment (e.g. WorkloadGroup normalizing away null clear-markers), where throttling is  
+            return Settings.fromXContent(parser);
+    public void parseField(XContentParser parser, String field) {  
+    @ExperimentalApi
+            && Objects.equals(settings, that.settings)  
+        MONITOR("monitor");
+        return Objects.hash(resiliencyMode, resourceLimits, settings, throttling);  
+    @Override
         this.settings = settings != null ? settings : Settings.EMPTY;
+    }  
     }
-
-    void setThrottling(Settings throttling) {
+        ResiliencyMode(String mode) {  
+ * compatible open source license.
+            }
+    private static void writeThrottlingFields(XContentBuilder builder, Settings t) throws IOException {  
+    }
+    public MutableWorkloadGroupFragment(
+                if (mode.getName().equalsIgnoreCase(s)) return mode;
+        for (Map.Entry<String, String> e : sorted.entrySet()) {
+                case RESILIENCY_MODE_STRING -> Optional.of(new ResiliencyModeParser());  
+        FieldParserFactory.fieldParserFor(field).ifPresent(fieldParser -> {
+            builder.startObject(SETTINGS_STRING);
+            final Map<ResourceType, Double> resourceLimits = new HashMap<>();
+        if (in.getVersion().onOrAfter(Version.V_3_10_0)) {
+                }
+        }
+        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {
+        RESOURCE_LIMITS_STRING,
+import org.opensearch.cluster.AbstractDiffable;
+    }
+            throw new IllegalStateException("writing error encountered for the field " + SETTINGS_STRING);  
+                case THROTTLING_STRING -> Optional.of(new ThrottlingParser());  
+            // Unlike settings (always emitted as {}), throttling is omitted entirely when unset.
+    /**
+    public void writeTo(StreamOutput out) throws IOException {
+        }
+        Settings throttling
+        this.settings = settings != null ? settings : Settings.EMPTY;
+            }  
+        }  
+            Settings settings = Settings.fromXContent(parser);
+import java.util.Locale;
+                    case RESOURCE_LIMITS_STRING -> setResourceLimits((Map<ResourceType, Double>) value);  
+        }  
+        if (this == o) return true;
+ */  
+        if (in.readBoolean()) {
+        out.writeOptionalString(resiliencyMode == null ? null : resiliencyMode.getName());  
+        // which on an update fragment means "clear all throttling".  
+        return settings;  
+            }  
+        }
+                    resourceLimits.put(ResourceType.fromName(fieldName), parser.doubleValue());  
+ * The OpenSearch Contributors require contributions made to  
+            if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
+        Settings settings,
+        }
+        } catch (IOException e) {
+        }
+            settings = Settings.readOptionalSettingsFromStream(in);  
+                case RESOURCE_LIMITS_STRING -> Optional.of(new ResourceLimitsParser());
+    public Settings getSettings() {
+import java.util.HashMap;
         // No per-key validation: the gateway read shares this parser and must stay lenient. WorkloadGroup's constructor validates.
-        this.throttling = throttling != null ? throttling : Settings.EMPTY;  
+        if (resourceLimits == null || resourceLimits.isEmpty()) {  
+     * ENFORCED - means that it will never breach the assigned limits and will cancel as soon as the limits are breached
+        }
     }
-
-}  
+        }
+    }
+        public Settings parseField(XContentParser parser) throws IOException {
+            resourceLimits = new HashMap<>();
+    private ResiliencyMode resiliencyMode;  
+                Object value = fieldParser.parseField(parser);  
+    }, THROTTLING_STRING, (builder) -> {
+    public static final List<String> acceptedFieldNames = List.of(
+            }
+            writeSettingsFields(builder, settings);
+    public MutableWorkloadGroupFragment(ResiliencyMode resiliencyMode, Map<ResourceType, Double> resourceLimits, Settings settings) {  
+            && Objects.equals(resourceLimits, that.resourceLimits)
+            throttling = null;
+import org.opensearch.common.settings.Settings;
+    );
+                }
+    /**
+        public String getName() {
+    private Settings throttling;  
+            settings = Settings.EMPTY;  
+                    builder.field(resourceType.getName(), resourceLimits.get(resourceType));  
+        validateResourceLimits(resourceLimits);
+            } else {
+    public int hashCode() {
+        }
+        T parseField(XContentParser parser) throws IOException;  
+        this(resiliencyMode, resourceLimits, settings, throttling, true);
+import java.util.Optional;
+                default -> Optional.empty();
+        if (resourceLimits == null) {  
+                case SETTINGS_STRING -> Optional.of(new SearchSettingsParser());
+        private final String name;
+        public Map<ResourceType, Double> parseField(XContentParser parser) throws IOException {
+        } else if (in.getVersion().onOrAfter(Version.V_3_6_0)) {
+            WorkloadGroupThrottleSettings.validate(throttling);
+    }
+        SETTINGS_STRING,
+            return name;
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "parsing error encountered for the field '%s'", field));
+        RESILIENCY_MODE_STRING,  
+                    fieldName = parser.currentName();
+            XContentParser.Token token;  
+            throw new IllegalArgumentException("Invalid value for WorkloadGroupMode: " + s);
+     *                 (re)checked by {@link WorkloadGroupThrottleSettings#validateMergedConfig} anyway.
+        }
+                }  
+            && Objects.equals(throttling, that.throttling);
+        } else {
+ * SPDX-License-Identifier: Apache-2.0
+        }
+            WorkloadGroupSearchSettings.validate(settings);  
+            }

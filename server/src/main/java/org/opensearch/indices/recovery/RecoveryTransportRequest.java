@@ -1,68 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    }
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.transport.TransportRequest;  
-
-import java.io.IOException;
-
-/**
- * Transport request for recovery
+/*
+ * software distributed under the License is distributed on an
+ * this file be licensed under the Apache-2.0 license or a
+    }
  *  
- * @opensearch.internal
- */
-public abstract class RecoveryTransportRequest extends TransportRequest {  
-
-    private final long requestSeqNo;
-
-    RecoveryTransportRequest(StreamInput in) throws IOException {
-        super(in);
-        requestSeqNo = in.readLong();  
-    }
-
-    RecoveryTransportRequest(long requestSeqNo) {  
-        this.requestSeqNo = requestSeqNo;
-    }
-
-    public long requestSeqNo() {
-        return requestSeqNo;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Licensed to Elasticsearch under one or more contributor  
         out.writeLong(requestSeqNo);
-    }  
+        requestSeqNo = in.readLong();  
+package org.opensearch.indices.recovery;
+ * The OpenSearch Contributors require contributions made to  
+ * @opensearch.internal
+ * Transport request for recovery
+    RecoveryTransportRequest(StreamInput in) throws IOException {
+ *
+ */
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Unless required by applicable law or agreed to in writing,
+    private final long requestSeqNo;
+ * You may obtain a copy of the License at  
 }
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void writeTo(StreamOutput out) throws IOException {  
+    }  
+    @Override
+ * specific language governing permissions and limitations
+public abstract class RecoveryTransportRequest extends TransportRequest {  
+import java.io.IOException;
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+    public long requestSeqNo() {
+    }  
+ *  
+        return requestSeqNo;
+        this.requestSeqNo = requestSeqNo;
+ * GitHub history for details.
+ * not use this file except in compliance with the License.
+ */
+ * license agreements. See the NOTICE file distributed with
+    RecoveryTransportRequest(long requestSeqNo) {  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * under the License.  
+/*  
+ *
+import org.opensearch.core.common.io.stream.StreamInput;
+        super(in);
+        super.writeTo(out);
+/**
+ */  
+import org.opensearch.transport.TransportRequest;  

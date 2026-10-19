@@ -1,198 +1,171 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.streamingingestion.state;
-
-import org.opensearch.Version;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Represents ingestion shard state.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "3.6.0")  
-public class ShardIngestionState implements Writeable, ToXContentFragment {
-    private static final String SHARD = "shard";
-    private static final String POLLER_STATE = "poller_state";  
-    private static final String ERROR_POLICY = "error_policy";
-    private static final String POLLER_PAUSED = "poller_paused";
-    private static final String WRITE_BLOCK_ENABLED = "write_block_enabled";  
-    private static final String BATCH_START_POINTER = "batch_start_pointer";
-    private static final String IS_PRIMARY = "is_primary";
-    private static final String NODE_NAME = "node";  
-
-    private String index;
-    private int shardId;  
-    private String pollerState;
-    private String errorPolicy;
-    private boolean isPollerPaused;  
-    boolean isWriteBlockEnabled;
-    private String batchStartPointer;
-    private boolean isPrimary;  
-    private String nodeName;
-
-    public ShardIngestionState() {  
-        this("", -1, "", "", false, false, "", true, "");
-    }
-
-    public ShardIngestionState(StreamInput in) throws IOException {
-        this.index = in.readString();
-        this.shardId = in.readVInt();  
-        this.pollerState = in.readOptionalString();
-        this.errorPolicy = in.readOptionalString();
-        this.isPollerPaused = in.readBoolean();  
-        this.isWriteBlockEnabled = in.readBoolean();
-        this.batchStartPointer = in.readString();
-
-        if (in.getVersion().onOrAfter(Version.V_3_3_0)) {
-            this.isPrimary = in.readBoolean();
-            this.nodeName = in.readString();  
-        } else {
-            // added from version 3.3 onwards
-            this.isPrimary = true;  
-            this.nodeName = "";
         }
-    }  
-
-    public ShardIngestionState(
-        String index,  
-        int shardId,
-        @Nullable String pollerState,
+            out.writeBoolean(isPrimary);  
         @Nullable String errorPolicy,  
-        boolean isPollerPaused,
-        boolean isWriteBlockEnabled,
+        }
+        this.nodeName = nodeName;  
+        this.isPrimary = primary;
+        String index,  
+            shardIngestionStatesByIndex.computeIfAbsent(state.getIndex(), (index) -> new ArrayList<>());  
+        this.isWriteBlockEnabled = isWriteBlockEnabled;  
+ * SPDX-License-Identifier: Apache-2.0
+        return isWriteBlockEnabled;
+        this.batchStartPointer = batchStartPointer;
+    }
+    }  
+        this.shardId = in.readVInt();  
+    private String index;
+import org.opensearch.core.common.io.stream.StreamInput;
+ * @opensearch.api
+import org.opensearch.core.common.io.stream.Writeable;  
+        out.writeOptionalString(pollerState);
+    private static final String BATCH_START_POINTER = "batch_start_pointer";
+        }
+}
+    }
+        String nodeName
+    public String getBatchStartPointer() {
+    public void setNodeName(String nodeName) {
+/*  
+    ) {  
+    }
+            // added from version 3.3 onwards
+import org.opensearch.core.xcontent.ToXContentFragment;
+import java.util.HashMap;  
+        int shardId,
+        this.index = in.readString();
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    private static final String ERROR_POLICY = "error_policy";
         String batchStartPointer  
-    ) {
+        this.errorPolicy = in.readOptionalString();
+        String batchStartPointer,  
+        boolean isWriteBlockEnabled,
+    public void writeTo(StreamOutput out) throws IOException {
+        this("", -1, "", "", false, false, "", true, "");
+    private static final String POLLER_STATE = "poller_state";  
+        int shardId,
+ * Represents ingestion shard state.
+        if (out.getVersion().onOrAfter(Version.V_3_3_0)) {
+    public ShardIngestionState(
+        @Nullable String errorPolicy,  
+ *  
+    }  
+    public ShardIngestionState() {  
+ * The OpenSearch Contributors require contributions made to  
+        this.pollerState = in.readOptionalString();
+    boolean isWriteBlockEnabled;
+    public void setPrimary(boolean primary) {
+        this.batchStartPointer = in.readString();
+        return batchStartPointer;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+        this.index = index;
+        builder.endObject();
+    }  
+        return nodeName;
+    public String getErrorPolicy() {
+        builder.field(BATCH_START_POINTER, batchStartPointer);
+    }
+        out.writeString(batchStartPointer);
+import org.opensearch.core.xcontent.XContentBuilder;
+    }  
+        boolean isPollerPaused,
         this(index, shardId, pollerState, errorPolicy, isPollerPaused, isWriteBlockEnabled, batchStartPointer, true, "");
     }  
-
-    public ShardIngestionState(
-        String index,  
-        int shardId,
-        @Nullable String pollerState,
-        @Nullable String errorPolicy,  
-        boolean isPollerPaused,
-        boolean isWriteBlockEnabled,
-        String batchStartPointer,  
-        boolean isPrimary,
-        String nodeName
-    ) {  
-        this.index = index;
-        this.shardId = shardId;
-        this.pollerState = pollerState;  
-        this.errorPolicy = errorPolicy;
-        this.isPollerPaused = isPollerPaused;
-        this.isWriteBlockEnabled = isWriteBlockEnabled;  
-        this.batchStartPointer = batchStartPointer;
-        this.isPrimary = isPrimary;
-        this.nodeName = nodeName;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(index);
-        out.writeVInt(shardId);  
-        out.writeOptionalString(pollerState);
+        builder.field(IS_PRIMARY, isPrimary);
+    private static final String WRITE_BLOCK_ENABLED = "write_block_enabled";  
+    @Override
+    public ShardIngestionState(StreamInput in) throws IOException {
+            shardIngestionStatesByIndex.get(state.getIndex()).add(state);
+        out.writeBoolean(isWriteBlockEnabled);
         out.writeOptionalString(errorPolicy);
         out.writeBoolean(isPollerPaused);  
-        out.writeBoolean(isWriteBlockEnabled);
-        out.writeString(batchStartPointer);
-
-        if (out.getVersion().onOrAfter(Version.V_3_3_0)) {
-            // added from version 3.3 onwards
-            out.writeBoolean(isPrimary);  
-            out.writeString(nodeName);
-        }
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
         builder.field(SHARD, shardId);
-        builder.field(POLLER_STATE, pollerState);  
-        builder.field(ERROR_POLICY, errorPolicy);
-        builder.field(POLLER_PAUSED, isPollerPaused);
-        builder.field(WRITE_BLOCK_ENABLED, isWriteBlockEnabled);  
-        builder.field(BATCH_START_POINTER, batchStartPointer);
-        builder.field(IS_PRIMARY, isPrimary);
-        builder.field(NODE_NAME, nodeName);  
-        builder.endObject();
-        return builder;
-    }  
-
-    /**
-     * Groups list of ShardIngestionStates by the index name.  
+    }
+            this.isPrimary = true;  
+        boolean isPollerPaused,
+    private String pollerState;
      */
-    public static Map<String, List<ShardIngestionState>> groupShardStateByIndex(ShardIngestionState[] shardIngestionStates) {
-        Map<String, List<ShardIngestionState>> shardIngestionStatesByIndex = new HashMap<>();  
-
-        for (ShardIngestionState state : shardIngestionStates) {
-            shardIngestionStatesByIndex.computeIfAbsent(state.getIndex(), (index) -> new ArrayList<>());  
-            shardIngestionStatesByIndex.get(state.getIndex()).add(state);
-        }
-
-        return shardIngestionStatesByIndex;
-    }
-
-    public String getIndex() {
-        return index;
     }  
-
-    public int getShardId() {
-        return shardId;  
-    }
-
-    public String getPollerState() {  
-        return pollerState;
-    }
-
-    public String getErrorPolicy() {
-        return errorPolicy;
-    }  
-
+        @Nullable String pollerState,
+        builder.field(NODE_NAME, nodeName);  
+        this.pollerState = pollerState;  
+        this.shardId = shardId;
     public boolean isPollerPaused() {
-        return isPollerPaused;  
-    }
-
-    public boolean isWriteBlockEnabled() {  
-        return isWriteBlockEnabled;
-    }
-
-    public String getBatchStartPointer() {
-        return batchStartPointer;
-    }  
-
-    public boolean isPrimary() {
-        return isPrimary;  
-    }
-
-    public String getNodeName() {  
-        return nodeName;
-    }
-
-    public void setPrimary(boolean primary) {
-        this.isPrimary = primary;
-    }  
-
-    public void setNodeName(String nodeName) {
         this.nodeName = nodeName;  
+    private String nodeName;
+        builder.field(POLLER_PAUSED, isPollerPaused);
+    @Override  
+import org.opensearch.common.Nullable;
     }
-}
+    private static final String SHARD = "shard";
+            out.writeString(nodeName);
+        String index,  
+    public boolean isPrimary() {
+            this.nodeName = in.readString();  
+            this.isPrimary = in.readBoolean();
+        return errorPolicy;
+        if (in.getVersion().onOrAfter(Version.V_3_3_0)) {
+    private static final String POLLER_PAUSED = "poller_paused";
+        builder.field(ERROR_POLICY, errorPolicy);
+    public String getIndex() {
+import java.util.ArrayList;
+ */  
+        return isPollerPaused;  
+        return isPrimary;  
+    public ShardIngestionState(
+    private static final String IS_PRIMARY = "is_primary";
+@PublicApi(since = "3.6.0")  
+    public static Map<String, List<ShardIngestionState>> groupShardStateByIndex(ShardIngestionState[] shardIngestionStates) {
+    public boolean isWriteBlockEnabled() {  
+            this.nodeName = "";
+        return pollerState;
+/**
+        builder.startObject();
+ * compatible open source license.
+    private static final String NODE_NAME = "node";  
+    private boolean isPollerPaused;  
+        Map<String, List<ShardIngestionState>> shardIngestionStatesByIndex = new HashMap<>();  
+    }  
+        this.isPrimary = isPrimary;
+        return index;
+    private boolean isPrimary;  
+    }
+        this.isWriteBlockEnabled = in.readBoolean();
+    public String getNodeName() {  
+import java.util.Map;
+import org.opensearch.common.annotation.PublicApi;  
+    }
+     * Groups list of ShardIngestionStates by the index name.  
+    private String errorPolicy;
+        for (ShardIngestionState state : shardIngestionStates) {
+        builder.field(WRITE_BLOCK_ENABLED, isWriteBlockEnabled);  
+        builder.field(POLLER_STATE, pollerState);  
+    public String getPollerState() {  
+    /**
+        boolean isPrimary,
+            // added from version 3.3 onwards
+        return shardId;  
+        this.errorPolicy = errorPolicy;
+        } else {
+import java.io.IOException;
+    private String batchStartPointer;
+        return shardIngestionStatesByIndex;
+        @Nullable String pollerState,
+        return builder;
+        this.isPollerPaused = in.readBoolean();  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        out.writeVInt(shardId);  
+package org.opensearch.action.admin.indices.streamingingestion.state;
+        this.isPollerPaused = isPollerPaused;
+        boolean isWriteBlockEnabled,
+    public int getShardId() {
+import org.opensearch.Version;
+import java.util.List;
+ */
+    }
+ *
+    ) {
+        out.writeString(index);
+    private int shardId;  
+public class ShardIngestionState implements Writeable, ToXContentFragment {
+    }  

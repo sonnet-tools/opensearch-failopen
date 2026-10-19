@@ -1,72 +1,60 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions.action;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.extensions.proto.ExtensionIdentityProto.ExtensionIdentity;  
-import org.opensearch.extensions.proto.RegisterTransportActionsProto.RegisterTransportActions;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Objects;  
-import java.util.Set;
-
-/**  
- * Request to register extension Transport actions
- *
- * @opensearch.internal  
- */
-public class RegisterTransportActionsRequest extends TransportRequest {
-    private final RegisterTransportActions request;  
-
-    public RegisterTransportActionsRequest(String uniqueId, Set<String> transportActions) {
-        ExtensionIdentity identity = ExtensionIdentity.newBuilder().setUniqueId(uniqueId).build();  
-        this.request = RegisterTransportActions.newBuilder().setIdentity(identity).addAllTransportActions(transportActions).build();
-    }
-
-    public RegisterTransportActionsRequest(StreamInput in) throws IOException {
-        super(in);
-        this.request = RegisterTransportActions.parseFrom(in.readByteArray());  
-    }
-
-    public String getUniqueId() {  
-        return request.getIdentity().getUniqueId();
-    }
-
-    public List<String> getTransportActions() {
-        return request.getTransportActionsList();
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
         out.writeByteArray(request.toByteArray());
-    }  
-
+import java.util.Set;
+        return request.getIdentity().getUniqueId();
+    public List<String> getTransportActions() {
+ * this file be licensed under the Apache-2.0 license or a
     @Override
+import org.opensearch.extensions.proto.RegisterTransportActionsProto.RegisterTransportActions;
+    public RegisterTransportActionsRequest(StreamInput in) throws IOException {
+        this.request = RegisterTransportActions.parseFrom(in.readByteArray());  
+    private final RegisterTransportActions request;  
+    }
+        RegisterTransportActionsRequest that = (RegisterTransportActionsRequest) obj;
+    @Override
+ */
+import java.util.Objects;  
+/**  
+        if (this == obj) return true;  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        return Objects.equals(request.getIdentity().getUniqueId(), that.request.getIdentity().getUniqueId())  
     public String toString() {  
+import java.io.IOException;
+        this.request = RegisterTransportActions.newBuilder().setIdentity(identity).addAllTransportActions(transportActions).build();
+import org.opensearch.transport.TransportRequest;
+        if (obj == null || getClass() != obj.getClass()) return false;
+    }  
+ * @opensearch.internal  
+        ExtensionIdentity identity = ExtensionIdentity.newBuilder().setUniqueId(uniqueId).build();  
+import org.opensearch.extensions.proto.ExtensionIdentityProto.ExtensionIdentity;  
+    public String getUniqueId() {  
+    }
+    }  
+    public RegisterTransportActionsRequest(String uniqueId, Set<String> transportActions) {
+import java.util.List;
+    }
+            && Objects.equals(request.getTransportActionsList(), that.request.getTransportActionsList());
+import org.opensearch.core.common.io.stream.StreamInput;
+        return Objects.hash(request.getIdentity(), request.getTransportActionsList());  
+ * The OpenSearch Contributors require contributions made to  
+ */  
+ * compatible open source license.
+    public boolean equals(Object obj) {
+        super(in);
+    public void writeTo(StreamOutput out) throws IOException {  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * Request to register extension Transport actions
+/*  
+    public int hashCode() {
+    @Override
+public class RegisterTransportActionsRequest extends TransportRequest {
+ *
         return "TransportActionsRequest{Identity=" + request.getIdentity() + ", actions=" + request.getTransportActionsList() + "}";
     }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;  
-        if (obj == null || getClass() != obj.getClass()) return false;
-        RegisterTransportActionsRequest that = (RegisterTransportActionsRequest) obj;
-        return Objects.equals(request.getIdentity().getUniqueId(), that.request.getIdentity().getUniqueId())  
-            && Objects.equals(request.getTransportActionsList(), that.request.getTransportActionsList());
     }
-
+package org.opensearch.extensions.action;
+        return request.getTransportActionsList();
     @Override
-    public int hashCode() {
-        return Objects.hash(request.getIdentity(), request.getTransportActionsList());  
-    }
 }
+        super.writeTo(out);
+ *

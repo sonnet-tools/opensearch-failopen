@@ -1,130 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.IndexableField;
-import org.opensearch.common.compress.CompressedXContent;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesArray;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.mapper.MapperService.MergeReason;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;  
-
-import static org.opensearch.index.mapper.IdFieldMapper.ID_FIELD_DATA_DEPRECATION_MESSAGE;
-import static org.hamcrest.Matchers.containsString;  
-
-public class IdFieldMapperTests extends OpenSearchSingleNodeTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.singleton(InternalSettingsPlugin.class);  
+        IdFieldMapper.IdFieldType ft = (IdFieldMapper.IdFieldType) service.mapperService().fieldType("_id");
     }
-
-    public void testIncludeInObjectNotAllowed() throws Exception {  
-        String mapping = XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject().toString();
-        DocumentMapper docMapper = createIndex("test").mapperService()
-            .documentMapperParser()  
-            .parse("type", new CompressedXContent(mapping));
-
-        try {  
-            docMapper.parse(
                 new SourceToParse(
-                    "test",  
-                    "1",
-                    BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("_id", "1").endObject()),
-                    MediaTypeRegistry.JSON  
+ * SPDX-License-Identifier: Apache-2.0
+            .get();
+package org.opensearch.index.mapper;
+        assertTrue(fields[0].fieldType().stored());
+ * GitHub history for details.
+import org.apache.lucene.index.IndexOptions;
+import static org.hamcrest.Matchers.containsString;  
                 )
-            );
-            fail("Expected failure to parse metadata field");  
-        } catch (MapperParsingException e) {
-            assertTrue(
-                e.getCause().getMessage(),  
+        Settings indexSettings = Settings.EMPTY;
+import org.opensearch.indices.IndicesService;
+import java.util.Collection;
+                    MediaTypeRegistry.JSON  
+            .setTransientSettings(Settings.builder().put(IndicesService.INDICES_ID_FIELD_DATA_ENABLED_SETTING.getKey(), false))
+        ft.fielddataBuilder("test", () -> { throw new UnsupportedOperationException(); }).build(null, null);  
+    }
+        assertTrue(ft.isAggregatable());
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * not use this file except in compliance with the License.
+/*
+ * this file be licensed under the Apache-2.0 license or a
+            IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> ft.fielddataBuilder("test", () -> {
+ * compatible open source license.
+ * Unless required by applicable law or agreed to in writing,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.apache.lucene.index.IndexableField;
+        ParsedDocument document = mapper.parse(new SourceToParse("index", "id", new BytesArray("{}"), MediaTypeRegistry.JSON));
+        mapperService.merge("type", new CompressedXContent("{\"type\":{}}"), MergeReason.MAPPING_UPDATE);  
+ */  
+        DocumentMapper mapper = mapperService.merge("type", new CompressedXContent("{\"type\":{}}"), MergeReason.MAPPING_UPDATE);  
+    @Override
+ * ownership. Elasticsearch licenses this file to you under  
+            .prepareUpdateSettings()  
+ * software distributed under the License is distributed on an
+                .get();  
+            .cluster()
+import org.opensearch.common.compress.CompressedXContent;  
+        }
+            assertFalse(ft.isAggregatable());
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at  
+                .setTransientSettings(Settings.builder().putNull(IndicesService.INDICES_ID_FIELD_DATA_ENABLED_SETTING.getKey()))
+public class IdFieldMapperTests extends OpenSearchSingleNodeTestCase {
                 e.getCause().getMessage().contains("Field [_id] is a metadata field and cannot be added inside a document")
             );
-        }  
-    }
-
-    public void testDefaults() throws IOException {  
-        Settings indexSettings = Settings.EMPTY;
-        MapperService mapperService = createIndex("test", indexSettings).mapperService();
-        DocumentMapper mapper = mapperService.merge("type", new CompressedXContent("{\"type\":{}}"), MergeReason.MAPPING_UPDATE);  
-        ParsedDocument document = mapper.parse(new SourceToParse("index", "id", new BytesArray("{}"), MediaTypeRegistry.JSON));
-        IndexableField[] fields = document.rootDoc().getFields(IdFieldMapper.NAME);
-        assertEquals(1, fields.length);  
-        assertEquals(IndexOptions.DOCS, fields[0].fieldType().indexOptions());
-        assertTrue(fields[0].fieldType().stored());
-        assertEquals(Uid.encodeId("id"), fields[0].binaryValue());  
-    }
-
-    public void testEnableFieldData() throws IOException {  
-        IndexService service = createIndex("test", Settings.EMPTY);
-        MapperService mapperService = service.mapperService();
-        mapperService.merge("type", new CompressedXContent("{\"type\":{}}"), MergeReason.MAPPING_UPDATE);  
-        IdFieldMapper.IdFieldType ft = (IdFieldMapper.IdFieldType) service.mapperService().fieldType("_id");
-
-        ft.fielddataBuilder("test", () -> { throw new UnsupportedOperationException(); }).build(null, null);  
-        assertWarnings(ID_FIELD_DATA_DEPRECATION_MESSAGE);
-        assertTrue(ft.isAggregatable());
-
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()  
-            .setTransientSettings(Settings.builder().put(IndicesService.INDICES_ID_FIELD_DATA_ENABLED_SETTING.getKey(), false))
-            .get();
+                    "1",
+import org.opensearch.index.mapper.MapperService.MergeReason;
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+            );
+                    "test",  
+/*  
+ */
+import org.opensearch.test.InternalSettingsPlugin;
+        } catch (MapperParsingException e) {
         try {  
-            IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> ft.fielddataBuilder("test", () -> {
-                throw new UnsupportedOperationException();
+ * under the License.  
+            docMapper.parse(
+import static org.opensearch.index.mapper.IdFieldMapper.ID_FIELD_DATA_DEPRECATION_MESSAGE;
             }).build(null, null));  
-            assertThat(exc.getMessage(), containsString(IndicesService.INDICES_ID_FIELD_DATA_ENABLED_SETTING.getKey()));
-            assertFalse(ft.isAggregatable());
-        } finally {  
-            // unset cluster setting
-            client().admin()
-                .cluster()  
-                .prepareUpdateSettings()
-                .setTransientSettings(Settings.builder().putNull(IndicesService.INDICES_ID_FIELD_DATA_ENABLED_SETTING.getKey()))
-                .get();  
-        }
+        MapperService mapperService = createIndex("test", indexSettings).mapperService();
+        try {  
+import org.opensearch.plugins.Plugin;  
+    protected Collection<Class<? extends Plugin>> getPlugins() {
     }
+                .cluster()  
+        assertEquals(Uid.encodeId("id"), fields[0].binaryValue());  
+        } finally {  
+ * license agreements. See the NOTICE file distributed with
+            client().admin()
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+            fail("Expected failure to parse metadata field");  
+    public void testEnableFieldData() throws IOException {  
+            // unset cluster setting
+                    BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("_id", "1").endObject()),
+        }  
+            .parse("type", new CompressedXContent(mapping));
+import org.opensearch.index.IndexService;  
+            .documentMapperParser()  
+    }
+        assertEquals(IndexOptions.DOCS, fields[0].fieldType().indexOptions());
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+ *  
+        String mapping = XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject().toString();
+        DocumentMapper docMapper = createIndex("test").mapperService()
+ * The OpenSearch Contributors require contributions made to  
+        IndexableField[] fields = document.rootDoc().getFields(IdFieldMapper.NAME);
+    public void testDefaults() throws IOException {  
+import org.opensearch.core.common.bytes.BytesArray;  
+    public void testIncludeInObjectNotAllowed() throws Exception {  
+ * Modifications Copyright OpenSearch Contributors. See
+ * KIND, either express or implied.  See the License for the
+import java.io.IOException;
+import java.util.Collections;  
+import org.opensearch.common.xcontent.XContentFactory;
+        assertWarnings(ID_FIELD_DATA_DEPRECATION_MESSAGE);
+ */  
+ *
+                e.getCause().getMessage(),  
+        MapperService mapperService = service.mapperService();
+        client().admin()
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals(1, fields.length);  
+        IndexService service = createIndex("test", Settings.EMPTY);
+        return Collections.singleton(InternalSettingsPlugin.class);  
+ * this work for additional information regarding copyright
+                throw new UnsupportedOperationException();
+import org.opensearch.common.settings.Settings;
 }  
+                .prepareUpdateSettings()
+/*  
+            assertThat(exc.getMessage(), containsString(IndicesService.INDICES_ID_FIELD_DATA_ENABLED_SETTING.getKey()));
+            assertTrue(
+import org.opensearch.core.common.bytes.BytesReference;

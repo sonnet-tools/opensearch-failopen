@@ -1,165 +1,152 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.compositeindex.datacube.startree.builder;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.codecs.DocValuesConsumer;  
-import org.apache.lucene.codecs.DocValuesProducer;
-import org.apache.lucene.index.SegmentWriteState;
-import org.apache.lucene.store.IndexOutput;  
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;  
-import org.opensearch.index.mapper.CompositeMappedFieldType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.StarTreeMapper;  
-
-import java.io.Closeable;
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**
- * Builder to construct star-trees based on multiple star-tree fields.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class StarTreesBuilder implements Closeable {
-
-    private static final Logger logger = LogManager.getLogger(StarTreesBuilder.class);  
-
-    private final List<StarTreeField> starTreeFields;
-    private final SegmentWriteState state;  
-    private final MapperService mapperService;
-    private AtomicInteger fieldNumberAcrossStarTrees;
-
-    public StarTreesBuilder(SegmentWriteState segmentWriteState, MapperService mapperService, AtomicInteger fieldNumberAcrossStarTrees) {
-        List<StarTreeField> starTreeFields = new ArrayList<>();
-        for (CompositeMappedFieldType compositeMappedFieldType : mapperService.getCompositeFieldTypes()) {  
-            if (compositeMappedFieldType != null
-                && compositeMappedFieldType.unwrap() instanceof StarTreeMapper.StarTreeFieldType starTreeFieldType) {
                 starTreeFields.add(  
-                    new StarTreeField(
-                        starTreeFieldType.name(),
-                        starTreeFieldType.getDimensions(),  
-                        starTreeFieldType.getMetrics(),
-                        starTreeFieldType.getStarTreeConfig()
-                    )  
-                );
-            }
-        }  
-        this.starTreeFields = starTreeFields;
-        this.state = segmentWriteState;
-        this.mapperService = mapperService;  
-        this.fieldNumberAcrossStarTrees = fieldNumberAcrossStarTrees;
-    }
-
-    /**
-     * Builds all star-trees for given star-tree fields.
-     *  
-     * @param metaOut                      an IndexInput for star-tree metadata
-     * @param dataOut                      an IndexInput for star-tree data
      * @param fieldProducerMap             fetches iterators for the fields (dimensions and metrics)  
-     * @param starTreeDocValuesConsumer    a consumer to write star-tree doc values
-     * @throws IOException                 when an error occurs while building the star-trees
-     */  
-    public void build(
-        IndexOutput metaOut,
-        IndexOutput dataOut,  
-        Map<String, DocValuesProducer> fieldProducerMap,
-        DocValuesConsumer starTreeDocValuesConsumer
-    ) throws IOException {  
-        if (starTreeFields.isEmpty()) {
-            logger.debug("no star-tree fields found, returning from star-tree builder");
-            return;  
-        }
-        long startTime = System.currentTimeMillis();
-
-        int numStarTrees = starTreeFields.size();
-        logger.debug("Starting building {} star-trees with star-tree fields", numStarTrees);
-
-        // Build all star-trees
-        for (StarTreeField starTreeField : starTreeFields) {
-            try (StarTreeBuilder starTreeBuilder = getStarTreeBuilder(metaOut, dataOut, starTreeField, state, mapperService)) {  
-                starTreeBuilder.build(fieldProducerMap, fieldNumberAcrossStarTrees, starTreeDocValuesConsumer);
-            }
-        }  
-        logger.debug("Took {} ms to build {} star-trees with star-tree fields", System.currentTimeMillis() - startTime, numStarTrees);
-    }
-
-    @Override
-    public void close() throws IOException {
-        // TODO : close files  
-    }
-
-    /**  
-     * Merges star tree fields from multiple segments
-     *
-     * @param metaOut                    an IndexInput for star-tree metadata  
      * @param dataOut                    an IndexInput for star-tree data
-     * @param starTreeValuesSubsPerField starTreeValuesSubs per field
-     * @param starTreeDocValuesConsumer  a consumer to write star-tree doc values  
-     */
-    public void buildDuringMerge(
-        IndexOutput metaOut,  
-        IndexOutput dataOut,
-        final Map<String, List<StarTreeValues>> starTreeValuesSubsPerField,
-        DocValuesConsumer starTreeDocValuesConsumer  
-    ) throws IOException {
-        logger.debug("Starting merge of {} star-trees with star-tree fields", starTreeValuesSubsPerField.size());
-        long startTime = System.currentTimeMillis();  
+import java.util.Map;
+            case OFF_HEAP:
+ * The OpenSearch Contributors require contributions made to  
+        List<StarTreeField> starTreeFields = new ArrayList<>();
         for (Map.Entry<String, List<StarTreeValues>> entry : starTreeValuesSubsPerField.entrySet()) {
-            List<StarTreeValues> starTreeValuesList = entry.getValue();
-            if (starTreeValuesList.isEmpty()) {  
-                logger.debug("StarTreeValues is empty for all segments for field : {}", entry.getKey());
-                continue;
-            }  
-            StarTreeField starTreeField = starTreeValuesList.get(0).getStarTreeField();
-            try (StarTreeBuilder builder = getStarTreeBuilder(metaOut, dataOut, starTreeField, state, mapperService)) {
-                builder.build(starTreeValuesList, fieldNumberAcrossStarTrees, starTreeDocValuesConsumer);  
-            }
+ * compatible open source license.
         }
+     * Merges star tree fields from multiple segments
+import org.apache.lucene.codecs.DocValuesProducer;
+ * @opensearch.experimental
+import java.util.concurrent.atomic.AtomicInteger;
+            if (starTreeValuesList.isEmpty()) {  
+        MapperService mapperService  
+            default:
+    }
+import java.util.List;
+            }  
+    /**  
+        // Build all star-trees
+    private final SegmentWriteState state;  
+                    )
+/**
+    }
+ */
+}
+                        starTreeField.getStarTreeConfig().getBuildMode()  
+        switch (starTreeField.getStarTreeConfig().getBuildMode()) {
+                    String.format(  
+                        starTreeFieldType.getDimensions(),  
+        IndexOutput metaOut,
+            return;  
+        IndexOutput dataOut,  
+package org.opensearch.index.compositeindex.datacube.startree.builder;
+    private static final Logger logger = LogManager.getLogger(StarTreesBuilder.class);  
+    ) throws IOException {
+     * @param metaOut                    an IndexInput for star-tree metadata  
+                        "No star tree implementation is available for [%s] build mode",
+    public StarTreesBuilder(SegmentWriteState segmentWriteState, MapperService mapperService, AtomicInteger fieldNumberAcrossStarTrees) {
+            starTreeValuesSubsPerField.size()  
+                        Locale.ROOT,
+import java.io.Closeable;
+                );
+     * @param dataOut                      an IndexInput for star-tree data
+@ExperimentalApi  
+import org.apache.lucene.codecs.DocValuesConsumer;  
+            case ON_HEAP:  
+            List<StarTreeValues> starTreeValuesList = entry.getValue();
+import java.util.ArrayList;
+        this.mapperService = mapperService;  
+ *
+        }
+import java.util.Locale;  
+            try (StarTreeBuilder starTreeBuilder = getStarTreeBuilder(metaOut, dataOut, starTreeField, state, mapperService)) {  
+ */  
+        long startTime = System.currentTimeMillis();
+     * @param starTreeDocValuesConsumer  a consumer to write star-tree doc values  
+public class StarTreesBuilder implements Closeable {
+     */  
+                );
+import org.apache.lucene.index.SegmentWriteState;
+     * Builds all star-trees for given star-tree fields.
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
+     *  
+    }
+                return new OffHeapStarTreeBuilder(metaOut, dataOut, starTreeField, state, mapperService);  
+        }  
+        logger.debug("Starting building {} star-trees with star-tree fields", numStarTrees);
+        }  
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;  
+        // TODO : close files  
+        logger.debug("Starting merge of {} star-trees with star-tree fields", starTreeValuesSubsPerField.size());
         logger.debug(  
             "Took {} ms to merge {} star-trees with star-tree fields",
-            System.currentTimeMillis() - startTime,
-            starTreeValuesSubsPerField.size()  
-        );
-    }
-
-    /**
-     * Get star-tree builder based on build mode.
-     */  
-    StarTreeBuilder getStarTreeBuilder(
+import org.opensearch.index.mapper.StarTreeMapper;  
         IndexOutput metaOut,
-        IndexOutput dataOut,  
-        StarTreeField starTreeField,
-        SegmentWriteState state,
-        MapperService mapperService  
-    ) throws IOException {
-        switch (starTreeField.getStarTreeConfig().getBuildMode()) {
-            case ON_HEAP:  
+    ) throws IOException {  
+            }
+     * @throws IOException                 when an error occurs while building the star-trees
+                        starTreeFieldType.name(),
+     * @param starTreeValuesSubsPerField starTreeValuesSubs per field
+                && compositeMappedFieldType.unwrap() instanceof StarTreeMapper.StarTreeFieldType starTreeFieldType) {
+        for (CompositeMappedFieldType compositeMappedFieldType : mapperService.getCompositeFieldTypes()) {  
+    public void build(
                 return new OnHeapStarTreeBuilder(metaOut, dataOut, starTreeField, state, mapperService);
-            case OFF_HEAP:
-                return new OffHeapStarTreeBuilder(metaOut, dataOut, starTreeField, state, mapperService);  
-            default:
-                throw new IllegalArgumentException(
-                    String.format(  
-                        Locale.ROOT,
-                        "No star tree implementation is available for [%s] build mode",
-                        starTreeField.getStarTreeConfig().getBuildMode()  
-                    )
-                );
-        }  
+        if (starTreeFields.isEmpty()) {
+            }
+        SegmentWriteState state,
+ *  
+        int numStarTrees = starTreeFields.size();
+        this.fieldNumberAcrossStarTrees = fieldNumberAcrossStarTrees;
     }
-}
+ * this file be licensed under the Apache-2.0 license or a
+ * Builder to construct star-trees based on multiple star-tree fields.
+    }
+    private final MapperService mapperService;
+                    )  
+            StarTreeField starTreeField = starTreeValuesList.get(0).getStarTreeField();
+     */  
+    public void close() throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+            System.currentTimeMillis() - startTime,
+        this.state = segmentWriteState;
+    /**
+import org.opensearch.index.mapper.MapperService;
+        IndexOutput dataOut,
+        DocValuesConsumer starTreeDocValuesConsumer  
+import java.io.IOException;  
+        StarTreeField starTreeField,
+                    new StarTreeField(
+        for (StarTreeField starTreeField : starTreeFields) {
+                logger.debug("StarTreeValues is empty for all segments for field : {}", entry.getKey());
+    /**
+        logger.debug("Took {} ms to build {} star-trees with star-tree fields", System.currentTimeMillis() - startTime, numStarTrees);
+import org.opensearch.common.annotation.ExperimentalApi;
+            try (StarTreeBuilder builder = getStarTreeBuilder(metaOut, dataOut, starTreeField, state, mapperService)) {
+        long startTime = System.currentTimeMillis();  
+     * @param metaOut                      an IndexInput for star-tree metadata
+                        starTreeFieldType.getStarTreeConfig()
+        IndexOutput metaOut,  
+     */
+        Map<String, DocValuesProducer> fieldProducerMap,
+            }
+/*  
+        );
+import org.apache.logging.log4j.Logger;
+    StarTreeBuilder getStarTreeBuilder(
+        final Map<String, List<StarTreeValues>> starTreeValuesSubsPerField,
+                throw new IllegalArgumentException(
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.index.mapper.CompositeMappedFieldType;
+     * @param starTreeDocValuesConsumer    a consumer to write star-tree doc values
+    ) throws IOException {
+                builder.build(starTreeValuesList, fieldNumberAcrossStarTrees, starTreeDocValuesConsumer);  
+                starTreeBuilder.build(fieldProducerMap, fieldNumberAcrossStarTrees, starTreeDocValuesConsumer);
+     *
+        IndexOutput dataOut,  
+    private final List<StarTreeField> starTreeFields;
+            logger.debug("no star-tree fields found, returning from star-tree builder");
+     * Get star-tree builder based on build mode.
+    public void buildDuringMerge(
+import org.apache.lucene.store.IndexOutput;  
+                        starTreeFieldType.getMetrics(),
+    @Override
+                continue;
+        }  
+        this.starTreeFields = starTreeFields;
+            if (compositeMappedFieldType != null
+    private AtomicInteger fieldNumberAcrossStarTrees;
+        DocValuesConsumer starTreeDocValuesConsumer

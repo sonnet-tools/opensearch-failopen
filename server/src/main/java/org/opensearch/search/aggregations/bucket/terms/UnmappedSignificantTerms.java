@@ -1,187 +1,160 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.util.BytesRef;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;  
-import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
-
-import java.io.IOException;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-
-import static java.util.Collections.emptyIterator;
-import static java.util.Collections.emptyList;  
-
-/**
- * Result of the running the significant terms aggregation on an unmapped field.  
- *
- * @opensearch.internal
- */  
+    }  
+    @Override
 public class UnmappedSignificantTerms extends InternalSignificantTerms<UnmappedSignificantTerms, UnmappedSignificantTerms.Bucket> {
-
-    public static final String NAME = "umsigterms";  
-
-    /**
-     * Concrete type that can't be built because Java needs a concrete type so {@link InternalTerms.Bucket} can have a self type but  
-     * {@linkplain UnmappedTerms} doesn't ever need to build it because it never returns any buckets.
-     *
-     * @opensearch.internal  
-     */
-    protected abstract static class Bucket extends InternalSignificantTerms.Bucket<Bucket> {
-        private Bucket(  
-            BytesRef term,
-            long subsetDf,
-            long subsetSize,  
-            long supersetDf,
-            long supersetSize,
-            InternalAggregations aggregations,  
-            DocValueFormat format
-        ) {
-            super(subsetDf, subsetSize, supersetDf, supersetSize, aggregations, format);  
-        }
-    }
-
-    public UnmappedSignificantTerms(
-        String name,
-        TermsAggregator.BucketCountThresholds bucketCountThresholds,  
-        Map<String, Object> metadata
-    ) {
-        super(name, bucketCountThresholds, metadata);  
-    }
-
-    /**  
-     * Read from a stream.
-     */
-    public UnmappedSignificantTerms(StreamInput in) throws IOException {  
-        super(in);
-    }
-
-    @Override
-    protected void writeTermTypeInfoTo(StreamOutput out) throws IOException {
-        // Nothing to write  
-    }
-
-    @Override  
-    public String getWriteableName() {
-        return NAME;
-    }  
-
-    @Override
-    public String getType() {  
-        return SignificantStringTerms.NAME;
-    }
-
-    @Override
-    public UnmappedSignificantTerms create(List<Bucket> buckets) {
-        return new UnmappedSignificantTerms(name, bucketCountThresholds, metadata);  
-    }
-
-    @Override  
-    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
-        throw new UnsupportedOperationException("not supported for UnmappedSignificantTerms");
-    }  
-
-    @Override
-    protected UnmappedSignificantTerms create(long subsetSize, long supersetSize, List<Bucket> buckets) {  
-        throw new UnsupportedOperationException("not supported for UnmappedSignificantTerms");
-    }
-
-    @Override
-    Bucket createBucket(
-        long subsetDf,  
-        long subsetSize,
-        long supersetDf,
-        long supersetSize,  
-        InternalAggregations aggregations,
-        Bucket prototype
     ) {  
-        throw new UnsupportedOperationException("not supported for UnmappedSignificantTerms");
-    }
-
-    @Override
     public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        return new UnmappedSignificantTerms(name, bucketCountThresholds, metadata);  
-    }
-
-    @Override  
-    public boolean isMapped() {
-        return false;
-    }  
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
-        builder.startArray(CommonFields.BUCKETS.getPreferredName()).endArray();
-        return builder;
-    }  
-
-    @Override
+    public String getWriteableName() {
+ * software distributed under the License is distributed on an
+    protected long getSubsetSize() {
+    public UnmappedSignificantTerms(StreamInput in) throws IOException {  
     protected Bucket[] createBucketsArray(int size) {  
-        return new Bucket[size];
+        ) {
+    public boolean isMapped() {
+        Map<String, Object> metadata
     }
-
+        return NAME;
+            long subsetDf,
+import org.opensearch.core.xcontent.XContentBuilder;  
+    @Override
+    @Override  
+    }  
+    /**  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+import org.opensearch.core.common.io.stream.StreamOutput;
+        throw new UnsupportedOperationException("not supported for UnmappedSignificantTerms");
+            InternalAggregations aggregations,  
+        throw new UnsupportedOperationException("not supported for UnmappedSignificantTerms");
+        String name,
+    }
+            long supersetSize,
+    }
+    @Override  
+ *  
+        return new UnmappedSignificantTerms(name, bucketCountThresholds, metadata);  
+ * under the License.  
+        long supersetSize,  
+    @Override  
+ * ownership. Elasticsearch licenses this file to you under  
+    protected UnmappedSignificantTerms create(long subsetSize, long supersetSize, List<Bucket> buckets) {  
+    public List<Bucket> getBuckets() {
+    @Override
+    }
+            super(subsetDf, subsetSize, supersetDf, supersetSize, aggregations, format);  
+    protected void writeTermTypeInfoTo(StreamOutput out) throws IOException {
+ * license agreements. See the NOTICE file distributed with
+    }
+import org.opensearch.search.aggregations.InternalAggregation;
+     * Concrete type that can't be built because Java needs a concrete type so {@link InternalTerms.Bucket} can have a self type but  
+        return 0;
+    }  
+/*
+    @Override  
+    }
+        return emptyIterator();  
+    @Override
+            long supersetDf,
+        return null;
+/**
+        long supersetDf,
+ */  
+import org.opensearch.core.common.io.stream.StreamInput;
+    /**
+        long subsetDf,  
+ *
+import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
+     * {@linkplain UnmappedTerms} doesn't ever need to build it because it never returns any buckets.
+    protected SignificanceHeuristic getSignificanceHeuristic() {
+    }
+        return new Bucket[size];
+        return builder;
+        long subsetSize,
+/*
+import java.util.Map;  
+        throw new UnsupportedOperationException();  
+     */
+import org.opensearch.search.DocValueFormat;
+     * @opensearch.internal  
+import java.util.List;
+    }
+ * compatible open source license.
+        Bucket prototype
+        return 0;
+ * Modifications Copyright OpenSearch Contributors. See  
+import static java.util.Collections.emptyList;  
+        private Bucket(  
+ * GitHub history for details.
+    ) {
+ *
+     * Read from a stream.
+        super(name, bucketCountThresholds, metadata);  
+    }  
+    public UnmappedSignificantTerms create(List<Bucket> buckets) {
+    public String getType() {  
+    @Override  
+    }  
+    public static final String NAME = "umsigterms";  
+            long subsetSize,  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+ */  
+        InternalAggregations aggregations,
+    @Override
+            BytesRef term,
     @Override
     public Iterator<SignificantTerms.Bucket> iterator() {
-        return emptyIterator();  
-    }
-
-    @Override  
-    public List<Bucket> getBuckets() {
+    Bucket createBucket(
+        TermsAggregator.BucketCountThresholds bucketCountThresholds,  
+ * KIND, either express or implied.  See the License for the
         return emptyList();
-    }  
-
-    @Override
-    public SignificantTerms.Bucket getBucketByKey(String term) {  
-        return null;
-    }
-
-    @Override
-    protected SignificanceHeuristic getSignificanceHeuristic() {
-        throw new UnsupportedOperationException();  
-    }
-
-    @Override  
-    protected long getSubsetSize() {
-        return 0;
-    }  
-
-    @Override
     protected long getSupersetSize() {  
-        return 0;
+import java.io.IOException;  
+ * Result of the running the significant terms aggregation on an unmapped field.  
+    @Override
+/*  
+    public SignificantTerms.Bucket getBucketByKey(String term) {  
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        builder.startArray(CommonFields.BUCKETS.getPreferredName()).endArray();
+        return false;
+    }  
+     */
+    @Override
+        throw new UnsupportedOperationException("not supported for UnmappedSignificantTerms");
+import static java.util.Collections.emptyIterator;
+    public UnmappedSignificantTerms(
+ * Unless required by applicable law or agreed to in writing,
+    protected abstract static class Bucket extends InternalSignificantTerms.Bucket<Bucket> {
+package org.opensearch.search.aggregations.bucket.terms;
+        return SignificantStringTerms.NAME;
+    @Override
+        }
     }
 }  
+ * this file be licensed under the Apache-2.0 license or a
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
+    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
+    }
+    }
+    }
+        // Nothing to write  
+import org.apache.lucene.util.BytesRef;  
+        super(in);
+        return new UnmappedSignificantTerms(name, bucketCountThresholds, metadata);  
+ * You may obtain a copy of the License at  
+ */
+ * not use this file except in compliance with the License.
+     *
+            DocValueFormat format
+import org.opensearch.search.aggregations.InternalAggregations;  
+ */
+ * @opensearch.internal
+    @Override
+    }
+    @Override
+import java.util.Iterator;
+    }
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may

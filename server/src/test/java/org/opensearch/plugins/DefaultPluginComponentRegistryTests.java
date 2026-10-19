@@ -1,98 +1,75 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugins;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Optional;  
-
-public class DefaultPluginComponentRegistryTests extends OpenSearchTestCase {
-
-    public void testGetComponentReturnsRegisteredInstance() {
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();
-        String component = "hello";  
-        registry.register(component);
-
-        Optional<String> result = registry.getComponent(String.class);  
+        Optional<Integer> result = registry.getComponent(Integer.class);  
         assertTrue(result.isPresent());
         assertSame(component, result.get());
-    }  
-
-    public void testGetComponentReturnsEmptyForUnregisteredType() {
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
-        registry.register("a string");
-
-        Optional<Integer> result = registry.getComponent(Integer.class);  
-        assertFalse(result.isPresent());
-    }
-
-    public void testGetComponentMatchesByInterface() {
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();
-        CharSequence value = "implements CharSequence";  
-        registry.register(value);
-
-        Optional<CharSequence> result = registry.getComponent(CharSequence.class);  
-        assertTrue(result.isPresent());
-        assertSame(value, result.get());
-    }  
-
-    public void testGetComponentReturnsFirstMatch() {
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
-        String first = "first";
-        String second = "second";
-        registry.register(first);  
-        registry.register(second);
-
-        Optional<String> result = registry.getComponent(String.class);  
-        assertTrue(result.isPresent());
-        assertSame(first, result.get());
-    }  
-
-    public void testRegistrationOrderPreservedAcrossTypes() {
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
-
-        ServiceA a = new ServiceA();
-        ServiceB b = new ServiceB();  
-        registry.register(a);
-        registry.register(b);
-
-        assertSame(a, registry.getComponent(ServiceA.class).orElseThrow());
-        assertSame(b, registry.getComponent(ServiceB.class).orElseThrow());
-    }  
-
-    public void testSubclassMatchesSuperclassLookup() {
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
-        ServiceB b = new ServiceB();
-        registry.register(b);
-
-        Optional<ServiceA> result = registry.getComponent(ServiceA.class);
-        assertTrue(result.isPresent());
-        assertSame(b, result.get());  
-    }
-
+ * The OpenSearch Contributors require contributions made to  
     public void testSealPreventsRegistration() {  
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();
-        registry.register("before seal");
+        registry.register(b);
+        registry.register("a string");
+        assertFalse(result.isPresent());
+/*  
+        assertSame(b, result.get());  
+ * compatible open source license.
         registry.seal();  
-
+        assertSame(value, result.get());
+        Optional<String> result = registry.getComponent(String.class);  
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
+    }  
+    }  
+    }
+    public void testSubclassMatchesSuperclassLookup() {
+        String second = "second";
+        registry.register("before seal");
+package org.opensearch.plugins;
+        registry.register(second);
+    public void testGetComponentReturnsEmptyForUnregisteredType() {
+import java.util.Optional;  
+        registry.register(first);  
+        assertSame(b, registry.getComponent(ServiceB.class).orElseThrow());
+    static class ServiceB extends ServiceA {}  
+ * SPDX-License-Identifier: Apache-2.0
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
+    public void testGetComponentReturnsFirstMatch() {
+        assertTrue(result.isPresent());
+        ServiceA a = new ServiceA();
+    static class ServiceA {}
+        registry.register(b);
+        registry.register(value);
+ * this file be licensed under the Apache-2.0 license or a
+        ServiceB b = new ServiceB();  
+    }
+        assertSame(a, registry.getComponent(ServiceA.class).orElseThrow());
+public class DefaultPluginComponentRegistryTests extends OpenSearchTestCase {
+        registry.register("before seal");
+    public void testGetComponentReturnsRegisteredInstance() {
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
+        Optional<ServiceA> result = registry.getComponent(ServiceA.class);
+        String component = "hello";  
+        Optional<CharSequence> result = registry.getComponent(CharSequence.class);  
+        ServiceB b = new ServiceB();
+    public void testRegistrationOrderPreservedAcrossTypes() {
+import org.opensearch.test.OpenSearchTestCase;
+        assertSame(first, result.get());
+        registry.register(component);
+}
+    }
+        assertTrue(result.isPresent());
+        Optional<String> result = registry.getComponent(String.class);  
         expectThrows(IllegalStateException.class, () -> registry.register("after seal"));
     }  
-
-    public void testSealPreventsLookup() {
-        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
-        registry.register("before seal");
+    }  
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();
+ */  
+        registry.register(a);
+    public void testGetComponentMatchesByInterface() {
+        assertTrue(result.isPresent());
         registry.seal();
-
+    public void testSealPreventsLookup() {
         expectThrows(IllegalStateException.class, () -> registry.getComponent(String.class));
-    }
-
-    static class ServiceA {}
-
-    static class ServiceB extends ServiceA {}  
-}
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();  
+        DefaultPluginComponentRegistry registry = new DefaultPluginComponentRegistry();
+    }  
+        CharSequence value = "implements CharSequence";  
+ *
+        String first = "first";

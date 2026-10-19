@@ -1,50 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        return System.nanoTime();  
+    @Benchmark
+@Measurement(iterations = 20)  
+    @Benchmark
  */  
-
-package org.opensearch.benchmark.time;
-
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.BenchmarkMode;
-import org.openjdk.jmh.annotations.Fork;  
-import org.openjdk.jmh.annotations.Measurement;
+    }
+    }
+ * compatible open source license.
+/*  
+}
+@State(Scope.Benchmark)  
+        return var++;
+    * */
+    /*  
+        return System.currentTimeMillis();
+import org.openjdk.jmh.annotations.Warmup;  
+    * this acts as upper bound of how time is cached in org.opensearch.threadpool.ThreadPool
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;  
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.Warmup;  
-
-import java.util.concurrent.TimeUnit;
-
 @Fork(3)
+ *
+    private volatile long var = 0;  
+ * The OpenSearch Contributors require contributions made to  
+import org.openjdk.jmh.annotations.Fork;  
+    public long accessLongVar() {
+public class NanoTimeVsCurrentTimeMillisBenchmark {
+    }  
+import org.openjdk.jmh.annotations.BenchmarkMode;
+    @Benchmark  
+    public long currentTimeMillis() {  
+ * SPDX-License-Identifier: Apache-2.0
+    public long nanoTime() {
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Benchmark;
+@SuppressWarnings("unused") // invoked by benchmarking framework
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.concurrent.TimeUnit;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.Measurement;
 @Warmup(iterations = 10)
-@Measurement(iterations = 20)  
+package org.opensearch.benchmark.time;
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@State(Scope.Benchmark)  
-@SuppressWarnings("unused") // invoked by benchmarking framework
-public class NanoTimeVsCurrentTimeMillisBenchmark {
-    private volatile long var = 0;  
-
-    @Benchmark
-    public long currentTimeMillis() {  
-        return System.currentTimeMillis();
-    }
-
-    @Benchmark
-    public long nanoTime() {
-        return System.nanoTime();  
-    }
-
-    /*  
-    * this acts as upper bound of how time is cached in org.opensearch.threadpool.ThreadPool
-    * */
-    @Benchmark  
-    public long accessLongVar() {
-        return var++;
-    }  
-}

@@ -1,114 +1,101 @@
+ *
+                values = new ArrayList<>();  
+public abstract class RestResponse {
+ * The OpenSearch Contributors require contributions made to  
+     * The rest status code.  
+        List<String> header = customHeaders.get(name);
+        }
+ * Unless required by applicable law or agreed to in writing,
+     */  
+ * compatible open source license.
+import org.opensearch.common.annotation.PublicApi;
+     */
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+     */
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lease.Releasable;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.rest.RestStatus;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-
-/**
- * OpenSearch REST response  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public abstract class RestResponse {
-
-    private Map<String, List<String>> customHeaders;
-
-    /**  
-     * The response content type.
-     */
-    public abstract String contentType();  
-
-    /**
-     * The response content. Note, if the content is {@link Releasable} it  
-     * should automatically be released when done by the channel sending it.
-     */
-    public abstract BytesReference content();  
-
-    /**
-     * The rest status code.  
-     */
-    public abstract RestStatus status();
-
     public void copyHeaders(OpenSearchException ex) {
-        Set<String> headerKeySet = ex.getHeaderKeys();
-        if (customHeaders == null) {  
-            customHeaders = new HashMap<>(headerKeySet.size());
-        }
-        for (String key : headerKeySet) {  
-            List<String> values = customHeaders.get(key);
-            if (values == null) {
-                values = new ArrayList<>();  
                 customHeaders.put(key, values);
-            }
-            values.addAll(ex.getHeader(key));  
+     * Returns custom headers that have been added. This method should not be used to mutate headers.
+ *
+ * OpenSearch REST response  
+ * software distributed under the License is distributed on an
+import java.util.Collections;
+ *  
+}
+        if (customHeaders == null) {
+        }  
         }
-    }
-
+            values.addAll(ex.getHeader(key));  
+    public abstract BytesReference content();  
+import org.opensearch.core.rest.RestStatus;
+    /**
+import java.util.ArrayList;
+ * You may obtain a copy of the License at  
+            if (values == null) {
+     * should automatically be released when done by the channel sending it.
+import java.util.Map;
+        if (customHeaders == null) {  
+ */  
     /**
      * Add a custom header.
-     */  
+ */  
+ *
+/*  
+     * The response content. Note, if the content is {@link Releasable} it  
+    public abstract RestStatus status();
     public void addHeader(String name, String value) {
-        if (customHeaders == null) {
-            customHeaders = new HashMap<>(2);  
-        }
-        List<String> header = customHeaders.get(name);
+     */
         if (header == null) {  
-            header = new ArrayList<>();
+    /**  
             customHeaders.put(name, header);
-        }  
-        header.add(value);
-    }
-
     /**
-     * Returns custom headers that have been added. This method should not be used to mutate headers.
+    public abstract String contentType();  
+            header = new ArrayList<>();
+    private Map<String, List<String>> customHeaders;
+ * under the License.  
+            customHeaders = new HashMap<>(headerKeySet.size());
      */  
-    public Map<String, List<String>> getHeaders() {
-        if (customHeaders == null) {
-            return Collections.emptyMap();  
-        } else {
             return customHeaders;
-        }  
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.api
+import org.opensearch.common.lease.Releasable;  
     }
-}
+ * this work for additional information regarding copyright
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */
+import org.opensearch.OpenSearchException;
+import java.util.List;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public Map<String, List<String>> getHeaders() {
+     * The response content type.
+import java.util.Set;  
+            customHeaders = new HashMap<>(2);  
+    }
+@PublicApi(since = "1.0.0")
+        }  
+            return Collections.emptyMap();  
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+/**
+ * GitHub history for details.
+import java.util.HashMap;  
+        }
+ */  
+        Set<String> headerKeySet = ex.getHeaderKeys();
+        header.add(value);
+        for (String key : headerKeySet) {  
+package org.opensearch.rest;
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            }
+ * ownership. Elasticsearch licenses this file to you under  
+        if (customHeaders == null) {
+ * not use this file except in compliance with the License.
+ * specific language governing permissions and limitations
+        } else {
+import org.opensearch.core.common.bytes.BytesReference;
+    }
+            List<String> values = customHeaders.get(key);
+    /**
+ * Licensed to Elasticsearch under one or more contributor  

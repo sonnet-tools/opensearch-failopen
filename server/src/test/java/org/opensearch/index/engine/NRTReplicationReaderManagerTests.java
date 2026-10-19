@@ -1,88 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.index.StandardDirectoryReader;  
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.util.Version;
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;  
-import org.opensearch.index.codec.CodecService;
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SequenceNumbers;  
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.TranslogConfig;
-
-import java.io.IOException;
-import java.util.List;
-
 import static java.util.Collections.emptyList;
-
-public class NRTReplicationReaderManagerTests extends EngineTestCase {  
-
-    public void testCreateNRTreaderManager() throws IOException {
-        try (final Store store = createStore()) {  
-            store.createEmpty(Version.LATEST);
             final DirectoryReader reader = DirectoryReader.open(store.directory());
-            final SegmentInfos initialInfos = ((StandardDirectoryReader) reader).getSegmentInfos();  
-
-            // Create a minimal engine config for testing
-            EngineConfig testConfig = new EngineConfig.Builder().shardId(shardId)  
-                .threadPool(threadPool)
-                .indexSettings(defaultSettings)
-                .warmer(null)  
-                .store(store)
-                .mergePolicy(newMergePolicy())
-                .analyzer(newIndexWriterConfig().getAnalyzer())  
-                .similarity(newIndexWriterConfig().getSimilarity())
-                .codecService(new CodecService(null, defaultSettings, logger, List.of()))
-                .eventListener(new Engine.EventListener() {  
-                })
-                .queryCache(IndexSearcher.getDefaultQueryCache())
-                .queryCachingPolicy(IndexSearcher.getDefaultQueryCachingPolicy())  
-                .translogConfig(new TranslogConfig(shardId, createTempDir(), defaultSettings, BigArrays.NON_RECYCLING_INSTANCE, "", false))
-                .flushMergesAfter(TimeValue.timeValueMinutes(5))
-                .externalRefreshListener(emptyList())  
-                .internalRefreshListener(emptyList())
-                .indexSort(null)
-                .circuitBreakerService(new NoneCircuitBreakerService())  
-                .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
-                .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-                .primaryTermSupplier(primaryTerm)  
-                .tombstoneDocSupplier(tombstoneDocSupplier())
-                .build();
-
-            NRTReplicationReaderManager readerManager = new NRTReplicationReaderManager(
-                OpenSearchDirectoryReader.wrap(reader, shardId),
-                (files) -> {},  
-                (files) -> {},
-                testConfig
-            );  
-            assertEquals(initialInfos, readerManager.getSegmentInfos());
-            try (final OpenSearchDirectoryReader acquire = readerManager.acquire()) {
-                assertNull(readerManager.refreshIfNeeded(acquire));  
-            }
-
-            // create an updated infos  
             final SegmentInfos infos_2 = readerManager.getSegmentInfos().clone();
-            infos_2.changed();
-
-            readerManager.updateSegments(infos_2);
-            assertEquals(infos_2, readerManager.getSegmentInfos());
-            try (final OpenSearchDirectoryReader acquire = readerManager.acquire()) {  
-                final StandardDirectoryReader standardReader = NRTReplicationReaderManager.unwrapStandardReader(acquire);
-                assertEquals(infos_2, standardReader.getSegmentInfos());
-            }  
-        }
     }
+                .warmer(null)  
+                .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+import org.apache.lucene.index.DirectoryReader;
+                .tombstoneDocSupplier(tombstoneDocSupplier())
+                .similarity(newIndexWriterConfig().getSimilarity())
+            );  
+            // Create a minimal engine config for testing
+import org.opensearch.index.store.Store;
+            assertEquals(initialInfos, readerManager.getSegmentInfos());
+            try (final OpenSearchDirectoryReader acquire = readerManager.acquire()) {  
+ * compatible open source license.
+                (files) -> {},
+                .queryCache(IndexSearcher.getDefaultQueryCache())
+                .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
+import org.opensearch.index.translog.TranslogConfig;
+                assertNull(readerManager.refreshIfNeeded(acquire));  
+                final StandardDirectoryReader standardReader = NRTReplicationReaderManager.unwrapStandardReader(acquire);
+        try (final Store store = createStore()) {  
+                })
+            }  
+    public void testCreateNRTreaderManager() throws IOException {
+                testConfig
+            EngineConfig testConfig = new EngineConfig.Builder().shardId(shardId)  
+public class NRTReplicationReaderManagerTests extends EngineTestCase {  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;  
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;  
+            final SegmentInfos initialInfos = ((StandardDirectoryReader) reader).getSegmentInfos();  
+                .primaryTermSupplier(primaryTerm)  
+            assertEquals(infos_2, readerManager.getSegmentInfos());
+                .indexSettings(defaultSettings)
+                .codecService(new CodecService(null, defaultSettings, logger, List.of()))
+            readerManager.updateSegments(infos_2);
+import org.apache.lucene.index.StandardDirectoryReader;  
+import java.io.IOException;
+                .externalRefreshListener(emptyList())  
+import org.opensearch.index.seqno.RetentionLeases;
+import java.util.List;
+                .analyzer(newIndexWriterConfig().getAnalyzer())  
+                .store(store)
+                .build();
+                .translogConfig(new TranslogConfig(shardId, createTempDir(), defaultSettings, BigArrays.NON_RECYCLING_INSTANCE, "", false))
+                .queryCachingPolicy(IndexSearcher.getDefaultQueryCachingPolicy())  
+import org.apache.lucene.index.SegmentInfos;
+ * SPDX-License-Identifier: Apache-2.0
+        }
+            infos_2.changed();
+import org.opensearch.common.unit.TimeValue;
+                OpenSearchDirectoryReader.wrap(reader, shardId),
+import org.opensearch.index.seqno.SequenceNumbers;  
+            try (final OpenSearchDirectoryReader acquire = readerManager.acquire()) {
+                assertEquals(infos_2, standardReader.getSegmentInfos());
+            NRTReplicationReaderManager readerManager = new NRTReplicationReaderManager(
 }  
+                .eventListener(new Engine.EventListener() {  
+package org.opensearch.index.engine;
+ */  
+                .threadPool(threadPool)
+            // create an updated infos  
+            }
+                .internalRefreshListener(emptyList())
+/*  
+                .mergePolicy(newMergePolicy())
+            store.createEmpty(Version.LATEST);
+import org.opensearch.common.util.BigArrays;
+import org.apache.lucene.util.Version;
+import org.apache.lucene.search.IndexSearcher;
+ *
+                .circuitBreakerService(new NoneCircuitBreakerService())  
+                .indexSort(null)
+                (files) -> {},  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.codec.CodecService;
+                .flushMergesAfter(TimeValue.timeValueMinutes(5))

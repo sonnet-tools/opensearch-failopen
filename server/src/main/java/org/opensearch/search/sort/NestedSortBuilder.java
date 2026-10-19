@@ -1,214 +1,187 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.sort;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.index.query.QueryRewriteContext;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-import static org.opensearch.search.sort.SortBuilder.parseNestedFilter;  
-
-/**
- * Builds a sort on nested objects  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class NestedSortBuilder implements Writeable, ToXContentObject {
-    public static final ParseField NESTED_FIELD = new ParseField("nested");  
-    public static final ParseField PATH_FIELD = new ParseField("path");
-    public static final ParseField FILTER_FIELD = new ParseField("filter");
-    public static final ParseField MAX_CHILDREN_FIELD = new ParseField("max_children");  
-
-    private final String path;
-    private QueryBuilder filter;  
-    private int maxChildren = Integer.MAX_VALUE;
-    private NestedSortBuilder nestedSort;
-
-    public NestedSortBuilder(String path) {
-        this.path = path;
-    }  
-
-    public NestedSortBuilder(StreamInput in) throws IOException {
-        path = in.readOptionalString();  
-        filter = in.readOptionalNamedWriteable(QueryBuilder.class);
-        nestedSort = in.readOptionalWriteable(NestedSortBuilder::new);
-        maxChildren = in.readVInt();  
-    }
-
-    public String getPath() {  
-        return path;
-    }
-
-    public QueryBuilder getFilter() {
-        return filter;
-    }  
-
-    public int getMaxChildren() {
-        return maxChildren;  
-    }
-
-    public NestedSortBuilder setFilter(final QueryBuilder filter) {  
-        this.filter = filter;
-        return this;
-    }  
-
-    public NestedSortBuilder setMaxChildren(final int maxChildren) {
-        this.maxChildren = maxChildren;  
-        return this;
-    }
-
-    public NestedSortBuilder getNestedSort() {
-        return nestedSort;
-    }  
-
-    public NestedSortBuilder setNestedSort(final NestedSortBuilder nestedSortBuilder) {
-        this.nestedSort = nestedSortBuilder;  
-        return this;
-    }
-
-    /**
-     * Write this object's fields to a {@linkplain StreamOutput}.
-     */  
-    @Override
-    public void writeTo(final StreamOutput out) throws IOException {
+            && Objects.equals(maxChildren, that.maxChildren)  
+            return this;
         out.writeOptionalString(path);  
-        out.writeOptionalNamedWriteable(filter);
-        out.writeOptionalWriteable(nestedSort);
-        out.writeVInt(maxChildren);  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-        builder.startObject();
-        if (path != null) {  
-            builder.field(PATH_FIELD.getPreferredName(), path);
-        }
-        if (filter != null) {  
+ */  
+ * KIND, either express or implied.  See the License for the
+import java.io.IOException;  
             builder.field(FILTER_FIELD.getPreferredName(), filter);
+import org.opensearch.core.common.io.stream.StreamInput;  
+    }
+            return new NestedSortBuilder(this.path).setFilter(rewriteFilter).setMaxChildren(this.maxChildren).setNestedSort(rewriteNested);
+ * ownership. Elasticsearch licenses this file to you under  
         }
-
-        if (maxChildren != Integer.MAX_VALUE) {
-            builder.field(MAX_CHILDREN_FIELD.getPreferredName(), maxChildren);
+import org.opensearch.core.xcontent.XContentParser;
+@PublicApi(since = "1.0.0")
+    }
+                } else {
+ *
+ */  
+        String path = null;
+    }
+        out.writeVInt(maxChildren);  
+        return this;
+ * the Apache License, Version 2.0 (the "License"); you may
+        return new NestedSortBuilder(path).setFilter(filter).setMaxChildren(maxChildren).setNestedSort(nestedSort);
+import org.opensearch.core.xcontent.ToXContentObject;  
+                        throw new IllegalArgumentException("malformed nested sort format, unknown field name [" + currentName + "]");  
+        return this;
+        }
+    }
+ * The OpenSearch Contributors require contributions made to  
+        builder.startObject();
+/*  
+        if (token == XContentParser.Token.START_OBJECT) {
+        }
+        return Objects.hash(path, filter, nestedSort, maxChildren);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public NestedSortBuilder rewrite(QueryRewriteContext ctx) throws IOException {  
+    public static final ParseField PATH_FIELD = new ParseField("path");
+                    } else if (currentName.equals(NESTED_FIELD.getPreferredName())) {  
+ * license agreements. See the NOTICE file distributed with
+            return true;
         }  
-
-        if (nestedSort != null) {
+ * specific language governing permissions and limitations
+        return nestedSort;
+                    } else if (currentName.equals(MAX_CHILDREN_FIELD.getPreferredName())) {
+        }  
+        }
+/**
+                }
+        if (filter != null) {  
+                if (token == XContentParser.Token.FIELD_NAME) {  
+     * Write this object's fields to a {@linkplain StreamOutput}.
+        QueryBuilder filter = null;
+            return false;
+        int maxChildren = Integer.MAX_VALUE;  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.common.io.stream.Writeable;
+     */  
+        if (obj == null || getClass() != obj.getClass()) {  
+        }
+            return this;  
+        return path;
+ * under the License.  
+            && Objects.equals(filter, that.filter)
+                    } else {
+                        filter = parseNestedFilter(parser);  
+        NestedSortBuilder that = (NestedSortBuilder) obj;  
+    }
+        } else {
+        if (this == obj) {  
+                        path = parser.text();
+    public int hashCode() {
+                    String currentName = parser.currentName();
+    public NestedSortBuilder setNestedSort(final NestedSortBuilder nestedSortBuilder) {
             builder.field(NESTED_FIELD.getPreferredName(), nestedSort);  
         }
-        builder.endObject();
-        return builder;  
+ * GitHub history for details.
+    private NestedSortBuilder nestedSort;
+import static org.opensearch.search.sort.SortBuilder.parseNestedFilter;  
+    public NestedSortBuilder setMaxChildren(final int maxChildren) {
+        return this;
+ *  
+            builder.field(MAX_CHILDREN_FIELD.getPreferredName(), maxChildren);
     }
-
-    public static NestedSortBuilder fromXContent(XContentParser parser) throws IOException {  
-        String path = null;
-        QueryBuilder filter = null;
-        int maxChildren = Integer.MAX_VALUE;  
-        NestedSortBuilder nestedSort = null;
-
-        XContentParser.Token token = parser.currentToken();  
-        if (token == XContentParser.Token.START_OBJECT) {
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {  
-                    String currentName = parser.currentName();
-                    parser.nextToken();
-                    if (currentName.equals(PATH_FIELD.getPreferredName())) {  
-                        path = parser.text();
-                    } else if (currentName.equals(FILTER_FIELD.getPreferredName())) {
-                        filter = parseNestedFilter(parser);  
-                    } else if (currentName.equals(MAX_CHILDREN_FIELD.getPreferredName())) {
-                        maxChildren = parser.intValue();
-                    } else if (currentName.equals(NESTED_FIELD.getPreferredName())) {  
-                        nestedSort = NestedSortBuilder.fromXContent(parser);
-                    } else {
-                        throw new IllegalArgumentException("malformed nested sort format, unknown field name [" + currentName + "]");  
-                    }
-                } else {
-                    throw new IllegalArgumentException("malformed nested sort format, only field names are allowed");  
-                }
-            }
-        } else {  
-            throw new IllegalArgumentException("malformed nested sort format, must start with an object");
-        }
-
-        return new NestedSortBuilder(path).setFilter(filter).setMaxChildren(maxChildren).setNestedSort(nestedSort);
+ *
+public class NestedSortBuilder implements Writeable, ToXContentObject {
+    private int maxChildren = Integer.MAX_VALUE;
+ */
+        return maxChildren;  
+    public static final ParseField MAX_CHILDREN_FIELD = new ParseField("max_children");  
     }
-
-    @Override
-    public boolean equals(final Object obj) {
-        if (this == obj) {  
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {  
-            return false;
-        }
-        NestedSortBuilder that = (NestedSortBuilder) obj;  
-        return Objects.equals(path, that.path)
-            && Objects.equals(filter, that.filter)
-            && Objects.equals(maxChildren, that.maxChildren)  
-            && Objects.equals(nestedSort, that.nestedSort);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(path, filter, nestedSort, maxChildren);  
-    }
-
-    public NestedSortBuilder rewrite(QueryRewriteContext ctx) throws IOException {  
-        if (filter == null && nestedSort == null) {
-            return this;
-        }  
-        QueryBuilder rewriteFilter = this.filter;
-        NestedSortBuilder rewriteNested = this.nestedSort;
-        if (filter != null) {  
-            rewriteFilter = filter.rewrite(ctx);
-        }
+        out.writeOptionalNamedWriteable(filter);
+        if (maxChildren != Integer.MAX_VALUE) {
         if (nestedSort != null) {  
-            rewriteNested = nestedSort.rewrite(ctx);
-        }
+        builder.endObject();
+ * Unless required by applicable law or agreed to in writing,
+    public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
+    public static final ParseField FILTER_FIELD = new ParseField("filter");
+    @Override
+ * @opensearch.api
+    @Override  
+    public String getPath() {  
+        out.writeOptionalWriteable(nestedSort);
+    public static NestedSortBuilder fromXContent(XContentParser parser) throws IOException {  
+ * Builds a sort on nested objects  
         if (rewriteFilter != this.filter || rewriteNested != this.nestedSort) {  
-            return new NestedSortBuilder(this.path).setFilter(rewriteFilter).setMaxChildren(this.maxChildren).setNestedSort(rewriteNested);
-        } else {
-            return this;  
-        }
+/*  
+        if (filter != null) {  
     }
+    public NestedSortBuilder setFilter(final QueryBuilder filter) {  
+                    if (currentName.equals(PATH_FIELD.getPreferredName())) {  
+    public QueryBuilder getFilter() {
+    public static final ParseField NESTED_FIELD = new ParseField("nested");  
+    public NestedSortBuilder(String path) {
+ *
+        maxChildren = in.readVInt();  
+    @Override
+import java.util.Objects;
+        nestedSort = in.readOptionalWriteable(NestedSortBuilder::new);
+        this.path = path;
+import org.opensearch.core.ParseField;
+        if (path != null) {  
+        }
+        } else {  
+        path = in.readOptionalString();  
+            throw new IllegalArgumentException("malformed nested sort format, must start with an object");
+        XContentParser.Token token = parser.currentToken();  
+    }
+import org.opensearch.index.query.QueryBuilder;  
+        if (nestedSort != null) {
+        return Objects.equals(path, that.path)
+    public boolean equals(final Object obj) {
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            rewriteNested = nestedSort.rewrite(ctx);
+    }  
 }  
+            rewriteFilter = filter.rewrite(ctx);
+ * You may obtain a copy of the License at  
+    }
+import org.opensearch.index.query.QueryRewriteContext;
+        }
+        this.filter = filter;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * software distributed under the License is distributed on an
+    private QueryBuilder filter;  
+ */  
+                    }
+    public int getMaxChildren() {
+package org.opensearch.search.sort;
+    }  
+ * compatible open source license.
+        NestedSortBuilder rewriteNested = this.nestedSort;
+    @Override
+    private final String path;
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+        NestedSortBuilder nestedSort = null;
+ * this work for additional information regarding copyright
+    }
+        this.nestedSort = nestedSortBuilder;  
+    }  
+        filter = in.readOptionalNamedWriteable(QueryBuilder.class);
+    /**
+    public NestedSortBuilder(StreamInput in) throws IOException {
+/*
+import org.opensearch.common.annotation.PublicApi;
+        return filter;
+    }  
+import org.opensearch.core.xcontent.XContentBuilder;
+ * Licensed to Elasticsearch under one or more contributor  
+        return builder;  
+ * not use this file except in compliance with the License.
+                    parser.nextToken();
+        }
+        if (filter == null && nestedSort == null) {
+                        maxChildren = parser.intValue();
+                    } else if (currentName.equals(FILTER_FIELD.getPreferredName())) {
+        QueryBuilder rewriteFilter = this.filter;
+    public void writeTo(final StreamOutput out) throws IOException {
+            && Objects.equals(nestedSort, that.nestedSort);
+            }
+            builder.field(PATH_FIELD.getPreferredName(), path);
+                        nestedSort = NestedSortBuilder.fromXContent(parser);
+                    throw new IllegalArgumentException("malformed nested sort format, only field names are allowed");  
+    public NestedSortBuilder getNestedSort() {
+        this.maxChildren = maxChildren;  

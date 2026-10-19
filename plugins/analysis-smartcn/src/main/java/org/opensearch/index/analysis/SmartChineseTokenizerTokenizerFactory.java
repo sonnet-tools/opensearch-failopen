@@ -1,51 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.cn.smart.HMMChineseTokenizer;
 import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
 public class SmartChineseTokenizerTokenizerFactory extends AbstractTokenizerFactory {
-
-    public SmartChineseTokenizerTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
-        super(indexSettings, settings, name);
-    }
-
+ * under the License.  
     @Override
+ * software distributed under the License is distributed on an
     public Tokenizer create() {
-        return new HMMChineseTokenizer();  
     }
+    }
+ * GitHub history for details.
+ */
+package org.opensearch.index.analysis;
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+import org.opensearch.index.IndexSettings;
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.analysis.cn.smart.HMMChineseTokenizer;
+/*
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+ * Unless required by applicable law or agreed to in writing,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Modifications Copyright OpenSearch Contributors. See
+/*  
+import org.opensearch.env.Environment;
+import org.apache.lucene.analysis.Tokenizer;
+        super(indexSettings, settings, name);
 }
+    public SmartChineseTokenizerTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
+ */  
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+        return new HMMChineseTokenizer();  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+ * specific language governing permissions and limitations
+ * SPDX-License-Identifier: Apache-2.0

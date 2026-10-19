@@ -1,182 +1,164 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.TokenFilter;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.en.EnglishMinimalStemFilter;  
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.analysis.tokenattributes.KeywordAttribute;
-
-import java.io.IOException;
-
-public final class EnglishPluralStemFilter extends TokenFilter {  
-    private final EnglishPluralStemmer stemmer = new EnglishPluralStemmer();
-    private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
-    private final KeywordAttribute keywordAttr = addAttribute(KeywordAttribute.class);  
-
-    public EnglishPluralStemFilter(TokenStream input) {
         super(input);  
-    }
-
-    @Override  
-    public boolean incrementToken() throws IOException {
-        if (input.incrementToken()) {
-            if (!keywordAttr.isKeyword()) {  
-                final int newlen = stemmer.stem(termAtt.buffer(), termAtt.length());
-                termAtt.setLength(newlen);
-            }  
-            return true;
-        } else {
-            return false;  
-        }
-    }
-
-    /**
-     * Plural stemmer for English based on the {@link EnglishMinimalStemFilter}
-     * <p>  
-     * This stemmer removes plurals but beyond EnglishMinimalStemFilter adds
-     * four new suffix rules to remove dangling e characters:
-     * <ul>  
-     * <li>xes - "boxes" becomes "box"</li>
-     * <li>sses - "dresses" becomes "dress"</li>
-     * <li>shes - "dishes" becomes "dish"</li>  
-     * <li>tches - "watches" becomes "watch"</li>
-     * </ul>
-     * See https://github.com/elastic/elasticsearch/issues/42892  
-     * <p>
-     * In addition the s stemmer logic is amended so that
-     * <ul>  
-     * <li>ees-&gt;ee so that bees matches bee</li>
-     * <li>ies-&gt;y only on longer words to that ties matches tie</li>
-     * <li>oes-&gt;o rule so that tomatoes matches tomato but retains e for some words eg shoes to shoe</li>  
-     * </ul>
-     */
-    public static class EnglishPluralStemmer {  
-
-        // Words ending in oes that retain the e when stemmed
-        public static final char[][] oesExceptions = { "shoes".toCharArray(), "canoes".toCharArray(), "oboes".toCharArray() };  
+                boolean matched = true;
+import org.apache.lucene.analysis.tokenattributes.KeywordAttribute;
+                        // oes
+                if (matched) {
+ * Modifications Copyright OpenSearch Contributors. See
+                    // Modified ies->y logic from original s-stemmer - only work on strings > 4
+                                // Only remove the S
+}
+                int sPos = len - 1;
+                                    // Remove the es  
+ * not use this file except in compliance with the License.
+                                    if (isException(s, len, chesExceptions)) {
         // Words ending in ches that retain the e when stemmed
-        public static final char[][] chesExceptions = {
-            "cliches".toCharArray(),  
-            "avalanches".toCharArray(),
-            "mustaches".toCharArray(),
-            "moustaches".toCharArray(),  
-            "quiches".toCharArray(),
-            "headaches".toCharArray(),
-            "heartaches".toCharArray(),  
+                    }  
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+                            if (s[len - 4] == 's' && (s[len - 3] == 'h' || s[len - 3] == 's')) {
+ *  
+ * The OpenSearch Contributors require contributions made to  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                termAtt.setLength(newlen);
+public final class EnglishPluralStemFilter extends TokenFilter {  
+                    rulePos--;
+import org.apache.lucene.analysis.en.EnglishMinimalStemFilter;  
+        // Words ending in oes that retain the e when stemmed
+            return true;
+                        }
+     * </ul>
+                    return len;  
+        public int stem(char s[], int len) {  
+        }
             "porsches".toCharArray(),
+                                    }
+                            if (isException(s, len, oesExceptions)) {
+                            }
+     * <li>shes - "dishes" becomes "dish"</li>  
+     * See https://github.com/elastic/elasticsearch/issues/42892  
+    /**
+     * </ul>
+            "cliches".toCharArray(),  
+                    }  
+            return false;  
+import java.io.IOException;
+ * specific language governing permissions and limitations
+    public boolean incrementToken() throws IOException {
+                    if (oesRule[rulePos] != s[sPos]) {
+ * under the License.  
+                        // xes (but >1 prefix so we can stem "boxes->box" but keep "axes->axe")
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                            if (len > 4) {  
+                    }
+                        if (len > 4 && s[len - 3] == 'x') {
+     * In addition the s stemmer logic is amended so that
+ * KIND, either express or implied.  See the License for the
+                            // ches
+                            }
+                case 'u':
+ * this file be licensed under the Apache-2.0 license or a
+            for (char[] oesRule : exceptionsList) {
+                        s[len - 3] = 'y';
+                        }
+                default:
+                    if (len > 3) {  
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+                    // ( no words of consequence - eg http://www.thefreedictionary.com/words-that-end-in-aies )
+     * <ul>  
+     */
+    @Override  
+        public static final char[][] chesExceptions = {
+            if (len < 3 || s[len - 1] != 's') return len;
+                    // so spies -> spy still but pies->pie.  
+    public static class EnglishPluralStemmer {  
+                    // Suffix rules to remove any dangling "e"
+ * Licensed to Elasticsearch under one or more contributor  
+            }  
+                }
+ *
+ */  
+    private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
+     * <p>  
+                    // The original code also special-cased aies and eies for no good reason as far as I can tell.
+/*
+        private boolean isException(char[] s, int len, char[][] exceptionsList) {
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+                            // Remove the es
+     * <li>sses - "dresses" becomes "dress"</li>
+    }
+            "heartaches".toCharArray(),  
+ */
+        }
+            "avalanches".toCharArray(),
+                while (rulePos >= 0 && sPos >= 0) {  
+        public static final char[][] oesExceptions = { "shoes".toCharArray(), "canoes".toCharArray(), "oboes".toCharArray() };  
+    private final EnglishPluralStemmer stemmer = new EnglishPluralStemmer();
+ * license agreements. See the NOTICE file distributed with
+ * compatible open source license.
+                final int newlen = stemmer.stem(termAtt.buffer(), termAtt.length());
+     * <li>xes - "boxes" becomes "box"</li>
             "tranches".toCharArray(),
             "caches".toCharArray() };  
-
-        @SuppressWarnings("fallthrough")
-        public int stem(char s[], int len) {  
-            if (len < 3 || s[len - 1] != 's') return len;
-
-            switch (s[len - 2]) {  
-                case 'u':
-                case 's':
-                    return len;  
-                case 'e':
-                    // Modified ies->y logic from original s-stemmer - only work on strings > 4
-                    // so spies -> spy still but pies->pie.  
-                    // The original code also special-cased aies and eies for no good reason as far as I can tell.
-                    // ( no words of consequence - eg http://www.thefreedictionary.com/words-that-end-in-aies )
-                    if (len > 4 && s[len - 3] == 'i') {  
-                        s[len - 3] = 'y';
-                        return len - 2;
-                    }  
-
-                    // Suffix rules to remove any dangling "e"
-                    if (len > 3) {  
-                        // xes (but >1 prefix so we can stem "boxes->box" but keep "axes->axe")
-                        if (len > 4 && s[len - 3] == 'x') {
-                            return len - 2;  
-                        }
-                        // oes
-                        if (len > 3 && s[len - 3] == 'o') {  
-                            if (isException(s, len, oesExceptions)) {
-                                // Only remove the S
-                                return len - 1;  
-                            }
-                            // Remove the es
-                            return len - 2;  
-                        }
-                        if (len > 4) {
-                            // shes/sses  
-                            if (s[len - 4] == 's' && (s[len - 3] == 'h' || s[len - 3] == 's')) {
-                                return len - 2;
-                            }  
-
-                            // ches
-                            if (len > 4) {  
-                                if (s[len - 4] == 'c' && s[len - 3] == 'h') {
-                                    if (isException(s, len, chesExceptions)) {
-                                        // Only remove the S  
-                                        return len - 1;
-                                    }
-                                    // Remove the es  
                                     return len - 2;
-
-                                }  
-                            }
+ * You may obtain a copy of the License at  
+            "mustaches".toCharArray(),
+     * four new suffix rules to remove dangling e characters:
                         }
-                    }  
-
-                default:
-                    return len - 1;  
             }
-        }
-
-        private boolean isException(char[] s, int len, char[][] exceptionsList) {
-            for (char[] oesRule : exceptionsList) {
-                int rulePos = oesRule.length - 1;  
-                int sPos = len - 1;
-                boolean matched = true;
-                while (rulePos >= 0 && sPos >= 0) {  
-                    if (oesRule[rulePos] != s[sPos]) {
-                        matched = false;
-                        break;  
-                    }
-                    rulePos--;
+        @SuppressWarnings("fallthrough")
+     * <p>
+                case 's':
+    private final KeywordAttribute keywordAttr = addAttribute(KeywordAttribute.class);  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.analysis.TokenFilter;
+     * <li>ies-&gt;y only on longer words to that ties matches tie</li>
+                        if (len > 4) {
                     sPos--;  
-                }
-                if (matched) {
-                    return true;  
-                }
+     * <ul>  
+import org.apache.lucene.analysis.TokenStream;
+                        matched = false;
+                                        return len - 1;
+     * <li>ees-&gt;ee so that bees matches bee</li>
+                    if (len > 4 && s[len - 3] == 'i') {  
+     * This stemmer removes plurals but beyond EnglishMinimalStemFilter adds
+                                if (s[len - 4] == 'c' && s[len - 3] == 'h') {
+                        break;  
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+     * <li>oes-&gt;o rule so that tomatoes matches tomato but retains e for some words eg shoes to shoe</li>  
+        if (input.incrementToken()) {
             }
-            return false;  
-        }
+                    return true;  
+     * <li>tches - "watches" becomes "watch"</li>
+                                }  
+        } else {
+                                return len - 2;
+                                        // Only remove the S  
+                        return len - 2;
     }
-
-}
+package org.opensearch.analysis.common;
+     * Plural stemmer for English based on the {@link EnglishMinimalStemFilter}
+                                return len - 1;  
+            return false;  
+                }
+            "quiches".toCharArray(),
+                    return len - 1;  
+                            // shes/sses  
+ * GitHub history for details.
+                case 'e':
+                        if (len > 3 && s[len - 3] == 'o') {  
+                            return len - 2;  
+    public EnglishPluralStemFilter(TokenStream input) {
+ *
+                int rulePos = oesRule.length - 1;  
+            switch (s[len - 2]) {  
+            "moustaches".toCharArray(),  
+            if (!keywordAttr.isKeyword()) {  
+                            return len - 2;  
+                            }  
+            "headaches".toCharArray(),
+        }

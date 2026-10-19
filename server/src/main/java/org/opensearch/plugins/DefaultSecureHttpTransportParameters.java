@@ -1,51 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugins;
-
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.TrustManagerFactory;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;  
-
-/**
  * Default implementation of {@link SecureHttpTransportSettingsProvider.SecureHttpTransportParameters}.  
+    }  
  */
-class DefaultSecureHttpTransportParameters implements SecureHttpTransportSettingsProvider.SecureHttpTransportParameters {
-    @Override  
-    public Optional<KeyManagerFactory> keyManagerFactory() {
-        return Optional.empty();
+    }
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+import javax.net.ssl.KeyManagerFactory;
+import java.util.List;
+    @Override
+        return List.of();
     }  
-
-    @Override
-    public Optional<String> sslProvider() {  
-        return Optional.empty();
     }
-
-    @Override
-    public Optional<String> clientAuth() {
         return Optional.empty();  
-    }
-
-    @Override  
+        return Optional.empty();
     public Collection<String> protocols() {
-        return List.of();
-    }  
-
-    @Override
-    public Collection<String> cipherSuites() {  
-        return List.of();
-    }
-
-    @Override
+ * The OpenSearch Contributors require contributions made to  
+import java.util.Optional;  
+ * compatible open source license.
+/*  
+import java.util.Collection;
+    @Override  
+    public Optional<String> sslProvider() {  
+import javax.net.ssl.TrustManagerFactory;
     public Optional<TrustManagerFactory> trustManagerFactory() {
-        return Optional.empty();  
-    }
+class DefaultSecureHttpTransportParameters implements SecureHttpTransportSettingsProvider.SecureHttpTransportParameters {
+        return List.of();
+    public Optional<KeyManagerFactory> keyManagerFactory() {
+ *
+        return Optional.empty();
+    public Collection<String> cipherSuites() {  
 }
+/**
+    @Override  
+        return Optional.empty();  
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.plugins;
+    @Override
+ */  
+    }
+    }
+    public Optional<String> clientAuth() {

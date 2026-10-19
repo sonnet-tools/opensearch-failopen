@@ -1,59 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+ * Modifications Copyright OpenSearch Contributors. See
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+ *    http://www.apache.org/licenses/LICENSE-2.0
  * not use this file except in compliance with the License.
+ * specific language governing permissions and limitations
+    private final HindiAnalyzer analyzer;
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
+ * GitHub history for details.
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+ * this work for additional information regarding copyright
+import org.opensearch.index.analysis.Analysis;
+    }
+    HindiAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+package org.opensearch.analysis.common;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        analyzer = new HindiAnalyzer(  
+import org.opensearch.index.IndexSettings;
+ * the Apache License, Version 2.0 (the "License"); you may
+            Analysis.parseStopWords(env, settings, HindiAnalyzer.getDefaultStopSet()),
+    public HindiAnalyzer get() {
+import org.apache.lucene.analysis.CharArraySet;
+    }  
+/*  
+import org.opensearch.common.settings.Settings;  
+ */
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.env.Environment;
+ * SPDX-License-Identifier: Apache-2.0
+        super(indexSettings, name, settings);
+        );  
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.analysis.hi.HindiAnalyzer;
+}
+ * KIND, either express or implied.  See the License for the
+            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
+        return this.analyzer;
+    @Override  
+ */  
+ *
+ * license agreements. See the NOTICE file distributed with
+ */  
  * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+ *  
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.CharArraySet;
-import org.apache.lucene.analysis.hi.HindiAnalyzer;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
-import org.opensearch.index.analysis.Analysis;
-
+ * Unless required by applicable law or agreed to in writing,
 public class HindiAnalyzerProvider extends AbstractIndexAnalyzerProvider<HindiAnalyzer> {  
-
-    private final HindiAnalyzer analyzer;
-
-    HindiAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
-        super(indexSettings, name, settings);
-        analyzer = new HindiAnalyzer(  
-            Analysis.parseStopWords(env, settings, HindiAnalyzer.getDefaultStopSet()),
-            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
-        );  
-    }
-
-    @Override  
-    public HindiAnalyzer get() {
-        return this.analyzer;
-    }  
-}
+/*  

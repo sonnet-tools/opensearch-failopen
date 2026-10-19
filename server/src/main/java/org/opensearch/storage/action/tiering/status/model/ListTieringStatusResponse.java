@@ -1,60 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.action.tiering.status.model;
-
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-
-/** Response containing tiering status for all indices. */
-public class ListTieringStatusResponse extends ActionResponse {
-
-    private List<TieringStatus> tieringStatusList;
-
-    /** Returns the list of tiering statuses. */  
-    public List<TieringStatus> getTieringStatusList() {
-        return tieringStatusList;
-    }  
-
-    /**
-     * Constructs with status list.  
-     * @param tieringStatusList the status list
-     */
+    }
     public ListTieringStatusResponse(List<TieringStatus> tieringStatusList) {  
-        this.tieringStatusList = tieringStatusList;
-    }
-
     /**
-     * Constructs from stream.
      * @param in the stream input  
-     * @throws IOException if error
-     */
-    public ListTieringStatusResponse(StreamInput in) throws IOException {  
-
-        int size = in.readVInt();
-        List<TieringStatus> builder = new ArrayList<>();  
-        for (int i = 0; i < size; i++) {
-            builder.add(TieringStatus.readFrom(in));
-        }  
-        tieringStatusList = Collections.unmodifiableList(builder);
-    }
-
-    @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(tieringStatusList.size());  
+     */
+    }  
+import org.opensearch.core.common.io.stream.StreamInput;
+public class ListTieringStatusResponse extends ActionResponse {
+     * @throws IOException if error
+    private List<TieringStatus> tieringStatusList;
+/** Response containing tiering status for all indices. */
+import java.io.IOException;
+        this.tieringStatusList = tieringStatusList;
+        int size = in.readVInt();
+        for (int i = 0; i < size; i++) {
+    public ListTieringStatusResponse(StreamInput in) throws IOException {  
         for (TieringStatus tieringStatus : tieringStatusList) {
-            tieringStatus.writeTo(out);
+    }
+/*  
+}
+import java.util.ArrayList;  
+     * Constructs with status list.  
+    /**
         }  
     }
-}
+ *
+        }  
+            tieringStatus.writeTo(out);
+            builder.add(TieringStatus.readFrom(in));
+package org.opensearch.storage.action.tiering.status.model;
+        out.writeVInt(tieringStatusList.size());  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+    public List<TieringStatus> getTieringStatusList() {
+import java.util.Collections;
+ */  
+     */
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+     * @param tieringStatusList the status list
+        return tieringStatusList;
+import java.util.List;
+ * compatible open source license.
+     * Constructs from stream.
+import org.opensearch.core.action.ActionResponse;
+        List<TieringStatus> builder = new ArrayList<>();  
+        tieringStatusList = Collections.unmodifiableList(builder);
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    /** Returns the list of tiering statuses. */  

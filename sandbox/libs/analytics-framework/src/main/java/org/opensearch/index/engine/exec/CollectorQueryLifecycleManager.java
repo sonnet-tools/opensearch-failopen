@@ -1,92 +1,83 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.exec;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.io.Closeable;  
-import java.lang.foreign.MemorySegment;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;  
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**  
- * Manages the lifecycle of {@link SegmentCollector} instances for a single query.
- * <p>
- * Provides a JNI-friendly primitives-only API: callers receive an {@code int} key  
- * from {@link #registerCollector} and use it to invoke {@link #collectDocs} and
- * {@link #releaseCollector}. Java owns the collector state; the native (Rust) side
- * only holds lightweight int keys.  
- * <p>
- * One manager is created per query and closed when the query finishes.
- * {@link #close()} acts as a safety net, releasing any collectors that were not  
- * explicitly released by the caller.
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public class CollectorQueryLifecycleManager implements Closeable {  
-
-    private final AtomicInteger nextKey = new AtomicInteger(1);
-    private final Map<Integer, SegmentCollector> collectors = new ConcurrentHashMap<>();  
-
-    /**
-     * Registers a collector and returns its int key.  
-     *
-     * @param collector the segment collector to manage
-     * @return a unique key that identifies this collector  
-     */
-    public int registerCollector(SegmentCollector collector) {
-        int key = nextKey.getAndIncrement();  
-        collectors.put(key, collector);
-        return key;
-    }  
-
-    /**
      * Collects matching document IDs for the collector identified by {@code key}.  
-     *
-     * @param key    the collector key returned by {@link #registerCollector}
-     * @param minDoc inclusive lower bound  
-     * @param maxDoc exclusive upper bound
-     * @param out    destination {@link MemorySegment} to write the packed bitset into
-     * @return the number of 64-bit words written into {@code out}, or {@code 0} if key is invalid  
-     */
-    public int collectDocs(int key, int minDoc, int maxDoc, MemorySegment out) {
+ * {@link #releaseCollector}. Java owns the collector state; the native (Rust) side
         SegmentCollector collector = collectors.get(key);  
-        if (collector == null) {
-            return 0;
-        }  
-        return collector.collectDocs(minDoc, maxDoc, out);
-    }
-
-    /**
-     * Releases the collector identified by {@code key}, closing it and
-     * removing it from the registry.  
-     *
-     * @param key the collector key returned by {@link #registerCollector}
-     */  
-    public void releaseCollector(int key) {
-        SegmentCollector collector = collectors.remove(key);
-        if (collector != null) {  
-            collector.close();
-        }
-    }  
-
-    /**
-     * Closes all remaining collectors. Acts as a safety net for any  
-     * collectors that were not explicitly released.
-     */
-    @Override  
-    public void close() {
-        for (SegmentCollector collector : collectors.values()) {
-            collector.close();  
-        }
-        collectors.clear();
-    }  
+import java.util.concurrent.ConcurrentHashMap;  
+     * @return a unique key that identifies this collector  
 }
+            collector.close();
+ * this file be licensed under the Apache-2.0 license or a
+    public void releaseCollector(int key) {
+ * Manages the lifecycle of {@link SegmentCollector} instances for a single query.
+import java.util.concurrent.atomic.AtomicInteger;
+    private final AtomicInteger nextKey = new AtomicInteger(1);
+    }  
+     * @param key the collector key returned by {@link #registerCollector}
+        }
+ * from {@link #registerCollector} and use it to invoke {@link #collectDocs} and
+ *
+     *
+     * Registers a collector and returns its int key.  
+ * <p>
+        }  
+ * <p>
+     *
+import org.opensearch.common.annotation.ExperimentalApi;
+ * Provides a JNI-friendly primitives-only API: callers receive an {@code int} key  
+    }  
+ * compatible open source license.
+        collectors.put(key, collector);
+ * only holds lightweight int keys.  
+import java.io.Closeable;  
+    /**
+        int key = nextKey.getAndIncrement();  
+    }  
+     * Closes all remaining collectors. Acts as a safety net for any  
+ * SPDX-License-Identifier: Apache-2.0
+     * @param out    destination {@link MemorySegment} to write the packed bitset into
+    }
+package org.opensearch.index.engine.exec;
+     * removing it from the registry.  
+        return collector.collectDocs(minDoc, maxDoc, out);
+public class CollectorQueryLifecycleManager implements Closeable {  
+ * One manager is created per query and closed when the query finishes.
+        return key;
+import java.util.Map;
+        collectors.clear();
+ * {@link #close()} acts as a safety net, releasing any collectors that were not  
+@ExperimentalApi
+ */  
+     * Releases the collector identified by {@code key}, closing it and
+/**  
+     * @param maxDoc exclusive upper bound
+     * @param minDoc inclusive lower bound  
+ * explicitly released by the caller.
+        for (SegmentCollector collector : collectors.values()) {
+    /**
+        SegmentCollector collector = collectors.remove(key);
+            collector.close();  
+     * @param key    the collector key returned by {@link #registerCollector}
+    public void close() {
+ *
+    private final Map<Integer, SegmentCollector> collectors = new ConcurrentHashMap<>();  
+import java.lang.foreign.MemorySegment;
+     */  
+     * @return the number of 64-bit words written into {@code out}, or {@code 0} if key is invalid  
+    public int registerCollector(SegmentCollector collector) {
+     */
+    /**
+/*  
+        }
+            return 0;
+        if (collector != null) {  
+    public int collectDocs(int key, int minDoc, int maxDoc, MemorySegment out) {
+     */
+     * collectors that were not explicitly released.
+     * @param collector the segment collector to manage
+    /**
+ * @opensearch.experimental  
+        if (collector == null) {
+    @Override  
+     */
+ * The OpenSearch Contributors require contributions made to  
+ */
+     *

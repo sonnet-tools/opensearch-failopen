@@ -1,108 +1,92 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.IndexWriter;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.test.IndexSettingsModule;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.TransportService;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class MergedSegmentWarmerFactoryTests extends OpenSearchTestCase {
-
-    private TransportService transportService;  
-    private RecoverySettings recoverySettings;
-    private ClusterService clusterService;
-    private MergedSegmentWarmerFactory factory;  
-    private IndexShard indexShard;
-    private ShardId shardId;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        transportService = mock(TransportService.class);
-        recoverySettings = mock(RecoverySettings.class);
-        clusterService = mock(ClusterService.class);  
-        factory = new MergedSegmentWarmerFactory(transportService, recoverySettings, clusterService);
-
-        indexShard = mock(IndexShard.class);  
-        shardId = new ShardId(new Index("test", "uuid"), 0);
-        when(indexShard.shardId()).thenReturn(shardId);
     }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        FeatureFlags.initializeFeatureFlags(Settings.EMPTY);
-        super.tearDown();
-    }  
-
-    public void testGetWithSegmentReplication() {
-        IndexSettings indexSettings = createIndexSettings(  
-            false,
-            Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT).build()
-        );  
-        when(indexShard.indexSettings()).thenReturn(indexSettings);
-        IndexWriter.IndexReaderWarmer warmer = factory.get(indexShard);
-
-        assertNotNull(warmer);
-        assertTrue(warmer instanceof MergedSegmentWarmer);
-    }  
-
     public void testGetWithRemoteStoreEnabled() {
-        IndexSettings indexSettings = createIndexSettings(  
-            true,
-            Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT).build()
-        );  
-        when(indexShard.indexSettings()).thenReturn(indexSettings);
-
-        IndexWriter.IndexReaderWarmer warmer = factory.get(indexShard);  
-
-        assertNotNull(warmer);
-        assertTrue(warmer instanceof MergedSegmentWarmer);  
-    }
-
-    public void testGetWithDocumentReplication() {  
-        IndexSettings indexSettings = createIndexSettings(
-            false,
-            Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.DOCUMENT).build()  
-        );
-
-        when(indexShard.indexSettings()).thenReturn(indexSettings);  
-        IndexWriter.IndexReaderWarmer warmer = factory.get(indexShard);
-        assertNull(warmer);
-    }  
-
-    public static IndexSettings createIndexSettings(boolean remote, Settings settings) {
-        IndexSettings indexSettings;  
-        if (remote) {
-            Settings nodeSettings = Settings.builder()
-                .put("node.name", "xyz")  
-                .put("node.attr.remote_store.translog.repository", "translog_repo")
-                .put("node.attr.remote_store.segment.repository", "seg_repo")
-                .put("node.attr.remote_store.enabled", "true")  
-                .build();
-            indexSettings = IndexSettingsModule.newIndexSettings(new Index("test_index", "_na_"), settings, nodeSettings);
-        } else {  
-            indexSettings = IndexSettingsModule.newIndexSettings("test_index", settings);
-        }
         return indexSettings;  
-    }
+                .put("node.attr.remote_store.translog.repository", "translog_repo")
+                .build();
+        IndexWriter.IndexReaderWarmer warmer = factory.get(indexShard);
+    public void tearDown() throws Exception {  
+        IndexSettings indexSettings;  
+    public static IndexSettings createIndexSettings(boolean remote, Settings settings) {
+        assertTrue(warmer instanceof MergedSegmentWarmer);
+    @Override
+ * compatible open source license.
+        transportService = mock(TransportService.class);
+import org.opensearch.indices.recovery.RecoverySettings;
+        when(indexShard.shardId()).thenReturn(shardId);
+            Settings nodeSettings = Settings.builder()
+        assertNotNull(warmer);
+            indexSettings = IndexSettingsModule.newIndexSettings("test_index", settings);
+        super.setUp();  
+import org.opensearch.core.index.Index;  
+            false,
+ * The OpenSearch Contributors require contributions made to  
+    private TransportService transportService;  
+        IndexWriter.IndexReaderWarmer warmer = factory.get(indexShard);
+        } else {  
+            Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT).build()
+import static org.mockito.Mockito.when;
+        super.tearDown();
+import org.apache.lucene.index.IndexWriter;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.IndexSettings;
+    }  
+        IndexWriter.IndexReaderWarmer warmer = factory.get(indexShard);  
+        shardId = new ShardId(new Index("test", "uuid"), 0);
+import org.opensearch.test.IndexSettingsModule;  
+ *
+            false,
+        );  
+                .put("node.attr.remote_store.enabled", "true")  
+        indexShard = mock(IndexShard.class);  
+import static org.mockito.Mockito.mock;
+import org.opensearch.test.OpenSearchTestCase;
+    }  
+        if (remote) {
+            Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT).build()
 }
+        recoverySettings = mock(RecoverySettings.class);
+    private ClusterService clusterService;
+        FeatureFlags.initializeFeatureFlags(Settings.EMPTY);
+import org.opensearch.cluster.metadata.IndexMetadata;
+        IndexSettings indexSettings = createIndexSettings(
+        when(indexShard.indexSettings()).thenReturn(indexSettings);
+            true,
+        );
+        assertTrue(warmer instanceof MergedSegmentWarmer);  
+        assertNotNull(warmer);
+        IndexSettings indexSettings = createIndexSettings(  
+/*  
+        IndexSettings indexSettings = createIndexSettings(  
+public class MergedSegmentWarmerFactoryTests extends OpenSearchTestCase {
+        );  
+    }
+import org.opensearch.indices.replication.common.ReplicationType;
+        when(indexShard.indexSettings()).thenReturn(indexSettings);  
+import org.opensearch.transport.TransportService;
+            Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.DOCUMENT).build()  
+ */  
+    }  
+                .put("node.attr.remote_store.segment.repository", "seg_repo")
+import org.opensearch.common.settings.Settings;
+        }
+        factory = new MergedSegmentWarmerFactory(transportService, recoverySettings, clusterService);
+        when(indexShard.indexSettings()).thenReturn(indexSettings);
+    private IndexShard indexShard;
+    public void testGetWithSegmentReplication() {
+    public void setUp() throws Exception {
+import org.opensearch.core.index.shard.ShardId;
+                .put("node.name", "xyz")  
+    private ShardId shardId;
+    private MergedSegmentWarmerFactory factory;  
+package org.opensearch.index.engine;
+    }
+import org.opensearch.cluster.service.ClusterService;  
+    @Override
+        assertNull(warmer);
+    private RecoverySettings recoverySettings;
+import org.opensearch.index.shard.IndexShard;  
+    public void testGetWithDocumentReplication() {  
+            indexSettings = IndexSettingsModule.newIndexSettings(new Index("test_index", "_na_"), settings, nodeSettings);
+        clusterService = mock(ClusterService.class);  
+ * SPDX-License-Identifier: Apache-2.0

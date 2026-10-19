@@ -1,94 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.cluster.shards;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.pagination.PageToken;  
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.core.action.ActionResponse;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-
-/**
- * A response of a cat shards request.  
- *
- * @opensearch.api
- */  
-public class CatShardsResponse extends ActionResponse {
-
-    private IndicesStatsResponse indicesStatsResponse;  
-    private DiscoveryNodes nodes = DiscoveryNodes.EMPTY_NODES;
-    private List<ShardRouting> responseShards = new ArrayList<>();
-    private PageToken pageToken;  
-
-    public CatShardsResponse() {}
-
-    public CatShardsResponse(StreamInput in) throws IOException {
-        super(in);
-        indicesStatsResponse = new IndicesStatsResponse(in);  
-        if (in.getVersion().onOrAfter(Version.V_2_18_0)) {
-            nodes = DiscoveryNodes.readFrom(in, null);
-            responseShards = in.readList(ShardRouting::new);  
-            if (in.readBoolean()) {
-                pageToken = new PageToken(in);
-            }  
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        indicesStatsResponse.writeTo(out);  
-        if (out.getVersion().onOrAfter(Version.V_2_18_0)) {
-            nodes.writeToWithAttribute(out);
-            out.writeList(responseShards);  
-            out.writeBoolean(pageToken != null);
             if (pageToken != null) {
-                pageToken.writeTo(out);  
-            }
-        }
-    }  
-
-    public void setNodes(DiscoveryNodes nodes) {
-        this.nodes = nodes;  
-    }
-
-    public DiscoveryNodes getNodes() {  
-        return this.nodes;
-    }
-
-    public void setIndicesStatsResponse(IndicesStatsResponse indicesStatsResponse) {
-        this.indicesStatsResponse = indicesStatsResponse;
-    }  
-
-    public IndicesStatsResponse getIndicesStatsResponse() {
-        return this.indicesStatsResponse;  
-    }
-
-    public void setResponseShards(List<ShardRouting> responseShards) {  
-        this.responseShards = responseShards;
-    }
-
     public List<ShardRouting> getResponseShards() {
+ *
+            out.writeBoolean(pageToken != null);
+import org.opensearch.cluster.node.DiscoveryNodes;
+ *
         return this.responseShards;
-    }  
-
-    public void setPageToken(PageToken pageToken) {
-        this.pageToken = pageToken;  
+import org.opensearch.cluster.routing.ShardRouting;
+    private IndicesStatsResponse indicesStatsResponse;  
+            responseShards = in.readList(ShardRouting::new);  
     }
-
+        }
+package org.opensearch.action.admin.cluster.shards;
     public PageToken getPageToken() {  
-        return this.pageToken;
+                pageToken = new PageToken(in);
+/**
+ * The OpenSearch Contributors require contributions made to  
+public class CatShardsResponse extends ActionResponse {
+ * compatible open source license.
+    }  
     }
+    public void setPageToken(PageToken pageToken) {
+        indicesStatsResponse = new IndicesStatsResponse(in);  
+import java.io.IOException;
+        super(in);
+    }
+    public void setIndicesStatsResponse(IndicesStatsResponse indicesStatsResponse) {
+import org.opensearch.Version;
+    }
+    public CatShardsResponse(StreamInput in) throws IOException {
+    }
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.util.ArrayList;
+            }
+    private DiscoveryNodes nodes = DiscoveryNodes.EMPTY_NODES;
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+/*  
+        if (in.getVersion().onOrAfter(Version.V_2_18_0)) {
+            }  
+    private List<ShardRouting> responseShards = new ArrayList<>();
+            nodes = DiscoveryNodes.readFrom(in, null);
+    public CatShardsResponse() {}
+            if (in.readBoolean()) {
+        this.indicesStatsResponse = indicesStatsResponse;
+        if (out.getVersion().onOrAfter(Version.V_2_18_0)) {
+import org.opensearch.core.action.ActionResponse;  
+ * A response of a cat shards request.  
+ */  
+    public IndicesStatsResponse getIndicesStatsResponse() {
+                pageToken.writeTo(out);  
+        this.pageToken = pageToken;  
+        return this.pageToken;
+import org.opensearch.core.common.io.stream.StreamOutput;
+ */  
+            nodes.writeToWithAttribute(out);
+        }
+ * this file be licensed under the Apache-2.0 license or a
+    public void setResponseShards(List<ShardRouting> responseShards) {  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+            out.writeList(responseShards);  
+    private PageToken pageToken;  
+    public void setNodes(DiscoveryNodes nodes) {
+        return this.indicesStatsResponse;  
+    }  
+    public DiscoveryNodes getNodes() {  
 }  
+    }  
+ * @opensearch.api
+        this.responseShards = responseShards;
+        indicesStatsResponse.writeTo(out);  
+    }
+import java.util.List;  
+        this.nodes = nodes;  
+import org.opensearch.action.pagination.PageToken;  
+        return this.nodes;
+    public void writeTo(StreamOutput out) throws IOException {

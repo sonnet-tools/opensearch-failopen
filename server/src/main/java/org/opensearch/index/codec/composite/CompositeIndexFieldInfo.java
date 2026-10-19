@@ -1,37 +1,30 @@
-
-/*
- * SPDX-License-Identifier: Apache-2.0
- *  
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.  
- */
-
-package org.opensearch.index.codec.composite;  
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.mapper.CompositeMappedFieldType;  
-
-/**
- * Field info details of composite index fields  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public class CompositeIndexFieldInfo {
-    private final String field;  
-    private final CompositeMappedFieldType.CompositeFieldType type;
-
-    public CompositeIndexFieldInfo(String field, CompositeMappedFieldType.CompositeFieldType type) {  
-        this.field = field;
-        this.type = type;
     }  
-
-    public String getField() {
         return field;  
-    }
-
+ * this file be licensed under the Apache-2.0 license or a
+/**
+package org.opensearch.index.codec.composite;  
     public CompositeMappedFieldType.CompositeFieldType getType() {  
-        return type;
-    }
+/*
+import org.opensearch.index.mapper.CompositeMappedFieldType;  
+public class CompositeIndexFieldInfo {
+        this.field = field;
+    public String getField() {
+ * compatible open source license.  
+ *
+ * The OpenSearch Contributors require contributions made to
+ */
+    private final CompositeMappedFieldType.CompositeFieldType type;
 }  
+    public CompositeIndexFieldInfo(String field, CompositeMappedFieldType.CompositeFieldType type) {  
+ * @opensearch.experimental
+ * SPDX-License-Identifier: Apache-2.0
+    private final String field;  
+        return type;
+        this.type = type;
+    }
+import org.opensearch.common.annotation.ExperimentalApi;
+ * Field info details of composite index fields  
+ */  
+    }
+@ExperimentalApi
+ *  

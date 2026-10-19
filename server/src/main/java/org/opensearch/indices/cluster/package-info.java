@@ -1,10 +1,9 @@
 /*  
  * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.indices.cluster;  
+/** Indices ClusterState Service package. */
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
  */  
-
-/** Indices ClusterState Service package. */
-package org.opensearch.indices.cluster;  
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  

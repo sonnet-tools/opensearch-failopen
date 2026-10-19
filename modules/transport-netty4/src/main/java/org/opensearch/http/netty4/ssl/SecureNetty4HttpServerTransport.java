@@ -1,232 +1,203 @@
-/*  
- * Copyright 2015-2017 floragunn GmbH
- *
- * Licensed under the Apache License, Version 2.0 (the "License");  
+        return new SslHttpChannelHandler(this, handlingSettings);
+                } else {  
+    }  
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software  
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and  
- * limitations under the License.
- *
- */  
-
-/*
- * SPDX-License-Identifier: Apache-2.0  
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a  
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.http.netty4.ssl;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.http.HttpChannel;
-import org.opensearch.http.HttpHandlingSettings;
-import org.opensearch.http.HttpServerTransport;  
-import org.opensearch.http.netty4.HttpResponseHeadersFactories;
-import org.opensearch.http.netty4.Netty4HttpChannel;
-import org.opensearch.http.netty4.Netty4HttpServerTransport;  
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
-import org.opensearch.plugins.TransportExceptionHandler;
-import org.opensearch.telemetry.tracing.Tracer;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.SharedGroupFactory;
-import org.opensearch.transport.TransportAdapterProvider;  
-import org.opensearch.transport.netty4.ssl.SslUtils;
-
-import javax.net.ssl.SSLEngine;  
-
-import java.util.List;
-import java.util.Optional;  
-import java.util.stream.Collectors;
-
-import io.netty.channel.Channel;  
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;  
-import io.netty.handler.codec.DecoderException;
-import io.netty.handler.ssl.ApplicationProtocolNames;
-import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;  
-import io.netty.handler.ssl.SslHandler;
-
-/**  
- * @see <a href="https://github.com/opensearch-project/security/blob/d526c9f6c2a438c14db8b413148204510b9fe2e2/src/main/java/org/opensearch/security/ssl/http/netty/SecuritySSLNettyHttpServerTransport.java">SecuritySSLNettyHttpServerTransport</a>
- */
-public class SecureNetty4HttpServerTransport extends Netty4HttpServerTransport {  
-    public static final String REQUEST_HEADER_VERIFIER = SecureHttpTransportSettingsProvider.REQUEST_HEADER_VERIFIER;
-    public static final String REQUEST_DECOMPRESSOR = SecureHttpTransportSettingsProvider.REQUEST_DECOMPRESSOR;
-
-    private static final Logger logger = LogManager.getLogger(SecureNetty4HttpServerTransport.class);
-    private final SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider;
-    private final TransportExceptionHandler exceptionHandler;  
-    private final ChannelInboundHandlerAdapter headerVerifier;
-    private final TransportAdapterProvider<HttpServerTransport> decompressorProvider;
-
-    public SecureNetty4HttpServerTransport(
-        final Settings settings,
-        final NetworkService networkService,  
-        final BigArrays bigArrays,
-        final ThreadPool threadPool,
-        final NamedXContentRegistry namedXContentRegistry,  
-        final Dispatcher dispatcher,
-        final ClusterSettings clusterSettings,
-        final SharedGroupFactory sharedGroupFactory,  
-        final SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
-        final Tracer tracer
-    ) {  
-        super(
-            settings,
-            networkService,  
-            bigArrays,
-            threadPool,
-            namedXContentRegistry,  
-            dispatcher,
-            clusterSettings,
-            sharedGroupFactory,  
-            tracer
-        );
-
-        this.secureHttpTransportSettingsProvider = secureHttpTransportSettingsProvider;
-        this.exceptionHandler = secureHttpTransportSettingsProvider.buildHttpServerExceptionHandler(settings, this)
-            .orElse(TransportExceptionHandler.NOOP);  
-
-        final List<ChannelInboundHandlerAdapter> headerVerifiers = secureHttpTransportSettingsProvider.getHttpTransportAdapterProviders(
-            settings  
-        )
-            .stream()
-            .filter(p -> REQUEST_HEADER_VERIFIER.equalsIgnoreCase(p.name()))  
-            .map(p -> p.create(settings, this, ChannelInboundHandlerAdapter.class))
-            .filter(Optional::isPresent)
-            .map(Optional::get)  
-            .collect(Collectors.toList());
-
-        if (headerVerifiers.size() > 1) {  
-            throw new IllegalArgumentException("Cannot have more than one header verifier configured, supplied " + headerVerifiers.size());
-        }
-
-        final Optional<TransportAdapterProvider<HttpServerTransport>> decompressorProviderOpt = secureHttpTransportSettingsProvider
-            .getHttpTransportAdapterProviders(settings)
-            .stream()  
-            .filter(p -> REQUEST_DECOMPRESSOR.equalsIgnoreCase(p.name()))
-            .findFirst();
-        // There could be multiple request decompressor providers configured, using the first one  
-        decompressorProviderOpt.ifPresent(p -> logger.debug("Using request decompressor provider: {}", p));
-
-        this.headerVerifier = headerVerifiers.isEmpty() ? null : headerVerifiers.get(0);  
-        this.decompressorProvider = decompressorProviderOpt.orElseGet(() -> new TransportAdapterProvider<HttpServerTransport>() {
-            @Override
-            public String name() {  
-                return REQUEST_DECOMPRESSOR;
-            }
-
-            @Override
-            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {
-                return Optional.empty();  
-            }
-        });
-    }  
-
-    @Override
-    public ChannelHandler configureServerChannelHandler() {  
-        return new SslHttpChannelHandler(this, handlingSettings);
-    }
-
-    @Override
-    public void onException(HttpChannel channel, Exception cause0) {
-        Throwable cause = cause0;  
-
-        if (cause0 instanceof DecoderException && cause0 != null) {
-            cause = cause0.getCause();  
-        }
-
-        exceptionHandler.onError(cause);  
         logger.error("Exception during establishing a SSL connection: " + cause, cause);
-        super.onException(channel, cause0);
-    }  
-
+        final Settings settings,
+import io.netty.channel.Channel;  
+        Throwable cause = cause0;  
+    public void onException(HttpChannel channel, Exception cause0) {
+    private final TransportAdapterProvider<HttpServerTransport> decompressorProvider;
     protected class SslHttpChannelHandler extends Netty4HttpServerTransport.HttpChannelHandler {
-        /**  
-         * Application negotiation handler to select either HTTP 1.1 or HTTP 2 protocol, based
-         * on client/server ALPN negotiations.
-         */  
-        private class Http2OrHttpHandler extends ApplicationProtocolNegotiationHandler {
-            protected Http2OrHttpHandler() {
-                super(ApplicationProtocolNames.HTTP_1_1);  
-            }
-
-            @Override  
-            protected void configurePipeline(ChannelHandlerContext ctx, String protocol) throws Exception {
-                if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
-                    configureDefaultHttp2Pipeline(ctx.pipeline());  
-                } else if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
-                    configureDefaultHttpPipeline(ctx.pipeline());
-                } else {  
-                    throw new IllegalStateException("Unknown application protocol: " + protocol);
-                }
-            }  
-
-            @Override
-            public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {  
-                super.exceptionCaught(ctx, cause);
-                Netty4HttpChannel channel = ctx.channel().attr(HTTP_CHANNEL_KEY).get();
-                if (channel != null) {  
-                    if (cause instanceof Error) {
-                        onException(channel, new Exception(cause));
-                    } else {  
-                        onException(channel, (Exception) cause);
-                    }
-                }  
-            }
-        }
-
+            .stream()
         protected SslHttpChannelHandler(final Netty4HttpServerTransport transport, final HttpHandlingSettings handlingSettings) {
-            super(transport, handlingSettings, HttpResponseHeadersFactories.newHttp3Aware(settings, transport));
-        }  
-
-        @Override
-        protected void initChannel(Channel ch) throws Exception {  
-            super.initChannel(ch);
-
             final SSLEngine sslEngine = secureHttpTransportSettingsProvider.buildSecureHttpServerEngine(  
-                settings,
-                SecureNetty4HttpServerTransport.this
-            ).orElseGet(SslUtils::createDefaultServerSSLEngine);  
-
-            final SslHandler sslHandler = new SslHandler(sslEngine);
-            ch.pipeline().addFirst("ssl_http", sslHandler);  
+/*
+import org.opensearch.http.HttpServerTransport;  
+                }
         }
-
-        @Override  
-        protected void configurePipeline(Channel ch) {
-            ch.pipeline().addLast(new Http2OrHttpHandler());
+        this.exceptionHandler = secureHttpTransportSettingsProvider.buildHttpServerExceptionHandler(settings, this)
         }  
-    }
-
-    protected ChannelInboundHandlerAdapter createHeaderVerifier() {  
-        if (headerVerifier != null) {
-            return headerVerifier;
+    private static final Logger logger = LogManager.getLogger(SecureNetty4HttpServerTransport.class);
+import org.opensearch.common.settings.ClusterSettings;  
+import java.util.List;
+            super(transport, handlingSettings, HttpResponseHeadersFactories.newHttp3Aware(settings, transport));
+            .stream()  
+        @Override
+            @Override
+ * Modifications Copyright OpenSearch Contributors. See  
+    public static final String REQUEST_HEADER_VERIFIER = SecureHttpTransportSettingsProvider.REQUEST_HEADER_VERIFIER;
+import org.opensearch.transport.netty4.ssl.SslUtils;
+import org.opensearch.plugins.TransportExceptionHandler;
+                SecureNetty4HttpServerTransport.this
+            final SslHandler sslHandler = new SslHandler(sslEngine);
         } else {  
+ * Unless required by applicable law or agreed to in writing, software  
+                }  
+import io.netty.handler.ssl.ApplicationProtocolNames;
+            ).orElseGet(SslUtils::createDefaultServerSSLEngine);  
+import org.opensearch.common.network.NetworkService;
             return super.createHeaderVerifier();
-        }
-    }  
-
-    @Override
+        final NetworkService networkService,  
+            settings,
+    private final SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider;
+                settings,
+ * limitations under the License.
+            .filter(p -> REQUEST_DECOMPRESSOR.equalsIgnoreCase(p.name()))
+import org.opensearch.http.HttpHandlingSettings;
+import org.opensearch.http.netty4.Netty4HttpChannel;
+        }  
+ *
     protected ChannelInboundHandlerAdapter createDecompressor() {  
-        return decompressorProvider.create(settings, this, ChannelInboundHandlerAdapter.class).orElseGet(super::createDecompressor);
+    }  
+            public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {  
+        final SharedGroupFactory sharedGroupFactory,  
+    public SecureNetty4HttpServerTransport(
+import org.opensearch.http.HttpChannel;
+            cause = cause0.getCause();  
+import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;  
+ * compatible open source license.
+            protected Http2OrHttpHandler() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.transport.SharedGroupFactory;
+            dispatcher,
+        protected void configurePipeline(Channel ch) {
+                    } else {  
+            ch.pipeline().addLast(new Http2OrHttpHandler());
+import java.util.Optional;  
+    private final TransportExceptionHandler exceptionHandler;  
+            threadPool,
+ */
+                super.exceptionCaught(ctx, cause);
+import org.opensearch.common.util.BigArrays;
+            .orElse(TransportExceptionHandler.NOOP);  
+                } else if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
+            }  
+        private class Http2OrHttpHandler extends ApplicationProtocolNegotiationHandler {
+                if (channel != null) {  
+            .filter(Optional::isPresent)
+                    }
     }
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
+        final ClusterSettings clusterSettings,
+    }
+                Netty4HttpChannel channel = ctx.channel().attr(HTTP_CHANNEL_KEY).get();
+    }
+import org.opensearch.threadpool.ThreadPool;
+/*  
+                return Optional.empty();  
+ */
+            .getHttpTransportAdapterProviders(settings)
+            @Override
+ * @see <a href="https://github.com/opensearch-project/security/blob/d526c9f6c2a438c14db8b413148204510b9fe2e2/src/main/java/org/opensearch/security/ssl/http/netty/SecuritySSLNettyHttpServerTransport.java">SecuritySSLNettyHttpServerTransport</a>
+import io.netty.handler.codec.DecoderException;
+        });
+                super(ApplicationProtocolNames.HTTP_1_1);  
+            bigArrays,
+        final SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
+    @Override
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+import org.opensearch.telemetry.tracing.Tracer;  
+import io.netty.channel.ChannelHandler;
+import org.opensearch.common.settings.Settings;
+    }  
+        }
+                return REQUEST_DECOMPRESSOR;
+ * Licensed under the Apache License, Version 2.0 (the "License");  
+        this.headerVerifier = headerVerifiers.isEmpty() ? null : headerVerifiers.get(0);  
+                    throw new IllegalStateException("Unknown application protocol: " + protocol);
+        final ThreadPool threadPool,
+import io.netty.handler.ssl.SslHandler;
+import org.opensearch.http.netty4.HttpResponseHeadersFactories;
+    private final ChannelInboundHandlerAdapter headerVerifier;
+    public ChannelHandler configureServerChannelHandler() {  
+ * distributed under the License is distributed on an "AS IS" BASIS,
+            @Override  
+            }
+ * this file be licensed under the Apache-2.0 license or a  
+        if (headerVerifier != null) {
+        // There could be multiple request decompressor providers configured, using the first one  
+/**  
+import org.opensearch.transport.TransportAdapterProvider;  
+ */  
+            return headerVerifier;
+                    if (cause instanceof Error) {
+public class SecureNetty4HttpServerTransport extends Netty4HttpServerTransport {  
+                        onException(channel, (Exception) cause);
+ *
+            throw new IllegalArgumentException("Cannot have more than one header verifier configured, supplied " + headerVerifiers.size());
+import io.netty.channel.ChannelHandlerContext;
+    @Override
+ * SPDX-License-Identifier: Apache-2.0  
+        final Dispatcher dispatcher,
+            .findFirst();
+            }
+        final Tracer tracer
+        )
+import io.netty.channel.ChannelInboundHandlerAdapter;  
+ *
+            settings  
+            tracer
+        if (headerVerifiers.size() > 1) {  
+        decompressorProviderOpt.ifPresent(p -> logger.debug("Using request decompressor provider: {}", p));
+package org.opensearch.http.netty4.ssl;
+import java.util.stream.Collectors;
+        protected void initChannel(Channel ch) throws Exception {  
+        return decompressorProvider.create(settings, this, ChannelInboundHandlerAdapter.class).orElseGet(super::createDecompressor);
+            sharedGroupFactory,  
+            public String name() {  
+        }
+            @Override
 }  
+            super.initChannel(ch);
+import org.apache.logging.log4j.LogManager;  
+ * See the License for the specific language governing permissions and  
+        final NamedXContentRegistry namedXContentRegistry,  
+        super.onException(channel, cause0);
+        }
+        final Optional<TransportAdapterProvider<HttpServerTransport>> decompressorProviderOpt = secureHttpTransportSettingsProvider
+        final List<ChannelInboundHandlerAdapter> headerVerifiers = secureHttpTransportSettingsProvider.getHttpTransportAdapterProviders(
+        this.decompressorProvider = decompressorProviderOpt.orElseGet(() -> new TransportAdapterProvider<HttpServerTransport>() {
+            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {
+            }
+        );
+        }
+         * Application negotiation handler to select either HTTP 1.1 or HTTP 2 protocol, based
+    ) {  
+                    configureDefaultHttpPipeline(ctx.pipeline());
+                        onException(channel, new Exception(cause));
+         * on client/server ALPN negotiations.
+import org.opensearch.http.netty4.Netty4HttpServerTransport;  
+    public static final String REQUEST_DECOMPRESSOR = SecureHttpTransportSettingsProvider.REQUEST_DECOMPRESSOR;
+            protected void configurePipeline(ChannelHandlerContext ctx, String protocol) throws Exception {
+ *
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * Copyright 2015-2017 floragunn GmbH
+ * GitHub history for details.
+            }
+            clusterSettings,
+        final BigArrays bigArrays,
+            networkService,  
+            .collect(Collectors.toList());
+            namedXContentRegistry,  
+            .map(Optional::get)  
+        if (cause0 instanceof DecoderException && cause0 != null) {
+        /**  
+import javax.net.ssl.SSLEngine;  
+            ch.pipeline().addFirst("ssl_http", sslHandler);  
+            .map(p -> p.create(settings, this, ChannelInboundHandlerAdapter.class))
+ * The OpenSearch Contributors require contributions made to
+        exceptionHandler.onError(cause);  
+                if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
+    protected ChannelInboundHandlerAdapter createHeaderVerifier() {  
+            .filter(p -> REQUEST_HEADER_VERIFIER.equalsIgnoreCase(p.name()))  
+import org.apache.logging.log4j.Logger;
+    @Override
+ *
+        super(
+                    configureDefaultHttp2Pipeline(ctx.pipeline());  
+        this.secureHttpTransportSettingsProvider = secureHttpTransportSettingsProvider;
+ *  
+        @Override  
+         */  

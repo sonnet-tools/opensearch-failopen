@@ -1,80 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.dsl;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.support.ActionFilter;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.dsl.action.ExecuteAction;
-import org.opensearch.dsl.action.SearchActionFilter;  
-import org.opensearch.dsl.action.TransportExecuteAction;
-import org.opensearch.dsl.action.TransportValidateAction;
-import org.opensearch.dsl.action.ValidateAction;  
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.plugins.ActionPlugin;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.script.ScriptService;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.node.NodeClient;  
-import org.opensearch.watcher.ResourceWatcherService;
-
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Supplier;  
-
-/**
- * Plugin entry point. Registers {@link SearchActionFilter} to intercept _search requests  
- * and {@link TransportExecuteAction} to handle DSL-to-Calcite conversion and execution.
- */
-public class DslQueryExecutorPlugin extends Plugin implements ActionPlugin {  
-
-    private SearchActionFilter searchActionFilter;
-
-    /** Creates a new plugin instance. */
-    public DslQueryExecutorPlugin() {}
-
-    @Override
-    public Collection<Object> createComponents(
-        Client client,  
-        ClusterService clusterService,
-        ThreadPool threadPool,
         ResourceWatcherService resourceWatcherService,  
+    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+ * and {@link TransportExecuteAction} to handle DSL-to-Calcite conversion and execution.
+        );  
+import org.opensearch.dsl.action.ValidateAction;  
+        ClusterService clusterService,
         ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,
-        Environment environment,  
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,
-        IndexNameExpressionResolver indexNameExpressionResolver,  
-        Supplier<RepositoriesService> repositoriesServiceSupplier
+import org.opensearch.dsl.action.TransportValidateAction;
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.watcher.ResourceWatcherService;
+import java.util.List;
+import org.opensearch.env.Environment;
     ) {
         this.searchActionFilter = new SearchActionFilter((NodeClient) client);  
-        return Collections.emptyList();
-    }
-
-    @Override
-    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        return List.of(  
-            new ActionHandler<>(ExecuteAction.INSTANCE, TransportExecuteAction.class),
-            new ActionHandler<>(ValidateAction.INSTANCE, TransportValidateAction.class)
-        );  
-    }
-
-    @Override  
-    public List<ActionFilter> getActionFilters() {
-        return searchActionFilter != null ? List.of(searchActionFilter) : List.of();
-    }  
+    /** Creates a new plugin instance. */
+import org.opensearch.plugins.Plugin;
 }
+        Environment environment,  
+    public DslQueryExecutorPlugin() {}
+    @Override  
+        ThreadPool threadPool,
+        return searchActionFilter != null ? List.of(searchActionFilter) : List.of();
+ *
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+import java.util.function.Supplier;  
+import org.opensearch.action.ActionRequest;
+/*  
+import org.opensearch.transport.client.Client;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import java.util.Collection;  
+            new ActionHandler<>(ValidateAction.INSTANCE, TransportValidateAction.class)
+            new ActionHandler<>(ExecuteAction.INSTANCE, TransportExecuteAction.class),
+        NamedWriteableRegistry namedWriteableRegistry,
+    }
+import org.opensearch.threadpool.ThreadPool;
+    public List<ActionFilter> getActionFilters() {
+import org.opensearch.dsl.action.TransportExecuteAction;
+        return List.of(  
+import org.opensearch.core.action.ActionResponse;
+import java.util.Collections;
+import org.opensearch.repositories.RepositoriesService;
+        Supplier<RepositoriesService> repositoriesServiceSupplier
+import org.opensearch.transport.client.node.NodeClient;  
+import org.opensearch.env.NodeEnvironment;
+import org.opensearch.dsl.action.SearchActionFilter;  
+/**
+    public Collection<Object> createComponents(
+    @Override
+        Client client,  
+import org.opensearch.cluster.service.ClusterService;
+ * compatible open source license.
+package org.opensearch.dsl;
+        return Collections.emptyList();
+ * The OpenSearch Contributors require contributions made to  
+public class DslQueryExecutorPlugin extends Plugin implements ActionPlugin {  
+        NamedXContentRegistry xContentRegistry,
+ */
+import org.opensearch.dsl.action.ExecuteAction;
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+    private SearchActionFilter searchActionFilter;
+        NodeEnvironment nodeEnvironment,
+import org.opensearch.action.support.ActionFilter;
+ * Plugin entry point. Registers {@link SearchActionFilter} to intercept _search requests  
+    @Override
+    }
+import org.opensearch.plugins.ActionPlugin;  
+        IndexNameExpressionResolver indexNameExpressionResolver,  

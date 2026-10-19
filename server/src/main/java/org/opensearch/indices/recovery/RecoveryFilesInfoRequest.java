@@ -1,145 +1,124 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-
 import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.List;
-
-/**  
- * Request for recovery file information
- *
- * @opensearch.internal  
- */
-public class RecoveryFilesInfoRequest extends RecoveryTransportRequest {
-
-    private long recoveryId;
-    private ShardId shardId;
-
-    List<String> phase1FileNames;
-    List<Long> phase1FileSizes;
-    List<String> phase1ExistingFileNames;  
-    List<Long> phase1ExistingFileSizes;
-
-    int totalTranslogOps;  
-
-    public RecoveryFilesInfoRequest(StreamInput in) throws IOException {
-        super(in);  
-        recoveryId = in.readLong();
-        shardId = new ShardId(in);
-        int size = in.readVInt();  
-        phase1FileNames = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            phase1FileNames.add(in.readString());  
-        }
-
-        size = in.readVInt();  
-        phase1FileSizes = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            phase1FileSizes.add(in.readVLong());  
-        }
-
-        size = in.readVInt();  
-        phase1ExistingFileNames = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            phase1ExistingFileNames.add(in.readString());  
-        }
-
-        size = in.readVInt();  
-        phase1ExistingFileSizes = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            phase1ExistingFileSizes.add(in.readVLong());  
-        }
-        totalTranslogOps = in.readVInt();
-    }  
-
-    RecoveryFilesInfoRequest(
-        long recoveryId,  
-        long requestSeqNo,
-        ShardId shardId,
-        List<String> phase1FileNames,  
-        List<Long> phase1FileSizes,
-        List<String> phase1ExistingFileNames,
-        List<Long> phase1ExistingFileSizes,  
-        int totalTranslogOps
-    ) {
-        super(requestSeqNo);  
-        this.recoveryId = recoveryId;
-        this.shardId = shardId;
-        this.phase1FileNames = phase1FileNames;  
-        this.phase1FileSizes = phase1FileSizes;
-        this.phase1ExistingFileNames = phase1ExistingFileNames;
-        this.phase1ExistingFileSizes = phase1ExistingFileSizes;  
-        this.totalTranslogOps = totalTranslogOps;
-    }
-
-    public long recoveryId() {
-        return this.recoveryId;
-    }  
-
-    public ShardId shardId() {
-        return shardId;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeLong(recoveryId);  
-        shardId.writeTo(out);
-
-        out.writeVInt(phase1FileNames.size());  
+ */  
         for (String phase1FileName : phase1FileNames) {
-            out.writeString(phase1FileName);
-        }  
-
-        out.writeVInt(phase1FileSizes.size());
-        for (Long phase1FileSize : phase1FileSizes) {  
-            out.writeVLong(phase1FileSize);
         }
-
+ * KIND, either express or implied.  See the License for the
+        int totalTranslogOps
+        this.phase1ExistingFileSizes = phase1ExistingFileSizes;  
         out.writeVInt(phase1ExistingFileNames.size());
-        for (String phase1ExistingFileName : phase1ExistingFileNames) {
-            out.writeString(phase1ExistingFileName);  
         }
-
-        out.writeVInt(phase1ExistingFileSizes.size());  
-        for (Long phase1ExistingFileSize : phase1ExistingFileSizes) {
-            out.writeVLong(phase1ExistingFileSize);
-        }  
+        ShardId shardId,
+ *  
+ * ownership. Elasticsearch licenses this file to you under  
         out.writeVInt(totalTranslogOps);
     }
+ */  
+    public void writeTo(StreamOutput out) throws IOException {
+ * the Apache License, Version 2.0 (the "License"); you may
+        long recoveryId,  
+/**  
+    private ShardId shardId;
+        super.writeTo(out);
+        recoveryId = in.readLong();
+        size = in.readVInt();  
+ *
+import java.util.List;
+    public RecoveryFilesInfoRequest(StreamInput in) throws IOException {
+            out.writeVLong(phase1FileSize);
+        for (int i = 0; i < size; i++) {
+ * Licensed to Elasticsearch under one or more contributor  
+        phase1FileNames = new ArrayList<>(size);
+        phase1FileSizes = new ArrayList<>(size);
+ */
+    }
+        }  
+        List<Long> phase1FileSizes,
+        this.totalTranslogOps = totalTranslogOps;
+        out.writeVInt(phase1FileNames.size());  
+import java.util.ArrayList;  
+    public ShardId shardId() {
+ * this file be licensed under the Apache-2.0 license or a
+        out.writeLong(recoveryId);  
+            phase1ExistingFileNames.add(in.readString());  
+        for (String phase1ExistingFileName : phase1ExistingFileNames) {
+ * Unless required by applicable law or agreed to in writing,
+        phase1ExistingFileSizes = new ArrayList<>(size);
+        this.phase1FileSizes = phase1FileSizes;
+    RecoveryFilesInfoRequest(
+ */
+        out.writeVInt(phase1ExistingFileSizes.size());  
+    private long recoveryId;
+            phase1FileNames.add(in.readString());  
+ * not use this file except in compliance with the License.
+            out.writeString(phase1ExistingFileName);  
+ * software distributed under the License is distributed on an
+import org.opensearch.core.common.io.stream.StreamInput;
+    List<Long> phase1ExistingFileSizes;
+        for (int i = 0; i < size; i++) {
+        for (int i = 0; i < size; i++) {
+        shardId = new ShardId(in);
+        phase1ExistingFileNames = new ArrayList<>(size);
 }  
+ * GitHub history for details.
+    int totalTranslogOps;  
+    List<String> phase1FileNames;
+    public long recoveryId() {
+        List<String> phase1FileNames,  
+/*  
+    List<String> phase1ExistingFileNames;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+    }  
+ * You may obtain a copy of the License at  
+ * @opensearch.internal  
+        super(requestSeqNo);  
+    List<Long> phase1FileSizes;
+        this.shardId = shardId;
+            out.writeString(phase1FileName);
+ * license agreements. See the NOTICE file distributed with
+        long requestSeqNo,
+        size = in.readVInt();  
+        }
+/*  
+            out.writeVLong(phase1ExistingFileSize);
+        return this.recoveryId;
+        this.phase1FileNames = phase1FileNames;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        shardId.writeTo(out);
+ * compatible open source license.
+ * under the License.  
+        this.recoveryId = recoveryId;
+        }
+        this.phase1ExistingFileNames = phase1ExistingFileNames;
+        for (int i = 0; i < size; i++) {
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+        for (Long phase1FileSize : phase1FileSizes) {  
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+ * Request for recovery file information
+    @Override  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        List<String> phase1ExistingFileNames,
+            phase1FileSizes.add(in.readVLong());  
+public class RecoveryFilesInfoRequest extends RecoveryTransportRequest {
+        totalTranslogOps = in.readVInt();
+    ) {
+        size = in.readVInt();  
+ * this work for additional information regarding copyright
+        }  
+        super(in);  
+        out.writeVInt(phase1FileSizes.size());
+import org.opensearch.core.index.shard.ShardId;  
+ *
+        int size = in.readVInt();  
+        return shardId;  
+        List<Long> phase1ExistingFileSizes,  
+        for (Long phase1ExistingFileSize : phase1ExistingFileSizes) {
+        }
+package org.opensearch.indices.recovery;
+    }
+            phase1ExistingFileSizes.add(in.readVLong());  
+        }

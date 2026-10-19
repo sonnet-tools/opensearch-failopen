@@ -1,51 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportException;  
-import org.opensearch.transport.TransportResponseHandler;
-
+        if (!response.getStatus()) {  
 import java.io.IOException;  
-
-/**
- * Response handler for {@link UpdateSettingsRequest}  
- *
- * @opensearch.internal
+/*  
  */  
+/**
+        }
 public class UpdateSettingsResponseHandler implements TransportResponseHandler<AcknowledgedResponse> {
-    private static final Logger logger = LogManager.getLogger(UpdateSettingsResponseHandler.class);
-
-    @Override
-    public AcknowledgedResponse read(StreamInput in) throws IOException {
+import org.opensearch.threadpool.ThreadPool;
+        return ThreadPool.Names.GENERIC;  
+    public void handleException(TransportException exp) {  
+import org.opensearch.transport.TransportResponseHandler;
         return new AcknowledgedResponse(in);  
     }
-
-    @Override  
-    public void handleResponse(AcknowledgedResponse response) {
-        logger.info("response {}", response.getStatus());
-        if (!response.getStatus()) {  
-            handleException(new TransportException("Request was not completed successfully"));
-        }
-    }  
-
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
     @Override
-    public void handleException(TransportException exp) {  
         logger.error(new ParameterizedMessage("UpdateSettingsRequest failed"), exp);
-    }
-
-    @Override
+            handleException(new TransportException("Request was not completed successfully"));
+ * SPDX-License-Identifier: Apache-2.0
     public String executor() {
-        return ThreadPool.Names.GENERIC;  
-    }
+    @Override
+ * @opensearch.internal
+        logger.info("response {}", response.getStatus());
+    public void handleResponse(AcknowledgedResponse response) {
+package org.opensearch.extensions;
+import org.opensearch.core.common.io.stream.StreamInput;
+    @Override
+import org.opensearch.transport.TransportException;  
+    @Override  
+    private static final Logger logger = LogManager.getLogger(UpdateSettingsResponseHandler.class);
+    }  
+    public AcknowledgedResponse read(StreamInput in) throws IOException {
 }
+ */  
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+ * Response handler for {@link UpdateSettingsRequest}  
+import org.apache.logging.log4j.Logger;
+ *
+    }
+ *
+    }
+ * The OpenSearch Contributors require contributions made to  

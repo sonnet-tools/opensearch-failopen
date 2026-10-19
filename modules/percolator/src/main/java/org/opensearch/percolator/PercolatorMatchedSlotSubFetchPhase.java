@@ -1,174 +1,154 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+        List<PercolateQuery> percolateQueries = locatePercolatorQuery(fetchContext.query());
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+        BitSetIterator iterator = new BitSetIterator(rootDocs, 0);
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
+                }  
  */
-
-package org.opensearch.percolator;
-
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;  
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TopDocs;  
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.BitSet;
-import org.apache.lucene.util.BitSetIterator;  
-import org.opensearch.common.document.DocumentField;
-import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.search.fetch.FetchContext;  
-import org.opensearch.search.fetch.FetchSubPhase;
-import org.opensearch.search.fetch.FetchSubPhaseProcessor;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;  
-
+                for (PercolateContext pc : percolateContexts) {
+        return stream;
+        boolean singlePercolateQuery = percolateQueries.size() == 1;  
+        }
+                        // This hit didn't match with a percolate query,
+import org.apache.lucene.util.BitSetIterator;  
+        int slot = 0;  
+ * under the License.  
+import org.apache.lucene.util.BitSet;
+            return null;
 import static org.opensearch.percolator.PercolatorHighlightSubFetchPhase.locatePercolatorQuery;
+            public void process(HitContext hitContext) throws IOException {  
+            @Override  
+        Query filterNestedDocs(Query in) {
+    static IntStream convertTopDocsToSlots(TopDocs topDocs, int[] rootDocsBySlot) {  
+                    if (query == null) {
+            rootDocsBySlot[slot++] = rootDocId;
+ * ownership. Elasticsearch licenses this file to you under  
+    }  
+        if (percolateContexts.isEmpty()) {
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+import java.util.List;
+            LeafReaderContext ctx;
+                    // _percolator_document_slot fields are document fields and should be under "fields" section in a hit
+            Query nonNestedFilter = percolatorIndexSearcher.rewrite(Queries.newNonNestedFilter());
+import java.util.ArrayList;
+                        continue;  
+            if (rootDocsBySlot != null) {
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+            int memoryIndexMaxDoc = percolatorIndexSearcher.getIndexReader().maxDoc();
+                    String fieldName = pc.fieldName();
+import org.apache.lucene.search.ScoreMode;
+/*
+                    }
+import java.util.stream.Collectors;
+import java.util.Arrays;  
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;  
-
-/**
+import org.apache.lucene.search.SortField;
+        List<PercolateContext> percolateContexts = new ArrayList<>();
+/*
+                    hitContext.hit().setDocumentField(fieldName, new DocumentField(fieldName, slots.boxed().collect(Collectors.toList())));
+            this.singlePercolateQuery = singlePercolateQuery;  
+            this.percolateQuery = pq;
+        IntStream stream = Arrays.stream(topDocs.scoreDocs).mapToInt(scoreDoc -> scoreDoc.doc);
+        }  
+final class PercolatorMatchedSlotSubFetchPhase implements FetchSubPhase {  
+ * specific language governing permissions and limitations
+            IndexSearcher percolatorIndexSearcher = percolateQuery.getPercolatorIndexSearcher();
+ * license agreements. See the NOTICE file distributed with
+                    .build();  
+            }  
+                    Query query = pc.percolateQuery.getQueryStore().getQueries(ctx).apply(hitContext.docId());  
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+        }
+import org.apache.lucene.search.Weight;
+ * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
+                return new BooleanQuery.Builder().add(in, BooleanClause.Occur.MUST)
+        }  
+            public void setNextReader(LeafReaderContext readerContext) {
+            @Override
+        return rootDocsBySlot;  
+            BitSet rootDocs = BitSet.of(s.iterator(), memoryIndexMaxDoc);  
+        return new FetchSubPhaseProcessor() {
+                    query = pc.filterNestedDocs(query);
+            percolateContexts.add(new PercolateContext(pq, singlePercolateQuery));
+    static final String FIELD_NAME_PREFIX = "_percolator_document_slot";
+ * not use this file except in compliance with the License.
+ * compatible open source license.
+import java.util.stream.IntStream;  
+        for (PercolateQuery pq : percolateQueries) {
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.TopDocs;  
+        final PercolateQuery percolateQuery;  
+            }
+                this.rootDocsBySlot = buildRootDocsSlots(rootDocs);  
+/*  
  * Adds a special field to a percolator query hit to indicate which documents matched with the percolator query.  
+    }
+    @Override
+import org.apache.lucene.search.BooleanClause;
+            boolean hasNestedDocs = rootDocs.cardinality() != percolatorIndexSearcher.getIndexReader().numDocs();
+                    IntStream slots = convertTopDocsToSlots(topDocs, pc.rootDocsBySlot);  
+/**
+            if (hasNestedDocs) {
+import org.apache.lucene.index.LeafReaderContext;  
+import java.io.IOException;
+                    int memoryIndexMaxDoc = percolatorIndexSearcher.getIndexReader().maxDoc();
+import org.apache.lucene.search.Sort;
+        PercolateContext(PercolateQuery pq, boolean singlePercolateQuery) throws IOException {
+import org.opensearch.search.fetch.FetchSubPhase;
+package org.opensearch.percolator;
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+ *
+        for (int rootDocId = iterator.nextDoc(); rootDocId != NO_MORE_DOCS; rootDocId = iterator.nextDoc()) {  
+    static class PercolateContext {
+import org.opensearch.common.document.DocumentField;
+            Scorer s = weight.scorer(percolatorIndexSearcher.getIndexReader().leaves().get(0));
+        }
+                    TopDocs topDocs = percolatorIndexSearcher.search(query, memoryIndexMaxDoc, new Sort(SortField.FIELD_DOC));
+        final int[] rootDocsBySlot;
+        String fieldName() {  
+            stream = stream.map(docId -> Arrays.binarySearch(rootDocsBySlot, docId));  
+                this.rootDocsBySlot = null;
+ * this work for additional information regarding copyright
+                // Ensures that we filter out nested documents  
+        final boolean singlePercolateQuery;
+        int[] rootDocsBySlot = new int[rootDocs.cardinality()];
+            }
+                this.ctx = readerContext;
+ * Modifications Copyright OpenSearch Contributors. See  
+                    IndexSearcher percolatorIndexSearcher = pc.percolateQuery.getPercolatorIndexSearcher();  
+            } else {
+                        // likely to happen when percolating multiple documents
+}
+                    .add(Queries.newNonNestedFilter(), BooleanClause.Occur.FILTER)
+    }  
+            }  
+            return singlePercolateQuery ? FIELD_NAME_PREFIX : FIELD_NAME_PREFIX + "_" + percolateQuery.getName();
+ * this file be licensed under the Apache-2.0 license or a
+        }  
+import org.opensearch.search.fetch.FetchSubPhaseProcessor;
+import org.apache.lucene.search.Query;
  * This is useful when multiple documents are being percolated in a single request.
  */
-final class PercolatorMatchedSlotSubFetchPhase implements FetchSubPhase {  
-
-    static final String FIELD_NAME_PREFIX = "_percolator_document_slot";
-
-    @Override
-    public FetchSubPhaseProcessor getProcessor(FetchContext fetchContext) throws IOException {
-
-        List<PercolateContext> percolateContexts = new ArrayList<>();
-        List<PercolateQuery> percolateQueries = locatePercolatorQuery(fetchContext.query());
-        boolean singlePercolateQuery = percolateQueries.size() == 1;  
-        for (PercolateQuery pq : percolateQueries) {
-            percolateContexts.add(new PercolateContext(pq, singlePercolateQuery));
-        }  
-        if (percolateContexts.isEmpty()) {
-            return null;
-        }  
-
-        return new FetchSubPhaseProcessor() {
-
-            LeafReaderContext ctx;
-
-            @Override  
-            public void setNextReader(LeafReaderContext readerContext) {
-                this.ctx = readerContext;
-            }  
-
-            @Override
-            public void process(HitContext hitContext) throws IOException {  
-                for (PercolateContext pc : percolateContexts) {
-                    String fieldName = pc.fieldName();
-                    Query query = pc.percolateQuery.getQueryStore().getQueries(ctx).apply(hitContext.docId());  
-                    if (query == null) {
-                        // This is not a document with a percolator field.
-                        continue;  
-                    }
-                    query = pc.filterNestedDocs(query);
-                    IndexSearcher percolatorIndexSearcher = pc.percolateQuery.getPercolatorIndexSearcher();  
-                    int memoryIndexMaxDoc = percolatorIndexSearcher.getIndexReader().maxDoc();
-                    TopDocs topDocs = percolatorIndexSearcher.search(query, memoryIndexMaxDoc, new Sort(SortField.FIELD_DOC));
-                    if (topDocs.totalHits.value() == 0) {  
-                        // This hit didn't match with a percolate query,
-                        // likely to happen when percolating multiple documents
-                        continue;  
-                    }
-
-                    IntStream slots = convertTopDocsToSlots(topDocs, pc.rootDocsBySlot);  
-                    // _percolator_document_slot fields are document fields and should be under "fields" section in a hit
-                    hitContext.hit().setDocumentField(fieldName, new DocumentField(fieldName, slots.boxed().collect(Collectors.toList())));
-                }  
-            }
+ * KIND, either express or implied.  See the License for the
         };
-    }  
-
-    static class PercolateContext {
-        final PercolateQuery percolateQuery;  
-        final boolean singlePercolateQuery;
-        final int[] rootDocsBySlot;
-
-        PercolateContext(PercolateQuery pq, boolean singlePercolateQuery) throws IOException {
-            this.percolateQuery = pq;
-            this.singlePercolateQuery = singlePercolateQuery;  
-            IndexSearcher percolatorIndexSearcher = percolateQuery.getPercolatorIndexSearcher();
-            Query nonNestedFilter = percolatorIndexSearcher.rewrite(Queries.newNonNestedFilter());
             Weight weight = percolatorIndexSearcher.createWeight(nonNestedFilter, ScoreMode.COMPLETE_NO_SCORES, 1f);  
-            Scorer s = weight.scorer(percolatorIndexSearcher.getIndexReader().leaves().get(0));
-            int memoryIndexMaxDoc = percolatorIndexSearcher.getIndexReader().maxDoc();
-            BitSet rootDocs = BitSet.of(s.iterator(), memoryIndexMaxDoc);  
-            boolean hasNestedDocs = rootDocs.cardinality() != percolatorIndexSearcher.getIndexReader().numDocs();
-            if (hasNestedDocs) {
-                this.rootDocsBySlot = buildRootDocsSlots(rootDocs);  
-            } else {
-                this.rootDocsBySlot = null;
-            }  
         }
-
-        String fieldName() {  
-            return singlePercolateQuery ? FIELD_NAME_PREFIX : FIELD_NAME_PREFIX + "_" + percolateQuery.getName();
-        }
-
-        Query filterNestedDocs(Query in) {
-            if (rootDocsBySlot != null) {
-                // Ensures that we filter out nested documents  
-                return new BooleanQuery.Builder().add(in, BooleanClause.Occur.MUST)
-                    .add(Queries.newNonNestedFilter(), BooleanClause.Occur.FILTER)
-                    .build();  
-            }
-            return in;
-        }  
-    }
-
-    static IntStream convertTopDocsToSlots(TopDocs topDocs, int[] rootDocsBySlot) {  
-        IntStream stream = Arrays.stream(topDocs.scoreDocs).mapToInt(scoreDoc -> scoreDoc.doc);
-        if (rootDocsBySlot != null) {
-            stream = stream.map(docId -> Arrays.binarySearch(rootDocsBySlot, docId));  
-        }
-        return stream;
-    }  
-
+                        continue;  
+    public FetchSubPhaseProcessor getProcessor(FetchContext fetchContext) throws IOException {
+                        // This is not a document with a percolator field.
+import org.opensearch.common.lucene.search.Queries;
     static int[] buildRootDocsSlots(BitSet rootDocs) {
-        int slot = 0;  
-        int[] rootDocsBySlot = new int[rootDocs.cardinality()];
-        BitSetIterator iterator = new BitSetIterator(rootDocs, 0);
-        for (int rootDocId = iterator.nextDoc(); rootDocId != NO_MORE_DOCS; rootDocId = iterator.nextDoc()) {  
-            rootDocsBySlot[slot++] = rootDocId;
-        }
-        return rootDocsBySlot;  
-    }
-}
+                    }
+        if (rootDocsBySlot != null) {
+            return in;
+import org.apache.lucene.search.Scorer;  
+ * GitHub history for details.
+import org.apache.lucene.search.IndexSearcher;  
+                    if (topDocs.totalHits.value() == 0) {  

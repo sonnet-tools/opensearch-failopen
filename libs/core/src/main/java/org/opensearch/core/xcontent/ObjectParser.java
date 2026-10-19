@@ -1,747 +1,689 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.core.xcontent;
-
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-
-import java.io.IOException;
-import java.lang.reflect.Array;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.HashMap;  
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-import java.util.function.BiConsumer;  
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;  
-import java.util.function.Supplier;
-
-import static java.util.Objects.requireNonNull;  
-import static org.opensearch.core.xcontent.XContentParser.Token.START_ARRAY;
+        private final Parser<Value, Context> parser;
 import static org.opensearch.core.xcontent.XContentParser.Token.START_OBJECT;
-import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_BOOLEAN;  
-import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_EMBEDDED_OBJECT;
-import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_NULL;
-import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_NUMBER;  
-import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_STRING;
-
-/**  
- * A declarative, stateless parser that turns XContent into setter calls. A single parser should be defined for each object being parsed,
- * nested elements can be added via {@link #declareObject(BiConsumer, ContextParser, ParseField)} which should be satisfied where possible
- * by passing another instance of {@link ObjectParser}, this one customized for that Object.  
- * <p>
- * This class works well for object that do have a constructor argument or that can be built using information available from earlier in the
- * XContent. For objects that have constructors with required arguments that are specified on the same level as other fields see  
- * {@link ConstructingObjectParser}.
- * </p>
- * <p>  
- * Instances of {@link ObjectParser} should be setup by declaring a constant field for the parsers and declaring all fields in a static
- * block just below the creation of the parser. Like this:
- * </p>  
- * <pre>{@code
- *   private static final ObjectParser<Thing, SomeContext> PARSER = new ObjectParser<>("thing", Thing::new));
- *   static {  
- *       PARSER.declareInt(Thing::setMineral, new ParseField("mineral"));
- *       PARSER.declareInt(Thing::setFruit, new ParseField("fruit"));
- *   }  
- * }</pre>
- * It's highly recommended to use the high level declare methods like {@link #declareString(BiConsumer, ParseField)} instead of
- * {@link #declareField} which can be used to implement exceptional parsing operations not covered by the high level methods.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public final class ObjectParser<Value, Context> extends AbstractObjectParser<Value, Context>
-    implements  
-        BiFunction<XContentParser, Context, Value>,
-        ContextParser<Context, Value> {
-
-    private final List<String[]> requiredFieldSets = new ArrayList<>();
-    private final List<String[]> exclusiveFieldSets = new ArrayList<>();
-
+import java.util.List;  
     /**
-     * Adapts an array (or varags) setter into a list setter.
-     */  
-    public static <Value, ElementValue> BiConsumer<Value, List<ElementValue>> fromList(
-        Class<ElementValue> c,
-        BiConsumer<Value, ElementValue[]> consumer  
-    ) {
-        return (Value v, List<ElementValue> l) -> {
-            @SuppressWarnings("unchecked")  
-            ElementValue[] array = (ElementValue[]) Array.newInstance(c, l.size());
-            consumer.accept(v, l.toArray(array));
-        };  
-    }
-
-    private interface UnknownFieldParser<Value, Context> {  
-        void acceptUnknownField(
-            ObjectParser<Value, Context> objectParser,
-            String field,  
-            XContentLocation location,
-            XContentParser parser,
-            Value value,  
-            Context context
-        ) throws IOException;
-    }  
-
-    private static <Value, Context> UnknownFieldParser<Value, Context> ignoreUnknown() {
-        return (op, f, l, p, v, c) -> p.skipChildren();  
-    }
-
-    private static <Value, Context> UnknownFieldParser<Value, Context> errorOnUnknown() {  
-        return (op, f, l, p, v, c) -> {
-            throw new XContentParseException(l, ErrorOnUnknown.IMPLEMENTATION.errorMessage(op.name, f, op.fieldParserMap.keySet()));
-        };  
-    }
-
-    /**  
-     * Defines how to consume a parsed undefined field
-     */
-    public interface UnknownFieldConsumer<Value> {  
-        void accept(Value target, String field, Object value);
-    }
-
-    private static <Value, Context> UnknownFieldParser<Value, Context> consumeUnknownField(UnknownFieldConsumer<Value> consumer) {
-        return (objectParser, field, location, parser, value, context) -> {
-            XContentParser.Token t = parser.currentToken();  
-            switch (t) {
-                case VALUE_STRING:
-                    consumer.accept(value, field, parser.text());  
-                    break;
-                case VALUE_NUMBER:
-                    consumer.accept(value, field, parser.numberValue());  
-                    break;
-                case VALUE_BOOLEAN:
-                    consumer.accept(value, field, parser.booleanValue());  
-                    break;
-                case VALUE_NULL:
-                    consumer.accept(value, field, null);  
-                    break;
-                case START_OBJECT:
-                    consumer.accept(value, field, parser.map());  
-                    break;
-                case START_ARRAY:
-                    consumer.accept(value, field, parser.list());  
-                    break;
-                default:
-                    throw new XContentParseException(  
-                        parser.getTokenLocation(),
-                        "[" + objectParser.name + "] cannot parse field [" + field + "] with value type [" + t + "]"
-                    );  
+            throw new IllegalArgumentException("[parseField] is required");
+ *  
+        }  
+import java.util.Arrays;
+                consumer.accept(v, objectParser.apply(p, c));
+        }
+        NamedObjectParser<T, Context> namedObjectParser,
+                if (parser.currentToken() != XContentParser.Token.END_ARRAY) {
+            case VALUE_NUMBER:
+                    throw new IllegalStateException("parser for [" + currentFieldName + "] did not end on END_ARRAY");
+                    }
+        OBJECT_OR_NULL(START_OBJECT, VALUE_NULL),
+    public Value parse(XContentParser parser, Value value, Context context) throws IOException {
+        declareNamedObjects(consumer, namedObjectParser, orderedModeCallback, field);
+     * Creates a new ObjectParser that attempts to resolve unknown fields as {@link XContentParser#namedObject namedObjects}.  
             }
-        };
-    }  
-
-    private static <Value, Category, Context> UnknownFieldParser<Value, Context> unknownIsNamedXContent(
-        Class<Category> categoryClass,  
-        BiConsumer<Value, ? super Category> consumer
-    ) {
-        return (objectParser, field, location, parser, value, context) -> {  
-            Category o;
-            try {
-                o = parser.namedObject(categoryClass, field, context);  
-            } catch (NamedObjectNotFoundException e) {
-                Set<String> candidates = new HashSet<>(objectParser.fieldParserMap.keySet());
-                e.getCandidates().forEach(candidates::add);  
-                String message = ErrorOnUnknown.IMPLEMENTATION.errorMessage(objectParser.name, field, candidates);
-                throw new XContentParseException(location, message, e);
-            }  
-            consumer.accept(value, o);
-        };
-    }  
-
-    private final Map<String, FieldParser> fieldParserMap = new HashMap<>();
-    private final String name;  
-    private final Function<Context, Value> valueBuilder;
-    private final UnknownFieldParser<Value, Context> unknownFieldParser;
-
-    /**
-     * Creates a new ObjectParser.
-     * @param name the parsers name, used to reference the parser in exceptions and messages.  
+            try {  
+        OBJECT_OR_STRING(START_OBJECT, VALUE_STRING),
      */
-    public ObjectParser(String name) {
-        this(name, errorOnUnknown(), null);  
-    }
-
-    /**  
-     * Creates a new ObjectParser.
+            return parse(parser, context);
+        OBJECT_ARRAY_BOOLEAN_OR_STRING(START_OBJECT, START_ARRAY, VALUE_BOOLEAN, VALUE_STRING),
+            if (p.currentToken() == XContentParser.Token.START_OBJECT) {
+                            "["
      * @param name the parsers name, used to reference the parser in exceptions and messages.
      * @param valueSupplier A supplier that creates a new Value instance. Used when the parser is used as an inner object parser.  
-     */
-    public ObjectParser(String name, @Nullable Supplier<Value> valueSupplier) {
-        this(name, errorOnUnknown(), c -> valueSupplier.get());  
-    }
-
-    /**  
-     * Creates a new ObjectParser.
-     * @param name the parsers name, used to reference the parser in exceptions and messages.
-     * @param valueBuilder A function that creates a new Value from the parse Context. Used  
-     *                     when the parser is used as an inner object parser.
-     */
-    public static <Value, Context> ObjectParser<Value, Context> fromBuilder(String name, Function<Context, Value> valueBuilder) {  
-        requireNonNull(valueBuilder, "Use the single argument ctor instead");
-        return new ObjectParser<Value, Context>(name, errorOnUnknown(), valueBuilder);
-    }  
-
-    /**
-     * Creates a new ObjectParser.  
-     * @param name the parsers name, used to reference the parser in exceptions and messages.
-     * @param ignoreUnknownFields Should this parser ignore unknown fields? This should generally be set to true only when parsing
-     *      responses from external systems, never when parsing requests from users.  
-     * @param valueSupplier a supplier that creates a new Value instance used when the parser is used as an inner object parser.
-     */
-    public ObjectParser(String name, boolean ignoreUnknownFields, @Nullable Supplier<Value> valueSupplier) {  
-        this(name, ignoreUnknownFields ? ignoreUnknown() : errorOnUnknown(), c -> valueSupplier.get());
-    }
-
-    /**
-     * Creates a new ObjectParser that consumes unknown fields as generic Objects.
-     * @param name the parsers name, used to reference the parser in exceptions and messages.  
-     * @param unknownFieldConsumer how to consume parsed unknown fields
-     * @param valueSupplier a supplier that creates a new Value instance used when the parser is used as an inner object parser.
-     */  
-    public ObjectParser(String name, UnknownFieldConsumer<Value> unknownFieldConsumer, @Nullable Supplier<Value> valueSupplier) {
-        this(name, consumeUnknownField(unknownFieldConsumer), c -> valueSupplier.get());
-    }  
-
-    /**
-     * Creates a new ObjectParser that attempts to resolve unknown fields as {@link XContentParser#namedObject namedObjects}.  
-     * @param <C> the type of named object that unknown fields are expected to be
-     * @param name the parsers name, used to reference the parser in exceptions and messages.
-     * @param categoryClass the type of named object that unknown fields are expected to be  
-     * @param unknownFieldConsumer how to consume parsed unknown fields
-     * @param valueSupplier a supplier that creates a new Value instance used when the parser is used as an inner object parser.
-     */  
-    public <C> ObjectParser(
-        String name,
-        Class<C> categoryClass,  
-        BiConsumer<Value, C> unknownFieldConsumer,
-        @Nullable Supplier<Value> valueSupplier
-    ) {  
-        this(name, unknownIsNamedXContent(categoryClass, unknownFieldConsumer), c -> valueSupplier.get());
-    }
-
-    /**
-     * Creates a new ObjectParser instance with a name.
-     * @param name the parsers name, used to reference the parser in exceptions and messages.  
-     * @param unknownFieldParser how to parse unknown fields
-     * @param valueBuilder builds the value from the context. Used when the ObjectParser is not passed a value.
-     */  
-    private ObjectParser(
-        String name,
-        UnknownFieldParser<Value, Context> unknownFieldParser,  
-        @Nullable Function<Context, Value> valueBuilder
-    ) {
-        this.name = name;  
-        this.unknownFieldParser = unknownFieldParser;
-        this.valueBuilder = valueBuilder;
-    }  
-
-    /**
-     * Parses a Value from the given {@link XContentParser}  
-     * @param parser the parser to build a value from
-     * @param context context needed for parsing
-     * @return a new value instance drawn from the provided value supplier on {@link #ObjectParser(String, Supplier)}  
      * @throws IOException if an IOException occurs.
-     */
-    @Override  
-    public Value parse(XContentParser parser, Context context) throws IOException {
-        if (valueBuilder == null) {
-            throw new NullPointerException("valueBuilder is not set");  
-        }
-        return parse(parser, valueBuilder.apply(context), context);
-    }  
-
-    /**
-     * Parses a Value from the given {@link XContentParser}  
-     * @param parser the parser to build a value from
-     * @param value the value to fill from the parser
-     * @param context a context that is passed along to all declared field parsers  
-     * @return the parsed value
-     * @throws IOException if an IOException occurs.
-     */  
-    public Value parse(XContentParser parser, Value value, Context context) throws IOException {
-        XContentParser.Token token;
-        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {  
-            token = parser.currentToken();
-        } else {
-            token = parser.nextToken();  
-            if (token != XContentParser.Token.START_OBJECT) {
-                throw new XContentParseException(parser.getTokenLocation(), "[" + name + "] Expected START_OBJECT but was: " + token);
-            }  
-        }
-
-        FieldParser fieldParser = null;  
-        String currentFieldName = null;
-        XContentLocation currentPosition = null;
-        List<String[]> requiredFields = new ArrayList<>(this.requiredFieldSets);  
-        List<List<String>> exclusiveFields = new ArrayList<>();
-        for (int i = 0; i < this.exclusiveFieldSets.size(); i++) {
-            exclusiveFields.add(new ArrayList<>());  
-        }
-
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-                currentPosition = parser.getTokenLocation();  
-                fieldParser = fieldParserMap.get(currentFieldName);
-            } else {
-                if (currentFieldName == null) {  
-                    throw new XContentParseException(parser.getTokenLocation(), "[" + name + "] no field found");
-                }
-                if (fieldParser == null) {  
-                    unknownFieldParser.acceptUnknownField(this, currentFieldName, currentPosition, parser, value, context);
-                } else {
-                    fieldParser.assertSupports(name, parser, currentFieldName);  
-
-                    // Check to see if this field is a required field, if it is we can
-                    // remove the entry as the requirement is satisfied  
-                    Iterator<String[]> iter = requiredFields.iterator();
-                    while (iter.hasNext()) {
-                        String[] requriedFields = iter.next();  
-                        for (String field : requriedFields) {
-                            if (field.equals(currentFieldName)) {
-                                iter.remove();  
-                                break;
-                            }
-                        }  
-                    }
-
-                    // Check if this field is in an exclusive set, if it is then mark  
-                    // it as seen.
-                    for (int i = 0; i < this.exclusiveFieldSets.size(); i++) {
-                        for (String field : this.exclusiveFieldSets.get(i)) {  
-                            if (field.equals(currentFieldName)) {
-                                exclusiveFields.get(i).add(currentFieldName);
-                            }  
-                        }
-                    }
-
-                    parseSub(parser, fieldParser, currentFieldName, value, context);
-                }
-                fieldParser = null;  
-            }
-        }
-
-        // Check for a) multiple entries appearing in exclusive field sets and b) empty
-        // required field entries
-        StringBuilder message = new StringBuilder();  
-        for (List<String> fieldset : exclusiveFields) {
-            if (fieldset.size() > 1) {
-                message.append("The following fields are not allowed together: ").append(fieldset.toString()).append(" ");  
-            }
-        }
-        if (message.length() > 0) {  
-            throw new IllegalArgumentException(message.toString());
-        }
-
-        if (requiredFields.isEmpty() == false) {
-            for (String[] fields : requiredFields) {
-                message.append("Required one of fields ").append(Arrays.toString(fields)).append(", but none were specified. ");  
-            }
-            throw new IllegalArgumentException(message.toString());
-        }  
-
-        return value;
-    }  
-
-    @Override
-    public Value apply(XContentParser parser, Context context) {  
-        try {
-            return parse(parser, context);
-        } catch (IOException e) {  
-            throw new XContentParseException(parser.getTokenLocation(), "[" + name + "] failed to parse object", e);
-        }
-    }  
-
-    /**
-     * Main parser interface  
-     *
-     * @opensearch.internal
-     */  
-    public interface Parser<Value, Context> {
-        void parse(XContentParser parser, Value value, Context context) throws IOException;
-    }  
-
-    public void declareField(Parser<Value, Context> p, ParseField parseField, ValueType type) {
-        if (parseField == null) {  
-            throw new IllegalArgumentException("[parseField] is required");
-        }
-        if (type == null) {  
-            throw new IllegalArgumentException("[type] is required");
-        }
-        FieldParser fieldParser = new FieldParser(p, type.supportedTokens(), parseField, type);  
-        for (String fieldValue : parseField.getAllNamesIncludedDeprecated()) {
-            fieldParserMap.putIfAbsent(fieldValue, fieldParser);
-        }  
-    }
-
-    @Override  
-    public <T> void declareField(BiConsumer<Value, T> consumer, ContextParser<Context, T> parser, ParseField parseField, ValueType type) {
-        if (consumer == null) {
-            throw new IllegalArgumentException("[consumer] is required");  
-        }
-        if (parser == null) {
-            throw new IllegalArgumentException("[parser] is required");  
-        }
-        declareField((p, v, c) -> consumer.accept(v, parser.parse(p, c)), parseField, type);
-    }  
-
-    public <T> void declareObjectOrDefault(
-        BiConsumer<Value, T> consumer,  
-        BiFunction<XContentParser, Context, T> objectParser,
-        Supplier<T> defaultValue,
-        ParseField field  
-    ) {
-        declareField((p, v, c) -> {
-            if (p.currentToken() == XContentParser.Token.VALUE_BOOLEAN) {  
-                if (p.booleanValue()) {
-                    consumer.accept(v, defaultValue.get());
-                }  
-            } else {
-                consumer.accept(v, objectParser.apply(p, c));
-            }  
-        }, field, ValueType.OBJECT_OR_BOOLEAN);
-    }
-
-    @Override
-    public <T> void declareNamedObject(BiConsumer<Value, T> consumer, NamedObjectParser<T, Context> namedObjectParser, ParseField field) {
-
-        BiFunction<XContentParser, Context, T> objectParser = (XContentParser p, Context c) -> {
-            try {
-                XContentParser.Token token = p.nextToken();  
-                assert token == XContentParser.Token.FIELD_NAME;
-                String name = p.currentName();
-                try {  
-                    T namedObject = namedObjectParser.parse(p, c, name);
-                    // consume the end object token
-                    token = p.nextToken();  
-                    assert token == XContentParser.Token.END_OBJECT;
-                    return namedObject;
-                } catch (Exception e) {  
-                    throw new XContentParseException(p.getTokenLocation(), "[" + field + "] failed to parse field [" + name + "]", e);
-                }
-            } catch (IOException e) {  
-                throw new XContentParseException(p.getTokenLocation(), "[" + field + "] error while parsing named object", e);
-            }
-        };  
-
-        declareField((XContentParser p, Value v, Context c) -> consumer.accept(v, objectParser.apply(p, c)), field, ValueType.OBJECT);
-    }  
-
-    @Override
-    public <T> void declareNamedObjects(  
-        BiConsumer<Value, List<T>> consumer,
-        NamedObjectParser<T, Context> namedObjectParser,
-        Consumer<Value> orderedModeCallback,  
-        ParseField field
-    ) {
-        // This creates and parses the named object  
-        BiFunction<XContentParser, Context, T> objectParser = (XContentParser p, Context c) -> {
-            if (p.currentToken() != XContentParser.Token.FIELD_NAME) {
-                throw new XContentParseException(  
-                    p.getTokenLocation(),
-                    "["
-                        + field  
-                        + "] can be a single object with any number of "
-                        + "fields or an array where each entry is an object with a single field"
-                );  
-            }
-            // This messy exception nesting has the nice side effect of telling the user which field failed to parse
-            try {  
-                String name = p.currentName();
-                try {
-                    return namedObjectParser.parse(p, c, name);  
-                } catch (Exception e) {
-                    throw new XContentParseException(p.getTokenLocation(), "[" + field + "] failed to parse field [" + name + "]", e);
-                }  
-            } catch (IOException e) {
-                throw new XContentParseException(p.getTokenLocation(), "[" + field + "] error while parsing", e);
-            }  
-        };
-        declareField((XContentParser p, Value v, Context c) -> {
-            List<T> fields = new ArrayList<>();  
-            XContentParser.Token token;
-            if (p.currentToken() == XContentParser.Token.START_OBJECT) {
-                // Fields are just named entries in a single object  
-                while ((token = p.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    fields.add(objectParser.apply(p, c));
-                }  
-            } else if (p.currentToken() == XContentParser.Token.START_ARRAY) {
-                // Fields are objects in an array. Each object contains a named field.
-                orderedModeCallback.accept(v);  
-                while ((token = p.nextToken()) != XContentParser.Token.END_ARRAY) {
-                    if (token != XContentParser.Token.START_OBJECT) {
-                        throw new XContentParseException(  
-                            p.getTokenLocation(),
-                            "["
-                                + field  
-                                + "] can be a single object with any number of "
-                                + "fields or an array where each entry is an object with a single field"
-                        );  
-                    }
-                    p.nextToken(); // Move to the first field in the object
-                    fields.add(objectParser.apply(p, c));  
-                    p.nextToken(); // Move past the object, should be back to into the array
-                    if (p.currentToken() != XContentParser.Token.END_OBJECT) {
-                        throw new XContentParseException(  
-                            p.getTokenLocation(),
-                            "["
-                                + field  
-                                + "] can be a single object with any number of "
-                                + "fields or an array where each entry is an object with a single field"
-                        );  
-                    }
-                }
-            }  
-            consumer.accept(v, fields);
-        }, field, ValueType.OBJECT_ARRAY);
-    }  
-
-    @Override
-    public <T> void declareNamedObjects(  
-        BiConsumer<Value, List<T>> consumer,
-        NamedObjectParser<T, Context> namedObjectParser,
-        ParseField field  
-    ) {
-        Consumer<Value> orderedModeCallback = (v) -> {
-            throw new IllegalArgumentException("[" + field + "] doesn't support arrays. Use a single object with multiple fields.");  
-        };
-        declareNamedObjects(consumer, namedObjectParser, orderedModeCallback, field);
-    }  
-
-    /**
-     * Functional interface for instantiating and parsing named objects. See ObjectParserTests#NamedObject for the canonical way to  
-     * implement this for objects that themselves have a parser.
-     */
-    @FunctionalInterface  
-    public interface NamedObjectParser<T, Context> {
-        T parse(XContentParser p, Context c, String name) throws IOException;
-    }  
-
-    /**
-     * Get the name of the parser.  
-     */
-    @Override
-    public String getName() {  
-        return name;
-    }
-
-    @Override
-    public void declareRequiredFieldSet(String... requiredSet) {
-        if (requiredSet.length == 0) {  
-            return;
-        }
-        this.requiredFieldSets.add(requiredSet);  
-    }
-
-    @Override  
-    public void declareExclusiveFieldSet(String... exclusiveSet) {
-        if (exclusiveSet.length == 0) {
-            return;  
-        }
-        this.exclusiveFieldSets.add(exclusiveSet);
-    }  
-
-    private void parseArray(XContentParser parser, FieldParser fieldParser, String currentFieldName, Value value, Context context)
-        throws IOException {  
-        assert parser.currentToken() == XContentParser.Token.START_ARRAY : "Token was: " + parser.currentToken();
-        parseValue(parser, fieldParser, currentFieldName, value, context);
-    }  
-
-    private void parseValue(XContentParser parser, FieldParser fieldParser, String currentFieldName, Value value, Context context)
-        throws IOException {  
-        try {
-            fieldParser.parser.parse(parser, value, context);
-        } catch (Exception ex) {  
-            throw new XContentParseException(
-                parser.getTokenLocation(),
-                "[" + name + "] failed to parse field [" + currentFieldName + "]",  
-                ex
-            );
-        }  
-    }
-
-    private void parseSub(XContentParser parser, FieldParser fieldParser, String currentFieldName, Value value, Context context)  
-        throws IOException {
-        final XContentParser.Token token = parser.currentToken();
-        switch (token) {  
-            case START_OBJECT:
-                parseValue(parser, fieldParser, currentFieldName, value, context);
-                /*  
-                 * Well behaving parsers should consume the entire object but
-                 * asserting that they do that is not something we can do
-                 * efficiently here. Instead we can check that they end on an  
-                 * END_OBJECT. They could end on the *wrong* end object and
-                 * this test won't catch them, but that is the price that we pay
-                 * for having a cheap test.  
-                 */
-                if (parser.currentToken() != XContentParser.Token.END_OBJECT) {
-                    throw new IllegalStateException("parser for [" + currentFieldName + "] did not end on END_OBJECT");  
-                }
-                break;
-            case START_ARRAY:  
-                parseArray(parser, fieldParser, currentFieldName, value, context);
-                /*
-                 * Well behaving parsers should consume the entire array but  
-                 * asserting that they do that is not something we can do
-                 * efficiently here. Instead we can check that they end on an
-                 * END_ARRAY. They could end on the *wrong* end array and  
-                 * this test won't catch them, but that is the price that we pay
-                 * for having a cheap test.
-                 */  
-                if (parser.currentToken() != XContentParser.Token.END_ARRAY) {
-                    throw new IllegalStateException("parser for [" + currentFieldName + "] did not end on END_ARRAY");
-                }  
-                break;
-            case END_OBJECT:
-            case END_ARRAY:  
-            case FIELD_NAME:
-                throw new XContentParseException(parser.getTokenLocation(), "[" + name + "]" + token + " is unexpected");
-            case VALUE_STRING:  
-            case VALUE_NUMBER:
-            case VALUE_BOOLEAN:
-            case VALUE_EMBEDDED_OBJECT:  
-            case VALUE_NULL:
-                parseValue(parser, fieldParser, currentFieldName, value, context);
-        }  
-    }
-
-    private class FieldParser {  
-        private final Parser<Value, Context> parser;
-        private final EnumSet<XContentParser.Token> supportedTokens;
-        private final ParseField parseField;  
-        private final ValueType type;
-
-        FieldParser(Parser<Value, Context> parser, EnumSet<XContentParser.Token> supportedTokens, ParseField parseField, ValueType type) {  
-            this.parser = parser;
-            this.supportedTokens = supportedTokens;
-            this.parseField = parseField;  
-            this.type = type;
-        }
-
-        void assertSupports(String parserName, XContentParser parser, String currentFieldName) {
-            if (parseField.match(parserName, parser::getTokenLocation, currentFieldName, parser.getDeprecationHandler()) == false) {
-                throw new XContentParseException(  
-                    parser.getTokenLocation(),
-                    "[" + parserName + "] parsefield doesn't accept: " + currentFieldName
-                );  
-            }
-            if (supportedTokens.contains(parser.currentToken()) == false) {
-                throw new XContentParseException(  
-                    parser.getTokenLocation(),
-                    "[" + parserName + "] " + currentFieldName + " doesn't support values of type: " + parser.currentToken()
-                );  
-            }
-        }
-
-        @Override
-        public String toString() {
-            String[] deprecatedNames = parseField.getDeprecatedNames();  
-            String allReplacedWith = parseField.getAllReplacedWith();
-            String deprecated = "";
-            if (deprecatedNames != null && deprecatedNames.length > 0) {  
-                deprecated = ", deprecated_names=" + Arrays.toString(deprecatedNames);
-            }
-            return "FieldParser{"  
-                + "preferred_name="
-                + parseField.getPreferredName()
-                + ", supportedTokens="  
-                + supportedTokens
-                + deprecated
-                + (allReplacedWith == null ? "" : ", replaced_with=" + allReplacedWith)  
-                + ", type="
-                + type.name()
-                + '}';  
-        }
-    }
-
-    /**
-     * Supported Value Types for Parsable Objects
-     *  
-     * @opensearch.internal
-     */
-    public enum ValueType {  
-        STRING(VALUE_STRING),
-        STRING_OR_NULL(VALUE_STRING, VALUE_NULL),
-        FLOAT(VALUE_NUMBER, VALUE_STRING),  
-        FLOAT_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),
-        DOUBLE(VALUE_NUMBER, VALUE_STRING),
-        DOUBLE_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),  
         LONG(VALUE_NUMBER, VALUE_STRING),
-        LONG_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),
-        INT(VALUE_NUMBER, VALUE_STRING),  
-        INT_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),
-        BOOLEAN(VALUE_BOOLEAN, VALUE_STRING),
-        STRING_ARRAY(START_ARRAY, VALUE_STRING),  
-        FLOAT_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),
-        DOUBLE_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),
-        LONG_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),  
-        INT_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),
-        BOOLEAN_ARRAY(START_ARRAY, VALUE_BOOLEAN),
-        OBJECT(START_OBJECT),  
-        OBJECT_OR_NULL(START_OBJECT, VALUE_NULL),
-        OBJECT_ARRAY(START_OBJECT, START_ARRAY),
-        OBJECT_ARRAY_OR_NULL(START_OBJECT, START_ARRAY, VALUE_NULL),  
-        OBJECT_OR_BOOLEAN(START_OBJECT, VALUE_BOOLEAN),
-        OBJECT_OR_STRING(START_OBJECT, VALUE_STRING),
-        OBJECT_OR_LONG(START_OBJECT, VALUE_NUMBER),  
-        OBJECT_ARRAY_BOOLEAN_OR_STRING(START_OBJECT, START_ARRAY, VALUE_BOOLEAN, VALUE_STRING),
-        OBJECT_ARRAY_OR_STRING(START_OBJECT, START_ARRAY, VALUE_STRING),
-        OBJECT_ARRAY_STRING_OR_NUMBER(START_OBJECT, START_ARRAY, VALUE_STRING, VALUE_NUMBER),  
-        VALUE(VALUE_BOOLEAN, VALUE_NULL, VALUE_EMBEDDED_OBJECT, VALUE_NUMBER, VALUE_STRING),
-        VALUE_OBJECT_ARRAY(VALUE_BOOLEAN, VALUE_NULL, VALUE_EMBEDDED_OBJECT, VALUE_NUMBER, VALUE_STRING, START_OBJECT, START_ARRAY),
-        VALUE_ARRAY(VALUE_BOOLEAN, VALUE_NULL, VALUE_NUMBER, VALUE_STRING, START_ARRAY);  
-
-        private final EnumSet<XContentParser.Token> tokens;
-
-        ValueType(XContentParser.Token first, XContentParser.Token... rest) {
-            this.tokens = EnumSet.of(first, rest);
         }  
-
-        public EnumSet<XContentParser.Token> supportedTokens() {
-            return this.tokens;  
+        String name,
+ * </p>
+        if (parseField == null) {  
+            throw new IllegalArgumentException(message.toString());
+    @Override  
+    public static <Value, Context> ObjectParser<Value, Context> fromBuilder(String name, Function<Context, Value> valueBuilder) {  
+        void acceptUnknownField(
+                    parser.getTokenLocation(),
+    public interface Parser<Value, Context> {
+                    parser.getTokenLocation(),
+        this.valueBuilder = valueBuilder;
         }
+     * @param name the parsers name, used to reference the parser in exceptions and messages.  
+            String deprecated = "";
+     */  
+                    throw new XContentParseException(p.getTokenLocation(), "[" + field + "] failed to parse field [" + name + "]", e);
+                                + field  
+        BiFunction<XContentParser, Context, Value>,
+                    T namedObject = namedObjectParser.parse(p, c, name);
+     * @param name the parsers name, used to reference the parser in exceptions and messages.
+    /**
+    /**  
+        FieldParser fieldParser = null;  
+ * block just below the creation of the parser. Like this:
+                    consumer.accept(value, field, parser.booleanValue());  
+            exclusiveFields.add(new ArrayList<>());  
+import java.util.Map;
+ * this work for additional information regarding copyright
+import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_NULL;
+     * Creates a new ObjectParser.  
+                // Fields are just named entries in a single object  
+                    );  
+            @SuppressWarnings("unchecked")  
+     * @param name the parsers name, used to reference the parser in exceptions and messages.  
+     * Creates a new ObjectParser instance with a name.
+                );  
+            if (p.currentToken() != XContentParser.Token.FIELD_NAME) {
+        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {  
+            }
+        }  
+                            p.getTokenLocation(),
+                case VALUE_BOOLEAN:
+import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_EMBEDDED_OBJECT;
+        DOUBLE(VALUE_NUMBER, VALUE_STRING),
+        };
+    private void parseValue(XContentParser parser, FieldParser fieldParser, String currentFieldName, Value value, Context context)
     }
-
+     * @throws IOException if an IOException occurs.
+        XContentLocation currentPosition = null;
+                }  
+        }
+        @Nullable Function<Context, Value> valueBuilder
+        STRING(VALUE_STRING),
+        final XContentParser.Token token = parser.currentToken();
+        StringBuilder message = new StringBuilder();  
+        String name,
+ * <p>  
+                + supportedTokens
+        BiFunction<XContentParser, Context, T> objectParser = (XContentParser p, Context c) -> {
+                        String[] requriedFields = iter.next();  
+ */
+            throw new XContentParseException(
+        } else {
+ * this file be licensed under the Apache-2.0 license or a
+            throw new XContentParseException(parser.getTokenLocation(), "[" + name + "] failed to parse object", e);
+    public <T> void declareObjectOrDefault(
+                    for (int i = 0; i < this.exclusiveFieldSets.size(); i++) {
+        void parse(XContentParser parser, Value value, Context context) throws IOException;
+ *
+        String currentFieldName = null;
+    }  
+        };
+        try {
+    public ObjectParser(String name, @Nullable Supplier<Value> valueSupplier) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            if (p.currentToken() == XContentParser.Token.VALUE_BOOLEAN) {  
+            case VALUE_NULL:
+     * Get the name of the parser.  
+ *   }  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * XContent. For objects that have constructors with required arguments that are specified on the same level as other fields see  
+                        );  
+    /**
+                // Fields are objects in an array. Each object contains a named field.
+                    break;
+        BiConsumer<Value, T> consumer,  
+                        }  
+                case START_ARRAY:
+                String name = p.currentName();
+                    }
+     * Parses a Value from the given {@link XContentParser}  
+    public void declareRequiredFieldSet(String... requiredSet) {
     @Override
-    public String toString() {
-        return "ObjectParser{" + "name='" + name + '\'' + ", fields=" + fieldParserMap.values() + '}';  
+            try {
+                    fields.add(objectParser.apply(p, c));  
+            this.tokens = EnumSet.of(first, rest);
     }
+        this(name, consumeUnknownField(unknownFieldConsumer), c -> valueSupplier.get());
+                            }
+                                iter.remove();  
+                    if (p.currentToken() != XContentParser.Token.END_OBJECT) {
+        throws IOException {  
+            consumer.accept(v, l.toArray(array));
+        for (String fieldValue : parseField.getAllNamesIncludedDeprecated()) {
+    private static <Value, Category, Context> UnknownFieldParser<Value, Context> unknownIsNamedXContent(
+ * by passing another instance of {@link ObjectParser}, this one customized for that Object.  
+    @Override  
+ * Unless required by applicable law or agreed to in writing,
+    }  
+            } catch (IOException e) {
+        @Override
+        Class<ElementValue> c,
+                case START_OBJECT:
+                        parser.getTokenLocation(),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                default:
+    @Override
+                message.append("Required one of fields ").append(Arrays.toString(fields)).append(", but none were specified. ");  
+     *      responses from external systems, never when parsing requests from users.  
+            if (parseField.match(parserName, parser::getTokenLocation, currentFieldName, parser.getDeprecationHandler()) == false) {
+        declareField((XContentParser p, Value v, Context c) -> consumer.accept(v, objectParser.apply(p, c)), field, ValueType.OBJECT);
+ * under the License.  
+                case VALUE_NUMBER:
+                parseArray(parser, fieldParser, currentFieldName, value, context);
+    /**
+        return (Value v, List<ElementValue> l) -> {
+    }  
+        }, field, ValueType.OBJECT_OR_BOOLEAN);
+        throws IOException {  
+        return parse(parser, valueBuilder.apply(context), context);
+     *
+            // This messy exception nesting has the nice side effect of telling the user which field failed to parse
+ */
+        void accept(Value target, String field, Object value);
+    public <C> ObjectParser(
+        OBJECT(START_OBJECT),  
+                }
+        parseValue(parser, fieldParser, currentFieldName, value, context);
+                throw new XContentParseException(  
+            return;  
+    ) {
+ * KIND, either express or implied.  See the License for the
+        if (consumer == null) {
+    private final String name;  
+                }
+            switch (t) {
+                    // Check if this field is in an exclusive set, if it is then mark  
+        VALUE_ARRAY(VALUE_BOOLEAN, VALUE_NULL, VALUE_NUMBER, VALUE_STRING, START_ARRAY);  
+                + (allReplacedWith == null ? "" : ", replaced_with=" + allReplacedWith)  
+        if (exclusiveSet.length == 0) {
+                 * this test won't catch them, but that is the price that we pay
+            }
+        private final EnumSet<XContentParser.Token> tokens;
+        INT(VALUE_NUMBER, VALUE_STRING),  
+        }
+            } else {
+import java.lang.reflect.Array;
+            case START_ARRAY:  
+        if (message.length() > 0) {  
+            );
+        this.exclusiveFieldSets.add(exclusiveSet);
+                    break;
+    public <T> void declareNamedObjects(  
+import static java.util.Objects.requireNonNull;  
+        NamedObjectParser<T, Context> namedObjectParser,
+    }  
+                    "[" + parserName + "] " + currentFieldName + " doesn't support values of type: " + parser.currentToken()
+                assert token == XContentParser.Token.FIELD_NAME;
+                break;
+                 */
+        // Check for a) multiple entries appearing in exclusive field sets and b) empty
+                        throw new XContentParseException(  
+     * Main parser interface  
+ * ownership. Elasticsearch licenses this file to you under  
+    ) {
+                orderedModeCallback.accept(v);  
+                    consumer.accept(v, defaultValue.get());
+                o = parser.namedObject(categoryClass, field, context);  
+    }  
+    }  
+        }  
+        INT_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),
+        STRING_OR_NULL(VALUE_STRING, VALUE_NULL),
+        List<List<String>> exclusiveFields = new ArrayList<>();
+    private class FieldParser {  
+    public ObjectParser(String name) {
+        this(name, unknownIsNamedXContent(categoryClass, unknownFieldConsumer), c -> valueSupplier.get());
+    public interface UnknownFieldConsumer<Value> {  
+ * SPDX-License-Identifier: Apache-2.0
+                            "["
+                    return namedObjectParser.parse(p, c, name);  
+                    "["
+                }
+        Supplier<T> defaultValue,
+                        throw new XContentParseException(  
+        ParseField field
+            if (token != XContentParser.Token.START_OBJECT) {
+            }
+     * Defines how to consume a parsed undefined field
+                }  
+import java.util.function.Function;  
+    }
+        List<String[]> requiredFields = new ArrayList<>(this.requiredFieldSets);  
+        declareField((p, v, c) -> {
+    }
+        }
+        }, field, ValueType.OBJECT_ARRAY);
+        try {
+    public void declareField(Parser<Value, Context> p, ParseField parseField, ValueType type) {
+        this(name, errorOnUnknown(), c -> valueSupplier.get());  
+        // This creates and parses the named object  
+import org.opensearch.common.Nullable;  
+     * @param valueBuilder A function that creates a new Value from the parse Context. Used  
+import java.util.function.BiFunction;
+        OBJECT_ARRAY_OR_NULL(START_OBJECT, START_ARRAY, VALUE_NULL),  
+                e.getCandidates().forEach(candidates::add);  
+    /**  
+    }  
+                                + "fields or an array where each entry is an object with a single field"
+                    break;
+                    break;
+        OBJECT_ARRAY_OR_STRING(START_OBJECT, START_ARRAY, VALUE_STRING),
+    private static <Value, Context> UnknownFieldParser<Value, Context> ignoreUnknown() {
+                                + "] can be a single object with any number of "
+        Consumer<Value> orderedModeCallback,  
+                 * efficiently here. Instead we can check that they end on an  
+            }
+     * Functional interface for instantiating and parsing named objects. See ObjectParserTests#NamedObject for the canonical way to  
+     * @param name the parsers name, used to reference the parser in exceptions and messages.  
+        BiConsumer<Value, List<T>> consumer,
+    }  
+     * @param valueSupplier a supplier that creates a new Value instance used when the parser is used as an inner object parser.
+ *       PARSER.declareInt(Thing::setMineral, new ParseField("mineral"));
+        ValueType(XContentParser.Token first, XContentParser.Token... rest) {
+    @Override
+                                break;
+                    throw new XContentParseException(  
+            if (token == XContentParser.Token.FIELD_NAME) {
+            fieldParserMap.putIfAbsent(fieldValue, fieldParser);
+     * @param valueBuilder builds the value from the context. Used when the ObjectParser is not passed a value.
+                /*
+                    throw new IllegalStateException("parser for [" + currentFieldName + "] did not end on END_OBJECT");  
+                    // consume the end object token
+                        + "] can be a single object with any number of "
+        }
+    public void declareExclusiveFieldSet(String... exclusiveSet) {
+                } catch (Exception e) {
+                 * asserting that they do that is not something we can do
+import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_BOOLEAN;  
+            throw new IllegalArgumentException("[consumer] is required");  
+                    throw new XContentParseException(parser.getTokenLocation(), "[" + name + "] no field found");
+            XContentParser.Token t = parser.currentToken();  
+            case VALUE_EMBEDDED_OBJECT:  
+                 * Well behaving parsers should consume the entire array but  
+    private ObjectParser(
+     * Creates a new ObjectParser that consumes unknown fields as generic Objects.
+        UnknownFieldParser<Value, Context> unknownFieldParser,  
+import static org.opensearch.core.xcontent.XContentParser.Token.START_ARRAY;
+        DOUBLE_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),
+    public static <Value, ElementValue> BiConsumer<Value, List<ElementValue>> fromList(
+        BiConsumer<Value, ElementValue[]> consumer  
+    }
+        void assertSupports(String parserName, XContentParser parser, String currentFieldName) {
+                fieldParser = fieldParserMap.get(currentFieldName);
+                );  
+                if (parser.currentToken() != XContentParser.Token.END_OBJECT) {
+     * Creates a new ObjectParser.
+        } catch (IOException e) {  
+            this.parseField = parseField;  
+                    consumer.accept(value, field, parser.text());  
+ * <p>
+            }
+import java.util.EnumSet;
+public final class ObjectParser<Value, Context> extends AbstractObjectParser<Value, Context>
+            this.type = type;
+                + ", type="
+        private final ValueType type;
+            throw new IllegalArgumentException(message.toString());
+        ParseField field  
+                 */  
+    implements  
+                    parseSub(parser, fieldParser, currentFieldName, value, context);
+            }  
+                    // it as seen.
+        for (int i = 0; i < this.exclusiveFieldSets.size(); i++) {
+     * Creates a new ObjectParser.
+    private interface UnknownFieldParser<Value, Context> {  
+package org.opensearch.core.xcontent;
+                                exclusiveFields.get(i).add(currentFieldName);
+                        );  
+    @FunctionalInterface  
+                case VALUE_NULL:
+        };  
+            XContentParser.Token token;
+     */  
+    private static <Value, Context> UnknownFieldParser<Value, Context> errorOnUnknown() {  
+        BiConsumer<Value, ? super Category> consumer
+                message.append("The following fields are not allowed together: ").append(fieldset.toString()).append(" ");  
+        }
+    public ObjectParser(String name, boolean ignoreUnknownFields, @Nullable Supplier<Value> valueSupplier) {  
+    }  
+                String message = ErrorOnUnknown.IMPLEMENTATION.errorMessage(objectParser.name, field, candidates);
+        OBJECT_ARRAY_STRING_OR_NUMBER(START_OBJECT, START_ARRAY, VALUE_STRING, VALUE_NUMBER),  
+        BiConsumer<Value, C> unknownFieldConsumer,
+                throw new XContentParseException(  
+            } else {
+ * {@link #declareField} which can be used to implement exceptional parsing operations not covered by the high level methods.  
+    }
+                    consumer.accept(value, field, parser.list());  
+                    token = p.nextToken();  
+     * @param context context needed for parsing
+     */
+            }  
+        FLOAT_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),
+    private final Function<Context, Value> valueBuilder;
+    public <T> void declareField(BiConsumer<Value, T> consumer, ContextParser<Context, T> parser, ParseField parseField, ValueType type) {
+                throw new XContentParseException(p.getTokenLocation(), "[" + field + "] error while parsing named object", e);
+        assert parser.currentToken() == XContentParser.Token.START_ARRAY : "Token was: " + parser.currentToken();
+                    "[" + parserName + "] parsefield doesn't accept: " + currentFieldName
+                                + "] can be a single object with any number of "
+                }
+                            if (field.equals(currentFieldName)) {
+        }
+        }
+import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_NUMBER;  
+            for (String[] fields : requiredFields) {
+     * @opensearch.internal
+                fieldParser = null;  
+                    return namedObject;
+    @Override
+    private void parseSub(XContentParser parser, FieldParser fieldParser, String currentFieldName, Value value, Context context)  
+            String[] deprecatedNames = parseField.getDeprecatedNames();  
+                }  
+                if (p.booleanValue()) {
+    @Override
+                if (fieldParser == null) {  
+ * A declarative, stateless parser that turns XContent into setter calls. A single parser should be defined for each object being parsed,
+                 * END_ARRAY. They could end on the *wrong* end array and  
+                + deprecated
+        };
+    /**  
+        return name;
+        FLOAT_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),
+/*  
+        @Nullable Supplier<Value> valueSupplier
+ * The OpenSearch Contributors require contributions made to  
+                                + field  
+    ) {
+        Class<C> categoryClass,  
+            consumer.accept(v, fields);
+                + parseField.getPreferredName()
+        if (requiredFields.isEmpty() == false) {
+                                + "fields or an array where each entry is an object with a single field"
+        declareField((XContentParser p, Value v, Context c) -> {
+ * compatible open source license.
+        }
+    }  
+            Context context
+    }
+            case START_OBJECT:
+import static org.opensearch.core.xcontent.XContentParser.Token.VALUE_STRING;
+            if (deprecatedNames != null && deprecatedNames.length > 0) {  
+        BOOLEAN(VALUE_BOOLEAN, VALUE_STRING),
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+    }
+                throw new XContentParseException(  
+ * not use this file except in compliance with the License.
+                throw new XContentParseException(parser.getTokenLocation(), "[" + name + "] Expected START_OBJECT but was: " + token);
+ * GitHub history for details.
+    }
+            Value value,  
+                 * END_OBJECT. They could end on the *wrong* end object and
+                            }  
+    public interface NamedObjectParser<T, Context> {
+     * Adapts an array (or varags) setter into a list setter.
+        private final ParseField parseField;  
+import java.util.ArrayList;  
+        BiConsumer<Value, List<T>> consumer,
+                throw new XContentParseException(p.getTokenLocation(), "[" + field + "] error while parsing", e);
+        XContentParser.Token token;
+        private final EnumSet<XContentParser.Token> supportedTokens;
+                            p.getTokenLocation(),
+     * @param unknownFieldConsumer how to consume parsed unknown fields
+     * @opensearch.internal
+                + ", supportedTokens="  
+        Class<Category> categoryClass,  
+        BiFunction<XContentParser, Context, T> objectParser,
+ * Licensed to Elasticsearch under one or more contributor  
+        LONG_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),
+        this(name, errorOnUnknown(), null);  
+                 * Well behaving parsers should consume the entire object but
+            token = parser.nextToken();  
+     */
+            } else if (p.currentToken() == XContentParser.Token.START_ARRAY) {
+    private final UnknownFieldParser<Value, Context> unknownFieldParser;
+ */  
+        FieldParser(Parser<Value, Context> parser, EnumSet<XContentParser.Token> supportedTokens, ParseField parseField, ValueType type) {  
+                + "preferred_name="
+import java.util.function.BiConsumer;  
+ * You may obtain a copy of the License at  
+        this.name = name;  
+                    p.nextToken(); // Move past the object, should be back to into the array
+ */  
+        ) throws IOException;
+            }  
+        BOOLEAN_ARRAY(START_ARRAY, VALUE_BOOLEAN),
+        ContextParser<Context, Value> {
+/*
+        }
+     * @param parser the parser to build a value from
+                ex
+ * nested elements can be added via {@link #declareObject(BiConsumer, ContextParser, ParseField)} which should be satisfied where possible
+        VALUE_OBJECT_ARRAY(VALUE_BOOLEAN, VALUE_NULL, VALUE_EMBEDDED_OBJECT, VALUE_NUMBER, VALUE_STRING, START_OBJECT, START_ARRAY),
+                + '}';  
+     * @param <C> the type of named object that unknown fields are expected to be
+     * implement this for objects that themselves have a parser.
+    }
+    ) {  
+        };
+     * @return the parsed value
+                } else {
+                }
+                            if (field.equals(currentFieldName)) {
+    }
+    public String getName() {  
+            token = parser.currentToken();
+                    consumer.accept(value, field, parser.numberValue());  
+                parser.getTokenLocation(),
+    ) {
+        OBJECT_ARRAY(START_OBJECT, START_ARRAY),
+            String allReplacedWith = parseField.getAllReplacedWith();
+                    consumer.accept(value, field, null);  
+            case FIELD_NAME:
+        }  
+ * This class works well for object that do have a constructor argument or that can be built using information available from earlier in the
+            String field,  
+                    unknownFieldParser.acceptUnknownField(this, currentFieldName, currentPosition, parser, value, context);
+import java.util.function.Consumer;
+        for (List<String> fieldset : exclusiveFields) {
+            this.supportedTokens = supportedTokens;
+/**  
+                 * for having a cheap test.
+            }
+            try {
+        FieldParser fieldParser = new FieldParser(p, type.supportedTokens(), parseField, type);  
+import java.util.HashMap;  
+    }
+    private final Map<String, FieldParser> fieldParserMap = new HashMap<>();
+        this.unknownFieldParser = unknownFieldParser;
+        }
+import java.util.Set;
+                        + field  
+                    }
+        this.requiredFieldSets.add(requiredSet);  
+            return this.tokens;  
+            consumer.accept(value, o);
+        if (type == null) {  
+    }  
+        };  
+    public <T> void declareNamedObject(BiConsumer<Value, T> consumer, NamedObjectParser<T, Context> namedObjectParser, ParseField field) {
+     *                     when the parser is used as an inner object parser.
+                    break;
+    }  
+     * Creates a new ObjectParser.
+    /**
+        this(name, ignoreUnknownFields ? ignoreUnknown() : errorOnUnknown(), c -> valueSupplier.get());
+                parseValue(parser, fieldParser, currentFieldName, value, context);
+                case VALUE_STRING:
+    public Value apply(XContentParser parser, Context context) {  
+     * @param value the value to fill from the parser
+        if (valueBuilder == null) {
+ * @opensearch.api
+    }  
+     */  
+    }  
+                currentFieldName = parser.currentName();
+ * </p>  
+        FLOAT(VALUE_NUMBER, VALUE_STRING),  
+     */
+     */  
+            throw new IllegalArgumentException("[parser] is required");  
+            Category o;
+    public <T> void declareNamedObjects(  
+     * @param unknownFieldParser how to parse unknown fields
+                 * efficiently here. Instead we can check that they end on an
+     * @param unknownFieldConsumer how to consume parsed unknown fields
+            }  
+        return (objectParser, field, location, parser, value, context) -> {  
+        OBJECT_OR_BOOLEAN(START_OBJECT, VALUE_BOOLEAN),
+ *   private static final ObjectParser<Thing, SomeContext> PARSER = new ObjectParser<>("thing", Thing::new));
+        }
+    public String toString() {
+                }  
+    ) {
+ * {@link ConstructingObjectParser}.
+                deprecated = ", deprecated_names=" + Arrays.toString(deprecatedNames);
+        LONG_ARRAY(START_ARRAY, VALUE_NUMBER, VALUE_STRING),  
+     */  
+                    break;
+        ParseField field  
+                    }
+    /**
+                    Iterator<String[]> iter = requiredFields.iterator();
+            fieldParser.parser.parse(parser, value, context);
+     * @param context a context that is passed along to all declared field parsers  
+                throw new XContentParseException(parser.getTokenLocation(), "[" + name + "]" + token + " is unexpected");
+        }
+ * }</pre>
+                        for (String field : this.exclusiveFieldSets.get(i)) {  
+    private final List<String[]> exclusiveFieldSets = new ArrayList<>();
+ *
+                    fields.add(objectParser.apply(p, c));
+            List<T> fields = new ArrayList<>();  
+                parseValue(parser, fieldParser, currentFieldName, value, context);
+    }  
+            throw new IllegalArgumentException("[" + field + "] doesn't support arrays. Use a single object with multiple fields.");  
+    /**
+            case END_ARRAY:  
+                while ((token = p.nextToken()) != XContentParser.Token.END_ARRAY) {
+        if (parser == null) {
+    /**
+            ElementValue[] array = (ElementValue[]) Array.newInstance(c, l.size());
+    @Override
+                 * asserting that they do that is not something we can do
+        return "ObjectParser{" + "name='" + name + '\'' + ", fields=" + fieldParserMap.values() + '}';  
+    private static <Value, Context> UnknownFieldParser<Value, Context> consumeUnknownField(UnknownFieldConsumer<Value> consumer) {
+     *  
+        }
+    /**
+                    p.getTokenLocation(),
+        T parse(XContentParser p, Context c, String name) throws IOException;
+                );  
+ * software distributed under the License is distributed on an
+            if (fieldset.size() > 1) {
+    }
+                    // Check to see if this field is a required field, if it is we can
+            } catch (IOException e) {  
+    /**
+     * @param name the parsers name, used to reference the parser in exceptions and messages.
+    }
+                        "[" + objectParser.name + "] cannot parse field [" + field + "] with value type [" + t + "]"
+                    consumer.accept(value, field, parser.map());  
+                    p.nextToken(); // Move to the first field in the object
+            throw new XContentParseException(l, ErrorOnUnknown.IMPLEMENTATION.errorMessage(op.name, f, op.fieldParserMap.keySet()));
+    private final List<String[]> requiredFieldSets = new ArrayList<>();
+            return;
+                throw new XContentParseException(location, message, e);
+            case VALUE_BOOLEAN:
+     * @param categoryClass the type of named object that unknown fields are expected to be  
+import java.util.Iterator;
+ *   static {  
+                    fieldParser.assertSupports(name, parser, currentFieldName);  
+    }  
+                        for (String field : requriedFields) {
+     */
+        STRING_ARRAY(START_ARRAY, VALUE_STRING),  
+        throws IOException {
+        requireNonNull(valueBuilder, "Use the single argument ctor instead");
+        return (op, f, l, p, v, c) -> p.skipChildren();  
+ *
+import java.util.function.Supplier;
+            if (supportedTokens.contains(parser.currentToken()) == false) {
+                + type.name()
+    }  
+     * @param ignoreUnknownFields Should this parser ignore unknown fields? This should generally be set to true only when parsing
+                currentPosition = parser.getTokenLocation();  
+                XContentParser.Token token = p.nextToken();  
+            XContentLocation location,
+                    // remove the entry as the requirement is satisfied  
+        declareField((p, v, c) -> consumer.accept(v, parser.parse(p, c)), parseField, type);
+    }
+    /**
+    @Override  
+                break;
+                "[" + name + "] failed to parse field [" + currentFieldName + "]",  
+     */
+ *       PARSER.declareInt(Thing::setFruit, new ParseField("fruit"));
+     * @return a new value instance drawn from the provided value supplier on {@link #ObjectParser(String, Supplier)}  
+ * It's highly recommended to use the high level declare methods like {@link #declareString(BiConsumer, ParseField)} instead of
+        } catch (Exception ex) {  
+    public enum ValueType {  
+    ) {
+        }
 }
+                    if (token != XContentParser.Token.START_OBJECT) {
+            throw new NullPointerException("valueBuilder is not set");  
+    public ObjectParser(String name, UnknownFieldConsumer<Value> unknownFieldConsumer, @Nullable Supplier<Value> valueSupplier) {
+    }
+     */
+        VALUE(VALUE_BOOLEAN, VALUE_NULL, VALUE_EMBEDDED_OBJECT, VALUE_NUMBER, VALUE_STRING),
+     */
+     * @param valueSupplier a supplier that creates a new Value instance used when the parser is used as an inner object parser.
+                    while (iter.hasNext()) {
+            } catch (NamedObjectNotFoundException e) {
+        public String toString() {
+ * specific language governing permissions and limitations
+     * @param name the parsers name, used to reference the parser in exceptions and messages.
+        }
+                try {
+     */  
+        return value;
+    public Value parse(XContentParser parser, Context context) throws IOException {
+            XContentParser parser,
+import org.opensearch.common.annotation.PublicApi;
+     * Parses a Value from the given {@link XContentParser}  
+        DOUBLE_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),  
+            }
+     * @param valueSupplier a supplier that creates a new Value instance used when the parser is used as an inner object parser.
+        public EnumSet<XContentParser.Token> supportedTokens() {
+                Set<String> candidates = new HashSet<>(objectParser.fieldParserMap.keySet());
+                        + "fields or an array where each entry is an object with a single field"
+                /*  
+        INT_OR_NULL(VALUE_NUMBER, VALUE_STRING, VALUE_NULL),
+import java.io.IOException;
+     */
+                 * this test won't catch them, but that is the price that we pay
+    /**
+        switch (token) {  
+            ObjectParser<Value, Context> objectParser,
+        return (objectParser, field, location, parser, value, context) -> {
+ * Instances of {@link ObjectParser} should be setup by declaring a constant field for the parsers and declaring all fields in a static
+ * license agreements. See the NOTICE file distributed with
+            case VALUE_STRING:  
+            this.parser = parser;
+                        }
+            return "FieldParser{"  
+        BiFunction<XContentParser, Context, T> objectParser = (XContentParser p, Context c) -> {
+        OBJECT_OR_LONG(START_OBJECT, VALUE_NUMBER),  
+                 * for having a cheap test.  
+        Consumer<Value> orderedModeCallback = (v) -> {
+    private void parseArray(XContentParser parser, FieldParser fieldParser, String currentFieldName, Value value, Context context)
+@PublicApi(since = "1.0.0")
+                } catch (Exception e) {  
+/*
+        };  
+        return new ObjectParser<Value, Context>(name, errorOnUnknown(), valueBuilder);
+ * Modifications Copyright OpenSearch Contributors. See  
+            }
+    @Override
+                try {  
+        return (op, f, l, p, v, c) -> {
+ * <pre>{@code
+                if (currentFieldName == null) {  
+    }
+            case END_OBJECT:
+                String name = p.currentName();
+     * @param parser the parser to build a value from
+        // required field entries
+import org.opensearch.core.ParseField;
+                    assert token == XContentParser.Token.END_OBJECT;
+                    throw new XContentParseException(p.getTokenLocation(), "[" + field + "] failed to parse field [" + name + "]", e);
+            }  
+     * Supported Value Types for Parsable Objects
+        if (requiredSet.length == 0) {  
+            throw new IllegalArgumentException("[type] is required");
+                while ((token = p.nextToken()) != XContentParser.Token.END_OBJECT) {

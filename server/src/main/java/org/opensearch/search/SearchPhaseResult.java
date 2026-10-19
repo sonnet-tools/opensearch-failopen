@@ -1,140 +1,118 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    }  
+     */
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+    }  
+    }
+    }
+    @Nullable
+        return searchShardTarget;
+     */
+        super(in);
+        return shardSearchRequest;  
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+    /**
+    }
+        return null;  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * this file be licensed under the Apache-2.0 license or a
+        return null;
+ * @opensearch.api  
+ * not use this file except in compliance with the License.
+    protected ShardSearchContextId contextId;
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
+ * request ID is particularly important since it is used to reference and maintain a context
+import org.opensearch.search.internal.ShardSearchContextId;
+    public void writeTo(StreamOutput out) throws IOException {
+    private RescoreDocIds rescoreDocIds = RescoreDocIds.EMPTY;  
+ */  
+    private int shardIndex = -1;  
+import org.opensearch.common.Nullable;
+ * You may obtain a copy of the License at  
+    protected SearchPhaseResult() {
+    public RescoreDocIds getRescoreDocIds() {
+     * Returns the query result iff it's included in this response otherwise <code>null</code>  
+ * ownership. Elasticsearch licenses this file to you under  
+    public void setRescoreDocIds(RescoreDocIds rescoreDocIds) {
  * specific language governing permissions and limitations
- * under the License.  
+    public ShardSearchRequest getShardSearchRequest() {
+ * KIND, either express or implied.  See the License for the
+    public void setShardSearchRequest(ShardSearchRequest shardSearchRequest) {  
  */
-
+import org.opensearch.search.fetch.FetchSearchResult;  
+    public QuerySearchResult queryResult() {
+        return contextId;
+        this.shardSearchRequest = shardSearchRequest;
+import org.opensearch.core.common.io.stream.StreamOutput;
+    /**
+        this.rescoreDocIds = rescoreDocIds;  
+        return shardIndex;
+ * software distributed under the License is distributed on an
+        // TODO: this seems wrong, SearchPhaseResult should have a writeTo?
+ * and a request ID that is used to reference the request context on the executing node. The
+    }
+     */
+    protected SearchPhaseResult(StreamInput in) throws IOException {  
+    /**  
+}
+ * This class is a base class for all search related results. It contains the shard target it
+    public FetchSearchResult fetchResult() {  
+/*
+    private ShardSearchRequest shardSearchRequest;
+ * across search phases to ensure the same point in time snapshot is used for querying and  
+ * SPDX-License-Identifier: Apache-2.0
+    public ShardSearchContextId getContextId() {  
+ * under the License.  
+ */  
+     * Returns the fetch result iff it's included in this response otherwise <code>null</code>
+    }  
+    }  
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;
+     * or <code>null</code> if no context was created.  
+/*  
 /*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.search.fetch.FetchSearchResult;  
-import org.opensearch.search.internal.ShardSearchContextId;
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.search.query.QuerySearchResult;  
-
-import java.io.IOException;
-
-/**
- * This class is a base class for all search related results. It contains the shard target it
- * was executed against, a shard index used to reference the result on the coordinating node  
- * and a request ID that is used to reference the request context on the executing node. The
- * request ID is particularly important since it is used to reference and maintain a context
- * across search phases to ensure the same point in time snapshot is used for querying and  
- * fetching etc.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public abstract class SearchPhaseResult extends TransportResponse {  
-
-    private SearchShardTarget searchShardTarget;
-    private int shardIndex = -1;  
-    protected ShardSearchContextId contextId;
-    private ShardSearchRequest shardSearchRequest;
-    private RescoreDocIds rescoreDocIds = RescoreDocIds.EMPTY;  
-
-    protected SearchPhaseResult() {
-
-    }
-
-    protected SearchPhaseResult(StreamInput in) throws IOException {  
-        super(in);
-    }
-
-    /**
-     * Returns the search context ID that is used to reference the search context on the executing node
-     * or <code>null</code> if no context was created.  
-     */
-    @Nullable
-    public ShardSearchContextId getContextId() {  
-        return contextId;
-    }
-
-    /**
-     * Returns the shard index in the context of the currently executing search request that is
-     * used for accounting on the coordinating node  
-     */
     public int getShardIndex() {
-        assert shardIndex != -1 : "shardIndex is not set";  
-        return shardIndex;
     }
-
-    public SearchShardTarget getSearchShardTarget() {
-        return searchShardTarget;
-    }  
-
-    public void setSearchShardTarget(SearchShardTarget shardTarget) {
-        this.searchShardTarget = shardTarget;  
-    }
-
-    public void setShardIndex(int shardIndex) {  
+ * fetching etc.
+     * used for accounting on the coordinating node  
         assert shardIndex >= 0 : "shardIndex must be >= 0 but was: " + shardIndex;
-        this.shardIndex = shardIndex;
-    }  
-
+import org.opensearch.core.transport.TransportResponse;
     /**
-     * Returns the query result iff it's included in this response otherwise <code>null</code>  
-     */
-    public QuerySearchResult queryResult() {
-        return null;  
-    }
-
-    /**  
-     * Returns the fetch result iff it's included in this response otherwise <code>null</code>
-     */
-    public FetchSearchResult fetchResult() {  
-        return null;
-    }
-
+public abstract class SearchPhaseResult extends TransportResponse {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     @Nullable
-    public ShardSearchRequest getShardSearchRequest() {
-        return shardSearchRequest;  
-    }
-
-    public void setShardSearchRequest(ShardSearchRequest shardSearchRequest) {  
-        this.shardSearchRequest = shardSearchRequest;
-    }
-
-    public RescoreDocIds getRescoreDocIds() {
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
         return rescoreDocIds;
-    }  
-
-    public void setRescoreDocIds(RescoreDocIds rescoreDocIds) {
-        this.rescoreDocIds = rescoreDocIds;  
-    }
-
+/**
+ * was executed against, a shard index used to reference the result on the coordinating node  
+import org.opensearch.core.common.io.stream.StreamInput;  
+import org.opensearch.search.internal.ShardSearchRequest;
+    public SearchShardTarget getSearchShardTarget() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
     @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        // TODO: this seems wrong, SearchPhaseResult should have a writeTo?
-    }  
-}
+ */
+import org.opensearch.common.annotation.PublicApi;
+@PublicApi(since = "1.0.0")
+import org.opensearch.search.query.QuerySearchResult;  
+    }
+    }
+    }
+    private SearchShardTarget searchShardTarget;
+    }
+        this.shardIndex = shardIndex;
+    public void setShardIndex(int shardIndex) {  
+     * Returns the search context ID that is used to reference the search context on the executing node
+package org.opensearch.search;
+ *
+ * this work for additional information regarding copyright
+        assert shardIndex != -1 : "shardIndex is not set";  
+ * Licensed to Elasticsearch under one or more contributor  
+     * Returns the shard index in the context of the currently executing search request that is
+ * compatible open source license.
+    }
+        this.searchShardTarget = shardTarget;  
+    public void setSearchShardTarget(SearchShardTarget shardTarget) {
+ * Unless required by applicable law or agreed to in writing,

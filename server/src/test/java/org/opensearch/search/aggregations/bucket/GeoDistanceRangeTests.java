@@ -1,124 +1,114 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket;
-
-import org.opensearch.common.geo.GeoDistance;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.unit.DistanceUnit;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParseException;
+        }
+        if (randomBoolean()) {  
+            "aggregationName",
+            + "}";
 import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.search.aggregations.BaseAggregationTestCase;
-import org.opensearch.search.aggregations.bucket.range.GeoDistanceAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.range.GeoDistanceAggregationBuilder.Range;  
-import org.opensearch.test.geo.RandomShapeGenerator;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.notNullValue;  
-
-public class GeoDistanceRangeTests extends BaseAggregationTestCase<GeoDistanceAggregationBuilder> {
-
-    @Override
-    protected GeoDistanceAggregationBuilder createTestAggregatorBuilder() {
-        int numRanges = randomIntBetween(1, 10);  
-        GeoPoint origin = RandomShapeGenerator.randomPoint(random());
-        GeoDistanceAggregationBuilder factory = new GeoDistanceAggregationBuilder(randomAlphaOfLengthBetween(3, 10), origin);
-        for (int i = 0; i < numRanges; i++) {  
-            String key = null;
-            if (randomBoolean()) {
-                key = randomAlphaOfLengthBetween(1, 20);  
-            }
-            double from = randomBoolean() ? 0 : randomIntBetween(0, Integer.MAX_VALUE - 1000);
-            double to = randomBoolean()  
-                ? Double.POSITIVE_INFINITY
-                : (Double.compare(from, 0) == 0 ? randomIntBetween(0, Integer.MAX_VALUE) : randomIntBetween((int) from, Integer.MAX_VALUE));
-            factory.addRange(new Range(key, from, to));  
-        }
-        factory.field(randomAlphaOfLengthBetween(1, 20));
-        if (randomBoolean()) {  
-            factory.keyed(randomBoolean());
-        }
-        if (randomBoolean()) {  
-            factory.missing("0, 0");
-        }
-        if (randomBoolean()) {  
-            factory.unit(randomFrom(DistanceUnit.values()));
-        }
-        if (randomBoolean()) {  
-            factory.distanceType(randomFrom(GeoDistance.values()));
-        }
-        return factory;  
-    }
-
-    public void testParsingRangeStrict() throws IOException {  
-        final String rangeAggregation = "{\n"
+ * You may obtain a copy of the License at  
             + "\"field\" : \"location\",\n"
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.search.aggregations.bucket.range.GeoDistanceAggregationBuilder;
+import org.opensearch.core.xcontent.XContentParseException;
+        GeoPoint origin = RandomShapeGenerator.randomPoint(random());
+        );
+                ? Double.POSITIVE_INFINITY
+        }
+ * KIND, either express or implied.  See the License for the
+ * Unless required by applicable law or agreed to in writing,
+ * GitHub history for details.
+            if (randomBoolean()) {
+import org.opensearch.common.unit.DistanceUnit;  
+        if (randomBoolean()) {  
+import java.io.IOException;  
+     * We never render "null" values to xContent, but we should test that we can parse them (and they return correct defaults)
+            factory.addRange(new Range(key, from, to));  
+            double from = randomBoolean() ? 0 : randomIntBetween(0, Integer.MAX_VALUE - 1000);
+import org.opensearch.common.geo.GeoDistance;
+        for (int i = 0; i < numRanges; i++) {  
+import org.opensearch.search.aggregations.BaseAggregationTestCase;
+            + "\"field\" : \"location\",\n"
+        }
+            + "\"ranges\" : [\n"
+        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);  
+            + "}";
+ * this work for additional information regarding copyright
+    }
+import org.opensearch.test.geo.RandomShapeGenerator;
+}  
+    /**  
             + "\"origin\" : \"52.3760, 4.894\",\n"  
             + "\"unit\" : \"m\",\n"
-            + "\"ranges\" : [\n"
-            + "    { \"from\" : 10000, \"to\" : 20000, \"badField\" : \"abcd\" }\n"  
-            + "]\n"
-            + "}";
-        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);  
+            + "\"origin\" : \"52.3760, 4.894\",\n"  
+import org.opensearch.common.geo.GeoPoint;
+ */
+        }
+import org.opensearch.search.aggregations.bucket.range.GeoDistanceAggregationBuilder.Range;  
+    @Override
+ */  
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
+ *
+        assertEquals(1, aggregationBuilder.range().size());
+            + "\"unit\" : \"m\",\n"
+package org.opensearch.search.aggregations.bucket;
+ * Licensed to Elasticsearch under one or more contributor  
+            double to = randomBoolean()  
+            + "    { \"from\" : null, \"to\" : null }\n"  
+import static org.hamcrest.Matchers.notNullValue;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * the Apache License, Version 2.0 (the "License"); you may
+import static org.hamcrest.Matchers.containsString;
+        if (randomBoolean()) {  
+            parser  
+/*
+     */
+        assertEquals(0.0, aggregationBuilder.range().get(0).getFrom(), 0.0);  
+ * not use this file except in compliance with the License.
+                key = randomAlphaOfLengthBetween(1, 20);  
+        if (randomBoolean()) {  
         XContentParseException ex = expectThrows(
             XContentParseException.class,
-            () -> GeoDistanceAggregationBuilder.parse("aggregationName", parser)  
+            factory.keyed(randomBoolean());
         );
-        assertThat(ex.getCause(), notNullValue());
-        assertThat(ex.getCause().getMessage(), containsString("badField"));  
-    }
-
-    /**  
-     * We never render "null" values to xContent, but we should test that we can parse them (and they return correct defaults)
-     */
-    public void testParsingNull() throws IOException {  
-        final String rangeAggregation = "{\n"
-            + "\"field\" : \"location\",\n"
-            + "\"origin\" : \"52.3760, 4.894\",\n"  
-            + "\"unit\" : \"m\",\n"
-            + "\"ranges\" : [\n"
-            + "    { \"from\" : null, \"to\" : null }\n"  
-            + "]\n"
-            + "}";
-        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);  
-        GeoDistanceAggregationBuilder aggregationBuilder = (GeoDistanceAggregationBuilder) GeoDistanceAggregationBuilder.parse(
-            "aggregationName",
-            parser  
-        );
-        assertEquals(1, aggregationBuilder.range().size());
-        assertEquals(0.0, aggregationBuilder.range().get(0).getFrom(), 0.0);  
         assertEquals(Double.POSITIVE_INFINITY, aggregationBuilder.range().get(0).getTo(), 0.0);
+ * license agreements. See the NOTICE file distributed with
+        GeoDistanceAggregationBuilder factory = new GeoDistanceAggregationBuilder(randomAlphaOfLengthBetween(3, 10), origin);
+        return factory;  
+ * The OpenSearch Contributors require contributions made to  
+            + "]\n"
+        int numRanges = randomIntBetween(1, 10);  
+            }
+public class GeoDistanceRangeTests extends BaseAggregationTestCase<GeoDistanceAggregationBuilder> {
+ */  
+            () -> GeoDistanceAggregationBuilder.parse("aggregationName", parser)  
+        assertThat(ex.getCause(), notNullValue());
+ * specific language governing permissions and limitations
+ *  
+                : (Double.compare(from, 0) == 0 ? randomIntBetween(0, Integer.MAX_VALUE) : randomIntBetween((int) from, Integer.MAX_VALUE));
+            + "\"ranges\" : [\n"
+ * software distributed under the License is distributed on an
+ * compatible open source license.
+            factory.missing("0, 0");
+        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);  
+        assertThat(ex.getCause().getMessage(), containsString("badField"));  
+        GeoDistanceAggregationBuilder aggregationBuilder = (GeoDistanceAggregationBuilder) GeoDistanceAggregationBuilder.parse(
+            + "    { \"from\" : 10000, \"to\" : 20000, \"badField\" : \"abcd\" }\n"  
+            factory.unit(randomFrom(DistanceUnit.values()));
+ * Modifications Copyright OpenSearch Contributors. See
+    protected GeoDistanceAggregationBuilder createTestAggregatorBuilder() {
+import org.opensearch.common.xcontent.json.JsonXContent;
+        }
+        final String rangeAggregation = "{\n"
+ *
+    public void testParsingNull() throws IOException {  
+        factory.field(randomAlphaOfLengthBetween(1, 20));
+/*  
     }
-}  
+ * under the License.  
+ * this file be licensed under the Apache-2.0 license or a
+    public void testParsingRangeStrict() throws IOException {  
+            String key = null;
+            factory.distanceType(randomFrom(GeoDistance.values()));
+        final String rangeAggregation = "{\n"
+ * SPDX-License-Identifier: Apache-2.0
+            + "]\n"

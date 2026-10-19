@@ -1,271 +1,241 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.RegexpQuery;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.AbstractQueryTestCase;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class RegexpQueryBuilderTests extends AbstractQueryTestCase<RegexpQueryBuilder> {
-
-    @Override  
-    protected RegexpQueryBuilder doCreateTestQueryBuilder() {
-        RegexpQueryBuilder query = randomRegexpQuery();
-        if (randomBoolean()) {  
-            List<RegexpFlag> flags = new ArrayList<>();
-            int iter = randomInt(5);
-            for (int i = 0; i < iter; i++) {  
-                // Exclude COMPLEMENT from random selection to avoid deprecation warnings
-                RegexpFlag[] availableFlags = {
-                    RegexpFlag.INTERSECTION,  
-                    RegexpFlag.EMPTY,
-                    RegexpFlag.ANYSTRING,
-                    RegexpFlag.INTERVAL,  
-                    RegexpFlag.NONE,
-                    RegexpFlag.ALL };
-                flags.add(randomFrom(availableFlags));  
-            }
-            query.flags(flags.toArray(new RegexpFlag[0]));
-        }  
-        if (randomBoolean()) {
-            query.caseInsensitive(true);
-        }  
-        if (randomBoolean()) {
+                "name.first" : {
+        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
             query.maxDeterminizedStates(randomInt(50000));
-        }  
-        if (randomBoolean()) {
-            query.rewrite(randomFrom(getRandomRewriteMethod()));
-        }  
-        return query;
-    }
-
-    @Override
-    protected Map<String, RegexpQueryBuilder> getAlternateVersions() {
-        Map<String, RegexpQueryBuilder> alternateVersions = new HashMap<>();  
-        RegexpQueryBuilder regexpQuery = randomRegexpQuery();
-        String contentString = String.format(Locale.ROOT, """
-            {  
-                "regexp" : {
-                    "%s" : "%s"
                 }  
-            }""", regexpQuery.fieldName(), regexpQuery.value());
+            RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT,  
+                    RegexpFlag.INTERSECTION,  
+        out.writeVInt(Integer.MAX_VALUE);                   // maxDeterminizedStates (malicious)
+        );
+    }
+                flags.add(randomFrom(availableFlags));  
+        assertEquals(20000, query.maxDeterminizedStates(20000).maxDeterminizedStates());  
+ * The OpenSearch Contributors require contributions made to  
+                    "value": "k.*y"  
+ */  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> parseQuery(json));
+    public void testFromJson() throws IOException {  
+ * SPDX-License-Identifier: Apache-2.0
+ * software distributed under the License is distributed on an
+                    RegexpFlag.ALL };
+    // Test that COMPLEMENT flag triggers deprecation warning  
+import org.apache.lucene.search.RegexpQuery;
+    protected Map<String, RegexpQueryBuilder> getAlternateVersions() {
+            "The complement operator (~) for arbitrary patterns in regexp queries is deprecated "
+import static org.hamcrest.Matchers.instanceOf;
+        // Guards against CVE-2026-63136 on the transport deserialization path: a patched data node
+        if (randomBoolean()) {
+import java.util.ArrayList;  
+ * compatible open source license.
+        }  
+        QueryBuilder rewriteQuery = rewriteQuery(queryBuilder, new QueryShardContext(context));
+        String contentString = String.format(Locale.ROOT, """
+            }""";  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder(null, "text"));
+        out.writeOptionalString(null);                      // rewrite  
+        RegexpQueryBuilder query = new RegexpQueryBuilder(INT_FIELD_NAME, "12");
+                    "%s" : "%s"
+import org.opensearch.core.common.ParsingException;
+    public void testMaxDeterminizedStatesFromJsonIsBounded() {  
+              "regexp" : {  
+        assertEquals("field name is null or empty", e.getMessage());  
+        assertEquals(
+import org.apache.lucene.search.Query;
+    }
+            {
+                  "user1": {
+    public void testComplementFlagDeprecation() throws IOException {
+        }  
+        out.writeString("field");                           // fieldName
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> query.maxDeterminizedStates(Integer.MAX_VALUE));
+                "regexp" : {
+        e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder("", "text"));
+    public void testParseFailsWithMultipleFields() throws IOException {
+            List<RegexpFlag> flags = new ArrayList<>();
+        if (randomBoolean()) {
+ * You may obtain a copy of the License at  
+/*  
+    @Override
+        );
+        String shortJson = """
+        out.writeBoolean(false);                            // caseInsensitive
+            "The complement operator (~) for arbitrary patterns in regexp queries is deprecated "  
+        String json = """
+        RegexpQueryBuilder parsed = (RegexpQueryBuilder) parseQuery(json);
+                }
+        e = expectThrows(
         alternateVersions.put(contentString, regexpQuery);
+        out.writeVInt(RegexpQueryBuilder.DEFAULT_FLAGS_VALUE);
+        QueryShardContext context = createShardContext();  
+import java.util.List;
+            assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));
+import static org.hamcrest.Matchers.equalTo;
+ * Licensed to Elasticsearch under one or more contributor  
+            int iter = randomInt(5);
+ * this file be licensed under the Apache-2.0 license or a
+        out.writeString(".*a.{30}");                        // value  
+                "regexp": {  
+                  "max_determinized_states" : 20000,
+        assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));
+    public void testMaxDeterminizedStatesIsBounded() {
+ */  
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+        assertNotNull(rewriteQuery.toQuery(context));
+        if (randomBoolean()) {  
+        // mapped or unmapped fields
+                        "value" : ".*a.{30}",  
+            }""", regexpQuery.fieldName(), regexpQuery.value());
+        assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));  
+}  
+                // Exclude COMPLEMENT from random selection to avoid deprecation warnings
+        e = expectThrows(IllegalArgumentException.class, () -> query.maxDeterminizedStates(-1));
+            query.maxDeterminizedStates(RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT).maxDeterminizedStates()
+        RegexpQuery regexpQuery = (RegexpQuery) query;
+                + "and will be removed in a future version. Consider rewriting your query to use character class negation [^...] or other query types."
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
+            {  
+            query.rewrite(randomFrom(getRandomRewriteMethod()));
+    }
+        queryBuilder.flags(RegexpFlag.COMPLEMENT);
+        );
+        assertEquals("field name is null or empty", e.getMessage());
+            IllegalArgumentException.class,
+        assertThat(luceneQuery, instanceOf(RegexpQuery.class));
+    }  
+    private static RegexpQueryBuilder randomRegexpQuery() {  
+        assertThat(regexpQuery.getField(), equalTo(expectedFieldName));
+        RegexpQueryBuilder query = randomRegexpQuery();
+    @Override  
+    // Separate test for COMPLEMENT flag Cacheability
+        RegexpQueryBuilder regexpQuery = randomRegexpQuery();
+        }  
+import java.util.Locale;  
+ */
+                  "boost" : 1.0  
+            query.flags(flags.toArray(new RegexpFlag[0]));
+        QueryShardContext context = createShardContext();
+        assertWarnings(
+    }
+ *  
+        assertEquals("[regexp] query doesn't support multiple fields, found [user1] and [user2]", e.getMessage());
+    public void testMaxDeterminizedStatesFromStreamIsBounded() throws IOException {  
+        out.writeFloat(AbstractQueryBuilder.DEFAULT_BOOST); // boost  
+        RegexpQueryBuilder query = new RegexpQueryBuilder("field", ".*a.{30}");
+        String value = randomAlphaOfLengthBetween(1, 10);  
+            }
+                    RegexpFlag.ANYSTRING,
+                        "max_determinized_states" : 2147483647
+import static org.hamcrest.Matchers.containsString;  
+        }  
+            "Can only use regexp queries on keyword and text fields - not on [mapped_int] which is of type [integer]",
+            }""";  
+        assertThat(e.getMessage(), containsString("cannot be negative"));
+                    RegexpFlag.EMPTY,
+            }""";
+            () -> query.maxDeterminizedStates(RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + 1)  
+        out.writeOptionalString(null);                      // queryName
+            for (int i = 0; i < iter; i++) {  
+ * license agreements. See the NOTICE file distributed with
+import java.io.IOException;
+ * specific language governing permissions and limitations
         return alternateVersions;  
     }
-
-    private static RegexpQueryBuilder randomRegexpQuery() {  
-        // mapped or unmapped fields
-        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME, randomAlphaOfLengthBetween(1, 10));
-        String value = randomAlphaOfLengthBetween(1, 10);  
-        return new RegexpQueryBuilder(fieldName, value);
-    }
-
-    @Override
-    protected void doAssertLuceneQuery(RegexpQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
-        assertThat(query, instanceOf(RegexpQuery.class));  
-        RegexpQuery regexpQuery = (RegexpQuery) query;
-
-        String expectedFieldName = expectedFieldName(queryBuilder.fieldName());  
-        assertThat(regexpQuery.getField(), equalTo(expectedFieldName));
-    }
-
-    public void testIllegalArguments() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder(null, "text"));
-        assertEquals("field name is null or empty", e.getMessage());  
-        e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder("", "text"));
-        assertEquals("field name is null or empty", e.getMessage());
-
-        e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder("field", null));
-        assertEquals("value cannot be null", e.getMessage());
-    }  
-
-    public void testMaxDeterminizedStatesIsBounded() {
-        // Guards against CVE-2026-63136: an unbounded max_determinized_states disables Lucene's  
-        // determinization safeguard and lets a crafted pattern exhaust the heap.
-        RegexpQueryBuilder query = new RegexpQueryBuilder("field", ".*a.{30}");
-
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> query.maxDeterminizedStates(Integer.MAX_VALUE));
-        assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));
-
-        e = expectThrows(
-            IllegalArgumentException.class,
-            () -> query.maxDeterminizedStates(RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT + 1)  
-        );
-        assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> query.maxDeterminizedStates(-1));
-        assertThat(e.getMessage(), containsString("cannot be negative"));
-
-        // The ceiling itself and typical values remain accepted.
-        assertEquals(
-            RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT,  
-            query.maxDeterminizedStates(RegexpQueryBuilder.MAX_DETERMINIZE_WORK_LIMIT).maxDeterminizedStates()
-        );
-        assertEquals(20000, query.maxDeterminizedStates(20000).maxDeterminizedStates());  
-    }
-
-    public void testMaxDeterminizedStatesFromJsonIsBounded() {  
-        // The bound must also apply when the value arrives via the REST/XContent parse path.
-        String json = String.format(Locale.ROOT, """
-            {  
                 "regexp" : {
-                    "field" : {
-                        "value" : ".*a.{30}",  
-                        "max_determinized_states" : 2147483647
-                    }
-                }  
-            }""");
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> parseQuery(json));
-        assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));  
-    }
-
-    public void testMaxDeterminizedStatesFromStreamIsBounded() throws IOException {  
-        // Guards against CVE-2026-63136 on the transport deserialization path: a patched data node
-        // must reject an out-of-bounds value serialized by an (unpatched) coordinating node instead
-        // of feeding it to Lucene. The setter bound cannot be reached by serializing a real builder  
-        // (the setter itself blocks it), so we hand-craft the wire bytes with an oversized value.
+        Map<String, RegexpQueryBuilder> alternateVersions = new HashMap<>();  
+        QueryShardContext context = createShardContext();
         BytesStreamOutput out = new BytesStreamOutput();
-        out.writeFloat(AbstractQueryBuilder.DEFAULT_BOOST); // boost  
-        out.writeOptionalString(null);                      // queryName
-        out.writeString("field");                           // fieldName
-        out.writeString(".*a.{30}");                        // value  
-        out.writeVInt(RegexpQueryBuilder.DEFAULT_FLAGS_VALUE);
-        out.writeVInt(Integer.MAX_VALUE);                   // maxDeterminizedStates (malicious)
-        out.writeOptionalString(null);                      // rewrite  
-        out.writeBoolean(false);                            // caseInsensitive
-
-        try (StreamInput in = out.bytes().streamInput()) {  
-            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder(in));
-            assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));
-        }  
-    }
-
-    public void testFromJson() throws IOException {  
-        String json = """
+import java.util.HashMap;
             {
-              "regexp" : {  
-                "name.first" : {
-                  "value" : "s.*y",
-                  "flags_value" : 7,  
-                  "case_insensitive" : true,
-                  "max_determinized_states" : 20000,
-                  "boost" : 1.0  
-                }
-              }
-            }""";  
-
-        RegexpQueryBuilder parsed = (RegexpQueryBuilder) parseQuery(json);
-        checkGeneratedJson(json, parsed);  
-
-        assertEquals(json, "s.*y", parsed.value());
-        assertEquals(json, 20000, parsed.maxDeterminizedStates());  
-    }
-
-    public void testNumeric() throws Exception {  
-        RegexpQueryBuilder query = new RegexpQueryBuilder(INT_FIELD_NAME, "12");
-        QueryShardContext context = createShardContext();
         QueryShardException e = expectThrows(QueryShardException.class, () -> query.toQuery(context));  
-        assertEquals(
-            "Can only use regexp queries on keyword and text fields - not on [mapped_int] which is of type [integer]",
-            e.getMessage()  
-        );
-    }
-
-    public void testParseFailsWithMultipleFields() throws IOException {
-        String json = """
-            {  
-                "regexp": {
-                  "user1": {
-                    "value": "k.*y"  
-                  },
-                  "user2": {
-                    "value": "k.*y"  
-                  }
-                }
-            }""";  
-        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
-        assertEquals("[regexp] query doesn't support multiple fields, found [user1] and [user2]", e.getMessage());
-
-        String shortJson = """
-            {
-                "regexp": {  
-                  "user1": "k.*y",
-                  "user2": "k.*y"
-                }  
-            }""";
+import org.opensearch.core.common.io.stream.StreamInput;
+        // (the setter itself blocks it), so we hand-craft the wire bytes with an oversized value.
         e = expectThrows(ParsingException.class, () -> parseQuery(shortJson));
+        // of feeding it to Lucene. The setter bound cannot be reached by serializing a real builder  
+                    "field" : {
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder(in));
+    }
+        return new RegexpQueryBuilder(fieldName, value);
+                    }
+        assertThat(query, instanceOf(RegexpQuery.class));  
+                  "case_insensitive" : true,
+                  "user1": "k.*y",
+        String json = """
+package org.opensearch.index.query;
+import java.util.Map;
+                  "user2": {
+                "regexp": {
+        // determinization safeguard and lets a crafted pattern exhaust the heap.
+ *
+    }
+                  },
         assertEquals("[regexp] query doesn't support multiple fields, found [user1] and [user2]", e.getMessage());  
+ * GitHub history for details.
+        assertEquals(json, "s.*y", parsed.value());
+        checkGeneratedJson(json, parsed);  
     }
-
-    // Test that COMPLEMENT flag triggers deprecation warning  
-    public void testComplementFlagDeprecation() throws IOException {
-        RegexpQueryBuilder query = new RegexpQueryBuilder("field", "a~bc");
-        query.flags(RegexpFlag.COMPLEMENT);  
-        QueryShardContext context = createShardContext();
-        Query luceneQuery = query.toQuery(context);
-        assertNotNull(luceneQuery);  
-        assertThat(luceneQuery, instanceOf(RegexpQuery.class));
-        assertWarnings(
-            "The complement operator (~) for arbitrary patterns in regexp queries is deprecated "  
-                + "and will be removed in a future version. Consider rewriting your query to use character class negation [^...] or other query types."
-        );
-    }  
-
-    // Separate test for COMPLEMENT flag Cacheability
-    public void testComplementFlagCacheability() throws IOException {  
-        RegexpQueryBuilder queryBuilder = new RegexpQueryBuilder("field", "pattern");
-        queryBuilder.flags(RegexpFlag.COMPLEMENT);
-        QueryShardContext context = createShardContext();  
-        QueryBuilder rewriteQuery = rewriteQuery(queryBuilder, new QueryShardContext(context));
-        assertNotNull(rewriteQuery.toQuery(context));
-        assertTrue("query should be cacheable: " + queryBuilder, context.isCacheable());  
-        assertWarnings(
-            "The complement operator (~) for arbitrary patterns in regexp queries is deprecated "
+        try (StreamInput in = out.bytes().streamInput()) {  
+    protected void doAssertLuceneQuery(RegexpQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
+        assertEquals(json, 20000, parsed.maxDeterminizedStates());  
+              }
                 + "and will be removed in a future version. Consider rewriting your query to use character class negation [^...] or other query types."  
+        assertEquals("value cannot be null", e.getMessage());
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+        assertEquals(
+                  "flags_value" : 7,  
+    public void testIllegalArguments() {
+        );
+        // must reject an out-of-bounds value serialized by an (unpatched) coordinating node instead
+                }  
+        e = expectThrows(IllegalArgumentException.class, () -> new RegexpQueryBuilder("field", null));
+ * KIND, either express or implied.  See the License for the
+        // The ceiling itself and typical values remain accepted.
         );
     }
-}  
+                RegexpFlag[] availableFlags = {
+        String expectedFieldName = expectedFieldName(queryBuilder.fieldName());  
+public class RegexpQueryBuilderTests extends AbstractQueryTestCase<RegexpQueryBuilder> {
+ * under the License.  
+                }
+        // Guards against CVE-2026-63136: an unbounded max_determinized_states disables Lucene's  
+        assertTrue("query should be cacheable: " + queryBuilder, context.isCacheable());  
+    protected RegexpQueryBuilder doCreateTestQueryBuilder() {
+        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME, randomAlphaOfLengthBetween(1, 10));
+                  "user2": "k.*y"
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertNotNull(luceneQuery);  
+            {  
+        assertThat(e.getMessage(), containsString("max_determinized_states cannot exceed"));
+        // The bound must also apply when the value arrives via the REST/XContent parse path.
+    }  
+        if (randomBoolean()) {
+/*
+    }
+        }  
+                    RegexpFlag.NONE,
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+            {  
+                  }
+        RegexpQueryBuilder queryBuilder = new RegexpQueryBuilder("field", "pattern");
+                  "value" : "s.*y",
+ * this work for additional information regarding copyright
+        return query;
+                    "value": "k.*y"  
+    public void testComplementFlagCacheability() throws IOException {  
+/*  
+        query.flags(RegexpFlag.COMPLEMENT);  
+        String json = String.format(Locale.ROOT, """
+            }""");
+        assertWarnings(
+ * ownership. Elasticsearch licenses this file to you under  
+    public void testNumeric() throws Exception {  
+            query.caseInsensitive(true);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    RegexpFlag.INTERVAL,  
+        RegexpQueryBuilder query = new RegexpQueryBuilder("field", "a~bc");
+                }  
+        Query luceneQuery = query.toQuery(context);
+import org.opensearch.test.AbstractQueryTestCase;  
+            e.getMessage()  
+ *

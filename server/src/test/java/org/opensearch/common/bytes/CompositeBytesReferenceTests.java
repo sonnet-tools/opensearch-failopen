@@ -1,148 +1,128 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+        for (int i = 0; i < length;) {
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.common.bytes;
-
-import org.apache.lucene.util.BytesRef;  
-import org.apache.lucene.util.BytesRefBuilder;
-import org.apache.lucene.util.BytesRefIterator;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.bytes.CompositeBytesReference;
-import org.hamcrest.Matchers;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-
-public class CompositeBytesReferenceTests extends AbstractBytesReferenceTestCase {
-
-    @Override
-    protected BytesReference newBytesReference(int length) throws IOException {
-        return newBytesReferenceWithOffsetOfZero(length);  
     }
-
+ * software distributed under the License is distributed on an
+        BytesReference ref = CompositeBytesReference.of(referenceList.toArray(new BytesReference[0]));  
+    protected BytesReference newBytesReference(int length) throws IOException {
+            while ((scratch = innerIter.next()) != null) {
+    }
+            }  
     @Override  
-    protected BytesReference newBytesReferenceWithOffsetOfZero(int length) throws IOException {
-        // we know bytes stream output always creates a paged bytes reference, we use it to create randomized content
-        List<BytesReference> referenceList = newRefList(length);  
-        BytesReference ref = CompositeBytesReference.of(referenceList.toArray(new BytesReference[0]));
-        assertEquals(length, ref.length());
+ *  
+        int offset = 0;
+        BytesReference bytesRef = CompositeBytesReference.of(
+        BytesRefBuilder builder = new BytesRefBuilder();
+                BytesRef next = iterator.next();
+            assertEquals(reference, ref.slice(offset, reference.length()));
+                assertNotNull(next);  
+ * specific language governing permissions and limitations
+/*
+    @Override  
+        );  
+/*
+    public void testCompositeBuffer() throws IOException {
+ * license agreements. See the NOTICE file distributed with
+import java.util.List;  
+                out.writeByte((byte) random().nextInt(1 << 8));
+    }
+        assertThat(bytesRef.slice(13, 10), Matchers.not(Matchers.instanceOf(CompositeBytesReference.class))); // strictly within sub  
+ * under the License.  
+        }
+        assertThat(bytesRef.slice(5, 8), Matchers.instanceOf(CompositeBytesReference.class));  
+        assertNull(iterator.next());  
+    }  
+        // CompositeBytesReference doesn't share pages  
+                builder.append(next);
+        List<BytesReference> referenceList = new ArrayList<>();
+public class CompositeBytesReferenceTests extends AbstractBytesReferenceTestCase {
+        // the assertions in this test only work on no-composite buffers
+            for (int j = 0; j < sliceLength; j++) {  
+            }  
+            int probes = randomIntBetween(Math.min(10, reference.length()), reference.length());
+        for (BytesReference reference : referenceList) {  
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+                assertEquals(ref.get(offset + index), reference.get(index));
+ * this file be licensed under the Apache-2.0 license or a
+        }  
+        BytesArray array = new BytesArray(builder.toBytesRef());
+ * Modifications Copyright OpenSearch Contributors. See  
+import org.opensearch.core.common.bytes.BytesReference;  
+                int index = randomIntBetween(0, reference.length() - 1);
+import org.opensearch.core.common.bytes.CompositeBytesReference;
+import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
+    }
+import org.apache.lucene.util.BytesRef;  
+ */
+    private List<BytesReference> newRefList(int length) throws IOException {  
+        assertEquals(array.hashCode(), ref.hashCode());  
+ * The OpenSearch Contributors require contributions made to  
         return ref;  
     }
-
-    private List<BytesReference> newRefList(int length) throws IOException {  
-        List<BytesReference> referenceList = new ArrayList<>();
-        for (int i = 0; i < length;) {
-            int remaining = length - i;  
-            int sliceLength = randomIntBetween(1, remaining);
-            ReleasableBytesStreamOutput out = new ReleasableBytesStreamOutput(sliceLength, bigarrays);
-            for (int j = 0; j < sliceLength; j++) {  
-                out.writeByte((byte) random().nextInt(1 << 8));
-            }
-            assertEquals(sliceLength, out.size());  
-            referenceList.add(out.bytes());
-            i += sliceLength;
-        }  
-        return referenceList;
-    }
-
-    public void testCompositeBuffer() throws IOException {
-        List<BytesReference> referenceList = newRefList(randomIntBetween(1, PAGE_SIZE * 2));
-        BytesReference ref = CompositeBytesReference.of(referenceList.toArray(new BytesReference[0]));  
-        BytesRefIterator iterator = ref.iterator();
-        BytesRefBuilder builder = new BytesRefBuilder();
-
-        for (BytesReference reference : referenceList) {
-            BytesRefIterator innerIter = reference.iterator(); // sometimes we have a paged ref - pull an iter and walk all pages!
             BytesRef scratch;  
-            while ((scratch = innerIter.next()) != null) {
-                BytesRef next = iterator.next();
-                assertNotNull(next);  
-                assertEquals(next, scratch);
-                builder.append(next);
-            }  
-
-        }
-        assertNull(iterator.next());  
-
-        int offset = 0;
-        for (BytesReference reference : referenceList) {  
-            assertEquals(reference, ref.slice(offset, reference.length()));
-            int probes = randomIntBetween(Math.min(10, reference.length()), reference.length());
-            for (int i = 0; i < probes; i++) {  
-                int index = randomIntBetween(0, reference.length() - 1);
-                assertEquals(ref.get(offset + index), reference.get(index));
-            }  
-            offset += reference.length();
-        }
-
-        BytesArray array = new BytesArray(builder.toBytesRef());
-        assertEquals(array, ref);
-        assertEquals(array.hashCode(), ref.hashCode());  
-
-        BytesStreamOutput output = new BytesStreamOutput();
-        ref.writeTo(output);  
-        assertEquals(array, output.bytes());
-    }
-
-    @Override
-    public void testToBytesRefSharedPage() throws IOException {
-        // CompositeBytesReference doesn't share pages  
-    }
-
-    @Override  
+        assertThat(bytesRef.slice(12, 15), Matchers.not(Matchers.instanceOf(CompositeBytesReference.class))); // equal to sub
+ * compatible open source license.
+    protected BytesReference newBytesReferenceWithOffsetOfZero(int length) throws IOException {
     public void testSliceArrayOffset() throws IOException {
-        // the assertions in this test only work on no-composite buffers
-    }  
-
+            int remaining = length - i;  
+/*  
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+            }
+    public void testSliceIsNotCompositeIfMatchesSingleSubSlice() {
+        List<BytesReference> referenceList = newRefList(randomIntBetween(1, PAGE_SIZE * 2));
+import org.hamcrest.Matchers;
+                assertEquals(next, scratch);
+            ReleasableBytesStreamOutput out = new ReleasableBytesStreamOutput(sliceLength, bigarrays);
+            new BytesArray(new byte[12]),  
+            assertEquals(sliceLength, out.size());  
+        BytesRefIterator iterator = ref.iterator();
+            BytesRefIterator innerIter = reference.iterator(); // sometimes we have a paged ref - pull an iter and walk all pages!
+        return referenceList;
+        for (BytesReference reference : referenceList) {
     @Override
-    public void testSliceToBytesRef() throws IOException {  
+ */  
         // CompositeBytesReference shifts offsets
     }
-
-    public void testSliceIsNotCompositeIfMatchesSingleSubSlice() {
-        BytesReference bytesRef = CompositeBytesReference.of(
-            new BytesArray(new byte[12]),  
+    @Override
+import org.apache.lucene.util.BytesRefIterator;
+            int sliceLength = randomIntBetween(1, remaining);
+import org.apache.lucene.util.BytesRefBuilder;
+ * this work for additional information regarding copyright
+ * GitHub history for details.
+        BytesReference ref = CompositeBytesReference.of(referenceList.toArray(new BytesReference[0]));
+        List<BytesReference> referenceList = newRefList(length);  
+        return newBytesReferenceWithOffsetOfZero(length);  
             new BytesArray(new byte[15]),
-            new BytesArray(new byte[13])
-        );  
-
-        // Slices that cross boundaries are composite too
-        assertThat(bytesRef.slice(5, 8), Matchers.instanceOf(CompositeBytesReference.class));  
-
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.common.bytes;
+ *
         // But not slices that cover a single sub reference
-        assertThat(bytesRef.slice(13, 10), Matchers.not(Matchers.instanceOf(CompositeBytesReference.class))); // strictly within sub  
-        assertThat(bytesRef.slice(12, 15), Matchers.not(Matchers.instanceOf(CompositeBytesReference.class))); // equal to sub
-    }
 }  
+        BytesStreamOutput output = new BytesStreamOutput();
+        assertEquals(array, ref);
+        // Slices that cross boundaries are composite too
+ * Licensed to Elasticsearch under one or more contributor  
+import java.io.IOException;
+ * Unless required by applicable law or agreed to in writing,
+            i += sliceLength;
+    public void testSliceToBytesRef() throws IOException {  
+import org.opensearch.core.common.bytes.BytesArray;
+            offset += reference.length();
+        assertEquals(array, output.bytes());
+        // we know bytes stream output always creates a paged bytes reference, we use it to create randomized content
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+        assertEquals(length, ref.length());
+ * You may obtain a copy of the License at  
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+            for (int i = 0; i < probes; i++) {  
+    @Override
+import java.util.ArrayList;
+        ref.writeTo(output);  
+            referenceList.add(out.bytes());
+    public void testToBytesRefSharedPage() throws IOException {
+ * not use this file except in compliance with the License.
+ *
+ * KIND, either express or implied.  See the License for the
+            new BytesArray(new byte[13])

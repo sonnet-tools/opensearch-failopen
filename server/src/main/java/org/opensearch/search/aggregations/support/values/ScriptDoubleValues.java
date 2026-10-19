@@ -1,128 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.support.values;
-
-import org.apache.lucene.search.Scorable;  
-import org.opensearch.common.lucene.ScorerAware;
-import org.opensearch.index.fielddata.SortingNumericDoubleValues;
-import org.opensearch.script.AggregationScript;  
-import org.opensearch.search.aggregations.AggregationExecutionException;
-import org.joda.time.ReadableInstant;
-
-import java.io.IOException;
-import java.lang.reflect.Array;
-import java.time.ZonedDateTime;  
 import java.util.Collection;
-
-/**  
- * {@link SortingNumericDoubleValues} implementation which is based on a script
- *
- * @opensearch.internal  
- */
-public class ScriptDoubleValues extends SortingNumericDoubleValues implements ScorerAware {
-
-    final AggregationScript script;
-
-    public ScriptDoubleValues(AggregationScript script) {  
-        super();
-        this.script = script;
-    }  
-
-    @Override
-    public boolean advanceExact(int target) throws IOException {  
-        script.setDocument(target);
-        final Object value = script.execute();
-
-        if (value == null) {
-            return false;
-        } else if (value instanceof Number) {  
-            resize(1);
-            values[0] = ((Number) value).doubleValue();
-        } else if (value instanceof ReadableInstant) {  
-            resize(1);
-            values[0] = ((ReadableInstant) value).getMillis();
-        } else if (value instanceof ZonedDateTime) {  
-            resize(1);
-            values[0] = ((ZonedDateTime) value).toInstant().toEpochMilli();
-        } else if (value.getClass().isArray()) {  
-            int length = Array.getLength(value);
-            if (length == 0) {
-                return false;  
-            }
-            resize(length);
-            for (int i = 0; i < length; ++i) {  
-                values[i] = toDoubleValue(Array.get(value, i));
-            }
-        } else if (value instanceof Collection) {  
-            Collection<?> coll = (Collection<?>) value;
-            if (coll.isEmpty()) {
-                return false;  
-            }
-            resize(coll.size());
-            int i = 0;  
-            for (Object v : coll) {
-                values[i++] = toDoubleValue(v);
             }  
-            assert i == docValueCount();
         } else {
-            resize(1);  
+ * this file be licensed under the Apache-2.0 license or a
+    public void setScorer(Scorable scorer) {
+ * {@link SortingNumericDoubleValues} implementation which is based on a script
+        if (value == null) {
+public class ScriptDoubleValues extends SortingNumericDoubleValues implements ScorerAware {
             values[0] = toDoubleValue(value);
-        }
-
-        sort();
-        return true;
+            for (Object v : coll) {
+/**  
     }  
-
-    private static double toDoubleValue(Object o) {
-        if (o instanceof Number) {  
-            return ((Number) o).doubleValue();
-        } else if (o instanceof ReadableInstant) {
-            // Dates are exposed in scripts as ReadableDateTimes but aggregations want them to be numeric  
+            values[0] = ((ReadableInstant) value).getMillis();
+ * Unless required by applicable law or agreed to in writing,
+            values[0] = ((ZonedDateTime) value).toInstant().toEpochMilli();
+ * ownership. Elasticsearch licenses this file to you under  
+            // make sure of using true/false in the key_as_string field
             return ((ReadableInstant) o).getMillis();
         } else if (o instanceof ZonedDateTime) {
-            return ((ZonedDateTime) o).toInstant().toEpochMilli();  
-        } else if (o instanceof Boolean) {
-            // We do expose boolean fields as boolean in scripts, however aggregations still expect
-            // that scripts return the same internal representation as regular fields, so boolean  
-            // values in scripts need to be converted to a number, and the value formatter will
-            // make sure of using true/false in the key_as_string field
-            return ((Boolean) o).booleanValue() ? 1.0 : 0.0;  
-        } else {
-            throw new AggregationExecutionException("Unsupported script value [" + o + "], expected a number, date, or boolean");
-        }  
-    }
-
-    @Override  
-    public void setScorer(Scorable scorer) {
+import org.opensearch.search.aggregations.AggregationExecutionException;
+                return false;  
+        } else if (value.getClass().isArray()) {  
+            assert i == docValueCount();
+ *
+    public boolean advanceExact(int target) throws IOException {  
+ * the Apache License, Version 2.0 (the "License"); you may
         script.setScorer(scorer);
-    }  
+ * this work for additional information regarding copyright
+    @Override
 }
+            values[0] = ((Number) value).doubleValue();
+ */
+        } else if (o instanceof ReadableInstant) {
+        final Object value = script.execute();
+ * Licensed to Elasticsearch under one or more contributor  
+            throw new AggregationExecutionException("Unsupported script value [" + o + "], expected a number, date, or boolean");
+        if (o instanceof Number) {  
+        this.script = script;
+            // Dates are exposed in scripts as ReadableDateTimes but aggregations want them to be numeric  
+        super();
+    @Override  
+            }
+ * @opensearch.internal  
+        return true;
+ */  
+            resize(length);
+ * The OpenSearch Contributors require contributions made to  
+        } else if (value instanceof Number) {  
+            Collection<?> coll = (Collection<?>) value;
+            // values in scripts need to be converted to a number, and the value formatter will
+                values[i++] = toDoubleValue(v);
+        }
+import java.io.IOException;
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  
+            for (int i = 0; i < length; ++i) {  
+            int i = 0;  
+                return false;  
+    public ScriptDoubleValues(AggregationScript script) {  
+            // We do expose boolean fields as boolean in scripts, however aggregations still expect
+ * software distributed under the License is distributed on an
+            // that scripts return the same internal representation as regular fields, so boolean  
+        } else if (value instanceof ZonedDateTime) {  
+            resize(1);  
+    }
+        }  
+            }
+    final AggregationScript script;
+            }
+import org.joda.time.ReadableInstant;
+        } else if (value instanceof ReadableInstant) {  
+import java.time.ZonedDateTime;  
+import org.opensearch.script.AggregationScript;  
+            if (coll.isEmpty()) {
+                values[i] = toDoubleValue(Array.get(value, i));
+            return ((ZonedDateTime) o).toInstant().toEpochMilli();  
+import org.opensearch.index.fielddata.SortingNumericDoubleValues;
+ * compatible open source license.
+        } else if (value instanceof Collection) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        script.setDocument(target);
+ * not use this file except in compliance with the License.
+ * under the License.  
+    }  
+/*
+            int length = Array.getLength(value);
+            resize(1);
+package org.opensearch.search.aggregations.support.values;
+ *
+            resize(1);
+import java.lang.reflect.Array;
+        sort();
+ */
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+            if (length == 0) {
+ * SPDX-License-Identifier: Apache-2.0
+            return ((Number) o).doubleValue();
+        } else if (o instanceof Boolean) {
+import org.opensearch.common.lucene.ScorerAware;
+ * GitHub history for details.
+        } else {
+            resize(1);
+            return false;
+/*
+            return ((Boolean) o).booleanValue() ? 1.0 : 0.0;  
+ * specific language governing permissions and limitations
+import org.apache.lucene.search.Scorable;  
+ */
+    private static double toDoubleValue(Object o) {
+ * Modifications Copyright OpenSearch Contributors. See  
+    }  
+            resize(coll.size());
+ * You may obtain a copy of the License at  

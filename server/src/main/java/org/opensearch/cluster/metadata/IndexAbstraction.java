@@ -1,399 +1,336 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.collect.Tuple;  
-import org.opensearch.core.common.Strings;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;  
-
-import static org.opensearch.cluster.metadata.DataStream.getDefaultBackingIndexName;
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_HIDDEN_SETTING;  
-
-/**
- * An index abstraction is a reference to one or more concrete indices.  
- * An index abstraction has a unique name and encapsulates all the  {@link IndexMetadata} instances it is pointing to.
- * Also depending on type it may refer to a single or many concrete indices and may or may not have a write index.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public interface IndexAbstraction {
-
-    /**  
-     * @return the type of the index abstraction
-     */
-    Type getType();  
-
-    /**
-     * @return the name of the index abstraction  
-     */
-    String getName();
-
-    /**
-     * @return All {@link IndexMetadata} of all concrete indices this index abstraction is referring to.
-     */  
-    List<IndexMetadata> getIndices();
-
-    /**  
-     * A write index is a dedicated concrete index, that accepts all the new documents that belong to an index abstraction.
-     * <p>
-     * A write index may also be a regular concrete index of a index abstraction and may therefore also be returned  
-     * by {@link #getIndices()}. An index abstraction may also not have a dedicated write index.
-     *
-     * @return the write index of this index abstraction or  
-     * <code>null</code> if this index abstraction doesn't have a write index.
-     */
+                @Override
     @Nullable  
-    IndexMetadata getWriteIndex();
-
-    /**  
-     * @return the data stream to which this index belongs or <code>null</code> if this is not a concrete index or
-     * if it is a concrete index that does not belong to a data stream.
-     */  
-    @Nullable
-    DataStream getParentDataStream();
-
-    /**
-     * @return whether this index abstraction is hidden or not
-     */  
-    boolean isHidden();
-
-    /**  
-     * @return whether this index abstraction should be treated as a system index or not
-     */
-    boolean isSystem();  
-
-    /**
-     * An index abstraction type.  
-     *
-     * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    enum Type {
-
-        /**
-         * An index abstraction that refers to a single concrete index.
-         * This concrete index is also the write index.  
-         */
-        CONCRETE_INDEX("concrete index"),
-
-        /**
-         * An index abstraction that refers to an alias.
-         * An alias typically refers to many concrete indices and  
-         * may have a write index.
-         */
-        ALIAS("alias"),  
-
-        /**
-         * An index abstraction that refers to a data stream.  
-         * A data stream typically has multiple backing indices, the latest of which
-         * is the target for index requests.
-         */  
-        DATA_STREAM("data_stream");
-
-        private final String displayName;  
-
-        Type(String displayName) {
-            this.displayName = displayName;  
+    class Alias implements IndexAbstraction {
+     * @return the type of the index abstraction
         }
-
-        public String getDisplayName() {  
-            return displayName;
-        }
-    }  
-
-    /**
-     * Represents an concrete index and encapsulates its {@link IndexMetadata}  
-     *
-     * @opensearch.internal
      */  
-    class Index implements IndexAbstraction {
-
-        private final IndexMetadata concreteIndex;  
-        private final DataStream dataStream;
-
-        public Index(IndexMetadata indexMetadata, DataStream dataStream) {  
-            this.concreteIndex = indexMetadata;
-            this.dataStream = dataStream;
-        }  
-
-        public Index(IndexMetadata indexMetadata) {
+import java.util.List;  
+/*
+        }
             this(indexMetadata, null);  
-        }
-
-        @Override  
-        public String getName() {
-            return concreteIndex.getIndex().getName();
         }  
-
-        @Override
-        public Type getType() {  
-            return Type.CONCRETE_INDEX;
-        }
-
-        @Override
+                && referenceIndexMetadatas.get(0).getAliases().get(aliasName).writeIndex() == null) {
+        public AliasMetadata getFirstAliasMetadata() {  
+            }
+        }  
+     */
         public List<IndexMetadata> getIndices() {
-            return Collections.singletonList(concreteIndex);  
-        }
-
-        @Override  
-        public IndexMetadata getWriteIndex() {
-            return concreteIndex;
         }  
-
-        @Override
-        public DataStream getParentDataStream() {  
-            return dataStream;
+            List<IndexMetadata> writeIndices = referenceIndexMetadatas.stream()
+        public Type getType() {
         }
-
-        @Override
-        public boolean isHidden() {
+        }  
+ * specific language governing permissions and limitations
+            return displayName;
+    }
+            this.displayName = displayName;  
+     */  
+ */  
+ * license agreements. See the NOTICE file distributed with
+        public DataStream getParentDataStream() {  
+                );  
+        public String getDisplayName() {  
+                writeIndices.add(referenceIndexMetadatas.get(0));
+            this.referenceIndexMetadatas.add(indexMetadata);
+        }
+        public boolean isHidden() {  
+            return referenceIndexMetadatas;  
+         * Returns the unique alias metadata per concrete index.
+import java.util.Iterator;
+import org.opensearch.common.collect.Tuple;  
             return INDEX_HIDDEN_SETTING.get(concreteIndex.getSettings());  
         }
-
-        @Override  
-        public boolean isSystem() {
-            return concreteIndex.isSystem();
-        }  
-    }
-
-    /**  
-     * Represents an alias and groups all {@link IndexMetadata} instances sharing the same alias name together.
-     *
-     * @opensearch.internal  
+        @Override
+ * this file be licensed under the Apache-2.0 license or a
      */
-    class Alias implements IndexAbstraction {
-
-        private final String aliasName;
-        private final List<IndexMetadata> referenceIndexMetadatas;
-        private final SetOnce<IndexMetadata> writeIndex = new SetOnce<>();  
-        private final boolean isHidden;
-
-        public Alias(AliasMetadata aliasMetadata, IndexMetadata indexMetadata) {  
-            this.aliasName = aliasMetadata.getAlias();
-            this.referenceIndexMetadatas = new ArrayList<>();
-            this.referenceIndexMetadatas.add(indexMetadata);  
-            this.isHidden = aliasMetadata.isHidden() == null ? false : aliasMetadata.isHidden();
         }
-
+         * An index abstraction that refers to an alias.
         @Override
-        public Type getType() {
-            return Type.ALIAS;  
         }
-
-        public String getName() {  
-            return aliasName;
-        }
-
-        @Override
-        public List<IndexMetadata> getIndices() {
-            return referenceIndexMetadatas;  
-        }
-
-        @Nullable  
-        public IndexMetadata getWriteIndex() {
-            return writeIndex.get();
-        }  
-
-        @Override
-        public DataStream getParentDataStream() {  
-            // aliases may not be part of a data stream
+ *  
+ */
+            return false;
+    /**  
+            return Type.CONCRETE_INDEX;
+ * Unless required by applicable law or agreed to in writing,
+    }
             return null;
-        }  
-
         @Override
-        public boolean isHidden() {  
-            return isHidden;
-        }
-
-        @Override
-        public boolean isSystem() {
             return referenceIndexMetadatas.stream().allMatch(IndexMetadata::isSystem);  
-        }
-
-        /**  
-         * Returns the unique alias metadata per concrete index.
-         * <p>
-         * (note that although alias can point to the same concrete indices, each alias reference may have its own routing  
-         * and filters)
-         */
-        public Iterable<Tuple<String, AliasMetadata>> getConcreteIndexAndAliasMetadatas() {  
-            return () -> new Iterator<Tuple<String, AliasMetadata>>() {
-
-                int index = 0;  
-
-                @Override
-                public boolean hasNext() {  
-                    return index < referenceIndexMetadatas.size();
-                }
-
-                @Override
-                public Tuple<String, AliasMetadata> next() {
-                    IndexMetadata indexMetadata = referenceIndexMetadatas.get(index++);  
-                    return new Tuple<>(indexMetadata.getIndex().getName(), indexMetadata.getAliases().get(aliasName));
-                }
-            };  
-        }
-
-        public AliasMetadata getFirstAliasMetadata() {  
-            return referenceIndexMetadatas.get(0).getAliases().get(aliasName);
-        }
-
-        void addIndex(IndexMetadata indexMetadata) {
-            this.referenceIndexMetadatas.add(indexMetadata);
         }  
-
-        public void computeAndValidateAliasProperties() {
-            // Validate write indices  
-            List<IndexMetadata> writeIndices = referenceIndexMetadatas.stream()
-                .filter(idxMeta -> Boolean.TRUE.equals(idxMeta.getAliases().get(aliasName).writeIndex()))
-                .collect(Collectors.toList());  
-
-            if (writeIndices.isEmpty()
-                && referenceIndexMetadatas.size() == 1  
-                && referenceIndexMetadatas.get(0).getAliases().get(aliasName).writeIndex() == null) {
-                writeIndices.add(referenceIndexMetadatas.get(0));
-            }  
-
-            if (writeIndices.size() == 1) {
-                writeIndex.set(writeIndices.get(0));  
-            } else if (writeIndices.size() > 1) {
-                List<String> writeIndicesStrings = writeIndices.stream().map(i -> i.getIndex().getName()).collect(Collectors.toList());
-                throw new IllegalStateException(  
-                    "alias ["
-                        + aliasName
-                        + "] has more than one write index ["  
-                        + Strings.collectionToCommaDelimitedString(writeIndicesStrings)
-                        + "]"
-                );  
-            }
-
-            // Validate hidden status  
-            final Map<Boolean, List<IndexMetadata>> groupedByHiddenStatus = referenceIndexMetadatas.stream()
-                .collect(Collectors.groupingBy(idxMeta -> Boolean.TRUE.equals(idxMeta.getAliases().get(aliasName).isHidden())));
-            if (isNonEmpty(groupedByHiddenStatus.get(true)) && isNonEmpty(groupedByHiddenStatus.get(false))) {  
-                List<String> hiddenOn = groupedByHiddenStatus.get(true)
-                    .stream()
-                    .map(idx -> idx.getIndex().getName())  
                     .collect(Collectors.toList());
-                List<String> nonHiddenOn = groupedByHiddenStatus.get(false)
-                    .stream()  
-                    .map(idx -> idx.getIndex().getName())
-                    .collect(Collectors.toList());
-                throw new IllegalStateException(  
-                    "alias ["
-                        + aliasName
-                        + "] has is_hidden set to true on indices ["  
-                        + Strings.collectionToCommaDelimitedString(hiddenOn)
                         + "] but does not have is_hidden set to true on indices ["
-                        + Strings.collectionToCommaDelimitedString(nonHiddenOn)  
-                        + "]; alias must have the same is_hidden setting "
-                        + "on all indices"
-                );  
+         * <p>
+        }
             }
-        }
-
-        private boolean isNonEmpty(List<IndexMetadata> idxMetas) {
-            return (Objects.isNull(idxMetas) || idxMetas.isEmpty()) == false;
-        }  
-    }
-
-    /**  
-     * A data stream.
-     *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "1.0.0")
-    class DataStream implements IndexAbstraction {  
-
-        private final org.opensearch.cluster.metadata.DataStream dataStream;
-        private final List<IndexMetadata> dataStreamIndices;  
-        private final IndexMetadata writeIndex;
-
-        public DataStream(org.opensearch.cluster.metadata.DataStream dataStream, List<IndexMetadata> dataStreamIndices) {  
-            this.dataStream = dataStream;
-            this.dataStreamIndices = List.copyOf(dataStreamIndices);
-            this.writeIndex = dataStreamIndices.get(dataStreamIndices.size() - 1);  
-            assert writeIndex.getIndex().getName().equals(getDefaultBackingIndexName(dataStream.getName(), dataStream.getGeneration()));
-        }
-
+            return Type.ALIAS;  
         @Override
-        public String getName() {
+            }  
+        }  
+     */
+        }
+package org.opensearch.cluster.metadata;
+        private final org.opensearch.cluster.metadata.DataStream dataStream;
+         * An index abstraction that refers to a data stream.  
+    Type getType();  
+         * An alias typically refers to many concrete indices and  
+    /**  
+            this.dataStreamIndices = List.copyOf(dataStreamIndices);
+            return concreteIndex;
+                List<String> writeIndicesStrings = writeIndices.stream().map(i -> i.getIndex().getName()).collect(Collectors.toList());
+    enum Type {
+        @Override
+                        + "]"
+    boolean isHidden();
+     */
+            // Validate write indices  
+            return aliasName;
+                        + Strings.collectionToCommaDelimitedString(writeIndicesStrings)
+            return concreteIndex.getIndex().getName();
+import org.opensearch.common.Nullable;  
+        private final IndexMetadata writeIndex;
+import org.opensearch.common.annotation.PublicApi;
+                && referenceIndexMetadatas.size() == 1  
+        @Nullable  
+                writeIndex.set(writeIndices.get(0));  
+        public String getName() {  
+ * this work for additional information regarding copyright
+    /**  
+ * software distributed under the License is distributed on an
+     *
+ * Modifications Copyright OpenSearch Contributors. See  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * An index abstraction has a unique name and encapsulates all the  {@link IndexMetadata} instances it is pointing to.
+            return null;
+                    .collect(Collectors.toList());
+    class DataStream implements IndexAbstraction {  
+     * @opensearch.api
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+         */
+            return referenceIndexMetadatas.get(0).getAliases().get(aliasName);
+            this.aliasName = aliasMetadata.getAlias();
+import org.opensearch.common.SetOnce;
+/*
+            if (isNonEmpty(groupedByHiddenStatus.get(true)) && isNonEmpty(groupedByHiddenStatus.get(false))) {  
+     * A write index may also be a regular concrete index of a index abstraction and may therefore also be returned  
+ * under the License.  
+        public List<IndexMetadata> getIndices() {  
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_HIDDEN_SETTING;  
+                @Override
+            return Collections.singletonList(concreteIndex);  
+            } else if (writeIndices.size() > 1) {
+        }
+            if (writeIndices.isEmpty()
+        public IndexMetadata getWriteIndex() {
+        }  
+                        + Strings.collectionToCommaDelimitedString(hiddenOn)
+        DATA_STREAM("data_stream");
+import java.util.stream.Collectors;  
+/*  
+        public Alias(AliasMetadata aliasMetadata, IndexMetadata indexMetadata) {  
+ * @opensearch.api
+    /**  
+                }
+         * A data stream typically has multiple backing indices, the latest of which
+        }
+     */
+     *
+            return dataStream;
+                int index = 0;  
+                    .stream()
+                        + "]; alias must have the same is_hidden setting "
+     * A data stream.
+                List<String> hiddenOn = groupedByHiddenStatus.get(true)
+     * @return All {@link IndexMetadata} of all concrete indices this index abstraction is referring to.
+        }  
+     * @return the data stream to which this index belongs or <code>null</code> if this is not a concrete index or
+        private final List<IndexMetadata> dataStreamIndices;  
+            this.writeIndex = dataStreamIndices.get(dataStreamIndices.size() - 1);  
+    @Nullable
+     * @return the name of the index abstraction  
+ *
+        @Override  
+            this.dataStream = dataStream;
+        }  
+    boolean isSystem();  
+            return isHidden;
+        @Override
+    }
+     * @return whether this index abstraction is hidden or not
+        Type(String displayName) {
+     *
+        @Override  
+        void addIndex(IndexMetadata indexMetadata) {
+        }
+                    .map(idx -> idx.getIndex().getName())
+        CONCRETE_INDEX("concrete index"),
+            // aliases may not be part of a data stream
+     * Represents an concrete index and encapsulates its {@link IndexMetadata}  
+import java.util.Map;
+    List<IndexMetadata> getIndices();
+        private boolean isNonEmpty(List<IndexMetadata> idxMetas) {
+            // No such thing as system data streams (yet)  
+         */
+                        + "] has more than one write index ["  
+                .filter(idxMeta -> Boolean.TRUE.equals(idxMeta.getAliases().get(aliasName).writeIndex()))
+        public void computeAndValidateAliasProperties() {
+                public Tuple<String, AliasMetadata> next() {
+                .collect(Collectors.toList());  
             return dataStream.getName();  
         }
-
-        @Override  
-        public Type getType() {
-            return Type.DATA_STREAM;
-        }  
-
-        @Override
-        public List<IndexMetadata> getIndices() {  
+                        + aliasName
+        }
+     */  
+            return false;
             return dataStreamIndices;
-        }
-
-        public IndexMetadata getWriteIndex() {
-            return writeIndex;
         }  
-
-        @Override
-        public DataStream getParentDataStream() {  
-            // a data stream cannot have a parent data stream
-            return null;
+        public Index(IndexMetadata indexMetadata, DataStream dataStream) {  
+ * KIND, either express or implied.  See the License for the
+import java.util.Objects;
         }  
-
+ * GitHub history for details.
+        private final String displayName;  
+        private final String aliasName;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+         * An index abstraction that refers to a single concrete index.
+     */
+        private final SetOnce<IndexMetadata> writeIndex = new SetOnce<>();  
+                );  
+     * Represents an alias and groups all {@link IndexMetadata} instances sharing the same alias name together.
+                    IndexMetadata indexMetadata = referenceIndexMetadatas.get(index++);  
+         */
         @Override
-        public boolean isHidden() {  
-            return false;
-        }
-
-        @Override
+    @PublicApi(since = "1.0.0")
+     * @opensearch.internal  
         public boolean isSystem() {
-            // No such thing as system data streams (yet)  
-            return false;
+/**
+        public Index(IndexMetadata indexMetadata) {
+         * This concrete index is also the write index.  
+            final Map<Boolean, List<IndexMetadata>> groupedByHiddenStatus = referenceIndexMetadatas.stream()
+        public Type getType() {
+     *
+        @Override
+        public Type getType() {  
+     */  
+        private final boolean isHidden;
         }
-
-        public org.opensearch.cluster.metadata.DataStream getDataStream() {
-            return dataStream;
-        }  
-    }
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.ArrayList;  
+    /**
+    IndexMetadata getWriteIndex();
+                List<String> nonHiddenOn = groupedByHiddenStatus.get(false)
+         * is the target for index requests.
+        ALIAS("alias"),  
+import static org.opensearch.cluster.metadata.DataStream.getDefaultBackingIndexName;
+            };  
+        @Override
+ * The OpenSearch Contributors require contributions made to  
+        public IndexMetadata getWriteIndex() {
+        /**  
+ * not use this file except in compliance with the License.
 }
+        private final IndexMetadata concreteIndex;  
+        @Override
+     * @return the write index of this index abstraction or  
+    /**
+        public boolean isHidden() {  
+     * @opensearch.internal
+        /**
+    /**
+ * An index abstraction is a reference to one or more concrete indices.  
+                    .stream()  
+    @PublicApi(since = "1.0.0")
+ * compatible open source license.
+                .collect(Collectors.groupingBy(idxMeta -> Boolean.TRUE.equals(idxMeta.getAliases().get(aliasName).isHidden())));
+                        + aliasName
+     * @opensearch.api  
+        public IndexMetadata getWriteIndex() {
+         * (note that although alias can point to the same concrete indices, each alias reference may have its own routing  
+        }
+        public List<IndexMetadata> getIndices() {
+import org.opensearch.core.common.Strings;
+    String getName();
+                        + "on all indices"
+        private final DataStream dataStream;
+        public boolean isSystem() {
+        @Override  
+                public boolean hasNext() {  
+            return Type.DATA_STREAM;
+         * and filters)
+            return writeIndex;
+                    "alias ["
+            this.isHidden = aliasMetadata.isHidden() == null ? false : aliasMetadata.isHidden();
+        @Override
+    /**
+ * Licensed to Elasticsearch under one or more contributor  
+                throw new IllegalStateException(  
+        }
+ *  
+            return () -> new Iterator<Tuple<String, AliasMetadata>>() {
+                        + "] has is_hidden set to true on indices ["  
+        }  
+     * A write index is a dedicated concrete index, that accepts all the new documents that belong to an index abstraction.
+ * You may obtain a copy of the License at  
+@PublicApi(since = "1.0.0")  
+            return (Objects.isNull(idxMetas) || idxMetas.isEmpty()) == false;
+                }
+    /**  
+        /**
+        /**
+         * may have a write index.
+     * <code>null</code> if this index abstraction doesn't have a write index.
+                        + Strings.collectionToCommaDelimitedString(nonHiddenOn)  
+            return concreteIndex.isSystem();
+        @Override
+            return dataStream;
+        public boolean isSystem() {
+        public boolean isHidden() {
+    }  
+                    return index < referenceIndexMetadatas.size();
+    /**  
+        public DataStream getParentDataStream() {  
+            assert writeIndex.getIndex().getName().equals(getDefaultBackingIndexName(dataStream.getName(), dataStream.getGeneration()));
+    DataStream getParentDataStream();
+            this.referenceIndexMetadatas.add(indexMetadata);  
+     * by {@link #getIndices()}. An index abstraction may also not have a dedicated write index.
+     * An index abstraction type.  
+        public DataStream(org.opensearch.cluster.metadata.DataStream dataStream, List<IndexMetadata> dataStreamIndices) {  
+        }
+                    .map(idx -> idx.getIndex().getName())  
+ */
+        public String getName() {
+        public org.opensearch.cluster.metadata.DataStream getDataStream() {
+        public DataStream getParentDataStream() {  
+    class Index implements IndexAbstraction {
+ */
+         */  
+     */  
+     * if it is a concrete index that does not belong to a data stream.
+     * @return whether this index abstraction should be treated as a system index or not
+                throw new IllegalStateException(  
+     *
+        @Override
+    /**
+        private final List<IndexMetadata> referenceIndexMetadatas;
+            // a data stream cannot have a parent data stream
+public interface IndexAbstraction {
+        @Override  
+                    "alias ["
+ * Also depending on type it may refer to a single or many concrete indices and may or may not have a write index.
+        }
+        }
+            return writeIndex.get();
+                    return new Tuple<>(indexMetadata.getIndex().getName(), indexMetadata.getAliases().get(aliasName));
+ * ownership. Elasticsearch licenses this file to you under  
+        @Override
+        public Iterable<Tuple<String, AliasMetadata>> getConcreteIndexAndAliasMetadatas() {  
+            this.dataStream = dataStream;
+            if (writeIndices.size() == 1) {
+import java.util.Collections;
+     * <p>
+            // Validate hidden status  
+            this.concreteIndex = indexMetadata;
+            this.referenceIndexMetadatas = new ArrayList<>();
+        public String getName() {
+ *
+        }

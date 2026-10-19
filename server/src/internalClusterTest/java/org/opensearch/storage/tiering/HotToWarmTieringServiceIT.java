@@ -1,1130 +1,943 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.tiering;
-
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
-
-import org.opensearch.action.DocWriteResponse;  
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
-import org.opensearch.cluster.ClusterInfoService;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateListener;  
-import org.opensearch.cluster.InternalClusterInfoService;
-import org.opensearch.cluster.MockInternalClusterInfoService;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.routing.IndexRoutingTable;  
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.core.common.unit.ByteSizeUnit;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.indices.replication.SegmentReplicationSourceService;  
-import org.opensearch.monitor.fs.FsInfo;
-import org.opensearch.node.Node;
-import org.opensearch.node.NodeResourceUsageStats;  
-import org.opensearch.node.resource.tracker.ResourceTrackerSettings;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;  
-import org.opensearch.search.SearchHit;
-import org.opensearch.storage.action.tiering.HotToWarmTierAction;
-import org.opensearch.storage.action.tiering.IndexTieringRequest;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.transport.MockTransportService;  
-import org.opensearch.transport.TransportService;
-
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;  
-import java.util.stream.Collectors;
-
-import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING;  
-import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING;
-import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING;
-import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING;  
-import static org.opensearch.index.store.remote.filecache.FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING;
-import static org.opensearch.storage.tiering.TieringTestUtils.buildDisabledAllocationSettings;
-import static org.opensearch.storage.tiering.TieringTestUtils.buildEnabledAllocationSettings;  
-import static org.hamcrest.Matchers.containsString;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
-@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
-public class HotToWarmTieringServiceIT extends RemoteStoreBaseIntegTestCase {
-
-    protected static final String INDEX_NAME = "h2w-test-idx-1";
-    protected static final String INDEX_NAME_2 = "h2w-test-idx-2";
-    private static final int DEFAULT_TIMEOUT_SECONDS = 30;  
-    private static final int MIGRATION_TIMEOUT_SECONDS = 30;
-    private static final long TOTAL_SPACE_BYTES = new ByteSizeValue(1000, ByteSizeUnit.KB).getBytes();
-
-    protected static final Map<String, Class<? extends Plugin>> TEST_SPECIFIC_CUSTOM_CLUSTER_INFO = Map.of(
-        "testWarmMigrationWithAllNodesJVMUtilizationBreached",
-        MockInternalClusterInfoService.TestPlugin.class,  
-        "testWarmMigrationWithAllNodesWaterMarkBreachedWithExistingTieredIndices",
-        MockInternalClusterInfoService.TestPlugin.class,
-        "testWarmMigrationWithAllNodesWaterMarkBreached",  
-        MockInternalClusterInfoService.TestPlugin.class
-    );
-
-    protected static final Map<String, ByteSizeValue> TEST_SPECIFIC_CACHE_SIZES = new HashMap<>();
-    static {
-        TEST_SPECIFIC_CACHE_SIZES.put("testWarmMigrationWithLargeTieringIndicesQueue", new ByteSizeValue(300, ByteSizeUnit.BYTES));  
-        TEST_SPECIFIC_CACHE_SIZES.put("testWarmMigrationWithAllNodesWaterMarkBreached", new ByteSizeValue(100, ByteSizeUnit.BYTES));
-        TEST_SPECIFIC_CACHE_SIZES.put(
-            "testWarmMigrationWithAllNodesWaterMarkBreachedWithExistingTieredIndices",  
-            new ByteSizeValue(1000, ByteSizeUnit.BYTES)
-        );
-    }  
-
-    @Override
-    protected boolean addMockIndexStorePlugin() {  
-        return false;
-    }
-
-    @Override
-    protected boolean ignoreExternalCluster() {
-        return true;  
-    }
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        String testName = getTestName();
-        List<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());  
-        plugins.add(MockTransportService.TestPlugin.class);
-        Class<? extends Plugin> extra = TEST_SPECIFIC_CUSTOM_CLUSTER_INFO.get(testName);
-        if (extra != null) {  
-            plugins.add(extra);
-        }
-        return plugins;  
-    }
-
-    @Override  
-    protected Settings nodeSettings(int nodeOrdinal) {
-        String testName = getTestName();
-        ByteSizeValue cacheSize = TEST_SPECIFIC_CACHE_SIZES.getOrDefault(testName, new ByteSizeValue(1, ByteSizeUnit.GB));  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), cacheSize.toString())  
-            .build();
-    }
-
-    @Override
-    protected Settings featureFlagSettings() {
-        return Settings.builder().put(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG, true).build();  
-    }
-
-    protected void setupCluster(int numberOfReplicas) {  
-        setupCluster(numberOfReplicas, null);
-    }
-
-    protected void setupCluster(int numberOfReplicas, Settings clusterSettings) {
-        setupCluster(numberOfReplicas, null, null, clusterSettings);
-    }  
-
-    protected void setupCluster(int numberOfReplicas, String lowDiskWaterMark, String dataToFileCacheRatio) {
-        setupCluster(numberOfReplicas, lowDiskWaterMark, dataToFileCacheRatio, null);  
-    }
-
-    protected void setupCluster(int numberOfReplicas, String lowDiskWaterMark, String dataToFileCacheRatio, Settings clusterSettings) {  
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), lowDiskWaterMark != null ? lowDiskWaterMark : "10b")
-            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")  
-            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
-            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), dataToFileCacheRatio != null ? Long.parseLong(dataToFileCacheRatio) : 5.0)  
-            .put(clusterSettings == null ? Settings.EMPTY : clusterSettings);
-
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
-        internalCluster().startDataOnlyNodes(numberOfReplicas + 1, settingsBuilder.build());
-        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
-        interceptCheckpointUpdates();  
-    }
-
-    /**  
-     * Intercepts the UPDATE_VISIBLE_CHECKPOINT transport action on all nodes to gracefully handle
-     * the known race condition where a checkpoint update arrives during relocation handoff.
-     * See: https://github.com/opensearch-project/OpenSearch/issues/3923  
-     */
-    protected void interceptCheckpointUpdates() {
-        for (String nodeName : internalCluster().getNodeNames()) {  
-            MockTransportService mockTransportService = (MockTransportService) internalCluster().getInstance(
-                TransportService.class,
-                nodeName  
-            );
-            mockTransportService.addRequestHandlingBehavior(
-                SegmentReplicationSourceService.Actions.UPDATE_VISIBLE_CHECKPOINT,  
-                (handler, request, channel, task) -> {
-                    try {
-                        handler.messageReceived(request, channel, task);  
-                    } catch (AssertionError e) {
-                        channel.sendResponse(TransportResponse.Empty.INSTANCE);
-                    }  
-                }
-            );
-        }  
-    }
-
-    protected void createTestIndex(String indexName, int numberOfShards, int numberOfReplicas) {  
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numberOfShards)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numberOfReplicas)  
-            .build();
-        createIndex(indexName, indexSettings);
-        refreshClusterInfo();  
-    }
-
-    protected void migrateToWarm(String indexName) throws Exception {  
-        // Ensure segment replication is fully caught up before triggering relocation
-        if (indexExists(indexName)) {
-            flush(indexName);  
-            waitForReplication(indexName);
-        }
-
-        CountDownLatch latch = new CountDownLatch(1);
-        ClusterStateListener listener = new TieringTestUtils.MockTieringCompletionListener(
-            latch,  
-            indexName,
-            IndexModule.TieringState.HOT_TO_WARM.toString()
-        );  
-
-        try {
-            clusterService().addListener(listener);  
-            final IndexTieringRequest request = new IndexTieringRequest("warm", indexName);
-            AcknowledgedResponse response = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet();
-            assertTrue(response.isAcknowledged());  
-
-            assertTrue("Hot to Warm migration timed out", latch.await(MIGRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS));
-
-            assertBusy(() -> {
-                assertIndexShardLocation(indexName, true);
-                verifyWarmIndexSettings(indexName);  
-            }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        } finally {
-            clusterService().removeListener(listener);  
-        }
-    }
-
-    protected static void assertIndexShardLocation(String indexName, boolean onWarmNodes) {
-        ClusterState state = client().admin().cluster().prepareState().get().getState();
-        IndexRoutingTable indexRoutingTable = state.routingTable().index(indexName);  
-
-        for (IndexShardRoutingTable shardRoutingTable : indexRoutingTable) {
-            ShardRouting shardRouting = shardRoutingTable.primaryShard();  
-            if (shardRouting.unassigned() && shardRouting.primary() == false) {
-                continue;
-            }  
-            String assignedNodeId = shardRouting.currentNodeId();
-            DiscoveryNode assignedNode = state.nodes().get(assignedNodeId);
-            if (onWarmNodes) {  
-                assertTrue("Shard should be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));
-            } else {
-                assertFalse("Shard should not be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));  
-            }
-        }
-    }  
-
-    protected void verifyWarmIndexSettings(String indexName) {
-        Settings currentSettings = internalCluster().clusterService().state().metadata().index(indexName).getSettings();  
-        Map<String, Object> expectedSettings = TieringTestUtils.getExpectedWarmIndexSettings();
-        for (Map.Entry<String, Object> entry : expectedSettings.entrySet()) {
-            assertEquals(  
-                "Incorrect value for setting: " + entry.getKey(),
-                entry.getValue().toString(),
-                currentSettings.get(entry.getKey())  
-            );
-        }
-    }  
-
-    protected void migrateMultipleIndicesToWarm(String[] indices) throws Exception {
-        // Ensure segment replication is fully caught up before triggering relocation  
-        for (String index : indices) {
-            flush(index);
-            waitForReplication(index);  
-        }
-
-        CountDownLatch migrationLatch = new CountDownLatch(indices.length);  
-        List<ClusterStateListener> listeners = new ArrayList<>();
-
-        for (String index : indices) {  
-            flush(index);
-            waitForReplication(index);
-            client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index)).actionGet();  
-            ClusterStateListener listener = new TieringTestUtils.MockTieringCompletionListener(
-                migrationLatch,
-                index,  
-                IndexModule.TieringState.HOT_TO_WARM.toString()
-            );
-            listeners.add(listener);  
-            clusterService().addListener(listener);
-        }
-
-        try {
-            assertTrue("Migration timed out", migrationLatch.await(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS));
-            assertBusy(() -> {  
-                for (String index : indices) {
-                    assertIndexShardLocation(index, true);
-                    verifyWarmIndexSettings(index);  
-                }
-            }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        } finally {  
-            listeners.forEach(l -> clusterService().removeListener(l));
-        }
-    }  
-
-    protected CountDownLatch waitForMigrationToStart(String indexName) {
-        CountDownLatch migrationStarted = new CountDownLatch(1);  
-        clusterService().addListener(event -> {
-            if (event.state().routingTable().hasIndex(indexName)) {
-                boolean isRelocating = event.state().routingTable().allShards(indexName).stream().anyMatch(ShardRouting::relocating);  
-                if (isRelocating) migrationStarted.countDown();
-            }
-        });  
-        return migrationStarted;
-    }
-
-    protected void verifyMigrationError(String indexName, String expectedErrorMessage) {
-        final IndexTieringRequest request = new IndexTieringRequest("warm", indexName);
-        Exception e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet()
-        );  
-        assertThat(e.getMessage(), containsString(expectedErrorMessage));
-    }
-
-    protected void refreshClusterInfo() {
-        InternalClusterInfoService infoService = (InternalClusterInfoService) internalCluster().getInstance(
-            ClusterInfoService.class,  
-            internalCluster().getClusterManagerName()
-        );
-        infoService.refresh();  
-    }
-
-    public void testHotToWarmMigrationBasic() throws Exception {  
-        int numberOfReplicas = randomIntBetween(0, 1);
-        int numberOfShards = randomIntBetween(1, 2);
-
-        setupCluster(numberOfReplicas);
-        createTestIndex(INDEX_NAME, numberOfShards, numberOfReplicas);
-        assertIndexShardLocation(INDEX_NAME, false);  
-
-        migrateToWarm(INDEX_NAME);
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-    }
-
-    public void testHotToWarmMigrationWithData() throws Exception {
-        setupCluster(1);
         createTestIndex(INDEX_NAME, 1, 1);  
-
-        indexBulk(INDEX_NAME, 100);
-        refresh(INDEX_NAME);  
-
-        assertIndexShardLocation(INDEX_NAME, false);
-        migrateToWarm(INDEX_NAME);  
-
-        refresh(INDEX_NAME);
-        assertEquals(100, client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value());  
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-    }  
-
-    public void testHotToWarmMigrationWithDeletedDocumentSuccess() throws Exception {
-        int numberOfReplicas = randomIntBetween(1, 2);  
-        logger.info("Testing migration with deletions, replicas: {}", numberOfReplicas);
-
-        setupCluster(numberOfReplicas, null, null);  
-        createTestIndex(INDEX_NAME, 1, numberOfReplicas);
-
-        Map<String, Long> indexStats = indexData(randomIntBetween(1, 3), true, INDEX_NAME);  
-        long initialDocCount = indexStats.get(TOTAL_OPERATIONS);
-
-        List<String> deletedIds = deleteRandomDocuments(INDEX_NAME, 2);  
-        long expectedDocsAfterDelete = initialDocCount - deletedIds.size();
-        refresh(INDEX_NAME);
-        flush(INDEX_NAME);  
-
-        assertIndexShardLocation(INDEX_NAME, false);
-
-        migrateToWarm(INDEX_NAME);
-
-        refresh(INDEX_NAME);  
-        flush(INDEX_NAME);
-        assertEquals(
-            "Document count changed after migration",  
-            expectedDocsAfterDelete,
-            client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value()
-        );  
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-    }  
-
-    private List<String> deleteRandomDocuments(String indexName, int count) {
-        SearchResponse searchResponse = client().prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).setSize(count).get();  
-
-        List<String> deletedIds = new ArrayList<>();
-        for (SearchHit hit : searchResponse.getHits()) {  
-            String docId = hit.getId();
-            deletedIds.add(docId);
-            assertEquals(DocWriteResponse.Result.DELETED, client().prepareDelete(indexName, docId).get().getResult());  
-        }
-        return deletedIds;
-    }  
-
-    public void testWarmMigrationForAlreadyMigratedIndex() throws Exception {
-        setupCluster(1);  
-        createTestIndex(INDEX_NAME, 1, 1);
-
-        migrateToWarm(INDEX_NAME);  
-
-        verifyMigrationError(INDEX_NAME, "Cannot migrate index [" + INDEX_NAME + "] to WARM tier");
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-    }
-
-    public void testMultipleIndicesHotToWarmMigration() throws Exception {
-        setupCluster(1);
-
-        String[] indices = new String[] { "test-1", "test-2", "test-3" };
-        for (String index : indices) {
-            createTestIndex(index, 1, 1);  
-        }
-        ensureGreen(indices);
-
-        for (String index : indices) {
-            assertIndexShardLocation(index, false);
-        }  
-
-        // Ensure segment replication is fully caught up before triggering relocation
-        for (String index : indices) {  
-            flush(index);
-            waitForReplication(index);
-        }  
-
-        CountDownLatch migrationLatch = new CountDownLatch(indices.length);
-        List<ClusterStateListener> listeners = new ArrayList<>();  
-
-        for (String index : indices) {
-            flush(index);  
-            waitForReplication(index);
-            client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index)).actionGet();
-            ClusterStateListener listener = new TieringTestUtils.MockTieringCompletionListener(  
-                migrationLatch,
-                index,
-                IndexModule.TieringState.HOT_TO_WARM.toString()  
-            );
-            listeners.add(listener);
-            clusterService().addListener(listener);  
-        }
-
-        try {  
-            assertTrue("Migration timed out", migrationLatch.await(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS));
-            assertBusy(() -> {
-                for (String index : indices) {  
-                    assertIndexShardLocation(index, true);
-                    verifyWarmIndexSettings(index);
-                }  
-            }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } finally {
-            listeners.forEach(l -> clusterService().removeListener(l));  
-            for (String index : indices) {
-                client().admin().indices().delete(new DeleteIndexRequest(index)).actionGet();
-            }  
-        }
-    }
-
-    public void testHotToWarmMigrationWithIndexDeletion() throws Exception {
+        }  
         setupCluster(1);
-        createTestIndex(INDEX_NAME, 1, 1);  
-        assertIndexShardLocation(INDEX_NAME, false);
-
-        CountDownLatch migrationStarted = new CountDownLatch(1);  
-        ClusterStateListener relocationListener = event -> {
-            if (event.state().routingTable().hasIndex(INDEX_NAME)) {
-                boolean isRelocating = event.state().routingTable().allShards(INDEX_NAME).stream().anyMatch(ShardRouting::relocating);  
-                if (isRelocating) {
-                    migrationStarted.countDown();
-                }  
-            }
-        };
-        clusterService().addListener(relocationListener);  
-
-        // Ensure segment replication is fully caught up before triggering relocation
-        flush(INDEX_NAME);  
-        waitForReplication(INDEX_NAME);
-
-        client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", INDEX_NAME)).actionGet();  
-        assertTrue("Migration didn't start", migrationStarted.await(MIGRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS));
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().get().getState();  
-            assertFalse("Index should be deleted", state.metadata().hasIndex(INDEX_NAME));
-        }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-
-        clusterService().removeListener(relocationListener);
-    }
-
-    public void testWarmMigrationReplicaCountFrom2To1() throws Exception {
-        setupCluster(2);
-        createTestIndex("test-replica", 1, 2);  
-
-        assertEquals(
-            "2",  
-            client().admin()
-                .indices()
-                .prepareGetSettings("test-replica")  
-                .get()
-                .getSetting("test-replica", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)
-        );  
-
-        migrateToWarm("test-replica");
-
-        assertEquals(
-            "1",
-            client().admin()  
-                .indices()
-                .prepareGetSettings("test-replica")
-                .get()  
-                .getSetting("test-replica", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)
-        );
-
-        client().admin().indices().delete(new DeleteIndexRequest("test-replica")).actionGet();
-    }
-
-    public void testConcurrentMigrationWithStuckIndex() throws Exception {
-        Settings disabledSettings = buildDisabledAllocationSettings();
-        Settings.Builder settingsBuilder = Settings.builder()  
-            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "10b")
-            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
-            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")  
-            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0)
-            .put(disabledSettings);  
-
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
-        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());  
-        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
-        interceptCheckpointUpdates();
-
-        createTestIndex("stuck-index", 1, 1);
-        createTestIndex("second-index", 1, 1);
-        ensureGreen("stuck-index", "second-index");  
-
-        try {
-            flush("stuck-index");  
-            waitForReplication("stuck-index");
-            AcknowledgedResponse resp = client().admin()
-                .indices()  
-                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", "stuck-index"))
-                .actionGet();
-            assertTrue(resp.isAcknowledged());  
-            TieringTestUtils.safeSleep(5000);
-
-            assertBusy(() -> { assertIndexShardLocation("stuck-index", false); }, 30, TimeUnit.SECONDS);  
-
             flush("second-index");
-            waitForReplication("second-index");  
-            client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", "second-index")).actionGet();
-
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
-
-            assertBusy(() -> {
-                assertIndexShardLocation("stuck-index", true);  
-                assertIndexShardLocation("second-index", true);
-                verifyWarmIndexSettings("stuck-index");
-                verifyWarmIndexSettings("second-index");  
-            }, 30, TimeUnit.SECONDS);
-        } finally {
-            client().admin().indices().delete(new DeleteIndexRequest("stuck-index")).actionGet();  
-            client().admin().indices().delete(new DeleteIndexRequest("second-index")).actionGet();
-        }
-    }  
-
-    public void testWarmMigrationForExistingMigratingIndex() throws Exception {
-        setupCluster(1, buildDisabledAllocationSettings());  
-        createTestIndex(INDEX_NAME, 1, 1);
-        ensureGreen(INDEX_NAME);
-
-        try {
-            final IndexTieringRequest stuckRequest = new IndexTieringRequest("warm", INDEX_NAME);
-            AcknowledgedResponse stuckResponse = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, stuckRequest).actionGet();  
-            assertTrue(stuckResponse.isAcknowledged());
-
-            assertBusy(() -> {  
-                ClusterState state = client().admin().cluster().prepareState().get().getState();
-                ShardRouting shardRouting = state.routingTable().index(INDEX_NAME).shard(0).primaryShard();
-                assertFalse("Shard should not be relocating", shardRouting.relocating());  
-                assertIndexShardLocation(INDEX_NAME, false);
-            }, 30, TimeUnit.SECONDS);
-
-            // Trigger migration again — should get ack (idempotent)
-            final IndexTieringRequest secondRequest = new IndexTieringRequest("warm", INDEX_NAME);
-            AcknowledgedResponse secondResponse = client().admin()  
-                .indices()
-                .execute(HotToWarmTierAction.INSTANCE, secondRequest)
-                .actionGet();  
-            assertTrue(secondResponse.isAcknowledged());
-        } finally {
-            client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
-        }
-    }
-
-    public void testWarmMigrationForInvalidIndex() throws Exception {
-        setupCluster(1);
-        Exception exception = expectThrows(IllegalArgumentException.class, () -> migrateToWarm("invalid-index"));  
-        assertTrue(exception.getMessage().contains("Failed to resolve index: invalid-index"));
-    }
-
-    public void testHotToWarmMigrationWithMasterNodeFailure() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());
-
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
-        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
-        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
-        interceptCheckpointUpdates();  
-
-        final String[] indices = new String[] { "test-1", "test-2", "test-3" };
-
-        try {
-            for (String index : indices) {
-                createTestIndex(index, 1, 1);  
-            }
-            ensureGreen(indices);
-
-            for (String index : indices) {
-                assertIndexShardLocation(index, false);
-            }  
-
-            for (String index : indices) {
-                flush(index);  
-                waitForReplication(index);
-                AcknowledgedResponse response = client().admin()
-                    .indices()  
-                    .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index))
-                    .actionGet();
-                assertTrue(response.isAcknowledged());  
-            }
-
-            for (String index : indices) {  
                 assertBusy(() -> {
-                    ClusterState state = client().admin().cluster().prepareState().get().getState();
-                    ShardRouting shard = state.routingTable().index(index).shard(0).primaryShard();  
-                    assertFalse("Shard should not be relocating", shard.relocating());
-                    assertIndexShardLocation(index, false);
-                }, 30, TimeUnit.SECONDS);  
-            }
-
-            internalCluster().stopCurrentClusterManagerNode();  
-            ensureStableCluster(6);
-
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
-
-            assertBusy(() -> {
-                for (String index : indices) {  
-                    assertIndexShardLocation(index, true);
-                    verifyWarmIndexSettings(index);
-                }  
-            }, 60, TimeUnit.SECONDS);
-        } finally {
-            for (String index : indices) {  
-                client().admin().indices().delete(new DeleteIndexRequest(index)).actionGet();
-            }
-        }  
-    }
-
-    public void testWarmMigrationReplicaCountFrom0To1() throws Exception {  
-        setupCluster(1);
-        createTestIndex("test-replica-0to1", 1, 0);
-
-        assertEquals(
-            "0",
-            client().admin()  
-                .indices()
-                .prepareGetSettings("test-replica-0to1")
-                .get()  
-                .getSetting("test-replica-0to1", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)
-        );
-
-        migrateToWarm("test-replica-0to1");
-
-        assertEquals(  
-            "1",
+            waitForReplication(index);  
+            ClusterStateListener listener = new TieringTestUtils.MockTieringCompletionListener(  
+            assertTrue(resp.isAcknowledged());  
+                assertIndexShardLocation("stuck-index", true);  
+        String[] indices = new String[] { "test-1", "test-2", "test-3" };
+        ClusterStateListener listener = new TieringTestUtils.MockTieringCompletionListener(
+                assertBusy(() -> {
+        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
+                assertTrue(response.isAcknowledged());  
+    protected void migrateMultipleIndicesToWarm(String[] indices) throws Exception {
+        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());
+            }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertTrue(exception.getMessage().contains("Failed to resolve index: invalid-index"));
             client().admin()
-                .indices()  
-                .prepareGetSettings("test-replica-0to1")
-                .get()
-                .getSetting("test-replica-0to1", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)  
-        );
-
-        client().admin().indices().delete(new DeleteIndexRequest("test-replica-0to1")).actionGet();  
+        createTestIndex("test-replica", 1, 2);  
+            }, 30, TimeUnit.SECONDS);
+            "0",
+        for (String nodeName : internalCluster().getNodeNames()) {  
     }
-
-    public void testWarmMigrationWithTieringQueueSizeBreached() throws Exception {  
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(buildDisabledAllocationSettings())
-            .put("cluster.tiering.max_concurrent_hot_to_warm_requests", 2);  
-
-        setupCluster(1, settingsBuilder.build());
-        createTestIndex(INDEX_NAME, 1, 1);  
-        createTestIndex("test-index-2", 1, 1);
-        createTestIndex("test-index-3", 1, 1);
-        refreshClusterInfo();  
-
-        List<String> inFlightIndices = List.of(INDEX_NAME, "test-index-2");
-        for (String index : inFlightIndices) {  
-            AcknowledgedResponse resp = client().admin()
+        ensureGreen(STUCK_INDEX);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numberOfShards)
                 .indices()
-                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index))  
-                .actionGet();
-            assertTrue(resp.isAcknowledged());
-            TieringTestUtils.safeSleep(4000);  
         }
-
-        assertThrows(  
-            OpenSearchRejectedExecutionException.class,
-            () -> client().admin()
-                .indices()  
-                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("WARM", "test-index-3"))
-                .actionGet()
-        );  
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-        client().admin().indices().delete(new DeleteIndexRequest("test-index-2")).actionGet();  
-        client().admin().indices().delete(new DeleteIndexRequest("test-index-3")).actionGet();
-    }
-
-    public void testWarmMigrationWithAllNodesWaterMarkBreached() {
         Settings.Builder settingsBuilder = Settings.builder()
-            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "20b")  
-            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
-            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
-            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")  
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 1);
-
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
-        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
-        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
-        interceptCheckpointUpdates();  
-
+import org.opensearch.common.util.FeatureFlags;
+                verifyWarmIndexSettings(indexName);  
+        migrateToWarm(INDEX_NAME);
+    public void testWarmMigrationForAlreadyMigratedIndex() throws Exception {
+ * compatible open source license.
+                ShardRouting shard = state.routingTable().index(STUCK_INDEX).shard(0).primaryShard();
+        if (indexExists(indexName)) {
+            listeners.add(listener);
         createTestIndex(INDEX_NAME, 1, 1);
-        refreshClusterInfo();  
-
-        MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
-        clusterInfoService.setDiskUsageFunctionAndRefresh((discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, 100L, 10L));  
-        clusterInfoService.setShardSizeFunctionAndRefresh(shardRouting -> 50L);
-
-        verifyMigrationError(INDEX_NAME, "since we don't have enough space on all warm nodes");  
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-    }
-
-    public void testWarmMigrationWithLargeTieringIndicesQueue() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "50b")  
-            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
+import static org.opensearch.index.store.remote.filecache.FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING;
+        for (String index : indices) {
+                if (isRelocating) {
+        ensureGreen(INDEX_NAME);
             .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
-            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")  
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 1.0);
-
+            internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primaryNode));  
+    protected Settings nodeSettings(int nodeOrdinal) {
+        indexBulk(INDEX_NAME, 100);
         internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
-        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
+                assertFalse("Shard should not be relocating", shard.relocating());
+            final IndexTieringRequest stuckRequest = new IndexTieringRequest("warm", INDEX_NAME);
+        final String[] indices = new String[] { "test-1", "test-2", "test-3" };
+ */  
+        clusterInfoService.setDiskUsageFunctionAndRefresh(
+        try {
+    public void testMigrationWithStuckIndexAndPrimaryShardDataNodeBounceWithReplicas() throws Exception {
+import org.opensearch.node.Node;
+import org.opensearch.core.common.unit.ByteSizeUnit;  
+            client().admin()
+        int numberOfReplicas = randomIntBetween(1, 2);  
+        }  
+    public void testHotToWarmMigrationBasic() throws Exception {  
+    public void testMigrationWithStuckIndexAndReplicaShardDataNodeBounce() throws Exception {
+            }
+            clusterService().removeListener(listener);  
+            flush("stuck-index");  
+                ClusterState state = client().admin().cluster().prepareState().get().getState();  
+                }, 30, TimeUnit.SECONDS);  
+            client().admin().indices().delete(new DeleteIndexRequest("test-index-3")).actionGet();  
+            .put(super.nodeSettings(nodeOrdinal))
+    public void testConcurrentMigrationWithStuckIndex() throws Exception {
+        createTestIndex("second-index", 1, 1);
+            );
+                }, 30, TimeUnit.SECONDS);  
+        }
+        createTestIndex(INDEX_NAME, 1, 1);  
+            "2",  
+        setupCluster(1);
+        }
+        Settings.Builder settingsBuilder = Settings.builder()
+        assertTrue(resp.isAcknowledged());  
+        List<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());  
+                indexBulk(index, 100);  
+                    assertFalse("Shard should not be relocating", shard.relocating());
+                .indices()
+            }, 60, TimeUnit.SECONDS);
+            if (shardRouting.unassigned() && shardRouting.primary() == false) {
+            flushAndRefresh(INDEX_NAME_2);
+                (handler, request, channel, task) -> {
+        ensureGreen(indices);
+    }  
+            ensureYellow(INDEX_NAME);
+                    verifyWarmIndexSettings(index);  
+        return true;  
+        setupCluster(1);
+        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());  
+        // Ensure segment replication is fully caught up before triggering relocation
+        }
+            for (String index : indices) {
+    public void testHotToWarmMigrationWithIndexDeletion() throws Exception {
+        );  
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), dataToFileCacheRatio != null ? Long.parseLong(dataToFileCacheRatio) : 5.0)  
+            for (String index : indices) {  
+            assertEquals(100, client().prepareSearch(STUCK_INDEX).setSize(0).get().getHits().getTotalHits().value());
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
+        }
+            }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        TieringTestUtils.safeSleep(6000);
+                client().admin().indices().delete(new DeleteIndexRequest(index)).actionGet();  
+    }  
+            clusterService().addListener(listener);
+        for (String index : inFlightIndices) {  
+            client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value()
+    protected void setupCluster(int numberOfReplicas, String lowDiskWaterMark, String dataToFileCacheRatio) {
+            }
+                for (String index : indices) {  
+            internalCluster().restartNode(masterNodeId);  
+                .indices()  
+    public void testWarmMigrationWithTieringQueueSizeBreached() throws Exception {  
+                createTestIndex(index, 1, 1);
+            listeners.add(listener);  
+            ShardRouting shardRouting = shardRoutingTable.primaryShard();  
+                .prepareGetSettings("test-replica")
+            for (String nodeName : dataNodeNames) {
+                    } catch (AssertionError e) {
+            assertTrue(response.isAcknowledged());  
+            for (String index : indices) {  
+            .indices()  
+            for (String index : indices) {  
+            .put(ResourceTrackerSettings.GLOBAL_CPU_USAGE_AC_WINDOW_DURATION_SETTING.getKey(), TimeValue.timeValueMillis(500));
+    }  
+                .filter(node -> node.getRoles().contains(DiscoveryNodeRole.DATA_ROLE))  
+    }  
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            AcknowledgedResponse resp = client().admin()
+    protected static final String INDEX_NAME_2 = "h2w-test-idx-2";
+            latch,  
+    protected void interceptCheckpointUpdates() {
+import org.opensearch.transport.TransportService;
+        CountDownLatch migrationLatch = new CountDownLatch(indices.length);
+                    .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index))
+            final IndexTieringRequest stuckRequest = new IndexTieringRequest("warm", INDEX_NAME);
+        );  
+                index,  
+        ensureGreen();
+        refreshClusterInfo();  
+                .getSetting("test-replica-0to1", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)  
         internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
-        interceptCheckpointUpdates();  
-
+            .put(buildDisabledAllocationSettings())
+            waitForReplication(STUCK_INDEX);
+        setupCluster(2);
+        refresh(STUCK_INDEX);  
+        assertEquals(
+                .indices()
+import org.opensearch.cluster.ClusterState;
+                verifyWarmIndexSettings(STUCK_INDEX);
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 2.0);
+                .actionGet()
+                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", STUCK_INDEX))
+            assertTrue(resp.isAcknowledged());  
+            assertBusy(() -> {
+    }
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
+        refreshClusterInfo();
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numberOfReplicas)  
+                DiscoveryNode primaryNode = state.nodes().get(primaryShard.currentNodeId());  
+        ensureGreen();
+                TransportService.class,
+                    verifyWarmIndexSettings(index);
+import org.opensearch.monitor.fs.FsInfo;
+            assertEquals(  
+        CountDownLatch migrationStarted = new CountDownLatch(1);  
+        Settings currentSettings = internalCluster().clusterService().state().metadata().index(indexName).getSettings();  
+    }
+            waitForReplication("stuck-index");
+            if (onWarmNodes) {  
+            indexBulk(INDEX_NAME_2, 5000);
+        MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();  
+        indexBulk(STUCK_INDEX, 100);
+        indexBulk(STUCK_INDEX, 100);
+                for (String index : indices) {  
+            client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index)).actionGet();
+    }  
+     * Intercepts the UPDATE_VISIBLE_CHECKPOINT transport action on all nodes to gracefully handle
+    }
+            }, 30, TimeUnit.SECONDS);
+        Exception e = expectThrows(  
+        plugins.add(MockTransportService.TestPlugin.class);
+        internalCluster().startDataOnlyNode(settingsBuilder.build());  
+            assertTrue(secondResponse.isAcknowledged());
+                SegmentReplicationSourceService.Actions.UPDATE_VISIBLE_CHECKPOINT,  
+                ClusterState state = client().admin().cluster().prepareState().get().getState();
+        client().admin().indices().delete(new DeleteIndexRequest("test-index-3")).actionGet();
+        } finally {
+            assertTrue("Migration timed out", migrationLatch.await(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+                    indexDocCounts.get(index).longValue(),  
+     * See: https://github.com/opensearch-project/OpenSearch/issues/3923  
+            createTestIndex(index, 1, 1);  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.storage.action.tiering.HotToWarmTierAction;
+import org.opensearch.core.transport.TransportResponse;  
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+        flush(INDEX_NAME);  
+        } finally {
+        });  
+                internalCluster().restartNode(nodeName);
+                .indices()  
+                IndexModule.TieringState.HOT_TO_WARM.toString()
+            }, 60, TimeUnit.SECONDS);
+        );  
+            }  
+        String replicaNode = internalCluster().startDataOnlyNode(settingsBuilder.build());  
+                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", STUCK_INDEX))
+        refresh(INDEX_NAME);  
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+            assertTrue(stuckResponse.isAcknowledged());
+        interceptCheckpointUpdates();
+                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", "stuck-index"))
+            (discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, TOTAL_SPACE_BYTES)
+            }
+    }
+    public void testWarmMigrationReplicaCountFrom2To1() throws Exception {
+        verifyMigrationError(INDEX_NAME, "Rejecting tiering request as JVM Utilization is high on all [WARM] nodes");  
+            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")  
+            client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", "second-index")).actionGet();
+        return plugins;  
+        if (extra != null) {  
+ * SPDX-License-Identifier: Apache-2.0
+        Map<String, Long> indexDocCounts = new HashMap<>();
+    }
+import org.opensearch.node.NodeResourceUsageStats;  
+            internalCluster().getClusterManagerName()
+            assertBusy(() -> {
+        } finally {
+        migrateToWarm(INDEX_NAME);
+        createTestIndex("test-index-2", 1, 0);  
+                    ClusterState state = client().admin().cluster().prepareState().get().getState();
+            }, 30, TimeUnit.SECONDS);
+        } finally {
+}
+        }
+            AcknowledgedResponse response = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet();
+import java.util.HashMap;
+        createTestIndex(INDEX_NAME_2, 1, 1);
+    public void testWarmMigrationReplicaCountFrom0To1() throws Exception {  
+        createTestIndex(STUCK_INDEX, 1, 1);  
+        String primaryNode = internalCluster().startDataOnlyNode(settingsBuilder.build());  
+        "testWarmMigrationWithAllNodesJVMUtilizationBreached",
+        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
+@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+            flush(STUCK_INDEX);  
+        CountDownLatch migrationLatch = new CountDownLatch(indices.length);  
+        try {
+    protected CountDownLatch waitForMigrationToStart(String indexName) {
+        assertEquals(100, client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value());  
+        try {
+                assertEquals(
+            .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", INDEX_NAME))
+import org.opensearch.index.IndexModule;
+        indexBulk(STUCK_INDEX, 100);
+        String testName = getTestName();
+            () -> client().admin()
+        flush(INDEX_NAME);  
+        setupCluster(1);  
+        Settings.Builder settingsBuilder = Settings.builder()
+                }  
+                .actionGet();
+        internalCluster().startDataOnlyNode(settingsBuilder.build());  
+    protected static void assertIndexShardLocation(String indexName, boolean onWarmNodes) {
+        assertEquals(
+        migrateToWarm(INDEX_NAME);
+                assertIndexShardLocation(STUCK_INDEX, false);  
+                verifyWarmIndexSettings("second-index");  
+        setupCluster(1);  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+    }
+                "Incorrect value for setting: " + entry.getKey(),
+                    verifyWarmIndexSettings(index);
+        MockInternalClusterInfoService.TestPlugin.class,  
         createTestIndex(INDEX_NAME, 1, 1);
         createTestIndex("test-index-2", 1, 1);  
-        createTestIndex("test-index-3", 1, 1);
-        refreshClusterInfo();
-
-        try {
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildDisabledAllocationSettings()).get();
-
-            final IndexTieringRequest stuckRequest = new IndexTieringRequest("warm", INDEX_NAME);
-            AcknowledgedResponse stuckResponse = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, stuckRequest).actionGet();
-            assertTrue(stuckResponse.isAcknowledged());  
-
-            assertBusy(() -> {
-                ClusterState state = client().admin().cluster().prepareState().get().getState();  
-                ShardRouting shardRouting = state.routingTable().index(INDEX_NAME).shard(0).primaryShard();
-                assertFalse("Shard should not be relocating", shardRouting.relocating());
-                assertIndexShardLocation(INDEX_NAME, false);  
-            }, 30, TimeUnit.SECONDS);
-
-            final IndexTieringRequest secondRequest = new IndexTieringRequest("warm", "test-index-2");  
-            AcknowledgedResponse secondResponse = client().admin()
-                .indices()
-                .execute(HotToWarmTierAction.INSTANCE, secondRequest)  
-                .actionGet();
-            assertTrue(secondResponse.isAcknowledged());
-
-            verifyMigrationError("test-index-3", "since we don't have enough space on all warm nodes");
-        } finally {
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
-            client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-            client().admin().indices().delete(new DeleteIndexRequest("test-index-2")).actionGet();
-            client().admin().indices().delete(new DeleteIndexRequest("test-index-3")).actionGet();  
-        }
-    }
-
-    public void testWarmMigrationWithAllNodesWaterMarkBreachedWithExistingTieredIndices() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "150b")  
-            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "100b")
-            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "50b")
-            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")  
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 2.0);
-
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
-        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
-        internalCluster().startWarmOnlyNodes(1, settingsBuilder.build());
-        interceptCheckpointUpdates();  
-
-        createTestIndex(INDEX_NAME, 1, 0);
-        createTestIndex("test-index-2", 1, 0);  
-
-        AcknowledgedResponse resp = client().admin()
-            .indices()  
-            .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", INDEX_NAME))
-            .actionGet();
-        assertTrue(resp.isAcknowledged());  
-
-        assertBusy(() -> assertIndexShardLocation(INDEX_NAME, true), 30, TimeUnit.SECONDS);
-
-        MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
-        clusterInfoService.setShardSizeFunctionAndRefresh(shardRouting -> 600L);
-        clusterInfoService.setDiskUsageFunctionAndRefresh((discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, 850L));  
-
-        verifyMigrationError("test-index-2", "since we don't have enough space on all warm nodes");
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-        client().admin().indices().delete(new DeleteIndexRequest("test-index-2")).actionGet();
-    }  
-
-    public void testConcurrentMigrationWithStuckIndexAndDataNodesRestarts() throws Exception {
-        setupCluster(1, buildDisabledAllocationSettings());  
-        final String STUCK_INDEX = "stuck-index";
-
-        createTestIndex(STUCK_INDEX, 1, 1);  
-        ensureGreen(STUCK_INDEX);
-        indexBulk(STUCK_INDEX, 100);
-        refresh(STUCK_INDEX);  
-
-        try {
-            flush(STUCK_INDEX);  
-            waitForReplication(STUCK_INDEX);
-            AcknowledgedResponse resp = client().admin()
-                .indices()  
-                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", STUCK_INDEX))
-                .actionGet();
-            assertTrue(resp.isAcknowledged());  
-            TieringTestUtils.safeSleep(4000);
-
-            assertBusy(() -> {  
-                ClusterState state = client().admin().cluster().prepareState().get().getState();
-                ShardRouting shard = state.routingTable().index(STUCK_INDEX).shard(0).primaryShard();
-                assertFalse("Shard should not be relocating", shard.relocating());  
-                assertIndexShardLocation(STUCK_INDEX, false);
-            }, 30, TimeUnit.SECONDS);
-
-            ClusterState state = client().admin().cluster().prepareState().get().getState();
-            List<String> dataNodeNames = state.nodes()
-                .getNodes()  
-                .values()
-                .stream()
-                .filter(node -> node.getRoles().contains(DiscoveryNodeRole.DATA_ROLE))  
-                .map(DiscoveryNode::getName)
-                .collect(Collectors.toList());
-
-            for (String nodeName : dataNodeNames) {
-                internalCluster().restartNode(nodeName);
-            }  
-
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
-
-            assertBusy(() -> {
-                assertIndexShardLocation(STUCK_INDEX, true);
-                verifyWarmIndexSettings(STUCK_INDEX);  
-            }, 60, TimeUnit.SECONDS);
-
-            refresh(STUCK_INDEX);  
-            assertEquals(100, client().prepareSearch(STUCK_INDEX).setSize(0).get().getHits().getTotalHits().value());
-        } finally {
-            client().admin().indices().delete(new DeleteIndexRequest(STUCK_INDEX)).actionGet();  
-        }
-    }
-
-    public void testMigrationWithStuckIndexAndPrimaryShardDataNodeBounceWithReplicas() throws Exception {
-        final String STUCK_INDEX = "stuck-index";
-        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());  
-
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
-        String primaryNode = internalCluster().startDataOnlyNode(settingsBuilder.build());  
-        createTestIndex(STUCK_INDEX, 1, 1);
-        ensureYellow(STUCK_INDEX);
-        internalCluster().startDataOnlyNode(settingsBuilder.build());  
-        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
-        ensureGreen(STUCK_INDEX);
-        interceptCheckpointUpdates();  
-
-        indexBulk(STUCK_INDEX, 100);
-        refresh(STUCK_INDEX);  
-
-        try {
-            flush(STUCK_INDEX);  
-            waitForReplication(STUCK_INDEX);
-            AcknowledgedResponse resp = client().admin()
-                .indices()  
-                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", STUCK_INDEX))
-                .actionGet();
-            assertTrue(resp.isAcknowledged());  
-
-            assertBusy(() -> {
-                ClusterState state = client().admin().cluster().prepareState().get().getState();  
-                ShardRouting shard = state.routingTable().index(STUCK_INDEX).shard(0).primaryShard();
-                assertFalse("Shard should not be relocating", shard.relocating());
-                assertIndexShardLocation(STUCK_INDEX, false);  
-            }, 30, TimeUnit.SECONDS);
-
-            internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primaryNode));  
-
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
-
-            assertBusy(() -> {
-                ensureGreen(STUCK_INDEX);
-                assertIndexShardLocation(STUCK_INDEX, true);  
-                verifyWarmIndexSettings(STUCK_INDEX);
-            }, 60, TimeUnit.SECONDS);
-
-            assertEquals(100, client().prepareSearch(STUCK_INDEX).setSize(0).get().getHits().getTotalHits().value());
-        } finally {
-            client().admin().indices().delete(new DeleteIndexRequest(STUCK_INDEX)).actionGet();  
-        }
-    }
-
-    public void testMigrationWithStuckIndexAndReplicaShardDataNodeBounce() throws Exception {
-        final String STUCK_INDEX = "stuck-index";
-        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());  
-
-        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
-        internalCluster().startDataOnlyNode(settingsBuilder.build());  
-        createTestIndex(STUCK_INDEX, 1, 1);
-        ensureYellow(STUCK_INDEX);
-        String replicaNode = internalCluster().startDataOnlyNode(settingsBuilder.build());  
-        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
-        ensureGreen(STUCK_INDEX);
-        interceptCheckpointUpdates();  
-
-        indexBulk(STUCK_INDEX, 100);
-        refresh(STUCK_INDEX);  
-
-        try {
-            flush(STUCK_INDEX);  
-            waitForReplication(STUCK_INDEX);
-            AcknowledgedResponse resp = client().admin()
-                .indices()  
-                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", STUCK_INDEX))
-                .actionGet();
-            assertTrue(resp.isAcknowledged());  
-
-            assertBusy(() -> {
-                ClusterState state = client().admin().cluster().prepareState().get().getState();  
-                ShardRouting shard = state.routingTable().index(STUCK_INDEX).shard(0).primaryShard();
-                assertFalse("Shard should not be relocating", shard.relocating());
-                assertIndexShardLocation(STUCK_INDEX, false);  
-            }, 30, TimeUnit.SECONDS);
-
-            internalCluster().stopRandomNode(InternalTestCluster.nameFilter(replicaNode));  
-
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
-
-            assertBusy(() -> {
-                ensureGreen(STUCK_INDEX);
-                assertIndexShardLocation(STUCK_INDEX, true);  
-                verifyWarmIndexSettings(STUCK_INDEX);
-            }, 60, TimeUnit.SECONDS);
-
-            assertEquals(100, client().prepareSearch(STUCK_INDEX).setSize(0).get().getHits().getTotalHits().value());
-        } finally {
-            client().admin().indices().delete(new DeleteIndexRequest(STUCK_INDEX)).actionGet();  
-        }
-    }
-
-    public void testHotToWarmMigrationDuringQuorumLoss() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());
-
-        String masterNodeId = internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
-        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
-        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());  
-        interceptCheckpointUpdates();
-
-        final String[] indices = new String[] { "test-1", "test-2", "test-3" };  
-        Map<String, Long> indexDocCounts = new HashMap<>();
-
-        try {  
-            for (String index : indices) {
-                createTestIndex(index, 1, 1);
-                indexBulk(index, 100);  
-                indexDocCounts.put(index, 100L);
-            }
-            ensureGreen(indices);  
-
-            for (String index : indices) {
-                flush(index);  
-                waitForReplication(index);
-                AcknowledgedResponse response = client().admin()
-                    .indices()  
-                    .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index))
-                    .actionGet();
-                assertTrue(response.isAcknowledged());  
-            }
-
-            for (String index : indices) {  
-                assertBusy(() -> {
-                    ClusterState state = client().admin().cluster().prepareState().get().getState();
-                    ShardRouting shard = state.routingTable().index(index).shard(0).primaryShard();  
-                    assertFalse("Shard should not be relocating", shard.relocating());
-                    assertIndexShardLocation(index, false);
-                }, 30, TimeUnit.SECONDS);  
-            }
-
-            internalCluster().restartNode(masterNodeId);  
-            ensureStableCluster(5);
-
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
-
-            assertBusy(() -> {
-                for (String index : indices) {  
-                    assertIndexShardLocation(index, true);
-                    verifyWarmIndexSettings(index);
-                }  
-            }, 60, TimeUnit.SECONDS);
-
-            for (String index : indices) {  
-                refresh(index);
-                assertEquals(
-                    indexDocCounts.get(index).longValue(),  
-                    client().prepareSearch(index).setSize(0).get().getHits().getTotalHits().value()
-                );
-            }  
-        } finally {
-            for (String index : indices) {
-                client().admin().indices().delete(new DeleteIndexRequest(index)).actionGet();  
-            }
-        }
-    }  
-
-    public void testWarmMigrationWithAllNodesJVMUtilizationBreached() {
-        setupCluster(1);  
-        createTestIndex(INDEX_NAME, 1, 1);
-
-        MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();  
-        clusterInfoService.setDiskUsageFunctionAndRefresh(
-            (discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, TOTAL_SPACE_BYTES)
-        );  
-        clusterInfoService.setShardSizeFunctionAndRefresh(shardRouting -> 230L);
-        clusterInfoService.setNodeResourceUsageFunctionAndRefresh(
-            nodeId -> new NodeResourceUsageStats(nodeId, System.currentTimeMillis(), 99, 20, null, 0.0)  
-        );
-
-        verifyMigrationError(INDEX_NAME, "Rejecting tiering request as JVM Utilization is high on all [WARM] nodes");  
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-    }  
-
-    public void testHotToWarmMigrationWithUnassignedReplica() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();  
-        internalCluster().startDataOnlyNodes(1);
-        internalCluster().startWarmOnlyNodes(1);
-        interceptCheckpointUpdates();  
-
-        try {
-            createTestIndex(INDEX_NAME, 1, 1);  
-            indexBulk(INDEX_NAME, 100);
-            ensureYellow(INDEX_NAME);
-
-            final IndexTieringRequest request = new IndexTieringRequest("warm", INDEX_NAME);
-            AcknowledgedResponse response = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet();
-            assertTrue(response.isAcknowledged());  
-
-            assertBusy(() -> {
-                ClusterState state = client().admin().cluster().prepareState().get().getState();  
-                ShardRouting primaryShard = state.routingTable().index(INDEX_NAME).shard(0).primaryShard();
-                assertTrue("Primary should be assigned", primaryShard.assignedToNode());
-                DiscoveryNode primaryNode = state.nodes().get(primaryShard.currentNodeId());  
-                assertTrue("Primary should be on warm node", primaryNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));
-                assertIndexShardLocation(INDEX_NAME, true);
-                verifyWarmIndexSettings(INDEX_NAME);  
-            }, 30, TimeUnit.SECONDS);
-
-            refresh(INDEX_NAME);  
-            assertEquals(100, client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value());
-        } finally {
             client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
-        }
+            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
+        verifyMigrationError(INDEX_NAME, "Cannot migrate index [" + INDEX_NAME + "] to WARM tier");
+                    .indices()  
+        Map<String, Long> indexStats = indexData(randomIntBetween(1, 3), true, INDEX_NAME);  
+                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", STUCK_INDEX))
     }
-
-    public void testWarmMigrationWithoutClusterInfoMockForJVMUtilization() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(ResourceTrackerSettings.GLOBAL_JVM_USAGE_AC_WINDOW_DURATION_SETTING.getKey(), TimeValue.timeValueMillis(500))  
-            .put(ResourceTrackerSettings.GLOBAL_IO_USAGE_AC_WINDOW_DURATION_SETTING.getKey(), TimeValue.timeValueMillis(5000))
-            .put(ResourceTrackerSettings.GLOBAL_CPU_USAGE_AC_WINDOW_DURATION_SETTING.getKey(), TimeValue.timeValueMillis(500));
-
+    }
+import org.opensearch.test.OpenSearchIntegTestCase;
+        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());  
+        String masterNodeId = internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
+    );
+                verifyWarmIndexSettings(STUCK_INDEX);
+                verifyWarmIndexSettings(STUCK_INDEX);  
+            assertBusy(() -> {
+        clusterInfoService.setDiskUsageFunctionAndRefresh((discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, 850L));  
+            DiscoveryNode assignedNode = state.nodes().get(assignedNodeId);
+                }
+        try {  
+        );
+                .indices()  
+import org.opensearch.cluster.routing.IndexRoutingTable;  
+        client().admin().indices().delete(new DeleteIndexRequest("test-replica-0to1")).actionGet();  
+import org.opensearch.action.DocWriteResponse;  
+        }
+            flush(index);
+                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("WARM", "test-index-3"))
+        assertTrue("Migration didn't start", migrationStarted.await(MIGRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+        internalCluster().startWarmOnlyNodes(1);
+        } finally {
+    protected static final Map<String, Class<? extends Plugin>> TEST_SPECIFIC_CUSTOM_CLUSTER_INFO = Map.of(
+        createTestIndex(INDEX_NAME, 1, 1);
+            TieringTestUtils.safeSleep(1000);  
+import org.opensearch.common.unit.TimeValue;
+                waitForReplication(index);
+        assertThat(e.getMessage(), containsString(expectedErrorMessage));
+            flush(index);  
+                client().admin().indices().delete(new DeleteIndexRequest(index)).actionGet();
+        for (Map.Entry<String, Object> entry : expectedSettings.entrySet()) {
+    }
+                assertIndexShardLocation(INDEX_NAME, false);
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
+                refresh(index);
+                .collect(Collectors.toList());
+    public void testWarmMigrationWithAllNodesWaterMarkBreachedWithExistingTieredIndices() throws Exception {
+        interceptCheckpointUpdates();  
+        return false;
+        return Settings.builder()
+            waitForReplication(STUCK_INDEX);
+            );
+package org.opensearch.storage.tiering;
+            ClusterStateListener listener = new TieringTestUtils.MockTieringCompletionListener(
+            client().admin().indices().delete(new DeleteIndexRequest(STUCK_INDEX)).actionGet();  
+        setupCluster(numberOfReplicas, null);
+                .indices()  
+        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
+    protected void refreshClusterInfo() {
+            waitForReplication(index);
+            }
+            expectedDocsAfterDelete,
+                .get()
+        final IndexTieringRequest request = new IndexTieringRequest("warm", indexName);
+        AcknowledgedResponse resp = client().admin()
+                .indices()  
         setupCluster(1, settingsBuilder.build());
         createTestIndex(INDEX_NAME, 1, 1);
-
-        // Adding a delay to let the JVM and CPU stats get collected
-        TieringTestUtils.safeSleep(6000);
-        refreshClusterInfo();  
-        migrateToWarm(INDEX_NAME);
-
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
-    }
-
-    public void testBulkOnWarmIndexWithFileCacheEvictionHappeningAlways() throws Exception {  
-        setupCluster(1);
-        createTestIndex(INDEX_NAME_2, 1, 1);
-
-        migrateToWarm(INDEX_NAME_2);
-
-        for (int i = 0; i < 5; i++) {  
-            indexBulk(INDEX_NAME_2, 5000);
-            flushAndRefresh(INDEX_NAME_2);
-            TieringTestUtils.safeSleep(1000);  
+        }  
         }
-        ensureGreen();
-        indexBulk(INDEX_NAME_2, 5000);  
-        flushAndRefresh(INDEX_NAME_2);
-        ensureGreen();
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME_2)).actionGet();  
-    }
-
-    protected MockInternalClusterInfoService getMockInternalClusterInfoService() {  
-        return (MockInternalClusterInfoService) internalCluster().getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
-    }
-
-    protected static FsInfo.Path setDiskUsage(FsInfo.Path original, long totalBytes, long freeBytes) {
-        return new FsInfo.Path(original.getPath(), original.getMount(), totalBytes, freeBytes, freeBytes);
+        Settings disabledSettings = buildDisabledAllocationSettings();
+            assertBusy(() -> {
+            }, 30, TimeUnit.SECONDS);
+        refresh(STUCK_INDEX);  
+        refresh(INDEX_NAME);  
+                .indices()
+            assertBusy(() -> {
+            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")  
+            }
+            ensureStableCluster(6);
+                .map(DiscoveryNode::getName)
+import static org.hamcrest.Matchers.containsString;
+                ensureGreen(STUCK_INDEX);
+            client().admin().indices().delete(new DeleteIndexRequest("second-index")).actionGet();
+import java.util.Collection;
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+        client().admin().indices().delete(new DeleteIndexRequest("test-replica")).actionGet();
+        Class<? extends Plugin> extra = TEST_SPECIFIC_CUSTOM_CLUSTER_INFO.get(testName);
+        final String[] indices = new String[] { "test-1", "test-2", "test-3" };  
+        TEST_SPECIFIC_CACHE_SIZES.put("testWarmMigrationWithLargeTieringIndicesQueue", new ByteSizeValue(300, ByteSizeUnit.BYTES));  
+        );
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
+        createIndex(indexName, indexSettings);
+        setupCluster(numberOfReplicas);
+            for (String index : indices) {
+                ShardRouting shard = state.routingTable().index(STUCK_INDEX).shard(0).primaryShard();
+                assertFalse("Shard should not be relocating", shard.relocating());
+            flush(STUCK_INDEX);  
+        setupCluster(1);
     }  
-}
+        interceptCheckpointUpdates();  
+            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
+            ClusterState state = client().admin().cluster().prepareState().get().getState();  
+        try {
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
+        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
+        }
+            assertBusy(() -> {
+            }, 30, TimeUnit.SECONDS);
+            refresh(STUCK_INDEX);  
+import org.opensearch.storage.action.tiering.IndexTieringRequest;  
+import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING;  
+            TieringTestUtils.safeSleep(4000);  
+            internalCluster().stopRandomNode(InternalTestCluster.nameFilter(replicaNode));  
+            new ByteSizeValue(1000, ByteSizeUnit.BYTES)
+            }, 30, TimeUnit.SECONDS);
+        MockInternalClusterInfoService.TestPlugin.class,
+            assertEquals(DocWriteResponse.Result.DELETED, client().prepareDelete(indexName, docId).get().getResult());  
+                IndexModule.TieringState.HOT_TO_WARM.toString()  
+        Settings.Builder settingsBuilder = Settings.builder()
+    protected static final Map<String, ByteSizeValue> TEST_SPECIFIC_CACHE_SIZES = new HashMap<>();
+            if (event.state().routingTable().hasIndex(INDEX_NAME)) {
+        for (String index : indices) {  
+        Settings.Builder settingsBuilder = Settings.builder()
+                boolean isRelocating = event.state().routingTable().allShards(indexName).stream().anyMatch(ShardRouting::relocating);  
+                .actionGet();
+                }  
+        createTestIndex(STUCK_INDEX, 1, 1);
+    public void testBulkOnWarmIndexWithFileCacheEvictionHappeningAlways() throws Exception {  
+        indexBulk(INDEX_NAME_2, 5000);  
+    }  
+    public void testWarmMigrationForExistingMigratingIndex() throws Exception {
+        for (String index : indices) {
+            }  
+    public void testWarmMigrationWithLargeTieringIndicesQueue() throws Exception {
+                assertIndexShardLocation(STUCK_INDEX, false);
+                flush(index);  
+        migrateToWarm("test-replica-0to1");
+            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
+            .put(clusterSettings == null ? Settings.EMPTY : clusterSettings);
+        assertThrows(  
+            plugins.add(extra);
+        refreshClusterInfo();  
+        } finally {
+            for (String index : indices) {
+                assertTrue("Primary should be on warm node", primaryNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));
+        client().admin().indices().delete(new DeleteIndexRequest("test-index-2")).actionGet();
+    @Override  
+import java.util.ArrayList;  
+        refresh(INDEX_NAME);
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
+                ClusterState state = client().admin().cluster().prepareState().get().getState();  
+    }
+        }
+        }  
+                assertIndexShardLocation(index, false);
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 1);
+                }
+        flushAndRefresh(INDEX_NAME_2);
+        client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", INDEX_NAME)).actionGet();  
+            assertTrue("Hot to Warm migration timed out", latch.await(MIGRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+        setupCluster(1);
+                .actionGet();
+            }
+    @Override  
+/*  
+            assertTrue(resp.isAcknowledged());
+                AcknowledgedResponse response = client().admin()
+        // Ensure segment replication is fully caught up before triggering relocation
+            ensureGreen(indices);  
+    }
+import org.opensearch.cluster.MockInternalClusterInfoService;
+        for (String index : indices) {
+    protected void verifyWarmIndexSettings(String indexName) {
+                .getSetting("test-replica-0to1", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME_2)).actionGet();  
+    public void testHotToWarmMigrationWithData() throws Exception {
+            AcknowledgedResponse resp = client().admin()
+import static org.opensearch.storage.tiering.TieringTestUtils.buildDisabledAllocationSettings;
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
+        Settings.Builder settingsBuilder = Settings.builder()
+    }
+                .indices()
+        createTestIndex(INDEX_NAME, 1, 0);
+import org.opensearch.search.SearchHit;
+            if (event.state().routingTable().hasIndex(indexName)) {
+        interceptCheckpointUpdates();  
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
+    public void testHotToWarmMigrationWithDeletedDocumentSuccess() throws Exception {
+                .prepareGetSettings("test-replica-0to1")
+                for (String index : indices) {  
+        flush(INDEX_NAME);
+        createTestIndex(INDEX_NAME, 1, numberOfReplicas);
+            MockTransportService mockTransportService = (MockTransportService) internalCluster().getInstance(
+                .getSetting("test-replica", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)
+            }
+        createTestIndex(INDEX_NAME, 1, 1);
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+                nodeName  
+        migrateToWarm(INDEX_NAME_2);
+            assertTrue(resp.isAcknowledged());  
+        final String STUCK_INDEX = "stuck-index";
+            waitForReplication(index);
+            ClusterInfoService.class,  
+        return new FsInfo.Path(original.getPath(), original.getMount(), totalBytes, freeBytes, freeBytes);
+            assertEquals(100, client().prepareSearch(STUCK_INDEX).setSize(0).get().getHits().getTotalHits().value());
+        createTestIndex("test-index-3", 1, 1);
+            clusterService().addListener(listener);  
+        // Ensure segment replication is fully caught up before triggering relocation  
+import org.opensearch.test.InternalTestCluster;
+                ClusterState state = client().admin().cluster().prepareState().get().getState();  
+        setupCluster(1, buildDisabledAllocationSettings());  
+            assertBusy(() -> {
+            listeners.forEach(l -> clusterService().removeListener(l));  
+                entry.getValue().toString(),
+        ClusterState state = client().admin().cluster().prepareState().get().getState();
+        refresh(STUCK_INDEX);  
+import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;  
+        for (String index : indices) {
+import org.opensearch.cluster.routing.ShardRouting;
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
+import org.opensearch.cluster.ClusterInfoService;
+        }
+                    assertIndexShardLocation(index, true);
+            .put("cluster.tiering.max_concurrent_hot_to_warm_requests", 2);  
+        }
+        }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            assertTrue(stuckResponse.isAcknowledged());  
+        List<String> inFlightIndices = List.of(INDEX_NAME, "test-index-2");
+        return Settings.builder().put(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG, true).build();  
+            AcknowledgedResponse secondResponse = client().admin()
+                .actionGet();  
+                    ShardRouting shard = state.routingTable().index(index).shard(0).primaryShard();  
+        return deletedIds;
+            assertTrue(response.isAcknowledged());  
+        migrateToWarm(INDEX_NAME);  
+    }
+        int numberOfReplicas = randomIntBetween(0, 1);
+                .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index))  
+import java.util.List;  
+        try {
+                    assertIndexShardLocation(index, true);
+                .get()  
+public class HotToWarmTieringServiceIT extends RemoteStoreBaseIntegTestCase {
+        CountDownLatch migrationStarted = new CountDownLatch(1);  
+        }
+                assertTrue("Shard should be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));
+    public void testWarmMigrationWithAllNodesWaterMarkBreached() {
+            TieringTestUtils.safeSleep(5000);
+        refreshClusterInfo();  
+                assertIndexShardLocation(INDEX_NAME, false);  
+        long expectedDocsAfterDelete = initialDocCount - deletedIds.size();
+                ShardRouting primaryShard = state.routingTable().index(INDEX_NAME).shard(0).primaryShard();
+            verifyMigrationError("test-index-3", "since we don't have enough space on all warm nodes");
+            }, 60, TimeUnit.SECONDS);
+            waitForReplication(indexName);
+        setupCluster(numberOfReplicas, lowDiskWaterMark, dataToFileCacheRatio, null);  
+        } finally {  
+            waitForReplication(index);
+import org.opensearch.indices.replication.SegmentReplicationSourceService;  
+                assertFalse("Shard should not be relocating", shardRouting.relocating());  
+                    migrationStarted.countDown();
+                ShardRouting shardRouting = state.routingTable().index(INDEX_NAME).shard(0).primaryShard();
+        clusterInfoService.setShardSizeFunctionAndRefresh(shardRouting -> 600L);
+                currentSettings.get(entry.getKey())  
+            // Trigger migration again — should get ack (idempotent)
+            ensureGreen(indices);
+    }  
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildDisabledAllocationSettings()).get();
+    static {
+        createTestIndex(INDEX_NAME, numberOfShards, numberOfReplicas);
+            final IndexTieringRequest request = new IndexTieringRequest("warm", indexName);
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+        SearchResponse searchResponse = client().prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).setSize(count).get();  
+            assertBusy(() -> {  
+     * the known race condition where a checkpoint update arrives during relocation handoff.
+        );
+            nodeId -> new NodeResourceUsageStats(nodeId, System.currentTimeMillis(), 99, 20, null, 0.0)  
+        infoService.refresh();  
+        setupCluster(1, settingsBuilder.build());
+            ClusterState state = client().admin().cluster().prepareState().get().getState();
+                migrationLatch,
+    }
+                .execute(HotToWarmTierAction.INSTANCE, secondRequest)
+        try {
+        ensureYellow(STUCK_INDEX);
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
+        internalCluster().startDataOnlyNodes(numberOfReplicas + 1, settingsBuilder.build());
+        }
+                .actionGet();
+        }
+    public void testWarmMigrationWithoutClusterInfoMockForJVMUtilization() throws Exception {
+                assertIndexShardLocation(STUCK_INDEX, false);  
+        createTestIndex("stuck-index", 1, 1);
+                .prepareGetSettings("test-replica-0to1")
+    }
+        interceptCheckpointUpdates();  
+    private static final int MIGRATION_TIMEOUT_SECONDS = 30;
+        internalCluster().startClusterManagerOnlyNode();  
+                ShardRouting shardRouting = state.routingTable().index(INDEX_NAME).shard(0).primaryShard();
+        ensureGreen(STUCK_INDEX);
+    public void testHotToWarmMigrationDuringQuorumLoss() throws Exception {
+        clusterInfoService.setDiskUsageFunctionAndRefresh((discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, 100L, 10L));  
+import org.opensearch.action.search.SearchResponse;
+        InternalClusterInfoService infoService = (InternalClusterInfoService) internalCluster().getInstance(
+            "1",
+        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());  
+        migrateToWarm("test-replica");
+            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "100b")
+     */
+        refreshClusterInfo();  
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
+    protected MockInternalClusterInfoService getMockInternalClusterInfoService() {  
+            client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
+                assertIndexShardLocation(STUCK_INDEX, true);  
+            "testWarmMigrationWithAllNodesWaterMarkBreachedWithExistingTieredIndices",  
+        createTestIndex(STUCK_INDEX, 1, 1);
+        clusterInfoService.setShardSizeFunctionAndRefresh(shardRouting -> 50L);
+    protected void createTestIndex(String indexName, int numberOfShards, int numberOfReplicas) {  
+        clusterService().removeListener(relocationListener);
+        Settings.Builder settingsBuilder = Settings.builder()  
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import java.util.Map;
+    }
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
+            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), lowDiskWaterMark != null ? lowDiskWaterMark : "10b")
+            assertBusy(() -> {  
+            String assignedNodeId = shardRouting.currentNodeId();
+            List<String> dataNodeNames = state.nodes()
+                assertTrue(response.isAcknowledged());  
+            client().admin()  
+        ClusterStateListener relocationListener = event -> {
+            "1",
+        createTestIndex("test-replica-0to1", 1, 0);
+                verifyWarmIndexSettings("stuck-index");
+                assertTrue("Primary should be assigned", primaryShard.assignedToNode());
+        clusterInfoService.setNodeResourceUsageFunctionAndRefresh(
+        assertBusy(() -> assertIndexShardLocation(INDEX_NAME, true), 30, TimeUnit.SECONDS);
+            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
+            .put(ResourceTrackerSettings.GLOBAL_JVM_USAGE_AC_WINDOW_DURATION_SETTING.getKey(), TimeValue.timeValueMillis(500))  
+        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
+        createTestIndex("test-index-2", 1, 1);
+    }
+            "Document count changed after migration",  
+        assertIndexShardLocation(INDEX_NAME, false);
+import org.opensearch.common.settings.Settings;  
+        List<ClusterStateListener> listeners = new ArrayList<>();
+            AcknowledgedResponse stuckResponse = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, stuckRequest).actionGet();  
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
+                );
+            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "50b")
+        Settings indexSettings = Settings.builder()
+    }
+            client().admin().indices().execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index)).actionGet();  
+        TEST_SPECIFIC_CACHE_SIZES.put(
+    public void testMultipleIndicesHotToWarmMigration() throws Exception {
+                    verifyWarmIndexSettings(index);
+        ensureYellow(STUCK_INDEX);
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());  
+            );
+            IndexModule.TieringState.HOT_TO_WARM.toString()
+    }  
+        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());  
+import static org.opensearch.storage.tiering.TieringTestUtils.buildEnabledAllocationSettings;  
+            createTestIndex(INDEX_NAME, 1, 1);  
+        // Adding a delay to let the JVM and CPU stats get collected
+        final String STUCK_INDEX = "stuck-index";
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
+            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), cacheSize.toString())  
+                        channel.sendResponse(TransportResponse.Empty.INSTANCE);
+        interceptCheckpointUpdates();  
+        internalCluster().startDataOnlyNodes(1);
+            client().admin().indices().delete(new DeleteIndexRequest(STUCK_INDEX)).actionGet();  
+            AcknowledgedResponse secondResponse = client().admin()  
+        ensureGreen(STUCK_INDEX);
+            assertFalse("Index should be deleted", state.metadata().hasIndex(INDEX_NAME));
+                .indices()
+            AcknowledgedResponse resp = client().admin()
+                ShardRouting shard = state.routingTable().index(STUCK_INDEX).shard(0).primaryShard();
+                for (String index : indices) {
+            }  
+                    assertFalse("Shard should not be relocating", shard.relocating());
+        "testWarmMigrationWithAllNodesWaterMarkBreached",  
+    }
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.plugins.Plugin;
+import org.opensearch.test.transport.MockTransportService;  
+    }
+            }  
+        }
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
+        assertIndexShardLocation(INDEX_NAME, false);  
+        try {
+            assertBusy(() -> {  
+        refresh(INDEX_NAME);
+            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")  
+        }
+    protected boolean ignoreExternalCluster() {
+        interceptCheckpointUpdates();  
+                    client().prepareSearch(index).setSize(0).get().getHits().getTotalHits().value()
+        setupCluster(numberOfReplicas, null, null, clusterSettings);
+            internalCluster().stopCurrentClusterManagerNode();  
+        TEST_SPECIFIC_CACHE_SIZES.put("testWarmMigrationWithAllNodesWaterMarkBreached", new ByteSizeValue(100, ByteSizeUnit.BYTES));
+                AcknowledgedResponse response = client().admin()
+        int numberOfShards = randomIntBetween(1, 2);
+        interceptCheckpointUpdates();  
+    protected void verifyMigrationError(String indexName, String expectedErrorMessage) {
+            assertBusy(() -> { assertIndexShardLocation("stuck-index", false); }, 30, TimeUnit.SECONDS);  
+import org.opensearch.cluster.InternalClusterInfoService;
+        Exception exception = expectThrows(IllegalArgumentException.class, () -> migrateToWarm("invalid-index"));  
+                flush(index);  
+                index,
+    protected void setupCluster(int numberOfReplicas) {  
+    protected static FsInfo.Path setDiskUsage(FsInfo.Path original, long totalBytes, long freeBytes) {
+        } finally {
+        return migrationStarted;
+                verifyWarmIndexSettings(INDEX_NAME);  
+            }  
+            assertEquals(100, client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value());
+    protected Settings featureFlagSettings() {
+        for (IndexShardRoutingTable shardRoutingTable : indexRoutingTable) {
+import org.opensearch.cluster.node.DiscoveryNode;
+            .put(ResourceTrackerSettings.GLOBAL_IO_USAGE_AC_WINDOW_DURATION_SETTING.getKey(), TimeValue.timeValueMillis(5000))
+        setupCluster(1, buildDisabledAllocationSettings());  
+            .build();
+            client().admin().indices().delete(new DeleteIndexRequest("test-index-2")).actionGet();
+            );
+import java.util.concurrent.CountDownLatch;
+            for (String index : indices) {
+        MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
+        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
+        Map<String, Object> expectedSettings = TieringTestUtils.getExpectedWarmIndexSettings();
+        );  
+                ClusterState state = client().admin().cluster().prepareState().get().getState();
+        ByteSizeValue cacheSize = TEST_SPECIFIC_CACHE_SIZES.getOrDefault(testName, new ByteSizeValue(1, ByteSizeUnit.GB));  
+    private List<String> deleteRandomDocuments(String indexName, int count) {
+            waitForReplication("second-index");  
+            assertEquals(100, client().prepareSearch(STUCK_INDEX).setSize(0).get().getHits().getTotalHits().value());
+        }
+        String testName = getTestName();
+            client().admin().indices().delete(new DeleteIndexRequest(STUCK_INDEX)).actionGet();  
+        );
+    }
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 1.0);
+import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING;  
+        Settings.Builder settingsBuilder = Settings.builder().put(buildDisabledAllocationSettings());
+                continue;
+                    assertIndexShardLocation(index, true);
+        }
+import org.opensearch.cluster.ClusterStateListener;  
+        "testWarmMigrationWithAllNodesWaterMarkBreachedWithExistingTieredIndices",
+            }
+                    ShardRouting shard = state.routingTable().index(index).shard(0).primaryShard();  
+        );  
+                assertFalse("Shard should not be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));  
+            }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        migrateToWarm(INDEX_NAME);  
+                .indices()  
+ *
+        };
+            listeners.forEach(l -> clusterService().removeListener(l));
+                    assertIndexShardLocation(index, false);
+    private static final long TOTAL_SPACE_BYTES = new ByteSizeValue(1000, ByteSizeUnit.KB).getBytes();
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0)
+            .actionGet();
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+import java.util.concurrent.TimeUnit;  
+            for (String index : indices) {
+            indexName,
+            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
+            }
+    protected void migrateToWarm(String indexName) throws Exception {  
+        IndexRoutingTable indexRoutingTable = state.routingTable().index(indexName);  
+        );  
+    }  
+                assertIndexShardLocation(STUCK_INDEX, true);
+            assertTrue("Migration timed out", migrationLatch.await(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+                migrationLatch,
+            IllegalArgumentException.class,
+        );
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+ * this file be licensed under the Apache-2.0 license or a
+            refresh(INDEX_NAME);  
+        try {
+        setupCluster(1);
+            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "20b")  
+                    .execute(HotToWarmTierAction.INSTANCE, new IndexTieringRequest("warm", index))
+            assertBusy(() -> {
+    }  
+    public void testWarmMigrationWithAllNodesJVMUtilizationBreached() {
+            .build();
+        logger.info("Testing migration with deletions, replicas: {}", numberOfReplicas);
+            } else {
+                .prepareGetSettings("test-replica")  
+        } finally {
+        verifyMigrationError("test-index-2", "since we don't have enough space on all warm nodes");
+        assertIndexShardLocation(INDEX_NAME, false);
+        clusterService().addListener(event -> {
+                assertIndexShardLocation(indexName, true);
+        createTestIndex("test-index-3", 1, 1);
+            }
+            AcknowledgedResponse response = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet();
+    }
+        } finally {
+        for (SearchHit hit : searchResponse.getHits()) {  
+            final IndexTieringRequest secondRequest = new IndexTieringRequest("warm", INDEX_NAME);
+                    }  
+                .getNodes()  
+        verifyMigrationError(INDEX_NAME, "since we don't have enough space on all warm nodes");  
+            ensureStableCluster(5);
+            TieringTestUtils.safeSleep(4000);
+        try {
+            client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+    public void testConcurrentMigrationWithStuckIndexAndDataNodesRestarts() throws Exception {
+            AcknowledgedResponse resp = client().admin()
+            waitForReplication(STUCK_INDEX);
+        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
+        interceptCheckpointUpdates();
+import org.opensearch.core.common.unit.ByteSizeValue;
+        assertEquals(
+            flush(STUCK_INDEX);  
+                .values()
+            assertBusy(() -> {
+                createTestIndex(index, 1, 1);  
+                assertFalse("Shard should not be relocating", shardRouting.relocating());
+                    assertIndexShardLocation(index, true);
+                    assertIndexShardLocation(index, false);
+            final IndexTieringRequest request = new IndexTieringRequest("warm", INDEX_NAME);
+            AcknowledgedResponse resp = client().admin()
+            for (String index : indices) {
+                }  
+        } finally {
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
+        clusterService().addListener(relocationListener);  
+        List<ClusterStateListener> listeners = new ArrayList<>();  
+            indexBulk(INDEX_NAME, 100);
+        setupCluster(numberOfReplicas, null, null);  
+    }
+                assertIndexShardLocation("second-index", true);
+                .actionGet();
+import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING;
+                .getSetting("test-replica", IndexMetadata.SETTING_NUMBER_OF_REPLICAS)
+            client().admin().indices().delete(new DeleteIndexRequest("stuck-index")).actionGet();  
+    public void testHotToWarmMigrationWithUnassignedReplica() throws Exception {
+        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+    }
+    protected boolean addMockIndexStorePlugin() {  
+    }  
+import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING;
+    }
+                boolean isRelocating = event.state().routingTable().allShards(INDEX_NAME).stream().anyMatch(ShardRouting::relocating);  
+        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
+        assertEquals(  
+    }
+            final IndexTieringRequest secondRequest = new IndexTieringRequest("warm", "test-index-2");  
+            () -> client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet()
+            assertTrue(secondResponse.isAcknowledged());
+                    .actionGet();
+import org.opensearch.node.resource.tracker.ResourceTrackerSettings;
+            }, 60, TimeUnit.SECONDS);
+                    .actionGet();
+    @Override
+        MockInternalClusterInfoService.TestPlugin.class
+                    try {
+                .get()  
+        try {
+        assertBusy(() -> {
+            assertBusy(() -> {
+    private static final int DEFAULT_TIMEOUT_SECONDS = 30;  
+            mockTransportService.addRequestHandlingBehavior(
+        return (MockInternalClusterInfoService) internalCluster().getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
+            flush(indexName);  
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+            clusterService().addListener(listener);  
+            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")  
+            AcknowledgedResponse stuckResponse = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, stuckRequest).actionGet();
+            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "50b")  
+            .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
+        internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
+        internalCluster().startWarmOnlyNodes(1, settingsBuilder.build());
+            client().admin()  
+        assertEquals(
+                        handler.messageReceived(request, channel, task);  
+        }
+        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
+        clusterInfoService.setShardSizeFunctionAndRefresh(shardRouting -> 230L);
+    }
+            for (String index : indices) {
+        CountDownLatch latch = new CountDownLatch(1);
+        waitForReplication(INDEX_NAME);
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        // Ensure segment replication is fully caught up before triggering relocation
+    protected void setupCluster(int numberOfReplicas, Settings clusterSettings) {
+        ensureGreen("stuck-index", "second-index");  
+        try {  
+                }  
+                assertIndexShardLocation(INDEX_NAME, true);
+        MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
+            .put(disabledSettings);  
+        client().admin().indices().delete(new DeleteIndexRequest("test-index-2")).actionGet();  
+            assertIndexShardLocation(index, false);
+                .get()
+    }
+import java.util.stream.Collectors;
+        assertIndexShardLocation(INDEX_NAME, false);
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+            );
+    protected static final String INDEX_NAME = "h2w-test-idx-1";
+            .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")  
+            }, 60, TimeUnit.SECONDS);
+    @Override
+            }, 30, TimeUnit.SECONDS);
+    }
+            flush(index);
+                assertIndexShardLocation(STUCK_INDEX, true);  
+        for (String index : indices) {  
+            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "10b")
+            assertBusy(() -> {
+    }
+                    .indices()  
+    }
+            flush(index);
+            for (String index : indices) {  
+    }  
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+        long initialDocCount = indexStats.get(TOTAL_OPERATIONS);
+                .stream()
+        createTestIndex(INDEX_NAME, 1, 1);
+    }
+            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
+    public void testWarmMigrationForInvalidIndex() throws Exception {
+                    ClusterState state = client().admin().cluster().prepareState().get().getState();
+            assertTrue(resp.isAcknowledged());  
+        for (int i = 0; i < 5; i++) {  
+        }
+        List<String> deletedIds = deleteRandomDocuments(INDEX_NAME, 2);  
+                indexDocCounts.put(index, 100L);
+                assertFalse("Shard should not be relocating", shard.relocating());  
+                ensureGreen(STUCK_INDEX);
+            assertBusy(() -> {
+                ClusterState state = client().admin().cluster().prepareState().get().getState();  
+        interceptCheckpointUpdates();  
+    public void testHotToWarmMigrationWithMasterNodeFailure() throws Exception {
+        createTestIndex(INDEX_NAME, 1, 1);  
+        internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
+    protected void setupCluster(int numberOfReplicas, String lowDiskWaterMark, String dataToFileCacheRatio, Settings clusterSettings) {  
+        );
+                client().admin().indices().delete(new DeleteIndexRequest(index)).actionGet();
+            String docId = hit.getId();
+                waitForReplication(index);
+        final String STUCK_INDEX = "stuck-index";
+                .actionGet();
+        List<String> deletedIds = new ArrayList<>();
+            OpenSearchRejectedExecutionException.class,
+    /**  
+            deletedIds.add(docId);
+                if (isRelocating) migrationStarted.countDown();
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
+            }
+    @Override
+            .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "150b")  
+        }
+                .execute(HotToWarmTierAction.INSTANCE, secondRequest)  

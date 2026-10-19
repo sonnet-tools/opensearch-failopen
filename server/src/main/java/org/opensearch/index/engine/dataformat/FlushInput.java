@@ -1,32 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-/**  
- * Parameter object for {@link Writer#flush(FlushInput)}.
- * Carries optional context that writers may use during flush.
- * Writers that don't need any context simply ignore the fields.  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
 public record FlushInput(RowIdMapping rowIdMapping) {
-
-    /** Empty flush input with no row ID mapping. */
+     */  
+    }  
+@ExperimentalApi
+ *
+        return rowIdMapping != null;
+ * @opensearch.experimental
     public static final FlushInput EMPTY = new FlushInput((RowIdMapping) null);
-
+    public boolean hasRowIdMapping() {
+}
+    /** Empty flush input with no row ID mapping. */
     /**
      * Returns whether a row ID mapping is available.
-     */  
-    public boolean hasRowIdMapping() {
-        return rowIdMapping != null;
-    }  
-}
+ */  
+ * The OpenSearch Contributors require contributions made to  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * Parameter object for {@link Writer#flush(FlushInput)}.
+/**  
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+ * Carries optional context that writers may use during flush.
+ * compatible open source license.
+import org.opensearch.common.annotation.ExperimentalApi;
+ * Writers that don't need any context simply ignore the fields.  

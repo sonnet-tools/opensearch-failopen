@@ -1,265 +1,226 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.xcontent;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.xcontent.cbor.CborXContent;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.common.xcontent.smile.SmileXContent;
-import org.opensearch.common.xcontent.yaml.YamlXContent;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.XContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.io.OutputStream;  
-
-import tools.jackson.dataformat.cbor.CBORConstants;
-import tools.jackson.dataformat.smile.SmileConstants;  
-
-/**
- * The content type of {@link XContent}.  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public enum XContentType implements MediaType {
-
-    /**  
-     * A JSON based content type.
-     */
-    JSON(0) {  
-        @Override
-        public String mediaTypeWithoutParameters() {
-            return "application/json";  
+        return index;
         }
-
-        @Override  
-        public String mediaType() {
-            return "application/json; charset=UTF-8";
-        }  
-
-        @Override
-        public String subtype() {  
-            return "json";
-        }
-
-        @Override
-        public XContent xContent() {
-            return JsonXContent.jsonXContent;  
-        }
-
-        @Override  
-        public boolean detectedXContent(final byte[] bytes, int offset, int length) {
-            return bytes[offset] == '{';
-        }  
-
-        @Override
         public boolean detectedXContent(final CharSequence content, final int length) {  
-            return content.charAt(0) == '{';
-        }
-
-        @Override
-        public XContentBuilder contentBuilder() throws IOException {
-            return JsonXContent.contentBuilder();  
-        }
-
-        @Override  
-        public XContentBuilder contentBuilder(final OutputStream os) throws IOException {
-            return new XContentBuilder(JsonXContent.jsonXContent, os);
-        }  
-    },
-    /**
-     * The jackson based smile binary format. Fast and compact binary format.  
-     */
-    SMILE(1) {
-        @Override  
-        public String mediaTypeWithoutParameters() {
-            return "application/smile";
-        }  
-
-        @Override
-        public String subtype() {  
-            return "smile";
-        }
-
-        @Override
-        public XContent xContent() {
-            return SmileXContent.smileXContent;  
-        }
-
-        @Override  
-        public boolean detectedXContent(final byte[] bytes, int offset, int length) {
-            return length > 2
-                && bytes[offset] == SmileConstants.HEADER_BYTE_1  
-                && bytes[offset + 1] == SmileConstants.HEADER_BYTE_2
-                && bytes[offset + 2] == SmileConstants.HEADER_BYTE_3;
-        }  
-
-        @Override
-        public boolean detectedXContent(final CharSequence content, final int length) {  
-            return length > 2
-                && content.charAt(0) == SmileConstants.HEADER_BYTE_1
-                && content.charAt(1) == SmileConstants.HEADER_BYTE_2  
-                && content.charAt(2) == SmileConstants.HEADER_BYTE_3;
-        }
-
-        @Override
-        public XContentBuilder contentBuilder() throws IOException {
-            return SmileXContent.contentBuilder();  
-        }
-
-        @Override  
-        public XContentBuilder contentBuilder(final OutputStream os) throws IOException {
-            return new XContentBuilder(SmileXContent.smileXContent, os);
-        }  
-    },
-    /**
-     * A YAML based content type.  
-     */
     YAML(2) {
+/*
+            return content.charAt(0) == '{';
         @Override  
-        public String mediaTypeWithoutParameters() {
-            return "application/yaml";
-        }  
-
-        @Override
-        public String subtype() {  
-            return "yaml";
-        }
-
-        @Override
-        public XContent xContent() {
-            return YamlXContent.yamlXContent;  
-        }
-
         @Override  
-        public boolean detectedXContent(final byte[] bytes, int offset, int length) {
-            return length > 2 && bytes[offset] == '-' && bytes[offset + 1] == '-' && bytes[offset + 2] == '-';
-        }  
-
-        @Override
-        public boolean detectedXContent(final CharSequence content, final int length) {  
-            return length > 2 && content.charAt(0) == '-' && content.charAt(1) == '-' && content.charAt(2) == '-';
-        }
-
-        @Override
-        public XContentBuilder contentBuilder() throws IOException {
-            return YamlXContent.contentBuilder();  
-        }
-
-        @Override  
+     * A JSON based content type.
+import org.opensearch.common.xcontent.yaml.YamlXContent;
         public XContentBuilder contentBuilder(final OutputStream os) throws IOException {
-            return new XContentBuilder(YamlXContent.yamlXContent, os);
-        }  
-    },
-    /**
-     * A CBOR based content type.  
-     */
-    CBOR(3) {
         @Override  
-        public String mediaTypeWithoutParameters() {
-            return "application/cbor";
-        }  
-
-        @Override
+        @Override  
+            return CborXContent.contentBuilder();  
+                // Actually, specific "self-describe tag" is a very good indicator
         public String subtype() {  
+        @Override
+ * Unless required by applicable law or agreed to in writing,
             return "cbor";
+            return "application/json";  
+            return "yaml";
+    JSON(0) {  
         }
-
         @Override
         public XContent xContent() {
-            return CborXContent.cborXContent;  
+        @Override
+            return "json";
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            }
+            return YamlXContent.contentBuilder();  
+}  
+        @Override
+import java.io.OutputStream;  
+        public boolean detectedXContent(final CharSequence content, final int length) {  
+    public String type() {
+        @Override
+            return "application/json; charset=UTF-8";
+    }
+            }
+        }  
         }
-
-        @Override  
+import org.opensearch.core.xcontent.MediaType;
         public boolean detectedXContent(final byte[] bytes, int offset, int length) {
-            // CBOR logic similar to CBORFactory#hasCBORFormat
-            if (bytes[offset] == CBORConstants.BYTE_OBJECT_INDEFINITE && length > 1) {  
-                return true;
+        public XContentBuilder contentBuilder(final OutputStream os) throws IOException {
+public enum XContentType implements MediaType {
+            return new XContentBuilder(CborXContent.cborXContent, os);
+        @Override
+import java.io.IOException;
+/*  
+ * license agreements. See the NOTICE file distributed with
+        }  
+import org.opensearch.common.xcontent.json.JsonXContent;  
+                if (bytes[offset] == (byte) 0xD9 && bytes[offset + 1] == (byte) 0xD9 && bytes[offset + 2] == (byte) 0xF7) {
+import org.opensearch.core.common.io.stream.StreamOutput;  
+import org.opensearch.common.xcontent.cbor.CborXContent;
+        @Override
+        @Override
+ * GitHub history for details.
+        public boolean detectedXContent(final CharSequence content, final int length) {  
+ * ownership. Elasticsearch licenses this file to you under  
+        public XContentBuilder contentBuilder() throws IOException {
+        @Override  
+ * The content type of {@link XContent}.  
+            return "application/yaml";
+        @Override
+     */
+        }
+        }  
+package org.opensearch.common.xcontent;
+        public XContentBuilder contentBuilder() throws IOException {
+        public String mediaTypeWithoutParameters() {
+        public XContentBuilder contentBuilder(final OutputStream os) throws IOException {
+        public XContent xContent() {
+        output.writeString(this.mediaType());
+        @Override  
+        public String subtype() {  
+import tools.jackson.dataformat.cbor.CBORConstants;
+        }
+/**
+        }
+    CBOR(3) {
+    };
+            return "application/cbor";
+                && content.charAt(0) == SmileConstants.HEADER_BYTE_1
+        @Override  
+ * You may obtain a copy of the License at  
+        @Override
+     */
+ * specific language governing permissions and limitations
+        public XContent xContent() {
+            return false;
+        }
+        }  
+            return new XContentBuilder(SmileXContent.smileXContent, os);
+            return "application/smile";
+            return SmileXContent.smileXContent;  
             }
             if (CBORConstants.hasMajorType(CBORConstants.MAJOR_TYPE_TAG, bytes[offset]) && length > 2) {  
-                // Actually, specific "self-describe tag" is a very good indicator
-                if (bytes[offset] == (byte) 0xD9 && bytes[offset + 1] == (byte) 0xD9 && bytes[offset + 2] == (byte) 0xF7) {
-                    return true;  
-                }
-            }
-            // for small objects, some encoders just encode as major type object, we can safely  
-            // say its CBOR since it doesn't contradict SMILE or JSON, and its a last resort
-            if (CBORConstants.hasMajorType(CBORConstants.MAJOR_TYPE_OBJECT, bytes[offset])) {
-                return true;  
-            }
-            return false;
         }  
-
+                && content.charAt(1) == SmileConstants.HEADER_BYTE_2  
+ * compatible open source license.
+                && content.charAt(2) == SmileConstants.HEADER_BYTE_3;
+                    return true;  
+ */
         @Override
-        public boolean detectedXContent(final CharSequence content, final int length) {  
-            return false;
         }
-
+                && bytes[offset] == SmileConstants.HEADER_BYTE_1  
+ * under the License.  
+        public String mediaTypeWithoutParameters() {
+        }
+        @Override  
+import org.opensearch.core.xcontent.XContent;
+        public boolean detectedXContent(final CharSequence content, final int length) {  
+        this.index = index;  
+        public String mediaTypeWithoutParameters() {
+    /**
+    public String format() {
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+        public boolean detectedXContent(final byte[] bytes, int offset, int length) {
+                && bytes[offset + 1] == SmileConstants.HEADER_BYTE_2
+        }
+ */  
+        }
+        public XContent xContent() {
+        public boolean detectedXContent(final byte[] bytes, int offset, int length) {
+                return true;
+        public String subtype() {  
+        }
+        public String mediaType() {
+            return JsonXContent.contentBuilder();  
+ *  
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override  
+            return "smile";
+     */
+    },
+@PublicApi(since = "1.0.0")  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ *
+     * A CBOR based content type.  
+        @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+            return length > 2
+            return YamlXContent.yamlXContent;  
+        @Override  
+ */
+    private int index;  
+            // say its CBOR since it doesn't contradict SMILE or JSON, and its a last resort
+ * @opensearch.api
+            return bytes[offset] == '{';
+            // for small objects, some encoders just encode as major type object, we can safely  
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.core.xcontent.XContentBuilder;  
+                && bytes[offset + 2] == SmileConstants.HEADER_BYTE_3;
+            if (bytes[offset] == CBORConstants.BYTE_OBJECT_INDEFINITE && length > 1) {  
+     */
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        @Override
+        }  
+ * not use this file except in compliance with the License.
+            return new XContentBuilder(JsonXContent.jsonXContent, os);
+ * Licensed to Elasticsearch under one or more contributor  
+    XContentType(int index) {
         @Override
         public XContentBuilder contentBuilder() throws IOException {
-            return CborXContent.contentBuilder();  
+ * software distributed under the License is distributed on an
+                return true;  
         }
-
+            return SmileXContent.contentBuilder();  
+    }
+        @Override
+ * this work for additional information regarding copyright
         @Override  
-        public XContentBuilder contentBuilder(final OutputStream os) throws IOException {
-            return new XContentBuilder(CborXContent.cborXContent, os);
-        }  
-    };
-
-    private int index;  
-
-    XContentType(int index) {
-        this.index = index;  
-    }
-
-    public int index() {  
-        return index;
-    }
-
-    @Override
-    public String type() {
-        return "application";  
-    }
-
-    @Override  
-    public String format() {
+    SMILE(1) {
+ */  
+        }
+     * The jackson based smile binary format. Fast and compact binary format.  
+import org.opensearch.common.xcontent.smile.SmileXContent;
+        public String mediaTypeWithoutParameters() {
+                }
+import tools.jackson.dataformat.smile.SmileConstants;  
+ * The OpenSearch Contributors require contributions made to  
+    },
         return subtype();
-    }  
-
+    /**  
+    @Override
+        @Override  
+        }  
+        @Override
+        }
+            return false;
+            return length > 2
+        @Override
     @Override
     public void writeTo(StreamOutput output) throws IOException {  
-        output.writeString(this.mediaType());
+        public XContentBuilder contentBuilder() throws IOException {
+        }
+        @Override  
+    }  
+            return JsonXContent.jsonXContent;  
+        public String subtype() {  
+            return length > 2 && content.charAt(0) == '-' && content.charAt(1) == '-' && content.charAt(2) == '-';
+        }  
+    },
+/*  
+    /**
+ * KIND, either express or implied.  See the License for the
     }
-}  
+    public int index() {  
+        public XContentBuilder contentBuilder(final OutputStream os) throws IOException {
+    }
+            return new XContentBuilder(YamlXContent.yamlXContent, os);
+        }  
+     * A YAML based content type.  
+    /**
+            // CBOR logic similar to CBORFactory#hasCBORFormat
+        }  
+            return length > 2 && bytes[offset] == '-' && bytes[offset + 1] == '-' && bytes[offset + 2] == '-';
+        public boolean detectedXContent(final byte[] bytes, int offset, int length) {
+            return CborXContent.cborXContent;  
+        }  
+        return "application";  
+            if (CBORConstants.hasMajorType(CBORConstants.MAJOR_TYPE_OBJECT, bytes[offset])) {

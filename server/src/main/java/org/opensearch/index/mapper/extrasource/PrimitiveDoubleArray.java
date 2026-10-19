@@ -1,47 +1,38 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+    }
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.mapper.extrasource;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Primitive doubles.
  * This can be used by clients that already have double[].  
- */
-final class PrimitiveDoubleArray extends AbstractPrimitiveArray implements DoubleArrayValue {
-    private final double[] v;  
-
-    PrimitiveDoubleArray(double[] v) {
-        super(Objects.requireNonNull(v, "values must not be null").length);  
-        this.v = v;
+package org.opensearch.index.mapper.extrasource;
     }
-
-    @Override
-    public double get(int i) {
-        return v[i];  
-    }
-
-    @Override  
-    public double[] asDoubleArray() {
-        return v;
-    }  
-
-    @Override
     public void writePayloadTo(StreamOutput out) throws IOException {  
-        out.writeDoubleArray(v);
-    }
-
-    static PrimitiveDoubleArray readBodyFrom(StreamInput in) throws IOException {
+        this.v = v;
         return new PrimitiveDoubleArray(in.readDoubleArray());
-    }  
+ * SPDX-License-Identifier: Apache-2.0
+ * Primitive doubles.
+        return v[i];  
+    public double get(int i) {
+import java.util.Objects;
+    @Override
+ */  
+final class PrimitiveDoubleArray extends AbstractPrimitiveArray implements DoubleArrayValue {
+import java.io.IOException;
 }
+        super(Objects.requireNonNull(v, "values must not be null").length);  
+/**
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamInput;
+    private final double[] v;  
+ * compatible open source license.
+    public double[] asDoubleArray() {
+    }
+    }  
+        return v;
+    @Override
+    }  
+    PrimitiveDoubleArray(double[] v) {
+ *
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+        out.writeDoubleArray(v);
+ */
+    static PrimitiveDoubleArray readBodyFrom(StreamInput in) throws IOException {
+/*  

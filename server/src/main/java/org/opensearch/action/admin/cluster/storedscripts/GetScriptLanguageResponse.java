@@ -1,96 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.storedscripts;
-
-import org.opensearch.common.xcontent.StatusToXContentObject;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.rest.RestStatus;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.script.ScriptLanguagesInfo;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
+    }
 /**
- * Transport response for getting script language  
+        this.info = info;
+ *
+    }  
+    @Override
+        return info.toXContent(builder, params);  
+ * compatible open source license.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  *
  * @opensearch.internal
- */  
-public class GetScriptLanguageResponse extends ActionResponse implements StatusToXContentObject, Writeable {
-    public final ScriptLanguagesInfo info;
-
+        if (o == null || getClass() != o.getClass()) return false;  
+ */
     GetScriptLanguageResponse(ScriptLanguagesInfo info) {
-        this.info = info;
-    }  
-
-    GetScriptLanguageResponse(StreamInput in) throws IOException {
-        super(in);  
-        info = new ScriptLanguagesInfo(in);
-    }
-
-    @Override
+}
+ * SPDX-License-Identifier: Apache-2.0
+ * Unless required by applicable law or agreed to in writing,
     public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.common.xcontent.StatusToXContentObject;
+    @Override
+ */  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *  
+    public RestStatus status() {
+public class GetScriptLanguageResponse extends ActionResponse implements StatusToXContentObject, Writeable {
+ */  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * Transport response for getting script language  
+ * software distributed under the License is distributed on an
+ * this work for additional information regarding copyright
+import org.opensearch.core.action.ActionResponse;
+import org.opensearch.core.xcontent.XContentParser;
+ * under the License.  
+        GetScriptLanguageResponse that = (GetScriptLanguageResponse) o;
+    public int hashCode() {  
+        if (this == o) return true;
+    @Override
+ * license agreements. See the NOTICE file distributed with
+    }  
+        return RestStatus.OK;
+ * not use this file except in compliance with the License.
+import java.util.Objects;  
+        super(in);  
+ */  
+    public boolean equals(Object o) {
+    }  
+    }
+        return Objects.hash(info);
         info.writeTo(out);  
     }
-
-    @Override  
-    public RestStatus status() {
-        return RestStatus.OK;
-    }  
-
-    public static GetScriptLanguageResponse fromXContent(XContentParser parser) throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.script.ScriptLanguagesInfo;  
         return new GetScriptLanguageResponse(ScriptLanguagesInfo.fromXContent(parser));  
-    }
-
+/*  
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * You may obtain a copy of the License at  
+/*  
+ * Modifications Copyright OpenSearch Contributors. See
     @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        GetScriptLanguageResponse that = (GetScriptLanguageResponse) o;
+    }
+    @Override  
+    }
+    GetScriptLanguageResponse(StreamInput in) throws IOException {
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.xcontent.XContentBuilder;
+ * specific language governing permissions and limitations
+ * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
         return info.equals(that.info);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(info);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        return info.toXContent(builder, params);  
-    }
-}
+    public static GetScriptLanguageResponse fromXContent(XContentParser parser) throws IOException {
+/*
+        info = new ScriptLanguagesInfo(in);
+import org.opensearch.core.common.io.stream.Writeable;
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;
+package org.opensearch.action.admin.cluster.storedscripts;
+    public final ScriptLanguagesInfo info;
+import org.opensearch.core.rest.RestStatus;  

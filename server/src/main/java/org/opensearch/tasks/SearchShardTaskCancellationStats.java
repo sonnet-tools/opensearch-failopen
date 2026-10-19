@@ -1,27 +1,21 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.tasks;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;  
-
-/**
- * Holds monitoring service stats specific to search shard task.  
- */
-public class SearchShardTaskCancellationStats extends BaseSearchTaskCancellationStats {
-
     public SearchShardTaskCancellationStats(long currentTaskCount, long totalTaskCount) {
-        super(currentTaskCount, totalTaskCount);
-    }  
-
-    public SearchShardTaskCancellationStats(StreamInput in) throws IOException {
-        super(in);  
-    }
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
 }
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+package org.opensearch.tasks;
+import java.io.IOException;  
+        super(in);  
+ *
+        super(currentTaskCount, totalTaskCount);
+ * Holds monitoring service stats specific to search shard task.  
+import org.opensearch.core.common.io.stream.StreamInput;
+public class SearchShardTaskCancellationStats extends BaseSearchTaskCancellationStats {
+/**
+    public SearchShardTaskCancellationStats(StreamInput in) throws IOException {
+ */
+    }
+/*  
+ */  

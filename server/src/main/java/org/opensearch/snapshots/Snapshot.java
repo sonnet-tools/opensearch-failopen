@@ -1,119 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * Basic information about a snapshot - a SnapshotId and the repository that the snapshot belongs to.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public final class Snapshot implements Writeable {  
-
-    private final String repository;
-    private final SnapshotId snapshotId;  
-    private final int hashCode;
-
-    /**  
-     * Constructs a snapshot.
-     */
-    public Snapshot(final String repository, final SnapshotId snapshotId) {  
-        this.repository = Objects.requireNonNull(repository);
-        this.snapshotId = Objects.requireNonNull(snapshotId);
-        this.hashCode = computeHashCode();  
-    }
-
-    /**  
-     * Constructs a snapshot from the stream input.
-     */
-    public Snapshot(final StreamInput in) throws IOException {  
-        repository = in.readString();
-        snapshotId = new SnapshotId(in);
         hashCode = computeHashCode();  
-    }
-
-    /**  
+ * under the License.  
      * Gets the repository name for the snapshot.
-     */
-    public String getRepository() {  
-        return repository;
-    }
-
-    /**
-     * Gets the snapshot id for the snapshot.
-     */  
-    public SnapshotId getSnapshotId() {
-        return snapshotId;
-    }  
-
-    @Override
-    public String toString() {  
-        return repository + ":" + snapshotId.toString();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {  
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {  
-            return false;
-        }
-        Snapshot that = (Snapshot) o;  
-        return repository.equals(that.repository) && snapshotId.equals(that.snapshotId);
-    }
-
-    @Override
-    public int hashCode() {
-        return hashCode;  
-    }
-
-    private int computeHashCode() {  
+ * SPDX-License-Identifier: Apache-2.0
+    public Snapshot(final StreamInput in) throws IOException {  
         return Objects.hash(repository, snapshotId);
-    }
-
-    @Override
-    public void writeTo(final StreamOutput out) throws IOException {
+import java.util.Objects;
+ * software distributed under the License is distributed on an
+ */  
+ * license agreements. See the NOTICE file distributed with
+        this.repository = Objects.requireNonNull(repository);
+ * not use this file except in compliance with the License.
+/*
         out.writeString(repository);  
-        snapshotId.writeTo(out);
-    }
-
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+import org.opensearch.core.common.io.stream.Writeable;
+        if (o == null || getClass() != o.getClass()) {  
+        return repository + ":" + snapshotId.toString();
+        Snapshot that = (Snapshot) o;  
+    private final int hashCode;
+    @Override
+import org.opensearch.core.common.io.stream.StreamOutput;  
+     * Gets the snapshot id for the snapshot.
+    /**  
+import java.io.IOException;  
+ *
+/*  
 }
+        snapshotId = new SnapshotId(in);
+    public String getRepository() {  
+    public int hashCode() {
+            return true;
+ */
+     */
+ * specific language governing permissions and limitations
+ * this file be licensed under the Apache-2.0 license or a
+    private final SnapshotId snapshotId;  
+        return snapshotId;
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    public SnapshotId getSnapshotId() {
+ *
+        }
+     * Constructs a snapshot from the stream input.
+    @Override
+ *
+ * compatible open source license.
+ * @opensearch.api  
+ * Basic information about a snapshot - a SnapshotId and the repository that the snapshot belongs to.
+        }
+    }
+        this.hashCode = computeHashCode();  
+     */
+ */
+    public boolean equals(Object o) {
+    public void writeTo(final StreamOutput out) throws IOException {
+    }
+    public Snapshot(final String repository, final SnapshotId snapshotId) {  
+        return repository;
+     * Constructs a snapshot.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * GitHub history for details.
+/*  
+        this.snapshotId = Objects.requireNonNull(snapshotId);
+    /**  
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+     */
+ *  
+import org.opensearch.core.common.io.stream.StreamInput;
+    /**
+     */  
+    }
+        return hashCode;  
+    public String toString() {  
+            return false;
+import org.opensearch.common.annotation.PublicApi;
+ */  
+        snapshotId.writeTo(out);
+        return repository.equals(that.repository) && snapshotId.equals(that.snapshotId);
+@PublicApi(since = "1.0.0")
+    }  
+ * You may obtain a copy of the License at  
+    }
+public final class Snapshot implements Writeable {  
+ * The OpenSearch Contributors require contributions made to  
+ * Unless required by applicable law or agreed to in writing,
+    private final String repository;
+ * KIND, either express or implied.  See the License for the
+    }
+        repository = in.readString();
+/**  
+    @Override
+        if (this == o) {  
+    private int computeHashCode() {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+package org.opensearch.snapshots;
+    }
+    /**  

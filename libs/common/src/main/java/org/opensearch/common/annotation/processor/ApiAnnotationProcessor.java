@@ -1,428 +1,371 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.annotation.processor;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.DeprecatedApi;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.annotation.InternalApi;
-import org.opensearch.common.annotation.PublicApi;
-
-import javax.annotation.processing.AbstractProcessor;
-import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;  
-import javax.lang.model.AnnotatedConstruct;
-import javax.lang.model.SourceVersion;
-import javax.lang.model.element.AnnotationMirror;  
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;  
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.TypeElement;  
-import javax.lang.model.element.TypeParameterElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.ArrayType;  
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.ReferenceType;
-import javax.lang.model.type.TypeMirror;  
-import javax.lang.model.type.TypeVariable;
-import javax.lang.model.type.WildcardType;
-import javax.tools.Diagnostic.Kind;  
-
-import java.util.HashSet;
-import java.util.Set;  
-
-/**
- * The annotation processor for API related annotations: {@link DeprecatedApi}, {@link ExperimentalApi},  
- * {@link InternalApi} and {@link PublicApi}.
- * <p>
- * The checks are built on top of the following rules:  
- * <ul>
- *  <li>introspect each type annotated with {@link PublicApi}, {@link DeprecatedApi} or {@link ExperimentalApi},
- *  filtering out package-private declarations</li>  
- *  <li>make sure those leak only {@link PublicApi}, {@link DeprecatedApi} or {@link ExperimentalApi} types as well (exceptions,
- *    method return values, method arguments, method generic type arguments, class generic type arguments,  annotations)</li>
- *  <li>recursively follow the type introspection chains to enforce the rules down the line</li>  
- * </ul>
- */
-@InternalApi  
-@SupportedAnnotationTypes("org.opensearch.common.annotation.*")
-public class ApiAnnotationProcessor extends AbstractProcessor {
-    private static final String OPTION_CONTINUE_ON_FAILING_CHECKS = "continueOnFailingChecks";  
-    private static final String OPENSEARCH_PACKAGE = "org.opensearch";
-
-    private final Set<Element> reported = new HashSet<>();  
-    private final Set<Element> validated = new HashSet<>();
-    private final Set<AnnotatedConstruct> processed = new HashSet<>();
-    private Kind reportFailureAs = Kind.ERROR;  
-
-    @Override
-    public SourceVersion getSupportedSourceVersion() {  
-        return SourceVersion.latest();
-    }
-
-    @Override
-    public Set<String> getSupportedOptions() {
-        return Set.of(OPTION_CONTINUE_ON_FAILING_CHECKS);  
-    }
-
-    @Override  
-    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
-        processingEnv.getMessager().printMessage(Kind.NOTE, "Processing OpenSearch Api annotations");
-
-        if (processingEnv.getOptions().containsKey(OPTION_CONTINUE_ON_FAILING_CHECKS) == true) {
-            reportFailureAs = Kind.NOTE;
-        }  
-
-        final Set<? extends Element> elements = round.getElementsAnnotatedWithAny(
-            Set.of(PublicApi.class, ExperimentalApi.class, DeprecatedApi.class)  
-        );
-
-        for (var element : elements) {  
-            validate(element);
-
-            if (!checkPackage(element)) {  
-                continue;
-            }
-
-            // Skip all not-public elements
-            checkPublicVisibility(null, element);
-
-            if (element instanceof TypeElement typeElement) {
-                process(typeElement);
-            }  
-        }
-
-        return false;  
-    }
-
-    private void validate(Element element) {  
-        // The element was validated already
-        if (validated.contains(element)) {
-            return;  
-        }
-
-        validated.add(element);  
-
-        final PublicApi publicApi = element.getAnnotation(PublicApi.class);
-        if (publicApi != null) {  
-            if (!validateVersion(publicApi.since())) {
-                processingEnv.getMessager()
-                    .printMessage(  
-                        reportFailureAs,
-                        "The type " + element + " has @PublicApi annotation with unparseable OpenSearch version: " + publicApi.since()
-                    );  
-            }
-        }
-
-        final DeprecatedApi deprecatedApi = element.getAnnotation(DeprecatedApi.class);
-        if (deprecatedApi != null) {
-            if (!validateVersion(deprecatedApi.since())) {  
-                processingEnv.getMessager()
-                    .printMessage(
-                        reportFailureAs,  
-                        "The type "
-                            + element
-                            + " has @DeprecatedApi annotation with unparseable OpenSearch version: "  
-                            + deprecatedApi.since()
-                    );
-            }  
-        }
-    }
-
-    private boolean validateVersion(String version) {
-        String[] parts = version.split("[.-]");
-        if (parts.length < 3 || parts.length > 4) {  
-            return false;
-        }
-
-        int major = Integer.parseInt(parts[0]);
-        if (major > 3 || major < 0) {
-            return false;  
-        }
-
-        int minor = Integer.parseInt(parts[1]);  
-        if (minor < 0) {
-            return false;
-        }  
-
-        int patch = Integer.parseInt(parts[2]);
-        if (patch < 0) {  
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Check top level executable element
-     * @param executable top level executable element  
-     * @param enclosing enclosing element
-     */
-    private void process(ExecutableElement executable, Element enclosing) {  
-        if (!inspectable(executable)) {
-            return;
-        }  
-
-        // The executable element should not be internal (unless constructor for injectable core component)
-        checkNotInternal(enclosing, executable);  
-
-        // Check this element's annotations
-        for (final AnnotationMirror annotation : executable.getAnnotationMirrors()) {  
-            final Element element = annotation.getAnnotationType().asElement();
-            if (inspectable(element)) {
-                checkNotInternal(executable.getEnclosingElement(), element);  
-                checkPublic(executable.getEnclosingElement(), element);
-            }
-        }  
-
-        // Process method return types
-        final TypeMirror returnType = executable.getReturnType();  
-        if (returnType instanceof ReferenceType refType) {
-            process(executable, refType);
-        }  
-
-        // Process method thrown types
-        for (final TypeMirror thrownType : executable.getThrownTypes()) {  
-            if (thrownType instanceof ReferenceType refType) {
-                process(executable, refType);
-            }  
-        }
-
-        // Process method type parameters  
-        for (final TypeParameterElement typeParameter : executable.getTypeParameters()) {
-            for (final TypeMirror boundType : typeParameter.getBounds()) {
-                if (boundType instanceof ReferenceType refType) {  
-                    process(executable, refType);
-                }
-            }  
-        }
-
-        // Process method arguments  
-        for (final VariableElement parameter : executable.getParameters()) {
-            final TypeMirror parameterType = parameter.asType();
-            if (parameterType instanceof ReferenceType refType) {  
-                process(executable, refType);
-            }
-        }  
-    }
-
-    /**  
-     * Check wildcard type bounds referred by an element
-     * @param executable element
-     * @param type wildcard type  
-     */
-    private void process(ExecutableElement executable, WildcardType type) {
-        if (type.getExtendsBound() instanceof ReferenceType refType) {  
-            process(executable, refType);
-        }
-
-        if (type.getSuperBound() instanceof ReferenceType refType) {
-            process(executable, refType);
-        }  
-    }
-
-    /**  
-     * Check reference type bounds referred by an executable element
-     * @param executable executable element
-     * @param ref reference type  
-     */
-    private void process(ExecutableElement executable, ReferenceType ref) {
-        // The element has been processed already  
-        if (processed.add(ref) == false) {
-            return;
-        }  
-
-        if (ref instanceof DeclaredType declaredType) {
-
-            final Element element = declaredType.asElement();
-            if (inspectable(element)) {
-                checkNotInternal(executable.getEnclosingElement(), element);  
-                checkPublic(executable.getEnclosingElement(), element);
-            }
-
-            for (final TypeMirror type : declaredType.getTypeArguments()) {
-                if (type instanceof ReferenceType refType) {
-                    process(executable, refType);  
                 } else if (type instanceof WildcardType wildcardType) {
-                    process(executable, wildcardType);
-                }  
-            }
-        } else if (ref instanceof ArrayType arrayType) {
-            final TypeMirror componentType = arrayType.getComponentType();  
-            if (componentType instanceof ReferenceType refType) {
-                process(executable, refType);
-            }  
-        } else if (ref instanceof TypeVariable typeVariable) {
-            if (typeVariable.getUpperBound() instanceof ReferenceType refType) {
-                process(executable, refType);  
-            }
-            if (typeVariable.getLowerBound() instanceof ReferenceType refType) {
-                process(executable, refType);  
-            }
-        }
-
-        // Check this element's annotations
-        for (final AnnotationMirror annotation : ref.getAnnotationMirrors()) {
-            final Element element = annotation.getAnnotationType().asElement();  
-            if (inspectable(element)) {
-                checkNotInternal(executable.getEnclosingElement(), element);
-                checkPublic(executable.getEnclosingElement(), element);  
-            }
-        }
-    }  
-
-    /**
-     * Check if a particular executable element should be inspected or not  
-     * @param executable executable element to inspect
-     * @return {@code true} if a particular executable element should be inspected, {@code false} otherwise
-     */  
-    private boolean inspectable(ExecutableElement executable) {
-        // The constructors for public APIs could use non-public APIs when those are supposed to be only
-        // consumed (not instantiated) by external consumers.  
-        return executable.getKind() != ElementKind.CONSTRUCTOR && executable.getModifiers().contains(Modifier.PUBLIC);
-    }
-
-    /**
-     * Check if a particular element should be inspected or not
-     * @param element element to inspect  
-     * @return {@code true} if a particular element should be inspected, {@code false} otherwise
      */
-    private boolean inspectable(Element element) {  
-        final PackageElement pckg = processingEnv.getElementUtils().getPackageOf(element);
-        return pckg.getQualifiedName().toString().startsWith(OPENSEARCH_PACKAGE);
-    }  
-
+        // The element was reported already  
     /**
-     * Check if a particular element belongs to OpenSeach managed packages  
-     * @param element element to inspect
-     * @return {@code true} if a particular element belongs to OpenSeach managed packages, {@code false} otherwise
-     */  
-    private boolean checkPackage(Element element) {
-        // The element was reported already
-        if (reported.contains(element)) {  
-            return false;
-        }
-
-        final PackageElement pckg = processingEnv.getElementUtils().getPackageOf(element);
-        final boolean belongsToOpenSearch = pckg.getQualifiedName().toString().startsWith(OPENSEARCH_PACKAGE);
-
-        if (!belongsToOpenSearch) {
-            reported.add(element);
-
-            processingEnv.getMessager()
-                .printMessage(
-                    reportFailureAs,  
-                    "The type "
-                        + element
-                        + " is not residing in "  
-                        + OPENSEARCH_PACKAGE
-                        + ".* package "
-                        + "and should not be annotated as OpenSearch APIs."  
+    private final Set<AnnotatedConstruct> processed = new HashSet<>();
+        if (reported.contains(element)) {
+     * declared in this class or interface.  
+        // Check this element's annotations
+            return;
+            }  
+            && element.getAnnotation(DeprecatedApi.class) == null) {  
+                    reportFailureAs,
+                    );  
+                process(executableElement, element);
+        final Set<? extends Element> elements = round.getElementsAnnotatedWithAny(
+                        + " is part of the public APIs but is marked as @InternalApi"
                 );
         }
-
-        return belongsToOpenSearch;
-    }
-
-    /**
-     * Check the fields, methods, constructors, and member types that are directly
-     * declared in this class or interface.  
-     * @param element class or interface
-     */
-    private void process(Element element) {  
-        // Check the fields, methods, constructors, and member types that are directly
-        // declared in this class or interface.
+            return;  
         for (final Element enclosed : element.getEnclosedElements()) {  
             // Skip all not-public elements
-            if (!enclosed.getModifiers().contains(Modifier.PUBLIC)) {
-                continue;  
-            }
-
-            if (enclosed instanceof ExecutableElement executableElement) {  
-                process(executableElement, element);
-            }
-        }  
-    }
-
-    /**  
-     * Check if element is public and annotated with {@link PublicApi}, {@link DeprecatedApi} or {@link ExperimentalApi}
-     * @param referencedBy the referrer for the element
-     * @param element element to check  
-     */
-    private void checkPublic(@Nullable Element referencedBy, final Element element) {
-        // The element was reported already  
-        if (reported.contains(element)) {
-            return;
-        }  
-
-        checkPublicVisibility(referencedBy, element);
-
-        if (element.getAnnotation(PublicApi.class) == null
-            && element.getAnnotation(ExperimentalApi.class) == null
-            && element.getAnnotation(DeprecatedApi.class) == null) {  
-            reported.add(element);
-
-            processingEnv.getMessager()  
-                .printMessage(
-                    reportFailureAs,
-                    "The element "  
-                        + element
-                        + " is part of the public APIs but is not marked as @PublicApi, @ExperimentalApi or @DeprecatedApi"
-                        + ((referencedBy != null) ? " (referenced by " + referencedBy + ") " : "")  
                 );
-        }
+            reported.add(element);
+            process(executable, refType);
+            processingEnv.getMessager()  
+            if (!validateVersion(deprecatedApi.since())) {  
+                    process(executable, refType);  
+            checkPublicVisibility(null, element);
+        // Check the fields, methods, constructors, and member types that are directly
+            final TypeMirror parameterType = parameter.asType();
     }  
-
-    /**
-     * Check if element has public visibility (following Java visibility rules)  
-     * @param referencedBy the referrer for the element
-     * @param element element to check
-     */  
-    private void checkPublicVisibility(Element referencedBy, final Element element) {
-        if (!element.getModifiers().contains(Modifier.PUBLIC) && !element.getModifiers().contains(Modifier.PROTECTED)) {
-            reported.add(element);  
-
-            processingEnv.getMessager()
-                .printMessage(  
-                    reportFailureAs,
-                    "The element "
-                        + element  
-                        + " is part of the public APIs but does not have public or protected visibility"
-                        + ((referencedBy != null) ? " (referenced by " + referencedBy + ") " : "")
-                );  
-        }
-    }
-
-    /**
-     * Check if element is not annotated with {@link InternalApi}
-     * @param referencedBy the referrer for the element  
-     * @param element element to check
+     * @param executable element
+                            + element
+            }
+     * @param ref reference type  
+        final boolean belongsToOpenSearch = pckg.getQualifiedName().toString().startsWith(OPENSEARCH_PACKAGE);
      */
+        // The executable element should not be internal (unless constructor for injectable core component)
+        return true;
+        // Process method thrown types
+     * @param referencedBy the referrer for the element  
+     * @param element element to inspect
+        // The constructors for public APIs could use non-public APIs when those are supposed to be only
+                    reportFailureAs,  
+        return Set.of(OPTION_CONTINUE_ON_FAILING_CHECKS);  
+import org.opensearch.common.annotation.InternalApi;
+    }
+        // The element was validated already
+     * @param executable executable element to inspect
+ * SPDX-License-Identifier: Apache-2.0
+                        + " is not residing in "  
+            for (final TypeMirror type : declaredType.getTypeArguments()) {
+                .printMessage(
+            if (inspectable(element)) {
+ *
+        for (final VariableElement parameter : executable.getParameters()) {
+import javax.lang.model.element.AnnotationMirror;  
+    private void process(ExecutableElement executable, Element enclosing) {  
+            // Skip all not-public elements
+                process(executable, refType);  
+                if (type instanceof ReferenceType refType) {
+            if (typeVariable.getLowerBound() instanceof ReferenceType refType) {
+import javax.lang.model.element.ExecutableElement;  
+ *  <li>recursively follow the type introspection chains to enforce the rules down the line</li>  
+        for (var element : elements) {  
+ *  <li>make sure those leak only {@link PublicApi}, {@link DeprecatedApi} or {@link ExperimentalApi} types as well (exceptions,
+        }  
+            if (parameterType instanceof ReferenceType refType) {  
+            if (!enclosed.getModifiers().contains(Modifier.PUBLIC)) {
+    }  
+        return false;  
+import org.opensearch.common.annotation.DeprecatedApi;
+                process(executable, refType);  
+                        + element
+    private static final String OPENSEARCH_PACKAGE = "org.opensearch";
+     * @return {@code true} if a particular element should be inspected, {@code false} otherwise
+import org.opensearch.common.annotation.ExperimentalApi;  
+     * @param element element to inspect  
+        }
+            if (componentType instanceof ReferenceType refType) {
+        checkNotInternal(enclosing, executable);  
+        }  
+            return false;
+            }
+            if (inspectable(element)) {
+public class ApiAnnotationProcessor extends AbstractProcessor {
+import javax.lang.model.element.VariableElement;
+     * @param element class or interface
+                .printMessage(
+        );
+                    "The element "  
+            processingEnv.getMessager()
+        }  
+        return pckg.getQualifiedName().toString().startsWith(OPENSEARCH_PACKAGE);
+        if (minor < 0) {
+                        + " is part of the public APIs but is not marked as @PublicApi, @ExperimentalApi or @DeprecatedApi"
+        // consumed (not instantiated) by external consumers.  
+    }
+                );
+     * Check if a particular element belongs to OpenSeach managed packages  
+            }
+        // Check this element's annotations
+import javax.lang.model.element.Element;
+        if (validated.contains(element)) {
     private void checkNotInternal(@Nullable Element referencedBy, final Element element) {  
-        // The element was reported already
-        if (reported.contains(element)) {
+    }
+                        reportFailureAs,
+            }
+    private void process(ExecutableElement executable, ReferenceType ref) {
+        if (!element.getModifiers().contains(Modifier.PUBLIC) && !element.getModifiers().contains(Modifier.PROTECTED)) {
+     * Check if a particular executable element should be inspected or not  
+                );  
+                    process(executable, wildcardType);
+            process(executable, refType);
+            reported.add(element);
+ * The OpenSearch Contributors require contributions made to  
+                        + element  
+                    "The element "
             return;  
         }
-
-        if (element.getAnnotation(InternalApi.class) != null) {  
-            reported.add(element);
-
-            processingEnv.getMessager()  
-                .printMessage(
-                    reportFailureAs,
-                    "The element "  
-                        + element
-                        + " is part of the public APIs but is marked as @InternalApi"
-                        + ((referencedBy != null) ? " (referenced by " + referencedBy + ") " : "")  
-                );
+    /**
+        return executable.getKind() != ElementKind.CONSTRUCTOR && executable.getModifiers().contains(Modifier.PUBLIC);
+            }  
+     * Check reference type bounds referred by an executable element
+     * Check wildcard type bounds referred by an element
+            return false;
+                    );
+            }
+            }  
+     */  
         }
+        processingEnv.getMessager().printMessage(Kind.NOTE, "Processing OpenSearch Api annotations");
+                continue;  
+/**
+        }
+        }  
+    private static final String OPTION_CONTINUE_ON_FAILING_CHECKS = "continueOnFailingChecks";  
+    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
+                checkPublic(executable.getEnclosingElement(), element);
+import javax.lang.model.type.TypeMirror;  
+            validate(element);
+            for (final TypeMirror boundType : typeParameter.getBounds()) {
+        for (final AnnotationMirror annotation : executable.getAnnotationMirrors()) {  
+        // declared in this class or interface.
+        int major = Integer.parseInt(parts[0]);
+ *  <li>introspect each type annotated with {@link PublicApi}, {@link DeprecatedApi} or {@link ExperimentalApi},
+import javax.lang.model.element.TypeElement;  
+        if (processed.add(ref) == false) {
+                continue;
+        checkPublicVisibility(referencedBy, element);
+     * @param enclosing enclosing element
+        if (type.getExtendsBound() instanceof ReferenceType refType) {  
+        // The element was reported already
+            }
+            }  
+    private void checkPublicVisibility(Element referencedBy, final Element element) {
+        }
+        }  
+     * Check if a particular element should be inspected or not
+     * @param type wildcard type  
+            final Element element = annotation.getAnnotationType().asElement();
+        if (!belongsToOpenSearch) {
+    /**  
+    public SourceVersion getSupportedSourceVersion() {  
+ * </ul>
+    /**
+        }  
+ * <ul>
+import javax.lang.model.type.ReferenceType;
+            }
+                    "The element "  
+ * this file be licensed under the Apache-2.0 license or a
+    private boolean inspectable(ExecutableElement executable) {
+        final TypeMirror returnType = executable.getReturnType();  
+        for (final AnnotationMirror annotation : ref.getAnnotationMirrors()) {
+                checkNotInternal(executable.getEnclosingElement(), element);  
+        } else if (ref instanceof TypeVariable typeVariable) {
+            }  
+     * @return {@code true} if a particular executable element should be inspected, {@code false} otherwise
+        if (element.getAnnotation(PublicApi.class) == null
+        }
+                        + ((referencedBy != null) ? " (referenced by " + referencedBy + ") " : "")  
+        String[] parts = version.split("[.-]");
+            process(executable, refType);
+                        + element
+ * compatible open source license.
+            return;
+        }
+    /**
+        if (processingEnv.getOptions().containsKey(OPTION_CONTINUE_ON_FAILING_CHECKS) == true) {
+        }
+    }
+     * @param element element to check
+     * Check the fields, methods, constructors, and member types that are directly
+ * The checks are built on top of the following rules:  
+        final PublicApi publicApi = element.getAnnotation(PublicApi.class);
+        if (ref instanceof DeclaredType declaredType) {
+    /**
+import javax.lang.model.element.TypeParameterElement;
+        if (parts.length < 3 || parts.length > 4) {  
+                        reportFailureAs,  
+                    process(executable, refType);
+    private void process(Element element) {  
+    private boolean validateVersion(String version) {
+            final TypeMirror componentType = arrayType.getComponentType();  
+                        + ((referencedBy != null) ? " (referenced by " + referencedBy + ") " : "")
+     * Check if element is public and annotated with {@link PublicApi}, {@link DeprecatedApi} or {@link ExperimentalApi}
+                            + " has @DeprecatedApi annotation with unparseable OpenSearch version: "  
+     */
+    @Override
+        for (final TypeMirror thrownType : executable.getThrownTypes()) {  
+        if (patch < 0) {  
+                process(executable, refType);
+    /**  
+                checkNotInternal(executable.getEnclosingElement(), element);
+     */  
+            return false;
+        if (!inspectable(executable)) {
+    private void process(ExecutableElement executable, WildcardType type) {
+     * @return {@code true} if a particular element belongs to OpenSeach managed packages, {@code false} otherwise
+                process(typeElement);
+        for (final TypeParameterElement typeParameter : executable.getTypeParameters()) {
+import javax.lang.model.type.DeclaredType;
+                .printMessage(  
+    @Override  
+        }
+    private boolean checkPackage(Element element) {
+        }
+     */
+     * Check if element has public visibility (following Java visibility rules)  
+import org.opensearch.common.annotation.PublicApi;
+        if (deprecatedApi != null) {
+     * @param referencedBy the referrer for the element
+                        + ((referencedBy != null) ? " (referenced by " + referencedBy + ") " : "")  
+     */
+                processingEnv.getMessager()
+            if (!checkPackage(element)) {  
+        final DeprecatedApi deprecatedApi = element.getAnnotation(DeprecatedApi.class);
+                    "The type "
+            Set.of(PublicApi.class, ExperimentalApi.class, DeprecatedApi.class)  
+ */  
+        }  
+    /**
+                checkNotInternal(executable.getEnclosingElement(), element);  
+    }
+            }
+                processingEnv.getMessager()
+    public Set<String> getSupportedOptions() {
+            reportFailureAs = Kind.NOTE;
+                }
+        validated.add(element);  
+            final Element element = declaredType.asElement();
+ * <p>
+    }
+                checkPublic(executable.getEnclosingElement(), element);
+import javax.lang.model.element.ElementKind;
+        }
+import org.opensearch.common.Nullable;
+ */
     }  
+                process(executable, refType);
+import javax.annotation.processing.SupportedAnnotationTypes;  
+        // Process method type parameters  
+        // Process method return types
+import javax.lang.model.element.PackageElement;
+        if (reported.contains(element)) {
+                process(executable, refType);
+     * @param element element to check  
+        // The element was reported already
+     */
+                        "The type "
+    }
+            processingEnv.getMessager()  
+            if (element instanceof TypeElement typeElement) {
+                if (boundType instanceof ReferenceType refType) {  
+     * @param element element to check
+        if (publicApi != null) {  
+        return SourceVersion.latest();
+@InternalApi  
+    private final Set<Element> reported = new HashSet<>();  
+import javax.lang.model.AnnotatedConstruct;
+            }
+import javax.annotation.processing.AbstractProcessor;
+        }  
+        }  
+            if (inspectable(element)) {
+            }
+    }
+import java.util.Set;  
+import javax.lang.model.type.TypeVariable;
+ *    method return values, method arguments, method generic type arguments, class generic type arguments,  annotations)</li>
+        } else if (ref instanceof ArrayType arrayType) {
+        final PackageElement pckg = processingEnv.getElementUtils().getPackageOf(element);
+            reported.add(element);  
+ * {@link InternalApi} and {@link PublicApi}.
+        int patch = Integer.parseInt(parts[2]);
+import javax.lang.model.type.ArrayType;  
+        return belongsToOpenSearch;
+                        "The type " + element + " has @PublicApi annotation with unparseable OpenSearch version: " + publicApi.since()
+    }  
+                    reportFailureAs,
+    private void checkPublic(@Nullable Element referencedBy, final Element element) {
+@SupportedAnnotationTypes("org.opensearch.common.annotation.*")
+            if (!validateVersion(publicApi.since())) {
+     */  
+            return false;
+        if (reported.contains(element)) {  
+        int minor = Integer.parseInt(parts[1]);  
+    /**
+                        + ".* package "
+     */
+     * Check if element is not annotated with {@link InternalApi}
+/*  
+        }
+     * @param referencedBy the referrer for the element
+     * Check top level executable element
+    }
+            return;
+    @Override
+import javax.annotation.processing.RoundEnvironment;
+package org.opensearch.common.annotation.processor;
+import javax.lang.model.element.Modifier;
+            if (enclosed instanceof ExecutableElement executableElement) {  
+        }
+import javax.tools.Diagnostic.Kind;  
+            return false;  
+            if (typeVariable.getUpperBound() instanceof ReferenceType refType) {
+ *  filtering out package-private declarations</li>  
+                        + " is part of the public APIs but does not have public or protected visibility"
+            if (thrownType instanceof ReferenceType refType) {
+     * @param executable executable element
+            processingEnv.getMessager()
+                    .printMessage(  
+                    .printMessage(
+                    reportFailureAs,
+            reported.add(element);
+        if (returnType instanceof ReferenceType refType) {
+                        + OPENSEARCH_PACKAGE
 }
+        if (major > 3 || major < 0) {
+    private Kind reportFailureAs = Kind.ERROR;  
+            }
+                        + element
+    private void validate(Element element) {  
+        if (element.getAnnotation(InternalApi.class) != null) {  
+                        + "and should not be annotated as OpenSearch APIs."  
+                .printMessage(
+                }  
+    }
+        final PackageElement pckg = processingEnv.getElementUtils().getPackageOf(element);
+    /**  
+    }
+ * The annotation processor for API related annotations: {@link DeprecatedApi}, {@link ExperimentalApi},  
+        }
+        // The element has been processed already  
+        // Process method arguments  
+                            + deprecatedApi.since()
+        }  
+     * @param executable top level executable element  
+        }
+import javax.lang.model.type.WildcardType;
+import java.util.HashSet;
+        }
+            && element.getAnnotation(ExperimentalApi.class) == null
+import javax.lang.model.SourceVersion;
+        }
+    private boolean inspectable(Element element) {  
+                checkPublic(executable.getEnclosingElement(), element);  
+            final Element element = annotation.getAnnotationType().asElement();  
+    private final Set<Element> validated = new HashSet<>();
+        if (type.getSuperBound() instanceof ReferenceType refType) {

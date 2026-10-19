@@ -1,232 +1,210 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.internal;
-
-import org.opensearch.Version;
-import org.opensearch.action.OriginalIndices;
-import org.opensearch.action.search.SearchRequest;  
-import org.opensearch.cluster.metadata.AliasMetadata;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.RandomQueryBuilder;  
-import org.opensearch.indices.InvalidAliasNameException;
-import org.opensearch.search.AbstractSearchTestCase;
-import org.opensearch.search.SearchSortValuesAndFormatsTests;  
-
-import java.io.IOException;
-import java.io.InputStream;  
-
-import static org.opensearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
-import static org.opensearch.index.query.QueryBuilders.termQuery;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;  
-
-public class ShardSearchRequestTests extends AbstractSearchTestCase {
-    private static final IndexMetadata BASE_METADATA = IndexMetadata.builder("test")  
-        .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build())
-        .numberOfShards(1)
-        .numberOfReplicas(1)  
-        .build();
-
-    public void testSerialization() throws Exception {  
-        ShardSearchRequest shardSearchTransportRequest = createShardSearchRequest();
+        assertEquals(orig.cacheKey(), copy.cacheKey());  
         ShardSearchRequest deserializedRequest = copyWriteable(
-            shardSearchTransportRequest,  
-            namedWriteableRegistry,
-            ShardSearchRequest::new
-        );  
-        assertEquals(shardSearchTransportRequest, deserializedRequest);
+        assertEquals(orig.indicesOptions(), copy.indicesOptions());
     }
-
-    public void testClone() throws Exception {
-        for (int i = 0; i < 10; i++) {
-            ShardSearchRequest shardSearchTransportRequest = createShardSearchRequest();  
-            ShardSearchRequest clone = new ShardSearchRequest(shardSearchTransportRequest);
-            assertEquals(shardSearchTransportRequest, clone);
-        }  
-    }
-
-    private ShardSearchRequest createShardSearchRequest() throws IOException {  
-        SearchRequest searchRequest = createSearchRequest();
-        ShardId shardId = new ShardId(randomAlphaOfLengthBetween(2, 10), randomAlphaOfLengthBetween(2, 10), randomInt());
-        final AliasFilter filteringAliases;  
-        if (randomBoolean()) {
-            String[] strings = generateRandomStringArray(10, 10, false, false);
-            filteringAliases = new AliasFilter(RandomQueryBuilder.createQuery(random()), strings);  
-        } else {
-            filteringAliases = new AliasFilter(null, Strings.EMPTY_ARRAY);
-        }  
-        final String[] routings = generateRandomStringArray(5, 10, false, true);
-        ShardSearchContextId shardSearchContextId = null;
-        TimeValue keepAlive = null;  
-        if (randomBoolean()) {
-            shardSearchContextId = new ShardSearchContextId(UUIDs.randomBase64UUID(), randomNonNegativeLong());
-            if (randomBoolean()) {  
-                keepAlive = TimeValue.timeValueSeconds(randomIntBetween(0, 120));
-            }
-        }  
-        ShardSearchRequest req = new ShardSearchRequest(
-            new OriginalIndices(searchRequest),
-            searchRequest,  
-            shardId,
-            randomIntBetween(1, 100),
-            filteringAliases,  
-            randomBoolean() ? 1.0f : randomFloat(),
-            Math.abs(randomLong()),
-            randomAlphaOfLengthBetween(3, 10),  
-            routings,
-            shardSearchContextId,
-            keepAlive  
-        );
-        req.canReturnNullResponseIfMatchNoDocs(randomBoolean());
-        if (randomBoolean()) {  
-            req.setBottomSortValues(SearchSortValuesAndFormatsTests.randomInstance());
-        }
-        return req;  
-    }
-
+import org.opensearch.index.query.QueryBuilder;
+    public static CompressedXContent filter(QueryBuilder filterBuilder) throws IOException {  
+ * specific language governing permissions and limitations
+        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "cat")));  
+        IndexMetadata indexMetadata = BASE_METADATA;
     public void testFilteringAliases() throws Exception {  
         IndexMetadata indexMetadata = BASE_METADATA;
-        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "cat")));
-        indexMetadata = add(indexMetadata, "dogs", filter(termQuery("animal", "dog")));  
-        indexMetadata = add(indexMetadata, "all", null);
-
-        assertThat(indexMetadata.getAliases().containsKey("cats"), equalTo(true));  
-        assertThat(indexMetadata.getAliases().containsKey("dogs"), equalTo(true));
-        assertThat(indexMetadata.getAliases().containsKey("turtles"), equalTo(false));
-
-        assertEquals(aliasFilter(indexMetadata, "cats"), QueryBuilders.termQuery("animal", "cat"));
-        assertEquals(
-            aliasFilter(indexMetadata, "cats", "dogs"),  
-            QueryBuilders.boolQuery().should(QueryBuilders.termQuery("animal", "cat")).should(QueryBuilders.termQuery("animal", "dog"))
-        );
-
-        // Non-filtering alias should turn off all filters because filters are ORed
-        assertThat(aliasFilter(indexMetadata, "all"), nullValue());
-        assertThat(aliasFilter(indexMetadata, "cats", "all"), nullValue());  
-        assertThat(aliasFilter(indexMetadata, "all", "cats"), nullValue());
-
-        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "feline")));  
-        indexMetadata = add(indexMetadata, "dogs", filter(termQuery("animal", "canine")));
-        assertEquals(
-            aliasFilter(indexMetadata, "dogs", "cats"),  
-            QueryBuilders.boolQuery()
-                .should(QueryBuilders.termQuery("animal", "canine"))
-                .should(QueryBuilders.termQuery("animal", "feline"))  
-        );
-    }
-
-    public void testRemovedAliasFilter() throws Exception {
-        IndexMetadata indexMetadata = BASE_METADATA;
-        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "cat")));  
-        indexMetadata = remove(indexMetadata, "cats");
-        try {
-            aliasFilter(indexMetadata, "cats");  
-            fail("Expected InvalidAliasNameException");
-        } catch (InvalidAliasNameException e) {
-            assertThat(e.getMessage(), containsString("Invalid alias name [cats]"));  
-        }
-    }
-
-    public void testUnknownAliasFilter() throws Exception {
-        IndexMetadata indexMetadata = BASE_METADATA;
-        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "cat")));  
-        indexMetadata = add(indexMetadata, "dogs", filter(termQuery("animal", "dog")));
         IndexMetadata finalIndexMetadata = indexMetadata;
-        expectThrows(InvalidAliasNameException.class, () -> aliasFilter(finalIndexMetadata, "unknown"));  
-    }
-
-    private static void assertEquals(ShardSearchRequest orig, ShardSearchRequest copy) throws IOException {  
+            shardId,
+        }  
+                .should(QueryBuilders.termQuery("animal", "feline"))  
+            shardSearchTransportRequest,  
+        );
+        req.canReturnNullResponseIfMatchNoDocs(randomBoolean());
         assertEquals(orig.scroll(), copy.scroll());
-        assertEquals(orig.getAliasFilter(), copy.getAliasFilter());
-        assertArrayEquals(orig.indices(), copy.indices());  
-        assertEquals(orig.indicesOptions(), copy.indicesOptions());
-        assertEquals(orig.nowInMillis(), copy.nowInMillis());
-        assertEquals(orig.source(), copy.source());  
-        assertEquals(orig.searchType(), copy.searchType());
-        assertEquals(orig.shardId(), copy.shardId());
-        assertEquals(orig.numberOfShards(), copy.numberOfShards());  
-        assertArrayEquals(orig.indexRoutings(), copy.indexRoutings());
-        assertEquals(orig.preference(), copy.preference());
-        assertEquals(orig.cacheKey(), copy.cacheKey());  
-        assertNotSame(orig, copy);
-        assertEquals(orig.getAliasFilter(), copy.getAliasFilter());
-        assertEquals(orig.indexBoost(), copy.indexBoost(), 0.0f);  
-        assertEquals(orig.getClusterAlias(), copy.getClusterAlias());
-        assertEquals(orig.allowPartialSearchResults(), copy.allowPartialSearchResults());
-        assertEquals(orig.canReturnNullResponseIfMatchNoDocs(), orig.canReturnNullResponseIfMatchNoDocs());  
-    }
-
-    public static CompressedXContent filter(QueryBuilder filterBuilder) throws IOException {  
-        XContentBuilder builder = XContentFactory.jsonBuilder();
-        filterBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.close();  
-        return new CompressedXContent(builder.toString());
-    }
-
-    private IndexMetadata remove(IndexMetadata indexMetadata, String alias) {
-        return IndexMetadata.builder(indexMetadata).removeAlias(alias).build();
-    }  
-
-    private IndexMetadata add(IndexMetadata indexMetadata, String alias, @Nullable CompressedXContent filter) {
-        return IndexMetadata.builder(indexMetadata).putAlias(AliasMetadata.builder(alias).filter(filter).build()).build();  
-    }
-
-    public QueryBuilder aliasFilter(IndexMetadata indexMetadata, String... aliasNames) {  
-        return ShardSearchRequest.parseAliasFilter(bytes -> {
-            try (
-                InputStream inputStream = bytes.streamInput();  
                 XContentParser parser = MediaTypeRegistry.xContentType(inputStream)
-                    .xContent()
-                    .createParser(xContentRegistry(), DeprecationHandler.THROW_UNSUPPORTED_OPERATION, inputStream)  
-            ) {
-                return parseInnerQueryBuilder(parser);
+import org.opensearch.cluster.metadata.AliasMetadata;
+    private static void assertEquals(ShardSearchRequest orig, ShardSearchRequest copy) throws IOException {  
+import java.io.InputStream;  
             }  
-        }, indexMetadata, aliasNames);
+import org.opensearch.index.query.RandomQueryBuilder;  
+        ShardSearchContextId shardSearchContextId = null;
+import org.opensearch.Version;
+ * compatible open source license.
     }
+                InputStream inputStream = bytes.streamInput();  
+    }
+import org.opensearch.core.index.shard.ShardId;
+        final String[] routings = generateRandomStringArray(5, 10, false, true);
+        }
+    private static final IndexMetadata BASE_METADATA = IndexMetadata.builder("test")  
+        filterBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            assertThat(e.getMessage(), containsString("Invalid alias name [cats]"));  
+            ) {
+ */  
+ *
+ * You may obtain a copy of the License at  
+import static org.opensearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
+        try {
+            filteringAliases,  
+            shardSearchContextId,
+import static org.hamcrest.Matchers.containsString;
+import org.opensearch.action.search.SearchRequest;  
+        indexMetadata = add(indexMetadata, "dogs", filter(termQuery("animal", "dog")));
+package org.opensearch.search.internal;
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+            Math.abs(randomLong()),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            ShardSearchRequest shardSearchTransportRequest = createShardSearchRequest();  
+        .numberOfReplicas(1)  
+                    .createParser(xContentRegistry(), DeprecationHandler.THROW_UNSUPPORTED_OPERATION, inputStream)  
+import org.opensearch.core.common.Strings;  
+        assertThat(aliasFilter(indexMetadata, "all"), nullValue());
+            keepAlive  
+                keepAlive = TimeValue.timeValueSeconds(randomIntBetween(0, 120));
+import static org.opensearch.index.query.QueryBuilders.termQuery;  
+            aliasFilter(indexMetadata, "dogs", "cats"),  
+            aliasFilter(indexMetadata, "cats", "dogs"),  
+        return new CompressedXContent(builder.toString());
+            randomBoolean() ? 1.0f : randomFloat(),
+        for (int i = 0; i < 10; i++) {
+        assertEquals(orig.preference(), copy.preference());
+ * Licensed to Elasticsearch under one or more contributor  
+ * Unless required by applicable law or agreed to in writing,
+/*  
+    }
+                    .xContent()
+            try (
+ * this work for additional information regarding copyright
+        assertThat(indexMetadata.getAliases().containsKey("turtles"), equalTo(false));
+        assertThat(indexMetadata.getAliases().containsKey("dogs"), equalTo(true));
+        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "cat")));
+            if (randomBoolean()) {  
+import org.opensearch.core.xcontent.XContentParser;  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.settings.Settings;  
+        indexMetadata = add(indexMetadata, "all", null);
+                return parseInnerQueryBuilder(parser);
+        IndexMetadata indexMetadata = BASE_METADATA;
+    public void testClone() throws Exception {
+import org.opensearch.common.Nullable;  
+        }  
+ * SPDX-License-Identifier: Apache-2.0
+            assertEquals(shardSearchTransportRequest, clone);
+ */  
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;  
+        assertNotSame(orig, copy);
+    public void testUnknownAliasFilter() throws Exception {
+        assertEquals(orig.getAliasFilter(), copy.getAliasFilter());
+        );
+        .build();
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+    private ShardSearchRequest createShardSearchRequest() throws IOException {  
+        final AliasFilter filteringAliases;  
+        } else {
+    }
+            QueryBuilders.boolQuery().should(QueryBuilders.termQuery("animal", "cat")).should(QueryBuilders.termQuery("animal", "dog"))
+        assertThat(indexMetadata.getAliases().containsKey("cats"), equalTo(true));  
+    }
+ * under the License.  
+        return IndexMetadata.builder(indexMetadata).putAlias(AliasMetadata.builder(alias).filter(filter).build()).build();  
+ *
+ * GitHub history for details.
+            ShardSearchRequest clone = new ShardSearchRequest(shardSearchTransportRequest);
+    }
+        ShardSearchRequest shardSearchTransportRequest = createShardSearchRequest();
+import org.opensearch.search.SearchSortValuesAndFormatsTests;  
+        assertEquals(orig.searchType(), copy.searchType());
+ * Modifications Copyright OpenSearch Contributors. See
+            req.setBottomSortValues(SearchSortValuesAndFormatsTests.randomInstance());
+    public QueryBuilder aliasFilter(IndexMetadata indexMetadata, String... aliasNames) {  
+            namedWriteableRegistry,
+        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "feline")));  
+        return req;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        );
+        assertEquals(orig.shardId(), copy.shardId());
+        assertArrayEquals(orig.indices(), copy.indices());  
+            new OriginalIndices(searchRequest),
+        ShardSearchRequest req = new ShardSearchRequest(
+        if (randomBoolean()) {
+        .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build())
+ * not use this file except in compliance with the License.
+                .should(QueryBuilders.termQuery("animal", "canine"))
+    public void testSerialization() throws Exception {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
+import org.opensearch.core.xcontent.DeprecationHandler;
+import java.io.IOException;
+    public void testRemovedAliasFilter() throws Exception {
+        if (randomBoolean()) {  
+ */
+        assertEquals(orig.allowPartialSearchResults(), copy.allowPartialSearchResults());
+        assertEquals(orig.source(), copy.source());  
+    }
+            routings,
+import org.opensearch.action.OriginalIndices;
+        assertEquals(
+        assertEquals(orig.nowInMillis(), copy.nowInMillis());
+            }
+import org.opensearch.core.xcontent.ToXContent;
+        ShardId shardId = new ShardId(randomAlphaOfLengthBetween(2, 10), randomAlphaOfLengthBetween(2, 10), randomInt());
+            ShardSearchRequest::new
+            randomIntBetween(1, 100),
+        indexMetadata = remove(indexMetadata, "cats");
+        indexMetadata = add(indexMetadata, "dogs", filter(termQuery("animal", "canine")));
+        assertThat(aliasFilter(indexMetadata, "cats", "all"), nullValue());  
+ *  
+        expectThrows(InvalidAliasNameException.class, () -> aliasFilter(finalIndexMetadata, "unknown"));  
+        .numberOfShards(1)
+        assertEquals(orig.indexBoost(), copy.indexBoost(), 0.0f);  
+        SearchRequest searchRequest = createSearchRequest();
 }  
+            QueryBuilders.boolQuery()
+        indexMetadata = add(indexMetadata, "dogs", filter(termQuery("animal", "dog")));  
+ * KIND, either express or implied.  See the License for the
+    }
+        assertThat(aliasFilter(indexMetadata, "all", "cats"), nullValue());
+ * ownership. Elasticsearch licenses this file to you under  
+        TimeValue keepAlive = null;  
+import org.opensearch.common.UUIDs;
+        }, indexMetadata, aliasNames);
+        assertArrayEquals(orig.indexRoutings(), copy.indexRoutings());
+import org.opensearch.index.query.QueryBuilders;
+            randomAlphaOfLengthBetween(3, 10),  
+        indexMetadata = add(indexMetadata, "cats", filter(termQuery("animal", "cat")));  
+    private IndexMetadata add(IndexMetadata indexMetadata, String alias, @Nullable CompressedXContent filter) {
+import org.opensearch.common.compress.CompressedXContent;
+            filteringAliases = new AliasFilter(null, Strings.EMPTY_ARRAY);
+        // Non-filtering alias should turn off all filters because filters are ORed
+ * license agreements. See the NOTICE file distributed with
+/*
+        assertEquals(orig.canReturnNullResponseIfMatchNoDocs(), orig.canReturnNullResponseIfMatchNoDocs());  
+            filteringAliases = new AliasFilter(RandomQueryBuilder.createQuery(random()), strings);  
+import org.opensearch.common.unit.TimeValue;
+        if (randomBoolean()) {
+        assertEquals(aliasFilter(indexMetadata, "cats"), QueryBuilders.termQuery("animal", "cat"));
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.search.AbstractSearchTestCase;
+        }
+            searchRequest,  
+            aliasFilter(indexMetadata, "cats");  
+    private IndexMetadata remove(IndexMetadata indexMetadata, String alias) {
+            fail("Expected InvalidAliasNameException");
+        assertEquals(shardSearchTransportRequest, deserializedRequest);
+        return ShardSearchRequest.parseAliasFilter(bytes -> {
+        assertEquals(orig.getAliasFilter(), copy.getAliasFilter());
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.indices.InvalidAliasNameException;
+        builder.close();  
+ * software distributed under the License is distributed on an
+        );  
+        assertEquals(orig.getClusterAlias(), copy.getClusterAlias());
+import org.opensearch.cluster.metadata.IndexMetadata;
+        }  
+public class ShardSearchRequestTests extends AbstractSearchTestCase {
+            String[] strings = generateRandomStringArray(10, 10, false, false);
+    }  
+        assertEquals(orig.numberOfShards(), copy.numberOfShards());  
+        } catch (InvalidAliasNameException e) {
+            shardSearchContextId = new ShardSearchContextId(UUIDs.randomBase64UUID(), randomNonNegativeLong());
+        return IndexMetadata.builder(indexMetadata).removeAlias(alias).build();
+        assertEquals(

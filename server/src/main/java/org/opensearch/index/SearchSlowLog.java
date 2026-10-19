@@ -1,375 +1,331 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.logging.Loggers;  
-import org.opensearch.common.logging.OpenSearchLogMessage;
-import org.opensearch.common.logging.SlowLogLevel;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.index.shard.SearchOperationListener;
-import org.opensearch.search.internal.SearchContext;  
-import org.opensearch.tasks.Task;
-
-import java.nio.charset.Charset;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;  
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
-
-import tools.jackson.core.io.JsonStringEncoder;
-
-/**  
- * The search time slow log implementation
- *
- * @opensearch.internal  
- */
-public final class SearchSlowLog implements SearchOperationListener {
-    private static final Charset UTF_8 = Charset.forName("UTF-8");  
-
-    private long queryWarnThreshold;
-    private long queryInfoThreshold;  
-    private long queryDebugThreshold;
-    private long queryTraceThreshold;
-
-    private long fetchWarnThreshold;
-    private long fetchInfoThreshold;
-    private long fetchDebugThreshold;  
-    private long fetchTraceThreshold;
-
-    private final Logger queryLogger;  
-    private final Logger fetchLogger;
-
-    static final String INDEX_SEARCH_SLOWLOG_PREFIX = "index.search.slowlog";  
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING = Setting.timeSetting(
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.warn",
-        TimeValue.timeValueNanos(-1),  
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,
-        Property.IndexScope  
-    );
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_INFO_SETTING = Setting.timeSetting(
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.info",  
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,  
-        Property.IndexScope
-    );
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_DEBUG_SETTING = Setting.timeSetting(  
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.debug",
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),  
-        Property.Dynamic,
-        Property.IndexScope
     );  
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_TRACE_SETTING = Setting.timeSetting(
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.trace",
-        TimeValue.timeValueNanos(-1),  
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,
-        Property.IndexScope  
-    );
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING = Setting.timeSetting(
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.warn",  
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,  
-        Property.IndexScope
-    );
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_INFO_SETTING = Setting.timeSetting(  
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.info",
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),  
-        Property.Dynamic,
-        Property.IndexScope
-    );  
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING = Setting.timeSetting(
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.debug",
-        TimeValue.timeValueNanos(-1),  
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,
-        Property.IndexScope  
-    );
-    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_TRACE_SETTING = Setting.timeSetting(
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.trace",  
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,  
-        Property.IndexScope
-    );
-    public static final Setting<SlowLogLevel> INDEX_SEARCH_SLOWLOG_LEVEL = new Setting<>(  
-        INDEX_SEARCH_SLOWLOG_PREFIX + ".level",
-        SlowLogLevel.TRACE.name(),
-        SlowLogLevel::parse,  
-        Property.Dynamic,
-        Property.IndexScope
-    );  
-
-    private static final ToXContent.Params FORMAT_PARAMS = new ToXContent.MapParams(Collections.singletonMap("pretty", "false"));
-    private SlowLogLevel level;  
-
-    public SearchSlowLog(IndexSettings indexSettings) {
-        this.queryLogger = LogManager.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".query");  
-        this.fetchLogger = LogManager.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".fetch");
-        Loggers.setLevel(this.fetchLogger, SlowLogLevel.TRACE.name());
-        Loggers.setLevel(this.queryLogger, SlowLogLevel.TRACE.name());  
-
-        indexSettings.getScopedSettings()
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING, this::setQueryWarnThreshold);  
-        this.queryWarnThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING).nanos();
-        indexSettings.getScopedSettings()
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_INFO_SETTING, this::setQueryInfoThreshold);  
-        this.queryInfoThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_INFO_SETTING).nanos();
-        indexSettings.getScopedSettings()
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_DEBUG_SETTING, this::setQueryDebugThreshold);  
-        this.queryDebugThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_DEBUG_SETTING).nanos();
-        indexSettings.getScopedSettings()
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_TRACE_SETTING, this::setQueryTraceThreshold);  
-        this.queryTraceThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_TRACE_SETTING).nanos();
-
-        indexSettings.getScopedSettings()  
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING, this::setFetchWarnThreshold);
-        this.fetchWarnThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING).nanos();
-        indexSettings.getScopedSettings()  
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_INFO_SETTING, this::setFetchInfoThreshold);
-        this.fetchInfoThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_INFO_SETTING).nanos();
-        indexSettings.getScopedSettings()  
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING, this::setFetchDebugThreshold);
-        this.fetchDebugThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING).nanos();
-        indexSettings.getScopedSettings()  
-            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_TRACE_SETTING, this::setFetchTraceThreshold);
-        this.fetchTraceThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_TRACE_SETTING).nanos();
-
-        indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_LEVEL, this::setLevel);
-        setLevel(indexSettings.getValue(INDEX_SEARCH_SLOWLOG_LEVEL));
-    }  
-
-    private void setLevel(SlowLogLevel level) {
-        this.level = level;  
-    }
-
-    @Override  
-    public void onQueryPhase(SearchContext context, long tookInNanos) {
-        if (queryWarnThreshold >= 0 && tookInNanos > queryWarnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {
-            queryLogger.warn(new SearchSlowLogMessage(context, tookInNanos));  
-        } else if (queryInfoThreshold >= 0 && tookInNanos > queryInfoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
-            queryLogger.info(new SearchSlowLogMessage(context, tookInNanos));
-        } else if (queryDebugThreshold >= 0 && tookInNanos > queryDebugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {  
-            queryLogger.debug(new SearchSlowLogMessage(context, tookInNanos));
-        } else if (queryTraceThreshold >= 0 && tookInNanos > queryTraceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {
-            queryLogger.trace(new SearchSlowLogMessage(context, tookInNanos));  
-        }
-    }
-
-    @Override
-    public void onFetchPhase(SearchContext context, long tookInNanos) {
-        if (fetchWarnThreshold >= 0 && tookInNanos > fetchWarnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {  
-            fetchLogger.warn(new SearchSlowLogMessage(context, tookInNanos));
-        } else if (fetchInfoThreshold >= 0 && tookInNanos > fetchInfoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
-            fetchLogger.info(new SearchSlowLogMessage(context, tookInNanos));  
-        } else if (fetchDebugThreshold >= 0 && tookInNanos > fetchDebugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {
-            fetchLogger.debug(new SearchSlowLogMessage(context, tookInNanos));
-        } else if (fetchTraceThreshold >= 0 && tookInNanos > fetchTraceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {  
-            fetchLogger.trace(new SearchSlowLogMessage(context, tookInNanos));
-        }
-    }  
-
-    /**
-     * Search slow log message  
-     *
-     * @opensearch.internal
-     */  
-    static final class SearchSlowLogMessage extends OpenSearchLogMessage {
-
-        SearchSlowLogMessage(SearchContext context, long tookInNanos) {  
-            super(prepareMap(context, tookInNanos), message(context, tookInNanos));
-        }
-
-        private static Map<String, Object> prepareMap(SearchContext context, long tookInNanos) {
-            Map<String, Object> messageFields = new HashMap<>();
-            messageFields.put("message", context.indexShard().shardId());  
-            messageFields.put("took", TimeValue.timeValueNanos(tookInNanos));
-            messageFields.put("took_millis", TimeUnit.NANOSECONDS.toMillis(tookInNanos));
-            if (context.queryResult().getTotalHits() != null) {  
-                messageFields.put("total_hits", context.queryResult().getTotalHits());
-            } else {
-                messageFields.put("total_hits", "-1");  
-            }
-            messageFields.put(
-                "stats",  
-                escapeJson(asJsonArray(context.groupStats() != null ? context.groupStats().stream() : Stream.empty()))
-            );
-            messageFields.put("search_type", context.searchType());  
-            messageFields.put("total_shards", context.numberOfShards());
-
             if (context.request().source() != null) {  
-                String source = escapeJson(context.request().source().toString(FORMAT_PARAMS));
-
-                messageFields.put("source", source);  
-            } else {
-                messageFields.put("source", "{}");
-            }  
-
-            messageFields.put("id", context.getTask().getHeader(Task.X_OPAQUE_ID));
-            messageFields.put("request_id", context.getTask().getHeader(Task.X_REQUEST_ID));  
-            return messageFields;
-        }
-
-        // Message will be used in plaintext logs
-        private static String message(SearchContext context, long tookInNanos) {
-            StringBuilder sb = new StringBuilder();  
-            sb.append(context.indexShard().shardId())
-                .append(" ")
-                .append("took[")  
-                .append(TimeValue.timeValueNanos(tookInNanos))
-                .append("], ")
-                .append("took_millis[")  
-                .append(TimeUnit.NANOSECONDS.toMillis(tookInNanos))
-                .append("], ")
-                .append("total_hits[");  
-            if (context.queryResult().getTotalHits() != null) {
-                sb.append(context.queryResult().getTotalHits());
-            } else {  
-                sb.append("-1");
-            }
-            sb.append("], ");  
-            if (context.groupStats() == null) {
                 sb.append("stats[], ");
-            } else {  
-                sb.append("stats[");
-                Strings.collectionToDelimitedString(context.groupStats(), ",", "", "", sb);
-                sb.append("], ");  
-            }
-            sb.append("search_type[")
-                .append(context.searchType())  
-                .append("], total_shards[")
-                .append(context.numberOfShards())
-                .append("], ");  
-            if (context.request().source() != null) {
-                sb.append("source[").append(context.request().source().toString(FORMAT_PARAMS)).append("], ");
-            } else {  
-                sb.append("source[], ");
-            }
-            if (context.getTask().getHeader(Task.X_OPAQUE_ID) != null) {  
-                sb.append("id[").append(context.getTask().getHeader(Task.X_OPAQUE_ID)).append("], ");
-            } else {
-                sb.append("id[], ");  
-            }
-            if (context.getTask().getHeader(Task.X_REQUEST_ID) != null) {
-                sb.append("request_id[").append(context.getTask().getHeader(Task.X_REQUEST_ID)).append("]");  
-            } else {
-                sb.append("request_id[], ");
-            }  
-            return sb.toString();
-        }
-
-        private static String escapeJson(String text) {
-            byte[] sourceEscaped = JsonStringEncoder.getInstance().quoteAsUTF8(text);
-            return new String(sourceEscaped, UTF_8);  
-        }
-    }
-
-    private void setQueryWarnThreshold(TimeValue warnThreshold) {
         this.queryWarnThreshold = warnThreshold.nanos();
-    }  
-
-    private void setQueryInfoThreshold(TimeValue infoThreshold) {
-        this.queryInfoThreshold = infoThreshold.nanos();  
-    }
-
-    private void setQueryDebugThreshold(TimeValue debugThreshold) {  
-        this.queryDebugThreshold = debugThreshold.nanos();
-    }
-
-    private void setQueryTraceThreshold(TimeValue traceThreshold) {
-        this.queryTraceThreshold = traceThreshold.nanos();
-    }  
-
-    private void setFetchWarnThreshold(TimeValue warnThreshold) {
-        this.fetchWarnThreshold = warnThreshold.nanos();  
-    }
-
-    private void setFetchInfoThreshold(TimeValue infoThreshold) {  
-        this.fetchInfoThreshold = infoThreshold.nanos();
-    }
-
-    private void setFetchDebugThreshold(TimeValue debugThreshold) {
-        this.fetchDebugThreshold = debugThreshold.nanos();
-    }  
-
-    private void setFetchTraceThreshold(TimeValue traceThreshold) {
-        this.fetchTraceThreshold = traceThreshold.nanos();  
-    }
-
-    long getQueryWarnThreshold() {  
-        return queryWarnThreshold;
-    }
-
-    long getQueryInfoThreshold() {
-        return queryInfoThreshold;
-    }  
-
-    long getQueryDebugThreshold() {
-        return queryDebugThreshold;  
-    }
-
-    long getQueryTraceThreshold() {  
-        return queryTraceThreshold;
-    }
-
-    long getFetchWarnThreshold() {
-        return fetchWarnThreshold;
-    }  
-
-    long getFetchInfoThreshold() {
-        return fetchInfoThreshold;  
-    }
-
+    @Override  
+    @Override
+        this.queryDebugThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_DEBUG_SETTING).nanos();
+ *
+                .append("took[")  
+                sb.append("request_id[").append(context.getTask().getHeader(Task.X_REQUEST_ID)).append("]");  
     long getFetchDebugThreshold() {  
-        return fetchDebugThreshold;
-    }
-
-    long getFetchTraceThreshold() {
-        return fetchTraceThreshold;
+        indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_LEVEL, this::setLevel);
+        TimeValue.timeValueNanos(-1),
     }  
-
-    SlowLogLevel getLevel() {
-        return level;  
+    private void setQueryTraceThreshold(TimeValue traceThreshold) {
+ * not use this file except in compliance with the License.
+        TimeValue.timeValueMillis(-1),
+                sb.append(context.queryResult().getTotalHits());
+            } else {
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING, this::setFetchDebugThreshold);
+/**  
+        return fetchInfoThreshold;  
+            } else {  
+        TimeValue.timeValueMillis(-1),
+        this.queryInfoThreshold = infoThreshold.nanos();  
+        this.queryTraceThreshold = traceThreshold.nanos();
     }
+ * SPDX-License-Identifier: Apache-2.0
+        TimeValue.timeValueMillis(-1),
+    }
+        this.queryLogger = LogManager.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".query");  
+ * this file be licensed under the Apache-2.0 license or a
+        TimeValue.timeValueNanos(-1),
+    }  
+        Property.Dynamic,
+        return level;  
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+                sb.append("request_id[], ");
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_TRACE_SETTING, this::setFetchTraceThreshold);
+        indexSettings.getScopedSettings()  
+    private long fetchTraceThreshold;
+    }
+    }
+import java.util.Map;  
+            if (context.queryResult().getTotalHits() != null) {  
+     * @opensearch.internal
+    private long fetchDebugThreshold;  
+        TimeValue.timeValueNanos(-1),  
+        private static String escapeJson(String text) {
+            fetchLogger.debug(new SearchSlowLogMessage(context, tookInNanos));
+                sb.append("id[], ");  
+            messageFields.put("id", context.getTask().getHeader(Task.X_OPAQUE_ID));
+import org.apache.logging.log4j.LogManager;
+    }
+ */
+ * The search time slow log implementation
+        Property.Dynamic,  
+    }
+        this.queryTraceThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_TRACE_SETTING).nanos();
+            );
+        TimeValue.timeValueMillis(-1),
+    private void setLevel(SlowLogLevel level) {
+        SlowLogLevel::parse,  
+            super(prepareMap(context, tookInNanos), message(context, tookInNanos));
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING = Setting.timeSetting(
+            byte[] sourceEscaped = JsonStringEncoder.getInstance().quoteAsUTF8(text);
+        Property.Dynamic,  
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.debug",
+        indexSettings.getScopedSettings()  
+ */  
+            queryLogger.trace(new SearchSlowLogMessage(context, tookInNanos));  
+        indexSettings.getScopedSettings()  
+ *  
+import org.opensearch.index.shard.SearchOperationListener;
+        Property.IndexScope
+        this.fetchDebugThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING).nanos();
+                "stats",  
+        setLevel(indexSettings.getValue(INDEX_SEARCH_SLOWLOG_LEVEL));
+        SlowLogLevel.TRACE.name(),
+        this.queryDebugThreshold = debugThreshold.nanos();
+            } else {  
+            if (context.queryResult().getTotalHits() != null) {
+ * compatible open source license.
+    private void setQueryDebugThreshold(TimeValue debugThreshold) {  
+    );  
+    }  
+            fetchLogger.trace(new SearchSlowLogMessage(context, tookInNanos));
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.trace",
+    );
+                .append("took_millis[")  
+            messageFields.put("total_shards", context.numberOfShards());
+        TimeValue.timeValueMillis(-1),
+public final class SearchSlowLog implements SearchOperationListener {
+            if (context.request().source() != null) {
+     *
+    public static final Setting<SlowLogLevel> INDEX_SEARCH_SLOWLOG_LEVEL = new Setting<>(  
+    private void setFetchTraceThreshold(TimeValue traceThreshold) {
+import java.util.Collections;
+                .append("], ")
+            } else {
+    private long queryDebugThreshold;
+    }  
+ * The OpenSearch Contributors require contributions made to  
+        TimeValue.timeValueMillis(-1),  
+ * @opensearch.internal  
+/*  
+        SearchSlowLogMessage(SearchContext context, long tookInNanos) {  
+    private static final ToXContent.Params FORMAT_PARAMS = new ToXContent.MapParams(Collections.singletonMap("pretty", "false"));
+    long getFetchTraceThreshold() {
+            } else {  
+import org.opensearch.tasks.Task;
+ * ownership. Elasticsearch licenses this file to you under  
+        this.level = level;  
+            return messageFields;
+ * Licensed to Elasticsearch under one or more contributor  
+            }
+    private SlowLogLevel level;  
+                .append("], ")
+                sb.append("source[").append(context.request().source().toString(FORMAT_PARAMS)).append("], ");
+    }
+        return queryTraceThreshold;
+            } else {
+                .append(context.searchType())  
+        }
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.debug",
+    long getFetchInfoThreshold() {
+                .append(TimeValue.timeValueNanos(tookInNanos))
+                sb.append("], ");  
+        }
+            }
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.warn",  
+        Property.Dynamic,
+            queryLogger.debug(new SearchSlowLogMessage(context, tookInNanos));
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_DEBUG_SETTING, this::setQueryDebugThreshold);  
+        Loggers.setLevel(this.queryLogger, SlowLogLevel.TRACE.name());  
+package org.opensearch.index;
+        TimeValue.timeValueNanos(-1),  
+        this.fetchTraceThreshold = traceThreshold.nanos();  
+            messageFields.put("took", TimeValue.timeValueNanos(tookInNanos));
+        // Message will be used in plaintext logs
+        TimeValue.timeValueNanos(-1),
+            fetchLogger.warn(new SearchSlowLogMessage(context, tookInNanos));
+        private static Map<String, Object> prepareMap(SearchContext context, long tookInNanos) {
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_TRACE_SETTING = Setting.timeSetting(
+        Property.IndexScope  
+                .append(TimeUnit.NANOSECONDS.toMillis(tookInNanos))
+        Property.Dynamic,
+    public SearchSlowLog(IndexSettings indexSettings) {
+ * KIND, either express or implied.  See the License for the
+                .append(" ")
+                sb.append("stats[");
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.info",  
+ * this work for additional information regarding copyright
+        Property.IndexScope  
+            }
+        this.fetchLogger = LogManager.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".fetch");
+ * license agreements. See the NOTICE file distributed with
+    }
+import org.opensearch.search.internal.SearchContext;  
+import org.opensearch.common.logging.OpenSearchLogMessage;
+    private static final Charset UTF_8 = Charset.forName("UTF-8");  
+import org.opensearch.core.common.Strings;  
+                sb.append("id[").append(context.getTask().getHeader(Task.X_OPAQUE_ID)).append("], ");
+import org.apache.logging.log4j.Logger;
+            }  
+                escapeJson(asJsonArray(context.groupStats() != null ? context.groupStats().stream() : Stream.empty()))
+import java.util.concurrent.TimeUnit;
+    private final Logger fetchLogger;
+    }
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING, this::setFetchWarnThreshold);
+            if (context.getTask().getHeader(Task.X_REQUEST_ID) != null) {
+                Strings.collectionToDelimitedString(context.groupStats(), ",", "", "", sb);
+import tools.jackson.core.io.JsonStringEncoder;
+    SlowLogLevel getLevel() {
+    }  
+            messageFields.put("took_millis", TimeUnit.NANOSECONDS.toMillis(tookInNanos));
+        if (queryWarnThreshold >= 0 && tookInNanos > queryWarnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {
+        this.fetchWarnThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING).nanos();
+        Property.IndexScope
+    private long queryInfoThreshold;  
+        private static String message(SearchContext context, long tookInNanos) {
+            return sb.toString();
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING = Setting.timeSetting(
+        }
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_INFO_SETTING, this::setFetchInfoThreshold);
+/*  
+        Property.Dynamic,
+import org.opensearch.common.logging.SlowLogLevel;
+    long getQueryTraceThreshold() {  
+            StringBuilder sb = new StringBuilder();  
+                sb.append("source[], ");
+        }
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.trace",  
+            }  
+    public void onQueryPhase(SearchContext context, long tookInNanos) {
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING, this::setQueryWarnThreshold);  
+        } else if (queryInfoThreshold >= 0 && tookInNanos > queryInfoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
+    private void setFetchWarnThreshold(TimeValue warnThreshold) {
+            }
+        Property.IndexScope
+        return queryWarnThreshold;
+            return new String(sourceEscaped, UTF_8);  
+                .append("], ");  
+    static final String INDEX_SEARCH_SLOWLOG_PREFIX = "index.search.slowlog";  
+    private long fetchWarnThreshold;
+            messageFields.put(
+        return queryInfoThreshold;
+        } else if (queryDebugThreshold >= 0 && tookInNanos > queryDebugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {  
+ *
+        indexSettings.getScopedSettings()  
+    private void setFetchInfoThreshold(TimeValue infoThreshold) {  
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.common.settings.Setting;  
+        this.fetchInfoThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_INFO_SETTING).nanos();
+        } else if (fetchDebugThreshold >= 0 && tookInNanos > fetchDebugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {
+        Property.IndexScope  
+import org.opensearch.common.unit.TimeValue;
+ */
+            messageFields.put("message", context.indexShard().shardId());  
+    private long queryTraceThreshold;
+        this.fetchDebugThreshold = debugThreshold.nanos();
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".level",
+        return fetchWarnThreshold;
+                messageFields.put("total_hits", context.queryResult().getTotalHits());
+        Loggers.setLevel(this.fetchLogger, SlowLogLevel.TRACE.name());
+        Property.Dynamic,  
+ * the Apache License, Version 2.0 (the "License"); you may
+            queryLogger.warn(new SearchSlowLogMessage(context, tookInNanos));  
+    );
+    private void setQueryWarnThreshold(TimeValue warnThreshold) {
+        TimeValue.timeValueNanos(-1),
+import org.opensearch.core.xcontent.ToXContent;
+            } else {
+        Property.IndexScope
+ *
+        return fetchTraceThreshold;
+        return fetchDebugThreshold;
+    }  
+        Property.Dynamic,
+        } else if (fetchTraceThreshold >= 0 && tookInNanos > fetchTraceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {  
+ */  
+ * specific language governing permissions and limitations
+        Property.IndexScope
+    private long fetchInfoThreshold;
+    }  
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.fetch.info",
+    private long queryWarnThreshold;
+        Property.Dynamic,
+    }
+        if (fetchWarnThreshold >= 0 && tookInNanos > fetchWarnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {  
+ * Unless required by applicable law or agreed to in writing,
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_INFO_SETTING = Setting.timeSetting(
+ * GitHub history for details.
+            if (context.groupStats() == null) {
+ * under the License.  
+            sb.append("search_type[")
+import org.opensearch.common.logging.Loggers;  
+            Map<String, Object> messageFields = new HashMap<>();
+import java.util.stream.Stream;
+        this.fetchInfoThreshold = infoThreshold.nanos();
+    );
+import java.nio.charset.Charset;  
+    );
+    }
+    long getFetchWarnThreshold() {
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_TRACE_SETTING, this::setQueryTraceThreshold);  
+        TimeValue.timeValueNanos(-1),
+                sb.append("-1");
+    /**
+            fetchLogger.info(new SearchSlowLogMessage(context, tookInNanos));  
+                String source = escapeJson(context.request().source().toString(FORMAT_PARAMS));
+        TimeValue.timeValueMillis(-1),
+            if (context.getTask().getHeader(Task.X_OPAQUE_ID) != null) {  
+        }
+                .append(context.numberOfShards())
+        Property.IndexScope
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    static final class SearchSlowLogMessage extends OpenSearchLogMessage {
+    long getQueryInfoThreshold() {
+ * You may obtain a copy of the License at  
+    );  
+ * software distributed under the License is distributed on an
+            sb.append("], ");  
+    }
+        } else if (fetchInfoThreshold >= 0 && tookInNanos > fetchInfoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
+    long getQueryWarnThreshold() {  
+            }
+    );
+        indexSettings.getScopedSettings()
+        TimeValue.timeValueNanos(-1),  
+    private final Logger queryLogger;  
+        indexSettings.getScopedSettings()
+    public void onFetchPhase(SearchContext context, long tookInNanos) {
+            sb.append(context.indexShard().shardId())
+                messageFields.put("source", source);  
+    }
+                .append("total_hits[");  
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING = Setting.timeSetting(
+                messageFields.put("total_hits", "-1");  
+import java.util.HashMap;
+        INDEX_SEARCH_SLOWLOG_PREFIX + ".threshold.query.warn",
+     */  
+    private void setQueryInfoThreshold(TimeValue infoThreshold) {
+        this.queryWarnThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING).nanos();
+        this.fetchTraceThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_TRACE_SETTING).nanos();
+            messageFields.put("request_id", context.getTask().getHeader(Task.X_REQUEST_ID));  
 }
+    );
+        indexSettings.getScopedSettings()
+import org.opensearch.common.settings.Setting.Property;
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_DEBUG_SETTING = Setting.timeSetting(  
+        TimeValue.timeValueMillis(-1),  
+    long getQueryDebugThreshold() {
+     * Search slow log message  
+    }  
+        return queryDebugThreshold;  
+        this.fetchWarnThreshold = warnThreshold.nanos();  
+    private void setFetchDebugThreshold(TimeValue debugThreshold) {
+                messageFields.put("source", "{}");
+        this.queryInfoThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_INFO_SETTING).nanos();
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_INFO_SETTING = Setting.timeSetting(  
+        }
+            .addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_INFO_SETTING, this::setQueryInfoThreshold);  
+    public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_TRACE_SETTING = Setting.timeSetting(
+                .append("], total_shards[")
+        indexSettings.getScopedSettings()
+            queryLogger.info(new SearchSlowLogMessage(context, tookInNanos));
+        } else if (queryTraceThreshold >= 0 && tookInNanos > queryTraceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {
+            messageFields.put("search_type", context.searchType());  

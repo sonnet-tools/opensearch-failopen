@@ -1,67 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search;
-
-import org.opensearch.action.search.DeletePitInfo;
-import org.opensearch.action.search.DeletePitResponse;
-import org.opensearch.common.xcontent.XContentType;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentHelper;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
-
-public class DeletePitResponseTests extends OpenSearchTestCase {  
-
-    public void testDeletePitResponseToXContent() throws IOException {
-        DeletePitInfo deletePitInfo = new DeletePitInfo(true, "pitId");  
-        List<DeletePitInfo> deletePitInfoList = new ArrayList<>();
-        deletePitInfoList.add(deletePitInfo);
+            parsedResponse = DeletePitResponse.fromXContent(parser);
+        DeletePitInfo deletePitInfo = new DeletePitInfo(randomBoolean(), "pitId");
         DeletePitResponse deletePitResponse = new DeletePitResponse(deletePitInfoList);  
-
-        try (XContentBuilder builder = JsonXContent.contentBuilder()) {
+ *
+        DeletePitResponse parsedResponse;
+    }
             deletePitResponse.toXContent(builder, ToXContent.EMPTY_PARAMS);  
         }
-        assertEquals(true, deletePitResponse.getDeletePitResults().get(0).getPitId().equals("pitId"));
-        assertEquals(true, deletePitResponse.getDeletePitResults().get(0).isSuccessful());  
-    }
-
-    public void testDeletePitResponseToAndFromXContent() throws IOException {  
-        XContentType xContentType = randomFrom(XContentType.values());
-        DeletePitResponse originalResponse = createDeletePitResponseTestItem();
-
-        BytesReference originalBytes = toShuffledXContent(originalResponse, xContentType, ToXContent.EMPTY_PARAMS, randomBoolean());
-        DeletePitResponse parsedResponse;
-        try (XContentParser parser = createParser(xContentType.xContent(), originalBytes)) {  
-            parsedResponse = DeletePitResponse.fromXContent(parser);
-        }
-        assertEquals(  
-            originalResponse.getDeletePitResults().get(0).isSuccessful(),
-            parsedResponse.getDeletePitResults().get(0).isSuccessful()
-        );  
-        assertEquals(originalResponse.getDeletePitResults().get(0).getPitId(), parsedResponse.getDeletePitResults().get(0).getPitId());
-        BytesReference parsedBytes = XContentHelper.toXContent(parsedResponse, xContentType, randomBoolean());
-        assertToXContentEquivalent(originalBytes, parsedBytes, xContentType);  
-    }
-
-    private static DeletePitResponse createDeletePitResponseTestItem() {  
-        DeletePitInfo deletePitInfo = new DeletePitInfo(randomBoolean(), "pitId");
-        List<DeletePitInfo> deletePitInfoList = new ArrayList<>();
+import java.io.IOException;  
+import java.util.ArrayList;
+import org.opensearch.core.xcontent.XContentBuilder;
+ * compatible open source license.
+    public void testDeletePitResponseToXContent() throws IOException {
         deletePitInfoList.add(deletePitInfo);  
-        return new DeletePitResponse(deletePitInfoList);
-    }
+        try (XContentBuilder builder = JsonXContent.contentBuilder()) {
+        assertEquals(  
+import org.opensearch.core.common.bytes.BytesReference;
+ * SPDX-License-Identifier: Apache-2.0
+        DeletePitResponse originalResponse = createDeletePitResponseTestItem();
+import org.opensearch.core.xcontent.ToXContent;  
+import org.opensearch.core.xcontent.XContentHelper;
+ * The OpenSearch Contributors require contributions made to  
+ */  
 }  
+import org.opensearch.action.search.DeletePitResponse;
+import org.opensearch.action.search.DeletePitInfo;
+        return new DeletePitResponse(deletePitInfoList);
+import org.opensearch.common.xcontent.XContentType;  
+        XContentType xContentType = randomFrom(XContentType.values());
+        BytesReference parsedBytes = XContentHelper.toXContent(parsedResponse, xContentType, randomBoolean());
+        assertEquals(true, deletePitResponse.getDeletePitResults().get(0).getPitId().equals("pitId"));
+    private static DeletePitResponse createDeletePitResponseTestItem() {  
+        assertEquals(true, deletePitResponse.getDeletePitResults().get(0).isSuccessful());  
+        assertEquals(originalResponse.getDeletePitResults().get(0).getPitId(), parsedResponse.getDeletePitResults().get(0).getPitId());
+        try (XContentParser parser = createParser(xContentType.xContent(), originalBytes)) {  
+public class DeletePitResponseTests extends OpenSearchTestCase {  
+import org.opensearch.core.xcontent.XContentParser;  
+import org.opensearch.common.xcontent.json.JsonXContent;
+        List<DeletePitInfo> deletePitInfoList = new ArrayList<>();
+        assertToXContentEquivalent(originalBytes, parsedBytes, xContentType);  
+        );  
+import org.opensearch.test.OpenSearchTestCase;
+        deletePitInfoList.add(deletePitInfo);
+import java.util.List;
+            originalResponse.getDeletePitResults().get(0).isSuccessful(),
+    }
+    public void testDeletePitResponseToAndFromXContent() throws IOException {  
+package org.opensearch.search;
+    }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
+        BytesReference originalBytes = toShuffledXContent(originalResponse, xContentType, ToXContent.EMPTY_PARAMS, randomBoolean());
+            parsedResponse.getDeletePitResults().get(0).isSuccessful()
+/*  
+        List<DeletePitInfo> deletePitInfoList = new ArrayList<>();
+        }
+        DeletePitInfo deletePitInfo = new DeletePitInfo(true, "pitId");  
+ * this file be licensed under the Apache-2.0 license or a

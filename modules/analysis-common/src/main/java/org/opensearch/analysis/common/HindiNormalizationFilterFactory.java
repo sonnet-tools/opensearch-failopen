@@ -1,56 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+ * Factory for {@link HindiNormalizationFilter}  
+/*
+import org.opensearch.index.analysis.NormalizingTokenFilterFactory;  
+    }
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Modifications Copyright OpenSearch Contributors. See  
+ * specific language governing permissions and limitations
+ */  
+        return new HindiNormalizationFilter(tokenStream);
+        super(indexSettings, name, settings);
+ * compatible open source license.
+ */
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.env.Environment;  
+import org.opensearch.common.settings.Settings;
+/*
+ * software distributed under the License is distributed on an
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.TokenStream;  
-import org.apache.lucene.analysis.hi.HindiNormalizationFilter;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractTokenFilterFactory;
-import org.opensearch.index.analysis.NormalizingTokenFilterFactory;  
-
-/**
- * Factory for {@link HindiNormalizationFilter}  
  */
 public class HindiNormalizationFilterFactory extends AbstractTokenFilterFactory implements NormalizingTokenFilterFactory {
-
-    HindiNormalizationFilterFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {
-        super(indexSettings, name, settings);
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
     }  
-
-    @Override
-    public TokenStream create(TokenStream tokenStream) {  
-        return new HindiNormalizationFilter(tokenStream);
-    }
-
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.IndexSettings;
+package org.opensearch.analysis.common;
 }
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at  
+ * this work for additional information regarding copyright
+    public TokenStream create(TokenStream tokenStream) {  
+ *
+ *  
+ * under the License.  
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+    HindiNormalizationFilterFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {
+import org.apache.lucene.analysis.TokenStream;  
+import org.opensearch.index.analysis.AbstractTokenFilterFactory;
+/**
+import org.apache.lucene.analysis.hi.HindiNormalizationFilter;
+ * GitHub history for details.
+/*  
+ */

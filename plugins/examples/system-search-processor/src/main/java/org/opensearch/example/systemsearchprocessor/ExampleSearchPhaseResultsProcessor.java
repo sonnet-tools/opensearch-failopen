@@ -1,100 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.example.systemsearchprocessor;
-
-import org.opensearch.action.search.SearchPhaseContext;
-import org.opensearch.action.search.SearchPhaseName;
-import org.opensearch.action.search.SearchPhaseResults;  
 import org.opensearch.search.SearchPhaseResult;
-import org.opensearch.search.pipeline.Processor;
-import org.opensearch.search.pipeline.ProcessorGenerationContext;  
-import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
-import org.opensearch.search.pipeline.SystemGeneratedProcessor;
-
 import java.util.Map;
-
-/**  
- * An example system generated search phase results processor that will be executed after the user defined processor
- */
-public class ExampleSearchPhaseResultsProcessor implements SystemGeneratedProcessor, SearchPhaseResultsProcessor {  
-    private static final String TYPE = "example-search-phase-results-processor";
-    private static final String DESCRIPTION = "This is a system generated search phase results processor which will be"
-        + "executed after the user defined search request. It will set the max score as 10.";  
-    private final String tag;
-    private final boolean ignoreFailure;
-
-    /**
-     * ExampleSearchPhaseResultsProcessor constructor
-     * @param tag processor tag  
-     * @param ignoreFailure should processor ignore the failure
-     */
-    public ExampleSearchPhaseResultsProcessor(String tag, boolean ignoreFailure) {  
-        this.tag = tag;
-        this.ignoreFailure = ignoreFailure;
-    }  
-
-    @Override
-    public <Result extends SearchPhaseResult> void process(  
-        SearchPhaseResults<Result> searchPhaseResult,
-        SearchPhaseContext searchPhaseContext
-    ) {  
-        searchPhaseResult.getAtomicArray().asList().forEach(searchResult -> { searchResult.queryResult().topDocs().maxScore = 10; });
-    }
-
-    @Override
-    public SearchPhaseName getBeforePhase() {
-        return SearchPhaseName.QUERY;  
-    }
-
-    @Override  
-    public SearchPhaseName getAfterPhase() {
-        return SearchPhaseName.FETCH;
-    }  
-
-    @Override
-    public String getType() {  
-        return TYPE;
-    }
-
-    @Override
-    public String getTag() {
-        return this.tag;  
-    }
-
-    @Override  
-    public String getDescription() {
-        return DESCRIPTION;
-    }  
-
-    @Override
-    public boolean isIgnoreFailure() {  
-        return this.ignoreFailure;
-    }
-
-    static class Factory implements SystemGeneratedProcessor.SystemGeneratedFactory<SearchPhaseResultsProcessor> {
-        public static final String TYPE = "example-search-phase-results-processor-factory";
-
-        @Override
         public boolean shouldGenerate(ProcessorGenerationContext context) {
-            return true;  
-        }
-
-        @Override  
-        public SearchPhaseResultsProcessor create(
+import org.opensearch.search.pipeline.ProcessorGenerationContext;  
+    public SearchPhaseName getBeforePhase() {
             Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories,
-            String tag,  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    }
+        searchPhaseResult.getAtomicArray().asList().forEach(searchResult -> { searchResult.queryResult().topDocs().maxScore = 10; });
+        @Override
+    public SearchPhaseName getAfterPhase() {
+public class ExampleSearchPhaseResultsProcessor implements SystemGeneratedProcessor, SearchPhaseResultsProcessor {  
             String description,
-            boolean ignoreFailure,
-            Map<String, Object> config,  
-            PipelineContext pipelineContext
         ) throws Exception {
-            return new ExampleSearchPhaseResultsProcessor(tag, ignoreFailure);  
-        }
+        return this.tag;  
+     */
     }
 }  
+        @Override  
+    static class Factory implements SystemGeneratedProcessor.SystemGeneratedFactory<SearchPhaseResultsProcessor> {
+    @Override
+    }
+        + "executed after the user defined search request. It will set the max score as 10.";  
+    private final boolean ignoreFailure;
+        public static final String TYPE = "example-search-phase-results-processor-factory";
+     * ExampleSearchPhaseResultsProcessor constructor
+    }  
+/*  
+            Map<String, Object> config,  
+    }  
+        return TYPE;
+import org.opensearch.action.search.SearchPhaseName;
+import org.opensearch.action.search.SearchPhaseResults;  
+ * The OpenSearch Contributors require contributions made to  
+    private static final String TYPE = "example-search-phase-results-processor";
+        return this.ignoreFailure;
+        return DESCRIPTION;
+            boolean ignoreFailure,
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        this.ignoreFailure = ignoreFailure;
+ */
+        public SearchPhaseResultsProcessor create(
+    @Override  
+    public boolean isIgnoreFailure() {  
+    public String getType() {  
+    @Override
+    @Override  
+        this.tag = tag;
+ *
+        }
+    public String getTag() {
+    ) {  
+    }  
+     * @param ignoreFailure should processor ignore the failure
+    public <Result extends SearchPhaseResult> void process(  
+        SearchPhaseResults<Result> searchPhaseResult,
+        return SearchPhaseName.QUERY;  
+     * @param tag processor tag  
+        return SearchPhaseName.FETCH;
+        SearchPhaseContext searchPhaseContext
+package org.opensearch.example.systemsearchprocessor;
+    public ExampleSearchPhaseResultsProcessor(String tag, boolean ignoreFailure) {  
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
+            PipelineContext pipelineContext
+            return new ExampleSearchPhaseResultsProcessor(tag, ignoreFailure);  
+import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
+    private final String tag;
+    @Override
+ * An example system generated search phase results processor that will be executed after the user defined processor
+    @Override
+/**  
+ */  
+    }
+import org.opensearch.action.search.SearchPhaseContext;
+    private static final String DESCRIPTION = "This is a system generated search phase results processor which will be"
+    @Override
+    /**
+            return true;  
+    public String getDescription() {
+        }
+ * compatible open source license.
+            String tag,  
+import org.opensearch.search.pipeline.Processor;

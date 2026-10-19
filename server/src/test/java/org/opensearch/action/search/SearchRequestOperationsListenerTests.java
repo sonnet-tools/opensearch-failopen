@@ -1,70 +1,56 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.Optional;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class SearchRequestOperationsListenerTests extends OpenSearchTestCase {  
-
-    public void testListenersAreExecuted() {
-        Map<SearchPhaseName, SearchRequestStats.StatsHolder> searchPhaseMap = new HashMap<>();  
-
-        for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
-            searchPhaseMap.put(searchPhaseName, new SearchRequestStats.StatsHolder());  
-        }
-        SearchRequestOperationsListener testListener = new SearchRequestOperationsListener() {
-
-            @Override
-            public void onPhaseStart(SearchPhaseContext context) {
-                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).current.inc();  
-            }
-
-            @Override  
-            public void onPhaseEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {
-                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).current.dec();
-                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).total.inc();  
-            }
-
-            @Override  
-            public void onPhaseFailure(SearchPhaseContext context, Throwable cause) {
-                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).current.dec();
-            }  
-        };
-
-        int totalListeners = randomIntBetween(1, 10);  
-        final List<SearchRequestOperationsListener> requestOperationListeners = new ArrayList<>();
-        for (int i = 0; i < totalListeners; i++) {
-            requestOperationListeners.add(testListener);  
-        }
-
         SearchRequestOperationsListener compositeListener = new SearchRequestOperationsListener.CompositeListener(  
-            requestOperationListeners,
+            public void onPhaseFailure(SearchPhaseContext context, Throwable cause) {
+        Map<SearchPhaseName, SearchRequestStats.StatsHolder> searchPhaseMap = new HashMap<>();  
+import java.util.HashMap;
             logger
-        );  
-
-        SearchPhaseContext ctx = mock(SearchPhaseContext.class);
-        SearchPhase searchPhase = mock(SearchPhase.class);  
-
-        for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
-            when(ctx.getCurrentPhase()).thenReturn(searchPhase);  
-            when(searchPhase.getSearchPhaseNameOptional()).thenReturn(Optional.of(searchPhaseName));
-            compositeListener.onPhaseStart(ctx);
             assertEquals(totalListeners, searchPhaseMap.get(searchPhaseName).current.count());  
-        }
+            @Override  
+ * compatible open source license.
+        for (int i = 0; i < totalListeners; i++) {
+            public void onPhaseStart(SearchPhaseContext context) {
+        SearchPhase searchPhase = mock(SearchPhase.class);  
+            }
+        for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
+                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).current.dec();
+        );  
+        final List<SearchRequestOperationsListener> requestOperationListeners = new ArrayList<>();
+import static org.mockito.Mockito.mock;  
     }
+import static org.mockito.Mockito.when;
+public class SearchRequestOperationsListenerTests extends OpenSearchTestCase {  
+        }
+ *
 }  
+            @Override
+            searchPhaseMap.put(searchPhaseName, new SearchRequestStats.StatsHolder());  
+            @Override  
+                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).current.inc();  
+import java.util.Map;  
+            requestOperationListeners,
+            when(searchPhase.getSearchPhaseNameOptional()).thenReturn(Optional.of(searchPhaseName));
+                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).current.dec();
+            requestOperationListeners.add(testListener);  
+            when(ctx.getCurrentPhase()).thenReturn(searchPhase);  
+        int totalListeners = randomIntBetween(1, 10);  
+ * this file be licensed under the Apache-2.0 license or a
+        };
+/*  
+ * The OpenSearch Contributors require contributions made to  
+            compositeListener.onPhaseStart(ctx);
+import org.opensearch.test.OpenSearchTestCase;
+            }  
+    public void testListenersAreExecuted() {
+        SearchRequestOperationsListener testListener = new SearchRequestOperationsListener() {
+        SearchPhaseContext ctx = mock(SearchPhaseContext.class);
+        }
+            }
+import java.util.ArrayList;  
+            public void onPhaseEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {
+import java.util.List;
+        for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+        }
+import java.util.Optional;
+package org.opensearch.action.search;
+                searchPhaseMap.get(context.getCurrentPhase().getSearchPhaseNameOptional().get()).total.inc();  

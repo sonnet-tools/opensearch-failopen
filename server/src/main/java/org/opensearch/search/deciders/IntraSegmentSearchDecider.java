@@ -1,60 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.deciders;
-
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-
-/**
- * Evaluates whether queries and aggregations support intra-segment search.
- */  
-public class IntraSegmentSearchDecider {
-
-    private boolean querySupport = true;  
+        }
     private boolean aggSupport = true;
-    private String reason = "no query or aggregation evaluated";
-    private boolean hasQuery = false;  
-    private boolean hasAggregations = false;
-
-    public void evaluateForQuery(QueryBuilder queryBuilder) {  
-        hasQuery = true;
-        if (queryBuilder.supportsIntraSegmentSearch() == false) {
-            querySupport = false;  
-            reason = queryBuilder.getName() + " does not support intra-segment search";
-        }
-    }  
-
-    public void evaluateForAggregations(AggregatorFactories aggregations) {
-        if (aggregations == null) {  
-            return;
-        }
-        hasAggregations = true;  
-        if (aggregations.allFactoriesSupportIntraSegmentSearch() == false) {
-            aggSupport = false;
-            reason = "some aggregations do not support intra-segment search";  
-        }
-    }
-
-    public boolean shouldUseIntraSegmentSearch() {
-        if (hasQuery && querySupport == false) {
-            return false;  
-        }
-        if (hasAggregations && aggSupport == false) {
-            return false;  
-        }
-        return hasQuery || hasAggregations;
-    }  
-
     public String getReason() {
-        if (shouldUseIntraSegmentSearch()) {  
             return "query/aggregations support intra-segment search";
+        if (aggregations == null) {  
+            return false;  
+    private boolean querySupport = true;  
+import org.opensearch.index.query.QueryBuilder;
         }
-        return reason;  
+    public void evaluateForAggregations(AggregatorFactories aggregations) {
+    }  
+            return;
+ */  
+ */  
+        if (shouldUseIntraSegmentSearch()) {  
+        hasAggregations = true;  
+    public boolean shouldUseIntraSegmentSearch() {
+        }
+            querySupport = false;  
+        hasQuery = true;
+ * SPDX-License-Identifier: Apache-2.0
+    private boolean hasQuery = false;  
+        }
     }
+    private String reason = "no query or aggregation evaluated";
+ * compatible open source license.
+        }
+        if (queryBuilder.supportsIntraSegmentSearch() == false) {
+    }  
+ * Evaluates whether queries and aggregations support intra-segment search.
+        if (aggregations.allFactoriesSupportIntraSegmentSearch() == false) {
+        return hasQuery || hasAggregations;
+    private boolean hasAggregations = false;
+        if (hasQuery && querySupport == false) {
+import org.opensearch.search.aggregations.AggregatorFactories;
+package org.opensearch.search.deciders;
+ *
+            reason = "some aggregations do not support intra-segment search";  
+        if (hasAggregations && aggSupport == false) {
+public class IntraSegmentSearchDecider {
+        return reason;  
+            return false;  
+            aggSupport = false;
+/*  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        }
+/**
+            reason = queryBuilder.getName() + " does not support intra-segment search";
+    public void evaluateForQuery(QueryBuilder queryBuilder) {  
 }

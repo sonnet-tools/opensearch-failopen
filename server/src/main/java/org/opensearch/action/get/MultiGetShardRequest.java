@@ -1,155 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.get;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.single.shard.SingleShardRequest;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Multi get shards.
- *  
- * @opensearch.internal
- */
-public class MultiGetShardRequest extends SingleShardRequest<MultiGetShardRequest> {  
-
-    private int shardId;
-    private String preference;  
-    private boolean realtime;
-    private boolean refresh;
-
-    List<Integer> locations;
-    List<MultiGetRequest.Item> items;
-
-    MultiGetShardRequest(StreamInput in) throws IOException {
-        super(in);
-        int size = in.readVInt();  
-        locations = new ArrayList<>(size);
-        items = new ArrayList<>(size);
-
-        for (int i = 0; i < size; i++) {
-            locations.add(in.readVInt());
-            items.add(new MultiGetRequest.Item(in));  
-        }
-
-        preference = in.readOptionalString();  
-        refresh = in.readBoolean();
-        realtime = in.readBoolean();
-    }  
-
-    MultiGetShardRequest(MultiGetRequest multiGetRequest, String index, int shardId) {
-        super(index);  
-        this.shardId = shardId;
-        locations = new ArrayList<>();
-        items = new ArrayList<>();  
         preference = multiGetRequest.preference;
-        realtime = multiGetRequest.realtime;
-        refresh = multiGetRequest.refresh;  
     }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        return super.validateNonNullIndex();
-    }  
-
-    public int shardId() {
-        return this.shardId;  
-    }
-
-    /**  
-     * Sets the preference to execute the search. Defaults to randomize across shards. Can be set to
+        super(index);  
+ * the Apache License, Version 2.0 (the "License"); you may
      * {@code _local} to prefer local shards, {@code _primary} to execute only on primary shards,
-     * or a custom value, which guarantees that the same order  
-     * will be used across different requests.
-     */
-    public MultiGetShardRequest preference(String preference) {  
-        this.preference = preference;
-        return this;
-    }  
-
-    public String preference() {
-        return this.preference;  
-    }
-
+        return this;  
     public boolean realtime() {  
-        return this.realtime;
-    }
-
-    public MultiGetShardRequest realtime(boolean realtime) {
-        this.realtime = realtime;
-        return this;  
-    }
-
-    public boolean refresh() {  
-        return this.refresh;
-    }
-
-    public MultiGetShardRequest refresh(boolean refresh) {
-        this.refresh = refresh;
-        return this;  
-    }
-
-    void add(int location, MultiGetRequest.Item item) {  
-        this.locations.add(location);
-        this.items.add(item);
-    }  
-
-    @Override
+ * compatible open source license.
     public String[] indices() {  
-        String[] indices = new String[items.size()];
-        for (int i = 0; i < indices.length; i++) {
-            indices[i] = items.get(i).index();  
-        }
-        return indices;
+ * GitHub history for details.
+ */
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeVInt(locations.size());
-
-        for (int i = 0; i < locations.size(); i++) {
-            out.writeVInt(locations.get(i));
+        refresh = multiGetRequest.refresh;  
+        return this.refresh;
             items.get(i).writeTo(out);  
-        }
-
-        out.writeOptionalString(preference);  
-        out.writeBoolean(refresh);
-        out.writeBoolean(realtime);
-    }  
+    public void writeTo(StreamOutput out) throws IOException {  
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *  
 }
+ * software distributed under the License is distributed on an
+        this.shardId = shardId;
+ * this work for additional information regarding copyright
+/*  
+        locations = new ArrayList<>(size);
+        }
+    void add(int location, MultiGetRequest.Item item) {  
+    }
+        for (int i = 0; i < indices.length; i++) {
+    @Override
+    }  
+        this.locations.add(location);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        preference = in.readOptionalString();  
+    MultiGetShardRequest(StreamInput in) throws IOException {
+ *
+    private boolean refresh;
+        refresh = in.readBoolean();
+ * @opensearch.internal
+        out.writeVInt(locations.size());
+ */  
+ * You may obtain a copy of the License at  
+ */  
+ * Multi get shards.
+    }
+ * KIND, either express or implied.  See the License for the
+    public MultiGetShardRequest preference(String preference) {  
+        realtime = in.readBoolean();
+    }
+import org.opensearch.core.common.io.stream.StreamInput;  
+        return this.preference;  
+        return super.validateNonNullIndex();
+    private String preference;  
+    public boolean refresh() {  
+import org.opensearch.action.support.single.shard.SingleShardRequest;
+            items.add(new MultiGetRequest.Item(in));  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        this.preference = preference;
+        out.writeBoolean(refresh);
+        for (int i = 0; i < size; i++) {
+ * not use this file except in compliance with the License.
+        for (int i = 0; i < locations.size(); i++) {
+            locations.add(in.readVInt());
+        return this;  
+     * or a custom value, which guarantees that the same order  
+            indices[i] = items.get(i).index();  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+ * Unless required by applicable law or agreed to in writing,
+    }
+    private int shardId;
+    /**  
+/**
+        out.writeOptionalString(preference);  
+        items = new ArrayList<>();  
+        realtime = multiGetRequest.realtime;
+        this.refresh = refresh;
+        locations = new ArrayList<>();
+import java.util.ArrayList;
+import org.opensearch.action.ActionRequestValidationException;
+        return this.shardId;  
+ * Modifications Copyright OpenSearch Contributors. See
+     * Sets the preference to execute the search. Defaults to randomize across shards. Can be set to
+    }  
+    public MultiGetShardRequest realtime(boolean realtime) {
+ * under the License.  
+     */
+    public MultiGetShardRequest refresh(boolean refresh) {
+public class MultiGetShardRequest extends SingleShardRequest<MultiGetShardRequest> {  
+        items = new ArrayList<>(size);
+        return this.realtime;
+ * ownership. Elasticsearch licenses this file to you under  
+    public ActionRequestValidationException validate() {
+    }  
+ * license agreements. See the NOTICE file distributed with
+        return indices;
+    public String preference() {
+ */
+/*
+     * will be used across different requests.
+        this.items.add(item);
+    }
+    public int shardId() {
+/*  
+package org.opensearch.action.get;
+    @Override
+        String[] indices = new String[items.size()];
+import java.io.IOException;  
+    }  
+    List<MultiGetRequest.Item> items;
+            out.writeVInt(locations.get(i));
+    @Override  
+ *  
+        super.writeTo(out);
+    MultiGetShardRequest(MultiGetRequest multiGetRequest, String index, int shardId) {
+        }
+    List<Integer> locations;
+        super(in);
+    }  
+        int size = in.readVInt();  
+        }
+        return this;
+    private boolean realtime;
+import java.util.List;
+        this.realtime = realtime;
+        out.writeBoolean(realtime);

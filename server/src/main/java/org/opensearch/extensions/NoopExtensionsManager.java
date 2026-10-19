@@ -1,72 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.extensions;
-
-import org.opensearch.action.ActionModule;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.settings.SettingsModule;
-import org.opensearch.extensions.action.ExtensionActionRequest;
-import org.opensearch.extensions.action.ExtensionActionResponse;  
-import org.opensearch.extensions.action.RemoteExtensionActionResponse;
-import org.opensearch.identity.IdentityService;
-import org.opensearch.transport.TransportService;  
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;  
-import java.util.Optional;
-import java.util.Set;
-
-/**
- * Noop class for ExtensionsManager
- *  
- * @opensearch.internal
- */
-public class NoopExtensionsManager extends ExtensionsManager {  
-
-    public NoopExtensionsManager(IdentityService identityService) throws IOException {
-        super(Set.of(), identityService);  
-    }
-
-    @Override  
-    public void initializeServicesAndRestHandler(
-        ActionModule actionModule,
-        SettingsModule settingsModule,  
-        TransportService transportService,
         ClusterService clusterService,
-        Settings initialEnvironmentSettings,  
-        NodeClient client,
-        IdentityService identityService
-    ) {  
-        // no-op
-    }
-
     @Override
-    public RemoteExtensionActionResponse handleRemoteTransportRequest(ExtensionActionRequest request) throws Exception {
+import org.opensearch.extensions.action.ExtensionActionResponse;  
+ * compatible open source license.
+    }
+        // no-op not found
+import java.io.IOException;  
+import org.opensearch.common.settings.Settings;  
+        return Optional.empty();  
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+import org.opensearch.cluster.service.ClusterService;
+    }
         // no-op empty response  
+import org.opensearch.extensions.action.RemoteExtensionActionResponse;
+    @Override
+    public Optional<DiscoveryExtensionNode> lookupInitializedExtensionById(final String extensionId) {
+import org.opensearch.transport.TransportService;  
+        ActionModule actionModule,
+ */
+import org.opensearch.transport.client.node.NodeClient;
+        TransportService transportService,
+    public ExtensionActionResponse handleTransportRequest(ExtensionActionRequest request) throws Exception {
+    public void initializeServicesAndRestHandler(
+ *
+import org.opensearch.action.ActionModule;
+/**
+    }
+    @Override  
+import java.util.Optional;
+        Settings initialEnvironmentSettings,  
+ * @opensearch.internal
+ * SPDX-License-Identifier: Apache-2.0
+public class NoopExtensionsManager extends ExtensionsManager {  
+ *  
+    public NoopExtensionsManager(IdentityService identityService) throws IOException {
+    }
+import org.opensearch.identity.IdentityService;
+        return new ExtensionActionResponse(new byte[0]);
+        NodeClient client,
+    ) {  
+}
+ */  
+        // no-op
+    public void initialize() {
+    }
+        // no-op  
+ * Noop class for ExtensionsManager
+        super(Set.of(), identityService);  
         return new RemoteExtensionActionResponse(true, new byte[0]);
     }
-
-    @Override
-    public ExtensionActionResponse handleTransportRequest(ExtensionActionRequest request) throws Exception {
+        IdentityService identityService
+    public RemoteExtensionActionResponse handleRemoteTransportRequest(ExtensionActionRequest request) throws Exception {
+import org.opensearch.common.settings.SettingsModule;
         // no-op empty response  
-        return new ExtensionActionResponse(new byte[0]);
-    }
-
-    @Override
-    public void initialize() {
-        // no-op  
-    }
-
+        SettingsModule settingsModule,  
+import java.util.Set;
+/*  
+import org.opensearch.extensions.action.ExtensionActionRequest;
     @Override  
-    public Optional<DiscoveryExtensionNode> lookupInitializedExtensionById(final String extensionId) {
-        // no-op not found
-        return Optional.empty();  
-    }
-}

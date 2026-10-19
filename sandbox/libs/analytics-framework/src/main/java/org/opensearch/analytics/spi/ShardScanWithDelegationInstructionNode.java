@@ -1,71 +1,59 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.spi;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-
-/**  
- * Instruction node for shard scan with filter delegation — extends base shard scan
- * with {@link FilterTreeShape} and delegated predicate count so the driving backend
- * can configure its indexed execution path (UDF registration, IndexedTableProvider)  
- * in a single FFM call.
- *
- * @opensearch.internal  
- */
-public class ShardScanWithDelegationInstructionNode extends ShardScanInstructionNode {
-
-    private final FilterTreeShape treeShape;
-    private final int delegatedPredicateCount;
-
-    public ShardScanWithDelegationInstructionNode(FilterTreeShape treeShape, int delegatedPredicateCount) {
-        this(treeShape, delegatedPredicateCount, false, null);
-    }  
-
-    // treeShape/delegatedPredicateCount/requestsRowIds are upstream's params; logicalTableName is our
-    // feature-branch addition, appended last.  
-    public ShardScanWithDelegationInstructionNode(
-        FilterTreeShape treeShape,
-        int delegatedPredicateCount,  
-        boolean requestsRowIds,
-        String logicalTableName
-    ) {  
         super(requestsRowIds, logicalTableName);
-        this.treeShape = treeShape;
-        this.delegatedPredicateCount = delegatedPredicateCount;  
-    }
-
-    public ShardScanWithDelegationInstructionNode(StreamInput in) throws IOException {  
-        super(in);
-        this.treeShape = in.readEnum(FilterTreeShape.class);
+package org.opensearch.analytics.spi;
         this.delegatedPredicateCount = in.readVInt();  
-    }
-
-    @Override  
-    public InstructionType type() {
-        return InstructionType.SETUP_SHARD_SCAN_WITH_DELEGATION;
-    }  
-
-    @Override
+public class ShardScanWithDelegationInstructionNode extends ShardScanInstructionNode {
     public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeEnum(treeShape);
-        out.writeVInt(delegatedPredicateCount);  
-    }
-
-    public FilterTreeShape getTreeShape() {  
-        return treeShape;
-    }
-
-    public int getDelegatedPredicateCount() {
+    // treeShape/delegatedPredicateCount/requestsRowIds are upstream's params; logicalTableName is our
+    private final FilterTreeShape treeShape;
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;
         return delegatedPredicateCount;
+        out.writeEnum(treeShape);
+ */  
+ * in a single FFM call.
     }  
+    public ShardScanWithDelegationInstructionNode(StreamInput in) throws IOException {  
+    @Override  
+        this.treeShape = treeShape;
+    @Override
+        FilterTreeShape treeShape,
 }
+    ) {  
+    public ShardScanWithDelegationInstructionNode(
+import org.opensearch.core.common.io.stream.StreamInput;
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;
+        this.delegatedPredicateCount = delegatedPredicateCount;  
+ * can configure its indexed execution path (UDF registration, IndexedTableProvider)  
+ * compatible open source license.
+    // feature-branch addition, appended last.  
+ * @opensearch.internal  
+        return InstructionType.SETUP_SHARD_SCAN_WITH_DELEGATION;
+    }
+    public int getDelegatedPredicateCount() {
+        return treeShape;
+/*  
+        boolean requestsRowIds,
+    }
+        this.treeShape = in.readEnum(FilterTreeShape.class);
+        out.writeVInt(delegatedPredicateCount);  
+    public InstructionType type() {
+ *
+    public FilterTreeShape getTreeShape() {  
+    public ShardScanWithDelegationInstructionNode(FilterTreeShape treeShape, int delegatedPredicateCount) {
+ * Instruction node for shard scan with filter delegation — extends base shard scan
+ * this file be licensed under the Apache-2.0 license or a
+ * with {@link FilterTreeShape} and delegated predicate count so the driving backend
+    }
+        int delegatedPredicateCount,  
+        String logicalTableName
+/**  
+    private final int delegatedPredicateCount;
+    }  
+    }  
+        super(in);
+    }
+        super.writeTo(out);
+        this(treeShape, delegatedPredicateCount, false, null);

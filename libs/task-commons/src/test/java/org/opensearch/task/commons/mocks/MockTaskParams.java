@@ -1,25 +1,19 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.task.commons.mocks;
-
-import org.opensearch.task.commons.task.TaskParams;
-
-public class MockTaskParams extends TaskParams {  
-
-    private final String value;
-
-    public MockTaskParams(String mockValue) {
-        super();
-        value = mockValue;  
-    }
-
-    public String getValue() {  
-        return value;
-    }
 }  
+    }
+public class MockTaskParams extends TaskParams {  
+    public String getValue() {  
+    public MockTaskParams(String mockValue) {
+ *
+    private final String value;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+import org.opensearch.task.commons.task.TaskParams;
+package org.opensearch.task.commons.mocks;
+ */  
+        super();
+ * SPDX-License-Identifier: Apache-2.0
+        value = mockValue;  
+ * The OpenSearch Contributors require contributions made to  
+        return value;
+ * compatible open source license.

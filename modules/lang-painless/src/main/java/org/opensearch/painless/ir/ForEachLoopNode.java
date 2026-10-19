@@ -1,78 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+    }
+ *  
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
  */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.Location;
-import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;
-
-public class ForEachLoopNode extends StatementNode {
-
-    /* ---- begin tree structure ---- */  
-
-    private ConditionNode conditionNode;
-
-    public void setConditionNode(ConditionNode conditionNode) {
-        this.conditionNode = conditionNode;
+}
+    }
     }  
-
-    public ConditionNode getConditionNode() {
-        return conditionNode;  
-    }
-
-    /* ---- end tree structure, begin visitor ---- */  
-
-    @Override
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
-        irTreeVisitor.visitForEachLoop(this, scope);
-    }
-
-    @Override
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        conditionNode.visit(irTreeVisitor, scope);  
-    }
-
+ * Modifications Copyright OpenSearch Contributors. See
+ * license agreements. See the NOTICE file distributed with
+        this.conditionNode = conditionNode;
+package org.opensearch.painless.ir;
+    /* ---- begin tree structure ---- */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * specific language governing permissions and limitations
+/*
     /* ---- end visitor ---- */  
-
-    public ForEachLoopNode(Location location) {
+import org.opensearch.painless.phase.IRTreeVisitor;
+    private ConditionNode conditionNode;
+import org.opensearch.painless.symbol.WriteScope;
+    @Override
+    public void setConditionNode(ConditionNode conditionNode) {
         super(location);  
     }
-
-    @Override  
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
-        writeScope = writeScope.newScope();
-        conditionNode.write(classWriter, methodWriter, writeScope);  
+        irTreeVisitor.visitForEachLoop(this, scope);
+ *
+ * not use this file except in compliance with the License.
     }
-}
+ *
+ * compatible open source license.
+    public ForEachLoopNode(Location location) {
+    @Override
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing,
+/*  
+        return conditionNode;  
+import org.opensearch.painless.MethodWriter;  
+/*  
+ */
+        writeScope = writeScope.newScope();
+    /* ---- end tree structure, begin visitor ---- */  
+    }
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
+import org.opensearch.painless.Location;
+        conditionNode.write(classWriter, methodWriter, writeScope);  
+        conditionNode.visit(irTreeVisitor, scope);  
+ */  
+    public ConditionNode getConditionNode() {
+import org.opensearch.painless.ClassWriter;
+public class ForEachLoopNode extends StatementNode {
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at  
+ * GitHub history for details.
+ * under the License.  
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+    @Override  
+ * ownership. Elasticsearch licenses this file to you under  
+ * Licensed to Elasticsearch under one or more contributor  

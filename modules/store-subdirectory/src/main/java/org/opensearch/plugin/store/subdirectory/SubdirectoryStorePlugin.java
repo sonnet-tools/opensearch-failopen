@@ -1,111 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.store.subdirectory;
-
-import org.apache.lucene.store.Directory;
+     */
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.env.ShardLock;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.Store;  
-import org.opensearch.plugins.IndexStorePlugin;
-import org.opensearch.plugins.Plugin;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;  
-
-/**
- * OpenSearch plugin that provides subdirectory-aware store functionality.  
- *
- * This plugin enables OpenSearch to work with stores that organize files
- * in subdirectories within shard data paths. It registers a custom store  
- * factory that creates {@link SubdirectoryAwareStore} instances capable
- * of handling nested directory structures during regular operations and
- * peer recovery.  
- */
-public class SubdirectoryStorePlugin extends Plugin implements IndexStorePlugin {
-    /**  
-     * Creates a new SubdirectoryStorePlugin instance.
-     */
-    public SubdirectoryStorePlugin() {  
-        // Default constructor
-    }
-
-    /**
+        /**  
      * Returns the store factories provided by this plugin.
-     *  
-     * @return A map containing the "subdirectory_store" factory that creates
-     *         {@link SubdirectoryAwareStore} instances
-     */  
-    @Override
+ */  
+            Store.OnClose onClose,  
     public Map<String, StoreFactory> getStoreFactories() {
-        Map<String, StoreFactory> map = new HashMap<>();  
-        map.put("subdirectory_store", new SubdirectoryStoreFactory());
-        return Collections.unmodifiableMap(map);
-    }  
-
-    /**
-     * Factory for creating {@link SubdirectoryAwareStore} instances.  
-     *
-     * This factory creates stores that can handle files organized in
-     * subdirectories within shard data paths, with support for  
-     * peer recovery operations.
-     */
-    static class SubdirectoryStoreFactory implements StoreFactory {  
         /**
+            ShardId shardId,  
+        map.put("subdirectory_store", new SubdirectoryStoreFactory());
+ * factory that creates {@link SubdirectoryAwareStore} instances capable
+     *
+import org.opensearch.env.ShardLock;  
+     *  
+            ShardLock shardLock,
+         * @param indexSettings the index settings
+         *
+        ) {
+         */  
+         * @param shardLock the shard lock
+         * @param shardLock the shard lock  
+import java.util.HashMap;
+            IndexSettings indexSettings,
+/*  
+    /**
+            IndexSettings indexSettings,  
+import java.util.Collections;
+        public Store newStore(
+package org.opensearch.plugin.store.subdirectory;
+import org.apache.lucene.store.Directory;
+ * peer recovery.  
+ *
+            Directory directory,
          * Creates a new {@link SubdirectoryAwareStore} instance.
-         *  
+         * @param onClose callback to execute when the store is closed
+            ShardPath shardPath,
+        @Override  
+     * This factory creates stores that can handle files organized in
+ *
+         * @param shardPath the path information for the shard  
+import org.opensearch.plugins.Plugin;
+    }  
+ * This plugin enables OpenSearch to work with stores that organize files
+     * Creates a new SubdirectoryStorePlugin instance.
+        }  
+    @Override
+import org.opensearch.index.store.Store;  
+/**
+ * compatible open source license.
+         * @return a new SubdirectoryAwareStore instance
+            return new SubdirectoryAwareStore(shardId, indexSettings, directory, shardLock, onClose, shardPath);  
+            ShardId shardId,
+    }
+ * of handling nested directory structures during regular operations and
+    static class SubdirectoryStoreFactory implements StoreFactory {  
+        public Store newStore(
          * @param shardId the shard identifier
          * @param indexSettings the index settings
-         * @param directory the underlying Lucene directory  
-         * @param shardLock the shard lock
+        Map<String, StoreFactory> map = new HashMap<>();  
+        return Collections.unmodifiableMap(map);
+     */  
          * @param onClose callback to execute when the store is closed
-         * @param shardPath the path information for the shard  
-         * @return a new SubdirectoryAwareStore instance
-         */
-        @Override  
-        public Store newStore(
-            ShardId shardId,
-            IndexSettings indexSettings,  
-            Directory directory,
-            ShardLock shardLock,
-            Store.OnClose onClose,  
-            ShardPath shardPath
-        ) {
-            return new SubdirectoryAwareStore(shardId, indexSettings, directory, shardLock, onClose, shardPath);  
-        }
-
-        /**  
-         * Creates a new {@link SubdirectoryAwareStore} instance.
-         *
+ * SPDX-License-Identifier: Apache-2.0
+     */
          * @param shardId the shard identifier  
-         * @param indexSettings the index settings
-         * @param directory the underlying Lucene directory
-         * @param shardLock the shard lock  
-         * @param onClose callback to execute when the store is closed
-         * @param shardPath the path information for the shard
-         * @param directoryFactory the directory factory to create child level directory.  
-         *                         Used for Context Aware Segments enabled indices.
-         * @return a new SubdirectoryAwareStore instance
-         */  
-        @Override
-        public Store newStore(
-            ShardId shardId,  
-            IndexSettings indexSettings,
-            Directory directory,
-            ShardLock shardLock,  
+         *  
             Store.OnClose onClose,
-            ShardPath shardPath,
+ * The OpenSearch Contributors require contributions made to  
+         */
+    /**
+import org.opensearch.index.IndexSettings;
+         * @return a new SubdirectoryAwareStore instance
+     * peer recovery operations.
+         *                         Used for Context Aware Segments enabled indices.
+ */
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
             DirectoryFactory directoryFactory  
-        ) {
+            Directory directory,
+         * @param shardPath the path information for the shard
+        // Default constructor
             return new SubdirectoryAwareStore(shardId, indexSettings, directory, shardLock, onClose, shardPath, directoryFactory);
-        }  
-    }
+import org.opensearch.index.shard.ShardPath;
+         * Creates a new {@link SubdirectoryAwareStore} instance.
+        }
+ * OpenSearch plugin that provides subdirectory-aware store functionality.  
 }
+    public SubdirectoryStorePlugin() {  
+     * Factory for creating {@link SubdirectoryAwareStore} instances.  
+     * @return A map containing the "subdirectory_store" factory that creates
+ * in subdirectories within shard data paths. It registers a custom store  
+        ) {
+import org.opensearch.plugins.IndexStorePlugin;
+            ShardLock shardLock,  
+         * @param directory the underlying Lucene directory  
+        @Override
+            ShardPath shardPath
+         * @param directory the underlying Lucene directory
+         * @param directoryFactory the directory factory to create child level directory.  
+    }
+import java.util.Map;  
+     *         {@link SubdirectoryAwareStore} instances
+     * subdirectories within shard data paths, with support for  
+public class SubdirectoryStorePlugin extends Plugin implements IndexStorePlugin {

@@ -1,58 +1,49 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import java.util.Map;
-
-/**  
- * A script used in significant terms heuristic scoring.
- *
- * @opensearch.internal  
- */
-public abstract class SignificantTermsHeuristicScoreScript {
-
     public static final String[] PARAMETERS = { "params" };
-
+ * Modifications Copyright OpenSearch Contributors. See
     public static final ScriptContext<Factory> CONTEXT = new ScriptContext<>("script_heuristic", Factory.class);  
-
-    public abstract double execute(Map<String, Object> params);
-
+ */
+import java.util.Map;
+}  
+ *  
+ */
     /**
-     * Factory for a significant terms heuristic score script
-     *  
+ * You may obtain a copy of the License at  
+ * Unless required by applicable law or agreed to in writing,
      * @opensearch.internal
      */
+ * The OpenSearch Contributors require contributions made to  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+     *  
+/**  
+ * not use this file except in compliance with the License.
     public interface Factory extends ScriptFactory {  
-        SignificantTermsHeuristicScoreScript newInstance();
     }
-}  
+/*  
+ * GitHub history for details.
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+ * A script used in significant terms heuristic scoring.
+ * @opensearch.internal  
+ * compatible open source license.
+        SignificantTermsHeuristicScoreScript newInstance();
+/*
+ *
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ * license agreements. See the NOTICE file distributed with
+/*  
+    public abstract double execute(Map<String, Object> params);
+ * specific language governing permissions and limitations
+ * KIND, either express or implied.  See the License for the
+public abstract class SignificantTermsHeuristicScoreScript {
+     * Factory for a significant terms heuristic score script
+package org.opensearch.script;

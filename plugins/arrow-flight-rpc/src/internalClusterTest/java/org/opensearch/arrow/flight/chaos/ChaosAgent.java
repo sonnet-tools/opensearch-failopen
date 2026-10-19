@@ -1,82 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+ * compatible open source license.
+                switch (className) {
+                        break;
+            return className.startsWith("org/opensearch/arrow/flight/transport/Flight");
+                    case "org/opensearch/arrow/flight/transport/FlightTransport":  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.chaos;
-
-import java.lang.instrument.ClassFileTransformer;
-import java.lang.instrument.Instrumentation;
-import java.security.ProtectionDomain;  
-import javassist.ClassPool;
-import javassist.CtClass;
-import javassist.CtConstructor;  
-
-/**
- * Java agent for bytecode injection of chaos testing  
- * Usage: -javaagent:chaos-agent.jar
- */
-public class ChaosAgent {  
-
-    public static void premain(String agentArgs, Instrumentation inst) {
-        inst.addTransformer(new ChaosTransformer());  
-    }
-
-    public static void agentmain(String agentArgs, Instrumentation inst) {  
-        inst.addTransformer(new ChaosTransformer(), true);
-    }
-
-    private static class ChaosTransformer implements ClassFileTransformer {
-
-        @Override  
-        public byte[] transform(
-            ClassLoader loader,
-            String className,  
-            Class<?> classBeingRedefined,
+        private boolean shouldTransform(String className) {  
+        private void transformFlightServerChannelWithDelay(CtClass ctClass) throws Exception {
+            } catch (Exception e) {
             ProtectionDomain protectionDomain,
-            byte[] classfileBuffer  
-        ) {
-
-            if (!shouldTransform(className)) {  
-                return null;
-            }
-
-            try {
-                ClassPool pool = ClassPool.getDefault();
-                CtClass ctClass = pool.get(className.replace('/', '.'));  
-
-                switch (className) {
-                    case "org/opensearch/arrow/flight/transport/FlightTransport":  
-                        // transformFlightTransport(ctClass);
+        }
+    private static class ChaosTransformer implements ClassFileTransformer {
                         break;
                     case "org/opensearch/arrow/flight/transport/FlightTransportChannel":  
+                        // transformFlightTransportResponse(ctClass);
+                ClassPool pool = ClassPool.getDefault();
+    public static void premain(String agentArgs, Instrumentation inst) {
+            }  
+/**
+import java.lang.instrument.ClassFileTransformer;
+        }
+import javassist.CtClass;
+import java.lang.instrument.Instrumentation;
+            ctr[0].insertBefore("org.opensearch.arrow.flight.chaos.ChaosScenario.injectChaos();");  
+            if (!shouldTransform(className)) {  
+    public static void agentmain(String agentArgs, Instrumentation inst) {  
+        ) {
+/*  
+public class ChaosAgent {  
+package org.opensearch.arrow.flight.chaos;
                         // transformFlightTransportChannel(ctClass);
+                }
+                        break;
+}  
+            ClassLoader loader,
+ * Usage: -javaagent:chaos-agent.jar
+            byte[] classfileBuffer  
+    }
+                        // transformFlightTransport(ctClass);
+    }
+            String className,  
+ */
+                    case "org/opensearch/arrow/flight/transport/FlightServerChannel":  
+                return ctClass.toBytecode();  
+ * Java agent for bytecode injection of chaos testing  
+                        transformFlightServerChannelWithDelay(ctClass);
+        @Override  
+import javassist.ClassPool;
+            try {
+        inst.addTransformer(new ChaosTransformer());  
+ */  
                         break;
                     case "org/opensearch/arrow/flight/transport/FlightTransportResponse":  
-                        // transformFlightTransportResponse(ctClass);
-                        break;
-                    case "org/opensearch/arrow/flight/transport/FlightServerChannel":  
-                        transformFlightServerChannelWithDelay(ctClass);
-                        break;
-
-                }
-
-                return ctClass.toBytecode();  
-            } catch (Exception e) {
-                return null;
-            }  
-        }
-
-        private boolean shouldTransform(String className) {  
-            return className.startsWith("org/opensearch/arrow/flight/transport/Flight");
-        }
-
-        private void transformFlightServerChannelWithDelay(CtClass ctClass) throws Exception {
             CtConstructor[] ctr = ctClass.getConstructors();
-            ctr[0].insertBefore("org.opensearch.arrow.flight.chaos.ChaosScenario.injectChaos();");  
-        }
+ *
     }
-}  
+                CtClass ctClass = pool.get(className.replace('/', '.'));  
+        inst.addTransformer(new ChaosTransformer(), true);
+            }
+                return null;
+        public byte[] transform(
+ * SPDX-License-Identifier: Apache-2.0
+            Class<?> classBeingRedefined,
+                return null;
+import java.security.ProtectionDomain;  
+        }
+import javassist.CtConstructor;  

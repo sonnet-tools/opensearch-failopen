@@ -1,261 +1,234 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.seqno;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.replication.ReplicationRequest;
-import org.opensearch.action.support.replication.ReplicationResponse;  
-import org.opensearch.action.support.replication.ReplicationTask;
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.cluster.action.shard.ShardStateAction;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.concurrent.ThreadContextAccess;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.index.shard.IndexShardClosedException;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.node.NodeClosedException;  
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportException;  
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.Objects;  
-
-/**
- * Replication action responsible for background syncing retention leases to replicas. This action is deliberately a replication action so  
- * that if a replica misses a background retention lease sync then that shard will not be marked as stale. We have some tolerance for a
- * shard copy missing renewals of retention leases since the background sync interval is much smaller than the expected lifetime of
- * retention leases.  
- *
- * @opensearch.internal
- */  
-public class RetentionLeaseBackgroundSyncAction extends TransportReplicationAction<
-    RetentionLeaseBackgroundSyncAction.Request,
-    RetentionLeaseBackgroundSyncAction.Request,  
-    ReplicationResponse> {
-
-    public static final String ACTION_NAME = "indices:admin/seq_no/retention_lease_background_sync";  
-    private static final Logger LOGGER = LogManager.getLogger(RetentionLeaseSyncAction.class);
-
-    protected Logger getLogger() {  
-        return LOGGER;
-    }
-
-    @Inject
-    public RetentionLeaseBackgroundSyncAction(
-        final Settings settings,  
-        final TransportService transportService,
-        final ClusterService clusterService,
-        final IndicesService indicesService,  
-        final ThreadPool threadPool,
-        final ShardStateAction shardStateAction,
-        final ActionFilters actionFilters  
-    ) {
-        super(
-            settings,  
-            ACTION_NAME,
-            transportService,
-            clusterService,  
-            indicesService,
-            threadPool,
-            shardStateAction,  
-            actionFilters,
-            Request::new,
-            Request::new,  
-            ThreadPool.Names.MANAGEMENT
-        );
-    }  
-
-    @Override
-    protected void doExecute(Task task, Request request, ActionListener<ReplicationResponse> listener) {  
-        assert false : "use RetentionLeaseBackgroundSyncAction#backgroundSync";
-    }
-
-    final void backgroundSync(ShardId shardId, String primaryAllocationId, long primaryTerm, RetentionLeases retentionLeases) {
-        final ThreadContext threadContext = threadPool.getThreadContext();
-        try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {  
-            // we have to execute under the system context so that if security is enabled the sync is authorized
-            ThreadContextAccess.doPrivilegedVoid(threadContext::markAsSystemContext);
-            final Request request = new Request(shardId, retentionLeases);  
-            final ReplicationTask task = (ReplicationTask) taskManager.register("transport", "retention_lease_background_sync", request);
-            transportService.sendChildRequest(
-                clusterService.localNode(),  
-                transportPrimaryAction,
-                new ConcreteShardRequest<>(request, primaryAllocationId, primaryTerm),
-                task,  
-                transportOptions,
-                new TransportResponseHandler<ReplicationResponse>() {
-                    @Override  
-                    public ReplicationResponse read(StreamInput in) throws IOException {
-                        return newResponseInstance(in);
-                    }  
-
-                    @Override
-                    public String executor() {  
-                        return ThreadPool.Names.SAME;
-                    }
-
-                    @Override
-                    public void handleResponse(ReplicationResponse response) {
-                        task.setPhase("finished");  
-                        taskManager.unregister(task);
-                    }
-
-                    @Override
-                    public void handleException(TransportException e) {
-                        task.setPhase("finished");  
-                        taskManager.unregister(task);
-                        if (ExceptionsHelper.unwrap(e, NodeClosedException.class) != null) {
-                            // node shutting down  
-                            return;
-                        }
-                        if (ExceptionsHelper.unwrap(  
-                            e,
-                            IndexNotFoundException.class,
-                            AlreadyClosedException.class,  
-                            IndexShardClosedException.class
                         ) != null) {
-                            // the index was deleted or the shard is closed  
-                            return;
-                        }
-                        getLogger().warn(new ParameterizedMessage("{} retention lease background sync failed", shardId), e);  
-                    }
-                }
-            );  
-        }
-    }
-
-    @Override
-    protected void shardOperationOnPrimary(
-        final Request request,  
-        final IndexShard primary,
-        ActionListener<PrimaryResult<Request, ReplicationResponse>> listener
-    ) {  
-        ActionListener.completeWith(listener, () -> {
-            assert request.waitForActiveShards().equals(ActiveShardCount.NONE) : request.waitForActiveShards();
-            Objects.requireNonNull(request);  
-            Objects.requireNonNull(primary);
-            primary.persistRetentionLeases();
-            return new PrimaryResult<>(request, new ReplicationResponse());  
-        });
-    }
-
-    @Override
-    protected void shardOperationOnReplica(Request request, IndexShard replica, ActionListener<ReplicaResult> listener) {
-        ActionListener.completeWith(listener, () -> {  
-            Objects.requireNonNull(request);
-            Objects.requireNonNull(replica);
-            replica.updateRetentionLeasesOnReplica(request.getRetentionLeases());  
-            replica.persistRetentionLeases();
-            return new ReplicaResult();
-        });  
-    }
-
-    /**  
-     * Request for retention lease bground sync action
-     *
-     * @opensearch.internal  
-     */
-    public static final class Request extends ReplicationRequest<Request> {
-
-        private RetentionLeases retentionLeases;
-
-        public RetentionLeases getRetentionLeases() {  
-            return retentionLeases;
-        }
-
-        public Request(StreamInput in) throws IOException {
-            super(in);
-            retentionLeases = new RetentionLeases(in);  
-        }
-
-        public Request(final ShardId shardId, final RetentionLeases retentionLeases) {  
-            super(Objects.requireNonNull(shardId));
-            this.retentionLeases = Objects.requireNonNull(retentionLeases);
-            waitForActiveShards(ActiveShardCount.NONE);  
-        }
-
+                        taskManager.unregister(task);
         @Override  
+ * Replication action responsible for background syncing retention leases to replicas. This action is deliberately a replication action so  
+    final void backgroundSync(ShardId shardId, String primaryAllocationId, long primaryTerm, RetentionLeases retentionLeases) {
+                            return;
+                    @Override
+        try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {  
+        assert false : "use RetentionLeaseBackgroundSyncAction#backgroundSync";
+ * not use this file except in compliance with the License.
+            super(Objects.requireNonNull(shardId));
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.util.concurrent.ThreadContext;
+import org.opensearch.action.support.replication.ReplicationRequest;
+        public RetentionLeases getRetentionLeases() {  
+    public static final class Request extends ReplicationRequest<Request> {
+                            IndexShardClosedException.class
+            Objects.requireNonNull(request);
+        public String toString() {  
+                + ", timeout="  
+            shardStateAction,  
+import org.opensearch.action.support.ActiveShardCount;
+                        task.setPhase("finished");  
+            );  
+import org.opensearch.action.support.ActionFilters;  
+                + shardId
+                    public String executor() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.transport.TransportResponseHandler;
+        @Override
+ * that if a replica misses a background retention lease sync then that shard will not be marked as stale. We have some tolerance for a
+/**
+        final IndexShard primary,
+ */  
+    }
+                    public void handleException(TransportException e) {
+        }
+                new TransportResponseHandler<ReplicationResponse>() {
+        ActionListener.completeWith(listener, () -> {  
+                    @Override  
+        }
+    ReplicationResponse> {
+                + ", waitForActiveShards="
+                + ", index='"
+ */
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+        ActionListener.completeWith(listener, () -> {
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+                    @Override
+import org.opensearch.cluster.action.shard.ShardStateAction;  
+            final ReplicationTask task = (ReplicationTask) taskManager.register("transport", "retention_lease_background_sync", request);
+        final IndicesService indicesService,  
+        }
+                        return newResponseInstance(in);
+    }
+                    public void handleResponse(ReplicationResponse response) {
+            transportService.sendChildRequest(
+import org.opensearch.common.inject.Inject;
+        return new ReplicationResponse(in);
+import org.opensearch.index.shard.IndexShardClosedException;
+            return new PrimaryResult<>(request, new ReplicationResponse());  
+            return new ReplicaResult();
+                transportPrimaryAction,
+                            // the index was deleted or the shard is closed  
+     * Request for retention lease bground sync action
+            threadPool,
+    @Override
         public void writeTo(final StreamOutput out) throws IOException {
+    private static final Logger LOGGER = LogManager.getLogger(RetentionLeaseSyncAction.class);
+/*  
+                }
+        }  
+            return new ReplicationTask(id, type, action, "retention_lease_background_sync shardId=" + shardId, parentTaskId, headers);
+            transportService,
+    protected void shardOperationOnReplica(Request request, IndexShard replica, ActionListener<ReplicaResult> listener) {
+        final Settings settings,  
+                    public ReplicationResponse read(StreamInput in) throws IOException {
+        final ShardStateAction shardStateAction,
+        private RetentionLeases retentionLeases;
+import org.opensearch.core.index.shard.ShardId;  
+            settings,  
+import org.opensearch.tasks.Task;
+                + index  
+    protected void shardOperationOnPrimary(
+            actionFilters,
+    RetentionLeaseBackgroundSyncAction.Request,  
+                        return ThreadPool.Names.SAME;
+                        }
+ *
+            return "RetentionLeaseBackgroundSyncAction.Request{"
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+                task,  
+    }
+            ThreadPool.Names.MANAGEMENT
+            ThreadContextAccess.doPrivilegedVoid(threadContext::markAsSystemContext);
+            primary.persistRetentionLeases();
+ * this work for additional information regarding copyright
+                            return;
+                            e,
+    @Override
+            retentionLeases = new RetentionLeases(in);  
+                            AlreadyClosedException.class,  
+        final ThreadContext threadContext = threadPool.getThreadContext();
+ * Licensed to Elasticsearch under one or more contributor  
+            replica.persistRetentionLeases();
+                        task.setPhase("finished");  
+import org.opensearch.index.shard.IndexShard;  
+    /**  
+import org.opensearch.common.util.concurrent.ThreadContextAccess;
+import org.opensearch.indices.IndicesService;
+                new ConcreteShardRequest<>(request, primaryAllocationId, primaryTerm),
+            Objects.requireNonNull(request);  
+            assert request.waitForActiveShards().equals(ActiveShardCount.NONE) : request.waitForActiveShards();
+    ) {
+ * ownership. Elasticsearch licenses this file to you under  
+     *
+                + waitForActiveShards  
+import java.util.Map;
+ *
+import org.opensearch.core.action.ActionListener;  
+            Request::new,
+import java.util.Objects;  
+        );
+    }
+    }  
+        public Request(StreamInput in) throws IOException {
+                    }
+        }
+ */  
+                            IndexNotFoundException.class,
+import org.apache.lucene.store.AlreadyClosedException;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+import org.opensearch.index.IndexNotFoundException;
+}
+            final Request request = new Request(shardId, retentionLeases);  
+                        if (ExceptionsHelper.unwrap(  
+     * @opensearch.internal  
+                + ", shardId="
+ *  
+ * GitHub history for details.
+            // we have to execute under the system context so that if security is enabled the sync is authorized
+                + retentionLeases  
+        final ThreadPool threadPool,
+        @Override  
+public class RetentionLeaseBackgroundSyncAction extends TransportReplicationAction<
+/*
+ * You may obtain a copy of the License at  
+                        taskManager.unregister(task);
+                + '}';
+            super(in);
+import java.io.IOException;
+ * Unless required by applicable law or agreed to in writing,
+        });  
+import org.opensearch.core.common.io.stream.StreamOutput;
+                clusterService.localNode(),  
+import org.opensearch.core.tasks.TaskId;
+        final ActionFilters actionFilters  
+        });
+import org.opensearch.transport.TransportService;
+ * KIND, either express or implied.  See the License for the
+     */
+                    }
+                            // node shutting down  
+                    @Override
+                + '\''
+import org.opensearch.action.support.replication.TransportReplicationAction;
             super.writeTo(Objects.requireNonNull(out));
             retentionLeases.writeTo(out);  
-        }
-
-        @Override  
-        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-            return new ReplicationTask(id, type, action, "retention_lease_background_sync shardId=" + shardId, parentTaskId, headers);
-        }  
-
-        @Override
-        public String toString() {  
-            return "RetentionLeaseBackgroundSyncAction.Request{"
-                + "retentionLeases="
-                + retentionLeases  
-                + ", shardId="
-                + shardId
-                + ", timeout="  
-                + timeout
-                + ", index='"
-                + index  
-                + '\''
-                + ", waitForActiveShards="
-                + waitForActiveShards  
-                + '}';
-        }
-
-    }
-
-    @Override  
-    protected ReplicationResponse newResponseInstance(StreamInput in) throws IOException {
-        return new ReplicationResponse(in);
+ *
+        public Request(final ShardId shardId, final RetentionLeases retentionLeases) {  
+            indicesService,
+    ) {  
+        final TransportService transportService,
+                        if (ExceptionsHelper.unwrap(e, NodeClosedException.class) != null) {
+            Request::new,  
+            clusterService,  
+    @Inject
+import org.opensearch.transport.TransportException;  
+    public static final String ACTION_NAME = "indices:admin/seq_no/retention_lease_background_sync";  
+        final Request request,  
     }  
-
-}
+import org.opensearch.threadpool.ThreadPool;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * specific language governing permissions and limitations
+import org.apache.logging.log4j.LogManager;
+ * @opensearch.internal
+                    }
+    public RetentionLeaseBackgroundSyncAction(
+/*  
+import org.opensearch.node.NodeClosedException;  
+            ACTION_NAME,
+            Objects.requireNonNull(primary);
+ * retention leases.  
+import org.opensearch.ExceptionsHelper;
+        }
+                + "retentionLeases="
+                    }  
+import org.opensearch.common.settings.Settings;  
+ * under the License.  
+        super(
+ * shard copy missing renewals of retention leases since the background sync interval is much smaller than the expected lifetime of
+import org.opensearch.action.support.replication.ReplicationTask;
+    @Override  
+            return retentionLeases;
+    protected Logger getLogger() {  
+                + timeout
+        return LOGGER;
+import org.opensearch.action.support.replication.ReplicationResponse;  
+    }
+                transportOptions,
+    protected void doExecute(Task task, Request request, ActionListener<ReplicationResponse> listener) {  
+import org.opensearch.cluster.service.ClusterService;
+import org.apache.logging.log4j.Logger;
+package org.opensearch.index.seqno;
+                        getLogger().warn(new ParameterizedMessage("{} retention lease background sync failed", shardId), e);  
+    }
+            this.retentionLeases = Objects.requireNonNull(retentionLeases);
+    RetentionLeaseBackgroundSyncAction.Request,
+ */  
+                        }
+        ActionListener<PrimaryResult<Request, ReplicationResponse>> listener
+            Objects.requireNonNull(replica);
+            waitForActiveShards(ActiveShardCount.NONE);  
+        final ClusterService clusterService,
+    protected ReplicationResponse newResponseInstance(StreamInput in) throws IOException {
+    @Override
+            replica.updateRetentionLeasesOnReplica(request.getRetentionLeases());  
+        }

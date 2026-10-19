@@ -1,63 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        assertTrue(internalCluster().clusterService().operationRouting().ignoreAwarenessAttributes());  
  */  
-
-package org.opensearch.cluster.routing;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.After;  
-
-import static org.opensearch.cluster.routing.OperationRouting.IGNORE_AWARENESS_ATTRIBUTES;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.hamcrest.Matchers.equalTo;
-
-public class OperationRoutingAwarenessTests extends OpenSearchIntegTestCase {  
-
-    @After
+        assertFalse(internalCluster().clusterService().operationRouting().isIgnoreAwarenessAttr());
     public void cleanup() {  
-        assertAcked(client().admin().cluster().prepareUpdateSettings().setTransientSettings(Settings.builder().putNull("*")));
+            .setTransientSettings(Settings.builder().put(IGNORE_AWARENESS_ATTRIBUTES, false))  
+ *
+package org.opensearch.cluster.routing;
+            .prepareUpdateSettings()
     }
-
-    public void testToggleSearchAllocationAwareness() {
         OperationRouting routing = internalCluster().clusterService().operationRouting();
-
-        // Update awareness settings
-        client().admin()
+        assertAcked(client().admin().cluster().prepareUpdateSettings().setTransientSettings(Settings.builder().putNull("*")));
+/*  
+        assertThat(routing.getAwarenessAttributes().size(), equalTo(1));
+import org.opensearch.common.settings.Settings;
+ * this file be licensed under the Apache-2.0 license or a
+            .setTransientSettings(Settings.builder().put("cluster.routing.allocation.awareness.attributes", "zone"))
+            .prepareUpdateSettings()
+    }
+            .get();  
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(routing.getAwarenessAttributes().size(), equalTo(1));  
+import org.junit.After;  
+        // Set ignore awareness attributes to true
+        // assert that awareness attributes hasn't changed
+            .cluster()
+            .get();
+        // Unset ignore awareness attributes
+        assertThat(routing.getAwarenessAttributes().get(0), equalTo("zone"));
+        client().admin()  
+        assertFalse(internalCluster().clusterService().operationRouting().ignoreAwarenessAttributes());  
+}
+import static org.opensearch.cluster.routing.OperationRouting.IGNORE_AWARENESS_ATTRIBUTES;
+        assertThat(routing.getAwarenessAttributes().get(0), equalTo("zone"));
             .cluster()  
             .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put("cluster.routing.allocation.awareness.attributes", "zone"))
-            .get();  
-        assertThat(routing.getAwarenessAttributes().size(), equalTo(1));
-        assertThat(routing.getAwarenessAttributes().get(0), equalTo("zone"));
-        assertTrue(internalCluster().clusterService().operationRouting().ignoreAwarenessAttributes());  
-
-        // Unset ignore awareness attributes
         client().admin()  
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(IGNORE_AWARENESS_ATTRIBUTES, false))  
-            .get();
         // assert that awareness attributes hasn't changed
-        assertThat(routing.getAwarenessAttributes().size(), equalTo(1));  
+ * compatible open source license.
+    public void testToggleSearchAllocationAwareness() {
         assertThat(routing.getAwarenessAttributes().get(0), equalTo("zone"));
-        assertFalse(internalCluster().clusterService().operationRouting().isIgnoreAwarenessAttr());
-        assertFalse(internalCluster().clusterService().operationRouting().ignoreAwarenessAttributes());  
-
-        // Set ignore awareness attributes to true
-        client().admin()  
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(IGNORE_AWARENESS_ATTRIBUTES, true))  
-            .get();
-        // assert that awareness attributes hasn't changed
-        assertThat(routing.getAwarenessAttributes().size(), equalTo(1));  
-        assertThat(routing.getAwarenessAttributes().get(0), equalTo("zone"));
+import static org.hamcrest.Matchers.equalTo;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+public class OperationRoutingAwarenessTests extends OpenSearchIntegTestCase {  
         assertTrue(routing.isIgnoreAwarenessAttr());
+        assertThat(routing.getAwarenessAttributes().size(), equalTo(1));  
+            .cluster()
+import org.opensearch.test.OpenSearchIntegTestCase;
+        client().admin()
+            .get();
+ * SPDX-License-Identifier: Apache-2.0
+        // Update awareness settings
+            .setTransientSettings(Settings.builder().put(IGNORE_AWARENESS_ATTRIBUTES, true))  
+    @After
         assertTrue(internalCluster().clusterService().operationRouting().ignoreAwarenessAttributes());  
-    }
-}

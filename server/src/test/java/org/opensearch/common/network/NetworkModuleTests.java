@@ -1,675 +1,611 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.network;
-
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.common.util.concurrent.ThreadContext;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.http.HttpInfo;
-import org.opensearch.http.HttpServerTransport;  
-import org.opensearch.http.HttpStats;
-import org.opensearch.http.NullDispatcher;
-import org.opensearch.plugins.NetworkPlugin;  
-import org.opensearch.plugins.SecureAuxTransportSettingsProvider;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
-import org.opensearch.plugins.SecureSettingsFactory;  
-import org.opensearch.plugins.SecureTransportSettingsProvider;
-import org.opensearch.plugins.TransportExceptionHandler;
-import org.opensearch.telemetry.tracing.Tracer;  
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportInterceptor;  
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestHandler;
-
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;  
-import java.util.function.Supplier;
-
-import static org.hamcrest.CoreMatchers.startsWith;  
-
-public class NetworkModuleTests extends OpenSearchTestCase {
-    private ThreadPool threadPool;  
-    private SecureSettingsFactory secureSettingsFactory;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool(NetworkModuleTests.class.getName());  
-        secureSettingsFactory = new SecureSettingsFactory() {
-
-            @Override  
-            public Optional<SecureTransportSettingsProvider> getSecureTransportSettingsProvider(Settings settings) {
-                return Optional.of(new SecureTransportSettingsProvider() {
+                    assertTrue(forceExecution);
                     @Override  
-                    public Optional<TransportExceptionHandler> buildServerTransportExceptionHandler(
-                        Settings settings,
-                        Transport transport  
-                    ) {
-                        return Optional.empty();
-                    }  
-
-                    @Override
-                    public Optional<SSLEngine> buildSecureServerTransportEngine(Settings settings, Transport transport)  
-                        throws SSLException {
-                        return Optional.empty();
-                    }  
-
-                    @Override
-                    public Optional<SSLEngine> buildSecureClientTransportEngine(Settings settings, String hostname, int port)  
-                        throws SSLException {
-                        return Optional.empty();
-                    }  
-                });
-            }
-
-            @Override
-            public Optional<SecureHttpTransportSettingsProvider> getSecureHttpTransportSettingsProvider(Settings settings) {
-                return Optional.of(new SecureHttpTransportSettingsProvider() {  
-                    @Override
-                    public Optional<SSLEngine> buildSecureHttpServerEngine(Settings settings, HttpServerTransport transport)
-                        throws SSLException {  
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<TransportExceptionHandler> buildHttpServerExceptionHandler(
-                        Settings settings,  
-                        HttpServerTransport transport
-                    ) {
-                        return Optional.empty();  
-                    }
-                });
-            }  
-
-            @Override
-            public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {  
-                return Optional.of(new SecureAuxTransportSettingsProvider() {
-                });
-            }  
         };
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        super.tearDown();  
-        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
-    }
-
-    static class FakeHttpTransport extends AbstractLifecycleComponent implements HttpServerTransport {
+                    assertTrue(forceExecution);
+        NetworkPlugin... plugins
+        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 1);  
+                String executor,
+package org.opensearch.common.network;
+    }  
         @Override
-        protected void doStart() {}  
-
-        @Override
-        protected void doStop() {}  
-
-        @Override
-        protected void doClose() {}  
-
-        @Override
-        public BoundTransportAddress boundAddress() {  
-            return null;
-        }
-
-        @Override
-        public HttpInfo info() {
-            return null;  
-        }
-
-        @Override  
-        public HttpStats stats() {
-            return null;
-        }  
-    }
-
-    public void testRegisterTransport() {  
-        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "custom").build();
-        Supplier<Transport> custom = () -> null; // content doesn't matter we check reference equality
-        NetworkPlugin plugin = new NetworkPlugin() {  
-            @Override
-            public Map<String, Supplier<Transport>> getTransports(
+                Settings settings,
+ * software distributed under the License is distributed on an
+    public void testRegisterSecureHttpTransport() {
                 Settings settings,  
+            public Map<String, Supplier<Transport>> getSecureTransports(  
+            () -> newNetworkModule(settings, null, List.of(secureSettingsFactory, secureSettingsFactory), plugin)
+        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
+                throw new RuntimeException("Handler Invoke Failed");  
+        );
+import org.opensearch.http.HttpInfo;
+                return Collections.singletonMap("custom-secure", custom);
+        NetworkPlugin plugin = new NetworkPlugin() {
+        super.setUp();
+            threadPool,
+            @Override
+            null,
+    private ThreadPool threadPool;  
+                }  
+                Tracer tracer
+    public void testRegisterSecureTransport() {
+            ) {
+                TransportRequestHandler<T> actualHandler
+                NamedWriteableRegistry namedWriteableRegistry,
+                called.incrementAndGet();
+        assertTrue(transportInterceptor instanceof NetworkModule.CompositeTransportInterceptor);  
+        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 2);
+        expectThrows(IllegalStateException.class, () -> newModule.getHttpServerTransportSupplier());
+        assertSame(custom, module.getHttpServerTransportSupplier());
+import java.util.function.Supplier;
+            public Map<String, Supplier<Transport>> getTransports(  
+                ClusterSettings clusterSettings,
+            }
+                PageCacheRecycler pageCacheRecycler,  
+        assertEquals(0, called1.get());
+        });
+        coreTransportInterceptors.add(interceptor);
+                ThreadPool threadPool,  
+    }
+                }
+            public Map<String, Supplier<HttpServerTransport>> getHttpTransports(
+ *  
+                    }  
+                NamedWriteableRegistry namedWriteableRegistry,
+            ) {
+        TransportInterceptor interceptor = new TransportInterceptor() {
+}
+            ) {
+ */  
+        List<SecureSettingsFactory> secureSettingsFactories,
+        }  
+        });
+import org.opensearch.transport.TransportRequest;
+                        throws SSLException {  
+            .put(NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.getKey(), "local")
+                return actualHandler;  
+        protected void doStop() {}  
+                NetworkService networkService,  
+import org.opensearch.common.settings.ClusterSettings;
+                String executor,
+        assertEquals(0, called.get());  
+        transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);
+        public BoundTransportAddress boundAddress() {  
+                    public Optional<SSLEngine> buildSecureServerTransportEngine(Settings settings, Transport transport)  
+                return Collections.singletonList(interceptor);
+            }  
+            }
+                CircuitBreakerService circuitBreakerService,
+            settings,
+                    @Override
+        transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);
+        protected void doStart() {}  
+                String executor,
+            secureSettingsFactories  
+        public HttpInfo info() {
+            }  
+    public void testRegisterCoreInterceptor() {  
+            @Override
+                return actualHandler;  
+        return newNetworkModule(settings, coreTransportInterceptors, List.of(), plugins);
+/*
+                    @Override
+                ThreadContext threadContext  
+                ThreadContext threadContext
+                HttpServerTransport.Dispatcher requestDispatcher,  
+                NamedWriteableRegistry namedWriteableRegistry,
+                boolean forceExecution,
+            ) {
+import org.opensearch.threadpool.ThreadPool;
+        };
                 ThreadPool threadPool,
+        threadPool = new TestThreadPool(NetworkModuleTests.class.getName());  
+            return null;
+            .build();
+import java.util.concurrent.TimeUnit;
+        final IllegalArgumentException ex = assertThrows(
+ * KIND, either express or implied.  See the License for the
+            .put(NetworkModule.TRANSPORT_TYPE_KEY, "local")  
+            }
+                } else {  
+            ) {
+            ) {
+            ) {
+                TransportRequestHandler<T> actualHandler
+                    public Optional<TransportExceptionHandler> buildHttpServerExceptionHandler(
+                        Transport transport  
+            @Override
+                if ("foo/bar/boom".equals(action)) {  
+            public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {  
+        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "custom-secure").build();
+            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(
+                Tracer tracer
+                Settings settings,
+            }
+        TransportInterceptor interceptor = new TransportInterceptor() {  
+            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
+            .put(NetworkModule.HTTP_DEFAULT_TYPE_SETTING.getKey(), "default_custom")
+            .build();  
+ */
+                Settings settings,
+ * The OpenSearch Contributors require contributions made to  
+                        Settings settings,
+            }  
+                    assertFalse(forceExecution);
+        Supplier<HttpServerTransport> def = FakeHttpTransport::new;
+                    public Optional<SSLEngine> buildSecureClientTransportEngine(Settings settings, String hostname, int port)  
+                NetworkService networkService,
+                ThreadPool threadPool,
+                called.incrementAndGet();  
+        NetworkModule module = newNetworkModule(settings, coreTransportInterceptors, new NetworkPlugin() {
+        coreTransportInterceptors = new ArrayList<>();  
+            public List<TransportInterceptor> getTransportInterceptors(  
+                @Override
+        });
+            @Override
+                    assertFalse(forceExecution);
+        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
+        AtomicInteger called1 = new AtomicInteger(0);
+            transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);  
+                String executor,
+                NamedXContentRegistry xContentRegistry,
+                }
+        coreTransportInterceptors.add(interceptor1);
+                return supplierMap;
+            public Map<String, Supplier<HttpServerTransport>> getHttpTransports(
+                NamedWriteableRegistry namedWriteableRegistry,
+                    assertFalse(forceExecution);
+                    ThreadContext threadContext
+    public void tearDown() throws Exception {
+        transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.plugins.TransportExceptionHandler;
+        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
+                ClusterSettings clusterSettings,
+                Tracer tracer
+                supplierMap.put("default_custom", def);  
+                    assertFalse(forceExecution);  
+        @Override
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        TransportInterceptor interceptor1 = new TransportInterceptor() {
+        NetworkPlugin plugin = new NetworkPlugin() {  
+                    assertTrue(forceExecution);
+                TransportRequestHandler<T> actualHandler  
+import org.opensearch.transport.Transport;
+            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(
+                ThreadPool threadPool,
+/*  
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
+            @Override
+        Supplier<Transport> custom = () -> null; // content doesn't matter we check reference equality  
+                ClusterSettings clusterSettings,
+                called1.incrementAndGet();
+            ) {
+                    return Collections.singletonList(null);
+import org.opensearch.plugins.SecureTransportSettingsProvider;
+import static org.hamcrest.CoreMatchers.startsWith;  
+                        Settings settings,  
+        assertEquals(2, called.get());
+                ThreadPool threadPool,
+                    ) {
+    @Override  
+        assertSame(customTransport, module.getTransportSupplier());  
+        };
+        TransportInterceptor interceptor = new TransportInterceptor() {
+        List<TransportInterceptor> coreTransportInterceptors = new ArrayList<>();
+        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "custom").build();
+        });
+            @Override  
+import java.util.Map;  
+            public Map<String, Supplier<HttpServerTransport>> getHttpTransports(  
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
+            }  
+        assertTrue(transportInterceptor instanceof NetworkModule.CompositeTransportInterceptor);
+        assertEquals(0, called.get());  
+            public Map<String, Supplier<Transport>> getTransports(
+    ) {  
+            null,
+        };
+            ) {
+                NamedWriteableRegistry namedWriteableRegistry,
+        module = newNetworkModule(settings, coreTransportInterceptors, new NetworkPlugin() {
+            @Override
+                });
+                TransportRequestHandler<T> actualHandler  
+                    @Override
+                ThreadContext threadContext
+            public Map<String, Supplier<Transport>> getTransports(  
+                SecureHttpTransportSettingsProvider secureTransportSettingsProvider,  
+                NetworkService networkService,
+        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {  
+                Map<String, Supplier<HttpServerTransport>> supplierMap = new HashMap<>();
+            }
+            assertEquals(1, called1.get());  
                 PageCacheRecycler pageCacheRecycler,
                 CircuitBreakerService circuitBreakerService,  
-                NamedWriteableRegistry namedWriteableRegistry,
-                NetworkService networkService,
-                Tracer tracer  
-            ) {
-                return Collections.singletonMap("custom", custom);
-            }  
-        };
-        NetworkModule module = newNetworkModule(settings, null, plugin);
-        assertSame(custom, module.getTransportSupplier());  
-    }
-
-    public void testRegisterHttpTransport() {  
-        Settings settings = Settings.builder()
-            .put(NetworkModule.HTTP_TYPE_SETTING.getKey(), "custom")
-            .put(NetworkModule.TRANSPORT_TYPE_KEY, "local")  
-            .build();
-        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
-
-        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {
-            @Override
-            public Map<String, Supplier<HttpServerTransport>> getHttpTransports(  
+                } else {  
+        protected void doClose() {}  
                 Settings settings,
-                ThreadPool threadPool,
-                BigArrays bigArrays,  
-                PageCacheRecycler pageCacheRecycler,
-                CircuitBreakerService circuitBreakerService,
-                NamedXContentRegistry xContentRegistry,  
-                NetworkService networkService,
-                HttpServerTransport.Dispatcher requestDispatcher,
-                ClusterSettings clusterSettings,  
-                Tracer tracer
-            ) {
-                return Collections.singletonMap("custom", custom);  
-            }
+        NetworkModule module = newNetworkModule(settings, null, plugin);
+        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
+            .put(NetworkModule.HTTP_DEFAULT_TYPE_SETTING.getKey(), "default_custom")  
+        @Override  
+        assertSame(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.get(0), interceptor);
+/*  
+            .put(NetworkModule.HTTP_TYPE_SETTING.getKey(), "custom")
+        AtomicInteger called = new AtomicInteger(0);
+                    assertTrue(forceExecution);
         });
-        assertSame(custom, module.getHttpServerTransportSupplier());  
-
-        settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
-        NetworkModule newModule = newNetworkModule(settings, null);  
-        expectThrows(IllegalStateException.class, () -> newModule.getHttpServerTransportSupplier());
+        Supplier<Transport> customTransport = () -> null;  
+ * GitHub history for details.
+            ) {  
+ * compatible open source license.
+            @Override
+                SecureTransportSettingsProvider secureTransportSettingsProvider,
+            public Optional<SecureTransportSettingsProvider> getSecureTransportSettingsProvider(Settings settings) {
+                String executor,
+public class NetworkModuleTests extends OpenSearchTestCase {
     }
-
-    public void testRegisterSecureTransport() {
+            .build();  
+                });
+    public void testInterceptorOrderException() {
+        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {
+                BigArrays bigArrays,  
+                } else {  
+                String action,
+        assertEquals(0, called.get());  
+                return Collections.singletonList(interceptor1);  
+        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();  
+        assertEquals(2, called1.get());
+            .put(NetworkModule.HTTP_TYPE_SETTING.getKey(), "custom")
+    @Override
+    static class FakeHttpTransport extends AbstractLifecycleComponent implements HttpServerTransport {
+            public List<TransportInterceptor> getTransportInterceptors(
+        }
+        NetworkModule module = newNetworkModule(settings, coreTransportInterceptors, new NetworkPlugin() {
+import java.util.concurrent.atomic.AtomicInteger;  
+        assertEquals(1, called1.get());
+        });  
+            public List<TransportInterceptor> getTransportInterceptors(
+        };
+                return Optional.of(new SecureHttpTransportSettingsProvider() {  
+                HttpServerTransport.Dispatcher requestDispatcher,  
+                Settings settings,  
+                String action,
+        assertEquals(2, called.get());
+            .put(NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.getKey(), "default_custom")
+            @Override
+ *
+                        throws SSLException {
+            assertEquals(1, called.get());
+ * specific language governing permissions and limitations
+        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 1);
         Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "custom-secure").build();
-        Supplier<Transport> custom = () -> null; // content doesn't matter we check reference equality  
+                PageCacheRecycler pageCacheRecycler,  
+            }
+    }
+    private SecureSettingsFactory secureSettingsFactory;
+            public Map<String, Supplier<HttpServerTransport>> getSecureHttpTransports(
+                NetworkService networkService,  
+ * this work for additional information regarding copyright
+    }
+        return new NetworkModule(
+        TransportInterceptor transportInterceptor = module.getTransportInterceptor();  
+        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 2);
+                        return Optional.empty();
+import org.opensearch.transport.TransportRequestHandler;
+                assertNotNull(threadContext);  
+        Settings settings = Settings.builder()
+    public void testOverrideDefault() {  
+import java.util.Collections;  
+                ThreadPool threadPool,
+    public void testRegisterTransport() {  
+            null,
+        });  
+            @Override
+            null,
         NetworkPlugin plugin = new NetworkPlugin() {
             @Override
-            public Map<String, Supplier<Transport>> getSecureTransports(  
-                Settings settings,
-                ThreadPool threadPool,
-                PageCacheRecycler pageCacheRecycler,  
-                CircuitBreakerService circuitBreakerService,
-                NamedWriteableRegistry namedWriteableRegistry,
-                NetworkService networkService,  
-                SecureTransportSettingsProvider secureTransportSettingsProvider,
-                Tracer tracer
-            ) {  
-                return Collections.singletonMap("custom-secure", custom);
-            }
-        };  
-        NetworkModule module = newNetworkModule(settings, null, List.of(secureSettingsFactory), plugin);
-        assertSame(custom, module.getTransportSupplier());
-    }  
-
-    public void testRegisterSecureHttpTransport() {
-        Settings settings = Settings.builder()  
-            .put(NetworkModule.HTTP_TYPE_SETTING.getKey(), "custom-secure")
-            .put(NetworkModule.TRANSPORT_TYPE_KEY, "local")
-            .build();  
-        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
-
-        NetworkModule module = newNetworkModule(settings, null, List.of(secureSettingsFactory), new NetworkPlugin() {  
-            @Override
-            public Map<String, Supplier<HttpServerTransport>> getSecureHttpTransports(
-                Settings settings,  
-                ThreadPool threadPool,
-                BigArrays bigArrays,
-                PageCacheRecycler pageCacheRecycler,  
-                CircuitBreakerService circuitBreakerService,
-                NamedXContentRegistry xContentRegistry,
-                NetworkService networkService,  
+                TransportRequestHandler<T> actualHandler
+                boolean forceExecution,  
+                ) {  
                 HttpServerTransport.Dispatcher requestDispatcher,
-                ClusterSettings clusterSettings,
-                SecureHttpTransportSettingsProvider secureTransportSettingsProvider,  
+        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
+            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
+        assertSame(customTransport, module.getTransportSupplier());
+        };  
+                boolean forceExecution,  
+    }
+                    }  
+            }
+    public void testRegisterSecureTransportMultipleProviers() {
+            }  
+                called1.incrementAndGet();  
+            .put(NetworkModule.TRANSPORT_TYPE_KEY, "default_custom")
+import java.util.Arrays;
+import javax.net.ssl.SSLEngine;
+                Settings settings,
+        assertEquals(1, called.get());  
+                Tracer tracer  
+        super.tearDown();  
+        TransportInterceptor transportInterceptor = module.getTransportInterceptor();  
+            @Override  
+            coreTransportInterceptors,
+        coreTransportInterceptors.add(interceptor);
+        List<TransportInterceptor> coreTransportInterceptors,  
+import org.opensearch.common.util.BigArrays;
+                public List<TransportInterceptor> getTransportInterceptors(  
+                        return Optional.empty();
+        assertSame(def, module.getHttpServerTransportSupplier());
+        transportInterceptor = module.getTransportInterceptor();
+    }
+                if ("foo/bar/boom".equals(action)) {
+            });
+    }  
+        NetworkModule module = newNetworkModule(settings, coreTransportInterceptors);
+                PageCacheRecycler pageCacheRecycler,  
+import org.opensearch.core.common.transport.BoundTransportAddress;
+                called.incrementAndGet();  
+            }
+                        return Optional.empty();
+import java.util.ArrayList;
+        Settings settings = Settings.builder()  
+                assertNotNull(threadContext);
+        TransportInterceptor interceptor = new TransportInterceptor() {
+        List<TransportInterceptor> coreTransportInterceptors = new ArrayList<>();
+            @Override
+            transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);
+            NoopTracer.INSTANCE,
+                PageCacheRecycler pageCacheRecycler,  
+            Arrays.asList(plugins),  
+        assertEquals(1, called.get());
+        public HttpStats stats() {
+                    ) {
+ *
+            null,  
+            ) {  
+                supplierMap.put("custom", custom);
+        @Override
+        coreTransportInterceptors.add(interceptor1);
+import org.opensearch.common.util.PageCacheRecycler;
                 Tracer tracer
+            ) {
+            ) {  
+        };  
+        NetworkPlugin... plugins
+    public void setUp() throws Exception {
+                NamedXContentRegistry xContentRegistry,
+                NetworkService networkService,
+            }
+    }
+            assertEquals(1, called.get());  
+            @Override
+    private NetworkModule newNetworkModule(
+            ) {  
+                HttpServerTransport.Dispatcher requestDispatcher,
+import org.opensearch.http.HttpStats;
+        });  
+                if ("foo/bar/boom".equals(action)) {
+            @Override  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+    }
+        assertEquals(2, called.get());  
+        AtomicInteger called = new AtomicInteger(0);  
+ * SPDX-License-Identifier: Apache-2.0
+                return Collections.singletonMap("default_custom", customTransport);  
+                return supplierMap;
+import java.util.HashMap;
+        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {
+        };
+            return null;
+ */  
+            ) {
+                PageCacheRecycler pageCacheRecycler,
+                return Collections.singletonMap("default_custom", customTransport);  
+        }
+                    assertFalse(forceExecution);
+                ClusterSettings clusterSettings,  
+                String action,
+import org.opensearch.transport.TransportInterceptor;  
+            }
+                NetworkService networkService,  
+import org.opensearch.plugins.SecureAuxTransportSettingsProvider;
+        try {  
+    ) {  
+                        return Optional.empty();  
+                NamedWriteableRegistry namedWriteableRegistry,
+            .put(NetworkModule.TRANSPORT_TYPE_KEY, "local")
+                return actualHandler;  
+                SecureTransportSettingsProvider secureTransportSettingsProvider,
+                    NamedWriteableRegistry namedWriteableRegistry,
+                    assertTrue(forceExecution);
+            }
+            .build();  
+ * under the License.  
+                ThreadPool threadPool,
+        settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
+                Tracer tracer
+                CircuitBreakerService circuitBreakerService,
+            assertEquals(2, called1.get());
+                PageCacheRecycler pageCacheRecycler,
+            }
+        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
+import org.opensearch.plugins.NetworkPlugin;  
+        AtomicInteger called = new AtomicInteger(0);
+    }
+                CircuitBreakerService circuitBreakerService,
+                CircuitBreakerService circuitBreakerService,
+        Settings settings = Settings.builder()
+import org.opensearch.common.util.concurrent.ThreadContext;  
+        NullPointerException nullPointerException = expectThrows(NullPointerException.class, () -> {  
+                BigArrays bigArrays,
+                return Collections.singletonList(interceptor);
+        AtomicInteger called = new AtomicInteger(0);
+                supplierMap.put("default_custom", def);  
+                PageCacheRecycler pageCacheRecycler,  
+                PageCacheRecycler pageCacheRecycler,
+ * You may obtain a copy of the License at  
+        Settings settings = Settings.builder()  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        TransportInterceptor transportInterceptor = module.getTransportInterceptor();
+                String action,  
+        );
+            @Override  
+                NamedWriteableRegistry namedWriteableRegistry,
+import org.opensearch.common.settings.Settings;  
+    public void testRegisterHttpTransport() {  
+                CircuitBreakerService circuitBreakerService,
+                NetworkService networkService,  
+        NetworkModule newModule = newNetworkModule(settings, null);  
+        };
+            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
+        Supplier<HttpServerTransport> def = FakeHttpTransport::new;  
+                return Collections.singletonMap("custom-secure", custom);
+                Settings settings,
+        assertThat(ex.getMessage(), startsWith("there is more than one secure transport settings provider"));  
+                    }
+            .put(NetworkModule.HTTP_TYPE_SETTING.getKey(), "custom-secure")
+        Supplier<Transport> custom = () -> null; // content doesn't matter we check reference equality
+        }
+                        throws SSLException {
+                Tracer tracer
+            @Override
+        assertSame(custom, module.getTransportSupplier());
+                NamedXContentRegistry xContentRegistry,  
+                    assertNotNull(threadContext);
+        @Override
+ * not use this file except in compliance with the License.
+            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
+        } catch (Exception e) {
+                    @Override
+        assertSame(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.get(0), interceptor);
+                    }
+ * license agreements. See the NOTICE file distributed with
+            public List<TransportInterceptor> getTransportInterceptors(  
+                CircuitBreakerService circuitBreakerService,  
+import org.opensearch.threadpool.TestThreadPool;  
+                    }  
+                    public Optional<TransportExceptionHandler> buildServerTransportExceptionHandler(
+        assertSame(custom, module.getTransportSupplier());  
+        List<TransportInterceptor> coreTransportInterceptors,
+        Settings settings,  
+        try {
+                return Optional.of(new SecureTransportSettingsProvider() {
+                Settings settings,
+                NamedXContentRegistry xContentRegistry,
+                TransportRequestHandler<T> actualHandler
+import javax.net.ssl.SSLException;
+                BigArrays bigArrays,
+    public void testDefaultKeys() {
+            }
+                assertNotNull(threadContext);
+        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
+import org.opensearch.core.indices.breaker.CircuitBreakerService;  
+    }  
+        assertEquals("interceptor must not be null", nullPointerException.getMessage());  
+            IllegalArgumentException.class,  
+        Settings settings,
+                BigArrays bigArrays,
+    }
+            @Override
+import org.opensearch.telemetry.tracing.Tracer;  
+        assertEquals(1, called.get());  
+                        HttpServerTransport transport
+                ThreadContext threadContext
+                CircuitBreakerService circuitBreakerService,  
+import org.opensearch.test.OpenSearchTestCase;
+        Supplier<Transport> customTransport = () -> null;  // content doesn't matter we check reference equality
+        };
+    }
+    public void testRegisterInterceptor() {  
+                boolean forceExecution,  
+            public Map<String, Supplier<Transport>> getSecureTransports(  
+            @Override
+                return Optional.of(new SecureAuxTransportSettingsProvider() {
+        assertEquals(0, called.get());
+                Map<String, Supplier<HttpServerTransport>> supplierMap = new HashMap<>();
+                String executor,
+            new NullDispatcher(),
+import java.util.Optional;
+        }
             ) {
                 return Collections.singletonMap("custom-secure", custom);  
+            ) {  
+                ThreadPool threadPool,
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),  
+                    public Optional<SSLEngine> buildSecureHttpServerEngine(Settings settings, HttpServerTransport transport)
+        Supplier<Transport> custom = () -> null; // content doesn't matter we check reference equality  
+    private NetworkModule newNetworkModule(
+                String action,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+        transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);
+                ThreadPool threadPool,  
+                        return Optional.empty();
+import java.util.List;
+                NamedWriteableRegistry namedWriteableRegistry,  
+            ) {
+                if ("foo/bar/boom".equals(action)) {
+                Tracer tracer
+                NamedWriteableRegistry namedWriteableRegistry,
+import org.opensearch.http.NullDispatcher;
+                assertNotNull(threadContext);
+                NetworkService networkService,  
+        } catch (Exception e) {
+                });
+                NetworkService networkService,
+import org.opensearch.plugins.SecureSettingsFactory;  
+            @Override
+        transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);
+            @Override
+                } else {
+            public Optional<SecureHttpTransportSettingsProvider> getSecureHttpTransportSettingsProvider(Settings settings) {
+                Tracer tracer
+                return actualHandler;  
+        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
+        secureSettingsFactory = new SecureSettingsFactory() {
+    public void testInterceptorOrder() {
+                }
+                }
+        NetworkModule module = newNetworkModule(settings, null, List.of(secureSettingsFactory), new NetworkPlugin() {  
+                boolean forceExecution,
+        NetworkModule module = newNetworkModule(settings, null, List.of(secureSettingsFactory), plugin);
+            @Override
+                if ("foo/bar/boom".equals(action)) {
+        transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);
+        assertEquals(0, called1.get());
+        List<TransportInterceptor> coreTransportInterceptors = new ArrayList<>();
+        AtomicInteger called1 = new AtomicInteger(0);
             }
         });
         assertSame(custom, module.getHttpServerTransportSupplier());  
-    }
-
-    public void testOverrideDefault() {  
-        Settings settings = Settings.builder()
-            .put(NetworkModule.HTTP_TYPE_SETTING.getKey(), "custom")
-            .put(NetworkModule.HTTP_DEFAULT_TYPE_SETTING.getKey(), "default_custom")  
-            .put(NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.getKey(), "local")
-            .put(NetworkModule.TRANSPORT_TYPE_KEY, "default_custom")
-            .build();  
-        Supplier<Transport> customTransport = () -> null;  // content doesn't matter we check reference equality
-        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
-        Supplier<HttpServerTransport> def = FakeHttpTransport::new;  
-        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {
-            @Override
-            public Map<String, Supplier<Transport>> getTransports(  
-                Settings settings,
-                ThreadPool threadPool,
-                PageCacheRecycler pageCacheRecycler,  
-                CircuitBreakerService circuitBreakerService,
-                NamedWriteableRegistry namedWriteableRegistry,
-                NetworkService networkService,  
-                Tracer tracer
-            ) {
-                return Collections.singletonMap("default_custom", customTransport);  
             }
-
-            @Override  
-            public Map<String, Supplier<HttpServerTransport>> getHttpTransports(
-                Settings settings,
-                ThreadPool threadPool,  
-                BigArrays bigArrays,
-                PageCacheRecycler pageCacheRecycler,
-                CircuitBreakerService circuitBreakerService,  
-                NamedXContentRegistry xContentRegistry,
-                NetworkService networkService,
-                HttpServerTransport.Dispatcher requestDispatcher,  
-                ClusterSettings clusterSettings,
-                Tracer tracer
             ) {  
-                Map<String, Supplier<HttpServerTransport>> supplierMap = new HashMap<>();
-                supplierMap.put("custom", custom);
-                supplierMap.put("default_custom", def);  
-                return supplierMap;
-            }
-        });  
-        assertSame(custom, module.getHttpServerTransportSupplier());
-        assertSame(customTransport, module.getTransportSupplier());
-    }  
-
-    public void testDefaultKeys() {
-        Settings settings = Settings.builder()  
-            .put(NetworkModule.HTTP_DEFAULT_TYPE_SETTING.getKey(), "default_custom")
-            .put(NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.getKey(), "default_custom")
-            .build();  
-        Supplier<HttpServerTransport> custom = FakeHttpTransport::new;
-        Supplier<HttpServerTransport> def = FakeHttpTransport::new;
-        Supplier<Transport> customTransport = () -> null;  
-        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {
-            @Override
-            public Map<String, Supplier<Transport>> getTransports(  
-                Settings settings,
-                ThreadPool threadPool,
-                PageCacheRecycler pageCacheRecycler,  
-                CircuitBreakerService circuitBreakerService,
-                NamedWriteableRegistry namedWriteableRegistry,
-                NetworkService networkService,  
-                Tracer tracer
-            ) {
-                return Collections.singletonMap("default_custom", customTransport);  
-            }
-
-            @Override  
-            public Map<String, Supplier<HttpServerTransport>> getHttpTransports(
-                Settings settings,
-                ThreadPool threadPool,  
-                BigArrays bigArrays,
-                PageCacheRecycler pageCacheRecycler,
-                CircuitBreakerService circuitBreakerService,  
-                NamedXContentRegistry xContentRegistry,
-                NetworkService networkService,
-                HttpServerTransport.Dispatcher requestDispatcher,  
-                ClusterSettings clusterSettings,
-                Tracer tracer
-            ) {  
-                Map<String, Supplier<HttpServerTransport>> supplierMap = new HashMap<>();
-                supplierMap.put("custom", custom);
-                supplierMap.put("default_custom", def);  
-                return supplierMap;
-            }
-        });  
-
-        assertSame(def, module.getHttpServerTransportSupplier());
-        assertSame(customTransport, module.getTransportSupplier());  
-    }
-
-    public void testRegisterInterceptor() {  
-        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
-        AtomicInteger called = new AtomicInteger(0);
-
-        TransportInterceptor interceptor = new TransportInterceptor() {
-            @Override
-            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
-                String action,
-                String executor,
-                boolean forceExecution,  
-                TransportRequestHandler<T> actualHandler
-            ) {
-                called.incrementAndGet();  
-                if ("foo/bar/boom".equals(action)) {
-                    assertTrue(forceExecution);
-                } else {  
-                    assertFalse(forceExecution);
-                }
-                return actualHandler;  
-            }
-        };
-        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {  
-            @Override
-            public List<TransportInterceptor> getTransportInterceptors(
-                NamedWriteableRegistry namedWriteableRegistry,  
-                ThreadContext threadContext
-            ) {
-                assertNotNull(threadContext);  
-                return Collections.singletonList(interceptor);
-            }
-        });  
-
-        TransportInterceptor transportInterceptor = module.getTransportInterceptor();
-        assertEquals(0, called.get());  
-        transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);
-        assertEquals(1, called.get());
-        transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);  
-        assertEquals(2, called.get());
-        assertTrue(transportInterceptor instanceof NetworkModule.CompositeTransportInterceptor);
-        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 1);  
-        assertSame(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.get(0), interceptor);
-
-        NullPointerException nullPointerException = expectThrows(NullPointerException.class, () -> {  
-            newNetworkModule(settings, null, new NetworkPlugin() {
-                @Override
-                public List<TransportInterceptor> getTransportInterceptors(  
-                    NamedWriteableRegistry namedWriteableRegistry,
-                    ThreadContext threadContext
-                ) {  
-                    assertNotNull(threadContext);
-                    return Collections.singletonList(null);
-                }  
-            });
-        });
-        assertEquals("interceptor must not be null", nullPointerException.getMessage());  
-    }
-
-    public void testRegisterCoreInterceptor() {  
-        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
-        AtomicInteger called = new AtomicInteger(0);
-
-        TransportInterceptor interceptor = new TransportInterceptor() {
-            @Override
-            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
-                String action,
-                String executor,
-                boolean forceExecution,  
-                TransportRequestHandler<T> actualHandler
-            ) {
-                called.incrementAndGet();  
-                if ("foo/bar/boom".equals(action)) {
-                    assertTrue(forceExecution);
-                } else {  
-                    assertFalse(forceExecution);
-                }
-                return actualHandler;  
-            }
-        };
-
-        List<TransportInterceptor> coreTransportInterceptors = new ArrayList<>();
-        coreTransportInterceptors.add(interceptor);
-
-        NetworkModule module = newNetworkModule(settings, coreTransportInterceptors);
-
-        TransportInterceptor transportInterceptor = module.getTransportInterceptor();  
-        assertEquals(0, called.get());
-        transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);
-        assertEquals(1, called.get());  
-        transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);
-        assertEquals(2, called.get());
-        assertTrue(transportInterceptor instanceof NetworkModule.CompositeTransportInterceptor);  
-        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 1);
-        assertSame(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.get(0), interceptor);
-    }  
-
-    public void testInterceptorOrder() {
-        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();  
-        AtomicInteger called = new AtomicInteger(0);
-        AtomicInteger called1 = new AtomicInteger(0);
-
-        TransportInterceptor interceptor = new TransportInterceptor() {
-            @Override
-            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
-                String action,
-                String executor,
-                boolean forceExecution,  
-                TransportRequestHandler<T> actualHandler
-            ) {
-                called.incrementAndGet();  
-                if ("foo/bar/boom".equals(action)) {
-                    assertTrue(forceExecution);
-                } else {  
-                    assertFalse(forceExecution);
-                }
-                return actualHandler;  
-            }
-        };
-
-        TransportInterceptor interceptor1 = new TransportInterceptor() {
-            @Override
-            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
-                String action,
-                String executor,
-                boolean forceExecution,  
-                TransportRequestHandler<T> actualHandler
-            ) {
-                called1.incrementAndGet();  
-                if ("foo/bar/boom".equals(action)) {
-                    assertTrue(forceExecution);
-                } else {  
-                    assertFalse(forceExecution);
-                }
-                return actualHandler;  
-            }
-        };
-
-        List<TransportInterceptor> coreTransportInterceptors = new ArrayList<>();
-        coreTransportInterceptors.add(interceptor1);
-
-        NetworkModule module = newNetworkModule(settings, coreTransportInterceptors, new NetworkPlugin() {
-            @Override
-            public List<TransportInterceptor> getTransportInterceptors(  
-                NamedWriteableRegistry namedWriteableRegistry,
-                ThreadContext threadContext
-            ) {  
-                assertNotNull(threadContext);
-                return Collections.singletonList(interceptor);
-            }  
-        });
-
-        TransportInterceptor transportInterceptor = module.getTransportInterceptor();  
-        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 2);
-
-        assertEquals(0, called.get());  
-        assertEquals(0, called1.get());
-        transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);
-        assertEquals(1, called.get());  
-        assertEquals(1, called1.get());
-        transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);
-        assertEquals(2, called.get());  
-        assertEquals(2, called1.get());
-    }
-
-    public void testInterceptorOrderException() {
-        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "local").build();
-        AtomicInteger called = new AtomicInteger(0);  
-        AtomicInteger called1 = new AtomicInteger(0);
-
-        TransportInterceptor interceptor = new TransportInterceptor() {  
-            @Override
-            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(
-                String action,  
-                String executor,
-                boolean forceExecution,
-                TransportRequestHandler<T> actualHandler  
-            ) {
-                called.incrementAndGet();
-                if ("foo/bar/boom".equals(action)) {  
-                    assertTrue(forceExecution);
-                } else {
-                    assertFalse(forceExecution);  
-                }
-                return actualHandler;
-            }  
-        };
-
         TransportInterceptor interceptor1 = new TransportInterceptor() {  
-            @Override
-            public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(
-                String action,  
-                String executor,
-                boolean forceExecution,
-                TransportRequestHandler<T> actualHandler  
-            ) {
-                called1.incrementAndGet();
-                throw new RuntimeException("Handler Invoke Failed");  
-            }
-        };
-
-        List<TransportInterceptor> coreTransportInterceptors = new ArrayList<>();
-        coreTransportInterceptors.add(interceptor1);
-
-        NetworkModule module = newNetworkModule(settings, coreTransportInterceptors, new NetworkPlugin() {
-            @Override
-            public List<TransportInterceptor> getTransportInterceptors(  
-                NamedWriteableRegistry namedWriteableRegistry,
-                ThreadContext threadContext
-            ) {  
-                assertNotNull(threadContext);
-                return Collections.singletonList(interceptor);
-            }  
-        });
-
-        TransportInterceptor transportInterceptor = module.getTransportInterceptor();  
-        assertEquals(((NetworkModule.CompositeTransportInterceptor) transportInterceptor).transportInterceptors.size(), 2);
-
-        assertEquals(0, called.get());  
-        assertEquals(0, called1.get());
-        try {
-            transportInterceptor.interceptHandler("foo/bar/boom", null, true, null);  
-        } catch (Exception e) {
-            assertEquals(1, called.get());
-            assertEquals(1, called1.get());  
-        }
-
-        coreTransportInterceptors = new ArrayList<>();  
-        coreTransportInterceptors.add(interceptor);
-        module = newNetworkModule(settings, coreTransportInterceptors, new NetworkPlugin() {
-            @Override  
-            public List<TransportInterceptor> getTransportInterceptors(
-                NamedWriteableRegistry namedWriteableRegistry,
-                ThreadContext threadContext  
-            ) {
-                assertNotNull(threadContext);
-                return Collections.singletonList(interceptor1);  
-            }
-        });
-
-        transportInterceptor = module.getTransportInterceptor();
-
-        try {  
-            transportInterceptor.interceptHandler("foo/baz/boom", null, false, null);
-        } catch (Exception e) {
-            assertEquals(1, called.get());  
-            assertEquals(2, called1.get());
-        }
+            newNetworkModule(settings, null, new NetworkPlugin() {
+                return actualHandler;
+                called.incrementAndGet();  
+ * Modifications Copyright OpenSearch Contributors. See
     }  
-
-    private NetworkModule newNetworkModule(
-        Settings settings,  
-        List<TransportInterceptor> coreTransportInterceptors,
-        NetworkPlugin... plugins
-    ) {  
-        return newNetworkModule(settings, coreTransportInterceptors, List.of(), plugins);
-    }
-
-    private NetworkModule newNetworkModule(
-        Settings settings,
-        List<TransportInterceptor> coreTransportInterceptors,  
-        List<SecureSettingsFactory> secureSettingsFactories,
-        NetworkPlugin... plugins
-    ) {  
-        return new NetworkModule(
-            settings,
-            Arrays.asList(plugins),  
-            threadPool,
-            null,
-            null,  
-            null,
-            null,
-            xContentRegistry(),  
-            null,
-            new NullDispatcher(),
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),  
-            NoopTracer.INSTANCE,
-            coreTransportInterceptors,
-            secureSettingsFactories  
-        );
-    }
-
-    public void testRegisterSecureTransportMultipleProviers() {
-        Settings settings = Settings.builder().put(NetworkModule.TRANSPORT_TYPE_KEY, "custom-secure").build();
-        Supplier<Transport> custom = () -> null; // content doesn't matter we check reference equality  
-        NetworkPlugin plugin = new NetworkPlugin() {
-            @Override
-            public Map<String, Supplier<Transport>> getSecureTransports(  
-                Settings settings,
-                ThreadPool threadPool,
-                PageCacheRecycler pageCacheRecycler,  
+                boolean forceExecution,  
+ * ownership. Elasticsearch licenses this file to you under  
+            }  
+                supplierMap.put("custom", custom);
+                return Collections.singletonList(interceptor);
+            return null;  
+                }
+        NetworkModule module = newNetworkModule(settings, null, new NetworkPlugin() {
+        TransportInterceptor transportInterceptor = module.getTransportInterceptor();  
+ * the Apache License, Version 2.0 (the "License"); you may
+                return Collections.singletonMap("custom", custom);  
+import org.opensearch.http.HttpServerTransport;  
+ * Licensed to Elasticsearch under one or more contributor  
+                return Collections.singletonMap("custom", custom);
+                String action,  
                 CircuitBreakerService circuitBreakerService,
-                NamedWriteableRegistry namedWriteableRegistry,
-                NetworkService networkService,  
-                SecureTransportSettingsProvider secureTransportSettingsProvider,
-                Tracer tracer
-            ) {  
-                return Collections.singletonMap("custom-secure", custom);
+ * this file be licensed under the Apache-2.0 license or a
+                } else {  
+        assertSame(custom, module.getHttpServerTransportSupplier());  
             }
-        };  
-
-        final IllegalArgumentException ex = assertThrows(
-            IllegalArgumentException.class,  
-            () -> newNetworkModule(settings, null, List.of(secureSettingsFactory, secureSettingsFactory), plugin)
-        );
-        assertThat(ex.getMessage(), startsWith("there is more than one secure transport settings provider"));  
-    }
-}
+        @Override
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+            xContentRegistry(),  

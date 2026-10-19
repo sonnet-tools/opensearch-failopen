@@ -1,362 +1,321 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene;
-
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptTable;  
-import org.apache.calcite.plan.hep.HepPlanner;
-import org.apache.calcite.plan.hep.HepProgramBuilder;
-import org.apache.calcite.rel.RelNode;  
-import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.logical.LogicalFilter;
-import org.apache.calcite.rel.type.RelDataTypeFactory;  
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlFunction;  
-import org.apache.calcite.sql.SqlFunctionCategory;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.OperandTypes;  
 import org.apache.calcite.sql.type.ReturnTypes;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.action.search.TransportSearchAction;  
-import org.opensearch.analytics.planner.CapabilityRegistry;
-import org.opensearch.analytics.planner.FieldStorageResolver;
-import org.opensearch.analytics.planner.PlannerContext;  
-import org.opensearch.analytics.planner.PlannerImpl;
-import org.opensearch.analytics.planner.dag.BackendPlanAdapter;
-import org.opensearch.analytics.planner.dag.DAGBuilder;  
-import org.opensearch.analytics.planner.dag.FragmentConversionDriver;
-import org.opensearch.analytics.planner.dag.PlanAlternativeSelector;
-import org.opensearch.analytics.planner.dag.PlanForker;  
-import org.opensearch.analytics.planner.dag.QueryDAG;
-import org.opensearch.analytics.planner.dag.Stage;
-import org.opensearch.analytics.planner.dag.StagePlan;  
-import org.opensearch.analytics.spi.AnalyticsSearchBackendPlugin;
-import org.opensearch.analytics.spi.BackendCapabilityProvider;
-import org.opensearch.analytics.spi.DelegatedExpression;  
-import org.opensearch.analytics.spi.DelegationType;
-import org.opensearch.analytics.spi.EngineCapability;
-import org.opensearch.analytics.spi.ExchangeSinkProvider;  
-import org.opensearch.analytics.spi.FieldType;
-import org.opensearch.analytics.spi.FilterCapability;
-import org.opensearch.analytics.spi.FilterDelegationInstructionNode;  
-import org.opensearch.analytics.spi.FilterTreeShape;
-import org.opensearch.analytics.spi.FragmentConvertor;
-import org.opensearch.analytics.spi.FragmentInstructionHandler;  
-import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;
-import org.opensearch.analytics.spi.InstructionNode;
-import org.opensearch.analytics.spi.ScalarFunction;  
-import org.opensearch.analytics.spi.ScanCapability;
-import org.opensearch.analytics.spi.ShardScanInstructionNode;
-import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.routing.GroupShardsIterator;  
-import org.opensearch.cluster.routing.OperationRouting;
-import org.opensearch.cluster.routing.ShardIterator;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;  
-import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.index.Index;
-import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;  
-import java.util.function.Function;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
- * End-to-end test: MATCH predicate flows through FragmentConversionDriver with the real
- * {@link LuceneAnalyticsBackendPlugin} serializer, producing valid MatchQueryBuilder bytes.  
- */
-public class LuceneAnalyticsBackendPluginTests extends OpenSearchTestCase {
-
-    /** Default resolver for DAGBuilder in tests; production injects core's resolver. */
-    private static final IndexNameExpressionResolver TEST_RESOLVER = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-
-    private static final SqlFunction MATCH_FUNCTION = new SqlFunction(
-        "MATCH",
-        SqlKind.OTHER_FUNCTION,  
-        ReturnTypes.BOOLEAN,
-        null,
-        OperandTypes.ANY,  
-        SqlFunctionCategory.USER_DEFINED_FUNCTION
-    );
-
-    private static final NamedWriteableRegistry WRITEABLE_REGISTRY = new NamedWriteableRegistry(
-        List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchQueryBuilder.NAME, MatchQueryBuilder::new))
-    );  
-
-    private RelDataTypeFactory typeFactory;
-    private RexBuilder rexBuilder;  
-    private RelOptCluster cluster;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        typeFactory = new JavaTypeFactoryImpl();  
-        rexBuilder = new RexBuilder(typeFactory);
-        cluster = RelOptCluster.create(new HepPlanner(new HepProgramBuilder().build()), rexBuilder);
-    }  
-
-    /**
-     * MATCH(message, 'hello world') through full pipeline → delegatedQueries contains  
-     * valid MatchQueryBuilder bytes with correct field name and query text.
-     */
-    public void testMatchPredicateDelegationEndToEnd() throws IOException {  
-        // DF backend: drives the plan, supports delegation, has a stub convertor
-        AnalyticsSearchBackendPlugin dfBackend = new StubDfBackend();
-        // Real Lucene backend: accepts delegation, provides MATCH serializer  
-        AnalyticsSearchBackendPlugin luceneBackend = new LuceneAnalyticsBackendPlugin(null);
-
-        Map<String, Map<String, Object>> fields = Map.of("message", Map.of("type", "keyword", "index", true));  
-        PlannerContext context = buildContext("parquet", fields, List.of(dfBackend, luceneBackend));
-
         RexNode condition = rexBuilder.makeCall(  
-            MATCH_FUNCTION,
-            rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 0),
-            rexBuilder.makeLiteral("hello world")  
-        );
-        RelOptTable table = mockTable("test_index", new String[] { "message" }, new SqlTypeName[] { SqlTypeName.VARCHAR });
-        LogicalFilter filter = LogicalFilter.create(new TableScan(cluster, cluster.traitSet(), List.of(), table) {  
-        }, condition);
-
-        RelNode marked = PlannerImpl.runAllOptimizations(filter, context);  
-        QueryDAG dag = DAGBuilder.build(marked, context.getCapabilityRegistry(), mockClusterService(), TEST_RESOLVER);
-        // Mirror DefaultPlanExecutor.executeInternal: forker → adapter → selector → convertor.
-        // preferMetadataDriver=false drops the Lucene alternative and forces the DataFusion  
-        // peer; the surviving plan exercises the DF→Lucene filter delegation path, which is
-        // what this test is asserting on.
-        PlanForker.forkAll(dag, context.getCapabilityRegistry());  
-        BackendPlanAdapter.adaptAll(dag, context.getCapabilityRegistry());
-        PlanAlternativeSelector.selectAll(dag, context.getCapabilityRegistry(), false);
-        FragmentConversionDriver.convertAll(dag, context.getCapabilityRegistry());  
-
-        // Find the leaf stage (shard scan with filter)
-        Stage leaf = dag.rootStage();  
-        while (!leaf.getChildStages().isEmpty()) {
-            leaf = leaf.getChildStages().getFirst();
-        }  
-        StagePlan plan = leaf.getPlanAlternatives()
-            .stream()
-            .filter(p -> "mock-parquet".equals(p.backendId()))  
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("No mock-parquet driver alternative found"));
-
-        // Verify delegation happened
-        assertFalse("delegatedExpressions should not be empty", plan.delegatedExpressions().isEmpty());
-        assertEquals("should have exactly one delegated expression", 1, plan.delegatedExpressions().size());  
-
-        // Deserialize and verify the MatchQueryBuilder
-        byte[] queryBytes = plan.delegatedExpressions().getFirst().getExpressionBytes();  
-        try (StreamInput input = new NamedWriteableAwareStreamInput(StreamInput.wrap(queryBytes), WRITEABLE_REGISTRY)) {
-            QueryBuilder deserialized = input.readNamedWriteable(QueryBuilder.class);
-            assertTrue("Should be MatchQueryBuilder", deserialized instanceof MatchQueryBuilder);  
-            MatchQueryBuilder matchQuery = (MatchQueryBuilder) deserialized;
-            assertEquals("message", matchQuery.fieldName());
-            assertEquals("hello world", matchQuery.value());  
-        }
-    }
-
-    // ---- Minimal infrastructure ----
-
-    @SuppressWarnings("unchecked")  
-    private PlannerContext buildContext(
-        String primaryFormat,
-        Map<String, Map<String, Object>> fieldMappings,  
-        List<AnalyticsSearchBackendPlugin> backends
-    ) {
-        MappingMetadata mappingMetadata = mock(MappingMetadata.class);  
-        when(mappingMetadata.sourceAsMap()).thenReturn(Map.of("properties", fieldMappings));
-
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);  
-        when(indexMetadata.getIndex()).thenReturn(new Index("test_index", "uuid"));
-        when(indexMetadata.getSettings()).thenReturn(
-            Settings.builder()  
-                .put("index.composite.primary_data_format", primaryFormat)
-                .putList("index.composite.secondary_data_formats", "lucene")
-                .build()  
-        );
-        when(indexMetadata.mapping()).thenReturn(mappingMetadata);
-        when(indexMetadata.getNumberOfShards()).thenReturn(2);  
-
-        Metadata metadata = mock(Metadata.class);
-        when(metadata.index("test_index")).thenReturn(indexMetadata);  
-
-        ClusterState clusterState = mock(ClusterState.class);
-        when(clusterState.metadata()).thenReturn(metadata);  
-
-        Function<IndexMetadata, FieldStorageResolver> fieldStorageFactory = FieldStorageResolver::new;
-        return new PlannerContext(new CapabilityRegistry(backends, fieldStorageFactory), clusterState);  
-    }
-
-    private RelOptTable mockTable(String tableName, String[] fieldNames, SqlTypeName[] fieldTypes) {  
-        RelDataTypeFactory.Builder builder = typeFactory.builder();
-        for (int index = 0; index < fieldNames.length; index++) {
-            builder.add(fieldNames[index], typeFactory.createSqlType(fieldTypes[index]));  
-        }
-        RelOptTable table = mock(RelOptTable.class);
-        when(table.getQualifiedName()).thenReturn(List.of(tableName));  
-        when(table.getRowType()).thenReturn(builder.build());
-        return table;
-    }  
-
-    private ClusterService mockClusterService() {
-        ClusterService clusterService = mock(ClusterService.class);  
-        ClusterState clusterState = mock(ClusterState.class);
-        OperationRouting routing = mock(OperationRouting.class);
-        when(clusterService.state()).thenReturn(clusterState);  
-        when(clusterService.operationRouting()).thenReturn(routing);
-        when(routing.searchShards(any(), any(), any(), any())).thenReturn(new GroupShardsIterator<ShardIterator>(List.of()));
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, Set.of(TransportSearchAction.SHARD_COUNT_LIMIT_SETTING));  
-        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
-        return clusterService;
-    }  
-
-    /** Minimal DF backend that drives the plan with delegation support. */
-    private static class StubDfBackend implements AnalyticsSearchBackendPlugin {  
-        private static final Set<FieldType> TYPES = new HashSet<>();
-        static {
-            TYPES.addAll(FieldType.numeric());  
-            TYPES.addAll(FieldType.keyword());
-            TYPES.addAll(FieldType.date());
-            TYPES.add(FieldType.BOOLEAN);  
-        }
-
-        @Override  
-        public String name() {
-            return "mock-parquet";
-        }  
-
-        @Override
-        public BackendCapabilityProvider getCapabilityProvider() {  
-            return new BackendCapabilityProvider() {
-                @Override
-                public Set<EngineCapability> supportedEngineCapabilities() {  
-                    return Set.of(EngineCapability.SORT);
-                }
-
-                @Override
-                public Set<ScanCapability> scanCapabilities() {
-                    return Set.of(new ScanCapability.DocValues(Set.of("parquet"), TYPES));  
-                }
-
-                @Override  
-                public Set<FilterCapability> filterCapabilities() {
-                    Set<FilterCapability> caps = new HashSet<>();
-                    for (ScalarFunction op : Set.of(  
-                        ScalarFunction.EQUALS,
-                        ScalarFunction.NOT_EQUALS,
-                        ScalarFunction.GREATER_THAN,  
-                        ScalarFunction.GREATER_THAN_OR_EQUAL,
-                        ScalarFunction.LESS_THAN,
-                        ScalarFunction.LESS_THAN_OR_EQUAL  
-                    )) {
-                        caps.add(new FilterCapability.Standard(op, TYPES, Set.of("parquet")));
-                    }  
-                    return caps;
-                }
-
-                @Override
-                public Set<DelegationType> supportedDelegations() {
+        // Real Lucene backend: accepts delegation, provides MATCH serializer  
+    public void testMatchPredicateDelegationEndToEnd() throws IOException {  
+import org.opensearch.analytics.spi.ExchangeSinkProvider;  
                     return Set.of(DelegationType.FILTER);  
-                }
-            };
-        }  
-
-        @Override
-        public ExchangeSinkProvider getExchangeSinkProvider() {  
-            return (context, backendContext) -> null;
-        }
-
-        @Override
-        public FragmentConvertor getFragmentConvertor() {
-            return new FragmentConvertor() {  
-                @Override
-                public byte[] convertFragment(RelNode fragment) {
-                    return "fragment".getBytes(StandardCharsets.UTF_8);  
-                }
-
-                @Override  
-                public byte[] attachFragmentOnTop(RelNode fragment, byte[] innerBytes) {
-                    return innerBytes;
-                }  
-
-                @Override
-                public byte[] attachPartialAggOnTop(RelNode partialAggFragment, byte[] innerBytes) {  
-                    return innerBytes;
-                }
-            };  
-        }
-
-        @Override  
-        public FragmentInstructionHandlerFactory getInstructionHandlerFactory() {
-            return new FragmentInstructionHandlerFactory() {
-                @Override  
-                public Optional<InstructionNode> createShardScanNode(boolean requestsRowIds, String logicalTableName) {
-                    return Optional.of(new ShardScanInstructionNode(requestsRowIds, logicalTableName));
-                }  
-
-                @Override
-                public Optional<InstructionNode> createFilterDelegationNode(  
-                    FilterTreeShape treeShape,
-                    int delegatedPredicateCount,
-                    List<DelegatedExpression> delegatedExpressions  
-                ) {
-                    return Optional.of(new FilterDelegationInstructionNode(treeShape, delegatedPredicateCount, delegatedExpressions));
-                }  
-
-                @Override
-                public Optional<InstructionNode> createShardScanWithDelegationNode(  
-                    FilterTreeShape treeShape,
-                    int delegatedPredicateCount,
-                    boolean requestsRowIds,  
-                    String logicalTableName
-                ) {
+     * valid MatchQueryBuilder bytes with correct field name and query text.
+import org.opensearch.analytics.planner.FieldStorageResolver;
+import org.opensearch.analytics.planner.PlannerImpl;
+        return new PlannerContext(new CapabilityRegistry(backends, fieldStorageFactory), clusterState);  
+        Map<String, Map<String, Object>> fieldMappings,  
+        List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchQueryBuilder.NAME, MatchQueryBuilder::new))
+import org.opensearch.analytics.planner.dag.PlanAlternativeSelector;
+            builder.add(fieldNames[index], typeFactory.createSqlType(fieldTypes[index]));  
                     return Optional.of(  
-                        new ShardScanWithDelegationInstructionNode(treeShape, delegatedPredicateCount, requestsRowIds, logicalTableName)
-                    );
-                }  
-
-                @Override
-                public Optional<InstructionNode> createPartialAggregateNode() {  
-                    return Optional.empty();
+import org.apache.calcite.rex.RexNode;
+    private static final SqlFunction MATCH_FUNCTION = new SqlFunction(
+            assertEquals("hello world", matchQuery.value());  
+import org.opensearch.analytics.planner.dag.BackendPlanAdapter;
+        RelDataTypeFactory.Builder builder = typeFactory.builder();
+        ClusterState clusterState = mock(ClusterState.class);
+        Function<IndexMetadata, FieldStorageResolver> fieldStorageFactory = FieldStorageResolver::new;
+    private static class StubDfBackend implements AnalyticsSearchBackendPlugin {  
+        "MATCH",
+        return clusterService;
+                .build()  
+public class LuceneAnalyticsBackendPluginTests extends OpenSearchTestCase {
+                    List<DelegatedExpression> delegatedExpressions  
+                        ScalarFunction.GREATER_THAN,  
                 }
-
-                @Override
+        String primaryFormat,
+    /**
+            assertTrue("Should be MatchQueryBuilder", deserialized instanceof MatchQueryBuilder);  
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+                        ScalarFunction.EQUALS,
+ */
+        BackendPlanAdapter.adaptAll(dag, context.getCapabilityRegistry());
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
+                    return Set.of(EngineCapability.SORT);
+import org.opensearch.analytics.planner.dag.Stage;
+                    return Optional.of(new ShardScanInstructionNode(requestsRowIds, logicalTableName));
+            Settings.builder()  
+                public FragmentInstructionHandler<?> createHandler(InstructionNode node) {
+        );
+        ReturnTypes.BOOLEAN,
+        when(clusterService.operationRouting()).thenReturn(routing);
+    private PlannerContext buildContext(
+        RelNode marked = PlannerImpl.runAllOptimizations(filter, context);  
+        byte[] queryBytes = plan.delegatedExpressions().getFirst().getExpressionBytes();  
+        when(mappingMetadata.sourceAsMap()).thenReturn(Map.of("properties", fieldMappings));
+        }  
                 public Optional<InstructionNode> createFinalAggregateNode() {
+import org.apache.calcite.sql.type.SqlTypeName;
                     return Optional.empty();  
                 }
-
-                @Override  
-                public FragmentInstructionHandler<?> createHandler(InstructionNode node) {
-                    throw new UnsupportedOperationException("mock");
+        SqlKind.OTHER_FUNCTION,  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        @Override  
+import org.apache.calcite.plan.hep.HepPlanner;
+        QueryDAG dag = DAGBuilder.build(marked, context.getCapabilityRegistry(), mockClusterService(), TEST_RESOLVER);
+                        ScalarFunction.LESS_THAN_OR_EQUAL  
+import org.opensearch.cluster.metadata.IndexMetadata;
                 }  
-            };
-        }
+        cluster = RelOptCluster.create(new HepPlanner(new HepProgramBuilder().build()), rexBuilder);
+                }  
+                public byte[] attachPartialAggOnTop(RelNode partialAggFragment, byte[] innerBytes) {  
+import org.apache.calcite.rel.type.RelDataTypeFactory;  
+import org.opensearch.analytics.spi.AnalyticsSearchBackendPlugin;
+            .findFirst()
+        assertFalse("delegatedExpressions should not be empty", plan.delegatedExpressions().isEmpty());
+import org.opensearch.cluster.ClusterState;
+                @Override
+        when(table.getRowType()).thenReturn(builder.build());
+        // Deserialize and verify the MatchQueryBuilder
+                public byte[] attachFragmentOnTop(RelNode fragment, byte[] innerBytes) {
+                public Optional<InstructionNode> createPartialAggregateNode() {  
+        // Find the leaf stage (shard scan with filter)
+    public void setUp() throws Exception {
+            return (context, backendContext) -> null;
+        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, Set.of(TransportSearchAction.SHARD_COUNT_LIMIT_SETTING));  
+        LogicalFilter filter = LogicalFilter.create(new TableScan(cluster, cluster.traitSet(), List.of(), table) {  
+                }
+import org.opensearch.analytics.spi.ShardScanInstructionNode;
+    private RelOptTable mockTable(String tableName, String[] fieldNames, SqlTypeName[] fieldTypes) {  
+        @Override
+import org.opensearch.analytics.spi.DelegationType;
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);  
+import org.apache.calcite.plan.RelOptCluster;
+        when(clusterService.state()).thenReturn(clusterState);  
+                ) {
+                public Set<ScanCapability> scanCapabilities() {
+                        caps.add(new FilterCapability.Standard(op, TYPES, Set.of("parquet")));
+import static org.mockito.Mockito.mock;
+            MATCH_FUNCTION,
+        when(indexMetadata.getNumberOfShards()).thenReturn(2);  
+            QueryBuilder deserialized = input.readNamedWriteable(QueryBuilder.class);
     }  
+import org.opensearch.cluster.routing.GroupShardsIterator;  
+        );
+        Map<String, Map<String, Object>> fields = Map.of("message", Map.of("type", "keyword", "index", true));  
+import org.opensearch.analytics.spi.ScalarFunction;  
+        RelOptTable table = mockTable("test_index", new String[] { "message" }, new SqlTypeName[] { SqlTypeName.VARCHAR });
+                    FilterTreeShape treeShape,
+        }
+            TYPES.addAll(FieldType.date());
+import org.opensearch.analytics.planner.PlannerContext;  
+import org.opensearch.action.search.TransportSearchAction;  
+        when(clusterState.metadata()).thenReturn(metadata);  
+import org.opensearch.common.settings.ClusterSettings;
+import org.apache.calcite.sql.SqlKind;
+        Metadata metadata = mock(Metadata.class);
+        SqlFunctionCategory.USER_DEFINED_FUNCTION
+    private RelDataTypeFactory typeFactory;
+        }
+                        ScalarFunction.NOT_EQUALS,
+ * compatible open source license.
+        when(table.getQualifiedName()).thenReturn(List.of(tableName));  
+import org.opensearch.cluster.routing.OperationRouting;
+                    int delegatedPredicateCount,
+            .filter(p -> "mock-parquet".equals(p.backendId()))  
+import org.apache.calcite.rel.core.TableScan;
+    ) {
+import org.opensearch.analytics.spi.EngineCapability;
+import org.opensearch.analytics.planner.dag.DAGBuilder;  
+        }  
+    private RexBuilder rexBuilder;  
+    }
+                @Override
+        when(indexMetadata.mapping()).thenReturn(mappingMetadata);
 }
+import static org.mockito.Mockito.when;
+        ClusterState clusterState = mock(ClusterState.class);
+            return new FragmentConvertor() {  
+        when(routing.searchShards(any(), any(), any(), any())).thenReturn(new GroupShardsIterator<ShardIterator>(List.of()));
+            .stream()
+        }
+import org.opensearch.analytics.spi.FilterCapability;
+            MatchQueryBuilder matchQuery = (MatchQueryBuilder) deserialized;
+                public Set<FilterCapability> filterCapabilities() {
+package org.opensearch.be.lucene;
+        // Mirror DefaultPlanExecutor.executeInternal: forker → adapter → selector → convertor.
+        null,
+    }  
+                @Override
+                    return Set.of(new ScanCapability.DocValues(Set.of("parquet"), TYPES));  
+ * this file be licensed under the Apache-2.0 license or a
+                ) {
+ *
+            };  
+                @Override  
+        public String name() {
+ * End-to-end test: MATCH predicate flows through FragmentConversionDriver with the real
+    private static final NamedWriteableRegistry WRITEABLE_REGISTRY = new NamedWriteableRegistry(
+import org.opensearch.analytics.spi.ScanCapability;
+                public byte[] convertFragment(RelNode fragment) {
+                @Override
+import org.opensearch.analytics.spi.InstructionNode;
+        @Override  
+import java.util.HashSet;
+                @Override  
+import org.opensearch.analytics.planner.dag.FragmentConversionDriver;
+        }, condition);
+        when(indexMetadata.getSettings()).thenReturn(
+                    throw new UnsupportedOperationException("mock");
+        try (StreamInput input = new NamedWriteableAwareStreamInput(StreamInput.wrap(queryBytes), WRITEABLE_REGISTRY)) {
+            };
+import java.util.Optional;
+        PlannerContext context = buildContext("parquet", fields, List.of(dfBackend, luceneBackend));
+                @Override  
+import org.opensearch.analytics.planner.dag.QueryDAG;
+                        ScalarFunction.GREATER_THAN_OR_EQUAL,
+import org.opensearch.test.OpenSearchTestCase;
+                    );
+        AnalyticsSearchBackendPlugin luceneBackend = new LuceneAnalyticsBackendPlugin(null);
+                @Override
+        @Override
+        PlanForker.forkAll(dag, context.getCapabilityRegistry());  
+import java.util.Set;  
+    /** Minimal DF backend that drives the plan with delegation support. */
+        assertEquals("should have exactly one delegated expression", 1, plan.delegatedExpressions().size());  
+                @Override
+/*  
+        for (int index = 0; index < fieldNames.length; index++) {
+                    return caps;
+                }
+        }  
+        public FragmentConvertor getFragmentConvertor() {
+                    return innerBytes;
+import org.opensearch.analytics.spi.FilterDelegationInstructionNode;  
+import org.opensearch.analytics.spi.FragmentInstructionHandler;  
+        // peer; the surviving plan exercises the DF→Lucene filter delegation path, which is
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+        typeFactory = new JavaTypeFactoryImpl();  
+                .put("index.composite.primary_data_format", primaryFormat)
+        OperationRouting routing = mock(OperationRouting.class);
+import org.opensearch.core.index.Index;
+    }
+import org.opensearch.index.query.QueryBuilder;  
+import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;  
+import java.nio.charset.StandardCharsets;
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;  
+                    return Optional.of(new FilterDelegationInstructionNode(treeShape, delegatedPredicateCount, delegatedExpressions));
+import org.opensearch.analytics.spi.DelegatedExpression;  
+        StagePlan plan = leaf.getPlanAlternatives()
+                    )) {
+import java.util.List;  
+        when(metadata.index("test_index")).thenReturn(indexMetadata);  
+                    int delegatedPredicateCount,
+                @Override  
+            assertEquals("message", matchQuery.fieldName());
+        Stage leaf = dag.rootStage();  
+import org.opensearch.cluster.metadata.MappingMetadata;
+            TYPES.addAll(FieldType.keyword());
+            .orElseThrow(() -> new AssertionError("No mock-parquet driver alternative found"));
+    );  
+import org.opensearch.cluster.metadata.Metadata;
+                }
+import java.util.function.Function;
+ */  
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+        ClusterService clusterService = mock(ClusterService.class);  
+import java.util.Map;
+import static org.mockito.ArgumentMatchers.any;  
+import org.opensearch.analytics.planner.CapabilityRegistry;
+                        new ShardScanWithDelegationInstructionNode(treeShape, delegatedPredicateCount, requestsRowIds, logicalTableName)
+import org.apache.calcite.sql.type.OperandTypes;  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        }
+                    return "fragment".getBytes(StandardCharsets.UTF_8);  
+            return new FragmentInstructionHandlerFactory() {
+            leaf = leaf.getChildStages().getFirst();
+     * MATCH(message, 'hello world') through full pipeline → delegatedQueries contains  
+import org.apache.calcite.sql.SqlFunction;  
+                }
+/**
+    private static final IndexNameExpressionResolver TEST_RESOLVER = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        AnalyticsSearchBackendPlugin dfBackend = new StubDfBackend();
+                    String logicalTableName
+            rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 0),
+import org.apache.calcite.sql.SqlFunctionCategory;
+import org.opensearch.analytics.planner.dag.PlanForker;  
+import org.opensearch.common.util.concurrent.ThreadContext;  
+        // preferMetadataDriver=false drops the Lucene alternative and forces the DataFusion  
+import org.apache.calcite.rex.RexBuilder;
+import org.opensearch.analytics.planner.dag.StagePlan;  
+                @Override
+                @Override
+        // Verify delegation happened
+            TYPES.add(FieldType.BOOLEAN);  
+    private RelOptCluster cluster;
+            TYPES.addAll(FieldType.numeric());  
+            return new BackendCapabilityProvider() {
+                }  
+        public BackendCapabilityProvider getCapabilityProvider() {  
+            };
+                @Override
+        OperandTypes.ANY,  
+import org.opensearch.analytics.spi.FieldType;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.analytics.spi.FilterTreeShape;
+import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;
+        public FragmentInstructionHandlerFactory getInstructionHandlerFactory() {
+                public Optional<InstructionNode> createShardScanWithDelegationNode(  
+                    return innerBytes;
+                }
+        }
+        }
+        MappingMetadata mappingMetadata = mock(MappingMetadata.class);  
+import org.opensearch.cluster.service.ClusterService;  
+        super.setUp();
+        private static final Set<FieldType> TYPES = new HashSet<>();
+                public Set<EngineCapability> supportedEngineCapabilities() {  
+        FragmentConversionDriver.convertAll(dag, context.getCapabilityRegistry());  
+                }  
+import org.apache.calcite.rel.logical.LogicalFilter;
+    private ClusterService mockClusterService() {
+        rexBuilder = new RexBuilder(typeFactory);
+    @Override  
+                    for (ScalarFunction op : Set.of(  
+                }  
+        return table;
+    }  
+        List<AnalyticsSearchBackendPlugin> backends
+        // what this test is asserting on.
+ * {@link LuceneAnalyticsBackendPlugin} serializer, producing valid MatchQueryBuilder bytes.  
+import org.apache.calcite.rel.RelNode;  
+                .putList("index.composite.secondary_data_formats", "lucene")
+                public Optional<InstructionNode> createFilterDelegationNode(  
+     */
+                        ScalarFunction.LESS_THAN,
+import org.apache.calcite.plan.hep.HepProgramBuilder;
+        while (!leaf.getChildStages().isEmpty()) {
+        static {
+        public ExchangeSinkProvider getExchangeSinkProvider() {  
+                    boolean requestsRowIds,  
+            return "mock-parquet";
+        PlanAlternativeSelector.selectAll(dag, context.getCapabilityRegistry(), false);
+    @SuppressWarnings("unchecked")  
+    // ---- Minimal infrastructure ----
+                }
+    /** Default resolver for DAGBuilder in tests; production injects core's resolver. */
+        @Override
+                    }  
+        RelOptTable table = mock(RelOptTable.class);
+import org.opensearch.analytics.spi.FragmentConvertor;
+            rexBuilder.makeLiteral("hello world")  
+                    Set<FilterCapability> caps = new HashSet<>();
+import org.opensearch.analytics.spi.BackendCapabilityProvider;
+                public Set<DelegationType> supportedDelegations() {
+        when(indexMetadata.getIndex()).thenReturn(new Index("test_index", "uuid"));
+import org.apache.calcite.plan.RelOptTable;  
+import org.opensearch.cluster.routing.ShardIterator;
+        // DF backend: drives the plan, supports delegation, has a stub convertor
+                    FilterTreeShape treeShape,
+ * SPDX-License-Identifier: Apache-2.0
+                public Optional<InstructionNode> createShardScanNode(boolean requestsRowIds, String logicalTableName) {
+    }  
+    );
+                    return Optional.empty();

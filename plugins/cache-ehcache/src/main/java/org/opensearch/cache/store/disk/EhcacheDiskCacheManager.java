@@ -1,250 +1,234 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cache.store.disk;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.cache.EhcacheDiskCacheSettings;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.cache.CacheType;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.secure_sm.AccessController;
-
-import java.io.File;  
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;  
-
-import org.ehcache.Cache;
-import org.ehcache.PersistentCacheManager;  
-import org.ehcache.config.builders.CacheConfigurationBuilder;
-import org.ehcache.config.builders.CacheManagerBuilder;
-import org.ehcache.config.builders.PooledExecutionServiceConfigurationBuilder;  
-
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MAXIMUM_THREADS_KEY;
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MIN_THREADS_KEY;  
-import static org.opensearch.cache.store.disk.EhcacheDiskCache.THREAD_POOL_ALIAS_PREFIX;
-import static org.opensearch.cache.store.disk.EhcacheDiskCache.UNIQUE_ID;
-
-/**
+            // All caches have been closed associated with this cache manager, lets close this as well.
  * This is responsible to create a single cache manager for a cache type, and is used to create subsequent caches if
- * needed.  
- */
-public class EhcacheDiskCacheManager {
-
-    // Defines one cache manager per cache type.
-    private static final Map<CacheType, Tuple<PersistentCacheManager, AtomicInteger>> cacheManagerMap = new HashMap<>();
-    private static final Logger logger = LogManager.getLogger(EhcacheDiskCacheManager.class);  
+     * @param storagePath storage path for cache
+import static org.opensearch.cache.store.disk.EhcacheDiskCache.UNIQUE_ID;
+                        IOUtils.rm(ehcacheDirectory);
+}  
+                }
+                    PooledExecutionServiceConfigurationBuilder.newPooledExecutionServiceConfigurationBuilder()
+                // before V hits ehcache.
+        if (cacheManagerMap.get(cacheType) == null) {  
+            if (cacheManagerMap.get(cacheType) == null) {  
     /**
-     * This lock is used to synchronize the operation where we create/remove cache and increment/decrement the
-     * reference counters.  
-     */
-    private static final Lock lock = new ReentrantLock();
-    private static final String CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG = "Ehcache manager does not exist for " + "cache type: ";  
-
-    // For testing
-    static Map<CacheType, Tuple<PersistentCacheManager, AtomicInteger>> getCacheManagerMap() {  
-        return cacheManagerMap;
-    }
-
-    /**
-     * Private Constructor
-     */  
-    private EhcacheDiskCacheManager() {}
-
-    /**  
-     * Used to fetch cache manager for a cache type. If it doesn't exist, it creates one.
-     * @param cacheType cache type
-     * @param storagePath storage path for the cache  
-     * @param settings settings
-     * @param threadPoolAlias alias for disk thread pool
-     * @return persistent cache manager  
-     */
-    public static PersistentCacheManager getCacheManager(
-        CacheType cacheType,  
-        String storagePath,
-        Settings settings,
-        String threadPoolAlias  
-    ) {
-        try {
-            lock.lock();  
-            return cacheManagerMap.computeIfAbsent(
-                cacheType,
-                type -> new Tuple<>(createCacheManager(cacheType, storagePath, settings, threadPoolAlias), new AtomicInteger(0))  
-            ).v1();
-        } finally {
-            lock.unlock();  
+import static org.opensearch.cache.store.disk.EhcacheDiskCache.THREAD_POOL_ALIAS_PREFIX;
+import org.apache.logging.log4j.Logger;
+                );  
         }
-    }
-
-    /**
-     * Checks whether cache manager exist for a cache type.
-     * @param cacheType cache type  
-     * @return true/false
+            lock.lock();
+                        logger.error(  
      */
-    public static boolean doesCacheManagerExist(CacheType cacheType) {  
-        return cacheManagerMap.get(cacheType) != null;
-    }
-
+                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)  
+                        .pool(
     /**
+    /**
+     */  
+     * This lock is used to synchronize the operation where we create/remove cache and increment/decrement the
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MAXIMUM_THREADS_KEY;
+        String storagePath,  
+                return;
+    }
+        }
+                            () -> new ParameterizedMessage("Failed to delete ehcache disk cache data under path: {}", storagePath)
+        try {
+                "One of the arguments passed to createCache is "
+                );  
+     * @return disk cache  
+                } catch (Exception e) {  
+        String diskCacheAlias,  
+import java.util.HashMap;
+                logger.error(() -> new ParameterizedMessage("Exception occurred while trying to close cache: " + diskCacheAlias), ex);  
+     * Used to close cache for a specific cache type and alias.
+    public static void closeCache(CacheType cacheType, String diskCacheAlias, String storagePath) {
+            // Check again in case a different thread removed it.
+    ) {
+import java.nio.file.Path;  
+    @SuppressForbidden(reason = "Ehcache uses File.io")  
+                if (cacheManagerMap.get(cacheType) == null) {  
+                .using(  
+    public static boolean doesCacheManagerExist(CacheType cacheType) {  
+     */  
+            );
+                Path ehcacheDirectory = Paths.get(storagePath);
+                        )  
+     */
+    }
      * Used to create caches using a cache manager for a specific cache type.
+                            "Removing disk cache related files for cacheType: " + cacheType + " under " + "directory: " + ehcacheDirectory
+                    + ", "
+                    try {  
+            return cacheManagerMap.computeIfAbsent(
+     * @return persistent cache manager  
+        return AccessController.doPrivileged(
+     * @return true/false
+     * @param <V> value type
+import java.util.concurrent.atomic.AtomicInteger;
+                type -> new Tuple<>(createCacheManager(cacheType, storagePath, settings, threadPoolAlias), new AtomicInteger(0))  
+import org.opensearch.common.util.io.IOUtils;  
+import org.ehcache.config.builders.CacheConfigurationBuilder;
+                    throw new IllegalStateException(CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG + cacheType);
+import org.opensearch.cache.EhcacheDiskCacheSettings;
+ */
+        CacheType cacheType,
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+                // This is not always feasible or necessary, like for BytesReference. So, we handle the value serialization
+        );
+                // We pass ByteArrayWrapperSerializer as ehcache's value serializer. If V is an interface, and we pass its
+        }  
+            logger.warn(() -> new ParameterizedMessage("Trying to close cache for: {} but cache manager does not " + "exist", cacheType));  
+    private static final Map<CacheType, Tuple<PersistentCacheManager, AtomicInteger>> cacheManagerMap = new HashMap<>();
+                    logger.warn(CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG + cacheType);
+                                .get(settings)
+                cacheManager.removeCache(diskCacheAlias);
+/*  
+                try {  
+        Settings settings,
+     * @param cacheType cache type  
      * @param cacheType cache type  
      * @param diskCacheAlias disk cache alias
-     * @param cacheConfigurationBuilder cache configuration
-     * @return disk cache  
-     * @param <K> key type
-     * @param <V> value type
-     */  
-    public static <K, V> Cache<K, V> createCache(
-        CacheType cacheType,
-        String diskCacheAlias,  
-        CacheConfigurationBuilder<K, V> cacheConfigurationBuilder
-    ) {
-        if (cacheType == null || diskCacheAlias == null || cacheConfigurationBuilder == null) {  
-            throw new IllegalArgumentException(
-                "One of the arguments passed to createCache is "
+ * needed.  
                     + "null. CacheType: "  
-                    + cacheType
-                    + ", diskCacheAlias: "
-                    + diskCacheAlias  
-                    + ", "
-                    + "cacheConfigurationBuilder: "
-                    + cacheConfigurationBuilder  
-            );
-        }
-        if (cacheManagerMap.get(cacheType) == null) {  
-            throw new IllegalArgumentException(CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG + cacheType);
-        }
-        // Creating the cache requires permissions specified in plugin-security.policy  
-        return AccessController.doPrivileged(() -> {
-            try {
-                lock.lock();  
-                // Check again for null cache manager, in case it got removed by another thread in below closeCache()
-                // method.
-                if (cacheManagerMap.get(cacheType) == null) {  
-                    logger.warn(CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG + cacheType);
-                    throw new IllegalStateException(CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG + cacheType);
-                }  
-                Cache<K, V> cache = cacheManagerMap.get(cacheType).v1().createCache(diskCacheAlias, cacheConfigurationBuilder
-                // We pass ByteArrayWrapperSerializer as ehcache's value serializer. If V is an interface, and we pass its
-                // serializer directly to ehcache, ehcache requires the classes match exactly before/after serialization.  
-                // This is not always feasible or necessary, like for BytesReference. So, we handle the value serialization
-                // before V hits ehcache.
-                );  
-                cacheManagerMap.get(cacheType).v2().incrementAndGet();
-                return cache;
-            } catch (IllegalArgumentException ex) {  
-                logger.error("Ehcache disk cache initialization failed due to illegal argument: {}", ex.getMessage());
-                throw ex;
-            } catch (IllegalStateException ex) {  
-                logger.error("Ehcache disk cache initialization failed: {}", ex.getMessage());
-                throw ex;
-            } finally {  
-                lock.unlock();
-            }
-        });  
-    }
-
-    /**  
-     * Used to close cache for a specific cache type and alias.
-     * @param cacheType cache type
-     * @param diskCacheAlias disk cache alias  
-     * @param storagePath storage path for cache
-     */
-    @SuppressForbidden(reason = "Ehcache uses File.io")  
-    public static void closeCache(CacheType cacheType, String diskCacheAlias, String storagePath) {
-        if (cacheManagerMap.get(cacheType) == null) {
-            logger.warn(() -> new ParameterizedMessage("Trying to close cache for: {} but cache manager does not " + "exist", cacheType));  
-            return;
-        }
-        PersistentCacheManager cacheManager = cacheManagerMap.get(cacheType).v1();  
-        try {
-            lock.lock();
-            try {  
-                cacheManager.removeCache(diskCacheAlias);
-            } catch (Exception ex) {
-                logger.error(() -> new ParameterizedMessage("Exception occurred while trying to close cache: " + diskCacheAlias), ex);  
-            }
-            // Check again in case a different thread removed it.
-            if (cacheManagerMap.get(cacheType) == null) {  
-                logger.warn(
-                    () -> new ParameterizedMessage("Trying to close cache for: {} but cache manager does not " + "exist", cacheType)
-                );  
-                return;
-            }
-            int referenceCount = cacheManagerMap.get(cacheType).v2().decrementAndGet();  
-            // All caches have been closed associated with this cache manager, lets close this as well.
-            if (referenceCount == 0) {
-                try {  
-                    logger.debug("Closing cache manager for cacheType: " + cacheType);
-                    cacheManager.close();
-                } catch (Exception e) {  
-                    logger.error(() -> new ParameterizedMessage("Exception occurred while trying to close ehcache manager"), e);
-                }
-                // Delete all the disk cache related files/data in case it is present  
-                Path ehcacheDirectory = Paths.get(storagePath);
-                if (Files.exists(ehcacheDirectory)) {
-                    try {  
-                        logger.debug(
-                            "Removing disk cache related files for cacheType: " + cacheType + " under " + "directory: " + ehcacheDirectory
-                        );  
-                        IOUtils.rm(ehcacheDirectory);
-                    } catch (IOException e) {
-                        logger.error(  
-                            () -> new ParameterizedMessage("Failed to delete ehcache disk cache data under path: {}", storagePath)
-                        );
-                    }  
-                }
-                cacheManagerMap.remove(cacheType);
-            }  
-        } finally {
-            lock.unlock();
-        }  
-    }
-
-    @SuppressForbidden(reason = "Ehcache uses File.io")  
-    private static PersistentCacheManager createCacheManager(
-        CacheType cacheType,
-        String storagePath,  
-        Settings settings,
-        String threadPoolAlias
-    ) {  
-
-        return AccessController.doPrivileged(
             () -> CacheManagerBuilder.newCacheManagerBuilder()  
+import org.opensearch.common.collect.Tuple;
+            lock.unlock();  
+    /**  
+    ) {  
+        PersistentCacheManager cacheManager = cacheManagerMap.get(cacheType).v1();  
+    private static final Logger logger = LogManager.getLogger(EhcacheDiskCacheManager.class);  
+import java.nio.file.Paths;
+        CacheType cacheType,  
                 .with(CacheManagerBuilder.persistence(new File(storagePath)))
-
-                .using(  
-                    PooledExecutionServiceConfigurationBuilder.newPooledExecutionServiceConfigurationBuilder()
-                        .defaultPool(THREAD_POOL_ALIAS_PREFIX + "Default#" + UNIQUE_ID, 1, 3) // Default pool used for other tasks
-                        // like event listeners  
-                        .pool(
-                            threadPoolAlias,
-                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)  
-                                .get(DISK_WRITE_MIN_THREADS_KEY)
-                                .get(settings),
-                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)  
-                                .get(DISK_WRITE_MAXIMUM_THREADS_KEY)
-                                .get(settings)
-                        )  
-                        .build()
-                )
-                .build(true)  
-        );
+            try {  
+            if (referenceCount == 0) {
+                // Check again for null cache manager, in case it got removed by another thread in below closeCache()
+            } catch (IllegalArgumentException ex) {  
+ * compatible open source license.
+     * @param settings settings
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MIN_THREADS_KEY;  
     }
-}  
+     * @param <K> key type
+                lock.lock();  
+                logger.error("Ehcache disk cache initialization failed: {}", ex.getMessage());
+                        logger.debug(
+                    cacheManager.close();
+     * @param cacheType cache type
+            } catch (IllegalStateException ex) {  
+                            threadPoolAlias,
+        Settings settings,
+     */
+                        // like event listeners  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+        String threadPoolAlias
+     * reference counters.  
+import java.util.concurrent.locks.Lock;
+                        );  
+                    + diskCacheAlias  
+    public static PersistentCacheManager getCacheManager(
+                    logger.error(() -> new ParameterizedMessage("Exception occurred while trying to close ehcache manager"), e);
+                )
+import java.nio.file.Files;
+ * SPDX-License-Identifier: Apache-2.0
+    static Map<CacheType, Tuple<PersistentCacheManager, AtomicInteger>> getCacheManagerMap() {  
+    /**  
+            }
+    }
+package org.opensearch.cache.store.disk;
+    }
+     */
+    private static final Lock lock = new ReentrantLock();
+                // method.
+    }
+import org.apache.logging.log4j.LogManager;
+import java.util.Map;  
+    private static PersistentCacheManager createCacheManager(
+                        .build()
+import java.io.File;  
+import java.io.IOException;
+    // For testing
+        }
+            throw new IllegalArgumentException(CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG + cacheType);
+                .build(true)  
+                                .get(DISK_WRITE_MIN_THREADS_KEY)
+public class EhcacheDiskCacheManager {
+                // Delete all the disk cache related files/data in case it is present  
+            int referenceCount = cacheManagerMap.get(cacheType).v2().decrementAndGet();  
+            ).v1();
+                cacheType,
+            try {
+                return cache;
+        return cacheManagerMap.get(cacheType) != null;
+        } finally {
+    private EhcacheDiskCacheManager() {}
+import org.opensearch.secure_sm.AccessController;
+                                .get(DISK_WRITE_MAXIMUM_THREADS_KEY)
+    public static <K, V> Cache<K, V> createCache(
+                                .get(settings),
+        return AccessController.doPrivileged(() -> {
+            }
+        String threadPoolAlias  
+    @SuppressForbidden(reason = "Ehcache uses File.io")  
+            } finally {  
+                    + "cacheConfigurationBuilder: "
+import java.util.concurrent.locks.ReentrantLock;  
+    ) {
+                    + cacheType
+            lock.unlock();
+import org.opensearch.common.settings.Settings;
+        if (cacheManagerMap.get(cacheType) == null) {
+                cacheManagerMap.remove(cacheType);
+        return cacheManagerMap;
+import org.ehcache.config.builders.PooledExecutionServiceConfigurationBuilder;  
+        String storagePath,
+                    + ", diskCacheAlias: "
+/**
+                logger.warn(
+                    }  
+    private static final String CACHE_MANAGER_DOES_NOT_EXIST_EXCEPTION_MSG = "Ehcache manager does not exist for " + "cache type: ";  
+    /**
+                // serializer directly to ehcache, ehcache requires the classes match exactly before/after serialization.  
+import org.opensearch.common.SuppressForbidden;
+     * Private Constructor
+                Cache<K, V> cache = cacheManagerMap.get(cacheType).v1().createCache(diskCacheAlias, cacheConfigurationBuilder
+        try {
+     * @param cacheConfigurationBuilder cache configuration
+     * Used to fetch cache manager for a cache type. If it doesn't exist, it creates one.
+                throw ex;
+        // Creating the cache requires permissions specified in plugin-security.policy  
+                }  
+ *
+                logger.error("Ehcache disk cache initialization failed due to illegal argument: {}", ex.getMessage());
+                if (Files.exists(ehcacheDirectory)) {
+                cacheManagerMap.get(cacheType).v2().incrementAndGet();
+        }
+import org.ehcache.config.builders.CacheManagerBuilder;
+     * @param cacheType cache type
+            return;
+                    () -> new ParameterizedMessage("Trying to close cache for: {} but cache manager does not " + "exist", cacheType)
+     * Checks whether cache manager exist for a cache type.
+            } catch (Exception ex) {
+        if (cacheType == null || diskCacheAlias == null || cacheConfigurationBuilder == null) {  
+                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)  
+import org.opensearch.common.cache.CacheType;  
+     * @param storagePath storage path for the cache  
+     * @param diskCacheAlias disk cache alias  
+import org.ehcache.Cache;
+    // Defines one cache manager per cache type.
+     * @param threadPoolAlias alias for disk thread pool
+        CacheConfigurationBuilder<K, V> cacheConfigurationBuilder
+            lock.lock();  
+import org.ehcache.PersistentCacheManager;  
+                lock.unlock();
+                    logger.debug("Closing cache manager for cacheType: " + cacheType);
+                    + cacheConfigurationBuilder  
+ * The OpenSearch Contributors require contributions made to  
+                        .defaultPool(THREAD_POOL_ALIAS_PREFIX + "Default#" + UNIQUE_ID, 1, 3) // Default pool used for other tasks
+            }  
+                        );
+            throw new IllegalArgumentException(
+        });  
+            }
+        } finally {
+                    } catch (IOException e) {
+        CacheType cacheType,
+                }
+                throw ex;

@@ -1,149 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.lucene.queries;
-
-import org.apache.lucene.tests.util.TestUtil;  
-import org.opensearch.index.mapper.RangeType;
-
-public class IntegerRandomBinaryDocValuesRangeQueryTests extends BaseRandomBinaryDocValuesRangeQueryTestCase {  
-
-    @Override
-    protected String fieldName() {  
-        return "int_range_dv_field";
-    }
-
-    @Override
-    protected RangeType rangeType() {
-        return RangeType.INTEGER;  
-    }
-
-    @Override  
-    protected Range nextRange(int dimensions) throws Exception {
-        int value1 = nextIntInternal();
-        int value2 = nextIntInternal();  
-        int min = Math.min(value1, value2);
-        int max = Math.max(value1, value2);
-        return new IntTestRange(min, max);  
-    }
-
-    private int nextIntInternal() {  
-        switch (random().nextInt(5)) {
-            case 0:
-                return Integer.MIN_VALUE;  
-            case 1:
-                return Integer.MAX_VALUE;
-            default:  
-                int bpv = random().nextInt(32);
-                switch (bpv) {
-                    case 32:  
-                        return random().nextInt();
-                    default:
-                        int v = TestUtil.nextInt(random(), 0, (1 << bpv) - 1);  
-                        if (bpv > 0) {
-                            // negative values sometimes
-                            v -= 1 << (bpv - 1);  
-                        }
-                        return v;
-                }  
+ * compatible open source license.
         }
-    }
-
-    private static class IntTestRange extends AbstractRange<Integer> {
-        int min;
-        int max;  
-
-        IntTestRange(int min, int max) {
-            this.min = min;  
-            this.max = max;
-        }
-
-        @Override
-        public Integer getMin() {
-            return min;  
-        }
-
-        @Override  
-        protected void setMin(int dim, Object val) {
-            assert dim == 0;
-            int v = (Integer) val;  
-            if (min < v) {
-                max = v;
-            } else {  
                 min = v;
+            return true;
             }
-        }  
-
-        @Override
-        public Integer getMax() {  
-            return max;
-        }
-
-        @Override
-        protected void setMax(int dim, Object val) {
+                        if (bpv > 0) {
+            }  
+            case 1:
+                return Integer.MIN_VALUE;  
             assert dim == 0;  
-            int v = (Integer) val;
-            if (max > v) {
-                min = v;  
-            } else {
+ * under the License.  
+                    case 32:  
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+        return RangeType.INTEGER;  
+        switch (random().nextInt(5)) {
+        protected void setMax(int dim, Object val) {
+            IntTestRange other = (IntTestRange) o;
+    @Override  
+/*
                 max = v;
-            }  
-        }
-
-        @Override  
-        protected boolean isDisjoint(Range o) {
             IntTestRange other = (IntTestRange) o;
-            return this.min > other.max || this.max < other.min;  
-        }
-
+    @Override
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+        protected void setMin(int dim, Object val) {
         @Override  
-        protected boolean isWithin(Range o) {
-            IntTestRange other = (IntTestRange) o;
-            if ((this.min >= other.min && this.max <= other.max) == false) {  
-                // not within:
-                return false;
-            }  
-            return true;
-        }
-
-        @Override
-        protected boolean contains(Range o) {
-            IntTestRange other = (IntTestRange) o;  
-            if ((this.min <= other.min && this.max >= other.max) == false) {
-                // not contains:
-                return false;  
-            }
-            return true;
-        }  
-
+            this.max = max;
+    private int nextIntInternal() {  
+/*
+    protected Range nextRange(int dimensions) throws Exception {
     }
-
+ */
+                int bpv = random().nextInt(32);
+ */  
+            if ((this.min <= other.min && this.max >= other.max) == false) {
+            return true;
+ * software distributed under the License is distributed on an
+        @Override  
+ * Unless required by applicable law or agreed to in writing,
+            if ((this.min >= other.min && this.max <= other.max) == false) {  
+                // not contains:
+ * the Apache License, Version 2.0 (the "License"); you may
+        return new IntTestRange(min, max);  
+import org.apache.lucene.tests.util.TestUtil;  
+                        return v;
+                min = v;  
+                }  
+            assert dim == 0;
+ *
+        int value2 = nextIntInternal();  
+            } else {
+        }  
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+                            // negative values sometimes
+                return false;  
+        }  
+        int min = Math.min(value1, value2);
+            } else {  
+        @Override
+        @Override
+ * Modifications Copyright OpenSearch Contributors. See  
+        }
+            this.min = min;  
+package org.opensearch.lucene.queries;
+            if (max > v) {
+ * GitHub history for details.
+            if (min < v) {
+        }
+            default:  
+        }
 }
+                    default:
+        @Override
+                        int v = TestUtil.nextInt(random(), 0, (1 << bpv) - 1);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                max = v;
+    }
+            }  
+                switch (bpv) {
+            int v = (Integer) val;
+    }
+            }
+    private static class IntTestRange extends AbstractRange<Integer> {
+            return max;
+ * The OpenSearch Contributors require contributions made to  
+        int min;
+            case 0:
+        int max = Math.max(value1, value2);
+        protected boolean isWithin(Range o) {
+        }
+public class IntegerRandomBinaryDocValuesRangeQueryTests extends BaseRandomBinaryDocValuesRangeQueryTestCase {  
+ */
+        public Integer getMax() {  
+            return this.min > other.max || this.max < other.min;  
+        int value1 = nextIntInternal();
+        public Integer getMin() {
+        int max;  
+ * specific language governing permissions and limitations
+                        }
+    protected String fieldName() {  
+            IntTestRange other = (IntTestRange) o;  
+        protected boolean contains(Range o) {
+        return "int_range_dv_field";
+        }
+        @Override
+ * You may obtain a copy of the License at  
+            int v = (Integer) val;  
+        @Override  
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            return min;  
+ *
+    protected RangeType rangeType() {
+        protected boolean isDisjoint(Range o) {
+import org.opensearch.index.mapper.RangeType;
+        }
+    }
+                        return random().nextInt();
+        IntTestRange(int min, int max) {
+                return Integer.MAX_VALUE;
+ * this work for additional information regarding copyright
+                            v -= 1 << (bpv - 1);  
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+                return false;
+                // not within:

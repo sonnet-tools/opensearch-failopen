@@ -1,253 +1,222 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.queue;
-
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.BenchmarkMode;
-import org.openjdk.jmh.annotations.Fork;  
-import org.openjdk.jmh.annotations.Group;
-import org.openjdk.jmh.annotations.GroupThreads;
-import org.openjdk.jmh.annotations.Level;  
-import org.openjdk.jmh.annotations.Measurement;
-import org.openjdk.jmh.annotations.Mode;
-import org.openjdk.jmh.annotations.OutputTimeUnit;  
-import org.openjdk.jmh.annotations.Param;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;  
-import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.Warmup;
-import org.openjdk.jmh.infra.Blackhole;  
-
-import java.util.LinkedList;
-import java.util.List;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.LockSupport;  
-import java.util.concurrent.locks.ReentrantLock;
-
-/**  
- * JMH benchmark for {@link LockablePool} measuring:
- * <ul>
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)  
  *   <li>Isolated checkout/return throughput at varying thread counts</li>  
- *   <li>Mixed workload: concurrent writers + periodic checkoutAll (refresh)</li>
- *   <li>Aggressive refresh: frequent checkoutAll to stress Phase 3 bulk cleanup</li>
- *   <li>Writer latency during refresh contention (sample mode)</li>  
- * </ul>
- */
-@Fork(2)  
-@Warmup(iterations = 2, time = 3)
-@Measurement(iterations = 3, time = 5)
-@State(Scope.Benchmark)  
-@SuppressWarnings("unused")
-public class LockablePoolBenchmark {
-
-    @Param({ "4", "8" })
-    int concurrency;
-
-    private LockablePool<PoolEntry> pool;
-
-    @Setup(Level.Iteration)  
-    public void setup() {
-        AtomicInteger counter = new AtomicInteger(0);
-        pool = new LockablePool<>(() -> new PoolEntry(counter.getAndIncrement()), LinkedList::new, concurrency);  
-        // Pre-warm the pool with more entries to populate multiple stripes
-        for (int i = 0; i < concurrency * 4; i++) {
-            PoolEntry e = pool.getAndLock();  
-            pool.releaseAndUnlock(e);
-        }
-    }  
-
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        @Override
     // ── Mixed workload: writers + periodic refresh (1s interval) ──
-
-    @Benchmark
     @Group("mixed_7w_1r")
-    @GroupThreads(7)  
-    @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public void writers_7w1r(Blackhole bh) {  
-        PoolEntry e = pool.getAndLock();
-        bh.consume(simulateWork(e));
-        pool.releaseAndUnlock(e);  
-    }
-
-    @Benchmark  
-    @Group("mixed_7w_1r")
-    @GroupThreads(1)
-    @BenchmarkMode(Mode.Throughput)  
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public List<PoolEntry> refresh_7w1r() throws InterruptedException {
-        Thread.sleep(1000);  
-        return pool.checkoutAll();
-    }
-
-    @Benchmark
-    @Group("mixed_3w_1r")
-    @GroupThreads(3)  
-    @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public void writers_3w1r(Blackhole bh) {  
-        PoolEntry e = pool.getAndLock();
-        bh.consume(simulateWork(e));
-        pool.releaseAndUnlock(e);  
-    }
-
-    @Benchmark  
-    @Group("mixed_3w_1r")
-    @GroupThreads(1)
-    @BenchmarkMode(Mode.Throughput)  
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public List<PoolEntry> refresh_3w1r() throws InterruptedException {
-        Thread.sleep(1000);  
-        return pool.checkoutAll();
-    }
-
-    // ── Aggressive refresh: 10ms interval to stress checkoutAll Phase 3 ──
-    // This makes checkoutAll fire ~100x/sec instead of 1x/sec, amplifying
-    // the difference between per-item remove (old) and bulk removeIf (new).  
-
-    @Benchmark
-    @Group("aggressive_7w_1r")  
-    @GroupThreads(7)
-    @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)  
-    public void writers_aggressive_7w1r(Blackhole bh) {
-        PoolEntry e = pool.getAndLock();
         bh.consume(simulateWork(e));  
-        pool.releaseAndUnlock(e);
-    }
-
-    @Benchmark
-    @Group("aggressive_7w_1r")
-    @GroupThreads(1)  
-    @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public List<PoolEntry> refresh_aggressive_7w1r() {  
-        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
-        return pool.checkoutAll();
-    }  
-
-    @Benchmark
     @Group("aggressive_3w_1r")  
-    @GroupThreads(3)
-    @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)  
-    public void writers_aggressive_3w1r(Blackhole bh) {
-        PoolEntry e = pool.getAndLock();
-        bh.consume(simulateWork(e));  
-        pool.releaseAndUnlock(e);
-    }
-
-    @Benchmark
-    @Group("aggressive_3w_1r")
-    @GroupThreads(1)  
-    @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public List<PoolEntry> refresh_aggressive_3w1r() {  
-        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
-        return pool.checkoutAll();
-    }  
-
-    // ── Writer latency during refresh contention (sample mode) ──
-    // Measures per-operation latency distribution to capture tail latency  
-    // spikes caused by checkoutAll holding the pool lock.
-
-    @Benchmark  
-    @Group("latency_7w_1r")
-    @GroupThreads(7)
-    @BenchmarkMode(Mode.SampleTime)  
+        // Pre-warm the pool with more entries to populate multiple stripes
+    public List<PoolEntry> refresh_latency_7w1r() {
+ * SPDX-License-Identifier: Apache-2.0
     @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public void writers_latency_7w1r(Blackhole bh) {
-        PoolEntry e = pool.getAndLock();  
+import org.openjdk.jmh.annotations.Scope;
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+    }
+    @GroupThreads(8)  
+@State(Scope.Benchmark)  
+    @GroupThreads(7)
+import org.openjdk.jmh.annotations.Fork;  
+public class LockablePoolBenchmark {
+        PoolEntry e = pool.getAndLock();
+            pool.releaseAndUnlock(e);
         bh.consume(simulateWork(e));
-        pool.releaseAndUnlock(e);
-    }  
-
-    @Benchmark
-    @Group("latency_7w_1r")  
+    public void writers_latency_7w1r(Blackhole bh) {
+        long result = entry.hashCode();
+    // ── Isolated: pure writer throughput (no refresh contention) ──  
+    // Measures per-operation latency distribution to capture tail latency  
+    }
+            lock.unlock();  
+        PoolEntry e = pool.getAndLock();
     @GroupThreads(1)
     @BenchmarkMode(Mode.SampleTime)
-    @OutputTimeUnit(TimeUnit.NANOSECONDS)  
-    public List<PoolEntry> refresh_latency_7w1r() {
-        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
-        return pool.checkoutAll();  
-    }
-
-    // ── Isolated: pure writer throughput (no refresh contention) ──  
-
-    @Benchmark
-    @Group("writers_only_4t")  
-    @GroupThreads(4)
-    @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)  
+        return pool.checkoutAll();
     public void writersOnly_4t(Blackhole bh) {
-        PoolEntry e = pool.getAndLock();
-        bh.consume(simulateWork(e));  
-        pool.releaseAndUnlock(e);
-    }
-
-    @Benchmark
-    @Group("writers_only_8t")
-    @GroupThreads(8)  
+import org.openjdk.jmh.annotations.Warmup;
+        for (int i = 0; i < 20; i++) {
+    static final class PoolEntry implements Lockable {
+            return lock.tryLock();
     @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public void writersOnly_8t(Blackhole bh) {  
-        PoolEntry e = pool.getAndLock();
-        bh.consume(simulateWork(e));
-        pool.releaseAndUnlock(e);  
-    }
-
-    // ── Isolated checkoutAll throughput (no writers) ──  
-    // Directly measures checkoutAll cost with a pre-populated pool.
-
-    @Benchmark  
-    @BenchmarkMode(Mode.AverageTime)
-    @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public List<PoolEntry> checkoutAll_isolated() {  
-        // Re-populate pool before each checkout
-        for (int i = 0; i < concurrency; i++) {
-            PoolEntry e = pool.getAndLock();  
             pool.releaseAndUnlock(e);
+import org.openjdk.jmh.annotations.Setup;  
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)  
+    @GroupThreads(7)  
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    @Benchmark
+    @BenchmarkMode(Mode.AverageTime)
+import java.util.LinkedList;
+        public void unlock() {
+    // ── Aggressive refresh: 10ms interval to stress checkoutAll Phase 3 ──
+        bh.consume(simulateWork(e));
+    @BenchmarkMode(Mode.Throughput)  
         }
+            result ^= (result >> 7);
+    public void setup() {
+    @Group("latency_7w_1r")
+@Warmup(iterations = 2, time = 3)
+    @Benchmark
+ * </ul>
+import org.openjdk.jmh.annotations.Param;
+    int concurrency;
+import org.openjdk.jmh.infra.Blackhole;  
+    @GroupThreads(7)
+        PoolEntry e = pool.getAndLock();  
+    @Group("mixed_7w_1r")
+        pool = new LockablePool<>(() -> new PoolEntry(counter.getAndIncrement()), LinkedList::new, concurrency);  
+            this.id = id;  
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    @BenchmarkMode(Mode.SampleTime)  
+        bh.consume(simulateWork(e));  
+        return pool.checkoutAll();
+ *   <li>Writer latency during refresh contention (sample mode)</li>  
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+/**  
+    @BenchmarkMode(Mode.Throughput)
+import java.util.concurrent.TimeUnit;
+    }
+            result ^= (result << 17);
+        for (int i = 0; i < concurrency * 4; i++) {
+    @GroupThreads(4)
+    public List<PoolEntry> refresh_7w1r() throws InterruptedException {
+        }  
+    @Group("aggressive_3w_1r")
+ * The OpenSearch Contributors require contributions made to  
+ * <ul>
+    @Benchmark
+        public void lock() {
+        pool.releaseAndUnlock(e);
+        for (int i = 0; i < concurrency; i++) {
+import java.util.List;  
+    }  
+    public void writersOnly_8t(Blackhole bh) {  
+    @Benchmark
+        @Override
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)  
+        pool.releaseAndUnlock(e);  
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+@SuppressWarnings("unused")
+    @BenchmarkMode(Mode.Throughput)  
+    @Group("latency_7w_1r")  
+        Thread.sleep(1000);  
+        PoolEntry(int id) {
+            result ^= (result << 13);  
+        bh.consume(simulateWork(e));  
+    // This makes checkoutAll fire ~100x/sec instead of 1x/sec, amplifying
+    public void writers_3w1r(Blackhole bh) {  
+    @Group("aggressive_7w_1r")  
+import org.openjdk.jmh.annotations.Group;
+        return pool.checkoutAll();
+    @GroupThreads(3)  
+    }
+    // spikes caused by checkoutAll holding the pool lock.
+/*  
+    @BenchmarkMode(Mode.Throughput)
+ */  
+    }
+import org.openjdk.jmh.annotations.State;
+    @Benchmark  
+@Measurement(iterations = 3, time = 5)
+    public void writers_aggressive_3w1r(Blackhole bh) {
+        pool.releaseAndUnlock(e);  
+import org.openjdk.jmh.annotations.OutputTimeUnit;  
+    }
+    }
+        PoolEntry e = pool.getAndLock();
+        Thread.sleep(1000);  
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+            lock.lock();
+        bh.consume(simulateWork(e));
+        pool.releaseAndUnlock(e);
+    public List<PoolEntry> refresh_aggressive_7w1r() {  
+ *
+        pool.releaseAndUnlock(e);
+    @Group("writers_only_8t")
+    @Group("aggressive_7w_1r")
+import org.openjdk.jmh.annotations.BenchmarkMode;
+    @BenchmarkMode(Mode.Throughput)
+    @Benchmark
+        }
+    public List<PoolEntry> refresh_aggressive_3w1r() {  
+    @Benchmark
+    @Benchmark  
+import org.openjdk.jmh.annotations.GroupThreads;
+        public boolean tryLock() {  
+    }
+    @Param({ "4", "8" })
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+        }
+    @BenchmarkMode(Mode.Throughput)
+    private LockablePool<PoolEntry> pool;
+ *   <li>Mixed workload: concurrent writers + periodic checkoutAll (refresh)</li>
+    }
+    }
+import java.util.concurrent.atomic.AtomicInteger;
+import org.openjdk.jmh.annotations.Level;  
+    @GroupThreads(1)
+    @Benchmark  
+            PoolEntry e = pool.getAndLock();  
+    @GroupThreads(1)
+        }
+        AtomicInteger counter = new AtomicInteger(0);
+    @BenchmarkMode(Mode.Throughput)
+        return pool.checkoutAll();
+    public List<PoolEntry> refresh_3w1r() throws InterruptedException {
+import java.util.concurrent.locks.ReentrantLock;
+        final int id;
+ * JMH benchmark for {@link LockablePool} measuring:
+import org.openjdk.jmh.annotations.Measurement;
+    @GroupThreads(1)  
+    }  
+    public void writers_aggressive_7w1r(Blackhole bh) {
+    @Benchmark
+    public void writers_7w1r(Blackhole bh) {  
+    // Directly measures checkoutAll cost with a pre-populated pool.
+            PoolEntry e = pool.getAndLock();  
+    @Group("mixed_3w_1r")
+        pool.releaseAndUnlock(e);  
+import java.util.concurrent.locks.LockSupport;  
+        @Override  
+        PoolEntry e = pool.getAndLock();
+        }  
+    @GroupThreads(1)  
+    // the difference between per-item remove (old) and bulk removeIf (new).  
+}  
+    }  
+        return pool.checkoutAll();  
+    @BenchmarkMode(Mode.Throughput)
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+import org.openjdk.jmh.annotations.Benchmark;
+        PoolEntry e = pool.getAndLock();
+        }
+    @BenchmarkMode(Mode.Throughput)
+ *   <li>Aggressive refresh: frequent checkoutAll to stress Phase 3 bulk cleanup</li>
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    private static long simulateWork(PoolEntry entry) {  
+    @Setup(Level.Iteration)  
+import org.openjdk.jmh.annotations.Mode;
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)  
+    @Benchmark  
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    // ── Writer latency during refresh contention (sample mode) ──
+        private final ReentrantLock lock = new ReentrantLock();  
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    }  
+@Fork(2)  
+ */
+        PoolEntry e = pool.getAndLock();
+    // ── Isolated checkoutAll throughput (no writers) ──  
+    public List<PoolEntry> checkoutAll_isolated() {  
+    @Group("writers_only_4t")  
+    @Benchmark
+ * compatible open source license.
+        pool.releaseAndUnlock(e);
+        // Re-populate pool before each checkout
+    @GroupThreads(3)
+        bh.consume(simulateWork(e));
+    @Benchmark
         return pool.checkoutAll();  
     }
-
-    private static long simulateWork(PoolEntry entry) {  
-        long result = entry.hashCode();
-        for (int i = 0; i < 20; i++) {
-            result ^= (result << 13);  
-            result ^= (result >> 7);
-            result ^= (result << 17);
-        }  
         return result;
-    }
-
-    static final class PoolEntry implements Lockable {
-        final int id;
-        private final ReentrantLock lock = new ReentrantLock();  
-
-        PoolEntry(int id) {
-            this.id = id;  
-        }
-
-        @Override  
-        public void lock() {
-            lock.lock();
-        }  
-
-        @Override
-        public boolean tryLock() {  
-            return lock.tryLock();
-        }
-
-        @Override
-        public void unlock() {
-            lock.unlock();  
-        }
-    }
-}  
+    @Group("mixed_3w_1r")
+package org.opensearch.common.queue;

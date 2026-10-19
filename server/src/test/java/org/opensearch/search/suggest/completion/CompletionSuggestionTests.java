@@ -1,171 +1,161 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+                entry.addOption(newOption);
+                    j,
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest.completion;
-
-import org.opensearch.core.common.text.Text;
+            assertThat(option.getDoc().doc, equalTo(count));
 import org.opensearch.search.suggest.Suggest;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-import java.util.stream.Collectors;
-
-import static org.opensearch.search.suggest.Suggest.COMPARATOR;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+        assertThat(reducedSuggestion.getOptions().size(), lessThanOrEqualTo(size));
+        int numSurfaceForms = randomIntBetween(1, size);  
+            CompletionSuggestion suggestion = new CompletionSuggestion(name, size, false);
+    public void testReduceWithDuplicates() {  
+        int count = 0;
+ * under the License.  
+                );  
+        assertThat(reducedSuggestion.getOptions().size(), lessThanOrEqualTo(size));
+        for (int i = 0; i < numSurfaceForms; i++) {
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
-
-public class CompletionSuggestionTests extends OpenSearchTestCase {
-
-    public void testReduce() {  
-        List<Suggest.Suggestion<CompletionSuggestion.Entry>> shardSuggestions = new ArrayList<>();
+ * Licensed to Elasticsearch under one or more contributor  
         int nShards = randomIntBetween(1, 10);
         String name = randomAlphaOfLength(10);  
-        int size = randomIntBetween(3, 5);
-        for (int i = 0; i < nShards; i++) {
-            CompletionSuggestion suggestion = new CompletionSuggestion(name, size, false);  
-            suggestion.addTerm(new CompletionSuggestion.Entry(new Text(""), 0, 0));
-            shardSuggestions.add(suggestion);
-        }  
-        int totalResults = randomIntBetween(0, 5) * nShards;
+ *  
+                );  
         float maxScore = randomIntBetween(totalResults, totalResults * 2);
-        for (int i = 0; i < totalResults; i++) {  
-            Suggest.Suggestion<CompletionSuggestion.Entry> suggestion = randomFrom(shardSuggestions);
-            CompletionSuggestion.Entry entry = suggestion.getEntries().get(0);
-            if (entry.getOptions().size() < size) {  
-                CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(
-                    i,
-                    new Text(""),  
-                    maxScore - i,
-                    Collections.emptyMap()
-                );  
-                option.setShardIndex(randomIntBetween(0, Integer.MAX_VALUE));
-                entry.addOption(option);
-            }  
-        }
-        CompletionSuggestion reducedSuggestion = (CompletionSuggestion) shardSuggestions.get(0).reduce(shardSuggestions);
-        assertNotNull(reducedSuggestion);  
-        assertThat(reducedSuggestion.getOptions().size(), lessThanOrEqualTo(size));
-        int count = 0;
-        for (CompletionSuggestion.Entry.Option option : reducedSuggestion.getOptions()) {  
-            assertThat(option.getDoc().doc, equalTo(count));
-            count++;
-        }  
-    }
-
-    public void testReduceWithDuplicates() {  
-        List<Suggest.Suggestion<CompletionSuggestion.Entry>> shardSuggestions = new ArrayList<>();
-        int nShards = randomIntBetween(2, 10);
-        String name = randomAlphaOfLength(10);  
-        int size = randomIntBetween(10, 100);
-        int totalResults = size * nShards;
-        int numSurfaceForms = randomIntBetween(1, size);  
-        String[] surfaceForms = new String[numSurfaceForms];
-        for (int i = 0; i < numSurfaceForms; i++) {
-            surfaceForms[i] = randomAlphaOfLength(20);  
-        }
-        List<CompletionSuggestion.Entry.Option> options = new ArrayList<>();
-        for (int i = 0; i < nShards; i++) {  
-            CompletionSuggestion suggestion = new CompletionSuggestion(name, size, true);
-            CompletionSuggestion.Entry entry = new CompletionSuggestion.Entry(new Text(""), 0, 0);
-            suggestion.addTerm(entry);  
-            int maxScore = randomIntBetween(totalResults, totalResults * 2);
-            for (int j = 0; j < size; j++) {
-                String surfaceForm = randomFrom(surfaceForms);  
-                CompletionSuggestion.Entry.Option newOption = new CompletionSuggestion.Entry.Option(
-                    j,
-                    new Text(surfaceForm),  
-                    maxScore - j,
-                    Collections.emptyMap()
-                );  
-                newOption.setShardIndex(0);
-                entry.addOption(newOption);
-                options.add(newOption);  
-            }
+                    (j + 1) * (i + 1),
+/*  
             shardSuggestions.add(suggestion);
+            if (entry.getOptions().size() < size) {  
+ * this work for additional information regarding copyright
+ * GitHub history for details.
+        }
+        for (CompletionSuggestion.Entry.Option option : reducedSuggestion.getOptions()) {  
+            suggestion.addTerm(new CompletionSuggestion.Entry(new Text(""), 0, 0));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+        int totalResults = size * nShards;
+            if (option.getDoc().shardIndex == shardIndex) {
+ * SPDX-License-Identifier: Apache-2.0
         }  
-        List<CompletionSuggestion.Entry.Option> expected = options.stream()
-            .sorted(COMPARATOR)
-            .distinct()  
-            .limit(size)
-            .collect(Collectors.toList());
-        CompletionSuggestion reducedSuggestion = (CompletionSuggestion) shardSuggestions.get(0).reduce(shardSuggestions);  
-        assertNotNull(reducedSuggestion);
-        assertThat(reducedSuggestion.getOptions().size(), lessThanOrEqualTo(size));
-        assertEquals(expected, reducedSuggestion.getOptions());  
-    }
-
-    public void testReduceTiebreak() {  
-        List<Suggest.Suggestion<CompletionSuggestion.Entry>> shardSuggestions = new ArrayList<>();
-        Text surfaceForm = new Text(randomAlphaOfLengthBetween(5, 10));
-        float score = randomFloat();  
+ */  
         int numResponses = randomIntBetween(2, 10);
         String name = randomAlphaOfLength(10);
-        int size = randomIntBetween(10, 100);  
-        for (int i = 0; i < numResponses; i++) {
-            CompletionSuggestion suggestion = new CompletionSuggestion(name, size, false);
-            CompletionSuggestion.Entry entry = new CompletionSuggestion.Entry(new Text(""), 0, 0);  
-            suggestion.addTerm(entry);
-            int shardIndex = 0;
-            for (int j = 0; j < size; j++) {  
-                CompletionSuggestion.Entry.Option newOption = new CompletionSuggestion.Entry.Option(
-                    (j + 1) * (i + 1),
-                    surfaceForm,  
-                    score,
-                    Collections.emptyMap()
-                );  
-                newOption.setShardIndex(shardIndex++);
-                entry.addOption(newOption);
+                entry.addOption(option);
             }  
-            shardSuggestions.add(suggestion);
-        }
-        CompletionSuggestion reducedSuggestion = (CompletionSuggestion) shardSuggestions.get(0).reduce(shardSuggestions);  
-        assertNotNull(reducedSuggestion);
-        List<CompletionSuggestion.Entry.Option> options = reducedSuggestion.getOptions();
-        assertThat(options.size(), lessThanOrEqualTo(size));  
-        int shardIndex = 0;
-        int docId = -1;
-        for (CompletionSuggestion.Entry.Option option : options) {  
-            assertThat(option.getDoc().shardIndex, greaterThanOrEqualTo(shardIndex));
-            if (option.getDoc().shardIndex == shardIndex) {
-                assertThat(option.getDoc().doc, greaterThan(docId));  
+        List<Suggest.Suggestion<CompletionSuggestion.Entry>> shardSuggestions = new ArrayList<>();
+                String surfaceForm = randomFrom(surfaceForms);  
+            surfaceForms[i] = randomAlphaOfLength(20);  
+import static org.hamcrest.Matchers.greaterThan;  
             } else {
+        int totalResults = randomIntBetween(0, 5) * nShards;
+ */
+        CompletionSuggestion reducedSuggestion = (CompletionSuggestion) shardSuggestions.get(0).reduce(shardSuggestions);  
+            suggestion.addTerm(entry);  
+ * this file be licensed under the Apache-2.0 license or a
+                options.add(newOption);  
+        List<Suggest.Suggestion<CompletionSuggestion.Entry>> shardSuggestions = new ArrayList<>();
+            CompletionSuggestion.Entry entry = new CompletionSuggestion.Entry(new Text(""), 0, 0);
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.common.text.Text;
+        List<CompletionSuggestion.Entry.Option> options = new ArrayList<>();
+            CompletionSuggestion suggestion = new CompletionSuggestion(name, size, false);  
+import java.util.List;
+        assertNotNull(reducedSuggestion);  
+                    Collections.emptyMap()
+            shardSuggestions.add(suggestion);
+        for (CompletionSuggestion.Entry.Option option : options) {  
+                CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(
+        List<CompletionSuggestion.Entry.Option> options = reducedSuggestion.getOptions();
+        assertNotNull(reducedSuggestion);
+            .collect(Collectors.toList());
+        int shardIndex = 0;
+        }
+import static org.opensearch.search.suggest.Suggest.COMPARATOR;
+ * specific language governing permissions and limitations
+            CompletionSuggestion suggestion = new CompletionSuggestion(name, size, true);
+public class CompletionSuggestionTests extends OpenSearchTestCase {
+            suggestion.addTerm(entry);
+}
+ * Unless required by applicable law or agreed to in writing,
+            int maxScore = randomIntBetween(totalResults, totalResults * 2);
+            .distinct()  
+            CompletionSuggestion.Entry entry = new CompletionSuggestion.Entry(new Text(""), 0, 0);  
+        CompletionSuggestion reducedSuggestion = (CompletionSuggestion) shardSuggestions.get(0).reduce(shardSuggestions);
+                entry.addOption(newOption);
+            Suggest.Suggestion<CompletionSuggestion.Entry> suggestion = randomFrom(shardSuggestions);
+        for (int i = 0; i < nShards; i++) {  
+/*  
+            .limit(size)
+                    maxScore - i,
+ *
+/*
+        }  
                 assertThat(option.getDoc().shardIndex, equalTo(shardIndex + 1));
+                option.setShardIndex(randomIntBetween(0, Integer.MAX_VALUE));
+        }  
+import org.opensearch.test.OpenSearchTestCase;  
+                newOption.setShardIndex(0);
+        CompletionSuggestion reducedSuggestion = (CompletionSuggestion) shardSuggestions.get(0).reduce(shardSuggestions);  
+        for (int i = 0; i < totalResults; i++) {  
+        String[] surfaceForms = new String[numSurfaceForms];
                 shardIndex = option.getDoc().shardIndex;  
-            }
+            .sorted(COMPARATOR)
+                    new Text(surfaceForm),  
+            for (int j = 0; j < size; j++) {  
             docId = option.getDoc().doc;
+        assertNotNull(reducedSuggestion);
+import java.util.Collections;  
+import java.util.ArrayList;
+    public void testReduceTiebreak() {  
+        assertEquals(expected, reducedSuggestion.getOptions());  
+                    maxScore - j,
+    }
+ *
+        int size = randomIntBetween(10, 100);  
+        int size = randomIntBetween(3, 5);
+ * ownership. Elasticsearch licenses this file to you under  
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
         }  
     }
-}
+        for (int i = 0; i < nShards; i++) {
+            assertThat(option.getDoc().shardIndex, greaterThanOrEqualTo(shardIndex));
+ * software distributed under the License is distributed on an
+            int shardIndex = 0;
+        Text surfaceForm = new Text(randomAlphaOfLengthBetween(5, 10));
+        List<CompletionSuggestion.Entry.Option> expected = options.stream()
+                    score,
+ * license agreements. See the NOTICE file distributed with
+        }
+                newOption.setShardIndex(shardIndex++);
+            shardSuggestions.add(suggestion);
+            for (int j = 0; j < size; j++) {
+ * compatible open source license.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                CompletionSuggestion.Entry.Option newOption = new CompletionSuggestion.Entry.Option(
+ * The OpenSearch Contributors require contributions made to  
+ * KIND, either express or implied.  See the License for the
+        int size = randomIntBetween(10, 100);
+            }  
+        for (int i = 0; i < numResponses; i++) {
+package org.opensearch.search.suggest.completion;
+    public void testReduce() {  
+import java.util.stream.Collectors;
+        assertThat(options.size(), lessThanOrEqualTo(size));  
+                );  
+        String name = randomAlphaOfLength(10);  
+import static org.hamcrest.Matchers.equalTo;
+            count++;
+            CompletionSuggestion.Entry entry = suggestion.getEntries().get(0);
+        int docId = -1;
+                    surfaceForm,  
+    }
+        List<Suggest.Suggestion<CompletionSuggestion.Entry>> shardSuggestions = new ArrayList<>();
+            }
+                    i,
+                    Collections.emptyMap()
+ */  
+        int nShards = randomIntBetween(2, 10);
+                assertThat(option.getDoc().doc, greaterThan(docId));  
+ * not use this file except in compliance with the License.
+        float score = randomFloat();  
+                    Collections.emptyMap()
+                    new Text(""),  
+                CompletionSuggestion.Entry.Option newOption = new CompletionSuggestion.Entry.Option(

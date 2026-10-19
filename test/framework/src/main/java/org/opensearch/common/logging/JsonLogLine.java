@@ -1,170 +1,140 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.logging;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ObjectParser;
-
-import java.util.List;
-
-/**  
- * Represents a single log line in a json format.
- * Parsing log lines with this class confirms the json format of logs
- */  
-public class JsonLogLine {
-    public static final ObjectParser<JsonLogLine, Void> PARSER = createParser(true);
-
-    private String type;
-    private String timestamp;
-    private String level;  
-    private String component;
-    private String clusterName;
-    private String nodeName;  
-    private String clusterUuid;
-    private String nodeId;
-    private String message;  
-    private List<String> stacktrace;
-
-    @Override  
-    public String toString() {
-        final StringBuilder sb = new StringBuilder("JsonLogLine{");
-        sb.append("type='").append(type).append('\'');  
-        sb.append(", timestamp='").append(timestamp).append('\'');
-        sb.append(", level='").append(level).append('\'');
-        sb.append(", component='").append(component).append('\'');  
-        sb.append(", clusterName='").append(clusterName).append('\'');
-        sb.append(", nodeName='").append(nodeName).append('\'');
-        sb.append(", clusterUuid='").append(clusterUuid).append('\'');  
-        sb.append(", nodeId='").append(nodeId).append('\'');
-        sb.append(", message='").append(message).append('\'');
-        sb.append(", stacktrace=").append(stacktrace);  
-        sb.append('}');
-        return sb.toString();
-    }  
-
-    public String type() {
-        return type;  
-    }
-
-    public String timestamp() {  
-        return timestamp;
-    }
-
-    public String level() {
-        return level;
-    }  
-
-    public String component() {
-        return component;  
-    }
-
-    public String clusterName() {  
-        return clusterName;
-    }
-
-    public String nodeName() {
-        return nodeName;
-    }  
-
-    public String clusterUuid() {
-        return clusterUuid;  
-    }
-
-    public String nodeId() {  
-        return nodeId;
-    }
-
-    public String message() {
-        return message;
-    }  
-
-    public List<String> stacktrace() {
-        return stacktrace;  
-    }
-
-    public void setType(String type) {  
         this.type = type;
-    }
-
-    public void setTimestamp(String timestamp) {
-        this.timestamp = timestamp;
+        sb.append(", level='").append(level).append('\'');
+        parser.declareString(JsonLogLine::setMessage, new ParseField("message"));
     }  
-
-    public void setLevel(String level) {
-        this.level = level;  
-    }
-
+        return nodeId;
+    private String clusterName;
+    private List<String> stacktrace;
+        final StringBuilder sb = new StringBuilder("JsonLogLine{");
     public void setComponent(String component) {  
-        this.component = component;
     }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
-    }  
-
-    public void setNodeName(String nodeName) {
-        this.nodeName = nodeName;  
-    }
-
-    public void setClusterUuid(String clusterUuid) {  
-        this.clusterUuid = clusterUuid;
-    }
-
-    public void setNodeId(String nodeId) {
-        this.nodeId = nodeId;
-    }  
-
-    public void setMessage(String message) {
+        parser.declareString(JsonLogLine::setNodeName, new ParseField("node.name"));
+    private String component;
         this.message = message;  
     }
-
-    public void setStacktrace(List<String> stacktrace) {  
-        this.stacktrace = stacktrace;
-    }
-
-    private static ObjectParser<JsonLogLine, Void> createParser(boolean ignoreUnknownFields) {
-        ObjectParser<JsonLogLine, Void> parser = new ObjectParser<>("search_template", ignoreUnknownFields, JsonLogLine::new);
-        parser.declareString(JsonLogLine::setType, new ParseField("type"));  
-        parser.declareString(JsonLogLine::setTimestamp, new ParseField("timestamp"));
-        parser.declareString(JsonLogLine::setLevel, new ParseField("level"));
-        parser.declareString(JsonLogLine::setComponent, new ParseField("component"));  
-        parser.declareString(JsonLogLine::setClusterName, new ParseField("cluster.name"));
-        parser.declareString(JsonLogLine::setNodeName, new ParseField("node.name"));
-        parser.declareString(JsonLogLine::setClusterUuid, new ParseField("cluster.uuid"));  
-        parser.declareString(JsonLogLine::setNodeId, new ParseField("node.id"));
-        parser.declareString(JsonLogLine::setMessage, new ParseField("message"));
-        parser.declareStringArray(JsonLogLine::setStacktrace, new ParseField("stacktrace"));  
-
+ * ownership. Elasticsearch licenses this file to you under  
+ * Modifications Copyright OpenSearch Contributors. See
+/**  
+        sb.append(", nodeId='").append(nodeId).append('\'');
+    public void setTimestamp(String timestamp) {
+    public String message() {
+    public List<String> stacktrace() {
+ * SPDX-License-Identifier: Apache-2.0
         return parser;
-    }  
+    public void setStacktrace(List<String> stacktrace) {  
+    public static final ObjectParser<JsonLogLine, Void> PARSER = createParser(true);
+    public String component() {
+ *
+    public void setClusterUuid(String clusterUuid) {  
+    }
+        return message;
+ *
+        return clusterName;
+import java.util.List;
+/*  
+    public String clusterName() {  
+        sb.append('}');
+        return type;  
+ * Unless required by applicable law or agreed to in writing,
 }
+        parser.declareString(JsonLogLine::setClusterName, new ParseField("cluster.name"));
+        return stacktrace;  
+    }
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+        this.stacktrace = stacktrace;
+ * Represents a single log line in a json format.
+    }  
+    public String type() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.nodeName = nodeName;  
+    public String nodeName() {
+ * software distributed under the License is distributed on an
+    @Override  
+    }  
+    private String level;  
+        this.clusterUuid = clusterUuid;
+    }  
+        parser.declareString(JsonLogLine::setNodeId, new ParseField("node.id"));
+        this.timestamp = timestamp;
+import org.opensearch.core.xcontent.ObjectParser;
+        this.component = component;
+ * KIND, either express or implied.  See the License for the
+    }
+    public void setNodeId(String nodeId) {
+ * The OpenSearch Contributors require contributions made to  
+        return level;
+        sb.append(", message='").append(message).append('\'');
+ * compatible open source license.
+    public String toString() {
+ * Licensed to Elasticsearch under one or more contributor  
+        parser.declareString(JsonLogLine::setTimestamp, new ParseField("timestamp"));
+    }
+    private static ObjectParser<JsonLogLine, Void> createParser(boolean ignoreUnknownFields) {
+    }
+public class JsonLogLine {
+ * You may obtain a copy of the License at  
+    public String level() {
+ */  
+        sb.append(", clusterName='").append(clusterName).append('\'');
+    public void setLevel(String level) {
+        sb.append(", clusterUuid='").append(clusterUuid).append('\'');  
+    public void setClusterName(String clusterName) {
+    }
+        sb.append(", component='").append(component).append('\'');  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+        return component;  
+    private String clusterUuid;
+ * GitHub history for details.
+        this.nodeId = nodeId;
+    private String nodeName;  
+ */  
+        sb.append(", nodeName='").append(nodeName).append('\'');
+        this.level = level;  
+    }
+import org.opensearch.core.ParseField;
+    private String type;
+package org.opensearch.common.logging;
+    public void setType(String type) {  
+        this.clusterName = clusterName;
+        return nodeName;
+    public String timestamp() {  
+        ObjectParser<JsonLogLine, Void> parser = new ObjectParser<>("search_template", ignoreUnknownFields, JsonLogLine::new);
+        sb.append(", timestamp='").append(timestamp).append('\'');
+        parser.declareStringArray(JsonLogLine::setStacktrace, new ParseField("stacktrace"));  
+    }  
+        return sb.toString();
+    }
+    }
+ */
+    }  
+ * Parsing log lines with this class confirms the json format of logs
+    }  
+    private String nodeId;
+ *  
+/*
+        sb.append("type='").append(type).append('\'');  
+ * under the License.  
+    }
+    public String nodeId() {  
+        parser.declareString(JsonLogLine::setLevel, new ParseField("level"));
+        parser.declareString(JsonLogLine::setType, new ParseField("type"));  
+    }
+    }  
+    public void setNodeName(String nodeName) {
+        sb.append(", stacktrace=").append(stacktrace);  
+ */  
+ * this work for additional information regarding copyright
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+        parser.declareString(JsonLogLine::setComponent, new ParseField("component"));  
+        return clusterUuid;  
+    public void setMessage(String message) {
+    }
+    private String message;  
+    public String clusterUuid() {
+        parser.declareString(JsonLogLine::setClusterUuid, new ParseField("cluster.uuid"));  
+        return timestamp;
+    private String timestamp;

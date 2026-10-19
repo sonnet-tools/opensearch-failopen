@@ -1,473 +1,427 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.support.tasks;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.ResourceNotFoundException;
-import org.opensearch.action.FailedNodeException;  
-import org.opensearch.action.NoSuchNodeException;
-import org.opensearch.action.TaskOperationFailure;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.collect.Tuple;  
-import org.opensearch.common.util.concurrent.AtomicArray;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.NodeShouldNotConnectException;  
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequest;  
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.TransportResponseHandler;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReferenceArray;
-import java.util.function.Consumer;  
-
-import static java.util.Collections.emptyList;
-
-/**
- * The base class for transport actions that are interacting with currently running tasks.
- *  
- * @opensearch.internal
- */
-public abstract class TransportTasksAction<  
-    OperationTask extends Task,
-    TasksRequest extends BaseTasksRequest<TasksRequest>,
-    TasksResponse extends BaseTasksResponse,  
-    TaskResponse extends Writeable> extends HandledTransportAction<TasksRequest, TasksResponse> {
-
     protected final ClusterService clusterService;  
-    protected final TransportService transportService;
-    protected final Writeable.Reader<TasksRequest> requestReader;
-    protected final Writeable.Reader<TasksResponse> responsesReader;  
-    protected final Writeable.Reader<TaskResponse> responseReader;
-
-    protected final String transportNodeAction;  
-
-    protected TransportTasksAction(
-        String actionName,  
-        ClusterService clusterService,
-        TransportService transportService,
-        ActionFilters actionFilters,  
-        Writeable.Reader<TasksRequest> requestReader,
-        Writeable.Reader<TasksResponse> responsesReader,
-        Writeable.Reader<TaskResponse> responseReader,  
-        String nodeExecutor
-    ) {
-        super(actionName, transportService, actionFilters, requestReader);  
-        this.clusterService = clusterService;
-        this.transportService = transportService;
-        this.transportNodeAction = actionName + "[n]";  
-        this.requestReader = requestReader;
-        this.responsesReader = responsesReader;
-        this.responseReader = responseReader;  
-
-        transportService.registerRequestHandler(transportNodeAction, nodeExecutor, NodeTaskRequest::new, new NodeTransportHandler());
-    }  
-
-    @Override
-    protected void doExecute(Task task, TasksRequest request, ActionListener<TasksResponse> listener) {  
-        new AsyncAction(task, request, listener).start();
-    }
-
-    private void nodeOperation(NodeTaskRequest nodeTaskRequest, ActionListener<NodeTasksResponse> listener) {
-        TasksRequest request = nodeTaskRequest.tasksRequest;
-        List<OperationTask> tasks = new ArrayList<>();  
-        processTasks(request, tasks::add);
-        if (tasks.isEmpty()) {
-            listener.onResponse(new NodeTasksResponse(clusterService.localNode().getId(), emptyList(), emptyList()));  
-            return;
-        }
-        AtomicArray<Tuple<TaskResponse, Exception>> responses = new AtomicArray<>(tasks.size());  
-        final AtomicInteger counter = new AtomicInteger(tasks.size());
-        for (int i = 0; i < tasks.size(); i++) {
-            final int taskIndex = i;  
-            ActionListener<TaskResponse> taskListener = new ActionListener<TaskResponse>() {
-                @Override
-                public void onResponse(TaskResponse response) {  
-                    responses.setOnce(taskIndex, response == null ? null : new Tuple<>(response, null));
-                    respondIfFinished();
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    responses.setOnce(taskIndex, new Tuple<>(null, e));
-                    respondIfFinished();
-                }  
-
-                private void respondIfFinished() {
-                    if (counter.decrementAndGet() != 0) {  
-                        return;
-                    }
-                    List<TaskResponse> results = new ArrayList<>();  
-                    List<TaskOperationFailure> exceptions = new ArrayList<>();
-                    for (Tuple<TaskResponse, Exception> response : responses.asList()) {
-                        if (response.v1() == null) {  
-                            assert response.v2() != null;
-                            exceptions.add(
-                                new TaskOperationFailure(clusterService.localNode().getId(), tasks.get(taskIndex).getId(), response.v2())  
-                            );
-                        } else {
-                            assert response.v2() == null;  
-                            results.add(response.v1());
-                        }
-                    }  
-                    listener.onResponse(new NodeTasksResponse(clusterService.localNode().getId(), results, exceptions));
-                }
-            };  
-            try {
-                taskOperation(request, tasks.get(taskIndex), taskListener);
-            } catch (Exception e) {  
-                taskListener.onFailure(e);
-            }
-        }  
-    }
-
-    protected String[] filterNodeIds(DiscoveryNodes nodes, String[] nodesIds) {  
-        return nodesIds;
-    }
-
-    protected String[] resolveNodes(TasksRequest request, ClusterState clusterState) {
-        if (request.getTaskId().isSet()) {
-            return new String[] { request.getTaskId().getNodeId() };  
-        } else {
+ * GitHub history for details.
             return clusterState.nodes().resolveNodes(request.getNodes());
-        }  
-    }
-
-    protected void processTasks(TasksRequest request, Consumer<OperationTask> operation) {  
-        if (request.getTaskId().isSet()) {
-            // we are only checking one task, we can optimize it
-            Task task = taskManager.getTask(request.getTaskId().getId());  
-            if (task != null) {
-                if (request.match(task)) {
-                    operation.accept((OperationTask) task);  
-                } else {
-                    throw new ResourceNotFoundException("task [{}] doesn't support this operation", request.getTaskId());
-                }  
-            } else {
-                throw new ResourceNotFoundException("task [{}] is missing", request.getTaskId());
-            }  
-        } else {
-            for (Task task : taskManager.getTasks().values()) {
-                if (request.match(task)) {  
-                    operation.accept((OperationTask) task);
-                }
-            }  
-        }
-    }
-
-    protected abstract TasksResponse newResponse(
-        TasksRequest request,
-        List<TaskResponse> tasks,  
-        List<TaskOperationFailure> taskOperationFailures,
-        List<FailedNodeException> failedNodeExceptions
-    );  
-
-    @SuppressWarnings("unchecked")
-    protected TasksResponse newResponse(TasksRequest request, AtomicReferenceArray responses) {  
-        List<TaskResponse> tasks = new ArrayList<>();
-        List<FailedNodeException> failedNodeExceptions = new ArrayList<>();
-        List<TaskOperationFailure> taskOperationFailures = new ArrayList<>();  
-        for (int i = 0; i < responses.length(); i++) {
-            Object response = responses.get(i);
-            if (response instanceof FailedNodeException) {  
-                failedNodeExceptions.add((FailedNodeException) response);
-            } else {
-                NodeTasksResponse tasksResponse = (NodeTasksResponse) response;  
-                if (tasksResponse.results != null) {
-                    tasks.addAll(tasksResponse.results);
-                }  
-                if (tasksResponse.exceptions != null) {
-                    taskOperationFailures.addAll(tasksResponse.exceptions);
-                }  
-            }
-        }
-        return newResponse(request, tasks, taskOperationFailures, failedNodeExceptions);  
-    }
-
-    /**  
-     * Perform the required operation on the task. It is OK start an asynchronous operation or to throw an exception but not both.
-     */
-    protected abstract void taskOperation(TasksRequest request, OperationTask task, ActionListener<TaskResponse> listener);  
-
-    /**
-     * Asynchronous single action  
-     *
-     * @opensearch.internal
-     */  
-    private class AsyncAction {
-
-        private final TasksRequest request;  
-        private final String[] nodesIds;
-        private final DiscoveryNode[] nodes;
-        private final ActionListener<TasksResponse> listener;  
-        private final AtomicReferenceArray<Object> responses;
-        private final AtomicInteger counter = new AtomicInteger();
-        private final Task task;  
-
-        private AsyncAction(Task task, TasksRequest request, ActionListener<TasksResponse> listener) {
-            this.task = task;  
-            this.request = request;
-            this.listener = listener;
-            ClusterState clusterState = clusterService.state();  
-            String[] nodesIds = resolveNodes(request, clusterState);
-            this.nodesIds = filterNodeIds(clusterState.nodes(), nodesIds);
-            final Map<String, DiscoveryNode> nodes = clusterState.nodes().getNodes();  
-            this.nodes = new DiscoveryNode[nodesIds.length];
-            for (int i = 0; i < this.nodesIds.length; i++) {
-                this.nodes[i] = nodes.get(this.nodesIds[i]);  
-            }
-            this.responses = new AtomicReferenceArray<>(this.nodesIds.length);
-        }  
-
-        private void start() {
-            if (nodesIds.length == 0) {  
-                // nothing to do
-                try {
-                    listener.onResponse(newResponse(request, responses));  
-                } catch (Exception e) {
-                    logger.debug("failed to generate empty response", e);
-                    listener.onFailure(e);  
-                }
-            } else {
-                TransportRequestOptions.Builder builder = TransportRequestOptions.builder();  
-                if (request.getTimeout() != null) {
-                    builder.withTimeout(request.getTimeout());
-                }  
-                for (int i = 0; i < nodesIds.length; i++) {
-                    final String nodeId = nodesIds[i];
-                    final int idx = i;  
-                    final DiscoveryNode node = nodes[i];
-                    try {
-                        if (node == null) {  
-                            onFailure(idx, nodeId, new NoSuchNodeException(nodeId));
-                        } else {
-                            NodeTaskRequest nodeRequest = new NodeTaskRequest(request);  
-                            nodeRequest.setParentTask(clusterService.localNode().getId(), task.getId());
-                            transportService.sendRequest(
-                                node,  
-                                transportNodeAction,
-                                nodeRequest,
-                                builder.build(),  
-                                new TransportResponseHandler<NodeTasksResponse>() {
-                                    @Override
-                                    public NodeTasksResponse read(StreamInput in) throws IOException {  
-                                        return new NodeTasksResponse(in);
-                                    }
-
-                                    @Override
-                                    public void handleResponse(NodeTasksResponse response) {
-                                        onOperation(idx, response);  
-                                    }
-
-                                    @Override  
-                                    public void handleException(TransportException exp) {
-                                        onFailure(idx, node.getId(), exp);
-                                    }  
-
-                                    @Override
-                                    public String executor() {  
-                                        return ThreadPool.Names.SAME;
-                                    }
-                                }  
-                            );
-                        }
-                    } catch (Exception e) {  
-                        onFailure(idx, nodeId, e);
-                    }
-                }  
-            }
-        }
-
-        private void onOperation(int idx, NodeTasksResponse nodeResponse) {
-            responses.set(idx, nodeResponse);
-            if (counter.incrementAndGet() == responses.length()) {  
-                finishHim();
-            }
-        }  
-
-        private void onFailure(int idx, String nodeId, Throwable t) {
-            if (logger.isDebugEnabled() && !(t instanceof NodeShouldNotConnectException)) {  
-                logger.debug(new ParameterizedMessage("failed to execute on node [{}]", nodeId), t);
-            }
-
-            responses.set(idx, new FailedNodeException(nodeId, "Failed node [" + nodeId + "]", t));
-
-            if (counter.incrementAndGet() == responses.length()) {  
-                finishHim();
-            }
-        }  
-
-        private void finishHim() {
-            TasksResponse finalResponse;  
-            try {
-                finalResponse = newResponse(request, responses);
-            } catch (Exception e) {  
-                logger.debug("failed to combine responses from nodes", e);
-                listener.onFailure(e);
-                return;  
-            }
-            listener.onResponse(finalResponse);
-        }  
-    }
-
-    /**  
-     * Node level transport handler
-     *
-     * @opensearch.internal  
-     */
-    class NodeTransportHandler implements TransportRequestHandler<NodeTaskRequest> {
-
-        @Override
-        public void messageReceived(final NodeTaskRequest request, final TransportChannel channel, Task task) throws Exception {
-            nodeOperation(request, ActionListener.wrap(channel::sendResponse, e -> {  
-                try {
-                    channel.sendResponse(e);
-                } catch (IOException e1) {  
-                    e1.addSuppressed(e);
-                    logger.warn("Failed to send failure", e1);
-                }  
-            }));
-        }
-    }  
-
-    /**
-     * Node level task request  
-     *
-     * @opensearch.internal
-     */  
-    private class NodeTaskRequest extends TransportRequest {
-        private TasksRequest tasksRequest;
-
-        protected NodeTaskRequest(StreamInput in) throws IOException {
-            super(in);
+import org.opensearch.action.TaskOperationFailure;
+                    for (Tuple<TaskResponse, Exception> response : responses.asList()) {
             this.tasksRequest = requestReader.read(in);  
-        }
-
-        @Override  
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            tasksRequest.writeTo(out);  
-        }
-
-        protected NodeTaskRequest(TasksRequest tasksRequest) {  
-            super();
-            this.tasksRequest = tasksRequest;
-        }  
-
-    }
-
-    /**
-     * Node level task response
-     *  
-     * @opensearch.internal
-     */
-    private class NodeTasksResponse extends TransportResponse {  
-        protected String nodeId;
-        protected List<TaskOperationFailure> exceptions;
-        protected List<TaskResponse> results;  
-
-        NodeTasksResponse(StreamInput in) throws IOException {
-            super(in);  
-            nodeId = in.readString();
-            int resultsSize = in.readVInt();
-            results = new ArrayList<>(resultsSize);  
-            for (; resultsSize > 0; resultsSize--) {
-                final TaskResponse result = in.readBoolean() ? responseReader.read(in) : null;
-                results.add(result);  
-            }
-            if (in.readBoolean()) {
-                int taskFailures = in.readVInt();  
-                exceptions = new ArrayList<>(taskFailures);
-                for (int i = 0; i < taskFailures; i++) {
-                    exceptions.add(new TaskOperationFailure(in));  
-                }
+            out.writeBoolean(exceptions != null);  
+            return nodeId;
+            return new String[] { request.getTaskId().getNodeId() };  
+        List<OperationTask> tasks = new ArrayList<>();  
+                for (TaskOperationFailure exception : exceptions) {
+        private void start() {
             } else {
+                }  
+            try {
+                    logger.warn("Failed to send failure", e1);
+            if (task != null) {
+        }
+            ClusterState clusterState = clusterService.state();  
+    protected void processTasks(TasksRequest request, Consumer<OperationTask> operation) {  
+    }
+        } else {
+                                    @Override
+            final int taskIndex = i;  
+        }
+            nodeId = in.readString();
+        } else {
+            listener.onResponse(finalResponse);
+                            );
+            this.tasksRequest = tasksRequest;
+                }
+            responses.set(idx, new FailedNodeException(nodeId, "Failed node [" + nodeId + "]", t));
+                failedNodeExceptions.add((FailedNodeException) response);
+                try {
+            try {
+import java.util.function.Consumer;  
+                    if (counter.decrementAndGet() != 0) {  
+                    }  
+        private void finishHim() {
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+                                    @Override  
+                    responses.setOnce(taskIndex, response == null ? null : new Tuple<>(response, null));
+import org.opensearch.action.NoSuchNodeException;
+        for (int i = 0; i < responses.length(); i++) {
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+                                builder.build(),  
+import org.opensearch.cluster.ClusterState;
+    protected final String transportNodeAction;  
+        public void messageReceived(final NodeTaskRequest request, final TransportChannel channel, Task task) throws Exception {
+        }  
+        List<FailedNodeException> failedNodeExceptions = new ArrayList<>();
+        this.responsesReader = responsesReader;
+        private final AtomicReferenceArray<Object> responses;
+    private class NodeTaskRequest extends TransportRequest {
+        new AsyncAction(task, request, listener).start();
+                }  
+                        } else {
+        List<TaskResponse> tasks = new ArrayList<>();
                 exceptions = null;  
             }
-        }
-
-        NodeTasksResponse(String nodeId, List<TaskResponse> results, List<TaskOperationFailure> exceptions) {
-            this.nodeId = nodeId;
-            this.results = results;  
-            this.exceptions = exceptions;
-        }
-
-        public String getNodeId() {
-            return nodeId;
-        }  
-
-        public List<TaskOperationFailure> getExceptions() {
-            return exceptions;  
-        }
-
+            if (response instanceof FailedNodeException) {  
         @Override  
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(nodeId);
-            out.writeVInt(results.size());  
-            for (TaskResponse result : results) {
-                if (result != null) {
-                    out.writeBoolean(true);  
-                    result.writeTo(out);
-                } else {
-                    out.writeBoolean(false);  
-                }
+        Writeable.Reader<TaskResponse> responseReader,  
             }
-            out.writeBoolean(exceptions != null);  
-            if (exceptions != null) {
-                int taskFailures = exceptions.size();
-                out.writeVInt(taskFailures);  
-                for (TaskOperationFailure exception : exceptions) {
-                    exception.writeTo(out);
-                }  
-            }
+                finalResponse = newResponse(request, responses);
         }
+    ) {
+import org.opensearch.transport.TransportResponseHandler;  
+     */  
+                                        onOperation(idx, response);  
+    protected TasksResponse newResponse(TasksRequest request, AtomicReferenceArray responses) {  
+                return;  
+ */
+        private TasksRequest tasksRequest;
+                }
+        protected NodeTaskRequest(StreamInput in) throws IOException {
+ * ownership. Elasticsearch licenses this file to you under  
+                }  
+    /**  
+        String actionName,  
+        }
+ * license agreements. See the NOTICE file distributed with
+            this.nodeId = nodeId;
+                logger.debug(new ParameterizedMessage("failed to execute on node [{}]", nodeId), t);
+        }
+                @Override
+                                    }
+                            assert response.v2() == null;  
+    protected TransportTasksAction(
+/*  
+                        }
+    TasksRequest extends BaseTasksRequest<TasksRequest>,
+import org.opensearch.transport.TransportService;
+            String[] nodesIds = resolveNodes(request, clusterState);
+            if (exceptions != null) {
+                TransportRequestOptions.Builder builder = TransportRequestOptions.builder();  
+            this.listener = listener;
+    }
+                throw new ResourceNotFoundException("task [{}] is missing", request.getTaskId());
+            return exceptions;  
+                                new TaskOperationFailure(clusterService.localNode().getId(), tasks.get(taskIndex).getId(), response.v2())  
+    }
+        TransportService transportService,
+                        return;
+            tasksRequest.writeTo(out);  
+     * @opensearch.internal  
+                if (request.match(task)) {  
+        final AtomicInteger counter = new AtomicInteger(tasks.size());
+ * @opensearch.internal
+        this.responseReader = responseReader;  
+        this.requestReader = requestReader;
+ * SPDX-License-Identifier: Apache-2.0
+        TasksRequest request,
+ * specific language governing permissions and limitations
+                results.add(result);  
+        protected List<TaskResponse> results;  
+        }  
+            if (in.readBoolean()) {
+            int resultsSize = in.readVInt();
+        List<FailedNodeException> failedNodeExceptions
+                }
+    );  
+     *
+        }  
+                        if (node == null) {  
+                    }
+        }
+            }  
+ * Unless required by applicable law or agreed to in writing,
+            super.writeTo(out);
+                for (int i = 0; i < taskFailures; i++) {
+                    out.writeBoolean(true);  
+            nodeOperation(request, ActionListener.wrap(channel::sendResponse, e -> {  
+                } else {
+                for (int i = 0; i < nodesIds.length; i++) {
+     */
+    }
+        protected String nodeId;
+                if (tasksResponse.results != null) {
+            }));
+        String nodeExecutor
+    protected String[] resolveNodes(TasksRequest request, ClusterState clusterState) {
+            Object response = responses.get(i);
+            }
+                    throw new ResourceNotFoundException("task [{}] doesn't support this operation", request.getTaskId());
+                                        onFailure(idx, node.getId(), exp);
+            } else {
+            return;
+                }  
+                    listener.onFailure(e);  
+                    logger.debug("failed to generate empty response", e);
+        this.clusterService = clusterService;
+        }  
+     * Node level task response
+                                transportNodeAction,
+        List<TaskOperationFailure> taskOperationFailures,
+            this.request = request;
+                if (request.getTimeout() != null) {
+            }
+                                nodeRequest,
+            ActionListener<TaskResponse> taskListener = new ActionListener<TaskResponse>() {
+import java.util.ArrayList;
+    TasksResponse extends BaseTasksResponse,  
+    protected final Writeable.Reader<TasksRequest> requestReader;
+                        onFailure(idx, nodeId, e);
+    OperationTask extends Task,
+                    taskOperationFailures.addAll(tasksResponse.exceptions);
+        }
+/**
+                    listener.onResponse(newResponse(request, responses));  
+import static java.util.Collections.emptyList;
+                    exceptions.add(new TaskOperationFailure(in));  
+        private final ActionListener<TasksResponse> listener;  
+            // we are only checking one task, we can optimize it
+                    final String nodeId = nodesIds[i];
+    }
+                listener.onFailure(e);
+        TasksRequest request = nodeTaskRequest.tasksRequest;
+ * this work for additional information regarding copyright
+            super(in);
+    private void nodeOperation(NodeTaskRequest nodeTaskRequest, ActionListener<NodeTasksResponse> listener) {
+            for (; resultsSize > 0; resultsSize--) {
+    protected void doExecute(Task task, TasksRequest request, ActionListener<TasksResponse> listener) {  
+                                        return new NodeTasksResponse(in);
+import java.util.Map;  
+     *
+ *
+                final TaskResponse result = in.readBoolean() ? responseReader.read(in) : null;
+    /**  
+    protected final Writeable.Reader<TasksResponse> responsesReader;  
+public abstract class TransportTasksAction<  
     }  
+    }
+import org.opensearch.action.support.HandledTransportAction;
+            } else {
+                    tasks.addAll(tasksResponse.results);
+        private final TasksRequest request;  
+            };  
+        this.transportNodeAction = actionName + "[n]";  
+                out.writeVInt(taskFailures);  
+                                }  
+import java.util.List;
+        NodeTasksResponse(String nodeId, List<TaskResponse> results, List<TaskOperationFailure> exceptions) {
+     * @opensearch.internal
+            Task task = taskManager.getTask(request.getTaskId().getId());  
+ * this file be licensed under the Apache-2.0 license or a
+                                    public NodeTasksResponse read(StreamInput in) throws IOException {  
+                } catch (Exception e) {
+                }
+import java.util.concurrent.atomic.AtomicInteger;
+                    final int idx = i;  
+            } catch (Exception e) {  
+            }
+            }
+    /**
+import org.opensearch.tasks.Task;
+            super();
+    }
+ * under the License.  
+        this.transportService = transportService;
+        super(actionName, transportService, actionFilters, requestReader);  
+                    respondIfFinished();
+            if (counter.incrementAndGet() == responses.length()) {  
+        if (request.getTaskId().isSet()) {
+        private final Task task;  
+import org.opensearch.cluster.node.DiscoveryNode;  
+ *  
+     * Node level task request  
+import org.opensearch.common.util.concurrent.AtomicArray;
+    /**
+    }  
+                                node,  
+        @Override
+import org.opensearch.transport.TransportException;
+            out.writeString(nodeId);
+            this.results = results;  
+import org.opensearch.core.transport.TransportResponse;  
+                            exceptions.add(
+                                    }
+                // nothing to do
+                logger.debug("failed to combine responses from nodes", e);
+                if (tasksResponse.exceptions != null) {
+     * Perform the required operation on the task. It is OK start an asynchronous operation or to throw an exception but not both.
+        processTasks(request, tasks::add);
+        @Override  
+            if (nodesIds.length == 0) {  
+ *  
+                    respondIfFinished();
+                            onFailure(idx, nodeId, new NoSuchNodeException(nodeId));
+ * KIND, either express or implied.  See the License for the
+/*  
+                    operation.accept((OperationTask) task);  
+            }
+        }  
+                        } else {
+import org.opensearch.transport.TransportChannel;
+                    result.writeTo(out);
+                finishHim();
+ * software distributed under the License is distributed on an
+        List<TaskResponse> tasks,  
+                exceptions = new ArrayList<>(taskFailures);
+                    e1.addSuppressed(e);
+                taskOperation(request, tasks.get(taskIndex), taskListener);
+            this.nodesIds = filterNodeIds(clusterState.nodes(), nodesIds);
+import org.opensearch.threadpool.ThreadPool;
+        ActionFilters actionFilters,  
+                try {
+        private AsyncAction(Task task, TasksRequest request, ActionListener<TasksResponse> listener) {
+                            assert response.v2() != null;
+                    responses.setOnce(taskIndex, new Tuple<>(null, e));
+        }  
+                    operation.accept((OperationTask) task);
+            }
+        private final DiscoveryNode[] nodes;
+                }  
+        for (int i = 0; i < tasks.size(); i++) {
+                int taskFailures = exceptions.size();
+                    List<TaskResponse> results = new ArrayList<>();  
+                NodeTasksResponse tasksResponse = (NodeTasksResponse) response;  
+                if (result != null) {
+ * compatible open source license.
+                private void respondIfFinished() {
+        }  
+        return nodesIds;
+        }
+        List<TaskOperationFailure> taskOperationFailures = new ArrayList<>();  
+    }
+    private class NodeTasksResponse extends TransportResponse {  
+        private void onOperation(int idx, NodeTasksResponse nodeResponse) {
+        return newResponse(request, tasks, taskOperationFailures, failedNodeExceptions);  
+        public String getNodeId() {
+        private final AtomicInteger counter = new AtomicInteger();
+        }  
+                } else {
+            }
+        private void onFailure(int idx, String nodeId, Throwable t) {
+                                    public String executor() {  
+            }
+            for (TaskResponse result : results) {
+                            results.add(response.v1());
+            results = new ArrayList<>(resultsSize);  
+            TasksResponse finalResponse;  
+        public List<TaskOperationFailure> getExceptions() {
+     * Node level transport handler
+        private final String[] nodesIds;
+     *
+ *
+                }
+                        }
+                public void onFailure(Exception e) {  
+ * Modifications Copyright OpenSearch Contributors. See
+                taskListener.onFailure(e);
+                }  
+            this.exceptions = exceptions;
+                                    @Override
+import org.opensearch.action.support.ActionFilters;  
+                if (request.match(task)) {
+        protected NodeTaskRequest(TasksRequest tasksRequest) {  
+        Writeable.Reader<TasksResponse> responsesReader,
+import org.opensearch.cluster.node.DiscoveryNodes;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+    }  
+                } catch (IOException e1) {  
+            super(in);  
+import org.opensearch.transport.TransportRequestOptions;
+            listener.onResponse(new NodeTasksResponse(clusterService.localNode().getId(), emptyList(), emptyList()));  
+                }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.transport.TransportRequestHandler;
+                }  
+ * The OpenSearch Contributors require contributions made to  
+        transportService.registerRequestHandler(transportNodeAction, nodeExecutor, NodeTaskRequest::new, new NodeTransportHandler());
+        }
+     */  
+        Writeable.Reader<TasksRequest> requestReader,
+    protected String[] filterNodeIds(DiscoveryNodes nodes, String[] nodesIds) {  
+            }
+import org.opensearch.common.collect.Tuple;  
+import org.opensearch.transport.NodeShouldNotConnectException;  
+import org.opensearch.core.common.io.stream.Writeable;
+/*
+                                        return ThreadPool.Names.SAME;
+            for (int i = 0; i < this.nodesIds.length; i++) {
+                            NodeTaskRequest nodeRequest = new NodeTaskRequest(request);  
+                    try {
+        if (tasks.isEmpty()) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                            transportService.sendRequest(
+            if (logger.isDebugEnabled() && !(t instanceof NodeShouldNotConnectException)) {  
+     */
+                                    }  
+            responses.set(idx, nodeResponse);
+                        if (response.v1() == null) {  
+                finishHim();
+            for (Task task : taskManager.getTasks().values()) {
+    protected abstract TasksResponse newResponse(
+    @SuppressWarnings("unchecked")
+    /**
+     * @opensearch.internal
+                    exception.writeTo(out);
+                                    public void handleException(TransportException exp) {
+import java.io.IOException;  
+ * not use this file except in compliance with the License.
+        protected List<TaskOperationFailure> exceptions;
+            }  
+            this.responses = new AtomicReferenceArray<>(this.nodesIds.length);
+ */  
+                                    @Override
+    @Override
+        NodeTasksResponse(StreamInput in) throws IOException {
+                }  
+import java.util.concurrent.atomic.AtomicReferenceArray;
+     */
+ */
+                    }
+        }
+    protected final TransportService transportService;
+            out.writeVInt(results.size());  
+import org.opensearch.cluster.service.ClusterService;
+                    listener.onResponse(new NodeTasksResponse(clusterService.localNode().getId(), results, exceptions));
+package org.opensearch.action.support.tasks;
 }
+                            );
+        public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;  
+        ClusterService clusterService,
+            this.task = task;  
+                    } catch (Exception e) {  
+     *  
+                int taskFailures = in.readVInt();  
+            } else {
+                                    public void handleResponse(NodeTasksResponse response) {
+     * @opensearch.internal
+                            nodeRequest.setParentTask(clusterService.localNode().getId(), task.getId());
+        AtomicArray<Tuple<TaskResponse, Exception>> responses = new AtomicArray<>(tasks.size());  
+import org.opensearch.action.FailedNodeException;  
+import org.opensearch.ResourceNotFoundException;
+     * Asynchronous single action  
+                this.nodes[i] = nodes.get(this.nodesIds[i]);  
+                    channel.sendResponse(e);
+ * Licensed to Elasticsearch under one or more contributor  
+                public void onResponse(TaskResponse response) {  
+import org.opensearch.transport.TransportRequest;  
+ * The base class for transport actions that are interacting with currently running tasks.
+            }
+    protected final Writeable.Reader<TaskResponse> responseReader;
+            } catch (Exception e) {  
+                @Override
+    TaskResponse extends Writeable> extends HandledTransportAction<TasksRequest, TasksResponse> {
+import org.opensearch.core.action.ActionListener;
+                    builder.withTimeout(request.getTimeout());
+    private class AsyncAction {
+    class NodeTransportHandler implements TransportRequestHandler<NodeTaskRequest> {
+                    out.writeBoolean(false);  
+                                new TransportResponseHandler<NodeTasksResponse>() {
+            if (counter.incrementAndGet() == responses.length()) {  
+ * You may obtain a copy of the License at  
+                    final DiscoveryNode node = nodes[i];
+                                    }
+    protected abstract void taskOperation(TasksRequest request, OperationTask task, ActionListener<TaskResponse> listener);  
+            this.nodes = new DiscoveryNode[nodesIds.length];
+                    List<TaskOperationFailure> exceptions = new ArrayList<>();
+        if (request.getTaskId().isSet()) {
+            final Map<String, DiscoveryNode> nodes = clusterState.nodes().getNodes();  

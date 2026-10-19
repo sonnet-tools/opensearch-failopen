@@ -1,132 +1,109 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+/**  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.index.IndexOptions;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermRangeQuery;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.util.Collections;
-
-/**  
- * A field mapper that records fields that have been ignored because they were malformed.
- *
- * @opensearch.internal  
- */
-public final class IgnoredFieldMapper extends MetadataFieldMapper {
-
-    public static final String NAME = "_ignored";
-
-    public static final String CONTENT_TYPE = "_ignored";  
-
-    /**
-     * Default parameters  
-     *
-     * @opensearch.internal
-     */  
-    public static class Defaults {
-        public static final String NAME = IgnoredFieldMapper.NAME;
-
-        public static final FieldType FIELD_TYPE = new FieldType();
-
-        static {  
-            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
-            FIELD_TYPE.setTokenized(false);
-            FIELD_TYPE.setStored(true);  
-            FIELD_TYPE.setOmitNorms(true);
-            FIELD_TYPE.freeze();
-        }  
-    }
-
-    public static final TypeParser PARSER = new FixedTypeParser(c -> new IgnoredFieldMapper());  
-
-    /**
-     * Field type for Ignored fields  
-     *
-     * @opensearch.internal
-     */  
-    public static final class IgnoredFieldType extends StringFieldType {
-
-        public static final IgnoredFieldType INSTANCE = new IgnoredFieldType();  
-
-        private IgnoredFieldType() {
-            super(NAME, true, true, false, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());  
-        }
-
-        @Override  
-        public String typeName() {
-            return CONTENT_TYPE;
-        }  
-
-        @Override
-        public Query existsQuery(QueryShardContext context) {  
-            // This query is not performance sensitive, it only helps assess
-            // quality of the data, so we may use a slow query. It shouldn't
-            // be too slow in practice since the number of unique terms in this  
-            // field is bounded by the number of fields in the mappings.
-            return new TermRangeQuery(name(), null, null, true, true);
-        }  
-
-        @Override
         protected FieldTypeCapabilities.Capability searchCapability() {  
-            return FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
-        }
-
+            FIELD_TYPE.setOmitNorms(true);
+        public Query existsQuery(QueryShardContext context) {  
+            // be too slow in practice since the number of unique terms in this  
         @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup lookup, String format) {
-            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + name() + "].");  
-        }
-    }
-
-    private IgnoredFieldMapper() {
-        super(IgnoredFieldType.INSTANCE);
-    }  
-
-    @Override
-    public void postParse(ParseContext context) {  
-        for (String field : context.getIgnoredFields()) {
-            context.doc().add(new Field(NAME, field, Defaults.FIELD_TYPE));
+    public static final TypeParser PARSER = new FixedTypeParser(c -> new IgnoredFieldMapper());  
         }  
+            FIELD_TYPE.freeze();
     }
-
-    @Override  
+import org.opensearch.index.query.QueryShardContext;
+ * Licensed to Elasticsearch under one or more contributor  
+ * SPDX-License-Identifier: Apache-2.0
+ * software distributed under the License is distributed on an
+        }
+import java.util.Collections;
+ * not use this file except in compliance with the License.
+        public static final String NAME = IgnoredFieldMapper.NAME;
+    private IgnoredFieldMapper() {
+import org.apache.lucene.search.Query;
+package org.opensearch.index.mapper;
+    public static class Defaults {
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup lookup, String format) {
+ * this work for additional information regarding copyright
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.search.lookup.SearchLookup;
+            return new TermRangeQuery(name(), null, null, true, true);
+import org.apache.lucene.document.Field;
+            // This query is not performance sensitive, it only helps assess
+    public void postParse(ParseContext context) {  
+     *
+public final class IgnoredFieldMapper extends MetadataFieldMapper {
     protected String contentType() {
-        return CONTENT_TYPE;
-    }  
-
+     */  
+        static {  
+    /**
+ *
+ * KIND, either express or implied.  See the License for the
+ * The OpenSearch Contributors require contributions made to  
+ * @opensearch.internal  
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;  
+ */
+        }  
+        }  
+     * @opensearch.internal
+        @Override  
+            FIELD_TYPE.setStored(true);  
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+    public static final class IgnoredFieldType extends StringFieldType {
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+            FIELD_TYPE.setTokenized(false);
+            return CONTENT_TYPE;
+        @Override
+import org.apache.lucene.index.IndexOptions;  
+            // field is bounded by the number of fields in the mappings.
+     * Default parameters  
+    @Override  
+        }
+            super(NAME, true, true, false, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());  
+        public String typeName() {
+        for (String field : context.getIgnoredFields()) {
+import org.apache.lucene.document.FieldType;
+    /**
+import org.apache.lucene.search.TermRangeQuery;
+     * @opensearch.internal
+ * A field mapper that records fields that have been ignored because they were malformed.
+ * You may obtain a copy of the License at  
+    }
+ *
+        public static final FieldType FIELD_TYPE = new FieldType();
+        super(IgnoredFieldType.INSTANCE);
+ *  
 }
+     *
+        public static final IgnoredFieldType INSTANCE = new IgnoredFieldType();  
+/*  
+    }  
+ * GitHub history for details.
+        }
+    public static final String NAME = "_ignored";
+            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + name() + "].");  
+     */  
+            context.doc().add(new Field(NAME, field, Defaults.FIELD_TYPE));
+    }
+        private IgnoredFieldType() {
+            return FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
+ */  
+        }  
+ * license agreements. See the NOTICE file distributed with
+ * compatible open source license.
+/*  
+        return CONTENT_TYPE;
+     * Field type for Ignored fields  
+    public static final String CONTENT_TYPE = "_ignored";  
+ * Unless required by applicable law or agreed to in writing,
+        @Override
+    }  
+            // quality of the data, so we may use a slow query. It shouldn't
+ * specific language governing permissions and limitations
+            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  

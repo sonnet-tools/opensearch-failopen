@@ -1,188 +1,153 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.action.admin.tiering.status.transport;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;  
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.storage.action.tiering.status.model.ListTieringStatusRequest;
-import org.opensearch.storage.action.tiering.status.model.ListTieringStatusResponse;  
-import org.opensearch.storage.action.tiering.status.model.TieringStatus;
-import org.opensearch.storage.action.tiering.status.transport.TransportListTieringStatusAction;
-import org.opensearch.storage.tiering.HotToWarmTieringService;  
-import org.opensearch.storage.tiering.WarmToHotTieringService;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;  
-
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.verify;  
-import static org.mockito.Mockito.when;
-
-public class TransportListTieringStatusTests extends OpenSearchTestCase {  
-
-    @Mock
-    private TransportService transportService;  
-    @Mock
-    private ClusterService clusterService;
-    @Mock  
-    private ThreadPool threadPool;
-    @Mock
-    private HotToWarmTieringService hotToWarmTieringService;  
-    @Mock
-    private WarmToHotTieringService warmToHotTieringService;
-    @Mock  
-    private ActionFilters actionFilters;
-    @Mock
-    private IndexNameExpressionResolver indexNameExpressionResolver;  
-    @Mock
-    private ClusterState clusterState;
-    @Mock  
-    private ClusterBlocks clusterBlocks;
-    @Mock
-    private ActionListener<ListTieringStatusResponse> listener;  
-
-    private TransportListTieringStatusAction action;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();  
-        MockitoAnnotations.openMocks(this);
-        action = new TransportListTieringStatusAction(
-            transportService,  
-            clusterService,
-            threadPool,
-            hotToWarmTieringService,  
-            warmToHotTieringService,
-            actionFilters,
-            indexNameExpressionResolver  
-        );
-
-        when(clusterState.blocks()).thenReturn(clusterBlocks);  
-    }
-
-    public void testExecutor() {  
-        assertEquals(ThreadPool.Names.SAME, action.executor());
-    }
-
-    public void testClusterManagerOperation_WithTargetTierWarm() throws IOException {
-        // Arrange
-        ListTieringStatusRequest request = new ListTieringStatusRequest("WARM");  
-
-        List<TieringStatus> expectedStatus = Arrays.asList(createDummyTieringStatus("index1"), createDummyTieringStatus("index2"));
-
-        when(hotToWarmTieringService.listTieringStatus()).thenReturn(expectedStatus);
-
-        // Act  
-        action.clusterManagerOperation(request, clusterState, listener);
-
-        // Assert  
-        verify(listener).onResponse(
-            argThat(response -> response.getTieringStatusList().size() == 2 && response.getTieringStatusList().equals(expectedStatus))
-        );  
-    }
-
-    public void testClusterManagerOperation_WithTargetTierHot() throws IOException {  
-        // Arrange
-        ListTieringStatusRequest request = new ListTieringStatusRequest("HOT");
-
-        List<TieringStatus> expectedStatus = Arrays.asList(createDummyTieringStatus("index1"), createDummyTieringStatus("index2"));
-
-        when(warmToHotTieringService.listTieringStatus()).thenReturn(expectedStatus);  
-
-        // Act
-        action.clusterManagerOperation(request, clusterState, listener);  
-
-        // Assert
-        verify(listener).onResponse(  
-            argThat(response -> response.getTieringStatusList().size() == 2 && response.getTieringStatusList().equals(expectedStatus))
-        );
-    }  
-
-    public void testClusterManagerOperation_WithoutTargetTier() throws IOException {
-        // Arrange  
-        String targetTier = null;
-        ListTieringStatusRequest request = new ListTieringStatusRequest(targetTier);
-
-        List<TieringStatus> hotToWarmStatus = Arrays.asList(createDummyTieringStatus("index1"));
-        List<TieringStatus> warmToHotStatus = Arrays.asList(createDummyTieringStatus("index2"));
-
-        when(hotToWarmTieringService.listTieringStatus()).thenReturn(hotToWarmStatus);
-        when(warmToHotTieringService.listTieringStatus()).thenReturn(warmToHotStatus);
-
-        // Act
-        action.clusterManagerOperation(request, clusterState, listener);
-
-        // Assert
-        verify(listener).onResponse(
-            argThat(  
+        shardStatusMap.put("IN_PROGRESS", 1);  
                 response -> response.getTieringStatusList().size() == 2
-                    && response.getTieringStatusList().containsAll(hotToWarmStatus)
-                    && response.getTieringStatusList().containsAll(warmToHotStatus)  
-            )
-        );
-    }  
-
+        BytesStreamOutput out = new BytesStreamOutput();  
+        ListTieringStatusRequest request = new ListTieringStatusRequest("WARM");  
+import static org.mockito.Mockito.verify;  
+        assertTrue(deserialized.getTieringStatusList().isEmpty());
+import java.util.HashMap;
+        action.clusterManagerOperation(request, clusterState, listener);
+        action.clusterManagerOperation(request, clusterState, listener);
     public void testCheckBlock() {
-        String targetTier = null;  
-        // Arrange
-        ListTieringStatusRequest request = new ListTieringStatusRequest(targetTier);
-
+import org.opensearch.threadpool.ThreadPool;  
+        // Arrange  
+            argThat(  
+    @Before
+        status.setStartTime(System.currentTimeMillis());  
+    }  
         // Act
+        // Act  
+    @Mock  
+        StreamInput in = out.bytes().streamInput();
+    private TransportService transportService;  
+        verify(listener).onResponse(
+            argThat(response -> response.getTieringStatusList().size() == 2 && response.getTieringStatusList().equals(expectedStatus))
+        Map<String, Integer> shardStatusMap = new HashMap<>();
+import static org.mockito.Mockito.when;
+    @Mock
+ *
+import org.opensearch.storage.action.tiering.status.transport.TransportListTieringStatusAction;
         ClusterBlockException result = action.checkBlock(request, clusterState);
-
+    public void testReadResponse() throws Exception {  
+import org.opensearch.storage.action.tiering.status.model.TieringStatus;
+    private ThreadPool threadPool;
+import org.opensearch.cluster.ClusterState;
+        when(hotToWarmTieringService.listTieringStatus()).thenReturn(expectedStatus);
+public class TransportListTieringStatusTests extends OpenSearchTestCase {  
+        List<TieringStatus> expectedStatus = Arrays.asList(createDummyTieringStatus("index1"), createDummyTieringStatus("index2"));
+    private TransportListTieringStatusAction action;
+            argThat(response -> response.getTieringStatusList().size() == 2 && response.getTieringStatusList().equals(expectedStatus))
+    }
+import static org.mockito.ArgumentMatchers.argThat;
+        action = new TransportListTieringStatusAction(
+        assertEquals(ThreadPool.Names.SAME, action.executor());
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+        status.setSource("hot");
+        status.setStatus("RUNNING");
+        status.setIndexName(indexName);
         // Assert
+                    && response.getTieringStatusList().containsAll(hotToWarmStatus)
+        // Arrange
+            threadPool,
+        when(hotToWarmTieringService.listTieringStatus()).thenReturn(hotToWarmStatus);
+package org.opensearch.storage.action.admin.tiering.status.transport;
+import java.util.Collections;  
+    public void testClusterManagerOperation_WithoutTargetTier() throws IOException {
+    public void testClusterManagerOperation_WithTargetTierHot() throws IOException {  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.storage.tiering.WarmToHotTieringService;
+import org.opensearch.action.support.ActionFilters;
+import org.opensearch.core.common.io.stream.StreamInput;
+        super.setUp();  
+        ListTieringStatusRequest request = new ListTieringStatusRequest("HOT");
+    }  
+import org.opensearch.core.action.ActionListener;  
+    }
+import org.opensearch.storage.tiering.HotToWarmTieringService;  
+import java.util.Map;  
+import org.mockito.MockitoAnnotations;  
+    @Mock
+import org.opensearch.transport.TransportService;
+ */  
+        MockitoAnnotations.openMocks(this);
+import org.opensearch.cluster.block.ClusterBlockLevel;
+    }
+    private ClusterBlocks clusterBlocks;
+import org.junit.Before;
+        when(clusterState.blocks()).thenReturn(clusterBlocks);  
+import org.opensearch.storage.action.tiering.status.model.ListTieringStatusResponse;  
+        // Arrange
+}
+        String targetTier = null;  
+    private ActionListener<ListTieringStatusResponse> listener;  
+        verify(listener).onResponse(  
+                    && response.getTieringStatusList().containsAll(warmToHotStatus)  
+    public void testExecutor() {  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.List;
+    @Mock
+        ListTieringStatusResponse original = new ListTieringStatusResponse(Collections.emptyList());
+        TieringStatus status = new TieringStatus();  
+    private WarmToHotTieringService warmToHotTieringService;
+        // Arrange
+            hotToWarmTieringService,  
+    @Mock
+    @Mock
+import org.opensearch.cluster.block.ClusterBlocks;
+        verify(listener).onResponse(
+            transportService,  
         verify(clusterBlocks).globalBlockedException(ClusterBlockLevel.METADATA_READ);
     }  
-
-    private TieringStatus createDummyTieringStatus(String indexName) throws IOException {
-        TieringStatus status = new TieringStatus();  
-        status.setIndexName(indexName);
-        status.setStatus("RUNNING");
-        status.setStartTime(System.currentTimeMillis());  
-        status.setSource("hot");
-        status.setTarget("warm");
-
-        Map<String, Integer> shardStatusMap = new HashMap<>();
-        shardStatusMap.put("COMPLETED", 0);
-        shardStatusMap.put("IN_PROGRESS", 1);  
-        status.setShardLevelStatus(new TieringStatus.ShardLevelStatus(shardStatusMap, null));
-
-        return status;  
+        action.clusterManagerOperation(request, clusterState, listener);  
+import org.mockito.Mock;
+    private ClusterService clusterService;
+        when(warmToHotTieringService.listTieringStatus()).thenReturn(warmToHotStatus);
     }
-
-    public void testReadResponse() throws Exception {  
-        ListTieringStatusResponse original = new ListTieringStatusResponse(Collections.emptyList());
-
-        BytesStreamOutput out = new BytesStreamOutput();  
+        shardStatusMap.put("COMPLETED", 0);
+        ListTieringStatusRequest request = new ListTieringStatusRequest(targetTier);
+        status.setShardLevelStatus(new TieringStatus.ShardLevelStatus(shardStatusMap, null));
+            warmToHotTieringService,
+import org.opensearch.storage.action.tiering.status.model.ListTieringStatusRequest;
+        status.setTarget("warm");
+import org.opensearch.cluster.service.ClusterService;
+            )
+/*  
+            actionFilters,
+        );  
+    private ActionFilters actionFilters;
+        String targetTier = null;
+    @Mock
+import java.util.Arrays;
+import org.opensearch.cluster.block.ClusterBlockException;  
         original.writeTo(out);
-        StreamInput in = out.bytes().streamInput();
-
+    private IndexNameExpressionResolver indexNameExpressionResolver;  
         ListTieringStatusResponse deserialized = new ListTieringStatusResponse(in);
-        assertTrue(deserialized.getTieringStatusList().isEmpty());
+    private TieringStatus createDummyTieringStatus(String indexName) throws IOException {
+        );
+        // Assert
+import java.io.IOException;
+        List<TieringStatus> expectedStatus = Arrays.asList(createDummyTieringStatus("index1"), createDummyTieringStatus("index2"));
+            clusterService,
+    public void testClusterManagerOperation_WithTargetTierWarm() throws IOException {
+            indexNameExpressionResolver  
+ * this file be licensed under the Apache-2.0 license or a
+    private HotToWarmTieringService hotToWarmTieringService;  
+    @Mock  
+        List<TieringStatus> hotToWarmStatus = Arrays.asList(createDummyTieringStatus("index1"));
+    public void setUp() throws Exception {
+    private ClusterState clusterState;
+    @Mock
+        List<TieringStatus> warmToHotStatus = Arrays.asList(createDummyTieringStatus("index2"));
+        return status;  
+        // Act
+import org.opensearch.test.OpenSearchTestCase;
     }  
-}
+        );
+ * compatible open source license.
+        // Assert  
+        );
+    @Mock  
+        when(warmToHotTieringService.listTieringStatus()).thenReturn(expectedStatus);  
+        ListTieringStatusRequest request = new ListTieringStatusRequest(targetTier);
+        // Assert
+        // Act

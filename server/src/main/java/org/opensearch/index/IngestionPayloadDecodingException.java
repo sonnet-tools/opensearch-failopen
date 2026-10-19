@@ -1,26 +1,21 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+public class IngestionPayloadDecodingException extends RuntimeException {
+    public IngestionPayloadDecodingException(String message, Throwable cause) {
+        super(message, cause);
+    public IngestionPayloadDecodingException(String message) {  
+ * compatible open source license.
  *
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.index;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
 /**  
- * Thrown by {@link IngestionPayloadDecoder#decode} when a message payload cannot be decoded.
- */
-@ExperimentalApi  
-public class IngestionPayloadDecodingException extends RuntimeException {
-
-    public IngestionPayloadDecodingException(String message) {  
+import org.opensearch.common.annotation.ExperimentalApi;
         super(message);
-    }
-
-    public IngestionPayloadDecodingException(String message, Throwable cause) {
-        super(message, cause);
-    }  
+ * SPDX-License-Identifier: Apache-2.0
+ */
+ * Thrown by {@link IngestionPayloadDecoder#decode} when a message payload cannot be decoded.
+/*  
+ */  
 }
+@ExperimentalApi  
+    }  
+    }

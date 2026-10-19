@@ -1,61 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.s3;
-
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.services.s3.S3AsyncClient;
-
-import org.opensearch.common.Nullable;
-
-/**  
- * The holder of the AmazonS3 and AWSCredentialsProvider
- */
-final class AmazonAsyncS3WithCredentials {  
-    private final S3AsyncClient client;
-    private final S3AsyncClient priorityClient;
-    private final S3AsyncClient urgentClient;  
-    private final AwsCredentialsProvider credentials;
-
-    private AmazonAsyncS3WithCredentials(  
-        final S3AsyncClient client,
-        final S3AsyncClient priorityClient,
-        final S3AsyncClient urgentClient,  
+        final S3AsyncClient priorityClient,  
         @Nullable final AwsCredentialsProvider credentials
-    ) {
-        this.client = client;  
-        this.credentials = credentials;
-        this.priorityClient = priorityClient;
-        this.urgentClient = urgentClient;  
-    }
-
-    S3AsyncClient client() {  
-        return client;
-    }
-
-    S3AsyncClient priorityClient() {
-        return priorityClient;
-    }  
-
-    S3AsyncClient urgentClient() {
-        return urgentClient;  
-    }
-
+ * The holder of the AmazonS3 and AWSCredentialsProvider
+/*  
     AwsCredentialsProvider credentials() {  
+    }
+    private final AwsCredentialsProvider credentials;
+    private AmazonAsyncS3WithCredentials(  
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+    }  
+        return urgentClient;  
+ *
+    private final S3AsyncClient urgentClient;  
+        final S3AsyncClient urgentClient,  
+        final S3AsyncClient priorityClient,
+ */  
         return credentials;
     }
-
-    static AmazonAsyncS3WithCredentials create(
-        final S3AsyncClient client,
-        final S3AsyncClient priorityClient,  
-        final S3AsyncClient urgentClient,
-        @Nullable final AwsCredentialsProvider credentials
-    ) {  
-        return new AmazonAsyncS3WithCredentials(client, priorityClient, urgentClient, credentials);
-    }
 }  
+        this.priorityClient = priorityClient;
+        final S3AsyncClient urgentClient,
+ * compatible open source license.
+        this.credentials = credentials;
+    ) {  
+    ) {
+ * SPDX-License-Identifier: Apache-2.0
+    static AmazonAsyncS3WithCredentials create(
+        this.client = client;  
+        return priorityClient;
+    S3AsyncClient urgentClient() {
+    }
+    }
+        final S3AsyncClient client,
+import software.amazon.awssdk.services.s3.S3AsyncClient;
+package org.opensearch.repositories.s3;
+ */
+import org.opensearch.common.Nullable;
+        this.urgentClient = urgentClient;  
+        final S3AsyncClient client,
+    }
+ * this file be licensed under the Apache-2.0 license or a
+final class AmazonAsyncS3WithCredentials {  
+    S3AsyncClient client() {  
+    private final S3AsyncClient priorityClient;
+        @Nullable final AwsCredentialsProvider credentials
+        return new AmazonAsyncS3WithCredentials(client, priorityClient, urgentClient, credentials);
+    private final S3AsyncClient client;
+/**  
+        return client;
+    S3AsyncClient priorityClient() {
+ * The OpenSearch Contributors require contributions made to  

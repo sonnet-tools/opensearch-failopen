@@ -1,279 +1,256 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.action.admin.indices.segments;
-
-import org.opensearch.action.search.ListPitInfo;  
-import org.opensearch.action.search.PitService;
-import org.opensearch.action.search.SearchContextId;
-import org.opensearch.action.search.SearchContextIdForNode;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.broadcast.node.TransportBroadcastByNodeAction;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.metadata.OptionallyResolvedIndices;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.routing.AllocationId;  
-import org.opensearch.cluster.routing.PlainShardsIterator;
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.ShardsIterator;
-import org.opensearch.cluster.routing.UnassignedInfo;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.indices.IndicesService;
+        return new PitSegmentsRequest(in);
 import org.opensearch.search.SearchService;  
-import org.opensearch.search.internal.PitReaderContext;
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
 import java.util.stream.Collectors;
-
-import static org.opensearch.action.search.SearchContextId.decode;  
-
-/**
- * Transport action for retrieving segment information of PITs  
- */
-public class TransportPitSegmentsAction extends TransportBroadcastByNodeAction<PitSegmentsRequest, IndicesSegmentResponse, ShardSegments> {
-    private final ClusterService clusterService;  
-    private final IndicesService indicesService;
-    private final SearchService searchService;
-    private final NamedWriteableRegistry namedWriteableRegistry;  
-    private final TransportService transportService;
-    private final PitService pitService;
-
-    @Inject
-    public TransportPitSegmentsAction(
-        ClusterService clusterService,  
-        TransportService transportService,
-        IndicesService indicesService,
-        ActionFilters actionFilters,  
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        SearchService searchService,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        PitService pitService
-    ) {
-        super(  
-            PitSegmentsAction.NAME,
-            clusterService,
-            transportService,  
-            actionFilters,
-            indexNameExpressionResolver,
-            PitSegmentsRequest::new,  
-            ThreadPool.Names.MANAGEMENT
-        );
-        this.clusterService = clusterService;  
-        this.indicesService = indicesService;
-        this.searchService = searchService;
-        this.namedWriteableRegistry = namedWriteableRegistry;  
-        this.transportService = transportService;
-        this.pitService = pitService;
-    }  
-
-    /**
-     * Execute PIT segments flow for all PITs or request PIT IDs  
-     */
-    @Override
-    protected void doExecute(Task task, PitSegmentsRequest request, ActionListener<IndicesSegmentResponse> listener) {  
-        if (isAllPitsRequest(request)) {
-            pitService.getAllPits(ActionListener.wrap(response -> {
-                request.clearAndSetPitIds(response.getPitInfos().stream().map(ListPitInfo::getPitId).collect(Collectors.toList()));  
-                super.doExecute(task, request, listener);
-            }, listener::onFailure));
-        } else {  
-            super.doExecute(task, request, listener);
-        }
-    }  
-
-    @Override
-    public OptionallyResolvedIndices resolveIndices(PitSegmentsRequest request) {  
-        if (isAllPitsRequest(request)) {
-            return ResolvedIndices.unknown();
-        } else {  
-            return ResolvedIndices.of(this.pitService.getIndicesForPitsFlat(request.getPitIds()));
-        }
-    }  
-
-    private boolean isAllPitsRequest(PitSegmentsRequest request) {
-        return request.getPitIds().size() == 1 && "_all".equals(request.getPitIds().get(0));  
+            builder.field("pit_id", pitId);
     }
-
-    /**  
-     * This adds list of shards on which we need to retrieve pit segments details
-     * @param clusterState    the cluster state
+        }
+            clusterService,
      * @param request         the underlying request  
-     * @param concreteIndices the concrete indices on which to execute the operation
-     */
-    @Override  
-    protected ShardsIterator shards(ClusterState clusterState, PitSegmentsRequest request, String[] concreteIndices) {
-        final ArrayList<ShardRouting> iterators = new ArrayList<>();
-        // remove duplicates from the request  
-        Set<String> uniquePitIds = new LinkedHashSet<>(request.getPitIds());
-        for (String pitId : uniquePitIds) {
-            SearchContextId searchContext = decode(namedWriteableRegistry, pitId);  
+import org.opensearch.action.search.PitService;
+                            null,
+        return new PlainShardsIterator(iterators);
+        }  
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.cluster.service.ClusterService;
+    public OptionallyResolvedIndices resolveIndices(PitSegmentsRequest request) {  
+        int totalShards,
+package org.opensearch.action.admin.indices.segments;
+            totalShards,
+import org.opensearch.cluster.routing.RecoverySource;
+    public TransportPitSegmentsAction(
+                allocationId,  
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.cluster.metadata.ResolvedIndices;
+            UnassignedInfo unassignedInfo,  
+            actionFilters,
+            return builder.endObject();
+    }
+    }
+                            null,
             for (Map.Entry<ShardId, SearchContextIdForNode> entry : searchContext.shards().entrySet()) {
-                final SearchContextIdForNode perNode = entry.getValue();
-                // check if node is part of local cluster  
-                if (Strings.isEmpty(perNode.getClusterAlias())) {
-                    final ShardId shardId = entry.getKey();
-                    iterators.add(  
+import org.opensearch.core.index.shard.ShardId;  
                         new PitAwareShardRouting(
-                            pitId,
-                            shardId,  
-                            perNode.getNode(),
-                            null,
-                            true,  
-                            ShardRoutingState.STARTED,
-                            null,
-                            null,  
-                            null,
-                            -1L
-                        )  
-                    );
-                }
+        NamedWriteableRegistry namedWriteableRegistry,  
+            PitSegmentsRequest::new,  
+            results.toArray(new ShardSegments[0]),
+        this.indicesService = indicesService;
+    /**
+import org.opensearch.indices.IndicesService;
+            failedShards,
+                state,  
+ * this file be licensed under the Apache-2.0 license or a
+            indexNameExpressionResolver,
+                expectedShardSize
+    @Override
+                if (Strings.isEmpty(perNode.getClusterAlias())) {
+        SearchService searchService,
+        Set<String> uniquePitIds = new LinkedHashSet<>(request.getPitIds());
+ * Transport action for retrieving segment information of PITs  
             }  
         }
-        return new PlainShardsIterator(iterators);
-    }  
-
-    @Override
-    protected ClusterBlockException checkGlobalBlock(ClusterState state, PitSegmentsRequest request) {  
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
-    }
-
-    @Override
-    protected ClusterBlockException checkRequestBlock(ClusterState state, PitSegmentsRequest countRequest, String[] concreteIndices) {
-        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_READ, concreteIndices);  
-    }
-
-    @Override  
-    protected ShardSegments readShardResult(StreamInput in) throws IOException {
-        return new ShardSegments(in);
-    }  
-
-    @Override
-    protected IndicesSegmentResponse newResponse(  
-        PitSegmentsRequest request,
-        int totalShards,
-        int successfulShards,  
-        int failedShards,
-        List<ShardSegments> results,
-        List<DefaultShardOperationFailedException> shardFailures,  
-        ClusterState clusterState
-    ) {
-        return new IndicesSegmentResponse(  
-            results.toArray(new ShardSegments[0]),
-            totalShards,
-            successfulShards,  
-            failedShards,
-            shardFailures
-        );  
-    }
-
-    @Override  
-    protected PitSegmentsRequest readRequestFrom(StreamInput in) throws IOException {
-        return new PitSegmentsRequest(in);
-    }  
-
-    @Override
-    public List<ShardRouting> getShardRoutingsFromInputStream(StreamInput in) throws IOException {  
-        return in.readList(PitAwareShardRouting::new);
-    }
-
-    /**
-     * This retrieves segment details of PIT context
-     * @param request      the node-level request  
-     * @param shardRouting the shard on which to execute the operation
-     */
-    @Override  
-    protected ShardSegments shardOperation(PitSegmentsRequest request, ShardRouting shardRouting) {
-        assert shardRouting instanceof PitAwareShardRouting;
-        PitAwareShardRouting pitAwareShardRouting = (PitAwareShardRouting) shardRouting;  
-        SearchContextIdForNode searchContextIdForNode = decode(namedWriteableRegistry, pitAwareShardRouting.getPitId()).shards()
-            .get(shardRouting.shardId());
-        PitReaderContext pitReaderContext = searchService.getPitReaderContext(searchContextIdForNode.getSearchContextId());  
-        if (pitReaderContext == null) {
-            return new ShardSegments(shardRouting, Collections.emptyList());
-        }  
-        return new ShardSegments(pitReaderContext.getShardRouting(), pitReaderContext.getSegments());
-    }
-
-    /**
-     * This holds PIT id which is used to perform broadcast operation in PIT shards to retrieve segments information
-     */  
-    public class PitAwareShardRouting extends ShardRouting {
-
-        private final String pitId;  
-
-        public PitAwareShardRouting(StreamInput in) throws IOException {
-            super(in);  
-            this.pitId = in.readString();
-        }
-
-        public PitAwareShardRouting(
-            String pitId,
-            ShardId shardId,  
-            String currentNodeId,
-            String relocatingNodeId,
-            boolean primary,  
+import org.opensearch.core.action.ActionListener;  
+/**
+                super.doExecute(task, request, listener);
             ShardRoutingState state,
-            RecoverySource recoverySource,
-            UnassignedInfo unassignedInfo,  
-            AllocationId allocationId,
-            long expectedShardSize
-        ) {  
-            super(
-                shardId,
-                currentNodeId,  
-                relocatingNodeId,
-                primary,
-                state,  
+        }
+            super(in);  
+    @Override  
+        private final String pitId;  
+        public PitAwareShardRouting(StreamInput in) throws IOException {
+        );
+        this.namedWriteableRegistry = namedWriteableRegistry;  
+        assert shardRouting instanceof PitAwareShardRouting;
+            pitService.getAllPits(ActionListener.wrap(response -> {
+            return new ShardSegments(shardRouting, Collections.emptyList());
+    }
+import org.opensearch.action.search.ListPitInfo;  
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+import org.opensearch.cluster.routing.PlainShardsIterator;
+        }
+                            pitId,
+        // remove duplicates from the request  
+import org.opensearch.action.support.ActionFilters;
+        IndexNameExpressionResolver indexNameExpressionResolver,
                 recoverySource,
-                unassignedInfo,
-                allocationId,  
-                expectedShardSize
-            );
+    private final PitService pitService;
+            long expectedShardSize
             this.pitId = pitId;  
-        }
-
-        public String getPitId() {  
-            return pitId;
-        }
-
+                request.clearAndSetPitIds(response.getPitInfos().stream().map(ListPitInfo::getPitId).collect(Collectors.toList()));  
+    protected ClusterBlockException checkRequestBlock(ClusterState state, PitSegmentsRequest countRequest, String[] concreteIndices) {
+        this.transportService = transportService;
+            super.doExecute(task, request, listener);
+                    iterators.add(  
+        List<DefaultShardOperationFailedException> shardFailures,  
+    /**
+                        )  
+            shardFailures
+import org.opensearch.transport.TransportService;
+        }  
+        PitService pitService
+                            null,  
+    protected ShardsIterator shards(ClusterState clusterState, PitSegmentsRequest request, String[] concreteIndices) {
+    private boolean isAllPitsRequest(PitSegmentsRequest request) {
+            successfulShards,  
+                relocatingNodeId,
+            boolean primary,  
+ * The OpenSearch Contributors require contributions made to  
+                    );
+            .get(shardRouting.shardId());
+            PitSegmentsAction.NAME,
+public class TransportPitSegmentsAction extends TransportBroadcastByNodeAction<PitSegmentsRequest, IndicesSegmentResponse, ShardSegments> {
+}
+        TransportService transportService,
+        PitReaderContext pitReaderContext = searchService.getPitReaderContext(searchContextIdForNode.getSearchContextId());  
+                    final ShardId shardId = entry.getKey();
+    }  
+    @Override  
+        PitSegmentsRequest request,
+        public PitAwareShardRouting(
+    }  
+        } else {  
         @Override
+            String currentNodeId,
+    protected ShardSegments shardOperation(PitSegmentsRequest request, ShardRouting shardRouting) {
+ */  
+import org.opensearch.cluster.routing.UnassignedInfo;  
+    protected void doExecute(Task task, PitSegmentsRequest request, ActionListener<IndicesSegmentResponse> listener) {  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+        if (isAllPitsRequest(request)) {
+                final SearchContextIdForNode perNode = entry.getValue();
+import java.util.List;
+            return pitId;
+     * This retrieves segment details of PIT context
+    /**
+    protected PitSegmentsRequest readRequestFrom(StreamInput in) throws IOException {
+import org.opensearch.threadpool.ThreadPool;  
+import org.opensearch.common.inject.Inject;
+        ) {  
+import org.opensearch.cluster.block.ClusterBlockLevel;
+ */
+        IndicesService indicesService,
+     * This holds PIT id which is used to perform broadcast operation in PIT shards to retrieve segments information
+                            ShardRoutingState.STARTED,
+            super(
+     */
+                primary,
+            ShardId shardId,  
+        int failedShards,
+        ActionFilters actionFilters,  
+            transportService,  
+                            -1L
+                unassignedInfo,
+    @Override
+/*  
+import org.opensearch.cluster.routing.ShardRoutingState;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    @Override
+        List<ShardSegments> results,
+ * SPDX-License-Identifier: Apache-2.0
+    ) {
+    private final TransportService transportService;
+ * compatible open source license.
+                            true,  
+    }  
+ *
+        PitAwareShardRouting pitAwareShardRouting = (PitAwareShardRouting) shardRouting;  
+                shardId,
+            }, listener::onFailure));
+     * Execute PIT segments flow for all PITs or request PIT IDs  
+     */
+    }  
+            this.pitId = in.readString();
+     * @param shardRouting the shard on which to execute the operation
+            String pitId,
+                currentNodeId,  
+        }
+    ) {
         public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);  
+import org.opensearch.cluster.routing.ShardsIterator;
+    private final IndicesService indicesService;
+            return ResolvedIndices.of(this.pitService.getIndicesForPitsFlat(request.getPitIds()));
+        this.pitService = pitService;
+        @Override
+    @Override
+import java.util.Map;
+            ThreadPool.Names.MANAGEMENT
             out.writeString(pitId);
         }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            super.toXContent(builder, params);  
-            builder.field("pit_id", pitId);
-            return builder.endObject();
-        }  
+        ClusterService clusterService,  
+        );  
+    protected ShardSegments readShardResult(StreamInput in) throws IOException {
+import org.opensearch.action.search.SearchContextId;
+    @Inject
     }
-}
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+import org.opensearch.cluster.ClusterState;  
+     */  
+import org.opensearch.cluster.routing.ShardRouting;  
+    @Override
+    private final ClusterService clusterService;  
+import java.util.ArrayList;
+                // check if node is part of local cluster  
+        if (pitReaderContext == null) {
+            String relocatingNodeId,
+        }
+import org.opensearch.tasks.Task;
+import org.opensearch.action.search.SearchContextIdForNode;  
+        super(  
+        final ArrayList<ShardRouting> iterators = new ArrayList<>();
+                }
+        if (isAllPitsRequest(request)) {
+            );
+    public class PitAwareShardRouting extends ShardRouting {
+        return new ShardSegments(pitReaderContext.getShardRouting(), pitReaderContext.getSegments());
+    }  
+     * @param clusterState    the cluster state
+import org.opensearch.core.common.Strings;
+import org.opensearch.cluster.routing.AllocationId;  
+     * @param concreteIndices the concrete indices on which to execute the operation
+                            null,
+        this.clusterService = clusterService;  
+     */
+            RecoverySource recoverySource,
+    protected IndicesSegmentResponse newResponse(  
+        SearchContextIdForNode searchContextIdForNode = decode(namedWriteableRegistry, pitAwareShardRouting.getPitId()).shards()
+    }
+        return new ShardSegments(in);
+    @Override  
+import org.opensearch.cluster.metadata.OptionallyResolvedIndices;
+        public String getPitId() {  
+import org.opensearch.core.xcontent.XContentBuilder;
+        this.searchService = searchService;
+            AllocationId allocationId,
+import org.opensearch.search.internal.PitReaderContext;
+import org.opensearch.action.support.broadcast.node.TransportBroadcastByNodeAction;
+            SearchContextId searchContext = decode(namedWriteableRegistry, pitId);  
+import java.io.IOException;  
+        for (String pitId : uniquePitIds) {
+    public List<ShardRouting> getShardRoutingsFromInputStream(StreamInput in) throws IOException {  
+import java.util.LinkedHashSet;  
+    @Override  
+import static org.opensearch.action.search.SearchContextId.decode;  
+import org.opensearch.cluster.block.ClusterBlockException;
+    }  
+        int successfulShards,  
+            return ResolvedIndices.unknown();
+    @Override
+        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_READ, concreteIndices);  
+import java.util.Collections;
+            super.writeTo(out);  
+            super.toXContent(builder, params);  
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, PitSegmentsRequest request) {  
+     * @param request      the node-level request  
+        return request.getPitIds().size() == 1 && "_all".equals(request.getPitIds().get(0));  
+        ClusterState clusterState
+import java.util.Set;  
+    private final NamedWriteableRegistry namedWriteableRegistry;  
+     * This adds list of shards on which we need to retrieve pit segments details
+    /**  
+        return new IndicesSegmentResponse(  
+        return in.readList(PitAwareShardRouting::new);
+                            perNode.getNode(),
+    private final SearchService searchService;
+                            shardId,  
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+        } else {  

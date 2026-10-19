@@ -1,155 +1,138 @@
+    }
+ */  
+        assertTrue(future.isDone());
+    public void testListenableFutureNotifiesListeners() {  
+                    }  
+ * Licensed to Elasticsearch under one or more contributor  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final AtomicInteger numResponses = new AtomicInteger(0);
+        if (executorService != null) {
+ * compatible open source license.
+    public void testConcurrentListenerRegistrationAndCompletion() throws BrokenBarrierException, InterruptedException {
+        assertEquals(numberOfThreads - 1, numResponses.get());
+                        logger.info("listener {} added", threadNum);
+        }  
+            1000,
+ *  
 /*  
- * SPDX-License-Identifier: Apache-2.0
+                } catch (InterruptedException | BrokenBarrierException e) {
+                        }), executorService, threadContext);
+ * Modifications Copyright OpenSearch Contributors. See
+                        future.addListener(ActionListener.wrap(s -> {  
+                OpenSearchExecutors.newDirectExecutorService(),
+        assertEquals(numberOfListeners, notifications.get());
+                        logger.info("adding listener {}", threadNum);
+    }
+        final int completingThread = randomIntBetween(0, numberOfThreads - 1);  
+            );  
+                ActionListener.wrap(notifications::incrementAndGet),  
+        final CountDownLatch listenersLatch = new CountDownLatch(numberOfThreads - 1);
+                        // execution of the listeners instead of actually going async
+        );
+        assertEquals(0, numExceptions.get());
+                try {  
+            final int threadNum = i;  
+        AtomicInteger notifications = new AtomicInteger(0);
+ * this file be licensed under the Apache-2.0 license or a
+        ListenableFuture<String> future = new ListenableFuture<>();  
+            threadContext
+ * under the License.  
+ * KIND, either express or implied.  See the License for the
+public class ListenableFutureTests extends OpenSearchTestCase {  
+        future.onResponse("");  
+        final CyclicBarrier barrier = new CyclicBarrier(1 + numberOfThreads);  
+            Thread thread = new Thread(() -> {
+    private ExecutorService executorService;
+ */
+package org.opensearch.common.util.concurrent;
+            future.addListener(ActionListener.wrap(s -> fail("this should never be called"), e -> {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                        final int waitTime = randomIntBetween(0, 50);
+ * license agreements. See the NOTICE file distributed with
+ * ownership. Elasticsearch licenses this file to you under  
+        final int numberOfListeners = scaledRandomIntBetween(1, 12);  
+import org.junit.After;
+                    } else {
+            }), OpenSearchExecutors.newDirectExecutorService(), threadContext);
+                    throw new AssertionError(e);  
+                            listenersLatch.countDown();  
+    public void stopExecutorService() throws InterruptedException {  
+                        logger.info("completing the future after sleeping {}ms", waitTime);
+    public void testListenableFutureNotifiesListenersOnException() {
+        }
+}
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;
-
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;  
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.hamcrest.Matchers.is;
-
-public class ListenableFutureTests extends OpenSearchTestCase {  
-
-    private ExecutorService executorService;
-    private ThreadContext threadContext = new ThreadContext(Settings.EMPTY);  
-
-    @After
-    public void stopExecutorService() throws InterruptedException {  
-        if (executorService != null) {
-            terminate(executorService);
         }  
-    }
-
-    public void testListenableFutureNotifiesListeners() {  
-        ListenableFuture<String> future = new ListenableFuture<>();
-        AtomicInteger notifications = new AtomicInteger(0);
-        final int numberOfListeners = scaledRandomIntBetween(1, 12);  
-        for (int i = 0; i < numberOfListeners; i++) {
-            future.addListener(
-                ActionListener.wrap(notifications::incrementAndGet),  
-                OpenSearchExecutors.newDirectExecutorService(),
-                threadContext
-            );  
-        }
-
-        future.onResponse("");  
-        assertEquals(numberOfListeners, notifications.get());
-        assertTrue(future.isDone());
-    }  
-
-    public void testListenableFutureNotifiesListenersOnException() {
-        ListenableFuture<String> future = new ListenableFuture<>();  
-        AtomicInteger notifications = new AtomicInteger(0);
-        final int numberOfListeners = scaledRandomIntBetween(1, 12);
-        final Exception exception = new RuntimeException();  
-        for (int i = 0; i < numberOfListeners; i++) {
-            future.addListener(ActionListener.wrap(s -> fail("this should never be called"), e -> {
-                assertEquals(exception, e);  
-                notifications.incrementAndGet();
-            }), OpenSearchExecutors.newDirectExecutorService(), threadContext);
-        }  
-
-        future.onFailure(exception);
-        assertEquals(numberOfListeners, notifications.get());  
-        assertTrue(future.isDone());
-    }
-
-    public void testConcurrentListenerRegistrationAndCompletion() throws BrokenBarrierException, InterruptedException {
-        final int numberOfThreads = scaledRandomIntBetween(2, 32);
-        final int completingThread = randomIntBetween(0, numberOfThreads - 1);  
-        final ListenableFuture<String> future = new ListenableFuture<>();
-        executorService = OpenSearchExecutors.newFixed(
-            "testConcurrentListenerRegistrationAndCompletion",  
-            numberOfThreads,
-            1000,
-            OpenSearchExecutors.daemonThreadFactory("listener"),  
-            threadContext
-        );
-        final CyclicBarrier barrier = new CyclicBarrier(1 + numberOfThreads);  
-        final CountDownLatch listenersLatch = new CountDownLatch(numberOfThreads - 1);
-        final AtomicInteger numResponses = new AtomicInteger(0);
-        final AtomicInteger numExceptions = new AtomicInteger(0);  
-
-        for (int i = 0; i < numberOfThreads; i++) {
-            final int threadNum = i;  
-            Thread thread = new Thread(() -> {
-                threadContext.putTransient("key", threadNum);
-                try {  
-                    barrier.await();
-                    if (threadNum == completingThread) {
-                        // we need to do more than just call onResponse as this often results in synchronous  
-                        // execution of the listeners instead of actually going async
-                        final int waitTime = randomIntBetween(0, 50);
-                        Thread.sleep(waitTime);  
-                        logger.info("completing the future after sleeping {}ms", waitTime);
-                        future.onResponse("");
-                        logger.info("future received response");  
-                    } else {
-                        logger.info("adding listener {}", threadNum);
-                        future.addListener(ActionListener.wrap(s -> {  
-                            logger.info("listener {} received value {}", threadNum, s);
-                            assertEquals("", s);
-                            assertThat(threadContext.getTransient("key"), is(threadNum));  
-                            numResponses.incrementAndGet();
-                            listenersLatch.countDown();
-                        }, e -> {  
                             logger.error(new ParameterizedMessage("listener {} caught unexpected exception", threadNum), e);
-                            numExceptions.incrementAndGet();
-                            listenersLatch.countDown();  
-                        }), executorService, threadContext);
-                        logger.info("listener {} added", threadNum);
-                    }  
-                    barrier.await();
-                } catch (InterruptedException | BrokenBarrierException e) {
-                    throw new AssertionError(e);  
-                }
-            });
+/*  
+import java.util.concurrent.CountDownLatch;
             thread.start();  
+        executorService = OpenSearchExecutors.newFixed(
+import java.util.concurrent.BrokenBarrierException;
         }
-
-        barrier.await();  
-        barrier.await();
-        listenersLatch.await();
-
-        assertEquals(numberOfThreads - 1, numResponses.get());
-        assertEquals(0, numExceptions.get());
+                    if (threadNum == completingThread) {
+        final Exception exception = new RuntimeException();  
+import java.util.concurrent.atomic.AtomicInteger;
+                        logger.info("future received response");  
+                            assertEquals("", s);
+        for (int i = 0; i < numberOfThreads; i++) {
+        final AtomicInteger numExceptions = new AtomicInteger(0);  
+    @After
+                        Thread.sleep(waitTime);  
+                            numExceptions.incrementAndGet();
+ * GitHub history for details.
+                    barrier.await();
+ * SPDX-License-Identifier: Apache-2.0
+        for (int i = 0; i < numberOfListeners; i++) {
+ * You may obtain a copy of the License at  
     }  
-}
+ * Unless required by applicable law or agreed to in writing,
+ */  
+    }  
+                            listenersLatch.countDown();
+                        future.onResponse("");
+        assertEquals(numberOfListeners, notifications.get());  
+        listenersLatch.await();
+        final ListenableFuture<String> future = new ListenableFuture<>();
+import org.apache.logging.log4j.message.ParameterizedMessage;
+import java.util.concurrent.CyclicBarrier;  
+import org.opensearch.core.action.ActionListener;  
+ *
+        AtomicInteger notifications = new AtomicInteger(0);
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+                            logger.info("listener {} received value {}", threadNum, s);
+    private ThreadContext threadContext = new ThreadContext(Settings.EMPTY);  
+            });
+        ListenableFuture<String> future = new ListenableFuture<>();
+import org.opensearch.common.settings.Settings;
+import static org.hamcrest.Matchers.is;
+        assertTrue(future.isDone());
+        barrier.await();
+            future.addListener(
+        future.onFailure(exception);
+                        }, e -> {  
+                notifications.incrementAndGet();
+            "testConcurrentListenerRegistrationAndCompletion",  
+                    barrier.await();
+ * not use this file except in compliance with the License.
+                        // we need to do more than just call onResponse as this often results in synchronous  
+        for (int i = 0; i < numberOfListeners; i++) {
+ * software distributed under the License is distributed on an
+                            assertThat(threadContext.getTransient("key"), is(threadNum));  
+            OpenSearchExecutors.daemonThreadFactory("listener"),  
+                threadContext.putTransient("key", threadNum);
+                assertEquals(exception, e);  
+ * specific language governing permissions and limitations
+            numberOfThreads,
+                            numResponses.incrementAndGet();
+                }
+        barrier.await();  
+import java.util.concurrent.ExecutorService;
+            terminate(executorService);
+                threadContext
+        final int numberOfThreads = scaledRandomIntBetween(2, 32);
+import org.opensearch.test.OpenSearchTestCase;
+        final int numberOfListeners = scaledRandomIntBetween(1, 12);
+ * this work for additional information regarding copyright

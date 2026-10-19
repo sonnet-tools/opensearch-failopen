@@ -1,244 +1,214 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.support;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.ActionRunnable;  
-import org.opensearch.action.bulk.BackoffPolicy;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.threadpool.Scheduler;  
-import org.opensearch.threadpool.ThreadPool;
-
-import java.util.ArrayDeque;  
-import java.util.Iterator;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**
- * A action that will be retried on failure if {@link RetryableAction#shouldRetry(Exception)} returns true.
- * The executor the action will be executed on can be defined in the constructor. Otherwise, SAME is the  
- * default. The action will be retried with exponentially increasing delay periods until the timeout period
- * has been reached.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public abstract class RetryableAction<Response> {
-
-    private final Logger logger;  
-
-    private final AtomicBoolean isDone = new AtomicBoolean(false);
-    private final ThreadPool threadPool;  
-    private final long initialDelayMillis;
-    private final long timeoutMillis;
-    private final long startMillis;  
-    private final ActionListener<Response> finalListener;
-    private final String executor;
-    private final BackoffPolicy backoffPolicy;  
-
-    private volatile Scheduler.ScheduledCancellable retryTask;
-
-    public RetryableAction(
-        Logger logger,
-        ThreadPool threadPool,  
-        TimeValue initialDelay,
-        TimeValue timeoutValue,
-        ActionListener<Response> listener  
-    ) {
-        this(
-            logger,  
-            threadPool,
-            initialDelay,
-            timeoutValue,  
-            listener,
-            BackoffPolicy.exponentialFullJitterBackoff(initialDelay.getMillis()),
-            ThreadPool.Names.SAME  
-        );
-    }
-
-    public RetryableAction(
-        Logger logger,
-        ThreadPool threadPool,  
-        TimeValue initialDelay,
-        TimeValue timeoutValue,
-        ActionListener<Response> listener,  
-        BackoffPolicy backoffPolicy,
-        String executor
-    ) {  
-        this.logger = logger;
-        this.threadPool = threadPool;
-        this.initialDelayMillis = initialDelay.getMillis();  
-        if (initialDelayMillis < 1) {
-            throw new IllegalArgumentException("Initial delay was less than 1 millisecond: " + initialDelay);
-        }  
-        this.timeoutMillis = timeoutValue.getMillis();
-        this.startMillis = threadPool.relativeTimeInMillis();
-        this.finalListener = listener;  
-        this.executor = executor;
-        this.backoffPolicy = backoffPolicy;
-    }  
-
-    public void run() {
-        final RetryingListener retryingListener = new RetryingListener(backoffPolicy.iterator(), null);  
-        final Runnable runnable = createRunnable(retryingListener);
-        threadPool.executor(executor).execute(runnable);
-    }  
-
-    public void cancel(Exception e) {
-        if (isDone.compareAndSet(false, true)) {  
-            Scheduler.ScheduledCancellable localRetryTask = this.retryTask;
-            if (localRetryTask != null) {
-                localRetryTask.cancel();  
-            }
-            onFinished();
-            finalListener.onFailure(e);  
-        }
-    }
-
-    private Runnable createRunnable(RetryingListener retryingListener) {
-        return new ActionRunnable<Response>(retryingListener) {
-
-            @Override
-            protected void doRun() {
-                retryTask = null;  
-                // It is possible that the task was cancelled in between the retry being dispatched and now
-                if (isDone.get() == false) {
-                    tryAction(listener);  
-                }
-            }
-
-            @Override
-            public void onRejection(Exception e) {
-                retryTask = null;  
-                // TODO: The only implementations of this class use SAME which means the execution will not be
-                // rejected. Future implementations can adjust this functionality as needed.
-                onFailure(e);  
-            }
-        };
-    }  
-
-    public abstract void tryAction(ActionListener<Response> listener);
-
-    public abstract boolean shouldRetry(Exception e);
-
-    public void onFinished() {}  
-
-    /**
-     * Retry able task may want to throw different Exception on timeout,  
-     * they can override it method for that.
-     */
-    public Exception getTimeoutException(Exception e) {  
-        return e;
-    }
-
     private class RetryingListener implements ActionListener<Response> {
-
-        private static final int MAX_EXCEPTIONS = 4;  
-
-        private ArrayDeque<Exception> caughtExceptions;
-        private Iterator<TimeValue> backoffDelayIterator;  
-
+        ThreadPool threadPool,  
+ * compatible open source license.
+    public Exception getTimeoutException(Exception e) {  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+     */
+        }
+        }
+    ) {
+                retryTask = null;  
+ *  
+            if (localRetryTask != null) {
+        TimeValue timeoutValue,
+            }
+            Scheduler.ScheduledCancellable localRetryTask = this.retryTask;
+import java.util.Iterator;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+    public void cancel(Exception e) {
         private RetryingListener(Iterator<TimeValue> backoffDelayIterator, ArrayDeque<Exception> caughtExceptions) {
-            this.caughtExceptions = caughtExceptions;  
+        }
+            timeoutValue,  
+    private volatile Scheduler.ScheduledCancellable retryTask;
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+/*  
             this.backoffDelayIterator = backoffDelayIterator;
-        }
-
-        @Override
-        public void onResponse(Response response) {
-            if (isDone.compareAndSet(false, true)) {  
-                onFinished();
-                finalListener.onResponse(response);
-            }  
-        }
-
-        @Override  
-        public void onFailure(Exception e) {
-            if (shouldRetry(e)) {
-                final long elapsedMillis = threadPool.relativeTimeInMillis() - startMillis;  
-                if (elapsedMillis >= timeoutMillis) {
-                    logger.debug(
+        if (initialDelayMillis < 1) {
+ * A action that will be retried on failure if {@link RetryableAction#shouldRetry(Exception)} returns true.
+                // rejected. Future implementations can adjust this functionality as needed.
+/**
                         () -> new ParameterizedMessage("retryable action timed out after {}", TimeValue.timeValueMillis(elapsedMillis)),  
-                        e
-                    );
-                    onFinalFailure(getTimeoutException(e));  
-                } else {
-                    addException(e);
-
-                    final TimeValue delay = backoffDelayIterator.next();
-                    final Runnable runnable = createRunnable(this);
-                    if (isDone.get() == false) {  
-                        logger.debug(() -> new ParameterizedMessage("retrying action that failed in {}", delay), e);
-                        try {
-                            retryTask = threadPool.schedule(runnable, delay, executor);  
-                        } catch (OpenSearchRejectedExecutionException ree) {
-                            onFinalFailure(ree);
-                        }  
-                    }
-                }
-            } else {  
-                onFinalFailure(e);
-            }
-        }  
-
-        private void onFinalFailure(Exception e) {
-            addException(e);  
-            if (isDone.compareAndSet(false, true)) {
-                onFinished();
-                finalListener.onFailure(buildFinalException());  
-            }
-        }
-
-        private Exception buildFinalException() {
-            final Exception topLevel = caughtExceptions.removeFirst();
-            Exception suppressed;  
+                final long elapsedMillis = threadPool.relativeTimeInMillis() - startMillis;  
+            onFinished();
             while ((suppressed = caughtExceptions.pollFirst()) != null) {
-                topLevel.addSuppressed(suppressed);
-            }  
-            return topLevel;
+    private final ThreadPool threadPool;  
+        Logger logger,
+import org.opensearch.core.action.ActionListener;
+            protected void doRun() {
+ */
+            @Override
+    public abstract void tryAction(ActionListener<Response> listener);
+    private final String executor;
+                    onFinalFailure(getTimeoutException(e));  
+            } else {  
+ * not use this file except in compliance with the License.
+    private final AtomicBoolean isDone = new AtomicBoolean(false);
+    /**
+    public void run() {
+                }
+ * specific language governing permissions and limitations
+                        logger.debug(() -> new ParameterizedMessage("retrying action that failed in {}", delay), e);
+                        }  
+    public void onFinished() {}  
+    private final ActionListener<Response> finalListener;
+            }
+    }  
+ * Unless required by applicable law or agreed to in writing,
+        private static final int MAX_EXCEPTIONS = 4;  
+            } else {  
+                        } catch (OpenSearchRejectedExecutionException ree) {
+ * this work for additional information regarding copyright
+        }  
+    private final long initialDelayMillis;
+            logger,  
+}  
+            threadPool,
         }
-
-        private void addException(Exception e) {
+            caughtExceptions.addFirst(e);  
+        if (isDone.compareAndSet(false, true)) {  
+ * @opensearch.api
+            final Exception topLevel = caughtExceptions.removeFirst();
+    public RetryableAction(
+    public RetryableAction(
+import org.apache.logging.log4j.Logger;
+ * under the License.  
+            }  
+                onFailure(e);  
+    }  
+        final RetryingListener retryingListener = new RetryingListener(backoffPolicy.iterator(), null);  
+                onFinished();
+    }
+                    );
+                    tryAction(listener);  
+ * The executor the action will be executed on can be defined in the constructor. Otherwise, SAME is the  
+                retryTask = null;  
+        final Runnable runnable = createRunnable(retryingListener);
+                    if (isDone.get() == false) {  
+import org.opensearch.threadpool.ThreadPool;
+        ActionListener<Response> listener,  
+                onFinalFailure(e);
+ * license agreements. See the NOTICE file distributed with
+ *  
+                    final TimeValue delay = backoffDelayIterator.next();
+        threadPool.executor(executor).execute(runnable);
+        };
+    }
+        String executor
+        ActionListener<Response> listener  
+ * KIND, either express or implied.  See the License for the
+            listener,
+ * has been reached.
+            return topLevel;
+    public abstract boolean shouldRetry(Exception e);
+                topLevel.addSuppressed(suppressed);
+ */  
+        public void onResponse(Response response) {
+        TimeValue initialDelay,
+ *
+/*
+                // It is possible that the task was cancelled in between the retry being dispatched and now
+            throw new IllegalArgumentException("Initial delay was less than 1 millisecond: " + initialDelay);
+     * they can override it method for that.
+                onFinished();
+import org.opensearch.action.ActionRunnable;  
+            this.caughtExceptions = caughtExceptions;  
+            BackoffPolicy.exponentialFullJitterBackoff(initialDelay.getMillis()),
+                } else {
+            if (shouldRetry(e)) {
+        );
+            }
+        public void onFailure(Exception e) {
+        this.initialDelayMillis = initialDelay.getMillis();  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.common.annotation.PublicApi;
+            @Override
+        this(
+                }
+        this.finalListener = listener;  
+                caughtExceptions = new ArrayDeque<>(MAX_EXCEPTIONS);
+    }  
+import java.util.concurrent.atomic.AtomicBoolean;
+        this.logger = logger;
+    }
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+                    logger.debug(
+        this.startMillis = threadPool.relativeTimeInMillis();
             if (caughtExceptions != null) {
+ * Modifications Copyright OpenSearch Contributors. See
+                    final Runnable runnable = createRunnable(this);
+            }
+            }  
+public abstract class RetryableAction<Response> {
+                finalListener.onResponse(response);
+                    addException(e);
+        this.executor = executor;
+     * Retry able task may want to throw different Exception on timeout,  
+        this.timeoutMillis = timeoutValue.getMillis();
+                localRetryTask.cancel();  
+import org.opensearch.action.bulk.BackoffPolicy;
+        this.threadPool = threadPool;
+        private ArrayDeque<Exception> caughtExceptions;
+        }
+import org.opensearch.common.unit.TimeValue;  
+    ) {  
+ * ownership. Elasticsearch licenses this file to you under  
+                        e
+        private void addException(Exception e) {
+    private final BackoffPolicy backoffPolicy;  
+        private Iterator<TimeValue> backoffDelayIterator;  
+        Logger logger,
+@PublicApi(since = "1.0.0")  
+ * default. The action will be retried with exponentially increasing delay periods until the timeout period
+            Exception suppressed;  
+            public void onRejection(Exception e) {
+            initialDelay,
+    private final Logger logger;  
                 if (caughtExceptions.size() == MAX_EXCEPTIONS) {  
+            if (isDone.compareAndSet(false, true)) {  
                     caughtExceptions.removeLast();
                 }
-            } else {  
-                caughtExceptions = new ArrayDeque<>(MAX_EXCEPTIONS);
+        BackoffPolicy backoffPolicy,
+            addException(e);  
+    private final long startMillis;  
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.ArrayDeque;  
+ * software distributed under the License is distributed on an
+        private Exception buildFinalException() {
+        @Override  
+package org.opensearch.action.support;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                finalListener.onFailure(buildFinalException());  
+                if (elapsedMillis >= timeoutMillis) {
+                if (isDone.get() == false) {
+        ThreadPool threadPool,  
             }
-            caughtExceptions.addFirst(e);  
+                        try {
+        this.backoffPolicy = backoffPolicy;
+        private void onFinalFailure(Exception e) {
         }
+        return e;
+    private final long timeoutMillis;
+        TimeValue timeoutValue,
+ * the Apache License, Version 2.0 (the "License"); you may
+        @Override
+                            retryTask = threadPool.schedule(runnable, delay, executor);  
+import org.opensearch.threadpool.Scheduler;  
+        }  
+            }
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+        TimeValue initialDelay,
+            ThreadPool.Names.SAME  
+            finalListener.onFailure(e);  
+ * GitHub history for details.
+            if (isDone.compareAndSet(false, true)) {
+                    }
+                // TODO: The only implementations of this class use SAME which means the execution will not be
+                            onFinalFailure(ree);
+        return new ActionRunnable<Response>(retryingListener) {
+    private Runnable createRunnable(RetryingListener retryingListener) {
     }
-}  

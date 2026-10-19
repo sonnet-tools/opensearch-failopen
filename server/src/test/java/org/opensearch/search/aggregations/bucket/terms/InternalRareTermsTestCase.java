@@ -1,88 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.search.aggregations.InternalAggregations;
 import org.opensearch.test.InternalMultiBucketAggregationTestCase;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
 import org.junit.Before;  
-
-import java.util.HashMap;
-import java.util.List;  
+ *  
+    protected void assertReduced(InternalRareTerms<?, ?> reduced, List<InternalRareTerms<?, ?>> inputs) {  
 import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;  
-
-public abstract class InternalRareTermsTestCase extends InternalMultiBucketAggregationTestCase<InternalRareTerms<?, ?>> {
-
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+    @Override  
+        assertEquals(expectedReducedCounts, reducedCounts);  
+package org.opensearch.search.aggregations.bucket.terms;
     private long maxDocCount;
-
-    @Before  
-    public void init() {
-        maxDocCount = randomIntBetween(1, 5);
+import org.opensearch.search.aggregations.InternalAggregations;
+ * license agreements. See the NOTICE file distributed with
+    private static Map<Object, Long> toCounts(Stream<? extends RareTerms.Bucket> buckets) {  
+        long maxDocCount  
+ * The OpenSearch Contributors require contributions made to  
+        Map<Object, Long> expectedReducedCounts = new HashMap<>(totalCounts);
     }  
-
-    @Override
-    protected final InternalRareTerms<?, ?> createTestInstance(  
-        String name,
+ * compatible open source license.
+    }
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * software distributed under the License is distributed on an
+    );
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+import java.util.List;  
+ */  
+    protected abstract InternalRareTerms<?, ?> createTestInstance(
+ * specific language governing permissions and limitations
         Map<String, Object> metadata,
         InternalAggregations aggregations  
-    ) {
-        return createTestInstance(name, metadata, aggregations, maxDocCount);
-    }  
-
-    protected abstract InternalRareTerms<?, ?> createTestInstance(
-        String name,  
-        Map<String, Object> metadata,
-        InternalAggregations aggregations,
-        long maxDocCount  
-    );
-
-    @Override  
-    protected InternalRareTerms<?, ?> createUnmappedInstance(String name, Map<String, Object> metadata) {
-        return new UnmappedRareTerms(name, metadata);
-    }  
-
-    @Override
-    protected void assertReduced(InternalRareTerms<?, ?> reduced, List<InternalRareTerms<?, ?>> inputs) {  
-        Map<Object, Long> reducedCounts = toCounts(reduced.getBuckets().stream());
-        Map<Object, Long> totalCounts = toCounts(inputs.stream().map(RareTerms::getBuckets).flatMap(List::stream));
-
-        Map<Object, Long> expectedReducedCounts = new HashMap<>(totalCounts);
-        expectedReducedCounts.keySet().retainAll(reducedCounts.keySet());
-        assertEquals(expectedReducedCounts, reducedCounts);  
-    }
-
-    private static Map<Object, Long> toCounts(Stream<? extends RareTerms.Bucket> buckets) {  
-        return buckets.collect(Collectors.toMap(RareTerms.Bucket::getKey, RareTerms.Bucket::getDocCount, Long::sum));
-    }
+import java.util.stream.Stream;  
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+ * Unless required by applicable law or agreed to in writing,
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.HashMap;
+public abstract class InternalRareTermsTestCase extends InternalMultiBucketAggregationTestCase<InternalRareTerms<?, ?>> {
+    protected final InternalRareTerms<?, ?> createTestInstance(  
 }  
+    @Before  
+    public void init() {
+        return buckets.collect(Collectors.toMap(RareTerms.Bucket::getKey, RareTerms.Bucket::getDocCount, Long::sum));
+        return createTestInstance(name, metadata, aggregations, maxDocCount);
+    }
+        InternalAggregations aggregations,
+    }  
+/*  
+import java.util.stream.Collectors;
+        Map<String, Object> metadata,
+    @Override
+ *
+        Map<Object, Long> totalCounts = toCounts(inputs.stream().map(RareTerms::getBuckets).flatMap(List::stream));
+    }  
+ */
+        maxDocCount = randomIntBetween(1, 5);
+ * GitHub history for details.
+        Map<Object, Long> reducedCounts = toCounts(reduced.getBuckets().stream());
+ * You may obtain a copy of the License at  
+    @Override
+ *
+        return new UnmappedRareTerms(name, metadata);
+ * under the License.  
+    ) {
+        String name,  
+        String name,
+        expectedReducedCounts.keySet().retainAll(reducedCounts.keySet());
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
+    protected InternalRareTerms<?, ?> createUnmappedInstance(String name, Map<String, Object> metadata) {

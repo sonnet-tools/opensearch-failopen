@@ -1,116 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.common.metrics;
-
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-
-/**
- * Mutable tracker of a repeated operation.
- *  
- * @opensearch.internal
- */
-public class OperationMetrics {  
-    /**
-     * The mean time it takes to complete the measured item.
      * Time unit should be nanoseconds to accurate record the time.  
+        current.addAndGet(-n);
+import java.util.concurrent.atomic.AtomicLong;
+        failed.inc(other.failed.count());  
+            time.inc(currentTime);
+/*  
+            current.get(),
+        return new OperationStats(
+ * Mutable tracker of a repeated operation.
      */
-    private final MeanMetric time = new MeanMetric();
+     * @param n number of items completed
+        for (int i = 0; i < n; ++i) {  
+        );
+     */
+    }
     /**  
-     * The current count of things being measured.
-     * Useful when aggregating multiple metrics to see how many things are in flight.
-     */  
-    private final AtomicLong current = new AtomicLong();
-    /**
-     * The non-decreasing count of failures  
-     */
-    private final CounterMetric failed = new CounterMetric();
-    /**  
-     * The target time unit used in the stats
-     */
-    private TimeUnit targetTimeUnit = TimeUnit.MILLISECONDS;  
-
-    public OperationMetrics() {}
-
-    public OperationMetrics(TimeUnit targetTimeUnit) {
         this.targetTimeUnit = targetTimeUnit;
-    }  
-
+ * compatible open source license.
+    public OperationStats createStats() {
+    public void failedN(int n) {
+     */  
+     * Invoked upon failure of the operation.  
+ */
+     * Invoke before the given operation begins in multiple items at the same time.
+     */  
     /**
      * Invoked before the given operation begins.  
-     */
-    public void before() {
+ * The OpenSearch Contributors require contributions made to  
+    }  
         current.incrementAndGet();  
-    }
-
-    /**  
-     * Invoke before the given operation begins in multiple items at the same time.
-     * @param n number of items
-     */  
     public void beforeN(int n) {
-        current.addAndGet(n);
-    }  
-
-    /**
-     * Invoked upon completion (success or failure) of the given operation  
      * @param currentTime elapsed time of the operation
-     */
-    public void after(long currentTime) {  
-        current.decrementAndGet();
-        time.inc(currentTime);
-    }  
-
-    /**
-     * Invoked upon completion (success or failure) of the given operation for multiple items.  
-     * @param n number of items completed
-     * @param currentTime elapsed time of the operation
-     */  
-    public void afterN(int n, long currentTime) {
-        current.addAndGet(-n);
-        for (int i = 0; i < n; ++i) {  
-            time.inc(currentTime);
-        }
-    }  
-
-    /**
-     * Invoked upon failure of the operation.  
-     */
-    public void failed() {
-        failed.inc();  
-    }
-
     /**  
-     * Invoked upon failure of the operation on multiple items.
-     * @param n number of items on operation.
-     */  
-    public void failedN(int n) {
-        for (int i = 0; i < n; ++i) {
-            failed.inc();  
-        }
-    }
-
-    public void add(OperationMetrics other) {
-        // Don't try copying over current, since in-flight requests will be linked to the existing metrics instance.
-        failed.inc(other.failed.count());  
-        time.add(other.time);
-    }
-
-    /**
-     * @return an immutable snapshot of the current metric values.
-     */  
-    public OperationStats createStats() {
-        return new OperationStats(
-            time.count(),  
-            targetTimeUnit.convert(time.sum(), TimeUnit.NANOSECONDS),
-            current.get(),
-            failed.count(),  
+    /**  
+     * @param currentTime elapsed time of the operation
             targetTimeUnit
-        );
+        current.addAndGet(n);
+ *
+ * @opensearch.internal
+     * The non-decreasing count of failures  
+ */  
+    /**  
+        current.decrementAndGet();
+     */
+            failed.inc();  
+        failed.inc();  
+/**
+            targetTimeUnit.convert(time.sum(), TimeUnit.NANOSECONDS),
+    /**
+    /**
+     * Useful when aggregating multiple metrics to see how many things are in flight.
+     * @param n number of items on operation.
+    public void afterN(int n, long currentTime) {
+     * Invoked upon completion (success or failure) of the given operation  
+    private final AtomicLong current = new AtomicLong();
+     * @param n number of items
+            failed.count(),  
+ * SPDX-License-Identifier: Apache-2.0
+     */  
+import java.util.concurrent.TimeUnit;
+     * The target time unit used in the stats
+    public void before() {
+     * Invoked upon failure of the operation on multiple items.
+        time.add(other.time);
+     */  
+    }
+    public void after(long currentTime) {  
+    public OperationMetrics() {}
+        for (int i = 0; i < n; ++i) {
+        }
+    private TimeUnit targetTimeUnit = TimeUnit.MILLISECONDS;  
+        }
     }  
+    public void add(OperationMetrics other) {
+    }  
+    public void failed() {
+     * Invoked upon completion (success or failure) of the given operation for multiple items.  
+     */
+     */
 }
+    }
+     * @return an immutable snapshot of the current metric values.
+    public OperationMetrics(TimeUnit targetTimeUnit) {
+    /**
+    private final CounterMetric failed = new CounterMetric();
+        // Don't try copying over current, since in-flight requests will be linked to the existing metrics instance.
+    /**
+     * The mean time it takes to complete the measured item.
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+public class OperationMetrics {  
+        time.inc(currentTime);
+ *  
+    private final MeanMetric time = new MeanMetric();
+    }  
+    /**
+    }
+     */  
+     * The current count of things being measured.
+    /**
+            time.count(),  
+     */

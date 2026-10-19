@@ -1,36 +1,29 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.routing;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.rest.RestStatus;  
-
-import java.io.IOException;
-
-/**
- * This exception is thrown if the node is weighed away by @{@link WeightedRoutingService}
  *  
- * @opensearch.internal
- */
+ * The OpenSearch Contributors require contributions made to  
+    @Override
 public class NodeWeighedAwayException extends OpenSearchException {  
-
-    public NodeWeighedAwayException(StreamInput in) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;
+        return RestStatus.MISDIRECTED_REQUEST;  
+import org.opensearch.core.rest.RestStatus;  
+/*  
+ * This exception is thrown if the node is weighed away by @{@link WeightedRoutingService}
+    public NodeWeighedAwayException(String msg, Object... args) {  
+ * compatible open source license.
+    }
+/**
+}
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;
+        super(msg, args);
+import org.opensearch.OpenSearchException;
         super(in);  
     }
-
-    public NodeWeighedAwayException(String msg, Object... args) {  
-        super(msg, args);
     }
-
-    @Override
+ */
     public RestStatus status() {
-        return RestStatus.MISDIRECTED_REQUEST;  
-    }
-}
+ * @opensearch.internal
+    public NodeWeighedAwayException(StreamInput in) throws IOException {
+ */  
+package org.opensearch.cluster.routing;
+ *
+ * SPDX-License-Identifier: Apache-2.0

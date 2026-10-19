@@ -1,197 +1,172 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
+    }
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.open;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.support.ActiveShardCount;  
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.util.CollectionUtils;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * A request to open an index.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class OpenIndexRequest extends AcknowledgedRequest<OpenIndexRequest> implements IndicesRequest.Replaceable {
-
-    private String[] indices;  
-    private IndicesOptions indicesOptions = IndicesOptions.fromOptions(false, true, false, true);
-    private ActiveShardCount waitForActiveShards = ActiveShardCount.DEFAULT;
     private boolean shouldStoreResult;  
-
-    public OpenIndexRequest(StreamInput in) throws IOException {
-        super(in);  
-        indices = in.readStringArray();
-        indicesOptions = IndicesOptions.readIndicesOptions(in);
-        waitForActiveShards = ActiveShardCount.readFrom(in);  
-    }
-
-    public OpenIndexRequest() {}  
-
-    /**
-     * Constructs a new open index request for the specified index.  
-     */
-    public OpenIndexRequest(String... indices) {
-        this.indices = indices;  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (CollectionUtils.isEmpty(indices)) {  
-            validationException = addValidationError("index is missing", validationException);
-        }
-        return validationException;  
-    }
-
-    /**  
-     * The indices to be opened
-     * @return the indices to be opened
-     */  
-    @Override
+        return "open indices " + Arrays.toString(indices());  
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.action.support.ActiveShardCount;  
     public String[] indices() {
-        return indices;  
-    }
-
-    /**  
-     * Sets the indices to be opened
-     * @param indices the indices to be opened
-     * @return the request itself  
      */
-    @Override
-    public OpenIndexRequest indices(String... indices) {  
-        this.indices = indices;
-        return this;
-    }  
-
+ * SPDX-License-Identifier: Apache-2.0
+    private ActiveShardCount waitForActiveShards = ActiveShardCount.DEFAULT;
     /**
+        return this;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.ActionRequestValidationException;
+    private IndicesOptions indicesOptions = IndicesOptions.fromOptions(false, true, false, true);
+ * KIND, either express or implied.  See the License for the
      * Specifies what type of requested indices to ignore and how to deal with wildcard expressions.  
-     * For example indices that don't exist.
-     *
-     * @return the current behaviour when it comes to index names and wildcard indices expressions  
-     */
-    @Override
-    public IndicesOptions indicesOptions() {  
-        return indicesOptions;
-    }
-
-    /**
-     * Specifies what type of requested indices to ignore and how to deal with wildcard expressions.
-     * For example indices that don't exist.  
-     *
-     * @param indicesOptions the desired behaviour regarding indices to ignore and wildcard indices expressions
-     * @return the request itself  
-     */
-    public OpenIndexRequest indicesOptions(IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;  
-        return this;
-    }
-
-    @Override
-    public boolean includeDataStreams() {
-        return true;  
-    }
-
-    public ActiveShardCount waitForActiveShards() {  
-        return waitForActiveShards;
-    }
-
-    /**
+     * A shortcut for {@link #waitForActiveShards(ActiveShardCount)} where the numerical  
+    }  
+import org.opensearch.core.common.util.CollectionUtils;  
      * Sets the number of shard copies that should be active for indices opening to return.
-     * Defaults to {@link ActiveShardCount#DEFAULT}, which will wait for one shard copy  
-     * (the primary) to become active. Set this value to {@link ActiveShardCount#ALL} to
-     * wait for all shards (primary and all replicas) to be active before returning.
-     * Otherwise, use {@link ActiveShardCount#from(int)} to set this value to any  
-     * non-negative integer, up to the number of copies per shard (number of replicas + 1),
-     * to wait for the desired amount of shard copies to become active before returning.
+}
+    public boolean getShouldStoreResult() {
+ * @opensearch.api
      * Indices opening will only wait up until the timeout value for the number of shard copies  
-     * to be active before returning.  Check {@link OpenIndexResponse#isShardsAcknowledged()} to
-     * determine if the requisite shard copies were all started before returning or timing out.
      *  
+    public String toString() {
+    @Override
+        return waitForActiveShards;
+    private String[] indices;  
+    /**  
+/*  
+     * Otherwise, use {@link ActiveShardCount#from(int)} to set this value to any  
+        this.indices = indices;
+    }
+     * Constructs a new open index request for the specified index.  
+    @Override  
+     * The indices to be opened
+ * A request to open an index.
+ */  
+import static org.opensearch.action.ValidateActions.addValidationError;
+    /**  
+        this.waitForActiveShards = waitForActiveShards;
+ * compatible open source license.
+    }  
+     * Should this task store its result after it has finished?  
+     * @param indicesOptions the desired behaviour regarding indices to ignore and wildcard indices expressions
+    /**
+    @Override  
+     * @return the indices to be opened
+ * You may obtain a copy of the License at  
+    public IndicesOptions indicesOptions() {  
+    }
+    @Override
+ *
+     */  
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Modifications Copyright OpenSearch Contributors. See
+     * @return the request itself  
+     * (the primary) to become active. Set this value to {@link ActiveShardCount#ALL} to
+/**
+    public OpenIndexRequest indices(String... indices) {  
+    public void writeTo(StreamOutput out) throws IOException {  
+     * @param indices the indices to be opened
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+ * the Apache License, Version 2.0 (the "License"); you may
+        return waitForActiveShards(ActiveShardCount.from(waitForActiveShards));
+        indices = in.readStringArray();
+    @Override  
+     * For example indices that don't exist.  
+    }
+        indicesOptions.writeIndicesOptions(out);  
+    public ActionRequestValidationException validate() {
+    @Override
+        return this.toString();
+/*
+    /**
      * @param waitForActiveShards number of active shard copies to wait on
      */
+ * license agreements. See the NOTICE file distributed with
+    }
+        return indicesOptions;
+     */
+     * to wait for the desired amount of shard copies to become active before returning.
     public OpenIndexRequest waitForActiveShards(ActiveShardCount waitForActiveShards) {  
-        this.waitForActiveShards = waitForActiveShards;
+     */
+    public OpenIndexRequest(String... indices) {
+        if (CollectionUtils.isEmpty(indices)) {  
+import java.util.Arrays;  
+import org.opensearch.action.support.IndicesOptions;
+     * Specifies what type of requested indices to ignore and how to deal with wildcard expressions.
+ */
+     * to be active before returning.  Check {@link OpenIndexResponse#isShardsAcknowledged()} to
+    @Override
+     *
+        }
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         return this;
     }  
-
-    /**
-     * A shortcut for {@link #waitForActiveShards(ActiveShardCount)} where the numerical  
-     * shard count is passed in, instead of having to first call {@link ActiveShardCount#from(int)}
-     * to get the ActiveShardCount.
-     */  
-    public OpenIndexRequest waitForActiveShards(final int waitForActiveShards) {
-        return waitForActiveShards(ActiveShardCount.from(waitForActiveShards));
-    }  
-
-    /**
-     * Should this task store its result after it has finished?  
+ * Licensed to Elasticsearch under one or more contributor  
      */
-    public void setShouldStoreResult(boolean shouldStoreResult) {
-        this.shouldStoreResult = shouldStoreResult;  
-    }
-
-    @Override  
-    public boolean getShouldStoreResult() {
-        return shouldStoreResult;
+    public OpenIndexRequest() {}  
+        return true;  
+    /**
+        return validationException;  
+ */
+@PublicApi(since = "1.0.0")  
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
+    public boolean includeDataStreams() {
+package org.opensearch.action.admin.indices.open;
+     * @return the request itself  
+    }
+        this.indicesOptions = indicesOptions;  
+    }
+    }
         out.writeStringArray(indices);
-        indicesOptions.writeIndicesOptions(out);  
-        waitForActiveShards.writeTo(out);
-    }
-
+        return indices;  
+ * software distributed under the License is distributed on an
+     * determine if the requisite shard copies were all started before returning or timing out.
+/*  
+    /**
+    public OpenIndexRequest indicesOptions(IndicesOptions indicesOptions) {
+        ActionRequestValidationException validationException = null;
     @Override
-    public String toString() {
-        return "open indices " + Arrays.toString(indices());  
-    }
-
-    @Override  
-    public String getDescription() {
-        return this.toString();
+    public OpenIndexRequest waitForActiveShards(final int waitForActiveShards) {
+     * to get the ActiveShardCount.
+            validationException = addValidationError("index is missing", validationException);
+ * ownership. Elasticsearch licenses this file to you under  
+     * @return the current behaviour when it comes to index names and wildcard indices expressions  
+ *  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.io.IOException;
+        indicesOptions = IndicesOptions.readIndicesOptions(in);
+import org.opensearch.core.common.io.stream.StreamOutput;
     }  
-}
+ *
+        waitForActiveShards = ActiveShardCount.readFrom(in);  
+        return shouldStoreResult;
+    }
+        this.indices = indices;  
+    @Override
+     * wait for all shards (primary and all replicas) to be active before returning.
+import org.opensearch.action.IndicesRequest;
+     */  
+    public String getDescription() {
+ * this work for additional information regarding copyright
+public class OpenIndexRequest extends AcknowledgedRequest<OpenIndexRequest> implements IndicesRequest.Replaceable {
+     * non-negative integer, up to the number of copies per shard (number of replicas + 1),
+    public OpenIndexRequest(StreamInput in) throws IOException {
+        super.writeTo(out);
+import org.opensearch.common.annotation.PublicApi;  
+     */
+        return this;
+    /**
+     * Sets the indices to be opened
+     * Defaults to {@link ActiveShardCount#DEFAULT}, which will wait for one shard copy  
+ * specific language governing permissions and limitations
+     * For example indices that don't exist.
+ * GitHub history for details.
+    public void setShouldStoreResult(boolean shouldStoreResult) {
+    public ActiveShardCount waitForActiveShards() {  
+ */  
+        this.shouldStoreResult = shouldStoreResult;  
+     *
+     * shard count is passed in, instead of having to first call {@link ActiveShardCount#from(int)}
+ * under the License.  
+        super(in);  
+        waitForActiveShards.writeTo(out);

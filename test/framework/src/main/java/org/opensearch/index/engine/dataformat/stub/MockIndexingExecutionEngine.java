@@ -1,156 +1,132 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
-import org.opensearch.index.engine.dataformat.Merger;  
-import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
-import org.opensearch.index.engine.dataformat.RefreshInput;
-import org.opensearch.index.engine.dataformat.RefreshResult;  
-import org.opensearch.index.engine.dataformat.Writer;
-import org.opensearch.index.engine.dataformat.WriterConfig;
-import org.opensearch.index.engine.exec.EngineReaderManager;  
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.commit.IndexStoreProvider;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiFunction;  
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-
-import static org.apache.lucene.tests.util.LuceneTestCase.createTempDir;
-
-/**  
- * A mock {@link IndexingExecutionEngine} for testing purposes.
- */
-public class MockIndexingExecutionEngine implements IndexingExecutionEngine<DataFormat, MockDocumentInput> {  
-    private final MockDataFormat dataFormat;
-    private final Path directory;
-    private final AtomicLong seqNo = new AtomicLong(0);  
-    private final AtomicLong writerGeneration = new AtomicLong(0);
-    private volatile Supplier<Exception> refreshFailure;
-    private volatile Exception tragicException;  
-    private final AtomicInteger refreshCallCount = new AtomicInteger(0);
-    private volatile Consumer<MockWriter> writerCustomizer;
-    private volatile BiFunction<RefreshInput, RefreshResult, RefreshResult> refreshResultTransformer;  
-
-    public MockIndexingExecutionEngine(MockDataFormat dataFormat) {
-        this.dataFormat = dataFormat;  
-        this.directory = createTempDir();
-    }
-
-    @Override
-    public Writer<MockDocumentInput> createWriter(WriterConfig config) {
-        MockWriter writer = new MockWriter(config.writerGeneration(), dataFormat, directory, seqNo);  
-        if (writerCustomizer != null) {
-            writerCustomizer.accept(writer);
-        }  
-        return writer;
-    }
-
-    /** Configures every writer this engine creates, so tests need not subclass it to inject writer behaviour. */
-    public void setWriterCustomizer(Consumer<MockWriter> customizer) {
         this.writerCustomizer = customizer;  
-    }
-
-    /** Rewrites this engine's refresh result, e.g. to report dropped generations. */  
-    public void setRefreshResultTransformer(BiFunction<RefreshInput, RefreshResult, RefreshResult> transformer) {
-        this.refreshResultTransformer = transformer;
-    }  
-
-    @Override
-    public Merger getMerger() {  
-        return new MockMerger(dataFormat, directory);
-    }
-
-    public void setRefreshFailure(Supplier<Exception> supplier) {
-        refreshFailure = supplier;
-    }  
-
-    public int getRefreshCallCount() {
-        return refreshCallCount.get();  
-    }
-
-    public void setTragicException(Exception e) {  
-        this.tragicException = e;
-    }
-
-    @Override
-    public Exception getTragicException() {
-        return tragicException;  
-    }
-
-    @Override  
-    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {
-        refreshCallCount.incrementAndGet();
-        if (refreshFailure != null) {  
-            Exception e = refreshFailure.get();
-            if (e instanceof IOException) throw (IOException) e;
-            if (e instanceof RuntimeException) throw (RuntimeException) e;  
-            throw new IOException(e);
-        }
-        List<Segment> segments = new ArrayList<>(refreshInput.existingSegments());  
-        segments.addAll(refreshInput.writerFiles());
-        RefreshResult result = new RefreshResult(segments);
-        return refreshResultTransformer == null ? result : refreshResultTransformer.apply(refreshInput, result);  
-    }
-
-    @Override  
-    public DataFormat getDataFormat() {
-        return dataFormat;
-    }  
-
-    @Override
-    public Map<String, Collection<String>> deleteFiles(Map<String, Collection<String>> filesToDelete) {  
-        return Map.of();
-    }
-
-    @Override
+/**  
     public long getNextWriterGeneration() {
-        return writerGeneration.getAndIncrement();  
-    }
-
-    @Override  
-    public MockDocumentInput newDocumentInput() {
-        return new MockDocumentInput();
-    }  
-
+            if (e instanceof IOException) throw (IOException) e;
+import java.util.Collection;
     @Override
-    public IndexStoreProvider getProvider() {  
+    }
+    @Override
+    @Override
+            Exception e = refreshFailure.get();
+            writerCustomizer.accept(writer);
+        this.refreshResultTransformer = transformer;
+        List<Segment> segments = new ArrayList<>(refreshInput.existingSegments());  
         return df -> null;
     }
-
+        return refreshCallCount.get();  
+import java.io.IOException;
+import org.opensearch.index.engine.exec.commit.IndexStoreProvider;
+    /** Rewrites this engine's refresh result, e.g. to report dropped generations. */  
+        }  
+    }  
+import org.opensearch.index.engine.exec.EngineReaderManager;  
     @Override
-    public void close() {
+        return writerGeneration.getAndIncrement();  
+ * this file be licensed under the Apache-2.0 license or a
+        RefreshResult result = new RefreshResult(segments);
+    }
+    }
+import org.opensearch.index.engine.dataformat.Writer;
+package org.opensearch.index.engine.dataformat.stub;
+        return new MockDocumentInput();
+    public IndexStoreProvider getProvider() {  
+import java.util.function.Supplier;
+    }  
+    public MockDocumentInput newDocumentInput() {
+    @Override
+import java.util.List;
+    }
+ * compatible open source license.
         // no-op for mock  
     }
-
-    @Override  
-    public Map<DataFormat, EngineReaderManager<?>> buildReaderManager(ReaderManagerConfig config) throws IOException {
+ * A mock {@link IndexingExecutionEngine} for testing purposes.
+        return new MockMerger(dataFormat, directory);
+            throw new IOException(e);
+    @Override
+    public void setWriterCustomizer(Consumer<MockWriter> customizer) {
+    private final MockDataFormat dataFormat;
+    private final AtomicInteger refreshCallCount = new AtomicInteger(0);
         return Map.of(getDataFormat(), new MockReaderManager(getDataFormat().name()));
-    }  
-
-    @Override
-    public long getHeapBytesUsed() {  
-        return 0;
-    }
-
-    @Override
-    public long getNativeBytesUsed() {
-        return 0;  
-    }
+import java.util.ArrayList;  
+    @Override  
+    public void setTragicException(Exception e) {  
+    private final Path directory;
 }
+    private final AtomicLong seqNo = new AtomicLong(0);  
+        return tragicException;  
+    }  
+    }
+    private volatile BiFunction<RefreshInput, RefreshResult, RefreshResult> refreshResultTransformer;  
+    private volatile Exception tragicException;  
+    @Override  
+        MockWriter writer = new MockWriter(config.writerGeneration(), dataFormat, directory, seqNo);  
+    public void close() {
+import static org.apache.lucene.tests.util.LuceneTestCase.createTempDir;
+    public long getHeapBytesUsed() {  
+    private volatile Consumer<MockWriter> writerCustomizer;
+/*  
+        return refreshResultTransformer == null ? result : refreshResultTransformer.apply(refreshInput, result);  
+public class MockIndexingExecutionEngine implements IndexingExecutionEngine<DataFormat, MockDocumentInput> {  
+    }
+    public Exception getTragicException() {
+    public void setRefreshResultTransformer(BiFunction<RefreshInput, RefreshResult, RefreshResult> transformer) {
+    public Writer<MockDocumentInput> createWriter(WriterConfig config) {
+    /** Configures every writer this engine creates, so tests need not subclass it to inject writer behaviour. */
+ * The OpenSearch Contributors require contributions made to  
+    public int getRefreshCallCount() {
+    @Override  
+            if (e instanceof RuntimeException) throw (RuntimeException) e;  
+        return 0;  
+        refreshFailure = supplier;
+    private volatile Supplier<Exception> refreshFailure;
+    public void setRefreshFailure(Supplier<Exception> supplier) {
+    public Map<DataFormat, EngineReaderManager<?>> buildReaderManager(ReaderManagerConfig config) throws IOException {
+        return Map.of();
+    }
+    }  
+import org.opensearch.index.engine.dataformat.RefreshInput;
+    @Override  
+        refreshCallCount.incrementAndGet();
+    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {
+import org.opensearch.index.engine.dataformat.Merger;  
+import java.util.concurrent.atomic.AtomicLong;
+import java.nio.file.Path;
+ * SPDX-License-Identifier: Apache-2.0
+    public DataFormat getDataFormat() {
+    private final AtomicLong writerGeneration = new AtomicLong(0);
+    @Override
+ *
+    }  
+    }
+        segments.addAll(refreshInput.writerFiles());
+        }
+import java.util.function.Consumer;
+import org.opensearch.index.engine.dataformat.RefreshResult;  
+    public MockIndexingExecutionEngine(MockDataFormat dataFormat) {
+        this.directory = createTempDir();
+ */
+    public Map<String, Collection<String>> deleteFiles(Map<String, Collection<String>> filesToDelete) {  
+        if (writerCustomizer != null) {
+        return dataFormat;
+        this.tragicException = e;
+    }
+import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
+    }
+import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
+import org.opensearch.index.engine.dataformat.WriterConfig;
+import java.util.concurrent.atomic.AtomicInteger;
+        return writer;
+    }
+    public long getNativeBytesUsed() {
+ */  
+import org.opensearch.index.engine.dataformat.DataFormat;
+    }
+        this.dataFormat = dataFormat;  
+    @Override
+        return 0;
+        if (refreshFailure != null) {  
+import org.opensearch.index.engine.exec.Segment;
+    public Merger getMerger() {  
+import java.util.Map;  
+    @Override
+import java.util.function.BiFunction;  

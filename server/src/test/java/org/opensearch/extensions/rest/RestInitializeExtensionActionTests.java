@@ -1,247 +1,217 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions.rest;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.network.NetworkService;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.PageCacheRecycler;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.extensions.DiscoveryExtensionNode;  
-import org.opensearch.extensions.ExtensionsManager;
-import org.opensearch.extensions.ExtensionsSettings.Extension;
-import org.opensearch.identity.IdentityService;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.rest.FakeRestChannel;
-import org.opensearch.test.rest.FakeRestRequest;
-import org.opensearch.test.transport.MockTransportService;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-import org.opensearch.transport.nio.MockNioTransport;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.util.Collections;
-import java.util.List;  
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;  
-import java.util.function.Function;
-
-import org.mockito.Mockito;  
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;  
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;  
-import static org.mockito.Mockito.when;
-
-public class RestInitializeExtensionActionTests extends OpenSearchTestCase {  
-
-    private TransportService transportService;
-    private MockNioTransport transport;  
-    private final ThreadPool threadPool = new TestThreadPool(RestInitializeExtensionActionTests.class.getSimpleName());
-
-    @Before  
-    public void setup() throws Exception {
-        Settings settings = Settings.builder().put("cluster.name", "test").build();
-        transport = new MockNioTransport(  
-            settings,
-            Version.CURRENT,
-            threadPool,  
-            new NetworkService(Collections.emptyList()),
-            PageCacheRecycler.NON_RECYCLING_INSTANCE,
-            new NamedWriteableRegistry(Collections.emptyList()),  
-            new NoneCircuitBreakerService(),
-            NoopTracer.INSTANCE
-        );  
-        transportService = new MockTransportService(
-            settings,
-            transport,  
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            (boundAddress) -> new DiscoveryNode(  
-                "test_node",
-                "test_node",
-                boundAddress.publishAddress(),  
-                emptyMap(),
-                emptySet(),
-                Version.CURRENT  
-            ),
-            null,
             Collections.emptySet(),  
-            NoopTracer.INSTANCE
-        );
-
-    }
-
-    @Override  
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();  
-        transportService.close();
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-    }  
-
-    public void testRestInitializeExtensionActionResponse() throws Exception {
-        ExtensionsManager extensionsManager = mock(ExtensionsManager.class);  
-        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(extensionsManager);
-        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"ad-extension\",\"hostAddress\":\"127.0.0.1\","
-            + "\"port\":\"4532\",\"version\":\"1.0\",\"opensearchVersion\":\""  
-            + Version.CURRENT.toString()
-            + "\","
-            + "\"minimumCompatibleVersion\":\""  
-            + Version.CURRENT.minimumCompatibilityVersion().toString()
-            + "\"}";
-        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)  
-            .withMethod(RestRequest.Method.POST)
-            .build();
-
-        FakeRestChannel channel = new FakeRestChannel(request, false, 0);
-        restInitializeExtensionAction.handleRequest(request, channel, null);
-
-        assertEquals(channel.capturedResponse().status(), RestStatus.ACCEPTED);
-        assertTrue(channel.capturedResponse().content().utf8ToString().contains("A request to initialize an extension has been sent."));
-    }  
-
-    public void testRestInitializeExtensionActionFailure() throws Exception {
-        ExtensionsManager extensionsManager = new ExtensionsManager(Set.of(), new IdentityService(Settings.EMPTY, threadPool, List.of()));  
-        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(extensionsManager);
-
-        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"\",\"hostAddress\":\"127.0.0.1\","  
             + "\"port\":\"4532\",\"version\":\"1.0\",\"opensearchVersion\":\""
-            + Version.CURRENT.toString()
-            + "\","  
-            + "\"minimumCompatibleVersion\":\""
-            + Version.CURRENT.minimumCompatibilityVersion().toString()
-            + "\"}";  
-        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)
-            .withMethod(RestRequest.Method.POST)
-            .build();  
-
+        super.tearDown();  
         FakeRestChannel channel = new FakeRestChannel(request, false, 0);
+        );  
+            ),
+            + Version.CURRENT.toString()
+        ExtensionsManager extensionsManager = new ExtensionsManager(  
+        assertEquals(channel.capturedResponse().status(), RestStatus.ACCEPTED);
+        // optionally, you can stub out some methods:
+        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(spy);  
+import org.opensearch.test.rest.FakeRestRequest;
+import org.opensearch.threadpool.TestThreadPool;
+                "test_node",
+            new NamedWriteableRegistry(Collections.emptyList()),  
+import static org.mockito.Mockito.spy;  
+        );  
+        assertEquals(true, extension.get().getAdditionalSettings().get(boolSetting));  
+            new NetworkService(Collections.emptyList()),
+        Setting stringSetting = Setting.simpleString("stringSetting", "default", Setting.Property.ExtensionScope);  
+            new IdentityService(Settings.EMPTY, threadPool, List.of())
         restInitializeExtensionAction.handleRequest(request, channel, null);  
-
-        assertEquals(1, channel.errors().get());
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    }
+        Setting listSetting = Setting.listSetting(  
+            List.of("first", "second", "third"),
+            + "\"minimumCompatibleVersion\":\""  
+        );
+            + "\"minimumCompatibleVersion\":\""
+        ExtensionsManager extensionsManager = new ExtensionsManager(Set.of(), new IdentityService(Settings.EMPTY, threadPool, List.of()));  
+    public void testRestInitializeExtensionActionResponseWithAdditionalSettings() throws Exception {
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.extensions.DiscoveryExtensionNode;  
+    public void tearDown() throws Exception {
+        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"ad-extension\",\"hostAddress\":\"127.0.0.1\","
+        ExtensionsManager spy = spy(extensionsManager);  
+        assertTrue(listSettingValue.contains("two"));  
+        assertEquals("default", extension.get().getAdditionalSettings().get(stringSetting));  
+            Function.identity(),
+ *
+import org.junit.After;
+            threadPool,  
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;  
+import org.opensearch.extensions.ExtensionsSettings.Extension;
+        assertEquals(RestStatus.ACCEPTED, channel.capturedResponse().status());
+        Mockito.doNothing().when(spy).initializeExtensionNode(any(DiscoveryExtensionNode.class));
+import org.opensearch.test.transport.MockTransportService;  
+        restInitializeExtensionAction.handleRequest(request, channel, null);
+        Setting boolSetting = Setting.boolSetting("boolSetting", false, Setting.Property.ExtensionScope);  
+            + Version.CURRENT.minimumCompatibilityVersion().toString()  
+    @Override  
+            null,
+        restInitializeExtensionAction.handleRequest(request, channel, null);
+            threadPool,
+        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"ad-extension\",\"hostAddress\":\"127.0.0.1\","
+            + "\","
+    public void testRestInitializeExtensionActionResponseWithAdditionalSettingsUsingDefault() throws Exception {
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+    }  
+        assertTrue(channel.capturedResponse().content().utf8ToString().contains("A request to initialize an extension has been sent."));
+import java.util.function.Function;
+public class RestInitializeExtensionActionTests extends OpenSearchTestCase {  
+            .build();
+            + Version.CURRENT.toString()  
+        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)  
+ * compatible open source license.
+        Setting listSetting = Setting.listSetting(
+import org.opensearch.test.OpenSearchTestCase;  
+            + "\"port\":\"4532\",\"version\":\"1.0\",\"opensearchVersion\":\""  
+        Setting intSetting = Setting.intSetting("intSetting", 0, Setting.Property.ExtensionScope);
+        Optional<Extension> extension = spy.lookupExtensionSettingsById("ad-extension");
+    }
+    private TransportService transportService;
+        // optionally, you can stub out some methods:  
+            + "\"}";  
+        when(spy.getAdditionalSettings()).thenCallRealMethod();  
+        assertEquals("customSetting", extension.get().getAdditionalSettings().get(stringSetting));
+import java.util.Collections;
+import org.opensearch.test.rest.FakeRestChannel;
+        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(extensionsManager);
+}  
+/*  
+import java.util.Set;
+        Setting boolSetting = Setting.boolSetting("boolSetting", false, Setting.Property.ExtensionScope);
+            + "\","  
+            new NoneCircuitBreakerService(),
+            + "\","
+            + Version.CURRENT.toString()
+            (boundAddress) -> new DiscoveryNode(  
+import org.opensearch.core.rest.RestStatus;
+ */  
+            Set.of(boolSetting, stringSetting, intSetting, listSetting),
+            + "\",\"boolSetting\":true,\"stringSetting\":\"customSetting\",\"intSetting\":5,\"listSetting\":[\"one\",\"two\",\"three\"]}";
+        assertTrue(listSettingValue.contains("first"));
+            + "\"minimumCompatibleVersion\":\""
+        assertTrue(listSettingValue.contains("second"));
+        restInitializeExtensionAction.handleRequest(request, channel, null);
+import org.mockito.Mockito;  
+        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"\",\"hostAddress\":\"127.0.0.1\","  
+            + Version.CURRENT.minimumCompatibilityVersion().toString()
+        ExtensionsManager spy = spy(extensionsManager);
+import org.opensearch.rest.RestRequest;
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+            + "\","
+            NoopTracer.INSTANCE
+import static java.util.Collections.emptySet;  
+        FakeRestChannel channel = new FakeRestChannel(request, false, 0);  
+import org.opensearch.common.settings.Settings;
+    private MockNioTransport transport;  
+        transport = new MockNioTransport(  
+import org.opensearch.Version;
+            new IdentityService(Settings.EMPTY, threadPool, List.of())
+import org.opensearch.transport.nio.MockNioTransport;
+            .withMethod(RestRequest.Method.POST)
+            .withMethod(RestRequest.Method.POST)  
+    @After
+        assertEquals(RestStatus.ACCEPTED, channel.capturedResponse().status());  
+        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)  
+        );
+ * this file be licensed under the Apache-2.0 license or a
+                emptySet(),
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+            + "\"port\":\"4532\",\"version\":\"1.0\",\"opensearchVersion\":\""
+                boundAddress.publishAddress(),  
+            Version.CURRENT,
+import static java.util.Collections.emptyMap;
+            settings,
+            NoopTracer.INSTANCE
+            .withMethod(RestRequest.Method.POST)
+import org.junit.Before;  
+        assertTrue(listSettingValue.contains("one"));
+import org.opensearch.identity.IdentityService;  
+ * SPDX-License-Identifier: Apache-2.0
+            transport,  
+    public void testRestInitializeExtensionActionResponse() throws Exception {
+            .withMethod(RestRequest.Method.POST)
+        assertTrue(channel.capturedResponse().content().utf8ToString().contains("A request to initialize an extension has been sent."));
+        Setting stringSetting = Setting.simpleString("stringSetting", "default", Setting.Property.ExtensionScope);
+            + "\"minimumCompatibleVersion\":\""  
+        assertEquals(0, extension.get().getAdditionalSettings().get(intSetting));
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import java.util.List;  
+import org.opensearch.threadpool.ThreadPool;
+    public void testRestInitializeExtensionActionFailure() throws Exception {
+            + "\"}";
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.extensions.ExtensionsManager;
+    private final ThreadPool threadPool = new TestThreadPool(RestInitializeExtensionActionTests.class.getSimpleName());
+        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)
+    }  
+            PageCacheRecycler.NON_RECYCLING_INSTANCE,
+        assertEquals(false, extension.get().getAdditionalSettings().get(boolSetting));
+    }  
+        Settings settings = Settings.builder().put("cluster.name", "test").build();
+        Mockito.doCallRealMethod().when(spy).loadExtension(any(Extension.class));
         assertTrue(  
+    public void setup() throws Exception {
+            + Version.CURRENT.toString()
+            .build();
+        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(spy);
+        ExtensionsManager extensionsManager = mock(ExtensionsManager.class);  
+        assertTrue(extension.isPresent());
+            Function.identity(),  
+        List<String> listSettingValue = (List<String>) extension.get().getAdditionalSettings().get(listSetting);
+                emptyMap(),
+            .build();
+        Mockito.doCallRealMethod().when(spy).loadExtension(any(Extension.class));
+        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(extensionsManager);
+            "listSetting",
+        assertTrue(extension.isPresent());
+            + Version.CURRENT.minimumCompatibilityVersion().toString()
+        assertTrue(listSettingValue.contains("third"));  
+        Mockito.doNothing().when(spy).initializeExtensionNode(any(DiscoveryExtensionNode.class));  
+        assertTrue(channel.capturedResponse().content().utf8ToString().contains("A request to initialize an extension has been sent."));
+import java.util.concurrent.TimeUnit;  
+        FakeRestChannel channel = new FakeRestChannel(request, false, 0);
+            settings,
+            Setting.Property.ExtensionScope
+import org.opensearch.common.network.NetworkService;  
+import static org.mockito.ArgumentMatchers.any;
+            "listSetting",  
+            + "\"}";
+import java.util.Optional;
+        Optional<Extension> extension = spy.lookupExtensionSettingsById("ad-extension");  
+import org.opensearch.common.util.PageCacheRecycler;  
+            Setting.Property.ExtensionScope  
+        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"ad-extension\",\"hostAddress\":\"127.0.0.1\","
+        List<String> listSettingValue = (List<String>) extension.get().getAdditionalSettings().get(listSetting);  
+        assertTrue(listSettingValue.contains("three"));
+        assertEquals(5, extension.get().getAdditionalSettings().get(intSetting));
+package org.opensearch.extensions.rest;
+        );
+            + "\"port\":\"4532\",\"version\":\"1.0\",\"opensearchVersion\":\""  
+        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)
+    }
+        );
+    @Before  
+        assertEquals(1, channel.errors().get());
+        transportService.close();
+import org.opensearch.transport.TransportService;  
+            Set.of(boolSetting, stringSetting, intSetting, listSetting),  
+        ExtensionsManager extensionsManager = new ExtensionsManager(
+            .build();  
+        when(spy.getAdditionalSettings()).thenCallRealMethod();
+        Setting intSetting = Setting.intSetting("intSetting", 0, Setting.Property.ExtensionScope);
+import org.opensearch.core.common.bytes.BytesArray;
+            + Version.CURRENT.minimumCompatibilityVersion().toString()
+            List.of("first", "second", "third"),
+        transportService = new MockTransportService(
+                "test_node",
+                Version.CURRENT  
             channel.capturedResponse().content().utf8ToString().contains("Required field [extension uniqueId] is missing in the request")
         );
-    }  
-
-    public void testRestInitializeExtensionActionResponseWithAdditionalSettings() throws Exception {
-        Setting boolSetting = Setting.boolSetting("boolSetting", false, Setting.Property.ExtensionScope);  
-        Setting stringSetting = Setting.simpleString("stringSetting", "default", Setting.Property.ExtensionScope);
-        Setting intSetting = Setting.intSetting("intSetting", 0, Setting.Property.ExtensionScope);
-        Setting listSetting = Setting.listSetting(  
-            "listSetting",
-            List.of("first", "second", "third"),
-            Function.identity(),  
-            Setting.Property.ExtensionScope
-        );
-        ExtensionsManager extensionsManager = new ExtensionsManager(  
-            Set.of(boolSetting, stringSetting, intSetting, listSetting),
-            new IdentityService(Settings.EMPTY, threadPool, List.of())
-        );  
-        ExtensionsManager spy = spy(extensionsManager);
-
-        // optionally, you can stub out some methods:  
-        when(spy.getAdditionalSettings()).thenCallRealMethod();
-        Mockito.doCallRealMethod().when(spy).loadExtension(any(Extension.class));
-        Mockito.doNothing().when(spy).initializeExtensionNode(any(DiscoveryExtensionNode.class));  
-        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(spy);
-        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"ad-extension\",\"hostAddress\":\"127.0.0.1\","
-            + "\"port\":\"4532\",\"version\":\"1.0\",\"opensearchVersion\":\""  
-            + Version.CURRENT.toString()
-            + "\","
-            + "\"minimumCompatibleVersion\":\""  
-            + Version.CURRENT.minimumCompatibilityVersion().toString()
-            + "\",\"boolSetting\":true,\"stringSetting\":\"customSetting\",\"intSetting\":5,\"listSetting\":[\"one\",\"two\",\"three\"]}";
-        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)  
-            .withMethod(RestRequest.Method.POST)
-            .build();
-
+import org.opensearch.common.settings.Setting;
         FakeRestChannel channel = new FakeRestChannel(request, false, 0);
-        restInitializeExtensionAction.handleRequest(request, channel, null);
-
-        assertEquals(RestStatus.ACCEPTED, channel.capturedResponse().status());
-        assertTrue(channel.capturedResponse().content().utf8ToString().contains("A request to initialize an extension has been sent."));
-
-        Optional<Extension> extension = spy.lookupExtensionSettingsById("ad-extension");
-        assertTrue(extension.isPresent());
-        assertEquals(true, extension.get().getAdditionalSettings().get(boolSetting));  
-        assertEquals("customSetting", extension.get().getAdditionalSettings().get(stringSetting));
-        assertEquals(5, extension.get().getAdditionalSettings().get(intSetting));
-
-        List<String> listSettingValue = (List<String>) extension.get().getAdditionalSettings().get(listSetting);
-        assertTrue(listSettingValue.contains("one"));
-        assertTrue(listSettingValue.contains("two"));  
-        assertTrue(listSettingValue.contains("three"));
-    }
-
-    public void testRestInitializeExtensionActionResponseWithAdditionalSettingsUsingDefault() throws Exception {
-        Setting boolSetting = Setting.boolSetting("boolSetting", false, Setting.Property.ExtensionScope);
-        Setting stringSetting = Setting.simpleString("stringSetting", "default", Setting.Property.ExtensionScope);  
-        Setting intSetting = Setting.intSetting("intSetting", 0, Setting.Property.ExtensionScope);
-        Setting listSetting = Setting.listSetting(
-            "listSetting",  
-            List.of("first", "second", "third"),
-            Function.identity(),
-            Setting.Property.ExtensionScope  
-        );
-        ExtensionsManager extensionsManager = new ExtensionsManager(
-            Set.of(boolSetting, stringSetting, intSetting, listSetting),  
-            new IdentityService(Settings.EMPTY, threadPool, List.of())
-        );
-        ExtensionsManager spy = spy(extensionsManager);  
-
-        // optionally, you can stub out some methods:
-        when(spy.getAdditionalSettings()).thenCallRealMethod();  
-        Mockito.doCallRealMethod().when(spy).loadExtension(any(Extension.class));
-        Mockito.doNothing().when(spy).initializeExtensionNode(any(DiscoveryExtensionNode.class));
-        RestInitializeExtensionAction restInitializeExtensionAction = new RestInitializeExtensionAction(spy);  
-        final String content = "{\"name\":\"ad-extension\",\"uniqueId\":\"ad-extension\",\"hostAddress\":\"127.0.0.1\","
-            + "\"port\":\"4532\",\"version\":\"1.0\",\"opensearchVersion\":\""
-            + Version.CURRENT.toString()  
-            + "\","
-            + "\"minimumCompatibleVersion\":\""
-            + Version.CURRENT.minimumCompatibilityVersion().toString()  
-            + "\"}";
-        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(new BytesArray(content), MediaTypeRegistry.JSON)
-            .withMethod(RestRequest.Method.POST)  
-            .build();
-
-        FakeRestChannel channel = new FakeRestChannel(request, false, 0);  
-        restInitializeExtensionAction.handleRequest(request, channel, null);
-
-        assertEquals(RestStatus.ACCEPTED, channel.capturedResponse().status());  
-        assertTrue(channel.capturedResponse().content().utf8ToString().contains("A request to initialize an extension has been sent."));
-
-        Optional<Extension> extension = spy.lookupExtensionSettingsById("ad-extension");  
-        assertTrue(extension.isPresent());
-        assertEquals(false, extension.get().getAdditionalSettings().get(boolSetting));
-        assertEquals("default", extension.get().getAdditionalSettings().get(stringSetting));  
-        assertEquals(0, extension.get().getAdditionalSettings().get(intSetting));
-
-        List<String> listSettingValue = (List<String>) extension.get().getAdditionalSettings().get(listSetting);  
-        assertTrue(listSettingValue.contains("first"));
-        assertTrue(listSettingValue.contains("second"));
-        assertTrue(listSettingValue.contains("third"));  
-    }
-
-}  

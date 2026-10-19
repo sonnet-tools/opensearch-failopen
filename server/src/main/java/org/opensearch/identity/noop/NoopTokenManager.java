@@ -1,53 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.identity.noop;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+        return new AuthToken() {  
+     */
 import org.opensearch.identity.IdentityService;  
-import org.opensearch.identity.Subject;
-import org.opensearch.identity.tokens.AuthToken;
-import org.opensearch.identity.tokens.OnBehalfOfClaims;  
-import org.opensearch.identity.tokens.TokenManager;
-
-/**  
+            }
  * This class represents a Noop Token Manager
  */
-public class NoopTokenManager implements TokenManager {  
-
+            }
+import org.apache.logging.log4j.LogManager;
     private static final Logger log = LogManager.getLogger(IdentityService.class);
-
-    /**
-     * Issue a new Noop Token
-     * @return a new Noop Token  
-     */
-    @Override
-    public AuthToken issueOnBehalfOfToken(final Subject subject, final OnBehalfOfClaims claims) {  
-        return new AuthToken() {
-            @Override
-            public String asAuthHeaderValue() {  
-                return "noopToken";
-            }
-        };  
-    }
-
     /**  
-     * Issue a new Noop Token
-     * @return a new Noop Token
-     */  
-    @Override
-    public AuthToken issueServiceAccountToken(final String audience) {
-        return new AuthToken() {  
-            @Override
-            public String asAuthHeaderValue() {
-                return "noopToken";  
-            }
+public class NoopTokenManager implements TokenManager {  
+                return "noopToken";
+ *
+import org.opensearch.identity.tokens.AuthToken;
         };
-    }  
+        };  
+ * compatible open source license.
+import org.opensearch.identity.tokens.TokenManager;
+import org.apache.logging.log4j.Logger;
+     */  
+            @Override
+            @Override
+    public AuthToken issueServiceAccountToken(final String audience) {
+     * Issue a new Noop Token
+                return "noopToken";  
+import org.opensearch.identity.Subject;
+/*  
+    public AuthToken issueOnBehalfOfToken(final Subject subject, final OnBehalfOfClaims claims) {  
+ */  
+ * The OpenSearch Contributors require contributions made to  
+    /**
+import org.opensearch.identity.tokens.OnBehalfOfClaims;  
+     * @return a new Noop Token  
+     * Issue a new Noop Token
+            public String asAuthHeaderValue() {  
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+    }
+package org.opensearch.identity.noop;
 }
+/**  
+    }  
+            public String asAuthHeaderValue() {
+        return new AuthToken() {
+     * @return a new Noop Token
+    @Override
+ * this file be licensed under the Apache-2.0 license or a

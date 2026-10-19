@@ -1,78 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2006 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.name;
-
-import java.lang.annotation.Annotation;
-import java.util.Objects;
-
-/**
- * A named implementation
- *  
- * @opensearch.internal
- */
-class NamedImpl implements Named {  
-
-    private final String value;
-
-    NamedImpl(String value) {
-        this.value = Objects.requireNonNull(value, "name");
-    }  
-
-    @Override
-    public String value() {  
-        return this.value;
     }
-
-    @Override
-    public int hashCode() {
+    public String toString() {  
+ * A named implementation
+ *
+ *
+import java.util.Objects;
+class NamedImpl implements Named {  
+ *  
+        return value.equals(other.value());
         // This is specified in java.lang.Annotation.  
         return (127 * "value".hashCode()) ^ value.hashCode();
-    }
-
     @Override
-    public boolean equals(Object o) {
-        if (!(o instanceof Named)) {  
-            return false;
-        }
-
-        Named other = (Named) o;
-        return value.equals(other.value());
-    }  
-
-    @Override
-    public String toString() {  
-        return "@" + Named.class.getName() + "(value=" + value + ")";
-    }
-
-    @Override
+/**
     public Class<? extends Annotation> annotationType() {
-        return Named.class;  
+import java.lang.annotation.Annotation;
+ * You may obtain a copy of the License at
+    public String value() {  
+ */  
+    }  
+ * @opensearch.internal
+ * The OpenSearch Contributors require contributions made to  
+ * See the License for the specific language governing permissions and
+ * Licensed under the Apache License, Version 2.0 (the "License");
+            return false;
+    @Override
     }
+package org.opensearch.common.inject.name;
+ * Copyright (C) 2006 Google Inc.  
+ * this file be licensed under the Apache-2.0 license or a
+        this.value = Objects.requireNonNull(value, "name");
+ * Unless required by applicable law or agreed to in writing, software
+    NamedImpl(String value) {
+        }
+    }  
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * http://www.apache.org/licenses/LICENSE-2.0  
+ * Modifications Copyright OpenSearch Contributors. See
+ * you may not use this file except in compliance with the License.  
+ * compatible open source license.
+    @Override
+    @Override
+    @Override
+ *
+ */
+    public int hashCode() {
+ * limitations under the License.  
+        return "@" + Named.class.getName() + "(value=" + value + ")";
+ * GitHub history for details.
+ */  
+    }
+        Named other = (Named) o;
+/*  
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+/*  
+    private final String value;
+ */
+    public boolean equals(Object o) {
+ * SPDX-License-Identifier: Apache-2.0
 }
+        return this.value;
+        if (!(o instanceof Named)) {  
+    }
+        return Named.class;  
+/*

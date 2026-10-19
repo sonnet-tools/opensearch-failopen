@@ -1,58 +1,49 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
+    }
  * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.open;
-
+/*  
 import org.opensearch.action.support.ActiveShardCount;  
-import org.opensearch.cluster.ack.IndicesClusterStateUpdateRequest;
-
-/**  
- * Cluster state update request that allows to open one or more indices
- *
- * @opensearch.internal  
- */
-public class OpenIndexClusterStateUpdateRequest extends IndicesClusterStateUpdateRequest<OpenIndexClusterStateUpdateRequest> {
-
-    private ActiveShardCount waitForActiveShards = ActiveShardCount.DEFAULT;
-
-    public OpenIndexClusterStateUpdateRequest() {  
-
-    }
-
-    public ActiveShardCount waitForActiveShards() {
-        return waitForActiveShards;
-    }  
-
-    public OpenIndexClusterStateUpdateRequest waitForActiveShards(ActiveShardCount waitForActiveShards) {
-        this.waitForActiveShards = waitForActiveShards;  
         return this;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+ * @opensearch.internal  
     }
+ *
+ * under the License.  
+ * not use this file except in compliance with the License.
+    public ActiveShardCount waitForActiveShards() {
+ *
+ */  
+ */
+ * this work for additional information regarding copyright
+/*
+    public OpenIndexClusterStateUpdateRequest waitForActiveShards(ActiveShardCount waitForActiveShards) {
+ */
+ * Cluster state update request that allows to open one or more indices
+ * this file be licensed under the Apache-2.0 license or a
 }  
+    public OpenIndexClusterStateUpdateRequest() {  
+ * KIND, either express or implied.  See the License for the
+        this.waitForActiveShards = waitForActiveShards;  
+ * specific language governing permissions and limitations
+    }  
+    private ActiveShardCount waitForActiveShards = ActiveShardCount.DEFAULT;
+/**  
+ * software distributed under the License is distributed on an
+ * license agreements. See the NOTICE file distributed with
+ * The OpenSearch Contributors require contributions made to  
+ * Modifications Copyright OpenSearch Contributors. See  
+ * compatible open source license.
+        return waitForActiveShards;
+ * You may obtain a copy of the License at  
+import org.opensearch.cluster.ack.IndicesClusterStateUpdateRequest;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+public class OpenIndexClusterStateUpdateRequest extends IndicesClusterStateUpdateRequest<OpenIndexClusterStateUpdateRequest> {
+ *
+package org.opensearch.action.admin.indices.open;
+/*

@@ -1,178 +1,149 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
 package org.opensearch.rest.action.admin.indices;
-
-import org.opensearch.action.ActionModule.DynamicActionRegistry;  
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionType;
-import org.opensearch.action.admin.indices.validate.query.ValidateQueryAction;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.TransportAction;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.rest.RestController;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.search.AbstractSearchTestCase;
-import org.opensearch.tasks.Task;  
-import org.opensearch.tasks.TaskManager;
-import org.opensearch.test.rest.FakeRestChannel;
-import org.opensearch.test.rest.FakeRestRequest;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.node.NodeClient;  
-import org.opensearch.usage.UsageService;
-import org.junit.AfterClass;
-import org.junit.Before;  
-import org.junit.BeforeClass;
-
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.Map;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
-import static org.hamcrest.Matchers.containsString;  
 import static org.hamcrest.Matchers.equalTo;
-
-public class RestValidateQueryActionTests extends AbstractSearchTestCase {  
-
-    private static ThreadPool threadPool = new TestThreadPool(RestValidateQueryActionTests.class.getName());
-    private static NodeClient client = new NodeClient(Settings.EMPTY, threadPool);  
-
-    private static UsageService usageService = new UsageService();
-    private static RestController controller = new RestController(emptySet(), null, client, new NoneCircuitBreakerService(), usageService);  
-    private static RestValidateQueryAction action = new RestValidateQueryAction();
-
-    /**  
-     * Configures {@link NodeClient} to stub {@link ValidateQueryAction} transport action.
-     * <p>
-     * This lower level of validation is out of the scope of this test.  
-     */
-    @BeforeClass
-    public static void stubValidateQueryAction() {  
-        final TaskManager taskManager = new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet());
-
-        final TransportAction<?, ?> transportAction = new TransportAction<>(  
-            ValidateQueryAction.NAME,
-            new ActionFilters(Collections.emptySet()),
-            taskManager  
-        ) {
-            @Override
-            protected void doExecute(Task task, ActionRequest request, ActionListener listener) {}  
-        };
-
-        final Map<ActionType, TransportAction> actions = new HashMap<>();  
-        actions.put(ValidateQueryAction.INSTANCE, transportAction);
-
-        DynamicActionRegistry dynamicActionRegistry = new DynamicActionRegistry();  
-        dynamicActionRegistry.registerUnmodifiableActionMap(actions);
-        client.initialize(dynamicActionRegistry, () -> "local", null, new NamedWriteableRegistry(Collections.emptyList()));
-        controller.registerHandler(action);  
-    }
-
-    @Before  
-    public void ensureCleanContext() {
-        // Make sure we have a clean context for each test
-        threadPool.getThreadContext().stashContext();  
-    }
-
-    @AfterClass  
-    public static void terminateThreadPool() throws InterruptedException {
-        terminate(threadPool);
-
         threadPool = null;
-        client = null;
-
-        usageService = null;
-        controller = null;
-        action = null;  
-    }
-
-    public void testRestValidateQueryAction() throws Exception {  
-        // GIVEN a valid query
-        final String content = "{\"query\":{\"bool\":{\"must\":{\"term\":{\"user\":\"foobar\"}}}}}";
-
-        final RestRequest request = createRestRequest(content);
-        final FakeRestChannel channel = new FakeRestChannel(request, true, 0);
-
-        // WHEN
-        action.handleRequest(request, channel, client);
-
-        // THEN query is valid (i.e. not marked as invalid)
-        assertThat(channel.responses().get(), equalTo(0));
-        assertThat(channel.errors().get(), equalTo(0));  
-        assertNull(channel.capturedResponse());
-    }
-
-    public void testRestValidateQueryAction_emptyQuery() throws Exception {
-        // GIVEN an empty (i.e. invalid) query wrapped into a valid JSON
+import static java.util.Collections.emptyMap;
+            new ActionFilters(Collections.emptySet()),
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.tasks.TaskManager;
+     * <p>
+            .withParams(emptyMap())
         final String content = "{\"query\":{}}";  
-
-        final RestRequest request = createRestRequest(content);
+     * Configures {@link NodeClient} to stub {@link ValidateQueryAction} transport action.
+import org.opensearch.transport.client.node.NodeClient;  
+import org.junit.Before;  
+        final Map<ActionType, TransportAction> actions = new HashMap<>();  
+ */  
+        client = null;
+        assertThat(channel.capturedResponse().content().utf8ToString(), containsString("{\"valid\":false}"));  
         final FakeRestChannel channel = new FakeRestChannel(request, true, 0);  
-
-        // WHEN
-        action.handleRequest(request, channel, client);  
-
-        // THEN query is marked as invalid
-        assertThat(channel.responses().get(), equalTo(1));  
+ * The OpenSearch Contributors require contributions made to  
         assertThat(channel.errors().get(), equalTo(0));
-        assertThat(channel.capturedResponse().content().utf8ToString(), containsString("{\"valid\":false}"));
-    }  
-
+        final RestRequest request = createRestRequest(content);
+        assertThat(channel.errors().get(), equalTo(0));  
+import static java.util.Collections.emptySet;
+        // GIVEN a valid query
+ * Modifications Copyright OpenSearch Contributors. See  
+import org.opensearch.rest.RestRequest;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    public static void stubValidateQueryAction() {  
+        final String content = "{\"query\":{\"bool\":{\"must\":{\"term\":{\"user\":\"foobar\"}}}}}";
+        action.handleRequest(request, channel, client);
+/*  
+        actions.put(ValidateQueryAction.INSTANCE, transportAction);
+/*
+        client.initialize(dynamicActionRegistry, () -> "local", null, new NamedWriteableRegistry(Collections.emptyList()));
+ * compatible open source license.
+        final FakeRestChannel channel = new FakeRestChannel(request, true, 0);
+ */
+ * this file be licensed under the Apache-2.0 license or a
+        final FakeRestChannel channel = new FakeRestChannel(request, true, 0);
+            .withContent(new BytesArray(content), MediaTypeRegistry.JSON)  
+ * GitHub history for details.
+    }
+        dynamicActionRegistry.registerUnmodifiableActionMap(actions);
+        assertThat(channel.responses().get(), equalTo(1));
+        final TransportAction<?, ?> transportAction = new TransportAction<>(  
+import org.opensearch.search.AbstractSearchTestCase;
+        final RestRequest request = createRestRequest(content);
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.HashMap;
+ * software distributed under the License is distributed on an
+    }
+    public void testRestValidateQueryAction_emptyQuery() throws Exception {
+public class RestValidateQueryActionTests extends AbstractSearchTestCase {  
+    private static RestValidateQueryAction action = new RestValidateQueryAction();
+        usageService = null;
+     * This lower level of validation is out of the scope of this test.  
+import org.opensearch.action.admin.indices.validate.query.ValidateQueryAction;  
+        final RestRequest request = createRestRequest(content);  
+        // GIVEN an empty (i.e. invalid) query wrapped into a valid JSON
+    }
+ *
+        action.handleRequest(request, channel, client);  
+import org.opensearch.action.support.TransportAction;
+        assertThat(channel.responses().get(), equalTo(1));  
+    @Before  
+ *
+     */
+import org.opensearch.rest.RestController;  
+import org.junit.BeforeClass;
+import org.opensearch.core.common.bytes.BytesArray;
+            protected void doExecute(Task task, ActionRequest request, ActionListener listener) {}  
+import org.opensearch.action.ActionType;
+    @BeforeClass
+import java.util.Map;
     public void testRestValidateQueryAction_malformedQuery() throws Exception {
+        threadPool.getThreadContext().stashContext();  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.tasks.Task;  
+        controller.registerHandler(action);  
+ * this work for additional information regarding copyright
+    public void testRestValidateQueryAction() throws Exception {  
+ */
+import org.opensearch.action.support.ActionFilters;
+        // THEN query is valid (i.e. not marked as invalid)
+    @AfterClass  
+        ) {
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+    }
+    private static UsageService usageService = new UsageService();
+        // THEN query is marked as invalid  
+    }
+import org.opensearch.core.action.ActionListener;
+        // Make sure we have a clean context for each test
+        assertNull(channel.capturedResponse());
+        terminate(threadPool);
+        action.handleRequest(request, channel, client);
+            .build();
+    public static void terminateThreadPool() throws InterruptedException {
+        final TaskManager taskManager = new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet());
+            @Override
+import org.opensearch.threadpool.TestThreadPool;
+        DynamicActionRegistry dynamicActionRegistry = new DynamicActionRegistry();  
+    private RestRequest createRestRequest(String content) {  
+        controller = null;
+        assertThat(channel.errors().get(), equalTo(0));
+ * KIND, either express or implied.  See the License for the
+import static org.hamcrest.Matchers.containsString;  
+        // WHEN
+        assertThat(channel.capturedResponse().content().utf8ToString(), containsString("{\"valid\":false}"));
+ * specific language governing permissions and limitations
+import org.opensearch.action.ActionRequest;
+    }  
+        // WHEN  
+import org.opensearch.test.rest.FakeRestChannel;
+ * not use this file except in compliance with the License.
+}  
+import org.opensearch.common.settings.Settings;  
+import java.util.Collections;  
         // GIVEN an invalid query due to a malformed JSON  
         final String content = "{malformed_json}";
-
-        final RestRequest request = createRestRequest(content);  
-        final FakeRestChannel channel = new FakeRestChannel(request, true, 0);
-
-        // WHEN  
-        action.handleRequest(request, channel, client);
-
-        // THEN query is marked as invalid  
-        assertThat(channel.responses().get(), equalTo(1));
-        assertThat(channel.errors().get(), equalTo(0));
-        assertThat(channel.capturedResponse().content().utf8ToString(), containsString("{\"valid\":false}"));  
+import org.opensearch.test.rest.FakeRestRequest;  
+import org.junit.AfterClass;
+            ValidateQueryAction.NAME,
     }
-
-    private RestRequest createRestRequest(String content) {  
         return new FakeRestRequest.Builder(xContentRegistry()).withPath("index1/type1/_validate/query")
-            .withParams(emptyMap())
-            .withContent(new BytesArray(content), MediaTypeRegistry.JSON)  
-            .build();
-    }
-}  
+    public void ensureCleanContext() {
+    /**  
+    private static ThreadPool threadPool = new TestThreadPool(RestValidateQueryActionTests.class.getName());
+import org.opensearch.usage.UsageService;
+ * Unless required by applicable law or agreed to in writing,
+            taskManager  
+import org.opensearch.action.ActionModule.DynamicActionRegistry;  
+        };
+        action = null;  
+import org.opensearch.threadpool.ThreadPool;
+    private static NodeClient client = new NodeClient(Settings.EMPTY, threadPool);  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+/*
+    private static RestController controller = new RestController(emptySet(), null, client, new NoneCircuitBreakerService(), usageService);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        // WHEN
+        assertThat(channel.responses().get(), equalTo(0));
+        // THEN query is marked as invalid
+ *  
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;

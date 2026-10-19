@@ -1,131 +1,116 @@
+            .put("index.analysis.analyzer.my_analyzer.tokenizer", tokenizer)  
+        final Settings indexSettings = newAnalysisSettingsBuilder().put(IndexSettings.MAX_NGRAM_DIFF_SETTING.getKey(), 2).build();
+            settings
+                assertAnalyzesTo(analyzer, "test", new String[] { "t", "te" });
+import org.opensearch.test.IndexSettingsModule;  
+                    VersionUtils.randomVersionBetween(random(), Version.V_2_0_0, VersionUtils.getPreviousVersion(Version.V_3_0_0)),
+import java.util.Arrays;  
+                IndexAnalyzers indexAnalyzers = buildAnalyzers(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.common.settings.Settings;
+        }
+public class EdgeNGramTokenizerTests extends OpenSearchTokenStreamTestCase {  
+ *  
+package org.opensearch.analysis.common;
+    }  
+    private IndexAnalyzers buildAnalyzers(Version version, String tokenizer) throws IOException {
+ * under the License.  
+            name,  
+import org.opensearch.index.IndexSettings;
+            IndexSettingsModule.newIndexSettings(index, indexSettings),
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+                assertNotNull(analyzer);
+ * GitHub history for details.
+        }
+            .put(IndexMetadata.SETTING_VERSION_CREATED, version)
+ * Unless required by applicable law or agreed to in writing,
+            try (IndexAnalyzers indexAnalyzers = buildAnalyzers(Version.CURRENT, "edge_ngram")) {  
+            null,
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+import java.io.IOException;
+                Arrays.stream(e.getSuppressed())  
+                () -> buildAnalyzers(VersionUtils.randomVersionBetween(random(), Version.V_3_0_0, Version.CURRENT), "edgeNGram")
  * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.Tokenizer;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
-import org.opensearch.env.Environment;  
-import org.opensearch.env.TestEnvironment;
-import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.IndexAnalyzers;  
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.indices.analysis.AnalysisModule;
-import org.opensearch.test.IndexSettingsModule;  
-import org.opensearch.test.OpenSearchTokenStreamTestCase;
-import org.opensearch.test.VersionUtils;
-
-import java.io.IOException;
-import java.io.StringReader;
-import java.util.Arrays;  
-import java.util.Collections;
-
-public class EdgeNGramTokenizerTests extends OpenSearchTokenStreamTestCase {  
-
-    private IndexAnalyzers buildAnalyzers(Version version, String tokenizer) throws IOException {
-        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();  
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, version)
-            .put("index.analysis.analyzer.my_analyzer.tokenizer", tokenizer)  
-            .build();
-        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("index", indexSettings);
-        return new AnalysisModule(TestEnvironment.newEnvironment(settings), Collections.singletonList(new CommonAnalysisModulePlugin()))  
-            .getAnalysisRegistry()
-            .build(idxSettings);
-    }  
-
-    public void testPreConfiguredTokenizer() throws IOException {
-
-        // Afterwards, we return ngrams of length 1 and 2, to match the default factory settings
-        {
-            try (IndexAnalyzers indexAnalyzers = buildAnalyzers(Version.CURRENT, "edge_ngram")) {  
-                NamedAnalyzer analyzer = indexAnalyzers.get("my_analyzer");
-                assertNotNull(analyzer);
-                assertAnalyzesTo(analyzer, "test", new String[] { "t", "te" });  
-            }
-        }
-
-        // Check deprecated name as well, needs version before 3.0 because throws IAE after that
-        {
-            try (  
-                IndexAnalyzers indexAnalyzers = buildAnalyzers(
-                    VersionUtils.randomVersionBetween(random(), Version.V_2_0_0, VersionUtils.getPreviousVersion(Version.V_3_0_0)),
-                    "edgeNGram"  
-                )
-            ) {
-                NamedAnalyzer analyzer = indexAnalyzers.get("my_analyzer");  
-                assertNotNull(analyzer);
-                assertAnalyzesTo(analyzer, "test", new String[] { "t", "te" });
-            }  
-        }
-
-        // Check IAE from 3.0 onward  
-        {
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.metadata.IndexMetadata;  
             final IllegalArgumentException e = expectThrows(
-                IllegalArgumentException.class,  
-                () -> buildAnalyzers(VersionUtils.randomVersionBetween(random(), Version.V_3_0_0, Version.CURRENT), "edgeNGram")
-            );
-
-            assertTrue(
-                "expected deprecation message in suppressed causes",
-                Arrays.stream(e.getSuppressed())  
-                    .map(org.opensearch.ExceptionsHelper::unwrapCause)
-                    .map(Throwable::getMessage)
-                    .anyMatch(msg -> msg.contains("The [edgeNGram] tokenizer name was deprecated pre 1.0."))  
-            );
-        }
-    }  
-
-    public void testCustomTokenChars() throws IOException {
-        final Index index = new Index("test", "_na_");  
-        final String name = "engr";
-        final Settings indexSettings = newAnalysisSettingsBuilder().put(IndexSettings.MAX_NGRAM_DIFF_SETTING.getKey(), 2).build();
-
-        final Settings settings = newAnalysisSettingsBuilder().put("min_gram", 2)
-            .put("max_gram", 3)
-            .putList("token_chars", "letter", "custom")  
-            .put("custom_token_chars", "_-")
-            .build();
         Tokenizer tokenizer = new EdgeNGramTokenizerFactory(  
-            IndexSettingsModule.newIndexSettings(index, indexSettings),
-            null,
-            name,  
-            settings
+                NamedAnalyzer analyzer = indexAnalyzers.get("my_analyzer");
+        final Settings settings = newAnalysisSettingsBuilder().put("min_gram", 2)
+ */
+                "expected deprecation message in suppressed causes",
+import org.opensearch.test.VersionUtils;
+        {
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.index.Index;
+        final Index index = new Index("test", "_na_");  
+ * SPDX-License-Identifier: Apache-2.0
+            try (  
+                    .map(org.opensearch.ExceptionsHelper::unwrapCause)
+import org.opensearch.env.TestEnvironment;
         ).create();
+import java.io.StringReader;
+        }
+            .put("custom_token_chars", "_-")
         tokenizer.setReader(new StringReader("Abc -gh _jk =lm"));  
+ * this work for additional information regarding copyright
+    public void testPreConfiguredTokenizer() throws IOException {
+/*
+            .putList("token_chars", "letter", "custom")  
+import org.opensearch.env.Environment;  
+            assertTrue(
+ * Licensed to Elasticsearch under one or more contributor  
+ * The OpenSearch Contributors require contributions made to  
+        // Check deprecated name as well, needs version before 3.0 because throws IAE after that
+                NamedAnalyzer analyzer = indexAnalyzers.get("my_analyzer");  
+ * specific language governing permissions and limitations
+            ) {
+ * software distributed under the License is distributed on an
+        return new AnalysisModule(TestEnvironment.newEnvironment(settings), Collections.singletonList(new CommonAnalysisModulePlugin()))  
+        {
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.index.analysis.NamedAnalyzer;
+        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("index", indexSettings);
+import org.apache.lucene.analysis.Tokenizer;
+        Settings indexSettings = Settings.builder()
+        {
         assertTokenStreamContents(tokenizer, new String[] { "Ab", "Abc", "-g", "-gh", "_j", "_jk", "lm" });
-    }
-
+            .build(idxSettings);
+                assertNotNull(analyzer);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    "edgeNGram"  
+                assertAnalyzesTo(analyzer, "test", new String[] { "t", "te" });  
+            );
+                    .anyMatch(msg -> msg.contains("The [edgeNGram] tokenizer name was deprecated pre 1.0."))  
+        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();  
+            .put("max_gram", 3)
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+import org.opensearch.indices.analysis.AnalysisModule;
+        // Afterwards, we return ngrams of length 1 and 2, to match the default factory settings
+                IllegalArgumentException.class,  
+            }  
+import java.util.Collections;
+            .build();
+ */  
+            .getAnalysisRegistry()
+import org.opensearch.Version;
+    public void testCustomTokenChars() throws IOException {
+ */  
+                    .map(Throwable::getMessage)
+            .build();
+            );
+import org.opensearch.test.OpenSearchTokenStreamTestCase;
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+ * Modifications Copyright OpenSearch Contributors. See
 }
+    }
+        // Check IAE from 3.0 onward  
+            }
+                )
+        final String name = "engr";
+/*  

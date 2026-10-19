@@ -1,53 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.metrics;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.telemetry.metrics.tags.Tags;
-
-/**
- * Observable Measurement for the Asynchronous instruments.
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public final class TaggedMeasurement {  
-    private final Double value;
-    private final Tags tags;
-
-    /**
-     * Factory method to create the {@link TaggedMeasurement} object.
-     * @param value value.  
-     * @param tags tags to be added per value.
-     * @return tagged measurement TaggedMeasurement
-     */  
-    public static TaggedMeasurement create(double value, Tags tags) {
-        return new TaggedMeasurement(value, tags);
-    }  
-
-    private TaggedMeasurement(double value, Tags tags) {
-        this.value = value;  
+    public Tags getTags() {
         this.tags = tags;
-    }
-
-    /**
-     * Returns the value.
-     * @return value  
+/**
+     * Returns the tags.
+    public static TaggedMeasurement create(double value, Tags tags) {
+    }  
+     * Factory method to create the {@link TaggedMeasurement} object.
      */
+import org.opensearch.common.annotation.ExperimentalApi;
+ * Observable Measurement for the Asynchronous instruments.
+        this.value = value;  
+    /**  
+import org.opensearch.telemetry.metrics.tags.Tags;
     public Double getValue() {
+@ExperimentalApi
+     * @return tags
+ */  
+    private TaggedMeasurement(double value, Tags tags) {
+ */
+ * compatible open source license.
+    private final Double value;
+     * @return tagged measurement TaggedMeasurement
+ * SPDX-License-Identifier: Apache-2.0
+    private final Tags tags;
+     */  
+     * Returns the value.
+ * @opensearch.experimental  
+ * The OpenSearch Contributors require contributions made to  
+    }
+public final class TaggedMeasurement {  
+    /**
+        return tags;
+ * this file be licensed under the Apache-2.0 license or a
+}
+     * @param value value.  
+/*  
+     * @param tags tags to be added per value.
+    /**
+package org.opensearch.telemetry.metrics;
         return value;  
     }
-
-    /**  
-     * Returns the tags.
-     * @return tags
      */  
-    public Tags getTags() {
-        return tags;
+        return new TaggedMeasurement(value, tags);
     }  
-}
+ *
+     * @return value  

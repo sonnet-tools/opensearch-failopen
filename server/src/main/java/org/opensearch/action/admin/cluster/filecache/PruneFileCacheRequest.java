@@ -1,47 +1,38 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.action.admin.cluster.filecache;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.nodes.BaseNodesRequest;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-
-/**
- * Request for pruning remote file cache across multiple nodes.  
- * Supports node targeting for efficient cache management.
- *
- * @opensearch.internal  
- */
-public class PruneFileCacheRequest extends BaseNodesRequest<PruneFileCacheRequest> {
-
-    public PruneFileCacheRequest() {
-        super((String[]) null);
-    }  
-
-    public PruneFileCacheRequest(String... nodesIds) {
-        super(nodesIds);  
-    }
-
-    public PruneFileCacheRequest(StreamInput in) throws IOException {  
-        super(in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        return null;
-    }  
 }
+ *
+        super(in);
+ * Supports node targeting for efficient cache management.
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+    }
+    }  
+    }
+ */
+ * @opensearch.internal  
+        return null;
+        super(nodesIds);  
+    @Override  
+    public PruneFileCacheRequest(String... nodesIds) {
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * The OpenSearch Contributors require contributions made to  
+ * Request for pruning remote file cache across multiple nodes.  
+    public PruneFileCacheRequest(StreamInput in) throws IOException {  
+ * compatible open source license.
+/**
+import org.opensearch.action.ActionRequestValidationException;
+import java.io.IOException;  
+ *
+import org.opensearch.action.support.nodes.BaseNodesRequest;
+    public PruneFileCacheRequest() {
+public class PruneFileCacheRequest extends BaseNodesRequest<PruneFileCacheRequest> {
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+        super((String[]) null);
+    @Override
+    }  
+    public ActionRequestValidationException validate() {
+ */  
+        super.writeTo(out);  
+    public void writeTo(StreamOutput out) throws IOException {

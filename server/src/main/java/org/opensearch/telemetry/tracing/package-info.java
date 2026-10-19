@@ -1,12 +1,11 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/**
- * This package contains classes needed for tracing requests.  
  */
+ * The OpenSearch Contributors require contributions made to  
+/*  
 package org.opensearch.telemetry.tracing;
+ * SPDX-License-Identifier: Apache-2.0
+/**
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * This package contains classes needed for tracing requests.  
+ * compatible open source license.

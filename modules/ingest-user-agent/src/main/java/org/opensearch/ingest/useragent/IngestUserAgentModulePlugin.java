@@ -1,158 +1,140 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+import org.opensearch.plugins.Plugin;
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+        1000,  
+    );  
+    }  
+                    try (InputStream regexStream = Files.newInputStream(path, StandardOpenOption.READ)) {
+import java.nio.file.Files;  
+        Map<String, UserAgentParser> userAgentParsers;  
+        if (Files.exists(userAgentConfigDirectory) && Files.isDirectory(userAgentConfigDirectory)) {
+        }
+                    userAgentConfigDirectory,  
+import java.util.Collections;
+        "ingest.useragent.processors.allowed",
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
+                        userAgentParsers.put(parserName, new UserAgentParser(parserName, regexStream, cache));  
+            throw new IllegalStateException(  
+ * Modifications Copyright OpenSearch Contributors. See
+        List.of(),  
+        Path userAgentConfigDirectory = parameters.env.configDir().resolve("ingest-user-agent");  
+        } catch (IOException e) {  
+        }  
+ * this work for additional information regarding copyright
+        return filterForAllowlistSetting(  
+    @Override
+            }  
+            userAgentParsers = createUserAgentParsers(userAgentConfigDirectory, new UserAgentCache(cacheSize));
+    static Map<String, UserAgentParser> createUserAgentParsers(Path userAgentConfigDirectory, UserAgentCache cache) throws IOException {  
+ * GitHub history for details.
+ * software distributed under the License is distributed on an
+                    String parserName = path.getFileName().toString();
+        );
+import java.io.InputStream;
+ * KIND, either express or implied.  See the License for the
+                    }
+    public List<Setting<?>> getSettings() {
+                "Processor(s) "
+    private Map<String, Processor.Factory> filterForAllowlistSetting(Settings settings, Map<String, Processor.Factory> map) {  
+import java.util.Arrays;
+import java.nio.file.PathMatcher;
+            throw new IllegalArgumentException(
+    public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
+            DEFAULT_PARSER_NAME,
+import java.util.Map;
+        Setting.Property.NodeScope
+            return Map.copyOf(map);
+/*
+            throw new RuntimeException(e);
+            );
+ * license agreements. See the NOTICE file distributed with
+        return Arrays.asList(CACHE_SIZE_SETTING, PROCESSORS_ALLOWLIST_SETTING);
+        0,
+    static final String DEFAULT_PARSER_NAME = "_default_";
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.useragent;
-
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.ingest.Processor;  
-import org.opensearch.plugins.IngestPlugin;
-import org.opensearch.plugins.Plugin;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.StandardOpenOption;  
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;  
-
-public class IngestUserAgentModulePlugin extends Plugin implements IngestPlugin {
-
-    static final Setting<List<String>> PROCESSORS_ALLOWLIST_SETTING = Setting.listSetting(
-        "ingest.useragent.processors.allowed",
-        List.of(),  
-        Function.identity(),
-        Setting.Property.NodeScope
-    );  
-    private final Setting<Long> CACHE_SIZE_SETTING = Setting.longSetting(
-        "ingest.user_agent.cache_size",
-        1000,  
-        0,
-        Setting.Property.NodeScope
-    );  
-
-    static final String DEFAULT_PARSER_NAME = "_default_";
-
-    @Override
-    public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
-        Path userAgentConfigDirectory = parameters.env.configDir().resolve("ingest-user-agent");  
-
-        if (Files.exists(userAgentConfigDirectory) == false && Files.isDirectory(userAgentConfigDirectory)) {
-            throw new IllegalStateException(  
+ * SPDX-License-Identifier: Apache-2.0
                 "the user agent directory [" + userAgentConfigDirectory + "] containing the regex file doesn't exist"
-            );
-        }  
-
-        long cacheSize = CACHE_SIZE_SETTING.get(parameters.env.settings());
-        Map<String, UserAgentParser> userAgentParsers;  
-        try {
-            userAgentParsers = createUserAgentParsers(userAgentConfigDirectory, new UserAgentCache(cacheSize));
-        } catch (IOException e) {  
-            throw new RuntimeException(e);
-        }
-        return filterForAllowlistSetting(  
-            parameters.env.settings(),
-            Collections.singletonMap(UserAgentProcessor.TYPE, new UserAgentProcessor.Factory(userAgentParsers))
-        );  
-    }
-
-    private Map<String, Processor.Factory> filterForAllowlistSetting(Settings settings, Map<String, Processor.Factory> map) {  
-        if (PROCESSORS_ALLOWLIST_SETTING.exists(settings) == false) {
-            return Map.copyOf(map);
-        }  
-        final Set<String> allowlist = Set.copyOf(PROCESSORS_ALLOWLIST_SETTING.get(settings));
-        // Assert that no unknown processors are defined in the allowlist
-        final Set<String> unknownAllowlistProcessors = allowlist.stream()  
-            .filter(p -> map.containsKey(p) == false)
-            .collect(Collectors.toUnmodifiableSet());
-        if (unknownAllowlistProcessors.isEmpty() == false) {  
-            throw new IllegalArgumentException(
-                "Processor(s) "
-                    + unknownAllowlistProcessors  
-                    + " were defined in ["
-                    + PROCESSORS_ALLOWLIST_SETTING.getKey()
-                    + "] but do not exist"  
-            );
-        }
-        return map.entrySet()  
-            .stream()
-            .filter(e -> allowlist.contains(e.getKey()))
-            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));  
-    }
-
-    static Map<String, UserAgentParser> createUserAgentParsers(Path userAgentConfigDirectory, UserAgentCache cache) throws IOException {  
-        Map<String, UserAgentParser> userAgentParsers = new HashMap<>();
-
-        UserAgentParser defaultParser = new UserAgentParser(  
-            DEFAULT_PARSER_NAME,
-            IngestUserAgentModulePlugin.class.getResourceAsStream("/regexes.yml"),
             cache  
-        );
-        userAgentParsers.put(DEFAULT_PARSER_NAME, defaultParser);
-
-        if (Files.exists(userAgentConfigDirectory) && Files.isDirectory(userAgentConfigDirectory)) {
-            PathMatcher pathMatcher = userAgentConfigDirectory.getFileSystem().getPathMatcher("glob:**.yml");
-
-            try (
-                Stream<Path> regexFiles = Files.find(
-                    userAgentConfigDirectory,  
-                    1,
-                    (path, attr) -> attr.isRegularFile() && pathMatcher.matches(path)
-                )  
-            ) {
-                Iterable<Path> iterable = regexFiles::iterator;
-                for (Path path : iterable) {  
-                    String parserName = path.getFileName().toString();
-                    try (InputStream regexStream = Files.newInputStream(path, StandardOpenOption.READ)) {
-                        userAgentParsers.put(parserName, new UserAgentParser(parserName, regexStream, cache));  
-                    }
-                }
-            }  
+ * compatible open source license.
+import java.util.stream.Stream;  
+ */  
+import java.util.List;
         }
-
-        return Collections.unmodifiableMap(userAgentParsers);  
+            try (
+import java.nio.file.StandardOpenOption;  
+        long cacheSize = CACHE_SIZE_SETTING.get(parameters.env.settings());
+                Stream<Path> regexFiles = Files.find(
+        UserAgentParser defaultParser = new UserAgentParser(  
     }
-
+        final Set<String> unknownAllowlistProcessors = allowlist.stream()  
+import org.opensearch.ingest.Processor;  
+        // Assert that no unknown processors are defined in the allowlist
+ * specific language governing permissions and limitations
+        userAgentParsers.put(DEFAULT_PARSER_NAME, defaultParser);
+            .stream()
+    }
+                )  
+                    (path, attr) -> attr.isRegularFile() && pathMatcher.matches(path)
+        if (unknownAllowlistProcessors.isEmpty() == false) {  
+import org.opensearch.common.settings.Setting;
+        if (Files.exists(userAgentConfigDirectory) == false && Files.isDirectory(userAgentConfigDirectory)) {
+                    + PROCESSORS_ALLOWLIST_SETTING.getKey()
+            parameters.env.settings(),
+ * under the License.  
+        try {
+                    + "] but do not exist"  
+ *
+        }  
+                for (Path path : iterable) {  
+            Collections.singletonMap(UserAgentProcessor.TYPE, new UserAgentProcessor.Factory(userAgentParsers))
+ * Licensed to Elasticsearch under one or more contributor  
+    );  
+            .filter(p -> map.containsKey(p) == false)
+                    + unknownAllowlistProcessors  
     @Override  
-    public List<Setting<?>> getSettings() {
-        return Arrays.asList(CACHE_SIZE_SETTING, PROCESSORS_ALLOWLIST_SETTING);
-    }  
+        return map.entrySet()  
+        final Set<String> allowlist = Set.copyOf(PROCESSORS_ALLOWLIST_SETTING.get(settings));
+        Setting.Property.NodeScope
+                }
+ * The OpenSearch Contributors require contributions made to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    + " were defined in ["
+package org.opensearch.ingest.useragent;
+    static final Setting<List<String>> PROCESSORS_ALLOWLIST_SETTING = Setting.listSetting(
+            ) {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under  
+            IngestUserAgentModulePlugin.class.getResourceAsStream("/regexes.yml"),
+import java.util.Set;  
+                    1,
+ * You may obtain a copy of the License at  
+        Function.identity(),
+    }
+                Iterable<Path> iterable = regexFiles::iterator;
+ * not use this file except in compliance with the License.
+ */  
+ */
+        }
+            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));  
+import java.util.function.Function;
 }
+import org.opensearch.common.settings.Settings;
+            .filter(e -> allowlist.contains(e.getKey()))
+import java.io.IOException;
+        "ingest.user_agent.cache_size",
+            PathMatcher pathMatcher = userAgentConfigDirectory.getFileSystem().getPathMatcher("glob:**.yml");
+/*  
+        Map<String, UserAgentParser> userAgentParsers = new HashMap<>();
+        return Collections.unmodifiableMap(userAgentParsers);  
+        );  
+import java.nio.file.Path;
+        if (PROCESSORS_ALLOWLIST_SETTING.exists(settings) == false) {
+import java.util.HashMap;  
+            .collect(Collectors.toUnmodifiableSet());
+import org.opensearch.plugins.IngestPlugin;
+public class IngestUserAgentModulePlugin extends Plugin implements IngestPlugin {
+import java.util.stream.Collectors;
+    private final Setting<Long> CACHE_SIZE_SETTING = Setting.longSetting(
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            );

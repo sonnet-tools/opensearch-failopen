@@ -1,400 +1,351 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.percolator;
-
-import org.apache.lucene.search.Query;
-import org.opensearch.OpenSearchException;
-import org.opensearch.ResourceNotFoundException;  
-import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
-import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.get.GetResponse;  
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lucene.uid.Versions;  
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.get.GetResult;  
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryShardContext;  
+    public void testDisallowExpensiveQueries() {
+                + indexedDocumentId  
 import org.opensearch.index.query.Rewriteable;
-import org.opensearch.ingest.RandomDocumentPicks;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.AbstractQueryTestCase;
-import org.opensearch.test.TestGeoShapeFieldMapperPlugin;
-import org.hamcrest.Matchers;  
-
-import java.io.IOException;
-import java.io.UncheckedIOException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.Collections;
+ * software distributed under the License is distributed on an
+        aliasField = randomAlphaOfLength(4);
+        String testName = "name1";
+    protected boolean builderGeneratesCacheableQueries() {
+    }
+        assertThat(e.getMessage(), equalTo(expectedString));
+    private String indexedDocumentIndex;  
+    }
+        );  
+     */
+import org.opensearch.common.lucene.uid.Versions;  
+import static org.mockito.Mockito.when;  
+        );
+import org.opensearch.core.xcontent.XContentBuilder;
+                + "\", \"field\":\""
+        QueryShardContext shardContext = createShardContext();  
+        QueryShardContext queryShardContext = createShardContext();
+    private static BytesReference randomSource(Set<String> usedFields) {
+        indexedDocumentVersion = Versions.MATCH_ANY;
+ * Modifications Copyright OpenSearch Contributors. See
+                        duplicateField = true;
+            // always have unique fields:
+    protected void doAssertLuceneQuery(PercolateQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+                new GetResult(  
+        e = expectThrows(IllegalArgumentException.class, () -> { new PercolateQueryBuilder("_field", "_index", null, null, null, null); });  
+        assertThat(getRequest.routing(), Matchers.equalTo(indexedDocumentRouting));
+import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
+        assertThat(e.getMessage(), equalTo("[field] is a required argument"));
+        PercolateQueryBuilder.DOCUMENT_FIELD.getPreferredName(),
+            docType,  
+        PercolateQueryBuilder queryBuilder;  
+        PercolateQueryBuilder pqb = doCreateTestQueryBuilder(true);
+            return new GetResponse(  
+        return false;  
+                    Collections.emptyMap(),
+                + "\"}}"  
+    }
+    public void testBothDocumentAndDocumentsSpecified() {
+            );  
 import java.util.HashSet;
 import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Supplier;  
-
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class PercolateQueryBuilderTests extends AbstractQueryTestCase<PercolateQueryBuilder> {
-
-    private static final String[] SHUFFLE_PROTECTED_FIELDS = new String[] {
-        PercolateQueryBuilder.DOCUMENT_FIELD.getPreferredName(),
-        PercolateQueryBuilder.DOCUMENTS_FIELD.getPreferredName() };  
-
-    protected static String queryField = "field";
-    protected static String aliasField = "alias";  
-    private static String docType;
-
-    private String indexedDocumentIndex;  
-    private String indexedDocumentId;
-    private String indexedDocumentRouting;
-    private String indexedDocumentPreference;  
-    private Long indexedDocumentVersion;
-    private List<BytesReference> documentSource;
-
-    private boolean indexedDocumentExists = true;
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Arrays.asList(PercolatorModulePlugin.class, TestGeoShapeFieldMapperPlugin.class);
-    }  
-
-    @Override
-    protected void initializeAdditionalMappings(MapperService mapperService) throws IOException {  
-        queryField = randomAlphaOfLength(4);
-        aliasField = randomAlphaOfLength(4);
-
-        docType = "_doc";
-        mapperService.merge(
-            docType,  
-            new CompressedXContent(
-                PutMappingRequest.simpleMapping(queryField, "type=percolator", aliasField, "type=alias,path=" + queryField).toString()
-            ),  
-            MapperService.MergeReason.MAPPING_UPDATE
-        );
-        mapperService.merge(  
-            docType,
-            new CompressedXContent(PutMappingRequest.simpleMapping(TEXT_FIELD_NAME, "type=text").toString()),
+                    indexedDocumentIndex,
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    1,
+        assertThat(getRequest.version(), Matchers.equalTo(indexedDocumentVersion));
+                    -1,
+        assertThat(getRequest.index(), Matchers.equalTo(indexedDocumentIndex));  
+ *  
+ *
             MapperService.MergeReason.MAPPING_UPDATE  
-        );
+import org.opensearch.test.AbstractQueryTestCase;
+        PercolateQueryBuilder pqb = doCreateTestQueryBuilder(true);  
+        assertEquals(testName, ((PercolateQueryBuilder) rewrittenQueryBuilder).getQueryName());  
+        QueryBuilder rewrite = rewriteAndFetch(pqb, createShardContext());  
     }
-
-    @Override
-    protected PercolateQueryBuilder doCreateTestQueryBuilder() {
-        return doCreateTestQueryBuilder(randomBoolean());  
-    }
-
-    private PercolateQueryBuilder doCreateTestQueryBuilder(boolean indexedDocument) {  
-        if (indexedDocument) {
-            documentSource = Collections.singletonList(randomSource(new HashSet<>()));
-        } else {  
+    /**  
+        assertThat(e.getMessage(), equalTo("[id] is a required argument"));
+            "{\"percolate\" : { \"index\": \""  
+    private Long indexedDocumentVersion;
             int numDocs = randomIntBetween(1, 8);
-            documentSource = new ArrayList<>(numDocs);
-            Set<String> usedFields = new HashSet<>();  
-            for (int i = 0; i < numDocs; i++) {
-                documentSource.add(randomSource(usedFields));
-            }  
-        }
-
-        PercolateQueryBuilder queryBuilder;  
-        if (indexedDocument) {
-            indexedDocumentIndex = randomAlphaOfLength(4);
-            indexedDocumentId = randomAlphaOfLength(4);  
-            indexedDocumentRouting = randomAlphaOfLength(4);
-            indexedDocumentPreference = randomAlphaOfLength(4);
-            indexedDocumentVersion = (long) randomIntBetween(0, Integer.MAX_VALUE);  
-            queryBuilder = new PercolateQueryBuilder(
-                queryField,
-                indexedDocumentIndex,  
-                indexedDocumentId,
-                indexedDocumentRouting,
-                indexedDocumentPreference,  
-                indexedDocumentVersion
-            );
-        } else {  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.test.TestGeoShapeFieldMapperPlugin;
+            documentSource = Collections.singletonList(randomSource(new HashSet<>()));
+ * compatible open source license.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    documentSource.iterator().next(),
+                    Collections.emptyMap()  
+        String testName = "name1";
+        PercolateQueryBuilder queryBuilder = doCreateTestQueryBuilder(true);
             queryBuilder = new PercolateQueryBuilder(queryField, documentSource, MediaTypeRegistry.JSON);
         }
-        if (randomBoolean()) {  
-            queryBuilder.setName(randomAlphaOfLength(4));
-        }
-        return queryBuilder;  
-    }
-
-    /**  
-     * we don't want to shuffle the "document" field internally in {@link #testFromXContent()} because even though the
-     * documents would be functionally the same, their {@link BytesReference} representation isn't and thats what we
-     * compare when check for equality of the original and the shuffled builder  
-     */
-    @Override
-    protected String[] shuffleProtectedFields() {  
-        return SHUFFLE_PROTECTED_FIELDS;
-    }
-
-    @Override
-    protected GetResponse executeGet(GetRequest getRequest) {
-        assertThat(getRequest.index(), Matchers.equalTo(indexedDocumentIndex));  
-        assertThat(getRequest.id(), Matchers.equalTo(indexedDocumentId));
-        assertThat(getRequest.routing(), Matchers.equalTo(indexedDocumentRouting));
-        assertThat(getRequest.preference(), Matchers.equalTo(indexedDocumentPreference));  
-        assertThat(getRequest.version(), Matchers.equalTo(indexedDocumentVersion));
-        if (indexedDocumentExists) {
-            return new GetResponse(  
-                new GetResult(
-                    indexedDocumentIndex,
-                    indexedDocumentId,  
-                    0,
-                    1,
-                    0L,  
-                    true,
-                    documentSource.iterator().next(),
-                    Collections.emptyMap(),  
-                    Collections.emptyMap()
-                )
-            );  
-        } else {
-            return new GetResponse(
-                new GetResult(  
-                    indexedDocumentIndex,
-                    indexedDocumentId,
-                    UNASSIGNED_SEQ_NO,  
-                    0,
-                    -1,
-                    false,  
-                    null,
-                    Collections.emptyMap(),
-                    Collections.emptyMap()  
-                )
-            );
-        }  
-    }
-
-    @Override  
-    protected void doAssertLuceneQuery(PercolateQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
-        assertThat(query, Matchers.instanceOf(PercolateQuery.class));
-        PercolateQuery percolateQuery = (PercolateQuery) query;  
-        assertThat(percolateQuery.getDocuments(), Matchers.equalTo(documentSource));
-    }
-
-    @Override
-    public void testMustRewrite() throws IOException {
-        PercolateQueryBuilder pqb = doCreateTestQueryBuilder(true);  
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> pqb.toQuery(createShardContext()));
-        assertThat(e.getMessage(), equalTo("query builder must be rewritten first"));
-        QueryBuilder rewrite = rewriteAndFetch(pqb, createShardContext());  
-        PercolateQueryBuilder geoShapeQueryBuilder = new PercolateQueryBuilder(pqb.getField(), documentSource, MediaTypeRegistry.JSON);
-        assertEquals(geoShapeQueryBuilder, rewrite);
-    }  
-
-    public void testIndexedDocumentDoesNotExist() throws IOException {
-        indexedDocumentExists = false;  
-        PercolateQueryBuilder pqb = doCreateTestQueryBuilder(true);
-        ResourceNotFoundException e = expectThrows(ResourceNotFoundException.class, () -> rewriteAndFetch(pqb, createShardContext()));
-        String expectedString = "indexed document [" + indexedDocumentIndex + "/" + indexedDocumentId + "] couldn't be found";  
-        assertThat(e.getMessage(), equalTo(expectedString));
-    }
-
-    @Override
-    protected Set<String> getObjectsHoldingArbitraryContent() {
-        // document contains arbitrary content, no error expected when an object is added to it  
-        return new HashSet<>(
-            Arrays.asList(PercolateQueryBuilder.DOCUMENT_FIELD.getPreferredName(), PercolateQueryBuilder.DOCUMENTS_FIELD.getPreferredName())
         );  
-    }
-
-    public void testRequiredParameters() {  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> {
-            new PercolateQueryBuilder(null, new BytesArray("{}"), MediaTypeRegistry.JSON);
-        });  
-        assertThat(e.getMessage(), equalTo("[field] is a required argument"));
-
-        e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> new PercolateQueryBuilder("_field", (List<BytesReference>) null, MediaTypeRegistry.JSON)
-        );  
-        assertThat(e.getMessage(), equalTo("[document] is a required argument"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> { new PercolateQueryBuilder(null, "_index", "_id", null, null, null); });  
-        assertThat(e.getMessage(), equalTo("[field] is a required argument"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> { new PercolateQueryBuilder("_field", null, "_id", null, null, null); });  
-        assertThat(e.getMessage(), equalTo("[index] is a required argument"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> { new PercolateQueryBuilder("_field", "_index", null, null, null, null); });  
-        assertThat(e.getMessage(), equalTo("[id] is a required argument"));
-    }
-
-    public void testFromJsonNoDocumentType() throws IOException {
-        QueryShardContext queryShardContext = createShardContext();
-        QueryBuilder queryBuilder = parseQuery("{\"percolate\" : { \"document\": {}, \"field\":\"" + queryField + "\"}}");  
-        queryBuilder.toQuery(queryShardContext);
-    }
-
-    public void testFromJsonNoType() throws IOException {
-        indexedDocumentIndex = randomAlphaOfLength(4);
-        indexedDocumentId = randomAlphaOfLength(4);  
-        indexedDocumentVersion = Versions.MATCH_ANY;
-        documentSource = Collections.singletonList(randomSource(new HashSet<>()));
-
-        QueryShardContext queryShardContext = createShardContext();
-        QueryBuilder queryBuilder = parseQuery(
-            "{\"percolate\" : { \"index\": \""  
-                + indexedDocumentIndex
-                + "\", \"id\": \""
-                + indexedDocumentId  
-                + "\", \"field\":\""
-                + queryField
-                + "\"}}"  
-        );
-        rewriteAndFetch(queryBuilder, queryShardContext).toQuery(queryShardContext);
-    }  
-
-    public void testBothDocumentAndDocumentsSpecified() {
-        IllegalArgumentException e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> parseQuery("{\"percolate\" : { \"document\": {}, \"documents\": [{}, {}], \"field\":\"" + queryField + "\"}}")
-        );  
-        assertThat(e.getMessage(), containsString("The following fields are not allowed together: [document, documents]"));
-    }
-
-    private static BytesReference randomSource(Set<String> usedFields) {
-        try {
-            // If we create two source that have the same field, but these fields have different kind of values (str vs. lng) then  
-            // when these source get indexed, indexing can fail. To solve this test issue, we should generate source that
-            // always have unique fields:
-            Map<String, ?> source;  
-            boolean duplicateField;
-            do {
-                duplicateField = false;  
-                source = RandomDocumentPicks.randomSource(random());
-                for (String field : source.keySet()) {
-                    if (usedFields.add(field) == false) {  
-                        duplicateField = true;
-                        break;
-                    }  
-                }
-            } while (duplicateField);
-
-            XContentBuilder xContent = XContentFactory.jsonBuilder();
-            xContent.map(source);
-            return BytesReference.bytes(xContent);  
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }  
-    }
-
-    /**  
-     * Test that this query is never cacheable
-     */
-    @Override  
-    public void testCacheability() throws IOException {
-        PercolateQueryBuilder queryBuilder = createTestQueryBuilder();
-        QueryShardContext context = createShardContext();  
-        assert context.isCacheable();
-        QueryBuilder rewritten = rewriteQuery(queryBuilder, new QueryShardContext(context));
-        assertNotNull(rewritten.toQuery(context));  
-        assertFalse("query should not be cacheable: " + queryBuilder.toString(), context.isCacheable());
-    }
-
-    @Override
-    protected boolean builderGeneratesCacheableQueries() {
-        return false;  
-    }
-
-    public void testSerializationFailsUnlessFetched() throws IOException {  
-        QueryBuilder builder = doCreateTestQueryBuilder(true);
-        QueryBuilder queryBuilder = Rewriteable.rewrite(builder, createShardContext());
-        IllegalStateException ise = expectThrows(IllegalStateException.class, () -> queryBuilder.writeTo(new BytesStreamOutput(10)));  
-        assertEquals(ise.getMessage(), "supplier must be null, can't serialize suppliers, missing a rewriteAndFetch?");
-        builder = rewriteAndFetch(builder, createShardContext());
-        builder.writeTo(new BytesStreamOutput(10));  
-    }
-
-    public void testFieldAlias() throws IOException {  
-        QueryShardContext shardContext = createShardContext();
-
-        PercolateQueryBuilder builder = doCreateTestQueryBuilder(false);  
-        QueryBuilder rewrittenBuilder = rewriteAndFetch(builder, shardContext);
+import java.util.ArrayList;
         PercolateQuery query = (PercolateQuery) rewrittenBuilder.toQuery(shardContext);
-
-        PercolateQueryBuilder aliasBuilder = new PercolateQueryBuilder(aliasField, builder.getDocuments(), builder.getXContentType());
-        QueryBuilder rewrittenAliasBuilder = rewriteAndFetch(aliasBuilder, shardContext);
-        PercolateQuery aliasQuery = (PercolateQuery) rewrittenAliasBuilder.toQuery(shardContext);  
-
-        assertEquals(query.getCandidateMatchesQuery(), aliasQuery.getCandidateMatchesQuery());
-        assertEquals(query.getVerifiedMatchesQuery(), aliasQuery.getVerifiedMatchesQuery());  
+    public void testFromJsonNoDocumentType() throws IOException {
+import org.opensearch.index.mapper.MapperService;
+import org.opensearch.ResourceNotFoundException;  
     }
-
-    public void testSettingNameWhileRewriting() {  
-        String testName = "name1";
-        QueryShardContext shardContext = createShardContext();
-        PercolateQueryBuilder percolateQueryBuilder = doCreateTestQueryBuilder(true);  
-        percolateQueryBuilder.setName(testName);
-
-        QueryBuilder rewrittenQueryBuilder = percolateQueryBuilder.doRewrite(shardContext);  
-
-        assertEquals(testName, ((PercolateQueryBuilder) rewrittenQueryBuilder).getQueryName());
-        assertNotEquals(rewrittenQueryBuilder, percolateQueryBuilder);  
-    }
-
-    public void testSettingNameWhileRewritingWhenDocumentSupplierAndSourceNotNull() {  
-        Supplier<BytesReference> supplier = () -> new BytesArray("{\"test\": \"test\"}");
-        String testName = "name1";
-        QueryShardContext shardContext = createShardContext();  
-        PercolateQueryBuilder percolateQueryBuilder = new PercolateQueryBuilder(queryField, supplier);
-        percolateQueryBuilder.setName(testName);
-
-        QueryBuilder rewrittenQueryBuilder = percolateQueryBuilder.doRewrite(shardContext);
-
-        assertEquals(testName, ((PercolateQueryBuilder) rewrittenQueryBuilder).getQueryName());  
-        assertNotEquals(rewrittenQueryBuilder, percolateQueryBuilder);
-    }
-
-    public void testDisallowExpensiveQueries() {
         QueryShardContext queryShardContext = mock(QueryShardContext.class);
-        when(queryShardContext.allowExpensiveQueries()).thenReturn(false);  
-
-        PercolateQueryBuilder queryBuilder = doCreateTestQueryBuilder(true);
-        OpenSearchException e = expectThrows(OpenSearchException.class, () -> queryBuilder.toQuery(queryShardContext));  
-        assertEquals("[percolate] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", e.getMessage());
+        );  
+            MapperService.MergeReason.MAPPING_UPDATE
+        assertEquals(ise.getMessage(), "supplier must be null, can't serialize suppliers, missing a rewriteAndFetch?");
+import java.util.function.Supplier;  
+                    indexedDocumentId,
+        PercolateQueryBuilder percolateQueryBuilder = doCreateTestQueryBuilder(true);  
+    @Override  
+        builder = rewriteAndFetch(builder, createShardContext());
+    private String indexedDocumentRouting;
+        QueryBuilder builder = doCreateTestQueryBuilder(true);
+        QueryBuilder rewritten = rewriteQuery(queryBuilder, new QueryShardContext(context));
+    public void testMustRewrite() throws IOException {
+            queryBuilder = new PercolateQueryBuilder(
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+                + "\", \"id\": \""
+import org.opensearch.ingest.RandomDocumentPicks;
+ * under the License.  
+                + queryField
+                    indexedDocumentId,  
+    protected static String aliasField = "alias";  
+        return SHUFFLE_PROTECTED_FIELDS;
+    @Override
+        assertThat(e.getMessage(), equalTo("[document] is a required argument"));
+    public void testRequiredParameters() {  
+ * GitHub history for details.
+        indexedDocumentExists = false;  
+import org.opensearch.plugins.Plugin;  
+            xContent.map(source);
+        return doCreateTestQueryBuilder(randomBoolean());  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+                + indexedDocumentIndex
+        queryBuilder.toQuery(queryShardContext);
+                source = RandomDocumentPicks.randomSource(random());
+import static org.hamcrest.Matchers.equalTo;
+        Supplier<BytesReference> supplier = () -> new BytesArray("{\"test\": \"test\"}");
+        );
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> pqb.toQuery(createShardContext()));
+    private static String docType;
+        assertEquals(query.getCandidateMatchesQuery(), aliasQuery.getCandidateMatchesQuery());
+            new PercolateQueryBuilder(null, new BytesArray("{}"), MediaTypeRegistry.JSON);
+            // when these source get indexed, indexing can fail. To solve this test issue, we should generate source that
+        assertThat(e.getMessage(), equalTo("query builder must be rewritten first"));
+        if (randomBoolean()) {  
+ * You may obtain a copy of the License at  
     }
+     * compare when check for equality of the original and the shuffled builder  
+    protected GetResponse executeGet(GetRequest getRequest) {
+    }
+import org.opensearch.OpenSearchException;
+        PercolateQueryBuilder percolateQueryBuilder = new PercolateQueryBuilder(queryField, supplier);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> {
+        assertEquals(query.getVerifiedMatchesQuery(), aliasQuery.getVerifiedMatchesQuery());  
+import java.util.Collections;
+        QueryBuilder rewrittenQueryBuilder = percolateQueryBuilder.doRewrite(shardContext);
+import org.opensearch.core.common.bytes.BytesArray;
+ * specific language governing permissions and limitations
+        QueryBuilder rewrittenQueryBuilder = percolateQueryBuilder.doRewrite(shardContext);  
+            documentSource = new ArrayList<>(numDocs);
+        rewriteAndFetch(queryBuilder, queryShardContext).toQuery(queryShardContext);
+        ResourceNotFoundException e = expectThrows(ResourceNotFoundException.class, () -> rewriteAndFetch(pqb, createShardContext()));
+ *
+        PercolateQuery percolateQuery = (PercolateQuery) query;  
+ */
+            queryBuilder.setName(randomAlphaOfLength(4));
+            XContentBuilder xContent = XContentFactory.jsonBuilder();
+                indexedDocumentIndex,  
+import org.hamcrest.Matchers;  
+/*
+            // If we create two source that have the same field, but these fields have different kind of values (str vs. lng) then  
+                for (String field : source.keySet()) {
+    }
+import org.opensearch.core.common.bytes.BytesReference;  
+            Map<String, ?> source;  
+    public void testSettingNameWhileRewritingWhenDocumentSupplierAndSourceNotNull() {  
+        assertThat(e.getMessage(), equalTo("[index] is a required argument"));
+     * we don't want to shuffle the "document" field internally in {@link #testFromXContent()} because even though the
+        assertEquals("[percolate] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", e.getMessage());
+import static org.mockito.Mockito.mock;
+        indexedDocumentIndex = randomAlphaOfLength(4);
+            do {
+            indexedDocumentId = randomAlphaOfLength(4);  
+        }
+        assertThat(getRequest.preference(), Matchers.equalTo(indexedDocumentPreference));  
+                        break;
+                indexedDocumentRouting,
+        OpenSearchException e = expectThrows(OpenSearchException.class, () -> queryBuilder.toQuery(queryShardContext));  
 }  
+            return BytesReference.bytes(xContent);  
+ */  
+            );
+    protected PercolateQueryBuilder doCreateTestQueryBuilder() {
+            } while (duplicateField);
+    public void testCacheability() throws IOException {
+                    indexedDocumentIndex,
+        percolateQueryBuilder.setName(testName);
+/*  
+            );
+    @Override
+        assertEquals(testName, ((PercolateQueryBuilder) rewrittenQueryBuilder).getQueryName());
+        assertThat(getRequest.id(), Matchers.equalTo(indexedDocumentId));
+    @Override
+        if (indexedDocumentExists) {
+import org.opensearch.index.query.QueryBuilder;
+    }
+        IllegalStateException ise = expectThrows(IllegalStateException.class, () -> queryBuilder.writeTo(new BytesStreamOutput(10)));  
+    }
+        assertFalse("query should not be cacheable: " + queryBuilder.toString(), context.isCacheable());
+        QueryShardContext shardContext = createShardContext();
+public class PercolateQueryBuilderTests extends AbstractQueryTestCase<PercolateQueryBuilder> {
+                    0L,  
+    public void testSerializationFailsUnlessFetched() throws IOException {  
+        queryField = randomAlphaOfLength(4);
+                    Collections.emptyMap(),  
+    }
+     * documents would be functionally the same, their {@link BytesReference} representation isn't and thats what we
+                    Collections.emptyMap()
+    public void testFromJsonNoType() throws IOException {
+    }
+        QueryBuilder queryBuilder = parseQuery(
+    @Override
+import org.opensearch.action.get.GetResponse;  
+        // document contains arbitrary content, no error expected when an object is added to it  
+        e = expectThrows(IllegalArgumentException.class, () -> { new PercolateQueryBuilder("_field", null, "_id", null, null, null); });  
+        } else {  
+ * ownership. Elasticsearch licenses this file to you under  
+            Arrays.asList(PercolateQueryBuilder.DOCUMENT_FIELD.getPreferredName(), PercolateQueryBuilder.DOCUMENTS_FIELD.getPreferredName())
+        } catch (IOException e) {
+                    if (usedFields.add(field) == false) {  
+    protected Set<String> getObjectsHoldingArbitraryContent() {
+    private List<BytesReference> documentSource;
+            }  
+    }
+    private PercolateQueryBuilder doCreateTestQueryBuilder(boolean indexedDocument) {  
+    }
+        assertThat(e.getMessage(), containsString("The following fields are not allowed together: [document, documents]"));
+import java.io.IOException;
+import java.util.Arrays;
+                    UNASSIGNED_SEQ_NO,  
+                duplicateField = false;  
+                    0,
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+                    false,  
+    }
+    }  
+        IllegalArgumentException e = expectThrows(  
+            () -> new PercolateQueryBuilder("_field", (List<BytesReference>) null, MediaTypeRegistry.JSON)
+import org.opensearch.index.get.GetResult;  
+                indexedDocumentPreference,  
+import org.apache.lucene.search.Query;
+ * license agreements. See the NOTICE file distributed with
+            for (int i = 0; i < numDocs; i++) {
+                PutMappingRequest.simpleMapping(queryField, "type=percolator", aliasField, "type=alias,path=" + queryField).toString()
+        });  
+        String expectedString = "indexed document [" + indexedDocumentIndex + "/" + indexedDocumentId + "] couldn't be found";  
+ * Licensed to Elasticsearch under one or more contributor  
+        docType = "_doc";
+    public void testIndexedDocumentDoesNotExist() throws IOException {
+    }
+import java.util.Map;
+        assert context.isCacheable();
+        assertThat(percolateQuery.getDocuments(), Matchers.equalTo(documentSource));
+    protected String[] shuffleProtectedFields() {  
+            docType,
+            new CompressedXContent(
+/*  
+            indexedDocumentVersion = (long) randomIntBetween(0, Integer.MAX_VALUE);  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        documentSource = Collections.singletonList(randomSource(new HashSet<>()));
+        if (indexedDocument) {
+        QueryBuilder rewrittenBuilder = rewriteAndFetch(builder, shardContext);
+        QueryShardContext shardContext = createShardContext();
+        assertThat(query, Matchers.instanceOf(PercolateQuery.class));
+        QueryBuilder queryBuilder = parseQuery("{\"percolate\" : { \"document\": {}, \"field\":\"" + queryField + "\"}}");  
+    @Override
+        PercolateQueryBuilder builder = doCreateTestQueryBuilder(false);  
+                    0,
+        }
+     */
+import java.io.UncheckedIOException;  
+        return Arrays.asList(PercolatorModulePlugin.class, TestGeoShapeFieldMapperPlugin.class);
+        } else {  
+        PercolateQueryBuilder aliasBuilder = new PercolateQueryBuilder(aliasField, builder.getDocuments(), builder.getXContentType());
+     * Test that this query is never cacheable
+    @Override
+                )
+    @Override
+    @Override  
+        when(queryShardContext.allowExpensiveQueries()).thenReturn(false);  
+                    }  
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.get.GetRequest;
+    }
+ * not use this file except in compliance with the License.
+import java.util.Collection;  
+            indexedDocumentIndex = randomAlphaOfLength(4);
+import org.opensearch.common.xcontent.XContentFactory;
+                    null,
+            () -> parseQuery("{\"percolate\" : { \"document\": {}, \"documents\": [{}, {}], \"field\":\"" + queryField + "\"}}")
+            ),  
+import org.opensearch.index.query.QueryShardContext;  
+            boolean duplicateField;
+        }  
+import static org.hamcrest.Matchers.containsString;  
+    }  
+    private boolean indexedDocumentExists = true;
+            new CompressedXContent(PutMappingRequest.simpleMapping(TEXT_FIELD_NAME, "type=text").toString()),
+    }
+        assertNotEquals(rewrittenQueryBuilder, percolateQueryBuilder);  
+            return new GetResponse(
+            IllegalArgumentException.class,
+ * KIND, either express or implied.  See the License for the
+        mapperService.merge(
+        e = expectThrows(  
+        percolateQueryBuilder.setName(testName);
+            IllegalArgumentException.class,
+                indexedDocumentVersion
+ */  
+        } else {
+import java.util.Set;
+            throw new UncheckedIOException(e);
+    protected void initializeAdditionalMappings(MapperService mapperService) throws IOException {  
+        assertEquals(geoShapeQueryBuilder, rewrite);
+        indexedDocumentId = randomAlphaOfLength(4);  
+        assertNotNull(rewritten.toQuery(context));  
+    @Override  
+                indexedDocumentId,
+    }
+        mapperService.merge(  
+    private String indexedDocumentId;
+        builder.writeTo(new BytesStreamOutput(10));  
+        if (indexedDocument) {
+        e = expectThrows(IllegalArgumentException.class, () -> { new PercolateQueryBuilder(null, "_index", "_id", null, null, null); });  
+import org.opensearch.common.compress.CompressedXContent;
+            indexedDocumentRouting = randomAlphaOfLength(4);
+        try {
+    protected static String queryField = "field";
+                documentSource.add(randomSource(usedFields));
+    public void testFieldAlias() throws IOException {  
+                queryField,
+        QueryShardContext queryShardContext = createShardContext();
+        assertThat(e.getMessage(), equalTo("[field] is a required argument"));
+                    true,
+                }
+package org.opensearch.percolator;
+    private static final String[] SHUFFLE_PROTECTED_FIELDS = new String[] {
+        assertNotEquals(rewrittenQueryBuilder, percolateQueryBuilder);
+        QueryBuilder rewrittenAliasBuilder = rewriteAndFetch(aliasBuilder, shardContext);
+    private String indexedDocumentPreference;  
+            Set<String> usedFields = new HashSet<>();  
+        return queryBuilder;  
+        PercolateQueryBuilder queryBuilder = createTestQueryBuilder();
+                new GetResult(
+                )
+ * this work for additional information regarding copyright
+        QueryBuilder queryBuilder = Rewriteable.rewrite(builder, createShardContext());
+    public void testSettingNameWhileRewriting() {  
+        );
+    /**  
+ * the Apache License, Version 2.0 (the "License"); you may
+        QueryShardContext context = createShardContext();  
+        PercolateQueryBuilder geoShapeQueryBuilder = new PercolateQueryBuilder(pqb.getField(), documentSource, MediaTypeRegistry.JSON);
+        PercolateQuery aliasQuery = (PercolateQuery) rewrittenAliasBuilder.toQuery(shardContext);  
+        return new HashSet<>(
+            indexedDocumentPreference = randomAlphaOfLength(4);
+        PercolateQueryBuilder.DOCUMENTS_FIELD.getPreferredName() };  
+    }  

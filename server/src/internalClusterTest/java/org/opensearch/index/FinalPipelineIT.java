@@ -1,449 +1,406 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index;
-
-import org.opensearch.action.get.GetRequestBuilder;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.action.index.IndexRequestBuilder;  
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.ingest.DeletePipelineRequest;
-import org.opensearch.action.ingest.GetPipelineRequest;  
-import org.opensearch.action.ingest.GetPipelineResponse;
-import org.opensearch.action.ingest.PutPipelineRequest;
-import org.opensearch.action.search.SearchResponse;  
-import org.opensearch.action.support.WriteRequest;
+            .build();  
+        public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {  
+            .put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline")
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;  
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.PipelineConfiguration;  
-import org.opensearch.ingest.Processor;
-import org.opensearch.plugins.IngestPlugin;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.script.ScriptService;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-import org.opensearch.watcher.ResourceWatcherService;  
-import org.junit.After;
-
-import java.io.IOException;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.Map;
-import java.util.function.Supplier;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasKey;  
-import static org.hamcrest.Matchers.hasToString;
-
-public class FinalPipelineIT extends OpenSearchIntegTestCase {  
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {  
-        return Collections.singletonList(TestPlugin.class);
-    }
-
-    @After
-    public void cleanUpPipelines() {
-        final GetPipelineResponse response = client().admin()  
+        assertEquals(RestStatus.CREATED, indexResponse.status());
+import org.opensearch.action.ingest.DeletePipelineRequest;
+                    @Override
             .cluster()
-            .getPipeline(new GetPipelineRequest("default_pipeline", "final_pipeline", "request_pipeline"))
-            .actionGet();  
-        for (final PipelineConfiguration pipeline : response.pipelines()) {
-            client().admin().cluster().deletePipeline(new DeletePipelineRequest(pipeline.getId())).actionGet();
-        }  
+ * Modifications Copyright OpenSearch Contributors. See
+        if (randomBoolean()) {
+                        return "final";
+import org.opensearch.action.index.IndexRequestBuilder;  
+            .get();
+                public String getType() {
     }
-
-    public void testFinalPipelineCantChangeDestination() {  
-        final Settings settings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();
+    public void testFinalPipeline() {
+import org.opensearch.action.ingest.GetPipelineResponse;
+            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)  
+            .putPipeline(new PutPipelineRequest("request_pipeline", requestPipelineBody, MediaTypeRegistry.JSON))  
+        createIndex("target", settings);
+ * You may obtain a copy of the License at  
         createIndex("index", settings);
-
-        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");
+        Settings settings = Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline").build();  
+                        ingestDocument.setFieldValue("final", true);
+    }  
+            .setSource(Collections.singletonMap("field", "value"))
+            IllegalArgumentException.class,
+            .build();  
+ *
+        BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");  
+                public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
+            .setSource(Collections.singletonMap("field", "value"))
+    }  
         client().admin()
-            .cluster()  
+        client().admin()
+            client().admin().cluster().deletePipeline(new DeletePipelineRequest(pipeline.getId())).actionGet();
+        final GetRequestBuilder get = client().prepareGet("index", "1");  
+ *  
+            .setId("1")
+        assertThat(e, hasToString(containsString("pipeline with id [high_order_final_pipeline] does not exist")));
+        final IndexResponse response = index.get();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {}}]}");  
+                @Override  
+            .preparePutTemplate("low_order")
+        assertThat(source, hasKey("final"));  
+import org.opensearch.env.Environment;
+import org.opensearch.core.common.bytes.BytesReference;  
+import org.opensearch.action.index.IndexResponse;
+import org.opensearch.watcher.ResourceWatcherService;  
+                @Override  
+        client().admin()
+            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
+            map.put("changing_dest", (processorFactories, tag, description, config) -> new AbstractProcessor(tag, description) {
+            .cluster()
+        final IndexRequestBuilder index = client().prepareIndex("index").setId("1");
+                    return "default";  
+        admin().indices()
+        }  
+        final IllegalArgumentException e = expectThrows(
+ * KIND, either express or implied.  See the License for the
+    }
+    public void cleanUpPipelines() {
+        final GetRequestBuilder get = client().prepareGet("index", "1");
+        final BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"default\": {}}]}");
+            final NodeEnvironment nodeEnvironment,  
+                    public String getType() {  
+        final IllegalStateException e = expectThrows(
+ * Unless required by applicable law or agreed to in writing,
+            return map;  
+                    }
+        assertThat(source, hasKey("request"));
+                    return ingestDocument;  
+/*  
+                    @Override  
+ * The OpenSearch Contributors require contributions made to  
+            .actionGet();
+            .setOrder(finalPipelineOrder)
+import org.opensearch.ingest.IngestDocument;
+    public void testDefaultPipelineOfNewDestinationIsNotInvoked() {
+        assertTrue(getResponse.isExists());  
+import java.util.Collections;
+        final IndexResponse response = index.get();
+            .setPatterns(Collections.singletonList("index*"))
+                }
+            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
+            () -> client().prepareIndex("index").setId("1").setSource(Collections.singletonMap("field", "value")).get()
+import org.opensearch.ingest.AbstractProcessor;
+import org.opensearch.env.NodeEnvironment;  
+            .cluster()
+        final IndexResponse response = index.get();
+/*  
+import java.util.function.Supplier;
+        assertTrue((boolean) source.get("final"));
+                            }
+    }
+        IndexResponse indexResponse = client().prepareIndex("index")  
+                    public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
+                                );
+        }  
+        index.setSource(Collections.singletonMap("field", "value"));
+import org.opensearch.core.rest.RestStatus;
+import static org.hamcrest.Matchers.hasKey;  
+    }
+        assertFalse(target.getHits().getAt(0).getSourceAsMap().containsKey("final"));
+        assertEquals(1, target.getHits().getTotalHits().value());
+            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)  
+        @Override  
+            .put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline")
+ * this file be licensed under the Apache-2.0 license or a
+        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"default\"}}]}");
+ * the Apache License, Version 2.0 (the "License"); you may
+            .build();  
+                    }  
+        );  
+            .cluster()
+            final ScriptService scriptService,  
+        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"request\"}}]}");
+            .get();  
+        assertThat(source, hasKey("default"));
+            return Collections.emptyList();
             .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))
             .actionGet();
-
-        final IllegalStateException e = expectThrows(
-            IllegalStateException.class,
-            () -> client().prepareIndex("index").setId("1").setSource(Collections.singletonMap("field", "value")).get()  
-        );
-        assertThat(e, hasToString(containsString("FINAL pipeline [final_pipeline] can't change the target index")));
-    }  
-
-    public void testFinalPipelineOfOldDestinationIsNotInvoked() {
-        Settings settings = Settings.builder()  
+ * compatible open source license.
+            .get();  
+ * under the License.  
+                    return "request";
+            map.put("request", (processorFactories, tag, description, config) -> new AbstractProcessor(tag, description) {
+            .cluster()
+                }
+        admin().indices()
+            .setPatterns(Collections.singletonList("index*"))  
+    public static class TestPlugin extends Plugin implements IngestPlugin {
+            .cluster()
+                public String getType() {
+    public void testFinalPipelineCantChangeDestination() {  
+        assertThat(source, hasKey("default"));
+}
+            defaultPipelineOrder = lowOrder;  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        SearchResponse target = client().prepareSearch("target").get();  
+        final GetResponse getResponse = get.get();
+        final Settings highOrderFinalPipelineSettings = Settings.builder()
+                    return ingestDocument;  
             .put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline")
+import org.opensearch.ingest.Processor;
+                            if (ingestDocument.getSourceAndMetadata().containsKey(exists) == false) {
+package org.opensearch.index;
+        final Settings settings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();
+import java.io.IOException;  
+            .setId("1")
+        client().admin()
+        assertThat(response.status(), equalTo(RestStatus.CREATED));
+        final IndexRequestBuilder index = client().prepareIndex("index").setId("1");  
+ */
+            });
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.plugins.Plugin;  
+            .get();
+        return Collections.singletonList(TestPlugin.class);
+        index.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+        assertThat(source, hasKey("final"));
+    }
+        for (final PipelineConfiguration pipeline : response.pipelines()) {
+        final Map<String, Object> source = getResponse.getSourceAsMap();
+        client().admin()  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        IndexResponse indexResponse = client().prepareIndex("index")  
+        assertTrue(getResponse.isExists());
+        @Override
+        final GetPipelineResponse response = client().admin()  
+                }  
+                        // this asserts that this pipeline is the final pipeline executed
+import static org.hamcrest.Matchers.containsString;
+        Settings settings = Settings.builder()  
+        );
+            .getPipeline(new GetPipelineRequest("default_pipeline", "final_pipeline", "request_pipeline"))
+import org.opensearch.action.get.GetResponse;
+        assertTrue(getResponse.isExists());
+            IllegalStateException.class,
+            .setPatterns(Collections.singletonList("index*"))  
+            });
+            .setSettings(finalPipelineSettings)
+            final ClusterService clusterService,  
+            .preparePutTemplate("default")
+        final int lowOrder = randomIntBetween(0, Integer.MAX_VALUE - 1);
+            final NamedXContentRegistry xContentRegistry,
+        final BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"default\": {}}]}");  
             .put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline")
-            .build();  
-        createIndex("index", settings);
-
-        BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");  
-        client().admin()
-            .cluster()
-            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
-            .actionGet();
-
-        BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"no_such_field\"}}]}");  
-        client().admin()
-            .cluster()
-            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))  
-            .actionGet();
-
-        IndexResponse indexResponse = client().prepareIndex("index")  
-            .setId("1")
-            .setSource(Collections.singletonMap("field", "value"))
-            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)  
+    public void testHighOrderFinalPipelinePreferred() throws IOException {
+import org.opensearch.repositories.RepositoriesService;
             .get();
-        assertEquals(RestStatus.CREATED, indexResponse.status());
-        SearchResponse target = client().prepareSearch("target").get();  
-        assertEquals(1, target.getHits().getTotalHits().value());
-        assertFalse(target.getHits().getAt(0).getSourceAsMap().containsKey("final"));
-    }  
-
-    public void testFinalPipelineOfNewDestinationIsInvoked() {
-        Settings settings = Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline").build();  
-        createIndex("index", settings);
-
+import org.opensearch.test.OpenSearchIntegTestCase;  
+                    return ingestDocument;
+                public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
+                @Override  
+ */  
+        // this asserts that the final_pipeline was used, without us having to actually create the pipeline etc.  
+public class FinalPipelineIT extends OpenSearchIntegTestCase {  
+                    return "changing_dest";
         settings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();  
-        createIndex("target", settings);
-
-        BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");  
-        client().admin()
+ * GitHub history for details.
+import org.opensearch.common.settings.Settings;
+ * this work for additional information regarding copyright
             .cluster()
-            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
-            .actionGet();
-
-        BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {}}]}");  
+import org.junit.After;
+    }  
+        final GetResponse getResponse = get.get();
+        final BytesReference requestPipelineBody = new BytesArray("{\"processors\": [{\"request\": {}}]}");  
+            .put(IndexSettings.FINAL_PIPELINE.getKey(), "high_order_final_pipeline")
+    @Override
+        final int lowOrder = randomIntBetween(0, Integer.MAX_VALUE - 1);
+            .setId("1")
+        final int defaultPipelineOrder;
+    }  
+                        return ingestDocument;
+        assertTrue((boolean) source.get("default"));  
+        final GetRequestBuilder get = client().prepareGet("index", "1");  
         client().admin()
-            .cluster()
             .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))  
-            .actionGet();
-
-        IndexResponse indexResponse = client().prepareIndex("index")  
-            .setId("1")
-            .setSource(Collections.singletonMap("field", "value"))
-            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)  
-            .get();
-        assertEquals(RestStatus.CREATED, indexResponse.status());
-        SearchResponse target = client().prepareSearch("target").get();  
-        assertEquals(1, target.getHits().getTotalHits().value());
-        assertEquals(true, target.getHits().getAt(0).getSourceAsMap().get("final"));
-    }  
-
-    public void testDefaultPipelineOfNewDestinationIsNotInvoked() {
-        Settings settings = Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline").build();  
         createIndex("index", settings);
-
-        settings = Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "target_default_pipeline").build();  
-        createIndex("target", settings);
-
-        BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");  
-        client().admin()
-            .cluster()
-            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
-            .actionGet();
-
-        BytesReference targetPipeline = new BytesArray("{\"processors\": [{\"final\": {}}]}");  
-        client().admin()
-            .cluster()
-            .putPipeline(new PutPipelineRequest("target_default_pipeline", targetPipeline, MediaTypeRegistry.JSON))  
-            .actionGet();
-
-        IndexResponse indexResponse = client().prepareIndex("index")  
-            .setId("1")
-            .setSource(Collections.singletonMap("field", "value"))
-            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)  
+import org.opensearch.action.get.GetRequestBuilder;
+        index.setPipeline("request_pipeline");
+        admin().indices()  
             .get();
+        assertThat(e, hasToString(containsString("pipeline with id [final_pipeline] does not exist")));
+            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))  
+    public void testFinalPipelineOfOldDestinationIsNotInvoked() {
+ */  
+    @After
+import org.opensearch.script.ScriptService;
+        final Settings settings = Settings.builder()  
+            });
+        assertEquals(true, target.getHits().getAt(0).getSourceAsMap().get("final"));
+        BytesReference targetPipeline = new BytesArray("{\"processors\": [{\"final\": {}}]}");  
+            finalPipelineOrder = highOrder;
+            .build();  
+                        if (exists != null) {  
+                        }  
+    public void testDefaultAndFinalPipelineFromTemplates() {
         assertEquals(RestStatus.CREATED, indexResponse.status());
-        SearchResponse target = client().prepareSearch("target").get();  
-        assertEquals(1, target.getHits().getTotalHits().value());
-        assertFalse(target.getHits().getAt(0).getSourceAsMap().containsKey("final"));
-    }  
-
-    public void testFinalPipeline() {
+            .actionGet();
+/*
+            .get();  
+        index.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
+        // this asserts that the high_order_final_pipeline was selected, without us having to actually create the pipeline etc.
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        createIndex("index", settings);
+import org.opensearch.cluster.service.ClusterService;  
+                public String getType() {
+        final int highOrder = randomIntBetween(lowOrder + 1, Integer.MAX_VALUE);  
+        createIndex("index", settings);
+ * software distributed under the License is distributed on an
+            final Environment environment,
+        assertThat(response.status(), equalTo(RestStatus.CREATED));  
+        final GetResponse getResponse = get.get();
+        }
+            .cluster()  
+ * ownership. Elasticsearch licenses this file to you under  
+        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");
+        assertThat(response.status(), equalTo(RestStatus.CREATED));
+                    ingestDocument.setFieldValue(IngestDocument.Metadata.INDEX.getFieldName(), "target");
+        client().admin()
+import org.opensearch.action.ingest.PutPipelineRequest;
+            .actionGet();
+            defaultPipelineOrder = highOrder;  
+        final int finalPipelineOrder;  
+        index.setSource(Collections.singletonMap("field", "value"));
+            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))
+            .putPipeline(new PutPipelineRequest("target_default_pipeline", targetPipeline, MediaTypeRegistry.JSON))  
+                }
+        BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");  
         final Settings settings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();  
         createIndex("index", settings);
-
-        // this asserts that the final_pipeline was used, without us having to actually create the pipeline etc.  
-        final IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> client().prepareIndex("index").setId("1").setSource(Collections.singletonMap("field", "value")).get()  
-        );
-        assertThat(e, hasToString(containsString("pipeline with id [final_pipeline] does not exist")));
-    }  
-
-    public void testRequestPipelineAndFinalPipeline() {
-        final BytesReference requestPipelineBody = new BytesArray("{\"processors\": [{\"request\": {}}]}");  
-        client().admin()
-            .cluster()
-            .putPipeline(new PutPipelineRequest("request_pipeline", requestPipelineBody, MediaTypeRegistry.JSON))  
             .actionGet();
-        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"request\"}}]}");
-        client().admin()  
-            .cluster()
-            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))
-            .actionGet();  
-        final Settings settings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();
-        createIndex("index", settings);
-        final IndexRequestBuilder index = client().prepareIndex("index").setId("1");  
-        index.setSource(Collections.singletonMap("field", "value"));
-        index.setPipeline("request_pipeline");
-        index.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
-        final IndexResponse response = index.get();
-        assertThat(response.status(), equalTo(RestStatus.CREATED));
-        final GetRequestBuilder get = client().prepareGet("index", "1");  
-        final GetResponse getResponse = get.get();
-        assertTrue(getResponse.isExists());
-        final Map<String, Object> source = getResponse.getSourceAsMap();  
-        assertThat(source, hasKey("request"));
-        assertTrue((boolean) source.get("request"));
-        assertThat(source, hasKey("final"));  
-        assertTrue((boolean) source.get("final"));
-    }
-
-    public void testDefaultAndFinalPipeline() {
-        final BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"default\": {}}]}");
-        client().admin()  
-            .cluster()
-            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))
-            .actionGet();  
-        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"default\"}}]}");
-        client().admin()
-            .cluster()  
-            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))
-            .actionGet();
-        final Settings settings = Settings.builder()  
-            .put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline")
-            .put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline")
-            .build();  
-        createIndex("index", settings);
-        final IndexRequestBuilder index = client().prepareIndex("index").setId("1");
-        index.setSource(Collections.singletonMap("field", "value"));  
-        index.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-        final IndexResponse response = index.get();
-        assertThat(response.status(), equalTo(RestStatus.CREATED));  
-        final GetRequestBuilder get = client().prepareGet("index", "1");
-        final GetResponse getResponse = get.get();
-        assertTrue(getResponse.isExists());  
-        final Map<String, Object> source = getResponse.getSourceAsMap();
-        assertThat(source, hasKey("default"));
-        assertTrue((boolean) source.get("default"));  
-        assertThat(source, hasKey("final"));
-        assertTrue((boolean) source.get("final"));
-    }  
-
-    public void testDefaultAndFinalPipelineFromTemplates() {
-        final BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"default\": {}}]}");  
-        client().admin()
-            .cluster()
-            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
-            .actionGet();
-        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"default\"}}]}");
-        client().admin()  
-            .cluster()
-            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))
-            .actionGet();  
-        final int lowOrder = randomIntBetween(0, Integer.MAX_VALUE - 1);
-        final int highOrder = randomIntBetween(lowOrder + 1, Integer.MAX_VALUE);
-        final int finalPipelineOrder;  
-        final int defaultPipelineOrder;
-        if (randomBoolean()) {
-            defaultPipelineOrder = lowOrder;  
-            finalPipelineOrder = highOrder;
-        } else {
-            defaultPipelineOrder = highOrder;  
-            finalPipelineOrder = lowOrder;
-        }
-        final Settings defaultPipelineSettings = Settings.builder()  
-            .put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline")
-            .build();
-        admin().indices()  
-            .preparePutTemplate("default")
-            .setPatterns(Collections.singletonList("index*"))
-            .setOrder(defaultPipelineOrder)  
-            .setSettings(defaultPipelineSettings)
-            .get();
-        final Settings finalPipelineSettings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();  
-        admin().indices()
-            .preparePutTemplate("final")
-            .setPatterns(Collections.singletonList("index*"))  
-            .setOrder(finalPipelineOrder)
-            .setSettings(finalPipelineSettings)
-            .get();  
-        final IndexRequestBuilder index = client().prepareIndex("index").setId("1");
-        index.setSource(Collections.singletonMap("field", "value"));
-        index.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
-        final IndexResponse response = index.get();
-        assertThat(response.status(), equalTo(RestStatus.CREATED));
-        final GetRequestBuilder get = client().prepareGet("index", "1");  
-        final GetResponse getResponse = get.get();
-        assertTrue(getResponse.isExists());
-        final Map<String, Object> source = getResponse.getSourceAsMap();  
-        assertThat(source, hasKey("default"));
-        assertTrue((boolean) source.get("default"));
-        assertThat(source, hasKey("final"));  
-        assertTrue((boolean) source.get("final"));
-    }
-
-    public void testHighOrderFinalPipelinePreferred() throws IOException {
-        final int lowOrder = randomIntBetween(0, Integer.MAX_VALUE - 1);
-        final int highOrder = randomIntBetween(lowOrder + 1, Integer.MAX_VALUE);  
-        final Settings lowOrderFinalPipelineSettings = Settings.builder()
-            .put(IndexSettings.FINAL_PIPELINE.getKey(), "low_order_final_pipeline")
-            .build();  
-        admin().indices()
-            .preparePutTemplate("low_order")
-            .setPatterns(Collections.singletonList("index*"))  
-            .setOrder(lowOrder)
-            .setSettings(lowOrderFinalPipelineSettings)
-            .get();  
-        final Settings highOrderFinalPipelineSettings = Settings.builder()
-            .put(IndexSettings.FINAL_PIPELINE.getKey(), "high_order_final_pipeline")
-            .build();  
-        admin().indices()
-            .preparePutTemplate("high_order")
-            .setPatterns(Collections.singletonList("index*"))  
-            .setOrder(highOrder)
-            .setSettings(highOrderFinalPipelineSettings)
-            .get();  
-
-        // this asserts that the high_order_final_pipeline was selected, without us having to actually create the pipeline etc.
-        final IllegalArgumentException e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> client().prepareIndex("index").setId("1").setSource(Collections.singletonMap("field", "value")).get()
-        );  
-        assertThat(e, hasToString(containsString("pipeline with id [high_order_final_pipeline] does not exist")));
-    }
-
-    public static class TestPlugin extends Plugin implements IngestPlugin {
-
-        @Override  
-        public Collection<Object> createComponents(
-            final Client client,
-            final ClusterService clusterService,  
-            final ThreadPool threadPool,
-            final ResourceWatcherService resourceWatcherService,
-            final ScriptService scriptService,  
-            final NamedXContentRegistry xContentRegistry,
-            final Environment environment,
-            final NodeEnvironment nodeEnvironment,  
-            final NamedWriteableRegistry namedWriteableRegistry,
-            final IndexNameExpressionResolver expressionResolver,
-            final Supplier<RepositoriesService> repositoriesServiceSupplier  
-        ) {
-            return Collections.emptyList();
-        }  
-
-        @Override
-        public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {  
-            final HashMap<String, Processor.Factory> map = new HashMap<>(3);
-            map.put("default", (factories, tag, description, config) -> new AbstractProcessor(tag, description) {
-
-                @Override
-                public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
-                    ingestDocument.setFieldValue("default", true);  
-                    return ingestDocument;
-                }
-
-                @Override
-                public String getType() {
-                    return "default";  
-                }
-            });
-            map.put("final", (processorFactories, tag, description, config) -> {  
-                final String exists = (String) config.remove("exists");
-                return new AbstractProcessor(tag, description) {
-                    @Override  
-                    public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
-                        // this asserts that this pipeline is the final pipeline executed
-                        if (exists != null) {  
-                            if (ingestDocument.getSourceAndMetadata().containsKey(exists) == false) {
                                 throw new AssertionError(
-                                    "expected document to contain [" + exists + "] but was [" + ingestDocument.getSourceAndMetadata()  
-                                );
-                            }
-                        }  
-                        ingestDocument.setFieldValue("final", true);
-                        return ingestDocument;
-                    }  
-
-                    @Override
-                    public String getType() {  
-                        return "final";
-                    }
+ * specific language governing permissions and limitations
+        final int highOrder = randomIntBetween(lowOrder + 1, Integer.MAX_VALUE);
+            finalPipelineOrder = lowOrder;
+    public void testFinalPipelineOfNewDestinationIsInvoked() {
+import org.opensearch.action.search.SearchResponse;  
+import java.util.Collection;
+        index.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
+    }  
+                @Override  
+        assertThat(e, hasToString(containsString("FINAL pipeline [final_pipeline] can't change the target index")));
+                    ingestDocument.setFieldValue("default", true);  
+            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
+                }  
+            final HashMap<String, Processor.Factory> map = new HashMap<>(3);
+            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))  
+            .putPipeline(new PutPipelineRequest("default_pipeline", defaultPipelineBody, MediaTypeRegistry.JSON))
+        final Settings lowOrderFinalPipelineSettings = Settings.builder()
+            .setSource(Collections.singletonMap("field", "value"))
+import org.opensearch.plugins.IngestPlugin;
+ * Licensed to Elasticsearch under one or more contributor  
+                @Override
+        final IllegalArgumentException e = expectThrows(  
                 };  
-            });
-            map.put("request", (processorFactories, tag, description, config) -> new AbstractProcessor(tag, description) {
-                @Override  
-                public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
-                    ingestDocument.setFieldValue("request", true);
-                    return ingestDocument;  
-                }
-
-                @Override  
-                public String getType() {
-                    return "request";
-                }  
-            });
-            map.put("changing_dest", (processorFactories, tag, description, config) -> new AbstractProcessor(tag, description) {
-                @Override  
-                public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
-                    ingestDocument.setFieldValue(IngestDocument.Metadata.INDEX.getFieldName(), "target");
-                    return ingestDocument;  
-                }
-
-                @Override  
-                public String getType() {
-                    return "changing_dest";
-                }  
-
-            });
-            return map;  
-        }
+            map.put("final", (processorFactories, tag, description, config) -> {  
+        );
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
+            .actionGet();
+            .cluster()
+            .actionGet();
     }
-
-}
+            .cluster()
+            .cluster()  
+import org.opensearch.transport.client.Client;
+        assertEquals(RestStatus.CREATED, indexResponse.status());
+            .setPatterns(Collections.singletonList("index*"))  
+            .build();
+            .preparePutTemplate("final")
+            .setOrder(lowOrder)
+        assertTrue((boolean) source.get("final"));
+    public void testDefaultAndFinalPipeline() {
+                @Override
+        client().admin()  
+import org.opensearch.action.support.WriteRequest;
+ *
+        client().admin()
+        createIndex("target", settings);
+            .cluster()
+                    ingestDocument.setFieldValue("request", true);
+                public IngestDocument execute(final IngestDocument ingestDocument) throws Exception {
+        index.setSource(Collections.singletonMap("field", "value"));  
+        BytesReference defaultPipelineBody = new BytesArray("{\"processors\": [{\"changing_dest\": {}}]}");  
+            IllegalArgumentException.class,
+                return new AbstractProcessor(tag, description) {
+        client().admin()
+            .actionGet();
+        ) {
+            final ThreadPool threadPool,
+        final Settings defaultPipelineSettings = Settings.builder()  
+        BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"no_such_field\"}}]}");  
+            .actionGet();  
+        SearchResponse target = client().prepareSearch("target").get();  
+        assertTrue((boolean) source.get("final"));
+ * license agreements. See the NOTICE file distributed with
+        final Map<String, Object> source = getResponse.getSourceAsMap();  
+            .preparePutTemplate("high_order")
+    }  
+            .setSettings(highOrderFinalPipelineSettings)
+            .actionGet();
+            final NamedWriteableRegistry namedWriteableRegistry,
+            .cluster()
+            final ResourceWatcherService resourceWatcherService,
+        admin().indices()
+            .actionGet();  
+            () -> client().prepareIndex("index").setId("1").setSource(Collections.singletonMap("field", "value")).get()  
+            .actionGet();  
+            .setSettings(defaultPipelineSettings)
+            .cluster()
+            .setOrder(highOrder)
+            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))
+            .actionGet();  
+ * SPDX-License-Identifier: Apache-2.0
+        final BytesReference finalPipelineBody = new BytesArray("{\"processors\": [{\"final\": {\"exists\":\"default\"}}]}");
+        createIndex("index", settings);
+                                    "expected document to contain [" + exists + "] but was [" + ingestDocument.getSourceAndMetadata()  
+            .setOrder(defaultPipelineOrder)  
+            map.put("default", (factories, tag, description, config) -> new AbstractProcessor(tag, description) {
+        assertThat(source, hasKey("final"));  
+        assertEquals(1, target.getHits().getTotalHits().value());
+        Settings settings = Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline").build();  
+            });
+        assertTrue((boolean) source.get("default"));
+        IndexResponse indexResponse = client().prepareIndex("index")  
+        assertTrue((boolean) source.get("request"));
+import java.util.HashMap;  
+import org.opensearch.action.ingest.GetPipelineRequest;  
+            .put(IndexSettings.FINAL_PIPELINE.getKey(), "low_order_final_pipeline")
+            final IndexNameExpressionResolver expressionResolver,
+        SearchResponse target = client().prepareSearch("target").get();  
+            .putPipeline(new PutPipelineRequest("final_pipeline", finalPipelineBody, MediaTypeRegistry.JSON))
+        final Map<String, Object> source = getResponse.getSourceAsMap();  
+            final Client client,
+import org.opensearch.core.common.bytes.BytesArray;
+                }
+            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)  
+        final Settings settings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();
+            .actionGet();
+    public void testRequestPipelineAndFinalPipeline() {
+        assertFalse(target.getHits().getAt(0).getSourceAsMap().containsKey("final"));
+        }
+import static org.hamcrest.Matchers.equalTo;
+            .setSettings(lowOrderFinalPipelineSettings)
+            () -> client().prepareIndex("index").setId("1").setSource(Collections.singletonMap("field", "value")).get()  
+ * not use this file except in compliance with the License.
+        final Settings finalPipelineSettings = Settings.builder().put(IndexSettings.FINAL_PIPELINE.getKey(), "final_pipeline").build();  
+        public Collection<Object> createComponents(
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+                final String exists = (String) config.remove("exists");
+        client().admin()
+            .put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline")
+import org.opensearch.ingest.PipelineConfiguration;  
+        client().admin()  
+        client().admin()
+        settings = Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "target_default_pipeline").build();  
+        createIndex("index", settings);
+            final Supplier<RepositoriesService> repositoriesServiceSupplier  
+import java.util.Map;
+        } else {
+import static org.hamcrest.Matchers.hasToString;
+        assertEquals(1, target.getHits().getTotalHits().value());
+        final IndexRequestBuilder index = client().prepareIndex("index").setId("1");

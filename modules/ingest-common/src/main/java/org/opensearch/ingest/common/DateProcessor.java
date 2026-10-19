@@ -1,224 +1,196 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.time.DateFormatter;  
-import org.opensearch.common.util.LocaleUtils;
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.ConfigurationUtils;  
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
-import org.opensearch.script.ScriptService;  
-import org.opensearch.script.TemplateScript;
-
-import java.time.ZoneId;  
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;  
-import java.util.function.Function;
-
-public final class DateProcessor extends AbstractProcessor {  
-
-    public static final String TYPE = "date";
-    static final String DEFAULT_TARGET_FIELD = "@timestamp";  
-    static final String DEFAULT_OUTPUT_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
-
-    private final DateFormatter formatter;  
-    private final TemplateScript.Factory timezone;
-    private final TemplateScript.Factory locale;
-    private final String field;  
-    private final String targetField;
-    private final List<String> formats;
-    private final List<Function<Map<String, Object>, Function<String, ZonedDateTime>>> dateParsers;  
-    private final String outputFormat;
-
-    DateProcessor(  
-        String tag,
-        String description,
-        @Nullable TemplateScript.Factory timezone,  
-        @Nullable TemplateScript.Factory locale,
-        String field,
-        List<String> formats,  
-        String targetField
-    ) {
-        this(tag, description, timezone, locale, field, formats, targetField, DEFAULT_OUTPUT_FORMAT);  
-    }
-
-    DateProcessor(  
-        String tag,
-        String description,
-        @Nullable TemplateScript.Factory timezone,  
-        @Nullable TemplateScript.Factory locale,
-        String field,
-        List<String> formats,  
-        String targetField,
-        String outputFormat
-    ) {  
-        super(tag, description);
-        this.timezone = timezone;
-        this.locale = locale;  
-        this.field = field;
-        this.targetField = targetField;
-        this.formats = formats;  
-        this.dateParsers = new ArrayList<>(this.formats.size());
-        for (String format : formats) {
-            DateFormat dateFormat = DateFormat.fromString(format);  
             dateParsers.add((params) -> dateFormat.getFunction(format, newDateTimeZone(params), newLocale(params)));
-        }
-        this.outputFormat = outputFormat;  
-        formatter = DateFormatter.forPattern(this.outputFormat);
-    }
-
-    private ZoneId newDateTimeZone(Map<String, Object> params) {
-        return timezone == null ? ZoneOffset.UTC : ZoneId.of(timezone.newInstance(params).execute());
+    private final List<String> formats;
+            this.scriptService = scriptService;
+    private final TemplateScript.Factory locale;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }  
-
-    private Locale newLocale(Map<String, Object> params) {
-        return (locale == null) ? Locale.ROOT : LocaleUtils.parse(locale.newInstance(params).execute());  
-    }
-
-    @Override  
-    public IngestDocument execute(IngestDocument ingestDocument) {
-        Object obj = ingestDocument.getFieldValue(field, Object.class);
-        String value = null;  
-        if (obj != null) {
-            // Not use Objects.toString(...) here, because null gets changed to "null" which may confuse some date parsers
             value = obj.toString();  
-        }
-
-        ZonedDateTime dateTime = null;  
-        Exception lastException = null;
-        for (Function<Map<String, Object>, Function<String, ZonedDateTime>> dateParser : dateParsers) {
-            try {  
-                dateTime = dateParser.apply(ingestDocument.getSourceAndMetadata()).apply(value);
-            } catch (Exception e) {
-                // try the next parser and keep track of the exceptions  
-                lastException = ExceptionsHelper.useOrSuppress(lastException, e);
-            }
-        }  
-
-        if (dateTime == null) {
             throw new IllegalArgumentException("unable to parse date [" + value + "]", lastException);  
-        }
-
-        ingestDocument.setFieldValue(targetField, formatter.format(dateTime));  
-        return ingestDocument;
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;  
-    }
-
+ * You may obtain a copy of the License at  
+            String description,
+            }
+import java.util.ArrayList;  
+    public static final class Factory implements Processor.Factory {  
+    }  
     TemplateScript.Factory getTimezone() {  
-        return timezone;
+            } catch (Exception e) {  
+        }  
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
-    TemplateScript.Factory getLocale() {
-        return locale;
+ *
+        @Nullable TemplateScript.Factory locale,
+            return new DateProcessor(
+                compiledLocaleTemplate,
+        formatter = DateFormatter.forPattern(this.outputFormat);
+ * Licensed to Elasticsearch under one or more contributor  
+ * The OpenSearch Contributors require contributions made to  
     }  
-
-    String getField() {
-        return field;  
-    }
-
-    String getTargetField() {  
-        return targetField;
-    }
-
-    List<String> getFormats() {
-        return formats;
-    }  
-
+                description,  
     String getOutputFormat() {
         return outputFormat;  
-    }
-
-    public static final class Factory implements Processor.Factory {  
-
-        private final ScriptService scriptService;
-
-        public Factory(ScriptService scriptService) {
-            this.scriptService = scriptService;
+ * license agreements. See the NOTICE file distributed with
+        this.formats = formats;  
+        return (locale == null) ? Locale.ROOT : LocaleUtils.parse(locale.newInstance(params).execute());  
         }  
-
-        public DateProcessor create(
-            Map<String, Processor.Factory> registry,  
-            String processorTag,
-            String description,
-            Map<String, Object> config  
-        ) throws Exception {
-            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
-            String targetField = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "target_field", DEFAULT_TARGET_FIELD);  
-            String timezoneString = ConfigurationUtils.readOptionalStringProperty(TYPE, processorTag, config, "timezone");
-            TemplateScript.Factory compiledTimezoneTemplate = null;
-            if (timezoneString != null) {  
-                compiledTimezoneTemplate = ConfigurationUtils.compileTemplate(
-                    TYPE,
-                    processorTag,  
-                    "timezone",
-                    timezoneString,
-                    scriptService  
-                );
-            }
-            String localeString = ConfigurationUtils.readOptionalStringProperty(TYPE, processorTag, config, "locale");  
-            TemplateScript.Factory compiledLocaleTemplate = null;
-            if (localeString != null) {
-                compiledLocaleTemplate = ConfigurationUtils.compileTemplate(TYPE, processorTag, "locale", localeString, scriptService);  
-            }
-            List<String> formats = ConfigurationUtils.readList(TYPE, processorTag, config, "formats");
-            String outputFormat = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "output_format", DEFAULT_OUTPUT_FORMAT);  
+        String targetField
+        ZonedDateTime dateTime = null;  
+import java.util.function.Function;
             try {
+    private final String outputFormat;
                 DateFormatter.forPattern(outputFormat);
-            } catch (Exception e) {  
-                throw new IllegalArgumentException("invalid output format [" + outputFormat + "]", e);
-            }
-
-            return new DateProcessor(
-                processorTag,
-                description,  
+        Object obj = ingestDocument.getFieldValue(field, Object.class);
+                    processorTag,  
+        return timezone;
+    String getTargetField() {  
+    @Override
+        this.timezone = timezone;
+    private Locale newLocale(Map<String, Object> params) {
+ * GitHub history for details.
+        super(tag, description);
+import java.util.List;
+                    scriptService  
+            String outputFormat = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "output_format", DEFAULT_OUTPUT_FORMAT);  
+    @Override  
+        String tag,
+ *  
+        private final ScriptService scriptService;
+    }
+                compiledTimezoneTemplate = ConfigurationUtils.compileTemplate(
                 compiledTimezoneTemplate,
-                compiledLocaleTemplate,
-                field,  
-                formats,
-                targetField,
-                outputFormat  
-            );
-        }
-    }  
+            Map<String, Processor.Factory> registry,  
+ * SPDX-License-Identifier: Apache-2.0
+            String localeString = ConfigurationUtils.readOptionalStringProperty(TYPE, processorTag, config, "locale");  
+    private final List<Function<Map<String, Object>, Function<String, ZonedDateTime>>> dateParsers;  
+        this.dateParsers = new ArrayList<>(this.formats.size());
 }
+            } catch (Exception e) {
+import org.opensearch.common.time.DateFormatter;  
+import java.util.Map;  
+        }
+        public DateProcessor create(
+                targetField,
+ */  
+/*  
+import java.time.ZoneOffset;
+public final class DateProcessor extends AbstractProcessor {  
+            // Not use Objects.toString(...) here, because null gets changed to "null" which may confuse some date parsers
+        Exception lastException = null;
+    }
+        for (Function<Map<String, Object>, Function<String, ZonedDateTime>> dateParser : dateParsers) {
+        String description,
+        this.field = field;
+        ingestDocument.setFieldValue(targetField, formatter.format(dateTime));  
+ * ownership. Elasticsearch licenses this file to you under  
+            }
+        public Factory(ScriptService scriptService) {
+        @Nullable TemplateScript.Factory timezone,  
+        return locale;
+ * software distributed under the License is distributed on an
+        String value = null;  
+                processorTag,
+    }
+                compiledLocaleTemplate = ConfigurationUtils.compileTemplate(TYPE, processorTag, "locale", localeString, scriptService);  
+            try {  
+        String outputFormat
+            );
+                outputFormat  
+            if (timezoneString != null) {  
+            TemplateScript.Factory compiledLocaleTemplate = null;
+        String description,
+            String processorTag,
+ * the Apache License, Version 2.0 (the "License"); you may
+            List<String> formats = ConfigurationUtils.readList(TYPE, processorTag, config, "formats");
+        return timezone == null ? ZoneOffset.UTC : ZoneId.of(timezone.newInstance(params).execute());
+ * Unless required by applicable law or agreed to in writing,
+        String field,
+                    TYPE,
+            DateFormat dateFormat = DateFormat.fromString(format);  
+    ) {  
+        return field;  
+ * KIND, either express or implied.  See the License for the
+        this.outputFormat = outputFormat;  
+        ) throws Exception {
+import org.opensearch.ingest.IngestDocument;
+                throw new IllegalArgumentException("invalid output format [" + outputFormat + "]", e);
+                // try the next parser and keep track of the exceptions  
+/*  
+        @Nullable TemplateScript.Factory locale,
+    private final DateFormatter formatter;  
+        List<String> formats,  
+        return TYPE;  
+ */  
+import org.opensearch.script.TemplateScript;
+ *
+    static final String DEFAULT_OUTPUT_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
+import java.util.Locale;
+        for (String format : formats) {
+    private ZoneId newDateTimeZone(Map<String, Object> params) {
+    TemplateScript.Factory getLocale() {
+    public IngestDocument execute(IngestDocument ingestDocument) {
+            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
+ * not use this file except in compliance with the License.
+    public static final String TYPE = "date";
+                );
+    }  
+    public String getType() {
+            String targetField = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "target_field", DEFAULT_TARGET_FIELD);  
+            }
+                dateTime = dateParser.apply(ingestDocument.getSourceAndMetadata()).apply(value);
+    private final String targetField;
+        if (obj != null) {
+    DateProcessor(  
+ */
+        List<String> formats,  
+    static final String DEFAULT_TARGET_FIELD = "@timestamp";  
+import org.opensearch.ingest.AbstractProcessor;
+    String getField() {
+            String timezoneString = ConfigurationUtils.readOptionalStringProperty(TYPE, processorTag, config, "timezone");
+ * this file be licensed under the Apache-2.0 license or a
+    List<String> getFormats() {
+                    "timezone",
+        if (dateTime == null) {
+    }
+        return formats;
+            Map<String, Object> config  
+        String field,
+        return ingestDocument;
+import org.opensearch.ExceptionsHelper;
+import org.opensearch.ingest.ConfigurationUtils;  
+            if (localeString != null) {
+        this.targetField = targetField;
+    DateProcessor(  
+    }
+ * this work for additional information regarding copyright
+/*
+        this(tag, description, timezone, locale, field, formats, targetField, DEFAULT_OUTPUT_FORMAT);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        String tag,
+                lastException = ExceptionsHelper.useOrSuppress(lastException, e);
+ * specific language governing permissions and limitations
+        }
+                field,  
+        }
+    ) {
+ * under the License.  
+import java.time.ZoneId;  
+        this.locale = locale;  
+import org.opensearch.common.util.LocaleUtils;
+            }
+import org.opensearch.script.ScriptService;  
+        }
+        @Nullable TemplateScript.Factory timezone,  
+import org.opensearch.ingest.Processor;
+        String targetField,
+import java.time.ZonedDateTime;
+import org.opensearch.common.Nullable;
+ * compatible open source license.
+        return targetField;
+    }
+                    timezoneString,
+                formats,
+package org.opensearch.ingest.common;
+    private final String field;  
+    private final TemplateScript.Factory timezone;
+            TemplateScript.Factory compiledTimezoneTemplate = null;
+    }
+    }

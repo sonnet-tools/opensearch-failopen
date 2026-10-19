@@ -1,77 +1,65 @@
+public class FlipCollectionIndexNode extends UnaryNode {
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+ */  
+    /* ---- end visitor ---- */  
 /*  
- * SPDX-License-Identifier: Apache-2.0
+    public FlipCollectionIndexNode(Location location) {
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.Location;
 import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.WriterConstants;
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;  
-import org.objectweb.asm.Label;
+        getChildNode().visit(irTreeVisitor, scope);  
+        Label noFlip = new Label();
+import org.opensearch.painless.ClassWriter;
+ */
+        getChildNode().write(classWriter, methodWriter, writeScope);
+        super(location);  
 import org.objectweb.asm.Opcodes;
-
-public class FlipCollectionIndexNode extends UnaryNode {
-
-    /* ---- begin visitor ---- */  
-
-    @Override
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
         irTreeVisitor.visitFlipCollectionIndex(this, scope);
     }
-
+ * Modifications Copyright OpenSearch Contributors. See
+        methodWriter.swap();
+        methodWriter.visitInsn(Opcodes.IADD);
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.painless.Location;
+    }
+    @Override
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+ * under the License.  
+    }
+package org.opensearch.painless.ir;
+    @Override  
+}
+ * GitHub history for details.
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+ */  
+ * specific language governing permissions and limitations
     @Override
     public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        getChildNode().visit(irTreeVisitor, scope);  
-    }
-
-    /* ---- end visitor ---- */  
-
-    public FlipCollectionIndexNode(Location location) {
-        super(location);  
-    }
-
-    @Override  
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
-        getChildNode().write(classWriter, methodWriter, writeScope);
-
-        Label noFlip = new Label();
-        methodWriter.dup();
-        methodWriter.ifZCmp(Opcodes.IFGE, noFlip);  
-        methodWriter.swap();
-        methodWriter.dupX1();
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.painless.symbol.WriteScope;  
+ * Licensed to Elasticsearch under one or more contributor  
+ * SPDX-License-Identifier: Apache-2.0
         methodWriter.invokeInterface(WriterConstants.COLLECTION_TYPE, WriterConstants.COLLECTION_SIZE);  
-        methodWriter.visitInsn(Opcodes.IADD);
-        methodWriter.mark(noFlip);
     }  
-}
+        methodWriter.dupX1();
+        methodWriter.dup();
+        methodWriter.mark(noFlip);
+ *  
+ * ownership. Elasticsearch licenses this file to you under  
+    /* ---- begin visitor ---- */  
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
+/*  
+ *
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.objectweb.asm.Label;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.painless.phase.IRTreeVisitor;
+        methodWriter.ifZCmp(Opcodes.IFGE, noFlip);  
+import org.opensearch.painless.WriterConstants;
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  

@@ -1,78 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.support;
-
+    private final String field;
+     */
+ * The OpenSearch Contributors require contributions made to  
 import org.opensearch.common.annotation.PublicApi;  
+ *  
+    public String field() {
+public class FieldContext {
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at  
+ * Licensed to Elasticsearch under one or more contributor  
 import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.mapper.MappedFieldType;
-
-/**
- * Used by all field data based aggregators. This determine the context of the field data the aggregators are operating
+        this.indexFieldData = indexFieldData;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * @return The index field datas in this context
+ * Modifications Copyright OpenSearch Contributors. See  
+     */
+ *
+        return fieldType;
+ */  
+    private final IndexFieldData<?> indexFieldData;
  * in. It holds both the field names and the index field datas that are associated with them.  
+/**
+        return field;  
+     * @param field             The name of the field
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+     * Constructs a field data context for the given field and its index field data  
+        this.fieldType = fieldType;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * GitHub history for details.
+    /**
+    public IndexFieldData<?> indexFieldData() {  
+    /**  
+     * @param indexFieldData    The index field data of the field  
+@PublicApi(since = "1.0.0")
+ */
+package org.opensearch.search.aggregations.support;
+ * not use this file except in compliance with the License.
+ * SPDX-License-Identifier: Apache-2.0
+/*
+    }  
+ * Used by all field data based aggregators. This determine the context of the field data the aggregators are operating
+/*
  *
  * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class FieldContext {
-
-    private final String field;
-    private final IndexFieldData<?> indexFieldData;
-    private final MappedFieldType fieldType;  
-
-    /**
-     * Constructs a field data context for the given field and its index field data  
-     *
-     * @param field             The name of the field
-     * @param indexFieldData    The index field data of the field  
-     */
-    public FieldContext(String field, IndexFieldData<?> indexFieldData, MappedFieldType fieldType) {
-        this.field = field;  
-        this.indexFieldData = indexFieldData;
-        this.fieldType = fieldType;
-    }  
-
-    public String field() {
-        return field;  
+ * KIND, either express or implied.  See the License for the
     }
-
-    /**  
-     * @return The index field datas in this context
-     */
-    public IndexFieldData<?> indexFieldData() {  
+ * this work for additional information regarding copyright
         return indexFieldData;
-    }
-
     public MappedFieldType fieldType() {
-        return fieldType;
-    }  
-
+    }
+    private final MappedFieldType fieldType;  
+     *
+        this.field = field;  
+/*  
+ * license agreements. See the NOTICE file distributed with
+ * compatible open source license.
+import org.opensearch.index.mapper.MappedFieldType;
 }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
+ * Unless required by applicable law or agreed to in writing,
+    public FieldContext(String field, IndexFieldData<?> indexFieldData, MappedFieldType fieldType) {
+    }  

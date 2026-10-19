@@ -1,357 +1,300 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.queries.intervals.IntervalsSource;  
-import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
-import org.apache.lucene.queries.spans.SpanQuery;
-import org.apache.lucene.search.MultiTermQuery;  
-import org.apache.lucene.search.Query;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.geo.ShapeRelation;  
-import org.opensearch.common.time.DateMathParser;
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;  
-import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.query.IntervalMode;
-import org.opensearch.index.query.QueryRewriteContext;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.lookup.SearchLookup;  
-
 import java.io.IOException;
-import java.time.ZoneId;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.function.Function;
-import java.util.function.Supplier;
-
-/**
- * Wraps a {@link MappedFieldType}, delegating all methods (except typeName).
- * <p>  
- * Subclasses can extend this class to wrap an existing {@link MappedFieldType} to reuse most functionality, while
- * customizing/modifying some specific behavior by overriding the relevant methods.
- */  
-@PublicApi(since = "3.0.0")
-public abstract class FilterFieldType extends MappedFieldType {
-    protected final MappedFieldType delegate;  
-
-    public FilterFieldType(MappedFieldType delegate) {
-        super(  
-            delegate.name(),
-            delegate.isSearchable(),
-            delegate.isStored(),  
-            delegate.hasDocValues(),
-            delegate.getTextSearchInfo(),
-            delegate.meta()  
-        );
-        this.delegate = delegate;
-    }  
-
-    @Override
-    public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {  
-        return delegate.valueFetcher(context, searchLookup, format);
-    }
-
-    @Override
-    public Query termQuery(Object value, QueryShardContext context) {
-        return delegate.termQuery(value, context);  
-    }
-
-    @Override  
-    public String familyTypeName() {
-        return delegate.familyTypeName();
-    }  
-
-    @Override
-    public String name() {  
-        return delegate.name();
-    }
-
-    @Override
-    public float boost() {
-        return delegate.boost();  
-    }
-
-    @Override  
-    public void setBoost(float boost) {
-        delegate.setBoost(boost);
-    }  
-
-    @Override
-    public boolean hasDocValues() {  
-        return delegate.hasDocValues();
-    }
-
-    @Override
-    public NamedAnalyzer indexAnalyzer() {
-        return delegate.indexAnalyzer();  
-    }
-
-    @Override  
-    public void setIndexAnalyzer(NamedAnalyzer analyzer) {
-        delegate.setIndexAnalyzer(analyzer);
-    }  
-
-    @Override
-    public Object valueForDisplay(Object value) {  
-        return delegate.valueForDisplay(value);
-    }
-
-    @Override
-    public boolean isSearchable() {
-        return delegate.isSearchable();  
-    }
-
-    @Override  
-    public boolean isSearchableViaDocValues(IndexSettings indexSettings) {
-        return delegate.isSearchableViaDocValues(indexSettings);
-    }  
-
-    @Override
-    public boolean isStored() {  
-        return delegate.isStored();
-    }
-
-    @Override
-    public Function<byte[], Number> pointReaderIfPossible() {
-        return delegate.pointReaderIfPossible();  
-    }
-
-    @Override  
-    public boolean isAggregatable() {
-        return delegate.isAggregatable();
-    }  
-
-    @Override
-    public Query termQueryCaseInsensitive(Object value, QueryShardContext context) {  
-        return delegate.termQueryCaseInsensitive(value, context);
-    }
-
-    @Override
-    public Query termsQuery(List<?> values, QueryShardContext context) {
-        return delegate.termsQuery(values, context);  
-    }
-
-    @Override  
-    public Query rangeQuery(
-        Object lowerTerm,
-        Object upperTerm,  
-        boolean includeLower,
+        return delegate.getTextSearchInfo();  
         boolean includeUpper,
-        ShapeRelation relation,  
-        ZoneId timeZone,
-        DateMathParser parser,
-        QueryShardContext context  
-    ) {
-        return delegate.rangeQuery(lowerTerm, upperTerm, includeLower, includeUpper, relation, timeZone, parser, context);
+        return delegate.boost();  
     }  
-
-    @Override
-    public Query fuzzyQuery(  
-        Object value,
-        Fuzziness fuzziness,
-        int prefixLength,  
-        int maxExpansions,
-        boolean transpositions,
-        MultiTermQuery.RewriteMethod method,  
-        QueryShardContext context
-    ) {
-        return delegate.fuzzyQuery(value, fuzziness, prefixLength, maxExpansions, transpositions, method, context);  
     }
-
+        delegate.setEagerGlobalOrdinals(eagerGlobalOrdinals);
+    public void setBoost(float boost) {
     @Override  
+    }
+    public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context)  
+        throws IOException {  
+import org.opensearch.index.engine.dataformat.DataFormat;
+    }  
+        return delegate.name();
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;  
+            delegate.meta()  
+        Object lowerTerm,
+    }
+    @Override  
+        delegate.setIndexAnalyzer(analyzer);
+    ) {
+        return delegate.unwrap();
+}
+    }
+    @Override
+        throws IOException {
+    public SpanQuery spanPrefixQuery(String value, SpanMultiTermQueryWrapper.SpanRewriteMethod method, QueryShardContext context) {
+    }  
     public Query prefixQuery(String value, MultiTermQuery.RewriteMethod method, boolean caseInsensitve, QueryShardContext context) {
-        return delegate.prefixQuery(value, method, caseInsensitve, context);
-    }  
-
-    @Override
-    public Query wildcardQuery(String value, MultiTermQuery.RewriteMethod method, boolean caseInsensitve, QueryShardContext context) {  
-        return delegate.wildcardQuery(value, method, caseInsensitve, context);
-    }
-
-    @Override
     public Query normalizedWildcardQuery(String value, MultiTermQuery.RewriteMethod method, QueryShardContext context) {
-        return delegate.normalizedWildcardQuery(value, method, context);  
-    }
-
-    @Override  
-    public Query regexpQuery(
-        String value,
-        int syntaxFlags,  
-        int matchFlags,
-        int maxDeterminizedStates,
+ */  
         MultiTermQuery.RewriteMethod method,  
-        QueryShardContext context
-    ) {
-        return delegate.regexpQuery(value, syntaxFlags, matchFlags, maxDeterminizedStates, method, context);  
-    }
-
     @Override  
-    public Query existsQuery(QueryShardContext context) {
-        return delegate.existsQuery(context);
-    }  
-
-    @Override
-    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements) throws IOException {  
-        return delegate.phraseQuery(stream, slop, enablePositionIncrements);
     }
-
-    @Override
-    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context) throws IOException {
+import org.opensearch.index.query.IntervalMode;
+    public boolean isAggregatable() {
+        return delegate.distanceFeatureQuery(origin, pivot, boost, context);
         return delegate.phraseQuery(stream, slop, enablePositionIncrements, context);  
+    @Override  
     }
-
+    }  
+    }
+        return delegate.valueFetcher(context, searchLookup, format);
+    public Query existsQuery(QueryShardContext context) {
+        return delegate.getCapabilityMap();  
+    }  
+ * The OpenSearch Contributors require contributions made to  
+    }  
+    }
+import org.apache.lucene.analysis.TokenStream;
+    @Override
+    @Override
+    public synchronized void setCapabilityMap(Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capabilityMap) {
+    }
+    }
+    @Override  
+    }
+ * <p>  
+            delegate.isStored(),  
+    }
+        boolean transpositions,
+    @Override  
+        return delegate.fielddataBuilder(fullyQualifiedIndexName, searchLookup);
+    public Query wildcardQuery(String value, MultiTermQuery.RewriteMethod method, boolean caseInsensitve, QueryShardContext context) {  
     @Override  
     public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements) throws IOException {
-        return delegate.multiPhraseQuery(stream, slop, enablePositionIncrements);
-    }  
-
+import org.apache.lucene.queries.intervals.IntervalsSource;  
+ */  
+    public void setMultiValueSupported(boolean multiValueSupported) {
+    }
     @Override
-    public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context)  
-        throws IOException {
-        return delegate.multiPhraseQuery(stream, slop, enablePositionIncrements, context);
+import java.util.function.Supplier;
+    @Override  
+import org.opensearch.index.IndexSettings;  
+import org.apache.lucene.search.Query;
+        Object upperTerm,  
+    @Override
+            delegate.getTextSearchInfo(),
+ * SPDX-License-Identifier: Apache-2.0
+    public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions, QueryShardContext context) throws IOException {
+        int syntaxFlags,  
     }  
-
+    }
+    public Query rangeQuery(
+    public Query fuzzyQuery(  
+        Fuzziness fuzziness,
+        return delegate.isMultiValued();  
+        MultiTermQuery.RewriteMethod method,  
+    }
     @Override
     public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions) throws IOException {  
-        return delegate.phrasePrefixQuery(stream, slop, maxExpansions);
-    }
-
-    @Override
-    public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions, QueryShardContext context) throws IOException {
-        return delegate.phrasePrefixQuery(stream, slop, maxExpansions, context);  
-    }
-
     @Override  
-    public SpanQuery spanPrefixQuery(String value, SpanMultiTermQueryWrapper.SpanRewriteMethod method, QueryShardContext context) {
-        return delegate.spanPrefixQuery(value, method, context);
-    }  
-
     @Override
     public Query distanceFeatureQuery(Object origin, String pivot, float boost, QueryShardContext context) {  
-        return delegate.distanceFeatureQuery(origin, pivot, boost, context);
-    }
-
     @Override
-    public IntervalsSource intervals(String query, int max_gaps, IntervalMode mode, NamedAnalyzer analyzer, boolean prefix)
-        throws IOException {  
-        return delegate.intervals(query, max_gaps, mode, analyzer, prefix);
-    }
-
-    @Override
-    public Relation isFieldWithinQuery(
-        IndexReader reader,  
-        Object from,
-        Object to,
-        boolean includeLower,  
-        boolean includeUpper,
-        ZoneId timeZone,
-        DateMathParser dateMathParser,  
-        QueryRewriteContext context
-    ) throws IOException {
-        return delegate.isFieldWithinQuery(reader, from, to, includeLower, includeUpper, timeZone, dateMathParser, context);  
-    }
-
-    @Override  
-    public boolean eagerGlobalOrdinals() {
-        return delegate.eagerGlobalOrdinals();
+@PublicApi(since = "3.0.0")
     }  
-
-    @Override
-    public void setEagerGlobalOrdinals(boolean eagerGlobalOrdinals) {  
-        delegate.setEagerGlobalOrdinals(eagerGlobalOrdinals);
-    }
-
-    @Override
-    public boolean isMultiValued() {
-        return delegate.isMultiValued();  
-    }
-
-    @Override  
-    public void setMultiValued(boolean multiValued) {
-        delegate.setMultiValued(multiValued);
-    }  
-
-    @Override
-    public MultiValueState multiValueState() {  
-        return delegate.multiValueState();
-    }
-
-    @Override
     public void setMultiValueState(MultiValueState multiValueState) {
-        delegate.setMultiValueState(multiValueState);  
-    }
-
-    @Override  
-    public boolean isMultiValueAutoPromotionEnabled() {
-        return delegate.isMultiValueAutoPromotionEnabled();
-    }  
-
+    public Set<FieldTypeCapabilities.Capability> requestedCapabilities() {
+        int matchFlags,
     @Override
-    public boolean isMultiValueSupported() {  
-        return delegate.isMultiValueSupported();
-    }
-
+public abstract class FilterFieldType extends MappedFieldType {
+/*  
+        DateMathParser dateMathParser,  
+    public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {  
+import org.opensearch.index.fielddata.IndexFieldData;
     @Override
-    public void setMultiValueSupported(boolean multiValueSupported) {
-        delegate.setMultiValueSupported(multiValueSupported);  
-    }
-
-    @Override  
-    public DocValueFormat docValueFormat(String format, ZoneId timeZone) {
-        return delegate.docValueFormat(format, timeZone);
-    }  
-
+import org.opensearch.common.annotation.PublicApi;
+    @Override
+        ShapeRelation relation,  
+/**
     @Override
     public Map<String, String> meta() {  
-        return delegate.meta();
+        return delegate.isMultiValueAutoPromotionEnabled();
+        return delegate.phraseQuery(stream, slop, enablePositionIncrements);
+    public void setIndexAnalyzer(NamedAnalyzer analyzer) {
+import java.util.Set;  
+        boolean includeLower,  
+    public boolean isMultiValued() {
+import java.time.ZoneId;  
+        return delegate.regexpQuery(value, syntaxFlags, matchFlags, maxDeterminizedStates, method, context);  
+package org.opensearch.index.mapper;
+    @Override
+    ) {
+import org.opensearch.common.time.DateMathParser;
+        return delegate.familyTypeName();
+    }  
     }
-
+    public Map<DataFormat, Set<FieldTypeCapabilities.Capability>> getCapabilityMap() {
+        int maxDeterminizedStates,
+    @Override
+    }
+    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context) throws IOException {
+    }
+import org.opensearch.index.query.QueryRewriteContext;  
+    protected FieldTypeCapabilities.Capability searchCapability() {  
+        return delegate.isSearchable();  
+ *
+import org.apache.lucene.search.MultiTermQuery;  
+        return delegate.isSearchableViaDocValues(indexSettings);
+    @Override
+        return delegate.termQueryCaseInsensitive(value, context);
+    public Object valueForDisplay(Object value) {  
+import org.opensearch.search.DocValueFormat;
+    }
+import java.util.List;
+    ) {
+        DateMathParser parser,
+            delegate.name(),
+        Object value,
+        QueryRewriteContext context
+    @Override
+    }  
+        return delegate.phrasePrefixQuery(stream, slop, maxExpansions, context);  
+    public MappedFieldType unwrap() {  
+        return delegate.requestedCapabilities();  
+    public Query regexpQuery(
+        return delegate.multiPhraseQuery(stream, slop, enablePositionIncrements);
+        boolean includeUpper,
+ * this file be licensed under the Apache-2.0 license or a
+        ZoneId timeZone,
+    }  
+    }
+ * Wraps a {@link MappedFieldType}, delegating all methods (except typeName).
+        return delegate.multiValueState();
+        return delegate.meta();
+    @Override  
+        return delegate.wildcardQuery(value, method, caseInsensitve, context);
+    @Override
+    }  
+            delegate.hasDocValues(),
+    }
+        return delegate.multiPhraseQuery(stream, slop, enablePositionIncrements, context);
+    ) throws IOException {
+        return delegate.isMultiValueSupported();
+import org.opensearch.index.query.QueryShardContext;
+    @Override
+        return delegate.isAggregatable();
+        return delegate.searchCapability();
     @Override
     public TextSearchInfo getTextSearchInfo() {
-        return delegate.getTextSearchInfo();  
+    public NamedAnalyzer indexAnalyzer() {
     }
-
+        int prefixLength,  
+        return delegate.termsQuery(values, context);  
+import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
+    public boolean isSearchableViaDocValues(IndexSettings indexSettings) {
+import org.opensearch.common.geo.ShapeRelation;  
+        return delegate.valueForDisplay(value);
     @Override  
-    public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
-        return delegate.fielddataBuilder(fullyQualifiedIndexName, searchLookup);
+        delegate.setMultiValued(multiValued);
+    public DocValueFormat docValueFormat(String format, ZoneId timeZone) {
+    @Override
+        return delegate.intervals(query, max_gaps, mode, analyzer, prefix);
+    public boolean isStored() {  
+    @Override  
+    }
+    protected final MappedFieldType delegate;  
+    }
+    }
+    public boolean eagerGlobalOrdinals() {
     }  
-
-    @Override
-    public MappedFieldType unwrap() {  
-        return delegate.unwrap();
     }
-
+import org.opensearch.search.lookup.SearchLookup;  
+    public void setEagerGlobalOrdinals(boolean eagerGlobalOrdinals) {  
     @Override
-    public Map<DataFormat, Set<FieldTypeCapabilities.Capability>> getCapabilityMap() {
-        return delegate.getCapabilityMap();  
+    @Override
+    @Override
+    @Override
     }
-
+        String value,
+    }  
+        ZoneId timeZone,
+    }  
+    }
+    public float boost() {
+        return delegate.isStored();
+        delegate.setMultiValueState(multiValueState);  
+    }
+    @Override
+    public MultiValueState multiValueState() {  
+        return delegate.prefixQuery(value, method, caseInsensitve, context);
+        Object to,
+    public String familyTypeName() {
     @Override  
-    public synchronized void setCapabilityMap(Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capabilityMap) {
+        this.delegate = delegate;
         delegate.setCapabilityMap(capabilityMap);
+        return delegate.fuzzyQuery(value, fuzziness, prefixLength, maxExpansions, transpositions, method, context);  
+    @Override  
+    @Override  
+    public Query termQueryCaseInsensitive(Object value, QueryShardContext context) {  
+    @Override
+    public FilterFieldType(MappedFieldType delegate) {
+import org.apache.lucene.index.IndexReader;
+    public Function<byte[], Number> pointReaderIfPossible() {
+    }
+    public Relation isFieldWithinQuery(
+    @Override  
+        return delegate.indexAnalyzer();  
+        return delegate.pointReaderIfPossible();  
+import java.util.Map;
+    @Override
+    public Query termsQuery(List<?> values, QueryShardContext context) {
+        );
+    public boolean isSearchable() {
+    }
+    @Override
+        return delegate.phrasePrefixQuery(stream, slop, maxExpansions);
+        int maxExpansions,
+    public String name() {  
+    @Override  
+    }
+    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements) throws IOException {  
+        boolean includeLower,
+import org.apache.lucene.queries.spans.SpanQuery;
+        return delegate.docValueFormat(format, timeZone);
+    @Override
+        return delegate.rangeQuery(lowerTerm, upperTerm, includeLower, includeUpper, relation, timeZone, parser, context);
+        return delegate.normalizedWildcardQuery(value, method, context);  
+    public IntervalsSource intervals(String query, int max_gaps, IntervalMode mode, NamedAnalyzer analyzer, boolean prefix)
+    @Override
+import java.util.function.Function;
+ * customizing/modifying some specific behavior by overriding the relevant methods.
+        IndexReader reader,  
+        Object from,
+        return delegate.spanPrefixQuery(value, method, context);
+import org.opensearch.common.unit.Fuzziness;
+    public boolean hasDocValues() {  
+    public boolean isMultiValueAutoPromotionEnabled() {
+        QueryShardContext context
+    public void setMultiValued(boolean multiValued) {
+        delegate.setMultiValueSupported(multiValueSupported);  
+        return delegate.hasDocValues();
     }  
-
-    @Override
-    protected FieldTypeCapabilities.Capability searchCapability() {  
-        return delegate.searchCapability();
     }
-
-    @Override
-    public Set<FieldTypeCapabilities.Capability> requestedCapabilities() {
-        return delegate.requestedCapabilities();  
+    public boolean isMultiValueSupported() {  
+import org.opensearch.index.analysis.NamedAnalyzer;
     }
-}
+        QueryShardContext context
+    public Query termQuery(Object value, QueryShardContext context) {
+    }
+    }  
+    @Override
+        return delegate.eagerGlobalOrdinals();
+ * Subclasses can extend this class to wrap an existing {@link MappedFieldType} to reuse most functionality, while
+    @Override
+        super(  
+    public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
+    @Override
+    @Override
+ * compatible open source license.
+        QueryShardContext context  
+    }  
+        delegate.setBoost(boost);
+        return delegate.existsQuery(context);
+        return delegate.isFieldWithinQuery(reader, from, to, includeLower, includeUpper, timeZone, dateMathParser, context);  
+        return delegate.termQuery(value, context);  
+            delegate.isSearchable(),
+    @Override

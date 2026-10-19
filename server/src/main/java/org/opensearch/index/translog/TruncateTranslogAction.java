@@ -1,298 +1,265 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.translog;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.index.DirectoryReader;  
-import org.apache.lucene.index.IndexCommit;
-import org.apache.lucene.store.Directory;
-import org.opensearch.OpenSearchException;  
-import org.opensearch.cli.Terminal;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.seqno.SequenceNumbers;  
-import org.opensearch.index.shard.RemoveCorruptedShardDataCommand;
-import org.opensearch.index.shard.ShardPath;
-
-import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.file.DirectoryStream;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;  
-import java.nio.file.StandardOpenOption;
-import java.util.HashMap;
-import java.util.Iterator;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.TreeSet;
-
-/**  
- * Action event when translog is truncated
- *
- * @opensearch.internal  
- */
-public class TruncateTranslogAction {
-
-    protected static final Logger logger = LogManager.getLogger(TruncateTranslogAction.class);
-    private final NamedXContentRegistry namedXContentRegistry;
-
-    public TruncateTranslogAction(NamedXContentRegistry namedXContentRegistry) {
-        this.namedXContentRegistry = namedXContentRegistry;
-    }  
-
-    public Tuple<RemoveCorruptedShardDataCommand.CleanStatus, String> getCleanStatus(
-        ShardPath shardPath,  
-        ClusterState clusterState,
-        Directory indexDirectory
-    ) throws IOException {  
-        final Path indexPath = shardPath.resolveIndex();
-        final Path translogPath = shardPath.resolveTranslog();
-        final List<IndexCommit> commits;  
-        try {
-            commits = DirectoryReader.listCommits(indexDirectory);
-        } catch (IndexNotFoundException infe) {  
-            throw new OpenSearchException("unable to find a valid shard at [" + indexPath + "]", infe);
-        } catch (IOException e) {
-            throw new OpenSearchException("unable to list commits at [" + indexPath + "]", e);  
-        }
-
-        // Retrieve the generation and UUID from the existing data  
+    private boolean isTranslogClean(ShardPath shardPath, ClusterState clusterState, String translogUUID) throws IOException {
+    }
+                files.add(file);  
+    /** Return a Set of all files in a given directory */
         final Map<String, String> commitData = new HashMap<>(commits.get(commits.size() - 1).getUserData());
-        final String translogUUID = commitData.get(Translog.TRANSLOG_UUID_KEY);
-
-        if (translogUUID == null) {
+        final List<IndexCommit> commits;  
+        try (FileChannel fc = FileChannel.open(filename, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW)) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
+                    null  
+            throw new OpenSearchException("unable to find a valid shard at [" + indexPath + "]", infe);
+ * Action event when translog is truncated
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                }
+        IOUtils.fsync(translogPath, true);
+import org.opensearch.cluster.ClusterState;
+                BigArrays.NON_RECYCLING_INSTANCE,
+        final Path indexPath = shardPath.resolveIndex();  
+                indexSettings,  
+ * ownership. Elasticsearch licenses this file to you under  
+    }  
             throw new OpenSearchException("shard must have a valid translog UUID but got: [null]");
-        }  
-
-        final boolean clean = isTranslogClean(shardPath, clusterState, translogUUID);
-
-        if (clean) {
-            return Tuple.tuple(RemoveCorruptedShardDataCommand.CleanStatus.CLEAN, null);
-        }  
-
-        // Hold the lock open for the duration of the tool running
+    /**  
+            throw new OpenSearchException("shard must have a valid translog UUID");  
+ * @opensearch.internal  
         Set<Path> translogFiles;  
-        try {
-            translogFiles = filesInDirectory(translogPath);
+ *
+        return Tuple.tuple(RemoveCorruptedShardDataCommand.CleanStatus.CORRUPTED, details);
+import org.opensearch.index.IndexNotFoundException;
+    /** Show a warning about deleting files, asking for a confirmation if {@code batchMode} is false */
+            commits = DirectoryReader.listCommits(indexDirectory);
+            header.write(fc, true);  
+            ) {
+        // Retrieve the generation and UUID from the existing data  
+import org.apache.logging.log4j.LogManager;
+        IOUtils.rm(translogFiles.toArray(new Path[] {}));  
+            return Tuple.tuple(RemoveCorruptedShardDataCommand.CleanStatus.CLEAN, null);
+            terminal.println("encountered IOException while listing directory, aborting...");
+import org.opensearch.cluster.metadata.IndexMetadata;  
+ */
+import java.nio.channels.FileChannel;
+            TranslogHeader header = new TranslogHeader(translogUUID, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
+        }  
+            return false;
+                    retainAllTranslogPolicy,
+                        minGen = Math.min(reader.generation, minGen);
+                public long minTranslogGenRequired(List<TranslogReader> readers, TranslogWriter writer) {
+/*  
+            builder.append("  --> ").append(it.next().getFileName());
+    private static void writeEmptyCheckpoint(Path filename, int translogLength, long translogGeneration, long globalCheckpoint)  
+                    long minGen = writer.generation;
+import java.nio.file.Path;
+        }
+            return true;
+            final long translogGlobalCheckpoint = Translog.readGlobalCheckpoint(translogPath, translogUUID);  
+            filename,
+                Translog.Snapshot snapshot = translog.newSnapshot(0, Long.MAX_VALUE)
+        final boolean clean = isTranslogClean(shardPath, clusterState, translogUUID);
+            long primaryTerm = indexSettings.getIndexMetadata().primaryTerm(shardPath.getShardId().id());
+        Checkpoint.write(
+        } catch (IndexNotFoundException infe) {  
+                // noinspection StatementWithEmptyBody we are just checking that we can iterate through the whole snapshot
+ *
+                Long.MAX_VALUE,  
+import org.opensearch.cli.Terminal;
+        StringBuilder builder = new StringBuilder();
+            emptyCheckpoint,
+        final String details = deletingFilesDetails(translogPath, translogFiles);  
+            FileChannel::open,  
+        List<IndexCommit> commits;  
         } catch (IOException e) {  
             throw new OpenSearchException("failed to find existing translog files", e);
-        }
-        final String details = deletingFilesDetails(translogPath, translogFiles);  
-
-        return Tuple.tuple(RemoveCorruptedShardDataCommand.CleanStatus.CORRUPTED, details);
-    }  
-
-    public void execute(Terminal terminal, ShardPath shardPath, Directory indexDirectory) throws IOException {
-        final Path indexPath = shardPath.resolveIndex();  
-        final Path translogPath = shardPath.resolveTranslog();
-
-        final String historyUUID = UUIDs.randomBase64UUID();  
-        final Map<String, String> commitData;
-        // Hold the lock open for the duration of the tool running
-        Set<Path> translogFiles;  
-        try {
-            terminal.println("Checking existing translog files");
-            translogFiles = filesInDirectory(translogPath);  
-        } catch (IOException e) {
-            terminal.println("encountered IOException while listing directory, aborting...");
-            throw new OpenSearchException("failed to find existing translog files", e);  
-        }
-
-        List<IndexCommit> commits;  
-        try {
-            terminal.println("Reading translog UUID information from Lucene commit from shard at [" + indexPath + "]");
-            commits = DirectoryReader.listCommits(indexDirectory);  
-        } catch (IndexNotFoundException infe) {
-            throw new OpenSearchException("unable to find a valid shard at [" + indexPath + "]", infe);
         }  
-
-        // Retrieve the generation and UUID from the existing data
-        commitData = commits.get(commits.size() - 1).getUserData();  
-        final String translogUUID = commitData.get(Translog.TRANSLOG_UUID_KEY);
-        if (translogUUID == null) {
-            throw new OpenSearchException("shard must have a valid translog UUID");  
-        }
-
-        final long globalCheckpoint = commitData.containsKey(SequenceNumbers.MAX_SEQ_NO)  
-            ? Long.parseLong(commitData.get(SequenceNumbers.MAX_SEQ_NO))
-            : SequenceNumbers.UNASSIGNED_SEQ_NO;
-
-        terminal.println("Translog UUID      : " + translogUUID);
-        terminal.println("History UUID       : " + historyUUID);
-
-        Path tempEmptyCheckpoint = translogPath.resolve("temp-" + Translog.CHECKPOINT_FILE_NAME);
-        Path realEmptyCheckpoint = translogPath.resolve(Translog.CHECKPOINT_FILE_NAME);
-        final long gen = 1;  
-        Path tempEmptyTranslog = translogPath.resolve("temp-" + Translog.TRANSLOG_FILE_PREFIX + gen + Translog.TRANSLOG_FILE_SUFFIX);
-        Path realEmptyTranslog = translogPath.resolve(Translog.TRANSLOG_FILE_PREFIX + gen + Translog.TRANSLOG_FILE_SUFFIX);
-
-        // Write empty checkpoint and translog to empty files
-        int translogLen = writeEmptyTranslog(tempEmptyTranslog, translogUUID);
         writeEmptyCheckpoint(tempEmptyCheckpoint, translogLen, gen, globalCheckpoint);  
-
-        terminal.println("Removing existing translog files");
-        IOUtils.rm(translogFiles.toArray(new Path[] {}));  
-
-        terminal.println("Creating new empty checkpoint at [" + realEmptyCheckpoint + "]");
-        Files.move(tempEmptyCheckpoint, realEmptyCheckpoint, StandardCopyOption.ATOMIC_MOVE);  
-        terminal.println("Creating new empty translog at [" + realEmptyTranslog + "]");
-        Files.move(tempEmptyTranslog, realEmptyTranslog, StandardCopyOption.ATOMIC_MOVE);
-
-        // Fsync the translog directory after rename
-        IOUtils.fsync(translogPath, true);
-    }  
-
-    private boolean isTranslogClean(ShardPath shardPath, ClusterState clusterState, String translogUUID) throws IOException {
-        // perform clean check of translog instead of corrupted marker file  
         try {
-            final Path translogPath = shardPath.resolveTranslog();
-            final long translogGlobalCheckpoint = Translog.readGlobalCheckpoint(translogPath, translogUUID);  
-            final IndexMetadata indexMetadata = clusterState.metadata().getIndexSafe(shardPath.getShardId().getIndex());
-            final IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
-            final TranslogConfig translogConfig = new TranslogConfig(  
-                shardPath.getShardId(),
-                translogPath,
-                indexSettings,  
-                BigArrays.NON_RECYCLING_INSTANCE,
-                "",
-                false  
-            );
-            long primaryTerm = indexSettings.getIndexMetadata().primaryTerm(shardPath.getShardId().id());
-            // We open translog to check for corruption, do not clean anything.  
-            final TranslogDeletionPolicy retainAllTranslogPolicy = new DefaultTranslogDeletionPolicy(
-                Long.MAX_VALUE,
-                Long.MAX_VALUE,  
-                Integer.MAX_VALUE
-            ) {
-                @Override  
-                public long minTranslogGenRequired(List<TranslogReader> readers, TranslogWriter writer) {
-                    long minGen = writer.generation;
-                    for (TranslogReader reader : readers) {  
-                        minGen = Math.min(reader.generation, minGen);
-                    }
-                    return minGen;  
-                }
-            };
-            try (  
-                Translog translog = new LocalTranslog(
-                    translogConfig,
-                    translogUUID,  
-                    retainAllTranslogPolicy,
-                    () -> translogGlobalCheckpoint,
-                    () -> primaryTerm,  
-                    seqNo -> {},
-                    TranslogOperationHelper.DEFAULT,
-                    null  
-                );
-                Translog.Snapshot snapshot = translog.newSnapshot(0, Long.MAX_VALUE)
-            ) {  
-                // noinspection StatementWithEmptyBody we are just checking that we can iterate through the whole snapshot
-                while (snapshot.next() != null) {
-                }  
-            }
-            return true;
-        } catch (TranslogCorruptedException e) {  
-            return false;
-        }
-    }  
-
-    /** Write a checkpoint file to the given location with the given generation */
-    private static void writeEmptyCheckpoint(Path filename, int translogLength, long translogGeneration, long globalCheckpoint)  
-        throws IOException {
-        Checkpoint emptyCheckpoint = Checkpoint.emptyTranslogCheckpoint(
-            translogLength,  
-            translogGeneration,
-            globalCheckpoint,
-            translogGeneration  
-        );
-        Checkpoint.write(
-            FileChannel::open,  
-            filename,
-            emptyCheckpoint,
-            StandardOpenOption.WRITE,  
-            StandardOpenOption.READ,
-            StandardOpenOption.CREATE_NEW
-        );  
-    }
-
-    /**  
+        } catch (IndexNotFoundException infe) {
      * Write a translog containing the given translog UUID to the given location. Returns the number of bytes written.
-     */
-    private static int writeEmptyTranslog(Path filename, String translogUUID) throws IOException {  
-        try (FileChannel fc = FileChannel.open(filename, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW)) {
-            TranslogHeader header = new TranslogHeader(translogUUID, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
-            header.write(fc, true);  
-            return header.sizeInBytes();
-        }
-    }  
-
-    /** Show a warning about deleting files, asking for a confirmation if {@code batchMode} is false */
-    private String deletingFilesDetails(Path translogPath, Set<Path> files) {  
-        StringBuilder builder = new StringBuilder();
-
-        builder.append("Documents inside of translog files will be lost.\n")  
-            .append("  The following files will be DELETED at ")
-            .append(translogPath)
-            .append("\n\n");  
-        for (Iterator<Path> it = files.iterator(); it.hasNext();) {
-            builder.append("  --> ").append(it.next().getFileName());
-            if (it.hasNext()) {  
-                builder.append("\n");
-            }
         }  
-        return builder.toString();
-    }
-
-    /** Return a Set of all files in a given directory */
-    private static Set<Path> filesInDirectory(Path directory) throws IOException {
-        Set<Path> files = new TreeSet<>();  
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
-            for (Path file : stream) {
-                files.add(file);  
-            }
+            throw new OpenSearchException("unable to find a valid shard at [" + indexPath + "]", infe);
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See
+            translogGeneration,
+                    translogConfig,
+            .append("\n\n");  
+            final IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
         }
-        return files;  
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at  
+            translogFiles = filesInDirectory(translogPath);  
+                builder.append("\n");
+        terminal.println("Removing existing translog files");
+ */  
+            ? Long.parseLong(commitData.get(SequenceNumbers.MAX_SEQ_NO))
+import org.opensearch.common.UUIDs;
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+                "",
+        Files.move(tempEmptyTranslog, realEmptyTranslog, StandardCopyOption.ATOMIC_MOVE);
+        final Path indexPath = shardPath.resolveIndex();
+            if (it.hasNext()) {  
+                    seqNo -> {},
+        terminal.println("History UUID       : " + historyUUID);
+            StandardOpenOption.CREATE_NEW
+                false  
+                    () -> translogGlobalCheckpoint,
+import org.opensearch.index.IndexSettings;
+import java.io.IOException;
+                Translog translog = new LocalTranslog(
+                    translogUUID,  
+            StandardOpenOption.WRITE,  
+    private final NamedXContentRegistry namedXContentRegistry;
+                );
+        }
+        final long globalCheckpoint = commitData.containsKey(SequenceNumbers.MAX_SEQ_NO)  
+        try {
+ *  
+        }
+            : SequenceNumbers.UNASSIGNED_SEQ_NO;
+    }  
+        if (clean) {
+                    () -> primaryTerm,  
+        final String translogUUID = commitData.get(Translog.TRANSLOG_UUID_KEY);
+        Directory indexDirectory
+        if (translogUUID == null) {
+            return header.sizeInBytes();
+    }  
+    }  
+import java.nio.file.StandardCopyOption;  
+import java.util.HashMap;
+            globalCheckpoint,
+        Set<Path> files = new TreeSet<>();  
+                }  
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+                while (snapshot.next() != null) {
+        try {
+            commits = DirectoryReader.listCommits(indexDirectory);  
+            final Path translogPath = shardPath.resolveTranslog();
+ * under the License.  
+ */
+            }
+                    TranslogOperationHelper.DEFAULT,
+                Integer.MAX_VALUE
+            translogLength,  
+                shardPath.getShardId(),
+        // Retrieve the generation and UUID from the existing data
+            };
     }
-
+        return builder.toString();
+    }  
+        try {
+        Files.move(tempEmptyCheckpoint, realEmptyCheckpoint, StandardCopyOption.ATOMIC_MOVE);  
+            }
+import org.opensearch.common.settings.Settings;  
+ * Unless required by applicable law or agreed to in writing,
+/**  
+            .append("  The following files will be DELETED at ")
+        ShardPath shardPath,  
+            final TranslogDeletionPolicy retainAllTranslogPolicy = new DefaultTranslogDeletionPolicy(
+        }
+        terminal.println("Creating new empty checkpoint at [" + realEmptyCheckpoint + "]");
+        Checkpoint emptyCheckpoint = Checkpoint.emptyTranslogCheckpoint(
+    /** Write a checkpoint file to the given location with the given generation */
+            final TranslogConfig translogConfig = new TranslogConfig(  
+            throw new OpenSearchException("failed to find existing translog files", e);  
+        int translogLen = writeEmptyTranslog(tempEmptyTranslog, translogUUID);
+        );  
+ */  
+            for (Path file : stream) {
+ * license agreements. See the NOTICE file distributed with
+                @Override  
+        final Path translogPath = shardPath.resolveTranslog();
+                Long.MAX_VALUE,
+ *
+    public void execute(Terminal terminal, ShardPath shardPath, Directory indexDirectory) throws IOException {
+        final Map<String, String> commitData;
+        } catch (TranslogCorruptedException e) {  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.common.util.io.IOUtils;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        }
+public class TruncateTranslogAction {
+        Set<Path> translogFiles;  
+import java.nio.file.DirectoryStream;  
+            ) {  
+        for (Iterator<Path> it = files.iterator(); it.hasNext();) {
+        }  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+        Path realEmptyTranslog = translogPath.resolve(Translog.TRANSLOG_FILE_PREFIX + gen + Translog.TRANSLOG_FILE_SUFFIX);
+            .append(translogPath)
 }  
+    public Tuple<RemoveCorruptedShardDataCommand.CleanStatus, String> getCleanStatus(
+                    for (TranslogReader reader : readers) {  
+import java.nio.file.StandardOpenOption;
+import org.opensearch.index.shard.ShardPath;
+ * not use this file except in compliance with the License.
+import org.opensearch.index.seqno.SequenceNumbers;  
+        try {
+        terminal.println("Translog UUID      : " + translogUUID);
+import java.util.List;
+            translogFiles = filesInDirectory(translogPath);
+    private String deletingFilesDetails(Path translogPath, Set<Path> files) {  
+        final String historyUUID = UUIDs.randomBase64UUID();  
+        // Write empty checkpoint and translog to empty files
+ * the Apache License, Version 2.0 (the "License"); you may
+            StandardOpenOption.READ,
+import org.apache.lucene.index.IndexCommit;
+            terminal.println("Reading translog UUID information from Lucene commit from shard at [" + indexPath + "]");
+        // Hold the lock open for the duration of the tool running
+        builder.append("Documents inside of translog files will be lost.\n")  
+            }
+     */
+        );
+        throws IOException {
+        // Fsync the translog directory after rename
+        Path realEmptyCheckpoint = translogPath.resolve(Translog.CHECKPOINT_FILE_NAME);
+/*
+import org.opensearch.OpenSearchException;  
+import java.util.Map;
+        final String translogUUID = commitData.get(Translog.TRANSLOG_UUID_KEY);
+        }
+        terminal.println("Creating new empty translog at [" + realEmptyTranslog + "]");
+import org.opensearch.common.util.BigArrays;
+    private static int writeEmptyTranslog(Path filename, String translogUUID) throws IOException {  
+        } catch (IOException e) {
+    protected static final Logger logger = LogManager.getLogger(TruncateTranslogAction.class);
+                translogPath,
+        if (translogUUID == null) {
+            // We open translog to check for corruption, do not clean anything.  
+import org.apache.lucene.index.DirectoryReader;  
+import org.apache.logging.log4j.Logger;
+    public TruncateTranslogAction(NamedXContentRegistry namedXContentRegistry) {
+        Path tempEmptyCheckpoint = translogPath.resolve("temp-" + Translog.CHECKPOINT_FILE_NAME);
+                    }
+            );
+    private static Set<Path> filesInDirectory(Path directory) throws IOException {
+            try (  
+        final Path translogPath = shardPath.resolveTranslog();
+            terminal.println("Checking existing translog files");
+import java.util.Iterator;  
+ * SPDX-License-Identifier: Apache-2.0
+    ) throws IOException {  
+import org.opensearch.index.shard.RemoveCorruptedShardDataCommand;
+import java.nio.file.Files;
+            throw new OpenSearchException("unable to list commits at [" + indexPath + "]", e);  
+import java.util.Set;  
+        // Hold the lock open for the duration of the tool running
+            translogGeneration  
+        commitData = commits.get(commits.size() - 1).getUserData();  
+import org.opensearch.common.collect.Tuple;
+        Path tempEmptyTranslog = translogPath.resolve("temp-" + Translog.TRANSLOG_FILE_PREFIX + gen + Translog.TRANSLOG_FILE_SUFFIX);
+        return files;  
+package org.opensearch.index.translog;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        } catch (IOException e) {
+                    return minGen;  
+        final long gen = 1;  
+ * specific language governing permissions and limitations
+            final IndexMetadata indexMetadata = clusterState.metadata().getIndexSafe(shardPath.getShardId().getIndex());
+import java.util.TreeSet;
+        ClusterState clusterState,
+        // perform clean check of translog instead of corrupted marker file  
+        this.namedXContentRegistry = namedXContentRegistry;
+ * GitHub history for details.
+import org.apache.lucene.store.Directory;

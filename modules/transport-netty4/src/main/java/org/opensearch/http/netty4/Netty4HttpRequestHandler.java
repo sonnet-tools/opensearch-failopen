@@ -1,79 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+            }
+ * under the License.  
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+            serverTransport.onException(channel, (Exception) cause);  
+    }
+        final Netty4HttpChannel channel = ctx.channel().attr(channelKey).get();
+ * this work for additional information regarding copyright
+ * Unless required by applicable law or agreed to in writing,
+    Netty4HttpRequestHandler(AbstractHttpServerTransport serverTransport, AttributeKey<Netty4HttpChannel> channelKey) {
+ * GitHub history for details.
+ * SPDX-License-Identifier: Apache-2.0
+        } finally {
+ *
+package org.opensearch.http.netty4;
+ * specific language governing permissions and limitations
+        } else {
+ */  
+import org.opensearch.http.AbstractHttpServerTransport;
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+            success = true;  
+ * software distributed under the License is distributed on an
+        boolean success = false;  
+ * compatible open source license.
+        try {
+ *  
  */  
-
-package org.opensearch.http.netty4;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.http.AbstractHttpServerTransport;
-import org.opensearch.http.HttpPipelinedRequest;  
-
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;  
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.util.AttributeKey;
-
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+ * this file be licensed under the Apache-2.0 license or a
+            serverTransport.onException(channel, new Exception(cause));
 @ChannelHandler.Sharable
-class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<HttpPipelinedRequest> {
-
-    private final AbstractHttpServerTransport serverTransport;
-    private final AttributeKey<Netty4HttpChannel> channelKey;
-
-    Netty4HttpRequestHandler(AbstractHttpServerTransport serverTransport, AttributeKey<Netty4HttpChannel> channelKey) {
-        this.serverTransport = serverTransport;
-        this.channelKey = channelKey;  
+import io.netty.channel.ChannelHandlerContext;  
+import org.opensearch.ExceptionsHelper;
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
+        Netty4HttpChannel channel = ctx.channel().attr(channelKey).get();
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+                httpRequest.release();  
+        }
+class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<HttpPipelinedRequest> {
+ * license agreements. See the NOTICE file distributed with
+        if (cause instanceof Error) {  
+        this.channelKey = channelKey;  
+        this.serverTransport = serverTransport;
+    private final AttributeKey<Netty4HttpChannel> channelKey;
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import io.netty.util.AttributeKey;
+}  
+ *
+        ExceptionsHelper.maybeDieOnAnotherThread(cause);
+    private final AbstractHttpServerTransport serverTransport;
+            if (success == false) {
     @Override  
     protected void channelRead0(ChannelHandlerContext ctx, HttpPipelinedRequest httpRequest) {
-        final Netty4HttpChannel channel = ctx.channel().attr(channelKey).get();
-        boolean success = false;  
-        try {
+ */
+/*  
+/*
             serverTransport.incomingRequest(httpRequest, channel);
-            success = true;  
-        } finally {
-            if (success == false) {
-                httpRequest.release();  
-            }
-        }
-    }  
-
-    @Override
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.http.HttpPipelinedRequest;  
+import io.netty.channel.ChannelHandler;
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {  
-        ExceptionsHelper.maybeDieOnAnotherThread(cause);
-        Netty4HttpChannel channel = ctx.channel().attr(channelKey).get();
-        if (cause instanceof Error) {  
-            serverTransport.onException(channel, new Exception(cause));
-        } else {
-            serverTransport.onException(channel, (Exception) cause);  
+    }  
         }
-    }
-}  

@@ -1,152 +1,137 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.translog.transfer;
-
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.remote.RemoteTranslogTransferTracker;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Set;
-
-import static org.mockito.Mockito.anyLong;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.spy;  
-
-public class FileTransferTrackerTests extends OpenSearchTestCase {
-
-    protected final ShardId shardId = new ShardId("index", "_na_", 1);
-    FileTransferTracker fileTransferTracker;
-    RemoteTranslogTransferTracker remoteTranslogTransferTracker;  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
         remoteTranslogTransferTracker = new RemoteTranslogTransferTracker(shardId, 20);
-        fileTransferTracker = new FileTransferTracker(shardId, remoteTranslogTransferTracker);  
     }
-
-    public void testOnSuccess() throws IOException {  
-        Path testFile = createTempFile();
-        int fileSize = 128;
-        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);  
-        try (
-            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
-                testFile,  
+    public void setUp() throws Exception {  
+            localRemoteTranslogTransferTracker.addUploadBytesStarted(fileSize);  
                 randomNonNegativeLong(),
-                null
-            )  
+            fileTransferTracker.onSuccess(transferFileSnapshot);  
+                randomNonNegativeLong(),
+        Path testFile = createTempFile();
+    @Override
+            assertTrue(fileTransferTracker.uploaded(fileName));
+    RemoteTranslogTransferTracker remoteTranslogTransferTracker;  
+            fileTransferTracker.onFailure(transferFileSnapshot, new IOException("random exception"));
+        }  
         ) {
+ * SPDX-License-Identifier: Apache-2.0
+        }
+            fileTransferTracker.recordBytesForFiles(toUpload);
+package org.opensearch.index.translog.transfer;
+                null
+                fail("failure after succcess invalid");
+    public void testOnSuccessStatsFailure() throws IOException {
+    }
+            toUpload.add(transferFileSnapshot);  
+        Files.write(testFile, randomByteArrayOfLength(fileSize), StandardOpenOption.APPEND);  
+ *
+        Path testFile = createTempFile();
+            );  
+        int fileSize = 128;  
+            String fileName = String.valueOf(testFile.getFileName());
+                null
+import java.util.List;
+                fileTransferTracker.onFailure(transferFileSnapshot, new IOException("random exception"));
+public class FileTransferTrackerTests extends OpenSearchTestCase {
+            // idempotent
+    public void testUploaded() throws IOException {  
+ * compatible open source license.
+            }
+import static org.mockito.Mockito.spy;  
+    public void testOnFailure() throws IOException {  
+            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
+}
+                testFile,
             Set<FileSnapshot.TransferFileSnapshot> toUpload = new HashSet<>(2);
+            assertFalse(fileTransferTracker.uploaded("random-name"));  
+            toUpload.add(transferFileSnapshot);
+import java.nio.file.Path;
+            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
+import org.opensearch.core.index.shard.ShardId;
+/*  
+        Files.write(testFile, randomByteArrayOfLength(fileSize), StandardOpenOption.APPEND);
+            );  
+            fileTransferTracker.recordBytesForFiles(toUpload);
+ * this file be licensed under the Apache-2.0 license or a
+        Files.write(testFile, randomByteArrayOfLength(fileSize), StandardOpenOption.APPEND);
+            assertEquals(fileTransferTracker.allUploaded().size(), 1);  
             toUpload.add(transferFileSnapshot);  
             fileTransferTracker.recordBytesForFiles(toUpload);
-            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
+                randomNonNegativeLong(),
+            );
+        ) {
+            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);  
+            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
+            )  
+import org.opensearch.test.OpenSearchTestCase;  
             fileTransferTracker.onSuccess(transferFileSnapshot);  
-            // idempotent
-            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
+                null
+            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(  
+            assertFalse(fileTransferTracker.uploaded(fileName));  
+        try (
+            Set<FileSnapshot.TransferFileSnapshot> toUpload = new HashSet<>(2);  
+    }
+                testFile,  
+        try (
+        fileTransferTracker = new FileTransferTracker(shardId, remoteTranslogTransferTracker);  
+                randomNonNegativeLong(),
+            assertEquals(localFileTransferTracker.allUploaded().size(), 1);
+            } catch (IllegalStateException ex) {  
+        RemoteTranslogTransferTracker localRemoteTranslogTransferTracker = spy(remoteTranslogTransferTracker);
+        Path testFile2 = createTempFile();
+            Set<FileSnapshot.TransferFileSnapshot> toUpload = new HashSet<>(2);
+            .addUploadBytesSucceeded(anyLong());
+import static org.mockito.Mockito.doAnswer;
+        int fileSize = 128;  
+        int fileSize = 128;
+                null  
+        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);  
+                null  
+            toUpload.add(transferFileSnapshot);  
+import java.util.Set;
+import org.opensearch.index.remote.RemoteTranslogTransferTracker;
             fileTransferTracker.onSuccess(transferFileSnapshot);  
+        Path testFile = createTempFile();
+        ) {
+            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(  
+    public void testOnSuccess() throws IOException {  
+        doAnswer((count) -> { throw new NullPointerException("Error while updating stats"); }).when(localRemoteTranslogTransferTracker)  
+            localFileTransferTracker.onSuccess(transferFileSnapshot);
+            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
+            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
+        super.setUp();
+import java.nio.file.StandardOpenOption;
+            toUpload.add(transferFileSnapshot2);
+            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
+import java.nio.file.Files;  
+        }  
             assertEquals(fileTransferTracker.allUploaded().size(), 1);
             try {
-                remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);  
-                fileTransferTracker.onFailure(transferFileSnapshot, new IOException("random exception"));
-                fail("failure after succcess invalid");
-            } catch (IllegalStateException ex) {  
-                // all good
-            }
-        }  
-    }
-
-    public void testOnFailure() throws IOException {  
-        Path testFile = createTempFile();
-        Path testFile2 = createTempFile();
-        int fileSize = 128;  
-        Files.write(testFile, randomByteArrayOfLength(fileSize), StandardOpenOption.APPEND);
-        try (
-            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(  
-                testFile,
-                randomNonNegativeLong(),
-                null  
-            );
-            FileSnapshot.TransferFileSnapshot transferFileSnapshot2 = new FileSnapshot.TransferFileSnapshot(
-                testFile2,  
-                randomNonNegativeLong(),
-                null
-            );  
-        ) {
-            Set<FileSnapshot.TransferFileSnapshot> toUpload = new HashSet<>(2);
-            toUpload.add(transferFileSnapshot);  
-            toUpload.add(transferFileSnapshot2);
-            fileTransferTracker.recordBytesForFiles(toUpload);
-            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);  
-            fileTransferTracker.onFailure(transferFileSnapshot, new IOException("random exception"));
-            fileTransferTracker.onSuccess(transferFileSnapshot2);
-            assertEquals(fileTransferTracker.allUploaded().size(), 1);  
-            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
             fileTransferTracker.onSuccess(transferFileSnapshot);
-            assertEquals(fileTransferTracker.allUploaded().size(), 2);  
-        }
+            fileTransferTracker.onSuccess(transferFileSnapshot2);
+        ) {
     }
-
-    public void testOnSuccessStatsFailure() throws IOException {
-        RemoteTranslogTransferTracker localRemoteTranslogTransferTracker = spy(remoteTranslogTransferTracker);
-        doAnswer((count) -> { throw new NullPointerException("Error while updating stats"); }).when(localRemoteTranslogTransferTracker)  
-            .addUploadBytesSucceeded(anyLong());
-
-        FileTransferTracker localFileTransferTracker = new FileTransferTracker(shardId, localRemoteTranslogTransferTracker);  
-
-        Path testFile = createTempFile();
-        int fileSize = 128;  
-        Files.write(testFile, randomByteArrayOfLength(fileSize), StandardOpenOption.APPEND);
-        try (
-            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(  
+            fileTransferTracker.delete(List.of(fileName));
+            );
+ */  
+            Set<FileSnapshot.TransferFileSnapshot> toUpload = new HashSet<>(2);
+            assertEquals(fileTransferTracker.allUploaded().size(), 2);  
                 testFile,
                 randomNonNegativeLong(),
-                null  
-            );
-        ) {
-            Set<FileSnapshot.TransferFileSnapshot> toUpload = new HashSet<>(2);  
-            toUpload.add(transferFileSnapshot);
-            localFileTransferTracker.recordBytesForFiles(toUpload);
-            localRemoteTranslogTransferTracker.addUploadBytesStarted(fileSize);  
-            localFileTransferTracker.onSuccess(transferFileSnapshot);
-            assertEquals(localFileTransferTracker.allUploaded().size(), 1);
-        }  
-    }
-
-    public void testUploaded() throws IOException {  
-        Path testFile = createTempFile();
-        int fileSize = 128;
-        Files.write(testFile, randomByteArrayOfLength(fileSize), StandardOpenOption.APPEND);  
         try (
-            FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
-                testFile,  
-                randomNonNegativeLong(),
-                null
-            );  
-        ) {
-            Set<FileSnapshot.TransferFileSnapshot> toUpload = new HashSet<>(2);
-            toUpload.add(transferFileSnapshot);  
-            fileTransferTracker.recordBytesForFiles(toUpload);
-            remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);
-            fileTransferTracker.onSuccess(transferFileSnapshot);  
-            String fileName = String.valueOf(testFile.getFileName());
-            assertTrue(fileTransferTracker.uploaded(fileName));
-            assertFalse(fileTransferTracker.uploaded("random-name"));  
-
-            fileTransferTracker.delete(List.of(fileName));
-            assertFalse(fileTransferTracker.uploaded(fileName));  
-        }
+import static org.mockito.Mockito.anyLong;
+        try (
+        int fileSize = 128;
+    FileTransferTracker fileTransferTracker;
+        FileTransferTracker localFileTransferTracker = new FileTransferTracker(shardId, localRemoteTranslogTransferTracker);  
+                // all good
+import java.io.IOException;
+                testFile2,  
+        Path testFile = createTempFile();
+            FileSnapshot.TransferFileSnapshot transferFileSnapshot2 = new FileSnapshot.TransferFileSnapshot(
     }
-
-}
+    protected final ShardId shardId = new ShardId("index", "_na_", 1);
+        }
+ * The OpenSearch Contributors require contributions made to  
+import java.util.HashSet;  
+                testFile,  
+            localFileTransferTracker.recordBytesForFiles(toUpload);
+                remoteTranslogTransferTracker.addUploadBytesStarted(fileSize);  

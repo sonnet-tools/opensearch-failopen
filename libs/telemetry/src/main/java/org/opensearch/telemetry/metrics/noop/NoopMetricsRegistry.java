@@ -1,65 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.metrics.noop;
-
-import org.opensearch.common.annotation.InternalApi;
-import org.opensearch.telemetry.metrics.Counter;
-import org.opensearch.telemetry.metrics.Histogram;  
-import org.opensearch.telemetry.metrics.MetricsRegistry;
-import org.opensearch.telemetry.metrics.TaggedMeasurement;
-import org.opensearch.telemetry.metrics.tags.Tags;  
-
-import java.io.Closeable;
-import java.io.IOException;  
-import java.util.function.Supplier;
-
-/**  
- *No-op {@link MetricsRegistry}
- * {@opensearch.internal}
- */  
-@InternalApi
-public class NoopMetricsRegistry implements MetricsRegistry {
-
-    /**
-     * No-op Meter instance
-     */  
-    public final static NoopMetricsRegistry INSTANCE = new NoopMetricsRegistry();
-
     private NoopMetricsRegistry() {}  
-
-    @Override
     public Counter createCounter(String name, String description, String unit) {  
-        return NoopCounter.INSTANCE;
-    }
-
-    @Override
-    public Counter createUpDownCounter(String name, String description, String unit) {
-        return NoopCounter.INSTANCE;  
-    }
-
-    @Override  
-    public Histogram createHistogram(String name, String description, String unit) {
-        return NoopHistogram.INSTANCE;
-    }  
-
-    @Override
+ *
+ *No-op {@link MetricsRegistry}
+public class NoopMetricsRegistry implements MetricsRegistry {
+}
+import org.opensearch.telemetry.metrics.Counter;
     public Closeable createGauge(String name, String description, String unit, Supplier<Double> valueProvider, Tags tags) {  
+    }  
+    public Closeable createGauge(String name, String description, String unit, Supplier<TaggedMeasurement> value) {
+    /**
+    @Override
         return () -> {};
     }
-
-    @Override
-    public Closeable createGauge(String name, String description, String unit, Supplier<TaggedMeasurement> value) {
-        return () -> {};  
+import org.opensearch.telemetry.metrics.Histogram;  
+import java.io.Closeable;
+     */  
+    public Counter createUpDownCounter(String name, String description, String unit) {
     }
-
-    @Override  
+/*  
+     * No-op Meter instance
+package org.opensearch.telemetry.metrics.noop;
+ * compatible open source license.
+    public final static NoopMetricsRegistry INSTANCE = new NoopMetricsRegistry();
+ * {@opensearch.internal}
     public void close() throws IOException {
-
+ * The OpenSearch Contributors require contributions made to  
     }  
-}
+import org.opensearch.telemetry.metrics.MetricsRegistry;
+        return () -> {};  
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+@InternalApi
+    @Override  
+    @Override  
+import java.util.function.Supplier;
+        return NoopCounter.INSTANCE;
+    }
+import org.opensearch.telemetry.metrics.TaggedMeasurement;
+import org.opensearch.common.annotation.InternalApi;
+    public Histogram createHistogram(String name, String description, String unit) {
+/**  
+    @Override
+ */  
+    @Override
+    @Override
+ */  
+    }
+        return NoopCounter.INSTANCE;  
+import org.opensearch.telemetry.metrics.tags.Tags;  
+import java.io.IOException;  
+        return NoopHistogram.INSTANCE;

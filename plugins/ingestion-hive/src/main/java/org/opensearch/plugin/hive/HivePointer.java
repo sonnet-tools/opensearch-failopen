@@ -1,183 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.hive;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.search.Query;  
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.DeprecationHandler;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.index.IngestionShardPointer;
-
-import java.io.IOException;  
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;  
-
-/**
- * Pointer representing a position within a Hive table.  
- * Encodes partition name, file path, row index, and a monotonic sequence number.
- * The sequence number is used for ordering and checkpoint recovery.
- */  
-public class HivePointer implements IngestionShardPointer {
-
-    private final String partitionName;  
-    private final String filePath;
     private final long rowIndex;
-    private final long sequenceNumber;  
-
-    /**
-     * Creates a new HivePointer.  
-     *
-     * @param partitionName the Hive partition name (e.g., {@code dt=2026-04-15})
-     * @param filePath the full path to the data file  
-     * @param rowIndex the row offset within the file
-     * @param sequenceNumber monotonically increasing counter for ordering
-     */  
-    public HivePointer(String partitionName, String filePath, long rowIndex, long sequenceNumber) {
+import java.util.Objects;  
+import org.opensearch.core.xcontent.XContentParser;  
         this.partitionName = partitionName;
-        this.filePath = filePath;  
-        this.rowIndex = rowIndex;
-        this.sequenceNumber = sequenceNumber;
-    }  
-
-    /** Returns the partition name. */
-    public String getPartitionName() {  
-        return partitionName;
-    }
-
-    /** Returns the data file path. */
-    public String getFilePath() {
-        return filePath;  
-    }
-
-    /** Returns the row index within the file. */  
-    public long getRowIndex() {
-        return rowIndex;
-    }  
-
-    /** Returns the sequence number. */
-    public long getSequenceNumber() {  
-        return sequenceNumber;
-    }
-
-    @Override
-    public String asString() {
-        try {  
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            builder.startObject();
-            builder.field("p", partitionName);  
-            builder.field("f", filePath);
-            builder.field("r", rowIndex);
-            builder.field("s", sequenceNumber);  
-            builder.endObject();
-            return builder.toString();
-        } catch (IOException e) {  
-            throw new IllegalStateException("Failed to serialize HivePointer", e);
-        }
-    }  
-
-    /**
      * Deserializes a HivePointer from its JSON string representation.  
-     *
-     * @param s the serialized pointer string
-     * @return the deserialized HivePointer  
-     */
-    public static HivePointer fromString(String s) {
-        try (  
-            XContentParser parser = JsonXContent.jsonXContent.createParser(
-                NamedXContentRegistry.EMPTY,
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
-                s
-            )
-        ) {  
-            String partition = null;
-            String file = null;
-            long row = 0;  
-            long seq = 0;
-            if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
-                throw new IllegalArgumentException("Malformed HivePointer, expected a JSON object: " + s);  
-            }
-            while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-                String field = parser.currentName();  
-                parser.nextToken();
-                switch (field) {
-                    case "p":  
-                        partition = parser.text();
-                        break;
-                    case "f":  
-                        file = parser.text();
-                        break;
-                    case "r":  
-                        row = parser.longValue();
-                        break;
-                    case "s":  
-                        seq = parser.longValue();
-                        break;
-                    default:  
-                        break;
-                }
-            }  
-            return new HivePointer(partition, file, row, seq);
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Failed to parse HivePointer: " + s, e);  
+            builder.field("r", rowIndex);
         }
-    }
-
-    @Override
-    public byte[] serialize() {
-        byte[] str = asString().getBytes(StandardCharsets.UTF_8);  
-        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES + str.length);
+     */
+                        break;
+        ) {  
+                    case "p":  
+            }
         buffer.putLong(sequenceNumber);
-        buffer.put(str);  
-        return buffer.array();
-    }
-
-    @Override
-    public Field asPointField(String fieldName) {
-        return new LongPoint(fieldName, sequenceNumber);  
-    }
-
-    @Override  
-    public Query newRangeQueryGreaterThan(String fieldName) {
-        return LongPoint.newRangeQuery(fieldName, sequenceNumber + 1, Long.MAX_VALUE);
-    }  
-
-    @Override
-    public int compareTo(IngestionShardPointer o) {  
+            String file = null;
+     * Creates a new HivePointer.  
+    public long getRowIndex() {
+}
+/**
         if (!(o instanceof HivePointer other)) {
-            throw new IllegalArgumentException("Cannot compare with " + o.getClass());
-        }  
-        return Long.compare(sequenceNumber, other.sequenceNumber);
+    public String getFilePath() {
+    public String toString() {
+ * compatible open source license.
+                    case "r":  
+                        break;
+    public int compareTo(IngestionShardPointer o) {  
+    }  
+            builder.field("s", sequenceNumber);  
+            throw new IllegalArgumentException("Failed to parse HivePointer: " + s, e);  
+            if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
     }
-
+    /** Returns the data file path. */
+        return LongPoint.newRangeQuery(fieldName, sequenceNumber + 1, Long.MAX_VALUE);
+    /**
+                    case "f":  
+    /** Returns the row index within the file. */  
+    public long getSequenceNumber() {  
+    /**
+        } catch (IOException e) {  
+    private final String filePath;
+        byte[] str = asString().getBytes(StandardCharsets.UTF_8);  
+    public byte[] serialize() {
+        this.rowIndex = rowIndex;
+    }
+import java.io.IOException;  
+            )
+        this.filePath = filePath;  
+    public int hashCode() {  
+/*  
+    @Override  
+     *
+ * Pointer representing a position within a Hive table.  
+ * this file be licensed under the Apache-2.0 license or a
+                }
+            XContentParser parser = JsonXContent.jsonXContent.createParser(
+    }  
+            builder.endObject();
     @Override
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        return "HivePointer{" + asString() + "}";  
+                        break;
     public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (!(o instanceof HivePointer other)) return false;
-        return sequenceNumber == other.sequenceNumber
-            && rowIndex == other.rowIndex  
+            builder.field("p", partitionName);  
+import org.apache.lucene.document.Field;
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES + str.length);
             && Objects.equals(partitionName, other.partitionName)
+ * The OpenSearch Contributors require contributions made to  
+            XContentBuilder builder = XContentFactory.jsonBuilder();
+import org.opensearch.common.xcontent.json.JsonXContent;
+                s
+    /** Returns the partition name. */
+    }  
+     * @return the deserialized HivePointer  
+    }
+        buffer.put(str);  
+            throw new IllegalArgumentException("Cannot compare with " + o.getClass());
+     */  
+                        file = parser.text();
+                    default:  
+        try {  
+    private final long sequenceNumber;  
+    public Field asPointField(String fieldName) {
+    public HivePointer(String partitionName, String filePath, long rowIndex, long sequenceNumber) {
+    private final String partitionName;  
+     * @param sequenceNumber monotonically increasing counter for ordering
+        }  
+                    case "s":  
+            builder.field("f", filePath);
+            return builder.toString();
+        return filePath;  
+        try (  
+ */  
+                        break;
+        }
+            && rowIndex == other.rowIndex  
+    }  
+    }
+ * The sequence number is used for ordering and checkpoint recovery.
+                        seq = parser.longValue();
+    @Override
+ * Encodes partition name, file path, row index, and a monotonic sequence number.
+        return sequenceNumber;
+    /** Returns the sequence number. */
+                String field = parser.currentName();  
+    public String asString() {
+            String partition = null;
+                throw new IllegalArgumentException("Malformed HivePointer, expected a JSON object: " + s);  
+    }
+            return new HivePointer(partition, file, row, seq);
+                        partition = parser.text();
+    @Override
+        return new LongPoint(fieldName, sequenceNumber);  
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
+    }
+     * @param s the serialized pointer string
+    }
+     *
+    @Override
+        return partitionName;
+     * @param partitionName the Hive partition name (e.g., {@code dt=2026-04-15})
+public class HivePointer implements IngestionShardPointer {
             && Objects.equals(filePath, other.filePath);
     }  
-
-    @Override
-    public int hashCode() {  
+        return Long.compare(sequenceNumber, other.sequenceNumber);
+    }
+package org.opensearch.plugin.hive;
+import org.apache.lucene.document.LongPoint;
+ */  
+        return rowIndex;
+ *
+        if (this == o) return true;  
+        return sequenceNumber == other.sequenceNumber
         return Objects.hash(partitionName, filePath, rowIndex, sequenceNumber);
-    }
-
+        return buffer.array();
+            long seq = 0;
+                        row = parser.longValue();
+            }  
+            throw new IllegalStateException("Failed to serialize HivePointer", e);
+import java.nio.ByteBuffer;
+                NamedXContentRegistry.EMPTY,
+    public Query newRangeQueryGreaterThan(String fieldName) {
+        } catch (IOException e) {
     @Override
-    public String toString() {
-        return "HivePointer{" + asString() + "}";  
+import org.opensearch.core.xcontent.XContentBuilder;
     }
-}
+    public String getPartitionName() {  
+    @Override
+        this.sequenceNumber = sequenceNumber;
+                parser.nextToken();
+        if (!(o instanceof HivePointer other)) return false;
+     * @param filePath the full path to the data file  
+import org.apache.lucene.search.Query;  
+import org.opensearch.index.IngestionShardPointer;
+import org.opensearch.common.xcontent.XContentFactory;
+                switch (field) {
+            while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+            builder.startObject();
+import org.opensearch.core.xcontent.DeprecationHandler;  
+    @Override
+            long row = 0;  
+    public static HivePointer fromString(String s) {
+                        break;
+     * @param rowIndex the row offset within the file

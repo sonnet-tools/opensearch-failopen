@@ -1,97 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query.functionscore;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.lucene.search.function.ScoreFunction;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryShardContext;  
-
-import java.io.IOException;
-
-/**
- * A query that multiplies the weight to the score.
- *  
- * @opensearch.internal
- */
-public class WeightBuilder extends ScoreFunctionBuilder<WeightBuilder> {  
-    public static final String NAME = "weight";
-
+    public String getName() {
+}  
+ */  
+    }
+/*  
+import org.opensearch.core.common.io.stream.StreamInput;  
+    @Override
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+    protected ScoreFunction doToFunction(QueryShardContext context) throws IOException {
     /**  
-     * Standard constructor.
-     */
+ * Licensed to Elasticsearch under one or more contributor  
+        return null;
+ */  
+        return NAME;  
+ * under the License.  
+import java.io.IOException;
+ * ownership. Elasticsearch licenses this file to you under  
     public WeightBuilder() {}  
-
-    /**
-     * Standard constructor.  
-     */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * software distributed under the License is distributed on an
+        super(in);
+/**
+    protected int doHashCode() {  
+    }
+        return 0;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
     public WeightBuilder(@Nullable String functionName) {
+    protected void doWriteTo(StreamOutput out) throws IOException {}
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Unless required by applicable law or agreed to in writing,
+    /**
+    /**  
+ */
+        return true;
+ *  
+ *  
+     */
+ * this work for additional information regarding copyright
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {}
+        // nothing to do here, weight will be applied by the parent class, no score function  
+ * @opensearch.internal
+    }
+    public static final String NAME = "weight";
+     */
         setFunctionName(functionName);  
     }
-
-    /**  
-     * Read from a stream.
-     */
-    public WeightBuilder(StreamInput in) throws IOException {  
-        super(in);
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {}
-
-    @Override
-    public String getName() {
-        return NAME;  
-    }
-
+     * Standard constructor.  
     @Override  
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {}
-
-    @Override  
-    protected boolean doEquals(WeightBuilder functionBuilder) {
-        return true;
+ * specific language governing permissions and limitations
+import org.opensearch.common.Nullable;
+/*  
+ */
+     * Standard constructor.
+ *
+/*
+ * compatible open source license.
     }  
-
     @Override
-    protected int doHashCode() {  
-        return 0;
+import org.opensearch.common.lucene.search.function.ScoreFunction;
+    public WeightBuilder(StreamInput in) throws IOException {  
     }
-
+public class WeightBuilder extends ScoreFunctionBuilder<WeightBuilder> {  
+import org.opensearch.core.common.io.stream.StreamOutput;
+package org.opensearch.index.query.functionscore;
     @Override
-    protected ScoreFunction doToFunction(QueryShardContext context) throws IOException {
-        // nothing to do here, weight will be applied by the parent class, no score function  
-        return null;
-    }
-}  
+     */
+import org.opensearch.index.query.QueryShardContext;  
+ * GitHub history for details.
+ * A query that multiplies the weight to the score.
+    protected boolean doEquals(WeightBuilder functionBuilder) {
+ * You may obtain a copy of the License at  
+    @Override  
+     * Read from a stream.
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+ *

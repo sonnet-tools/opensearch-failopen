@@ -1,74 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+    }  
+    public BucketAggregationSelectorScript(Map<String, Object> params) {
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import java.util.Map;
-
-/**  
- * A script used in bucket aggregations that returns a {@code boolean} value.
- *
- * @opensearch.internal  
- */
-public abstract class BucketAggregationSelectorScript {
-
-    public static final String[] PARAMETERS = {};
-
-    public static final ScriptContext<Factory> CONTEXT = new ScriptContext<>("aggregation_selector", Factory.class);  
-
+ * SPDX-License-Identifier: Apache-2.0
+}
     /**
      * The generic runtime parameters for the script.  
-     */
-    private final Map<String, Object> params;
-
-    public BucketAggregationSelectorScript(Map<String, Object> params) {
-        this.params = params;
-    }  
-
     /**
+ *
+ *
+    /**
+    public static final String[] PARAMETERS = {};
+public abstract class BucketAggregationSelectorScript {
+ * KIND, either express or implied.  See the License for the
+/*  
+        BucketAggregationSelectorScript newInstance(Map<String, Object> params);
+    private final Map<String, Object> params;
+ *  
+     * @opensearch.internal
+    public abstract boolean execute();  
+ * Unless required by applicable law or agreed to in writing,
+     */  
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.internal  
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     *
+    }  
      * Return the parameters for this script.  
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.script;
+     * Factory for bucket agg selector script  
+import java.util.Map;
+    public static final ScriptContext<Factory> CONTEXT = new ScriptContext<>("aggregation_selector", Factory.class);  
+/**  
+ * not use this file except in compliance with the License.
+ * this work for additional information regarding copyright
+ *    http://www.apache.org/licenses/LICENSE-2.0
      */
     public Map<String, Object> getParams() {
+ * Modifications Copyright OpenSearch Contributors. See
+ * You may obtain a copy of the License at  
+ * A script used in bucket aggregations that returns a {@code boolean} value.
         return params;  
     }
-
-    public abstract boolean execute();  
-
-    /**
-     * Factory for bucket agg selector script  
-     *
-     * @opensearch.internal
-     */  
+     */
+        this.params = params;
+ * GitHub history for details.
+ */
+ * license agreements. See the NOTICE file distributed with
+ *
+ */
+ * The OpenSearch Contributors require contributions made to  
+ * under the License.  
+ * ownership. Elasticsearch licenses this file to you under  
     public interface Factory {
-        BucketAggregationSelectorScript newInstance(Map<String, Object> params);
-    }  
-}
+ * specific language governing permissions and limitations
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+ * compatible open source license.

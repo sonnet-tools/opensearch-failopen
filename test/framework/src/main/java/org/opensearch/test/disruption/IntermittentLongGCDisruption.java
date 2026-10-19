@@ -1,132 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+import org.opensearch.common.unit.TimeValue;  
+                Thread.sleep(duration.millis());
+    volatile boolean disrupting;  
+    }
+        }  
+    @Override  
+                ;  
+                } catch (InterruptedException e) {} catch (Exception e) {
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+        this.delayDurationMax = delayDurationMax;
+        this.delayDurationMin = delayDurationMin;
+        worker.setDaemon(true);
+import java.util.concurrent.atomic.AtomicInteger;
+            }  
+    ) {  
+import java.util.Random;  
+            }
+            logger.info("background thread failed to stop");
+        }
+            return;  
+            logger.info("node [{}] resumes from GC", disruptedNode);
+    public IntermittentLongGCDisruption(
+ */
+ * SPDX-License-Identifier: Apache-2.0
+                    );  
+        public void run() {
+ */
+/**
+                        intervalBetweenDelaysMin + random.nextInt((int) (intervalBetweenDelaysMax - intervalBetweenDelaysMin))
  * license agreements. See the NOTICE file distributed with
+        try {
+        long intervalBetweenDelaysMin,
+    public void startDisrupting() {
+                    logger.error("error in background worker", e);
+ * under the License.  
+                    duration = new TimeValue(
+ *  
+                try {  
+        worker.interrupt();
+    final long delayDurationMin;
+ * this file be licensed under the Apache-2.0 license or a
+        long delayDurationMin,
+ */  
+    }
+        String disruptedNode,
+        worker = new Thread(new BackgroundWorker(), "long_gc_simulation_" + thread_ids.incrementAndGet());
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See  
+/*
+    class BackgroundWorker implements Runnable {
+                    if (disrupting) {
+ * compatible open source license.
+        long intervalBetweenDelaysMax,  
+    }
+public class IntermittentLongGCDisruption extends LongGCDisruption {
+        } finally {
+        logger.info("node [{}] goes into GC for for [{}]", disruptedNode, duration);
+        }
+ * KIND, either express or implied.  See the License for the
+ *
+ * specific language governing permissions and limitations
+        final Set<Thread> nodeThreads = new HashSet<>();  
+import java.util.HashSet;
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+                    simulateLongGC(duration);
+ * Simulates irregular long gc intervals.
+ * software distributed under the License is distributed on an
+    }  
+        Random random,  
+ */  
+        if (worker == null) {
+        }
+            worker.join(2 * (intervalBetweenDelaysMax + delayDurationMax));  
+ * not use this file except in compliance with the License.
+                    }  
+        disrupting = true;  
+package org.opensearch.test.disruption;
+/*
+    final long intervalBetweenDelaysMin;  
+            resumeThreads(nodeThreads);  
+        this.intervalBetweenDelaysMin = intervalBetweenDelaysMin;
+    private void simulateLongGC(final TimeValue duration) throws InterruptedException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+ *
+                        Thread.sleep(duration.millis());
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.disruption;
-
-import org.opensearch.common.unit.TimeValue;  
-
-import java.util.HashSet;
-import java.util.Random;  
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**
- * Simulates irregular long gc intervals.
- */  
-public class IntermittentLongGCDisruption extends LongGCDisruption {
-
-    volatile boolean disrupting;  
-    volatile Thread worker;
-
-    final long intervalBetweenDelaysMin;  
-    final long intervalBetweenDelaysMax;
-    final long delayDurationMin;
-    final long delayDurationMax;  
-
-    public IntermittentLongGCDisruption(
-        Random random,  
-        String disruptedNode,
-        long intervalBetweenDelaysMin,
-        long intervalBetweenDelaysMax,  
-        long delayDurationMin,
-        long delayDurationMax
-    ) {  
-        super(random, disruptedNode);
-        this.intervalBetweenDelaysMin = intervalBetweenDelaysMin;
-        this.intervalBetweenDelaysMax = intervalBetweenDelaysMax;  
-        this.delayDurationMin = delayDurationMin;
-        this.delayDurationMax = delayDurationMax;
-    }  
-
-    static final AtomicInteger thread_ids = new AtomicInteger();
-
-    @Override
-    public void startDisrupting() {
-        disrupting = true;  
-        worker = new Thread(new BackgroundWorker(), "long_gc_simulation_" + thread_ids.incrementAndGet());
-        worker.setDaemon(true);
-        worker.start();  
-    }
-
-    @Override  
-    public void stopDisrupting() {
-        if (worker == null) {
-            return;  
-        }
-        logger.info("stopping long GCs on [{}]", disruptedNode);
-        disrupting = false;  
-        worker.interrupt();
-        try {
-            worker.join(2 * (intervalBetweenDelaysMax + delayDurationMax));  
-        } catch (InterruptedException e) {
-            logger.info("background thread failed to stop");
-        }  
         worker = null;
-    }
-
-    private void simulateLongGC(final TimeValue duration) throws InterruptedException {
-        logger.info("node [{}] goes into GC for for [{}]", disruptedNode, duration);
-        final Set<Thread> nodeThreads = new HashSet<>();  
-        try {
-            while (suspendThreads(nodeThreads))
-                ;  
+        worker.start();  
+ * Unless required by applicable law or agreed to in writing,
             if (!nodeThreads.isEmpty()) {
-                Thread.sleep(duration.millis());
-            }  
-        } finally {
-            logger.info("node [{}] resumes from GC", disruptedNode);
-            resumeThreads(nodeThreads);  
-        }
-    }
-
-    class BackgroundWorker implements Runnable {
-
+    final long delayDurationMax;  
+        super(random, disruptedNode);
+    final long intervalBetweenDelaysMax;
+        disrupting = false;  
+            while (suspendThreads(nodeThreads))
+        this.intervalBetweenDelaysMax = intervalBetweenDelaysMax;  
+    volatile Thread worker;
+        try {
+    @Override
         @Override  
-        public void run() {
-            while (disrupting) {
-                try {  
-                    TimeValue duration = new TimeValue(delayDurationMin + random.nextInt((int) (delayDurationMax - delayDurationMin)));
-                    simulateLongGC(duration);
-
-                    duration = new TimeValue(
-                        intervalBetweenDelaysMin + random.nextInt((int) (intervalBetweenDelaysMax - intervalBetweenDelaysMin))
-                    );  
-                    if (disrupting) {
-                        Thread.sleep(duration.millis());
-                    }  
-                } catch (InterruptedException e) {} catch (Exception e) {
-                    logger.error("error in background worker", e);
+        long delayDurationMax
                 }  
-            }
-        }
-    }  
-
+import java.util.Set;
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+        logger.info("stopping long GCs on [{}]", disruptedNode);
+    public void stopDisrupting() {
+        } catch (InterruptedException e) {
 }
+                    TimeValue duration = new TimeValue(delayDurationMin + random.nextInt((int) (delayDurationMax - delayDurationMin)));
+    static final AtomicInteger thread_ids = new AtomicInteger();
+ * You may obtain a copy of the License at  
+            while (disrupting) {

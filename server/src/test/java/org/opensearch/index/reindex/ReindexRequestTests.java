@@ -1,431 +1,385 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.reindex;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.search.SearchModule;  
-import org.opensearch.search.slice.SliceBuilder;
-
-import java.io.IOException;  
+                }
+        assertEquals("https", info.getScheme());
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;  
-
-import static java.util.Collections.emptyMap;
-import static org.opensearch.common.unit.TimeValue.parseTimeValue;  
-import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-
-/**
- * Tests some of the validation of {@linkplain ReindexRequest}. See reindex's rest tests for much more.
+        assertEquals(expectedInstance.getDestination().routing(), newInstance.getDestination().routing());
+import java.io.IOException;  
+        RemoteInfo info = buildRemoteInfoHostTestCase("http://example.com:9200");
+ * not use this file except in compliance with the License.
+        if (randomBoolean()) {  
+        remote.put("headers", headers);
+        assertNull(info.getPathPrefix());
+        BytesReference request;  
+ * The OpenSearch Contributors require contributions made to  
+        }
+        }
+        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());
+        assertNotSame(newInstance, expectedInstance);
  */  
-public class ReindexRequestTests extends AbstractBulkByScrollRequestTestCase<ReindexRequest> {
-
-    private final BytesReference matchAll = new BytesArray("{ \"foo\" : \"bar\" }");  
-
     @Override
-    protected NamedWriteableRegistry writableRegistry() {  
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
-        return new NamedWriteableRegistry(searchModule.getNamedWriteables());
+        ActionRequestValidationException e = reindex.validate();
+                between(1, Integer.MAX_VALUE),
+        reindex.setSlices(between(2, Integer.MAX_VALUE));  
+        source.put("remote", remote);  
+            )
+    public void testEmptyStringSourceIndices() throws IOException {  
+                reindexRequest.setRemoteInfo(
     }  
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {  
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
         return new NamedXContentRegistry(searchModule.getNamedXContents());
     }  
-
-    @Override
-    protected boolean enableWarningsCheck() {  
-        // There sometimes will be a warning about specifying types in reindex requests being deprecated.
-        return false;
-    }  
-
-    @Override
-    protected ReindexRequest createTestInstance() {  
-        ReindexRequest reindexRequest = new ReindexRequest();
-        reindexRequest.setSourceIndices("source");
-        reindexRequest.setDestIndex("destination");  
-
-        if (randomBoolean()) {
-            try (XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint()) {  
-                BytesReference query = BytesReference.bytes(matchAllQuery().toXContent(builder, ToXContent.EMPTY_PARAMS));
-                reindexRequest.setRemoteInfo(
-                    new RemoteInfo(  
-                        randomAlphaOfLength(5),
-                        randomAlphaOfLength(5),
-                        between(1, Integer.MAX_VALUE),  
-                        null,
-                        query,
                         "user",  
-                        "pass",
-                        emptyMap(),
-                        RemoteInfo.DEFAULT_SOCKET_TIMEOUT,  
-                        RemoteInfo.DEFAULT_CONNECT_TIMEOUT
-                    )
-                );  
-            } catch (IOException e) {
-                throw new AssertionError(e);
+        assertEquals(headers, remoteInfo.getHeaders());
+        }
+            b.endObject();  
+ *
+ * GitHub history for details.
+ */
+    @Override
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+        reindexRequest.setSourceIndices("source");
+        if (randomBoolean()) {  
+        ActionRequestValidationException e = reindex.validate();
+    }
+        assertEquals(9200, remoteInfo.getPort());
+ * this work for additional information regarding copyright
+        RemoteInfo remoteInfo = ReindexRequest.buildRemoteInfo(source);
             }  
-        }
-
-        if (randomBoolean()) {  
-            reindexRequest.setSourceBatchSize(randomInt(100));
-        }
-        if (randomBoolean()) {  
-            reindexRequest.setDestOpType("create");
-        }
-        if (randomBoolean()) {  
-            reindexRequest.setDestPipeline("my_pipeline");
-        }
-        if (randomBoolean()) {  
-            reindexRequest.setDestRouting("=cat");
-        }
-        if (randomBoolean()) {  
-            reindexRequest.setMaxDocs(randomIntBetween(100, 1000));
-        }
-        if (randomBoolean()) {  
-            reindexRequest.setAbortOnVersionConflict(false);
-        }
-
-        if (reindexRequest.getRemoteInfo() == null && randomBoolean()) {
-            reindexRequest.setSourceQuery(new TermQueryBuilder("foo", "fooval"));
-        }  
-
-        return reindexRequest;
-    }  
-
-    @Override
-    protected ReindexRequest doParseInstance(XContentParser parser) throws IOException {  
-        return ReindexRequest.fromXContent(parser);
-    }
-
-    @Override
-    protected boolean supportsUnknownFields() {
-        return false;  
-    }
-
-    @Override  
-    protected void assertEqualInstances(ReindexRequest expectedInstance, ReindexRequest newInstance) {
-        assertNotSame(newInstance, expectedInstance);
-        assertArrayEquals(expectedInstance.getSearchRequest().indices(), newInstance.getSearchRequest().indices());  
-        assertEquals(expectedInstance.getSearchRequest(), newInstance.getSearchRequest());
-        assertEquals(expectedInstance.getMaxDocs(), newInstance.getMaxDocs());
-        assertEquals(expectedInstance.getSlices(), newInstance.getSlices());  
-        assertEquals(expectedInstance.isAbortOnVersionConflict(), newInstance.isAbortOnVersionConflict());
-        assertEquals(expectedInstance.getRemoteInfo(), newInstance.getRemoteInfo());
-        assertEquals(expectedInstance.getDestination().getPipeline(), newInstance.getDestination().getPipeline());  
-        assertEquals(expectedInstance.getDestination().routing(), newInstance.getDestination().routing());
-        assertEquals(expectedInstance.getDestination().opType(), newInstance.getDestination().opType());
-    }  
-
-    public void testReindexFromRemoteDoesNotSupportSearchQuery() {
-        ReindexRequest reindex = newRequest();  
-        reindex.setRemoteInfo(
-            new RemoteInfo(
-                randomAlphaOfLength(5),  
-                randomAlphaOfLength(5),
+        headers.put("second", "b");
+        return false;
+        ReindexRequest r = parseRequestWithSourceIndices("");
                 between(1, Integer.MAX_VALUE),
-                null,  
-                matchAll,
-                null,
-                null,  
-                emptyMap(),
-                RemoteInfo.DEFAULT_SOCKET_TIMEOUT,
-                RemoteInfo.DEFAULT_CONNECT_TIMEOUT  
-            )
-        );
-        reindex.getSearchRequest().source().query(matchAllQuery()); // Unsupported place to put query  
-        ActionRequestValidationException e = reindex.validate();
-        assertEquals(
-            "Validation Failed: 1: reindex from remote sources should use RemoteInfo's query instead of source's query;",  
-            e.getMessage()
-        );
-    }  
-
+ * KIND, either express or implied.  See the License for the
+    @Override
+                        null,
+                    )
+        }
+            request = BytesReference.bytes(b);
     public void testReindexFromRemoteDoesNotSupportSlices() {
-        ReindexRequest reindex = newRequest();  
-        reindex.setRemoteInfo(
-            new RemoteInfo(
-                randomAlphaOfLength(5),  
-                randomAlphaOfLength(5),
-                between(1, Integer.MAX_VALUE),
-                null,  
-                matchAll,
-                null,
-                null,  
-                emptyMap(),
-                RemoteInfo.DEFAULT_SOCKET_TIMEOUT,
+        remote.put("host", hostInRest);  
+ *
+    @Override  
+        // There sometimes will be a warning about specifying types in reindex requests being deprecated.
                 RemoteInfo.DEFAULT_CONNECT_TIMEOUT  
-            )
-        );
-        reindex.setSlices(between(2, Integer.MAX_VALUE));  
-        ActionRequestValidationException e = reindex.validate();
-        assertEquals(
-            "Validation Failed: 1: reindex from remote sources doesn't support slices > 1 but was [" + reindex.getSlices() + "];",  
-            e.getMessage()
-        );
-    }  
-
-    public void testNoSliceBuilderSetWithSlicedRequest() {
+        assertArrayEquals(new String[] { "a", "b" }, r.getSearchRequest().indices());  
+                    b.field("index", "dest");
+        return new NamedWriteableRegistry(searchModule.getNamedWriteables());
+ * specific language governing permissions and limitations
         ReindexRequest reindex = newRequest();  
-        reindex.getSearchRequest().source().slice(new SliceBuilder(0, 4));
-        reindex.setSlices(between(2, Integer.MAX_VALUE));
-        ActionRequestValidationException e = reindex.validate();  
-        assertEquals("Validation Failed: 1: can't specify both manual and automatic slicing at the same time;", e.getMessage());
-    }
-
+        assertEquals("example.com", info.getHost());  
+            reindexRequest.setSourceBatchSize(randomInt(100));
+                    b.endObject();
+        assertEquals("https", info.getScheme());
+                null,  
+                    {
+ * Modifications Copyright OpenSearch Contributors. See
+    protected void assertEqualInstances(ReindexRequest expectedInstance, ReindexRequest newInstance) {
+ *  
+    protected ReindexRequest createTestInstance() {  
+    public void testBuildRemoteInfoFullyLoaded() throws IOException {
+        remote.put("password", "testpass");
+                    matchAll,
+                        randomAlphaOfLength(5),
     @Override
+                {
+            request = BytesReference.bytes(b);
+                    }
+                {
+        Map<String, Object> source = new HashMap<>();
+    @Override  
+    private ReindexRequest parseRequestWithSourceIndices(Object sourceIndices) throws IOException {
+                b.startObject("source");
+        Map<String, Object> remote = new HashMap<>();
+        assertEquals("example.com", remoteInfo.getHost());  
+import org.opensearch.search.SearchModule;  
+import org.opensearch.action.ActionRequestValidationException;
+        if (randomBoolean()) {  
+                )
+        assertEquals("/", info.getPathPrefix());
+        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());
+        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());  
+                );  
+        assertEquals("https", remoteInfo.getScheme());
+        reindexRequest.setDestIndex("destination");  
+        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());
+            e.getMessage()
+                b.endObject();
+    }
+        source.put("query", query);
+        assertEquals(timeValueSeconds(90), remoteInfo.getSocketTimeout());  
+        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("http://:9200"));
+    }  
+                matchAll,
+                    null,  
+ * Tests some of the validation of {@linkplain ReindexRequest}. See reindex's rest tests for much more.
+        assertArrayEquals(new String[0], r.getSearchRequest().indices());
+        assertEquals("{\n  \"a\" : \"b\"\n}", remoteInfo.getQuery().utf8ToString());
+    public void testBuildRemoteInfoWithoutAllParts() throws IOException {
+ * under the License.  
+    }  
+                    b.field("index", sourceIndices);  
+    private RemoteInfo buildRemoteInfoHostTestCase(String hostInRest) throws IOException {
+        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("example.com"));
+import org.opensearch.core.xcontent.XContentBuilder;  
+        headers.put("third", "");
+                randomAlphaOfLength(5),
+        if (randomBoolean()) {  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());
+        assertEquals("/proxy-path/", info.getPathPrefix());
+        assertEquals(expectedInstance.getMaxDocs(), newInstance.getMaxDocs());
+        Map<String, Object> query = new HashMap<>();  
+        assertEquals(expectedInstance.getRemoteInfo(), newInstance.getRemoteInfo());
+        try (XContentBuilder b = JsonXContent.contentBuilder()) {
+        assertEquals("[::1]", info.getHost());
+        assertEquals("https", info.getScheme());  
+                b.endObject();
+                        "pass",
+        }
+    public void testReindexFromRemoteRequestParsing() throws IOException {  
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+        }
+    protected NamedWriteableRegistry writableRegistry() {  
+            {
+                {
+                b.startObject("source");
+            reindexRequest.setDestPipeline("my_pipeline");
+    public void testCommaSeparatedSourceIndices() throws IOException {
+        }
+        info = buildRemoteInfoHostTestCase("https://other.example.com:9201");  
+            assertEquals("localhost", r.getRemoteInfo().getHost());
+    }  
+        Map<String, Object> remote = new HashMap<>();
+                throw new AssertionError(e);
+    }
+ */  
+        }  
+        );
+        info = buildRemoteInfoHostTestCase("https://other.example.com:9201/proxy-path/");  
+import java.util.HashMap;
+        }
+            return ReindexRequest.fromXContent(p);
+    }
+import static java.util.Collections.emptyMap;
+        );
+        assertEquals(expectedInstance.getSlices(), newInstance.getSlices());  
+                BytesReference query = BytesReference.bytes(matchAllQuery().toXContent(builder, ToXContent.EMPTY_PARAMS));
+import java.util.Map;  
+                    null,
+        if (reindexRequest.getRemoteInfo() == null && randomBoolean()) {
+                    parseTimeValue(randomPositiveTimeValue(), "socket_timeout"),
+import org.opensearch.index.query.TermQueryBuilder;
+        info = buildRemoteInfoHostTestCase("https://[::1]:9201");
+                        RemoteInfo.DEFAULT_CONNECT_TIMEOUT
+        }
+        reindex.getSearchRequest().source().query(matchAllQuery()); // Unsupported place to put query  
+        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());  
+        ReindexRequest reindex = newRequest();  
+import org.opensearch.core.xcontent.XContentParser;
+/*
+    @Override
+                null,
+/**
+ *     http://www.apache.org/licenses/LICENSE-2.0
+public class ReindexRequestTests extends AbstractBulkByScrollRequestTestCase<ReindexRequest> {
+                        between(1, Integer.MAX_VALUE),  
+            reindexRequest.setSourceQuery(new TermQueryBuilder("foo", "fooval"));
+    }  
+                emptyMap(),
+        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase(":9200"));  
+            "Validation Failed: 1: reindex from remote sources should use RemoteInfo's query instead of source's query;",  
+    protected ReindexRequest doParseInstance(XContentParser parser) throws IOException {  
+    }
+        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());
+/*  
+import org.opensearch.core.common.bytes.BytesArray;
+        assertArrayEquals(expectedInstance.getSearchRequest().indices(), newInstance.getSearchRequest().indices());  
+ */  
+        assertEquals("other.example.com", info.getHost());  
+        Map<String, String> headers = new HashMap<>();
+ * software distributed under the License is distributed on an
+        return false;  
+                RemoteInfo.DEFAULT_CONNECT_TIMEOUT  
+    @Override
+        assertEquals(original.getDestination(), forSliced.getDestination());  
+        assertEquals("testuser", remoteInfo.getUsername());  
+            ReindexRequest r = ReindexRequest.fromXContent(p);
+    protected void extraForSliceAssertions(ReindexRequest original, ReindexRequest forSliced) {
+                    between(1, 10000),
+        try (XContentParser p = createParser(JsonXContent.jsonXContent, request)) {  
+                RemoteInfo.DEFAULT_SOCKET_TIMEOUT,
+        assertNull(info.getPathPrefix());
+        headers.put("first", "a");  
+            )
+        reindex.setDestIndex("dest");
+            b.startObject();  
+        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout()); // Didn't set the timeout so we should get the default  
+        if (randomBoolean()) {  
+    public void testArraySourceIndices() throws IOException {
+import org.opensearch.common.xcontent.json.JsonXContent;  
+    private final BytesReference matchAll = new BytesArray("{ \"foo\" : \"bar\" }");  
+ * Unless required by applicable law or agreed to in writing,
+            );
+        return reindexRequest;
+        ReindexRequest r = parseRequestWithSourceIndices("a,b");  
+                        RemoteInfo.DEFAULT_SOCKET_TIMEOUT,  
+            {  
+        query.put("a", "b");
+        assertNull(info.getPathPrefix());  
+        if (randomBoolean()) {
     protected void extraRandomizationForSlice(ReindexRequest original) {
         if (randomBoolean()) {  
-            original.setScript(mockScript(randomAlphaOfLength(5)));
-        }
-        if (randomBoolean()) {  
-            original.setRemoteInfo(
-                new RemoteInfo(
-                    randomAlphaOfLength(5),  
-                    randomAlphaOfLength(5),
-                    between(1, 10000),
-                    null,  
-                    matchAll,
-                    null,
-                    null,  
-                    emptyMap(),
-                    parseTimeValue(randomPositiveTimeValue(), "socket_timeout"),
-                    parseTimeValue(randomPositiveTimeValue(), "connect_timeout")  
-                )
-            );
-        }  
-    }
-
-    @Override  
-    protected void extraForSliceAssertions(ReindexRequest original, ReindexRequest forSliced) {
-        assertEquals(original.getScript(), forSliced.getScript());
-        assertEquals(original.getDestination(), forSliced.getDestination());  
-        assertEquals(original.getRemoteInfo(), forSliced.getRemoteInfo());
-    }
-
+    protected boolean enableWarningsCheck() {  
+                matchAll,
     @Override
-    protected ReindexRequest newRequest() {
-        ReindexRequest reindex = new ReindexRequest();  
-        reindex.setSourceIndices("source");
-        reindex.setDestIndex("dest");
-        return reindex;  
-    }
-
-    public void testBuildRemoteInfoNoRemote() throws IOException {  
-        assertNull(ReindexRequest.buildRemoteInfo(new HashMap<>()));
-    }
-
-    public void testBuildRemoteInfoFullyLoaded() throws IOException {
-        Map<String, String> headers = new HashMap<>();
-        headers.put("first", "a");  
-        headers.put("second", "b");
-        headers.put("third", "");
-
-        Map<String, Object> remote = new HashMap<>();
-        remote.put("host", "https://example.com:9200");
-        remote.put("username", "testuser");  
-        remote.put("password", "testpass");
-        remote.put("headers", headers);
-        remote.put("socket_timeout", "90s");  
-        remote.put("connect_timeout", "10s");
-
-        Map<String, Object> query = new HashMap<>();  
-        query.put("a", "b");
-
-        Map<String, Object> source = new HashMap<>();  
-        source.put("remote", remote);
-        source.put("query", query);
-
-        RemoteInfo remoteInfo = ReindexRequest.buildRemoteInfo(source);
-        assertEquals("https", remoteInfo.getScheme());
-        assertEquals("example.com", remoteInfo.getHost());  
-        assertEquals(9200, remoteInfo.getPort());
-        assertEquals("{\n  \"a\" : \"b\"\n}", remoteInfo.getQuery().utf8ToString());
-        assertEquals("testuser", remoteInfo.getUsername());  
-        assertEquals("testpass", remoteInfo.getPassword());
-        assertEquals(headers, remoteInfo.getHeaders());
-        assertEquals(timeValueSeconds(90), remoteInfo.getSocketTimeout());  
-        assertEquals(timeValueSeconds(10), remoteInfo.getConnectTimeout());
-    }
-
-    public void testBuildRemoteInfoWithoutAllParts() throws IOException {
-        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("example.com"));
-        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase(":9200"));  
-        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("http://:9200"));
-        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("example.com:9200"));
-        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("http://example.com"));  
-    }
-
-    public void testBuildRemoteInfoWithAllHostParts() throws IOException {  
-        RemoteInfo info = buildRemoteInfoHostTestCase("http://example.com:9200");
-        assertEquals("http", info.getScheme());
-        assertEquals("example.com", info.getHost());  
-        assertEquals(9200, info.getPort());
-        assertNull(info.getPathPrefix());
-        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout()); // Didn't set the timeout so we should get the default  
-        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout()); // Didn't set the timeout so we should get the default
-
-        info = buildRemoteInfoHostTestCase("https://other.example.com:9201");  
-        assertEquals("https", info.getScheme());
-        assertEquals("other.example.com", info.getHost());
-        assertEquals(9201, info.getPort());  
-        assertNull(info.getPathPrefix());
-        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());
-        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());  
-
-        info = buildRemoteInfoHostTestCase("https://[::1]:9201");
-        assertEquals("https", info.getScheme());  
-        assertEquals("[::1]", info.getHost());
-        assertEquals(9201, info.getPort());
-        assertNull(info.getPathPrefix());  
-        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());
-        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());
-
-        info = buildRemoteInfoHostTestCase("https://other.example.com:9201/");
-        assertEquals("https", info.getScheme());
-        assertEquals("other.example.com", info.getHost());  
-        assertEquals(9201, info.getPort());
-        assertEquals("/", info.getPathPrefix());
-        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());  
-        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());
-
-        info = buildRemoteInfoHostTestCase("https://other.example.com:9201/proxy-path/");  
-        assertEquals("https", info.getScheme());
-        assertEquals("other.example.com", info.getHost());
-        assertEquals(9201, info.getPort());  
-        assertEquals("/proxy-path/", info.getPathPrefix());
-        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());
-        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout());  
-
-        final IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("https"));
-        assertEquals("[host] must be of the form [scheme]://[host]:[port](/[pathPrefix])? but was [https]", exception.getMessage());  
-    }
-
-    public void testReindexFromRemoteRequestParsing() throws IOException {  
-        BytesReference request;
-        try (XContentBuilder b = JsonXContent.contentBuilder()) {
-            b.startObject();  
-            {
-                b.startObject("source");
-                {  
-                    b.startObject("remote");
-                    {
-                        b.field("host", "http://localhost:9200");  
-                    }
-                    b.endObject();
-                    b.field("index", "source");  
-                }
-                b.endObject();
-                b.startObject("dest");  
-                {
-                    b.field("index", "dest");
-                }  
-                b.endObject();
-            }
-            b.endObject();  
-            request = BytesReference.bytes(b);
-        }
+            reindexRequest.setMaxDocs(randomIntBetween(100, 1000));
         try (XContentParser p = createParser(JsonXContent.jsonXContent, request)) {  
-            ReindexRequest r = ReindexRequest.fromXContent(p);
-            assertEquals("localhost", r.getRemoteInfo().getHost());
-            assertArrayEquals(new String[] { "source" }, r.getSearchRequest().indices());  
-        }
-    }
-
-    private RemoteInfo buildRemoteInfoHostTestCase(String hostInRest) throws IOException {
-        Map<String, Object> remote = new HashMap<>();
-        remote.put("host", hostInRest);  
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("remote", remote);  
-
-        return ReindexRequest.buildRemoteInfo(source);
+        BytesReference request;
     }  
-
-    public void testCommaSeparatedSourceIndices() throws IOException {
-        ReindexRequest r = parseRequestWithSourceIndices("a,b");  
+            }
+            new RemoteInfo(
+                b.endObject();
+                randomAlphaOfLength(5),  
+        );
+        Map<String, Object> source = new HashMap<>();  
+                    null,  
+            e.getMessage()
+        assertEquals("other.example.com", info.getHost());
+            original.setRemoteInfo(
+        }
+        assertEquals("http", info.getScheme());
+ * the Apache License, Version 2.0 (the "License"); you may
+    }  
+    protected ReindexRequest newRequest() {
+                    b.field("index", "dest");
+        assertEquals(9201, info.getPort());
+        ReindexRequest r = parseRequestWithSourceIndices(new String[] { "a", "b" });
+    }
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
+        ReindexRequest reindex = new ReindexRequest();  
+package org.opensearch.index.reindex;
+        remote.put("connect_timeout", "10s");
+        info = buildRemoteInfoHostTestCase("https://other.example.com:9201/");
+        assertEquals(original.getScript(), forSliced.getScript());
+        assertEquals(timeValueSeconds(10), remoteInfo.getConnectTimeout());
+    }  
+        );
+                    new RemoteInfo(  
+                null,  
+            assertArrayEquals(new String[] { "source" }, r.getSearchRequest().indices());  
+import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
+        assertEquals(
+        );
+        }
+        assertEquals("testpass", remoteInfo.getPassword());
+        assertEquals(original.getRemoteInfo(), forSliced.getRemoteInfo());
+        assertEquals(9201, info.getPort());
+import static org.opensearch.common.unit.TimeValue.parseTimeValue;  
+                emptyMap(),
+        assertEquals(expectedInstance.getSearchRequest(), newInstance.getSearchRequest());
+        reindex.getSearchRequest().source().slice(new SliceBuilder(0, 4));
+        reindex.setSourceIndices("source");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.common.bytes.BytesReference;
+        assertEquals(expectedInstance.getDestination().opType(), newInstance.getDestination().opType());
+        final IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("https"));
+        assertEquals(9201, info.getPort());  
         assertArrayEquals(new String[] { "a", "b" }, r.getSearchRequest().indices());
     }
-
-    public void testArraySourceIndices() throws IOException {
-        ReindexRequest r = parseRequestWithSourceIndices(new String[] { "a", "b" });
-        assertArrayEquals(new String[] { "a", "b" }, r.getSearchRequest().indices());  
+        }  
     }
-
-    public void testEmptyStringSourceIndices() throws IOException {  
-        ReindexRequest r = parseRequestWithSourceIndices("");
-        assertArrayEquals(new String[0], r.getSearchRequest().indices());
-        ActionRequestValidationException validationException = r.validate();  
-        assertNotNull(validationException);
-        assertEquals(
-            Collections.singletonList("use _all if you really want to copy from all existing indexes"),  
-            validationException.validationErrors()
-        );
+                        query,
     }  
-
-    private ReindexRequest parseRequestWithSourceIndices(Object sourceIndices) throws IOException {
-        BytesReference request;  
-        try (XContentBuilder b = JsonXContent.contentBuilder()) {
-            b.startObject();
-            {  
-                b.startObject("source");
-                {
-                    b.field("index", sourceIndices);  
-                }
-                b.endObject();
-                b.startObject("dest");  
-                {
-                    b.field("index", "dest");
+                        randomAlphaOfLength(5),
+        assertEquals(RemoteInfo.DEFAULT_SOCKET_TIMEOUT, info.getSocketTimeout());  
+ * ownership. Elasticsearch licenses this file to you under  
+        reindex.setRemoteInfo(
+    protected boolean supportsUnknownFields() {
+            new RemoteInfo(
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
+            } catch (IOException e) {
                 }  
-                b.endObject();
-            }
-            b.endObject();  
-            request = BytesReference.bytes(b);
-        }
-        try (XContentParser p = createParser(JsonXContent.jsonXContent, request)) {  
-            return ReindexRequest.fromXContent(p);
-        }
-    }  
+        ActionRequestValidationException validationException = r.validate();  
+        reindex.setSlices(between(2, Integer.MAX_VALUE));
+        ActionRequestValidationException e = reindex.validate();  
+    }
+                    b.field("index", "source");  
+        try (XContentBuilder b = JsonXContent.contentBuilder()) {
+        ReindexRequest reindex = newRequest();  
+            b.startObject();
+    protected NamedXContentRegistry xContentRegistry() {  
+                    parseTimeValue(randomPositiveTimeValue(), "connect_timeout")  
+                RemoteInfo.DEFAULT_SOCKET_TIMEOUT,
+            validationException.validationErrors()
+                randomAlphaOfLength(5),  
+        ReindexRequest reindexRequest = new ReindexRequest();
+        remote.put("socket_timeout", "90s");  
+        assertEquals(expectedInstance.getDestination().getPipeline(), newInstance.getDestination().getPipeline());  
+        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("http://example.com"));  
+                    randomAlphaOfLength(5),  
+    public void testBuildRemoteInfoWithAllHostParts() throws IOException {  
+    @Override
 }
+                        emptyMap(),
+        assertEquals(
+        if (randomBoolean()) {  
+            Collections.singletonList("use _all if you really want to copy from all existing indexes"),  
+        assertEquals(expectedInstance.isAbortOnVersionConflict(), newInstance.isAbortOnVersionConflict());
+            reindexRequest.setAbortOnVersionConflict(false);
+            try (XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint()) {  
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals("other.example.com", info.getHost());
+                null,  
+        return reindex;  
+                new RemoteInfo(
+        assertNull(ReindexRequest.buildRemoteInfo(new HashMap<>()));
+                        b.field("host", "http://localhost:9200");  
+            reindexRequest.setDestOpType("create");
+        return ReindexRequest.fromXContent(parser);
+                b.endObject();
+ * SPDX-License-Identifier: Apache-2.0
+    }
+ * compatible open source license.
+    public void testNoSliceBuilderSetWithSlicedRequest() {
+import org.opensearch.core.xcontent.ToXContent;
+                }
+        assertEquals(9200, info.getPort());
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+    }
+                b.startObject("dest");  
+    public void testReindexFromRemoteDoesNotSupportSearchQuery() {
+                randomAlphaOfLength(5),
+        source.put("remote", remote);
+            "Validation Failed: 1: reindex from remote sources doesn't support slices > 1 but was [" + reindex.getSlices() + "];",  
+                    randomAlphaOfLength(5),
+    public void testBuildRemoteInfoNoRemote() throws IOException {  
+import org.opensearch.search.slice.SliceBuilder;
+                }  
+            }
+                b.startObject("dest");  
+        assertEquals(RemoteInfo.DEFAULT_CONNECT_TIMEOUT, info.getConnectTimeout()); // Didn't set the timeout so we should get the default
+        assertEquals("[host] must be of the form [scheme]://[host]:[port](/[pathPrefix])? but was [https]", exception.getMessage());  
+            reindexRequest.setDestRouting("=cat");
+        if (randomBoolean()) {  
+                null,  
+                {  
+ * You may obtain a copy of the License at  
+    }
+        expectThrows(IllegalArgumentException.class, () -> buildRemoteInfoHostTestCase("example.com:9200"));
+        return ReindexRequest.buildRemoteInfo(source);
+        remote.put("host", "https://example.com:9200");
+import org.opensearch.common.settings.Settings;
+        assertNotNull(validationException);
+        assertEquals(9201, info.getPort());  
+        reindex.setRemoteInfo(
+        assertEquals(
+            original.setScript(mockScript(randomAlphaOfLength(5)));
+                    emptyMap(),
+        assertEquals("Validation Failed: 1: can't specify both manual and automatic slicing at the same time;", e.getMessage());
+    }
+                null,
+                    b.startObject("remote");
+            b.endObject();  
+/*  
+        assertEquals("https", info.getScheme());
+        }
+        remote.put("username", "testuser");  

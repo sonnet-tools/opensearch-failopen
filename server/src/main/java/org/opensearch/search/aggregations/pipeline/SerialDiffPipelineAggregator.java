@@ -1,127 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+                double diff = thisBucketValue - lagValue;
+            counter += 1;
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+            newBuckets.add(newBucket);
+            Double thisBucketValue = resolveBucketValue(histo, bucket, bucketsPaths()[0], gapPolicy);
+    }
+/*  
+            Double lagValue;
+                    .collect(Collectors.toList());
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        super(name, bucketsPaths, metadata);
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
 import org.opensearch.common.Nullable;
+                List<InternalAggregation> aggs = StreamSupport.stream(bucket.getAggregations().spliterator(), false)  
+    ) {
+import java.util.Map;
+            Bucket newBucket = bucket;  
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+        @Nullable DocValueFormat formatter,  
+/*  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+ */  
+import org.opensearch.search.aggregations.bucket.histogram.HistogramFactory;  
+    private GapPolicy gapPolicy;  
+ * Licensed to Elasticsearch under one or more contributor  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * @opensearch.internal
+ *  
+                lagValue = lagWindow.peek();  // Peek here, because we rely on add'ing to always move the window  
 import org.opensearch.common.collect.EvictingQueue;
+import java.util.List;
+            // Normalize null's to NaN  
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+ *
+    public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {  
+                ? extends InternalMultiBucketAggregation,
+import org.opensearch.search.aggregations.InternalAggregations;  
+        String name,
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private DocValueFormat formatter;
+            if (thisBucketValue == null) {
+            }
+                aggs.add(new InternalSimpleValue(name(), diff, formatter, metadata()));  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
+            if (counter <= lag) {  
+        EvictingQueue<Double> lagWindow = new EvictingQueue<>(lag);
+/**
+        List<Bucket> newBuckets = new ArrayList<>();  
+            // Both have values, calculate diff and replace the "empty" bucket
+                ? extends InternalMultiBucketAggregation.InternalBucket>) aggregation;
+        for (InternalMultiBucketAggregation.InternalBucket bucket : buckets) {
+package org.opensearch.search.aggregations.pipeline;
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+        int lag,
+ *
+        List<? extends InternalMultiBucketAggregation.InternalBucket> buckets = histo.getBuckets();  
+import static org.opensearch.search.aggregations.pipeline.BucketHelpers.resolveBucketValue;  
+ * GitHub history for details.
+    @Override
+                lagValue = Double.NaN;
+        Map<String, Object> metadata  
+        this.lag = lag;
+ * this file be licensed under the Apache-2.0 license or a
+        this.gapPolicy = gapPolicy;
+        int counter = 0;
+import java.util.stream.StreamSupport;
+ * this work for additional information regarding copyright
+            }
+    private int lag;
+            }  
+                    .map((p) -> (InternalAggregation) p)
+        String[] bucketsPaths,
+        InternalMultiBucketAggregation<
+import java.util.ArrayList;  
+ * Unless required by applicable law or agreed to in writing,
+    SerialDiffPipelineAggregator(  
+            } else {
+ * specific language governing permissions and limitations
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation.Bucket;
+ */
+ */  
+            ? extends InternalMultiBucketAggregation.InternalBucket> histo = (InternalMultiBucketAggregation<  
+            ? extends InternalMultiBucketAggregation,
+ * software distributed under the License is distributed on an
+ * Aggregate all docs into a serial diff bucket  
+    }  
+/*
+ */  
+        GapPolicy gapPolicy,
+            if (!Double.isNaN(thisBucketValue) && !Double.isNaN(lagValue)) {  
+}  
+        HistogramFactory factory = (HistogramFactory) histo;
+public class SerialDiffPipelineAggregator extends PipelineAggregator {
+                newBucket = factory.createBucket(factory.getKey(bucket), bucket.getDocCount(), InternalAggregations.from(aggs));
+            lagWindow.add(thisBucketValue);
+ * under the License.  
 import org.opensearch.search.DocValueFormat;  
 import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
-import org.opensearch.search.aggregations.InternalAggregations;  
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation.Bucket;
-import org.opensearch.search.aggregations.bucket.histogram.HistogramFactory;  
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;  
-import java.util.stream.StreamSupport;
-
-import static org.opensearch.search.aggregations.pipeline.BucketHelpers.resolveBucketValue;  
-
-/**
- * Aggregate all docs into a serial diff bucket  
- *
- * @opensearch.internal
- */  
-public class SerialDiffPipelineAggregator extends PipelineAggregator {
-    private DocValueFormat formatter;
-    private GapPolicy gapPolicy;  
-    private int lag;
-
-    SerialDiffPipelineAggregator(  
-        String name,
-        String[] bucketsPaths,
-        @Nullable DocValueFormat formatter,  
-        GapPolicy gapPolicy,
-        int lag,
-        Map<String, Object> metadata  
-    ) {
-        super(name, bucketsPaths, metadata);
         this.formatter = formatter;  
-        this.gapPolicy = gapPolicy;
-        this.lag = lag;
-    }  
-
-    @Override
-    public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {  
-        InternalMultiBucketAggregation<
-            ? extends InternalMultiBucketAggregation,
-            ? extends InternalMultiBucketAggregation.InternalBucket> histo = (InternalMultiBucketAggregation<  
-                ? extends InternalMultiBucketAggregation,
-                ? extends InternalMultiBucketAggregation.InternalBucket>) aggregation;
-        List<? extends InternalMultiBucketAggregation.InternalBucket> buckets = histo.getBuckets();  
-        HistogramFactory factory = (HistogramFactory) histo;
-
-        List<Bucket> newBuckets = new ArrayList<>();  
-        EvictingQueue<Double> lagWindow = new EvictingQueue<>(lag);
-        int counter = 0;
-
-        for (InternalMultiBucketAggregation.InternalBucket bucket : buckets) {
-            Double thisBucketValue = resolveBucketValue(histo, bucket, bucketsPaths()[0], gapPolicy);
-            Bucket newBucket = bucket;  
-
-            counter += 1;
-
-            // Still under the initial lag period, add nothing and move on
-            Double lagValue;
-            if (counter <= lag) {  
-                lagValue = Double.NaN;
-            } else {
-                lagValue = lagWindow.peek();  // Peek here, because we rely on add'ing to always move the window  
-            }
-
-            // Normalize null's to NaN  
-            if (thisBucketValue == null) {
-                thisBucketValue = Double.NaN;
-            }  
-
-            // Both have values, calculate diff and replace the "empty" bucket
-            if (!Double.isNaN(thisBucketValue) && !Double.isNaN(lagValue)) {  
-                double diff = thisBucketValue - lagValue;
-
-                List<InternalAggregation> aggs = StreamSupport.stream(bucket.getAggregations().spliterator(), false)  
-                    .map((p) -> (InternalAggregation) p)
-                    .collect(Collectors.toList());
-                aggs.add(new InternalSimpleValue(name(), diff, formatter, metadata()));  
-                newBucket = factory.createBucket(factory.getKey(bucket), bucket.getDocCount(), InternalAggregations.from(aggs));
-            }
-
-            newBuckets.add(newBucket);
-            lagWindow.add(thisBucketValue);
-        }  
         return factory.createAggregation(newBuckets);
-    }
-}  
+            // Still under the initial lag period, add nothing and move on
+import java.util.stream.Collectors;  
+                thisBucketValue = Double.NaN;

@@ -1,277 +1,246 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.matrix.stats;
-
-import org.opensearch.OpenSearchException;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;  
-
-/**
- * Descriptive stats gathered per shard. Coordinating node computes final pearson product coefficient  
- * based on these descriptive stats
- */
-class MatrixStatsResults implements Writeable {  
-    /** object holding results - computes results in place */
-    protected final RunningStats results;
-    /** pearson product correlation coefficients */  
-    protected final Map<String, Map<String, Double>> correlation;
-
-    /** Base ctor */  
-    MatrixStatsResults(String[] fieldNames) {
-        results = new RunningStats(fieldNames);
-        this.correlation = new HashMap<>();  
     }
-
-    /** creates and computes result from provided stats */  
-    MatrixStatsResults(RunningStats stats) {
-        this.results = stats.clone();
-        this.correlation = new HashMap<>();  
-        this.compute();
-    }
-
-    /** creates a results object from the given stream */
-    @SuppressWarnings("unchecked")
-    protected MatrixStatsResults(StreamInput in) {  
-        try {
-            results = new RunningStats(in);
-            correlation = (Map<String, Map<String, Double>>) in.readGenericValue();  
-        } catch (IOException e) {
-            throw new OpenSearchException("Error trying to create multifield_stats results from stream input", e);
-        }  
-    }
-
-    /** Marshalls MatrixStatsResults */  
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        // marshall results  
-        results.writeTo(out);
         // marshall correlation
-        out.writeGenericValue(correlation);  
-    }
-
-    /** return document count */  
-    public final long getDocCount() {
-        return results.docCount;
-    }  
-
-    /** return the field counts - not public, used for getProperty() */
-    protected Map<String, Long> getFieldCounts() {  
-        if (results.usesMaps()) {
-            return Collections.unmodifiableMap(results.counts);
+            results.kurtosis.put(fieldName, (double) results.docCount * results.kurtosis.get(fieldName) / (var * var));  
+ * Descriptive stats gathered per shard. Coordinating node computes final pearson product coefficient  
+            final double var = results.variances.get(fieldName);
         }  
+        for (String fieldName : results.means.keySet()) {
+    }
+        return getMapHelper(results, results.kurtosis, results.kurtosisArr);
+                // fieldY exists as a col key to fieldX
+    /** return the skewness for the requested field */
+            } else {
+        checkField(field, skewness);
+                    cor = Double.NaN;  
+    @Override  
+    }
+            results.skewness.put(fieldName, Math.sqrt(results.docCount) * results.skewness.get(fieldName) / Math.pow(var, 1.5D));
+        if (results.usesMaps()) {
+import org.opensearch.OpenSearchException;  
+    public Double getCorrelation(String fieldX, String fieldY) {
+ * based on these descriptive stats
+    /** return the field counts - not public, used for getProperty() */
+        if (o == null || getClass() != o.getClass()) return false;  
+        Map<String, Double> skewness = getSkewness();  
+            checkField(fieldX, variances);
+            // update variances
+ * specific language governing permissions and limitations
+    /** return the kurtosis */
+    }
+    private Map<String, Double> getMapHelper(RunningStats results, Map<String, Double> map, double[] array) {
+        return kurtosis.get(field);
+        if (fieldX.equals(fieldY)) {
+            // fieldX did not exist as a row key, it must be a col key  
+            return 0;
+import java.io.IOException;
+class MatrixStatsResults implements Writeable {  
+    @Override
+    }
+            if (map.get(fieldX).containsKey(fieldY)) {
+    /** return the correlation coefficient between two fields */
+    /** object holding results - computes results in place */
+/*  
+        return getMapHelper(results, results.skewness, results.skewnessArr);
+        }  
+    @SuppressWarnings("unchecked")
+ * The OpenSearch Contributors require contributions made to  
+ * the Apache License, Version 2.0 (the "License"); you may
+    protected Map<String, Map<String, Double>> getCovariances() {  
+                    cor = covRow.get(colName) / corDen;  
+    protected Map<String, Long> getFieldCounts() {  
+        if (this == o) return true;
+                covRow.put(colName, covRow.get(colName) / nM1);
+        }  
+    public double getCovariance(String fieldX, String fieldY) {
+    }  
+            throw new OpenSearchException("Error trying to create multifield_stats results from stream input", e);
+    /** pearson product correlation coefficients */  
+                // update covariance
+        return results.docCount;
+        try {
+        this.results = stats.clone();
+        this.compute();
+                final String colName = col.getKey();  
+ * KIND, either express or implied.  See the License for the
+    public boolean equals(Object o) {
+    }
+        return variances.get(field);
+        return Collections.unmodifiableMap(results.covariances);
+            }
+    /** Base ctor */  
+        return getValFromUpperTriangularMatrix(correlation, fieldX, fieldY);  
+ *
+        return skewness.get(field);
+    protected MatrixStatsResults(StreamInput in) {  
+    }
+    /** Marshalls MatrixStatsResults */  
+            // update skewness  
+        Map<String, Double> kurtosis = getKurtosis();  
+            final String rowName = row.getKey();
+        return means.get(field);
+                // update correlation  
+ */
+    protected final Map<String, Map<String, Double>> correlation;
+ * not use this file except in compliance with the License.
+        checkField(field, variances);
+                if (results.variances.get(rowName) == 0d || results.variances.get(colName) == 0d) {
+        return Collections.unmodifiableMap(correlation);
+            // update kurtosis
+    private void compute() {
+    public int hashCode() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /** Computes final covariance, variance, and correlation */  
+        MatrixStatsResults that = (MatrixStatsResults) o;
+    }
+        return getValFromUpperTriangularMatrix(getCovariances(), fieldX, fieldY);
+        }
+                return map.get(fieldY).get(fieldX);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.correlation = new HashMap<>();  
+import java.util.HashMap;
+        } else if (map.containsKey(fieldX)) {
+        // marshall results  
+        }  
+import java.util.Map;
+        if (!results.usesMaps()) {
+        results.writeTo(out);
+    /** return the means - not public, used for getProperty() */
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.Objects;  
+    }  
+                } else {
+        if (results.usesMaps()) {
+    protected Map<String, Double> getKurtosis() {  
+        }
+            // fieldX exists as a row key  
+    }
+        Map<String, Double> variances = getVariances();  
+                // if there is no variance in the data then correlation is NaN
+ *  
+            return Collections.unmodifiableMap(results.counts);
+    }  
+ */
+    protected final RunningStats results;
+    }  
+    public void writeTo(StreamOutput out) throws IOException {
+        throw new IllegalArgumentException("Coefficient not computed between fields: " + fieldX + " and " + fieldY);  
+    }  
+    }
+/**
+        return Objects.hash(results, correlation);
+        this.correlation = new HashMap<>();  
+            results.covariances.put(rowName, covRow);
+}  
+    }
+        }  
+        results = new RunningStats(fieldNames);
+        return Collections.unmodifiableMap(results.convertDoubleArrayToMap(array));
+        if (map.containsKey(field) == false) {
+        if (counts.containsKey(field) == false) {
+    private void checkField(String field, Map<String, ?> map) {  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+    public double getMean(String field) {
+                    final double corDen = Math.sqrt(results.variances.get(rowName)) * Math.sqrt(results.variances.get(colName));
         return Collections.unmodifiableMap(results.convertLongArrayToMap(results.countsArr));
     }
-
-    /** return the field count for the requested field */
-    public long getFieldCount(String field) {
-        Map<String, Long> counts = getFieldCounts();  
-        if (counts.containsKey(field) == false) {
-            return 0;
-        }  
-        return counts.get(field);
-    }
-
-    private Map<String, Double> getMapHelper(RunningStats results, Map<String, Double> map, double[] array) {
-        if (results.usesMaps()) {
-            return Collections.unmodifiableMap(map);  
-        }
-        return Collections.unmodifiableMap(results.convertDoubleArrayToMap(array));
-    }  
-
-    /** return the means - not public, used for getProperty() */
-    protected Map<String, Double> getMeans() {  
-        return getMapHelper(results, results.means, results.meansArr);
-    }
-
-    /** return the mean for the requested field */
-    public double getMean(String field) {
-        Map<String, Double> means = getMeans();  
-        checkField(field, means);
-        return means.get(field);
-    }  
-
-    /** return the variances - not public, used for getProperty() */
-    protected Map<String, Double> getVariances() {  
-        return getMapHelper(results, results.variances, results.variancesArr);
-    }
-
-    /** return the variance for the requested field */
-    public double getVariance(String field) {
-        Map<String, Double> variances = getVariances();  
-        checkField(field, variances);
-        return variances.get(field);
-    }  
-
-    /** return the skewness - not public, used for getProperty() */
-    protected Map<String, Double> getSkewness() {  
-        return getMapHelper(results, results.skewness, results.skewnessArr);
-    }
-
-    /** return the skewness for the requested field */
-    public double getSkewness(String field) {
-        Map<String, Double> skewness = getSkewness();  
-        checkField(field, skewness);
-        return skewness.get(field);
-    }  
-
-    /** return the kurtosis */
-    protected Map<String, Double> getKurtosis() {  
-        return getMapHelper(results, results.kurtosis, results.kurtosisArr);
-    }
-
-    /** return the kurtosis for the requested field */
-    public double getKurtosis(String field) {
-        Map<String, Double> kurtosis = getKurtosis();  
-        checkField(field, kurtosis);
-        return kurtosis.get(field);
-    }  
-
     /** return the covariances as a map - not public, used for getProperty() */
-    protected Map<String, Map<String, Double>> getCovariances() {  
-        return Collections.unmodifiableMap(results.covariances);
-    }
-
-    /** return the covariance between two fields */
-    public double getCovariance(String fieldX, String fieldY) {
-        Map<String, Double> variances = getVariances();  
-        if (fieldX.equals(fieldY)) {
-            checkField(fieldX, variances);
-            return variances.get(fieldX);  
+    MatrixStatsResults(String[] fieldNames) {
+    public final long getDocCount() {
+            correlation = (Map<String, Map<String, Double>>) in.readGenericValue();  
+/*
         }
-        return getValFromUpperTriangularMatrix(getCovariances(), fieldX, fieldY);
-    }  
-
-    /** return the correlations as a map - not public, used for getProperty() */
-    protected Map<String, Map<String, Double>> getCorrelations() {  
-        return Collections.unmodifiableMap(correlation);
-    }
-
-    /** return the correlation coefficient between two fields */
-    public Double getCorrelation(String fieldX, String fieldY) {
-        if (fieldX.equals(fieldY)) {  
-            return 1.0;
-        }
-        return getValFromUpperTriangularMatrix(correlation, fieldX, fieldY);  
-    }
-
     /** return the value for two fields in an upper triangular matrix, regardless of row col location. */  
-    static <M extends Map<String, Double>> double getValFromUpperTriangularMatrix(Map<String, M> map, String fieldX, String fieldY) {
-        // for the co-value to exist, one of the two (or both) fields has to be a row key
-        if (map.containsKey(fieldX) == false && map.containsKey(fieldY) == false) {  
-            throw new IllegalArgumentException("neither field " + fieldX + " nor " + fieldY + " exist");
-        } else if (map.containsKey(fieldX)) {
-            // fieldX exists as a row key  
-            if (map.get(fieldX).containsKey(fieldY)) {
-                // fieldY exists as a col key to fieldX
+    /** return the variance for the requested field */
+        return getMapHelper(results, results.variances, results.variancesArr);
                 return map.get(fieldX).get(fieldY);  
-            } else {
-                // otherwise fieldX is the col key to fieldY
-                return map.get(fieldY).get(fieldX);  
-            }
-        } else if (map.containsKey(fieldY)) {
-            // fieldX did not exist as a row key, it must be a col key  
-            return map.get(fieldY).get(fieldX);
-        }
-        throw new IllegalArgumentException("Coefficient not computed between fields: " + fieldX + " and " + fieldY);  
-    }
-
-    private void checkField(String field, Map<String, ?> map) {  
-        if (field == null) {
-            throw new IllegalArgumentException("field name cannot be null");
-        }  
-        if (map.containsKey(field) == false) {
-            throw new IllegalArgumentException("field " + field + " does not exist");
-        }  
-    }
-
-    /** Computes final covariance, variance, and correlation */  
-    private void compute() {
-        if (!results.usesMaps()) {
-            results.switchToMaps();  
-        }
-        final double nM1 = results.docCount - 1D;
-        // compute final skewness and kurtosis  
-        for (String fieldName : results.means.keySet()) {
-            final double var = results.variances.get(fieldName);
-            // update skewness  
-            results.skewness.put(fieldName, Math.sqrt(results.docCount) * results.skewness.get(fieldName) / Math.pow(var, 1.5D));
-            // update kurtosis
-            results.kurtosis.put(fieldName, (double) results.docCount * results.kurtosis.get(fieldName) / (var * var));  
-            // update variances
-            results.variances.put(fieldName, results.variances.get(fieldName) / nM1);
-        }  
-
-        // compute final covariances and correlation
-        double cor;  
-        for (Map.Entry<String, Map<String, Double>> row : results.covariances.entrySet()) {
-            final String rowName = row.getKey();
-            final Map<String, Double> covRow = row.getValue();  
-            final Map<String, Double> corRow = new HashMap<>();
+    /** return the field count for the requested field */
+        Map<String, Double> variances = getVariances();  
+import org.opensearch.core.common.io.stream.StreamOutput;
             for (Map.Entry<String, Double> col : covRow.entrySet()) {
-                final String colName = col.getKey();  
-                // update covariance
-                covRow.put(colName, covRow.get(colName) / nM1);
-                // update correlation  
-                // if there is no variance in the data then correlation is NaN
-                if (results.variances.get(rowName) == 0d || results.variances.get(colName) == 0d) {
-                    cor = Double.NaN;  
-                } else {
-                    final double corDen = Math.sqrt(results.variances.get(rowName)) * Math.sqrt(results.variances.get(colName));
-                    cor = covRow.get(colName) / corDen;  
-                }
+            throw new IllegalArgumentException("neither field " + fieldX + " nor " + fieldY + " exist");
+        checkField(field, kurtosis);
+        return Objects.equals(results, that.results) && Objects.equals(correlation, that.correlation);
+    /** return the correlations as a map - not public, used for getProperty() */
                 corRow.put(colName, cor);
-            }  
-            results.covariances.put(rowName, covRow);
+    }
+        for (Map.Entry<String, Map<String, Double>> row : results.covariances.entrySet()) {
+    }
+            final Map<String, Double> covRow = row.getValue();  
+        if (field == null) {
+        // compute final skewness and kurtosis  
+        }
+ * GitHub history for details.
+        if (map.containsKey(fieldX) == false && map.containsKey(fieldY) == false) {  
+    protected Map<String, Double> getSkewness() {  
             correlation.put(rowName, corRow);
+                }
+        Map<String, Long> counts = getFieldCounts();  
+            return map.get(fieldY).get(fieldX);
+    /** return the skewness - not public, used for getProperty() */
+    /** return the mean for the requested field */
+import org.opensearch.core.common.io.stream.StreamInput;
+    /** creates and computes result from provided stats */  
+        } catch (IOException e) {
+            final Map<String, Double> corRow = new HashMap<>();
+    /** creates a results object from the given stream */
+            return variances.get(fieldX);  
+package org.opensearch.search.aggregations.matrix.stats;
+    MatrixStatsResults(RunningStats stats) {
+    protected Map<String, Map<String, Double>> getCorrelations() {  
+        return counts.get(field);
+            throw new IllegalArgumentException("field " + field + " does not exist");
+        // compute final covariances and correlation
+ *
+ * compatible open source license.
+    public double getVariance(String field) {
+ */  
+ * this work for additional information regarding copyright
+        checkField(field, means);
+        if (fieldX.equals(fieldY)) {  
+ * ownership. Elasticsearch licenses this file to you under  
+            }  
+    }  
+    /** return document count */  
+ * You may obtain a copy of the License at  
+    /** return the variances - not public, used for getProperty() */
+            results = new RunningStats(in);
+    public double getKurtosis(String field) {
+        // for the co-value to exist, one of the two (or both) fields has to be a row key
+        double cor;  
+    /** return the covariance between two fields */
         }  
     }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        MatrixStatsResults that = (MatrixStatsResults) o;
-        return Objects.equals(results, that.results) && Objects.equals(correlation, that.correlation);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(results, correlation);
+    protected Map<String, Double> getVariances() {  
+ * Unless required by applicable law or agreed to in writing,
+            results.switchToMaps();  
+import org.opensearch.core.common.io.stream.Writeable;  
     }
-}  
+        Map<String, Double> means = getMeans();  
+                // otherwise fieldX is the col key to fieldY
+        } else if (map.containsKey(fieldY)) {
+    public long getFieldCount(String field) {
+ * SPDX-License-Identifier: Apache-2.0
+        final double nM1 = results.docCount - 1D;
+ * software distributed under the License is distributed on an
+        return getMapHelper(results, results.means, results.meansArr);
+    }  
+        }
+    }
+            throw new IllegalArgumentException("field name cannot be null");
+        out.writeGenericValue(correlation);  
+    protected Map<String, Double> getMeans() {  
+            return Collections.unmodifiableMap(map);  
+ * Modifications Copyright OpenSearch Contributors. See  
+    /** return the kurtosis for the requested field */
+    @Override
+            results.variances.put(fieldName, results.variances.get(fieldName) / nM1);
+/*
+import java.util.Collections;  
+    }  
+        }  
+    public double getSkewness(String field) {
+    static <M extends Map<String, Double>> double getValFromUpperTriangularMatrix(Map<String, M> map, String fieldX, String fieldY) {
+            return 1.0;
+ * license agreements. See the NOTICE file distributed with

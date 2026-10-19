@@ -1,213 +1,186 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.common.lucene.index;
-
-import org.apache.lucene.index.DirectoryReader;  
-import org.apache.lucene.index.FilterDirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReader;  
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.index.shard.ShardId;  
-
-import java.io.IOException;
-import java.util.Optional;  
-import java.util.UUID;
-
-/**  
- * A {@link org.apache.lucene.index.FilterDirectoryReader} that exposes
- * OpenSearch internal per shard / index information like the shard ID.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public final class OpenSearchDirectoryReader extends FilterDirectoryReader {
-
-    private final ShardId shardId;  
-    private final FilterDirectoryReader.SubReaderWrapper wrapper;
-
-    private final DelegatingCacheHelper delegatingCacheHelper;  
-
-    private OpenSearchDirectoryReader(DirectoryReader in, FilterDirectoryReader.SubReaderWrapper wrapper, ShardId shardId)
-        throws IOException {  
-        super(in, wrapper);
-        this.wrapper = wrapper;
-        this.shardId = shardId;  
-        this.delegatingCacheHelper = new DelegatingCacheHelper(in.getReaderCacheHelper());
-    }
-
-    /**
-     * Returns the shard id this index belongs to.
-     */  
-    public ShardId shardId() {
-        return this.shardId;
-    }  
-
-    @Override
-    public CacheHelper getReaderCacheHelper() {  
-        // safe to delegate since this reader does not alter the index
-        return this.delegatingCacheHelper;
-    }  
-
-    public DelegatingCacheHelper getDelegatingCacheHelper() {
-        return this.delegatingCacheHelper;  
-    }
-
-    /**  
-     * Wraps existing IndexReader cache helper which internally provides a way to wrap CacheKey.
-     *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "2.13.0")
-    public class DelegatingCacheHelper implements CacheHelper {  
-        private final CacheHelper cacheHelper;
-        private final DelegatingCacheKey serializableCacheKey;
-
-        DelegatingCacheHelper(CacheHelper cacheHelper) {
-            this.cacheHelper = cacheHelper;
-            this.serializableCacheKey = new DelegatingCacheKey(Optional.ofNullable(cacheHelper).map(key -> getKey()).orElse(null));  
-        }
-
-        @Override  
-        public CacheKey getKey() {
-            return this.cacheHelper.getKey();
-        }  
-
-        public DelegatingCacheKey getDelegatingCacheKey() {
-            return this.serializableCacheKey;  
-        }
-
-        @Override  
-        public void addClosedListener(ClosedListener listener) {
-            this.cacheHelper.addClosedListener(listener);
-        }  
-    }
-
-    /**  
-     *  Wraps internal IndexReader.CacheKey and attaches a uniqueId to it which can be eventually be used instead of
-     *  object itself for serialization purposes.
-     *  
-     *  @opensearch.api
-     */
-    @PublicApi(since = "2.13.0")  
-    public class DelegatingCacheKey {
-        private final CacheKey cacheKey;
-        private final String uniqueId;  
-
-        DelegatingCacheKey(CacheKey cacheKey) {
-            this.cacheKey = cacheKey;  
-            this.uniqueId = UUID.randomUUID().toString();
-        }
-
-        public CacheKey getCacheKey() {
-            return this.cacheKey;
-        }  
-
-        public String getId() {
-            return uniqueId;  
-        }
-    }
-
-    @Override
-    protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
-        return new OpenSearchDirectoryReader(in, wrapper, shardId);  
-    }
-
-    /**  
-     * Wraps the given reader in a {@link OpenSearchDirectoryReader} as
-     * well as all it's sub-readers in {@link OpenSearchLeafReader} to
-     * expose the given shard Id.  
-     *
-     * @param reader the reader to wrap
-     * @param shardId the shard ID to expose via the opensearch internal reader wrappers.  
-     */
-    public static OpenSearchDirectoryReader wrap(DirectoryReader reader, ShardId shardId) throws IOException {
-        return new OpenSearchDirectoryReader(reader, new SubReaderWrapper(shardId), shardId);  
-    }
-
-    private static final class SubReaderWrapper extends FilterDirectoryReader.SubReaderWrapper {  
-        private final ShardId shardId;
-
-        SubReaderWrapper(ShardId shardId) {  
-            this.shardId = shardId;
-        }
-
-        @Override
-        public LeafReader wrap(LeafReader reader) {
-            return new OpenSearchLeafReader(reader, shardId);  
-        }
-    }
-
-    /**
-     * Adds the given listener to the provided directory reader. The reader
-     * must contain an {@link OpenSearchDirectoryReader} in it's hierarchy  
-     * otherwise we can't safely install the listener.
-     *
-     * @throws IllegalArgumentException if the reader doesn't contain an  
-     *     {@link OpenSearchDirectoryReader} in it's hierarchy
-     */
-    @SuppressForbidden(reason = "This is the only sane way to add a ReaderClosedListener")  
-    public static void addReaderCloseListener(DirectoryReader reader, IndexReader.ClosedListener listener) {
-        OpenSearchDirectoryReader openSearchDirectoryReader = getOpenSearchDirectoryReader(reader);
-        if (openSearchDirectoryReader == null) {  
-            throw new IllegalArgumentException(
-                "Can't install close listener reader is not an OpenSearchDirectoryReader/OpenSearchLeafReader"
             );  
-        }
-        IndexReader.CacheHelper cacheHelper = openSearchDirectoryReader.getReaderCacheHelper();
-        if (cacheHelper == null) {  
-            throw new IllegalArgumentException("Reader " + openSearchDirectoryReader + " does not support caching");
-        }
-        assert cacheHelper.getKey() == reader.getReaderCacheHelper().getKey();  
-        cacheHelper.addClosedListener(listener);
-    }
-
-    /**
-     * Tries to unwrap the given reader until the first
-     * {@link OpenSearchDirectoryReader} instance is found or {@code null}  
+ * this file be licensed under the Apache-2.0 license or a
+        this.shardId = shardId;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     *  @opensearch.api
+     * expose the given shard Id.  
+     * well as all it's sub-readers in {@link OpenSearchLeafReader} to
+        // safe to delegate since this reader does not alter the index
      * if no instance is found.
-     */
-    public static OpenSearchDirectoryReader getOpenSearchDirectoryReader(DirectoryReader reader) {  
-        if (reader instanceof FilterDirectoryReader) {
-            if (reader instanceof OpenSearchDirectoryReader) {
-                return (OpenSearchDirectoryReader) reader;  
-            } else {
-                // We need to use FilterDirectoryReader#getDelegate and not FilterDirectoryReader#unwrap, because
-                // If there are multiple levels of filtered leaf readers then with the unwrap() method it immediately  
-                // returns the most inner leaf reader and thus skipping of over any other filtered leaf reader that
-                // may be instance of OpenSearchLeafReader. This can cause us to miss the shardId.
-                return getOpenSearchDirectoryReader(((FilterDirectoryReader) reader).getDelegate());  
+    private final ShardId shardId;  
+    public CacheHelper getReaderCacheHelper() {  
+        }
+    }  
+    private static final class SubReaderWrapper extends FilterDirectoryReader.SubReaderWrapper {  
             }
         }
+     * @opensearch.api  
+     * otherwise we can't safely install the listener.
+        if (openSearchDirectoryReader == null) {  
+            throw new IllegalArgumentException(
+            return this.cacheKey;
+ * license agreements. See the NOTICE file distributed with
+        }  
         return null;  
+        SubReaderWrapper(ShardId shardId) {  
+    /**  
+import org.opensearch.common.SuppressForbidden;
+    private OpenSearchDirectoryReader(DirectoryReader in, FilterDirectoryReader.SubReaderWrapper wrapper, ShardId shardId)
+ * the Apache License, Version 2.0 (the "License"); you may
+     * @param shardId the shard ID to expose via the opensearch internal reader wrappers.  
+    }
+            } else {
+        }  
+    public static void addReaderCloseListener(DirectoryReader reader, IndexReader.ClosedListener listener) {
+     */
+        this.delegatingCacheHelper = new DelegatingCacheHelper(in.getReaderCacheHelper());
+import org.opensearch.common.annotation.PublicApi;
+     */
+ * not use this file except in compliance with the License.
+        public CacheKey getCacheKey() {
+/*  
+        }
+    private final FilterDirectoryReader.SubReaderWrapper wrapper;
+    }
+        @Override  
+     */
+import java.util.Optional;  
+ * this work for additional information regarding copyright
+        @Override
+            return new OpenSearchLeafReader(reader, shardId);  
+public final class OpenSearchDirectoryReader extends FilterDirectoryReader {
+        @Override  
+            return uniqueId;  
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+        return this.shardId;
+        private final CacheKey cacheKey;
+ * Modifications Copyright OpenSearch Contributors. See  
+        private final ShardId shardId;
+/*
+            this.cacheHelper = cacheHelper;
+ */  
+     */
+        private final String uniqueId;  
+                // may be instance of OpenSearchLeafReader. This can cause us to miss the shardId.
+                return (OpenSearchDirectoryReader) reader;  
+            if (reader instanceof OpenSearchDirectoryReader) {
+    }
+    public DelegatingCacheHelper getDelegatingCacheHelper() {
+    }
+    }
+    public class DelegatingCacheKey {
+        assert cacheHelper.getKey() == reader.getReaderCacheHelper().getKey();  
+    }  
+        public CacheKey getKey() {
+        if (reader instanceof FilterDirectoryReader) {
+ * GitHub history for details.
+        super(in, wrapper);
+        }
+                // returns the most inner leaf reader and thus skipping of over any other filtered leaf reader that
+        this.wrapper = wrapper;
+        IndexReader.CacheHelper cacheHelper = openSearchDirectoryReader.getReaderCacheHelper();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public static OpenSearchDirectoryReader wrap(DirectoryReader reader, ShardId shardId) throws IOException {
+    @Override
+ */
+        DelegatingCacheKey(CacheKey cacheKey) {
+        public void addClosedListener(ClosedListener listener) {
+    /**
+        return this.delegatingCacheHelper;  
+                "Can't install close listener reader is not an OpenSearchDirectoryReader/OpenSearchLeafReader"
+ */
+        cacheHelper.addClosedListener(listener);
+ * specific language governing permissions and limitations
+            this.serializableCacheKey = new DelegatingCacheKey(Optional.ofNullable(cacheHelper).map(key -> getKey()).orElse(null));  
+        private final DelegatingCacheKey serializableCacheKey;
+    public class DelegatingCacheHelper implements CacheHelper {  
+ * The OpenSearch Contributors require contributions made to  
+            this.uniqueId = UUID.randomUUID().toString();
+        return new OpenSearchDirectoryReader(reader, new SubReaderWrapper(shardId), shardId);  
+    @SuppressForbidden(reason = "This is the only sane way to add a ReaderClosedListener")  
+    /**
+     */  
+        public String getId() {
+     * @param reader the reader to wrap
+     *  
+                // We need to use FilterDirectoryReader#getDelegate and not FilterDirectoryReader#unwrap, because
+        return new OpenSearchDirectoryReader(in, wrapper, shardId);  
+    protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
+     * {@link OpenSearchDirectoryReader} instance is found or {@code null}  
+     *
+    /**  
+ * Licensed to Elasticsearch under one or more contributor  
+        if (cacheHelper == null) {  
+import java.io.IOException;
+    }
+    /**
+     *
+ * SPDX-License-Identifier: Apache-2.0
+        }
+                return getOpenSearchDirectoryReader(((FilterDirectoryReader) reader).getDelegate());  
+ *
+import org.apache.lucene.index.DirectoryReader;  
+ *  
+ * @opensearch.api
+        }
+            return this.serializableCacheKey;  
+@PublicApi(since = "1.0.0")  
+     */
+     *     {@link OpenSearchDirectoryReader} in it's hierarchy
+    @PublicApi(since = "2.13.0")  
+ *  
+        }
+     * must contain an {@link OpenSearchDirectoryReader} in it's hierarchy  
+    /**  
+     * Wraps existing IndexReader cache helper which internally provides a way to wrap CacheKey.
+            return this.cacheHelper.getKey();
+ */
+ *
+    public static OpenSearchDirectoryReader getOpenSearchDirectoryReader(DirectoryReader reader) {  
+/*
+            this.cacheHelper.addClosedListener(listener);
+ * compatible open source license.
+     *  Wraps internal IndexReader.CacheKey and attaches a uniqueId to it which can be eventually be used instead of
+        return this.delegatingCacheHelper;
+     * @throws IllegalArgumentException if the reader doesn't contain an  
+        public DelegatingCacheKey getDelegatingCacheKey() {
+import org.apache.lucene.index.LeafReader;  
+ * under the License.  
+            this.cacheKey = cacheKey;  
+            this.shardId = shardId;
+     * Adds the given listener to the provided directory reader. The reader
+        throws IOException {  
+        DelegatingCacheHelper(CacheHelper cacheHelper) {
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.index.IndexReader;
+        private final CacheHelper cacheHelper;
+    }
+ * OpenSearch internal per shard / index information like the shard ID.
+    @PublicApi(since = "2.13.0")
     }
 }
+ * You may obtain a copy of the License at  
+     * Returns the shard id this index belongs to.
+     *  object itself for serialization purposes.
+        public LeafReader wrap(LeafReader reader) {
+     *
+ * software distributed under the License is distributed on an
+            throw new IllegalArgumentException("Reader " + openSearchDirectoryReader + " does not support caching");
+import org.apache.lucene.index.FilterDirectoryReader;
+    private final DelegatingCacheHelper delegatingCacheHelper;  
+import org.opensearch.core.index.shard.ShardId;  
+ * A {@link org.apache.lucene.index.FilterDirectoryReader} that exposes
+     * Wraps the given reader in a {@link OpenSearchDirectoryReader} as
+/**  
+ * Unless required by applicable law or agreed to in writing,
+    }
+        }  
+package org.opensearch.common.lucene.index;
+                // If there are multiple levels of filtered leaf readers then with the unwrap() method it immediately  
+     * Tries to unwrap the given reader until the first
+        }
+    @Override
+        OpenSearchDirectoryReader openSearchDirectoryReader = getOpenSearchDirectoryReader(reader);
+import java.util.UUID;
+    public ShardId shardId() {

@@ -1,62 +1,48 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    @Override
+    }
  *
+    public void recordWrite(String id, DocumentLocation location) {}
+        throw new IllegalArgumentException(UNSUPPORTED_MESSAGE);  
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    }  
+    public DeleteResult deleteDocument(DeleteInput deleteInput, Writer<?> writer) throws IOException {
+public final class NoOpDeleteExecutionEngine implements DeleteExecutionEngine<DataFormat> {
+import org.opensearch.common.annotation.ExperimentalApi;
+    public Deleter createDeleter(Writer<?> writer) {
+ *
+/*  
+        return null;
+        + "(requires a format such as Lucene)";  
+    /** Unsupported operation message. */
+ */  
+    public void close() throws IOException {}  
+        return null;  
+        return null;
+import java.io.IOException;  
+package org.opensearch.index.engine.dataformat;
+    @Override  
+    public DataFormat getDataFormat() {  
+    @Override
+        return false;
+    private NoOpDeleteExecutionEngine() {}
+    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {
+    public boolean onWriterCheckedOut(long generation) throws IOException {
  * compatible open source license.
  */  
-
-package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.io.IOException;  
-
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
 /**
- * Delete engine used when no data format supports deletes.  
- *
+    }  
+ * SPDX-License-Identifier: Apache-2.0
  * @opensearch.experimental
- */  
-@ExperimentalApi
-public final class NoOpDeleteExecutionEngine implements DeleteExecutionEngine<DataFormat> {
-
+    }
+}
+ * Delete engine used when no data format supports deletes.  
     /** Shared instance. */
     public static final NoOpDeleteExecutionEngine INSTANCE = new NoOpDeleteExecutionEngine();
-
-    /** Unsupported operation message. */
+@ExperimentalApi
     public static final String UNSUPPORTED_MESSAGE = "Update/delete is not supported for this index: no delete-applicable data format "
-        + "(requires a format such as Lucene)";  
-
-    private NoOpDeleteExecutionEngine() {}
-
     @Override
-    public Deleter createDeleter(Writer<?> writer) {
-        return null;  
-    }
-
     @Override  
-    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {
-        return null;
-    }  
-
-    @Override
-    public DataFormat getDataFormat() {  
-        return null;
-    }
-
-    @Override
-    public DeleteResult deleteDocument(DeleteInput deleteInput, Writer<?> writer) throws IOException {
-        throw new IllegalArgumentException(UNSUPPORTED_MESSAGE);  
-    }
-
     @Override  
-    public void recordWrite(String id, DocumentLocation location) {}
-
-    @Override  
-    public boolean onWriterCheckedOut(long generation) throws IOException {
-        return false;
-    }  
-
-    @Override
-    public void close() throws IOException {}  
-}
+    }

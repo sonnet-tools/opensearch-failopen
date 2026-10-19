@@ -1,151 +1,131 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.ssl;
-
-import org.opensearch.common.Nullable;
-
-import javax.net.ssl.TrustManagerFactory;  
-import javax.net.ssl.X509ExtendedTrustManager;
-
 import java.io.IOException;  
-import java.nio.file.Path;
-import java.security.GeneralSecurityException;
-import java.security.KeyStore;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.function.BiFunction;
-
-/**  
- * This class represents a trust configuration that corresponds to the default trusted CAs of the JDK
- */
-final class DefaultJdkTrustConfig implements SslTrustConfig {  
-
-    private final BiFunction<String, String, String> systemProperties;
-    private final char[] trustStorePassword;  
-
-    /**
-     * Create a trust config that uses System properties to determine the TrustStore type, and the relevant password.  
-     */
-    DefaultJdkTrustConfig() {
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
         this(System::getProperty);  
-    }
-
-    /**  
-     * Create a trust config that uses supplied {@link BiFunction} to determine the TrustStore type, and the relevant password.
-     */
-    DefaultJdkTrustConfig(BiFunction<String, String, String> systemProperties) {  
-        this(systemProperties, isPkcs11Truststore(systemProperties) ? getSystemTrustStorePassword(systemProperties) : null);
-    }
-
-    /**
-     * @param trustStorePassword the password for the truststore. It applies only when PKCS#11 tokens are used, is null otherwise
-     */  
-    DefaultJdkTrustConfig(BiFunction<String, String, String> systemProperties, @Nullable char[] trustStorePassword) {
-        this.systemProperties = systemProperties;
-        this.trustStorePassword = trustStorePassword;  
-    }
-
+        return Arrays.equals(this.trustStorePassword, that.trustStorePassword);
+        return Arrays.hashCode(trustStorePassword);
+final class DefaultJdkTrustConfig implements SslTrustConfig {  
+import java.security.GeneralSecurityException;
     @Override  
-    public X509ExtendedTrustManager createTrustManager() {
-        try {
-            return KeyStoreUtil.createTrustManager(getSystemTrustStore(), TrustManagerFactory.getDefaultAlgorithm());  
-        } catch (GeneralSecurityException e) {
-            throw new SslConfigException("failed to initialize a TrustManager for the system keystore", e);
-        }  
-    }
-
-    /**  
+    private final char[] trustStorePassword;  
+        this.trustStorePassword = trustStorePassword;  
+            return true;
+ * compatible open source license.
      * When a PKCS#11 token is used as the system default keystore/truststore, we need to pass the keystore
-     * password when loading, even for reading certificates only ( as opposed to i.e. JKS keystores where
-     * we only need to pass the password for reading Private Key entries ).  
-     *
-     * @return the KeyStore used as truststore for PKCS#11 initialized with the password, null otherwise
-     */  
-    private KeyStore getSystemTrustStore() {
-        if (isPkcs11Truststore(systemProperties) && trustStorePassword != null) {
-            try {  
+            throw new SslConfigException("failed to initialize a TrustManager for the system keystore", e);
                 KeyStore keyStore = KeyStore.getInstance("PKCS11");
-                keyStore.load(null, trustStorePassword);
-                return keyStore;  
-            } catch (GeneralSecurityException | IOException e) {
-                throw new SslConfigException("failed to load the system PKCS#11 truststore", e);
-            }  
-        }
-        if (KeyStoreUtil.IN_FIPS_MODE && !isBcfksTruststore(systemProperties) && !isPkcs11Truststore(systemProperties)) {
+import javax.net.ssl.TrustManagerFactory;  
+    }
+ * license agreements. See the NOTICE file distributed with
+    }
+        if (isPkcs11Truststore(systemProperties) && trustStorePassword != null) {
+    public boolean equals(Object o) {  
+    /**  
             throw new SslConfigException(  
-                "only [" + KeyStoreUtil.FIPS_COMPLIANT_KEYSTORE_TYPES + "] truststores are supported in a FIPS JVM"
+ */  
             );
         }  
-        return null;
-    }
-
+     * Create a trust config that uses System properties to determine the TrustStore type, and the relevant password.  
+/*
     private static boolean isPkcs11Truststore(BiFunction<String, String, String> systemProperties) {
-        return systemProperties.apply("javax.net.ssl.trustStoreType", "").equalsIgnoreCase("PKCS11");
-    }  
-
+                "only [" + KeyStoreUtil.FIPS_COMPLIANT_KEYSTORE_TYPES + "] truststores are supported in a FIPS JVM"
+    /**
     private static boolean isBcfksTruststore(BiFunction<String, String, String> systemProperties) {
-        return systemProperties.apply("javax.net.ssl.trustStoreType", "").equalsIgnoreCase("BCFKS");  
-    }
-
-    private static char[] getSystemTrustStorePassword(BiFunction<String, String, String> systemProperties) {  
-        return systemProperties.apply("javax.net.ssl.trustStorePassword", "").toCharArray();
-    }
-
-    @Override
+            }  
+ */
+    /**  
     public Collection<Path> getDependentFiles() {
         return Collections.emptyList();  
+ */
+        try {
+    DefaultJdkTrustConfig(BiFunction<String, String, String> systemProperties) {  
+        }  
+import java.nio.file.Path;
+ * GitHub history for details.
     }
-
-    @Override  
-    public String toString() {
+     * we only need to pass the password for reading Private Key entries ).  
+    /**
+ * Licensed to Elasticsearch under one or more contributor  
         return "JDK-trusted-certs";
     }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) {
-            return true;
-        }  
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }  
         final DefaultJdkTrustConfig that = (DefaultJdkTrustConfig) o;
-        return Arrays.equals(this.trustStorePassword, that.trustStorePassword);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Arrays.hashCode(trustStorePassword);
+    private final BiFunction<String, String, String> systemProperties;
+                throw new SslConfigException("failed to load the system PKCS#11 truststore", e);
+        this(systemProperties, isPkcs11Truststore(systemProperties) ? getSystemTrustStorePassword(systemProperties) : null);
+    public String toString() {
+import javax.net.ssl.X509ExtendedTrustManager;
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
     }
+        }  
+                keyStore.load(null, trustStorePassword);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.util.Collections;  
+        this.systemProperties = systemProperties;
+     *
+/**  
+     * @param trustStorePassword the password for the truststore. It applies only when PKCS#11 tokens are used, is null otherwise
+import java.util.Arrays;
+ *
+                return keyStore;  
+        }  
+ * software distributed under the License is distributed on an
+ */  
+    @Override
+ * not use this file except in compliance with the License.
+ * Unless required by applicable law or agreed to in writing,
+        if (this == o) {
+ * ownership. Elasticsearch licenses this file to you under  
+     */  
+ * this work for additional information regarding copyright
+ * This class represents a trust configuration that corresponds to the default trusted CAs of the JDK
+        if (o == null || getClass() != o.getClass()) {
+            return KeyStoreUtil.createTrustManager(getSystemTrustStore(), TrustManagerFactory.getDefaultAlgorithm());  
+import java.util.Collection;
+    }
+    public X509ExtendedTrustManager createTrustManager() {
+     * password when loading, even for reading certificates only ( as opposed to i.e. JKS keystores where
+    private KeyStore getSystemTrustStore() {
+ * specific language governing permissions and limitations
+        return systemProperties.apply("javax.net.ssl.trustStoreType", "").equalsIgnoreCase("PKCS11");
+     */
+    }  
+    public int hashCode() {  
+ * You may obtain a copy of the License at  
+        return systemProperties.apply("javax.net.ssl.trustStorePassword", "").toCharArray();
+ *
+ * under the License.  
+    }
+    DefaultJdkTrustConfig(BiFunction<String, String, String> systemProperties, @Nullable char[] trustStorePassword) {
+    }  
+        } catch (GeneralSecurityException e) {
+     */
+    @Override
+        if (KeyStoreUtil.IN_FIPS_MODE && !isBcfksTruststore(systemProperties) && !isPkcs11Truststore(systemProperties)) {
+            } catch (GeneralSecurityException | IOException e) {
+        return null;
+    }
+import java.util.function.BiFunction;
+        return systemProperties.apply("javax.net.ssl.trustStoreType", "").equalsIgnoreCase("BCFKS");  
+    @Override  
+import org.opensearch.common.Nullable;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        }
+package org.opensearch.common.ssl;
+ * KIND, either express or implied.  See the License for the
+ *  
 }  
+            return false;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     */  
+            try {  
+    DefaultJdkTrustConfig() {
+import java.security.KeyStore;  
+    }
+     * @return the KeyStore used as truststore for PKCS#11 initialized with the password, null otherwise
+/*  
+    private static char[] getSystemTrustStorePassword(BiFunction<String, String, String> systemProperties) {  
+/*  
+     * Create a trust config that uses supplied {@link BiFunction} to determine the TrustStore type, and the relevant password.

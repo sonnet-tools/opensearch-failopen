@@ -1,137 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.action.stats;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-
-/**
- * Unit tests for {@link ClearCacheNodesRequest} and {@link ClearCacheNodeRequest}.
- * Verifies flag semantics, isClearAll() logic, and round-trip serialization.  
- */
-public class ClearCacheRequestTests extends OpenSearchTestCase {
-
-    // ── ClearCacheNodesRequest ────────────────────────────────────────────────
-
-    public void testDefaultNodesRequestIsClearAll() {  
-        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
-        assertFalse(req.isFooter());
-        assertFalse(req.isColumn());  
-        assertFalse(req.isOffset());
-        assertFalse(req.isStatistics());
-        assertTrue("no flags set → isClearAll()", req.isClearAll());  
-    }
-
-    public void testSetFooterOnlyIsNotClearAll() {  
-        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
-        req.setFooter(true);
-        assertTrue(req.isFooter());  
         assertFalse(req.isColumn());
-        assertFalse(req.isOffset());
-        assertFalse(req.isStatistics());  
-        assertFalse("footer=true → not clear-all", req.isClearAll());
-    }
-
-    public void testSetColumnOnlyIsNotClearAll() {
-        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
+        ClearCacheNodeRequest req = new ClearCacheNodeRequest(false, false, false, false);
         req.setColumn(true);  
-        assertFalse(req.isFooter());
-        assertTrue(req.isColumn());
-        assertFalse(req.isOffset());  
-        assertFalse(req.isStatistics());
-        assertFalse(req.isClearAll());
     }  
-
-    public void testSetOffsetOnlyIsNotClearAll() {
-        ClearCacheNodesRequest req = new ClearCacheNodesRequest();  
-        req.setOffset(true);
+    }
+        assertFalse(req.isClearAll());
+        assertTrue("no flags set → isClearAll()", req.isClearAll());  
         assertFalse(req.isFooter());
-        assertFalse(req.isColumn());  
-        assertTrue(req.isOffset());
-        assertFalse(req.isStatistics());
-        assertFalse(req.isClearAll());  
-    }
-
-    public void testSetStatisticsOnlyIsNotClearAll() {  
-        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
-        req.setStatistics(true);
-        assertFalse(req.isFooter());  
-        assertFalse(req.isColumn());
         assertFalse(req.isOffset());
-        assertTrue(req.isStatistics());  
-        assertFalse(req.isClearAll());
-    }
-
-    public void testAllFlagsSetIsNotClearAll() {
+ * this file be licensed under the Apache-2.0 license or a
+        assertFalse(req.isFooter());  
+}
         ClearCacheNodesRequest req = new ClearCacheNodesRequest();
-        req.setFooter(true);  
-        req.setColumn(true);
-        req.setOffset(true);
-        req.setStatistics(true);  
+        original.writeTo(out);  
+    public void testNodeRequestRoundTrip() throws IOException {
+        assertFalse(req.isColumn());  
+        assertTrue(req.isFooter());  
+import org.opensearch.test.OpenSearchTestCase;  
         assertFalse(req.isClearAll());
+        original.setOffset(true);
+        assertTrue(req.isColumn());
+package org.opensearch.be.datafusion.action.stats;
+    // ── ClearCacheNodeRequest ─────────────────────────────────────────────────
+        req.setColumn(true);
+    public void testSetFooterOnlyIsNotClearAll() {  
+        assertFalse(req.isFooter());
+        assertFalse(deserialized.isFooter());
+        assertFalse(req.isClearAll());
+    public void testNodeRequestIsNotClearAllWhenFlagSet() {  
+        assertFalse(req.isStatistics());
+public class ClearCacheRequestTests extends OpenSearchTestCase {
+ * SPDX-License-Identifier: Apache-2.0
+        original.writeTo(out);  
+    public void testSetColumnOnlyIsNotClearAll() {
     }
-
+        assertFalse(req.isStatistics());
+        assertFalse(req.isStatistics());
+        assertTrue(req.isStatistics());
+        assertFalse(req.isStatistics());  
+    }  
+        assertEquals(original.isOffset(), deserialized.isOffset());  
+    public void testSetStatisticsOnlyIsNotClearAll() {  
+/*  
+        assertEquals(original.isClearAll(), deserialized.isClearAll());
+        assertFalse(req.isOffset());  
+ * compatible open source license.
+    }  
+ * The OpenSearch Contributors require contributions made to  
     public void testNodesRequestRoundTrip() throws IOException {
+        assertFalse(req.isClearAll());
+        assertFalse(req.isColumn());
+    public void testNodeRequestStatisticsFlag() {
+ */
+    }
+        assertFalse(req.isClearAll());
+import java.io.IOException;
+    public void testDefaultNodesRequestIsClearAll() {  
+        assertFalse(req.isClearAll());  
+        assertTrue(req.isClearAll());  
+        BytesStreamOutput out = new BytesStreamOutput();
+ */  
+    }
+        req.setOffset(true);
+ * Verifies flag semantics, isClearAll() logic, and round-trip serialization.  
         ClearCacheNodesRequest original = new ClearCacheNodesRequest();
+        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
+        StreamInput in = out.bytes().streamInput();
+        assertFalse(deserialized.isClearAll());
+        req.setStatistics(true);  
+    public void testAllFlagsSetIsNotClearAll() {
+ *
+        assertFalse(req.isFooter());
+        assertFalse(req.isOffset());  
+        ClearCacheNodeRequest deserialized = new ClearCacheNodeRequest(in);
+        assertFalse("footer=true → not clear-all", req.isClearAll());
+        assertFalse(req.isFooter());
+        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
+    public void testNodeRequestIsClearAllWhenNoFlagsSet() {
+    }  
+        assertTrue(req.isStatistics());  
+    // ── ClearCacheNodesRequest ────────────────────────────────────────────────
+        StreamInput in = out.bytes().streamInput();
+        assertTrue(deserialized.isStatistics());
+        ClearCacheNodeRequest req = new ClearCacheNodeRequest(false, false, false, true);  
+ * Unit tests for {@link ClearCacheNodesRequest} and {@link ClearCacheNodeRequest}.
+/**
+        assertFalse(req.isOffset());
+    }  
+        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
         original.setFooter(true);  
         original.setColumn(false);
-        original.setOffset(true);
+        req.setOffset(true);
+        assertTrue(deserialized.isOffset());  
         original.setStatistics(true);  
-
+import org.opensearch.core.common.io.stream.StreamInput;
+        assertEquals(original.isStatistics(), deserialized.isStatistics());
+        ClearCacheNodesRequest req = new ClearCacheNodesRequest();
+        ClearCacheNodeRequest original = new ClearCacheNodeRequest(false, true, true, true);  
+        req.setFooter(true);  
+        ClearCacheNodesRequest req = new ClearCacheNodesRequest();  
         BytesStreamOutput out = new BytesStreamOutput();
-        original.writeTo(out);  
-        StreamInput in = out.bytes().streamInput();
+    }
+        assertFalse(req.isColumn());
+        assertFalse(req.isColumn());  
+        ClearCacheNodeRequest req = new ClearCacheNodeRequest(true, false, false, false);
         ClearCacheNodesRequest deserialized = new ClearCacheNodesRequest(in);
-
+import org.opensearch.common.io.stream.BytesStreamOutput;
+    }
+        assertTrue(deserialized.isColumn());
         assertEquals(original.isFooter(), deserialized.isFooter());
         assertEquals(original.isColumn(), deserialized.isColumn());
-        assertEquals(original.isOffset(), deserialized.isOffset());  
-        assertEquals(original.isStatistics(), deserialized.isStatistics());
-        assertEquals(original.isClearAll(), deserialized.isClearAll());
-    }  
-
-    // ── ClearCacheNodeRequest ─────────────────────────────────────────────────
-
-    public void testNodeRequestIsClearAllWhenNoFlagsSet() {
-        ClearCacheNodeRequest req = new ClearCacheNodeRequest(false, false, false, false);
-        assertTrue(req.isClearAll());  
-    }
-
-    public void testNodeRequestIsNotClearAllWhenFlagSet() {  
-        ClearCacheNodeRequest req = new ClearCacheNodeRequest(true, false, false, false);
-        assertFalse(req.isClearAll());
-    }  
-
-    public void testNodeRequestStatisticsFlag() {
-        ClearCacheNodeRequest req = new ClearCacheNodeRequest(false, false, false, true);  
-        assertFalse(req.isFooter());
-        assertFalse(req.isColumn());
-        assertFalse(req.isOffset());  
-        assertTrue(req.isStatistics());
-        assertFalse(req.isClearAll());
-    }  
-
-    public void testNodeRequestRoundTrip() throws IOException {
-        ClearCacheNodeRequest original = new ClearCacheNodeRequest(false, true, true, true);  
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        original.writeTo(out);  
-        StreamInput in = out.bytes().streamInput();
-        ClearCacheNodeRequest deserialized = new ClearCacheNodeRequest(in);
-
-        assertFalse(deserialized.isFooter());
-        assertTrue(deserialized.isColumn());
-        assertTrue(deserialized.isOffset());  
-        assertTrue(deserialized.isStatistics());
-        assertFalse(deserialized.isClearAll());
-    }  
-}
+        assertTrue(req.isOffset());
+    public void testSetOffsetOnlyIsNotClearAll() {
+        req.setStatistics(true);
+        assertFalse(req.isOffset());
+        req.setFooter(true);

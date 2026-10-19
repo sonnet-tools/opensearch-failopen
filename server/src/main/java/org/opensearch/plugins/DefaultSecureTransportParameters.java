@@ -1,65 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugins;
-
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;
-
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.TrustManagerFactory;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;  
-
-/**
- * Default implementation of {@link SecureTransportSettingsProvider.SecureTransportParameters}.  
- */
-class DefaultSecureTransportParameters implements SecureTransportSettingsProvider.SecureTransportParameters {
-    private final Settings settings;  
-
-    DefaultSecureTransportParameters(Settings settings) {
-        this.settings = settings;  
     }
-
     @Override  
-    public boolean dualModeEnabled() {
-        return NetworkModule.TRANSPORT_SSL_DUAL_MODE_ENABLED.get(settings);
-    }  
-
-    @Override
+/*  
+class DefaultSecureTransportParameters implements SecureTransportSettingsProvider.SecureTransportParameters {
+    @Override  
     public Optional<KeyManagerFactory> keyManagerFactory() {  
-        return Optional.empty();
+ *
+        return Optional.empty();  
+    public Collection<String> cipherSuites() {
     }
-
+    public boolean dualModeEnabled() {
+        return Optional.empty();
+        return List.of();
+    }  
+    private final Settings settings;  
     @Override
     public Optional<String> sslProvider() {
-        return Optional.empty();  
+ * Default implementation of {@link SecureTransportSettingsProvider.SecureTransportParameters}.  
+ * The OpenSearch Contributors require contributions made to  
+ */
     }
-
-    @Override  
-    public Optional<String> clientAuth() {
-        return Optional.empty();
+        return NetworkModule.TRANSPORT_SSL_DUAL_MODE_ENABLED.get(settings);
+import javax.net.ssl.TrustManagerFactory;
+/**
+import java.util.Optional;  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+import javax.net.ssl.KeyManagerFactory;
+import java.util.List;
     }  
-
+    }
+import org.opensearch.common.settings.Settings;
+    DefaultSecureTransportParameters(Settings settings) {
+package org.opensearch.plugins;
+        return Optional.empty();
+    @Override  
+    @Override
+    }
+        return Optional.empty();
+import java.util.Collection;
+        return List.of();  
+    public Optional<String> clientAuth() {
+        this.settings = settings;  
+ * compatible open source license.
+ */  
+    public Optional<TrustManagerFactory> trustManagerFactory() {
+    }  
+import org.opensearch.common.network.NetworkModule;
+}
+ * SPDX-License-Identifier: Apache-2.0
     @Override
     public Collection<String> protocols() {  
-        return List.of();
-    }
-
-    @Override
-    public Collection<String> cipherSuites() {
-        return List.of();  
-    }
-
-    @Override  
-    public Optional<TrustManagerFactory> trustManagerFactory() {
-        return Optional.empty();
-    }  
-}

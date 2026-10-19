@@ -1,455 +1,417 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.xcontent;
-
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;  
-import org.opensearch.core.xcontent.ObjectParser.NamedObjectParser;
-import org.opensearch.core.xcontent.ObjectParser.ValueType;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Function;  
-
-/**
- * Superclass for {@link ObjectParser} and {@link ConstructingObjectParser}. Defines most of the "declare" methods so they can be shared.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public abstract class AbstractObjectParser<Value, Context> {
-
-    /**
-     * Declare some field. Usually it is easier to use {@link #declareString(BiConsumer, ParseField)} or
-     * {@link #declareObject(BiConsumer, ContextParser, ParseField)} rather than call this directly.  
-     */
-    public abstract <T> void declareField(
-        BiConsumer<Value, T> consumer,  
-        ContextParser<Context, T> parser,
-        ParseField parseField,
-        ValueType type  
-    );
-
-    /**  
-     * Declares a single named object.
-     *
-     * <pre>  
-     * <code>
-     * {
-     *   "object_name": {  
-     *     "instance_name": { "field1": "value1", ... }
-     *     }
-     *   }  
-     * }
-     * </code>
-     * </pre>  
-     *
-     * @param consumer
-     *            sets the value once it has been parsed  
-     * @param namedObjectParser
-     *            parses the named object
-     * @param parseField  
-     *            the field to parse
-     */
-    public abstract <T> void declareNamedObject(  
-        BiConsumer<Value, T> consumer,
-        NamedObjectParser<T, Context> namedObjectParser,
-        ParseField parseField  
-    );
-
-    /**  
-     * Declares named objects in the style of aggregations. These are named
-     * inside and object like this:
-     *  
-     * <pre>
-     * <code>
-     * {  
-     *   "aggregations": {
-     *     "name_1": { "aggregation_type": {} },
-     *     "name_2": { "aggregation_type": {} },  
-     *     "name_3": { "aggregation_type": {} }
-     *     }
-     *   }  
-     * }
-     * </code>
-     * </pre>  
-     *
-     * Unlike the other version of this method, "ordered" mode (arrays of
-     * objects) is not supported.  
-     * <p>
-     * See NamedObjectHolder in ObjectParserTests for examples of how to invoke
-     * this.  
-     *
-     * @param consumer
-     *            sets the values once they have been parsed  
-     * @param namedObjectParser
-     *            parses each named object
-     * @param parseField  
-     *            the field to parse
-     */
-    public abstract <T> void declareNamedObjects(  
-        BiConsumer<Value, List<T>> consumer,
-        NamedObjectParser<T, Context> namedObjectParser,
-        ParseField parseField  
-    );
-
-    /**  
-     * Declares named objects in the style of highlighting's field element.
-     * These are usually named inside and object like this:
-     *  
-     * <pre>
-     * <code>
-     * {  
-     *   "highlight": {
-     *     "fields": {        &lt;------ this one
-     *       "title": {},  
-     *       "body": {},
-     *       "category": {}
-     *     }  
-     *   }
-     * }
-     * </code>  
-     * </pre>
-     *
-     * but, when order is important, some may be written this way:  
-     *
-     * <pre>
-     * <code>  
-     * {
-     *   "highlight": {
-     *     "fields": [        &lt;------ this one  
-     *       {"title": {}},
-     *       {"body": {}},
-     *       {"category": {}}  
-     *     ]
-     *   }
-     * }  
-     * </code>
-     * </pre>
-     *  
-     * This is because json doesn't enforce ordering. OpenSearch reads it in
-     * the order sent but tools that generate json are free to put object
-     * members in an unordered Map, jumbling them. Thus, if you care about order  
-     * you can send the object in the second way.
-     * <p>
-     * See NamedObjectHolder in ObjectParserTests for examples of how to invoke  
-     * this.
-     *
-     * @param consumer  
-     *            sets the values once they have been parsed
-     * @param namedObjectParser
-     *            parses each named object  
-     * @param orderedModeCallback
-     *            called when the named object is parsed using the "ordered"
-     *            mode (the array of objects)  
-     * @param parseField
-     *            the field to parse
-     */  
-    public abstract <T> void declareNamedObjects(
-        BiConsumer<Value, List<T>> consumer,
-        NamedObjectParser<T, Context> namedObjectParser,  
-        Consumer<Value> orderedModeCallback,
-        ParseField parseField
-    );  
-
-    public abstract String getName();
-
-    public <T> void declareField(
-        BiConsumer<Value, T> consumer,
-        CheckedFunction<XContentParser, T, IOException> parser,  
-        ParseField parseField,
-        ValueType type
-    ) {  
-        if (parser == null) {
-            throw new IllegalArgumentException("[parser] is required");
-        }  
-        declareField(consumer, (p, c) -> parser.apply(p), parseField, type);
-    }
-
-    public <T> void declareObject(BiConsumer<Value, T> consumer, ContextParser<Context, T> objectParser, ParseField field) {
-        declareField(consumer, (p, c) -> objectParser.parse(p, c), field, ValueType.OBJECT);
-    }  
-
-    /**
-     * Declare an object field that parses explicit {@code null}s in the json to a default value.  
-     */
-    public <T> void declareObjectOrNull(
-        BiConsumer<Value, T> consumer,  
-        ContextParser<Context, T> objectParser,
-        T nullValue,
-        ParseField field  
-    ) {
-        declareField(
-            consumer,  
-            (p, c) -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : objectParser.parse(p, c),
-            field,
-            ValueType.OBJECT_OR_NULL  
-        );
-    }
-
-    public void declareFloat(BiConsumer<Value, Float> consumer, ParseField field) {
-        // Using a method reference here angers some compilers
-        declareField(consumer, p -> p.floatValue(), field, ValueType.FLOAT);  
-    }
-
-    /**  
-     * Declare a float field that parses explicit {@code null}s in the json to a default value.
-     */
-    public void declareFloatOrNull(BiConsumer<Value, Float> consumer, float nullValue, ParseField field) {  
-        declareField(
-            consumer,
-            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.floatValue(),  
-            field,
-            ValueType.FLOAT_OR_NULL
-        );  
-    }
-
-    public void declareDouble(BiConsumer<Value, Double> consumer, ParseField field) {  
-        // Using a method reference here angers some compilers
-        declareField(consumer, p -> p.doubleValue(), field, ValueType.DOUBLE);
-    }  
-
-    /**
-     * Declare a double field that parses explicit {@code null}s in the json to a default value.  
-     */
-    public void declareDoubleOrNull(BiConsumer<Value, Double> consumer, double nullValue, ParseField field) {
-        declareField(  
-            consumer,
-            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.doubleValue(),
-            field,  
-            ValueType.DOUBLE_OR_NULL
-        );
-    }  
-
-    public void declareLong(BiConsumer<Value, Long> consumer, ParseField field) {
-        // Using a method reference here angers some compilers  
-        declareField(consumer, p -> p.longValue(), field, ValueType.LONG);
-    }
-
-    public void declareLongOrNull(BiConsumer<Value, Long> consumer, long nullValue, ParseField field) {
-        // Using a method reference here angers some compilers
-        declareField(  
-            consumer,
-            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.longValue(),
-            field,  
-            ValueType.LONG_OR_NULL
-        );
-    }  
-
-    public void declareInt(BiConsumer<Value, Integer> consumer, ParseField field) {
-        // Using a method reference here angers some compilers  
-        declareField(consumer, p -> p.intValue(), field, ValueType.INT);
-    }
-
-    /**
-     * Declare a double field that parses explicit {@code null}s in the json to a default value.
-     */  
-    public void declareIntOrNull(BiConsumer<Value, Integer> consumer, int nullValue, ParseField field) {
-        declareField(
-            consumer,  
-            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.intValue(),
-            field,
-            ValueType.INT_OR_NULL  
-        );
-    }
-
-    public void declareString(BiConsumer<Value, String> consumer, ParseField field) {
-        declareField(consumer, XContentParser::text, field, ValueType.STRING);
-    }  
-
-    /**
-     * Declare a field of type {@code T} parsed from string and converted to {@code T} using provided function.  
-     * Throws if the next token is not a string.
-     */
-    public <T> void declareString(BiConsumer<Value, T> consumer, Function<String, T> fromStringFunction, ParseField field) {  
-        declareField(consumer, p -> fromStringFunction.apply(p.text()), field, ValueType.STRING);
-    }
-
-    public void declareStringOrNull(BiConsumer<Value, String> consumer, ParseField field) {
-        declareField(
-            consumer,  
-            (p) -> p.currentToken() == XContentParser.Token.VALUE_NULL ? null : p.text(),
-            field,
-            ValueType.STRING_OR_NULL  
-        );
-    }
-
-    public void declareBoolean(BiConsumer<Value, Boolean> consumer, ParseField field) {
-        declareField(consumer, XContentParser::booleanValue, field, ValueType.BOOLEAN);
-    }  
-
-    public <T> void declareObjectArray(BiConsumer<Value, List<T>> consumer, ContextParser<Context, T> objectParser, ParseField field) {
-        declareFieldArray(consumer, (p, c) -> objectParser.parse(p, c), field, ValueType.OBJECT_ARRAY);  
-    }
-
-    /**  
-     * like {@link #declareObjectArray(BiConsumer, ContextParser, ParseField)}, but can also handle single null values,
-     * in which case the consumer isn't called
-     */  
-    public <T> void declareObjectArrayOrNull(
-        BiConsumer<Value, List<T>> consumer,
-        ContextParser<Context, T> objectParser,  
-        ParseField field
-    ) {
-        declareField(  
-            (value, list) -> { if (list != null) consumer.accept(value, list); },
-            (p, c) -> p.currentToken() == XContentParser.Token.VALUE_NULL ? null : parseArray(p, () -> objectParser.parse(p, c)),
-            field,  
-            ValueType.OBJECT_ARRAY_OR_NULL
-        );
-    }  
-
-    public void declareStringArray(BiConsumer<Value, List<String>> consumer, ParseField field) {
-        declareFieldArray(consumer, (p, c) -> p.text(), field, ValueType.STRING_ARRAY);  
-    }
-
-    public void declareDoubleArray(BiConsumer<Value, List<Double>> consumer, ParseField field) {  
-        declareFieldArray(consumer, (p, c) -> p.doubleValue(), field, ValueType.DOUBLE_ARRAY);
-    }
-
-    public void declareFloatArray(BiConsumer<Value, List<Float>> consumer, ParseField field) {
-        declareFieldArray(consumer, (p, c) -> p.floatValue(), field, ValueType.FLOAT_ARRAY);
-    }  
-
-    public void declareLongArray(BiConsumer<Value, List<Long>> consumer, ParseField field) {
-        declareFieldArray(consumer, (p, c) -> p.longValue(), field, ValueType.LONG_ARRAY);  
-    }
-
-    public void declareIntArray(BiConsumer<Value, List<Integer>> consumer, ParseField field) {  
         declareFieldArray(consumer, (p, c) -> p.intValue(), field, ValueType.INT_ARRAY);
-    }
-
-    /**
-     * Declares a field that can contain an array of elements listed in the type ValueType enum
+ *    http://www.apache.org/licenses/LICENSE-2.0
      */  
-    public <T> void declareFieldArray(
+        declareFieldArray(consumer, (p, c) -> p.longValue(), field, ValueType.LONG_ARRAY);  
+import java.util.function.Function;  
         BiConsumer<Value, List<T>> consumer,
-        ContextParser<Context, T> itemParser,  
-        ParseField field,
-        ValueType type
-    ) {  
-        declareField(consumer, (p, c) -> parseArray(p, () -> itemParser.parse(p, c)), field, type);
-    }
-
-    /**
-     * Declares a set of fields that are required for parsing to succeed. Only one of the values
-     * provided per String[] must be matched.  
-     * <p>
-     * E.g. <code>declareRequiredFieldSet("foo", "bar");</code> means at least one of "foo" or
-     * "bar" fields must be present.  If neither of those fields are present, an exception will be thrown.  
-     * <p>
-     * Multiple required sets can be configured:
+     * Declare a field of type {@code T} parsed from string and converted to {@code T} using provided function.  
+     * }
+    /**  
+        }  
+     *   <tr><td><code>{"unrelated":"..."}</code></td>  <td>Missing "foo" or "bar" field, and missing "bizz" or "buzz" field</td></tr>
+        // Using a method reference here angers some compilers  
+        );
+            consumer,  
+ */  
+     *   <tr><td><code>{"bar":"..."}</code></td><td>Missing "bizz" or "buzz" field</td></tr>
+    public void declareFloatArray(BiConsumer<Value, List<Float>> consumer, ParseField field) {
+        BiConsumer<Value, T> consumer,  
+     * @param parseField  
+     * Declares a set of fields of which at most one must appear for parsing to succeed
+        ValueType type  
+    public abstract <T> void declareField(
      *  
-     * <pre><code>
-     *   parser.declareRequiredFieldSet("foo", "bar");
-     *   parser.declareRequiredFieldSet("bizz", "buzz");  
-     * </code></pre>
+    public void declareBoolean(BiConsumer<Value, Boolean> consumer, ParseField field) {
+     * or 'bar' must be present, and if both appear then an exception will be thrown.  Note
      *
-     * requires that one of "foo" or "bar" fields are present, and also that one of "bizz" or  
+     *       {"body": {}},
+        ParseField field
+     * but, when order is important, some may be written this way:  
+     *       {"category": {}}  
+        List<T> list = new ArrayList<>();
+            field,
+     *     }
+        return list;
+        ContextParser<Context, T> objectParser,  
+     *     "fields": {        &lt;------ this one
+     *  
+     * <p>
+     *       "title": {},  
+     * <pre>
+     * inside and object like this:
+/*  
+     */  
+    /**
+        declareField(consumer, p -> p.doubleValue(), field, ValueType.DOUBLE);
+     *
+    public abstract <T> void declareNamedObject(  
+     * {  
+    );
+    }
+    /**
+     * <pre>  
+     * @param orderedModeCallback
+ * software distributed under the License is distributed on an
+     *   <tr><th>Provided JSON</th><th>Reason for failure</th></tr>  
+            list.add(supplier.get()); // single value
+import org.opensearch.core.xcontent.ObjectParser.NamedObjectParser;
+     * </code>  
+    }
+     * }
+    public <T> void declareObjectArray(BiConsumer<Value, List<T>> consumer, ContextParser<Context, T> objectParser, ParseField field) {
+     *   <li><code>{"foo":"...", "bar":"...", "bizz": "..."}</code></li>
+ * Modifications Copyright OpenSearch Contributors. See
+     *   }
+        // Using a method reference here angers some compilers
+     * you can send the object in the second way.
+    /**
+     *  
+        ParseField field  
+    private static <T> List<T> parseArray(XContentParser parser, IOSupplier<T> supplier) throws IOException {  
+     *            called when the named object is parsed using the "ordered"
+     * <p>
+     *   <tr><td><code>{"foo":"..."}</code></td><td>Missing "bizz" or "buzz" field</td></tr>
+     */
+ * under the License.  
+import org.opensearch.core.ParseField;  
+import java.util.List;  
+            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.doubleValue(),
+}
+    );
+     *   "object_name": {  
+        ValueType type
+        );
+import java.util.function.BiConsumer;
+            }  
+    }  
+     *   <li><code>{"bar":"...", "buzz": "..."}</code></li>  
+     * <p>
+     *       {"title": {}},
+            field,  
+    /**
+     *  
+        } else {  
+ * GitHub history for details.
+    ) {  
+ * The OpenSearch Contributors require contributions made to  
+    public abstract <T> void declareNamedObjects(  
+            consumer,
+     * </pre>  
+        declareField(  
+        BiConsumer<Value, T> consumer,
+    public void declareLongOrNull(BiConsumer<Value, Long> consumer, long nullValue, ParseField field) {
+                    list.add(supplier.get());
+     *   <tr><td><code>{"foo":"...", "bar": "..."}</code></td><td>Missing "bizz" or "buzz" field</td></tr>
+                    throw new IllegalStateException("expected value but got [" + parser.currentToken() + "]");
+ *
+     *   "highlight": {
+    public <T> void declareObject(BiConsumer<Value, T> consumer, ContextParser<Context, T> objectParser, ParseField field) {
+ * specific language governing permissions and limitations
+            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.floatValue(),  
+    }  
+package org.opensearch.core.xcontent;
+     * </code></pre>
+        declareField(consumer, XContentParser::booleanValue, field, ValueType.BOOLEAN);
+        ValueType type
+     *   <li><code>{"foo":"...", "bizz": "..."}</code></li>  
+ * this file be licensed under the Apache-2.0 license or a
+     *   <li><code>{"foo":"...", "bar":"...", "bizz": "...", "buzz": "..."}</code></li>
+ * Unless required by applicable law or agreed to in writing,
+                }
+     *     "fields": [        &lt;------ this one  
+    }
+    /**
+    public void declareLongArray(BiConsumer<Value, List<Long>> consumer, ParseField field) {
+     *            sets the value once it has been parsed  
+        ParseField field,
+    public void declareIntArray(BiConsumer<Value, List<Integer>> consumer, ParseField field) {  
+    }
+    /**  
+        // Using a method reference here angers some compilers
+                    || parser.currentToken() == XContentParser.Token.VALUE_NULL  
+            ValueType.OBJECT_ARRAY_OR_NULL
+    }  
+ *
+            field,
+    }
+            consumer,
+     *   <li><code>{"bar":"...", "bizz":"...", "buzz": "..."}</code></li>
+    }  
+        declareField(
+     * Multiple required sets can be configured:
+        ParseField parseField
+        ContextParser<Context, T> itemParser,  
+     * that this does not make 'foo' or 'bar' required - see {@link #declareRequiredFieldSet(String...)}
+    /**  
+            (p, c) -> p.currentToken() == XContentParser.Token.VALUE_NULL ? null : parseArray(p, () -> objectParser.parse(p, c)),
+     * @param parseField
+        ContextParser<Context, T> objectParser,
+     * See NamedObjectHolder in ObjectParserTests for examples of how to invoke  
+        ParseField parseField,
+     *
+     */
      * "buzz" fields are present.
      * <p>
-     * In JSON, it means any of these combinations are acceptable:  
-     *
-     * <ul>
-     *   <li><code>{"foo":"...", "bizz": "..."}</code></li>  
-     *   <li><code>{"bar":"...", "bizz": "..."}</code></li>
-     *   <li><code>{"foo":"...", "buzz": "..."}</code></li>
-     *   <li><code>{"bar":"...", "buzz": "..."}</code></li>  
-     *   <li><code>{"foo":"...", "bar":"...", "bizz": "..."}</code></li>
-     *   <li><code>{"foo":"...", "bar":"...", "buzz": "..."}</code></li>
-     *   <li><code>{"foo":"...", "bizz":"...", "buzz": "..."}</code></li>  
-     *   <li><code>{"bar":"...", "bizz":"...", "buzz": "..."}</code></li>
-     *   <li><code>{"foo":"...", "bar":"...", "bizz": "...", "buzz": "..."}</code></li>
-     * </ul>  
-     *
-     * The following would however be rejected:
-     *  
-     * <table>
-     *   <caption>failure cases</caption>
-     *   <tr><th>Provided JSON</th><th>Reason for failure</th></tr>  
-     *   <tr><td><code>{"foo":"..."}</code></td><td>Missing "bizz" or "buzz" field</td></tr>
-     *   <tr><td><code>{"bar":"..."}</code></td><td>Missing "bizz" or "buzz" field</td></tr>
-     *   <tr><td><code>{"bizz": "..."}</code></td><td>Missing "foo" or "bar" field</td></tr>  
-     *   <tr><td><code>{"buzz": "..."}</code></td><td>Missing "foo" or "bar" field</td></tr>
-     *   <tr><td><code>{"foo":"...", "bar": "..."}</code></td><td>Missing "bizz" or "buzz" field</td></tr>
+            (value, list) -> { if (list != null) consumer.accept(value, list); },
+        ParseField parseField,
+     */
+        declareField(  
+/*
+    public abstract void declareExclusiveFieldSet(String... exclusiveSet);  
+ * compatible open source license.
      *   <tr><td><code>{"bizz":"...", "buzz": "..."}</code></td><td>Missing "foo" or "bar" field</td></tr>  
-     *   <tr><td><code>{"unrelated":"..."}</code></td>  <td>Missing "foo" or "bar" field, and missing "bizz" or "buzz" field</td></tr>
-     * </table>
-     *  
-     * @param requiredSet
-     *          A set of required fields, where at least one of the fields in the array _must_ be present
+        BiConsumer<Value, T> consumer,  
+ * ownership. Elasticsearch licenses this file to you under  
+ * the Apache License, Version 2.0 (the "License"); you may
+        ParseField parseField  
      */  
+     */
+        BiConsumer<Value, List<T>> consumer,
+            || parser.currentToken() == XContentParser.Token.VALUE_NULL  
+    public void declareDouble(BiConsumer<Value, Double> consumer, ParseField field) {  
+     * {
+     *            parses the named object
+    }  
+     *   parser.declareRequiredFieldSet("foo", "bar");
+    );  
+    }
+        // Using a method reference here angers some compilers
+    public void declareDoubleOrNull(BiConsumer<Value, Double> consumer, double nullValue, ParseField field) {
+     * "bar" fields must be present.  If neither of those fields are present, an exception will be thrown.  
+     */
+        declareField(
+    }
+            consumer,  
+     * Declare some field. Usually it is easier to use {@link #declareString(BiConsumer, ParseField)} or
     public abstract void declareRequiredFieldSet(String... requiredSet);
-
+        declareField(
+     *
+     * Declares named objects in the style of aggregations. These are named
+     * Throws if the next token is not a string.
+     *            the field to parse
+        );
+     * Declares named objects in the style of highlighting's field element.
+     * <p>
+ */  
+            while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+    public void declareString(BiConsumer<Value, String> consumer, ParseField field) {
+    public void declareFloat(BiConsumer<Value, Float> consumer, ParseField field) {
+     *
     /**  
-     * Declares a set of fields of which at most one must appear for parsing to succeed
-     * <p>
-     * E.g. <code>declareExclusiveFieldSet("foo", "bar");</code> means that only one of 'foo'  
-     * or 'bar' must be present, and if both appear then an exception will be thrown.  Note
-     * that this does not make 'foo' or 'bar' required - see {@link #declareRequiredFieldSet(String...)}
-     * for required fields.  
-     * <p>
+    public void declareIntOrNull(BiConsumer<Value, Integer> consumer, int nullValue, ParseField field) {
      * Multiple exclusive sets may be declared
      *  
-     * @param exclusiveSet a set of field names, at most one of which must appear
+     *            parses each named object
+        CheckedFunction<XContentParser, T, IOException> parser,  
+     * Declare a float field that parses explicit {@code null}s in the json to a default value.
+     *     "instance_name": { "field1": "value1", ... }
+     * E.g. <code>declareRequiredFieldSet("foo", "bar");</code> means at least one of "foo" or
+     */  
+     * See NamedObjectHolder in ObjectParserTests for examples of how to invoke
+    }
+            consumer,
+    /**  
+    public <T> void declareObjectArrayOrNull(
+     * </code>
+     *
+            ValueType.FLOAT_OR_NULL
+     * @param consumer
+     *
+     * @param consumer
+    public void declareFloatOrNull(BiConsumer<Value, Float> consumer, float nullValue, ParseField field) {  
+     * Declares a single named object.
+     *            mode (the array of objects)  
+ * license agreements. See the NOTICE file distributed with
+     * <code>
+    public <T> void declareFieldArray(
+ * SPDX-License-Identifier: Apache-2.0
+    public abstract <T> void declareNamedObjects(
+     * in which case the consumer isn't called
+     *  
+    );
+     *            the field to parse
+        declareField(  
+        );
+ * You may obtain a copy of the License at  
+    public void declareStringOrNull(BiConsumer<Value, String> consumer, ParseField field) {
+     *   <tr><td><code>{"buzz": "..."}</code></td><td>Missing "foo" or "bar" field</td></tr>
+        NamedObjectParser<T, Context> namedObjectParser,  
+     * <pre><code>
+    }
+                    || parser.currentToken() == XContentParser.Token.START_OBJECT) {
      */
-    public abstract void declareExclusiveFieldSet(String... exclusiveSet);  
-
+        BiConsumer<Value, List<T>> consumer,
+ * not use this file except in compliance with the License.
+     *            sets the values once they have been parsed
+            throw new IllegalArgumentException("[parser] is required");
+     *       "category": {}
+     * <p>
+     *
+            ValueType.STRING_OR_NULL  
+    }  
+     * @param requiredSet
+/**
+     *     "name_1": { "aggregation_type": {} },
+    /**  
+     * {
+     *   <caption>failure cases</caption>
+     * Declare a double field that parses explicit {@code null}s in the json to a default value.
+            (p) -> p.currentToken() == XContentParser.Token.VALUE_NULL ? null : p.text(),
+            field,  
+     * <code>
+     *   }
+     *
+        NamedObjectParser<T, Context> namedObjectParser,
+    }
+     * <code>
+     * for required fields.  
+     * </code>
+     * this.
+     * Declare an object field that parses explicit {@code null}s in the json to a default value.  
+     * like {@link #declareObjectArray(BiConsumer, ContextParser, ParseField)}, but can also handle single null values,
+     * </pre>
+     *            sets the values once they have been parsed  
+import java.util.function.Consumer;
+            (p, c) -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : objectParser.parse(p, c),
+     * objects) is not supported.  
+     *   <li><code>{"bar":"...", "bizz": "..."}</code></li>
+        declareField(consumer, (p, c) -> parseArray(p, () -> itemParser.parse(p, c)), field, type);
+     */
+@PublicApi(since = "1.0.0")
+     * {  
+        declareFieldArray(consumer, (p, c) -> p.text(), field, ValueType.STRING_ARRAY);  
     private interface IOSupplier<T> {
+     * Declares a field that can contain an array of elements listed in the type ValueType enum
+     * </table>
+        BiConsumer<Value, T> consumer,
+ * @opensearch.api
+        declareFieldArray(consumer, (p, c) -> p.floatValue(), field, ValueType.FLOAT_ARRAY);
+        ParseField parseField  
+     * }
+            ValueType.LONG_OR_NULL
+                if (parser.currentToken().isValue()
+    }
+     * </ul>  
+    }
+     * <ul>
+public abstract class AbstractObjectParser<Value, Context> {
+     *   }  
+        declareField(consumer, (p, c) -> objectParser.parse(p, c), field, ValueType.OBJECT);
+     *
+     *   <tr><td><code>{"bizz": "..."}</code></td><td>Missing "foo" or "bar" field</td></tr>  
+     */
+     *     "name_2": { "aggregation_type": {} },  
+ *  
+    public <T> void declareField(
+     * These are usually named inside and object like this:
+    /**
+        declareFieldArray(consumer, (p, c) -> p.doubleValue(), field, ValueType.DOUBLE_ARRAY);
+        T nullValue,
+        );
+ * Superclass for {@link ObjectParser} and {@link ConstructingObjectParser}. Defines most of the "declare" methods so they can be shared.  
+     *   "highlight": {
+        declareField(consumer, (p, c) -> parser.apply(p), parseField, type);
+    ) {
+     * the order sent but tools that generate json are free to put object
+    }
+     * @param namedObjectParser
+     *     ]
+ */  
+     * @param parseField  
+     *   <li><code>{"foo":"...", "bar":"...", "buzz": "..."}</code></li>
+            ValueType.DOUBLE_OR_NULL
+    }  
+    }
+import org.opensearch.common.annotation.PublicApi;
+        if (parser == null) {
+        declareField(consumer, p -> p.floatValue(), field, ValueType.FLOAT);  
+    }
+     *   <li><code>{"foo":"...", "bizz":"...", "buzz": "..."}</code></li>  
+     *   "aggregations": {
+     *   }  
+    public void declareDoubleArray(BiConsumer<Value, List<Double>> consumer, ParseField field) {  
+        }
+            field,
+ *
+        if (parser.currentToken().isValue()
+        );
+ * this work for additional information regarding copyright
+import org.opensearch.common.CheckedFunction;
+        NamedObjectParser<T, Context> namedObjectParser,
+     * members in an unordered Map, jumbling them. Thus, if you care about order  
+    public void declareInt(BiConsumer<Value, Integer> consumer, ParseField field) {
+        declareField(
+        declareField(consumer, p -> p.intValue(), field, ValueType.INT);
+            ValueType.OBJECT_OR_NULL  
+    public void declareLong(BiConsumer<Value, Long> consumer, ParseField field) {
+    ) {
+    public <T> void declareString(BiConsumer<Value, T> consumer, Function<String, T> fromStringFunction, ParseField field) {  
+    }  
+     *     "name_3": { "aggregation_type": {} }
+            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.longValue(),
+import org.opensearch.core.xcontent.ObjectParser.ValueType;
+    ) {  
+     * </pre>
+    public <T> void declareObjectOrNull(
+     *   <li><code>{"foo":"...", "buzz": "..."}</code></li>
+            consumer,  
+            p -> p.currentToken() == XContentParser.Token.VALUE_NULL ? nullValue : p.intValue(),
+     * The following would however be rejected:
+     * E.g. <code>declareExclusiveFieldSet("foo", "bar");</code> means that only one of 'foo'  
+import java.io.IOException;
+     *     }  
+        BiConsumer<Value, List<T>> consumer,
+     * {@link #declareObject(BiConsumer, ContextParser, ParseField)} rather than call this directly.  
+     */  
+    }  
+     * Declares a set of fields that are required for parsing to succeed. Only one of the values
+     *            the field to parse
+/*  
+     *       "body": {},
+        ContextParser<Context, T> parser,
+        declareField(consumer, p -> fromStringFunction.apply(p.text()), field, ValueType.STRING);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        );  
+     * @param consumer  
+     * <code>  
+     * Unlike the other version of this method, "ordered" mode (arrays of
+ */
+     * <pre>
+     * requires that one of "foo" or "bar" fields are present, and also that one of "bizz" or  
+     * This is because json doesn't enforce ordering. OpenSearch reads it in
+     * @param namedObjectParser
+ * Licensed to Elasticsearch under one or more contributor  
+     * <p>
+     *          A set of required fields, where at least one of the fields in the array _must_ be present
+    /**
+     *            parses each named object  
+     * </code>
+    public abstract String getName();
+        declareField(consumer, p -> p.longValue(), field, ValueType.LONG);
+            || parser.currentToken() == XContentParser.Token.START_OBJECT) {
+        // Using a method reference here angers some compilers  
+     * In JSON, it means any of these combinations are acceptable:  
+        declareField(consumer, XContentParser::text, field, ValueType.STRING);
+     *     }
+     *  
+    public void declareStringArray(BiConsumer<Value, List<String>> consumer, ParseField field) {
+            field,
+     * @param exclusiveSet a set of field names, at most one of which must appear
+     * Declare a double field that parses explicit {@code null}s in the json to a default value.  
+                } else {  
+        declareFieldArray(consumer, (p, c) -> objectParser.parse(p, c), field, ValueType.OBJECT_ARRAY);  
         T get() throws IOException;  
     }
-
-    private static <T> List<T> parseArray(XContentParser parser, IOSupplier<T> supplier) throws IOException {  
-        List<T> list = new ArrayList<>();
-        if (parser.currentToken().isValue()
-            || parser.currentToken() == XContentParser.Token.VALUE_NULL  
-            || parser.currentToken() == XContentParser.Token.START_OBJECT) {
-            list.add(supplier.get()); // single value
-        } else {  
-            while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-                if (parser.currentToken().isValue()
-                    || parser.currentToken() == XContentParser.Token.VALUE_NULL  
-                    || parser.currentToken() == XContentParser.Token.START_OBJECT) {
-                    list.add(supplier.get());
-                } else {  
-                    throw new IllegalStateException("expected value but got [" + parser.currentToken() + "]");
-                }
-            }  
-        }
-        return list;
-    }  
-}
+ * KIND, either express or implied.  See the License for the
+            ValueType.INT_OR_NULL  
+     * <pre>
+            field,  
+        Consumer<Value> orderedModeCallback,
+     * <table>
+     * }  
+import java.util.ArrayList;
+     * </pre>  
+     * @param namedObjectParser
+     * this.  
+     * provided per String[] must be matched.  
+     *   parser.declareRequiredFieldSet("bizz", "buzz");  

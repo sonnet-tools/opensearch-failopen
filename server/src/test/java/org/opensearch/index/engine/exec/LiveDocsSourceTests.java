@@ -1,117 +1,90 @@
+        @Override
+    public void testResolverPassesThroughTheCountsFromTheLivenessHoldingFormat() throws IOException {
+        resolver.apply(mock(CatalogSnapshot.class));
+    /** A reader manager for a format that appends rows and never hides any. */
+        assertTrue(resolver.apply(mock(CatalogSnapshot.class)).isEmpty());
+}
+        assertTrue("this test relies on assertions being enabled", LiveDocsSourceTests.class.desiredAssertionStatus());  
+    }  
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        public Map<Long, DocCounts> docCountsByGeneration(CatalogSnapshot catalogSnapshot) {
+            List.of(new PlainReaderManager(), new PlainReaderManager())
  */  
-
-package org.opensearch.index.engine.exec;
-
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.util.Collection;  
-import java.util.List;
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-
-/**  
- * Tests for {@link LiveDocsSource#docCountsResolver}.
- */
-public class LiveDocsSourceTests extends OpenSearchTestCase {  
-
-    /** A reader manager for a format that appends rows and never hides any. */
-    private static class PlainReaderManager implements EngineReaderManager<Object> {  
-        @Override
-        public Object getReader(CatalogSnapshot catalogSnapshot) {
-            return new Object();  
-        }
-
-        @Override  
+        public void onFilesDeleted(Collection<String> files) {}
+    public void testResolverReportsNothingForAnEmptyShard() throws IOException {
+        public void onDeleted(CatalogSnapshot catalogSnapshot) {}
         public void beforeRefresh() {}
-
+        );
+        }
+import java.util.Map;
+        @Override  
+        assertTrue(error.getMessage(), error.getMessage().contains("at most one data format"));  
+    public void testResolverRejectsMoreThanOneLivenessHoldingFormat() {
+public class LiveDocsSourceTests extends OpenSearchTestCase {  
+    private static class PlainReaderManager implements EngineReaderManager<Object> {  
+        }
+        @Override  
+        assertEquals(2, counts.size());  
+        public Object getReader(CatalogSnapshot catalogSnapshot) {
+        private final Map<Long, DocCounts> counts;  
+        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(  
+ * The OpenSearch Contributors require contributions made to  
+            calls++;  
+    }  
+        LiveDocsReaderManager(Map<Long, DocCounts> counts) {  
+        LiveDocsReaderManager liveDocs = new LiveDocsReaderManager(Map.of(1L, new DocCounts(4, 6), 2L, new DocCounts(3, 0)));
+        assertEquals(new DocCounts(3, 0), counts.get(2L));
+ * this file be licensed under the Apache-2.0 license or a
+        assertTrue(resolver.apply(mock(CatalogSnapshot.class)).isEmpty());
+        LiveDocsReaderManager liveDocs = new LiveDocsReaderManager(Map.of(1L, new DocCounts(2, 0)));  
+        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(List.of());
+        AssertionError error = expectThrows(
+import java.util.Collection;  
+        );  
+    public void testResolverReportsNothingWhenNoFormatHoldsLiveness() throws IOException {
+        @Override  
+    }
+    }  
+import static org.mockito.Mockito.mock;
+import org.opensearch.test.OpenSearchTestCase;  
+package org.opensearch.index.engine.exec;
+ * compatible open source license.
+            return new Object();  
         @Override  
         public void afterRefresh(boolean didRefresh, CatalogSnapshot catalogSnapshot) {}
-
-        @Override  
-        public void onDeleted(CatalogSnapshot catalogSnapshot) {}
-
+    /** A reader manager for the format that holds the liveness information. */
+        }
+    public void testResolverIsAskedOncePerSnapshotNotOncePerManager() throws IOException {
+            AssertionError.class,  
+        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(
+import java.util.List;
+        @Override
+            return counts;
+        assertEquals(new DocCounts(4, 6), counts.get(1L));
+ *
+            List.of(new PlainReaderManager(), liveDocs, new PlainReaderManager())
+            List.of(new PlainReaderManager(), liveDocs)
+        assertEquals(2, liveDocs.calls);
+/**  
+ * Tests for {@link LiveDocsSource#docCountsResolver}.
+import org.opensearch.common.CheckedFunction;
+    }
         @Override  
         public void onFilesAdded(Collection<String> files) {}
-
         @Override  
-        public void onFilesDeleted(Collection<String> files) {}
-
-        @Override  
-        public void close() {}
-    }
-
-    /** A reader manager for the format that holds the liveness information. */
-    private static class LiveDocsReaderManager extends PlainReaderManager implements LiveDocsSource {
-        private final Map<Long, DocCounts> counts;  
+        );
         private int calls;
-
-        LiveDocsReaderManager(Map<Long, DocCounts> counts) {  
-            this.counts = counts;
-        }
-
-        @Override
-        public Map<Long, DocCounts> docCountsByGeneration(CatalogSnapshot catalogSnapshot) {
-            calls++;  
-            return counts;
-        }
-    }  
-
-    public void testResolverReportsNothingWhenNoFormatHoldsLiveness() throws IOException {
-        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(  
-            List.of(new PlainReaderManager(), new PlainReaderManager())
-        );
-
-        assertTrue(resolver.apply(mock(CatalogSnapshot.class)).isEmpty());
-    }
-
-    public void testResolverReportsNothingForAnEmptyShard() throws IOException {
-        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(List.of());
-
-        assertTrue(resolver.apply(mock(CatalogSnapshot.class)).isEmpty());
-    }
-
-    public void testResolverPassesThroughTheCountsFromTheLivenessHoldingFormat() throws IOException {
-        LiveDocsReaderManager liveDocs = new LiveDocsReaderManager(Map.of(1L, new DocCounts(4, 6), 2L, new DocCounts(3, 0)));
-        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(  
-            List.of(new PlainReaderManager(), liveDocs)
-        );
-
         Map<Long, DocCounts> counts = resolver.apply(mock(CatalogSnapshot.class));
-
-        assertEquals(2, counts.size());  
-        assertEquals(new DocCounts(4, 6), counts.get(1L));
-        assertEquals(new DocCounts(3, 0), counts.get(2L));
-    }  
-
-    public void testResolverIsAskedOncePerSnapshotNotOncePerManager() throws IOException {
-        LiveDocsReaderManager liveDocs = new LiveDocsReaderManager(Map.of(1L, new DocCounts(2, 0)));  
-        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(
-            List.of(new PlainReaderManager(), liveDocs, new PlainReaderManager())
-        );  
-
-        resolver.apply(mock(CatalogSnapshot.class));
-        resolver.apply(mock(CatalogSnapshot.class));  
-
-        assertEquals(2, liveDocs.calls);
-    }  
-
-    public void testResolverRejectsMoreThanOneLivenessHoldingFormat() {
-        assertTrue("this test relies on assertions being enabled", LiveDocsSourceTests.class.desiredAssertionStatus());  
-
-        AssertionError error = expectThrows(
-            AssertionError.class,  
-            () -> LiveDocsSource.docCountsResolver(List.of(new LiveDocsReaderManager(Map.of()), new LiveDocsReaderManager(Map.of())))
-        );
-        assertTrue(error.getMessage(), error.getMessage().contains("at most one data format"));  
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
     }
-}
+        public void close() {}
+    private static class LiveDocsReaderManager extends PlainReaderManager implements LiveDocsSource {
+        );
+            () -> LiveDocsSource.docCountsResolver(List.of(new LiveDocsReaderManager(Map.of()), new LiveDocsReaderManager(Map.of())))
+        CheckedFunction<CatalogSnapshot, Map<Long, DocCounts>, IOException> resolver = LiveDocsSource.docCountsResolver(  
+import java.io.IOException;
+            this.counts = counts;
+ */
+    }
+        resolver.apply(mock(CatalogSnapshot.class));  

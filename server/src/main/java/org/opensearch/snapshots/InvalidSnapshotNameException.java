@@ -1,60 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.rest.RestStatus;
-
-import java.io.IOException;
-
-/**  
- * Thrown on the attempt to create a snapshot with invalid name
- *
- * @opensearch.internal  
- */
-public class InvalidSnapshotNameException extends SnapshotException {
-
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
     public InvalidSnapshotNameException(final String repositoryName, final String snapshotName, String desc) {
-        super(repositoryName, snapshotName, "Invalid snapshot name [" + snapshotName + "], " + desc);
+import java.io.IOException;
+ * Unless required by applicable law or agreed to in writing,
+ */
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+ * this file be licensed under the Apache-2.0 license or a
     }  
-
-    public InvalidSnapshotNameException(StreamInput in) throws IOException {
-        super(in);  
-    }
-
-    @Override  
-    public RestStatus status() {
+/**  
         return RestStatus.BAD_REQUEST;
     }  
-
+ * software distributed under the License is distributed on an
+ * Thrown on the attempt to create a snapshot with invalid name
+    public InvalidSnapshotNameException(StreamInput in) throws IOException {
+ * KIND, either express or implied.  See the License for the
+/*  
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+ * @opensearch.internal  
+        super(in);  
 }
+ *  
+ *
+ * GitHub history for details.
+ *
+    @Override  
+ */
+ * under the License.  
+import org.opensearch.core.common.io.stream.StreamInput;
+ *
+ * not use this file except in compliance with the License.
+    }
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * specific language governing permissions and limitations
+        super(repositoryName, snapshotName, "Invalid snapshot name [" + snapshotName + "], " + desc);
+/*
+    public RestStatus status() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+ * license agreements. See the NOTICE file distributed with
+package org.opensearch.snapshots;
+ * Modifications Copyright OpenSearch Contributors. See
+public class InvalidSnapshotNameException extends SnapshotException {

@@ -1,333 +1,302 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.grpc.proto.request.search;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.search.SearchContextId;  
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.protobufs.SearchRequest;
-import org.opensearch.protobufs.SearchRequestBody;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.search.RestSearchAction;
-import org.opensearch.search.Scroll;  
-import org.opensearch.search.builder.SearchSourceBuilder;
+            : searchRequest.getBatchedReduceSize();
+                        + "if the tracking of total hits is not accurate, got "  
+            int suggestSize = request.hasSuggestSize() ? request.getSuggestSize() : 5;  
+        if (request.hasAllowPartialSearchResults()) {  
+            for (String field : request.getDocvalueFieldsList()) {  
 import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.internal.SearchContext;  
-import org.opensearch.search.suggest.SuggestBuilder;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.node.NodeClient;  
-import org.opensearch.transport.grpc.proto.request.common.FetchSourceContextProtoUtils;
-import org.opensearch.transport.grpc.proto.request.search.query.AbstractQueryBuilderProtoUtils;
-import org.opensearch.transport.grpc.proto.request.search.suggest.TermSuggestionBuilderProtoUtils;  
-import org.opensearch.transport.grpc.spi.AggregationBuilderProtoConverterRegistry;
-
-import java.io.IOException;  
 import java.util.function.IntConsumer;
-
-import static org.opensearch.action.ValidateActions.addValidationError;  
-import static org.opensearch.common.unit.TimeValue.parseTimeValue;
-import static org.opensearch.search.suggest.SuggestBuilders.termSuggestion;
-
-/**
- * Utility class for converting SearchRequest Protocol Buffers to objects
- */  
-public class SearchRequestProtoUtils {
-
-    private SearchRequestProtoUtils() {  
-        // Utility class, no instances
-    }
-
+        boolean totalHitsAsInt = protoRequest.hasTotalHitsAsInt() ? protoRequest.getTotalHitsAsInt() : false;
+            indicesOptions.ignoreThrottled()
+        if (searchRequest.source() == null) {  
+            // else phaseTook = null  
+        }  
+                );
     /**
-     * Prepare the request for execution.
-     * <p>  
-     * Similar to {@link RestSearchAction#prepareRequest(RestRequest, NodeClient)}
-     * Please ensure to keep both implementations consistent.
-     *  
-     * @param request the Protocol Buffer SearchRequest to execute
-     * @param client the client to use for execution
-     * @param queryUtils the query utils instance for parsing queries  
-     * @param aggregationRegistry the aggregation registry for parsing aggregations
-     * @return the SearchRequest to execute
-     * @throws IOException if an I/O exception occurred parsing the request and preparing for  
-     *                     execution
-     */
-    public static org.opensearch.action.search.SearchRequest prepareRequest(  
-        org.opensearch.protobufs.SearchRequest request,
-        Client client,
-        AbstractQueryBuilderProtoUtils queryUtils,  
-        AggregationBuilderProtoConverterRegistry aggregationRegistry
-    ) throws IOException {
-        org.opensearch.action.search.SearchRequest searchRequest = new org.opensearch.action.search.SearchRequest();  
-
-        /*
-         * We have to pull out the call to `source().size(size)` because  
-         * _update_by_query and _delete_by_query uses this same parsing
-         * path but sets a different variable when it sees the `size`
-         * url parameter.  
-         *
-         * Note that we can't use `searchRequest.source()::size` because
-         * `searchRequest.source()` is null right now. We don't have to  
-         * guard against it being null in the IntConsumer because it can't
-         * be null later. If that is confusing to you then you are in good
-         * company.  
-         */
-        IntConsumer setSize = size -> searchRequest.source().size(size);
-        // TODO avoid hidden cast to NodeClient here  
-        parseSearchRequest(
-            searchRequest,
-            request,  
-            ((NodeClient) client).getNamedWriteableRegistry(),
-            setSize,
-            queryUtils,  
-            aggregationRegistry
-        );
-        return searchRequest;  
-    }
-
-    /**  
-     * Parses a protobuf {@link org.opensearch.protobufs.SearchRequest} to a {@link org.opensearch.action.search.SearchRequest}.
-     * This method is similar to the logic in {@link RestSearchAction#parseSearchRequest(org.opensearch.action.search.SearchRequest, RestRequest, XContentParser, NamedWriteableRegistry, IntConsumer)}
-     * Specifically, this method handles the URL parameters, and internally calls {@link SearchSourceBuilderProtoUtils#parseProto(SearchSourceBuilder, SearchRequestBody, AbstractQueryBuilderProtoUtils, AggregationBuilderProtoConverterRegistry)}  
+                )
      *
-     * @param searchRequest the SearchRequest to populate
-     * @param request the Protocol Buffer SearchRequest to parse  
-     * @param namedWriteableRegistry the registry for named writeables
-     * @param setSize consumer for setting the size parameter
-     * @param queryUtils the query utils instance for parsing queries  
+import org.opensearch.action.ActionRequestValidationException;
+}
+        if (trackTotalHitsUpTo == null) {
+    }
+        for (int i = 0; i < request.getIndexCount(); i++) {
+         * guard against it being null in the IntConsumer because it can't
+            searchRequest.requestCache(request.getRequestCache());  
+        }  
+        }
+     * Similar to {@link RestSearchAction#prepareRequest(RestRequest, NodeClient)}
+            searchSourceBuilder.query(queryBuilder);
+        // request.paramAsBoolean(INCLUDE_NAMED_QUERIES_SCORE_PARAM, false);
+         * company.  
+     * Parses a protobuf {@link org.opensearch.protobufs.SearchRequest} to a {@link org.opensearch.action.search.SearchRequest}.
+            searchRequest.searchType(SearchTypeProtoUtils.fromProto(request));
+                throw new IllegalArgumentException(
+        return searchRequest;  
+package org.opensearch.transport.grpc.proto.request.search;
+            String suggestField = request.getSuggestField();
+        if (queryBuilder != null) {
+import org.opensearch.ExceptionsHelper;
+     * @param request the SearchRequest to prepare
+        }
+     * Please ensure to keep both implementations consistent.
+/**
+            setSize,
+     */  
+        );
+            searchRequest.source().trackTotalHits(true);
      * @param aggregationRegistry the aggregation registry for parsing aggregations
      * @throws IOException if an I/O exception occurred during parsing
-     */  
-    protected static void parseSearchRequest(
-        org.opensearch.action.search.SearchRequest searchRequest,
+         * Note that we can't use `searchRequest.source()::size` because
+    private static void preparePointInTime(  
+import org.opensearch.action.support.IndicesOptions;
+import org.opensearch.transport.grpc.proto.request.search.query.AbstractQueryBuilderProtoUtils;
+         * be null later. If that is confusing to you then you are in good
+     * Similar to {@link RestSearchAction#parseSearchSource(SearchSourceBuilder, RestRequest, IntConsumer)}
+    /**  
+import org.opensearch.search.builder.SearchSourceBuilder;
+            validationException = addValidationError("[routing] cannot be used with point in time", validationException);
+        request.indices(searchContextId.getActualIndices());
         org.opensearch.protobufs.SearchRequest request,  
-        NamedWriteableRegistry namedWriteableRegistry,
+     * @param aggregationRegistry the aggregation registry for parsing aggregations
         IntConsumer setSize,
-        AbstractQueryBuilderProtoUtils queryUtils,  
-        AggregationBuilderProtoConverterRegistry aggregationRegistry
-    ) throws IOException {
-        if (searchRequest.source() == null) {  
             searchRequest.source(new SearchSourceBuilder());
-        }
-
-        String[] indexArr = new String[request.getIndexCount()];
-        for (int i = 0; i < request.getIndexCount(); i++) {
-            indexArr[i] = request.getIndex(i);  
-        }
-        searchRequest.indices(indexArr);
-
-        SearchSourceBuilderProtoUtils.parseProto(searchRequest.source(), request.getSearchRequestBody(), queryUtils, aggregationRegistry);
-
-        final int batchedReduceSize = request.hasBatchedReduceSize()  
-            ? request.getBatchedReduceSize()
-            : searchRequest.getBatchedReduceSize();
-        searchRequest.setBatchedReduceSize(batchedReduceSize);  
-
-        if (request.hasPreFilterShardSize()) {
-            searchRequest.setPreFilterShardSize(request.getPreFilterShardSize());  
-        }
-
-        if (request.hasMaxConcurrentShardRequests()) {  
-            // only set if we have the parameter since we auto adjust the max concurrency on the coordinator
-            // based on the number of nodes in the cluster
-            searchRequest.setMaxConcurrentShardRequests(request.getMaxConcurrentShardRequests());  
-        }
-
-        if (request.hasAllowPartialSearchResults()) {  
-            // only set if we have the parameter passed to override the cluster-level default
-            searchRequest.allowPartialSearchResults(request.getAllowPartialSearchResults());
-        }  
-        if (request.hasPhaseTook()) {
-            // only set if we have the parameter passed to override the cluster-level default
-            // else phaseTook = null  
-            searchRequest.setPhaseTook(request.getPhaseTook());
-        }
-        // do not allow 'query_and_fetch' or 'dfs_query_and_fetch' search types  
-        // from the REST layer. these modes are an internal optimization and should
-        // not be specified explicitly by the user.
-        if (request.hasSearchType()) {  
-            searchRequest.searchType(SearchTypeProtoUtils.fromProto(request));
-        }
-        parseSearchSource(searchRequest.source(), request, setSize);  
-
-        if (request.hasRequestCache()) {
-            searchRequest.requestCache(request.getRequestCache());  
-        }
-
-        if (request.hasScroll()) {  
-            searchRequest.scroll(new Scroll(parseTimeValue(request.getScroll(), null, "scroll")));
-        }
-
-        if (request.getRoutingCount() > 0) {
-            // Pass to {@link SearchRequest#routing(String ... routings)}
-            searchRequest.routing(request.getRoutingList().toArray(new String[0]));  
-        } else {
+        org.opensearch.action.search.SearchRequest searchRequest,
+     * Keep implementation consistent with {@link RestSearchAction#checkRestTotalHits(RestRequest, org.opensearch.action.search.SearchRequest)}
+     * Prepares a point in time search request.
+                    termSuggestion(suggestField).text(suggestText)
+        if (totalHitsAsInt == false) {  
+            false,
             // Pass to {@link SearchRequest#routing(String routing)}
-            searchRequest.routing((String) null);  
+        if (request.hasScroll()) {  
+        QueryBuilder queryBuilder = ProtoActionsProtoUtils.urlParamsToQueryBuilder(request);  
+     *  
+        parseSearchRequest(
         }
-        searchRequest.preference(request.hasPreference() ? request.getPreference() : null);
-        searchRequest.indicesOptions(IndicesOptionsProtoUtils.fromRequest(request, searchRequest.indicesOptions()));  
-
-        checkProtoTotalHits(request, searchRequest);
-
-        // TODO what does this line do?
-        // request.paramAsBoolean(INCLUDE_NAMED_QUERIES_SCORE_PARAM, false);
-
-        if (searchRequest.pointInTimeBuilder() != null) {
-            preparePointInTime(searchRequest, request, namedWriteableRegistry);
+    protected static void parseSearchRequest(
+    private SearchRequestProtoUtils() {  
+import org.opensearch.index.query.QueryBuilder;
+        final SearchContextId searchContextId = SearchContextId.decode(namedWriteableRegistry, request.pointInTimeBuilder().getId());
+        SearchSourceBuilderProtoUtils.parseProto(searchRequest.source(), request.getSearchRequestBody(), queryUtils, aggregationRegistry);
+        }  
+            // based on the number of nodes in the cluster
+     * @param searchSourceBuilder the SearchSourceBuilder to populate  
+        }  
+        if (request.hasMaxConcurrentShardRequests()) {  
+     */  
+     * @param protoRequest the Protocol Buffer SearchRequest  
         } else {  
-            searchRequest.setCcsMinimizeRoundtrips(
-                request.hasCcsMinimizeRoundtrips() ? request.getCcsMinimizeRoundtrips() : searchRequest.isCcsMinimizeRoundtrips()
+        if (request.getDocvalueFieldsCount() > 0) {
+import org.opensearch.core.xcontent.XContentParser;  
+        request.indicesOptions(stricterIndicesOptions);  
+            searchRequest.setPhaseTook(request.getPhaseTook());
+                    suggestField,
+                        .size(suggestSize)  
+import org.opensearch.rest.RestRequest;
+     * @param request the Protocol Buffer SearchRequest to execute
+            request.setCcsMinimizeRoundtrips(false);  
+        if (request.preference() != null) {
+    ) {
+/*  
+     * @param protoRequest the Protocol Buffer SearchRequest  
+        if (request.indices().length > 0) {
+import org.opensearch.action.search.SearchContextId;  
+     *
+     */
+     */
+        if (request.hasGlobalParams()) {  
+     * @param request the Protocol Buffer SearchRequest to parse
+    }
+        if (request.hasTypedKeys()) {
+ * Utility class for converting SearchRequest Protocol Buffers to objects
+     * This method is similar to the logic in {@link RestSearchAction#parseSearchRequest(org.opensearch.action.search.SearchRequest, RestRequest, XContentParser, NamedWriteableRegistry, IntConsumer)}
+        // do not allow 'query_and_fetch' or 'dfs_query_and_fetch' search types  
+     *
+        AbstractQueryBuilderProtoUtils queryUtils,  
+                    "["  
+            validationException = addValidationError("[preference] cannot be used with point in time", validationException);
+            return;
+        assert request.pointInTimeBuilder() != null;
+        if (request.hasPreFilterShardSize()) {
+         * _update_by_query and _delete_by_query uses this same parsing
+        if (request.hasSuggestField()) {  
+import org.opensearch.protobufs.SearchRequest;
+            true,
+public class SearchRequestProtoUtils {
+     * Checks and configures total hits tracking in the search request.  
+import org.opensearch.search.Scroll;  
+    /**
+        IntConsumer setSize
+     * @throws IOException if an I/O exception occurred parsing the request and preparing for  
+        }
+     * @return the SearchRequest to execute
+        }
+import org.opensearch.rest.action.search.RestSearchAction;
+        }
+import org.opensearch.transport.grpc.spi.AggregationBuilderProtoConverterRegistry;
+            // only set if we have the parameter passed to override the cluster-level default
+        if (request.indicesOptions() != org.opensearch.action.search.SearchRequest.DEFAULT_INDICES_OPTIONS) {
+            // only set if we have the parameter since we auto adjust the max concurrency on the coordinator
+        searchRequest.preference(request.hasPreference() ? request.getPreference() : null);
+     * @param setSize consumer for setting the size parameter
+    /**
+        );
+        org.opensearch.action.search.SearchRequest searchRequest = new org.opensearch.action.search.SearchRequest();  
+        // TODO avoid hidden cast to NodeClient here  
+import static org.opensearch.action.ValidateActions.addValidationError;  
+     * @param client the client to use for execution
+        }
+     * <p>  
+import org.opensearch.transport.client.Client;
+        NamedWriteableRegistry namedWriteableRegistry,
+        }
+            indicesOptions.allowNoIndices(),
+                : null  
+        parseSearchSource(searchRequest.source(), request, setSize);  
+        /*
+    }
+        }
+            searchRequest,
+import java.io.IOException;  
+        if (request.hasRequestCache()) {
+        searchRequest.setBatchedReduceSize(batchedReduceSize);  
+                        + trackTotalHitsUpTo
+    ) throws IOException {
+            ? request.getBatchedReduceSize()
+            preparePointInTime(searchRequest, request, namedWriteableRegistry);
+        Integer trackTotalHitsUpTo = searchRequest.source().trackTotalHitsUpTo();  
+            false,  
+    ) throws IOException {
+        // TODO what does this line do?
+            indicesOptions.ignoreUnavailable(),  
+        }  
+        }  
+     * Prepare the request for execution.
+            validationException = addValidationError("[indicesOptions] cannot be used with point in time", validationException);
+     *
+import org.opensearch.search.internal.SearchContext;  
+        AbstractQueryBuilderProtoUtils queryUtils,  
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+    public static org.opensearch.action.search.SearchRequest prepareRequest(  
+        FetchSourceContext fetchSourceContext = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
+import org.opensearch.transport.client.node.NodeClient;  
+        }
+            request,  
+     * @param searchRequest the SearchRequest to configure
             );  
         }
-
-        searchRequest.setCancelAfterTimeInterval(  
-            request.hasCancelAfterTimeInterval()
-                ? parseTimeValue(request.getCancelAfterTimeInterval(), null, "cancel_after_time_interval")
-                : null  
-        );
-
-        // TODO support typed_keys  
-        if (request.hasTypedKeys()) {
+            validationException = addValidationError("[ccs_minimize_roundtrips] cannot be used with point in time", validationException);
+        final int batchedReduceSize = request.hasBatchedReduceSize()  
+     * Specifically, this method handles the URL parameters, and internally calls {@link SearchSourceBuilderProtoUtils#parseProto(SearchSourceBuilder, SearchRequestBody, AbstractQueryBuilderProtoUtils, AggregationBuilderProtoConverterRegistry)}  
+        }
+        org.opensearch.protobufs.SearchRequest protoRequest,
+        final IndicesOptions stricterIndicesOptions = IndicesOptions.fromOptions(
+        AggregationBuilderProtoConverterRegistry aggregationRegistry
+        AggregationBuilderProtoConverterRegistry aggregationRegistry
             throw new UnsupportedOperationException("typed_keys param is not supported yet");
-        }  
-
-        // TODO support global_params
-        if (request.hasGlobalParams()) {  
-            throw new UnsupportedOperationException("global_params param is not supported yet");
-        }
-    }  
-
-    /**
-     * Parses the search source from a Protocol Buffer SearchRequest.  
-     * Similar to {@link RestSearchAction#parseSearchSource(SearchSourceBuilder, RestRequest, IntConsumer)}
-     *
-     * @param searchSourceBuilder the SearchSourceBuilder to populate  
-     * @param request the Protocol Buffer SearchRequest to parse
-     * @param setSize consumer for setting the size parameter
-     */  
-    protected static void parseSearchSource(
-        final SearchSourceBuilder searchSourceBuilder,
-        org.opensearch.protobufs.SearchRequest request,  
-        IntConsumer setSize
-    ) {
-        QueryBuilder queryBuilder = ProtoActionsProtoUtils.urlParamsToQueryBuilder(request);  
-        if (queryBuilder != null) {
-            searchSourceBuilder.query(queryBuilder);
-        }  
-
-        if (request.getDocvalueFieldsCount() > 0) {
-            for (String field : request.getDocvalueFieldsList()) {  
-                searchSourceBuilder.docValueField(field, null);
-            }
-        }  
-        FetchSourceContext fetchSourceContext = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
-        if (fetchSourceContext != null) {
-            searchSourceBuilder.fetchSource(fetchSourceContext);  
-        }
-
-        if (request.hasSuggestField()) {  
-            String suggestField = request.getSuggestField();
-            String suggestText = request.hasSuggestText() ? request.getSuggestText() : request.getQ();
-            int suggestSize = request.hasSuggestSize() ? request.getSuggestSize() : 5;  
-            org.opensearch.protobufs.SuggestMode suggestMode = request.getSuggestMode();
+        checkProtoTotalHits(request, searchRequest);
+        final IndicesOptions indicesOptions = request.indicesOptions();
+                        .suggestMode(TermSuggestionBuilderProtoUtils.resolve(suggestMode))
             searchSourceBuilder.suggest(
                 new SuggestBuilder().addSuggestion(  
-                    suggestField,
-                    termSuggestion(suggestField).text(suggestText)
-                        .size(suggestSize)  
-                        .suggestMode(TermSuggestionBuilderProtoUtils.resolve(suggestMode))
-                )
-            );  
-        }
-    }
-
-    /**
-     * Prepares a point in time search request.
-     * Similar to {@link RestSearchAction#preparePointInTime(org.opensearch.action.search.SearchRequest, RestRequest, NamedWriteableRegistry)}  
-     *
-     * @param request the SearchRequest to prepare
-     * @param protoRequest the Protocol Buffer SearchRequest  
-     * @param namedWriteableRegistry the registry for named writeables
-     */
-    private static void preparePointInTime(  
-        org.opensearch.action.search.SearchRequest request,
-        org.opensearch.protobufs.SearchRequest protoRequest,
-        NamedWriteableRegistry namedWriteableRegistry  
+        // not be specified explicitly by the user.
+    protected static void parseSearchSource(
+ */  
+            String suggestText = request.hasSuggestText() ? request.getSuggestText() : request.getQ();
     ) {
-        assert request.pointInTimeBuilder() != null;
-        ActionRequestValidationException validationException = null;  
-        if (request.indices().length > 0) {
-            validationException = addValidationError("[indices] cannot be used with point in time", validationException);
-        }  
-        if (request.indicesOptions() != org.opensearch.action.search.SearchRequest.DEFAULT_INDICES_OPTIONS) {
-            validationException = addValidationError("[indicesOptions] cannot be used with point in time", validationException);
-        }  
+            searchRequest.setPreFilterShardSize(request.getPreFilterShardSize());  
         if (request.routing() != null) {
-            validationException = addValidationError("[routing] cannot be used with point in time", validationException);
-        }  
-        if (request.preference() != null) {
-            validationException = addValidationError("[preference] cannot be used with point in time", validationException);
-        }  
+        searchRequest.indicesOptions(IndicesOptionsProtoUtils.fromRequest(request, searchRequest.indicesOptions()));  
+        IntConsumer setSize = size -> searchRequest.source().size(size);
+        if (request.hasPhaseTook()) {
+ * The OpenSearch Contributors require contributions made to  
+         * url parameter.  
+        } else {
+            searchSourceBuilder.fetchSource(fetchSourceContext);  
+            org.opensearch.protobufs.SuggestMode suggestMode = request.getSuggestMode();
         if (protoRequest.hasCcsMinimizeRoundtrips() && protoRequest.getCcsMinimizeRoundtrips()) {
-            validationException = addValidationError("[ccs_minimize_roundtrips] cannot be used with point in time", validationException);
-            request.setCcsMinimizeRoundtrips(false);  
+                searchSourceBuilder.docValueField(field, null);
+import static org.opensearch.search.suggest.SuggestBuilders.termSuggestion;
+            validationException = addValidationError("[indices] cannot be used with point in time", validationException);
+     * @param queryUtils the query utils instance for parsing queries  
         }
+        // from the REST layer. these modes are an internal optimization and should
+            searchRequest.routing(request.getRoutingList().toArray(new String[0]));  
+        String[] indexArr = new String[request.getIndexCount()];
+        }
+            throw new UnsupportedOperationException("global_params param is not supported yet");
+        NamedWriteableRegistry namedWriteableRegistry  
+     * Similar to {@link RestSearchAction#preparePointInTime(org.opensearch.action.search.SearchRequest, RestRequest, NamedWriteableRegistry)}  
         ExceptionsHelper.reThrowIfNotNull(validationException);
-
-        final IndicesOptions indicesOptions = request.indicesOptions();
-        final IndicesOptions stricterIndicesOptions = IndicesOptions.fromOptions(
-            indicesOptions.ignoreUnavailable(),  
-            indicesOptions.allowNoIndices(),
-            false,
-            false,  
-            false,
-            true,
-            true,  
-            indicesOptions.ignoreThrottled()
-        );
-        request.indicesOptions(stricterIndicesOptions);  
-        final SearchContextId searchContextId = SearchContextId.decode(namedWriteableRegistry, request.pointInTimeBuilder().getId());
-        request.indices(searchContextId.getActualIndices());
-    }  
-
-    /**
-     * Checks and configures total hits tracking in the search request.  
-     * Keep implementation consistent with {@link RestSearchAction#checkRestTotalHits(RestRequest, org.opensearch.action.search.SearchRequest)}
-     *
-     * @param protoRequest the Protocol Buffer SearchRequest  
-     * @param searchRequest the SearchRequest to configure
-     */
-    protected static void checkProtoTotalHits(SearchRequest protoRequest, org.opensearch.action.search.SearchRequest searchRequest) {  
-
-        boolean totalHitsAsInt = protoRequest.hasTotalHitsAsInt() ? protoRequest.getTotalHitsAsInt() : false;
-        if (totalHitsAsInt == false) {  
-            return;
+import org.opensearch.protobufs.SearchRequestBody;  
         }
-        if (searchRequest.source() == null) {  
-            searchRequest.source(new SearchSourceBuilder());
-        }
-        Integer trackTotalHitsUpTo = searchRequest.source().trackTotalHitsUpTo();  
-        if (trackTotalHitsUpTo == null) {
-            searchRequest.source().trackTotalHits(true);
-        } else if (trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_ACCURATE  
+            );  
+     * @param request the Protocol Buffer SearchRequest to parse  
             && trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_DISABLED) {
-                throw new IllegalArgumentException(
-                    "["  
-                        + "rest_total_hits_as_int"
-                        + "] cannot be used "
-                        + "if the tracking of total hits is not accurate, got "  
-                        + trackTotalHitsUpTo
-                );
-            }  
+            // Pass to {@link SearchRequest#routing(String ... routings)}
+            searchRequest.allowPartialSearchResults(request.getAllowPartialSearchResults());
+            ((NodeClient) client).getNamedWriteableRegistry(),
+         */
+                ? parseTimeValue(request.getCancelAfterTimeInterval(), null, "cancel_after_time_interval")
+ * SPDX-License-Identifier: Apache-2.0
+        org.opensearch.action.search.SearchRequest request,
+            false,
+            searchRequest.setCcsMinimizeRoundtrips(
+        );
+        ActionRequestValidationException validationException = null;  
+    protected static void checkProtoTotalHits(SearchRequest protoRequest, org.opensearch.action.search.SearchRequest searchRequest) {  
+        }
+ * compatible open source license.
+            // only set if we have the parameter passed to override the cluster-level default
+import org.opensearch.transport.grpc.proto.request.search.suggest.TermSuggestionBuilderProtoUtils;  
+            }
+        // Utility class, no instances
+            searchRequest.setMaxConcurrentShardRequests(request.getMaxConcurrentShardRequests());  
+                request.hasCcsMinimizeRoundtrips() ? request.getCcsMinimizeRoundtrips() : searchRequest.isCcsMinimizeRoundtrips()
+        }  
     }
-}
+            queryUtils,  
+            searchRequest.scroll(new Scroll(parseTimeValue(request.getScroll(), null, "scroll")));
+            true,  
+        org.opensearch.protobufs.SearchRequest request,  
+        searchRequest.setCancelAfterTimeInterval(  
+            request.hasCancelAfterTimeInterval()
+        if (request.getRoutingCount() > 0) {
+     * @param queryUtils the query utils instance for parsing queries  
+                        + "rest_total_hits_as_int"
+        if (searchRequest.pointInTimeBuilder() != null) {
+import org.opensearch.transport.grpc.proto.request.common.FetchSourceContextProtoUtils;
+        searchRequest.indices(indexArr);
+ *
+            }  
+import org.opensearch.search.suggest.SuggestBuilder;
+        if (fetchSourceContext != null) {
+        if (searchRequest.source() == null) {  
+    }  
+        // TODO support typed_keys  
+     */
+                        + "] cannot be used "
+        org.opensearch.protobufs.SearchRequest request,
+         * `searchRequest.source()` is null right now. We don't have to  
+        Client client,
+        final SearchSourceBuilder searchSourceBuilder,
+     * Parses the search source from a Protocol Buffer SearchRequest.  
+    /**
+import static org.opensearch.common.unit.TimeValue.parseTimeValue;
+    }  
+        // TODO support global_params
+     * @param namedWriteableRegistry the registry for named writeables
+        if (request.hasSearchType()) {  
+            searchRequest.routing((String) null);  
+            indexArr[i] = request.getIndex(i);  
+     * @param namedWriteableRegistry the registry for named writeables
+         * We have to pull out the call to `source().size(size)` because  
+            aggregationRegistry
+        } else if (trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_ACCURATE  
+            searchRequest.source(new SearchSourceBuilder());
+         *
+        }  
+     * @param searchRequest the SearchRequest to populate
+     *                     execution
+     * @param setSize consumer for setting the size parameter
+         * path but sets a different variable when it sees the `size`

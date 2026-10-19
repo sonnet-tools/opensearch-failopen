@@ -1,234 +1,200 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.directory;
-
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.FilterDirectory;  
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.blobstore.BlobContainer;  
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.DataFormatStoreHandler;
-import org.opensearch.index.engine.dataformat.DataFormatStoreHandlerFactory;  
-import org.opensearch.index.engine.dataformat.StoreStrategy;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.DataFormatAwareStoreDirectory;  
-import org.opensearch.index.store.RemoteDirectory;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory;
-import org.opensearch.index.store.SubdirectoryAwareDirectory;  
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
-import org.opensearch.index.store.remote.filecache.FileCache;
-import org.opensearch.index.store.remote.filecache.FileCacheFactory;  
-import org.opensearch.plugins.IndexStorePlugin;
-import org.opensearch.repositories.NativeStoreRepository;
-import org.opensearch.storage.prefetch.TieredStoragePrefetchSettings;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;  
-import java.util.function.Supplier;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
- * Integration-level tests for the warm shard directory stack.
- *  
- * <p>Verifies that the full directory stack (FSDirectory → SubdirectoryAwareDirectory
- * → TieredSubdirectoryAwareDirectory → DataFormatAwareStoreDirectory) is wired
- * correctly via {@link TieredDataFormatAwareStoreDirectoryFactory} and that file  
- * operations flow through the correct layers.
- */
-public class WarmShardDirectoryStackTests extends OpenSearchTestCase {  
-
-    private static final DataFormat PARQUET_FORMAT = new DataFormat() {
-        @Override  
-        public String name() {
-            return "parquet";
-        }  
-
-        @Override
-        public long priority() {  
-            return 2;
-        }
-
-        @Override
-        public java.util.Set<org.opensearch.index.engine.dataformat.FieldTypeCapabilities> supportedFields() {
-            return java.util.Set.of();  
-        }
-    };
-
-    private Path tempDir;
-    private ShardPath shardPath;
-    private IndexSettings indexSettings;  
-    private FileCache fileCache;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        tempDir = createTempDir();  
-        Index index = new Index("test-warm-index", "test-uuid");
-        ShardId shardId = new ShardId(index, 0);
-
-        Path shardStatePath = tempDir.resolve("state").resolve("test-uuid").resolve("0");
-        Path shardDataPath = tempDir.resolve("data").resolve("test-uuid").resolve("0");
-        Path indexPath = shardDataPath.resolve("index");  
-        Files.createDirectories(shardStatePath);
-        Files.createDirectories(shardDataPath);
-        Files.createDirectories(indexPath);  
-
-        shardPath = new ShardPath(false, shardDataPath, shardStatePath, shardId);
-
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .build();
-        IndexMetadata indexMetadata = IndexMetadata.builder("test-warm-index").settings(settings).build();  
-        indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
-
-        fileCache = FileCacheFactory.createConcurrentLRUFileCache(10_000_000, 1);  
-    }
-
-    private Supplier<TieredStoragePrefetchSettings> getMockPrefetchSettingsSupplier() {  
-        return () -> {
-            TieredStoragePrefetchSettings settings = mock(TieredStoragePrefetchSettings.class);
-            when(settings.getReadAheadBlockCount()).thenReturn(TieredStoragePrefetchSettings.DEFAULT_READ_AHEAD_BLOCK_COUNT);  
-            when(settings.getReadAheadEnableFileFormats()).thenReturn(TieredStoragePrefetchSettings.READ_AHEAD_ENABLE_FILE_FORMATS);
-            when(settings.isStoredFieldsPrefetchEnabled()).thenReturn(true);
-            return settings;  
-        };
-    }
-
-    /**
-     * Exercises the factory end-to-end with no store strategies — verifies the stack
+        );  
      * nests FSDirectory → SubdirectoryAwareDirectory → TieredSubdirectoryAwareDirectory  
-     * → DataFormatAwareStoreDirectory.
-     */
-    @LockFeatureFlag(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
-    public void testWarmDirectoryStackCreationAndWrite() throws IOException {
-        TieredDataFormatAwareStoreDirectoryFactory factory = new TieredDataFormatAwareStoreDirectoryFactory(
-            getMockPrefetchSettingsSupplier()  
-        );
-
-        FSDirectory fsDir = FSDirectory.open(shardPath.resolveIndex());  
-        IndexStorePlugin.DirectoryFactory localDirFactory = mock(IndexStorePlugin.DirectoryFactory.class);
-        when(localDirFactory.newDirectory(any(), any())).thenReturn(fsDir);
-
-        RemoteSegmentStoreDirectory remoteDir = createRealRemoteDir(shardPath.getShardId());
-
-        StoreStrategyRegistry registry = StoreStrategyRegistry.open(  
-            shardPath,
-            true,
-            NativeStoreRepository.EMPTY,  
-            java.util.Map.of(),
+            when(settings.getReadAheadEnableFileFormats()).thenReturn(TieredStoragePrefetchSettings.READ_AHEAD_ENABLE_FILE_FORMATS);
+import org.opensearch.common.blobstore.BlobPath;
             remoteDir,
-            null  
-        );
-        DataFormatAwareStoreDirectory storeDir = factory.newDataFormatAwareStoreDirectory(
-            indexSettings,  
-            shardPath.getShardId(),
-            shardPath,
-            localDirFactory,  
-            java.util.Map.of(),
-            registry,
-            remoteDir,  
-            fileCache,
-            null
-        );  
-
-        assertNotNull("Directory stack should be created", storeDir);
-
-        Directory delegate = ((FilterDirectory) storeDir).getDelegate();
-        assertTrue("Should have TieredSubdirectoryAwareDirectory", delegate instanceof TieredSubdirectoryAwareDirectory);
-
-        Directory innerDelegate = ((FilterDirectory) delegate).getDelegate();
-        assertTrue("Should have SubdirectoryAwareDirectory", innerDelegate instanceof SubdirectoryAwareDirectory);
-
-        storeDir.close();
+/*  
+        when(localDirFactory.newDirectory(any(), any())).thenReturn(fsDir);
+ * compatible open source license.
+            TieredStoragePrefetchSettings settings = mock(TieredStoragePrefetchSettings.class);
     }
-
-    /**
-     * Exercises the stack with a parquet strategy. File ops on {@code parquet/…} route
-     * to the remote store; the mock remote has no parquet metadata so {@code fileLength}  
-     * throws. {@code listAll} reflects whatever is on disk (format files included).
-     */
-    @LockFeatureFlag(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
-    public void testWarmDirectoryStackWithFormatStrategy() throws IOException {
-        FSDirectory localFsDir = FSDirectory.open(shardPath.resolveIndex());
-        SubdirectoryAwareDirectory subdirAware = new SubdirectoryAwareDirectory(localFsDir, shardPath);  
-
-        RemoteSegmentStoreDirectory remoteDir = createRealRemoteDir(shardPath.getShardId());
-
         DataFormatStoreHandler nativeRegistry = mock(DataFormatStoreHandler.class);
-        DataFormatStoreHandlerFactory factory = (sid, isWarm, repo, cacheRegistry) -> nativeRegistry;
-        StoreStrategy parquet = new StoreStrategy() {  
-            @Override
-            public Optional<DataFormatStoreHandlerFactory> storeHandler() {
-                return Optional.of(factory);  
-            }
-        };
-
-        StoreStrategyRegistry registry = StoreStrategyRegistry.open(
-            shardPath,
-            true,  
-            NativeStoreRepository.EMPTY,
-            Map.of(PARQUET_FORMAT, parquet),
-            remoteDir,  
-            null
-        );
-
-        TieredSubdirectoryAwareDirectory tieredSubdir = new TieredSubdirectoryAwareDirectory(
-            subdirAware,
-            remoteDir,  
-            fileCache,
-            null,
-            registry,  
-            shardPath,
-            getMockPrefetchSettingsSupplier()
-        );  
-
-        expectThrows(Exception.class, () -> tieredSubdir.fileLength("parquet/seg.parquet"));
-
-        String[] allFiles = tieredSubdir.listAll();
-        Set<String> fileSet = new HashSet<>(Arrays.asList(allFiles));
-        assertFalse("listAll should not surface an unwritten parquet file", fileSet.contains("parquet/seg.parquet"));  
-
-        tieredSubdir.close();
-    }  
-
+            NativeStoreRepository.EMPTY,  
+        TieredDataFormatAwareStoreDirectoryFactory factory = new TieredDataFormatAwareStoreDirectoryFactory(
     private RemoteSegmentStoreDirectory createRealRemoteDir(ShardId shardId) throws IOException {
-        RemoteDirectory remoteDataDir = mock(RemoteDirectory.class);  
-        RemoteDirectory remoteMetadataDir = mock(RemoteDirectory.class);
-        RemoteStoreLockManager lockManager = mock(RemoteStoreLockManager.class);
-        ThreadPool tp = mock(ThreadPool.class);  
-
-        BlobContainer mockBlobContainer = mock(BlobContainer.class);
-        when(mockBlobContainer.path()).thenReturn(new BlobPath().add("test-base-path"));  
-        when(remoteDataDir.getBlobContainer()).thenReturn(mockBlobContainer);
-
-        return new RemoteSegmentStoreDirectory(remoteDataDir, remoteMetadataDir, lockManager, tp, shardId, new HashMap<>());  
+import static org.mockito.Mockito.mock;
+    private ShardPath shardPath;
+            true,  
+    @LockFeatureFlag(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+     * Exercises the factory end-to-end with no store strategies — verifies the stack
+        IndexMetadata indexMetadata = IndexMetadata.builder("test-warm-index").settings(settings).build();  
+ *
+import java.util.Optional;
+        assertFalse("listAll should not surface an unwritten parquet file", fileSet.contains("parquet/seg.parquet"));  
+        Path indexPath = shardDataPath.resolve("index");  
+        );
     }
+    /**
+        return () -> {
+    private IndexSettings indexSettings;  
+ * → TieredSubdirectoryAwareDirectory → DataFormatAwareStoreDirectory) is wired
+        RemoteSegmentStoreDirectory remoteDir = createRealRemoteDir(shardPath.getShardId());
+            .build();
+        );  
+        RemoteSegmentStoreDirectory remoteDir = createRealRemoteDir(shardPath.getShardId());
+            shardPath.getShardId(),
+        when(remoteDataDir.getBlobContainer()).thenReturn(mockBlobContainer);
+            null
+                return Optional.of(factory);  
+import org.opensearch.index.engine.dataformat.StoreStrategy;
+        String[] allFiles = tieredSubdir.listAll();
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+     * → DataFormatAwareStoreDirectory.
+        IndexStorePlugin.DirectoryFactory localDirFactory = mock(IndexStorePlugin.DirectoryFactory.class);
+import org.opensearch.plugins.IndexStorePlugin;
+import org.opensearch.index.store.remote.filecache.FileCacheFactory;  
+        DataFormatStoreHandlerFactory factory = (sid, isWarm, repo, cacheRegistry) -> nativeRegistry;
+import org.opensearch.common.util.FeatureFlags;  
+        shardPath = new ShardPath(false, shardDataPath, shardStatePath, shardId);
+    public void testWarmDirectoryStackWithFormatStrategy() throws IOException {
+import org.apache.lucene.store.Directory;
+        );
+ */
+        SubdirectoryAwareDirectory subdirAware = new SubdirectoryAwareDirectory(localFsDir, shardPath);  
+        Index index = new Index("test-warm-index", "test-uuid");
+            shardPath,
+import org.opensearch.core.index.shard.ShardId;
+     * to the remote store; the mock remote has no parquet metadata so {@code fileLength}  
+import static org.mockito.Mockito.when;
+import org.opensearch.core.index.Index;
+        tempDir = createTempDir();  
+    };
+import org.opensearch.index.store.RemoteSegmentStoreDirectory;
+    /**
+        return new RemoteSegmentStoreDirectory(remoteDataDir, remoteMetadataDir, lockManager, tp, shardId, new HashMap<>());  
+ * correctly via {@link TieredDataFormatAwareStoreDirectoryFactory} and that file  
+        BlobContainer mockBlobContainer = mock(BlobContainer.class);
+            public Optional<DataFormatStoreHandlerFactory> storeHandler() {
+        @Override
+import java.util.HashMap;
+     * throws. {@code listAll} reflects whatever is on disk (format files included).
+import org.opensearch.index.store.RemoteDirectory;
+import static org.mockito.ArgumentMatchers.any;  
+            localDirFactory,  
+        ShardId shardId = new ShardId(index, 0);
+        storeDir.close();
+            return settings;  
+            fileCache,
+/**
+ */  
+        RemoteDirectory remoteMetadataDir = mock(RemoteDirectory.class);
+            shardPath,
+            return java.util.Set.of();  
+        StoreStrategyRegistry registry = StoreStrategyRegistry.open(
+            getMockPrefetchSettingsSupplier()
+import org.opensearch.index.engine.dataformat.DataFormat;
+            remoteDir,  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+        Directory delegate = ((FilterDirectory) storeDir).getDelegate();
+        };
+        }
+        Path shardStatePath = tempDir.resolve("state").resolve("test-uuid").resolve("0");
+            null,
+package org.opensearch.storage.directory;
+ * this file be licensed under the Apache-2.0 license or a
+        StoreStrategy parquet = new StoreStrategy() {  
+import org.opensearch.index.engine.dataformat.DataFormatStoreHandler;
+import org.opensearch.index.shard.ShardPath;
+import org.opensearch.index.store.SubdirectoryAwareDirectory;  
 }
+            }
+import java.io.IOException;
+        FSDirectory localFsDir = FSDirectory.open(shardPath.resolveIndex());
+import java.util.HashSet;  
+        fileCache = FileCacheFactory.createConcurrentLRUFileCache(10_000_000, 1);  
+import java.util.Arrays;
+        public String name() {
+import java.nio.file.Path;  
+            null  
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+import java.util.Set;  
+            fileCache,
+    public void setUp() throws Exception {
+        StoreStrategyRegistry registry = StoreStrategyRegistry.open(  
+        super.setUp();
+        ThreadPool tp = mock(ThreadPool.class);  
+        @Override  
+            java.util.Map.of(),
+            registry,  
+    private FileCache fileCache;
+        assertTrue("Should have SubdirectoryAwareDirectory", innerDelegate instanceof SubdirectoryAwareDirectory);
+        when(mockBlobContainer.path()).thenReturn(new BlobPath().add("test-base-path"));  
+import java.util.Map;
+            remoteDir,  
+import org.opensearch.common.blobstore.BlobContainer;  
+public class WarmShardDirectoryStackTests extends OpenSearchTestCase {  
+        );
+        expectThrows(Exception.class, () -> tieredSubdir.fileLength("parquet/seg.parquet"));
+import org.apache.lucene.store.FilterDirectory;  
+            @Override
+        tieredSubdir.close();
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.IndexSettings;  
+        Files.createDirectories(shardStatePath);
+            registry,
+        TieredSubdirectoryAwareDirectory tieredSubdir = new TieredSubdirectoryAwareDirectory(
+            null
+ * Integration-level tests for the warm shard directory stack.
+        DataFormatAwareStoreDirectory storeDir = factory.newDataFormatAwareStoreDirectory(
+            return 2;
+import org.opensearch.common.settings.Settings;
+            true,
+        assertTrue("Should have TieredSubdirectoryAwareDirectory", delegate instanceof TieredSubdirectoryAwareDirectory);
+            when(settings.isStoredFieldsPrefetchEnabled()).thenReturn(true);
+     */
+        }  
+ * operations flow through the correct layers.
+        public java.util.Set<org.opensearch.index.engine.dataformat.FieldTypeCapabilities> supportedFields() {
+        indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
+        Files.createDirectories(indexPath);  
+        }
+        Directory innerDelegate = ((FilterDirectory) delegate).getDelegate();
+        RemoteDirectory remoteDataDir = mock(RemoteDirectory.class);  
+    @LockFeatureFlag(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+        Set<String> fileSet = new HashSet<>(Arrays.asList(allFiles));
+            subdirAware,
+ * <p>Verifies that the full directory stack (FSDirectory → SubdirectoryAwareDirectory
+import java.util.function.Supplier;
+     * Exercises the stack with a parquet strategy. File ops on {@code parquet/…} route
+    public void testWarmDirectoryStackCreationAndWrite() throws IOException {
+            return "parquet";
+     */
+        public long priority() {  
+            indexSettings,  
+import org.opensearch.index.store.remote.filecache.FileCache;
+import org.apache.lucene.store.FSDirectory;
+            shardPath,
+import org.opensearch.test.OpenSearchTestCase;
+        @Override
+        Path shardDataPath = tempDir.resolve("data").resolve("test-uuid").resolve("0");
+import org.opensearch.Version;
+    }
+import org.opensearch.storage.prefetch.TieredStoragePrefetchSettings;  
+            when(settings.getReadAheadBlockCount()).thenReturn(TieredStoragePrefetchSettings.DEFAULT_READ_AHEAD_BLOCK_COUNT);  
+            shardPath,
+            getMockPrefetchSettingsSupplier()  
+        assertNotNull("Directory stack should be created", storeDir);
+    }
+    private Supplier<TieredStoragePrefetchSettings> getMockPrefetchSettingsSupplier() {  
+    @Override  
+import java.nio.file.Files;
+        };
+            remoteDir,  
+    private static final DataFormat PARQUET_FORMAT = new DataFormat() {
+ *  
+import org.opensearch.index.store.DataFormatAwareStoreDirectory;  
+ * The OpenSearch Contributors require contributions made to  
+        Files.createDirectories(shardDataPath);
+import org.opensearch.repositories.NativeStoreRepository;
+        FSDirectory fsDir = FSDirectory.open(shardPath.resolveIndex());  
+    private Path tempDir;
+import org.opensearch.threadpool.ThreadPool;
+        Settings settings = Settings.builder()
+            Map.of(PARQUET_FORMAT, parquet),
+        RemoteStoreLockManager lockManager = mock(RemoteStoreLockManager.class);
+            java.util.Map.of(),
+import org.opensearch.index.engine.dataformat.DataFormatStoreHandlerFactory;  
+    }  
+            NativeStoreRepository.EMPTY,
+import org.opensearch.cluster.metadata.IndexMetadata;

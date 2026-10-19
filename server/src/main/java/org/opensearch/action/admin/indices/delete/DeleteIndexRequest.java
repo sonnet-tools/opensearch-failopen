@@ -1,126 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.delete;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.support.IndicesOptions;  
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.util.CollectionUtils;
-import org.opensearch.transport.client.Requests;  
-
-import java.io.IOException;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**  
- * A request to delete an index. Best created with {@link Requests#deleteIndexRequest(String)}.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class DeleteIndexRequest extends AcknowledgedRequest<DeleteIndexRequest> implements IndicesRequest.Replaceable {  
-
-    private String[] indices;
-    // Delete index should work by default on both open and closed indices.  
-    private IndicesOptions indicesOptions = IndicesOptions.fromOptions(false, true, true, true, false, false, true, false);
-
-    public DeleteIndexRequest(StreamInput in) throws IOException {  
-        super(in);
-        indices = in.readStringArray();
-        indicesOptions = IndicesOptions.readIndicesOptions(in);  
-    }
-
-    public DeleteIndexRequest() {}  
-
-    /**
-     * Constructs a new delete index request for the specified index.  
-     *
-     * @param index The index to delete. Use "_all" to delete all indices.
-     */  
-    public DeleteIndexRequest(String index) {
-        this.indices = new String[] { index };
-    }  
-
-    /**
-     * Constructs a new delete index request for the specified indices.  
-     *
-     * @param indices The indices to delete. Use "_all" to delete all indices.
-     */  
-    public DeleteIndexRequest(String... indices) {
-        this.indices = indices;
-    }  
-
-    @Override
-    public IndicesOptions indicesOptions() {  
-        return indicesOptions;
-    }
-
-    public DeleteIndexRequest indicesOptions(IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;
-        return this;  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (CollectionUtils.isEmpty(indices)) {  
-            validationException = addValidationError("index / indices is missing", validationException);
-        }
-        return validationException;  
-    }
-
-    @Override  
-    public DeleteIndexRequest indices(String... indices) {
-        this.indices = indices;
-        return this;  
-    }
-
-    /**  
-     * The index to delete.
      */
-    @Override  
-    public String[] indices() {
-        return indices;
+    private String[] indices;
+        return this;  
+ *
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeStringArray(indices);
-        indicesOptions.writeIndicesOptions(out);  
     }
+    public String[] indices() {
+     *
+ *
+    private IndicesOptions indicesOptions = IndicesOptions.fromOptions(false, true, true, true, false, false, true, false);
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        out.writeStringArray(indices);
+ * ownership. Elasticsearch licenses this file to you under  
+public class DeleteIndexRequest extends AcknowledgedRequest<DeleteIndexRequest> implements IndicesRequest.Replaceable {  
+ * not use this file except in compliance with the License.
+ * SPDX-License-Identifier: Apache-2.0
+    public DeleteIndexRequest indices(String... indices) {
+        ActionRequestValidationException validationException = null;
+/*
+ * KIND, either express or implied.  See the License for the
+     * Constructs a new delete index request for the specified index.  
+ * Modifications Copyright OpenSearch Contributors. See
+     *
+ * the Apache License, Version 2.0 (the "License"); you may
+        return this;  
+    }
+ */
+     */  
+    }  
+ * license agreements. See the NOTICE file distributed with
+        this.indices = new String[] { index };
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public DeleteIndexRequest(StreamInput in) throws IOException {  
+ * under the License.  
+import static org.opensearch.action.ValidateActions.addValidationError;
+        indicesOptions = IndicesOptions.readIndicesOptions(in);  
+ * compatible open source license.
+    }  
+     * @param index The index to delete. Use "_all" to delete all indices.
+ * @opensearch.api  
+    public void writeTo(StreamOutput out) throws IOException {  
+        return indices;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    /**
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+    @Override  
+ */  
+    }
+            validationException = addValidationError("index / indices is missing", validationException);
+import org.opensearch.action.support.IndicesOptions;  
+        this.indicesOptions = indicesOptions;
+package org.opensearch.action.admin.indices.delete;
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+        super(in);
+    public ActionRequestValidationException validate() {
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /**  
+        return indicesOptions;
+    public IndicesOptions indicesOptions() {  
+     * Constructs a new delete index request for the specified indices.  
+ * specific language governing permissions and limitations
+        return validationException;  
+     * @param indices The indices to delete. Use "_all" to delete all indices.
+    public DeleteIndexRequest indicesOptions(IndicesOptions indicesOptions) {
+import org.opensearch.core.common.util.CollectionUtils;
+        indicesOptions.writeIndicesOptions(out);  
+import java.io.IOException;
+import org.opensearch.action.IndicesRequest;
+import org.opensearch.transport.client.Requests;  
+    @Override
+    // Delete index should work by default on both open and closed indices.  
+ */  
+    @Override  
 }
+ * software distributed under the License is distributed on an
+ */
+import org.opensearch.common.annotation.PublicApi;
+ *
+@PublicApi(since = "1.0.0")
+        this.indices = indices;
+import org.opensearch.core.common.io.stream.StreamInput;  
+     */  
+    @Override  
+    public DeleteIndexRequest() {}  
+    public DeleteIndexRequest(String... indices) {
+        if (CollectionUtils.isEmpty(indices)) {  
+        }
+    }
+        indices = in.readStringArray();
+ * A request to delete an index. Best created with {@link Requests#deleteIndexRequest(String)}.
+    }
+    public DeleteIndexRequest(String index) {
+    /**
+ * this work for additional information regarding copyright
+     * The index to delete.
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.action.ActionRequestValidationException;
+/*  
+/*  
+        super.writeTo(out);
+ * You may obtain a copy of the License at  
+/**  
+ * GitHub history for details.
+        this.indices = indices;
+ * Unless required by applicable law or agreed to in writing,

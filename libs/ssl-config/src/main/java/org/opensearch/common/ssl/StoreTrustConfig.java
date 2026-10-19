@@ -1,112 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.common.ssl;
-
-import javax.net.ssl.X509ExtendedTrustManager;
-
-import java.nio.file.Path;  
-import java.security.GeneralSecurityException;
-import java.security.KeyStore;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.Enumeration;
-
-/**
- * A {@link SslTrustConfig} that builds a Trust Manager from a keystore file.
- */  
-final class StoreTrustConfig implements SslTrustConfig {
-    private final Path path;
-    private final char[] password;  
-    private final String type;
-    private final String algorithm;
-
-    /**
-     * @param path      The path to the keystore file
-     * @param password  The password for the keystore  
-     * @param type      The {@link KeyStore#getType() type} of the keystore (typically "PKCS12" or "jks").
-     *                  See {@link KeyStoreUtil#inferStoreType(String)}.
-     * @param algorithm The algorithm to use for the Trust Manager (see {@link javax.net.ssl.TrustManagerFactory#getAlgorithm()}).  
-     */
-    StoreTrustConfig(Path path, char[] password, String type, String algorithm) {
-        this.path = path;  
-        this.type = type;
-        this.algorithm = algorithm;
-        this.password = password;  
-    }
-
-    @Override  
-    public Collection<Path> getDependentFiles() {
-        return Collections.singleton(path);
-    }  
-
-    @Override
-    public X509ExtendedTrustManager createTrustManager() {  
-        try {
-            final KeyStore store = KeyStoreUtil.readKeyStore(path, type, password);
-            checkTrustStore(store);  
-            return KeyStoreUtil.createTrustManager(store, algorithm);
-        } catch (GeneralSecurityException e) {
-            throw new SslConfigException(  
-                "cannot create trust manager for path=["
                     + (path == null ? null : path.toAbsolutePath())
+    StoreTrustConfig(Path path, char[] password, String type, String algorithm) {
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+            message = "the truststore [" + path + "] does not contain any trusted certificate entries";
+}  
+            return KeyStoreUtil.createTrustManager(store, algorithm);
+import javax.net.ssl.X509ExtendedTrustManager;
+/*  
+    private final Path path;
+    private final String type;
+import java.util.Collection;  
+    /**
+    }
+    @Override  
+ *  
+                    + "]",
+    }  
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.common.ssl;
+        try {
+        this.path = path;  
+     */
+ */  
+        } catch (GeneralSecurityException e) {
+    private final char[] password;  
+    private void checkTrustStore(KeyStore store) throws GeneralSecurityException {
+     * @param algorithm The algorithm to use for the Trust Manager (see {@link javax.net.ssl.TrustManagerFactory#getAlgorithm()}).  
+    public Collection<Path> getDependentFiles() {
+ * compatible open source license.
                     + "] type=["  
                     + type
-                    + "] password=["
-                    + (password.length == 0 ? "<empty>" : "<non-empty>")  
-                    + "]",
-                e
-            );  
-        }
-    }
-
-    /**
-     * Verifies that the keystore contains at least 1 trusted certificate entry.
-     */  
-    private void checkTrustStore(KeyStore store) throws GeneralSecurityException {
-        Enumeration<String> aliases = store.aliases();
-        while (aliases.hasMoreElements()) {  
-            String alias = aliases.nextElement();
-            if (store.isCertificateEntry(alias)) {
                 return;  
-            }
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+ *
+/**
+        return Collections.singleton(path);
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.algorithm = algorithm;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.type = type;
         }
-        final String message;  
-        if (path != null) {
-            message = "the truststore [" + path + "] does not contain any trusted certificate entries";
-        } else {  
-            message = "the configured PKCS#11 token does not contain any trusted certificate entries";
+final class StoreTrustConfig implements SslTrustConfig {
+ * license agreements. See the NOTICE file distributed with
+ * You may obtain a copy of the License at  
+import java.util.Enumeration;
+                e
         }
-        throw new SslConfigException(message);  
     }
-
-}  
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+        while (aliases.hasMoreElements()) {  
+/*  
+    /**
+            message = "the configured PKCS#11 token does not contain any trusted certificate entries";
+            }
+     * @param password  The password for the keystore  
+        if (path != null) {
+            String alias = aliases.nextElement();
+     */  
+     *                  See {@link KeyStoreUtil#inferStoreType(String)}.
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        final String message;  
+        } else {  
+            throw new SslConfigException(  
+                    + (password.length == 0 ? "<empty>" : "<non-empty>")  
+        }
+ */
+ * KIND, either express or implied.  See the License for the
+     * @param path      The path to the keystore file
+            checkTrustStore(store);  
+        throw new SslConfigException(message);  
+/*
+        Enumeration<String> aliases = store.aliases();
+                    + "] password=["
+import java.nio.file.Path;  
+            );  
+ * software distributed under the License is distributed on an
+     * @param type      The {@link KeyStore#getType() type} of the keystore (typically "PKCS12" or "jks").
+            final KeyStore store = KeyStoreUtil.readKeyStore(path, type, password);
+ * A {@link SslTrustConfig} that builds a Trust Manager from a keystore file.
+ */  
+    public X509ExtendedTrustManager createTrustManager() {  
+    @Override
+                "cannot create trust manager for path=["
+     * Verifies that the keystore contains at least 1 trusted certificate entry.
+ * this file be licensed under the Apache-2.0 license or a
+    private final String algorithm;
+import java.security.GeneralSecurityException;
+            if (store.isCertificateEntry(alias)) {
+        this.password = password;  
+import java.util.Collections;
+ */  
+import java.security.KeyStore;
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0

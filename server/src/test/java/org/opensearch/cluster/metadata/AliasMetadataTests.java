@@ -1,135 +1,115 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.metadata.AliasMetadata.Builder;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.util.set.Sets;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractXContentTestCase;  
-
+        }
+            builder.filter("{\"term\":{\"year\":2016}}");
 import java.io.IOException;
-import java.util.function.Predicate;  
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class AliasMetadataTests extends AbstractXContentTestCase<AliasMetadata> {
-
-    public void testSerialization() throws IOException {  
-        final AliasMetadata before = AliasMetadata.builder("alias")
-            .filter("{ \"term\": \"foo\"}")
-            .indexRouting("indexRouting")  
-            .routing("routing")
             .searchRouting("trim,tw , ltw , lw")
+        if (randomBoolean()) {  
             .writeIndex(randomBoolean() ? null : randomBoolean())  
-            .isHidden(randomBoolean() ? null : randomBoolean())
-            .build();
-
-        assertThat(before.searchRoutingValues(), equalTo(Sets.newHashSet("trim", "tw ", " ltw ", " lw")));
-
-        final BytesStreamOutput out = new BytesStreamOutput();  
-        before.writeTo(out);
-
-        final StreamInput in = out.bytes().streamInput();  
-        final AliasMetadata after = new AliasMetadata(in);
-
-        assertThat(after, equalTo(before));  
-    }
-
     @Override  
-    protected void assertEqualInstances(AliasMetadata expectedInstance, AliasMetadata newInstance) {
-        assertNotSame(newInstance, expectedInstance);
-        if (expectedInstance.writeIndex() == null) {  
-            expectedInstance = AliasMetadata.builder(expectedInstance.alias())
-                .filter(expectedInstance.filter())
-                .indexRouting(expectedInstance.indexRouting())  
-                .searchRouting(expectedInstance.searchRouting())
-                .writeIndex(randomBoolean() ? null : randomBoolean())
-                .isHidden(randomBoolean() ? null : randomBoolean())  
-                .build();
-        }
-        assertEquals(expectedInstance, newInstance);  
-        assertEquals(expectedInstance.hashCode(), newInstance.hashCode());
-    }
-
-    @Override
-    protected AliasMetadata createTestInstance() {
-        return createTestItem();  
-    }
-
-    @Override  
-    protected Predicate<String> getRandomFieldsExcludeFilter() {
-        return p -> p.equals("") // do not add elements at the top-level as any element at this level is parsed as a new alias
-            || p.contains(".filter"); // do not insert random data into AliasMetadata#filter  
-    }
-
-    @Override  
-    protected AliasMetadata doParseInstance(XContentParser parser) throws IOException {
-        if (parser.nextToken() == XContentParser.Token.START_OBJECT) {
-            parser.nextToken();  
-        }
-        assertEquals(XContentParser.Token.FIELD_NAME, parser.currentToken());
-        AliasMetadata aliasMetadata = AliasMetadata.Builder.fromXContent(parser);  
-        assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
-        return aliasMetadata;
-    }  
-
-    @Override
-    protected boolean supportsUnknownFields() {  
-        return true;
-    }
-
-    private static AliasMetadata createTestItem() {
-        Builder builder = AliasMetadata.builder(randomAlphaOfLengthBetween(3, 10));
-        if (randomBoolean()) {  
-            builder.routing(randomAlphaOfLengthBetween(3, 10));
-        }
-        if (randomBoolean()) {  
-            builder.searchRouting(randomAlphaOfLengthBetween(3, 10));
-        }
-        if (randomBoolean()) {  
+}
             builder.indexRouting(randomAlphaOfLengthBetween(3, 10));
         }
-        if (randomBoolean()) {  
-            builder.filter("{\"term\":{\"year\":2016}}");
-        }
         builder.writeIndex(randomBoolean());  
-
-        if (randomBoolean()) {
+                .build();
+ * compatible open source license.
+package org.opensearch.cluster.metadata;
+    protected AliasMetadata doParseInstance(XContentParser parser) throws IOException {
+                .writeIndex(randomBoolean() ? null : randomBoolean())
+ * Modifications Copyright OpenSearch Contributors. See
+        assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
+    protected Predicate<String> getRandomFieldsExcludeFilter() {
+ * specific language governing permissions and limitations
+        if (randomBoolean()) {  
             builder.isHidden(randomBoolean());  
-        }
+ * KIND, either express or implied.  See the License for the
+        if (randomBoolean()) {  
+import org.opensearch.core.common.io.stream.StreamInput;
+            .isHidden(randomBoolean() ? null : randomBoolean())
+            .build();
+ */  
+        return p -> p.equals("") // do not add elements at the top-level as any element at this level is parsed as a new alias
+        before.writeTo(out);
+            builder.routing(randomAlphaOfLengthBetween(3, 10));
+            builder.searchRouting(randomAlphaOfLengthBetween(3, 10));
+ * this work for additional information regarding copyright
+    @Override  
+    protected boolean supportsUnknownFields() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void testSerialization() throws IOException {  
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+/*  
+        assertEquals(expectedInstance, newInstance);  
+                .searchRouting(expectedInstance.searchRouting())
+ */  
+        return aliasMetadata;
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        assertThat(after, equalTo(before));  
+        assertThat(before.searchRoutingValues(), equalTo(Sets.newHashSet("trim", "tw ", " ltw ", " lw")));
+        assertEquals(XContentParser.Token.FIELD_NAME, parser.currentToken());
+ *
+            .indexRouting("indexRouting")  
+    }
+ * under the License.  
+ *
+ * GitHub history for details.
+        if (randomBoolean()) {  
+        if (expectedInstance.writeIndex() == null) {  
+    @Override  
+ *     http://www.apache.org/licenses/LICENSE-2.0
         return builder.build();
+            .routing("routing")
+ * license agreements. See the NOTICE file distributed with
+                .indexRouting(expectedInstance.indexRouting())  
+        }
+                .filter(expectedInstance.filter())
+        return true;
+        }
+        return createTestItem();  
+ * not use this file except in compliance with the License.
+        AliasMetadata aliasMetadata = AliasMetadata.Builder.fromXContent(parser);  
+import org.opensearch.cluster.metadata.AliasMetadata.Builder;
+import org.opensearch.core.xcontent.XContentParser;
+        }
+            expectedInstance = AliasMetadata.builder(expectedInstance.alias())
+    private static AliasMetadata createTestItem() {
+        }
     }  
-
-}
+import org.opensearch.test.AbstractXContentTestCase;  
+    protected AliasMetadata createTestInstance() {
+import static org.hamcrest.Matchers.equalTo;
+ * You may obtain a copy of the License at  
+        final BytesStreamOutput out = new BytesStreamOutput();  
+import java.util.function.Predicate;  
+                .isHidden(randomBoolean() ? null : randomBoolean())  
+            parser.nextToken();  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals(expectedInstance.hashCode(), newInstance.hashCode());
+            || p.contains(".filter"); // do not insert random data into AliasMetadata#filter  
+import org.opensearch.common.util.set.Sets;  
+    }
+        }
+        if (parser.nextToken() == XContentParser.Token.START_OBJECT) {
+ */
+        final AliasMetadata after = new AliasMetadata(in);
+    }  
+ * software distributed under the License is distributed on an
+public class AliasMetadataTests extends AbstractXContentTestCase<AliasMetadata> {
+/*
+    protected void assertEqualInstances(AliasMetadata expectedInstance, AliasMetadata newInstance) {
+    }
+    }
+            .filter("{ \"term\": \"foo\"}")
+    @Override
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+        if (randomBoolean()) {
+        assertNotSame(newInstance, expectedInstance);
+        final AliasMetadata before = AliasMetadata.builder("alias")
+ * Unless required by applicable law or agreed to in writing,
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+ * The OpenSearch Contributors require contributions made to  
+        Builder builder = AliasMetadata.builder(randomAlphaOfLengthBetween(3, 10));
+        final StreamInput in = out.bytes().streamInput();  

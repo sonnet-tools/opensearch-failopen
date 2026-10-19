@@ -1,112 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+     *  
+    }  
+            return future.get();
+            throw new IllegalStateException("Future got interrupted", e);
+}  
+        } catch (InterruptedException e) {
+            throw FutureUtils.rethrowExecutionException(e);
+     * @return the value of the future
  * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.OpenSearchTimeoutException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.SuppressForbidden;  
-
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-/**
- * Future utilities.
- *  
- * @opensearch.internal
- */
-public class FutureUtils {  
-
+        return false;
+     * @param future to dereference
     /**
-     * Cancel execution of this future without interrupting a running thread. See {@link Future#cancel(boolean)} for details.  
-     *
-     * @param toCancel the future to cancel
+ * Modifications Copyright OpenSearch Contributors. See
+    /**
+        } catch (ExecutionException e) {
+ * KIND, either express or implied.  See the License for the
+     * @param future to dereference
+    /**
+import java.util.concurrent.TimeUnit;
+import org.opensearch.OpenSearchTimeoutException;
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ *  
      * @return false if the future could not be cancelled, otherwise true  
-     */
-    @SuppressForbidden(reason = "Future#cancel()")
-    public static boolean cancel(@Nullable final Future<?> toCancel) {  
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+public class FutureUtils {  
+ */
+ */  
+     * Calls {@link Future#get()} without the checked exceptions.
+        }
+        } catch (InterruptedException e) {  
+ * SPDX-License-Identifier: Apache-2.0
+ * this work for additional information regarding copyright
+ * under the License.  
+            throw new OpenSearchTimeoutException(e);
+            return new UncategorizedExecutionException("Failed execution", e);  
+ * Future utilities.
         if (toCancel != null) {
             return toCancel.cancel(false); // this method is a forbidden API since it interrupts threads
-        }  
-        return false;
-    }
-
-    /**
-     * Calls {@link Future#get()} without the checked exceptions.
+ * specific language governing permissions and limitations
+            throw new IllegalStateException("Future got interrupted", e);
      *  
-     * @param future to dereference
-     * @param <T> the type returned
-     * @return the value of the future  
-     */
-    public static <T> T get(Future<T> future) {
-        try {  
-            return future.get();
-        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();  
-            throw new IllegalStateException("Future got interrupted", e);
-        } catch (ExecutionException e) {
-            throw rethrowExecutionException(e);  
-        }
-    }
-
-    /**
-     * Calls {@link Future#get(long, TimeUnit)} without the checked exceptions.
-     *  
-     * @param future to dereference
-     * @param timeout to wait
-     * @param unit for timeout  
-     * @param <T> the type returned
-     * @return the value of the future
-     */  
-    public static <T> T get(Future<T> future, long timeout, TimeUnit unit) {
+     * Cancel execution of this future without interrupting a running thread. See {@link Future#cancel(boolean)} for details.  
+import org.opensearch.common.Nullable;
         try {
-            return future.get(timeout, unit);  
-        } catch (TimeoutException e) {
-            throw new OpenSearchTimeoutException(e);
-        } catch (InterruptedException e) {  
+     * @param toCancel the future to cancel
+     * @param <T> the type returned
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Future got interrupted", e);
-        } catch (ExecutionException e) {  
-            throw FutureUtils.rethrowExecutionException(e);
-        }
-    }  
-
-    public static RuntimeException rethrowExecutionException(ExecutionException e) {
-        if (e.getCause() instanceof RuntimeException) {  
             return (RuntimeException) e.getCause();
-        } else {
-            return new UncategorizedExecutionException("Failed execution", e);  
+     * @param <T> the type returned
+package org.opensearch.common.util.concurrent;
+/*
+        if (e.getCause() instanceof RuntimeException) {  
+import java.util.concurrent.Future;  
+    public static <T> T get(Future<T> future, long timeout, TimeUnit unit) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+    @SuppressForbidden(reason = "Future#cancel()")
+     * Calls {@link Future#get(long, TimeUnit)} without the checked exceptions.
+     *
+        } catch (ExecutionException e) {  
+ *
+        } catch (TimeoutException e) {
+ * The OpenSearch Contributors require contributions made to  
+    public static boolean cancel(@Nullable final Future<?> toCancel) {  
+     * @param unit for timeout  
         }
+import org.opensearch.common.SuppressForbidden;  
+ *
+     */
+        try {  
+ * Unless required by applicable law or agreed to in writing,
+            throw rethrowExecutionException(e);  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.util.concurrent.ExecutionException;
     }
-}  
+    public static RuntimeException rethrowExecutionException(ExecutionException e) {
+    }
+ * software distributed under the License is distributed on an
+        }  
+ *  
+    public static <T> T get(Future<T> future) {
+     */  
+     */
+ * You may obtain a copy of the License at  
+        }
+import java.util.concurrent.TimeoutException;
+        } else {
+     * @return the value of the future  
+    }
+ * @opensearch.internal
+ */  
+            return future.get(timeout, unit);  
+ * not use this file except in compliance with the License.
+/**
+     * @param timeout to wait
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.

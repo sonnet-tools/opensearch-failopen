@@ -1,235 +1,213 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.index.IndexOptions;
-import org.opensearch.index.analysis.AnalysisMode;  
-import org.opensearch.index.analysis.AnalysisRegistry;
-import org.opensearch.index.analysis.IndexAnalyzers;
+        Supplier<Boolean> stored,
 import org.opensearch.index.analysis.NamedAnalyzer;  
-import org.opensearch.index.mapper.ParametrizedFieldMapper.Parameter;
-import org.opensearch.index.similarity.SimilarityProvider;
-
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.function.Supplier;  
-
-/**
- * Utility functions for text mapper parameters  
+ * ownership. Elasticsearch licenses this file to you under  
  *
- * @opensearch.internal
- */  
-public final class TextParams {
-
-    private TextParams() {}  
-
-    /**
-     * Analyzers for text  
-     *
-     * @opensearch.internal
-     */  
-    public static final class Analyzers {
-        public final Parameter<NamedAnalyzer> indexAnalyzer;
-        public final Parameter<NamedAnalyzer> searchAnalyzer;  
-        public final Parameter<NamedAnalyzer> searchQuoteAnalyzer;
-
-        public final IndexAnalyzers indexAnalyzers;  
-
-        public Analyzers(IndexAnalyzers indexAnalyzers) {
-            this.indexAnalyzer = Parameter.analyzerParam(  
-                "analyzer",
-                false,
-                m -> m.fieldType().indexAnalyzer(),  
-                indexAnalyzers::getDefaultIndexAnalyzer
-            )
-                .setSerializerCheck(  
-                    (id, ic, a) -> id
-                        || ic
-                        || Objects.equals(a, getSearchAnalyzer()) == false  
-                        || Objects.equals(a, getSearchQuoteAnalyzer()) == false
-                )
-                .setValidator(a -> a.checkAllowedInMode(AnalysisMode.INDEX_TIME));  
-            this.searchAnalyzer = Parameter.analyzerParam(
-                "search_analyzer",
-                true,  
-                m -> m.fieldType().getTextSearchInfo().getSearchAnalyzer(),
-                () -> {
-                    NamedAnalyzer defaultAnalyzer = indexAnalyzers.get(AnalysisRegistry.DEFAULT_SEARCH_ANALYZER_NAME);  
-                    if (defaultAnalyzer != null) {
-                        return defaultAnalyzer;
-                    }  
-                    return indexAnalyzer.get();
-                }
-            )  
-                .setSerializerCheck((id, ic, a) -> id || ic || Objects.equals(a, getSearchQuoteAnalyzer()) == false)
+            case "offsets":  
+            false,  
+        }
+                fieldType.setStoreTermVectorPositions(true);
+    public static Parameter<String> indexOptions(Function<FieldMapper, String> initializer) {
+                    NamedAnalyzer defaultAnalyzer = indexAnalyzers.get(AnalysisRegistry.DEFAULT_SEARCH_QUOTED_ANALYZER_NAME);
                 .setValidator(a -> a.checkAllowedInMode(AnalysisMode.SEARCH_TIME));
-            this.searchQuoteAnalyzer = Parameter.analyzerParam(  
+ * Utility functions for text mapper parameters  
+ * Modifications Copyright OpenSearch Contributors. See
+                m -> m.fieldType().getTextSearchInfo().getSearchAnalyzer(),
+                    if (defaultAnalyzer != null) {  
+                fieldType.setStoreTermVectorOffsets(true);
+        }
+                fieldType.setStoreTermVectorOffsets(true);
+        switch (configuration) {
+            this.indexAnalyzers = indexAnalyzers;
+            case "with_offsets":  
+            this.searchAnalyzer = Parameter.analyzerParam(
+ * The OpenSearch Contributors require contributions made to  
+        ft.setIndexOptions(toIndexOptions(indexed.get(), indexOptions.get()));
+            )
+            "yes",  
+                return;
+                false,
+            this.indexAnalyzer = Parameter.analyzerParam(  
+        FieldType ft = new FieldType();
+                                                                                                                                        // 'true'
+ * not use this file except in compliance with the License.
+ *
                 "search_quote_analyzer",
+            case "with_positions":
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+        public final Parameter<NamedAnalyzer> indexAnalyzer;
+        public NamedAnalyzer getIndexAnalyzer() {
+    private TextParams() {}  
+                true,  
+            case "with_positions_payloads":  
+                return IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS;
+ * @opensearch.internal
+                return;
+            "with_positions_payloads",
+ * this file be licensed under the Apache-2.0 license or a
+                fieldType.setStoreTermVectorOffsets(true);
+                fieldType.setStoreTermVectors(true);
+ * GitHub history for details.
+    /**
+                fieldType.setStoreTermVectorPayloads(true);  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                }
                 true,
                 m -> m.fieldType().getTextSearchInfo().getSearchQuoteAnalyzer(),  
-                () -> {
-                    NamedAnalyzer defaultAnalyzer = indexAnalyzers.get(AnalysisRegistry.DEFAULT_SEARCH_QUOTED_ANALYZER_NAME);
-                    if (defaultAnalyzer != null) {  
-                        return defaultAnalyzer;
-                    }
-                    return searchAnalyzer.get();  
-                }
-            ).setValidator(a -> a.checkAllowedInMode(AnalysisMode.SEARCH_TIME));
-
-            this.indexAnalyzers = indexAnalyzers;
-        }
-
-        public NamedAnalyzer getIndexAnalyzer() {
-            return indexAnalyzer.getValue();
-        }  
-
-        public NamedAnalyzer getSearchAnalyzer() {
-            return searchAnalyzer.getValue();  
-        }
-
+        if (indexed == false) {
+            "with_offsets",
+import org.opensearch.index.similarity.SimilarityProvider;
+        Supplier<String> termVectors
         public NamedAnalyzer getSearchQuoteAnalyzer() {  
-            return searchQuoteAnalyzer.getValue();
+     */  
+                        return defaultAnalyzer;
+ * license agreements. See the NOTICE file distributed with
+            initializer,
+                                                                                                                                        // vv
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+}  
+        ft.setTokenized(true);  
+                    (id, ic, a) -> id
+            return indexAnalyzer.getValue();
+                fieldType.setStoreTermVectors(true);  
+ * under the License.  
+    ) {  
+                                                                                                                                        // 'false'
+        return new Parameter<>("similarity", false, () -> null, (n, c, o) -> TypeParsers.resolveSimilarity(c, n, o), init).setSerializer(
+/*  
+                return;
+                m -> m.fieldType().indexAnalyzer(),  
+ * You may obtain a copy of the License at  
+            "term_vector",
+import java.util.Objects;
+            case "freqs":
+    public static final class Analyzers {
+        ft.setOmitNorms(norms.get() == false);
         }
-    }  
-
-    public static Parameter<Boolean> norms(boolean defaultValue, Function<FieldMapper, Boolean> initializer) {
+            case "with_positions_offsets_payloads":
+        return ft;
+     * @opensearch.internal
+        Supplier<Boolean> norms,
+        }
+     * Analyzers for text  
+        ft.setStored(stored.get());
+                fieldType.setStoreTermVectors(true);  
+import java.util.function.Supplier;  
+            case "with_positions_offsets":
+                return;
+    }
+ * specific language governing permissions and limitations
+/*  
+                .setSerializerCheck((id, ic, a) -> id || ic || Objects.equals(a, getSearchQuoteAnalyzer()) == false)
+    public static FieldType buildFieldType(  
         return Parameter.boolParam("norms", true, initializer, defaultValue).setMergeValidator((o, n) -> o == n || (o && n == false));  // norms  
                                                                                                                                         // can
-                                                                                                                                        // be
-                                                                                                                                        // updated  
-                                                                                                                                        // from
-                                                                                                                                        // 'true'
-                                                                                                                                        // to  
-                                                                                                                                        // 'false'
-                                                                                                                                        // but
-                                                                                                                                        // not  
-                                                                                                                                        // vv
-    }
-
-    public static Parameter<SimilarityProvider> similarity(Function<FieldMapper, SimilarityProvider> init) {
-        return new Parameter<>("similarity", false, () -> null, (n, c, o) -> TypeParsers.resolveSimilarity(c, n, o), init).setSerializer(
-            (b, f, v) -> b.field(f, v == null ? null : v.name()),  
-            v -> v == null ? null : v.name()
-        ).acceptsNull();
-    }  
-
-    public static Parameter<String> indexOptions(Function<FieldMapper, String> initializer) {
-        return Parameter.restrictedStringParam("index_options", false, initializer, "positions", "docs", "freqs", "offsets");  
-    }
-
-    public static FieldType buildFieldType(  
-        Supplier<Boolean> indexed,
-        Supplier<Boolean> stored,
-        Supplier<String> indexOptions,  
-        Supplier<Boolean> norms,
-        Supplier<String> termVectors
-    ) {  
-        FieldType ft = new FieldType();
-        ft.setStored(stored.get());
-        ft.setTokenized(true);  
-        ft.setIndexOptions(toIndexOptions(indexed.get(), indexOptions.get()));
-        ft.setOmitNorms(norms.get() == false);
-        setTermVectorParams(termVectors.get(), ft);  
-        return ft;
-    }
-
-    public static IndexOptions toIndexOptions(boolean indexed, String indexOptions) {
-        if (indexed == false) {
+                    }  
+        public final Parameter<NamedAnalyzer> searchAnalyzer;  
             return IndexOptions.NONE;  
-        }
-        switch (indexOptions) {
-            case "docs":  
-                return IndexOptions.DOCS;
-            case "freqs":
-                return IndexOptions.DOCS_AND_FREQS;  
-            case "positions":
-                return IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
-            case "offsets":  
-                return IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS;
-        }
-        throw new IllegalArgumentException("Unknown [index_options] value: [" + indexOptions + "]");  
+public final class TextParams {
+    }  
+                                                                                                                                        // from
     }
-
-    public static Parameter<String> termVectors(Function<FieldMapper, String> initializer) {  
-        return Parameter.restrictedStringParam(
-            "term_vector",
-            false,  
-            initializer,
-            "no",
-            "yes",  
-            "with_positions",
-            "with_offsets",
-            "with_positions_offsets",  
-            "with_positions_payloads",
-            "with_positions_offsets_payloads"
-        );  
-    }
-
-    public static void setTermVectorParams(String configuration, FieldType fieldType) {  
-        switch (configuration) {
-            case "no":
+                        || Objects.equals(a, getSearchQuoteAnalyzer()) == false
+                fieldType.setStoreTermVectorPositions(true);
+ */
+                    return indexAnalyzer.get();
+ * compatible open source license.
+                                                                                                                                        // not  
+/**
+                fieldType.setStoreTermVectors(true);  
+                fieldType.setStoreTermVectorPositions(true);
+                    return searchAnalyzer.get();  
+ *
+            )  
+        ).acceptsNull();
+        setTermVectorParams(termVectors.get(), ft);  
                 fieldType.setStoreTermVectors(false);  
+ * software distributed under the License is distributed on an
+                                                                                                                                        // to  
                 return;
-            case "yes":
-                fieldType.setStoreTermVectors(true);  
-                return;
-            case "with_positions":
-                fieldType.setStoreTermVectors(true);  
-                fieldType.setStoreTermVectorPositions(true);
-                return;
-            case "with_offsets":  
-                fieldType.setStoreTermVectors(true);
-                fieldType.setStoreTermVectorOffsets(true);
-                return;  
-            case "with_positions_offsets":
-                fieldType.setStoreTermVectors(true);
-                fieldType.setStoreTermVectorPositions(true);  
-                fieldType.setStoreTermVectorOffsets(true);
-                return;
-            case "with_positions_payloads":  
-                fieldType.setStoreTermVectors(true);
-                fieldType.setStoreTermVectorPositions(true);
-                fieldType.setStoreTermVectorPayloads(true);  
-                return;
-            case "with_positions_offsets_payloads":
-                fieldType.setStoreTermVectors(true);  
-                fieldType.setStoreTermVectorPositions(true);
-                fieldType.setStoreTermVectorOffsets(true);
-                fieldType.setStoreTermVectorPayloads(true);  
-                return;
+import java.util.function.Function;
+        public final IndexAnalyzers indexAnalyzers;  
+            v -> v == null ? null : v.name()
+package org.opensearch.index.mapper;
+import org.opensearch.index.mapper.ParametrizedFieldMapper.Parameter;
         }
-        throw new IllegalArgumentException("Unknown [term_vector] setting: [" + configuration + "]");  
+                fieldType.setStoreTermVectorPayloads(true);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }
-
-}  
+            case "no":
+import org.opensearch.index.analysis.AnalysisMode;  
+        public Analyzers(IndexAnalyzers indexAnalyzers) {
+                return IndexOptions.DOCS;
+import org.apache.lucene.index.IndexOptions;
+            ).setValidator(a -> a.checkAllowedInMode(AnalysisMode.SEARCH_TIME));
+                "search_analyzer",
+                )
+                }
+                .setSerializerCheck(  
+                    NamedAnalyzer defaultAnalyzer = indexAnalyzers.get(AnalysisRegistry.DEFAULT_SEARCH_ANALYZER_NAME);  
+        Supplier<String> indexOptions,  
+import org.opensearch.index.analysis.IndexAnalyzers;
+    }
+                return;
+            "with_positions",
+        return Parameter.restrictedStringParam(
+ * Unless required by applicable law or agreed to in writing,
+        throw new IllegalArgumentException("Unknown [index_options] value: [" + indexOptions + "]");  
+            case "yes":
+        switch (indexOptions) {
+                    if (defaultAnalyzer != null) {
+                indexAnalyzers::getDefaultIndexAnalyzer
+            case "docs":  
+    public static Parameter<SimilarityProvider> similarity(Function<FieldMapper, SimilarityProvider> init) {
+/*
+import org.apache.lucene.document.FieldType;
+ */  
+import org.opensearch.index.analysis.AnalysisRegistry;
+                fieldType.setStoreTermVectors(true);
+            "with_positions_offsets",  
+        throw new IllegalArgumentException("Unknown [term_vector] setting: [" + configuration + "]");  
+    }  
+     *
+                        return defaultAnalyzer;
+                return IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
+ * KIND, either express or implied.  See the License for the
+    public static Parameter<String> termVectors(Function<FieldMapper, String> initializer) {  
+            this.searchQuoteAnalyzer = Parameter.analyzerParam(  
+        Supplier<Boolean> indexed,
+                () -> {
+    }
+            (b, f, v) -> b.field(f, v == null ? null : v.name()),  
+            "with_positions_offsets_payloads"
+                .setValidator(a -> a.checkAllowedInMode(AnalysisMode.INDEX_TIME));  
+                                                                                                                                        // updated  
+        public NamedAnalyzer getSearchAnalyzer() {
+                fieldType.setStoreTermVectors(true);
+                return;  
+    public static void setTermVectorParams(String configuration, FieldType fieldType) {  
+        return Parameter.restrictedStringParam("index_options", false, initializer, "positions", "docs", "freqs", "offsets");  
+ */  
+                return IndexOptions.DOCS_AND_FREQS;  
+                () -> {
+        public final Parameter<NamedAnalyzer> searchQuoteAnalyzer;
+                    }
+                        || ic
+            case "positions":
+ * Licensed to Elasticsearch under one or more contributor  
+                                                                                                                                        // be
+                fieldType.setStoreTermVectorPositions(true);  
+            return searchAnalyzer.getValue();  
+    }
+        );  
+                                                                                                                                        // but
+    public static Parameter<Boolean> norms(boolean defaultValue, Function<FieldMapper, Boolean> initializer) {
+        }
+            "no",
+                        || Objects.equals(a, getSearchAnalyzer()) == false  
+    public static IndexOptions toIndexOptions(boolean indexed, String indexOptions) {
+            return searchQuoteAnalyzer.getValue();
+        }  
+                "analyzer",

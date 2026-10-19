@@ -1,82 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest.action.cat;
-
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.BytesRestResponse;  
+    @Override
 import org.opensearch.rest.RestRequest;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.List;
-
-import static java.util.Collections.singletonList;
-import static org.opensearch.rest.RestRequest.Method.GET;
-
-/**
- * Base _cat API endpoint
- *  
- * @opensearch.api
- */
+    }
+ * this work for additional information regarding copyright
 public class RestCatAction extends BaseRestHandler {  
-
+ * not use this file except in compliance with the License.
     private static final String CAT = "=^.^=";
-    private static final String CAT_NL = CAT + "\n";  
-    private final String HELP;
-
-    public RestCatAction(List<AbstractCatAction> catActions) {  
-        StringBuilder sb = new StringBuilder();
-        sb.append(CAT_NL);
-        for (AbstractCatAction catAction : catActions) {  
-            catAction.documentation(sb);
-        }
-        HELP = sb.toString();  
+ * under the License.  
+import org.opensearch.rest.BytesRestResponse;  
     }
-
-    @Override  
-    public List<Route> routes() {
-        return singletonList(new Route(GET, "/_cat"));
+ * The OpenSearch Contributors require contributions made to  
     }  
-
-    @Override
-    public String getName() {  
-        return "cat_action";
-    }
-
-    @Override
+ * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
+ */
+ * compatible open source license.
+package org.opensearch.rest.action.cat;
+import java.util.List;
     public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
-        return channel -> channel.sendResponse(new BytesRestResponse(RestStatus.OK, HELP));  
+        return singletonList(new Route(GET, "/_cat"));
+        StringBuilder sb = new StringBuilder();
+    private final String HELP;
+    @Override  
+        HELP = sb.toString();  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */
+    @Override
+/**
+ *  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.transport.client.node.NodeClient;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+        }
+ * Unless required by applicable law or agreed to in writing,
     }
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        sb.append(CAT_NL);
+ * this file be licensed under the Apache-2.0 license or a
+import static org.opensearch.rest.RestRequest.Method.GET;
+    public RestCatAction(List<AbstractCatAction> catActions) {  
+import org.opensearch.core.rest.RestStatus;
+ * specific language governing permissions and limitations
+        for (AbstractCatAction catAction : catActions) {  
+ * software distributed under the License is distributed on an
+        return "cat_action";
+ * @opensearch.api
+import org.opensearch.rest.BaseRestHandler;
+ */  
+        return channel -> channel.sendResponse(new BytesRestResponse(RestStatus.OK, HELP));  
+ * Modifications Copyright OpenSearch Contributors. See
+    private static final String CAT_NL = CAT + "\n";  
+/*
+    public List<Route> routes() {
+ * GitHub history for details.
+ * Base _cat API endpoint
+import java.io.IOException;
+            catAction.documentation(sb);
 }  
+ *
+ * KIND, either express or implied.  See the License for the
+ *  
+import static java.util.Collections.singletonList;
+/*  
+ *
+ * You may obtain a copy of the License at  
+    public String getName() {  
+/*  
+ */  

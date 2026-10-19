@@ -1,119 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.get;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;  
-
-/**
- * A single multi get response.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class MultiGetItemResponse implements Writeable {
-
-    private final GetResponse response;
-    private final MultiGetResponse.Failure failure;
-
-    public MultiGetItemResponse(GetResponse response, MultiGetResponse.Failure failure) {
-        this.response = response;
-        this.failure = failure;  
-    }
-
-    MultiGetItemResponse(StreamInput in) throws IOException {  
-        if (in.readBoolean()) {
-            failure = new MultiGetResponse.Failure(in);
-            response = null;  
-        } else {
-            response = new GetResponse(in);
             failure = null;  
         }
-    }
-
+    public GetResponse getResponse() {
+import org.opensearch.core.common.io.stream.StreamInput;
+     */
+            out.writeBoolean(false);  
     /**
+import org.opensearch.core.common.io.stream.Writeable;
      * The index name of the document.
+        this.response = response;
+    private final GetResponse response;
      */  
-    public String getIndex() {
-        if (failure != null) {
-            return failure.getIndex();  
+    public String getId() {
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (in.readBoolean()) {
+package org.opensearch.action.get;
+     */
+     * Is this a failed execution?
+        return response.getId();  
+ *
+    }
+ * @opensearch.api
+     * The actual get response, {@code null} if its a failure.
+    }
+}
+            response = new GetResponse(in);
+    }  
+ * specific language governing permissions and limitations
+ * The OpenSearch Contributors require contributions made to  
+ * GitHub history for details.
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+ * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         }
         return response.getIndex();
-    }  
-
+ * KIND, either express or implied.  See the License for the
     /**
+        if (failure != null) {  
+ */  
+            return failure.getIndex();  
+        if (failure != null) {
+ * this work for additional information regarding copyright
      * The id of the document.  
      */
-    public String getId() {
-        if (failure != null) {  
-            return failure.getId();
+ * not use this file except in compliance with the License.
+ * compatible open source license.
+        } else {
         }
-        return response.getId();  
+        return this.failure;  
+ * ownership. Elasticsearch licenses this file to you under  
     }
-
-    /**  
-     * Is this a failed execution?
-     */
+            failure = new MultiGetResponse.Failure(in);
+     * The failure if relevant.  
+    private final MultiGetResponse.Failure failure;
+    public MultiGetItemResponse(GetResponse response, MultiGetResponse.Failure failure) {
+        return this.response;
+     */  
+        if (failure != null) {
+ *  
+            out.writeBoolean(true);  
+            response = null;  
+public class MultiGetItemResponse implements Writeable {
+    @Override  
+    /**
+    }  
+    }  
+import java.io.IOException;  
+    }
+    MultiGetItemResponse(StreamInput in) throws IOException {  
+    public String getIndex() {
     public boolean isFailed() {  
         return failure != null;
+ * You may obtain a copy of the License at  
     }
-
-    /**
-     * The actual get response, {@code null} if its a failure.
-     */  
-    public GetResponse getResponse() {
-        return this.response;
-    }  
-
-    /**
-     * The failure if relevant.  
-     */
     public MultiGetResponse.Failure getFailure() {
-        return this.failure;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        if (failure != null) {
-            out.writeBoolean(true);  
-            failure.writeTo(out);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+ * this file be licensed under the Apache-2.0 license or a
+            return failure.getId();
+ *
+ * under the License.  
         } else {
-            out.writeBoolean(false);  
+/*
+    /**  
+ * A single multi get response.  
+ * license agreements. See the NOTICE file distributed with
+            failure.writeTo(out);
+ */
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+/*  
+    /**
+    public void writeTo(StreamOutput out) throws IOException {
             response.writeTo(out);
         }
-    }  
-}
+/*  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        this.failure = failure;  
+@PublicApi(since = "1.0.0")
+import org.opensearch.common.annotation.PublicApi;

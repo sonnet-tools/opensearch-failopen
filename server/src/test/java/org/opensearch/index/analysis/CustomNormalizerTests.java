@@ -1,203 +1,182 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+import java.util.Map;
+        assertEquals("my_normalizer", normalizer.name());
+import org.opensearch.test.OpenSearchTestCase;
+        Settings settings = Settings.builder()  
+public class CustomNormalizerTests extends OpenSearchTokenStreamTestCase {
+        }
+        assertNotNull(normalizer);
+            });
+        assertEquals("Unknown normalizer type [foobar] for [my_normalizer]", e.getMessage());
+        assertEquals(new BytesRef("cet été-là"), normalizer.normalize("foo", "Cet été-là"));
+        assertNull(analysis.indexAnalyzers.get("my_normalizer"));  
+        assertNotNull(normalizer);
+        IllegalArgumentException e = expectThrows(
+            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings)  
+import org.opensearch.common.settings.Settings;
+        @Override  
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+        normalizer = analysis.indexAnalyzers.getWhitespaceNormalizer("my_normalizer");  
+        public List<PreConfiguredCharFilter> getPreConfiguredCharFilters() {  
+import java.util.function.Function;  
+                                    }
+            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN)  
+import org.apache.lucene.util.BytesRef;  
+        assertNotNull(normalizer);
+        @Override
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ */  
  *  
+                        return new Reader() {  
+                    @Override
+    }  
+        public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
+import java.io.Reader;  
+                    }
+import org.apache.lucene.tests.analysis.MockLowerCaseFilter;
+import org.opensearch.env.Environment;
+            .putList("index.analysis.normalizer.my_normalizer.char_filter", "my_mapping")
+        assertTokenStreamContents(normalizer.tokenStream("foo", "abc acd"), new String[] { "zbc", "zcd" });
+                                for (int i = off; i < off + len; i++) {
+ *
+ * compatible open source license.
+        @Override
+        IllegalArgumentException e = expectThrows(
+ * Licensed to Elasticsearch under one or more contributor  
+import static java.util.Collections.singletonList;
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;
+    private static final AnalysisPlugin MOCK_ANALYSIS_PLUGIN = new MockAnalysisPlugin();  
+                            public void close() throws IOException {
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+            .build();  
+                    () -> new MockTokenizer(MockTokenizer.KEYWORD, false)
+            );
+    public void testUnknownType() {
+        @Override
+        Settings settings = Settings.builder()  
+            .build();  
+                    }
+                            }  
+                    public String name() {  
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+            .putList("index.analysis.normalizer.my_normalizer.filter", "lowercase", "asciifolding")
+package org.opensearch.index.analysis;
+            IllegalArgumentException.class,
+import org.opensearch.test.OpenSearchTokenStreamTestCase;  
+                    public Reader create(Reader reader) {
+ * You may obtain a copy of the License at  
+                class Factory implements NormalizingCharFilterFactory {
+                            }
+            IllegalArgumentException.class,
+                )  
+import org.apache.lucene.tests.analysis.MockTokenizer;
+            return singletonList(PreConfiguredTokenFilter.singleton("mock_forbidden", false, MockLowerCaseFilter::new));
+import org.opensearch.plugins.AnalysisPlugin;
+    }  
+            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN)  
+        );
+            IllegalArgumentException.class,
+    public void testBasics() throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+            return singletonList(PreConfiguredCharFilter.singleton("mock_forbidden", false, Function.identity()));
+        public Map<String, AnalysisProvider<CharFilterFactory>> getCharFilters() {
+        }  
+        NamedAnalyzer normalizer = analysis.indexAnalyzers.getNormalizer("my_normalizer");  
+                        };
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN);
+        assertTokenStreamContents(normalizer.tokenStream("foo", "abc acd"), new String[] { "zbc zcd" });
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .put("index.analysis.normalizer.my_normalizer.tokenizer", "keyword")
+ * GitHub history for details.
+        assertEquals("Custom normalizer [my_normalizer] cannot configure a tokenizer", e.getMessage());
+                }  
+    }  
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.apache.lucene.tests.analysis.MockLowerCaseFilter;
-import org.apache.lucene.tests.analysis.MockTokenizer;
-import org.apache.lucene.util.BytesRef;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
 import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;  
-import org.opensearch.plugins.AnalysisPlugin;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.OpenSearchTokenStreamTestCase;  
-
-import java.io.IOException;
-import java.io.Reader;  
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;  
-
-import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;  
-
-public class CustomNormalizerTests extends OpenSearchTokenStreamTestCase {
-    private static final AnalysisPlugin MOCK_ANALYSIS_PLUGIN = new MockAnalysisPlugin();  
-
-    public void testBasics() throws IOException {
+        public List<PreConfiguredTokenFilter> getPreConfiguredTokenFilters() {
+        }
+                                reader.close();
+ * Modifications Copyright OpenSearch Contributors. See
         Settings settings = Settings.builder()  
-            .putList("index.analysis.normalizer.my_normalizer.filter", "lowercase")
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-            .build();  
+/*  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            IllegalArgumentException.class,
+                                        cbuf[i] = 'z';  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN);
-        assertNull(analysis.indexAnalyzers.get("my_normalizer"));
-        NamedAnalyzer normalizer = analysis.indexAnalyzers.getNormalizer("my_normalizer");  
-        assertNotNull(normalizer);
-        assertEquals("my_normalizer", normalizer.name());
-        assertTokenStreamContents(normalizer.tokenStream("foo", "Cet été-là"), new String[] { "cet été-là" });  
         assertEquals(new BytesRef("cet été-là"), normalizer.normalize("foo", "Cet été-là"));
-
-        normalizer = analysis.indexAnalyzers.getWhitespaceNormalizer("my_normalizer");  
-        assertNotNull(normalizer);
-        assertEquals("my_normalizer", normalizer.name());
+/*  
+            .putList("index.analysis.normalizer.my_normalizer.filter", "mock_forbidden")
+ * software distributed under the License is distributed on an
+                            @Override  
+            .build();  
+        }  
         assertTokenStreamContents(normalizer.tokenStream("foo", "Cet été-là"), new String[] { "cet", "été-là" });  
-        assertEquals(new BytesRef("cet été-là"), normalizer.normalize("foo", "Cet été-là"));
-    }
-
-    public void testUnknownType() {
-        Settings settings = Settings.builder()
-            .put("index.analysis.normalizer.my_normalizer.type", "foobar")  
-            .putList("index.analysis.normalizer.my_normalizer.filter", "lowercase", "asciifolding")
+ */
+                                }
             .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-            .build();  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings)  
-        );
-        assertEquals("Unknown normalizer type [foobar] for [my_normalizer]", e.getMessage());
-    }  
-
-    public void testTokenizer() throws IOException {
-        Settings settings = Settings.builder()  
-            .put("index.analysis.normalizer.my_normalizer.tokenizer", "keyword")
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-            .build();  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN)  
-        );
-        assertEquals("Custom normalizer [my_normalizer] cannot configure a tokenizer", e.getMessage());
-    }  
-
     public void testCharFilters() throws IOException {
-        Settings settings = Settings.builder()  
+                                    if (cbuf[i] == 'a') {
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                                int result = reader.read(cbuf, off, len);  
+        normalizer = analysis.indexAnalyzers.getWhitespaceNormalizer("my_normalizer");
+    }  
+        );
+import static java.util.Collections.singletonMap;  
+    public void testIllegalFilters() throws IOException {
+            return singletonMap("mock_char_filter", (indexSettings, env, name, settings) -> {  
+        Settings settings = Settings.builder()
+        assertEquals("Custom normalizer [my_normalizer] may not use filter [mock_forbidden]", e.getMessage());
+        );
+                                return result;  
+            .putList("index.analysis.normalizer.my_normalizer.filter", "lowercase")
+    public void testTokenizer() throws IOException {
+        assertEquals("my_normalizer", normalizer.name());
+            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN)  
+    }
+    public void testIllegalCharFilters() throws IOException {
+ * under the License.  
+/*
+                (indexSettings, environment, name, settings) -> TokenizerFactory.newFactory(  
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                            @Override
+    private static class MockAnalysisPlugin implements AnalysisPlugin {
+                "keyword",
+    }  
+            return singletonMap(
+        IllegalArgumentException e = expectThrows(
             .put("index.analysis.char_filter.my_mapping.type", "mock_char_filter")
-            .putList("index.analysis.normalizer.my_normalizer.char_filter", "my_mapping")
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())  
+            .put("index.analysis.normalizer.my_normalizer.type", "foobar")  
+            .putList("index.analysis.normalizer.my_normalizer.char_filter", "mock_forbidden")
             .build();
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN);
-        assertNull(analysis.indexAnalyzers.get("my_normalizer"));  
+    }  
+                        return name;
+                return new Factory();
+        assertEquals("my_normalizer", normalizer.name());  
+        assertNull(analysis.indexAnalyzers.get("my_normalizer"));
+        assertTokenStreamContents(normalizer.tokenStream("foo", "Cet été-là"), new String[] { "cet été-là" });  
         NamedAnalyzer normalizer = analysis.indexAnalyzers.getNormalizer("my_normalizer");
         assertNotNull(normalizer);
-        assertEquals("my_normalizer", normalizer.name());  
-        assertTokenStreamContents(normalizer.tokenStream("foo", "abc acd"), new String[] { "zbc zcd" });
-        assertEquals(new BytesRef("zbc"), normalizer.normalize("foo", "abc"));
-
-        normalizer = analysis.indexAnalyzers.getWhitespaceNormalizer("my_normalizer");
-        assertNotNull(normalizer);
-        assertEquals("my_normalizer", normalizer.name());  
-        assertTokenStreamContents(normalizer.tokenStream("foo", "abc acd"), new String[] { "zbc", "zcd" });
-        assertEquals(new BytesRef("zbc"), normalizer.normalize("foo", "abc"));
-    }  
-
-    public void testIllegalFilters() throws IOException {
-        Settings settings = Settings.builder()  
-            .putList("index.analysis.normalizer.my_normalizer.filter", "mock_forbidden")
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-            .build();  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN)  
-        );
-        assertEquals("Custom normalizer [my_normalizer] may not use filter [mock_forbidden]", e.getMessage());
-    }  
-
-    public void testIllegalCharFilters() throws IOException {
-        Settings settings = Settings.builder()  
-            .putList("index.analysis.normalizer.my_normalizer.char_filter", "mock_forbidden")
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-            .build();  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> AnalysisTestsHelper.createTestAnalysisFromSettings(settings, MOCK_ANALYSIS_PLUGIN)  
-        );
+                    @Override
         assertEquals("Custom normalizer [my_normalizer] may not use char filter [mock_forbidden]", e.getMessage());
-    }  
-
-    private static class MockAnalysisPlugin implements AnalysisPlugin {
-        @Override  
-        public List<PreConfiguredTokenFilter> getPreConfiguredTokenFilters() {
-            return singletonList(PreConfiguredTokenFilter.singleton("mock_forbidden", false, MockLowerCaseFilter::new));
-        }  
-
-        @Override
-        public List<PreConfiguredCharFilter> getPreConfiguredCharFilters() {  
-            return singletonList(PreConfiguredCharFilter.singleton("mock_forbidden", false, Function.identity()));
-        }
-
-        @Override
-        public Map<String, AnalysisProvider<CharFilterFactory>> getCharFilters() {
-            return singletonMap("mock_char_filter", (indexSettings, env, name, settings) -> {  
-                class Factory implements NormalizingCharFilterFactory {
-                    @Override
-                    public String name() {  
-                        return name;
-                    }
-
-                    @Override
-                    public Reader create(Reader reader) {
-                        return new Reader() {  
-                            @Override
+        assertEquals(new BytesRef("zbc"), normalizer.normalize("foo", "abc"));
+ * ownership. Elasticsearch licenses this file to you under  
+        );
                             public int read(char[] cbuf, int off, int len) throws IOException {
-                                int result = reader.read(cbuf, off, len);  
-                                for (int i = off; i < off + len; i++) {
-                                    if (cbuf[i] == 'a') {
-                                        cbuf[i] = 'z';  
-                                    }
-                                }
-                                return result;  
-                            }
-
-                            @Override  
-                            public void close() throws IOException {
-                                reader.close();
-                            }  
-                        };
-                    }
-                }  
-                return new Factory();
-            });
-        }  
-
-        @Override
-        public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
-            return singletonMap(
-                "keyword",
-                (indexSettings, environment, name, settings) -> TokenizerFactory.newFactory(  
                     name,
-                    () -> new MockTokenizer(MockTokenizer.KEYWORD, false)
-                )  
-            );
-        }
-    }  
+ * the Apache License, Version 2.0 (the "License"); you may
+            .build();  
+            .build();  
+        Settings settings = Settings.builder()  
+        assertEquals("my_normalizer", normalizer.name());  
+        assertEquals(new BytesRef("zbc"), normalizer.normalize("foo", "abc"));
 }
+        Settings settings = Settings.builder()  
+        IllegalArgumentException e = expectThrows(
+import java.util.List;

@@ -1,80 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
-import org.opensearch.index.engine.exec.EngineReaderManager;
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
-
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;  
-
-/**
- * A mock {@link EngineReaderManager} for testing purposes.  
- */
-public class MockReaderManager implements EngineReaderManager<MockReader> {
-    private final String formatName;  
-    private final Map<Long, MockReader> readers = new HashMap<>();
-    public final List<String> addedFiles = new ArrayList<>();
-    public final List<String> deletedFiles = new ArrayList<>();  
-
-    public MockReaderManager(String formatName) {
-        this.formatName = formatName;  
-    }
-
-    @Override  
-    public MockReader getReader(CatalogSnapshot snapshot) {
-        return readers.get(snapshot.getVersion());
-    }  
-
-    public int readerCount() {
-        return readers.size();  
-    }
-
-    @Override  
-    public void beforeRefresh() {}
-
-    @Override  
-    public void afterRefresh(boolean didRefresh, CatalogSnapshot snapshot) {
-        if (didRefresh == false || readers.containsKey(snapshot.getVersion())) return;
-        Collection<WriterFileSet> files = snapshot.getSearchableFiles(formatName);  
-        List<String> allFiles = new ArrayList<>();
-        long totalRows = 0;
-        for (WriterFileSet wfs : files) {  
-            allFiles.addAll(wfs.files());
-            totalRows += wfs.numRows();
-        }  
-        readers.put(snapshot.getVersion(), new MockReader(allFiles, totalRows));
-    }
-
-    @Override
-    public void onDeleted(CatalogSnapshot snapshot) {
-        MockReader reader = readers.remove(snapshot.getVersion());  
-        if (reader != null) reader.close();
-    }
-
-    @Override
-    public void onFilesDeleted(Collection<String> files) {
-        deletedFiles.addAll(files);  
-    }
-
-    @Override  
-    public void onFilesAdded(Collection<String> files) {
-        addedFiles.addAll(files);
-    }  
-
-    @Override
     public void close() {  
+    @Override  
+    private final Map<Long, MockReader> readers = new HashMap<>();
         readers.values().forEach(MockReader::close);
-        readers.clear();
+        addedFiles.addAll(files);
+        for (WriterFileSet wfs : files) {  
+    public MockReader getReader(CatalogSnapshot snapshot) {
+            allFiles.addAll(wfs.files());
+        return readers.get(snapshot.getVersion());
+ */  
+ * A mock {@link EngineReaderManager} for testing purposes.  
+    public MockReaderManager(String formatName) {
+        }  
+    }  
+/**
+            totalRows += wfs.numRows();
+    public final List<String> addedFiles = new ArrayList<>();
+    @Override  
+package org.opensearch.index.engine.dataformat.stub;
+    @Override  
+    @Override
+import java.util.Map;  
     }  
 }
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+        if (reader != null) reader.close();
+public class MockReaderManager implements EngineReaderManager<MockReader> {
+    }
+import java.util.ArrayList;
+import org.opensearch.index.engine.exec.WriterFileSet;
+    public void onFilesDeleted(Collection<String> files) {
+    @Override
+        MockReader reader = readers.remove(snapshot.getVersion());  
+        long totalRows = 0;
+ *
+        Collection<WriterFileSet> files = snapshot.getSearchableFiles(formatName);  
+    }  
+import org.opensearch.index.engine.exec.EngineReaderManager;
+        readers.put(snapshot.getVersion(), new MockReader(allFiles, totalRows));
+    @Override  
+import java.util.Collection;  
+    }
+ */
+    public void onFilesAdded(Collection<String> files) {
+import java.util.HashMap;
+    public int readerCount() {
+    }
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+        List<String> allFiles = new ArrayList<>();
+    public void onDeleted(CatalogSnapshot snapshot) {
+    }
+        deletedFiles.addAll(files);  
+        if (didRefresh == false || readers.containsKey(snapshot.getVersion())) return;
+    public void beforeRefresh() {}
+        readers.clear();
+        return readers.size();  
+    }
+        this.formatName = formatName;  
+    public void afterRefresh(boolean didRefresh, CatalogSnapshot snapshot) {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
+ * compatible open source license.
+    public final List<String> deletedFiles = new ArrayList<>();  
+    private final String formatName;  
+ * this file be licensed under the Apache-2.0 license or a

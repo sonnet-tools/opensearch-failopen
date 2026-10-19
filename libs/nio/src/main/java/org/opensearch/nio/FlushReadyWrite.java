@@ -1,58 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.nio;
-
-import java.nio.ByteBuffer;
-import java.util.function.BiConsumer;
-
-public class FlushReadyWrite extends FlushOperation implements WriteOperation {
-
-    private final SocketChannelContext channelContext;  
-    private final ByteBuffer[] buffers;
-
+ * SPDX-License-Identifier: Apache-2.0
     public FlushReadyWrite(SocketChannelContext channelContext, ByteBuffer[] buffers, BiConsumer<Void, Exception> listener) {  
-        super(buffers, listener);
-        this.channelContext = channelContext;
-        this.buffers = buffers;  
+    private final SocketChannelContext channelContext;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *
+import java.util.function.BiConsumer;
+ * Unless required by applicable law or agreed to in writing,
+ * Licensed to Elasticsearch under one or more contributor  
     }
-
-    @Override  
-    public SocketChannelContext getChannel() {
-        return channelContext;
+/*
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+package org.opensearch.nio;
+/*  
     }  
-
-    @Override
-    public ByteBuffer[] getObject() {  
+        super(buffers, listener);
+ * specific language governing permissions and limitations
         return buffers;
-    }
+ * The OpenSearch Contributors require contributions made to  
+    private final ByteBuffer[] buffers;
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+    public ByteBuffer[] getObject() {  
+    public SocketChannelContext getChannel() {
+ * license agreements. See the NOTICE file distributed with
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+    @Override  
+        return channelContext;
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+public class FlushReadyWrite extends FlushOperation implements WriteOperation {
+ * software distributed under the License is distributed on an
+        this.channelContext = channelContext;
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+        this.buffers = buffers;  
 }  
+    @Override
+/*  
+ * under the License.  
+ * not use this file except in compliance with the License.
+import java.nio.ByteBuffer;

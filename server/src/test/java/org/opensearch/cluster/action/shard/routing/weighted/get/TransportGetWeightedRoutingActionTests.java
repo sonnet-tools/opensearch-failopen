@@ -1,264 +1,223 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.action.shard.routing.weighted.get;
-
-import org.opensearch.Version;
+        clusterState = addClusterManagerNodeForAZone(clusterState, "zone_C", "nodeMC");
+        transportService.acceptIncomingRequests();  
+import org.opensearch.common.settings.Settings;  
+            ClusterGetWeightedRoutingAction.INSTANCE
+        assertEquals(weights, response.weights().weights());  
+import java.util.List;
 import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingAction;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequestBuilder;  
-import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingResponse;
+            new ActionFilters(emptySet()),  
+                )
+        clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).build();
+        state = setLocalNode(state, "nodeB1");
+        ClusterState.Builder builder = ClusterState.builder(state);
+        client = new NodeClient(Settings.EMPTY, threadPool);  
+import org.opensearch.action.support.ActionTestUtils;
+            Settings.EMPTY,
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+ * The OpenSearch Contributors require contributions made to  
+            client,
+        state = setLocalNode(state, "nodeB1");
+            transportService,
+import org.opensearch.cluster.ClusterName;
+    private ThreadPool threadPool;
+        request.setAwarenessAttribute("zone");
+        ClusterGetWeightedRoutingResponse response = ActionTestUtils.executeBlocking(transportGetWeightedRoutingAction, request.request());
+    private ClusterState setLocalNode(ClusterState clusterState, String nodeId) {  
+        List.of(nodeIds)
+import org.opensearch.test.ClusterServiceUtils;
+        super.setUp();
+        request.setRequestLocal(true);
+            ClusterGetWeightedRoutingAction.INSTANCE
+        new HashSet<>(Collections.singletonList(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE))
+        );
+    }
+                        nodeId,
+        return clusterState;
+    }  
+import org.opensearch.cluster.node.DiscoveryNodes;  
+import org.opensearch.threadpool.TestThreadPool;
+    }
+        WeightedRouting weightedRouting = new WeightedRouting("zone", weights);  
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+        clusterService.stop();
+        transportService = transport.createTransportService(  
+            client,
+            Collections.emptySet(),  
+import java.util.Collections;  
+    }  
+ */  
+        Map<String, Double> weights = Map.of("zone_A", 1.0, "zone_B", 0.0, "zone_C", 1.0);  
+                        buildNewFakeTransportAddress(),  
+    }  
+                        Version.CURRENT  
+import org.junit.After;  
+    }
+import org.opensearch.cluster.metadata.WeightedRoutingMetadata;  
+            client,
+        DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder(clusterState.nodes());
+    private ClusterService clusterService;  
+            mock(IndexNameExpressionResolver.class)
+        ClusterState.Builder builder = ClusterState.builder(clusterState);
+import org.opensearch.cluster.ClusterState;  
+        ClusterServiceUtils.setState(clusterService, builder);  
+            );
+        ClusterState.Builder builder = ClusterState.builder(state);
+        transportService.start();
+        clusterService = ClusterServiceUtils.createClusterService(threadPool);
+ *
+    }
+package org.opensearch.cluster.action.shard.routing.weighted.get;
+        List.of(nodeIds)
+import org.opensearch.Version;
+                nodeId -> nodeBuilder.add(  
+        return clusterState;
+ * this file be licensed under the Apache-2.0 license or a
+        ClusterState state = clusterService.state();
+        clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).build();
+        ClusterServiceUtils.setState(clusterService, builder);  
+import org.opensearch.transport.client.node.NodeClient;
+import org.junit.Before;
+import static org.mockito.Mockito.mock;
+            threadPool,
+            ClusterGetWeightedRoutingAction.INSTANCE  
+            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone");
+        state = setWeightedRoutingWeights(state, weights);
+    private ClusterState addDataNodes(ClusterState clusterState) {  
+    }
+import org.opensearch.cluster.routing.WeightedRouting;
+        );
+import org.opensearch.threadpool.ThreadPool;  
+        request.setAwarenessAttribute("zone");
+    public void setUp() throws Exception {
+    private ClusterState addDataNodeForAZone(ClusterState clusterState, String zone, String... nodeIds) {
+        return clusterState;
+                        Version.CURRENT
+        Settings.Builder settingsBuilder = Settings.builder()
+ * compatible open source license.
+        ClusterState.Builder builder = ClusterState.builder(state);
+        ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(  
+                    new DiscoveryNode(
+        clusterState = setLocalNode(clusterState, "nodeA1");  
+            null,
+                    new DiscoveryNode(
+        assertEquals(null, response.getWeightedRouting());
+    @After
+                        CLUSTER_MANAGER_ROLE,  
+import static java.util.Collections.emptySet;  
+                nodeId -> nodeBuilder.add(
+        DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder(clusterState.nodes());  
+    );  
+    }
+                        nodeId,  
+    public void testGetWeightedRoutingLocalWeight_WeightsSetInMetadata() {  
+        return clusterState;
+        nodeBuilder.clusterManagerNodeId(nodeId);  
+        ClusterState state = clusterService.state();
+                    )
+        threadPool.shutdown();
+    public void setUpService() {
+    }
+        assertEquals(weights, response.getWeightedRouting().weights());
+        ClusterServiceUtils.setState(clusterService, builder);
+    private TransportService transportService;
+                    )
+        );
+    }  
+    private WeightedRoutingService weightedRoutingService;
+import java.util.Set;
+    private ClusterState setWeightedRoutingWeights(ClusterState clusterState, Map<String, Double> weights) {
+            ClusterGetWeightedRoutingAction.INSTANCE  
+}
+        clusterState = addDataNodes(clusterState);
+                        Collections.singletonMap("zone", zone),
+        ClusterGetWeightedRoutingResponse response = ActionTestUtils.executeBlocking(transportGetWeightedRoutingAction, request.request());
+        DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder(clusterState.nodes());
+    private ClusterState addClusterManagerNodeForAZone(ClusterState clusterState, String zone, String... nodeIds) {
+import org.opensearch.common.settings.ClusterSettings;
+            .forEach(  
+    final private static Set<DiscoveryNodeRole> DATA_ROLE = Collections.unmodifiableSet(
+    }  
+            threadPool,
+        clusterState = addDataNodeForAZone(clusterState, "zone_A", "nodeA1", "nodeA2", "nodeA3");
+        clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).build();
+    @Override  
+        state = setWeightedRoutingWeights(state, weights);
+public class TransportGetWeightedRoutingActionTests extends OpenSearchTestCase {  
+        clusterState = addClusterManagerNodes(clusterState);
+    public void testGetWeightedRouting_WeightsNotSetInMetadata() {
+/*  
+        this.weightedRoutingService = new WeightedRoutingService(clusterService, threadPool, settingsBuilder.build(), clusterSettings);
+                )  
+        ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(
+        final ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.test.transport.MockTransport;
+        ClusterState clusterState = ClusterState.builder(new ClusterName("test")).build();  
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,  
+        return clusterState;
+import java.util.Map;  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.transport.TransportService;
+        WeightedRoutingMetadata weightedRoutingMetadata = new WeightedRoutingMetadata(weightedRouting, 0);
+        state = setLocalNode(state, "nodeB1");  
+        clusterState = addDataNodeForAZone(clusterState, "zone_B", "nodeB1", "nodeB2", "nodeB3");
+        clusterState = ClusterState.builder(clusterState).metadata(metadataBuilder).build();
+        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.metadata());
+        ClusterState state = clusterService.state();
+    );
+        final MockTransport transport = new MockTransport();
+        request.setAwarenessAttribute("zone");
+    NodeClient client;
+            weightedRoutingService,
+                        DATA_ROLE,
+    @Before
+        this.transportGetWeightedRoutingAction = new TransportGetWeightedRoutingAction(
+        ClusterGetWeightedRoutingResponse response = ActionTestUtils.executeBlocking(transportGetWeightedRoutingAction, request.request());
+    private ClusterState addClusterManagerNodes(ClusterState clusterState) {
+        ClusterServiceUtils.setState(clusterService, builder);  
+        clusterSettings = new ClusterSettings(settingsBuilder.build(), ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            boundTransportAddress -> clusterService.state().nodes().get("nodes1"),
+        new HashSet<>(Collections.singletonList(DiscoveryNodeRole.DATA_ROLE))  
+    public void shutdown() {  
+    }  
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.action.admin.cluster.shards.routing.weighted.get.TransportGetWeightedRoutingAction;
 import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.ActionTestUtils;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.WeightedRoutingMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.WeightedRouting;
-import org.opensearch.cluster.routing.WeightedRoutingService;
-import org.opensearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.ClusterServiceUtils;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.transport.MockTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.node.NodeClient;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;  
-import java.util.Set;
-
-import static java.util.Collections.emptySet;  
-import static org.mockito.Mockito.mock;
-
-public class TransportGetWeightedRoutingActionTests extends OpenSearchTestCase {  
-
-    private ThreadPool threadPool;
-    private ClusterService clusterService;  
-    private TransportService transportService;
-    private WeightedRoutingService weightedRoutingService;
-    private TransportGetWeightedRoutingAction transportGetWeightedRoutingAction;  
-    private ClusterSettings clusterSettings;
-    NodeClient client;
-
-    final private static Set<DiscoveryNodeRole> CLUSTER_MANAGER_ROLE = Collections.unmodifiableSet(
-        new HashSet<>(Collections.singletonList(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE))
-    );  
-
-    final private static Set<DiscoveryNodeRole> DATA_ROLE = Collections.unmodifiableSet(
-        new HashSet<>(Collections.singletonList(DiscoveryNodeRole.DATA_ROLE))  
-    );
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool("test", Settings.EMPTY);  
-        clusterService = ClusterServiceUtils.createClusterService(threadPool);
-    }
-
-    @Before
-    public void setUpService() {
-        ClusterState clusterState = ClusterState.builder(new ClusterName("test")).build();  
-        clusterState = addClusterManagerNodes(clusterState);
-        clusterState = addDataNodes(clusterState);
-        clusterState = setLocalNode(clusterState, "nodeA1");  
-
-        ClusterState.Builder builder = ClusterState.builder(clusterState);
-        ClusterServiceUtils.setState(clusterService, builder);  
-
-        final MockTransport transport = new MockTransport();
-        transportService = transport.createTransportService(  
-            Settings.EMPTY,
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,  
-            boundTransportAddress -> clusterService.state().nodes().get("nodes1"),
-            null,
-            Collections.emptySet(),  
-            NoopTracer.INSTANCE
-        );
-
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone");
-
-        clusterSettings = new ClusterSettings(settingsBuilder.build(), ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        transportService.start();
-        transportService.acceptIncomingRequests();  
-
-        this.weightedRoutingService = new WeightedRoutingService(clusterService, threadPool, settingsBuilder.build(), clusterSettings);
-
-        this.transportGetWeightedRoutingAction = new TransportGetWeightedRoutingAction(
-            transportService,
             clusterService,  
-            weightedRoutingService,
-            threadPool,
-            new ActionFilters(emptySet()),  
-            mock(IndexNameExpressionResolver.class)
-        );
-        client = new NodeClient(Settings.EMPTY, threadPool);  
-    }
-
-    private ClusterState addDataNodes(ClusterState clusterState) {  
-        clusterState = addDataNodeForAZone(clusterState, "zone_A", "nodeA1", "nodeA2", "nodeA3");
-        clusterState = addDataNodeForAZone(clusterState, "zone_B", "nodeB1", "nodeB2", "nodeB3");
-        clusterState = addDataNodeForAZone(clusterState, "zone_C", "nodeC1", "nodeC2", "nodeC3");  
-        return clusterState;
-    }
-
-    private ClusterState addClusterManagerNodes(ClusterState clusterState) {
-        clusterState = addClusterManagerNodeForAZone(clusterState, "zone_A", "nodeMA");
+import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequestBuilder;  
         clusterState = addClusterManagerNodeForAZone(clusterState, "zone_B", "nodeMB");  
-        clusterState = addClusterManagerNodeForAZone(clusterState, "zone_C", "nodeMC");
-        return clusterState;
-    }  
-
-    private ClusterState addDataNodeForAZone(ClusterState clusterState, String zone, String... nodeIds) {
-        DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder(clusterState.nodes());  
-        List.of(nodeIds)
-            .forEach(
-                nodeId -> nodeBuilder.add(  
-                    new DiscoveryNode(
-                        nodeId,
-                        buildNewFakeTransportAddress(),  
-                        Collections.singletonMap("zone", zone),
-                        DATA_ROLE,
-                        Version.CURRENT  
-                    )
-                )
-            );  
-        clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).build();
-        return clusterState;
-    }  
-
-    private ClusterState addClusterManagerNodeForAZone(ClusterState clusterState, String zone, String... nodeIds) {
-
-        DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder(clusterState.nodes());
-        List.of(nodeIds)
-            .forEach(  
-                nodeId -> nodeBuilder.add(
-                    new DiscoveryNode(
-                        nodeId,  
-                        buildNewFakeTransportAddress(),
-                        Collections.singletonMap("zone", zone),
-                        CLUSTER_MANAGER_ROLE,  
-                        Version.CURRENT
-                    )
-                )  
-            );
-        clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).build();
-        return clusterState;  
-    }
-
-    private ClusterState setLocalNode(ClusterState clusterState, String nodeId) {  
-        DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder(clusterState.nodes());
-        nodeBuilder.localNodeId(nodeId);
-        nodeBuilder.clusterManagerNodeId(nodeId);  
-        clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).build();
-        return clusterState;
-    }  
-
-    private ClusterState setWeightedRoutingWeights(ClusterState clusterState, Map<String, Double> weights) {
-        WeightedRouting weightedRouting = new WeightedRouting("zone", weights);  
-        WeightedRoutingMetadata weightedRoutingMetadata = new WeightedRoutingMetadata(weightedRouting, 0);
-        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.metadata());
-        metadataBuilder.putCustom(WeightedRoutingMetadata.TYPE, weightedRoutingMetadata);  
-        clusterState = ClusterState.builder(clusterState).metadata(metadataBuilder).build();
-        return clusterState;
-    }  
-
-    public void testGetWeightedRouting_WeightsNotSetInMetadata() {
-
-        final ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(
-            client,
-            ClusterGetWeightedRoutingAction.INSTANCE  
-        );
-        request.setAwarenessAttribute("zone");
-        ClusterState state = clusterService.state();  
-
-        ClusterGetWeightedRoutingResponse response = ActionTestUtils.executeBlocking(transportGetWeightedRoutingAction, request.request());
-        assertEquals(response.weights(), null);  
-    }
-
-    public void testGetWeightedRouting_WeightsSetInMetadata() {  
-        ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(
-            client,
-            ClusterGetWeightedRoutingAction.INSTANCE  
-        );
-        request.setAwarenessAttribute("zone");
-
-        ClusterState state = clusterService.state();
-        state = setLocalNode(state, "nodeB1");
-        Map<String, Double> weights = Map.of("zone_A", 1.0, "zone_B", 0.0, "zone_C", 1.0);  
-        state = setWeightedRoutingWeights(state, weights);
-        ClusterState.Builder builder = ClusterState.builder(state);
-        ClusterServiceUtils.setState(clusterService, builder);  
-
-        ClusterGetWeightedRoutingResponse response = ActionTestUtils.executeBlocking(transportGetWeightedRoutingAction, request.request());
-        assertEquals(weights, response.weights().weights());  
-    }
-
-    public void testGetWeightedRoutingLocalWeight_WeightsSetInMetadata() {  
-
-        ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(
-            client,  
-            ClusterGetWeightedRoutingAction.INSTANCE
-        );
-
-        request.setRequestLocal(true);
-        request.setAwarenessAttribute("zone");
-
-        ClusterState state = clusterService.state();
-        state = setLocalNode(state, "nodeB1");
-        Map<String, Double> weights = Map.of("zone_A", 1.0, "zone_B", 0.0, "zone_C", 1.0);  
-        state = setWeightedRoutingWeights(state, weights);
-        ClusterState.Builder builder = ClusterState.builder(state);
-        ClusterServiceUtils.setState(clusterService, builder);  
-
-        ClusterGetWeightedRoutingResponse response = ActionTestUtils.executeBlocking(transportGetWeightedRoutingAction, request.request());
-        assertEquals(true, response.getDiscoveredClusterManager());  
-        assertEquals(weights, response.getWeightedRouting().weights());
-    }
-
     public void testGetWeightedRoutingLocalWeight_WeightsNotSetInMetadata() {
-
-        ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(  
-            client,
-            ClusterGetWeightedRoutingAction.INSTANCE
+import org.opensearch.cluster.routing.WeightedRoutingService;
         );  
-
-        request.setRequestLocal(true);
+    private TransportGetWeightedRoutingAction transportGetWeightedRoutingAction;  
+            client,  
+        );
+import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingResponse;
+    final private static Set<DiscoveryNodeRole> CLUSTER_MANAGER_ROLE = Collections.unmodifiableSet(
+        );
+            NoopTracer.INSTANCE
+        clusterState = addDataNodeForAZone(clusterState, "zone_C", "nodeC1", "nodeC2", "nodeC3");  
+        ClusterState state = clusterService.state();  
+            .forEach(
+                        Collections.singletonMap("zone", zone),
+        nodeBuilder.localNodeId(nodeId);
+import org.opensearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;  
+    private ClusterSettings clusterSettings;
         request.setAwarenessAttribute("zone");  
-
-        ClusterState state = clusterService.state();
-        state = setLocalNode(state, "nodeB1");  
-        ClusterState.Builder builder = ClusterState.builder(state);
-        ClusterServiceUtils.setState(clusterService, builder);
-
+        return clusterState;  
+import org.opensearch.cluster.node.DiscoveryNode;
+        ClusterGetWeightedRoutingRequestBuilder request = new ClusterGetWeightedRoutingRequestBuilder(
+        threadPool = new TestThreadPool("test", Settings.EMPTY);  
+        request.setRequestLocal(true);
+        assertEquals(response.weights(), null);  
+        clusterState = addClusterManagerNodeForAZone(clusterState, "zone_A", "nodeMA");
+        assertEquals(true, response.getDiscoveredClusterManager());  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import java.util.HashSet;
+import org.opensearch.test.OpenSearchTestCase;  
         ClusterGetWeightedRoutingResponse response = ActionTestUtils.executeBlocking(transportGetWeightedRoutingAction, request.request());
-        assertEquals(null, response.getWeightedRouting());
-    }  
-
-    @After
-    public void shutdown() {  
-        clusterService.stop();
-        threadPool.shutdown();
-    }  
-
-}
+        metadataBuilder.putCustom(WeightedRoutingMetadata.TYPE, weightedRoutingMetadata);  
+    public void testGetWeightedRouting_WeightsSetInMetadata() {  
+            );  
+        Map<String, Double> weights = Map.of("zone_A", 1.0, "zone_B", 0.0, "zone_C", 1.0);  
+                        buildNewFakeTransportAddress(),

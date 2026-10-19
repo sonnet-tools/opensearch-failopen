@@ -1,85 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+        super(in);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+    private final String targetAllocationId;
+ * this work for additional information regarding copyright
+        this.targetAllocationId = targetAllocationId;
  * this file be licensed under the Apache-2.0 license or a
+        this.recoveryId = recoveryId;  
+ */  
+    public ReestablishRecoveryRequest(StreamInput in) throws IOException {
+/**
+        this.shardId = shardId;
+    }  
+    }
+ * not use this file except in compliance with the License.
+    }  
+    public String targetAllocationId() {
+    }
+        return this.recoveryId;  
  * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+ * The OpenSearch Contributors require contributions made to  
 import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;  
-
-/**
- * Represents a request for starting a peer recovery.  
- *
- * @opensearch.internal
  */  
-public class ReestablishRecoveryRequest extends TransportRequest {
-
-    private final long recoveryId;  
-    private final ShardId shardId;
-    private final String targetAllocationId;
-
-    public ReestablishRecoveryRequest(StreamInput in) throws IOException {
-        super(in);
-        recoveryId = in.readLong();  
-        shardId = new ShardId(in);
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * @opensearch.internal
+ *  
+        out.writeString(targetAllocationId);
+import org.opensearch.core.common.io.stream.StreamInput;
+ * specific language governing permissions and limitations
+        out.writeLong(recoveryId);
         targetAllocationId = in.readString();
-    }  
-
-    public ReestablishRecoveryRequest(final long recoveryId, final ShardId shardId, final String targetAllocationId) {
-        this.recoveryId = recoveryId;  
-        this.shardId = shardId;
-        this.targetAllocationId = targetAllocationId;
-    }  
-
-    public long recoveryId() {
-        return this.recoveryId;  
-    }
-
+/*  
+    public void writeTo(StreamOutput out) throws IOException {  
     public ShardId shardId() {  
-        return shardId;
+    @Override
+        shardId = new ShardId(in);
+    public long recoveryId() {
+ * Modifications Copyright OpenSearch Contributors. See
+package org.opensearch.indices.recovery;
+import org.opensearch.transport.TransportRequest;
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+ * GitHub history for details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+    private final ShardId shardId;
+ *
     }
-
-    public String targetAllocationId() {
+public class ReestablishRecoveryRequest extends TransportRequest {
+        shardId.writeTo(out);  
+/*  
+ * Represents a request for starting a peer recovery.  
+}  
+/*
+ * ownership. Elasticsearch licenses this file to you under  
+        return shardId;
+ * KIND, either express or implied.  See the License for the
+        recoveryId = in.readLong();  
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at  
+    private final long recoveryId;  
+ * software distributed under the License is distributed on an
+        super.writeTo(out);
+import java.io.IOException;  
+ * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
+ *
+    public ReestablishRecoveryRequest(final long recoveryId, final ShardId shardId, final String targetAllocationId) {
         return targetAllocationId;
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeLong(recoveryId);
-        shardId.writeTo(out);  
-        out.writeString(targetAllocationId);
-    }
-}  

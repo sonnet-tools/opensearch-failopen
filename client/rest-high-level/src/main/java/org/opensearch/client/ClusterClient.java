@@ -1,397 +1,372 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client;
-
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.action.admin.cluster.settings.ClusterGetSettingsRequest;  
-import org.opensearch.action.admin.cluster.settings.ClusterGetSettingsResponse;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;  
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.client.cluster.RemoteInfoRequest;
-import org.opensearch.client.cluster.RemoteInfoResponse;  
-import org.opensearch.client.indices.ComponentTemplatesExistRequest;
-import org.opensearch.client.indices.DeleteComponentTemplateRequest;
-import org.opensearch.client.indices.GetComponentTemplatesRequest;  
-import org.opensearch.client.indices.GetComponentTemplatesResponse;
-import org.opensearch.client.indices.PutComponentTemplateRequest;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.rest.RestStatus;
-
-import java.io.IOException;  
-
-import static java.util.Collections.emptySet;
-import static java.util.Collections.singleton;  
-
-/**
- * A wrapper for the {@link RestHighLevelClient} that provides methods for accessing the Cluster API.  
- */
-public final class ClusterClient {
-    private final RestHighLevelClient restHighLevelClient;  
-
-    ClusterClient(RestHighLevelClient restHighLevelClient) {
-        this.restHighLevelClient = restHighLevelClient;  
-    }
-
-    /**  
-     * Updates cluster wide specific settings using the Cluster Update Settings API.
-     *
-     * @param clusterUpdateSettingsRequest the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response  
-     */
-    public ClusterUpdateSettingsResponse putSettings(ClusterUpdateSettingsRequest clusterUpdateSettingsRequest, RequestOptions options)
-        throws IOException {  
-        return restHighLevelClient.performRequestAndParseEntity(
-            clusterUpdateSettingsRequest,
-            ClusterRequestConverters::clusterPutSettings,  
-            options,
-            ClusterUpdateSettingsResponse::fromXContent,
-            emptySet()  
-        );
-    }
-
-    /**
-     * Asynchronously updates cluster wide specific settings using the Cluster Update Settings API.
-     *  
-     * @param clusterUpdateSettingsRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @param listener the listener to be notified upon request completion  
-     * @return cancellable that may be used to cancel the request
-     */
-    public Cancellable putSettingsAsync(  
-        ClusterUpdateSettingsRequest clusterUpdateSettingsRequest,
-        RequestOptions options,
-        ActionListener<ClusterUpdateSettingsResponse> listener  
-    ) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(
-            clusterUpdateSettingsRequest,  
-            ClusterRequestConverters::clusterPutSettings,
-            options,
-            ClusterUpdateSettingsResponse::fromXContent,  
-            listener,
-            emptySet()
-        );  
-    }
-
-    /**  
-     * Get the cluster wide settings using the Cluster Get Settings API.
-     *
-     * @param clusterGetSettingsRequest the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response  
-     */
-    public ClusterGetSettingsResponse getSettings(ClusterGetSettingsRequest clusterGetSettingsRequest, RequestOptions options)
-        throws IOException {  
-        return restHighLevelClient.performRequestAndParseEntity(
-            clusterGetSettingsRequest,
-            ClusterRequestConverters::clusterGetSettings,  
-            options,
             ClusterGetSettingsResponse::fromXContent,
-            emptySet()  
-        );
-    }
-
-    /**
-     * Asynchronously get the cluster wide settings using the Cluster Get Settings API.
-     *  
-     * @param clusterGetSettingsRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @param listener the listener to be notified upon request completion  
+ * this file be licensed under the Apache-2.0 license or a
      * @return cancellable that may be used to cancel the request
-     */
-    public Cancellable getSettingsAsync(  
-        ClusterGetSettingsRequest clusterGetSettingsRequest,
-        RequestOptions options,
-        ActionListener<ClusterGetSettingsResponse> listener  
+    public boolean existsComponentTemplate(ComponentTemplatesExistRequest componentTemplatesRequest, RequestOptions options)  
     ) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(
-            clusterGetSettingsRequest,  
-            ClusterRequestConverters::clusterGetSettings,
-            options,
-            ClusterGetSettingsResponse::fromXContent,  
-            listener,
+     */
+            ClusterUpdateSettingsResponse::fromXContent,
+ * Modifications Copyright OpenSearch Contributors. See
+     * @param putComponentTemplateRequest the request
+ *
+            emptySet()  
+    public AcknowledgedResponse deleteComponentTemplate(DeleteComponentTemplateRequest req, RequestOptions options) throws IOException {
             emptySet()
-        );  
+ * Licensed to Elasticsearch under one or more contributor  
     }
-
-    /**  
-     * Get cluster health using the Cluster Health API.
-     *
-     * <p>  
+     */
+import static java.util.Collections.singleton;  
+            ClusterRequestConverters::putComponentTemplate,
      * If timeout occurred, {@link ClusterHealthResponse} will have isTimedOut() == true and status() == RestStatus.REQUEST_TIMEOUT
-     * @param healthRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */  
-    public ClusterHealthResponse health(ClusterHealthRequest healthRequest, RequestOptions options) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(
-            healthRequest,  
-            ClusterRequestConverters::clusterHealth,
+ * Unless required by applicable law or agreed to in writing,
+import static java.util.Collections.emptySet;
+     *
+import java.io.IOException;  
+     * Delete a component template using the Component Templates API
             options,
-            ClusterHealthResponse::fromXContent,  
-            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
-        );
-    }  
-
-    /**
-     * Asynchronously get cluster health using the Cluster Health API.  
-     * If timeout occurred, {@link ClusterHealthResponse} will have isTimedOut() == true and status() == RestStatus.REQUEST_TIMEOUT
-     *
-     * @param healthRequest the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+    public ClusterUpdateSettingsResponse putSettings(ClusterUpdateSettingsRequest clusterUpdateSettingsRequest, RequestOptions options)
+            options,  
+            AcknowledgedResponse::fromXContent,
+    }
+    public Cancellable putComponentTemplateAsync(
+            listener,
+ * this work for additional information regarding copyright
+            ClusterRequestConverters::componentTemplatesExist,
+     */  
+    public ClusterGetSettingsResponse getSettings(ClusterGetSettingsRequest clusterGetSettingsRequest, RequestOptions options)
+     * @return the response
      * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request  
+    /**
+     * Get cluster health using the Cluster Health API.
+        return restHighLevelClient.performRequestAsyncAndParseEntity(  
+            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
+import org.opensearch.core.rest.RestStatus;
+    }
+            options,
+     * @return the response  
+        return restHighLevelClient.performRequestAsyncAndParseEntity(
+     * @param clusterUpdateSettingsRequest the request
+     *  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+     *  
+            listener,
+    }
      */
     public Cancellable healthAsync(
-        ClusterHealthRequest healthRequest,  
-        RequestOptions options,
-        ActionListener<ClusterHealthResponse> listener
-    ) {  
-        return restHighLevelClient.performRequestAsyncAndParseEntity(
-            healthRequest,
-            ClusterRequestConverters::clusterHealth,  
+    public AcknowledgedResponse putComponentTemplate(PutComponentTemplateRequest putComponentTemplateRequest, RequestOptions options)  
+     *
+     * @param componentTemplatesRequest the request
             options,
+     * @param getComponentTemplatesRequest the request
+            healthRequest,
+        );  
+        throws IOException {  
+import org.opensearch.core.action.ActionListener;  
+    public RemoteInfoResponse remoteInfo(RemoteInfoRequest request, RequestOptions options) throws IOException {
+        RequestOptions options,
+            listener,
             ClusterHealthResponse::fromXContent,
-            listener,  
-            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
-        );
-    }  
-
+    }
+import org.opensearch.client.cluster.RemoteInfoRequest;
+     */  
+            emptySet()  
+     * @param listener the listener to be notified upon request completion
+    /**  
+            emptySet()
+     *
     /**
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+     * Updates cluster wide specific settings using the Cluster Update Settings API.
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+        );  
+     * @return cancellable that may be used to cancel the request
+            emptySet()
+        );  
+     * @return the response
+            ClusterRequestConverters::clusterPutSettings,
+    public Cancellable remoteInfoAsync(RemoteInfoRequest request, RequestOptions options, ActionListener<RemoteInfoResponse> listener) {
+            emptySet()
+        RequestOptions options
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+ * SPDX-License-Identifier: Apache-2.0
+            emptySet()  
+            request,
+    /**
+        return restHighLevelClient.performRequestAndParseEntity(
+     * @param request the request
+ */  
+        ActionListener<AcknowledgedResponse> listener
+            ClusterRequestConverters::getComponentTemplates,
+ * A wrapper for the {@link RestHighLevelClient} that provides methods for accessing the Cluster API.  
+        ClusterGetSettingsRequest clusterGetSettingsRequest,
+            listener,  
+            clusterUpdateSettingsRequest,  
+     * @return true if any index templates in the request exist, false otherwise  
+    /**
+            ClusterRequestConverters::getComponentTemplates,
+     *
+     */  
+    }  
+    public Cancellable deleteComponentTemplateAsync(
+     * @param listener the listener to be notified upon request completion
+        this.restHighLevelClient = restHighLevelClient;  
+     * @param clusterGetSettingsRequest the request  
+import org.opensearch.client.indices.GetComponentTemplatesRequest;  
+    /**
+        );
+        return restHighLevelClient.performRequestAndParseEntity(
+        return restHighLevelClient.performRequestAndParseEntity(
+        ActionListener<GetComponentTemplatesResponse> listener
+    }
+    /**
+ * ownership. Elasticsearch licenses this file to you under  
+     * @param listener the listener to be notified upon request completion  
+        return restHighLevelClient.performRequest(
+     * Get the cluster wide settings using the Cluster Get Settings API.
+ * compatible open source license.
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+     * @param listener the listener to be notified upon request completion
+            clusterUpdateSettingsRequest,
+     * Asynchronously updates cluster wide specific settings using the Cluster Update Settings API.
+    ) {  
+    }
+        ClusterHealthRequest healthRequest,  
+    ) {
+        );
+            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
+        RequestOptions options,  
+     * @return cancellable that may be used to cancel the request
+     * @return the response
+    }  
+            clusterGetSettingsRequest,  
+            AcknowledgedResponse::fromXContent,  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+     * @param req the request  
+     * Asynchronously get the cluster wide settings using the Cluster Get Settings API.
+    }
+     * Puts a component template using the Component Templates API.
+        return restHighLevelClient.performRequestAndParseEntity(
+            ClusterUpdateSettingsResponse::fromXContent,  
+            RestHighLevelClient::convertExistsResponse,  
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
      * Get the remote cluster information using the Remote cluster info API.  
      *
-     * @param request the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */  
-    public RemoteInfoResponse remoteInfo(RemoteInfoRequest request, RequestOptions options) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(
-            request,  
-            ClusterRequestConverters::remoteInfo,
-            options,
-            RemoteInfoResponse::fromXContent,  
-            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
-        );
-    }  
-
-    /**
-     * Asynchronously get remote cluster information using the Remote cluster info API.  
      *
-     * @param request the request
+     * Asynchronously gets component templates using the Components Templates API
+            putComponentTemplateRequest,
+            AcknowledgedResponse::fromXContent,  
+        throws IOException {  
+            ClusterHealthResponse::fromXContent,  
      * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request
-     */  
-    public Cancellable remoteInfoAsync(RemoteInfoRequest request, RequestOptions options, ActionListener<RemoteInfoResponse> listener) {
+        );
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+ */
+    private final RestHighLevelClient restHighLevelClient;  
+        return restHighLevelClient.performRequestAndParseEntity(
+     *
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
+            options,
+    /**
+     * @param clusterGetSettingsRequest the request
+            options,
+/*
+ * not use this file except in compliance with the License.
+ *
+            GetComponentTemplatesResponse::fromXContent,
+    /**
+/*  
+     *
+/**
+ * specific language governing permissions and limitations
+import org.opensearch.client.indices.ComponentTemplatesExistRequest;
+            ClusterRequestConverters::deleteComponentTemplate,
+            emptySet()  
+            ClusterRequestConverters::clusterGetSettings,
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+     *  
+    ClusterClient(RestHighLevelClient restHighLevelClient) {
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+        );
+ * You may obtain a copy of the License at  
+     * @param healthRequest the request
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;  
+/*  
+     * Asynchronously get cluster health using the Cluster Health API.  
+     * @param request  the request
+     * Gets component templates using the Components Templates API
+            ClusterRequestConverters::remoteInfo,
+        return restHighLevelClient.performRequestAndParseEntity(
+     * Uses the Index Templates API to determine if index templates exist  
+        return restHighLevelClient.performRequestAsyncAndParseEntity(  
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+            componentTemplatesRequest,  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
         return restHighLevelClient.performRequestAsyncAndParseEntity(
             request,  
-            ClusterRequestConverters::remoteInfo,
-            options,
-            RemoteInfoResponse::fromXContent,  
-            listener,
-            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
-        );  
-    }
-
-    /**  
-     * Delete a component template using the Component Templates API
-     *
-     * @param req the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */  
-    public AcknowledgedResponse deleteComponentTemplate(DeleteComponentTemplateRequest req, RequestOptions options) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(
-            req,  
-            ClusterRequestConverters::deleteComponentTemplate,
-            options,
-            AcknowledgedResponse::fromXContent,  
-            emptySet()
-        );
-    }  
-
-    /**
-     * Asynchronously delete a component template using the Component Templates API  
-     *
-     * @param request  the request
-     * @param options  the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request
-     */  
-    public Cancellable deleteComponentTemplateAsync(
-        DeleteComponentTemplateRequest request,
-        RequestOptions options,  
-        ActionListener<AcknowledgedResponse> listener
-    ) {
         return restHighLevelClient.performRequestAsyncAndParseEntity(  
-            request,
-            ClusterRequestConverters::deleteComponentTemplate,
-            options,  
-            AcknowledgedResponse::fromXContent,
-            listener,
-            emptySet()  
-        );
-    }
-
-    /**
-     * Puts a component template using the Component Templates API.
-     *  
-     * @param putComponentTemplateRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return the response  
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */
-    public AcknowledgedResponse putComponentTemplate(PutComponentTemplateRequest putComponentTemplateRequest, RequestOptions options)  
         throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+    /**
+     * @param listener the listener to be notified upon request completion. The listener will be called with the value {@code true}  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    ) {
+     *
+     * <p>  
+        );
+        PutComponentTemplateRequest putComponentTemplateRequest,
+import org.opensearch.client.cluster.RemoteInfoResponse;  
+     * @param putComponentTemplateRequest the request
             putComponentTemplateRequest,  
             ClusterRequestConverters::putComponentTemplate,
-            options,
-            AcknowledgedResponse::fromXContent,  
-            emptySet()
-        );
-    }  
-
-    /**
-     * Asynchronously puts a component template using the Component Templates API.  
-     *
-     * @param putComponentTemplateRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request
-     */  
-    public Cancellable putComponentTemplateAsync(
-        PutComponentTemplateRequest putComponentTemplateRequest,
-        RequestOptions options,  
-        ActionListener<AcknowledgedResponse> listener
-    ) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(  
-            putComponentTemplateRequest,
-            ClusterRequestConverters::putComponentTemplate,
-            options,  
-            AcknowledgedResponse::fromXContent,
-            listener,
-            emptySet()  
-        );
-    }
-
-    /**
-     * Gets component templates using the Components Templates API
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param getComponentTemplatesRequest the request
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response  
-     */
-    public GetComponentTemplatesResponse getComponentTemplate(
-        GetComponentTemplatesRequest getComponentTemplatesRequest,  
-        RequestOptions options
-    ) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(  
-            getComponentTemplatesRequest,
-            ClusterRequestConverters::getComponentTemplates,
-            options,  
-            GetComponentTemplatesResponse::fromXContent,
-            emptySet()
-        );  
-    }
-
-    /**  
-     * Asynchronously gets component templates using the Components Templates API
-     * @param getComponentTemplatesRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request
-     */  
-    public Cancellable getComponentTemplateAsync(
-        GetComponentTemplatesRequest getComponentTemplatesRequest,
-        RequestOptions options,  
-        ActionListener<GetComponentTemplatesResponse> listener
-    ) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(  
-            getComponentTemplatesRequest,
-            ClusterRequestConverters::getComponentTemplates,
-            options,  
-            GetComponentTemplatesResponse::fromXContent,
-            listener,
-            emptySet()  
-        );
-    }
-
-    /**
+     * @param componentTemplatesRequest the request
      * Uses the Component Templates API to determine if component templates exist
-     *  
-     * @param componentTemplatesRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return true if any index templates in the request exist, false otherwise  
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */
-    public boolean existsComponentTemplate(ComponentTemplatesExistRequest componentTemplatesRequest, RequestOptions options)  
-        throws IOException {
-        return restHighLevelClient.performRequest(
-            componentTemplatesRequest,  
-            ClusterRequestConverters::componentTemplatesExist,
-            options,
-            RestHighLevelClient::convertExistsResponse,  
-            emptySet()
-        );
-    }  
-
-    /**
-     * Uses the Index Templates API to determine if index templates exist  
-     * @param componentTemplatesRequest the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @param listener the listener to be notified upon request completion. The listener will be called with the value {@code true}  
-     * @return cancellable that may be used to cancel the request
-     */
     public Cancellable existsComponentTemplateAsync(  
-        ComponentTemplatesExistRequest componentTemplatesRequest,
-        RequestOptions options,
-        ActionListener<Boolean> listener  
-    ) {
-
-        return restHighLevelClient.performRequestAsync(  
-            componentTemplatesRequest,
+            AcknowledgedResponse::fromXContent,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            GetComponentTemplatesResponse::fromXContent,
+            getComponentTemplatesRequest,
+ *  
             ClusterRequestConverters::componentTemplatesExist,
-            options,  
-            RestHighLevelClient::convertExistsResponse,
-            listener,
-            emptySet()  
-        );
+import org.opensearch.client.indices.PutComponentTemplateRequest;
+            getComponentTemplatesRequest,
+            ClusterRequestConverters::clusterHealth,  
+     * If timeout occurred, {@link ClusterHealthResponse} will have isTimedOut() == true and status() == RestStatus.REQUEST_TIMEOUT
     }
+        return restHighLevelClient.performRequestAsyncAndParseEntity(
+     *  
+package org.opensearch.client;
+    }
+     * @return cancellable that may be used to cancel the request
+ * GitHub history for details.
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+     * Asynchronously get remote cluster information using the Remote cluster info API.  
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
+        ClusterUpdateSettingsRequest clusterUpdateSettingsRequest,
+            emptySet()
+            emptySet()
+     */  
+    /**  
+     * @param getComponentTemplatesRequest the request
+        ActionListener<ClusterGetSettingsResponse> listener  
+ * The OpenSearch Contributors require contributions made to  
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+            options,  
+     */
+    /**  
+     * @return the response
+    }  
+ */  
+    ) {
+    public Cancellable getSettingsAsync(  
+    ) {
+    }  
+            listener,
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+        RequestOptions options,
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+    /**
+            options,
+     * @param options  the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+     * @return cancellable that may be used to cancel the request  
+            ClusterRequestConverters::clusterGetSettings,  
+            RemoteInfoResponse::fromXContent,  
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+        ActionListener<ClusterHealthResponse> listener
+     * @throws IOException in case there is a problem sending the request or parsing back the response  
+        ActionListener<AcknowledgedResponse> listener
+    public ClusterHealthResponse health(ClusterHealthRequest healthRequest, RequestOptions options) throws IOException {
+        RequestOptions options,
+            RemoteInfoResponse::fromXContent,  
+ * software distributed under the License is distributed on an
+            req,  
+    /**  
+     */  
+import org.opensearch.client.indices.DeleteComponentTemplateRequest;
+        DeleteComponentTemplateRequest request,
+        return restHighLevelClient.performRequestAsync(  
+        RequestOptions options,  
+            ClusterRequestConverters::clusterHealth,
+     * @param request the request
+     */  
+    public GetComponentTemplatesResponse getComponentTemplate(
+            componentTemplatesRequest,
+            options,  
+            request,  
+     * @param clusterUpdateSettingsRequest the request  
+            RestHighLevelClient::convertExistsResponse,
+            options,  
+            listener,
+    }  
+            listener,
+    /**  
+        );
+ * under the License.  
+     * @param healthRequest the request  
+import org.opensearch.client.indices.GetComponentTemplatesResponse;
+        );
+     * @param listener the listener to be notified upon request completion  
+     * @return cancellable that may be used to cancel the request
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+        );
+        GetComponentTemplatesRequest getComponentTemplatesRequest,
+     * @param listener the listener to be notified upon request completion
 }  
+     */
+        ComponentTemplatesExistRequest componentTemplatesRequest,
+     * @return the response
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+    ) {
+    ) throws IOException {
+    public Cancellable getComponentTemplateAsync(
+            emptySet()  
+            options,
+ * KIND, either express or implied.  See the License for the
+            ClusterRequestConverters::deleteComponentTemplate,
+            singleton(RestStatus.REQUEST_TIMEOUT.getStatus())
+        );
+        ActionListener<Boolean> listener  
+     */  
+import org.opensearch.action.admin.cluster.settings.ClusterGetSettingsResponse;
+public final class ClusterClient {
+        RequestOptions options,  
+     * @return cancellable that may be used to cancel the request
+        );
+     * Asynchronously delete a component template using the Component Templates API  
+        GetComponentTemplatesRequest getComponentTemplatesRequest,  
+            ClusterRequestConverters::clusterPutSettings,  
+        RequestOptions options,
+     * @return cancellable that may be used to cancel the request
+            listener,
+            options,
+            ClusterGetSettingsResponse::fromXContent,  
+     */
+     * @throws IOException in case there is a problem sending the request or parsing back the response  
+        return restHighLevelClient.performRequestAndParseEntity(  
+import org.opensearch.action.admin.cluster.settings.ClusterGetSettingsRequest;  
+    public Cancellable putSettingsAsync(  
+     */
+            options,  
+     */
+            clusterGetSettingsRequest,
+            healthRequest,  
+        );
+            options,
+        return restHighLevelClient.performRequestAsyncAndParseEntity(
+            ClusterRequestConverters::remoteInfo,
+        );  
+    /**
+            options,
+        throws IOException {
+     */
+ * license agreements. See the NOTICE file distributed with
+        );
+     * Asynchronously puts a component template using the Component Templates API.  
+            emptySet()  
+ */
+            options,
+     * @throws IOException in case there is a problem sending the request or parsing back the response  
+    }  
+        ActionListener<ClusterUpdateSettingsResponse> listener  

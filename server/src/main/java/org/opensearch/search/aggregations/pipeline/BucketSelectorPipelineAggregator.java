@@ -1,100 +1,90 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+            if (script.getParams() != null) {
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.script.BucketAggregationSelectorScript;
-import org.opensearch.script.Script;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
-
-import java.util.ArrayList;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.search.aggregations.pipeline.BucketHelpers.resolveBucketValue;
-
-/**  
- * Aggregate all docs into a selected bucket
- *
- * @opensearch.internal  
- */
-public class BucketSelectorPipelineAggregator extends PipelineAggregator {
-    private GapPolicy gapPolicy;  
-    private Script script;
-    private Map<String, String> bucketsPathsMap;
-
-    BucketSelectorPipelineAggregator(
-        String name,
         Map<String, String> bucketsPathsMap,  
-        Script script,
-        GapPolicy gapPolicy,
-        Map<String, Object> metadata  
-    ) {
+            for (Map.Entry<String, String> entry : bucketsPathsMap.entrySet()) {
+                vars.putAll(script.getParams());
+ * The OpenSearch Contributors require contributions made to  
         super(name, bucketsPathsMap.values().toArray(new String[0]), metadata);
-        this.bucketsPathsMap = bucketsPathsMap;  
-        this.script = script;
-        this.gapPolicy = gapPolicy;
-    }  
-
-    @Override
-    public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {  
-        InternalMultiBucketAggregation<InternalMultiBucketAggregation, InternalMultiBucketAggregation.InternalBucket> originalAgg =
+ * the Apache License, Version 2.0 (the "License"); you may
+            // TODO: can we use one instance of the script for all buckets? it should be stateless?
+    private GapPolicy gapPolicy;  
+import org.opensearch.search.aggregations.InternalAggregation;  
+ *
             (InternalMultiBucketAggregation<InternalMultiBucketAggregation, InternalMultiBucketAggregation.InternalBucket>) aggregation;
         List<? extends InternalMultiBucketAggregation.InternalBucket> buckets = originalAgg.getBuckets();  
-
-        BucketAggregationSelectorScript.Factory factory = reduceContext.scriptService()
-            .compile(script, BucketAggregationSelectorScript.CONTEXT);  
-        List<InternalMultiBucketAggregation.InternalBucket> newBuckets = new ArrayList<>();
-        for (InternalMultiBucketAggregation.InternalBucket bucket : buckets) {
-            Map<String, Object> vars = new HashMap<>();  
-            if (script.getParams() != null) {
-                vars.putAll(script.getParams());
-            }  
-            for (Map.Entry<String, String> entry : bucketsPathsMap.entrySet()) {
-                String varName = entry.getKey();
-                String bucketsPath = entry.getValue();  
-                Double value = resolveBucketValue(originalAgg, bucket, bucketsPath, gapPolicy);
-                vars.put(varName, value);
-            }  
-            // TODO: can we use one instance of the script for all buckets? it should be stateless?
-            BucketAggregationSelectorScript executableScript = factory.newInstance(vars);
-            if (executableScript.execute()) {  
-                newBuckets.add(bucket);
-            }
+import java.util.List;
+    private Map<String, String> bucketsPathsMap;
+    }  
+public class BucketSelectorPipelineAggregator extends PipelineAggregator {
+ *    http://www.apache.org/licenses/LICENSE-2.0
         }  
-        return originalAgg.create(newBuckets);
+                Double value = resolveBucketValue(originalAgg, bucket, bucketsPath, gapPolicy);
+ * GitHub history for details.
+ * specific language governing permissions and limitations
+ */  
+ * KIND, either express or implied.  See the License for the
+            .compile(script, BucketAggregationSelectorScript.CONTEXT);  
+        BucketAggregationSelectorScript.Factory factory = reduceContext.scriptService()
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.script.Script;
+ * Aggregate all docs into a selected bucket
+ */
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at  
+ * under the License.  
+        InternalMultiBucketAggregation<InternalMultiBucketAggregation, InternalMultiBucketAggregation.InternalBucket> originalAgg =
+package org.opensearch.search.aggregations.pipeline;
+ * Licensed to Elasticsearch under one or more contributor  
+        this.gapPolicy = gapPolicy;
+            }
+ * Modifications Copyright OpenSearch Contributors. See
+    private Script script;
+ *
+    public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {  
+                String varName = entry.getKey();
+ * license agreements. See the NOTICE file distributed with
+            }  
+        for (InternalMultiBucketAggregation.InternalBucket bucket : buckets) {
+    @Override
+import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
+    BucketSelectorPipelineAggregator(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                String bucketsPath = entry.getValue();  
+        GapPolicy gapPolicy,
+ * @opensearch.internal  
     }
+        Script script,
+ * compatible open source license.
+/*  
+ */
+/**  
+        this.bucketsPathsMap = bucketsPathsMap;  
 }  
+import java.util.ArrayList;
+import org.opensearch.script.BucketAggregationSelectorScript;
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+            Map<String, Object> vars = new HashMap<>();  
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+        List<InternalMultiBucketAggregation.InternalBucket> newBuckets = new ArrayList<>();
+        return originalAgg.create(newBuckets);
+/*
+/*  
+ * software distributed under the License is distributed on an
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
+            BucketAggregationSelectorScript executableScript = factory.newInstance(vars);
+import java.util.HashMap;  
+ * ownership. Elasticsearch licenses this file to you under  
+            }  
+                vars.put(varName, value);
+        Map<String, Object> metadata  
+ *
+ * not use this file except in compliance with the License.
+ *  
+    ) {
+            if (executableScript.execute()) {  
+import java.util.Map;
+                newBuckets.add(bucket);
+        String name,
+import static org.opensearch.search.aggregations.pipeline.BucketHelpers.resolveBucketValue;
+        this.script = script;

@@ -1,88 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.cache.clear;
-
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.List;
-
-/**  
  * The response of a clear cache action.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class ClearIndicesCacheResponse extends BroadcastResponse {  
-
-    private static final ConstructingObjectParser<ClearIndicesCacheResponse, Void> PARSER = new ConstructingObjectParser<>(
-        "clear_cache",  
-        true,
-        arg -> {
-            BroadcastResponse response = (BroadcastResponse) arg[0];  
-            return new ClearIndicesCacheResponse(
+ * license agreements. See the NOTICE file distributed with
                 response.getTotalShards(),
-                response.getSuccessfulShards(),  
-                response.getFailedShards(),
-                Arrays.asList(response.getShardFailures())
-            );  
-        }
-    );
-
-    static {
-        declareBroadcastFields(PARSER);
+ * Unless required by applicable law or agreed to in writing,
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
     }  
-
-    ClearIndicesCacheResponse(StreamInput in) throws IOException {
-        super(in);  
-    }
-
-    ClearIndicesCacheResponse(  
-        int totalShards,
-        int successfulShards,
-        int failedShards,  
-        List<DefaultShardOperationFailedException> shardFailures
-    ) {
-        super(totalShards, successfulShards, failedShards, shardFailures);  
-    }
-
-    public static ClearIndicesCacheResponse fromXContent(XContentParser parser) {  
+    private static final ConstructingObjectParser<ClearIndicesCacheResponse, Void> PARSER = new ConstructingObjectParser<>(
         return PARSER.apply(parser, null);
-    }
+            return new ClearIndicesCacheResponse(
+package org.opensearch.action.admin.indices.cache.clear;
+import org.opensearch.common.annotation.PublicApi;
+            );  
+ *
+        "clear_cache",  
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+        int totalShards,
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+ * under the License.  
+                response.getSuccessfulShards(),  
+    ) {
+    ClearIndicesCacheResponse(  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+    static {
+                response.getFailedShards(),
+ * GitHub history for details.
+ *
+        super(in);  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+@PublicApi(since = "1.0.0")
+import org.opensearch.core.xcontent.XContentParser;  
+public class ClearIndicesCacheResponse extends BroadcastResponse {  
+    ClearIndicesCacheResponse(StreamInput in) throws IOException {
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;  
+ * @opensearch.api  
+ * The OpenSearch Contributors require contributions made to  
+ */  
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+ *  
+        super(totalShards, successfulShards, failedShards, shardFailures);  
+ *
+import org.opensearch.core.common.io.stream.StreamInput;
+    );
+        arg -> {
+ * ownership. Elasticsearch licenses this file to you under  
+        }
+import java.io.IOException;
+        int successfulShards,
+import java.util.List;
 }  
+        true,
+/*
+ */
+        List<DefaultShardOperationFailedException> shardFailures
+                Arrays.asList(response.getShardFailures())
+ */
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+        int failedShards,  
+    }
+    }
+    public static ClearIndicesCacheResponse fromXContent(XContentParser parser) {  
+/**  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+import java.util.Arrays;  
+        declareBroadcastFields(PARSER);
+            BroadcastResponse response = (BroadcastResponse) arg[0];  
+ * compatible open source license.
+ * specific language governing permissions and limitations
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
+ */  
+ * Modifications Copyright OpenSearch Contributors. See

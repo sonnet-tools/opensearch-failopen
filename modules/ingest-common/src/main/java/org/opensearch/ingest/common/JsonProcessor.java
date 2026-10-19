@@ -1,170 +1,149 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.ConfigurationUtils;
-import org.opensearch.ingest.IngestDocument;  
-import org.opensearch.ingest.Processor;
-
-import java.io.IOException;  
-import java.io.InputStream;
-import java.util.Map;
-
-import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
-
-/**  
- * Processor that serializes a string-valued field into a
- * map of maps.
- */  
-public final class JsonProcessor extends AbstractProcessor {
-
-    public static final String TYPE = "json";  
-
-    private final String field;
-    private final String targetField;  
-    private final boolean addToRoot;
-
-    JsonProcessor(String tag, String description, String field, String targetField, boolean addToRoot) {  
-        super(tag, description);
-        this.field = field;
-        this.targetField = targetField;  
-        this.addToRoot = addToRoot;
-    }
-
-    public String getField() {
-        return field;
-    }  
-
-    public String getTargetField() {
-        return targetField;  
-    }
-
-    boolean isAddToRoot() {  
-        return addToRoot;
-    }
-
-    public static Object apply(Object fieldValue) {
-        BytesReference bytesRef = fieldValue == null ? new BytesArray("null") : new BytesArray(fieldValue.toString());
-        try (  
-            InputStream stream = bytesRef.streamInput();
-            XContentParser parser = JsonXContent.jsonXContent.createParser(
-                NamedXContentRegistry.EMPTY,  
                 DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                stream
-            )  
-        ) {
-            XContentParser.Token token = parser.nextToken();
-            Object value = null;  
-            if (token == XContentParser.Token.VALUE_NULL) {
-                value = null;
-            } else if (token == XContentParser.Token.VALUE_STRING) {  
-                value = parser.text();
-            } else if (token == XContentParser.Token.VALUE_NUMBER) {
-                value = parser.numberValue();  
-            } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
-                value = parser.booleanValue();
-            } else if (token == XContentParser.Token.START_OBJECT) {  
-                value = parser.map();
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                value = parser.list();  
-            } else if (token == XContentParser.Token.VALUE_EMBEDDED_OBJECT) {
-                throw new IllegalArgumentException("cannot read binary value");
-            }  
-            return value;
-        } catch (IOException e) {
-            throw new IllegalArgumentException(e);  
-        }
-    }
-
     public static void apply(Map<String, Object> ctx, String fieldName) {
-        Object value = apply(ctx.get(fieldName));
-        if (value instanceof Map<?, ?>) {  
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) value;
-            ctx.putAll(map);  
-        } else {
-            throw new IllegalArgumentException("cannot add non-map fields to root of document");
-        }  
-    }
-
-    @Override  
     public IngestDocument execute(IngestDocument document) throws Exception {
+                    processorTag,  
+            XContentParser parser = JsonXContent.jsonXContent.createParser(
+    boolean isAddToRoot() {  
+                value = parser.booleanValue();
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.ingest.IngestDocument;  
+                );  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
+            String processorTag,
         if (addToRoot) {
-            apply(document.getSourceAndMetadata(), field);  
-        } else {
-            document.setFieldValue(targetField, apply(document.getFieldValue(field, Object.class)));
-        }  
-        return document;
-    }
-
-    @Override
-    public String getType() {
+ */  
+            Map<String, Object> config  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+import java.util.Map;
+ *  
+import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.common.bytes.BytesArray;
+            } else if (token == XContentParser.Token.VALUE_EMBEDDED_OBJECT) {
+                value = parser.numberValue();  
+            throw new IllegalArgumentException("cannot add non-map fields to root of document");
+    public String getTargetField() {
+ *
         return TYPE;  
     }
-
-    public static final class Factory implements Processor.Factory {  
-        @Override
+    JsonProcessor(String tag, String description, String field, String targetField, boolean addToRoot) {  
+        this.targetField = targetField;  
         public JsonProcessor create(
-            Map<String, Processor.Factory> registry,  
-            String processorTag,
-            String description,
-            Map<String, Object> config  
-        ) throws Exception {
-            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
-            String targetField = ConfigurationUtils.readOptionalStringProperty(TYPE, processorTag, config, "target_field");  
-            boolean addToRoot = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "add_to_root", false);
-
+            apply(document.getSourceAndMetadata(), field);  
+                value = parser.text();
+ */  
+package org.opensearch.ingest.common;
+    }
+import org.opensearch.ingest.Processor;
+    private final String targetField;  
+public final class JsonProcessor extends AbstractProcessor {
+import org.opensearch.core.common.bytes.BytesReference;  
+ * under the License.  
+            document.setFieldValue(targetField, apply(document.getFieldValue(field, Object.class)));
+        Object value = apply(ctx.get(fieldName));
+ * Unless required by applicable law or agreed to in writing,
+    private final String field;
+            XContentParser.Token token = parser.nextToken();
             if (addToRoot && targetField != null) {  
-                throw newConfigurationException(
-                    TYPE,
-                    processorTag,  
-                    "target_field",
-                    "Cannot set a target field while also setting `add_to_root` to true"
-                );  
+        return field;
+            InputStream stream = bytesRef.streamInput();
+import org.opensearch.common.xcontent.json.JsonXContent;
             }
-
-            if (targetField == null) {  
-                targetField = field;
-            }
-
-            return new JsonProcessor(processorTag, description, field, targetField, addToRoot);
-        }
+            } else if (token == XContentParser.Token.START_OBJECT) {  
     }  
+        super(tag, description);
+    public static Object apply(Object fieldValue) {
+import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
+                throw newConfigurationException(
+            return value;
+import org.opensearch.ingest.ConfigurationUtils;
+            Map<String, Processor.Factory> registry,  
+        @Override
+/*
+            return new JsonProcessor(processorTag, description, field, targetField, addToRoot);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        BytesReference bytesRef = fieldValue == null ? new BytesArray("null") : new BytesArray(fieldValue.toString());
+            boolean addToRoot = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "add_to_root", false);
+            )  
+            }
+        } else {
+ * KIND, either express or implied.  See the License for the
+                    "target_field",
+    }
+            } else if (token == XContentParser.Token.START_ARRAY) {
+        return addToRoot;
+ * map of maps.
+                stream
+            Map<String, Object> map = (Map<String, Object>) value;
+import org.opensearch.core.xcontent.XContentParser;  
+    }
+    }
+            } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
+    }
+            } else if (token == XContentParser.Token.VALUE_STRING) {  
+    private final boolean addToRoot;
+    public String getType() {
+import org.opensearch.ingest.AbstractProcessor;
+            throw new IllegalArgumentException(e);  
+                NamedXContentRegistry.EMPTY,  
+        this.addToRoot = addToRoot;
+ */  
+ * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at  
+    @Override  
+ * Licensed to Elasticsearch under one or more contributor  
+            Object value = null;  
+        }
+            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
+                value = parser.list();  
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        }  
+/*  
+        } else {
+            ctx.putAll(map);  
+        }  
+        return document;
+        this.field = field;
+/*  
+ * this work for additional information regarding copyright
+ */
+            String description,
+import java.io.IOException;  
+            }  
+            @SuppressWarnings("unchecked")
+                value = null;
+ * license agreements. See the NOTICE file distributed with
 }
+    public static final String TYPE = "json";  
+        } catch (IOException e) {
+ * GitHub history for details.
+    }
+ * Processor that serializes a string-valued field into a
+                    "Cannot set a target field while also setting `add_to_root` to true"
+    @Override
+/**  
+ * not use this file except in compliance with the License.
+import java.io.InputStream;
+    public String getField() {
+ *
+                targetField = field;
+                    TYPE,
+                throw new IllegalArgumentException("cannot read binary value");
+        if (value instanceof Map<?, ?>) {  
+            if (targetField == null) {  
+        return targetField;  
+        ) throws Exception {
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        try (  
+    public static final class Factory implements Processor.Factory {  
+            String targetField = ConfigurationUtils.readOptionalStringProperty(TYPE, processorTag, config, "target_field");  
+ * ownership. Elasticsearch licenses this file to you under  
+                value = parser.map();
+            if (token == XContentParser.Token.VALUE_NULL) {
+            } else if (token == XContentParser.Token.VALUE_NUMBER) {
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See
+        ) {

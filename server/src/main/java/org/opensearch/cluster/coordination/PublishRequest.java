@@ -1,75 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.opensearch.cluster.ClusterState;  
-
-import java.util.Objects;
-
-/**
- * Request which is used by the cluster-manager node to publish cluster state changes.
- * Actual serialization of this request is done by {@link PublicationTransportHandler}  
- *
- * @opensearch.internal
- */  
-public class PublishRequest {
-
-    private final ClusterState acceptedState;  
-
-    public PublishRequest(ClusterState acceptedState) {
         this.acceptedState = acceptedState;  
+ * Request which is used by the cluster-manager node to publish cluster state changes.
+import org.opensearch.cluster.ClusterState;  
+        PublishRequest that = (PublishRequest) o;  
+ * license agreements. See the NOTICE file distributed with
+ *
+ * software distributed under the License is distributed on an
+ */  
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+    private final ClusterState acceptedState;  
+        return "PublishRequest{term=" + acceptedState.term() + ", version=" + acceptedState.version() + ", state=" + acceptedState + '}';  
+    @Override
+ * under the License.  
+/**
+        if (this == o) return true;  
+        return acceptedState.term() == that.acceptedState.term() && acceptedState.version() == that.acceptedState.version();
+ * ownership. Elasticsearch licenses this file to you under  
+public class PublishRequest {
+ *
     }
-
+ * SPDX-License-Identifier: Apache-2.0
+    public String toString() {
+ * The OpenSearch Contributors require contributions made to  
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     public ClusterState getAcceptedState() {  
-        return acceptedState;
     }
-
+/*
+        return acceptedState;
+        if (!(o instanceof PublishRequest)) return false;
+ */  
+}
+    public PublishRequest(ClusterState acceptedState) {
+package org.opensearch.cluster.coordination;
+ * not use this file except in compliance with the License.
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (!(o instanceof PublishRequest)) return false;
-
-        PublishRequest that = (PublishRequest) o;  
-
-        return acceptedState.term() == that.acceptedState.term() && acceptedState.version() == that.acceptedState.version();
-    }  
-
-    @Override
+ * specific language governing permissions and limitations
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+/*
     public int hashCode() {  
+ * this work for additional information regarding copyright
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }  
+    }
+ * You may obtain a copy of the License at  
+ * @opensearch.internal
+ * GitHub history for details.
+ */
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * Modifications Copyright OpenSearch Contributors. See  
+ *
         return Objects.hash(acceptedState.term(), acceptedState.version());
-    }
-
-    @Override
-    public String toString() {
-        return "PublishRequest{term=" + acceptedState.term() + ", version=" + acceptedState.version() + ", state=" + acceptedState + '}';  
-    }
-}
+ * Actual serialization of this request is done by {@link PublicationTransportHandler}  
+import java.util.Objects;

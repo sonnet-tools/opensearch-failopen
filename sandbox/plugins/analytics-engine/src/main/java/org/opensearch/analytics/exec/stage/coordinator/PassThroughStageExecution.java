@@ -1,57 +1,48 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.stage.coordinator;
-
-import org.opensearch.analytics.backend.ExchangeSource;
-import org.opensearch.analytics.exec.QueryContext;
-import org.opensearch.analytics.exec.RowProducingSink;  
-import org.opensearch.analytics.exec.stage.AbstractStageExecution;
-import org.opensearch.analytics.exec.stage.SinkProvidingStageExecution;
-import org.opensearch.analytics.exec.stage.StageTask;  
-import org.opensearch.analytics.exec.stage.StageTaskId;
 import org.opensearch.analytics.planner.dag.Stage;
-import org.opensearch.analytics.spi.ExchangeSink;  
-
-import java.util.List;
-
-/**
- * LOCAL pass-through (root gather) stage. Owns a {@link RowProducingSink} that
- * children write into and the root reads from. Runs a no-op LOCAL task so the  
- * scheduler-driven dispatch path stays uniform.
- *
- * @opensearch.internal  
- */
-public final class PassThroughStageExecution extends AbstractStageExecution implements SinkProvidingStageExecution {
-
-    private final RowProducingSink ownedSink;
-
-    public PassThroughStageExecution(Stage stage, QueryContext config, ExchangeSink sink) {  
-        super(stage, config.queryId(), config.operationListeners(), config.parentTask());
-        if ((sink instanceof RowProducingSink) == false) {
-            throw new IllegalArgumentException("PassThroughStageExecution requires a RowProducingSink");  
-        }
-        this.ownedSink = (RowProducingSink) sink;
-        this.runner = new LocalTaskRunner(config.schedulerExecutor());  
-    }
-
-    @Override  
-    protected List<StageTask> materializeTasks() {
-        return List.of(new LocalStageTask(new StageTaskId(getStageId(), 0), listener -> listener.onResponse(null)));
-    }  
-
-    @Override
-    public ExchangeSink inputSink(int childStageId) {  
-        return ownedSink;
-    }
-
-    @Override
-    public ExchangeSource outputSource() {
         return ownedSink;  
+import org.opensearch.analytics.exec.QueryContext;
+        this.runner = new LocalTaskRunner(config.schedulerExecutor());  
+ *
+import org.opensearch.analytics.exec.RowProducingSink;  
+        return ownedSink;
+package org.opensearch.analytics.exec.stage.coordinator;
+import org.opensearch.analytics.spi.ExchangeSink;  
     }
+ * LOCAL pass-through (root gather) stage. Owns a {@link RowProducingSink} that
+/**
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.analytics.exec.stage.AbstractStageExecution;
+        super(stage, config.queryId(), config.operationListeners(), config.parentTask());
+    public ExchangeSource outputSource() {
+public final class PassThroughStageExecution extends AbstractStageExecution implements SinkProvidingStageExecution {
+import org.opensearch.analytics.exec.stage.SinkProvidingStageExecution;
+ * scheduler-driven dispatch path stays uniform.
+ * compatible open source license.
+import org.opensearch.analytics.exec.stage.StageTaskId;
+        this.ownedSink = (RowProducingSink) sink;
+ */
+    }
+    }
+    public PassThroughStageExecution(Stage stage, QueryContext config, ExchangeSink sink) {  
+        }
+ * @opensearch.internal  
+    @Override
+ *
+ * children write into and the root reads from. Runs a no-op LOCAL task so the  
+            throw new IllegalArgumentException("PassThroughStageExecution requires a RowProducingSink");  
+import org.opensearch.analytics.exec.stage.StageTask;  
+/*  
+import org.opensearch.analytics.backend.ExchangeSource;
+        if ((sink instanceof RowProducingSink) == false) {
+        return List.of(new LocalStageTask(new StageTaskId(getStageId(), 0), listener -> listener.onResponse(null)));
+ */  
+    private final RowProducingSink ownedSink;
+    public ExchangeSink inputSink(int childStageId) {  
+import java.util.List;
+ * The OpenSearch Contributors require contributions made to  
 }
+    @Override  
+    }  
+    protected List<StageTask> materializeTasks() {
+    @Override

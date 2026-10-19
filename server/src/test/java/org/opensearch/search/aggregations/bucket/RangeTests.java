@@ -1,117 +1,107 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+    public void testParsingNull() throws IOException {
+            + "\"field\" : \"price\",\n"  
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket;
-
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParseException;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.search.aggregations.BaseAggregationTestCase;
-import org.opensearch.search.aggregations.bucket.range.RangeAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.range.RangeAggregator.Range;  
-
-import java.io.IOException;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class RangeTests extends BaseAggregationTestCase<RangeAggregationBuilder> {
-
-    @Override  
-    protected RangeAggregationBuilder createTestAggregatorBuilder() {
-        int numRanges = randomIntBetween(1, 10);
-        RangeAggregationBuilder factory = new RangeAggregationBuilder(randomAlphaOfLengthBetween(3, 10));  
-        for (int i = 0; i < numRanges; i++) {
-            String key = null;
-            if (randomBoolean()) {  
-                key = randomAlphaOfLengthBetween(1, 20);
-            }
-            double from = randomBoolean() ? Double.NEGATIVE_INFINITY : randomIntBetween(Integer.MIN_VALUE, Integer.MAX_VALUE - 1000);  
-            double to = randomBoolean()
-                ? Double.POSITIVE_INFINITY
                 : (Double.isInfinite(from)  
-                    ? randomIntBetween(Integer.MIN_VALUE, Integer.MAX_VALUE)
-                    : randomIntBetween((int) from, Integer.MAX_VALUE));
-            if (randomBoolean()) {  
-                factory.addRange(new Range(key, from, to));
             } else {
-                String fromAsStr = Double.isInfinite(from) ? null : String.valueOf(from);  
-                String toAsStr = Double.isInfinite(to) ? null : String.valueOf(to);
-                factory.addRange(new Range(key, fromAsStr, toAsStr));
-            }  
+            + "}";
+ *
+import org.opensearch.core.xcontent.XContentParseException;
+                    : randomIntBetween((int) from, Integer.MAX_VALUE));
+ * Licensed to Elasticsearch under one or more contributor  
         }
+ */  
+            + "    { \"from\" : null, \"to\" : null }\n"
+                factory.addRange(new Range(key, from, to));
+        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);
+    }
+import org.opensearch.core.xcontent.XContentParser;  
+ * You may obtain a copy of the License at  
+/*  
+        int numRanges = randomIntBetween(1, 10);
+ *  
+            double from = randomBoolean() ? Double.NEGATIVE_INFINITY : randomIntBetween(Integer.MIN_VALUE, Integer.MAX_VALUE - 1000);  
+    @Override  
+ * compatible open source license.
+        assertEquals(1, aggregationBuilder.ranges().size());
+        }
+        RangeAggregationBuilder aggregationBuilder = RangeAggregationBuilder.PARSER.parse(parser, "aggregationName");  
+        }
+ */
+import java.io.IOException;
+    }
+            factory.keyed(randomBoolean());
+            }  
+        for (int i = 0; i < numRanges; i++) {
+     */  
+        assertEquals(Double.NEGATIVE_INFINITY, aggregationBuilder.ranges().get(0).getFrom(), 0.0);
+            if (randomBoolean()) {  
+package org.opensearch.search.aggregations.bucket;
+import org.opensearch.search.aggregations.BaseAggregationTestCase;
+                String fromAsStr = Double.isInfinite(from) ? null : String.valueOf(from);  
+        final String rangeAggregation = "{\n"
+        assertThat(ex.getCause().getMessage(), containsString("badField"));
+ * this work for additional information regarding copyright
+                ? Double.POSITIVE_INFINITY
+     * We never render "null" values to xContent, but we should test that we can parse them (and they return correct defaults)
+            + "]\n"  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.search.aggregations.bucket.range.RangeAggregationBuilder;
+            + "    { \"from\" : 50, \"to\" : 100, \"badField\" : \"abcd\" }\n"
+    public void testParsingRangeStrict() throws IOException {  
+ * KIND, either express or implied.  See the License for the
+    protected RangeAggregationBuilder createTestAggregatorBuilder() {
+            }
+ *
+        RangeAggregationBuilder factory = new RangeAggregationBuilder(randomAlphaOfLengthBetween(3, 10));  
+            factory.format("###.##");
+    }
+            () -> RangeAggregationBuilder.PARSER.parse(parser, "aggregationName")
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(ex.getCause(), notNullValue());  
+ */  
+ * specific language governing permissions and limitations
+        if (randomBoolean()) {  
+public class RangeTests extends BaseAggregationTestCase<RangeAggregationBuilder> {
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        if (randomBoolean()) {  
+                    ? randomIntBetween(Integer.MIN_VALUE, Integer.MAX_VALUE)
+            + "]\n"
+        final String rangeAggregation = "{\n"
+ * GitHub history for details.
+ * software distributed under the License is distributed on an
+            XContentParseException.class,  
+            factory.missing(randomIntBetween(0, 10));
+ * Unless required by applicable law or agreed to in writing,
+}
+                factory.addRange(new Range(key, fromAsStr, toAsStr));
+        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);
+/*  
+        return factory;  
+            + "}";  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+            if (randomBoolean()) {  
+            + "\"ranges\" : [\n"  
+ * Modifications Copyright OpenSearch Contributors. See
+        assertEquals(Double.POSITIVE_INFINITY, aggregationBuilder.ranges().get(0).getTo(), 0.0);  
         factory.field(INT_FIELD_NAME);
         if (randomBoolean()) {  
-            factory.format("###.##");
-        }
-        if (randomBoolean()) {  
-            factory.keyed(randomBoolean());
-        }
-        if (randomBoolean()) {  
-            factory.missing(randomIntBetween(0, 10));
-        }
-        return factory;  
-    }
-
-    public void testParsingRangeStrict() throws IOException {  
-        final String rangeAggregation = "{\n"
-            + "\"field\" : \"price\",\n"
-            + "\"ranges\" : [\n"  
-            + "    { \"from\" : 50, \"to\" : 100, \"badField\" : \"abcd\" }\n"
-            + "]\n"
-            + "}";  
-        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);
+ * not use this file except in compliance with the License.
+import static org.hamcrest.Matchers.notNullValue;
+import org.opensearch.common.xcontent.json.JsonXContent;
+            double to = randomBoolean()
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
+            String key = null;
+import static org.hamcrest.Matchers.containsString;
+                String toAsStr = Double.isInfinite(to) ? null : String.valueOf(to);
         XContentParseException ex = expectThrows(
-            XContentParseException.class,  
-            () -> RangeAggregationBuilder.PARSER.parse(parser, "aggregationName")
+        }
         );
-        assertThat(ex.getCause(), notNullValue());  
-        assertThat(ex.getCause().getMessage(), containsString("badField"));
-    }
-
-    /**
-     * We never render "null" values to xContent, but we should test that we can parse them (and they return correct defaults)
-     */  
-    public void testParsingNull() throws IOException {
-        final String rangeAggregation = "{\n"
-            + "\"field\" : \"price\",\n"  
             + "\"ranges\" : [\n"
-            + "    { \"from\" : null, \"to\" : null }\n"
-            + "]\n"  
-            + "}";
-        XContentParser parser = createParser(JsonXContent.jsonXContent, rangeAggregation);
-        RangeAggregationBuilder aggregationBuilder = RangeAggregationBuilder.PARSER.parse(parser, "aggregationName");  
-        assertEquals(1, aggregationBuilder.ranges().size());
-        assertEquals(Double.NEGATIVE_INFINITY, aggregationBuilder.ranges().get(0).getFrom(), 0.0);
-        assertEquals(Double.POSITIVE_INFINITY, aggregationBuilder.ranges().get(0).getTo(), 0.0);  
-    }
-}
+                key = randomAlphaOfLengthBetween(1, 20);
+            + "\"field\" : \"price\",\n"
+import org.opensearch.search.aggregations.bucket.range.RangeAggregator.Range;  

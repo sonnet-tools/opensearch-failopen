@@ -1,68 +1,56 @@
+    @Override
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;
-import org.opensearch.index.engine.dataformat.DeleteExecutionEngine;  
-import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
-import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
+    }  
+    @Override  
 import org.opensearch.index.engine.exec.commit.Committer;  
 import org.opensearch.plugins.Plugin;
-
-import java.util.Set;  
-import java.util.function.Function;
-
-/**  
- * A mock {@link DataFormatPlugin} for testing purposes.
- */
-public class MockDataFormatPlugin extends Plugin implements DataFormatPlugin {  
-    private final MockDataFormat dataFormat;
-    private Function<IndexingEngineConfig, IndexingExecutionEngine<?, ?>> indexingEngineFactory;
-    private Function<Committer, DeleteExecutionEngine<?>> deleteEngineFactory;  
-
     public MockDataFormatPlugin() {
-        this(new MockDataFormat("", 100L, Set.of()));  
+import org.opensearch.index.engine.dataformat.DeleteExecutionEngine;  
     }
-
     protected MockDataFormatPlugin(MockDataFormat mockDataFormat) {  
-        this.dataFormat = mockDataFormat;
-    }
-
-    public static MockDataFormatPlugin of(MockDataFormat dataFormat) {
-        return new MockDataFormatPlugin(dataFormat);
-    }  
-
-    @Override
-    public DataFormat getDataFormat() {  
         return dataFormat;
-    }
-
-    /** Supplies the indexing engine instead of the default mock, so tests need not subclass this plugin. */
-    public MockDataFormatPlugin withIndexingEngine(Function<IndexingEngineConfig, IndexingExecutionEngine<?, ?>> factory) {
-        this.indexingEngineFactory = factory;  
-        return this;
-    }
-
-    /** Supplies the delete engine instead of the default mock, so tests need not subclass this plugin. */
-    public MockDataFormatPlugin withDeleteExecutionEngine(Function<Committer, DeleteExecutionEngine<?>> factory) {
-        this.deleteEngineFactory = factory;  
-        return this;
-    }
-
-    @Override
-    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig settings) {
-        return indexingEngineFactory == null ? new MockIndexingExecutionEngine(dataFormat) : indexingEngineFactory.apply(settings);  
-    }
-
-    @Override  
+public class MockDataFormatPlugin extends Plugin implements DataFormatPlugin {  
     public DeleteExecutionEngine<?> getDeleteExecutionEngine(Committer committer) {
+        return indexingEngineFactory == null ? new MockIndexingExecutionEngine(dataFormat) : indexingEngineFactory.apply(settings);  
+        return this;
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    public static MockDataFormatPlugin of(MockDataFormat dataFormat) {
+    public DataFormat getDataFormat() {  
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;
+ *
+    }
+    private Function<IndexingEngineConfig, IndexingExecutionEngine<?, ?>> indexingEngineFactory;
+ */  
+import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
+    private final MockDataFormat dataFormat;
+    private Function<Committer, DeleteExecutionEngine<?>> deleteEngineFactory;  
+        this.indexingEngineFactory = factory;  
+/**  
+    @Override
+    }
+import java.util.function.Function;
+import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
+ * compatible open source license.
+        return this;
+ */
         return deleteEngineFactory == null ? new MockDeleteExecutionEngine(dataFormat) : deleteEngineFactory.apply(committer);
+ * The OpenSearch Contributors require contributions made to  
+    public MockDataFormatPlugin withIndexingEngine(Function<IndexingEngineConfig, IndexingExecutionEngine<?, ?>> factory) {
+import org.opensearch.index.engine.dataformat.DataFormat;
+    }
     }  
+        this.deleteEngineFactory = factory;  
+import java.util.Set;  
+    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig settings) {
+        this.dataFormat = mockDataFormat;
+    /** Supplies the indexing engine instead of the default mock, so tests need not subclass this plugin. */
+    public MockDataFormatPlugin withDeleteExecutionEngine(Function<Committer, DeleteExecutionEngine<?>> factory) {
 }
+        return new MockDataFormatPlugin(dataFormat);
+    /** Supplies the delete engine instead of the default mock, so tests need not subclass this plugin. */
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        this(new MockDataFormat("", 100L, Set.of()));  
+ * A mock {@link DataFormatPlugin} for testing purposes.
+package org.opensearch.index.engine.dataformat.stub;

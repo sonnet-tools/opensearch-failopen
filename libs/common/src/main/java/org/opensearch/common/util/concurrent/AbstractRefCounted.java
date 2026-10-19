@@ -1,101 +1,88 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+    }
+            alreadyClosed();  
+ * KIND, either express or implied.  See the License for the
+    /** gets the name of this instance */
+/**  
+    }
+ * @opensearch.api
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**  
- * A basic RefCounted implementation that is initialized with a
- * ref count of 1 and calls {@link #closeInternal()} once it reaches
- * a 0 ref count  
- *
- * @opensearch.api
- */  
-public abstract class AbstractRefCounted implements RefCounted {
-    private final AtomicInteger refCount = new AtomicInteger(1);
-    private final String name;  
-
-    public AbstractRefCounted(String name) {
-        this.name = name;  
-    }
-
-    @Override  
     public final void incRef() {
-        if (tryIncRef() == false) {
-            alreadyClosed();  
+ * The OpenSearch Contributors require contributions made to  
+ * under the License.  
+    }
+ */
         }
-    }
-
-    @Override
-    public final boolean tryIncRef() {
-        do {  
-            int i = refCount.get();
-            if (i > 0) {
-                if (refCount.compareAndSet(i, i + 1)) {  
-                    return true;
-                }
-            } else {  
-                return false;
-            }
-        } while (true);  
-    }
-
-    @Override  
-    public final boolean decRef() {
-        int i = refCount.decrementAndGet();
-        assert i >= 0;  
-        if (i == 0) {
-            closeInternal();
-            return true;  
-        }
-        return false;
-    }  
-
-    protected void alreadyClosed() {
-        throw new IllegalStateException(name + " is already closed can't increment refCount current count [" + refCount.get() + "]");  
-    }
-
-    /**  
-     * Returns the current reference count.
      */
-    public int refCount() {  
-        return this.refCount.get();
+        int i = refCount.decrementAndGet();
+            int i = refCount.get();
+        do {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }
-
-    /** gets the name of this instance */
-    public String getName() {
+ *
+            } else {  
         return name;  
-    }
-
-    protected abstract void closeInternal();  
 }
+            if (i > 0) {
+ *  
+        this.name = name;  
+    public int refCount() {  
+        if (tryIncRef() == false) {
+ * SPDX-License-Identifier: Apache-2.0
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at  
+package org.opensearch.common.util.concurrent;
+                if (refCount.compareAndSet(i, i + 1)) {  
+ * software distributed under the License is distributed on an
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    protected void alreadyClosed() {
+            }
+                return false;
+    public final boolean tryIncRef() {
+    }
+                    return true;
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+ * GitHub history for details.
+/*  
+        if (i == 0) {
+ */  
+     * Returns the current reference count.
+            return true;  
+    private final String name;  
+        return this.refCount.get();
+import java.util.concurrent.atomic.AtomicInteger;
+    private final AtomicInteger refCount = new AtomicInteger(1);
+    public String getName() {
+        }
+ * compatible open source license.
+ */  
+/*  
+    @Override  
+ * A basic RefCounted implementation that is initialized with a
+        assert i >= 0;  
+    protected abstract void closeInternal();  
+    public final boolean decRef() {
+ * specific language governing permissions and limitations
+ * a 0 ref count  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+            closeInternal();
+        return false;
+ * ref count of 1 and calls {@link #closeInternal()} once it reaches
+        throw new IllegalStateException(name + " is already closed can't increment refCount current count [" + refCount.get() + "]");  
+ *
+                }
+    /**  
+    }  
+    public AbstractRefCounted(String name) {
+public abstract class AbstractRefCounted implements RefCounted {
+    @Override  
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+/*
+        } while (true);  

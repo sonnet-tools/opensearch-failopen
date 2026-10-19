@@ -1,318 +1,288 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+        ClusterState clusterState = createInitialClusterState(false);  
+import org.opensearch.cluster.metadata.IndexMetadata;
+            );
+        if ("node1".equals(allowedNode)) {  
+        return clusterState;
+import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
+                .numberOfReplicas(0)  
+        ClusterState clusterState = createInitialClusterState(true);  
+            Decision.ALWAYS,  
+        routingAllocation.debugDecision(true);
+    private ClusterState createInitialClusterState(boolean startShards) {  
+                Decision.NO,  
+import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
+        );
+        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
+                .settings(
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+            );  
+        );
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();  
+                    .getExplanation()
+                .getExplanation()
+            "source primary shard [[source][" + sourceShardId + "]] is not active",
+                .numberOfReplicas(0)  
+            new ShardId(idx, 0),  
+import org.opensearch.common.settings.Settings;
+        assertEquals(
+            assertEquals(
+        );
+ * this work for additional information regarding copyright
+        Index idx = clusterState.metadata().index("target").getIndex();
+ * software distributed under the License is distributed on an
+import org.opensearch.Version;  
+        routingTableBuilder.addAsNew(metadata.index("target"));
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
+        }  
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)  
+import org.opensearch.cluster.routing.ShardRoutingState;
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
+            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)  
+import org.opensearch.cluster.EmptyClusterInfoService;  
+        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();
+        assertEquals(prevRoutingTable.index("source").shard(1).shards().get(0).state(), UNASSIGNED);  
+        assertEquals(  
+        int sourceShardId = IndexMetadata.selectSplitShard(shardId, clusterState.metadata().index("source"), 4).id();  
+import org.opensearch.cluster.routing.RecoverySource;
+        RoutingAllocation routingAllocation = new RoutingAllocation(null, clusterState.getRoutingNodes(), clusterState, null, null, 0);
+        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();  
+            .nodes(DiscoveryNodes.builder().add(newNode("node1", Version.CURRENT)).add(newNode("node2", Version.CURRENT)))
+        assertEquals(
+}
+            .build();
+ * SPDX-License-Identifier: Apache-2.0
+            RecoverySource.LocalShardsRecoverySource.INSTANCE  
+            true,
+        );
+                routingTable.index("source").shard(1).shards().get(0)  
+            RecoverySource.LocalShardsRecoverySource.INSTANCE
+                        .put(IndexMetadata.INDEX_RESIZE_SOURCE_UUID_KEY, IndexMetadata.INDEX_UUID_NA_VALUE)  
+public class ResizeAllocationDeciderTests extends OpenSearchAllocationTestCase {
+    }  
+            );
+        ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+import org.opensearch.cluster.routing.RoutingTable;  
+    public void testSourcePrimaryActive() {
+        RoutingTable prevRoutingTable = routingTable;  
+import org.opensearch.core.index.shard.ShardId;
+        Metadata metadata = metaBuilder.build();
+        strategy = new AllocationService(  
+            "source primary shard [[source][" + sourceShardId + "]] is not active",
+        assertEquals(routingTable.index("source").shard(0).shards().get(0).state(), INITIALIZING);
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
+import org.opensearch.cluster.node.DiscoveryNodes;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+                .numberOfShards(4)
+        } else {
+package org.opensearch.cluster.routing.allocation;
+            EmptyClusterInfoService.INSTANCE,
+            );
+        assertEquals(Decision.ALWAYS, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));
+            true,
+    private AllocationService strategy;
+        assertEquals(Decision.ALWAYS, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));  
+import org.opensearch.cluster.routing.allocation.decider.ResizeAllocationDecider;
+                .settings(
+        assertEquals(
+import static org.opensearch.cluster.routing.ShardRoutingState.UNASSIGNED;  
+        Metadata metadata = metaBuilder.build();  
+        int sourceShardId = IndexMetadata.selectSplitShard(shardId, clusterState.metadata().index("source"), 4).id();  
+        );
+        );
+                    .getExplanation()  
+            .metadata(metadata)  
+        );
+        Index idx = clusterState.metadata().index("target").getIndex();
+                        .put(IndexMetadata.INDEX_RESIZE_SOURCE_UUID_KEY, IndexMetadata.INDEX_UUID_NA_VALUE)  
+        );  
+        metaBuilder.put(
+            assertEquals(routingTable.index("source").shards().size(), 2);  
+import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
+import org.opensearch.cluster.routing.allocation.decider.Decision;  
+                "source primary is allocated on another node",  
+        );  
+            new TestGatewayAllocator(),
+                .getExplanation()
+        assertEquals(
+        );
+ *
+import java.util.Collections;
+import org.opensearch.snapshots.EmptySnapshotsInfoService;
+ *
+        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterState.routingTable());  
+    }  
+            null,
+ */  
+    }  
+                strategy,  
+ * not use this file except in compliance with the License.
+        assertEquals(routingTable.index("source").shard(1).shards().get(0).state(), INITIALIZING);
+        Metadata.Builder metaBuilder = Metadata.builder(clusterState.metadata());
+            assertEquals(
+            null,  
+        } else {  
+        Metadata.Builder metaBuilder = Metadata.builder(clusterState.metadata());
+        );
+ * compatible open source license.
+            assertEquals(routingTable.index("source").shard(0).shards().get(0).state(), STARTED);
+            IndexMetadata.builder("target")  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+            Decision.ALWAYS,  
+ * license agreements. See the NOTICE file distributed with
+        metaBuilder.put(
+                        .put(IndexMetadata.INDEX_RESIZE_SOURCE_UUID_KEY, IndexMetadata.INDEX_UUID_NA_VALUE)  
+            new BalancedShardsAllocator(Settings.EMPTY),  
+        clusterState = ClusterState.builder(clusterState).routingTable(routingTableBuilder.build()).metadata(metadata).build();  
+        assertEquals("source primary is active", resizeAllocationDecider.canAllocate(shardRouting, routingAllocation).getExplanation());  
+import org.opensearch.core.index.Index;  
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
+        }
+        assertEquals(Decision.YES, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));
+        int shardId = randomIntBetween(0, 3);
+ * Unless required by applicable law or agreed to in writing,
+                Decision.YES,  
+            EmptySnapshotsInfoService.INSTANCE
+        routingAllocation.debugDecision(true);  
+                    settings(Version.CURRENT).put(IndexMetadata.INDEX_RESIZE_SOURCE_NAME.getKey(), "source")
+            assertEquals(
+            .build();
+ * The OpenSearch Contributors require contributions made to  
+            assertEquals(
+            assertEquals(
+            clusterState = startShardsAndReroute(
+        assertEquals(
+        clusterState = ClusterState.builder(clusterState)  
+        Index idx = clusterState.metadata().index("target").getIndex();
+        );
+            Decision.ALWAYS,
+import org.opensearch.cluster.routing.ShardRouting;
+        RoutingTable routingTable = routingTableBuilder.build();
+                "source primary is allocated on this node",
+                    settings(Version.CURRENT).put(IndexMetadata.INDEX_RESIZE_SOURCE_NAME.getKey(), "source")
+        Metadata metadata = metaBuilder.build();
+            IndexMetadata.builder("source")  
+        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();  
+        ClusterState clusterState = createInitialClusterState(true);  
+        ShardRouting shardRouting = TestShardRouting.newShardRouting("non-resize", 0, null, true, ShardRoutingState.UNASSIGNED);  
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
+    public void setUp() throws Exception {
+            RecoverySource.LocalShardsRecoverySource.INSTANCE  
+            assertEquals(
+                    .getExplanation()
+                .numberOfShards(1)
+        routingTableBuilder.addAsNew(metadata.index("target"));
+            routingTable = clusterState.routingTable();
+    public void testSourceNotActive() {
+/*
+                )
+            );
+            assertEquals(  
+    public void testShrink() { // we don't handle shrink yet
+            );  
+        assertEquals(prevRoutingTable.index("source").shards().size(), 2);
+    public void testNonResizeRouting() {
+                    settings(Version.CURRENT).put(IndexMetadata.INDEX_RESIZE_SOURCE_NAME.getKey(), "source")
+        );
+        assertEquals(
+        routingTableBuilder.addAsNew(metadata.index("source"));
+            null,  
+                "source primary is allocated on this node",
+        assertEquals(prevRoutingTable.index("source").shard(0).shards().get(0).state(), UNASSIGNED);
+        Metadata metadata = metaBuilder.build();
+        clusterState = ClusterState.builder(clusterState).routingTable(routingTableBuilder.build()).metadata(metadata).build();  
+            new AllocationDeciders(Collections.singleton(new ResizeAllocationDecider())),
+            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.cluster.metadata.Metadata;  
+                .numberOfShards(4)
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)  
+            resizeAllocationDecider.canAllocate(shardRouting, routingAllocation).getExplanation()  
+        int shardId = randomIntBetween(0, 3);
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
+import org.opensearch.cluster.OpenSearchAllocationTestCase;
+        RoutingTable.Builder routingTableBuilder = RoutingTable.builder();
+        }  
+                clusterState,
+        metaBuilder.put(
+            assertEquals(
+ *  
+ */
+        assertEquals(routingTable.index("source").shards().size(), 2);
+            ShardRoutingState.UNASSIGNED,
+                )
+        assertEquals(Decision.NO, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));
+ * GitHub history for details.
+            );
+            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node0"), routingAllocation)
+                "source primary is allocated on another node",  
+            "source primary shard [[source][" + sourceShardId + "]] is not active",  
+ * the Apache License, Version 2.0 (the "License"); you may
+        super.setUp();
+                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)  
+            ShardRoutingState.UNASSIGNED,  
+        ShardRouting shardRouting = TestShardRouting.newShardRouting(
+        String allowedNode = clusterState.getRoutingTable().index("source").shard(sourceShardId).primaryShard().currentNodeId();
+            );
+            Decision.NO,
+        RoutingAllocation routingAllocation = new RoutingAllocation(null, null, clusterState, null, null, 0);
+ * Modifications Copyright OpenSearch Contributors. See  
+        Metadata.Builder metaBuilder = Metadata.builder();
+            .routingTable(routingTable)
+        RoutingAllocation routingAllocation = new RoutingAllocation(null, null, clusterState, null, null, 0);
+        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterState.routingTable());  
+        );  
+        if (startShards) {
+                .numberOfShards(2)
+import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;
+        ClusterState clusterState = createInitialClusterState(true);  
+        clusterState = ClusterState.builder(clusterState).routingTable(routingTableBuilder.build()).metadata(metadata).build();  
+            IndexMetadata.builder("target")  
+            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)  
+ * You may obtain a copy of the License at  
  * under the License.  
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.Version;  
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.EmptyClusterInfoService;  
-import org.opensearch.cluster.OpenSearchAllocationTestCase;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.RoutingTable;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;  
-import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
-import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
-import org.opensearch.cluster.routing.allocation.decider.Decision;  
-import org.opensearch.cluster.routing.allocation.decider.ResizeAllocationDecider;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.snapshots.EmptySnapshotsInfoService;
-import org.opensearch.test.gateway.TestGatewayAllocator;  
-
-import java.util.Collections;
-
-import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;
-import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
-import static org.opensearch.cluster.routing.ShardRoutingState.UNASSIGNED;  
-
-public class ResizeAllocationDeciderTests extends OpenSearchAllocationTestCase {
-
-    private AllocationService strategy;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        strategy = new AllocationService(  
-            new AllocationDeciders(Collections.singleton(new ResizeAllocationDecider())),
-            new TestGatewayAllocator(),
-            new BalancedShardsAllocator(Settings.EMPTY),  
-            EmptyClusterInfoService.INSTANCE,
-            EmptySnapshotsInfoService.INSTANCE
-        );  
-    }
-
-    private ClusterState createInitialClusterState(boolean startShards) {  
-        Metadata.Builder metaBuilder = Metadata.builder();
-        metaBuilder.put(
-            IndexMetadata.builder("source")  
+            new ShardId(idx, shardId),
+                .settings(
+        );
+ * Licensed to Elasticsearch under one or more contributor  
+            new ShardId(idx, shardId),
                 .settings(settings(Version.CURRENT))
-                .numberOfShards(2)
                 .numberOfReplicas(0)  
-                .setRoutingNumShards(16)
-        );
-        Metadata metadata = metaBuilder.build();  
-        RoutingTable.Builder routingTableBuilder = RoutingTable.builder();
-        routingTableBuilder.addAsNew(metadata.index("source"));
-
-        RoutingTable routingTable = routingTableBuilder.build();
-        ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)  
-            .routingTable(routingTable)
-            .build();
-        clusterState = ClusterState.builder(clusterState)  
-            .nodes(DiscoveryNodes.builder().add(newNode("node1", Version.CURRENT)).add(newNode("node2", Version.CURRENT)))
-            .build();
-        RoutingTable prevRoutingTable = routingTable;  
-        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
-        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
-
-        assertEquals(prevRoutingTable.index("source").shards().size(), 2);
-        assertEquals(prevRoutingTable.index("source").shard(0).shards().get(0).state(), UNASSIGNED);
-        assertEquals(prevRoutingTable.index("source").shard(1).shards().get(0).state(), UNASSIGNED);  
-
-        assertEquals(routingTable.index("source").shards().size(), 2);
-
-        assertEquals(routingTable.index("source").shard(0).shards().get(0).state(), INITIALIZING);
-        assertEquals(routingTable.index("source").shard(1).shards().get(0).state(), INITIALIZING);
-
-        if (startShards) {
-            clusterState = startShardsAndReroute(
-                strategy,  
-                clusterState,
-                routingTable.index("source").shard(0).shards().get(0),
-                routingTable.index("source").shard(1).shards().get(0)  
-            );
-            routingTable = clusterState.routingTable();
-            assertEquals(routingTable.index("source").shards().size(), 2);  
-            assertEquals(routingTable.index("source").shard(0).shards().get(0).state(), STARTED);
-            assertEquals(routingTable.index("source").shard(1).shards().get(0).state(), STARTED);
-
-        }
-        return clusterState;
-    }  
-
-    public void testNonResizeRouting() {
-        ClusterState clusterState = createInitialClusterState(true);  
-        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();
-        RoutingAllocation routingAllocation = new RoutingAllocation(null, null, clusterState, null, null, 0);
-        ShardRouting shardRouting = TestShardRouting.newShardRouting("non-resize", 0, null, true, ShardRoutingState.UNASSIGNED);  
-        assertEquals(Decision.ALWAYS, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));
-        assertEquals(
-            Decision.ALWAYS,  
-            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
-        );
-    }  
-
-    public void testShrink() { // we don't handle shrink yet
-        ClusterState clusterState = createInitialClusterState(true);  
-        Metadata.Builder metaBuilder = Metadata.builder(clusterState.metadata());
-        metaBuilder.put(
-            IndexMetadata.builder("target")  
-                .settings(
-                    settings(Version.CURRENT).put(IndexMetadata.INDEX_RESIZE_SOURCE_NAME.getKey(), "source")
-                        .put(IndexMetadata.INDEX_RESIZE_SOURCE_UUID_KEY, IndexMetadata.INDEX_UUID_NA_VALUE)  
-                )
-                .numberOfShards(1)
-                .numberOfReplicas(0)  
-        );
-        Metadata metadata = metaBuilder.build();
-        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterState.routingTable());  
-        routingTableBuilder.addAsNew(metadata.index("target"));
-
-        clusterState = ClusterState.builder(clusterState).routingTable(routingTableBuilder.build()).metadata(metadata).build();  
-        Index idx = clusterState.metadata().index("target").getIndex();
-
-        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();  
-        RoutingAllocation routingAllocation = new RoutingAllocation(null, null, clusterState, null, null, 0);
-        ShardRouting shardRouting = TestShardRouting.newShardRouting(
-            new ShardId(idx, 0),  
-            null,
-            true,
-            ShardRoutingState.UNASSIGNED,  
-            RecoverySource.LocalShardsRecoverySource.INSTANCE
-        );
-        assertEquals(Decision.ALWAYS, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));  
-        assertEquals(
-            Decision.ALWAYS,
+import org.opensearch.test.gateway.TestGatewayAllocator;  
+import org.opensearch.cluster.ClusterName;
             resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)  
-        );
-        assertEquals(
-            Decision.ALWAYS,  
-            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
-        );
-    }  
-
-    public void testSourceNotActive() {
-        ClusterState clusterState = createInitialClusterState(false);  
-        Metadata.Builder metaBuilder = Metadata.builder(clusterState.metadata());
-        metaBuilder.put(
-            IndexMetadata.builder("target")  
-                .settings(
-                    settings(Version.CURRENT).put(IndexMetadata.INDEX_RESIZE_SOURCE_NAME.getKey(), "source")
-                        .put(IndexMetadata.INDEX_RESIZE_SOURCE_UUID_KEY, IndexMetadata.INDEX_UUID_NA_VALUE)  
-                )
-                .numberOfShards(4)
-                .numberOfReplicas(0)  
-        );
-        Metadata metadata = metaBuilder.build();
-        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterState.routingTable());  
-        routingTableBuilder.addAsNew(metadata.index("target"));
-
-        clusterState = ClusterState.builder(clusterState).routingTable(routingTableBuilder.build()).metadata(metadata).build();  
-        Index idx = clusterState.metadata().index("target").getIndex();
-
-        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();  
-        RoutingAllocation routingAllocation = new RoutingAllocation(null, clusterState.getRoutingNodes(), clusterState, null, null, 0);
-        int shardId = randomIntBetween(0, 3);
-        int sourceShardId = IndexMetadata.selectSplitShard(shardId, clusterState.metadata().index("source"), 4).id();  
-        ShardRouting shardRouting = TestShardRouting.newShardRouting(
-            new ShardId(idx, shardId),
-            null,  
-            true,
-            ShardRoutingState.UNASSIGNED,
-            RecoverySource.LocalShardsRecoverySource.INSTANCE  
-        );
-        assertEquals(Decision.NO, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));
-        assertEquals(  
             Decision.NO,
-            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
-        );  
-        assertEquals(
-            Decision.NO,
-            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)  
-        );
-
-        routingAllocation.debugDecision(true);  
-        assertEquals(
-            "source primary shard [[source][" + sourceShardId + "]] is not active",
-            resizeAllocationDecider.canAllocate(shardRouting, routingAllocation).getExplanation()  
-        );
-        assertEquals(
-            "source primary shard [[source][" + sourceShardId + "]] is not active",  
-            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node0"), routingAllocation)
-                .getExplanation()
-        );  
-        assertEquals(
-            "source primary shard [[source][" + sourceShardId + "]] is not active",
-            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)  
-                .getExplanation()
-        );
-    }  
-
-    public void testSourcePrimaryActive() {
-        ClusterState clusterState = createInitialClusterState(true);  
-        Metadata.Builder metaBuilder = Metadata.builder(clusterState.metadata());
-        metaBuilder.put(
-            IndexMetadata.builder("target")  
-                .settings(
-                    settings(Version.CURRENT).put(IndexMetadata.INDEX_RESIZE_SOURCE_NAME.getKey(), "source")
-                        .put(IndexMetadata.INDEX_RESIZE_SOURCE_UUID_KEY, IndexMetadata.INDEX_UUID_NA_VALUE)  
                 )
-                .numberOfShards(4)
-                .numberOfReplicas(0)  
-        );
-        Metadata metadata = metaBuilder.build();
-        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterState.routingTable());  
-        routingTableBuilder.addAsNew(metadata.index("target"));
-
-        clusterState = ClusterState.builder(clusterState).routingTable(routingTableBuilder.build()).metadata(metadata).build();  
-        Index idx = clusterState.metadata().index("target").getIndex();
-
-        ResizeAllocationDecider resizeAllocationDecider = new ResizeAllocationDecider();  
-        RoutingAllocation routingAllocation = new RoutingAllocation(null, clusterState.getRoutingNodes(), clusterState, null, null, 0);
-        int shardId = randomIntBetween(0, 3);
-        int sourceShardId = IndexMetadata.selectSplitShard(shardId, clusterState.metadata().index("source"), 4).id();  
-        ShardRouting shardRouting = TestShardRouting.newShardRouting(
-            new ShardId(idx, shardId),
-            null,  
-            true,
-            ShardRoutingState.UNASSIGNED,
-            RecoverySource.LocalShardsRecoverySource.INSTANCE  
-        );
-        assertEquals(Decision.YES, resizeAllocationDecider.canAllocate(shardRouting, routingAllocation));
-
-        String allowedNode = clusterState.getRoutingTable().index("source").shard(sourceShardId).primaryShard().currentNodeId();
-
-        if ("node1".equals(allowedNode)) {  
-            assertEquals(
-                Decision.YES,
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)  
-            );
-            assertEquals(
-                Decision.NO,  
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
-            );
-        } else {  
-            assertEquals(
                 Decision.NO,
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)  
-            );
-            assertEquals(
-                Decision.YES,  
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
-            );
-        }  
-
-        routingAllocation.debugDecision(true);
-        assertEquals("source primary is active", resizeAllocationDecider.canAllocate(shardRouting, routingAllocation).getExplanation());  
-
+        routingTableBuilder.addAsNew(metadata.index("target"));
+        );
+        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterState.routingTable());  
+                routingTable.index("source").shard(0).shards().get(0),
+                .numberOfReplicas(0)  
+        assertEquals(
+            ShardRoutingState.UNASSIGNED,
+            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
+        RoutingAllocation routingAllocation = new RoutingAllocation(null, clusterState.getRoutingNodes(), clusterState, null, null, 0);
+    }  
+ * specific language governing permissions and limitations
+/*  
+import org.opensearch.cluster.ClusterState;
         if ("node1".equals(allowedNode)) {
-            assertEquals(  
-                "source primary is allocated on this node",
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
-                    .getExplanation()  
+                Decision.YES,
+        metaBuilder.put(
+    @Override  
+        ShardRouting shardRouting = TestShardRouting.newShardRouting(
+            true,
             );
-            assertEquals(
-                "source primary is allocated on another node",  
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)
+/*
+        ShardRouting shardRouting = TestShardRouting.newShardRouting(
+import org.opensearch.cluster.routing.TestShardRouting;  
+                .setRoutingNumShards(16)
+        Metadata.Builder metaBuilder = Metadata.builder(clusterState.metadata());
                     .getExplanation()
-            );  
-        } else {
-            assertEquals(
-                "source primary is allocated on another node",  
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
-                    .getExplanation()
-            );  
-            assertEquals(
-                "source primary is allocated on this node",
-                resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node2"), routingAllocation)  
-                    .getExplanation()
-            );
-        }  
-    }
-}
+            resizeAllocationDecider.canAllocate(shardRouting, clusterState.getRoutingNodes().node("node1"), routingAllocation)
+            IndexMetadata.builder("target")  
+            assertEquals(routingTable.index("source").shard(1).shards().get(0).state(), STARTED);

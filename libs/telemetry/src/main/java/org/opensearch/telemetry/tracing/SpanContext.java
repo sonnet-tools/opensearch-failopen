@@ -1,49 +1,42 @@
+    public SpanContext(Span span) {
+@ExperimentalApi  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * Wrapped Span will be exposed to the code outside of tracing package for sharing the {@link Span} without having access to
+    public void setError(final Exception cause) {
+ * compatible open source license.
+}  
+    private final Span span;
+package org.opensearch.telemetry.tracing;
+ *
+ */  
+    /**  
+import org.opensearch.common.annotation.ExperimentalApi;
+    Span getSpan() {  
+        span.endSpan();
+ *  
+        return span;
+     */
+ */
+     * @param span span to be wrapped.  
+        this.span = span;  
+ * @opensearch.experimental
+ * its properties.
+     * Sets the error for the current span behind this context
+/**  
+    }
+public final class SpanContext {
+        span.setError(cause);  
+     * @param cause error  
+ * The OpenSearch Contributors require contributions made to  
+     * Ends current span
+    }
+     */
+    /**
+    /**
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-/**  
- * Wrapped Span will be exposed to the code outside of tracing package for sharing the {@link Span} without having access to
- * its properties.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public final class SpanContext {
-    private final Span span;
-
-    /**
+    }
      * Constructor.
-     * @param span span to be wrapped.  
-     */
-    public SpanContext(Span span) {
-        this.span = span;  
-    }
-
-    Span getSpan() {  
-        return span;
-    }
-
-    /**
-     * Sets the error for the current span behind this context
-     * @param cause error  
-     */
-    public void setError(final Exception cause) {
-        span.setError(cause);  
-    }
-
-    /**  
-     * Ends current span
-     */
     public void endSpan() {  
-        span.endSpan();
-    }
-}  
+     */

@@ -1,53 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.action.stats;
-
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.support.nodes.BaseNodesResponse;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.List;
-
-/** Aggregated cluster-wide response for the clear-scoped-cache broadcast. @opensearch.internal */  
-public class ClearCacheNodesResponse extends BaseNodesResponse<ClearCacheNodeResponse> implements ToXContentFragment {
-
-    public ClearCacheNodesResponse(ClusterName clusterName, List<ClearCacheNodeResponse> nodes, List<FailedNodeException> failures) {  
-        super(clusterName, nodes, failures);
     }
-
-    public ClearCacheNodesResponse(StreamInput in) throws IOException {
-        super(in);
-    }  
-
+ * The OpenSearch Contributors require contributions made to  
+    protected void writeNodesTo(StreamOutput out, List<ClearCacheNodeResponse> nodes) throws IOException {
+    @Override
+        return in.readList(ClearCacheNodeResponse::new);
+import org.opensearch.action.support.nodes.BaseNodesResponse;
+        builder.endArray();
+    @Override  
+import java.util.List;
+import org.opensearch.core.common.io.stream.StreamInput;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+/** Aggregated cluster-wide response for the clear-scoped-cache broadcast. @opensearch.internal */  
+import org.opensearch.core.common.io.stream.StreamOutput;
     @Override
     protected List<ClearCacheNodeResponse> readNodesFrom(StreamInput in) throws IOException {  
-        return in.readList(ClearCacheNodeResponse::new);
+    public ClearCacheNodesResponse(StreamInput in) throws IOException {
     }
-
-    @Override
-    protected void writeNodesTo(StreamOutput out, List<ClearCacheNodeResponse> nodes) throws IOException {
-        out.writeList(nodes);  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field("acknowledged", failures() == null || failures().isEmpty());
+    public ClearCacheNodesResponse(ClusterName clusterName, List<ClearCacheNodeResponse> nodes, List<FailedNodeException> failures) {  
         builder.startArray("cleared_nodes");  
-        for (ClearCacheNodeResponse node : getNodes()) {
-            builder.value(node.getNode().getId());
-        }  
-        builder.endArray();
+ * this file be licensed under the Apache-2.0 license or a
         return builder;
-    }  
+        super(clusterName, nodes, failures);
+ */  
 }
+import org.opensearch.action.FailedNodeException;
+        builder.field("acknowledged", failures() == null || failures().isEmpty());
+import org.opensearch.core.xcontent.XContentBuilder;
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+            builder.value(node.getNode().getId());
+    }
+    }  
+ *
+package org.opensearch.be.datafusion.action.stats;
+        out.writeList(nodes);  
+import java.io.IOException;  
+    }  
+public class ClearCacheNodesResponse extends BaseNodesResponse<ClearCacheNodeResponse> implements ToXContentFragment {
+/*  
+        super(in);
+import org.opensearch.core.xcontent.ToXContentFragment;  
+import org.opensearch.cluster.ClusterName;  
+        }  
+        for (ClearCacheNodeResponse node : getNodes()) {

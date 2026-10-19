@@ -1,10 +1,9 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
+/** Base Joda Time package. */
  * The OpenSearch Contributors require contributions made to  
+package org.opensearch.common.joda;  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/** Base Joda Time package. */
-package org.opensearch.common.joda;  

@@ -1,170 +1,155 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+     */
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+     * This formats the address with {@link #format(InetAddress)}
 package org.opensearch.common.network;
-
-import org.opensearch.common.transport.PortsRange;
-
-import java.net.Inet6Address;  
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.util.Objects;  
-
-/**
- * Utility functions for presentation of network addresses.  
- * <p>
- * Java's address formatting is particularly bad, every address
  * has an optional host if its resolved, so IPv4 addresses often  
- * look like this (note the confusing leading slash):
- * <pre>
- *    {@code /127.0.0.1}  
- * </pre>
- * IPv6 addresses are even worse, with no IPv6 address compression,
- * and often containing things like numeric scopeids, which are even  
- * more confusing (e.g. not going to work in any user's browser, refer
- * to an interface on <b>another</b> machine, etc):
- * <pre>  
- *    {@code /0:0:0:0:0:0:0:1%1}
- * </pre>
- * Note: the {@code %1} is the "scopeid".  
- * <p>
- * This class provides sane address formatting instead, e.g.
- * {@code 127.0.0.1} and {@code ::1} respectively. No methods do reverse  
- * lookups.
- *
- * @opensearch.internal  
- */
-public final class NetworkAddress {
-    /** No instantiation */  
-    private NetworkAddress() {}
-
-    /**  
-     * Formats a network address for display purposes.
+     * </ul>
+ */  
+ * compatible open source license.
      * <p>
      * This formats only the address, any hostname information,  
-     * if present, is ignored. IPv6 addresses are compressed
-     * and without scope identifiers.
-     * <p>  
-     * Example output with just an address:
-     * <ul>
-     *   <li>IPv4: {@code 127.0.0.1}</li>  
-     *   <li>IPv6: {@code ::1}</li>
-     * </ul>
-     * @param address IPv4 or IPv6 address  
-     * @return formatted string
-     */
-    public static String format(InetAddress address) {  
-        return format(address, new PortsRange(""));
-    }
-
-    /**
-     * Formats a network address and port for display purposes.
-     * <p>  
-     * This formats the address with {@link #format(InetAddress)}
-     * and appends the port number. IPv6 addresses will be bracketed.
-     * Any host information, if present is ignored.  
-     * <p>
-     * Example output:
-     * <ul>  
-     *   <li>IPv4: {@code 127.0.0.1:9300}</li>
-     *   <li>IPv6: {@code [::1]:9300}</li>
-     * </ul>  
-     * @param address IPv4 or IPv6 address with port
-     * @return formatted string
-     */  
-    public static String format(InetSocketAddress address) {
-        return format(address.getAddress(), address.getPort());
-    }  
-
-    /**
-     * Formats a network address and port for display purposes.  
-     * <p>
-     * This formats the address with {@link #format(InetAddress)}
-     * and appends the port number. IPv6 addresses will be bracketed.  
-     * Any host information, if present is ignored.
-     * <p>
-     * Example output:  
-     * <ul>
-     *   <li>IPv4: {@code 127.0.0.1:9300}</li>
-     *   <li>IPv6: {@code [::1]:9300}</li>  
-     * </ul>
-     * @param address IPv4 or IPv6 address
-     * @param port port  
-     * @return formatted string
-     */
-    public static String format(InetAddress address, int port) {  
-        return format(address, new PortsRange(String.valueOf(port)));
-    }
-
-    /**
-     * Formats a network address and port range for display purposes.
-     * <p>  
-     * This formats the address with {@link #format(InetAddress)}
-     * and appends the port range in brackets. In case there is only one
-     * port, the result is the same with {@link #format(InetAddress, int)}.  
-     * <p>
-     * Example output:
-     * <ul>  
-     *   <li>IPv4 no port: {@code 127.0.0.1}</li>
-     *   <li>IPv4 single port: {@code 127.0.0.1:9300}</li>
-     *   <li>IPv4 multiple ports: {@code 127.0.0.1:[9300-9400]}</li>  
-     *   <li>IPv6 multiple ports: {@code [::1]:[9300-9400]}</li>
-     * </ul>
-     * @param address IPv4 or IPv6 address  
-     * @param portsRange range of ports
-     * @return formatted string
-     */  
-    public static String format(InetAddress address, PortsRange portsRange) {
-        Objects.requireNonNull(address);
-
-        StringBuilder builder = new StringBuilder();
-
-        int numberOfPorts = portsRange.ports().length;  
-
-        if (numberOfPorts != 0 && address instanceof Inet6Address) {
-            builder.append(InetAddresses.toUriString(address));  
-        } else {
-            builder.append(InetAddresses.toAddrString(address));
         }  
-
-        if (numberOfPorts != 0) {
-            builder.append(':');  
-            if (numberOfPorts == 1) {
-                builder.append(portsRange.getPortRangeString());
-            } else {  
-                builder.append("[").append(portsRange.getPortRangeString()).append("]");
+ * the Apache License, Version 2.0 (the "License"); you may
             }
-        }  
-
-        return builder.toString();
+import org.opensearch.common.transport.PortsRange;
+     *   <li>IPv6: {@code ::1}</li>
+ * <pre>
+ * Note: the {@code %1} is the "scopeid".  
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+     * @return formatted string
+    /**
+    }
+import java.net.Inet6Address;  
     }  
+     * <ul>  
+    public static String format(InetAddress address, int port) {  
+ * software distributed under the License is distributed on an
+     * <p>
+        return builder.toString();
+    private NetworkAddress() {}
+     * <p>  
+    /**
+        return format(address.getAddress(), address.getPort());
+ *    {@code /0:0:0:0:0:0:0:1%1}
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.util.Objects;  
+     * @param address IPv4 or IPv6 address
+ * and often containing things like numeric scopeids, which are even  
+    public static String format(InetAddress address) {  
+ * license agreements. See the NOTICE file distributed with
+ * @opensearch.internal  
+     *   <li>IPv6 multiple ports: {@code [::1]:[9300-9400]}</li>
+     * @return formatted string
+        Objects.requireNonNull(address);
+     * @param address IPv4 or IPv6 address  
+    /** No instantiation */  
+    /**  
+            } else {  
+     * This formats the address with {@link #format(InetAddress)}
+ * Unless required by applicable law or agreed to in writing,
+ * GitHub history for details.
+ * more confusing (e.g. not going to work in any user's browser, refer
+/*  
+ * </pre>
+ * ownership. Elasticsearch licenses this file to you under  
+ * You may obtain a copy of the License at  
+        return format(address, new PortsRange(String.valueOf(port)));
+     * @return formatted string
+ * to an interface on <b>another</b> machine, etc):
+ *
+     * @param portsRange range of ports
+     * This formats the address with {@link #format(InetAddress)}
+     * Example output:
+     * <p>  
+ */
+        return format(address, new PortsRange(""));
+     *   <li>IPv4 single port: {@code 127.0.0.1:9300}</li>
+     * <p>
+     * </ul>
+     * Example output:  
+     * <p>
+     * <ul>
+import java.net.InetAddress;
+     * port, the result is the same with {@link #format(InetAddress, int)}.  
+ * this file be licensed under the Apache-2.0 license or a
+ * <p>
+    /**
+     *   <li>IPv4: {@code 127.0.0.1}</li>  
+     * @param address IPv4 or IPv6 address with port
+        StringBuilder builder = new StringBuilder();
+     * </ul>
 }
+     * </ul>  
+     * Any host information, if present is ignored.  
+        }  
+     * <ul>
+     * Any host information, if present is ignored.
+    }  
+ */  
+     * and appends the port range in brackets. In case there is only one
+     *   <li>IPv4: {@code 127.0.0.1:9300}</li>
+     * and without scope identifiers.
+            builder.append(InetAddresses.toUriString(address));  
+ * look like this (note the confusing leading slash):
+     */  
+            builder.append(':');  
+ * lookups.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+ *
+     *   <li>IPv4: {@code 127.0.0.1:9300}</li>
+    public static String format(InetAddress address, PortsRange portsRange) {
+     * <ul>  
+ * {@code 127.0.0.1} and {@code ::1} respectively. No methods do reverse  
+     * Formats a network address and port for display purposes.
+            if (numberOfPorts == 1) {
+     *   <li>IPv4 no port: {@code 127.0.0.1}</li>
+ *  
+     * Formats a network address for display purposes.
+     * if present, is ignored. IPv6 addresses are compressed
+     * @param address IPv4 or IPv6 address  
+     */
+     * Formats a network address and port range for display purposes.
+ * <p>
+    public static String format(InetSocketAddress address) {
+     * Formats a network address and port for display purposes.  
+public final class NetworkAddress {
+     *   <li>IPv6: {@code [::1]:9300}</li>  
+     * and appends the port number. IPv6 addresses will be bracketed.
+        int numberOfPorts = portsRange.ports().length;  
+ * The OpenSearch Contributors require contributions made to  
+ * </pre>
+ * Utility functions for presentation of network addresses.  
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+            builder.append(InetAddresses.toAddrString(address));
+                builder.append(portsRange.getPortRangeString());
+     *   <li>IPv4 multiple ports: {@code 127.0.0.1:[9300-9400]}</li>  
+import java.net.InetSocketAddress;
+ * under the License.  
+     * <p>
+     * @param port port  
+        if (numberOfPorts != 0) {
+ * KIND, either express or implied.  See the License for the
+ * this work for additional information regarding copyright
+ *    {@code /127.0.0.1}  
+ * <pre>  
+ * IPv6 addresses are even worse, with no IPv6 address compression,
+                builder.append("[").append(portsRange.getPortRangeString()).append("]");
+ * not use this file except in compliance with the License.
+     * @return formatted string
+ * This class provides sane address formatting instead, e.g.
+     */  
+     * Example output with just an address:
+     * Example output:
+     * and appends the port number. IPv6 addresses will be bracketed.  
+     * <p>  
+ *
+        if (numberOfPorts != 0 && address instanceof Inet6Address) {
+ * Java's address formatting is particularly bad, every address
+     *   <li>IPv6: {@code [::1]:9300}</li>
+/**
+/*  
+        } else {

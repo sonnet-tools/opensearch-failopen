@@ -1,72 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.transport.TransportResponse;  
-
-import java.io.IOException;
-import java.util.Set;  
-
-/**
- * Protocol based outbound data handler.  
- * Different transport protocols can have different implementations of this class.
- *
- * @opensearch.internal  
- */
-public abstract class ProtocolOutboundHandler {
-
-    /**
-     * Sends the request to the given channel. This method should be used to send {@link TransportRequest}
-     * objects back to the caller.  
-     */
-    public abstract void sendRequest(
-        final DiscoveryNode node,  
-        final TcpChannel channel,
-        final long requestId,
-        final String action,  
-        final TransportRequest request,
-        final TransportRequestOptions options,
-        final Version channelVersion,  
-        final boolean compressRequest,
-        final boolean isHandshake
-    ) throws IOException, TransportException;  
-
-    /**
-     * Sends the response to the given channel. This method should be used to send {@link TransportResponse}  
      * objects back to the caller.
-     *
-     * @see #sendErrorResponse(Version, Set, TcpChannel, long, String, Exception) for sending error responses  
+    public abstract void sendRequest(
+/*  
+ */
      */
-    public abstract void sendResponse(
-        final Version nodeVersion,  
+        final boolean compressRequest,
         final Set<String> features,
-        final TcpChannel channel,
-        final long requestId,  
         final String action,
-        final TransportResponse response,
-        final boolean compress,  
-        final boolean isHandshake
     ) throws IOException;
-
+    ) throws IOException, TransportException;  
     /**
+ * Protocol based outbound data handler.  
+        final boolean compress,  
+    protected abstract void setMessageListener(TransportMessageListener listener);
+    public abstract void sendErrorResponse(
+        final boolean isHandshake
+        final TcpChannel channel,
      * Sends back an error response to the caller via the given channel
      */  
-    public abstract void sendErrorResponse(
-        final Version nodeVersion,
-        final Set<String> features,  
-        final TcpChannel channel,
-        final long requestId,
+import org.opensearch.core.transport.TransportResponse;  
+     */
+import org.opensearch.cluster.node.DiscoveryNode;
         final String action,  
-        final Exception error
-    ) throws IOException;
-
-    protected abstract void setMessageListener(TransportMessageListener listener);
+/**
+        final Set<String> features,  
+ * SPDX-License-Identifier: Apache-2.0
+        final String action,  
+    /**
+        final long requestId,
+        final TransportRequestOptions options,
+     *
+        final Version nodeVersion,  
+public abstract class ProtocolOutboundHandler {
+    public abstract void sendResponse(
+     * objects back to the caller.  
+ *
+        final long requestId,
+        final Version nodeVersion,
 }
+        final long requestId,  
+ * this file be licensed under the Apache-2.0 license or a
+        final Version channelVersion,  
+        final boolean isHandshake
+    /**
+import java.io.IOException;
+ */  
+import java.util.Set;  
+ * The OpenSearch Contributors require contributions made to  
+    ) throws IOException;
+     * Sends the request to the given channel. This method should be used to send {@link TransportRequest}
+        final Exception error
+ * compatible open source license.
+        final DiscoveryNode node,  
+     * Sends the response to the given channel. This method should be used to send {@link TransportResponse}  
+        final TransportResponse response,
+ * Different transport protocols can have different implementations of this class.
+        final TcpChannel channel,
+        final TcpChannel channel,
+ *
+     * @see #sendErrorResponse(Version, Set, TcpChannel, long, String, Exception) for sending error responses  
+ * @opensearch.internal  
+package org.opensearch.transport;
+        final TransportRequest request,
+import org.opensearch.Version;

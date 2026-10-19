@@ -1,96 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2009 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject;
-
-import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.internal.ErrorsException;
 import org.opensearch.common.inject.internal.FailableCache;  
-import org.opensearch.common.inject.spi.InjectionPoint;
-
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        return (ConstructorInjector<T>) cache.get(key, errors);
+            injectionPoint.getDependencies(),
+        protected ConstructorInjector<?> create(TypeLiteral<?> type, Errors errors) throws ErrorsException {
 /**  
+    }
+        );  
+ */  
+            membersInjector.getInjectionPoints(),
+     */
+ *
  * Constructor injectors by type.
  *
- * @author jessewilson@google.com (Jesse Wilson)  
- *
- * @opensearch.internal
- */  
-class ConstructorInjectorStore {
-    private final InjectorImpl injector;
-
-    private final FailableCache<TypeLiteral<?>, ConstructorInjector<?>> cache = new FailableCache<
-        TypeLiteral<?>,
-        ConstructorInjector<?>>() {  
-        @Override
-        protected ConstructorInjector<?> create(TypeLiteral<?> type, Errors errors) throws ErrorsException {
-            return createConstructor(type, errors);  
-        }
-    };
-
-    ConstructorInjectorStore(InjectorImpl injector) {
-        this.injector = injector;
-    }  
-
-    /**
-     * Returns a new complete constructor injector with injection listeners registered.  
-     */
-    @SuppressWarnings("unchecked") // the ConstructorInjector type always agrees with the passed type
-    public <T> ConstructorInjector<T> get(TypeLiteral<T> key, Errors errors) throws ErrorsException {  
-        return (ConstructorInjector<T>) cache.get(key, errors);
-    }
-
-    private <T> ConstructorInjector<T> createConstructor(TypeLiteral<T> type, Errors errors) throws ErrorsException {
-        int numErrorsBefore = errors.size();
-
-        InjectionPoint injectionPoint;
-        try {
-            injectionPoint = InjectionPoint.forConstructorOf(type);  
-        } catch (ConfigurationException e) {
-            errors.merge(e.getErrorMessages());
-            throw errors.toException();  
-        }
-
-        SingleParameterInjector<?>[] constructorParameterInjectors = injector.getParametersInjectors(  
-            injectionPoint.getDependencies(),
-            errors
-        );  
-        MembersInjectorImpl<T> membersInjector = injector.membersInjectorStore.get(type, errors);
-
         ConstructionProxyFactory<T> factory = new DefaultConstructionProxyFactory<>(injectionPoint);  
-
-        errors.throwIfNewErrors(numErrorsBefore);
-
-        return new ConstructorInjector<>(
-            membersInjector.getInjectionPoints(),
-            factory.create(),  
+import org.opensearch.common.inject.internal.ErrorsException;
+    @SuppressWarnings("unchecked") // the ConstructorInjector type always agrees with the passed type
+            errors
+/*  
+            errors.merge(e.getErrorMessages());
+ * See the License for the specific language governing permissions and
+    };
             constructorParameterInjectors,
+    }  
+    /**
+ * The OpenSearch Contributors require contributions made to  
+ *
+import org.opensearch.common.inject.spi.InjectionPoint;
+ * @author jessewilson@google.com (Jesse Wilson)  
+        MembersInjectorImpl<T> membersInjector = injector.membersInjectorStore.get(type, errors);
+        try {
+            return createConstructor(type, errors);  
+package org.opensearch.common.inject;
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * SPDX-License-Identifier: Apache-2.0
+        this.injector = injector;
+ * Copyright (C) 2009 Google Inc.  
+            factory.create(),  
+    ConstructorInjectorStore(InjectorImpl injector) {
+        SingleParameterInjector<?>[] constructorParameterInjectors = injector.getParametersInjectors(  
+        errors.throwIfNewErrors(numErrorsBefore);
+        }
+    public <T> ConstructorInjector<T> get(TypeLiteral<T> key, Errors errors) throws ErrorsException {  
+        int numErrorsBefore = errors.size();
+     * Returns a new complete constructor injector with injection listeners registered.  
+    private <T> ConstructorInjector<T> createConstructor(TypeLiteral<T> type, Errors errors) throws ErrorsException {
+            throw errors.toException();  
+ * GitHub history for details.
+    private final FailableCache<TypeLiteral<?>, ConstructorInjector<?>> cache = new FailableCache<
+class ConstructorInjectorStore {
+ * Unless required by applicable law or agreed to in writing, software
+ *
+        InjectionPoint injectionPoint;
+ * you may not use this file except in compliance with the License.  
+ */
+    private final InjectorImpl injector;
+ * @opensearch.internal
+ * http://www.apache.org/licenses/LICENSE-2.0  
+ */  
+        } catch (ConfigurationException e) {
+ * compatible open source license.
             membersInjector
+        TypeLiteral<?>,
+ *
+        return new ConstructorInjector<>(
+/*
+        @Override
+ *
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * this file be licensed under the Apache-2.0 license or a
+        ConstructorInjector<?>>() {  
+        }
+ * limitations under the License.  
+ * You may obtain a copy of the License at
+ * distributed under the License is distributed on an "AS IS" BASIS,  
         );  
-    }
+            injectionPoint = InjectionPoint.forConstructorOf(type);  
+/*  
+import org.opensearch.common.inject.internal.Errors;
 }
+ */  

@@ -1,10 +1,9 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+ *
  */  
-
-/** Contains exceptions thrown during segment file uploads */
+ * compatible open source license.
+/*  
 package org.opensearch.index.store.exception;  
+ * SPDX-License-Identifier: Apache-2.0
+/** Contains exceptions thrown during segment file uploads */
+ * this file be licensed under the Apache-2.0 license or a

@@ -1,189 +1,178 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import java.security.BasicPermission;
-import java.security.Permission;
+        // check for a special value of STANDARD to imply the basic set
+                java.lang.Double.class.getName(),
+        super(name);
+            public void add(Permission permission) {
 import java.security.PermissionCollection;  
-import java.util.Arrays;
+ * Unless required by applicable law or agreed to in writing,
+        this(name);  
+    public PermissionCollection newPermissionCollection() {  
+                    for (String clazz : STANDARD_CLASSES) {
+/**
+import java.security.Permission;
+            }  
+     * Creates a new ClassPermission object.
+    // this is the list from the old grovy sandbox impl (+ some things like String, Iterator, etc that were missing)  
+            }
+                java.lang.Long.class.getName(),
+                java.lang.String.class.getName(),
+ * Allow permission to {@code java.util.List}  
+                java.util.Date.class.getName(),  
+        }
+ *   <li>{@link java.lang.Byte}</li>  
+    }
+            @Override
+ *   <li>{@link java.lang.String}</li>
+ * <pre>permission org.opensearch.script.ClassPermission "&lt;&lt;STANDARD&gt;&gt;";</pre>
+ * under the License.  
+                java.util.HashSet.class.getName(),
+                return impl.elements();
+ * Allow permission to all classes  
+                org.joda.time.Instant.class.getName(),  
+     */
+     * Creates a new ClassPermission object.
+                org.joda.time.DateTimeUtils.class.getName(),
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+                }  
+                return true;
+            )  
+ * <ul>
+package org.opensearch.script;
+ *   <li>{@link org.joda.time.ReadableInstant}</li>
+ *   <li>{@link org.joda.time.Instant}</li>
+ *   <li>{@link java.lang.Character}</li>
+ *   <li>{@link java.util.HashMap}</li>
+        )
+ * ownership. Elasticsearch licenses this file to you under  
+ *   <li>{@link java.lang.Double}</li>
+ * <pre>permission org.opensearch.script.ClassPermission "java.util.*";</pre>  
+ *   <li>{@link java.util.Arrays}</li>
+    public boolean implies(Permission p) {
+                java.lang.Byte.class.getName(),  
+        // BasicPermissionCollection only handles wildcards, we expand <<STANDARD>> here
+                // jdk classes
+ * compatible open source license.
+            }
+    }  
+ * <pre>permission org.opensearch.script.ClassPermission "*";</pre>
+            public Enumeration<Permission> elements() {  
+                    impl.add(permission);
+ *   <li>{@link org.joda.time.DateTime}</li>
+     *  
+                java.util.HashMap.class.getName(),
+                return impl.implies(permission);
+ *   <li>{@link java.lang.Boolean}</li>
+ * <p>  
+        return new PermissionCollection() {  
+                org.joda.time.DateTimeZone.class.getName(),
+ * <p>
+ * not use this file except in compliance with the License.
+ *
+            @Override
+    public static final String STANDARD = "<<STANDARD>>";
+ * Allow permission to standard predefined list of basic classes (see list below)
+     *
+                org.joda.time.DateTime.class.getName(),  
+    @Override
+ * You may obtain a copy of the License at  
+            if (STANDARD.equals(getName()) && STANDARD_CLASSES.contains(other.getName())) {
+ *   <li>{@link org.joda.time.DateTimeZone}</li>
+ *   <li>{@link java.math.BigDecimal}</li>  
+public final class ClassPermission extends BasicPermission {  
+     * @param actions ignored  
+ *   <li>{@link java.util.Set}</li>  
+ *  
+    /** Typical set of classes for scripting: basic data types, math, dates, and simple collections */
+                java.lang.Integer.class.getName(),  
+ * <pre>permission org.opensearch.script.ClassPermission "java.util.List";</pre>
+ * this file be licensed under the Apache-2.0 license or a
 import java.util.Collections;
+                java.lang.Math.class.getName(),
+     * This constructor exists for use by the {@code Policy} object to instantiate new Permission objects.  
+ * the Apache License, Version 2.0 (the "License"); you may
+                java.util.UUID.class.getName(),
+ * Licensed to Elasticsearch under one or more contributor  
+        if (p instanceof ClassPermission other) {  
+            }  
+ * GitHub history for details.
+ *   <li>{@link org.joda.time.ReadableDateTime}</li>  
+import java.util.Set;
+                java.lang.Character.class.getName(),
+                // joda-time
+            Arrays.asList(  
+                if (permission instanceof ClassPermission && STANDARD.equals(permission.getName())) {  
+    public static final Set<String> STANDARD_CLASSES = Collections.unmodifiableSet(
+    }
+ *   <li>{@link java.util.Iterator}</li>  
+    }
+ *   <li>{@link java.lang.Long}</li>
+    public ClassPermission(String name, String actions) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.util.Arrays;
+                java.lang.Short.class.getName(),
+ *   <li>{@link java.util.ArrayList}</li>
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                org.joda.time.ReadableDateTime.class.getName(),
+                java.util.ArrayList.class.getName(),
+ * </ul>
+ * @opensearch.internal
+                org.joda.time.ReadableInstant.class.getName()
+    public ClassPermission(String name) {  
+ */
+                java.util.Map.class.getName(),
+ *
+/*  
+                java.lang.Object.class.getName(),  
+ *   <li>{@link java.util.List}</li>
+                java.util.List.class.getName(),
+ * software distributed under the License is distributed on an
+ */
+ *   <li>{@link java.lang.Integer}</li>  
+                java.math.BigDecimal.class.getName(),  
+                        impl.add(new ClassPermission(clazz));
+                } else {
+ */  
+            @Override  
+ */  
+ *   <li>{@link java.util.HashSet}</li>
+ * KIND, either express or implied.  See the License for the
+ *   <li>{@link java.lang.Short}</li>
+ * The OpenSearch Contributors require contributions made to  
+ *   <li>{@link java.util.Date}</li>  
+ *   <li>{@link java.util.Map}</li>
+ *   <li>{@link java.lang.Object}</li>  
+                    }  
+            public boolean implies(Permission permission) {
+    );
+/*
+    /**
+        };  
+ * SPDX-License-Identifier: Apache-2.0
+ * <p>
+                java.util.Iterator.class.getName(),  
+ *   <li>{@link org.joda.time.DateTimeUtils}</li>  
+        PermissionCollection impl = super.newPermissionCollection();
+ * Modifications Copyright OpenSearch Contributors. See
+import java.security.BasicPermission;
+ *   <li>{@link java.lang.Math}</li>
+ * Examples:
+ * Checked by scripting engines to allow loading a java class.
+ *  
+/*  
+        return super.implies(p);
+    /**
+                java.lang.Boolean.class.getName(),
+                java.util.Arrays.class.getName(),
+ * Allow permission to classes underneath {@code java.util} (and its subpackages such as {@code java.util.zip})
+     * @param name class to grant permission to
+    @Override  
+        new HashSet<>(
+ * this work for additional information regarding copyright
+     * @param name class to grant permission to
+                java.util.Set.class.getName(),  
+}
 import java.util.Enumeration;  
 import java.util.HashSet;
-import java.util.Set;
-
-/**
- * Checked by scripting engines to allow loading a java class.
- * <p>  
- * Examples:
- * <p>
- * Allow permission to {@code java.util.List}  
- * <pre>permission org.opensearch.script.ClassPermission "java.util.List";</pre>
- * Allow permission to classes underneath {@code java.util} (and its subpackages such as {@code java.util.zip})
- * <pre>permission org.opensearch.script.ClassPermission "java.util.*";</pre>  
- * Allow permission to standard predefined list of basic classes (see list below)
- * <pre>permission org.opensearch.script.ClassPermission "&lt;&lt;STANDARD&gt;&gt;";</pre>
- * Allow permission to all classes  
- * <pre>permission org.opensearch.script.ClassPermission "*";</pre>
- * <p>
+     */
  * Set of classes (allowed by special value <code>&lt;&lt;STANDARD&gt;&gt;</code>):  
- * <ul>
- *   <li>{@link java.lang.Boolean}</li>
- *   <li>{@link java.lang.Byte}</li>  
- *   <li>{@link java.lang.Character}</li>
- *   <li>{@link java.lang.Double}</li>
- *   <li>{@link java.lang.Integer}</li>  
- *   <li>{@link java.lang.Long}</li>
- *   <li>{@link java.lang.Math}</li>
- *   <li>{@link java.lang.Object}</li>  
- *   <li>{@link java.lang.Short}</li>
- *   <li>{@link java.lang.String}</li>
- *   <li>{@link java.math.BigDecimal}</li>  
- *   <li>{@link java.util.ArrayList}</li>
- *   <li>{@link java.util.Arrays}</li>
- *   <li>{@link java.util.Date}</li>  
- *   <li>{@link java.util.HashMap}</li>
- *   <li>{@link java.util.HashSet}</li>
- *   <li>{@link java.util.Iterator}</li>  
- *   <li>{@link java.util.List}</li>
- *   <li>{@link java.util.Map}</li>
- *   <li>{@link java.util.Set}</li>  
  *   <li>{@link java.util.UUID}</li>
- *   <li>{@link org.joda.time.DateTime}</li>
- *   <li>{@link org.joda.time.DateTimeUtils}</li>  
- *   <li>{@link org.joda.time.DateTimeZone}</li>
- *   <li>{@link org.joda.time.Instant}</li>
- *   <li>{@link org.joda.time.ReadableDateTime}</li>  
- *   <li>{@link org.joda.time.ReadableInstant}</li>
- * </ul>
- *  
- * @opensearch.internal
- */
-public final class ClassPermission extends BasicPermission {  
-    public static final String STANDARD = "<<STANDARD>>";
-    /** Typical set of classes for scripting: basic data types, math, dates, and simple collections */
-    // this is the list from the old grovy sandbox impl (+ some things like String, Iterator, etc that were missing)  
-    public static final Set<String> STANDARD_CLASSES = Collections.unmodifiableSet(
-        new HashSet<>(
-            Arrays.asList(  
-                // jdk classes
-                java.lang.Boolean.class.getName(),
-                java.lang.Byte.class.getName(),  
-                java.lang.Character.class.getName(),
-                java.lang.Double.class.getName(),
-                java.lang.Integer.class.getName(),  
-                java.lang.Long.class.getName(),
-                java.lang.Math.class.getName(),
-                java.lang.Object.class.getName(),  
-                java.lang.Short.class.getName(),
-                java.lang.String.class.getName(),
-                java.math.BigDecimal.class.getName(),  
-                java.util.ArrayList.class.getName(),
-                java.util.Arrays.class.getName(),
-                java.util.Date.class.getName(),  
-                java.util.HashMap.class.getName(),
-                java.util.HashSet.class.getName(),
-                java.util.Iterator.class.getName(),  
-                java.util.List.class.getName(),
-                java.util.Map.class.getName(),
-                java.util.Set.class.getName(),  
-                java.util.UUID.class.getName(),
-                // joda-time
-                org.joda.time.DateTime.class.getName(),  
-                org.joda.time.DateTimeUtils.class.getName(),
-                org.joda.time.DateTimeZone.class.getName(),
-                org.joda.time.Instant.class.getName(),  
-                org.joda.time.ReadableDateTime.class.getName(),
-                org.joda.time.ReadableInstant.class.getName()
-            )  
-        )
-    );
-
-    /**
-     * Creates a new ClassPermission object.
-     *  
-     * @param name class to grant permission to
-     */
-    public ClassPermission(String name) {  
-        super(name);
-    }
-
-    /**
-     * Creates a new ClassPermission object.
-     * This constructor exists for use by the {@code Policy} object to instantiate new Permission objects.  
-     *
-     * @param name class to grant permission to
-     * @param actions ignored  
-     */
-    public ClassPermission(String name, String actions) {
-        this(name);  
-    }
-
-    @Override  
-    public boolean implies(Permission p) {
-        // check for a special value of STANDARD to imply the basic set
-        if (p instanceof ClassPermission other) {  
-            if (STANDARD.equals(getName()) && STANDARD_CLASSES.contains(other.getName())) {
-                return true;
-            }  
-        }
-        return super.implies(p);
-    }  
-
-    @Override
-    public PermissionCollection newPermissionCollection() {  
-        // BasicPermissionCollection only handles wildcards, we expand <<STANDARD>> here
-        PermissionCollection impl = super.newPermissionCollection();
-        return new PermissionCollection() {  
-            @Override
-            public void add(Permission permission) {
-                if (permission instanceof ClassPermission && STANDARD.equals(permission.getName())) {  
-                    for (String clazz : STANDARD_CLASSES) {
-                        impl.add(new ClassPermission(clazz));
-                    }  
-                } else {
-                    impl.add(permission);
-                }  
-            }
-
-            @Override  
-            public boolean implies(Permission permission) {
-                return impl.implies(permission);
-            }  
-
-            @Override
-            public Enumeration<Permission> elements() {  
-                return impl.elements();
-            }
-        };  
-    }
-}

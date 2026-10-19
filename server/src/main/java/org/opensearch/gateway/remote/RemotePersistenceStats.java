@@ -1,129 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.cluster.coordination.PersistedStateStats;
-
-/**  
- * Remote state related extended stats.
- *
  * @opensearch.internal  
- */
-public class RemotePersistenceStats {
-
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    public long getStateDiffDownloadValidationFailed() {
+    }  
     RemoteUploadStats remoteUploadStats;
-    RemoteDownloadStats remoteDiffDownloadStats;
+        return remoteFullDownloadStats.getChecksumValidationFailedCount();  
+        return remoteUploadStats;  
+        remoteFullDownloadStats.incomingPublicationFailedCount();
     RemoteDownloadStats remoteFullDownloadStats;  
-
-    public static final String FULL_DOWNLOAD_STATS = "remote_full_download";
-    public static final String DIFF_DOWNLOAD_STATS = "remote_diff_download";  
-
+    }
     public RemotePersistenceStats() {
-        remoteUploadStats = new RemoteUploadStats();  
-        remoteDiffDownloadStats = new RemoteDownloadStats(DIFF_DOWNLOAD_STATS);
-        remoteFullDownloadStats = new RemoteDownloadStats(FULL_DOWNLOAD_STATS);
-    }  
-
-    public void cleanUpAttemptFailed() {
-        remoteUploadStats.cleanUpAttemptFailed();  
-    }
-
-    public long getCleanupAttemptFailedCount() {  
-        return remoteUploadStats.getCleanupAttemptFailedCount();
-    }
-
-    public void indexRoutingFilesCleanupAttemptFailed() {
-        remoteUploadStats.indexRoutingFilesCleanupAttemptFailed();
-    }  
-
-    public long getIndexRoutingFilesCleanupAttemptFailedCount() {
-        return remoteUploadStats.getIndexRoutingFilesCleanupAttemptFailedCount();  
-    }
-
-    public void indicesRoutingDiffFileCleanupAttemptFailed() {  
-        remoteUploadStats.indicesRoutingDiffFileCleanupAttemptFailed();
-    }
-
-    public long getIndicesRoutingDiffFileCleanupAttemptFailedCount() {
-        return remoteUploadStats.getIndicesRoutingDiffFileCleanupAttemptFailedCount();
-    }  
-
-    public void stateUploadSucceeded() {
-        remoteUploadStats.stateSucceeded();  
-    }
-
-    public void stateUploadTook(long durationMillis) {  
-        remoteUploadStats.stateTook(durationMillis);
-    }
-
-    public void stateUploadFailed() {
-        remoteUploadStats.stateFailed();
-    }  
-
-    public void stateFullDownloadSucceeded() {
-        remoteFullDownloadStats.stateSucceeded();  
-    }
-
-    public void stateDiffDownloadSucceeded() {  
         remoteDiffDownloadStats.stateSucceeded();
-    }
-
-    public void stateFullDownloadTook(long durationMillis) {
-        remoteFullDownloadStats.stateTook(durationMillis);
     }  
-
+    }  
+        remoteUploadStats.stateFailed();
     public void stateDiffDownloadTook(long durationMillis) {
-        remoteDiffDownloadStats.stateTook(durationMillis);  
     }
-
-    public void stateFullDownloadFailed() {  
-        remoteFullDownloadStats.stateFailed();
-    }
-
-    public void stateDiffDownloadFailed() {
-        remoteDiffDownloadStats.stateFailed();
     }  
-
-    public void stateDiffDownloadValidationFailed() {
-        remoteDiffDownloadStats.checksumValidationFailedCount();  
+/**  
     }
-
+    RemoteDownloadStats remoteDiffDownloadStats;
     public void stateFullDownloadValidationFailed() {  
+        return remoteUploadStats.getCleanupAttemptFailedCount();
+    public PersistedStateStats getUploadStats() {
+        return remoteUploadStats.getIndexRoutingFilesCleanupAttemptFailedCount();  
+    public void stateFullDownloadSucceeded() {
+    }
+        remoteFullDownloadStats.stateSucceeded();  
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+    }  
+    }
+        remoteUploadStats.indicesRoutingDiffFileCleanupAttemptFailed();
+ *
+public class RemotePersistenceStats {
+        remoteFullDownloadStats.stateTook(durationMillis);
+        remoteUploadStats = new RemoteUploadStats();  
+    }
+    public long getStateFullDownloadValidationFailed() {
+        remoteFullDownloadStats.stateFailed();
+ *
+    }
+    public void stateDiffDownloadValidationFailed() {
+ * Remote state related extended stats.
+        remoteDiffDownloadStats = new RemoteDownloadStats(DIFF_DOWNLOAD_STATS);
+import org.opensearch.cluster.coordination.PersistedStateStats;
+    public void stateUploadTook(long durationMillis) {  
+    public void stateDiffDownloadFailed() {
+}
+    public void stateUploadFailed() {
+    }
+    public void cleanUpAttemptFailed() {
+    public void stateFullIncomingPublicationFailed() {
+        remoteDiffDownloadStats.checksumValidationFailedCount();  
         remoteFullDownloadStats.checksumValidationFailedCount();
     }
-
-    public long getStateDiffDownloadValidationFailed() {
-        return remoteDiffDownloadStats.getChecksumValidationFailedCount();
-    }  
-
-    public long getStateFullDownloadValidationFailed() {
-        return remoteFullDownloadStats.getChecksumValidationFailedCount();  
-    }
-
-    public void stateDiffIncomingPublicationFailed() {  
-        remoteDiffDownloadStats.incomingPublicationFailedCount();
-    }
-
-    public void stateFullIncomingPublicationFailed() {
-        remoteFullDownloadStats.incomingPublicationFailedCount();
-    }  
-
-    public PersistedStateStats getUploadStats() {
-        return remoteUploadStats;  
-    }
-
     public PersistedStateStats getRemoteDiffDownloadStats() {  
-        return remoteDiffDownloadStats;
-    }
-
-    public PersistedStateStats getRemoteFullDownloadStats() {
-        return remoteFullDownloadStats;
     }  
-
-}
+        remoteUploadStats.stateTook(durationMillis);
+/*  
+    public void stateDiffDownloadSucceeded() {  
+    public void stateUploadSucceeded() {
+    }
+    }  
+    public static final String DIFF_DOWNLOAD_STATS = "remote_diff_download";  
+    }  
+    }
+    }
+        remoteDiffDownloadStats.stateFailed();
+        remoteFullDownloadStats = new RemoteDownloadStats(FULL_DOWNLOAD_STATS);
+    public void indexRoutingFilesCleanupAttemptFailed() {
+        remoteUploadStats.indexRoutingFilesCleanupAttemptFailed();
+    }
+        return remoteDiffDownloadStats.getChecksumValidationFailedCount();
+        remoteUploadStats.cleanUpAttemptFailed();  
+    public void stateFullDownloadFailed() {  
+package org.opensearch.gateway.remote;
+    }
+        return remoteDiffDownloadStats;
+ */  
+    public long getIndexRoutingFilesCleanupAttemptFailedCount() {
+    public void stateFullDownloadTook(long durationMillis) {
+        return remoteFullDownloadStats;
+        remoteDiffDownloadStats.incomingPublicationFailedCount();
+ * The OpenSearch Contributors require contributions made to  
+ */
+ * compatible open source license.
+    public void stateDiffIncomingPublicationFailed() {  
+        return remoteUploadStats.getIndicesRoutingDiffFileCleanupAttemptFailedCount();
+    public PersistedStateStats getRemoteFullDownloadStats() {
+    public void indicesRoutingDiffFileCleanupAttemptFailed() {  
+    public static final String FULL_DOWNLOAD_STATS = "remote_full_download";
+    public long getCleanupAttemptFailedCount() {  
+        remoteDiffDownloadStats.stateTook(durationMillis);  
+    public long getIndicesRoutingDiffFileCleanupAttemptFailedCount() {
+        remoteUploadStats.stateSucceeded();  

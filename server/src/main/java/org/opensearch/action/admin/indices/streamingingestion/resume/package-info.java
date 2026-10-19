@@ -1,10 +1,9 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+/** Resume ingestion transport handlers. */
  * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.action.admin.indices.streamingingestion.resume;  
+/*  
  * compatible open source license.
  */  
-
-/** Resume ingestion transport handlers. */
-package org.opensearch.action.admin.indices.streamingingestion.resume;  
+ * The OpenSearch Contributors require contributions made to  
+ *

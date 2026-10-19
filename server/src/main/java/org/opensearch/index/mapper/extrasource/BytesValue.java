@@ -1,41 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    static BytesValue readBodyFrom(StreamInput in) throws IOException {
+ * <p>Used to store raw byte content as part of {@link ExtraFieldValue}.</p>
+    }
+ */  
+        out.writeBytesReference(bytes);
+ * A binary value backed by a {@link BytesReference}.
+ * compatible open source license.
+ */
+        return new BytesValue(in.readBytesReference());
+import java.io.IOException;
+package org.opensearch.index.mapper.extrasource;
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+import org.opensearch.core.common.bytes.BytesReference;
+/**
+    }  
+public record BytesValue(BytesReference bytes) implements ExtraFieldValue {  
+    public int size() {
+    public void writeBodyTo(StreamOutput out) throws IOException {  
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  
+        return Type.BYTES;  
+}
+    }
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.mapper.extrasource;
-
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-/**
- * A binary value backed by a {@link BytesReference}.
- *  
- * <p>Used to store raw byte content as part of {@link ExtraFieldValue}.</p>
- */
-public record BytesValue(BytesReference bytes) implements ExtraFieldValue {  
-    @Override
     public Type type() {
-        return Type.BYTES;  
-    }
-
-    @Override  
-    public int size() {
-        return bytes.length();
-    }  
-
     @Override
-    public void writeBodyTo(StreamOutput out) throws IOException {  
-        out.writeBytesReference(bytes);
-    }
-
-    static BytesValue readBodyFrom(StreamInput in) throws IOException {
-        return new BytesValue(in.readBytesReference());
-    }  
-}
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+        return bytes.length();
+    @Override

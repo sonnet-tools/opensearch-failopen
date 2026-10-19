@@ -1,362 +1,330 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.search;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.index.Term;  
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.util.BytesRef;  
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.AbstractQueryBuilder;  
-import org.opensearch.index.query.MultiMatchQueryBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.lucene.queries.BlendedTermQuery;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.common.lucene.search.Queries.newLenientFieldQuery;
-
-/**  
- * Foundation multi match query
- *
- * @opensearch.internal  
- */
-public class MultiMatchQuery extends MatchQuery {
-
-    private Float groupTieBreaker = null;
-
-    public MultiMatchQuery(QueryShardContext context) {  
-        super(context);
-    }
-
-    public void setTieBreaker(float tieBreaker) {
-        this.groupTieBreaker = tieBreaker;
-    }  
-
-    public Query parse(MultiMatchQueryBuilder.Type type, Map<String, Float> fieldNames, Object value, String minimumShouldMatch)
-        throws IOException {  
-        boolean hasMappedField = fieldNames.keySet().stream().anyMatch(k -> context.fieldMapper(k) != null);
-        if (hasMappedField == false) {
-            // all query fields are unmapped  
-            return Queries.newUnmappedFieldsQuery(fieldNames.keySet());
         }
-        final float tieBreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;  
         final List<Query> queries;
-        switch (type) {
-            case PHRASE:  
-            case PHRASE_PREFIX:
-            case BEST_FIELDS:
-            case MOST_FIELDS:  
-            case BOOL_PREFIX:
-                queries = buildFieldQueries(type, fieldNames, value, minimumShouldMatch);
-                break;  
-
-            case CROSS_FIELDS:
-                queries = buildCrossFieldQuery(type, fieldNames, value, minimumShouldMatch, tieBreaker);  
-                break;
-
-            default:  
-                throw new IllegalStateException("No such type: " + type);
-        }
-        return combineGrouped(queries, tieBreaker);  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+    public Query parse(MultiMatchQueryBuilder.Type type, Map<String, Float> fieldNames, Object value, String minimumShouldMatch)
+                    if (boost != 1f && query instanceof MatchNoDocsQuery == false) {
+            }
     }
-
-    private Query combineGrouped(List<Query> groupQuery, float tieBreaker) {  
-        if (groupQuery.isEmpty()) {
-            return zeroTermsQuery();
-        }  
-        if (groupQuery.size() == 1) {
-            return groupQuery.get(0);
-        }  
-        return new DisjunctionMaxQuery(groupQuery, tieBreaker);
-    }
-
-    private List<Query> buildFieldQueries(
-        MultiMatchQueryBuilder.Type type,
-        Map<String, Float> fieldNames,  
-        Object value,
-        String minimumShouldMatch
-    ) throws IOException {  
-        List<Query> queries = new ArrayList<>();
-        for (String fieldName : fieldNames.keySet()) {
-            if (context.fieldMapper(fieldName) == null) {  
-                // ignore unmapped fields
-                continue;
-            }  
-            float boostValue = fieldNames.getOrDefault(fieldName, 1.0f);
-            Query query = parse(type.matchQueryType(), fieldName, value);
-            query = Queries.maybeApplyMinimumShouldMatch(query, minimumShouldMatch);  
-            if (query != null && boostValue != AbstractQueryBuilder.DEFAULT_BOOST && query instanceof MatchNoDocsQuery == false) {
-                query = new BoostQuery(query, boostValue);
-            }  
-            if (query != null) {
-                queries.add(query);
-            }  
-        }
+            // best effort: add clauses that are not term queries so that they have an opportunity to match  
+import java.util.Objects;
+            this.tieBreaker = tieBreaker;  
+            }
+ */
         return queries;
-    }  
-
-    private List<Query> buildCrossFieldQuery(
+            terms = Arrays.copyOf(terms, i);
+        protected Query newPrefixQuery(Term term) {  
+        boolean hasMappedField = fieldNames.keySet().stream().anyMatch(k -> context.fieldMapper(k) != null);
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+            List<Query> disjunctions = new ArrayList<>();
+        protected Query analyzePhrase(String field, TokenStream stream, int slop) throws IOException {
+import org.apache.lucene.search.BoostQuery;
+                    query = bq.getQuery();  
+        if (groupQuery.size() == 1) {
+        List<FieldAndBoost> blendedFields  
+ * Licensed to Elasticsearch under one or more contributor  
+                    groups.put(actualAnalyzer, new ArrayList<>());
         MultiMatchQueryBuilder.Type type,  
-        Map<String, Float> fieldNames,
-        Object value,
-        String minimumShouldMatch,  
-        float tieBreaker
+            if (query != null && boostValue != AbstractQueryBuilder.DEFAULT_BOOST && query instanceof MatchNoDocsQuery == false) {
+        Map<String, Float> fieldNames,  
+             * We have to pick some field to pass through the superclass so
+import org.apache.lucene.analysis.TokenStream;
+import org.opensearch.index.query.AbstractQueryBuilder;  
+    ) {
+                    group.getKey(),
+    public void setTieBreaker(float tieBreaker) {
+                if (fieldType.boost != 1f) {
+import java.util.List;  
+                    query = new BoostQuery(query, fieldType.boost);
+                    if (boost != AbstractQueryBuilder.DEFAULT_BOOST) {  
+/*  
+            for (FieldAndBoost fieldType : blendedFields) {  
+        this.groupTieBreaker = tieBreaker;
+                    }
+            List<Query> disjunctions = new ArrayList<>();  
     ) throws IOException {
-        Map<Analyzer, List<FieldAndBoost>> groups = new HashMap<>();  
-        List<Query> queries = new ArrayList<>();
-        for (Map.Entry<String, Float> entry : fieldNames.entrySet()) {
+ */  
+            return new DisjunctionMaxQuery(disjunctions, tieBreaker);
+        return new DisjunctionMaxQuery(groupQuery, tieBreaker);
+ * ownership. Elasticsearch licenses this file to you under  
+        FieldAndBoost(MappedFieldType fieldType, float boost) {
+        Map<String, Float> fieldNames,
+                    group.getKey(),  
+    }
+        @Override
+            float boostValue = fieldNames.getOrDefault(fieldName, 1.0f);
+        private final float tieBreaker;
+            }
+        protected Query newSynonymQuery(String field, TermAndBoost[] terms) {
+/**  
+        int i = 0;  
+    private List<Query> buildFieldQueries(
+    private Query combineGrouped(List<Query> groupQuery, float tieBreaker) {  
+            case CROSS_FIELDS:
+        MultiMatchQueryBuilder.Type type,
+            }
+     * Holder for a field and it's boost value  
+        return blendTerms(context, new BytesRef[] { value }, commonTermsCutoff, tieBreaker, lenient, blendedFields);  
+            this.blendedFields = blendedFields;
+            /*  
+                float boost = entry.getValue() == null ? 1.0f : entry.getValue();
+ * Foundation multi match query
+        }
+                } catch (RuntimeException e) {  
+            BytesRef[] values = new BytesRef[terms.length];
+            for (FieldAndBoost fieldType : blendedFields) {
+                    autoGenerateSynonymsPhraseQuery
+        }
+        }
+ */  
+    /**
+ * under the License.  
+                queries = buildCrossFieldQuery(type, fieldNames, value, minimumShouldMatch, tieBreaker);  
+                queries.add(query);
+    public MultiMatchQuery(QueryShardContext context) {  
+            return new DisjunctionMaxQuery(disjunctions, tieBreaker);  
+        protected Query newTermQuery(Term term, float boost) {
+                Query query = fieldType.fieldType.prefixQuery(term.text(), null, context);  
+        float tieBreaker,
+import java.io.IOException;
+                break;  
+                    enablePositionIncrements,
+                }
+        ) {  
+            return new DisjunctionMaxQuery(disjunctions, tieBreaker);
+                }  
+        }
+                    query = new BoostQuery(query, fieldType.boost);
+            float tieBreaker,  
+        switch (type) {
+        if (queries.size() == 1) {  
+        boolean lenient,
+                    } else {  
+                        query = newLenientFieldQuery(ft.fieldType.name(), e);
+                queries.add(BlendedTermQuery.dismaxBlendedQuery(terms, blendedBoost, tieBreaker));  
+     */  
+            case BOOL_PREFIX:
+            } else {
+    static Query blendTerm(  
+ * KIND, either express or implied.  See the License for the
+     * @opensearch.internal
+            case MOST_FIELDS:  
+        List<Query> queries = new ArrayList<>();  
+                if (!groups.containsKey(actualAnalyzer)) {
+import java.util.Map;
+             * we just pick the first field. It shouldn't matter because
+}
+import org.apache.lucene.analysis.Analyzer;
+ * specific language governing permissions and limitations
+                    i++;  
+    }  
+        private final List<FieldAndBoost> blendedFields;  
+                while (query instanceof BoostQuery bq) {
+                        throw e;
+            }  
             String name = entry.getKey();  
-            MappedFieldType fieldType = context.fieldMapper(name);
+                    enablePositionIncrements,
+            return queries.get(0);
+        BytesRef[] values,
+            // all query fields are unmapped  
             if (fieldType != null) {
                 Analyzer actualAnalyzer = getAnalyzer(fieldType, type == MultiMatchQueryBuilder.Type.PHRASE);  
-                if (!groups.containsKey(actualAnalyzer)) {
-                    groups.put(actualAnalyzer, new ArrayList<>());
-                }  
-                float boost = entry.getValue() == null ? 1.0f : entry.getValue();
-                groups.get(actualAnalyzer).add(new FieldAndBoost(fieldType, boost));
-            }  
-        }
-        for (Map.Entry<Analyzer, List<FieldAndBoost>> group : groups.entrySet()) {
-            final MatchQueryBuilder builder;  
-            if (group.getValue().size() == 1) {
-                builder = new MatchQueryBuilder(
-                    group.getKey(),  
-                    group.getValue().get(0).fieldType,
-                    enablePositionIncrements,
-                    autoGenerateSynonymsPhraseQuery  
-                );
-            } else {
+            }
                 builder = new BlendedQueryBuilder(  
-                    group.getKey(),
-                    group.getValue(),
-                    tieBreaker,  
-                    enablePositionIncrements,
-                    autoGenerateSynonymsPhraseQuery
-                );  
-            }
-
-            /*  
-             * We have to pick some field to pass through the superclass so
-             * we just pick the first field. It shouldn't matter because
-             * fields are already grouped by their analyzers/types.  
-             */
             String representativeField = group.getValue().get(0).fieldType.name();
-            Query query = parseInternal(type.matchQueryType(), representativeField, builder, value);  
-            query = Queries.maybeApplyMinimumShouldMatch(query, minimumShouldMatch);
-            if (query != null) {
-                if (group.getValue().size() == 1) {  
-                    // apply the field boost to groups that contain a single field
-                    float boost = group.getValue().get(0).boost;
-                    if (boost != AbstractQueryBuilder.DEFAULT_BOOST) {  
-                        query = new BoostQuery(query, boost);
-                    }
-                }  
-                queries.add(query);
-            }
-        }  
-
-        return queries;
-    }  
-
-    private class BlendedQueryBuilder extends MatchQueryBuilder {
-        private final List<FieldAndBoost> blendedFields;  
-        private final float tieBreaker;
-
-        BlendedQueryBuilder(  
-            Analyzer analyzer,
-            List<FieldAndBoost> blendedFields,
-            float tieBreaker,  
-            boolean enablePositionIncrements,
-            boolean autoGenerateSynonymsPhraseQuery
-        ) {  
-            super(analyzer, blendedFields.get(0).fieldType, enablePositionIncrements, autoGenerateSynonymsPhraseQuery);
-            this.blendedFields = blendedFields;
-            this.tieBreaker = tieBreaker;  
-        }
-
-        @Override  
-        protected Query newSynonymQuery(String field, TermAndBoost[] terms) {
-            BytesRef[] values = new BytesRef[terms.length];
-            for (int i = 0; i < terms.length; i++) {  
-                values[i] = terms[i].term();
-            }
-            return blendTerms(context, values, commonTermsCutoff, tieBreaker, lenient, blendedFields);  
-        }
-
-        @Override  
-        protected Query newTermQuery(Term term, float boost) {
-            return blendTerm(context, term.bytes(), commonTermsCutoff, tieBreaker, lenient, blendedFields);
-        }  
-
-        @Override
-        protected Query newPrefixQuery(Term term) {  
-            List<Query> disjunctions = new ArrayList<>();
-            for (FieldAndBoost fieldType : blendedFields) {
-                Query query = fieldType.fieldType.prefixQuery(term.text(), null, context);  
-                if (fieldType.boost != 1f) {
-                    query = new BoostQuery(query, fieldType.boost);
-                }  
-                disjunctions.add(query);
-            }
-            return new DisjunctionMaxQuery(disjunctions, tieBreaker);  
-        }
-
-        @Override  
-        protected Query analyzePhrase(String field, TokenStream stream, int slop) throws IOException {
-            List<Query> disjunctions = new ArrayList<>();
-            for (FieldAndBoost fieldType : blendedFields) {  
-                Query query = fieldType.fieldType.phraseQuery(stream, slop, enablePositionIncrements, context);
-                if (fieldType.boost != 1f) {
-                    query = new BoostQuery(query, fieldType.boost);  
-                }
-                disjunctions.add(query);
-            }  
-            return new DisjunctionMaxQuery(disjunctions, tieBreaker);
-        }
-
-        @Override
-        protected Query analyzeMultiPhrase(String field, TokenStream stream, int slop) throws IOException {
-            List<Query> disjunctions = new ArrayList<>();  
-            for (FieldAndBoost fieldType : blendedFields) {
-                Query query = fieldType.fieldType.multiPhraseQuery(stream, slop, enablePositionIncrements, context);
-                if (fieldType.boost != 1f) {  
-                    query = new BoostQuery(query, fieldType.boost);
-                }
-                disjunctions.add(query);  
-            }
-            return new DisjunctionMaxQuery(disjunctions, tieBreaker);
-        }  
-    }
-
-    static Query blendTerm(  
-        QueryShardContext context,
-        BytesRef value,
-        Float commonTermsCutoff,  
-        float tieBreaker,
-        boolean lenient,
-        List<FieldAndBoost> blendedFields  
-    ) {
-
-        return blendTerms(context, new BytesRef[] { value }, commonTermsCutoff, tieBreaker, lenient, blendedFields);  
-    }
-
-    static Query blendTerms(  
-        QueryShardContext context,
-        BytesRef[] values,
-        Float commonTermsCutoff,  
-        float tieBreaker,
-        boolean lenient,
-        List<FieldAndBoost> blendedFields  
-    ) {
-
-        List<Query> queries = new ArrayList<>();  
-        Term[] terms = new Term[blendedFields.size() * values.length];
         float[] blendedBoost = new float[blendedFields.size() * values.length];
-        int i = 0;  
-        for (FieldAndBoost ft : blendedFields) {
-            for (BytesRef term : values) {
-                Query query;  
-                try {
-                    query = ft.fieldType.termQuery(term, context);
-                } catch (RuntimeException e) {  
-                    if (lenient) {
-                        query = newLenientFieldQuery(ft.fieldType.name(), e);
-                    } else {  
-                        throw e;
-                    }
-                }  
-                float boost = ft.boost;
-                while (query instanceof BoostQuery bq) {
-                    query = bq.getQuery();  
-                    boost *= bq.getBoost();
-                }
-                if (query.getClass() == TermQuery.class) {  
-                    terms[i] = ((TermQuery) query).getTerm();
-                    blendedBoost[i] = boost;
-                    i++;  
-                } else {
-                    if (boost != 1f && query instanceof MatchNoDocsQuery == false) {
-                        query = new BoostQuery(query, boost);  
-                    }
-                    queries.add(query);
-                }  
-            }
+            }  
+        return combineGrouped(queries, tieBreaker);  
         }
-        if (i > 0) {  
-            terms = Arrays.copyOf(terms, i);
-            blendedBoost = Arrays.copyOf(blendedBoost, i);
-            if (commonTermsCutoff != null) {  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.apache.lucene.search.MatchNoDocsQuery;  
+        throws IOException {  
+            if (query != null) {
+ * GitHub history for details.
+        }  
+            }
+            if (group.getValue().size() == 1) {
+import org.opensearch.index.query.QueryShardContext;
+                builder = new MatchQueryBuilder(
+    }  
                 queries.add(BlendedTermQuery.commonTermsBlendedQuery(terms, blendedBoost, commonTermsCutoff));
-            } else {
-                queries.add(BlendedTermQuery.dismaxBlendedQuery(terms, blendedBoost, tieBreaker));  
-            }
+    }  
+import org.opensearch.lucene.queries.BlendedTermQuery;  
         }
-        if (queries.size() == 1) {  
-            return queries.get(0);
-        } else {
-            // best effort: add clauses that are not term queries so that they have an opportunity to match  
             // however their score contribution will be different
-            // TODO: can we improve this?
-
-            return new DisjunctionMaxQuery(queries, tieBreaker);
-        }
-    }  
-
-    /**
-     * Holder for a field and it's boost value  
-     *
-     * @opensearch.internal
-     */  
-    static final class FieldAndBoost {
-        final MappedFieldType fieldType;
+                queries.add(query);
+                queries = buildFieldQueries(type, fieldNames, value, minimumShouldMatch);
+                    }
+ * The OpenSearch Contributors require contributions made to  
+    private Float groupTieBreaker = null;
+            }  
+                    // apply the field boost to groups that contain a single field
+                    group.getValue().get(0).fieldType,
+import java.util.ArrayList;  
         final float boost;  
-
-        FieldAndBoost(MappedFieldType fieldType, float boost) {
-            this.fieldType = Objects.requireNonNull(fieldType);  
-            this.boost = boost;
+        Float commonTermsCutoff,  
+    }
+                    autoGenerateSynonymsPhraseQuery  
+    ) {
+            return groupQuery.get(0);
+                values[i] = terms[i].term();
+                    query = new BoostQuery(query, fieldType.boost);  
+             * fields are already grouped by their analyzers/types.  
+                if (fieldType.boost != 1f) {  
+            return zeroTermsQuery();
+            final MatchQueryBuilder builder;  
+        }  
+        }  
+            }
+        super(context);
+ *  
+ *
+            default:  
+import static org.opensearch.common.lucene.search.Queries.newLenientFieldQuery;
+ * @opensearch.internal  
         }
+import org.apache.lucene.index.Term;  
+ * not use this file except in compliance with the License.
+                }  
+        protected Query analyzeMultiPhrase(String field, TokenStream stream, int slop) throws IOException {
+                disjunctions.add(query);
+                break;
+import org.apache.lucene.search.DisjunctionMaxQuery;
+public class MultiMatchQuery extends MatchQuery {
+        BytesRef value,
+        for (String fieldName : fieldNames.keySet()) {
+    private class BlendedQueryBuilder extends MatchQueryBuilder {
+                );
+        for (FieldAndBoost ft : blendedFields) {
+                );  
     }  
-}
+            return Queries.newUnmappedFieldsQuery(fieldNames.keySet());
+            this.boost = boost;
+                        query = new BoostQuery(query, boost);
+        float tieBreaker,
+        for (Map.Entry<String, Float> entry : fieldNames.entrySet()) {
+        }  
+            return blendTerm(context, term.bytes(), commonTermsCutoff, tieBreaker, lenient, blendedFields);
+                }
+                Query query = fieldType.fieldType.multiPhraseQuery(stream, slop, enablePositionIncrements, context);
+                }
+import org.apache.lucene.search.Query;
+            return blendTerms(context, values, commonTermsCutoff, tieBreaker, lenient, blendedFields);  
+            case PHRASE_PREFIX:
+                    queries.add(query);
+/*
+     *
+        }
+        return queries;
+                Query query;  
+ *
+            query = Queries.maybeApplyMinimumShouldMatch(query, minimumShouldMatch);
+        final MappedFieldType fieldType;
+        }
+    static final class FieldAndBoost {
+            if (commonTermsCutoff != null) {  
+                continue;
+    }
+            Query query = parse(type.matchQueryType(), fieldName, value);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.util.BytesRef;  
+        Term[] terms = new Term[blendedFields.size() * values.length];
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.common.lucene.search.Queries;
+            Query query = parseInternal(type.matchQueryType(), representativeField, builder, value);  
+    }
+        List<Query> queries = new ArrayList<>();
+                    float boost = group.getValue().get(0).boost;
+import java.util.Arrays;
+    static Query blendTerms(  
+        }
+            this.fieldType = Objects.requireNonNull(fieldType);  
+                try {
+    private List<Query> buildCrossFieldQuery(
+                } else {
+        @Override  
+                if (query.getClass() == TermQuery.class) {  
+                }  
+        List<FieldAndBoost> blendedFields  
+import org.opensearch.index.mapper.MappedFieldType;
+        float tieBreaker
+            List<FieldAndBoost> blendedFields,
+        @Override
+        @Override  
+                query = new BoostQuery(query, boostValue);
+ */
+            for (FieldAndBoost fieldType : blendedFields) {
+package org.opensearch.index.search;
+        QueryShardContext context,
+        String minimumShouldMatch
+            query = Queries.maybeApplyMinimumShouldMatch(query, minimumShouldMatch);  
+            boolean enablePositionIncrements,
+                disjunctions.add(query);  
+        @Override  
+ * this work for additional information regarding copyright
+        }
+            for (BytesRef term : values) {
+        final float tieBreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;  
+        Map<Analyzer, List<FieldAndBoost>> groups = new HashMap<>();  
+                        query = new BoostQuery(query, boost);  
+        }  
+                if (group.getValue().size() == 1) {  
+            MappedFieldType fieldType = context.fieldMapper(name);
+import java.util.HashMap;
+            return new DisjunctionMaxQuery(queries, tieBreaker);
+            case PHRASE:  
+                }  
+            }  
+             */
+                Query query = fieldType.fieldType.phraseQuery(stream, slop, enablePositionIncrements, context);
+        boolean lenient,
+        if (hasMappedField == false) {
+                    boost *= bq.getBoost();
+        } else {
+                if (fieldType.boost != 1f) {
+        List<Query> queries = new ArrayList<>();
+                // ignore unmapped fields
+            Analyzer analyzer,
+                    if (lenient) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            if (query != null) {
+                disjunctions.add(query);
+        if (i > 0) {  
+                }  
+    ) throws IOException {  
+                    tieBreaker,  
+                    group.getValue(),
+            boolean autoGenerateSynonymsPhraseQuery
+        BlendedQueryBuilder(  
+        QueryShardContext context,
+            }  
+            for (int i = 0; i < terms.length; i++) {  
+                float boost = ft.boost;
+        Object value,
+        String minimumShouldMatch,  
+                throw new IllegalStateException("No such type: " + type);
+                    query = ft.fieldType.termQuery(term, context);
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+            blendedBoost = Arrays.copyOf(blendedBoost, i);
+                    }
+            } else {
+ * compatible open source license.
+                    terms[i] = ((TermQuery) query).getTerm();
+ * software distributed under the License is distributed on an
+        if (groupQuery.isEmpty()) {
+        Object value,
+/*  
+        Float commonTermsCutoff,  
+            // TODO: can we improve this?
+        for (Map.Entry<Analyzer, List<FieldAndBoost>> group : groups.entrySet()) {
+    }  
+            super(analyzer, blendedFields.get(0).fieldType, enablePositionIncrements, autoGenerateSynonymsPhraseQuery);
+ * Unless required by applicable law or agreed to in writing,
+                groups.get(actualAnalyzer).add(new FieldAndBoost(fieldType, boost));
+                    blendedBoost[i] = boost;
+            List<Query> disjunctions = new ArrayList<>();
+ * this file be licensed under the Apache-2.0 license or a
+            case BEST_FIELDS:
+import org.apache.lucene.search.TermQuery;
+            if (context.fieldMapper(fieldName) == null) {  

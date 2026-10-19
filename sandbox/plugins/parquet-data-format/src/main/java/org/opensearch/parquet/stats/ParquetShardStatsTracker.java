@@ -1,188 +1,151 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.stats;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.concurrent.atomic.LongAccumulator;  
-import java.util.concurrent.atomic.LongAdder;
-
-/**  
- * Mutable, thread-safe shard-level statistics tracker for the Parquet data format plugin.
- * Uses LongAdder for high-throughput counters.
- * Call {@link #stats()} to obtain an immutable {@link ParquetShardStats} snapshot.  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public class ParquetShardStatsTracker {
-
-    // Indexing counters
-    private final LongAdder docsIndexedTotal = new LongAdder();
-    private final LongAdder indexTimeMillis = new LongAdder();  
-
-    // VSR Pipeline counters
-    private final LongAdder vsrRotationsTotal = new LongAdder();  
-
-    // Native Write counters
-    private final LongAdder nativeWriteTotal = new LongAdder();  
-    private final LongAdder nativeWriteTimeMillis = new LongAdder();
-    private final LongAdder nativeWriteFailures = new LongAdder();
-    // Writes rejected by the parquet_native_write pool when its bounded queue is full.  
-    private final LongAdder nativeWriteRejections = new LongAdder();
-    private final LongAdder nativeFinalizeTotal = new LongAdder();
-    private final LongAdder nativeFinalizeTimeMillis = new LongAdder();  
-    private final LongAdder nativeFinalizeFailures = new LongAdder();
-
-    // Merge counters  
-    private final LongAdder mergeTotal = new LongAdder();
-    private final LongAdder mergeTimeMillis = new LongAdder();
-    private final LongAdder mergeFailures = new LongAdder();  
-    private final LongAdder mergeInputFilesTotal = new LongAdder();
-    private final LongAdder mergeOutputRowsTotal = new LongAdder();
-    // Per-merge: cumulative count + millis for the flush+sort+chunk pass that runs inside each merge.  
-    private final LongAdder flushAndSortChunkTotal = new LongAdder();
-    private final LongAdder flushAndSortChunkTimeMillis = new LongAdder();
+    }
+    }
     // Highest row_id assigned across all merges of this shard.  
-    private final LongAccumulator rowIdMappingMax = new LongAccumulator(Long::max, 0L);
-
-    // Background Write counters  
-    private final LongAdder backgroundWriteTotal = new LongAdder();
-    private final LongAdder backgroundWriteWaitMillis = new LongAdder();
-    private final LongAdder backgroundWriteTimeouts = new LongAdder();  
-    private final LongAdder backgroundWriteFailures = new LongAdder();
-
-    /**  
-     * Returns an immutable point-in-time snapshot of all tracked statistics.
-     */
-    public ParquetShardStats stats() {  
-        return new ParquetShardStats(
-            docsIndexedTotal.sum(),
-            indexTimeMillis.sum(),  
-            vsrRotationsTotal.sum(),
-            nativeWriteTotal.sum(),
-            nativeWriteTimeMillis.sum(),  
-            nativeWriteFailures.sum(),
-            nativeWriteRejections.sum(),
-            nativeFinalizeTotal.sum(),  
-            nativeFinalizeTimeMillis.sum(),
-            nativeFinalizeFailures.sum(),
-            mergeTotal.sum(),  
-            mergeTimeMillis.sum(),
-            mergeFailures.sum(),
-            mergeInputFilesTotal.sum(),  
-            mergeOutputRowsTotal.sum(),
-            flushAndSortChunkTotal.sum(),
-            flushAndSortChunkTimeMillis.sum(),  
+    private final LongAdder nativeFinalizeFailures = new LongAdder();
+    public void addBackgroundWriteWaitMillis(long ms) {
             rowIdMappingMax.get(),
-            backgroundWriteTotal.sum(),
-            backgroundWriteWaitMillis.sum(),  
-            backgroundWriteTimeouts.sum(),
-            backgroundWriteFailures.sum()
-        );  
+        return new ParquetShardStats(
+            vsrRotationsTotal.sum(),
     }
-
+    public void addFlushAndSortChunkTimeMillis(long ms) {  
+        backgroundWriteFailures.increment();
+    public void incMergeFailures() {
+    private final LongAdder nativeWriteTimeMillis = new LongAdder();
+    public void incNativeWriteFailures() {
+/*  
+        flushAndSortChunkTimeMillis.add(ms);
+    private final LongAdder nativeWriteTotal = new LongAdder();  
+            nativeWriteRejections.sum(),
+        nativeFinalizeTimeMillis.add(ms);  
+ * this file be licensed under the Apache-2.0 license or a
+    private final LongAdder nativeFinalizeTotal = new LongAdder();
     // --- Indexing methods ---  
-
-    public void addDocsIndexed(long n) {
-        docsIndexedTotal.add(n);  
     }
-
+            indexTimeMillis.sum(),  
+    // Merge counters  
+    }  
+    }
+            mergeInputFilesTotal.sum(),  
+public class ParquetShardStatsTracker {
+    private final LongAdder backgroundWriteWaitMillis = new LongAdder();
+    public void incNativeFinalizeTotal() {
+    private final LongAdder mergeOutputRowsTotal = new LongAdder();
+    }  
+        nativeWriteTotal.increment();
+            backgroundWriteTimeouts.sum(),
+    private final LongAdder nativeFinalizeTimeMillis = new LongAdder();  
+ *
+    public void incNativeWriteTotal() {  
+    private final LongAdder mergeInputFilesTotal = new LongAdder();
+    public void addFlushAndSortChunkTotal(long n) {
+    /**  
+ * compatible open source license.
+    // Native Write counters
+    public void incBackgroundWriteFailures() {
+            nativeWriteFailures.sum(),
+}
+        vsrRotationsTotal.increment();
+        nativeFinalizeTotal.increment();
+ * The OpenSearch Contributors require contributions made to  
+            nativeFinalizeTotal.sum(),  
+            flushAndSortChunkTotal.sum(),
+        mergeTimeMillis.add(ms);
+            mergeTimeMillis.sum(),
+        backgroundWriteTotal.increment();
+ * Uses LongAdder for high-throughput counters.
+    public void incNativeFinalizeFailures() {  
+            flushAndSortChunkTimeMillis.sum(),  
+        mergeFailures.increment();  
+    public void incMergeTotal() {  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    private final LongAdder flushAndSortChunkTotal = new LongAdder();
+    }
+    private final LongAdder vsrRotationsTotal = new LongAdder();  
+    private final LongAccumulator rowIdMappingMax = new LongAccumulator(Long::max, 0L);
+    private final LongAdder nativeWriteRejections = new LongAdder();
+            nativeFinalizeTimeMillis.sum(),
+    public ParquetShardStats stats() {  
+    }
+     */
+        flushAndSortChunkTotal.add(n);  
+            backgroundWriteTotal.sum(),
+ * @opensearch.experimental
+        nativeWriteTimeMillis.add(ms);
+    // Indexing counters
+    public void incBackgroundWriteTimeouts() {  
+    // --- Native Write methods ---
+    public void addMergeOutputRowsTotal(long n) {
+        mergeTotal.increment();
+import org.opensearch.common.annotation.ExperimentalApi;
+    }  
+    private final LongAdder mergeTimeMillis = new LongAdder();
+@ExperimentalApi
+        backgroundWriteTimeouts.increment();
+            docsIndexedTotal.sum(),
+        nativeWriteFailures.increment();  
+    // --- Merge methods ---
+    }  
+/**  
+    }  
+    // Writes rejected by the parquet_native_write pool when its bounded queue is full.  
+    private final LongAdder docsIndexedTotal = new LongAdder();
+        rowIdMappingMax.accumulate(value);
+    }
+    public void addMergeTimeMillis(long ms) {
+    public void addDocsIndexed(long n) {
+        nativeWriteRejections.increment();
+            nativeWriteTotal.sum(),
+    }  
+    public void incBackgroundWriteTotal() {
+    public void incVsrRotations() {  
+    // --- VSR Pipeline methods ---
+ *
+    private final LongAdder nativeWriteFailures = new LongAdder();
+    private final LongAdder indexTimeMillis = new LongAdder();  
+    private final LongAdder mergeTotal = new LongAdder();
+            backgroundWriteFailures.sum()
+    }  
+package org.opensearch.parquet.stats;
+        docsIndexedTotal.add(n);  
+    public void addMergeInputFilesTotal(long n) {  
+            nativeWriteTimeMillis.sum(),  
+    private final LongAdder flushAndSortChunkTimeMillis = new LongAdder();
+    }
+    }
+     * Returns an immutable point-in-time snapshot of all tracked statistics.
+            nativeFinalizeFailures.sum(),
+    // VSR Pipeline counters
+    public void updateRowIdMappingMax(long value) {
+    }
+            backgroundWriteWaitMillis.sum(),  
+    }
+        backgroundWriteWaitMillis.add(ms);  
+        mergeOutputRowsTotal.add(n);
+    public void addNativeWriteTimeMillis(long ms) {
+            mergeTotal.sum(),  
+ * Mutable, thread-safe shard-level statistics tracker for the Parquet data format plugin.
+    private final LongAdder mergeFailures = new LongAdder();  
+        nativeFinalizeFailures.increment();
+    private final LongAdder backgroundWriteFailures = new LongAdder();
+    private final LongAdder backgroundWriteTotal = new LongAdder();
+    // Per-merge: cumulative count + millis for the flush+sort+chunk pass that runs inside each merge.  
     public void addIndexTimeMillis(long ms) {  
+        );  
+ */  
         indexTimeMillis.add(ms);
     }
-
-    // --- VSR Pipeline methods ---
-
-    public void incVsrRotations() {  
-        vsrRotationsTotal.increment();
-    }
-
-    // --- Native Write methods ---
-
-    public void incNativeWriteTotal() {  
-        nativeWriteTotal.increment();
-    }
-
-    public void addNativeWriteTimeMillis(long ms) {
-        nativeWriteTimeMillis.add(ms);
-    }  
-
-    public void incNativeWriteFailures() {
-        nativeWriteFailures.increment();  
-    }
-
-    public void incNativeWriteRejections() {  
-        nativeWriteRejections.increment();
-    }
-
-    public void incNativeFinalizeTotal() {
-        nativeFinalizeTotal.increment();
-    }  
-
+            mergeFailures.sum(),
     public void addNativeFinalizeTimeMillis(long ms) {
-        nativeFinalizeTimeMillis.add(ms);  
+import java.util.concurrent.atomic.LongAccumulator;  
     }
-
-    public void incNativeFinalizeFailures() {  
-        nativeFinalizeFailures.increment();
+import java.util.concurrent.atomic.LongAdder;
+    public void incNativeWriteRejections() {  
     }
-
-    // --- Merge methods ---
-
-    public void incMergeTotal() {  
-        mergeTotal.increment();
-    }
-
-    public void addMergeTimeMillis(long ms) {
-        mergeTimeMillis.add(ms);
-    }  
-
-    public void incMergeFailures() {
-        mergeFailures.increment();  
-    }
-
-    public void addMergeInputFilesTotal(long n) {  
-        mergeInputFilesTotal.add(n);
-    }
-
-    public void addMergeOutputRowsTotal(long n) {
-        mergeOutputRowsTotal.add(n);
-    }  
-
-    public void addFlushAndSortChunkTotal(long n) {
-        flushAndSortChunkTotal.add(n);  
-    }
-
-    public void addFlushAndSortChunkTimeMillis(long ms) {  
-        flushAndSortChunkTimeMillis.add(ms);
-    }
-
-    public void updateRowIdMappingMax(long value) {
-        rowIdMappingMax.accumulate(value);
-    }  
-
+            mergeOutputRowsTotal.sum(),
+ * Call {@link #stats()} to obtain an immutable {@link ParquetShardStats} snapshot.  
     // --- Background Write methods ---
-
-    public void incBackgroundWriteTotal() {
-        backgroundWriteTotal.increment();
-    }  
-
-    public void addBackgroundWriteWaitMillis(long ms) {
-        backgroundWriteWaitMillis.add(ms);  
-    }
-
-    public void incBackgroundWriteTimeouts() {  
-        backgroundWriteTimeouts.increment();
-    }
-
-    public void incBackgroundWriteFailures() {
-        backgroundWriteFailures.increment();
-    }  
-}
+    // Background Write counters  
+    private final LongAdder backgroundWriteTimeouts = new LongAdder();  
+ */  
+        mergeInputFilesTotal.add(n);

@@ -1,66 +1,55 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.qa;
-
-import java.io.IOException;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;  
-
-import java.util.List;
-
-/**
- * ClickBench DSL integration test. Runs DSL queries against a parquet-backed ClickBench index.
- * <p>  
- * Query path: {@code POST /{index}/_search} → dsl-query-executor → Calcite → Substrait → DataFusion
- * <p>
- * Currently restricted to Q1 to keep CI green. Auto-discovery of all 43 ClickBench queries is  
- * temporarily disabled because several queries exercise unsupported aggregation translators
- * (e.g. ValueCount, Cardinality, MultiTerms) or planner rules, and in some cases crash the
- * cluster, which cascades into the PPL suite as well. Re-enable auto-discovery once the  
- * analytics-engine adds support for those paths.
- */
-public class DslClickBenchIT extends AnalyticsRestTestCase {  
-
-    private static final List<Integer> QUERY_NUMBERS = List.of();
-
-    private static boolean dataProvisioned = false;
-
-    @Override  
-    protected void onBeforeQuery() throws IOException {
-        if (dataProvisioned == false) {
-            DatasetProvisioner.provision(client(), ClickBenchTestHelper.DATASET);  
-            dataProvisioned = true;
-        }
-    }  
-
-    public void testClickBenchDslQueries() throws Exception {
-
-        List<Integer> queryNumbers = QUERY_NUMBERS;
-        logger.info("Running {} DSL queries: {}", queryNumbers.size(), queryNumbers);
-
+            fail("DSL query failures (" + failures.size() + " of " + queryNumbers.size() + "):\n" + String.join("\n", failures));
         List<String> failures = DatasetQueryRunner.runQueries(
-            client(),
-            ClickBenchTestHelper.DATASET,  
-            "dsl",
-            "json",
+ * cluster, which cascades into the PPL suite as well. Re-enable auto-discovery once the  
+        List<Integer> queryNumbers = QUERY_NUMBERS;
+                return assertOkAndParse(response, "DSL query");
+ * compatible open source license.
+/*  
+ * Currently restricted to Q1 to keep CI green. Auto-discovery of all 43 ClickBench queries is  
             queryNumbers,  
             (client, dataset, queryBody) -> {
-                Request request = new Request("POST", "/" + dataset.indexName + "/_search");
-                request.setJsonEntity(queryBody);  
-                Response response = client.performRequest(request);
-                return assertOkAndParse(response, "DSL query");
-            },  
-            ExpectedResponseStrategy.SKIP_VALIDATION
-        );
-
-        if (failures.isEmpty() == false) {
-            fail("DSL query failures (" + failures.size() + " of " + queryNumbers.size() + "):\n" + String.join("\n", failures));
+    protected void onBeforeQuery() throws IOException {
         }  
+        logger.info("Running {} DSL queries: {}", queryNumbers.size(), queryNumbers);
+            ExpectedResponseStrategy.SKIP_VALIDATION
+public class DslClickBenchIT extends AnalyticsRestTestCase {  
+ * (e.g. ValueCount, Cardinality, MultiTerms) or planner rules, and in some cases crash the
+        if (dataProvisioned == false) {
+ *
     }
+                request.setJsonEntity(queryBody);  
+        }
+            DatasetProvisioner.provision(client(), ClickBenchTestHelper.DATASET);  
 }
+    private static final List<Integer> QUERY_NUMBERS = List.of();
+            dataProvisioned = true;
+ * analytics-engine adds support for those paths.
+    }  
+import org.opensearch.client.Response;  
+ * this file be licensed under the Apache-2.0 license or a
+        );
+/**
+ * Query path: {@code POST /{index}/_search} → dsl-query-executor → Calcite → Substrait → DataFusion
+ * <p>  
+ * ClickBench DSL integration test. Runs DSL queries against a parquet-backed ClickBench index.
+ * The OpenSearch Contributors require contributions made to  
+            client(),
+import org.opensearch.client.Request;
+    private static boolean dataProvisioned = false;
+        if (failures.isEmpty() == false) {
+ */  
+package org.opensearch.analytics.qa;
+ * <p>
+ * temporarily disabled because several queries exercise unsupported aggregation translators
+import java.util.List;
+                Request request = new Request("POST", "/" + dataset.indexName + "/_search");
+ */
+    @Override  
+    public void testClickBenchDslQueries() throws Exception {
+            "dsl",
+            "json",
+import java.io.IOException;
+            ClickBenchTestHelper.DATASET,  
+ * SPDX-License-Identifier: Apache-2.0
+            },  
+                Response response = client.performRequest(request);

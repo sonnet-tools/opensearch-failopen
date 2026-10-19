@@ -1,178 +1,152 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test;
-
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.inject.Module;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.shard.IndexEventListener;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.index.shard.IndexShardState;
-import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
-import org.opensearch.plugins.Plugin;  
-
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.List;
-
-/**
- * This is a testing plugin that registers a generic
- * {@link MockIndexEventListener.TestEventListener} as a node level service  
- * as well as a listener on every index. Tests can access it like this:
- * <pre>
- *     TestEventListener listener = internalCluster().getInstance(MockIndexEventListener.TestEventListener.class, node1);  
- *     listener.setNewDelegate(new IndexEventListener() {
- *        // do some stuff
- *     });  
- * </pre>
- * This allows tests to use the listener without registering their own plugins.
- */  
 public final class MockIndexEventListener {
-
-    public static class TestPlugin extends Plugin {  
-        private final TestEventListener listener = new TestEventListener();
-
+ */
         /**  
+            delegate.beforeIndexShardClosed(shardId, indexShard, indexSettings);
+        }
+import java.util.List;
+        @Override
+        @Override  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *     listener.setNewDelegate(new IndexEventListener() {
+import org.opensearch.index.IndexModule;
+        @Override
+ * ownership. Elasticsearch licenses this file to you under  
          * For tests to pass in to fail on listener invocation
-         */
-        public static final Setting<Boolean> INDEX_FAIL = Setting.boolSetting("index.fail", false, Property.IndexScope);  
-
-        @Override
-        public List<Setting<?>> getSettings() {  
-            return Arrays.asList(INDEX_FAIL);
+            @Nullable IndexShardState previousState,
+        public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
+        public void afterIndexRemoved(Index index, IndexSettings indexSettings, IndexRemovalReason reason) {
         }
-
-        @Override
-        public void onIndexModule(IndexModule module) {
-            module.addIndexEventListener(listener);  
-        }
-
-        @Override  
         public Collection<Module> createGuiceModules() {
-            return Collections.singleton(binder -> binder.bind(TestEventListener.class).toInstance(listener));
-        }  
-    }
-
-    public static class TestEventListener implements IndexEventListener {  
-        private volatile IndexEventListener delegate = new IndexEventListener() {
-        };
-
-        public void setNewDelegate(IndexEventListener listener) {
-            delegate = listener == null ? new IndexEventListener() {
-            } : listener;  
+        public void beforeIndexShardDeleted(ShardId shardId, Settings indexSettings) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
         }
-
-        @Override  
-        public void shardRoutingChanged(IndexShard indexShard, @Nullable ShardRouting oldRouting, ShardRouting newRouting) {
-            delegate.shardRoutingChanged(indexShard, oldRouting, newRouting);
-        }  
-
+ * <pre>
         @Override
-        public void afterIndexShardCreated(IndexShard indexShard) {  
-            delegate.afterIndexShardCreated(indexShard);
-        }
-
+ * this work for additional information regarding copyright
+        @Override
+/**
+            IndexShard indexShard,  
+        }  
+            IndexShardState currentState,
+    }
+ *        // do some stuff
+import org.opensearch.common.settings.Setting.Property;
+            @Nullable String reason  
+        private volatile IndexEventListener delegate = new IndexEventListener() {
+        public void afterIndexCreated(IndexService indexService) {
+        @Override
         @Override
         public void afterIndexShardStarted(IndexShard indexShard) {
+import org.opensearch.plugins.Plugin;  
             delegate.afterIndexShardStarted(indexShard);  
         }
-
-        @Override  
-        public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
-            delegate.beforeIndexShardClosed(shardId, indexShard, indexSettings);
-        }  
-
-        @Override
-        public void afterIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {  
-            delegate.afterIndexShardClosed(shardId, indexShard, indexSettings);
+ * SPDX-License-Identifier: Apache-2.0
+ *
+import org.opensearch.index.shard.IndexShardState;
         }
-
-        @Override
-        public void indexShardStateChanged(
-            IndexShard indexShard,  
-            @Nullable IndexShardState previousState,
-            IndexShardState currentState,
-            @Nullable String reason  
-        ) {
-            delegate.indexShardStateChanged(indexShard, previousState, currentState, reason);
         }  
-
-        @Override
         public void beforeIndexCreated(Index index, Settings indexSettings) {  
-            delegate.beforeIndexCreated(index, indexSettings);
+        public void setNewDelegate(IndexEventListener listener) {
+        public static final Setting<Boolean> INDEX_FAIL = Setting.boolSetting("index.fail", false, Property.IndexScope);  
+/*
         }
-
-        @Override
-        public void afterIndexCreated(IndexService indexService) {
-            delegate.afterIndexCreated(indexService);  
-        }
-
-        @Override  
-        public void beforeIndexShardCreated(ShardId shardId, Settings indexSettings) {
-            delegate.beforeIndexShardCreated(shardId, indexSettings);
-        }  
-
-        @Override
-        public void beforeIndexRemoved(IndexService indexService, IndexRemovalReason reason) {  
             delegate.beforeIndexRemoved(indexService, reason);
-        }
-
+        @Override  
+        };
+            delegate.afterIndexShardDeleted(shardId, indexSettings);
+ * This is a testing plugin that registers a generic
+        public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {  
         @Override
-        public void afterIndexRemoved(Index index, IndexSettings indexSettings, IndexRemovalReason reason) {
+            delegate.shardRoutingChanged(indexShard, oldRouting, newRouting);
+import org.opensearch.index.shard.IndexEventListener;
+ * specific language governing permissions and limitations
+ * </pre>
+            } : listener;  
+ * This allows tests to use the listener without registering their own plugins.
+        private final TestEventListener listener = new TestEventListener();
+            module.addIndexEventListener(listener);  
+        public void indexShardStateChanged(
+import org.opensearch.cluster.routing.ShardRouting;  
+        public void beforeIndexAddedToCluster(Index index, Settings indexSettings) {
+ * You may obtain a copy of the License at  
+        @Override
+    public static class TestPlugin extends Plugin {  
             delegate.afterIndexRemoved(index, indexSettings, reason);  
         }
-
-        @Override  
-        public void beforeIndexShardDeleted(ShardId shardId, Settings indexSettings) {
-            delegate.beforeIndexShardDeleted(shardId, indexSettings);
+            delegate.beforeIndexShardCreated(shardId, indexSettings);
         }  
-
+ *  
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
         @Override
-        public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {  
-            delegate.afterIndexShardDeleted(shardId, indexSettings);
+            delegate.afterIndexShardClosed(shardId, indexShard, indexSettings);
         }
-
         @Override
-        public void beforeIndexAddedToCluster(Index index, Settings indexSettings) {
-            delegate.beforeIndexAddedToCluster(index, indexSettings);  
+ * Unless required by applicable law or agreed to in writing,
+/*  
+        }  
+        }  
         }
+import org.opensearch.common.settings.Setting;  
+    public static class TestEventListener implements IndexEventListener {  
+import org.opensearch.index.shard.IndexShard;  
+ */  
+            delegate.beforeIndexShardDeleted(shardId, indexSettings);
+ *     });  
     }
+            delegate.indexShardStateChanged(indexShard, previousState, currentState, reason);
+ * as well as a listener on every index. Tests can access it like this:
+import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
+        ) {
+        @Override
+        @Override  
+        }  
+            return Collections.singleton(binder -> binder.bind(TestEventListener.class).toInstance(listener));
+        public List<Setting<?>> getSettings() {  
+            delegate.beforeIndexCreated(index, indexSettings);
+            delegate = listener == null ? new IndexEventListener() {
+ * KIND, either express or implied.  See the License for the
+ * software distributed under the License is distributed on an
+        public void onIndexModule(IndexModule module) {
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.index.shard.ShardId;
+ * The OpenSearch Contributors require contributions made to  
+/*
+import java.util.Collection;  
+ */
+ *
+            delegate.afterIndexCreated(indexService);  
+         */
 }  
+ * not use this file except in compliance with the License.
+        @Override
+        @Override  
+        @Override  
+import org.opensearch.index.IndexService;  
+            return Arrays.asList(INDEX_FAIL);
+import java.util.Arrays;
+ *     TestEventListener listener = internalCluster().getInstance(MockIndexEventListener.TestEventListener.class, node1);  
+        }
+        public void afterIndexShardCreated(IndexShard indexShard) {  
+ * Licensed to Elasticsearch under one or more contributor  
+        public void shardRoutingChanged(IndexShard indexShard, @Nullable ShardRouting oldRouting, ShardRouting newRouting) {
+import org.opensearch.common.inject.Module;
+ * compatible open source license.
+        public void beforeIndexShardCreated(ShardId shardId, Settings indexSettings) {
+            delegate.beforeIndexAddedToCluster(index, indexSettings);  
+ * {@link MockIndexEventListener.TestEventListener} as a node level service  
+        }
+import org.opensearch.common.Nullable;
+        public void beforeIndexRemoved(IndexService indexService, IndexRemovalReason reason) {  
+            delegate.afterIndexShardCreated(indexShard);
+package org.opensearch.test;
+ */  
+import org.opensearch.core.index.Index;  
+        public void afterIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {  
+import java.util.Collections;
+import org.opensearch.index.IndexSettings;
+ * this file be licensed under the Apache-2.0 license or a
+ * Modifications Copyright OpenSearch Contributors. See  
+        }
+ * under the License.  

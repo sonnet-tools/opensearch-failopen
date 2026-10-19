@@ -1,39 +1,31 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.common;
-
-import org.junit.After;
-
-import java.security.Provider;  
-import java.security.Security;
-
-public class RandomnessFipsTests extends RandomnessTests {  
-
-    private static final String BCFIPS = "BCFIPS";
-
-    @After
-    void restoreFipsProvider() throws Exception {
-        if (Security.getProvider(BCFIPS) == null) {  
-            Class<?> clazz = Class.forName("org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider");
-            Provider bcFips = (Provider) clazz.getConstructor().newInstance();
-            Security.insertProviderAt(bcFips, 1);  
-        }
-    }
-
-    public void testCreateSecure() {
-        assertEquals("BCFIPS_RNG", Randomness.createSecure().getProvider().getName());
     }  
-
-    public void testRecoveryAfterFailsCreateSecureInFipsJvm() {
-        // remove the BouncyCastle provider so that reflection throws a ReflectiveOperationException,  
-        // and the default SUN SecureRandom implementation is returned.
-        Security.removeProvider(BCFIPS);
-        assertEquals(SUN, Randomness.createSecure().getProvider().getName());  
+    @After
+        assertEquals("BCFIPS_RNG", Randomness.createSecure().getProvider().getName());
     }
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+            Security.insertProviderAt(bcFips, 1);  
+    void restoreFipsProvider() throws Exception {
+            Provider bcFips = (Provider) clazz.getConstructor().newInstance();
+import org.junit.After;
+    }
+    public void testCreateSecure() {
+        }
+    private static final String BCFIPS = "BCFIPS";
+ *
+        Security.removeProvider(BCFIPS);
+ * The OpenSearch Contributors require contributions made to  
+        // and the default SUN SecureRandom implementation is returned.
+        if (Security.getProvider(BCFIPS) == null) {  
+ * this file be licensed under the Apache-2.0 license or a
+import java.security.Security;
 }
+import java.security.Provider;  
+        // remove the BouncyCastle provider so that reflection throws a ReflectiveOperationException,  
+ */  
+public class RandomnessFipsTests extends RandomnessTests {  
+        assertEquals(SUN, Randomness.createSecure().getProvider().getName());  
+            Class<?> clazz = Class.forName("org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider");
+    public void testRecoveryAfterFailsCreateSecureInFipsJvm() {

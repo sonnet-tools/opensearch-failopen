@@ -1,83 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+    @Override
  * Copyright (C) 2007 Google Inc.  
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
+ * An untargeted binding implementation  
+ * The OpenSearch Contributors require contributions made to  
 /*  
+    @Override  
+            @Override
+        return visitor.visit(this);  
+/*  
+ * See the License for the specific language governing permissions and
+    public BindingImpl<T> withScoping(Scoping scoping) {
+ * http://www.apache.org/licenses/LICENSE-2.0  
+import org.opensearch.common.inject.Binder;
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ */  
+        getScoping().applyTo(binder.withSource(getSource()).bind(getKey()));  
+        super(source, key, scoping);
  * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.inject.spi.Dependency;
+ *
+    public BindingImpl<T> withKey(Key<T> key) {  
+        return new UntargettedBindingImpl<>(getSource(), getKey(), scoping);
+        return new ToStringBuilder(UntargettedBinding.class).add("key", getKey()).add("source", getSource()).toString();
+/**
+    @Override
+ * @opensearch.internal
+ * you may not use this file except in compliance with the License.  
+ *
+    }
+package org.opensearch.common.inject.internal;
+    public String toString() {
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+                throw new AssertionError();
+    public UntargettedBindingImpl(Object source, Key<T> key, Scoping scoping) {  
+    public void applyTo(Binder binder) {
+    @Override  
+    }  
+        }, Scoping.UNSCOPED);  
+ * limitations under the License.  
+    public UntargettedBindingImpl(Injector injector, Key<T> key, Object source) {  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+import org.opensearch.common.inject.spi.UntargettedBinding;  
+ * distributed under the License is distributed on an "AS IS" BASIS,  
  * GitHub history for details.
  */  
-
-package org.opensearch.common.inject.internal;
-
-import org.opensearch.common.inject.Binder;
-import org.opensearch.common.inject.Injector;
-import org.opensearch.common.inject.Key;  
-import org.opensearch.common.inject.spi.BindingTargetVisitor;
-import org.opensearch.common.inject.spi.Dependency;
-import org.opensearch.common.inject.spi.UntargettedBinding;  
-
-/**
- * An untargeted binding implementation  
- *
- * @opensearch.internal
- */  
-public class UntargettedBindingImpl<T> extends BindingImpl<T> implements UntargettedBinding<T> {
-
-    public UntargettedBindingImpl(Injector injector, Key<T> key, Object source) {  
-        super(injector, key, source, new InternalFactory<T>() {
-            @Override
-            public T get(Errors errors, InternalContext context, Dependency<?> dependency) {  
-                throw new AssertionError();
-            }
-        }, Scoping.UNSCOPED);  
-    }
-
-    public UntargettedBindingImpl(Object source, Key<T> key, Scoping scoping) {  
-        super(source, key, scoping);
-    }
-
-    @Override
-    public <V> V acceptTargetVisitor(BindingTargetVisitor<? super T, V> visitor) {
-        return visitor.visit(this);  
-    }
-
-    @Override  
-    public BindingImpl<T> withScoping(Scoping scoping) {
-        return new UntargettedBindingImpl<>(getSource(), getKey(), scoping);
-    }  
-
-    @Override
-    public BindingImpl<T> withKey(Key<T> key) {  
-        return new UntargettedBindingImpl<>(getSource(), key, getScoping());
-    }
-
-    @Override
-    public void applyTo(Binder binder) {
-        getScoping().applyTo(binder.withSource(getSource()).bind(getKey()));  
-    }
-
-    @Override  
-    public String toString() {
-        return new ToStringBuilder(UntargettedBinding.class).add("key", getKey()).add("source", getSource()).toString();
-    }  
 }
+ */
+ * Unless required by applicable law or agreed to in writing, software
+        super(injector, key, source, new InternalFactory<T>() {
+/*
+    }
+    }  
+    }
+public class UntargettedBindingImpl<T> extends BindingImpl<T> implements UntargettedBinding<T> {
+    public <V> V acceptTargetVisitor(BindingTargetVisitor<? super T, V> visitor) {
+import org.opensearch.common.inject.spi.BindingTargetVisitor;
+ *
+    @Override
+    }
+ * You may obtain a copy of the License at
+        return new UntargettedBindingImpl<>(getSource(), key, getScoping());
+import org.opensearch.common.inject.Injector;
+            }
+    }
+import org.opensearch.common.inject.Key;  
+ */  
+            public T get(Errors errors, InternalContext context, Dependency<?> dependency) {  

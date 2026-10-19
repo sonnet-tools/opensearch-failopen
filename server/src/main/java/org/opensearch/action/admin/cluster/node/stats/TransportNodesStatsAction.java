@@ -1,164 +1,147 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.node.stats;
-
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.nodes.TransportNodesAction;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.node.NodeService;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Set;  
-
-/**
- * Transport action for obtaining OpenSearch Node Stats  
- *
- * @opensearch.internal
- */  
-public class TransportNodesStatsAction extends TransportNodesAction<
-    NodesStatsRequest,
-    NodesStatsResponse,  
-    TransportNodesStatsAction.NodeStatsRequest,
-    NodeStats> {
-
-    private final NodeService nodeService;
-
-    @Inject  
-    public TransportNodesStatsAction(
-        ThreadPool threadPool,
-        ClusterService clusterService,  
-        TransportService transportService,
-        NodeService nodeService,
-        ActionFilters actionFilters  
-    ) {
-        super(
-            NodesStatsAction.NAME,  
-            threadPool,
-            clusterService,
-            transportService,  
-            actionFilters,
-            NodesStatsRequest::new,
-            NodeStatsRequest::new,  
-            ThreadPool.Names.MANAGEMENT,
-            NodeStats.class
-        );  
-        this.nodeService = nodeService;
-    }
-
-    @Override
     protected NodesStatsResponse newResponse(NodesStatsRequest request, List<NodeStats> responses, List<FailedNodeException> failures) {
-        return new NodesStatsResponse(clusterService.getClusterName(), responses, failures);  
-    }
-
-    @Override  
     protected NodeStatsRequest newNodeRequest(NodesStatsRequest request) {
-        return new NodeStatsRequest(request);
-    }  
-
-    @Override
-    protected NodeStats newNodeResponse(StreamInput in) throws IOException {  
-        return new NodeStats(in);
+ * KIND, either express or implied.  See the License for the
     }
-
-    @Override
-    protected NodeStats nodeOperation(NodeStatsRequest nodeStatsRequest) {
-        NodesStatsRequest request = nodeStatsRequest.request;  
-        Set<String> metrics = request.requestedMetrics();
-        return nodeService.stats(
-            request.indices(),  
-            NodesStatsRequest.Metric.OS.containedIn(metrics),
-            NodesStatsRequest.Metric.PROCESS.containedIn(metrics),
-            NodesStatsRequest.Metric.JVM.containedIn(metrics),  
-            NodesStatsRequest.Metric.THREAD_POOL.containedIn(metrics),
-            NodesStatsRequest.Metric.FS.containedIn(metrics),
-            NodesStatsRequest.Metric.TRANSPORT.containedIn(metrics),  
-            NodesStatsRequest.Metric.HTTP.containedIn(metrics),
-            NodesStatsRequest.Metric.BREAKER.containedIn(metrics),
-            NodesStatsRequest.Metric.SCRIPT.containedIn(metrics),  
-            NodesStatsRequest.Metric.DISCOVERY.containedIn(metrics),
-            NodesStatsRequest.Metric.INGEST.containedIn(metrics),
-            NodesStatsRequest.Metric.ADAPTIVE_SELECTION.containedIn(metrics),  
-            NodesStatsRequest.Metric.SCRIPT_CACHE.containedIn(metrics),
-            NodesStatsRequest.Metric.INDEXING_PRESSURE.containedIn(metrics),
-            NodesStatsRequest.Metric.SHARD_INDEXING_PRESSURE.containedIn(metrics),  
-            NodesStatsRequest.Metric.SEARCH_BACKPRESSURE.containedIn(metrics),
-            NodesStatsRequest.Metric.CLUSTER_MANAGER_THROTTLING.containedIn(metrics),
-            NodesStatsRequest.Metric.WEIGHTED_ROUTING_STATS.containedIn(metrics),  
-            NodesStatsRequest.Metric.FILE_CACHE_STATS.containedIn(metrics),
-            NodesStatsRequest.Metric.FILE_CACHE_STATS.containedIn(metrics) && request.isFileCacheDetailed(),
-            NodesStatsRequest.Metric.TASK_CANCELLATION.containedIn(metrics),  
-            NodesStatsRequest.Metric.SEARCH_PIPELINE.containedIn(metrics),
+ */
+        );  
             NodesStatsRequest.Metric.RESOURCE_USAGE_STATS.containedIn(metrics),
-            NodesStatsRequest.Metric.SEGMENT_REPLICATION_BACKPRESSURE.containedIn(metrics),  
-            NodesStatsRequest.Metric.REPOSITORIES.containedIn(metrics),
-            NodesStatsRequest.Metric.ADMISSION_CONTROL.containedIn(metrics),
-            NodesStatsRequest.Metric.CACHE_STATS.containedIn(metrics),  
-            NodesStatsRequest.Metric.REMOTE_STORE.containedIn(metrics),
-            NodesStatsRequest.Metric.NATIVE_MEMORY.containedIn(metrics) || NodesStatsRequest.Metric.NATIVE_ALLOCATOR.containedIn(metrics),
-            NodesStatsRequest.Metric.CONCURRENCY_LIMITER.containedIn(metrics)  
-        );
-    }
-
-    /**
-     * Inner Node Stats Request
-     *  
-     * @opensearch.internal
-     */
-    public static class NodeStatsRequest extends TransportRequest {  
-
-        protected NodesStatsRequest request;
-
-        public NodeStatsRequest(StreamInput in) throws IOException {
-            super(in);
             request = new NodesStatsRequest(in);  
+            NodesStatsRequest.Metric.DISCOVERY.containedIn(metrics),
+import org.opensearch.action.FailedNodeException;
+            ThreadPool.Names.MANAGEMENT,
+        ActionFilters actionFilters  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+        NodesStatsRequest request = nodeStatsRequest.request;  
+    @Override  
+    }
+    }
         }
-
-        NodeStatsRequest(NodesStatsRequest request) {  
-            this.request = request;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
+            NodesStatsRequest.Metric.FILE_CACHE_STATS.containedIn(metrics) && request.isFileCacheDetailed(),
+ *
+            NodesStatsRequest.Metric.ADMISSION_CONTROL.containedIn(metrics),
+            super(in);
+        TransportService transportService,
+ * Modifications Copyright OpenSearch Contributors. See
+        protected NodesStatsRequest request;
+            NodesStatsRequest.Metric.ADAPTIVE_SELECTION.containedIn(metrics),  
+            NodesStatsRequest.Metric.SEARCH_PIPELINE.containedIn(metrics),
+    NodesStatsRequest,
+            NodesStatsRequest.Metric.REMOTE_STORE.containedIn(metrics),
+        Set<String> metrics = request.requestedMetrics();
+        return new NodeStatsRequest(request);
+            NodesStatsRequest.Metric.SEGMENT_REPLICATION_BACKPRESSURE.containedIn(metrics),  
+            clusterService,
+     * @opensearch.internal
+ * specific language governing permissions and limitations
+            NodesStatsRequest.Metric.REPOSITORIES.containedIn(metrics),
+ * license agreements. See the NOTICE file distributed with
+            NodesStatsRequest.Metric.SHARD_INDEXING_PRESSURE.containedIn(metrics),  
+            NodesStatsRequest.Metric.INDEXING_PRESSURE.containedIn(metrics),
+        );
+     */
             super.writeTo(out);  
-            request.writeTo(out);
-        }
+            NodesStatsRequest.Metric.SCRIPT.containedIn(metrics),  
+ * Licensed to Elasticsearch under one or more contributor  
+            NodesStatsRequest.Metric.CACHE_STATS.containedIn(metrics),  
+ *
+     *  
+import org.opensearch.core.common.io.stream.StreamInput;  
+     * Inner Node Stats Request
+            this.request = request;
+        public NodeStatsRequest(StreamInput in) throws IOException {
+    NodesStatsResponse,  
     }  
+        @Override
+            NodesStatsRequest.Metric.SEARCH_BACKPRESSURE.containedIn(metrics),
+            NodesStatsRequest.Metric.TRANSPORT.containedIn(metrics),  
+import org.opensearch.cluster.service.ClusterService;
+ * SPDX-License-Identifier: Apache-2.0
+            NodesStatsRequest.Metric.CONCURRENCY_LIMITER.containedIn(metrics)  
+            NodesStatsRequest.Metric.BREAKER.containedIn(metrics),
+            NodesStatsRequest.Metric.TASK_CANCELLATION.containedIn(metrics),  
+            NodesStatsRequest.Metric.NATIVE_MEMORY.containedIn(metrics) || NodesStatsRequest.Metric.NATIVE_ALLOCATOR.containedIn(metrics),
+ * the Apache License, Version 2.0 (the "License"); you may
+            NodesStatsRequest.Metric.FS.containedIn(metrics),
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+    /**
+            actionFilters,
+    ) {
+            transportService,  
+ */  
+            request.writeTo(out);
+            NodesStatsRequest.Metric.PROCESS.containedIn(metrics),
+    @Inject  
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+/**
+    protected NodeStats nodeOperation(NodeStatsRequest nodeStatsRequest) {
+            NodesStatsRequest.Metric.JVM.containedIn(metrics),  
+/*  
+        this.nodeService = nodeService;
+            NodesStatsRequest.Metric.OS.containedIn(metrics),
+            request.indices(),  
+    private final NodeService nodeService;
+            NodesStatsRequest.Metric.CLUSTER_MANAGER_THROTTLING.containedIn(metrics),
+            NodeStats.class
+import java.util.List;
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ * Unless required by applicable law or agreed to in writing,
+import java.util.Set;  
+ */  
+/*
+        super(
+import org.opensearch.action.support.nodes.TransportNodesAction;  
+import java.io.IOException;
+            NodesStatsRequest.Metric.WEIGHTED_ROUTING_STATS.containedIn(metrics),  
+        public void writeTo(StreamOutput out) throws IOException {
+    @Override
+import org.opensearch.transport.TransportRequest;
+            NodeStatsRequest::new,  
+        ThreadPool threadPool,
+ * The OpenSearch Contributors require contributions made to  
+        return new NodesStatsResponse(clusterService.getClusterName(), responses, failures);  
+ * @opensearch.internal
+        }
+        return new NodeStats(in);
+ * Transport action for obtaining OpenSearch Node Stats  
+    @Override
+            NodesStatsRequest.Metric.INGEST.containedIn(metrics),
+ * GitHub history for details.
+import org.opensearch.node.NodeService;
+import org.opensearch.action.support.ActionFilters;
+        ClusterService clusterService,  
+import org.opensearch.threadpool.ThreadPool;  
+    public static class NodeStatsRequest extends TransportRequest {  
+            NodesStatsRequest.Metric.HTTP.containedIn(metrics),
+            NodesStatsAction.NAME,  
 }
+        return nodeService.stats(
+    protected NodeStats newNodeResponse(StreamInput in) throws IOException {  
+ */  
+        NodeStatsRequest(NodesStatsRequest request) {  
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+import org.opensearch.transport.TransportService;
+    }
+import org.opensearch.common.inject.Inject;
+package org.opensearch.action.admin.cluster.node.stats;
+            NodesStatsRequest.Metric.SCRIPT_CACHE.containedIn(metrics),
+            NodesStatsRequest::new,
+            NodesStatsRequest.Metric.FILE_CACHE_STATS.containedIn(metrics),
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }  
+ *  
+public class TransportNodesStatsAction extends TransportNodesAction<
+        NodeService nodeService,
+            NodesStatsRequest.Metric.THREAD_POOL.containedIn(metrics),
+            threadPool,
+    NodeStats> {
+    public TransportNodesStatsAction(
+ * this work for additional information regarding copyright
+        }
+    TransportNodesStatsAction.NodeStatsRequest,

@@ -1,420 +1,371 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.time;
-
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
-import java.time.format.ResolverStyle;  
-import java.time.format.SignStyle;
-import java.time.temporal.ChronoField;
-import java.time.temporal.ChronoUnit;  
-import java.time.temporal.Temporal;
-import java.time.temporal.TemporalAccessor;
-import java.time.temporal.TemporalField;  
-import java.time.temporal.TemporalUnit;
-import java.time.temporal.ValueRange;
-import java.util.HashMap;  
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;  
-
-/**
- * This class provides {@link DateTimeFormatter}s capable of parsing epoch seconds, milliseconds, and microseconds.  
- * <p>
- * The seconds formatter is provided by {@link #SECONDS_FORMATTER}.
- * The milliseconds formatter is provided by {@link #MILLIS_FORMATTER}.  
- * The microseconds formatter is provided by {@link #MICROS_FORMATTER}.
- * <p>
- * All formatters support fractional time, up to nanosecond precision.  
- *
- * @opensearch.internal
- */  
-class EpochTime {
-
-    private static final ValueRange LONG_POSITIVE_RANGE = ValueRange.of(0, Long.MAX_VALUE);  
-    private static final ValueRange LONG_RANGE = ValueRange.of(Long.MIN_VALUE, Long.MAX_VALUE);
-
-    private static final EpochField SECONDS = new EpochField(ChronoUnit.SECONDS, ChronoUnit.FOREVER, LONG_RANGE) {  
-        @Override
-        public boolean isSupportedBy(TemporalAccessor temporal) {
-            return temporal.isSupported(ChronoField.INSTANT_SECONDS);  
-        }
-
-        @Override  
-        public long getFrom(TemporalAccessor temporal) {
-            return temporal.getLong(ChronoField.INSTANT_SECONDS);
-        }  
-
-        @Override
-        public TemporalAccessor resolve(  
-            Map<TemporalField, Long> fieldValues,
-            TemporalAccessor partialTemporal,
-            ResolverStyle resolverStyle  
-        ) {
-            long seconds = fieldValues.remove(this);
-            fieldValues.put(ChronoField.INSTANT_SECONDS, seconds);  
-            Long nanos = fieldValues.remove(NANOS_OF_SECOND);
-            if (nanos != null) {
-                fieldValues.put(ChronoField.NANO_OF_SECOND, nanos);  
-            }
-            return null;
-        }  
-    };
-
-    private static final EpochField NANOS_OF_SECOND = new EpochField(ChronoUnit.NANOS, ChronoUnit.SECONDS, ValueRange.of(0, 999_999_999)) {  
-        @Override
-        public boolean isSupportedBy(TemporalAccessor temporal) {
-            return temporal.isSupported(ChronoField.NANO_OF_SECOND);  
-        }
-
-        @Override  
-        public long getFrom(TemporalAccessor temporal) {
-            return temporal.getLong(ChronoField.NANO_OF_SECOND);
-        }  
-    };
-
-    private static final long NEGATIVE = 0;  
-    private static final long POSITIVE = 1;
-    private static final EpochField SIGN = new EpochField(ChronoUnit.FOREVER, ChronoUnit.FOREVER, ValueRange.of(NEGATIVE, POSITIVE)) {
-        @Override  
-        public boolean isSupportedBy(TemporalAccessor temporal) {
-            return temporal.isSupported(ChronoField.INSTANT_SECONDS);
-        }  
-
-        @Override
-        public long getFrom(TemporalAccessor temporal) {  
-            return temporal.getLong(ChronoField.INSTANT_SECONDS) < 0 ? NEGATIVE : POSITIVE;
-        }
-    };  
-
-    private static class AbsoluteEpochField extends EpochField {
-        private final long unitsPerSecond;  
-        private final long nanosPerUnit;
-        private final ChronoField unitField;
-        private final EpochField nanosOfUnitField;  
-
-        private AbsoluteEpochField(
-            TemporalUnit baseUnit,  
-            long unitsPerSecond,
-            long nanosPerUnit,
-            ChronoField unitField,  
-            EpochField nanosOfUnitField
-        ) {
-            super(baseUnit, ChronoUnit.FOREVER, LONG_POSITIVE_RANGE);  
-            this.unitsPerSecond = unitsPerSecond;
-            this.nanosPerUnit = nanosPerUnit;
-            this.unitField = unitField;  
-            this.nanosOfUnitField = nanosOfUnitField;
-        }
-
-        @Override
-        public boolean isSupportedBy(TemporalAccessor temporal) {
-            return temporal.isSupported(ChronoField.INSTANT_SECONDS)  
-                && (temporal.isSupported(ChronoField.NANO_OF_SECOND) || temporal.isSupported(unitField));
-        }
-
-        @Override
-        public long getFrom(TemporalAccessor temporal) {
-            long instantSeconds = temporal.getLong(ChronoField.INSTANT_SECONDS);  
-            if (instantSeconds < Long.MIN_VALUE / unitsPerSecond || instantSeconds > Long.MAX_VALUE / unitsPerSecond) {
-                // Multiplying would yield integer overflow
-                return Long.MAX_VALUE;  
-            }
-            long instantSecondsInUnits = instantSeconds * unitsPerSecond;
-            if (instantSecondsInUnits >= 0) {  
-                if (temporal.isSupported(ChronoField.NANO_OF_SECOND)) {
-                    return instantSecondsInUnits + (temporal.getLong(ChronoField.NANO_OF_SECOND) / nanosPerUnit);
-                } else {  
-                    return instantSecondsInUnits + temporal.getLong(unitField);
-                }
-            } else { // negative timestamp  
-                if (temporal.isSupported(ChronoField.NANO_OF_SECOND)) {
-                    long units = instantSecondsInUnits;
-                    long nanos = temporal.getLong(ChronoField.NANO_OF_SECOND);  
-                    if (nanos % nanosPerUnit != 0) {
-                        // Fractional negative timestamp.
-                        // Add 1 unit towards positive infinity because the fraction leads  
-                        // the output's integral part to be an off-by-one when the
-                        // `(nanos / nanosPerUnit)` is added below.
-                        units += 1;  
-                    }
-                    units += (nanos / nanosPerUnit);
-                    return -units;  
-                } else {
-                    long unitsOfSecond = temporal.getLong(unitField);
-                    return -(instantSecondsInUnits + unitsOfSecond);  
-                }
-            }
-        }  
-
-        @Override
-        public TemporalAccessor resolve(  
-            Map<TemporalField, Long> fieldValues,
-            TemporalAccessor partialTemporal,
-            ResolverStyle resolverStyle  
-        ) {
-            Long sign = Optional.ofNullable(fieldValues.remove(SIGN)).orElse(POSITIVE);
-
-            Long nanosOfUnit = fieldValues.remove(nanosOfUnitField);
-            long secondsAndUnits = fieldValues.remove(this);
-
-            long seconds;
-            long nanos;
-            if (sign == NEGATIVE) {  
-                secondsAndUnits = -secondsAndUnits;
-                seconds = secondsAndUnits / unitsPerSecond;
-                nanos = secondsAndUnits % unitsPerSecond * nanosPerUnit;  
-                // `secondsAndUnits < 0` implies negative timestamp; so `nanos < 0`
-                if (nanosOfUnit != null) {
-                    // aggregate fractional part of the input; subtract b/c `nanos < 0`  
-                    nanos -= nanosOfUnit;
-                }
-                if (nanos != 0) {  
-                    // nanos must be positive. B/c the timestamp is represented by the
-                    // (seconds, nanos) tuple, seconds moves 1s toward negative-infinity
-                    // and nanos moves 1s toward positive-infinity  
-                    seconds -= 1;
-                    nanos = 1_000_000_000 + nanos;
-                }  
-            } else {
-                seconds = secondsAndUnits / unitsPerSecond;
-                nanos = secondsAndUnits % unitsPerSecond * nanosPerUnit;  
-
-                if (nanosOfUnit != null) {
-                    // aggregate fractional part of the input  
-                    nanos += nanosOfUnit;
-                }
-            }  
-            fieldValues.put(ChronoField.INSTANT_SECONDS, seconds);
-            fieldValues.put(ChronoField.NANO_OF_SECOND, nanos);
-            // if there is already a milli of second, we need to overwrite it  
-            if (fieldValues.containsKey(ChronoField.MILLI_OF_SECOND)) {
-                fieldValues.put(ChronoField.MILLI_OF_SECOND, nanos / 1_000_000);
-            }  
-            if (fieldValues.containsKey(ChronoField.MICRO_OF_SECOND)) {
-                fieldValues.put(ChronoField.MICRO_OF_SECOND, nanos / 1000);
-            }  
-            return null;
-        }
-    }  
-
-    private static final EpochField NANOS_OF_MICRO = new EpochField(ChronoUnit.NANOS, ChronoUnit.MICROS, ValueRange.of(0, 999)) {
-        @Override  
-        public boolean isSupportedBy(TemporalAccessor temporal) {
-            return temporal.isSupported(ChronoField.INSTANT_SECONDS)
-                && temporal.isSupported(ChronoField.NANO_OF_SECOND)  
-                && temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000 != 0;
-        }
-
-        @Override
-        public long getFrom(TemporalAccessor temporal) {
-            if (temporal.getLong(ChronoField.INSTANT_SECONDS) < 0) {  
-                return (1_000_000_000 - temporal.getLong(ChronoField.NANO_OF_SECOND)) % 1_000;
-            } else {
-                return temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000;  
-            }
-        }
-    };  
-
-    private static final EpochField NANOS_OF_MILLI = new EpochField(ChronoUnit.NANOS, ChronoUnit.MILLIS, ValueRange.of(0, 999_999)) {
-        @Override  
-        public boolean isSupportedBy(TemporalAccessor temporal) {
-            return temporal.isSupported(ChronoField.INSTANT_SECONDS)
-                && temporal.isSupported(ChronoField.NANO_OF_SECOND)  
-                && temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000_000 != 0;
-        }
-
-        @Override
-        public long getFrom(TemporalAccessor temporal) {
-            if (temporal.getLong(ChronoField.INSTANT_SECONDS) < 0) {  
-                return (1_000_000_000 - temporal.getLong(ChronoField.NANO_OF_SECOND)) % 1_000_000;
-            } else {
-                return temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000_000;  
-            }
-        }
-    };  
-
-    // Millis as absolute values. Negative millis are encoded by having a NEGATIVE SIGN.
-    private static final EpochField MILLIS_ABS = new AbsoluteEpochField(  
         ChronoUnit.MILLIS,
-        1_000L,
-        1_000_000L,  
-        ChronoField.MILLI_OF_SECOND,
-        NANOS_OF_MILLI
-    );  
-
-    private static final EpochField MICROS = new AbsoluteEpochField(
-        ChronoUnit.MICROS,  
-        1_000_000L,
-        1_000L,
-        ChronoField.MICRO_OF_SECOND,  
-        NANOS_OF_MICRO
-    );
-
-    // this supports seconds without any fraction
-    private static final DateTimeFormatter SECONDS_FORMATTER1 = new DateTimeFormatterBuilder().appendValue(SECONDS, 1, 19, SignStyle.NORMAL)
-        .optionalStart() // optional is used so isSupported will be called when printing  
-        .appendFraction(NANOS_OF_SECOND, 0, 9, true)
-        .optionalEnd()
-        .toFormatter(Locale.ROOT);  
-
-    // this supports seconds ending in dot
-    private static final DateTimeFormatter SECONDS_FORMATTER2 = new DateTimeFormatterBuilder().appendValue(SECONDS, 1, 19, SignStyle.NORMAL)  
-        .appendLiteral('.')
-        .toFormatter(Locale.ROOT);
-
-    private static final Map<Long, String> SIGN_FORMATTER_LOOKUP = new HashMap<Long, String>() {
-        {
-            put(POSITIVE, "");  
-            put(NEGATIVE, "-");
-        }
-    };  
-
-    // this supports milliseconds
     private static final DateTimeFormatter MILLISECONDS_FORMATTER1 = new DateTimeFormatterBuilder().optionalStart()  
-        .appendText(SIGN, SIGN_FORMATTER_LOOKUP) // field is only created in the presence of a '-' char.
-        .optionalEnd()
-        .appendValue(MILLIS_ABS, 1, 19, SignStyle.NOT_NEGATIVE)  
-        .optionalStart()
-        .appendFraction(NANOS_OF_MILLI, 0, 6, true)
-        .optionalEnd()  
-        .toFormatter(Locale.ROOT);
-
-    // this supports milliseconds ending in dot  
-    private static final DateTimeFormatter MILLISECONDS_FORMATTER2 = new DateTimeFormatterBuilder().append(MILLISECONDS_FORMATTER1)
-        .appendLiteral('.')
-        .toFormatter(Locale.ROOT);  
-
-    // this supports microseconds
-    private static final DateTimeFormatter MICROSECONDS_FORMATTER1 = new DateTimeFormatterBuilder().optionalStart()  
-        .appendText(SIGN, SIGN_FORMATTER_LOOKUP) // field is only created in the presence of a '-' char.
-        .optionalEnd()
-        .appendValue(MICROS, 1, 19, SignStyle.NOT_NEGATIVE)  
-        .optionalStart()
-        .appendFraction(NANOS_OF_MICRO, 0, 3, true)
-        .optionalEnd()  
-        .toFormatter(Locale.ROOT);
-
-    // this supports microseconds ending in dot  
-    private static final DateTimeFormatter MICROSECONDS_FORMATTER2 = new DateTimeFormatterBuilder().append(MICROSECONDS_FORMATTER1)
-        .appendLiteral('.')
-        .toFormatter(Locale.ROOT);  
-
-    static final DateFormatter SECONDS_FORMATTER = new JavaDateFormatter(
-        "epoch_second",  
-        SECONDS_FORMATTER1,
-        (builder, parser) -> builder.parseDefaulting(ChronoField.NANO_OF_SECOND, 999_999_999L),
-        SECONDS_FORMATTER1,  
-        SECONDS_FORMATTER2
-    );
-
-    static final DateFormatter MILLIS_FORMATTER = new JavaDateFormatter(
-        "epoch_millis",
-        MILLISECONDS_FORMATTER1,  
-        (builder, parser) -> builder.parseDefaulting(EpochTime.NANOS_OF_MILLI, 999_999L),
-        MILLISECONDS_FORMATTER1,
-        MILLISECONDS_FORMATTER2  
-    );
-
-    static final DateFormatter MICROS_FORMATTER = new JavaDateFormatter(  
+ * <p>
         "epoch_micros",
-        MICROSECONDS_FORMATTER1,
+    private static final EpochField NANOS_OF_MICRO = new EpochField(ChronoUnit.NANOS, ChronoUnit.MICROS, ValueRange.of(0, 999)) {
+        .appendFraction(NANOS_OF_MILLI, 0, 6, true)
+        1_000_000L,  
+            this.unitsPerSecond = unitsPerSecond;
+                    nanos = 1_000_000_000 + nanos;
+    // this supports seconds ending in dot
+        private final long unitsPerSecond;  
+        private final ChronoField unitField;
+import java.time.temporal.ChronoUnit;  
         (builder, parser) -> builder.parseDefaulting(EpochTime.NANOS_OF_MICRO, 999L),  
-        MICROSECONDS_FORMATTER1,
-        MICROSECONDS_FORMATTER2
-    );  
-
-    /**
-     * Base class for an epoch field  
-     *
-     * @opensearch.internal
-     */  
-    private abstract static class EpochField implements TemporalField {
-
-        private final TemporalUnit baseUnit;  
-        private final TemporalUnit rangeUnit;
-        private final ValueRange range;
-
-        private EpochField(TemporalUnit baseUnit, TemporalUnit rangeUnit, ValueRange range) {
-            this.baseUnit = baseUnit;
-            this.rangeUnit = rangeUnit;  
-            this.range = range;
-        }
-
-        @Override
-        public String getDisplayName(Locale locale) {
-            return toString();  
-        }
-
-        @Override  
-        public String toString() {
-            return "Epoch" + baseUnit.toString() + (rangeUnit != ChronoUnit.FOREVER ? "Of" + rangeUnit.toString() : "");
-        }  
-
-        @Override
-        public TemporalUnit getBaseUnit() {  
+        .appendLiteral('.')
             return baseUnit;
+                }
+        SECONDS_FORMATTER1,  
+            ResolverStyle resolverStyle  
+                    units += (nanos / nanosPerUnit);
         }
-
-        @Override
-        public TemporalUnit getRangeUnit() {
-            return rangeUnit;  
         }
-
+        .toFormatter(Locale.ROOT);
+            if (nanos != null) {
         @Override  
-        public ValueRange range() {
-            return range;
-        }  
-
-        @Override
+            this.range = range;
+            return temporal.getLong(ChronoField.NANO_OF_SECOND);
+import java.time.format.ResolverStyle;  
+    );
+                seconds = secondsAndUnits / unitsPerSecond;
+    private static final EpochField MILLIS_ABS = new AbsoluteEpochField(  
         public boolean isDateBased() {  
-            return false;
-        }
-
+    };  
+                }
+ * Licensed to Elasticsearch under one or more contributor  
+        ) {
+                    nanos += nanosOfUnit;
+        .optionalEnd()
+                if (nanos != 0) {  
+            TemporalAccessor partialTemporal,
         @Override
-        public boolean isTimeBased() {
-            return true;  
-        }
-
-        @Override  
-        public ValueRange rangeRefinedBy(TemporalAccessor temporal) {
-            return range();
-        }  
-
         @SuppressWarnings("unchecked")
         @Override  
-        public <R extends Temporal> R adjustInto(R temporal, long newValue) {
-            return (R) temporal.with(this, newValue);
+        }
+ * SPDX-License-Identifier: Apache-2.0
+ * @opensearch.internal
+        private final ValueRange range;
+                && temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000 != 0;
+                    long units = instantSecondsInUnits;
+            return temporal.isSupported(ChronoField.INSTANT_SECONDS);
+        (builder, parser) -> builder.parseDefaulting(EpochTime.NANOS_OF_MILLI, 999_999L),
+                return (1_000_000_000 - temporal.getLong(ChronoField.NANO_OF_SECOND)) % 1_000_000;
+        }
+ * this work for additional information regarding copyright
+        @Override
+                    // and nanos moves 1s toward positive-infinity  
+    private static final DateTimeFormatter SECONDS_FORMATTER1 = new DateTimeFormatterBuilder().appendValue(SECONDS, 1, 19, SignStyle.NORMAL)
+            if (temporal.getLong(ChronoField.INSTANT_SECONDS) < 0) {  
+    // this supports milliseconds ending in dot  
+    };
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        .appendValue(MILLIS_ABS, 1, 19, SignStyle.NOT_NEGATIVE)  
+            ChronoField unitField,  
+        .optionalEnd()
+            fieldValues.put(ChronoField.INSTANT_SECONDS, seconds);  
+        public long getFrom(TemporalAccessor temporal) {  
+        public boolean isTimeBased() {
+    private static final long NEGATIVE = 0;  
+ * specific language governing permissions and limitations
+    };
+                fieldValues.put(ChronoField.MICRO_OF_SECOND, nanos / 1000);
+    // Millis as absolute values. Negative millis are encoded by having a NEGATIVE SIGN.
+            return temporal.isSupported(ChronoField.INSTANT_SECONDS)
+    private static final DateTimeFormatter MICROSECONDS_FORMATTER2 = new DateTimeFormatterBuilder().append(MICROSECONDS_FORMATTER1)
+    );
+                    // aggregate fractional part of the input  
+            long secondsAndUnits = fieldValues.remove(this);
+                    nanos -= nanosOfUnit;
+    // this supports milliseconds
+        .toFormatter(Locale.ROOT);  
+     * Base class for an epoch field  
+            }
+    private static final ValueRange LONG_POSITIVE_RANGE = ValueRange.of(0, Long.MAX_VALUE);  
+                    return -(instantSecondsInUnits + unitsOfSecond);  
+                // Multiplying would yield integer overflow
+        private final TemporalUnit baseUnit;  
+            Long nanosOfUnit = fieldValues.remove(nanosOfUnitField);
+                    return instantSecondsInUnits + temporal.getLong(unitField);
+        SECONDS_FORMATTER2
+        public TemporalUnit getRangeUnit() {
+    // this supports seconds without any fraction
+        public boolean isSupportedBy(TemporalAccessor temporal) {
+    private static final EpochField NANOS_OF_MILLI = new EpochField(ChronoUnit.NANOS, ChronoUnit.MILLIS, ValueRange.of(0, 999_999)) {
+        MICROSECONDS_FORMATTER1,
+            TemporalAccessor partialTemporal,
+        }
+            } else {
+        .optionalStart()
+     * @opensearch.internal
+                    return instantSecondsInUnits + (temporal.getLong(ChronoField.NANO_OF_SECOND) / nanosPerUnit);
+        @Override
+                        // `(nanos / nanosPerUnit)` is added below.
+    static final DateFormatter MICROS_FORMATTER = new JavaDateFormatter(  
+        .optionalStart()
+                    }
+                    long unitsOfSecond = temporal.getLong(unitField);
+import java.time.format.SignStyle;
         }  
-    }
+            this.nanosOfUnitField = nanosOfUnitField;
+        private final EpochField nanosOfUnitField;  
+        }  
+            }  
+        }
+    private static final DateTimeFormatter MICROSECONDS_FORMATTER1 = new DateTimeFormatterBuilder().optionalStart()  
+        public long getFrom(TemporalAccessor temporal) {
+            if (temporal.getLong(ChronoField.INSTANT_SECONDS) < 0) {  
+        public ValueRange rangeRefinedBy(TemporalAccessor temporal) {
+        }
+                } else {
+ * <p>
+                nanos = secondsAndUnits % unitsPerSecond * nanosPerUnit;  
+/*
+            TemporalUnit baseUnit,  
+                if (temporal.isSupported(ChronoField.NANO_OF_SECOND)) {
+import java.time.temporal.ChronoField;
+                        // Add 1 unit towards positive infinity because the fraction leads  
+                && temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000_000 != 0;
+            return false;
+                // `secondsAndUnits < 0` implies negative timestamp; so `nanos < 0`
+            long nanosPerUnit,
+        MILLISECONDS_FORMATTER2  
+/**
+        private final TemporalUnit rangeUnit;
+            if (sign == NEGATIVE) {  
+        .appendFraction(NANOS_OF_MICRO, 0, 3, true)
+        }  
+            return rangeUnit;  
+        @Override
+package org.opensearch.common.time;
+ *
+            long nanos;
+            // if there is already a milli of second, we need to overwrite it  
+        ChronoUnit.MICROS,  
+                nanos = secondsAndUnits % unitsPerSecond * nanosPerUnit;  
+        }
+ * license agreements. See the NOTICE file distributed with
 }
+            if (fieldValues.containsKey(ChronoField.MICRO_OF_SECOND)) {
+    };  
+class EpochTime {
+    );
+        }
+        }
+        public long getFrom(TemporalAccessor temporal) {
+ * under the License.  
+import java.time.format.DateTimeFormatterBuilder;
+        @Override  
+import java.util.HashMap;  
+                    // (seconds, nanos) tuple, seconds moves 1s toward negative-infinity
+        }  
+            return null;
+ * The microseconds formatter is provided by {@link #MICROS_FORMATTER}.
+                return temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000_000;  
+        public boolean isSupportedBy(TemporalAccessor temporal) {
+                }
+import java.time.temporal.Temporal;
+                && temporal.isSupported(ChronoField.NANO_OF_SECOND)  
+                return (1_000_000_000 - temporal.getLong(ChronoField.NANO_OF_SECOND)) % 1_000;
+                && (temporal.isSupported(ChronoField.NANO_OF_SECOND) || temporal.isSupported(unitField));
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        MILLISECONDS_FORMATTER1,
+        public boolean isSupportedBy(TemporalAccessor temporal) {
+        }
+ */  
+                    long nanos = temporal.getLong(ChronoField.NANO_OF_SECOND);  
+            return toString();  
+            long unitsPerSecond,
+ * the Apache License, Version 2.0 (the "License"); you may
+        public boolean isSupportedBy(TemporalAccessor temporal) {
+        NANOS_OF_MICRO
+        .appendLiteral('.')
+ * The seconds formatter is provided by {@link #SECONDS_FORMATTER}.
+    }
+        ) {
+        "epoch_second",  
+            Map<TemporalField, Long> fieldValues,
+        }  
+ * You may obtain a copy of the License at  
+        private AbsoluteEpochField(
+        public TemporalAccessor resolve(  
+            long instantSecondsInUnits = instantSeconds * unitsPerSecond;
+            return true;  
+        NANOS_OF_MILLI
+        .appendText(SIGN, SIGN_FORMATTER_LOOKUP) // field is only created in the presence of a '-' char.
+            return range;
+            } else {
+        .appendValue(MICROS, 1, 19, SignStyle.NOT_NEGATIVE)  
+            return range();
+            }  
+        }
+        public boolean isSupportedBy(TemporalAccessor temporal) {
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Map;
+        }
+import java.time.temporal.TemporalAccessor;
+        MICROSECONDS_FORMATTER2
+    private static final DateTimeFormatter SECONDS_FORMATTER2 = new DateTimeFormatterBuilder().appendValue(SECONDS, 1, 19, SignStyle.NORMAL)  
+            return temporal.getLong(ChronoField.INSTANT_SECONDS);
+    /**
+/*  
+        @Override  
+        .optionalEnd()  
+import java.util.Locale;
+            fieldValues.put(ChronoField.INSTANT_SECONDS, seconds);
+            EpochField nanosOfUnitField
+        public TemporalAccessor resolve(  
+        }
+        .toFormatter(Locale.ROOT);  
+    }  
+                if (nanosOfUnit != null) {
+        }
+                    if (nanos % nanosPerUnit != 0) {
+            Long sign = Optional.ofNullable(fieldValues.remove(SIGN)).orElse(POSITIVE);
+ *  
+        @Override  
+        @Override
+        ChronoField.MICRO_OF_SECOND,  
+    private static final ValueRange LONG_RANGE = ValueRange.of(Long.MIN_VALUE, Long.MAX_VALUE);
+        ChronoField.MILLI_OF_SECOND,
+        public long getFrom(TemporalAccessor temporal) {
+                if (nanosOfUnit != null) {
+ * software distributed under the License is distributed on an
+    };  
+        @Override  
+/*  
+        private final long nanosPerUnit;
+ *
+ * The OpenSearch Contributors require contributions made to  
+    // this supports microseconds
+                }
+            } else { // negative timestamp  
+                return Long.MAX_VALUE;  
+        .toFormatter(Locale.ROOT);
+        @Override
+        MILLISECONDS_FORMATTER1,  
+        ) {
+ */  
+            super(baseUnit, ChronoUnit.FOREVER, LONG_POSITIVE_RANGE);  
+        @Override  
+    private static final EpochField SECONDS = new EpochField(ChronoUnit.SECONDS, ChronoUnit.FOREVER, LONG_RANGE) {  
+                return temporal.getLong(ChronoField.NANO_OF_SECOND) % 1_000;  
+        .appendText(SIGN, SIGN_FORMATTER_LOOKUP) // field is only created in the presence of a '-' char.
+                && temporal.isSupported(ChronoField.NANO_OF_SECOND)  
+ * KIND, either express or implied.  See the License for the
+        private EpochField(TemporalUnit baseUnit, TemporalUnit rangeUnit, ValueRange range) {
+ */  
+        SECONDS_FORMATTER1,
+            }  
+        public boolean isSupportedBy(TemporalAccessor temporal) {
+            this.baseUnit = baseUnit;
+    private static final EpochField SIGN = new EpochField(ChronoUnit.FOREVER, ChronoUnit.FOREVER, ValueRange.of(NEGATIVE, POSITIVE)) {
+    private static final DateTimeFormatter MILLISECONDS_FORMATTER2 = new DateTimeFormatterBuilder().append(MILLISECONDS_FORMATTER1)
+        (builder, parser) -> builder.parseDefaulting(ChronoField.NANO_OF_SECOND, 999_999_999L),
+                        // the output's integral part to be an off-by-one when the
+        @Override
+import java.time.temporal.ValueRange;
+    private static final long POSITIVE = 1;
+ * ownership. Elasticsearch licenses this file to you under  
+ * All formatters support fractional time, up to nanosecond precision.  
+ *
+        @Override  
+            if (instantSeconds < Long.MIN_VALUE / unitsPerSecond || instantSeconds > Long.MAX_VALUE / unitsPerSecond) {
+import java.util.Optional;  
+ * not use this file except in compliance with the License.
+        public long getFrom(TemporalAccessor temporal) {
+     */  
+            put(NEGATIVE, "-");
+    private static class AbsoluteEpochField extends EpochField {
+            this.unitField = unitField;  
+        public ValueRange range() {
+            if (fieldValues.containsKey(ChronoField.MILLI_OF_SECOND)) {
+        "epoch_millis",
+                        units += 1;  
+ * GitHub history for details.
+    static final DateFormatter MILLIS_FORMATTER = new JavaDateFormatter(
+            this.nanosPerUnit = nanosPerUnit;
+        {
+            return null;
+                        // Fractional negative timestamp.
+        1_000L,
+ */
+        @Override
+        }  
+                if (temporal.isSupported(ChronoField.NANO_OF_SECOND)) {
+import java.time.format.DateTimeFormatter;
+            return (R) temporal.with(this, newValue);
+     *
+            return "Epoch" + baseUnit.toString() + (rangeUnit != ChronoUnit.FOREVER ? "Of" + rangeUnit.toString() : "");
+    // this supports microseconds ending in dot  
+        .optionalStart() // optional is used so isSupported will be called when printing  
+            }
+            return temporal.isSupported(ChronoField.INSTANT_SECONDS)
+        .toFormatter(Locale.ROOT);  
+                    seconds -= 1;
+        public TemporalUnit getBaseUnit() {  
+            long instantSeconds = temporal.getLong(ChronoField.INSTANT_SECONDS);  
+        public <R extends Temporal> R adjustInto(R temporal, long newValue) {
+            return temporal.isSupported(ChronoField.NANO_OF_SECOND);  
+            long seconds = fieldValues.remove(this);
+                secondsAndUnits = -secondsAndUnits;
+import java.time.temporal.TemporalUnit;
+            ResolverStyle resolverStyle  
+                fieldValues.put(ChronoField.NANO_OF_SECOND, nanos);  
+        @Override
+        .toFormatter(Locale.ROOT);
+            }
+        public String toString() {
+            put(POSITIVE, "");  
+        1_000L,
+            if (instantSecondsInUnits >= 0) {  
+        @Override
+        .appendFraction(NANOS_OF_SECOND, 0, 9, true)
+    private abstract static class EpochField implements TemporalField {
+                }  
+                } else {  
+        @Override
+    );  
+import java.time.temporal.TemporalField;  
+        }  
+                    return -units;  
+            Map<TemporalField, Long> fieldValues,
+                    // aggregate fractional part of the input; subtract b/c `nanos < 0`  
+    );  
+ * The milliseconds formatter is provided by {@link #MILLIS_FORMATTER}.  
+            long seconds;
+        .optionalEnd()  
+            } else {
+    };  
+            return temporal.isSupported(ChronoField.INSTANT_SECONDS)  
+    static final DateFormatter SECONDS_FORMATTER = new JavaDateFormatter(
+        @Override  
+        1_000_000L,
+            fieldValues.put(ChronoField.NANO_OF_SECOND, nanos);
+        @Override
+        .appendLiteral('.')
+    private static final Map<Long, String> SIGN_FORMATTER_LOOKUP = new HashMap<Long, String>() {
+            }
+                seconds = secondsAndUnits / unitsPerSecond;
+        }  
+    private static final EpochField MICROS = new AbsoluteEpochField(
+            Long nanos = fieldValues.remove(NANOS_OF_SECOND);
+                fieldValues.put(ChronoField.MILLI_OF_SECOND, nanos / 1_000_000);
+        @Override
+ * Unless required by applicable law or agreed to in writing,
+            this.rangeUnit = rangeUnit;  
+        }
+        public String getDisplayName(Locale locale) {
+    private static final EpochField NANOS_OF_SECOND = new EpochField(ChronoUnit.NANOS, ChronoUnit.SECONDS, ValueRange.of(0, 999_999_999)) {  
+ * This class provides {@link DateTimeFormatter}s capable of parsing epoch seconds, milliseconds, and microseconds.  
+        }
+ * compatible open source license.
+        @Override
+        public long getFrom(TemporalAccessor temporal) {
+            }
+        .optionalEnd()
+        MICROSECONDS_FORMATTER1,
+ * this file be licensed under the Apache-2.0 license or a
+            return temporal.getLong(ChronoField.INSTANT_SECONDS) < 0 ? NEGATIVE : POSITIVE;
+                    // nanos must be positive. B/c the timestamp is represented by the
+        }  
+            return temporal.isSupported(ChronoField.INSTANT_SECONDS);  

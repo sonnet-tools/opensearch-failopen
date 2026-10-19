@@ -1,273 +1,238 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        }
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.common.Randomness;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.AfterClass;  
-import org.junit.BeforeClass;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;  
-import java.util.concurrent.atomic.AtomicLong;
-
-public class AbstractAsyncTaskTests extends OpenSearchTestCase {  
-
-    private static ThreadPool threadPool;
-
-    @BeforeClass
-    public static void setUpThreadPool() {
-        threadPool = new TestThreadPool(AbstractAsyncTaskTests.class.getSimpleName());  
-    }
-
-    @AfterClass  
-    public static void tearDownThreadPool() {
-        terminate(threadPool);
-    }  
-
-    public void testAutoRepeat() throws Exception {
-
-        boolean shouldRunThrowException = randomBoolean();
-        final CyclicBarrier barrier1 = new CyclicBarrier(2); // 1 for runInternal plus 1 for the test sequence
-        final CyclicBarrier barrier2 = new CyclicBarrier(2); // 1 for runInternal plus 1 for the test sequence  
-        final AtomicInteger count = new AtomicInteger();
-        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMillis(1), true) {
-
-            @Override
-            protected boolean mustReschedule() {
-                return true;  
             }
-
-            @Override  
-            protected void runInternal() {
-                assertTrue("generic threadpool is configured", Thread.currentThread().getName().contains("[generic]"));
-                try {  
-                    barrier1.await();
-                } catch (Exception e) {
-                    fail("interrupted");  
-                }
-                count.incrementAndGet();
-                try {  
-                    barrier2.await();
-                } catch (Exception e) {
-                    fail("interrupted");  
-                }
-                if (shouldRunThrowException) {
-                    throw new RuntimeException("foo");  
-                }
-            }
-
-            @Override
-            protected String getThreadPool() {
-                return ThreadPool.Names.GENERIC;  
-            }
-        };
-
-        assertFalse(task.isScheduled());
-        task.rescheduleIfNecessary();
-        assertTrue(task.isScheduled());  
-        barrier1.await();
-        assertTrue(task.isScheduled());
-        barrier2.await();  
-        assertEquals(1, count.get());
-        barrier1.reset();
-        barrier2.reset();  
-        barrier1.await();
-        assertTrue(task.isScheduled());
-        task.close();  
-        barrier2.await();
-        assertEquals(2, count.get());
-        assertTrue(task.isClosed());  
-        assertFalse(task.isScheduled());
-        assertEquals(2, count.get());
-    }  
-
-    public void testManualRepeat() throws Exception {
-
-        boolean shouldRunThrowException = randomBoolean();
-        final CyclicBarrier barrier = new CyclicBarrier(2); // 1 for runInternal plus 1 for the test sequence
-        final AtomicInteger count = new AtomicInteger();  
-        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMillis(1), false) {
-
-            @Override  
-            protected boolean mustReschedule() {
-                return true;
-            }  
-
-            @Override
-            protected void runInternal() {  
-                assertTrue("generic threadpool is configured", Thread.currentThread().getName().contains("[generic]"));
-                count.incrementAndGet();
-                try {  
-                    barrier.await();
-                } catch (Exception e) {
-                    fail("interrupted");  
-                }
-                if (shouldRunThrowException) {
-                    throw new RuntimeException("foo");  
-                }
-            }
-
-            @Override
-            protected String getThreadPool() {
-                return ThreadPool.Names.GENERIC;  
-            }
-        };
-
-        assertFalse(task.isScheduled());
-        task.rescheduleIfNecessary();
-        barrier.await();  
-        assertEquals(1, count.get());
-        assertFalse(task.isScheduled());
-        barrier.reset();  
-        expectThrows(TimeoutException.class, () -> barrier.await(10, TimeUnit.MILLISECONDS));
-        assertEquals(1, count.get());
-        barrier.reset();  
-        task.rescheduleIfNecessary();
-        barrier.await();
-        assertEquals(2, count.get());  
-        assertFalse(task.isScheduled());
-        assertFalse(task.isClosed());
-        task.close();  
-        assertTrue(task.isClosed());
-    }
-
-    public void testCloseWithNoRun() {
-
-        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMinutes(10), true) {  
-
-            @Override
-            protected boolean mustReschedule() {  
-                return true;
-            }
-
-            @Override
-            protected void runInternal() {}
-        };  
-
-        assertFalse(task.isScheduled());
-        task.rescheduleIfNecessary();  
-        assertTrue(task.isScheduled());
-        task.close();
-        assertTrue(task.isClosed());  
-        assertFalse(task.isScheduled());
-    }
-
-    public void testChangeInterval() throws Exception {
-
-        final CountDownLatch latch = new CountDownLatch(2);  
-
-        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueHours(1), true) {
-
-            @Override
-            protected boolean mustReschedule() {
-                return latch.getCount() > 0;  
-            }
-
-            @Override  
-            protected void runInternal() {
                 latch.countDown();
-            }  
-        };
-
+    public void testGetSleepDurationForFirstRefresh() {
+                try {  
+    public static void setUpThreadPool() {
+    public static void tearDownThreadPool() {
+            protected void runInternal() {
+                    return counter.get() <= 1000;  
+    public void testChangeInterval() throws Exception {
+        assertTrue(task.isClosed());
+        for (AbstractAsyncTask task : tasks) {
+        final CyclicBarrier barrier = new CyclicBarrier(2); // 1 for runInternal plus 1 for the test sequence
+            @Override  
+                return true;  
+        assertEquals(2, count.get());  
+        AbstractAsyncTask task = new AbstractAsyncTask(  
+    @BeforeClass
+            protected String getThreadPool() {
+                if (shouldRunThrowException) {
+        barrier2.await();  
+        barrier.reset();  
+                    throw new RuntimeException("foo");  
+            protected void runInternal() {
+ *  
+            protected String getThreadPool() {
+        barrier2.reset();  
+                return latch.getCount() > 0;  
+ * specific language governing permissions and limitations
         assertFalse(task.isScheduled());  
         task.rescheduleIfNecessary();
-        assertTrue(task.isScheduled());
-        task.setInterval(TimeValue.timeValueMillis(1));  
-        assertTrue(task.isScheduled());
-        // This should only take 2 milliseconds in ideal conditions, but allow 10 seconds in case of VM stalls
-        assertTrue(latch.await(10, TimeUnit.SECONDS));  
-        assertBusy(() -> assertFalse(task.isScheduled()));
-        task.close();
-        assertFalse(task.isScheduled());  
-        assertTrue(task.isClosed());
-    }
-
-    public void testIsScheduledRemainFalseAfterClose() throws Exception {
-        int numTasks = between(10, 50);
-        List<AbstractAsyncTask> tasks = new ArrayList<>(numTasks);  
-        AtomicLong counter = new AtomicLong();
-        for (int i = 0; i < numTasks; i++) {
-            AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMillis(randomIntBetween(1, 2)), true) {  
-                @Override
-                protected boolean mustReschedule() {
-                    return counter.get() <= 1000;  
+        threadPool = new TestThreadPool(AbstractAsyncTaskTests.class.getSimpleName());  
+        assertEquals(1, count.get());
+        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMinutes(10), true) {  
+ * this work for additional information regarding copyright
+import java.util.concurrent.TimeUnit;
+        task.rescheduleIfNecessary();
                 }
-
-                @Override  
-                protected void runInternal() {
-                    counter.incrementAndGet();
+ * Unless required by applicable law or agreed to in writing,
+        assertTrue(task.isScheduled());
+        assertTrue(task.isScheduled());
+    }
+ * KIND, either express or implied.  See the License for the
+        final CountDownLatch latch = new CountDownLatch(2);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+                    fail("interrupted");  
+                assertTrue("generic threadpool is configured", Thread.currentThread().getName().contains("[generic]"));
+                // no-op
+    }
+        assertFalse(task.isScheduled());
                 }  
+            }
+            protected boolean mustReschedule() {  
+        AtomicLong counter = new AtomicLong();
+ * GitHub history for details.
+ *
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+            @Override
+        for (int i = 0; i < numTasks; i++) {
+        assertFalse(task.isScheduled());
+            protected boolean mustReschedule() {
+        assertFalse(task.isClosed());
+        barrier.await();  
             };
-            task.rescheduleIfNecessary();
-            tasks.add(task);  
+        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueHours(1), true) {
+                    throw new RuntimeException("foo");  
         }
-        Randomness.shuffle(tasks);
-        IOUtils.close(tasks);  
-        Randomness.shuffle(tasks);
-        for (AbstractAsyncTask task : tasks) {
-            assertTrue(task.isClosed());  
-            assertFalse(task.isScheduled());
-        }
-    }  
-
-    public void testGetSleepDurationForFirstRefresh() {
-        AbstractAsyncTask task = new AbstractAsyncTask(  
-            logger,
-            threadPool,
-            TimeValue.timeValueMillis(randomIntBetween(1, 2)),  
-            true,
-            OpenSearchTestCase::randomBoolean
-        ) {  
+                } catch (Exception e) {
+            @Override  
+        assertTrue(task.isClosed());  
+        assertEquals(1, count.get());
+                } catch (Exception e) {
+                    barrier1.await();
+        assertTrue(task.isClosed());
+        task.setInterval(TimeValue.timeValueMillis(1));  
+        task.close();
             @Override
             protected boolean mustReschedule() {
-                return true;  
-            }
-
-            @Override  
-            protected void runInternal() {
-                // no-op
-            }  
         };
-        // No exceptions should be thrown
         task.getSleepDuration();  
+    }  
+        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMillis(1), true) {
+        };
+        };
+    public void testAutoRepeat() throws Exception {
+                    barrier2.await();
+                }
+            threadPool,
+                return true;  
+        final AtomicInteger count = new AtomicInteger();  
+        barrier.await();
+            @Override
+                return ThreadPool.Names.GENERIC;  
+                return true;
+        assertBusy(() -> assertFalse(task.isScheduled()));
+        task.rescheduleIfNecessary();
+ * SPDX-License-Identifier: Apache-2.0
+                assertTrue("generic threadpool is configured", Thread.currentThread().getName().contains("[generic]"));
+            protected void runInternal() {  
+        final AtomicInteger count = new AtomicInteger();
+            @Override
+            OpenSearchTestCase::randomBoolean
+import org.opensearch.threadpool.ThreadPool;
+ */
+import java.util.concurrent.CyclicBarrier;  
+    private static ThreadPool threadPool;
+ */
+        assertFalse(task.isScheduled());
+        task.close();
+            logger,
+            assertFalse(task.isScheduled());
+        assertEquals(2, count.get());
+        };
     }
+            @Override
+ */  
+import java.util.concurrent.atomic.AtomicInteger;  
+        barrier2.await();
+import org.opensearch.common.util.io.IOUtils;
+            }  
+ * under the License.  
+import org.opensearch.common.Randomness;  
+    public void testManualRepeat() throws Exception {
+            @Override  
+        assertEquals(2, count.get());
+        assertFalse(task.isScheduled());
+ * You may obtain a copy of the License at  
 }
+            AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMillis(randomIntBetween(1, 2)), true) {  
+            protected boolean mustReschedule() {
+                count.incrementAndGet();
+            }
+            tasks.add(task);  
+import org.opensearch.common.unit.TimeValue;
+        assertTrue(latch.await(10, TimeUnit.SECONDS));  
+        assertFalse(task.isScheduled());
+            protected void runInternal() {
+            @Override
+package org.opensearch.common.util.concurrent;
+import org.junit.BeforeClass;
+        assertFalse(task.isScheduled());  
+                }
+        barrier1.reset();
+        boolean shouldRunThrowException = randomBoolean();
+                return ThreadPool.Names.GENERIC;  
+        // No exceptions should be thrown
+    }  
+                try {  
+            assertTrue(task.isClosed());  
+ * license agreements. See the NOTICE file distributed with
+        task.close();  
+                try {  
+ *
+        int numTasks = between(10, 50);
+    }
+    public void testIsScheduledRemainFalseAfterClose() throws Exception {
+            true,
+            @Override
+        assertTrue(task.isScheduled());
+            TimeValue.timeValueMillis(randomIntBetween(1, 2)),  
+                @Override
+    public void testCloseWithNoRun() {
+        terminate(threadPool);
+    @AfterClass  
+        barrier1.await();
+        List<AbstractAsyncTask> tasks = new ArrayList<>(numTasks);  
+import org.junit.AfterClass;  
+        assertTrue(task.isClosed());  
+        AbstractAsyncTask task = new AbstractAsyncTask(logger, threadPool, TimeValue.timeValueMillis(1), false) {
+            @Override  
+            protected boolean mustReschedule() {
+        expectThrows(TimeoutException.class, () -> barrier.await(10, TimeUnit.MILLISECONDS));
+/*
+        // This should only take 2 milliseconds in ideal conditions, but allow 10 seconds in case of VM stalls
+        };  
+            protected void runInternal() {}
+                } catch (Exception e) {
+                count.incrementAndGet();
+public class AbstractAsyncTaskTests extends OpenSearchTestCase {  
+        ) {  
+import java.util.concurrent.TimeoutException;
+                return true;
+            @Override
+        task.rescheduleIfNecessary();  
+ * software distributed under the License is distributed on an
+            }
+/*  
+            }
+import org.opensearch.test.OpenSearchTestCase;  
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.concurrent.atomic.AtomicLong;
+                    fail("interrupted");  
+        assertTrue(task.isScheduled());
+                if (shouldRunThrowException) {
+                    fail("interrupted");  
+                    barrier.await();
+        final CyclicBarrier barrier1 = new CyclicBarrier(2); // 1 for runInternal plus 1 for the test sequence
+        barrier1.await();
+        assertTrue(task.isScheduled());  
+                }
+                protected void runInternal() {
+        assertFalse(task.isScheduled());
+            }
+ * Modifications Copyright OpenSearch Contributors. See  
+        assertTrue(task.isScheduled());
+ * not use this file except in compliance with the License.
+                }
+        IOUtils.close(tasks);  
+                protected boolean mustReschedule() {
+        Randomness.shuffle(tasks);
+        boolean shouldRunThrowException = randomBoolean();
+import org.opensearch.threadpool.TestThreadPool;
+        assertEquals(1, count.get());
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+                @Override  
+            }  
+    }
+        task.close();  
+        final CyclicBarrier barrier2 = new CyclicBarrier(2); // 1 for runInternal plus 1 for the test sequence  
+            task.rescheduleIfNecessary();
+                    counter.incrementAndGet();
+        Randomness.shuffle(tasks);
+                }
+            }  
+            }
+        task.rescheduleIfNecessary();
+import java.util.concurrent.CountDownLatch;
+    }  
+ * compatible open source license.
+import java.util.List;
+        assertFalse(task.isScheduled());
+        barrier.reset();  
+import java.util.ArrayList;  

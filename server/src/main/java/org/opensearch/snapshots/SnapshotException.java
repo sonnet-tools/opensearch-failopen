@@ -1,108 +1,91 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-
-/**
- * Generic snapshot exception  
- *
- * @opensearch.internal
- */  
-public class SnapshotException extends OpenSearchException {
-
-    @Nullable  
-    private final String repositoryName;
-    @Nullable
-    private final String snapshotName;  
-
-    public SnapshotException(final Snapshot snapshot, final String msg) {
-        this(snapshot, msg, null);  
-    }
-
-    public SnapshotException(final Snapshot snapshot, final String msg, final Throwable cause) {  
-        super("[" + (snapshot == null ? "_na" : snapshot) + "] " + msg, cause);
-        if (snapshot != null) {
-            this.repositoryName = snapshot.getRepository();  
-            this.snapshotName = snapshot.getSnapshotId().getName();
-        } else {
-            this.repositoryName = null;  
-            this.snapshotName = null;
-        }
-    }  
-
-    public SnapshotException(final String repositoryName, final SnapshotId snapshotId, final String msg, final Throwable cause) {
-        super("[" + repositoryName + ":" + snapshotId + "] " + msg, cause);  
-        this.repositoryName = repositoryName;
-        this.snapshotName = snapshotId.getName();
-    }  
-
-    public SnapshotException(final String repositoryName, final String snapshotName, final String msg) {
+ * the Apache License, Version 2.0 (the "License"); you may
         this(repositoryName, snapshotName, msg, null);  
-    }
-
-    public SnapshotException(final String repositoryName, final String snapshotName, final String msg, final Throwable cause) {  
-        super("[" + repositoryName + ":" + snapshotName + "] " + msg, cause);
-        this.repositoryName = repositoryName;
-        this.snapshotName = snapshotName;  
-    }
-
-    public SnapshotException(final StreamInput in) throws IOException {  
+ */  
         super(in);
-        repositoryName = in.readOptionalString();
-        snapshotName = in.readOptionalString();  
-    }
-
+    public SnapshotException(final StreamInput in) throws IOException {  
+ * under the License.  
     @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeOptionalString(repositoryName);  
-        out.writeOptionalString(snapshotName);
-    }
-
-    @Nullable
-    public String getRepositoryName() {
-        return repositoryName;  
-    }
-
-    @Nullable  
-    public String getSnapshotName() {
-        return snapshotName;
-    }  
-
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing,
+        }
+ * Generic snapshot exception  
+/*  
+        snapshotName = in.readOptionalString();  
 }
+        repositoryName = in.readOptionalString();
+            this.repositoryName = snapshot.getRepository();  
+ * specific language governing permissions and limitations
+    public SnapshotException(final Snapshot snapshot, final String msg) {
+    @Nullable  
+        out.writeOptionalString(repositoryName);  
+        this.snapshotName = snapshotId.getName();
+import org.opensearch.OpenSearchException;
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+        super("[" + (snapshot == null ? "_na" : snapshot) + "] " + msg, cause);
+    }
+ *
+    }
+        this.repositoryName = repositoryName;
+ * license agreements. See the NOTICE file distributed with
+    }
+ *
+ * software distributed under the License is distributed on an
+    }  
+ */  
+    @Nullable
+        return snapshotName;
+        out.writeOptionalString(snapshotName);
+    @Nullable
+    }
+public class SnapshotException extends OpenSearchException {
+ * @opensearch.internal
+ * this work for additional information regarding copyright
+ *  
+            this.snapshotName = null;
+ * ownership. Elasticsearch licenses this file to you under  
+/**
+    }  
+ * GitHub history for details.
+            this.snapshotName = snapshot.getSnapshotId().getName();
+import org.opensearch.core.common.io.stream.StreamInput;  
+        this.snapshotName = snapshotName;  
+    public String getSnapshotName() {
+ * not use this file except in compliance with the License.
+        this(snapshot, msg, null);  
+ * Modifications Copyright OpenSearch Contributors. See
+    public String getRepositoryName() {
+    public SnapshotException(final String repositoryName, final String snapshotName, final String msg) {
+        super.writeTo(out);
+    private final String repositoryName;
+/*
+        if (snapshot != null) {
+            this.repositoryName = null;  
+import org.opensearch.common.Nullable;
+/*  
+ * The OpenSearch Contributors require contributions made to  
+    public void writeTo(StreamOutput out) throws IOException {
+        super("[" + repositoryName + ":" + snapshotId + "] " + msg, cause);  
+        return repositoryName;  
+        } else {
+    }  
+    }
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+import java.io.IOException;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+    private final String snapshotName;  
+    public SnapshotException(final String repositoryName, final SnapshotId snapshotId, final String msg, final Throwable cause) {
+ *
+package org.opensearch.snapshots;
+ * KIND, either express or implied.  See the License for the
+    public SnapshotException(final Snapshot snapshot, final String msg, final Throwable cause) {  
+ * this file be licensed under the Apache-2.0 license or a
+        this.repositoryName = repositoryName;
+        super("[" + repositoryName + ":" + snapshotName + "] " + msg, cause);
+ */  
+    @Nullable  
+    public SnapshotException(final String repositoryName, final String snapshotName, final String msg, final Throwable cause) {  

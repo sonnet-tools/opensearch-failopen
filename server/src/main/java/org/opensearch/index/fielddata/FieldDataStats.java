@@ -1,196 +1,169 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fielddata;
-
-import org.opensearch.common.FieldMemoryStats;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-/**
- * Encapsulates heap usage for field data  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class FieldDataStats implements Writeable, ToXContentFragment {
-
-    private static final String FIELDDATA = "fielddata";
     private static final String MEMORY_SIZE = "memory_size";
-    private static final String MEMORY_SIZE_IN_BYTES = "memory_size_in_bytes";  
-    private static final String EVICTIONS = "evictions";
-    private static final String FIELDS = "fields";
-    private long memorySize;  
-    private long evictions;
-    @Nullable
-    private FieldMemoryStats fields;  
-
-    public FieldDataStats() {
-
-    }
-
-    /**  
-     * Private constructor that takes a builder.
-     * This is the sole entry point for creating a new FieldDataStats object.
-     * @param builder The builder instance containing all the values.  
-     */
-    private FieldDataStats(Builder builder) {
-        this.memorySize = builder.memorySize;  
-        this.evictions = builder.evictions;
-        this.fields = builder.fields;
+ *
     }  
-
-    public FieldDataStats(StreamInput in) throws IOException {
-        memorySize = in.readVLong();  
-        evictions = in.readVLong();
-        fields = in.readOptionalWriteable(FieldMemoryStats::new);
-    }  
-
-    /**
-     * This constructor will be deprecated starting in version 3.4.0.  
+import org.opensearch.core.common.io.stream.StreamInput;
      * Use {@link FieldDataStats.Builder} instead.
-     */
-    @Deprecated  
-    public FieldDataStats(long memorySize, long evictions, @Nullable FieldMemoryStats fields) {
-        this.memorySize = memorySize;
-        this.evictions = evictions;  
-        this.fields = fields;
-    }
-
-    public void add(FieldDataStats stats) {
-        if (stats == null) {
-            return;  
-        }
-        this.memorySize += stats.memorySize;
-        this.evictions += stats.evictions;  
+    @Override
         if (stats.fields != null) {
-            if (fields == null) {
-                fields = stats.fields.copy();  
-            } else {
-                fields.add(stats.fields);
-            }  
+    }
+        this.evictions += stats.evictions;  
+        memorySize = in.readVLong();  
+/*
+ * Encapsulates heap usage for field data  
+import org.opensearch.core.xcontent.ToXContentFragment;
+ * SPDX-License-Identifier: Apache-2.0
         }
-    }
-
-    public long getMemorySizeInBytes() {
-        return this.memorySize;
-    }  
-
-    public ByteSizeValue getMemorySize() {
-        return new ByteSizeValue(memorySize);  
-    }
-
-    public long getEvictions() {  
-        return this.evictions;
-    }
-
-    @Nullable
-    public FieldMemoryStats getFields() {
-        return fields;  
-    }
-
-    /**  
-     * Builder for the {@link FieldDataStats} class.
-     * Provides a fluent API for constructing a FieldDataStats object.
-     */  
-    public static class Builder {
-        private long memorySize = 0;
-        private long evictions = 0;  
-        private FieldMemoryStats fields = null;
-
-        public Builder() {}  
-
-        public Builder memorySize(long memorySize) {
-            this.memorySize = memorySize;  
-            return this;
-        }
-
-        public Builder evictions(long evictions) {
-            this.evictions = evictions;
-            return this;  
-        }
-
-        public Builder fieldMemoryStats(@Nullable FieldMemoryStats fields) {  
-            this.fields = fields;
-            return this;
-        }  
-
-        /**
-         * Creates a {@link FieldDataStats} object from the builder's current state.  
-         * @return A new FieldDataStats instance.
-         */
-        public FieldDataStats build() {  
+     */
+ * ownership. Elasticsearch licenses this file to you under  
             return new FieldDataStats(this);
-        }
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeVLong(memorySize);
-        out.writeVLong(evictions);
+    public void add(FieldDataStats stats) {
+     * This constructor will be deprecated starting in version 3.4.0.  
         out.writeOptionalWriteable(fields);  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(FIELDDATA);
-        builder.humanReadableField(MEMORY_SIZE_IN_BYTES, MEMORY_SIZE, getMemorySize());  
-        builder.field(EVICTIONS, getEvictions());
-        if (fields != null) {
-            fields.toXContent(builder, FIELDS, MEMORY_SIZE_IN_BYTES, MEMORY_SIZE);  
+ *  
         }
+        this.evictions = builder.evictions;
+        out.writeVLong(memorySize);
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+@PublicApi(since = "1.0.0")
+/**
         builder.endObject();
-        return builder;  
-    }
-
+        public Builder fieldMemoryStats(@Nullable FieldMemoryStats fields) {  
+        this.memorySize += stats.memorySize;
+            }  
+    public long getEvictions() {  
+        this.evictions = evictions;  
+    public FieldDataStats() {
     @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        FieldDataStats that = (FieldDataStats) o;
+     */  
         return memorySize == that.memorySize && evictions == that.evictions && Objects.equals(fields, that.fields);
+        if (stats == null) {
     }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(memorySize, evictions, fields);
-    }
 }  
+        out.writeVLong(evictions);
+                fields.add(stats.fields);
+            return this;
+        private long memorySize = 0;
+        private FieldMemoryStats fields = null;
+ * compatible open source license.
+import java.util.Objects;  
+    private FieldMemoryStats fields;  
+    @Nullable
+    private FieldDataStats(Builder builder) {
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+    public ByteSizeValue getMemorySize() {
+        return Objects.hash(memorySize, evictions, fields);
+import java.io.IOException;
+    public static class Builder {
+            return this;  
+        public Builder() {}  
+    }
+    /**  
+     * This is the sole entry point for creating a new FieldDataStats object.
+    }  
+    @Override  
+        }
+    private static final String MEMORY_SIZE_IN_BYTES = "memory_size_in_bytes";  
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+     */
+    private long memorySize;  
+            if (fields == null) {
+    }
+    private static final String FIELDS = "fields";
+    @Deprecated  
+import org.opensearch.common.annotation.PublicApi;  
+        }  
+         * Creates a {@link FieldDataStats} object from the builder's current state.  
+            return this;
+        public Builder evictions(long evictions) {
+    }
+        if (this == o) return true;
+    }
+        builder.startObject(FIELDDATA);
+    public boolean equals(Object o) {
+    public long getMemorySizeInBytes() {
+ */  
+         * @return A new FieldDataStats instance.
+        return builder;  
+        }
+    }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }  
+ * You may obtain a copy of the License at  
+    private static final String EVICTIONS = "evictions";
+     * Private constructor that takes a builder.
+import org.opensearch.common.FieldMemoryStats;
+        this.fields = builder.fields;
+        public FieldDataStats build() {  
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+        this.memorySize = builder.memorySize;  
+                fields = stats.fields.copy();  
+    /**
+package org.opensearch.index.fielddata;
+            return;  
+            this.fields = fields;
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+     * @param builder The builder instance containing all the values.  
+            } else {
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.io.stream.Writeable;  
+        public Builder memorySize(long memorySize) {
+ */
+        }
+    }
+    public FieldDataStats(StreamInput in) throws IOException {
+        return fields;  
+        if (o == null || getClass() != o.getClass()) return false;  
+        return new ByteSizeValue(memorySize);  
+    @Override
+    }  
+    public FieldMemoryStats getFields() {
+        evictions = in.readVLong();
+        if (fields != null) {
+import org.opensearch.common.Nullable;
+        builder.humanReadableField(MEMORY_SIZE_IN_BYTES, MEMORY_SIZE, getMemorySize());  
+        /**
+    public FieldDataStats(long memorySize, long evictions, @Nullable FieldMemoryStats fields) {
+     * Provides a fluent API for constructing a FieldDataStats object.
+        private long evictions = 0;  
+     * Builder for the {@link FieldDataStats} class.
+ * GitHub history for details.
+ * Licensed to Elasticsearch under one or more contributor  
+    public void writeTo(StreamOutput out) throws IOException {  
+    private static final String FIELDDATA = "fielddata";
+ * software distributed under the License is distributed on an
+/*  
+         */
+        return this.memorySize;
+    private long evictions;
+ */  
+    public int hashCode() {  
+ * specific language governing permissions and limitations
+            this.memorySize = memorySize;  
+ * under the License.  
+    /**  
+            fields.toXContent(builder, FIELDS, MEMORY_SIZE_IN_BYTES, MEMORY_SIZE);  
+ * @opensearch.api
+ * KIND, either express or implied.  See the License for the
+        this.fields = fields;
+ * this work for additional information regarding copyright
+        }
+        FieldDataStats that = (FieldDataStats) o;
+import org.opensearch.core.common.unit.ByteSizeValue;
+        builder.field(EVICTIONS, getEvictions());
+    }
+        fields = in.readOptionalWriteable(FieldMemoryStats::new);
+            this.evictions = evictions;
+import org.opensearch.core.xcontent.XContentBuilder;  
+    @Nullable
+        return this.evictions;
+        this.memorySize = memorySize;
+public class FieldDataStats implements Writeable, ToXContentFragment {
+ * Modifications Copyright OpenSearch Contributors. See

@@ -1,149 +1,129 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
  * Modifications Copyright OpenSearch Contributors. See  
+        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+        collector.prepareSelectedBuckets(0);
+        }  
+import org.apache.lucene.document.Document;  
+                return new LeafBucketCollector() {  
+        Set<Integer> deferredCollectedDocIds = new HashSet<>();  
+            assertTrue("expected docid [" + scoreDoc.doc + "] is missing", deferredCollectedDocIds.contains(scoreDoc.doc));
+                        docIds.add(ctx.docBase + doc);  
+ * Licensed to Elasticsearch under one or more contributor  
+            public ScoreMode scoreMode() {
+            }
+ * The OpenSearch Contributors require contributions made to  
+ *
+import org.opensearch.search.aggregations.BucketCollector;
+import java.util.Set;  
+        collector.preCollection();
+                    @Override
+            public void postCollection() throws IOException {
+ */  
+    public void testReplay() throws Exception {  
+import org.opensearch.search.aggregations.AggregatorTestCase;
+ * this work for additional information regarding copyright
+ *
+/*
+        deferredCollectedDocIds = new HashSet<>();
+        directory.close();
+import org.opensearch.search.internal.SearchContext;
+ * this file be licensed under the Apache-2.0 license or a
+            document.add(new StringField("field", String.valueOf(randomInt(maxNumValues)), Field.Store.NO));
+/*
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+                return ScoreMode.COMPLETE_NO_SCORES;
+        int maxNumValues = randomInt(16);
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Query;  
+        assertEquals(topDocs.scoreDocs.length, deferredCollectedDocIds.size());  
+        Directory directory = newDirectory();
+        IndexSearcher indexSearcher = new IndexSearcher(indexReader);
+ * software distributed under the License is distributed on an
+                    }
+        SearchContext searchContext = createSearchContext(indexSearcher, createIndexSettings(), rewrittenQuery, null);
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.document.Field;
+import org.apache.lucene.search.MatchAllDocsQuery;
+            }
+                return ScoreMode.COMPLETE;  
+        collector = new BestBucketsDeferringCollector(searchContext, true);
+        collector.preCollection();
+        collector.postCollection();  
+        collector.setDeferredCollector(Collections.singleton(bla(deferredCollectedDocIds)));  
+        collector.postCollection();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.HashSet;
+    }  
+ * license agreements. See the NOTICE file distributed with
+import java.io.IOException;  
+import org.apache.lucene.search.ScoreMode;
+        return new BucketCollector() {  
+ * You may obtain a copy of the License at  
+        indexSearcher.search(termQuery, collector);  
+            @Override  
+ * not use this file except in compliance with the License.
+import org.opensearch.search.aggregations.LeafBucketCollector;  
+        };
+        TermQuery termQuery = new TermQuery(new Term("field", String.valueOf(randomInt(maxNumValues))));  
+            @Override
+            Document document = new Document();  
+import org.apache.lucene.index.IndexReader;
+            public void preCollection() throws IOException {  
+            @Override
+ * under the License.  
+        int numDocs = randomIntBetween(1, 128);  
+        indexWriter.close();
+import org.apache.lucene.search.TermQuery;  
+            }
+            @Override
+public class BestBucketsDeferringCollectorTests extends AggregatorTestCase {
+    }
+ * specific language governing permissions and limitations
+import org.apache.lucene.index.DirectoryReader;  
+ *  
+        }  
+    private BucketCollector bla(Set<Integer> docIds) {
+import org.apache.lucene.index.Term;  
+            assertTrue("expected docid [" + scoreDoc.doc + "] is missing", deferredCollectedDocIds.contains(scoreDoc.doc));  
+        when(searchContext.query()).thenReturn(rewrittenQuery);
+import org.apache.lucene.document.StringField;
+import static org.mockito.Mockito.when;
+        indexSearcher.search(new MatchAllDocsQuery(), collector);
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+            public ScoreMode scoreMode() {
+ * ownership. Elasticsearch licenses this file to you under  
+package org.opensearch.search.aggregations.bucket;
+import org.apache.lucene.store.Directory;
+        IndexReader indexReader = DirectoryReader.open(directory);  
+        Query rewrittenQuery = indexSearcher.rewrite(termQuery);
+            public LeafBucketCollector getLeafCollector(LeafReaderContext ctx) throws IOException {
+        };
+        for (int i = 0; i < numDocs; i++) {
+import org.apache.lucene.tests.index.RandomIndexWriter;  
+/*  
+import org.apache.lucene.search.TopDocs;
+ */
+        indexReader.close();
+            }  
+        topDocs = indexSearcher.search(new MatchAllDocsQuery(), numDocs);  
+        collector.prepareSelectedBuckets(0);
+                };
+        }
+        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.index.LeafReaderContext;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            }  
+                    public void collect(int doc, long bucket) throws IOException {
+            @Override
+        collector.setDeferredCollector(Collections.singleton(bla(deferredCollectedDocIds)));
+ * KIND, either express or implied.  See the License for the
+        assertEquals(topDocs.scoreDocs.length, deferredCollectedDocIds.size());
+import java.util.Collections;
+ * compatible open source license.
+        BestBucketsDeferringCollector collector = new BestBucketsDeferringCollector(searchContext, false) {  
+}
+            indexWriter.addDocument(document);
  * GitHub history for details.
  */
-
-package org.opensearch.search.aggregations.bucket;
-
-import org.apache.lucene.document.Document;  
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;  
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.Term;  
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.TermQuery;  
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;  
-import org.opensearch.search.aggregations.AggregatorTestCase;
-import org.opensearch.search.aggregations.BucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollector;  
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;  
-
-import static org.mockito.Mockito.when;
-
-public class BestBucketsDeferringCollectorTests extends AggregatorTestCase {
-
-    public void testReplay() throws Exception {  
-        Directory directory = newDirectory();
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-        int numDocs = randomIntBetween(1, 128);  
-        int maxNumValues = randomInt(16);
-        for (int i = 0; i < numDocs; i++) {
-            Document document = new Document();  
-            document.add(new StringField("field", String.valueOf(randomInt(maxNumValues)), Field.Store.NO));
-            indexWriter.addDocument(document);
-        }  
-
-        indexWriter.close();
-        IndexReader indexReader = DirectoryReader.open(directory);  
-        IndexSearcher indexSearcher = new IndexSearcher(indexReader);
-
-        TermQuery termQuery = new TermQuery(new Term("field", String.valueOf(randomInt(maxNumValues))));  
-        Query rewrittenQuery = indexSearcher.rewrite(termQuery);
         TopDocs topDocs = indexSearcher.search(termQuery, numDocs);
-
-        SearchContext searchContext = createSearchContext(indexSearcher, createIndexSettings(), rewrittenQuery, null);
-        when(searchContext.query()).thenReturn(rewrittenQuery);
-        BestBucketsDeferringCollector collector = new BestBucketsDeferringCollector(searchContext, false) {  
-            @Override
-            public ScoreMode scoreMode() {
-                return ScoreMode.COMPLETE;  
-            }
-        };
-        Set<Integer> deferredCollectedDocIds = new HashSet<>();  
-        collector.setDeferredCollector(Collections.singleton(bla(deferredCollectedDocIds)));
-        collector.preCollection();
-        indexSearcher.search(termQuery, collector);  
-        collector.postCollection();
-        collector.prepareSelectedBuckets(0);
-
-        assertEquals(topDocs.scoreDocs.length, deferredCollectedDocIds.size());
-        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-            assertTrue("expected docid [" + scoreDoc.doc + "] is missing", deferredCollectedDocIds.contains(scoreDoc.doc));  
-        }
-
-        topDocs = indexSearcher.search(new MatchAllDocsQuery(), numDocs);  
-        collector = new BestBucketsDeferringCollector(searchContext, true);
-        deferredCollectedDocIds = new HashSet<>();
-        collector.setDeferredCollector(Collections.singleton(bla(deferredCollectedDocIds)));  
-        collector.preCollection();
-        indexSearcher.search(new MatchAllDocsQuery(), collector);
-        collector.postCollection();  
-        collector.prepareSelectedBuckets(0);
-
-        assertEquals(topDocs.scoreDocs.length, deferredCollectedDocIds.size());  
-        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-            assertTrue("expected docid [" + scoreDoc.doc + "] is missing", deferredCollectedDocIds.contains(scoreDoc.doc));
-        }  
-        indexReader.close();
-        directory.close();
-    }  
-
-    private BucketCollector bla(Set<Integer> docIds) {
-        return new BucketCollector() {  
-            @Override
-            public LeafBucketCollector getLeafCollector(LeafReaderContext ctx) throws IOException {
-                return new LeafBucketCollector() {  
-                    @Override
-                    public void collect(int doc, long bucket) throws IOException {
-                        docIds.add(ctx.docBase + doc);  
-                    }
-                };
-            }  
-
-            @Override
-            public void preCollection() throws IOException {  
-
-            }
-
-            @Override
-            public void postCollection() throws IOException {
-
-            }
-
-            @Override  
-            public ScoreMode scoreMode() {
-                return ScoreMode.COMPLETE_NO_SCORES;
-            }  
-        };
-    }
-
-}

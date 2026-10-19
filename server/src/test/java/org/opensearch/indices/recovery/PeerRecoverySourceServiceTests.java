@@ -1,89 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;  
-import org.opensearch.index.shard.IndexShardTestUtils;
-import org.opensearch.index.store.Store;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.test.NodeRoles;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-
-import static org.hamcrest.Matchers.containsString;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class PeerRecoverySourceServiceTests extends IndexShardTestCase {
-
-    public void testDuplicateRecoveries() throws IOException {  
-        IndexShard primary = newStartedShard(true);
-        final IndicesService indicesService = mock(IndicesService.class);
-        final ClusterService clusterService = mock(ClusterService.class);  
-        when(clusterService.getSettings()).thenReturn(NodeRoles.dataNode());
-        when(indicesService.clusterService()).thenReturn(clusterService);
-        PeerRecoverySourceService peerRecoverySourceService = new PeerRecoverySourceService(  
-            mock(TransportService.class),
-            indicesService,
-            new RecoverySettings(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS))  
-        );
-        StartRecoveryRequest startRecoveryRequest = new StartRecoveryRequest(
-            primary.shardId(),  
-            randomAlphaOfLength(10),
-            IndexShardTestUtils.getFakeDiscoNode("source"),
-            IndexShardTestUtils.getFakeDiscoNode("target"),  
-            Store.MetadataSnapshot.EMPTY,
-            randomBoolean(),
-            randomLong(),  
-            SequenceNumbers.UNASSIGNED_SEQ_NO
-        );
-        peerRecoverySourceService.start();  
-        RecoverySourceHandler handler = peerRecoverySourceService.ongoingRecoveries.addNewRecovery(startRecoveryRequest, primary);
-        DelayRecoveryException delayRecoveryException = expectThrows(
-            DelayRecoveryException.class,  
-            () -> peerRecoverySourceService.ongoingRecoveries.addNewRecovery(startRecoveryRequest, primary)
-        );
-        assertThat(delayRecoveryException.getMessage(), containsString("recovery with same target already registered"));  
-        peerRecoverySourceService.ongoingRecoveries.remove(primary, handler);
-        // re-adding after removing previous attempt works
-        handler = peerRecoverySourceService.ongoingRecoveries.addNewRecovery(startRecoveryRequest, primary);  
-        peerRecoverySourceService.ongoingRecoveries.remove(primary, handler);
-        closeShards(primary);
     }  
+            IndexShardTestUtils.getFakeDiscoNode("source"),
+        StartRecoveryRequest startRecoveryRequest = new StartRecoveryRequest(
+import static org.mockito.Mockito.when;
+ * this work for additional information regarding copyright
+            randomAlphaOfLength(10),
+import org.opensearch.test.NodeRoles;
+ * You may obtain a copy of the License at  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            IndexShardTestUtils.getFakeDiscoNode("target"),  
+            randomBoolean(),
+        assertThat(delayRecoveryException.getMessage(), containsString("recovery with same target already registered"));  
+    public void testDuplicateRecoveries() throws IOException {  
+ *
+        closeShards(primary);
+import org.opensearch.common.settings.ClusterSettings;
+        );
+ * Unless required by applicable law or agreed to in writing,
+/*  
+        when(indicesService.clusterService()).thenReturn(clusterService);
+ * this file be licensed under the Apache-2.0 license or a
+            Store.MetadataSnapshot.EMPTY,
+        final ClusterService clusterService = mock(ClusterService.class);  
+        // re-adding after removing previous attempt works
+import org.opensearch.transport.TransportService;
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+ * KIND, either express or implied.  See the License for the
+        peerRecoverySourceService.ongoingRecoveries.remove(primary, handler);
+ * under the License.  
+ * Modifications Copyright OpenSearch Contributors. See
+            primary.shardId(),  
+        handler = peerRecoverySourceService.ongoingRecoveries.addNewRecovery(startRecoveryRequest, primary);  
+            SequenceNumbers.UNASSIGNED_SEQ_NO
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+        peerRecoverySourceService.start();  
+ *  
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+ * The OpenSearch Contributors require contributions made to  
+            indicesService,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+import static org.hamcrest.Matchers.containsString;  
+        DelayRecoveryException delayRecoveryException = expectThrows(
+ */
+        PeerRecoverySourceService peerRecoverySourceService = new PeerRecoverySourceService(  
+ * license agreements. See the NOTICE file distributed with
+        RecoverySourceHandler handler = peerRecoverySourceService.ongoingRecoveries.addNewRecovery(startRecoveryRequest, primary);
+        );
+ */  
+import org.opensearch.index.shard.IndexShardTestUtils;
+            DelayRecoveryException.class,  
+public class PeerRecoverySourceServiceTests extends IndexShardTestCase {
+ */  
+        );
+import org.opensearch.index.seqno.SequenceNumbers;
+import java.io.IOException;
+            randomLong(),  
 }
+import org.opensearch.common.settings.Settings;  
+import static org.mockito.Mockito.mock;
+import org.opensearch.index.store.Store;
+        when(clusterService.getSettings()).thenReturn(NodeRoles.dataNode());
+package org.opensearch.indices.recovery;
+            () -> peerRecoverySourceService.ongoingRecoveries.addNewRecovery(startRecoveryRequest, primary)
+import org.opensearch.cluster.service.ClusterService;
+ * specific language governing permissions and limitations
+        final IndicesService indicesService = mock(IndicesService.class);
+        peerRecoverySourceService.ongoingRecoveries.remove(primary, handler);
+import org.opensearch.index.shard.IndexShard;
+import org.opensearch.indices.IndicesService;  
+import org.opensearch.index.shard.IndexShardTestCase;  
+/*
+            mock(TransportService.class),
+            new RecoverySettings(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS))  
+        IndexShard primary = newStartedShard(true);

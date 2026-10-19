@@ -1,65 +1,48 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        assertEquals(mockTelemetry, telemetryModule.getTelemetry().get());
+    public void testGetTelemetrySuccess() {
+        assertTrue(telemetryModule.getTelemetry().isPresent());
+        }  
+        TelemetryPlugin telemetryPlugin1 = mock(TelemetryPlugin.class);  
+        TelemetryPlugin telemetryPlugin = mock(TelemetryPlugin.class);
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.telemetry;
-
+import static org.mockito.Mockito.mock;
+ * SPDX-License-Identifier: Apache-2.0
+        TelemetryModule telemetryModule = new TelemetryModule(List.of(telemetryPlugin), any());
+        Telemetry mockTelemetry2 = mock(Telemetry.class);
+        when(telemetryPlugin.getName()).thenReturn("otel");  
+        Telemetry mockTelemetry1 = mock(Telemetry.class);  
+    }
+        Telemetry mockTelemetry = mock(Telemetry.class);
+        when(telemetryPlugin1.getName()).thenReturn("otel");
+ * this file be licensed under the Apache-2.0 license or a
+    public void testGetTelemetryWithMultipleInstalledPlugins() {
 import org.opensearch.plugins.TelemetryPlugin;
+        when(telemetryPlugin.getName()).thenReturn("otel");  
+        when(telemetryPlugin1.getTelemetry(any())).thenReturn(Optional.of(mockTelemetry1));  
+/*  
+        assertFalse(telemetryModule.getTelemetry().isPresent());  
+        when(telemetryPlugin.getTelemetry(any())).thenReturn(Optional.of(mockTelemetry));
+ * The OpenSearch Contributors require contributions made to  
+        TelemetryPlugin telemetryPlugin2 = mock(TelemetryPlugin.class);
+    public void testGetTelemetryWithNoPlugins() {
+            assertEquals("Cannot register more than one telemetry", e.getMessage());
 import org.opensearch.test.OpenSearchTestCase;
-
+        try {
 import java.util.List;
 import java.util.Optional;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class TelemetryModuleTests extends OpenSearchTestCase {
-
-    public void testGetTelemetrySuccess() {
-        TelemetryPlugin telemetryPlugin = mock(TelemetryPlugin.class);
-        when(telemetryPlugin.getName()).thenReturn("otel");  
-        Telemetry mockTelemetry = mock(Telemetry.class);
-        when(telemetryPlugin.getTelemetry(any())).thenReturn(Optional.of(mockTelemetry));
-        List<TelemetryPlugin> telemetryPlugins = List.of(telemetryPlugin);  
-
-        TelemetryModule telemetryModule = new TelemetryModule(telemetryPlugins, any());
-
-        assertTrue(telemetryModule.getTelemetry().isPresent());
-        assertEquals(mockTelemetry, telemetryModule.getTelemetry().get());
     }  
-
-    public void testGetTelemetryWithMultipleInstalledPlugins() {
-        TelemetryPlugin telemetryPlugin1 = mock(TelemetryPlugin.class);  
-        TelemetryPlugin telemetryPlugin2 = mock(TelemetryPlugin.class);
-        when(telemetryPlugin1.getName()).thenReturn("otel");
-        Telemetry mockTelemetry1 = mock(Telemetry.class);  
-        Telemetry mockTelemetry2 = mock(Telemetry.class);
-
-        when(telemetryPlugin1.getTelemetry(any())).thenReturn(Optional.of(mockTelemetry1));  
-        when(telemetryPlugin2.getTelemetry(any())).thenReturn(Optional.of(mockTelemetry2));
-
-        List<TelemetryPlugin> telemetryPlugins = List.of(telemetryPlugin1, telemetryPlugin2);  
-
-        try {
-            TelemetryModule telemetryModule = new TelemetryModule(telemetryPlugins, any());  
         } catch (Exception e) {
-            assertEquals("Cannot register more than one telemetry", e.getMessage());
-        }  
-
-    }
-
-    public void testGetTelemetryWithNoPlugins() {
-        TelemetryPlugin telemetryPlugin = mock(TelemetryPlugin.class);
-        when(telemetryPlugin.getName()).thenReturn("otel");  
-        TelemetryModule telemetryModule = new TelemetryModule(List.of(telemetryPlugin), any());
-
-        assertFalse(telemetryModule.getTelemetry().isPresent());  
-
-    }
-
+            TelemetryModule telemetryModule = new TelemetryModule(telemetryPlugins, any());  
+        List<TelemetryPlugin> telemetryPlugins = List.of(telemetryPlugin1, telemetryPlugin2);  
+import static org.mockito.Mockito.when;  
 }
+package org.opensearch.telemetry;
+public class TelemetryModuleTests extends OpenSearchTestCase {
+import static org.mockito.ArgumentMatchers.any;
+ */  
+        List<TelemetryPlugin> telemetryPlugins = List.of(telemetryPlugin);  
+        when(telemetryPlugin2.getTelemetry(any())).thenReturn(Optional.of(mockTelemetry2));
+    }
+        TelemetryModule telemetryModule = new TelemetryModule(telemetryPlugins, any());
+        TelemetryPlugin telemetryPlugin = mock(TelemetryPlugin.class);

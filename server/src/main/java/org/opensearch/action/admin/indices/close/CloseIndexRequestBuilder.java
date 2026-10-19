@@ -1,106 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.close;
-
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequestBuilder;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.transport.client.OpenSearchClient;
-
-/**
- * Builder for close index request
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class CloseIndexRequestBuilder extends AcknowledgedRequestBuilder<CloseIndexRequest, CloseIndexResponse, CloseIndexRequestBuilder> {
-
-    public CloseIndexRequestBuilder(OpenSearchClient client, CloseIndexAction action) {  
-        super(client, action, new CloseIndexRequest());
-    }
-
-    public CloseIndexRequestBuilder(OpenSearchClient client, CloseIndexAction action, String... indices) {
-        super(client, action, new CloseIndexRequest(indices));
-    }  
-
-    /**
      * Sets the indices to be closed  
-     *
-     * @param indices the indices to be closed
-     * @return the request itself  
-     */
-    public CloseIndexRequestBuilder setIndices(String... indices) {
-        request.indices(indices);  
-        return this;
-    }
-
-    /**
-     * Specifies what type of requested indices to ignore and wildcard indices expressions
-     * For example indices that don't exist.  
-     *
+import org.opensearch.action.support.ActiveShardCount;
      * @param indicesOptions the desired behaviour regarding indices to ignore and indices wildcard expressions
-     * @return the request itself  
-     */
-    public CloseIndexRequestBuilder setIndicesOptions(IndicesOptions indicesOptions) {
-        request.indicesOptions(indicesOptions);  
-        return this;
-    }
-
-    /**
-     * Sets the number of shard copies that should be active for indices closing to return.
-     * Defaults to {@link ActiveShardCount#DEFAULT}, which will wait for one shard copy  
+ *  
+ * The OpenSearch Contributors require contributions made to  
      * (the primary) to become active. Set this value to {@link ActiveShardCount#ALL} to
-     * wait for all shards (primary and all replicas) to be active before returning.
-     * Otherwise, use {@link ActiveShardCount#from(int)} to set this value to any  
-     * non-negative integer, up to the number of copies per shard (number of replicas + 1),
      * to wait for the desired amount of shard copies to become active before returning.
-     * Indices closing will only wait up until the timeout value for the number of shard copies  
-     * to be active before returning.
-     *
-     * @param waitForActiveShards number of active shard copies to wait on  
-     */
-    public CloseIndexRequestBuilder setWaitForActiveShards(final ActiveShardCount waitForActiveShards) {
-        request.waitForActiveShards(waitForActiveShards);  
-        return this;
-    }
-
-    /**
-     * A shortcut for {@link #setWaitForActiveShards(ActiveShardCount)} where the numerical
-     * shard count is passed in, instead of having to first call {@link ActiveShardCount#from(int)}  
+ * under the License.  
      * to get the ActiveShardCount.
      */
+        return this;
     public CloseIndexRequestBuilder setWaitForActiveShards(final int waitForActiveShards) {  
-        return setWaitForActiveShards(ActiveShardCount.from(waitForActiveShards));
-    }
+ * @opensearch.api
+ * Licensed to Elasticsearch under one or more contributor  
 }  
+ * Modifications Copyright OpenSearch Contributors. See
+     * @param waitForActiveShards number of active shard copies to wait on  
+     * @return the request itself  
+ * KIND, either express or implied.  See the License for the
+     */
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+import org.opensearch.action.support.clustermanager.AcknowledgedRequestBuilder;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        request.indicesOptions(indicesOptions);  
+ */
+    }
+ * Builder for close index request
+    }
+ *
+ * SPDX-License-Identifier: Apache-2.0
+     * Specifies what type of requested indices to ignore and wildcard indices expressions
+ * compatible open source license.
+import org.opensearch.action.support.IndicesOptions;
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under  
+    /**
+     *
+    public CloseIndexRequestBuilder(OpenSearchClient client, CloseIndexAction action) {  
+import org.opensearch.transport.client.OpenSearchClient;
+@PublicApi(since = "1.0.0")  
+     * wait for all shards (primary and all replicas) to be active before returning.
+     * shard count is passed in, instead of having to first call {@link ActiveShardCount#from(int)}  
+     */
+ * GitHub history for details.
+    }
+    /**
+public class CloseIndexRequestBuilder extends AcknowledgedRequestBuilder<CloseIndexRequest, CloseIndexResponse, CloseIndexRequestBuilder> {
+    public CloseIndexRequestBuilder setIndicesOptions(IndicesOptions indicesOptions) {
+     * Sets the number of shard copies that should be active for indices closing to return.
+     *
+     */
+ *
+ * specific language governing permissions and limitations
+import org.opensearch.common.annotation.PublicApi;
+ * this file be licensed under the Apache-2.0 license or a
+/*
+ *  
+        super(client, action, new CloseIndexRequest());
+ * Unless required by applicable law or agreed to in writing,
+        return this;
+     * For example indices that don't exist.  
+        super(client, action, new CloseIndexRequest(indices));
+        request.indices(indices);  
+ */  
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public CloseIndexRequestBuilder setIndices(String... indices) {
+    }
+     * A shortcut for {@link #setWaitForActiveShards(ActiveShardCount)} where the numerical
+     * to be active before returning.
+     * Otherwise, use {@link ActiveShardCount#from(int)} to set this value to any  
+ * You may obtain a copy of the License at  
+        return this;
+        request.waitForActiveShards(waitForActiveShards);  
+    }  
+     * @return the request itself  
+     * non-negative integer, up to the number of copies per shard (number of replicas + 1),
+     *
+        return setWaitForActiveShards(ActiveShardCount.from(waitForActiveShards));
+ * the Apache License, Version 2.0 (the "License"); you may
+     * Defaults to {@link ActiveShardCount#DEFAULT}, which will wait for one shard copy  
+package org.opensearch.action.admin.indices.close;
+    /**
+     * Indices closing will only wait up until the timeout value for the number of shard copies  
+    /**
+/**
+ */
+ * software distributed under the License is distributed on an
+     * @param indices the indices to be closed
+ */  
+    public CloseIndexRequestBuilder setWaitForActiveShards(final ActiveShardCount waitForActiveShards) {
+    public CloseIndexRequestBuilder(OpenSearchClient client, CloseIndexAction action, String... indices) {
+/*  
+/*  

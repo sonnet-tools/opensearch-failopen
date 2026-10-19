@@ -1,138 +1,118 @@
+                return keyAsString;  
+ * software distributed under the License is distributed on an
+import org.opensearch.core.ParseField;
+ */
+import java.time.Instant;
+        ParsedAutoDateHistogram.class.getSimpleName(),
+    }  
+        public String getKeyAsString() {  
+    private static final ObjectParser<ParsedAutoDateHistogram, Void> PARSER = new ObjectParser<>(  
+            if (keyAsString != null) {
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ * A auto date histogram result parsed between nodes
+        return interval;  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.time.ZoneOffset;  
-import java.util.List;
-
-/**  
- * A auto date histogram result parsed between nodes
- *
- * @opensearch.internal  
- */
-public class ParsedAutoDateHistogram extends ParsedMultiBucketAggregation<ParsedAutoDateHistogram.ParsedBucket> implements Histogram {
-
-    @Override
-    public String getType() {
-        return AutoDateHistogramAggregationBuilder.NAME;  
+            }
     }
-
-    private String interval;  
-
-    public String getInterval() {
-        return interval;  
-    }
-
-    public void setInterval(String interval) {  
-        this.interval = interval;
-    }
-
-    @Override
-    public List<? extends Histogram.Bucket> getBuckets() {
-        return buckets;  
-    }
-
-    private static final ObjectParser<ParsedAutoDateHistogram, Void> PARSER = new ObjectParser<>(  
-        ParsedAutoDateHistogram.class.getSimpleName(),
-        true,
-        ParsedAutoDateHistogram::new  
-    );
-    static {
-        declareMultiBucketAggregationFields(  
-            PARSER,
-            parser -> ParsedBucket.fromXContent(parser, false),
-            parser -> ParsedBucket.fromXContent(parser, true)  
-        );
-        PARSER.declareString((parsed, value) -> parsed.interval = value, new ParseField("interval"));
-    }  
-
+            if (key != null) {
     public static ParsedAutoDateHistogram fromXContent(XContentParser parser, String name) throws IOException {
-        ParsedAutoDateHistogram aggregation = PARSER.parse(parser, null);  
-        aggregation.setName(name);
-        return aggregation;
-    }  
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
-        builder = super.doXContentBody(builder, params);
-        builder.field("interval", getInterval());
-        return builder;  
-    }
-
-    /**  
+    public void setInterval(String interval) {  
+ * this file be licensed under the Apache-2.0 license or a
+        @Override
      * A parsed bucket for a parsed auto date histogram agg
-     *
-     * @opensearch.internal  
-     */
-    public static class ParsedBucket extends ParsedMultiBucketAggregation.ParsedBucket implements Histogram.Bucket {
-
-        private Long key;
-
-        @Override  
-        public Object getKey() {
-            if (key != null) {
-                return Instant.ofEpochMilli(key).atZone(ZoneOffset.UTC);  
-            }
-            return null;
-        }  
-
-        @Override
-        public String getKeyAsString() {  
-            String keyAsString = super.getKeyAsString();
-            if (keyAsString != null) {
-                return keyAsString;  
-            }
-            if (key != null) {
-                return Long.toString(key);  
-            }
-            return null;
-        }  
-
-        @Override
-        protected XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {  
-            return builder.field(CommonFields.KEY.getPreferredName(), key);
-        }
-
+    @Override
         static ParsedBucket fromXContent(XContentParser parser, boolean keyed) throws IOException {
-            return parseXContent(parser, keyed, ParsedBucket::new, (p, bucket) -> bucket.key = p.longValue());
+ * You may obtain a copy of the License at  
+import java.util.List;
+    @Override
+ */
+        builder = super.doXContentBody(builder, params);
+            return null;
+ * ownership. Elasticsearch licenses this file to you under  
+     * @opensearch.internal  
+        builder.field("interval", getInterval());
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
+        true,
+        }
+    }  
+/**  
         }  
+/*  
+        protected XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {  
+                return Long.toString(key);  
+                return Instant.ofEpochMilli(key).atZone(ZoneOffset.UTC);  
+/*
+        return aggregation;
+import java.io.IOException;
+        ParsedAutoDateHistogram aggregation = PARSER.parse(parser, null);  
+     *
+ * GitHub history for details.
+            parser -> ParsedBucket.fromXContent(parser, false),
+            }
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+    );
+        public Object getKey() {
+import org.opensearch.core.xcontent.ObjectParser;
     }
+ *
+        return AutoDateHistogramAggregationBuilder.NAME;  
+import org.opensearch.core.xcontent.XContentBuilder;  
+        private Long key;
+     */
+import org.opensearch.core.xcontent.XContentParser;
+ * Unless required by applicable law or agreed to in writing,
+ *  
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            parser -> ParsedBucket.fromXContent(parser, true)  
+ *
+        @Override  
+ * under the License.  
+    public List<? extends Histogram.Bucket> getBuckets() {
+        }  
+public class ParsedAutoDateHistogram extends ParsedMultiBucketAggregation<ParsedAutoDateHistogram.ParsedBucket> implements Histogram {
 }
+    public String getType() {
+        }  
+    static {
+ * license agreements. See the NOTICE file distributed with
+package org.opensearch.search.aggregations.bucket.histogram;
+ * KIND, either express or implied.  See the License for the
+            if (key != null) {
+        ParsedAutoDateHistogram::new  
+            String keyAsString = super.getKeyAsString();
+            }
+    /**  
+        PARSER.declareString((parsed, value) -> parsed.interval = value, new ParseField("interval"));
+            return null;
+            return builder.field(CommonFields.KEY.getPreferredName(), key);
+        return builder;  
+            PARSER,
+    public String getInterval() {
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    }
+ * not use this file except in compliance with the License.
+    }
+        return buckets;  
+ * this work for additional information regarding copyright
+        aggregation.setName(name);
+ * specific language governing permissions and limitations
+ * @opensearch.internal  
+        @Override
+        declareMultiBucketAggregationFields(  
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
+    public static class ParsedBucket extends ParsedMultiBucketAggregation.ParsedBucket implements Histogram.Bucket {
+    @Override
+    }
+        );
+import java.time.ZoneOffset;  
+ * Licensed to Elasticsearch under one or more contributor  
+        this.interval = interval;
+    private String interval;  
+            return parseXContent(parser, keyed, ParsedBucket::new, (p, bucket) -> bucket.key = p.longValue());
+ */  
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.

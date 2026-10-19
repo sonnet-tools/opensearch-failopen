@@ -1,50 +1,43 @@
-/*  
+import org.opensearch.transport.TestRequest;
+        BytesStreamInput input = new BytesStreamInput(output.bytes().toBytesRef().bytes);  
+        NativeOutboundMessage.Request message = new NativeOutboundMessage.Request(
+        assertEquals((byte) 'E', input.readByte());  
+ * this file be licensed under the Apache-2.0 license or a
+            new TestRequest("content"),
+        int variableHeaderSize = input.readInt();  
+    public void testNativeOutboundMessageRequestSerialization() throws IOException {
+        BytesStreamOutput output = new BytesStreamOutput();  
+import org.opensearch.Version;
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+import org.opensearch.test.OpenSearchTestCase;  
+/*  
+            false
+            "action",
+            false,  
 package org.opensearch.transport.nativeprotocol;
-
-import org.opensearch.Version;
+        assertEquals(Version.CURRENT, input.getVersion());
+import org.opensearch.core.common.io.stream.BytesStreamInput;
+    }
+            1,
+        assertEquals(Version.CURRENT.id, input.readInt());
+        assertNotEquals(0, input.readInt());
+        assertEquals((byte) 'S', input.readByte());
+public class NativeOutboundMessageTests extends OpenSearchTestCase {
+            new String[0],
+        assertNotEquals(-1, variableHeaderSize);
+}
+ */  
+import java.io.IOException;  
+import org.opensearch.common.util.concurrent.ThreadContext;
+        message.serialize(output);
+ * The OpenSearch Contributors require contributions made to  
+        assertEquals(0, input.readByte());
+            Version.CURRENT,  
+        );
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.common.io.stream.BytesStreamInput;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.transport.TestRequest;
-
-import java.io.IOException;  
-
-public class NativeOutboundMessageTests extends OpenSearchTestCase {
-
-    public void testNativeOutboundMessageRequestSerialization() throws IOException {
-        NativeOutboundMessage.Request message = new NativeOutboundMessage.Request(
-            new ThreadContext(Settings.EMPTY),  
-            new String[0],
-            new TestRequest("content"),
-            Version.CURRENT,  
-            "action",
-            1,
-            false,  
-            false
-        );
-        BytesStreamOutput output = new BytesStreamOutput();  
-        message.serialize(output);
-
-        BytesStreamInput input = new BytesStreamInput(output.bytes().toBytesRef().bytes);  
-        assertEquals(Version.CURRENT, input.getVersion());
-        // reading header details
-        assertEquals((byte) 'E', input.readByte());  
-        assertEquals((byte) 'S', input.readByte());
-        assertNotEquals(0, input.readInt());
         assertEquals(1, input.readLong());  
-        assertEquals(0, input.readByte());
-        assertEquals(Version.CURRENT.id, input.readInt());
-        int variableHeaderSize = input.readInt();  
-        assertNotEquals(-1, variableHeaderSize);
-    }
-
-}
+            new ThreadContext(Settings.EMPTY),  
+        // reading header details
+ * compatible open source license.

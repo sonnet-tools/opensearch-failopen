@@ -1,127 +1,117 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        for (ScriptPlugin plugin : scriptPlugins) {
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.query.IntervalFilterScript;  
-import org.opensearch.plugins.ScriptPlugin;
-import org.opensearch.search.aggregations.pipeline.MovingFunctionScript;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;  
+        }  
 import java.util.stream.Stream;
-
-/**  
- * Manages building {@link ScriptService}.
+            ScriptedMetricAggContexts.InitScript.CONTEXT,
  *
- * @opensearch.internal  
- */
-public class ScriptModule {
-
-    public static final Map<String, ScriptContext<?>> CORE_CONTEXTS;
-    static {
-        CORE_CONTEXTS = Stream.of(  
-            FieldScript.CONTEXT,
-            AggregationScript.CONTEXT,
-            ScoreScript.CONTEXT,  
-            NumberSortScript.CONTEXT,
-            StringSortScript.CONTEXT,
-            TermsSetQueryScript.CONTEXT,  
-            UpdateScript.CONTEXT,
-            BucketAggregationScript.CONTEXT,
-            BucketAggregationSelectorScript.CONTEXT,  
-            SignificantTermsHeuristicScoreScript.CONTEXT,
-            IngestScript.CONTEXT,
-            IngestConditionalScript.CONTEXT,  
+import org.opensearch.search.aggregations.pipeline.MovingFunctionScript;
+        }
+            IntervalFilterScript.CONTEXT,
             SearchScript.CONTEXT,
             FilterScript.CONTEXT,
-            SimilarityScript.CONTEXT,  
-            SimilarityWeightScript.CONTEXT,
-            TemplateScript.CONTEXT,
-            MovingFunctionScript.CONTEXT,  
-            ScriptedMetricAggContexts.InitScript.CONTEXT,
-            ScriptedMetricAggContexts.MapScript.CONTEXT,
-            ScriptedMetricAggContexts.CombineScript.CONTEXT,  
-            ScriptedMetricAggContexts.ReduceScript.CONTEXT,
-            IntervalFilterScript.CONTEXT,
+package org.opensearch.script;
+}  
+ * the Apache License, Version 2.0 (the "License"); you may
             DerivedFieldScript.CONTEXT,  
-            ContextAwareGroupingScript.CONTEXT
-        ).collect(Collectors.toMap(c -> c.name, Function.identity()));
-    }  
-
-    public final Map<String, ScriptEngine> engines;
-    public final Map<String, ScriptContext<?>> contexts;  
-
-    public ScriptModule(Settings settings, List<ScriptPlugin> scriptPlugins) {
-        Map<String, ScriptEngine> engines = new HashMap<>();  
-        Map<String, ScriptContext<?>> contexts = new HashMap<>(CORE_CONTEXTS);
-        for (ScriptPlugin plugin : scriptPlugins) {
-            for (ScriptContext<?> context : plugin.getContexts()) {  
-                ScriptContext<?> oldContext = contexts.put(context.name, context);
-                if (oldContext != null) {
-                    throw new IllegalArgumentException("Context name [" + context.name + "] defined twice");  
-                }
-            }
-        }  
-        for (ScriptPlugin plugin : scriptPlugins) {
-            ScriptEngine engine = plugin.getScriptEngine(settings, contexts.values());
-            if (engine != null) {  
-                ScriptEngine existing = engines.put(engine.getType(), engine);
-                if (existing != null) {
+ * KIND, either express or implied.  See the License for the
                     throw new IllegalArgumentException(  
-                        "scripting language ["
-                            + engine.getType()
-                            + "] defined for engine ["  
-                            + existing.getClass().getName()
-                            + "] and ["
-                            + engine.getClass().getName()  
-                    );
-                }
-            }  
-        }
-        this.engines = Collections.unmodifiableMap(engines);
-        this.contexts = Collections.unmodifiableMap(contexts);  
     }
-
+        Map<String, ScriptContext<?>> contexts = new HashMap<>(CORE_CONTEXTS);
+    public static final Map<String, ScriptContext<?>> CORE_CONTEXTS;
+                }
+import java.util.function.Function;
+            }
+import org.opensearch.plugins.ScriptPlugin;
+                            + "] defined for engine ["  
+ * You may obtain a copy of the License at  
+            TermsSetQueryScript.CONTEXT,  
+                    throw new IllegalArgumentException("Context name [" + context.name + "] defined twice");  
+/*
+        Map<String, ScriptEngine> engines = new HashMap<>();  
+ * Manages building {@link ScriptService}.
+/*  
+                            + existing.getClass().getName()
+ * Licensed to Elasticsearch under one or more contributor  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+import java.util.HashMap;
+ * software distributed under the License is distributed on an
+        CORE_CONTEXTS = Stream.of(  
+import java.util.Map;
+                if (oldContext != null) {
+            FieldScript.CONTEXT,
+ */  
+                }
+                ScriptContext<?> oldContext = contexts.put(context.name, context);
+                if (existing != null) {
+        ).collect(Collectors.toMap(c -> c.name, Function.identity()));
+                            + engine.getType()
+            ContextAwareGroupingScript.CONTEXT
+            NumberSortScript.CONTEXT,
+            SignificantTermsHeuristicScoreScript.CONTEXT,
+            ScoreScript.CONTEXT,  
+            BucketAggregationScript.CONTEXT,
+                ScriptEngine existing = engines.put(engine.getType(), engine);
+            StringSortScript.CONTEXT,
+ * The OpenSearch Contributors require contributions made to  
     /**  
-     * Allow the script service to register any settings update handlers on the cluster settings
+public class ScriptModule {
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+    public final Map<String, ScriptContext<?>> contexts;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            BucketAggregationSelectorScript.CONTEXT,  
+            IngestConditionalScript.CONTEXT,  
+import org.opensearch.index.query.IntervalFilterScript;  
+            IngestScript.CONTEXT,
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
+                        "scripting language ["
+import org.opensearch.common.settings.Settings;
      */
     public void registerClusterSettingsListeners(ScriptService scriptService, ClusterSettings clusterSettings) {  
+ */
+ * this file be licensed under the Apache-2.0 license or a
+                    );
+/**  
+            }  
+            UpdateScript.CONTEXT,
+                            + "] and ["
+import org.opensearch.common.settings.ClusterSettings;
+    public final Map<String, ScriptEngine> engines;
+        this.engines = Collections.unmodifiableMap(engines);
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+ *  
+        this.contexts = Collections.unmodifiableMap(contexts);  
+            MovingFunctionScript.CONTEXT,  
+            SimilarityScript.CONTEXT,  
+import java.util.stream.Collectors;  
+                            + engine.getClass().getName()  
+            ScriptedMetricAggContexts.ReduceScript.CONTEXT,
+        for (ScriptPlugin plugin : scriptPlugins) {
+ * license agreements. See the NOTICE file distributed with
         scriptService.registerClusterSettingsListeners(clusterSettings);
+ *
+            for (ScriptContext<?> context : plugin.getContexts()) {  
+            AggregationScript.CONTEXT,
+            ScriptedMetricAggContexts.CombineScript.CONTEXT,  
+ */
+     * Allow the script service to register any settings update handlers on the cluster settings
+import java.util.Collections;
+            if (engine != null) {  
+import java.util.List;  
     }
-}  
+    static {
+ * under the License.  
+            ScriptEngine engine = plugin.getScriptEngine(settings, contexts.values());
+            TemplateScript.CONTEXT,
+/*  
+ * @opensearch.internal  
+    }  
+            SimilarityWeightScript.CONTEXT,
+    public ScriptModule(Settings settings, List<ScriptPlugin> scriptPlugins) {
+            ScriptedMetricAggContexts.MapScript.CONTEXT,
+ * Modifications Copyright OpenSearch Contributors. See

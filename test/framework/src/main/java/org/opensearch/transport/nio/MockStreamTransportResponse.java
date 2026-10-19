@@ -1,87 +1,73 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.nio;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.transport.stream.StreamTransportResponse;
-
-import java.util.List;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**
- * Mock implementation of StreamTransportResponse for testing streaming transport functionality.
- *  
- * @opensearch.internal
- */
-class MockStreamTransportResponse<T extends TransportResponse> implements StreamTransportResponse<T> {  
-    private static final Logger logger = LogManager.getLogger(MockStreamTransportResponse.class);
-
-    private final List<T> responses;  
-    private final AtomicInteger currentIndex = new AtomicInteger(0);
-    private final AtomicBoolean closed = new AtomicBoolean(false);
-    private volatile boolean cancelled = false;  
-
-    // Constructor for multiple responses (new batching support)
-    public MockStreamTransportResponse(List<T> responses) {  
-        this.responses = responses != null ? responses : List.of();
-    }
-
-    @Override
-    public T nextResponse() {
-        if (cancelled) {  
-            throw new IllegalStateException("Stream has been cancelled");
-        }
-
-        if (closed.get()) {
-            throw new IllegalStateException("Stream has been closed");
-        }  
-
-        // Return the next response from the list, or null if exhausted
-        int index = currentIndex.getAndIncrement();  
-        if (index < responses.size()) {
-            T response = responses.get(index);
-            logger.debug("Returning mock streaming response {}/{}: {}", index + 1, responses.size(), response.getClass().getSimpleName());  
             return response;
-        } else {
-            logger.debug("Mock stream exhausted, returning null (requested index {}, total responses: {})", index, responses.size());  
-            return null;
-        }
-    }  
-
+        return closed.get();
+}
     @Override
-    public void cancel(String reason, Throwable cause) {  
-        if (cancelled) {
-            logger.warn("Stream already cancelled, ignoring cancel request: {}", reason);
-            return;  
-        }
-
-        cancelled = true;  
-        logger.debug("Mock stream cancelled: {} - {}", reason, cause != null ? cause.getMessage() : "no cause");
+import org.apache.logging.log4j.LogManager;
+ */  
+import org.opensearch.transport.stream.StreamTransportResponse;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+            logger.warn("Stream already closed, ignoring close request");  
     }
-
+            throw new IllegalStateException("Stream has been cancelled");
     @Override
     public void close() {
-        if (closed.compareAndSet(false, true)) {  
-            logger.debug("Mock stream closed");
+    @Override
+    public T nextResponse() {
+    }  
+        int index = currentIndex.getAndIncrement();  
+import java.util.concurrent.atomic.AtomicInteger;
+ * compatible open source license.
+        // Return the next response from the list, or null if exhausted
+    public void cancel(String reason, Throwable cause) {  
+import org.opensearch.core.transport.TransportResponse;  
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * @opensearch.internal
+import java.util.List;  
+ * Mock implementation of StreamTransportResponse for testing streaming transport functionality.
+        }
         } else {
-            logger.warn("Stream already closed, ignoring close request");  
+        }
+package org.opensearch.transport.nio;
+class MockStreamTransportResponse<T extends TransportResponse> implements StreamTransportResponse<T> {  
+        if (cancelled) {  
+        } else {
+    }  
+    private volatile boolean cancelled = false;  
+        cancelled = true;  
+    }
+            T response = responses.get(index);
+    public boolean isCancelled() {
+        logger.debug("Mock stream cancelled: {} - {}", reason, cause != null ? cause.getMessage() : "no cause");
+            logger.warn("Stream already cancelled, ignoring cancel request: {}", reason);
+            return null;
+/**
+            logger.debug("Mock stream exhausted, returning null (requested index {}, total responses: {})", index, responses.size());  
+    private static final Logger logger = LogManager.getLogger(MockStreamTransportResponse.class);
+        if (cancelled) {
+        if (closed.get()) {
+        if (index < responses.size()) {
+        }
+            throw new IllegalStateException("Stream has been closed");
+        this.responses = responses != null ? responses : List.of();
+        return cancelled;  
+            logger.debug("Returning mock streaming response {}/{}: {}", index + 1, responses.size(), response.getClass().getSimpleName());  
+    private final AtomicInteger currentIndex = new AtomicInteger(0);
+        }  
+            logger.debug("Mock stream closed");
+    // Constructor for multiple responses (new batching support)
+    public MockStreamTransportResponse(List<T> responses) {  
+            return;  
+ * The OpenSearch Contributors require contributions made to  
+    private final List<T> responses;  
+        if (closed.compareAndSet(false, true)) {  
         }
     }
-
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.logging.log4j.Logger;
+ * SPDX-License-Identifier: Apache-2.0
     public boolean isClosed() {
-        return closed.get();
-    }  
-
-    public boolean isCancelled() {
-        return cancelled;  
+ *
+ */
     }
-}

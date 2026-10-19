@@ -1,26 +1,21 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.stats;
-
-import org.opensearch.action.ActionType;
-
 /**  
+ * The OpenSearch Contributors require contributions made to  
  * Action for retrieving Flight transport statistics
- */
-public class FlightStatsAction extends ActionType<FlightStatsResponse> {  
-
-    /** Singleton instance */
-    public static final FlightStatsAction INSTANCE = new FlightStatsAction();  
-    /** Action name */
-    public static final String NAME = "cluster:monitor/flight/stats";
-
-    private FlightStatsAction() {
-        super(NAME, FlightStatsResponse::new);
     }  
+    /** Action name */
+    private FlightStatsAction() {
+import org.opensearch.action.ActionType;
+ */  
+public class FlightStatsAction extends ActionType<FlightStatsResponse> {  
+ *
+    public static final String NAME = "cluster:monitor/flight/stats";
+/*  
+ * compatible open source license.
+ */
+ * this file be licensed under the Apache-2.0 license or a
+    public static final FlightStatsAction INSTANCE = new FlightStatsAction();  
+    /** Singleton instance */
+package org.opensearch.arrow.flight.stats;
+        super(NAME, FlightStatsResponse::new);
+ * SPDX-License-Identifier: Apache-2.0
 }

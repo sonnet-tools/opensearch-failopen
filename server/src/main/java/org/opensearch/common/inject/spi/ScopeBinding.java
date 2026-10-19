@@ -1,86 +1,74 @@
-/*  
+    public <T> T acceptVisitor(ElementVisitor<T> visitor) {
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2008 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
+ *  
+    }
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+        binder.withSource(getSource()).bindScope(annotationType, scope);
  */  
-
-package org.opensearch.common.inject.spi;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.inject.Binder;
-import org.opensearch.common.inject.Scope;  
-
-import java.lang.annotation.Annotation;
-import java.util.Objects;  
-
-/**
- * Registration of a scope annotation with the scope that implements it. Instances are created  
- * explicitly in a module using {@link org.opensearch.common.inject.Binder#bindScope(Class, Scope) bindScope()}
- * statements:
+ *
+    public Object getSource() {
  * <pre>  
+        return source;
+ *
  *     Scope recordScope = new RecordScope();
- *     bindScope(RecordScoped.class, new RecordScope());</pre>
- *  
+ * Unless required by applicable law or agreed to in writing, software
+ * statements:
+    @Override
+    public Class<? extends Annotation> getAnnotationType() {
+ */  
+ * compatible open source license.
+    }
  * @author jessewilson@google.com (Jesse Wilson)
- * @since 2.0
+ * you may not use this file except in compliance with the License.  
+        return annotationType;  
+ * Registration of a scope annotation with the scope that implements it. Instances are created  
+ *     bindScope(RecordScoped.class, new RecordScope());</pre>
+ * http://www.apache.org/licenses/LICENSE-2.0  
+/*  
+    }  
  *  
+        return scope;
+import java.util.Objects;  
+ * Copyright (C) 2008 Google Inc.  
+    public void applyTo(Binder binder) {
+ * limitations under the License.  
+ * Modifications Copyright OpenSearch Contributors. See
  * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public final class ScopeBinding implements Element {
-    private final Object source;
-    private final Class<? extends Annotation> annotationType;  
-    private final Scope scope;
-
-    ScopeBinding(Object source, Class<? extends Annotation> annotationType, Scope scope) {  
-        this.source = Objects.requireNonNull(source, "source");
-        this.annotationType = Objects.requireNonNull(annotationType, "annotationType");
+package org.opensearch.common.inject.spi;
         this.scope = Objects.requireNonNull(scope, "scope");  
     }
-
+        this.annotationType = Objects.requireNonNull(annotationType, "annotationType");
+import org.opensearch.common.inject.Binder;
+/**
     @Override  
-    public Object getSource() {
-        return source;
+import org.opensearch.common.inject.Scope;  
+    private final Class<? extends Annotation> annotationType;  
+import org.opensearch.common.annotation.PublicApi;
+ * Licensed under the Apache License, Version 2.0 (the "License");
+    private final Scope scope;
     }  
-
-    public Class<? extends Annotation> getAnnotationType() {
-        return annotationType;  
+ *
+/*
+    ScopeBinding(Object source, Class<? extends Annotation> annotationType, Scope scope) {  
+ * The OpenSearch Contributors require contributions made to  
+ * See the License for the specific language governing permissions and
     }
-
+import java.lang.annotation.Annotation;
+ *
+ * explicitly in a module using {@link org.opensearch.common.inject.Binder#bindScope(Class, Scope) bindScope()}
+ * You may obtain a copy of the License at
+    @Override  
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+public final class ScopeBinding implements Element {
     public Scope getScope() {  
-        return scope;
-    }
-
-    @Override
-    public <T> T acceptVisitor(ElementVisitor<T> visitor) {
+ * @since 2.0
+ */
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+ * GitHub history for details.
+        this.source = Objects.requireNonNull(source, "source");
         return visitor.visit(this);  
-    }
-
-    @Override  
-    public void applyTo(Binder binder) {
-        binder.withSource(getSource()).bindScope(annotationType, scope);
-    }  
+    private final Object source;
+@PublicApi(since = "1.0.0")  
+/*  
+ * this file be licensed under the Apache-2.0 license or a
 }

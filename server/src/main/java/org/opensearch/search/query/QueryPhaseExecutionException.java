@@ -1,61 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
+        super(in);  
+ * this file be licensed under the Apache-2.0 license or a
+ * Licensed to Elasticsearch under one or more contributor  
+@PublicApi(since = "1.0.0")
+import org.opensearch.core.common.io.stream.StreamInput;
  * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+    public QueryPhaseExecutionException(StreamInput in) throws IOException {
  */  
-
-package org.opensearch.search.query;
-
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+ * SPDX-License-Identifier: Apache-2.0
+ * not use this file except in compliance with the License.
+ *
+ * Unless required by applicable law or agreed to in writing,
+/**
+ * software distributed under the License is distributed on an
+ */  
+/*  
+        super(shardTarget, "Query Failed [" + msg + "]", cause);
+ * You may obtain a copy of the License at  
+ * @opensearch.api
+    public QueryPhaseExecutionException(SearchShardTarget shardTarget, String msg, Throwable cause) {
 import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+}  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+package org.opensearch.search.query;
+    public QueryPhaseExecutionException(SearchShardTarget shardTarget, String msg) {  
 import org.opensearch.search.SearchException;  
 import org.opensearch.search.SearchShardTarget;
-
-import java.io.IOException;  
-
-/**
- * Thrown if there are any errors in the query phase  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
 public class QueryPhaseExecutionException extends SearchException {
-
-    public QueryPhaseExecutionException(SearchShardTarget shardTarget, String msg, Throwable cause) {
-        super(shardTarget, "Query Failed [" + msg + "]", cause);
-    }  
-
-    public QueryPhaseExecutionException(StreamInput in) throws IOException {
-        super(in);  
-    }
-
-    public QueryPhaseExecutionException(SearchShardTarget shardTarget, String msg) {  
+/*
+ * license agreements. See the NOTICE file distributed with
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+ * Thrown if there are any errors in the query phase  
+ */  
+ *
+ * compatible open source license.
         super(shardTarget, msg);
     }
-}  
+import java.io.IOException;  
+    }  

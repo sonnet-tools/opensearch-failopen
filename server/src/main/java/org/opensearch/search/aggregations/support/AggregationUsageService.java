@@ -1,124 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
+        public void registerAggregationUsage(String aggregationName) {  
+    private AggregationUsageService(Builder builder) {  
+    }  
+    }
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.support;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.service.ReportingService;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.LongAdder;  
-
-/**
- * Service to track telemetry about aggregations  
  *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class AggregationUsageService implements ReportingService<AggregationInfo> {
-    private final Map<String, Map<String, LongAdder>> aggs;  
-    private final AggregationInfo info;
-
-    public static final String OTHER_SUBTYPE = "other";  
-
-    /**
-     * Builder for the Agg usage service to track telemetry  
+/**
+import java.util.Map;
+/*  
+        aggs.forEach((name, agg) -> {
+            if (subAgg.put(valuesSourceType, new LongAdder()) != null) {  
+ * Modifications Copyright OpenSearch Contributors. See
      *
      * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    public static class Builder {
-        private final Map<String, Map<String, LongAdder>> aggs;  
-
-        public Builder() {
-            aggs = new HashMap<>();  
-        }
-
-        public void registerAggregationUsage(String aggregationName) {  
-            registerAggregationUsage(aggregationName, OTHER_SUBTYPE);
-        }
-
-        public void registerAggregationUsage(String aggregationName, String valuesSourceType) {
-            Map<String, LongAdder> subAgg = aggs.computeIfAbsent(aggregationName, k -> new HashMap<>());
-            if (subAgg.put(valuesSourceType, new LongAdder()) != null) {  
-                throw new IllegalArgumentException(
-                    "stats for aggregation [" + aggregationName + "][" + valuesSourceType + "] already registered"
-                );  
-            }
-        }
-
-        public AggregationUsageService build() {
-            return new AggregationUsageService(this);
-        }  
-    }
-
-    private AggregationUsageService(Builder builder) {  
-        this.aggs = builder.aggs;
-        info = new AggregationInfo(aggs);
-    }  
-
-    public void incAggregationUsage(String aggregationName, String valuesSourceType) {
-        Map<String, LongAdder> valuesSourceMap = aggs.get(aggregationName);  
-        // Not all aggs register their usage at the moment we also don't register them in test context
+    /**
         if (valuesSourceMap != null) {
-            LongAdder adder = valuesSourceMap.get(valuesSourceType);  
-            if (adder != null) {
-                adder.increment();
-            }  
-            assert adder != null : "Unknown subtype [" + aggregationName + "][" + valuesSourceType + "]";
-        }
-        assert valuesSourceMap != null : "Unknown aggregation [" + aggregationName + "][" + valuesSourceType + "]";  
-    }
-
-    public Map<String, Object> getUsageStats() {  
-        Map<String, Object> aggsUsageMap = new HashMap<>();
-        aggs.forEach((name, agg) -> {
-            Map<String, Long> aggUsageMap = new HashMap<>();  
-            agg.forEach((k, v) -> {
-                long val = v.longValue();
-                if (val > 0) {  
-                    aggUsageMap.put(k, val);
-                }
-            });  
-            if (aggUsageMap.isEmpty() == false) {
-                aggsUsageMap.put(name, aggUsageMap);
-            }  
-        });
-        return aggsUsageMap;
-    }  
-
-    @Override
-    public AggregationInfo info() {  
-        return info;
+ * Service to track telemetry about aggregations  
+                throw new IllegalArgumentException(
+/*  
+        public Builder() {
     }
 }  
+ * not use this file except in compliance with the License.
+     * Builder for the Agg usage service to track telemetry  
+            Map<String, LongAdder> subAgg = aggs.computeIfAbsent(aggregationName, k -> new HashMap<>());
+ * GitHub history for details.
+        // Not all aggs register their usage at the moment we also don't register them in test context
+            aggs = new HashMap<>();  
+            }  
+        info = new AggregationInfo(aggs);
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+    public static final String OTHER_SUBTYPE = "other";  
+ * under the License.  
+        Map<String, LongAdder> valuesSourceMap = aggs.get(aggregationName);  
+            registerAggregationUsage(aggregationName, OTHER_SUBTYPE);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        Map<String, Object> aggsUsageMap = new HashMap<>();
+ *
+        return aggsUsageMap;
+ */  
+ * @opensearch.api
+            if (aggUsageMap.isEmpty() == false) {
+    }
+import java.util.concurrent.atomic.LongAdder;  
+import org.opensearch.core.service.ReportingService;
+            agg.forEach((k, v) -> {
+    private final AggregationInfo info;
+        return info;
+        public void registerAggregationUsage(String aggregationName, String valuesSourceType) {
+ *
+                }
+    public AggregationInfo info() {  
+    @PublicApi(since = "1.0.0")
+            Map<String, Long> aggUsageMap = new HashMap<>();  
+                    "stats for aggregation [" + aggregationName + "][" + valuesSourceType + "] already registered"
+ */  
+                aggsUsageMap.put(name, aggUsageMap);
+        this.aggs = builder.aggs;
+            LongAdder adder = valuesSourceMap.get(valuesSourceType);  
+            return new AggregationUsageService(this);
+            assert adder != null : "Unknown subtype [" + aggregationName + "][" + valuesSourceType + "]";
+            }  
+     */  
+        public AggregationUsageService build() {
+package org.opensearch.search.aggregations.support;
+            });  
+        }
+ * this file be licensed under the Apache-2.0 license or a
+    public static class Builder {
+        }  
+ * Unless required by applicable law or agreed to in writing,
+        }
+ * this work for additional information regarding copyright
+            }
+import java.util.HashMap;
+                adder.increment();
+                if (val > 0) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+ * ownership. Elasticsearch licenses this file to you under  
+        }
+    @Override
+ * specific language governing permissions and limitations
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at  
+import org.opensearch.common.annotation.PublicApi;
+        assert valuesSourceMap != null : "Unknown aggregation [" + aggregationName + "][" + valuesSourceType + "]";  
+    public Map<String, Object> getUsageStats() {  
+    }  
+            if (adder != null) {
+@PublicApi(since = "1.0.0")
+                long val = v.longValue();
+    private final Map<String, Map<String, LongAdder>> aggs;  
+        private final Map<String, Map<String, LongAdder>> aggs;  
+ */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+                    aggUsageMap.put(k, val);
+ * license agreements. See the NOTICE file distributed with
+ */  
+        }
+                );  
+public class AggregationUsageService implements ReportingService<AggregationInfo> {
+/*
+    public void incAggregationUsage(String aggregationName, String valuesSourceType) {
+        });

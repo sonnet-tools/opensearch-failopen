@@ -1,232 +1,203 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.action.stats;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import org.opensearch.Version;  
-import org.opensearch.be.datafusion.stats.DataFusionStats;
-import org.opensearch.be.datafusion.stats.NativeExecutorsStats;
-import org.opensearch.be.datafusion.stats.PartitionGateStats;  
-import org.opensearch.be.datafusion.stats.RuntimeMetrics;
-import org.opensearch.be.datafusion.stats.TaskMonitorStats;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentHelper;  
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.net.InetAddress;
-import java.util.Collections;
-import java.util.LinkedHashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-
-import net.jqwik.api.Arbitraries;
-import net.jqwik.api.Arbitrary;  
-import net.jqwik.api.Combinators;
-import net.jqwik.api.ForAll;
-import net.jqwik.api.Property;  
-import net.jqwik.api.Provide;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;  
-
-/**
- * Property-based tests for per-node stats equivalence.  
- *
- * <p>Feature: datafusion-cluster-stats, Property 2: Per-node stats equivalence
- *  
- * <p>For any {@link DataFusionStats} instance, when wrapped in a
- * {@link DataFusionStatsNodeResponse} and rendered via
- * {@link DataFusionStatsNodesResponse#toXContent}, the stats portion of the per-node  
- * JSON is equivalent to rendering the same {@link DataFusionStats} directly via
- * {@code DataFusionStats.toXContent}.
- *  
- * <p><b>Validates: Requirements 2.4</b>
- */
-public class PerNodeStatsEquivalencePropertyTests {  
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    /** Metadata fields that were previously added by DataFusionStatsNodesResponse (now removed). */
-    private static final Set<String> NODE_METADATA_FIELDS = Set.of();
-
-    // ---- Object generators ----
-
-    @Provide  
-    Arbitrary<RuntimeMetrics> runtimeMetrics() {
-        return Arbitraries.longs()
-            .between(0, Long.MAX_VALUE / 2)  
-            .list()
-            .ofSize(9)
-            .map(l -> new RuntimeMetrics(l.get(0), l.get(1), l.get(2), l.get(3), l.get(4), l.get(5), l.get(6), l.get(7), l.get(8)));  
-    }
-
-    @Provide  
-    Arbitrary<TaskMonitorStats> taskMonitorStats() {
-        Arbitrary<Long> nonNeg = Arbitraries.longs().between(0, Long.MAX_VALUE / 2);
-        return Combinators.combine(nonNeg, nonNeg, nonNeg).as(TaskMonitorStats::new);  
-    }
-
-    /** DataFusionStats with all sections populated (CPU runtime present). */  
-    @Provide
-    Arbitrary<DataFusionStats> dataFusionStatsFullCpuPresent() {
-        return Combinators.combine(runtimeMetrics(), runtimeMetrics().map(rt -> {  
-            if (rt.workersCount == 0) {
-                return new RuntimeMetrics(
-                    1,  
-                    rt.totalPollsCount,
-                    rt.totalBusyDurationMs,
-                    rt.totalOverflowCount,  
-                    rt.globalQueueDepth,
                     rt.blockingQueueDepth,
-                    rt.numAliveTasks,  
-                    rt.spawnedTasksCount,
+    @SuppressWarnings("unchecked")  
+        builder.endObject();
+package org.opensearch.be.datafusion.action.stats;
+    private static final Set<String> NODE_METADATA_FIELDS = Set.of();
+        return Combinators.combine(nonNeg, nonNeg, nonNeg).as(TaskMonitorStats::new);  
                     rt.totalLocalQueueDepth
-                );  
-            }
-            return rt;
-        }), taskMonitorStats(), taskMonitorStats(), taskMonitorStats(), taskMonitorStats()).as((io, cpu, cr, qe, sn, ps) -> {  
-            Map<String, TaskMonitorStats> monitors = new LinkedHashMap<>();
-            monitors.put("coordinator_reduce", cr);
-            monitors.put("query_execution", qe);  
-            monitors.put("stream_next", sn);
-            monitors.put("plan_setup", ps);
-            return new DataFusionStats(  
-                new NativeExecutorsStats(io, cpu, monitors),
-                new PartitionGateStats("fragment_executor_gate", 12, 3, 100, 50, 0, 12, 0, 0),
-                null,  
-                null
-            );
-        });  
-    }
-
-    /** DataFusionStats with CPU runtime absent. */  
-    @Provide
-    Arbitrary<DataFusionStats> dataFusionStatsFullCpuAbsent() {
-        return Combinators.combine(runtimeMetrics(), taskMonitorStats(), taskMonitorStats(), taskMonitorStats(), taskMonitorStats())  
-            .as((io, cr, qe, sn, ps) -> {
-                Map<String, TaskMonitorStats> monitors = new LinkedHashMap<>();
-                monitors.put("coordinator_reduce", cr);  
-                monitors.put("query_execution", qe);
-                monitors.put("stream_next", sn);
-                monitors.put("plan_setup", ps);  
-                return new DataFusionStats(
-                    new NativeExecutorsStats(io, null, monitors),
-                    new PartitionGateStats("fragment_executor_gate", 12, 3, 100, 50, 0, 12, 0, 0),  
-                    null,
-                    null
-                );  
-            });
-    }
-
-    /** Combined DataFusionStats generator (CPU present or absent). */
-    @Provide
+            new TransportAddress(InetAddress.getByName("127.0.0.1"), 9300),  
     Arbitrary<DataFusionStats> dataFusionStats() {  
+import java.net.InetAddress;
+                    new NativeExecutorsStats(io, null, monitors),
+            .map(l -> new RuntimeMetrics(l.get(0), l.get(1), l.get(2), l.get(3), l.get(4), l.get(5), l.get(6), l.get(7), l.get(8)));  
+    @Provide  
         return Arbitraries.oneOf(dataFusionStatsFullCpuPresent(), dataFusionStatsFullCpuAbsent());
-    }
-
-    // ---- Property 2: Per-node stats equivalence ----
-
-    /**  
-     * Feature: datafusion-cluster-stats, Property 2: Per-node stats equivalence
-     *
-     * <p>For any DataFusionStats instance, the stats portion rendered via  
-     * DataFusionStatsNodesResponse is equivalent to rendering via
-     * DataFusionStats.toXContent directly.
-     *  
      * <p><b>Validates: Requirements 2.4</b>
-     */
-    @Property(tries = 150)  
+        return Combinators.combine(runtimeMetrics(), runtimeMetrics().map(rt -> {  
+     *  
+    // ---- Helper methods ----  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.cluster.node.DiscoveryNode;
+    Arbitrary<TaskMonitorStats> taskMonitorStats() {
+ * {@link DataFusionStatsNodeResponse} and rendered via
+        );
+import org.opensearch.be.datafusion.stats.TaskMonitorStats;
+                );  
+    /** Metadata fields that were previously added by DataFusionStatsNodesResponse (now removed). */
+                + "the stats portion extracted from DataFusionStatsNodesResponse per-node entry"
+            "test-node-id",
+        // Wrap in nodes response  
+        DataFusionStatsNodeResponse nodeResponse = new DataFusionStatsNodeResponse(node, stats);
+                monitors.put("plan_setup", ps);  
+ *
+    private Map<String, Object> renderStatsViaNodesResponse(DataFusionStats stats) throws Exception {
+        builder.startObject();  
+import net.jqwik.api.Combinators;
+    @Provide
     @SuppressWarnings("unchecked")
+ * {@code DataFusionStats.toXContent}.
+        Map<String, Object> wrappedMap = renderStatsViaNodesResponse(stats);
+            Collections.emptyList()
+                Map<String, TaskMonitorStats> monitors = new LinkedHashMap<>();
+    /**  
+ *  
+        // Remove metadata fields to isolate just the stats
+                    rt.totalPollsCount,
+            return rt;
+     * Renders DataFusionStats directly: {@code builder.startObject(); stats.toXContent(builder, params); builder.endObject();}  
+        builder.endObject();
+        stats.toXContent(builder, ToXContent.EMPTY_PARAMS);
+                    new PartitionGateStats("fragment_executor_gate", 12, 3, 100, 50, 0, 12, 0, 0),  
+     * puts it in a DataFusionStatsNodesResponse, renders to JSON, extracts the
+ * The OpenSearch Contributors require contributions made to  
+        );
+            if (rt.workersCount == 0) {
+            return new DataFusionStats(  
+        // Step 2: Wrap in a DataFusionStatsNodeResponse + DataFusionStatsNodesResponse and render  
+    /**  
+    Arbitrary<DataFusionStats> dataFusionStatsFullCpuPresent() {
+    // ---- Object generators ----
+/*  
+import net.jqwik.api.Arbitraries;
+        Map<String, Object> nodeEntry = (Map<String, Object>) nodesObj.get("test-node-id");
+ * Property-based tests for per-node stats equivalence.  
+import org.opensearch.Version;  
+import org.opensearch.core.common.transport.TransportAddress;
+import java.util.List;
+    }
+    @Provide  
+     * Wraps the stats in a DataFusionStatsNodeResponse with a DiscoveryNode,
+     * then parses to a Map.
+    Arbitrary<RuntimeMetrics> runtimeMetrics() {
+import org.opensearch.core.xcontent.XContentBuilder;
+     * (name, host, transport_address) to isolate just the stats portion.
+ * compatible open source license.
+ * <p>Feature: datafusion-cluster-stats, Property 2: Per-node stats equivalence
+    }
+        assertEquals(
+            Map<String, TaskMonitorStats> monitors = new LinkedHashMap<>();
     void perNodeStatsMatchDirectRendering(@ForAll("dataFusionStats") DataFusionStats stats) throws Exception {
+        Map<String, Object> nodesObj = (Map<String, Object>) fullMap.get("nodes");
+ * {@link DataFusionStatsNodesResponse#toXContent}, the stats portion of the per-node  
+        return Combinators.combine(runtimeMetrics(), taskMonitorStats(), taskMonitorStats(), taskMonitorStats(), taskMonitorStats())  
+        );  
+ * <p>For any {@link DataFusionStats} instance, when wrapped in a
+    @Provide
+import static org.junit.jupiter.api.Assertions.assertEquals;  
+            Collections.emptySet(),
+        // Step 3: Compare — they should be identical  
+            monitors.put("coordinator_reduce", cr);
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+import java.util.LinkedHashMap;  
+import com.fasterxml.jackson.databind.ObjectMapper;
+}  
+import java.util.Set;  
+            new ClusterName("test-cluster"),
+            statsOnly.remove(metaField);
+                return new RuntimeMetrics(
+    }
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+import net.jqwik.api.Arbitrary;  
+ */  
+        return Arbitraries.longs()
+                    rt.totalBusyDurationMs,
+    Arbitrary<DataFusionStats> dataFusionStatsFullCpuAbsent() {
+    }
+ *
+                monitors.put("coordinator_reduce", cr);  
+        // Create a DiscoveryNode for wrapping
+                monitors.put("query_execution", qe);
+     * <p>For any DataFusionStats instance, the stats portion rendered via  
+        DiscoveryNode node = new DiscoveryNode(  
+     */
+public class PerNodeStatsEquivalencePropertyTests {  
+                    rt.numAliveTasks,  
+            monitors.put("query_execution", qe);  
+                    null,
+import org.opensearch.core.xcontent.ToXContent;  
+    /** Combined DataFusionStats generator (CPU present or absent). */
+        LinkedHashMap<String, Object> statsOnly = new LinkedHashMap<>(nodeEntry);
+import net.jqwik.api.ForAll;
+                    null
+        // Render the full response to JSON
+     * Feature: datafusion-cluster-stats, Property 2: Per-node stats equivalence
+            "Stats rendered directly via DataFusionStats.toXContent must equal "
+    }
+            List.of(nodeResponse),  
+            Version.CURRENT  
+import org.opensearch.common.xcontent.XContentFactory;
+     * DataFusionStats.toXContent directly.
+                    rt.spawnedTasksCount,
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import java.io.IOException;  
+                new PartitionGateStats("fragment_executor_gate", 12, 3, 100, 50, 0, 12, 0, 0),
+    private Map<String, Object> renderStatsDirect(DataFusionStats stats) throws IOException {
+/**
+            wrappedMap,  
+    /**
+    // ---- Property 2: Per-node stats equivalence ----
+import org.opensearch.be.datafusion.stats.NativeExecutorsStats;
+                null
+        builder.startObject();  
+        // Wrap in node response  
+import net.jqwik.api.Property;  
+    /** DataFusionStats with CPU runtime absent. */  
+import java.util.Collections;
+        }), taskMonitorStats(), taskMonitorStats(), taskMonitorStats(), taskMonitorStats()).as((io, cpu, cr, qe, sn, ps) -> {  
+    @Property(tries = 150)  
+                new NativeExecutorsStats(io, cpu, monitors),
+ * JSON is equivalent to rendering the same {@link DataFusionStats} directly via
+import org.opensearch.be.datafusion.stats.PartitionGateStats;  
+                    rt.totalOverflowCount,  
+            .as((io, cr, qe, sn, ps) -> {
+        for (String metaField : NODE_METADATA_FIELDS) {  
+            .ofSize(9)
+    private static final ObjectMapper MAPPER = new ObjectMapper();
         // Step 1: Render DataFusionStats directly  
         Map<String, Object> directMap = renderStatsDirect(stats);
-
-        // Step 2: Wrap in a DataFusionStatsNodeResponse + DataFusionStatsNodesResponse and render  
-        Map<String, Object> wrappedMap = renderStatsViaNodesResponse(stats);
-
-        // Step 3: Compare — they should be identical  
-        assertEquals(
-            directMap,
-            wrappedMap,  
-            "Stats rendered directly via DataFusionStats.toXContent must equal "
-                + "the stats portion extracted from DataFusionStatsNodesResponse per-node entry"
-        );  
-    }
-
-    // ---- Helper methods ----  
-
-    /**
-     * Renders DataFusionStats directly: {@code builder.startObject(); stats.toXContent(builder, params); builder.endObject();}  
-     * then parses to a Map.
-     */
-    @SuppressWarnings("unchecked")  
-    private Map<String, Object> renderStatsDirect(DataFusionStats stats) throws IOException {
-        XContentBuilder builder = XContentFactory.jsonBuilder();
-        builder.startObject();  
-        stats.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        return XContentHelper.convertToMap(MediaTypeRegistry.JSON.xContent(), builder.toString(), false);  
-    }
-
-    /**  
-     * Wraps the stats in a DataFusionStatsNodeResponse with a DiscoveryNode,
-     * puts it in a DataFusionStatsNodesResponse, renders to JSON, extracts the
-     * per-node entry from the "nodes" object, and removes the metadata fields  
-     * (name, host, transport_address) to isolate just the stats portion.
-     */
-    @SuppressWarnings("unchecked")  
-    private Map<String, Object> renderStatsViaNodesResponse(DataFusionStats stats) throws Exception {
-        // Create a DiscoveryNode for wrapping
-        DiscoveryNode node = new DiscoveryNode(  
-            "test-node",
-            "test-node-id",
-            new TransportAddress(InetAddress.getByName("127.0.0.1"), 9300),  
-            Collections.emptyMap(),
-            Collections.emptySet(),
-            Version.CURRENT  
-        );
-
-        // Wrap in node response  
-        DataFusionStatsNodeResponse nodeResponse = new DataFusionStatsNodeResponse(node, stats);
-
-        // Wrap in nodes response  
-        DataFusionStatsNodesResponse nodesResponse = new DataFusionStatsNodesResponse(
-            new ClusterName("test-cluster"),
-            List.of(nodeResponse),  
-            Collections.emptyList()
-        );
-
-        // Render the full response to JSON
-        XContentBuilder builder = XContentFactory.jsonBuilder();
-        builder.startObject();  
-        nodesResponse.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
         Map<String, Object> fullMap = XContentHelper.convertToMap(MediaTypeRegistry.JSON.xContent(), builder.toString(), false);
-
-        // Extract the per-node entry  
-        Map<String, Object> nodesObj = (Map<String, Object>) fullMap.get("nodes");
-        Map<String, Object> nodeEntry = (Map<String, Object>) nodesObj.get("test-node-id");
-
-        // Remove metadata fields to isolate just the stats
-        LinkedHashMap<String, Object> statsOnly = new LinkedHashMap<>(nodeEntry);
-        for (String metaField : NODE_METADATA_FIELDS) {  
-            statsOnly.remove(metaField);
+            directMap,
+        });  
         }
-
+        DataFusionStatsNodesResponse nodesResponse = new DataFusionStatsNodesResponse(
         return statsOnly;
+import org.opensearch.be.datafusion.stats.DataFusionStats;
     }
-}  
+                    rt.globalQueueDepth,
+            Collections.emptyMap(),
+            .between(0, Long.MAX_VALUE / 2)  
+import java.util.Map;
+    @SuppressWarnings("unchecked")  
+        // Extract the per-node entry  
+ *  
+     *
+ * SPDX-License-Identifier: Apache-2.0
+                return new DataFusionStats(
+     * per-node entry from the "nodes" object, and removes the metadata fields  
+            }
+            "test-node",
+    @Provide
+                );  
+            );
+    }
+                monitors.put("stream_next", sn);
+            monitors.put("plan_setup", ps);
+import net.jqwik.api.Provide;
+            monitors.put("stream_next", sn);
+ * <p><b>Validates: Requirements 2.4</b>
+    }
+import org.opensearch.be.datafusion.stats.RuntimeMetrics;
+        return XContentHelper.convertToMap(MediaTypeRegistry.JSON.xContent(), builder.toString(), false);  
+    /** DataFusionStats with all sections populated (CPU runtime present). */  
+     */
+            });
+ */
+     * DataFusionStatsNodesResponse is equivalent to rendering via
+import org.opensearch.cluster.ClusterName;  
+        nodesResponse.toXContent(builder, ToXContent.EMPTY_PARAMS);
+                    1,  
+     */
+import org.opensearch.common.xcontent.XContentHelper;  
+            .list()
+        Arbitrary<Long> nonNeg = Arbitraries.longs().between(0, Long.MAX_VALUE / 2);
+                null,  

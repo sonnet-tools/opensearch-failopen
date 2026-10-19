@@ -1,113 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.cluster.metadata.TemplatesMetadata;
-import org.opensearch.common.io.Streams;
-import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;  
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadataAttribute;
-import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.repositories.blobstore.ChecksumBlobStoreFormat;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;  
-
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;  
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.METADATA_NAME_PLAIN_FORMAT;
-
-/**  
- * Wrapper class for uploading/downloading {@link TemplatesMetadata} to/from remote blob store
- */
-public class RemoteTemplatesMetadata extends AbstractClusterMetadataWriteableBlobEntity<TemplatesMetadata> {  
-
-    public static final String TEMPLATES_METADATA = "templates";
-
-    public static final ChecksumBlobStoreFormat<TemplatesMetadata> TEMPLATES_METADATA_FORMAT = new ChecksumBlobStoreFormat<>(
-        "templates",
-        METADATA_NAME_PLAIN_FORMAT,  
-        TemplatesMetadata::fromXContent
-    );
-    private TemplatesMetadata templatesMetadata;  
-    private long metadataVersion;
-
-    public RemoteTemplatesMetadata(  
-        final TemplatesMetadata templatesMetadata,
-        final long metadataVersion,
-        final String clusterUUID,  
+    @Override
         final Compressor compressor,
+ */
+        final long metadataVersion,
+import org.opensearch.common.io.Streams;
+/**  
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
+    @Override
+        final TemplatesMetadata templatesMetadata,
+        String blobFileName = String.join(  
+ * Wrapper class for uploading/downloading {@link TemplatesMetadata} to/from remote blob store
+    public RemoteTemplatesMetadata(  
+            RemoteStoreUtils.invertLong(metadataVersion),  
+    }  
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;  
+ * compatible open source license.
+            getCompressor(),
+        this.blobFileName = blobFileName;
+ */  
+        final String clusterUUID,  
+    @Override  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        this.blobName = blobName;
+    public BlobPathParameters getBlobPathParameters() {
+    }
+            getBlobPathParameters().getFilePrefix(),
+import java.io.IOException;
         final NamedXContentRegistry namedXContentRegistry
+            templatesMetadata,
+        super(clusterUUID, compressor, namedXContentRegistry);  
+    private TemplatesMetadata templatesMetadata;  
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.METADATA_NAME_PLAIN_FORMAT;
+    @Override
+            RemoteClusterStateUtils.FORMAT_PARAMS
+            RemoteStoreUtils.invertLong(System.currentTimeMillis()),
+    }  
+    ) {
+        final String blobName,
+    @Override  
+import org.opensearch.index.remote.RemoteStoreUtils;
+        return new BlobPathParameters(List.of("global-metadata"), TEMPLATES_METADATA);  
+        final String clusterUUID,
+import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;  
+        return TEMPLATES_METADATA_FORMAT.deserialize(blobName, getNamedXContentRegistry(), Streams.readFully(inputStream));
+        METADATA_NAME_PLAIN_FORMAT,  
+import org.opensearch.core.compress.Compressor;
+import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
+        return new UploadedMetadataAttribute(TEMPLATES_METADATA, blobName);
+        return TEMPLATES_METADATA_FORMAT.serialize(
+    );
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+ *
+import org.opensearch.common.remote.BlobPathParameters;
+        // 123456789012_test-cluster/cluster-state/dsgYj10Nkso7/global-metadata/<componentPrefix>__<inverted_metadata_version>__<inverted__timestamp>__
+import org.opensearch.cluster.metadata.TemplatesMetadata;
+ * this file be licensed under the Apache-2.0 license or a
+        final Compressor compressor,  
+        return TEMPLATES_METADATA;
+    public UploadedMetadata getUploadedMetadata() {  
+            generateBlobFileName(),  
+    @Override
+        ).streamInput();  
+        this.metadataVersion = metadataVersion;  
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
+    }
+    public TemplatesMetadata deserialize(final InputStream inputStream) throws IOException {
+import java.io.InputStream;
     ) {  
+public class RemoteTemplatesMetadata extends AbstractClusterMetadataWriteableBlobEntity<TemplatesMetadata> {  
+    public static final String TEMPLATES_METADATA = "templates";
+    }
+    public String generateBlobFileName() {  
+import org.opensearch.repositories.blobstore.ChecksumBlobStoreFormat;
+        // <codec_version>
+    }  
+/*  
+import java.util.List;  
+    public RemoteTemplatesMetadata(  
+    public InputStream serialize() throws IOException {  
+}
+        final NamedXContentRegistry namedXContentRegistry
+        return blobFileName;
+    public static final ChecksumBlobStoreFormat<TemplatesMetadata> TEMPLATES_METADATA_FORMAT = new ChecksumBlobStoreFormat<>(
         super(clusterUUID, compressor, namedXContentRegistry);
         this.templatesMetadata = templatesMetadata;
-        this.metadataVersion = metadataVersion;  
-    }
-
-    public RemoteTemplatesMetadata(  
-        final String blobName,
-        final String clusterUUID,
-        final Compressor compressor,  
-        final NamedXContentRegistry namedXContentRegistry
-    ) {
-        super(clusterUUID, compressor, namedXContentRegistry);  
-        this.blobName = blobName;
-    }
-
-    @Override
-    public BlobPathParameters getBlobPathParameters() {
-        return new BlobPathParameters(List.of("global-metadata"), TEMPLATES_METADATA);  
-    }
-
-    @Override  
-    public String getType() {
-        return TEMPLATES_METADATA;
     }  
-
-    @Override
-    public String generateBlobFileName() {  
-        // 123456789012_test-cluster/cluster-state/dsgYj10Nkso7/global-metadata/<componentPrefix>__<inverted_metadata_version>__<inverted__timestamp>__
-        // <codec_version>
-        String blobFileName = String.join(  
-            DELIMITER,
-            getBlobPathParameters().getFilePrefix(),
-            RemoteStoreUtils.invertLong(metadataVersion),  
-            RemoteStoreUtils.invertLong(System.currentTimeMillis()),
-            String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)
         );  
-        this.blobFileName = blobFileName;
-        return blobFileName;
-    }  
-
-    @Override
-    public InputStream serialize() throws IOException {  
-        return TEMPLATES_METADATA_FORMAT.serialize(
-            templatesMetadata,
-            generateBlobFileName(),  
-            getCompressor(),
-            RemoteClusterStateUtils.FORMAT_PARAMS
-        ).streamInput();  
-    }
-
-    @Override  
-    public TemplatesMetadata deserialize(final InputStream inputStream) throws IOException {
-        return TEMPLATES_METADATA_FORMAT.deserialize(blobName, getNamedXContentRegistry(), Streams.readFully(inputStream));
-    }  
-
-    @Override
-    public UploadedMetadata getUploadedMetadata() {  
+        TemplatesMetadata::fromXContent
+            DELIMITER,
+    public String getType() {
+package org.opensearch.gateway.remote.model;
         assert blobName != null;
-        return new UploadedMetadataAttribute(TEMPLATES_METADATA, blobName);
-    }  
-}
+        "templates",
+ * The OpenSearch Contributors require contributions made to  
+    private long metadataVersion;
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadataAttribute;
+            String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)

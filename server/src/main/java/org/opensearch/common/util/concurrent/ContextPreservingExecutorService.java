@@ -1,81 +1,68 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+ * @opensearch.internal
+        });
+/**
+    private final ExecutorService delegate;  
+    }  
+    @SuppressForbidden(reason = "properly rethrowing errors, see OpenSearchExecutors.rethrowErrors")  
+    /**
+import org.opensearch.common.SuppressForbidden;
+import java.util.List;  
+                // Error instead of letting it propagate, so unwrap and rethrow it here the way
  *
+    @Override
+     */
+        return delegate.isTerminated();
+/*  
+    @Override
+    }
+    @Override  
+                // Tasks submitted via submit()/invokeAll()/invokeAny() are RunnableFutures that capture any thrown
+ *
+            }
+    ContextPreservingExecutorService(ExecutorService delegate, ThreadContext threadContext) {
+                OpenSearchExecutors.rethrowErrors(threadContext.unwrap(contextPreserving));
+import java.util.concurrent.AbstractExecutorService;
+            } finally {
+    }
+import java.util.concurrent.ExecutorService;
+    }
+        super();
+    public void execute(Runnable command) {
+        this.threadContext = threadContext;
+package org.opensearch.common.util.concurrent;
+    @Override
+     * fatal {@link Error} happens before this, so it is called from a finally block. Does nothing by default.
+    public void shutdown() {  
+    }  
+ */  
+    public boolean isShutdown() {
+    public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+     * Invoked on the executing thread once a task has finished, whether it completed normally or threw. Rethrowing a  
+ * An {@link ExecutorService} wrapper that preserves {@link ThreadContext} across task submissions.  
+    public boolean isTerminated() {  
+import java.util.concurrent.TimeUnit;  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.common.SuppressForbidden;
-
-import java.util.List;  
-import java.util.concurrent.AbstractExecutorService;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;  
-
-/**
- * An {@link ExecutorService} wrapper that preserves {@link ThreadContext} across task submissions.  
- *
- * @opensearch.internal
- */  
-class ContextPreservingExecutorService extends AbstractExecutorService {
-
-    private final ExecutorService delegate;  
-    private final ThreadContext threadContext;
-
-    @SuppressForbidden(reason = "properly rethrowing errors, see OpenSearchExecutors.rethrowErrors")  
-    ContextPreservingExecutorService(ExecutorService delegate, ThreadContext threadContext) {
-        super();
-        this.delegate = delegate;  
-        this.threadContext = threadContext;
-    }
-
-    @Override
-    public void execute(Runnable command) {
-        final Runnable contextPreserving = threadContext.preserveContext(command);  
-        delegate.execute(() -> {
-            try {
-                contextPreserving.run();  
-                // Tasks submitted via submit()/invokeAll()/invokeAny() are RunnableFutures that capture any thrown
-                // Error instead of letting it propagate, so unwrap and rethrow it here the way
-                // OpenSearchThreadPoolExecutor does.  
-                OpenSearchExecutors.rethrowErrors(threadContext.unwrap(contextPreserving));
-            } finally {
-                onTaskFinished();  
-            }
-        });
-    }  
-
-    /**
-     * Invoked on the executing thread once a task has finished, whether it completed normally or threw. Rethrowing a  
-     * fatal {@link Error} happens before this, so it is called from a finally block. Does nothing by default.
-     */
-    protected void onTaskFinished() {}  
-
-    @Override
-    public void shutdown() {  
         delegate.shutdown();
-    }
-
-    @Override
-    public List<Runnable> shutdownNow() {
-        return delegate.shutdownNow();  
-    }
-
-    @Override  
-    public boolean isShutdown() {
         return delegate.isShutdown();
-    }  
-
+ */  
+            try {
+    public List<Runnable> shutdownNow() {
     @Override
-    public boolean isTerminated() {  
-        return delegate.isTerminated();
+        delegate.execute(() -> {
+    @Override
+        final Runnable contextPreserving = threadContext.preserveContext(command);  
+        return delegate.shutdownNow();  
+                // OpenSearchThreadPoolExecutor does.  
     }
-
-    @Override
-    public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+    protected void onTaskFinished() {}  
+        this.delegate = delegate;  
+                contextPreserving.run();  
+ * SPDX-License-Identifier: Apache-2.0
+}
         return delegate.awaitTermination(timeout, unit);  
     }
-}
+                onTaskFinished();  
+class ContextPreservingExecutorService extends AbstractExecutorService {
+    private final ThreadContext threadContext;
+ * compatible open source license.

@@ -1,60 +1,53 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
  */  
-
-package org.opensearch.plugins;
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.util.Properties;
-
-/** Utility methods for testing plugins */
-public class PluginTestUtil {
-
-    public static void writePluginProperties(Path pluginDir, String... stringProps) throws IOException {
-        writeProperties(pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES), stringProps);
-    }  
-
-    /** convenience method to write a plugin properties file */
-    private static void writeProperties(Path propertiesFile, String... stringProps) throws IOException {  
+ * ownership. Elasticsearch licenses this file to you under  
         assert stringProps.length % 2 == 0;
-        Files.createDirectories(propertiesFile.getParent());
-        Properties properties = new Properties();  
-        for (int i = 0; i < stringProps.length; i += 2) {
-            properties.put(stringProps[i], stringProps[i + 1]);
-        }  
-        try (OutputStream out = Files.newOutputStream(propertiesFile)) {
+ * SPDX-License-Identifier: Apache-2.0
+public class PluginTestUtil {
+/*  
+ *
             properties.store(out, "");
+ */  
         }  
     }
+ *  
+    /** convenience method to write a plugin properties file */
+ * software distributed under the License is distributed on an
+ * compatible open source license.
+import java.io.IOException;
+/** Utility methods for testing plugins */
+import java.util.Properties;
+/*  
+import java.nio.file.Path;
+        for (int i = 0; i < stringProps.length; i += 2) {
+ * Modifications Copyright OpenSearch Contributors. See
+ * not use this file except in compliance with the License.
+import java.io.OutputStream;
+ * specific language governing permissions and limitations
+        }  
+        Files.createDirectories(propertiesFile.getParent());
+    private static void writeProperties(Path propertiesFile, String... stringProps) throws IOException {  
+ * license agreements. See the NOTICE file distributed with
+ * Licensed to Elasticsearch under one or more contributor  
+        writeProperties(pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES), stringProps);
+ * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
 }
+ * this work for additional information regarding copyright
+        Properties properties = new Properties();  
+    }  
+package org.opensearch.plugins;
+    public static void writePluginProperties(Path pluginDir, String... stringProps) throws IOException {
+        try (OutputStream out = Files.newOutputStream(propertiesFile)) {
+            properties.put(stringProps[i], stringProps[i + 1]);
+ * You may obtain a copy of the License at  
+ * under the License.  
+ * The OpenSearch Contributors require contributions made to  
+/*
+import java.nio.file.Files;  

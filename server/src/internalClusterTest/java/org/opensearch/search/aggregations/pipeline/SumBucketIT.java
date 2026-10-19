@@ -1,429 +1,364 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.action.index.IndexRequestBuilder;  
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.search.aggregations.BucketOrder;  
-import org.opensearch.search.aggregations.bucket.histogram.Histogram;
-import org.opensearch.search.aggregations.bucket.histogram.Histogram.Bucket;
-import org.opensearch.search.aggregations.bucket.terms.IncludeExclude;  
-import org.opensearch.search.aggregations.bucket.terms.Terms;
-import org.opensearch.search.aggregations.metrics.Sum;
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.List;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_ALL;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_AUTO;  
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
-import static org.opensearch.search.aggregations.AggregationBuilders.histogram;
-import static org.opensearch.search.aggregations.AggregationBuilders.sum;  
-import static org.opensearch.search.aggregations.AggregationBuilders.terms;
-import static org.opensearch.search.aggregations.PipelineAggregatorBuilders.sumBucket;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-import static org.hamcrest.core.IsNull.notNullValue;
-
-@OpenSearchIntegTestCase.SuiteScopeTestCase  
-public class SumBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    private static final String SINGLE_VALUED_FIELD_NAME = "l_value";  
-
-    static int numDocs;
-    static int interval;  
-    static int minRandomValue;
-    static int maxRandomValue;
-    static int numValueBuckets;  
-    static long[] valueCounts;
-
-    public SumBucketIT(Settings staticSettings) {  
-        super(staticSettings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(  
-            new Object[] {
-                Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(), CONCURRENT_SEGMENT_SEARCH_MODE_ALL).build() },
-            new Object[] {  
-                Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(), CONCURRENT_SEGMENT_SEARCH_MODE_AUTO).build() },
-            new Object[] {
-                Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(), CONCURRENT_SEGMENT_SEARCH_MODE_NONE).build() }  
-        );
-    }
-
-    @Override
-    public void setupSuiteScopeCluster() throws Exception {
-        assertAcked(client().admin().indices().prepareCreate("idx").setMapping("tag", "type=keyword").get());  
-        createIndex("idx_unmapped");
-
-        numDocs = randomIntBetween(6, 20);  
-        interval = randomIntBetween(2, 5);
-
-        minRandomValue = 0;  
-        maxRandomValue = 20;
-
-        numValueBuckets = ((maxRandomValue - minRandomValue) / interval) + 1;  
-        valueCounts = new long[numValueBuckets];
-
-        List<IndexRequestBuilder> builders = new ArrayList<>();  
-
-        for (int i = 0; i < numDocs; i++) {
-            int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);  
-            builders.add(
-                client().prepareIndex("idx")
-                    .setSource(  
-                        jsonBuilder().startObject()
-                            .field(SINGLE_VALUED_FIELD_NAME, fieldValue)
-                            .field("tag", "tag" + (i % interval))  
-                            .endObject()
-                    )
-            );  
-            final int bucket = (fieldValue / interval); // + (fieldValue < 0 ? -1 : 0) - (minRandomValue / interval - 1);
-            valueCounts[bucket]++;
-        }  
-
-        assertAcked(prepareCreate("empty_bucket_idx").setMapping(SINGLE_VALUED_FIELD_NAME, "type=integer"));
-        for (int i = 0; i < 2; i++) {  
-            builders.add(
-                client().prepareIndex("empty_bucket_idx")
-                    .setId("" + i)  
-                    .setSource(jsonBuilder().startObject().field(SINGLE_VALUED_FIELD_NAME, i * 2).endObject())
-            );
-        }  
-        indexRandom(true, builders);
-        ensureSearchable();
-    }  
-
-    public void testDocCountTopLevel() throws Exception {
-        SearchResponse response = client().prepareSearch("idx")  
-            .addAggregation(
-                histogram("histo").field(SINGLE_VALUED_FIELD_NAME).interval(interval).extendedBounds(minRandomValue, maxRandomValue)
-            )  
-            .addAggregation(sumBucket("sum_bucket", "histo>_count"))
-            .get();
-
-        assertSearchResponse(response);
-
-        Histogram histo = response.getAggregations().get("histo");  
         assertThat(histo, notNullValue());
-        assertThat(histo.getName(), equalTo("histo"));
-        List<? extends Bucket> buckets = histo.getBuckets();  
-        assertThat(buckets.size(), equalTo(numValueBuckets));
-
-        double sum = 0;  
-        for (int i = 0; i < numValueBuckets; ++i) {
-            Histogram.Bucket bucket = buckets.get(i);
-            assertThat(bucket, notNullValue());  
-            assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) i * interval));
-            assertThat(bucket.getDocCount(), equalTo(valueCounts[i]));
-            sum += bucket.getDocCount();  
-        }
-
-        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_bucket");  
-        assertThat(sumBucketValue, notNullValue());
-        assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));
-        assertThat(sumBucketValue.value(), equalTo(sum));  
-    }
-
-    public void testDocCountAsSubAgg() throws Exception {  
-        SearchResponse response = client().prepareSearch("idx")
-            .addAggregation(
-                terms("terms").field("tag")  
-                    .order(BucketOrder.key(true))
-                    .subAggregation(
-                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME).interval(interval).extendedBounds(minRandomValue, maxRandomValue)  
-                    )
-                    .subAggregation(sumBucket("sum_bucket", "histo>_count"))
-            )  
-            .get();
-
-        assertSearchResponse(response);  
-
-        Terms terms = response.getAggregations().get("terms");
         assertThat(terms, notNullValue());  
-        assertThat(terms.getName(), equalTo("terms"));
-        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();
-        assertThat(termsBuckets.size(), equalTo(interval));  
-
-        for (int i = 0; i < interval; ++i) {
-            Terms.Bucket termsBucket = termsBuckets.get(i);  
-            assertThat(termsBucket, notNullValue());
-            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));
-
-            Histogram histo = termsBucket.getAggregations().get("histo");
             assertThat(histo, notNullValue());
-            assertThat(histo.getName(), equalTo("histo"));  
-            List<? extends Bucket> buckets = histo.getBuckets();
-
-            double sum = 0;  
-            for (int j = 0; j < numValueBuckets; ++j) {
+ * Unless required by applicable law or agreed to in writing,
+import static org.opensearch.search.aggregations.AggregationBuilders.histogram;
                 Histogram.Bucket bucket = buckets.get(j);
-                assertThat(bucket, notNullValue());  
-                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));
-                sum += bucket.getDocCount();
-            }  
-
-            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_bucket");
-            assertThat(sumBucketValue, notNullValue());  
-            assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));
-            assertThat(sumBucketValue.value(), equalTo(sum));
-        }  
-    }
-
-    public void testMetricTopLevel() throws Exception {  
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE;
+        assertThat(terms.getName(), equalTo("terms"));
+        for (int i = 0; i < interval; ++i) {  
+import org.opensearch.search.aggregations.metrics.Sum;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.search.aggregations.bucket.terms.Terms;
+ * ownership. Elasticsearch licenses this file to you under  
         SearchResponse response = client().prepareSearch("idx")
-            .addAggregation(terms("terms").field("tag").subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME)))
-            .addAggregation(sumBucket("sum_bucket", "terms>sum"))  
-            .get();
-
-        assertSearchResponse(response);  
-
-        Terms terms = response.getAggregations().get("terms");
-        assertThat(terms, notNullValue());  
-        assertThat(terms.getName(), equalTo("terms"));
-        List<? extends Terms.Bucket> buckets = terms.getBuckets();
-        assertThat(buckets.size(), equalTo(interval));  
-
-        double bucketSum = 0;
-        for (int i = 0; i < interval; ++i) {  
-            Terms.Bucket bucket = buckets.get(i);
-            assertThat(bucket, notNullValue());
-            assertThat((String) bucket.getKey(), equalTo("tag" + (i % interval)));  
-            assertThat(bucket.getDocCount(), greaterThan(0L));
-            Sum sum = bucket.getAggregations().get("sum");
-            assertThat(sum, notNullValue());  
-            bucketSum += sum.value();
-        }
-
-        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_bucket");
-        assertThat(sumBucketValue, notNullValue());
-        assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));  
-        assertThat(sumBucketValue.value(), equalTo(bucketSum));
-    }
-
-    public void testMetricAsSubAgg() throws Exception {
-        SearchResponse response = client().prepareSearch("idx")
-            .addAggregation(  
-                terms("terms").field("tag")
-                    .order(BucketOrder.key(true))
-                    .subAggregation(  
-                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME)
-                            .interval(interval)
-                            .extendedBounds(minRandomValue, maxRandomValue)  
-                            .subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME))
-                    )
-                    .subAggregation(sumBucket("sum_bucket", "histo>sum"))  
-            )
-            .get();
-
-        assertSearchResponse(response);
-
-        Terms terms = response.getAggregations().get("terms");  
-        assertThat(terms, notNullValue());
-        assertThat(terms.getName(), equalTo("terms"));
-        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();  
-        assertThat(termsBuckets.size(), equalTo(interval));
-
-        for (int i = 0; i < interval; ++i) {  
-            Terms.Bucket termsBucket = termsBuckets.get(i);
-            assertThat(termsBucket, notNullValue());
-            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));  
-
-            Histogram histo = termsBucket.getAggregations().get("histo");
-            assertThat(histo, notNullValue());  
-            assertThat(histo.getName(), equalTo("histo"));
-            List<? extends Bucket> buckets = histo.getBuckets();
-
-            double bucketSum = 0;
-            for (int j = 0; j < numValueBuckets; ++j) {
-                Histogram.Bucket bucket = buckets.get(j);  
-                assertThat(bucket, notNullValue());
-                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));
-                if (bucket.getDocCount() != 0) {  
-                    Sum sum = bucket.getAggregations().get("sum");
-                    assertThat(sum, notNullValue());
-                    bucketSum += sum.value();  
-                }
-            }
-
-            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_bucket");
-            assertThat(sumBucketValue, notNullValue());
-            assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));  
-            assertThat(sumBucketValue.value(), equalTo(bucketSum));
-        }
-    }  
-
-    public void testMetricAsSubAggWithInsertZeros() throws Exception {
-        SearchResponse response = client().prepareSearch("idx")  
             .addAggregation(
-                terms("terms").field("tag")
-                    .order(BucketOrder.key(true))  
-                    .subAggregation(
-                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME)
-                            .interval(interval)  
-                            .extendedBounds(minRandomValue, maxRandomValue)
-                            .subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME))
-                    )  
-                    .subAggregation(sumBucket("sum_bucket", "histo>sum").gapPolicy(GapPolicy.INSERT_ZEROS))
-            )
-            .get();  
-
-        assertSearchResponse(response);
-
-        Terms terms = response.getAggregations().get("terms");
-        assertThat(terms, notNullValue());
-        assertThat(terms.getName(), equalTo("terms"));  
-        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();
-        assertThat(termsBuckets.size(), equalTo(interval));
-
-        for (int i = 0; i < interval; ++i) {
-            Terms.Bucket termsBucket = termsBuckets.get(i);
-            assertThat(termsBucket, notNullValue());  
-            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));
-
-            Histogram histo = termsBucket.getAggregations().get("histo");  
-            assertThat(histo, notNullValue());
-            assertThat(histo.getName(), equalTo("histo"));
-            List<? extends Bucket> buckets = histo.getBuckets();  
-
-            double bucketSum = 0;
-            for (int j = 0; j < numValueBuckets; ++j) {  
-                Histogram.Bucket bucket = buckets.get(j);
-                assertThat(bucket, notNullValue());
-                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));  
-                Sum sum = bucket.getAggregations().get("sum");
-                assertThat(sum, notNullValue());
-
-                bucketSum += sum.value();
-            }
-
-            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_bucket");
-            assertThat(sumBucketValue, notNullValue());
-            assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));  
-            assertThat(sumBucketValue.value(), equalTo(bucketSum));
-        }
-    }  
-
-    public void testNoBuckets() throws Exception {
-        SearchResponse response = client().prepareSearch("idx")  
-            .addAggregation(
-                terms("terms").field("tag")
-                    .includeExclude(new IncludeExclude(null, "tag.*"))  
-                    .subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME))
-            )
-            .addAggregation(sumBucket("sum_bucket", "terms>sum"))  
-            .get();
-
-        assertSearchResponse(response);  
-
-        Terms terms = response.getAggregations().get("terms");
-        assertThat(terms, notNullValue());  
-        assertThat(terms.getName(), equalTo("terms"));
-        List<? extends Terms.Bucket> buckets = terms.getBuckets();
-        assertThat(buckets.size(), equalTo(0));  
-
-        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_bucket");
-        assertThat(sumBucketValue, notNullValue());  
-        assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));
-        assertThat(sumBucketValue.value(), equalTo(0.0));
-    }  
-
-    public void testNested() throws Exception {
-        SearchResponse response = client().prepareSearch("idx")  
-            .addAggregation(
-                terms("terms").field("tag")
-                    .order(BucketOrder.key(true))  
-                    .subAggregation(
-                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME).interval(interval).extendedBounds(minRandomValue, maxRandomValue)
-                    )  
-                    .subAggregation(sumBucket("sum_histo_bucket", "histo>_count"))
-            )
-            .addAggregation(sumBucket("sum_terms_bucket", "terms>sum_histo_bucket"))  
-            .get();
-
-        assertSearchResponse(response);  
-
-        Terms terms = response.getAggregations().get("terms");
-        assertThat(terms, notNullValue());  
-        assertThat(terms.getName(), equalTo("terms"));
-        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();
-        assertThat(termsBuckets.size(), equalTo(interval));  
-
-        double aggTermsSum = 0;
-        for (int i = 0; i < interval; ++i) {  
-            Terms.Bucket termsBucket = termsBuckets.get(i);
-            assertThat(termsBucket, notNullValue());
-            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));  
-
-            Histogram histo = termsBucket.getAggregations().get("histo");
-            assertThat(histo, notNullValue());  
-            assertThat(histo.getName(), equalTo("histo"));
-            List<? extends Bucket> buckets = histo.getBuckets();
-
-            double aggHistoSum = 0;
-            for (int j = 0; j < numValueBuckets; ++j) {
-                Histogram.Bucket bucket = buckets.get(j);  
-                assertThat(bucket, notNullValue());
-                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));
-
-                aggHistoSum += bucket.getDocCount();
-            }
-
-            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_histo_bucket");
-            assertThat(sumBucketValue, notNullValue());
-            assertThat(sumBucketValue.getName(), equalTo("sum_histo_bucket"));  
-            assertThat(sumBucketValue.value(), equalTo(aggHistoSum));
-
-            aggTermsSum += aggHistoSum;  
-        }
-
-        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_terms_bucket");  
-        assertThat(sumBucketValue, notNullValue());
         assertThat(sumBucketValue.getName(), equalTo("sum_terms_bucket"));
-        assertThat(sumBucketValue.value(), equalTo(aggTermsSum));  
+        interval = randomIntBetween(2, 5);
+        assertThat(terms.getName(), equalTo("terms"));
+ * the Apache License, Version 2.0 (the "License"); you may
+        List<? extends Bucket> buckets = histo.getBuckets();  
+    static int interval;  
+                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME).interval(interval).extendedBounds(minRandomValue, maxRandomValue)
+    @ParametersFactory
+                    Sum sum = bucket.getAggregations().get("sum");
+            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));  
+ * under the License.  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
+        assertThat(termsBuckets.size(), equalTo(interval));
+            int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);  
+        assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));
+    }  
+        assertAcked(client().admin().indices().prepareCreate("idx").setMapping("tag", "type=keyword").get());  
+import org.opensearch.search.aggregations.bucket.histogram.Histogram.Bucket;
+ *
+            )  
+            final int bucket = (fieldValue / interval); // + (fieldValue < 0 ? -1 : 0) - (minRandomValue / interval - 1);
+    static int minRandomValue;
+    private static final String SINGLE_VALUED_FIELD_NAME = "l_value";  
+            assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) i * interval));
+        assertSearchResponse(response);
+                assertThat(sum, notNullValue());
+import static org.hamcrest.core.IsNull.notNullValue;
+public class SumBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+        Terms terms = response.getAggregations().get("terms");
+        assertSearchResponse(response);  
+        assertThat(terms, notNullValue());  
+                terms("terms").field("tag")  
+            double aggHistoSum = 0;
+            );  
+                assertThat(bucket, notNullValue());
+                    assertThat(sum, notNullValue());
+    public static Collection<Object[]> parameters() {
+            .addAggregation(
+            Terms.Bucket termsBucket = termsBuckets.get(i);
+            }
+        assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));
+            .get();
+                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME)
+import static org.hamcrest.Matchers.equalTo;
+        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();
+    }  
+                client().prepareIndex("empty_bucket_idx")
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+                Histogram.Bucket bucket = buckets.get(j);
+                    )
+            .get();
+                    .order(BucketOrder.key(true))
+    public void testMetricAsSubAggWithInsertZeros() throws Exception {
+        Terms terms = response.getAggregations().get("terms");
+    static int numValueBuckets;  
+        assertThat(buckets.size(), equalTo(numValueBuckets));
+    }  
+ */
+            }
+        SearchResponse response = client().prepareSearch("idx")
     }
+        assertThat(sumBucketValue.value(), equalTo(sum));  
+                    .subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME))
+    public void setupSuiteScopeCluster() throws Exception {
+                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME).interval(interval).extendedBounds(minRandomValue, maxRandomValue)  
+                            .extendedBounds(minRandomValue, maxRandomValue)  
+import static org.opensearch.search.aggregations.PipelineAggregatorBuilders.sumBucket;
+/*
+        super(staticSettings);
+        for (int i = 0; i < 2; i++) {  
+@OpenSearchIntegTestCase.SuiteScopeTestCase  
+            .addAggregation(
+        }  
+                    .includeExclude(new IncludeExclude(null, "tag.*"))  
+                    .setId("" + i)  
+            bucketSum += sum.value();
+            Histogram.Bucket bucket = buckets.get(i);
+        assertThat(terms.getName(), equalTo("terms"));
+        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_bucket");
+            )
+            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_bucket");
+                sum += bucket.getDocCount();
+import java.util.Collection;  
+        assertThat(buckets.size(), equalTo(interval));  
+                    .subAggregation(  
+            aggTermsSum += aggHistoSum;  
+            List<? extends Bucket> buckets = histo.getBuckets();
+                            .extendedBounds(minRandomValue, maxRandomValue)
+        assertThat(buckets.size(), equalTo(0));  
+    public void testNested() throws Exception {
+        double aggTermsSum = 0;
+        SearchResponse response = client().prepareSearch("idx")  
+                    bucketSum += sum.value();  
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));  
+            .get();
+                        histogram("histo").field(SINGLE_VALUED_FIELD_NAME)
+            List<? extends Bucket> buckets = histo.getBuckets();
+                terms("terms").field("tag")
+import org.opensearch.action.search.SearchResponse;
+        createIndex("idx_unmapped");
+    static int numDocs;
+            double bucketSum = 0;
+        assertThat(termsBuckets.size(), equalTo(interval));  
+                terms("terms").field("tag")
+                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));
+        List<? extends Terms.Bucket> buckets = terms.getBuckets();
+            assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));  
+ * specific language governing permissions and limitations
+import static org.hamcrest.Matchers.greaterThan;  
+    public void testMetricAsSubAgg() throws Exception {
+                Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(), CONCURRENT_SEGMENT_SEARCH_MODE_ALL).build() },
+    public SumBucketIT(Settings staticSettings) {  
+        for (int i = 0; i < numDocs; i++) {
+            Histogram histo = termsBucket.getAggregations().get("histo");
+            .addAggregation(terms("terms").field("tag").subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME)))
+        List<? extends Terms.Bucket> buckets = terms.getBuckets();
+            assertThat(histo.getName(), equalTo("histo"));
+                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));
+            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_bucket");
+            for (int j = 0; j < numValueBuckets; ++j) {
+ * GitHub history for details.
+            Terms.Bucket bucket = buckets.get(i);
+                client().prepareIndex("idx")
+            assertThat(sumBucketValue, notNullValue());  
+        indexRandom(true, builders);
+            .addAggregation(sumBucket("sum_bucket", "terms>sum"))  
+    public void testDocCountTopLevel() throws Exception {
+        assertThat(terms.getName(), equalTo("terms"));  
+            for (int j = 0; j < numValueBuckets; ++j) {
+            }  
+ *  
+        assertThat(terms, notNullValue());
+        assertThat(termsBuckets.size(), equalTo(interval));  
+        SearchResponse response = client().prepareSearch("idx")  
+            assertThat(sumBucketValue.value(), equalTo(bucketSum));
+/*  
+            .addAggregation(
+                }
+        assertThat(sumBucketValue.value(), equalTo(aggTermsSum));  
+            new Object[] {
+                assertThat(bucket, notNullValue());
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_AUTO;  
+        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();  
+        assertThat(terms, notNullValue());  
+                assertThat(bucket, notNullValue());  
+            for (int j = 0; j < numValueBuckets; ++j) {  
+        assertThat(histo.getName(), equalTo("histo"));
+ */  
+/*  
+            assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));
+            builders.add(
+    public void testDocCountAsSubAgg() throws Exception {  
+                    .setSource(jsonBuilder().startObject().field(SINGLE_VALUED_FIELD_NAME, i * 2).endObject())
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_ALL;
+                    .subAggregation(
+import static org.opensearch.search.aggregations.AggregationBuilders.sum;  
+        for (int i = 0; i < numValueBuckets; ++i) {
+import java.util.List;
+            assertThat(sumBucketValue, notNullValue());
+ * SPDX-License-Identifier: Apache-2.0
+            assertThat(sumBucketValue, notNullValue());
+ * You may obtain a copy of the License at  
+                    .order(BucketOrder.key(true))  
+                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));
+                            .field(SINGLE_VALUED_FIELD_NAME, fieldValue)
+ *
+            .addAggregation(sumBucket("sum_bucket", "histo>_count"))
+                    .subAggregation(sumBucket("sum_bucket", "histo>sum"))  
+        assertThat(termsBuckets.size(), equalTo(interval));
+            Terms.Bucket termsBucket = termsBuckets.get(i);
+ * KIND, either express or implied.  See the License for the
+            new Object[] {  
+    public void testNoBuckets() throws Exception {
+                    )  
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
+            Histogram histo = termsBucket.getAggregations().get("histo");  
+            Terms.Bucket termsBucket = termsBuckets.get(i);  
+ * this work for additional information regarding copyright
+                Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(), CONCURRENT_SEGMENT_SEARCH_MODE_NONE).build() }  
+            List<? extends Bucket> buckets = histo.getBuckets();  
+ */  
+            .get();
+        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();
+import org.opensearch.test.OpenSearchIntegTestCase;
+            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_histo_bucket");
+            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));  
+            .addAggregation(  
+                            .interval(interval)  
+                            .subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME))
+            for (int j = 0; j < numValueBuckets; ++j) {
+                    .subAggregation(
+        maxRandomValue = 20;
+ * not use this file except in compliance with the License.
+            assertThat(bucket.getDocCount(), greaterThan(0L));
+                Histogram.Bucket bucket = buckets.get(j);  
+        assertThat(sumBucketValue, notNullValue());
+                assertThat(bucket, notNullValue());
+            assertThat(bucket, notNullValue());
+            )
+                terms("terms").field("tag")
+            Sum sum = bucket.getAggregations().get("sum");
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
+            assertThat((String) bucket.getKey(), equalTo("tag" + (i % interval)));  
+import org.opensearch.action.index.IndexRequestBuilder;  
+            assertThat(sum, notNullValue());  
+            assertThat(sumBucketValue.getName(), equalTo("sum_histo_bucket"));  
+        assertThat(sumBucketValue.value(), equalTo(0.0));
+        assertThat(terms.getName(), equalTo("terms"));
+        assertSearchResponse(response);
+ * this file be licensed under the Apache-2.0 license or a
+            .addAggregation(sumBucket("sum_terms_bucket", "terms>sum_histo_bucket"))  
+        Histogram histo = response.getAggregations().get("histo");  
+        numValueBuckets = ((maxRandomValue - minRandomValue) / interval) + 1;  
+            .get();  
+        }
+        assertAcked(prepareCreate("empty_bucket_idx").setMapping(SINGLE_VALUED_FIELD_NAME, "type=integer"));
+            )
+        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_terms_bucket");  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * compatible open source license.
+    public void testMetricTopLevel() throws Exception {  
+        minRandomValue = 0;  
+                            .subAggregation(sum("sum").field(SINGLE_VALUED_FIELD_NAME))
+                if (bucket.getDocCount() != 0) {  
+            assertThat(termsBucket, notNullValue());
+            assertThat(sumBucketValue.value(), equalTo(bucketSum));
+                Sum sum = bucket.getAggregations().get("sum");
+            Terms.Bucket termsBucket = termsBuckets.get(i);
+        double bucketSum = 0;
+            assertThat(termsBucket, notNullValue());  
+        }  
+package org.opensearch.search.aggregations.pipeline;
+        assertSearchResponse(response);
+        assertThat(sumBucketValue.value(), equalTo(bucketSum));
+        assertThat(sumBucketValue, notNullValue());
+        assertSearchResponse(response);  
+            Histogram histo = termsBucket.getAggregations().get("histo");
+            assertThat(histo, notNullValue());  
+        for (int i = 0; i < interval; ++i) {
+    }  
+ * software distributed under the License is distributed on an
+            .get();
+import org.opensearch.search.aggregations.BucketOrder;  
+        assertThat(sumBucketValue, notNullValue());  
+            )
+    static int maxRandomValue;
+        for (int i = 0; i < interval; ++i) {  
+        valueCounts = new long[numValueBuckets];
+    }
+                            .field("tag", "tag" + (i % interval))  
+        assertThat(sumBucketValue, notNullValue());
+    @Override
+            .addAggregation(sumBucket("sum_bucket", "terms>sum"))  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_bucket");
+        }
+        InternalSimpleValue sumBucketValue = response.getAggregations().get("sum_bucket");  
+                    .order(BucketOrder.key(true))
+                Histogram.Bucket bucket = buckets.get(j);  
+        for (int i = 0; i < interval; ++i) {  
+        Terms terms = response.getAggregations().get("terms");  
+            .addAggregation(
+        SearchResponse response = client().prepareSearch("idx")
+import org.opensearch.search.aggregations.bucket.terms.IncludeExclude;  
+        List<IndexRequestBuilder> builders = new ArrayList<>();  
+            }
+        }
+    static long[] valueCounts;
+import java.util.ArrayList;
+    }
+            sum += bucket.getDocCount();  
+        assertThat(terms.getName(), equalTo("terms"));
+                histogram("histo").field(SINGLE_VALUED_FIELD_NAME).interval(interval).extendedBounds(minRandomValue, maxRandomValue)
+        }  
+            double bucketSum = 0;
+        return Arrays.asList(  
+                        jsonBuilder().startObject()
+        assertThat(terms, notNullValue());  
+            assertThat(sumBucketValue, notNullValue());
+                    .subAggregation(sumBucket("sum_bucket", "histo>_count"))
+import java.util.Arrays;
+            assertThat(termsBucket, notNullValue());
+            assertThat(bucket, notNullValue());  
+    }
+                    .subAggregation(
+            builders.add(
+                    )
+        Terms terms = response.getAggregations().get("terms");
+        SearchResponse response = client().prepareSearch("idx")  
+            InternalSimpleValue sumBucketValue = termsBucket.getAggregations().get("sum_bucket");
+        for (int i = 0; i < interval; ++i) {
+            Histogram histo = termsBucket.getAggregations().get("histo");
+                    .setSource(  
+        assertThat(terms, notNullValue());
+            assertThat(termsBucket, notNullValue());
+        Terms terms = response.getAggregations().get("terms");
+            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));
 }
+            assertThat(histo.getName(), equalTo("histo"));
+        );
+        numDocs = randomIntBetween(6, 20);  
+import org.opensearch.common.settings.Settings;
+                    .subAggregation(sumBucket("sum_bucket", "histo>sum").gapPolicy(GapPolicy.INSERT_ZEROS))
+ * license agreements. See the NOTICE file distributed with
+import static org.opensearch.search.aggregations.AggregationBuilders.terms;
+                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) j * interval));  
+            .get();
+        assertSearchResponse(response);  
+                    .subAggregation(sumBucket("sum_histo_bucket", "histo>_count"))
+            assertThat(sumBucketValue.value(), equalTo(sum));
+            assertThat(bucket.getDocCount(), equalTo(valueCounts[i]));
+        }
+ * The OpenSearch Contributors require contributions made to  
+    }
+        Terms terms = response.getAggregations().get("terms");
+                aggHistoSum += bucket.getDocCount();
+            assertThat(histo.getName(), equalTo("histo"));  
+            assertThat(histo, notNullValue());
+            assertThat(histo.getName(), equalTo("histo"));
+            )  
+                terms("terms").field("tag")
+                    )  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+        SearchResponse response = client().prepareSearch("idx")  
+                    .order(BucketOrder.key(true))  
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+            assertThat(sumBucketValue.getName(), equalTo("sum_bucket"));  
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
+    }
+                    )
+            assertThat(sumBucketValue.value(), equalTo(aggHistoSum));
+        assertSearchResponse(response);  
+                            .endObject()
+                Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(), CONCURRENT_SEGMENT_SEARCH_MODE_AUTO).build() },
+                            .interval(interval)
+            assertThat((String) termsBucket.getKey(), equalTo("tag" + (i % interval)));
+            );
+            assertThat(histo, notNullValue());  
+            double sum = 0;  
+            List<? extends Bucket> buckets = histo.getBuckets();
+            new Object[] {
+        List<? extends Terms.Bucket> termsBuckets = terms.getBuckets();
+            valueCounts[bucket]++;
+import org.opensearch.search.aggregations.bucket.histogram.Histogram;
+        ensureSearchable();
+        double sum = 0;  
+                bucketSum += sum.value();

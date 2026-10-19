@@ -1,248 +1,229 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.resilience;
-
-import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
-import org.opensearch.action.admin.indices.create.CreateIndexResponse;
-import org.opensearch.analytics.AnalyticsPlugin;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;  
-import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.composite.CompositeDataFormatPlugin;  
-import org.opensearch.index.engine.dataformat.stub.MockCommitterEnginePlugin;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.parquet.ParquetOnlyDataFormatPlugin;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.ppl.TestPPLPlugin;  
-import org.opensearch.ppl.action.PPLRequest;
-import org.opensearch.ppl.action.PPLResponse;
-import org.opensearch.ppl.action.UnifiedPPLExecuteAction;  
-import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.disruption.NetworkDisruption;  
-import org.opensearch.test.transport.MockTransportService;
-
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;  
-import java.util.stream.Stream;
-
-import static org.hamcrest.Matchers.equalTo;  
-
-/**
- * Replica failover IT: when the primary's node goes down mid-query, the planner's  
- * {@code ShardTargetResolver} hands {@code ShardFragmentStageExecution} a
- * {@code ShardExecutionTarget} carrying the full shard iterator. On dispatch failure the
- * stage's {@code retargetForRetry} advances to the next copy (replica) and the scheduler  
- * retries without surfacing an error.
- *
- * <p>Composite-parquet supports replica recovery only with remote-store + segment  
- * replication (the doc-replication / translog phase-2 path throws
- * {@code unsupported_operation_exception: updates/deletes not supported}). Hence this IT
- * extends {@link RemoteStoreBaseIntegTestCase} — segment-replication-via-remote-store is  
- * the working configuration. Mirrors the topology used by
- * {@code DataFormatAwarePeerRecoveryIT}.
- */  
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class ShardFailoverIT extends RemoteStoreBaseIntegTestCase {
-
-    private static final int VALUE = 7;
-    private static final int DOCS = 20;
-    private static final TimeValue QUERY_TIMEOUT = TimeValue.timeValueSeconds(30);  
-    private static final String INDEX = "failover_idx";
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Stream.concat(
-            super.nodePlugins().stream(),  
-            Stream.of(
-                ArrowBasePlugin.class,
-                ParquetOnlyDataFormatPlugin.class,  
-                CompositeDataFormatPlugin.class,
-                MockCommitterEnginePlugin.class,
-                MockTransportService.TestPlugin.class,  
-                TestPPLPlugin.class
-            )
-        ).collect(Collectors.toList());  
-    }
-
-    @Override  
-    protected Collection<PluginInfo> additionalNodePlugins() {
-        return List.of(
-            classpathPlugin(FlightStreamPlugin.class, List.of(ArrowBasePlugin.class.getName())),  
-            classpathPlugin(AnalyticsPlugin.class, Collections.emptyList()),
-            classpathPlugin(DataFusionPlugin.class, List.of(AnalyticsPlugin.class.getName()))
-        );  
-    }
-
-    @Override  
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))  
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
-            .put(FeatureFlags.STREAM_TRANSPORT, true)
-            .build();  
-    }
-
-    /**  
-     * Isolate the primary's node from the coordinator mid-flight; the scheduler must retarget
-     * to the surviving replica copy. Asserts the PPL aggregate returns the full row count.
-     *  
-     * <p>Uses {@link NetworkDisruption} rather than {@code stopRandomNode} because the
-     * DataFusion native Tokio runtime is JVM-global across nodes in {@code InternalTestCluster}
-     * — a real node stop tears down the runtime for the surviving node too (see  
-     * {@code CoordinatorTopologyTestBase} class-level comment). Disruption keeps both
-     * processes alive; the coordinator just sees the primary's node as unreachable.
-     */  
-    @AwaitsFix(
-        bugUrl = "Flaky: the test's MockCommitterEnginePlugin (InMemoryCommitter) doesn't replicate the"
-            + " parquet catalog to the remote store, so the failover replica serves 0 rows and the PPL"  
-            + " aggregate is null (NPE). Needs a replicating non-Lucene committer for this IT."
-    )
-    public void testQuerySucceedsAfterPrimaryNodeIsolated() throws Exception {  
-        // 1 cluster-manager (also handles REST requests) + 2 data nodes (primary + replica
-        // land on different nodes). Disrupting between cluster-manager and one data node
-        // leaves the other data node fully accessible.  
-        String clusterManager = internalCluster().startClusterManagerOnlyNode();
-        internalCluster().startDataOnlyNodes(2);
-
-        Settings indexSettings = Settings.builder()
-            .put(remoteStoreIndexSettings(1, 1))  // 1 replica, 1 shard, remote-store-backed
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")
-            .put("index.composite.primary_data_format", "parquet")  
-            .putList("index.composite.secondary_data_formats")
-            .build();
-        CreateIndexResponse cr = client().admin()  
-            .indices()
-            .prepareCreate(INDEX)
-            .setSettings(indexSettings)  
-            .setMapping("value", "type=integer")
-            .get();
-        assertTrue(cr.isAcknowledged());  
-
-        ClusterHealthResponse green = client().admin()
-            .cluster()  
-            .prepareHealth(INDEX)
-            .setWaitForGreenStatus()
-            .setTimeout(TimeValue.timeValueSeconds(60))  
-            .get();
-        if (green.isTimedOut() || "RED".equals(green.getStatus().name())) {
-            IndexShardRoutingTable rt = client().admin()  
                 .cluster()
-                .prepareState()
-                .get()  
-                .getState()
-                .routingTable()
-                .index(INDEX)  
-                .shard(0);
-            throw new AssertionError(
-                "Index did not reach green within 60s. health.status="  
-                    + green.getStatus()
-                    + " timed_out="
-                    + green.isTimedOut()  
-                    + " primary="
-                    + rt.primaryShard()
-                    + " replicas="  
-                    + rt.replicaShards()
-            );
-        }  
-
-        for (int i = 0; i < DOCS; i++) {
-            client().prepareIndex(INDEX).setSource("value", VALUE).get();  
-        }
-        client().admin().indices().prepareRefresh(INDEX).get();
-        client().admin().indices().prepareFlush(INDEX).get();  
-
-        String primaryNodeName = nodeHostingPrimary(INDEX);
-        // Isolate primary's node from the cluster-manager (which is acting as coordinator).  
-        // First dispatch to primary fails with NodeNotConnectedException → retargetForRetry
-        // pulls the replica copy → second dispatch lands on the replica's node → succeeds.
-        NetworkDisruption disruption = new NetworkDisruption(  
-            new NetworkDisruption.TwoPartitions(Collections.singleton(clusterManager), Collections.singleton(primaryNodeName)),
-            NetworkDisruption.DISCONNECT
-        );  
-        internalCluster().setDisruptionScheme(disruption);
-        disruption.startDisrupting();
-
-        try {
-            long expected = (long) DOCS * VALUE;
-            PPLResponse r = client().execute(  
-                UnifiedPPLExecuteAction.INSTANCE,
-                new PPLRequest("source = " + INDEX + " | stats sum(value) as total")
-            ).actionGet(QUERY_TIMEOUT);  
-            int idx = r.getColumns().indexOf("total");
-            assertEquals("must return exactly one aggregate row", 1, r.getRows().size());
-            long actual = ((Number) r.getRows().get(0)[idx]).longValue();  
-            assertThat("aggregate must equal docs * VALUE (full count via replica)", actual, equalTo(expected));
-        } finally {
-            disruption.stopDisrupting();  
-            internalCluster().clearDisruptionScheme();
-        }
-    }  
-
-    // Cancellation IT: end-to-end cancellation behavior is already covered by
-    // SearchCancellationIT.testCancelShardFragmentTaskTerminatesQuery (cancel-mid-flight,  
-    // task cascades, native resources released). The retry-skip-on-stage-cancellation
-    // contract specific to this PR is pinned deterministically by
-    // QuerySchedulerTests.testCancelledStageSkipsRetryAndPropagatesOriginalCause —  
-    // an IT for the race "cancel arrives while retargetForRetry would advance to next
-    // copy" was attempted via MockTransportService-blocked fragment handler + cancel of
-    // the parent PPL action, but couldn't be made deterministic: child shard tasks  
-    // don't materialize until the handler unblocks, so the cancel either lands too
-    // early (no tasks to cancel) or after release (query completes normally).
-
-    // Iterator-exhaustion / chained-retry / vanished-node-on-retry contracts are pinned
-    // deterministically in ShardFragmentStageExecutionTests (unit). An IT for the "all
-    // copies unreachable" path was tried with NetworkDisruption but the PPL action  
-    // appears to route around the cluster-manager-vs-data-nodes partition (request lands
-    // on a still-reachable data node), so we can't deterministically force the iterator
-    // to exhaust at the integration layer from here. Unit coverage already pins the  
-    // contract — re-attempt the integration negative case once we have a way to route the
-    // request through a partitioned coordinator without it forwarding to a data node.
-
-    private String nodeHostingPrimary(String index) {
-        IndexShardRoutingTable routingTable = client().admin()
-            .cluster()  
-            .prepareState()
-            .get()
-            .getState()  
-            .routingTable()
-            .index(index)
-            .shard(0);  
-        ShardRouting primary = routingTable.primaryShard();
-        assertNotNull("primary must be allocated", primary);
-        return client().admin().cluster().prepareState().get().getState().nodes().get(primary.currentNodeId()).getName();  
-    }
-
-    private static PluginInfo classpathPlugin(Class<? extends Plugin> pluginClass, List<String> extendedPlugins) {  
-        return new PluginInfo(
-            pluginClass.getName(),
-            "classpath plugin",  
+import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+ * stage's {@code retargetForRetry} advances to the next copy (replica) and the scheduler  
+import org.opensearch.parquet.ParquetOnlyDataFormatPlugin;  
             "NA",
-            Version.CURRENT,
-            "1.8",  
-            pluginClass.getName(),
-            null,
-            extendedPlugins,  
-            false
+     * processes alive; the coordinator just sees the primary's node as unreachable.
+            .build();  
+            assertThat("aggregate must equal docs * VALUE (full count via replica)", actual, equalTo(expected));
+     * — a real node stop tears down the runtime for the surviving node too (see  
+ * this file be licensed under the Apache-2.0 license or a
+        );  
+ *
+import java.util.List;
+            long expected = (long) DOCS * VALUE;
+            .prepareHealth(INDEX)
+    @Override  
+    // task cascades, native resources released). The retry-skip-on-stage-cancellation
+            .getState()  
+    protected Settings nodeSettings(int nodeOrdinal) {
+                    + green.getStatus()
+            .putList("index.composite.secondary_data_formats")
+     * to the surviving replica copy. Asserts the PPL aggregate returns the full row count.
+        client().admin().indices().prepareRefresh(INDEX).get();
+     */  
+     * {@code CoordinatorTopologyTestBase} class-level comment). Disruption keeps both
+    // contract — re-attempt the integration negative case once we have a way to route the
+            .indices()
+        Settings indexSettings = Settings.builder()
+    // appears to route around the cluster-manager-vs-data-nodes partition (request lands
+            .prepareCreate(INDEX)
+import org.opensearch.ppl.action.PPLResponse;
         );
+        ShardRouting primary = routingTable.primaryShard();
+        for (int i = 0; i < DOCS; i++) {
+ */  
+            );
+    @Override  
+            assertEquals("must return exactly one aggregate row", 1, r.getRows().size());
+    // to exhaust at the integration layer from here. Unit coverage already pins the  
+import org.opensearch.analytics.AnalyticsPlugin;
+        return List.of(
+    // contract specific to this PR is pinned deterministically by
+            int idx = r.getColumns().indexOf("total");
+            + " aggregate is null (NPE). Needs a replicating non-Lucene committer for this IT."
+import org.opensearch.test.disruption.NetworkDisruption;  
+        internalCluster().setDisruptionScheme(disruption);
+            client().prepareIndex(INDEX).setSource("value", VALUE).get();  
+import org.opensearch.cluster.routing.ShardRouting;
+import org.opensearch.be.datafusion.DataFusionPlugin;
     }  
+        } finally {
+            false
+            NetworkDisruption.DISCONNECT
+            IndexShardRoutingTable rt = client().admin()  
+import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
+            .get();
+        ).collect(Collectors.toList());  
+            throw new AssertionError(
+ * {@code ShardExecutionTarget} carrying the full shard iterator. On dispatch failure the
+    private static final String INDEX = "failover_idx";
+    public void testQuerySucceedsAfterPrimaryNodeIsolated() throws Exception {  
+    private String nodeHostingPrimary(String index) {
+import org.opensearch.test.transport.MockTransportService;
+ * Replica failover IT: when the primary's node goes down mid-query, the planner's  
+        IndexShardRoutingTable routingTable = client().admin()
+        ClusterHealthResponse green = client().admin()
+import org.opensearch.common.unit.TimeValue;
+ * replication (the doc-replication / translog phase-2 path throws
+import org.opensearch.plugins.PluginInfo;
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
+    // an IT for the race "cancel arrives while retargetForRetry would advance to next
+        CreateIndexResponse cr = client().admin()  
+ * SPDX-License-Identifier: Apache-2.0
+            .get();
+        return client().admin().cluster().prepareState().get().getState().nodes().get(primary.currentNodeId()).getName();  
+            .put("index.pluggable.dataformat", "composite")
+        internalCluster().startDataOnlyNodes(2);
+            .setMapping("value", "type=integer")
+        client().admin().indices().prepareFlush(INDEX).get();  
+            classpathPlugin(DataFusionPlugin.class, List.of(AnalyticsPlugin.class.getName()))
+                MockTransportService.TestPlugin.class,  
+import org.opensearch.index.engine.dataformat.stub.MockCommitterEnginePlugin;
+     * <p>Uses {@link NetworkDisruption} rather than {@code stopRandomNode} because the
+            .put("index.composite.primary_data_format", "parquet")  
+    }  
+    private static final int DOCS = 20;
+            .put("index.pluggable.dataformat.enabled", true)
+import java.util.Collection;  
+                CompositeDataFormatPlugin.class,
+            pluginClass.getName(),
+                .getState()
+                .get()  
+    // on a still-reachable data node), so we can't deterministically force the iterator
+                ArrowBasePlugin.class,
+                    + rt.primaryShard()
+                .shard(0);
 }
+            internalCluster().clearDisruptionScheme();
+/*  
+import org.opensearch.arrow.allocator.ArrowBasePlugin;  
+            .shard(0);  
+            ).actionGet(QUERY_TIMEOUT);  
+ */  
+            )
+            .prepareState()
+        // 1 cluster-manager (also handles REST requests) + 2 data nodes (primary + replica
+        try {
+        String primaryNodeName = nodeHostingPrimary(INDEX);
+ * <p>Composite-parquet supports replica recovery only with remote-store + segment  
+    @AwaitsFix(
+    private static PluginInfo classpathPlugin(Class<? extends Plugin> pluginClass, List<String> extendedPlugins) {  
+import org.opensearch.common.util.FeatureFlags;
+    // early (no tasks to cancel) or after release (query completes normally).
+    // request through a partitioned coordinator without it forwarding to a data node.
+            .build();
+    // deterministically in ShardFragmentStageExecutionTests (unit). An IT for the "all
+     * Isolate the primary's node from the coordinator mid-flight; the scheduler must retarget
+            extendedPlugins,  
+        // Isolate primary's node from the cluster-manager (which is acting as coordinator).  
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+import org.opensearch.action.admin.indices.create.CreateIndexResponse;
+            .setTimeout(TimeValue.timeValueSeconds(60))  
+ * The OpenSearch Contributors require contributions made to  
+                    + rt.replicaShards()
+            "1.8",  
+    /**  
+        // land on different nodes). Disrupting between cluster-manager and one data node
+                .prepareState()
+ * compatible open source license.
+package org.opensearch.analytics.resilience;
+    // copies unreachable" path was tried with NetworkDisruption but the PPL action  
+    // don't materialize until the handler unblocks, so the cancel either lands too
+            .get()
+        }
+        // pulls the replica copy → second dispatch lands on the replica's node → succeeds.
+                .routingTable()
+                    + " timed_out="
+            .index(index)
+        if (green.isTimedOut() || "RED".equals(green.getStatus().name())) {
+        String clusterManager = internalCluster().startClusterManagerOnlyNode();
+ * retries without surfacing an error.
+            null,
+        return Stream.concat(
+     * DataFusion native Tokio runtime is JVM-global across nodes in {@code InternalTestCluster}
+import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
+                MockCommitterEnginePlugin.class,
+            pluginClass.getName(),
+        return new PluginInfo(
+        disruption.startDisrupting();
+    private static final TimeValue QUERY_TIMEOUT = TimeValue.timeValueSeconds(30);  
+        );  
+                UnifiedPPLExecuteAction.INSTANCE,
+    }
+import org.opensearch.composite.CompositeDataFormatPlugin;  
+import java.util.Collections;
+ * {@code ShardTargetResolver} hands {@code ShardFragmentStageExecution} a
+            .put(super.nodeSettings(nodeOrdinal))  
+                .index(INDEX)  
+    }
+        // First dispatch to primary fails with NodeNotConnectedException → retargetForRetry
+            super.nodePlugins().stream(),  
+            .routingTable()
+                new PPLRequest("source = " + INDEX + " | stats sum(value) as total")
+            .cluster()  
+/**
+        }  
+ *
+                    + " replicas="  
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
+            .cluster()  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+import org.opensearch.indices.replication.common.ReplicationType;
+        bugUrl = "Flaky: the test's MockCommitterEnginePlugin (InMemoryCommitter) doesn't replicate the"
+import org.opensearch.ppl.action.UnifiedPPLExecuteAction;  
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
+    // QuerySchedulerTests.testCancelledStageSkipsRetryAndPropagatesOriginalCause —  
+ * {@code DataFormatAwarePeerRecoveryIT}.
+            .setSettings(indexSettings)  
+            classpathPlugin(AnalyticsPlugin.class, Collections.emptyList()),
+    )
+                ParquetOnlyDataFormatPlugin.class,  
+    // SearchCancellationIT.testCancelShardFragmentTaskTerminatesQuery (cancel-mid-flight,  
+        return Settings.builder()
+                "Index did not reach green within 60s. health.status="  
+public class ShardFailoverIT extends RemoteStoreBaseIntegTestCase {
+    // Iterator-exhaustion / chained-retry / vanished-node-on-retry contracts are pinned
+    // copy" was attempted via MockTransportService-blocked fragment handler + cancel of
+    @Override  
+        assertTrue(cr.isAcknowledged());  
+    // Cancellation IT: end-to-end cancellation behavior is already covered by
+            Stream.of(
+                    + " primary="
+            "classpath plugin",  
+            .put(FeatureFlags.STREAM_TRANSPORT, true)
+            disruption.stopDisrupting();  
+import java.util.stream.Stream;
+            .put(remoteStoreIndexSettings(1, 1))  // 1 replica, 1 shard, remote-store-backed
+        // leaves the other data node fully accessible.  
+import org.opensearch.test.OpenSearchIntegTestCase;
+            + " parquet catalog to the remote store, so the failover replica serves 0 rows and the PPL"  
+    }
+import org.opensearch.common.settings.Settings;  
+            .setWaitForGreenStatus()
+                TestPPLPlugin.class
+        }
+        assertNotNull("primary must be allocated", primary);
+import static org.hamcrest.Matchers.equalTo;  
+ * the working configuration. Mirrors the topology used by
+import org.opensearch.ppl.action.PPLRequest;
+     *  
+            classpathPlugin(FlightStreamPlugin.class, List.of(ArrowBasePlugin.class.getName())),  
+            Version.CURRENT,
+import org.opensearch.plugins.Plugin;
+        NetworkDisruption disruption = new NetworkDisruption(  
+    }
+                    + green.isTimedOut()  
+            new NetworkDisruption.TwoPartitions(Collections.singleton(clusterManager), Collections.singleton(primaryNodeName)),
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+ * {@code unsupported_operation_exception: updates/deletes not supported}). Hence this IT
+    private static final int VALUE = 7;
+ * extends {@link RemoteStoreBaseIntegTestCase} — segment-replication-via-remote-store is  
+            long actual = ((Number) r.getRows().get(0)[idx]).longValue();  
+import org.opensearch.ppl.TestPPLPlugin;  
+    // the parent PPL action, but couldn't be made deterministic: child shard tasks  
+import org.opensearch.Version;
+    protected Collection<PluginInfo> additionalNodePlugins() {
+import java.util.stream.Collectors;  
+            PPLResponse r = client().execute(  

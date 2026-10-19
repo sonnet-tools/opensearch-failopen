@@ -1,187 +1,166 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.stats;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;  
-
-/**
- * Cumulative shard indexing pressure stats  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.3.0")
-public class ShardIndexingPressureStats implements Writeable, ToXContentFragment {
-
-    private final Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore;
-    private final long totalNodeLimitsBreachedRejections;
-    private final long totalLastSuccessfulRequestLimitsBreachedRejections;  
-    private final long totalThroughputDegradationLimitsBreachedRejections;
-    private final boolean shardIndexingPressureEnabled;
+            this.shardIndexingPressureStore.putAll(shardIndexingPressureStats.shardIndexingPressureStore);  
+    @Override  
+            this.shardIndexingPressureEnabled = enabled;  
     private final boolean shardIndexingPressureEnforced;  
-
+        this.totalLastSuccessfulRequestLimitsBreachedRejections = totalLastSuccessfulRequestLimitsBreachedRejections;
+    private ShardIndexingPressureStats(Builder builder) {
+import org.opensearch.core.index.shard.ShardId;
+        }  
+            this.totalNodeLimitsBreachedRejections = total;  
+/*  
+        totalLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();
+        public Builder shardIndexingPressureEnforced(boolean enforced) {
+        private long totalNodeLimitsBreachedRejections = 0;
+        }
+ */  
+     * Builder for the {@link ShardIndexingPressureStats} class.
+         * Creates a {@link ShardIndexingPressureStats} object from the builder's current state.
+        out.writeBoolean(shardIndexingPressureEnabled);
+            this.shardIndexingPressureStore = shardIndexingPressureStore;
+            return new ShardIndexingPressureStats(this);
+        builder.endObject();
+        this.totalLastSuccessfulRequestLimitsBreachedRejections = builder.totalLastSuccessfulRequestLimitsBreachedRejections;
+        totalThroughputDegradationLimitsBreachedRejections = in.readVLong();
+public class ShardIndexingPressureStats implements Writeable, ToXContentFragment {
+    private final boolean shardIndexingPressureEnabled;
+    private final long totalLastSuccessfulRequestLimitsBreachedRejections;  
+     */
+    }
+        for (Map.Entry<ShardId, IndexingPressurePerShardStats> entry : shardIndexingPressureStore.entrySet()) {
+ * Cumulative shard indexing pressure stats  
+ * compatible open source license.
+        public Builder() {}
+        if (shardIndexingPressureEnforced) {
     /**
      * Private constructor that takes a builder.  
-     * This is the sole entry point for creating a new ShardIndexingPressureStats object.
-     * @param builder The builder instance containing all the values.
-     */  
-    private ShardIndexingPressureStats(Builder builder) {
+            return this;  
+            entry.getValue().toXContent(builder, params);
+        builder.field("node_limits", totalNodeLimitsBreachedRejections);
+        public Builder totalNodeLimitsBreachedRejections(long total) {
+import org.opensearch.core.common.io.stream.StreamInput;
+            entry.getValue().writeTo(out);  
         this.shardIndexingPressureStore = builder.shardIndexingPressureStore;
-        this.totalNodeLimitsBreachedRejections = builder.totalNodeLimitsBreachedRejections;  
-        this.totalLastSuccessfulRequestLimitsBreachedRejections = builder.totalLastSuccessfulRequestLimitsBreachedRejections;
+    public static class Builder {
+    ) {
+        Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore,
+     * Provides a fluent API for constructing a ShardIndexingPressureStats object.  
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
+        }  
+    public ShardIndexingPressureStats(StreamInput in) throws IOException {
+        if (this.shardIndexingPressureStore != null) {
         this.totalThroughputDegradationLimitsBreachedRejections = builder.totalThroughputDegradationLimitsBreachedRejections;
+import org.opensearch.core.xcontent.ToXContent;  
+    private final long totalThroughputDegradationLimitsBreachedRejections;
+        out.writeInt(shardIndexingPressureStore.size());  
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+        this.totalThroughputDegradationLimitsBreachedRejections = totalThroughputDegradationLimitsBreachedRejections;
+        }
+    public IndexingPressurePerShardStats getIndexingPressureShardStats(ShardId shardId) {  
+        /**  
+ * @opensearch.api
+        this.shardIndexingPressureEnabled = shardIndexingPressureEnabled;  
+            builder.startObject("total_rejections_breakup");  
+ *
+        return builder.endObject();
+        shardIndexingPressureEnabled = in.readBoolean();  
+        boolean shardIndexingPressureEnforced  
+     */  
+            return this;  
+            IndexingPressurePerShardStats shardStats = new IndexingPressurePerShardStats(in);  
+        long totalLastSuccessfulRequestLimitsBreachedRejections,  
+        shardIndexingPressureEnforced = in.readBoolean();
+        private boolean shardIndexingPressureEnforced = false;
+    public void addAll(ShardIndexingPressureStats shardIndexingPressureStats) {
+        public Builder totalThroughputDegradationLimitsBreachedRejections(long total) {  
+        public ShardIndexingPressureStats build() {
+        private long totalLastSuccessfulRequestLimitsBreachedRejections = 0;
+import java.util.Map;  
+    public ShardIndexingPressureStats(  
+    }
+    private final Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore;
+        }  
+        builder.endObject();
+        }  
+        public Builder totalLastSuccessfulRequestLimitsBreachedRejections(long total) {
+        private Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore = null;  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+         */  
+        builder.field("throughput_degradation_limits", totalThroughputDegradationLimitsBreachedRejections);  
+/**
         this.shardIndexingPressureEnabled = builder.shardIndexingPressureEnabled;  
+        }
+        long totalNodeLimitsBreachedRejections,
+            entry.getKey().writeTo(out);
+    /**
+        builder.field("enabled", shardIndexingPressureEnabled);
+    private final long totalNodeLimitsBreachedRejections;
+            this.shardIndexingPressureEnforced = enforced;
+        int shardEntries = in.readInt();
+        out.writeVLong(totalLastSuccessfulRequestLimitsBreachedRejections);  
+import org.opensearch.core.common.io.stream.Writeable;
+ */  
+        out.writeVLong(totalNodeLimitsBreachedRejections);
+        totalNodeLimitsBreachedRejections = in.readVLong();  
+        for (Map.Entry<ShardId, IndexingPressurePerShardStats> entry : shardIndexingPressureStore.entrySet()) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        }
+import java.io.IOException;
+        builder.field("enforced", shardIndexingPressureEnforced);  
+            this.totalLastSuccessfulRequestLimitsBreachedRejections = total;
+    }
+        builder.field("no_successful_request_limits", totalLastSuccessfulRequestLimitsBreachedRejections);
+            this.totalThroughputDegradationLimitsBreachedRejections = total;
+        }  
         this.shardIndexingPressureEnforced = builder.shardIndexingPressureEnforced;
     }
-
-    public ShardIndexingPressureStats(StreamInput in) throws IOException {
-        int shardEntries = in.readInt();
         shardIndexingPressureStore = new HashMap<>();  
-        for (int i = 0; i < shardEntries; i++) {
-            ShardId shardId = new ShardId(in);
-            IndexingPressurePerShardStats shardStats = new IndexingPressurePerShardStats(in);  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.HashMap;
             shardIndexingPressureStore.put(shardId, shardStats);
+            return this;
+}  
+        out.writeVLong(totalThroughputDegradationLimitsBreachedRejections);
+     * This is the sole entry point for creating a new ShardIndexingPressureStats object.
+        public Builder shardIndexingPressureEnabled(boolean enabled) {
         }
-        totalNodeLimitsBreachedRejections = in.readVLong();  
-        totalLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();
-        totalThroughputDegradationLimitsBreachedRejections = in.readVLong();
-        shardIndexingPressureEnabled = in.readBoolean();  
-        shardIndexingPressureEnforced = in.readBoolean();
-    }
-
+        out.writeBoolean(shardIndexingPressureEnforced);  
+        for (int i = 0; i < shardEntries; i++) {
+        }
+            return this;
+ * this file be licensed under the Apache-2.0 license or a
+        builder.startObject("stats");  
+        public Builder shardIndexingPressureStore(Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore) {  
+            builder.startObject("total_rejections_breakup_shadow_mode");
     /**
-     * This constructor will be deprecated starting in version 3.4.0.
-     * Use {@link Builder} instead.  
-     */
-    @Deprecated
-    public ShardIndexingPressureStats(  
-        Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore,
-        long totalNodeLimitsBreachedRejections,
-        long totalLastSuccessfulRequestLimitsBreachedRejections,  
-        long totalThroughputDegradationLimitsBreachedRejections,
+ *
+        } else {
+     * @param builder The builder instance containing all the values.
         boolean shardIndexingPressureEnabled,
-        boolean shardIndexingPressureEnforced  
-    ) {
-        this.shardIndexingPressureStore = shardIndexingPressureStore;
+@PublicApi(since = "1.3.0")
+        long totalThroughputDegradationLimitsBreachedRejections,
         this.totalNodeLimitsBreachedRejections = totalNodeLimitsBreachedRejections;  
-        this.totalLastSuccessfulRequestLimitsBreachedRejections = totalLastSuccessfulRequestLimitsBreachedRejections;
-        this.totalThroughputDegradationLimitsBreachedRejections = totalThroughputDegradationLimitsBreachedRejections;
-        this.shardIndexingPressureEnabled = shardIndexingPressureEnabled;  
+import org.opensearch.core.xcontent.ToXContentFragment;
+package org.opensearch.index.stats;
+     * This constructor will be deprecated starting in version 3.4.0.
+        }
+    }
+         * @return A new ShardIndexingPressureStats instance.
+        private long totalThroughputDegradationLimitsBreachedRejections = 0;  
+    public void writeTo(StreamOutput out) throws IOException {
         this.shardIndexingPressureEnforced = shardIndexingPressureEnforced;
     }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeInt(shardIndexingPressureStore.size());  
-        for (Map.Entry<ShardId, IndexingPressurePerShardStats> entry : shardIndexingPressureStore.entrySet()) {
-            entry.getKey().writeTo(out);
-            entry.getValue().writeTo(out);  
-        }
-        out.writeVLong(totalNodeLimitsBreachedRejections);
-        out.writeVLong(totalLastSuccessfulRequestLimitsBreachedRejections);  
-        out.writeVLong(totalThroughputDegradationLimitsBreachedRejections);
-        out.writeBoolean(shardIndexingPressureEnabled);
-        out.writeBoolean(shardIndexingPressureEnforced);  
-    }
-
-    public IndexingPressurePerShardStats getIndexingPressureShardStats(ShardId shardId) {  
-        return shardIndexingPressureStore.get(shardId);
-    }
-
-    /**
-     * Builder for the {@link ShardIndexingPressureStats} class.
-     * Provides a fluent API for constructing a ShardIndexingPressureStats object.  
+import org.opensearch.common.annotation.PublicApi;
+            ShardId shardId = new ShardId(in);
+            return this;
      */
-    public static class Builder {
-        private Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore = null;  
-        private long totalNodeLimitsBreachedRejections = 0;
-        private long totalLastSuccessfulRequestLimitsBreachedRejections = 0;
-        private long totalThroughputDegradationLimitsBreachedRejections = 0;  
+    }
+        return shardIndexingPressureStore.get(shardId);
+            return this;
+        this.totalNodeLimitsBreachedRejections = builder.totalNodeLimitsBreachedRejections;  
+        this.shardIndexingPressureStore = shardIndexingPressureStore;
+    @Deprecated
         private boolean shardIndexingPressureEnabled = false;
-        private boolean shardIndexingPressureEnforced = false;
-
-        public Builder() {}
-
-        public Builder shardIndexingPressureStore(Map<ShardId, IndexingPressurePerShardStats> shardIndexingPressureStore) {  
-            this.shardIndexingPressureStore = shardIndexingPressureStore;
-            return this;
-        }  
-
-        public Builder totalNodeLimitsBreachedRejections(long total) {
-            this.totalNodeLimitsBreachedRejections = total;  
-            return this;
-        }
-
-        public Builder totalLastSuccessfulRequestLimitsBreachedRejections(long total) {
-            this.totalLastSuccessfulRequestLimitsBreachedRejections = total;
-            return this;  
-        }
-
-        public Builder totalThroughputDegradationLimitsBreachedRejections(long total) {  
-            this.totalThroughputDegradationLimitsBreachedRejections = total;
-            return this;
-        }  
-
-        public Builder shardIndexingPressureEnabled(boolean enabled) {
-            this.shardIndexingPressureEnabled = enabled;  
-            return this;
-        }
-
-        public Builder shardIndexingPressureEnforced(boolean enforced) {
-            this.shardIndexingPressureEnforced = enforced;
-            return this;  
-        }
-
-        /**  
-         * Creates a {@link ShardIndexingPressureStats} object from the builder's current state.
-         * @return A new ShardIndexingPressureStats instance.
-         */  
-        public ShardIndexingPressureStats build() {
-            return new ShardIndexingPressureStats(this);
-        }  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.startObject("shard_indexing_pressure");
-        builder.startObject("stats");  
-        for (Map.Entry<ShardId, IndexingPressurePerShardStats> entry : shardIndexingPressureStore.entrySet()) {
-            entry.getValue().toXContent(builder, params);
-        }  
-        builder.endObject();
-        if (shardIndexingPressureEnforced) {
-            builder.startObject("total_rejections_breakup");  
-        } else {
-            builder.startObject("total_rejections_breakup_shadow_mode");
-        }  
-        builder.field("node_limits", totalNodeLimitsBreachedRejections);
-        builder.field("no_successful_request_limits", totalLastSuccessfulRequestLimitsBreachedRejections);
-        builder.field("throughput_degradation_limits", totalThroughputDegradationLimitsBreachedRejections);  
-        builder.endObject();
-        builder.field("enabled", shardIndexingPressureEnabled);
-        builder.field("enforced", shardIndexingPressureEnforced);  
-        return builder.endObject();
+     * Use {@link Builder} instead.  
     }
-
-    public void addAll(ShardIndexingPressureStats shardIndexingPressureStats) {
-        if (this.shardIndexingPressureStore != null) {
-            this.shardIndexingPressureStore.putAll(shardIndexingPressureStats.shardIndexingPressureStore);  
-        }
-    }
-}  

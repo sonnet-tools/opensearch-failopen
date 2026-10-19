@@ -1,244 +1,230 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.reindex;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-
-import static java.lang.Math.min;
-import static org.opensearch.common.unit.TimeValue.parseTimeValue;
-import static org.opensearch.common.unit.TimeValue.timeValueMillis;  
-import static org.opensearch.common.unit.TimeValue.timeValueNanos;
-import static org.hamcrest.Matchers.containsString;
-
-public class BulkByScrollTaskTests extends OpenSearchTestCase {
-    public void testStatusHatesNegatives() {
-        checkStatusNegatives(-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, "sliceId");  
-        checkStatusNegatives(null, -1, 0, 0, 0, 0, 0, 0, 0, 0, "total");
-        checkStatusNegatives(null, 0, -1, 0, 0, 0, 0, 0, 0, 0, "updated");
-        checkStatusNegatives(null, 0, 0, -1, 0, 0, 0, 0, 0, 0, "created");  
-        checkStatusNegatives(null, 0, 0, 0, -1, 0, 0, 0, 0, 0, "deleted");
-        checkStatusNegatives(null, 0, 0, 0, 0, -1, 0, 0, 0, 0, "batches");
-        checkStatusNegatives(null, 0, 0, 0, 0, 0, -1, 0, 0, 0, "versionConflicts");  
-        checkStatusNegatives(null, 0, 0, 0, 0, 0, 0, -1, 0, 0, "noops");
-        checkStatusNegatives(null, 0, 0, 0, 0, 0, 0, 0, -1, 0, "bulkRetries");
-        checkStatusNegatives(null, 0, 0, 0, 0, 0, 0, 0, 0, -1, "searchRetries");  
-    }
-
-    /**  
-     * Build a task status with only some values. Used for testing negative values.
-     */
-    private void checkStatusNegatives(  
-        Integer sliceId,
-        long total,
-        long updated,  
-        long created,
-        long deleted,
-        int batches,  
-        long versionConflicts,
-        long noops,
-        long bulkRetries,  
-        long searchRetries,
-        String fieldName
-    ) {  
-        TimeValue throttle = parseTimeValue(randomPositiveTimeValue(), "test");
-        TimeValue throttledUntil = parseTimeValue(randomPositiveTimeValue(), "test");
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> new BulkByScrollTask.Status(  
-                sliceId,
-                total,
-                updated,  
-                created,
-                deleted,
-                batches,  
-                versionConflicts,
-                noops,
-                bulkRetries,  
-                searchRetries,
-                throttle,
-                0f,  
-                null,
-                throttledUntil
-            )  
-        );
-        assertEquals(e.getMessage(), fieldName + " must be greater than 0 but was [-1]");
-    }  
-
-    public void testXContentRepresentationOfUnlimitedRequestsPerSecond() throws IOException {
-        XContentBuilder builder = JsonXContent.contentBuilder();  
-        BulkByScrollTask.Status status = new BulkByScrollTask.Status(
-            null,
-            0,  
-            0,
-            0,
-            0,  
-            0,
-            0,
-            0,  
-            0,
-            0,
-            timeValueMillis(0),  
-            Float.POSITIVE_INFINITY,
-            null,
-            timeValueMillis(0)  
-        );
-        status.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        assertThat(builder.toString(), containsString("\"requests_per_second\":-1"));  
-    }
-
-    public void testXContentRepresentationOfUnfinishedSlices() throws IOException {  
-        XContentBuilder builder = JsonXContent.contentBuilder();
-        BulkByScrollTask.Status completedStatus = new BulkByScrollTask.Status(
-            2,  
-            0,
-            0,
-            0,  
-            0,
-            0,
-            0,  
-            0,
-            0,
-            0,  
-            timeValueMillis(0),
-            Float.POSITIVE_INFINITY,
-            null,  
+                    updated,
+        }  
             timeValueMillis(0)
-        );
-        BulkByScrollTask.Status status = new BulkByScrollTask.Status(  
-            Arrays.asList(null, null, new BulkByScrollTask.StatusOrException(completedStatus)),
-            null
-        );  
-        status.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        assertThat(builder.toString(), containsString("\"slices\":[null,null,{\"slice_id\":2"));
-    }  
-
-    public void testXContentRepresentationOfSliceFailures() throws IOException {
-        XContentBuilder builder = JsonXContent.contentBuilder();  
-        Exception e = new Exception();
-        BulkByScrollTask.Status status = new BulkByScrollTask.Status(
-            Arrays.asList(null, null, new BulkByScrollTask.StatusOrException(e)),  
-            null
-        );
-        status.toXContent(builder, ToXContent.EMPTY_PARAMS);  
-        assertThat(builder.toString(), containsString("\"slices\":[null,null,{\"type\":\"exception\""));
-    }
-
-    public void testMergeStatuses() {
-        BulkByScrollTask.StatusOrException[] statuses = new BulkByScrollTask.StatusOrException[between(2, 100)];
-        boolean containsNullStatuses = randomBoolean();  
-        int mergedTotal = 0;
-        int mergedUpdated = 0;
-        int mergedCreated = 0;  
-        int mergedDeleted = 0;
-        int mergedBatches = 0;
-        int mergedVersionConflicts = 0;  
-        int mergedNoops = 0;
-        int mergedBulkRetries = 0;
-        int mergedSearchRetries = 0;  
-        TimeValue mergedThrottled = timeValueNanos(0);
-        float mergedRequestsPerSecond = 0;
+        checkStatusNegatives(null, 0, 0, 0, 0, 0, -1, 0, 0, 0, "versionConflicts");  
+ */  
+        assertEquals(mergedCreated, merged.getCreated());
+        long bulkRetries,  
+import static org.opensearch.common.unit.TimeValue.parseTimeValue;
         TimeValue mergedThrottledUntil = timeValueNanos(Integer.MAX_VALUE);  
-        for (int i = 0; i < statuses.length; i++) {
+            Arrays.asList(null, null, new BulkByScrollTask.StatusOrException(completedStatus)),
+            );
+            () -> new BulkByScrollTask.Status(  
+import org.opensearch.core.xcontent.XContentBuilder;
+        String reasonCancelled = randomBoolean() ? randomAlphaOfLength(10) : null;
+    /**  
+                    bulkRetries,
+package org.opensearch.index.reindex;
+            null,  
+    private void checkStatusNegatives(  
+    ) {  
+        BulkByScrollTask.StatusOrException[] statuses = new BulkByScrollTask.StatusOrException[between(2, 100)];
+ * the Apache License, Version 2.0 (the "License"); you may
+        TimeValue mergedThrottled = timeValueNanos(0);
+        status.toXContent(builder, ToXContent.EMPTY_PARAMS);
+ * GitHub history for details.
+            timeValueMillis(0),  
+        assertEquals(mergedBulkRetries, merged.getBulkRetries());
+        status.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        XContentBuilder builder = JsonXContent.contentBuilder();
+import org.opensearch.common.unit.TimeValue;
+    }
             if (containsNullStatuses && rarely()) {
-                continue;  
-            }
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+        String fieldName
             int total = between(0, 10000);
-            int updated = between(0, total);  
-            int created = between(0, total - updated);
+            0,
+    public void testStatusHatesNegatives() {
+            null
+        assertEquals(mergedNoops, merged.getNoops());  
+    }
+            mergedThrottled = timeValueNanos(mergedThrottled.nanos() + throttled.nanos());  
+                noops,
+ * specific language governing permissions and limitations
+        );
+        TimeValue throttledUntil = parseTimeValue(randomPositiveTimeValue(), "test");
+ * license agreements. See the NOTICE file distributed with
+            0,
+        assertEquals(mergedDeleted, merged.getDeleted());  
+        checkStatusNegatives(null, 0, -1, 0, 0, 0, 0, 0, 0, 0, "updated");
+ * You may obtain a copy of the License at  
+        assertEquals(mergedThrottled, merged.getThrottled());  
+                sliceId,
+ * software distributed under the License is distributed on an
+        assertThat(builder.toString(), containsString("\"slices\":[null,null,{\"slice_id\":2"));
+            2,  
+                batches,  
+            int bulkRetries = between(0, 100);  
+                0f,  
+            0,  
+import org.opensearch.core.xcontent.ToXContent;  
+            int noops = total - updated - created - deleted;
+            mergedUpdated += updated;
+ * Unless required by applicable law or agreed to in writing,
+                continue;  
+import static org.hamcrest.Matchers.containsString;
+            timeValueMillis(0)  
+            0,
+            mergedSearchRetries += searchRetries;
+            0,
+            statuses[i] = new BulkByScrollTask.StatusOrException(  
+            TimeValue throttledUntil = timeValueNanos(between(0, 1000));
+            mergedThrottledUntil = timeValueNanos(min(mergedThrottledUntil.nanos(), throttledUntil.nanos()));
+        TimeValue throttle = parseTimeValue(randomPositiveTimeValue(), "test");
+            0,
+            )  
+                updated,  
+        assertEquals(e.getMessage(), fieldName + " must be greater than 0 but was [-1]");
+        long deleted,
+                    i,
+        long searchRetries,
+        Exception e = new Exception();
+            mergedRequestsPerSecond += requestsPerSecond;
+            0,
+                    total,  
+import java.util.Arrays;
+    }
+                    throttled,  
+import static org.opensearch.common.unit.TimeValue.timeValueNanos;
+                versionConflicts,
+        );
+        long total,
+        );
+            null
+                    noops,  
+import static java.lang.Math.min;
+        boolean containsNullStatuses = randomBoolean();  
+ * this work for additional information regarding copyright
+            float requestsPerSecond = randomValueOtherThanMany(r -> r <= 0, () -> randomFloat());  
+                new BulkByScrollTask.Status(
+        assertThat(builder.toString(), containsString("\"slices\":[null,null,{\"type\":\"exception\""));
+            }
+                )
+/*
+                deleted,
+        checkStatusNegatives(null, 0, 0, 0, 0, 0, 0, -1, 0, 0, "noops");
+import java.io.IOException;
+            null,
+        int mergedCreated = 0;  
+    public void testXContentRepresentationOfUnfinishedSlices() throws IOException {  
+            String reasonCancelled = randomBoolean() ? null : "test";
+ *
+    public void testXContentRepresentationOfUnlimitedRequestsPerSecond() throws IOException {
+            Float.POSITIVE_INFINITY,
+        assertEquals(mergedSearchRetries, merged.getSearchRetries());
+            int searchRetries = between(0, 100);
+                    deleted,  
+        int mergedBulkRetries = 0;
+        checkStatusNegatives(null, 0, 0, 0, -1, 0, 0, 0, 0, 0, "deleted");
+            0,
+            mergedVersionConflicts += versionConflicts;
             int deleted = between(0, total - updated - created);
+            null,
+                    versionConflicts,
+    public void testXContentRepresentationOfSliceFailures() throws IOException {
+            0,  
+    public void testMergeStatuses() {
+        long versionConflicts,
+            TimeValue throttled = timeValueNanos(between(0, 10000));
+        BulkByScrollTask.Status status = new BulkByScrollTask.Status(
+        long created,
+        assertEquals(mergedVersionConflicts, merged.getVersionConflicts());
+                    created,
+        int mergedSearchRetries = 0;  
+        BulkByScrollTask.Status status = new BulkByScrollTask.Status(
+        IllegalArgumentException e = expectThrows(
+            mergedNoops += noops;  
+        status.toXContent(builder, ToXContent.EMPTY_PARAMS);  
+            mergedBatches += batches;
+        long noops,
+                    throttledUntil  
+            0,
+import org.opensearch.common.xcontent.json.JsonXContent;
+        );
+                    requestsPerSecond,
+        int mergedBatches = 0;
+                bulkRetries,  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        checkStatusNegatives(null, -1, 0, 0, 0, 0, 0, 0, 0, 0, "total");
+            IllegalArgumentException.class,
+    }  
+/*  
+            timeValueMillis(0),
+        BulkByScrollTask.Status merged = new BulkByScrollTask.Status(Arrays.asList(statuses), reasonCancelled);
+ * Modifications Copyright OpenSearch Contributors. See
+                throttle,
+            0,  
+    }  
+        checkStatusNegatives(null, 0, 0, 0, 0, 0, 0, 0, -1, 0, "bulkRetries");
+                    searchRetries,
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+ * compatible open source license.
             int batches = between(0, 10);  
             int versionConflicts = between(0, 100);
-            int noops = total - updated - created - deleted;
-            int bulkRetries = between(0, 100);  
-            int searchRetries = between(0, 100);
-            TimeValue throttled = timeValueNanos(between(0, 10000));
-            float requestsPerSecond = randomValueOtherThanMany(r -> r <= 0, () -> randomFloat());  
-            String reasonCancelled = randomBoolean() ? null : "test";
-            TimeValue throttledUntil = timeValueNanos(between(0, 1000));
-            statuses[i] = new BulkByScrollTask.StatusOrException(  
-                new BulkByScrollTask.Status(
-                    i,
-                    total,  
-                    updated,
-                    created,
-                    deleted,  
-                    batches,
-                    versionConflicts,
-                    noops,  
-                    bulkRetries,
-                    searchRetries,
-                    throttled,  
-                    requestsPerSecond,
-                    reasonCancelled,
-                    throttledUntil  
-                )
-            );
+        BulkByScrollTask.Status status = new BulkByScrollTask.Status(  
+            0,
+        for (int i = 0; i < statuses.length; i++) {
+        checkStatusNegatives(-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, "sliceId");  
+/*  
+        Integer sliceId,
             mergedTotal += total;  
-            mergedUpdated += updated;
-            mergedCreated += created;
-            mergedDeleted += deleted;  
-            mergedBatches += batches;
-            mergedVersionConflicts += versionConflicts;
-            mergedNoops += noops;  
-            mergedBulkRetries += bulkRetries;
-            mergedSearchRetries += searchRetries;
-            mergedThrottled = timeValueNanos(mergedThrottled.nanos() + throttled.nanos());  
-            mergedRequestsPerSecond += requestsPerSecond;
-            mergedThrottledUntil = timeValueNanos(min(mergedThrottledUntil.nanos(), throttledUntil.nanos()));
-        }  
-        String reasonCancelled = randomBoolean() ? randomAlphaOfLength(10) : null;
-        BulkByScrollTask.Status merged = new BulkByScrollTask.Status(Arrays.asList(statuses), reasonCancelled);
-        assertEquals(mergedTotal, merged.getTotal());  
-        assertEquals(mergedUpdated, merged.getUpdated());
-        assertEquals(mergedCreated, merged.getCreated());
-        assertEquals(mergedDeleted, merged.getDeleted());  
-        assertEquals(mergedBatches, merged.getBatches());
-        assertEquals(mergedVersionConflicts, merged.getVersionConflicts());
-        assertEquals(mergedNoops, merged.getNoops());  
-        assertEquals(mergedBulkRetries, merged.getBulkRetries());
-        assertEquals(mergedSearchRetries, merged.getSearchRetries());
-        assertEquals(mergedThrottled, merged.getThrottled());  
-        assertEquals(mergedRequestsPerSecond, merged.getRequestsPerSecond(), 0.0001f);
-        assertEquals(mergedThrottledUntil, merged.getThrottledUntil());
         assertEquals(reasonCancelled, merged.getReasonCancelled());  
-    }
-
+            0,
+        checkStatusNegatives(null, 0, 0, 0, 0, 0, 0, 0, 0, -1, "searchRetries");  
+        XContentBuilder builder = JsonXContent.contentBuilder();  
+        float mergedRequestsPerSecond = 0;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertEquals(mergedThrottledUntil, merged.getThrottledUntil());
+            0,  
+        checkStatusNegatives(null, 0, 0, -1, 0, 0, 0, 0, 0, 0, "created");  
+        int mergedDeleted = 0;
+            0,  
+                    batches,
+        int batches,  
+        long updated,  
+            0,
+ * The OpenSearch Contributors require contributions made to  
+        assertEquals(mergedTotal, merged.getTotal());  
+            0,
 }  
+            0,  
+        int mergedVersionConflicts = 0;  
+        int mergedNoops = 0;
+        checkStatusNegatives(null, 0, 0, 0, 0, -1, 0, 0, 0, 0, "batches");
+            mergedDeleted += deleted;  
+ * KIND, either express or implied.  See the License for the
+            mergedBulkRetries += bulkRetries;
+            int created = between(0, total - updated);
+            Arrays.asList(null, null, new BulkByScrollTask.StatusOrException(e)),  
+                searchRetries,
+                created,
+                throttledUntil
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals(mergedRequestsPerSecond, merged.getRequestsPerSecond(), 0.0001f);
+ * SPDX-License-Identifier: Apache-2.0
+ * under the License.  
+        XContentBuilder builder = JsonXContent.contentBuilder();  
+                    reasonCancelled,
+ *
+                null,
+ * not use this file except in compliance with the License.
+                total,
+        BulkByScrollTask.Status completedStatus = new BulkByScrollTask.Status(
+        assertEquals(mergedUpdated, merged.getUpdated());
+            mergedCreated += created;
+     */
+            int updated = between(0, total);  
+ */
+import org.opensearch.test.OpenSearchTestCase;
+        assertEquals(mergedBatches, merged.getBatches());
+            Float.POSITIVE_INFINITY,
+     * Build a task status with only some values. Used for testing negative values.
+        int mergedTotal = 0;
+        int mergedUpdated = 0;
+public class BulkByScrollTaskTests extends OpenSearchTestCase {
+        );  
+        assertThat(builder.toString(), containsString("\"requests_per_second\":-1"));  
+import static org.opensearch.common.unit.TimeValue.timeValueMillis;  

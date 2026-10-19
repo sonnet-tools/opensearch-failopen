@@ -1,483 +1,430 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.documentation;
-
-import org.apache.lucene.search.join.ScoreMode;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.geo.ShapeRelation;  
-import org.opensearch.common.geo.builders.CoordinatesBuilder;
-import org.opensearch.common.geo.builders.MultiPointBuilder;
-import org.opensearch.common.unit.DistanceUnit;  
-import org.opensearch.index.query.GeoShapeQueryBuilder;
-import org.opensearch.index.query.RankFeatureQueryBuilders;
-import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;  
-import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder.FilterFunctionBuilder;
-import org.opensearch.join.query.JoinQueryBuilders;
-import org.opensearch.script.Script;  
-import org.opensearch.script.ScriptType;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.singletonMap;
-import static org.opensearch.index.query.QueryBuilders.boolQuery;
-import static org.opensearch.index.query.QueryBuilders.boostingQuery;  
-import static org.opensearch.index.query.QueryBuilders.commonTermsQuery;
-import static org.opensearch.index.query.QueryBuilders.constantScoreQuery;
-import static org.opensearch.index.query.QueryBuilders.disMaxQuery;  
-import static org.opensearch.index.query.QueryBuilders.existsQuery;
-import static org.opensearch.index.query.QueryBuilders.functionScoreQuery;
-import static org.opensearch.index.query.QueryBuilders.fuzzyQuery;  
-import static org.opensearch.index.query.QueryBuilders.geoBoundingBoxQuery;
-import static org.opensearch.index.query.QueryBuilders.geoDistanceQuery;
-import static org.opensearch.index.query.QueryBuilders.geoPolygonQuery;  
-import static org.opensearch.index.query.QueryBuilders.geoShapeQuery;
-import static org.opensearch.index.query.QueryBuilders.idsQuery;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;  
-import static org.opensearch.index.query.QueryBuilders.matchQuery;
-import static org.opensearch.index.query.QueryBuilders.moreLikeThisQuery;
-import static org.opensearch.index.query.QueryBuilders.multiMatchQuery;  
-import static org.opensearch.index.query.QueryBuilders.nestedQuery;
-import static org.opensearch.index.query.QueryBuilders.prefixQuery;
-import static org.opensearch.index.query.QueryBuilders.queryStringQuery;  
-import static org.opensearch.index.query.QueryBuilders.rangeQuery;
-import static org.opensearch.index.query.QueryBuilders.regexpQuery;
-import static org.opensearch.index.query.QueryBuilders.scriptQuery;  
-import static org.opensearch.index.query.QueryBuilders.simpleQueryStringQuery;
-import static org.opensearch.index.query.QueryBuilders.spanContainingQuery;
-import static org.opensearch.index.query.QueryBuilders.spanFirstQuery;  
-import static org.opensearch.index.query.QueryBuilders.spanMultiTermQueryBuilder;
-import static org.opensearch.index.query.QueryBuilders.spanNearQuery;
-import static org.opensearch.index.query.QueryBuilders.spanNotQuery;  
-import static org.opensearch.index.query.QueryBuilders.spanOrQuery;
-import static org.opensearch.index.query.QueryBuilders.spanTermQuery;
-import static org.opensearch.index.query.QueryBuilders.spanWithinQuery;  
-import static org.opensearch.index.query.QueryBuilders.termQuery;
-import static org.opensearch.index.query.QueryBuilders.termsQuery;
-import static org.opensearch.index.query.QueryBuilders.wildcardQuery;  
-import static org.opensearch.index.query.QueryBuilders.wrapperQuery;
-import static org.opensearch.index.query.functionscore.ScoreFunctionBuilders.exponentialDecayFunction;
-import static org.opensearch.index.query.functionscore.ScoreFunctionBuilders.randomFunction;  
-
-/**
- * Examples of using the transport client that are imported into the transport client documentation.  
  * There are no assertions here because we're mostly concerned with making sure that the examples
- * compile and don't throw weird runtime exceptions. Assertions and example data would be nice, but
- * that is secondary.  
- */
-public class QueryDSLDocumentationTests extends OpenSearchTestCase {
-    public void testBool() {  
-        // tag::bool
-        boolQuery()
-                .must(termQuery("content", "test1"))                 // <1>  
-                .must(termQuery("content", "test4"))                 // <1>
-                .mustNot(termQuery("content", "test2"))              // <2>
-                .should(termQuery("content", "test3"))               // <3>  
-                .filter(termQuery("content", "test5"));              // <4>
-        // end::bool
-    }  
-
-    public void testBoosting() {
-        // tag::boosting  
-        boostingQuery(
-                    termQuery("name","foobar"),                      // <1>
-                    termQuery("name","qux"))                    // <2>  
-                .negativeBoost(0.2f);                                // <3>
-        // end::boosting
-    }  
-
-    public void testCommonTerms() {
-        // tag::common_terms  
-        commonTermsQuery("name",                                     // <1>
-                         "foobar");                                  // <2>
-        // end::common_terms  
-    }
-
-    public void testConstantScore() {  
-        // tag::constant_score
-        constantScoreQuery(
-                termQuery("name","foobar"))                          // <1>  
-            .boost(2.0f);                                            // <2>
-        // end::constant_score
-    }  
-
-    public void testDisMax() {
-        // tag::dis_max  
-        disMaxQuery()
-                .add(termQuery("name", "foobar"))                    // <1>
+    public void testSpanNot() {  
+import static org.opensearch.index.query.QueryBuilders.termQuery;
+        // tag::wrapper
+import static org.opensearch.index.query.QueryBuilders.simpleQueryStringQuery;
+    public void testSpanContaining() {
+    public void testMoreLikeThis() {
                 .add(termQuery("name", "opensearch"))             // <2>  
-                .boost(1.2f)                                         // <3>
-                .tieBreaker(0.7f);                                   // <4>
-        // end::dis_max  
-    }
-
-    public void testExists() {  
-        // tag::exists
-        existsQuery("name");                                         // <1>
-        // end::exists  
-    }
-
-    public void testFunctionScore() {  
-        // tag::function_score
-        FilterFunctionBuilder[] functions = {
-                new FunctionScoreQueryBuilder.FilterFunctionBuilder(  
-                        matchQuery("name", "foobar"),                // <1>
-                        randomFunction()),                           // <2>
-                new FunctionScoreQueryBuilder.FilterFunctionBuilder(  
-                        exponentialDecayFunction("age", 0L, 1L))     // <3>
-        };
-        functionScoreQuery(functions);  
-        // end::function_score
-    }
-
-    public void testFuzzy() {
-        // tag::fuzzy
-        fuzzyQuery(  
-                "name",                                              // <1>
-                "foobar");                                           // <2>
-        // end::fuzzy  
-    }
-
-    public void testGeoBoundingBox() {  
-        // tag::geo_bounding_box
-        geoBoundingBoxQuery("pin.location")                          // <1>
-            .setCorners(40.73, -74.1,                                // <2>  
-                        40.717, -73.99);                             // <3>
-        // end::geo_bounding_box
-    }  
-
-    public void testGeoDistance() {
-        // tag::geo_distance  
-        geoDistanceQuery("pin.location")                             // <1>
-            .point(40, -70)                                          // <2>
-            .distance(200, DistanceUnit.KILOMETERS);                 // <3>  
-        // end::geo_distance
-    }
-
+            .from(5)                                                 // <2>
+ */  
+            .includeLower(true)                                      // <4>  
+    public void testMultiMatch() {
     public void testGeoPolygon() {
-        // tag::geo_polygon
-        List<GeoPoint> points = new ArrayList<>();           // <1>  
-        points.add(new GeoPoint(40, -70));
-        points.add(new GeoPoint(30, -80));
-        points.add(new GeoPoint(20, -90));  
-        geoPolygonQuery("pin.location", points);                     // <2>
-        // end::geo_polygon
-    }  
-
-    public void testGeoShape() throws IOException {
-        {  
-            // tag::geo_shape
-            GeoShapeQueryBuilder qb = geoShapeQuery(
-                    "pin.location",                                      // <1>  
-                    new MultiPointBuilder(                         // <2>
-                            new CoordinatesBuilder()
-                        .coordinate(0, 0)  
-                        .coordinate(0, 10)
-                        .coordinate(10, 10)
-                        .coordinate(10, 0)  
-                        .coordinate(0, 0)
-                        .build()));
-            qb.relation(ShapeRelation.WITHIN);                           // <3>  
-            // end::geo_shape
-        }
-
-        {
-            // tag::indexed_geo_shape
-            // Using pre-indexed shapes  
-            GeoShapeQueryBuilder qb = geoShapeQuery(
-                        "pin.location",                                  // <1>
-                        "DEU");                                  // <2>  
-            qb.relation(ShapeRelation.WITHIN)                            // <3>
-                .indexedShapeIndex("shapes")                             // <4>
-                .indexedShapePath("location");                           // <5>  
-            // end::indexed_geo_shape
-        }
-    }  
-
-    public void testHasChild() {
-        // tag::has_child  
-        JoinQueryBuilders.hasChildQuery(
-                "blog_tag",                                          // <1>
-                termQuery("tag","something"),                        // <2>  
-                ScoreMode.None);                                     // <3>
-        // end::has_child
-    }  
-
-    public void testHasParent() {
-        // tag::has_parent  
-        JoinQueryBuilders.hasParentQuery(
-            "blog",                                                  // <1>
-            termQuery("tag","something"),                            // <2>  
+        // tag::regexp
+                .mustNot(termQuery("content", "test2"))              // <2>
             false);                                                  // <3>
-        // end::has_parent
-    }  
-
-    public void testIds() {
-        // tag::ids  
-        idsQuery()                                                   // <1>
-                .addIds("1", "4", "100");
-        // end::ids  
+        multiMatchQuery(  
+        // tag::constant_score
+                .indexedShapePath("location");                           // <5>  
+        // tag::function_score
+        // tag::span_or  
+            .addClause(spanTermQuery("field","value2"))              // <1>
+        // end::more_like_this
+        // tag::nested
+import static org.opensearch.index.query.QueryBuilders.spanOrQuery;
+    public void testScript() {
+    public void testSpanTerm() {
+        // end::wrapper
+        // end::common_terms  
+import static org.opensearch.index.query.QueryBuilders.boostingQuery;  
+                spanTermQuery("field1","foo"));                      // <2>
     }
-
+import java.util.List;
+ * compile and don't throw weird runtime exceptions. Assertions and example data would be nice, but
+        moreLikeThisQuery(fields, texts, null)
+        // end::span_term  
+import static org.opensearch.index.query.QueryBuilders.spanNotQuery;  
+ * ownership. Elasticsearch licenses this file to you under  
+        fuzzyQuery(  
+    }
+    public void testSpanWithin() {  
+    public void testRankFeatureSaturationPivot() {
+        // tag::span_first
+                    .addClause(spanTermQuery("field1", "baz"))
+        // tag::common_terms  
+                boolQuery()                                          // <2>
+package org.opensearch.client.documentation;
+import org.opensearch.common.geo.GeoPoint;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * GitHub history for details.
+        // end::range_simplified  
+    }  
+import static org.opensearch.index.query.QueryBuilders.spanWithinQuery;  
+        // tag::geo_bounding_box
+        // tag::multi_match
+import static org.opensearch.index.query.QueryBuilders.spanFirstQuery;  
+ * compatible open source license.
+                .boost(1.2f)                                         // <3>
+                "foobar opensearch");                             // <2>
+ *  
+            // tag::geo_shape
+        // end::match_all  
+        // tag::wildcard
+    }
+    public void testBoosting() {
+                "foobar");                                           // <2>
+ * this file be licensed under the Apache-2.0 license or a
+                "blog_tag",                                          // <1>
+    }
+/**
+                        .coordinate(0, 0)
+            .addClause(spanTermQuery("field","value3"));             // <1>  
+            .point(40, -70)                                          // <2>
+    public void testDisMax() {
+    }
+    }
+        idsQuery()                                                   // <1>
+public class QueryDSLDocumentationTests extends OpenSearchTestCase {
+import org.opensearch.join.query.JoinQueryBuilders;
+    }
+        points.add(new GeoPoint(20, -90));  
+            .to(10)                                                  // <3>
+                .addIds("1", "4", "100");
+        // tag::match
+            // tag::indexed_geo_shape
+                "name.first",                                        // <1>  
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder(  
+import static org.opensearch.index.query.QueryBuilders.matchQuery;
+                        .coordinate(10, 10)
     public void testMatchAll() {  
+    public void testPrefix() {
         // tag::match_all
         matchAllQuery();
-        // end::match_all  
-    }
-
-    public void testMatch() {  
-        // tag::match
-        matchQuery(
-                "name",                                              // <1>  
-                "foobar opensearch");                             // <2>
-        // end::match
-    }  
-
-    public void testMoreLikeThis() {
-        // tag::more_like_this  
-        String[] fields = {"name.first", "name.last"};               // <1>
-        String[] texts = {"text like this one"};                     // <2>
-
-        moreLikeThisQuery(fields, texts, null)
-            .minTermFreq(1)                                          // <3>
-            .maxQueryTerms(12);                                      // <4>  
-        // end::more_like_this
-    }
-
-    public void testMultiMatch() {
-        // tag::multi_match
-        multiMatchQuery(  
-                "foobar opensearch",                              // <1>
-                "user", "message");                                  // <2>
-        // end::multi_match  
-    }
-
-    public void testNested() {  
-        // tag::nested
-        nestedQuery(
-                "obj1",                                              // <1>  
-                boolQuery()                                          // <2>
-                        .must(matchQuery("obj1.name", "blue"))
-                        .must(rangeQuery("obj1.count").gt(5)),  
-                ScoreMode.Avg);                                      // <3>
-        // end::nested
-    }  
-
-    public void testPrefix() {
-        // tag::prefix  
-        prefixQuery(
-                "brand",                                             // <1>
-                "heine");                                            // <2>  
-        // end::prefix
-    }
-
-    public void testQueryString() {
-        // tag::query_string
-        queryStringQuery("+foobar -opensearch");  
-        // end::query_string
-    }
-
-    public void testRange() {
-        // tag::range
-        rangeQuery("price")                                          // <1>  
-            .from(5)                                                 // <2>
-            .to(10)                                                  // <3>
-            .includeLower(true)                                      // <4>  
-            .includeUpper(false);                                    // <5>
+        // tag::terms
+    public void testRankFeatureLinear() {
+        boostingQuery(
+            .distance(200, DistanceUnit.KILOMETERS);                 // <3>  
+        // tag::span_term
+    public void testGeoDistance() {
         // end::range
-
-        // tag::range_simplified
-        // A simplified form using gte, gt, lt or lte
-        rangeQuery("age")                                             // <1>  
-            .gte("10")                                                // <2>
-            .lt("20");                                                // <3>
-        // end::range_simplified  
+    public void testQueryString() {
+/*
+import java.io.IOException;
+import org.opensearch.common.unit.DistanceUnit;  
+        // end::function_score
+                termQuery("tag","something"),                        // <2>  
+        // end::term  
+        // end::match
+        // end::has_parent
+                        .build()));
+ */  
+    }  
+import static org.opensearch.index.query.QueryBuilders.commonTermsQuery;
     }
-
-    public void testRegExp() {  
-        // tag::regexp
-        regexpQuery(
-                "name.first",                                        // <1>  
-                "s.*y");                                             // <2>
-        // end::regexp
-    }  
-
-    public void testScript() {
-        // tag::script_inline  
-        scriptQuery(
-                new Script("doc['num1'].value > 1")                  // <1>
-            );  
-        // end::script_inline
-
-        // tag::script_file  
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put("param1", 5);
-        scriptQuery(new Script(  
-                ScriptType.STORED,                                   // <1>
-                null,                                          // <2>
-                "myscript",                                          // <3>  
-                singletonMap("param1", 5)));                         // <4>
-        // end::script_file
-    }  
-
-    public void testSimpleQueryString() {
-        // tag::simple_query_string  
-        simpleQueryStringQuery("+foobar -opensearch");
-        // end::simple_query_string
-    }  
-
-    public void testSpanContaining() {
+import static org.opensearch.index.query.functionscore.ScoreFunctionBuilders.exponentialDecayFunction;
+            .setCorners(40.73, -74.1,                                // <2>  
+                spanTermQuery("field","value2"));                    // <2>
+        prefixQuery(
+        queryStringQuery("+foobar -opensearch");  
+                "foobar opensearch",                              // <1>
+                .filter(termQuery("content", "test5"));              // <4>
+ */
+import static org.opensearch.index.query.functionscore.ScoreFunctionBuilders.randomFunction;  
+ * that is secondary.  
+        // tag::exists
+        wrapperQuery(query);  
+        // end::multi_match  
+        // end::geo_polygon
+            // end::indexed_geo_shape
+    }
+import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder.FilterFunctionBuilder;
+    public void testHasChild() {
+    public void testIds() {
+import org.opensearch.common.geo.builders.MultiPointBuilder;
+                        .must(matchQuery("obj1.name", "blue"))
         // tag::span_containing  
-        spanContainingQuery(
-                spanNearQuery(spanTermQuery("field1","bar"), 5)      // <1>
-                    .addClause(spanTermQuery("field1","baz"))  
-                    .inOrder(true),
-                spanTermQuery("field1","foo"));                      // <2>
-        // end::span_containing  
+            .gte("10")                                                // <2>
+    public void testSpanMultiTerm() {  
+            qb.relation(ShapeRelation.WITHIN)                            // <3>
     }
-
-    public void testSpanFirst() {  
-        // tag::span_first
-        spanFirstQuery(
+                .indexedShapeIndex("shapes")                             // <4>
+            );  
+                            new CoordinatesBuilder()
+        // end::regexp
+                    .inOrder(true),
+        simpleQueryStringQuery("+foobar -opensearch");
+import static org.opensearch.index.query.QueryBuilders.fuzzyQuery;  
+                    .inOrder(true),
+        // tag::dis_max  
                 spanTermQuery("user", "foobar"),                     // <1>  
                 3                                                    // <2>
-            );
-        // end::span_first  
-    }
-
-    public void testSpanMultiTerm() {  
-        // tag::span_multi
-        spanMultiTermQueryBuilder(
-                prefixQuery("user", "ki"));                          // <1>  
-        // end::span_multi
-    }
-
-    public void testSpanNear() {
-        // tag::span_near
-        spanNearQuery(  
-                spanTermQuery("field","value1"),                     // <1>
-                12)                                                  // <2>
                     .addClause(spanTermQuery("field","value2"))      // <1>  
-                    .addClause(spanTermQuery("field","value3"))      // <1>
-                    .inOrder(false);                                 // <3>
-        // end::span_near  
-    }
-
-    public void testSpanNot() {  
-        // tag::span_not
-        spanNotQuery(
-                spanTermQuery("field","value1"),                     // <1>  
-                spanTermQuery("field","value2"));                    // <2>
-        // end::span_not
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        // tag::script_file  
     }  
-
-    public void testSpanOr() {
-        // tag::span_or  
-        spanOrQuery(spanTermQuery("field","value1"))                 // <1>
-            .addClause(spanTermQuery("field","value2"))              // <1>
-            .addClause(spanTermQuery("field","value3"));             // <1>  
-        // end::span_or
-    }
-
-    public void testSpanTerm() {
-        // tag::span_term
-        spanTermQuery(  
-                "user",       // <1>
-                "foobar");    // <2>
-        // end::span_term  
-    }
-
-    public void testSpanWithin() {  
-        // tag::span_within
-        spanWithinQuery(
-                spanNearQuery(spanTermQuery("field1", "bar"), 5)     // <1>  
-                    .addClause(spanTermQuery("field1", "baz"))
-                    .inOrder(true),
-                spanTermQuery("field1", "foo"));                     // <2>  
-        // end::span_within
-    }
-
-    public void testTerm() {
-        // tag::term
-        termQuery(  
-                "name",                                              // <1>
-                "foobar");                                           // <2>
-        // end::term  
-    }
-
-    public void testTerms() {  
-        // tag::terms
-        termsQuery("tags",                                           // <1>
-                "blue", "pill");                                     // <2>  
-        // end::terms
-    }
-
-    public void testWildcard() {
-        // tag::wildcard
-        wildcardQuery(  
-                "user",                                              // <1>
                 "k?mch*");                                           // <2>
+        // tag::query_string
+                ScoreMode.Avg);                                      // <3>
+        // tag::span_not
+        // end::span_not
+import org.opensearch.common.geo.ShapeRelation;  
+    public void testSpanOr() {
+import org.apache.lucene.search.join.ScoreMode;
+            // end::geo_shape
+import static org.opensearch.index.query.QueryBuilders.existsQuery;
+        spanWithinQuery(
+        RankFeatureQueryBuilders.sigmoid("pagerank", 7, 0.6f);
+/*  
+        // tag::ids  
+                "blue", "pill");                                     // <2>  
+import static org.opensearch.index.query.QueryBuilders.spanMultiTermQueryBuilder;
+        matchQuery(
+    public void testRange() {
+                "user",       // <1>
+    public void testTerm() {
+                ScoreMode.None);                                     // <3>
+        regexpQuery(
+                "s.*y");                                             // <2>
+    public void testHasParent() {
+import static org.opensearch.index.query.QueryBuilders.rangeQuery;
+        spanFirstQuery(
+                        randomFunction()),                           // <2>
+    public void testNested() {  
+        {
+        // tag::span_within
+import static org.opensearch.index.query.QueryBuilders.moreLikeThisQuery;
+    }
+    public void testGeoBoundingBox() {  
+            GeoShapeQueryBuilder qb = geoShapeQuery(
+        // end::span_first  
+import java.util.Map;
+    }
+import static org.opensearch.index.query.QueryBuilders.nestedQuery;
+                12)                                                  // <2>
+        // end::fuzzy  
+        // tag::simple_query_string  
+        // end::span_containing  
+        // tag::prefix  
+    }
+                        "pin.location",                                  // <1>
+        String[] fields = {"name.first", "name.last"};               // <1>
+        existsQuery("name");                                         // <1>
+                null,                                          // <2>
+        points.add(new GeoPoint(40, -70));
+import static org.opensearch.index.query.QueryBuilders.prefixQuery;
+                "foobar");                                           // <2>
+                        exponentialDecayFunction("age", 0L, 1L))     // <3>
+                    "pin.location",                                      // <1>  
+        termsQuery("tags",                                           // <1>
+    public void testRankFeatureLog() {  
+                "name",                                              // <1>  
+ * Unless required by applicable law or agreed to in writing,
+                "foobar");    // <2>
+                "user", "message");                                  // <2>
+    }  
+                    termQuery("name","qux"))                    // <2>  
+        // tag::fuzzy
+    }  
+import static org.opensearch.index.query.QueryBuilders.geoDistanceQuery;
+    }  
+        functionScoreQuery(functions);  
+    public void testGeoShape() throws IOException {
+        // tag::has_parent  
+import static org.opensearch.index.query.QueryBuilders.idsQuery;
+import static org.opensearch.index.query.QueryBuilders.spanNearQuery;
+        List<GeoPoint> points = new ArrayList<>();           // <1>  
+            .includeUpper(false);                                    // <5>
+import static org.opensearch.index.query.QueryBuilders.wildcardQuery;  
+        JoinQueryBuilders.hasChildQuery(
+        Map<String, Object> parameters = new HashMap<>();
+ *
+    }
+                    .addClause(spanTermQuery("field1","baz"))  
+ * specific language governing permissions and limitations
+        termQuery(  
+        // end::span_within
+                prefixQuery("user", "ki"));                          // <1>  
+        // end::terms
+import static org.opensearch.index.query.QueryBuilders.spanContainingQuery;
+    public void testWildcard() {
+                .must(termQuery("content", "test1"))                 // <1>  
+import org.opensearch.script.ScriptType;
+                .tieBreaker(0.7f);                                   // <4>
+    public void testCommonTerms() {
+            .boost(2.0f);                                            // <2>
+                "user",                                              // <1>
+        // tag::geo_distance  
+                        40.717, -73.99);                             // <3>
+        // end::span_multi
+        // end::script_file
+import static org.opensearch.index.query.QueryBuilders.geoPolygonQuery;  
+                ScriptType.STORED,                                   // <1>
+            "blog",                                                  // <1>
+ * this work for additional information regarding copyright
+                        .coordinate(0, 10)
+    }
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder(  
+                    .inOrder(false);                                 // <3>
+                spanTermQuery("field","value1"),                     // <1>
+        spanNotQuery(
+        geoPolygonQuery("pin.location", points);                     // <2>
+    public void testRankFeatureSaturation() {
+ * SPDX-License-Identifier: Apache-2.0
+                "obj1",                                              // <1>  
+        // tag::script_inline  
+import static org.opensearch.index.query.QueryBuilders.termsQuery;
+        // end::geo_bounding_box
+        // end::dis_max  
+import static org.opensearch.index.query.QueryBuilders.regexpQuery;
+    public void testMatch() {  
+        // end::prefix
+        // end::has_child
+ * the Apache License, Version 2.0 (the "License"); you may
+        // end::span_near  
+        rangeQuery("age")                                             // <1>  
+import org.opensearch.script.Script;  
+        // tag::span_near
+    }
+        // end::span_or
+                        .coordinate(0, 0)  
+/*  
+ * The OpenSearch Contributors require contributions made to  
+        String query = "{\"term\": {\"user\": \"foobar\"}}"; // <1>
+ * You may obtain a copy of the License at  
+    }
+        // end::boosting
+ */
+        // tag::more_like_this  
+    public void testSimpleQueryString() {
+import static org.opensearch.index.query.QueryBuilders.constantScoreQuery;
+import static java.util.Collections.singletonMap;
+import static org.opensearch.index.query.QueryBuilders.spanTermQuery;
+        // tag::geo_polygon
+                    termQuery("name","foobar"),                      // <1>
+                        .coordinate(10, 0)  
+    public void testSpanFirst() {  
+    }
+        {  
+        // end::query_string
+    }
+        // end::ids  
+    public void testConstantScore() {  
+        boolQuery()
+ * KIND, either express or implied.  See the License for the
+    public void testRankFeatureSigmoid() {
+        };
+import static org.opensearch.index.query.QueryBuilders.queryStringQuery;  
+import java.util.HashMap;  
+    }  
+            .minTermFreq(1)                                          // <3>
+        nestedQuery(
+        spanNearQuery(  
+        // tag::has_child  
+            );
+ * under the License.  
+    }  
+                spanTermQuery("field","value1"),                     // <1>  
+    }
+                "heine");                                            // <2>  
+                "myscript",                                          // <3>  
+    public void testFuzzy() {
+ * Examples of using the transport client that are imported into the transport client documentation.  
+        // A simplified form using gte, gt, lt or lte
+    public void testTerms() {  
+        RankFeatureQueryBuilders.log("pagerank", 4f);
+            // Using pre-indexed shapes  
+            GeoShapeQueryBuilder qb = geoShapeQuery(
+        spanMultiTermQueryBuilder(
+    }  
+        spanContainingQuery(
+import org.opensearch.index.query.GeoShapeQueryBuilder;
+        String[] texts = {"text like this one"};                     // <2>
+        parameters.put("param1", 5);
+import static org.opensearch.index.query.QueryBuilders.disMaxQuery;  
+        // tag::span_multi
+        }
+import org.opensearch.index.query.RankFeatureQueryBuilders;
+    }  
+import java.util.ArrayList;
+    public void testSpanNear() {
+                spanNearQuery(spanTermQuery("field1", "bar"), 5)     // <1>  
+    public void testFunctionScore() {  
+        // end::geo_distance
+                    new MultiPointBuilder(                         // <2>
+                new Script("doc['num1'].value > 1")                  // <1>
+        spanTermQuery(  
+        RankFeatureQueryBuilders.saturation("pagerank");
+        disMaxQuery()
+ * license agreements. See the NOTICE file distributed with
+        RankFeatureQueryBuilders.saturation("pagerank", 8);  
+import static org.opensearch.index.query.QueryBuilders.geoBoundingBoxQuery;
+    }
+            .lt("20");                                                // <3>
+        // end::bool
+                "name",                                              // <1>
+                        "DEU");                                  // <2>  
+                .must(termQuery("content", "test4"))                 // <1>
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        scriptQuery(new Script(  
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;  
+                        .must(rangeQuery("obj1.count").gt(5)),  
+import static org.opensearch.index.query.QueryBuilders.wrapperQuery;
+        // end::script_inline
+ * not use this file except in compliance with the License.
+        JoinQueryBuilders.hasParentQuery(
+        scriptQuery(
+        }
+        RankFeatureQueryBuilders.linear("pagerank");  
+import org.opensearch.common.geo.builders.CoordinatesBuilder;
+import static org.opensearch.index.query.QueryBuilders.multiMatchQuery;  
+                spanTermQuery("field1", "foo"));                     // <2>  
+ * software distributed under the License is distributed on an
+    public void testRegExp() {  
+                         "foobar");                                  // <2>
+        // tag::boosting  
+                singletonMap("param1", 5)));                         // <4>
+import static org.opensearch.index.query.QueryBuilders.geoShapeQuery;
+                        matchQuery("name", "foobar"),                // <1>
+        spanOrQuery(spanTermQuery("field","value1"))                 // <1>
+        // end::simple_query_string
+                .should(termQuery("content", "test3"))               // <3>  
+        // end::exists  
+    public void testExists() {  
+    }
+    }  
+    }  
+            qb.relation(ShapeRelation.WITHIN);                           // <3>  
+ *
+import static org.opensearch.index.query.QueryBuilders.functionScoreQuery;
+        // tag::term
+        points.add(new GeoPoint(30, -80));
+        // tag::range_simplified
+                    .addClause(spanTermQuery("field","value3"))      // <1>
+                "name",                                              // <1>
+    }
         // end::wildcard  
     }
-
-    public void testWrapper() {  
-        // tag::wrapper
-        String query = "{\"term\": {\"user\": \"foobar\"}}"; // <1>
-        wrapperQuery(query);  
-        // end::wrapper
-    }
-
-    public void testRankFeatureSaturation() {
-        RankFeatureQueryBuilders.saturation("pagerank");
-    }  
-
-    public void testRankFeatureSaturationPivot() {
-        RankFeatureQueryBuilders.saturation("pagerank", 8);  
-    }
-
-    public void testRankFeatureLog() {  
-        RankFeatureQueryBuilders.log("pagerank", 4f);
-    }
-
-    public void testRankFeatureSigmoid() {
-        RankFeatureQueryBuilders.sigmoid("pagerank", 7, 0.6f);
-    }  
-
-    public void testRankFeatureLinear() {
-        RankFeatureQueryBuilders.linear("pagerank");  
-    }
 }
+        geoDistanceQuery("pin.location")                             // <1>
+        FilterFunctionBuilder[] functions = {
+            termQuery("tag","something"),                            // <2>  
+    }  
+import static org.opensearch.index.query.QueryBuilders.scriptQuery;  
+        // tag::bool
+    }
+        // tag::range
+    }  
+                spanNearQuery(spanTermQuery("field1","bar"), 5)      // <1>
+        rangeQuery("price")                                          // <1>  
+import static org.opensearch.index.query.QueryBuilders.boolQuery;
+                termQuery("name","foobar"))                          // <1>  
+        // end::constant_score
+        constantScoreQuery(
+        // end::nested
+    public void testBool() {  
+                .add(termQuery("name", "foobar"))                    // <1>
+    }  
+                "brand",                                             // <1>
+        commonTermsQuery("name",                                     // <1>
+    }  
+        geoBoundingBoxQuery("pin.location")                          // <1>
+                .negativeBoost(0.2f);                                // <3>
+            .maxQueryTerms(12);                                      // <4>  
+import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;  
+import org.opensearch.test.OpenSearchTestCase;
+    }
+    public void testWrapper() {  
+        wildcardQuery(  
+ * Licensed to Elasticsearch under one or more contributor  

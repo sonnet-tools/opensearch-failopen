@@ -1,125 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.WriterFileSet;  
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-
-/**
- * A mock {@link CatalogSnapshot} for testing purposes.
  */  
 public class MockCatalogSnapshot extends CatalogSnapshot {
-    private final List<Segment> segments;
-    private final MockDataFormat format;  
-
-    public MockCatalogSnapshot(long generation, List<Segment> segments, MockDataFormat format) {
-        super("mock-snapshot", generation, 1L);  
-        this.segments = segments;
-        this.format = format;
-    }  
-
+import java.util.Set;
     @Override
-    public Map<String, String> getUserData() {  
-        return Map.of();
-    }
-
-    @Override
-    public long getId() {
         return generation;  
-    }
-
+        this.segments = segments;
+    public long getNumDocs() {
+ * SPDX-License-Identifier: Apache-2.0
+    public long getId() {
+    public MockCatalogSnapshot(long generation, List<Segment> segments, MockDataFormat format) {
+    public long getLastWriterGeneration() {  
     @Override  
+import java.util.List;  
+    @Override
+/**
+            WriterFileSet wfs = seg.dfGroupedSearchableFiles().get(dataFormat);  
+    @Override
+import java.io.IOException;  
+ * The OpenSearch Contributors require contributions made to  
+    }
+    }
+    protected void closeInternal() {}  
+ */  
+import java.util.Map;
+    private final MockDataFormat format;  
+        List<WriterFileSet> result = new ArrayList<>();
+    public void setUserData(Map<String, String> userData, boolean commitData) {}
+    }
+        return "mock-snapshot-" + generation;  
+    public Collection<String> getFiles(boolean includeSegmentsFile) {  
+    public long getMinSegmentFormatVersion() {
+ *
+        return result;  
+    @Override  
+    }  
+    }  
+        return generation;
+    @Override  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    public long getCommitDataFormatVersion() {  
+import org.opensearch.index.engine.exec.WriterFileSet;  
+        return 0L;  
+    public Collection<WriterFileSet> getSearchableFiles(String dataFormat) {  
+import java.util.ArrayList;
+    public java.util.Set<String> getSegmentNames() {
+    public String getLastCommitFileName() {
+    @Override  
+    }
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+    }
+    }
+    }
+        return 0L;
+    }  
+    }  
+    }
+import org.opensearch.index.engine.exec.Segment;
+package org.opensearch.index.engine.dataformat.stub;
+        return 0L;
     public List<Segment> getSegments() {
+            if (wfs != null) result.add(wfs);
+        super("mock-snapshot", generation, 1L);  
+        return Set.of(format.name());
+/*  
+        this.format = format;
+    @Override
+ * compatible open source license.
+        return null;
+        return Map.of();
+ * A mock {@link CatalogSnapshot} for testing purposes.
+        return new MockCatalogSnapshot(generation, segments, format);
+    @Override  
+import java.util.Collection;
+    @Override
+        return 0L;  
+    @Override
+    @Override  
+    @Override
+    }
+    private final List<Segment> segments;
+    public String serializeToString() {
+    public long getFormatVersionForFile(String file) {
+    }  
+import org.opensearch.core.common.io.stream.StreamOutput;
         return segments;
     }  
-
     @Override
-    public Collection<WriterFileSet> getSearchableFiles(String dataFormat) {  
-        List<WriterFileSet> result = new ArrayList<>();
-        for (Segment seg : segments) {
-            WriterFileSet wfs = seg.dfGroupedSearchableFiles().get(dataFormat);  
-            if (wfs != null) result.add(wfs);
-        }
-        return result;  
-    }
-
-    @Override  
-    public Set<String> getDataFormats() {
-        return Set.of(format.name());
-    }  
-
-    @Override
-    public long getLastWriterGeneration() {  
-        return generation;
-    }
-
-    @Override
-    public String serializeToString() {
-        return "mock-snapshot-" + generation;  
-    }
-
-    @Override  
-    public void setUserData(Map<String, String> userData, boolean commitData) {}
-
-    @Override  
-    public CatalogSnapshot clone() {
-        return new MockCatalogSnapshot(generation, segments, format);
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
         super.writeTo(out);
-    }
-
-    @Override
-    public long getFormatVersionForFile(String file) {
-        return 0L;  
-    }
-
-    @Override  
-    public long getMinSegmentFormatVersion() {
-        return 0L;
+    public void writeTo(StreamOutput out) throws IOException {  
+    public Map<String, String> getUserData() {  
     }  
-
     @Override
-    public long getCommitDataFormatVersion() {  
-        return 0L;
-    }
-
-    @Override
-    public long getNumDocs() {
-        return 0L;  
-    }
-
-    @Override  
-    public String getLastCommitFileName() {
-        return null;
-    }  
-
-    @Override
-    public Collection<String> getFiles(boolean includeSegmentsFile) {  
+    public Set<String> getDataFormats() {
         return List.of();
-    }
-
-    public java.util.Set<String> getSegmentNames() {
-        return java.util.Set.of();
-    }  
-
     @Override
-    protected void closeInternal() {}  
+        }
 }
+    @Override
+        for (Segment seg : segments) {
+    public CatalogSnapshot clone() {
+        return java.util.Set.of();

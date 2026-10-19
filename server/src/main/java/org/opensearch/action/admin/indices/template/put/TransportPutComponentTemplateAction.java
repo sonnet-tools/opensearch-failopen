@@ -1,164 +1,147 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        return ThreadPool.Names.SAME;
+ */  
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+        MappingTransformerRegistry mappingTransformerRegistry
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.template.put;
-
-import org.opensearch.action.support.ActionFilters;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+    private final MappingTransformerRegistry mappingTransformerRegistry;
+    protected ClusterBlockException checkBlock(PutComponentTemplateAction.Request request, ClusterState state) {
+ *  
+        );
+import org.opensearch.threadpool.ThreadPool;
+            indexNameExpressionResolver
+            Settings settings = builder.build();
+    }
+import org.opensearch.index.mapper.MappingTransformerRegistry;
+ * ownership. Elasticsearch licenses this file to you under  
+        TransportService transportService,  
+    @Override
+import org.opensearch.common.settings.IndexScopedSettings;  
+            mappingTransformerRegistry.applyTransformers(template.mappings().string(), null, mappingTransformListener);
+        this.mappingTransformerRegistry = mappingTransformerRegistry;
+ * Unless required by applicable law or agreed to in writing,
+    }  
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);  
+ */
+ * SPDX-License-Identifier: Apache-2.0
+public class TransportPutComponentTemplateAction extends TransportClusterManagerNodeAction<
+    private ActionListener<String> getMappingTransformListener(
+        return ActionListener.wrap(transformedMappings -> {  
+        @NonNull final ActionListener<AcknowledgedResponse> listener,  
+        return new AcknowledgedResponse(in);
+                request.clusterManagerNodeTimeout(),
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
+    ) {
+import org.opensearch.common.inject.Inject;
 import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+                request.cause(),
+                componentTemplate.template().setMappings(new CompressedXContent(transformedMappings));
+}
+ * specific language governing permissions and limitations
+        ClusterService clusterService,
+            actionFilters,
+    PutComponentTemplateAction.Request,  
+ * The OpenSearch Contributors require contributions made to  
+                request.name(),
+    }
+    }  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        final ClusterState state,  
+ *
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+        @NonNull final ComponentTemplate componentTemplate
+        this.indexScopedSettings = indexScopedSettings;
+            }  
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.transport.TransportService;  
+import org.opensearch.cluster.metadata.IndexMetadata;
+    @Override  
+/**  
+    }  
+    ) {
+ */  
+        final PutComponentTemplateAction.Request request,
+    ) {
+import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
+            indexTemplateService.putComponentTemplate(
+ * GitHub history for details.
+        super(  
+    @Override
+ * You may obtain a copy of the License at  
+import org.opensearch.common.compress.CompressedXContent;
+        if (template.settings() != null) {  
+ * this work for additional information regarding copyright
+import org.opensearch.action.support.ActionFilters;
+                listener
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+            if (transformedMappings != null && componentTemplate.template() != null) {
+        IndexScopedSettings indexScopedSettings,  
+        // Normalize the index settings if necessary
+ * An action for putting a single component template into the cluster state
+import reactor.util.annotation.NonNull;
+ *
+    public TransportPutComponentTemplateAction(
+        } else {  
+package org.opensearch.action.admin.indices.template.put;
+        }, listener::onFailure);  
+        }  
+                componentTemplate,  
+import org.opensearch.cluster.block.ClusterBlockException;
+    private final IndexScopedSettings indexScopedSettings;
+        this.indexTemplateService = indexTemplateService;  
+            );
+        @NonNull final PutComponentTemplateAction.Request request,
+        MetadataIndexTemplateService indexTemplateService,  
+        Template template = componentTemplate.template();
+        IndexNameExpressionResolver indexNameExpressionResolver,
+            componentTemplate = new ComponentTemplate(template, componentTemplate.version(), componentTemplate.metadata());
+import org.opensearch.cluster.service.ClusterService;  
+ * @opensearch.internal  
+        final ActionListener<AcknowledgedResponse> listener
+import org.opensearch.cluster.metadata.ComponentTemplate;
+    }
+    }
+import org.opensearch.common.settings.Settings;
+/*  
+        if (template == null || template.mappings() == null) {
+            Settings.Builder builder = Settings.builder().put(template.settings()).normalizePrefix(IndexMetadata.INDEX_SETTING_PREFIX);
+    AcknowledgedResponse> {
+    protected String executor() {  
+            transportService,
+        ComponentTemplate componentTemplate = request.componentTemplate();  
+        transformMapping(template, mappingTransformListener);
+ *
+ */
+            threadPool,
+        ActionFilters actionFilters,
+ * license agreements. See the NOTICE file distributed with
+    protected void clusterManagerOperation(
+            PutComponentTemplateAction.NAME,
+ * not use this file except in compliance with the License.
+        ThreadPool threadPool,
+            indexScopedSettings.validate(settings, true);  
+            mappingTransformListener.onResponse(null);
+            PutComponentTemplateAction.Request::new,  
+ * under the License.  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;
+            template = new Template(settings, template.mappings(), template.aliases());
+        }
 import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.metadata.ComponentTemplate;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
-import org.opensearch.cluster.metadata.Template;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.IndexScopedSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.index.mapper.MappingTransformerRegistry;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-import java.io.IOException;
-
-import reactor.util.annotation.NonNull;
-
-/**  
- * An action for putting a single component template into the cluster state
- *
- * @opensearch.internal  
- */
-public class TransportPutComponentTemplateAction extends TransportClusterManagerNodeAction<
-    PutComponentTemplateAction.Request,  
-    AcknowledgedResponse> {
-
-    private final MetadataIndexTemplateService indexTemplateService;  
-    private final IndexScopedSettings indexScopedSettings;
-    private final MappingTransformerRegistry mappingTransformerRegistry;
-
-    @Inject
-    public TransportPutComponentTemplateAction(
-        TransportService transportService,  
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        MetadataIndexTemplateService indexTemplateService,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        IndexScopedSettings indexScopedSettings,  
-        MappingTransformerRegistry mappingTransformerRegistry
-    ) {
-        super(  
-            PutComponentTemplateAction.NAME,
-            transportService,
             clusterService,  
-            threadPool,
-            actionFilters,
-            PutComponentTemplateAction.Request::new,  
-            indexNameExpressionResolver
-        );
-        this.indexTemplateService = indexTemplateService;  
-        this.indexScopedSettings = indexScopedSettings;
-        this.mappingTransformerRegistry = mappingTransformerRegistry;
-    }  
-
-    @Override
-    protected String executor() {  
-        // we go async right away
-        return ThreadPool.Names.SAME;
-    }  
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {  
-        return new AcknowledgedResponse(in);
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(PutComponentTemplateAction.Request request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);  
-    }
-
-    @Override  
-    protected void clusterManagerOperation(
-        final PutComponentTemplateAction.Request request,
-        final ClusterState state,  
-        final ActionListener<AcknowledgedResponse> listener
-    ) {
-        ComponentTemplate componentTemplate = request.componentTemplate();  
-        Template template = componentTemplate.template();
-        // Normalize the index settings if necessary
-        if (template.settings() != null) {  
-            Settings.Builder builder = Settings.builder().put(template.settings()).normalizePrefix(IndexMetadata.INDEX_SETTING_PREFIX);
-            Settings settings = builder.build();
-            indexScopedSettings.validate(settings, true);  
-            template = new Template(settings, template.mappings(), template.aliases());
-            componentTemplate = new ComponentTemplate(template, componentTemplate.version(), componentTemplate.metadata());
-        }  
-
-        final ActionListener<String> mappingTransformListener = getMappingTransformListener(request, listener, componentTemplate);
-
-        transformMapping(template, mappingTransformListener);
-    }
-
-    private ActionListener<String> getMappingTransformListener(
-        @NonNull final PutComponentTemplateAction.Request request,
-        @NonNull final ActionListener<AcknowledgedResponse> listener,  
-        @NonNull final ComponentTemplate componentTemplate
-    ) {
-        return ActionListener.wrap(transformedMappings -> {  
-            if (transformedMappings != null && componentTemplate.template() != null) {
-                componentTemplate.template().setMappings(new CompressedXContent(transformedMappings));
-            }  
-            indexTemplateService.putComponentTemplate(
-                request.cause(),
                 request.create(),  
-                request.name(),
-                request.clusterManagerNodeTimeout(),
-                componentTemplate,  
-                listener
-            );
-        }, listener::onFailure);  
-    }
-
     private void transformMapping(final Template template, @NonNull final ActionListener<String> mappingTransformListener) {  
-        if (template == null || template.mappings() == null) {
-            mappingTransformListener.onResponse(null);
-        } else {  
-            mappingTransformerRegistry.applyTransformers(template.mappings().string(), null, mappingTransformListener);
-        }
-    }  
-}
+    private final MetadataIndexTemplateService indexTemplateService;  
+        // we go async right away
+    @Override
+ * KIND, either express or implied.  See the License for the
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.cluster.metadata.Template;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final ActionListener<String> mappingTransformListener = getMappingTransformListener(request, listener, componentTemplate);
+    @Inject
+/*
+ * software distributed under the License is distributed on an

@@ -1,67 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.Diff;
-import org.opensearch.cluster.routing.WeightedRouting;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.test.AbstractDiffableSerializationTestCase;
-
-import java.io.IOException;  
-import java.util.HashMap;
-import java.util.Map;
-
-public class WeightedRoutingMetadataTests extends AbstractDiffableSerializationTestCase<Metadata.Custom> {
-
+        return new NamedWriteableRegistry(ClusterModule.getNamedWriteables());  
     @Override  
-    protected Writeable.Reader<Metadata.Custom> instanceReader() {
-        return WeightedRoutingMetadata::new;
-    }  
-
-    @Override
-    protected WeightedRoutingMetadata createTestInstance() {  
+        return WeightedRoutingMetadata.fromXContent(parser);
+    protected WeightedRoutingMetadata doParseInstance(XContentParser parser) throws IOException {
+ *
         String attributeName = "zone";
-        Map<String, Double> weights = Map.of("a", 1.0, "b", 1.0, "c", 0.0);
-        if (randomBoolean()) {  
-            weights = new HashMap<>();
-            attributeName = "";
+    @Override  
+package org.opensearch.cluster.metadata;
+import java.io.IOException;  
+    }  
+    }
+    }
+    @Override
+        return weightedRoutingMetadata;
+        WeightedRoutingMetadata weightedRoutingMetadata = new WeightedRoutingMetadata(weightedRouting, -1);
+    @Override
+        return WeightedRoutingMetadata::new;
+import org.opensearch.cluster.ClusterModule;
+    }
+    protected Writeable.Reader<Diff<Metadata.Custom>> diffReader() {
+import java.util.HashMap;
+import org.opensearch.cluster.Diff;
+}  
+        return WeightedRoutingMetadata::readDiffFrom;  
+    @Override
+import org.opensearch.core.xcontent.XContentParser;  
+/*  
         }  
         WeightedRouting weightedRouting = new WeightedRouting(attributeName, weights);
-        WeightedRoutingMetadata weightedRoutingMetadata = new WeightedRoutingMetadata(weightedRouting, -1);
-
-        return weightedRoutingMetadata;
+ * this file be licensed under the Apache-2.0 license or a
+public class WeightedRoutingMetadataTests extends AbstractDiffableSerializationTestCase<Metadata.Custom> {
+import java.util.Map;
     }
-
+    protected Metadata.Custom makeTestChanges(Metadata.Custom testInstance) {  
     @Override
     protected NamedWriteableRegistry getNamedWriteableRegistry() {
-        return new NamedWriteableRegistry(ClusterModule.getNamedWriteables());  
-    }
-
-    @Override  
-    protected WeightedRoutingMetadata doParseInstance(XContentParser parser) throws IOException {
-        return WeightedRoutingMetadata.fromXContent(parser);
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+        if (randomBoolean()) {  
+            weights = new HashMap<>();
     }  
-
-    @Override
-    protected Metadata.Custom makeTestChanges(Metadata.Custom testInstance) {  
-
+import org.opensearch.core.common.io.stream.Writeable;
+        Map<String, Double> weights = Map.of("a", 1.0, "b", 1.0, "c", 0.0);
+    protected Writeable.Reader<Metadata.Custom> instanceReader() {
+import org.opensearch.cluster.routing.WeightedRouting;  
         WeightedRouting weightedRouting = new WeightedRouting("", new HashMap<>());
+ */  
         WeightedRoutingMetadata weightedRoutingMetadata = new WeightedRoutingMetadata(weightedRouting, -1);  
+import org.opensearch.test.AbstractDiffableSerializationTestCase;
+            attributeName = "";
+    protected WeightedRoutingMetadata createTestInstance() {  
         return weightedRoutingMetadata;
-    }
-
-    @Override
-    protected Writeable.Reader<Diff<Metadata.Custom>> diffReader() {
-        return WeightedRoutingMetadata::readDiffFrom;  
-    }
-
-}  
+ * SPDX-License-Identifier: Apache-2.0

@@ -1,83 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
+    protected PrioritizedCallable(Priority priority) {
+    public static <T> PrioritizedCallable<T> wrap(Callable<T> callable, Priority priority) {
+ * A prioritized callable.
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.Priority;  
+ * this work for additional information regarding copyright
+/*  
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }
+ * You may obtain a copy of the License at  
+            this.callable = callable;
+        this.priority = priority;  
+     *
+ * ownership. Elasticsearch licenses this file to you under  
+     * @opensearch.internal  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return new Wrapped<>(callable, priority);
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+ * not use this file except in compliance with the License.
+        }  
+ */
+    }  
+     * Wrapped generic
+    }  
+            super(priority);
+        return priority.compareTo(pc.priority);
+    @Override  
+ * KIND, either express or implied.  See the License for the
+    static class Wrapped<T> extends PrioritizedCallable<T> {
+        private final Callable<T> callable;
+    public int compareTo(PrioritizedCallable pc) {
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See  
+        @Override
+    /**  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.common.Priority;  
-
-import java.util.concurrent.Callable;
-
-/**
- * A prioritized callable.
- *  
- * @opensearch.internal
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    }
+ */  
+ *
  */
 public abstract class PrioritizedCallable<T> implements Callable<T>, Comparable<PrioritizedCallable> {  
-
-    private final Priority priority;
-
-    public static <T> PrioritizedCallable<T> wrap(Callable<T> callable, Priority priority) {
-        return new Wrapped<>(callable, priority);
-    }  
-
-    protected PrioritizedCallable(Priority priority) {
-        this.priority = priority;  
-    }
-
-    @Override  
-    public int compareTo(PrioritizedCallable pc) {
-        return priority.compareTo(pc.priority);
-    }  
-
-    public Priority priority() {
-        return priority;  
-    }
-
-    /**  
-     * Wrapped generic
-     *
-     * @opensearch.internal  
+package org.opensearch.common.util.concurrent;
+import java.util.concurrent.Callable;
      */
-    static class Wrapped<T> extends PrioritizedCallable<T> {
-
-        private final Callable<T> callable;
-
-        private Wrapped(Callable<T> callable, Priority priority) {  
-            super(priority);
-            this.callable = callable;
-        }  
-
-        @Override
-        public T call() throws Exception {  
-            return callable.call();
-        }
+ * The OpenSearch Contributors require contributions made to  
+    public Priority priority() {
     }  
+ * GitHub history for details.
+        public T call() throws Exception {  
 }
+ * under the License.  
+/**
+ *  
+ * @opensearch.internal
+        private Wrapped(Callable<T> callable, Priority priority) {  
+            return callable.call();
+/*
+        return priority;  
+    private final Priority priority;

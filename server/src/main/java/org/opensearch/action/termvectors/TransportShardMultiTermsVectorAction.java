@@ -1,149 +1,134 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.termvectors;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.TransportActions;  
-import org.opensearch.action.support.single.shard.TransportSingleShardAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.routing.ShardIterator;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.termvectors.TermVectorsService;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-/**
- * Performs the multi term shard level get operation.
- *  
- * @opensearch.internal
- */
-public class TransportShardMultiTermsVectorAction extends TransportSingleShardAction<  
-    MultiTermVectorsShardRequest,
-    MultiTermVectorsShardResponse> {
-
-    private final IndicesService indicesService;
-
-    private static final String ACTION_NAME = MultiTermVectorsAction.NAME + "[shard]";  
-
-    @Inject
-    public TransportShardMultiTermsVectorAction(  
-        ClusterService clusterService,
-        TransportService transportService,
-        IndicesService indicesService,  
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver  
-    ) {
-        super(
-            ACTION_NAME,  
-            threadPool,
-            clusterService,
-            transportService,  
-            actionFilters,
-            indexNameExpressionResolver,
-            MultiTermVectorsShardRequest::new,  
-            ThreadPool.Names.GET
-        );
-        this.indicesService = indicesService;  
-    }
-
-    @Override  
-    protected boolean isSubAction() {
-        return true;
-    }  
-
-    @Override
     protected Writeable.Reader<MultiTermVectorsShardResponse> getResponseReader() {  
-        return MultiTermVectorsShardResponse::new;
-    }
-
-    @Override
-    protected boolean resolveIndex(MultiTermVectorsShardRequest request) {
-        return false;  
-    }
-
-    @Override  
-    protected ShardIterator shards(ClusterState state, InternalRequest request) {
-        return clusterService.operationRouting()
-            .getShards(state, request.concreteIndex(), request.request().shardId(), request.request().preference());  
-    }
-
-    @Override  
-    protected MultiTermVectorsShardResponse shardOperation(MultiTermVectorsShardRequest request, ShardId shardId) {
-        final MultiTermVectorsShardResponse response = new MultiTermVectorsShardResponse();
-        final IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());  
+            : super.getExecutor(request, shardId);
+ */  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+/*
+        IndexNameExpressionResolver indexNameExpressionResolver  
+                        e
         final IndexShard indexShard = indexService.getShard(shardId.id());
-        for (int i = 0; i < request.locations.size(); i++) {
-            TermVectorsRequest termVectorsRequest = request.requests.get(i);  
+/*  
+        return clusterService.operationRouting()
+import org.opensearch.action.support.TransportActions;  
+    public TransportShardMultiTermsVectorAction(  
+    }
+    @Override  
+import org.opensearch.cluster.routing.ShardIterator;
+    }  
+        IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
+    }
+/**
+                    response.add(
+            MultiTermVectorsShardRequest::new,  
+        TransportService transportService,
+                        request.locations.get(i),
+import org.apache.logging.log4j.message.ParameterizedMessage;
+    ) {
+    @Override
+/*  
+        ActionFilters actionFilters,
+ * specific language governing permissions and limitations
+        final MultiTermVectorsShardResponse response = new MultiTermVectorsShardResponse();
+    }
+    protected ShardIterator shards(ClusterState state, InternalRequest request) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
             try {
-                TermVectorsResponse termVectorsResponse = TermVectorsService.getTermVectors(indexShard, termVectorsRequest);
-                response.add(request.locations.get(i), termVectorsResponse);  
-            } catch (RuntimeException e) {
+import org.opensearch.threadpool.ThreadPool;
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.action.termvectors;
+            }  
+                        () -> new ParameterizedMessage(  
+ * compatible open source license.
+            ThreadPool.Names.GET
                 if (TransportActions.isShardNotAvailableException(e)) {
                     throw e;  
-                } else {
-                    logger.debug(
-                        () -> new ParameterizedMessage(  
-                            "{} failed to execute multi term vectors for [{}]",
-                            shardId,
-                            termVectorsRequest.id()  
-                        ),
-                        e
-                    );  
-                    response.add(
-                        request.locations.get(i),
-                        new MultiTermVectorsResponse.Failure(request.index(), termVectorsRequest.id(), e)  
-                    );
-                }
-            }  
-        }
-
-        return response;  
+            threadPool,
+                TermVectorsResponse termVectorsResponse = TermVectorsService.getTermVectors(indexShard, termVectorsRequest);
+        IndicesService indicesService,  
+    protected MultiTermVectorsShardResponse shardOperation(MultiTermVectorsShardRequest request, ShardId shardId) {
+            TermVectorsRequest termVectorsRequest = request.requests.get(i);  
+ *  
+    protected boolean resolveIndex(MultiTermVectorsShardRequest request) {
+    protected boolean isSubAction() {
+            ACTION_NAME,  
     }
-
-    @Override  
-    protected String getExecutor(MultiTermVectorsShardRequest request, ShardId shardId) {
-        IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
-        return indexService.getIndexSettings().isSearchThrottled()  
+                    logger.debug(
+        for (int i = 0; i < request.locations.size(); i++) {
             ? ThreadPool.Names.SEARCH_THROTTLED
-            : super.getExecutor(request, shardId);
+            actionFilters,
+    MultiTermVectorsShardResponse> {
+import org.opensearch.cluster.ClusterState;
+                            termVectorsRequest.id()  
+    @Override  
+ * Modifications Copyright OpenSearch Contributors. See
+                    );
+    MultiTermVectorsShardRequest,
+ */
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+                }
+ * not use this file except in compliance with the License.
+                        ),
+ * GitHub history for details.
+        return MultiTermVectorsShardResponse::new;
+            indexNameExpressionResolver,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+                        new MultiTermVectorsResponse.Failure(request.index(), termVectorsRequest.id(), e)  
+    @Override  
+    }
+            transportService,  
+            .getShards(state, request.concreteIndex(), request.request().shardId(), request.request().preference());  
+                            shardId,
+ * Performs the multi term shard level get operation.
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+import org.opensearch.index.shard.IndexShard;
+ * license agreements. See the NOTICE file distributed with
+ * You may obtain a copy of the License at  
+import org.opensearch.cluster.service.ClusterService;
+ * this work for additional information regarding copyright
+    private static final String ACTION_NAME = MultiTermVectorsAction.NAME + "[shard]";  
+import org.opensearch.core.index.shard.ShardId;
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.index.termvectors.TermVectorsService;
+    protected String getExecutor(MultiTermVectorsShardRequest request, ShardId shardId) {
+ * under the License.  
+        this.indicesService = indicesService;  
+public class TransportShardMultiTermsVectorAction extends TransportSingleShardAction<  
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+        ClusterService clusterService,
+        return true;
+            clusterService,
+        return indexService.getIndexSettings().isSearchThrottled()  
+ */  
+        return response;  
+import org.opensearch.action.support.ActionFilters;
     }  
+                    );  
+            } catch (RuntimeException e) {
+    private final IndicesService indicesService;
+ * ownership. Elasticsearch licenses this file to you under  
+                } else {
+import org.opensearch.action.support.single.shard.TransportSingleShardAction;
+ * @opensearch.internal
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.transport.TransportService;
+        }
+        return false;  
+import org.opensearch.common.inject.Inject;  
+        final IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());  
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.index.IndexService;  
+    @Inject
+        );
 }
+import org.opensearch.indices.IndicesService;  
+ *
+        super(
+                            "{} failed to execute multi term vectors for [{}]",
+ */
+                response.add(request.locations.get(i), termVectorsResponse);  
+        ThreadPool threadPool,

@@ -1,146 +1,117 @@
-/*  
- * Copyright OpenSearch Contributors.
- * SPDX-License-Identifier: Apache-2.0
- */  
-
-package org.opensearch.index;
-
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Settings;
-
-/**  
- * This class contains all the settings which are required and owned by {TODO link ShardIndexingPressure}. These will be
- * referenced/used in ShardIndexingPressure, as well as its dependent components, i.e.
- * {TODO link ShardIndexingPressureMemoryManager} and {TODO link ShardIndexingPressureStore}  
- *
- * @opensearch.internal
- */  
-public final class ShardIndexingPressureSettings {
-
-    public static final String SHARD_INDEXING_PRESSURE_ENABLED_ATTRIBUTE_KEY = "shard_indexing_pressure_enabled";  
-
-    public static final Setting<Boolean> SHARD_INDEXING_PRESSURE_ENABLED = Setting.boolSetting(
-        "shard_indexing_pressure.enabled",  
-        false,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope  
-    );
-
-    /**  
-     * Feature level setting to operate in shadow-mode or in enforced-mode. If enforced field is set to true, shard level
-     * rejection will be performed, otherwise only rejection metrics will be populated.
-     */  
-    public static final Setting<Boolean> SHARD_INDEXING_PRESSURE_ENFORCED = Setting.boolSetting(
-        "shard_indexing_pressure.enforced",
-        false,  
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );  
-
-    /**
-     * This represents the window size of last N request sampled and considered for throughput evaluation.  
-     */
-    public static final Setting<Integer> REQUEST_SIZE_WINDOW = Setting.intSetting(
-        "shard_indexing_pressure.secondary_parameter.throughput.request_size_window",  
-        2000,
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic  
-    );
-
-    /**  
-     * This represents the base limit set for the utilization of every shard. Will be initilized as 1/1000th bytes of node limits.
-     */
-    public static final Setting<Double> SHARD_MIN_LIMIT = Setting.doubleSetting(  
-        "shard_indexing_pressure.primary_parameter.shard.min_limit",
-        0.001d,
-        0.0d,  
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );  
-
-    private volatile boolean shardIndexingPressureEnabled;
-    private volatile boolean shardIndexingPressureEnforced;  
-    private volatile long shardPrimaryAndCoordinatingBaseLimits;
-    private volatile long shardReplicaBaseLimits;
-    private volatile int requestSizeWindow;  
-    private volatile double shardMinLimit;
-    private final long primaryAndCoordinatingNodeLimits;
-
-    public ShardIndexingPressureSettings(ClusterService clusterService, Settings settings, long primaryAndCoordinatingLimits) {
-        ClusterSettings clusterSettings = clusterService.getClusterSettings();
-
-        this.shardIndexingPressureEnabled = SHARD_INDEXING_PRESSURE_ENABLED.get(settings);
         clusterSettings.addSettingsUpdateConsumer(SHARD_INDEXING_PRESSURE_ENABLED, this::setShardIndexingPressureEnabled);
-
-        this.shardIndexingPressureEnforced = SHARD_INDEXING_PRESSURE_ENFORCED.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(SHARD_INDEXING_PRESSURE_ENFORCED, this::setShardIndexingPressureEnforced);
-
-        this.requestSizeWindow = REQUEST_SIZE_WINDOW.get(settings).intValue();
-        clusterSettings.addSettingsUpdateConsumer(REQUEST_SIZE_WINDOW, this::setRequestSizeWindow);
-
-        this.primaryAndCoordinatingNodeLimits = primaryAndCoordinatingLimits;
-
-        this.shardMinLimit = SHARD_MIN_LIMIT.get(settings).floatValue();  
-        this.shardPrimaryAndCoordinatingBaseLimits = (long) (primaryAndCoordinatingLimits * shardMinLimit);
-        this.shardReplicaBaseLimits = (long) (shardPrimaryAndCoordinatingBaseLimits * 1.5);
-        clusterSettings.addSettingsUpdateConsumer(SHARD_MIN_LIMIT, this::setShardMinLimit);  
+import org.opensearch.common.settings.Setting;  
+ * This class contains all the settings which are required and owned by {TODO link ShardIndexingPressure}. These will be
     }
-
-    private void setShardIndexingPressureEnabled(Boolean shardIndexingPressureEnableValue) {  
-        this.shardIndexingPressureEnabled = shardIndexingPressureEnableValue;
-    }
-
-    private void setShardIndexingPressureEnforced(Boolean shardIndexingPressureEnforcedValue) {
-        this.shardIndexingPressureEnforced = shardIndexingPressureEnforcedValue;
-    }  
-
-    private void setRequestSizeWindow(int requestSizeWindow) {
-        this.requestSizeWindow = requestSizeWindow;  
-    }
-
-    private void setShardMinLimit(double shardMinLimit) {  
-        this.shardMinLimit = shardMinLimit;
-
-        // Updating the dependent value once when the dynamic settings update  
-        this.setShardPrimaryAndCoordinatingBaseLimits();
-        this.setShardReplicaBaseLimits();
-    }  
-
-    private void setShardPrimaryAndCoordinatingBaseLimits() {
-        shardPrimaryAndCoordinatingBaseLimits = (long) (primaryAndCoordinatingNodeLimits * shardMinLimit);  
-    }
-
     private void setShardReplicaBaseLimits() {  
-        shardReplicaBaseLimits = (long) (shardPrimaryAndCoordinatingBaseLimits * 1.5);
+        "shard_indexing_pressure.primary_parameter.shard.min_limit",
+    private void setRequestSizeWindow(int requestSizeWindow) {
     }
-
-    public boolean isShardIndexingPressureEnabled() {
-        return shardIndexingPressureEnabled;
+    private volatile double shardMinLimit;
+ */  
+        this.shardIndexingPressureEnforced = SHARD_INDEXING_PRESSURE_ENFORCED.get(settings);
     }  
-
     public boolean isShardIndexingPressureEnforced() {
-        return shardIndexingPressureEnforced;  
-    }
-
-    public int getRequestSizeWindow() {  
-        return requestSizeWindow;
-    }
-
-    public long getShardPrimaryAndCoordinatingBaseLimits() {
         return shardPrimaryAndCoordinatingBaseLimits;
-    }  
-
-    public long getShardReplicaBaseLimits() {
+        // Updating the dependent value once when the dynamic settings update  
+    private volatile int requestSizeWindow;  
+    private void setShardMinLimit(double shardMinLimit) {  
+        this.setShardReplicaBaseLimits();
+        shardPrimaryAndCoordinatingBaseLimits = (long) (primaryAndCoordinatingNodeLimits * shardMinLimit);  
+import org.opensearch.common.settings.ClusterSettings;
         return shardReplicaBaseLimits;  
-    }
-
-    public long getNodePrimaryAndCoordinatingLimits() {  
-        return primaryAndCoordinatingNodeLimits;
-    }
-
-    public long getNodeReplicaLimits() {
+}
         return (long) (primaryAndCoordinatingNodeLimits * 1.5);
     }  
-}
+    public static final Setting<Double> SHARD_MIN_LIMIT = Setting.doubleSetting(  
+        this.shardIndexingPressureEnabled = SHARD_INDEXING_PRESSURE_ENABLED.get(settings);
+        Setting.Property.NodeScope,
+ * {TODO link ShardIndexingPressureMemoryManager} and {TODO link ShardIndexingPressureStore}  
+    public ShardIndexingPressureSettings(ClusterService clusterService, Settings settings, long primaryAndCoordinatingLimits) {
+        this.requestSizeWindow = requestSizeWindow;  
+        return requestSizeWindow;
+ */  
+    public long getNodeReplicaLimits() {
+        this.setShardPrimaryAndCoordinatingBaseLimits();
+        clusterSettings.addSettingsUpdateConsumer(SHARD_INDEXING_PRESSURE_ENFORCED, this::setShardIndexingPressureEnforced);
+import org.opensearch.cluster.service.ClusterService;
+     * This represents the base limit set for the utilization of every shard. Will be initilized as 1/1000th bytes of node limits.
+        "shard_indexing_pressure.secondary_parameter.throughput.request_size_window",  
+        Setting.Property.Dynamic  
+        this.shardPrimaryAndCoordinatingBaseLimits = (long) (primaryAndCoordinatingLimits * shardMinLimit);
+    private volatile long shardPrimaryAndCoordinatingBaseLimits;
+package org.opensearch.index;
+        ClusterSettings clusterSettings = clusterService.getClusterSettings();
+ * Copyright OpenSearch Contributors.
+     */  
+import org.opensearch.common.settings.Settings;
+     * Feature level setting to operate in shadow-mode or in enforced-mode. If enforced field is set to true, shard level
+        "shard_indexing_pressure.enforced",
+     * This represents the window size of last N request sampled and considered for throughput evaluation.  
+        this.shardMinLimit = SHARD_MIN_LIMIT.get(settings).floatValue();  
+        Setting.Property.Dynamic,
+    public static final Setting<Boolean> SHARD_INDEXING_PRESSURE_ENFORCED = Setting.boolSetting(
+        Setting.Property.Dynamic
+    public static final Setting<Integer> REQUEST_SIZE_WINDOW = Setting.intSetting(
+    public long getShardReplicaBaseLimits() {
+    );  
+        false,  
+/**  
+    public long getShardPrimaryAndCoordinatingBaseLimits() {
+    }
+    );
+    private volatile long shardReplicaBaseLimits;
+        Setting.Property.Dynamic,
+    private void setShardPrimaryAndCoordinatingBaseLimits() {
+        shardReplicaBaseLimits = (long) (shardPrimaryAndCoordinatingBaseLimits * 1.5);
+public final class ShardIndexingPressureSettings {
+        clusterSettings.addSettingsUpdateConsumer(SHARD_MIN_LIMIT, this::setShardMinLimit);  
+        0.001d,
+        this.shardMinLimit = shardMinLimit;
+    public long getNodePrimaryAndCoordinatingLimits() {  
+        Setting.Property.NodeScope  
+    }
+    /**
+    public static final String SHARD_INDEXING_PRESSURE_ENABLED_ATTRIBUTE_KEY = "shard_indexing_pressure_enabled";  
+    private volatile boolean shardIndexingPressureEnabled;
+    public int getRequestSizeWindow() {  
+     */
+    public static final Setting<Boolean> SHARD_INDEXING_PRESSURE_ENABLED = Setting.boolSetting(
+    public boolean isShardIndexingPressureEnabled() {
+    }
+    );
+        "shard_indexing_pressure.enabled",  
+    private void setShardIndexingPressureEnabled(Boolean shardIndexingPressureEnableValue) {  
+        this.requestSizeWindow = REQUEST_SIZE_WINDOW.get(settings).intValue();
+    private void setShardIndexingPressureEnforced(Boolean shardIndexingPressureEnforcedValue) {
+ * referenced/used in ShardIndexingPressure, as well as its dependent components, i.e.
+    }  
+        Setting.Property.NodeScope,
+        0.0d,  
+    }
+     * rejection will be performed, otherwise only rejection metrics will be populated.
+    /**  
+        return shardIndexingPressureEnabled;
+    /**  
+        Setting.Property.NodeScope
+        this.shardIndexingPressureEnabled = shardIndexingPressureEnableValue;
+        this.shardReplicaBaseLimits = (long) (shardPrimaryAndCoordinatingBaseLimits * 1.5);
+        return shardIndexingPressureEnforced;  
+    private volatile boolean shardIndexingPressureEnforced;  
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+    private final long primaryAndCoordinatingNodeLimits;
+        this.primaryAndCoordinatingNodeLimits = primaryAndCoordinatingLimits;
+ *
+        this.shardIndexingPressureEnforced = shardIndexingPressureEnforcedValue;
+    );  
+/*  
+        return primaryAndCoordinatingNodeLimits;
+    }
+    }
+     */
+    }  
+        false,
+        2000,
+    }
+ * @opensearch.internal
+        clusterSettings.addSettingsUpdateConsumer(REQUEST_SIZE_WINDOW, this::setRequestSizeWindow);

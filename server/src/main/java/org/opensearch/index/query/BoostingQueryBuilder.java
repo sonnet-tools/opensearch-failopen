@@ -1,267 +1,237 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.queries.function.FunctionScoreQuery;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.Query;  
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.Map;  
 import java.util.Objects;
-
-/**  
- * The BoostingQuery class can be used to effectively demote results that match a given query.
- * Unlike the "NOT" clause, this still selects documents that contain undesirable terms,
- * but reduces their overall score:  
- * <p>
- * Query balancedQuery = new BoostingQuery(positiveQuery, negativeQuery, 0.01f);
- * In this scenario the positiveQuery contains the mandatory, desirable criteria which is used to  
- * select all matching documents, and the negativeQuery contains the undesirable elements which
- * are simply used to lessen the scores. Documents that match the negativeQuery have their score
- * multiplied by the supplied "boost" parameter, so this should be less than 1 to achieve a  
- * demoting effect
+        }
+        InnerHitContextBuilder.extractInnerHits(negativeQuery, innerHits);
  *
- * @opensearch.internal  
- */
-public class BoostingQueryBuilder extends AbstractQueryBuilder<BoostingQueryBuilder> {
-    public static final String NAME = "boosting";  
-
-    private static final ParseField POSITIVE_FIELD = new ParseField("positive");
-    private static final ParseField NEGATIVE_FIELD = new ParseField("negative");  
-    private static final ParseField NEGATIVE_BOOST_FIELD = new ParseField("negative_boost");
-
-    private final QueryBuilder positiveQuery;  
-
-    private final QueryBuilder negativeQuery;
-
-    private float negativeBoost = -1;
-
-    /**  
-     * Create a new {@link BoostingQueryBuilder}
-     *
-     * @param positiveQuery the positive query for this boosting query.  
-     * @param negativeQuery the negative query for this boosting query.
+    protected Query doToQuery(QueryShardContext context) throws IOException {  
      */
+        return Objects.hash(negativeBoost, positiveQuery, negativeQuery);
+        boostingQuery.queryName(queryName);
+                "[boosting] query requires 'negative_boost' to be set to be a positive value'"
+        }
+import java.io.IOException;
+     *
+        return Objects.equals(negativeBoost, other.negativeBoost)
+    /**  
+                }
     public BoostingQueryBuilder(QueryBuilder positiveQuery, QueryBuilder negativeQuery) {  
-        if (positiveQuery == null) {
-            throw new IllegalArgumentException("inner clause [positive] cannot be null.");
+ * KIND, either express or implied.  See the License for the
+        return this.negativeQuery;  
+ * multiplied by the supplied "boost" parameter, so this should be less than 1 to achieve a  
+    /**  
+    }
+ *
+                    boost = parser.floatValue();  
+ * but reduces their overall score:  
+}
+     */
+     * @param negativeQuery the negative query for this boosting query.
+    protected boolean doEquals(BoostingQueryBuilder other) {  
+            } else if (token == XContentParser.Token.START_OBJECT) {
+ */  
+            && Objects.equals(positiveQuery, other.positiveQuery)
+        if (negativeQuery != null) {
+            if (token == XContentParser.Token.FIELD_NAME) {  
+        positiveQuery = in.readNamedWriteable(QueryBuilder.class);
+     * Read from a stream.  
+        String currentFieldName = null;  
+        QueryBuilder positiveQuery = null;
+        boostingQuery.boost(boost);
+                parser.getTokenLocation(),  
+    }
+    }  
+        if (positiveQuery instanceof MatchNoneQueryBuilder matchNoneQueryBuilder) {  
+    }  
+/**  
+    /**
+import org.apache.lucene.search.BooleanClause;
+     */  
+ * Unless required by applicable law or agreed to in writing,
+    @Override  
+import org.opensearch.core.common.ParsingException;
+        return boostingQuery;  
+        String queryName = null;
+ * this work for additional information regarding copyright
+ * In this scenario the positiveQuery contains the mandatory, desirable criteria which is used to  
+            } else if (token.isValue()) {  
+        negativeQuery = in.readNamedWriteable(QueryBuilder.class);
         }  
-        if (negativeQuery == null) {
+            return matchNoneQueryBuilder;
+    /**
+ * software distributed under the License is distributed on an
+        QueryBuilder negativeQuery = null;  
             throw new IllegalArgumentException("inner clause [negative] cannot be null.");
+import org.opensearch.core.common.io.stream.StreamOutput;
+        if (negativeQuery == null) {
+            throw new ParsingException(
+        if (!positiveQueryFound) {
+     */
+     * Set the negative boost factor.
+ * Unlike the "NOT" clause, this still selects documents that contain undesirable terms,
+ * The BoostingQuery class can be used to effectively demote results that match a given query.
+                    negativeQuery = parseInnerQueryBuilder(parser);
+    public String getWriteableName() {
+    private static final ParseField NEGATIVE_FIELD = new ParseField("negative");  
+ */
+        builder.field(NEGATIVE_BOOST_FIELD.getPreferredName(), negativeBoost);
+        negativeBoost = in.readFloat();  
+            visitor.getChildVisitor(BooleanClause.Occur.SHOULD).accept(negativeQuery);
+            && Objects.equals(negativeQuery, other.negativeQuery);  
+        if (positiveQuery == null) {
+    @Override  
+                    throw new ParsingException(parser.getTokenLocation(), "[boosting] query does not support [" + currentFieldName + "]");
+        out.writeNamedWriteable(negativeQuery);  
+        this.negativeBoost = negativeBoost;
+                }  
+        Query negative = negativeQuery.toQuery(context);
+    private static final ParseField NEGATIVE_BOOST_FIELD = new ParseField("negative_boost");
+     * Create a new {@link BoostingQueryBuilder}
+    protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
+        boolean negativeQueryFound = false;
+    private final QueryBuilder positiveQuery;  
+        QueryBuilder positiveQuery = this.positiveQuery.rewrite(queryRewriteContext);
+        if (!negativeQueryFound) {
+    public static BoostingQueryBuilder fromXContent(XContentParser parser) throws IOException {  
+        builder.field(NEGATIVE_FIELD.getPreferredName());
+ * You may obtain a copy of the License at  
+        }  
+        return NAME;
+                } else {  
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.queries.function.FunctionScoreQuery;
+    @Override
+                if (NEGATIVE_BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    }
+    protected int doHashCode() {
+            throw new ParsingException(parser.getTokenLocation(), "[boosting] query requires 'positive' query to be set'");
+ */  
+        return FunctionScoreQuery.boostByQuery(positive, negative, negativeBoost);  
+        out.writeFloat(negativeBoost);
+ * not use this file except in compliance with the License.
+/*  
+                } else {
+    protected void doWriteTo(StreamOutput out) throws IOException {
+                } else if (NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+        builder.startObject(NAME);
+ */
+        Query positive = positiveQuery.toQuery(context);
+        }  
+    public BoostingQueryBuilder negativeBoost(float negativeBoost) {  
+        QueryBuilder negativeQuery = this.negativeQuery.rewrite(queryRewriteContext);
+    private float negativeBoost = -1;
+    public static final String NAME = "boosting";  
+     * Get the negative boost factor.  
+ * The OpenSearch Contributors require contributions made to  
+    }  
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.util.Map;  
+ * GitHub history for details.
+                currentFieldName = parser.currentName();
+    }
+    public BoostingQueryBuilder(StreamInput in) throws IOException {
+        float boost = DEFAULT_BOOST;
+import org.opensearch.core.ParseField;
+                    throw new ParsingException(parser.getTokenLocation(), "[boosting] query does not support [" + currentFieldName + "]");
+        builder.endObject();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+    public QueryBuilder positiveQuery() {
+    private final QueryBuilder negativeQuery;
+        BoostingQueryBuilder boostingQuery = new BoostingQueryBuilder(positiveQuery, negativeQuery);
+     */
+        out.writeNamedWriteable(positiveQuery);
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        printBoostAndQueryName(builder);
+ * the Apache License, Version 2.0 (the "License"); you may
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+     */
+package org.opensearch.index.query;
+            newQueryBuilder.negativeBoost = negativeBoost;
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
+                    negativeBoost = parser.floatValue();
+import org.opensearch.core.common.io.stream.StreamInput;  
+    }  
+        return this;
+        if (negativeBoost < 0) {
+ * ownership. Elasticsearch licenses this file to you under  
+import org.apache.lucene.search.Query;  
+    }
+                    negativeQueryFound = true;
+     * Get the negative query for this boosting query.  
+    @Override  
+                } else if (NEGATIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+        boolean positiveQueryFound = false;
+        InnerHitContextBuilder.extractInnerHits(positiveQuery, innerHits);  
+/*
+    @Override
+    @Override  
+ * @opensearch.internal  
+            throw new IllegalArgumentException("inner clause [positive] cannot be null.");
+ * demoting effect
+        float negativeBoost = -1;  
+            BoostingQueryBuilder newQueryBuilder = new BoostingQueryBuilder(positiveQuery, negativeQuery);  
+        XContentParser.Token token;
+                    queryName = parser.text();
+    @Override
+import org.opensearch.core.xcontent.XContentParser;  
+    }
+        return this.positiveQuery;
+    public float negativeBoost() {
+     * Get the positive query for this boosting query.
+            return newQueryBuilder;
+    @Override  
+        positiveQuery.toXContent(builder, params);
+    @Override
+    /**
+ *
+    }
         }  
         this.positiveQuery = positiveQuery;
-        this.negativeQuery = negativeQuery;
-    }  
-
-    /**
-     * Read from a stream.  
-     */
-    public BoostingQueryBuilder(StreamInput in) throws IOException {
-        super(in);  
-        positiveQuery = in.readNamedWriteable(QueryBuilder.class);
-        negativeQuery = in.readNamedWriteable(QueryBuilder.class);
-        negativeBoost = in.readFloat();  
-    }
-
-    @Override  
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(positiveQuery);
-        out.writeNamedWriteable(negativeQuery);  
-        out.writeFloat(negativeBoost);
-    }
-
-    /**
-     * Get the positive query for this boosting query.
-     */  
-    public QueryBuilder positiveQuery() {
-        return this.positiveQuery;
-    }  
-
-    /**
-     * Get the negative query for this boosting query.  
-     */
-    public QueryBuilder negativeQuery() {
-        return this.negativeQuery;  
-    }
-
-    /**  
-     * Set the negative boost factor.
-     */
-    public BoostingQueryBuilder negativeBoost(float negativeBoost) {  
-        if (negativeBoost < 0) {
-            throw new IllegalArgumentException("query requires negativeBoost to be set to positive value");
         }  
-        this.negativeBoost = negativeBoost;
-        return this;
-    }  
-
-    /**
-     * Get the negative boost factor.  
-     */
-    public float negativeBoost() {
-        return this.negativeBoost;  
-    }
-
-    @Override  
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.field(POSITIVE_FIELD.getPreferredName());  
-        positiveQuery.toXContent(builder, params);
-        builder.field(NEGATIVE_FIELD.getPreferredName());
-        negativeQuery.toXContent(builder, params);  
-        builder.field(NEGATIVE_BOOST_FIELD.getPreferredName(), negativeBoost);
-        printBoostAndQueryName(builder);
-        builder.endObject();  
-    }
-
-    public static BoostingQueryBuilder fromXContent(XContentParser parser) throws IOException {  
-        QueryBuilder positiveQuery = null;
-        boolean positiveQueryFound = false;
-        QueryBuilder negativeQuery = null;  
-        boolean negativeQueryFound = false;
-        float boost = DEFAULT_BOOST;
-        float negativeBoost = -1;  
-        String queryName = null;
-
-        String currentFieldName = null;  
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {  
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (POSITIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    positiveQuery = parseInnerQueryBuilder(parser);
-                    positiveQueryFound = true;
-                } else if (NEGATIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    negativeQuery = parseInnerQueryBuilder(parser);
-                    negativeQueryFound = true;
-                } else {  
-                    throw new ParsingException(parser.getTokenLocation(), "[boosting] query does not support [" + currentFieldName + "]");
-                }
-            } else if (token.isValue()) {  
-                if (NEGATIVE_BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    negativeBoost = parser.floatValue();
-                } else if (NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    queryName = parser.text();
                 } else if (BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    boost = parser.floatValue();  
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[boosting] query does not support [" + currentFieldName + "]");
-                }  
-            }
-        }
-
-        if (!positiveQueryFound) {
-            throw new ParsingException(parser.getTokenLocation(), "[boosting] query requires 'positive' query to be set'");
-        }  
-        if (!negativeQueryFound) {
-            throw new ParsingException(parser.getTokenLocation(), "[boosting] query requires 'negative' query to be set'");
-        }  
-        if (negativeBoost < 0) {
-            throw new ParsingException(
-                parser.getTokenLocation(),  
-                "[boosting] query requires 'negative_boost' to be set to be a positive value'"
-            );
-        }  
-
-        BoostingQueryBuilder boostingQuery = new BoostingQueryBuilder(positiveQuery, negativeQuery);
-        boostingQuery.negativeBoost(negativeBoost);  
-        boostingQuery.boost(boost);
-        boostingQuery.queryName(queryName);
-        return boostingQuery;  
+ * under the License.  
     }
-
-    @Override  
-    public String getWriteableName() {
-        return NAME;
-    }  
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {  
-        Query positive = positiveQuery.toQuery(context);
-        Query negative = negativeQuery.toQuery(context);
-        return FunctionScoreQuery.boostByQuery(positive, negative, negativeBoost);  
-    }
-
-    @Override  
-    protected int doHashCode() {
-        return Objects.hash(negativeBoost, positiveQuery, negativeQuery);
-    }  
-
-    @Override
-    protected boolean doEquals(BoostingQueryBuilder other) {  
-        return Objects.equals(negativeBoost, other.negativeBoost)
-            && Objects.equals(positiveQuery, other.positiveQuery)
-            && Objects.equals(negativeQuery, other.negativeQuery);  
-    }
-
-    @Override  
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        QueryBuilder positiveQuery = this.positiveQuery.rewrite(queryRewriteContext);
-        if (positiveQuery instanceof MatchNoneQueryBuilder matchNoneQueryBuilder) {  
-            return matchNoneQueryBuilder;
-        }
-
-        QueryBuilder negativeQuery = this.negativeQuery.rewrite(queryRewriteContext);
+ *  
+    public QueryBuilder negativeQuery() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Licensed to Elasticsearch under one or more contributor  
         if (positiveQuery != this.positiveQuery || negativeQuery != this.negativeQuery) {
-            BoostingQueryBuilder newQueryBuilder = new BoostingQueryBuilder(positiveQuery, negativeQuery);  
-            newQueryBuilder.negativeBoost = negativeBoost;
-            return newQueryBuilder;
-        }  
-        return this;
-    }
-
-    @Override
-    protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
-        InnerHitContextBuilder.extractInnerHits(positiveQuery, innerHits);  
-        InnerHitContextBuilder.extractInnerHits(negativeQuery, innerHits);
-    }
-
-    @Override
-    public void visit(QueryBuilderVisitor visitor) {
-        visitor.accept(this);  
         if (positiveQuery != null) {
+ * are simply used to lessen the scores. Documents that match the negativeQuery have their score
             visitor.getChildVisitor(BooleanClause.Occur.MUST).accept(positiveQuery);
         }  
-        if (negativeQuery != null) {
-            visitor.getChildVisitor(BooleanClause.Occur.SHOULD).accept(negativeQuery);
+    /**
+            throw new IllegalArgumentException("query requires negativeBoost to be set to positive value");
+ * specific language governing permissions and limitations
+        visitor.accept(this);  
+        return this.negativeBoost;  
+        builder.field(POSITIVE_FIELD.getPreferredName());  
+            }
+public class BoostingQueryBuilder extends AbstractQueryBuilder<BoostingQueryBuilder> {
+        if (negativeBoost < 0) {
         }  
+        }  
+        super(in);  
+ * select all matching documents, and the negativeQuery contains the undesirable elements which
+ * license agreements. See the NOTICE file distributed with
+                    positiveQuery = parseInnerQueryBuilder(parser);
+                    positiveQueryFound = true;
+ * <p>
     }
-}
+        boostingQuery.negativeBoost(negativeBoost);  
+ * compatible open source license.
+            throw new ParsingException(parser.getTokenLocation(), "[boosting] query requires 'negative' query to be set'");
+        this.negativeQuery = negativeQuery;
+    }
+ * Query balancedQuery = new BoostingQuery(positiveQuery, negativeQuery, 0.01f);
+    }
+     * @param positiveQuery the positive query for this boosting query.  
+    public void visit(QueryBuilderVisitor visitor) {
+        return this;
+ * SPDX-License-Identifier: Apache-2.0
+    private static final ParseField POSITIVE_FIELD = new ParseField("positive");
+        negativeQuery.toXContent(builder, params);  
+/*  
+                if (POSITIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+            );
+        }  

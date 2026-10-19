@@ -1,169 +1,153 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.opensearch.common.Rounding;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;  
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.BucketOrder;  
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.bucket.filterrewrite.DateHistogramAggregatorBridge;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;  
 import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Aggregation Factory for date_histogram agg
- *  
- * @opensearch.internal
- */
-public final class DateHistogramAggregatorFactory extends ValuesSourceAggregatorFactory {  
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        builder.register(  
-            DateHistogramAggregationBuilder.REGISTRY_KEY,
-            List.of(CoreValuesSourceType.DATE, CoreValuesSourceType.NUMERIC, CoreValuesSourceType.BOOLEAN),
-            DateHistogramAggregator::new,  
-            true
         );
-
-        builder.register(DateHistogramAggregationBuilder.REGISTRY_KEY, CoreValuesSourceType.RANGE, DateRangeHistogramAggregator::new, true);
-    }
-
-    private final BucketOrder order;
-    private final boolean keyed;
     private final long minDocCount;  
-    private final LongBounds extendedBounds;
-    private final LongBounds hardBounds;
-    private final Rounding rounding;  
-
-    public DateHistogramAggregatorFactory(
-        String name,  
-        ValuesSourceConfig config,
-        BucketOrder order,
-        boolean keyed,  
-        long minDocCount,
-        Rounding rounding,
-        LongBounds extendedBounds,  
-        LongBounds hardBounds,
-        QueryShardContext queryShardContext,
-        AggregatorFactory parent,  
-        AggregatorFactories.Builder subFactoriesBuilder,
-        Map<String, Object> metadata
-    ) throws IOException {  
-        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
+ *  
+ * Licensed to Elasticsearch under one or more contributor  
         this.order = order;
-        this.keyed = keyed;  
-        this.minDocCount = minDocCount;
-        this.extendedBounds = extendedBounds;
-        this.hardBounds = hardBounds;  
-        this.rounding = rounding;
-    }
-
-    public long minDocCount() {
-        return minDocCount;
-    }  
-
-    protected Aggregator doCreateInternal(
-        SearchContext searchContext,  
-        Aggregator parent,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        DateHistogramAggregationSupplier aggregatorSupplier = queryShardContext.getValuesSourceRegistry()
-            .getAggregator(DateHistogramAggregationBuilder.REGISTRY_KEY, config);  
-        // TODO: Is there a reason not to get the prepared rounding in the supplier itself?
-        Rounding.Prepared preparedRounding = config.getValuesSource().roundingPreparer(queryShardContext.getIndexReader()).apply(rounding);
-        return aggregatorSupplier.build(  
-            name,
-            factories,
-            rounding,  
-            preparedRounding,
-            order,
-            keyed,  
-            minDocCount,
-            extendedBounds,
-            hardBounds,  
-            config,
-            searchContext,
             parent,  
-            cardinality,
-            metadata
-        );  
-    }
-
-    @Override  
-    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
-        return new DateHistogramAggregator(
-            name,  
-            factories,
-            rounding,
-            null,  
-            order,
-            keyed,
-            minDocCount,  
-            extendedBounds,
-            hardBounds,
+        DateHistogramAggregationSupplier aggregatorSupplier = queryShardContext.getValuesSourceRegistry()
+            keyed,  
             config,  
-            searchContext,
-            parent,
-            CardinalityUpperBound.NONE,  
-            metadata
-        );
-    }  
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {  
+        long minDocCount,
+ * Aggregation Factory for date_histogram agg
+        Rounding rounding,
+            name,  
+        AggregatorFactories.Builder subFactoriesBuilder,
+        this.rounding = rounding;
         return true;
+            factories,
     }
-
-    @Override
-    protected boolean supportsIntraSegmentSearch() {
-        // Use intra-segment only when the filter-rewrite fast path does NOT apply (non-UTC, script/missing,  
-        // non-indexed field, or nested). When it applies, its BKD point-tree walk is not partition-aware, so
+            .getAggregator(DateHistogramAggregationBuilder.REGISTRY_KEY, config);  
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;  
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+            order,
+        String name,  
+    }  
+ * license agreements. See the NOTICE file distributed with
+ * ownership. Elasticsearch licenses this file to you under  
+        LongBounds hardBounds,
         // partitioning would duplicate the walk per partition and regress — stay sequential in that case.
+            searchContext,
+    protected boolean supportsConcurrentSegmentSearch() {  
+        this.minDocCount = minDocCount;
+            true
+    ) throws IOException {  
+            extendedBounds,
+    }
+            minDocCount,  
+        );  
+package org.opensearch.search.aggregations.bucket.histogram;
+    public long minDocCount() {
+import org.opensearch.index.query.QueryShardContext;
+ *  
+/*  
         return DateHistogramAggregatorBridge.filterRewriteFastPathApplies(parent, config, rounding) == false;  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
     }
-
-    public Rounding.DateTimeUnit getRounding() {  
+    private final Rounding rounding;  
+        Map<String, Object> metadata  
+    private final boolean keyed;
+import java.io.IOException;  
         return this.rounding.unit();
+    @Override
+            config,
+            metadata
+            List.of(CoreValuesSourceType.DATE, CoreValuesSourceType.NUMERIC, CoreValuesSourceType.BOOLEAN),
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+        LongBounds extendedBounds,  
+            rounding,
+import org.opensearch.search.aggregations.bucket.filterrewrite.DateHistogramAggregatorBridge;
+    @Override
+        AggregatorFactory parent,  
+        builder.register(  
+        // Use intra-segment only when the filter-rewrite fast path does NOT apply (non-UTC, script/missing,  
+ * The OpenSearch Contributors require contributions made to  
+            searchContext,
+ *
+import java.util.List;
+ */  
+import java.util.Map;
+ *
+import org.opensearch.common.Rounding;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
+        Rounding.Prepared preparedRounding = config.getValuesSource().roundingPreparer(queryShardContext.getIndexReader()).apply(rounding);
+            extendedBounds,
+/*
+            metadata
+/*  
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+            DateHistogramAggregator::new,  
+    public DateHistogramAggregatorFactory(
+    private final LongBounds extendedBounds;
+ * GitHub history for details.
+        Aggregator parent,
+            factories,
+        BucketOrder order,
+public final class DateHistogramAggregatorFactory extends ValuesSourceAggregatorFactory {  
+        SearchContext searchContext,  
+            preparedRounding,
+    private final BucketOrder order;
+        // TODO: Is there a reason not to get the prepared rounding in the supplier itself?
+            name,
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+import org.opensearch.search.aggregations.Aggregator;  
+        // non-indexed field, or nested). When it applies, its BKD point-tree walk is not partition-aware, so
+ * SPDX-License-Identifier: Apache-2.0
+/**
+ */  
+        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
     }
+        this.keyed = keyed;  
+        ValuesSourceConfig config,
+ */
+ * under the License.  
+            parent,
+            rounding,  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ * this work for additional information regarding copyright
+            null,  
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+    protected boolean supportsIntraSegmentSearch() {
+        this.hardBounds = hardBounds;  
+import org.opensearch.search.aggregations.AggregatorFactories;
+    }  
+ * software distributed under the License is distributed on an
+import org.opensearch.search.aggregations.AggregatorFactory;
+    }
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+import org.opensearch.search.aggregations.BucketOrder;  
+        CardinalityUpperBound cardinality,
+    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
+        return aggregatorSupplier.build(  
+            CardinalityUpperBound.NONE,  
+            keyed,
+    @Override  
+        this.extendedBounds = extendedBounds;
+ * compatible open source license.
+            cardinality,
+        boolean keyed,  
+        QueryShardContext queryShardContext,
+            hardBounds,  
+        Map<String, Object> metadata
+            hardBounds,
+ * @opensearch.internal
+ * specific language governing permissions and limitations
 }  
+    private final LongBounds hardBounds;
+            order,
+        return new DateHistogramAggregator(
+    public Rounding.DateTimeUnit getRounding() {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            DateHistogramAggregationBuilder.REGISTRY_KEY,
+        );
+    protected Aggregator doCreateInternal(
+    ) throws IOException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return minDocCount;
+        builder.register(DateHistogramAggregationBuilder.REGISTRY_KEY, CoreValuesSourceType.RANGE, DateRangeHistogramAggregator::new, true);
+            minDocCount,

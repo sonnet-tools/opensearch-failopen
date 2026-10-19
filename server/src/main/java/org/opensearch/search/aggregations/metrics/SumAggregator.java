@@ -1,257 +1,233 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.DocIdStream;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.util.NumericUtils;  
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.DoubleArray;  
-import org.opensearch.index.codec.composite.CompositeIndexFieldInfo;
-import org.opensearch.index.compositeindex.datacube.MetricStat;
-import org.opensearch.index.fielddata.SortedNumericDoubleValues;  
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.StarTreeBucketCollector;  
-import org.opensearch.search.aggregations.StarTreePreComputeCollector;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.StarTreeQueryHelper;
-
-import java.io.IOException;
-import java.util.Map;
-
-import static org.opensearch.search.startree.StarTreeQueryHelper.getSupportedStarTree;
-
-/**  
- * Aggregate all docs into a single sum value
- *
- * @opensearch.internal  
- */
-public class SumAggregator extends NumericMetricsAggregator.SingleValue implements StarTreePreComputeCollector {
-
+        }
     private final ValuesSource.Numeric valuesSource;
-    private final DocValueFormat format;
-
-    private DoubleArray sums;
-    private DoubleArray compensations;
-
-    SumAggregator(
-        String name,
-        ValuesSourceConfig valuesSourceConfig,  
-        SearchContext context,
-        Aggregator parent,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        super(name, context, parent, metadata);
-        // TODO: stop expecting nulls here  
-        this.valuesSource = valuesSourceConfig.hasValues() ? (ValuesSource.Numeric) valuesSourceConfig.getValuesSource() : null;
-        this.format = valuesSourceConfig.format();
-        if (valuesSource != null) {  
-            sums = context.bigArrays().newDoubleArray(1, true);
-            compensations = context.bigArrays().newDoubleArray(1, true);
-        }  
-    }
-
-    @Override  
-    public ScoreMode scoreMode() {
-        return valuesSource != null && valuesSource.needsScores() ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
-    }  
-
+                }
+     */
+        return sums.get(owningBucketOrd);
+                kahanSummation.reset(sums.get(bucket), compensations.get(bucket));  
     @Override
-    protected boolean tryPrecomputeAggregationForLeaf(LeafReaderContext ctx) throws IOException {  
-        if (valuesSource == null) {
-            return false;
-        }  
-        CompositeIndexFieldInfo supportedStarTree = getSupportedStarTree(this.context.getQueryShardContext());
-        if (supportedStarTree != null) {
-            if (parent != null && subAggregators.length == 0) {  
-                // If this a child aggregator, then the parent will trigger star-tree pre-computation.
-                // Returning NO_OP_COLLECTOR explicitly because the getLeafCollector() are invoked starting from innermost aggregators
-                return true;  
-            }
-            precomputeLeafUsingStarTree(ctx, supportedStarTree);
-            return true;  
-        }
         return false;
-    }  
-
+        if (valuesSource == null || bucket >= sums.size()) {  
+ * license agreements. See the NOTICE file distributed with
     @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {  
-
-        if (valuesSource == null) {
-            return LeafBucketCollector.NO_OP_COLLECTOR;  
-        }
-        final BigArrays bigArrays = context.bigArrays();
-        final SortedNumericDoubleValues values = valuesSource.doubleValues(ctx);  
-        final CompensatedSum kahanSummation = new CompensatedSum(0, 0);
-        return new LeafBucketCollectorBase(sub, values) {
-            @Override  
+    public InternalAggregation buildEmptyAggregation() {
+        StarTreeQueryHelper.precomputeLeafUsingStarTree(
+            private void setKahanSummation(long bucket) {
+ * ownership. Elasticsearch licenses this file to you under  
+            public void collectRange(int min, int max) throws IOException {
+    }  
+import org.apache.lucene.util.NumericUtils;  
+            }
+import java.io.IOException;
+import org.opensearch.search.internal.SearchContext;
             public void collect(int doc, long bucket) throws IOException {
-                if (values.advanceExact(doc)) {
-                    setKahanSummation(bucket);  
+    ) throws IOException {  
+            parentCollector,  
+        final CompensatedSum kahanSummation = new CompensatedSum(sums.get(0), compensations.get(0));  
+        StarTreeBucketCollector parentCollector
+    }  
+                    if (values.advanceExact(docId)) {
+                        }
+    @Override
                     for (int i = 0; i < values.docValueCount(); i++) {
+ * not use this file except in compliance with the License.
+            public void collect(DocIdStream stream, long bucket) throws IOException {
+                sums = context.bigArrays().grow(sums, bucket + 1);
+    }  
+                    }
+ * under the License.  
+            starTree,  
+    SumAggregator(
+        SearchContext context,
+            return true;  
+            precomputeLeafUsingStarTree(ctx, supportedStarTree);
+    public void doReset() {  
+ * Unless required by applicable law or agreed to in writing,
+ *
+            MetricStat.SUM.getTypeName(),
+        if (sums != null) {
+     * The parent aggregator invokes this method to get a StarTreeBucketCollector,
+package org.opensearch.search.aggregations.metrics;
+            valuesSource,
+import org.opensearch.index.codec.composite.CompositeIndexFieldInfo;
+        this.format = valuesSourceConfig.format();
+/**  
+ * SPDX-License-Identifier: Apache-2.0
+        super(name, context, parent, metadata);
+            @Override  
+                compensations = bigArrays.grow(compensations, bucket + 1);
+            }  
+ * @opensearch.internal  
+                compensations.set(bucket, kahanSummation.delta());
+import org.opensearch.search.startree.StarTreeQueryHelper;
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+                    setKahanSummation(bucket);  
+                        for (int i = 0; i < values.docValueCount(); i++) {
+    @Override
+        final BigArrays bigArrays = context.bigArrays();
+ * compatible open source license.
+            value -> kahanSummation.add(NumericUtils.sortableLongToDouble(value)),
+                double compensation = compensations.get(bucket);
+        return valuesSource != null && valuesSource.needsScores() ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
+        return new InternalSum(name, 0.0, format, metadata());
+                for (int docId = min; docId < max; docId++) {  
+import org.apache.lucene.search.ScoreMode;
+        final CompensatedSum kahanSummation = new CompensatedSum(0, 0);
+            }
+            if (parent != null && subAggregators.length == 0) {  
+        this.valuesSource = valuesSourceConfig.hasValues() ? (ValuesSource.Numeric) valuesSourceConfig.getValuesSource() : null;
+ */
+import org.opensearch.search.aggregations.StarTreePreComputeCollector;
+import org.opensearch.search.aggregations.InternalAggregation;  
+    @Override  
+        if (compensations != null) {
+                        for (int i = 0; i < values.docValueCount(); i++) {  
+ * software distributed under the License is distributed on an
+        Releasables.close(sums, compensations);
+                sums.set(bucket, kahanSummation.value());  
+ * specific language governing permissions and limitations
+            (bucket) -> {
+import org.opensearch.index.compositeindex.datacube.MetricStat;
+import org.opensearch.common.lease.Releasables;
+        final CompensatedSum kahanSummation = new CompensatedSum(0, 0);
+                sums = bigArrays.grow(sums, bucket + 1);  
+ */
+ *  
+        final SortedNumericDoubleValues values = valuesSource.doubleValues(ctx);  
+            context,  
+        }
+ * this file be licensed under the Apache-2.0 license or a
                         double value = values.nextValue();
                         kahanSummation.add(value);  
-                    }
-                    compensations.set(bucket, kahanSummation.delta());
-                    sums.set(bucket, kahanSummation.value());  
-                }
-            }
-
-            @Override
-            public void collect(DocIdStream stream, long bucket) throws IOException {
-                setKahanSummation(bucket);  
-                stream.forEach((doc) -> {
-                    if (values.advanceExact(doc)) {
-                        for (int i = 0; i < values.docValueCount(); i++) {  
-                            kahanSummation.add(values.nextValue());
-                        }
-                    }  
-                });
-                compensations.set(bucket, kahanSummation.delta());
-                sums.set(bucket, kahanSummation.value());  
-            }
-
-            @Override  
-            public void collectRange(int min, int max) throws IOException {
-                setKahanSummation(0);
-                for (int docId = min; docId < max; docId++) {  
-                    if (values.advanceExact(docId)) {
-                        for (int i = 0; i < values.docValueCount(); i++) {
-                            kahanSummation.add(values.nextValue());  
-                        }
-                    }
-                }  
-                sums.set(0, kahanSummation.value());
+/*
                 compensations.set(0, kahanSummation.delta());
-            }  
-
-            private void setKahanSummation(long bucket) {
-                sums = bigArrays.grow(sums, bucket + 1);  
-                compensations = bigArrays.grow(compensations, bucket + 1);
-                // Compute the sum of double values with Kahan summation algorithm which is more
-                // accurate than naive summation.  
-                double sum = sums.get(bucket);
-                double compensation = compensations.get(bucket);
-                kahanSummation.reset(sum, compensation);  
-            }
-        };
-    }  
-
-    private void precomputeLeafUsingStarTree(LeafReaderContext ctx, CompositeIndexFieldInfo starTree) throws IOException {
-        final CompensatedSum kahanSummation = new CompensatedSum(sums.get(0), compensations.get(0));  
-
-        StarTreeQueryHelper.precomputeLeafUsingStarTree(
-            context,  
-            valuesSource,
-            ctx,
-            starTree,  
-            MetricStat.SUM.getTypeName(),
-            value -> kahanSummation.add(NumericUtils.sortableLongToDouble(value)),
             () -> {  
-                sums.set(0, kahanSummation.value());
-                compensations.set(0, kahanSummation.delta());
-            }  
         );
-    }
-
-    /**
-     * The parent aggregator invokes this method to get a StarTreeBucketCollector,
-     * which exposes collectStarTreeEntry() to be evaluated on filtered star tree entries  
-     */
-    public StarTreeBucketCollector getStarTreeBucketCollector(
-        LeafReaderContext ctx,  
-        CompositeIndexFieldInfo starTree,
-        StarTreeBucketCollector parentCollector
-    ) throws IOException {  
-        final CompensatedSum kahanSummation = new CompensatedSum(0, 0);
-        return StarTreeQueryHelper.getStarTreeBucketMetricCollector(
-            starTree,  
-            MetricStat.SUM.getTypeName(),
-            valuesSource,
-            parentCollector,  
-            (bucket) -> {
-                sums = context.bigArrays().grow(sums, bucket + 1);
-                compensations = context.bigArrays().grow(compensations, bucket + 1);  
-            },
             (bucket, metricValue) -> {
-                kahanSummation.reset(sums.get(bucket), compensations.get(bucket));  
-                kahanSummation.add(NumericUtils.sortableLongToDouble(metricValue));
-                sums.set(bucket, kahanSummation.value());
-                compensations.set(bucket, kahanSummation.delta());  
-            }
-        );
-    }  
-
-    @Override
-    public double metric(long owningBucketOrd) {  
+     * which exposes collectStarTreeEntry() to be evaluated on filtered star tree entries  
+            @Override
+        }  
+    @Override  
+ * the Apache License, Version 2.0 (the "License"); you may
+                setKahanSummation(bucket);  
+                    sums.set(bucket, kahanSummation.value());  
+        LeafReaderContext ctx,  
+                            kahanSummation.add(values.nextValue());
+/*
         if (valuesSource == null || owningBucketOrd >= sums.size()) {
+import org.opensearch.common.util.BigArrays;
+import static org.opensearch.search.startree.StarTreeQueryHelper.getSupportedStarTree;
+        ValuesSourceConfig valuesSourceConfig,  
+import org.opensearch.search.aggregations.Aggregator;
+            starTree,  
+                return true;  
+        }
+            @Override  
+    ) throws IOException {
+            }  
+ * You may obtain a copy of the License at  
+    }  
+import org.opensearch.search.aggregations.LeafBucketCollector;
+    }
+        String name,
+    }
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {  
+    private final DocValueFormat format;
+    /**
+import org.apache.lucene.search.DocIdStream;
+        if (valuesSource == null) {
+ * Modifications Copyright OpenSearch Contributors. See  
+        );
+        // TODO: stop expecting nulls here  
+    public void doClose() {
+import org.opensearch.index.fielddata.SortedNumericDoubleValues;  
+                }  
+    private void precomputeLeafUsingStarTree(LeafReaderContext ctx, CompositeIndexFieldInfo starTree) throws IOException {
+                if (values.advanceExact(doc)) {
+ * GitHub history for details.
+    }
+                            kahanSummation.add(values.nextValue());  
+            }
+ *
+        }  
+import org.opensearch.search.aggregations.support.ValuesSource;
+                    if (values.advanceExact(doc)) {
+ * Licensed to Elasticsearch under one or more contributor  
+}
+        Map<String, Object> metadata  
+                // accurate than naive summation.  
+            }
+ */
+    protected boolean tryPrecomputeAggregationForLeaf(LeafReaderContext ctx) throws IOException {  
+                compensations = context.bigArrays().grow(compensations, bucket + 1);  
+        if (supportedStarTree != null) {
+    }  
+    public double metric(long owningBucketOrd) {  
+    public InternalAggregation buildAggregation(long bucket) {
+    }
+ * KIND, either express or implied.  See the License for the
+            MetricStat.SUM.getTypeName(),
+            return buildEmptyAggregation();
+                setKahanSummation(0);
+import java.util.Map;
+                });
+/*  
+public class SumAggregator extends NumericMetricsAggregator.SingleValue implements StarTreePreComputeCollector {
+        Aggregator parent,
+ * this work for additional information regarding copyright
+                kahanSummation.reset(sum, compensation);  
             return 0.0;
         }  
-        return sums.get(owningBucketOrd);
-    }
-
-    @Override
-    public InternalAggregation buildAggregation(long bucket) {
-        if (valuesSource == null || bucket >= sums.size()) {  
-            return buildEmptyAggregation();
-        }
-        return new InternalSum(name, sums.get(bucket), format, metadata());  
-    }
-
-    @Override  
-    public InternalAggregation buildEmptyAggregation() {
-        return new InternalSum(name, 0.0, format, metadata());
-    }  
-
-    @Override
-    public void doReset() {  
-        if (sums != null) {
+ * Aggregate all docs into a single sum value
+        };
+import org.opensearch.common.util.DoubleArray;  
+                        }
+                    }
+        }  
+        return StarTreeQueryHelper.getStarTreeBucketMetricCollector(
+import org.opensearch.search.aggregations.StarTreeBucketCollector;  
+                sums.set(0, kahanSummation.value());
+                // If this a child aggregator, then the parent will trigger star-tree pre-computation.
+ */  
+import org.opensearch.search.DocValueFormat;
+            },
+        if (valuesSource != null) {  
+                sums.set(bucket, kahanSummation.value());
+                stream.forEach((doc) -> {
+                compensations.set(bucket, kahanSummation.delta());  
             sums.fill(0, sums.size(), 0.0);
-        }  
-        if (compensations != null) {
-            compensations.fill(0, compensations.size(), 0.0);
-        }  
-    }
-
-    @Override  
-    public void doClose() {
-        Releasables.close(sums, compensations);
+    private DoubleArray sums;
+                sums.set(0, kahanSummation.value());
     }  
-}
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            compensations = context.bigArrays().newDoubleArray(1, true);
+            ctx,
+            sums = context.bigArrays().newDoubleArray(1, true);
+        if (valuesSource == null) {
+            return LeafBucketCollector.NO_OP_COLLECTOR;  
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
+                    compensations.set(bucket, kahanSummation.delta());
+            valuesSource,
+                double sum = sums.get(bucket);
+    private DoubleArray compensations;
+    public StarTreeBucketCollector getStarTreeBucketCollector(
+        return new InternalSum(name, sums.get(bucket), format, metadata());  
+        return new LeafBucketCollectorBase(sub, values) {
+            return false;
+import org.apache.lucene.index.LeafReaderContext;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                compensations.set(0, kahanSummation.delta());
+        }  
+                    }  
+    public ScoreMode scoreMode() {
+    @Override  
+                // Returning NO_OP_COLLECTOR explicitly because the getLeafCollector() are invoked starting from innermost aggregators
+        CompositeIndexFieldInfo starTree,
+    }
+                kahanSummation.add(NumericUtils.sortableLongToDouble(metricValue));
+                // Compute the sum of double values with Kahan summation algorithm which is more
+ *
+            }
+            compensations.fill(0, compensations.size(), 0.0);
+        CompositeIndexFieldInfo supportedStarTree = getSupportedStarTree(this.context.getQueryShardContext());
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;  

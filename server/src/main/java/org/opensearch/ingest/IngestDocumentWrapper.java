@@ -1,48 +1,40 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ingest;
-
-/**
- * A IngestDocument wrapper including the slot of the IngestDocument in original IndexRequests.
- * It also stores the exception happened during ingest process of the document.  
- */
+    }
 public final class IngestDocumentWrapper {
+    }
+        return this.ingestDocument;  
+/**
+    public IngestDocumentWrapper(int slot, int childSlot, IngestDocument ingestDocument, Exception ex) {
+    public int getChildSlot() {
+    }
+ * compatible open source license.
+package org.opensearch.ingest;
+}
+    public Exception getException() {  
+ *
+        return this.slot;
+ */
+    }
     private final int slot;  
     private final int childSlot;
-    private IngestDocument ingestDocument;
-    private Exception exception;  
-
-    public IngestDocumentWrapper(int slot, int childSlot, IngestDocument ingestDocument, Exception ex) {
-        this.slot = slot;  
-        this.childSlot = childSlot;
-        this.ingestDocument = ingestDocument;
-        this.exception = ex;  
-    }
-
-    public int getSlot() {  
-        return this.slot;
-    }
-
-    public int getChildSlot() {
-        return this.childSlot;
-    }  
-
-    public IngestDocument getIngestDocument() {
-        return this.ingestDocument;  
-    }
-
-    public Exception getException() {  
-        return this.exception;
-    }
-
     public void update(IngestDocument result, Exception ex) {
-        this.ingestDocument = result;
         this.exception = ex;  
+        this.childSlot = childSlot;
+ * SPDX-License-Identifier: Apache-2.0
+    private IngestDocument ingestDocument;
+        this.slot = slot;  
     }
-}
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+    public int getSlot() {  
+    public IngestDocument getIngestDocument() {
+        return this.childSlot;
+        this.ingestDocument = ingestDocument;
+ * A IngestDocument wrapper including the slot of the IngestDocument in original IndexRequests.
+        this.ingestDocument = result;
+ * It also stores the exception happened during ingest process of the document.  
+/*  
+ */  
+    }  
+    private Exception exception;  
+        this.exception = ex;  
+        return this.exception;

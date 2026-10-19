@@ -1,320 +1,275 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.action.support.clustermanager;
-
-import org.opensearch.Version;  
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.PlainActionFuture;  
-import org.opensearch.action.support.ThreadedActionListener;
-import org.opensearch.action.support.clustermanager.term.GetTermVersionResponse;
-import org.opensearch.action.support.replication.ClusterStateCreationUtils;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.coordination.ClusterStateTermVersion;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.tasks.Task;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.After;  
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.concurrent.ExecutionException;  
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;  
-import static org.opensearch.test.ClusterServiceUtils.setState;
-import static org.hamcrest.Matchers.equalTo;
-
-public class TransportClusterManagerTermCheckTests extends OpenSearchTestCase {
-    private static ThreadPool threadPool;
-
-    private ClusterService clusterService;
-    private TransportService transportService;
-    private CapturingTransport transport;  
-    private DiscoveryNode localNode;
-    private DiscoveryNode remoteNode;
-    private DiscoveryNode[] allNodes;  
-
-    @BeforeClass
-    public static void beforeClass() {  
-        threadPool = new TestThreadPool("TransportMasterNodeActionTests");
-    }
-
-    @Override
-    @Before
-    public void setUp() throws Exception {  
-        super.setUp();
-        transport = new CapturingTransport();
-        clusterService = createClusterService(threadPool);  
-        transportService = transport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,  
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            x -> clusterService.localNode(),
-            null,  
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );  
-        transportService.start();
-        transportService.acceptIncomingRequests();
-
-    }
-
-    @After  
-    public void tearDown() throws Exception {
-        super.tearDown();
-        clusterService.close();  
-        transportService.close();
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);  
-        threadPool = null;
-    }
-
-    public static class Request extends ClusterManagerNodeRequest<Request> {
-        Request() {}
-
-        Request(StreamInput in) throws IOException {
-            super(in);
-        }  
-
-        @Override
-        public ActionRequestValidationException validate() {  
-            return null;
-        }
-    }  
-
-    class Response extends ActionResponse {
-        private long identity = randomLong();  
-
-        Response() {}
-
-        Response(StreamInput in) throws IOException {
-            super(in);
-            identity = in.readLong();  
-        }
-
-        @Override  
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;  
-            Response response = (Response) o;
-            return identity == response.identity;
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Objects.hash(identity);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeLong(identity);  
-        }
-    }
-
-    class Action extends TransportClusterManagerNodeAction<Request, Response> {
-        Action(String actionName, TransportService transportService, ClusterService clusterService, ThreadPool threadPool) {
-            super(  
-                actionName,
-                transportService,
-                clusterService,  
-                threadPool,
-                new ActionFilters(new HashSet<>()),
-                Request::new,  
-                new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY))
-            );
-        }  
-
-        @Override
-        protected void doExecute(Task task, final Request request, ActionListener<Response> listener) {  
-            // remove unneeded threading by wrapping listener with SAME to prevent super.doExecute from wrapping it with LISTENER
-            super.doExecute(task, request, new ThreadedActionListener<>(logger, threadPool, ThreadPool.Names.SAME, listener, false));
-        }  
-
-        @Override
-        protected String executor() {  
-            // very lightweight operation in memory, no need to fork to a thread
-            return ThreadPool.Names.SAME;
-        }  
-
-        @Override
-        protected boolean localExecuteSupportedByAction() {  
-            return true;
-        }
-
-        @Override
-        protected Response read(StreamInput in) throws IOException {
-            return new Response(in);  
-        }
-
-        @Override  
-        protected void clusterManagerOperation(Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
-            listener.onResponse(new Response()); // default implementation, overridden in specific tests
-        }  
-
-        @Override
-        protected ClusterBlockException checkBlock(Request request, ClusterState state) {  
-            return null; // default implementation, overridden in specific tests
-        }
-    }  
-
-    public void testTermCheckMatchWithClusterManager() throws ExecutionException, InterruptedException {
-        setUpCluster(Version.CURRENT);  
-
-        TransportClusterManagerTermCheckTests.Request request = new TransportClusterManagerTermCheckTests.Request();
-        PlainActionFuture<TransportClusterManagerTermCheckTests.Response> listener = new PlainActionFuture<>();  
-        new TransportClusterManagerTermCheckTests.Action("internal:testAction", transportService, clusterService, threadPool).execute(
-            request,
-            listener  
-        );
-
-        assertThat(transport.capturedRequests().length, equalTo(1));  
-        CapturingTransport.CapturedRequest capturedRequest = transport.capturedRequests()[0];
-        assertTrue(capturedRequest.node.isClusterManagerNode());
-        assertThat(capturedRequest.action, equalTo("internal:monitor/term"));  
         GetTermVersionResponse response = new GetTermVersionResponse(
-            new ClusterStateTermVersion(
-                clusterService.state().getClusterName(),  
-                clusterService.state().metadata().clusterUUID(),
-                clusterService.state().term(),
-                clusterService.state().version()  
-            )
-        );
-        transport.handleResponse(capturedRequest.requestId, response);  
-        assertTrue(listener.isDone());
-    }
-
-    public void testTermCheckNoMatchWithClusterManager() throws ExecutionException, InterruptedException {
-        setUpCluster(Version.CURRENT);
-        TransportClusterManagerTermCheckTests.Request request = new TransportClusterManagerTermCheckTests.Request();  
-
-        PlainActionFuture<TransportClusterManagerTermCheckTests.Response> listener = new PlainActionFuture<>();
-        new TransportClusterManagerTermCheckTests.Action("internal:testAction", transportService, clusterService, threadPool).execute(  
-            request,
-            listener
         );  
-
+import java.util.concurrent.TimeUnit;
+                clusterService.state().version()  
+        assertTrue(listener.isDone());
+        @Override
+            listener.onResponse(new Response()); // default implementation, overridden in specific tests
+import org.opensearch.test.transport.CapturingTransport;
+            new ClusterStateTermVersion(
+import org.opensearch.core.action.ActionListener;
+    private DiscoveryNode[] allNodes;  
+        assertThat(capturedRequest.request, equalTo(request));
+        private long identity = randomLong();  
+        transportService = transport.createTransportService(
+/*  
+        TransportClusterManagerTermCheckTests.Response response = new TransportClusterManagerTermCheckTests.Response();
+        CapturingTransport.CapturedRequest capturedRequest = transport.capturedRequests()[0];  
+import org.opensearch.cluster.ClusterState;
+            super(in);
+ * Modifications Copyright OpenSearch Contributors. See  
+            return null;
+import org.opensearch.test.OpenSearchTestCase;
+            return Objects.hash(identity);
+ * specific language governing permissions and limitations
+            Collections.emptyMap(),
+import java.util.Objects;
+            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),  
+        assertThat(capturedRequest.action, equalTo("internal:testAction"));  
+        assertTrue(capturedRequest.node.isClusterManagerNode());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY))
+        @Override
+            listener
+            NoopTracer.INSTANCE
+import org.opensearch.action.support.clustermanager.term.GetTermVersionResponse;
+ * ownership. Elasticsearch licenses this file to you under  
+import org.junit.After;  
+        }  
+        protected Response read(StreamInput in) throws IOException {
+        Request(StreamInput in) throws IOException {
+ * You may obtain a copy of the License at  
+            if (this == o) return true;
+            request,
+ */  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.cluster.node.DiscoveryNodeRole;  
+            buildNewFakeTransportAddress(),  
+        setUpCluster(Version.CURRENT);  
+                clusterService,  
+            )
+        }  
+import org.opensearch.telemetry.tracing.noop.NoopTracer;  
+        }
+import org.opensearch.threadpool.ThreadPool;
+        setUpCluster(Version.V_2_12_0);
+            Collections.emptySet(),
+            return true;
+        @Override
+        PlainActionFuture<TransportClusterManagerTermCheckTests.Response> listener = new PlainActionFuture<>();
+import org.junit.Before;
+        }
+ *  
+            return null; // default implementation, overridden in specific tests
+ * Licensed to Elasticsearch under one or more contributor  
+            buildNewFakeTransportAddress(),
+ * compatible open source license.
+            request,
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+import org.opensearch.common.settings.Settings;
+        }
+        transport.handleResponse(termCheckRequest.requestId, noMatchResponse);
+            // very lightweight operation in memory, no need to fork to a thread
+    @Before
+        }
+ * not use this file except in compliance with the License.
+        assertThat(listener.get(), equalTo(response));
+ * GitHub history for details.
+        setUpCluster(Version.CURRENT);
+        assertTrue(termCheckRequest.node.isClusterManagerNode());
+}
+ * KIND, either express or implied.  See the License for the
+            if (o == null || getClass() != o.getClass()) return false;  
+import org.opensearch.tasks.Task;
+        );  
+            return identity == response.identity;
+    @After  
+        TransportClusterManagerTermCheckTests.Request request = new TransportClusterManagerTermCheckTests.Request();
+            null,  
+        CapturingTransport.CapturedRequest capturedRequest = transport.capturedRequests()[1];  
+            new ClusterStateTermVersion(
+            x -> clusterService.localNode(),
+        clusterService.close();  
+        assertTrue(listener.isDone());
         assertThat(transport.capturedRequests().length, equalTo(1));
         CapturingTransport.CapturedRequest termCheckRequest = transport.capturedRequests()[0];  
-        assertTrue(termCheckRequest.node.isClusterManagerNode());
-        assertThat(termCheckRequest.action, equalTo("internal:monitor/term"));
-        GetTermVersionResponse noMatchResponse = new GetTermVersionResponse(  
-            new ClusterStateTermVersion(
+        super.tearDown();
                 clusterService.state().getClusterName(),
-                clusterService.state().metadata().clusterUUID(),  
-                clusterService.state().term(),
-                clusterService.state().version() - 1
-            )  
-        );
-        transport.handleResponse(termCheckRequest.requestId, noMatchResponse);
-        assertFalse(listener.isDone());  
-
-        assertThat(transport.capturedRequests().length, equalTo(2));
-        CapturingTransport.CapturedRequest capturedRequest = transport.capturedRequests()[1];  
-        assertTrue(capturedRequest.node.isClusterManagerNode());
-        assertThat(capturedRequest.request, equalTo(request));
-        assertThat(capturedRequest.action, equalTo("internal:testAction"));  
-
-        TransportClusterManagerTermCheckTests.Response response = new TransportClusterManagerTermCheckTests.Response();
-        transport.handleResponse(capturedRequest.requestId, response);  
-        assertTrue(listener.isDone());
-        assertThat(listener.get(), equalTo(response));
-
-    }
-
-    public void testTermCheckOnOldVersionClusterManager() throws ExecutionException, InterruptedException {  
-
-        setUpCluster(Version.V_2_12_0);
-        TransportClusterManagerTermCheckTests.Request request = new TransportClusterManagerTermCheckTests.Request();  
-
-        PlainActionFuture<TransportClusterManagerTermCheckTests.Response> listener = new PlainActionFuture<>();
-        new TransportClusterManagerTermCheckTests.Action("internal:testAction", transportService, clusterService, threadPool).execute(  
-            request,
-            listener
-        );  
-
+        protected void doExecute(Task task, final Request request, ActionListener<Response> listener) {  
+import org.opensearch.cluster.block.ClusterBlockException;
+        transport = new CapturingTransport();
+    public void setUp() throws Exception {  
+ * this file be licensed under the Apache-2.0 license or a
         assertThat(transport.capturedRequests().length, equalTo(1));
-        CapturingTransport.CapturedRequest capturedRequest = transport.capturedRequests()[0];  
-        assertTrue(capturedRequest.node.isClusterManagerNode());
-        assertThat(capturedRequest.request, equalTo(request));
-        assertThat(capturedRequest.action, equalTo("internal:testAction"));  
-
-        TransportClusterManagerTermCheckTests.Response response = new TransportClusterManagerTermCheckTests.Response();
-        transport.handleResponse(capturedRequest.requestId, response);  
-        assertTrue(listener.isDone());
-        assertThat(listener.get(), equalTo(response));
-
-    }
-
-    private void setUpCluster(Version clusterManagerVersion) {  
-        localNode = new DiscoveryNode(
-            "local_node",
-            buildNewFakeTransportAddress(),  
-            Collections.emptyMap(),
-            Collections.singleton(DiscoveryNodeRole.DATA_ROLE),
-            Version.CURRENT  
-        );
-        remoteNode = new DiscoveryNode(
-            "remote_node",  
-            buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),  
-            clusterManagerVersion
-        );
-        allNodes = new DiscoveryNode[] { localNode, remoteNode };  
-        setState(clusterService, ClusterStateCreationUtils.state(localNode, remoteNode, allNodes));
-
+    public void testTermCheckMatchWithClusterManager() throws ExecutionException, InterruptedException {
+                threadPool,
+        protected ClusterBlockException checkBlock(Request request, ClusterState state) {  
+                new ActionFilters(new HashSet<>()),
+        assertThat(transport.capturedRequests().length, equalTo(2));
+            super.doExecute(task, request, new ThreadedActionListener<>(logger, threadPool, ThreadPool.Names.SAME, listener, false));
     }  
-}
+    }
+import org.opensearch.action.support.ThreadedActionListener;
+ * this work for additional information regarding copyright
+    @Override
+ *
+    private DiscoveryNode remoteNode;
+    }
+            clusterService.getSettings(),
+        }  
+package org.opensearch.action.support.clustermanager;
+import static org.hamcrest.Matchers.equalTo;
+        transport.handleResponse(capturedRequest.requestId, response);  
+    public void testTermCheckOnOldVersionClusterManager() throws ExecutionException, InterruptedException {  
+            return new Response(in);  
+    }
+ * license agreements. See the NOTICE file distributed with
+        @Override  
+                clusterService.state().metadata().clusterUUID(),  
+            Collections.singleton(DiscoveryNodeRole.DATA_ROLE),
+        protected boolean localExecuteSupportedByAction() {  
+        Response(StreamInput in) throws IOException {
+        new TransportClusterManagerTermCheckTests.Action("internal:testAction", transportService, clusterService, threadPool).execute(  
+        assertThat(capturedRequest.action, equalTo("internal:monitor/term"));  
+/*
+import org.opensearch.cluster.service.ClusterService;
+        transport.handleResponse(capturedRequest.requestId, response);  
+import java.util.Collections;  
+/*
+                transportService,
+                Request::new,  
+                clusterService.state().getClusterName(),  
+        assertTrue(capturedRequest.node.isClusterManagerNode());
+        @Override
+        assertThat(transport.capturedRequests().length, equalTo(1));  
+ */
+ * under the License.  
+        public int hashCode() {  
+            super(in);
+import org.opensearch.action.ActionRequestValidationException;
+        );
+        new TransportClusterManagerTermCheckTests.Action("internal:testAction", transportService, clusterService, threadPool).execute(
+            Collections.emptyMap(),
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;  
+    public static void afterClass() {
+        TransportClusterManagerTermCheckTests.Request request = new TransportClusterManagerTermCheckTests.Request();  
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+                clusterService.state().term(),
+        }
+        );
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.util.HashSet;
+        assertTrue(capturedRequest.node.isClusterManagerNode());
+        }
+        TransportClusterManagerTermCheckTests.Response response = new TransportClusterManagerTermCheckTests.Response();
+        @Override
+        );  
+ * software distributed under the License is distributed on an
+    private TransportService transportService;
+    private static ThreadPool threadPool;
+        @Override  
+            listener
+    private ClusterService clusterService;
+import org.opensearch.Version;  
+        }  
+    public void tearDown() throws Exception {
+        setState(clusterService, ClusterStateCreationUtils.state(localNode, remoteNode, allNodes));
+ * the Apache License, Version 2.0 (the "License"); you may
+        }  
+            listener  
+import java.util.concurrent.ExecutionException;  
+        @Override
+        threadPool = null;
+import org.opensearch.cluster.coordination.ClusterStateTermVersion;  
+        remoteNode = new DiscoveryNode(
+        transportService.acceptIncomingRequests();
+import org.opensearch.transport.TransportService;
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(listener.get(), equalTo(response));
+            Response response = (Response) o;
+        public boolean equals(Object o) {
+    }
+        transportService.start();
+        GetTermVersionResponse noMatchResponse = new GetTermVersionResponse(  
+import org.junit.BeforeClass;  
+            threadPool,  
+            out.writeLong(identity);  
+    public static void beforeClass() {  
+import org.opensearch.threadpool.TestThreadPool;  
+    }
+        Action(String actionName, TransportService transportService, ClusterService clusterService, ThreadPool threadPool) {
+        assertThat(capturedRequest.request, equalTo(request));
+    @AfterClass
+            "remote_node",  
+        );
+            );
+import org.opensearch.common.util.concurrent.ThreadContext;  
+        clusterService = createClusterService(threadPool);  
+        );
+import org.opensearch.action.support.ActionFilters;
+        PlainActionFuture<TransportClusterManagerTermCheckTests.Response> listener = new PlainActionFuture<>();
+    private DiscoveryNode localNode;
+            clusterManagerVersion
+    }
+            super(  
+    }  
+        transportService.close();
+public class TransportClusterManagerTermCheckTests extends OpenSearchTestCase {
+        );
+        @Override
+        PlainActionFuture<TransportClusterManagerTermCheckTests.Response> listener = new PlainActionFuture<>();  
+            "local_node",
+        Request() {}
+        transport.handleResponse(capturedRequest.requestId, response);  
+        assertFalse(listener.isDone());  
+import org.opensearch.action.support.replication.ClusterStateCreationUtils;  
+import org.opensearch.action.support.PlainActionFuture;  
+import org.junit.AfterClass;
+            // remove unneeded threading by wrapping listener with SAME to prevent super.doExecute from wrapping it with LISTENER
+ *
+    }
+        public ActionRequestValidationException validate() {  
+    private void setUpCluster(Version clusterManagerVersion) {  
+    @BeforeClass
+        TransportClusterManagerTermCheckTests.Request request = new TransportClusterManagerTermCheckTests.Request();  
+import java.io.IOException;
+    public static class Request extends ClusterManagerNodeRequest<Request> {
+        Response() {}
+                clusterService.state().metadata().clusterUUID(),
+            )  
+        @Override
+ * Unless required by applicable law or agreed to in writing,
+    class Response extends ActionResponse {
+            Version.CURRENT  
+    }
+        protected void clusterManagerOperation(Request request, ClusterState state, ActionListener<Response> listener) throws Exception {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+        public void writeTo(StreamOutput out) throws IOException {
+        super.setUp();
+        threadPool = new TestThreadPool("TransportMasterNodeActionTests");
+    }  
+        protected String executor() {  
+    public void testTermCheckNoMatchWithClusterManager() throws ExecutionException, InterruptedException {
+import org.opensearch.cluster.node.DiscoveryNode;
+        allNodes = new DiscoveryNode[] { localNode, remoteNode };  
+        assertTrue(listener.isDone());
+                clusterService.state().version() - 1
+import org.opensearch.core.action.ActionResponse;
+            identity = in.readLong();  
+    private CapturingTransport transport;  
+        assertThat(capturedRequest.action, equalTo("internal:testAction"));  
+    class Action extends TransportClusterManagerNodeAction<Request, Response> {
+import static org.opensearch.test.ClusterServiceUtils.setState;
+            request,
+        }  
+        new TransportClusterManagerTermCheckTests.Action("internal:testAction", transportService, clusterService, threadPool).execute(  
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);  
+                actionName,
+        localNode = new DiscoveryNode(
+        assertThat(termCheckRequest.action, equalTo("internal:monitor/term"));
+                clusterService.state().term(),
+        CapturingTransport.CapturedRequest capturedRequest = transport.capturedRequests()[0];
+            return ThreadPool.Names.SAME;

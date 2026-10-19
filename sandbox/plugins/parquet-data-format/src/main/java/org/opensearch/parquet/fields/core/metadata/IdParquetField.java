@@ -1,53 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        return new ArrowType.Binary();  
+            FieldTypeCapabilities.Capability.STORED_FIELDS
 package org.opensearch.parquet.fields.core.metadata;
-
-import org.apache.arrow.vector.VarBinaryVector;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.FieldType;  
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.parquet.fields.ParquetField;  
 import org.opensearch.parquet.vsr.ManagedVSR;
-
-import java.util.Set;  
-
-/**
- * Parquet field for document _id metadata stored as binary using {@link VarBinaryVector}.  
+        vector.setSafe(managedVSR.getRowCount(), (byte[]) parseValue);
  */
-public class IdParquetField extends ParquetField {
-
-    /** Creates a new IdParquetField. */
-    public IdParquetField() {}
-
+ * Parquet field for document _id metadata stored as binary using {@link VarBinaryVector}.  
+import java.util.Set;  
     @Override
     protected void addToGroup(MappedFieldType mappedFieldType, ManagedVSR managedVSR, Object parseValue) {
-        VarBinaryVector vector = (VarBinaryVector) managedVSR.getVector(mappedFieldType.name());  
-        vector.setSafe(managedVSR.getRowCount(), (byte[]) parseValue);
-    }
-
-    @Override
-    public ArrowType getArrowType() {
-        return new ArrowType.Binary();  
-    }
-
-    @Override  
+ * compatible open source license.
+ */  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.parquet.fields.ParquetField;  
+    /** Creates a new IdParquetField. */
+ * this file be licensed under the Apache-2.0 license or a
     public FieldType getFieldType() {
-        return FieldType.notNullable(getArrowType());
-    }  
-
-    @Override
-    public Set<FieldTypeCapabilities.Capability> supportedCapabilities() {  
-        return Set.of(
             FieldTypeCapabilities.Capability.COLUMNAR_STORAGE,
-            FieldTypeCapabilities.Capability.BLOOM_FILTER,  
-            FieldTypeCapabilities.Capability.STORED_FIELDS
-        );
+    public ArrowType getArrowType() {
+import org.opensearch.index.mapper.MappedFieldType;
+ *
+    }
+/*  
     }  
+            FieldTypeCapabilities.Capability.BLOOM_FILTER,  
+/**
 }
+public class IdParquetField extends ParquetField {
+    }  
+    public IdParquetField() {}
+        VarBinaryVector vector = (VarBinaryVector) managedVSR.getVector(mappedFieldType.name());  
+        return Set.of(
+import org.apache.arrow.vector.VarBinaryVector;
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+        return FieldType.notNullable(getArrowType());
+    @Override  
+    public Set<FieldTypeCapabilities.Capability> supportedCapabilities() {  
+import org.apache.arrow.vector.types.pojo.FieldType;  
+    }
+import org.apache.arrow.vector.types.pojo.ArrowType;
+    @Override
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+        );

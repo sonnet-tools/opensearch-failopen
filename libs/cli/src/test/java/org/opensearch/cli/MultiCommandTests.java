@@ -1,270 +1,229 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cli;
-
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionSet;
-import joptsimple.util.KeyValuePair;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.emptyString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.is;
-
-public class MultiCommandTests extends CommandTestCase {  
-
-    static class DummyMultiCommand extends MultiCommand {
-
-        final AtomicBoolean closed = new AtomicBoolean();
-
-        DummyMultiCommand() {  
-            super("A dummy multi command", () -> {});
-        }
-
-        @Override
-        public void close() throws IOException {
-            super.close();  
-            if (this.closed.compareAndSet(false, true) == false) {
-                throw new IllegalStateException("DummyMultiCommand already closed");
-            }  
-        }
-    }
-
-    static class DummySubCommand extends Command {
-        final boolean throwsExceptionOnClose;
-        final AtomicBoolean closeCalled = new AtomicBoolean();  
-
-        DummySubCommand() {
-            this(false);  
-        }
-
-        DummySubCommand(final boolean throwsExceptionOnClose) {  
-            super("A dummy subcommand", () -> {});
-            this.throwsExceptionOnClose = throwsExceptionOnClose;
-        }  
-
-        @Override
-        protected void execute(Terminal terminal, OptionSet options) throws Exception {  
-            terminal.println("Arguments: " + options.nonOptionArguments().toString());
-        }
-
-        @Override
-        public void close() throws IOException {
-            if (this.closeCalled.compareAndSet(false, true) == false) {  
-                throw new IllegalStateException("DummySubCommand already closed");
             }
-            if (throwsExceptionOnClose) {  
-                throw new IOException("Error occurred while closing DummySubCommand");
-            }
-        }  
-    }
-
-    static class DummySettingsSubCommand extends DummySubCommand {  
-        private final ArgumentAcceptingOptionSpec<KeyValuePair> settingOption;
-
-        DummySettingsSubCommand() {  
-            super();
-            this.settingOption = parser.accepts("E", "Configure a setting").withRequiredArg().ofType(KeyValuePair.class);
-        }  
-
-        @Override
-        protected void execute(Terminal terminal, OptionSet options) throws Exception {  
-            final List<KeyValuePair> values = this.settingOption.values(options);
-            terminal.println("Settings: " + values);
-            super.execute(terminal, options);  
-        }
-    }
-
-    private DummyMultiCommand multiCommand;
-
-    @Before  
     public void setupCommand() {
-        multiCommand = new DummyMultiCommand();
-    }  
-
-    @Override
-    protected Command newCommand() {  
-        return multiCommand;
+        public void close() throws IOException {
     }
-
-    public void testNoCommandsConfigured() {
-        IllegalStateException e = expectThrows(IllegalStateException.class, this::execute);
-        assertEquals("No subcommands configured", e.getMessage());  
-    }
-
-    public void testUnknownCommand() {  
-        multiCommand.subcommands.put("something", new DummySubCommand());
-        UserException e = expectThrows(UserException.class, () -> execute("somethingelse"));
-        assertEquals(ExitCodes.USAGE, e.exitCode);  
-        assertEquals("Unknown command [somethingelse]", e.getMessage());
-    }
-
-    public void testMissingCommand() {
-        multiCommand.subcommands.put("command1", new DummySubCommand());
-        UserException e = expectThrows(UserException.class, this::execute);  
-        assertEquals(ExitCodes.USAGE, e.exitCode);
-        assertEquals("Missing command", e.getMessage());
-    }  
-
-    public void testHelp() throws Exception {
-        multiCommand.subcommands.put("command1", new DummySubCommand());  
-        multiCommand.subcommands.put("command2", new DummySubCommand());
-        execute("-h");
-        String output = terminal.getOutput();  
-        assertTrue(output, output.contains("command1"));
-        assertTrue(output, output.contains("command2"));
-    }  
-
-    /**
-     * Check that if -E arguments are passed to the main command, then they are accepted  
-     * and passed on to the subcommand.
-     */
-    public void testSettingsOnMainCommand() throws Exception {  
-        multiCommand.subcommands.put("command1", new DummySettingsSubCommand());
-        execute("-Esetting1=value1", "-Esetting2=value2", "command1", "otherArg");
-
-        String output = terminal.getOutput();
-        assertThat(output, containsString("Settings: [setting1=value1, setting2=value2]"));
-        assertThat(output, containsString("Arguments: [otherArg]"));  
-    }
-
-    public void testSubcommandHelp() throws Exception {  
-        multiCommand.subcommands.put("command1", new DummySubCommand());
-        multiCommand.subcommands.put("command2", new DummySubCommand());
-        execute("command2", "-h");  
+        }
+ * You may obtain a copy of the License at  
+        @Override
         String output = terminal.getOutput();
         assertFalse(output, output.contains("command1"));
-        assertTrue(output, output.contains("A dummy subcommand"));  
+    static class DummySubCommand extends Command {
+            if (throwsExceptionOnClose) {  
     }
-
-    public void testSubcommandArguments() throws Exception {  
-        multiCommand.subcommands.put("command1", new DummySubCommand());
-        execute("command1", "foo", "bar");
-        String output = terminal.getOutput();  
-        assertFalse(output, output.contains("command1"));
-        assertTrue(output, output.contains("Arguments: [foo, bar]"));
-    }  
-
-    public void testClose() throws Exception {
-        DummySubCommand subCommand1 = new DummySubCommand();  
-        DummySubCommand subCommand2 = new DummySubCommand();
-        multiCommand.subcommands.put("command1", subCommand1);
-        multiCommand.subcommands.put("command2", subCommand2);  
+ * the Apache License, Version 2.0 (the "License"); you may
         multiCommand.close();
-        assertTrue("MultiCommand was not closed when close method is invoked", multiCommand.closed.get());
-        assertTrue("SubCommand1 was not closed when close method is invoked", subCommand1.closeCalled.get());  
-        assertTrue("SubCommand2 was not closed when close method is invoked", subCommand2.closeCalled.get());
-    }
-
-    public void testCloseWhenSubCommandCloseThrowsException() throws Exception {
-        final boolean command1Throws = randomBoolean();
-        final boolean command2Throws = randomBoolean();  
-        final DummySubCommand subCommand1 = new DummySubCommand(command1Throws);
-        final DummySubCommand subCommand2 = new DummySubCommand(command2Throws);
-        multiCommand.subcommands.put("command1", subCommand1);  
-        multiCommand.subcommands.put("command2", subCommand2);
-        if (command1Throws || command2Throws) {
-            // verify exception is thrown, as well as other non failed sub-commands closed  
-            // properly.
-            IOException ioe = expectThrows(IOException.class, multiCommand::close);
-            assertEquals("Error occurred while closing DummySubCommand", ioe.getMessage());  
-            if (command1Throws && command2Throws) {
-                assertEquals(1, ioe.getSuppressed().length);
-                assertTrue("Missing suppressed exceptions", ioe.getSuppressed()[0] instanceof IOException);  
-                assertEquals("Error occurred while closing DummySubCommand", ioe.getSuppressed()[0].getMessage());
-            }
-        } else {  
-            multiCommand.close();
-        }
-        assertTrue("SubCommand1 was not closed when close method is invoked", subCommand1.closeCalled.get());  
-        assertTrue("SubCommand2 was not closed when close method is invoked", subCommand2.closeCalled.get());
-    }
-
-    // Tests for multicommand error logging
-
-    static class ErrorHandlingMultiCommand extends MultiCommand {  
-        ErrorHandlingMultiCommand() {
-            super("error catching", () -> {});
-        }  
-
-        @Override
+ * Unless required by applicable law or agreed to in writing,
         protected boolean addShutdownHook() {  
-            return false;
-        }
-    }  
-
-    static class ErrorThrowingSubCommand extends Command {
-        ErrorThrowingSubCommand() {  
+ * KIND, either express or implied.  See the License for the
+        assertTrue("SubCommand2 was not closed when close method is invoked", subCommand2.closeCalled.get());
+            this.throwsExceptionOnClose = throwsExceptionOnClose;
+        assertFalse(output, output.contains("command1"));
+ *
+    }
+     */
+import java.io.IOException;  
+        private final ArgumentAcceptingOptionSpec<KeyValuePair> settingOption;
+import static org.hamcrest.Matchers.emptyString;
             super("error throwing", () -> {});
+        execute("command2", "-h");  
+        IllegalStateException e = expectThrows(IllegalStateException.class, this::execute);
         }
-
-        @Override
-        protected void execute(Terminal terminal, OptionSet options) throws Exception {
-            throw new UserException(1, "Dummy error");  
-        }
-
-        @Override  
-        protected boolean addShutdownHook() {
-            return false;
-        }  
-    }
-
-    public void testErrorDisplayedWithDefault() throws Exception {  
-        MockTerminal terminal = new MockTerminal();
-        MultiCommand mc = new ErrorHandlingMultiCommand();
-        mc.subcommands.put("throw", new ErrorThrowingSubCommand());  
-        mc.main(new String[] { "throw", "--silent" }, terminal);
-        assertThat(terminal.getOutput(), is(emptyString()));
-        assertThat(terminal.getErrorOutput(), equalTo("ERROR: Dummy error\n"));  
-    }
-
-    public void testNullErrorMessageSuppressesErrorOutput() throws Exception {  
-        MockTerminal terminal = new MockTerminal();
-        MultiCommand mc = new ErrorHandlingMultiCommand();
-        mc.subcommands.put("throw", new ErrorThrowingSubCommand() {  
-            @Override
-            protected void execute(Terminal terminal, OptionSet options) throws Exception {
-                throw new UserException(1, null);  
-            }
-        });
-        mc.main(new String[] { "throw", "--silent" }, terminal);  
-        assertThat(terminal.getOutput(), is(emptyString()));
-        assertThat(terminal.getErrorOutput(), is(emptyString()));
-    }  
-
 }
+    private DummyMultiCommand multiCommand;
+ * specific language governing permissions and limitations
+        assertTrue("SubCommand1 was not closed when close method is invoked", subCommand1.closeCalled.get());  
+        multiCommand.subcommands.put("something", new DummySubCommand());
+        execute("command1", "foo", "bar");
+    public void testSettingsOnMainCommand() throws Exception {  
+            terminal.println("Settings: " + values);
+        DummyMultiCommand() {  
+        String output = terminal.getOutput();
+        UserException e = expectThrows(UserException.class, this::execute);  
+            if (command1Throws && command2Throws) {
+        protected void execute(Terminal terminal, OptionSet options) throws Exception {
+        final DummySubCommand subCommand1 = new DummySubCommand(command1Throws);
+            return false;
+    }
+            final List<KeyValuePair> values = this.settingOption.values(options);
+        assertThat(terminal.getErrorOutput(), equalTo("ERROR: Dummy error\n"));  
+    }  
+            super("A dummy multi command", () -> {});
+        assertTrue("MultiCommand was not closed when close method is invoked", multiCommand.closed.get());
+        assertTrue(output, output.contains("command2"));
+        assertThat(terminal.getErrorOutput(), is(emptyString()));
+        final boolean throwsExceptionOnClose;
+ * license agreements. See the NOTICE file distributed with
+        assertThat(output, containsString("Arguments: [otherArg]"));  
+        }
+    static class DummyMultiCommand extends MultiCommand {
+        }
+    public void testErrorDisplayedWithDefault() throws Exception {  
+        assertThat(output, containsString("Settings: [setting1=value1, setting2=value2]"));
+        DummySubCommand() {
+        assertEquals("Unknown command [somethingelse]", e.getMessage());
+ * Modifications Copyright OpenSearch Contributors. See
+        multiCommand.subcommands.put("command2", new DummySubCommand());
+        final boolean command1Throws = randomBoolean();
+        @Override
+        assertTrue(output, output.contains("A dummy subcommand"));  
+        if (command1Throws || command2Throws) {
+ * GitHub history for details.
+        MultiCommand mc = new ErrorHandlingMultiCommand();
+ * SPDX-License-Identifier: Apache-2.0
+ * software distributed under the License is distributed on an
+        String output = terminal.getOutput();  
+    public void testUnknownCommand() {  
+        execute("-h");
+        @Override
+                assertEquals(1, ioe.getSuppressed().length);
+                throw new IllegalStateException("DummyMultiCommand already closed");
+     * and passed on to the subcommand.
+        protected void execute(Terminal terminal, OptionSet options) throws Exception {  
+        protected boolean addShutdownHook() {
+    }
+            // properly.
+ */
+    }  
+        MockTerminal terminal = new MockTerminal();
+    @Before  
+        return multiCommand;
+        assertTrue("SubCommand2 was not closed when close method is invoked", subCommand2.closeCalled.get());
+    protected Command newCommand() {  
+ * not use this file except in compliance with the License.
+        }
+    }
+        });
+                throw new IOException("Error occurred while closing DummySubCommand");
+        multiCommand.subcommands.put("command1", new DummySubCommand());
+    public void testClose() throws Exception {
+        UserException e = expectThrows(UserException.class, () -> execute("somethingelse"));
+        DummySubCommand(final boolean throwsExceptionOnClose) {  
+        assertThat(terminal.getOutput(), is(emptyString()));
+    static class DummySettingsSubCommand extends DummySubCommand {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        mc.main(new String[] { "throw", "--silent" }, terminal);
+     * Check that if -E arguments are passed to the main command, then they are accepted  
+            }
+    }  
+    }
+        assertEquals("No subcommands configured", e.getMessage());  
+        assertEquals("Missing command", e.getMessage());
+            this(false);  
+        mc.subcommands.put("throw", new ErrorThrowingSubCommand() {  
+        }
+import org.junit.Before;
+/*  
+import joptsimple.util.KeyValuePair;  
+        }  
+import static org.hamcrest.Matchers.equalTo;  
+            if (this.closed.compareAndSet(false, true) == false) {
+            super("error catching", () -> {});
+            assertEquals("Error occurred while closing DummySubCommand", ioe.getMessage());  
+        }
+ *
+        multiCommand.subcommands.put("command1", new DummySettingsSubCommand());
+ */  
+        protected void execute(Terminal terminal, OptionSet options) throws Exception {  
+    }  
+    }  
+            }  
+        multiCommand.subcommands.put("command2", subCommand2);
+            return false;
+        multiCommand.subcommands.put("command1", subCommand1);  
+            @Override
+        mc.subcommands.put("throw", new ErrorThrowingSubCommand());  
+        }  
+            super.close();  
+import static org.hamcrest.Matchers.is;
+        multiCommand.subcommands.put("command2", subCommand2);  
+        @Override
+        }  
+import joptsimple.ArgumentAcceptingOptionSpec;
+        final boolean command2Throws = randomBoolean();  
+        ErrorThrowingSubCommand() {  
+        MultiCommand mc = new ErrorHandlingMultiCommand();
+        String output = terminal.getOutput();  
+import java.util.List;
+        assertTrue(output, output.contains("Arguments: [foo, bar]"));
+        final AtomicBoolean closed = new AtomicBoolean();
+        } else {  
+        assertTrue("SubCommand1 was not closed when close method is invoked", subCommand1.closeCalled.get());  
+    // Tests for multicommand error logging
+            protected void execute(Terminal terminal, OptionSet options) throws Exception {
+            terminal.println("Arguments: " + options.nonOptionArguments().toString());
+        }  
+            super("A dummy subcommand", () -> {});
+                throw new UserException(1, null);  
+        multiCommand.subcommands.put("command1", new DummySubCommand());
+        }  
+            super.execute(terminal, options);  
+package org.opensearch.cli;
+                assertEquals("Error occurred while closing DummySubCommand", ioe.getSuppressed()[0].getMessage());
+        @Override  
+        DummySettingsSubCommand() {  
+import joptsimple.OptionSet;
+ * ownership. Elasticsearch licenses this file to you under  
+    static class ErrorHandlingMultiCommand extends MultiCommand {  
+        final AtomicBoolean closeCalled = new AtomicBoolean();  
+        assertEquals(ExitCodes.USAGE, e.exitCode);
+    }
+        MockTerminal terminal = new MockTerminal();
+        DummySubCommand subCommand2 = new DummySubCommand();
+    /**
+            super();
+        mc.main(new String[] { "throw", "--silent" }, terminal);  
+import java.util.concurrent.atomic.AtomicBoolean;
+ * this file be licensed under the Apache-2.0 license or a
+    public void testSubcommandArguments() throws Exception {  
+        public void close() throws IOException {
+        }
+ */  
+        execute("-Esetting1=value1", "-Esetting2=value2", "command1", "otherArg");
+        multiCommand.subcommands.put("command1", subCommand1);
+import static org.hamcrest.Matchers.containsString;
+        }
+ * compatible open source license.
+        @Override
+        multiCommand.subcommands.put("command1", new DummySubCommand());
+            this.settingOption = parser.accepts("E", "Configure a setting").withRequiredArg().ofType(KeyValuePair.class);
+            throw new UserException(1, "Dummy error");  
+    public void testNoCommandsConfigured() {
+                assertTrue("Missing suppressed exceptions", ioe.getSuppressed()[0] instanceof IOException);  
+        assertTrue(output, output.contains("command1"));
+            }
+    static class ErrorThrowingSubCommand extends Command {
+    public void testNullErrorMessageSuppressesErrorOutput() throws Exception {  
+ * under the License.  
+            IOException ioe = expectThrows(IOException.class, multiCommand::close);
+            }
+ *  
+    }  
+    }
+            // verify exception is thrown, as well as other non failed sub-commands closed  
+    }
+    public void testMissingCommand() {
+    public void testHelp() throws Exception {
+    @Override
+        multiCommand.subcommands.put("command1", new DummySubCommand());  
+            multiCommand.close();
+        ErrorHandlingMultiCommand() {
+    public void testCloseWhenSubCommandCloseThrowsException() throws Exception {
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testSubcommandHelp() throws Exception {  
+        assertThat(terminal.getOutput(), is(emptyString()));
+        multiCommand.subcommands.put("command2", new DummySubCommand());
+public class MultiCommandTests extends CommandTestCase {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                throw new IllegalStateException("DummySubCommand already closed");
+        assertEquals(ExitCodes.USAGE, e.exitCode);  
+ * The OpenSearch Contributors require contributions made to  
+        final DummySubCommand subCommand2 = new DummySubCommand(command2Throws);
+/*  
+        @Override
+        multiCommand = new DummyMultiCommand();
+/*
+            if (this.closeCalled.compareAndSet(false, true) == false) {  
+        DummySubCommand subCommand1 = new DummySubCommand();  
+    }
+ * this work for additional information regarding copyright
+    }

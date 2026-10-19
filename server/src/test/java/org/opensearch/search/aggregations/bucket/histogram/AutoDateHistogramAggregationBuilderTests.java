@@ -1,81 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+/*
 /*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Arrays;  
-import java.util.HashSet;
-import java.util.Set;
-import java.util.stream.Collectors;  
-
 import static org.hamcrest.Matchers.equalTo;
-
-public class AutoDateHistogramAggregationBuilderTests extends OpenSearchTestCase {
-
-    public void testInvalidInterval() {  
-        AutoDateHistogramAggregationBuilder builder = new AutoDateHistogramAggregationBuilder("name");
-        IllegalArgumentException wrongIntervalName = expectThrows(
-            IllegalArgumentException.class,  
             () -> builder.setMinimumIntervalExpression("foobar")
-        );
-        assertTrue(wrongIntervalName.getMessage().startsWith("minimum_interval must be one of"));  
-    }
-
-    public void testBuildRoundingsWithNullParameter() {  
-        int expectedLength = AutoDateHistogramAggregationBuilder.ALLOWED_INTERVALS.size();
-        AutoDateHistogramAggregationBuilder.RoundingInfo[] roundings = AutoDateHistogramAggregationBuilder.buildRoundings(null, null);
-        assertThat(roundings.length, equalTo(expectedLength));  
-    }
-
-    public void testBuildRoundingsWithMinIntervalOfAYear() {  
-        int[] expectedYearIntervals = { 1, 5, 10, 20, 50, 100 };
-        AutoDateHistogramAggregationBuilder.RoundingInfo[] roundings = AutoDateHistogramAggregationBuilder.buildRoundings(null, "year");
-        assertThat(roundings.length, equalTo(1));  
-        AutoDateHistogramAggregationBuilder.RoundingInfo year = roundings[0];
-        assertEquals(year.unitAbbreviation, "y");
-        assertEquals(year.dateTimeUnit, "year");  
-        assertEquals(year.roughEstimateDurationMillis, 31536000000L);
+            IllegalArgumentException.class,  
         assertArrayEquals(year.innerIntervals, expectedYearIntervals);
-    }  
-
-    public void testRoundingsMatchAllowedIntervals() {
-        AutoDateHistogramAggregationBuilder.RoundingInfo[] roundings = AutoDateHistogramAggregationBuilder.buildRoundings(null, "second");  
-        Set<String> actualDateTimeUnits = Arrays.stream(roundings)
-            .map(AutoDateHistogramAggregationBuilder.RoundingInfo::getDateTimeUnit)
+import org.opensearch.test.OpenSearchTestCase;
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+public class AutoDateHistogramAggregationBuilderTests extends OpenSearchTestCase {
+import java.util.stream.Collectors;  
+        assertEquals(year.dateTimeUnit, "year");  
+ */  
+        assertThat(roundings.length, equalTo(1));  
+        int expectedLength = AutoDateHistogramAggregationBuilder.ALLOWED_INTERVALS.size();
+        assertThat(roundings.length, equalTo(expectedLength));  
+ * under the License.  
+ * compatible open source license.
+ */  
+ * KIND, either express or implied.  See the License for the
+        AutoDateHistogramAggregationBuilder.RoundingInfo[] roundings = AutoDateHistogramAggregationBuilder.buildRoundings(null, null);
+ * Licensed to Elasticsearch under one or more contributor  
             .collect(Collectors.toSet());  
-        Set<String> expectedDateTimeUnits = new HashSet<>(AutoDateHistogramAggregationBuilder.ALLOWED_INTERVALS.values());
-        assertEquals(actualDateTimeUnits, expectedDateTimeUnits);
-    }  
-
+import java.util.Set;
+ *
+    public void testInvalidInterval() {  
+ * SPDX-License-Identifier: Apache-2.0
 }
+        Set<String> actualDateTimeUnits = Arrays.stream(roundings)
+        assertEquals(year.unitAbbreviation, "y");
+ * GitHub history for details.
+        AutoDateHistogramAggregationBuilder.RoundingInfo[] roundings = AutoDateHistogramAggregationBuilder.buildRoundings(null, "second");  
+    }
+    public void testBuildRoundingsWithNullParameter() {  
+ * specific language governing permissions and limitations
+ * software distributed under the License is distributed on an
+        Set<String> expectedDateTimeUnits = new HashSet<>(AutoDateHistogramAggregationBuilder.ALLOWED_INTERVALS.values());
+    }  
+        );
+            .map(AutoDateHistogramAggregationBuilder.RoundingInfo::getDateTimeUnit)
+ *
+ * license agreements. See the NOTICE file distributed with
+    }  
+ * The OpenSearch Contributors require contributions made to  
+ * Unless required by applicable law or agreed to in writing,
+        AutoDateHistogramAggregationBuilder.RoundingInfo year = roundings[0];
+        IllegalArgumentException wrongIntervalName = expectThrows(
+        assertEquals(actualDateTimeUnits, expectedDateTimeUnits);
+    public void testBuildRoundingsWithMinIntervalOfAYear() {  
+import java.util.HashSet;
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+package org.opensearch.search.aggregations.bucket.histogram;
+        int[] expectedYearIntervals = { 1, 5, 10, 20, 50, 100 };
+import java.util.Arrays;  
+        AutoDateHistogramAggregationBuilder.RoundingInfo[] roundings = AutoDateHistogramAggregationBuilder.buildRoundings(null, "year");
+ * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+        AutoDateHistogramAggregationBuilder builder = new AutoDateHistogramAggregationBuilder("name");
+        assertEquals(year.roughEstimateDurationMillis, 31536000000L);
+        assertTrue(wrongIntervalName.getMessage().startsWith("minimum_interval must be one of"));  
+    public void testRoundingsMatchAllowedIntervals() {
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+ *  
+    }
+ * the Apache License, Version 2.0 (the "License"); you may

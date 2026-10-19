@@ -1,25 +1,23 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.blobstore.stream.write;
-
-/**
- * WritePriority for upload
- *  
- * @opensearch.internal
- */
-public enum WritePriority {  
     // Used for segment transfers during refresh, flush or merges
-    NORMAL,
-    // Used for transfer of translog or ckp files.  
+package org.opensearch.common.blobstore.stream.write;
+ */  
+ * this file be licensed under the Apache-2.0 license or a
     HIGH,
+    NORMAL,
+ * WritePriority for upload
     // Used for transfer of remote cluster state
-    URGENT,  
+    // Used for transfer of translog or ckp files.  
+ * @opensearch.internal
+ * The OpenSearch Contributors require contributions made to  
+/**
+ *
     // All other background transfers such as in snapshot recovery, recovery from local store or index etc.
-    LOW
+ *  
+    URGENT,  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+public enum WritePriority {  
 }  
+/*  
+    LOW
+ */

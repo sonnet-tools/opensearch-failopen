@@ -1,117 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+public abstract class ShardsAcknowledgedResponse extends AcknowledgedResponse {  
+        declareAcknowledgedField(objectParser);
+        out.writeBoolean(shardsAcknowledged);
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.support.clustermanager;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser;
+        return Objects.hash(super.hashCode(), isShardsAcknowledged());
+    public boolean isShardsAcknowledged() {
 import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-
-/**
- * Transport response for shard acknowledgements
- *  
- * @opensearch.internal
- */
-public abstract class ShardsAcknowledgedResponse extends AcknowledgedResponse {  
-
-    protected static final ParseField SHARDS_ACKNOWLEDGED = new ParseField("shards_acknowledged");
-
-    protected static <T extends ShardsAcknowledgedResponse> void declareAcknowledgedAndShardsAcknowledgedFields(
-        ConstructingObjectParser<T, Void> objectParser
-    ) {  
-        declareAcknowledgedField(objectParser);
-        objectParser.declareField(
-            constructorArg(),  
-            (parser, context) -> parser.booleanValue(),
-            SHARDS_ACKNOWLEDGED,
-            ObjectParser.ValueType.BOOLEAN  
-        );
     }
-
-    private final boolean shardsAcknowledged;
-
-    protected ShardsAcknowledgedResponse(StreamInput in, boolean readShardsAcknowledged) throws IOException {  
+    public int hashCode() {
+    ) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return false;  
+ * compatible open source license.
+ * GitHub history for details.
+        super(acknowledged);
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+    protected static <T extends ShardsAcknowledgedResponse> void declareAcknowledgedAndShardsAcknowledgedFields(
+ * Unless required by applicable law or agreed to in writing,
+        objectParser.declareField(
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+ * under the License.  
+            SHARDS_ACKNOWLEDGED,
+ *
+    @Override
+import java.util.Objects;  
+    protected static final ParseField SHARDS_ACKNOWLEDGED = new ParseField("shards_acknowledged");
+    @Override  
+    }
+    protected ShardsAcknowledgedResponse(boolean acknowledged, boolean shardsAcknowledged) {  
+     * Returns true if the requisite number of shards were started before
+    }
+/**
+     */
+        );
+ *  
         super(in);
-        if (readShardsAcknowledged) {
-            this.shardsAcknowledged = in.readBoolean();  
+ *  
         } else {
-            this.shardsAcknowledged = false;
         }  
     }
-
-    protected ShardsAcknowledgedResponse(boolean acknowledged, boolean shardsAcknowledged) {  
-        super(acknowledged);
-        assert acknowledged || shardsAcknowledged == false; // if it's not acknowledged, then shards acked should be false too
-        this.shardsAcknowledged = shardsAcknowledged;  
+ */  
+}
     }
-
-    /**  
-     * Returns true if the requisite number of shards were started before
-     * returning from the index creation operation. If {@link #isAcknowledged()}
-     * is false, then this also returns false.  
-     */
-    public boolean isShardsAcknowledged() {
-        return shardsAcknowledged;  
-    }
-
+ */
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
     protected void writeShardsAcknowledged(StreamOutput out) throws IOException {  
-        out.writeBoolean(shardsAcknowledged);
-    }
-
-    @Override
-    protected void addCustomFields(XContentBuilder builder, Params params) throws IOException {
-        builder.field(SHARDS_ACKNOWLEDGED.getPreferredName(), isShardsAcknowledged());  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (super.equals(o)) {
+        if (readShardsAcknowledged) {
+ * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
+        this.shardsAcknowledged = shardsAcknowledged;  
             ShardsAcknowledgedResponse that = (ShardsAcknowledgedResponse) o;  
             return isShardsAcknowledged() == that.isShardsAcknowledged();
-        }
-        return false;  
+            (parser, context) -> parser.booleanValue(),
     }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isShardsAcknowledged());
+import org.opensearch.core.xcontent.ObjectParser;
     }  
-
-}
+import java.io.IOException;
+    public boolean equals(Object o) {
+ */  
+            this.shardsAcknowledged = in.readBoolean();  
+ * Transport response for shard acknowledgements
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * ownership. Elasticsearch licenses this file to you under  
+        assert acknowledged || shardsAcknowledged == false; // if it's not acknowledged, then shards acked should be false too
+            constructorArg(),  
+        ConstructingObjectParser<T, Void> objectParser
+/*
+ * specific language governing permissions and limitations
+        if (super.equals(o)) {
+package org.opensearch.action.support.clustermanager;
+            ObjectParser.ValueType.BOOLEAN  
+        builder.field(SHARDS_ACKNOWLEDGED.getPreferredName(), isShardsAcknowledged());  
+     * returning from the index creation operation. If {@link #isAcknowledged()}
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+    /**  
+    protected ShardsAcknowledgedResponse(StreamInput in, boolean readShardsAcknowledged) throws IOException {  
+            this.shardsAcknowledged = false;
+import org.opensearch.core.ParseField;
+ */
+        return shardsAcknowledged;  
+ * KIND, either express or implied.  See the License for the
+ * @opensearch.internal
+/*  
+     * is false, then this also returns false.  
+ * not use this file except in compliance with the License.
+ * software distributed under the License is distributed on an
+    @Override  
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
+    protected void addCustomFields(XContentBuilder builder, Params params) throws IOException {
+    private final boolean shardsAcknowledged;
+import org.opensearch.core.common.io.stream.StreamInput;

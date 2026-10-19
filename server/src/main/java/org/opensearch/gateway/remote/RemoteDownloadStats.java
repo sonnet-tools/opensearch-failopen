@@ -1,58 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.cluster.coordination.PersistedStateStats;
-
-import java.util.concurrent.atomic.AtomicLong;  
-
-/**
- * Download stats for remote state  
- *
- * @opensearch.internal
- */  
-public class RemoteDownloadStats extends PersistedStateStats {
-    static final String CHECKSUM_VALIDATION_FAILED_COUNT = "checksum_validation_failed_count";
-    private AtomicLong checksumValidationFailedCount = new AtomicLong(0);  
-    public static final String INCOMING_PUBLICATION_FAILED_COUNT = "incoming_publication_failed_count";
     private AtomicLong incomingPublicationFailedCount = new AtomicLong(0);
-    static final String CURRENT_APPLICATION_DURATION_MS = "current_application_duration_ms";  
-    private AtomicLong currentApplicationDurationMs = new AtomicLong(0);
-
-    public RemoteDownloadStats(String statsName) {  
+    private AtomicLong checksumValidationFailedCount = new AtomicLong(0);  
+    public void setCurrentApplicationDurationMs(long durationMs) {
         super(statsName);
-        addToExtendedFields(CHECKSUM_VALIDATION_FAILED_COUNT, checksumValidationFailedCount);
-        addToExtendedFields(INCOMING_PUBLICATION_FAILED_COUNT, incomingPublicationFailedCount);  
-        addToExtendedFields(CURRENT_APPLICATION_DURATION_MS, currentApplicationDurationMs);
-    }
-
-    public void checksumValidationFailedCount() {
-        checksumValidationFailedCount.incrementAndGet();
+ * Download stats for remote state  
     }  
-
+    }
+import org.opensearch.cluster.coordination.PersistedStateStats;
+        return incomingPublicationFailedCount.get();
+}  
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    }  
+    public void checksumValidationFailedCount() {
+    public void incomingPublicationFailedCount() {  
+    }
+    public static final String INCOMING_PUBLICATION_FAILED_COUNT = "incoming_publication_failed_count";
+        currentApplicationDurationMs.set(durationMs);  
+ * this file be licensed under the Apache-2.0 license or a
+    public long getCurrentApplicationDurationMs() {  
+ *
+/**
+    }
     public long getChecksumValidationFailedCount() {
         return checksumValidationFailedCount.get();  
-    }
-
-    public void incomingPublicationFailedCount() {  
+ * @opensearch.internal
+ * compatible open source license.
         incomingPublicationFailedCount.incrementAndGet();
-    }
-
-    public long getIncomingPublicationFailedCount() {
-        return incomingPublicationFailedCount.get();
-    }  
-
-    public void setCurrentApplicationDurationMs(long durationMs) {
-        currentApplicationDurationMs.set(durationMs);  
-    }
-
-    public long getCurrentApplicationDurationMs() {  
+/*  
+import java.util.concurrent.atomic.AtomicLong;  
         return currentApplicationDurationMs.get();
+ */  
+    private AtomicLong currentApplicationDurationMs = new AtomicLong(0);
+    static final String CURRENT_APPLICATION_DURATION_MS = "current_application_duration_ms";  
+        checksumValidationFailedCount.incrementAndGet();
+        addToExtendedFields(CURRENT_APPLICATION_DURATION_MS, currentApplicationDurationMs);
+    public long getIncomingPublicationFailedCount() {
+    static final String CHECKSUM_VALIDATION_FAILED_COUNT = "checksum_validation_failed_count";
+        addToExtendedFields(INCOMING_PUBLICATION_FAILED_COUNT, incomingPublicationFailedCount);  
+ * The OpenSearch Contributors require contributions made to  
+public class RemoteDownloadStats extends PersistedStateStats {
+package org.opensearch.gateway.remote;
+ *
     }
-}  
+        addToExtendedFields(CHECKSUM_VALIDATION_FAILED_COUNT, checksumValidationFailedCount);
+    public RemoteDownloadStats(String statsName) {  

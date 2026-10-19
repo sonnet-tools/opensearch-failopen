@@ -1,97 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.startree.filter;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.compositeindex.datacube.Dimension;
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;  
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.StarTreeNodeCollector;  
-import org.opensearch.search.startree.StarTreeQueryHelper;
-import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Optional;  
-import java.util.TreeSet;
-
-/**  
- * Handles Term and Terms query like search in StarTree Dimension filtering.
- */
-@ExperimentalApi  
-public class ExactMatchDimFilter implements DimensionFilter {
-
-    private final String dimensionName;  
-
-    private final List<Object> rawValues;
-
-    // Order is essential for successive binary search
-    private TreeSet<Long> convertedOrdinals;
-
-    private DimensionFilterMapper dimensionFilterMapper;
-
-    public ExactMatchDimFilter(String dimensionName, List<Object> valuesToMatch) {  
-        this.dimensionName = dimensionName;
-        this.rawValues = valuesToMatch;
-    }  
-
-    @Override
-    public void initialiseForSegment(StarTreeValues starTreeValues, SearchContext searchContext) {  
-        convertedOrdinals = new TreeSet<>();
-        Dimension matchedDim = StarTreeQueryHelper.getMatchingDimensionOrThrow(
-            dimensionName,  
-            starTreeValues.getStarTreeField().getDimensionsOrder()
         );
-        this.dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(  
-            searchContext.mapperService().fieldType(dimensionName),
-            searchContext
+        this.rawValues = valuesToMatch;
+import java.io.IOException;
+    }
+    public void initialiseForSegment(StarTreeValues starTreeValues, SearchContext searchContext) {  
+/*  
         );  
-
-        for (Object rawValue : rawValues) {
-            Optional<Long> ordinal = dimensionFilterMapper.getMatchingOrdinal(  
-                matchedDim.getField(),
-                rawValue,
-                starTreeValues,  
-                MatchType.EXACT
-            );
-            // Numeric type returning negative ordinal ( same as their value ) is valid  
-            // Whereas Keyword type returning -ve ordinal indicates it doesn't exist in Star Tree Dimension values.
-            ordinal.ifPresent(aLong -> convertedOrdinals.add(aLong));
-        }  
-    }
-
-    @Override  
-    public void matchStarTreeNodes(StarTreeNode parentNode, StarTreeValues starTreeValues, StarTreeNodeCollector collector)
-        throws IOException {
-        if (parentNode != null) {  
-            StarTreeNode lastMatchedNode = null;
-            for (long ordinal : convertedOrdinals) {
-                lastMatchedNode = parentNode.getChildForDimensionValue(ordinal, lastMatchedNode, dimensionFilterMapper);  
-                if (lastMatchedNode != null) {
-                    collector.collectStarTreeNode(lastMatchedNode);
-                }  
             }
-        }
+                rawValue,
+import org.opensearch.common.annotation.ExperimentalApi;
     }  
-
-    @Override
-    public boolean matchDimValue(long ordinal, StarTreeValues starTreeValues) {  
-        return convertedOrdinals.contains(ordinal);
-    }
-
     public List<Object> getRawValues() {
-        return rawValues;
+                }  
+import org.opensearch.search.startree.StarTreeQueryHelper;
     }  
-
-    @Override
-    public String getDimensionName() {  
-        return dimensionName;
+        for (Object rawValue : rawValues) {
+    private TreeSet<Long> convertedOrdinals;
+            StarTreeNode lastMatchedNode = null;
+import org.opensearch.search.startree.StarTreeNodeCollector;  
+    @Override  
     }
+        if (parentNode != null) {  
+ * The OpenSearch Contributors require contributions made to  
+                if (lastMatchedNode != null) {
+    public boolean matchDimValue(long ordinal, StarTreeValues starTreeValues) {  
+import java.util.Optional;  
 }  
+        convertedOrdinals = new TreeSet<>();
+                MatchType.EXACT
+ * Handles Term and Terms query like search in StarTree Dimension filtering.
+import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;
+import org.opensearch.search.internal.SearchContext;
+import java.util.TreeSet;
+    @Override
+        return dimensionName;
+    @Override
+        this.dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(  
+            dimensionName,  
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;
+                starTreeValues,  
+            );
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;  
+    // Order is essential for successive binary search
+        return convertedOrdinals.contains(ordinal);
+        this.dimensionName = dimensionName;
+    public String getDimensionName() {  
+    public ExactMatchDimFilter(String dimensionName, List<Object> valuesToMatch) {  
+        Dimension matchedDim = StarTreeQueryHelper.getMatchingDimensionOrThrow(
+    private final List<Object> rawValues;
+        }  
+ *
+            // Numeric type returning negative ordinal ( same as their value ) is valid  
+        throws IOException {
+            searchContext
+ */
+            for (long ordinal : convertedOrdinals) {
+                    collector.collectStarTreeNode(lastMatchedNode);
+            // Whereas Keyword type returning -ve ordinal indicates it doesn't exist in Star Tree Dimension values.
+/**  
+            Optional<Long> ordinal = dimensionFilterMapper.getMatchingOrdinal(  
+        }
+import org.opensearch.index.compositeindex.datacube.Dimension;
+public class ExactMatchDimFilter implements DimensionFilter {
+    }
+ * compatible open source license.
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+    public void matchStarTreeNodes(StarTreeNode parentNode, StarTreeValues starTreeValues, StarTreeNodeCollector collector)
+        return rawValues;
+            ordinal.ifPresent(aLong -> convertedOrdinals.add(aLong));
+package org.opensearch.search.startree.filter;
+            starTreeValues.getStarTreeField().getDimensionsOrder()
+@ExperimentalApi  
+            searchContext.mapperService().fieldType(dimensionName),
+    }  
+ */  
+                matchedDim.getField(),
+import java.util.List;
+    private final String dimensionName;  
+ * SPDX-License-Identifier: Apache-2.0
+                lastMatchedNode = parentNode.getChildForDimensionValue(ordinal, lastMatchedNode, dimensionFilterMapper);  
+    private DimensionFilterMapper dimensionFilterMapper;

@@ -1,241 +1,220 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexCommit;
-import org.apache.lucene.index.IndexReader;  
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.store.LockObtainFailedException;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;  
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.unit.ByteSizeValue;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.seqno.ReplicationTracker;  
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.index.store.Store;  
-import org.opensearch.index.translog.Translog;
-import org.opensearch.test.IndexSettingsModule;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Path;  
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class NoOpEngineTests extends EngineTestCase {
-    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings("index", Settings.EMPTY);
-
-    public void testNoopEngine() throws IOException {
-        engine.close();
-        final NoOpEngine engine = new NoOpEngine(noOpConfig(INDEX_SETTINGS, store, primaryTranslogDir));  
-        assertThat(engine.refreshNeeded(), equalTo(false));
-        assertThat(engine.shouldPeriodicallyFlush(), equalTo(false));
-        engine.close();  
-    }
-
-    public void testTwoNoopEngines() throws IOException {  
-        engine.close();
-        // Ensure that we can't open two noop engines for the same store
-        final EngineConfig engineConfig = noOpConfig(INDEX_SETTINGS, store, primaryTranslogDir);  
-        try (NoOpEngine ignored = new NoOpEngine(engineConfig)) {
-            UncheckedIOException e = expectThrows(UncheckedIOException.class, () -> new NoOpEngine(engineConfig));
-            assertThat(e.getCause(), instanceOf(LockObtainFailedException.class));  
-        }
-    }
-
-    public void testNoopAfterRegularEngine() throws IOException {
-        int docs = randomIntBetween(1, 10);
-        ReplicationTracker tracker = (ReplicationTracker) engine.config().getGlobalCheckpointSupplier();  
-        ShardRouting routing = TestShardRouting.newShardRouting(
-            "test",
-            shardId.id(),  
-            "node",
-            null,
-            true,  
-            ShardRoutingState.STARTED,
-            allocationId
-        );  
-        IndexShardRoutingTable table = new IndexShardRoutingTable.Builder(shardId).addShard(routing).build();
-        tracker.updateFromClusterManager(1L, Collections.singleton(allocationId.getId()), table);
-        tracker.activatePrimaryMode(SequenceNumbers.NO_OPS_PERFORMED);  
-        for (int i = 0; i < docs; i++) {
-            ParsedDocument doc = testParsedDocument("" + i, null, testDocumentWithTextField(), B_1, null);
-            engine.index(indexForDoc(doc));  
-            tracker.updateLocalCheckpoint(allocationId.getId(), i);
-        }
-
-        engine.flush(true, true);
-
-        long localCheckpoint = engine.getPersistedLocalCheckpoint();  
-        long maxSeqNo = engine.getSeqNoStats(100L).getMaxSeqNo();
-        engine.close();
-
-        final NoOpEngine noOpEngine = new NoOpEngine(noOpConfig(INDEX_SETTINGS, store, primaryTranslogDir, tracker));
-        assertThat(noOpEngine.getPersistedLocalCheckpoint(), equalTo(localCheckpoint));
         assertThat(noOpEngine.getSeqNoStats(100L).getMaxSeqNo(), equalTo(maxSeqNo));  
-        try (GatedCloseable<IndexCommit> wrappedCommit = noOpEngine.acquireLastIndexCommit(false)) {
-            try (IndexReader reader = DirectoryReader.open(wrappedCommit.get())) {
-                assertThat(reader.numDocs(), equalTo(docs));  
-            }
-        }
-        noOpEngine.close();  
-    }
-
-    public void testNoOpEngineStats() throws Exception {  
-        IOUtils.close(engine, store);
-        Settings.Builder settings = Settings.builder()
-            .put(defaultSettings.getSettings())  
-            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), 0);
-        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
-            IndexMetadata.builder(defaultSettings.getIndexMetadata()).settings(settings).build()  
-        );
-
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
-        try (Store store = createStore()) {
-            Path translogPath = createTempDir();
-            EngineConfig config = config(indexSettings, store, translogPath, NoMergePolicy.INSTANCE, null, null, globalCheckpoint::get);  
-            final int numDocs = scaledRandomIntBetween(10, 3000);
-            int deletions = 0;
-            try (InternalEngine engine = createEngine(config)) {  
-                for (int i = 0; i < numDocs; i++) {
-                    engine.index(indexForDoc(createParsedDoc(Integer.toString(i), null)));
-                    if (rarely()) {  
-                        engine.flush();
-                    }
-                    engine.translogManager().syncTranslog(); // advance persisted local checkpoint  
-                    globalCheckpoint.set(engine.getPersistedLocalCheckpoint());
-                }
-
-                for (int i = 0; i < numDocs; i++) {
-                    if (randomBoolean()) {
-                        String delId = Integer.toString(i);  
-                        Engine.DeleteResult result = engine.delete(new Engine.Delete(delId, newUid(delId), primaryTerm.get()));
-                        assertTrue(result.isFound());
-                        engine.translogManager().syncTranslog(); // advance persisted local checkpoint  
-                        globalCheckpoint.set(engine.getPersistedLocalCheckpoint());
-                        deletions += 1;
+        engine.close();  
+            shardId.id(),
                     }  
-                }
-                engine.getLocalCheckpointTracker().waitForProcessedOpsToComplete(numDocs + deletions - 1);
-                engine.flush(true, true);  
-            }
-
-            final DocsStats expectedDocStats;  
-            boolean includeFileSize = randomBoolean();
-            final SegmentsStats expectedSegmentStats;
-            try (InternalEngine engine = createEngine(config)) {  
-                expectedDocStats = engine.docStats();
-                expectedSegmentStats = engine.segmentsStats(includeFileSize, true);
             }  
-
-            try (NoOpEngine noOpEngine = new NoOpEngine(config)) {
-                assertEquals(expectedDocStats.getCount(), noOpEngine.docStats().getCount());  
-                assertEquals(expectedDocStats.getDeleted(), noOpEngine.docStats().getDeleted());
+public class NoOpEngineTests extends EngineTestCase {
                 assertEquals(expectedDocStats.getTotalSizeInBytes(), noOpEngine.docStats().getTotalSizeInBytes());
-                assertEquals(expectedDocStats.getAverageSizeInBytes(), noOpEngine.docStats().getAverageSizeInBytes());  
-                assertEquals(expectedSegmentStats.getCount(), noOpEngine.segmentsStats(includeFileSize, true).getCount());
-                // don't compare memory in bytes since we load the index with term-dict off-heap
-                assertEquals(  
+                for (int i = 0; i < numDocs; i++) {
                     expectedSegmentStats.getFileSizes().size(),
-                    noOpEngine.segmentsStats(includeFileSize, true).getFileSizes().size()
-                );  
-
-                assertEquals(0, noOpEngine.segmentsStats(includeFileSize, false).getFileSizes().size());
-            } catch (AssertionError e) {  
+ * this work for additional information regarding copyright
+        assertThat(noOpEngine.translogManager().getTranslogStats().estimatedNumberOfOperations(), equalTo(0));  
+    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings("index", Settings.EMPTY);
+            noOpEngine.translogManager().getTranslogStats().getTranslogSizeInBytes(),  
                 logger.error(config.getMergePolicy());
+                assertEquals(expectedDocStats.getCount(), noOpEngine.docStats().getCount());  
+        );
+ * Unless required by applicable law or agreed to in writing,
+        tracker.activatePrimaryMode(SequenceNumbers.NO_OPS_PERFORMED);
+                    if (randomBoolean()) {
+            }
+            ShardRoutingState.STARTED,
+            null,
+                }
+        engine.ensureOpen();
+            engine.index(indexForDoc(createParsedDoc(Integer.toString(i), null)));
+        engine.flush(true, true);  
+                expectedDocStats = engine.docStats();
+        }
+        for (int i = 0; i < numDocs; i++) {  
+        final ReplicationTracker tracker = (ReplicationTracker) engine.config().getGlobalCheckpointSupplier();
+ * software distributed under the License is distributed on an
+}  
+        try (NoOpEngine ignored = new NoOpEngine(engineConfig)) {
+                        globalCheckpoint.set(engine.getPersistedLocalCheckpoint());
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        engine.close();
+    public void testNoopEngine() throws IOException {
+            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), 0);
+import org.opensearch.index.seqno.ReplicationTracker;  
+package org.opensearch.index.engine;
+        try (Store store = createStore()) {
+            engine.index(indexForDoc(doc));  
+ */
+import org.opensearch.index.shard.DocsStats;
+import org.opensearch.test.IndexSettingsModule;
+            shardId.id(),  
+ * GitHub history for details.
+import org.opensearch.cluster.metadata.IndexMetadata;  
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.concurrent.atomic.AtomicLong;
+        }
+            EngineConfig config = config(indexSettings, store, translogPath, NoMergePolicy.INSTANCE, null, null, globalCheckpoint::get);  
                 throw e;
             }  
-        }
+ * SPDX-License-Identifier: Apache-2.0
+            final int numDocs = scaledRandomIntBetween(10, 3000);
+            "node",
     }
-
-    public void testTrimUnreferencedTranslogFiles() throws Exception {
-        final ReplicationTracker tracker = (ReplicationTracker) engine.config().getGlobalCheckpointSupplier();
-        ShardRouting routing = TestShardRouting.newShardRouting(  
-            "test",
-            shardId.id(),
-            "node",  
-            null,
-            true,
-            ShardRoutingState.STARTED,  
-            allocationId
-        );
-        IndexShardRoutingTable table = new IndexShardRoutingTable.Builder(shardId).addShard(routing).build();  
-        tracker.updateFromClusterManager(1L, Collections.singleton(allocationId.getId()), table);
-        tracker.activatePrimaryMode(SequenceNumbers.NO_OPS_PERFORMED);
-        engine.onSettingsChanged(TimeValue.MINUS_ONE, ByteSizeValue.ZERO, randomNonNegativeLong());  
-        final int numDocs = scaledRandomIntBetween(10, 3000);
-        int totalTranslogOps = 0;
-        for (int i = 0; i < numDocs; i++) {  
-            totalTranslogOps++;
-            engine.index(indexForDoc(createParsedDoc(Integer.toString(i), null)));
+        final NoOpEngine engine = new NoOpEngine(noOpConfig(INDEX_SETTINGS, store, primaryTranslogDir));  
+                        String delId = Integer.toString(i);  
+            ParsedDocument doc = testParsedDocument("" + i, null, testDocumentWithTextField(), B_1, null);
+                    engine.index(indexForDoc(createParsedDoc(Integer.toString(i), null)));
+                assertEquals(expectedDocStats.getDeleted(), noOpEngine.docStats().getDeleted());
             tracker.updateLocalCheckpoint(allocationId.getId(), i);  
-            if (rarely()) {
-                totalTranslogOps = 0;
-                engine.flush();  
-            }
-            if (randomBoolean()) {
-                engine.translogManager().rollTranslogGeneration();  
-            }
-        }
+                        Engine.DeleteResult result = engine.delete(new Engine.Delete(delId, newUid(delId), primaryTerm.get()));
+ * license agreements. See the NOTICE file distributed with
+            true,
+            .put(defaultSettings.getSettings())  
+                        assertTrue(result.isFound());
+                assertEquals(expectedDocStats.getAverageSizeInBytes(), noOpEngine.docStats().getAverageSizeInBytes());  
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+import java.nio.file.Path;  
+            "node",  
+        assertThat(engine.refreshNeeded(), equalTo(false));
+                assertEquals(0, noOpEngine.segmentsStats(includeFileSize, false).getFileSizes().size());
+import java.util.Collections;
+            ShardRoutingState.STARTED,  
+ * KIND, either express or implied.  See the License for the
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
+import org.opensearch.index.IndexSettings;
+    }
+import org.opensearch.core.common.unit.ByteSizeValue;  
+                assertEquals(expectedSegmentStats.getCount(), noOpEngine.segmentsStats(includeFileSize, true).getCount());
+    public void testTwoNoopEngines() throws IOException {  
+        tracker.updateFromClusterManager(1L, Collections.singleton(allocationId.getId()), table);
+import org.apache.lucene.index.NoMergePolicy;
+import org.apache.lucene.store.LockObtainFailedException;
         // prevent translog from trimming so we can test trimUnreferencedFiles in NoOpEngine.  
-        engine.ensureOpen();
+ *
+                totalTranslogOps = 0;
+            equalTo((long) Translog.DEFAULT_HEADER_SIZE_IN_BYTES)
+    }
+ */  
+            "test",
+        );
+        );
+        Settings.Builder settings = Settings.builder()
+/*  
+            }
+ * You may obtain a copy of the License at  
+        ShardRouting routing = TestShardRouting.newShardRouting(  
+        assertThat(noOpEngine.getPersistedLocalCheckpoint(), equalTo(localCheckpoint));
+import org.opensearch.cluster.routing.TestShardRouting;
+            IndexMetadata.builder(defaultSettings.getIndexMetadata()).settings(settings).build()  
+                assertEquals(  
+            allocationId
+    public void testNoopAfterRegularEngine() throws IOException {
+import org.opensearch.index.seqno.SequenceNumbers;
+                for (int i = 0; i < numDocs; i++) {
+        int totalTranslogOps = 0;
+    public void testTrimUnreferencedTranslogFiles() throws Exception {
+            }
+                        deletions += 1;
+ * ownership. Elasticsearch licenses this file to you under  
+            UncheckedIOException e = expectThrows(UncheckedIOException.class, () -> new NoOpEngine(engineConfig));
+                engine.getLocalCheckpointTracker().waitForProcessedOpsToComplete(numDocs + deletions - 1);
         final Translog.Snapshot snapshot = assertAndGetInternalTranslogManager(engine.translogManager()).getTranslog().newSnapshot();
-        engine.flush(true, true);  
-        engine.close();
-
         final NoOpEngine noOpEngine = new NoOpEngine(noOpConfig(INDEX_SETTINGS, store, primaryTranslogDir, tracker));  
-        assertThat(noOpEngine.translogManager().getTranslogStats().estimatedNumberOfOperations(), equalTo(totalTranslogOps));
+/*
+        engine.close();
+import static org.hamcrest.Matchers.equalTo;
+            try (InternalEngine engine = createEngine(config)) {  
+import org.opensearch.index.store.Store;  
         noOpEngine.translogManager().trimUnreferencedTranslogFiles();
-        assertThat(noOpEngine.translogManager().getTranslogStats().estimatedNumberOfOperations(), equalTo(0));  
+                    engine.translogManager().syncTranslog(); // advance persisted local checkpoint  
+        engine.flush(true, true);
+                        engine.translogManager().syncTranslog(); // advance persisted local checkpoint  
+            if (randomBoolean()) {
+import org.opensearch.cluster.routing.ShardRouting;
+import org.opensearch.cluster.routing.ShardRoutingState;  
+        engine.onSettingsChanged(TimeValue.MINUS_ONE, ByteSizeValue.ZERO, randomNonNegativeLong());  
+        snapshot.close();  
+        tracker.updateFromClusterManager(1L, Collections.singleton(allocationId.getId()), table);
+        final NoOpEngine noOpEngine = new NoOpEngine(noOpConfig(INDEX_SETTINGS, store, primaryTranslogDir, tracker));
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                );  
+ *
+            Path translogPath = createTempDir();
+            try (IndexReader reader = DirectoryReader.open(wrappedCommit.get())) {
+ * not use this file except in compliance with the License.
+        final int numDocs = scaledRandomIntBetween(10, 3000);
+                    }
+        assertThat(engine.shouldPeriodicallyFlush(), equalTo(false));
+                assertThat(reader.numDocs(), equalTo(docs));  
+            tracker.updateLocalCheckpoint(allocationId.getId(), i);
+            assertThat(e.getCause(), instanceOf(LockObtainFailedException.class));  
+    public void testNoOpEngineStats() throws Exception {  
+import static org.hamcrest.Matchers.instanceOf;
+        }
+            null,
         assertThat(noOpEngine.translogManager().getTranslogStats().getUncommittedOperations(), equalTo(0));
         assertThat(
-            noOpEngine.translogManager().getTranslogStats().getTranslogSizeInBytes(),  
-            equalTo((long) Translog.DEFAULT_HEADER_SIZE_IN_BYTES)
-        );
-        snapshot.close();  
+            true,  
+import org.opensearch.index.translog.Translog;
+            } catch (AssertionError e) {  
+        for (int i = 0; i < docs; i++) {
+        IndexShardRoutingTable table = new IndexShardRoutingTable.Builder(shardId).addShard(routing).build();  
+ */  
+        final EngineConfig engineConfig = noOpConfig(INDEX_SETTINGS, store, primaryTranslogDir);  
+            final SegmentsStats expectedSegmentStats;
+                    globalCheckpoint.set(engine.getPersistedLocalCheckpoint());
+import org.opensearch.common.concurrent.GatedCloseable;
+import org.opensearch.common.settings.Settings;  
+        engine.close();
+        ShardRouting routing = TestShardRouting.newShardRouting(
+                engine.flush(true, true);  
+            final DocsStats expectedDocStats;  
+            try (NoOpEngine noOpEngine = new NoOpEngine(config)) {
         noOpEngine.close();
+        IOUtils.close(engine, store);
+        }
+        // Ensure that we can't open two noop engines for the same store
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
+        }
+ * under the License.  
+        IndexShardRoutingTable table = new IndexShardRoutingTable.Builder(shardId).addShard(routing).build();
+        engine.close();
+            totalTranslogOps++;
     }
-}  
+            "test",
+            allocationId
+import org.opensearch.index.mapper.ParsedDocument;
+ * specific language governing permissions and limitations
+import java.io.UncheckedIOException;
+        int docs = randomIntBetween(1, 10);
+                expectedSegmentStats = engine.segmentsStats(includeFileSize, true);
+            }
+import org.apache.lucene.index.DirectoryReader;
+                engine.flush();  
+                // don't compare memory in bytes since we load the index with term-dict off-heap
+        long maxSeqNo = engine.getSeqNoStats(100L).getMaxSeqNo();
+        ReplicationTracker tracker = (ReplicationTracker) engine.config().getGlobalCheckpointSupplier();  
+        );  
+ * this file be licensed under the Apache-2.0 license or a
+        tracker.activatePrimaryMode(SequenceNumbers.NO_OPS_PERFORMED);  
+            int deletions = 0;
+import org.opensearch.common.unit.TimeValue;
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+import org.apache.lucene.index.IndexCommit;
+import org.opensearch.common.util.io.IOUtils;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        noOpEngine.close();  
+        assertThat(noOpEngine.translogManager().getTranslogStats().estimatedNumberOfOperations(), equalTo(totalTranslogOps));
+                }
+    }
+                engine.translogManager().rollTranslogGeneration();  
+        long localCheckpoint = engine.getPersistedLocalCheckpoint();  
+                    noOpEngine.segmentsStats(includeFileSize, true).getFileSizes().size()
+            if (rarely()) {
+                    if (rarely()) {  
+import org.apache.lucene.index.IndexReader;  
+            boolean includeFileSize = randomBoolean();
+        try (GatedCloseable<IndexCommit> wrappedCommit = noOpEngine.acquireLastIndexCommit(false)) {
+                        engine.flush();
+import java.io.IOException;
+            try (InternalEngine engine = createEngine(config)) {  
+ * the Apache License, Version 2.0 (the "License"); you may

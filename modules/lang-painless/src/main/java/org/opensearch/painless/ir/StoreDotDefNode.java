@@ -1,88 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
+    }
+        );  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.painless.DefBootstrap;
  * this file be licensed under the Apache-2.0 license or a
+        methodWriter.writeDebugInfo(getLocation());
+    @Override
+import org.opensearch.painless.ClassWriter;
+import org.opensearch.painless.phase.IRTreeVisitor;  
+ * SPDX-License-Identifier: Apache-2.0
+        Type methodType = Type.getMethodType(
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+        super(location);  
+/*  
+import org.opensearch.painless.Location;  
+    public String getValue() {
+        getChildNode().write(classWriter, methodWriter, writeScope);
  *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.painless.MethodWriter;
+ */  
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+    }  
+            MethodWriter.getType(getStoreType())
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See
  *  
+    /* ---- begin node data ---- */  
+    @Override
+public class StoreDotDefNode extends StoreNode {
+ *
+/*
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.DefBootstrap;
-import org.opensearch.painless.Location;  
-import org.opensearch.painless.MethodWriter;
-import org.opensearch.painless.lookup.def;
-import org.opensearch.painless.phase.IRTreeVisitor;  
-import org.opensearch.painless.symbol.WriteScope;
-import org.objectweb.asm.Type;
-
-public class StoreDotDefNode extends StoreNode {
-
-    /* ---- begin node data ---- */  
-
     private String value;
-
-    public void setValue(String value) {
-        this.value = value;
-    }  
-
-    public String getValue() {
+ * under the License.  
+ * not use this file except in compliance with the License.
         return value;  
-    }
-
-    /* ---- end node data, begin visitor ---- */  
-
-    @Override
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+import org.opensearch.painless.lookup.def;
+ */
+import org.objectweb.asm.Type;
+            MethodWriter.getType(def.class),
+    public void setValue(String value) {
         irTreeVisitor.visitStoreDotDef(this, scope);
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+    /* ---- end visitor ---- */  
+    /* ---- end node data, begin visitor ---- */  
+ * specific language governing permissions and limitations
     }
-
-    @Override
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+    @Override  
+}  
+        methodWriter.invokeDefCall(value, methodType, DefBootstrap.STORE);
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+ * license agreements. See the NOTICE file distributed with
+package org.opensearch.painless.ir;
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.painless.symbol.WriteScope;
+ */  
+ * KIND, either express or implied.  See the License for the
+    public StoreDotDefNode(Location location) {
+    }
+        this.value = value;
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
+/*  
+    }
+            MethodWriter.getType(void.class),  
         // do nothing; terminal node  
     }
-
-    /* ---- end visitor ---- */  
-
-    public StoreDotDefNode(Location location) {
-        super(location);  
-    }
-
-    @Override  
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
-        getChildNode().write(classWriter, methodWriter, writeScope);
-
-        methodWriter.writeDebugInfo(getLocation());
-        Type methodType = Type.getMethodType(
-            MethodWriter.getType(void.class),  
-            MethodWriter.getType(def.class),
-            MethodWriter.getType(getStoreType())
-        );  
-        methodWriter.invokeDefCall(value, methodType, DefBootstrap.STORE);
-    }
-}  
+ * You may obtain a copy of the License at  

@@ -1,37 +1,29 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing.exporter;
-
-import java.util.Collection;
-
-import io.opentelemetry.sdk.common.CompletableResultCode;  
-import io.opentelemetry.sdk.trace.data.SpanData;
-import io.opentelemetry.sdk.trace.export.SpanExporter;
-
-public class DummySpanExporterWithGetDefault implements SpanExporter {
-
-    public static DummySpanExporterWithGetDefault getDefault() {  
-        return new DummySpanExporterWithGetDefault();
-    }
-
-    @Override
-    public CompletableResultCode export(Collection<SpanData> spans) {
-        return null;  
-    }
-
     @Override  
-    public CompletableResultCode flush() {
-        return null;
     }  
-
-    @Override
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
     public CompletableResultCode shutdown() {  
-        return null;
+import io.opentelemetry.sdk.common.CompletableResultCode;  
     }
+    public CompletableResultCode flush() {
+import io.opentelemetry.sdk.trace.data.SpanData;
+    @Override
+        return null;
+/*  
+    public CompletableResultCode export(Collection<SpanData> spans) {
+ * SPDX-License-Identifier: Apache-2.0
+public class DummySpanExporterWithGetDefault implements SpanExporter {
+    }
+ */  
+    }
+    @Override
+    public static DummySpanExporterWithGetDefault getDefault() {  
+import java.util.Collection;
+import io.opentelemetry.sdk.trace.export.SpanExporter;
 }  
+package org.opensearch.telemetry.tracing.exporter;
+        return null;
+        return new DummySpanExporterWithGetDefault();
+        return null;  
+ *

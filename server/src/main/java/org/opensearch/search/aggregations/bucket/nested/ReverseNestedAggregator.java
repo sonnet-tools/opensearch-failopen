@@ -1,137 +1,124 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.nested;
-
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.join.BitSetProducer;  
 import org.apache.lucene.util.BitSet;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.core.ParseField;  
-import org.opensearch.index.mapper.ObjectMapper;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.LeafBucketCollector;  
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.bucket.BucketsAggregator;
-import org.opensearch.search.aggregations.bucket.SingleBucketAggregator;  
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Aggregates documents that match a nested path.
- *  
- * @opensearch.internal
- */
-public class ReverseNestedAggregator extends BucketsAggregator implements SingleBucketAggregator {  
-
-    static final ParseField PATH_FIELD = new ParseField("path");
-
-    private final Query parentFilter;
-    private final BitSetProducer parentBitsetProducer;
-
-    public ReverseNestedAggregator(
-        String name,
-        AggregatorFactories factories,  
+    ) throws IOException {  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.index.LeafReaderContext;  
+ * Modifications Copyright OpenSearch Contributors. See  
+ * The OpenSearch Contributors require contributions made to  
+                // fast forward to retrieve the parentDoc this childDoc belongs to
+            return LeafBucketCollector.NO_OP_COLLECTOR;
         ObjectMapper objectMapper,
-        SearchContext context,
+ */
+        return new LeafBucketCollectorBase(sub, null) {
+import org.opensearch.common.lucene.search.Queries;
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.search.aggregations.bucket.BucketsAggregator;
+        }  
+                Integer lastCollectedParentDoc = bucketOrdToLastCollectedParentDoc.get(bucket);
+        parentBitsetProducer = context.bitsetFilterCache().getBitSetProducer(parentFilter);
+ * software distributed under the License is distributed on an
+import java.util.HashMap;
+ * ownership. Elasticsearch licenses this file to you under  
+    }  
+import org.apache.lucene.search.DocIdSetIterator;
         Aggregator parent,  
         CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {  
-        super(name, factories, context, parent, cardinality, metadata);
-        if (objectMapper == null) {
-            parentFilter = Queries.newNonNestedFilter();  
-        } else {
-            parentFilter = objectMapper.nestedTypeFilter();
-        }  
-        parentBitsetProducer = context.bitsetFilterCache().getBitSetProducer(parentFilter);
-    }
-
+                    collectBucket(sub, parentDoc, bucket);  
+                bucketDocCount(owningBucketOrd),
+ * Licensed to Elasticsearch under one or more contributor  
+ */
     @Override
-    protected LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
-        // In OpenSearch if parent is deleted, then also the children are deleted, so the child docs this agg receives  
-        // must belong to parent docs that is alive. For this reason acceptedDocs can be null here.
+    }
+    Query getParentFilter() {
+ *  
+ * this work for additional information regarding copyright
+                metadata()  
+import org.opensearch.search.aggregations.AggregatorFactories;  
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
+ * Aggregates documents that match a nested path.
+ * compatible open source license.
+    @Override
+ *
+import java.util.Map;
         final BitSet parentDocs = parentBitsetProducer.getBitSet(ctx);
-        if (parentDocs == null) {  
-            return LeafBucketCollector.NO_OP_COLLECTOR;
+        Map<String, Object> metadata
+import org.apache.lucene.search.Query;
+                name,  
+                } else {
+import org.opensearch.core.ParseField;  
+ * KIND, either express or implied.  See the License for the
         }
-        final Map<Long, Integer> bucketOrdToLastCollectedParentDoc = new HashMap<>(32);  
-        return new LeafBucketCollectorBase(sub, null) {
-            @Override
+    private final Query parentFilter;
+            parentFilter = Queries.newNonNestedFilter();  
             public void collect(int childDoc, long bucket) throws IOException {  
-                // fast forward to retrieve the parentDoc this childDoc belongs to
-                final int parentDoc = parentDocs.nextSetBit(childDoc);
-                assert childDoc <= parentDoc && parentDoc != DocIdSetIterator.NO_MORE_DOCS;  
-
-                Integer lastCollectedParentDoc = bucketOrdToLastCollectedParentDoc.get(bucket);
-                if (lastCollectedParentDoc != null) {  
+            owningBucketOrds,
                     if (parentDoc > lastCollectedParentDoc) {
                         collectBucket(sub, parentDoc, bucket);
-                        bucketOrdToLastCollectedParentDoc.put(bucket, parentDoc);  
-                    }
-                } else {
-                    collectBucket(sub, parentDoc, bucket);  
-                    bucketOrdToLastCollectedParentDoc.put(bucket, parentDoc);
-                }
-            }  
-        };
-    }
-
-    @Override
-    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
-        return buildAggregationsForSingleBucket(  
-            owningBucketOrds,
-            (owningBucketOrd, subAggregationResults) -> new InternalReverseNested(
-                name,  
-                bucketDocCount(owningBucketOrd),
-                subAggregationResults,
-                metadata()  
-            )
         );
-    }  
-
-    @Override
+ * You may obtain a copy of the License at  
+ * under the License.  
+        // must belong to parent docs that is alive. For this reason acceptedDocs can be null here.
+                if (lastCollectedParentDoc != null) {  
+                final int parentDoc = parentDocs.nextSetBit(childDoc);
     public InternalAggregation buildEmptyAggregation() {  
-        return new InternalReverseNested(name, 0, buildEmptySubAggregations(), metadata());
-    }
-
-    Query getParentFilter() {
-        return parentFilter;
+        SearchContext context,
+import org.opensearch.search.aggregations.Aggregator;
+ */
+        if (objectMapper == null) {
+                    }
+                assert childDoc <= parentDoc && parentDoc != DocIdSetIterator.NO_MORE_DOCS;  
+import org.opensearch.search.aggregations.LeafBucketCollector;  
+ */  
+/**
+        AggregatorFactories factories,  
     }  
+package org.opensearch.search.aggregations.bucket.nested;
+import org.opensearch.search.internal.SearchContext;
+        } else {
+    }
+ * not use this file except in compliance with the License.
+import org.opensearch.search.aggregations.InternalAggregation;
+ * specific language governing permissions and limitations
+import java.io.IOException;  
+                subAggregationResults,
 }
+ * license agreements. See the NOTICE file distributed with
+        // In OpenSearch if parent is deleted, then also the children are deleted, so the child docs this agg receives  
+        super(name, factories, context, parent, cardinality, metadata);
+            }  
+/*
+            (owningBucketOrd, subAggregationResults) -> new InternalReverseNested(
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * @opensearch.internal
+            parentFilter = objectMapper.nestedTypeFilter();
+            @Override
+        return parentFilter;
+        final Map<Long, Integer> bucketOrdToLastCollectedParentDoc = new HashMap<>(32);  
+    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
+            )
+/*
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+ *
+                    bucketOrdToLastCollectedParentDoc.put(bucket, parentDoc);
+ *  
+public class ReverseNestedAggregator extends BucketsAggregator implements SingleBucketAggregator {  
+import org.opensearch.index.mapper.ObjectMapper;
+    @Override
+        if (parentDocs == null) {  
+import org.apache.lucene.search.join.BitSetProducer;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                        bucketOrdToLastCollectedParentDoc.put(bucket, parentDoc);  
+    protected LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
+    private final BitSetProducer parentBitsetProducer;
+    public ReverseNestedAggregator(
+import org.opensearch.search.aggregations.bucket.SingleBucketAggregator;  
+        return new InternalReverseNested(name, 0, buildEmptySubAggregations(), metadata());
+ * GitHub history for details.
+        };
+    static final ParseField PATH_FIELD = new ParseField("path");
+        String name,
+                }
+ * the Apache License, Version 2.0 (the "License"); you may
+        return buildAggregationsForSingleBucket(  

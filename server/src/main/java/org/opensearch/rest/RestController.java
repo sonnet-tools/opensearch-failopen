@@ -1,805 +1,724 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.path.PathTrie;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.RequestUtils;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.io.Streams;  
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.breaker.CircuitBreaker;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.http.HttpChunk;
-import org.opensearch.http.HttpServerTransport;  
-import org.opensearch.http.HttpTransportSettings;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.client.node.NodeClient;  
-import org.opensearch.usage.UsageService;
-
-import java.io.ByteArrayOutputStream;  
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;  
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
-import java.util.stream.Collectors;  
-
-import org.reactivestreams.Subscriber;
-import reactor.core.publisher.Mono;  
-
-import static org.opensearch.cluster.metadata.IndexNameExpressionResolver.SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY;
-import static org.opensearch.core.rest.RestStatus.BAD_REQUEST;  
-import static org.opensearch.core.rest.RestStatus.INTERNAL_SERVER_ERROR;
-import static org.opensearch.core.rest.RestStatus.METHOD_NOT_ALLOWED;
-import static org.opensearch.core.rest.RestStatus.NOT_ACCEPTABLE;  
-import static org.opensearch.core.rest.RestStatus.OK;
-import static org.opensearch.rest.BytesRestResponse.TEXT_CONTENT_TYPE;
-
-/**
- * OpenSearch REST controller
- *  
- * @opensearch.api
- */
-public class RestController implements HttpServerTransport.Dispatcher {  
-
-    private static final Logger logger = LogManager.getLogger(RestController.class);
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestController.class);  
-    private static final String OPENSEARCH_PRODUCT_ORIGIN_HTTP_HEADER = "X-opensearch-product-origin";
-
-    private volatile int requestIdMaxLength = HttpTransportSettings.SETTING_HTTP_REQUEST_ID_MAX_LENGTH.getDefault(Settings.EMPTY);  
-
-    private static final BytesReference FAVICON_RESPONSE;
-
-    static {
-        try (InputStream stream = RestController.class.getResourceAsStream("/config/favicon.ico")) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();  
-            Streams.copy(stream, out);
-            FAVICON_RESPONSE = new BytesArray(out.toByteArray());
-        } catch (IOException e) {  
-            throw new AssertionError(e);
-        }
-    }  
-
-    private final PathTrie<RestMethodHandlers> handlers = new PathTrie<>(RestUtils.REST_DECODER);
-
-    private final UnaryOperator<RestHandler> handlerWrapper;
-
-    private final NodeClient client;  
-
-    private final CircuitBreakerService circuitBreakerService;
-
-    /** Rest headers that are copied to internal requests made during a rest request. */
-    private final Set<RestHeaderDefinition> headersToCopy;
-    private final UsageService usageService;  
-
-    public RestController(
-        Set<RestHeaderDefinition> headersToCopy,  
-        UnaryOperator<RestHandler> handlerWrapper,
-        NodeClient client,
-        CircuitBreakerService circuitBreakerService,  
-        UsageService usageService
-    ) {
-        this.headersToCopy = headersToCopy;  
-        this.usageService = usageService;
-        if (handlerWrapper == null) {
-            handlerWrapper = h -> h; // passthrough if no wrapper set  
-        }
-
-        this.handlerWrapper = handlerWrapper;  
-        this.client = client;
-        this.circuitBreakerService = circuitBreakerService;
-        registerHandlerNoWrap(  
-            RestRequest.Method.GET,
-            "/favicon.ico",
-            (request, channel, clnt) -> channel.sendResponse(new BytesRestResponse(RestStatus.OK, "image/x-icon", FAVICON_RESPONSE))  
-        );
-    }
-
-    public void setRequestIdMaxLength(int maxLength) {
-        this.requestIdMaxLength = maxLength;
-    }  
-
-    /**
-     * Returns an iterator over registered REST method handlers.  
-     * @return {@link Iterator} of {@link MethodHandlers}
-     */
-    public Iterator<MethodHandlers> getAllHandlers() {  
-        List<MethodHandlers> methodHandlers = new ArrayList<>();
-        handlers.retrieveAll().forEachRemaining(methodHandlers::add);
-        return methodHandlers.iterator();  
-    }
-
-    /**  
-     * Registers a REST handler to be executed when the provided {@code method} and {@code path} match the request.
-     *
      * @param method GET, POST, etc.  
-     * @param path Path to handle (e.g., "/{index}/{type}/_bulk")
-     * @param handler The handler to actually execute
-     * @param deprecationMessage The message to log and send as a header in the response  
-     */
-    protected void registerAsDeprecatedHandler(RestRequest.Method method, String path, RestHandler handler, String deprecationMessage) {
-        assert (handler instanceof DeprecationRestHandler) == false;  
-
-        registerHandler(method, path, new DeprecationRestHandler(handler, deprecationMessage, deprecationLogger));
-    }  
-
-    /**
-     * Registers a REST handler to be executed when the provided {@code method} and {@code path} match the request, or when provided  
-     * with {@code deprecatedMethod} and {@code deprecatedPath}. Expected usage:
-     * <pre><code>
-     * // remove deprecation in next major release  
-     * controller.registerWithDeprecatedHandler(POST, "/_forcemerge", this,
-     *                                          POST, "/_optimize", deprecationLogger);
-     * controller.registerWithDeprecatedHandler(POST, "/{index}/_forcemerge", this,  
-     *                                          POST, "/{index}/_optimize", deprecationLogger);
-     * </code></pre>
-     * <p>  
-     * The registered REST handler ({@code method} with {@code path}) is a normal REST handler that is not deprecated and it is
-     * replacing the deprecated REST handler ({@code deprecatedMethod} with {@code deprecatedPath}) that is using the <em>same</em>
-     * {@code handler}.  
-     * <p>
-     * Deprecated REST handlers without a direct replacement should be deprecated directly using {@link #registerAsDeprecatedHandler}
-     * and a specific message.  
-     *
-     * @param method GET, POST, etc.
-     * @param path Path to handle (e.g., "/_forcemerge")  
-     * @param handler The handler to actually execute
-     * @param deprecatedMethod GET, POST, etc.
-     * @param deprecatedPath <em>Deprecated</em> path to handle (e.g., "/_optimize")  
-     */
-    protected void registerWithDeprecatedHandler(
-        RestRequest.Method method,  
-        String path,
-        RestHandler handler,
-        RestRequest.Method deprecatedMethod,  
-        String deprecatedPath
-    ) {
-        // e.g., [POST /_optimize] is deprecated! Use [POST /_forcemerge] instead.  
-        final String deprecationMessage = "["
-            + deprecatedMethod.name()
-            + " "  
-            + deprecatedPath
-            + "] is deprecated! Use ["
-            + method.name()  
-            + " "
-            + path
-            + "] instead.";  
-
-        registerHandler(method, path, handler);
-        registerAsDeprecatedHandler(deprecatedMethod, deprecatedPath, handler, deprecationMessage);  
-    }
-
-    /**  
-     * Registers a REST handler to be executed when one of the provided methods and path match the request.
-     *
-     * @param path Path to handle (e.g., "/{index}/{type}/_bulk")  
-     * @param handler The handler to actually execute
-     * @param method GET, POST, etc.
-     */  
-    protected void registerHandler(RestRequest.Method method, String path, RestHandler handler) {
-        if (handler instanceof BaseRestHandler baseRestHandler) {
-            usageService.addRestHandler(baseRestHandler);  
-        }
-        registerHandlerNoWrap(method, path, handlerWrapper.apply(handler));
-    }  
-
-    private void registerHandlerNoWrap(RestRequest.Method method, String path, RestHandler maybeWrappedHandler) {
-        handlers.insertOrUpdate(  
-            path,
-            new RestMethodHandlers(path, maybeWrappedHandler, method),
-            (mHandlers, newMHandler) -> mHandlers.addMethods(maybeWrappedHandler, method)  
-        );
-    }
-
-    /**
-     * Registers a REST handler with the controller. The REST handler declares the {@code method}
-     * and {@code path} combinations.  
-     */
-    public void registerHandler(final RestHandler restHandler) {
-        restHandler.routes().forEach(route -> registerHandler(route.getMethod(), route.getPath(), restHandler));  
-        restHandler.deprecatedRoutes()
-            .forEach(route -> registerAsDeprecatedHandler(route.getMethod(), route.getPath(), restHandler, route.getDeprecationMessage()));
-        restHandler.replacedRoutes()  
-            .forEach(
-                route -> registerWithDeprecatedHandler(
-                    route.getMethod(),  
-                    route.getPath(),
-                    restHandler,
-                    route.getDeprecatedMethod(),  
-                    route.getDeprecatedPath()
-                )
-            );  
-    }
-
-    @Override  
-    public Optional<RestHandler> dispatchHandler(String uri, String rawPath, RestRequest.Method method, Map<String, String> params) {
-        // Loop through all possible handlers, attempting to dispatch the request
-        final Iterator<RestMethodHandlers> allHandlers = getAllRestMethodHandlers(params, rawPath);  
-
-        while (allHandlers.hasNext()) {
-            final RestHandler handler;  
-            final RestMethodHandlers handlers = allHandlers.next();
-            if (handlers == null) {
-                handler = null;  
-            } else {
-                handler = handlers.getHandler(method);
-            }  
-            if (handler == null) {
-                final Set<RestRequest.Method> validMethodSet = getValidHandlerMethodSet(rawPath);
-                if (validMethodSet.contains(method) == false) {  
-                    return Optional.empty();
-                }
-            } else {  
-                return Optional.of(handler);
-            }
-        }  
-
-        return Optional.empty();
-    }  
-
-    @Override
-    public void dispatchRequest(RestRequest request, RestChannel channel, ThreadContext threadContext) {  
-        try {
-            tryAllHandlers(request, channel, threadContext);
-        } catch (Exception e) {  
-            try {
-                channel.sendResponse(new BytesRestResponse(channel, e));
-            } catch (Exception inner) {  
-                inner.addSuppressed(e);
-                logger.error(() -> new ParameterizedMessage("failed to send failure response for uri [{}]", request.uri()), inner);
-            }  
-        }
-    }
-
-    @Override
-    public void dispatchBadRequest(final RestChannel channel, final ThreadContext threadContext, final Throwable cause) {
-        try {  
-            final Exception e;
-            if (cause == null) {
-                e = new OpenSearchException("unknown cause");  
-            } else if (cause instanceof Exception exception) {
-                e = exception;
-            } else {  
-                e = new OpenSearchException(cause);
-            }
-            channel.sendResponse(new BytesRestResponse(channel, BAD_REQUEST, e));  
-        } catch (final IOException e) {
-            if (cause != null) {
-                e.addSuppressed(cause);  
-            }
-            logger.warn("failed to send bad request response", e);
-            channel.sendResponse(new BytesRestResponse(INTERNAL_SERVER_ERROR, BytesRestResponse.TEXT_CONTENT_TYPE, BytesArray.EMPTY));  
-        }
-    }
-
-    private void dispatchRequest(RestRequest request, RestChannel channel, RestHandler handler) throws Exception {
-        final int contentLength = request.content().length();
-        final MediaType mediaType = request.getMediaType();  
-        if (contentLength > 0) {
-            if (mediaType == null) {
-                sendContentTypeErrorMessage(request.getAllHeaderValues("Content-Type"), channel);  
-                return;
-            }
-            if (handler.supportsContentStream() && mediaType != MediaTypeRegistry.JSON && mediaType != XContentType.SMILE) {  
-                channel.sendResponse(
-                    BytesRestResponse.createSimpleErrorResponse(
-                        channel,  
-                        RestStatus.NOT_ACCEPTABLE,
-                        "Content-Type [" + mediaType + "] does not support stream parsing. Use JSON or SMILE instead"
-                    )  
-                );
-                return;
-            }  
-        }
-
-        RestChannel responseChannel = channel;  
-        try {
-            if (handler.canTripCircuitBreaker()) {
-                inFlightRequestsBreaker(circuitBreakerService).addEstimateBytesAndMaybeBreak(contentLength, "<http_request>");  
-            } else {
-                inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(contentLength);
-            }  
-
-            if (handler.supportsStreaming()) {
-                // The handler may support streaming but not the engine, in this case we fail with the bad request  
-                if (channel instanceof StreamingRestChannel streamingRestChannel) {
-                    responseChannel = new StreamHandlingHttpChannel(streamingRestChannel, circuitBreakerService, contentLength);
-                } else {  
-                    throw new IllegalStateException(
-                        "The engine does not support HTTP streaming, unable to serve uri ["
-                            + request.getHttpRequest().uri()  
-                            + "] and method ["
-                            + request.getHttpRequest().method()
-                            + "]"  
-                    );
-                }
-
-                if (mediaType == null) {
-                    sendContentTypeErrorMessage(request.getAllHeaderValues("Content-Type"), responseChannel);
-                    return;  
-                }
-            } else {
-                // if we could reserve bytes for the request we need to send the response also over this channel  
-                responseChannel = new ResourceHandlingHttpChannel(channel, circuitBreakerService, contentLength);
-            }
-
-            // TODO: Count requests double in the circuit breaker if they need copying?
-            if (handler.allowsUnsafeBuffers() == false) {
-                request.ensureSafeBuffers();  
-            }
-            if (handler.allowSystemIndexAccessByDefault() == false && request.header(OPENSEARCH_PRODUCT_ORIGIN_HTTP_HEADER) == null) {
-                // The OPENSEARCH_PRODUCT_ORIGIN_HTTP_HEADER indicates that the request is coming from an OpenSearch product with a plan  
-                // to move away from direct access to system indices, and thus deprecation warnings should not be emitted.
-                // This header is intended for internal use only.
-                client.threadPool().getThreadContext().putHeader(SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, Boolean.FALSE.toString());  
-            }
-
-            handler.handleRequest(request, responseChannel, client);  
-        } catch (Exception e) {
-            responseChannel.sendResponse(new BytesRestResponse(responseChannel, e));
-        }  
-    }
-
-    private boolean handleNoHandlerFound(String rawPath, RestRequest.Method method, String uri, RestChannel channel) {  
-        // Get the map of matching handlers for a request, for the full set of HTTP methods.
-        final Set<RestRequest.Method> validMethodSet = getValidHandlerMethodSet(rawPath);
-        if (validMethodSet.contains(method) == false) {  
-            if (method == RestRequest.Method.OPTIONS) {
-                handleOptionsRequest(channel, validMethodSet);
-                return true;  
-            }
-            if (validMethodSet.isEmpty() == false) {
-                // If an alternative handler for an explicit path is registered to a  
-                // different HTTP method than the one supplied - return a 405 Method
-                // Not Allowed error.
-                handleUnsupportedHttpMethod(uri, method, channel, validMethodSet, null);  
-                return true;
-            }
-        }  
-        return false;
-    }
-
-    private void sendContentTypeErrorMessage(@Nullable List<String> contentTypeHeader, RestChannel channel) throws IOException {
         final String errorMessage;
-        if (contentTypeHeader == null) {  
-            errorMessage = "Content-Type header is missing";
-        } else {
-            errorMessage = "Content-Type header [" + Strings.collectionToCommaDelimitedString(contentTypeHeader) + "] is not supported";  
-        }
-
-        channel.sendResponse(BytesRestResponse.createSimpleErrorResponse(channel, NOT_ACCEPTABLE, errorMessage));  
-    }
-
-    private void tryAllHandlers(final RestRequest request, final RestChannel channel, final ThreadContext threadContext) throws Exception {  
-        for (final RestHeaderDefinition restHeader : headersToCopy) {
-            final String name = restHeader.getName();
-            final List<String> headerValues = request.getAllHeaderValues(name);  
-            if (headerValues != null && headerValues.isEmpty() == false) {
-                final List<String> distinctHeaderValues = headerValues.stream().distinct().collect(Collectors.toList());
-                if (restHeader.isMultiValueAllowed() == false && distinctHeaderValues.size() > 1) {  
-                    channel.sendResponse(
-                        BytesRestResponse.createSimpleErrorResponse(
-                            channel,  
-                            BAD_REQUEST,
-                            "multiple values for single-valued header [" + name + "]."
-                        )  
-                    );
-                    return;
-                } else {  
-                    threadContext.putHeader(name, String.join(",", distinctHeaderValues));
-                    // Validate request-id header if present
-                    if (Task.X_REQUEST_ID.equals(restHeader.getName())) {  
-                        RequestUtils.validateRequestId(distinctHeaderValues.getFirst(), requestIdMaxLength);
-                    }
-                }  
-            }
-        }
-        // error_trace cannot be used when we disable detailed errors  
-        // we consume the error_trace parameter first to ensure that it is always consumed
-        if (channel.detailedErrorStackTraceEnabled() && channel.detailedErrorsEnabled() == false) {
-            channel.sendResponse(  
-                BytesRestResponse.createSimpleErrorResponse(channel, BAD_REQUEST, "error traces in responses are disabled.")
-            );
-            return;  
-        }
-
-        final String rawPath = request.rawPath();  
-        final String uri = request.uri();
-        final RestRequest.Method requestMethod;
-        try {  
-            // Resolves the HTTP method and fails if the method is invalid
-            requestMethod = request.method();
-            // Loop through all possible handlers, attempting to dispatch the request  
-            Iterator<RestMethodHandlers> allHandlers = getAllRestMethodHandlers(request.params(), rawPath);
-            while (allHandlers.hasNext()) {
-                final RestHandler handler;  
-                final RestMethodHandlers handlers = allHandlers.next();
-                if (handlers == null) {
-                    handler = null;  
-                } else {
-                    handler = handlers.getHandler(requestMethod);
-                }  
-                if (handler == null) {
-                    if (handleNoHandlerFound(rawPath, requestMethod, uri, channel)) {
-                        return;  
-                    }
-                } else {
-                    dispatchRequest(request, channel, handler);  
-                    return;
-                }
-            }  
-        } catch (final IllegalArgumentException e) {
+                    return;  
+     * @param path Path to handle (e.g., "/_forcemerge")  
+                channel.sendResponse(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            throw new AssertionError(e);
             handleUnsupportedHttpMethod(uri, null, channel, getValidHandlerMethodSet(rawPath), e);
-            return;  
-        }
-        // If request has not been handled, fallback to a bad request error.
-        handleBadRequest(uri, requestMethod, channel);  
-    }
-
-    Iterator<RestMethodHandlers> getAllRestMethodHandlers(@Nullable Map<String, String> requestParamsRef, String rawPath) {  
-        final Supplier<Map<String, String>> paramsSupplier;
-        if (requestParamsRef == null) {
-            paramsSupplier = () -> null;  
-        } else {
-            // Between retrieving the correct path, we need to reset the parameters,
-            // otherwise parameters are parsed out of the URI that aren't actually handled.  
-            final Map<String, String> originalParams = new HashMap<>(requestParamsRef);
-            paramsSupplier = () -> {
-                // PathTrie modifies the request, so reset the params between each iteration  
-                requestParamsRef.clear();
-                requestParamsRef.putAll(originalParams);
-                return requestParamsRef;  
-            };
-        }
-        // we use rawPath since we don't want to decode it while processing the path resolution  
-        // so we can handle things like:
-        // my_index/my_type/http%3A%2F%2Fwww.google.com
-        return handlers.retrieveAll(rawPath, paramsSupplier);  
-    }
-
-    /**  
-     * Handle requests to a valid REST endpoint using an unsupported HTTP
-     * method. A 405 HTTP response code is returned, and the response 'Allow'
-     * header includes a list of valid HTTP methods for the endpoint (see  
-     * <a href="https://tools.ietf.org/html/rfc2616#section-10.4.6">HTTP/1.1 -
-     * 10.4.6 - 405 Method Not Allowed</a>).
-     */  
-    private void handleUnsupportedHttpMethod(
-        String uri,
-        @Nullable RestRequest.Method method,  
-        final RestChannel channel,
-        final Set<RestRequest.Method> validMethodSet,
-        @Nullable final IllegalArgumentException exception  
-    ) {
-        try {
-            final StringBuilder msg = new StringBuilder();  
-            if (exception == null) {
-                msg.append("Incorrect HTTP method for uri [").append(uri);
-                msg.append("] and method [").append(method).append("]");  
-            } else {
-                // Not using the error message directly from 'exception.getMessage()' to avoid unescaped HTML special characters,
-                // in case false-positive cross site scripting vulnerability is detected by common security scanners.  
-                msg.append("Unexpected HTTP method");
-            }
-            if (validMethodSet.isEmpty() == false) {  
-                msg.append(", allowed: ").append(validMethodSet);
-            }
-            BytesRestResponse bytesRestResponse = BytesRestResponse.createSimpleErrorResponse(channel, METHOD_NOT_ALLOWED, msg.toString());  
-            if (validMethodSet.isEmpty() == false) {
-                bytesRestResponse.addHeader("Allow", Strings.collectionToDelimitedString(validMethodSet, ","));
-            }  
-            channel.sendResponse(bytesRestResponse);
-        } catch (final IOException e) {
-            logger.warn("failed to send bad request response", e);  
-            channel.sendResponse(new BytesRestResponse(INTERNAL_SERVER_ERROR, BytesRestResponse.TEXT_CONTENT_TYPE, BytesArray.EMPTY));
-        }
-    }  
-
-    /**
-     * Handle HTTP OPTIONS requests to a valid REST endpoint. A 200 HTTP  
-     * response code is returned, and the response 'Allow' header includes a
-     * list of valid HTTP methods for the endpoint (see
-     * <a href="https://tools.ietf.org/html/rfc2616#section-9.2">HTTP/1.1 - 9.2  
-     * - Options</a>).
-     */
-    private void handleOptionsRequest(RestChannel channel, Set<RestRequest.Method> validMethodSet) {  
-        BytesRestResponse bytesRestResponse = new BytesRestResponse(OK, TEXT_CONTENT_TYPE, BytesArray.EMPTY);
-        // When we have an OPTIONS HTTP request and no valid handlers, simply send OK by default (with the Access Control Origin header
-        // which gets automatically added).  
-        if (validMethodSet.isEmpty() == false) {
-            bytesRestResponse.addHeader("Allow", Strings.collectionToDelimitedString(validMethodSet, ","));
-        }  
-        channel.sendResponse(bytesRestResponse);
-    }
-
-    /**
-     * Handle a requests with no candidate handlers (return a 400 Bad Request
-     * error).  
-     */
-    private void handleBadRequest(String uri, RestRequest.Method method, RestChannel channel) throws IOException {
-        try (XContentBuilder builder = channel.newErrorBuilder()) {  
-            builder.startObject();
+        @Override
+        @Override
+        final Set<RestRequest.Method> validMethodSet = getValidHandlerMethodSet(rawPath);
             {
-                try {  
-                    // Validate input URI to filter out HTML special characters in the error message,
-                    // in case false-positive cross site scripting vulnerability is detected by common security scanners.
-                    uri = new URI(uri).getPath();  
-                    builder.field("error", "no handler found for uri [" + uri + "] and method [" + method + "]");
-                } catch (Exception e) {
-                    builder.field("error", "invalid uri has been requested");  
-                }
-            }
-            builder.endObject();  
-            channel.sendResponse(new BytesRestResponse(BAD_REQUEST, builder));
-        }
-    }  
-
-    /**
-     * Get the valid set of HTTP methods for a REST request.  
-     */
-    private Set<RestRequest.Method> getValidHandlerMethodSet(String rawPath) {
-        Set<RestRequest.Method> validMethods = new HashSet<>();  
-        Iterator<RestMethodHandlers> allHandlers = getAllRestMethodHandlers(null, rawPath);
-        while (allHandlers.hasNext()) {
+     * @param handler The handler to actually execute
+        UnaryOperator<RestHandler> handlerWrapper,
+     * controller.registerWithDeprecatedHandler(POST, "/{index}/_forcemerge", this,  
+        try {  
+    /**  
+        return circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS);
             final MethodHandlers methodHandlers = allHandlers.next();  
-            if (methodHandlers != null) {
-                validMethods.addAll(methodHandlers.getValidMethods());
+            channel.sendResponse(new BytesRestResponse(INTERNAL_SERVER_ERROR, BytesRestResponse.TEXT_CONTENT_TYPE, BytesArray.EMPTY));  
+     * {@code handler}.  
+        @Override  
+        RestRequest.Method deprecatedMethod,  
+        } catch (final IllegalArgumentException e) {
+                releaseRequestBytes();
+            bytesRestResponse.addHeader("Allow", Strings.collectionToDelimitedString(validMethodSet, ","));
+     * @param method GET, POST, etc.
+                inner.addSuppressed(e);
+                msg.append(", allowed: ").append(validMethodSet);
+            return delegate.detailedErrorStackTraceEnabled();  
+        @Override
+    private static CircuitBreaker inFlightRequestsBreaker(CircuitBreakerService circuitBreakerService) {
+     * @param method GET, POST, etc.
+        public boolean isWritable() {  
+    }
+        }
+                }
+     * <p>
+        if (contentTypeHeader == null) {  
+import reactor.core.publisher.Mono;  
+import org.opensearch.http.HttpTransportSettings;
+            if (mediaType == null) {
+            this.contentLength = contentLength;
+     * method. A 405 HTTP response code is returned, and the response 'Allow'
+                    // Nothing reached the client, so the failure response must still be allowed through this channel.  
+     * with {@code deprecatedMethod} and {@code deprecatedPath}. Expected usage:
+        @Override
+        public XContentBuilder newBuilder() throws IOException {  
+                            + request.getHttpRequest().method()
+                if (accepted == false) {
+            }
+                requestParamsRef.clear();
+    private Set<RestRequest.Method> getValidHandlerMethodSet(String rawPath) {
+     * Get the valid set of HTTP methods for a REST request.  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+ * @opensearch.api
+            }
+            this.delegate = delegate;  
+        }  
+    /**  
+            this.circuitBreakerService = circuitBreakerService;
+                    sendContentTypeErrorMessage(request.getAllHeaderValues("Content-Type"), responseChannel);
+    }  
+        final int contentLength = request.content().length();
+import java.util.HashMap;
+    public Iterator<MethodHandlers> getAllHandlers() {  
+     * 10.4.6 - 405 Method Not Allowed</a>).
+        private final int contentLength;
+    /**
+        registerHandlerNoWrap(  
+     *
+import org.opensearch.transport.client.node.NodeClient;  
+    private static final class ResourceHandlingHttpChannel implements RestChannel {
+    ) {
+        final String rawPath = request.rawPath();  
+        }
+            // Between retrieving the correct path, we need to reset the parameters,
+    private boolean handleNoHandlerFound(String rawPath, RestRequest.Method method, String uri, RestChannel channel) {  
+    private void registerHandlerNoWrap(RestRequest.Method method, String path, RestHandler maybeWrappedHandler) {
+        try (InputStream stream = RestController.class.getResourceAsStream("/config/favicon.ico")) {
+        while (allHandlers.hasNext()) {
+            }
+        public boolean isReadable() {
+            return delegate.newErrorBuilder();  
+ */  
+                    route.getPath(),
+            } else {
+    private final PathTrie<RestMethodHandlers> handlers = new PathTrie<>(RestUtils.REST_DECODER);
+            return delegate.detailedErrorsEnabled();
+                msg.append("] and method [").append(method).append("]");  
+        RestRequest.Method method,  
+import java.util.Optional;
+     * Registers a REST handler to be executed when the provided {@code method} and {@code path} match the request, or when provided  
+        // If request has not been handled, fallback to a bad request error.
+import org.opensearch.common.logging.DeprecationLogger;
+                try {  
+    private final UnaryOperator<RestHandler> handlerWrapper;
+                    BytesRestResponse.createSimpleErrorResponse(
+            );
+                    threadContext.putHeader(name, String.join(",", distinctHeaderValues));
+                    }
+        channel.sendResponse(BytesRestResponse.createSimpleErrorResponse(channel, NOT_ACCEPTABLE, errorMessage));  
+                    return;
+        registerHandlerNoWrap(method, path, handlerWrapper.apply(handler));
+        registerHandler(method, path, new DeprecationRestHandler(handler, deprecationMessage, deprecationLogger));
+                } else {
+                requestParamsRef.putAll(originalParams);
+        @Override
+        for (final RestHeaderDefinition restHeader : headersToCopy) {
+     */
+            return;  
+                            + request.getHttpRequest().uri()  
+        /** Guards the in-flight-requests breaker release, which must happen exactly once. */
+    private final Set<RestHeaderDefinition> headersToCopy;
+        private final RestChannel delegate;  
+     * - Options</a>).
+        final RestChannel channel,
+                        "The engine does not support HTTP streaming, unable to serve uri ["
+        if (channel.detailedErrorStackTraceEnabled() && channel.detailedErrorsEnabled() == false) {
+            this.delegate = delegate;  
+            while (allHandlers.hasNext()) {
+                handler = null;  
+                } else {  
+        @Override
+            channel.sendResponse(bytesRestResponse);
+        handleBadRequest(uri, requestMethod, channel);  
+import org.opensearch.common.util.io.Streams;  
+ *  
+     * Returns an iterator over registered REST method handlers.  
+    }
+        this.client = client;
+            if (responseSent.compareAndSet(false, true) == false) {
+        // e.g., [POST /_optimize] is deprecated! Use [POST /_forcemerge] instead.  
+        return Optional.empty();
+        private final int contentLength;
+    }
+                route -> registerWithDeprecatedHandler(
+        this.circuitBreakerService = circuitBreakerService;
+            } else {
+        }
+                handleUnsupportedHttpMethod(uri, method, channel, validMethodSet, null);  
+            if (handler.canTripCircuitBreaker()) {
+        /** Guards the response handoff. Claimed atomically and reset if the delegate rejects the response. */
+                    dispatchRequest(request, channel, handler);  
+        // We always obtain a fresh breaker to reflect changes to the breaker configuration.  
+            logger.warn("failed to send bad request response", e);  
+            Streams.copy(stream, out);
+                return true;
+ * compatible open source license.
+            if (cause != null) {
+                if (mediaType == null) {
+        } catch (final IOException e) {
+import org.opensearch.core.xcontent.MediaType;
+                    prepareResponse(response.status(), Map.of("Content-Type", List.of(response.contentType())));  
+        }  
+                    if (Task.X_REQUEST_ID.equals(restHeader.getName())) {  
+        }
+            try {
+            }
+import org.apache.logging.log4j.LogManager;
+            boolean accepted = false;
+            }
+     * header includes a list of valid HTTP methods for the endpoint (see  
             }  
+            return delegate.detailedErrorsEnabled();
+            }
+                e.addSuppressed(cause);  
+     */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        @Override
+        // we use rawPath since we don't want to decode it while processing the path resolution  
+        public BytesStreamOutput bytesOutput() {
+            if (handler.supportsStreaming()) {
+    }
+        try {
+        } catch (Exception e) {  
+import static org.opensearch.core.rest.RestStatus.METHOD_NOT_ALLOWED;
+        @Override  
+            } finally {
+     * @param deprecatedPath <em>Deprecated</em> path to handle (e.g., "/_optimize")  
+    /** Rest headers that are copied to internal requests made during a rest request. */
+            } else {
+            } else {
+import static org.opensearch.cluster.metadata.IndexNameExpressionResolver.SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY;
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestController.class);  
+    public void dispatchBadRequest(final RestChannel channel, final ThreadContext threadContext, final Throwable cause) {
+                            "multiple values for single-valued header [" + name + "]."
+        public void sendChunk(HttpChunk chunk) {  
+            channel.sendResponse(  
+            // TODO: Count requests double in the circuit breaker if they need copying?
+        public XContentBuilder newBuilder(MediaType mediaType, MediaType responseContentType, boolean useFiltering) throws IOException {  
+            if (cause == null) {
+ * Modifications Copyright OpenSearch Contributors. See
+                Mono.from(this).ignoreElement().then(Mono.just(response)).subscribe(delegate::sendResponse);  
+ *
+        String path,
+            delegate.prepareResponse(status, headers);  
+    private void handleOptionsRequest(RestChannel channel, Set<RestRequest.Method> validMethodSet) {  
+            return delegate.newBuilder(mediaType, responseContentType, useFiltering);
+ */
+        channel.sendResponse(bytesRestResponse);
+        }
+     * replacing the deprecated REST handler ({@code deprecatedMethod} with {@code deprecatedPath}) that is using the <em>same</em>
+ * this file be licensed under the Apache-2.0 license or a
+            }
+        // Loop through all possible handlers, attempting to dispatch the request
+                        channel,  
+                final RestHandler handler;  
+            return delegate.newBuilder(mediaType, useFiltering);
+        }
+     * @return {@link Iterator} of {@link MethodHandlers}
+                inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(contentLength);
+            );  
+     *
+                sendContentTypeErrorMessage(request.getAllHeaderValues("Content-Type"), channel);  
+public class RestController implements HttpServerTransport.Dispatcher {  
+import java.io.ByteArrayOutputStream;  
+            }
+     * and a specific message.  
+            (mHandlers, newMHandler) -> mHandlers.addMethods(maybeWrappedHandler, method)  
+        String deprecatedPath
+            + "] is deprecated! Use ["
+    }
+import org.opensearch.http.HttpChunk;
+        @Override
+        }
+            requestMethod = request.method();
+                // Not using the error message directly from 'exception.getMessage()' to avoid unescaped HTML special characters,
+        @Override
+                if (validMethodSet.contains(method) == false) {  
+        }
+                // different HTTP method than the one supplied - return a 405 Method
+            final List<String> headerValues = request.getAllHeaderValues(name);  
+    private volatile int requestIdMaxLength = HttpTransportSettings.SETTING_HTTP_REQUEST_ID_MAX_LENGTH.getDefault(Settings.EMPTY);  
+ * Licensed to Elasticsearch under one or more contributor  
+            }
+                    responseSent.set(false);
+     */
+ * ownership. Elasticsearch licenses this file to you under  
+    protected void registerHandler(RestRequest.Method method, String path, RestHandler handler) {
+            };
+                handedOff = true;  
+     * <pre><code>
+import java.util.Map;  
+/**
+    @Override  
+        RestHandler handler,
+        return methodHandlers.iterator();  
+ * license agreements. See the NOTICE file distributed with
+        Set<RestHeaderDefinition> headersToCopy,  
+            usageService.addRestHandler(baseRestHandler);  
+            path,
+        }  
+            new RestMethodHandlers(path, maybeWrappedHandler, method),
+                    // Validate input URI to filter out HTML special characters in the error message,
+        }  
+        handlers.retrieveAll().forEachRemaining(methodHandlers::add);
+import org.opensearch.core.common.breaker.CircuitBreaker;  
+        @Override  
+            builder.endObject();  
+                inFlightRequestsBreaker(circuitBreakerService).addEstimateBytesAndMaybeBreak(contentLength, "<http_request>");  
+        @Override  
+            }  
+            + deprecatedMethod.name()
+        restHandler.routes().forEach(route -> registerHandler(route.getMethod(), route.getPath(), restHandler));  
+                inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(-contentLength);
+    }
+     * @param path Path to handle (e.g., "/{index}/{type}/_bulk")  
+        registerHandler(method, path, handler);
+    }
+                    responseChannel = new StreamHandlingHttpChannel(streamingRestChannel, circuitBreakerService, contentLength);
+                    handler = handlers.getHandler(requestMethod);
+        Iterator<RestMethodHandlers> allHandlers = getAllRestMethodHandlers(null, rawPath);
+        }
+ * this work for additional information regarding copyright
+     * </code></pre>
+ * software distributed under the License is distributed on an
+    }
+            return delegate.detailedErrorStackTraceEnabled();  
+                request.ensureSafeBuffers();  
+            + " "
+            Iterator<RestMethodHandlers> allHandlers = getAllRestMethodHandlers(request.params(), rawPath);
+ * under the License.  
+import java.util.concurrent.atomic.AtomicBoolean;  
+            final Map<String, String> originalParams = new HashMap<>(requestParamsRef);
+            if (released.compareAndSet(false, true)) {
+        @Override
+        // When we have an OPTIONS HTTP request and no valid handlers, simply send OK by default (with the Access Control Origin header
+     * @param deprecationMessage The message to log and send as a header in the response  
+                if (handlers == null) {
+            channel.sendResponse(new BytesRestResponse(BAD_REQUEST, builder));
+    private static final String OPENSEARCH_PRODUCT_ORIGIN_HTTP_HEADER = "X-opensearch-product-origin";
+        }
+import java.util.Set;
+            // Resolves the HTTP method and fails if the method is invalid
+import static org.opensearch.core.rest.RestStatus.INTERNAL_SERVER_ERROR;
+    private void handleUnsupportedHttpMethod(
+            BytesRestResponse bytesRestResponse = BytesRestResponse.createSimpleErrorResponse(channel, METHOD_NOT_ALLOWED, msg.toString());  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+    }
+        this.requestIdMaxLength = maxLength;
+        @Override  
+                // to move away from direct access to system indices, and thus deprecation warnings should not be emitted.
+                // If an alternative handler for an explicit path is registered to a  
+                    return Optional.empty();
+                e = new OpenSearchException(cause);
+                final Set<RestRequest.Method> validMethodSet = getValidHandlerMethodSet(rawPath);
+            }  
+                    route.getDeprecatedPath()
+        @Override
+        CircuitBreakerService circuitBreakerService,  
+                    handler = null;  
+            builder.startObject();
+                        )  
+     */
+    ) {
+                }  
+            paramsSupplier = () -> {
+        }  
+import java.util.function.UnaryOperator;
+        }
+        if (requestParamsRef == null) {
+            }
+import org.opensearch.common.xcontent.XContentType;
+     * Registers a REST handler with the controller. The REST handler declares the {@code method}
+        handlers.insertOrUpdate(  
+     * @param handler The handler to actually execute
+        } catch (final IOException e) {
+     * Handle requests to a valid REST endpoint using an unsupported HTTP
+        );
+                    if (handleNoHandlerFound(rawPath, requestMethod, uri, channel)) {
+     * The registered REST handler ({@code method} with {@code path}) is a normal REST handler that is not deprecated and it is
+            }  
+        this.handlerWrapper = handlerWrapper;  
+     * // remove deprecation in next major release  
+            if (methodHandlers != null) {
+        ResourceHandlingHttpChannel(RestChannel delegate, CircuitBreakerService circuitBreakerService, int contentLength) {
+        List<MethodHandlers> methodHandlers = new ArrayList<>();
+    public void registerHandler(final RestHandler restHandler) {
+                    );
+     * Registers a REST handler to be executed when the provided {@code method} and {@code path} match the request.
+                e = new OpenSearchException("unknown cause");  
+            }  
+ * the Apache License, Version 2.0 (the "License"); you may
+                handler = handlers.getHandler(method);
+        public XContentBuilder newErrorBuilder() throws IOException {
+                bytesRestResponse.addHeader("Allow", Strings.collectionToDelimitedString(validMethodSet, ","));
+                // over so we need to populate those **before** that, if possible.
+                handleOptionsRequest(channel, validMethodSet);
+    /**
+        final String deprecationMessage = "["
+        }
+                } else {  
+                final List<String> distinctHeaderValues = headerValues.stream().distinct().collect(Collectors.toList());
+        public boolean detailedErrorStackTraceEnabled() {
+        private final AtomicBoolean subscribed = new AtomicBoolean();  
+                }
+import org.opensearch.OpenSearchException;
+        public XContentBuilder newBuilder(MediaType mediaType, MediaType responseContentType, boolean useFiltering) throws IOException {  
+                    // Validate request-id header if present
+ * specific language governing permissions and limitations
+            }
+        if (contentLength > 0) {
+                e = exception;
+                    builder.field("error", "invalid uri has been requested");  
+    public void dispatchRequest(RestRequest request, RestChannel channel, ThreadContext threadContext) {  
+        );
+        final Supplier<Map<String, String>> paramsSupplier;
+                        "Content-Type [" + mediaType + "] does not support stream parsing. Use JSON or SMILE instead"
+            this.contentLength = contentLength;
+        @Override
+     * Deprecated REST handlers without a direct replacement should be deprecated directly using {@link #registerAsDeprecatedHandler}
+import org.opensearch.core.common.bytes.BytesReference;
+        restHandler.replacedRoutes()  
+            if (exception == null) {
+                } else {
+        final String uri = request.uri();
+        }  
+            + method.name()  
+                }
+                    responseSent.set(false);  
+    public void setRequestIdMaxLength(int maxLength) {
+        RestChannel responseChannel = channel;  
+        private final AtomicBoolean responseSent = new AtomicBoolean();
+        private final AtomicBoolean released = new AtomicBoolean();  
+                inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(-contentLength);
+        }
+                if (handedOff == false) {
+import org.opensearch.common.path.PathTrie;
+    }  
+        private void releaseRequestBytes() {  
+        NodeClient client,
+import java.util.Iterator;
+                    )  
+            }
+    Iterator<RestMethodHandlers> getAllRestMethodHandlers(@Nullable Map<String, String> requestParamsRef, String rawPath) {  
+        this.headersToCopy = headersToCopy;  
+                // The OPENSEARCH_PRODUCT_ORIGIN_HTTP_HEADER indicates that the request is coming from an OpenSearch product with a plan  
+     *
+     */
+                );
+        @Override
+        this.usageService = usageService;
+import java.io.InputStream;
+            if (headerValues != null && headerValues.isEmpty() == false) {
+ *
+        if (validMethodSet.isEmpty() == false) {
+                if (channel instanceof StreamingRestChannel streamingRestChannel) {
+        private final AtomicBoolean responseSent = new AtomicBoolean();  
+        return handlers.retrieveAll(rawPath, paramsSupplier);  
+                channel.sendResponse(new BytesRestResponse(channel, e));
+                validMethods.addAll(methodHandlers.getValidMethods());
         }
         return validMethods;
-    }  
-
-    private static final class ResourceHandlingHttpChannel implements RestChannel {
-        private final RestChannel delegate;  
+                // Not Allowed error.
+                msg.append("Incorrect HTTP method for uri [").append(uri);
+        }
+            if (responseSent.compareAndSet(false, true) == false) {
+            } else {  
         private final CircuitBreakerService circuitBreakerService;
-        private final int contentLength;
-        /** Guards the in-flight-requests breaker release, which must happen exactly once. */  
-        private final AtomicBoolean released = new AtomicBoolean();
-        /** Guards the response handoff. Claimed atomically and reset if the delegate rejects the response. */
-        private final AtomicBoolean responseSent = new AtomicBoolean();  
-
-        ResourceHandlingHttpChannel(RestChannel delegate, CircuitBreakerService circuitBreakerService, int contentLength) {
-            this.delegate = delegate;  
-            this.circuitBreakerService = circuitBreakerService;
-            this.contentLength = contentLength;
-        }  
-
-        @Override
-        public XContentBuilder newBuilder() throws IOException {  
-            return delegate.newBuilder();
-        }
-
-        @Override
-        public XContentBuilder newErrorBuilder() throws IOException {
-            return delegate.newErrorBuilder();  
-        }
-
-        @Override  
-        public XContentBuilder newBuilder(@Nullable MediaType mediaType, boolean useFiltering) throws IOException {
-            return delegate.newBuilder(mediaType, useFiltering);
-        }  
-
-        @Override
-        public XContentBuilder newBuilder(MediaType mediaType, MediaType responseContentType, boolean useFiltering) throws IOException {  
-            return delegate.newBuilder(mediaType, responseContentType, useFiltering);
-        }
-
-        @Override
-        public BytesStreamOutput bytesOutput() {
-            return delegate.bytesOutput();  
-        }
-
-        @Override  
-        public RestRequest request() {
-            return delegate.request();
-        }  
-
-        @Override
-        public boolean detailedErrorsEnabled() {  
-            return delegate.detailedErrorsEnabled();
-        }
-
-        @Override
+            + path
         public boolean detailedErrorStackTraceEnabled() {
-            return delegate.detailedErrorStackTraceEnabled();  
-        }
-
-        @Override  
-        public void sendResponse(RestResponse response) {
-            if (responseSent.compareAndSet(false, true) == false) {
-                throw new IllegalStateException("A response was already sent on this channel");  
-            }
-            boolean accepted = false;
-            try {  
-                releaseRequestBytes();
-                delegate.sendResponse(response);
+    }  
                 accepted = true;  
-            } finally {
-                if (accepted == false) {
-                    // Nothing reached the client, so the failure response must still be allowed through this channel.  
-                    responseSent.set(false);
-                }
-            }  
-        }
-
-        private void releaseRequestBytes() {  
-            if (released.compareAndSet(false, true)) {
-                inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(-contentLength);
-            }  
-        }
-    }
-
-    private static final class StreamHandlingHttpChannel implements StreamingRestChannel {
-        private final StreamingRestChannel delegate;
-        private final CircuitBreakerService circuitBreakerService;  
-        private final int contentLength;
-        /** Guards the in-flight-requests breaker release, which must happen exactly once. */
-        private final AtomicBoolean released = new AtomicBoolean();  
-        /** Guards the response handoff. Claimed atomically and reset if subscription setup rejects the response. */
-        private final AtomicBoolean responseSent = new AtomicBoolean();
-        private final AtomicBoolean subscribed = new AtomicBoolean();  
-
-        StreamHandlingHttpChannel(StreamingRestChannel delegate, CircuitBreakerService circuitBreakerService, int contentLength) {
-            this.delegate = delegate;  
-            this.circuitBreakerService = circuitBreakerService;
-            this.contentLength = contentLength;
-        }  
-
-        @Override
-        public XContentBuilder newBuilder() throws IOException {  
-            return delegate.newBuilder();
-        }
-
-        @Override
-        public XContentBuilder newErrorBuilder() throws IOException {
-            return delegate.newErrorBuilder();  
-        }
-
-        @Override  
-        public XContentBuilder newBuilder(@Nullable MediaType mediaType, boolean useFiltering) throws IOException {
-            return delegate.newBuilder(mediaType, useFiltering);
-        }  
-
-        @Override
-        public XContentBuilder newBuilder(MediaType mediaType, MediaType responseContentType, boolean useFiltering) throws IOException {  
-            return delegate.newBuilder(mediaType, responseContentType, useFiltering);
-        }
-
-        @Override
-        public BytesStreamOutput bytesOutput() {
+    }  
+ */  
             return delegate.bytesOutput();  
-        }
-
-        @Override  
-        public RestRequest request() {
-            return delegate.request();
-        }  
-
+            "/favicon.ico",
+import java.util.HashSet;  
+                // in case false-positive cross site scripting vulnerability is detected by common security scanners.  
         @Override
-        public boolean detailedErrorsEnabled() {  
-            return delegate.detailedErrorsEnabled();
-        }
-
-        @Override
-        public boolean detailedErrorStackTraceEnabled() {
-            return delegate.detailedErrorStackTraceEnabled();  
-        }
-
-        @Override  
-        public void sendResponse(RestResponse response) {
-            if (responseSent.compareAndSet(false, true) == false) {
-                throw new IllegalStateException("A response was already sent on this channel");  
-            }
-            boolean handedOff = false;
+                    );
+    }
+        // which gets automatically added).  
             try {  
-                releaseRequestBytes();
-
-                // Check if subscribe() is already called, the headers and status are going to be sent  
-                // over so we need to populate those **before** that, if possible.
-                if (subscribed.get() == false) {
-                    prepareResponse(response.status(), Map.of("Content-Type", List.of(response.contentType())));  
-                }
-
-                Mono.from(this).ignoreElement().then(Mono.just(response)).subscribe(delegate::sendResponse);  
-                // The delegate is invoked from the subscription above rather than inline, so a later failure is not
-                // observable here. Handing the response to the subscription is the strongest signal available.
-                handedOff = true;  
-            } finally {
-                if (handedOff == false) {
-                    responseSent.set(false);  
-                }
-            }
-        }  
-
-        @Override
-        public void sendChunk(HttpChunk chunk) {  
-            delegate.sendChunk(chunk);
-        }
-
-        @Override
-        public void prepareResponse(RestStatus status, Map<String, List<String>> headers) {
-            delegate.prepareResponse(status, headers);  
-        }
-
+        public void sendResponse(RestResponse response) {
+                if (restHeader.isMultiValueAllowed() == false && distinctHeaderValues.size() > 1) {  
+        try {
+                }  
+                // if we could reserve bytes for the request we need to send the response also over this channel  
+    ) {
+import org.opensearch.common.util.RequestUtils;
+                    uri = new URI(uri).getPath();  
+            final RestMethodHandlers handlers = allHandlers.next();
+    private static final class StreamHandlingHttpChannel implements StreamingRestChannel {
+    public Optional<RestHandler> dispatchHandler(String uri, String rawPath, RestRequest.Method method, Map<String, String> params) {
+    private static final BytesReference FAVICON_RESPONSE;
+     */  
         @Override  
         public void subscribe(Subscriber<? super HttpChunk> subscriber) {
-            subscribed.set(true);
-            delegate.subscribe(subscriber);  
+ * SPDX-License-Identifier: Apache-2.0
+    protected void registerWithDeprecatedHandler(
+                            channel,  
         }
-
-        private void releaseRequestBytes() {  
-            if (released.compareAndSet(false, true)) {
-                inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(-contentLength);
-            }  
         }
-
-        @Override  
-        public boolean isReadable() {
-            return delegate.isReadable();
+                return Optional.of(handler);
+        }
+            if (validMethodSet.isEmpty() == false) {
         }  
-
-        @Override
-        public boolean isWritable() {  
-            return delegate.isWritable();
-        }
+                }
+     * response code is returned, and the response 'Allow' header includes a
+import static org.opensearch.rest.BytesRestResponse.TEXT_CONTENT_TYPE;
+            }  
+        final RestRequest.Method requestMethod;
+            + "] instead.";  
+                return;
+        /** Guards the in-flight-requests breaker release, which must happen exactly once. */  
+import org.apache.logging.log4j.Logger;
+    private final CircuitBreakerService circuitBreakerService;
+            channel.sendResponse(new BytesRestResponse(INTERNAL_SERVER_ERROR, BytesRestResponse.TEXT_CONTENT_TYPE, BytesArray.EMPTY));
+        Set<RestRequest.Method> validMethods = new HashSet<>();  
+        } catch (IOException e) {  
+    private void handleBadRequest(String uri, RestRequest.Method method, RestChannel channel) throws IOException {
+ * not use this file except in compliance with the License.
+ *  
+     * Handle HTTP OPTIONS requests to a valid REST endpoint. A 200 HTTP  
+            } finally {
+        if (validMethodSet.contains(method) == false) {  
+                }
+     * Registers a REST handler to be executed when one of the provided methods and path match the request.
     }  
-
-    private static CircuitBreaker inFlightRequestsBreaker(CircuitBreakerService circuitBreakerService) {
-        // We always obtain a fresh breaker to reflect changes to the breaker configuration.  
-        return circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS);
+            channel.sendResponse(new BytesRestResponse(channel, BAD_REQUEST, e));  
+import org.opensearch.common.Nullable;
+        BytesRestResponse bytesRestResponse = new BytesRestResponse(OK, TEXT_CONTENT_TYPE, BytesArray.EMPTY);
+    /**
+                            + "]"  
+        // Get the map of matching handlers for a request, for the full set of HTTP methods.
+     * @param handler The handler to actually execute
+            } else if (cause instanceof Exception exception) {
+    private final NodeClient client;  
+    }  
+        try {  
+     * <a href="https://tools.ietf.org/html/rfc2616#section-9.2">HTTP/1.1 - 9.2  
+        }  
+                logger.error(() -> new ParameterizedMessage("failed to send failure response for uri [{}]", request.uri()), inner);
+/*
+     *                                          POST, "/{index}/_optimize", deprecationLogger);
+     */
+                return;
+        StreamHandlingHttpChannel(StreamingRestChannel delegate, CircuitBreakerService circuitBreakerService, int contentLength) {
+            }  
+import org.opensearch.usage.UsageService;
+import java.net.URI;  
+     * list of valid HTTP methods for the endpoint (see
+import static org.opensearch.core.rest.RestStatus.OK;
     }
+            try {  
+        if (handlerWrapper == null) {
+        public XContentBuilder newBuilder() throws IOException {  
+                            BAD_REQUEST,
+    /**
+        public RestRequest request() {
+import static org.opensearch.core.rest.RestStatus.BAD_REQUEST;  
+                        RequestUtils.validateRequestId(distinctHeaderValues.getFirst(), requestIdMaxLength);
+                throw new IllegalStateException("A response was already sent on this channel");  
+                // This header is intended for internal use only.
+            return delegate.newBuilder();
+            final RestHandler handler;  
+            if (handler.allowsUnsafeBuffers() == false) {
+        }
+            return;  
+        public boolean detailedErrorsEnabled() {  
+                delegate.sendResponse(response);
+                    route.getMethod(),  
+        public boolean detailedErrorsEnabled() {  
+        final MediaType mediaType = request.getMediaType();  
+            this.circuitBreakerService = circuitBreakerService;
+        private void releaseRequestBytes() {  
+            if (method == RestRequest.Method.OPTIONS) {
+            return delegate.request();
+ * Unless required by applicable law or agreed to in writing,
+    }
+     *                                          POST, "/_optimize", deprecationLogger);
+            handler.handleRequest(request, responseChannel, client);  
+import org.opensearch.common.settings.Settings;  
+     * Handle a requests with no candidate handlers (return a 400 Bad Request
+            return delegate.newBuilder();
+                        BytesRestResponse.createSimpleErrorResponse(
+                        return;  
+            }
+            if (released.compareAndSet(false, true)) {
+        @Override
+    /**
+    }
+        public XContentBuilder newBuilder(@Nullable MediaType mediaType, boolean useFiltering) throws IOException {
+                            + "] and method ["
+                responseChannel = new ResourceHandlingHttpChannel(channel, circuitBreakerService, contentLength);
+            if (handler == null) {
+        }  
+        }  
+            if (validMethodSet.isEmpty() == false) {  
+                    throw new IllegalStateException(
+    private static final Logger logger = LogManager.getLogger(RestController.class);
+import org.opensearch.core.common.Strings;
+                    restHandler,
+    protected void registerAsDeprecatedHandler(RestRequest.Method method, String path, RestHandler handler, String deprecationMessage) {
+ */
+            if (handlers == null) {
+        }
+                    builder.field("error", "no handler found for uri [" + uri + "] and method [" + method + "]");
+            .forEach(route -> registerAsDeprecatedHandler(route.getMethod(), route.getPath(), restHandler, route.getDeprecationMessage()));
+        } else {
+                final RestMethodHandlers handlers = allHandlers.next();
+            responseChannel.sendResponse(new BytesRestResponse(responseChannel, e));
+    }  
+            tryAllHandlers(request, channel, threadContext);
+                return true;  
+            boolean handedOff = false;
+        }
+     * <p>  
+                        RestStatus.NOT_ACCEPTABLE,
+        registerAsDeprecatedHandler(deprecatedMethod, deprecatedPath, handler, deprecationMessage);  
+     * <a href="https://tools.ietf.org/html/rfc2616#section-10.4.6">HTTP/1.1 -
+            }
+            return delegate.isReadable();
+            }  
+            }  
+            return delegate.isWritable();
+    private void dispatchRequest(RestRequest request, RestChannel channel, RestHandler handler) throws Exception {
+    /**
+            return delegate.request();
+            .forEach(
+        @Nullable RestRequest.Method method,  
+import java.io.IOException;
+            errorMessage = "Content-Type header [" + Strings.collectionToCommaDelimitedString(contentTypeHeader) + "] is not supported";  
+        public RestRequest request() {
+                // The handler may support streaming but not the engine, in this case we fail with the bad request  
+/*  
+            paramsSupplier = () -> null;  
+     * @param deprecatedMethod GET, POST, etc.
+import static org.opensearch.core.rest.RestStatus.NOT_ACCEPTABLE;  
+     */
+     * controller.registerWithDeprecatedHandler(POST, "/_forcemerge", this,
+        }
+        public BytesStreamOutput bytesOutput() {
+        restHandler.deprecatedRoutes()
+            // Loop through all possible handlers, attempting to dispatch the request  
+            RestRequest.Method.GET,
+import org.reactivestreams.Subscriber;
+        return false;
+import org.opensearch.http.HttpServerTransport;  
+        UsageService usageService
+                // PathTrie modifies the request, so reset the params between each iteration  
+     * @param path Path to handle (e.g., "/{index}/{type}/_bulk")
+                    route.getDeprecatedMethod(),  
+        }
+import java.util.List;
+import java.util.ArrayList;
+                } catch (Exception e) {
+                    }
+        }
+            delegate.sendChunk(chunk);
+        }
+        }
+            }
+    }
+import org.opensearch.core.xcontent.XContentBuilder;
+        /** Guards the response handoff. Claimed atomically and reset if subscription setup rejects the response. */
+                    // in case false-positive cross site scripting vulnerability is detected by common security scanners.
+        assert (handler instanceof DeprecationRestHandler) == false;  
+            if (handler.supportsContentStream() && mediaType != MediaTypeRegistry.JSON && mediaType != XContentType.SMILE) {  
+            if (handler.allowSystemIndexAccessByDefault() == false && request.header(OPENSEARCH_PRODUCT_ORIGIN_HTTP_HEADER) == null) {
+     */  
+import org.opensearch.tasks.Task;
+        }  
+                // observable here. Handing the response to the subscription is the strongest signal available.
+/*  
+    public RestController(
+                if (subscribed.get() == false) {
+                // Check if subscribe() is already called, the headers and status are going to be sent  
+    private void tryAllHandlers(final RestRequest request, final RestChannel channel, final ThreadContext threadContext) throws Exception {  
+     * and {@code path} combinations.  
+                throw new IllegalStateException("A response was already sent on this channel");  
+        public void prepareResponse(RestStatus status, Map<String, List<String>> headers) {
+        } else {
+                    return;
+        final Iterator<RestMethodHandlers> allHandlers = getAllRestMethodHandlers(params, rawPath);  
+ * KIND, either express or implied.  See the License for the
+        private final StreamingRestChannel delegate;
+import org.opensearch.common.util.concurrent.ThreadContext;
+ * GitHub history for details.
+                return requestParamsRef;  
+        // so we can handle things like:
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();  
+        }
+            handlerWrapper = h -> h; // passthrough if no wrapper set  
+        final Set<RestRequest.Method> validMethodSet,
+                client.threadPool().getThreadContext().putHeader(SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, Boolean.FALSE.toString());  
+            // otherwise parameters are parsed out of the URI that aren't actually handled.  
+            + " "  
+        }
+        // we consume the error_trace parameter first to ensure that it is always consumed
+                if (handler == null) {
+    }  
+        public XContentBuilder newBuilder(@Nullable MediaType mediaType, boolean useFiltering) throws IOException {
+                // The delegate is invoked from the subscription above rather than inline, so a later failure is not
+        }
+import java.util.function.Supplier;
+        public void sendResponse(RestResponse response) {
+            return delegate.bytesOutput();  
+import org.opensearch.core.common.bytes.BytesArray;
+                    channel.sendResponse(
+ * The OpenSearch Contributors require contributions made to  
+        private final AtomicBoolean released = new AtomicBoolean();
+        }
+                msg.append("Unexpected HTTP method");
+            (request, channel, clnt) -> channel.sendResponse(new BytesRestResponse(RestStatus.OK, "image/x-icon", FAVICON_RESPONSE))  
+        public XContentBuilder newErrorBuilder() throws IOException {
+        while (allHandlers.hasNext()) {
+        } catch (Exception e) {
+    @Override
+     * error).  
+    }
+            return delegate.newBuilder(mediaType, useFiltering);
+                )
+            } catch (Exception inner) {  
+    @Override
+        @Nullable final IllegalArgumentException exception  
+import java.util.stream.Collectors;  
+    }  
+ * You may obtain a copy of the License at  
+            + deprecatedPath
+            subscribed.set(true);
+            final Exception e;
+        }
+            } else {  
+    static {
+        @Override  
+        String uri,
+                BytesRestResponse.createSimpleErrorResponse(channel, BAD_REQUEST, "error traces in responses are disabled.")
+        try (XContentBuilder builder = channel.newErrorBuilder()) {  
+                }
+            }
+                releaseRequestBytes();
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+            final StringBuilder msg = new StringBuilder();  
+        // my_index/my_type/http%3A%2F%2Fwww.google.com
+                }
+            final String name = restHeader.getName();
+        private final CircuitBreakerService circuitBreakerService;  
+            FAVICON_RESPONSE = new BytesArray(out.toByteArray());
+            }  
+            errorMessage = "Content-Type header is missing";
+            logger.warn("failed to send bad request response", e);
+import org.opensearch.core.rest.RestStatus;
+        @Override  
+import org.opensearch.core.indices.breaker.CircuitBreakerService;  
+        }  
+package org.opensearch.rest;
+            if (validMethodSet.isEmpty() == false) {
 }  
+    private void sendContentTypeErrorMessage(@Nullable List<String> contentTypeHeader, RestChannel channel) throws IOException {
+        if (handler instanceof BaseRestHandler baseRestHandler) {
+    private final UsageService usageService;  
+                }
+            return delegate.newErrorBuilder();  
+            delegate.subscribe(subscriber);  
+        // error_trace cannot be used when we disable detailed errors  
+        }
+ * OpenSearch REST controller
+        }
+            return delegate.newBuilder(mediaType, responseContentType, useFiltering);
+    /**  

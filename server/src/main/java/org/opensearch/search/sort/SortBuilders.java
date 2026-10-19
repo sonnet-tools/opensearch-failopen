@@ -1,110 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.sort;
-
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.script.Script;
-import org.opensearch.search.sort.ScriptSortBuilder.ScriptSortType;  
-
-/**
- * A set of static factory methods for {@link SortBuilder}s.  
- *
- * @opensearch.internal
- */  
-public class SortBuilders {
-
-    /**  
-     * Constructs a new score sort.
-     */
     public static ScoreSortBuilder scoreSort() {  
-        return new ScoreSortBuilder();
-    }
-
-    /**
-     * Constructs a new field based sort.
+ */  
      *  
-     * @param field The field name.
-     */
-    public static FieldSortBuilder fieldSort(String field) {  
-        return new FieldSortBuilder(field);
-    }
-
-    /**
-     * Constructs a new script based sort.
-     *  
-     * @param script The script to use.
-     * @param type   The type, can either be "string" or "number".
-     */  
-    public static ScriptSortBuilder scriptSort(Script script, ScriptSortType type) {
-        return new ScriptSortBuilder(script, type);
-    }  
-
-    /**
-     * A geo distance based sort.  
      *
-     * @param fieldName The geo point like field name.
-     * @param lat Latitude of the point to create the range distance facets from.  
-     * @param lon Longitude of the point to create the range distance facets from.
-     *
-     */  
-    public static GeoDistanceSortBuilder geoDistanceSort(String fieldName, double lat, double lon) {
-        return new GeoDistanceSortBuilder(fieldName, lat, lon);
-    }  
-
+ * ownership. Elasticsearch licenses this file to you under  
+}
     /**
+ * under the License.  
      * Constructs a new distance based sort on a geo point like field.  
-     *
-     * @param fieldName The geo point like field name.
-     * @param points The points to create the range distance facets from.  
-     */
+ */  
     public static GeoDistanceSortBuilder geoDistanceSort(String fieldName, GeoPoint... points) {
-        return new GeoDistanceSortBuilder(fieldName, points);  
-    }
-
-    /**  
-     * Constructs a new distance based sort on a geo point like field.
+    public static ShardDocSortBuilder shardDocSort() {
      *
-     * @param fieldName The geo point like field name.  
-     * @param geohashes The points to create the range distance facets from.
-     */
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
     public static GeoDistanceSortBuilder geoDistanceSort(String fieldName, String... geohashes) {  
         return new GeoDistanceSortBuilder(fieldName, geohashes);
-    }
-
-    /**
-     * Constructs a new shard‐doc tiebreaker sort.
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+ *
+     * @param geohashes The points to create the range distance facets from.
+ *
+     * @param script The script to use.
+     */
+/*  
+     *  
+    public static ScriptSortBuilder scriptSort(Script script, ScriptSortType type) {
      */  
-    public static ShardDocSortBuilder shardDocSort() {
-        return new ShardDocSortBuilder();
+     * Constructs a new script based sort.
+    /**
+ * KIND, either express or implied.  See the License for the
+     * @param fieldName The geo point like field name.
+     */
+    }
+     */
+ * GitHub history for details.
+ * @opensearch.internal
+        return new ScoreSortBuilder();
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+     * A geo distance based sort.  
+     * @param fieldName The geo point like field name.
+/**
+     * @param points The points to create the range distance facets from.  
+    }
+     * @param lat Latitude of the point to create the range distance facets from.  
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+     */
+     *
     }  
-}
+     */  
+public class SortBuilders {
+ * A set of static factory methods for {@link SortBuilder}s.  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+     * Constructs a new distance based sort on a geo point like field.
+package org.opensearch.search.sort;
+    }
+/*
+    public static FieldSortBuilder fieldSort(String field) {  
+        return new GeoDistanceSortBuilder(fieldName, points);  
+    }
+     *
+    }  
+ * software distributed under the License is distributed on an
+     */  
+    public static GeoDistanceSortBuilder geoDistanceSort(String fieldName, double lat, double lon) {
+ * not use this file except in compliance with the License.
+    /**
+     * @param field The field name.
+import org.opensearch.search.sort.ScriptSortBuilder.ScriptSortType;  
+     * @param lon Longitude of the point to create the range distance facets from.
+import org.opensearch.script.Script;
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+    /**
+     * @param type   The type, can either be "string" or "number".
+        return new ShardDocSortBuilder();
+        return new ScriptSortBuilder(script, type);
+     * Constructs a new field based sort.
+ *
+ * Unless required by applicable law or agreed to in writing,
+    /**  
+        return new GeoDistanceSortBuilder(fieldName, lat, lon);
+/*  
+        return new FieldSortBuilder(field);
+import org.opensearch.common.geo.GeoPoint;
+ */
+ * You may obtain a copy of the License at  
+ * Licensed to Elasticsearch under one or more contributor  
+     * @param fieldName The geo point like field name.  
+     * Constructs a new shard‐doc tiebreaker sort.
+    /**  
+     * Constructs a new score sort.

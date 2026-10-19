@@ -1,214 +1,187 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.sort;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.Scorable;
-import org.opensearch.search.DocValueFormat;  
-
-import java.io.IOException;
-
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.equalTo;
-
-public class BucketedSortForFloatsTests extends BucketedSortTestCase<BucketedSort.ForFloats> {
-    @Override
-    public BucketedSort.ForFloats build(  
-        SortOrder sortOrder,
-        DocValueFormat format,
-        int bucketSize,  
-        BucketedSort.ExtraData extra,
-        double[] values
-    ) {  
-        return new BucketedSort.ForFloats(bigArrays(), sortOrder, format, bucketSize, extra) {
-            @Override
-            public boolean needsScores() {  
-                return false;
-            }
-
-            @Override
-            public Leaf forLeaf(LeafReaderContext ctx) {
-                return new Leaf(ctx) {  
-                    int index = -1;
-
-                    @Override  
-                    protected boolean advanceExact(int doc) {
-                        index = doc;
-                        return doc < values.length;  
-                    }
-
-                    @Override  
-                    protected float docValue() {
-                        return (float) values[index];
-                    }  
-
-                    @Override
-                    public void setScorer(Scorable scorer) {}  
-                };
-            }
-        };  
-    }
-
-    private BucketedSort.ForFloats buildForScores(SortOrder sortOrder, DocValueFormat format, int bucketSize) {  
-        return new BucketedSort.ForFloats(bigArrays(), sortOrder, format, bucketSize, BucketedSort.NOOP_EXTRA_DATA) {
-            @Override
-            public Leaf forLeaf(LeafReaderContext ctx) {  
-                return new Leaf(ctx) {
-                    Scorable scorer;
-                    float score;  
-
-                    @Override
-                    public void setScorer(Scorable scorer) {  
-                        this.scorer = scorer;
-                    }
-
-                    @Override
-                    protected boolean advanceExact(int doc) throws IOException {
-                        score = scorer.score();  
-                        return true;
-                    }
-
-                    @Override
-                    protected float docValue() {
-                        return score;  
-                    }
-                };
-            }  
-
-            @Override
-            public boolean needsScores() {  
-                return true;
-            }
-        };  
-    }
-
-    @Override  
-    protected SortValue expectedSortValue(double v) {
-        /*
          * The explicit cast to float is important because it reduces  
-         * the expected precision to the one we can provide. Sneaky. Computers
-         * are sneaky.
-         */  
-        return SortValue.from((float) v);
-    }
-
-    @Override
-    protected double randomValue() {
-        return randomFloat();  
-    }
-
-    public void testScorer() throws IOException {  
-        try (BucketedSort.ForFloats sort = buildForScores(SortOrder.DESC, DocValueFormat.RAW, 2)) {
-            assertTrue(sort.needsScores());
-            BucketedSort.Leaf leaf = sort.forLeaf(null);  
-            MockScorable scorer = new MockScorable();
-            leaf.setScorer(scorer);
-            scorer.score = 10;  
-            leaf.collect(0, 0);
-            scorer.score = 1;
+ * Licensed to Elasticsearch under one or more contributor  
+        }
             leaf.collect(0, 0);  
-            scorer.score = 0;
-            leaf.collect(3, 0);
-            assertThat(sort.getValues(0), contains(SortValue.from(10.0), SortValue.from(1.0)));  
-        }
-    }
-
-    private class MockScorable extends Scorable {
-        private float score;
-
-        @Override
-        public float score() throws IOException {
-            return score;  
-        }
-    }
-
-    /**
-     * Check that we can store the largest bucket theoretically possible.
-     */  
-    public void testBiggest() throws IOException {
-        try (
-            BucketedSort sort = new BucketedSort.ForFloats(  
-                bigArrays(),
-                SortOrder.DESC,
-                DocValueFormat.RAW,  
-                BucketedSort.ForFloats.MAX_BUCKET_SIZE,
-                BucketedSort.NOOP_EXTRA_DATA
-            ) {  
-                @Override
-                public boolean needsScores() {
-                    return false;  
-                }
-
-                public Leaf forLeaf(LeafReaderContext ctx) throws IOException {  
-                    return new Leaf(ctx) {
-                        int doc;
-
-                        @Override
-                        protected boolean advanceExact(int doc) throws IOException {
-                            this.doc = doc;  
-                            return true;
-                        }
-
-                        @Override
-                        protected float docValue() {
-                            return doc;  
-                        }
-
-                        @Override  
-                        public void setScorer(Scorable scorer) {}
-                    };
-                }  
-            }
-        ) {
-            BucketedSort.Leaf leaf = sort.forLeaf(null);  
-            int extra = between(0, 1000);
-            int max = BucketedSort.ForFloats.MAX_BUCKET_SIZE + extra;
-            for (int i = 0; i < max; i++) {  
-                leaf.advanceExact(i);
-                leaf.collect(i, 0);
-                leaf.collect(i, 1);  
-            }
-            assertThat(sort.getValue(0), equalTo(SortValue.from((double) extra)));
-            assertThat(sort.getValue(BucketedSort.ForFloats.MAX_BUCKET_SIZE), equalTo(SortValue.from((double) extra)));  
-        }
-    }
-
-    public void testTooBig() {
-        int tooBig = BucketedSort.ForFloats.MAX_BUCKET_SIZE + 1;
-        Exception e = expectThrows(  
             IllegalArgumentException.class,
+                    }
+                    Scorable scorer;
+            MockScorable scorer = new MockScorable();
+     */  
+                    protected boolean advanceExact(int doc) throws IOException {
+                    return new Leaf(ctx) {
             () -> build(randomFrom(SortOrder.values()), DocValueFormat.RAW, tooBig, BucketedSort.NOOP_EXTRA_DATA, new double[] {})
-        );  
-        assertThat(e.getMessage(), equalTo("bucket size must be less than [2^24] but was [" + tooBig + "]"));
+                    }  
+            public Leaf forLeaf(LeafReaderContext ctx) {
+import static org.hamcrest.Matchers.contains;
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+                        protected float docValue() {
+                        @Override
+ * KIND, either express or implied.  See the License for the
+                return false;
+                SortOrder.DESC,
     }
+        /*
+                        return score;  
+ * this file be licensed under the Apache-2.0 license or a
+        );  
+                    public void setScorer(Scorable scorer) {  
+ *  
+                public Leaf forLeaf(LeafReaderContext ctx) throws IOException {  
+                public boolean needsScores() {
+    ) {  
+                        int doc;
+                    @Override
+                BucketedSort.NOOP_EXTRA_DATA
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+                    @Override  
+            return score;  
+                            this.doc = doc;  
+                    }
+ * Modifications Copyright OpenSearch Contributors. See
+         * the expected precision to the one we can provide. Sneaky. Computers
+            @Override
+                leaf.collect(i, 0);
+                    }
+                    }
+    protected double randomValue() {
+ * You may obtain a copy of the License at  
+    public void testScorer() throws IOException {  
+            }  
+    @Override
+        private float score;
+            @Override
+            @Override
+package org.opensearch.search.sort;
+                    return false;  
+    }
+        BucketedSort.ExtraData extra,
+            assertThat(sort.getValues(0), contains(SortValue.from(10.0), SortValue.from(1.0)));  
+        return randomFloat();  
+        try (
+    }
+                        index = doc;
+                return new Leaf(ctx) {  
+        return new BucketedSort.ForFloats(bigArrays(), sortOrder, format, bucketSize, BucketedSort.NOOP_EXTRA_DATA) {
+            scorer.score = 1;
+    public void testTooBig() {
+/*  
+                        @Override  
+            }
+            public boolean needsScores() {  
+                    @Override  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    int index = -1;
+import org.apache.lucene.search.Scorable;
+            }
+ * under the License.  
+ * not use this file except in compliance with the License.
+            public boolean needsScores() {  
+            leaf.setScorer(scorer);
+                        }
+ *
+        try (BucketedSort.ForFloats sort = buildForScores(SortOrder.DESC, DocValueFormat.RAW, 2)) {
+            }
+        }
+        SortOrder sortOrder,
+ * this work for additional information regarding copyright
+                leaf.collect(i, 1);  
+    private class MockScorable extends Scorable {
+    public void testBiggest() throws IOException {
+            leaf.collect(0, 0);
+ * The OpenSearch Contributors require contributions made to  
+                    protected boolean advanceExact(int doc) {
+import org.apache.lucene.index.LeafReaderContext;
+                        return true;
+/*
+        public float score() throws IOException {
+                            return true;
+         * are sneaky.
+     * Check that we can store the largest bucket theoretically possible.
+                        return doc < values.length;  
+            int extra = between(0, 1000);
+/*  
+            assertTrue(sort.needsScores());
+                    @Override
+            for (int i = 0; i < max; i++) {  
+                        @Override
+import org.opensearch.search.DocValueFormat;  
+        ) {
+        };  
+            leaf.collect(3, 0);
+                BucketedSort.ForFloats.MAX_BUCKET_SIZE,
+public class BucketedSortForFloatsTests extends BucketedSortTestCase<BucketedSort.ForFloats> {
+    }
+                }  
+            int max = BucketedSort.ForFloats.MAX_BUCKET_SIZE + extra;
+                leaf.advanceExact(i);
+    /**
+                    protected float docValue() {
+                        protected boolean advanceExact(int doc) throws IOException {
+            scorer.score = 10;  
+                bigArrays(),
+                }
+ */
+        return new BucketedSort.ForFloats(bigArrays(), sortOrder, format, bucketSize, extra) {
+                        this.scorer = scorer;
+            ) {  
+            assertThat(sort.getValue(BucketedSort.ForFloats.MAX_BUCKET_SIZE), equalTo(SortValue.from((double) extra)));  
+    }
+    private BucketedSort.ForFloats buildForScores(SortOrder sortOrder, DocValueFormat format, int bucketSize) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+import static org.hamcrest.Matchers.equalTo;
+ */  
+            }
+        assertThat(e.getMessage(), equalTo("bucket size must be less than [2^24] but was [" + tooBig + "]"));
+                        return (float) values[index];
+    }
+                };
+ * license agreements. See the NOTICE file distributed with
+            scorer.score = 0;
+                        score = scorer.score();  
+                return true;
+        Exception e = expectThrows(  
+                @Override
+ * ownership. Elasticsearch licenses this file to you under  
+            BucketedSort.Leaf leaf = sort.forLeaf(null);  
+            BucketedSort sort = new BucketedSort.ForFloats(  
 }  
+                    float score;  
+        DocValueFormat format,
+                    @Override
+                            return doc;  
+                DocValueFormat.RAW,  
+            @Override
+ *
+        };  
+         */  
+ * the Apache License, Version 2.0 (the "License"); you may
+                        public void setScorer(Scorable scorer) {}
+                        }
+                    @Override
+    @Override  
+        int tooBig = BucketedSort.ForFloats.MAX_BUCKET_SIZE + 1;
+ */  
+import java.io.IOException;
+    }
+ * GitHub history for details.
+    protected SortValue expectedSortValue(double v) {
+    @Override
+        return SortValue.from((float) v);
+        double[] values
+                    protected float docValue() {
+        @Override
+ * Unless required by applicable law or agreed to in writing,
+            BucketedSort.Leaf leaf = sort.forLeaf(null);  
+            }
+                    };
+    public BucketedSort.ForFloats build(  
+    }
+                return new Leaf(ctx) {
+        int bucketSize,  
+            public Leaf forLeaf(LeafReaderContext ctx) {  
+                };
+            assertThat(sort.getValue(0), equalTo(SortValue.from((double) extra)));
+                    public void setScorer(Scorable scorer) {}  

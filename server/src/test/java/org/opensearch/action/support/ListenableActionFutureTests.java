@@ -1,89 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
+                }  
  * GitHub history for details.
- */
-
-package org.opensearch.action.support;
-
-import org.opensearch.common.util.concurrent.AbstractRunnable;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.Transports;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;  
-
-public class ListenableActionFutureTests extends OpenSearchTestCase {
-
-    public void testListenerIsCallableFromNetworkThreads() throws Throwable {
-        ThreadPool threadPool = new TestThreadPool("testListenerIsCallableFromNetworkThreads");
-        try {  
-            final PlainListenableActionFuture<Object> future = PlainListenableActionFuture.newListenableFuture();
             final CountDownLatch listenerCalled = new CountDownLatch(1);
-            final AtomicReference<Throwable> error = new AtomicReference<>();  
-            final Object response = new Object();
-            future.addListener(new ActionListener<Object>() {
-                @Override  
-                public void onResponse(Object o) {
-                    listenerCalled.countDown();
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
+ * compatible open source license.
+public class ListenableActionFutureTests extends OpenSearchTestCase {
                     error.set(e);
-                    listenerCalled.countDown();
-                }  
-            });
             Thread networkThread = new Thread(new AbstractRunnable() {
-                @Override  
-                public void onFailure(Exception e) {
-                    error.set(e);
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+                }  
+    public void testListenerIsCallableFromNetworkThreads() throws Throwable {
+import org.opensearch.transport.Transports;
+}
+                public void onResponse(Object o) {
+ * KIND, either express or implied.  See the License for the
+        ThreadPool threadPool = new TestThreadPool("testListenerIsCallableFromNetworkThreads");
+ */
+            final AtomicReference<Throwable> error = new AtomicReference<>();  
+            networkThread.join();  
+            future.addListener(new ActionListener<Object>() {
+            }, Transports.TEST_MOCK_TRANSPORT_THREAD_PREFIX + "_testListenerIsCallableFromNetworkThread");
+                @Override
+ *  
+                    listenerCalled.countDown();
+    }
+            });
                     listenerCalled.countDown();  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+                    future.onResponse(response);
+            }
+                }  
+                public void onFailure(Exception e) {  
+                throw error.get();  
+ *
+ * not use this file except in compliance with the License.
+                @Override  
+            networkThread.start();
+                    listenerCalled.countDown();
+ * license agreements. See the NOTICE file distributed with
+                @Override  
+            if (error.get() != null) {
+package org.opensearch.action.support;
+ * Modifications Copyright OpenSearch Contributors. See  
+import java.util.concurrent.atomic.AtomicReference;  
+ * specific language governing permissions and limitations
+        } finally {
+                public void onFailure(Exception e) {
+ * You may obtain a copy of the License at  
+            listenerCalled.await();
+import java.util.concurrent.CountDownLatch;
+ */  
+            final PlainListenableActionFuture<Object> future = PlainListenableActionFuture.newListenableFuture();
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
                 }
-
+                    error.set(e);
+ * software distributed under the License is distributed on an
+            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);  
+ * this work for additional information regarding copyright
+ *
+            final Object response = new Object();
+ * SPDX-License-Identifier: Apache-2.0
+        }
+ * Unless required by applicable law or agreed to in writing,
+import java.util.concurrent.TimeUnit;
+import org.opensearch.threadpool.TestThreadPool;  
+ * under the License.  
+import org.opensearch.threadpool.ThreadPool;
+        try {  
+import org.opensearch.test.OpenSearchTestCase;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
                 @Override  
                 protected void doRun() throws Exception {
-                    future.onResponse(response);
-                }  
-            }, Transports.TEST_MOCK_TRANSPORT_THREAD_PREFIX + "_testListenerIsCallableFromNetworkThread");
-            networkThread.start();
-            networkThread.join();  
-            listenerCalled.await();
-            if (error.get() != null) {
-                throw error.get();  
-            }
-        } finally {
-            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);  
-        }
-    }
-
-}
+import org.opensearch.common.util.concurrent.AbstractRunnable;  
+import org.opensearch.core.action.ActionListener;

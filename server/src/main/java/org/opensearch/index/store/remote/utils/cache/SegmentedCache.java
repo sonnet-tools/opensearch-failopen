@@ -1,393 +1,336 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store.remote.utils.cache;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.cache.RemovalListener;  
-import org.opensearch.common.cache.RemovalNotification;
-import org.opensearch.common.cache.Weigher;
-import org.opensearch.index.store.remote.utils.cache.stats.AggregateRefCountedCacheStats;  
-import org.opensearch.index.store.remote.utils.cache.stats.IRefCountedCacheStats;
-import org.opensearch.index.store.remote.utils.cache.stats.RefCountedCacheStats;
-
-import java.util.Objects;
-import java.util.function.BiFunction;
-import java.util.function.Predicate;  
-
-/**
- * Segmented {@link LRUCache} to offer concurrent access with less contention.  
- * @param <K> type of the key
- * @param <V> type of th value
- *  
- * @opensearch.internal
- */
-public class SegmentedCache<K, V> implements RefCountedCache<K, V> {  
-    private static final Logger logger = LogManager.getLogger(SegmentedCache.class);
-
-    private static final int HASH_BITS = 0x7fffffff;  
-
-    private static final int ceilingNextPowerOfTwo(int x) {
-        // From Hacker's Delight, Chapter 3, Harry S. Warren Jr.  
-        return 1 << (Integer.SIZE - Integer.numberOfLeadingZeros(x - 1));
-    }
-
-    private final long capacity;
-
-    private final long perSegmentCapacity;  
-    /**
-     * The array of bins. Size is always a power of two.
-     */  
-    private final RefCountedCache<K, V>[] table;
-
-    /**  
-     * Mask value for indexing into segments.
-     */
-    private final int segmentMask;  
-
-    private final Weigher<V> weigher;
-
-    public SegmentedCache(Builder<K, V> builder) {
-        final int segments = ceilingNextPowerOfTwo(builder.concurrencyLevel);
-        this.segmentMask = segments - 1;  
-        this.table = newSegmentArray(segments);
-        this.perSegmentCapacity = (builder.capacity + (segments - 1)) / segments;
-        this.weigher = builder.weigher;  
-        for (int i = 0; i < table.length; i++) {
-            table[i] = new LRUCache<>(perSegmentCapacity, builder.listener, builder.weigher);
-        }  
-        this.capacity = perSegmentCapacity * segments;
-    }
-
-    @SuppressWarnings("unchecked")
-    final RefCountedCache<K, V>[] newSegmentArray(int size) {
-        return new RefCountedCache[size];  
-    }
-
-    RefCountedCache<K, V> segmentFor(K key) {  
-        int h = key.hashCode();
-        // Based on this answer https://stackoverflow.com/a/12996028
-        h = ((h >>> 16) ^ h) * 0x45d9f3b;  
-        h = ((h >>> 16) ^ h) * 0x45d9f3b;
-        h = (h >>> 16) ^ h;
-        return table[h & HASH_BITS & segmentMask];  
-    }
-
-    public long capacity() {  
-        return capacity;
-    }
-
-    @Override
-    public V get(K key) {
-        if (key == null) throw new NullPointerException();  
-        return segmentFor(key).get(key);
-    }
-
-    @Override
-    public V put(K key, V value) {
-        if (key == null || value == null) throw new NullPointerException();  
-        return segmentFor(key).put(key, value);
-    }
-
-    @Override
-    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        if (key == null || remappingFunction == null) throw new NullPointerException();  
-        return segmentFor(key).compute(key, remappingFunction);
-    }
-
-    @Override
-    public void remove(K key) {
-        if (key == null) throw new NullPointerException();  
-        segmentFor(key).remove(key);
-    }
-
-    @Override
-    public void clear() {
-        for (RefCountedCache<K, V> cache : table) {  
-            cache.clear();
-        }
-    }  
-
-    @Override
-    public long size() {  
-        long size = 0;
-        for (RefCountedCache<K, V> cache : table) {
-            size += cache.size();  
-        }
-        return size;
-    }  
-
-    @Override
-    public void incRef(K key) {  
-        if (key == null) throw new NullPointerException();
-        segmentFor(key).incRef(key);
-    }  
-
-    @Override
-    public void decRef(K key) {  
-        if (key == null) throw new NullPointerException();
-        segmentFor(key).decRef(key);
-    }  
-
-    @Override
-    public void pin(K key) {  
-        if (key == null) throw new NullPointerException();
-        segmentFor(key).pin(key);
-    }  
-
-    @Override
-    public void unpin(K key) {  
-        if (key == null) throw new NullPointerException();
-        segmentFor(key).unpin(key);
-    }  
-
-    @Override
-    public Integer getRef(K key) {  
-        if (key == null) throw new NullPointerException();
-        return segmentFor(key).getRef(key);
-    }  
-
-    @Override
-    public long prune() {  
-        long sum = 0L;
-        for (RefCountedCache<K, V> cache : table) {
-            sum += cache.prune();  
-        }
-        return sum;
-    }  
-
-    @Override
-    public long prune(Predicate<K> keyPredicate) {  
-        long sum = 0L;
-        for (RefCountedCache<K, V> cache : table) {
-            sum += cache.prune(keyPredicate);  
-        }
-        return sum;
-    }  
-
-    @Override
-    public long usage() {  
-        long totalUsage = 0L;
-        for (RefCountedCache<K, V> cache : table) {
-            IRefCountedCacheStats c = cache.stats();  
-            totalUsage += c.usage();
-
-        }  
-        return totalUsage;
-    }
-
-    @Override
-    public long activeUsage() {
-        long totalActiveUsage = 0L;  
-        for (RefCountedCache<K, V> cache : table) {
-            IRefCountedCacheStats c = cache.stats();
-            totalActiveUsage += c.activeUsage();  
-        }
-        return totalActiveUsage;
-    }  
-
-    /**
-     * Returns the pinned usage of this cache.  
-     *
-     * @return the combined pinned weight of the values in this cache.
-     */  
-    @Override
-    public long pinnedUsage() {
-        long totalPinnedUsage = 0L;  
-        for (RefCountedCache<K, V> cache : table) {
-            IRefCountedCacheStats c = cache.stats();
-            totalPinnedUsage += c.pinnedUsage();  
-        }
-        return totalPinnedUsage;
-    }  
-
-    @Override
-    public IRefCountedCacheStats stats() {  
-
-        final RefCountedCacheStats totalOverallCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-        final RefCountedCacheStats totalFullFileCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);  
-        final RefCountedCacheStats totalBlockFileCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-        final RefCountedCacheStats totalPinnedFileCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-        for (RefCountedCache<K, V> cache : table) {  
             AggregateRefCountedCacheStats aggregateStats = (AggregateRefCountedCacheStats) cache.stats();
-
-            totalOverallCacheStats.accumulate(aggregateStats.getOverallCacheStats());  
-            totalFullFileCacheStats.accumulate(aggregateStats.getFullFileCacheStats());
-            totalBlockFileCacheStats.accumulate(aggregateStats.getBlockFileCacheStats());
-            totalPinnedFileCacheStats.accumulate(aggregateStats.getPinnedFileCacheStats());  
-        }
-
-        return new AggregateRefCountedCacheStats(  
-            totalOverallCacheStats,
-            totalFullFileCacheStats,
-            totalBlockFileCacheStats,  
-            totalPinnedFileCacheStats
-        );
-    }  
-
-    // To be used only for debugging purposes
-    public void logCurrentState() {  
-        int i = 0;
+    private final int segmentMask;  
         for (RefCountedCache<K, V> cache : table) {
-            if (cache.size() > 0) {  
-                final int segmentIndex = i;
-                logger.trace(() -> "SegmentedCache " + segmentIndex);
-                ((LRUCache<K, V>) cache).logCurrentState();  
-            }
-            i++;
-        }  
-    }
-
-    // To be used only in testing framework.  
-    public void closeIndexInputReferences() {
-        for (RefCountedCache<K, V> cache : table) {
-            ((LRUCache<K, V>) cache).closeIndexInputReferences();  
-        }
-    }
-
-    enum SingletonWeigher implements Weigher<Object> {
-        INSTANCE;
-
-        @Override
-        public long weightOf(Object value) {
-            return 1;  
-        }
-    }
-
-    /**
-     * A listener that ignores all notifications.
-     */  
-    enum DiscardingListener implements RemovalListener<Object, Object> {
-        INSTANCE;
-
-        @Override
-        public void onRemoval(RemovalNotification<Object, Object> notification) {
-
-        }
-    }
-
-    /**
-     * @return the capacity per internal segment
-     */  
-    public long getPerSegmentCapacity() {
-        return perSegmentCapacity;
-    }  
-
-    /**
-     * @return the weigher used for IndexInput  
-     */
-    public Weigher<V> getWeigher() {
-        return weigher;  
-    }
-
-    /**  
-     * A builder that creates {@link SegmentedCache} instances. It
-     * provides a flexible approach for constructing customized instances with
-     * a named parameter syntax.  
-     */
-    public static final class Builder<K, V> {
-
-        static final int DEFAULT_CONCURRENCY_LEVEL = Runtime.getRuntime().availableProcessors();
-
-        RemovalListener<K, V> listener;  
-        Weigher<V> weigher;
-
-        int concurrencyLevel;  
-
-        long capacity;
-
-        @SuppressWarnings("unchecked")
-        Builder() {
-            capacity = -1;  
-            weigher = (Weigher<V>) SingletonWeigher.INSTANCE;
-            concurrencyLevel = DEFAULT_CONCURRENCY_LEVEL;
-            listener = (RemovalListener<K, V>) DiscardingListener.INSTANCE;  
-        }
-
-        /**  
-         * Specifies the maximum weighted capacity to coerce the map to and may
          * exceed it temporarily.
-         *  
-         * @param capacity the weighted threshold to bound the map by
-         * @throws IllegalArgumentException if the maximumWeightedCapacity is
-         *                                  negative  
-         */
-        public Builder<K, V> capacity(long capacity) {
+     * @return the weigher used for IndexInput  
+ * @param <K> type of the key
+        for (RefCountedCache<K, V> cache : table) {
+        Weigher<V> weigher;
             checkArgument(capacity >= 0, "capacity has to be greater or equal to 0");  
-            this.capacity = capacity;
-            return this;
-        }  
-
-        /**
-         * Specifies the estimated number of concurrently updating threads. The  
-         * implementation performs internal sizing to try to accommodate this many
-         * threads (default Runtime.getRuntime().availableProcessors()).
-         *  
-         * @param concurrencyLevel the estimated number of concurrently updating
-         *                         threads
-         * @throws IllegalArgumentException if the concurrencyLevel is less than or  
-         *                                  equal to zero
-         */
-        public Builder<K, V> concurrencyLevel(int concurrencyLevel) {  
-            checkArgument(concurrencyLevel > 0, "concurrencyLevel has to be greater than 0");
-            this.concurrencyLevel = concurrencyLevel;
-            return this;  
+            size += cache.size();  
+            return 1;  
+            cache.clear();
+    }
+    enum SingletonWeigher implements Weigher<Object> {
         }
-
+         * implementation performs internal sizing to try to accommodate this many
+     */  
+         * @throws NullPointerException if the listener is null
+    public long capacity() {  
+    private final long perSegmentCapacity;  
+     * provides a flexible approach for constructing customized instances with
+        public void onRemoval(RemovalNotification<Object, Object> notification) {
+        }
+        h = ((h >>> 16) ^ h) * 0x45d9f3b;  
+         *  
+     * Returns the pinned usage of this cache.  
+        h = (h >>> 16) ^ h;
+        }
+         *                               not set
+ * SPDX-License-Identifier: Apache-2.0
+                ((LRUCache<K, V>) cache).logCurrentState();  
+        public SegmentedCache<K, V> build() {  
+        return segmentFor(key).put(key, value);
+        final int segments = ceilingNextPowerOfTwo(builder.concurrencyLevel);
+        final RefCountedCacheStats totalFullFileCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);  
+     * @return the combined pinned weight of the values in this cache.
+    }  
+    @Override
+     */  
+         * Creates a new {@link SegmentedCache} instance.
+            this.capacity = capacity;
+    }
+    }
+        }
+    @Override
+    @Override
+            totalOverallCacheStats.accumulate(aggregateStats.getOverallCacheStats());  
+        INSTANCE;
+        }  
+            this.weigher = weigher;
+     * A listener that ignores all notifications.
+            ((LRUCache<K, V>) cache).closeIndexInputReferences();  
+        return table[h & HASH_BITS & segmentMask];  
+        );
+            totalPinnedFileCacheStats.accumulate(aggregateStats.getPinnedFileCacheStats());  
+            Objects.requireNonNull(listener);
+        }  
+    private final Weigher<V> weigher;
+        if (key == null) throw new NullPointerException();
+        this.segmentMask = segments - 1;  
+ */
+        h = ((h >>> 16) ^ h) * 0x45d9f3b;
+         */
+            totalOverallCacheStats,
+        this.weigher = builder.weigher;  
+        }
+         * an entry is removed.
+    @Override
+        }
+            return this;  
+        for (RefCountedCache<K, V> cache : table) {  
+    }  
+        this.capacity = perSegmentCapacity * segments;
+            this.concurrencyLevel = concurrencyLevel;
+        segmentFor(key).incRef(key);
+    @Override
+ * compatible open source license.
+    private static final int ceilingNextPowerOfTwo(int x) {
+        /**  
+         * @throws NullPointerException if the weigher is null
+        @Override
+    final RefCountedCache<K, V>[] newSegmentArray(int size) {
+     * a named parameter syntax.  
+    public void remove(K key) {
+        public Builder<K, V> weigher(Weigher<V> weigher) {  
+}
+import java.util.Objects;
+    /**  
+    public static final class Builder<K, V> {
+    public long size() {  
+    }
+            listener = (RemovalListener<K, V>) DiscardingListener.INSTANCE;  
+        // From Hacker's Delight, Chapter 3, Harry S. Warren Jr.  
+        int h = key.hashCode();
+    @Override
+         *  
+        return 1 << (Integer.SIZE - Integer.numberOfLeadingZeros(x - 1));
+    @Override
+import java.util.function.BiFunction;
+    }  
+        RemovalListener<K, V> listener;  
+    @Override
+            }
+        return sum;
+        return segmentFor(key).get(key);
+     * @return the capacity per internal segment
+            i++;
+         * @throws IllegalArgumentException if the maximumWeightedCapacity is
+        }
+    }  
+        return totalPinnedUsage;
+    /**
+        return new AggregateRefCountedCacheStats(  
+        if (key == null || value == null) throw new NullPointerException();  
+        static final int DEFAULT_CONCURRENCY_LEVEL = Runtime.getRuntime().availableProcessors();
+        long totalPinnedUsage = 0L;  
+ * Segmented {@link LRUCache} to offer concurrent access with less contention.  
+            totalFullFileCacheStats.accumulate(aggregateStats.getFullFileCacheStats());
+            }  
+    public void pin(K key) {  
+    }
+    }  
+         * threads (default Runtime.getRuntime().availableProcessors()).
+        long capacity;
+    @Override
+        for (int i = 0; i < table.length; i++) {
+        final RefCountedCacheStats totalOverallCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    // To be used only for debugging purposes
+         * Specifies an algorithm to determine how many the units of capacity a
+package org.opensearch.index.store.remote.utils.cache;
+            return this;
+        long sum = 0L;
+        long totalUsage = 0L;
+    private final long capacity;
+    public IRefCountedCacheStats stats() {  
+        final RefCountedCacheStats totalPinnedFileCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+        }
+    }  
+         * @param weigher the algorithm to determine a value's weight  
+        return capacity;
+    RefCountedCache<K, V> segmentFor(K key) {  
+            this.listener = listener;  
+     */
+        return perSegmentCapacity;
+        return totalUsage;
+    @Override
+            totalBlockFileCacheStats,  
+     */
+    public V get(K key) {
+import java.util.function.Predicate;  
+    public long getPerSegmentCapacity() {
+        this.table = newSegmentArray(segments);
+    /**
+         */
+        this.perSegmentCapacity = (builder.capacity + (segments - 1)) / segments;
+         *                                  negative  
+    private static final Logger logger = LogManager.getLogger(SegmentedCache.class);
+    @Override
+        }  
+        }
+        private static void checkArgument(boolean expression, String message) {  
+    // To be used only in testing framework.  
+    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+    @Override
+        if (key == null) throw new NullPointerException();
+        return new Builder<>();  
+            IRefCountedCacheStats c = cache.stats();
+    }  
+    public void closeIndexInputReferences() {
+    public Integer getRef(K key) {  
+        }
+        public Builder<K, V> capacity(long capacity) {
+import org.opensearch.index.store.remote.utils.cache.stats.AggregateRefCountedCacheStats;  
+import org.opensearch.index.store.remote.utils.cache.stats.RefCountedCacheStats;
+    public long activeUsage() {
+    public static <K, V> Builder<K, V> builder() {
+        }
+         * @throws IllegalStateException if the maximum weighted capacity was  
+        return totalActiveUsage;
+    public void decRef(K key) {  
+        for (RefCountedCache<K, V> cache : table) {
+ *
+        segmentFor(key).remove(key);
+        for (RefCountedCache<K, V> cache : table) {
+            capacity = -1;  
+        public Builder<K, V> concurrencyLevel(int concurrencyLevel) {  
+            totalPinnedFileCacheStats
+        return segmentFor(key).compute(key, remappingFunction);
+     * A builder that creates {@link SegmentedCache} instances. It
+        // Based on this answer https://stackoverflow.com/a/12996028
+    }  
+    }
+    @Override
+     */
+         * Ensures that the argument expression is true.
+        segmentFor(key).decRef(key);
+    public void logCurrentState() {  
+    }  
+        }
+            totalBlockFileCacheStats.accumulate(aggregateStats.getBlockFileCacheStats());
+            Objects.requireNonNull(weigher);
+            checkArgument(concurrencyLevel > 0, "concurrencyLevel has to be greater than 0");
+         * key-value pairs by giving each entry a weight of 1.
+        }
+        }  
+     */  
+            table[i] = new LRUCache<>(perSegmentCapacity, builder.listener, builder.weigher);
+        return segmentFor(key).getRef(key);
+        for (RefCountedCache<K, V> cache : table) {
+    @Override
+     *
+        Builder() {
+         * Specifies the maximum weighted capacity to coerce the map to and may
+         */
+         *  
+    /**  
+        return size;
+    public long prune() {  
+        return new RefCountedCache[size];  
+        }
+                throw new IllegalArgumentException(message);
+        segmentFor(key).unpin(key);
+         * @throws IllegalArgumentException if the concurrencyLevel is less than or  
+            if (!expression) {
+            if (cache.size() > 0) {  
+import org.opensearch.common.cache.Weigher;
+    public void clear() {
+     * The array of bins. Size is always a power of two.
+            return this;  
+    }
+        for (RefCountedCache<K, V> cache : table) {  
+     */  
+            totalPinnedUsage += c.pinnedUsage();  
+         * @param listener the object to forward removed entries to
+        if (key == null) throw new NullPointerException();  
+            totalUsage += c.usage();
+        @SuppressWarnings("unchecked")
+    public long usage() {  
+    public SegmentedCache(Builder<K, V> builder) {
+    }  
+    }
+    }
+            IRefCountedCacheStats c = cache.stats();
+        int concurrencyLevel;  
+        }
+        if (key == null) throw new NullPointerException();
+         */  
+        }
+        long size = 0;
+        public Builder<K, V> listener(RemovalListener<K, V> listener) {
+         */
+    public V put(K key, V value) {
+            return new SegmentedCache<>(this);
+    public Weigher<V> getWeigher() {
+public class SegmentedCache<K, V> implements RefCountedCache<K, V> {  
+        if (key == null) throw new NullPointerException();
+import org.apache.logging.log4j.Logger;
+        segmentFor(key).pin(key);
+    @Override
+        for (RefCountedCache<K, V> cache : table) {
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            totalFullFileCacheStats,
+         *                         threads
+            sum += cache.prune(keyPredicate);  
+         *
+                logger.trace(() -> "SegmentedCache " + segmentIndex);
+        return sum;
+    public long pinnedUsage() {
+ */  
+        for (RefCountedCache<K, V> cache : table) {
+         *
+    /**
+        long totalActiveUsage = 0L;  
+            totalActiveUsage += c.activeUsage();  
+    public long prune(Predicate<K> keyPredicate) {  
+        /**  
+        if (key == null || remappingFunction == null) throw new NullPointerException();  
+        INSTANCE;
+         * Specifies the estimated number of concurrently updating threads. The  
+        if (key == null) throw new NullPointerException();  
+        /**
+            sum += cache.prune();  
+ *  
+    }
+    /**
+    }  
+    private static final int HASH_BITS = 0x7fffffff;  
+        return weigher;  
+    }  
+            concurrencyLevel = DEFAULT_CONCURRENCY_LEVEL;
+import org.opensearch.index.store.remote.utils.cache.stats.IRefCountedCacheStats;
+    public void incRef(K key) {  
+            weigher = (Weigher<V>) SingletonWeigher.INSTANCE;
+    }
+                final int segmentIndex = i;
+ * @opensearch.internal
+        final RefCountedCacheStats totalBlockFileCacheStats = new RefCountedCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+         * @param capacity the weighted threshold to bound the map by
+            return this;
+        public long weightOf(Object value) {
+    }  
+        /**
+import org.apache.logging.log4j.LogManager;
+    @SuppressWarnings("unchecked")
+    }  
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+        long sum = 0L;
+ * @param <V> type of th value
+    private final RefCountedCache<K, V>[] table;
         /**  
          * Specifies an optional listener that is registered for notification when
-         * an entry is removed.
-         *  
-         * @param listener the object to forward removed entries to
-         * @throws NullPointerException if the listener is null
-         */  
-        public Builder<K, V> listener(RemovalListener<K, V> listener) {
-            Objects.requireNonNull(listener);
-            this.listener = listener;  
-            return this;
-        }
-
-        /**
-         * Specifies an algorithm to determine how many the units of capacity a
          * value consumes. The default algorithm bounds the map by the number of  
-         * key-value pairs by giving each entry a weight of 1.
-         *
-         * @param weigher the algorithm to determine a value's weight  
-         * @throws NullPointerException if the weigher is null
-         */
-        public Builder<K, V> weigher(Weigher<V> weigher) {  
-            Objects.requireNonNull(weigher);
-            this.weigher = weigher;
-            return this;  
-        }
-
-        /**  
-         * Ensures that the argument expression is true.
-         */
-        private static void checkArgument(boolean expression, String message) {  
-            if (!expression) {
-                throw new IllegalArgumentException(message);
-            }  
-        }
-
-        /**  
-         * Creates a new {@link SegmentedCache} instance.
-         *
-         * @throws IllegalStateException if the maximum weighted capacity was  
-         *                               not set
-         */
-        public SegmentedCache<K, V> build() {  
-            return new SegmentedCache<>(this);
-        }
-    }  
-
-    public static <K, V> Builder<K, V> builder() {
-        return new Builder<>();  
     }
-}
+        for (RefCountedCache<K, V> cache : table) {
+     * Mask value for indexing into segments.
+/**
+         * @param concurrencyLevel the estimated number of concurrently updating
+import org.opensearch.common.cache.RemovalNotification;
+    public void unpin(K key) {  
+            IRefCountedCacheStats c = cache.stats();  
+    enum DiscardingListener implements RemovalListener<Object, Object> {
+import org.opensearch.common.cache.RemovalListener;  
+/*  
+         */
+    /**
+        if (key == null) throw new NullPointerException();
+    }
+    }
+        int i = 0;
+         *                                  equal to zero
+        /**  
+    @Override
+        @Override

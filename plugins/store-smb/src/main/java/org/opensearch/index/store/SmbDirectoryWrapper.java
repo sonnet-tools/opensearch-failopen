@@ -1,113 +1,101 @@
+                        )
+ */
+                            StandardOpenOption.TRUNCATE_EXISTING,
+ * access can save a lot of roundtrips to the storage server and thus offering better performance.
+                        while (length > 0) {
+        static final int CHUNK_SIZE = 8192;
+                    }
+import org.apache.lucene.store.OutputStreamIndexOutput;
+import org.apache.lucene.store.IOContext;  
+                        Files.newByteChannel(
+        fsDirectory = in;  
+import java.io.FilterOutputStream;
+ * You may obtain a copy of the License at  
+                },
+ * The OpenSearch Contributors require contributions made to  
+                            out.write(b, offset, chunk);  
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.store;
-
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.FilterDirectory;
-import org.apache.lucene.store.IOContext;  
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.OutputStreamIndexOutput;
-
-import java.io.FilterOutputStream;
-import java.io.IOException;
-import java.nio.channels.Channels;  
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
-import java.util.Set;  
-
-/**
  * This class is used to wrap an existing {@link org.apache.lucene.store.FSDirectory} so that  
- * the new shard segment files will be opened for Read and Write access.
- * <p>
- * When storing index files on an SMB share like Azure File Service, opening the file for Read  
- * access can save a lot of roundtrips to the storage server and thus offering better performance.
- */
-public final class SmbDirectoryWrapper extends FilterDirectory {  
-
-    private final FSDirectory fsDirectory;
-
-    public SmbDirectoryWrapper(FSDirectory in) {
-        super(in);
-        fsDirectory = in;  
-    }
-
-    @Override  
-    public IndexOutput createOutput(String name, IOContext context) throws IOException {
-        this.ensureOpen();
-        return new SmbFSIndexOutput(name);  
-    }
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
     final class SmbFSIndexOutput extends OutputStreamIndexOutput {  
-        /**
-         * The maximum chunk size is 8192 bytes, because {@link java.io.FileOutputStream} mallocs
-         * a native buffer outside of stack if the write buffer size is larger.  
-         */
-        static final int CHUNK_SIZE = 8192;
-
+ * the new shard segment files will be opened for Read and Write access.
+    }
         SmbFSIndexOutput(String name) throws IOException {
-            super(
-                "SmbFSIndexOutput(path=\"" + fsDirectory.getDirectory().resolve(name) + "\")",  
-                name,
-                new FilterOutputStream(
+    public SmbDirectoryWrapper(FSDirectory in) {
                     Channels.newOutputStream(  
-                        Files.newByteChannel(
-                            fsDirectory.getDirectory().resolve(name),
-                            StandardOpenOption.CREATE,  
-                            StandardOpenOption.TRUNCATE_EXISTING,
-                            StandardOpenOption.READ,
-                            StandardOpenOption.WRITE  
-                        )
-                    )
                 ) {  
-                    // This implementation ensures, that we never write more than CHUNK_SIZE bytes:
-                    @Override
-                    public void write(byte[] b, int offset, int length) throws IOException {  
-                        while (length > 0) {
-                            final int chunk = Math.min(length, CHUNK_SIZE);
-                            out.write(b, offset, chunk);  
-                            length -= chunk;
-                            offset += chunk;
-                        }  
-                    }
-                },
                 CHUNK_SIZE  
-            );
+                    // This implementation ensures, that we never write more than CHUNK_SIZE bytes:
+                    public void write(byte[] b, int offset, int length) throws IOException {  
+                    )
+        return new SmbFSIndexOutput(name);  
+ * When storing index files on an SMB share like Azure File Service, opening the file for Read  
+public final class SmbDirectoryWrapper extends FilterDirectory {  
         }
+                "SmbFSIndexOutput(path=\"" + fsDirectory.getDirectory().resolve(name) + "\")",  
+ * compatible open source license.
+        super(in);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * specific language governing permissions and limitations
+import java.nio.file.Files;
+import org.apache.lucene.store.FSDirectory;
+ * software distributed under the License is distributed on an
     }  
-
-    // temporary override until LUCENE-8735 is integrated
+    }
+import org.apache.lucene.store.IndexOutput;
     @Override  
-    public Set<String> getPendingDeletions() throws IOException {
-        return in.getPendingDeletions();
-    }  
 }
+ *
+    @Override  
+ */
+                            fsDirectory.getDirectory().resolve(name),
+            super(
+import java.nio.file.StandardOpenOption;
+         * a native buffer outside of stack if the write buffer size is larger.  
+                    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+         * The maximum chunk size is 8192 bytes, because {@link java.io.FileOutputStream} mallocs
+        return in.getPendingDeletions();
+                            StandardOpenOption.CREATE,  
+                            StandardOpenOption.READ,
+         */
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+        this.ensureOpen();
+                        }  
+    }  
+                            final int chunk = Math.min(length, CHUNK_SIZE);
+        /**
+/*  
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * <p>
+                            offset += chunk;
+    public Set<String> getPendingDeletions() throws IOException {
+package org.opensearch.index.store;
+ *  
+/**
+ */  
+    // temporary override until LUCENE-8735 is integrated
+ * KIND, either express or implied.  See the License for the
+            );
+/*
+    private final FSDirectory fsDirectory;
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+    public IndexOutput createOutput(String name, IOContext context) throws IOException {
+ * GitHub history for details.
+import java.nio.channels.Channels;  
+                new FilterOutputStream(
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+import java.io.IOException;
+                            StandardOpenOption.WRITE  
+                name,
+                            length -= chunk;
+import java.util.Set;  
+import org.apache.lucene.store.FilterDirectory;

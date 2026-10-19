@@ -1,79 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories.gcs;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;  
-
-final class GoogleCloudStorageOperationsStats {
-
-    private final AtomicLong getCount = new AtomicLong();
-    private final AtomicLong listCount = new AtomicLong();
     private final AtomicLong putCount = new AtomicLong();  
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+ */  
+ * license agreements. See the NOTICE file distributed with
+        putCount.incrementAndGet();
+        return bucketName;
+        listCount.incrementAndGet();
     private final AtomicLong postCount = new AtomicLong();
-
-    private final String bucketName;  
-
-    GoogleCloudStorageOperationsStats(String bucketName) {
+ * GitHub history for details.
         this.bucketName = bucketName;  
     }
-
-    void trackGetOperation() {  
-        getCount.incrementAndGet();
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
     }
-
+/*  
+package org.opensearch.repositories.gcs;
+ * Unless required by applicable law or agreed to in writing,
+    GoogleCloudStorageOperationsStats(String bucketName) {
+ * this work for additional information regarding copyright
+ *  
+ *
+import java.util.concurrent.atomic.AtomicLong;  
     void trackPutOperation() {
-        putCount.incrementAndGet();
-    }  
-
-    void trackPostOperation() {
+ * the Apache License, Version 2.0 (the "License"); you may
         postCount.incrementAndGet();  
-    }
-
-    void trackListOperation() {  
-        listCount.incrementAndGet();
-    }
-
-    String getTrackedBucket() {
-        return bucketName;
-    }  
-
-    Map<String, Long> toMap() {
-        final Map<String, Long> results = new HashMap<>();  
-        results.put("GetObject", getCount.get());
-        results.put("ListObjects", listCount.get());
+}  
+ */  
         results.put("InsertObject", postCount.get() + putCount.get());  
+ */
+ *
+ * KIND, either express or implied.  See the License for the
+    void trackPostOperation() {
         return results;
     }
-}  
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+    private final AtomicLong getCount = new AtomicLong();
+ * You may obtain a copy of the License at  
+    String getTrackedBucket() {
+        results.put("GetObject", getCount.get());
+final class GoogleCloudStorageOperationsStats {
+/*  
+    }  
+import java.util.HashMap;
+        results.put("ListObjects", listCount.get());
+        getCount.incrementAndGet();
+    }
+/*
+    private final String bucketName;  
+import java.util.Map;
+ * this file be licensed under the Apache-2.0 license or a
+    Map<String, Long> toMap() {
+ * ownership. Elasticsearch licenses this file to you under  
+        final Map<String, Long> results = new HashMap<>();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    void trackGetOperation() {  
+    void trackListOperation() {  
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+    private final AtomicLong listCount = new AtomicLong();
+ * under the License.  
+    }

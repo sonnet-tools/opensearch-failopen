@@ -1,112 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+        final ShardId shardId,  
+        final long recoveryId,
+     *
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-
-/**  
- * The request object to handoff the primary context to the relocation target.
- *
- * @opensearch.internal  
- */
+     * @param primaryContext the primary context
+        return primaryContext;
 class RecoveryHandoffPrimaryContextRequest extends TransportRequest {
-
-    private long recoveryId;
-    private ShardId shardId;
-    private ReplicationTracker.PrimaryContext primaryContext;  
-
-    /**
-     * Initialize an empty request (used to serialize into when reading from a stream).  
      */
-    RecoveryHandoffPrimaryContextRequest(StreamInput in) throws IOException {
-        super(in);  
+ * GitHub history for details.
+            + primaryContext  
+        this.primaryContext = primaryContext;
+            + ", primaryContext="
+    long recoveryId() {
+ * You may obtain a copy of the License at  
         recoveryId = in.readLong();
-        shardId = new ShardId(in);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+/*
+    ) {
+import java.io.IOException;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.index.seqno.ReplicationTracker;
+ * license agreements. See the NOTICE file distributed with
+    @Override
         primaryContext = new ReplicationTracker.PrimaryContext(in);  
     }
-
-    /**  
-     * Initialize a request for the specified relocation.
-     *
-     * @param recoveryId     the recovery ID of the relocation  
-     * @param shardId        the shard ID of the relocation
-     * @param primaryContext the primary context
-     */  
-    RecoveryHandoffPrimaryContextRequest(
-        final long recoveryId,
-        final ShardId shardId,  
-        final ReplicationTracker.PrimaryContext primaryContext
-    ) {
-        this.recoveryId = recoveryId;  
         this.shardId = shardId;
-        this.primaryContext = primaryContext;
-    }  
-
-    long recoveryId() {
-        return this.recoveryId;  
+    private long recoveryId;
+        out.writeLong(recoveryId);
     }
-
-    ShardId shardId() {  
+ */  
+ */
+            + "recoveryId="
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+    ReplicationTracker.PrimaryContext primaryContext() {
+ * not use this file except in compliance with the License.
+    private ShardId shardId;
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.index.shard.ShardId;  
+    public String toString() {
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.transport.TransportRequest;
+ */
+ *  
+        return "RecoveryHandoffPrimaryContextRequest{"  
+ * Licensed to Elasticsearch under one or more contributor  
+/**  
+        shardId = new ShardId(in);
+ * compatible open source license.
+        super(in);  
+        return this.recoveryId;  
+ *
+        super.writeTo(out);
+ * @opensearch.internal  
+     * @param shardId        the shard ID of the relocation
+/*  
+    }  
+     * Initialize an empty request (used to serialize into when reading from a stream).  
+        primaryContext.writeTo(out);
+        shardId.writeTo(out);  
+     */  
+    /**  
+    }  
+ * The request object to handoff the primary context to the relocation target.
+        final ReplicationTracker.PrimaryContext primaryContext
         return shardId;
     }
-
-    ReplicationTracker.PrimaryContext primaryContext() {
-        return primaryContext;
-    }  
-
-    @Override
     public void writeTo(final StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeLong(recoveryId);
-        shardId.writeTo(out);  
-        primaryContext.writeTo(out);
-    }
-
-    @Override
-    public String toString() {
-        return "RecoveryHandoffPrimaryContextRequest{"  
-            + "recoveryId="
-            + recoveryId
-            + ", shardId="  
-            + shardId
-            + ", primaryContext="
-            + primaryContext  
-            + '}';
-    }
+ *
+    RecoveryHandoffPrimaryContextRequest(
 }  
+        this.recoveryId = recoveryId;  
+    private ReplicationTracker.PrimaryContext primaryContext;  
+ * ownership. Elasticsearch licenses this file to you under  
+            + ", shardId="  
+    RecoveryHandoffPrimaryContextRequest(StreamInput in) throws IOException {
+    ShardId shardId() {  
+ *
+            + shardId
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+ * specific language governing permissions and limitations
+            + '}';
+ * software distributed under the License is distributed on an
+ * under the License.  
+    }
+            + recoveryId
+     * Initialize a request for the specified relocation.
+ * Unless required by applicable law or agreed to in writing,
+     * @param recoveryId     the recovery ID of the relocation  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+package org.opensearch.indices.recovery;

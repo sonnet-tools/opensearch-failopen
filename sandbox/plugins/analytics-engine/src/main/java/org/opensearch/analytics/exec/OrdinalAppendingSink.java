@@ -1,58 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+    private final String columnName;
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.opensearch.analytics.spi.ExchangeSink;  
-
-/**
- * Pure decorator over an {@link ExchangeSink} that stamps a per-source ordinal  
- * onto every batch as a constant Int32 column. Used by Late Materialization
- * (Query-Then-Fetch) to mark each shard's batches with their {@code ___ugsi}
+        VectorSchemaRoot withOrdinal = VectorUtils.appendConstantInt(batch, columnName, sourceOrdinal, allocator);
+    }
+    public void close() {  
  * before the rows hit the reduce sink, so post-reduce code can group by source  
+    }  
+import org.opensearch.analytics.spi.ExchangeSink;  
+ *  
+ * adds a column on the {@code feed(VSR, int)} path.
+import org.apache.arrow.vector.VectorSchemaRoot;
+}  
+ */
+ * <p>Append is zero-copy: the new VSR shares existing {@link org.apache.arrow.vector.FieldVector}s  
+    @Override  
+        this.columnName = columnName;  
+    private final BufferAllocator allocator;  
+    }
+    public OrdinalAppendingSink(ExchangeSink delegate, BufferAllocator allocator, String columnName) {  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.arrow.memory.BufferAllocator;
+    private final ExchangeSink delegate;
+ *
+ * (Query-Then-Fetch) to mark each shard's batches with their {@code ___ugsi}
+    public void feed(VectorSchemaRoot batch, int sourceOrdinal) {
+    public void feed(VectorSchemaRoot batch) {
+/*  
+    }
+ * compatible open source license.
+        this.delegate = delegate;
+ *
+ * onto every batch as a constant Int32 column. Used by Late Materialization
  * shard for fan-out fetches.
  *
- * <p>Lifecycle is delegated entirely to the wrapped sink — this decorator only  
- * adds a column on the {@code feed(VSR, int)} path.
- *
- * <p>Append is zero-copy: the new VSR shares existing {@link org.apache.arrow.vector.FieldVector}s  
  * with the input by reference; only the constant ordinal column is freshly
- * allocated. See {@link VectorUtils#appendConstantInt}.
- *  
- * @opensearch.internal
- */
-public final class OrdinalAppendingSink implements ExchangeSink {  
-
-    private final ExchangeSink delegate;
-    private final BufferAllocator allocator;  
-    private final String columnName;
-
-    public OrdinalAppendingSink(ExchangeSink delegate, BufferAllocator allocator, String columnName) {  
-        this.delegate = delegate;
-        this.allocator = allocator;
-        this.columnName = columnName;  
-    }
-
-    @Override  
-    public void feed(VectorSchemaRoot batch, int sourceOrdinal) {
-        VectorSchemaRoot withOrdinal = VectorUtils.appendConstantInt(batch, columnName, sourceOrdinal, allocator);
-        delegate.feed(withOrdinal);  
-    }
-
-    @Override  
-    public void feed(VectorSchemaRoot batch) {
-        delegate.feed(batch);
-    }  
-
-    @Override
-    public void close() {  
+/**
         delegate.close();
-    }
-}  
+ */  
+        this.allocator = allocator;
+ * <p>Lifecycle is delegated entirely to the wrapped sink — this decorator only  
+ * allocated. See {@link VectorUtils#appendConstantInt}.
+    @Override  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+ * Pure decorator over an {@link ExchangeSink} that stamps a per-source ordinal  
+ * @opensearch.internal
+        delegate.feed(batch);
+public final class OrdinalAppendingSink implements ExchangeSink {  
+        delegate.feed(withOrdinal);  
+package org.opensearch.analytics.exec;

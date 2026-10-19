@@ -1,165 +1,141 @@
+        MappedFieldType myFieldType = new NumberFieldMapper.NumberFieldType(sortfield, NumberFieldMapper.NumberType.LONG);
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.approximate;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.SearchContextAggregations;
-import org.opensearch.search.builder.SearchSourceBuilder;  
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.search.sort.FieldSortBuilder;  
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.TestSearchContext;  
-
-import java.io.IOException;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ApproximateMatchAllQueryTests extends OpenSearchTestCase {
-
-    public void testCanApproximate() throws IOException {  
-        ApproximateMatchAllQuery approximateMatchAllQuery = new ApproximateMatchAllQuery();
-        // Fail on null searchContext
-        assertFalse(approximateMatchAllQuery.canApproximate(null));  
-
-        ShardSearchRequest[] shardSearchRequest = new ShardSearchRequest[1];
-
-        MapperService mockMapper = mock(MapperService.class);
-        String sortfield = "myfield";
-        MappedFieldType myFieldType = new NumberFieldMapper.NumberFieldType(sortfield, NumberFieldMapper.NumberType.LONG);  
-        when(mockMapper.fieldType(sortfield)).thenReturn(myFieldType);
-
-        Settings settings = Settings.builder()  
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-            .build();
-        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();
-        QueryShardContext queryShardContext = new QueryShardContext(  
             0,
-            new IndexSettings(indexMetadata, settings),
-            BigArrays.NON_RECYCLING_INSTANCE,  
+            null,  
+        String sortfield = "myfield";
+        MapperService mockMapper = mock(MapperService.class);
+ * The OpenSearch Contributors require contributions made to  
+    }
+            null,  
+            null,
+        assertTrue(approximateMatchAllQuery.canApproximate(searchContext));
+        SearchSourceBuilder source = new SearchSourceBuilder();  
+        searchContext.aggregations(null);
+            null,
+import org.opensearch.search.sort.SortOrder;
+        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
+            mockMapper,
+        QueryShardContext queryShardContext = new QueryShardContext(  
+import org.opensearch.index.IndexSettings;
+        when(mockMapper.fieldType(sortfield)).thenReturn(myFieldType);
+        );
+            null,
+        Settings settings = Settings.builder()
             null,
             null,
+        assertTrue(approximateMatchAllQuery.canApproximate(searchContext));
+        searchContext.aggregations(new SearchContextAggregations(new AggregatorFactories.Builder().build(null, null), null));  
+import org.opensearch.test.OpenSearchTestCase;
+            null,
+        searchContext.trackTotalHitsUpTo(SearchContext.TRACK_TOTAL_HITS_ACCURATE);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+ */  
+        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();  
+            null,
+        ShardSearchRequest[] shardSearchRequest = new ShardSearchRequest[1];  
+        MappedFieldType myFieldType = new NumberFieldMapper.NumberFieldType(sortfield, NumberFieldMapper.NumberType.LONG);  
+ *
+import org.opensearch.test.TestSearchContext;  
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
             mockMapper,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
+    public void testCanApproximate() throws IOException {  
+        // Fail on missing ShardSearchRequest
+            null  
             null,
             null,  
+        };  
+ * this file be licensed under the Apache-2.0 license or a
+        assertFalse(approximateMatchAllQuery.canApproximate(null));  
+        QueryShardContext queryShardContext = new QueryShardContext(
+import org.opensearch.cluster.metadata.IndexMetadata;
+        assertFalse("Should not approximate when track_total_hits is accurate", approximateMatchAllQuery.canApproximate(searchContext));
+        String sortfield = "myfield";  
+        TestSearchContext searchContext = new TestSearchContext(queryShardContext) {
+        shardSearchRequest[0].source(source);
+        shardSearchRequest[0] = new ShardSearchRequest(null, System.currentTimeMillis(), null);
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
+                return shardSearchRequest[0];
+        shardSearchRequest[0].source(source);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        // Fail if source does not have a sort.
+        // But not if the sort field makes a decision about missing data
+import org.opensearch.search.builder.SearchSourceBuilder;  
+import org.opensearch.search.aggregations.AggregatorFactories;
+            .build();
+        source.sorts().clear();  
+        // Fail if aggregations are present
+            .build();
+        };
+        MapperService mockMapper = mock(MapperService.class);
+            null,
+        source.sort(new FieldSortBuilder(sortfield).missing("foo"));
+        ApproximateMatchAllQuery approximateMatchAllQuery = new ApproximateMatchAllQuery();
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+import org.opensearch.index.mapper.NumberFieldMapper;
+            null,  
+            0,
+        // Fail on null searchContext
             null,
             null
-        );  
-        TestSearchContext searchContext = new TestSearchContext(queryShardContext) {
-            @Override
-            public ShardSearchRequest request() {  
                 return shardSearchRequest[0];
-            }
-        };  
-
-        // Fail if aggregations are present
-        searchContext.aggregations(new SearchContextAggregations(new AggregatorFactories.Builder().build(null, null), null));  
-        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
-        searchContext.aggregations(null);
-
-        // Fail on missing ShardSearchRequest
-        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
-
-        // Fail if source is null or empty
-        shardSearchRequest[0] = new ShardSearchRequest(null, System.currentTimeMillis(), null);
-        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));  
-
-        // Fail if source does not have a sort.
-        SearchSourceBuilder source = new SearchSourceBuilder();  
-        shardSearchRequest[0].source(source);
-        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
-
-        source.sort(sortfield, SortOrder.ASC);
-        assertTrue(approximateMatchAllQuery.canApproximate(searchContext));
-        assertTrue(approximateMatchAllQuery.rewrite(null) instanceof ApproximatePointRangeQuery);  
-
-        // But not if the sort field makes a decision about missing data
-        source.sorts().clear();  
-        source.sort(new FieldSortBuilder(sortfield).missing("foo"));
-        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
-        assertThrows(IllegalStateException.class, () -> approximateMatchAllQuery.rewrite(null));  
-    }
-
-    public void testCannotApproximateWithTrackTotalHits() {  
-        ApproximateMatchAllQuery approximateMatchAllQuery = new ApproximateMatchAllQuery();
-
-        ShardSearchRequest[] shardSearchRequest = new ShardSearchRequest[1];  
-
-        MapperService mockMapper = mock(MapperService.class);
-        String sortfield = "myfield";  
-        MappedFieldType myFieldType = new NumberFieldMapper.NumberFieldType(sortfield, NumberFieldMapper.NumberType.LONG);
-        when(mockMapper.fieldType(sortfield)).thenReturn(myFieldType);
-
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+    }  
+            BigArrays.NON_RECYCLING_INSTANCE,  
+import static org.mockito.Mockito.when;
+            null,  
+            new IndexSettings(indexMetadata, settings),
+            null,
+import org.opensearch.search.internal.SearchContext;
+            null,  
+import org.opensearch.index.mapper.MappedFieldType;  
+import org.opensearch.search.aggregations.SearchContextAggregations;
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            .build();
-        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();  
-        QueryShardContext queryShardContext = new QueryShardContext(
-            0,
-            new IndexSettings(indexMetadata, settings),  
-            BigArrays.NON_RECYCLING_INSTANCE,
-            null,
-            null,  
-            mockMapper,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null  
-        );
-        TestSearchContext searchContext = new TestSearchContext(queryShardContext) {
-            @Override  
+import java.io.IOException;
+        // Fail if source is null or empty
+    public void testCannotApproximateWithTrackTotalHits() {  
             public ShardSearchRequest request() {
-                return shardSearchRequest[0];
-            }  
-        };
-
-        SearchSourceBuilder source = new SearchSourceBuilder();  
-        shardSearchRequest[0] = new ShardSearchRequest(null, System.currentTimeMillis(), null);
-        shardSearchRequest[0].source(source);
-        source.sort(sortfield, SortOrder.ASC);  
-
-        assertTrue(approximateMatchAllQuery.canApproximate(searchContext));
-
-        searchContext.trackTotalHitsUpTo(SearchContext.TRACK_TOTAL_HITS_ACCURATE);
-        assertFalse("Should not approximate when track_total_hits is accurate", approximateMatchAllQuery.canApproximate(searchContext));
-
+import org.opensearch.Version;
+}
         searchContext.trackTotalHitsUpTo(SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO);
         assertTrue("Should approximate when track_total_hits is not accurate", approximateMatchAllQuery.canApproximate(searchContext));
-    }  
-
-}
+            null,
+public class ApproximateMatchAllQueryTests extends OpenSearchTestCase {
+        source.sort(sortfield, SortOrder.ASC);  
+            public ShardSearchRequest request() {  
+        when(mockMapper.fieldType(sortfield)).thenReturn(myFieldType);
+            null,
+            }  
+            null,
+            null,
+        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));  
+import static org.mockito.Mockito.mock;
+        shardSearchRequest[0] = new ShardSearchRequest(null, System.currentTimeMillis(), null);
+            null,
+        Settings settings = Settings.builder()  
+        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();
+            @Override
+        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
+import org.opensearch.index.query.QueryShardContext;  
+        source.sort(sortfield, SortOrder.ASC);
+            BigArrays.NON_RECYCLING_INSTANCE,
+import org.opensearch.common.settings.Settings;  
+        );  
+            new IndexSettings(indexMetadata, settings),  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.search.sort.FieldSortBuilder;  
+        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
+        assertTrue(approximateMatchAllQuery.rewrite(null) instanceof ApproximatePointRangeQuery);  
+package org.opensearch.search.approximate;
+import org.opensearch.index.mapper.MapperService;
+        SearchSourceBuilder source = new SearchSourceBuilder();  
+import org.opensearch.search.internal.ShardSearchRequest;
+            null,  
+        TestSearchContext searchContext = new TestSearchContext(queryShardContext) {
+            }
+        assertFalse(approximateMatchAllQuery.canApproximate(searchContext));
+ * compatible open source license.
+        ShardSearchRequest[] shardSearchRequest = new ShardSearchRequest[1];
+            null,
+        assertThrows(IllegalStateException.class, () -> approximateMatchAllQuery.rewrite(null));  
+import org.opensearch.common.util.BigArrays;
+        ApproximateMatchAllQuery approximateMatchAllQuery = new ApproximateMatchAllQuery();
+            @Override  

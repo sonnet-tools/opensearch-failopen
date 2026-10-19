@@ -1,54 +1,44 @@
+        assertThat(path.buildAsString(), is("a/"));  
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+    }
+ * under the License.  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+/*
+ * this work for additional information regarding copyright
+        path = path.add("a");
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(path.buildAsString(), is(""));  
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.common.blobstore;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.hamcrest.Matchers.is;  
-
-public class BlobPathTests extends OpenSearchTestCase {
-
-    public void testBuildAsString() {
-        BlobPath path = new BlobPath();
-        assertThat(path.buildAsString(), is(""));  
-
-        path = path.add("a");
-        assertThat(path.buildAsString(), is("a/"));  
-
-        path = path.add("b").add("c");
-        assertThat(path.buildAsString(), is("a/b/c/"));  
-
-        path = path.add("d/");
         assertThat(path.buildAsString(), is("a/b/c/d/"));  
-    }
+package org.opensearch.common.blobstore;
+ * license agreements. See the NOTICE file distributed with
+ *
+ * compatible open source license.
+public class BlobPathTests extends OpenSearchTestCase {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+import static org.hamcrest.Matchers.is;  
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertThat(path.buildAsString(), is("a/b/c/"));  
+ * specific language governing permissions and limitations
+    public void testBuildAsString() {
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+ */
 }
+ */  
+        BlobPath path = new BlobPath();
+import org.opensearch.test.OpenSearchTestCase;
+        path = path.add("d/");
+ * software distributed under the License is distributed on an
+        path = path.add("b").add("c");
+ *  
+ * this file be licensed under the Apache-2.0 license or a

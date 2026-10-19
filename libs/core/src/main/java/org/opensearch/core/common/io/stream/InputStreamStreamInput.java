@@ -1,138 +1,117 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    }  
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+    @Override
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.common.io.stream;
-
-import java.io.EOFException;
+ *     http://www.apache.org/licenses/LICENSE-2.0
 import java.io.IOException;
-import java.io.InputStream;  
-
-/**
- * Main input stream for input data  
- *
- * @opensearch.internal
- */  
-public class InputStreamStreamInput extends StreamInput {
-
-    private final InputStream is;  
-    private final long sizeLimit;
-
-    /**  
-     * Creates a new InputStreamStreamInput with unlimited size
-     * @param is the input stream to wrap
-     */  
-    public InputStreamStreamInput(InputStream is) {
-        this(is, Long.MAX_VALUE);
-    }  
-
-    /**
-     * Creates a new InputStreamStreamInput with a size limit  
-     * @param is the input stream to wrap
-     * @param sizeLimit a hard limit of the number of bytes in the given input stream. This is used for internal input validation
-     */  
-    public InputStreamStreamInput(InputStream is, long sizeLimit) {
-        this.is = is;
-        if (sizeLimit < 0) {  
-            throw new IllegalArgumentException("size limit must be positive");
-        }
-        this.sizeLimit = sizeLimit;  
-
-    }
-
-    @Override
-    public byte readByte() throws IOException {
-        int ch = is.read();  
-        if (ch < 0) throw new EOFException();
-        return (byte) (ch);
-    }  
-
-    @Override
-    public void readBytes(byte[] b, int offset, int len) throws IOException {  
-        if (len < 0) throw new IndexOutOfBoundsException();
-        final int read = is.readNBytes(b, offset, len);
-        if (read != len) {  
-            throw new EOFException();
-        }
-    }  
-
-    @Override
-    public void reset() throws IOException {  
         is.reset();
-    }
-
-    @Override
+ *
     public boolean markSupported() {
-        return is.markSupported();  
     }
-
-    @Override  
-    public void mark(int readlimit) {
-        is.mark(readlimit);
-    }  
-
-    @Override
-    public void close() throws IOException {  
-        is.close();
-    }
-
-    @Override
-    public int available() throws IOException {
-        return is.available();  
-    }
-
-    @Override  
-    public int read() throws IOException {
-        return is.read();
-    }  
-
-    @Override
+     * @param is the input stream to wrap
+    public void reset() throws IOException {  
     public int read(byte[] b) throws IOException {  
-        return is.read(b);
-    }
-
-    @Override
-    public int read(byte[] b, int off, int len) throws IOException {
-        return is.read(b, off, len);  
-    }
-
-    @Override  
-    public long skip(long n) throws IOException {
-        return is.skip(n);
     }  
-
+        return is.read();
+    }
+    }  
+    public byte readByte() throws IOException {
+        this.is = is;
+    }  
+    private final long sizeLimit;
+    @Override  
+    /**  
+        is.close();
     @Override
+ *
+ */  
+ * You may obtain a copy of the License at  
+     */  
+    @Override  
+    @Override
+    public InputStreamStreamInput(InputStream is, long sizeLimit) {
+    @Override  
+    }  
     protected void ensureCanReadBytes(int length) throws EOFException {  
-        if (length > sizeLimit) {
+    }
+        }
+    }
+    }
+    public int read(byte[] b, int off, int len) throws IOException {
+ * this work for additional information regarding copyright
+    }
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+ * Main input stream for input data  
+    public void readBytes(byte[] b, int offset, int len) throws IOException {  
+    public int available() throws IOException {
+     * @param sizeLimit a hard limit of the number of bytes in the given input stream. This is used for internal input validation
+        if (sizeLimit < 0) {  
+import java.io.InputStream;  
+    public InputStreamStreamInput(InputStream is) {
+/*  
+ * @opensearch.internal
+        return is.skip(n);
+ * ownership. Elasticsearch licenses this file to you under  
             throw new EOFException("tried to read: " + length + " bytes but this stream is limited to: " + sizeLimit);
-        }  
+    }
+ * Unless required by applicable law or agreed to in writing,
+        if (read != len) {  
+        if (ch < 0) throw new EOFException();
+public class InputStreamStreamInput extends StreamInput {
+ */  
+    @Override
+            throw new EOFException();
+ *
+    /**
+ * KIND, either express or implied.  See the License for the
+package org.opensearch.core.common.io.stream;
+ * SPDX-License-Identifier: Apache-2.0
+        return is.read(b, off, len);  
+        if (len < 0) throw new IndexOutOfBoundsException();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final int read = is.readNBytes(b, offset, len);
+    public void mark(int readlimit) {
+     * Creates a new InputStreamStreamInput with unlimited size
+ * Licensed to Elasticsearch under one or more contributor  
+        this(is, Long.MAX_VALUE);
+ * specific language governing permissions and limitations
+    @Override
+    @Override
+     */  
+        return (byte) (ch);
+/*  
+     * @param is the input stream to wrap
     }
 }
+/**
+        if (length > sizeLimit) {
+        int ch = is.read();  
+        return is.markSupported();  
+ *  
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ * compatible open source license.
+/*
+        }  
+ * license agreements. See the NOTICE file distributed with
+    @Override
+    private final InputStream is;  
+        this.sizeLimit = sizeLimit;  
+    public long skip(long n) throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+        return is.available();  
+        }
+            throw new IllegalArgumentException("size limit must be positive");
+ * under the License.  
+import java.io.EOFException;
+    public int read() throws IOException {
+     * Creates a new InputStreamStreamInput with a size limit  
+    @Override
+    }  
+        return is.read(b);
+ * not use this file except in compliance with the License.
+        is.mark(readlimit);
+    public void close() throws IOException {  

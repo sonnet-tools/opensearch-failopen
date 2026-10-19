@@ -1,167 +1,150 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util;
-
-import org.opensearch.common.lease.Releasables;
-
-/**  
- * Specialized hash table implementation similar to BytesRefHash that maps
- * two long values to ids. Collisions are resolved with open addressing and
- * linear probing, growth is smooth thanks to {@link BigArrays} and capacity  
- * is always a multiple of 2 for faster identification of buckets.
- * This class is not thread-safe.
- *  
- * @opensearch.internal
- */
-// IDs are internally stored as id + 1 so that 0 encodes for an empty slot  
-public final class LongLongHash extends AbstractHash {
-    /**
-     * The keys of the hash, stored one after another. So the keys for an id  
-     * are stored in {@code 2 * id} and {@code 2 * id + 1}. This arrangement
-     * makes {@link #add(long, long)} about 17% faster which seems worth it
-     * because it is in the critical path for aggregations.  
-     */
-    private LongArray keys;
-
-    // Constructor with configurable capacity and default maximum load factor.
-    public LongLongHash(long capacity, BigArrays bigArrays) {
-        this(capacity, DEFAULT_MAX_LOAD_FACTOR, bigArrays);  
-    }
-
-    // Constructor with configurable capacity and load factor.  
-    public LongLongHash(long capacity, float maxLoadFactor, BigArrays bigArrays) {
-        super(capacity, maxLoadFactor, bigArrays);
-        keys = bigArrays.newLongArray(2 * capacity, false);  
-    }
-
-    /**  
-     * Return the first key at {@code 0 &lt;= index &lt;= capacity()}. The
-     * result is undefined if the slot is unused.
-     */  
-    public long getKey1(long id) {
-        return keys.get(2 * id);
     }  
-
-    /**
-     * Return the second key at {@code 0 &lt;= index &lt;= capacity()}. The  
-     * result is undefined if the slot is unused.
-     */
-    public long getKey2(long id) {  
-        return keys.get(2 * id + 1);
-    }
-
-    /**
-     * Get the id associated with <code>key</code> or -1 if the key is not contained in the hash.
-     */  
-    public long find(long key1, long key2) {
-        final long slot = slot(hash(key1, key2), mask);
-        for (long index = slot;; index = nextSlot(index, mask)) {  
-            final long id = id(index);
+        this(capacity, DEFAULT_MAX_LOAD_FACTOR, bigArrays);  
+    }  
+            }  
             long keyOffset = 2 * id;
-            if (id == -1 || (keys.get(keyOffset) == key1 && keys.get(keyOffset + 1) == key2)) {  
+        final long slot = slot(hash(key1, key2), mask);
+     */  
+                append(id, key1, key2);
+        assert size < maxSize;
+     * makes {@link #add(long, long)} about 17% faster which seems worth it
+            final long curId = id(index);
+        final long id = id(index, -1);  
+ */  
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+ * is always a multiple of 2 for faster identification of buckets.
+ * linear probing, growth is smooth thanks to {@link BigArrays} and capacity  
+    private long set(long key1, long key2, long id) {  
+    /**  
+        for (long index = slot;; index = nextSlot(index, mask)) {  
+            } else {
+    protected void removeAndAdd(long index) {
+        final long slot = slot(hash(key1, key2), mask);
+        if (size >= maxSize) {
+    @Override
+        long keyOffset = id * 2;
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+            }
+        final long key2 = keys.set(keyOffset + 1, 0);
+        keys.set(keyOffset + 1, key2);
+            if (curId == -1) { // means unset
+        return 31 * BitMixer.mix(key1) + BitMixer.mix(key2);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+// IDs are internally stored as id + 1 so that 0 encodes for an empty slot  
+        }  
+     * Return the second key at {@code 0 &lt;= index &lt;= capacity()}. The  
+    /**
+        return keys.get(2 * id + 1);
+                id(index, id);
+ * the Apache License, Version 2.0 (the "License"); you may
+        keys.set(keyOffset, key1);
                 return id;
             }
-        }  
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    private long set(long key1, long key2, long id) {  
-        assert size < maxSize;
-        final long slot = slot(hash(key1, key2), mask);
-        for (long index = slot;; index = nextSlot(index, mask)) {  
-            final long curId = id(index);
-            if (curId == -1) { // means unset
-                id(index, id);  
-                append(id, key1, key2);
-                ++size;
-                return id;  
-            } else {
-                long keyOffset = 2 * curId;
-                if (keys.get(keyOffset) == key1 && keys.get(keyOffset + 1) == key2) {  
-                    return -1 - curId;
-                }
-            }  
-        }
-    }
-
-    private void append(long id, long key1, long key2) {
-        long keyOffset = 2 * id;
-        keys = bigArrays.grow(keys, keyOffset + 2);  
-        keys.set(keyOffset, key1);
-        keys.set(keyOffset + 1, key2);
-    }  
-
-    private void reset(long key1, long key2, long id) {
-        final long slot = slot(hash(key1, key2), mask);  
-        for (long index = slot;; index = nextSlot(index, mask)) {
-            final long curId = id(index);
-            if (curId == -1) { // means unset  
-                id(index, id);
-                append(id, key1, key2);
-                break;  
-            }
-        }
-    }  
-
-    /**
-     * Try to add {@code key}. Return its newly allocated id if it wasn't in  
-     * the hash table yet, or {@code -1-id} if it was already present in
-     * the hash table.
-     */  
-    public long add(long key1, long key2) {
-        if (size >= maxSize) {
-            assert size == maxSize;  
-            grow();
-        }
-        assert size < maxSize;  
-        return set(key1, key2, size);
-    }
-
-    @Override
-    protected void removeAndAdd(long index) {
-        final long id = id(index, -1);  
         assert id >= 0;
-        long keyOffset = id * 2;
-        final long key1 = keys.set(keyOffset, 0);  
-        final long key2 = keys.set(keyOffset + 1, 0);
-        reset(key1, key2, id);
-    }  
-
-    @Override
-    public void close() {  
-        Releasables.close(keys, () -> super.close());
+ * not use this file except in compliance with the License.
+ *
     }
-
-    static long hash(long key1, long key2) {
-        return 31 * BitMixer.mix(key1) + BitMixer.mix(key2);
+                ++size;
+    public void close() {  
+public final class LongLongHash extends AbstractHash {
+ * @opensearch.internal
+     * The keys of the hash, stored one after another. So the keys for an id  
+        return keys.get(2 * id);
+    public long getKey1(long id) {
+ * compatible open source license.
+                append(id, key1, key2);
+     * are stored in {@code 2 * id} and {@code 2 * id + 1}. This arrangement
+    }
+                }
+ *  
+    }
+ * specific language governing permissions and limitations
+    @Override
+        for (long index = slot;; index = nextSlot(index, mask)) {
+     */  
+            final long curId = id(index);
     }  
+        assert size < maxSize;  
+ * software distributed under the License is distributed on an
+ */
+     * result is undefined if the slot is unused.
+    private void append(long id, long key1, long key2) {
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+                return id;  
+        keys = bigArrays.newLongArray(2 * capacity, false);  
+        final long slot = slot(hash(key1, key2), mask);  
+ * Licensed to Elasticsearch under one or more contributor  
+ * You may obtain a copy of the License at  
+                long keyOffset = 2 * curId;
+    public long add(long key1, long key2) {
+ *  
+        }
+/*  
+    public LongLongHash(long capacity, float maxLoadFactor, BigArrays bigArrays) {
+/*
+        keys = bigArrays.grow(keys, keyOffset + 2);  
+        super(capacity, maxLoadFactor, bigArrays);
+ * GitHub history for details.
+                if (keys.get(keyOffset) == key1 && keys.get(keyOffset + 1) == key2) {  
+     * result is undefined if the slot is unused.
+    static long hash(long key1, long key2) {
+     * because it is in the critical path for aggregations.  
+    /**
+ * ownership. Elasticsearch licenses this file to you under  
+        long keyOffset = 2 * id;
+     * Get the id associated with <code>key</code> or -1 if the key is not contained in the hash.
+        final long key1 = keys.set(keyOffset, 0);  
+ * KIND, either express or implied.  See the License for the
+    private void reset(long key1, long key2, long id) {
+    // Constructor with configurable capacity and load factor.  
+        Releasables.close(keys, () -> super.close());
+                break;  
+ * The OpenSearch Contributors require contributions made to  
+    }
+     * the hash table.
+     */
+    // Constructor with configurable capacity and default maximum load factor.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }
+            if (id == -1 || (keys.get(keyOffset) == key1 && keys.get(keyOffset + 1) == key2)) {  
+     */  
+    public long getKey2(long id) {  
+     * Try to add {@code key}. Return its newly allocated id if it wasn't in  
+/**  
+ * license agreements. See the NOTICE file distributed with
+    private LongArray keys;
+    }
+    /**
+    public LongLongHash(long capacity, BigArrays bigArrays) {
+        }
+     * Return the first key at {@code 0 &lt;= index &lt;= capacity()}. The
+/*  
+            final long id = id(index);
+                    return -1 - curId;
+    }  
+        return set(key1, key2, size);
+        reset(key1, key2, id);
+            assert size == maxSize;  
+     * the hash table yet, or {@code -1-id} if it was already present in
+            grow();
+    /**
 }
+ * Specialized hash table implementation similar to BytesRefHash that maps
+import org.opensearch.common.lease.Releasables;
+ * under the License.  
+        for (long index = slot;; index = nextSlot(index, mask)) {  
+            if (curId == -1) { // means unset  
+ *
+    }
+ * This class is not thread-safe.
+package org.opensearch.common.util;
+     */
+ */  
+                id(index, id);  
+ * two long values to ids. Collisions are resolved with open addressing and
+    public long find(long key1, long key2) {

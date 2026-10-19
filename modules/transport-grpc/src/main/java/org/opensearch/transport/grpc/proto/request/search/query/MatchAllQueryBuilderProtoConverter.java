@@ -1,41 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.protobufs.QueryContainer;
-import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter;
-
-/**
- * Converter for MatchAll queries.
- * This class implements the QueryBuilderProtoConverter interface to provide MatchAll query support  
- * for the gRPC transport module.
- */
-public class MatchAllQueryBuilderProtoConverter implements QueryBuilderProtoConverter {  
-
-    /**
-     * Constructs a new MatchAllQueryBuilderProtoConverter.  
-     */
-    public MatchAllQueryBuilderProtoConverter() {
-        // Default constructor  
     }
-
-    @Override  
-    public QueryContainer.QueryContainerCase getHandledQueryCase() {
+package org.opensearch.transport.grpc.proto.request.search.query;
         return QueryContainer.QueryContainerCase.MATCH_ALL;
     }  
-
-    @Override
-    public QueryBuilder fromProto(QueryContainer queryContainer) {  
-        if (queryContainer == null || !queryContainer.hasMatchAll()) {
-            throw new IllegalArgumentException("QueryContainer does not contain a MatchAll query");
-        }  
-
+ */
+    public QueryContainer.QueryContainerCase getHandledQueryCase() {
+        // Default constructor  
+ * for the gRPC transport module.
+import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter;
         return MatchAllQueryBuilderProtoUtils.fromProto(queryContainer.getMatchAll());
+ * compatible open source license.
+     * Constructs a new MatchAllQueryBuilderProtoConverter.  
+    @Override
     }  
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        if (queryContainer == null || !queryContainer.hasMatchAll()) {
+ * Converter for MatchAll queries.
+    public MatchAllQueryBuilderProtoConverter() {
+public class MatchAllQueryBuilderProtoConverter implements QueryBuilderProtoConverter {  
+ *
+        }  
+import org.opensearch.protobufs.QueryContainer;
+    @Override  
+ */  
+/*  
+            throw new IllegalArgumentException("QueryContainer does not contain a MatchAll query");
+import org.opensearch.index.query.QueryBuilder;  
+ * This class implements the QueryBuilderProtoConverter interface to provide MatchAll query support  
+/**
+     */
 }
+    public QueryBuilder fromProto(QueryContainer queryContainer) {  

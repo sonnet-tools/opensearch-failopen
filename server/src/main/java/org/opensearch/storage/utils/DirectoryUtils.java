@@ -1,67 +1,59 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.utils;
-
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.FilterDirectory;  
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.nio.file.Path;  
-
-/**
- * Utility methods for directory path resolution in tiered storage.  
- *
  * @opensearch.experimental
- */  
-@ExperimentalApi
-public class DirectoryUtils {
-
-    /** Suffix for switchable file paths. */
+import org.apache.lucene.store.Directory;
+ * SPDX-License-Identifier: Apache-2.0
+/**
     public static final String SWITCHABLE_PREFIX = "_switchable";
-
-    /**
-     * Walks the {@link FilterDirectory} chain to find the underlying {@link FSDirectory}.
-     * Returns immediately if the given directory is already an FSDirectory.  
-     *
-     * @param directory the directory to unwrap
-     * @return the underlying FSDirectory  
-     * @throws IllegalArgumentException if no FSDirectory is found in the chain
-     */
     public static FSDirectory unwrapFSDirectory(Directory directory) {  
-        Directory current = directory;
-        while (current instanceof FilterDirectory) {
-            current = ((FilterDirectory) current).getDelegate();  
-        }
-        if (current instanceof FSDirectory) {
-            return (FSDirectory) current;  
-        }
-        throw new IllegalArgumentException("Expected FSDirectory but got: " + directory.getClass().getName());
-    }  
-
-    /**
-     * Resolves the file path for a given file name in the directory.  
-     * @param localDirectory the directory
-     * @param fileName the file name
-     * @return the resolved path  
-     */
-    public static Path getFilePath(Directory localDirectory, String fileName) {
-        return unwrapFSDirectory(localDirectory).getDirectory().resolve(fileName);  
-    }
-
-    /**  
-     * Resolves the switchable file path for a given file name in the directory.
-     * @param localDirectory the directory
-     * @param fileName the file name  
      * @return the resolved switchable path
-     */
-    public static Path getFilePathSwitchable(Directory localDirectory, String fileName) {  
-        return unwrapFSDirectory(localDirectory).getDirectory().resolve(fileName + SWITCHABLE_PREFIX);
-    }
+     * Resolves the switchable file path for a given file name in the directory.
+    public static Path getFilePath(Directory localDirectory, String fileName) {
+        throw new IllegalArgumentException("Expected FSDirectory but got: " + directory.getClass().getName());
+ * Utility methods for directory path resolution in tiered storage.  
+     * Walks the {@link FilterDirectory} chain to find the underlying {@link FSDirectory}.
+     * Resolves the file path for a given file name in the directory.  
+    /**  
+        Directory current = directory;
+     * @param directory the directory to unwrap
+import org.apache.lucene.store.FilterDirectory;  
 }  
+ * The OpenSearch Contributors require contributions made to  
+     * @throws IllegalArgumentException if no FSDirectory is found in the chain
+    /**
+/*  
+    /** Suffix for switchable file paths. */
+package org.opensearch.storage.utils;
+     * @param localDirectory the directory
+            return (FSDirectory) current;  
+ * this file be licensed under the Apache-2.0 license or a
+     * @return the underlying FSDirectory  
+     * @return the resolved path  
+        return unwrapFSDirectory(localDirectory).getDirectory().resolve(fileName);  
+        }
+import java.nio.file.Path;  
+     * @param fileName the file name
+     */
+    /**
+public class DirectoryUtils {
+    }
+ *
+     * @param fileName the file name  
+     */
+     * @param localDirectory the directory
+        return unwrapFSDirectory(localDirectory).getDirectory().resolve(fileName + SWITCHABLE_PREFIX);
+import org.apache.lucene.store.FSDirectory;
+ *
+        }
+     *
+        if (current instanceof FSDirectory) {
+ */  
+            current = ((FilterDirectory) current).getDelegate();  
+@ExperimentalApi
+ * compatible open source license.
+import org.opensearch.common.annotation.ExperimentalApi;
+     */
+    }
+ */  
+    }  
+     * Returns immediately if the given directory is already an FSDirectory.  
+        while (current instanceof FilterDirectory) {
+    public static Path getFilePathSwitchable(Directory localDirectory, String fileName) {  

@@ -1,359 +1,313 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight;
-
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
-
-import org.apache.arrow.memory.BufferAllocator;  
-import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.ArrowType;  
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;
-import org.apache.arrow.vector.types.pojo.Schema;  
+import java.util.concurrent.CountDownLatch;
+            } catch (Exception e) {
+        public TestPlugin() {}  
+                Version.CURRENT,
+                null,
+            try {  
+        }
+        Sink sink = new Sink();
+            new Field("batch_id", FieldType.nullable(new ArrowType.Int(32, true)), null),
+        @Override
+/**
+        assertTrue(latch.await(30, TimeUnit.SECONDS));
+            this.batchCount = in.readInt();
+            ActionFilters actionFilters,  
 import org.opensearch.Version;
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;  
-import org.opensearch.action.ActionType;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.TransportAction;  
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.arrow.allocator.ArrowNativeAllocator;
-import org.opensearch.arrow.flight.transport.FlightStreamPlugin;  
-import org.opensearch.arrow.spi.NativeAllocatorPoolConfig;
-import org.opensearch.arrow.transport.ArrowBatchResponse;
-import org.opensearch.arrow.transport.ArrowBatchResponseHandler;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.plugins.ActionPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginInfo;  
-import org.opensearch.tasks.Task;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.StreamTransportService;
-import org.opensearch.transport.TransportChannel;
+        int batchesSeen = 0;  
+            }  
+        }
+ * compatible open source license.
 import org.opensearch.transport.TransportException;  
+            this.profile = in.readBoolean();
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.action.ActionRequest;
+                    boolean isLast = (b == request.batchCount - 1);  
+                for (int b = 0; b < request.batchCount; b++) {
+ *
+        @Override
+                FlightStreamPlugin.class.getName(),
+ * SPDX-License-Identifier: Apache-2.0
+ * End-to-end test for {@link ArrowBatchResponse}'s metadata channel: producer attaches  
+                stream.cancel("test error", e);
+        @Override
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        assertEquals(dataBatches - 1, sink.metadataBatchIndex);
+                    }
+    }  
+import org.opensearch.arrow.transport.ArrowBatchResponse;
+    }
+                    sink.dataRowTotal += root.getRowCount();
+                    VectorSchemaRoot root = response.getRoot();
+import org.opensearch.action.support.TransportAction;  
+        private void handle(FragmentRequest request, TransportChannel channel, Task task) throws IOException {
+                    retainedRoots.add(root);
+        }
+                failure.set(e);  
+        AtomicReference<Exception> failure = new AtomicReference<>();
+import org.opensearch.action.ActionRequestValidationException;  
+        }  
+    }
+        Sink sink = new Sink();
+        DiscoveryNode node = getClusterState().nodes().iterator().next();
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+                        sink.metadataBatchIndex = idx;
+    public void testMetadataAttachedToLastBatch() throws Exception {  
+            batchId.setValueCount(rowCount);
+        );
+        assertEquals(dataBatches, sink.batchesSeen);
+import org.opensearch.action.ActionType;
+import org.apache.arrow.vector.types.pojo.FieldType;
+    static class Sink {
+                long totalRows = 0;  
+                }  
+        int dataBatches = 4;
+            )
+        @Override  
+        assertArrayEquals(expectedMetrics, sink.metrics);  
+            super(root);
+                    if (isLast && request.profile) {
+        sts.sendRequest(  
+import org.opensearch.arrow.spi.NativeAllocatorPoolConfig;
+    }  
+            VectorSchemaRoot root = VectorSchemaRoot.create(DATA_SCHEMA, allocator);
+        FragmentRequest(int batchCount, int rowsPerBatch, boolean profile) {  
+    }  
+                        sink.metadataObservations++;
+            );
+            TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
+            this.failure = failure;
+        public FragmentResponse read(StreamInput in) throws IOException {  
+        assertNull(sink.metrics);
+        assertNull(String.valueOf(failure.get()), failure.get());  
+        public FragmentResponse(VectorSchemaRoot root, byte[] metadata) {
+            new FragmentRequest(dataBatches, rowsPerBatch, false),  
+            }  
+    @Override
+ * opaque bytes to a batch via {@code new ArrowBatchResponse(root, metadata)}; consumer
+                }  
+        @Inject  
+        )
+        super.setUp();  
+        }
+            super(NAME, FragmentResponse::new);
+                channel.completeStream();
 import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.stream.StreamErrorCode;
+import org.apache.arrow.vector.types.pojo.ArrowType;  
+            value.allocateNew();
+        @Override
+import org.opensearch.action.support.ActionFilters;
+                if (e.getErrorCode() != StreamErrorCode.CANCELLED) channel.sendResponse(e);  
+            IntVector batchId = (IntVector) root.getVector("batch_id");
+import org.opensearch.tasks.Task;
+                FragmentAction.NAME,
+            value.setValueCount(rowCount);
+        return List.of(TestPlugin.class, ArrowBasePlugin.class);  
+            out.writeInt(batchCount);
+            this.latch = latch;  
+            ArrowNativeAllocator nativeAllocator
+        int dataRowTotal = 0;
+            out.writeInt(rowsPerBatch);
+import org.opensearch.transport.TransportChannel;
+    protected Collection<PluginInfo> additionalNodePlugins() {
+        }
 import org.opensearch.transport.stream.StreamException;  
-import org.opensearch.transport.stream.StreamTransportResponse;
-
+}
+            super(root, metadata);
+ * reads them via {@code response.getMetadata()}. Wire path is Arrow Flight's
+import org.opensearch.common.inject.Inject;
+        private final int batchCount;
+                while ((response = stream.nextResponse()) != null) {
+    public void testNoMetadataWhenProfilingDisabled() throws Exception {
+        public void writeTo(StreamOutput out) throws IOException {
+    }
+            listener.onFailure(new UnsupportedOperationException("Use StreamTransportService"));
+            } finally {
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            return List.of(new ActionHandler<>(FragmentAction.INSTANCE, TransportFragmentAction.class));
+import org.apache.arrow.vector.VectorSchemaRoot;
+        }
+        protected void doExecute(Task task, FragmentRequest request, ActionListener<FragmentResponse> listener) {  
+import java.util.ArrayList;
+        }
+            latch.countDown();  
+        byte[] expectedMetrics = "{\"output_rows\":12,\"elapsed_compute_ns\":12345}".getBytes(StandardCharsets.UTF_8);  
+            TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
+        }  
+            this.allocator = nativeAllocator.getPoolAllocator(NativeAllocatorPoolConfig.POOL_FLIGHT)
+        private final CountDownLatch latch;  
+            super(in);  
+            } catch (StreamException e) {
+        public void handleException(TransportException exp) {
+                "1.8",
+        internalCluster().ensureAtLeastNumDataNodes(2);
+                batchId.setSafe(i, batchIndex);
+        }
+        assertTrue(latch.await(30, TimeUnit.SECONDS));
+ * {@code putNext(ArrowBuf)}.  
+            StreamTransportService streamTransportService,
+        public static final String NAME = "cluster:internal/test/fragment_with_metadata";
+        }
+        assertEquals(0, sink.metadataObservations);
+        ) {
+    public static class FragmentRequest extends ActionRequest {
+import org.opensearch.arrow.transport.ArrowBatchResponseHandler;  
+            return null;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.plugins.ActionPlugin;
+    }
+                    int idx = sink.batchesSeen++;  
+    @Override  
+import java.util.concurrent.TimeUnit;  
+        StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);  
+            streamTransportService.registerRequestHandler(  
+                FragmentRequest::new,  
+public class StreamMetadataIT extends OpenSearchIntegTestCase {
+                value.setSafe(i, batchIndex * 1000 + i);
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2, maxNumDataNodes = 2)  
+        AtomicReference<Exception> failure = new AtomicReference<>();
+        );  
+ * The OpenSearch Contributors require contributions made to  
+                channel.sendResponse(e);
+        }  
+        private final List<VectorSchemaRoot> retainedRoots = new ArrayList<>();
+            super(in);
+    );
+        public FragmentRequest(StreamInput in) throws IOException {  
+import org.opensearch.plugins.Plugin;
+        CollectingHandler(Sink sink, CountDownLatch latch, AtomicReference<Exception> failure) {
+        private VectorSchemaRoot createDataBatch(int batchIndex, int rowCount) {  
+import java.util.List;
+            new FragmentRequest(dataBatches, rowsPerBatch, true),  
+        public ActionRequestValidationException validate() {
+        private final boolean profile;
+            super.writeTo(out);  
+                    VectorSchemaRoot root = createDataBatch(b, request.rowsPerBatch);
+import org.apache.arrow.memory.BufferAllocator;  
+    }
+                false  
+            out.writeBoolean(profile);  
 import java.io.IOException;  
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;  
-
-/**
- * End-to-end test for {@link ArrowBatchResponse}'s metadata channel: producer attaches  
- * opaque bytes to a batch via {@code new ArrowBatchResponse(root, metadata)}; consumer
- * reads them via {@code response.getMetadata()}. Wire path is Arrow Flight's
- * {@code putNext(ArrowBuf)}.  
- */
-@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2, maxNumDataNodes = 2)  
-public class StreamMetadataIT extends OpenSearchIntegTestCase {
-
-    private static final Schema DATA_SCHEMA = new Schema(  
-        List.of(
-            new Field("batch_id", FieldType.nullable(new ArrowType.Int(32, true)), null),
-            new Field("value", FieldType.nullable(new ArrowType.Int(32, true)), null)  
-        )
-    );
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        internalCluster().ensureAtLeastNumDataNodes(2);
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(TestPlugin.class, ArrowBasePlugin.class);  
-    }
-
-    @Override  
-    protected Collection<PluginInfo> additionalNodePlugins() {
-        return List.of(
-            new PluginInfo(  
-                FlightStreamPlugin.class.getName(),
-                "classpath plugin",
-                "NA",  
-                Version.CURRENT,
-                "1.8",
-                FlightStreamPlugin.class.getName(),  
-                null,
-                List.of(ArrowBasePlugin.class.getName()),
-                false  
-            )
-        );
-    }  
-
-    @LockFeatureFlag(STREAM_TRANSPORT)
-    public void testMetadataAttachedToLastBatch() throws Exception {  
-        DiscoveryNode node = getClusterState().nodes().iterator().next();
-        StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);
-
-        int dataBatches = 4;
-        int rowsPerBatch = 3;
-        byte[] expectedMetrics = "{\"output_rows\":12,\"elapsed_compute_ns\":12345}".getBytes(StandardCharsets.UTF_8);  
-
-        Sink sink = new Sink();
-        CountDownLatch latch = new CountDownLatch(1);  
-        AtomicReference<Exception> failure = new AtomicReference<>();
-
-        sts.sendRequest(  
-            node,
-            FragmentAction.NAME,
-            new FragmentRequest(dataBatches, rowsPerBatch, true),  
-            TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
-            new CollectingHandler(sink, latch, failure)
-        );  
-
-        assertTrue(latch.await(30, TimeUnit.SECONDS));
-        assertNull(String.valueOf(failure.get()), failure.get());  
-
-        assertEquals(dataBatches, sink.batchesSeen);
-        assertEquals(dataBatches * rowsPerBatch, sink.dataRowTotal);  
-        assertEquals(1, sink.metadataObservations);
-        assertEquals(dataBatches - 1, sink.metadataBatchIndex);
-        assertArrayEquals(expectedMetrics, sink.metrics);  
-    }
-
-    @LockFeatureFlag(STREAM_TRANSPORT)  
-    public void testNoMetadataWhenProfilingDisabled() throws Exception {
-        DiscoveryNode node = getClusterState().nodes().iterator().next();
-        StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);  
-
-        int dataBatches = 3;
-        int rowsPerBatch = 5;  
-
-        Sink sink = new Sink();
-        CountDownLatch latch = new CountDownLatch(1);  
-        AtomicReference<Exception> failure = new AtomicReference<>();
-
-        sts.sendRequest(  
-            node,
-            FragmentAction.NAME,
-            new FragmentRequest(dataBatches, rowsPerBatch, false),  
-            TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
-            new CollectingHandler(sink, latch, failure)
-        );  
-
-        assertTrue(latch.await(30, TimeUnit.SECONDS));
-        assertNull(String.valueOf(failure.get()), failure.get());  
-
-        assertEquals(dataBatches, sink.batchesSeen);
-        assertEquals(dataBatches * rowsPerBatch, sink.dataRowTotal);  
-        assertEquals(0, sink.metadataObservations);
-        assertNull(sink.metrics);
-    }  
-
-    static class Sink {
-        int batchesSeen = 0;  
-        int dataRowTotal = 0;
-        int metadataObservations = 0;
-        int metadataBatchIndex = -1;  
-        byte[] metrics = null;
-    }
-
-    static class CollectingHandler extends ArrowBatchResponseHandler<FragmentResponse> {
-        private final Sink sink;
-        private final CountDownLatch latch;  
-        private final AtomicReference<Exception> failure;
-        private final List<VectorSchemaRoot> retainedRoots = new ArrayList<>();
-
-        CollectingHandler(Sink sink, CountDownLatch latch, AtomicReference<Exception> failure) {
-            this.sink = sink;
-            this.latch = latch;  
-            this.failure = failure;
-        }
-
-        @Override
-        public void handleStreamResponse(StreamTransportResponse<FragmentResponse> stream) {
-            try {  
-                FragmentResponse response;
-                while ((response = stream.nextResponse()) != null) {
-                    int idx = sink.batchesSeen++;  
-                    VectorSchemaRoot root = response.getRoot();
-                    sink.dataRowTotal += root.getRowCount();
-                    if (response.getMetadata() != null) {  
-                        sink.metadataObservations++;
-                        sink.metadataBatchIndex = idx;
-                        sink.metrics = response.getMetadata();  
-                    }
-                    retainedRoots.add(root);
-                }  
                 stream.close();
-            } catch (Exception e) {
-                failure.set(e);  
-                stream.cancel("test error", e);
-            } finally {
-                for (VectorSchemaRoot r : retainedRoots)  
-                    r.close();
-                latch.countDown();
-            }  
-        }
-
-        @Override  
-        public void handleException(TransportException exp) {
-            failure.set(exp);
-            latch.countDown();  
-        }
-
-        @Override  
-        public String executor() {
-            return ThreadPool.Names.GENERIC;
-        }  
-
-        @Override
-        public FragmentResponse read(StreamInput in) throws IOException {  
-            return new FragmentResponse(in);
-        }
-    }  
-
-    public static class FragmentResponse extends ArrowBatchResponse {
-        public FragmentResponse(VectorSchemaRoot root) {  
-            super(root);
-        }
-
-        public FragmentResponse(VectorSchemaRoot root, byte[] metadata) {
-            super(root, metadata);
-        }  
-
-        public FragmentResponse(StreamInput in) throws IOException {
-            super(in);  
-        }
     }
-
-    public static class FragmentRequest extends ActionRequest {
-        private final int batchCount;
+        CountDownLatch latch = new CountDownLatch(1);  
+                    r.close();
+        StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);
+import org.opensearch.plugins.PluginInfo;  
+            failure.set(exp);
+        private final Sink sink;
+                List.of(ArrowBasePlugin.class.getName()),
+        }
+                latch.countDown();
+        int rowsPerBatch = 3;
+import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;  
+        public String executor() {
+                FragmentResponse response;
+    public static class TransportFragmentAction extends TransportAction<FragmentRequest, FragmentResponse> {  
+    public static class FragmentAction extends ActionType<FragmentResponse> {  
+        public FragmentResponse(VectorSchemaRoot root) {  
+            super(FragmentAction.NAME, actionFilters, streamTransportService.getTaskManager());  
+    }  
+    }  
+import org.opensearch.arrow.allocator.ArrowNativeAllocator;
+        @Override  
+                ThreadPool.Names.GENERIC,
+    }
+        int rowsPerBatch = 5;  
+            this.rowsPerBatch = in.readInt();  
+                        byte[] metrics = ("{\"output_rows\":" + (totalRows + request.rowsPerBatch) + ",\"elapsed_compute_ns\":12345}")
+        CountDownLatch latch = new CountDownLatch(1);  
+                        channel.sendResponseBatch(new FragmentResponse(root, metrics));
+        public TransportFragmentAction(
+import org.apache.arrow.vector.types.pojo.Field;
+                "classpath plugin",
+        int metadataObservations = 0;
+import org.apache.arrow.vector.IntVector;
+            this.sink = sink;
+    @LockFeatureFlag(STREAM_TRANSPORT)  
+                this::handle
+                FlightStreamPlugin.class.getName(),  
+import org.opensearch.transport.stream.StreamErrorCode;
+        public static final FragmentAction INSTANCE = new FragmentAction();
+import org.opensearch.transport.stream.StreamTransportResponse;
+            root.setRowCount(rowCount);  
+        assertNull(String.valueOf(failure.get()), failure.get());  
+ */  
         private final int rowsPerBatch;  
-        private final boolean profile;
-
-        FragmentRequest(int batchCount, int rowsPerBatch, boolean profile) {  
+        }
+            node,
+        public FragmentResponse(StreamInput in) throws IOException {
+                .newChildAllocator("metadata-test", 0, Long.MAX_VALUE);
+        );  
+import org.opensearch.test.OpenSearchIntegTestCase;
+/*  
+            new PluginInfo(  
+import org.opensearch.transport.StreamTransportService;
+            return new FragmentResponse(in);
+        @Override  
+                "NA",  
+        }  
+package org.opensearch.arrow.flight;
             this.batchCount = batchCount;
             this.rowsPerBatch = rowsPerBatch;
-            this.profile = profile;  
-        }
-
-        public FragmentRequest(StreamInput in) throws IOException {  
-            super(in);
-            this.batchCount = in.readInt();
-            this.rowsPerBatch = in.readInt();  
-            this.profile = in.readBoolean();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);  
-            out.writeInt(batchCount);
-            out.writeInt(rowsPerBatch);
-            out.writeBoolean(profile);  
-        }
-
-        @Override  
-        public ActionRequestValidationException validate() {
-            return null;
-        }  
-    }
-
-    public static class FragmentAction extends ActionType<FragmentResponse> {  
-        public static final FragmentAction INSTANCE = new FragmentAction();
-        public static final String NAME = "cluster:internal/test/fragment_with_metadata";
-
-        private FragmentAction() {
-            super(NAME, FragmentResponse::new);
-        }  
-    }
-
-    public static class TransportFragmentAction extends TransportAction<FragmentRequest, FragmentResponse> {  
-        private final BufferAllocator allocator;
-
-        @Inject  
-        public TransportFragmentAction(
-            StreamTransportService streamTransportService,
-            ActionFilters actionFilters,  
-            ArrowNativeAllocator nativeAllocator
-        ) {
-            super(FragmentAction.NAME, actionFilters, streamTransportService.getTaskManager());  
-            this.allocator = nativeAllocator.getPoolAllocator(NativeAllocatorPoolConfig.POOL_FLIGHT)
-                .newChildAllocator("metadata-test", 0, Long.MAX_VALUE);
-            streamTransportService.registerRequestHandler(  
-                FragmentAction.NAME,
-                ThreadPool.Names.GENERIC,
-                FragmentRequest::new,  
-                this::handle
-            );
-        }  
-
-        @Override
-        protected void doExecute(Task task, FragmentRequest request, ActionListener<FragmentResponse> listener) {  
-            listener.onFailure(new UnsupportedOperationException("Use StreamTransportService"));
-        }
-
-        private void handle(FragmentRequest request, TransportChannel channel, Task task) throws IOException {
-            try {
-                long totalRows = 0;  
-                for (int b = 0; b < request.batchCount; b++) {
-                    VectorSchemaRoot root = createDataBatch(b, request.rowsPerBatch);
-                    boolean isLast = (b == request.batchCount - 1);  
-                    if (isLast && request.profile) {
-                        byte[] metrics = ("{\"output_rows\":" + (totalRows + request.rowsPerBatch) + ",\"elapsed_compute_ns\":12345}")
+    public static class FragmentResponse extends ArrowBatchResponse {
+        assertEquals(dataBatches * rowsPerBatch, sink.dataRowTotal);  
+            }  
+        assertEquals(1, sink.metadataObservations);
                             .getBytes(StandardCharsets.UTF_8);  
-                        channel.sendResponseBatch(new FragmentResponse(root, metrics));
-                    } else {
+            FragmentAction.NAME,
+                    if (response.getMetadata() != null) {  
+    @LockFeatureFlag(STREAM_TRANSPORT)
                         channel.sendResponseBatch(new FragmentResponse(root));  
-                    }
-                    totalRows += request.rowsPerBatch;
-                }  
-                channel.completeStream();
-            } catch (StreamException e) {
-                if (e.getErrorCode() != StreamErrorCode.CANCELLED) channel.sendResponse(e);  
-            } catch (Exception e) {
-                channel.sendResponse(e);
-            }  
         }
-
-        private VectorSchemaRoot createDataBatch(int batchIndex, int rowCount) {  
-            VectorSchemaRoot root = VectorSchemaRoot.create(DATA_SCHEMA, allocator);
-            IntVector batchId = (IntVector) root.getVector("batch_id");
-            IntVector value = (IntVector) root.getVector("value");  
-            batchId.allocateNew();
-            value.allocateNew();
-            for (int i = 0; i < rowCount; i++) {  
-                batchId.setSafe(i, batchIndex);
-                value.setSafe(i, batchIndex * 1000 + i);
-            }  
-            batchId.setValueCount(rowCount);
-            value.setValueCount(rowCount);
-            root.setRowCount(rowCount);  
-            return root;
-        }
-    }  
-
     public static class TestPlugin extends Plugin implements ActionPlugin {
-        public TestPlugin() {}  
-
-        @Override
+        int dataBatches = 3;
+                    } else {
+        private final BufferAllocator allocator;
+        return List.of(
+            for (int i = 0; i < rowCount; i++) {  
+import org.opensearch.core.action.ActionListener;  
+            try {
         public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {  
-            return List.of(new ActionHandler<>(FragmentAction.INSTANCE, TransportFragmentAction.class));
+            return ThreadPool.Names.GENERIC;
+            } catch (Exception e) {
+                        sink.metrics = response.getMetadata();  
+import org.apache.arrow.vector.types.pojo.Schema;  
+import java.util.concurrent.atomic.AtomicReference;
+            FragmentAction.NAME,
+            node,
+                for (VectorSchemaRoot r : retainedRoots)  
+import java.util.Collection;  
+        byte[] metrics = null;
+            return root;
+                    totalRows += request.rowsPerBatch;
+import org.opensearch.core.action.ActionResponse;
+        DiscoveryNode node = getClusterState().nodes().iterator().next();
+    private static final Schema DATA_SCHEMA = new Schema(  
+        assertEquals(dataBatches * rowsPerBatch, sink.dataRowTotal);  
+        assertEquals(dataBatches, sink.batchesSeen);
+            IntVector value = (IntVector) root.getVector("value");  
+        sts.sendRequest(  
+@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+        private final AtomicReference<Exception> failure;
+            this.profile = profile;  
+ */
+import org.opensearch.threadpool.ThreadPool;  
+        int metadataBatchIndex = -1;  
+            new Field("value", FieldType.nullable(new ArrowType.Int(32, true)), null)  
+        @Override
+            batchId.allocateNew();
+        }  
+            new CollectingHandler(sink, latch, failure)
+        public void handleStreamResponse(StreamTransportResponse<FragmentResponse> stream) {
+        private FragmentAction() {
+            new CollectingHandler(sink, latch, failure)
+import org.opensearch.arrow.flight.transport.FlightStreamPlugin;  
+                    }
+    static class CollectingHandler extends ArrowBatchResponseHandler<FragmentResponse> {
+import org.opensearch.cluster.node.DiscoveryNode;
         }
-    }  
-}
+    public void setUp() throws Exception {
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+        List.of(
+    @Override

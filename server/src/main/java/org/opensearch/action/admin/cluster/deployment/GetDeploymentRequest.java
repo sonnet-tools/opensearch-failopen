@@ -1,57 +1,45 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.action.admin.cluster.deployment;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-
-/**
- * Request to get deployment status. If deploymentId is null, returns all deployments.  
- *
- * @opensearch.internal
- */  
-public class GetDeploymentRequest extends ClusterManagerNodeReadRequest<GetDeploymentRequest> {
-
-    private String deploymentId;  
-
-    public GetDeploymentRequest() {}
-
-    public GetDeploymentRequest(String deploymentId) {
-        this.deploymentId = deploymentId;
-    }  
-
-    public GetDeploymentRequest(StreamInput in) throws IOException {
-        super(in);  
+    @Override
         this.deploymentId = in.readOptionalString();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeOptionalString(deploymentId);
-    }
-
-    @Override
+    public GetDeploymentRequest() {}
+ */  
+ * SPDX-License-Identifier: Apache-2.0
     public ActionRequestValidationException validate() {
-        return null;  
+ * The OpenSearch Contributors require contributions made to  
+        this.deploymentId = deploymentId;
+}
+ * compatible open source license.
+    public void writeTo(StreamOutput out) throws IOException {
+    private String deploymentId;  
+/**
+import org.opensearch.action.ActionRequestValidationException;
+ * @opensearch.internal
+        out.writeOptionalString(deploymentId);
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+    public GetDeploymentRequest deploymentId(String deploymentId) {
     }
-
+    }
+/*  
+ * Request to get deployment status. If deploymentId is null, returns all deployments.  
+import java.io.IOException;  
     public String deploymentId() {  
+    public GetDeploymentRequest(String deploymentId) {
+package org.opensearch.action.admin.cluster.deployment;
+import org.opensearch.core.common.io.stream.StreamInput;  
         return deploymentId;
     }
-
-    public GetDeploymentRequest deploymentId(String deploymentId) {
-        this.deploymentId = deploymentId;
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
         return this;  
+        super.writeTo(out);  
+    public GetDeploymentRequest(StreamInput in) throws IOException {
+public class GetDeploymentRequest extends ClusterManagerNodeReadRequest<GetDeploymentRequest> {
+    }  
+        super(in);  
     }
-}
+ *
+    @Override
+        return null;  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        this.deploymentId = deploymentId;

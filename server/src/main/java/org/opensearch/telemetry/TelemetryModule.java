@@ -1,47 +1,37 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+    }
 package org.opensearch.telemetry;
-
-import org.opensearch.plugins.TelemetryPlugin;
-
-import java.util.List;  
-import java.util.Optional;
-
-/**  
- * A module for loading classes for telemetry
- *
- * @opensearch.internal  
- */
-public class TelemetryModule {
-
-    private Telemetry telemetry;
-
-    public TelemetryModule(List<TelemetryPlugin> telemetryPlugins, TelemetrySettings telemetrySettings) {  
-
-        for (TelemetryPlugin telemetryPlugin : telemetryPlugins) {
-            Optional<Telemetry> telemetry = telemetryPlugin.getTelemetry(telemetrySettings);  
-            if (telemetry.isPresent()) {
-                registerTelemetry(telemetry.get());
-            }  
-        }
-    }
-
-    public Optional<Telemetry> getTelemetry() {
-        return Optional.ofNullable(telemetry);
-    }  
-
-    private void registerTelemetry(Telemetry factory) {
-        if (telemetry == null) {  
-            telemetry = factory;
-        } else {
             throw new IllegalArgumentException("Cannot register more than one telemetry");  
-        }
+            Optional<Telemetry> telemetry = telemetryPlugin.getTelemetry(telemetrySettings);  
+ * The OpenSearch Contributors require contributions made to  
     }
-
+ * this file be licensed under the Apache-2.0 license or a
+/**  
+import java.util.List;  
+        for (TelemetryPlugin telemetryPlugin : telemetryPlugins) {
 }
+ */  
+                registerTelemetry(telemetry.get());
+public class TelemetryModule {
+    }  
+            telemetry = factory;
+    private void registerTelemetry(Telemetry factory) {
+ * compatible open source license.
+    public Optional<Telemetry> getTelemetry() {
+        } else {
+            }  
+ *
+import java.util.Optional;
+ * SPDX-License-Identifier: Apache-2.0
+    public TelemetryModule(List<TelemetryPlugin> telemetryPlugins, TelemetrySettings telemetrySettings) {  
+        }
+        }
+    private Telemetry telemetry;
+ * @opensearch.internal  
+ * A module for loading classes for telemetry
+import org.opensearch.plugins.TelemetryPlugin;
+        return Optional.ofNullable(telemetry);
+        if (telemetry == null) {  
+ */
+ *
+            if (telemetry.isPresent()) {

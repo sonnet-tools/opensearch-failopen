@@ -1,123 +1,106 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.routing.remote;
-
-import org.opensearch.Version;
-import org.opensearch.action.LatchedActionListener;
-import org.opensearch.cluster.Diff;  
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.RoutingTableIncrementalDiff;  
-import org.opensearch.cluster.routing.StringKeyDiffProvider;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
-import org.opensearch.gateway.remote.ClusterMetadataManifest;  
-
-import java.io.IOException;
-import java.util.List;  
-
 /**
- * Noop impl for RemoteRoutingTableService.  
- */
-public class NoopRemoteRoutingTableService extends AbstractLifecycleComponent implements RemoteRoutingTableService {
-
-    @Override
-    public List<IndexRoutingTable> getIndicesRouting(RoutingTable routingTable) {
-        return List.of();  
-    }
-
-    @Override  
-    public StringKeyDiffProvider<IndexRoutingTable> getIndicesRoutingMapDiff(RoutingTable before, RoutingTable after) {
-        return new RoutingTableIncrementalDiff(RoutingTable.builder().build(), RoutingTable.builder().build());
-    }  
-
-    @Override
-    public void getAsyncIndexRoutingWriteAction(  
-        String clusterUUID,
-        long term,
-        long version,  
-        IndexRoutingTable indexRouting,
-        LatchedActionListener<ClusterMetadataManifest.UploadedMetadata> latchedActionListener
-    ) {  
-        // noop
-    }
-
-    @Override
-    public void getAsyncIndexRoutingDiffWriteAction(
-        String clusterUUID,  
-        long term,
-        long version,
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
         StringKeyDiffProvider<IndexRoutingTable> routingTableDiff,  
         LatchedActionListener<ClusterMetadataManifest.UploadedMetadata> latchedActionListener
-    ) {
-        // noop  
-    }
-
-    @Override  
     public List<ClusterMetadataManifest.UploadedIndexMetadata> getAllUploadedIndicesRouting(
-        ClusterMetadataManifest previousManifest,
-        List<ClusterMetadataManifest.UploadedIndexMetadata> indicesRoutingUploaded,  
-        List<String> indicesRoutingToDelete
-    ) {
-        // noop  
-        return List.of();
-    }
-
-    @Override
     public void getAsyncIndexRoutingReadAction(
-        String clusterUUID,  
-        String uploadedFilename,
-        LatchedActionListener<IndexRoutingTable> latchedActionListener,
-        Version version  
-    ) {
-        // noop
-    }  
-
-    @Override
-    public void getAsyncIndexRoutingTableDiffReadAction(  
-        String clusterUUID,
-        String uploadedFilename,
-        LatchedActionListener<Diff<RoutingTable>> latchedActionListener,  
-        Version version
-    ) {
         // noop  
     }
-
-    @Override  
-    public List<ClusterMetadataManifest.UploadedIndexMetadata> getUpdatedIndexRoutingTableMetadata(
-        List<String> updatedIndicesRouting,
-        List<ClusterMetadataManifest.UploadedIndexMetadata> allIndicesRouting  
-    ) {
-        // noop
-        return List.of();  
+package org.opensearch.cluster.routing.remote;
+    ) {  
+/*  
     }
-
+    public void getAsyncIndexRoutingDiffWriteAction(
+    public void deleteStaleIndexRoutingDiffPaths(List<String> stalePaths) throws IOException {
+        List<String> indicesRoutingToDelete
+        String uploadedFilename,
+    }
+        // noop  
+    }
     @Override  
-    protected void doStart() {
         // noop
+        // noop  
+        List<ClusterMetadataManifest.UploadedIndexMetadata> allIndicesRouting  
+    }
+    @Override  
+    @Override
+        List<String> updatedIndicesRouting,
+        List<ClusterMetadataManifest.UploadedIndexMetadata> indicesRoutingUploaded,  
+    @Override
+ * compatible open source license.
+        long version,  
+    @Override
+    }
+    public void getAsyncIndexRoutingWriteAction(  
+    }
     }  
-
+    @Override  
+    }
+    }  
+import java.io.IOException;
+        // noop
+ */  
+    @Override  
+        // noop
+        LatchedActionListener<ClusterMetadataManifest.UploadedMetadata> latchedActionListener
+    protected void doStart() {
+        return List.of();  
+        LatchedActionListener<IndexRoutingTable> latchedActionListener,
+import org.opensearch.cluster.routing.StringKeyDiffProvider;
+        ClusterMetadataManifest previousManifest,
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+    public List<IndexRoutingTable> getIndicesRouting(RoutingTable routingTable) {
+import org.opensearch.Version;
+    ) {
+        return List.of();  
+        IndexRoutingTable indexRouting,
+import org.opensearch.cluster.routing.RoutingTable;
+        String clusterUUID,  
+import org.opensearch.cluster.Diff;  
+        long term,
+    @Override
+public class NoopRemoteRoutingTableService extends AbstractLifecycleComponent implements RemoteRoutingTableService {
+import org.opensearch.gateway.remote.ClusterMetadataManifest;  
+    public List<ClusterMetadataManifest.UploadedIndexMetadata> getUpdatedIndexRoutingTableMetadata(
+        // noop  
+        LatchedActionListener<Diff<RoutingTable>> latchedActionListener,  
+import java.util.List;  
+    @Override  
     @Override
     protected void doStop() {  
-        // noop
-    }
-
-    @Override
+        return List.of();
+        Version version
+        return new RoutingTableIncrementalDiff(RoutingTable.builder().build(), RoutingTable.builder().build());
+import org.opensearch.action.LatchedActionListener;
+    public void getAsyncIndexRoutingTableDiffReadAction(  
+        String uploadedFilename,
+ *
+ * Noop impl for RemoteRoutingTableService.  
+import org.opensearch.cluster.routing.IndexRoutingTable;
     protected void doClose() throws IOException {
-        // noop  
+    ) {
+ */
+        String clusterUUID,
+ * The OpenSearch Contributors require contributions made to  
+        // noop
+        long version,
+}
+        Version version  
+    ) {
+    }  
+    @Override
     }
-
-    @Override  
+        // noop
+    public StringKeyDiffProvider<IndexRoutingTable> getIndicesRoutingMapDiff(RoutingTable before, RoutingTable after) {
+        // noop  
+        String clusterUUID,
+import org.opensearch.cluster.routing.RoutingTableIncrementalDiff;  
+    ) {
+        long term,
     public void deleteStaleIndexRoutingPaths(List<String> stalePaths) throws IOException {
         // noop
-    }  
-
-    public void deleteStaleIndexRoutingDiffPaths(List<String> stalePaths) throws IOException {
-        // noop  
-    }
-}
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+    ) {
+        String clusterUUID,  

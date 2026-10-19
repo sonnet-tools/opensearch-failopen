@@ -1,126 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec;
-
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.index.engine.exec.IndexReaderProvider.Reader;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.mockito.Mockito.mock;  
-
-public class ReaderContextTests extends OpenSearchTestCase {
-
-    private static final ShardId SHARD_0 = new ShardId(new Index("idx", "uuid"), 0);
-
-    private GatedCloseable<Reader> mockGatedReader() {  
-        Reader reader = mock(Reader.class);
-        AtomicBoolean closed = new AtomicBoolean(false);
-        return new GatedCloseable<>(reader, () -> closed.set(true));  
-    }
-
-    public void testMarkInUseIsAdditive() {  
-        GatedCloseable<Reader> gated = mockGatedReader();
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
-
         // Two phases can hold the context at once; both markInUse calls succeed.
-        assertTrue(ctx.markInUse());
-        assertTrue(ctx.markInUse());  
-
-        // One markDone per markInUse; still in use after the first.
-        ctx.markDone();  
-        assertFalse("Still in use after one of two done", ctx.isExpired());
-
-        ctx.markDone();  
-        assertTrue("Reusable once both are done", ctx.markInUse());
-    }
-
-    public void testNotExpiredWhileInUse() {
-        GatedCloseable<Reader> gated = mockGatedReader();
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 1); // 1ms keepAlive  
-
-        ctx.markInUse();
-        assertFalse("Should not expire while in-use", ctx.isExpired());  
-    }
-
-    public void testExpiresAfterKeepAlive() throws Exception {  
-        GatedCloseable<Reader> gated = mockGatedReader();
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 50); // 50ms keepAlive
-
-        ctx.markInUse();
-        ctx.markDone();
-
-        Thread.sleep(100);
-        assertTrue("Should expire after keepAlive", ctx.isExpired());
-    }  
-
-    public void testNotExpiredBeforeKeepAlive() {
-        GatedCloseable<Reader> gated = mockGatedReader();  
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
-
-        ctx.markInUse();  
-        ctx.markDone();
-
-        assertFalse("Should not expire before keepAlive", ctx.isExpired());  
-    }
-
-    public void testCloseReleasesReader() throws Exception {  
-        AtomicBoolean closed = new AtomicBoolean(false);
-        Reader reader = mock(Reader.class);
-        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> closed.set(true));  
-
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
+        assertTrue("Reusable once both are done", ctx.markInUse());
+import org.opensearch.core.index.Index;
+ * The OpenSearch Contributors require contributions made to  
         ctx.close();  
-
-        assertTrue("Reader should be closed", closed.get());
-    }  
-
-    public void testMarkInUseAfterCloseReturnsFalse() throws Exception {
-        GatedCloseable<Reader> gated = mockGatedReader();  
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
-        ctx.close();
-
-        assertFalse("markInUse should fail after close", ctx.markInUse());
-    }
-
-    public void testGetReader() {
-        Reader reader = mock(Reader.class);
-        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> {});  
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
-
-        assertSame(reader, ctx.getReader());  
-    }
-
-    public void testGetQueryId() {  
-        GatedCloseable<Reader> gated = mockGatedReader();
-        ReaderContext ctx = new ReaderContext("test-query-123", SHARD_0, gated, 30_000);
-
-        assertEquals("test-query-123", ctx.getQueryId());
-    }
-
+        ctx.markInUse();
+        Thread.sleep(20);  
     public void testLastAccessTimeUpdatedOnMarkInUse() throws Exception {
-        GatedCloseable<Reader> gated = mockGatedReader();
+    }
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);  
-
+    }
+    public void testGetQueryId() {  
+import java.util.concurrent.atomic.AtomicBoolean;
+    }  
+        assertTrue("lastAccessTime should advance on markInUse", timeAfterMarkInUse > timeAfterCreate);
+        assertTrue("Should expire after keepAlive", ctx.isExpired());
+        assertTrue("lastAccessTime should advance on markDone", timeAfterDone > timeAfterMarkInUse);  
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 50); // 50ms keepAlive
+        Reader reader = mock(Reader.class);
+        GatedCloseable<Reader> gated = mockGatedReader();
+    public void testGetReader() {
+import org.opensearch.core.index.shard.ShardId;  
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
+        ctx.markDone();
         long timeAfterCreate = ctx.getLastAccessTime();
-
+        ctx.markDone();
+        assertTrue(ctx.markInUse());
+        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> closed.set(true));  
+        // One markDone per markInUse; still in use after the first.
+        return new GatedCloseable<>(reader, () -> closed.set(true));  
+ * compatible open source license.
         Thread.sleep(20);
         ctx.markInUse();
-        long timeAfterMarkInUse = ctx.getLastAccessTime();  
-        assertTrue("lastAccessTime should advance on markInUse", timeAfterMarkInUse > timeAfterCreate);
-
-        Thread.sleep(20);  
-        ctx.markDone();
-        long timeAfterDone = ctx.getLastAccessTime();
-        assertTrue("lastAccessTime should advance on markDone", timeAfterDone > timeAfterMarkInUse);  
     }
+        Thread.sleep(100);
+        GatedCloseable<Reader> gated = mockGatedReader();
+        GatedCloseable<Reader> gated = mockGatedReader();
+    }
+    }
+        ctx.markInUse();  
+        assertEquals("test-query-123", ctx.getQueryId());
+        AtomicBoolean closed = new AtomicBoolean(false);
+        assertTrue(ctx.markInUse());  
+        GatedCloseable<Reader> gated = mockGatedReader();  
+    }
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
+        assertFalse("Should not expire before keepAlive", ctx.isExpired());  
+        ctx.markDone();
+        AtomicBoolean closed = new AtomicBoolean(false);
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
+public class ReaderContextTests extends OpenSearchTestCase {
+    public void testCloseReleasesReader() throws Exception {  
+    public void testMarkInUseIsAdditive() {  
+package org.opensearch.analytics.exec;
+        ctx.close();
+        GatedCloseable<Reader> gated = mockGatedReader();
+ */  
+    public void testExpiresAfterKeepAlive() throws Exception {  
+        assertSame(reader, ctx.getReader());  
+import org.opensearch.test.OpenSearchTestCase;
+    }  
+        ctx.markInUse();
+ * SPDX-License-Identifier: Apache-2.0
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
+    public void testNotExpiredWhileInUse() {
+        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> {});  
+        Reader reader = mock(Reader.class);
+    }
+        GatedCloseable<Reader> gated = mockGatedReader();
+ *
+        ctx.markDone();  
+import org.opensearch.common.concurrent.GatedCloseable;
+import org.opensearch.index.engine.exec.IndexReaderProvider.Reader;
+        long timeAfterMarkInUse = ctx.getLastAccessTime();  
+    public void testMarkInUseAfterCloseReturnsFalse() throws Exception {
+        long timeAfterDone = ctx.getLastAccessTime();
+    private static final ShardId SHARD_0 = new ShardId(new Index("idx", "uuid"), 0);
+        ReaderContext ctx = new ReaderContext("test-query-123", SHARD_0, gated, 30_000);
+        ctx.markDone();  
+        GatedCloseable<Reader> gated = mockGatedReader();  
+import static org.mockito.Mockito.mock;  
+        assertFalse("Still in use after one of two done", ctx.isExpired());
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
+/*  
+ * this file be licensed under the Apache-2.0 license or a
 }
+    }
+    private GatedCloseable<Reader> mockGatedReader() {  
+    public void testNotExpiredBeforeKeepAlive() {
+        assertFalse("markInUse should fail after close", ctx.markInUse());
+        Reader reader = mock(Reader.class);
+        assertFalse("Should not expire while in-use", ctx.isExpired());  
+        assertTrue("Reader should be closed", closed.get());

@@ -1,269 +1,240 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.blobstore;
-
-import org.opensearch.cluster.metadata.CryptoMetadata;
-import org.opensearch.common.CheckedBiConsumer;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.crypto.CryptoHandler;
-import org.opensearch.common.crypto.DecryptedRangedStreamProvider;
-import org.opensearch.common.crypto.EncryptedHeaderContentSupplier;  
-import org.opensearch.common.io.InputStreamContainer;
-import org.opensearch.core.action.ActionListener;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;  
-import java.util.Map;
-import java.util.stream.Collectors;
-
-/**
- * EncryptedBlobContainer is a wrapper around BlobContainer that encrypts the data on the fly.
- */  
-public class EncryptedBlobContainer<T, U> implements BlobContainer {
-
-    private final BlobContainer blobContainer;  
-    private final CryptoHandler<T, U> cryptoHandler;
-
-    public EncryptedBlobContainer(BlobContainer blobContainer, CryptoHandler<T, U> cryptoHandler) {  
-        this.blobContainer = blobContainer;
-        this.cryptoHandler = cryptoHandler;
-    }  
-
-    @Override
-    public BlobPath path() {  
-        return blobContainer.path();
-    }
-
-    @Override
-    public boolean blobExists(String blobName) throws IOException {
-        return blobContainer.blobExists(blobName);  
-    }
-
-    @Override  
-    public InputStream readBlob(String blobName) throws IOException {
-        InputStream inputStream = blobContainer.readBlob(blobName);
-        return cryptoHandler.createDecryptingStream(inputStream);  
-    }
-
-    @ExperimentalApi  
-    @Override
-    public InputStreamWithMetadata readBlobWithMetadata(String blobName) throws IOException {
-        InputStreamWithMetadata inputStreamWithMetadata = blobContainer.readBlobWithMetadata(blobName);  
-        InputStream decryptInputStream = cryptoHandler.createDecryptingStream(inputStreamWithMetadata.getInputStream());
-        return new InputStreamWithMetadata(decryptInputStream, inputStreamWithMetadata.getMetadata());
-    }  
-
-    EncryptedHeaderContentSupplier getEncryptedHeaderContentSupplier(String blobName) {
-        return (start, end) -> {  
-            byte[] buffer;
-            int length = (int) (end - start + 1);
-            try (InputStream inputStream = blobContainer.readBlob(blobName, start, length)) {  
-                buffer = new byte[length];
-                inputStream.readNBytes(buffer, (int) start, buffer.length);
-            }  
-            return buffer;
-        };
-    }  
-
-    @Override
-    public InputStream readBlob(String blobName, long position, long length) throws IOException {  
-        U encryptionMetadata = cryptoHandler.loadEncryptionMetadata(getEncryptedHeaderContentSupplier(blobName));
-        DecryptedRangedStreamProvider decryptedStreamProvider = cryptoHandler.createDecryptingStreamOfRange(
-            encryptionMetadata,  
-            position,
-            position + length - 1
-        );  
-        long adjustedPos = decryptedStreamProvider.getAdjustedRange()[0];
-        long adjustedLength = decryptedStreamProvider.getAdjustedRange()[1] - adjustedPos + 1;
-        InputStream encryptedStream = blobContainer.readBlob(blobName, adjustedPos, adjustedLength);  
-        return decryptedStreamProvider.getDecryptedStreamProvider().apply(encryptedStream);
-    }
-
-    @Override
-    public long readBlobPreferredLength() {
         return blobContainer.readBlobPreferredLength();  
-    }
-
-    private void executeWrite(InputStream inputStream, long blobSize, CheckedBiConsumer<InputStream, Long, IOException> writeConsumer)  
-        throws IOException {
-        T cryptoContext = cryptoHandler.initEncryptionMetadata();
-        InputStreamContainer streamContainer = new InputStreamContainer(inputStream, blobSize, 0);  
-        InputStreamContainer encryptedStream = cryptoHandler.createEncryptingStream(cryptoContext, streamContainer);
-        long cryptoLength = cryptoHandler.estimateEncryptedLengthOfEntireContent(cryptoContext, blobSize);
-        writeConsumer.accept(encryptedStream.getInputStream(), cryptoLength);  
-    }
-
-    @Override  
-    public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
-        executeWrite(
-            inputStream,  
-            blobSize,
-            (encryptedStream, encryptedLength) -> blobContainer.writeBlob(blobName, encryptedStream, encryptedLength, failIfAlreadyExists)
         );  
-    }
-
-    @Override  
-    public void writeBlobAtomic(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
-        executeWrite(
-            inputStream,  
-            blobSize,
-            (encryptedStream, encryptedLength) -> blobContainer.writeBlobAtomic(
-                blobName,  
-                encryptedStream,
-                encryptedLength,
-                failIfAlreadyExists  
-            )
-        );
-    }  
-
-    @Override
-    public void writeBlobWithMetadata(  
-        String blobName,
-        InputStream inputStream,
-        long blobSize,  
-        boolean failIfAlreadyExists,
-        Map<String, String> metadata
-    ) throws IOException {  
-        executeWrite(
-            inputStream,
+        return decryptedStreamProvider.getDecryptedStreamProvider().apply(encryptedStream);
+                        .map(
             blobSize,  
-            (encryptedStream, encryptedLength) -> blobContainer.writeBlobWithMetadata(
-                blobName,
-                encryptedStream,  
-                encryptedLength,
-                failIfAlreadyExists,
-                metadata  
+    public InputStream readBlob(String blobName, long position, long length) throws IOException {  
+        return (start, end) -> {  
             )
-        );
-    }  
-
-    @Override
-    public void writeBlobWithMetadata(  
-        String blobName,
-        InputStream inputStream,
-        long blobSize,  
+    private Map<String, BlobMetadata> convertToEncryptedMetadataMap(Map<String, BlobMetadata> blobMetadataMap) {
+ * The OpenSearch Contributors require contributions made to  
+                    entry -> new EncryptedBlobMetadata<>(entry.getValue(), cryptoHandler, getEncryptedHeaderContentSupplier(entry.getKey()))
         boolean failIfAlreadyExists,
-        Map<String, String> metadata,
-        CryptoMetadata cryptoMetadata  
-    ) throws IOException {
-        // Note: cryptoMetadata parameter is for SSE-KMS settings
-        // SSE-KMS settings are passed through to underlying container  
-        executeWrite(
-            inputStream,
-            blobSize,  
-            (encryptedStream, encryptedLength) -> blobContainer.writeBlobWithMetadata(
-                blobName,
-                encryptedStream,  
-                encryptedLength,
-                failIfAlreadyExists,
-                metadata,  
-                cryptoMetadata
-            )
-        );  
-    }
-
-    @Override  
-    public DeleteResult delete() throws IOException {
-        return blobContainer.delete();
-    }  
-
+    EncryptedHeaderContentSupplier getEncryptedHeaderContentSupplier(String blobName) {
+        DecryptedRangedStreamProvider decryptedStreamProvider = cryptoHandler.createDecryptingStreamOfRange(
+        ActionListener<List<BlobMetadata>> listener
+            try (InputStream inputStream = blobContainer.readBlob(blobName, start, length)) {  
+        Map<String, BlobMetadata> blobMetadataMap = blobContainer.listBlobsByPrefix(blobNamePrefix);  
+import java.util.stream.Collectors;
+import org.opensearch.common.CheckedBiConsumer;
+        return blobContainer.blobExists(blobName);  
     @Override
-    public void deleteBlobsIgnoringIfNotExists(List<String> blobNames) throws IOException {  
-        blobContainer.deleteBlobsIgnoringIfNotExists(blobNames);
-    }
-
-    @Override
-    public Map<String, BlobMetadata> listBlobs() throws IOException {
+                            )
+        throws IOException {  
+        return cryptoHandler.createDecryptingStream(inputStream);  
         Map<String, BlobMetadata> blobMetadataMap = blobContainer.listBlobs();  
-        return convertToEncryptedMetadataMap(blobMetadataMap);
+        InputStream inputStream = blobContainer.readBlob(blobName);
+        // SSE-KMS settings are passed through to underlying container  
+        blobContainer.listBlobsByPrefixInSortedOrder(blobNamePrefix, limit, blobNameSortOrder, encryptedMetadataListener);
+                buffer = new byte[length];
+            return buffer;
+                blobName,
+        }
+            .collect(Collectors.toList());
+        String blobName,
+        long blobSize,  
+            encryptionMetadata,  
+                blobName,  
+    public void writeBlobAtomic(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
+import org.opensearch.common.crypto.CryptoHandler;
+            blobSize,
+                encryptedLength,
+    private void executeWrite(InputStream inputStream, long blobSize, CheckedBiConsumer<InputStream, Long, IOException> writeConsumer)  
+        // Note: cryptoMetadata parameter is for SSE-KMS settings
+            }
+            byte[] buffer;
+ * SPDX-License-Identifier: Apache-2.0
     }
-
+                encryptedLength,
+                    getEncryptedHeaderContentSupplier(blobMetadata.name())
+ * EncryptedBlobContainer is a wrapper around BlobContainer that encrypts the data on the fly.
+import java.io.IOException;
+        long adjustedPos = decryptedStreamProvider.getAdjustedRange()[0];
+        InputStream inputStream,
+            );
+    }
+            inputStream,
     @Override
-    public Map<String, BlobContainer> children() throws IOException {
+    ) throws IOException {  
+            position + length - 1
+    public InputStream readBlob(String blobName) throws IOException {
+        };
+            int length = (int) (end - start + 1);
+import java.util.Map;
+        InputStream inputStream,
+    ) throws IOException {
+                    Map.Entry::getKey,
+ * this file be licensed under the Apache-2.0 license or a
+        long cryptoLength = cryptoHandler.estimateEncryptedLengthOfEntireContent(cryptoContext, blobSize);
+ */  
+    public InputStreamWithMetadata readBlobWithMetadata(String blobName) throws IOException {
+        );  
+    @Override
+    @Override
+import org.opensearch.common.crypto.EncryptedHeaderContentSupplier;  
+        long blobSize,  
+    public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
+    @Override  
+    }
         Map<String, BlobContainer> children = blobContainer.children();  
         if (children != null) {
-            return children.entrySet()
-                .stream()  
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> new EncryptedBlobContainer<>(entry.getValue(), cryptoHandler)));
-        } else {
-            return null;  
-        }
+        );
+                failIfAlreadyExists,
+            (encryptedStream, encryptedLength) -> blobContainer.writeBlobWithMetadata(
+    public void writeBlobWithMetadata(  
+/*  
+    }  
+            }  
     }
-
+/**
+            )
+    @Override  
+    public void writeBlobWithMetadata(  
+        );
+        executeWrite(
+    public long readBlobPreferredLength() {
+ */  
+    public Map<String, BlobMetadata> listBlobs() throws IOException {
+            )
+            return null;  
+            .map(
+    public void listBlobsByPrefixInSortedOrder(  
+    }
+        this.cryptoHandler = cryptoHandler;
+                    blobMetadata,  
+    }
+        } else {
     @Override
-    public Map<String, BlobMetadata> listBlobsByPrefix(String blobNamePrefix) throws IOException {
-        Map<String, BlobMetadata> blobMetadataMap = blobContainer.listBlobsByPrefix(blobNamePrefix);  
+    }
+        );  
+ * compatible open source license.
+                encryptedStream,
+            )
+                encryptedLength,
+        InputStream decryptInputStream = cryptoHandler.createDecryptingStream(inputStreamWithMetadata.getInputStream());
+import org.opensearch.common.io.InputStreamContainer;
+        InputStreamContainer streamContainer = new InputStreamContainer(inputStream, blobSize, 0);  
+                            blobMetadata -> new EncryptedBlobMetadata<>(  
+                inputStream.readNBytes(buffer, (int) start, buffer.length);
+    public BlobPath path() {  
+        T cryptoContext = cryptoHandler.initEncryptionMetadata();
+                encryptedStream,  
+    @Override  
+        long adjustedLength = decryptedStreamProvider.getAdjustedRange()[1] - adjustedPos + 1;
+        return blobContainer.delete();
+        );  
+        Map<String, String> metadata
+        BlobNameSortOrder blobNameSortOrder,  
+import java.util.List;  
+        }
+import org.opensearch.core.action.ActionListener;
+                    delegatedListener.onResponse(encryptedMetadata);
+        this.blobContainer = blobContainer;
+    }  
+            (encryptedStream, encryptedLength) -> blobContainer.writeBlob(blobName, encryptedStream, encryptedLength, failIfAlreadyExists)
+        List<BlobMetadata> blobsList = blobContainer.listBlobsByPrefixInSortedOrder(blobNamePrefix, limit, blobNameSortOrder);
+            .stream()
+                blobName,
+            position,
+        throws IOException {
+        return blobMetadataMap.entrySet()  
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> new EncryptedBlobContainer<>(entry.getValue(), cryptoHandler)));
+                        )
+                encryptedStream,  
+}
+        blobContainer.deleteBlobsIgnoringIfNotExists(blobNames);
+                                getEncryptedHeaderContentSupplier(blobMetadata.name())  
+    }
+            inputStream,  
+                )  
+    }  
+    public List<BlobMetadata> listBlobsByPrefixInSortedOrder(String blobNamePrefix, int limit, BlobNameSortOrder blobNameSortOrder)
+        Map<String, String> metadata,
+    @Override
+            blobSize,
+    public EncryptedBlobContainer(BlobContainer blobContainer, CryptoHandler<T, U> cryptoHandler) {  
+    public DeleteResult delete() throws IOException {
+        ActionListener<List<BlobMetadata>> encryptedMetadataListener = ActionListener.delegateFailure(  
+    public Map<String, BlobContainer> children() throws IOException {
+    private final CryptoHandler<T, U> cryptoHandler;
+            (delegatedListener, metadataList) -> {
+    @ExperimentalApi  
+    @Override
+    public boolean blobExists(String blobName) throws IOException {
+            return null;  
+                }
+    }  
+            inputStream,  
+        InputStreamContainer encryptedStream = cryptoHandler.createEncryptingStream(cryptoContext, streamContainer);
+            (encryptedStream, encryptedLength) -> blobContainer.writeBlobAtomic(
+    }  
+            listener,
+    @Override
+            (encryptedStream, encryptedLength) -> blobContainer.writeBlobWithMetadata(
+                    List<BlobMetadata> encryptedMetadata = metadataList.stream()
+package org.opensearch.common.blobstore;
+                )  
+    @Override
+            blobSize,  
+                metadata  
+                                blobMetadata,
+        int limit,
+                blobMetadata -> new EncryptedBlobMetadata<>(
+                .stream()  
+    @Override
+        U encryptionMetadata = cryptoHandler.loadEncryptionMetadata(getEncryptedHeaderContentSupplier(blobName));
+            inputStream,
+    }
+import org.opensearch.cluster.metadata.CryptoMetadata;
+        return blobsList.stream()  
+        return blobContainer.path();
+                Collectors.toMap(  
+        InputStream encryptedStream = blobContainer.readBlob(blobName, adjustedPos, adjustedLength);  
+            return children.entrySet()
+    }
+        executeWrite(
+    ) {
+            .collect(
+import org.opensearch.common.crypto.DecryptedRangedStreamProvider;
+                failIfAlreadyExists  
+        String blobNamePrefix,
+    @Override
+import org.opensearch.common.annotation.ExperimentalApi;  
+                    delegatedListener.onResponse(null);  
+                if (metadataList != null) {  
+        return new InputStreamWithMetadata(decryptInputStream, inputStreamWithMetadata.getMetadata());
+            return null;  
+                cryptoMetadata
+    @Override
         return convertToEncryptedMetadataMap(blobMetadataMap);
     }
-
-    private Map<String, BlobMetadata> convertToEncryptedMetadataMap(Map<String, BlobMetadata> blobMetadataMap) {
-        if (blobMetadataMap == null) {
-            return null;  
-        }
-
-        return blobMetadataMap.entrySet()  
-            .stream()
-            .collect(
-                Collectors.toMap(  
-                    Map.Entry::getKey,
-                    entry -> new EncryptedBlobMetadata<>(entry.getValue(), cryptoHandler, getEncryptedHeaderContentSupplier(entry.getKey()))
-                )  
-            );
-
-    }  
-
+    private final BlobContainer blobContainer;  
+import java.io.InputStream;
+        String blobName,
+        CryptoMetadata cryptoMetadata  
     @Override
-    public void listBlobsByPrefixInSortedOrder(  
-        String blobNamePrefix,
-        int limit,
-        BlobNameSortOrder blobNameSortOrder,  
-        ActionListener<List<BlobMetadata>> listener
-    ) {
-        ActionListener<List<BlobMetadata>> encryptedMetadataListener = ActionListener.delegateFailure(  
-            listener,
-            (delegatedListener, metadataList) -> {
-                if (metadataList != null) {  
-                    List<BlobMetadata> encryptedMetadata = metadataList.stream()
-                        .map(
-                            blobMetadata -> new EncryptedBlobMetadata<>(  
-                                blobMetadata,
-                                cryptoHandler,
-                                getEncryptedHeaderContentSupplier(blobMetadata.name())  
-                            )
-                        )
-                        .collect(Collectors.toList());  
-                    delegatedListener.onResponse(encryptedMetadata);
-                } else {
-                    delegatedListener.onResponse(null);  
-                }
-            }
-        );  
-        blobContainer.listBlobsByPrefixInSortedOrder(blobNamePrefix, limit, blobNameSortOrder, encryptedMetadataListener);
+        executeWrite(
     }
-
-    @Override
-    public List<BlobMetadata> listBlobsByPrefixInSortedOrder(String blobNamePrefix, int limit, BlobNameSortOrder blobNameSortOrder)
-        throws IOException {  
-        List<BlobMetadata> blobsList = blobContainer.listBlobsByPrefixInSortedOrder(blobNamePrefix, limit, blobNameSortOrder);
-        if (blobsList == null) {
-            return null;  
-        }
-
-        return blobsList.stream()  
-            .map(
-                blobMetadata -> new EncryptedBlobMetadata<>(
-                    blobMetadata,  
-                    cryptoHandler,
-                    getEncryptedHeaderContentSupplier(blobMetadata.name())
-                )  
-            )
-            .collect(Collectors.toList());
+                        .collect(Collectors.toList());  
+                metadata,  
+    public void deleteBlobsIgnoringIfNotExists(List<String> blobNames) throws IOException {  
     }  
-}
+                } else {
+ *
+    }  
+                failIfAlreadyExists,
+    }
+        InputStreamWithMetadata inputStreamWithMetadata = blobContainer.readBlobWithMetadata(blobName);  
+        return convertToEncryptedMetadataMap(blobMetadataMap);
+        boolean failIfAlreadyExists,
+                                cryptoHandler,
+        }
+    public Map<String, BlobMetadata> listBlobsByPrefix(String blobNamePrefix) throws IOException {
+public class EncryptedBlobContainer<T, U> implements BlobContainer {
+        if (blobsList == null) {
+    @Override  
+        executeWrite(
+        if (blobMetadataMap == null) {
+    }  
+        writeConsumer.accept(encryptedStream.getInputStream(), cryptoLength);  
+                    cryptoHandler,

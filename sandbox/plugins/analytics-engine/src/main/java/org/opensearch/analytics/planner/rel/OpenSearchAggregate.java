@@ -1,492 +1,459 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.planner.rel;
-
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptCost;
-import org.apache.calcite.plan.RelOptPlanner;  
-import org.apache.calcite.plan.RelTrait;
-import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.rel.RelDistribution;  
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelWriter;
-import org.apache.calcite.rel.core.Aggregate;  
-import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.hint.RelHint;
-import org.apache.calcite.rel.logical.LogicalAggregate;  
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;  
-import org.apache.calcite.util.ImmutableBitSet;
-import org.opensearch.analytics.planner.RelNodeUtils;
-import org.opensearch.analytics.spi.AggregateFunction.IntermediateField;  
-import org.opensearch.analytics.spi.FieldStorageInfo;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * OpenSearch custom Aggregate carrying viable backend list and per-call annotations.
- *  
- * <p>Per-call annotations are kept in a side-map keyed by call index — NOT in
- * {@code AggregateCall#rexList}. Keeping them out of rexList avoids contaminating
- * Calcite's {@code AggCallBinding.preOperands}, which would otherwise corrupt  
- * inferReturnType for functions that read {@code getOperandType(0)} (PPL's
- * {@code ARG0_ARRAY} for {@code take} / {@code list} / {@code values}).
- *  
- * @opensearch.internal
- */
-public class OpenSearchAggregate extends Aggregate implements OpenSearchRelNode, DistributionAware {  
-
-    private final List<String> viableBackends;
-    private final AggregateMode mode;  
-    /**
-     * Per-call annotations keyed by call index in {@link #getAggCallList()}. May be empty when
-     * the aggregate has no annotations yet (pre-marking) or when copied from a Calcite-internal  
-     * rule that doesn't preserve them. Order is stable for {@link #getAnnotations()} /
-     * {@link #copyResolved}.
-     */  
-    private final Map<Integer, AggregateCallAnnotation> callAnnotations;
-    /**
-     * FINAL-side carrier for literal aggregate-args (e.g. TAKE's N) captured by the  
-     * split rule from the original SINGLE aggregate's child Project. Empty otherwise.
-     * Used by {@code DistributedAggregateRewriter} to re-create the literals as
-     * constant columns below FINAL, since the StageInputScan only carries the state.  
-     */
-    private final Map<Integer, List<RexLiteral>> finalExtraLiteralArgs;
     /** Per-call {@link IntermediateField} classification, parallel to {@link #getAggCallList()}; null entry = no SPI decomposition; empty for SINGLE/PARTIAL. */  
-    private final List<IntermediateField> perCallIntermediateField;
-
-    public OpenSearchAggregate(  
-        RelOptCluster cluster,
-        RelTraitSet traitSet,
-        RelNode input,  
-        ImmutableBitSet groupSet,
-        List<ImmutableBitSet> groupSets,
-        List<AggregateCall> aggCalls,  
-        AggregateMode mode,
-        List<String> viableBackends,
-        Map<Integer, AggregateCallAnnotation> callAnnotations  
-    ) {
-        this(cluster, traitSet, input, groupSet, groupSets, aggCalls, mode, viableBackends, callAnnotations, Map.of(), List.of());
+        return planner.getCostFactory().makeTinyCost();  
+    /**
     }  
-
-    public OpenSearchAggregate(
-        RelOptCluster cluster,  
-        RelTraitSet traitSet,
-        RelNode input,
-        ImmutableBitSet groupSet,  
-        List<ImmutableBitSet> groupSets,
-        List<AggregateCall> aggCalls,
-        AggregateMode mode,  
-        List<String> viableBackends,
-        Map<Integer, AggregateCallAnnotation> callAnnotations,
-        Map<Integer, List<RexLiteral>> finalExtraLiteralArgs  
-    ) {
-        this(
-            cluster,  
-            traitSet,
-            input,
-            groupSet,  
-            groupSets,
-            aggCalls,
-            mode,  
-            viableBackends,
-            callAnnotations,
-            finalExtraLiteralArgs,  
+        return null;
             List.of()
-        );
-    }  
-
-    public OpenSearchAggregate(
-        RelOptCluster cluster,  
-        RelTraitSet traitSet,
-        RelNode input,
-        ImmutableBitSet groupSet,  
-        List<ImmutableBitSet> groupSets,
-        List<AggregateCall> aggCalls,
-        AggregateMode mode,  
+     * workers + {@code Aggregate(FINAL)} on the coordinator (the existing {@code OpenSearchAggregateSplitRule}
         List<String> viableBackends,
-        Map<Integer, AggregateCallAnnotation> callAnnotations,
-        Map<Integer, List<RexLiteral>> finalExtraLiteralArgs,  
-        List<IntermediateField> perCallIntermediateField
-    ) {
-        super(  
-            cluster,
-            traitSet,
-            List.of(),  
-            input,
-            frontGroupSetForFinal(groupSet, mode),
-            frontGroupSetsForFinal(groupSet, groupSets, mode),  
-            aggCalls
-        );
-        this.mode = mode;  
-        this.viableBackends = viableBackends;
-        this.callAnnotations = Map.copyOf(callAnnotations);
-        this.finalExtraLiteralArgs = Map.copyOf(finalExtraLiteralArgs);  
-        // Collections.unmodifiableList — List.copyOf would NPE on the null pass-through entries.
-        this.perCallIntermediateField = Collections.unmodifiableList(new ArrayList<>(perCallIntermediateField));
-    }  
-
-    /**
-     * FINAL reads PARTIAL's output, where Calcite has fronted the group keys to {@code 0..n-1}; group  
-     * on the prefix range so a non-prefix key (e.g. {@code avg(x) by span(y,5)} → {@code {1}}) isn't
-     * read as an agg-state column. No-op for SINGLE/PARTIAL (raw input) and already-fronted sets.
-     */  
-    private static ImmutableBitSet frontGroupSetForFinal(ImmutableBitSet groupSet, AggregateMode mode) {
-        return mode == AggregateMode.FINAL ? ImmutableBitSet.range(groupSet.cardinality()) : groupSet;
-    }  
-
-    /**
-     * Keeps {@code groupSets} consistent with the fronted {@code groupSet}. PPL only emits simple  
-     * (single-set) aggregates, so this collapses to one set; revisit if GROUPING SETS is ever added.
-     */
-    private static List<ImmutableBitSet> frontGroupSetsForFinal(  
-        ImmutableBitSet groupSet,
-        List<ImmutableBitSet> groupSets,
-        AggregateMode mode  
-    ) {
-        if (mode != AggregateMode.FINAL || groupSets == null || groupSets.isEmpty()) {
-            return groupSets;  
-        }
-        return List.of(ImmutableBitSet.range(groupSet.cardinality()));
-    }  
-
-    /** Builds a FINAL aggregate post-rewrite; clears both stashes so a later {@code copy()} can't replay them. */
-    public static OpenSearchAggregate finalAfterRewrite(OpenSearchAggregate prior, RelNode newInput, List<AggregateCall> rebuiltCalls) {  
-        return new OpenSearchAggregate(
-            prior.getCluster(),
-            prior.getTraitSet(),  
-            newInput,
-            prior.getGroupSet(),
-            prior.getGroupSets(),  
-            rebuiltCalls,
-            AggregateMode.FINAL,
-            prior.viableBackends,  
-            prior.callAnnotations,
-            Map.of(),
-            List.of()  
-        );
+        List<AggregateCall> aggCalls,  
+     * path beat the coord-centric path on high-cardinality {@code GROUP BY} despite paying an  
+            // ER on top — but only when the savings exceed the gather's setup, so tiny inputs
     }
-
+    @Override
+            frontGroupSetForFinal(groupSet, mode),
+        );
+                    return planner.getCostFactory().makeInfiniteCost();  
+        ImmutableBitSet groupSet,
+            if (groupIdx < inputStorage.size()) {  
+     * backstop for the whole split: {@code OpenSearchAggregateSplitRule} now emits a single  
+    public static final String FINAL_MODE_HINT = "OPENSEARCH_AGGREGATE_FINAL";
+        Map<Integer, AggregateCallAnnotation> callAnnotations,
+     * extra gather ER on top: for shuffle to win the savings on FINAL must exceed the extra
+     * (single-set) aggregates, so this collapses to one set; revisit if GROUPING SETS is ever added.
+     */  
+        Map<Integer, AggregateCallAnnotation> rebuilt = new LinkedHashMap<>(callAnnotations.size());  
+    public Map<Integer, List<RexLiteral>> getFinalExtraLiteralArgs() {
+ * SPDX-License-Identifier: Apache-2.0
+     *
+public class OpenSearchAggregate extends Aggregate implements OpenSearchRelNode, DistributionAware {  
+    }
+import java.util.ArrayList;  
+    private final AggregateMode mode;  
+            List.of()  
+                }
+                }
+        int annotationIndex = 0;
+            }
+    private final List<String> viableBackends;
+            groupSet,  
+     * when the aggregate is not decomposable ({@code STATE_EXPANDING}/{@code DISTINCT}/percentile) — those
+import java.util.List;
+        List<ImmutableBitSet> groupSets,
+        }
+            // serially (partitionCount=1); HASH+WORKER merges in parallel across N workers
+     * the merge runs serially → cost = inputRows. At HASH+WORKER+N the merge runs across N
+                }
+    ) {
+        RelTraitSet traitSet,
+     * {@link #copyResolved}.
+            // No partition key — the PARTIAL/FINAL split still distributes the work below, but the agg  
+        // Group-by fields: inherit from input
+    ) {
+            if (mode == AggregateMode.PARTIAL && inputIsSingleton) {
+            callAnnotations,
+                outputStorage.add(inputStorage.get(groupIdx));
+    /** Builds a FINAL aggregate post-rewrite; clears both stashes so a later {@code copy()} can't replay them. */
+import org.apache.calcite.plan.RelOptPlanner;  
+                if (!(trait instanceof OpenSearchDistribution distribution)) continue;
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        return perCallIntermediateField;
+     * constant columns below FINAL, since the StageInputScan only carries the state.  
+            }
+package org.opensearch.analytics.planner.rel;
+     */
+    /**
+                        "AggregateCall arg["  
+        // Annotations live out-of-band; the aggCall list passes through unchanged.
+            aggCalls,
+            for (RexNode rex : aggCall.rexList) {  
+    /** True when {@code aggregate} is a stripped FINAL-mode {@link OpenSearchAggregate}. */  
+        List<ImmutableBitSet> groupSets,
+     */
+     * merges) and HASH+WORKER (the M3 shuffle path — partials hash-shuffled by group keys,  
+            for (int index = 0; index < getInput().getTraitSet().size(); index++) {  
+    /**
+        if (inputIndex != 0 || mode != AggregateMode.SINGLE) {
+/*  
+import org.apache.calcite.rel.RelWriter;
+        return super.explainTerms(pw).item("mode", mode).item("viableBackends", viableBackends);
+        RelOptCluster cluster,
+     * independently, results would never merge). FINAL has two legal input shapes:
+            frontGroupSetsForFinal(groupSet, groupSets, mode),  
+     * split rule from the original SINGLE aggregate's child Project. Empty otherwise.
+                if (src.isDerived()) {  
+    ) {
+    public static boolean isFinalMode(Aggregate aggregate) {
+     * Used by {@code DistributedAggregateRewriter} to re-create the literals as
+import java.util.LinkedHashSet;  
+        AggregateMode mode,  
+            // input is already gathered; the distribution win comes from the input's own requirement.
+                    && distribution.getLocality() == OpenSearchDistribution.Locality.WORKER;
+    private final Map<Integer, List<RexLiteral>> finalExtraLiteralArgs;
+        RelTraitSet traitSet,
+            int partitionCount = 1;
+import org.apache.calcite.rel.core.AggregateCall;
+        // Rebuild the side-map preserving call-index keys, swapping annotation values  
+    public List<String> getViableBackends() {
+     *       is bounded (one partial row per partition), so no hash key is needed.</li>
+            viableBackends,
+        if (getGroupSet().isEmpty()) {
+        List<ImmutableBitSet> groupSets,
+            return groupSets;  
+                boolean singletonCoord = distribution.getType() == RelDistribution.Type.SINGLETON
+            prior.viableBackends,  
+     * FINAL-side carrier for literal aggregate-args (e.g. TAKE's N) captured by the  
+        return traitDef.hash(getGroupSet().asList(), partitionCount);
+                            + "(input only declares "  
+            perCallIntermediateField  
+     * deleting it breaks correctness, not just a test.  
+    public RelWriter explainTerms(RelWriter pw) {  
+        // getAnnotations() used.
+            return List.of();
+            finalExtraLiteralArgs,  
+     * Keeps {@code groupSets} consistent with the fronted {@code groupSet}. PPL only emits simple  
+     * {@code passThroughTraits}) would fold the cost-RANKING part of this override into the trait  
+        Map<Integer, AggregateCallAnnotation> callAnnotations  
+                || distribution.getType() == RelDistribution.Type.ANY;  
+            outputStorage.add(FieldStorageInfo.derivedColumn(aggCall.getName(), aggCall.getType().getSqlTypeName(), deps));  
+    @Override
+ *
+     * <p>The check tolerates ANY (Volcano's "still exploring" placeholder) on either side so the  
+            callAnnotations,
+            for (int argIdx : aggCall.getArgList()) {  
+     * rejects a SINGLE aggregate placed over RANDOM (multi-shard) input. Without it, Volcano can
+    private final List<IntermediateField> perCallIntermediateField;
+ * The OpenSearch Contributors require contributions made to  
+    }  
+            // FINAL pays a merge cost proportional to its input row count. Coord-centric merges
+        // and a PARTIAL over singleton input so Volcano never lands them on the wrong distribution.
+     */  
+                return planner.getCostFactory().makeInfiniteCost();
+        List<ImmutableBitSet> groupSets,
+        }  
+            // itself gathers its partials to the coordinator. Requiring SINGLETON here is a no-op when the
+        List<IntermediateField> perCallIntermediateField
+        return new OpenSearchAggregate(
+     * {@link DistributionAware#requiredInputDistribution}/{@link DistributionAware#deriveOutputDistribution}  
+    @Override  
+     * parent that needs a specific partitioning will demand its own exchange. (Aggregate output rarely  
+        // for the resolved (single-backend-narrowed) variants in the same iteration order
+    }
+        return aggregate.getHints().stream().anyMatch(hint -> FINAL_MODE_HINT.equals(hint.hintName));
+     * A {@code SINGLE} aggregate over a distributable input declares it needs its input hash-partitioned  
+     * Group-by fields inherit storage info from the input. Agg results are derived columns.
+    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {
+    ) {
+        Map<Integer, List<RexLiteral>> finalExtraLiteralArgs,  
+            }
+        RelNode input,  
+                boolean hashWorker = distribution.getType() == RelDistribution.Type.HASH_DISTRIBUTED  
+            }  
+        this(
+    @Override
+            prior.callAnnotations,
+    /**
+                    deps.add(src.getFieldName());  
+ *  
+                }
+        ImmutableBitSet groupSet,
+            }
+        );
+            return null;  
+     * coordinator anyway. So we do not advertise a co-partitionable output here (returns {@code null}); a
+            getGroupSet(),
+            prior.getGroupSets(),  
+import org.opensearch.analytics.spi.AggregateFunction.IntermediateField;  
+    }
+        for (int groupIdx : getGroupSet()) {
+            prior.getCluster(),
+    }
+        List<FieldStorageInfo> inputStorage = (input instanceof OpenSearchRelNode openSearchInput)
+     * partial-state output at the same locality).
+            input,
+            finalExtraLiteralArgs,  
+     * <p>Cost: FINAL pays merge cost proportional to its input rows. At COORDINATOR+SINGLETON  
+            viableBackends,
+     * isolation, the partials never merge, and queries return silently wrong results. Plan-shape
+        return callAnnotations;
+            // Prices a SINGLE over partitioned input out (infinite cost) so it's never chosen.
+            List.of(backend),  
+     * SINGLETON+COORDINATOR (the M0/M1 coord-centric path — partials gathered to coord, FINAL
+        // Collections.unmodifiableList — List.copyOf would NPE on the null pass-through entries.
+    }  
+        }
+        }
+            groupSets,
+        List<ImmutableBitSet> groupSets,
+        Map<Integer, AggregateCallAnnotation> callAnnotations,
+            cluster,
+        return LogicalAggregate.create(strippedChildren.getFirst(), hints, getGroupSet(), getGroupSets(), getAggCallList());  
+            perCallIntermediateField
+        List<RelHint> hints = mode == AggregateMode.FINAL ? List.of(RelHint.builder(FINAL_MODE_HINT).build()) : List.of();
+import org.apache.calcite.rel.hint.RelHint;
+     * An aggregate's output is partitioned by its group keys only when it ran distributed (PARTIAL/FINAL)  
+ * {@code AggregateCall#rexList}. Keeping them out of rexList avoids contaminating
+                return planner.getCostFactory().makeInfiniteCost();
+ * {@code ARG0_ARRAY} for {@code take} / {@code list} / {@code values}).
+    }
+    }  
+    ) {
+    public List<OperatorAnnotation> getAnnotations() {
+            if (!(trait instanceof OpenSearchDistribution distribution)) continue;
+        }
+    }
+    /**
+        for (int index = 0; index < getInput().getTraitSet().size(); index++) {
+import java.util.Collections;
+        this(cluster, traitSet, input, groupSet, groupSets, aggCalls, mode, viableBackends, callAnnotations, Map.of(), List.of());
+            getGroupSets(),  
+            prior.getTraitSet(),  
+import org.apache.calcite.rel.RelDistribution;  
+import java.util.Map;
+        }
+        }  
+     * FINAL runs on each worker over its hash bucket). Anything else is rejected.
+     * gather ER's setup + final-output rows. This naturally amortizes only at scale, leaving
+    public OpenSearchAggregate(
+     */
+        return annotations;
+            aggCalls
+     *
+     * on the group keys, so the enforcement pass can split it into {@code Aggregate(PARTIAL)} on the
+     */  
+            mode,  
+     * legally land a SINGLE aggregate directly on partitioned data — each shard aggregates in  
+        AggregateMode mode,
+                            + inputStorage.size()
+            if (callAnnotations.containsKey(i)) {  
+        RelOptCluster cluster,  
+            List.of(),  
+                    deps.addAll(src.getDependsOnPhysicalCols());
+import org.apache.calcite.plan.RelTraitSet;
+    }  
+     * on this class, consulted by the post-CBO {@code DistributionEnforcementPass}. A future top-down
+                    throw new IllegalStateException(
+/**
+        this.finalExtraLiteralArgs = Map.copyOf(finalExtraLiteralArgs);  
+     * ranking — it must survive any such migration (see the paragraph above).
+     * Hint carried on the stripped {@link LogicalAggregate} of a FINAL-mode aggregate so backend
+     * Returns {@code null} (no requirement → input left at its CBO-chosen shape) for non-SINGLE modes, or
+            // (partitionCount=N). The /N discount is what lets the shuffle path beat the  
+    private final Map<Integer, AggregateCallAnnotation> callAnnotations;
+            return null;  
+    /**
+            traitSet,
+        ImmutableBitSet groupSet,  
+        // parallel across N workers (the /partitionCount discount that lets shuffle beat coord-centric
+            LinkedHashSet<String> deps = new LinkedHashSet<>();
+                double finalCost = finalRows / partitionCount;
+            prior.getGroupSet(),
+        for (int i = 0; i < getAggCallList().size(); i++) {
+            boolean traitResolved = false;
+     *
+            // ANY placeholder) so memo expansion can register alternatives without committing
+        return new OpenSearchAggregate(
+                rebuilt.put(i, (AggregateCallAnnotation) resolvedAnnotations.get(annotationIndex++));
+    }  
+    public OpenSearchDistribution requiredInputDistribution(int inputIndex, int partitionCount, OpenSearchDistributionTraitDef traitDef) {
+    // ---- DistributionAware (Option B post-CBO enforcement pass) ----  
+        ImmutableBitSet groupSet,
+            // to a cost.
+    private static ImmutableBitSet frontGroupSetForFinal(ImmutableBitSet groupSet, AggregateMode mode) {
+ */  
+        return finalExtraLiteralArgs;
+    @Override  
+import org.apache.calcite.rel.core.Aggregate;  
+     */  
+            mode,  
+        List<FieldStorageInfo> outputStorage = new ArrayList<>();
+        // SINGLE / PARTIAL placement gates (upstream): price out a SINGLE over partitioned input  
+            getAggCallList(),
+        );
+            if (annotation != null) {  
+     * tiny aggregates on coord-centric.  
+        if (mode != AggregateMode.FINAL || groupSets == null || groupSets.isEmpty()) {
+        }
+        List<AggregateCall> aggCalls,
+            traitSet,
+     * — but in the pre-split SINGLE form the pass hasn't decided that yet, and the FINAL gathers to the
+            boolean inputIsSingleton = distribution.getType() == RelDistribution.Type.SINGLETON
+ * OpenSearch custom Aggregate carrying viable backend list and per-call annotations.
+    }
+                return planner.getCostFactory().makeCost(finalCost, finalCost, 0);  
+     * tests happen to catch the current shapes, but they are not a substitute for this gate;
+            // Prices a PARTIAL above the Exchange out (infinite cost) so it's never chosen.  
+    }
+            }  
+    public List<FieldStorageInfo> getOutputFieldStorage() {
+    public Aggregate copy(
+            input,
+     * the aggregate has no annotations yet (pre-marking) or when copied from a Calcite-internal  
+    private static List<ImmutableBitSet> frontGroupSetsForFinal(  
+        RelTraitSet traitSet,
+        return viableBackends;  
     public AggregateMode getMode() {
+                RelTrait trait = getInput().getTraitSet().getTrait(index);
+ * compatible open source license.
+        Map<Integer, List<RexLiteral>> finalExtraLiteralArgs  
+        if (callAnnotations.isEmpty()) {  
+ * inferReturnType for functions that read {@code getOperandType(0)} (PPL's
+        RelNode input,
+    @Override
+import org.apache.calcite.plan.RelOptCluster;
+     * <p><b>DO NOT REMOVE the SINGLE-mode infinite-cost branch below.</b> It is the correctness
+            getCluster(),
+import org.opensearch.analytics.spi.FieldStorageInfo;
+                    && distribution.getLocality() == OpenSearchDistribution.Locality.COORDINATOR;
+                if (hashWorker && distribution.getPartitionCount() != null) {  
+            Map.of(),
+import org.apache.calcite.rel.logical.LogicalAggregate;  
+            getCluster(),  
+     * / {@code DistributedAggregateRewriter} machinery the pass reuses):  
+                } else {
+     * stay coordinator-centric. The {@code groupSet} of a SINGLE aggregate indexes INPUT columns, so the  
+        );
+     *
+    @Override
+     *   <li>non-empty group set → require {@code WORKER+HASH(groupKeys, N)} on the input;</li>
+ * @opensearch.internal
+    @Override
+        for (int i = 0; i < getAggCallList().size(); i++) {
+            traitSet,
+     * read as an agg-state column. No-op for SINGLE/PARTIAL (raw input) and already-fronted sets.
+    /**
+    public OpenSearchAggregate(
+     * rule that doesn't preserve them. Order is stable for {@link #getAnnotations()} /
+        }
         return mode;
     }  
-
-    /** Returns the per-call annotation map (keyed by call index). */
-    public Map<Integer, AggregateCallAnnotation> getCallAnnotations() {  
-        return callAnnotations;
-    }
-
-    public Map<Integer, List<RexLiteral>> getFinalExtraLiteralArgs() {
-        return finalExtraLiteralArgs;
-    }  
-
-    /** See {@link #perCallIntermediateField}. */
-    public List<IntermediateField> getIntermediateFields() {  
-        return perCallIntermediateField;
-    }
-
-    @Override
-    public List<String> getViableBackends() {
-        return viableBackends;  
-    }
-
-    /**  
-     * Aggregate output: group-by fields first (inherited from input), then agg results (derived).
-     * Group-by fields inherit storage info from the input. Agg results are derived columns.
-     */  
-    @Override
-    public List<FieldStorageInfo> getOutputFieldStorage() {
-        RelNode input = RelNodeUtils.unwrapHep(getInput());  
-        List<FieldStorageInfo> inputStorage = (input instanceof OpenSearchRelNode openSearchInput)
-            ? openSearchInput.getOutputFieldStorage()
-            : List.of();  
-
-        List<FieldStorageInfo> outputStorage = new ArrayList<>();
-
-        // Group-by fields: inherit from input
-        for (int groupIdx : getGroupSet()) {
-            if (groupIdx < inputStorage.size()) {  
-                outputStorage.add(inputStorage.get(groupIdx));
-            }
-        }  
-
-        // Agg results: derived columns whose physical-deps are the union of arg refs' deps
-        // (preserving first-seen order across argList, then rexList).  
-        for (AggregateCall aggCall : getAggCallList()) {
-            LinkedHashSet<String> deps = new LinkedHashSet<>();
-            for (int argIdx : aggCall.getArgList()) {  
-                if (argIdx >= inputStorage.size()) {
-                    throw new IllegalStateException(
-                        "AggregateCall arg["  
-                            + argIdx
-                            + "] has no matching FieldStorageInfo entry "
-                            + "(input only declares "  
-                            + inputStorage.size()
-                            + " columns)"
-                    );  
-                }
-                FieldStorageInfo src = inputStorage.get(argIdx);
-                if (src.isDerived()) {  
-                    deps.addAll(src.getDependsOnPhysicalCols());
-                } else {
-                    deps.add(src.getFieldName());  
-                }
-            }
-            for (RexNode rex : aggCall.rexList) {  
-                deps.addAll(RelNodeUtils.resolvePhysicalDeps(rex, inputStorage));
-            }
-            outputStorage.add(FieldStorageInfo.derivedColumn(aggCall.getName(), aggCall.getType().getSqlTypeName(), deps));  
-        }
-
-        return outputStorage;  
-    }
-
-    @Override  
-    public Aggregate copy(
-        RelTraitSet traitSet,
-        RelNode input,  
-        ImmutableBitSet groupSet,
-        List<ImmutableBitSet> groupSets,
-        List<AggregateCall> aggCalls  
-    ) {
-        return new OpenSearchAggregate(
-            getCluster(),  
-            traitSet,
-            input,
-            groupSet,  
-            groupSets,
-            aggCalls,
-            mode,  
-            viableBackends,
-            callAnnotations,
-            finalExtraLiteralArgs,  
-            perCallIntermediateField
-        );
-    }  
-
-    /**
-     * SINGLE-mode aggregate over partitioned input is incorrect (each shard would aggregate  
-     * independently, results would never merge). FINAL has two legal input shapes:
-     * SINGLETON+COORDINATOR (the M0/M1 coord-centric path — partials gathered to coord, FINAL
-     * merges) and HASH+WORKER (the M3 shuffle path — partials hash-shuffled by group keys,  
-     * FINAL runs on each worker over its hash bucket). Anything else is rejected.
-     *
-     * <p>PARTIAL is unconstrained (it consumes whatever the child distribution is and emits  
-     * partial-state output at the same locality).
-     *
-     * <p>The check tolerates ANY (Volcano's "still exploring" placeholder) on either side so the  
-     * planner can register alternatives during memo expansion before the trait is finalized.
-     *
-     * <p>Cost: FINAL pays merge cost proportional to its input rows. At COORDINATOR+SINGLETON  
-     * the merge runs serially → cost = inputRows. At HASH+WORKER+N the merge runs across N
-     * workers in parallel → cost = inputRows / N. The parallelism win is what makes the shuffle
-     * path beat the coord-centric path on high-cardinality {@code GROUP BY} despite paying an  
-     * extra gather ER on top: for shuffle to win the savings on FINAL must exceed the extra
-     * gather ER's setup + final-output rows. This naturally amortizes only at scale, leaving
-     * tiny aggregates on coord-centric.  
-     *
-     * <p><b>DO NOT REMOVE the SINGLE-mode infinite-cost branch below.</b> It is the correctness
-     * backstop for the whole split: {@code OpenSearchAggregateSplitRule} now emits a single  
-     * alternative deterministically (no cost comparison), so this gate is the ONLY thing that
-     * rejects a SINGLE aggregate placed over RANDOM (multi-shard) input. Without it, Volcano can
-     * legally land a SINGLE aggregate directly on partitioned data — each shard aggregates in  
-     * isolation, the partials never merge, and queries return silently wrong results. Plan-shape
-     * tests happen to catch the current shapes, but they are not a substitute for this gate;
-     * deleting it breaks correctness, not just a test.  
-     *
-     * <p>TODO(trait-propagation): PARTIAL/FINAL split PLACEMENT is already a trait algebra — see
-     * {@link DistributionAware#requiredInputDistribution}/{@link DistributionAware#deriveOutputDistribution}  
-     * on this class, consulted by the post-CBO {@code DistributionEnforcementPass}. A future top-down
-     * migration ({@code setTopDownOpt} + Calcite {@code PhysicalNode} {@code deriveTraits}/
-     * {@code passThroughTraits}) would fold the cost-RANKING part of this override into the trait  
-     * machinery. NOTE: the SINGLE-mode infinite-cost gate below is a CORRECTNESS backstop, not cost
-     * ranking — it must survive any such migration (see the paragraph above).
-     */  
-    @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-        // SINGLE / PARTIAL placement gates (upstream): price out a SINGLE over partitioned input  
-        // and a PARTIAL over singleton input so Volcano never lands them on the wrong distribution.
-        for (int index = 0; index < getInput().getTraitSet().size(); index++) {
-            RelTrait trait = getInput().getTraitSet().getTrait(index);  
-            if (!(trait instanceof OpenSearchDistribution distribution)) continue;
-            boolean inputIsSingleton = distribution.getType() == RelDistribution.Type.SINGLETON
-                || distribution.getType() == RelDistribution.Type.ANY;  
-
-            // Prices a SINGLE over partitioned input out (infinite cost) so it's never chosen.
-            if (mode == AggregateMode.SINGLE && !inputIsSingleton) {  
-                return planner.getCostFactory().makeInfiniteCost();
-            }
-            // Prices a PARTIAL above the Exchange out (infinite cost) so it's never chosen.  
-            if (mode == AggregateMode.PARTIAL && inputIsSingleton) {
-                return planner.getCostFactory().makeInfiniteCost();
-            }  
-        }
-        // FINAL placement + parallel-merge cost (our hash-shuffle feature): FINAL is legal only over
-        // a COORDINATOR+SINGLETON gather or a WORKER+HASH shuffle, and the HASH case merges in  
-        // parallel across N workers (the /partitionCount discount that lets shuffle beat coord-centric
-        // for high-cardinality GROUP BY).
         if (mode == AggregateMode.FINAL) {  
-            int partitionCount = 1;
-            boolean traitResolved = false;
-            for (int index = 0; index < getInput().getTraitSet().size(); index++) {  
-                RelTrait trait = getInput().getTraitSet().getTrait(index);
-                if (!(trait instanceof OpenSearchDistribution distribution)) continue;
-                if (distribution.getType() == RelDistribution.Type.ANY) continue;  
-                boolean singletonCoord = distribution.getType() == RelDistribution.Type.SINGLETON
-                    && distribution.getLocality() == OpenSearchDistribution.Locality.COORDINATOR;
-                boolean hashWorker = distribution.getType() == RelDistribution.Type.HASH_DISTRIBUTED  
-                    && distribution.getLocality() == OpenSearchDistribution.Locality.WORKER;
-                if (!singletonCoord && !hashWorker) {
-                    return planner.getCostFactory().makeInfiniteCost();  
-                }
-                traitResolved = true;
-                if (hashWorker && distribution.getPartitionCount() != null) {  
-                    partitionCount = Math.max(1, distribution.getPartitionCount());
-                }
-            }  
-            // FINAL pays a merge cost proportional to its input row count. Coord-centric merges
-            // serially (partitionCount=1); HASH+WORKER merges in parallel across N workers
-            // (partitionCount=N). The /N discount is what lets the shuffle path beat the  
-            // coord-centric path on high-cardinality GROUP BY despite paying an extra gather
-            // ER on top — but only when the savings exceed the gather's setup, so tiny inputs
-            // still route coord-centric. Use tinyCost while the trait is unresolved (Volcano's  
-            // ANY placeholder) so memo expansion can register alternatives without committing
-            // to a cost.
-            if (traitResolved) {  
-                double finalRows = mq.getRowCount(getInput());
-                double finalCost = finalRows / partitionCount;
-                return planner.getCostFactory().makeCost(finalCost, finalCost, 0);  
-            }
-        }
-        return planner.getCostFactory().makeTinyCost();  
-    }
-
-    // ---- DistributionAware (Option B post-CBO enforcement pass) ----  
-
-    /**
-     * A {@code SINGLE} aggregate over a distributable input declares it needs its input hash-partitioned  
-     * on the group keys, so the enforcement pass can split it into {@code Aggregate(PARTIAL)} on the
-     * workers + {@code Aggregate(FINAL)} on the coordinator (the existing {@code OpenSearchAggregateSplitRule}
-     * / {@code DistributedAggregateRewriter} machinery the pass reuses):  
-     * <ul>
-     *   <li>non-empty group set → require {@code WORKER+HASH(groupKeys, N)} on the input;</li>
+            cluster,  
+     * <p>PARTIAL is unconstrained (it consumes whatever the child distribution is and emits  
+ * <p>Per-call annotations are kept in a side-map keyed by call index — NOT in
+        this.callAnnotations = Map.copyOf(callAnnotations);
      *   <li>empty group set (e.g. {@code stats sum(x)} no {@code by}) → require {@code COORDINATOR+SINGLETON}:  
-     *       PARTIAL runs wherever the input is, FINAL merges the ≤N partials at the coordinator. The gather
-     *       is bounded (one partial row per partition), so no hash key is needed.</li>
-     * </ul>  
-     * Returns {@code null} (no requirement → input left at its CBO-chosen shape) for non-SINGLE modes, or
-     * when the aggregate is not decomposable ({@code STATE_EXPANDING}/{@code DISTINCT}/percentile) — those
-     * stay coordinator-centric. The {@code groupSet} of a SINGLE aggregate indexes INPUT columns, so the  
-     * hash keys are the group-set bits directly.
-     */
+        this.viableBackends = viableBackends;
+                traitResolved = true;
+        return mode == AggregateMode.FINAL ? ImmutableBitSet.range(groupSet.cardinality()) : groupSet;
+            // coord-centric path on high-cardinality GROUP BY despite paying an extra gather
+    /** Returns the per-call annotation map (keyed by call index). */
+        List<String> viableBackends,
+        RelNode input = RelNodeUtils.unwrapHep(getInput());  
     @Override  
-    public OpenSearchDistribution requiredInputDistribution(int inputIndex, int partitionCount, OpenSearchDistributionTraitDef traitDef) {
-        if (inputIndex != 0 || mode != AggregateMode.SINGLE) {
-            return null;  
-        }
-        if (org.opensearch.analytics.planner.rules.OpenSearchAggregateSplitRule.shouldSkipPartialFinalSplit(this)) {
-            return null;  
-        }
-        if (getGroupSet().isEmpty()) {
-            // No partition key — the PARTIAL/FINAL split still distributes the work below, but the agg  
-            // itself gathers its partials to the coordinator. Requiring SINGLETON here is a no-op when the
-            // input is already gathered; the distribution win comes from the input's own requirement.
-            return traitDef.coordSingleton();  
-        }
-        return traitDef.hash(getGroupSet().asList(), partitionCount);
-    }  
-
-    /**
-     * An aggregate's output is partitioned by its group keys only when it ran distributed (PARTIAL/FINAL)  
-     * — but in the pre-split SINGLE form the pass hasn't decided that yet, and the FINAL gathers to the
-     * coordinator anyway. So we do not advertise a co-partitionable output here (returns {@code null}); a
-     * parent that needs a specific partitioning will demand its own exchange. (Aggregate output rarely  
-     * feeds a co-partition-sensitive parent in PPL; revisit if a join-on-agg-output shape needs it.)
-     */
-    @Override  
-    public OpenSearchDistribution deriveOutputDistribution(
-        List<OpenSearchDistribution> childDistributions,
-        OpenSearchDistributionTraitDef traitDef  
-    ) {
-        return null;
-    }  
-
-    @Override
-    public RelWriter explainTerms(RelWriter pw) {  
-        return super.explainTerms(pw).item("mode", mode).item("viableBackends", viableBackends);
-    }
-
-    @Override
-    public List<OperatorAnnotation> getAnnotations() {
-        if (callAnnotations.isEmpty()) {  
-            return List.of();
-        }
-        List<OperatorAnnotation> annotations = new ArrayList<>(callAnnotations.size());  
-        for (int i = 0; i < getAggCallList().size(); i++) {
-            AggregateCallAnnotation annotation = callAnnotations.get(i);
-            if (annotation != null) {  
-                annotations.add(annotation);
-            }
-        }  
-        return annotations;
-    }
-
-    @Override
-    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {
-        // Rebuild the side-map preserving call-index keys, swapping annotation values  
-        // for the resolved (single-backend-narrowed) variants in the same iteration order
-        // getAnnotations() used.
-        Map<Integer, AggregateCallAnnotation> rebuilt = new LinkedHashMap<>(callAnnotations.size());  
-        int annotationIndex = 0;
-        for (int i = 0; i < getAggCallList().size(); i++) {
-            if (callAnnotations.containsKey(i)) {  
-                rebuilt.put(i, (AggregateCallAnnotation) resolvedAnnotations.get(annotationIndex++));
-            }
-        }  
-        return new OpenSearchAggregate(
-            getCluster(),
-            getTraitSet(),  
-            children.getFirst(),
-            getGroupSet(),
-            getGroupSets(),  
-            getAggCallList(),
-            mode,
-            List.of(backend),  
-            rebuilt,
+    /**  
             finalExtraLiteralArgs,
-            perCallIntermediateField  
-        );
-    }
-
-    /**
-     * Hint carried on the stripped {@link LogicalAggregate} of a FINAL-mode aggregate so backend
-     * rewriters that run after stripping can still tell the coordinator-side merge half apart from  
-     * the PARTIAL half. Hints are not part of the Calcite digest and survive {@code copy}, so this
-     * is a pure side-channel for the fragment convertor.
+import org.apache.calcite.util.ImmutableBitSet;
+            aggCalls,
+import org.apache.calcite.rex.RexLiteral;
+        super(  
+     * on the prefix range so a non-prefix key (e.g. {@code avg(x) by span(y,5)} → {@code {1}}) isn't
+            return traitDef.coordSingleton();  
+            children.getFirst(),
+                    );  
+     * Per-call annotations keyed by call index in {@link #getAggCallList()}. May be empty when
+    public static OpenSearchAggregate finalAfterRewrite(OpenSearchAggregate prior, RelNode newInput, List<AggregateCall> rebuiltCalls) {  
+            groupSets,
      */  
-    public static final String FINAL_MODE_HINT = "OPENSEARCH_AGGREGATE_FINAL";
-
-    /** True when {@code aggregate} is a stripped FINAL-mode {@link OpenSearchAggregate}. */  
-    public static boolean isFinalMode(Aggregate aggregate) {
-        return aggregate.getHints().stream().anyMatch(hint -> FINAL_MODE_HINT.equals(hint.hintName));
+            // still route coord-centric. Use tinyCost while the trait is unresolved (Volcano's  
+        AggregateMode mode  
+        List<AggregateCall> aggCalls,
     }  
-
-    @Override
-    public RelNode stripAnnotations(List<RelNode> strippedChildren) {  
-        // Annotations live out-of-band; the aggCall list passes through unchanged.
-        List<RelHint> hints = mode == AggregateMode.FINAL ? List.of(RelHint.builder(FINAL_MODE_HINT).build()) : List.of();
-        return LogicalAggregate.create(strippedChildren.getFirst(), hints, getGroupSet(), getGroupSets(), getAggCallList());  
+            }
+            mode,
+     * <p>TODO(trait-propagation): PARTIAL/FINAL split PLACEMENT is already a trait algebra — see
+        // FINAL placement + parallel-merge cost (our hash-shuffle feature): FINAL is legal only over
+     */
+                deps.addAll(RelNodeUtils.resolvePhysicalDeps(rex, inputStorage));
+     * migration ({@code setTopDownOpt} + Calcite {@code PhysicalNode} {@code deriveTraits}/
+        this.mode = mode;  
+     *       PARTIAL runs wherever the input is, FINAL merges the ≤N partials at the coordinator. The gather
+            if (traitResolved) {  
+            newInput,
     }
+        for (AggregateCall aggCall : getAggCallList()) {
+            if (mode == AggregateMode.SINGLE && !inputIsSingleton) {  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+        }
+        List<String> viableBackends,
+    /** See {@link #perCallIntermediateField}. */
+        // (preserving first-seen order across argList, then rexList).  
+     * is a pure side-channel for the fragment convertor.
+            ? openSearchInput.getOutputFieldStorage()
+import org.opensearch.analytics.planner.RelNodeUtils;
+     * FINAL reads PARTIAL's output, where Calcite has fronted the group keys to {@code 0..n-1}; group  
+        AggregateMode mode,  
+                if (!singletonCoord && !hashWorker) {
+        OpenSearchDistributionTraitDef traitDef  
+        // a COORDINATOR+SINGLETON gather or a WORKER+HASH shuffle, and the HASH case merges in  
+        List<AggregateCall> aggCalls  
+        List<OperatorAnnotation> annotations = new ArrayList<>(callAnnotations.size());  
+                    partitionCount = Math.max(1, distribution.getPartitionCount());
+import java.util.LinkedHashMap;
+import org.apache.calcite.plan.RelTrait;
+     *
+        }  
+            getTraitSet(),  
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.plan.RelOptCost;
+    @Override
+     * alternative deterministically (no cost comparison), so this gate is the ONLY thing that
+     * SINGLE-mode aggregate over partitioned input is incorrect (each shard would aggregate  
+     * machinery. NOTE: the SINGLE-mode infinite-cost gate below is a CORRECTNESS backstop, not cost
+        RelOptCluster cluster,  
 }
+        return new OpenSearchAggregate(
+    }  
+     * </ul>  
+            rebuilt,
+ * Calcite's {@code AggCallBinding.preOperands}, which would otherwise corrupt  
+     * hash keys are the group-set bits directly.
+     * workers in parallel → cost = inputRows / N. The parallelism win is what makes the shuffle
+    public OpenSearchDistribution deriveOutputDistribution(
+    ) {
+        );
+    }  
+        RelNode input,
+    public Map<Integer, AggregateCallAnnotation> getCallAnnotations() {  
+     * Aggregate output: group-by fields first (inherited from input), then agg results (derived).
+import org.apache.calcite.rel.RelNode;
+            : List.of();  
+    /**
+            AggregateCallAnnotation annotation = callAnnotations.get(i);
+                double finalRows = mq.getRowCount(getInput());
+        this.perCallIntermediateField = Collections.unmodifiableList(new ArrayList<>(perCallIntermediateField));
+     * the PARTIAL half. Hints are not part of the Calcite digest and survive {@code copy}, so this
+    public RelNode stripAnnotations(List<RelNode> strippedChildren) {  
+                            + "] has no matching FieldStorageInfo entry "
+            input,
+        RelNode input,  
+        // Agg results: derived columns whose physical-deps are the union of arg refs' deps
+     * planner can register alternatives during memo expansion before the trait is finalized.
+                annotations.add(annotation);
+    public List<IntermediateField> getIntermediateFields() {  
+                if (argIdx >= inputStorage.size()) {
+        if (org.opensearch.analytics.planner.rules.OpenSearchAggregateSplitRule.shouldSkipPartialFinalSplit(this)) {
+            }
+        List<OpenSearchDistribution> childDistributions,
+    public OpenSearchAggregate(  
+ *  
+            rebuiltCalls,
+     * rewriters that run after stripping can still tell the coordinator-side merge half apart from  
+            AggregateMode.FINAL,
+                            + " columns)"
+        return outputStorage;  
+                if (distribution.getType() == RelDistribution.Type.ANY) continue;  
+                FieldStorageInfo src = inputStorage.get(argIdx);
+                            + argIdx
+            groupSet,  
+     * <ul>
+            }
+        RelTraitSet traitSet,
+        // for high-cardinality GROUP BY).
+import org.apache.calcite.rex.RexNode;  
+     * feeds a co-partition-sensitive parent in PPL; revisit if a join-on-agg-output shape needs it.)
+        return List.of(ImmutableBitSet.range(groupSet.cardinality()));
+        ImmutableBitSet groupSet,  
+    }  
+            RelTrait trait = getInput().getTraitSet().getTrait(index);  

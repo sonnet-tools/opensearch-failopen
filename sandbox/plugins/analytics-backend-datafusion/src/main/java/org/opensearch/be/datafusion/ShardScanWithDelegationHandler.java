@@ -1,93 +1,83 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.opensearch.analytics.backend.ShardScanExecutionContext;
-import org.opensearch.analytics.spi.BackendExecutionContext;
-import org.opensearch.analytics.spi.CommonExecutionContext;  
-import org.opensearch.analytics.spi.FilterTreeShape;
-import org.opensearch.analytics.spi.FragmentInstructionHandler;
-import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;  
-import org.opensearch.be.datafusion.nativelib.NativeBridge;
-import org.opensearch.be.datafusion.nativelib.SessionContextHandle;
 import org.opensearch.index.engine.dataformat.DataFormatRegistry;  
-
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;  
-
-/**
- * Handles ShardScanWithDelegation instruction: creates a SessionContext via FFM  
- * configured for indexed execution — registers the delegated_predicate UDF and
- * sets up the custom scan operator (IndexedTableProvider) with FilterTreeShape
- * and delegatedPredicateCount.  
- */
-public class ShardScanWithDelegationHandler implements FragmentInstructionHandler<ShardScanWithDelegationInstructionNode> {
-
+        try (Arena arena = Arena.ofConfined()) {
+        long readerPtr = dfReader.getReaderHandle().getPointer();
+import org.opensearch.analytics.spi.CommonExecutionContext;  
+ * this file be licensed under the Apache-2.0 license or a
+        long runtimePtr = dataFusionService.getNativeRuntime().get();  
+                // liveDocs application in collectDocs. When false, zero extra work.
+        // Substrait plan's NamedTable binds. Fall back to the concrete shard index name when absent.
     private final DataFusionPlugin plugin;
-
-    ShardScanWithDelegationHandler(DataFusionPlugin plugin) {  
-        this.plugin = plugin;
-    }
-
-    @Override
-    public BackendExecutionContext apply(
-        ShardScanWithDelegationInstructionNode node,  
-        CommonExecutionContext commonContext,
-        BackendExecutionContext backendContext
-    ) {  
-        ShardScanExecutionContext context = (ShardScanExecutionContext) commonContext;
-        DataFusionService dataFusionService = plugin.getDataFusionService();
-        DataFormatRegistry registry = plugin.getDataFormatRegistry();  
-
-        DatafusionReader dfReader = null;
-        for (String formatName : plugin.getSupportedFormats()) {  
             dfReader = context.getReader().getReader(registry.format(formatName), DatafusionReader.class);
             if (dfReader != null) break;
-        }  
-        if (dfReader == null) {
-            throw new IllegalStateException("No DatafusionReader available in the acquired reader");
-        }  
-
-        long readerPtr = dfReader.getReaderHandle().getPointer();
-        long runtimePtr = dataFusionService.getNativeRuntime().get();  
-        long contextId = context.getTask() != null ? context.getTask().getId() : 0L;
-        // The coordinator captured the logical table name (alias / index pattern / index the query
         // referenced) from the plan's table-scan leaf. Register the shard's table under it so the  
-        // Substrait plan's NamedTable binds. Fall back to the concrete shard index name when absent.
-        String tableName = node.getLogicalTableName() != null ? node.getLogicalTableName() : context.getTableName();
-        FilterTreeShape treeShape = node.getTreeShape();  
-        int delegatedPredicateCount = node.getDelegatedPredicateCount();
-
+        DataFormatRegistry registry = plugin.getDataFormatRegistry();  
+ * SPDX-License-Identifier: Apache-2.0
         WireConfigSnapshot snapshot = plugin.getDatafusionSettings().getSnapshot();  
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment segment = arena.allocate(WireConfigSnapshot.BYTE_SIZE);
-            snapshot.writeTo(segment);  
-            SessionContextHandle sessionCtxHandle = NativeBridge.createSessionContextForIndexedExecution(
-                readerPtr,
-                runtimePtr,  
-                tableName,
-                contextId,
-                treeShape.ordinal(),  
-                delegatedPredicateCount,
-                node.requestsRowIds(),
-                // Per-shard hasDeletions signal from AnalyticsSearchService (Lucene backend's  
-                // directoryReader().hasDeletions()). When true, the native indexed executor ANDs a
-                // synthetic match-all Collector (reserved annotation id, resolved by the Lucene
-                // handle to the segment's liveDocs) into the decoded filter tree where needed;  
-                // trees that already carry a correctness Collector are covered by the Lucene-side
-                // liveDocs application in collectDocs. When false, zero extra work.
+        DatafusionReader dfReader = null;
+import org.opensearch.analytics.spi.BackendExecutionContext;
+        // The coordinator captured the logical table name (alias / index pattern / index the query
                 context.hasDeletedDocs(),  
-                context.hasPartialAggregate(),
-                segment.address(),
-                context.getFragmentBytes()  
-            );
-            return new DataFusionSessionState(sessionCtxHandle);
         }  
+                // directoryReader().hasDeletions()). When true, the native indexed executor ANDs a
+import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;  
+                delegatedPredicateCount,
     }
+ * Handles ShardScanWithDelegation instruction: creates a SessionContext via FFM  
+        ShardScanExecutionContext context = (ShardScanExecutionContext) commonContext;
+import org.opensearch.analytics.spi.FilterTreeShape;
+import org.opensearch.analytics.backend.ShardScanExecutionContext;
+/*  
+            snapshot.writeTo(segment);  
+                // Per-shard hasDeletions signal from AnalyticsSearchService (Lucene backend's  
+        for (String formatName : plugin.getSupportedFormats()) {  
+ * and delegatedPredicateCount.  
+                // synthetic match-all Collector (reserved annotation id, resolved by the Lucene
+ */
+ */  
+                context.hasPartialAggregate(),
+    ) {  
+ * compatible open source license.
+public class ShardScanWithDelegationHandler implements FragmentInstructionHandler<ShardScanWithDelegationInstructionNode> {
+            );
+            throw new IllegalStateException("No DatafusionReader available in the acquired reader");
+                treeShape.ordinal(),  
+                readerPtr,
+        this.plugin = plugin;
+    @Override
+                runtimePtr,  
+        long contextId = context.getTask() != null ? context.getTask().getId() : 0L;
+            SessionContextHandle sessionCtxHandle = NativeBridge.createSessionContextForIndexedExecution(
+    public BackendExecutionContext apply(
+/**
+    ShardScanWithDelegationHandler(DataFusionPlugin plugin) {  
+import java.lang.foreign.Arena;
+        DataFusionService dataFusionService = plugin.getDataFusionService();
+                // trees that already carry a correctness Collector are covered by the Lucene-side
+        FilterTreeShape treeShape = node.getTreeShape();  
+import org.opensearch.be.datafusion.nativelib.NativeBridge;
+        int delegatedPredicateCount = node.getDelegatedPredicateCount();
+        ShardScanWithDelegationInstructionNode node,  
+                node.requestsRowIds(),
+        }  
+                tableName,
+ *
+        BackendExecutionContext backendContext
+        }  
+import org.opensearch.analytics.spi.FragmentInstructionHandler;
+ * configured for indexed execution — registers the delegated_predicate UDF and
+                segment.address(),
 }
+            MemorySegment segment = arena.allocate(WireConfigSnapshot.BYTE_SIZE);
+import org.opensearch.be.datafusion.nativelib.SessionContextHandle;
+                // handle to the segment's liveDocs) into the decoded filter tree where needed;  
+            return new DataFusionSessionState(sessionCtxHandle);
+    }
+        String tableName = node.getLogicalTableName() != null ? node.getLogicalTableName() : context.getTableName();
+import java.lang.foreign.MemorySegment;  
+ * sets up the custom scan operator (IndexedTableProvider) with FilterTreeShape
+                context.getFragmentBytes()  
+                contextId,
+        if (dfReader == null) {
+        CommonExecutionContext commonContext,
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.be.datafusion;

@@ -1,78 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+ * Modifications Copyright OpenSearch Contributors. See
+    public void reset() {
+package org.opensearch.index.fieldvisitor;
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fieldvisitor;
-
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.StoredFieldVisitor;
-import org.opensearch.index.mapper.IdFieldMapper;  
 import org.opensearch.index.mapper.Uid;
-
-/**  
- * Visitor pattern for doc ids only
- *
- * @opensearch.internal  
- */
-public final class IdOnlyFieldVisitor extends StoredFieldVisitor {
-    private String id = null;  
-    private boolean visited = false;
-
-    @Override  
-    public Status needsField(FieldInfo fieldInfo) {
-        if (visited) {
-            return Status.STOP;  
-        }
-        if (IdFieldMapper.NAME.equals(fieldInfo.name)) {
-            visited = true;  
-            return Status.YES;
-        } else {
-            return Status.NO;  
-        }
     }
-
+ * compatible open source license.
+ * this work for additional information regarding copyright
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+/*
+        if (IdFieldMapper.NAME.equals(fieldInfo.name)) {
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+    private boolean visited = false;
+ *
+ */
+import org.apache.lucene.index.StoredFieldVisitor;
+    @Override  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+            return Status.NO;  
+            return Status.STOP;  
+ */  
+public final class IdOnlyFieldVisitor extends StoredFieldVisitor {
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+/**  
+ * Licensed to Elasticsearch under one or more contributor  
+    private String id = null;  
+        if (visited) {
+    public Status needsField(FieldInfo fieldInfo) {
+}
+            id = Uid.decodeId(value);
+ * under the License.  
+            return Status.YES;
+        }
+ * @opensearch.internal  
     @Override
-    public void binaryField(FieldInfo fieldInfo, byte[] value) {
+ * specific language governing permissions and limitations
+    }
+import org.apache.lucene.index.FieldInfo;
+/*  
+        id = null;
+        }
+        } else {
+        visited = false;  
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+/*  
+import org.opensearch.index.mapper.IdFieldMapper;  
+    public String getId() {  
         assert IdFieldMapper.NAME.equals(fieldInfo.name) : fieldInfo;  
         if (IdFieldMapper.NAME.equals(fieldInfo.name)) {
-            id = Uid.decodeId(value);
-        }  
-    }
-
-    public String getId() {  
+ * Visitor pattern for doc ids only
         return id;
+    public void binaryField(FieldInfo fieldInfo, byte[] value) {
+ *
+ */  
+ * You may obtain a copy of the License at  
     }
-
-    public void reset() {
-        id = null;
-        visited = false;  
-    }
-}
+ *  
+        }  
+            visited = true;  
+ * The OpenSearch Contributors require contributions made to  
+ */

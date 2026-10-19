@@ -1,210 +1,199 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+                    for (int i = 0; i < numExcs2; i++) {
+import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
+                case 3:
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+                case 2:  
+                    int numIncs3 = randomIntBetween(1, 20);  
+                fail();  
+                    SortedSet<BytesRef> excludeValues3 = new TreeSet<>();
+                    SortedSet<BytesRef> excludeValues2 = new TreeSet<>();  
+            factory.collectMode(randomFrom(SubAggCollectionMode.values()));
+                break;
+            switch (minDocCount) {
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+        List<BucketOrder> orders = new ArrayList<>();  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
-import org.opensearch.search.aggregations.BaseAggregationTestCase;  
-import org.opensearch.search.aggregations.BucketOrder;
+        if (randomBoolean()) {
+        if (randomBoolean()) {  
+                orders.add(BucketOrder.count(randomBoolean()));  
 import org.opensearch.search.aggregations.bucket.terms.IncludeExclude;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;  
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregatorFactory.ExecutionMode;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeSet;  
-
-public class TermsTests extends BaseAggregationTestCase<TermsAggregationBuilder> {
-
-    private static final String[] executionHints;
-
-    static {  
-        ExecutionMode[] executionModes = ExecutionMode.values();
-        executionHints = new String[executionModes.length];
-        for (int i = 0; i < executionModes.length; i++) {  
-            executionHints[i] = executionModes[i].toString();
-        }
+/*  
+                    break;  
+                    incExc = new IncludeExclude(includeValues3, excludeValues3);  
     }  
-
-    @Override
+            }
+                default:
+import java.util.TreeSet;  
+ * not use this file except in compliance with the License.
+                case 1:
+                    SortedSet<BytesRef> includeValues2 = null;
+                    orders.addAll(randomOrder());
+ *
+            }  
+        if (randomBoolean()) {
+                    fail();
+                    break;  
+    private List<BucketOrder> randomOrder() {
+        }
+                    break;  
+            case 0:
+                    break;  
     protected TermsAggregationBuilder createTestAggregatorBuilder() {  
-        String name = randomAlphaOfLengthBetween(3, 20);
-        TermsAggregationBuilder factory = new TermsAggregationBuilder(name);
-        String field = randomAlphaOfLengthBetween(3, 20);  
-        randomFieldOrScript(factory, field);
-        if (randomBoolean()) {
-            factory.missing("MISSING");  
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;  
+import org.opensearch.search.aggregations.BucketOrder;
+        return orders;
+import java.util.SortedSet;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }  
+                    int numExcs2 = randomIntBetween(1, 20);
+                case 2:
+                orders.add(BucketOrder.key(randomBoolean()));  
+                    fail();  
+            factory.executionHint(randomFrom(executionHints));
         }
+            factory.includeExclude(incExc);
+                    incExc = new IncludeExclude(null, "foobaz");
+                case 4:
         if (randomBoolean()) {
-            factory.size(randomIntBetween(1, Integer.MAX_VALUE));  
-        }
-        if (randomBoolean()) {
+                    break;  
+}
+        switch (randomInt(4)) {
             factory.shardSize(randomIntBetween(1, Integer.MAX_VALUE));  
         }
-        if (randomBoolean()) {
-            int minDocCount = randomInt(4);  
-            switch (minDocCount) {
-                case 0:
-                    break;  
-                case 1:
-                case 2:
-                case 3:  
-                case 4:
-                    minDocCount = randomIntBetween(0, Integer.MAX_VALUE);
-                    break;  
-                default:
-                    fail();
-            }  
-            factory.minDocCount(minDocCount);
+                break;
         }
-        if (randomBoolean()) {  
-            int shardMinDocCount = randomInt(4);
-            switch (shardMinDocCount) {
-                case 0:  
-                    break;
-                case 1:
-                case 2:  
-                case 3:
-                case 4:
-                    shardMinDocCount = randomIntBetween(0, Integer.MAX_VALUE);  
-                    break;
-                default:
-                    fail();  
-            }
-            factory.shardMinDocCount(shardMinDocCount);
-        }  
-        if (randomBoolean()) {
-            factory.collectMode(randomFrom(SubAggCollectionMode.values()));
-        }  
-        if (randomBoolean()) {
-            factory.executionHint(randomFrom(executionHints));
-        }  
-        if (randomBoolean()) {
-            factory.format("###.##");
-        }  
-        if (randomBoolean()) {
-            IncludeExclude incExc = null;
-            switch (randomInt(6)) {  
-                case 0:
-                    incExc = new IncludeExclude("foobar", null);
+package org.opensearch.search.aggregations.bucket;
+        }
                     break;  
-                case 1:
-                    incExc = new IncludeExclude(null, "foobaz");
-                    break;  
-                case 2:
-                    incExc = new IncludeExclude("foobar", "foobaz");
-                    break;  
-                case 3:
-                    SortedSet<BytesRef> includeValues = new TreeSet<>();
-                    int numIncs = randomIntBetween(1, 20);  
-                    for (int i = 0; i < numIncs; i++) {
-                        includeValues.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
-                    }  
-                    SortedSet<BytesRef> excludeValues = null;
-                    incExc = new IncludeExclude(includeValues, excludeValues);
-                    break;  
-                case 4:
-                    SortedSet<BytesRef> includeValues2 = null;
-                    SortedSet<BytesRef> excludeValues2 = new TreeSet<>();  
-                    int numExcs2 = randomIntBetween(1, 20);
-                    for (int i = 0; i < numExcs2; i++) {
-                        excludeValues2.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));  
-                    }
-                    incExc = new IncludeExclude(includeValues2, excludeValues2);
-                    break;  
+ * compatible open source license.
+            }  
+        ExecutionMode[] executionModes = ExecutionMode.values();
+        String name = randomAlphaOfLengthBetween(3, 20);
                 case 5:
-                    SortedSet<BytesRef> includeValues3 = new TreeSet<>();
-                    int numIncs3 = randomIntBetween(1, 20);  
-                    for (int i = 0; i < numIncs3; i++) {
-                        includeValues3.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
-                    }  
-                    SortedSet<BytesRef> excludeValues3 = new TreeSet<>();
-                    int numExcs3 = randomIntBetween(1, 20);
                     for (int i = 0; i < numExcs3; i++) {  
-                        excludeValues3.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
-                    }
-                    incExc = new IncludeExclude(includeValues3, excludeValues3);  
-                    break;
-                case 6:
-                    final int numPartitions = randomIntBetween(1, 100);  
-                    final int partition = randomIntBetween(0, numPartitions - 1);
-                    incExc = new IncludeExclude(partition, numPartitions);
-                    break;  
-                default:
-                    fail();
-            }  
-            factory.includeExclude(incExc);
-        }
-        if (randomBoolean()) {  
-            List<BucketOrder> order = randomOrder();
-            if (order.size() == 1 && randomBoolean()) {
-                factory.order(order.get(0));  
-            } else {
-                factory.order(order);
-            }  
-        }
+                    int numIncs = randomIntBetween(1, 20);  
         if (randomBoolean()) {
-            factory.showTermDocCountError(randomBoolean());  
-        }
-        return factory;
-    }  
-
-    private List<BucketOrder> randomOrder() {
-        List<BucketOrder> orders = new ArrayList<>();  
-        switch (randomInt(4)) {
-            case 0:
-                orders.add(BucketOrder.key(randomBoolean()));  
-                break;
-            case 1:
-                orders.add(BucketOrder.count(randomBoolean()));  
-                break;
+                case 0:  
+import java.util.ArrayList;  
+import org.apache.lucene.util.BytesRef;
+/*
+                    incExc = new IncludeExclude("foobar", null);
+                    incExc = new IncludeExclude(includeValues2, excludeValues2);
             case 2:
-                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomBoolean()));  
+        if (randomBoolean()) {
+                    shardMinDocCount = randomIntBetween(0, Integer.MAX_VALUE);  
                 break;
-            case 3:
-                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomAlphaOfLengthBetween(3, 20), randomBoolean()));  
-                break;
-            case 4:
-                int numOrders = randomIntBetween(1, 3);  
-                for (int i = 0; i < numOrders; i++) {
-                    orders.addAll(randomOrder());
+ * GitHub history for details.
+        String field = randomAlphaOfLengthBetween(3, 20);  
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregatorFactory.ExecutionMode;
                 }  
-                break;
-            default:
-                fail();  
+                        excludeValues2.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));  
+                    SortedSet<BytesRef> excludeValues = null;
+ * KIND, either express or implied.  See the License for the
+                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomBoolean()));  
+                    SortedSet<BytesRef> includeValues3 = new TreeSet<>();
+import java.util.List;
+        executionHints = new String[executionModes.length];
+            case 3:
+            factory.showTermDocCountError(randomBoolean());  
+                    }  
+            case 4:
+                default:
+                    SortedSet<BytesRef> includeValues = new TreeSet<>();
         }
-        return orders;
+import org.opensearch.search.aggregations.BaseAggregationTestCase;  
+ * this work for additional information regarding copyright
+                    final int partition = randomIntBetween(0, numPartitions - 1);
+ *
+                case 0:
+            default:
+        TermsAggregationBuilder factory = new TermsAggregationBuilder(name);
+                    }
+        if (randomBoolean()) {
+/*  
+        }  
+                int numOrders = randomIntBetween(1, 3);  
+                    break;  
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+                orders.add(BucketOrder.aggregation(randomAlphaOfLengthBetween(3, 20), randomAlphaOfLengthBetween(3, 20), randomBoolean()));  
+        if (randomBoolean()) {
+                case 3:
+                        includeValues.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
+                factory.order(order);
+ * Modifications Copyright OpenSearch Contributors. See
+        randomFieldOrScript(factory, field);
+                default:
+                    final int numPartitions = randomIntBetween(1, 100);  
+        return factory;
+                factory.order(order.get(0));  
     }  
-
-}
+                        excludeValues3.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
+                    break;  
+                    int numExcs3 = randomIntBetween(1, 20);
+ * Licensed to Elasticsearch under one or more contributor  
+            List<BucketOrder> order = randomOrder();
+        if (randomBoolean()) {
+            } else {
+            factory.minDocCount(minDocCount);
+        if (randomBoolean()) {  
+ * specific language governing permissions and limitations
+        }  
+ */  
+ * software distributed under the License is distributed on an
+            switch (shardMinDocCount) {
+                        includeValues3.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
+ * the Apache License, Version 2.0 (the "License"); you may
+                break;
+            executionHints[i] = executionModes[i].toString();
+                case 4:
+                    incExc = new IncludeExclude("foobar", "foobaz");
+                    break;
+                case 1:
+                    incExc = new IncludeExclude(partition, numPartitions);
+        }
+        }
+            int minDocCount = randomInt(4);  
+                    incExc = new IncludeExclude(includeValues, excludeValues);
+                case 2:
+                    for (int i = 0; i < numIncs; i++) {
+        if (randomBoolean()) {
+            switch (randomInt(6)) {  
+ * You may obtain a copy of the License at  
+                    minDocCount = randomIntBetween(0, Integer.MAX_VALUE);
+            }  
+                    break;
+                for (int i = 0; i < numOrders; i++) {
+                    for (int i = 0; i < numIncs3; i++) {
+    }  
+            factory.format("###.##");
+                break;
+            factory.shardMinDocCount(shardMinDocCount);
+    static {  
+            case 1:
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                case 0:
+            IncludeExclude incExc = null;
+                case 6:
+ * under the License.  
+ */  
+                case 1:
+ * SPDX-License-Identifier: Apache-2.0
+    private static final String[] executionHints;
+            int shardMinDocCount = randomInt(4);
+        }
+                    }
+        }  
+                case 4:
+            factory.size(randomIntBetween(1, Integer.MAX_VALUE));  
+            factory.missing("MISSING");  
+                    break;
+                    }  
+        for (int i = 0; i < executionModes.length; i++) {  
+                    fail();
+                case 3:  
+            if (order.size() == 1 && randomBoolean()) {
+public class TermsTests extends BaseAggregationTestCase<TermsAggregationBuilder> {

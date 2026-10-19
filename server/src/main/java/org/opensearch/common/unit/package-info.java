@@ -1,10 +1,9 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/** Base Units of Measure utility package. */
 package org.opensearch.common.unit;  
+ * The OpenSearch Contributors require contributions made to  
+ */  
+/** Base Units of Measure utility package. */
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+/*  

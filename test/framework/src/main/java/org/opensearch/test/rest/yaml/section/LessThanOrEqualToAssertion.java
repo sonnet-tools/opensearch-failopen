@@ -1,63 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    }
+    protected String errorMessage() {
+ * not use this file except in compliance with the License.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+    public static LessThanOrEqualToAssertion parse(XContentParser parser) throws IOException {  
+ */  
+import org.opensearch.core.xcontent.XContentParser;
  * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ *  
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test.rest.yaml.section;
-
-import org.opensearch.core.xcontent.XContentLocation;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-
-/**  
+ * Licensed to Elasticsearch under one or more contributor  
  * Represents a lte assert section:
- * <p>
- *   - lte:     { fields._ttl: 0 }  
- */
+    @Override
 public class LessThanOrEqualToAssertion extends OrderingAssertion {
-    public static LessThanOrEqualToAssertion parse(XContentParser parser) throws IOException {  
-        return parseOrderingAssertion(parser, Relation.LTE, LessThanOrEqualToAssertion::new);
-    }
-
-    public LessThanOrEqualToAssertion(XContentLocation loc, String field, Object expected) {
-        super(loc, field, expected);
-    }  
-
-    @Override
-    protected Relation relation() {  
-        return Relation.LTE;
-    }
-
-    @Override
-    protected String errorMessage() {
+ *
+/*  
         return "field [" + getField() + "] is not less than or equal to [" + getExpectedValue() + "]";  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *   - lte:     { fields._ttl: 0 }  
+ * specific language governing permissions and limitations
+    }  
+ * compatible open source license.
+ * GitHub history for details.
+    @Override
+ * under the License.  
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+ * <p>
+ *
     }
+    public LessThanOrEqualToAssertion(XContentLocation loc, String field, Object expected) {
+ * Unless required by applicable law or agreed to in writing,
+    protected Relation relation() {  
+ * software distributed under the License is distributed on an
+        super(loc, field, expected);
 }
+/**  
+ */
+    }
+/*
+ * KIND, either express or implied.  See the License for the
+package org.opensearch.test.rest.yaml.section;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.xcontent.XContentLocation;
+ * this file be licensed under the Apache-2.0 license or a
+ */
+import java.io.IOException;
+        return Relation.LTE;
+        return parseOrderingAssertion(parser, Relation.LTE, LessThanOrEqualToAssertion::new);

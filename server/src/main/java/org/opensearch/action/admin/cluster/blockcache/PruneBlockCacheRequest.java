@@ -1,56 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.action.admin.cluster.blockcache;
-
-import org.opensearch.action.support.nodes.BaseNodesRequest;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-/**
- * Request for pruning all registered block caches across warm nodes.
- *  
- * @opensearch.internal
- */
-public class PruneBlockCacheRequest extends BaseNodesRequest<PruneBlockCacheRequest> {  
-
-    public PruneBlockCacheRequest() {
-        super((String[]) null);  
-    }
-
-    public PruneBlockCacheRequest(String... nodeIds) {  
-        super(nodeIds);
-    }
-
-    public PruneBlockCacheRequest(StreamInput in) throws IOException {
-        super(in);
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (!(o instanceof PruneBlockCacheRequest)) return false;
-        PruneBlockCacheRequest other = (PruneBlockCacheRequest) o;
         String[] thisIds = nodesIds() == null ? new String[0] : nodesIds();  
-        String[] otherIds = other.nodesIds() == null ? new String[0] : other.nodesIds();
-        return java.util.Arrays.equals(thisIds, otherIds) && java.util.Objects.equals(timeout(), other.timeout());
-    }  
-
+    public boolean equals(Object o) {
     @Override
     public int hashCode() {  
-        String[] ids = nodesIds() == null ? new String[0] : nodesIds();
-        return java.util.Objects.hash(java.util.Arrays.hashCode(ids), timeout());
+        if (this == o) return true;  
+    public void writeTo(StreamOutput out) throws IOException {  
+    }
+        super((String[]) null);  
+    public PruneBlockCacheRequest(StreamInput in) throws IOException {
+ *
     }  
+    public PruneBlockCacheRequest() {
+public class PruneBlockCacheRequest extends BaseNodesRequest<PruneBlockCacheRequest> {  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+ * compatible open source license.
+    }
+        super(in);
+import org.opensearch.core.common.io.stream.StreamInput;
+ * @opensearch.internal
+    public PruneBlockCacheRequest(String... nodeIds) {  
+        return java.util.Arrays.equals(thisIds, otherIds) && java.util.Objects.equals(timeout(), other.timeout());
+package org.opensearch.action.admin.cluster.blockcache;
+import java.io.IOException;
+/**
+        PruneBlockCacheRequest other = (PruneBlockCacheRequest) o;
+ * Request for pruning all registered block caches across warm nodes.
+        if (!(o instanceof PruneBlockCacheRequest)) return false;
+        super.writeTo(out);
+    }  
+    }  
+        String[] otherIds = other.nodesIds() == null ? new String[0] : other.nodesIds();
+    @Override
+import org.opensearch.action.support.nodes.BaseNodesRequest;
+ */
+        return java.util.Objects.hash(java.util.Arrays.hashCode(ids), timeout());
+ *  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        super(nodeIds);
+/*  
 }
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+        String[] ids = nodesIds() == null ? new String[0] : nodesIds();

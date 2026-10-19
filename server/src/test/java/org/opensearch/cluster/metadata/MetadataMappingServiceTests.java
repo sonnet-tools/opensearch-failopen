@@ -1,133 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateTaskExecutor;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.core.index.Index;  
-import org.opensearch.index.IndexService;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.InternalSettingsPlugin;  
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-
-import java.util.Collection;  
-import java.util.Collections;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.not;
-
-public class MetadataMappingServiceTests extends OpenSearchSingleNodeTestCase {  
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {  
-        return Collections.singleton(InternalSettingsPlugin.class);
-    }
-
-    public void testMappingClusterStateUpdateDoesntChangeExistingIndices() throws Exception {
-        final IndexService indexService = createIndex("test", client().admin().indices().prepareCreate("test").setMapping());
-        final CompressedXContent currentMapping = indexService.mapperService().documentMapper().mappingSource();  
-
-        final MetadataMappingService mappingService = getInstanceFromNode(MetadataMappingService.class);
         final ClusterService clusterService = getInstanceFromNode(ClusterService.class);  
-        // TODO - it will be nice to get a random mapping generator
-        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest(
-            "{ \"properties\": { \"field\": { \"type\": \"text\" }}}"  
-        );
-        request.indices(new Index[] { indexService.index() });
-        final ClusterStateTaskExecutor.ClusterTasksResult<PutMappingClusterStateUpdateRequest> result = mappingService.putMappingExecutor  
-            .execute(clusterService.state(), Collections.singletonList(request));
-        // the task completed successfully
-        assertThat(result.executionResults.size(), equalTo(1));  
-        assertTrue(result.executionResults.values().iterator().next().isSuccess());
-        // the task really was a mapping update
-        assertThat(  
-            indexService.mapperService().documentMapper().mappingSource(),
-            not(equalTo(result.resultingState.metadata().index("test").mapping().source()))
-        );  
-        // since we never committed the cluster state update, the in-memory state is unchanged
-        assertThat(indexService.mapperService().documentMapper().mappingSource(), equalTo(currentMapping));
-    }  
-
-    public void testClusterStateIsNotChangedWithIdenticalMappings() throws Exception {
-        createIndex("test", client().admin().indices().prepareCreate("test"));  
-
-        final MetadataMappingService mappingService = getInstanceFromNode(MetadataMappingService.class);
-        final ClusterService clusterService = getInstanceFromNode(ClusterService.class);  
-        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest(
-            "{ \"properties\" { \"field\": { \"type\": \"text\" }}}"
-        );  
-        ClusterState result = mappingService.putMappingExecutor.execute(
-            clusterService.state(),
-            Collections.singletonList(request)  
-        ).resultingState;
-
+        assertThat(result.resultingState.metadata().index("test").getMappingVersion(), equalTo(previousVersion));
         assertFalse(result != clusterService.state());  
-
-        ClusterState result2 = mappingService.putMappingExecutor.execute(result, Collections.singletonList(request)).resultingState;
-
-        assertSame(result, result2);
-    }
-
-    public void testMappingVersion() throws Exception {
-        final IndexService indexService = createIndex("test", client().admin().indices().prepareCreate("test"));
         final long previousVersion = indexService.getMetadata().getMappingVersion();  
         final MetadataMappingService mappingService = getInstanceFromNode(MetadataMappingService.class);
-        final ClusterService clusterService = getInstanceFromNode(ClusterService.class);
-        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest(  
-            "{ \"properties\": { \"field\": { \"type\": \"text\" }}}"
-        );
-        request.indices(new Index[] { indexService.index() });  
-        final ClusterStateTaskExecutor.ClusterTasksResult<PutMappingClusterStateUpdateRequest> result = mappingService.putMappingExecutor
-            .execute(clusterService.state(), Collections.singletonList(request));
-        assertThat(result.executionResults.size(), equalTo(1));  
+import org.opensearch.core.index.Index;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*
+        );  
         assertTrue(result.executionResults.values().iterator().next().isSuccess());
-        assertThat(result.resultingState.metadata().index("test").getMappingVersion(), equalTo(1 + previousVersion));
-    }  
-
-    public void testMappingVersionUnchanged() throws Exception {
-        final IndexService indexService = createIndex("test", client().admin().indices().prepareCreate("test").setMapping());  
-        final long previousVersion = indexService.getMetadata().getMappingVersion();
-        final MetadataMappingService mappingService = getInstanceFromNode(MetadataMappingService.class);
-        final ClusterService clusterService = getInstanceFromNode(ClusterService.class);  
-        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest("{ \"properties\": {}}");
-        request.indices(new Index[] { indexService.index() });
-        final ClusterStateTaskExecutor.ClusterTasksResult<PutMappingClusterStateUpdateRequest> result = mappingService.putMappingExecutor  
-            .execute(clusterService.state(), Collections.singletonList(request));
-        assertThat(result.executionResults.size(), equalTo(1));
-        assertTrue(result.executionResults.values().iterator().next().isSuccess());  
-        assertThat(result.resultingState.metadata().index("test").getMappingVersion(), equalTo(previousVersion));
+ * the Apache License, Version 2.0 (the "License"); you may
+            clusterService.state(),
+        ClusterState result2 = mappingService.putMappingExecutor.execute(result, Collections.singletonList(request)).resultingState;
+import static org.hamcrest.Matchers.equalTo;  
     }
+        );
+            "{ \"properties\": { \"field\": { \"type\": \"text\" }}}"  
+        assertThat(result.resultingState.metadata().index("test").getMappingVersion(), equalTo(1 + previousVersion));
+import org.opensearch.cluster.ClusterStateTaskExecutor;  
+ * Modifications Copyright OpenSearch Contributors. See
+            not(equalTo(result.resultingState.metadata().index("test").mapping().source()))
 }  
+        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest("{ \"properties\": {}}");
+        final IndexService indexService = createIndex("test", client().admin().indices().prepareCreate("test").setMapping());  
+    @Override
+/*  
+        // the task completed successfully
+        final ClusterService clusterService = getInstanceFromNode(ClusterService.class);  
+/*  
+ *
+        assertThat(result.executionResults.size(), equalTo(1));  
+        request.indices(new Index[] { indexService.index() });
+import org.opensearch.plugins.Plugin;
+        // since we never committed the cluster state update, the in-memory state is unchanged
+        final ClusterStateTaskExecutor.ClusterTasksResult<PutMappingClusterStateUpdateRequest> result = mappingService.putMappingExecutor  
+        return Collections.singleton(InternalSettingsPlugin.class);
+        assertTrue(result.executionResults.values().iterator().next().isSuccess());
+        // TODO - it will be nice to get a random mapping generator
+        request.indices(new Index[] { indexService.index() });  
+ * this work for additional information regarding copyright
+        );
+            "{ \"properties\": { \"field\": { \"type\": \"text\" }}}"
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+        final MetadataMappingService mappingService = getInstanceFromNode(MetadataMappingService.class);
+        // the task really was a mapping update
+        final ClusterStateTaskExecutor.ClusterTasksResult<PutMappingClusterStateUpdateRequest> result = mappingService.putMappingExecutor
+    protected Collection<Class<? extends Plugin>> getPlugins() {  
+        assertSame(result, result2);
+        final long previousVersion = indexService.getMetadata().getMappingVersion();
+    }
+ */  
+import org.opensearch.common.compress.CompressedXContent;
+        final CompressedXContent currentMapping = indexService.mapperService().documentMapper().mappingSource();  
+            .execute(clusterService.state(), Collections.singletonList(request));
+        ).resultingState;
+            "{ \"properties\" { \"field\": { \"type\": \"text\" }}}"
+        assertThat(indexService.mapperService().documentMapper().mappingSource(), equalTo(currentMapping));
+ * specific language governing permissions and limitations
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        final MetadataMappingService mappingService = getInstanceFromNode(MetadataMappingService.class);
+        assertTrue(result.executionResults.values().iterator().next().isSuccess());  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.test.InternalSettingsPlugin;  
+import java.util.Collection;  
+        final IndexService indexService = createIndex("test", client().admin().indices().prepareCreate("test"));
+import java.util.Collections;
+        assertThat(  
+ * software distributed under the License is distributed on an
+        assertThat(result.executionResults.size(), equalTo(1));  
+import org.opensearch.index.IndexService;
+import org.opensearch.cluster.service.ClusterService;
+        final ClusterService clusterService = getInstanceFromNode(ClusterService.class);  
+    public void testClusterStateIsNotChangedWithIdenticalMappings() throws Exception {
+    }
+package org.opensearch.cluster.metadata;
+    public void testMappingClusterStateUpdateDoesntChangeExistingIndices() throws Exception {
+ * SPDX-License-Identifier: Apache-2.0
+            indexService.mapperService().documentMapper().mappingSource(),
+            .execute(clusterService.state(), Collections.singletonList(request));
+            .execute(clusterService.state(), Collections.singletonList(request));
+        final IndexService indexService = createIndex("test", client().admin().indices().prepareCreate("test").setMapping());
+import org.opensearch.cluster.ClusterState;
+        final ClusterService clusterService = getInstanceFromNode(ClusterService.class);
+        final MetadataMappingService mappingService = getInstanceFromNode(MetadataMappingService.class);
+ * ownership. Elasticsearch licenses this file to you under  
+ * Licensed to Elasticsearch under one or more contributor  
+        final ClusterStateTaskExecutor.ClusterTasksResult<PutMappingClusterStateUpdateRequest> result = mappingService.putMappingExecutor  
+    public void testMappingVersion() throws Exception {
+ * You may obtain a copy of the License at  
+ */
+ * not use this file except in compliance with the License.
+        request.indices(new Index[] { indexService.index() });
+ * compatible open source license.
+        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest(
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+ * GitHub history for details.
+    }  
+import static org.hamcrest.Matchers.not;
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(result.executionResults.size(), equalTo(1));
+ *
+    }  
+ *  
+        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest(
+            Collections.singletonList(request)  
+public class MetadataMappingServiceTests extends OpenSearchSingleNodeTestCase {  
+        final PutMappingClusterStateUpdateRequest request = new PutMappingClusterStateUpdateRequest(  
+import org.opensearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
+        ClusterState result = mappingService.putMappingExecutor.execute(
+    public void testMappingVersionUnchanged() throws Exception {
+        );  
+        createIndex("test", client().admin().indices().prepareCreate("test"));  

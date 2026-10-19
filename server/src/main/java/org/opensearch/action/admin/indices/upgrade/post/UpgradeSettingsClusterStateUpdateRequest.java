@@ -1,68 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+    /**
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+}
+ * under the License.  
+import java.util.Map;
+/**
+ * license agreements. See the NOTICE file distributed with
  * GitHub history for details.
  */  
-
-package org.opensearch.action.admin.indices.upgrade.post;
-
-import org.opensearch.Version;
+     */
 import org.opensearch.cluster.ack.ClusterStateUpdateRequest;
-import org.opensearch.common.collect.Tuple;  
-
-import java.util.Map;
-
-/**
- * Cluster state update request that allows to change minimum compatibility settings for some indices
- *  
- * @opensearch.internal
- */
-public class UpgradeSettingsClusterStateUpdateRequest extends ClusterStateUpdateRequest<UpgradeSettingsClusterStateUpdateRequest> {  
-
-    private Map<String, Tuple<Version, String>> versions;
-
-    public UpgradeSettingsClusterStateUpdateRequest() {
-
-    }  
-
-    /**
      * Returns the index to version map for indices that should be updated  
-     */
-    public Map<String, Tuple<Version, String>> versions() {
-        return versions;  
     }
-
-    /**  
+ *
+/*  
+ * @opensearch.internal
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
+        return versions;  
      * Sets the index to version map for indices that should be updated
-     */
-    public UpgradeSettingsClusterStateUpdateRequest versions(Map<String, Tuple<Version, String>> versions) {  
-        this.versions = versions;
+import org.opensearch.Version;
+public class UpgradeSettingsClusterStateUpdateRequest extends ClusterStateUpdateRequest<UpgradeSettingsClusterStateUpdateRequest> {  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ * Cluster state update request that allows to change minimum compatibility settings for some indices
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+ *
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.collect.Tuple;  
+ *  
+    public UpgradeSettingsClusterStateUpdateRequest() {
+    public Map<String, Tuple<Version, String>> versions() {
         return this;
+/*  
+ * software distributed under the License is distributed on an
     }  
-}
+ * specific language governing permissions and limitations
+    }  
+    /**  
+    public UpgradeSettingsClusterStateUpdateRequest versions(Map<String, Tuple<Version, String>> versions) {  
+ */  
+     */
+ *  
+ * Modifications Copyright OpenSearch Contributors. See
+    private Map<String, Tuple<Version, String>> versions;
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed to Elasticsearch under one or more contributor  
+ * You may obtain a copy of the License at  
+package org.opensearch.action.admin.indices.upgrade.post;
+        this.versions = versions;
+ * KIND, either express or implied.  See the License for the
+ * this work for additional information regarding copyright

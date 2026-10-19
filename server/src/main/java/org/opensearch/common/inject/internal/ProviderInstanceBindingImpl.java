@@ -1,128 +1,107 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
-Copyright (C) 2007 Google Inc.  
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.  
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0  
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,  
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.  
-*/
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.internal;
-
-import org.opensearch.common.inject.Binder;
-import org.opensearch.common.inject.Injector;
-import org.opensearch.common.inject.Key;  
-import org.opensearch.common.inject.Provider;
-import org.opensearch.common.inject.spi.BindingTargetVisitor;
-import org.opensearch.common.inject.spi.Dependency;  
-import org.opensearch.common.inject.spi.HasDependencies;
-import org.opensearch.common.inject.spi.InjectionPoint;
-import org.opensearch.common.inject.spi.ProviderInstanceBinding;  
-
-import java.util.HashSet;
-import java.util.Set;  
-
-import static java.util.Collections.unmodifiableSet;
-
-/**
- * Provider instance binding
- *  
- * @opensearch.internal
- */
-public final class ProviderInstanceBindingImpl<T> extends BindingImpl<T> implements ProviderInstanceBinding<T> {  
-
-    final Provider<? extends T> providerInstance;
-    final Set<InjectionPoint> injectionPoints;  
-
-    public ProviderInstanceBindingImpl(
-        Injector injector,  
-        Key<T> key,
-        Object source,
-        InternalFactory<? extends T> internalFactory,  
-        Scoping scoping,
-        Provider<? extends T> providerInstance,
-        Set<InjectionPoint> injectionPoints  
-    ) {
-        super(injector, key, source, internalFactory, scoping);
-        this.providerInstance = providerInstance;  
-        this.injectionPoints = injectionPoints;
-    }
-
-    public ProviderInstanceBindingImpl(
-        Object source,
-        Key<T> key,  
-        Scoping scoping,
-        Set<InjectionPoint> injectionPoints,
+    @Override
         Provider<? extends T> providerInstance  
-    ) {
-        super(source, key, scoping);
-        this.injectionPoints = injectionPoints;  
-        this.providerInstance = providerInstance;
-    }
-
     @Override
-    public <V> V acceptTargetVisitor(BindingTargetVisitor<? super T, V> visitor) {
-        return visitor.visit(this);  
-    }
-
-    @Override  
-    public Provider<? extends T> getProviderInstance() {
-        return providerInstance;
-    }  
-
-    @Override
-    public Set<InjectionPoint> getInjectionPoints() {  
+        InternalFactory<? extends T> internalFactory,  
+/*
         return injectionPoints;
-    }
-
-    @Override
-    public Set<Dependency<?>> getDependencies() {
-        return providerInstance instanceof HasDependencies  
-            ? unmodifiableSet(new HashSet<>((((HasDependencies) providerInstance).getDependencies())))
-            : Dependency.forInjectionPoints(injectionPoints);
-    }  
-
-    @Override
-    public BindingImpl<T> withScoping(Scoping scoping) {  
-        return new ProviderInstanceBindingImpl<>(getSource(), getKey(), scoping, injectionPoints, providerInstance);
-    }
-
-    @Override
-    public BindingImpl<T> withKey(Key<T> key) {
+public final class ProviderInstanceBindingImpl<T> extends BindingImpl<T> implements ProviderInstanceBinding<T> {  
+        return new ToStringBuilder(ProviderInstanceBinding.class).add("key", getKey())
+        getScoping().applyTo(binder.withSource(getSource()).bind(getKey()).toProvider(getProviderInstance()));
+ * SPDX-License-Identifier: Apache-2.0
         return new ProviderInstanceBindingImpl<>(getSource(), key, getScoping(), injectionPoints, providerInstance);  
+Licensed under the Apache License, Version 2.0 (the "License");
+    ) {
+    }  
+            .add("source", getSource())
+    public BindingImpl<T> withScoping(Scoping scoping) {  
+        Key<T> key,
+import org.opensearch.common.inject.spi.ProviderInstanceBinding;  
+            .toString();
     }
-
+        return providerInstance instanceof HasDependencies  
+        Scoping scoping,
+import java.util.Set;  
+    @Override
+ * GitHub history for details.
+    }
+    }
     @Override  
     public void applyTo(Binder binder) {
-        getScoping().applyTo(binder.withSource(getSource()).bind(getKey()).toProvider(getProviderInstance()));
-    }  
-
-    @Override
-    public String toString() {  
-        return new ToStringBuilder(ProviderInstanceBinding.class).add("key", getKey())
-            .add("source", getSource())
+        this.injectionPoints = injectionPoints;  
+import org.opensearch.common.inject.spi.HasDependencies;
+        Set<InjectionPoint> injectionPoints  
+*/
+import org.opensearch.common.inject.Key;  
+import java.util.HashSet;
+See the License for the specific language governing permissions and
+distributed under the License is distributed on an "AS IS" BASIS,  
             .add("scope", getScoping())  
-            .add("provider", providerInstance)
-            .toString();
-    }  
+import org.opensearch.common.inject.spi.Dependency;  
+    @Override  
+    public Set<InjectionPoint> getInjectionPoints() {  
+        return providerInstance;
 }
+    }  
+        Scoping scoping,
+        Object source,
+    }
+import org.opensearch.common.inject.spi.InjectionPoint;
+    public ProviderInstanceBindingImpl(
+        Key<T> key,  
+import org.opensearch.common.inject.Binder;
+    @Override
+Copyright (C) 2007 Google Inc.  
+        this.providerInstance = providerInstance;  
+    public Set<Dependency<?>> getDependencies() {
+    public Provider<? extends T> getProviderInstance() {
+    public ProviderInstanceBindingImpl(
+    public String toString() {  
+import org.opensearch.common.inject.Provider;
+ * @opensearch.internal
+    @Override
+You may obtain a copy of the License at
+ *  
+/*  
+    @Override
+    final Set<InjectionPoint> injectionPoints;  
+    }
+    }
+ */
+    public <V> V acceptTargetVisitor(BindingTargetVisitor<? super T, V> visitor) {
+    public BindingImpl<T> withKey(Key<T> key) {
+ * this file be licensed under the Apache-2.0 license or a
+        Object source,
+import org.opensearch.common.inject.spi.BindingTargetVisitor;
+        this.providerInstance = providerInstance;
+        return new ProviderInstanceBindingImpl<>(getSource(), getKey(), scoping, injectionPoints, providerInstance);
+/**
+    final Provider<? extends T> providerInstance;
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+            ? unmodifiableSet(new HashSet<>((((HasDependencies) providerInstance).getDependencies())))
+        return visitor.visit(this);  
+    }  
+limitations under the License.  
+    ) {
+you may not use this file except in compliance with the License.  
+ * Provider instance binding
+ * Modifications Copyright OpenSearch Contributors. See
+        super(source, key, scoping);
+     http://www.apache.org/licenses/LICENSE-2.0  
+        Injector injector,  
+    }  
+/*  
+        Provider<? extends T> providerInstance,
+package org.opensearch.common.inject.internal;
+            .add("provider", providerInstance)
+ */  
+Unless required by applicable law or agreed to in writing, software
+        this.injectionPoints = injectionPoints;
+import static java.util.Collections.unmodifiableSet;
+        Set<InjectionPoint> injectionPoints,
+ *
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+        super(injector, key, source, internalFactory, scoping);
+            : Dependency.forInjectionPoints(injectionPoints);
+import org.opensearch.common.inject.Injector;
+ */  

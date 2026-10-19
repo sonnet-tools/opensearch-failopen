@@ -1,68 +1,55 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.routing.UnassignedInfo;
-import org.opensearch.common.settings.Settings;
+        internalCluster().startSearchOnlyNode();
 import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
-import org.opensearch.test.InternalTestCluster;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(searchNode));  
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+        // Enable auto expand for search replica
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REPLICATION_TYPE;  
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+        internalCluster().startSearchOnlyNode();
+ *
+            .get();
+        // Add 1 more search nodes  
+import org.opensearch.indices.replication.common.ReplicationType;
+    }  
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+        // Add 1 more search nodes  
+            indexName,
+        );  
+        createIndex(  
+package org.opensearch.cluster.metadata;
+        // Stop a node which hosts search replica
+import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
+        assertBusy(() -> assertEquals(1, getNumShards(indexName).numSearchReplicas));  
+import org.opensearch.cluster.routing.UnassignedInfo;
 public class AutoExpandSearchReplicasIT extends RemoteStoreBaseIntegTestCase {  
-
+ * SPDX-License-Identifier: Apache-2.0
+            .prepareUpdateSettings(indexName)
+import org.opensearch.common.settings.Settings;
+/*  
+                .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
+        ensureGreen();
+        internalCluster().startDataOnlyNode();
+                .build()
+import org.opensearch.test.InternalTestCluster;  
+ * compatible open source license.
     public void testAutoExpandSearchReplica() throws Exception {
         String indexName = "test";  
-        internalCluster().startClusterManagerOnlyNode();
-
-        // Create a cluster with 2 data nodes and 1 search node  
-        internalCluster().startDataOnlyNode();
-        internalCluster().startDataOnlyNode();
-        String searchNode = internalCluster().startSearchOnlyNode();  
-
-        // Create index with 1 primary, 1 replica and 1 search replica shards
-        createIndex(  
-            indexName,
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
                 .put(SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
-                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(0))
-                .build()
-        );  
-        ensureGreen();
-
-        assertBusy(() -> assertEquals(1, getNumShards(indexName).numSearchReplicas));  
-
-        // Enable auto expand for search replica
-        client().admin()  
-            .indices()
-            .prepareUpdateSettings(indexName)
-            .setSettings(Settings.builder().put("index.auto_expand_search_replicas", "0-all"))  
-            .get();
-
-        // Add 1 more search nodes  
-        internalCluster().startSearchOnlyNode();
-
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
         assertBusy(() -> assertEquals(2, getNumShards(indexName).numSearchReplicas));  
-
-        // Stop a node which hosts search replica
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(searchNode));  
-        assertBusy(() -> assertEquals(1, getNumShards(indexName).numSearchReplicas));
-
-        // Add 1 more search nodes  
-        internalCluster().startSearchOnlyNode();
-        assertBusy(() -> assertEquals(2, getNumShards(indexName).numSearchReplicas));
-    }  
+                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(0))
+        internalCluster().startDataOnlyNode();
+        client().admin()  
+        String searchNode = internalCluster().startSearchOnlyNode();  
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
 }
+        assertBusy(() -> assertEquals(1, getNumShards(indexName).numSearchReplicas));
+        assertBusy(() -> assertEquals(2, getNumShards(indexName).numSearchReplicas));
+        // Create index with 1 primary, 1 replica and 1 search replica shards
+import org.opensearch.test.OpenSearchIntegTestCase;
+            .setSettings(Settings.builder().put("index.auto_expand_search_replicas", "0-all"))  
+        internalCluster().startClusterManagerOnlyNode();
+        // Create a cluster with 2 data nodes and 1 search node  
+            .indices()
+            Settings.builder()

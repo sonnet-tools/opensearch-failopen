@@ -1,82 +1,73 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+        final LongObjectPagedHashMap<Object> map2 = new LongObjectPagedHashMap<>(
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ *
+}  
+        final Map<Long, Object> copy = new HashMap<>();
+ */  
+    public void testDuel() {
+            randomInt(42),
  * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+                    assertSame(map1.remove(key), map2.remove(key));
+                assertEquals(map1.size(), map2.size());
+ */
+        }  
+    }  
+            0.6f + randomFloat() * 0.39f,  
+        final int maxKey = randomIntBetween(1, 10000);  
+import org.opensearch.test.OpenSearchTestCase;  
+            for (int j = 0; j < iters2; ++j) {
+            copy.put(cursor.key, cursor.value);  
+                    assertSame(map1.put(key, value), map2.put(key, value));  
  * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+    private BigArrays randomBigArrays() {
+                if (put) {
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+            final boolean put = randomBoolean();  
+import java.util.HashMap;
+                } else {
+/*  
+        for (int i = 0; i < iters; ++i) {
+ * GitHub history for details.
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+        for (LongObjectPagedHashMap.Cursor<Object> cursor : map2) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        for (long i = 0; i <= maxKey; ++i) {
+        final int iters = scaledRandomIntBetween(10000, 100000);
+                final long key = randomInt(maxKey);  
+        assertEquals(map1, copy);  
+ * compatible open source license.
+ *  
+/*
+        }  
+        }
+        final Map<Long, Object> map1 = new HashMap<>();  
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.HashMap;
-import java.util.Map;  
-
-public class LongObjectHashMapTests extends OpenSearchTestCase {
-
-    private BigArrays randomBigArrays() {
-        return new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
-    }  
-
-    public void testDuel() {
-        final Map<Long, Object> map1 = new HashMap<>();  
-        final LongObjectPagedHashMap<Object> map2 = new LongObjectPagedHashMap<>(
-            randomInt(42),
-            0.6f + randomFloat() * 0.39f,  
-            randomBigArrays()
-        );
-        final int maxKey = randomIntBetween(1, 10000);  
-        final int iters = scaledRandomIntBetween(10000, 100000);
-        for (int i = 0; i < iters; ++i) {
-            final boolean put = randomBoolean();  
-            final int iters2 = randomIntBetween(1, 100);
-            for (int j = 0; j < iters2; ++j) {
-                final long key = randomInt(maxKey);  
-                if (put) {
                     final Object value = new Object();
-                    assertSame(map1.put(key, value), map2.put(key, value));  
-                } else {
-                    assertSame(map1.remove(key), map2.remove(key));
-                }  
-                assertEquals(map1.size(), map2.size());
+            final int iters2 = randomIntBetween(1, 100);
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+ * The OpenSearch Contributors require contributions made to  
             }
-        }  
-        for (long i = 0; i <= maxKey; ++i) {
-            assertSame(map1.get(i), map2.get(i));
-        }  
-        final Map<Long, Object> copy = new HashMap<>();
-        for (LongObjectPagedHashMap.Cursor<Object> cursor : map2) {
-            copy.put(cursor.key, cursor.value);  
-        }
-        map2.close();
-        assertEquals(map1, copy);  
+ * software distributed under the License is distributed on an
+        return new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
     }
-
-}  
+            randomBigArrays()
+public class LongObjectHashMapTests extends OpenSearchTestCase {
+                }  
+            assertSame(map1.get(i), map2.get(i));
+        );
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+ * specific language governing permissions and limitations
+        map2.close();
+import java.util.Map;  
+package org.opensearch.common.util;
+import org.opensearch.common.settings.Settings;

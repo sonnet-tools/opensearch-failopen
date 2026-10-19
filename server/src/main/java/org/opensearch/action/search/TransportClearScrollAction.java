@@ -1,75 +1,66 @@
+    private final SearchTransportService searchTransportService;  
+/**
+        super(ClearScrollAction.NAME, transportService, actionFilters, ClearScrollRequest::new);
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+ */
+    protected void doExecute(Task task, ClearScrollRequest request, final ActionListener<ClearScrollResponse> listener) {  
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+ * Perform transport action to clear a search scroll
+import org.opensearch.common.inject.Inject;
+    private final NamedWriteableRegistry namedWriteableRegistry;
+ * The OpenSearch Contributors require contributions made to  
+    }  
+        ActionFilters actionFilters,
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+    private final ClusterService clusterService;
+        this.searchTransportService = searchTransportService;
+ * not use this file except in compliance with the License.
+import org.opensearch.transport.TransportService;
+ * compatible open source license.
+package org.opensearch.action.search;
+}
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+    public TransportClearScrollAction(
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+        SearchTransportService searchTransportService,
+    @Inject  
+import org.opensearch.tasks.Task;
+import org.opensearch.core.action.ActionListener;
  * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.action.support.ActionFilters;
+ * this file be licensed under the Apache-2.0 license or a
 import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;
-
-/**
- * Perform transport action to clear a search scroll
- *  
- * @opensearch.internal
- */
-public class TransportClearScrollAction extends HandledTransportAction<ClearScrollRequest, ClearScrollResponse> {  
-
-    private final ClusterService clusterService;
-    private final SearchTransportService searchTransportService;  
-    private final NamedWriteableRegistry namedWriteableRegistry;
-
-    @Inject  
-    public TransportClearScrollAction(
-        TransportService transportService,
-        ClusterService clusterService,  
-        ActionFilters actionFilters,
-        SearchTransportService searchTransportService,
-        NamedWriteableRegistry namedWriteableRegistry  
-    ) {
-        super(ClearScrollAction.NAME, transportService, actionFilters, ClearScrollRequest::new);
-        this.clusterService = clusterService;  
-        this.searchTransportService = searchTransportService;
-        this.namedWriteableRegistry = namedWriteableRegistry;
-    }  
-
-    @Override
-    protected void doExecute(Task task, ClearScrollRequest request, final ActionListener<ClearScrollResponse> listener) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.action.support.ActionFilters;
         Runnable runnable = new ClearScrollController(request, listener, clusterService.state().nodes(), logger, searchTransportService);
-        runnable.run();
+ * license agreements. See the NOTICE file distributed with
+public class TransportClearScrollAction extends HandledTransportAction<ClearScrollRequest, ClearScrollResponse> {  
     }  
-
-}
+ * GitHub history for details.
+ *  
+/*
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+        NamedWriteableRegistry namedWriteableRegistry  
+ *  
+ * software distributed under the License is distributed on an
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    ) {
+        this.clusterService = clusterService;  
+ * @opensearch.internal
+ */  
+ * Unless required by applicable law or agreed to in writing,
+        runnable.run();
+import org.opensearch.cluster.service.ClusterService;  
+        ClusterService clusterService,  
+        this.namedWriteableRegistry = namedWriteableRegistry;
+ */  
+ *
+ *
+ * specific language governing permissions and limitations
+        TransportService transportService,
+/*  

@@ -1,102 +1,88 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.geo;
-
-import org.apache.lucene.document.ShapeField.QueryRelation;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;
-import java.util.Locale;
-
-/**
- * Enum representing the relationship between a Query / Filter Shape and indexed Shapes
+    public static ShapeRelation getRelationByName(String name) {  
+    }
+ * license agreements. See the NOTICE file distributed with
+    INTERSECTS("intersects"),
+        }
+                return QueryRelation.INTERSECTS;
+        }  
+                throw new IllegalArgumentException("ShapeRelation [" + this + "] not supported");
+    ShapeRelation(String relationName) {
  * that will be used to determine if a Document should be matched or not  
+import org.opensearch.core.common.io.stream.Writeable;
+/*  
+        out.writeEnum(this);  
+ */  
+    private final String relationName;  
+ * GitHub history for details.
  *
+ * under the License.  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+                return QueryRelation.CONTAINS;
+            case INTERSECTS:
+        for (ShapeRelation relation : ShapeRelation.values()) {
+ * software distributed under the License is distributed on an
+import java.io.IOException;
+        return relationName;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.common.geo;
+ * KIND, either express or implied.  See the License for the
+    CONTAINS("contains");
+    WITHIN("within"),  
+/*
+ * compatible open source license.
+ * this work for additional information regarding copyright
+    }
+        return in.readEnum(ShapeRelation.class);
+ * The OpenSearch Contributors require contributions made to  
+    public static ShapeRelation readFromStream(StreamInput in) throws IOException {  
+    }
+            }
+                return relation;
+                return QueryRelation.DISJOINT;
+ * Modifications Copyright OpenSearch Contributors. See
+            case WITHIN:
+        switch (this) {  
+    public QueryRelation getLuceneRelation() {
+    public String getRelationName() {
+    public void writeTo(StreamOutput out) throws IOException {
+    }  
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.Locale;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    DISJOINT("disjoint"),
+import org.opensearch.core.common.io.stream.StreamInput;  
  * @opensearch.api
  */  
-@PublicApi(since = "1.0.0")
-public enum ShapeRelation implements Writeable {
-
-    INTERSECTS("intersects"),
-    DISJOINT("disjoint"),
-    WITHIN("within"),  
-    CONTAINS("contains");
-
-    private final String relationName;  
-
-    ShapeRelation(String relationName) {
-        this.relationName = relationName;  
-    }
-
-    public static ShapeRelation readFromStream(StreamInput in) throws IOException {  
-        return in.readEnum(ShapeRelation.class);
-    }
-
+ * not use this file except in compliance with the License.
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeEnum(this);  
-    }
-
-    public static ShapeRelation getRelationByName(String name) {  
-        name = name.toLowerCase(Locale.ENGLISH);
-        for (ShapeRelation relation : ShapeRelation.values()) {
-            if (relation.relationName.equals(name)) {  
-                return relation;
-            }
-        }  
-        return null;
-    }
-
-    /** Maps ShapeRelation to Lucene's LatLonShapeRelation */
-    public QueryRelation getLuceneRelation() {
-        switch (this) {  
-            case INTERSECTS:
-                return QueryRelation.INTERSECTS;
-            case DISJOINT:  
-                return QueryRelation.DISJOINT;
-            case WITHIN:
-                return QueryRelation.WITHIN;  
-            case CONTAINS:
-                return QueryRelation.CONTAINS;
-            default:  
-                throw new IllegalArgumentException("ShapeRelation [" + this + "] not supported");
-        }
-    }  
-
-    public String getRelationName() {
-        return relationName;  
-    }
 }
+            case DISJOINT:  
+        return null;
+@PublicApi(since = "1.0.0")
+/**
+                return QueryRelation.WITHIN;  
+ * You may obtain a copy of the License at  
+ * Unless required by applicable law or agreed to in writing,
+        name = name.toLowerCase(Locale.ENGLISH);
+import org.opensearch.common.annotation.PublicApi;
+ *  
+    }
+ * Enum representing the relationship between a Query / Filter Shape and indexed Shapes
+            if (relation.relationName.equals(name)) {  
+ * specific language governing permissions and limitations
+ *
+ */  
+ *
+        this.relationName = relationName;  
+    /** Maps ShapeRelation to Lucene's LatLonShapeRelation */
+            case CONTAINS:
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.document.ShapeField.QueryRelation;
+            default:  
+public enum ShapeRelation implements Writeable {
+ * this file be licensed under the Apache-2.0 license or a

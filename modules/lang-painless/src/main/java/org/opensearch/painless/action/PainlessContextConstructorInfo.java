@@ -1,138 +1,115 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
+    public boolean equals(Object o) {
 /*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.painless.action;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
+    @Override
+ * KIND, either express or implied.  See the License for the
+ *  
+    public String getDeclaring() {
+ */
 import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.painless.lookup.PainlessConstructor;
-import org.opensearch.painless.lookup.PainlessLookupUtility;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-public class PainlessContextConstructorInfo implements Writeable, ToXContentObject {
-
-    public static final ParseField DECLARING = new ParseField("declaring");  
-    public static final ParseField PARAMETERS = new ParseField("parameters");
-
-    private final String declaring;  
-    private final List<String> parameters;
-
-    @SuppressWarnings("unchecked")  
-    private static final ConstructingObjectParser<PainlessContextConstructorInfo, Void> PARSER = new ConstructingObjectParser<>(
-        PainlessContextConstructorInfo.class.getCanonicalName(),
-        (v) -> new PainlessContextConstructorInfo((String) v[0], (List<String>) v[1])  
-    );
-
-    static {  
-        PARSER.declareString(ConstructingObjectParser.constructorArg(), DECLARING);
-        PARSER.declareStringArray(ConstructingObjectParser.constructorArg(), PARAMETERS);
-    }  
-
-    public PainlessContextConstructorInfo(PainlessConstructor painlessConstructor) {
-        this(  
-            painlessConstructor.javaConstructor.getDeclaringClass().getName(),
-            painlessConstructor.typeParameters.stream().map(Class::getName).collect(Collectors.toList())
-        );  
+        builder.startObject();
+    @Override
     }
-
+    private static final ConstructingObjectParser<PainlessContextConstructorInfo, Void> PARSER = new ConstructingObjectParser<>(
+import java.util.Objects;
+import org.opensearch.core.xcontent.ToXContent;  
+ */  
+    }  
+        return PARSER.apply(parser, null);
+        builder.field(DECLARING.getPreferredName(), declaring);
+            painlessConstructor.typeParameters.stream().map(Class::getName).collect(Collectors.toList())
+    @Override
+import org.opensearch.core.common.io.stream.Writeable;
+ * license agreements. See the NOTICE file distributed with
+    @SuppressWarnings("unchecked")  
+    );
+import java.io.IOException;
+ * software distributed under the License is distributed on an
+        builder.field(PARAMETERS.getPreferredName(), parameters);  
+        parameters = Collections.unmodifiableList(in.readStringList());
+ */  
+    }
+    public List<String> getParameters() {
+    @Override  
+        if (this == o) return true;  
+    public static PainlessContextConstructorInfo fromXContent(XContentParser parser) {
+    static {  
+        this(  
+    }
+ * under the License.  
     public PainlessContextConstructorInfo(String declaring, List<String> parameters) {  
-        this.declaring = Objects.requireNonNull(declaring);
+        (v) -> new PainlessContextConstructorInfo((String) v[0], (List<String>) v[1])  
+import org.opensearch.painless.lookup.PainlessConstructor;
+        return PainlessLookupUtility.buildPainlessConstructorKey(parameters.size());
+ * Unless required by applicable law or agreed to in writing,
+        declaring = in.readString();  
+    public PainlessContextConstructorInfo(StreamInput in) throws IOException {
+    public String toString() {  
         this.parameters = Collections.unmodifiableList(Objects.requireNonNull(parameters));
     }  
-
-    public PainlessContextConstructorInfo(StreamInput in) throws IOException {
-        declaring = in.readString();  
-        parameters = Collections.unmodifiableList(in.readStringList());
+import org.opensearch.core.xcontent.ToXContentObject;
     }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(declaring);  
-        out.writeStringCollection(parameters);
-    }
-
-    public static PainlessContextConstructorInfo fromXContent(XContentParser parser) {
-        return PARSER.apply(parser, null);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {  
-        builder.startObject();
-        builder.field(DECLARING.getPreferredName(), declaring);
-        builder.field(PARAMETERS.getPreferredName(), parameters);  
-        builder.endObject();
-
-        return builder;  
-    }
-
-    public String getSortValue() {  
-        return PainlessLookupUtility.buildPainlessConstructorKey(parameters.size());
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
+ * The OpenSearch Contributors require contributions made to  
+        this.declaring = Objects.requireNonNull(declaring);
+        PainlessContextConstructorInfo.class.getCanonicalName(),
         PainlessContextConstructorInfo that = (PainlessContextConstructorInfo) o;
-        return Objects.equals(declaring, that.declaring) && Objects.equals(parameters, that.parameters);  
-    }
-
-    @Override  
+import java.util.List;  
+        return builder;  
+import org.opensearch.core.xcontent.XContentBuilder;
+        out.writeStringCollection(parameters);
+import org.opensearch.painless.lookup.PainlessLookupUtility;
+ * You may obtain a copy of the License at  
+    public void writeTo(StreamOutput out) throws IOException {
+    }  
     public int hashCode() {
-        return Objects.hash(declaring, parameters);
-    }  
-
-    @Override
-    public String toString() {  
-        return "PainlessContextConstructorInfo{" + "declaring='" + declaring + '\'' + ", parameters=" + parameters + '}';
-    }
-
-    public String getDeclaring() {
         return declaring;
+ * Modifications Copyright OpenSearch Contributors. See
+public class PainlessContextConstructorInfo implements Writeable, ToXContentObject {
+    public PainlessContextConstructorInfo(PainlessConstructor painlessConstructor) {
+ * compatible open source license.
+        out.writeString(declaring);  
+import org.opensearch.core.xcontent.XContentParser;  
+    public static final ParseField DECLARING = new ParseField("declaring");  
+    private final List<String> parameters;
+ * Licensed to Elasticsearch under one or more contributor  
+    private final String declaring;  
+import java.util.Collections;
+import org.opensearch.core.common.io.stream.StreamInput;
     }  
-
-    public List<String> getParameters() {
-        return parameters;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return Objects.equals(declaring, that.declaring) && Objects.equals(parameters, that.parameters);  
+/*  
     }
+        return Objects.hash(declaring, parameters);
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {  
+    }
+        builder.endObject();
+ * this file be licensed under the Apache-2.0 license or a
+            painlessConstructor.javaConstructor.getDeclaringClass().getName(),
+import org.opensearch.core.ParseField;
+ *
+    }
+        return "PainlessContextConstructorInfo{" + "declaring='" + declaring + '\'' + ", parameters=" + parameters + '}';
+import java.util.stream.Collectors;
+        return parameters;  
+/*
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+ * not use this file except in compliance with the License.
+        );  
+        if (o == null || getClass() != o.getClass()) return false;
+    }
+    public static final ParseField PARAMETERS = new ParseField("parameters");
+ *
+ * SPDX-License-Identifier: Apache-2.0
+        PARSER.declareStringArray(ConstructingObjectParser.constructorArg(), PARAMETERS);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+        PARSER.declareString(ConstructingObjectParser.constructorArg(), DECLARING);
+    public String getSortValue() {  
 }
+    @Override
+package org.opensearch.painless.action;
+    }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  

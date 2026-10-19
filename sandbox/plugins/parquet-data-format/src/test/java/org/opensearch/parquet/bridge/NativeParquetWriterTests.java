@@ -1,312 +1,263 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.bridge;
-
-import org.apache.arrow.c.ArrowArray;
-import org.apache.arrow.c.ArrowSchema;
-import org.apache.arrow.c.Data;  
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.BigIntVector;  
-import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.VarCharVector;
-import org.apache.arrow.vector.VectorSchemaRoot;  
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;  
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.nativebridge.spi.ArrowExport;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;  
-import java.util.function.Consumer;
-
-public class NativeParquetWriterTests extends OpenSearchTestCase {  
-
-    private BufferAllocator allocator;
-    private Schema schema;  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        RustBridge.initLogger();
-        allocator = new RootAllocator();  
-        schema = new Schema(
-            List.of(
-                new Field("id", FieldType.nullable(new ArrowType.Int(32, true)), null),  
-                new Field("name", FieldType.nullable(new ArrowType.Utf8()), null),
-                new Field("score", FieldType.nullable(new ArrowType.Int(64, true)), null)
-            )  
-        );
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        allocator.close();  
-        super.tearDown();
-    }
-
-    public void testFullLifecycle() throws Exception {
-        String filePath = createTempDir().resolve("full.parquet").toString();
-        NativeParquetWriter writer = createWriter(filePath);  
-
-        try (
-            ArrowExport export = exportData(  
-                new int[] { 1, 2, 3 },
-                new String[] { "alice", "bob", "carol" },
-                new long[] { 100L, 200L, 300L }  
-            )
-        ) {
-            writer.write(export.getArrayAddress(), export.getSchemaAddress());  
-        }
-
-        writer.flush();  
-        assertNotNull(writer.getMetadata());
-        assertEquals(3, writer.getMetadata().numRows());
-
-        assertTrue("Parquet file should exist after flush", Files.exists(Path.of(filePath)));
-    }
-
-    public void testMultipleBatchesThenCloseAndFlush() throws Exception {
-        String filePath = createTempDir().resolve("multi-batch.parquet").toString();
-        NativeParquetWriter writer = createWriter(filePath);  
-
-        try (ArrowExport batch1 = exportData(new int[] { 1, 2 }, new String[] { "alice", "bob" }, new long[] { 10L, 20L })) {
-            writer.write(batch1.getArrayAddress(), batch1.getSchemaAddress());  
-        }
-
-        try (  
+        // Constructor is lightweight — error surfaces on initialize
             ArrowExport batch2 = exportData(new int[] { 3, 4, 5 }, new String[] { "carol", "dave", "eve" }, new long[] { 30L, 40L, 50L })
-        ) {
-            writer.write(batch2.getArrayAddress(), batch2.getSchemaAddress());  
+import org.apache.arrow.vector.types.pojo.Schema;
+        // the previous writer un-finalized).  
         }
-
-        writer.flush();  
+            writer2.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L);  
+            expectThrows(IOException.class, () -> writer.write(dataExport.getArrayAddress(), 0L));  
+                }
+        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {
+        }
+        String filePath = createTempDir().resolve("cleanup-noop.parquet").toString();  
+            ArrowArray array = ArrowArray.allocateNew(allocator);
+    public void testCreateWriterForSameFileReplacesStaleEntry() throws Exception {
+        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "alice" }, new long[] { 10L })) {
+import org.apache.arrow.vector.types.pojo.ArrowType;
+        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {  
+        }  
         assertEquals(5, writer.getMetadata().numRows());
         assertTrue("Parquet file should exist after flush", Files.exists(Path.of(filePath)));
-    }  
-
-    public void testFlushWithoutWrite() throws Exception {
-        String filePath = createTempDir().resolve("close-only.parquet").toString();  
+        assertFalse(writer.isInitialized());
         NativeParquetWriter writer = new NativeParquetWriter(filePath);
-        ParquetFileMetadata metadata = writer.flush();
-        // Writer was never initialized, so flush returns null  
-        assertNull(metadata);
-    }
-
-    public void testFlushIsIdempotent() throws Exception {
-        String filePath = createTempDir().resolve("idempotent.parquet").toString();
-        NativeParquetWriter writer = createWriter(filePath);  
-
-        // Write some data first so the writer gets initialized
-        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "alice" }, new long[] { 10L })) {  
-            writer.write(export.getArrayAddress(), export.getSchemaAddress());
-        }
-
-        writer.flush();
         ParquetFileMetadata first = writer.getMetadata();
-        writer.flush();  
-        assertSame(first, writer.getMetadata());
-    }
-
-    public void testWriteAfterFlushThrows() throws Exception {
-        String filePath = createTempDir().resolve("write-after-flush.parquet").toString();
-        NativeParquetWriter writer = createWriter(filePath);  
-
-        // Initialize writer with a write, then flush
-        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {  
-            writer.write(export.getArrayAddress(), export.getSchemaAddress());
-        }
-        writer.flush();  
-
-        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "alice" }, new long[] { 10L })) {
             expectThrows(IOException.class, () -> writer.write(export.getArrayAddress(), export.getSchemaAddress()));  
+        Data.exportSchema(allocator, schema, null, arrowSchema);
+        }  
+                    root.setRowCount(1);
+        }
+            writer1.write(export.getArrayAddress(), export.getSchemaAddress());
+                scoreVec.setSafe(i, scores[i]);  
+                new int[] { 1, 2, 3 },
+    public void testWriteAfterFlushThrows() throws Exception {
+        NativeParquetWriter writer2 = new NativeParquetWriter(filePath);  
+        writer.flush();  
+        writer.flush();  
+        NativeParquetWriter writer = new NativeParquetWriter("/nonexistent/dir/file.parquet");  
+    }  
+        NativeParquetWriter writer2 = new NativeParquetWriter(filePath);
+        }
+        try (ArrowExport export = exportData(new int[] {}, new String[] {}, new long[] {})) {
+            IntVector idVec = (IntVector) root.getVector("id");  
+            return new ArrowExport(array, arrowSchema);
+    public void testFlushWithoutWrite() throws Exception {
+            writer.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L);
+                // Expected — some Rust versions detect mismatch at write time
+                () -> writer.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L)
+    }  
+    public void testWriteWithNullAddresses() throws Exception {
+import org.opensearch.test.OpenSearchTestCase;  
+        String filePath = createTempDir().resolve("bad-schema.parquet").toString();
+    @Override
+        String filePath = createTempDir().resolve("duplicate.parquet").toString();
+    }
+        NativeParquetWriter writer = createWriter(filePath);  
+    }
+    public void setUp() throws Exception {  
+import org.opensearch.nativebridge.spi.ArrowExport;
         }
     }
-
-    public void testCreateWriterWithNonExistentDirectory() throws Exception {
-        // Constructor is lightweight — error surfaces on initialize
-        NativeParquetWriter writer = new NativeParquetWriter("/nonexistent/dir/file.parquet");  
-        try (ArrowExport export = exportSchema()) {
-            expectThrows(
-                IOException.class,  
-                () -> writer.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L)
+            ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);
+        }
+import org.apache.arrow.memory.RootAllocator;
+    private ArrowExport exportSchema() {  
+        String filePath = createTempDir().resolve("multi-batch.parquet").toString();
+                idVec.setSafe(i, ids[i]);
+import org.apache.arrow.vector.VarCharVector;
+        assert ids.length == names.length && names.length == scores.length;
+        try (ArrowExport dataExport = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {
+            )  
+    }
             );
-        }  
-    }
-
-    public void testCreateWriterWithInvalidSchemaAddress() throws Exception {  
-        String filePath = createTempDir().resolve("bad-schema.parquet").toString();
-        NativeParquetWriter writer = new NativeParquetWriter(filePath);
-        assertFalse(writer.isInitialized());  
+        writer.flush();  
+    private ArrowExport exportDataWithSchema(Schema customSchema, Consumer<VectorSchemaRoot> populator) {
+        return writer;  
         expectThrows(Exception.class, () -> writer.initialize("test-index", 0L, ParquetSortConfig.empty(), 0L));
-    }
-
-    public void testWriteWithSchemaMismatch() throws Exception {
-        String filePath = createTempDir().resolve("mismatch.parquet").toString();
+        // If write didn't throw, flush should detect the mismatch  
+                    ((IntVector) root.getVector("other_field")).setSafe(0, 99);  
+import java.nio.file.Path;
         NativeParquetWriter writer = createWriter(filePath);  
-
+        allocator.close();  
+import java.nio.charset.StandardCharsets;  
+import java.io.IOException;
+        writer.flush();
+        ) {
+import org.apache.arrow.c.ArrowArray;
+    private ArrowExport exportData(int[] ids, String[] names, long[] scores) {  
+        }
+        // Initialize writer with a write, then flush
+        NativeParquetWriter writer = createWriter(filePath);  
+import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.BigIntVector;  
+            } catch (IOException e) {  
+import org.apache.arrow.memory.BufferAllocator;
+        try (ArrowExport export = exportSchema()) {
+        assertNull(metadata);
+                new long[] { 100L, 200L, 300L }  
+    }  
+            expectThrows(IOException.class, () -> writer.write(0L, schemaExport.getSchemaAddress()));
+            ArrowExport export = exportDataWithSchema(  
+        expectThrows(IOException.class, () -> writer.write(0L, 0L));  
+            Data.exportVectorSchemaRoot(allocator, root, null, array, arrowSchema);  
+                new Field("score", FieldType.nullable(new ArrowType.Int(64, true)), null)
+        super.tearDown();
+                root -> {
+                writer.write(export.getArrayAddress(), export.getSchemaAddress());
+        schema = new Schema(
         // First write initializes the writer with the correct schema
         try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {  
-            writer.write(export.getArrayAddress(), export.getSchemaAddress());
-        }
-
-        // Second write with mismatched schema
-        try (
-            ArrowExport export = exportDataWithSchema(  
-                new Schema(List.of(new Field("other_field", FieldType.nullable(new ArrowType.Int(32, true)), null))),
-                root -> {
-                    ((IntVector) root.getVector("other_field")).setSafe(0, 99);  
-                    root.setRowCount(1);
-                }
-            )  
-        ) {
-            // Rust side may or may not throw on schema mismatch during write;
-            // the mismatch is detected at flush time  
-            try {
-                writer.write(export.getArrayAddress(), export.getSchemaAddress());
-            } catch (IOException e) {  
-                // Expected — some Rust versions detect mismatch at write time
-                return;
-            }  
-        }
-
-        // If write didn't throw, flush should detect the mismatch  
-        expectThrows(IOException.class, writer::flush);
-    }
-
-    public void testCreateWriterForSameFileReplacesStaleEntry() throws Exception {
-        String filePath = createTempDir().resolve("duplicate.parquet").toString();
-        NativeParquetWriter writer1 = createWriter(filePath);  
-
-        // Initialize writer1 by writing data
-        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {  
-            writer1.write(export.getArrayAddress(), export.getSchemaAddress());
-        }
-
-        // A second writer for the same file now SUCCEEDS: create_writer removes the stale entry and
-        // creates a fresh writer in its place (this is what unblocks recovery after a failure left
-        // the previous writer un-finalized).  
-        NativeParquetWriter writer2 = new NativeParquetWriter(filePath);
-        try (ArrowExport export = exportSchema()) {
-            writer2.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L);  
-        }
-        assertTrue("second writer must initialize after replacing the stale entry", writer2.isInitialized());
-
-        writer2.flush();
-    }
-
-    public void testCleanupWriterAllowsReinitializeForSameFile() throws Exception {
-        String filePath = createTempDir().resolve("cleanup.parquet").toString();
-        NativeParquetWriter writer1 = createWriter(filePath);  
-        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {
-            writer1.write(export.getArrayAddress(), export.getSchemaAddress());
-        }  
-
-        // cleanup() removes the native registry entry without finalizing.
-        writer1.cleanup();  
-
-        // A fresh writer can now initialize for the same file.
-        NativeParquetWriter writer2 = new NativeParquetWriter(filePath);  
-        try (ArrowExport export = exportSchema()) {
-            writer2.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L);
-        }  
-        assertTrue("writer must re-initialize for the same file after cleanup", writer2.isInitialized());
-
-        writer2.flush();  
         // cleanup() is idempotent / safe after flush already removed the entry.
-        writer2.cleanup();
-    }  
-
-    public void testCleanupOnUninitializedWriterIsNoop() throws Exception {
-        String filePath = createTempDir().resolve("cleanup-noop.parquet").toString();  
         NativeParquetWriter writer = new NativeParquetWriter(filePath);
-        assertFalse(writer.isInitialized());
-        // Never initialized: cleanup must be a no-op and must not throw.  
-        writer.cleanup();
-    }
-
-    public void testWriteEmptyBatch() throws Exception {
-        String filePath = createTempDir().resolve("empty-batch.parquet").toString();
-        NativeParquetWriter writer = createWriter(filePath);  
-
-        try (ArrowExport export = exportData(new int[] {}, new String[] {}, new long[] {})) {
-            writer.write(export.getArrayAddress(), export.getSchemaAddress());  
-        }
-
-        writer.flush();  
-        assertNotNull(writer.getMetadata());
-    }
-
-    public void testWriteWithNullAddresses() throws Exception {
-        String filePath = createTempDir().resolve("null-addr.parquet").toString();
-        NativeParquetWriter writer = createWriter(filePath);  
-
-        // Both null
-        expectThrows(IOException.class, () -> writer.write(0L, 0L));  
-
-        // Null array only
-        try (ArrowExport schemaExport = exportSchema()) {  
-            expectThrows(IOException.class, () -> writer.write(0L, schemaExport.getSchemaAddress()));
-        }
-
-        // Null schema only
-        try (ArrowExport dataExport = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {
-            expectThrows(IOException.class, () -> writer.write(dataExport.getArrayAddress(), 0L));  
-        }
-    }
-
-    private NativeParquetWriter createWriter(String filePath) throws Exception {
-        NativeParquetWriter writer = new NativeParquetWriter(filePath);
-        try (ArrowExport export = exportSchema()) {  
-            writer.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L);
-        }
-        return writer;  
-    }
-
-    private ArrowExport exportSchema() {  
-        ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);
-        Data.exportSchema(allocator, schema, null, arrowSchema);
-        return new ArrowExport(null, arrowSchema);  
-    }
-
-    private ArrowExport exportData(int[] ids, String[] names, long[] scores) {  
-        assert ids.length == names.length && names.length == scores.length;
-        try (VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator)) {
-            IntVector idVec = (IntVector) root.getVector("id");  
-            VarCharVector nameVec = (VarCharVector) root.getVector("name");
-            BigIntVector scoreVec = (BigIntVector) root.getVector("score");
-            for (int i = 0; i < ids.length; i++) {  
-                idVec.setSafe(i, ids[i]);
-                nameVec.setSafe(i, names[i].getBytes(StandardCharsets.UTF_8));
-                scoreVec.setSafe(i, scores[i]);  
+    public void testMultipleBatchesThenCloseAndFlush() throws Exception {
+        String filePath = createTempDir().resolve("idempotent.parquet").toString();
             }
-            root.setRowCount(ids.length);
-
-            ArrowArray array = ArrowArray.allocateNew(allocator);
-            ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);
-            Data.exportVectorSchemaRoot(allocator, root, null, array, arrowSchema);  
-            return new ArrowExport(array, arrowSchema);
-        }
-    }  
-
-    private ArrowExport exportDataWithSchema(Schema customSchema, Consumer<VectorSchemaRoot> populator) {
-        try (VectorSchemaRoot root = VectorSchemaRoot.create(customSchema, allocator)) {  
-            populator.accept(root);
-            ArrowArray array = ArrowArray.allocateNew(allocator);
-            ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);  
-            Data.exportVectorSchemaRoot(allocator, root, null, array, arrowSchema);
-            return new ArrowExport(array, arrowSchema);
+    @Override
+            )  
+import java.nio.file.Files;
+        writer2.cleanup();
+    private Schema schema;  
         }  
+ *
+                return;
+                new Schema(List.of(new Field("other_field", FieldType.nullable(new ArrowType.Int(32, true)), null))),
+        // A fresh writer can now initialize for the same file.
+            ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);  
+            VarCharVector nameVec = (VarCharVector) root.getVector("name");
+ * compatible open source license.
     }
+import org.apache.arrow.c.ArrowSchema;
+    }
+        NativeParquetWriter writer = createWriter(filePath);  
+        assertTrue("second writer must initialize after replacing the stale entry", writer2.isInitialized());
+        try (  
+            root.setRowCount(ids.length);
+        // Initialize writer1 by writing data
+            expectThrows(
+        assertEquals(3, writer.getMetadata().numRows());
+import org.apache.arrow.c.Data;  
+        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "a" }, new long[] { 1L })) {  
+        String filePath = createTempDir().resolve("mismatch.parquet").toString();
+    }
+            writer.write(export.getArrayAddress(), export.getSchemaAddress());
+    public void testCreateWriterWithNonExistentDirectory() throws Exception {
+ * The OpenSearch Contributors require contributions made to  
+        // Write some data first so the writer gets initialized
+        try (VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator)) {
+                IOException.class,  
+    }
+            ArrowArray array = ArrowArray.allocateNew(allocator);
+    }
+        allocator = new RootAllocator();  
+        // Never initialized: cleanup must be a no-op and must not throw.  
+        String filePath = createTempDir().resolve("write-after-flush.parquet").toString();
+        ) {
+        try (ArrowExport schemaExport = exportSchema()) {  
+package org.opensearch.parquet.bridge;
+            )
+        try (VectorSchemaRoot root = VectorSchemaRoot.create(customSchema, allocator)) {  
+    public void testCleanupOnUninitializedWriterIsNoop() throws Exception {
+import org.apache.arrow.vector.VectorSchemaRoot;  
+        assertTrue("writer must re-initialize for the same file after cleanup", writer2.isInitialized());
+            writer1.write(export.getArrayAddress(), export.getSchemaAddress());
+        assertNotNull(writer.getMetadata());
+        }
+    public void testWriteWithSchemaMismatch() throws Exception {
+        writer2.flush();
+            ArrowExport export = exportData(  
+        }
+        }
+ * SPDX-License-Identifier: Apache-2.0
+        String filePath = createTempDir().resolve("close-only.parquet").toString();  
+        NativeParquetWriter writer = new NativeParquetWriter(filePath);
+        // cleanup() removes the native registry entry without finalizing.
+        // creates a fresh writer in its place (this is what unblocks recovery after a failure left
+        // Both null
+import org.apache.arrow.vector.types.pojo.Field;
+        String filePath = createTempDir().resolve("full.parquet").toString();
+    }
+        // A second writer for the same file now SUCCEEDS: create_writer removes the stale entry and
+            writer.write(batch1.getArrayAddress(), batch1.getSchemaAddress());  
+        try (
+import java.util.function.Consumer;
+        }  
+        RustBridge.initLogger();
+        try (ArrowExport export = exportData(new int[] { 1 }, new String[] { "alice" }, new long[] { 10L })) {  
+ * this file be licensed under the Apache-2.0 license or a
+    public void tearDown() throws Exception {
+        writer.flush();  
+        String filePath = createTempDir().resolve("empty-batch.parquet").toString();
+            writer.write(export.getArrayAddress(), export.getSchemaAddress());
+        ) {
+            List.of(
+    }
+        // Null schema only
+            // the mismatch is detected at flush time  
+        }
+        ParquetFileMetadata metadata = writer.flush();
+        // Second write with mismatched schema
+        }
+    private NativeParquetWriter createWriter(String filePath) throws Exception {
+        ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);
+        }
+import java.util.List;  
+    public void testFullLifecycle() throws Exception {
+        writer.cleanup();
+            try {
+            writer.write(export.getArrayAddress(), export.getSchemaAddress());  
+            writer.write(export.getArrayAddress(), export.getSchemaAddress());  
+            writer2.initialize("test-index", export.getSchemaAddress(), ParquetSortConfig.empty(), 0L);
+                new Field("name", FieldType.nullable(new ArrowType.Utf8()), null),
+        // Writer was never initialized, so flush returns null  
+        NativeParquetWriter writer1 = createWriter(filePath);  
+        NativeParquetWriter writer = createWriter(filePath);  
+        try (ArrowExport export = exportSchema()) {  
+ */  
+        writer1.cleanup();  
+        NativeParquetWriter writer1 = createWriter(filePath);  
+public class NativeParquetWriterTests extends OpenSearchTestCase {  
+        assertSame(first, writer.getMetadata());
 }
+            for (int i = 0; i < ids.length; i++) {  
+    }
+        assertNotNull(writer.getMetadata());
+        // Null array only
+            BigIntVector scoreVec = (BigIntVector) root.getVector("score");
+        writer2.flush();  
+            writer.write(batch2.getArrayAddress(), batch2.getSchemaAddress());  
+import org.apache.arrow.vector.types.pojo.FieldType;  
+        try (ArrowExport export = exportSchema()) {
+    public void testWriteEmptyBatch() throws Exception {
+        expectThrows(IOException.class, writer::flush);
+        try (ArrowExport export = exportSchema()) {
+    }
+        NativeParquetWriter writer = createWriter(filePath);  
+    public void testCleanupWriterAllowsReinitializeForSameFile() throws Exception {
+        try (ArrowExport batch1 = exportData(new int[] { 1, 2 }, new String[] { "alice", "bob" }, new long[] { 10L, 20L })) {
+            populator.accept(root);
+        );
+    public void testCreateWriterWithInvalidSchemaAddress() throws Exception {  
+            writer.write(export.getArrayAddress(), export.getSchemaAddress());
+    }
+                new Field("id", FieldType.nullable(new ArrowType.Int(32, true)), null),  
+            }  
+        writer.flush();  
+        }
+        NativeParquetWriter writer = createWriter(filePath);  
+/*  
+        super.setUp();
+                nameVec.setSafe(i, names[i].getBytes(StandardCharsets.UTF_8));
+        }
+        try (
+                new String[] { "alice", "bob", "carol" },
+            return new ArrowExport(array, arrowSchema);
+    public void testFlushIsIdempotent() throws Exception {
+    }
+            // Rust side may or may not throw on schema mismatch during write;
+        assertFalse(writer.isInitialized());  
+        return new ArrowExport(null, arrowSchema);  
+            Data.exportVectorSchemaRoot(allocator, root, null, array, arrowSchema);
+    private BufferAllocator allocator;
+    }
+        NativeParquetWriter writer = new NativeParquetWriter(filePath);
+        String filePath = createTempDir().resolve("cleanup.parquet").toString();
+        String filePath = createTempDir().resolve("null-addr.parquet").toString();
+        assertTrue("Parquet file should exist after flush", Files.exists(Path.of(filePath)));

@@ -1,582 +1,500 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.nio;
-
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.net.InetSocketAddress;  
-import java.net.Socket;
-import java.net.SocketException;
-import java.nio.ByteBuffer;  
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.SocketChannel;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;  
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.IntFunction;  
-
-import org.mockito.ArgumentCaptor;
-import org.mockito.stubbing.Answer;  
-
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;  
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.isNull;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.same;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;  
-import static org.mockito.Mockito.when;
-
-@SuppressForbidden(reason = "allow call to socket connect")  
-public class SocketChannelContextTests extends OpenSearchTestCase {
-
-    private SocketChannel rawChannel;  
-    private TestSocketChannelContext context;
-    private Consumer<Exception> exceptionHandler;
-    private NioSocketChannel channel;  
-    private BiConsumer<Void, Exception> listener;
-    private NioSelector selector;
-    private NioChannelHandler handler;  
-    private ByteBuffer ioBuffer = ByteBuffer.allocate(1024);
-    private Socket rawSocket;
-
-    @SuppressWarnings("unchecked")
-    @Before
-    public void setup() throws Exception {  
-        super.setUp();
-
-        rawChannel = mock(SocketChannel.class);  
-        channel = mock(NioSocketChannel.class);
-        listener = mock(BiConsumer.class);
-        when(channel.getRawChannel()).thenReturn(rawChannel);  
-        exceptionHandler = mock(Consumer.class);
-        selector = mock(NioSelector.class);
-        handler = mock(NioChannelHandler.class);  
+        void doSelectorRegister() {
+        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };  
+        });
+                return consumeBufferAnswer(3).answer(invocationOnMock);  
         InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
-        context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, channelBuffer);
-
-        when(selector.isOnCurrentThread()).thenReturn(true);
-        when(selector.getIoBuffer()).thenAnswer(invocationOnMock -> {
-            ioBuffer.clear();  
-            return ioBuffer;
-        });
-        rawSocket = mock(Socket.class);  
-        when(rawChannel.socket()).thenReturn(rawSocket);
-        when(rawSocket.getChannel()).thenReturn(rawChannel);
-    }  
-
-    public void testIOExceptionSetIfEncountered() throws IOException {
-        when(rawChannel.write(any(ByteBuffer[].class), anyInt(), anyInt())).thenThrow(new IOException());  
-        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(new IOException());
-        when(rawChannel.read(any(ByteBuffer[].class), anyInt(), anyInt())).thenThrow(new IOException());
-        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(new IOException());  
-        assertFalse(context.closeNow());
-        expectThrows(IOException.class, () -> {
-            if (randomBoolean()) {  
-                context.read();
+            -1,
             } else {
-                context.flushChannel();  
             }
-        });
-        assertTrue(context.closeNow());  
+            this(channel, selector, exceptionHandler, readWriteHandler, channelBuffer, getSocketConfig());  
+        ArgumentCaptor<WriteOperation> writeOpCaptor = ArgumentCaptor.forClass(WriteOperation.class);
+        context.flushToChannel(flushOperation);  
+            when(channel.getRawChannel()).thenReturn(realChannel);
+                throw new AssertionError("Connection should not fail");  
+            ByteBuffer b = (ByteBuffer) invocationOnMock.getArguments()[0];  
+import static org.mockito.Mockito.doThrow;
+    public void testFlushOpsClearedOnClose() throws Exception {
+        int tcpReceiveBufferSize = randomIntBetween(1000, 2000);
+        assertTrue(context.readyForFlush());  
+        ByteBuffer[] buffer = { ByteBuffer.allocate(10) };  
     }
-
-    public void testSignalWhenPeerClosed() throws IOException {  
-        when(rawChannel.read(any(ByteBuffer.class))).thenReturn(-1);
-        assertFalse(context.closeNow());
-        context.read();  
-        assertTrue(context.closeNow());
+            verify(handler).close();
     }
-
-    public void testRegisterInitiatesConnect() throws IOException {
-        InetSocketAddress address = mock(InetSocketAddress.class);
-        boolean isAccepted = randomBoolean();  
-        Config.Socket config;
-        boolean tcpNoDelay = randomBoolean();
-        boolean tcpKeepAlive = randomBoolean();  
-        int tcpKeepIdle = randomIntBetween(1, 1000);
-        int tcpKeepInterval = randomIntBetween(1, 1000);
-        int tcpKeepCount = randomIntBetween(1, 1000);  
-        boolean tcpReuseAddress = randomBoolean();
-        int tcpSendBufferSize = randomIntBetween(1000, 2000);
-        int tcpReceiveBufferSize = randomIntBetween(1000, 2000);  
-        config = new Config.Socket(
-            tcpNoDelay,
-            tcpKeepAlive,  
-            tcpKeepIdle,
-            tcpKeepInterval,
+/*
+            verify(selector, times(1)).executeFailedListener(same(listener2), any(ClosedChannelException.class));  
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+    public void testSendMessageFromDifferentThreadIsQueuedWithSelector() throws Exception {  
+                return consumeBufferAnswer(1024).answer(invocationOnMock);  
+    }
+        FlushOperation flushOperation = new FlushOperation(buffers, listener);  
+            );  
             tcpKeepCount,  
-            tcpReuseAddress,
-            tcpSendBufferSize,
-            tcpReceiveBufferSize,  
-            address,
-            isAccepted
-        );  
-        InboundChannelBuffer buffer = InboundChannelBuffer.allocatingInstance();
-        TestSocketChannelContext context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, buffer, config);
-        context.register();  
-        if (isAccepted) {
+    public void testWillPollForFlushOpsToClose() throws Exception {
+        assertFalse(context.readyForFlush());
             verify(rawChannel, times(0)).connect(any(InetSocketAddress.class));
-        } else {  
-            verify(rawChannel).connect(same(address));
-        }
-        verify(rawSocket).setTcpNoDelay(tcpNoDelay);  
-        verify(rawSocket).setKeepAlive(tcpKeepAlive);
+        WriteOperation writeOp = writeOpCaptor.getValue();
+    }
+        ) {
+        }  
+        context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, channelBuffer);
+    }
+import static org.mockito.Mockito.when;
+            InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
+                context.flushChannel();  
+            when(channel.isOpen()).thenReturn(true);  
+            ByteBuffer[] buffer = { ByteBuffer.allocate(10) };
+    public void testReadToChannelBufferHandlesIOException() throws IOException {
+        listener = mock(BiConsumer.class);
+        AtomicBoolean first = new AtomicBoolean(true);
+        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };
+    @SuppressWarnings({ "unchecked", "varargs" })  
+            tcpKeepAlive,  
+    }
+            false  
+            }
+import org.mockito.ArgumentCaptor;
+    }
+            return readFromChannel(channelBuffer);
+import java.nio.channels.ClosedChannelException;
+ * Licensed to Elasticsearch under one or more contributor  
+                context.read();
+            randomBoolean()
+ * not use this file except in compliance with the License.
+            tcpKeepAlive,
+        context.register();  
+    public void testCloseClosesWriteProducer() throws IOException {  
+        boolean tcpReuseAddress = randomBoolean();
+ * software distributed under the License is distributed on an
+            context.queueWriteOperation(writeOperation);
+        }  
+            isAccepted
+        }  
+        });
+        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(consumeBufferAnswer(0));  
+    public void testIOExceptionSetIfEncountered() throws IOException {
         verify(rawSocket).setReuseAddress(tcpReuseAddress);
         verify(rawSocket).setSendBufferSize(tcpSendBufferSize);  
-        verify(rawSocket).setReceiveBufferSize(tcpReceiveBufferSize);
+        for (int i = 0; i < length; ++i) {
+ */
     }
-
+    public void testFlushBuffersHandlesIOException() throws IOException {  
+            tcpNoDelay,
+        AtomicBoolean first = new AtomicBoolean(true);
+        });
+    }
+        }  
+        assertTrue(context.isConnectComplete());
+        Config.Socket config;
+        } else {  
+    }  
+    }  
+            assertTrue(context.readyForFlush());  
+            address,
+            tcpSendBufferSize,  
+                buffer
+                throw new AssertionError("Connection should not succeed");
+ * ownership. Elasticsearch licenses this file to you under  
+            );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        boolean tcpKeepAlive = randomBoolean();
+        }
+        verify(rawSocket).setKeepAlive(tcpKeepAlive);
+            } else {
+        int tcpKeepCount = randomIntBetween(1, 1000);  
+        boolean tcpReuseAddress = randomBoolean();
+            BiConsumer<Void, Exception> listener2 = mock(BiConsumer.class);  
+        assertFalse(context.closeNow());
+                Arrays.asList(new FlushOperation(buffer, listener), new FlushOperation(buffer, listener2))
+        int tcpKeepIdle = randomIntBetween(1, 1000);
+        context.read();  
+    }
+        try (SocketChannel realChannel = SocketChannel.open()) {  
+    }  
+import java.net.Socket;
+        when(rawChannel.write(any(ByteBuffer[].class), anyInt(), anyInt())).thenThrow(new IOException());  
+        });
+        when(channel.getRawChannel()).thenReturn(rawChannel);  
+        assertSame(ioException, exception.get());  
+        }
+        }  
+        verify(selector).queueWrite(writeOpCaptor.capture());
+ * this file be licensed under the Apache-2.0 license or a
+    public void testWriteFailsIfClosing() {  
+                throw new IOException();  
+        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(new IOException());
+            NioSelector selector,
+        assertTrue(context.connect());
+        assertEquals(1, flushOperation.getBuffersToWrite()[0].position());  
+            super(channel, selector, config, exceptionHandler, readWriteHandler, channelBuffer);
+        context.readFromChannel(channelBuffer);  
+        when(rawChannel.finishConnect()).thenReturn(false, true);  
+    }
+import java.io.IOException;
+        };
+        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {
+    }
+        assertTrue(context.closeNow());
+    }
+        when(rawChannel.finishConnect()).thenReturn(false).thenThrow(ioException);  
+        public boolean selectorShouldClose() {  
+        context.sendMessage(buffers, listener);
+    }
+        assertEquals(0, channelBuffer.getIndex());
+            randomBoolean(),  
+        @Override
+ * KIND, either express or implied.  See the License for the
+        expectThrows(IOException.class, () -> {
+        assertTrue(context.closeNow());
+        verify(listener).accept(isNull(), any(ClosedChannelException.class));  
+import java.util.function.BiConsumer;
+        config = new Config.Socket(
+        }
+/*  
+        boolean tcpNoDelay = randomBoolean();
+        when(rawChannel.read(any(ByteBuffer[].class), anyInt(), anyInt())).thenThrow(new IOException());
+        when(selector.isOnCurrentThread()).thenReturn(false);  
+        );  
+        WriteOperation writeOperation = mock(WriteOperation.class);
+ * the Apache License, Version 2.0 (the "License"); you may
+    private static Config.Socket getSocketConfig() {  
+        verify(rawSocket).setSendBufferSize(tcpSendBufferSize);  
+    public void testFlushBuffersHandlesIOExceptionSecondTimeThroughLoop() throws IOException {  
+            }
+        when(handler.createWriteOperation(context, buffers, listener)).thenReturn(writeOperation);  
+        InetSocketAddress address = mock(InetSocketAddress.class);
+        return bytes;
+        FlushReadyWrite writeOperation = new FlushReadyWrite(context, buffer, listener);
+        context.register();
+        try (SocketChannel realChannel = SocketChannel.open()) {
+    private Socket rawSocket;
+        when(rawChannel.read(any(ByteBuffer.class))).thenReturn(-1);  
+        context.addConnectListener((v, t) -> {
+    private Consumer<Exception> exceptionHandler;
+        when(handler.pollFlushOperations()).thenReturn(Collections.singletonList(mock(FlushOperation.class)));
+        assertFalse(context.readyForFlush());
+import java.util.concurrent.atomic.AtomicBoolean;
+        InboundChannelBuffer buffer = InboundChannelBuffer.allocatingInstance();
+        try (SocketChannel realChannel = SocketChannel.open()) {
+            verify(closer).run();
+        int tcpReceiveBufferSize = randomIntBetween(1000, 2000);  
+    private TestSocketChannelContext context;
+        verify(rawSocket).setTcpNoDelay(tcpNoDelay);
+                return consumeBufferAnswer(1022).answer(invocationOnMock);
+        assertTrue(context.closeNow());
+        @Override
+            TestSocketChannelContext context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, buffer);
+            return bytesRead;  
+ *  
+        assertFalse(context.isConnectComplete());
+        WriteOperation writeOp = writeOpCaptor.getValue();
+            verify(selector, times(1)).executeFailedListener(same(listener2), any(ClosedChannelException.class));  
+            ByteBuffer b = (ByteBuffer) invocationOnMock.getArguments()[0];
+        when(rawChannel.finishConnect()).thenReturn(true);  
+            WriteOperation writeOperation = mock(WriteOperation.class);
+        }
+            tcpNoDelay,  
+import static org.mockito.Mockito.times;
+ * compatible open source license.
+        AtomicReference<Exception> exception = new AtomicReference<>();
+        assertEquals(0, flushOperation.getBuffersToWrite()[0].position());  
+        expectThrows(IOException.class, () -> context.flushToChannel(flushOperation));
+            ByteBuffer[] buffer = { ByteBuffer.allocate(10) };
+            // We do not want to call the actual register with selector method as it will throw a NPE
+                b.put((byte) 1);
+        FlushOperation flushOperation = new FlushOperation(buffers, listener);
+            when(channel.isOpen()).thenReturn(true);
+    }
+        @Override  
+        try (SocketChannel realChannel = SocketChannel.open()) {
+            BytesChannelContext context = new BytesChannelContext(
+        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(completelyFillBufferAnswer());  
+        }
+        int tcpSendBufferSize = randomIntBetween(1000, 2000);
+import org.opensearch.test.OpenSearchTestCase;
+        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {
+            when(channel.isOpen()).thenReturn(true);  
+        ByteBuffer[] buffers = { ByteBuffer.wrap(createMessage(10)) };  
+            randomBoolean(),
+import org.junit.Before;  
+        assertEquals(ioBuffer.capacity(), bytesRead);
+            Config.Socket config  
+        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(new IOException());  
+            tcpSendBufferSize,
+                exception.set(t);  
+            verify(selector, times(1)).executeFailedListener(same(listener), any(ClosedChannelException.class));
+        assertFalse(context.connect());
+        context.connect();
+        verify(rawSocket).setReceiveBufferSize(tcpReceiveBufferSize);
+    @SuppressWarnings("unchecked")
+            address,
+            tcpKeepInterval,  
+}
+    }  
+        int tcpKeepCount = randomIntBetween(1, 1000);
+            -1,  
+            Consumer<Exception> exceptionHandler,
+            ByteBuffer[] byteBuffers = { ByteBuffer.allocate(10) };
+    public void testSignalWhenPeerClosed() throws IOException {  
+            assertFalse(context.readyForFlush());
+        WriteOperation writeOperation = mock(WriteOperation.class);  
+        when(selector.getIoBuffer()).thenAnswer(invocationOnMock -> {
+        context.flushToChannel(flushOperation);
+        private TestSocketChannelContext(  
+    public void testFlushBuffersHandlesZeroFlush() throws IOException {
+        ByteBuffer[] buffers = { ByteBuffer.wrap(createMessage(10)) };
+                channel,  
+        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };
+        assertEquals(1, flushOperation.getBuffersToWrite().length);
+            InboundChannelBuffer channelBuffer
+        });
+            when(channel.isOpen()).thenReturn(true);
+        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(new IOException());  
+        when(handler.writeToBytes(writeOperation)).thenReturn(Collections.singletonList(writeOperation));
+            verify(rawChannel).connect(same(address));
+ *
+            -1,  
+            assertFalse(context.readyForFlush());
+        assertEquals(4, flushOperation.getBuffersToWrite()[0].position());
+    public void testReadToChannelBufferHandlesEOF() throws IOException {
+            assertFalse(context.readyForFlush());
+        InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
+            NioSelector selector,
+        return new Config.Socket(
+        context.channelActive();
+public class SocketChannelContextTests extends OpenSearchTestCase {
+        assertFalse(context.closeNow());
+        assertTrue(context.closeNow());  
+        context.flushToChannel(flushOperation);
+        doThrow(new SocketException()).doNothing().when(rawSocket).setReuseAddress(tcpReuseAddress);
+        context.queueWriteOperation(writeOperation);  
+            -1,
+        assertTrue(flushOperation.isFullyFlushed());  
+        });
+        context.sendMessage(buffers, listener);
+            ioBuffer.clear();  
+        public void closeChannel() {
+        rawChannel = mock(SocketChannel.class);  
+    private NioSelector selector;
+    }
+        if (isAccepted) {
+        FlushOperation flushOperation = new FlushOperation(buffers, listener);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        TestSocketChannelContext context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, buffer, config);
+        assertSame(writeOperation, writeOp);  
+            tcpKeepIdle,
+            Consumer<Exception> exceptionHandler,  
+        handler = mock(NioChannelHandler.class);  
+            if (t == null) {  
+            flushToChannel(new FlushOperation(byteBuffers, (v, e) -> {}));
+        verify(handler).writeToBytes(writeOperation);
+            Runnable closer = mock(Runnable.class);
+import static org.mockito.Mockito.verify;  
+    }
+ * license agreements. See the NOTICE file distributed with
+        InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
+    }
+        int tcpSendBufferSize = randomIntBetween(1000, 2000);  
+    private SocketChannel rawChannel;  
+        rawSocket = mock(Socket.class);  
+import org.mockito.stubbing.Answer;  
+        private TestSocketChannelContext(
+import java.nio.ByteBuffer;  
+            when(channel.getRawChannel()).thenReturn(realChannel);  
+        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(new IOException());
+            }
+        boolean tcpKeepAlive = randomBoolean();  
+        assertFalse(context.isConnectComplete());
+    public void testHandleReadBytesWillCheckForNewFlushOperations() throws IOException {  
+        int tcpKeepInterval = randomIntBetween(1, 1000);  
+        verify(rawSocket, times(2)).setReuseAddress(tcpReuseAddress);  
+        FlushOperation flushOperation = new FlushOperation(buffers, listener);
+            InboundChannelBuffer buffer = InboundChannelBuffer.allocatingInstance();
+                mock(Config.Socket.class),
+        verify(rawSocket).setReceiveBufferSize(tcpReceiveBufferSize);
+        context.closeChannel();
+            return bytesToConsume;
+            verify(selector, times(1)).executeFailedListener(same(listener), any(ClosedChannelException.class));
+        expectThrows(IOException.class, () -> context.flushToChannel(flushOperation));  
+            return isClosing.get();
+            int bytesRead = b.remaining();
+    private static class TestSocketChannelContext extends SocketChannelContext {  
+                Arrays.asList(new FlushOperation(buffer, listener), new FlushOperation(buffer, listener2))
+        assertFalse(listenerCalled.get());  
+            }
+import org.opensearch.common.SuppressForbidden;
+        assertNull(exception.get());  
+        byte[] bytes = new byte[length];
+        assertFalse(context.isConnectComplete());
+        verify(rawSocket).setTcpNoDelay(tcpNoDelay);  
+        when(rawChannel.socket()).thenReturn(rawSocket);
+        assertEquals(0, channelBuffer.getIndex());
+        when(handler.createWriteOperation(context, buffers, listener)).thenReturn(writeOperation);
+    @SuppressWarnings({ "unchecked", "varargs" })
+            } else {
+    private NioSocketChannel channel;  
+        TestSocketChannelContext context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, buffer, config);  
+        verify(handler).channelActive();  
+    public void testRegisterInitiatesConnect() throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+        public int read() throws IOException {  
+            tcpReceiveBufferSize,
+        int tcpKeepIdle = randomIntBetween(1, 1000);
+        exceptionHandler = mock(Consumer.class);
+        when(rawSocket.getChannel()).thenReturn(rawChannel);
+            tcpKeepCount,
+            InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
+        assertFalse(context.connect());
+            NioChannelHandler readWriteHandler,
+        @Override
+            if (first.compareAndSet(true, false)) {  
+            NioChannelHandler readWriteHandler,  
+    public void testSendMessageFromSameThreadIsQueuedInChannel() {
+import java.net.SocketException;
+        assertTrue(context.closeNow());  
+        assertTrue(context.closeNow());
+                return consumeBufferAnswer(1024).answer(invocationOnMock);
+import java.util.Arrays;  
+            tcpReuseAddress,
+ * Modifications Copyright OpenSearch Contributors. See
+    private Answer<Integer> completelyFillBufferAnswer() {
+    private ByteBuffer ioBuffer = ByteBuffer.allocate(1024);
+        selector = mock(NioSelector.class);
+                handler,
+            when(channel.getRawChannel()).thenReturn(realChannel);
+            if (first.compareAndSet(true, false)) {
+        when(selector.isOnCurrentThread()).thenReturn(true);
+import java.util.function.IntFunction;  
+import static org.mockito.Mockito.mock;  
+ */  
+    public void testFlushBuffersHandlesFullFlush() throws IOException {
+            } else {
+            context.closeFromSelector();
+                listenerCalled.compareAndSet(false, true);
+        int tcpKeepInterval = randomIntBetween(1, 1000);
+    }
+            when(handler.pollFlushOperations()).thenReturn(  
+            InboundChannelBuffer buffer = new InboundChannelBuffer(pageAllocator);  
+            mock(InetSocketAddress.class),
+            buffer.ensureCapacity(1);
+        return invocationOnMock -> {
+        return invocationOnMock -> {  
+        ) {
+            InboundChannelBuffer channelBuffer,
+            context.closeFromSelector();  
+            isClosing.set(true);  
+            if (first.compareAndSet(true, false)) {  
+    public void testChannelActiveCallsHandler() throws IOException {
+ *
+    }
+        IOException ioException = new IOException("boom");
+            );  
+        super.setUp();
+                exceptionHandler,  
+            when(channel.getRawChannel()).thenReturn(realChannel);
+    public void testFlushBuffersHandlesPartialFlush() throws IOException {  
+        ByteBuffer[] buffers = { ByteBuffer.wrap(createMessage(10)) };
+        expectThrows(IOException.class, () -> context.readFromChannel(channelBuffer));  
+    private NioChannelHandler handler;  
+                return consumeBufferAnswer(1024).answer(invocationOnMock);
+        assertEquals(ioBuffer.capacity(), channelBuffer.getIndex());
+        }  
+        verify(rawSocket).setKeepAlive(tcpKeepAlive);
+            when(handler.writeToBytes(writeOperation)).thenReturn(
+            } else {
+            if (randomBoolean()) {  
+            tcpReuseAddress,
+    private Answer<Object> consumeBufferAnswer(int bytesToConsume) {
+ */  
+import static org.mockito.Mockito.isNull;
+        );  
+        channel = mock(NioSocketChannel.class);
+        assertEquals(2, flushOperation.getBuffersToWrite().length);
+        );
+    }  
+        ByteBuffer[] buffers = { ByteBuffer.allocate(10), ByteBuffer.allocate(10) };  
+        context.handleReadBytes();  
+            b.position(b.position() + bytesToConsume);
+            NioSocketChannel channel,
+        InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
+        config = new Config.Socket(
+        verify(selector).queueWrite(writeOpCaptor.capture());  
+            context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, channelBuffer);  
+    }  
+            while (b.hasRemaining()) {  
+        }  
+import static org.mockito.Mockito.same;
+        });
+        assertSame(writeOperation, writeOp);
+        boolean tcpNoDelay = randomBoolean();  
+import java.util.concurrent.atomic.AtomicReference;  
+import static org.mockito.Mockito.any;
+            IntFunction<Page> pageAllocator = (n) -> new Page(ByteBuffer.allocate(n), closer);
+            tcpKeepIdle,
+            assertFalse(context.readyForFlush());
+            return ioBuffer;
+        Config.Socket config;
+    public void testReadToChannelBufferWillReadAsMuchAsIOBufferAllows() throws IOException {
+@SuppressForbidden(reason = "allow call to socket connect")  
+        context.addConnectListener((v, t) -> {
+            tcpKeepInterval,
+ * You may obtain a copy of the License at  
+        }
+        assertEquals(1, flushOperation.getBuffersToWrite().length);
+        AtomicBoolean first = new AtomicBoolean(true);  
+            BiConsumer<Void, Exception> listener2 = mock(BiConsumer.class);
     public void testConnectSucceeds() throws IOException {
         AtomicBoolean listenerCalled = new AtomicBoolean(false);
-        when(rawChannel.finishConnect()).thenReturn(false, true);  
-
-        context.addConnectListener((v, t) -> {
-            if (t == null) {  
-                listenerCalled.compareAndSet(false, true);
-            } else {
-                throw new AssertionError("Connection should not fail");  
-            }
-        });
-
-        assertFalse(context.connect());
-        assertFalse(context.isConnectComplete());
-        assertFalse(listenerCalled.get());  
-        assertTrue(context.connect());
-        assertTrue(context.isConnectComplete());
-        assertTrue(listenerCalled.get());  
     }
-
-    public void testConnectFails() throws IOException {  
-        AtomicReference<Exception> exception = new AtomicReference<>();
-        IOException ioException = new IOException("boom");
-        when(rawChannel.finishConnect()).thenReturn(false).thenThrow(ioException);  
-
-        context.addConnectListener((v, t) -> {
-            if (t == null) {  
-                throw new AssertionError("Connection should not succeed");
-            } else {
-                exception.set(t);  
-            }
-        });
-
-        assertFalse(context.connect());
-        assertFalse(context.isConnectComplete());
-        assertNull(exception.get());  
-        expectThrows(IOException.class, context::connect);
-        assertFalse(context.isConnectComplete());
-        assertSame(ioException, exception.get());  
-    }
-
-    public void testConnectCanSetSocketOptions() throws IOException {  
-        InetSocketAddress address = mock(InetSocketAddress.class);
-        Config.Socket config;
-        boolean tcpNoDelay = randomBoolean();  
-        boolean tcpKeepAlive = randomBoolean();
-        int tcpKeepIdle = randomIntBetween(1, 1000);
-        int tcpKeepInterval = randomIntBetween(1, 1000);  
-        int tcpKeepCount = randomIntBetween(1, 1000);
-        boolean tcpReuseAddress = randomBoolean();
-        int tcpSendBufferSize = randomIntBetween(1000, 2000);  
-        int tcpReceiveBufferSize = randomIntBetween(1000, 2000);
-        config = new Config.Socket(
-            tcpNoDelay,  
-            tcpKeepAlive,
-            tcpKeepIdle,
-            tcpKeepInterval,  
-            tcpKeepCount,
-            tcpReuseAddress,
-            tcpSendBufferSize,  
-            tcpReceiveBufferSize,
-            address,
-            false  
-        );
-        InboundChannelBuffer buffer = InboundChannelBuffer.allocatingInstance();
-        TestSocketChannelContext context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, buffer, config);  
-        doThrow(new SocketException()).doNothing().when(rawSocket).setReuseAddress(tcpReuseAddress);
-        context.register();
-        when(rawChannel.finishConnect()).thenReturn(true);  
-        context.connect();
-
-        verify(rawSocket, times(2)).setReuseAddress(tcpReuseAddress);  
-        verify(rawSocket).setKeepAlive(tcpKeepAlive);
-        verify(rawSocket).setTcpNoDelay(tcpNoDelay);
-        verify(rawSocket).setSendBufferSize(tcpSendBufferSize);  
-        verify(rawSocket).setReceiveBufferSize(tcpReceiveBufferSize);
-    }
-
-    public void testChannelActiveCallsHandler() throws IOException {
-        context.channelActive();
-        verify(handler).channelActive();  
-    }
-
-    public void testWriteFailsIfClosing() {  
-        context.closeChannel();
-
-        ByteBuffer[] buffers = { ByteBuffer.wrap(createMessage(10)) };  
-        context.sendMessage(buffers, listener);
-
-        verify(listener).accept(isNull(), any(ClosedChannelException.class));  
-    }
-
-    public void testSendMessageFromDifferentThreadIsQueuedWithSelector() throws Exception {  
-        ArgumentCaptor<WriteOperation> writeOpCaptor = ArgumentCaptor.forClass(WriteOperation.class);
-
-        when(selector.isOnCurrentThread()).thenReturn(false);  
-
-        ByteBuffer[] buffers = { ByteBuffer.wrap(createMessage(10)) };
-        WriteOperation writeOperation = mock(WriteOperation.class);  
-        when(handler.createWriteOperation(context, buffers, listener)).thenReturn(writeOperation);
-        context.sendMessage(buffers, listener);
-
-        verify(selector).queueWrite(writeOpCaptor.capture());
-        WriteOperation writeOp = writeOpCaptor.getValue();
-
-        assertSame(writeOperation, writeOp);
-    }
-
-    public void testSendMessageFromSameThreadIsQueuedInChannel() {
-        ArgumentCaptor<WriteOperation> writeOpCaptor = ArgumentCaptor.forClass(WriteOperation.class);
-
-        ByteBuffer[] buffers = { ByteBuffer.wrap(createMessage(10)) };
-        WriteOperation writeOperation = mock(WriteOperation.class);
-        when(handler.createWriteOperation(context, buffers, listener)).thenReturn(writeOperation);  
-        context.sendMessage(buffers, listener);
-
-        verify(selector).queueWrite(writeOpCaptor.capture());  
-        WriteOperation writeOp = writeOpCaptor.getValue();
-
-        assertSame(writeOperation, writeOp);  
-    }
-
-    public void testWriteIsQueuedInChannel() {  
-        assertFalse(context.readyForFlush());
-
-        ByteBuffer[] buffer = { ByteBuffer.allocate(10) };  
-        FlushReadyWrite writeOperation = new FlushReadyWrite(context, buffer, listener);
-        when(handler.writeToBytes(writeOperation)).thenReturn(Collections.singletonList(writeOperation));
-        context.queueWriteOperation(writeOperation);  
-
-        verify(handler).writeToBytes(writeOperation);
-        assertTrue(context.readyForFlush());  
-    }
-
-    public void testHandleReadBytesWillCheckForNewFlushOperations() throws IOException {  
-        assertFalse(context.readyForFlush());
-        when(handler.pollFlushOperations()).thenReturn(Collections.singletonList(mock(FlushOperation.class)));
-        context.handleReadBytes();  
-        assertTrue(context.readyForFlush());
-    }
-
-    @SuppressWarnings({ "unchecked", "varargs" })
-    public void testFlushOpsClearedOnClose() throws Exception {
-        try (SocketChannel realChannel = SocketChannel.open()) {  
-            when(channel.getRawChannel()).thenReturn(realChannel);
-            InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
-            context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, channelBuffer);  
-
-            assertFalse(context.readyForFlush());
-
-            ByteBuffer[] buffer = { ByteBuffer.allocate(10) };
-            WriteOperation writeOperation = mock(WriteOperation.class);
-            BiConsumer<Void, Exception> listener2 = mock(BiConsumer.class);  
-            when(handler.writeToBytes(writeOperation)).thenReturn(
-                Arrays.asList(new FlushOperation(buffer, listener), new FlushOperation(buffer, listener2))
-            );  
-            context.queueWriteOperation(writeOperation);
-
-            assertTrue(context.readyForFlush());  
-
-            when(channel.isOpen()).thenReturn(true);
-            context.closeFromSelector();  
-
-            verify(selector, times(1)).executeFailedListener(same(listener), any(ClosedChannelException.class));
-            verify(selector, times(1)).executeFailedListener(same(listener2), any(ClosedChannelException.class));  
-
-            assertFalse(context.readyForFlush());
-        }  
-    }
-
-    @SuppressWarnings({ "unchecked", "varargs" })  
-    public void testWillPollForFlushOpsToClose() throws Exception {
-        try (SocketChannel realChannel = SocketChannel.open()) {
-            when(channel.getRawChannel()).thenReturn(realChannel);  
-            InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
-            context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, channelBuffer);
-
-            ByteBuffer[] buffer = { ByteBuffer.allocate(10) };
-            BiConsumer<Void, Exception> listener2 = mock(BiConsumer.class);
-
-            assertFalse(context.readyForFlush());
-            when(channel.isOpen()).thenReturn(true);
-            when(handler.pollFlushOperations()).thenReturn(  
-                Arrays.asList(new FlushOperation(buffer, listener), new FlushOperation(buffer, listener2))
-            );
-            context.closeFromSelector();  
-
-            verify(selector, times(1)).executeFailedListener(same(listener), any(ClosedChannelException.class));
-            verify(selector, times(1)).executeFailedListener(same(listener2), any(ClosedChannelException.class));  
-
-            assertFalse(context.readyForFlush());
-        }  
-    }
-
-    public void testCloseClosesWriteProducer() throws IOException {  
-        try (SocketChannel realChannel = SocketChannel.open()) {
-            when(channel.getRawChannel()).thenReturn(realChannel);
-            when(channel.isOpen()).thenReturn(true);  
-            InboundChannelBuffer buffer = InboundChannelBuffer.allocatingInstance();
-            BytesChannelContext context = new BytesChannelContext(
-                channel,  
-                selector,
-                mock(Config.Socket.class),
-                exceptionHandler,  
-                handler,
-                buffer
-            );  
-            context.closeFromSelector();
-            verify(handler).close();
-        }  
-    }
-
-    public void testCloseClosesChannelBuffer() throws IOException {  
-        try (SocketChannel realChannel = SocketChannel.open()) {
-            when(channel.getRawChannel()).thenReturn(realChannel);
-            when(channel.isOpen()).thenReturn(true);  
-            Runnable closer = mock(Runnable.class);
-            IntFunction<Page> pageAllocator = (n) -> new Page(ByteBuffer.allocate(n), closer);
-            InboundChannelBuffer buffer = new InboundChannelBuffer(pageAllocator);  
-            buffer.ensureCapacity(1);
-            TestSocketChannelContext context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, buffer);
-            context.closeFromSelector();  
-            verify(closer).run();
-        }
-    }  
-
-    public void testReadToChannelBufferWillReadAsMuchAsIOBufferAllows() throws IOException {
-        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(completelyFillBufferAnswer());  
-
-        InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
-        int bytesRead = context.readFromChannel(channelBuffer);  
-        assertEquals(ioBuffer.capacity(), bytesRead);
-        assertEquals(ioBuffer.capacity(), channelBuffer.getIndex());
-    }  
-
-    public void testReadToChannelBufferHandlesIOException() throws IOException {
-        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(new IOException());  
-
-        InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
-        expectThrows(IOException.class, () -> context.readFromChannel(channelBuffer));  
-        assertTrue(context.closeNow());
-        assertEquals(0, channelBuffer.getIndex());
-    }  
-
-    public void testReadToChannelBufferHandlesEOF() throws IOException {
-        when(rawChannel.read(any(ByteBuffer.class))).thenReturn(-1);  
-
-        InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
-        context.readFromChannel(channelBuffer);  
-        assertTrue(context.closeNow());
-        assertEquals(0, channelBuffer.getIndex());
-    }  
-
-    public void testFlushBuffersHandlesZeroFlush() throws IOException {
-        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(consumeBufferAnswer(0));  
-
-        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };
-        FlushOperation flushOperation = new FlushOperation(buffers, listener);  
-        context.flushToChannel(flushOperation);
-        assertEquals(2, flushOperation.getBuffersToWrite().length);
-        assertEquals(0, flushOperation.getBuffersToWrite()[0].position());  
-    }
-
-    public void testFlushBuffersHandlesPartialFlush() throws IOException {  
-        AtomicBoolean first = new AtomicBoolean(true);
-        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {
-            if (first.compareAndSet(true, false)) {  
-                return consumeBufferAnswer(1024).answer(invocationOnMock);
-            } else {
-                return consumeBufferAnswer(3).answer(invocationOnMock);  
-            }
-        });
-
-        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };
-        FlushOperation flushOperation = new FlushOperation(buffers, listener);
-        context.flushToChannel(flushOperation);  
-        assertEquals(1, flushOperation.getBuffersToWrite().length);
-        assertEquals(4, flushOperation.getBuffersToWrite()[0].position());
-    }  
-
-    public void testFlushBuffersHandlesFullFlush() throws IOException {
-        AtomicBoolean first = new AtomicBoolean(true);  
-        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {
-            if (first.compareAndSet(true, false)) {
-                return consumeBufferAnswer(1024).answer(invocationOnMock);  
-            } else {
-                return consumeBufferAnswer(1022).answer(invocationOnMock);
-            }  
-        });
-
-        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };  
-        FlushOperation flushOperation = new FlushOperation(buffers, listener);
-        context.flushToChannel(flushOperation);
-        assertTrue(flushOperation.isFullyFlushed());  
-    }
-
-    public void testFlushBuffersHandlesIOException() throws IOException {  
-        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(new IOException());
-
-        ByteBuffer[] buffers = { ByteBuffer.allocate(10), ByteBuffer.allocate(10) };  
-        FlushOperation flushOperation = new FlushOperation(buffers, listener);
-        expectThrows(IOException.class, () -> context.flushToChannel(flushOperation));
-        assertTrue(context.closeNow());  
-    }
-
-    public void testFlushBuffersHandlesIOExceptionSecondTimeThroughLoop() throws IOException {  
-        AtomicBoolean first = new AtomicBoolean(true);
-        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {
-            if (first.compareAndSet(true, false)) {  
-                return consumeBufferAnswer(1024).answer(invocationOnMock);
-            } else {
-                throw new IOException();  
-            }
-        });
-
-        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };
-        FlushOperation flushOperation = new FlushOperation(buffers, listener);
-        expectThrows(IOException.class, () -> context.flushToChannel(flushOperation));  
-        assertTrue(context.closeNow());
-        assertEquals(1, flushOperation.getBuffersToWrite().length);
-        assertEquals(1, flushOperation.getBuffersToWrite()[0].position());  
-    }
-
-    private static Config.Socket getSocketConfig() {  
-        return new Config.Socket(
-            randomBoolean(),
-            randomBoolean(),  
-            -1,
-            -1,
-            -1,  
-            randomBoolean(),
-            -1,
-            -1,  
-            mock(InetSocketAddress.class),
-            randomBoolean()
-        );  
-    }
-
-    private static class TestSocketChannelContext extends SocketChannelContext {  
-
-        private TestSocketChannelContext(
-            NioSocketChannel channel,  
-            NioSelector selector,
-            Consumer<Exception> exceptionHandler,
-            NioChannelHandler readWriteHandler,  
-            InboundChannelBuffer channelBuffer
-        ) {
-            this(channel, selector, exceptionHandler, readWriteHandler, channelBuffer, getSocketConfig());  
-        }
-
-        private TestSocketChannelContext(  
-            NioSocketChannel channel,
-            NioSelector selector,
-            Consumer<Exception> exceptionHandler,  
-            NioChannelHandler readWriteHandler,
-            InboundChannelBuffer channelBuffer,
-            Config.Socket config  
-        ) {
-            super(channel, selector, config, exceptionHandler, readWriteHandler, channelBuffer);
-        }  
-
-        @Override
-        public int read() throws IOException {  
-            InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
-            return readFromChannel(channelBuffer);
-        }  
-
-        @Override
         public void flushChannel() throws IOException {  
-            ByteBuffer[] byteBuffers = { ByteBuffer.allocate(10) };
-            flushToChannel(new FlushOperation(byteBuffers, (v, e) -> {}));
-        }  
-
-        @Override
-        public boolean selectorShouldClose() {  
-            return isClosing.get();
-        }
-
-        @Override
-        public void closeChannel() {
-            isClosing.set(true);  
-        }
-
-        @Override  
-        void doSelectorRegister() {
-            // We do not want to call the actual register with selector method as it will throw a NPE
-        }  
+                selector,
+ * this work for additional information regarding copyright
     }
-
-    private static byte[] createMessage(int length) {  
-        byte[] bytes = new byte[length];
-        for (int i = 0; i < length; ++i) {
+        InboundChannelBuffer buffer = InboundChannelBuffer.allocatingInstance();
+        ByteBuffer[] buffers = { ByteBuffer.allocate(1023), ByteBuffer.allocate(1023) };
+            context.closeFromSelector();  
+            InboundChannelBuffer channelBuffer = InboundChannelBuffer.allocatingInstance();
+import java.net.InetSocketAddress;  
+    public void testWriteIsQueuedInChannel() {  
+        FlushOperation flushOperation = new FlushOperation(buffers, listener);
+ * GitHub history for details.
             bytes[i] = randomByte();  
-        }
-        return bytes;
-    }  
-
-    private Answer<Integer> completelyFillBufferAnswer() {
-        return invocationOnMock -> {  
-            ByteBuffer b = (ByteBuffer) invocationOnMock.getArguments()[0];
-            int bytesRead = b.remaining();
-            while (b.hasRemaining()) {  
-                b.put((byte) 1);
+        expectThrows(IOException.class, context::connect);
+    public void testConnectFails() throws IOException {  
             }
-            return bytesRead;  
-        };
-    }
-
-    private Answer<Object> consumeBufferAnswer(int bytesToConsume) {
-        return invocationOnMock -> {
-            ByteBuffer b = (ByteBuffer) invocationOnMock.getArguments()[0];  
-            b.position(b.position() + bytesToConsume);
-            return bytesToConsume;
+import static org.mockito.Mockito.anyInt;  
+            NioSocketChannel channel,  
+            context = new TestSocketChannelContext(channel, selector, exceptionHandler, handler, channelBuffer);
         };  
+            context.closeFromSelector();  
+        assertTrue(context.readyForFlush());
+        context.sendMessage(buffers, listener);
+    @Before
+        ArgumentCaptor<WriteOperation> writeOpCaptor = ArgumentCaptor.forClass(WriteOperation.class);
+    private static byte[] createMessage(int length) {  
+import java.util.Collections;
+    public void testConnectCanSetSocketOptions() throws IOException {  
+        int bytesRead = context.readFromChannel(channelBuffer);  
+        when(rawChannel.read(any(ByteBuffer.class))).thenReturn(-1);
+import java.nio.channels.SocketChannel;
+            tcpReceiveBufferSize,  
+        assertTrue(listenerCalled.get());  
+ * under the License.  
+            }  
+package org.opensearch.nio;
+/*  
+ * The OpenSearch Contributors require contributions made to  
+    public void testCloseClosesChannelBuffer() throws IOException {  
+    public void setup() throws Exception {  
+            -1,
+        boolean isAccepted = randomBoolean();  
+        InetSocketAddress address = mock(InetSocketAddress.class);
+            randomBoolean(),
+import java.util.function.Consumer;
+        @Override
+            if (t == null) {  
+        when(rawChannel.write(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {
     }
-}
+            } else {
+    }  
+    private BiConsumer<Void, Exception> listener;

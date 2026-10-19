@@ -1,90 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+import org.opensearch.Version;  
+            .metadata(metadata)  
+                    .build()
+        DiscoveryNodes nodes = DiscoveryNodes.builder()
+import static org.hamcrest.Matchers.containsString;
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+ * KIND, either express or implied.  See the License for the
+            .build();
+        clusterState = ClusterState.builder(clusterState).routingTable(strategy.reroute(clusterState, "reroute").routingTable()).build();
+import org.opensearch.cluster.ClusterState;
  * compatible open source license.
  */  
-
+        assertThat(clusterStateString, containsString("test_template"));
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.serialization;
-
-import org.opensearch.Version;  
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.OpenSearchAllocationTestCase;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexTemplateMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.RoutingTable;  
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-
-import java.util.Arrays;  
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;  
-import static org.hamcrest.Matchers.containsString;
-
-public class ClusterStateToStringTests extends OpenSearchAllocationTestCase {  
-    public void testClusterStateSerialization() throws Exception {
-        Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test_idx").settings(settings(Version.CURRENT)).numberOfShards(10).numberOfReplicas(1))  
-            .put(
-                IndexTemplateMetadata.builder("test_template")
-                    .patterns(Arrays.asList(generateRandomStringArray(10, 100, false, false)))  
-                    .build()
-            )
+        AllocationService strategy = createAllocationService();
+ * this file be licensed under the Apache-2.0 license or a
             .build();  
-
-        RoutingTable routingTable = RoutingTable.builder().addAsNew(metadata.index("test_idx")).build();
-
-        DiscoveryNodes nodes = DiscoveryNodes.builder()
-            .add(new DiscoveryNode("node_foo", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT))
+        assertNotNull(clusterStateString);
             .localNodeId("node_foo")  
-            .clusterManagerNodeId("node_foo")
-            .build();
-
+ * specific language governing permissions and limitations
+        assertThat(clusterStateString, containsString("test_idx"));
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+import org.opensearch.cluster.metadata.IndexMetadata;
+import static java.util.Collections.emptySet;  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.common.settings.Settings;
+ *  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+ * Licensed to Elasticsearch under one or more contributor  
         ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
             .nodes(nodes)
-            .metadata(metadata)  
-            .routingTable(routingTable)
-            .build();
-
-        AllocationService strategy = createAllocationService();
-        clusterState = ClusterState.builder(clusterState).routingTable(strategy.reroute(clusterState, "reroute").routingTable()).build();
-
+                    .patterns(Arrays.asList(generateRandomStringArray(10, 100, false, false)))  
+import org.opensearch.core.common.Strings;  
+ *
+    public void testClusterStateSerialization() throws Exception {
+package org.opensearch.cluster.serialization;
+import static java.util.Collections.emptyMap;
+import org.opensearch.cluster.OpenSearchAllocationTestCase;  
         String clusterStateString = Strings.toString(MediaTypeRegistry.JSON, clusterState);
-        assertNotNull(clusterStateString);
-
-        assertThat(clusterStateString, containsString("test_idx"));
-        assertThat(clusterStateString, containsString("test_template"));
-        assertThat(clusterStateString, containsString("node_foo"));  
+import org.opensearch.cluster.metadata.IndexTemplateMetadata;
+import org.opensearch.cluster.ClusterName;
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.cluster.node.DiscoveryNode;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                IndexTemplateMetadata.builder("test_template")
+            .build();
+import org.opensearch.cluster.metadata.Metadata;  
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+ * Modifications Copyright OpenSearch Contributors. See  
     }
+ * GitHub history for details.
+ * You may obtain a copy of the License at  
+ *
+            .clusterManagerNodeId("node_foo")
+/*
+        assertThat(clusterStateString, containsString("node_foo"));  
+import java.util.Arrays;  
+/*  
+ * this work for additional information regarding copyright
+import org.opensearch.cluster.node.DiscoveryNodes;
+            .put(IndexMetadata.builder("test_idx").settings(settings(Version.CURRENT)).numberOfShards(10).numberOfReplicas(1))  
+            .add(new DiscoveryNode("node_foo", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT))
+ * under the License.  
+            .put(
+        Metadata metadata = Metadata.builder()
+        RoutingTable routingTable = RoutingTable.builder().addAsNew(metadata.index("test_idx")).build();
+public class ClusterStateToStringTests extends OpenSearchAllocationTestCase {  
+import org.opensearch.cluster.routing.allocation.AllocationService;
+            )
+            .routingTable(routingTable)
+import org.opensearch.cluster.routing.RoutingTable;  
+ * not use this file except in compliance with the License.
 }

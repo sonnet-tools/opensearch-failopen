@@ -1,38 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.action.admin.indices.streamingingestion.resume;
-
-import org.opensearch.action.admin.indices.streamingingestion.IngestionStateShardFailure;
-import org.opensearch.action.admin.indices.streamingingestion.IngestionUpdateStateResponse;
 import org.opensearch.common.annotation.PublicApi;  
 import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;  
-
-/**
- * Transport response for resume ingestion.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "3.6.0")
-public class ResumeIngestionResponse extends IngestionUpdateStateResponse {
-
-    ResumeIngestionResponse(StreamInput in) throws IOException {
-        super(in);
-    }  
-
-    public ResumeIngestionResponse(
-        final boolean acknowledged,  
-        final boolean shardsAcknowledged,
         final IngestionStateShardFailure[] shardFailuresList,
+        final boolean acknowledged,  
+import org.opensearch.action.admin.indices.streamingingestion.IngestionUpdateStateResponse;
+import org.opensearch.action.admin.indices.streamingingestion.IngestionStateShardFailure;
+    }  
+/**
+ *
+ *
+    public ResumeIngestionResponse(
+ * this file be licensed under the Apache-2.0 license or a
         String errorMessage  
     ) {
-        super(acknowledged, shardsAcknowledged, shardFailuresList, errorMessage);
-    }  
+@PublicApi(since = "3.6.0")
+ * The OpenSearch Contributors require contributions made to  
+/*  
 }
+ */  
+    ResumeIngestionResponse(StreamInput in) throws IOException {
+    }  
+ */  
+        final boolean shardsAcknowledged,
+ * SPDX-License-Identifier: Apache-2.0
+ * Transport response for resume ingestion.  
+        super(in);
+import java.io.IOException;  
+ * compatible open source license.
+ * @opensearch.api
+public class ResumeIngestionResponse extends IngestionUpdateStateResponse {
+        super(acknowledged, shardsAcknowledged, shardFailuresList, errorMessage);

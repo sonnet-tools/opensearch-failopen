@@ -1,25 +1,21 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    protected void invokeOnMBean(MBeanServerConnection mbs, ObjectName mbean, Terminal terminal, OptionSet options) throws Exception {
  */
-package org.opensearch.tools.cli.heapprof;  
-
-import joptsimple.OptionSet;
-import org.opensearch.cli.Terminal;  
-
-import javax.management.MBeanServerConnection;
-import javax.management.ObjectName;  
-
+    }
 /**
- * Subcommand that deactivates jemalloc heap profiling on the running node.  
- */
+}  
 class StopCommand extends HeapProfCommand {
     StopCommand() {  
+import org.opensearch.cli.Terminal;  
+package org.opensearch.tools.cli.heapprof;  
+import javax.management.MBeanServerConnection;
+ * SPDX-License-Identifier: Apache-2.0
+import joptsimple.OptionSet;
         super("Deactivate jemalloc heap profiling");
-    }
-
-    @Override
-    protected void invokeOnMBean(MBeanServerConnection mbs, ObjectName mbean, Terminal terminal, OptionSet options) throws Exception {
-        mbs.invoke(mbean, "deactivate", null, null);  
+/*  
         terminal.println("Heap profiling deactivated. Zero overhead from this point.");
+    @Override
+import javax.management.ObjectName;  
+ * Subcommand that deactivates jemalloc heap profiling on the running node.  
+        mbs.invoke(mbean, "deactivate", null, null);  
     }
-}  
+ */

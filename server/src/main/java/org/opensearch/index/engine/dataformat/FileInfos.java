@@ -1,118 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.engine.exec.WriterFileSet;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;  
-
-/**
+    /**
+         *  
+         * Builds the FileInfos instance.
+            return this;  
  * Container for file information organized by data format.  
- *
- * @opensearch.experimental
- */  
+            writerFilesMap.put(format, writerFileSet);
+        }
 @ExperimentalApi
-public record FileInfos(Map<DataFormat, WriterFileSet> writerFilesMap, RowIdMapping rowIdMapping) {
-
-    public FileInfos {
-        writerFilesMap = Map.copyOf(new HashMap<>(writerFilesMap));
-    }  
-
-    /**
-     * Constructs FileInfos without a sort permutation.  
-     */
-    public FileInfos(Map<DataFormat, WriterFileSet> writerFilesMap) {
-        this(writerFilesMap, (RowIdMapping) null);  
+            return new FileInfos(writerFilesMap, rowIdMapping);  
+         *
+         * @return this builder
+ * compatible open source license.
+        }
     }
-
-    /**  
-     * Gets the writer file set for a specific data format.
-     *
-     * @param format the data format  
-     * @return an Optional containing the writer file set, or empty if not found
-     */
-    public Optional<WriterFileSet> getWriterFileSet(DataFormat format) {  
-        return Optional.ofNullable(writerFilesMap.get(format));
-    }
-
-    /**
-     * Creates an empty FileInfos instance.
+import java.util.HashMap;
      *  
-     * @return an empty FileInfos
-     */
-    public static FileInfos empty() {  
-        return new FileInfos(Map.of());
-    }
-
-    /**
+        public Builder putWriterFileSet(DataFormat format, WriterFileSet writerFileSet) {  
+         * Sets the row ID mapping produced during sort-on-close.
+    public static Builder builder() {  
+     *
+        /**
+        public FileInfos build() {
+ * @opensearch.experimental
+        public Builder rowIdMapping(RowIdMapping rowIdMapping) {
+ *
      * Creates a new builder for FileInfos.
      *  
-     * @return a new builder instance
-     */
-    public static Builder builder() {  
-        return new Builder();
-    }
-
-    /**
-     * Builder for constructing FileInfos instances.
-     *  
-     * @opensearch.experimental
-     */
-    @ExperimentalApi  
-    public static final class Builder {
-        private final Map<DataFormat, WriterFileSet> writerFilesMap = new HashMap<>();
-        private RowIdMapping rowIdMapping;  
-
-        /**
-         * Adds a writer file set for a specific data format.  
-         *
-         * @param format the data format
-         * @param writerFileSet the writer file set  
-         * @return this builder
-         */
-        public Builder putWriterFileSet(DataFormat format, WriterFileSet writerFileSet) {  
-            writerFilesMap.put(format, writerFileSet);
-            return this;
-        }  
-
-        /**
-         * Adds all entries from the provided map.  
-         *
-         * @param map the map of data formats to writer file sets
-         * @return this builder  
-         */
-        public Builder putAll(Map<DataFormat, WriterFileSet> map) {
-            writerFilesMap.putAll(map);  
-            return this;
-        }
-
-        /**
-         * Sets the row ID mapping produced during sort-on-close.
-         *  
-         * @param rowIdMapping the row ID mapping, or null
-         * @return this builder
-         */  
-        public Builder rowIdMapping(RowIdMapping rowIdMapping) {
-            this.rowIdMapping = rowIdMapping;
-            return this;  
-        }
-
+import org.opensearch.common.annotation.ExperimentalApi;
+package org.opensearch.index.engine.dataformat;
+        this(writerFilesMap, (RowIdMapping) null);  
+    public FileInfos {
         /**  
-         * Builds the FileInfos instance.
-         *
-         * @return a new FileInfos instance  
+     * Builder for constructing FileInfos instances.
+     * Gets the writer file set for a specific data format.
          */
-        public FileInfos build() {
-            return new FileInfos(writerFilesMap, rowIdMapping);  
-        }
+ * SPDX-License-Identifier: Apache-2.0
+         * @return a new FileInfos instance  
+    /**
     }
+    /**
+     */
+     * Creates an empty FileInfos instance.
+         * @return this builder
+ * this file be licensed under the Apache-2.0 license or a
+         */
+         * Adds all entries from the provided map.  
+        return Optional.ofNullable(writerFilesMap.get(format));
+     */
+     * @return an empty FileInfos
+        /**
+ * The OpenSearch Contributors require contributions made to  
+ *
+    @ExperimentalApi  
+         * @param format the data format
+    public FileInfos(Map<DataFormat, WriterFileSet> writerFilesMap) {
+import java.util.Optional;  
+        private final Map<DataFormat, WriterFileSet> writerFilesMap = new HashMap<>();
+    }
+     */
+         */  
+            writerFilesMap.putAll(map);  
+         * @return this builder  
+    /**  
+         * Adds a writer file set for a specific data format.  
+        public Builder putAll(Map<DataFormat, WriterFileSet> map) {
+     *  
+/*  
+    public static final class Builder {
+        /**
+            return this;
+    }  
+        return new Builder();
+     * @param format the data format  
+         *
+    }
+     * @return a new builder instance
+    public static FileInfos empty() {  
+         * @param writerFileSet the writer file set  
+    public Optional<WriterFileSet> getWriterFileSet(DataFormat format) {  
+     * @opensearch.experimental
+    }
+         * @param map the map of data formats to writer file sets
+ */  
+/**
+        }
+     */
+import java.util.Map;
+        private RowIdMapping rowIdMapping;  
+         * @param rowIdMapping the row ID mapping, or null
+        return new FileInfos(Map.of());
+         */
+            this.rowIdMapping = rowIdMapping;
+     * Constructs FileInfos without a sort permutation.  
+     */
+     * @return an Optional containing the writer file set, or empty if not found
+import org.opensearch.index.engine.exec.WriterFileSet;
+        writerFilesMap = Map.copyOf(new HashMap<>(writerFilesMap));
+public record FileInfos(Map<DataFormat, WriterFileSet> writerFilesMap, RowIdMapping rowIdMapping) {
+    /**
+            return this;
 }  
+        }  
+         *

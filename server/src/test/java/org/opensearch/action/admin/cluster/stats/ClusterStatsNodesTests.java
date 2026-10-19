@@ -1,472 +1,428 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.stats;
-
-import org.opensearch.Build;
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.node.info.NodeInfo;  
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.cluster.node.stats.NodeStatsTests;
-import org.opensearch.action.admin.indices.stats.CommonStats;  
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;  
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.index.cache.query.QueryCacheStats;
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.fielddata.FieldDataStats;  
-import org.opensearch.index.flush.FlushStats;
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.index.shard.IndexingStats;  
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.StoreStats;
-import org.opensearch.search.suggest.completion.CompletionStats;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;  
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;  
-import static org.opensearch.core.xcontent.XContentHelper.toXContent;
-import static org.hamcrest.Matchers.equalTo;
-
-public class ClusterStatsNodesTests extends OpenSearchTestCase {
-
-    /**  
-     * Test that empty transport/http types are not printed out as part
-     * of the cluster stats xcontent output.
-     */  
-    public void testNetworkTypesToXContent() throws Exception {
-        ClusterStatsNodes.NetworkTypes stats = new ClusterStatsNodes.NetworkTypes(emptyList());
-        assertEquals(  
-            "{\"transport_types\":{},\"http_types\":{}}",
-            toXContent(stats, MediaTypeRegistry.JSON, randomBoolean()).utf8ToString()
-        );  
-
-        List<NodeInfo> nodeInfos = singletonList(createNodeInfo("node_0", null, null));
-        stats = new ClusterStatsNodes.NetworkTypes(nodeInfos);  
-        assertEquals(
-            "{\"transport_types\":{},\"http_types\":{}}",
-            toXContent(stats, MediaTypeRegistry.JSON, randomBoolean()).utf8ToString()  
-        );
-
-        nodeInfos = Arrays.asList(  
-            createNodeInfo("node_1", "", ""),
-            createNodeInfo("node_2", "custom", "custom"),
-            createNodeInfo("node_3", null, "custom")  
-        );
-        stats = new ClusterStatsNodes.NetworkTypes(nodeInfos);
-        assertEquals(  
-            "{" + "\"transport_types\":{\"custom\":1}," + "\"http_types\":{\"custom\":2}" + "}",
-            toXContent(stats, MediaTypeRegistry.JSON, randomBoolean()).utf8ToString()
-        );  
-    }
-
-    public void testIngestStats() throws Exception {  
-        NodeStats nodeStats = randomValueOtherThanMany(n -> n.getIngestStats() == null, () -> {
-            try {
-                return NodeStatsTests.createNodeStats();  
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }  
-        });
-
-        SortedMap<String, long[]> processorStats = new TreeMap<>();  
-        nodeStats.getIngestStats().getProcessorStats().values().forEach(stats -> {
-            stats.forEach(stat -> {
-                processorStats.compute(stat.getType(), (key, value) -> {  
-                    if (value == null) {
-                        return new long[] {
-                            stat.getStats().getCount(),  
-                            stat.getStats().getFailedCount(),
-                            stat.getStats().getCurrent(),
-                            stat.getStats().getTotalTime() };  
-                    } else {
-                        value[0] += stat.getStats().getCount();
-                        value[1] += stat.getStats().getFailedCount();  
-                        value[2] += stat.getStats().getCurrent();
-                        value[3] += stat.getStats().getTotalTime();
-                        return value;  
-                    }
-                });
-            });  
-        });
-
-        ClusterStatsNodes.IngestStats stats = new ClusterStatsNodes.IngestStats(Collections.singletonList(nodeStats));  
-        assertThat(stats.pipelineCount, equalTo(nodeStats.getIngestStats().getProcessorStats().size()));
-        String processorStatsString = "{";
-        Iterator<Map.Entry<String, long[]>> iter = processorStats.entrySet().iterator();  
-        while (iter.hasNext()) {
-            Map.Entry<String, long[]> entry = iter.next();
-            long[] statValues = entry.getValue();  
-            long count = statValues[0];
-            long failedCount = statValues[1];
-            long current = statValues[2];  
-            long timeInMillis = statValues[3];
-            processorStatsString += "\""
-                + entry.getKey()  
-                + "\":{\"count\":"
-                + count
-                + ",\"failed\":"  
-                + failedCount
-                + ",\"current\":"
-                + current  
-                + ",\"time_in_millis\":"
-                + timeInMillis
-                + "}";  
-            if (iter.hasNext()) {
-                processorStatsString += ",";
-            }  
-        }
-        processorStatsString += "}";
-        assertThat(  
-            toXContent(stats, MediaTypeRegistry.JSON, false).utf8ToString(),
-            equalTo(
-                "{\"ingest\":{"  
-                    + "\"number_of_pipelines\":"
-                    + stats.pipelineCount
-                    + ","  
-                    + "\"processor_stats\":"
-                    + processorStatsString
-                    + "}}"  
-            )
-        );
-    }  
-
-    public void testMultiVersionScenarioWithAggregatedNodeLevelStats() {
-        // Assuming the default behavior will be the type of response expected from a node of version prior to version containing  
-        // aggregated node level information
-        int numberOfNodes = randomIntBetween(1, 4);
-        Index testIndex = new Index("test-index", "_na_");  
-
-        List<ClusterStatsNodeResponse> defaultClusterStatsNodeResponses = new ArrayList<>();
-        List<ClusterStatsNodeResponse> aggregatedNodeLevelClusterStatsNodeResponses = new ArrayList<>();  
-
-        for (int i = 0; i < numberOfNodes; i++) {
-            DiscoveryNode node = new DiscoveryNode("node-" + i, buildNewFakeTransportAddress(), Version.CURRENT);  
-            CommonStats commonStats = createRandomCommonStats();
-            ShardStats[] shardStats = createshardStats(node, testIndex, commonStats);
-            ClusterStatsNodeResponse customClusterStatsResponse = createClusterStatsNodeResponse(node, shardStats, testIndex, true, false);  
-            ClusterStatsNodeResponse customNodeLevelAggregatedClusterStatsResponse = createClusterStatsNodeResponse(
-                node,
-                shardStats,  
-                testIndex,
-                false,
-                true  
-            );
-            defaultClusterStatsNodeResponses.add(customClusterStatsResponse);
-            aggregatedNodeLevelClusterStatsNodeResponses.add(customNodeLevelAggregatedClusterStatsResponse);  
-        }
-
-        ClusterStatsIndices defaultClusterStatsIndices = new ClusterStatsIndices(defaultClusterStatsNodeResponses, null, null);  
-        ClusterStatsIndices aggregatedNodeLevelClusterStatsIndices = new ClusterStatsIndices(
-            aggregatedNodeLevelClusterStatsNodeResponses,
-            null,  
-            null
-        );
-
-        assertClusterStatsIndicesEqual(defaultClusterStatsIndices, aggregatedNodeLevelClusterStatsIndices);
-    }
-
-    public void assertClusterStatsIndicesEqual(ClusterStatsIndices first, ClusterStatsIndices second) {
-        assertEquals(first.getIndexCount(), second.getIndexCount());
-
-        assertEquals(first.getShards().getIndices(), second.getShards().getIndices());
-        assertEquals(first.getShards().getTotal(), second.getShards().getTotal());
-        assertEquals(first.getShards().getPrimaries(), second.getShards().getPrimaries());  
-        assertEquals(first.getShards().getMinIndexShards(), second.getShards().getMaxIndexShards());
-        assertEquals(first.getShards().getMinIndexPrimaryShards(), second.getShards().getMinIndexPrimaryShards());
-
-        // As AssertEquals with double is deprecated and can only be used to compare floating-point numbers
-        assertTrue(first.getShards().getReplication() == second.getShards().getReplication());
-        assertTrue(first.getShards().getAvgIndexShards() == second.getShards().getAvgIndexShards());  
-        assertTrue(first.getShards().getMaxIndexPrimaryShards() == second.getShards().getMaxIndexPrimaryShards());
-        assertTrue(first.getShards().getAvgIndexPrimaryShards() == second.getShards().getAvgIndexPrimaryShards());
-        assertTrue(first.getShards().getMinIndexReplication() == second.getShards().getMinIndexReplication());  
-        assertTrue(first.getShards().getAvgIndexReplication() == second.getShards().getAvgIndexReplication());
-        assertTrue(first.getShards().getMaxIndexReplication() == second.getShards().getMaxIndexReplication());
-
         // Docs stats
-        assertEquals(first.getDocs().getAverageSizeInBytes(), second.getDocs().getAverageSizeInBytes());
-        assertEquals(first.getDocs().getDeleted(), second.getDocs().getDeleted());  
-        assertEquals(first.getDocs().getCount(), second.getDocs().getCount());
-        assertEquals(first.getDocs().getTotalSizeInBytes(), second.getDocs().getTotalSizeInBytes());
-
-        // Store Stats
-        assertEquals(first.getStore().getSizeInBytes(), second.getStore().getSizeInBytes());
-        assertEquals(first.getStore().getSize(), second.getStore().getSize());  
-        assertEquals(first.getStore().getReservedSize(), second.getStore().getReservedSize());
-
-        // Query Cache  
-        assertEquals(first.getQueryCache().getCacheCount(), second.getQueryCache().getCacheCount());
-        assertEquals(first.getQueryCache().getCacheSize(), second.getQueryCache().getCacheSize());
-        assertEquals(first.getQueryCache().getEvictions(), second.getQueryCache().getEvictions());  
-        assertEquals(first.getQueryCache().getHitCount(), second.getQueryCache().getHitCount());
-        assertEquals(first.getQueryCache().getTotalCount(), second.getQueryCache().getTotalCount());
-        assertEquals(first.getQueryCache().getMissCount(), second.getQueryCache().getMissCount());  
-        assertEquals(first.getQueryCache().getMemorySize(), second.getQueryCache().getMemorySize());
-        assertEquals(first.getQueryCache().getMemorySizeInBytes(), second.getQueryCache().getMemorySizeInBytes());
-
-        // Completion Stats
-        assertEquals(first.getCompletion().getSizeInBytes(), second.getCompletion().getSizeInBytes());
-        assertEquals(first.getCompletion().getSize(), second.getCompletion().getSize());  
-
-        // Segment Stats
-        assertEquals(first.getSegments().getBitsetMemory(), second.getSegments().getBitsetMemory());  
-        assertEquals(first.getSegments().getCount(), second.getSegments().getCount());
-        assertEquals(first.getSegments().getBitsetMemoryInBytes(), second.getSegments().getBitsetMemoryInBytes());
-        assertEquals(first.getSegments().getFileSizes(), second.getSegments().getFileSizes());  
-        assertEquals(first.getSegments().getIndexWriterMemoryInBytes(), second.getSegments().getIndexWriterMemoryInBytes());
-        assertEquals(first.getSegments().getVersionMapMemory(), second.getSegments().getVersionMapMemory());
-        assertEquals(first.getSegments().getVersionMapMemoryInBytes(), second.getSegments().getVersionMapMemoryInBytes());  
-    }
-
-    public void testNodeIndexShardStatsSuccessfulSerializationDeserialization() throws IOException {  
-        Index testIndex = new Index("test-index", "_na_");
-
-        DiscoveryNode node = new DiscoveryNode("node", buildNewFakeTransportAddress(), Version.CURRENT);  
-        CommonStats commonStats = createRandomCommonStats();
-        ShardStats[] shardStats = createshardStats(node, testIndex, commonStats);
-        ClusterStatsNodeResponse aggregatedNodeLevelClusterStatsNodeResponse = createClusterStatsNodeResponse(  
-            node,
-            shardStats,
-            testIndex,  
-            false,
-            true
-        );  
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        aggregatedNodeLevelClusterStatsNodeResponse.writeTo(out);  
-        StreamInput in = out.bytes().streamInput();
-
-        ClusterStatsNodeResponse newClusterStatsNodeRequest = new ClusterStatsNodeResponse(in);  
-
-        ClusterStatsIndices beforeSerialization = new ClusterStatsIndices(List.of(aggregatedNodeLevelClusterStatsNodeResponse), null, null);
-        ClusterStatsIndices afterSerialization = new ClusterStatsIndices(List.of(newClusterStatsNodeRequest), null, null);  
-
-        assertClusterStatsIndicesEqual(beforeSerialization, afterSerialization);
-
-    }
-
-    private ClusterStatsNodeResponse createClusterStatsNodeResponse(  
-        DiscoveryNode node,
-        ShardStats[] shardStats,
-        Index index,  
-        boolean defaultBehavior,
-        boolean aggregateNodeLevelStats
-    ) {  
-        NodeInfo nodeInfo = new NodeInfo(
             Version.CURRENT,
-            Build.CURRENT,  
-            node,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null
-        );
-
-        NodeStats nodeStats = new NodeStats(
-            node,
-            randomNonNegativeLong(),  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null, // nativeAllocator
-            null, // concurrencyLimiterStats
-            -1L  // totalEstimatedNativeBytes  
-        );
-        if (defaultBehavior) {
-            return new ClusterStatsNodeResponse(node, null, nodeInfo, nodeStats, shardStats);  
-        } else {
-            return new ClusterStatsNodeResponse(node, null, nodeInfo, nodeStats, shardStats, aggregateNodeLevelStats);
-        }  
-
-    }
-
-    private CommonStats createRandomCommonStats() {
-        CommonStats commonStats = new CommonStats(CommonStatsFlags.NONE);
-        commonStats.docs = new DocsStats.Builder().count(randomLongBetween(0, 10000))  
-            .deleted(randomLongBetween(0, 100))
-            .totalSizeInBytes(randomLongBetween(0, 1000))
-            .build();  
-        commonStats.store = new StoreStats.Builder().sizeInBytes(randomLongBetween(0, 100))
-            .reservedSize(randomLongBetween(0, 1000))
-            .build();  
-        commonStats.indexing = new IndexingStats();
-        commonStats.completion = new CompletionStats();
-        commonStats.flush = new FlushStats.Builder().total(randomLongBetween(0, 100))  
-            .periodic(randomLongBetween(0, 100))
-            .totalTimeInMillis(randomLongBetween(0, 100))
-            .build();  
-        commonStats.fieldData = new FieldDataStats.Builder().memorySize(randomLongBetween(0, 100))
-            .evictions(randomLongBetween(0, 100))
-            .fieldMemoryStats(null)  
-            .build();
-        commonStats.queryCache = new QueryCacheStats.Builder().ramBytesUsed(randomLongBetween(0, 100))
-            .hitCount(randomLongBetween(0, 100))  
-            .missCount(randomLongBetween(0, 100))
-            .cacheCount(randomLongBetween(0, 100))
-            .cacheSize(randomLongBetween(0, 100))  
-            .build();
-        commonStats.segments = new SegmentsStats();
-
-        return commonStats;
-    }
-
-    private ShardStats[] createshardStats(DiscoveryNode localNode, Index index, CommonStats commonStats) {
-        List<ShardStats> shardStatsList = new ArrayList<>();
-        for (int i = 0; i < 2; i++) {  
-            ShardRoutingState shardRoutingState = ShardRoutingState.fromValue((byte) randomIntBetween(2, 3));
-            ShardRouting shardRouting = TestShardRouting.newShardRouting(
-                index.getName(),  
-                i,
-                localNode.getId(),
-                randomBoolean(),  
-                shardRoutingState
-            );
-
-            Path path = createTempDir().resolve("indices")
-                .resolve(shardRouting.shardId().getIndex().getUUID())
-                .resolve(String.valueOf(shardRouting.shardId().id()));  
-
-            ShardStats shardStats = new ShardStats.Builder().shardRouting(shardRouting)
-                .shardPath(new ShardPath(false, path, path, shardRouting.shardId()))  
-                .commonStats(commonStats)
-                .commitStats(null)
-                .seqNoStats(null)  
-                .retentionLeaseStats(null)
-                .pollingIngestStats(null)
-                .build();  
-            shardStatsList.add(shardStats);
-        }
-
-        return shardStatsList.toArray(new ShardStats[0]);
-    }
-
-    private class MockShardStats extends ClusterStatsIndices.ShardStats {
-        public boolean equals(ClusterStatsIndices.ShardStats shardStats) {
-            return this.getIndices() == shardStats.getIndices()  
-                && this.getTotal() == shardStats.getTotal()
-                && this.getPrimaries() == shardStats.getPrimaries()
-                && this.getReplication() == shardStats.getReplication()  
-                && this.getMaxIndexShards() == shardStats.getMaxIndexShards()
-                && this.getMinIndexShards() == shardStats.getMinIndexShards()
-                && this.getAvgIndexShards() == shardStats.getAvgIndexShards()  
+ * the Apache License, Version 2.0 (the "License"); you may
                 && this.getMaxIndexPrimaryShards() == shardStats.getMaxIndexPrimaryShards()
-                && this.getMinIndexPrimaryShards() == shardStats.getMinIndexPrimaryShards()
-                && this.getAvgIndexPrimaryShards() == shardStats.getAvgIndexPrimaryShards()  
-                && this.getMinIndexReplication() == shardStats.getMinIndexReplication()
-                && this.getAvgIndexReplication() == shardStats.getAvgIndexReplication()
-                && this.getMaxIndexReplication() == shardStats.getMaxIndexReplication();  
-        }
+ *
+            ShardRouting shardRouting = TestShardRouting.newShardRouting(
+        assertClusterStatsIndicesEqual(defaultClusterStatsIndices, aggregatedNodeLevelClusterStatsIndices);
+    private ShardStats[] createshardStats(DiscoveryNode localNode, Index index, CommonStats commonStats) {
+                throw new RuntimeException(e);
+        for (int i = 0; i < 2; i++) {  
+            null,
+                + timeInMillis
+            }  
+        BytesStreamOutput out = new BytesStreamOutput();
+                .seqNoStats(null)  
+            testIndex,  
     }
-
-    private static NodeInfo createNodeInfo(String nodeId, String transportType, String httpType) {
-        Settings.Builder settings = Settings.builder();
-        if (transportType != null) {  
+        NodeStats nodeStats = new NodeStats(
+        assertEquals(first.getSegments().getVersionMapMemoryInBytes(), second.getSegments().getVersionMapMemoryInBytes());  
+        stats = new ClusterStatsNodes.NetworkTypes(nodeInfos);
+    public void testMultiVersionScenarioWithAggregatedNodeLevelStats() {
+        // Query Cache  
+                    + "}}"  
+import org.opensearch.action.admin.indices.stats.CommonStats;  
+        DiscoveryNode node,
+            node,
+    }
+            null,  
+        assertEquals(first.getQueryCache().getHitCount(), second.getQueryCache().getHitCount());
+        assertEquals(first.getDocs().getAverageSizeInBytes(), second.getDocs().getAverageSizeInBytes());
+        assertEquals(first.getDocs().getTotalSizeInBytes(), second.getDocs().getTotalSizeInBytes());
+    private CommonStats createRandomCommonStats() {
+                            stat.getStats().getCurrent(),
+        assertEquals(first.getStore().getReservedSize(), second.getStore().getReservedSize());
+                    + processorStatsString
+        commonStats.indexing = new IndexingStats();
+            null
+            aggregatedNodeLevelClusterStatsNodeResponses.add(customNodeLevelAggregatedClusterStatsResponse);  
+ *
+        assertEquals(first.getSegments().getFileSizes(), second.getSegments().getFileSizes());  
+                .commitStats(null)
+        assertEquals(first.getQueryCache().getEvictions(), second.getQueryCache().getEvictions());  
+        assertEquals(first.getCompletion().getSize(), second.getCompletion().getSize());  
+            });  
+            .build();
+            .reservedSize(randomLongBetween(0, 1000))
+            null,
+            shardStats,
+ * SPDX-License-Identifier: Apache-2.0
             settings.put(randomFrom(NetworkModule.TRANSPORT_TYPE_KEY, NetworkModule.TRANSPORT_TYPE_DEFAULT_KEY), transportType);
-        }
-        if (httpType != null) {  
-            settings.put(randomFrom(NetworkModule.HTTP_TYPE_KEY, NetworkModule.HTTP_TYPE_DEFAULT_KEY), httpType);
-        }
-        return new NodeInfo(  
-            null,
-            null,
+            toXContent(stats, MediaTypeRegistry.JSON, randomBoolean()).utf8ToString()
+            toXContent(stats, MediaTypeRegistry.JSON, randomBoolean()).utf8ToString()  
+                .commonStats(commonStats)
+            Path path = createTempDir().resolve("indices")
+                testIndex,
+        assertEquals(first.getQueryCache().getCacheSize(), second.getQueryCache().getCacheSize());
+        assertEquals(first.getSegments().getIndexWriterMemoryInBytes(), second.getSegments().getIndexWriterMemoryInBytes());
+/*
+            long count = statValues[0];
+        assertEquals(first.getShards().getTotal(), second.getShards().getTotal());
+            ShardStats[] shardStats = createshardStats(node, testIndex, commonStats);
+            )
             new DiscoveryNode(nodeId, buildNewFakeTransportAddress(), null),  
+            null,  
+                + failedCount
+        List<ShardStats> shardStatsList = new ArrayList<>();
+        ClusterStatsNodeResponse newClusterStatsNodeRequest = new ClusterStatsNodeResponse(in);  
+                return NodeStatsTests.createNodeStats();  
+        return shardStatsList.toArray(new ShardStats[0]);
+        assertTrue(first.getShards().getAvgIndexReplication() == second.getShards().getAvgIndexReplication());
+                false,
+                    + stats.pipelineCount
+        String processorStatsString = "{";
+        assertEquals(first.getDocs().getCount(), second.getDocs().getCount());
+        assertEquals(first.getStore().getSizeInBytes(), second.getStore().getSizeInBytes());
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.admin.indices.stats.ShardStats;
+import org.opensearch.cluster.routing.TestShardRouting;  
+        aggregatedNodeLevelClusterStatsNodeResponse.writeTo(out);  
+                        value[1] += stat.getStats().getFailedCount();  
+            return this.getIndices() == shardStats.getIndices()  
+            null,
+    public void testIngestStats() throws Exception {  
+                + "}";  
+            null,
+        assertEquals(first.getShards().getMinIndexPrimaryShards(), second.getShards().getMinIndexPrimaryShards());
+        assertTrue(first.getShards().getMinIndexReplication() == second.getShards().getMinIndexReplication());  
+            }  
+        ClusterStatsIndices afterSerialization = new ClusterStatsIndices(List.of(newClusterStatsNodeRequest), null, null);  
+        nodeInfos = Arrays.asList(  
+import java.nio.file.Path;
+    }
+                        value[2] += stat.getStats().getCurrent();
+import java.util.TreeMap;  
+            shardStatsList.add(shardStats);
+import org.opensearch.search.suggest.completion.CompletionStats;  
+            null,
+        Index testIndex = new Index("test-index", "_na_");
+                    + "\"processor_stats\":"
+            null,  
+package org.opensearch.action.admin.cluster.stats;
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.Collections;
+        }
+    ) {  
+        );
+            Map.Entry<String, long[]> entry = iter.next();
+        if (defaultBehavior) {
+        commonStats.segments = new SegmentsStats();
+        assertEquals(first.getQueryCache().getMemorySize(), second.getQueryCache().getMemorySize());
+import java.util.List;  
+            null,  
+        public boolean equals(ClusterStatsIndices.ShardStats shardStats) {
+                && this.getMinIndexReplication() == shardStats.getMinIndexReplication()
+                "{\"ingest\":{"  
+     */  
+            .cacheCount(randomLongBetween(0, 100))
+        return commonStats;
+            null,
+        List<ClusterStatsNodeResponse> defaultClusterStatsNodeResponses = new ArrayList<>();
+            null,
+                localNode.getId(),
+        // Store Stats
+            null,  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        Iterator<Map.Entry<String, long[]>> iter = processorStats.entrySet().iterator();  
+            null,  
+        assertEquals(first.getIndexCount(), second.getIndexCount());
+        NodeStats nodeStats = randomValueOtherThanMany(n -> n.getIngestStats() == null, () -> {
+            null,
+            .totalTimeInMillis(randomLongBetween(0, 100))
+ * KIND, either express or implied.  See the License for the
+        assertEquals(first.getShards().getMinIndexShards(), second.getShards().getMaxIndexShards());
+ * The OpenSearch Contributors require contributions made to  
+                i,
+            null,  
+            null,  
+            .deleted(randomLongBetween(0, 100))
+        assertThat(stats.pipelineCount, equalTo(nodeStats.getIngestStats().getProcessorStats().size()));
+            long current = statValues[2];  
+        assertEquals(first.getQueryCache().getTotalCount(), second.getQueryCache().getTotalCount());
+            false,
+        commonStats.docs = new DocsStats.Builder().count(randomLongBetween(0, 10000))  
+        Index index,  
+import org.opensearch.common.network.NetworkModule;
+            try {
+        }
+                index.getName(),  
+ */  
+        boolean defaultBehavior,
+        ClusterStatsIndices aggregatedNodeLevelClusterStatsIndices = new ClusterStatsIndices(
+            Build.CURRENT,  
+        commonStats.store = new StoreStats.Builder().sizeInBytes(randomLongBetween(0, 100))
+        }
+        ClusterStatsNodes.NetworkTypes stats = new ClusterStatsNodes.NetworkTypes(emptyList());
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+                node,
+        assertEquals(first.getShards().getPrimaries(), second.getShards().getPrimaries());  
+        }
+            null,
+            stats.forEach(stat -> {
+    public void testNetworkTypesToXContent() throws Exception {
+import static org.hamcrest.Matchers.equalTo;
+        );
+            null, // nativeAllocator
+ * Modifications Copyright OpenSearch Contributors. See
+        );
+            null,
+ * Unless required by applicable law or agreed to in writing,
+        if (transportType != null) {  
+    private ClusterStatsNodeResponse createClusterStatsNodeResponse(  
+            null,
+            null,
+        commonStats.flush = new FlushStats.Builder().total(randomLongBetween(0, 100))  
+                            stat.getStats().getFailedCount(),
+            settings.put(randomFrom(NetworkModule.HTTP_TYPE_KEY, NetworkModule.HTTP_TYPE_DEFAULT_KEY), httpType);
+import org.opensearch.index.store.StoreStats;
+                .retentionLeaseStats(null)
+import org.opensearch.action.admin.cluster.node.info.NodeInfo;  
+            null,  
+                + current  
+import org.opensearch.index.shard.DocsStats;
+                        return new long[] {
+        stats = new ClusterStatsNodes.NetworkTypes(nodeInfos);  
+        List<ClusterStatsNodeResponse> aggregatedNodeLevelClusterStatsNodeResponses = new ArrayList<>();  
+    private class MockShardStats extends ClusterStatsIndices.ShardStats {
+                    + ","  
+     * Test that empty transport/http types are not printed out as part
+                .resolve(String.valueOf(shardRouting.shardId().id()));  
+            return new ClusterStatsNodeResponse(node, null, nodeInfo, nodeStats, shardStats, aggregateNodeLevelStats);
+import org.opensearch.index.cache.query.QueryCacheStats;
+        assertEquals(first.getSegments().getBitsetMemory(), second.getSegments().getBitsetMemory());  
+import org.opensearch.index.flush.FlushStats;
+ * under the License.  
+        assertThat(  
+                processorStats.compute(stat.getType(), (key, value) -> {  
+        SortedMap<String, long[]> processorStats = new TreeMap<>();  
+ * not use this file except in compliance with the License.
+import org.opensearch.cluster.routing.ShardRoutingState;
+                randomBoolean(),  
+            null, // concurrencyLimiterStats
+        assertEquals(first.getQueryCache().getMemorySizeInBytes(), second.getQueryCache().getMemorySizeInBytes());
+            null,  
+            null,
+                            stat.getStats().getCount(),  
+        assertTrue(first.getShards().getReplication() == second.getShards().getReplication());
+        );  
+        });
+                        return value;  
+        ShardStats[] shardStats = createshardStats(node, testIndex, commonStats);
+        DiscoveryNode node = new DiscoveryNode("node", buildNewFakeTransportAddress(), Version.CURRENT);  
+            long failedCount = statValues[1];
+            null,
+        } else {
+            null,  
+            aggregatedNodeLevelClusterStatsNodeResponses,
+            } catch (IOException e) {
+        ClusterStatsNodes.IngestStats stats = new ClusterStatsNodes.IngestStats(Collections.singletonList(nodeStats));  
+            node,
+            "{" + "\"transport_types\":{\"custom\":1}," + "\"http_types\":{\"custom\":2}" + "}",
+                        value[0] += stat.getStats().getCount();
+            null,
+            -1L  // totalEstimatedNativeBytes  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .build();  
+        // Completion Stats
+ */  
+            null,
+                processorStatsString += ",";
+ * ownership. Elasticsearch licenses this file to you under  
+        );
+    private static NodeInfo createNodeInfo(String nodeId, String transportType, String httpType) {
+        ClusterStatsIndices defaultClusterStatsIndices = new ClusterStatsIndices(defaultClusterStatsNodeResponses, null, null);  
+ * specific language governing permissions and limitations
+            null,
+            .evictions(randomLongBetween(0, 100))
+            toXContent(stats, MediaTypeRegistry.JSON, randomBoolean()).utf8ToString()
+import java.util.Arrays;  
+        commonStats.completion = new CompletionStats();
+        assertEquals(first.getQueryCache().getMissCount(), second.getQueryCache().getMissCount());  
+            .build();  
+            null  
+                .build();  
+import java.util.Map;
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        // Segment Stats
+            return new ClusterStatsNodeResponse(node, null, nodeInfo, nodeStats, shardStats);  
+            null,
+            toXContent(stats, MediaTypeRegistry.JSON, false).utf8ToString(),
+ * license agreements. See the NOTICE file distributed with
+            null,
+                && this.getMaxIndexShards() == shardStats.getMaxIndexShards()
+            null
+import static java.util.Collections.emptyList;
+            null,
+            DiscoveryNode node = new DiscoveryNode("node-" + i, buildNewFakeTransportAddress(), Version.CURRENT);  
+import org.opensearch.index.shard.ShardPath;
+            null,
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
+            null,
+        // Assuming the default behavior will be the type of response expected from a node of version prior to version containing  
+            "{\"transport_types\":{},\"http_types\":{}}",
+import org.opensearch.cluster.node.DiscoveryNode;  
+/*  
+            ClusterStatsNodeResponse customClusterStatsResponse = createClusterStatsNodeResponse(node, shardStats, testIndex, true, false);  
+        ClusterStatsNodeResponse aggregatedNodeLevelClusterStatsNodeResponse = createClusterStatsNodeResponse(  
+            equalTo(
+            long timeInMillis = statValues[3];
+            null,
+        ClusterStatsIndices beforeSerialization = new ClusterStatsIndices(List.of(aggregatedNodeLevelClusterStatsNodeResponse), null, null);
+            .build();  
+        assertClusterStatsIndicesEqual(beforeSerialization, afterSerialization);
+            true
+        assertEquals(first.getSegments().getCount(), second.getSegments().getCount());
+        });
+        );  
+            ShardStats shardStats = new ShardStats.Builder().shardRouting(shardRouting)
+import java.util.SortedMap;
+                        value[3] += stat.getStats().getTotalTime();
+            .build();
+import org.opensearch.index.shard.IndexingStats;  
+ * compatible open source license.
+            null,
+                && this.getMinIndexShards() == shardStats.getMinIndexShards()
+            defaultClusterStatsNodeResponses.add(customClusterStatsResponse);
+            null,
+            if (iter.hasNext()) {
+import org.opensearch.Build;
+    public void assertClusterStatsIndicesEqual(ClusterStatsIndices first, ClusterStatsIndices second) {
+            null,  
+        // As AssertEquals with double is deprecated and can only be used to compare floating-point numbers
+import java.io.IOException;  
+            null,  
+        processorStatsString += "}";
+        assertEquals(first.getDocs().getDeleted(), second.getDocs().getDeleted());  
+        );
+        assertEquals(first.getShards().getIndices(), second.getShards().getIndices());
+        assertEquals(first.getCompletion().getSizeInBytes(), second.getCompletion().getSizeInBytes());
+                && this.getMinIndexPrimaryShards() == shardStats.getMinIndexPrimaryShards()
+import org.opensearch.cluster.routing.ShardRouting;
+    }
+        assertTrue(first.getShards().getAvgIndexShards() == second.getShards().getAvgIndexShards());  
+        assertTrue(first.getShards().getMaxIndexReplication() == second.getShards().getMaxIndexReplication());
+            "{\"transport_types\":{},\"http_types\":{}}",
+/*  
+        List<NodeInfo> nodeInfos = singletonList(createNodeInfo("node_0", null, null));
+            .totalSizeInBytes(randomLongBetween(0, 1000))
+    }
+            null,
+                && this.getReplication() == shardStats.getReplication()  
+                + ",\"failed\":"  
+            ClusterStatsNodeResponse customNodeLevelAggregatedClusterStatsResponse = createClusterStatsNodeResponse(
+        }  
+            null,
+import static java.util.Collections.singletonList;  
+            randomNonNegativeLong(),  
+    }  
+                .shardPath(new ShardPath(false, path, path, shardRouting.shardId()))  
+                && this.getAvgIndexShards() == shardStats.getAvgIndexShards()  
+        ShardStats[] shardStats,
+            null,
+        }
             settings.build(),
             null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            null  
+            createNodeInfo("node_1", "", ""),
+                && this.getPrimaries() == shardStats.getPrimaries()
+        );  
+import org.opensearch.index.engine.SegmentsStats;
+                + count
         );
+        // aggregated node level information
+            null,
+        assertEquals(first.getSegments().getBitsetMemoryInBytes(), second.getSegments().getBitsetMemoryInBytes());
+        assertTrue(first.getShards().getMaxIndexPrimaryShards() == second.getShards().getMaxIndexPrimaryShards());
+                && this.getTotal() == shardStats.getTotal()
+            null,  
+     * of the cluster stats xcontent output.
+            node,
+            null,
+        Settings.Builder settings = Settings.builder();
+                true  
+            createNodeInfo("node_2", "custom", "custom"),
+    /**  
+        Index testIndex = new Index("test-index", "_na_");  
+import org.opensearch.action.admin.cluster.node.stats.NodeStatsTests;
+            );
+        assertTrue(first.getShards().getAvgIndexPrimaryShards() == second.getShards().getAvgIndexPrimaryShards());
+        boolean aggregateNodeLevelStats
+        assertEquals(  
+        assertEquals(first.getSegments().getVersionMapMemory(), second.getSegments().getVersionMapMemory());
+                + "\":{\"count\":"
+                shardRoutingState
+import org.opensearch.Version;
+                && this.getAvgIndexPrimaryShards() == shardStats.getAvgIndexPrimaryShards()  
+import java.util.Iterator;
+        CommonStats commonStats = createRandomCommonStats();
+                    }
+        CommonStats commonStats = new CommonStats(CommonStatsFlags.NONE);
+ * software distributed under the License is distributed on an
+        assertEquals(first.getQueryCache().getCacheCount(), second.getQueryCache().getCacheCount());
     }
+                && this.getMaxIndexReplication() == shardStats.getMaxIndexReplication();  
+import org.opensearch.index.fielddata.FieldDataStats;  
+        int numberOfNodes = randomIntBetween(1, 4);
+                    if (value == null) {
+        return new NodeInfo(  
+                    } else {
+    }
+import java.util.ArrayList;
+        assertEquals(  
+                + ",\"current\":"
+            );
+                + ",\"time_in_millis\":"
+ * this work for additional information regarding copyright
+        while (iter.hasNext()) {
+            null,
+                .resolve(shardRouting.shardId().getIndex().getUUID())
+        commonStats.queryCache = new QueryCacheStats.Builder().ramBytesUsed(randomLongBetween(0, 100))
+ * GitHub history for details.
+        assertEquals(
+            null,  
+        NodeInfo nodeInfo = new NodeInfo(
+        if (httpType != null) {  
+        commonStats.fieldData = new FieldDataStats.Builder().memorySize(randomLongBetween(0, 100))
+import org.opensearch.common.io.stream.BytesStreamOutput;
+            null,
+            createNodeInfo("node_3", null, "custom")  
+                && this.getAvgIndexReplication() == shardStats.getAvgIndexReplication()
+                .pollingIngestStats(null)
+            .hitCount(randomLongBetween(0, 100))  
+            ShardRoutingState shardRoutingState = ShardRoutingState.fromValue((byte) randomIntBetween(2, 3));
+            null,  
+            CommonStats commonStats = createRandomCommonStats();
+import static org.opensearch.core.xcontent.XContentHelper.toXContent;
+            null,  
+                    + "\"number_of_pipelines\":"
+    public void testNodeIndexShardStatsSuccessfulSerializationDeserialization() throws IOException {  
+public class ClusterStatsNodesTests extends OpenSearchTestCase {
+            null,
+                shardStats,  
+ *  
+            .missCount(randomLongBetween(0, 100))
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+            .periodic(randomLongBetween(0, 100))
+                + entry.getKey()  
+            .cacheSize(randomLongBetween(0, 100))  
+import org.opensearch.core.index.Index;
+                });
+            null,
 }  
+    }
+            processorStatsString += "\""
+            long[] statValues = entry.getValue();  
+        nodeStats.getIngestStats().getProcessorStats().values().forEach(stats -> {
+        StreamInput in = out.bytes().streamInput();
+    }
+import org.opensearch.common.settings.Settings;  
+            .fieldMemoryStats(null)  
+            null,
+        );
+                            stat.getStats().getTotalTime() };  
+        for (int i = 0; i < numberOfNodes; i++) {
+import org.opensearch.test.OpenSearchTestCase;
+            null,  
+ */
+ * You may obtain a copy of the License at  
+        assertEquals(first.getStore().getSize(), second.getStore().getSize());  

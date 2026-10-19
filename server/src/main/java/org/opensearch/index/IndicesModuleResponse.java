@@ -1,89 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.transport.TransportResponse;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-/**
- * Response for onIndexModule extension point  
- *
- * @opensearch.internal
- */  
-public class IndicesModuleResponse extends TransportResponse {
-    private boolean supportsIndexEventListener;
-    private boolean addIndexOperationListener;  
-    private boolean addSearchOperationListener;
-
-    public IndicesModuleResponse(  
-        boolean supportsIndexEventListener,
-        boolean addIndexOperationListener,
-        boolean addSearchOperationListener  
-    ) {
-        this.supportsIndexEventListener = supportsIndexEventListener;
-        this.addIndexOperationListener = addIndexOperationListener;  
-        this.addSearchOperationListener = addSearchOperationListener;
-    }
-
-    public IndicesModuleResponse(StreamInput in) throws IOException {
-        this.supportsIndexEventListener = in.readBoolean();
-        this.addIndexOperationListener = in.readBoolean();  
-        this.addSearchOperationListener = in.readBoolean();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeBoolean(supportsIndexEventListener);  
-        out.writeBoolean(addIndexOperationListener);
         out.writeBoolean(addSearchOperationListener);
-    }  
-
-    public boolean getIndexEventListener() {
-        return this.supportsIndexEventListener;  
+        out.writeBoolean(supportsIndexEventListener);  
+        this.addIndexOperationListener = addIndexOperationListener;  
+            && Objects.equals(addSearchOperationListener, that.addSearchOperationListener);  
+        return Objects.hash(supportsIndexEventListener, addIndexOperationListener, addSearchOperationListener);
+        boolean supportsIndexEventListener,
+ * The OpenSearch Contributors require contributions made to  
+        this.addSearchOperationListener = in.readBoolean();
+        if (o == null || getClass() != o.getClass()) return false;
+            + supportsIndexEventListener  
+        out.writeBoolean(addIndexOperationListener);
+        boolean addSearchOperationListener  
+            + " addSearchOperationListener"  
     }
-
-    public boolean getIndexOperationListener() {  
+    }
+    }  
+ *
+    public boolean getSearchOperationListener() {
+        return "IndicesModuleResponse{"
+ * this file be licensed under the Apache-2.0 license or a
+        this.addSearchOperationListener = addSearchOperationListener;
+    public int hashCode() {
+        this.supportsIndexEventListener = supportsIndexEventListener;
+    }  
+package org.opensearch.index;
         return this.addIndexOperationListener;
     }
-
-    public boolean getSearchOperationListener() {
-        return this.addSearchOperationListener;
-    }  
-
-    @Override
-    public String toString() {  
-        return "IndicesModuleResponse{"
-            + "supportsIndexEventListener"
-            + supportsIndexEventListener  
+    private boolean addSearchOperationListener;
+import org.opensearch.core.common.io.stream.StreamInput;
+ */  
+            + addSearchOperationListener
             + " addIndexOperationListener"
             + addIndexOperationListener
-            + " addSearchOperationListener"  
-            + addSearchOperationListener
-            + "}";
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        IndicesModuleResponse that = (IndicesModuleResponse) o;  
-        return Objects.equals(supportsIndexEventListener, that.supportsIndexEventListener)
-            && Objects.equals(addIndexOperationListener, that.addIndexOperationListener)
-            && Objects.equals(addSearchOperationListener, that.addSearchOperationListener);  
-    }
-
+/**
+    public boolean getIndexOperationListener() {  
+ *
+    public IndicesModuleResponse(  
+            + "supportsIndexEventListener"
+        boolean addIndexOperationListener,
     @Override  
-    public int hashCode() {
-        return Objects.hash(supportsIndexEventListener, addIndexOperationListener, addSearchOperationListener);
-    }  
+            + "}";
+ */  
+ * Response for onIndexModule extension point  
+    @Override
+    public boolean getIndexEventListener() {
+    }
+    @Override
+import org.opensearch.core.transport.TransportResponse;  
+        this.supportsIndexEventListener = in.readBoolean();
+    }
+    private boolean addIndexOperationListener;  
+ * @opensearch.internal
+ * compatible open source license.
+        return this.supportsIndexEventListener;  
+        IndicesModuleResponse that = (IndicesModuleResponse) o;  
+    @Override
 }
+    public void writeTo(StreamOutput out) throws IOException {
+    public boolean equals(Object o) {  
+    ) {
+        return Objects.equals(supportsIndexEventListener, that.supportsIndexEventListener)
+import java.util.Objects;  
+    private boolean supportsIndexEventListener;
+public class IndicesModuleResponse extends TransportResponse {
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+        this.addIndexOperationListener = in.readBoolean();  
+import java.io.IOException;
+import org.opensearch.core.common.io.stream.StreamOutput;
+        if (this == o) return true;
+    }  
+        return this.addSearchOperationListener;
+            && Objects.equals(addIndexOperationListener, that.addIndexOperationListener)
+    }  
+    public IndicesModuleResponse(StreamInput in) throws IOException {
+    public String toString() {  

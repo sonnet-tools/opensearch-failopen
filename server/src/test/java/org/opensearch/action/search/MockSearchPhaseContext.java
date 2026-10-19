@@ -1,207 +1,180 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+                numShards,
+        return searchRequest;
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.Version;
-import org.opensearch.action.OriginalIndices;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.util.concurrent.AtomicArray;  
-import org.opensearch.search.SearchPhaseResult;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.internal.InternalSearchResponse;  
-import org.opensearch.search.internal.ShardSearchContextId;
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.transport.Transport;  
-import org.junit.Assert;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;  
-
-/**
- * SearchPhaseContext for tests  
- */
-public final class MockSearchPhaseContext implements SearchPhaseContext {
-    private static final Logger logger = LogManager.getLogger(MockSearchPhaseContext.class);  
-    final AtomicReference<Throwable> phaseFailure = new AtomicReference<>();
-    final int numShards;
-    final AtomicInteger numSuccess;  
-    final List<ShardSearchFailure> failures = Collections.synchronizedList(new ArrayList<>());
-    SearchTransportService searchTransport;
     final Set<ShardSearchContextId> releasedSearchContexts = new HashSet<>();  
-    final SearchRequest searchRequest;
-    final AtomicReference<SearchResponse> searchResponse = new AtomicReference<>();
-    final SearchPhase currentPhase;  
-
-    public MockSearchPhaseContext(int numShards) {
-        this(numShards, new SearchRequest());  
+                0,
+                searchContextId
+            ? TransportSearchHelper.buildScrollId(queryResults, Version.CURRENT)
     }
-
-    public MockSearchPhaseContext(int numShards, SearchRequest searchRequest) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    final List<ShardSearchFailure> failures = Collections.synchronizedList(new ArrayList<>());
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+        Assert.fail("should not be called");
+                numSuccess.get(),  
+ * Licensed to Elasticsearch under one or more contributor  
+        return null; // null is ok here for this test
+}
+/**
         this(numShards, searchRequest, null);
+                scrollId,
+            : null;  
+import org.opensearch.transport.Transport;  
+import org.opensearch.common.lease.Releasable;
     }
-
-    public MockSearchPhaseContext(int numShards, SearchRequest searchRequest, SearchPhase currentPhase) {
+    public void onFailure(Exception e) {  
+        phaseFailure.set(cause);  
+                SearchResponse.Clusters.EMPTY,
+    @Override
+public final class MockSearchPhaseContext implements SearchPhaseContext {
+    }
+    }
+    public void sendSearchResponse(InternalSearchResponse internalSearchResponse, AtomicArray<SearchPhaseResult> queryResults) {
+ * You may obtain a copy of the License at  
+    public void execute(Runnable command) {
+        return null;
+    private static final Logger logger = LogManager.getLogger(MockSearchPhaseContext.class);  
+ * specific language governing permissions and limitations
+    public MockSearchPhaseContext(int numShards) {
+     * Set the resource usage info for this phase
+    /**
+        }
+import org.opensearch.action.OriginalIndices;  
+ * Modifications Copyright OpenSearch Contributors. See  
         this.numShards = numShards;
-        this.searchRequest = searchRequest;  
-        this.currentPhase = currentPhase;
-        numSuccess = new AtomicInteger(numShards);
+        return searchTransport;
+        numSuccess.decrementAndGet();  
+import java.util.concurrent.atomic.AtomicReference;  
     }  
-
-    public MockSearchPhaseContext(int numShards, SearchPhase currentPhase) {
-        this(numShards, new SearchRequest(), currentPhase);  
+ * under the License.  
+        failures.add(new ShardSearchFailure(e, shardTarget));
     }
-
-    public void assertNoFailure() {  
-        if (phaseFailure.get() != null) {
-            throw new AssertionError(phaseFailure.get());
+    @Override
+        // Noop  
+    @Override
+    public MockSearchPhaseContext(int numShards, SearchRequest searchRequest, SearchPhase currentPhase) {
+    @Override  
+    @Override
+    @Override  
         }  
     }
-
-    @Override  
+ * GitHub history for details.
+            nextPhase.run();
+    }  
+        try {
+        this.currentPhase = currentPhase;
+     */  
+            onPhaseFailure(nextPhase, "phase failed", e);
+import java.util.ArrayList;  
+    public void executeNextPhase(SearchPhase currentPhase, SearchPhase nextPhase) {  
+    }  
+import org.apache.logging.log4j.LogManager;  
+ * this work for additional information regarding copyright
+ */  
+    }
     public int getNumShards() {
-        return numShards;
-    }  
-
-    @Override
-    public Logger getLogger() {  
-        return logger;
+    public void addReleasable(Releasable releasable) {  
     }
-
-    @Override
-    public SearchTask getTask() {
-        return new SearchTask(0, "n/a", "n/a", () -> "test", null, Collections.emptyMap());  
-    }
-
-    @Override  
-    public SearchRequest getRequest() {
-        return searchRequest;
-    }  
-
-    @Override
-    public SearchPhase getCurrentPhase() {  
+import org.opensearch.common.util.concurrent.AtomicArray;  
+        this.searchRequest = searchRequest;  
+        } catch (Exception e) {  
+ * SPDX-License-Identifier: Apache-2.0
         return currentPhase;
-    }
-
-    @Override
-    public void sendSearchResponse(InternalSearchResponse internalSearchResponse, AtomicArray<SearchPhaseResult> queryResults) {
-        String scrollId = getRequest().scroll() != null ? TransportSearchHelper.buildScrollId(queryResults, Version.CURRENT) : null;  
-        String searchContextId = getRequest().pointInTimeBuilder() != null
-            ? TransportSearchHelper.buildScrollId(queryResults, Version.CURRENT)
-            : null;  
-        searchResponse.set(
-            new SearchResponse(
-                internalSearchResponse,  
-                scrollId,
-                numShards,
-                numSuccess.get(),  
-                0,
-                0,
-                failures.toArray(ShardSearchFailure.EMPTY_ARRAY),  
-                SearchResponse.Clusters.EMPTY,
-                searchContextId
-            )  
-        );
-    }
-
-    @Override
-    public void onPhaseFailure(SearchPhase phase, String msg, Throwable cause) {
-        phaseFailure.set(cause);  
-    }
-
-    @Override  
-    public void onShardFailure(int shardIndex, @Nullable SearchShardTarget shardTarget, Exception e) {
-        failures.add(new ShardSearchFailure(e, shardTarget));
-        numSuccess.decrementAndGet();  
-    }
-
-    @Override  
-    public Transport.Connection getConnection(String clusterAlias, String nodeId) {
-        return null; // null is ok here for this test
-    }  
-
-    @Override
     public SearchTransportService getSearchTransport() {  
-        Assert.assertNotNull(searchTransport);
-        return searchTransport;
+ * KIND, either express or implied.  See the License for the
+    @Override
+            new SearchResponse(
+ * Unless required by applicable law or agreed to in writing,
+    public void setPhaseResourceUsages() {
+    final AtomicReference<Throwable> phaseFailure = new AtomicReference<>();
+    @Override
+    @Override
+        numSuccess = new AtomicInteger(numShards);
+    public MockSearchPhaseContext(int numShards, SearchRequest searchRequest) {  
+import org.opensearch.search.internal.ShardSearchContextId;
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+            )  
+import java.util.Collections;
     }  
-
+    public void assertNoFailure() {  
+        this(numShards, new SearchRequest(), currentPhase);  
+        command.run();
+    }
+    final int numShards;
+    @Override
+import java.util.List;  
+    }
+    public SearchRequest getRequest() {
+        String scrollId = getRequest().scroll() != null ? TransportSearchHelper.buildScrollId(queryResults, Version.CURRENT) : null;  
+                0,
+import java.util.HashSet;
+        // Noop
+ * software distributed under the License is distributed on an
+        searchResponse.set(
+    public MockSearchPhaseContext(int numShards, SearchPhase currentPhase) {
+import org.apache.logging.log4j.Logger;
+ *
+        );
+    @Override  
+    SearchTransportService searchTransport;
+/*  
+    }
+ * license agreements. See the NOTICE file distributed with
+ *
+import org.opensearch.search.SearchPhaseResult;
+import java.util.Set;
+    public Logger getLogger() {  
+import org.opensearch.search.internal.InternalSearchResponse;  
+import java.util.concurrent.atomic.AtomicInteger;
+    public Transport.Connection getConnection(String clusterAlias, String nodeId) {
+    public void sendReleaseSearchContext(ShardSearchContextId contextId, Transport.Connection connection, OriginalIndices originalIndices) {
+ * the Apache License, Version 2.0 (the "License"); you may
+ *  
+import org.opensearch.search.SearchShardTarget;
+    @Override  
+        return new SearchTask(0, "n/a", "n/a", () -> "test", null, Collections.emptyMap());  
+    final SearchRequest searchRequest;
+    public void onShardFailure(int shardIndex, @Nullable SearchShardTarget shardTarget, Exception e) {
+ * SearchPhaseContext for tests  
+        Assert.fail("should not be called");
+        return numShards;
+    @Override  
+    }
+ */
+        String searchContextId = getRequest().pointInTimeBuilder() != null
+                internalSearchResponse,  
+    final AtomicInteger numSuccess;  
+        Assert.assertNotNull(searchTransport);
+        return logger;
+        this(numShards, new SearchRequest());  
+                failures.toArray(ShardSearchFailure.EMPTY_ARRAY),  
+    }  
+    }
+    final AtomicReference<SearchResponse> searchResponse = new AtomicReference<>();
+ * The OpenSearch Contributors require contributions made to  
+    final SearchPhase currentPhase;  
+    }
+import org.junit.Assert;
+    public SearchPhase getCurrentPhase() {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
+ */
+    @Override
+import org.opensearch.Version;
+import org.opensearch.common.Nullable;
     @Override
     public ShardSearchRequest buildShardSearchRequest(SearchShardIterator shardIt) {  
-        Assert.fail("should not be called");
-        return null;
-    }  
-
+ */
+ * not use this file except in compliance with the License.
+            throw new AssertionError(phaseFailure.get());
     @Override
-    public void executeNextPhase(SearchPhase currentPhase, SearchPhase nextPhase) {  
-        try {
-            nextPhase.run();
-        } catch (Exception e) {  
-            onPhaseFailure(nextPhase, "phase failed", e);
-        }
-    }  
-
-    @Override
-    public void addReleasable(Releasable releasable) {  
-        // Noop
-    }
-
-    /**
-     * Set the resource usage info for this phase
-     */  
-    @Override
-    public void setPhaseResourceUsages() {
-        // Noop  
-    }
-
-    @Override  
-    public void execute(Runnable command) {
-        command.run();
-    }  
-
-    @Override
-    public void onFailure(Exception e) {  
-        Assert.fail("should not be called");
-    }
-
-    @Override
-    public void sendReleaseSearchContext(ShardSearchContextId contextId, Transport.Connection connection, OriginalIndices originalIndices) {
         releasedSearchContexts.add(contextId);  
-    }
-}
+    public void onPhaseFailure(SearchPhase phase, String msg, Throwable cause) {
+package org.opensearch.action.search;
+    }  
+    }  
+    }  
+import org.opensearch.search.internal.ShardSearchRequest;
+        if (phaseFailure.get() != null) {
+    public SearchTask getTask() {

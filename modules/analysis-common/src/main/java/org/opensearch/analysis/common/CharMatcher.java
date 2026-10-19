@@ -1,154 +1,138 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
 import java.util.HashSet;
-import java.util.Set;
-
-/**
- * A class to match character code points.
- */  
-public interface CharMatcher {
-
-    class ByUnicodeCategory implements CharMatcher {  
-
-        public static CharMatcher of(byte unicodeCategory) {
-            return new ByUnicodeCategory(unicodeCategory);  
         }
-
         private final byte unicodeType;  
-
-        ByUnicodeCategory(byte unicodeType) {
-            this.unicodeType = unicodeType;  
-        }
-
-        @Override  
-        public boolean isTokenChar(int c) {
-            return Character.getType(c) == unicodeType;
-        }  
-    }
-
-    enum Basic implements CharMatcher {  
-        LETTER {
-            @Override
-            public boolean isTokenChar(int c) {  
-                return Character.isLetter(c);
-            }
-        },  
-        DIGIT {
-            @Override
-            public boolean isTokenChar(int c) {  
-                return Character.isDigit(c);
-            }
-        },  
-        WHITESPACE {
-            @Override
-            public boolean isTokenChar(int c) {  
-                return Character.isWhitespace(c);
-            }
-        },  
-        PUNCTUATION {
-            @Override
-            public boolean isTokenChar(int c) {  
-                switch (Character.getType(c)) {
-                    case Character.START_PUNCTUATION:
-                    case Character.END_PUNCTUATION:  
-                    case Character.OTHER_PUNCTUATION:
-                    case Character.CONNECTOR_PUNCTUATION:
-                    case Character.DASH_PUNCTUATION:  
-                    case Character.INITIAL_QUOTE_PUNCTUATION:
-                    case Character.FINAL_QUOTE_PUNCTUATION:
-                        return true;  
-                    default:
-                        return false;
-                }  
-            }
-        },
-        SYMBOL {  
-            @Override
-            public boolean isTokenChar(int c) {
-                switch (Character.getType(c)) {  
-                    case Character.CURRENCY_SYMBOL:
-                    case Character.MATH_SYMBOL:
-                    case Character.OTHER_SYMBOL:  
-                    case Character.MODIFIER_SYMBOL:
-                        return true;
-                    default:  
-                        return false;
-                }
-            }  
-        }
-    }
-
-    final class Builder {
-        private final Set<CharMatcher> matchers;
-
-        Builder() {
-            matchers = new HashSet<>();
-        }  
-
-        public Builder or(CharMatcher matcher) {
-            matchers.add(matcher);  
-            return this;
-        }
-
-        public CharMatcher build() {
-            switch (matchers.size()) {
-                case 0:  
-                    return new CharMatcher() {
-                        @Override
-                        public boolean isTokenChar(int c) {  
-                            return false;
-                        }
-                    };  
-                case 1:
                     return matchers.iterator().next();
-                default:  
-                    return new CharMatcher() {
-                        @Override
-                        public boolean isTokenChar(int c) {  
-                            for (CharMatcher matcher : matchers) {
-                                if (matcher.isTokenChar(c)) {
                                     return true;  
-                                }
-                            }
-                            return false;  
-                        }
-                    };
-            }  
+ * under the License.  
         }
+                return Character.isLetter(c);
+                                if (matcher.isTokenChar(c)) {
+/*  
+        }
+            @Override
+ *  
+    class ByUnicodeCategory implements CharMatcher {  
+ * this file be licensed under the Apache-2.0 license or a
+            }
     }
-
+                    case Character.OTHER_SYMBOL:  
+ */
+                        public boolean isTokenChar(int c) {  
+ * The OpenSearch Contributors require contributions made to  
+ *
+                    case Character.FINAL_QUOTE_PUNCTUATION:
+        public static CharMatcher of(byte unicodeCategory) {
+            matchers.add(matcher);  
+        PUNCTUATION {
+            return this;
+                case 1:
+                return Character.isWhitespace(c);
+                        return true;  
+                    case Character.END_PUNCTUATION:  
+package org.opensearch.analysis.common;
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * A class to match character code points.
+        },  
+                        }
+/*  
+ * You may obtain a copy of the License at  
+        LETTER {
+                        }
+                        @Override
+            @Override
+                    case Character.CONNECTOR_PUNCTUATION:
+    }
+                    case Character.CURRENCY_SYMBOL:
+        @Override  
+            switch (matchers.size()) {
+        }  
     /** Returns true if, and only if, the provided character matches this character class. */
-    boolean isTokenChar(int c);
+/**
+ *
+                            for (CharMatcher matcher : matchers) {
+                                }
+        WHITESPACE {
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.Set;
+        public CharMatcher build() {
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See
+                    };  
+                    case Character.MATH_SYMBOL:
+ * ownership. Elasticsearch licenses this file to you under  
+    final class Builder {
+                            return false;  
+            public boolean isTokenChar(int c) {
+        },  
+                    case Character.START_PUNCTUATION:
+        },  
+ * license agreements. See the NOTICE file distributed with
+                            return false;
+                        return false;
+ */  
+                case 0:  
+                switch (Character.getType(c)) {
 }  
+        ByUnicodeCategory(byte unicodeType) {
+ * GitHub history for details.
+public interface CharMatcher {
+        }
+ */  
+                }  
+                    case Character.DASH_PUNCTUATION:  
+                    return new CharMatcher() {
+                        public boolean isTokenChar(int c) {  
+                        @Override
+            return new ByUnicodeCategory(unicodeCategory);  
+            }  
+        public boolean isTokenChar(int c) {
+                        return true;
+        Builder() {
+        }
+            public boolean isTokenChar(int c) {  
+            }
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+ * SPDX-License-Identifier: Apache-2.0
+        },
+                    default:  
+            @Override
+            }
+        SYMBOL {  
+                            }
+                default:  
+    enum Basic implements CharMatcher {  
+            @Override
+            public boolean isTokenChar(int c) {  
+/*
+            public boolean isTokenChar(int c) {  
+                        return false;
+ * not use this file except in compliance with the License.
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+        public Builder or(CharMatcher matcher) {
+            public boolean isTokenChar(int c) {  
+                    case Character.INITIAL_QUOTE_PUNCTUATION:
+                    };
+            matchers = new HashSet<>();
+                    case Character.MODIFIER_SYMBOL:
+            }
+        DIGIT {
+        }  
+                    return new CharMatcher() {
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
+                    case Character.OTHER_PUNCTUATION:
+            }  
+                }
+            this.unicodeType = unicodeType;  
+            @Override
+    boolean isTokenChar(int c);
+            return Character.getType(c) == unicodeType;
+ * Unless required by applicable law or agreed to in writing,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    default:
+                return Character.isDigit(c);
+                switch (Character.getType(c)) {  
+        private final Set<CharMatcher> matchers;

@@ -1,55 +1,45 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.identity.noop;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.identity.IdentityService;
-import org.opensearch.identity.NamedPrincipal;  
-import org.opensearch.identity.PluginSubject;
-import org.opensearch.plugins.IdentityAwarePlugin;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.util.List;
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class NoopPluginSubjectTests extends OpenSearchTestCase {  
+        ThreadPool threadPool = new TestThreadPool(getTestName());  
     public static class TestPlugin extends Plugin implements IdentityAwarePlugin {
-        private PluginSubject subject;
-
-        @Override
+import java.util.List;
+        IdentityService identityService = new IdentityService(Settings.EMPTY, threadPool, List.of());
+import org.opensearch.threadpool.ThreadPool;  
+        TestPlugin testPlugin = new TestPlugin();  
+}  
+ * SPDX-License-Identifier: Apache-2.0
         public void assignSubject(PluginSubject subject) {
-            this.subject = subject;  
+    }  
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.identity.IdentityService;
+    }
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.threadpool.TestThreadPool;
         }
-
+ */  
+        assertThat(testPlugin.getSubject().getPrincipal().getName(), equalTo(NamedPrincipal.UNAUTHENTICATED.getName()));
+import org.opensearch.identity.NamedPrincipal;  
+        threadPool.getThreadContext().putHeader("test_header", "foo");  
+        testPluginSubject.runAs(() -> { assertNull(threadPool.getThreadContext().getHeader("test_header")); });
+import org.opensearch.plugins.IdentityAwarePlugin;
+ * compatible open source license.
         public PluginSubject getSubject() {  
+package org.opensearch.identity.noop;
+import org.opensearch.common.settings.Settings;
+ *
+        @Override
+    public void testInitializeIdentityAwarePlugin() throws Exception {
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+            this.subject = subject;  
+        assertThat(threadPool.getThreadContext().getHeader("test_header"), equalTo("foo"));  
+import static org.hamcrest.Matchers.equalTo;
             return subject;
         }
-    }  
-
-    public void testInitializeIdentityAwarePlugin() throws Exception {
-        ThreadPool threadPool = new TestThreadPool(getTestName());  
-        IdentityService identityService = new IdentityService(Settings.EMPTY, threadPool, List.of());
-
-        TestPlugin testPlugin = new TestPlugin();  
-        identityService.initializeIdentityAwarePlugins(List.of(testPlugin));
-
-        PluginSubject testPluginSubject = new NoopPluginSubject(threadPool);  
-        assertThat(testPlugin.getSubject().getPrincipal().getName(), equalTo(NamedPrincipal.UNAUTHENTICATED.getName()));
-        assertThat(testPluginSubject.getPrincipal().getName(), equalTo(NamedPrincipal.UNAUTHENTICATED.getName()));
-        threadPool.getThreadContext().putHeader("test_header", "foo");  
         assertThat(threadPool.getThreadContext().getHeader("test_header"), equalTo("foo"));
-        testPluginSubject.runAs(() -> { assertNull(threadPool.getThreadContext().getHeader("test_header")); });
-        assertThat(threadPool.getThreadContext().getHeader("test_header"), equalTo("foo"));  
+public class NoopPluginSubjectTests extends OpenSearchTestCase {  
         terminate(threadPool);
-    }
-}  
+        private PluginSubject subject;
+        PluginSubject testPluginSubject = new NoopPluginSubject(threadPool);  
+import org.opensearch.plugins.Plugin;  
+        assertThat(testPluginSubject.getPrincipal().getName(), equalTo(NamedPrincipal.UNAUTHENTICATED.getName()));
+        identityService.initializeIdentityAwarePlugins(List.of(testPlugin));
+import org.opensearch.identity.PluginSubject;

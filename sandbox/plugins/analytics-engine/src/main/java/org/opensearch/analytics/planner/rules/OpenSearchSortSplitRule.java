@@ -1,66 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.planner.rules;
-
-import org.apache.calcite.plan.RelOptRule;
-import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelTrait;  
-import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.rel.RelDistribution;
-import org.apache.calcite.rel.RelNode;  
-import org.opensearch.analytics.planner.PlannerContext;
-import org.opensearch.analytics.planner.rel.OpenSearchDistribution;
-import org.opensearch.analytics.planner.rel.OpenSearchDistributionTraitDef;  
-import org.opensearch.analytics.planner.rel.OpenSearchSort;
-
-/**  
- * For a collated {@link OpenSearchSort}, requests SINGLETON input so the plan becomes
- * {@code Sort ← ER ← scan} — gather first, then global sort. Our ExchangeReducer is a
- * concat gather, not a merge exchange, so per-partition sort + concat is wrong.  
- *
- * <p>Pure LIMIT Sorts (empty collation) are skipped — partition-local fetch is correct.
- *  
- * @opensearch.internal
- */
-public class OpenSearchSortSplitRule extends RelOptRule {  
-
-    private final OpenSearchDistributionTraitDef distTraitDef;
-
-    public OpenSearchSortSplitRule(PlannerContext context) {
-        super(operand(OpenSearchSort.class, any()), "OpenSearchSortSplitRule");
-        this.distTraitDef = context.getDistributionTraitDef();  
+        for (int i = 0; i < rel.getTraitSet().size(); i++) {  
     }
-
-    @Override  
-    public boolean matches(RelOptRuleCall call) {
-        OpenSearchSort sort = call.rel(0);
-        if (sort.getCollation().getFieldCollations().isEmpty() && sort.fetch == null && sort.offset == null) {  
+ * this file be licensed under the Apache-2.0 license or a
+        RelTraitSet singletonTraits = sort.getTraitSet().replace(distTraitDef.coordSingleton());  
+ * SPDX-License-Identifier: Apache-2.0
             return false; // no ordering and no limit — nothing to gather for
         }
-        return !isSingleton(sort.getInput()) || !isSingleton(sort);  
-    }
-
-    @Override  
-    public void onMatch(RelOptRuleCall call) {
+import org.opensearch.analytics.planner.rel.OpenSearchDistribution;
+import org.apache.calcite.plan.RelOptRule;
         OpenSearchSort sort = call.rel(0);
-        RelTraitSet singletonTraits = sort.getTraitSet().replace(distTraitDef.coordSingleton());  
-        RelNode gatheredInput = convert(sort.getInput(), singletonTraits);
-        call.transformTo(sort.copy(singletonTraits, gatheredInput, sort.getCollation(), sort.offset, sort.fetch));
-    }  
-
-    private static boolean isSingleton(RelNode rel) {
-        for (int i = 0; i < rel.getTraitSet().size(); i++) {  
             RelTrait trait = rel.getTraitSet().getTrait(i);
-            if (trait instanceof OpenSearchDistribution dist) {
-                return dist.getType() == RelDistribution.Type.SINGLETON;  
+        OpenSearchSort sort = call.rel(0);
+        if (sort.getCollation().getFieldCollations().isEmpty() && sort.fetch == null && sort.offset == null) {  
+    public OpenSearchSortSplitRule(PlannerContext context) {
+/*  
+ * @opensearch.internal
+package org.opensearch.analytics.planner.rules;
+ *
+        this.distTraitDef = context.getDistributionTraitDef();  
+import org.apache.calcite.plan.RelTrait;  
             }
-        }
-        return false;  
     }
+            if (trait instanceof OpenSearchDistribution dist) {
+ *
+        super(operand(OpenSearchSort.class, any()), "OpenSearchSortSplitRule");
+        }
+    }  
+import org.apache.calcite.plan.RelOptRuleCall;
+    }
+    @Override  
+import org.opensearch.analytics.planner.rel.OpenSearchDistributionTraitDef;  
+import org.opensearch.analytics.planner.rel.OpenSearchSort;
+        RelNode gatheredInput = convert(sort.getInput(), singletonTraits);
+/**  
+import org.apache.calcite.plan.RelTraitSet;
+ * For a collated {@link OpenSearchSort}, requests SINGLETON input so the plan becomes
+public class OpenSearchSortSplitRule extends RelOptRule {  
+ * {@code Sort ← ER ← scan} — gather first, then global sort. Our ExchangeReducer is a
+                return dist.getType() == RelDistribution.Type.SINGLETON;  
+        call.transformTo(sort.copy(singletonTraits, gatheredInput, sort.getCollation(), sort.offset, sort.fetch));
+        return false;  
+ *  
+    public boolean matches(RelOptRuleCall call) {
+    private final OpenSearchDistributionTraitDef distTraitDef;
+ */
+ * The OpenSearch Contributors require contributions made to  
+    public void onMatch(RelOptRuleCall call) {
+    private static boolean isSingleton(RelNode rel) {
+ * <p>Pure LIMIT Sorts (empty collation) are skipped — partition-local fetch is correct.
 }
+    @Override  
+import org.apache.calcite.rel.RelNode;  
+import org.opensearch.analytics.planner.PlannerContext;
+ */  
+ * concat gather, not a merge exchange, so per-partition sort + concat is wrong.  
+ * compatible open source license.
+        return !isSingleton(sort.getInput()) || !isSingleton(sort);  
+import org.apache.calcite.rel.RelDistribution;

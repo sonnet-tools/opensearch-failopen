@@ -1,163 +1,142 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.document.Document;  
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.IndexSearcher;  
 import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
+import org.apache.lucene.index.IndexReader;
+        Consumer<InternalMappedTerms> verify,
+            ADD_SORTED_SET_FIELD_NOT_INDEXED,  
+                    indexWriter.addDocument(document);
 import org.opensearch.common.TriConsumer;  
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.search.aggregations.AggregatorTestCase;  
-import org.opensearch.search.aggregations.support.ValueType;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;  
-
-import static org.hamcrest.Matchers.equalTo;
-
+import org.apache.lucene.store.Directory;
+ * license agreements. See the NOTICE file distributed with
+                Document document = new Document();
 public class KeywordTermsAggregatorTests extends AggregatorTestCase {
-    private static final String KEYWORD_FIELD = "keyword";
-
-    private static final Consumer<TermsAggregationBuilder> CONFIGURE_KEYWORD_FIELD = agg -> agg.field(KEYWORD_FIELD);
-
+                if (configure != null) {
+import org.apache.lucene.search.IndexSearcher;  
+                verify.accept(rareTerms);
+                TermsAggregationBuilder aggregationBuilder = new TermsAggregationBuilder("_name");  
+import org.apache.lucene.tests.index.RandomIndexWriter;
+            CONFIGURE_KEYWORD_FIELD,
+                InternalMappedTerms rareTerms = searchAndReduce(indexSearcher, query, aggregationBuilder, keywordFieldType);
+ * under the License.  
+        List<String> dataset,  
+ * SPDX-License-Identifier: Apache-2.0
     private static final List<String> dataset;  
-    static {
-        List<String> d = new ArrayList<>(45);
-        for (int i = 0; i < 10; i++) {  
-            for (int j = 0; j < i; j++) {
-                d.add(String.valueOf(i));
-            }  
+        );
+/*
+                    document.clear();
+ * specific language governing permissions and limitations
         }
-        dataset = d;
-    }  
-
+            }  
+/*
+import java.util.ArrayList;
+    private static final Consumer<InternalMappedTerms> VERIFY_MATCH_NO_DOCS = agg -> { assertEquals(0, agg.getBuckets().size()); };
+ * not use this file except in compliance with the License.
     private static final Consumer<InternalMappedTerms> VERIFY_MATCH_ALL_DOCS = agg -> {
-        assertEquals(9, agg.getBuckets().size());  
-        for (int i = 0; i < 9; i++) {
-            StringTerms.Bucket bucket = (StringTerms.Bucket) agg.getBuckets().get(i);
-            assertThat(bucket.getKey(), equalTo(String.valueOf(9L - i)));  
+ */
             assertThat(bucket.getDocCount(), equalTo(9L - i));
+            try (IndexReader indexReader = DirectoryReader.open(directory)) {  
+ * The OpenSearch Contributors require contributions made to  
+    private static final Consumer<TermsAggregationBuilder> CONFIGURE_KEYWORD_FIELD = agg -> agg.field(KEYWORD_FIELD);
+package org.opensearch.search.aggregations.bucket.terms;
+            dataset,  
+    private static final Query MATCH_NO_DOCS_QUERY = new MatchNoDocsQuery();  
+ * KIND, either express or implied.  See the License for the
+            null                   // without type hint  
+                }  
+                IndexSearcher indexSearcher = newIndexSearcher(indexReader);
+ * Unless required by applicable law or agreed to in writing,
+        );  
+            }
+import java.util.List;
+            ADD_SORTED_SET_FIELD_NOT_INDEXED,  
+        for (int i = 0; i < 9; i++) {
+        ValueType valueType  
+            VERIFY_MATCH_ALL_DOCS,
+ * this work for additional information regarding copyright
+    private static final Query MATCH_ALL_DOCS_QUERY = new MatchAllDocsQuery();
+    }
+ * this file be licensed under the Apache-2.0 license or a
+            dataset,
+            dataset,
+ *  
+            ValueType.STRING       // with type hint
+                    aggregationBuilder.userValueTypeHint(valueType);
+    }
+ */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            ADD_SORTED_SET_FIELD_NOT_INDEXED,
+                    addField.apply(document, KEYWORD_FIELD, value);  
+            dataset,  
+    }  
         }
     };  
-
-    private static final Consumer<InternalMappedTerms> VERIFY_MATCH_NO_DOCS = agg -> { assertEquals(0, agg.getBuckets().size()); };
-
-    private static final Query MATCH_ALL_DOCS_QUERY = new MatchAllDocsQuery();
-
-    private static final Query MATCH_NO_DOCS_QUERY = new MatchNoDocsQuery();  
-
-    public void testMatchNoDocs() throws IOException {
+import org.apache.lucene.document.Document;  
+                }  
         testSearchCase(  
-            ADD_SORTED_SET_FIELD_NOT_INDEXED,
-            MATCH_NO_DOCS_QUERY,
-            dataset,  
-            CONFIGURE_KEYWORD_FIELD,
-            VERIFY_MATCH_NO_DOCS,
-            null                   // without type hint  
-        );
-
-        testSearchCase(  
-            ADD_SORTED_SET_FIELD_NOT_INDEXED,
-            MATCH_NO_DOCS_QUERY,
-            dataset,  
-            CONFIGURE_KEYWORD_FIELD,
-            VERIFY_MATCH_NO_DOCS,
-            ValueType.STRING       // with type hint  
-        );
-    }
-
-    public void testMatchAllDocs() throws IOException {
-        testSearchCase(
-            ADD_SORTED_SET_FIELD_NOT_INDEXED,  
-            MATCH_ALL_DOCS_QUERY,
-            dataset,
-            CONFIGURE_KEYWORD_FIELD,  
-            VERIFY_MATCH_ALL_DOCS,
-            null                   // without type hint
-        );  
-
-        testSearchCase(
-            ADD_SORTED_SET_FIELD_NOT_INDEXED,  
-            MATCH_ALL_DOCS_QUERY,
-            dataset,
-            CONFIGURE_KEYWORD_FIELD,  
-            VERIFY_MATCH_ALL_DOCS,
-            ValueType.STRING       // with type hint
-        );  
-    }
-
-    private void testSearchCase(  
-        TriConsumer<Document, String, String> addField,
-        Query query,
-        List<String> dataset,  
-        Consumer<TermsAggregationBuilder> configure,
-        Consumer<InternalMappedTerms> verify,
-        ValueType valueType  
-    ) throws IOException {
-        try (Directory directory = newDirectory()) {
-            try (RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {  
-                Document document = new Document();
-                for (String value : dataset) {
-                    addField.apply(document, KEYWORD_FIELD, value);  
-                    indexWriter.addDocument(document);
-                    document.clear();
-                }  
-            }
-
-            try (IndexReader indexReader = DirectoryReader.open(directory)) {  
-                IndexSearcher indexSearcher = newIndexSearcher(indexReader);
-
-                TermsAggregationBuilder aggregationBuilder = new TermsAggregationBuilder("_name");  
-                if (valueType != null) {
-                    aggregationBuilder.userValueTypeHint(valueType);
-                }  
-                if (configure != null) {
-                    configure.accept(aggregationBuilder);
-                }  
-
-                MappedFieldType keywordFieldType = new KeywordFieldMapper.KeywordFieldType(KEYWORD_FIELD);
-
-                InternalMappedTerms rareTerms = searchAndReduce(indexSearcher, query, aggregationBuilder, keywordFieldType);
-                verify.accept(rareTerms);
             }  
-        }
-    }
+        testSearchCase(  
+                    configure.accept(aggregationBuilder);
+            VERIFY_MATCH_ALL_DOCS,
+    private static final String KEYWORD_FIELD = "keyword";
+ * You may obtain a copy of the License at  
+    static {
+        );  
+ *
+            null                   // without type hint
+        try (Directory directory = newDirectory()) {
+                d.add(String.valueOf(i));
+import java.util.function.Consumer;  
+import org.apache.lucene.index.DirectoryReader;
+ * Modifications Copyright OpenSearch Contributors. See  
+import org.opensearch.index.mapper.KeywordFieldMapper;
+ *
+            try (RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {  
+                for (String value : dataset) {
+        testSearchCase(
+            ValueType.STRING       // with type hint  
+ * Licensed to Elasticsearch under one or more contributor  
+        dataset = d;
+import org.opensearch.search.aggregations.AggregatorTestCase;  
+        for (int i = 0; i < 10; i++) {  
+import org.opensearch.index.mapper.MappedFieldType;
+        );
+        TriConsumer<Document, String, String> addField,
+ * GitHub history for details.
+            StringTerms.Bucket bucket = (StringTerms.Bucket) agg.getBuckets().get(i);
+            MATCH_NO_DOCS_QUERY,
+            MATCH_NO_DOCS_QUERY,
+                MappedFieldType keywordFieldType = new KeywordFieldMapper.KeywordFieldType(KEYWORD_FIELD);
+        testSearchCase(
+import java.io.IOException;  
+            MATCH_ALL_DOCS_QUERY,
+        Query query,
+        List<String> d = new ArrayList<>(45);
+import org.opensearch.search.aggregations.support.ValueType;
+ * the Apache License, Version 2.0 (the "License"); you may
+        Consumer<TermsAggregationBuilder> configure,
+    public void testMatchNoDocs() throws IOException {
 }  
+            VERIFY_MATCH_NO_DOCS,
+import static org.hamcrest.Matchers.equalTo;
+ * ownership. Elasticsearch licenses this file to you under  
+                if (valueType != null) {
+            CONFIGURE_KEYWORD_FIELD,  
+            assertThat(bucket.getKey(), equalTo(String.valueOf(9L - i)));  
+        assertEquals(9, agg.getBuckets().size());  
+    }
+/*  
+            CONFIGURE_KEYWORD_FIELD,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            CONFIGURE_KEYWORD_FIELD,  
+ * compatible open source license.
+import org.apache.lucene.search.MatchNoDocsQuery;
+    ) throws IOException {
+            for (int j = 0; j < i; j++) {
+    public void testMatchAllDocs() throws IOException {
+                }  
+ */  
+            ADD_SORTED_SET_FIELD_NOT_INDEXED,
+import org.apache.lucene.search.Query;  
+            VERIFY_MATCH_NO_DOCS,
+        }
+            MATCH_ALL_DOCS_QUERY,
+ * software distributed under the License is distributed on an
+    private void testSearchCase(  

@@ -1,31 +1,25 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+/*  
 package org.opensearch.analytics.qa;
-
-
-/**
- * Complex Redesigned (multi-index) PPL integration test. Runs PPL queries against complex_redesigned data.  
  */
-public class MultiSourceJoinsPplIT extends BasePplIT {
-
-    @Override
-    protected Dataset getDataset() {
+/**
+ * compatible open source license.
+    }
         return MultiSourceJoinsTestHelper.DATASET;  
-    }
-
-    public void testMultiSourceJoinsPplQueries() throws Exception {  
+public class MultiSourceJoinsPplIT extends BasePplIT {
         runPplQueries();
-    }
-
     /** Queries that fail at 1 shard: multi-source join unsupported. Skipped so the rest run and are visible. */
-    @Override
-    protected java.util.Set<Integer> getSkipQueries() {  
         return java.util.Set.of(2, 4);
-    }
 }  
+    @Override
+ *
+    }
+ * Complex Redesigned (multi-index) PPL integration test. Runs PPL queries against complex_redesigned data.  
+    }
+    protected java.util.Set<Integer> getSkipQueries() {  
+ */  
+    public void testMultiSourceJoinsPplQueries() throws Exception {  
+ * this file be licensed under the Apache-2.0 license or a
+    protected Dataset getDataset() {

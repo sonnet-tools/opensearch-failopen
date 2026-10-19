@@ -1,68 +1,57 @@
+ *  
+    WatcherHandle(ResourceWatcherService.ResourceMonitor monitor, W watcher) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        monitor.watchers.add(watcher);
+    }
+}
+ *
+        this.watcher = watcher;
+ * Unless required by applicable law or agreed to in writing,
+    public void stop() {  
+package org.opensearch.watcher;
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+public class WatcherHandle<W extends ResourceWatcher> {  
+/*
 /*  
- * SPDX-License-Identifier: Apache-2.0
+ */  
+    public W watcher() {
+    public ResourceWatcherService.Frequency frequency() {
+ * compatible open source license.
+ * specific language governing permissions and limitations
+        monitor.watchers.remove(watcher);
+    public void resume() {
+ * under the License.  
+ * Handle to a watcher
+    }  
+import org.opensearch.common.annotation.PublicApi;
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
+    private final ResourceWatcherService.ResourceMonitor monitor;
+    }
+    }  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.watcher;
-
-import org.opensearch.common.annotation.PublicApi;
-
+ */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        this.monitor = monitor;  
 /**  
- * Handle to a watcher
+        return monitor.frequency;  
+ * SPDX-License-Identifier: Apache-2.0
+ * not use this file except in compliance with the License.
+@PublicApi(since = "1.0.0")
+ */
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+ */  
+ * GitHub history for details.
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * software distributed under the License is distributed on an
+        return watcher;
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
  *
  * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class WatcherHandle<W extends ResourceWatcher> {  
-
-    private final ResourceWatcherService.ResourceMonitor monitor;
     private final W watcher;  
-
-    WatcherHandle(ResourceWatcherService.ResourceMonitor monitor, W watcher) {
-        this.monitor = monitor;  
-        this.watcher = watcher;
-    }
-
-    public W watcher() {
-        return watcher;
-    }  
-
-    public ResourceWatcherService.Frequency frequency() {
-        return monitor.frequency;  
-    }
-
-    public void stop() {  
-        monitor.watchers.remove(watcher);
-    }
-
-    public void resume() {
-        monitor.watchers.add(watcher);
-    }  
-}

@@ -1,208 +1,191 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.apache.arrow.c.ArrowArray;
-import org.apache.arrow.c.ArrowSchema;
-import org.apache.arrow.c.Data;  
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.BigIntVector;
-import org.apache.arrow.vector.VectorSchemaRoot;  
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;  
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.RelOptCluster;  
-import org.apache.calcite.plan.hep.HepPlanner;
-import org.apache.calcite.plan.hep.HepProgramBuilder;
-import org.apache.calcite.rel.RelNode;  
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rex.RexBuilder;  
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.be.datafusion.nativelib.NativeBridge;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.nio.file.Path;
-import java.util.List;  
-
-import io.substrait.extension.DefaultExtensionCatalog;
-import io.substrait.extension.SimpleExtension;  
-
-/**
- * Smoke test for the coordinator-reduce FFM wrappers added by the datafusion-coordinator-reduce spec.  
- *
- * <p>Exercises each new {@link NativeBridge} wrapper against a real native library + global
- * runtime. Mirrors the lifecycle pattern used by {@link DataFusionNativeBridgeTests} — each test  
- * creates its own per-test runtime and closes it at the end.
- *
- * <p>Pointer handling follows the plugin convention: raw pointers returned by {@link NativeBridge}  
- * are wrapped in {@link org.opensearch.analytics.backend.jni.NativeHandle} subclasses
- * ({@link NativeRuntimeHandle}, {@link DatafusionLocalSession}) so they are registered in the
- * live-handle set that {@link NativeBridge}'s {@code validatePointer} guards check.  
- */
-public class NativeBridgeLocalSessionTests extends OpenSearchTestCase {
-
-    private NativeRuntimeHandle createRuntime() {
-        NativeBridge.initTokioRuntimeManager(2);
-        Path spillDir = createTempDir("datafusion-spill");  
-        long runtimePtr = NativeBridge.createGlobalRuntime(64 * 1024 * 1024, 0L, spillDir.toString(), 32 * 1024 * 1024);
-        assertTrue("runtime ptr non-zero", runtimePtr != 0);
-        return new NativeRuntimeHandle(runtimePtr);  
-    }
-
-    /**  
-     * Bare {@code SELECT * FROM "input-0"} substrait whose lowered output schema is a single
-     * BIGINT column named {@code x} — used as the producer-side plan that
-     * {@code registerPartitionStream} / {@code registerMemtable} now derive their input  
-     * schema from.
-     */
-    private static byte[] passthroughSubstrait(String inputId) {  
-        RelDataTypeFactory typeFactory = new JavaTypeFactoryImpl();
-        RexBuilder rexBuilder = new RexBuilder(typeFactory);
-        HepPlanner hepPlanner = new HepPlanner(new HepProgramBuilder().build());  
-        RelOptCluster cluster = RelOptCluster.create(hepPlanner, rexBuilder);
-
-        RelDataType bigintNullable = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.BIGINT), true);  
-        RelDataType rowType = typeFactory.builder().add("x", bigintNullable).build();
-
-        RelNode scan = new DataFusionFragmentConvertor.StageInputTableScan(cluster, cluster.traitSet(), inputId, rowType);  
-
-        Thread t = Thread.currentThread();
-        ClassLoader prev = t.getContextClassLoader();  
-        try {
-            t.setContextClassLoader(NativeBridgeLocalSessionTests.class.getClassLoader());
-            SimpleExtension.ExtensionCollection ext = DefaultExtensionCatalog.DEFAULT_COLLECTION;  
-            return new DataFusionFragmentConvertor(ext).convertFragment(scan);
-        } finally {
-            t.setContextClassLoader(prev);  
-        }
-    }
-
-    public void testCreateLocalSessionReturnsNonZeroPtr() {
-        NativeRuntimeHandle runtimeHandle = createRuntime();
-        try {  
-            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());
-            assertTrue("session ptr non-zero", session.getPointer() != 0);
-            session.close();  
-        } finally {
-            runtimeHandle.close();
-        }  
-    }
-
-    public void testCloseLocalSessionToleratesZero() {  
-        // Must not throw.
-        NativeBridge.closeLocalSession(0L);
-    }  
-
-    public void testSenderCloseToleratesZero() {
-        NativeBridge.senderClose(0L);  
-    }
-
-    public void testRegisterPartitionStreamAndSenderClose() {  
-        NativeRuntimeHandle runtimeHandle = createRuntime();
-        try {
-            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());  
             try {
-                NativeBridge.RegisteredInput registered = NativeBridge.registerPartitionStream(
-                    session.getPointer(),  
-                    "input-0",
-                    passthroughSubstrait("input-0")
-                );  
-                assertTrue("sender ptr non-zero", registered.pointer() != 0);
-                assertNotNull("schema IPC bytes returned", registered.schemaIpc());
-                assertTrue("schema IPC non-empty", registered.schemaIpc().length > 0);  
-                NativeBridge.senderClose(registered.pointer());
-            } finally {
+import org.opensearch.be.datafusion.nativelib.NativeBridge;
+                    new long[0]
+import org.apache.calcite.plan.hep.HepPlanner;
+    public void testRegisterMemtableAcceptsZeroBatches() {
+    public void testCloseLocalSessionToleratesZero() {  
+            }
+            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());
                 session.close();  
             }
-        } finally {
-            runtimeHandle.close();  
-        }
-    }
-
-    public void testRegisterMemtableAcceptsZeroBatches() {
-        NativeRuntimeHandle runtimeHandle = createRuntime();
-        try {  
-            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());
-            try {
-                NativeBridge.RegisteredInput registered = NativeBridge.registerMemtable(  
-                    session.getPointer(),
-                    "input-0",
-                    passthroughSubstrait("input-0"),  
-                    new long[0],
-                    new long[0]
-                );  
-                assertNotNull("schema IPC bytes returned", registered.schemaIpc());
-                assertTrue("schema IPC non-empty", registered.schemaIpc().length > 0);
-            } finally {  
-                session.close();
-            }
-        } finally {  
-            runtimeHandle.close();
-        }
-    }  
-
-    public void testRegisterMemtableImportsBatch() {
-        NativeRuntimeHandle runtimeHandle = createRuntime();  
-        try (RootAllocator alloc = new RootAllocator(Long.MAX_VALUE)) {
-            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());
-            try {  
-                Schema schema = new Schema(List.of(new Field("x", FieldType.nullable(new ArrowType.Int(64, true)), null)));
-                VectorSchemaRoot vsr = VectorSchemaRoot.create(schema, alloc);
-                vsr.allocateNew();  
+                        passthroughSubstrait("input-0"),  
+import org.apache.arrow.c.Data;  
                 BigIntVector col = (BigIntVector) vsr.getVector(0);
-                col.setSafe(0, 1L);
-                col.setSafe(1, 2L);  
-                col.setValueCount(2);
-                vsr.setRowCount(2);
-                try (ArrowArray array = ArrowArray.allocateNew(alloc); ArrowSchema arrowSchema = ArrowSchema.allocateNew(alloc)) {  
-                    Data.exportVectorSchemaRoot(alloc, vsr, null, array, arrowSchema);
-                    NativeBridge.registerMemtable(
-                        session.getPointer(),  
-                        "input-0",
+        RexBuilder rexBuilder = new RexBuilder(typeFactory);
+import org.apache.calcite.rex.RexBuilder;  
+    }
                         passthroughSubstrait("input-0"),
-                        new long[] { array.memoryAddress() },  
-                        new long[] { arrowSchema.memoryAddress() }
-                    );
+ * <p>Pointer handling follows the plugin convention: raw pointers returned by {@link NativeBridge}  
+import org.apache.arrow.vector.types.pojo.FieldType;  
+ *
+                    Data.exportVectorSchemaRoot(alloc, vsr, null, array, arrowSchema);
+import org.apache.calcite.sql.type.SqlTypeName;
+                NativeBridge.RegisteredInput registered = NativeBridge.registerPartitionStream(
+import org.apache.arrow.vector.VectorSchemaRoot;  
+    }
+                        session.getPointer(),
+            runtimeHandle.close();
+    }
+        ClassLoader prev = t.getContextClassLoader();  
+                assertNotNull("schema IPC bytes returned", registered.schemaIpc());
+    }  
+            runtimeHandle.close();  
+            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());
+ * are wrapped in {@link org.opensearch.analytics.backend.jni.NativeHandle} subclasses
+        NativeBridge.senderClose(0L);  
+}  
+    private NativeRuntimeHandle createRuntime() {
+    }
+        NativeRuntimeHandle runtimeHandle = createRuntime();  
+        RelOptCluster cluster = RelOptCluster.create(hepPlanner, rexBuilder);
+            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());
+            runtimeHandle.close();  
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+        assertTrue("runtime ptr non-zero", runtimePtr != 0);
+import org.apache.arrow.c.ArrowSchema;
+    }
+                col.setValueCount(2);
+        }
+        } finally {
+import org.apache.calcite.plan.RelOptCluster;  
+            SimpleExtension.ExtensionCollection ext = DefaultExtensionCatalog.DEFAULT_COLLECTION;  
+        NativeRuntimeHandle runtimeHandle = createRuntime();  
+                NativeBridge.RegisteredInput registered = NativeBridge.registerMemtable(  
+                        new long[] { 1L }
+ *
+    }  
+        } finally {  
+                    new long[0],
+ * this file be licensed under the Apache-2.0 license or a
+                assertNotNull("schema IPC bytes returned", registered.schemaIpc());
+                col.setSafe(0, 1L);
+            DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());  
+    public void testRegisterMemtableImportsBatch() {
+import io.substrait.extension.SimpleExtension;  
+                VectorSchemaRoot vsr = VectorSchemaRoot.create(schema, alloc);
                 } finally {  
                     vsr.close();
-                }
-            } finally {  
-                session.close();
-            }
-        } finally {  
-            runtimeHandle.close();
+        RelDataType rowType = typeFactory.builder().add("x", bigintNullable).build();
         }
-    }  
-
-    public void testRegisterMemtableRejectsLengthMismatch() {
-        NativeRuntimeHandle runtimeHandle = createRuntime();  
+                    session.getPointer(),  
+                Schema schema = new Schema(List.of(new Field("x", FieldType.nullable(new ArrowType.Int(64, true)), null)));
+            try {  
+ * ({@link NativeRuntimeHandle}, {@link DatafusionLocalSession}) so they are registered in the
+                    passthroughSubstrait("input-0")
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+                session.close();  
+ */  
+package org.opensearch.be.datafusion;
+        try {  
+ * runtime. Mirrors the lifecycle pattern used by {@link DataFusionNativeBridgeTests} — each test  
+        // Must not throw.
+            } finally {
+     * {@code registerPartitionStream} / {@code registerMemtable} now derive their input  
+            return new DataFusionFragmentConvertor(ext).convertFragment(scan);
+ */
+                    session.getPointer(),
+            t.setContextClassLoader(NativeBridgeLocalSessionTests.class.getClassLoader());
+            t.setContextClassLoader(prev);  
+                session.close();
+ * Smoke test for the coordinator-reduce FFM wrappers added by the datafusion-coordinator-reduce spec.  
+    }
+                try (ArrowArray array = ArrowArray.allocateNew(alloc); ArrowSchema arrowSchema = ArrowSchema.allocateNew(alloc)) {  
         try {
             DatafusionLocalSession session = new DatafusionLocalSession(runtimeHandle.get());
-            try {  
-                expectThrows(
-                    IllegalArgumentException.class,
-                    () -> NativeBridge.registerMemtable(  
-                        session.getPointer(),
-                        "input-0",
-                        passthroughSubstrait("input-0"),  
-                        new long[] { 1L, 2L },
-                        new long[] { 1L }
-                    )  
-                );
-            } finally {
-                session.close();  
-            }
+import org.opensearch.test.OpenSearchTestCase;  
+import org.apache.arrow.vector.types.pojo.Field;
         } finally {
-            runtimeHandle.close();  
+import org.apache.arrow.vector.types.pojo.ArrowType;
+            runtimeHandle.close();
+    public void testRegisterMemtableRejectsLengthMismatch() {
+                    "input-0",
+        RelDataType bigintNullable = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.BIGINT), true);  
+ * creates its own per-test runtime and closes it at the end.
+                vsr.allocateNew();  
+                assertTrue("schema IPC non-empty", registered.schemaIpc().length > 0);  
+            assertTrue("session ptr non-zero", session.getPointer() != 0);
+            } finally {
+        try {  
+        NativeRuntimeHandle runtimeHandle = createRuntime();
+                    NativeBridge.registerMemtable(
+import org.apache.arrow.memory.RootAllocator;
         }
-    }
-}  
+        }
+        NativeBridge.initTokioRuntimeManager(2);
+                vsr.setRowCount(2);
+            runtimeHandle.close();
+                        new long[] { array.memoryAddress() },  
+ * <p>Exercises each new {@link NativeBridge} wrapper against a real native library + global
+ * SPDX-License-Identifier: Apache-2.0
+     */
+        } finally {
+                    );
+                    "input-0",
+                );  
+                    )  
+            }
+ * live-handle set that {@link NativeBridge}'s {@code validatePointer} guards check.  
+import org.apache.calcite.rel.type.RelDataType;
+            }
+        } finally {  
+                        new long[] { 1L, 2L },
+        Path spillDir = createTempDir("datafusion-spill");  
+                session.close();
+                assertTrue("schema IPC non-empty", registered.schemaIpc().length > 0);
+            try {  
+import io.substrait.extension.DefaultExtensionCatalog;
+import org.apache.arrow.vector.BigIntVector;
+        try {
+        return new NativeRuntimeHandle(runtimePtr);  
+        try (RootAllocator alloc = new RootAllocator(Long.MAX_VALUE)) {
+                assertTrue("sender ptr non-zero", registered.pointer() != 0);
+/*  
+                        "input-0",
+import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.arrow.c.ArrowArray;
+                expectThrows(
+import java.util.List;  
+public class NativeBridgeLocalSessionTests extends OpenSearchTestCase {
+        RelNode scan = new DataFusionFragmentConvertor.StageInputTableScan(cluster, cluster.traitSet(), inputId, rowType);  
+        } finally {
+                );
+ * compatible open source license.
+                NativeBridge.senderClose(registered.pointer());
+            try {
+                        "input-0",
+                );  
+    /**  
+    }  
+ *
+                    IllegalArgumentException.class,
+        NativeBridge.closeLocalSession(0L);
+     * Bare {@code SELECT * FROM "input-0"} substrait whose lowered output schema is a single
+    public void testRegisterPartitionStreamAndSenderClose() {  
+        }  
+/**
+     * BIGINT column named {@code x} — used as the producer-side plan that
+                col.setSafe(1, 2L);  
+            } finally {  
+        RelDataTypeFactory typeFactory = new JavaTypeFactoryImpl();
+    public void testSenderCloseToleratesZero() {
+        NativeRuntimeHandle runtimeHandle = createRuntime();
+                    () -> NativeBridge.registerMemtable(  
+        NativeRuntimeHandle runtimeHandle = createRuntime();
+     * schema from.
+                        session.getPointer(),  
+        long runtimePtr = NativeBridge.createGlobalRuntime(64 * 1024 * 1024, 0L, spillDir.toString(), 32 * 1024 * 1024);
+        Thread t = Thread.currentThread();
+ * The OpenSearch Contributors require contributions made to  
+    private static byte[] passthroughSubstrait(String inputId) {  
+        HepPlanner hepPlanner = new HepPlanner(new HepProgramBuilder().build());  
+import java.nio.file.Path;
+                    passthroughSubstrait("input-0"),  
+        }
+                        new long[] { arrowSchema.memoryAddress() }
+import org.apache.calcite.rel.RelNode;  
+import org.apache.calcite.plan.hep.HepProgramBuilder;
+                }
+            } finally {  
+    public void testCreateLocalSessionReturnsNonZeroPtr() {
+            session.close();  
+        try {

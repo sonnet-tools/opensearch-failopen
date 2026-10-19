@@ -1,62 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.SegmentReplicationTransportRequest;  
-
-import java.io.IOException;
-
-/**
- * Request object for updating the replica's checkpoint on primary for tracking.
- *  
- * @opensearch.internal
- */
-public class UpdateVisibleCheckpointRequest extends SegmentReplicationTransportRequest {  
-
-    private final ReplicationCheckpoint checkpoint;
-    private final ShardId primaryShardId;  
-
-    public UpdateVisibleCheckpointRequest(StreamInput in) throws IOException {
-        super(in);  
-        checkpoint = new ReplicationCheckpoint(in);
-        primaryShardId = new ShardId(in);
     }  
-
-    public UpdateVisibleCheckpointRequest(
-        long replicationId,  
-        String targetAllocationId,
-        ShardId primaryShardId,
-        DiscoveryNode targetNode,  
-        ReplicationCheckpoint checkpoint
-    ) {
-        super(replicationId, targetAllocationId, targetNode);  
-        this.checkpoint = checkpoint;
-        this.primaryShardId = primaryShardId;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        checkpoint.writeTo(out);
-        primaryShardId.writeTo(out);  
-    }
-
-    public ReplicationCheckpoint getCheckpoint() {  
-        return checkpoint;
-    }
-
-    public ShardId getPrimaryShardId() {
         return primaryShardId;
+        checkpoint = new ReplicationCheckpoint(in);
+ * Request object for updating the replica's checkpoint on primary for tracking.
+        return checkpoint;
+        super.writeTo(out);
+        ShardId primaryShardId,
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.io.stream.StreamInput;
+        primaryShardId.writeTo(out);  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.index.shard.ShardId;
+ */  
+        this.checkpoint = checkpoint;
+    }  
+ * compatible open source license.
+ *  
+    ) {
+    }
+        ReplicationCheckpoint checkpoint
+import org.opensearch.core.common.io.stream.StreamOutput;  
+package org.opensearch.indices.replication;
+    public UpdateVisibleCheckpointRequest(
+    private final ReplicationCheckpoint checkpoint;
+    @Override
+        DiscoveryNode targetNode,  
+ *
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+        checkpoint.writeTo(out);
+public class UpdateVisibleCheckpointRequest extends SegmentReplicationTransportRequest {  
+    public ShardId getPrimaryShardId() {
+/*  
+        super(in);  
+        String targetAllocationId,
+import org.opensearch.cluster.node.DiscoveryNode;
+/**
+import org.opensearch.indices.replication.common.SegmentReplicationTransportRequest;  
+        long replicationId,  
+        primaryShardId = new ShardId(in);
+    private final ShardId primaryShardId;  
+import java.io.IOException;
+ * The OpenSearch Contributors require contributions made to  
+        super(replicationId, targetAllocationId, targetNode);  
+    public ReplicationCheckpoint getCheckpoint() {  
+    public UpdateVisibleCheckpointRequest(StreamInput in) throws IOException {
+    }
     }  
 }
+ */
+        this.primaryShardId = primaryShardId;
+    public void writeTo(StreamOutput out) throws IOException {  
+ * @opensearch.internal

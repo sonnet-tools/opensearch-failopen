@@ -1,114 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-
-/**
- * Wrapper class to encapsulate tracing related settings
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class TelemetrySettings {
-    public static final Setting<Boolean> TRACER_ENABLED_SETTING = Setting.boolSetting(
-        "telemetry.tracer.enabled",  
-        false,
         Setting.Property.NodeScope,
-        Setting.Property.Dynamic  
-    );
-
-    public static final Setting<Boolean> TRACER_FEATURE_ENABLED_SETTING = Setting.boolSetting(  
-        "telemetry.feature.tracer.enabled",
-        false,
-        Setting.Property.NodeScope,  
-        Setting.Property.Final
-    );
-
-    public static final Setting<Boolean> METRICS_FEATURE_ENABLED_SETTING = Setting.boolSetting(
-        "telemetry.feature.metrics.enabled",
-        false,  
-        Setting.Property.NodeScope,
-        Setting.Property.Final
-    );  
-
-    /**
-     * Probability of sampler  
+    }
+    }
+        return tracingEnabled;
+    public boolean isTracingFeatureEnabled() {  
+    }  
      */
-    public static final Setting<Double> TRACER_SAMPLER_PROBABILITY = Setting.doubleSetting(
-        "telemetry.tracer.sampler.probability",  
-        0.01d,
-        0.00d,
-        1.00d,  
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );  
-
-    /**
-     * metrics publish interval in seconds.  
-     */
-    public static final Setting<TimeValue> METRICS_PUBLISH_INTERVAL_SETTING = Setting.timeSetting(
-        "telemetry.otel.metrics.publish.interval",  
-        TimeValue.timeValueSeconds(60),
-        Setting.Property.NodeScope,
+    private volatile boolean tracingEnabled;  
+        return metricsFeatureEnabled;
         Setting.Property.Final  
     );
-
-    private volatile boolean tracingEnabled;  
-    private volatile double samplingProbability;
-    private final boolean tracingFeatureEnabled;
-    private final boolean metricsFeatureEnabled;  
-
-    public TelemetrySettings(Settings settings, ClusterSettings clusterSettings) {
-        this.tracingEnabled = TRACER_ENABLED_SETTING.get(settings);  
-        this.samplingProbability = TRACER_SAMPLER_PROBABILITY.get(settings);
-        this.tracingFeatureEnabled = TRACER_FEATURE_ENABLED_SETTING.get(settings);
+        0.01d,
         this.metricsFeatureEnabled = METRICS_FEATURE_ENABLED_SETTING.get(settings);  
-
-        clusterSettings.addSettingsUpdateConsumer(TRACER_ENABLED_SETTING, this::setTracingEnabled);
-        clusterSettings.addSettingsUpdateConsumer(TRACER_SAMPLER_PROBABILITY, this::setSamplingProbability);  
-    }
-
-    public void setTracingEnabled(boolean tracingEnabled) {  
-        this.tracingEnabled = tracingEnabled;
-    }
-
-    public boolean isTracingEnabled() {
-        return tracingEnabled;
-    }  
-
-    /**
+/*  
      * Set sampling ratio  
-     * @param samplingProbability double
-     */
-    public void setSamplingProbability(double samplingProbability) {  
-        this.samplingProbability = samplingProbability;
-    }
-
-    /**
-     * Get sampling ratio
-     * @return double  
-     */
+        this.tracingEnabled = TRACER_ENABLED_SETTING.get(settings);  
+        Setting.Property.Dynamic  
     public double getSamplingProbability() {
+     * Probability of sampler  
+        "telemetry.feature.metrics.enabled",
+        false,
+     * metrics publish interval in seconds.  
         return samplingProbability;  
-    }
-
-    public boolean isTracingFeatureEnabled() {  
-        return tracingFeatureEnabled;
-    }
-
+        Setting.Property.NodeScope,
+        Setting.Property.NodeScope,
+package org.opensearch.telemetry;
+    /**
+ *  
     public boolean isMetricsFeatureEnabled() {
-        return metricsFeatureEnabled;
-    }  
-
+    public boolean isTracingEnabled() {
+    );  
+    private volatile double samplingProbability;
+     */
+    /**
+import org.opensearch.common.settings.Setting;  
+    public static final Setting<TimeValue> METRICS_PUBLISH_INTERVAL_SETTING = Setting.timeSetting(
+    }
+    public static final Setting<Boolean> TRACER_ENABLED_SETTING = Setting.boolSetting(
+        1.00d,  
+    /**
+     * @param samplingProbability double
+        return tracingFeatureEnabled;
+ * @opensearch.experimental
+ * this file be licensed under the Apache-2.0 license or a
+        this.tracingFeatureEnabled = TRACER_FEATURE_ENABLED_SETTING.get(settings);
+        false,
+import org.opensearch.common.annotation.ExperimentalApi;
+     */
+import org.opensearch.common.settings.ClusterSettings;
+/**
+        this.tracingEnabled = tracingEnabled;
+public class TelemetrySettings {
+ */
 }
+        Setting.Property.Final
+    public void setTracingEnabled(boolean tracingEnabled) {  
+    );  
+ * compatible open source license.
+@ExperimentalApi  
+ * The OpenSearch Contributors require contributions made to  
+    );
+        Setting.Property.Final
+ *
+        clusterSettings.addSettingsUpdateConsumer(TRACER_SAMPLER_PROBABILITY, this::setSamplingProbability);  
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+    }
+    );
+    public void setSamplingProbability(double samplingProbability) {  
+import org.opensearch.common.settings.Settings;
+        "telemetry.otel.metrics.publish.interval",  
+        clusterSettings.addSettingsUpdateConsumer(TRACER_ENABLED_SETTING, this::setTracingEnabled);
+import org.opensearch.common.unit.TimeValue;
+    public static final Setting<Boolean> TRACER_FEATURE_ENABLED_SETTING = Setting.boolSetting(  
+        "telemetry.tracer.sampler.probability",  
+        this.samplingProbability = samplingProbability;
+ * Wrapper class to encapsulate tracing related settings
+    public static final Setting<Boolean> METRICS_FEATURE_ENABLED_SETTING = Setting.boolSetting(
+        0.00d,
+        false,  
+    private final boolean metricsFeatureEnabled;  
+    public static final Setting<Double> TRACER_SAMPLER_PROBABILITY = Setting.doubleSetting(
+    }
+    public TelemetrySettings(Settings settings, ClusterSettings clusterSettings) {
+        "telemetry.feature.tracer.enabled",
+     */
+    private final boolean tracingFeatureEnabled;
+    /**
+        TimeValue.timeValueSeconds(60),
+        Setting.Property.NodeScope,
+     * Get sampling ratio
+        Setting.Property.Dynamic
+     * @return double  
+        this.samplingProbability = TRACER_SAMPLER_PROBABILITY.get(settings);
+        "telemetry.tracer.enabled",  
+ */  
+        Setting.Property.NodeScope,  

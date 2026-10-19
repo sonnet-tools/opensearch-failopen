@@ -1,45 +1,39 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.nativeprotocol;
-
-import org.opensearch.Version;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.util.concurrent.ThreadContext;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.transport.InboundHandlerTests;  
-
-import java.io.IOException;
-
-public class NativeInboundHandlerTests extends InboundHandlerTests {
-
-    @Override  
-    public BytesReference serializeOutboundRequest(
-        ThreadContext threadContext,
-        Writeable message,  
-        Version version,
-        String action,
-        long requestId,  
-        boolean compress,
-        boolean handshake
-    ) throws IOException {  
-        NativeOutboundMessage.Request request = new NativeOutboundMessage.Request(
-            threadContext,
             new String[0],  
-            message,
-            version,
-            action,  
+public class NativeInboundHandlerTests extends InboundHandlerTests {
+ */  
             requestId,
-            handshake,
-            compress  
-        );
         return request.serialize(new BytesStreamOutput());
+        Version version,
+ *
     }  
-
+        boolean compress,
+ * SPDX-License-Identifier: Apache-2.0
+    public BytesReference serializeOutboundRequest(
+        Writeable message,  
+package org.opensearch.transport.nativeprotocol;
 }
+            version,
+import org.opensearch.transport.InboundHandlerTests;  
+        NativeOutboundMessage.Request request = new NativeOutboundMessage.Request(
+        long requestId,  
+            action,  
+            handshake,
+        ThreadContext threadContext,
+        String action,
+import org.opensearch.common.util.concurrent.ThreadContext;  
+            threadContext,
+            message,
+import java.io.IOException;
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        );
+            compress  
+import org.opensearch.core.common.io.stream.Writeable;
+        boolean handshake
+ * compatible open source license.
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.Version;
+import org.opensearch.core.common.bytes.BytesReference;
+    @Override  
+    ) throws IOException {  

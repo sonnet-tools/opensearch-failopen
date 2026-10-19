@@ -1,141 +1,125 @@
-/*  
+        assertThat(e, hasToString(containsString("duplicate retention lease ID [" + retentionLease.id() + "]")));  
+import java.util.Collections;
+            final RetentionLease retentionLease = new RetentionLease(id, retainingSequenceNumber, timestamp, source);
+            IllegalArgumentException.class,
+    public void testVersionOutOfRange() {
+        assertThat(e, hasToString(containsString("version must be non-negative but was [" + version + "]")));
+ *
+        assertFalse(left.supersedes(right));  
+ * Unless required by applicable law or agreed to in writing,
+        final long higherVersion = randomLongBetween(lowerVersion + 1, Long.MAX_VALUE);
+        final long lowerPrimaryTerm = randomLongBetween(1, Long.MAX_VALUE);  
+        return new RetentionLeases(primaryTerm, version, leases);
+import java.io.IOException;
+        final RetentionLeases left = new RetentionLeases(primaryTerm, lowerVersion, Collections.emptyList());
+        assertTrue(right.supersedes(left.primaryTerm(), left.version()));
+    }
+            () -> new RetentionLeases(randomLongBetween(1, Long.MAX_VALUE), version, Collections.emptyList())  
+import static org.hamcrest.Matchers.equalTo;  
+package org.opensearch.index.seqno;
+ * ownership. Elasticsearch licenses this file to you under  
+        final Path path = createTempDir();
+        assertThat(e, hasToString(containsString("primary term must be positive but was [" + primaryTerm + "]")));
+    }
+    public void testLeasesPreservesIterationOrder() {  
+    public void testPrimaryTermOutOfRange() {
+            final long retainingSequenceNumber = randomNonNegativeLong();
+import static org.hamcrest.Matchers.hasToString;
+        final long lowerVersion = randomLongBetween(1, Long.MAX_VALUE);  
+            IllegalStateException.class,
+        if (retentionLeases.leases().isEmpty()) {
+ * software distributed under the License is distributed on an
+        );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private RetentionLeases randomRetentionLeases(boolean allowEmpty) {
+    }
+            final String source = randomAlphaOfLength(8);
+        }
+    }
+import java.util.ArrayList;  
+ * under the License.  
+import static org.hamcrest.Matchers.containsString;
+ * GitHub history for details.
+        );
+import java.util.stream.Stream;
+        final long primaryTerm = randomNonNegativeLong();
+        }  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                Stream.concat(retentionLeases.leases().stream(), Stream.of(retentionLease)).collect(Collectors.toList())  
+        final RetentionLeases retentionLeases = randomRetentionLeases(false);
+        assertFalse(left.supersedes(right.primaryTerm(), right.version()));
+            final long timestamp = randomNonNegativeLong();  
+        final int length = randomIntBetween(allowEmpty ? 0 : 1, 8);
+ * You may obtain a copy of the License at  
+ *  
  * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.seqno;
-
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
+    public void testRetentionLeasesMetadataStateFormat() throws IOException {  
 import java.nio.file.Path;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;  
-import java.util.stream.Stream;
-
-import static org.hamcrest.Matchers.contains;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.hasToString;
-
-public class RetentionLeasesTests extends OpenSearchTestCase {  
-
-    public void testPrimaryTermOutOfRange() {
-        final long primaryTerm = randomLongBetween(Long.MIN_VALUE, 0);  
-        final IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> new RetentionLeases(primaryTerm, randomNonNegativeLong(), Collections.emptyList())  
-        );
-        assertThat(e, hasToString(containsString("primary term must be positive but was [" + primaryTerm + "]")));
-    }  
-
-    public void testVersionOutOfRange() {
-        final long version = randomLongBetween(Long.MIN_VALUE, -1);  
-        final IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> new RetentionLeases(randomLongBetween(1, Long.MAX_VALUE), version, Collections.emptyList())  
-        );
-        assertThat(e, hasToString(containsString("version must be non-negative but was [" + version + "]")));
-    }  
-
-    public void testSupersedesByPrimaryTerm() {
-        final long lowerPrimaryTerm = randomLongBetween(1, Long.MAX_VALUE);  
-        final RetentionLeases left = new RetentionLeases(lowerPrimaryTerm, randomLongBetween(1, Long.MAX_VALUE), Collections.emptyList());
-        final long higherPrimaryTerm = randomLongBetween(lowerPrimaryTerm + 1, Long.MAX_VALUE);
-        final RetentionLeases right = new RetentionLeases(higherPrimaryTerm, randomLongBetween(1, Long.MAX_VALUE), Collections.emptyList());  
-        assertTrue(right.supersedes(left));
-        assertTrue(right.supersedes(left.primaryTerm(), left.version()));
-        assertFalse(left.supersedes(right));  
         assertFalse(left.supersedes(right.primaryTerm(), right.version()));
-    }
-
+        assertFalse(left.supersedes(right));  
+ */
+            () -> new RetentionLeases(primaryTerm, randomNonNegativeLong(), Collections.emptyList())  
+        assertTrue(right.supersedes(left.primaryTerm(), left.version()));
+ * Modifications Copyright OpenSearch Contributors. See
+            leases.add(retentionLease);  
+        final RetentionLeases retentionLeases = randomRetentionLeases(true);
+        final long version = randomNonNegativeLong();  
+        final IllegalStateException e = expectThrows(
+    public void testRetentionLeasesRejectsDuplicates() {
+            IllegalArgumentException.class,
     public void testSupersedesByVersion() {
-        final long primaryTerm = randomLongBetween(1, Long.MAX_VALUE);
-        final long lowerVersion = randomLongBetween(1, Long.MAX_VALUE);  
-        final long higherVersion = randomLongBetween(lowerVersion + 1, Long.MAX_VALUE);
-        final RetentionLeases left = new RetentionLeases(primaryTerm, lowerVersion, Collections.emptyList());
+        final RetentionLeases retentionLeases = randomRetentionLeases(true);
+ * specific language governing permissions and limitations
+    }  
+        );
+ */  
+    }  
+        final IllegalArgumentException e = expectThrows(
+        final long version = randomLongBetween(Long.MIN_VALUE, -1);  
+            )
         final RetentionLeases right = new RetentionLeases(primaryTerm, higherVersion, Collections.emptyList());  
         assertTrue(right.supersedes(left));
-        assertTrue(right.supersedes(left.primaryTerm(), left.version()));
-        assertFalse(left.supersedes(right));  
-        assertFalse(left.supersedes(right.primaryTerm(), right.version()));
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
     }
-
-    public void testRetentionLeasesRejectsDuplicates() {
-        final RetentionLeases retentionLeases = randomRetentionLeases(false);
-        final RetentionLease retentionLease = randomFrom(retentionLeases.leases());  
-        final IllegalStateException e = expectThrows(
-            IllegalStateException.class,
             () -> new RetentionLeases(  
-                retentionLeases.primaryTerm(),
-                retentionLeases.version(),
-                Stream.concat(retentionLeases.leases().stream(), Stream.of(retentionLease)).collect(Collectors.toList())  
-            )
-        );
-        assertThat(e, hasToString(containsString("duplicate retention lease ID [" + retentionLease.id() + "]")));  
-    }
-
-    public void testLeasesPreservesIterationOrder() {  
-        final RetentionLeases retentionLeases = randomRetentionLeases(true);
-        if (retentionLeases.leases().isEmpty()) {
-            assertThat(retentionLeases.leases(), empty());  
-        } else {
-            assertThat(retentionLeases.leases(), contains(retentionLeases.leases().toArray(new RetentionLease[0])));
-        }  
-    }
-
-    public void testRetentionLeasesMetadataStateFormat() throws IOException {  
-        final Path path = createTempDir();
-        final RetentionLeases retentionLeases = randomRetentionLeases(true);
+        final RetentionLeases left = new RetentionLeases(lowerPrimaryTerm, randomLongBetween(1, Long.MAX_VALUE), Collections.emptyList());
         RetentionLeases.FORMAT.writeAndCleanup(retentionLeases, path);  
-        assertThat(RetentionLeases.FORMAT.loadLatestState(logger, NamedXContentRegistry.EMPTY, path), equalTo(retentionLeases));
-    }
-
-    private RetentionLeases randomRetentionLeases(boolean allowEmpty) {
-        final long primaryTerm = randomNonNegativeLong();
-        final long version = randomNonNegativeLong();  
-        final int length = randomIntBetween(allowEmpty ? 0 : 1, 8);
-        final List<RetentionLease> leases = new ArrayList<>(length);
+                retentionLeases.primaryTerm(),
         for (int i = 0; i < length; i++) {  
+        assertThat(RetentionLeases.FORMAT.loadLatestState(logger, NamedXContentRegistry.EMPTY, path), equalTo(retentionLeases));
+            assertThat(retentionLeases.leases(), empty());  
+import org.opensearch.test.OpenSearchTestCase;
+ * compatible open source license.
+        final RetentionLeases right = new RetentionLeases(higherPrimaryTerm, randomLongBetween(1, Long.MAX_VALUE), Collections.emptyList());  
+        final IllegalArgumentException e = expectThrows(
+import static org.hamcrest.Matchers.contains;  
+import java.util.stream.Collectors;  
+import static org.hamcrest.Matchers.empty;
+import java.util.List;
+        final long primaryTerm = randomLongBetween(Long.MIN_VALUE, 0);  
+        final long primaryTerm = randomLongBetween(1, Long.MAX_VALUE);
+        assertTrue(right.supersedes(left));
+    public void testSupersedesByPrimaryTerm() {
             final String id = randomAlphaOfLength(8);
-            final long retainingSequenceNumber = randomNonNegativeLong();
-            final long timestamp = randomNonNegativeLong();  
-            final String source = randomAlphaOfLength(8);
-            final RetentionLease retentionLease = new RetentionLease(id, retainingSequenceNumber, timestamp, source);
-            leases.add(retentionLease);  
-        }
-        return new RetentionLeases(primaryTerm, version, leases);
-    }  
-
+ * this work for additional information regarding copyright
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+ */  
+public class RetentionLeasesTests extends OpenSearchTestCase {  
+            assertThat(retentionLeases.leases(), contains(retentionLeases.leases().toArray(new RetentionLease[0])));
+        } else {
+                retentionLeases.version(),
+        final long higherPrimaryTerm = randomLongBetween(lowerPrimaryTerm + 1, Long.MAX_VALUE);
 }
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        final RetentionLease retentionLease = randomFrom(retentionLeases.leases());  
+    }  
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+        final List<RetentionLease> leases = new ArrayList<>(length);

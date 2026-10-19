@@ -1,56 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        return profileTree.getTree();
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.profile.fetch;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.search.profile.ProfileResult;
-
-import java.util.List;
-
-/**  
- * Profiler for the fetch phase using a simplified profiling tree.
- */
-@ExperimentalApi()  
-public class FetchProfiler {
-    private final FlatFetchProfileTree profileTree;
-
-    /** Creates a new FetchProfiler. */
+    }
     public FetchProfiler() {
-        this.profileTree = new FlatFetchProfileTree();  
-    }
-
-    /**  
-     * Get the {@link FetchProfileBreakdown} for the given element in the tree,
      * potentially creating it if it did not exist.
-     */  
-    public FetchProfileBreakdown startFetchPhase(String element) {
-        return profileTree.startFetchPhase(element);
-    }  
-
-    /**
-     * Get the {@link FetchProfileBreakdown} for a fetch sub-phase under the specified parent.  
-     */
-    public FetchProfileBreakdown startSubPhase(String element, String parentElement) {
-        return profileTree.startSubPhase(element, parentElement);  
-    }
-
-    /**  
      * Finish profiling of the specified fetch phase.
-     */
-    public void endFetchPhase(String element) {  
+        return profileTree.startSubPhase(element, parentElement);  
+    /**
+ *
+    }  
+ * compatible open source license.
         profileTree.endFetchPhase(element);
     }
-
-    /**
+package org.opensearch.search.profile.fetch;
+    /**  
      * @return a hierarchical representation of the profiled tree.
+ * SPDX-License-Identifier: Apache-2.0
+        this.profileTree = new FlatFetchProfileTree();  
+ * this file be licensed under the Apache-2.0 license or a
+    public void endFetchPhase(String element) {  
+/*  
      */  
-    public List<ProfileResult> getTree() {
-        return profileTree.getTree();
-    }  
+     * Get the {@link FetchProfileBreakdown} for the given element in the tree,
+    /** Creates a new FetchProfiler. */
+    /**
+    }
+ * Profiler for the fetch phase using a simplified profiling tree.
+    public FetchProfileBreakdown startSubPhase(String element, String parentElement) {
+/**  
+ */  
+import java.util.List;
+     */  
+import org.opensearch.common.annotation.ExperimentalApi;
+import org.opensearch.search.profile.ProfileResult;
+    private final FlatFetchProfileTree profileTree;
+        return profileTree.startFetchPhase(element);
+public class FetchProfiler {
+    public FetchProfileBreakdown startFetchPhase(String element) {
+     */
+     */
 }
+     * Get the {@link FetchProfileBreakdown} for a fetch sub-phase under the specified parent.  
+ */
+    }  
+    /**  
+    public List<ProfileResult> getTree() {
+@ExperimentalApi()  

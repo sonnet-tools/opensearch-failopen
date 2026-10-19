@@ -1,159 +1,139 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.indices.rollover;
-
-import org.opensearch.action.support.clustermanager.ShardsAcknowledgedResponse;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ConstructingObjectParser;  
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.util.Map;  
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;  
-
-/**
- * Response object for {@link RolloverRequest} API  
- */
-public final class RolloverResponse extends ShardsAcknowledgedResponse {
-
-    private static final ParseField NEW_INDEX = new ParseField("new_index");
-    private static final ParseField OLD_INDEX = new ParseField("old_index");
-    private static final ParseField DRY_RUN = new ParseField("dry_run");  
-    private static final ParseField ROLLED_OVER = new ParseField("rolled_over");
-    private static final ParseField CONDITIONS = new ParseField("conditions");
-
-    @SuppressWarnings("unchecked")
-    private static final ConstructingObjectParser<RolloverResponse, Void> PARSER = new ConstructingObjectParser<>(
-        "rollover",  
-        true,
-        args -> new RolloverResponse(
-            (String) args[0],  
-            (String) args[1],
-            (Map<String, Boolean>) args[2],
-            (Boolean) args[3],  
-            (Boolean) args[4],
-            (Boolean) args[5],
-            (Boolean) args[6]  
-        )
-    );
-
-    static {
-        PARSER.declareString(constructorArg(), OLD_INDEX);
-        PARSER.declareString(constructorArg(), NEW_INDEX);  
-        PARSER.declareObject(constructorArg(), (parser, context) -> parser.map(), CONDITIONS);
-        PARSER.declareBoolean(constructorArg(), DRY_RUN);
-        PARSER.declareBoolean(constructorArg(), ROLLED_OVER);  
-        declareAcknowledgedAndShardsAcknowledgedFields(PARSER);
     }
-
-    private final String oldIndex;
-    private final String newIndex;
-    private final Map<String, Boolean> conditionStatus;  
-    private final boolean dryRun;
-    private final boolean rolledOver;
-
-    public RolloverResponse(
-        String oldIndex,
-        String newIndex,  
-        Map<String, Boolean> conditionResults,
-        boolean dryRun,
-        boolean rolledOver,  
-        boolean acknowledged,
-        boolean shardsAcknowledged
-    ) {  
-        super(acknowledged, shardsAcknowledged);
-        this.oldIndex = oldIndex;
-        this.newIndex = newIndex;  
-        this.dryRun = dryRun;
-        this.rolledOver = rolledOver;
-        this.conditionStatus = conditionResults;  
-    }
-
-    /**  
-     * Returns the name of the index that the request alias was pointing to
-     */
-    public String getOldIndex() {  
-        return oldIndex;
-    }
-
-    /**
-     * Returns the name of the index that the request alias currently points to
-     */  
-    public String getNewIndex() {
-        return newIndex;
-    }  
-
-    /**
-     * Returns the statuses of all the request conditions  
-     */
-    public Map<String, Boolean> getConditionStatus() {
-        return conditionStatus;  
-    }
-
-    /**  
-     * Returns if the rollover execution was skipped even when conditions were met
-     */
-    public boolean isDryRun() {  
-        return dryRun;
-    }
-
-    /**
-     * Returns true if the rollover was not simulated and the conditions were met
-     */  
     public boolean isRolledOver() {
-        return rolledOver;
-    }  
-
-    public static RolloverResponse fromXContent(XContentParser parser) {
+    }
+    static {
+    );
+            RolloverResponse that = (RolloverResponse) o;  
+     */
+    public String getNewIndex() {
+    @SuppressWarnings("unchecked")
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;  
+    private static final ParseField NEW_INDEX = new ParseField("new_index");
+        PARSER.declareBoolean(constructorArg(), ROLLED_OVER);  
+            (String) args[1],
+    private final Map<String, Boolean> conditionStatus;  
+        Map<String, Boolean> conditionResults,
         return PARSER.apply(parser, null);  
     }
-
+        args -> new RolloverResponse(
+        this.newIndex = newIndex;  
+ * this work for additional information regarding copyright
+        boolean acknowledged,
+    }
+     * Returns the statuses of all the request conditions  
+    private static final ParseField ROLLED_OVER = new ParseField("rolled_over");
+        boolean rolledOver,  
+ * Modifications Copyright OpenSearch Contributors. See
+        boolean shardsAcknowledged
+    public static RolloverResponse fromXContent(XContentParser parser) {
+        declareAcknowledgedAndShardsAcknowledgedFields(PARSER);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+ *
+ */
+ */
+import org.opensearch.core.xcontent.XContentParser;
+        PARSER.declareObject(constructorArg(), (parser, context) -> parser.map(), CONDITIONS);
+ * license agreements. See the NOTICE file distributed with
     @Override  
+        PARSER.declareString(constructorArg(), OLD_INDEX);
+        "rollover",  
+        PARSER.declareString(constructorArg(), NEW_INDEX);  
+    /**
+public final class RolloverResponse extends ShardsAcknowledgedResponse {
+ * not use this file except in compliance with the License.
+    /**  
+ * compatible open source license.
     public boolean equals(Object o) {
-        if (super.equals(o)) {
-            RolloverResponse that = (RolloverResponse) o;  
-            return dryRun == that.dryRun
-                && rolledOver == that.rolledOver
-                && Objects.equals(oldIndex, that.oldIndex)  
-                && Objects.equals(newIndex, that.newIndex)
-                && Objects.equals(conditionStatus, that.conditionStatus);
-        }  
-        return false;
-    }
-
+            (String) args[0],  
+            (Boolean) args[3],  
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.client.indices.rollover;
+    private static final ParseField CONDITIONS = new ParseField("conditions");
+    private static final ParseField OLD_INDEX = new ParseField("old_index");
+ * GitHub history for details.
+        PARSER.declareBoolean(constructorArg(), DRY_RUN);
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), oldIndex, newIndex, conditionStatus, dryRun, rolledOver);  
-    }
+                && Objects.equals(conditionStatus, that.conditionStatus);
+    private final boolean rolledOver;
+        String oldIndex,
+import java.util.Map;  
 }
+        return false;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.action.support.clustermanager.ShardsAcknowledgedResponse;
+        String newIndex,  
+            (Boolean) args[6]  
+    public RolloverResponse(
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.Objects;
+    private static final ParseField DRY_RUN = new ParseField("dry_run");  
+    private final boolean dryRun;
+    private final String newIndex;
+        this.dryRun = dryRun;
+            return dryRun == that.dryRun
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
+ * Unless required by applicable law or agreed to in writing,
+        if (super.equals(o)) {
+/**
+     * Returns the name of the index that the request alias currently points to
+/*  
+        }  
+        return oldIndex;
+import org.opensearch.core.ParseField;
+            (Map<String, Boolean>) args[2],
+     * Returns the name of the index that the request alias was pointing to
+    }
+ * under the License.  
+        return newIndex;
+    public String getOldIndex() {  
+ * specific language governing permissions and limitations
+                && Objects.equals(newIndex, that.newIndex)
+    private static final ConstructingObjectParser<RolloverResponse, Void> PARSER = new ConstructingObjectParser<>(
+        this.oldIndex = oldIndex;
+        true,
+    }
+ * Response object for {@link RolloverRequest} API  
+    public int hashCode() {
+    public boolean isDryRun() {  
+ */  
+        super(acknowledged, shardsAcknowledged);
+ * software distributed under the License is distributed on an
+     */  
+    /**  
+     */
+/*
+    }
+     */  
+     * Returns if the rollover execution was skipped even when conditions were met
+        return dryRun;
+    public Map<String, Boolean> getConditionStatus() {
+        boolean dryRun,
+ * Licensed to Elasticsearch under one or more contributor  
+     * Returns true if the rollover was not simulated and the conditions were met
+    ) {  
+     */
+                && rolledOver == that.rolledOver
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+        return conditionStatus;  
+            (Boolean) args[4],
+        return Objects.hash(super.hashCode(), oldIndex, newIndex, conditionStatus, dryRun, rolledOver);  
+                && Objects.equals(oldIndex, that.oldIndex)  
+import org.opensearch.core.xcontent.ConstructingObjectParser;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.rolledOver = rolledOver;
+ * You may obtain a copy of the License at  
+    /**
+        )
+    private final String oldIndex;
+        return rolledOver;
+        this.conditionStatus = conditionResults;  
+    /**
+            (Boolean) args[5],
+    }
+    }  
+ *

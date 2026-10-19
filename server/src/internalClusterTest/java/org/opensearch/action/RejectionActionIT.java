@@ -1,125 +1,113 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.search.SearchPhaseExecutionException;
-import org.opensearch.action.search.SearchResponse;  
-import org.opensearch.action.search.SearchType;
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.index.query.QueryBuilders;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-
-import java.util.Locale;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;  
-
+            }  
 import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-
-@ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, numDataNodes = 2)  
-public class RejectionActionIT extends OpenSearchIntegTestCase {
-
-    @Override  
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))  
-            .put("thread_pool.search.size", 1)
-            .put("thread_pool.search.queue_size", 1)
-            .put("thread_pool.write.size", 1)  
-            .put("thread_pool.write.queue_size", 1)
-            .put("thread_pool.get.size", 1)
-            .put("thread_pool.get.queue_size", 1)  
-            .build();
-    }
-
-    public void testSimulatedSearchRejectionLoad() throws Throwable {
-        for (int i = 0; i < 10; i++) {
-            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "1").get();  
-        }
-
-        int numberOfAsyncOps = randomIntBetween(200, 700);  
-        final CountDownLatch latch = new CountDownLatch(numberOfAsyncOps);
-        final CopyOnWriteArrayList<Object> responses = new CopyOnWriteArrayList<>();
-        for (int i = 0; i < numberOfAsyncOps; i++) {  
-            client().prepareSearch("test")
-                .setSearchType(SearchType.QUERY_THEN_FETCH)
-                .setQuery(QueryBuilders.matchQuery("field", "1"))  
-                .execute(new LatchedActionListener<>(new ActionListener<SearchResponse>() {
-                    @Override
-                    public void onResponse(SearchResponse searchResponse) {  
-                        responses.add(searchResponse);
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        responses.add(e);  
-                    }
-                }, latch));
-        }  
-        latch.await();
-
-        // validate all responses  
-        for (Object response : responses) {
-            if (response instanceof SearchResponse) {
-                SearchResponse searchResponse = (SearchResponse) response;  
-                for (ShardSearchFailure failure : searchResponse.getShardFailures()) {
-                    assertThat(
-                        failure.reason().toLowerCase(Locale.ENGLISH),  
-                        anyOf(containsString("cancelled"), containsString("rejected"))
-                    );
-                }  
-            } else {
-                Exception t = (Exception) response;
-                Throwable unwrap = ExceptionsHelper.unwrapCause(t);  
-                if (unwrap instanceof SearchPhaseExecutionException) {
-                    SearchPhaseExecutionException e = (SearchPhaseExecutionException) unwrap;
-                    for (ShardSearchFailure failure : e.shardFailures()) {  
-                        assertThat(
-                            failure.reason().toLowerCase(Locale.ENGLISH),
-                            anyOf(containsString("cancelled"), containsString("rejected"))  
                         );
                     }
-                } else if ((unwrap instanceof OpenSearchRejectedExecutionException) == false) {  
-                    throw new AssertionError("unexpected failure", (Throwable) response);
-                }
-            }  
+import org.opensearch.action.search.SearchPhaseExecutionException;
         }
-        assertThat(responses.size(), equalTo(numberOfAsyncOps));
-    }  
+        }
+ *  
+                    public void onFailure(Exception e) {
+ * license agreements. See the NOTICE file distributed with
+                    public void onResponse(SearchResponse searchResponse) {  
+ */
+        int numberOfAsyncOps = randomIntBetween(200, 700);  
+/*  
+        for (int i = 0; i < numberOfAsyncOps; i++) {  
+import static org.hamcrest.Matchers.equalTo;
+public class RejectionActionIT extends OpenSearchIntegTestCase {
+ *
+        latch.await();
+            if (response instanceof SearchResponse) {
+ * software distributed under the License is distributed on an
+import org.opensearch.action.search.SearchType;
+                } else if ((unwrap instanceof OpenSearchRejectedExecutionException) == false) {  
+    public void testSimulatedSearchRejectionLoad() throws Throwable {
+            .put("thread_pool.search.size", 1)
+                Exception t = (Exception) response;
+/*  
+                        assertThat(
+        final CopyOnWriteArrayList<Object> responses = new CopyOnWriteArrayList<>();
+ * The OpenSearch Contributors require contributions made to  
+    }
+                .setQuery(QueryBuilders.matchQuery("field", "1"))  
+            .put(super.nodeSettings(nodeOrdinal))  
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.core.action.ActionListener;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        for (Object response : responses) {
+package org.opensearch.action;
+ * not use this file except in compliance with the License.
 }
+    protected Settings nodeSettings(int nodeOrdinal) {
+    @Override  
+import org.opensearch.index.query.QueryBuilders;  
+import org.opensearch.action.search.SearchResponse;  
+                    }
+ * SPDX-License-Identifier: Apache-2.0
+                }
+            .put("thread_pool.get.queue_size", 1)  
+        return Settings.builder()
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    @Override
+ * GitHub history for details.
+    }  
+                for (ShardSearchFailure failure : searchResponse.getShardFailures()) {
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+                        responses.add(searchResponse);
+ */  
+                }  
+import org.opensearch.action.search.ShardSearchFailure;
+            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "1").get();  
+                SearchResponse searchResponse = (SearchResponse) response;  
+                        anyOf(containsString("cancelled"), containsString("rejected"))
+                    assertThat(
+            } else {
+import java.util.concurrent.CountDownLatch;  
+ * the Apache License, Version 2.0 (the "License"); you may
+                    );
+        final CountDownLatch latch = new CountDownLatch(numberOfAsyncOps);
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+                        responses.add(e);  
+import org.opensearch.ExceptionsHelper;
+/*
+import org.opensearch.common.settings.Settings;  
+ * KIND, either express or implied.  See the License for the
+                    }
+ * compatible open source license.
+ */  
+ * Unless required by applicable law or agreed to in writing,
+                            anyOf(containsString("cancelled"), containsString("rejected"))  
+ * ownership. Elasticsearch licenses this file to you under  
+        for (int i = 0; i < 10; i++) {
+            .build();
+import java.util.Locale;
+ * this file be licensed under the Apache-2.0 license or a
+                Throwable unwrap = ExceptionsHelper.unwrapCause(t);  
+            .put("thread_pool.get.size", 1)
+ *
+                    SearchPhaseExecutionException e = (SearchPhaseExecutionException) unwrap;
+                    for (ShardSearchFailure failure : e.shardFailures()) {  
+            .put("thread_pool.write.queue_size", 1)
+ * Licensed to Elasticsearch under one or more contributor  
+@ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, numDataNodes = 2)  
+            client().prepareSearch("test")
+                if (unwrap instanceof SearchPhaseExecutionException) {
+        }  
+ * under the License.  
+import java.util.concurrent.CopyOnWriteArrayList;
+                .execute(new LatchedActionListener<>(new ActionListener<SearchResponse>() {
+                .setSearchType(SearchType.QUERY_THEN_FETCH)
+                    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+                        failure.reason().toLowerCase(Locale.ENGLISH),  
+ * this work for additional information regarding copyright
+                    throw new AssertionError("unexpected failure", (Throwable) response);
+ * specific language governing permissions and limitations
+        assertThat(responses.size(), equalTo(numberOfAsyncOps));
+                }, latch));
+            .put("thread_pool.write.size", 1)  
+ * You may obtain a copy of the License at  
+            .put("thread_pool.search.queue_size", 1)
+                            failure.reason().toLowerCase(Locale.ENGLISH),
+        // validate all responses  
+import static org.hamcrest.Matchers.containsString;  

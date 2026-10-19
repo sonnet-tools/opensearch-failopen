@@ -1,133 +1,121 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest;
-
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.text.Text;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHitTests;
-import org.opensearch.search.suggest.completion.CompletionSuggestion;  
-import org.opensearch.search.suggest.completion.CompletionSuggestion.Entry.Option;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Collections;
+/*
+ * license agreements. See the NOTICE file distributed with
 import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;  
-import java.util.function.Predicate;
-
-import static org.opensearch.core.xcontent.XContentHelper.toXContent;  
-import static org.opensearch.test.XContentTestUtils.insertRandomFields;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
-
-public class CompletionSuggestionOptionTests extends OpenSearchTestCase {
-
-    public static Option createTestItem() {  
-        Text text = new Text(randomAlphaOfLengthBetween(5, 15));
-        int docId = randomInt();
-        int numberOfContexts = randomIntBetween(0, 3);  
-        Map<String, Set<String>> contexts = new HashMap<>();
-        for (int i = 0; i < numberOfContexts; i++) {
-            int numberOfValues = randomIntBetween(0, 3);  
-            Set<String> values = new HashSet<>();
-            for (int v = 0; v < numberOfValues; v++) {
-                values.add(randomAlphaOfLengthBetween(5, 15));  
-            }
-            contexts.put(randomAlphaOfLengthBetween(5, 15), values);
-        }  
-        SearchHit hit = null;
-        float score = randomFloat();
-        if (randomBoolean()) {  
-            hit = SearchHitTests.createTestItem(false, true);
-            score = hit.getScore();
-        }  
-        Option option = new CompletionSuggestion.Entry.Option(docId, text, score, contexts);
-        option.setHit(hit);
-        return option;  
-    }
-
-    public void testFromXContent() throws IOException {  
-        doTestFromXContent(false);
-    }
-
-    public void testFromXContentWithRandomFields() throws IOException {
-        doTestFromXContent(true);
     }  
-
-    private void doTestFromXContent(boolean addRandomFields) throws IOException {
+import java.util.function.Predicate;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.Map;
         Option option = createTestItem();  
-        XContentType xContentType = randomFrom(XContentType.values());
-        boolean humanReadable = randomBoolean();
-        BytesReference originalBytes = toShuffledXContent(option, xContentType, ToXContent.EMPTY_PARAMS, humanReadable);  
-        BytesReference mutated;
-        if (addRandomFields) {
-            // "contexts" is an object consisting of key/array pairs, we shouldn't add anything random there  
-            // also there can be inner search hits fields inside this option, we need to exclude another couple of paths
-            // where we cannot add random stuff. We also exclude the root level, this is done for SearchHits as all unknown fields
-            // for SearchHit on a root level are interpreted as meta-fields and will be kept  
-            Predicate<String> excludeFilter = (path) -> path.endsWith(CompletionSuggestion.Entry.Option.CONTEXTS.getPreferredName())
-                || path.endsWith("highlight")
-                || path.contains("fields")  
-                || path.contains("_source")
-                || path.contains("inner_hits")
-                || path.isEmpty();  
-            mutated = insertRandomFields(xContentType, originalBytes, excludeFilter, random());
-        } else {
-            mutated = originalBytes;  
-        }
-        Option parsed;
+/*  
+import org.opensearch.search.suggest.completion.CompletionSuggestion;  
+import org.opensearch.test.OpenSearchTestCase;
         try (XContentParser parser = createParser(xContentType.xContent(), mutated)) {  
-            parsed = Option.fromXContent(parser);
             assertNull(parser.nextToken());
-        }  
-        assertEquals(option.getText(), parsed.getText());
-        assertEquals(option.getHighlighted(), parsed.getHighlighted());
-        assertEquals(option.getScore(), parsed.getScore(), Float.MIN_VALUE);  
+        Map<String, Set<String>> contexts = new HashMap<>();
+            mutated = originalBytes;  
+ * You may obtain a copy of the License at  
+ *  
+import java.io.IOException;
+            Predicate<String> excludeFilter = (path) -> path.endsWith(CompletionSuggestion.Entry.Option.CONTEXTS.getPreferredName())
+        return option;  
+                || path.isEmpty();  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
+import java.util.HashSet;
+import org.opensearch.core.common.bytes.BytesReference;
         assertEquals(option.collateMatch(), parsed.collateMatch());
-        assertEquals(option.getContexts(), parsed.getContexts());
-        assertToXContentEquivalent(originalBytes, toXContent(parsed, xContentType, humanReadable), xContentType);  
+import java.util.Collections;
+ */  
+        boolean humanReadable = randomBoolean();
+    public void testFromXContentWithRandomFields() throws IOException {
+        option.setHit(hit);
+            int numberOfValues = randomIntBetween(0, 3);  
+ * ownership. Elasticsearch licenses this file to you under  
+    public static Option createTestItem() {  
+ * under the License.  
+ * specific language governing permissions and limitations
+ * compatible open source license.
     }
-
-    public void testToXContent() throws IOException {  
+        }  
+ * this work for additional information regarding copyright
         Map<String, Set<String>> contexts = Collections.singletonMap("key", Collections.singleton("value"));
-        CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(1, new Text("someText"), 1.3f, contexts);
-        BytesReference xContent = toXContent(option, MediaTypeRegistry.JSON, randomBoolean());  
-        assertEquals("{\"text\":\"someText\",\"score\":1.3,\"contexts\":{\"key\":[\"value\"]}}", xContent.utf8ToString());
+ * Licensed to Elasticsearch under one or more contributor  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import static org.opensearch.test.XContentTestUtils.insertRandomFields;
+                || path.contains("fields")  
+        assertEquals(option.getScore(), parsed.getScore(), Float.MIN_VALUE);  
+package org.opensearch.search.suggest;
+        }
+ * software distributed under the License is distributed on an
+        } else {
+ * SPDX-License-Identifier: Apache-2.0
     }
+import org.opensearch.common.xcontent.XContentType;
+    public void testToXContent() throws IOException {  
+import org.opensearch.core.xcontent.ToXContent;
+ */
+            contexts.put(randomAlphaOfLengthBetween(5, 15), values);
+            mutated = insertRandomFields(xContentType, originalBytes, excludeFilter, random());
+            // "contexts" is an object consisting of key/array pairs, we shouldn't add anything random there  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+            // also there can be inner search hits fields inside this option, we need to exclude another couple of paths
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+            Set<String> values = new HashSet<>();
+            parsed = Option.fromXContent(parser);
+                || path.endsWith("highlight")
+        SearchHit hit = null;
+        XContentType xContentType = randomFrom(XContentType.values());
+        doTestFromXContent(true);
+        assertEquals(option.getText(), parsed.getText());
+            // for SearchHit on a root level are interpreted as meta-fields and will be kept  
 }  
+        assertEquals("{\"text\":\"someText\",\"score\":1.3,\"contexts\":{\"key\":[\"value\"]}}", xContent.utf8ToString());
+        Text text = new Text(randomAlphaOfLengthBetween(5, 15));
+        float score = randomFloat();
+    public void testFromXContent() throws IOException {  
+ * GitHub history for details.
+                || path.contains("_source")
+import org.opensearch.search.SearchHitTests;
+                || path.contains("inner_hits")
+        if (randomBoolean()) {  
+            }
+            for (int v = 0; v < numberOfValues; v++) {
+        BytesReference originalBytes = toShuffledXContent(option, xContentType, ToXContent.EMPTY_PARAMS, humanReadable);  
+        }  
+import static org.opensearch.core.xcontent.XContentHelper.toXContent;  
+        int numberOfContexts = randomIntBetween(0, 3);  
+        if (addRandomFields) {
+    }
+import org.opensearch.search.suggest.completion.CompletionSuggestion.Entry.Option;
+        doTestFromXContent(false);
+import org.opensearch.core.xcontent.XContentParser;  
+/*  
+        assertEquals(option.getContexts(), parsed.getContexts());
+        BytesReference xContent = toXContent(option, MediaTypeRegistry.JSON, randomBoolean());  
+ * Unless required by applicable law or agreed to in writing,
+        BytesReference mutated;
+ */  
+        assertEquals(option.getHighlighted(), parsed.getHighlighted());
+        Option parsed;
+import org.opensearch.core.common.text.Text;  
+        Option option = new CompletionSuggestion.Entry.Option(docId, text, score, contexts);
+        assertToXContentEquivalent(originalBytes, toXContent(parsed, xContentType, humanReadable), xContentType);  
+        CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(1, new Text("someText"), 1.3f, contexts);
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.search.SearchHit;
+            score = hit.getScore();
+            hit = SearchHitTests.createTestItem(false, true);
+import java.util.Set;  
+        int docId = randomInt();
+    }
+    private void doTestFromXContent(boolean addRandomFields) throws IOException {
+                values.add(randomAlphaOfLengthBetween(5, 15));  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            // where we cannot add random stuff. We also exclude the root level, this is done for SearchHits as all unknown fields
+ *
+public class CompletionSuggestionOptionTests extends OpenSearchTestCase {
+        for (int i = 0; i < numberOfContexts; i++) {
+        }  
+ * Modifications Copyright OpenSearch Contributors. See

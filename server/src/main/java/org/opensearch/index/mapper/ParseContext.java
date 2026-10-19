@@ -1,897 +1,731 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.util.BytesRef;  
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.DocumentInput;  
-
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-
-/**
- * Holds the context at parse time
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public abstract class ParseContext implements Iterable<ParseContext.Document> {
-
-    /**  
-     * Fork of {@link org.apache.lucene.document.Document} with additional functionality.
-     *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Document implements Iterable<IndexableField> {  
-
-        private final Document parent;
-        private final String path;  
-        private final String prefix;
-        private final List<IndexableField> fields;
-        private Map<Object, IndexableField> keyedFields;  
+        @Override
+        }
+            return null;
         private Map<String, Object> groupingCriteriaParams;
-        private String groupingCriteria;
-
-        private Document(String path, Document parent) {
-            fields = new ArrayList<>();
-            this.path = path;  
-            this.prefix = path.isEmpty() ? "" : path + ".";
-            this.parent = parent;
-        }  
-
-        public Document() {
-            this("", null);  
-        }
-
-        /**  
-         * Return the path associated with this document.
-         */
-        public String getPath() {  
-            return path;
-        }
-
-        /**
-         * Return a prefix that all fields in this document should have.
-         */  
-        public String getPrefix() {
-            return prefix;
-        }  
-
-        /**
-         * Return the parent document, or null if this is the root document.  
-         */
-        public Document getParent() {
-            return parent;  
-        }
-
-        @Override  
-        public Iterator<IndexableField> iterator() {
-            return fields.iterator();
-        }  
-
-        public List<IndexableField> getFields() {
-            return fields;  
-        }
-
-        public void addGroupingCriteriaParams(final String fieldName, final Object value) {  
-            if (groupingCriteriaParams != null) {
-                throw new IllegalArgumentException("grouping criteria params already set");
-            }  
-            groupingCriteriaParams = Map.of(fieldName, value);
-        }
-
-        public Map<String, Object> getGroupingCriteriaParams() {
-            return groupingCriteriaParams;
-        }  
-
-        public void setGroupingCriteria(String groupingCriteria) {
-            this.groupingCriteria = groupingCriteria;  
-        }
-
-        public String getGroupingCriteria() {  
-            return groupingCriteria;
-        }
-
-        public void addAll(List<? extends IndexableField> fields) {
-            this.fields.addAll(fields);
-        }  
-
-        public void add(IndexableField field) {
-            // either a meta fields or starts with the prefix  
-            assert field.name().startsWith("_") || field.name().startsWith(prefix) : field.name() + " " + prefix;
-            fields.add(field);
-        }  
-
-        /** Add fields so that they can later be fetched using {@link #getByKey(Object)}. */
-        public void addWithKey(Object key, IndexableField field) {  
-            if (keyedFields == null) {
-                keyedFields = new HashMap<>();
-            } else if (keyedFields.containsKey(key)) {  
-                throw new IllegalStateException("Only one field can be stored per key");
-            }
-            keyedFields.put(key, field);  
-            add(field);
-        }
-
-        /** Get back fields that have been previously added with {@link #addWithKey(Object, IndexableField)}. */
-        public IndexableField getByKey(Object key) {
-            return keyedFields == null ? null : keyedFields.get(key);  
-        }
-
-        public IndexableField[] getFields(String name) {  
-            List<IndexableField> f = new ArrayList<>();
-            for (IndexableField field : fields) {
-                if (field.name().equals(name)) {  
-                    f.add(field);
-                }
-            }  
-            return f.toArray(new IndexableField[0]);
-        }
-
-        public IndexableField getField(String name) {
-            for (IndexableField field : fields) {
-                if (field.name().equals(name)) {  
-                    return field;
-                }
-            }  
-            return null;
-        }
-
-        public String get(String name) {
-            for (IndexableField f : fields) {
-                if (f.name().equals(name) && f.stringValue() != null) {  
-                    return f.stringValue();
-                }
-            }  
-            return null;
-        }
-
-        public BytesRef getBinaryValue(String name) {
-            for (IndexableField f : fields) {
-                if (f.name().equals(name) && f.binaryValue() != null) {  
-                    return f.binaryValue();
-                }
-            }  
-            return null;
-        }
-
-    }
-
-    /**  
-     * Filter parse context.
-     *
-     * @opensearch.internal  
-     */
-    private static class FilterParseContext extends ParseContext {
-
-        private final ParseContext in;
-
-        private FilterParseContext(ParseContext in) {  
-            this.in = in;
-        }
-
+                documents.addAll(newDocs);
+     * Add the given {@code field} to the set of ignored fields.
         @Override
-        public Iterable<Document> nonRootDocuments() {
-            return in.nonRootDocuments();  
+     * @param clazz Expected class for external value  
         }
-
-        @Override  
-        public DocumentMapperParser docMapperParser() {
-            return in.docMapperParser();
         }  
-
-        @Override
-        public boolean isWithinCopyTo() {  
-            return in.isWithinCopyTo();
-        }
-
-        @Override
-        public boolean isWithinMultiFields() {
-            return in.isWithinMultiFields();  
-        }
-
-        @Override  
         public IndexSettings indexSettings() {
-            return in.indexSettings();
-        }  
-
-        @Override
-        public SourceToParse sourceToParse() {  
-            return in.sourceToParse();
-        }
-
-        @Override
-        public ContentPath path() {
-            return in.path();  
-        }
-
-        @Override  
-        public XContentParser parser() {
-            return in.parser();
-        }  
-
-        @Override
-        public Document rootDoc() {  
-            return in.rootDoc();
-        }
-
-        @Override
-        public Document doc() {
-            return in.doc();  
-        }
-
-        @Override  
-        public DocumentInput documentInput() {
-            return in.documentInput();
-        }  
-
-        @Override
-        protected void addDoc(Document doc) {  
-            in.addDoc(doc);
-        }
-
-        @Override
-        public RootObjectMapper root() {
-            return in.root();  
-        }
-
-        @Override  
-        public DocumentMapper docMapper() {
-            return in.docMapper();
-        }  
-
-        @Override
-        public MapperService mapperService() {  
-            return in.mapperService();
-        }
-
-        @Override
-        public Field version() {
-            return in.version();  
-        }
-
-        @Override  
-        public void version(Field version) {
-            in.version(version);
-        }  
-
-        @Override
-        public SeqNoFieldMapper.SequenceIDFields seqID() {  
-            return in.seqID();
-        }
-
-        @Override
-        public void seqID(SeqNoFieldMapper.SequenceIDFields seqID) {
-            in.seqID(seqID);  
-        }
-
-        @Override  
-        public boolean externalValueSet() {
-            return in.externalValueSet();
-        }  
-
-        @Override
-        public Object externalValue() {  
-            return in.externalValue();
-        }
-
-        @Override
-        public void addDynamicMapper(Mapper update) {
-            in.addDynamicMapper(update);  
-        }
-
-        @Override  
-        public List<Mapper> getDynamicMappers() {
-            return in.getDynamicMappers();
-        }  
-
-        @Override
-        Mapper lookupDynamicPropertyMapper(String fullPath) {  
-            return in.lookupDynamicPropertyMapper(fullPath);
-        }
-
-        @Override
-        void rememberDynamicPropertyMapper(String fullPath, Mapper mapper) {
-            in.rememberDynamicPropertyMapper(fullPath, mapper);  
-        }
-
-        @Override  
-        public Iterator<Document> iterator() {
-            return in.iterator();
-        }  
-
-        @Override
-        public void addIgnoredField(String field) {  
-            in.addIgnoredField(field);
-        }
-
-        @Override
-        public Collection<String> getIgnoredFields() {
-            return in.getIgnoredFields();  
-        }
-
-        @Override  
-        public void incrementFieldCurrentDepth() {
-            in.incrementFieldCurrentDepth();
-        }  
-
-        @Override
-        public void decrementFieldCurrentDepth() {  
-            in.decrementFieldCurrentDepth();
-        }
-
-        @Override
-        public void checkFieldDepthLimit() {
-            in.checkFieldDepthLimit();  
-        }
-
-        @Override  
-        public void incrementFieldArrayDepth() {
-            in.incrementFieldArrayDepth();
-        }  
-
-        @Override
-        public void decrementFieldArrayDepth() {  
-            in.decrementFieldArrayDepth();
-        }
-
-        @Override
+                        + "]."  
         public void checkFieldArrayDepthLimit() {
-            in.checkFieldArrayDepthLimit();  
-        }
-    }
-
-    /**
-     * An internal parse context
-     *  
-     * @opensearch.internal
+import org.opensearch.OpenSearchParseException;
+        return false;
+    /**  
+     * @return null if no external value has been set or the value
+            return in.sourceToParse();
+        private final Document parent;
+import java.util.List;  
+        @Override
+            );
      */
-    public static class InternalParseContext extends ParseContext {  
-
-        private final DocumentMapper docMapper;
-
-        private final DocumentMapperParser docMapperParser;
-
-        private final ContentPath path;  
-
-        private final XContentParser parser;
-
-        private Document document;
-
-        private final List<Document> documents;  
-
-        private final IndexSettings indexSettings;
-
-        private final SourceToParse sourceToParse;
-
-        private Field version;  
-
-        private SeqNoFieldMapper.SequenceIDFields seqID;
-
-        private final long maxAllowedNumNestedDocs;
-
-        private long numNestedDocs;  
-
+import java.util.Collections;
+        public void version(Field version) {
+        }
         private long currentFieldDepth;
-
-        private final long maxAllowedFieldDepth;
-
-        private long currentArrayDepth;  
-
-        private final long maxAllowedArrayDepth;
-
-        private final List<Mapper> dynamicMappers;
-
-        /** Reuse mappers built from dynamic_property for the same path within one document parse. */  
-        private final Map<String, Mapper> dynamicPropertyMapperCache = new HashMap<>();
-
-        private boolean docsReversed = false;  
-
-        private final Set<String> ignoredFields = new HashSet<>();
-
-        private DocumentInput documentInput;
-
-        public InternalParseContext(  
-            IndexSettings indexSettings,
-            DocumentMapperParser docMapperParser,
-            DocumentMapper docMapper,  
-            SourceToParse source,
-            XContentParser parser
-        ) {  
-            this(indexSettings, docMapperParser, docMapper, source, parser, null);
-        }
-
-        public InternalParseContext(
-            IndexSettings indexSettings,
-            DocumentMapperParser docMapperParser,  
-            DocumentMapper docMapper,
-            SourceToParse source,
-            XContentParser parser,  
-            DocumentInput documentInput
-        ) {
-            this.indexSettings = indexSettings;  
-            this.docMapper = docMapper;
-            this.docMapperParser = docMapperParser;
-            this.path = new ContentPath(0);  
-            this.parser = parser;
-            this.document = new Document();
-            this.documentInput = documentInput;  
-            this.documents = new ArrayList<>();
-            this.documents.add(document);
-            this.version = null;  
-            this.sourceToParse = source;
-            this.dynamicMappers = new ArrayList<>();
-            this.maxAllowedNumNestedDocs = indexSettings.getMappingNestedDocsLimit();  
-            this.numNestedDocs = 0L;
-            this.currentFieldDepth = 0L;
-            this.currentArrayDepth = 0L;  
-            this.maxAllowedFieldDepth = indexSettings.getMappingDepthLimit();
-            this.maxAllowedArrayDepth = indexSettings.getMappingDepthLimit();
-        }  
-
-        @Override
-        public DocumentMapperParser docMapperParser() {  
-            return this.docMapperParser;
-        }
-
-        @Override
-        public IndexSettings indexSettings() {
-            return this.indexSettings;  
-        }
-
+        };
         @Override  
-        public SourceToParse sourceToParse() {
-            return this.sourceToParse;
-        }  
-
-        @Override
-        public ContentPath path() {  
-            return this.path;
         }
-
-        @Override
-        public XContentParser parser() {
-            return this.parser;  
-        }
-
-        @Override  
-        public Document rootDoc() {
-            return documents.get(0);
-        }  
-
-        List<Document> docs() {
-            return this.documents;  
-        }
-
-        @Override  
+    public static class Document implements Iterable<IndexableField> {  
+import java.util.Iterator;
+            newDocs.addAll(parents);
         public Document doc() {
-            return this.document;
-        }  
-
-        @Override
-        public DocumentInput documentInput() {  
+        @Override  
+        @Override  
+        return false;
+        }
+            }  
+            LinkedList<Document> parents = new LinkedList<>();  
+        private FilterParseContext(ParseContext in) {  
+        public Object externalValue() {  
+        /**
+            in.addDynamicMapper(update);  
+import org.opensearch.index.IndexSettings;
+            for (IndexableField field : fields) {
+     */
+     *
+            if (this.currentArrayDepth > 0) {  
+        public SourceToParse sourceToParse() {  
+            return dynamicMappers;
+        public DocumentMapperParser docMapperParser() {  
             return this.documentInput;
+    public abstract IndexSettings indexSettings();
+    private static class FilterParseContext extends ParseContext {
         }
-
-        @Override
-        protected void addDoc(Document doc) {
-            numNestedDocs++;  
-            if (numNestedDocs > maxAllowedNumNestedDocs) {
-                throw new MapperParsingException(
-                    "The number of nested documents has exceeded the allowed limit of ["  
-                        + maxAllowedNumNestedDocs
-                        + "]."
-                        + " This limit can be set by changing the ["  
-                        + MapperService.INDEX_MAPPING_NESTED_DOCS_LIMIT_SETTING.getKey()
-                        + "] index level setting."
-                );  
-            }
-            this.documents.add(doc);
-        }  
-
-        @Override
-        public RootObjectMapper root() {  
-            return docMapper.root();
-        }
-
-        @Override
-        public DocumentMapper docMapper() {
             return this.docMapper;  
         }
-
         @Override  
-        public MapperService mapperService() {
-            return docMapperParser.mapperService;
-        }  
-
-        @Override
-        public Field version() {  
-            return this.version;
-        }
-
-        @Override
-        public void version(Field version) {
-            this.version = version;  
-        }
-
-        @Override  
-        public SeqNoFieldMapper.SequenceIDFields seqID() {
-            return this.seqID;
-        }  
-
-        @Override
-        public void seqID(SeqNoFieldMapper.SequenceIDFields seqID) {  
-            this.seqID = seqID;
-        }
-
-        @Override
-        public void addDynamicMapper(Mapper mapper) {
-            dynamicMappers.add(mapper);  
-        }
-
-        @Override  
-        public List<Mapper> getDynamicMappers() {
-            return dynamicMappers;
-        }  
-
-        @Override
-        Mapper lookupDynamicPropertyMapper(String fullPath) {  
-            return dynamicPropertyMapperCache.get(fullPath);
-        }
-
-        @Override
-        void rememberDynamicPropertyMapper(String fullPath, Mapper mapper) {
-            dynamicPropertyMapperCache.put(fullPath, mapper);  
-        }
-
-        @Override  
-        public Iterable<Document> nonRootDocuments() {
-            if (docsReversed) {
-                throw new IllegalStateException("documents are already reversed");  
-            }
-            return documents.subList(1, documents.size());
-        }  
-
-        void postParse() {
-            if (documents.size() > 1) {  
-                docsReversed = true;
-                // Preserve the order of the children while ensuring that parents appear after them.
-                List<Document> newDocs = reorderParent(documents);  
-                documents.clear();
-                documents.addAll(newDocs);
-            }  
-        }
-
+ */  
         /**  
-         * Returns a copy of the provided {@link List} where parent documents appear
-         * after their children.
-         */  
-        private List<Document> reorderParent(List<Document> docs) {
-            List<Document> newDocs = new ArrayList<>(docs.size());
-            LinkedList<Document> parents = new LinkedList<>();  
-            for (Document doc : docs) {
-                while (parents.peek() != doc.getParent()) {
-                    newDocs.add(parents.poll());  
-                }
-                parents.add(0, doc);
-            }  
-            newDocs.addAll(parents);
-            return newDocs;
-        }  
-
-        @Override
-        public Iterator<Document> iterator() {  
-            return documents.iterator();
-        }
-
-        @Override
-        public void addIgnoredField(String field) {
-            ignoredFields.add(field);  
-        }
-
-        @Override  
-        public Collection<String> getIgnoredFields() {
-            return Collections.unmodifiableCollection(ignoredFields);
-        }  
-
-        @Override
-        public void incrementFieldCurrentDepth() {  
-            this.currentFieldDepth++;
-        }
-
-        @Override
-        public void decrementFieldCurrentDepth() {
-            if (this.currentFieldDepth > 0) {  
-                this.currentFieldDepth--;
-            }
-        }  
-
-        @Override
         public void checkFieldDepthLimit() {  
-            if (this.currentFieldDepth > maxAllowedFieldDepth) {
-                this.currentFieldDepth = 0;
-                throw new OpenSearchParseException(  
-                    "The depth of the field has exceeded the allowed limit of ["
-                        + maxAllowedFieldDepth
-                        + "]."  
-                        + " This limit can be set by changing the ["
-                        + MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getKey()
-                        + "] index level setting."  
-                );
-            }
-        }  
-
-        @Override
-        public void incrementFieldArrayDepth() {  
-            this.currentArrayDepth++;
-        }
-
-        @Override
-        public void decrementFieldArrayDepth() {
-            if (this.currentArrayDepth > 0) {  
-                this.currentArrayDepth--;
-            }
-        }  
-
-        @Override
-        public void checkFieldArrayDepthLimit() {  
-            if (this.currentArrayDepth > maxAllowedArrayDepth) {
-                this.currentArrayDepth = 0;
-                throw new OpenSearchParseException(  
-                    "The depth of the nested array field has exceeded the allowed limit of ["
-                        + maxAllowedArrayDepth
-                        + "]."  
-                        + " This limit can be set by changing the ["
-                        + MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getKey()
-                        + "] index level setting."  
-                );
-            }
-        }  
-    }
-
-    /**  
+            return this.document;
      * Returns an Iterable over all non-root documents. If there are no non-root documents
-     * the iterable will return an empty iterator.
-     */  
-    public abstract Iterable<Document> nonRootDocuments();
-
-    /**  
-     * Add the given {@code field} to the set of ignored fields.
-     */
-    public abstract void addIgnoredField(String field);  
-
-    /**
-     * Return the collection of fields that have been ignored so far.  
-     */
-    public abstract Collection<String> getIgnoredFields();
-
-    public abstract DocumentMapperParser docMapperParser();
-
-    /**  
-     * Return a new context that will be within a copy-to operation.
-     */
-    public final ParseContext createCopyToContext() {  
-        return new FilterParseContext(this) {
-            @Override
-            public boolean isWithinCopyTo() {  
-                return true;
-            }
-        };  
-    }
-
-    public boolean isWithinCopyTo() {  
-        return false;
-    }
-
-    /**
-     * Return a new context that will be within multi-fields.
-     */  
-    public final ParseContext createMultiFieldContext() {
-        return new FilterParseContext(this) {
-            @Override  
-            public boolean isWithinMultiFields() {
-                return true;
-            }  
-        };
-    }
-
-    /**
-     * Return a new context that will be used within a nested document.
-     */  
-    public final ParseContext createNestedContext(String fullPath) {
-        final Document doc = new Document(fullPath, doc());
-        addDoc(doc);  
-        return switchDoc(doc);
-    }
-
-    public final ParseContext switchParser(final XContentParser parser) {
-        return new FilterParseContext(this) {
-            @Override  
-            public XContentParser parser() {
-                return parser;
-            }  
-        };
-    }
-
-    /**
-     * Return a new context that has the provided document as the current document.
-     */  
-    public final ParseContext switchDoc(final Document document) {
-        return new FilterParseContext(this) {
-            @Override  
-            public Document doc() {
-                return document;
-            }  
-        };
-    }
-
-    /**
-     * Return a new context that will have the provided path.
-     */  
-    public final ParseContext overridePath(final ContentPath path) {
-        return new FilterParseContext(this) {
-            @Override  
-            public ContentPath path() {
-                return path;
-            }  
-        };
-    }
-
-    public boolean isWithinMultiFields() {
-        return false;
-    }  
-
-    public abstract IndexSettings indexSettings();
-
-    public abstract SourceToParse sourceToParse();
-
-    public abstract ContentPath path();  
-
-    public abstract XContentParser parser();
-
-    public abstract Document rootDoc();
-
     public abstract Document doc();  
-
-    @ExperimentalApi
-    public abstract DocumentInput<?> documentInput();  
-
-    protected abstract void addDoc(Document doc);
-
-    public abstract RootObjectMapper root();
-
-    public abstract DocumentMapper docMapper();  
-
-    public abstract MapperService mapperService();
-
-    public abstract Field version();
-
-    public abstract void version(Field version);  
-
-    public abstract SeqNoFieldMapper.SequenceIDFields seqID();
-
-    public abstract void seqID(SeqNoFieldMapper.SequenceIDFields seqID);
-
-    /**  
-     * Return a new context that will have the external value set.
-     */
-    public final ParseContext createExternalValueContext(final Object externalValue) {  
-        return new FilterParseContext(this) {
-            @Override
-            public boolean externalValueSet() {  
-                return true;
-            }
-
-            @Override
-            public Object externalValue() {
-                return externalValue;  
-            }
-        };
-    }  
-
-    public boolean externalValueSet() {
-        return false;  
-    }
-
-    public Object externalValue() {  
-        throw new IllegalStateException("External value is not set");
-    }
-
-    /**
-     * Try to parse an externalValue if any
-     * @param clazz Expected class for external value  
-     * @return null if no external value has been set or the value
-     */
-    public final <T> T parseExternalValue(Class<T> clazz) {  
-        if (!externalValueSet() || externalValue() == null) {
+import java.util.ArrayList;
+    public static class InternalParseContext extends ParseContext {  
+     * @opensearch.internal
+        public void decrementFieldCurrentDepth() {  
+            this.currentFieldDepth = 0L;
+        public Document() {
             return null;
         }  
-
-        if (!clazz.isInstance(externalValue())) {
-            throw new IllegalArgumentException(  
-                "illegal external value class [" + externalValue().getClass().getName() + "]. Should be " + clazz.getName()
-            );
-        }  
-        return clazz.cast(externalValue());
-    }
-
-    /**
-     * Add a new mapper dynamically created while parsing.
-     */  
+        public SeqNoFieldMapper.SequenceIDFields seqID() {  
     public abstract void addDynamicMapper(Mapper update);
-
+            @Override  
+            return Collections.unmodifiableCollection(ignoredFields);
+            public Document doc() {
+            return fields;  
+                throw new IllegalStateException("documents are already reversed");  
+        }  
+        @Override
+        void postParse() {
+        public void add(IndexableField field) {
+ * SPDX-License-Identifier: Apache-2.0
+        public Document rootDoc() {
+        }
+import org.apache.lucene.util.BytesRef;  
+            return in.nonRootDocuments();  
+     * Return a new context that has the provided document as the current document.
     /**  
-     * Get dynamic mappers created while parsing.
-     */
-    public abstract List<Mapper> getDynamicMappers();  
-
-    /**
-     * Returns a cached mapper for a dynamic_property match, or null.  
-     */
-    Mapper lookupDynamicPropertyMapper(String fullPath) {
-        return null;  
+            this.fields.addAll(fields);
+        }
+        public void decrementFieldArrayDepth() {  
+            if (this.currentArrayDepth > maxAllowedArrayDepth) {
+            dynamicMappers.add(mapper);  
+            this.sourceToParse = source;
+                this.currentArrayDepth = 0;
+                documents.clear();
+         */  
     }
-
-    /**  
-     * Caches a mapper built for a dynamic_property field path for the rest of this parse.
+        return null;  
+                    f.add(field);
+        public InternalParseContext(  
+        public DocumentInput documentInput() {
+     */  
+ *  
+                // Preserve the order of the children while ensuring that parents appear after them.
+    public abstract RootObjectMapper root();
+        @Override
+            DocumentInput documentInput
+        public void addAll(List<? extends IndexableField> fields) {
+     */  
+            }
+            for (IndexableField f : fields) {
+                        + maxAllowedArrayDepth
+    public abstract DocumentMapper docMapper();  
+            if (docsReversed) {
+            }  
+    public final ParseContext createCopyToContext() {  
+        @Override
+        }
+/**
+            DocumentMapper docMapper,  
+        @Override
+        private final List<Document> documents;  
+        }
+            }
+        @Override
+            SourceToParse source,
+        }  
+            return groupingCriteria;
+            return dynamicPropertyMapperCache.get(fullPath);
+        private final List<Mapper> dynamicMappers;
+        @Override  
+/*
+            return this.documents;  
+    public abstract SeqNoFieldMapper.SequenceIDFields seqID();
+            return parent;  
+    }
      */
-    void rememberDynamicPropertyMapper(String fullPath, Mapper mapper) {}  
-
+        }  
+    public final ParseContext createExternalValueContext(final Object externalValue) {  
+            }
+    public final <T> T parseExternalValue(Class<T> clazz) {  
+        protected void addDoc(Document doc) {
+        }
+        public Document rootDoc() {  
+        }
+     * Add a new mapper dynamically created while parsing.
+        @Override  
+        return false;  
+                parents.add(0, doc);
+        @Override
+                        + MapperService.INDEX_MAPPING_NESTED_DOCS_LIMIT_SETTING.getKey()
+        }
+            return null;
+         */  
+     * the iterable will return an empty iterator.
+            if (documents.size() > 1) {  
+            DocumentMapperParser docMapperParser,  
     public abstract void incrementFieldCurrentDepth();
-
-    public abstract void decrementFieldCurrentDepth();
-
-    public abstract void checkFieldDepthLimit();  
-
-    public abstract void incrementFieldArrayDepth();
-
+            keyedFields.put(key, field);  
+        }  
+            this.indexSettings = indexSettings;  
+    /**  
+            in.seqID(seqID);  
+        private final String prefix;
+     * An internal parse context
+        }
+            return this.seqID;
+        public Field version() {  
+        }  
     public abstract void decrementFieldArrayDepth();
-
-    public abstract void checkFieldArrayDepthLimit();  
-
+        public IndexableField getField(String name) {
+    }  
+            this.path = path;  
+            in.decrementFieldArrayDepth();
+        Mapper lookupDynamicPropertyMapper(String fullPath) {  
+            }
+/*  
+        public void decrementFieldCurrentDepth() {
+            }
+            } else if (keyedFields.containsKey(key)) {  
+        public void addDynamicMapper(Mapper update) {
+ * Unless required by applicable law or agreed to in writing,
+     */  
+            return prefix;
+ * this work for additional information regarding copyright
+        @Override  
+                }
+        throw new IllegalStateException("External value is not set");
+                if (f.name().equals(name) && f.stringValue() != null) {  
+                }
+        };
+            }  
+        }
+        }
+         * Return a prefix that all fields in this document should have.
+        return switchDoc(doc);
+        ) {
+        }
+            public boolean isWithinMultiFields() {
+    }
+            return this.version;
+            this.parser = parser;
+                throw new MapperParsingException(
+        public List<Mapper> getDynamicMappers() {
+        }
+ * Holds the context at parse time
+            throw new IllegalArgumentException(  
+        private long currentArrayDepth;  
+    }
+        public void decrementFieldArrayDepth() {
+        public BytesRef getBinaryValue(String name) {
+        public void seqID(SeqNoFieldMapper.SequenceIDFields seqID) {
+        }
+     */  
+     * Fork of {@link org.apache.lucene.document.Document} with additional functionality.
+        }
+            }  
+        @Override  
+    public final ParseContext createNestedContext(String fullPath) {
+            return in.isWithinCopyTo();
+        /** Add fields so that they can later be fetched using {@link #getByKey(Object)}. */
+                }
+ * specific language governing permissions and limitations
+        }
+    /**  
+        }  
+        @Override
+            groupingCriteriaParams = Map.of(fieldName, value);
+        }
+ *
+            in.incrementFieldCurrentDepth();
+        public String getGroupingCriteria() {  
+        public void addIgnoredField(String field) {
+        public InternalParseContext(
+        public List<IndexableField> getFields() {
+        }
+     */
+/*  
+    public abstract XContentParser parser();
+        private boolean docsReversed = false;  
+        @Override
+        public boolean isWithinMultiFields() {
+        public IndexableField getByKey(Object key) {
+    /**
+                if (field.name().equals(name)) {  
+        public RootObjectMapper root() {
+        if (!clazz.isInstance(externalValue())) {
+    protected abstract void addDoc(Document doc);
+        public void addDynamicMapper(Mapper mapper) {
+            public boolean externalValueSet() {  
+                return path;
+        @Override
+        private final ParseContext in;
+        @Override
+        @Override
+ * under the License.  
+        }  
+        }  
+        private final List<IndexableField> fields;
+        public RootObjectMapper root() {  
+        @Override
+        @Override  
+ * @opensearch.api
+        @Override
+        @Override
+        private Document(String path, Document parent) {
+                        + MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getKey()
+        }
+            this.maxAllowedArrayDepth = indexSettings.getMappingDepthLimit();
+    }
+        public void version(Field version) {
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.HashSet;  
+        return new FilterParseContext(this) {
+        }
+        private final IndexSettings indexSettings;
+                        + maxAllowedFieldDepth
+        private final DocumentMapperParser docMapperParser;
+import org.opensearch.core.xcontent.XContentParser;
+        }  
+            @Override
+            }  
+        }
+import org.apache.lucene.index.IndexableField;
+     */
+        @Override
+        }
+     * Caches a mapper built for a dynamic_property field path for the rest of this parse.
+        final Document doc = new Document(fullPath, doc());
+        }
+            public ContentPath path() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        };
+        List<Document> docs() {
+                throw new IllegalStateException("Only one field can be stored per key");
+            return in.parser();
+        public Document getParent() {
+    public abstract Iterable<Document> nonRootDocuments();
+            this.in = in;
+            for (Document doc : docs) {
+        @Override
+    public boolean isWithinMultiFields() {
+            if (numNestedDocs > maxAllowedNumNestedDocs) {
+        }
+    /**  
+        private Field version;  
+            return in.isWithinMultiFields();  
+            this.numNestedDocs = 0L;
+ * KIND, either express or implied.  See the License for the
+    }  
+            in.checkFieldArrayDepthLimit();  
+    /**
+         * after their children.
+            List<IndexableField> f = new ArrayList<>();
+     */
+        @Override
+                "illegal external value class [" + externalValue().getClass().getName() + "]. Should be " + clazz.getName()
+        }
+        public void incrementFieldArrayDepth() {  
+        @Override  
+            XContentParser parser,  
+            @Override  
+            }  
+            return this.docMapperParser;
+    }
+    /**
+        @Override
+        @Override
+        void rememberDynamicPropertyMapper(String fullPath, Mapper mapper) {
+        @Override  
+            return docMapper.root();
+        private final XContentParser parser;
+            this.documentInput = documentInput;  
+import java.util.Set;
+        @Override
+    }
+            public boolean isWithinCopyTo() {  
+        @Override
+            return fields.iterator();
+                if (f.name().equals(name) && f.binaryValue() != null) {  
+        private final SourceToParse sourceToParse;
+        @Override
+                    "The number of nested documents has exceeded the allowed limit of ["  
+                );
+        public MapperService mapperService() {  
+            return in.path();  
+                        + " This limit can be set by changing the ["
+     */  
+        public IndexableField[] getFields(String name) {  
+            in.checkFieldDepthLimit();  
+    Mapper lookupDynamicPropertyMapper(String fullPath) {
+        public Iterator<Document> iterator() {  
+        @Override
+    public abstract void version(Field version);  
+        @Override
+    }
+        return new FilterParseContext(this) {
+        }
+        }  
+        }  
+    public abstract void seqID(SeqNoFieldMapper.SequenceIDFields seqID);
+        @Override  
+            IndexSettings indexSettings,
+import org.apache.lucene.document.Field;
+                return parser;
+        public void addWithKey(Object key, IndexableField field) {  
+                return true;
+    /**
+        public DocumentMapper docMapper() {
+            return this.indexSettings;  
+    @ExperimentalApi
+            return docMapperParser.mapperService;
+                        + "] index level setting."  
+    /**  
+        }  
+            XContentParser parser
+            this.version = null;  
+                this.currentFieldDepth = 0;
+        return new FilterParseContext(this) {
+    public Object externalValue() {  
+    public abstract SourceToParse sourceToParse();
+        private SeqNoFieldMapper.SequenceIDFields seqID;
+        private DocumentInput documentInput;
+            this.docMapperParser = docMapperParser;
+        }
+        }  
+            DocumentMapper docMapper,
+                );
+    public abstract Document rootDoc();
+     */
+        private final Map<String, Mapper> dynamicPropertyMapperCache = new HashMap<>();
+ * Licensed to Elasticsearch under one or more contributor  
+        @Override
+        @Override  
+        @Override
+        @Override
+        }
+        public Collection<String> getIgnoredFields() {
+    /**
+    public abstract ContentPath path();  
+            this(indexSettings, docMapperParser, docMapper, source, parser, null);
+        private final long maxAllowedArrayDepth;
+        private Map<Object, IndexableField> keyedFields;  
+                this.currentFieldDepth--;
+            this.prefix = path.isEmpty() ? "" : path + ".";
+ *
+        }  
+        @Override
+    }
+    public boolean externalValueSet() {
+        }
+            return this.path;
+            if (this.currentFieldDepth > 0) {  
+        @Override
+@PublicApi(since = "1.0.0")  
+        }
+            fields = new ArrayList<>();
+ * Modifications Copyright OpenSearch Contributors. See
+            this.docMapper = docMapper;
+                        + maxAllowedNumNestedDocs
+        }  
+import org.opensearch.common.annotation.PublicApi;  
+            return in.doc();  
+        public void addIgnoredField(String field) {  
+                        + "]."  
+        public void checkFieldArrayDepthLimit() {  
+            if (this.currentFieldDepth > maxAllowedFieldDepth) {
+            for (IndexableField f : fields) {
+            in.addDoc(doc);
+        public void incrementFieldCurrentDepth() {  
+            List<Document> newDocs = new ArrayList<>(docs.size());
+ * not use this file except in compliance with the License.
+        @Override  
+        public boolean externalValueSet() {
+                );  
+        }
+        public ContentPath path() {  
+            assert field.name().startsWith("_") || field.name().startsWith(prefix) : field.name() + " " + prefix;
+            this.maxAllowedNumNestedDocs = indexSettings.getMappingNestedDocsLimit();  
+        public String get(String name) {
+        ) {  
+        public void incrementFieldArrayDepth() {
+    /**
+        public XContentParser parser() {
+            return in.getIgnoredFields();  
+            return documents.subList(1, documents.size());
+        /**  
+        }
+        }
+        private final Set<String> ignoredFields = new HashSet<>();
+            IndexSettings indexSettings,
+        @Override  
+            return keyedFields == null ? null : keyedFields.get(key);  
+                return externalValue;  
+import org.opensearch.index.engine.dataformat.DocumentInput;  
+        @Override  
+ */
+            return in.iterator();
+        };
+        @Override
+                this.currentArrayDepth--;
+    public abstract void checkFieldDepthLimit();  
+            @Override  
+        private List<Document> reorderParent(List<Document> docs) {
+        public void incrementFieldCurrentDepth() {
+            this.maxAllowedFieldDepth = indexSettings.getMappingDepthLimit();
+        public void addGroupingCriteriaParams(final String fieldName, final Object value) {  
+        public Iterable<Document> nonRootDocuments() {
+        public Collection<String> getIgnoredFields() {
+     */
+ * GitHub history for details.
+                throw new OpenSearchParseException(  
+         * Return the parent document, or null if this is the root document.  
+        }
+    public abstract void addIgnoredField(String field);  
+     * Try to parse an externalValue if any
+                return document;
+        private final ContentPath path;  
+                    "The depth of the field has exceeded the allowed limit of ["
+            this.path = new ContentPath(0);  
+        }  
+        @Override
+ * software distributed under the License is distributed on an
+        }
+        return new FilterParseContext(this) {
+        @Override  
+ */  
+                return true;
+            return documents.get(0);
+        }
+            this.version = version;  
+    public abstract void incrementFieldArrayDepth();
+import java.util.HashMap;
+            return in.getDynamicMappers();
+            return in.docMapperParser();
+            }  
+                        + MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getKey()
+        };
+            if (keyedFields == null) {
+    void rememberDynamicPropertyMapper(String fullPath, Mapper mapper) {}  
+            return in.indexSettings();
+            }
+        @Override
+            return in.docMapper();
+    public abstract Collection<String> getIgnoredFields();
+     * @opensearch.api  
+        public Iterator<IndexableField> iterator() {
+            return in.externalValue();
+package org.opensearch.index.mapper;
+            return newDocs;
+        }
+        /** Reuse mappers built from dynamic_property for the same path within one document parse. */  
+            }
+            this.documents.add(doc);
+        }
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        return new FilterParseContext(this) {
+        }
+        }  
+            return in.seqID();
+            in.decrementFieldCurrentDepth();
 }
+        }  
+     * @opensearch.internal  
+         */
+            return groupingCriteriaParams;
+        }  
+                        + " This limit can be set by changing the ["  
+                    newDocs.add(parents.poll());  
+    public final ParseContext switchDoc(final Document document) {
+        }  
+    public abstract DocumentInput<?> documentInput();  
+        /**
+                    return field;
+     */
+            if (groupingCriteriaParams != null) {
+     * Return a new context that will be used within a nested document.
+        }  
+                keyedFields = new HashMap<>();
+            ignoredFields.add(field);  
+            }
+                while (parents.peek() != doc.getParent()) {
+    public abstract List<Mapper> getDynamicMappers();  
+        addDoc(doc);  
+        private final long maxAllowedNumNestedDocs;
+        public void checkFieldDepthLimit() {
+        }
+     * Return a new context that will have the external value set.
+ * The OpenSearch Contributors require contributions made to  
+            return documents.iterator();
+    public abstract void checkFieldArrayDepthLimit();  
+import java.util.Map;
+        }  
+        Mapper lookupDynamicPropertyMapper(String fullPath) {  
+        }  
+ *  
+     */  
+import java.util.Collection;  
+        @Override
+            this.parent = parent;
+        @Override
+        /** Get back fields that have been previously added with {@link #addWithKey(Object, IndexableField)}. */
+            }
+        private final String path;  
+    }
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+     *  
+        return new FilterParseContext(this) {
+     *
+        }
+        }
+        }  
+     */
+        public DocumentInput documentInput() {  
+            }
+            return in.lookupDynamicPropertyMapper(fullPath);
+                throw new OpenSearchParseException(  
+    /**
+        }  
+        @Override
+        }
+        }  
+            numNestedDocs++;  
+        }  
+    public final ParseContext overridePath(final ContentPath path) {
+    }
+            DocumentMapperParser docMapperParser,
+        protected void addDoc(Document doc) {  
+        @Override
+        @Override
+ */
+            @Override
+public abstract class ParseContext implements Iterable<ParseContext.Document> {
+     * Return a new context that will be within multi-fields.
+        public ContentPath path() {
+        public Iterator<Document> iterator() {
+        }
+            this.documents = new ArrayList<>();
+        }
+            this.currentFieldDepth++;
+                docsReversed = true;
+        private final DocumentMapper docMapper;
+                return true;
+        }  
+            this.groupingCriteria = groupingCriteria;  
+            add(field);
+        public Map<String, Object> getGroupingCriteriaParams() {
+            }  
+        }  
+        @Override  
+        private final long maxAllowedFieldDepth;
+            return path;
+            dynamicPropertyMapperCache.put(fullPath, mapper);  
+     * Get dynamic mappers created while parsing.
+    public abstract void decrementFieldCurrentDepth();
+            public Object externalValue() {
+            this.dynamicMappers = new ArrayList<>();
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+            @Override  
+    public abstract Field version();
+        public SourceToParse sourceToParse() {
+            in.addIgnoredField(field);
+    /**  
+            this.currentArrayDepth++;
+import org.opensearch.common.annotation.ExperimentalApi;
+        public String getPrefix() {
+        }
+        public IndexSettings indexSettings() {
+                if (field.name().equals(name)) {  
+         */
+            return in.externalValueSet();
+                        + "]."
+         * Returns a copy of the provided {@link List} where parent documents appear
+        public Document doc() {
+                    return f.binaryValue();
+        public DocumentMapper docMapper() {
+            return in.root();  
+        @Override
+            this.documents.add(document);
+    public abstract DocumentMapperParser docMapperParser();
+        public void setGroupingCriteria(String groupingCriteria) {
+            this.currentArrayDepth = 0L;  
+            return in.rootDoc();
+        };  
+    @PublicApi(since = "1.0.0")
+    }
+            in.rememberDynamicPropertyMapper(fullPath, mapper);  
+        public DocumentMapperParser docMapperParser() {
+            return null;
+        }
+            return this.parser;  
+        public boolean isWithinCopyTo() {  
+                }
+        private String groupingCriteria;
+        }
+        }  
+        @Override
+            return this.sourceToParse;
+            in.version(version);
+        }
+        @Override  
+            for (IndexableField field : fields) {
+        if (!externalValueSet() || externalValue() == null) {
+        @Override  
+            return f.toArray(new IndexableField[0]);
+        public Field version() {
+        @Override
+        }  
+                List<Document> newDocs = reorderParent(documents);  
+            fields.add(field);
+            }  
+    /**
+                throw new IllegalArgumentException("grouping criteria params already set");
+        private long numNestedDocs;  
+            return in.version();  
+            SourceToParse source,
+        public Iterable<Document> nonRootDocuments() {
+     * Return a new context that will have the provided path.
+        void rememberDynamicPropertyMapper(String fullPath, Mapper mapper) {
+        public SeqNoFieldMapper.SequenceIDFields seqID() {
+            }  
+            // either a meta fields or starts with the prefix  
+import java.util.LinkedList;
+            return in.mapperService();
+    public final ParseContext createMultiFieldContext() {
+        }  
+    public final ParseContext switchParser(final XContentParser parser) {
+                        + "] index level setting."
+                        + "] index level setting."  
+    public abstract MapperService mapperService();
+    /**
+            this("", null);  
+            @Override
+            public XContentParser parser() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                }
+ * license agreements. See the NOTICE file distributed with
+                        + " This limit can be set by changing the ["
+        @Override
+        public List<Mapper> getDynamicMappers() {
+        return clazz.cast(externalValue());
+            return in.documentInput();
+                    return f.stringValue();
+        public void seqID(SeqNoFieldMapper.SequenceIDFields seqID) {  
+    public boolean isWithinCopyTo() {  
+     * Return the collection of fields that have been ignored so far.  
+            this.document = new Document();
+     * Return a new context that will be within a copy-to operation.
+        public MapperService mapperService() {
+     */
+         * Return the path associated with this document.
+                    "The depth of the nested array field has exceeded the allowed limit of ["
+            }  
+        }
+     * Returns a cached mapper for a dynamic_property match, or null.  
+        private Document document;
+            in.incrementFieldArrayDepth();
+     * Filter parse context.
+    }
+        public XContentParser parser() {
+        public String getPath() {  
+        @Override
+            this.seqID = seqID;
+    /**  

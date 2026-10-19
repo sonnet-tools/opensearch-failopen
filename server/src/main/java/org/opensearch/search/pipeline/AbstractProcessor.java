@@ -1,39 +1,33 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+    public String getTag() {
  * this file be licensed under the Apache-2.0 license or a
+    @Override  
+    public String getDescription() {  
  * compatible open source license.
- */  
-
-package org.opensearch.search.pipeline;
-
-/**
- * Base class for common processor behavior.
- */  
-public abstract class AbstractProcessor implements Processor {
-    private final String tag;
-    private final String description;  
-    private final boolean ignoreFailure;
-
-    protected AbstractProcessor(String tag, String description, boolean ignoreFailure) {  
+    public boolean isIgnoreFailure() {
         this.tag = tag;
+    private final String tag;
+    @Override
+    @Override
+public abstract class AbstractProcessor implements Processor {
+ * Base class for common processor behavior.
+        return ignoreFailure;  
+ */  
+    }
+ */  
+        return description;
+    protected AbstractProcessor(String tag, String description, boolean ignoreFailure) {  
+        return tag;
+}
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
         this.description = description;
+    }  
         this.ignoreFailure = ignoreFailure;  
     }
-
-    @Override  
-    public String getTag() {
-        return tag;
-    }  
-
-    @Override
-    public String getDescription() {  
-        return description;
     }
-
-    @Override
-    public boolean isIgnoreFailure() {
-        return ignoreFailure;  
-    }
-}
+ *
+    private final boolean ignoreFailure;
+package org.opensearch.search.pipeline;
+/**
+/*  
+    private final String description;  

@@ -1,84 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.query.functionscore;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.queries.function.FunctionValues;
-import org.apache.lucene.queries.function.valuesource.SumTotalTermFreqValueSource;  
-import org.apache.lucene.queries.function.valuesource.TermFreqValueSource;
-import org.apache.lucene.queries.function.valuesource.TotalTermFreqValueSource;
-import org.apache.lucene.search.IndexSearcher;  
-import org.opensearch.common.lucene.BytesRefs;
-
-import java.io.IOException;  
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * A factory class for creating instances of {@link TermFrequencyFunction}.
- * This class provides methods for creating different term frequency functions based on  
- * the specified function name, field, and term. Each term frequency function is designed
- * to compute document scores based on specific term frequency calculations.
- *  
- * @opensearch.internal
- */
-public class TermFrequencyFunctionFactory {  
-    public static TermFrequencyFunction createFunction(
-        TermFrequencyFunctionName functionName,
-        String field,  
         String term,
-        LeafReaderContext readerContext,
+        switch (functionName) {
+ * the specified function name, field, and term. Each term frequency function is designed
+import java.io.IOException;  
+     * An enumeration representing the names of supported term frequency functions.  
+}
+                functionValues = totalTermFreqValueSource.getValues(ttfContext, readerContext);
+                throw new IllegalArgumentException("Unsupported function: " + functionName);
+            case SUM_TOTAL_TERM_FREQ:  
+import java.util.Map;
+    }
+                    BytesRefs.toBytesRef(term)  
+    public enum TermFrequencyFunctionName {
+                return docId -> functionValues.longVal(docId);
+     */
+        }
+ * @opensearch.internal
+        SUM_TOTAL_TERM_FREQ("sumTotalTermFreq");
+import org.apache.lucene.queries.function.FunctionValues;
+/*  
         IndexSearcher indexSearcher  
     ) throws IOException {
-        switch (functionName) {
-            case TERM_FREQ:  
-                TermFreqValueSource termFreqValueSource = new TermFreqValueSource(field, term, field, BytesRefs.toBytesRef(term));
-                FunctionValues functionValues = termFreqValueSource.getValues(null, readerContext);
-                return docId -> functionValues.intVal(docId);  
-            case TOTAL_TERM_FREQ:
-                TotalTermFreqValueSource totalTermFreqValueSource = new TotalTermFreqValueSource(
-                    field,  
-                    term,
-                    field,
-                    BytesRefs.toBytesRef(term)  
-                );
-                Map<Object, Object> ttfContext = new HashMap<>();
-                totalTermFreqValueSource.createWeight(ttfContext, indexSearcher);  
-                functionValues = totalTermFreqValueSource.getValues(ttfContext, readerContext);
-                return docId -> functionValues.longVal(docId);
-            case SUM_TOTAL_TERM_FREQ:  
-                SumTotalTermFreqValueSource sumTotalTermFreqValueSource = new SumTotalTermFreqValueSource(field);
-                Map<Object, Object> sttfContext = new HashMap<>();
-                sumTotalTermFreqValueSource.createWeight(sttfContext, indexSearcher);  
-                functionValues = sumTotalTermFreqValueSource.getValues(sttfContext, readerContext);
-                return docId -> functionValues.longVal(docId);
-            default:  
-                throw new IllegalArgumentException("Unsupported function: " + functionName);
-        }
-    }  
-
     /**
-     * An enumeration representing the names of supported term frequency functions.  
-     */
-    public enum TermFrequencyFunctionName {
-        TERM_FREQ("termFreq"),  
-        TOTAL_TERM_FREQ("totalTermFreq"),
-        SUM_TOTAL_TERM_FREQ("sumTotalTermFreq");
-
-        private final String termFrequencyFunctionName;
-
-        TermFrequencyFunctionName(String termFrequencyFunctionName) {  
-            this.termFrequencyFunctionName = termFrequencyFunctionName;
-        }
-
         public String getTermFrequencyFunctionName() {
-            return termFrequencyFunctionName;
+            this.termFrequencyFunctionName = termFrequencyFunctionName;
+ * The OpenSearch Contributors require contributions made to  
+        String field,  
+import org.apache.lucene.queries.function.valuesource.TermFreqValueSource;
+ * A factory class for creating instances of {@link TermFrequencyFunction}.
+        LeafReaderContext readerContext,
+                Map<Object, Object> ttfContext = new HashMap<>();
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+import org.apache.lucene.queries.function.valuesource.SumTotalTermFreqValueSource;  
+package org.opensearch.index.query.functionscore;
+            default:  
+                FunctionValues functionValues = termFreqValueSource.getValues(null, readerContext);
+import org.apache.lucene.search.IndexSearcher;  
+ * compatible open source license.
+ * to compute document scores based on specific term frequency calculations.
+                sumTotalTermFreqValueSource.createWeight(sttfContext, indexSearcher);  
+                TotalTermFreqValueSource totalTermFreqValueSource = new TotalTermFreqValueSource(
+    public static TermFrequencyFunction createFunction(
+        TOTAL_TERM_FREQ("totalTermFreq"),
+ * This class provides methods for creating different term frequency functions based on  
+import org.apache.lucene.index.LeafReaderContext;
+        TermFrequencyFunctionName functionName,
+import org.opensearch.common.lucene.BytesRefs;
+                functionValues = sumTotalTermFreqValueSource.getValues(sttfContext, readerContext);
+ *
+            case TERM_FREQ:  
+                Map<Object, Object> sttfContext = new HashMap<>();
+public class TermFrequencyFunctionFactory {  
+                    field,  
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+                return docId -> functionValues.intVal(docId);  
+                );
+                TermFreqValueSource termFreqValueSource = new TermFreqValueSource(field, term, field, BytesRefs.toBytesRef(term));
+import org.apache.lucene.queries.function.valuesource.TotalTermFreqValueSource;
+                SumTotalTermFreqValueSource sumTotalTermFreqValueSource = new SumTotalTermFreqValueSource(field);
+            case TOTAL_TERM_FREQ:
+ *  
+                    field,
+        private final String termFrequencyFunctionName;
+        TermFrequencyFunctionName(String termFrequencyFunctionName) {  
+ */
+/**
+                return docId -> functionValues.longVal(docId);
+import java.util.HashMap;
+        }
+        TERM_FREQ("termFreq"),  
         }  
-    }
-}
+                    term,
+            return termFrequencyFunctionName;
+                totalTermFreqValueSource.createWeight(ttfContext, indexSearcher);  

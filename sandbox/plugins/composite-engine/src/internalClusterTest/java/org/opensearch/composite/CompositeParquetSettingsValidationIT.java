@@ -1,616 +1,544 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.composite;
-
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;  
-import org.opensearch.be.lucene.LucenePlugin;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.composite.framework.ParquetOnlyDataFormatPlugin;
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.WriterFileSet;  
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.parquet.ParquetSettings;
-import org.opensearch.parquet.bridge.RustBridge;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Integration tests verifying that Parquet field-level encoding/compression  
- * and type-level encoding/compression validations are enforced at index creation time.
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)  
-public class CompositeParquetSettingsValidationIT extends AbstractCompositeEngineIT {
-
-    private static final String INDEX_NAME = "test-settings-validation";  
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {  
-        return Arrays.asList(
-            ArrowBasePlugin.class,
-            ParquetOnlyDataFormatPlugin.class,  
-            CompositeDataFormatPlugin.class,
-            LucenePlugin.class,
-            DataFusionPlugin.class  
-        );
-    }
-
-    // --- Field-level encoding validation ---
-
-    public void testValidFieldEncodingAccepted() {  
-        createCompositeIndexWithSettings(
-            Settings.builder()
-                .putList("index.parquet.encoding.field", "value")  
-                .putList("index.parquet.encoding.value", "DELTA_BINARY_PACKED")
-                .build()
-        );  
-        ensureGreen(INDEX_NAME);
-    }
-
-    public void testInvalidFieldEncodingRejected() {
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> createCompositeIndexWithSettings(
-                Settings.builder()
-                    .putList("index.parquet.encoding.field", "value")  
-                    .putList("index.parquet.encoding.value", "INVALID_ENCODING")
-                    .build()
-            )  
-        );
-        assertTrue(e.getMessage().contains("Invalid encoding"));
-    }  
-
-    // --- Field-level compression validation ---
-
-    public void testValidFieldCompressionAccepted() {
-        createCompositeIndexWithSettings(
-            Settings.builder()  
-                .putList("index.parquet.compression.field", "value")
-                .putList("index.parquet.compression.value", "SNAPPY")
-                .build()  
-        );
-        ensureGreen(INDEX_NAME);
-    }  
-
-    public void testInvalidFieldCompressionRejected() {
-        IllegalArgumentException e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> createCompositeIndexWithSettings(
-                Settings.builder()  
-                    .putList("index.parquet.compression.field", "value")
-                    .putList("index.parquet.compression.value", "INVALID_COMPRESSION")
-                    .build()  
-            )
-        );
-        assertTrue(e.getMessage().contains("Invalid compression"));  
-    }
-
-    // --- Type-level encoding validation ---  
-
-    public void testValidTypeEncodingAccepted() {
-        createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_encoding.int64.encoding", "DELTA_BINARY_PACKED").build());  
-    }
-
-    public void testInvalidArrowTypeInTypeEncodingRejected() {  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_encoding.banana.encoding", "PLAIN").build())  
-        );
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        }
+                .putList("index.parquet.compression.field", "name", "value")
+                    assertTrue(
+        String encodingsStr = colJson.substring(encStart + 1, encEnd);  
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
         assertTrue(e.getMessage().contains("Invalid arrow type"));
-        assertTrue(e.getMessage().contains("banana"));  
-    }
-
-    public void testInvalidEncodingValueInTypeEncodingRejected() {  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_encoding.int64.encoding", "INVALID").build())  
-        );
-        assertTrue(e.getMessage().contains("Invalid encoding"));
-    }  
-
-    public void testIncompatibleTypeLevelEncodingRejected() {
-        // DELTA_BINARY_PACKED is only valid for integer types, not utf8  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> createCompositeIndexWithNodeSettings(  
-                Settings.builder().put("parquet.type_encoding.utf8.encoding", "DELTA_BINARY_PACKED").build()
-            )
-        );  
-        assertTrue(e.getMessage().contains("not compatible") || e.getMessage().contains("not supported"));
-    }
-
-    // --- Type-level compression validation ---
-
-    public void testValidTypeCompressionAccepted() {  
-        createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_compression.utf8.compression", "ZSTD").build());
-    }
-
-    public void testInvalidArrowTypeInTypeCompressionRejected() {
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> createCompositeIndexWithNodeSettings(
-                Settings.builder().put("parquet.type_compression.foobar.compression", "SNAPPY").build()
-            )  
-        );
-        assertTrue(e.getMessage().contains("Invalid arrow type"));
-        assertTrue(e.getMessage().contains("foobar"));  
-    }
-
-    public void testInvalidCompressionValueInTypeCompressionRejected() {  
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> createCompositeIndexWithNodeSettings(  
-                Settings.builder().put("parquet.type_compression.utf8.compression", "INVALID").build()
-            )
-        );  
-        assertTrue(e.getMessage().contains("Invalid compression"));
-    }
-
-    // --- Encoding-type compatibility validation ---
-
-    public void testIncompatibleEncodingForFieldTypeRejected() {  
-        // DELTA_BINARY_PACKED is only valid for integer types, not keyword (utf8)
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> createCompositeIndexWithSettings(
-                Settings.builder()
-                    .putList("index.parquet.encoding.field", "name")  
-                    .putList("index.parquet.encoding.value", "DELTA_BINARY_PACKED")
-                    .build()
-            )  
-        );
-        assertTrue(e.getMessage().contains("not compatible") || e.getMessage().contains("not supported"));
-    }  
-
-    public void testCompatibleEncodingForFieldTypeAccepted() {
-        // DELTA_BINARY_PACKED is valid for integer types  
-        createCompositeIndexWithSettings(
-            Settings.builder()
-                .putList("index.parquet.encoding.field", "value")  
-                .putList("index.parquet.encoding.value", "DELTA_BINARY_PACKED")
-                .build()
-        );  
-        ensureGreen(INDEX_NAME);
-    }
-
-    // --- Case insensitivity ---
-
-    public void testEncodingCaseInsensitive() {  
-        createCompositeIndexWithSettings(
-            Settings.builder()
-                .putList("index.parquet.encoding.field", "value")  
-                .putList("index.parquet.encoding.value", "delta_binary_packed")
-                .build()
-        );  
-        ensureGreen(INDEX_NAME);
-    }
-
-    public void testCompressionCaseInsensitive() {
-        createCompositeIndexWithSettings(
-            Settings.builder()  
-                .putList("index.parquet.compression.field", "value")
-                .putList("index.parquet.compression.value", "snappy")
-                .build()  
-        );
-        ensureGreen(INDEX_NAME);
-    }  
-
-    // --- 3-tier precedence tests (field > type > global) ---
-
-    /**
-     * Verifies that global compression (index.parquet.compression_type) is applied
-     * when no field-level or type-level config is set.  
-     */
-    public void testGlobalCompressionApplied() throws IOException {
-        createCompositeIndexWithSettings(Settings.builder().put("index.parquet.compression_type", "SNAPPY").build());  
-        ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);
-        refreshIndex(INDEX_NAME);  
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> colMeta = getColumnInfo(INDEX_NAME, "value");  
-        assertCompression(colMeta, "SNAPPY");
-    }
-
-    /**
-     * Verifies that field-level encoding is applied and visible in parquet metadata.
      */  
-    public void testFieldLevelEncodingApplied() throws IOException {
+import java.util.ArrayList;
+     */
+            }
+ *
+            .setSettings(builder)  
+    /**
+            CompositeDataFormatPlugin.class,
+                .putList("index.parquet.encoding.field", "name", "value")
         createCompositeIndexWithSettings(
-            Settings.builder()  
-                .putList("index.parquet.encoding.field", "name")
+                    IllegalArgumentException e = expectThrows(
+        assertTrue(e.getMessage().contains("not compatible") || e.getMessage().contains("not supported"));
+                    .build();
+    }  
+                    .putList("index.parquet.encoding.field", "name")  
+            () -> createCompositeIndexWithNodeSettings(
+    // --- Helpers ---  
+        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");  
+    @SuppressWarnings("unchecked")
+import java.nio.file.Path;  
+    // --- 3-tier precedence tests (field > type > global) ---
+    // --- Encoding/compression exhaustive combination tests ---  
+        assertCompression(valueMeta, "ZSTD");
+    }  
                 .putList("index.parquet.encoding.value", "DELTA_BYTE_ARRAY")
+                    // Should be accepted — no exception
+        );  
+    /**
+            encodings.add(enc.trim().replace("\"", ""));  
+        result.put("encodings", encodings);
+                boolean compatible = ParquetSettings.isEncodingValidForArrowType(encoding, arrowType);
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+    /**
+     * Loops over every (field, compression) pair for field-level settings.
+            IllegalArgumentException.class,
+        refreshIndex(INDEX_NAME);  
+        assertTrue(e.getMessage().contains("Invalid compression"));
+                Settings nodeSettings = Settings.builder()  
+        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+                    createCompositeIndexWithSettings(indexSettings);
+            () -> createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_encoding.int64.encoding", "INVALID").build())  
+     * Loops over every (field, encoding) pair for field-level settings.  
+                    .build();
+        }
+            .putList("index.composite.secondary_data_formats")  
+        Map<String, Object> colMeta = getColumnInfo(INDEX_NAME, "name");
+     */  
+                    .putList("index.parquet.compression.field", "value")
+     * Loops over every (arrow_type, encoding) pair for type-level settings.  
+    }
+        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
+            IllegalArgumentException.class,  
+        ensureGreen(INDEX_NAME);
+     * All compressions are valid for all types — every combo must be accepted.
+    /**
                 .build()  
+    }
+                .putList("index.parquet.encoding.value", "delta_binary_packed")
+            .put("index.composite.primary_data_format", "parquet")
         );
         ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);  
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> colMeta = getColumnInfo(INDEX_NAME, "name");
-        assertHasEncoding(colMeta, "DELTA_BYTE_ARRAY");
+        createCompositeIndexWithSettings(
+            .get();
+        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
+        createCompositeIndexWithSettings(
+     * Verifies that field-level encoding is applied and visible in parquet metadata.
+    public void testMultipleFieldLevelSettings() throws IOException {
+            () -> createCompositeIndexWithSettings(
+                .putList("index.parquet.compression.value", "ZSTD")
+        }  
+        IllegalArgumentException e = expectThrows(
+        Settings.Builder builder = Settings.builder()  
+                    IllegalArgumentException e = expectThrows(
+        );  
+    public void testValidTypeCompressionAccepted() {  
+            for (String compression : ParquetSettings.VALID_COMPRESSIONS) {
+import java.util.Collection;  
+        assertCompression(nameMeta, "ZSTD");  
     }  
-
-    /**
-     * Verifies that field-level compression is applied and visible in parquet metadata.  
-     */
-    public void testFieldLevelCompressionApplied() throws IOException {
-        createCompositeIndexWithSettings(  
-            Settings.builder()
-                .putList("index.parquet.compression.field", "value")
-                .putList("index.parquet.compression.value", "ZSTD")  
-                .build()
         );
         ensureGreen(INDEX_NAME);  
-        indexDocs(INDEX_NAME, 5, 0);
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);  
-
-        Map<String, Object> colMeta = getColumnInfo(INDEX_NAME, "value");
-        assertCompression(colMeta, "ZSTD");  
-    }
-
-    /**  
-     * Verifies field-level encoding with global compression.
-     */
-    public void testFieldLevelEncodingWithGlobalCompression() throws IOException {  
-        createCompositeIndexWithSettings(
-            Settings.builder()
-                .put("index.parquet.compression_type", "SNAPPY")  
-                .putList("index.parquet.encoding.field", "name")
-                .putList("index.parquet.encoding.value", "DELTA_BYTE_ARRAY")
-                .build()  
-        );
-        ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);  
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
-        assertHasEncoding(nameMeta, "DELTA_BYTE_ARRAY");
-        assertCompression(nameMeta, "ZSTD");  
-    }
-
-    /**  
-     * Verifies field-level compression overrides global compression for a specific column.
-     */
-    public void testFieldLevelCompressionOverridesGlobal() throws IOException {  
-        createCompositeIndexWithSettings(
-            Settings.builder()
-                .put("index.parquet.compression_type", "LZ4_RAW")  
-                .putList("index.parquet.compression.field", "value")
-                .putList("index.parquet.compression.value", "ZSTD")
-                .build()  
-        );
-        ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);  
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
-        assertCompression(valueMeta, "ZSTD");
-
-        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
-        assertCompression(nameMeta, "ZSTD");
-    }  
-
-    /**
-     * Verifies multiple field-level settings can coexist on different columns.  
-     */
-    public void testMultipleFieldLevelSettings() throws IOException {
-        createCompositeIndexWithSettings(  
-            Settings.builder()
-                .putList("index.parquet.encoding.field", "name", "value")
-                .putList("index.parquet.encoding.value", "DELTA_BYTE_ARRAY", "DELTA_BINARY_PACKED")  
-                .putList("index.parquet.compression.field", "name", "value")
-                .putList("index.parquet.compression.value", "SNAPPY", "ZSTD")
-                .build()  
-        );
-        ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);  
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
-        assertHasEncoding(nameMeta, "DELTA_BYTE_ARRAY");
-        assertCompression(nameMeta, "SNAPPY");  
-
-        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
-        assertHasEncoding(valueMeta, "DELTA_BINARY_PACKED");  
-        assertCompression(valueMeta, "ZSTD");
-    }
-
-    // --- Bloom filter tests ---
-
-    /**  
-     * Verifies that bloom filters are disabled by default for all columns.
-     */
-    public void testBloomFilterDisabledByDefault() throws IOException {  
+            DataFusionPlugin.class  
         createCompositeIndexWithSettings(Settings.builder().build());
-        ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);  
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
-        assertEquals(Boolean.FALSE, nameMeta.get("bloom_filter"));
-
-        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
-        assertEquals(Boolean.FALSE, valueMeta.get("bloom_filter"));
-    }  
-
-    /**
-     * Verifies that global bloom_filter_enabled=true enables bloom filters for all columns.  
-     */
-    public void testGlobalBloomFilterEnabled() throws IOException {
-        createCompositeIndexWithSettings(Settings.builder().put("index.parquet.bloom_filter_enabled", "true").build());  
-        ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);
-        refreshIndex(INDEX_NAME);  
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");  
-        assertEquals(Boolean.TRUE, nameMeta.get("bloom_filter"));
-
-        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");  
-        assertEquals(Boolean.TRUE, valueMeta.get("bloom_filter"));
-    }
-
-    /**
-     * Verifies that field-level bloom_filter_enabled=true enables bloom filter for that column only.
-     */  
-    public void testFieldLevelBloomFilterEnabled() throws IOException {
-        createCompositeIndexWithSettings(
-            Settings.builder()  
-                .putList("index.parquet.bloom_filter_enabled.field", "name")
-                .putList("index.parquet.bloom_filter_enabled.value", "true")
-                .build()  
-        );
-        ensureGreen(INDEX_NAME);
-        indexDocs(INDEX_NAME, 5, 0);  
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
-        assertEquals(Boolean.TRUE, nameMeta.get("bloom_filter"));
-
-        // Other columns should still have no bloom filter (global default is disabled)
-        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
-        assertEquals(Boolean.FALSE, valueMeta.get("bloom_filter"));  
-    }
-
-    // --- Encoding/compression exhaustive combination tests ---  
-
-    /**
-     * Loops over every (arrow_type, encoding) pair for type-level settings.  
-     * Valid combos must be accepted; incompatible combos must throw IllegalArgumentException.
-     */
-    public void testTypeLevelEncodingAllCombinations() {  
-        for (String arrowType : ParquetSettings.VALID_ARROW_TYPES) {
-            for (String encoding : ParquetSettings.VALID_ENCODINGS) {
-                ArrowType arrowTypeInstance = ParquetSettings.ARROW_TYPE_NAME_TO_INSTANCE.get(arrowType);  
-                boolean compatible = arrowTypeInstance == null || ParquetSettings.isEncodingValidForArrowType(encoding, arrowTypeInstance);
-                Settings nodeSettings = Settings.builder().put("parquet.type_encoding." + arrowType + ".encoding", encoding).build();
-                if (compatible) {  
-                    // Should be accepted — no exception
-                    client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get();
-                } else {  
-                    IllegalArgumentException e = expectThrows(
-                        IllegalArgumentException.class,
-                        () -> client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get()  
-                    );
-                    assertTrue(
-                        "Expected incompatibility error for type=" + arrowType + " encoding=" + encoding + ", got: " + e.getMessage(),  
-                        e.getMessage().contains("not compatible")
-                    );
-                }  
-            }
-        }
-    }  
-
-    /**
-     * Loops over every (field, encoding) pair for field-level settings.  
-     * Uses keyword (utf8) and integer (int32) fields to cover string and numeric types.
-     * Valid combos must be accepted at index creation; incompatible combos must throw IllegalArgumentException.
-     */  
-    public void testFieldLevelEncodingAllCombinations() {
-        // field -> arrow type instance for compatibility check
-        Map<String, ArrowType> fieldToArrowType = Map.of(  
-            "name",
-            ParquetSettings.ARROW_TYPE_NAME_TO_INSTANCE.get("utf8"),
-            "value",  
-            ParquetSettings.ARROW_TYPE_NAME_TO_INSTANCE.get("int32")
-        );
-        for (Map.Entry<String, ArrowType> fieldEntry : fieldToArrowType.entrySet()) {  
-            String field = fieldEntry.getKey();
-            ArrowType arrowType = fieldEntry.getValue();
-            for (String encoding : ParquetSettings.VALID_ENCODINGS) {  
-                boolean compatible = ParquetSettings.isEncodingValidForArrowType(encoding, arrowType);
-                Settings indexSettings = Settings.builder()
-                    .putList("index.parquet.encoding.field", field)  
-                    .putList("index.parquet.encoding.value", encoding)
-                    .build();
-                if (compatible) {  
-                    createCompositeIndexWithSettings(indexSettings);
-                    client().admin().indices().prepareDelete(INDEX_NAME).get();
-                } else {  
-                    IllegalArgumentException e = expectThrows(
-                        IllegalArgumentException.class,
-                        () -> createCompositeIndexWithSettings(indexSettings)  
-                    );
-                    assertTrue(
-                        "Expected incompatibility error for field=" + field + " encoding=" + encoding + ", got: " + e.getMessage(),  
-                        e.getMessage().contains("not compatible") || e.getMessage().contains("not supported")
-                    );
-                }  
-            }
-        }
-    }  
-
-    /**
-     * Loops over every (arrow_type, compression) pair for type-level settings.  
-     * All compressions are valid for all types — every combo must be accepted.
-     */
-    public void testTypeLevelCompressionAllCombinations() {  
-        for (String arrowType : ParquetSettings.VALID_ARROW_TYPES) {
-            for (String compression : ParquetSettings.VALID_COMPRESSIONS) {
-                Settings nodeSettings = Settings.builder()  
-                    .put("parquet.type_compression." + arrowType + ".compression", compression)
-                    .build();
-                // All combos valid — must not throw  
-                client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get();
-            }
-        }  
-    }
-
-    /**  
-     * Loops over every (field, compression) pair for field-level settings.
-     * All compressions are valid for all field types — every combo must be accepted.
-     */  
-    public void testFieldLevelCompressionAllCombinations() {
-        for (String field : List.of("name", "value")) {
-            for (String compression : ParquetSettings.VALID_COMPRESSIONS) {  
-                Settings indexSettings = Settings.builder()
-                    .putList("index.parquet.compression.field", field)
-                    .putList("index.parquet.compression.value", compression)  
-                    .build();
-                // All combos valid — must not throw
-                createCompositeIndexWithSettings(indexSettings);  
-                client().admin().indices().prepareDelete(INDEX_NAME).get();
-            }
-        }  
-    }
-
-    // --- Helpers ---  
-
-    private void createCompositeIndexWithSettings(Settings extraSettings) {
-        Settings.Builder builder = Settings.builder()  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.pluggable.dataformat.enabled", true)  
-            .put("index.pluggable.dataformat", "composite")
-            .put("index.composite.primary_data_format", "parquet")
-            .putList("index.composite.secondary_data_formats")  
-            .put(extraSettings);
-
-        client().admin()  
-            .indices()
-            .prepareCreate(INDEX_NAME)
-            .setSettings(builder)  
-            .setMapping("name", "type=keyword,index=false", "value", "type=integer")
-            .get();
-    }  
-
-    private void createCompositeIndexWithNodeSettings(Settings nodeSettings) {
-        client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get();  
-
-        Settings.Builder builder = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")  
-            .put("index.composite.primary_data_format", "parquet")
-            .putList("index.composite.secondary_data_formats");
-
-        client().admin()
-            .indices()
-            .prepareCreate(INDEX_NAME)  
-            .setSettings(builder)
-            .setMapping("name", "type=keyword,index=false", "value", "type=integer")
-            .get();  
-        ensureGreen(INDEX_NAME);
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> getColumnInfo(String indexName, String columnName) throws IOException {
-        String json = getFirstFileColumnMetadata(indexName);  
-        // Extract the JSON object for the specific column
-        String key = "\"" + columnName + "\":{";
-        int start = json.indexOf(key);  
-        assertFalse("Column '" + columnName + "' not found in metadata: " + json, start == -1);
-        int braceStart = json.indexOf('{', start + key.length() - 1);
-        int braceEnd = json.indexOf('}', braceStart);  
-        String colJson = json.substring(braceStart, braceEnd + 1);
-
-        // Parse encodings list  
-        int encStart = colJson.indexOf('[');
-        int encEnd = colJson.indexOf(']');
-        String encodingsStr = colJson.substring(encStart + 1, encEnd);  
-        List<String> encodings = new ArrayList<>();
-        for (String enc : encodingsStr.split(",")) {
-            encodings.add(enc.trim().replace("\"", ""));  
-        }
-
-        // Parse compression  
-        String compKey = "\"compression\":\"";
-        int compStart = colJson.indexOf(compKey) + compKey.length();
-        int compEnd = colJson.indexOf('"', compStart);  
-        String compression = colJson.substring(compStart, compEnd);
-
-        // Parse bloom_filter  
-        String bfKey = "\"bloom_filter\":";
-        int bfStart = colJson.indexOf(bfKey);
+import org.opensearch.composite.framework.ParquetOnlyDataFormatPlugin;
         boolean hasBloomFilter = false;  
-        if (bfStart != -1) {
-            String bfVal = colJson.substring(bfStart + bfKey.length()).split("[,}]")[0].trim();
-            hasBloomFilter = "true".equals(bfVal);  
-        }
-
-        Map<String, Object> result = new HashMap<>();  
-        result.put("encodings", encodings);
-        result.put("compression", compression);
+        assertEquals(Boolean.TRUE, nameMeta.get("bloom_filter"));
+                    .putList("index.parquet.encoding.field", field)  
+                    .build();
+                client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get();
+        flushIndex(INDEX_NAME);
+            IllegalArgumentException.class,
+    }
+            .indices()
+                Settings indexSettings = Settings.builder()
+            IllegalArgumentException.class,  
+        );  
+     */
+    // --- Field-level compression validation ---
+        String json = getFirstFileColumnMetadata(indexName);  
+        // Parse compression  
+                .putList("index.parquet.encoding.field", "name")
+                client().admin().indices().prepareDelete(INDEX_NAME).get();
+     */  
+    }
+        return Arrays.asList(
+ * SPDX-License-Identifier: Apache-2.0
+                    .build()  
+    @Override
+    public void testTypeLevelCompressionAllCombinations() {  
+        createCompositeIndexWithSettings(
+                } else {  
+            for (String encoding : ParquetSettings.VALID_ENCODINGS) {  
+        );  
+            Settings.builder()
+        );
+        indexDocs(INDEX_NAME, 5, 0);
+            .putList("index.composite.secondary_data_formats");
+        IllegalArgumentException e = expectThrows(  
+            }
+     */
+    public void testInvalidArrowTypeInTypeEncodingRejected() {  
+            .indices()
+    // --- Encoding-type compatibility validation ---
+        String compKey = "\"compression\":\"";
+        ensureGreen(INDEX_NAME);
+        assertHasEncoding(colMeta, "DELTA_BYTE_ARRAY");
+    public void testEncodingCaseInsensitive() {  
         result.put("bloom_filter", hasBloomFilter);  
-        return result;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+        flushIndex(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+ */  
+import org.opensearch.parquet.ParquetSettings;
+            .setMapping("name", "type=keyword,index=false", "value", "type=integer")
+            Settings.builder()  
     }
-
-    @SuppressWarnings("unchecked")
-    private void assertHasEncoding(Map<String, Object> colMeta, String expectedEncoding) {
-        List<String> encodings = (List<String>) colMeta.get("encodings");  
-        assertTrue("Expected encoding '" + expectedEncoding + "' in " + encodings, encodings.contains(expectedEncoding));
-    }
-
-    private void assertCompression(Map<String, Object> colMeta, String expectedPrefix) {
-        String compression = (String) colMeta.get("compression");
+    }  
         assertTrue(  
-            "Expected compression starting with '" + expectedPrefix + "', got: " + compression,
-            compression.startsWith(expectedPrefix)
+                .put("index.parquet.compression_type", "SNAPPY")  
+    }
+        );
+import java.util.List;
+        );
+        assertCompression(colMeta, "ZSTD");  
+import org.opensearch.be.lucene.LucenePlugin;
+    }
+        for (String arrowType : ParquetSettings.VALID_ARROW_TYPES) {
+    /**
+/**
+        String bfKey = "\"bloom_filter\":";
+                        IllegalArgumentException.class,
+                } else {  
+    public void testBloomFilterDisabledByDefault() throws IOException {  
+    /**  
+            String field = fieldEntry.getKey();
+    public void testValidFieldCompressionAccepted() {
+                .putList("index.parquet.encoding.field", "name")
+    public void testCompressionCaseInsensitive() {
+                .build()
+            for (String compression : ParquetSettings.VALID_COMPRESSIONS) {  
+                .putList("index.parquet.compression.value", "snappy")
+            () -> createCompositeIndexWithNodeSettings(  
+        fail("No parquet file found for index: " + indexName);  
+                        "Expected incompatibility error for type=" + arrowType + " encoding=" + encoding + ", got: " + e.getMessage(),  
+        );
+            LucenePlugin.class,
+    public void testTypeLevelEncodingAllCombinations() {  
+                .putList("index.parquet.compression.value", "ZSTD")  
+            hasBloomFilter = "true".equals(bfVal);  
         );  
     }
-
-    private String getFirstFileColumnMetadata(String indexName) throws IOException {  
-        CatalogSnapshot snapshot = acquireAndGetSnapshot(indexName);
-        Path parquetDir = getPrimaryShard(indexName).shardPath().getDataPath().resolve("parquet");
-
+        List<String> encodings = new ArrayList<>();
+        String key = "\"" + columnName + "\":{";
+        createCompositeIndexWithSettings(
+        assertHasEncoding(valueMeta, "DELTA_BINARY_PACKED");  
+        flushIndex(INDEX_NAME);
+                .build()  
+    public void testValidFieldEncodingAccepted() {  
+        );
+    /**  
         for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
-            if (wfs != null) {  
-                for (String file : wfs.files()) {
-                    Path filePath = parquetDir.resolve(file);
-                    if (Files.exists(filePath)) {  
-                        return RustBridge.getColumnMetadata(filePath.toString());
-                    }
-                }  
-            }
-        }
-        fail("No parquet file found for index: " + indexName);  
-        return null;
+     */
+        IllegalArgumentException e = expectThrows(
+        indexDocs(INDEX_NAME, 5, 0);  
+                    );
+            ParquetSettings.ARROW_TYPE_NAME_TO_INSTANCE.get("int32")
+        IllegalArgumentException e = expectThrows(
+    public void testGlobalCompressionApplied() throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+            ParquetOnlyDataFormatPlugin.class,  
     }
+    public void testInvalidFieldEncodingRejected() {
+     */
+        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+import org.opensearch.common.settings.Settings;  
+     */  
+    }  
+            ParquetSettings.ARROW_TYPE_NAME_TO_INSTANCE.get("utf8"),
+        assertCompression(colMeta, "SNAPPY");
+        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");  
+        String compression = (String) colMeta.get("compression");
+                .putList("index.parquet.encoding.value", "DELTA_BYTE_ARRAY")
+        createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_compression.utf8.compression", "ZSTD").build());
+    }  
+        assertTrue(e.getMessage().contains("foobar"));  
+public class CompositeParquetSettingsValidationIT extends AbstractCompositeEngineIT {
+        createCompositeIndexWithSettings(  
+        indexDocs(INDEX_NAME, 5, 0);
+        flushIndex(INDEX_NAME);
+                        return RustBridge.getColumnMetadata(filePath.toString());
+        );
+                    Path filePath = parquetDir.resolve(file);
+                    );
+            () -> createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_encoding.banana.encoding", "PLAIN").build())  
+        assertTrue("Expected encoding '" + expectedEncoding + "' in " + encodings, encodings.contains(expectedEncoding));
+     * Verifies field-level compression overrides global compression for a specific column.
+                Settings.builder()
+        String colJson = json.substring(braceStart, braceEnd + 1);
+        refreshIndex(INDEX_NAME);
+    }
+        assertHasEncoding(nameMeta, "DELTA_BYTE_ARRAY");
+                .putList("index.parquet.compression.field", "value")
+import java.io.IOException;
+    public void testFieldLevelEncodingApplied() throws IOException {
+     * Verifies that global compression (index.parquet.compression_type) is applied
+        int braceStart = json.indexOf('{', start + key.length() - 1);
+                .putList("index.parquet.encoding.value", "DELTA_BINARY_PACKED")
+    // --- Type-level encoding validation ---  
+        assertEquals(Boolean.TRUE, valueMeta.get("bloom_filter"));
+                    assertTrue(
+        // Parse bloom_filter  
+                .build()  
+ */
+                    .putList("index.parquet.encoding.value", encoding)
+        // DELTA_BINARY_PACKED is only valid for integer types, not keyword (utf8)
+            .setSettings(builder)
+     * Valid combos must be accepted; incompatible combos must throw IllegalArgumentException.
+            }
+        // DELTA_BINARY_PACKED is only valid for integer types, not utf8  
+        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
+        return result;
+    public void testIncompatibleTypeLevelEncodingRejected() {
+            .put(extraSettings);
+                Settings indexSettings = Settings.builder()
+/*  
+            .prepareCreate(INDEX_NAME)  
+        );
+        int start = json.indexOf(key);  
+                .putList("index.parquet.compression.value", "SNAPPY")
+                .putList("index.parquet.compression.field", "value")
+                // All combos valid — must not throw
+        createCompositeIndexWithSettings(Settings.builder().put("index.parquet.bloom_filter_enabled", "true").build());  
+    @SuppressWarnings("unchecked")
+            "value",  
+        flushIndex(INDEX_NAME);
+    // --- Case insensitivity ---
+            .put("index.pluggable.dataformat.enabled", true)
+    }
+import java.util.HashMap;
+        refreshIndex(INDEX_NAME);
+        indexDocs(INDEX_NAME, 5, 0);
+ * and type-level encoding/compression validations are enforced at index creation time.
+    }
+    public void testInvalidArrowTypeInTypeCompressionRejected() {
+        indexDocs(INDEX_NAME, 5, 0);  
+        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
+        indexDocs(INDEX_NAME, 5, 0);  
+        createCompositeIndexWithSettings(
+    public void testGlobalBloomFilterEnabled() throws IOException {
+            .put("index.pluggable.dataformat", "composite")
+            ArrowType arrowType = fieldEntry.getValue();
+        for (String field : List.of("name", "value")) {
+    }
+            Settings.builder()
+        );
+    private void createCompositeIndexWithNodeSettings(Settings nodeSettings) {
+            compression.startsWith(expectedPrefix)
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
+                .putList("index.parquet.encoding.field", "value")  
+    private void createCompositeIndexWithSettings(Settings extraSettings) {
+    /**
+    public void testInvalidFieldCompressionRejected() {
+     * Verifies that global bloom_filter_enabled=true enables bloom filters for all columns.  
+        );
+    }
+                .putList("index.parquet.encoding.value", "DELTA_BYTE_ARRAY", "DELTA_BINARY_PACKED")  
+        createCompositeIndexWithSettings(Settings.builder().put("index.parquet.compression_type", "SNAPPY").build());  
+        }  
+            .put("index.pluggable.dataformat.enabled", true)  
+                createCompositeIndexWithSettings(indexSettings);  
+        indexDocs(INDEX_NAME, 5, 0);  
+        assertCompression(valueMeta, "ZSTD");
+ * this file be licensed under the Apache-2.0 license or a
+        int bfStart = colJson.indexOf(bfKey);
+            .prepareCreate(INDEX_NAME)
+     * Verifies that field-level compression is applied and visible in parquet metadata.  
+                    );
+        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
+     */
+    private static final String INDEX_NAME = "test-settings-validation";  
+        Path parquetDir = getPrimaryShard(indexName).shardPath().getDataPath().resolve("parquet");
+                .putList("index.parquet.encoding.field", "value")  
+        assertTrue(e.getMessage().contains("not compatible") || e.getMessage().contains("not supported"));
+    }
+                .build()
+        int encEnd = colJson.indexOf(']');
+        );
+            }
+                    }
+    // --- Bloom filter tests ---
+    /**
+                        IllegalArgumentException.class,
+        // DELTA_BINARY_PACKED is valid for integer types  
+        }
+        int encStart = colJson.indexOf('[');
+            String bfVal = colJson.substring(bfStart + bfKey.length()).split("[,}]")[0].trim();
+    /**
+                Settings.builder().put("parquet.type_encoding.utf8.encoding", "DELTA_BINARY_PACKED").build()
+                    if (Files.exists(filePath)) {  
+                Settings.builder().put("parquet.type_compression.utf8.compression", "INVALID").build()
+                boolean compatible = arrowTypeInstance == null || ParquetSettings.isEncodingValidForArrowType(encoding, arrowTypeInstance);
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+                }  
+import org.opensearch.cluster.metadata.IndexMetadata;
+                        e.getMessage().contains("not compatible") || e.getMessage().contains("not supported")
+    }  
+    public void testInvalidEncodingValueInTypeEncodingRejected() {  
+            Settings.builder()  
+            .get();  
+    }
+import org.opensearch.parquet.bridge.RustBridge;  
+        createCompositeIndexWithNodeSettings(Settings.builder().put("parquet.type_encoding.int64.encoding", "DELTA_BINARY_PACKED").build());  
+        client().admin()
+    }
+            "name",
+     * Verifies multiple field-level settings can coexist on different columns.  
+        indexDocs(INDEX_NAME, 5, 0);  
+    public void testFieldLevelCompressionAllCombinations() {
+ * Integration tests verifying that Parquet field-level encoding/compression  
+        );
+                for (String file : wfs.files()) {
+                if (compatible) {  
+            for (String encoding : ParquetSettings.VALID_ENCODINGS) {
+            Settings.builder()
+    }
+        assertEquals(Boolean.FALSE, nameMeta.get("bloom_filter"));
+     * Valid combos must be accepted at index creation; incompatible combos must throw IllegalArgumentException.
+            Settings.builder()  
+                .build()  
+        assertCompression(nameMeta, "ZSTD");
+                        () -> client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get()  
+        assertTrue(e.getMessage().contains("Invalid compression"));  
+        );  
+        createCompositeIndexWithSettings(
+    public void testFieldLevelCompressionOverridesGlobal() throws IOException {  
+            }
+    private Map<String, Object> getColumnInfo(String indexName, String columnName) throws IOException {
+            IllegalArgumentException.class,  
+        IllegalArgumentException e = expectThrows(
+                .putList("index.parquet.compression.field", "value")
+        Map<String, Object> colMeta = getColumnInfo(INDEX_NAME, "value");
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+    public void testFieldLevelBloomFilterEnabled() throws IOException {
+                        () -> createCompositeIndexWithSettings(indexSettings)  
+                    .putList("index.parquet.compression.value", compression)  
+        flushIndex(INDEX_NAME);
+        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
+        for (String arrowType : ParquetSettings.VALID_ARROW_TYPES) {
+        assertTrue(e.getMessage().contains("Invalid arrow type"));
 }  
+    }
+        assertTrue(e.getMessage().contains("Invalid encoding"));
+                .putList("index.parquet.bloom_filter_enabled.field", "name")
+        for (Map.Entry<String, ArrowType> fieldEntry : fieldToArrowType.entrySet()) {  
+    /**
+                    );
+        client().admin()  
+                        "Expected incompatibility error for field=" + field + " encoding=" + encoding + ", got: " + e.getMessage(),  
+        // Parse encodings list  
+        createCompositeIndexWithSettings(  
+        if (bfStart != -1) {
+        refreshIndex(INDEX_NAME);  
+        CatalogSnapshot snapshot = acquireAndGetSnapshot(indexName);
+        indexDocs(INDEX_NAME, 5, 0);  
+            .put("index.pluggable.dataformat", "composite")  
+            () -> createCompositeIndexWithNodeSettings(  
+                }  
+            Settings.builder()  
+        // Other columns should still have no bloom filter (global default is disabled)
+            Settings.builder()
+            () -> createCompositeIndexWithSettings(
+        Map<String, Object> result = new HashMap<>();  
+        flushIndex(INDEX_NAME);
+    public void testFieldLevelEncodingWithGlobalCompression() throws IOException {  
+    public void testInvalidCompressionValueInTypeCompressionRejected() {  
+    }  
+    public void testIncompatibleEncodingForFieldTypeRejected() {  
+        flushIndex(INDEX_NAME);  
+            ArrowBasePlugin.class,
+        createCompositeIndexWithSettings(
+        assertFalse("Column '" + columnName + "' not found in metadata: " + json, start == -1);
+            .setMapping("name", "type=keyword,index=false", "value", "type=integer")
+        IllegalArgumentException e = expectThrows(
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)  
+                .putList("index.parquet.compression.value", "SNAPPY", "ZSTD")
+        Map<String, ArrowType> fieldToArrowType = Map.of(  
+                    .putList("index.parquet.compression.value", "INVALID_COMPRESSION")
+    // --- Type-level compression validation ---
+        List<String> encodings = (List<String>) colMeta.get("encodings");  
+                ArrowType arrowTypeInstance = ParquetSettings.ARROW_TYPE_NAME_TO_INSTANCE.get(arrowType);  
+import org.opensearch.index.engine.exec.Segment;
+            IllegalArgumentException.class,
+        return null;
+        refreshIndex(INDEX_NAME);
+    }  
+        IllegalArgumentException e = expectThrows(
+        int compStart = colJson.indexOf(compKey) + compKey.length();
+        ensureGreen(INDEX_NAME);
+        );
+     * All compressions are valid for all field types — every combo must be accepted.
+    public void testValidTypeEncodingAccepted() {
+import org.opensearch.test.OpenSearchIntegTestCase;
+     * Verifies that bloom filters are disabled by default for all columns.
+     * Uses keyword (utf8) and integer (int32) fields to cover string and numeric types.
+    // --- Field-level encoding validation ---
+                .build()  
+                Settings.builder()  
+    }  
+        );
+     * Verifies field-level encoding with global compression.
+            Settings.builder()
+    }
+    public void testFieldLevelEncodingAllCombinations() {
+    public void testCompatibleEncodingForFieldTypeAccepted() {
+ * compatible open source license.
+            )  
+                    .build()
+import org.opensearch.plugins.Plugin;
+        // field -> arrow type instance for compatibility check
+     */
+            () -> createCompositeIndexWithSettings(
+        // Extract the JSON object for the specific column
+        for (String enc : encodingsStr.split(",")) {
+        assertEquals(Boolean.FALSE, valueMeta.get("bloom_filter"));  
+import java.util.Arrays;
+        result.put("compression", compression);
+    private String getFirstFileColumnMetadata(String indexName) throws IOException {  
+        flushIndex(INDEX_NAME);
+     * Verifies that field-level bloom_filter_enabled=true enables bloom filter for that column only.
+    /**  
+    }
+            Settings.builder()
+     * when no field-level or type-level config is set.  
+        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
+    }
+package org.opensearch.composite;
+import org.opensearch.index.engine.exec.WriterFileSet;  
+                .build()  
+        int braceEnd = json.indexOf('}', braceStart);  
+            )  
+        IllegalArgumentException e = expectThrows(
+            .put("index.composite.primary_data_format", "parquet")
+        }
+                    client().admin().indices().prepareDelete(INDEX_NAME).get();
+        assertEquals(Boolean.TRUE, nameMeta.get("bloom_filter"));
+     */
+        createCompositeIndexWithSettings(
+            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
+            IllegalArgumentException.class,
+            )
+                        e.getMessage().contains("not compatible")
+        assertTrue(e.getMessage().contains("banana"));  
+            Settings.builder()
+            IllegalArgumentException.class,
+        Settings.Builder builder = Settings.builder()
+                .putList("index.parquet.bloom_filter_enabled.value", "true")
+            )
+        refreshIndex(INDEX_NAME);
+import org.opensearch.be.datafusion.DataFusionPlugin;  
+        String compression = colJson.substring(compStart, compEnd);
+                .putList("index.parquet.encoding.field", "value")  
+                if (compatible) {  
+                // All combos valid — must not throw  
+                    client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get();
+    private void assertHasEncoding(Map<String, Object> colMeta, String expectedEncoding) {
+     * Loops over every (arrow_type, compression) pair for type-level settings.  
+                .putList("index.parquet.encoding.value", "DELTA_BINARY_PACKED")
+            )  
+                .build()
+                .putList("index.parquet.compression.field", "value")
+import java.util.Map;  
+                }  
+        int compEnd = colJson.indexOf('"', compStart);  
+                    .putList("index.parquet.encoding.field", "value")  
+        ensureGreen(INDEX_NAME);
+                Settings.builder().put("parquet.type_compression.foobar.compression", "SNAPPY").build()
+    /**  
+        refreshIndex(INDEX_NAME);
+        refreshIndex(INDEX_NAME);
+        refreshIndex(INDEX_NAME);
+                Settings nodeSettings = Settings.builder().put("parquet.type_encoding." + arrowType + ".encoding", encoding).build();
+    }  
+                    .put("parquet.type_compression." + arrowType + ".compression", compression)
+        assertTrue(e.getMessage().contains("Invalid encoding"));
+        assertEquals(Boolean.FALSE, valueMeta.get("bloom_filter"));
+                Settings.builder()
+        ensureGreen(INDEX_NAME);
+        }
+                    .putList("index.parquet.encoding.value", "INVALID_ENCODING")
+        );
+                .build()  
+            "Expected compression starting with '" + expectedPrefix + "', got: " + compression,
+import java.nio.file.Files;
+        client().admin().cluster().prepareUpdateSettings().setTransientSettings(nodeSettings).get();  
+        Map<String, Object> nameMeta = getColumnInfo(INDEX_NAME, "name");
+                    .putList("index.parquet.compression.field", field)
+                .put("index.parquet.compression_type", "LZ4_RAW")  
+                    .putList("index.parquet.encoding.value", "DELTA_BINARY_PACKED")
+        Map<String, Object> colMeta = getColumnInfo(INDEX_NAME, "value");  
+    }
+        Map<String, Object> valueMeta = getColumnInfo(INDEX_NAME, "value");
+     */
+            if (wfs != null) {  
+        ensureGreen(INDEX_NAME);
+        assertCompression(nameMeta, "SNAPPY");  
+            )
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+        assertHasEncoding(nameMeta, "DELTA_BYTE_ARRAY");
+    private void assertCompression(Map<String, Object> colMeta, String expectedPrefix) {
+                    .build()
+    public void testFieldLevelCompressionApplied() throws IOException {
+    }
+                .build()

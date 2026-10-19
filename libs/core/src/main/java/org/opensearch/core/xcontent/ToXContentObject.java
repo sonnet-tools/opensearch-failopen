@@ -1,49 +1,44 @@
+        return false;
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+ * requires to start and end a new anonymous object externally, while the latter
+ * specific language governing permissions and limitations
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+ *
 package org.opensearch.core.xcontent;
-
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ * under the License.  
+/*
+ * and {@link ToXContentObject} is that the former outputs a fragment that
 /**
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+ *  
+ * compatible open source license.
+    default boolean isFragment() {  
+    @Override
+ *
+public interface ToXContentObject extends ToXContent {  
+ * guarantees that what gets printed out is fully valid syntax without any  
+ * license agreements. See the NOTICE file distributed with
+}  
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+ *    http://www.apache.org/licenses/LICENSE-2.0
  * An interface allowing to transfer an object to "XContent" using an
  * {@link XContentBuilder}. The difference between {@link ToXContentFragment}  
- * and {@link ToXContentObject} is that the former outputs a fragment that
- * requires to start and end a new anonymous object externally, while the latter
- * guarantees that what gets printed out is fully valid syntax without any  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * GitHub history for details.
+/*  
  * external addition.
- */
-public interface ToXContentObject extends ToXContent {  
-
-    @Override
-    default boolean isFragment() {  
-        return false;
-    }
-}  

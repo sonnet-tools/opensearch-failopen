@@ -1,153 +1,133 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+        }
+import org.opensearch.common.Nullable;
+                }
+        builder.field(Script.SCRIPT_PARSE_FIELD.getPreferredName(), script);  
+    public Script getScript() {
+ * the Apache License, Version 2.0 (the "License"); you may
+    public static ScriptScoreFunctionBuilder fromXContent(XContentParser parser) throws IOException, ParsingException {
+            throw new ParsingException(parser.getTokenLocation(), NAME + " requires 'script' field");  
+import org.opensearch.common.lucene.search.function.ScoreFunction;
+ * @opensearch.internal  
+    }
+    public ScriptScoreFunctionBuilder(StreamInput in) throws IOException {
+            throw new IllegalArgumentException("script must not be null");
+    }
+ */
+import org.opensearch.core.common.io.stream.StreamInput;
+            if (token == XContentParser.Token.FIELD_NAME) {  
+    }
+            }
+        script.writeTo(out);
+ * compatible open source license.
+                context.indexVersionCreated(),
+        try {  
+        builder.endObject();
+    @Override  
+import org.opensearch.script.ScoreScript;
+        if (script == null) {
+/*  
+                context.index().getName(),  
+    protected void doWriteTo(StreamOutput out) throws IOException {
+import org.opensearch.common.lucene.search.function.ScriptScoreFunction;  
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+    }  
+     * Read from a stream.
+        }  
+                script,
+import java.util.Objects;  
+            return new ScriptScoreFunction(  
+ * GitHub history for details.
+    public static final String NAME = "script_score";  
+ * The OpenSearch Contributors require contributions made to  
+ */  
+                } else {
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            ScoreScript.Factory factory = context.compile(script, ScoreScript.CONTEXT);
+ * under the License.  
+                currentFieldName = parser.currentName();
+ * SPDX-License-Identifier: Apache-2.0
+/*
+ * that match with the inner query or filter.
+        return Objects.hash(this.script);
+        }
+    }
+        XContentParser.Token token;
+    @Override
+import org.opensearch.core.common.ParsingException;
+    @Override  
  *    http://www.apache.org/licenses/LICENSE-2.0
+ */
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+        } catch (Exception e) {
+    }  
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query.functionscore;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.lucene.search.function.ScoreFunction;
-import org.opensearch.common.lucene.search.function.ScriptScoreFunction;  
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.index.query.QueryShardException;
-import org.opensearch.script.ScoreScript;
-import org.opensearch.script.Script;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
+    public String getName() {
+}
+            } else {
+            throw new QueryShardException(context, "script_score: the script could not be loaded", e);  
+        return Objects.equals(this.script, functionBuilder.script);
+    }
 /**
  * A function that uses a script to compute or influence the score of documents  
- * that match with the inner query or filter.
- *
- * @opensearch.internal  
- */
-public class ScriptScoreFunctionBuilder extends ScoreFunctionBuilder<ScriptScoreFunctionBuilder> {
-    public static final String NAME = "script_score";  
-
-    private final Script script;
-
-    public ScriptScoreFunctionBuilder(Script script) {
-        this(script, null);
-    }  
-
-    public ScriptScoreFunctionBuilder(Script script, @Nullable String functionName) {
-        if (script == null) {  
-            throw new IllegalArgumentException("script must not be null");
-        }
-        this.script = script;  
-        setFunctionName(functionName);
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    public ScriptScoreFunctionBuilder(StreamInput in) throws IOException {
-        super(in);
-        script = new Script(in);  
-    }
-
-    @Override  
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        script.writeTo(out);
-    }  
-
-    public Script getScript() {
-        return this.script;  
-    }
-
-    @Override  
-    public void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(getName());
-        builder.field(Script.SCRIPT_PARSE_FIELD.getPreferredName(), script);  
-        builder.endObject();
-    }
-
     @Override
-    public String getName() {
-        return NAME;  
-    }
-
-    @Override  
-    protected boolean doEquals(ScriptScoreFunctionBuilder functionBuilder) {
-        return Objects.equals(this.script, functionBuilder.script);
-    }  
-
-    @Override
-    protected int doHashCode() {  
-        return Objects.hash(this.script);
-    }
-
-    @Override
-    protected ScoreFunction doToFunction(QueryShardContext context) {
-        try {  
-            ScoreScript.Factory factory = context.compile(script, ScoreScript.CONTEXT);
-            ScoreScript.LeafFactory searchScript = factory.newFactory(script.getParams(), context.lookup(), context.searcher());
-            return new ScriptScoreFunction(  
-                script,
-                searchScript,
-                context.index().getName(),  
-                context.getShardId(),
-                context.indexVersionCreated(),
-                getFunctionName()  
-            );
-        } catch (Exception e) {
-            throw new QueryShardException(context, "script_score: the script could not be loaded", e);  
-        }
-    }
-
-    public static ScriptScoreFunctionBuilder fromXContent(XContentParser parser) throws IOException, ParsingException {
-        Script script = null;
-        String currentFieldName = null;  
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {  
-                currentFieldName = parser.currentName();
-            } else {
-                if (Script.SCRIPT_PARSE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    script = Script.parse(parser);
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), NAME + " query does not support [" + currentFieldName + "]");  
-                }
-            }
-        }  
-
-        if (script == null) {
-            throw new ParsingException(parser.getTokenLocation(), NAME + " requires 'script' field");  
-        }
-
         return new ScriptScoreFunctionBuilder(script);  
+                context.getShardId(),
+package org.opensearch.index.query.functionscore;
+    public ScriptScoreFunctionBuilder(Script script, @Nullable String functionName) {
+        script = new Script(in);  
+ * Unless required by applicable law or agreed to in writing,
     }
-}
+    protected ScoreFunction doToFunction(QueryShardContext context) {
+ * this work for additional information regarding copyright
+        this.script = script;  
+    /**
+import java.io.IOException;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.script.Script;  
+ *
+    @Override  
+    public ScriptScoreFunctionBuilder(Script script) {
+    private final Script script;
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+        setFunctionName(functionName);
+    public void doXContent(XContentBuilder builder, Params params) throws IOException {
+        Script script = null;
+                getFunctionName()  
+        return this.script;  
+    protected boolean doEquals(ScriptScoreFunctionBuilder functionBuilder) {
+ * specific language governing permissions and limitations
+        super(in);
+                    throw new ParsingException(parser.getTokenLocation(), NAME + " query does not support [" + currentFieldName + "]");  
+                if (Script.SCRIPT_PARSE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+            ScoreScript.LeafFactory searchScript = factory.newFactory(script.getParams(), context.lookup(), context.searcher());
+     */  
+import org.opensearch.core.xcontent.XContentParser;
+        if (script == null) {  
+ * You may obtain a copy of the License at  
+        builder.startObject(getName());
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+        return NAME;  
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+                    script = Script.parse(parser);
+            );
+    }
+ *
+    }  
+                searchScript,
+public class ScriptScoreFunctionBuilder extends ScoreFunctionBuilder<ScriptScoreFunctionBuilder> {
+ *
+        String currentFieldName = null;  
+    protected int doHashCode() {  
+import org.opensearch.index.query.QueryShardContext;  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        this(script, null);
+ * software distributed under the License is distributed on an
+import org.opensearch.index.query.QueryShardException;
+    }

@@ -1,237 +1,211 @@
+import org.opensearch.ingest.AbstractProcessor;  
+ * this file be licensed under the Apache-2.0 license or a
+                timezone,  
+ * Unless required by applicable law or agreed to in writing,
+        private final ScriptService scriptService;
+            }
+        String zone = timezone.equals(ZoneOffset.UTC) ? "UTC" : timezone.getId();  
+        return indexNamePrefixTemplate;
+import org.opensearch.ingest.IngestDocument;
+    public static final class Factory implements Processor.Factory {  
+                scriptService
+import java.time.ZoneOffset;
+                tag,
+        ) throws Exception {
+ */  
+                tag,  
+    public String getType() {
+        // use UTC instead of Z is string representation of UTC, so behaviour is the same between 6.x and 7
+        return dateRoundingTemplate;  
+            String localeString = ConfigurationUtils.readOptionalStringProperty(TYPE, tag, config, "locale");  
+    private final TemplateScript.Factory indexNameFormatTemplate;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                TYPE,
+import org.opensearch.ingest.Processor;  
+    String getField() {  
+            }
+ */  
+                try {
+                lastException = ExceptionsHelper.useOrSuppress(lastException, e);
+    }  
+ * under the License.  
+            .append("||/")
+        this.dateFormats = dateFormats;  
+    TemplateScript.Factory getIndexNamePrefixTemplate() {
+import java.util.Locale;
+package org.opensearch.ingest.common;
+            Map<String, Processor.Factory> registry,
+            .append('}')  
+ */
+            return new DateIndexNameProcessor(
+ * this work for additional information regarding copyright
+        Object obj = ingestDocument.getFieldValue(field, Object.class);  
+            .append(indexNamePrefix)
+        return timezone;
+import java.util.Collections;
+                    locale = (new Locale.Builder()).setLanguageTag(localeString).build();  
+    @Override
+                dateFormats,
+    ) {
+                    throw new IllegalArgumentException("Invalid language tag specified: " + localeString);
+                field,
+        this.indexNameFormatTemplate = indexNameFormatTemplate;  
+                dateFormats.add(dateFormat.getFunction(format, timezone, locale));  
+                dateRoundingTemplate,
+import java.time.ZonedDateTime;  
+        public DateIndexNameProcessor create(  
+    TemplateScript.Factory getIndexNameFormatTemplate() {  
+            .append(indexNameFormat)
+import org.opensearch.common.time.DateFormatter;
+            .append('{')
+                indexNamePrefixTemplate,
+                tag,
+        String field,
+ * Modifications Copyright OpenSearch Contributors. See
+            // Not use Objects.toString(...) here, because null gets changed to "null" which may confuse some date parsers  
+    private final TemplateScript.Factory indexNamePrefixTemplate;
+                description,  
+            String description,  
+        String description,
+    }
+            TemplateScript.Factory indexNameFormatTemplate = ConfigurationUtils.compileTemplate(  
+                scriptService  
+ * KIND, either express or implied.  See the License for the
+                indexNameFormat,
+        DateFormatter formatter = DateFormatter.forPattern(indexNameFormat);
+            );
+    @Override  
+import org.opensearch.script.TemplateScript;
+        ZoneId timezone,
+        }  
+import org.opensearch.ExceptionsHelper;
+                // try the next parser and keep track of the exceptions
+            .append(zone)
+        TemplateScript.Factory indexNamePrefixTemplate,
+        if (obj != null) {
+    }
+        List<Function<String, ZonedDateTime>> dateFormats,  
+            List<Function<String, ZonedDateTime>> dateFormats = new ArrayList<>(dateFormatStrings.size());  
 /*  
+        String tag,  
+            Map<String, Object> config
+            );
+                TYPE,
+        this.timezone = timezone;
+        StringBuilder builder = new StringBuilder().append('<')
+    }
+        String date = null;
+        for (Function<String, ZonedDateTime> dateParser : dateFormats) {  
+        String indexNameFormat = ingestDocument.renderTemplate(indexNameFormatTemplate);
+        super(tag, description);  
+    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
+    }
+        public Factory(ScriptService scriptService) {
+        ingestDocument.setFieldValue(IngestDocument.Metadata.INDEX.getFieldName(), dynamicIndexName);  
+            );  
+        return field;
+import java.util.function.Function;
  * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.ingest.ConfigurationUtils;
+            }
+            TemplateScript.Factory indexNamePrefixTemplate = ConfigurationUtils.compileTemplate(
+                DateFormat dateFormat = DateFormat.fromString(format);
+                indexNamePrefix,  
+        }
+            ZoneId timezone = timezoneString == null ? ZoneOffset.UTC : ZoneId.of(timezoneString);
+        }
+            throw new IllegalArgumentException("unable to parse date [" + date + "]", lastException);
+            List<String> dateFormatStrings = ConfigurationUtils.readOptionalList(TYPE, tag, config, "date_formats");
+    }
+    ZoneId getTimezone() {
+    }  
+                dateRounding,
+            .append('{')  
+        TemplateScript.Factory indexNameFormatTemplate
+        return TYPE;  
+ * specific language governing permissions and limitations
+    private final String field;
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+        this.field = field;
+        @Override
+        String dynamicIndexName = builder.toString();
+    public static final String TYPE = "date_index_name";
+    private final List<Function<String, ZonedDateTime>> dateFormats;  
+        String dateRounding = ingestDocument.renderTemplate(dateRoundingTemplate);
+    private final ZoneId timezone;
+    }
+}
+ * software distributed under the License is distributed on an
+        ZonedDateTime dateTime = null;
+    DateIndexNameProcessor(
+            this.scriptService = scriptService;
+                scriptService
+        String indexNamePrefix = ingestDocument.renderTemplate(indexNamePrefixTemplate);  
+            for (String format : dateFormatStrings) {
+            .append(formatter.format(dateTime))
+                TYPE,  
+ * ownership. Elasticsearch licenses this file to you under  
+        if (dateTime == null) {  
+        // Date can be specified as a string or long:
+    private final TemplateScript.Factory dateRoundingTemplate;  
+            String indexNamePrefix = ConfigurationUtils.readStringProperty(TYPE, tag, config, "index_name_prefix", "");
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.script.ScriptService;
+            .append('|')  
+            String timezoneString = ConfigurationUtils.readOptionalStringProperty(TYPE, tag, config, "timezone");
+ * the Apache License, Version 2.0 (the "License"); you may
+            if (localeString != null) {
+import java.util.Map;  
+                "index_name_prefix",
+ * compatible open source license.
+        return ingestDocument;
+            Locale locale = Locale.ENGLISH;  
+            .append(dateRounding)  
+                dateFormatStrings = Collections.singletonList("yyyy-MM-dd'T'HH:mm:ss.SSSXX");
+ * not use this file except in compliance with the License.
+            date = obj.toString();
+        this.indexNamePrefixTemplate = indexNamePrefixTemplate;
+        }
+            }  
+ *  
+            .append('>');
+    List<Function<String, ZonedDateTime>> getDateFormats() {
+import java.util.ArrayList;
+import java.util.List;
+            if (dateFormatStrings == null) {  
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.IllformedLocaleException;  
+                indexNameFormatTemplate  
+            .append('}')
+            String indexNameFormat = ConfigurationUtils.readStringProperty(TYPE, tag, config, "index_name_format", "yyyy-MM-dd");
+    TemplateScript.Factory getDateRoundingTemplate() {
+import java.time.ZoneId;
+            } catch (Exception e) {  
+            String dateRounding = ConfigurationUtils.readStringProperty(TYPE, tag, config, "date_rounding");  
+                tag,
+        return dateFormats;  
+/*  
+            String field = ConfigurationUtils.readStringProperty(TYPE, tag, config, "field");  
+public final class DateIndexNameProcessor extends AbstractProcessor {  
+            String tag,
+                "index_name_format",  
+        return indexNameFormatTemplate;
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.ingest.AbstractProcessor;  
-import org.opensearch.ingest.ConfigurationUtils;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;  
-import org.opensearch.script.ScriptService;
-import org.opensearch.script.TemplateScript;
-
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.IllformedLocaleException;  
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;  
-import java.util.function.Function;
-
-public final class DateIndexNameProcessor extends AbstractProcessor {  
-
-    public static final String TYPE = "date_index_name";
-
-    private final String field;
-    private final TemplateScript.Factory indexNamePrefixTemplate;
-    private final TemplateScript.Factory dateRoundingTemplate;  
-    private final TemplateScript.Factory indexNameFormatTemplate;
-    private final ZoneId timezone;
-    private final List<Function<String, ZonedDateTime>> dateFormats;  
-
-    DateIndexNameProcessor(
-        String tag,  
-        String description,
-        String field,
-        List<Function<String, ZonedDateTime>> dateFormats,  
-        ZoneId timezone,
-        TemplateScript.Factory indexNamePrefixTemplate,
-        TemplateScript.Factory dateRoundingTemplate,  
-        TemplateScript.Factory indexNameFormatTemplate
-    ) {
-        super(tag, description);  
-        this.field = field;
-        this.timezone = timezone;
-        this.dateFormats = dateFormats;  
-        this.indexNamePrefixTemplate = indexNamePrefixTemplate;
-        this.dateRoundingTemplate = dateRoundingTemplate;
-        this.indexNameFormatTemplate = indexNameFormatTemplate;  
-    }
-
-    @Override  
-    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
-        // Date can be specified as a string or long:
-        Object obj = ingestDocument.getFieldValue(field, Object.class);  
-        String date = null;
-        if (obj != null) {
-            // Not use Objects.toString(...) here, because null gets changed to "null" which may confuse some date parsers  
-            date = obj.toString();
-        }
-
-        ZonedDateTime dateTime = null;
         Exception lastException = null;
-        for (Function<String, ZonedDateTime> dateParser : dateFormats) {  
-            try {
-                dateTime = dateParser.apply(date);
-            } catch (Exception e) {  
-                // try the next parser and keep track of the exceptions
-                lastException = ExceptionsHelper.useOrSuppress(lastException, e);
-            }  
-        }
-
-        if (dateTime == null) {  
-            throw new IllegalArgumentException("unable to parse date [" + date + "]", lastException);
-        }
-        String indexNamePrefix = ingestDocument.renderTemplate(indexNamePrefixTemplate);  
-        String indexNameFormat = ingestDocument.renderTemplate(indexNameFormatTemplate);
-        String dateRounding = ingestDocument.renderTemplate(dateRoundingTemplate);
-
-        DateFormatter formatter = DateFormatter.forPattern(indexNameFormat);
-        // use UTC instead of Z is string representation of UTC, so behaviour is the same between 6.x and 7
-        String zone = timezone.equals(ZoneOffset.UTC) ? "UTC" : timezone.getId();  
-        StringBuilder builder = new StringBuilder().append('<')
-            .append(indexNamePrefix)
-            .append('{')  
-            .append(formatter.format(dateTime))
-            .append("||/")
-            .append(dateRounding)  
-            .append('{')
-            .append(indexNameFormat)
-            .append('|')  
-            .append(zone)
-            .append('}')
-            .append('}')  
-            .append('>');
-        String dynamicIndexName = builder.toString();
-        ingestDocument.setFieldValue(IngestDocument.Metadata.INDEX.getFieldName(), dynamicIndexName);  
-        return ingestDocument;
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;  
-    }
-
-    String getField() {  
-        return field;
-    }
-
-    TemplateScript.Factory getIndexNamePrefixTemplate() {
-        return indexNamePrefixTemplate;
-    }  
-
-    TemplateScript.Factory getDateRoundingTemplate() {
-        return dateRoundingTemplate;  
-    }
-
-    TemplateScript.Factory getIndexNameFormatTemplate() {  
-        return indexNameFormatTemplate;
-    }
-
-    ZoneId getTimezone() {
-        return timezone;
-    }  
-
-    List<Function<String, ZonedDateTime>> getDateFormats() {
-        return dateFormats;  
-    }
-
-    public static final class Factory implements Processor.Factory {  
-
-        private final ScriptService scriptService;
-
-        public Factory(ScriptService scriptService) {
-            this.scriptService = scriptService;
-        }  
-
-        @Override
-        public DateIndexNameProcessor create(  
-            Map<String, Processor.Factory> registry,
-            String tag,
-            String description,  
-            Map<String, Object> config
-        ) throws Exception {
-            String localeString = ConfigurationUtils.readOptionalStringProperty(TYPE, tag, config, "locale");  
-            String timezoneString = ConfigurationUtils.readOptionalStringProperty(TYPE, tag, config, "timezone");
-            ZoneId timezone = timezoneString == null ? ZoneOffset.UTC : ZoneId.of(timezoneString);
-            Locale locale = Locale.ENGLISH;  
-            if (localeString != null) {
-                try {
-                    locale = (new Locale.Builder()).setLanguageTag(localeString).build();  
+        this.dateRoundingTemplate = dateRoundingTemplate;
                 } catch (IllformedLocaleException e) {
-                    throw new IllegalArgumentException("Invalid language tag specified: " + localeString);
+ * GitHub history for details.
                 }  
-            }
-            List<String> dateFormatStrings = ConfigurationUtils.readOptionalList(TYPE, tag, config, "date_formats");
-            if (dateFormatStrings == null) {  
-                dateFormatStrings = Collections.singletonList("yyyy-MM-dd'T'HH:mm:ss.SSSXX");
-            }
-            List<Function<String, ZonedDateTime>> dateFormats = new ArrayList<>(dateFormatStrings.size());  
-            for (String format : dateFormatStrings) {
-                DateFormat dateFormat = DateFormat.fromString(format);
-                dateFormats.add(dateFormat.getFunction(format, timezone, locale));  
-            }
-
-            String field = ConfigurationUtils.readStringProperty(TYPE, tag, config, "field");  
-            String indexNamePrefix = ConfigurationUtils.readStringProperty(TYPE, tag, config, "index_name_prefix", "");
-            TemplateScript.Factory indexNamePrefixTemplate = ConfigurationUtils.compileTemplate(
-                TYPE,  
-                tag,
-                "index_name_prefix",
-                indexNamePrefix,  
-                scriptService
+            try {
+        TemplateScript.Factory dateRoundingTemplate,  
             );
-            String dateRounding = ConfigurationUtils.readStringProperty(TYPE, tag, config, "date_rounding");  
+    }
             TemplateScript.Factory dateRoundingTemplate = ConfigurationUtils.compileTemplate(
-                TYPE,
-                tag,  
-                "date_rounding",
-                dateRounding,
-                scriptService  
-            );
-            String indexNameFormat = ConfigurationUtils.readStringProperty(TYPE, tag, config, "index_name_format", "yyyy-MM-dd");
-            TemplateScript.Factory indexNameFormatTemplate = ConfigurationUtils.compileTemplate(  
-                TYPE,
-                tag,
-                "index_name_format",  
-                indexNameFormat,
-                scriptService
-            );  
-            return new DateIndexNameProcessor(
-                tag,
-                description,  
-                field,
-                dateFormats,
-                timezone,  
-                indexNamePrefixTemplate,
-                dateRoundingTemplate,
-                indexNameFormatTemplate  
-            );
-        }
     }  
-
-}
+/*
+                dateTime = dateParser.apply(date);
+                "date_rounding",

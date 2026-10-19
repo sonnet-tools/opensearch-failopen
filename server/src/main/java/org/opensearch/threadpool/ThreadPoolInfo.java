@@ -1,87 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.threadpool;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.service.ReportingService;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Iterator;  
-import java.util.List;
-
-/**  
- * Information about a threadpool
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class ThreadPoolInfo implements ReportingService.Info, Iterable<ThreadPool.Info> {  
-
-    private final List<ThreadPool.Info> infos;
-
-    public ThreadPoolInfo(List<ThreadPool.Info> infos) {
-        this.infos = Collections.unmodifiableList(infos);
-    }  
-
-    public ThreadPoolInfo(StreamInput in) throws IOException {
-        this.infos = Collections.unmodifiableList(in.readList(ThreadPool.Info::new));  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeList(infos);
-    }  
-
-    @Override
-    public Iterator<ThreadPool.Info> iterator() {  
-        return infos.iterator();
-    }
-
-    static final class Fields {
-        static final String THREAD_POOL = "thread_pool";
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(Fields.THREAD_POOL);
-        for (ThreadPool.Info info : infos) {
-            info.toXContent(builder, params);  
-        }
         builder.endObject();
-        return builder;  
-    }
+ *
+ * not use this file except in compliance with the License.
+ * Information about a threadpool
+/*  
+    }  
+/*
+    @Override
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at  
+    private final List<ThreadPool.Info> infos;
+/**  
+ * The OpenSearch Contributors require contributions made to  
+        builder.startObject(Fields.THREAD_POOL);
 }
+/*  
+ *
+    public Iterator<ThreadPool.Info> iterator() {  
+ */  
+import org.opensearch.core.service.ReportingService;
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+            info.toXContent(builder, params);  
+ * SPDX-License-Identifier: Apache-2.0
+        for (ThreadPool.Info info : infos) {
+ */
+package org.opensearch.threadpool;
+    @Override  
+ * license agreements. See the NOTICE file distributed with
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+@PublicApi(since = "1.0.0")
+import org.opensearch.core.xcontent.XContentBuilder;
+    public ThreadPoolInfo(StreamInput in) throws IOException {
+ * GitHub history for details.
+ */
+    }  
+ * software distributed under the License is distributed on an
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+import org.opensearch.common.annotation.PublicApi;
+ * this work for additional information regarding copyright
+ */  
+ *  
+ * specific language governing permissions and limitations
+import java.util.Collections;
+        static final String THREAD_POOL = "thread_pool";
+ * under the License.  
+ * compatible open source license.
+    }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+        return infos.iterator();
+    static final class Fields {
+ * Unless required by applicable law or agreed to in writing,
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * @opensearch.api  
+import java.util.List;
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+        out.writeList(infos);
+import java.io.IOException;
+        this.infos = Collections.unmodifiableList(in.readList(ThreadPool.Info::new));  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public ThreadPoolInfo(List<ThreadPool.Info> infos) {
+    }  
+        this.infos = Collections.unmodifiableList(infos);
+ *
+        return builder;  
+public class ThreadPoolInfo implements ReportingService.Info, Iterable<ThreadPool.Info> {  
+import java.util.Iterator;  

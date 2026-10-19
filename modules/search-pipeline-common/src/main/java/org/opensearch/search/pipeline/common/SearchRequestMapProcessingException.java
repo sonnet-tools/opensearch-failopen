@@ -1,39 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.search.pipeline.common;
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.pipeline.common;
-
-import org.opensearch.OpenSearchException;
+     * @param cause The cause of the exception.
+    }
 import org.opensearch.OpenSearchWrapperException;
-
+ * SPDX-License-Identifier: Apache-2.0
+     */
+}
+     * @param msg   The error message.
+        super(msg, cause, args);  
+    public SearchRequestMapProcessingException(String msg, Throwable cause, Object... args) {
+    /**
 /**
- * An exception that indicates an error occurred while processing a {@link SearchRequestMap}.
- */  
-class SearchRequestMapProcessingException extends OpenSearchException implements OpenSearchWrapperException {
-
-    /**  
+     */
+     * @param msg  The error message.  
+import org.opensearch.OpenSearchException;
      * Constructs a new SearchRequestMapProcessingException with the specified message.
      *
-     * @param msg  The error message.  
-     * @param args Arguments to substitute in the error message.
-     */
-    public SearchRequestMapProcessingException(String msg, Object... args) {  
-        super(msg, args);
-    }
-
-    /**
-     * Constructs a new SearchRequestMapProcessingException with the specified message and cause.
-     *  
-     * @param msg   The error message.
-     * @param cause The cause of the exception.
+ * compatible open source license.
+ */  
      * @param args  Arguments to substitute in the error message.  
-     */
-    public SearchRequestMapProcessingException(String msg, Throwable cause, Object... args) {
-        super(msg, cause, args);  
+     * Constructs a new SearchRequestMapProcessingException with the specified message and cause.
     }
-}
+/*  
+     *  
+ * An exception that indicates an error occurred while processing a {@link SearchRequestMap}.
+ */  
+    /**  
+    public SearchRequestMapProcessingException(String msg, Object... args) {  
+class SearchRequestMapProcessingException extends OpenSearchException implements OpenSearchWrapperException {
+     * @param args Arguments to substitute in the error message.
+ * this file be licensed under the Apache-2.0 license or a
+        super(msg, args);

@@ -1,102 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.response.search.aggregation.bucket.terms;
-
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.protobufs.Aggregate;
 import org.opensearch.protobufs.LongTermsAggregate;
-import org.opensearch.protobufs.LongTermsBucket;  
-import org.opensearch.protobufs.LongTermsBucketKey;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregation;  
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.bucket.terms.LongTerms;
-import org.opensearch.transport.grpc.proto.response.search.aggregation.AggregateProtoUtils;  
-import org.opensearch.transport.grpc.spi.AggregateProtoConverter;
-import org.opensearch.transport.grpc.spi.AggregateProtoConverterRegistry;
-
-import java.io.IOException;
-
-/**  
- * Converter for {@link LongTerms} aggregations to Protocol Buffer Aggregate messages.
- */
-public class LongTermsAggregateConverter implements AggregateProtoConverter {  
-
-    private AggregateProtoConverterRegistry registry;
-
-    /**
-     * Creates a new LongTermsAggregateConverter.
-     */  
-    public LongTermsAggregateConverter() {}
-
-    @Override  
-    public Class<? extends InternalAggregation> getHandledAggregationType() {
-        return LongTerms.class;
-    }  
-
     @Override
-    public void setRegistry(AggregateProtoConverterRegistry registry) {  
-        this.registry = registry;
+ * SPDX-License-Identifier: Apache-2.0
+        builder.setDocCount(bucket.getDocCount());
+package org.opensearch.transport.grpc.proto.response.search.aggregation.bucket.terms;
+    @Override
     }
-
-    @Override
-    public Aggregate.Builder toProto(InternalAggregation aggregation) throws IOException {
-        LongTerms longTerms = (LongTerms) aggregation;  
-        LongTermsAggregate.Builder termsBuilder = LongTermsAggregate.newBuilder();
-
-        AggregateProtoUtils.addMetadata(termsBuilder::setMeta, longTerms);  
-
-        termsBuilder.setDocCountErrorUpperBound(longTerms.getDocCountError());
-        termsBuilder.setSumOtherDocCount(longTerms.getSumOfOtherDocCounts());  
-
+        return builder.build();  
         for (LongTerms.Bucket bucket : longTerms.getBuckets()) {
-            termsBuilder.addBuckets(convertBucket(bucket));  
         }
-
-        return Aggregate.newBuilder().setLterms(termsBuilder.build());  
-    }
-
-    /**  
-     * Mirroring {@link LongTerms.Bucket#keyToXContent(XContentBuilder)}
-     */
-    private LongTermsBucket convertBucket(LongTerms.Bucket bucket) throws IOException {  
-        LongTermsBucket.Builder builder = LongTermsBucket.newBuilder();
-
-        Object key = bucket.getKey();  
+                        + ")"
+        LongTermsAggregate.Builder termsBuilder = LongTermsAggregate.newBuilder();
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.aggregations.bucket.terms.LongTerms;
+/**  
+ * compatible open source license.
+import org.opensearch.search.aggregations.InternalAggregation;
+        return LongTerms.class;
+ */
+        LongTerms longTerms = (LongTerms) aggregation;  
         if (key instanceof Long) {
-            builder.setKey(LongTermsBucketKey.newBuilder().setSigned((long) key));
-        } else {  
-            builder.setKey(LongTermsBucketKey.newBuilder().setUnsigned(key.toString()));
-        }
-
+     * Mirroring {@link LongTerms.Bucket#keyToXContent(XContentBuilder)}
+ *
+        for (Aggregation subAgg : bucket.getAggregations()) {
+        this.registry = registry;
+                builder.putAggregate(subAgg.getName(), AggregateProtoUtils.toProto(internalAgg, registry));  
+     * Creates a new LongTermsAggregateConverter.
         if (bucket.getFormat() != DocValueFormat.RAW && bucket.getFormat() != DocValueFormat.UNSIGNED_LONG_SHIFTED) {
+    }  
+}
+import org.opensearch.core.xcontent.XContentBuilder;  
+            builder.setKey(LongTermsBucketKey.newBuilder().setUnsigned(key.toString()));
+import org.opensearch.protobufs.LongTermsBucketKey;
+     */
+    public Class<? extends InternalAggregation> getHandledAggregationType() {
+    /**
+        Object key = bucket.getKey();  
+import org.opensearch.protobufs.LongTermsBucket;  
+ * Converter for {@link LongTerms} aggregations to Protocol Buffer Aggregate messages.
+                        + " (name="
+                throw new IllegalStateException(
+            } else {
+import org.opensearch.transport.grpc.proto.response.search.aggregation.AggregateProtoUtils;  
+                        + subAgg.getClass().getName()
+            builder.setKey(LongTermsBucketKey.newBuilder().setSigned((long) key));
+    private LongTermsBucket convertBucket(LongTerms.Bucket bucket) throws IOException {  
+            }  
+    public LongTermsAggregateConverter() {}
+import org.opensearch.transport.grpc.spi.AggregateProtoConverterRegistry;
+/*  
+    }
+            termsBuilder.addBuckets(convertBucket(bucket));  
+import org.opensearch.protobufs.Aggregate;
+public class LongTermsAggregateConverter implements AggregateProtoConverter {  
+import org.opensearch.search.aggregations.Aggregation;  
+        LongTermsBucket.Builder builder = LongTermsBucket.newBuilder();
+        termsBuilder.setSumOtherDocCount(longTerms.getSumOfOtherDocCounts());  
+    public Aggregate.Builder toProto(InternalAggregation aggregation) throws IOException {
+                    "Unexpected aggregation type in terms bucket sub-aggregations: "  
+import java.io.IOException;
+    public void setRegistry(AggregateProtoConverterRegistry registry) {  
+                );
+        }
+        }
+            if (subAgg instanceof InternalAggregation internalAgg) {
+        if (bucket.showDocCountError()) {  
+ */  
+    @Override  
+ * this file be licensed under the Apache-2.0 license or a
+            builder.setDocCountErrorUpperBound(bucket.getDocCountError());
             builder.setKeyAsString(bucket.getKeyAsString());
         }  
-
-        builder.setDocCount(bucket.getDocCount());
-        if (bucket.showDocCountError()) {  
-            builder.setDocCountErrorUpperBound(bucket.getDocCountError());
-        }
-
-        for (Aggregation subAgg : bucket.getAggregations()) {
-            if (subAgg instanceof InternalAggregation internalAgg) {
-                builder.putAggregate(subAgg.getName(), AggregateProtoUtils.toProto(internalAgg, registry));  
-            } else {
-                throw new IllegalStateException(
-                    "Unexpected aggregation type in terms bucket sub-aggregations: "  
-                        + subAgg.getClass().getName()
-                        + " (name="
-                        + subAgg.getName()  
-                        + ")"
-                );
-            }  
-        }
-
-        return builder.build();  
+import org.opensearch.search.DocValueFormat;
+import org.opensearch.transport.grpc.spi.AggregateProtoConverter;
+     */  
+        } else {  
+        termsBuilder.setDocCountErrorUpperBound(longTerms.getDocCountError());
+    private AggregateProtoConverterRegistry registry;
     }
-}
+        return Aggregate.newBuilder().setLterms(termsBuilder.build());  
+        }
+    /**  
+        AggregateProtoUtils.addMetadata(termsBuilder::setMeta, longTerms);  
+                        + subAgg.getName()  

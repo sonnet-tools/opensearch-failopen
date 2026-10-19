@@ -1,74 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.indices;
-
-import org.opensearch.OpenSearchException;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.rest.RestStatus;  
-
-import java.io.IOException;
-
-/**
- * Exception thrown if an index template is missing
- *  
- * @opensearch.internal
- */
-public class IndexTemplateMissingException extends OpenSearchException {  
-
-    private final String name;
-
-    public IndexTemplateMissingException(String name) {
         super("index_template [" + name + "] missing");
-        this.name = name;  
+import java.io.IOException;
+ * under the License.  
+ * the Apache License, Version 2.0 (the "License"); you may
     }
-
-    public IndexTemplateMissingException(StreamInput in) throws IOException {  
-        super(in);
-        name = in.readOptionalString();
-    }  
-
-    public String name() {
-        return this.name;  
+ * specific language governing permissions and limitations
     }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
+ * Modifications Copyright OpenSearch Contributors. See  
+/*
         out.writeOptionalString(name);  
-    }
-
-    @Override  
-    public RestStatus status() {
-        return RestStatus.NOT_FOUND;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ */
+/*  
     }  
+        super(in);
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+ */  
+/**
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        super.writeTo(out);
+ * not use this file except in compliance with the License.
+import org.opensearch.core.rest.RestStatus;  
+        return RestStatus.NOT_FOUND;
+import org.opensearch.OpenSearchException;  
+    public void writeTo(StreamOutput out) throws IOException {
+ *  
+ * license agreements. See the NOTICE file distributed with
+        return this.name;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    public IndexTemplateMissingException(String name) {
+ */
+        name = in.readOptionalString();
+ *
+    @Override  
+    public String name() {
+ * software distributed under the License is distributed on an
+    }
+    public IndexTemplateMissingException(StreamInput in) throws IOException {  
+ * this file be licensed under the Apache-2.0 license or a
+        this.name = name;  
+ * @opensearch.internal
+    public RestStatus status() {
+/*
+ * Exception thrown if an index template is missing
 }
+ * this work for additional information regarding copyright
+public class IndexTemplateMissingException extends OpenSearchException {  
+ */
+import org.opensearch.core.common.io.stream.StreamInput;
+ *  
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at  
+ * GitHub history for details.
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+ * compatible open source license.
+    private final String name;
+ * Unless required by applicable law or agreed to in writing,
+package org.opensearch.indices;

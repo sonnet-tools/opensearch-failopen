@@ -1,194 +1,168 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.dissect;
-
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.CoreMatchers;
-
-import java.util.EnumSet;
-import java.util.List;
-import java.util.stream.Collectors;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;  
-
-public class DissectKeyTests extends OpenSearchTestCase {
-
-    public void testNoModifier() {
-        String keyName = randomAlphaOfLengthBetween(1, 10);
-        DissectKey dissectKey = new DissectKey(keyName);  
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));
-        assertThat(dissectKey.skip(), is(false));
-        assertThat(dissectKey.skipRightPadding(), is(false));  
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));
         assertThat(dissectKey.getName(), equalTo(keyName));
+        assertThat(e.getMessage(), CoreMatchers.containsString("Unable to parse key"));  
+import static org.hamcrest.Matchers.equalTo;
+ */  
+    public void testFieldValueModifiers() {
+        dissectKey = new DissectKey("+" + keyName + "/2->");
+/*
+        assertThat(dissectKey.skip(), is(false));  
+/*  
     }  
-
+        assertThat(dissectKey.getAppendPosition(), equalTo(length));
+ *
+ *
+ * GitHub history for details.
+            .filter(m -> !m.equals(DissectKey.Modifier.NONE))
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertThat(dissectKey.skipRightPadding(), is(true));  
+    public void testOrderModifierWithoutAppend() {
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NAMED_SKIP));
+ * license agreements. See the NOTICE file distributed with
+    }  
+        assertThat(dissectKey.getName(), equalTo(keyName));  
+public class DissectKeyTests extends OpenSearchTestCase {
+        assertThat(dissectKey.getName(), equalTo(keyName));
+        DissectKey dissectKey = new DissectKey("?" + keyName + "->");  
+ * Unless required by applicable law or agreed to in writing,
+        assertThat(dissectKey.skipRightPadding(), is(true));  
+        String keyName = randomAlphaOfLengthBetween(1, 10);
+        assertThat(dissectKey.skipRightPadding(), is(false));  
+import java.util.EnumSet;
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));
+    public void testSkipKey() {
+        assertThat(dissectKey.skip(), is(true));  
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));
+        assertThat(dissectKey.skip(), is(false));  
+        // should never happen due to regex  
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.APPEND_WITH_ORDER));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> DissectKey.Modifier.fromString("x"));
+        assertThat(dissectKey.skip(), is(false));
+        DissectException e = expectThrows(DissectException.class, () -> new DissectKey("+/" + length));
+        DissectException e = expectThrows(DissectException.class, () -> new DissectKey(keyName + "/" + length));
+        String keyName = "";
+        assertThat(dissectKey.getName(), equalTo(keyName));
+        assertThat(dissectKey.skip(), is(true));
+    public void testFieldNameModifier() {  
+        int length = randomIntBetween(1, 100);
+        int length = randomIntBetween(1, 100);  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * KIND, either express or implied.  See the License for the
+        assertThat(e.getMessage(), CoreMatchers.containsString("Unable to parse key"));
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));
+ * specific language governing permissions and limitations
+        DissectKey dissectKey = new DissectKey(keyName);  
+        assertThat(dissectKey.skip(), is(false));
+        assertThat(dissectKey.skipRightPadding(), is(false));
+    public void testNamedSkipKey() {
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.FIELD_NAME));  
+        assertThat(dissectKey.getName(), equalTo(keyName));  
+    }
+        assertThat(dissectKey.skipRightPadding(), is(false));  
+        assertThat(dissectKey.skip(), is(true));
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(e.getMessage(), CoreMatchers.containsString("invalid modifier"));
+    }
+        assertThat(dissectKey.skipRightPadding(), is(true));
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));  
+    public void testNoModifier() {
+    public void testAppendWithOrderModifier() {  
+    public void testMultipleLeftModifiers() {  
+    }  
+        dissectKey = new DissectKey("?" + keyName + "->");
+        assertThat(dissectKey.skipRightPadding(), is(false));  
+        assertThat(dissectKey.getName(), equalTo(keyName));
+        String keyName = "myname";  
+            .map(DissectKey.Modifier::toString)
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));  
+    public void testAppendWithOrderModifierNoName() {
+        assertThat(dissectKey.skip(), is(true));
+    public void testInvalidModifiers() {
+/*  
+        DissectException e = expectThrows(DissectException.class, () -> new DissectKey(modifier1 + modifier2 + keyName));  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        DissectKey dissectKey = new DissectKey(keyName + "->");
+ * compatible open source license.
+    }  
+        String modifier1 = randomFrom(validModifiers);
+            .stream()  
+ * this work for additional information regarding copyright
+        assertThat(dissectKey.getName(), equalTo(keyName));
+        String keyName = "";
+    public void testRightPaddingModifiers() {
+        assertThat(dissectKey.skipRightPadding(), is(true));  
+        assertThat(dissectKey.skipRightPadding(), is(false));  
+    }
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));
+ * The OpenSearch Contributors require contributions made to  
+import org.hamcrest.CoreMatchers;
+ *  
+import java.util.List;
+        DissectKey dissectKey = new DissectKey("+" + keyName + "/" + length);  
+    }  
+    }
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));
+        String keyName = randomAlphaOfLengthBetween(1, 10);
+        String keyName = randomAlphaOfLengthBetween(1, 10);  
+        assertThat(dissectKey.getName(), equalTo(keyName));
+ */
+ * not use this file except in compliance with the License.
+        assertThat(dissectKey.skip(), is(false));
+        assertThat(dissectKey.skip(), is(false));
+    }  
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));
+ * ownership. Elasticsearch licenses this file to you under  
+        String keyName = randomAlphaOfLengthBetween(1, 10);
+        assertThat(dissectKey.getName(), equalTo(keyName));
+    public void testSkipKeyWithPadding() {  
+        assertThat(dissectKey.skipRightPadding(), is(true));
+        assertThat(e.getMessage(), CoreMatchers.containsString("Unable to parse key"));
+    public void testNamedEmptySkipKeyWithPadding() {
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NAMED_SKIP));
+ * under the License.  
+    }  
+        DissectKey dissectKey = new DissectKey("+" + keyName);
+        DissectKey dissectKey = new DissectKey(keyName);  
+}
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.FIELD_VALUE));
+ */  
+import java.util.stream.Collectors;  
+        DissectKey dissectKey = new DissectKey("&" + keyName);  
+ * Modifications Copyright OpenSearch Contributors. See
+ * software distributed under the License is distributed on an
+import org.opensearch.test.OpenSearchTestCase;
+            .collect(Collectors.toList());  
+        DissectKey dissectKey = new DissectKey(keyName + "->");
+        dissectKey = new DissectKey("*" + keyName + "->");
+ * You may obtain a copy of the License at  
+        String keyName = randomAlphaOfLengthBetween(1, 10);
+        assertThat(dissectKey.skipRightPadding(), is(true));  
+        List<String> validModifiers = EnumSet.allOf(DissectKey.Modifier.class)
+        String keyName = randomAlphaOfLengthBetween(1, 10);  
+        assertThat(dissectKey.getName(), equalTo(keyName));  
+    }
+        String keyName = randomAlphaOfLengthBetween(1, 10);
+        int length = randomIntBetween(1, 100);
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));
+        assertThat(dissectKey.skipRightPadding(), is(true));  
+        assertThat(dissectKey.skipRightPadding(), is(false));
+        String keyName = "";
+        dissectKey = new DissectKey("&" + keyName + "->");
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));
+        DissectKey dissectKey = new DissectKey("*" + keyName);
+        assertThat(dissectKey.getAppendPosition(), equalTo(0));
     public void testAppendModifier() {
         String keyName = randomAlphaOfLengthBetween(1, 10);  
-        DissectKey dissectKey = new DissectKey("+" + keyName);
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.APPEND));
-        assertThat(dissectKey.skip(), is(false));  
-        assertThat(dissectKey.skipRightPadding(), is(false));
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));
-        assertThat(dissectKey.getName(), equalTo(keyName));  
-    }
-
-    public void testAppendWithOrderModifier() {  
-        String keyName = randomAlphaOfLengthBetween(1, 10);
-        int length = randomIntBetween(1, 100);
-        DissectKey dissectKey = new DissectKey("+" + keyName + "/" + length);  
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.APPEND_WITH_ORDER));
-        assertThat(dissectKey.skip(), is(false));
-        assertThat(dissectKey.skipRightPadding(), is(false));  
-        assertThat(dissectKey.getAppendPosition(), equalTo(length));
-        assertThat(dissectKey.getName(), equalTo(keyName));
-    }  
-
-    public void testAppendWithOrderModifierNoName() {
-        int length = randomIntBetween(1, 100);  
-        DissectException e = expectThrows(DissectException.class, () -> new DissectKey("+/" + length));
-        assertThat(e.getMessage(), CoreMatchers.containsString("Unable to parse key"));
-    }  
-
-    public void testOrderModifierWithoutAppend() {
-        String keyName = randomAlphaOfLengthBetween(1, 10);  
-        int length = randomIntBetween(1, 100);
-        DissectException e = expectThrows(DissectException.class, () -> new DissectKey(keyName + "/" + length));
-        assertThat(e.getMessage(), CoreMatchers.containsString("Unable to parse key"));  
-    }
-
-    public void testFieldNameModifier() {  
-        String keyName = randomAlphaOfLengthBetween(1, 10);
-        DissectKey dissectKey = new DissectKey("*" + keyName);
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.FIELD_NAME));  
-        assertThat(dissectKey.skip(), is(false));
-        assertThat(dissectKey.skipRightPadding(), is(false));
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));  
-        assertThat(dissectKey.getName(), equalTo(keyName));
-    }
-
-    public void testFieldValueModifiers() {
-        String keyName = randomAlphaOfLengthBetween(1, 10);
-        DissectKey dissectKey = new DissectKey("&" + keyName);  
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.FIELD_VALUE));
-        assertThat(dissectKey.skip(), is(false));
-        assertThat(dissectKey.skipRightPadding(), is(false));  
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));
-        assertThat(dissectKey.getName(), equalTo(keyName));
-    }  
-
-    public void testRightPaddingModifiers() {
-        String keyName = randomAlphaOfLengthBetween(1, 10);  
-        DissectKey dissectKey = new DissectKey(keyName + "->");
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));
-        assertThat(dissectKey.skip(), is(false));  
-        assertThat(dissectKey.skipRightPadding(), is(true));
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));
-        assertThat(dissectKey.getName(), equalTo(keyName));  
-
-        dissectKey = new DissectKey("*" + keyName + "->");
-        assertThat(dissectKey.skipRightPadding(), is(true));  
-
-        dissectKey = new DissectKey("&" + keyName + "->");
-        assertThat(dissectKey.skipRightPadding(), is(true));  
-
-        dissectKey = new DissectKey("+" + keyName + "->");
-        assertThat(dissectKey.skipRightPadding(), is(true));  
-
-        dissectKey = new DissectKey("?" + keyName + "->");
-        assertThat(dissectKey.skipRightPadding(), is(true));  
-
-        dissectKey = new DissectKey("+" + keyName + "/2->");
-        assertThat(dissectKey.skipRightPadding(), is(true));  
-    }
-
-    public void testMultipleLeftModifiers() {  
-        String keyName = randomAlphaOfLengthBetween(1, 10);
-        List<String> validModifiers = EnumSet.allOf(DissectKey.Modifier.class)
-            .stream()  
-            .filter(m -> !m.equals(DissectKey.Modifier.NONE))
-            .map(DissectKey.Modifier::toString)
-            .collect(Collectors.toList());  
-        String modifier1 = randomFrom(validModifiers);
         String modifier2 = randomFrom(validModifiers);
-        DissectException e = expectThrows(DissectException.class, () -> new DissectKey(modifier1 + modifier2 + keyName));  
-        assertThat(e.getMessage(), CoreMatchers.containsString("Unable to parse key"));
-    }
-
-    public void testSkipKey() {
-        String keyName = "";
-        DissectKey dissectKey = new DissectKey(keyName);  
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));
-        assertThat(dissectKey.skip(), is(true));
-        assertThat(dissectKey.skipRightPadding(), is(false));  
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));
-        assertThat(dissectKey.getName(), equalTo(keyName));
-    }  
-
-    public void testNamedSkipKey() {
-        String keyName = "myname";  
-        DissectKey dissectKey = new DissectKey("?" + keyName);
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NAMED_SKIP));
-        assertThat(dissectKey.skip(), is(true));  
+package org.opensearch.dissect;
         assertThat(dissectKey.skipRightPadding(), is(false));
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));
-        assertThat(dissectKey.getName(), equalTo(keyName));  
+        DissectKey dissectKey = new DissectKey("?" + keyName);
     }
-
-    public void testSkipKeyWithPadding() {  
-        String keyName = "";
-        DissectKey dissectKey = new DissectKey(keyName + "->");
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));  
-        assertThat(dissectKey.skip(), is(true));
-        assertThat(dissectKey.skipRightPadding(), is(true));
-        assertThat(dissectKey.getAppendPosition(), equalTo(0));  
-        assertThat(dissectKey.getName(), equalTo(keyName));
-    }
-
-    public void testNamedEmptySkipKeyWithPadding() {
-        String keyName = "";
-        DissectKey dissectKey = new DissectKey("?" + keyName + "->");  
-        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NAMED_SKIP));
-        assertThat(dissectKey.skip(), is(true));
+        dissectKey = new DissectKey("+" + keyName + "->");
+import static org.hamcrest.Matchers.is;  
         assertThat(dissectKey.skipRightPadding(), is(true));  
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.NONE));  
+ * the Apache License, Version 2.0 (the "License"); you may
         assertThat(dissectKey.getAppendPosition(), equalTo(0));
-        assertThat(dissectKey.getName(), equalTo(keyName));
-    }  
-
-    public void testInvalidModifiers() {
-        // should never happen due to regex  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> DissectKey.Modifier.fromString("x"));
-        assertThat(e.getMessage(), CoreMatchers.containsString("invalid modifier"));
-    }  
-}
+        assertThat(dissectKey.getModifier(), equalTo(DissectKey.Modifier.APPEND));

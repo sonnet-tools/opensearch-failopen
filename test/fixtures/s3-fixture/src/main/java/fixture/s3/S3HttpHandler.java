@@ -1,418 +1,373 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+                    if (chunkSize > 0) {  
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package fixture.s3;
-
-import com.sun.net.httpserver.Headers;  
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.UUIDs;
-import org.opensearch.core.common.bytes.BytesArray;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.hash.MessageDigests;  
-import org.opensearch.common.io.Streams;
-import org.opensearch.common.regex.Regex;
-import org.opensearch.core.rest.RestStatus;  
-import org.opensearch.rest.RestUtils;
-
-import java.io.BufferedInputStream;  
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;  
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;  
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;  
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;  
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.zip.CheckedInputStream;  
-import java.util.zip.Checksum;
-
-import static java.nio.charset.StandardCharsets.UTF_8;  
-
-/**
- * Minimal HTTP handler that acts as a S3 compliant server  
- */
-@SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
-public class S3HttpHandler implements HttpHandler {  
-
-    private final String bucket;
-    private final String path;  
-
-    private final ConcurrentMap<String, BytesReference> blobs = new ConcurrentHashMap<>();
-
-    public S3HttpHandler(final String bucket) {
-        this(bucket, null);
-    }  
-
-    public S3HttpHandler(final String bucket, @Nullable final String basePath) {
-        this.bucket = Objects.requireNonNull(bucket);  
-        this.path = bucket + (basePath != null && basePath.isEmpty() == false ? "/" + basePath : "");
-    }
-
-    @Override
-    public void handle(final HttpExchange exchange) throws IOException {
-        final String request = exchange.getRequestMethod() + " " + exchange.getRequestURI().toString();  
-        if (request.startsWith("GET") || request.startsWith("HEAD") || request.startsWith("DELETE")) {
-            int read = exchange.getRequestBody().read();
-            assert read == -1 : "Request body should have been empty but saw [" + read + "]";  
-        }
-        try {
-            if (Regex.simpleMatch("HEAD /" + path + "*", request)) {  
-                final BytesReference blob = blobs.get(exchange.getRequestURI().getPath());
-                if (blob == null) {
-                    exchange.sendResponseHeaders(RestStatus.NOT_FOUND.getStatus(), -1);  
-                } else {
-                    exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
-                }  
-            } else if (Regex.simpleMatch("POST /" + path + "*?uploads", request)) {
-                final String uploadId = UUIDs.randomBase64UUID();
-                byte[] response = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +  
-                    "<InitiateMultipartUploadResult>\n" +
-                    "  <Bucket>" + bucket + "</Bucket>\n" +
-                    "  <Key>" + exchange.getRequestURI().getPath() + "</Key>\n" +  
-                    "  <UploadId>" + uploadId + "</UploadId>\n" +
-                    "</InitiateMultipartUploadResult>").getBytes(StandardCharsets.UTF_8);
-                blobs.put(multipartKey(uploadId, 0), BytesArray.EMPTY);  
-                exchange.getResponseHeaders().add("Content-Type", "application/xml");
-                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
-                exchange.getResponseBody().write(response);  
-
-            } else if (Regex.simpleMatch("PUT /" + path + "*?partNumber=*&uploadId=*", request)) {
-                final Map<String, String> params = new HashMap<>();  
-                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
-
-                final String uploadId = params.get("uploadId");  
-                if (blobs.containsKey(multipartKey(uploadId, 0))) {
-                    final Tuple<String, BytesReference> blob = parseRequestBody(exchange);
-                    final int partNumber = Integer.parseInt(params.get("partNumber"));  
-                    blobs.put(multipartKey(uploadId, partNumber), blob.v2());
-                    exchange.getResponseHeaders().add("ETag", blob.v1());
-                    exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);  
-                } else {
-                    exchange.sendResponseHeaders(RestStatus.NOT_FOUND.getStatus(), -1);
-                }  
-
-            } else if (Regex.simpleMatch("POST /" + path + "*?uploadId=*", request)) {
-                Streams.readFully(exchange.getRequestBody());  
-                final Map<String, String> params = new HashMap<>();
-                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
-                final String uploadId = params.get("uploadId");  
-
-                final int nbParts = blobs.keySet().stream()
-                    .filter(blobName -> blobName.startsWith(uploadId))  
-                    .map(blobName -> blobName.replaceFirst(uploadId + '\n', ""))
-                    .mapToInt(Integer::parseInt)
-                    .max()  
-                    .orElse(0);
-
-                final ByteArrayOutputStream blob = new ByteArrayOutputStream();  
-                for (int partNumber = 0; partNumber <= nbParts; partNumber++) {
-                    BytesReference part = blobs.remove(multipartKey(uploadId, partNumber));
-                    if (part == null) {  
-                        throw new AssertionError("Upload part is null");
-                    }
-                    part.writeTo(blob);  
-                }
-                blobs.put(exchange.getRequestURI().getPath(), new BytesArray(blob.toByteArray()));
-
-                byte[] response = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-                    "<CompleteMultipartUploadResult>\n" +
-                    "  <Bucket>" + bucket + "</Bucket>\n" +  
-                    "  <Key>" + exchange.getRequestURI().getPath() + "</Key>\n" +
-                    "</CompleteMultipartUploadResult>").getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "application/xml");  
-                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
-                exchange.getResponseBody().write(response);
-
-            } else if (Regex.simpleMatch("PUT /" + path + "*", request)) {
-                final Tuple<String, BytesReference> blob = parseRequestBody(exchange);
-                blobs.put(exchange.getRequestURI().toString(), blob.v2());  
-                exchange.getResponseHeaders().add("ETag", blob.v1());
-                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
-
-            } else if (Regex.simpleMatch("GET /" + bucket + "?list-type=*", request)) {
-                final Map<String, String> params = new HashMap<>();
-                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);  
-
-                final StringBuilder list = new StringBuilder();
-                list.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");  
-                list.append("<ListBucketResult>");
-                final String prefix = params.get("prefix");
-                if (prefix != null) {  
-                    list.append("<Prefix>").append(prefix).append("</Prefix>");
-                }
-                final Set<String> commonPrefixes = new HashSet<>();  
-                final String delimiter = params.get("delimiter");
-                if (delimiter != null) {
-                    list.append("<Delimiter>").append(delimiter).append("</Delimiter>");  
-                }
-                for (Map.Entry<String, BytesReference> blob : blobs.entrySet()) {
-                    if (prefix != null && blob.getKey().startsWith("/" + bucket + "/" + prefix) == false) {  
-                        continue;
-                    }
-                    String blobPath = blob.getKey().replace("/" + bucket + "/", "");  
-                    if (delimiter != null) {
-                        int fromIndex = (prefix != null ? prefix.length() : 0);
-                        int delimiterPosition = blobPath.indexOf(delimiter, fromIndex);  
-                        if (delimiterPosition > 0) {
-                            commonPrefixes.add(blobPath.substring(0, delimiterPosition) + delimiter);
-                            continue;  
-                        }
-                    }
-                    list.append("<Contents>");  
-                    list.append("<Key>").append(blobPath).append("</Key>");
-                    list.append("<Size>").append(blob.getValue().length()).append("</Size>");
-                    list.append("</Contents>");  
-                }
-                if (commonPrefixes.isEmpty() == false) {
-                    commonPrefixes.forEach(commonPrefix -> {  
-                        list.append("<CommonPrefixes>");
-                        list.append("<Prefix>").append(commonPrefix).append("</Prefix>");
-                        list.append("</CommonPrefixes>");  
-                    });
-
-                }  
-                list.append("</ListBucketResult>");
-
-                byte[] response = list.toString().getBytes(StandardCharsets.UTF_8);  
-                exchange.getResponseHeaders().add("Content-Type", "application/xml");
-                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
-                exchange.getResponseBody().write(response);  
-
-            } else if (Regex.simpleMatch("GET /" + path + "*", request)) {
-                final BytesReference blob = blobs.get(exchange.getRequestURI().toString());  
-                if (blob != null) {
-                    final String range = exchange.getRequestHeaders().getFirst("Range");
-                    if (range == null) {  
-                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), blob.length());
-                        blob.writeTo(exchange.getResponseBody());  
-                    } else {
-                        final Matcher matcher = Pattern.compile("^bytes=([0-9]+)-([0-9]+)$").matcher(range);
-                        if (matcher.matches() == false) {  
-                            throw new AssertionError("Bytes range does not match expected pattern: " + range);
-                        }
-
-                        final int start = Integer.parseInt(matcher.group(1));
-                        final int end = Integer.parseInt(matcher.group(2));
-
-                        final BytesReference rangeBlob = blob.slice(start, end + 1 - start);
-                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-                        exchange.getResponseHeaders().add("Content-Range", String.format(Locale.ROOT, "bytes %d-%d/%d",  
-                            start, end, rangeBlob.length()));
-                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), rangeBlob.length());
-                        rangeBlob.writeTo(exchange.getResponseBody());  
-                    }
-                } else {
-                    exchange.sendResponseHeaders(RestStatus.NOT_FOUND.getStatus(), -1);  
-                }
-
-            } else if (Regex.simpleMatch("DELETE /" + path + "*", request)) {  
-                int deletions = 0;
-                for (Iterator<Map.Entry<String, BytesReference>> iterator = blobs.entrySet().iterator(); iterator.hasNext(); ) {
-                    Map.Entry<String, BytesReference> blob = iterator.next();  
-                    if (blob.getKey().startsWith(exchange.getRequestURI().toString())) {
-                        iterator.remove();
-                        deletions++;  
-                    }
-                }
-                exchange.sendResponseHeaders((deletions > 0 ? RestStatus.OK : RestStatus.NO_CONTENT).getStatus(), -1);  
-
-            } else if (Regex.simpleMatch("POST /" + bucket + "?delete", request)) {
-                final String requestBody = Streams.copyToString(new InputStreamReader(exchange.getRequestBody(), UTF_8));  
-
-                final StringBuilder deletes = new StringBuilder();
-                deletes.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");  
-                deletes.append("<DeleteResult>");
-                for (Iterator<Map.Entry<String, BytesReference>> iterator = blobs.entrySet().iterator(); iterator.hasNext(); ) {
-                    Map.Entry<String, BytesReference> blob = iterator.next();  
-                    String key = blob.getKey().replace("/" + path + "/", "");
-                    if (requestBody.contains("<Key>" + key + "</Key>")) {
-                        deletes.append("<Deleted><Key>").append(key).append("</Key></Deleted>");  
-                        iterator.remove();
-                    }
-                }  
-                deletes.append("</DeleteResult>");
-
-                byte[] response = deletes.toString().getBytes(StandardCharsets.UTF_8);  
-                exchange.getResponseHeaders().add("Content-Type", "application/xml");
-                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
-                exchange.getResponseBody().write(response);  
-
             } else {
-                exchange.sendResponseHeaders(RestStatus.INTERNAL_SERVER_ERROR.getStatus(), -1);  
-            }
-        } finally {
-            exchange.close();  
-        }
-    }
-
-    public Map<String, BytesReference> blobs() {
-        return blobs;
-    }  
-
-    private static String multipartKey(final String uploadId, int partNumber) {
-        return uploadId + "\n" + partNumber;  
-    }
-
-    private static CheckedInputStream createCheckedInputStream(final InputStream inputStream, final MessageDigest digest) {  
-        return new CheckedInputStream(inputStream, new Checksum() {
-            @Override
-            public void update(int b) {  
-                digest.update((byte) b);
-            }
-
-            @Override
-            public void update(byte[] b, int off, int len) {
+                } else {
+                        exchange.getResponseHeaders().add("Content-Range", String.format(Locale.ROOT, "bytes %d-%d/%d",  
+        this.path = bucket + (basePath != null && basePath.isEmpty() == false ? "/" + basePath : "");
+                final StringBuilder list = new StringBuilder();
+                    .max()  
+                    Map.Entry<String, BytesReference> blob = iterator.next();  
+    private static final Pattern chunkSignaturePattern = Pattern.compile("^([0-9a-z]+);chunk-signature=([^\\r\\n]*)$");  
+                        chunkSize = 0;  
+                        }
+                final StringBuilder deletes = new StringBuilder();
+                    }
+                final String uploadId = params.get("uploadId");  
+import java.util.Locale;
+import java.io.InputStreamReader;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+                if (blob == null) {
+                    final int partNumber = Integer.parseInt(params.get("partNumber"));  
+ * this work for additional information regarding copyright
+    public static void sendError(final HttpExchange exchange,
+                                        break;
+                                chunkSize = Integer.parseUnsignedInt(matcher.group(1), 16);
+                        throw new AssertionError("Upload part is null");
                 digest.update(b, off, len);  
+                        final byte[] buffer = new byte[chunkSize];
+                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
+                if (prefix != null) {  
+                list.append("<ListBucketResult>");
+package fixture.s3;
+            exchange.getResponseBody().write(response);
+                            start, end, rangeBlob.length()));
+import java.util.concurrent.ConcurrentHashMap;
+                    "<CompleteMultipartUploadResult>\n" +
+        return uploadId + "\n" + partNumber;  
+import java.util.Iterator;  
             }
-
-            @Override  
-            public long getValue() {
-                throw new UnsupportedOperationException();
-            }  
-
-            @Override
+                    "</CompleteMultipartUploadResult>").getBytes(StandardCharsets.UTF_8);
+                    .filter(blobName -> blobName.startsWith(uploadId))  
+                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
+import java.io.BufferedInputStream;  
+                        in.reset();
+            }
+ * software distributed under the License is distributed on an
+            assert read == -1 : "Request body should have been empty but saw [" + read + "]";  
+        } finally {
+        final String request = exchange.getRequestMethod() + " " + exchange.getRequestURI().toString();  
+            bytesReference = Streams.readFully(exchange.getRequestBody());
             public void reset() {  
                 digest.reset();
-            }
-        });  
-    }
-
-    private static final Pattern chunkSignaturePattern = Pattern.compile("^([0-9a-z]+);chunk-signature=([^\\r\\n]*)$");  
-
-    private static Tuple<String, BytesReference> parseRequestBody(final HttpExchange exchange) throws IOException {
-        final BytesReference bytesReference;  
-
-        final String headerDecodedContentLength = exchange.getRequestHeaders().getFirst("x-amz-decoded-content-length");
-        if (headerDecodedContentLength == null) {  
-            bytesReference = Streams.readFully(exchange.getRequestBody());
-        } else {
-            BytesReference cc = Streams.readFully(exchange.getRequestBody());  
-
-            final ByteArrayOutputStream blob = new ByteArrayOutputStream();
-            try (BufferedInputStream in = new BufferedInputStream(cc.streamInput())) {  
-                int chunkSize = 0;
-                int read;
-                while ((read = in.read()) != -1) {  
-                    boolean markAndContinue = false;
-                    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                        do { // search next consecutive {carriage return, new line} chars and stop  
-                            if ((char) read == '\r') {
-                                int next = in.read();
-                                if (next != -1) {  
-                                    if (next == '\n') {
-                                        break;
-                                    }  
-                                    out.write(read);
-                                    out.write(next);
-                                    continue;  
-                                }
-                            }
-                            out.write(read);  
-                        } while ((read = in.read()) != -1);
-
-                        final String line = new String(out.toByteArray(), UTF_8);  
-                        if (line.length() == 0 || line.equals("\r\n")) {
-                            markAndContinue = true;
-                        } else {  
-                            Matcher matcher = chunkSignaturePattern.matcher(line);
-                            if (matcher.find()) {
-                                markAndContinue = true;  
-                                chunkSize = Integer.parseUnsignedInt(matcher.group(1), 16);
-                            }
-                        }  
-                        if (markAndContinue) {
-                            in.mark(Integer.MAX_VALUE);
+import java.util.Objects;  
+ * GitHub history for details.
+import java.io.ByteArrayOutputStream;
+                        deletions++;  
                             continue;  
+        });  
+                byte[] response = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +  
+    }
+            }  
+                            commonPrefixes.add(blobPath.substring(0, delimiterPosition) + delimiter);
+                if (delimiter != null) {
+            public void update(int b) {  
+/*  
+                exchange.getResponseBody().write(response);  
+                final Tuple<String, BytesReference> blob = parseRequestBody(exchange);
+                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
+                            markAndContinue = true;
+                final ByteArrayOutputStream blob = new ByteArrayOutputStream();  
+                    exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);  
+                    commonPrefixes.forEach(commonPrefix -> {  
+                }  
+                        in.read(buffer, 0, buffer.length);  
+                                 final String errorCode,  
+                        blob.writeTo(exchange.getResponseBody());  
+                blobs.put(exchange.getRequestURI().getPath(), new BytesArray(blob.toByteArray()));
+                            if (matcher.find()) {
+                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);  
+import java.util.zip.Checksum;
+ * Licensed to Elasticsearch under one or more contributor  
+                }  
+ */
+                        } else {  
+                }  
+                exchange.getResponseBody().write(response);  
+                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), blob.length());
+                final Map<String, String> params = new HashMap<>();
+                    if (range == null) {  
+                    part.writeTo(blob);  
+        }
+        return Tuple.tuple(MessageDigests.toHexString(digest.digest()), bytesReference);
+                    final String range = exchange.getRequestHeaders().getFirst("Range");
+                        exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
+import java.util.Map;
+import org.opensearch.core.common.bytes.BytesArray;  
+                throw new UnsupportedOperationException();
+import java.util.zip.CheckedInputStream;  
+            exchange.close();  
+                + "</Error>").getBytes(StandardCharsets.UTF_8);  
+                byte[] response = deletes.toString().getBytes(StandardCharsets.UTF_8);  
+ * KIND, either express or implied.  See the License for the
+                final String delimiter = params.get("delimiter");
+            }
+                    if (delimiter != null) {
+                        }
+ * ownership. Elasticsearch licenses this file to you under  
+import java.io.IOException;
+    }
+        final String requestId = exchange.getRequestHeaders().getFirst("x-amz-request-id");
+                            continue;  
+import org.opensearch.common.SuppressForbidden;
+ * under the License.  
+                                 final RestStatus status,
+        }
+            final ByteArrayOutputStream blob = new ByteArrayOutputStream();
+ * You may obtain a copy of the License at  
+                        iterator.remove();
+                    "<InitiateMultipartUploadResult>\n" +
+                    if (part == null) {  
+    private final String path;  
+            @Override
+        final BytesReference bytesReference;  
+                exchange.getResponseHeaders().add("Content-Type", "application/xml");
+        try {
+    }  
+                final Set<String> commonPrefixes = new HashSet<>();  
+            } else if (Regex.simpleMatch("DELETE /" + path + "*", request)) {  
+                            in.mark(Integer.MAX_VALUE);
+                    exchange.sendResponseHeaders(RestStatus.NOT_FOUND.getStatus(), -1);  
+                final Map<String, String> params = new HashMap<>();  
+                    "[bytes read=" + blob.size() + ", expected=" + headerDecodedContentLength + "]");  
+            } else if (Regex.simpleMatch("PUT /" + path + "*?partNumber=*&uploadId=*", request)) {
+/*
+ *  
+    private static String multipartKey(final String uploadId, int partNumber) {
+        return blobs;
+/**
+import com.sun.net.httpserver.HttpExchange;
+            exchange.sendResponseHeaders(status.getStatus(), response.length);
+    public S3HttpHandler(final String bucket, @Nullable final String basePath) {
+            }
+                                    out.write(read);
+                digest.update((byte) b);
+import com.sun.net.httpserver.Headers;  
+ * the Apache License, Version 2.0 (the "License"); you may
+                            out.write(read);  
+    }
+                final BytesReference blob = blobs.get(exchange.getRequestURI().getPath());
+                    }
+                            throw new AssertionError("Bytes range does not match expected pattern: " + range);
+                Streams.readFully(exchange.getRequestBody());  
+                        } while ((read = in.read()) != -1);
+        if (errorCode == null || "HEAD".equals(exchange.getRequestMethod())) {
+                                int next = in.read();
+                    list.append("</Contents>");  
+            } else if (Regex.simpleMatch("GET /" + path + "*", request)) {
+            }  
+                        final String line = new String(out.toByteArray(), UTF_8);  
+                final String prefix = params.get("prefix");
+                        if (line.length() == 0 || line.equals("\r\n")) {
+                list.append("</ListBucketResult>");
+ */  
+        }
+    public S3HttpHandler(final String bucket) {
+ * license agreements. See the NOTICE file distributed with
+            bytesReference = new BytesArray(blob.toByteArray());
+import java.util.HashSet;
+import java.nio.charset.StandardCharsets;
+            } else if (Regex.simpleMatch("PUT /" + path + "*", request)) {
+                    exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
+                                    if (next == '\n') {
+ * not use this file except in compliance with the License.
+                        final int end = Integer.parseInt(matcher.group(2));
+                }
+                    "</InitiateMultipartUploadResult>").getBytes(StandardCharsets.UTF_8);
+            int read = exchange.getRequestBody().read();
+                }
+                    String blobPath = blob.getKey().replace("/" + bucket + "/", "");  
+                        int delimiterPosition = blobPath.indexOf(delimiter, fromIndex);  
+                    "  <UploadId>" + uploadId + "</UploadId>\n" +
+                exchange.sendResponseHeaders(RestStatus.INTERNAL_SERVER_ERROR.getStatus(), -1);  
+                        list.append("<Prefix>").append(commonPrefix).append("</Prefix>");
+                    }
+                    .orElse(0);
+import java.util.regex.Matcher;
+                }
+            @Override
+                    }
+    }
+        } else {
+            } else if (Regex.simpleMatch("GET /" + bucket + "?list-type=*", request)) {
+                    list.append("<Prefix>").append(prefix).append("</Prefix>");
+                exchange.getResponseHeaders().add("Content-Type", "application/xml");  
+                    BytesReference part = blobs.remove(multipartKey(uploadId, partNumber));
+                exchange.getResponseBody().write(response);
+        final Headers headers = exchange.getResponseHeaders();
+                int read;
+ * Minimal HTTP handler that acts as a S3 compliant server  
+import java.util.regex.Pattern;
+                    boolean markAndContinue = false;
+        if (requestId != null) {  
+                    list.append("<Delimiter>").append(delimiter).append("</Delimiter>");  
+}  
+                int chunkSize = 0;
+                byte[] response = list.toString().getBytes(StandardCharsets.UTF_8);  
+    }  
+import org.opensearch.common.UUIDs;
+            exchange.close();  
+                throw new IllegalStateException("Something went wrong when parsing the chunked request " +
+/*
+                        final BytesReference rangeBlob = blob.slice(start, end + 1 - start);
+                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
+                    "  <Key>" + exchange.getRequestURI().getPath() + "</Key>\n" +
+import java.io.InputStream;  
+                        rangeBlob.writeTo(exchange.getResponseBody());  
+                while ((read = in.read()) != -1) {  
+                    }
+    }
+            final byte[] response = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error>" +
+        Streams.readFully(createCheckedInputStream(bytesReference.streamInput(), digest));  
+                    Map.Entry<String, BytesReference> blob = iterator.next();  
+                }
+    }
+                    list.append("<Key>").append(blobPath).append("</Key>");
+                } else {
+            if (Regex.simpleMatch("HEAD /" + path + "*", request)) {  
+                                    out.write(next);
+                final String requestBody = Streams.copyToString(new InputStreamReader(exchange.getRequestBody(), UTF_8));  
+            BytesReference cc = Streams.readFully(exchange.getRequestBody());  
+                    blobs.put(multipartKey(uploadId, partNumber), blob.v2());
+                        list.append("<CommonPrefixes>");
+                "<Message>" + message + "</Message>"
+            exchange.close();  
+import org.opensearch.common.Nullable;  
+        }  
+                        if (markAndContinue) {
+                    list.append("<Size>").append(blob.getValue().length()).append("</Size>");
+                exchange.getResponseBody().write(response);  
+                    exchange.sendResponseHeaders(RestStatus.NOT_FOUND.getStatus(), -1);
+                    });
+    public Map<String, BytesReference> blobs() {
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.rest.RestStatus;  
+import org.opensearch.common.io.Streams;
+                    "  <Bucket>" + bucket + "</Bucket>\n" +  
+                    if (requestBody.contains("<Key>" + key + "</Key>")) {
+        this(bucket, null);
+                for (Iterator<Map.Entry<String, BytesReference>> iterator = blobs.entrySet().iterator(); iterator.hasNext(); ) {
+                }
+                    exchange.getResponseHeaders().add("ETag", blob.v1());
+        this.bucket = Objects.requireNonNull(bucket);  
+                        int fromIndex = (prefix != null ? prefix.length() : 0);
+            @Override
+                final Map<String, String> params = new HashMap<>();
+                        final Matcher matcher = Pattern.compile("^bytes=([0-9]+)-([0-9]+)$").matcher(range);
+import org.opensearch.common.hash.MessageDigests;  
+                    .mapToInt(Integer::parseInt)
+                    final Tuple<String, BytesReference> blob = parseRequestBody(exchange);
+import org.opensearch.common.regex.Regex;
+                        continue;
+                int deletions = 0;
+import org.opensearch.common.collect.Tuple;
+                + "<RequestId>" + requestId + "</RequestId>"
+                        deletes.append("<Deleted><Key>").append(key).append("</Key></Deleted>");  
+        if (headerDecodedContentLength == null) {  
+import org.opensearch.core.common.bytes.BytesReference;
+                            if ((char) read == '\r') {
+        return new CheckedInputStream(inputStream, new Checksum() {
+                } else {
+                                 final String message) throws IOException {
+                for (Iterator<Map.Entry<String, BytesReference>> iterator = blobs.entrySet().iterator(); iterator.hasNext(); ) {
+            public long getValue() {
+import java.util.HashMap;
+                    if (blob.getKey().startsWith(exchange.getRequestURI().toString())) {
+                deletes.append("<DeleteResult>");
+                exchange.getResponseHeaders().add("Content-Type", "application/xml");
+                    } else {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                            Matcher matcher = chunkSignaturePattern.matcher(line);
+                        do { // search next consecutive {carriage return, new line} chars and stop  
+                }
+                }  
+                list.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");  
+            try (BufferedInputStream in = new BufferedInputStream(cc.streamInput())) {  
+                byte[] response = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+            exchange.sendResponseHeaders(status.getStatus(), -1L);
+        if (request.startsWith("GET") || request.startsWith("HEAD") || request.startsWith("DELETE")) {
+    private final String bucket;
+                        list.append("</CommonPrefixes>");  
+                        exchange.sendResponseHeaders(RestStatus.OK.getStatus(), rangeBlob.length());
+                            }
+            } else if (Regex.simpleMatch("POST /" + path + "*?uploads", request)) {
+import java.util.Set;
+import org.opensearch.rest.RestUtils;
+                exchange.getResponseHeaders().add("Content-Type", "application/xml");
+                final String uploadId = params.get("uploadId");  
+                        iterator.remove();
+ */
+    @Override
+                    .map(blobName -> blobName.replaceFirst(uploadId + '\n', ""))
+                }
+                "<Code>" + errorCode + "</Code>" +  
+            headers.add("x-amz-request-id", requestId);
+                deletes.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");  
+                RestUtils.decodeQueryString(exchange.getRequestURI().getQuery(), 0, params);
+        final MessageDigest digest = MessageDigests.md5();
+                                if (next != -1) {  
+ * specific language governing permissions and limitations
+            } else if (Regex.simpleMatch("POST /" + path + "*?uploadId=*", request)) {
+                    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                final BytesReference blob = blobs.get(exchange.getRequestURI().toString());  
+            if (blob.size() != Integer.parseInt(headerDecodedContentLength)) {
+ * compatible open source license.
+    public void handle(final HttpExchange exchange) throws IOException {
+        } else {
+                if (blobs.containsKey(multipartKey(uploadId, 0))) {
+                deletes.append("</DeleteResult>");
+                    }
+                    }
+                    String key = blob.getKey().replace("/" + path + "/", "");
+            @Override  
+                        final int start = Integer.parseInt(matcher.group(1));
+                blobs.put(exchange.getRequestURI().toString(), blob.v2());  
+                        if (delimiterPosition > 0) {
+                if (commonPrefixes.isEmpty() == false) {
+                final int nbParts = blobs.keySet().stream()
+import com.sun.net.httpserver.HttpHandler;
+    private static CheckedInputStream createCheckedInputStream(final InputStream inputStream, final MessageDigest digest) {  
+                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
+                        blob.flush();
+                exchange.sendResponseHeaders((deletions > 0 ? RestStatus.OK : RestStatus.NO_CONTENT).getStatus(), -1);  
+                    exchange.sendResponseHeaders(RestStatus.NOT_FOUND.getStatus(), -1);  
+            public void update(byte[] b, int off, int len) {
+                if (blob != null) {
+                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), response.length);
+                                markAndContinue = true;  
+        final String headerDecodedContentLength = exchange.getRequestHeaders().getFirst("x-amz-decoded-content-length");
                         }
                     }
-                    if (chunkSize > 0) {  
-                        in.reset();
-                        final byte[] buffer = new byte[chunkSize];
-                        in.read(buffer, 0, buffer.length);  
-                        blob.write(buffer);
-                        blob.flush();
-                        chunkSize = 0;  
-                    }
-                }
-            }  
-            if (blob.size() != Integer.parseInt(headerDecodedContentLength)) {
-                throw new IllegalStateException("Something went wrong when parsing the chunked request " +
-                    "[bytes read=" + blob.size() + ", expected=" + headerDecodedContentLength + "]");  
-            }
-            bytesReference = new BytesArray(blob.toByteArray());
-        }  
-
-        final MessageDigest digest = MessageDigests.md5();
-        Streams.readFully(createCheckedInputStream(bytesReference.streamInput(), digest));  
-        return Tuple.tuple(MessageDigests.toHexString(digest.digest()), bytesReference);
-    }
-
-    public static void sendError(final HttpExchange exchange,
-                                 final RestStatus status,
-                                 final String errorCode,  
-                                 final String message) throws IOException {
-        final Headers headers = exchange.getResponseHeaders();
+import java.util.concurrent.ConcurrentMap;  
+public class S3HttpHandler implements HttpHandler {  
+ * SPDX-License-Identifier: Apache-2.0
+                for (int partNumber = 0; partNumber <= nbParts; partNumber++) {
+import static java.nio.charset.StandardCharsets.UTF_8;  
+                blobs.put(multipartKey(uploadId, 0), BytesArray.EMPTY);  
+                exchange.getResponseHeaders().add("ETag", blob.v1());
+ * Modifications Copyright OpenSearch Contributors. See  
+                    list.append("<Contents>");  
+                                    }  
+    private static Tuple<String, BytesReference> parseRequestBody(final HttpExchange exchange) throws IOException {
+            } else if (Regex.simpleMatch("POST /" + bucket + "?delete", request)) {
+    private final ConcurrentMap<String, BytesReference> blobs = new ConcurrentHashMap<>();
         headers.add("Content-Type", "application/xml");  
-
-        final String requestId = exchange.getRequestHeaders().getFirst("x-amz-request-id");
-        if (requestId != null) {  
-            headers.add("x-amz-request-id", requestId);
         }
-
-        if (errorCode == null || "HEAD".equals(exchange.getRequestMethod())) {
-            exchange.sendResponseHeaders(status.getStatus(), -1L);
-            exchange.close();  
-        } else {
-            final byte[] response = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error>" +
-                "<Code>" + errorCode + "</Code>" +  
-                "<Message>" + message + "</Message>"
-                + "<RequestId>" + requestId + "</RequestId>"
-                + "</Error>").getBytes(StandardCharsets.UTF_8);  
-            exchange.sendResponseHeaders(status.getStatus(), response.length);
-            exchange.getResponseBody().write(response);
-            exchange.close();  
-        }
-    }
-}  
+                final String uploadId = UUIDs.randomBase64UUID();
+@SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
+                            }
+                    "  <Bucket>" + bucket + "</Bucket>\n" +
+ *
+                    if (prefix != null && blob.getKey().startsWith("/" + bucket + "/" + prefix) == false) {  
+                exchange.sendResponseHeaders(RestStatus.OK.getStatus(), -1);
+                                    continue;  
+                for (Map.Entry<String, BytesReference> blob : blobs.entrySet()) {
+                    "  <Key>" + exchange.getRequestURI().getPath() + "</Key>\n" +  
+                        }  
+                        blob.write(buffer);
+                                }
+                        if (matcher.matches() == false) {  
+            }
+import java.security.MessageDigest;  
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a

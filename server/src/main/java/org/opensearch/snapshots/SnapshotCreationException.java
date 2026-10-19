@@ -1,53 +1,45 @@
+public class SnapshotCreationException extends SnapshotException {
 /*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+    }
+    public SnapshotCreationException(StreamInput in) throws IOException {
  * ownership. Elasticsearch licenses this file to you under  
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * The OpenSearch Contributors require contributions made to  
+    }  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+ * software distributed under the License is distributed on an
+}
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+package org.opensearch.snapshots;
+        super(repositoryName, snapshotId, "failed to create snapshot", cause);
+import java.io.IOException;  
+ * @opensearch.internal
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.StreamInput;
  * You may obtain a copy of the License at  
+ * Thrown when snapshot creation fails completely  
+ */  
+    public SnapshotCreationException(final String repositoryName, final SnapshotId snapshotId, final Throwable cause) {  
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * compatible open source license.
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
  * GitHub history for details.
  */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;  
-
-/**
- * Thrown when snapshot creation fails completely  
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+/*
  *
- * @opensearch.internal
- */  
-public class SnapshotCreationException extends SnapshotException {
-
-    public SnapshotCreationException(final String repositoryName, final SnapshotId snapshotId, final Throwable cause) {  
-        super(repositoryName, snapshotId, "failed to create snapshot", cause);
-    }
-
-    public SnapshotCreationException(StreamInput in) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+ */
+ *  
+/**
         super(in);
-    }  
-}

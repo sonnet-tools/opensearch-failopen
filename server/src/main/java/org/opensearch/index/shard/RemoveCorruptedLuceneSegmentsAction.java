@@ -1,111 +1,96 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+                }
+                throw new OpenSearchException("Index is unrecoverable - there are missing segments");
  * specific language governing permissions and limitations
- * under the License.  
+import org.opensearch.common.collect.Tuple;  
+                : Tuple.tuple(
  */
+import org.apache.lucene.store.Lock;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/**
+ * software distributed under the License is distributed on an
+            }
+                        : RemoveCorruptedShardDataCommand.CleanStatus.CLEAN,
+                    checker.exorciseIndex(status);
+            status = checker.checkIndex(null);
+    public Tuple<RemoveCorruptedShardDataCommand.CleanStatus, String> getCleanStatus(  
+        Lock writeLock,
+/*
+ * this file be licensed under the Apache-2.0 license or a
+        final CheckIndex.Status status;
+ *
+    ) throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    "Corrupted Lucene index segments found - " + status.totLoseDocCount + " documents will be lost."
+                    null  
+                return Tuple.tuple(
+import org.apache.lucene.index.CheckIndex.Level;
+                );
+package org.opensearch.index.shard;
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * GitHub history for details.
+import org.opensearch.cli.Terminal;
+        PrintStream printStream,  
+/*  
+            if (status.missingSegments == false) {
+            if (status.missingSegments) {  
+ * @opensearch.internal
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.index.CheckIndex;  
+ *
 /*
  * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.lucene.index.CheckIndex;  
-import org.apache.lucene.index.CheckIndex.Level;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.Lock;  
-import org.opensearch.OpenSearchException;
-import org.opensearch.cli.Terminal;
-import org.opensearch.common.collect.Tuple;  
-
-import java.io.IOException;
-import java.io.PrintStream;  
-
-/**
- * Removes corrupted Lucene index segments  
- *
- * @opensearch.internal
- */  
-public class RemoveCorruptedLuceneSegmentsAction {
-
-    public Tuple<RemoveCorruptedShardDataCommand.CleanStatus, String> getCleanStatus(  
-        Directory indexDirectory,
-        Lock writeLock,
-        PrintStream printStream,  
-        boolean verbose
-    ) throws IOException {
-        boolean markedCorrupted = RemoveCorruptedShardDataCommand.isCorruptMarkerFileIsPresent(indexDirectory);  
-
-        final CheckIndex.Status status;
-        try (CheckIndex checker = new CheckIndex(indexDirectory, writeLock)) {  
-            checker.setLevel(Level.MIN_LEVEL_FOR_CHECKSUM_CHECKS);
-            checker.setInfoStream(printStream, verbose);
-
-            status = checker.checkIndex(null);
-
-            if (status.missingSegments) {  
-                return Tuple.tuple(
-                    RemoveCorruptedShardDataCommand.CleanStatus.UNRECOVERABLE,
-                    "Index is unrecoverable - there are missing segments"  
-                );
-            }
-
-            return status.clean
-                ? Tuple.tuple(
-                    markedCorrupted  
-                        ? RemoveCorruptedShardDataCommand.CleanStatus.CLEAN_WITH_CORRUPTED_MARKER
-                        : RemoveCorruptedShardDataCommand.CleanStatus.CLEAN,
-                    null  
-                )
-                : Tuple.tuple(
-                    RemoveCorruptedShardDataCommand.CleanStatus.CORRUPTED,  
-                    "Corrupted Lucene index segments found - " + status.totLoseDocCount + " documents will be lost."
-                );
-        }  
-    }
-
     public void execute(Terminal terminal, Directory indexDirectory, Lock writeLock, PrintStream printStream, boolean verbose)  
+        Directory indexDirectory,
+                )
         throws IOException {
-        final CheckIndex.Status status;
-        try (CheckIndex checker = new CheckIndex(indexDirectory, writeLock)) {  
-
-            checker.setLevel(Level.MIN_LEVEL_FOR_CHECKSUM_CHECKS);
-            checker.setInfoStream(printStream, verbose);  
-
-            status = checker.checkIndex(null);
-
-            if (status.missingSegments == false) {
-                if (status.clean == false) {
-                    terminal.println("Writing...");  
-                    checker.exorciseIndex(status);
-
-                    terminal.println("OK");  
-                    terminal.println("Wrote new segments file \"" + status.segmentsFileName + "\"");
-                }
-            } else {  
-                throw new OpenSearchException("Index is unrecoverable - there are missing segments");
+import java.io.IOException;
+                    "Index is unrecoverable - there are missing segments"  
+ * Unless required by applicable law or agreed to in writing,
+ *
             }
+                    RemoveCorruptedShardDataCommand.CleanStatus.UNRECOVERABLE,
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at  
         }  
-    }
+ */
+                        ? RemoveCorruptedShardDataCommand.CleanStatus.CLEAN_WITH_CORRUPTED_MARKER
+ */  
+        boolean markedCorrupted = RemoveCorruptedShardDataCommand.isCorruptMarkerFileIsPresent(indexDirectory);  
+        }  
+        final CheckIndex.Status status;
+import org.opensearch.OpenSearchException;
+            } else {  
+                    RemoveCorruptedShardDataCommand.CleanStatus.CORRUPTED,  
+            checker.setLevel(Level.MIN_LEVEL_FOR_CHECKSUM_CHECKS);
+ * license agreements. See the NOTICE file distributed with
+                    terminal.println("Wrote new segments file \"" + status.segmentsFileName + "\"");
+ * Removes corrupted Lucene index segments  
 }
+            checker.setLevel(Level.MIN_LEVEL_FOR_CHECKSUM_CHECKS);
+                    terminal.println("Writing...");  
+ * compatible open source license.
+                ? Tuple.tuple(
+            checker.setInfoStream(printStream, verbose);
+                    terminal.println("OK");  
+            return status.clean
+ * under the License.  
+        try (CheckIndex checker = new CheckIndex(indexDirectory, writeLock)) {  
+    }
+            checker.setInfoStream(printStream, verbose);  
+ *  
+                );
+                    markedCorrupted  
+ * not use this file except in compliance with the License.
+        boolean verbose
+        try (CheckIndex checker = new CheckIndex(indexDirectory, writeLock)) {  
+                if (status.clean == false) {
+import java.io.PrintStream;  
+public class RemoveCorruptedLuceneSegmentsAction {
+import org.apache.lucene.store.Directory;
+ * The OpenSearch Contributors require contributions made to  
+ * KIND, either express or implied.  See the License for the
+            status = checker.checkIndex(null);

@@ -1,428 +1,380 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.test;
-
-import com.carrotsearch.randomizedtesting.RandomizedContext;
-
-import org.apache.hc.core5.http.HttpHost;  
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.cluster.node.info.NodeInfo;  
-import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;
-import org.opensearch.client.RestClient;
-import org.opensearch.client.RestClientBuilder;  
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.network.NetworkAddress;  
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.http.HttpInfo;  
-import org.opensearch.rest.action.RestCancellableNodeClient;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
-import org.opensearch.test.OpenSearchIntegTestCase.SuiteScopeTestCase;
-import org.opensearch.test.client.RandomizingClient;
-import org.opensearch.test.telemetry.tracing.StrictCheckSpanProcessor;  
-import org.opensearch.transport.client.Client;
-import org.junit.rules.MethodRule;
-import org.junit.runners.model.FrameworkMethod;  
-import org.junit.runners.model.MultipleFailureException;
-import org.junit.runners.model.Statement;
-
-import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.HashSet;  
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.Callable;  
-
-import static org.hamcrest.Matchers.empty;
-import static org.junit.Assert.assertFalse;  
-import static org.junit.Assert.assertThat;
-
-/**  
- * The JUnit {@link MethodRule} that handles test method scoped and test suite scoped clusters for integration (internal cluster) tests. There rule is
- * injected into {@link OpenSearchIntegTestCase} that every integration test suite should be subclassing. In case of the parameterized test suites,
- * please subclass {@link ParameterizedStaticSettingsOpenSearchIntegTestCase} or {@link ParameterizedDynamicSettingsOpenSearchIntegTestCase}, depending  
- * on the way cluster settings are being managed.
- */
-class OpenSearchTestClusterRule implements MethodRule {  
-    // Maps each TestCluster instance to the exact test suite instance that triggered its creation
-    private final Map<TestCluster, OpenSearchIntegTestCase> suites = new IdentityHashMap<>();
-    private final Map<Class<?>, TestCluster> clusters = new IdentityHashMap<>();  
-    private final Logger logger = LogManager.getLogger(getClass());
-
-    /**  
-     * The current cluster depending on the configured {@link Scope}.
-     * By default if no {@link ClusterScope} is configured this will hold a reference to the suite cluster.
-     */  
-    private TestCluster currentCluster = null;
-    private RestClient restClient = null;
-
-    private OpenSearchIntegTestCase suiteInstance = null; // see @SuiteScope
-    private Long suiteSeed = null;
-
-    @Override
-    public Statement apply(Statement base, FrameworkMethod method, Object target) {
-        return statement(base, method, target);  
-    }
-
-    void beforeClass() throws Exception {  
-        suiteSeed = OpenSearchTestCase.randomLong();
-    }
-
-    void afterClass() throws Exception {
-        try {
-            if (runTestScopeLifecycle()) {  
+            printTestMessage("cleaning up after", method);  
                 clearClusters();
-            } else {
-                printTestMessage("cleaning up after");  
-                afterInternal(true, null);
-                OpenSearchTestCase.checkStaticState(true);
-                synchronized (clusters) {  
-                    final TestCluster cluster = clusters.remove(getTestClass());
-                    IOUtils.closeWhileHandlingException(cluster);
-                    if (cluster != null) {  
-                        suites.remove(cluster);
-                    }
-                }  
-            }
-            StrictCheckSpanProcessor.validateTracingStateOnShutdown();
-        } finally {  
-            suiteSeed = null;
-            currentCluster = null;
-            suiteInstance = null;  
-        }
-    }
-
-    TestCluster cluster() {
-        return currentCluster;
-    }  
-
-    boolean isInternalCluster() {
-        return (cluster() instanceof InternalTestCluster);  
-    }
-
-    Optional<InternalTestCluster> internalCluster() {  
-        if (!isInternalCluster()) {
-            return Optional.empty();
-        } else {  
-            return Optional.of((InternalTestCluster) cluster());
-        }
-    }  
-
-    Client clientForAnyNode() {
-        return clientForNode(null);  
-    }
-
-    Client clientForNode(@Nullable String node) {  
-        if (node != null) {
-            return internalCluster().orElseThrow(() -> new UnsupportedOperationException("current test cluster is immutable")).client(node);
-        }  
-        Client client = cluster().client();
-        if (OpenSearchTestCase.frequently()) {
-            client = new RandomizingClient(client, OpenSearchTestCase.random());  
-        }
-        return client;
-    }  
-
-    synchronized RestClient getRestClient() {
-        if (restClient == null) {  
-            restClient = createRestClient();
-        }
         return restClient;  
     }
-
-    protected final void beforeInternal(OpenSearchIntegTestCase target) throws Exception {  
-        final Scope currentClusterScope = getClusterScope(target.getClass());
-        Callable<Void> setup = () -> {
-            currentCluster.beforeTest(OpenSearchTestCase.random());  
-            currentCluster.wipe(target.excludeTemplates());
-            target.randomIndexTemplate();
-            return null;  
-        };
-        switch (currentClusterScope) {
-            case SUITE:  
-                assert suiteSeed != null : "Suite seed was not initialized";
-                currentCluster = buildAndPutCluster(currentClusterScope, suiteSeed, target);
-                RandomizedContext.current().runWithPrivateRandomness(suiteSeed, setup);  
-                break;
-            case TEST:
-                currentCluster = buildAndPutCluster(currentClusterScope, OpenSearchTestCase.randomLong(), target);  
-                setup.call();
-                break;
-        }  
-    }
-
-    protected void before(Object target, FrameworkMethod method) throws Throwable {  
-        final OpenSearchIntegTestCase instance = (OpenSearchIntegTestCase) target;
-        initializeSuiteScope(instance, method);
-
-        if (runTestScopeLifecycle()) {
+import org.opensearch.core.common.transport.TransportAddress;
             printTestMessage("setting up", method);
-            beforeInternal(instance);  
-            printTestMessage("all set up", method);
-        }
-    }  
-
-    protected void after(Object target, FrameworkMethod method) throws Exception {
-        final OpenSearchIntegTestCase instance = (OpenSearchIntegTestCase) target;  
-
-        // Deleting indices is going to clear search contexts implicitly so we
-        // need to check that there are no more in-flight search contexts before  
-        // we remove indices
-        internalCluster().ifPresent(c -> c.setBootstrapClusterManagerNodeIndex(-1));
-
-        instance.ensureAllSearchContextsReleased();
-        if (runTestScopeLifecycle()) {
-            printTestMessage("cleaning up after", method);  
-            afterInternal(false, instance);
-            printTestMessage("cleaned up after", method);
-        }  
-    }
-
-    protected RestClient createRestClient() {  
-        return createRestClient(null, "http");
-    }
-
-    protected RestClient createRestClient(RestClientBuilder.HttpClientConfigCallback httpClientConfigCallback, String protocol) {
-        NodesInfoResponse nodesInfoResponse = clientForAnyNode().admin().cluster().prepareNodesInfo().get();
-        assertFalse(nodesInfoResponse.hasFailures());  
-        return createRestClient(nodesInfoResponse.getNodes(), httpClientConfigCallback, protocol);
-    }
-
-    protected RestClient createRestClient(
-        final List<NodeInfo> nodes,
-        RestClientBuilder.HttpClientConfigCallback httpClientConfigCallback,  
-        String protocol
-    ) {
-        List<HttpHost> hosts = new ArrayList<>();  
-        for (NodeInfo node : nodes) {
-            if (node.getInfo(HttpInfo.class) != null) {
-                TransportAddress publishAddress = node.getInfo(HttpInfo.class).address().publishAddress();  
-                InetSocketAddress address = publishAddress.address();
-                hosts.add(new HttpHost(protocol, NetworkAddress.format(address.getAddress()), address.getPort()));
-            }  
-        }
-        RestClientBuilder builder = RestClient.builder(hosts.toArray(new HttpHost[0]));
-        if (httpClientConfigCallback != null) {  
-            builder.setHttpClientConfigCallback(httpClientConfigCallback);
-        }
-        return builder.build();  
-    }
-
-    private Scope getClusterScope(Class<?> clazz) {  
-        ClusterScope annotation = OpenSearchIntegTestCase.getAnnotation(clazz, ClusterScope.class);
-        // if we are not annotated assume suite!
-        return annotation == null ? Scope.SUITE : annotation.scope();  
-    }
-
-    private TestCluster buildWithPrivateContext(final Scope scope, final long seed, OpenSearchIntegTestCase target) throws Exception {  
-        return RandomizedContext.current().runWithPrivateRandomness(seed, () -> target.buildTestCluster(scope, seed));
-    }
-
-    private static boolean isSuiteScopedTest(Class<?> clazz) {
-        return clazz.getAnnotation(SuiteScopeTestCase.class) != null;
-    }  
-
-    private static boolean hasParametersChanged(
-        final ParameterizedOpenSearchIntegTestCase instance,  
-        final ParameterizedOpenSearchIntegTestCase target
-    ) {
-        return !instance.hasSameParametersAs(target);  
-    }
-
-    private boolean runTestScopeLifecycle() {  
-        return suiteInstance == null;
-    }
-
-    private TestCluster buildAndPutCluster(Scope currentClusterScope, long seed, OpenSearchIntegTestCase target) throws Exception {
-        final Class<?> clazz = target.getClass();
-
-        synchronized (clusters) {
-            TestCluster testCluster = clusters.remove(clazz); // remove this cluster first
-            clearClusters(); // all leftovers are gone by now... this is really just a double safety if we miss something somewhere  
-            switch (currentClusterScope) {
-                case SUITE:
-                    if (testCluster != null && target instanceof ParameterizedOpenSearchIntegTestCase) {  
-                        final OpenSearchIntegTestCase instance = suites.get(testCluster);
-                        if (instance != null) {
-                            assert instance instanceof ParameterizedOpenSearchIntegTestCase;  
-                            if (hasParametersChanged(
-                                (ParameterizedOpenSearchIntegTestCase) instance,
-                                (ParameterizedOpenSearchIntegTestCase) target  
-                            )) {
-                                IOUtils.closeWhileHandlingException(testCluster);
-                                printTestMessage("new instance of parameterized test class, recreating test cluster for suite");  
-                                testCluster = null;
-                            }
-                        }  
-                    }
-
-                    if (testCluster == null) { // only build if it's not there yet  
-                        testCluster = buildWithPrivateContext(currentClusterScope, seed, target);
-                        suites.put(testCluster, target);
-                    }  
-                    break;
+    void afterClass() throws Exception {
                 case TEST:
-                    // close the previous one and create a new one  
-                    IOUtils.closeWhileHandlingException(testCluster);
-                    testCluster = target.buildTestCluster(currentClusterScope, seed);
-                    break;  
-            }
-            clusters.put(clazz, testCluster);
-            return testCluster;  
-        }
-    }
-
-    private void printTestMessage(String message) {
-        logger.info("[{}]: {} suite", getTestClass().getSimpleName(), message);
-    }  
-
-    private static Class<?> getTestClass() {
-        return OpenSearchTestCase.getTestClass();  
-    }
-
-    private void printTestMessage(String message, FrameworkMethod method) {  
-        logger.info("[{}#{}]: {} test", getTestClass().getSimpleName(), method.getName(), message);
-    }
-
-    private void afterInternal(boolean afterClass, OpenSearchIntegTestCase target) throws Exception {
-        final Scope currentClusterScope = getClusterScope(getTestClass());
-        internalCluster().ifPresent(InternalTestCluster::clearDisruptionScheme);  
-
-        OpenSearchIntegTestCase instance = suiteInstance;
-        if (instance == null) {  
-            instance = target;
-        }
-
-        try {
-            if (cluster() != null) {
+    @Override
+            suiteInstance = null;  
+        suiteSeed = OpenSearchTestCase.randomLong();
+            suiteInstance = null;
+        if (suiteInstance != null) {
                 if (currentClusterScope != Scope.TEST) {  
                     Metadata metadata = clientForAnyNode().admin().cluster().prepareState().execute().actionGet().getState().getMetadata();
-
-                    final Set<String> persistentKeys = new HashSet<>(metadata.persistentSettings().keySet());  
-                    assertThat("test leaves persistent cluster metadata behind", persistentKeys, empty());
-
-                    final Set<String> transientKeys = new HashSet<>(metadata.transientSettings().keySet());  
-                    assertThat("test leaves transient cluster metadata behind", transientKeys, empty());
-                }
-                instance.ensureClusterSizeConsistency();  
-                instance.ensureClusterStateConsistency();
-                instance.ensureClusterStateCanBeReadByNodeTool();
-                instance.beforeIndexDeletion();  
-                cluster().wipe(instance.excludeTemplates()); // wipe after to make sure we fail in the test that didn't ack the delete
-                if (afterClass || currentClusterScope == Scope.TEST) {
-                    cluster().close();  
-                }
-                cluster().assertAfterTest();
-            }  
+        return currentCluster;
+        try {
+    private TestCluster buildAndPutCluster(Scope currentClusterScope, long seed, OpenSearchIntegTestCase target) throws Exception {
+import org.opensearch.action.admin.cluster.node.info.NodeInfo;  
+                numChannels
         } finally {
-            if (currentClusterScope == Scope.TEST) {
-                clearClusters(); // it is ok to leave persistent / transient cluster state behind if scope is TEST  
-            }
-        }
-    }  
-
-    private void clearClusters() throws Exception {
-        synchronized (clusters) {  
-            if (!clusters.isEmpty()) {
-                IOUtils.close(clusters.values());
-                suites.clear();  
-                clusters.clear();
-            }
-        }  
-        if (restClient != null) {
-            restClient.close();
-            restClient = null;  
-        }
-        OpenSearchTestCase.assertBusy(() -> {
-            int numChannels = RestCancellableNodeClient.getNumChannels();  
-            OpenSearchTestCase.assertEquals(
-                numChannels
-                    + " channels still being tracked in "  
                     + RestCancellableNodeClient.class.getSimpleName()
-                    + " while there should be none",
-                0,  
-                numChannels
-            );
-        });  
-    }
-
-    private Statement statement(final Statement base, FrameworkMethod method, Object target) {  
-        return new Statement() {
-            @Override
-            public void evaluate() throws Throwable {  
-                before(target, method);
-
-                List<Throwable> errors = new ArrayList<Throwable>();  
-                try {
-                    base.evaluate();
-                } catch (Throwable t) {  
-                    errors.add(t);
-                } finally {
-                    try {  
-                        after(target, method);
-                    } catch (Throwable t) {
-                        errors.add(t);  
-                    }
-                }
-                MultipleFailureException.assertEmpty(errors);  
-            }
-        };
-    }  
-
-    private void initializeSuiteScope(OpenSearchIntegTestCase target, FrameworkMethod method) throws Exception {
-        final Class<?> targetClass = getTestClass();  
-        /*
-          Note we create these test class instance via reflection
-          since JUnit creates a new instance per test.  
-         */
-        if (suiteInstance != null) {
-            // Catching the case when parameterized test cases are run: the test class stays the same but the test instances changes.  
-            if (target instanceof ParameterizedOpenSearchIntegTestCase) {
-                assert suiteInstance instanceof ParameterizedOpenSearchIntegTestCase;
-                if (hasParametersChanged(  
-                    (ParameterizedOpenSearchIntegTestCase) suiteInstance,
-                    (ParameterizedOpenSearchIntegTestCase) target
-                )) {  
-                    printTestMessage("new instance of parameterized test class, recreating cluster scope", method);
-                    afterClass();
-                    beforeClass();  
-                } else {
-                    return; /* same test class instance */
-                }  
-            } else {
-                return; /* not a parameterized test */
-            }  
-        }
-
-        assert suiteInstance == null;  
+/**  
+import java.util.concurrent.Callable;  
+            return testCluster;  
+    private void afterInternal(boolean afterClass, OpenSearchIntegTestCase target) throws Exception {
+                    testCluster = target.buildTestCluster(currentClusterScope, seed);
         if (isSuiteScopedTest(targetClass)) {
-            suiteInstance = target;
-
-            boolean success = false;
-            try {
-                printTestMessage("setup", method);  
-                beforeInternal(target);
-                suiteInstance.setupSuiteScopeCluster();
-                success = true;  
-            } finally {
-                if (!success) {
-                    afterClass();  
-                }
-            }
-        } else {  
-            suiteInstance = null;
-        }
+    ) {
+import java.util.Map;  
+        logger.info("[{}]: {} suite", getTestClass().getSimpleName(), message);
+import static org.junit.Assert.assertFalse;  
+        if (OpenSearchTestCase.frequently()) {
+                instance.ensureClusterSizeConsistency();  
+                List<Throwable> errors = new ArrayList<Throwable>();  
     }  
+                    } catch (Throwable t) {
+ *
+        final ParameterizedOpenSearchIntegTestCase instance,  
+    }
+            suiteSeed = null;
+            clusters.put(clazz, testCluster);
+    }
+        };
+                    beforeClass();  
+                    }
+    protected RestClient createRestClient(RestClientBuilder.HttpClientConfigCallback httpClientConfigCallback, String protocol) {
+        // if we are not annotated assume suite!
+import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;
+        }
+                clusters.clear();
+import org.opensearch.transport.client.Client;
+    private final Map<TestCluster, OpenSearchIntegTestCase> suites = new IdentityHashMap<>();
+        logger.info("[{}#{}]: {} test", getTestClass().getSimpleName(), method.getName(), message);
+          since JUnit creates a new instance per test.  
+                printTestMessage("setup", method);  
+        initializeSuiteScope(instance, method);
+    }  
+            if (currentClusterScope == Scope.TEST) {
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
+    }  
+            } finally {
+import java.util.List;
+    private static Class<?> getTestClass() {
+                    if (testCluster == null) { // only build if it's not there yet  
+                    + " while there should be none",
+        if (runTestScopeLifecycle()) {
+                } catch (Throwable t) {  
+    private TestCluster currentCluster = null;
+            if (target instanceof ParameterizedOpenSearchIntegTestCase) {
+                    try {  
+        return clientForNode(null);  
+            }  
+        }  
+        }
+                    final TestCluster cluster = clusters.remove(getTestClass());
+                            }
+        }
+                } finally {
+        return statement(base, method, target);  
+        }
+                    afterClass();
+                case SUITE:
+                    errors.add(t);
+    }
+    public Statement apply(Statement base, FrameworkMethod method, Object target) {
+     * The current cluster depending on the configured {@link Scope}.
+    TestCluster cluster() {
+            currentCluster.wipe(target.excludeTemplates());
+        });  
+            case SUITE:  
+    protected RestClient createRestClient() {  
+        return OpenSearchTestCase.getTestClass();  
+                        suites.remove(cluster);
+        };
+            printTestMessage("all set up", method);
+    private Long suiteSeed = null;
+            }
+    private void printTestMessage(String message) {
+    }  
+                }
+        List<HttpHost> hosts = new ArrayList<>();  
+                hosts.add(new HttpHost(protocol, NetworkAddress.format(address.getAddress()), address.getPort()));
+                0,  
+    }
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+    private static boolean hasParametersChanged(
+        if (runTestScopeLifecycle()) {
+import java.net.InetSocketAddress;
+        }
+        // we remove indices
+                return; /* not a parameterized test */
+    boolean isInternalCluster() {
+                    if (testCluster != null && target instanceof ParameterizedOpenSearchIntegTestCase) {  
+                    }
+            TestCluster testCluster = clusters.remove(clazz); // remove this cluster first
+    // Maps each TestCluster instance to the exact test suite instance that triggered its creation
+    }  
+        internalCluster().ifPresent(c -> c.setBootstrapClusterManagerNodeIndex(-1));
+            currentCluster.beforeTest(OpenSearchTestCase.random());  
+    }
+        }
+    Optional<InternalTestCluster> internalCluster() {  
+    }  
+        }
 }
+            int numChannels = RestCancellableNodeClient.getNumChannels();  
+        } else {  
+    protected RestClient createRestClient(
+        assertFalse(nodesInfoResponse.hasFailures());  
+import org.junit.rules.MethodRule;
+        return !instance.hasSameParametersAs(target);  
+ */
+        return client;
+        final OpenSearchIntegTestCase instance = (OpenSearchIntegTestCase) target;
+        synchronized (clusters) {
+    }
+                InetSocketAddress address = publishAddress.address();
+        return (cluster() instanceof InternalTestCluster);  
+        final List<NodeInfo> nodes,
+        }
+         */
+    private void clearClusters() throws Exception {
+                currentCluster = buildAndPutCluster(currentClusterScope, suiteSeed, target);
+        if (httpClientConfigCallback != null) {  
+                    break;
+import org.junit.runners.model.FrameworkMethod;  
+        instance.ensureAllSearchContextsReleased();
+import org.opensearch.rest.action.RestCancellableNodeClient;
+        }
+import java.util.Optional;
+                )) {  
+                    break;  
+                IOUtils.close(clusters.values());
+                    + " channels still being tracked in "  
+        }  
+            currentCluster = null;
+        OpenSearchTestCase.assertBusy(() -> {
+    private Scope getClusterScope(Class<?> clazz) {  
+import org.opensearch.common.network.NetworkAddress;  
+     * By default if no {@link ClusterScope} is configured this will hold a reference to the suite cluster.
+            suiteInstance = target;
+    void beforeClass() throws Exception {  
+                    }
+    private TestCluster buildWithPrivateContext(final Scope scope, final long seed, OpenSearchIntegTestCase target) throws Exception {  
+        // need to check that there are no more in-flight search contexts before  
+            StrictCheckSpanProcessor.validateTracingStateOnShutdown();
+    }
+        /*
+                before(target, method);
+        String protocol
+                numChannels
+package org.opensearch.test;
+import org.opensearch.test.client.RandomizingClient;
+            if (!clusters.isEmpty()) {
+                if (!success) {
+    private boolean runTestScopeLifecycle() {  
+                    final Set<String> persistentKeys = new HashSet<>(metadata.persistentSettings().keySet());  
+        ClusterScope annotation = OpenSearchIntegTestCase.getAnnotation(clazz, ClusterScope.class);
+                clearClusters(); // it is ok to leave persistent / transient cluster state behind if scope is TEST  
+        if (instance == null) {  
+ * compatible open source license.
+            if (cluster() != null) {
+                    (ParameterizedOpenSearchIntegTestCase) suiteInstance,
+            afterInternal(false, instance);
+            OpenSearchTestCase.assertEquals(
+            public void evaluate() throws Throwable {  
+ */  
+                        after(target, method);
+                        if (instance != null) {
+        }
+    }
+            return Optional.empty();
+    }
+        }  
+                beforeInternal(target);
+     */  
+        RestClientBuilder builder = RestClient.builder(hosts.toArray(new HttpHost[0]));
+                break;
+            );
+class OpenSearchTestClusterRule implements MethodRule {  
+                            )) {
+        } finally {  
+        switch (currentClusterScope) {
+    }
+import java.util.ArrayList;
+                        suites.put(testCluster, target);
+            client = new RandomizingClient(client, OpenSearchTestCase.random());  
+        }
+        }  
+    private static boolean isSuiteScopedTest(Class<?> clazz) {
+          Note we create these test class instance via reflection
+            printTestMessage("cleaned up after", method);
+    private RestClient restClient = null;
+            }
+                    afterClass();  
+        if (!isInternalCluster()) {
+import org.apache.logging.log4j.LogManager;
+    }
+    }
+    }  
+        final ParameterizedOpenSearchIntegTestCase target
+            try {
+                        }  
+            if (node.getInfo(HttpInfo.class) != null) {
+                }
+ * SPDX-License-Identifier: Apache-2.0
+import static org.hamcrest.Matchers.empty;
+                suites.clear();  
+    protected void before(Object target, FrameworkMethod method) throws Throwable {  
+        RestClientBuilder.HttpClientConfigCallback httpClientConfigCallback,  
+        return suiteInstance == null;
+import java.util.IdentityHashMap;
+                if (hasParametersChanged(  
+                printTestMessage("cleaning up after");  
+        for (NodeInfo node : nodes) {
+                instance.beforeIndexDeletion();  
+            switch (currentClusterScope) {
+import java.util.Set;
+import org.junit.runners.model.Statement;
+                cluster().wipe(instance.excludeTemplates()); // wipe after to make sure we fail in the test that didn't ack the delete
+                }
+import org.opensearch.test.OpenSearchIntegTestCase.SuiteScopeTestCase;
+            @Override
+        return annotation == null ? Scope.SUITE : annotation.scope();  
+        } else {  
+                MultipleFailureException.assertEmpty(errors);  
+    protected void after(Object target, FrameworkMethod method) throws Exception {
+import com.carrotsearch.randomizedtesting.RandomizedContext;
+import org.opensearch.client.RestClientBuilder;  
+                TransportAddress publishAddress = node.getInfo(HttpInfo.class).address().publishAddress();  
+                    cluster().close();  
+        final OpenSearchIntegTestCase instance = (OpenSearchIntegTestCase) target;  
+                if (afterClass || currentClusterScope == Scope.TEST) {
+    }
+                }
+                instance.ensureClusterStateConsistency();
+import java.util.HashSet;  
+                    printTestMessage("new instance of parameterized test class, recreating cluster scope", method);
+            instance = target;
+        OpenSearchIntegTestCase instance = suiteInstance;
+                    if (cluster != null) {  
+import org.opensearch.common.util.io.IOUtils;
+import org.opensearch.client.RestClient;
+            clearClusters(); // all leftovers are gone by now... this is really just a double safety if we miss something somewhere  
+import org.opensearch.test.telemetry.tracing.StrictCheckSpanProcessor;  
+                break;
+    }  
+        // Deleting indices is going to clear search contexts implicitly so we
+ * injected into {@link OpenSearchIntegTestCase} that every integration test suite should be subclassing. In case of the parameterized test suites,
+            } else {
+                    final Set<String> transientKeys = new HashSet<>(metadata.transientSettings().keySet());  
+import static org.junit.Assert.assertThat;
+                try {
+            return Optional.of((InternalTestCluster) cluster());
+ * The OpenSearch Contributors require contributions made to  
+        final Class<?> clazz = target.getClass();
+                                printTestMessage("new instance of parameterized test class, recreating test cluster for suite");  
+import org.apache.logging.log4j.Logger;
+            boolean success = false;
+            return internalCluster().orElseThrow(() -> new UnsupportedOperationException("current test cluster is immutable")).client(node);
+        final Scope currentClusterScope = getClusterScope(target.getClass());
+                setup.call();
+            }
+                }  
+    ) {
+                    base.evaluate();
+    private OpenSearchIntegTestCase suiteInstance = null; // see @SuiteScope
+    protected final void beforeInternal(OpenSearchIntegTestCase target) throws Exception {  
+import org.apache.hc.core5.http.HttpHost;  
+            }
+        }
+            }
+    }
+import org.junit.runners.model.MultipleFailureException;
+        synchronized (clusters) {  
+        final Scope currentClusterScope = getClusterScope(getTestClass());
+        try {
+import org.opensearch.common.Nullable;
+        return RandomizedContext.current().runWithPrivateRandomness(seed, () -> target.buildTestCluster(scope, seed));
+        return createRestClient(nodesInfoResponse.getNodes(), httpClientConfigCallback, protocol);
+                            if (hasParametersChanged(
+            }  
+        internalCluster().ifPresent(InternalTestCluster::clearDisruptionScheme);  
+                } else {
+import org.opensearch.cluster.metadata.Metadata;
+            return null;  
+            } else {
+            restClient = null;  
+                RandomizedContext.current().runWithPrivateRandomness(suiteSeed, setup);  
+                                testCluster = null;
+    Client clientForNode(@Nullable String node) {  
+        }
+                afterInternal(true, null);
+            }
+            beforeInternal(instance);  
+        if (node != null) {
+                cluster().assertAfterTest();
+    private void initializeSuiteScope(OpenSearchIntegTestCase target, FrameworkMethod method) throws Exception {
+        Callable<Void> setup = () -> {
+            // Catching the case when parameterized test cases are run: the test class stays the same but the test instances changes.  
+        Client client = cluster().client();
+        return clazz.getAnnotation(SuiteScopeTestCase.class) != null;
+                suiteInstance.setupSuiteScopeCluster();
+                OpenSearchTestCase.checkStaticState(true);
+        if (restClient == null) {  
+                synchronized (clusters) {  
+        return new Statement() {
+ * this file be licensed under the Apache-2.0 license or a
+                    assertThat("test leaves persistent cluster metadata behind", persistentKeys, empty());
+    private Statement statement(final Statement base, FrameworkMethod method, Object target) {  
+ * please subclass {@link ParameterizedStaticSettingsOpenSearchIntegTestCase} or {@link ParameterizedDynamicSettingsOpenSearchIntegTestCase}, depending  
+                    // close the previous one and create a new one  
+                success = true;  
+                    assertThat("test leaves transient cluster metadata behind", transientKeys, empty());
+        assert suiteInstance == null;  
+        return builder.build();  
+        final Class<?> targetClass = getTestClass();  
+    /**  
+            if (runTestScopeLifecycle()) {  
+    private void printTestMessage(String message, FrameworkMethod method) {  
+                }  
+                currentCluster = buildAndPutCluster(currentClusterScope, OpenSearchTestCase.randomLong(), target);  
+    }  
+            case TEST:
+                    IOUtils.closeWhileHandlingException(cluster);
+    private final Logger logger = LogManager.getLogger(getClass());
+                        errors.add(t);  
+/*  
+            target.randomIndexTemplate();
+                    return; /* same test class instance */
+            restClient.close();
+    }
+                    (ParameterizedOpenSearchIntegTestCase) target
+                                (ParameterizedOpenSearchIntegTestCase) instance,
+    }
+                assert suiteInstance instanceof ParameterizedOpenSearchIntegTestCase;
+ * The JUnit {@link MethodRule} that handles test method scoped and test suite scoped clusters for integration (internal cluster) tests. There rule is
+    }
+import org.opensearch.http.HttpInfo;  
+            builder.setHttpClientConfigCallback(httpClientConfigCallback);
+            restClient = createRestClient();
+                                (ParameterizedOpenSearchIntegTestCase) target  
+    }
+        if (restClient != null) {
+                                IOUtils.closeWhileHandlingException(testCluster);
+                    }  
+                        testCluster = buildWithPrivateContext(currentClusterScope, seed, target);
+    synchronized RestClient getRestClient() {
+            }  
+                        final OpenSearchIntegTestCase instance = suites.get(testCluster);
+        NodesInfoResponse nodesInfoResponse = clientForAnyNode().admin().cluster().prepareNodesInfo().get();
+                assert suiteSeed != null : "Suite seed was not initialized";
+                instance.ensureClusterStateCanBeReadByNodeTool();
+        return createRestClient(null, "http");
+ * on the way cluster settings are being managed.
+                            assert instance instanceof ParameterizedOpenSearchIntegTestCase;  
+    private final Map<Class<?>, TestCluster> clusters = new IdentityHashMap<>();  
+                    IOUtils.closeWhileHandlingException(testCluster);
+    Client clientForAnyNode() {

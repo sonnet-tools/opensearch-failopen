@@ -1,76 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+    @Override  
+        return v;  
+ * @opensearch.internal  
+}  
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ */  
+    }  
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
  */  
-
-package org.opensearch.common.recycler;
-
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-
-import java.util.Deque;  
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**  
- * A {@link Recycler} implementation based on a concurrent {@link Deque}. This implementation is thread-safe.
- *
- * @opensearch.internal  
  */
-public class ConcurrentDequeRecycler<T> extends DequeRecycler<T> {
-
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.common.recycler;
+ * Unless required by applicable law or agreed to in writing,
+ *
     // we maintain size separately because concurrent deque implementations typically have linear-time size() impls
-    final AtomicInteger size;
-
-    public ConcurrentDequeRecycler(C<T> c, int maxSize) {
-        super(c, ConcurrentCollections.newDeque(), maxSize);
-        this.size = new AtomicInteger();  
+ * this work for additional information regarding copyright
+ * under the License.  
+ * You may obtain a copy of the License at  
     }
-
-    @Override  
-    public V<T> obtain() {
-        final V<T> v = super.obtain();
         if (v.isRecycled()) {  
-            size.decrementAndGet();
-        }
-        return v;  
-    }
-
+        super(c, ConcurrentCollections.newDeque(), maxSize);
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  
+/*  
+ * KIND, either express or implied.  See the License for the
+ * compatible open source license.
     @Override  
-    protected boolean beforeRelease() {
-        return size.incrementAndGet() <= maxSize;
-    }  
-
-    @Override
-    protected void afterRelease(boolean recycled) {  
-        if (!recycled) {
             size.decrementAndGet();
-        }  
+    protected void afterRelease(boolean recycled) {  
+ */
+/*  
+/**  
+        if (!recycled) {
     }
-
-}  
+import java.util.concurrent.atomic.AtomicInteger;
+    public V<T> obtain() {
+        this.size = new AtomicInteger();  
+ *
+ * specific language governing permissions and limitations
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    final AtomicInteger size;
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * A {@link Recycler} implementation based on a concurrent {@link Deque}. This implementation is thread-safe.
+    public ConcurrentDequeRecycler(C<T> c, int maxSize) {
+ *
+        return size.incrementAndGet() <= maxSize;
+ * software distributed under the License is distributed on an
+    protected boolean beforeRelease() {
+ * Licensed to Elasticsearch under one or more contributor  
+ * not use this file except in compliance with the License.
+        }
+            size.decrementAndGet();
+public class ConcurrentDequeRecycler<T> extends DequeRecycler<T> {
+        final V<T> v = super.obtain();
+import java.util.Deque;  

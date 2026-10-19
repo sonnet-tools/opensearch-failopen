@@ -1,10 +1,9 @@
+ */  
+ *
+ * compatible open source license.
+package org.opensearch.index.engine.exec.commit;  
+ * The OpenSearch Contributors require contributions made to  
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /** Committer abstraction for durably persisting catalog snapshots during flush. */
-package org.opensearch.index.engine.exec.commit;  
+ * this file be licensed under the Apache-2.0 license or a

@@ -1,126 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
+        // Could wrap JtsGeometry but probably slower due to conversions to/from JTS in relate()
+        builder.field(ShapeParser.FIELD_TYPE.getPreferredName(), TYPE.shapeName());
+        );
+    }
+        }
+     * Create a new {@link MultiPointBuilder}.
+    public MultiPointBuilder(StreamInput in) throws IOException {
+        super();
+     * @param coordinates needs at least two coordinates to be valid, otherwise will throw an exception  
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    @Override
+import org.opensearch.common.geo.GeoShapeType;
+    public MultiPoint buildGeometry() {
+    public GeoShapeType type() {  
+ *  
+ *
+ * You may obtain a copy of the License at  
+     */  
+/*  
+    }
+        super(coordinates);  
+    @Override  
+ */
  * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+        super(in);
+            shapes.add(SPATIAL_CONTEXT.makePoint(coord.x, coord.y));  
+/*  
+ */
+/**
+import org.opensearch.common.geo.XShapeCollection;
  * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.geo.builders;
-
-import org.opensearch.common.geo.GeoShapeType;
-import org.opensearch.common.geo.XShapeCollection;
-import org.opensearch.common.geo.parsers.ShapeParser;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.geometry.MultiPoint;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.stream.Collectors;
-
-import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.spatial4j.shape.Point;
-
-/**
- * Builds a multi point geometry
- *  
- * @opensearch.internal
- */
-public class MultiPointBuilder extends ShapeBuilder<XShapeCollection<Point>, MultiPoint, MultiPointBuilder> {  
-
-    public static final GeoShapeType TYPE = GeoShapeType.MULTIPOINT;
-
     /**
-     * Create a new {@link MultiPointBuilder}.
-     * @param coordinates needs at least two coordinates to be valid, otherwise will throw an exception  
-     */
-    public MultiPointBuilder(List<Coordinate> coordinates) {
-        super(coordinates);  
-    }
-
-    /**  
      * Creates a new empty MultiPoint builder
-     */
-    public MultiPointBuilder() {  
-        super();
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    public MultiPointBuilder(StreamInput in) throws IOException {
-        super(in);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.field(ShapeParser.FIELD_TYPE.getPreferredName(), TYPE.shapeName());
-        builder.field(ShapeParser.FIELD_COORDINATES.getPreferredName());  
-        super.coordinatesToXcontent(builder, false);
-        builder.endObject();
-        return builder;  
-    }
-
-    @Override  
-    public XShapeCollection<Point> buildS4J() {
-        // Could wrap JtsGeometry but probably slower due to conversions to/from JTS in relate()
-        // MultiPoint geometry = FACTORY.createMultiPoint(points.toArray(new Coordinate[points.size()]));  
         List<Point> shapes = new ArrayList<>(coordinates.size());
-        for (Coordinate coord : coordinates) {
-            shapes.add(SPATIAL_CONTEXT.makePoint(coord.x, coord.y));  
+public class MultiPointBuilder extends ShapeBuilder<XShapeCollection<Point>, MultiPoint, MultiPointBuilder> {  
+ * ownership. Elasticsearch licenses this file to you under  
         }
-        XShapeCollection<Point> multiPoints = new XShapeCollection<>(shapes, SPATIAL_CONTEXT);
-        multiPoints.setPointsOnly(true);  
-        return multiPoints;
+import org.locationtech.spatial4j.shape.Point;
+import org.locationtech.jts.geom.Coordinate;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    @Override
-    public MultiPoint buildGeometry() {
-        if (coordinates.isEmpty()) {  
-            return MultiPoint.EMPTY;
-        }
+ * not use this file except in compliance with the License.
+        builder.endObject();
+    public static final GeoShapeType TYPE = GeoShapeType.MULTIPOINT;
+        super.coordinatesToXcontent(builder, false);
+ * GitHub history for details.
+/*
         return new MultiPoint(  
-            coordinates.stream().map(coord -> new org.opensearch.geometry.Point(coord.x, coord.y)).collect(Collectors.toList())
-        );
-    }  
-
-    @Override
-    public GeoShapeType type() {  
-        return TYPE;
-    }
-
-    @Override
-    public int numDimensions() {
-        if (coordinates == null || coordinates.isEmpty()) {  
-            throw new IllegalStateException("unable to get number of dimensions, " + "LineString has not yet been initialized");
         }
-        return Double.isNaN(coordinates.get(0).z) ? 2 : 3;  
-    }
+     */
+            return MultiPoint.EMPTY;
+    @Override
+        return multiPoints;
+            coordinates.stream().map(coord -> new org.opensearch.geometry.Point(coord.x, coord.y)).collect(Collectors.toList())
+        for (Coordinate coord : coordinates) {
 }
+import java.util.stream.Collectors;
+ * @opensearch.internal
+ * The OpenSearch Contributors require contributions made to  
+    public int numDimensions() {
+import org.opensearch.common.geo.parsers.ShapeParser;  
+    public MultiPointBuilder() {  
+ */  
+    public XShapeCollection<Point> buildS4J() {
+    }  
+        multiPoints.setPointsOnly(true);  
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.io.IOException;
+    @Override
+import java.util.List;
+import java.util.ArrayList;  
+            throw new IllegalStateException("unable to get number of dimensions, " + "LineString has not yet been initialized");
+ * compatible open source license.
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+    /**
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+        return TYPE;
+ *
+        builder.field(ShapeParser.FIELD_COORDINATES.getPreferredName());  
+ * Builds a multi point geometry
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.geometry.MultiPoint;  
+package org.opensearch.common.geo.builders;
+    public MultiPointBuilder(List<Coordinate> coordinates) {
+        return Double.isNaN(coordinates.get(0).z) ? 2 : 3;  
+     */
+        builder.startObject();
+    /**  
+        return builder;  
+ * this file be licensed under the Apache-2.0 license or a
+        if (coordinates == null || coordinates.isEmpty()) {  
+        // MultiPoint geometry = FACTORY.createMultiPoint(points.toArray(new Coordinate[points.size()]));  
+        if (coordinates.isEmpty()) {  
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        XShapeCollection<Point> multiPoints = new XShapeCollection<>(shapes, SPATIAL_CONTEXT);
+     * Read from a stream.
+    }

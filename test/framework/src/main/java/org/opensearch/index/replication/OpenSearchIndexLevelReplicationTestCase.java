@@ -1,1299 +1,1160 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        }  
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.replication;
-
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.Version;
-import org.opensearch.action.DocWriteRequest;  
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.bulk.BulkItemRequest;  
-import org.opensearch.action.bulk.BulkItemResponse;
-import org.opensearch.action.bulk.BulkShardRequest;
-import org.opensearch.action.bulk.BulkShardResponse;  
-import org.opensearch.action.bulk.MappingUpdatePerformer;
-import org.opensearch.action.bulk.TransportShardBulkAction;
-import org.opensearch.action.delete.DeleteRequest;  
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.resync.ResyncReplicationRequest;
-import org.opensearch.action.resync.ResyncReplicationResponse;  
-import org.opensearch.action.resync.TransportResyncReplicationAction;
-import org.opensearch.action.support.ActionTestUtils;
-import org.opensearch.action.support.PlainActionFuture;  
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.action.support.replication.FanoutReplicationProxy;
-import org.opensearch.action.support.replication.PendingReplicationActions;  
-import org.opensearch.action.support.replication.ReplicatedWriteRequest;
-import org.opensearch.action.support.replication.ReplicationOperation;
-import org.opensearch.action.support.replication.ReplicationRequest;  
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.action.support.replication.TransportReplicationAction.ReplicaResponse;  
-import org.opensearch.action.support.replication.TransportWriteAction;
-import org.opensearch.action.support.replication.TransportWriteActionTestHelper;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.AllocationId;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RecoverySource;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingHelper;
-import org.opensearch.cluster.routing.ShardRoutingState;  
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.common.collect.Iterators;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.DocIdSeqNoAndSource;  
-import org.opensearch.index.engine.EngineConfigFactory;
-import org.opensearch.index.engine.EngineFactory;
-import org.opensearch.index.engine.InternalEngineFactory;  
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.engine.exec.IndexerFactory;
-import org.opensearch.index.mapper.MapperService;  
-import org.opensearch.index.seqno.GlobalCheckpointSyncAction;
-import org.opensearch.index.seqno.RetentionLease;
-import org.opensearch.index.seqno.RetentionLeaseSyncAction;  
-import org.opensearch.index.seqno.RetentionLeaseSyncer;
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.index.shard.IndexShardTestUtils;
-import org.opensearch.index.shard.PrimaryReplicaSyncer;  
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.indices.recovery.DefaultRecoverySettings;  
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.indices.recovery.RecoveryTarget;  
-import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
-import org.opensearch.tasks.TaskManager;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.threadpool.ThreadPool.Names;
-
-import java.io.IOException;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Future;  
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;  
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.stream.Collectors;  
-import java.util.stream.StreamSupport;
-
-import static org.hamcrest.Matchers.empty;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-
-public abstract class OpenSearchIndexLevelReplicationTestCase extends IndexShardTestCase {
-
-    protected final Index index = new Index("test", "uuid");  
-    private final ShardId shardId = new ShardId(index, 0);
-    protected final String indexMapping = "{ \"" + MapperService.SINGLE_MAPPING_NAME + "\": {} }";
-
-    protected ReplicationGroup createGroup(int replicas) throws IOException {
-        return createGroup(replicas, Settings.EMPTY);
-    }  
-
-    protected ReplicationGroup createGroup(int replicas, Settings settings) throws IOException {
-        IndexMetadata metadata = buildIndexMetadata(replicas, settings, indexMapping);  
-        return new ReplicationGroup(metadata);
-    }
-
-    protected ReplicationGroup createGroup(int replicas, Settings settings, EngineFactory engineFactory) throws IOException {
-        return createGroup(replicas, settings, indexMapping, engineFactory);
-    }  
-
-    protected ReplicationGroup createGroup(int replicas, Settings settings, String mappings, EngineFactory engineFactory)
-        throws IOException {  
-        return createGroup(replicas, settings, mappings, engineFactory, DefaultRecoverySettings.INSTANCE, MergedSegmentPublisher.EMPTY);
-    }
-
-    protected ReplicationGroup createGroup(
-        int replicas,
-        Settings settings,  
-        String mappings,
-        EngineFactory engineFactory,
-        RecoverySettings recoverySettings,  
-        MergedSegmentPublisher mergedSegmentPublisher
-    ) throws IOException {
-        Path remotePath = null;  
-        if ("true".equals(settings.get(IndexMetadata.SETTING_REMOTE_STORE_ENABLED))) {
-            remotePath = createTempDir();
-        }  
-        return createGroup(replicas, settings, mappings, engineFactory, recoverySettings, remotePath, mergedSegmentPublisher);
-    }
-
-    protected ReplicationGroup createGroup(int replicas, Settings settings, String mappings, EngineFactory engineFactory, Path remotePath)
-        throws IOException {
-        return createGroup(  
-            replicas,
-            settings,
-            mappings,  
-            engineFactory,
-            DefaultRecoverySettings.INSTANCE,
-            remotePath,  
-            MergedSegmentPublisher.EMPTY
-        );
-    }  
-
-    protected ReplicationGroup createGroup(
-        int replicas,  
-        Settings settings,
-        String mappings,
-        EngineFactory engineFactory,  
-        RecoverySettings recoverySettings,
-        Path remotePath,
-        MergedSegmentPublisher mergedSegmentPublisher  
-    ) throws IOException {
-        IndexMetadata metadata = buildIndexMetadata(replicas, settings, mappings);
-        return new ReplicationGroup(metadata, recoverySettings, remotePath, mergedSegmentPublisher) {  
-            @Override
-            protected EngineFactory getEngineFactory(ShardRouting routing) {
-                return engineFactory;  
-            }
-        };
-    }  
-
-    protected IndexMetadata buildIndexMetadata(int replicas) throws IOException {
-        return buildIndexMetadata(replicas, indexMapping);  
-    }
-
-    protected IndexMetadata buildIndexMetadata(int replicas, String mappings) throws IOException {  
-        return buildIndexMetadata(replicas, Settings.EMPTY, mappings);
-    }
-
-    protected IndexMetadata buildIndexMetadata(int replicas, Settings indexSettings, String mappings) throws IOException {
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, replicas)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))  
-            .put(indexSettings)
-            .build();
-        IndexMetadata.Builder metadata = IndexMetadata.builder(index.getName())  
-            .settings(settings)
-            .putMapping(mappings)
-            .primaryTerm(0, randomIntBetween(1, 100));  
-
-        return metadata.build();
-    }  
-
-    IndexRequest copyIndexRequest(IndexRequest inRequest) throws IOException {
-        try (BytesStreamOutput out = new BytesStreamOutput()) {  
-            inRequest.writeTo(out);
-            try (StreamInput in = out.bytes().streamInput()) {
-                return new IndexRequest(in);  
-            }
         }
-    }  
-
-    protected DiscoveryNode getDiscoveryNode(String id) {
-        return new DiscoveryNode(  
-            id,
-            id,
-            buildNewFakeTransportAddress(),  
-            Collections.emptyMap(),
-            Collections.singleton(DiscoveryNodeRole.DATA_ROLE),
-            Version.CURRENT  
-        );
-    }
-
-    protected class ReplicationGroup implements AutoCloseable, Iterable<IndexShard> {
-        private IndexShard primary;
-        private IndexMetadata indexMetadata;  
-        private final List<IndexShard> replicas;
-        private final AtomicInteger replicaId = new AtomicInteger();
-        private final AtomicInteger docId = new AtomicInteger();  
-        boolean closed = false;
-        private volatile ReplicationTargets replicationTargets;
-        private final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
-
-        private final PrimaryReplicaSyncer primaryReplicaSyncer = new PrimaryReplicaSyncer(
-            new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet()),  
-            (request, parentTask, primaryAllocationId, primaryTerm, listener) -> {
-                try {
-                    new ResyncAction(request, listener, ReplicationGroup.this).execute();  
-                } catch (Exception e) {
-                    throw new AssertionError(e);
-                }  
-            }
-        );
-
-        private final RetentionLeaseSyncer retentionLeaseSyncer = new RetentionLeaseSyncer(
-            (shardId, primaryAllocationId, primaryTerm, retentionLeases, listener) -> syncRetentionLeases(
-                shardId,  
-                retentionLeases,
-                listener
-            ),  
-            (shardId, primaryAllocationId, primaryTerm, retentionLeases) -> syncRetentionLeases(
-                shardId,
-                retentionLeases,  
-                ActionListener.wrap(r -> {}, e -> {
-                    throw new AssertionError("failed to background sync retention lease", e);
-                })  
-            )
-        );
-
-        protected ReplicationGroup(final IndexMetadata indexMetadata) throws IOException {
-            this(indexMetadata, null);
-        }  
-
-        protected ReplicationGroup(final IndexMetadata indexMetadata, Path remotePath) throws IOException {
-            this(indexMetadata, DefaultRecoverySettings.INSTANCE, remotePath, MergedSegmentPublisher.EMPTY);  
-        }
-
-        protected ReplicationGroup(  
-            final IndexMetadata indexMetadata,
-            RecoverySettings recoverySettings,
-            Path remotePath,  
-            MergedSegmentPublisher mergedSegmentPublisher
-        ) throws IOException {
-            final ShardRouting primaryRouting = this.createShardRouting("s0", true);  
-            primary = newShard(
-                primaryRouting,
-                indexMetadata,  
-                null,
-                getIndexerFactory(primaryRouting),
-                () -> {},  
-                retentionLeaseSyncer,
-                recoverySettings,
-                remotePath,  
-                mergedSegmentPublisher
-            );
-            replicas = new CopyOnWriteArrayList<>();  
-            this.indexMetadata = indexMetadata;
-            updateAllocationIDsOnPrimary();
-            for (int i = 0; i < indexMetadata.getNumberOfReplicas(); i++) {  
-                addReplica(remotePath, recoverySettings);
-            }
-        }  
-
-        private ShardRouting createShardRouting(String nodeId, boolean primary) {
-            return TestShardRouting.newShardRouting(  
-                shardId,
-                nodeId,
-                primary,  
-                ShardRoutingState.INITIALIZING,
-                primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
-            );  
-        }
-
-        protected EngineFactory getEngineFactory(ShardRouting routing) {  
-            return new InternalEngineFactory();
-        }
-
-        protected IndexerFactory getIndexerFactory(ShardRouting routing) {
-            return new EngineBackedIndexerFactory(getEngineFactory(routing));
-        }  
-
-        protected EngineConfigFactory getEngineConfigFactory(IndexSettings indexSettings) {
-            return new EngineConfigFactory(indexSettings);  
-        }
-
-        public IndexMetadata getIndexMetadata() {  
-            return indexMetadata;
-        }
-
-        public int indexDocs(final int numOfDoc) throws Exception {
-            for (int doc = 0; doc < numOfDoc; doc++) {
-                final IndexRequest indexRequest = new IndexRequest(index.getName()).id(Integer.toString(docId.incrementAndGet()))  
-                    .source("{}", MediaTypeRegistry.JSON);
-                final BulkItemResponse response = index(indexRequest);
-                if (response.isFailed()) {  
-                    throw response.getFailure().getCause();
-                } else {
-                    assertEquals(DocWriteResponse.Result.CREATED, response.getResponse().getResult());  
+                if (replica.indexSettings() != null && replica.indexSettings().isAssignedOnRemoteNode()) {
                 }
+    private final ShardId shardId = new ShardId(index, 0);
+                mergedSegmentPublisher
+            updateAllocationIDsOnPrimary();
+            .put(indexSettings)
+            }
+        protected ReplicationAction(Request request, ActionListener<Response> listener, ReplicationGroup group, String opType) {  
+        throws IOException {  
+import org.opensearch.index.seqno.RetentionLease;
+            ) {  
+ *
+            computeReplicationTargets();
+package org.opensearch.index.replication;
+            RecoverySettings recoverySettings,
+ */  
+                Exception exception,
+        ) {  
+        }  
+                remotePath,  
+import org.opensearch.action.bulk.TransportShardBulkAction;
+        public BulkItemResponse delete(DeleteRequest deleteRequest) throws Exception {
+                null,
+            buildNewFakeTransportAddress(),  
+        IndexMetadata metadata = buildIndexMetadata(replicas, settings, indexMapping);  
+        ResyncReplicationRequest request
+            final ShardRouting shardRouting = TestShardRouting.newShardRouting(
+                generateFakeDiscoveryNodes()  
+import org.opensearch.index.engine.exec.IndexerFactory;
+                activeIds,
+                replicaRouting,  
+        protected abstract void performOnReplica(ReplicaRequest request, IndexShard replica) throws Exception;
+        }
+import org.opensearch.index.seqno.RetentionLeases;
+        synchronized void addReplica(IndexShard replica) {
+            .primaryTerm(0, randomIntBetween(1, 100));  
+    protected ReplicationGroup createGroup(int replicas, Settings settings, String mappings, EngineFactory engineFactory, Path remotePath)
+import org.opensearch.index.engine.DocIdSeqNoAndSource;  
+        }  
+import org.opensearch.cluster.metadata.IndexMetadata;  
             }
             return numOfDoc;  
-        }
-
-        public int appendDocs(final int numOfDoc) throws Exception {  
-            for (int doc = 0; doc < numOfDoc; doc++) {
-                final IndexRequest indexRequest = new IndexRequest(index.getName()).source("{}", MediaTypeRegistry.JSON);
-                final BulkItemResponse response = index(indexRequest);  
-                if (response.isFailed()) {
-                    throw response.getFailure().getCause();
-                } else if (response.isFailed() == false) {  
-                    assertEquals(DocWriteResponse.Result.CREATED, response.getResponse().getResult());
-                }
-            }  
-            return numOfDoc;
-        }
-
-        public BulkItemResponse index(IndexRequest indexRequest) throws Exception {
-            return executeWriteRequest(indexRequest, indexRequest.getRefreshPolicy());
-        }  
-
-        public BulkItemResponse delete(DeleteRequest deleteRequest) throws Exception {
-            return executeWriteRequest(deleteRequest, deleteRequest.getRefreshPolicy());  
-        }
-
-        private BulkItemResponse executeWriteRequest(DocWriteRequest<?> writeRequest, WriteRequest.RefreshPolicy refreshPolicy)  
-            throws Exception {
-            PlainActionFuture<BulkItemResponse> listener = new PlainActionFuture<>();
-            final ActionListener<BulkShardResponse> wrapBulkListener = ActionListener.map(  
-                listener,
-                bulkShardResponse -> bulkShardResponse.getResponses()[0]
-            );  
-            BulkItemRequest[] items = new BulkItemRequest[1];
-            items[0] = new BulkItemRequest(0, writeRequest);
-            BulkShardRequest request = new BulkShardRequest(shardId, refreshPolicy, items);  
-            new WriteReplicationAction(request, wrapBulkListener, this).execute();
-            return listener.get();
-        }  
-
-        public synchronized void startAll() throws IOException {
-            startReplicas(replicas.size());  
-        }
-
-        public synchronized DiscoveryNodes generateFakeDiscoveryNodes() {  
-            DiscoveryNodes.Builder builder = new DiscoveryNodes.Builder();
-            if (primary.indexSettings() != null && primary.indexSettings().isAssignedOnRemoteNode()) {
-                builder.add(IndexShardTestUtils.getFakeRemoteEnabledNode(primary.routingEntry().currentNodeId()));  
-            } else {
-                builder.add(IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId()));
-            }  
-            for (IndexShard replica : replicas) {
-                if (replica.indexSettings() != null && replica.indexSettings().isAssignedOnRemoteNode()) {
-                    builder.add(IndexShardTestUtils.getFakeRemoteEnabledNode(replica.routingEntry().currentNodeId()));  
-                } else {
-                    builder.add(IndexShardTestUtils.getFakeDiscoNode(replica.routingEntry().currentNodeId()));
-                }  
-            }
-            return builder.build();
-        }  
-
-        public synchronized int startReplicas(int numOfReplicasToStart) throws IOException {
-            if (primary.routingEntry().initializing()) {  
-                startPrimary();
-            }
-            int started = 0;  
-            for (IndexShard replicaShard : replicas) {
-                if (replicaShard.routingEntry().initializing()) {
-                    recoverReplica(replicaShard);  
-                    started++;
-                    if (started > numOfReplicasToStart) {
-                        break;  
-                    }
-                }
-            }  
-            // Update the status of the replicas in the routing table to IndexShardState.STARTED.
-            updateAllocationIDsOnPrimary();
-            return started;  
-        }
-
-        public void startPrimary() throws IOException {  
-            recoverPrimary(primary);
-            computeReplicationTargets();
-            HashSet<String> activeIds = new HashSet<>();  
-            activeIds.addAll(activeIds());
-            activeIds.add(primary.routingEntry().allocationId().getId());
-            ShardRouting startedRoutingEntry = ShardRoutingHelper.moveToStarted(primary.routingEntry());  
-            IndexShardRoutingTable routingTable = routingTable(shr -> shr == primary.routingEntry() ? startedRoutingEntry : shr);
-            primary.updateShardState(
-                startedRoutingEntry,  
-                primary.getPendingPrimaryTerm(),
-                null,
-                currentClusterStateVersion.incrementAndGet(),  
-                activeIds,
-                routingTable,
-                generateFakeDiscoveryNodes()  
-            );
-            for (final IndexShard replica : replicas) {
-                recoverReplica(replica);  
-            }
-            computeReplicationTargets();
-        }  
-
-        public IndexShard addReplica() throws IOException {
-            return addReplica((Path) null);  
-        }
-
-        public IndexShard addReplica(Path remotePath) throws IOException {  
-            final ShardRouting replicaRouting = createShardRouting("s" + replicaId.incrementAndGet(), false);
-            final IndexShard replica = newShard(
-                replicaRouting,  
-                indexMetadata,
-                null,
-                getIndexerFactory(replicaRouting),  
                 () -> {},
-                retentionLeaseSyncer,
-                remotePath  
-            );
-            addReplica(replica);
-            return replica;  
-        }
-
-        public IndexShard addReplica(Path remotePath, RecoverySettings recoverySettings) throws IOException {  
-            final ShardRouting replicaRouting = createShardRouting("s" + replicaId.incrementAndGet(), false);
-            final IndexShard replica = newShard(
-                replicaRouting,  
-                indexMetadata,
-                null,
-                getIndexerFactory(replicaRouting),  
-                () -> {},
-                retentionLeaseSyncer,
-                recoverySettings,  
-                remotePath,
-                MergedSegmentPublisher.EMPTY
-            );  
-            addReplica(replica);
-            return replica;
-        }  
-
-        public synchronized void addReplica(IndexShard replica) throws IOException {
-            assert shardRoutings().stream().anyMatch(shardRouting -> shardRouting.isSameAllocation(replica.routingEntry())) == false  
-                : "replica with aId [" + replica.routingEntry().allocationId() + "] already exists";
-            replicas.add(replica);
-            if (replicationTargets != null) {  
-                replicationTargets.addReplica(replica);
-            }
-            updateAllocationIDsOnPrimary();  
-        }
-
-        protected synchronized void recoverPrimary(IndexShard primary) {  
-            final DiscoveryNode pNode = getDiscoveryNode(primary.routingEntry().currentNodeId());
-            primary.markAsRecovering("store", new RecoveryState(primary.routingEntry(), pNode, null));
-            recoverFromStore(primary);  
-        }
-
-        public synchronized IndexShard addReplicaWithExistingPath(final ShardPath shardPath, final String nodeId) throws IOException {  
-            final ShardRouting shardRouting = TestShardRouting.newShardRouting(
-                shardId,
-                nodeId,  
-                false,
-                ShardRoutingState.INITIALIZING,
-                RecoverySource.PeerRecoverySource.INSTANCE  
-            );
-
-            final IndexShard newReplica = newShard(  
-                shardRouting,
-                shardPath,
-                indexMetadata,  
-                null,
-                null,
-                getIndexerFactory(shardRouting),  
-                getEngineConfigFactory(new IndexSettings(indexMetadata, indexMetadata.getSettings())),
-                () -> {},
-                retentionLeaseSyncer,  
-                EMPTY_EVENT_LISTENER,
-                null
-            );  
-            replicas.add(newReplica);
-            if (replicationTargets != null) {
-                replicationTargets.addReplica(newReplica);  
-            }
-            updateAllocationIDsOnPrimary();
-            return newReplica;  
-        }
-
-        public synchronized List<IndexShard> getReplicas() {  
-            return Collections.unmodifiableList(replicas);
-        }
-
-        /**
-         * promotes the specific replica as the new primary
-         */  
-        public Future<PrimaryReplicaSyncer.ResyncTask> promoteReplicaToPrimary(IndexShard replica) throws IOException {
-            PlainActionFuture<PrimaryReplicaSyncer.ResyncTask> fut = new PlainActionFuture<>();
-            promoteReplicaToPrimary(replica, (shard, listener) -> {  
-                computeReplicationTargets();
-                primaryReplicaSyncer.resync(shard, new ActionListener<PrimaryReplicaSyncer.ResyncTask>() {
-                    @Override  
-                    public void onResponse(PrimaryReplicaSyncer.ResyncTask resyncTask) {
-                        listener.onResponse(resyncTask);
-                        fut.onResponse(resyncTask);  
-                    }
-
-                    @Override  
-                    public void onFailure(Exception e) {
-                        listener.onFailure(e);
-                        fut.onFailure(e);  
-                    }
-                });
-            });  
-            return fut;
-        }
-
-        public synchronized void promoteReplicaToPrimary(
-            IndexShard replica,
-            BiConsumer<IndexShard, ActionListener<PrimaryReplicaSyncer.ResyncTask>> primaryReplicaSyncer  
-        ) throws IOException {
-            final long newTerm = indexMetadata.primaryTerm(shardId.id()) + 1;
-            IndexMetadata.Builder newMetadata = IndexMetadata.builder(indexMetadata).primaryTerm(shardId.id(), newTerm);  
-            indexMetadata = newMetadata.build();
-            assertTrue(replicas.remove(replica));
-            closeShards(primary);  
-            primary = replica;
-            assert primary.routingEntry().active() : "only active replicas can be promoted to primary: " + primary.routingEntry();
-            ShardRouting primaryRouting = replica.routingEntry().moveActiveReplicaToPrimary();  
-            IndexShardRoutingTable routingTable = routingTable(shr -> shr == replica.routingEntry() ? primaryRouting : shr);
-
-            primary.updateShardState(  
-                primaryRouting,
-                newTerm,
-                primaryReplicaSyncer,  
-                currentClusterStateVersion.incrementAndGet(),
-                activeIds(),
-                routingTable,  
-                generateFakeDiscoveryNodes()
-            );
-        }  
-
-        private synchronized Set<String> activeIds() {
-            return shardRoutings().stream()  
-                .filter(ShardRouting::active)
-                .map(ShardRouting::allocationId)
-                .map(AllocationId::getId)  
-                .collect(Collectors.toSet());
-        }
-
-        private synchronized IndexShardRoutingTable routingTable(Function<ShardRouting, ShardRouting> transformer) {
-            IndexShardRoutingTable.Builder routingTable = new IndexShardRoutingTable.Builder(primary.shardId());
-            shardRoutings().stream().map(transformer).forEach(routingTable::addShard);  
-            return routingTable.build();
-        }
-
-        public synchronized boolean removeReplica(IndexShard replica) throws IOException {
-            final boolean removed = replicas.remove(replica);
-            if (removed) {  
-                updateAllocationIDsOnPrimary();
-                computeReplicationTargets();
-            }  
-            return removed;
-        }
-
-        public void recoverReplica(IndexShard replica) throws IOException {
-            recoverReplica(replica, (r, sourceNode) -> new RecoveryTarget(r, sourceNode, recoveryListener, threadPool));
-        }  
-
-        public void recoverReplica(IndexShard replica, BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier)
-            throws IOException {  
-            recoverReplica(replica, targetSupplier, true);
-        }
-
-        public void recoverReplica(
-            IndexShard replica,
-            BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,  
-            boolean markAsRecovering
-        ) throws IOException {
-            final IndexShardRoutingTable routingTable = routingTable(Function.identity());  
-            final Set<String> inSyncIds = activeIds();
-            OpenSearchIndexLevelReplicationTestCase.this.recoverUnstartedReplica(
-                replica,  
-                primary,
-                targetSupplier,
-                markAsRecovering,  
-                inSyncIds,
-                routingTable,
-                getReplicationFunc(replica)  
-            );
-            OpenSearchIndexLevelReplicationTestCase.this.startReplicaAfterRecovery(replica, primary, inSyncIds, routingTable);
-            computeReplicationTargets();  
-        }
-
-        public synchronized DiscoveryNode getPrimaryNode() {  
-            return getDiscoveryNode(primary.routingEntry().currentNodeId());
-        }
-
-        public Future<Void> asyncRecoverReplica(
-            final IndexShard replica,
-            final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier  
-        ) {
-            final FutureTask<Void> task = new FutureTask<>(() -> {
-                recoverReplica(replica, targetSupplier);  
-                return null;
-            });
-            threadPool.generic().execute(task);  
-            return task;
-        }
-
-        public synchronized void assertAllEqual(int expectedCount) throws IOException {
-            Set<String> primaryIds = getShardDocUIDs(primary);
-            assertThat(primaryIds.size(), equalTo(expectedCount));  
-            for (IndexShard replica : replicas) {
-                Set<String> replicaIds = getShardDocUIDs(replica);
-                Set<String> temp = new HashSet<>(primaryIds);  
-                temp.removeAll(replicaIds);
-                assertThat(replica.routingEntry() + " is missing docs", temp, empty());
-                temp = new HashSet<>(replicaIds);  
-                temp.removeAll(primaryIds);
-                assertThat(replica.routingEntry() + " has extra docs", temp, empty());
-            }  
-        }
-
-        public synchronized void refresh(String source) {  
-            for (IndexShard shard : this) {
-                shard.refresh(source);
-            }  
-        }
-
-        public synchronized void flush() {  
-            final FlushRequest request = new FlushRequest();
-            for (IndexShard shard : this) {
-                shard.flush(request);  
-            }
-        }
-
-        public synchronized List<ShardRouting> shardRoutings() {
-            return StreamSupport.stream(this.spliterator(), false).map(IndexShard::routingEntry).collect(Collectors.toList());
-        }  
-
-        @Override
-        public synchronized void close() throws Exception {  
-            if (closed == false) {
-                closed = true;
-                try {  
-                    final List<DocIdSeqNoAndSource> docsOnPrimary = getDocIdAndSeqNos(primary);
-                    for (IndexShard replica : replicas) {
-                        assertThat(replica.getMaxSeenAutoIdTimestamp(), equalTo(primary.getMaxSeenAutoIdTimestamp()));  
-                        assertThat(replica.getMaxSeqNoOfUpdatesOrDeletes(), greaterThanOrEqualTo(primary.getMaxSeqNoOfUpdatesOrDeletes()));
-                        assertThat(getDocIdAndSeqNos(replica), equalTo(docsOnPrimary));
-                    }  
-                } catch (AlreadyClosedException ignored) {}
-                closeShards(this);
-            } else {  
-                throw new AlreadyClosedException("too bad");
-            }
-        }  
-
-        @Override
-        public Iterator<IndexShard> iterator() {  
-            return Iterators.concat(replicas.iterator(), Collections.singleton(primary).iterator());
-        }
-
-        public synchronized IndexShard getPrimary() {
-            return primary;
-        }  
-
-        public synchronized void reinitPrimaryShard(Path remotePath) throws IOException {
-            primary = reinitShard(primary, remotePath);  
-            computeReplicationTargets();
-        }
-
-        public void syncGlobalCheckpoint() {
-            PlainActionFuture<ReplicationResponse> listener = new PlainActionFuture<>();
-            try {  
-                new GlobalCheckpointSync(listener, this).execute();
-                listener.get();
-            } catch (Exception e) {  
-                throw new AssertionError(e);
-            }
-        }  
-
-        private void updateAllocationIDsOnPrimary() throws IOException {
-            primary.updateShardState(  
-                primary.routingEntry(),
-                primary.getPendingPrimaryTerm(),
-                null,  
-                currentClusterStateVersion.incrementAndGet(),
-                activeIds(),
-                routingTable(Function.identity()),  
-                primary.indexSettings().isRemoteTranslogStoreEnabled()
-                    ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable(Function.identity()).getShards())
-                    : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable(Function.identity()).getShards())  
-            );
-        }
-
-        private synchronized void computeReplicationTargets() {
-            this.replicationTargets = new ReplicationTargets(this.primary, new ArrayList<>(this.replicas));
-        }  
-
-        private ReplicationTargets getReplicationTargets() {
-            return replicationTargets;  
-        }
-
-        protected void syncRetentionLeases(ShardId shardId, RetentionLeases leases, ActionListener<ReplicationResponse> listener) {  
-            new SyncRetentionLeases(
-                new RetentionLeaseSyncAction.Request(shardId, leases),
-                this,  
-                ActionListener.map(listener, r -> new ReplicationResponse())
-            ).execute();
-        }  
-
-        public synchronized RetentionLease addRetentionLease(
-            String id,  
-            long retainingSequenceNumber,
-            String source,
-            ActionListener<ReplicationResponse> listener  
-        ) {
-            return getPrimary().addRetentionLease(id, retainingSequenceNumber, source, listener);
-        }  
-
-        public synchronized RetentionLease renewRetentionLease(String id, long retainingSequenceNumber, String source) {
-            return getPrimary().renewRetentionLease(id, retainingSequenceNumber, source);  
-        }
-
-        public synchronized void removeRetentionLease(String id, ActionListener<ReplicationResponse> listener) {  
-            getPrimary().removeRetentionLease(id, listener);
-        }
-
-        public void executeRetentionLeasesSyncRequestOnReplica(RetentionLeaseSyncAction.Request request, IndexShard replica) {
-            final PlainActionFuture<Releasable> acquirePermitFuture = new PlainActionFuture<>();
-            replica.acquireReplicaOperationPermit(  
-                getPrimary().getOperationPrimaryTerm(),
-                getPrimary().getLastKnownGlobalCheckpoint(),
-                getPrimary().getMaxSeqNoOfUpdatesOrDeletes(),  
-                acquirePermitFuture,
-                ThreadPool.Names.SAME,
-                request  
-            );
-            try (Releasable ignored = acquirePermitFuture.actionGet()) {
-                replica.updateRetentionLeasesOnReplica(request.getRetentionLeases());  
-                replica.persistRetentionLeases();
-            } catch (Exception e) {
-                throw new AssertionError("failed to execute retention lease request on replica [" + replica.routingEntry() + "]", e);  
-            }
-        }
-    }  
-
-    static final class ReplicationTargets {
-        final IndexShard primary;  
-        final List<IndexShard> replicas;
-
-        ReplicationTargets(IndexShard primary, List<IndexShard> replicas) {  
-            this.primary = primary;
-            this.replicas = replicas;
-        }  
-
-        /**
-         * This does not modify the replication targets, but only adds a replica to the list.  
-         * If the targets is updated to include the given replica, a replication action would
-         * be able to find this replica to execute write requests on it.
-         */  
-        synchronized void addReplica(IndexShard replica) {
-            replicas.add(replica);
-        }  
-
-        synchronized IndexShard findReplicaShard(ShardRouting replicaRouting) {
-            for (IndexShard replica : replicas) {  
-                if (replica.routingEntry().isSameAllocation(replicaRouting)) {
-                    return replica;
-                }  
-            }
-            throw new AssertionError("replica [" + replicaRouting + "] is not found; replicas[" + replicas + "] primary[" + primary + "]");
-        }  
-    }
-
-    protected abstract class ReplicationAction<  
-        Request extends ReplicationRequest<Request>,
-        ReplicaRequest extends ReplicationRequest<ReplicaRequest>,
-        Response extends ReplicationResponse> {  
-        private final Request request;
-        private ActionListener<Response> listener;
-        private final ReplicationTargets replicationTargets;  
-        private final String opType;
-
-        protected ReplicationAction(Request request, ActionListener<Response> listener, ReplicationGroup group, String opType) {  
-            this.request = request;
-            this.listener = listener;
-            this.replicationTargets = group.getReplicationTargets();  
-            this.opType = opType;
-        }
-
-        public void execute() {
-            try {
-                new ReplicationOperation<>(request, new PrimaryRef(), ActionListener.map(listener, result -> {  
-                    adaptResponse(result.finalResponse, getPrimaryShard());
-                    return result.finalResponse;
-                }),  
-                    new ReplicasRef(),
-                    logger,
-                    threadPool,  
-                    opType,
-                    primaryTerm,
-                    TimeValue.timeValueMillis(20),  
-                    TimeValue.timeValueSeconds(60),
-                    new FanoutReplicationProxy<>(new ReplicasRef())
-                ).execute();  
-            } catch (Exception e) {
-                listener.onFailure(e);
-            }  
-        }
-
-        // to be overridden by subclasses  
-        protected void adaptResponse(Response response, IndexShard indexShard) {
-
-        }  
-
-        protected IndexShard getPrimaryShard() {
-            return replicationTargets.primary;  
-        }
-
-        protected abstract void performOnPrimary(IndexShard primary, Request request, ActionListener<PrimaryResult> listener);  
-
-        protected abstract void performOnReplica(ReplicaRequest request, IndexShard replica) throws Exception;
-
-        class PrimaryRef implements ReplicationOperation.Primary<Request, ReplicaRequest, PrimaryResult> {
-
-            @Override  
-            public ShardRouting routingEntry() {
-                return getPrimaryShard().routingEntry();
-            }  
-
-            @Override
-            public void failShard(String message, Exception exception) {  
-                throw new UnsupportedOperationException("failing a primary isn't supported. failure: " + message, exception);
-            }
-
-            @Override
-            public void perform(Request request, ActionListener<PrimaryResult> listener) {
-                performOnPrimary(getPrimaryShard(), request, listener);  
-            }
-
-            @Override  
-            public void updateLocalCheckpointForShard(String allocationId, long checkpoint) {
-                getPrimaryShard().updateLocalCheckpointForShard(allocationId, checkpoint);
-            }  
-
-            @Override
-            public void updateGlobalCheckpointForShard(String allocationId, long globalCheckpoint) {  
-                getPrimaryShard().updateGlobalCheckpointForShard(allocationId, globalCheckpoint);
-            }
-
-            @Override
-            public long localCheckpoint() {
-                return getPrimaryShard().getLocalCheckpoint();  
-            }
-
-            @Override  
-            public long globalCheckpoint() {
-                return getPrimaryShard().getLastSyncedGlobalCheckpoint();
-            }  
-
-            @Override
-            public long computedGlobalCheckpoint() {  
-                return getPrimaryShard().getLastKnownGlobalCheckpoint();
-            }
-
-            @Override
-            public long maxSeqNoOfUpdatesOrDeletes() {
-                return getPrimaryShard().getMaxSeqNoOfUpdatesOrDeletes();  
-            }
-
-            @Override  
-            public org.opensearch.index.shard.ReplicationGroup getReplicationGroup() {
-                return getPrimaryShard().getReplicationGroup();
-            }  
-
-            @Override
-            public PendingReplicationActions getPendingReplicationActions() {  
                 return getPrimaryShard().getPendingReplicationActions();
+            final FlushRequest request = new FlushRequest();
             }
+                } else {
         }  
-
-        class ReplicasRef implements ReplicationOperation.Replicas<ReplicaRequest> {
-
-            @Override
-            public void performOn(
-                final ShardRouting replicaRouting,  
-                final ReplicaRequest request,
-                final long primaryTerm,
-                final long globalCheckpoint,  
-                final long maxSeqNoOfUpdatesOrDeletes,
-                final ActionListener<ReplicationOperation.ReplicaResponse> listener
-            ) {  
-                IndexShard replica = replicationTargets.findReplicaShard(replicaRouting);
-                replica.acquireReplicaOperationPermit(
-                    getPrimaryShard().getPendingPrimaryTerm(),  
-                    globalCheckpoint,
-                    maxSeqNoOfUpdatesOrDeletes,
-                    ActionListener.delegateFailure(listener, (delegatedListener, releasable) -> {  
-                        try {
-                            performOnReplica(request, replica);
-                            releasable.close();  
-                            delegatedListener.onResponse(
-                                new ReplicaResponse(replica.getLocalCheckpoint(), replica.getLastKnownGlobalCheckpoint())
-                            );  
-                        } catch (final Exception e) {
-                            Releasables.closeWhileHandlingException(releasable);
-                            delegatedListener.onFailure(e);  
-                        }
-                    }),
-                    ThreadPool.Names.WRITE,  
-                    request
-                );
-            }  
-
-            @Override
-            public void failShardIfNeeded(  
-                ShardRouting replica,
-                long primaryTerm,
-                String message,  
-                Exception exception,
-                ActionListener<Void> listener
-            ) {  
-                throw new UnsupportedOperationException("failing shard " + replica + " isn't supported. failure: " + message, exception);
-            }
-
-            @Override
-            public void markShardCopyAsStaleIfNeeded(
-                ShardId shardId,  
-                String allocationId,
-                long primaryTerm,
-                ActionListener<Void> listener  
-            ) {
-                throw new UnsupportedOperationException("can't mark " + shardId + ", aid [" + allocationId + "] as stale");
-            }  
-        }
-
-        protected class PrimaryResult implements ReplicationOperation.PrimaryResult<ReplicaRequest> {  
-            final ReplicaRequest replicaRequest;
-            final Response finalResponse;
-
-            public PrimaryResult(ReplicaRequest replicaRequest, Response finalResponse) {
-                this.replicaRequest = replicaRequest;
-                this.finalResponse = finalResponse;  
-            }
-
-            @Override  
-            public ReplicaRequest replicaRequest() {
-                return replicaRequest;
-            }  
-
-            @Override
-            public void setShardInfo(ReplicationResponse.ShardInfo shardInfo) {  
-                finalResponse.setShardInfo(shardInfo);
-            }
-
-            @Override
-            public void runPostReplicationActions(ActionListener<Void> listener) {
-                listener.onResponse(null);  
-            }
-        }
-
-    }
-
-    class WriteReplicationAction extends ReplicationAction<BulkShardRequest, BulkShardRequest, BulkShardResponse> {  
-
-        WriteReplicationAction(BulkShardRequest request, ActionListener<BulkShardResponse> listener, ReplicationGroup replicationGroup) {
-            super(request, listener, replicationGroup, "indexing");  
-        }
-
-        @Override  
-        protected void performOnPrimary(IndexShard primary, BulkShardRequest request, ActionListener<PrimaryResult> listener) {
-            executeShardBulkOnPrimary(
-                primary,  
-                request,
-                ActionListener.map(listener, result -> new PrimaryResult(result.replicaRequest(), result.finalResponseIfSuccessful))
-            );  
-        }
-
-        @Override  
-        protected void performOnReplica(BulkShardRequest request, IndexShard replica) throws Exception {
-            executeShardBulkOnReplica(
-                request,  
-                replica,
-                getPrimaryShard().getPendingPrimaryTerm(),
-                getPrimaryShard().getLastKnownGlobalCheckpoint(),  
-                getPrimaryShard().getMaxSeqNoOfUpdatesOrDeletes()
+            final IndexMetadata indexMetadata,
+            try (StreamInput in = out.bytes().streamInput()) {
+                startPrimary();
+            return shardRoutings().stream()  
             );
-        }  
-    }
-
-    private void executeShardBulkOnPrimary(  
-        IndexShard primary,
-        BulkShardRequest request,
-        ActionListener<TransportWriteAction.WritePrimaryResult<BulkShardRequest, BulkShardResponse>> listener  
+                return null;
     ) {
-        for (BulkItemRequest itemRequest : request.items()) {
-            if (itemRequest.request() instanceof IndexRequest) {  
-                ((IndexRequest) itemRequest.request()).process(Version.CURRENT, null, index.getName());
+            final PlainActionFuture<Releasable> acquirePermitFuture = new PlainActionFuture<>();
+                final BulkItemResponse response = index(indexRequest);
+        private final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
+            boolean markAsRecovering
+        private IndexShard primary;
+    }  
+                RecoverySource.PeerRecoverySource.INSTANCE  
+                getPrimaryShard().getPendingPrimaryTerm(),
+                routingTable(Function.identity()),  
             }
-        }  
-        final PlainActionFuture<Releasable> permitAcquiredFuture = new PlainActionFuture<>();
-        primary.acquirePrimaryOperationPermit(permitAcquiredFuture, ThreadPool.Names.SAME, request);
-        try (Releasable ignored = permitAcquiredFuture.actionGet()) {  
-            MappingUpdatePerformer noopMappingUpdater = (update, shardId, listener1) -> {};
-            TransportShardBulkAction.performOnPrimary(
-                request,  
-                primary,
-                null,
-                System::currentTimeMillis,  
-                noopMappingUpdater,
-                null,
-                ActionTestUtils.assertNoFailureListener(result -> {  
-                    TransportWriteActionTestHelper.performPostWriteActions(
-                        primary,
-                        request,  
-                        ((TransportWriteAction.WritePrimaryResult<BulkShardRequest, BulkShardResponse>) result).location,
-                        logger
-                    );  
-                    listener.onResponse((TransportWriteAction.WritePrimaryResult<BulkShardRequest, BulkShardResponse>) result);
-                }),
-                threadPool,  
-                Names.WRITE
-            );
-        } catch (Exception e) {  
-            listener.onFailure(e);
-        }
-    }  
-
-    private <Request extends ReplicatedWriteRequest & DocWriteRequest> BulkShardRequest executeReplicationRequestOnPrimary(
-        IndexShard primary,  
-        Request request
-    ) throws Exception {
-        final BulkShardRequest bulkShardRequest = new BulkShardRequest(  
-            shardId,
-            request.getRefreshPolicy(),
-            new BulkItemRequest[] { new BulkItemRequest(0, request) }  
-        );
-        final PlainActionFuture<BulkShardRequest> res = new PlainActionFuture<>();
-        executeShardBulkOnPrimary(  
-            primary,
-            bulkShardRequest,
-            ActionListener.map(res, TransportReplicationAction.PrimaryResult::replicaRequest)  
-        );
-        return res.get();
-    }  
-
-    private void executeShardBulkOnReplica(
-        BulkShardRequest request,  
-        IndexShard replica,
-        long operationPrimaryTerm,
-        long globalCheckpointOnPrimary,  
-        long maxSeqNoOfUpdatesOrDeletes
-    ) throws Exception {
-        final PlainActionFuture<Releasable> permitAcquiredFuture = new PlainActionFuture<>();  
-        replica.acquireReplicaOperationPermit(
-            operationPrimaryTerm,
-            globalCheckpointOnPrimary,  
-            maxSeqNoOfUpdatesOrDeletes,
-            permitAcquiredFuture,
-            ThreadPool.Names.SAME,  
-            request
-        );
-        final Translog.Location location;  
-        try (Releasable ignored = permitAcquiredFuture.actionGet()) {
-            location = TransportShardBulkAction.performOnReplica(request, replica);
-        }  
-        TransportWriteActionTestHelper.performPostWriteActions(replica, request, location, logger);
-    }
-
-    /**
-     * indexes the given requests on the supplied primary, modifying it for replicas
-     */  
-    public BulkShardRequest indexOnPrimary(IndexRequest request, IndexShard primary) throws Exception {
-        return executeReplicationRequestOnPrimary(primary, request);
-    }  
-
-    /**
-     * Executes the delete request on the primary, and modifies it for replicas.  
-     */
-    BulkShardRequest deleteOnPrimary(DeleteRequest request, IndexShard primary) throws Exception {
-        return executeReplicationRequestOnPrimary(primary, request);  
-    }
-
-    /**  
-     * indexes the given requests on the supplied replica shard
-     */
-    public void indexOnReplica(BulkShardRequest request, ReplicationGroup group, IndexShard replica) throws Exception {  
-        indexOnReplica(request, group, replica, group.primary.getPendingPrimaryTerm());
-    }
-
-    void indexOnReplica(BulkShardRequest request, ReplicationGroup group, IndexShard replica, long term) throws Exception {
-        executeShardBulkOnReplica(
-            request,  
-            replica,
-            term,
-            group.primary.getLastKnownGlobalCheckpoint(),  
-            group.primary.getMaxSeqNoOfUpdatesOrDeletes()
-        );
-    }  
-
-    /**
-     * Executes the delete request on the given replica shard.  
-     */
-    void deleteOnReplica(BulkShardRequest request, ReplicationGroup group, IndexShard replica) throws Exception {
-        executeShardBulkOnReplica(  
-            request,
-            replica,
-            group.primary.getPendingPrimaryTerm(),  
-            group.primary.getLastKnownGlobalCheckpoint(),
-            group.primary.getMaxSeqNoOfUpdatesOrDeletes()
-        );  
-    }
-
-    class GlobalCheckpointSync extends ReplicationAction<  
-        GlobalCheckpointSyncAction.Request,
-        GlobalCheckpointSyncAction.Request,
-        ReplicationResponse> {  
-
-        GlobalCheckpointSync(final ActionListener<ReplicationResponse> listener, final ReplicationGroup replicationGroup) {
-            super(  
-                new GlobalCheckpointSyncAction.Request(replicationGroup.getPrimary().shardId()),
-                listener,
-                replicationGroup,  
-                "global_checkpoint_sync"
-            );
-        }  
-
-        @Override
-        protected void performOnPrimary(  
-            IndexShard primary,
-            GlobalCheckpointSyncAction.Request request,
-            ActionListener<PrimaryResult> listener  
-        ) {
-            ActionListener.completeWith(listener, () -> {
-                primary.sync();  
-                return new PrimaryResult(request, new ReplicationResponse());
+        class ReplicasRef implements ReplicationOperation.Replicas<ReplicaRequest> {
+            computeReplicationTargets();
+                throw new UnsupportedOperationException("failing a primary isn't supported. failure: " + message, exception);
             });
-        }  
-
-        @Override
-        protected void performOnReplica(final GlobalCheckpointSyncAction.Request request, final IndexShard replica) throws IOException {  
+        public synchronized DiscoveryNode getPrimaryNode() {  
+            @Override  
+            });
+            );
+ * ownership. Elasticsearch licenses this file to you under  
+        }
+    }
+    void deleteOnReplica(BulkShardRequest request, ReplicationGroup group, IndexShard replica) throws Exception {
+        RetentionLeaseSyncAction.Request,
+            }  
+            throws Exception {
+        );
+            closeShards(primary);  
+                if (replica.routingEntry().isSameAllocation(replicaRouting)) {
+                listener.get();
+    }
+        public synchronized void startAll() throws IOException {
+            IndexShard primary,  
             replica.sync();
         }
-    }  
-
-    class ResyncAction extends ReplicationAction<ResyncReplicationRequest, ResyncReplicationRequest, ResyncReplicationResponse> {
-
-        ResyncAction(ResyncReplicationRequest request, ActionListener<ResyncReplicationResponse> listener, ReplicationGroup group) {
-            super(request, listener, group, "resync");
+            OpenSearchIndexLevelReplicationTestCase.this.startReplicaAfterRecovery(replica, primary, inSyncIds, routingTable);
+import org.opensearch.action.support.replication.TransportWriteAction;
+        protected abstract void performOnPrimary(IndexShard primary, Request request, ActionListener<PrimaryResult> listener);  
+                    TimeValue.timeValueSeconds(60),
+            .putMapping(mappings)
         }  
-
-        @Override
-        protected void performOnPrimary(IndexShard primary, ResyncReplicationRequest request, ActionListener<PrimaryResult> listener) {  
-            ActionListener.completeWith(listener, () -> {
-                final TransportWriteAction.WritePrimaryResult<ResyncReplicationRequest, ResyncReplicationResponse> result =
-                    executeResyncOnPrimary(primary, request);  
-                return new PrimaryResult(result.replicaRequest(), result.finalResponseIfSuccessful);
-            });
-        }  
-
-        @Override
-        protected void performOnReplica(ResyncReplicationRequest request, IndexShard replica) throws Exception {  
-            executeResyncOnReplica(
-                replica,
-                request,  
-                getPrimaryShard().getPendingPrimaryTerm(),
-                getPrimaryShard().getLastKnownGlobalCheckpoint(),
-                getPrimaryShard().getMaxSeqNoOfUpdatesOrDeletes()  
-            );
-        }
+import java.util.function.Function;
+import org.opensearch.action.resync.TransportResyncReplicationAction;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                "global_checkpoint_sync"
+                null,
     }  
-
-    private TransportWriteAction.WritePrimaryResult<ResyncReplicationRequest, ResyncReplicationResponse> executeResyncOnPrimary(
-        IndexShard primary,  
-        ResyncReplicationRequest request
-    ) {
+                    opType,
+ * specific language governing permissions and limitations
+        }  
+                } catch (Exception e) {
+            return getPrimary().addRetentionLease(id, retainingSequenceNumber, source, listener);
         final TransportWriteAction.WritePrimaryResult<ResyncReplicationRequest, ResyncReplicationResponse> result =  
-            new TransportWriteAction.WritePrimaryResult<>(
-                TransportResyncReplicationAction.performOnPrimary(request),
-                new ResyncReplicationResponse(),  
-                null,
-                null,
-                primary,  
-                logger
-            );
-        TransportWriteActionTestHelper.performPostWriteActions(primary, request, result.location, logger);  
-        return result;
-    }
-
-    private void executeResyncOnReplica(
-        IndexShard replica,
-        ResyncReplicationRequest request,  
-        long operationPrimaryTerm,
-        long globalCheckpointOnPrimary,
-        long maxSeqNoOfUpdatesOrDeletes  
-    ) throws Exception {
-        final Translog.Location location;
-        final PlainActionFuture<Releasable> acquirePermitFuture = new PlainActionFuture<>();  
-        replica.acquireReplicaOperationPermit(
-            operationPrimaryTerm,
-            globalCheckpointOnPrimary,  
             maxSeqNoOfUpdatesOrDeletes,
-            acquirePermitFuture,
-            ThreadPool.Names.SAME,  
-            request
-        );
-        try (Releasable ignored = acquirePermitFuture.actionGet()) {  
-            location = TransportResyncReplicationAction.performOnReplica(request, replica);
-        }
-        TransportWriteActionTestHelper.performPostWriteActions(replica, request, location, logger);  
-    }
-
-    class SyncRetentionLeases extends ReplicationAction<  
+            final Response finalResponse;
+            this.replicationTargets = new ReplicationTargets(this.primary, new ArrayList<>(this.replicas));
+            final ShardRouting replicaRouting = createShardRouting("s" + replicaId.incrementAndGet(), false);
+                ActionListener<Void> listener  
+            permitAcquiredFuture,
+                replica.updateRetentionLeasesOnReplica(request.getRetentionLeases());  
+import java.util.stream.StreamSupport;
+    class WriteReplicationAction extends ReplicationAction<BulkShardRequest, BulkShardRequest, BulkShardResponse> {  
+        public void recoverReplica(IndexShard replica) throws IOException {
+            addReplica(replica);
         RetentionLeaseSyncAction.Request,
-        RetentionLeaseSyncAction.Request,
-        RetentionLeaseSyncAction.Response> {  
-
-        SyncRetentionLeases(
-            RetentionLeaseSyncAction.Request request,  
-            ReplicationGroup group,
-            ActionListener<RetentionLeaseSyncAction.Response> listener
-        ) {  
-            super(request, listener, group, "sync-retention-leases");
+        MergedSegmentPublisher mergedSegmentPublisher  
+            group.primary.getLastKnownGlobalCheckpoint(),
+            assertTrue(replicas.remove(replica));
+        private final PrimaryReplicaSyncer primaryReplicaSyncer = new PrimaryReplicaSyncer(
+import org.opensearch.index.engine.EngineFactory;
+                replica,  
+            );
+            engineFactory,
+            public long maxSeqNoOfUpdatesOrDeletes() {
+    protected ReplicationGroup createGroup(int replicas) throws IOException {
+        RecoverySettings recoverySettings,
+    ) {
+        protected void performOnPrimary(IndexShard primary, BulkShardRequest request, ActionListener<PrimaryResult> listener) {
+            String source,
+    class GlobalCheckpointSync extends ReplicationAction<  
+                replica.acquireReplicaOperationPermit(
+            this.primary = primary;
+            protected EngineFactory getEngineFactory(ShardRouting routing) {
+                recoverySettings,
+        return createGroup(replicas, Settings.EMPTY);
+        return metadata.build();
+        primary.acquirePrimaryOperationPermit(permitAcquiredFuture, ThreadPool.Names.SAME, request);
+            @Override  
+        }  
+            new WriteReplicationAction(request, wrapBulkListener, this).execute();
+            @Override
+            replicas.add(replica);
+    private TransportWriteAction.WritePrimaryResult<ResyncReplicationRequest, ResyncReplicationResponse> executeResyncOnPrimary(
+                null,
+            startReplicas(replicas.size());  
+                request,  
+     */  
+                routingTable,
+                shard.flush(request);  
         }
-
         @Override
-        protected void performOnPrimary(
-            IndexShard primary,  
-            RetentionLeaseSyncAction.Request request,
-            ActionListener<PrimaryResult> listener
-        ) {  
-            ActionListener.completeWith(listener, () -> {
-                primary.persistRetentionLeases();
-                return new PrimaryResult(request, new RetentionLeaseSyncAction.Response());  
-            });
+import java.util.concurrent.Future;  
+                    started++;
+            }
+        return new ReplicationGroup(metadata, recoverySettings, remotePath, mergedSegmentPublisher) {  
+            });  
+            for (IndexShard replica : replicas) {
         }
-
-        @Override
-        protected void performOnReplica(RetentionLeaseSyncAction.Request request, IndexShard replica) throws Exception {
-            replica.updateRetentionLeasesOnReplica(request.getRetentionLeases());  
-            replica.persistRetentionLeases();
-        }
+        boolean closed = false;
     }  
-
+        public synchronized void promoteReplicaToPrimary(
+            recoverFromStore(primary);  
+import org.opensearch.Version;
+                shardPath,
+        }
+                        assertThat(replica.getMaxSeqNoOfUpdatesOrDeletes(), greaterThanOrEqualTo(primary.getMaxSeqNoOfUpdatesOrDeletes()));
+            if (primary.routingEntry().initializing()) {  
+                final long globalCheckpoint,  
+import org.opensearch.action.bulk.BulkShardResponse;  
+        }  
+        synchronized IndexShard findReplicaShard(ShardRouting replicaRouting) {
+ */
+    /**
+        }
+     * indexes the given requests on the supplied replica shard
+    }  
+                try {  
+                    throw response.getFailure().getCause();
+    }  
+        @Override
+        }
+                null,  
+/*
+                ActionListener.wrap(r -> {}, e -> {
+    ) throws Exception {
+import org.opensearch.cluster.routing.TestShardRouting;
+                new GlobalCheckpointSyncAction.Request(replicationGroup.getPrimary().shardId()),
+            IndexShard primary,
+    }  
+        int replicas,  
+                        assertThat(replica.getMaxSeenAutoIdTimestamp(), equalTo(primary.getMaxSeenAutoIdTimestamp()));  
+                    public void onFailure(Exception e) {
+         * This does not modify the replication targets, but only adds a replica to the list.  
+                null,
+        }  
+                        assertThat(getDocIdAndSeqNos(replica), equalTo(docsOnPrimary));
+            }
+                .map(AllocationId::getId)  
+    static final class ReplicationTargets {
+                        listener.onResponse(resyncTask);
+            ThreadPool.Names.SAME,  
+        );
+        if ("true".equals(settings.get(IndexMetadata.SETTING_REMOTE_STORE_ENABLED))) {
+            final DiscoveryNode pNode = getDiscoveryNode(primary.routingEntry().currentNodeId());
+            MergedSegmentPublisher mergedSegmentPublisher
+                    }
+                    new ResyncAction(request, listener, ReplicationGroup.this).execute();  
+        ActionListener<TransportWriteAction.WritePrimaryResult<BulkShardRequest, BulkShardResponse>> listener  
+import org.opensearch.index.translog.Translog;
+         * promotes the specific replica as the new primary
+        return executeReplicationRequestOnPrimary(primary, request);
+                    @Override  
+import org.opensearch.index.seqno.RetentionLeaseSyncAction;  
+            } else {  
+                false,
+        public void recoverReplica(IndexShard replica, BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier)
+            updateAllocationIDsOnPrimary();  
+            }
+    void indexOnReplica(BulkShardRequest request, ReplicationGroup group, IndexShard replica, long term) throws Exception {
+ * Licensed to Elasticsearch under one or more contributor  
+                () -> {},
+        final BulkShardRequest bulkShardRequest = new BulkShardRequest(  
+                final ShardRouting replicaRouting,  
+            return started;  
+            );
+            primary = newShard(
+    public BulkShardRequest indexOnPrimary(IndexRequest request, IndexShard primary) throws Exception {
+import org.opensearch.action.support.replication.ReplicationOperation;
+        WriteReplicationAction(BulkShardRequest request, ActionListener<BulkShardResponse> listener, ReplicationGroup replicationGroup) {
+            replica.persistRetentionLeases();
+    }
+                long primaryTerm,
+            for (IndexShard replicaShard : replicas) {
+                currentClusterStateVersion.incrementAndGet(),
+            public long localCheckpoint() {
+            public long globalCheckpoint() {
+        Response extends ReplicationResponse> {  
+            final IndexShard newReplica = newShard(  
+                getIndexerFactory(primaryRouting),
+        try (Releasable ignored = permitAcquiredFuture.actionGet()) {  
+                getPrimary().getLastKnownGlobalCheckpoint(),
+            try {  
+        public BulkItemResponse index(IndexRequest indexRequest) throws Exception {
+            }  
+            group.primary.getMaxSeqNoOfUpdatesOrDeletes()
+            final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier  
+        private final Request request;
+            IndexShard replica,
+                throw new AlreadyClosedException("too bad");
+            );
+ * software distributed under the License is distributed on an
+            Set<String> primaryIds = getShardDocUIDs(primary);
+        long operationPrimaryTerm,
+            return replicationTargets.primary;  
+                            Releasables.closeWhileHandlingException(releasable);
+                }
+            PlainActionFuture<PrimaryReplicaSyncer.ResyncTask> fut = new PlainActionFuture<>();
+                primary.sync();  
+                recoverySettings,  
+                    new ReplicasRef(),
+    protected ReplicationGroup createGroup(int replicas, Settings settings) throws IOException {
+            @Override  
+            Collections.emptyMap(),
+            return getPrimary().renewRetentionLease(id, retainingSequenceNumber, source);  
+        int replicas,
+            operationPrimaryTerm,
+                closeShards(this);
+            String id,  
+        public synchronized boolean removeReplica(IndexShard replica) throws IOException {
+        ) throws IOException {
+        Request extends ReplicationRequest<Request>,
+        // to be overridden by subclasses  
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+            }
+        long maxSeqNoOfUpdatesOrDeletes
+    }
+        @Override  
+        final Translog.Location location;  
+            return Iterators.concat(replicas.iterator(), Collections.singleton(primary).iterator());
+                getPrimaryShard().getLastKnownGlobalCheckpoint(),  
+        }
+        indexOnReplica(request, group, replica, group.primary.getPendingPrimaryTerm());
+        public void recoverReplica(
+                ShardRoutingState.INITIALIZING,
+            globalCheckpointOnPrimary,  
+            }
+            getPrimary().removeRetentionLease(id, listener);
+            );  
+            IndexShardRoutingTable.Builder routingTable = new IndexShardRoutingTable.Builder(primary.shardId());
+            public PrimaryResult(ReplicaRequest replicaRequest, Response finalResponse) {
+                ActionListener<Void> listener
+            return StreamSupport.stream(this.spliterator(), false).map(IndexShard::routingEntry).collect(Collectors.toList());
+    }  
+            globalCheckpointOnPrimary,  
+                    assertEquals(DocWriteResponse.Result.CREATED, response.getResponse().getResult());  
+    }  
+         */  
+            }  
+import org.opensearch.indices.recovery.RecoverySettings;
+import org.opensearch.action.support.PlainActionFuture;  
+ * Unless required by applicable law or agreed to in writing,
+        }  
+                    request
+                    }
+    }  
+                routingTable,
+import org.opensearch.action.bulk.BulkItemRequest;  
+                return getPrimaryShard().getReplicationGroup();
+        );
+            final IndexShard replica,
+        Path remotePath = null;  
+        }  
+                bulkShardResponse -> bulkShardResponse.getResponses()[0]
+                recoverReplica(replica, targetSupplier);  
+import org.opensearch.action.support.replication.ReplicationRequest;  
+            request.getRefreshPolicy(),
+            executeShardBulkOnReplica(
+        public synchronized void flush() {  
+                })  
+            super(request, listener, group, "resync");
+                getPrimaryShard().updateGlobalCheckpointForShard(allocationId, globalCheckpoint);
+        String mappings,
+         * If the targets is updated to include the given replica, a replication action would
+            final IndexShardRoutingTable routingTable = routingTable(Function.identity());  
+            ActionListener.completeWith(listener, () -> {
+            );
+                    ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable(Function.identity()).getShards())
+            replica.updateRetentionLeasesOnReplica(request.getRetentionLeases());  
+import java.util.concurrent.CopyOnWriteArrayList;
+            primary = reinitShard(primary, remotePath);  
+        public void syncGlobalCheckpoint() {
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, replicas)
+        }  
+        return result;
+        );
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+ * The OpenSearch Contributors require contributions made to  
+            if (primary.indexSettings() != null && primary.indexSettings().isAssignedOnRemoteNode()) {
+        private final String opType;
+import org.opensearch.cluster.routing.ShardRoutingState;  
+        return res.get();
+                    adaptResponse(result.finalResponse, getPrimaryShard());
+                listener.onResponse(null);  
+            public void failShardIfNeeded(  
+import org.opensearch.core.index.shard.ShardId;  
+                request,  
+import java.util.List;  
+                .map(ShardRouting::allocationId)
+                markAsRecovering,  
+            return executeWriteRequest(indexRequest, indexRequest.getRefreshPolicy());
+                replica.persistRetentionLeases();
+            }
+        IndexShard primary,
+            }
+            }  
+                String message,  
+        ResyncAction(ResyncReplicationRequest request, ActionListener<ResyncReplicationResponse> listener, ReplicationGroup group) {
+            try (Releasable ignored = acquirePermitFuture.actionGet()) {
+            final ShardRouting replicaRouting = createShardRouting("s" + replicaId.incrementAndGet(), false);
+    protected ReplicationGroup createGroup(int replicas, Settings settings, EngineFactory engineFactory) throws IOException {
+                threadPool,  
+            shardRoutings().stream().map(transformer).forEach(routingTable::addShard);  
+            IndexMetadata.Builder newMetadata = IndexMetadata.builder(indexMetadata).primaryTerm(shardId.id(), newTerm);  
+import org.opensearch.action.support.WriteRequest;
+    protected final String indexMapping = "{ \"" + MapperService.SINGLE_MAPPING_NAME + "\": {} }";
+            }
+                throw new UnsupportedOperationException("failing shard " + replica + " isn't supported. failure: " + message, exception);
+            public void setShardInfo(ReplicationResponse.ShardInfo shardInfo) {  
+            id,
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+        }
+        Request request
+            });
+            replica,
+            public ReplicaRequest replicaRequest() {
+                        request,  
+        }  
+ *
+            super(request, listener, replicationGroup, "indexing");  
+        }  
+            primary.updateShardState(  
+        long operationPrimaryTerm,
+            GlobalCheckpointSyncAction.Request request,
+            return numOfDoc;
+            this.replicas = replicas;
+import org.opensearch.common.settings.ClusterSettings;  
+import org.opensearch.action.bulk.BulkItemResponse;
+ * not use this file except in compliance with the License.
+            request
+public abstract class OpenSearchIndexLevelReplicationTestCase extends IndexShardTestCase {
+            remotePath,  
+        class PrimaryRef implements ReplicationOperation.Primary<Request, ReplicaRequest, PrimaryResult> {
+        }
+        try (Releasable ignored = permitAcquiredFuture.actionGet()) {
+        private synchronized Set<String> activeIds() {
+            MergedSegmentPublisher.EMPTY
+        /**
+            return replicationTargets;  
+        IndexMetadata.Builder metadata = IndexMetadata.builder(index.getName())  
+        }
+        ResyncReplicationRequest request,  
+            } catch (Exception e) {  
+import org.opensearch.action.support.replication.FanoutReplicationProxy;
+                listener
+        protected void performOnReplica(BulkShardRequest request, IndexShard replica) throws Exception {
+import org.opensearch.core.action.ActionListener;  
+        }
+            }
+import org.opensearch.action.support.replication.ReplicationResponse;
+import org.opensearch.index.shard.IndexShard;  
+                closed = true;
+            return task;
+    private <Request extends ReplicatedWriteRequest & DocWriteRequest> BulkShardRequest executeReplicationRequestOnPrimary(
+                    primaryTerm,
+            return routingTable.build();
+    }  
+                request  
+            new BulkItemRequest[] { new BulkItemRequest(0, request) }  
+                return replicaRequest;
+        replica.acquireReplicaOperationPermit(
+                }),  
+        EngineFactory engineFactory,  
+        public IndexShard addReplica(Path remotePath) throws IOException {  
+    public void indexOnReplica(BulkShardRequest request, ReplicationGroup group, IndexShard replica) throws Exception {  
+            replicas = new CopyOnWriteArrayList<>();  
+                indexMetadata,
+            primary,
+                listener,
+        private void updateAllocationIDsOnPrimary() throws IOException {
+            return TestShardRouting.newShardRouting(  
+    }
+                recoverReplica(replica);  
+                    return replica;
+                noopMappingUpdater,
+        @Override
+        }
+import org.opensearch.core.index.Index;
+            );  
+        }
+        final PlainActionFuture<Releasable> permitAcquiredFuture = new PlainActionFuture<>();  
+        IndexShard replica,
+                getPrimaryShard().getLastKnownGlobalCheckpoint(),
+            return replica;
+                shardId,
+    protected final Index index = new Index("test", "uuid");  
+        public synchronized RetentionLease renewRetentionLease(String id, long retainingSequenceNumber, String source) {
+                new RetentionLeaseSyncAction.Request(shardId, leases),
+            );
+                String allocationId,
+                    threadPool,  
+ */  
+    private void executeShardBulkOnReplica(
+        IndexMetadata metadata = buildIndexMetadata(replicas, settings, mappings);
+                new ReplicationOperation<>(request, new PrimaryRef(), ActionListener.map(listener, result -> {  
+            (shardId, primaryAllocationId, primaryTerm, retentionLeases, listener) -> syncRetentionLeases(
+import org.opensearch.indices.recovery.RecoveryState;
+                replica,
+import java.util.Set;
+        }
+                throw new AssertionError("failed to execute retention lease request on replica [" + replica.routingEntry() + "]", e);  
+     * Executes the delete request on the given replica shard.  
+            return fut;
+                ActionTestUtils.assertNoFailureListener(result -> {  
+                return new PrimaryResult(result.replicaRequest(), result.finalResponseIfSuccessful);
+            ActionListener<PrimaryResult> listener
+        public IndexMetadata getIndexMetadata() {  
+        }  
+            );
+ * You may obtain a copy of the License at  
+                return getPrimaryShard().getMaxSeqNoOfUpdatesOrDeletes();  
+            acquirePermitFuture,
+            computeReplicationTargets();  
+                primary,  
+import java.util.Iterator;
+                    final List<DocIdSeqNoAndSource> docsOnPrimary = getDocIdAndSeqNos(primary);
+                primaryReplicaSyncer.resync(shard, new ActionListener<PrimaryReplicaSyncer.ResyncTask>() {
+        Settings settings = Settings.builder()
+    class ResyncAction extends ReplicationAction<ResyncReplicationRequest, ResyncReplicationRequest, ResyncReplicationResponse> {
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
+                    public void onResponse(PrimaryReplicaSyncer.ResyncTask resyncTask) {
+    }  
+            });
+            }
+    }
+            @Override
+                getPrimaryShard().updateLocalCheckpointForShard(allocationId, checkpoint);
+import org.opensearch.cluster.routing.ShardRoutingHelper;
+                return getPrimaryShard().routingEntry();
+            term,
+        }  
+ *  
+            IndexShardRoutingTable routingTable = routingTable(shr -> shr == replica.routingEntry() ? primaryRouting : shr);
+            public void markShardCopyAsStaleIfNeeded(
+ * SPDX-License-Identifier: Apache-2.0
+        private final AtomicInteger docId = new AtomicInteger();  
+            public void updateGlobalCheckpointForShard(String allocationId, long globalCheckpoint) {  
+                } catch (AlreadyClosedException ignored) {}
+            new TaskManager(Settings.EMPTY, threadPool, Collections.emptySet()),  
+            @Override
+        }
+        public Future<Void> asyncRecoverReplica(
+    protected ReplicationGroup createGroup(
+                } else if (response.isFailed() == false) {  
+import org.opensearch.action.resync.ResyncReplicationResponse;  
+            remotePath = createTempDir();
+            ).execute();
+                    throw new AssertionError(e);
+                replicationGroup,  
+import java.util.function.BiConsumer;  
+                    builder.add(IndexShardTestUtils.getFakeDiscoNode(replica.routingEntry().currentNodeId()));
+            @Override
+        }
+        }  
+                replicationTargets.addReplica(replica);
+    ) throws IOException {
+        }
+        public synchronized void refresh(String source) {  
+        }  
+            try {
+            }  
+        executeShardBulkOnReplica(  
+            if (removed) {  
+                primaryReplicaSyncer,  
+    }
+            @Override
+                    ActionListener.delegateFailure(listener, (delegatedListener, releasable) -> {  
+        }
+import org.opensearch.common.settings.Settings;
+     */
+import org.opensearch.index.shard.IndexShardTestCase;
+            PlainActionFuture<ReplicationResponse> listener = new PlainActionFuture<>();
+            primary.updateShardState(
+        GlobalCheckpointSyncAction.Request,
+        /**
+            super(  
+        protected EngineFactory getEngineFactory(ShardRouting routing) {  
+        GlobalCheckpointSyncAction.Request,
+            executeResyncOnReplica(
+            recoverPrimary(primary);
+            ActionListener.completeWith(listener, () -> {
+            public long computedGlobalCheckpoint() {  
+        }  
+            for (IndexShard replica : replicas) {
+        protected IndexerFactory getIndexerFactory(ShardRouting routing) {
+            public org.opensearch.index.shard.ReplicationGroup getReplicationGroup() {
+        }
+            recoverReplica(replica, targetSupplier, true);
+                null,
+                getPrimaryShard().getPendingPrimaryTerm(),
+                primary.routingEntry(),
+        public synchronized IndexShard addReplicaWithExistingPath(final ShardPath shardPath, final String nodeId) throws IOException {  
+        private synchronized void computeReplicationTargets() {
+            }
+        return createGroup(replicas, settings, indexMapping, engineFactory);
+import java.util.stream.Collectors;  
+                this.finalResponse = finalResponse;  
+            for (int i = 0; i < indexMetadata.getNumberOfReplicas(); i++) {  
+            group.primary.getPendingPrimaryTerm(),  
+                acquirePermitFuture,
+            DefaultRecoverySettings.INSTANCE,
+            final FutureTask<Void> task = new FutureTask<>(() -> {
+            indexMetadata = newMetadata.build();
+    ) throws Exception {
+            return new EngineConfigFactory(indexSettings);  
+        protected IndexShard getPrimaryShard() {
+        protected ReplicationGroup(final IndexMetadata indexMetadata, Path remotePath) throws IOException {
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+            promoteReplicaToPrimary(replica, (shard, listener) -> {  
+            }  
+            final IndexShard replica = newShard(
+            }
+import static org.hamcrest.Matchers.equalTo;
+        private ReplicationTargets getReplicationTargets() {
+                new ResyncReplicationResponse(),  
+                activeIds(),
+            }  
+            public void updateLocalCheckpointForShard(String allocationId, long checkpoint) {
+                newTerm,
+     * indexes the given requests on the supplied primary, modifying it for replicas
+    }  
+                final long maxSeqNoOfUpdatesOrDeletes,
+        ReplicationResponse> {  
+            MappingUpdatePerformer noopMappingUpdater = (update, shardId, listener1) -> {};
+        }
+                nodeId,
+        }
+            for (IndexShard shard : this) {
+            mappings,  
+                primary.getPendingPrimaryTerm(),
+        };
+        );
+        @Override
+            replica,
+                generateFakeDiscoveryNodes()
+            public ShardRouting routingEntry() {
+            BulkShardRequest request = new BulkShardRequest(shardId, refreshPolicy, items);  
+                new GlobalCheckpointSync(listener, this).execute();
+            final long newTerm = indexMetadata.primaryTerm(shardId.id()) + 1;
+                ((IndexRequest) itemRequest.request()).process(Version.CURRENT, null, index.getName());
+            replicas.add(newReplica);
+        }
+        return executeReplicationRequestOnPrimary(primary, request);  
+            }
+            primary.markAsRecovering("store", new RecoveryState(primary.routingEntry(), pNode, null));
+            shardId,
+    protected IndexMetadata buildIndexMetadata(int replicas) throws IOException {
+            }
+                if (replicaShard.routingEntry().initializing()) {
+                    }),
+            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))  
+    }
+        Settings settings,  
+                final TransportWriteAction.WritePrimaryResult<ResyncReplicationRequest, ResyncReplicationResponse> result =
+        return buildIndexMetadata(replicas, indexMapping);  
+        }
+                MergedSegmentPublisher.EMPTY
+                finalResponse.setShardInfo(shardInfo);
+import org.opensearch.action.support.replication.TransportReplicationAction.ReplicaResponse;  
+import org.opensearch.cluster.node.DiscoveryNodes;  
+ * the Apache License, Version 2.0 (the "License"); you may
+            public void perform(Request request, ActionListener<PrimaryResult> listener) {
+                temp = new HashSet<>(replicaIds);  
+import org.opensearch.index.IndexSettings;
+import org.opensearch.tasks.TaskManager;
+            ActionListener<ReplicationResponse> listener  
+            this.replicationTargets = group.getReplicationTargets();  
+                ShardRouting replica,
+                    logger,
+        protected void performOnPrimary(  
+        public synchronized void addReplica(IndexShard replica) throws IOException {
+        return new ReplicationGroup(metadata);
+            ActionListener<PrimaryResult> listener  
+import java.io.IOException;  
+                        fut.onResponse(resyncTask);  
+                ShardId shardId,  
+            throw new AssertionError("replica [" + replicaRouting + "] is not found; replicas[" + replicas + "] primary[" + primary + "]");
+                primary,  
+                null,
+                getReplicationFunc(replica)  
+            if (replicationTargets != null) {
+                            );  
+            maxSeqNoOfUpdatesOrDeletes,
+            }
+        }
+                ShardRoutingState.INITIALIZING,
+            DiscoveryNodes.Builder builder = new DiscoveryNodes.Builder();
+            @Override
+                    ThreadPool.Names.WRITE,  
+        ) {
+            RetentionLeaseSyncAction.Request request,  
+            }
+        protected void syncRetentionLeases(ShardId shardId, RetentionLeases leases, ActionListener<ReplicationResponse> listener) {  
+    IndexRequest copyIndexRequest(IndexRequest inRequest) throws IOException {
+        EngineFactory engineFactory,
+                                new ReplicaResponse(replica.getLocalCheckpoint(), replica.getLastKnownGlobalCheckpoint())
+            }  
+                        try {
+            }
+        return createGroup(replicas, settings, mappings, engineFactory, DefaultRecoverySettings.INSTANCE, MergedSegmentPublisher.EMPTY);
+                retentionLeases,
+                shardId,
+            }
+    protected IndexMetadata buildIndexMetadata(int replicas, Settings indexSettings, String mappings) throws IOException {
+                );
+    protected IndexMetadata buildIndexMetadata(int replicas, String mappings) throws IOException {  
+            }  
+            return builder.build();
+        protected class PrimaryResult implements ReplicationOperation.PrimaryResult<ReplicaRequest> {  
 }
+        }
+            long retainingSequenceNumber,
+            IndexShardRoutingTable routingTable = routingTable(shr -> shr == primary.routingEntry() ? startedRoutingEntry : shr);
+        MergedSegmentPublisher mergedSegmentPublisher
+        RecoverySettings recoverySettings,  
+            );
+                }),
+                getPrimary().getMaxSeqNoOfUpdatesOrDeletes(),  
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+        GlobalCheckpointSync(final ActionListener<ReplicationResponse> listener, final ReplicationGroup replicationGroup) {
+                primary,
+            @Override  
+import org.opensearch.index.seqno.RetentionLeaseSyncer;
+            computeReplicationTargets();
+                computeReplicationTargets();
+import java.util.function.BiFunction;
+import org.opensearch.action.support.replication.TransportWriteActionTestHelper;
+                getIndexerFactory(replicaRouting),  
+         * be able to find this replica to execute write requests on it.
+        private BulkItemResponse executeWriteRequest(DocWriteRequest<?> writeRequest, WriteRequest.RefreshPolicy refreshPolicy)  
+            group.primary.getMaxSeqNoOfUpdatesOrDeletes()
+/*  
+    }
+    /**
+            return removed;
+        private synchronized IndexShardRoutingTable routingTable(Function<ShardRouting, ShardRouting> transformer) {
+            @Override
+        }
+                request,  
+        ReplicaRequest extends ReplicationRequest<ReplicaRequest>,
+            return newReplica;  
+                TransportResyncReplicationAction.performOnPrimary(request),
+        public synchronized RetentionLease addRetentionLease(
+                currentClusterStateVersion.incrementAndGet(),
+        protected void performOnPrimary(
+        public synchronized void removeRetentionLease(String id, ActionListener<ReplicationResponse> listener) {  
+        final PlainActionFuture<BulkShardRequest> res = new PlainActionFuture<>();
+            }
+                retentionLeaseSyncer,  
+        }
+                        } catch (final Exception e) {
+        TransportWriteActionTestHelper.performPostWriteActions(replica, request, location, logger);
+                remotePath  
+        private final RetentionLeaseSyncer retentionLeaseSyncer = new RetentionLeaseSyncer(
+            IndexShard replica,
+            Collections.singleton(DiscoveryNodeRole.DATA_ROLE),
+            id,
+            primary = replica;
+                () -> {},  
+            new SyncRetentionLeases(
+import org.opensearch.core.common.io.stream.StreamInput;
+     * Executes the delete request on the primary, and modifies it for replicas.  
+        protected void performOnReplica(RetentionLeaseSyncAction.Request request, IndexShard replica) throws Exception {
+                getPrimary().getOperationPrimaryTerm(),
+            }
+            items[0] = new BulkItemRequest(0, writeRequest);
+                if (response.isFailed()) {  
+                primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
+                primary,
+            ) {  
+            return listener.get();
+        ) throws IOException {
+                try {
+        private volatile ReplicationTargets replicationTargets;
+            replicas,
+        ) {  
+            listener.onFailure(e);
+        }
+        @Override
+            group.primary.getLastKnownGlobalCheckpoint(),  
+        final Translog.Location location;
+        public void startPrimary() throws IOException {  
+                        logger
+        BulkShardRequest request,  
+        for (BulkItemRequest itemRequest : request.items()) {
+import org.opensearch.action.support.replication.TransportReplicationAction;
+            BiConsumer<IndexShard, ActionListener<PrimaryReplicaSyncer.ResyncTask>> primaryReplicaSyncer  
+import org.opensearch.index.shard.IndexShardTestUtils;
+            this(indexMetadata, null);
+                } else {
+                this.replicaRequest = replicaRequest;
+            updateAllocationIDsOnPrimary();
+        IndexShard primary,  
+                Set<String> temp = new HashSet<>(primaryIds);  
+        public synchronized List<ShardRouting> shardRoutings() {
+                () -> {},
+            final ShardRouting primaryRouting = this.createShardRouting("s0", true);  
+                return new IndexRequest(in);  
+                return new PrimaryResult(request, new RetentionLeaseSyncAction.Response());  
+        }
+        }
+        executeShardBulkOnReplica(
+                indexMetadata,
+            }  
+    protected ReplicationGroup createGroup(
+        long maxSeqNoOfUpdatesOrDeletes  
+        return createGroup(  
+        protected void performOnPrimary(IndexShard primary, ResyncReplicationRequest request, ActionListener<PrimaryResult> listener) {  
+        RetentionLeaseSyncAction.Response> {  
+            recoverReplica(replica, (r, sourceNode) -> new RecoveryTarget(r, sourceNode, recoveryListener, threadPool));
+    private void executeShardBulkOnPrimary(  
+        private IndexMetadata indexMetadata;  
+                return new PrimaryResult(request, new ReplicationResponse());
+        public int appendDocs(final int numOfDoc) throws Exception {  
+import java.util.HashSet;
+                        break;  
+        @Override
+        @Override
+            .build();
+                            delegatedListener.onResponse(
+            );  
+ * license agreements. See the NOTICE file distributed with
+        long globalCheckpointOnPrimary,  
+import org.opensearch.common.lease.Releasables;
+        }
+        public Future<PrimaryReplicaSyncer.ResyncTask> promoteReplicaToPrimary(IndexShard replica) throws IOException {
+            this.listener = listener;
+        try (BytesStreamOutput out = new BytesStreamOutput()) {  
+            );  
+            }  
+            );
+                listener.onFailure(e);
+    BulkShardRequest deleteOnPrimary(DeleteRequest request, IndexShard primary) throws Exception {
+                retentionLeaseSyncer,
+                replicationTargets.addReplica(newReplica);  
+        private final AtomicInteger replicaId = new AtomicInteger();
+        public IndexShard addReplica(Path remotePath, RecoverySettings recoverySettings) throws IOException {  
+            updateAllocationIDsOnPrimary();
+                }  
+            if (replicationTargets != null) {  
+                replicaRouting,  
+            }  
+        TransportWriteActionTestHelper.performPostWriteActions(replica, request, location, logger);  
+        public synchronized void close() throws Exception {  
+        }  
+        public synchronized List<IndexShard> getReplicas() {  
+                    listener.onResponse((TransportWriteAction.WritePrimaryResult<BulkShardRequest, BulkShardResponse>) result);
+            ShardRouting primaryRouting = replica.routingEntry().moveActiveReplicaToPrimary();  
+                    TimeValue.timeValueMillis(20),  
+        ) throws IOException {
+import org.opensearch.index.seqno.GlobalCheckpointSyncAction;
+            replicas.add(replica);
+                ThreadPool.Names.SAME,
+            @Override
+import org.opensearch.cluster.routing.ShardRouting;
+            BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,  
+            throws IOException {  
+                IndexShard replica = replicationTargets.findReplicaShard(replicaRouting);
+            addReplica(replica);
+                    recoverReplica(replicaShard);  
+        );  
+import org.opensearch.action.DocWriteResponse;
+        protected ReplicationGroup(final IndexMetadata indexMetadata) throws IOException {
+                final long primaryTerm,
+            public void runPostReplicationActions(ActionListener<Void> listener) {
+            final ReplicaRequest replicaRequest;
+        }
+                    throw new AssertionError("failed to background sync retention lease", e);
+                EMPTY_EVENT_LISTENER,
+import org.opensearch.index.shard.ShardPath;
+                primary,  
+        } catch (Exception e) {  
+    }
+        public synchronized void reinitPrimaryShard(Path remotePath) throws IOException {
+        TransportWriteActionTestHelper.performPostWriteActions(primary, request, result.location, logger);  
+        replica.acquireReplicaOperationPermit(
+            ActionListener.completeWith(listener, () -> {
+                Set<String> replicaIds = getShardDocUIDs(replica);
+        public synchronized DiscoveryNodes generateFakeDiscoveryNodes() {  
+                listener,
+import org.opensearch.indices.recovery.RecoveryTarget;  
+            return addReplica((Path) null);  
+import org.opensearch.cluster.routing.RecoverySource;  
+ * Modifications Copyright OpenSearch Contributors. See
+        return buildIndexMetadata(replicas, Settings.EMPTY, mappings);
+                long primaryTerm,
+            executeShardBulkOnPrimary(
+        }
+            location = TransportResyncReplicationAction.performOnReplica(request, replica);
+import org.opensearch.action.support.replication.PendingReplicationActions;  
+                    return result.finalResponse;
+        final PlainActionFuture<Releasable> permitAcquiredFuture = new PlainActionFuture<>();
+import java.nio.file.Path;
+                return getPrimaryShard().getLastKnownGlobalCheckpoint();
+                        listener.onFailure(e);
+                final IndexRequest indexRequest = new IndexRequest(index.getName()).source("{}", MediaTypeRegistry.JSON);
+        throws IOException {
+        return createGroup(replicas, settings, mappings, engineFactory, recoverySettings, remotePath, mergedSegmentPublisher);
+            ShardRouting startedRoutingEntry = ShardRoutingHelper.moveToStarted(primary.routingEntry());  
+        }  
+import org.opensearch.cluster.routing.AllocationId;
+                    }
+        ) {
+                primaryRouting,
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.action.support.ActionTestUtils;
+    protected DiscoveryNode getDiscoveryNode(String id) {
+                            releasable.close();  
+            (shardId, primaryAllocationId, primaryTerm, retentionLeases) -> syncRetentionLeases(
+        private ShardRouting createShardRouting(String nodeId, boolean primary) {
+            );
+            this.request = request;
+        @Override  
+        final IndexShard primary;  
+            PlainActionFuture<BulkItemResponse> listener = new PlainActionFuture<>();
+                updateAllocationIDsOnPrimary();
+import org.opensearch.action.support.replication.ReplicatedWriteRequest;
+    protected class ReplicationGroup implements AutoCloseable, Iterable<IndexShard> {
+                retentionLeaseSyncer,
+            @Override
+        }
+                        ((TransportWriteAction.WritePrimaryResult<BulkShardRequest, BulkShardResponse>) result).location,
+                targetSupplier,
+                routingTable,  
+                        primary,
+        }
+            return indexMetadata;
+            request,
+            return primary;
+        final PlainActionFuture<Releasable> acquirePermitFuture = new PlainActionFuture<>();  
+            ReplicationGroup group,
+            operationPrimaryTerm,
+import org.opensearch.common.collect.Iterators;
+                : "replica with aId [" + replica.routingEntry().allocationId() + "] already exists";
+            .settings(settings)
+                primary.persistRetentionLeases();
+                    .source("{}", MediaTypeRegistry.JSON);
+            settings,
+        protected ReplicationGroup(  
+                    }  
+            @Override  
+    }
+import org.opensearch.threadpool.ThreadPool.Names;
+            primary.updateShardState(  
+                retentionLeaseSyncer,
+        }
+            if (itemRequest.request() instanceof IndexRequest) {  
+            return executeWriteRequest(deleteRequest, deleteRequest.getRefreshPolicy());  
+            final Set<String> inSyncIds = activeIds();
+            request
+            }
+import org.opensearch.index.engine.EngineConfigFactory;
+import org.opensearch.common.lease.Releasable;
+                indexMetadata,  
+                ).execute();  
+            } else {
+                currentClusterStateVersion.incrementAndGet(),  
+                request,
+                    builder.add(IndexShardTestUtils.getFakeRemoteEnabledNode(replica.routingEntry().currentNodeId()));  
+                }  
+        IndexShard primary,  
+    }
+ * GitHub history for details.
+        String mappings,
+        public void executeRetentionLeasesSyncRequestOnReplica(RetentionLeaseSyncAction.Request request, IndexShard replica) {
+        public synchronized int startReplicas(int numOfReplicasToStart) throws IOException {
+                null,
+                });
+import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
+        protected synchronized void recoverPrimary(IndexShard primary) {  
+    private void executeResyncOnReplica(
+            for (IndexShard replica : replicas) {  
+                if (response.isFailed()) {
+        SyncRetentionLeases(
+                .filter(ShardRouting::active)
+                primary.indexSettings().isRemoteTranslogStoreEnabled()
+                            delegatedListener.onFailure(e);  
+    /**  
+            @Override
+        }
+            ActionListener.map(res, TransportReplicationAction.PrimaryResult::replicaRequest)  
+            }  
+            request,  
+        }  
+                this,  
+            }  
+    }
+    class SyncRetentionLeases extends ReplicationAction<  
+                    for (IndexShard replica : replicas) {
+                    );  
+            final ActionListener<BulkShardResponse> wrapBulkListener = ActionListener.map(  
+            if (closed == false) {
+     */
+        }
+                final ReplicaRequest request,
+import org.opensearch.index.engine.InternalEngineFactory;  
+        protected void performOnReplica(ResyncReplicationRequest request, IndexShard replica) throws Exception {  
+            );
+        ReplicationTargets(IndexShard primary, List<IndexShard> replicas) {  
+                performOnPrimary(getPrimaryShard(), request, listener);  
+import org.opensearch.action.bulk.BulkShardRequest;
+                null
+import org.opensearch.action.bulk.MappingUpdatePerformer;
+                computeReplicationTargets();
+        return new DiscoveryNode(  
+import java.util.concurrent.FutureTask;
+            HashSet<String> activeIds = new HashSet<>();  
+        }  
+        }
+        );
+                shardRouting,
+                    TransportWriteActionTestHelper.performPostWriteActions(
+            ThreadPool.Names.SAME,  
+    ) throws IOException {
+                assertThat(replica.routingEntry() + " has extra docs", temp, empty());
+            public void failShard(String message, Exception exception) {  
+                remotePath,
+            return getDiscoveryNode(primary.routingEntry().currentNodeId());
+                        }
+        try (Releasable ignored = acquirePermitFuture.actionGet()) {  
+     */
+            public void performOn(
+        BulkShardRequest request,
+                    new FanoutReplicationProxy<>(new ReplicasRef())
+            location = TransportShardBulkAction.performOnReplica(request, replica);
+            inRequest.writeTo(out);
+                final IndexRequest indexRequest = new IndexRequest(index.getName()).id(Integer.toString(docId.incrementAndGet()))  
+        );
+import org.opensearch.action.index.IndexRequest;
+                replica,
+            this.opType = opType;
+            this.indexMetadata = indexMetadata;
+        Settings settings,
+                null,
+            assert primary.routingEntry().active() : "only active replicas can be promoted to primary: " + primary.routingEntry();
+                return getPrimaryShard().getLocalCheckpoint();  
+                    throw response.getFailure().getCause();
+                primaryRouting,
+                assertThat(replica.routingEntry() + " is missing docs", temp, empty());
+                    @Override  
+         */  
+ * this file be licensed under the Apache-2.0 license or a
+                startedRoutingEntry,  
+        }  
+import org.opensearch.indices.recovery.DefaultRecoverySettings;  
+        public synchronized IndexShard getPrimary() {
+            replica.acquireReplicaOperationPermit(  
+                final BulkItemResponse response = index(indexRequest);  
+ * KIND, either express or implied.  See the License for the
+            for (int doc = 0; doc < numOfDoc; doc++) {
+        }  
+                ActionListener.map(listener, result -> new PrimaryResult(result.replicaRequest(), result.finalResponseIfSuccessful))
+            return new InternalEngineFactory();
+            ActionListener<RetentionLeaseSyncAction.Response> listener
+            RetentionLeaseSyncAction.Request request,
+        protected void adaptResponse(Response response, IndexShard indexShard) {
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /**
+    protected abstract class ReplicationAction<  
+/*  
+            assert shardRoutings().stream().anyMatch(shardRouting -> shardRouting.isSameAllocation(replica.routingEntry())) == false  
+import org.opensearch.action.DocWriteRequest;  
+        }  
+ * this work for additional information regarding copyright
+            for (IndexShard shard : this) {
+        }
+import java.util.concurrent.atomic.AtomicInteger;
+            Version.CURRENT  
+    }
+        public synchronized void assertAllEqual(int expectedCount) throws IOException {
+            return replica;  
+                final ActionListener<ReplicationOperation.ReplicaResponse> listener
+                getIndexerFactory(replicaRouting),  
+        }
+                    globalCheckpoint,
+                logger
+            } catch (Exception e) {
+            @Override
+                .collect(Collectors.toSet());
+import org.opensearch.action.delete.DeleteRequest;  
+        }  
+        final List<IndexShard> replicas;
+                shardId,  
+        }  
+                return getPrimaryShard().getLastSyncedGlobalCheckpoint();
+                activeIds(),
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+            }
+            ) {
+                    getPrimaryShard().getPendingPrimaryTerm(),  
+                getEngineConfigFactory(new IndexSettings(indexMetadata, indexMetadata.getSettings())),
+                addReplica(remotePath, recoverySettings);
+                retentionLeases,  
+            final boolean removed = replicas.remove(replica);
+        }
+                    if (started > numOfReplicasToStart) {
+    protected ReplicationGroup createGroup(int replicas, Settings settings, String mappings, EngineFactory engineFactory)
+    }  
+                null,
+            public PendingReplicationActions getPendingReplicationActions() {  
+        private ActionListener<Response> listener;
+            ),  
+        ) {
+                    assertEquals(DocWriteResponse.Result.CREATED, response.getResponse().getResult());
+                indexMetadata,  
+        );
+            final IndexShard replica = newShard(
+            TransportShardBulkAction.performOnPrimary(
+        private final List<IndexShard> replicas;
+            assertThat(primaryIds.size(), equalTo(expectedCount));  
+                    maxSeqNoOfUpdatesOrDeletes,
+        public int indexDocs(final int numOfDoc) throws Exception {
+                System::currentTimeMillis,  
+            activeIds.addAll(activeIds());
+            threadPool.generic().execute(task);  
+                primary.getPendingPrimaryTerm(),
+                    executeResyncOnPrimary(primary, request);  
+        public Iterator<IndexShard> iterator() {  
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+        public void execute() {
+import org.opensearch.threadpool.ThreadPool;  
+            }
+            );
+                getPrimaryShard().getMaxSeqNoOfUpdatesOrDeletes()
+            } catch (Exception e) {
+            for (final IndexShard replica : replicas) {
+            // Update the status of the replicas in the routing table to IndexShardState.STARTED.
+                getIndexerFactory(shardRouting),  
+                builder.add(IndexShardTestUtils.getFakeRemoteEnabledNode(primary.routingEntry().currentNodeId()));  
+                }  
+        protected void performOnReplica(final GlobalCheckpointSyncAction.Request request, final IndexShard replica) throws IOException {  
+            for (int doc = 0; doc < numOfDoc; doc++) {
+                temp.removeAll(primaryIds);
+                        fut.onFailure(e);  
+            new TransportWriteAction.WritePrimaryResult<>(
+            this(indexMetadata, DefaultRecoverySettings.INSTANCE, remotePath, MergedSegmentPublisher.EMPTY);  
+        public IndexShard addReplica() throws IOException {
+            return new EngineBackedIndexerFactory(getEngineFactory(routing));
+        protected EngineConfigFactory getEngineConfigFactory(IndexSettings indexSettings) {
+        }
+        private final ReplicationTargets replicationTargets;  
+import org.opensearch.index.mapper.MapperService;  
+        Path remotePath,
+                throw new AssertionError(e);
+            @Override
+                }
+        executeShardBulkOnPrimary(  
+    }
+    }  
+            int started = 0;  
+                nodeId,  
+import org.opensearch.common.unit.TimeValue;
+            );  
+            super(request, listener, group, "sync-retention-leases");
+import java.util.Collections;  
+import static org.hamcrest.Matchers.empty;  
+            )
+                builder.add(IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId()));
+        }
+                    : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable(Function.identity()).getShards())  
+import org.opensearch.cluster.node.DiscoveryNode;
+        long globalCheckpointOnPrimary,
+        );
+                            performOnReplica(request, replica);
+        @Override
+            return Collections.unmodifiableList(replicas);
+import org.opensearch.index.shard.PrimaryReplicaSyncer;  
+            bulkShardRequest,
+import org.apache.lucene.store.AlreadyClosedException;
+                null,
+        IndexShard replica,
+            activeIds.add(primary.routingEntry().allocationId().getId());
+            BulkItemRequest[] items = new BulkItemRequest[1];
+        }  
+            OpenSearchIndexLevelReplicationTestCase.this.recoverUnstartedReplica(
+    ) throws Exception {
+import java.util.ArrayList;
+                Names.WRITE
+            (request, parentTask, primaryAllocationId, primaryTerm, listener) -> {
+                inSyncIds,
+import org.opensearch.action.resync.ResyncReplicationRequest;
+        }
+            @Override
+                getPrimaryShard().getMaxSeqNoOfUpdatesOrDeletes()  
+            Path remotePath,  
+                ActionListener.map(listener, r -> new ReplicationResponse())
+                temp.removeAll(replicaIds);
+                return engineFactory;  
+                shard.refresh(source);
+        }
+                shardId,
+        }  
+                throw new UnsupportedOperationException("can't mark " + shardId + ", aid [" + allocationId + "] as stale");

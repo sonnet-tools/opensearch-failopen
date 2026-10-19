@@ -1,106 +1,88 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.cache.serializer;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.Randomness;
-import org.opensearch.common.cache.ICacheKey;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Random;
-import java.util.UUID;
-
-public class ICacheKeySerializerTests extends OpenSearchTestCase {
-    // For these tests, we use BytesReference as K, since we already have a Serializer<BytesReference, byte[]> implementation
-    public void testEquality() throws Exception {  
-        BytesReferenceSerializer keySer = new BytesReferenceSerializer();
-        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);
-
-        int numDimensionsTested = 100;
-        for (int i = 0; i < numDimensionsTested; i++) {
-            String dim = getRandomDimValue();  
-            ICacheKey<BytesReference> key = new ICacheKey<>(getRandomBytesReference(), List.of(dim));
-            byte[] serialized = serializer.serialize(key);
-            assertTrue(serializer.equals(key, serialized));  
-            ICacheKey<BytesReference> deserialized = serializer.deserialize(serialized);
-            assertEquals(key, deserialized);
-            assertTrue(serializer.equals(deserialized, serialized));  
-        }
-    }
-
-    public void testInvalidInput() throws Exception {
-        BytesReferenceSerializer keySer = new BytesReferenceSerializer();
-        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);  
-
-        Random rand = Randomness.get();
-        // The first thing the serializer reads is a VInt for the number of dimensions.  
-        // This is an invalid input for StreamInput.readVInt(), so we are guaranteed to have an exception
-        assertThrows(OpenSearchException.class, () -> serializer.deserialize(new byte[] { -1, -1, -1, -1, -1 }));
-    }  
-
-    public void testDimNumbers() throws Exception {
-        BytesReferenceSerializer keySer = new BytesReferenceSerializer();  
-        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);
-
-        for (int numDims : new int[] { 0, 5, 1000 }) {  
-            List<String> dims = new ArrayList<>();
-            for (int j = 0; j < numDims; j++) {
-                dims.add(getRandomDimValue());  
-            }
-            ICacheKey<BytesReference> key = new ICacheKey<>(getRandomBytesReference(), dims);
-            byte[] serialized = serializer.serialize(key);  
-            assertTrue(serializer.equals(key, serialized));
-            ICacheKey<BytesReference> deserialized = serializer.deserialize(serialized);
-            assertEquals(key, deserialized);  
-        }
-    }
-
-    public void testHashCodes() throws Exception {
-        ICacheKey<String> key1 = new ICacheKey<>("key", List.of("dimension_value"));
-        ICacheKey<String> key2 = new ICacheKey<>("key", List.of("dimension_value"));  
-
-        ICacheKey<String> key3 = new ICacheKey<>(null, List.of("dimension_value"));
-        ICacheKey<String> key4 = new ICacheKey<>(null, List.of("dimension_value"));  
-
-        assertEquals(key1, key2);
-        assertEquals(key1.hashCode(), key2.hashCode());  
-
-        assertEquals(key3, key4);
-        assertEquals(key3.hashCode(), key4.hashCode());  
-
-        assertNotEquals(key1, key3);
-        assertNotEquals("string", key3);  
-    }
-
-    public void testNullInputs() throws Exception {  
-        BytesReferenceSerializer keySer = new BytesReferenceSerializer();
-        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);
-
-        assertNull(serializer.deserialize(null));
-        ICacheKey<BytesReference> nullKey = new ICacheKey<>(null, List.of(getRandomDimValue()));
-        assertNull(serializer.serialize(nullKey));  
-        assertNull(serializer.serialize(null));
-        assertNull(serializer.serialize(new ICacheKey<>(getRandomBytesReference(), null)));
-    }  
-
-    private String getRandomDimValue() {
-        return UUID.randomUUID().toString();  
-    }
-
-    private BytesReference getRandomBytesReference() {  
-        byte[] bytesValue = new byte[1000];
-        Random rand = Randomness.get();
-        rand.nextBytes(bytesValue);  
+ *
         return new BytesArray(bytesValue);
+            for (int j = 0; j < numDims; j++) {
+        assertEquals(key3, key4);
+            assertTrue(serializer.equals(key, serialized));
     }
+        assertEquals(key3.hashCode(), key4.hashCode());  
+ * this file be licensed under the Apache-2.0 license or a
+            assertTrue(serializer.equals(key, serialized));  
+    }  
+        rand.nextBytes(bytesValue);  
+        assertThrows(OpenSearchException.class, () -> serializer.deserialize(new byte[] { -1, -1, -1, -1, -1 }));
+        BytesReferenceSerializer keySer = new BytesReferenceSerializer();
 }  
+import org.opensearch.common.cache.ICacheKey;  
+        assertNotEquals("string", key3);  
+            assertEquals(key, deserialized);
+    }
+/*  
+public class ICacheKeySerializerTests extends OpenSearchTestCase {
+        // This is an invalid input for StreamInput.readVInt(), so we are guaranteed to have an exception
+        ICacheKey<String> key1 = new ICacheKey<>("key", List.of("dimension_value"));
+        ICacheKey<String> key3 = new ICacheKey<>(null, List.of("dimension_value"));
+import java.util.ArrayList;
+        return UUID.randomUUID().toString();  
+        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);
+import org.opensearch.OpenSearchException;
+        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);
+        assertNotEquals(key1, key3);
+        ICacheKey<BytesReference> nullKey = new ICacheKey<>(null, List.of(getRandomDimValue()));
+            ICacheKey<BytesReference> deserialized = serializer.deserialize(serialized);
+        BytesReferenceSerializer keySer = new BytesReferenceSerializer();
+        assertNull(serializer.deserialize(null));
+import org.opensearch.core.common.bytes.BytesArray;
+        int numDimensionsTested = 100;
+package org.opensearch.common.cache.serializer;
+        byte[] bytesValue = new byte[1000];
+            ICacheKey<BytesReference> key = new ICacheKey<>(getRandomBytesReference(), List.of(dim));
+    public void testEquality() throws Exception {  
+    }
+            String dim = getRandomDimValue();  
+import org.opensearch.core.common.bytes.BytesReference;
+    }  
+            ICacheKey<BytesReference> key = new ICacheKey<>(getRandomBytesReference(), dims);
+            List<String> dims = new ArrayList<>();
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        ICacheKey<String> key4 = new ICacheKey<>(null, List.of("dimension_value"));  
+            ICacheKey<BytesReference> deserialized = serializer.deserialize(serialized);
+    public void testInvalidInput() throws Exception {
+    private BytesReference getRandomBytesReference() {  
+    private String getRandomDimValue() {
+    public void testDimNumbers() throws Exception {
+    public void testHashCodes() throws Exception {
+        // The first thing the serializer reads is a VInt for the number of dimensions.  
+            assertTrue(serializer.equals(deserialized, serialized));  
+    }
+ * The OpenSearch Contributors require contributions made to  
+import java.util.List;  
+        BytesReferenceSerializer keySer = new BytesReferenceSerializer();  
+ * compatible open source license.
+import java.util.UUID;
+            assertEquals(key, deserialized);  
+    }
+                dims.add(getRandomDimValue());  
+ */  
+        BytesReferenceSerializer keySer = new BytesReferenceSerializer();
+        Random rand = Randomness.get();
+        assertNull(serializer.serialize(null));
+        for (int i = 0; i < numDimensionsTested; i++) {
+        assertEquals(key1, key2);
+        assertNull(serializer.serialize(nullKey));  
+        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);  
+        ICacheKeySerializer<BytesReference> serializer = new ICacheKeySerializer<>(keySer);
+        assertNull(serializer.serialize(new ICacheKey<>(getRandomBytesReference(), null)));
+        ICacheKey<String> key2 = new ICacheKey<>("key", List.of("dimension_value"));  
+    // For these tests, we use BytesReference as K, since we already have a Serializer<BytesReference, byte[]> implementation
+import java.util.Random;
+            }
+            byte[] serialized = serializer.serialize(key);  
+        }
+    public void testNullInputs() throws Exception {  
+        for (int numDims : new int[] { 0, 5, 1000 }) {  
+        Random rand = Randomness.get();
+import org.opensearch.common.Randomness;
+        assertEquals(key1.hashCode(), key2.hashCode());  
+            byte[] serialized = serializer.serialize(key);

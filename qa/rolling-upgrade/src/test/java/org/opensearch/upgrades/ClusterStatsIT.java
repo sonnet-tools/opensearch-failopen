@@ -1,67 +1,58 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.upgrades;
-
-import org.opensearch.Version;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.List;
+                    assertTrue(nodesStats.containsKey(metric));
+/*  
+            validateClusterStatsWithFilterResponse(response, List.of("os"), List.of("mappings"));
 import java.util.Map;
-
-public class ClusterStatsIT extends AbstractRollingTestCase {
-
-    private final List<String> nodeStatsMetrics = List.of("os", "process", "jvm", "fs", "plugins", "ingest", "network_types", "discovery_types", "packaging_types");  
-
-    private final List<String> indicesStatsMetrics = List.of("shards", "docs", "store", "fielddata", "query_cache", "completion", "segments", "analysis", "mappings");
-
-    public void testClusterStats() throws IOException {
         Response response = client().performRequest(new Request("GET", "/_cluster/stats"));
-        validateClusterStatsWithFilterResponse(response, nodeStatsMetrics, indicesStatsMetrics);  
-        if (AbstractRollingTestCase.UPGRADE_FROM_VERSION.onOrAfter(Version.V_2_18_0) || (
             CLUSTER_TYPE == ClusterType.UPGRADED && Version.CURRENT.onOrAfter(Version.V_2_18_0))) {
             response = client().performRequest(new Request("GET", "/_cluster/stats/os/nodes/_all"));  
-            validateClusterStatsWithFilterResponse(response, List.of("os"), Collections.emptyList());
+        if (requestedIndicesStatsMetrics != null && !requestedIndicesStatsMetrics.isEmpty()) {  
+            Map<?, ?> indicesStats = (Map<?, ?>) entity.get("indices");
+                    assertTrue(indicesStats.containsKey(metric));
+ */  
+package org.opensearch.upgrades;
+                if (requestedNodesStatsMetrics.contains(metric)) {
             response = client().performRequest(new Request("GET", "/_cluster/stats/indices/mappings/nodes/_all"));
-            validateClusterStatsWithFilterResponse(response, Collections.emptyList(), List.of("mappings"));  
-            response = client().performRequest(new Request("GET", "/_cluster/stats/os,indices/mappings/nodes/_all"));
-            validateClusterStatsWithFilterResponse(response, List.of("os"), List.of("mappings"));
-        }  
-    }
-
-    private void validateClusterStatsWithFilterResponse(Response response, List<String> requestedNodesStatsMetrics, List<String> requestedIndicesStatsMetrics) throws IOException {  
-        assertEquals(200, response.getStatusLine().getStatusCode());
+        }
         Map<String, Object> entity = entityAsMap(response);
+            validateClusterStatsWithFilterResponse(response, Collections.emptyList(), List.of("mappings"));  
+            assertTrue(entity.containsKey("indices"));
+    }
+import java.util.List;
+import org.opensearch.Version;
+        validateClusterStatsWithFilterResponse(response, nodeStatsMetrics, indicesStatsMetrics);  
+            }  
+        }
+ * The OpenSearch Contributors require contributions made to  
+    public void testClusterStats() throws IOException {
+            }  
+public class ClusterStatsIT extends AbstractRollingTestCase {
+        }  
+                if (requestedIndicesStatsMetrics.contains(metric)) {
+    private final List<String> indicesStatsMetrics = List.of("shards", "docs", "store", "fielddata", "query_cache", "completion", "segments", "analysis", "mappings");
+import java.io.IOException;
+                    assertFalse(nodesStats.containsKey(metric));
+import org.opensearch.client.Request;
+        assertEquals(200, response.getStatusLine().getStatusCode());
+    private final List<String> nodeStatsMetrics = List.of("os", "process", "jvm", "fs", "plugins", "ingest", "network_types", "discovery_types", "packaging_types");  
+    private void validateClusterStatsWithFilterResponse(Response response, List<String> requestedNodesStatsMetrics, List<String> requestedIndicesStatsMetrics) throws IOException {  
+            Map<?, ?> nodesStats = (Map<?, ?>) entity.get("nodes");
+                    assertFalse(indicesStats.containsKey(metric));
+ *
+                } else {  
+import java.util.Collections;  
+    }
+            response = client().performRequest(new Request("GET", "/_cluster/stats/os,indices/mappings/nodes/_all"));
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+                }
+            for (String metric : indicesStatsMetrics) {  
+        if (AbstractRollingTestCase.UPGRADE_FROM_VERSION.onOrAfter(Version.V_2_18_0) || (
+                } else {  
         if (requestedNodesStatsMetrics != null && !requestedNodesStatsMetrics.isEmpty()) {  
             assertTrue(entity.containsKey("nodes"));
-            Map<?, ?> nodesStats = (Map<?, ?>) entity.get("nodes");
+import org.opensearch.client.Response;  
             for (String metric : nodeStatsMetrics) {  
-                if (requestedNodesStatsMetrics.contains(metric)) {
-                    assertTrue(nodesStats.containsKey(metric));
-                } else {  
-                    assertFalse(nodesStats.containsKey(metric));
+            validateClusterStatsWithFilterResponse(response, List.of("os"), Collections.emptyList());
                 }
-            }  
-        }
-
-        if (requestedIndicesStatsMetrics != null && !requestedIndicesStatsMetrics.isEmpty()) {  
-            assertTrue(entity.containsKey("indices"));
-            Map<?, ?> indicesStats = (Map<?, ?>) entity.get("indices");
-            for (String metric : indicesStatsMetrics) {  
-                if (requestedIndicesStatsMetrics.contains(metric)) {
-                    assertTrue(indicesStats.containsKey(metric));
-                } else {  
-                    assertFalse(indicesStats.containsKey(metric));
-                }
-            }  
-        }
-    }
 }  

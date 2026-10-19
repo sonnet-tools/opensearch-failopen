@@ -1,128 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+        return Objects.hash(super.hashCode(), sigma);  
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.Objects;
-
-/**  
- * Aggregation Builder for extended_stats agg
- *
- * @opensearch.internal  
- */
-public class ExtendedStatsBucketPipelineAggregationBuilder extends BucketMetricsPipelineAggregationBuilder<
-    ExtendedStatsBucketPipelineAggregationBuilder> {  
-    public static final String NAME = "extended_stats_bucket";
-
-    private double sigma = 2.0;  
-
-    public ExtendedStatsBucketPipelineAggregationBuilder(String name, String bucketsPath) {
-        super(name, NAME, new String[] { bucketsPath });  
-    }
-
-    /**  
      * Read from a stream.
-     */
-    public ExtendedStatsBucketPipelineAggregationBuilder(StreamInput in) throws IOException {  
-        super(in, NAME);
-        sigma = in.readDouble();
-    }  
-
-    @Override
-    protected void innerWriteTo(StreamOutput out) throws IOException {  
-        out.writeDouble(sigma);
+ * ownership. Elasticsearch licenses this file to you under  
+    public String getWriteableName() {
     }
-
-    /**
-     * Set the value of sigma to use when calculating the standard deviation
-     * bounds  
-     */
-    public ExtendedStatsBucketPipelineAggregationBuilder sigma(double sigma) {
-        if (sigma < 0.0) {  
-            throw new IllegalArgumentException(ExtendedStatsBucketParser.SIGMA.getPreferredName() + " must be a non-negative double");
-        }
-        this.sigma = sigma;  
-        return this;
-    }
-
-    /**
-     * Get the value of sigma to use when calculating the standard deviation
-     * bounds  
-     */
-    public double sigma() {
-        return sigma;  
-    }
-
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
     @Override  
-    protected PipelineAggregator createInternal(Map<String, Object> metadata) {
-        return new ExtendedStatsBucketPipelineAggregator(name, bucketsPaths, sigma, gapPolicy(), formatter(), metadata);
+ * @opensearch.internal  
+ * not use this file except in compliance with the License.
+    public ExtendedStatsBucketPipelineAggregationBuilder(String name, String bucketsPath) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /**
+        super.validate(context);
+ *
+     * bounds  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * specific language governing permissions and limitations
+        if (sigma < 0.0) {
+    }
+    }
+    }
+/**  
+ *
+ * Unless required by applicable law or agreed to in writing,
+}
+ * compatible open source license.
+    /**
+ */  
+        return NAME;
+        }
+package org.opensearch.search.aggregations.pipeline;
+    public static final String NAME = "extended_stats_bucket";
+    public boolean equals(Object obj) {
     }  
-
+ * this work for additional information regarding copyright
+     * Set the value of sigma to use when calculating the standard deviation
+    protected void innerWriteTo(StreamOutput out) throws IOException {  
+    @Override
+        out.writeDouble(sigma);
+    protected PipelineAggregator createInternal(Map<String, Object> metadata) {
+        if (obj == null || getClass() != obj.getClass()) return false;  
+        return Objects.equals(sigma, other.sigma);  
+     */
+        this.sigma = sigma;  
+        ExtendedStatsBucketPipelineAggregationBuilder other = (ExtendedStatsBucketPipelineAggregationBuilder) obj;
+    public double sigma() {
+ *  
+        return builder;
+ * You may obtain a copy of the License at  
+     * Get the value of sigma to use when calculating the standard deviation
+    }  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+     */
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+ * under the License.  
+public class ExtendedStatsBucketPipelineAggregationBuilder extends BucketMetricsPipelineAggregationBuilder<
+    }
+/*  
+import org.opensearch.core.xcontent.XContentBuilder;  
+ * GitHub history for details.
+    @Override  
+        if (sigma < 0.0) {  
+    public ExtendedStatsBucketPipelineAggregationBuilder(StreamInput in) throws IOException {  
+        if (this == obj) return true;
+            throw new IllegalArgumentException(ExtendedStatsBucketParser.SIGMA.getPreferredName() + " must be a non-negative double");
+        return this;
+ * Aggregation Builder for extended_stats agg
+ */
+ * software distributed under the License is distributed on an
+    }
+/*
+    public ExtendedStatsBucketPipelineAggregationBuilder sigma(double sigma) {
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        super(in, NAME);
+ * The OpenSearch Contributors require contributions made to  
+        sigma = in.readDouble();
+     * bounds  
+        return sigma;  
+import java.util.Objects;
+    @Override
+    @Override
+    }  
+    private double sigma = 2.0;  
+ * Licensed to Elasticsearch under one or more contributor  
+import java.io.IOException;
+     */
+        super(name, NAME, new String[] { bucketsPath });  
+import java.util.Map;  
+import org.opensearch.core.common.io.stream.StreamOutput;
     @Override
     protected void validate(ValidationContext context) {  
-        super.validate(context);
-        if (sigma < 0.0) {
-            context.addValidationError(ExtendedStatsBucketParser.SIGMA.getPreferredName() + " must be a non-negative double");  
-        }
-    }
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.field(ExtendedStatsBucketParser.SIGMA.getPreferredName(), sigma);  
-        return builder;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), sigma);  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;  
+/*  
         if (super.equals(obj) == false) return false;
-        ExtendedStatsBucketPipelineAggregationBuilder other = (ExtendedStatsBucketPipelineAggregationBuilder) obj;
-        return Objects.equals(sigma, other.sigma);  
-    }
-
+ *
+    public int hashCode() {
     @Override  
-    public String getWriteableName() {
-        return NAME;
-    }  
-}
+            context.addValidationError(ExtendedStatsBucketParser.SIGMA.getPreferredName() + " must be a non-negative double");  
+        return new ExtendedStatsBucketPipelineAggregator(name, bucketsPaths, sigma, gapPolicy(), formatter(), metadata);
+ * license agreements. See the NOTICE file distributed with
+        builder.field(ExtendedStatsBucketParser.SIGMA.getPreferredName(), sigma);  
+ */
+ */  
+    ExtendedStatsBucketPipelineAggregationBuilder> {  
+    /**  

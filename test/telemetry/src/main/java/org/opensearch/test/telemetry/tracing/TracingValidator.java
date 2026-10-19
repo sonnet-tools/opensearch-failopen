@@ -1,23 +1,20 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.test.telemetry.tracing;
-
-import java.util.List;
-
 /**  
- * Performs validations on traces emitted.
- */
-public interface TracingValidator {  
+ * this file be licensed under the Apache-2.0 license or a
     /**
-     * Validates spanData and return list of problematic spans.
-     * @param spans spans emitted at any point of time.  
-     * @param requests requests can be search/index calls.
+public interface TracingValidator {  
+ * The OpenSearch Contributors require contributions made to  
      */
-    public List<MockSpanData> validate(List<MockSpanData> spans, int requests);  
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ * compatible open source license.
 }
+ */
+ *
+     * @param requests requests can be search/index calls.
+ * Performs validations on traces emitted.
+     * @param spans spans emitted at any point of time.  
+ */  
+    public List<MockSpanData> validate(List<MockSpanData> spans, int requests);  
+package org.opensearch.test.telemetry.tracing;
+import java.util.List;
+     * Validates spanData and return list of problematic spans.

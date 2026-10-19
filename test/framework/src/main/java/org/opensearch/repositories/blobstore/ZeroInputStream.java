@@ -1,96 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.blobstore;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Arrays;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-
-/**
- * A resettable InputStream that only serves zeros.
- **/  
 public class ZeroInputStream extends InputStream {
-
-    private final AtomicBoolean closed = new AtomicBoolean(false);  
-    private final long length;
-    private final AtomicLong reads;
-    private volatile long mark;  
-
-    public ZeroInputStream(final long length) {
-        this.length = length;  
-        this.reads = new AtomicLong(0);
-        this.mark = -1;
-    }  
-
-    @Override
-    public int read() throws IOException {  
-        ensureOpen();
-        return (reads.incrementAndGet() <= length) ? 0 : -1;
-    }  
-
-    @Override
-    public int read(byte[] b, int off, int len) throws IOException {  
-        ensureOpen();
-        if (len == 0) {
-            return 0;  
-        }
-
-        final int available = available();  
-        if (available == 0) {
-            return -1;
-        }  
-
-        final int toCopy = Math.min(len, available);
-        Arrays.fill(b, off, off + toCopy, (byte) 0);  
-        reads.addAndGet(toCopy);
-        return toCopy;
-    }  
-
-    @Override
-    public boolean markSupported() {  
-        return true;
     }
-
-    @Override
-    public synchronized void mark(int readlimit) {
-        mark = reads.get();  
-    }
-
-    @Override  
-    public synchronized void reset() throws IOException {
-        ensureOpen();
-        reads.set(mark);  
-    }
-
-    @Override  
-    public int available() throws IOException {
-        ensureOpen();
-        if (reads.get() >= length) {  
-            return 0;
-        }
-        try {  
-            return Math.toIntExact(length - reads.get());
-        } catch (ArithmeticException e) {
-            return Integer.MAX_VALUE;  
-        }
-    }
-
-    @Override
-    public void close() {
+ * A resettable InputStream that only serves zeros.
         closed.set(true);  
+    public void close() {
+    @Override  
+        return true;
+        final int available = available();  
+        Arrays.fill(b, off, off + toCopy, (byte) 0);  
+        reads.set(mark);  
+            return -1;
     }
-
-    private void ensureOpen() throws IOException {  
-        if (closed.get()) {
+        this.length = length;  
             throw new IOException("Stream closed");
+        if (reads.get() >= length) {  
+    public ZeroInputStream(final long length) {
+    public synchronized void mark(int readlimit) {
+    public boolean markSupported() {  
+        mark = reads.get();  
+ *
+    public int read(byte[] b, int off, int len) throws IOException {  
+        this.reads = new AtomicLong(0);
+        return (reads.incrementAndGet() <= length) ? 0 : -1;
+        if (len == 0) {
+    private final long length;
+            return 0;  
+    private final AtomicLong reads;
         }  
+import java.io.InputStream;
+    private volatile long mark;  
+    public int read() throws IOException {  
     }
+import java.util.concurrent.atomic.AtomicLong;
+        }  
+        try {  
+ */  
+/**
+    @Override
+        ensureOpen();
+    }
+        ensureOpen();
+        if (available == 0) {
+        this.mark = -1;
+        if (closed.get()) {
+        }
+    }  
+    @Override
 }
+        reads.addAndGet(toCopy);
+import java.io.IOException;
+    @Override
+    public int available() throws IOException {
+    }
+    @Override
+    }
+import java.util.concurrent.atomic.AtomicBoolean;
+            return Integer.MAX_VALUE;  
+    @Override
+    public synchronized void reset() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+        }
+package org.opensearch.repositories.blobstore;
+    private void ensureOpen() throws IOException {  
+            return 0;
+        ensureOpen();
+import java.util.Arrays;  
+        } catch (ArithmeticException e) {
+    @Override  
+ **/  
+/*  
+        }
+    }  
+        ensureOpen();
+    }  
+ * The OpenSearch Contributors require contributions made to  
+    private final AtomicBoolean closed = new AtomicBoolean(false);  
+            return Math.toIntExact(length - reads.get());
+        return toCopy;
+ * SPDX-License-Identifier: Apache-2.0
+        final int toCopy = Math.min(len, available);
+ * compatible open source license.

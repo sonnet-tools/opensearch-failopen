@@ -1,85 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest.completion;
-
-import org.apache.lucene.search.suggest.document.TopSuggestDocsCollector;  
-
-import java.io.IOException;
 import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashMap;
+ * ownership. Elasticsearch licenses this file to you under  
 import java.util.List;  
-import java.util.Map;
-
-/**  
- *
- * Extension of the {@link TopSuggestDocsCollector} that returns top documents from the completion suggester.
- * <p>  
- * This collector groups suggestions coming from the same document but matching different contexts
- * or surface form together. When different contexts or surface forms match the same suggestion form only
- * the best one per document (sorted by weight) is kept.  
- *
- * @opensearch.internal
- **/  
-class TopSuggestGroupDocsCollector extends TopSuggestDocsCollector {
-    private Map<Integer, List<CharSequence>> docContexts = new HashMap<>();
-
-    /**
+ * software distributed under the License is distributed on an
+ * under the License.  
      * Sole constructor
-     * <p>  
-     * Collects at most <code>num</code> completions
-     * with corresponding document and weight
-     */  
-    TopSuggestGroupDocsCollector(int num, boolean skipDuplicates) {
-        super(num, skipDuplicates);
-    }  
-
-    /**
-     * Returns the contexts associated with the provided <code>doc</code>.  
-     */
-    List<CharSequence> getContexts(int doc) {
-        return docContexts.getOrDefault(doc, Collections.emptyList());  
-    }
-
-    @Override  
-    public void collect(int docID, CharSequence key, CharSequence context, float score) throws IOException {
-        int globalDoc = docID + docBase;
-        boolean isNewDoc = docContexts.containsKey(globalDoc) == false;  
-        List<CharSequence> contexts = docContexts.computeIfAbsent(globalDoc, k -> new ArrayList<>());
-        if (context != null) {
+        }
             contexts.add(context);  
-        }
-        if (isNewDoc) {
-            super.collect(docID, key, context, score);  
-        }
+ * The OpenSearch Contributors require contributions made to  
+    /**
     }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * <p>  
+    TopSuggestGroupDocsCollector(int num, boolean skipDuplicates) {
+ */
+ * KIND, either express or implied.  See the License for the
+     * Returns the contexts associated with the provided <code>doc</code>.  
+     * with corresponding document and weight
+class TopSuggestGroupDocsCollector extends TopSuggestDocsCollector {
+        return docContexts.getOrDefault(doc, Collections.emptyList());  
+ * license agreements. See the NOTICE file distributed with
+        int globalDoc = docID + docBase;
+ *
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at  
+ * or surface form together. When different contexts or surface forms match the same suggestion form only
+import org.apache.lucene.search.suggest.document.TopSuggestDocsCollector;  
+    @Override  
+ * not use this file except in compliance with the License.
+        }
 }  
+import java.util.Map;
+ */  
+    /**
+     * <p>  
+ * @opensearch.internal
+package org.opensearch.search.suggest.completion;
+        List<CharSequence> contexts = docContexts.computeIfAbsent(globalDoc, k -> new ArrayList<>());
+ *
+ * GitHub history for details.
+ *
+        super(num, skipDuplicates);
+     */  
+            super.collect(docID, key, context, score);  
+import java.util.Collections;
+    }  
+ * This collector groups suggestions coming from the same document but matching different contexts
+ **/  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+/*
+     * Collects at most <code>num</code> completions
+        if (context != null) {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+ * Extension of the {@link TopSuggestDocsCollector} that returns top documents from the completion suggester.
+/**  
+     */
+ *  
+        if (isNewDoc) {
+    List<CharSequence> getContexts(int doc) {
+    }
+ * Unless required by applicable law or agreed to in writing,
+    public void collect(int docID, CharSequence key, CharSequence context, float score) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See  
+import java.io.IOException;
+    private Map<Integer, List<CharSequence>> docContexts = new HashMap<>();
+import java.util.HashMap;
+/*  
+/*
+ *
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ * the best one per document (sorted by weight) is kept.  
+        boolean isNewDoc = docContexts.containsKey(globalDoc) == false;  

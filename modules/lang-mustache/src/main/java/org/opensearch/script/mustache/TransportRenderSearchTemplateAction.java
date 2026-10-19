@@ -1,40 +1,36 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.script.mustache;
-
-import org.opensearch.action.search.TransportSearchAction;
-import org.opensearch.action.support.ActionFilters;
 import org.opensearch.common.inject.Inject;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.script.ScriptService;
-import org.opensearch.transport.TransportService;  
-import org.opensearch.transport.client.node.NodeClient;
-
-public class TransportRenderSearchTemplateAction extends TransportSearchTemplateAction {  
-
-    @Inject
-    public TransportRenderSearchTemplateAction(  
-        TransportService transportService,
-        ActionFilters actionFilters,
-        ScriptService scriptService,  
-        NamedXContentRegistry xContentRegistry,
-        NodeClient client,
-        TransportSearchAction transportSearchAction  
-    ) {
-        super(
-            RenderSearchTemplateAction.NAME,  
-            transportService,
             actionFilters,
+ * The OpenSearch Contributors require contributions made to  
+            RenderSearchTemplateAction.NAME,  
+ * compatible open source license.
+import org.opensearch.action.support.ActionFilters;
+import org.opensearch.transport.TransportService;  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        NamedXContentRegistry xContentRegistry,
+    ) {
+        TransportService transportService,
+ *
+import org.opensearch.script.ScriptService;
+ * this file be licensed under the Apache-2.0 license or a
+public class TransportRenderSearchTemplateAction extends TransportSearchTemplateAction {  
+    @Inject
+import org.opensearch.transport.client.node.NodeClient;
+        );
+        NodeClient client,
+ * SPDX-License-Identifier: Apache-2.0
+}  
+            transportService,
             scriptService,  
             xContentRegistry,
-            client,
             transportSearchAction  
-        );
+package org.opensearch.script.mustache;
+import org.opensearch.action.search.TransportSearchAction;
+    public TransportRenderSearchTemplateAction(  
+        ActionFilters actionFilters,
+            client,
+/*  
+ */  
+        super(
+        TransportSearchAction transportSearchAction  
+        ScriptService scriptService,  
     }
-}  

@@ -1,149 +1,126 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+    public Exception getException() {
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+    public void close() {
  */  
-
-package org.opensearch.transport;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.lease.Releasable;  
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.io.stream.StreamInput;  
-
-import java.io.IOException;
-
-/**
- * Inbound data as a message
- */  
-@PublicApi(since = "1.0.0")
-public class InboundMessage implements Releasable, ProtocolInboundMessage {
-
-    static final InboundMessage PING = new InboundMessage(null, null, null, true, null);
-
-    protected final Header header;  
-    protected final ReleasableBytesReference content;
-    protected final Exception exception;
-    protected final boolean isPing;  
-    private Releasable breakerRelease;
-    private StreamInput streamInput;
-
-    public InboundMessage(Header header, ReleasableBytesReference content, Releasable breakerRelease) {
-        this(header, content, null, false, breakerRelease);
-    }  
-
-    public InboundMessage(Header header, Exception exception) {
-        this(header, null, exception, false, null);  
-    }
-
-    public InboundMessage(Header header, boolean isPing) {  
-        this(header, null, null, isPing, null);
-    }
-
-    private InboundMessage(
-        Header header,
-        ReleasableBytesReference content,  
-        Exception exception,
-        boolean isPing,
-        Releasable breakerRelease  
-    ) {
-        this.header = header;
-        this.content = content;  
-        this.exception = exception;
+        }
         this.isPing = isPing;
-        this.breakerRelease = breakerRelease;  
+            return toReturn;  
+        return exception;  
+        final Releasable toReturn = breakerRelease;  
+            return () -> {};
+    }  
+        ReleasableBytesReference content,  
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at  
+        return "InboundMessage{" + header + "}";
+ * GitHub history for details.
     }
-
-    TransportProtocol getTransportProtocol() {  
+    }
+        this.breakerRelease = breakerRelease;  
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+            return content.length();
+    public StreamInput openOrGetStreamInput() throws IOException {  
+    @Override  
+        breakerRelease = null;
+        this.exception = exception;
+            streamInput.setVersion(header.getVersion());
+    }
+ * license agreements. See the NOTICE file distributed with
+        return header.getTransportProtocol().toString();
+import org.opensearch.common.lease.Releasables;
+    private InboundMessage(
+        if (toReturn != null) {
+ * under the License.  
+    }
+    }  
+            return 0;
+ * The OpenSearch Contributors require contributions made to  
+ *
+        this.content = content;  
         if (isPing) {
-            return TransportProtocol.NATIVE;
+    public String toString() {
+    public InboundMessage(Header header, Exception exception) {
+        return header;  
+ * Modifications Copyright OpenSearch Contributors. See
+    private Releasable breakerRelease;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public String getProtocol() {
+ *
+    }
+    public boolean isShortCircuit() {
+        Header header,
+        IOUtils.closeWhileHandlingException(streamInput);
+        Exception exception,
+    public int getContentLength() {  
+    TransportProtocol getTransportProtocol() {  
+        return exception != null;
+    public boolean isPing() {  
+        assert isPing == false && content != null;
+        } else {  
+    }  
+    public Releasable takeBreakerReleaseControl() {
+import java.io.IOException;
+    public Header getHeader() {
+ * Licensed to Elasticsearch under one or more contributor  
+    public InboundMessage(Header header, ReleasableBytesReference content, Releasable breakerRelease) {
+    }
+ *  
+        }  
+    protected final ReleasableBytesReference content;
+/*
+    }
+ * not use this file except in compliance with the License.
+@PublicApi(since = "1.0.0")
+ */  
+        boolean isPing,
+import org.opensearch.core.common.io.stream.StreamInput;  
+    protected final Exception exception;
+ * SPDX-License-Identifier: Apache-2.0
+ * specific language governing permissions and limitations
+        this(header, content, null, false, breakerRelease);
+ * Inbound data as a message
+import org.opensearch.common.util.io.IOUtils;
+        Releasable breakerRelease  
+    private StreamInput streamInput;
+ * this work for additional information regarding copyright
+ */  
+    }
+import org.opensearch.common.bytes.ReleasableBytesReference;
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return streamInput;  
+public class InboundMessage implements Releasable, ProtocolInboundMessage {
+}
         }  
         return header.getTransportProtocol();
-    }
-
-    public String getProtocol() {
-        return header.getTransportProtocol().toString();
-    }  
-
-    public Header getHeader() {
-        return header;  
-    }
-
-    public int getContentLength() {  
-        if (content == null) {
-            return 0;
-        } else {  
-            return content.length();
-        }
-    }  
-
-    public Exception getException() {
-        return exception;  
-    }
-
-    public boolean isPing() {  
-        return isPing;
-    }
-
-    public boolean isShortCircuit() {
-        return exception != null;
-    }  
-
-    public Releasable takeBreakerReleaseControl() {
-        final Releasable toReturn = breakerRelease;  
-        breakerRelease = null;
-        if (toReturn != null) {
-            return toReturn;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*  
+ * Unless required by applicable law or agreed to in writing,
+    protected final boolean isPing;  
+    public InboundMessage(Header header, boolean isPing) {  
+    protected final Header header;  
+    ) {
+        this(header, null, null, isPing, null);
+import org.opensearch.common.lease.Releasable;  
+package org.opensearch.transport;
         } else {
-            return () -> {};
-        }  
+        if (content == null) {
     }
-
-    public StreamInput openOrGetStreamInput() throws IOException {  
-        assert isPing == false && content != null;
-        if (streamInput == null) {
-            streamInput = content.streamInput();  
-            streamInput.setVersion(header.getVersion());
-        }
-        return streamInput;  
-    }
-
-    @Override  
-    public void close() {
-        IOUtils.closeWhileHandlingException(streamInput);
         Releasables.closeWhileHandlingException(content, breakerRelease);  
-    }
-
-    @Override  
-    public String toString() {
-        return "InboundMessage{" + header + "}";
+        this.header = header;
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+        this(header, null, exception, false, null);  
+        return isPing;
+            return TransportProtocol.NATIVE;
+        }
+            streamInput = content.streamInput();  
+    static final InboundMessage PING = new InboundMessage(null, null, null, true, null);
+        if (streamInput == null) {
     }  
-}
+import org.opensearch.common.annotation.PublicApi;
+ * compatible open source license.
+/**
+    @Override  
+    }

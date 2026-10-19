@@ -1,134 +1,119 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.action.stats;
-
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.BytesRestResponse;
-import org.opensearch.rest.RestRequest;  
-import org.opensearch.rest.action.RestBuilderListener;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;  
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.unmodifiableList;  
-import static org.opensearch.rest.RestRequest.Method.GET;
-
-/**  
- * REST handler for DataFusion cluster stats.
- *
- * <p>Parses path parameters ({@code nodeId}, {@code stat}) and delegates to  
- * {@link TransportDataFusionStatsAction} via the transport layer.
- *
- * <p>Routes:  
- * <ul>
- *   <li>{@code GET /_plugins/_analytics_backend_datafusion/{nodeId}/stats/{stat}}</li>
- *   <li>{@code GET /_plugins/_analytics_backend_datafusion/{nodeId}/stats}</li>  
- *   <li>{@code GET /_plugins/_analytics_backend_datafusion/stats/{stat}}</li>
- *   <li>{@code GET /_plugins/_analytics_backend_datafusion/stats}</li>
- * </ul>  
- *
- * @opensearch.internal
- */  
-public class RestDataFusionStatsAction extends BaseRestHandler {
-
-    private static final String CANONICAL_PREFIX = "/_plugins/_analytics_backend_datafusion";  
-
-    private static final Set<String> VALID_STAT_NAMES = Set.of(
-        "io_runtime",  
-        "cpu_runtime",
-        "coordinator_reduce",
-        "query_execution",  
-        "stream_next",
-        "plan_setup",
-        "fragment_executor_gate",  
-        "adaptive_budget",
-        "disk_spill"
-    );  
-
-    /**
-     * Comma-separated list of valid stat section names for display in error messages.  
-     * Derived from {@link #VALID_STAT_NAMES} so there is a single place to edit when adding stats.
-     */
-    public static final String VALID_STATS = VALID_STAT_NAMES.stream().sorted().collect(Collectors.joining(", "));  
-
-    @Override
-    public String getName() {  
-        return "datafusion_stats_action";
-    }
-
-    @Override
-    public List<Route> routes() {
-        return unmodifiableList(  
-            asList(
-                new Route(GET, CANONICAL_PREFIX + "/{nodeId}/stats/{stat}"),
-                new Route(GET, CANONICAL_PREFIX + "/{nodeId}/stats"),  
-                new Route(GET, CANONICAL_PREFIX + "/stats/{stat}"),
-                new Route(GET, CANONICAL_PREFIX + "/stats")
-            )  
-        );
-    }
-
-    @Override
     protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
-        // Parse nodeId: default to all nodes if not provided  
-        String[] nodeIds;
-        String nodeIdParam = request.param("nodeId");
-        if (nodeIdParam != null && !nodeIdParam.isEmpty()) {  
-            nodeIds = Strings.splitStringByCommaToArray(nodeIdParam);
-        } else {
-            nodeIds = new String[0];  
-        }
-
-        // Parse stat filter: comma-separated stat section names  
-        Set<String> statsToRetrieve = new HashSet<>();
-        String statParam = request.param("stat");
-        if (statParam != null && !statParam.isEmpty()) {  
-            String[] requestedStats = Strings.splitStringByCommaToArray(statParam);
-
-            // Validate stat names — collect all invalid names and report together  
-            List<String> invalidStats = Arrays.stream(requestedStats).filter(s -> !VALID_STAT_NAMES.contains(s)).toList();
-            if (!invalidStats.isEmpty()) {
-                return channel -> {  
-                    XContentBuilder builder = channel.newBuilder();
-                    builder.startObject();
-                    builder.field("error", "Invalid stat sections: " + invalidStats + ". Valid values are: " + VALID_STATS);  
-                    builder.endObject();
-                    channel.sendResponse(new BytesRestResponse(RestStatus.BAD_REQUEST, builder));
-                };  
-            }
-            statsToRetrieve.addAll(Arrays.asList(requestedStats));
-        }  
-
         DataFusionStatsNodesRequest nodesRequest = new DataFusionStatsNodesRequest(nodeIds, statsToRetrieve);
-
-        return channel -> client.execute(
-            DataFusionStatsActionType.INSTANCE,
-            nodesRequest,  
-            new RestBuilderListener<DataFusionStatsNodesResponse>(channel) {
-                @Override
-                public org.opensearch.rest.RestResponse buildResponse(DataFusionStatsNodesResponse response, XContentBuilder builder)  
-                    throws Exception {
-                    builder.startObject();
-                    response.toXContent(builder, request);  
+        if (nodeIdParam != null && !nodeIdParam.isEmpty()) {  
+    private static final Set<String> VALID_STAT_NAMES = Set.of(
+import java.util.List;
+            List<String> invalidStats = Arrays.stream(requestedStats).filter(s -> !VALID_STAT_NAMES.contains(s)).toList();
                     builder.endObject();
                     return new BytesRestResponse(RestStatus.OK, builder);
-                }  
-            }
-        );
-    }  
+                new Route(GET, CANONICAL_PREFIX + "/{nodeId}/stats/{stat}"),
+            asList(
+ * </ul>  
+ * REST handler for DataFusion cluster stats.
 }
+import org.opensearch.rest.BaseRestHandler;
+import java.io.IOException;
+        "stream_next",
+            DataFusionStatsActionType.INSTANCE,
+        "query_execution",  
+        // Parse nodeId: default to all nodes if not provided  
+ *
+                return channel -> {  
+            statsToRetrieve.addAll(Arrays.asList(requestedStats));
+ *   <li>{@code GET /_plugins/_analytics_backend_datafusion/{nodeId}/stats}</li>  
+ * {@link TransportDataFusionStatsAction} via the transport layer.
+        String statParam = request.param("stat");
+import java.util.HashSet;  
+            )  
+ * this file be licensed under the Apache-2.0 license or a
+ * <p>Parses path parameters ({@code nodeId}, {@code stat}) and delegates to  
+ *   <li>{@code GET /_plugins/_analytics_backend_datafusion/stats/{stat}}</li>
+    public List<Route> routes() {
+    public String getName() {  
+    }
+    private static final String CANONICAL_PREFIX = "/_plugins/_analytics_backend_datafusion";  
+import static java.util.Arrays.asList;
+    @Override
+ *
+                    builder.field("error", "Invalid stat sections: " + invalidStats + ". Valid values are: " + VALID_STATS);  
+                    response.toXContent(builder, request);  
+    public static final String VALID_STATS = VALID_STAT_NAMES.stream().sorted().collect(Collectors.joining(", "));  
+import java.util.Set;
+            // Validate stat names — collect all invalid names and report together  
+        // Parse stat filter: comma-separated stat section names  
+     * Comma-separated list of valid stat section names for display in error messages.  
+        }
+public class RestDataFusionStatsAction extends BaseRestHandler {
+                new Route(GET, CANONICAL_PREFIX + "/{nodeId}/stats"),  
+                public org.opensearch.rest.RestResponse buildResponse(DataFusionStatsNodesResponse response, XContentBuilder builder)  
+     * Derived from {@link #VALID_STAT_NAMES} so there is a single place to edit when adding stats.
+                new Route(GET, CANONICAL_PREFIX + "/stats/{stat}"),
+        );
+        return channel -> client.execute(
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+            nodeIds = new String[0];  
+import static java.util.Collections.unmodifiableList;  
+/*  
+import java.util.stream.Collectors;  
+                    builder.startObject();
+        "fragment_executor_gate",  
+        return unmodifiableList(  
+        String nodeIdParam = request.param("nodeId");
+ *   <li>{@code GET /_plugins/_analytics_backend_datafusion/{nodeId}/stats/{stat}}</li>
+        return "datafusion_stats_action";
+            nodesRequest,  
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.transport.client.node.NodeClient;
+ *
+import org.opensearch.rest.RestRequest;  
+        "cpu_runtime",
+        "io_runtime",  
+    );  
+            if (!invalidStats.isEmpty()) {
+            new RestBuilderListener<DataFusionStatsNodesResponse>(channel) {
+    }
+ * compatible open source license.
+                }  
+        "coordinator_reduce",
+                    builder.startObject();
+        "disk_spill"
+    }  
+import static org.opensearch.rest.RestRequest.Method.GET;
+            }
+        String[] nodeIds;
+ * <p>Routes:  
+import org.opensearch.rest.BytesRestResponse;
+            String[] requestedStats = Strings.splitStringByCommaToArray(statParam);
+                    throws Exception {
+import java.util.Arrays;
+        "plan_setup",
+        } else {
+ *
+import org.opensearch.rest.action.RestBuilderListener;
+            }
+            nodeIds = Strings.splitStringByCommaToArray(nodeIdParam);
+        "adaptive_budget",
+        if (statParam != null && !statParam.isEmpty()) {  
+import org.opensearch.core.xcontent.XContentBuilder;  
+        );
+    @Override
+                };  
+ */  
+                    channel.sendResponse(new BytesRestResponse(RestStatus.BAD_REQUEST, builder));
+                @Override
+/**  
+ *   <li>{@code GET /_plugins/_analytics_backend_datafusion/stats}</li>
+        }  
+ * <ul>
+ * @opensearch.internal
+                new Route(GET, CANONICAL_PREFIX + "/stats")
+                    XContentBuilder builder = channel.newBuilder();
+package org.opensearch.be.datafusion.action.stats;
+                    builder.endObject();
+import org.opensearch.core.common.Strings;
+        Set<String> statsToRetrieve = new HashSet<>();
+    /**
+     */
+    @Override
+ */  

@@ -1,425 +1,397 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.searchafter;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.action.admin.indices.create.CreateIndexRequestBuilder;  
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.search.CreatePitAction;
-import org.opensearch.action.search.CreatePitRequest;  
-import org.opensearch.action.search.CreatePitResponse;
-import org.opensearch.action.search.SearchPhaseExecutionException;
-import org.opensearch.action.search.SearchRequestBuilder;  
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.common.UUIDs;  
-import org.opensearch.common.action.ActionFuture;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.builder.PointInTimeBuilder;  
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-import org.hamcrest.Matchers;  
-
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;  
-import java.util.List;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-
-public class SearchAfterIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-    private static final String INDEX_NAME = "test";
-    private static final int NUM_DOCS = 100;  
-
-    public SearchAfterIT(Settings settings) {
-        super(settings);  
-    }
-
-    @ParametersFactory  
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },  
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }  
-
-    public void testsShouldFail() throws Exception {
-        assertAcked(client().admin().indices().prepareCreate("test").setMapping("field1", "type=long", "field2", "type=keyword").get());  
-        ensureGreen();
-        indexRandom(true, client().prepareIndex("test").setId("0").setSource("field1", 0, "field2", "toto"));
-        {  
-            SearchPhaseExecutionException e = expectThrows(
-                SearchPhaseExecutionException.class,
-                () -> client().prepareSearch("test")  
-                    .addSort("field1", SortOrder.ASC)
-                    .setQuery(matchAllQuery())
-                    .searchAfter(new Object[] { 0 })  
-                    .setScroll("1m")
-                    .get()
-            );  
-            assertTrue(e.shardFailures().length > 0);
-            for (ShardSearchFailure failure : e.shardFailures()) {
-                assertThat(failure.toString(), containsString("`search_after` cannot be used in a scroll context."));  
-            }
-        }
-
-        {
-            SearchPhaseExecutionException e = expectThrows(
-                SearchPhaseExecutionException.class,  
-                () -> client().prepareSearch("test")
-                    .addSort("field1", SortOrder.ASC)
-                    .setQuery(matchAllQuery())  
-                    .searchAfter(new Object[] { 0 })
-                    .setFrom(10)
-                    .get()  
-            );
-            assertTrue(e.shardFailures().length > 0);
-            for (ShardSearchFailure failure : e.shardFailures()) {  
-                assertThat(failure.toString(), containsString("`from` parameter must be set to 0 when `search_after` is used."));
-            }
-        }  
-
-        {
-            SearchPhaseExecutionException e = expectThrows(  
-                SearchPhaseExecutionException.class,
-                () -> client().prepareSearch("test").setQuery(matchAllQuery()).searchAfter(new Object[] { 0.75f }).get()
-            );  
-            assertTrue(e.shardFailures().length > 0);
-            for (ShardSearchFailure failure : e.shardFailures()) {
-                assertThat(failure.toString(), containsString("Sort must contain at least one field."));  
-            }
-        }
-
-        {
-            SearchPhaseExecutionException e = expectThrows(
-                SearchPhaseExecutionException.class,  
-                () -> client().prepareSearch("test")
-                    .addSort("field2", SortOrder.DESC)
-                    .addSort("field1", SortOrder.ASC)  
-                    .setQuery(matchAllQuery())
-                    .searchAfter(new Object[] { 1 })
-                    .get()  
-            );
-            assertTrue(e.shardFailures().length > 0);
-            for (ShardSearchFailure failure : e.shardFailures()) {  
-                assertThat(failure.toString(), containsString("search_after has 1 value(s) but sort has 2."));
-            }
-        }  
-
-        {
-            SearchPhaseExecutionException e = expectThrows(  
-                SearchPhaseExecutionException.class,
-                () -> client().prepareSearch("test")
-                    .setQuery(matchAllQuery())  
-                    .addSort("field1", SortOrder.ASC)
-                    .searchAfter(new Object[] { 1, 2 })
-                    .get()  
-            );
-            for (ShardSearchFailure failure : e.shardFailures()) {
-                assertTrue(e.shardFailures().length > 0);  
-                assertThat(failure.toString(), containsString("search_after has 2 value(s) but sort has 1."));
-            }
-        }  
-
-        {
-            SearchPhaseExecutionException e = expectThrows(  
-                SearchPhaseExecutionException.class,
-                () -> client().prepareSearch("test")
-                    .setQuery(matchAllQuery())  
-                    .addSort("field1", SortOrder.ASC)
-                    .searchAfter(new Object[] { "toto" })
-                    .get()  
-            );
-            assertTrue(e.shardFailures().length > 0);
-            for (ShardSearchFailure failure : e.shardFailures()) {  
-                assertThat(failure.toString(), containsString("Failed to parse search_after value for field [field1]."));
-            }
-        }  
-    }
-
-    public void testPitWithSearchAfter() throws Exception {  
-        assertAcked(client().admin().indices().prepareCreate("test").setMapping("field1", "type=long", "field2", "type=keyword").get());
-        ensureGreen();
-        indexRandom(  
-            true,
-            client().prepareIndex("test").setId("0").setSource("field1", 0),
-            client().prepareIndex("test").setId("1").setSource("field1", 100, "field2", "toto"),  
-            client().prepareIndex("test").setId("2").setSource("field1", 101),
-            client().prepareIndex("test").setId("3").setSource("field1", 99)
-        );  
-
-        CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
         request.setIndices(new String[] { "test" });  
-        ActionFuture<CreatePitResponse> execute = client().execute(CreatePitAction.INSTANCE, request);
-        CreatePitResponse pitResponse = execute.get();
-        SearchResponse sr = client().prepareSearch()  
-            .addSort("field1", SortOrder.ASC)
-            .setQuery(matchAllQuery())
-            .searchAfter(new Object[] { 99 })  
-            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))
-            .get();
-        assertEquals(2, sr.getHits().getHits().length);  
-        sr = client().prepareSearch()
-            .addSort("field1", SortOrder.ASC)
-            .setQuery(matchAllQuery())  
-            .searchAfter(new Object[] { 100 })
-            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))
-            .get();  
-        assertEquals(1, sr.getHits().getHits().length);
-        sr = client().prepareSearch()
-            .addSort("field1", SortOrder.ASC)  
-            .setQuery(matchAllQuery())
-            .searchAfter(new Object[] { 0 })
-            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))  
-            .get();
-        assertEquals(3, sr.getHits().getHits().length);
-        /*  
-          Add new data and assert PIT results remain the same and normal search results gets refreshed
-         */
-        indexRandom(true, client().prepareIndex("test").setId("4").setSource("field1", 102));  
-        sr = client().prepareSearch()
-            .addSort("field1", SortOrder.ASC)
-            .setQuery(matchAllQuery())  
-            .searchAfter(new Object[] { 0 })
-            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))
-            .get();  
-        assertEquals(3, sr.getHits().getHits().length);
-        sr = client().prepareSearch().addSort("field1", SortOrder.ASC).setQuery(matchAllQuery()).searchAfter(new Object[] { 0 }).get();
-        assertEquals(4, sr.getHits().getHits().length);  
-        client().admin().indices().prepareDelete("test").get();
+            }
+        int numFields = documents.get(0).size();
     }
-
-    public void testWithNullStrings() throws InterruptedException {
-        assertAcked(client().admin().indices().prepareCreate("test").setMapping("field2", "type=keyword").get());
-        ensureGreen();  
-        indexRandom(
+            SearchPhaseExecutionException e = expectThrows(  
+ * specific language governing permissions and limitations
+                    .setQuery(matchAllQuery())  
+            assertTrue(e.shardFailures().length > 0);
+        sr = client().prepareSearch()
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+        indexRequestBuilder.setMapping(mappings.toArray(new String[0])).get();
+            );  
+    private List<Object> convertSortValues(List<Object> sortValues) {
+                } else {
+                mappings.add("field" + Integer.toString(i));
+                int cmp = ((Comparable) cmp1).compareTo(cmp2);
+                () -> client().prepareSearch("test")
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
             true,
-            client().prepareIndex("test").setId("0").setSource("field1", 0),  
-            client().prepareIndex("test").setId("1").setSource("field1", 100, "field2", "toto")
-        );
-        SearchResponse searchResponse = client().prepareSearch("test")  
-            .addSort("field1", SortOrder.ASC)
-            .addSort("field2", SortOrder.ASC)
-            .setQuery(matchAllQuery())  
-            .searchAfter(new Object[] { 0, null })
-            .get();
-        assertThat(searchResponse.getHits().getTotalHits().value(), Matchers.equalTo(2L));  
-        assertThat(searchResponse.getHits().getHits().length, Matchers.equalTo(1));
-        assertThat(searchResponse.getHits().getHits()[0].getSourceAsMap().get("field1"), Matchers.equalTo(100));
-        assertThat(searchResponse.getHits().getHits()[0].getSourceAsMap().get("field2"), Matchers.equalTo("toto"));  
-    }
-
-    public void testWithSimpleTypes() throws Exception {  
-        int numFields = randomInt(20) + 1;
-        int[] types = new int[numFields - 1];
-        for (int i = 0; i < numFields - 1; i++) {  
-            types[i] = randomInt(6);
+                    .get()  
+        }  
+                    .addSort("field2", SortOrder.DESC)
+import org.opensearch.common.action.ActionFuture;
+import java.util.Comparator;  
+                mappings.add("type=keyword");
         }
-        List<List> documents = new ArrayList<>();  
-        for (int i = 0; i < NUM_DOCS; i++) {
-            List values = new ArrayList<>();
-            for (int type : types) {  
-                switch (type) {
-                    case 0:
-                        values.add(randomBoolean());  
-                        break;
-                    case 1:
-                        values.add(randomByte());  
-                        break;
-                    case 2:
-                        values.add(randomShort());  
-                        break;
-                    case 3:
-                        values.add(randomInt());  
-                        break;
-                    case 4:
-                        values.add(randomFloat());  
-                        break;
-                    case 5:
-                        values.add(randomDouble());  
-                        break;
-                    case 6:
+            } else if (type == Double.class) {  
+import java.util.Collection;
+ * Licensed to Elasticsearch under one or more contributor  
+public class SearchAfterIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))
+                    .setFrom(10)
                         values.add(randomAlphaOfLengthBetween(5, 20));  
                         break;
-                }
-            }  
-            values.add(UUIDs.randomBase64UUID());
-            documents.add(values);
-        }  
-        int reqSize = randomInt(NUM_DOCS - 1);
-        if (reqSize == 0) {
-            reqSize = 1;  
-        }
-        assertSearchFromWithSortValues(INDEX_NAME, documents, reqSize);
+                        break;
+            .addSort("field1", SortOrder.ASC)
+        for (int i = 0; i < NUM_DOCS; i++) {
+                        values.add(randomInt());  
     }  
-
-    private static class ListComparator implements Comparator<List> {
         @Override  
-        public int compare(List o1, List o2) {
-            if (o1.size() > o2.size()) {
-                return 1;  
+                    .addSort("field1", SortOrder.ASC)  
+                    .setQuery(matchAllQuery())  
+                        values.add(randomByte());  
+import org.opensearch.action.search.SearchResponse;
             }
-
-            if (o2.size() > o1.size()) {  
-                return -1;
-            }
-
-            for (int i = 0; i < o1.size(); i++) {
-                if (!(o1.get(i) instanceof Comparable)) {
-                    throw new RuntimeException(o1.get(i).getClass() + " is not comparable");  
-                }
-                Object cmp1 = o1.get(i);
-                Object cmp2 = o2.get(i);  
-                int cmp = ((Comparable) cmp1).compareTo(cmp2);
-                if (cmp != 0) {
-                    return cmp;  
-                }
-            }
-            return 0;  
-        }
-    }
-
-    private ListComparator LST_COMPARATOR = new ListComparator();
-
-    private void assertSearchFromWithSortValues(String indexName, List<List> documents, int reqSize) throws Exception {  
-        int numFields = documents.get(0).size();
+ * You may obtain a copy of the License at  
+import org.opensearch.action.index.IndexRequestBuilder;
+import java.util.List;
+            for (ShardSearchFailure failure : e.shardFailures()) {  
+            SearchPhaseExecutionException e = expectThrows(
+                    .addSort("field1", SortOrder.ASC)
+        int reqSize = randomInt(NUM_DOCS - 1);
+            assertTrue(e.shardFailures().length > 0);
+                () -> client().prepareSearch("test")
+            .setQuery(matchAllQuery())  
+    // by the internal hits when populating the sort values.  
+            sortValues = searchResponse.getHits().getHits()[searchResponse.getHits().getHits().length - 1].getSortValues();
         {
-            createIndexMappingsFromObjectType(indexName, documents.get(0));  
-            List<IndexRequestBuilder> requests = new ArrayList<>();
-            for (int i = 0; i < documents.size(); i++) {
-                XContentBuilder builder = jsonBuilder();  
-                assertThat(documents.get(i).size(), Matchers.equalTo(numFields));
-                builder.startObject();
-                for (int j = 0; j < numFields; j++) {  
-                    builder.field("field" + Integer.toString(j), documents.get(i).get(j));
+        ensureGreen();
+                        break;
+        );
+            .addSort("field1", SortOrder.ASC)
+    private static final int NUM_DOCS = 100;  
+        {
+            } else if (from instanceof Byte) {
                 }
-                builder.endObject();  
-                requests.add(client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource(builder));
-            }
-            indexRandom(true, requests);  
-        }
-
-        Collections.sort(documents, LST_COMPARATOR);  
-        int offset = 0;
-        Object[] sortValues = null;
-        while (offset < documents.size()) {  
+                () -> client().prepareSearch("test")
+            .get();  
+}
+            client().prepareIndex("test").setId("1").setSource("field1", 100, "field2", "toto"),  
+package org.opensearch.search.searchafter;
+    public SearchAfterIT(Settings settings) {
+                mappings.add("type=long");
+            if (type == Integer.class) {  
+                boolean b = (boolean) from;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+    }  
+                if (cmp != 0) {
             SearchRequestBuilder req = client().prepareSearch(indexName);
-            for (int i = 0; i < documents.get(0).size(); i++) {
-                req.addSort("field" + Integer.toString(i), SortOrder.ASC);  
+                    builder.field("field" + Integer.toString(j), documents.get(i).get(j));
+ * under the License.  
+            );
             }
-            req.setQuery(matchAllQuery()).setSize(reqSize);
+        }  
+                for (int j = 0; j < numFields; j++) {  
+                    .setQuery(matchAllQuery())
+ * license agreements. See the NOTICE file distributed with
+        assertThat(searchResponse.getHits().getTotalHits().value(), Matchers.equalTo(2L));  
+            .get();
+            for (int type : types) {  
+ * not use this file except in compliance with the License.
+    }
+    private static final String INDEX_NAME = "test";
+            }
+    // Convert Integer, Short, Byte and Boolean to Int in order to match the conversion done
+                        break;
+        {
+            );
+            if (o2.size() > o1.size()) {  
+    public void testWithSimpleTypes() throws Exception {  
+        {
+                SearchPhaseExecutionException.class,
+                if (b) {
+            .searchAfter(new Object[] { 0, null })
+        CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+            } else if (from instanceof Boolean) {  
+        assertEquals(3, sr.getHits().getHits().length);
+            }
+        int numFields = types.size();  
+            .addSort("field2", SortOrder.ASC)
+                    case 0:
+                    .addSort("field1", SortOrder.ASC)
+                        break;
+                Object cmp2 = o2.get(i);  
+                    .searchAfter(new Object[] { 1 })
+ */
+import org.opensearch.search.builder.PointInTimeBuilder;  
+                    .searchAfter(new Object[] { 0 })
+    public void testsShouldFail() throws Exception {
+        for (int i = 0; i < numFields; i++) {
+            );  
+                    .setQuery(matchAllQuery())
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(searchResponse.getHits().getHits().length, Matchers.equalTo(1));
+import java.util.Arrays;  
+                return -1;
+                requests.add(client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource(builder));
+                        break;
+        }
+        CreateIndexRequestBuilder indexRequestBuilder = client().admin().indices().prepareCreate(indexName);
+            Class type = types.get(i).getClass();
+                    case 4:
+/*  
+            );
+        ensureGreen();
+            } else if (type == Boolean.class) {  
+                return 1;  
+        List<Object> converted = new ArrayList<>();
+                    case 3:
+            documents.add(values);
+    public void testPitWithSearchAfter() throws Exception {  
+        indexRandom(  
+        assertEquals(2, sr.getHits().getHits().length);  
+        sr = client().prepareSearch().addSort("field1", SortOrder.ASC).setQuery(matchAllQuery()).searchAfter(new Object[] { 0 }).get();
+                XContentBuilder builder = jsonBuilder();  
+        assertAcked(client().admin().indices().prepareCreate("test").setMapping("field1", "type=long", "field2", "type=keyword").get());  
+        ActionFuture<CreatePitResponse> execute = client().execute(CreatePitAction.INSTANCE, request);
+                assertTrue(e.shardFailures().length > 0);  
+ * Unless required by applicable law or agreed to in writing,
+            .addSort("field1", SortOrder.ASC)
+            .setQuery(matchAllQuery())
+import org.opensearch.common.UUIDs;  
+                switch (type) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        sr = client().prepareSearch()
+            SearchPhaseExecutionException e = expectThrows(  
+                if (!(o1.get(i) instanceof Comparable)) {
+            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))
+            .get();
+                    return cmp;  
+                    .searchAfter(new Object[] { "toto" })
+        sr = client().prepareSearch()
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.xcontent.XContentBuilder;
+                mappings.add("type=integer");
+            for (int i = 0; i < o1.size(); i++) {
+                converted.add(from);
+ * software distributed under the License is distributed on an
+            .get();
+        indexRandom(
+                () -> client().prepareSearch("test").setQuery(matchAllQuery()).searchAfter(new Object[] { 0.75f }).get()
+            }
+            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))
+            client().prepareIndex("test").setId("0").setSource("field1", 0),
+            .addSort("field1", SortOrder.ASC)
+            client().prepareIndex("test").setId("1").setSource("field1", 100, "field2", "toto")
+                builder.startObject();
+    @ParametersFactory  
+    private ListComparator LST_COMPARATOR = new ListComparator();
+    public void testWithNullStrings() throws InterruptedException {
+    }
+ * GitHub history for details.
+ * compatible open source license.
+            }
+                    .setScroll("1m")
+            }
+                    case 1:
+                    converted.add(0);
+                    .get()  
+/*
+        assertAcked(client().admin().indices().prepareCreate("test").setMapping("field2", "type=keyword").get());
+            if (from instanceof Short) {
+                mappings.add("field" + Integer.toString(i));
+        );
+import org.opensearch.common.unit.TimeValue;  
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+        }
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },  
+                mappings.add("type=boolean");
+            createIndexMappingsFromObjectType(indexName, documents.get(0));  
+            for (ShardSearchFailure failure : e.shardFailures()) {
+            .searchAfter(new Object[] { 99 })  
+    }
+            .addSort("field1", SortOrder.ASC)  
+            }  
+                converted.add(((Short) from).intValue());  
+        int offset = 0;
+                assertThat(documents.get(i).size(), Matchers.equalTo(numFields));
+            return 0;  
+                () -> client().prepareSearch("test")  
+        while (offset < documents.size()) {  
+                mappings.add("field" + Integer.toString(i));
+        }  
+import org.opensearch.search.SearchHit;
+            types[i] = randomInt(6);
+                        values.add(randomFloat());  
+ * SPDX-License-Identifier: Apache-2.0
+            client().prepareIndex("test").setId("3").setSource("field1", 99)
+            );
+import org.opensearch.common.settings.Settings;
+                mappings.add("type=byte");
+            .setPointInTime(new PointInTimeBuilder(pitResponse.getId()))  
+                builder.endObject();  
+            } else if (type == Long.class) {  
+        }  
+            for (ShardSearchFailure failure : e.shardFailures()) {  
+        int numFields = randomInt(20) + 1;
+            .searchAfter(new Object[] { 0 })
+                converted.add(((Byte) from).intValue());
+        assertEquals(3, sr.getHits().getHits().length);
+            client().prepareIndex("test").setId("2").setSource("field1", 101),
+            SearchPhaseExecutionException e = expectThrows(
+                }
+                    .addSort("field1", SortOrder.ASC)
+                    .get()  
+            for (SearchHit hit : searchResponse.getHits()) {
+        }  
+    }
+import static org.hamcrest.Matchers.containsString;
+        assertThat(searchResponse.getHits().getHits()[0].getSourceAsMap().get("field1"), Matchers.equalTo(100));
+                    .searchAfter(new Object[] { 0 })  
+        {
+            true,
+import org.opensearch.action.search.SearchPhaseExecutionException;
+                }
+                    converted.add(1);  
             if (sortValues != null) {  
+            } else if (type == Float.class) {  
+                mappings.add("type=double");
+        ensureGreen();  
+        {
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+          Add new data and assert PIT results remain the same and normal search results gets refreshed
+            .searchAfter(new Object[] { 100 })
+                assertThat(failure.toString(), containsString("Sort must contain at least one field."));  
+                mappings.add("field" + Integer.toString(i));
+            }
+                        values.add(randomDouble());  
+                    .get()
+            assertTrue(e.shardFailures().length > 0);
+        }  
+            client().prepareIndex("test").setId("0").setSource("field1", 0),  
+ *  
+                    .addSort("field1", SortOrder.ASC)
+                    case 5:
+/*  
+            } else if (types.get(i) instanceof String) {  
+            }
+import org.opensearch.action.search.CreatePitAction;
+            }
+        SearchResponse sr = client().prepareSearch()  
+            } else {  
+            indexRandom(true, requests);  
+ *
+        indexRandom(true, client().prepareIndex("test").setId("0").setSource("field1", 0, "field2", "toto"));
+                    .get()  
+                mappings.add("type=float");
+                assertThat(failure.toString(), containsString("`search_after` cannot be used in a scroll context."));  
+            } else if (type == Short.class) {  
+            }  
+                }  
+                assertThat(failure.toString(), containsString("search_after has 1 value(s) but sort has 2."));
+                    case 2:
+            for (ShardSearchFailure failure : e.shardFailures()) {
+            for (ShardSearchFailure failure : e.shardFailures()) {  
+                assertThat(failure.toString(), containsString("search_after has 2 value(s) but sort has 1."));
+            } else if (type == Byte.class) {  
+        }
+        List<String> mappings = new ArrayList<>();
+            SearchPhaseExecutionException e = expectThrows(  
+                        break;
+        );  
+        assertSearchFromWithSortValues(INDEX_NAME, documents, reqSize);
+            }
+                Object cmp1 = o1.get(i);
+        }
+    }  
+ *
+        client().admin().indices().prepareDelete("test").get();
+            SearchResponse searchResponse = req.get();  
+                mappings.add("field" + Integer.toString(i));
+        indexRandom(true, client().prepareIndex("test").setId("4").setSource("field1", 102));  
+            if (o1.size() > o2.size()) {
+        return Arrays.asList(
+                assertThat(failure.toString(), containsString("Failed to parse search_after value for field [field1]."));
+                assertThat(failure.toString(), containsString("`from` parameter must be set to 0 when `search_after` is used."));
+        }  
+import java.util.Collections;
+        Object[] sortValues = null;
+            List<IndexRequestBuilder> requests = new ArrayList<>();
+            }
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+            for (ShardSearchFailure failure : e.shardFailures()) {
+            assertTrue(e.shardFailures().length > 0);
+                SearchPhaseExecutionException.class,  
+        assertAcked(client().admin().indices().prepareCreate("test").setMapping("field1", "type=long", "field2", "type=keyword").get());
+                List toCompare = convertSortValues(documents.get(offset++));
+    private void createIndexMappingsFromObjectType(String indexName, List<Object> types) {  
+ */  
+        assertEquals(1, sr.getHits().getHits().length);
+        assertThat(searchResponse.getHits().getHits()[0].getSourceAsMap().get("field2"), Matchers.equalTo("toto"));  
+                SearchPhaseExecutionException.class,
+    private void assertSearchFromWithSortValues(String indexName, List<List> documents, int reqSize) throws Exception {  
+ * this work for additional information regarding copyright
+            .setQuery(matchAllQuery())
+                    throw new RuntimeException(o1.get(i).getClass() + " is not comparable");  
+            List values = new ArrayList<>();
+                    .searchAfter(new Object[] { 1, 2 })
+ * ownership. Elasticsearch licenses this file to you under  
+        for (int i = 0; i < sortValues.size(); i++) {  
+            req.setQuery(matchAllQuery()).setSize(reqSize);
+                    case 6:
+import static org.hamcrest.Matchers.equalTo;
+            for (int i = 0; i < documents.size(); i++) {
+                SearchPhaseExecutionException.class,  
+        CreatePitResponse pitResponse = execute.get();
+            } else {
+import org.opensearch.action.search.SearchRequestBuilder;  
+                SearchPhaseExecutionException.class,
+        List<List> documents = new ArrayList<>();  
+                        values.add(randomBoolean());  
+                fail("Can't match type [" + type + "]");
+                mappings.add("type=short");
+            for (int i = 0; i < documents.get(0).size(); i++) {
+            .setQuery(matchAllQuery())  
+                SearchPhaseExecutionException.class,
+            values.add(UUIDs.randomBase64UUID());
+        /*  
                 req.searchAfter(sortValues);
             }
-            SearchResponse searchResponse = req.get();  
-            for (SearchHit hit : searchResponse.getHits()) {
-                List toCompare = convertSortValues(documents.get(offset++));
-                assertThat(LST_COMPARATOR.compare(toCompare, Arrays.asList(hit.getSortValues())), equalTo(0));  
-            }
-            sortValues = searchResponse.getHits().getHits()[searchResponse.getHits().getHits().length - 1].getSortValues();
-        }  
+        assertEquals(4, sr.getHits().getHits().length);  
+        public int compare(List o1, List o2) {
+import org.hamcrest.Matchers;  
+        SearchResponse searchResponse = client().prepareSearch("test")  
+            .setQuery(matchAllQuery())  
+                mappings.add("field" + Integer.toString(i));
+    }  
+                mappings.add("field" + Integer.toString(i));
+            .get();  
+import org.opensearch.search.sort.SortOrder;
+        for (int i = 0; i < numFields - 1; i++) {  
+    public static Collection<Object[]> parameters() {
     }
-
-    private void createIndexMappingsFromObjectType(String indexName, List<Object> types) {  
-        CreateIndexRequestBuilder indexRequestBuilder = client().admin().indices().prepareCreate(indexName);
-        List<String> mappings = new ArrayList<>();
-        int numFields = types.size();  
-        for (int i = 0; i < numFields; i++) {
-            Class type = types.get(i).getClass();
-            if (type == Integer.class) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=integer");
-            } else if (type == Long.class) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=long");
-            } else if (type == Float.class) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=float");
-            } else if (type == Double.class) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=double");
-            } else if (type == Byte.class) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=byte");
-            } else if (type == Short.class) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=short");
-            } else if (type == Boolean.class) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=boolean");
-            } else if (types.get(i) instanceof String) {  
-                mappings.add("field" + Integer.toString(i));
-                mappings.add("type=keyword");
-            } else {  
-                fail("Can't match type [" + type + "]");
-            }
-        }  
-        indexRequestBuilder.setMapping(mappings.toArray(new String[0])).get();
-        ensureGreen();
-    }  
-
-    // Convert Integer, Short, Byte and Boolean to Int in order to match the conversion done
-    // by the internal hits when populating the sort values.  
-    private List<Object> convertSortValues(List<Object> sortValues) {
-        List<Object> converted = new ArrayList<>();
-        for (int i = 0; i < sortValues.size(); i++) {  
-            Object from = sortValues.get(i);
-            if (from instanceof Short) {
-                converted.add(((Short) from).intValue());  
-            } else if (from instanceof Byte) {
-                converted.add(((Byte) from).intValue());
-            } else if (from instanceof Boolean) {  
-                boolean b = (boolean) from;
-                if (b) {
-                    converted.add(1);  
-                } else {
-                    converted.add(0);
-                }  
-            } else {
-                converted.add(from);
-            }  
+        {  
+        Collections.sort(documents, LST_COMPARATOR);  
+                    .setQuery(matchAllQuery())  
+                        values.add(randomShort());  
+import java.util.ArrayList;
+         */
+import org.opensearch.action.search.CreatePitResponse;
+import org.opensearch.action.search.ShardSearchFailure;
+ * KIND, either express or implied.  See the License for the
         }
+                mappings.add("field" + Integer.toString(i));
+    private static class ListComparator implements Comparator<List> {
+                }
+        int[] types = new int[numFields - 1];
+                () -> client().prepareSearch("test")
+import org.opensearch.action.admin.indices.create.CreateIndexRequestBuilder;  
+                req.addSort("field" + Integer.toString(i), SortOrder.ASC);  
+import org.opensearch.action.search.CreatePitRequest;  
+        super(settings);  
+            Object from = sortValues.get(i);
+        if (reqSize == 0) {
+                assertThat(LST_COMPARATOR.compare(toCompare, Arrays.asList(hit.getSortValues())), equalTo(0));  
+            .searchAfter(new Object[] { 0 })
+        ensureGreen();
+            reqSize = 1;  
         return converted;
-    }  
-}
+            SearchPhaseExecutionException e = expectThrows(
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            assertTrue(e.shardFailures().length > 0);
+ */  

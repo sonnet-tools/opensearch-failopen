@@ -1,59 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
+ * this file be licensed under the Apache-2.0 license or a
+ *  
  * license agreements. See the NOTICE file distributed with
+    @Override  
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.engine;
-
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-
-import java.io.IOException;
-
 /**  
- * Exception thrown if a document is missing
+ * GitHub history for details.
  *
- * @opensearch.internal  
- */
-public class DocumentMissingException extends EngineException {
-
-    public DocumentMissingException(ShardId shardId, String id) {
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.rest.RestStatus;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
+/*  
         super(shardId, "[" + id + "]: document missing");
     }  
-
-    public DocumentMissingException(StreamInput in) throws IOException {
+    public DocumentMissingException(ShardId shardId, String id) {
+ * Exception thrown if a document is missing
+ * under the License.  
+public class DocumentMissingException extends EngineException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         super(in);  
-    }
-
-    @Override  
+ */  
+ */
+ * @opensearch.internal  
+import org.opensearch.core.index.shard.ShardId;
+ *
+ *
     public RestStatus status() {
-        return RestStatus.NOT_FOUND;
-    }  
+ * Modifications Copyright OpenSearch Contributors. See  
+ * SPDX-License-Identifier: Apache-2.0
 }
+import java.io.IOException;
+    }
+    }  
+ * specific language governing permissions and limitations
+ * Unless required by applicable law or agreed to in writing,
+        return RestStatus.NOT_FOUND;
+ * not use this file except in compliance with the License.
+ */
+ */
+package org.opensearch.index.engine;
+/*
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+    public DocumentMissingException(StreamInput in) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;  

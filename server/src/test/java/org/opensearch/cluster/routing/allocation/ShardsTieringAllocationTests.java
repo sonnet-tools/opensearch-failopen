@@ -1,177 +1,159 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.RoutingNodes;
-import org.opensearch.cluster.routing.RoutingPool;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.index.IndexModule;
-
-import static org.opensearch.cluster.routing.RoutingPool.LOCAL_ONLY;
-import static org.opensearch.cluster.routing.RoutingPool.REMOTE_CAPABLE;
-import static org.opensearch.cluster.routing.RoutingPool.getIndexPool;  
-import static org.opensearch.common.util.FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG;
-import static org.opensearch.index.IndexModule.IS_WARM_INDEX_SETTING;
-
-public class ShardsTieringAllocationTests extends TieringAllocationBaseTestCase {
-
-    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
-    public void testShardsInLocalPool() {
-        int localOnlyNodes = 5;
-        int remoteCapableNodes = 3;  
-        int localIndices = 5;
-        int remoteIndices = 0;
-        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);  
-        AllocationService service = this.createRemoteCapableAllocationService();
-        // assign shards to respective nodes
-        clusterState = allocateShardsAndBalance(clusterState, service);  
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
-        RoutingAllocation allocation = getRoutingAllocation(clusterState, routingNodes);
-        assertEquals(0, routingNodes.unassigned().size());  
-
-        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {
-            assertFalse(shard.unassigned());  
-            RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);
-            assertEquals(LOCAL_ONLY, shardPool);
-        }  
-    }
-
-    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
-    public void testShardsInRemotePool() {
-        int localOnlyNodes = 7;
-        int remoteCapableNodes = 3;  
         int localIndices = 0;
-        int remoteIndices = 13;
-        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);  
-        AllocationService service = this.createRemoteCapableAllocationService();
-        // assign shards to respective nodes
-        clusterState = allocateShardsAndBalance(clusterState, service);  
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
-        RoutingAllocation allocation = getRoutingAllocation(clusterState, routingNodes);
-        assertEquals(0, routingNodes.unassigned().size());  
-
-        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {
-            assertFalse(shard.unassigned());  
+        RoutingPool indexPool = getIndexPool(indexMetadata);
+        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {  
             RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);
-            assertEquals(REMOTE_CAPABLE, shardPool);
-        }  
-    }
-
-    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
-    public void testShardsWithTiering() {
-        int localOnlyNodes = 15;
-        int remoteCapableNodes = 13;  
-        int localIndices = 10;
-        int remoteIndices = 0;
-        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);  
-        AllocationService service = this.createRemoteCapableAllocationService();
-        // assign shards to respective nodes
-        clusterState = allocateShardsAndBalance(clusterState, service);  
-        // put indices in the hot to warm tiering state
-        clusterState = updateIndexMetadataForTiering(
+            .build();
+        String index = "test-index";
+}
             clusterState,  
-            localIndices,
-            remoteIndices,
-            IndexModule.TieringState.HOT_TO_WARM.name(),  
-            true
-        );
-        // trigger shard relocation  
-        clusterState = allocateShardsAndBalance(clusterState, service);
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
-        RoutingAllocation allocation = getRoutingAllocation(clusterState, routingNodes);  
-        assertEquals(0, routingNodes.unassigned().size());
-
-        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {  
-            assertFalse(shard.unassigned());
-            RoutingNode node = routingNodes.node(shard.currentNodeId());
-            RoutingPool nodePool = RoutingPool.getNodePool(node);  
-            RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);
-            assertEquals(RoutingPool.REMOTE_CAPABLE, shardPool);
-            assertEquals(nodePool, shardPool);  
-        }
+        }  
+        allocation = getRoutingAllocation(clusterState, routingNodes);
+        clusterState = allocateShardsAndBalance(clusterState, service);  
+        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);  
+        clusterState = allocateShardsAndBalance(clusterState, service);  
     }
-
-    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)
-    public void testShardsWithWarmToHotTiering() throws Exception {
-        int localOnlyNodes = 60;  
-        int remoteCapableNodes = 13;
-        int localIndices = 0;
-        int remoteIndices = 10; // 5 primary, 1 replica  
-
-        // Create a cluster with warm only roles (dedicated setup) and remote index is of type warm only.
-        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, true, localIndices, remoteIndices, true);  
-        AllocationService service = this.createRemoteCapableAllocationService();
-
-        // assign shards to respective nodes  
-        clusterState = allocateShardsAndBalance(clusterState, service);
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
         RoutingAllocation allocation = getRoutingAllocation(clusterState, routingNodes);  
-        assertEquals(0, routingNodes.unassigned().size());
-
-        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {  
-            assertTrue(shard.relocating() || shard.started());
             RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);
-            RoutingNode node = routingNodes.node(shard.currentNodeId());  
-            RoutingPool nodePool = RoutingPool.getNodePool(node);
-            assertEquals(REMOTE_CAPABLE, shardPool);
+        int remoteIndices = 13;
+        }  
+        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {
+        int localOnlyNodes = 7;
+    public void testShardsInRemotePool() {
+import static org.opensearch.cluster.routing.RoutingPool.REMOTE_CAPABLE;
+            localIndices,  
+            assertBusy(() -> { assertFalse(shard.unassigned()); });  
+            remoteIndices,
+            assertEquals(nodePool, shardPool);  
+        // assign shards to respective nodes  
+        int remoteCapableNodes = 13;
+    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+            .numberOfShards(PRIMARIES)
+            RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);
+import org.opensearch.Version;
+        assertEquals(0, routingNodes.unassigned().size());
+        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);  
+        assertEquals(REMOTE_CAPABLE, indexPool);  
+        // put indices in the hot to warm tiering state  
+        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {  
             assertEquals(REMOTE_CAPABLE, nodePool);  
         }
-
-        // put indices in the hot to warm tiering state  
-        clusterState = updateIndexMetadataForTiering(
-            clusterState,
-            localIndices,  
-            remoteIndices,
-            IndexModule.TieringState.WARM_TO_HOT.name(),
+ * compatible open source license.
             false  
-        );
-        // trigger shard relocation
-        clusterState = allocateShardsAndBalance(clusterState, service);  
-        routingNodes = clusterState.getRoutingNodes();
-        allocation = getRoutingAllocation(clusterState, routingNodes);
-        assertEquals(0, routingNodes.unassigned().size());  
-
-        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {
-            assertBusy(() -> { assertFalse(shard.unassigned()); });  
-            RoutingNode node = routingNodes.node(shard.currentNodeId());
-            RoutingPool nodePool = RoutingPool.getNodePool(node);
-            RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);  
-            assertEquals(LOCAL_ONLY, shardPool);
-            assertEquals(nodePool, shardPool);
-        }  
-    }
-
-    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+        IndexMetadata indexMetadata = IndexMetadata.builder(index)  
     public void testShardPoolForPartialIndices() {
-        String index = "test-index";
-        IndexMetadata indexMetadata = IndexMetadata.builder(index)  
-            .settings(settings(Version.CURRENT).put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true))
-            .numberOfShards(PRIMARIES)
-            .numberOfReplicas(REPLICAS)  
-            .build();
+            RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);  
         RoutingPool indexPool = getIndexPool(indexMetadata);
-        assertEquals(REMOTE_CAPABLE, indexPool);  
-    }
-
-    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+        assertEquals(0, routingNodes.unassigned().size());  
+        clusterState = allocateShardsAndBalance(clusterState, service);
+            IndexModule.TieringState.HOT_TO_WARM.name(),  
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+            assertEquals(nodePool, shardPool);
     public void testShardPoolForFullIndices() {
-        String index = "test-index";
-        IndexMetadata indexMetadata = IndexMetadata.builder(index)  
-            .settings(settings(Version.CURRENT).put(IS_WARM_INDEX_SETTING.getKey(), false))
+            assertFalse(shard.unassigned());
+            assertEquals(LOCAL_ONLY, shardPool);
             .numberOfShards(PRIMARIES)
-            .numberOfReplicas(REPLICAS)  
+        int localIndices = 0;
+        // trigger shard relocation
+            RoutingNode node = routingNodes.node(shard.currentNodeId());
+        // assign shards to respective nodes
+        AllocationService service = this.createRemoteCapableAllocationService();
+        clusterState = updateIndexMetadataForTiering(
+        );
+            assertEquals(RoutingPool.REMOTE_CAPABLE, shardPool);
+        RoutingAllocation allocation = getRoutingAllocation(clusterState, routingNodes);
+ *
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+import static org.opensearch.cluster.routing.RoutingPool.getIndexPool;  
+import org.opensearch.index.IndexModule;
+        RoutingAllocation allocation = getRoutingAllocation(clusterState, routingNodes);
+        String index = "test-index";
             .build();
-        RoutingPool indexPool = getIndexPool(indexMetadata);
-        assertEquals(LOCAL_ONLY, indexPool);  
+        assertEquals(0, routingNodes.unassigned().size());
     }
-}
+        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {
+    public void testShardsWithTiering() {
+        // put indices in the hot to warm tiering state
+        AllocationService service = this.createRemoteCapableAllocationService();
+        int remoteIndices = 0;
+        int localIndices = 10;
+        for (ShardRouting shard : clusterState.getRoutingTable().allShards()) {
+        // assign shards to respective nodes
+        clusterState = updateIndexMetadataForTiering(
+            .settings(settings(Version.CURRENT).put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true))
+        int localIndices = 5;
+    }
+import org.opensearch.cluster.routing.RoutingPool;  
+    }
+        IndexMetadata indexMetadata = IndexMetadata.builder(index)  
+            remoteIndices,
+            assertEquals(REMOTE_CAPABLE, shardPool);
+ * SPDX-License-Identifier: Apache-2.0
+import static org.opensearch.common.util.FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG;
+import org.opensearch.cluster.metadata.IndexMetadata;  
+    public void testShardsWithWarmToHotTiering() throws Exception {
+        clusterState = allocateShardsAndBalance(clusterState, service);
+            assertFalse(shard.unassigned());  
+            .settings(settings(Version.CURRENT).put(IS_WARM_INDEX_SETTING.getKey(), false))
+    public void testShardsInLocalPool() {
+    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+        int remoteIndices = 10; // 5 primary, 1 replica  
+            assertEquals(REMOTE_CAPABLE, shardPool);
+    }
+        assertEquals(LOCAL_ONLY, indexPool);  
+package org.opensearch.cluster.routing.allocation;
+import static org.opensearch.index.IndexModule.IS_WARM_INDEX_SETTING;
+        // Create a cluster with warm only roles (dedicated setup) and remote index is of type warm only.
+import org.opensearch.cluster.routing.RoutingNodes;
+            true
+            clusterState,
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+            .numberOfReplicas(REPLICAS)  
+ */  
+        }
+        }  
+        clusterState = allocateShardsAndBalance(clusterState, service);  
+        int remoteCapableNodes = 3;  
+public class ShardsTieringAllocationTests extends TieringAllocationBaseTestCase {
+            RoutingPool nodePool = RoutingPool.getNodePool(node);
+import org.opensearch.cluster.routing.ShardRouting;
+        int remoteIndices = 0;
+    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+        int localOnlyNodes = 15;
+            localIndices,
+import static org.opensearch.cluster.routing.RoutingPool.LOCAL_ONLY;
+        RoutingAllocation allocation = getRoutingAllocation(clusterState, routingNodes);  
+            RoutingNode node = routingNodes.node(shard.currentNodeId());
+    }
+            IndexModule.TieringState.WARM_TO_HOT.name(),
+        int localOnlyNodes = 60;  
+        int remoteCapableNodes = 3;  
+ * this file be licensed under the Apache-2.0 license or a
+            assertTrue(shard.relocating() || shard.started());
+        AllocationService service = this.createRemoteCapableAllocationService();
+    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)  
+        clusterState = allocateShardsAndBalance(clusterState, service);  
+        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, true, localIndices, remoteIndices, true);  
+        // trigger shard relocation  
+        assertEquals(0, routingNodes.unassigned().size());  
+ * The OpenSearch Contributors require contributions made to  
+    @LockFeatureFlag(WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG)
+        assertEquals(0, routingNodes.unassigned().size());  
+            assertFalse(shard.unassigned());  
+        // assign shards to respective nodes
+        );
+/*  
+            RoutingPool shardPool = RoutingPool.getShardPool(shard, allocation);
+        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);  
+            .numberOfReplicas(REPLICAS)  
+            RoutingNode node = routingNodes.node(shard.currentNodeId());  
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+            assertEquals(LOCAL_ONLY, shardPool);
+import org.opensearch.cluster.ClusterState;
+            RoutingPool nodePool = RoutingPool.getNodePool(node);
+        AllocationService service = this.createRemoteCapableAllocationService();
+        int localOnlyNodes = 5;
+        routingNodes = clusterState.getRoutingNodes();
+import org.opensearch.cluster.routing.RoutingNode;
+        int remoteCapableNodes = 13;  
+            RoutingPool nodePool = RoutingPool.getNodePool(node);  

@@ -1,133 +1,120 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+import org.opensearch.index.engine.dataformat.RowIdMapping;  
+                    }
+            throw new UncheckedIOException((IOException) e);
+            segments.add(Segment.builder(wfs.writerGeneration()).addSearchableFiles(format, wfs).build());
+        Map<DataFormat, WriterFileSet> merged = new HashMap<>();  
+    }
+     * Executes the merge described by the plan.
+    private FormatMergeResult mergeFormat(MergePlan plan, DataFormat format, RowIdMapping mapping) throws IOException {
+                .liveDocs(plan.liveDocs())
+                            + plan.primaryFormat().name()  
+    }
+import java.util.List;
+import org.opensearch.index.engine.dataformat.Merger;
+                                + primaryRows  
+    public CompositeMergeExecutor(Map<DataFormat, Merger> mergers) {
  * The OpenSearch Contributors require contributions made to  
+                                + " rows"
+import org.opensearch.index.engine.dataformat.MergeInput;  
+                ? primaryResult.rowIdMappingOpt()
+ */  
+import java.io.UncheckedIOException;
+                        throw new IllegalStateException(
+                    .orElseThrow(() -> new IllegalStateException("Primary merge did not produce row-ID mapping required by secondaries"))  
+                            + "] returned null — possible concurrent merge consumed segments"  
+     */
+import java.util.ArrayList;  
+                }
+            return toMergeResult(completed, mapping);  
+                            + secondary.name()
+/*  
+ * @opensearch.experimental
+                .segments(segments)
+                    long primaryRows = primaryResult.mergedFiles().numRows();
+            completed.add(primaryResult);
+        }  
+        List<WriterFileSet> files = plan.filesFor(format);
+        MergeResult result = merger.merge(  
+import org.opensearch.common.annotation.ExperimentalApi;
+            for (DataFormat secondary : plan.secondaryFormats()) {  
+import java.io.IOException;
+    }
+                            "Row count mismatch after merge: primary format ["  
+                                + "] has "
+        return new MergeResult(merged, mapping);
+            FormatMergeResult primaryResult = mergeFormat(plan, plan.primaryFormat(), null);
+            completed.forEach(FormatMergeResult::cleanup);
+ *  
+                                + " rows but secondary format ["
+    public MergeResult execute(MergePlan plan) {
+            RowIdMapping mapping = plan.hasSecondaries()
+                    );
+        } catch (Exception e) {
+                        );  
+            if (e instanceof RuntimeException re) throw re;  
+                completed.add(secondaryResult);  
+ *
+        }
+        return new FormatMergeResult(format, result.getMergedWriterFileSetForDataformat(format), result.rowIdMapping().orElse(null));
+ * SPDX-License-Identifier: Apache-2.0
+                    throw new IllegalStateException(
+                if (primaryResult.mergedFiles() != null && secondaryResult.mergedFiles() != null) {
+import java.util.HashMap;
+        for (WriterFileSet wfs : files) {  
+}  
+        try {  
+public class CompositeMergeExecutor {
+                                + secondary.name()
+import java.util.Map;  
+/**
+        this.mergers = Map.copyOf(mergers);  
+ * Executes a composite merge: primary format first, then secondaries using the  
+                                + secondaryRows
+ */
+        return mergers.get(format);
+        List<Segment> segments = new ArrayList<>();
+     *  
+ * {@link MergePlan} and the merger map.
+        List<FormatMergeResult> completed = new ArrayList<>();
+            MergeInput.builder()
+                    if (primaryRows != secondaryRows) {
+    }  
+    }  
+    public Merger getMerger(DataFormat format) {  
+    /**
+        }
+                        "Primary format ["
+        );
+        Merger merger = mergers.get(format);  
+                    long secondaryRows = secondaryResult.mergedFiles().numRows();  
+@ExperimentalApi  
+import org.opensearch.index.engine.dataformat.MergeResult;
+            }
+import org.opensearch.index.engine.dataformat.DataFormat;
+                // Verify secondary merged row count matches primary  
+        for (FormatMergeResult r : results) {
+                                + "] has "  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.composite.merge;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.MergeInput;  
-import org.opensearch.index.engine.dataformat.MergeResult;
-import org.opensearch.index.engine.dataformat.Merger;
-import org.opensearch.index.engine.dataformat.RowIdMapping;  
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.WriterFileSet;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Executes a composite merge: primary format first, then secondaries using the  
- * row-ID mapping from the primary. Stateless — all state comes from the
- * {@link MergePlan} and the merger map.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class CompositeMergeExecutor {
-
-    private final Map<DataFormat, Merger> mergers;  
-
-    public CompositeMergeExecutor(Map<DataFormat, Merger> mergers) {
-        this.mergers = Map.copyOf(mergers);  
-    }
-
-    /**  
      * Returns the merger registered for the given data format, or {@code null} if absent.
-     */
-    public Merger getMerger(DataFormat format) {  
-        return mergers.get(format);
-    }
-
-    /**
-     * Executes the merge described by the plan.
-     *  
-     * @param plan the pre-validated merge plan
-     * @return the combined merge result across all formats
-     */  
-    public MergeResult execute(MergePlan plan) {
-        List<FormatMergeResult> completed = new ArrayList<>();
-        try {  
-            FormatMergeResult primaryResult = mergeFormat(plan, plan.primaryFormat(), null);
-            completed.add(primaryResult);
-
-            RowIdMapping mapping = plan.hasSecondaries()
-                ? primaryResult.rowIdMappingOpt()
-                    .orElseThrow(() -> new IllegalStateException("Primary merge did not produce row-ID mapping required by secondaries"))  
-                : null;
-
-            for (DataFormat secondary : plan.secondaryFormats()) {  
-                FormatMergeResult secondaryResult = mergeFormat(plan, secondary, mapping);
-                // Verify secondary produced output when primary did
-                if (primaryResult.mergedFiles() != null && secondaryResult.mergedFiles() == null) {  
-                    throw new IllegalStateException(
-                        "Primary format ["
-                            + plan.primaryFormat().name()  
-                            + "] produced merged output but secondary format ["
-                            + secondary.name()
-                            + "] returned null — possible concurrent merge consumed segments"  
-                    );
-                }
-                // Verify secondary merged row count matches primary  
-                if (primaryResult.mergedFiles() != null && secondaryResult.mergedFiles() != null) {
-                    long primaryRows = primaryResult.mergedFiles().numRows();
-                    long secondaryRows = secondaryResult.mergedFiles().numRows();  
-                    if (primaryRows != secondaryRows) {
-                        throw new IllegalStateException(
-                            "Row count mismatch after merge: primary format ["  
                                 + plan.primaryFormat().name()
-                                + "] has "
-                                + primaryRows  
-                                + " rows but secondary format ["
-                                + secondary.name()
-                                + "] has "  
-                                + secondaryRows
-                                + " rows"
-                        );  
-                    }
-                }
-                completed.add(secondaryResult);  
-            }
-
-            return toMergeResult(completed, mapping);  
-        } catch (Exception e) {
-            completed.forEach(FormatMergeResult::cleanup);
-            if (e instanceof RuntimeException re) throw re;  
-            throw new UncheckedIOException((IOException) e);
-        }
-    }  
-
-    private FormatMergeResult mergeFormat(MergePlan plan, DataFormat format, RowIdMapping mapping) throws IOException {
-        Merger merger = mergers.get(format);  
-        List<WriterFileSet> files = plan.filesFor(format);
-        List<Segment> segments = new ArrayList<>();
-        for (WriterFileSet wfs : files) {  
-            segments.add(Segment.builder(wfs.writerGeneration()).addSearchableFiles(format, wfs).build());
-        }
-        MergeResult result = merger.merge(  
-            MergeInput.builder()
-                .segments(segments)
-                .rowIdMapping(mapping)  
-                .newWriterGeneration(plan.mergedWriterGeneration())
-                .liveDocs(plan.liveDocs())
-                .build()  
-        );
-        return new FormatMergeResult(format, result.getMergedWriterFileSetForDataformat(format), result.rowIdMapping().orElse(null));
-    }  
-
-    private static MergeResult toMergeResult(List<FormatMergeResult> results, RowIdMapping mapping) {
-        Map<DataFormat, WriterFileSet> merged = new HashMap<>();  
-        for (FormatMergeResult r : results) {
+                            + "] produced merged output but secondary format ["
+                FormatMergeResult secondaryResult = mergeFormat(plan, secondary, mapping);
+     */  
+     * @return the combined merge result across all formats
+                if (primaryResult.mergedFiles() != null && secondaryResult.mergedFiles() == null) {  
             merged.put(r.format(), r.mergedFiles());
-        }  
-        return new MergeResult(merged, mapping);
-    }
-}  
+     * @param plan the pre-validated merge plan
+    private static MergeResult toMergeResult(List<FormatMergeResult> results, RowIdMapping mapping) {
+import org.opensearch.index.engine.exec.WriterFileSet;
+                // Verify secondary produced output when primary did
+    private final Map<DataFormat, Merger> mergers;  
+                .newWriterGeneration(plan.mergedWriterGeneration())
+                : null;
+package org.opensearch.composite.merge;
+                }
+                .build()  
+    /**  
+ * row-ID mapping from the primary. Stateless — all state comes from the
+import org.opensearch.index.engine.exec.Segment;
+                .rowIdMapping(mapping)  

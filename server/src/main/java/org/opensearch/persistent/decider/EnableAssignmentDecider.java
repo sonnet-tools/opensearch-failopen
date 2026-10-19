@@ -1,123 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.persistent.decider;
-
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-
-import java.util.Locale;
-
-import static org.opensearch.common.settings.Setting.Property.Dynamic;  
-import static org.opensearch.common.settings.Setting.Property.NodeScope;
-
-/**  
- * {@link EnableAssignmentDecider} is used to allow/disallow the persistent tasks
  * to be assigned to cluster nodes.
- * <p>  
- * Allocation settings can have the following values (non-casesensitive):
- * <ul>
- *     <li> <code>NONE</code> - no persistent tasks can be assigned  
- *     <li> <code>ALL</code> - all persistent tasks can be assigned to nodes
- * </ul>
- *  
- * @see Allocation
- *
- * @opensearch.internal  
- */
-public class EnableAssignmentDecider {
-
-    public static final Setting<Allocation> CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING = new Setting<>(
-        "cluster.persistent_tasks.allocation.enable",
-        Allocation.ALL.toString(),  
-        Allocation::fromString,
-        Dynamic,
-        NodeScope  
-    );
-    public static final String ALLOCATION_NONE_EXPLANATION = "no persistent task assignments are allowed due to cluster settings";
-
-    private volatile Allocation enableAssignment;
-
-    public EnableAssignmentDecider(final Settings settings, final ClusterSettings clusterSettings) {  
-        this.enableAssignment = CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING, this::setEnableAssignment);
-    }  
-
-    public void setEnableAssignment(final Allocation enableAssignment) {
-        this.enableAssignment = enableAssignment;  
-    }
-
-    /**  
-     * Returns a {@link AssignmentDecision} whether the given persistent task can be assigned
-     * to a node of the cluster. The decision depends on the current value of the setting
-     * {@link EnableAssignmentDecider#CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING}.  
-     *
      * @return the {@link AssignmentDecision}
-     */  
-    public AssignmentDecision canAssign() {
-        if (enableAssignment == Allocation.NONE) {
-            return new AssignmentDecision(AssignmentDecision.Type.NO, ALLOCATION_NONE_EXPLANATION);  
-        }
-        return AssignmentDecision.YES;
+ * KIND, either express or implied.  See the License for the
+        this.enableAssignment = CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING.get(settings);
+ * @opensearch.internal  
+     * to a node of the cluster. The decision depends on the current value of the setting
+ *  
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.persistent.decider;
     }  
-
+ * <ul>
+ * <p>  
+ * specific language governing permissions and limitations
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public AssignmentDecision canAssign() {
     /**
-     * Allocation values or rather their string representation to be used used with  
-     * {@link EnableAssignmentDecider#CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING}
-     * via cluster settings.
-     */  
-    public enum Allocation {
-
-        NONE,  
-        ALL;
-
-        public static Allocation fromString(final String strValue) {  
+    public static final String ALLOCATION_NONE_EXPLANATION = "no persistent task assignments are allowed due to cluster settings";
+    }  
+            }  
             if (strValue == null) {
-                return null;
-            } else {  
-                String value = strValue.toUpperCase(Locale.ROOT);
-                try {
+        }
+/*  
+ */  
+ * license agreements. See the NOTICE file distributed with
+ * the Apache License, Version 2.0 (the "License"); you may
                     return valueOf(value);  
                 } catch (IllegalArgumentException e) {
-                    throw new IllegalArgumentException(
-                        "Illegal value [" + value + "] for [" + CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING.getKey() + "]"  
-                    );
-                }
-            }  
-        }
-
-        @Override  
-        public String toString() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+        Allocation::fromString,
+            return new AssignmentDecision(AssignmentDecision.Type.NO, ALLOCATION_NONE_EXPLANATION);  
+/*
+     */  
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING, this::setEnableAssignment);
             return name().toLowerCase(Locale.ROOT);
-        }  
+ * Modifications Copyright OpenSearch Contributors. See  
+    public void setEnableAssignment(final Allocation enableAssignment) {
+     * Returns a {@link AssignmentDecision} whether the given persistent task can be assigned
+     * {@link EnableAssignmentDecider#CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING}
     }
+ *
+ * this file be licensed under the Apache-2.0 license or a
+                    throw new IllegalArgumentException(
+        }
+import java.util.Locale;
+    public EnableAssignmentDecider(final Settings settings, final ClusterSettings clusterSettings) {  
+import org.opensearch.common.settings.Settings;
+        if (enableAssignment == Allocation.NONE) {
 }
+ * software distributed under the License is distributed on an
+    }
+/*
+     * Allocation values or rather their string representation to be used used with  
+import org.opensearch.common.settings.Setting;
+ * ownership. Elasticsearch licenses this file to you under  
+ * </ul>
+ * @see Allocation
+/**  
+        public static Allocation fromString(final String strValue) {  
+ *
+        ALL;
+ * Licensed to Elasticsearch under one or more contributor  
+        public String toString() {
+ * SPDX-License-Identifier: Apache-2.0
+        "cluster.persistent_tasks.allocation.enable",
+            } else {  
+        return AssignmentDecision.YES;
+     */  
+        }  
+ * Unless required by applicable law or agreed to in writing,
+     *
+                }
+ *
+import org.opensearch.common.settings.ClusterSettings;  
+ *     <li> <code>NONE</code> - no persistent tasks can be assigned  
+ */
+ * under the License.  
+        NodeScope  
+import static org.opensearch.common.settings.Setting.Property.NodeScope;
+ *  
+                try {
+        NONE,  
+ */
+     * {@link EnableAssignmentDecider#CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING}.  
+                return null;
+                String value = strValue.toUpperCase(Locale.ROOT);
+public class EnableAssignmentDecider {
+        this.enableAssignment = enableAssignment;  
+ * GitHub history for details.
+import static org.opensearch.common.settings.Setting.Property.Dynamic;  
+ * Allocation settings can have the following values (non-casesensitive):
+        Allocation.ALL.toString(),  
+ * You may obtain a copy of the License at  
+ * not use this file except in compliance with the License.
+    /**  
+        Dynamic,
+        @Override  
+    public static final Setting<Allocation> CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING = new Setting<>(
+                    );
+ */
+    );
+ * compatible open source license.
+                        "Illegal value [" + value + "] for [" + CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING.getKey() + "]"  
+    public enum Allocation {
+    private volatile Allocation enableAssignment;
+ * {@link EnableAssignmentDecider} is used to allow/disallow the persistent tasks
+     * via cluster settings.
+ *     <li> <code>ALL</code> - all persistent tasks can be assigned to nodes

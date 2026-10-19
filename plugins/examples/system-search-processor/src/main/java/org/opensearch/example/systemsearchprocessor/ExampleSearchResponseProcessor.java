@@ -1,197 +1,173 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.example.systemsearchprocessor;
-
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchResponseSections;  
-import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.search.SearchHit;  
-import org.opensearch.search.SearchHits;
+        if (originalQuerySize > allHits.length) {
+    }
+            searchResponse.getPhaseTook(),  
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.Processor;  
-import org.opensearch.search.pipeline.ProcessorConflictEvaluationContext;
-import org.opensearch.search.pipeline.ProcessorGenerationContext;
-import org.opensearch.search.pipeline.SearchResponseProcessor;  
-import org.opensearch.search.pipeline.SystemGeneratedProcessor;
-import org.opensearch.search.profile.SearchProfileShardResults;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.example.systemsearchprocessor.ExampleSearchRequestPreProcessor.ORIGINAL_QUERY_SIZE_KEY;
-
-/**  
- * An example system generated search response processor that will be executed before the user defined processor
- */
-public class ExampleSearchResponseProcessor implements SearchResponseProcessor, SystemGeneratedProcessor {  
-    /**
-     * type of the processor
-     */  
-    public static final String TYPE = "example-search-response-processor";
-    private static final String DESCRIPTION = "This is a system generated search response processor which will be"
-        + "executed before the user defined search request. It will truncate the hits in the response.";  
-    private static final String TRIGGER_FIELD = "trigger_field";
-    private static final String CONFLICT_PROCESSOR_TYPE = "truncate_hits";
-    private final String tag;  
-    private final boolean ignoreFailure;
-
-    /**  
-     * ExampleSearchResponseProcessor constructor
-     * @param tag tag of the processor
-     * @param ignoreFailure should processor ignore the failure  
-     */
-    public ExampleSearchResponseProcessor(String tag, boolean ignoreFailure) {
-        this.tag = tag;  
-        this.ignoreFailure = ignoreFailure;
-    }
-
-    @Override
-    public SearchResponse processResponse(SearchRequest request, SearchResponse response) throws Exception {
-        throw new UnsupportedOperationException(  
-            String.format(Locale.ROOT, " [%s] should process the search response with PipelineProcessingContext.", TYPE)
-        );
-    }  
-
-    @Override
-    public SearchResponse processResponse(SearchRequest request, SearchResponse searchResponse, PipelineProcessingContext requestContext)  
-        throws Exception {
-        long startTimeNanos = System.nanoTime();
-        Object originalQuerySizeObj = requestContext.getAttribute(ORIGINAL_QUERY_SIZE_KEY);  
-        int originalQuerySize = originalQuerySizeObj == null ? 1 : Integer.parseInt(originalQuerySizeObj.toString());
-
-        // Select subset of hits  
-        SearchHit[] allHits = searchResponse.getHits().getHits();
-        if (originalQuerySize > allHits.length) {
-            return searchResponse;  
-        }
-
-        List<SearchHit> selected = Arrays.asList(Arrays.copyOf(allHits, originalQuerySize));  
-
-        // Build new SearchHits
-        final SearchHits newHits = new SearchHits(  
-            selected.toArray(new SearchHit[0]),
-            searchResponse.getHits().getTotalHits(),
-            searchResponse.getHits().getMaxScore(),  
-            searchResponse.getHits().getSortFields(),
-            searchResponse.getHits().getCollapseField(),
             searchResponse.getHits().getCollapseValues()  
-        );
-
-        // Build new SearchResponseSections  
-        final SearchResponseSections newSections = new SearchResponseSections(
-            newHits,
-            searchResponse.getAggregations(),  
-            searchResponse.getSuggest(),
-            searchResponse.isTimedOut(),
+    public ExecutionStage getExecutionStage() {
+            );  
+            searchResponse.getClusters(),
+import org.opensearch.search.SearchHit;  
+            PipelineContext pipelineContext
+                    TYPE,  
+            SearchRequest searchRequest = context.searchRequest();
+    }
+import static org.opensearch.example.systemsearchprocessor.ExampleSearchRequestPreProcessor.ORIGINAL_QUERY_SIZE_KEY;
+        if (hasTruncateHitsProcessor) {
+    }
+        return this.tag;
+     * @param tag tag of the processor
+    @Override
+            String.format(Locale.ROOT, " [%s] should process the search response with PipelineProcessingContext.", TYPE)
             searchResponse.isTerminatedEarly(),  
-            new SearchProfileShardResults(searchResponse.getProfileResults()),
-            searchResponse.getNumReducePhases(),
-            searchResponse.getInternalResponse().getSearchExtBuilders()  
-        );
-
-        // Adjust timing  
-        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNanos);
+        public static final String TYPE = "example-search-response-processor-factory";
+                    CONFLICT_PROCESSOR_TYPE,
+            boolean ignoreFailure,  
+        final SearchHits newHits = new SearchHits(  
+        Object originalQuerySizeObj = requestContext.getAttribute(ORIGINAL_QUERY_SIZE_KEY);  
+            Map<String, Object> config,
+            return new ExampleSearchResponseProcessor(tag, ignoreFailure);
+                )
+    private static final String CONFLICT_PROCESSOR_TYPE = "truncate_hits";
+            searchResponse.getAggregations(),  
+     */
+        @Override
         long newTookMillis = searchResponse.getTook().millis() + elapsedMillis;
-
+        public SearchResponseProcessor create(
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+    }
+}
+    private final String tag;  
+            QueryBuilder queryBuilder = searchRequest.source().query();
+            String description,
+import org.opensearch.search.SearchHits;
+import org.opensearch.index.query.MatchQueryBuilder;
+            searchResponse.getSuccessfulShards(),  
+import java.util.concurrent.TimeUnit;
+        this.ignoreFailure = ignoreFailure;
+            searchResponse.getTotalShards(),
+            searchResponse.getScrollId(),
+        );
+        );
+        // auto generate the processor if we do match query against the trigger_field
+    private static final String DESCRIPTION = "This is a system generated search response processor which will be"
+    /**
+    }  
+            searchResponse.getHits().getMaxScore(),  
+        }
+        return TYPE;  
+            }  
+    @Override
+            searchResponse.isTimedOut(),
+    public String getType() {
+        return DESCRIPTION;
+    public String getDescription() {  
+        throws Exception {
+            selected.toArray(new SearchHit[0]),
+            new SearchProfileShardResults(searchResponse.getProfileResults()),
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
+            String tag,
+                return false;  
+    }  
+import org.opensearch.action.search.SearchResponseSections;  
+            .anyMatch(processor -> CONFLICT_PROCESSOR_TYPE.equals(processor.getType()));  
+    /**  
+import java.util.Map;
+            return false;
+ * this file be licensed under the Apache-2.0 license or a
+        boolean hasTruncateHitsProcessor = context.getUserDefinedSearchResponseProcessors()
+    public void evaluateConflicts(ProcessorConflictEvaluationContext context) throws IllegalArgumentException {  
+    }
+        throw new UnsupportedOperationException(  
+            searchResponse.getSkippedShards(),
+    public static final String TYPE = "example-search-response-processor";
+        }
+/**  
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNanos);
+    }
+            .stream()
+import org.opensearch.search.pipeline.SearchResponseProcessor;  
+    static class Factory implements SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor> {
+        int originalQuerySize = originalQuerySizeObj == null ? 1 : Integer.parseInt(originalQuerySizeObj.toString());
+import org.opensearch.search.pipeline.ProcessorGenerationContext;
+        + "executed before the user defined search request. It will truncate the hits in the response.";  
+import org.opensearch.search.profile.SearchProfileShardResults;
+            newTookMillis,
+/*  
+    private final boolean ignoreFailure;
+        );
+            searchResponse.getHits().getCollapseField(),
+ */  
+package org.opensearch.example.systemsearchprocessor;
+                    Locale.ROOT,
+            searchResponse.getNumReducePhases(),
+        // Build new SearchResponseSections  
+    public String getTag() {
+            return searchResponse;  
+    public SearchResponse processResponse(SearchRequest request, SearchResponse searchResponse, PipelineProcessingContext requestContext)  
+                    TRIGGER_FIELD
+import org.opensearch.action.search.SearchResponse;
+     */  
+    private static final String TRIGGER_FIELD = "trigger_field";
+    public ExampleSearchResponseProcessor(String tag, boolean ignoreFailure) {
+        // Adjust timing  
+import java.util.Arrays;
+        return ignoreFailure;  
+                    "The [%s] processor cannot be used in a search pipeline because it conflicts with the [%s] processor, "  
+import org.opensearch.index.query.QueryBuilder;
+            searchResponse.getHits().getSortFields(),
+            newSections,  
+    }  
+import org.opensearch.search.pipeline.ProcessorConflictEvaluationContext;
+            searchResponse.pointInTimeId()  
+        SearchHit[] allHits = searchResponse.getHits().getHits();
+            newHits,
+                        + "which is automatically generated when executing a match query against [%s].",
+                String.format(
+     * @param ignoreFailure should processor ignore the failure  
+ *
+        // Select subset of hits  
+    }  
+        final SearchResponseSections newSections = new SearchResponseSections(
+            throw new IllegalArgumentException(  
+        List<SearchHit> selected = Arrays.asList(Arrays.copyOf(allHits, originalQuerySize));  
+    @Override  
+        // Build new SearchHits
+        @Override
+            }
         // Build final SearchResponse
         return new SearchResponse(
-            newSections,  
-            searchResponse.getScrollId(),
-            searchResponse.getTotalShards(),
-            searchResponse.getSuccessfulShards(),  
-            searchResponse.getSkippedShards(),
-            newTookMillis,
-            searchResponse.getPhaseTook(),  
-            searchResponse.getShardFailures(),
-            searchResponse.getClusters(),
-            searchResponse.pointInTimeId()  
-        );
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;  
-    }
-
-    @Override  
-    public String getTag() {
-        return this.tag;
-    }  
-
-    @Override
-    public String getDescription() {  
-        return DESCRIPTION;
-    }
-
-    @Override
-    public boolean isIgnoreFailure() {
-        return ignoreFailure;  
-    }
-
-    @Override  
-    public ExecutionStage getExecutionStage() {
-        return ExecutionStage.PRE_USER_DEFINED;
-    }  
-
-    @Override
-    public void evaluateConflicts(ProcessorConflictEvaluationContext context) throws IllegalArgumentException {  
-        boolean hasTruncateHitsProcessor = context.getUserDefinedSearchResponseProcessors()
-            .stream()
-            .anyMatch(processor -> CONFLICT_PROCESSOR_TYPE.equals(processor.getType()));  
-
-        if (hasTruncateHitsProcessor) {
-            throw new IllegalArgumentException(  
-                String.format(
-                    Locale.ROOT,
-                    "The [%s] processor cannot be used in a search pipeline because it conflicts with the [%s] processor, "  
-                        + "which is automatically generated when executing a match query against [%s].",
-                    CONFLICT_PROCESSOR_TYPE,
-                    TYPE,  
-                    TRIGGER_FIELD
-                )
-            );  
-        }
-    }
-
-    static class Factory implements SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor> {
-        public static final String TYPE = "example-search-response-processor-factory";
-
-        // auto generate the processor if we do match query against the trigger_field
-        @Override
-        public boolean shouldGenerate(ProcessorGenerationContext context) {  
-            SearchRequest searchRequest = context.searchRequest();
-            if (searchRequest == null || searchRequest.source() == null || searchRequest.source().query() == null) {
-                return false;  
-            }
-            QueryBuilder queryBuilder = searchRequest.source().query();
-            if (queryBuilder instanceof MatchQueryBuilder matchQueryBuilder) {  
-                String fieldName = matchQueryBuilder.fieldName();
-                return TRIGGER_FIELD.equals(fieldName);
-            }  
-            return false;
-        }
-
-        @Override
-        public SearchResponseProcessor create(
-            Map<String, Processor.Factory<SearchResponseProcessor>> processorFactories,  
-            String tag,
-            String description,
-            boolean ignoreFailure,  
-            Map<String, Object> config,
-            PipelineContext pipelineContext
         ) throws Exception {  
-            return new ExampleSearchResponseProcessor(tag, ignoreFailure);
+                return TRIGGER_FIELD.equals(fieldName);
+import java.util.List;
+ */
         }
-    }  
-}
+            searchResponse.getHits().getTotalHits(),
+    @Override  
+        long startTimeNanos = System.nanoTime();
+            searchResponse.getInternalResponse().getSearchExtBuilders()  
+import org.opensearch.action.search.SearchRequest;
+    public boolean isIgnoreFailure() {
+            searchResponse.getShardFailures(),
+     * ExampleSearchResponseProcessor constructor
+ * SPDX-License-Identifier: Apache-2.0
+        );
+import java.util.Locale;  
+            Map<String, Processor.Factory<SearchResponseProcessor>> processorFactories,  
+        this.tag = tag;  
+        public boolean shouldGenerate(ProcessorGenerationContext context) {  
+     * type of the processor
+    @Override
+    @Override
+            if (searchRequest == null || searchRequest.source() == null || searchRequest.source().query() == null) {
+                String fieldName = matchQueryBuilder.fieldName();
+public class ExampleSearchResponseProcessor implements SearchResponseProcessor, SystemGeneratedProcessor {  
+ * compatible open source license.
+            searchResponse.getSuggest(),
+    @Override
+        }
+ * An example system generated search response processor that will be executed before the user defined processor
+            if (queryBuilder instanceof MatchQueryBuilder matchQueryBuilder) {  
+        return ExecutionStage.PRE_USER_DEFINED;
+    public SearchResponse processResponse(SearchRequest request, SearchResponse response) throws Exception {

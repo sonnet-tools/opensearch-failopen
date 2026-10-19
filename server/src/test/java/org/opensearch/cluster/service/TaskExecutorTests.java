@@ -1,380 +1,320 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.service;
-
-import org.opensearch.cluster.ClusterStateTaskConfig;  
-import org.opensearch.cluster.metadata.ProcessClusterEventTimeoutException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.Priority;  
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.common.util.concurrent.PrioritizedOpenSearchThreadPoolExecutor;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;  
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;  
-
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.opensearch.common.util.concurrent.OpenSearchExecutors.daemonThreadFactory;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.core.Is.is;
-
-public class TaskExecutorTests extends OpenSearchTestCase {
-
-    protected static ThreadPool threadPool;  
-    protected PrioritizedOpenSearchThreadPoolExecutor threadExecutor;
-
-    @BeforeClass  
-    public static void createThreadPool() {
-        threadPool = new TestThreadPool(getTestClass().getName());
-    }  
-
-    @AfterClass
-    public static void stopThreadPool() {  
-        if (threadPool != null) {
-            threadPool.shutdownNow();
             threadPool = null;  
-        }
-    }
-
-    @Before
-    public void setUpExecutor() {
-        threadExecutor = OpenSearchExecutors.newSinglePrioritizing(  
-            getClass().getName() + "/" + getTestName(),
-            daemonThreadFactory(Settings.EMPTY, "test_thread"),
-            threadPool.getThreadContext(),  
-            threadPool.scheduler()
-        );
-    }  
-
-    @After
-    public void shutDownThreadExecutor() {  
-        ThreadPool.terminate(threadExecutor, 10, TimeUnit.SECONDS);
-    }
-
-    protected interface TestListener {
-        void onFailure(String source, Exception e);
-
-        default void processed(String source) {
-            // do nothing by default
-        }  
-    }
-
-    protected interface TestExecutor<T> {  
-        void execute(List<T> tasks);
-
-        default String describeTasks(List<T> tasks) {  
-            return tasks.stream().map(T::toString).reduce((s1, s2) -> {
-                if (s1.isEmpty()) {
-                    return s2;  
-                } else if (s2.isEmpty()) {
-                    return s1;
-                } else {  
-                    return s1 + ", " + s2;
-                }
-            }).orElse("");  
-        }
-    }
-
-    /**
-     * Task class that works for single tasks as well as batching (see {@link TaskBatcherTests})
-     */  
-    protected abstract static class TestTask implements TestExecutor<TestTask>, TestListener, ClusterStateTaskConfig {
-
-        @Override  
-        public void execute(List<TestTask> tasks) {
-            tasks.forEach(TestTask::run);
-        }  
-
-        @Nullable
-        @Override  
-        public TimeValue timeout() {
-            return null;
-        }  
-
-        @Override
-        public Priority priority() {  
-            return Priority.NORMAL;
-        }
-
-        public abstract void run();
-    }
-
-    class UpdateTask extends SourcePrioritizedRunnable {
-        final TestTask testTask;
-
-        UpdateTask(String source, TestTask testTask) {
-            super(testTask.priority(), source);
-            this.testTask = testTask;  
-        }
-
-        @Override  
-        public void run() {
-            logger.trace("will process {}", source);
-            testTask.execute(Collections.singletonList(testTask));  
-            testTask.processed(source);
-        }
-    }  
-
-    // can be overridden by TaskBatcherTests
+                    throw new RuntimeException(e);
     protected void submitTask(String source, TestTask testTask) {  
-        SourcePrioritizedRunnable task = new UpdateTask(source, testTask);
-        TimeValue timeout = testTask.timeout();
-        if (timeout != null) {  
-            threadExecutor.execute(task, timeout, () -> threadPool.generic().execute(() -> {
-                logger.debug("task [{}] timed out after [{}]", task, timeout);
-                testTask.onFailure(source, new ProcessClusterEventTimeoutException(timeout, source));  
-            }));
-        } else {
-            threadExecutor.execute(task);  
-        }
-    }
-
-    public void testTimedOutTaskCleanedUp() throws Exception {
-        final CountDownLatch block = new CountDownLatch(1);
-        final CountDownLatch blockCompleted = new CountDownLatch(1);  
-        TestTask blockTask = new TestTask() {
-
-            @Override  
-            public void run() {
-                try {
-                    block.await();  
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }  
-                blockCompleted.countDown();
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                throw new RuntimeException(e);  
-            }
-        };
-        submitTask("block-task", blockTask);  
-
-        final CountDownLatch block2 = new CountDownLatch(1);
-        TestTask unblockTask = new TestTask() {  
-
-            @Override
-            public void run() {  
-                block2.countDown();
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                block2.countDown();  
-            }
-
-            @Override  
-            public TimeValue timeout() {
-                return TimeValue.ZERO;
-            }  
-        };
-        submitTask("unblock-task", unblockTask);
-
-        block.countDown();
-        block2.await();
-        blockCompleted.await();  
-    }
-
-    public void testTimeoutTask() throws Exception {  
-        final CountDownLatch block = new CountDownLatch(1);
-        TestTask test1 = new TestTask() {
-            @Override  
-            public void run() {
-                try {
-                    block.await();  
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }  
-            }
-
-            @Override  
-            public void onFailure(String source, Exception e) {
-                throw new RuntimeException(e);
-            }  
-        };
-        submitTask("block-task", test1);
-
-        final CountDownLatch timedOut = new CountDownLatch(1);
-        final AtomicBoolean executeCalled = new AtomicBoolean();
-        TestTask test2 = new TestTask() {  
-
-            @Override
-            public TimeValue timeout() {  
-                return TimeValue.timeValueMillis(2);
-            }
-
-            @Override
-            public void run() {
-                executeCalled.set(true);  
-            }
-
-            @Override  
-            public void onFailure(String source, Exception e) {
-                timedOut.countDown();
-            }  
-        };
         submitTask("block-task", test2);
-
-        timedOut.await();
-        block.countDown();
-        final CountDownLatch allProcessed = new CountDownLatch(1);  
-        TestTask test3 = new TestTask() {
-
-            @Override  
-            public void run() {
-                allProcessed.countDown();
-            }  
-
-            @Override
-            public void onFailure(String source, Exception e) {  
-                throw new RuntimeException(e);
-            }
-        };  
-        submitTask("block-task", test3);
-        allProcessed.await(); // executed another task to double check that execute on the timed out update task is not called...
-        assertThat(executeCalled.get(), equalTo(false));  
-    }
-
-    static class TaskExecutor implements TestExecutor<Integer> {  
-        List<Integer> tasks = new ArrayList<>();
-
-        @Override  
-        public void execute(List<Integer> tasks) {
-            this.tasks.addAll(tasks);
-        }  
-    }
-
-    /**  
-     * Note, this test can only work as long as we have a single thread executor executing the state update tasks!
-     */
-    public void testPrioritizedTasks() throws Exception {  
-        BlockingTask block = new BlockingTask(Priority.IMMEDIATE);
-        submitTask("test", block);
-        int taskCount = randomIntBetween(5, 20);  
-
-        // will hold all the tasks in the order in which they were executed
-        List<PrioritizedTask> tasks = new ArrayList<>(taskCount);  
-        CountDownLatch latch = new CountDownLatch(taskCount);
-        for (int i = 0; i < taskCount; i++) {
-            Priority priority = randomFrom(Priority.values());  
-            PrioritizedTask task = new PrioritizedTask(priority, latch, tasks);
-            submitTask("test", task);
-        }  
-
-        block.close();
-        latch.await();  
-
-        Priority prevPriority = null;
-        for (PrioritizedTask task : tasks) {  
-            if (prevPriority == null) {
-                prevPriority = task.priority();
-            } else {  
-                assertThat(task.priority().sameOrAfter(prevPriority), is(true));
-            }
-        }  
-    }
-
-    protected static class BlockingTask extends TestTask implements Releasable {  
-        private final CountDownLatch latch = new CountDownLatch(1);
-        private final Priority priority;
-
-        BlockingTask(Priority priority) {
-            super();
-            this.priority = priority;  
-        }
-
-        @Override  
-        public void run() {
-            try {
-                latch.await();  
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }  
-        }
-
-        @Override  
-        public void onFailure(String source, Exception e) {}
-
-        @Override  
-        public Priority priority() {
-            return priority;
-        }  
-
-        public void close() {
-            latch.countDown();  
-        }
-
     }  
-
-    protected static class PrioritizedTask extends TestTask {
-        private final CountDownLatch latch;  
-        private final List<PrioritizedTask> tasks;
-        private final Priority priority;
-
-        private PrioritizedTask(Priority priority, CountDownLatch latch, List<PrioritizedTask> tasks) {
-            super();
-            this.latch = latch;  
-            this.tasks = tasks;
-            this.priority = priority;
-        }  
-
-        @Override
-        public void run() {  
-            tasks.add(this);
-            latch.countDown();
-        }  
-
-        @Override
-        public Priority priority() {  
-            return priority;
+        @Override  
+import org.junit.After;  
+        public void run() {
         }
-
+import java.util.concurrent.TimeUnit;  
+ * not use this file except in compliance with the License.
+            }
+    protected static class BlockingTask extends TestTask implements Releasable {  
+/*  
+            @Override  
+                    return s1 + ", " + s2;
+            } else {  
+    static class TaskExecutor implements TestExecutor<Integer> {  
+        CountDownLatch latch = new CountDownLatch(taskCount);
+     * Note, this test can only work as long as we have a single thread executor executing the state update tasks!
+        final CountDownLatch timedOut = new CountDownLatch(1);
+            }  
+            super(testTask.priority(), source);
+public class TaskExecutorTests extends OpenSearchTestCase {
+        private final List<PrioritizedTask> tasks;
         @Override
-        public void onFailure(String source, Exception e) {
+        private final CountDownLatch latch;  
+                try {
+            @Override  
+        TimeValue timeout = testTask.timeout();
+            @Override  
+ * You may obtain a copy of the License at  
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+            public void onFailure(String source, Exception e) {
+            this.latch = latch;  
+                blockCompleted.countDown();
+                throw new RuntimeException(e);
+    protected abstract static class TestTask implements TestExecutor<TestTask>, TestListener, ClusterStateTaskConfig {
+    @After
+        @Override
+            @Override  
+import org.opensearch.threadpool.TestThreadPool;
+                logger.debug("task [{}] timed out after [{}]", task, timeout);
+        private final CountDownLatch latch = new CountDownLatch(1);
+    }
+            testTask.execute(Collections.singletonList(testTask));  
+     */  
+        };  
+     * Task class that works for single tasks as well as batching (see {@link TaskBatcherTests})
+        }  
+        public void close() {
+            testTask.processed(source);
+        public void execute(List<TestTask> tasks) {
+        void onFailure(String source, Exception e);
+            return tasks.stream().map(T::toString).reduce((s1, s2) -> {
+            public void onFailure(String source, Exception e) {  
+        if (timeout != null) {  
+import org.opensearch.common.settings.Settings;
+            }
+     */
+    class UpdateTask extends SourcePrioritizedRunnable {
+    public void testPrioritizedTasks() throws Exception {  
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+            }
+            public void run() {
+/*
+                assertThat(task.priority().sameOrAfter(prevPriority), is(true));
+        UpdateTask(String source, TestTask testTask) {
+        public void run() {
+                }  
+        block.countDown();
+                block2.countDown();  
             latch.countDown();  
+ * Licensed to Elasticsearch under one or more contributor  
+            }
+                timedOut.countDown();
+        if (threadPool != null) {
+            @Override  
+        }  
+import org.opensearch.cluster.ClusterStateTaskConfig;  
+        @Nullable
+            threadExecutor.execute(task);  
+        }  
+        }
+            }
+        }  
+import java.util.concurrent.atomic.AtomicBoolean;
+        List<PrioritizedTask> tasks = new ArrayList<>(taskCount);  
+                return TimeValue.timeValueMillis(2);
+    // can be overridden by TaskBatcherTests
+                } else if (s2.isEmpty()) {
+            if (prevPriority == null) {
+        submitTask("block-task", test1);
+        };
+        }
+    /**
+    }  
+            @Override  
+import static org.opensearch.common.util.concurrent.OpenSearchExecutors.daemonThreadFactory;  
+    }
+        default void processed(String source) {
+import static org.hamcrest.core.Is.is;
+        @Override  
+            try {
         }
     }
-
+            }
+            public void onFailure(String source, Exception e) {
+        submitTask("block-task", blockTask);  
+        for (PrioritizedTask task : tasks) {  
+            }  
+        }  
+import org.opensearch.common.lease.Releasable;
+                try {
+            }));
+    public void testTimedOutTaskCleanedUp() throws Exception {
+                    return s1;
+import java.util.concurrent.CountDownLatch;
+        }
+                throw new RuntimeException(e);
+        latch.await();  
+            return Priority.NORMAL;
+import org.junit.Before;
+            @Override
+        default String describeTasks(List<T> tasks) {  
+import java.util.ArrayList;
+            latch.countDown();  
+        final CountDownLatch block = new CountDownLatch(1);
+        }
+                executeCalled.set(true);  
+import org.opensearch.test.OpenSearchTestCase;  
+            }  
+ */
+                } else {  
+            } catch (InterruptedException e) {
+                } catch (InterruptedException e) {
+                testTask.onFailure(source, new ProcessClusterEventTimeoutException(timeout, source));  
+import org.opensearch.common.Nullable;
+        }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        public TimeValue timeout() {
+ * GitHub history for details.
+        BlockingTask block = new BlockingTask(Priority.IMMEDIATE);
+            getClass().getName() + "/" + getTestName(),
+                }
+        }
+    }
+            threadPool.getThreadContext(),  
+            return priority;
+    protected PrioritizedOpenSearchThreadPoolExecutor threadExecutor;
+import java.util.Collections;  
+            }  
+        for (int i = 0; i < taskCount; i++) {
+ * this file be licensed under the Apache-2.0 license or a
+            tasks.add(this);
+        public Priority priority() {
+    protected interface TestListener {
+            @Override
+        submitTask("unblock-task", unblockTask);
+        };
+    protected interface TestExecutor<T> {  
+        final CountDownLatch block = new CountDownLatch(1);
+import org.opensearch.cluster.metadata.ProcessClusterEventTimeoutException;
+        @Override  
+ *
+            threadExecutor.execute(task, timeout, () -> threadPool.generic().execute(() -> {
+                return TimeValue.ZERO;
+            daemonThreadFactory(Settings.EMPTY, "test_thread"),
+                if (s1.isEmpty()) {
+import java.util.List;
+        final CountDownLatch blockCompleted = new CountDownLatch(1);  
+            this.priority = priority;  
+        submitTask("test", block);
+        // will hold all the tasks in the order in which they were executed
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.common.Priority;  
+            submitTask("test", task);
+            this.priority = priority;
+    protected static ThreadPool threadPool;  
+        }  
+            this.testTask = testTask;  
+import org.junit.BeforeClass;  
+    }  
+                block2.countDown();
+        final CountDownLatch allProcessed = new CountDownLatch(1);  
+        }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        public void onFailure(String source, Exception e) {}
+                    block.await();  
+            return null;
+        @Override  
+                }  
+ * Modifications Copyright OpenSearch Contributors. See  
+    public void setUpExecutor() {
+            @Override
+ *  
+            public void onFailure(String source, Exception e) {
+        };
+                throw new RuntimeException(e);
+        TestTask test3 = new TestTask() {
+        BlockingTask(Priority priority) {
+import org.opensearch.common.util.concurrent.PrioritizedOpenSearchThreadPoolExecutor;
+        private final Priority priority;
+            public void run() {
+        @Override
+                throw new RuntimeException(e);  
+            super();
+            PrioritizedTask task = new PrioritizedTask(priority, latch, tasks);
+ * The OpenSearch Contributors require contributions made to  
+ * Unless required by applicable law or agreed to in writing,
+/*
+import static org.hamcrest.Matchers.equalTo;
+ * compatible open source license.
+            }).orElse("");  
+        TestTask unblockTask = new TestTask() {  
+        );
+                    return s2;  
+        void execute(List<T> tasks);
+        } else {
+    }
+        }
+            public void run() {  
+        };
+    }
+        private PrioritizedTask(Priority priority, CountDownLatch latch, List<PrioritizedTask> tasks) {
+        TestTask test1 = new TestTask() {
+            threadPool.shutdownNow();
+            super();
+    @Before
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+        public Priority priority() {  
+import org.opensearch.common.unit.TimeValue;  
+        allProcessed.await(); // executed another task to double check that execute on the timed out update task is not called...
+        block.countDown();
+        @Override  
+            public void onFailure(String source, Exception e) {
+        int taskCount = randomIntBetween(5, 20);  
+            public void run() {
+ * software distributed under the License is distributed on an
+    }
+ */
+    }
+        List<Integer> tasks = new ArrayList<>();
+                    throw new RuntimeException(e);
+        public void onFailure(String source, Exception e) {
+    /**  
+            public TimeValue timeout() {
+        public void execute(List<Integer> tasks) {
+            @Override
+    @AfterClass
+import org.opensearch.threadpool.ThreadPool;
+            threadPool.scheduler()
 }
+    }
+            this.tasks.addAll(tasks);
+        final CountDownLatch block2 = new CountDownLatch(1);
+            logger.trace("will process {}", source);
+    @BeforeClass  
+        timedOut.await();
+            }  
+    }  
+ */  
+        @Override  
+package org.opensearch.cluster.service;
+            latch.countDown();
+                } catch (InterruptedException e) {
+        }
+            tasks.forEach(TestTask::run);
+        final AtomicBoolean executeCalled = new AtomicBoolean();
+                    block.await();  
+            }
+            @Override
+        @Override  
+            public TimeValue timeout() {  
+ *
+            }
+    public static void createThreadPool() {
+            this.tasks = tasks;
+ * ownership. Elasticsearch licenses this file to you under  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        public void run() {  
+        TestTask blockTask = new TestTask() {
+        assertThat(executeCalled.get(), equalTo(false));  
+ * KIND, either express or implied.  See the License for the
+        block2.await();
+        public abstract void run();
+                prevPriority = task.priority();
+            }
+        }  
+        SourcePrioritizedRunnable task = new UpdateTask(source, testTask);
+        public Priority priority() {  
+        TestTask test2 = new TestTask() {  
+        final TestTask testTask;
+        }  
+    public void testTimeoutTask() throws Exception {  
+            // do nothing by default
+        threadExecutor = OpenSearchExecutors.newSinglePrioritizing(  
+        Priority prevPriority = null;
+                latch.await();  
+            public void run() {
+            @Override
+    public static void stopThreadPool() {  
+        }  
+        private final Priority priority;
+        submitTask("block-task", test3);
+        block.close();
+    public void shutDownThreadExecutor() {  
+        blockCompleted.await();  
+        ThreadPool.terminate(threadExecutor, 10, TimeUnit.SECONDS);
+import org.junit.AfterClass;
+    }
+                allProcessed.countDown();
+        @Override
+            Priority priority = randomFrom(Priority.values());  
+    protected static class PrioritizedTask extends TestTask {
+        threadPool = new TestThreadPool(getTestClass().getName());
+            return priority;

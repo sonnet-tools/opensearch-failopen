@@ -1,153 +1,136 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client;
-
-import org.apache.hc.client5.http.classic.methods.HttpDelete;
-import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.classic.methods.HttpHead;  
-import org.apache.hc.client5.http.classic.methods.HttpPut;
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
-import org.opensearch.action.admin.cluster.settings.ClusterGetSettingsRequest;  
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.client.cluster.RemoteInfoRequest;  
-import org.opensearch.client.indices.ComponentTemplatesExistRequest;
-import org.opensearch.client.indices.DeleteComponentTemplateRequest;
-import org.opensearch.client.indices.GetComponentTemplatesRequest;  
-import org.opensearch.client.indices.PutComponentTemplateRequest;
-import org.opensearch.core.common.Strings;
-
-import java.io.IOException;
-
-final class ClusterRequestConverters {  
-
-    private ClusterRequestConverters() {}
-
-    static Request clusterPutSettings(ClusterUpdateSettingsRequest clusterUpdateSettingsRequest) throws IOException {
-        Request request = new Request(HttpPut.METHOD_NAME, "/_cluster/settings");
-
+        request.addParameters(params.asMap());
         RequestConverters.Params parameters = new RequestConverters.Params();
-        parameters.withTimeout(clusterUpdateSettingsRequest.timeout());
-        parameters.withClusterManagerTimeout(clusterUpdateSettingsRequest.clusterManagerNodeTimeout());  
-        request.addParameters(parameters.asMap());
-        request.setEntity(RequestConverters.createEntity(clusterUpdateSettingsRequest, RequestConverters.REQUEST_BODY_CONTENT_TYPE));
-        return request;  
-    }
-
-    static Request clusterGetSettings(ClusterGetSettingsRequest clusterGetSettingsRequest) throws IOException {  
-        Request request = new Request(HttpGet.METHOD_NAME, "/_cluster/settings");
-        RequestConverters.Params parameters = new RequestConverters.Params();
-        parameters.withLocal(clusterGetSettingsRequest.local());  
-        parameters.withIncludeDefaults(clusterGetSettingsRequest.includeDefaults());
-        parameters.withClusterManagerTimeout(clusterGetSettingsRequest.clusterManagerNodeTimeout());
-        request.addParameters(parameters.asMap());  
-        return request;
-    }
-
-    static Request clusterHealth(ClusterHealthRequest healthRequest) {
-        String[] indices = healthRequest.indices() == null ? Strings.EMPTY_ARRAY : healthRequest.indices();
-        String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_cluster/health")  
-            .addCommaSeparatedPathParts(indices)
-            .build();
-        Request request = new Request(HttpGet.METHOD_NAME, endpoint);  
-
-        RequestConverters.Params params = new RequestConverters.Params().withWaitForStatus(healthRequest.waitForStatus())
-            .withWaitForNoRelocatingShards(healthRequest.waitForNoRelocatingShards())  
-            .withWaitForNoInitializingShards(healthRequest.waitForNoInitializingShards())
-            .withWaitForActiveShards(healthRequest.waitForActiveShards(), ActiveShardCount.NONE)
-            .withWaitForNodes(healthRequest.waitForNodes())  
-            .withWaitForEvents(healthRequest.waitForEvents())
-            .withTimeout(healthRequest.timeout())
-            .withClusterManagerTimeout(healthRequest.clusterManagerNodeTimeout())  
-            .withLocal(healthRequest.local())
-            .withLevel(healthRequest.level());
-        request.addParameters(params.asMap());  
-        return request;
-    }
-
-    static Request remoteInfo(RemoteInfoRequest remoteInfoRequest) {
-        return new Request(HttpGet.METHOD_NAME, "/_remote/info");
-    }  
-
-    static Request putComponentTemplate(PutComponentTemplateRequest putComponentTemplateRequest) throws IOException {
-        String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template")  
-            .addPathPart(putComponentTemplateRequest.name())
-            .build();
-        Request request = new Request(HttpPut.METHOD_NAME, endpoint);  
-        RequestConverters.Params params = new RequestConverters.Params();
-        params.withClusterManagerTimeout(putComponentTemplateRequest.clusterManagerNodeTimeout());
-        if (putComponentTemplateRequest.create()) {  
-            params.putParam("create", Boolean.TRUE.toString());
-        }
-        if (Strings.hasText(putComponentTemplateRequest.cause())) {  
-            params.putParam("cause", putComponentTemplateRequest.cause());
-        }
-        request.addParameters(params.asMap());  
-        request.setEntity(RequestConverters.createEntity(putComponentTemplateRequest, RequestConverters.REQUEST_BODY_CONTENT_TYPE));
-        return request;
-    }  
-
-    static Request getComponentTemplates(GetComponentTemplatesRequest getComponentTemplatesRequest) {
-        final String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template")  
-            .addPathPart(getComponentTemplatesRequest.name())
-            .build();
-        final Request request = new Request(HttpGet.METHOD_NAME, endpoint);  
-        final RequestConverters.Params params = new RequestConverters.Params();
         params.withLocal(getComponentTemplatesRequest.isLocal());
-        params.withClusterManagerTimeout(getComponentTemplatesRequest.getClusterManagerNodeTimeout());  
-        request.addParameters(params.asMap());
-        return request;
+ * Modifications Copyright OpenSearch Contributors. See
+        RequestConverters.Params params = new RequestConverters.Params();
+import org.opensearch.client.cluster.RemoteInfoRequest;  
+import org.opensearch.client.indices.PutComponentTemplateRequest;
+        Request request = new Request(HttpGet.METHOD_NAME, "/_cluster/settings");
     }  
-
-    static Request componentTemplatesExist(ComponentTemplatesExistRequest componentTemplatesRequest) {
-        final String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template")  
-            .addPathPart(componentTemplatesRequest.name())
+        request.addParameters(parameters.asMap());
             .build();
-        final Request request = new Request(HttpHead.METHOD_NAME, endpoint);  
-        final RequestConverters.Params params = new RequestConverters.Params();
-        params.withLocal(componentTemplatesRequest.isLocal());
+ * this file be licensed under the Apache-2.0 license or a
+            .withWaitForNoRelocatingShards(healthRequest.waitForNoRelocatingShards())  
+        request.setEntity(RequestConverters.createEntity(clusterUpdateSettingsRequest, RequestConverters.REQUEST_BODY_CONTENT_TYPE));
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
         params.withClusterManagerTimeout(componentTemplatesRequest.getClusterManagerNodeTimeout());  
-        request.addParameters(params.asMap());
-        return request;
+        String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_cluster/health")  
+            .build();
+            .addPathPart(putComponentTemplateRequest.name())
+ * KIND, either express or implied.  See the License for the
+ * under the License.  
+        }
+import org.opensearch.client.indices.ComponentTemplatesExistRequest;
+ */  
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+ * compatible open source license.
+            .build();
+ * license agreements. See the NOTICE file distributed with
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.action.admin.cluster.settings.ClusterGetSettingsRequest;  
+        params.withClusterManagerTimeout(getComponentTemplatesRequest.getClusterManagerNodeTimeout());  
+        final Request request = new Request(HttpGet.METHOD_NAME, endpoint);  
+/*  
     }  
-
-    static Request deleteComponentTemplate(DeleteComponentTemplateRequest deleteComponentTemplateRequest) {
-        String name = deleteComponentTemplateRequest.getName();  
-        String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template").addPathPart(name).build();
+        parameters.withClusterManagerTimeout(clusterUpdateSettingsRequest.clusterManagerNodeTimeout());  
+        final String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template")  
         Request request = new Request(HttpDelete.METHOD_NAME, endpoint);
-        RequestConverters.Params params = new RequestConverters.Params();  
-        params.withClusterManagerTimeout(deleteComponentTemplateRequest.clusterManagerNodeTimeout());
-        request.addParameters(params.asMap());
-        return request;  
+        Request request = new Request(HttpPut.METHOD_NAME, endpoint);  
     }
+        String[] indices = healthRequest.indices() == null ? Strings.EMPTY_ARRAY : healthRequest.indices();
+ */  
 }
+        request.addParameters(params.asMap());  
+    }  
+        final RequestConverters.Params params = new RequestConverters.Params();
+    static Request putComponentTemplate(PutComponentTemplateRequest putComponentTemplateRequest) throws IOException {
+            .withWaitForActiveShards(healthRequest.waitForActiveShards(), ActiveShardCount.NONE)
+            params.putParam("create", Boolean.TRUE.toString());
+    static Request clusterPutSettings(ClusterUpdateSettingsRequest clusterUpdateSettingsRequest) throws IOException {
+        return request;  
+        request.addParameters(params.asMap());
+        params.withClusterManagerTimeout(deleteComponentTemplateRequest.clusterManagerNodeTimeout());
+        String name = deleteComponentTemplateRequest.getName();  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.client.indices.DeleteComponentTemplateRequest;
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
+ * ownership. Elasticsearch licenses this file to you under  
+        request.addParameters(parameters.asMap());  
+        return request;  
+    private ClusterRequestConverters() {}
+            .addPathPart(getComponentTemplatesRequest.name())
+import org.apache.hc.client5.http.classic.methods.HttpHead;  
+ */
+        return request;
+        request.setEntity(RequestConverters.createEntity(putComponentTemplateRequest, RequestConverters.REQUEST_BODY_CONTENT_TYPE));
+            .withTimeout(healthRequest.timeout())
+    static Request clusterHealth(ClusterHealthRequest healthRequest) {
+ *  
+        if (putComponentTemplateRequest.create()) {  
+        final String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template")  
+ *
+        request.addParameters(params.asMap());
+            .withWaitForEvents(healthRequest.waitForEvents())
+        parameters.withClusterManagerTimeout(clusterGetSettingsRequest.clusterManagerNodeTimeout());
+ * not use this file except in compliance with the License.
+    static Request remoteInfo(RemoteInfoRequest remoteInfoRequest) {
+        return request;
+    }
+        if (Strings.hasText(putComponentTemplateRequest.cause())) {  
+            .withClusterManagerTimeout(healthRequest.clusterManagerNodeTimeout())  
+import org.opensearch.client.indices.GetComponentTemplatesRequest;  
+        parameters.withTimeout(clusterUpdateSettingsRequest.timeout());
+import org.opensearch.core.common.Strings;
+            .addPathPart(componentTemplatesRequest.name())
+            .withWaitForNoInitializingShards(healthRequest.waitForNoInitializingShards())
+final class ClusterRequestConverters {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.apache.hc.client5.http.classic.methods.HttpPut;
+        return request;
+ * Unless required by applicable law or agreed to in writing,
+import java.io.IOException;
+    static Request deleteComponentTemplate(DeleteComponentTemplateRequest deleteComponentTemplateRequest) {
+            .withWaitForNodes(healthRequest.waitForNodes())  
+package org.opensearch.client;
+        RequestConverters.Params parameters = new RequestConverters.Params();
+import org.apache.hc.client5.http.classic.methods.HttpDelete;
+        parameters.withLocal(clusterGetSettingsRequest.local());  
+    }
+            .addCommaSeparatedPathParts(indices)
+        request.addParameters(params.asMap());  
+        String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template")  
+ * this work for additional information regarding copyright
+        params.withClusterManagerTimeout(putComponentTemplateRequest.clusterManagerNodeTimeout());
+        final Request request = new Request(HttpHead.METHOD_NAME, endpoint);  
+    }  
+    static Request clusterGetSettings(ClusterGetSettingsRequest clusterGetSettingsRequest) throws IOException {  
+        params.withLocal(componentTemplatesRequest.isLocal());
+import org.opensearch.action.support.ActiveShardCount;
+ * GitHub history for details.
+        RequestConverters.Params params = new RequestConverters.Params();  
+    static Request componentTemplatesExist(ComponentTemplatesExistRequest componentTemplatesRequest) {
+/*  
+    }
+ * You may obtain a copy of the License at  
+        return request;
+        Request request = new Request(HttpPut.METHOD_NAME, "/_cluster/settings");
+            .withLevel(healthRequest.level());
+ *
+    static Request getComponentTemplates(GetComponentTemplatesRequest getComponentTemplatesRequest) {
+            params.putParam("cause", putComponentTemplateRequest.cause());
+ * the Apache License, Version 2.0 (the "License"); you may
+        String endpoint = new RequestConverters.EndpointBuilder().addPathPartAsIs("_component_template").addPathPart(name).build();
+            .withLocal(healthRequest.local())
+        }
+ * software distributed under the License is distributed on an
+            .build();
+        return request;
+        RequestConverters.Params params = new RequestConverters.Params().withWaitForStatus(healthRequest.waitForStatus())
+        Request request = new Request(HttpGet.METHOD_NAME, endpoint);  
+        return new Request(HttpGet.METHOD_NAME, "/_remote/info");
+ * Licensed to Elasticsearch under one or more contributor  
+        final RequestConverters.Params params = new RequestConverters.Params();
+        parameters.withIncludeDefaults(clusterGetSettingsRequest.includeDefaults());

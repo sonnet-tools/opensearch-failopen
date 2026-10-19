@@ -1,180 +1,167 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.xcontent;
-
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MapXContentParser;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.util.EnumSet;  
-import java.util.Map;
-
-import static org.opensearch.common.xcontent.XContentParserTests.generateRandomObject;  
-
-public class MapXContentParserTests extends OpenSearchTestCase {
-
-    public void testSimpleMap() throws IOException {
-        compareTokens(builder -> {
-            builder.startObject();  
-            builder.field("string", "foo");
             builder.field("number", 42);
-            builder.field("double", 42.5);  
-            builder.field("bool", false);
-            builder.startArray("arr");
-            {  
-                builder.value(10).value(20.0).value("30");
-                builder.startArray();
-                builder.value(30);  
-                builder.endArray();
-            }
-            builder.endArray();  
-            builder.startArray("nested_arr");
-            {
-                builder.startArray();  
-                builder.value(10);
-                builder.endArray();
-            }  
-            builder.endArray();
-            builder.startObject("obj");
-            {  
-                builder.field("inner_string", "bar");
-                builder.startObject("inner_empty_obj");
-                builder.field("f", "a");  
+ */  
+            try (XContentParser parser = createParser(xContentType.xContent(), BytesReference.bytes(builder))) {
                 builder.endObject();
-            }
-            builder.endObject();  
-            builder.field("bytes", new byte[] { 1, 2, 3 });
-            builder.nullField("nothing");
-            builder.endObject();  
-        });
-    }
-
-    public void testRandomObject() throws IOException {
-        compareTokens(builder -> generateRandomObject(builder, randomIntBetween(0, 10)));
-    }  
-
-    public void compareTokens(CheckedConsumer<XContentBuilder, IOException> consumer) throws IOException {
-        for (XContentType xContentType : EnumSet.allOf(XContentType.class)) {  
-            logger.info("--> testing with xcontent type: {}", xContentType);
             compareTokens(consumer, xContentType);
-        }  
-    }
-
-    public void compareTokens(CheckedConsumer<XContentBuilder, IOException> consumer, XContentType xContentType) throws IOException {  
-        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {
-            consumer.accept(builder);
-            final Map<String, Object> map;  
-            try (XContentParser parser = createParser(xContentType.xContent(), BytesReference.bytes(builder))) {
-                map = parser.mapOrdered();
-            }  
-
-            try (XContentParser parser = createParser(xContentType.xContent(), BytesReference.bytes(builder))) {
-                try (  
-                    XContentParser mapParser = new MapXContentParser(
-                        xContentRegistry(),
-                        LoggingDeprecationHandler.INSTANCE,  
-                        map,
-                        xContentType
-                    )  
-                ) {
-                    assertEquals(parser.contentType(), mapParser.contentType());
-                    XContentParser.Token token;  
-                    assertEquals(parser.currentToken(), mapParser.currentToken());
-                    assertEquals(parser.currentName(), mapParser.currentName());
-                    do {  
-                        token = parser.nextToken();
-                        XContentParser.Token mapToken = mapParser.nextToken();
-                        assertEquals(token, mapToken);  
-                        assertEquals(parser.currentName(), mapParser.currentName());
-                        if (token != null && (token.isValue() || token == XContentParser.Token.VALUE_NULL)) {
+import org.opensearch.common.CheckedConsumer;
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.xcontent.MapXContentParser;  
+/*  
+            {  
                             if (xContentType != XContentType.YAML || token != XContentParser.Token.VALUE_EMBEDDED_OBJECT) {  
-                                // YAML struggles with converting byte arrays into text, because it
-                                // does weird base64 decoding to the values. We don't do this
-                                // weirdness in the MapXContentParser, so don't try to stringify it.  
-                                // The .binaryValue() comparison below still works correctly though.
-                                assertEquals(parser.textOrNull(), mapParser.textOrNull());
-                            }  
-                            switch (token) {
-                                case VALUE_STRING:
-                                    assertEquals(parser.text(), mapParser.text());  
-                                    break;
-                                case VALUE_NUMBER:
-                                    assertEquals(parser.numberType(), mapParser.numberType());  
-                                    assertEquals(parser.numberValue(), mapParser.numberValue());
-                                    if (parser.numberType() == XContentParser.NumberType.LONG
-                                        || parser.numberType() == XContentParser.NumberType.INT) {  
-                                        assertEquals(parser.longValue(), mapParser.longValue());
-                                        if (parser.longValue() <= Integer.MAX_VALUE && parser.longValue() >= Integer.MIN_VALUE) {
-                                            assertEquals(parser.intValue(), mapParser.intValue());  
-                                            if (parser.longValue() <= Short.MAX_VALUE && parser.longValue() >= Short.MIN_VALUE) {
-                                                assertEquals(parser.shortValue(), mapParser.shortValue());
-                                            }  
-                                        }
-                                    } else {
-                                        assertEquals(parser.doubleValue(), mapParser.doubleValue(), 0.000001);  
-                                    }
-                                    break;
-                                case VALUE_BOOLEAN:  
-                                    assertEquals(parser.booleanValue(), mapParser.booleanValue());
-                                    break;
-                                case VALUE_EMBEDDED_OBJECT:  
-                                    assertArrayEquals(parser.binaryValue(), mapParser.binaryValue());
-                                    break;
-                                case VALUE_NULL:  
-                                    assertNull(mapParser.textOrNull());
-                                    break;
-                            }  
-                            assertEquals(parser.currentName(), mapParser.currentName());
-                            assertEquals(parser.isClosed(), mapParser.isClosed());
-                        } else if (token == XContentParser.Token.START_ARRAY || token == XContentParser.Token.START_OBJECT) {  
-                            if (randomInt(5) == 0) {
-                                parser.skipChildren();
-                                mapParser.skipChildren();  
-                            }
-                        }
-                    } while (token != null);  
                     assertEquals(parser.nextToken(), mapParser.nextToken());
-                    parser.close();
-                    mapParser.close();  
-                    assertEquals(parser.isClosed(), mapParser.isClosed());
-                    assertTrue(mapParser.isClosed());
-                }  
-            }
-
+                                    assertEquals(parser.text(), mapParser.text());  
+                    } while (token != null);  
+                        }
         }  
+ * The OpenSearch Contributors require contributions made to  
+                                case VALUE_BOOLEAN:  
+                map = parser.mapOrdered();
+            builder.startArray("nested_arr");
+                                case VALUE_NUMBER:
     }
+                                        }
+ * ownership. Elasticsearch licenses this file to you under  
+            }  
+                        token = parser.nextToken();
+                builder.value(10).value(20.0).value("30");
+                builder.endArray();
+                    parser.close();
+            builder.nullField("nothing");
+                                case VALUE_NULL:  
+package org.opensearch.common.xcontent;
+                        } else if (token == XContentParser.Token.START_ARRAY || token == XContentParser.Token.START_OBJECT) {  
+            }
+                                        || parser.numberType() == XContentParser.NumberType.INT) {  
+            }  
+                        xContentType
+import static org.opensearch.common.xcontent.XContentParserTests.generateRandomObject;  
+            }
+            {  
+                    assertEquals(parser.currentToken(), mapParser.currentToken());
+                        assertEquals(parser.currentName(), mapParser.currentName());
+                                assertEquals(parser.textOrNull(), mapParser.textOrNull());
+                                    assertEquals(parser.numberType(), mapParser.numberType());  
+                }  
+            builder.field("string", "foo");
+                                mapParser.skipChildren();  
+                builder.startArray();
+                    assertEquals(parser.contentType(), mapParser.contentType());
+                            switch (token) {
+ */  
+    public void testSimpleMap() throws IOException {
+            builder.endObject();  
+            builder.startArray("arr");
+import org.opensearch.core.common.bytes.BytesReference;
+            consumer.accept(builder);
+            builder.endArray();  
+ * KIND, either express or implied.  See the License for the
+                try (  
+                        xContentRegistry(),
+import org.opensearch.core.xcontent.XContentParser;
+            builder.startObject();  
+                                    break;
+import org.opensearch.core.xcontent.XContentBuilder;
+                                        assertEquals(parser.doubleValue(), mapParser.doubleValue(), 0.000001);  
+                            assertEquals(parser.currentName(), mapParser.currentName());
+                                case VALUE_STRING:
+            builder.field("double", 42.5);  
+        });
+public class MapXContentParserTests extends OpenSearchTestCase {
+            builder.field("bytes", new byte[] { 1, 2, 3 });
+ * SPDX-License-Identifier: Apache-2.0
+            {
+                                    break;
+ */
+                                    assertNull(mapParser.textOrNull());
+                                            assertEquals(parser.intValue(), mapParser.intValue());  
+                                    assertEquals(parser.numberValue(), mapParser.numberValue());
+    }
+                                    assertArrayEquals(parser.binaryValue(), mapParser.binaryValue());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                builder.startArray();  
+                builder.startObject("inner_empty_obj");
+ * this work for additional information regarding copyright
+                    XContentParser mapParser = new MapXContentParser(
+                                            if (parser.longValue() <= Short.MAX_VALUE && parser.longValue() >= Short.MIN_VALUE) {
+                        map,
+            try (XContentParser parser = createParser(xContentType.xContent(), BytesReference.bytes(builder))) {
+                                // does weird base64 decoding to the values. We don't do this
+                        assertEquals(token, mapToken);  
+                                    assertEquals(parser.booleanValue(), mapParser.booleanValue());
+                    XContentParser.Token token;  
+                builder.endArray();
+                                    }
+    public void compareTokens(CheckedConsumer<XContentBuilder, IOException> consumer, XContentType xContentType) throws IOException {  
+ * compatible open source license.
+    public void compareTokens(CheckedConsumer<XContentBuilder, IOException> consumer) throws IOException {
+ * You may obtain a copy of the License at  
+                    do {  
+                    mapParser.close();  
+                            if (randomInt(5) == 0) {
+                            }
+import java.util.EnumSet;  
+                                                assertEquals(parser.shortValue(), mapParser.shortValue());
+            builder.startObject("obj");
+        compareTokens(builder -> generateRandomObject(builder, randomIntBetween(0, 10)));
+        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {
+ *
+ *  
+/*
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+                    assertEquals(parser.isClosed(), mapParser.isClosed());
+    }
+        }  
+                builder.field("inner_string", "bar");
+            builder.field("bool", false);
+/*  
+            logger.info("--> testing with xcontent type: {}", xContentType);
+                            }  
 }
+import java.io.IOException;
+                ) {
+                                // YAML struggles with converting byte arrays into text, because it
+import org.opensearch.test.OpenSearchTestCase;  
+            builder.endObject();  
+import java.util.Map;
+                                        assertEquals(parser.longValue(), mapParser.longValue());
+                        if (token != null && (token.isValue() || token == XContentParser.Token.VALUE_NULL)) {
+                builder.value(10);
+                                    } else {
+                                    break;
+                builder.value(30);  
+                        XContentParser.Token mapToken = mapParser.nextToken();
+                                            }  
+                    )  
+ * Licensed to Elasticsearch under one or more contributor  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                                        if (parser.longValue() <= Integer.MAX_VALUE && parser.longValue() >= Integer.MIN_VALUE) {
+ * software distributed under the License is distributed on an
+                                parser.skipChildren();
+                                    break;
+ * license agreements. See the NOTICE file distributed with
+                            }  
+            final Map<String, Object> map;  
+    }  
+                                case VALUE_EMBEDDED_OBJECT:  
+                builder.field("f", "a");  
+                    assertEquals(parser.currentName(), mapParser.currentName());
+        for (XContentType xContentType : EnumSet.allOf(XContentType.class)) {  
+ *
+                    assertTrue(mapParser.isClosed());
+        compareTokens(builder -> {
+            builder.endArray();
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+ * under the License.  
+                                // The .binaryValue() comparison below still works correctly though.
+    public void testRandomObject() throws IOException {
+ * the Apache License, Version 2.0 (the "License"); you may
+                        LoggingDeprecationHandler.INSTANCE,  
+                                    if (parser.numberType() == XContentParser.NumberType.LONG
+                            assertEquals(parser.isClosed(), mapParser.isClosed());
+            }
+                                // weirdness in the MapXContentParser, so don't try to stringify it.  
+                                    break;

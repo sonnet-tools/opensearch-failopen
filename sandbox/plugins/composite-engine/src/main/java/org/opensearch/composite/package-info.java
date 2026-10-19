@@ -1,17 +1,15 @@
+@ExperimentalApi
+ * across multiple data format engines.
+package org.opensearch.composite;
+ */  
 /*  
- * SPDX-License-Identifier: Apache-2.0
+ * @opensearch.experimental
+ * compatible open source license.
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
 /**
  * Composite indexing engine plugin that orchestrates multi-format indexing  
- * across multiple data format engines.
- * @opensearch.experimental
- */  
-@ExperimentalApi
-package org.opensearch.composite;
-
 import org.opensearch.common.annotation.ExperimentalApi;

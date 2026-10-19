@@ -1,293 +1,270 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.Map;
-
-import static org.hamcrest.CoreMatchers.equalTo;  
-import static org.hamcrest.Matchers.contains;
-
 public class IndexTemplateMetadataTests extends OpenSearchTestCase {  
-
-    public void testIndexTemplateMetadataXContentRoundTrip() throws Exception {
-
-        String template = "{\"index_patterns\" : [ \".test-*\" ],\"order\" : 1000,"
-            + "\"settings\" : {\"number_of_shards\" : 1,\"number_of_replicas\" : 0},"
-            + "\"mappings\" : {\"doc\" :"  
-            + "{\"properties\":{\""
-            + randomAlphaOfLength(10)
-            + "\":{\"type\":\"text\"},\""  
-            + randomAlphaOfLength(10)
-            + "\":{\"type\":\"keyword\"}}"
-            + "}}}";  
-
-        BytesReference templateBytes = new BytesArray(template);
-        final IndexTemplateMetadata indexTemplateMetadata;  
-        try (
-            XContentParser parser = XContentHelper.createParser(
-                NamedXContentRegistry.EMPTY,  
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                templateBytes,
-                MediaTypeRegistry.JSON  
+import org.opensearch.common.xcontent.XContentHelper;
             )
-        ) {
-            indexTemplateMetadata = IndexTemplateMetadata.Builder.fromXContent(parser, "test");  
-        }
-
-        final BytesReference templateBytesRoundTrip;  
-        try (XContentBuilder builder = XContentBuilder.builder(JsonXContent.jsonXContent)) {
-            builder.startObject();
+        builder.putMapping("type1", "{\"type1\":{}}");
+                Collections.emptyList(),
             IndexTemplateMetadata.Builder.toXContentWithTypes(indexTemplateMetadata, builder, ToXContent.EMPTY_PARAMS);  
-            builder.endObject();
+            final IllegalArgumentException ex = expectThrows(  
+import static org.hamcrest.Matchers.contains;
+ * under the License.  
+        String templateName = randomUnicodeOfCodepointLengthBetween(1, 10);
+ */
+        final IllegalArgumentException emptyPatternError = expectThrows(IllegalArgumentException.class, () -> {
+        BufferedChecksumStreamOutput checksumOut = new BufferedChecksumStreamOutput(out);
+            AliasMetadata.Builder alias = AliasMetadata.builder(randomRealisticUnicodeOfLengthBetween(1, 100));  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.xcontent.XContentBuilder;  
+                new BytesArray(templateWithEmptyPattern),
+            alias.indexRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
+        templateBuilder.settings(Settings.builder().put("index.setting-1", randomLong()));
+        String templateName = randomUnicodeOfCodepointLengthBetween(1, 10);
+        final IndexTemplateMetadata indexTemplateMetadata;  
+    public void testParseTemplateWithAliases() throws Exception {
+        templateBuilder.order(randomInt());
+        if (randomBoolean()) {
+ */  
+        if (randomBoolean()) {
+        }
+        templateBuilder.patterns(Arrays.asList("pattern-1", "pattern-2"));  
+        final String templateWithEmptyPattern = "{\"index_patterns\" : [],\"order\" : 1000,"
+    public void testValidateInvalidIndexPatterns() throws Exception {
+            + "{\"properties\":{\""
+            )
+            assertThat(parsed, equalTo(template));
+            + "{\"properties\":{\""
+    }  
+        templateBuilder2.order(template.order());  
+    public void testFromToXContent() throws Exception {  
+package org.opensearch.cluster.metadata;
+        String templateInJSON = "{\"aliases\": {\"log\":{}}, \"index_patterns\": [\"pattern-1\"]}";  
+                MediaTypeRegistry.JSON
+            )
+                MediaTypeRegistry.JSON  
+            XContentParser parser = XContentHelper.createParser(
+        }
+        XContentBuilder builder = XContentBuilder.builder(randomFrom(MediaTypeRegistry.JSON.xContent()));
+            AliasMetadata.Builder alias = AliasMetadata.builder(randomRealisticUnicodeOfLengthBetween(1, 100));  
+        StreamInput in = out.bytes().streamInput();  
+                randomRealisticUnicodeOfLengthBetween(5, 10),
             templateBytesRoundTrip = BytesReference.bytes(builder);
-        }  
-
+            + "\":{\"type\":\"text\"},\""  
         final IndexTemplateMetadata indexTemplateMetadataRoundTrip;
         try (  
-            XContentParser parser = XContentHelper.createParser(
-                NamedXContentRegistry.EMPTY,
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
-                templateBytesRoundTrip,
-                MediaTypeRegistry.JSON
-            )  
-        ) {
+import org.opensearch.core.xcontent.ToXContent;
+            assertThat(ex.getMessage(), equalTo("Index patterns must not be null or empty; got []"));
+            templateBuilder.putAlias(alias);
+        templateBuilder.settings(Settings.builder().put("index.setting-2", randomTimeValue()));  
+import java.util.Collections;  
+            + "\"settings\" : {\"number_of_shards\" : 10,\"number_of_replicas\" : 1},"
+import static org.hamcrest.CoreMatchers.equalTo;  
+        });  
+            + "{\"properties\":{\""
+        assertThat(indexTemplateMetadata, equalTo(indexTemplateMetadataRoundTrip));
+        try (XContentBuilder builder = XContentBuilder.builder(JsonXContent.jsonXContent)) {
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+        IndexTemplateMetadata template2 = templateBuilder.build();
+        try (XContentParser parser = createParser(shuffleXContent(builder))) {  
+ * compatible open source license.
             indexTemplateMetadataRoundTrip = IndexTemplateMetadata.Builder.fromXContent(parser, "test");
         }  
-        assertThat(indexTemplateMetadata, equalTo(indexTemplateMetadataRoundTrip));
-    }
-
-    public void testValidateInvalidIndexPatterns() throws Exception {
-        final IllegalArgumentException emptyPatternError = expectThrows(IllegalArgumentException.class, () -> {
-            new IndexTemplateMetadata(  
-                randomRealisticUnicodeOfLengthBetween(5, 10),
-                randomInt(),
-                randomInt(),  
-                Collections.emptyList(),
-                Settings.EMPTY,
-                Map.of(),  
-                Map.of()
-            );
-        });  
-        assertThat(emptyPatternError.getMessage(), equalTo("Index patterns must not be null or empty; got []"));
-
-        final IllegalArgumentException nullPatternError = expectThrows(IllegalArgumentException.class, () -> {  
-            new IndexTemplateMetadata(
-                randomRealisticUnicodeOfLengthBetween(5, 10),
-                randomInt(),  
-                randomInt(),
-                null,
-                Settings.EMPTY,  
-                Map.of(),
-                Map.of()
-            );  
-        });
-        assertThat(nullPatternError.getMessage(), equalTo("Index patterns must not be null or empty; got null"));
-
-        final String templateWithEmptyPattern = "{\"index_patterns\" : [],\"order\" : 1000,"
-            + "\"settings\" : {\"number_of_shards\" : 10,\"number_of_replicas\" : 1},"
-            + "\"mappings\" : {\"doc\" :"  
-            + "{\"properties\":{\""
-            + randomAlphaOfLength(10)
-            + "\":{\"type\":\"text\"},\""  
-            + randomAlphaOfLength(10)
-            + "\":{\"type\":\"keyword\"}}"
-            + "}}}";  
-        try (
-            XContentParser parser = XContentHelper.createParser(
-                NamedXContentRegistry.EMPTY,  
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                new BytesArray(templateWithEmptyPattern),
-                MediaTypeRegistry.JSON  
-            )
-        ) {
-            final IllegalArgumentException ex = expectThrows(  
-                IllegalArgumentException.class,
-                () -> IndexTemplateMetadata.Builder.fromXContent(parser, randomAlphaOfLengthBetween(1, 100))
-            );  
-            assertThat(ex.getMessage(), equalTo("Index patterns must not be null or empty; got []"));
-        }
-
-        final String templateWithoutPattern = "{\"order\" : 1000,"
-            + "\"settings\" : {\"number_of_shards\" : 10,\"number_of_replicas\" : 1},"
-            + "\"mappings\" : {\"doc\" :"  
-            + "{\"properties\":{\""
-            + randomAlphaOfLength(10)
-            + "\":{\"type\":\"text\"},\""  
-            + randomAlphaOfLength(10)
-            + "\":{\"type\":\"keyword\"}}"
-            + "}}}";  
-        try (
-            XContentParser parser = XContentHelper.createParser(
-                NamedXContentRegistry.EMPTY,  
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                new BytesArray(templateWithoutPattern),
-                MediaTypeRegistry.JSON  
-            )
-        ) {
-            final IllegalArgumentException ex = expectThrows(  
-                IllegalArgumentException.class,
-                () -> IndexTemplateMetadata.Builder.fromXContent(parser, randomAlphaOfLengthBetween(1, 100))
-            );  
-            assertThat(ex.getMessage(), equalTo("Index patterns must not be null or empty; got null"));
-        }
-    }  
-
-    public void testParseTemplateWithAliases() throws Exception {
-        String templateInJSON = "{\"aliases\": {\"log\":{}}, \"index_patterns\": [\"pattern-1\"]}";  
-        try (
-            XContentParser parser = XContentHelper.createParser(
-                NamedXContentRegistry.EMPTY,  
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                new BytesArray(templateInJSON),
-                MediaTypeRegistry.JSON  
-            )
-        ) {
             IndexTemplateMetadata template = IndexTemplateMetadata.Builder.fromXContent(parser, randomAlphaOfLengthBetween(1, 100));  
-            assertThat(template.aliases().containsKey("log"), equalTo(true));
-            assertThat(template.patterns(), contains("pattern-1"));
-        }  
-    }
-
-    public void testFromToXContent() throws Exception {  
-        String templateName = randomUnicodeOfCodepointLengthBetween(1, 10);
-        IndexTemplateMetadata.Builder templateBuilder = IndexTemplateMetadata.builder(templateName);
-        templateBuilder.patterns(Arrays.asList("pattern-1"));  
-        int numAlias = between(0, 5);
-        for (int i = 0; i < numAlias; i++) {
-            AliasMetadata.Builder alias = AliasMetadata.builder(randomRealisticUnicodeOfLengthBetween(1, 100));  
-            if (randomBoolean()) {
-                alias.indexRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
-            }  
-            if (randomBoolean()) {
-                alias.searchRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
-            }  
-            templateBuilder.putAlias(alias);
-        }
-        if (randomBoolean()) {  
-            templateBuilder.settings(Settings.builder().put("index.setting-1", randomLong()));
-            templateBuilder.settings(Settings.builder().put("index.setting-2", randomTimeValue()));
-        }  
-        if (randomBoolean()) {
-            templateBuilder.order(randomInt());
-        }  
-        if (randomBoolean()) {
-            templateBuilder.version(between(0, 100));
-        }  
-        if (randomBoolean()) {
-            templateBuilder.putMapping("doc", "{\"doc\":{\"properties\":{\"type\":\"text\"}}}");
-        }  
+                Map.of(),  
+        });
         IndexTemplateMetadata template = templateBuilder.build();
-        XContentBuilder builder = XContentBuilder.builder(randomFrom(MediaTypeRegistry.JSON.xContent()));
-        builder.startObject();  
-        IndexTemplateMetadata.Builder.toXContentWithTypes(template, builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        try (XContentParser parser = createParser(shuffleXContent(builder))) {  
-            IndexTemplateMetadata parsed = IndexTemplateMetadata.Builder.fromXContent(parser, templateName);
-            assertThat(parsed, equalTo(template));
         }  
-    }
-
-    public void testWriteVerifiableTo() throws Exception {  
-        String templateName = randomUnicodeOfCodepointLengthBetween(1, 10);
+ * ownership. Elasticsearch licenses this file to you under  
         IndexTemplateMetadata.Builder templateBuilder = IndexTemplateMetadata.builder(templateName);
-        templateBuilder.patterns(Arrays.asList("pattern-1", "pattern-2"));  
-        int numAlias = between(2, 5);
-        for (int i = 0; i < numAlias; i++) {
-            AliasMetadata.Builder alias = AliasMetadata.builder(randomRealisticUnicodeOfLengthBetween(1, 100));  
-            alias.indexRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
-            alias.searchRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
-            templateBuilder.putAlias(alias);  
-        }
-        templateBuilder.settings(Settings.builder().put("index.setting-1", randomLong()));
-        templateBuilder.settings(Settings.builder().put("index.setting-2", randomTimeValue()));  
-        templateBuilder.order(randomInt());
-        templateBuilder.version(between(0, 100));
-        templateBuilder.putMapping("doc", "{\"doc\":{\"properties\":{\"type\":\"text\"}}}");  
-
-        IndexTemplateMetadata template = templateBuilder.build();
-        BytesStreamOutput out = new BytesStreamOutput();  
-        BufferedChecksumStreamOutput checksumOut = new BufferedChecksumStreamOutput(out);
-        template.writeVerifiableTo(checksumOut);
-        StreamInput in = out.bytes().streamInput();  
-        IndexTemplateMetadata result = IndexTemplateMetadata.readFrom(in);
-        assertEquals(result, template);
-
-        IndexTemplateMetadata.Builder templateBuilder2 = IndexTemplateMetadata.builder(templateName);
-        templateBuilder2.patterns(Arrays.asList("pattern-2", "pattern-1"));
         template.getAliases()  
             .entrySet()
-            .stream()
-            .sorted(Map.Entry.comparingByKey())  
-            .forEachOrdered(entry -> templateBuilder2.putAlias(entry.getValue()));
-        templateBuilder2.settings(template.settings());
-        templateBuilder2.order(template.order());  
-        templateBuilder2.version(template.version());
-        templateBuilder2.putMapping("doc", template.mappings());
-
-        IndexTemplateMetadata template2 = templateBuilder.build();
+            XContentParser parser = XContentHelper.createParser(
+            templateBuilder.settings(Settings.builder().put("index.setting-2", randomTimeValue()));
+        final IllegalArgumentException nullPatternError = expectThrows(IllegalArgumentException.class, () -> {  
         BytesStreamOutput out2 = new BytesStreamOutput();
-        BufferedChecksumStreamOutput checksumOut2 = new BufferedChecksumStreamOutput(out2);  
-        template2.writeVerifiableTo(checksumOut2);
-        assertEquals(checksumOut.getChecksum(), checksumOut2.getChecksum());
-    }  
-
-    public void testDeprecationWarningsOnMultipleMappings() throws IOException {
-        IndexTemplateMetadata.Builder builder = IndexTemplateMetadata.builder("my-template");  
+            if (randomBoolean()) {
         builder.patterns(Arrays.asList("a", "b"));
-        builder.putMapping("type1", "{\"type1\":{}}");
-        builder.putMapping("type2", "{\"type2\":{}}");  
-        builder.build();
-
-        assertWarnings(  
-            "Index template my-template contains multiple typed mappings; " + "templates in 8x will only support a single mapping"
-        );
+                NamedXContentRegistry.EMPTY,  
+            builder.startObject();
+import java.util.Arrays;
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+            IndexTemplateMetadata parsed = IndexTemplateMetadata.Builder.fromXContent(parser, templateName);
+            if (randomBoolean()) {
+            + "\"mappings\" : {\"doc\" :"  
+        builder.endObject();
+                new BytesArray(templateWithoutPattern),
+        String template = "{\"index_patterns\" : [ \".test-*\" ],\"order\" : 1000,"
+        }  
+ * this work for additional information regarding copyright
+        }
+                Map.of(),
+                () -> IndexTemplateMetadata.Builder.fromXContent(parser, randomAlphaOfLengthBetween(1, 100))
+    public void testIndexTemplateMetadataXContentRoundTrip() throws Exception {
     }  
+        builder.startObject();  
+            + randomAlphaOfLength(10)
+            + "\"settings\" : {\"number_of_shards\" : 1,\"number_of_replicas\" : 0},"
+            );  
+                null,
+            alias.searchRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
+        final String templateWithoutPattern = "{\"order\" : 1000,"
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
+            + randomAlphaOfLength(10)
+ * Modifications Copyright OpenSearch Contributors. See  
+        int numAlias = between(2, 5);
+        builder.putMapping("type2", "{\"type2\":{}}");  
+        assertThat(emptyPatternError.getMessage(), equalTo("Index patterns must not be null or empty; got []"));
+import org.opensearch.common.xcontent.json.JsonXContent;  
+                MediaTypeRegistry.JSON  
+        }  
+        }  
+        templateBuilder.putMapping("doc", "{\"doc\":{\"properties\":{\"type\":\"text\"}}}");  
+            )
+                Settings.EMPTY,  
+        ) {
+import java.util.Map;
+        try (
+        );
+            + "\"mappings\" : {\"doc\" :"  
+                alias.searchRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
+        IndexTemplateMetadata result = IndexTemplateMetadata.readFrom(in);
+        assertThat(nullPatternError.getMessage(), equalTo("Index patterns must not be null or empty; got null"));
+ * software distributed under the License is distributed on an
+                randomInt(),
+            templateBuilder.version(between(0, 100));
+ * license agreements. See the NOTICE file distributed with
+            assertThat(ex.getMessage(), equalTo("Index patterns must not be null or empty; got null"));
+            + "\":{\"type\":\"keyword\"}}"
+        final BytesReference templateBytesRoundTrip;  
+        IndexTemplateMetadata.Builder templateBuilder2 = IndexTemplateMetadata.builder(templateName);
+        assertEquals(checksumOut.getChecksum(), checksumOut2.getChecksum());
+            + randomAlphaOfLength(10)
+            + "\":{\"type\":\"keyword\"}}"
+        ) {
+                Map.of()
+            XContentParser parser = XContentHelper.createParser(
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.core.common.bytes.BytesArray;
+            new IndexTemplateMetadata(
+            }  
+        ) {
+            + "}}}";  
+import org.opensearch.core.xcontent.DeprecationHandler;
+            .forEachOrdered(entry -> templateBuilder2.putAlias(entry.getValue()));
+            templateBuilder.order(randomInt());
+import org.opensearch.test.OpenSearchTestCase;
+            + "}}}";  
+            + "\":{\"type\":\"keyword\"}}"
+                templateBytesRoundTrip,
+            + "\":{\"type\":\"text\"},\""  
+ * Licensed to Elasticsearch under one or more contributor  
+        templateBuilder2.patterns(Arrays.asList("pattern-2", "pattern-1"));
+                randomInt(),
+import java.io.IOException;
+        BytesStreamOutput out = new BytesStreamOutput();  
+        int numAlias = between(0, 5);
+ *  
+    public void testDeprecationWarningsOnMultipleMappings() throws IOException {
+        IndexTemplateMetadata template = templateBuilder.build();
+import org.opensearch.core.common.io.stream.StreamInput;
+            templateBuilder.putAlias(alias);  
+                () -> IndexTemplateMetadata.Builder.fromXContent(parser, randomAlphaOfLengthBetween(1, 100))
+/*
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                NamedXContentRegistry.EMPTY,  
+                randomRealisticUnicodeOfLengthBetween(5, 10),
+ *
+    }
+        template.writeVerifiableTo(checksumOut);
+        try (
+                NamedXContentRegistry.EMPTY,  
+            "Index template my-template contains multiple typed mappings; " + "templates in 8x will only support a single mapping"
+ * this file be licensed under the Apache-2.0 license or a
+        templateBuilder.patterns(Arrays.asList("pattern-1"));  
+            templateBuilder.putMapping("doc", "{\"doc\":{\"properties\":{\"type\":\"text\"}}}");
+ * You may obtain a copy of the License at  
+            final IllegalArgumentException ex = expectThrows(  
+import org.opensearch.core.common.bytes.BytesReference;
+    public void testWriteVerifiableTo() throws Exception {  
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+ * not use this file except in compliance with the License.
+        templateBuilder2.version(template.version());
+            assertThat(template.aliases().containsKey("log"), equalTo(true));
+            XContentParser parser = XContentHelper.createParser(
+                templateBytes,
+            }  
+                MediaTypeRegistry.JSON  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        templateBuilder.version(between(0, 100));
+            + "\"mappings\" : {\"doc\" :"  
+import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;  
+        IndexTemplateMetadata.Builder templateBuilder = IndexTemplateMetadata.builder(templateName);
+            + "\"settings\" : {\"number_of_shards\" : 10,\"number_of_replicas\" : 1},"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+            + "}}}";  
+    }  
+        assertEquals(result, template);
+                alias.indexRouting(randomRealisticUnicodeOfLengthBetween(1, 100));
+            + randomAlphaOfLength(10)
+        BytesReference templateBytes = new BytesArray(template);
+        }
+                randomInt(),  
+            );  
 }
+            + "\":{\"type\":\"text\"},\""  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+            + randomAlphaOfLength(10)
+ * SPDX-License-Identifier: Apache-2.0
+        builder.build();
+                IllegalArgumentException.class,
+            )  
+        }  
+    }
+                randomInt(),  
+                Map.of()
+                MediaTypeRegistry.JSON  
+        assertWarnings(  
+ * the Apache License, Version 2.0 (the "License"); you may
+                NamedXContentRegistry.EMPTY,  
+            XContentParser parser = XContentHelper.createParser(
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+            .stream()
+            );
+        IndexTemplateMetadata.Builder.toXContentWithTypes(template, builder, ToXContent.EMPTY_PARAMS);
+            templateBuilder.settings(Settings.builder().put("index.setting-1", randomLong()));
+/*
+ *
+            builder.endObject();
+            .sorted(Map.Entry.comparingByKey())  
+        }  
+            assertThat(template.patterns(), contains("pattern-1"));
+        BufferedChecksumStreamOutput checksumOut2 = new BufferedChecksumStreamOutput(out2);  
+        }  
+        IndexTemplateMetadata.Builder builder = IndexTemplateMetadata.builder("my-template");  
+        ) {
+/*  
+        if (randomBoolean()) {
+        for (int i = 0; i < numAlias; i++) {
+        try (
+import org.opensearch.common.settings.Settings;
+        templateBuilder2.settings(template.settings());
+            indexTemplateMetadata = IndexTemplateMetadata.Builder.fromXContent(parser, "test");  
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+        for (int i = 0; i < numAlias; i++) {
+                NamedXContentRegistry.EMPTY,
+            + randomAlphaOfLength(10)
+                Settings.EMPTY,
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+ * Unless required by applicable law or agreed to in writing,
+        try (
+            new IndexTemplateMetadata(  
+            );  
+                new BytesArray(templateInJSON),
+ */
+        if (randomBoolean()) {  
+        }
+        ) {
+        templateBuilder2.putMapping("doc", template.mappings());
+                IllegalArgumentException.class,
+        template2.writeVerifiableTo(checksumOut2);

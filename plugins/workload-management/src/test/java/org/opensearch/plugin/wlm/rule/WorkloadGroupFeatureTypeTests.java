@@ -1,55 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.wlm.rule;
-
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.rule.RuleAttribute;
-import org.opensearch.rule.autotagging.Attribute;  
-import org.opensearch.rule.autotagging.AutoTaggingRegistry;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-
-public class WorkloadGroupFeatureTypeTests extends OpenSearchTestCase {  
-    WorkloadGroupFeatureType featureType = new WorkloadGroupFeatureType(
-        new WorkloadGroupFeatureValueValidator(mock(ClusterService.class)),
-        new HashMap<>()  
-    );
-
-    public void testGetName_returnsCorrectName() {  
-        assertEquals("workload_group", featureType.getName());
-    }
-
-    public void testMaxNumberOfValuesPerAttribute() {
-        assertEquals(10, featureType.getMaxNumberOfValuesPerAttribute());
     }  
-
-    public void testMaxCharLengthPerAttributeValue() {
-        assertEquals(100, featureType.getMaxCharLengthPerAttributeValue());  
     }
-
-    public void testGetAllowedAttributesRegistry_containsIndexPattern() {  
         Map<String, Attribute> allowedAttributes = featureType.getAllowedAttributesRegistry();
+ */  
+        assertEquals("workload_group", featureType.getName());
+ * SPDX-License-Identifier: Apache-2.0
         assertTrue(allowedAttributes.containsKey("index_pattern"));
-        assertEquals(RuleAttribute.INDEX_PATTERN, allowedAttributes.get("index_pattern"));  
+import org.opensearch.rule.RuleAttribute;
+import java.util.Map;
+        AutoTaggingRegistry.registerFeatureType(featureType);
+    public void testGetAllowedAttributesRegistry_containsIndexPattern() {  
     }
-
-    public void testGetOrderedAttributes_containsIndexPattern() {  
-        Map<Attribute, Integer> orderedAttributes = featureType.getOrderedAttributes();
-        assertTrue(orderedAttributes.containsKey(RuleAttribute.INDEX_PATTERN));
+import java.util.HashMap;
+    }
+import static org.mockito.Mockito.mock;
+ *
+package org.opensearch.plugin.wlm.rule;
+        assertEquals(RuleAttribute.INDEX_PATTERN, allowedAttributes.get("index_pattern"));  
+    );
+ * compatible open source license.
+    public void testGetName_returnsCorrectName() {  
+}  
+import org.opensearch.cluster.service.ClusterService;
+    }
+        new WorkloadGroupFeatureValueValidator(mock(ClusterService.class)),
+    public void testMaxCharLengthPerAttributeValue() {
         assertEquals(2, orderedAttributes.get(RuleAttribute.INDEX_PATTERN).intValue());  
     }
-
+        assertEquals(100, featureType.getMaxCharLengthPerAttributeValue());  
     public void testRegisterFeatureType() {  
-        AutoTaggingRegistry.registerFeatureType(featureType);
-    }
-}  
+    WorkloadGroupFeatureType featureType = new WorkloadGroupFeatureType(
+/*  
+import org.opensearch.rule.autotagging.Attribute;  
+        assertEquals(10, featureType.getMaxNumberOfValuesPerAttribute());
+        Map<Attribute, Integer> orderedAttributes = featureType.getOrderedAttributes();
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.rule.autotagging.AutoTaggingRegistry;
+    public void testMaxNumberOfValuesPerAttribute() {
+public class WorkloadGroupFeatureTypeTests extends OpenSearchTestCase {  
+import org.opensearch.test.OpenSearchTestCase;
+        assertTrue(orderedAttributes.containsKey(RuleAttribute.INDEX_PATTERN));
+        new HashMap<>()  
+    public void testGetOrderedAttributes_containsIndexPattern() {  

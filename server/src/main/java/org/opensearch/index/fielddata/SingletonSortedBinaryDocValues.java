@@ -1,72 +1,59 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+    }  
  */
-
+/**  
+ * Licensed to Elasticsearch under one or more contributor  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return 1;
+        return in;
+ *
+ * Provider for sorted binary docvalues
 /*  
- * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+    public int docValueCount() {
+final class SingletonSortedBinaryDocValues extends SortedBinaryDocValues {
+ * software distributed under the License is distributed on an
+        return in.advanceExact(doc);  
+import java.io.IOException;
+import org.apache.lucene.index.BinaryDocValues;
+ * ownership. Elasticsearch licenses this file to you under  
+import org.apache.lucene.util.BytesRef;
+ * KIND, either express or implied.  See the License for the
+ * Unless required by applicable law or agreed to in writing,
+    public BytesRef nextValue() throws IOException {  
+ *
+        return in.binaryValue();
+ * The OpenSearch Contributors require contributions made to  
+    }
+    }
  * GitHub history for details.
  */  
-
-package org.opensearch.index.fielddata;
-
-import org.apache.lucene.index.BinaryDocValues;
-import org.apache.lucene.util.BytesRef;
-
-import java.io.IOException;
-
-/**  
- * Provider for sorted binary docvalues
- *
- * @opensearch.internal  
+ * this work for additional information regarding copyright
  */
-final class SingletonSortedBinaryDocValues extends SortedBinaryDocValues {
-
-    private final BinaryDocValues in;
-
-    SingletonSortedBinaryDocValues(BinaryDocValues in) {  
-        this.in = in;
-    }
-
-    @Override
+ *
     public boolean advanceExact(int doc) throws IOException {
-        return in.advanceExact(doc);  
-    }
-
+ */  
     @Override  
-    public int docValueCount() {
-        return 1;
-    }  
-
     @Override
-    public BytesRef nextValue() throws IOException {  
-        return in.binaryValue();
-    }
-
-    public BinaryDocValues getBinaryDocValues() {
-        return in;
-    }  
-
+ * under the License.  
 }
+/*
+    }  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+ * Modifications Copyright OpenSearch Contributors. See
+    public BinaryDocValues getBinaryDocValues() {
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+        this.in = in;
+ * @opensearch.internal  
+package org.opensearch.index.fielddata;
+ * this file be licensed under the Apache-2.0 license or a
+ * You may obtain a copy of the License at  
+    SingletonSortedBinaryDocValues(BinaryDocValues in) {  
+ * license agreements. See the NOTICE file distributed with
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private final BinaryDocValues in;

@@ -1,56 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.util.CollectionUtils;
-import org.opensearch.core.xcontent.ToXContentObject;  
 import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.List;
-
-/**  
- * Encapsulates stats for multiple repositories
- *
- * @opensearch.api  
- */
-@PublicApi(since = "2.11.0")
 public class RepositoriesStats implements Writeable, ToXContentObject {  
-
-    List<RepositoryStatsSnapshot> repositoryStatsSnapshots;
-
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+ *
     public RepositoriesStats(List<RepositoryStatsSnapshot> repositoryStatsSnapshots) {
-        this.repositoryStatsSnapshots = repositoryStatsSnapshots;
-    }  
-
-    public RepositoriesStats(StreamInput in) throws IOException {
-        this.repositoryStatsSnapshots = in.readList(RepositoryStatsSnapshot::new);  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
+ */  
         out.writeList(repositoryStatsSnapshots);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startArray("repositories");
-        if (CollectionUtils.isEmpty(repositoryStatsSnapshots) == false) {
-            for (RepositoryStatsSnapshot repositoryStatsSnapshot : repositoryStatsSnapshots) {  
-                repositoryStatsSnapshot.toXContent(builder, params);
+    }
+@PublicApi(since = "2.11.0")
+ *
+import org.opensearch.core.common.util.CollectionUtils;
             }
-        }  
+import org.opensearch.common.annotation.PublicApi;
+/**  
+                repositoryStatsSnapshot.toXContent(builder, params);
         builder.endArray();
+    }  
+        this.repositoryStatsSnapshots = in.readList(RepositoryStatsSnapshot::new);  
+        builder.startArray("repositories");
+import java.util.List;
+        this.repositoryStatsSnapshots = repositoryStatsSnapshots;
+        }  
+    public RepositoriesStats(StreamInput in) throws IOException {
+    List<RepositoryStatsSnapshot> repositoryStatsSnapshots;
+            for (RepositoryStatsSnapshot repositoryStatsSnapshot : repositoryStatsSnapshots) {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
         return builder;
     }  
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
 }
+/*  
+ * Encapsulates stats for multiple repositories
+    @Override
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+ * @opensearch.api  
+package org.opensearch.repositories;
+import java.io.IOException;  
+import org.opensearch.core.common.io.stream.Writeable;
+    public void writeTo(StreamOutput out) throws IOException {
+    }  
+import org.opensearch.core.xcontent.ToXContentObject;  
+ */
+    @Override  
+        if (CollectionUtils.isEmpty(repositoryStatsSnapshots) == false) {
+import org.opensearch.core.common.io.stream.StreamInput;

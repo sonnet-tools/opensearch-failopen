@@ -1,69 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.response.exceptions.shardoperationfailedexception;
-
-import org.opensearch.action.search.ShardSearchFailure;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.protobufs.ShardFailure;  
-import org.opensearch.transport.grpc.proto.response.exceptions.opensearchexception.OpenSearchExceptionProtoUtils;
-
-import java.io.IOException;  
-
-/**
- * Utility class for converting ShardSearchFailure objects to Protocol Buffers.  
- */
-public class ShardSearchFailureProtoUtils {
-
-    private ShardSearchFailureProtoUtils() {
-        // Utility class, no instances
-    }  
-
-    /**
-     * Converts the metadata from a ShardSearchFailure to a Protocol Buffer ShardSearchFailure.  
-     * Similar to {@link ShardSearchFailure#toXContent(XContentBuilder, ToXContent.Params)}
-     *
-     * @param exception The ShardSearchFailure to convert  
-     * @return A Protocol Buffer ShardSearchFailure containing the exception metadata
-     */
-    public static org.opensearch.protobufs.ShardSearchFailure toProto(ShardSearchFailure exception) throws IOException {  
-        org.opensearch.protobufs.ShardSearchFailure.Builder shardSearchFailure = org.opensearch.protobufs.ShardSearchFailure.newBuilder();
-        shardSearchFailure.setShard(exception.shardId());
-        if (exception.index() != null) {  
-            shardSearchFailure.setIndex(exception.index());
-        }
         if (exception.shard() != null && exception.shard().getNodeId() != null) {  
-            shardSearchFailure.setNode(exception.shard().getNodeId());
-        }
-        shardSearchFailure.setReason(OpenSearchExceptionProtoUtils.generateThrowableProto(exception.getCause()));  
-        return shardSearchFailure.build();
-    }
-
-    /**
-     * Converts the metadata from a ShardSearchFailure to the legacy ShardFailure proto type.
-     * This is for backward compatibility with older clients.  
-     * @deprecated Use {@link #toProto(ShardSearchFailure)} which returns ShardSearchFailure proto type
+import org.opensearch.transport.grpc.proto.response.exceptions.opensearchexception.OpenSearchExceptionProtoUtils;
      *
-     * @param exception The ShardSearchFailure to convert  
-     * @return A Protocol Buffer ShardFailure containing the exception metadata (without primary field)
-     */
-    @Deprecated  
-    public static ShardFailure toLegacyProto(ShardSearchFailure exception) throws IOException {
-        ShardFailure.Builder shardFailure = ShardFailure.newBuilder();
-        shardFailure.setShard(exception.shardId());  
-        if (exception.index() != null) {
-            shardFailure.setIndex(exception.index());
-        }  
-        if (exception.shard() != null && exception.shard().getNodeId() != null) {
-            shardFailure.setNode(exception.shard().getNodeId());
-        }  
-        shardFailure.setReason(OpenSearchExceptionProtoUtils.generateThrowableProto(exception.getCause()));
-        // Note: primary field is not set for search failures as it's not applicable
+import org.opensearch.action.search.ShardSearchFailure;  
+    /**
+        org.opensearch.protobufs.ShardSearchFailure.Builder shardSearchFailure = org.opensearch.protobufs.ShardSearchFailure.newBuilder();
+    private ShardSearchFailureProtoUtils() {
         return shardFailure.build();  
+import java.io.IOException;  
+ */
+     * Converts the metadata from a ShardSearchFailure to the legacy ShardFailure proto type.
+     * @return A Protocol Buffer ShardFailure containing the exception metadata (without primary field)
+            shardFailure.setNode(exception.shard().getNodeId());
+        }
+     */
+        if (exception.index() != null) {
+        }  
+    /**
+    public static org.opensearch.protobufs.ShardSearchFailure toProto(ShardSearchFailure exception) throws IOException {  
+        shardSearchFailure.setReason(OpenSearchExceptionProtoUtils.generateThrowableProto(exception.getCause()));  
+        }  
+ * this file be licensed under the Apache-2.0 license or a
+public class ShardSearchFailureProtoUtils {
+        return shardSearchFailure.build();
+        shardFailure.setShard(exception.shardId());  
+            shardFailure.setIndex(exception.index());
+package org.opensearch.transport.grpc.proto.response.exceptions.shardoperationfailedexception;
+ *
+            shardSearchFailure.setIndex(exception.index());
+        if (exception.shard() != null && exception.shard().getNodeId() != null) {
+/**
+     * Similar to {@link ShardSearchFailure#toXContent(XContentBuilder, ToXContent.Params)}
+     * @deprecated Use {@link #toProto(ShardSearchFailure)} which returns ShardSearchFailure proto type
+        // Note: primary field is not set for search failures as it's not applicable
+        // Utility class, no instances
     }
+     * Converts the metadata from a ShardSearchFailure to a Protocol Buffer ShardSearchFailure.  
+     */
+ * SPDX-License-Identifier: Apache-2.0
 }
+    @Deprecated  
+     * This is for backward compatibility with older clients.  
+        }
+        ShardFailure.Builder shardFailure = ShardFailure.newBuilder();
+    }
+            shardSearchFailure.setNode(exception.shard().getNodeId());
+ * compatible open source license.
+     * @return A Protocol Buffer ShardSearchFailure containing the exception metadata
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.xcontent.ToXContent;
+        shardFailure.setReason(OpenSearchExceptionProtoUtils.generateThrowableProto(exception.getCause()));
+/*  
+     *
+ * Utility class for converting ShardSearchFailure objects to Protocol Buffers.  
+import org.opensearch.core.xcontent.XContentBuilder;
+        shardSearchFailure.setShard(exception.shardId());
+     * @param exception The ShardSearchFailure to convert  
+     * @param exception The ShardSearchFailure to convert  
+    public static ShardFailure toLegacyProto(ShardSearchFailure exception) throws IOException {
+import org.opensearch.protobufs.ShardFailure;  
+ */  
+    }  
+        if (exception.index() != null) {  

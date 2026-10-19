@@ -1,149 +1,136 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.client;
-
-import org.opensearch.action.search.DeleteSearchPipelineRequest;
-import org.opensearch.action.search.GetSearchPipelineRequest;
-import org.opensearch.action.search.GetSearchPipelineResponse;  
-import org.opensearch.action.search.PutSearchPipelineRequest;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.core.action.ActionListener;  
-
-import java.io.IOException;
-import java.util.Collections;  
-
-import static java.util.Collections.emptySet;
-
-public final class SearchPipelineClient {
-    private final RestHighLevelClient restHighLevelClient;
-
-    SearchPipelineClient(RestHighLevelClient restHighLevelClient) {
-        this.restHighLevelClient = restHighLevelClient;
-    }  
-
     /**
-     * Add a pipeline or update an existing pipeline.  
-     *
      * @param request the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */  
-    public AcknowledgedResponse put(PutSearchPipelineRequest request, RequestOptions options) throws IOException {
         return restHighLevelClient.performRequestAndParseEntity(
-            request,  
-            SearchPipelineRequestConverters::putPipeline,
-            options,
-            AcknowledgedResponse::fromXContent,  
-            emptySet()
-        );
-    }  
-
-    /**
-     * Asynchronously add a pipeline or update an existing pipeline.  
-     *
-     * @param request the request
+    }
+ * SPDX-License-Identifier: Apache-2.0
      * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request
-     */  
-    public Cancellable putAsync(PutSearchPipelineRequest request, RequestOptions options, ActionListener<AcknowledgedResponse> listener) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(
-            request,  
-            SearchPipelineRequestConverters::putPipeline,
-            options,
-            AcknowledgedResponse::fromXContent,  
-            listener,
+     * Asynchronously delete an existing pipeline.  
+        );
+ */  
+     *
+    private final RestHighLevelClient restHighLevelClient;
+        );
+     */
+        ActionListener<AcknowledgedResponse> listener
             emptySet()
-        );  
-    }
-
-    /**  
-     * Get existing pipelines.
-     *
-     * @param request the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response  
-     */
-    public GetSearchPipelineResponse get(GetSearchPipelineRequest request, RequestOptions options) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(  
+    ) {
+    /**
             request,
-            SearchPipelineRequestConverters::getPipeline,
-            options,  
-            GetSearchPipelineResponse::fromXContent,
-            Collections.singleton(404)
-        );  
-    }
-
-    /**  
-     * Asynchronously get existing pipelines.
-     *
-     * @param request the request  
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request  
-     */
-    public Cancellable getAsync(
-        GetSearchPipelineRequest request,  
-        RequestOptions options,
-        ActionListener<GetSearchPipelineResponse> listener
-    ) {  
-        return restHighLevelClient.performRequestAsyncAndParseEntity(
-            request,
-            SearchPipelineRequestConverters::getPipeline,  
             options,
+            SearchPipelineRequestConverters::getPipeline,
+     * Get existing pipelines.
+    }  
+        return restHighLevelClient.performRequestAndParseEntity(  
+        );
+            options,  
+        );  
+package org.opensearch.client;
+     *
             GetSearchPipelineResponse::fromXContent,
             listener,  
-            Collections.singleton(404)
-        );
-    }  
-
-    /**
-     * Delete an existing pipeline.  
-     *
-     * @param request the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @return the response
-     * @throws IOException in case there is a problem sending the request or parsing back the response
-     */  
-    public AcknowledgedResponse delete(DeleteSearchPipelineRequest request, RequestOptions options) throws IOException {
-        return restHighLevelClient.performRequestAndParseEntity(
             request,  
-            SearchPipelineRequestConverters::deletePipeline,
-            options,
-            AcknowledgedResponse::fromXContent,  
-            emptySet()
-        );
-    }  
-
-    /**
-     * Asynchronously delete an existing pipeline.  
-     *
-     * @param request the request
-     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
-     * @param listener the listener to be notified upon request completion
-     * @return cancellable that may be used to cancel the request
-     */  
-    public Cancellable deleteAsync(
-        DeleteSearchPipelineRequest request,
-        RequestOptions options,  
-        ActionListener<AcknowledgedResponse> listener
-    ) {
-        return restHighLevelClient.performRequestAsyncAndParseEntity(  
-            request,
-            SearchPipelineRequestConverters::deletePipeline,
-            options,  
-            AcknowledgedResponse::fromXContent,
             listener,
-            emptySet()  
-        );
+    public Cancellable putAsync(PutSearchPipelineRequest request, RequestOptions options, ActionListener<AcknowledgedResponse> listener) {
+     */  
+            options,
+    }  
+            AcknowledgedResponse::fromXContent,  
+     * @return the response
+    /**
+import org.opensearch.action.search.GetSearchPipelineResponse;  
+            SearchPipelineRequestConverters::getPipeline,  
+     * @return cancellable that may be used to cancel the request
+    public AcknowledgedResponse put(PutSearchPipelineRequest request, RequestOptions options) throws IOException {
+     * @param listener the listener to be notified upon request completion
+    SearchPipelineClient(RestHighLevelClient restHighLevelClient) {
+        RequestOptions options,  
+ * The OpenSearch Contributors require contributions made to  
+     * @param request the request
+            Collections.singleton(404)
+            SearchPipelineRequestConverters::putPipeline,
+    /**  
+    public AcknowledgedResponse delete(DeleteSearchPipelineRequest request, RequestOptions options) throws IOException {
+        return restHighLevelClient.performRequestAsyncAndParseEntity(
+    }  
+        return restHighLevelClient.performRequestAndParseEntity(
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+    public GetSearchPipelineResponse get(GetSearchPipelineRequest request, RequestOptions options) throws IOException {
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+        ActionListener<GetSearchPipelineResponse> listener
+        DeleteSearchPipelineRequest request,
+import java.io.IOException;
+    public Cancellable deleteAsync(
+ * compatible open source license.
+     * @param request the request  
+     * Add a pipeline or update an existing pipeline.  
+        return restHighLevelClient.performRequestAsyncAndParseEntity(  
+/*  
+            request,  
+            Collections.singleton(404)
+ * this file be licensed under the Apache-2.0 license or a
+            GetSearchPipelineResponse::fromXContent,
+            options,
+import org.opensearch.action.search.GetSearchPipelineRequest;
     }
-
+     */  
+     * @param listener the listener to be notified upon request completion
+        );  
+     * @return cancellable that may be used to cancel the request  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+     * @return cancellable that may be used to cancel the request
+     * @return the response
+            emptySet()  
+            SearchPipelineRequestConverters::putPipeline,
+        );
+        this.restHighLevelClient = restHighLevelClient;
+            request,
+    ) {  
+        RequestOptions options,
 }
+ *
+     * @param request the request  
+     * @param request the request
+    }
+            request,  
+import org.opensearch.core.action.ActionListener;  
+            request,
+            options,  
+            emptySet()
+    /**
+     */  
+    /**  
+            listener,
+     */  
+     *
+     *
+import org.opensearch.action.search.DeleteSearchPipelineRequest;
+     * Delete an existing pipeline.  
+     * @param request the request
+    public Cancellable getAsync(
+            AcknowledgedResponse::fromXContent,
+     * Asynchronously get existing pipelines.
+     * @throws IOException in case there is a problem sending the request or parsing back the response
+    }  
+            AcknowledgedResponse::fromXContent,  
+        return restHighLevelClient.performRequestAsyncAndParseEntity(
+            emptySet()
+            SearchPipelineRequestConverters::deletePipeline,
+public final class SearchPipelineClient {
+     * @throws IOException in case there is a problem sending the request or parsing back the response  
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized
+            SearchPipelineRequestConverters::deletePipeline,
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+     * Asynchronously add a pipeline or update an existing pipeline.  
+            options,
+     *
+     * @return the response
+import org.opensearch.action.search.PutSearchPipelineRequest;
+            AcknowledgedResponse::fromXContent,  
+import java.util.Collections;  
+     * @param listener the listener to be notified upon request completion
+     * @param options the request options (e.g. headers), use {@link RequestOptions#DEFAULT} if nothing needs to be customized  
+     */
+     *
+import static java.util.Collections.emptySet;
+        GetSearchPipelineRequest request,  

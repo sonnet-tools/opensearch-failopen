@@ -1,81 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.search.aggregations.support;
-
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.script.AggregationScript;
-import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregatorSupplier;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Collections;  
-
-import org.mockito.Mockito;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ValuesSourceRegistryTests extends OpenSearchTestCase {
-
-    public void testAggregatorNotFoundException() {  
-        final QueryShardContext queryShardContext = mock(QueryShardContext.class);
-        final AggregationScript.Factory mockAggScriptFactory = mock(AggregationScript.Factory.class);
-        when(mockAggScriptFactory.newFactory(Mockito.any(), Mockito.any())).thenReturn(mock(AggregationScript.LeafFactory.class));  
-        when(queryShardContext.compile(Mockito.any(), Mockito.any())).thenReturn(mockAggScriptFactory);
-
+ * GitHub history for details.
+}
         ValuesSourceConfig fieldOnly = ValuesSourceConfig.resolve(  
-            queryShardContext,
+        final AggregationScript.Factory mockAggScriptFactory = mock(AggregationScript.Factory.class);
+        ValuesSourceRegistry registry = new ValuesSourceRegistry(Collections.singletonMap(key, Collections.emptyList()), null);
             null,
-            "field",  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        ValuesSourceRegistry.RegistryKey key = new ValuesSourceRegistry.RegistryKey("bogus", HistogramAggregatorSupplier.class);  
+import org.opensearch.script.AggregationScript;
+ *
+ * under the License.  
             null,
-            null,
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+package org.opensearch.search.aggregations.support;
             null,  
+ * this file be licensed under the Apache-2.0 license or a
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+/*
+        ValuesSourceConfig scriptOnly = ValuesSourceConfig.resolve(
+        expectThrows(IllegalArgumentException.class, () -> registry.getAggregator(key, scriptOnly));  
+/*  
+ * KIND, either express or implied.  See the License for the
+            null,
+/*  
+        final QueryShardContext queryShardContext = mock(QueryShardContext.class);
+import org.opensearch.test.OpenSearchTestCase;
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
             null,
             CoreValuesSourceType.BYTES
-        );  
-
-        ValuesSourceConfig scriptOnly = ValuesSourceConfig.resolve(
+import org.opensearch.index.query.QueryShardContext;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            null,
+            null,
+        );
+            queryShardContext,
+ * license agreements. See the NOTICE file distributed with
+import java.util.Collections;  
+import static org.mockito.Mockito.mock;
+ * software distributed under the License is distributed on an
+import org.mockito.Mockito;
+ * compatible open source license.
+    public void testAggregatorNotFoundException() {  
+            null,
+public class ValuesSourceRegistryTests extends OpenSearchTestCase {
             queryShardContext,  
             null,
-            null,
-            mockScript("fakeScript"),  
-            null,
-            null,
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
+import static org.mockito.Mockito.when;
+ */
+        when(queryShardContext.compile(Mockito.any(), Mockito.any())).thenReturn(mockAggScriptFactory);
+import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregatorSupplier;  
             null,  
+ * The OpenSearch Contributors require contributions made to  
             CoreValuesSourceType.BYTES
-        );
-        ValuesSourceRegistry.RegistryKey key = new ValuesSourceRegistry.RegistryKey("bogus", HistogramAggregatorSupplier.class);  
-        ValuesSourceRegistry registry = new ValuesSourceRegistry(Collections.singletonMap(key, Collections.emptyList()), null);
-        expectThrows(IllegalArgumentException.class, () -> registry.getAggregator(key, fieldOnly));
-        expectThrows(IllegalArgumentException.class, () -> registry.getAggregator(key, scriptOnly));  
     }
-}
+            mockScript("fakeScript"),  
+ * not use this file except in compliance with the License.
+            "field",  
+ * SPDX-License-Identifier: Apache-2.0
+        when(mockAggScriptFactory.newFactory(Mockito.any(), Mockito.any())).thenReturn(mock(AggregationScript.LeafFactory.class));  
+        expectThrows(IllegalArgumentException.class, () -> registry.getAggregator(key, fieldOnly));
+        );  

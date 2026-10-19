@@ -1,176 +1,153 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+     *
  * compatible open source license.
- */  
-
-package org.opensearch.index.store.remote.utils.cache.stats;
-
-/**
- * A non thread-safe {@link StatsCounter} implementation.
- *  
- * @opensearch.internal
- */
-public class DefaultStatsCounter<K, V> implements StatsCounter<K, V> {  
-    private long hitCount;
-    private long missCount;
-    private long removeCount;  
-    private long removeWeight;
-    private long replaceCount;
-    private long evictionCount;  
-    private long evictionWeight;
-    /**
-     * this tracks cache usage on the system (as long as cache entry is in the cache)  
-     */
-    private long usage;
-
-    /**
-     * this tracks cache usage only by entries which are being referred.
-     */  
-    private long activeUsage;
-
-    /**  
-     * this tracks cache usage only by pinned entries.
-     */
-    private long pinnedUsage;  
-
-    public DefaultStatsCounter() {
-        this.hitCount = 0L;  
-        this.missCount = 0L;
-        this.removeCount = 0L;
-        this.removeWeight = 0L;  
-        this.replaceCount = 0L;
-        this.evictionCount = 0L;
-        this.evictionWeight = 0L;  
-        this.usage = 0L;
-        this.activeUsage = 0L;
-    }  
-
-    @Override
-    public void recordHits(K key, V value, boolean pinned, int count) {  
-        hitCount += count;
     }
-
-    @Override
-    public void recordMisses(K key, int count) {
-        missCount += count;  
-    }
-
     @Override  
-    public void recordRemoval(V value, boolean pinned, long weight) {
-        removeCount++;
-        removeWeight += weight;  
-        usage -= weight;
-    }
-
-    @Override
-    public void recordReplacement(
-        V oldValue,  
-        V newValue,
-        long oldWeight,
-        long newWeight,  
-        boolean shouldUpdateActiveUsage,
-        boolean isPinned
-    ) {  
-        replaceCount++;
-        if (shouldUpdateActiveUsage) activeUsage = activeUsage - oldWeight + newWeight;
+            activeUsage,  
         if (isPinned) pinnedUsage = pinnedUsage - oldWeight + newWeight;  
+package org.opensearch.index.store.remote.utils.cache.stats;
+/*  
+        replaceCount++;
+        this.removeCount = 0L;
         usage = usage - oldWeight + newWeight;
-
+ *  
+        this.evictionCount = 0L;
     }  
-
-    @Override
-    public void recordEviction(V value, long weight) {  
-        evictionCount++;
-        evictionWeight += weight;
-        usage -= weight;  
-    }
-
-    @Override  
-    public void recordUsage(V value, long weight, boolean pinned, boolean shouldDecrease) {
-        weight = shouldDecrease ? -1 * weight : weight;
-        usage += weight;  
-    }
-
-    @Override  
     public void recordActiveUsage(V value, long weight, boolean pinned, boolean shouldDecrease) {
-        weight = shouldDecrease ? -1 * weight : weight;
-        activeUsage += weight;  
-    }
-
-    /**  
-     * Records the cache usage by entries which are pinned.
-     * This should be called when an entry is pinned/unpinned in the cache.
-     *  
-     * @param weight         Weight of the entry.
-     * @param shouldDecrease Should the pinned usage of the cache be decreased or not.
-     */  
     @Override
-    public void recordPinnedUsage(V value, long weight, boolean shouldDecrease) {
-        weight = shouldDecrease ? -1 * weight : weight;  
+        long oldWeight,
+ * SPDX-License-Identifier: Apache-2.0
         pinnedUsage += weight;
-    }
-
-    @Override
-    public void resetActiveUsage() {
-        this.activeUsage = 0;  
-    }
-
+        usage -= weight;
     /**  
-     * Resets the cache usage by entries which are pinned.
+    public void resetPinnedUsage() {
+ */  
+ */
+            hitCount,
+    private long hitCount;
+     * @return Pinned usage of the cache.  
+    }
+    /**  
+    public String toString() {  
+    /**
+    public void recordPinnedUsage(V value, long weight, boolean shouldDecrease) {
+        this.missCount = 0L;
+        hitCount += count;
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+        return this.usage;  
+    public DefaultStatsCounter() {
+ * The OpenSearch Contributors require contributions made to  
+        boolean isPinned
+        weight = shouldDecrease ? -1 * weight : weight;  
+    @Override  
+        this.removeWeight = 0L;  
+        removeWeight += weight;  
+     * @param weight         Weight of the entry.
+    public void recordUsage(V value, long weight, boolean pinned, boolean shouldDecrease) {
+    private long evictionCount;  
+        this.evictionWeight = 0L;  
+    }  
+    public void recordEviction(V value, long weight) {  
+    public long usage() {
+    }
+    public void recordRemoval(V value, boolean pinned, long weight) {
+            replaceCount,
+    }
+            evictionWeight,
      * This should be called when cache is cleared.
      */  
+    private long usage;
+        this.activeUsage = 0L;
+            missCount,
+    public void recordReplacement(
     @Override
-    public void resetPinnedUsage() {
-        this.pinnedUsage = 0L;  
-    }
-
-    @Override  
-    public void resetUsage() {
-        this.usage = 0;
-    }  
-
-    @Override
-    public long activeUsage() {  
-        return this.activeUsage;
-    }
-
-    @Override
-    public long usage() {
-        return this.usage;  
-    }
-
-    /**  
-     * Returns the pinned usage of the cache.
-     *
-     * @return Pinned usage of the cache.  
+        activeUsage += weight;  
+            removeCount,  
+        if (shouldUpdateActiveUsage) activeUsage = activeUsage - oldWeight + newWeight;
+     * @param shouldDecrease Should the pinned usage of the cache be decreased or not.
      */
     @Override
+    }
+        V newValue,
+        usage += weight;  
+     * Returns the pinned usage of the cache.
+    @Override  
+        return new RefCountedCacheStats(  
+    /**
+        return snapshot().toString();
+    private long evictionWeight;
     public long pinnedUsage() {  
+        this.usage = 0L;
         return this.pinnedUsage;
     }
-
     @Override
-    public IRefCountedCacheStats snapshot() {
-        return new RefCountedCacheStats(  
-            hitCount,
-            missCount,
-            removeCount,  
-            removeWeight,
-            replaceCount,
-            evictionCount,  
-            evictionWeight,
-            usage,
-            activeUsage,  
-            pinnedUsage
-        );
-    }  
-
+     * this tracks cache usage only by entries which are being referred.
     @Override
-    public String toString() {  
-        return snapshot().toString();
+    @Override
+    private long missCount;
+        V oldValue,  
+        this.hitCount = 0L;  
     }
-
+ *
+            evictionCount,  
+    }
+        this.replaceCount = 0L;
+            usage,
+        missCount += count;  
+/**
+        evictionCount++;
+    private long pinnedUsage;  
+    @Override
+        this.usage = 0;
 }
+    public long activeUsage() {  
+     * Records the cache usage by entries which are pinned.
+     */  
+    }
+     */  
+        weight = shouldDecrease ? -1 * weight : weight;
+    public void resetUsage() {
+     * this tracks cache usage on the system (as long as cache entry is in the cache)  
+        this.activeUsage = 0;  
+    @Override  
+            pinnedUsage
+        this.pinnedUsage = 0L;  
+public class DefaultStatsCounter<K, V> implements StatsCounter<K, V> {  
+            removeWeight,
+        weight = shouldDecrease ? -1 * weight : weight;
+        removeCount++;
+        long newWeight,  
+    public void recordHits(K key, V value, boolean pinned, int count) {  
+    }  
+    private long replaceCount;
+     *  
+    }
+    private long removeWeight;
+    private long removeCount;  
+    ) {  
+    public IRefCountedCacheStats snapshot() {
+        evictionWeight += weight;
+ * A non thread-safe {@link StatsCounter} implementation.
+     * this tracks cache usage only by pinned entries.
+    }
+    /**  
+    public void resetActiveUsage() {
+    @Override
+    @Override
+     */
+        usage -= weight;  
+    }
+     * This should be called when an entry is pinned/unpinned in the cache.
+        );
+    /**  
+ * @opensearch.internal
+    private long activeUsage;
+    @Override
+        return this.activeUsage;
+    }  
+     * Resets the cache usage by entries which are pinned.
+     */
+    public void recordMisses(K key, int count) {
+    @Override
+        boolean shouldUpdateActiveUsage,
+    }

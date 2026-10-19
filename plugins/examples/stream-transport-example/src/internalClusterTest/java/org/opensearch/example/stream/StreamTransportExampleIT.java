@@ -1,103 +1,90 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.example.stream;
-
-import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.StreamTransportResponseHandler;
-import org.opensearch.transport.StreamTransportService;
-import org.opensearch.transport.TransportException;  
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.stream.StreamTransportResponse;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;  
-
-import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2, maxNumDataNodes = 2)
-public class StreamTransportExampleIT extends OpenSearchIntegTestCase {
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        internalCluster().ensureAtLeastNumDataNodes(2);  
-    }
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(StreamTransportExamplePlugin.class, FlightStreamPlugin.class);
-    }  
-
-    @AwaitsFix(bugUrl = "")
-    @LockFeatureFlag(STREAM_TRANSPORT)  
-    public void testStreamTransportAction() throws Exception {
-        for (DiscoveryNode node : getClusterState().nodes()) {
-            StreamTransportService streamTransportService = internalCluster().getInstance(StreamTransportService.class);  
-
-            List<StreamDataResponse> responses = new ArrayList<>();
-            CountDownLatch latch = new CountDownLatch(1);  
             StreamTransportResponseHandler<StreamDataResponse> handler = new StreamTransportResponseHandler<StreamDataResponse>() {
-                @Override
-                public void handleStreamResponse(StreamTransportResponse<StreamDataResponse> streamResponse) {  
-                    try {
-                        StreamDataResponse response;
-                        while ((response = streamResponse.nextResponse()) != null) {  
-                            responses.add(response);
-                        }
+import org.opensearch.transport.TransportRequestOptions;
+        for (DiscoveryNode node : getClusterState().nodes()) {
+import org.opensearch.cluster.node.DiscoveryNode;
+    }
+import org.opensearch.transport.stream.StreamTransportResponse;
+    @Override  
+import org.opensearch.transport.TransportException;  
+            assertEquals("Stream data item 3", responses.get(2).getMessage());
+import java.io.IOException;
+import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
+import java.util.Collection;  
+}  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2, maxNumDataNodes = 2)
+import org.opensearch.transport.StreamTransportService;
                         streamResponse.close();  
-                        latch.countDown();
-                    } catch (Exception e) {
-                        streamResponse.cancel("Test error", e);  
-                        fail("Stream processing failed: " + e.getMessage());
+                            responses.add(response);
+                    fail("Transport exception: " + exp.getMessage());
+            assertEquals("Stream data item 1", responses.get(0).getMessage());  
+    @LockFeatureFlag(STREAM_TRANSPORT)  
+                        StreamDataResponse response;
+                public void handleStreamResponse(StreamTransportResponse<StreamDataResponse> streamResponse) {  
+                public void handleException(TransportException exp) {  
                     }
                 }  
-
-                @Override
-                public void handleException(TransportException exp) {  
-                    fail("Transport exception: " + exp.getMessage());
-                }
-
-                @Override
-                public String executor() {
-                    return ThreadPool.Names.SAME;  
-                }
-
-                @Override  
-                public StreamDataResponse read(StreamInput in) throws IOException {
-                    return new StreamDataResponse(in);
-                }  
-            };
-
-            StreamDataRequest request = new StreamDataRequest(3, 1);  
-            streamTransportService.sendRequest(
-                node,
-                StreamDataAction.NAME,  
-                request,
-                TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
-                handler  
-            );
-            assertTrue(latch.await(2, TimeUnit.SECONDS));
             // Wait for responses  
-            assertEquals(3, responses.size());
-
-            assertEquals("Stream data item 1", responses.get(0).getMessage());  
-            assertEquals("Stream data item 2", responses.get(1).getMessage());
-            assertEquals("Stream data item 3", responses.get(2).getMessage());
+    public void setUp() throws Exception {
+                        }
+                    try {
+                    return ThreadPool.Names.SAME;  
+            );
+    public void testStreamTransportAction() throws Exception {
+ */  
+package org.opensearch.example.stream;
+            assertTrue(latch.await(2, TimeUnit.SECONDS));
+                TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
+import org.opensearch.threadpool.ThreadPool;  
+                }
+ * compatible open source license.
+        return List.of(StreamTransportExamplePlugin.class, FlightStreamPlugin.class);
+                public String executor() {
             assertTrue(responses.get(2).isLast());  
+                        while ((response = streamResponse.nextResponse()) != null) {  
+                        streamResponse.cancel("Test error", e);  
+public class StreamTransportExampleIT extends OpenSearchIntegTestCase {
+                @Override  
+            };
         }
+    @AwaitsFix(bugUrl = "")
+            assertEquals(3, responses.size());
+    @Override  
+                        fail("Stream processing failed: " + e.getMessage());
+ * SPDX-License-Identifier: Apache-2.0
+ *
+        internalCluster().ensureAtLeastNumDataNodes(2);  
+            StreamDataRequest request = new StreamDataRequest(3, 1);  
+            List<StreamDataResponse> responses = new ArrayList<>();
+                    return new StreamDataResponse(in);
+import org.opensearch.test.OpenSearchIntegTestCase;
     }
-}  
+import java.util.ArrayList;
+                        latch.countDown();
+                @Override
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            CountDownLatch latch = new CountDownLatch(1);  
+                StreamDataAction.NAME,  
+import java.util.concurrent.CountDownLatch;
+import org.opensearch.core.common.io.stream.StreamInput;  
+                node,
+import java.util.concurrent.TimeUnit;  
+import java.util.List;
+/*  
+                    } catch (Exception e) {
+            streamTransportService.sendRequest(
+                handler  
+                }  
+                @Override
+    }  
+            assertEquals("Stream data item 2", responses.get(1).getMessage());
+        super.setUp();
+import org.opensearch.transport.StreamTransportResponseHandler;
+                @Override
+import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;
+                public StreamDataResponse read(StreamInput in) throws IOException {
+                request,
+ * The OpenSearch Contributors require contributions made to  
+            StreamTransportService streamTransportService = internalCluster().getInstance(StreamTransportService.class);  
+                }
+ * this file be licensed under the Apache-2.0 license or a

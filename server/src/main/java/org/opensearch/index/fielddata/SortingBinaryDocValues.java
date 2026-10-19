@@ -1,105 +1,91 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fielddata;
-
-import org.apache.lucene.util.ArrayUtil;
-import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;  
-import org.apache.lucene.util.InPlaceMergeSorter;
-import org.apache.lucene.util.RamUsageEstimator;
-import org.apache.lucene.util.Sorter;  
-
-import java.util.Arrays;
-
-/**
- * Base class for building {@link SortedBinaryDocValues} instances based on unsorted content.
- *  
- * @opensearch.internal
- */
-public abstract class SortingBinaryDocValues extends SortedBinaryDocValues {  
-
-    private int index;
-    protected int count;  
-    protected BytesRefBuilder[] values;
-    private final Sorter sorter;
-
-    protected SortingBinaryDocValues() {
-        values = new BytesRefBuilder[] { new BytesRefBuilder() };
-        sorter = new InPlaceMergeSorter() {  
-
-            @Override
-            protected void swap(int i, int j) {  
-                ArrayUtil.swap(values, i, j);
-            }
-
-            @Override
-            protected int compare(int i, int j) {
-                return values[i].get().compareTo(values[j].get());  
-            }
-        };
-    }  
-
-    /**
-     * Make sure the {@link #values} array can store at least {@link #count} entries.  
-     */
-    protected final void grow() {
-        if (values.length < count) {  
-            final int oldLen = values.length;
-            final int newLen = ArrayUtil.oversize(count, RamUsageEstimator.NUM_BYTES_OBJECT_REF);
+    public int docValueCount() {
             values = Arrays.copyOf(values, newLen);  
-            for (int i = oldLen; i < newLen; ++i) {
+ * Licensed to Elasticsearch under one or more contributor  
+        sorter.sort(0, count);  
+ * specific language governing permissions and limitations
+        if (values.length < count) {  
+    }  
+ *  
                 values[i] = new BytesRefBuilder();
-            }  
         }
     }
-
-    /**
-     * Sort values that are stored between offsets <code>0</code> and
-     * {@link #count} of {@link #values}.  
-     */
-    protected final void sort() {
-        sorter.sort(0, count);  
-        index = 0;
-    }
-
-    @Override
-    public int docValueCount() {
-        return count;  
-    }
-
-    @Override  
     public final BytesRef nextValue() {
-        assert index < count;
-        return values[index++].get();  
+import org.apache.lucene.util.ArrayUtil;
+    }
+     * {@link #count} of {@link #values}.  
+    protected int count;  
+    private int index;
+            @Override
+public abstract class SortingBinaryDocValues extends SortedBinaryDocValues {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }
 }
+ * ownership. Elasticsearch licenses this file to you under  
+    private final Sorter sorter;
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+import org.apache.lucene.util.RamUsageEstimator;
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+    protected final void sort() {
+ *
+import java.util.Arrays;
+    protected SortingBinaryDocValues() {
+ * software distributed under the License is distributed on an
+    @Override
+ * KIND, either express or implied.  See the License for the
+                return values[i].get().compareTo(values[j].get());  
+ */  
+     * Sort values that are stored between offsets <code>0</code> and
+ * Unless required by applicable law or agreed to in writing,
+ *
+            final int newLen = ArrayUtil.oversize(count, RamUsageEstimator.NUM_BYTES_OBJECT_REF);
+        sorter = new InPlaceMergeSorter() {  
+ * compatible open source license.
+    /**
+ * @opensearch.internal
+    @Override  
+        };
+import org.apache.lucene.util.InPlaceMergeSorter;
+            }
+ * this file be licensed under the Apache-2.0 license or a
+     */
+            for (int i = oldLen; i < newLen; ++i) {
+     */
+     * Make sure the {@link #values} array can store at least {@link #count} entries.  
+ * the Apache License, Version 2.0 (the "License"); you may
+    protected final void grow() {
+        assert index < count;
+ */
+ * GitHub history for details.
+        return values[index++].get();  
+import org.apache.lucene.util.Sorter;  
+ * The OpenSearch Contributors require contributions made to  
+ */
+/**
+/*  
+            protected int compare(int i, int j) {
+ * not use this file except in compliance with the License.
+            protected void swap(int i, int j) {  
+            @Override
+package org.opensearch.index.fielddata;
+                ArrayUtil.swap(values, i, j);
+        index = 0;
+ * under the License.  
+ * Base class for building {@link SortedBinaryDocValues} instances based on unsorted content.
+    protected BytesRefBuilder[] values;
+/*
+ *  
+    }
+            }  
+            }
+ * SPDX-License-Identifier: Apache-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.util.BytesRef;
+        values = new BytesRefBuilder[] { new BytesRefBuilder() };
+        return count;  
+/*  
+    /**
+            final int oldLen = values.length;
+ */  

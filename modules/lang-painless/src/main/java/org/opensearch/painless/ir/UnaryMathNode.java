@@ -1,178 +1,147 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.DefBootstrap;
-import org.opensearch.painless.Location;  
-import org.opensearch.painless.MethodWriter;
-import org.opensearch.painless.Operation;
-import org.opensearch.painless.lookup.PainlessLookupUtility;  
-import org.opensearch.painless.lookup.def;
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;  
-import org.objectweb.asm.Label;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;  
-
-public class UnaryMathNode extends UnaryNode {
-
-    /* ---- begin node data ---- */
-
-    private Operation operation;  
-    private Class<?> unaryType;
-    private boolean cat;
-    private boolean originallyExplicit; // record whether there was originally an explicit cast  
-
-    public void setOperation(Operation operation) {
-        this.operation = operation;  
-    }
-
-    public Operation getOperation() {  
-        return operation;
-    }
-
-    public void setUnaryType(Class<?> unaryType) {
-        this.unaryType = unaryType;
-    }  
-
-    public Class<?> getUnaryType() {
-        return unaryType;  
-    }
-
-    public String getUnaryCanonicalTypeName() {  
-        return PainlessLookupUtility.typeToCanonicalTypeName(unaryType);
-    }
-
-    public void setCat(boolean cat) {
-        this.cat = cat;
-    }  
-
-    public boolean getCat() {
-        return cat;  
-    }
-
-    public void setOriginallyExplicit(boolean originallyExplicit) {  
-        this.originallyExplicit = originallyExplicit;
-    }
-
-    public boolean getOriginallyExplicit() {
-        return originallyExplicit;
-    }  
-
-    /* ---- end node data, begin visitor ---- */
-
-    @Override
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        irTreeVisitor.visitUnaryMath(this, scope);  
-    }
-
-    @Override  
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        getChildNode().visit(irTreeVisitor, scope);
-    }  
-
-    /* ---- end visitor ---- */
-
-    public UnaryMathNode(Location location) {
-        super(location);
-    }  
-
-    @Override
-    public void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {  
-        methodWriter.writeDebugInfo(getLocation());
-
-        if (operation == Operation.NOT) {  
-            Label fals = new Label();
-            Label end = new Label();
-
-            getChildNode().write(classWriter, methodWriter, writeScope);
-
-            methodWriter.ifZCmp(Opcodes.IFEQ, fals);  
-
-            methodWriter.push(false);
-            methodWriter.goTo(end);  
-            methodWriter.mark(fals);
             methodWriter.push(true);
-            methodWriter.mark(end);  
-        } else {
-            getChildNode().write(classWriter, methodWriter, writeScope);
-
-            // Def calls adopt the wanted return value. If there was a narrowing cast,
-            // we need to flag that so that it's done at runtime.
-            int defFlags = 0;  
-
-            if (originallyExplicit) {
-                defFlags |= DefBootstrap.OPERATOR_EXPLICIT_CAST;  
-            }
-
-            Type actualType = MethodWriter.getType(getExpressionType());  
-            Type childType = MethodWriter.getType(getChildNode().getExpressionType());
-
-            if (operation == Operation.BWNOT) {  
-                if (getUnaryType() == def.class) {
-                    org.objectweb.asm.Type descriptor = org.objectweb.asm.Type.getMethodType(actualType, childType);
-                    methodWriter.invokeDefCall("not", descriptor, DefBootstrap.UNARY_OPERATOR, defFlags);  
-                } else {
-                    if (getUnaryType() == int.class) {
-                        methodWriter.push(-1);  
-                    } else if (getUnaryType() == long.class) {
-                        methodWriter.push(-1L);
-                    } else {  
-                        throw new IllegalStateException(
+ * license agreements. See the NOTICE file distributed with
                             "unexpected unary math operation [" + operation + "] " + "for type [" + getExpressionCanonicalTypeName() + "]"
-                        );  
-                    }
-
-                    methodWriter.math(MethodWriter.XOR, actualType);  
-                }
-            } else if (operation == Operation.SUB) {
-                if (getUnaryType() == def.class) {  
-                    org.objectweb.asm.Type descriptor = org.objectweb.asm.Type.getMethodType(actualType, childType);
-                    methodWriter.invokeDefCall("neg", descriptor, DefBootstrap.UNARY_OPERATOR, defFlags);
                 } else {  
+ *
+public class UnaryMathNode extends UnaryNode {
                     methodWriter.math(MethodWriter.NEG, actualType);
-                }
-            } else if (operation == Operation.ADD) {  
-                if (getUnaryType() == def.class) {
-                    org.objectweb.asm.Type descriptor = org.objectweb.asm.Type.getMethodType(actualType, childType);
-                    methodWriter.invokeDefCall("plus", descriptor, DefBootstrap.UNARY_OPERATOR, defFlags);  
-                }
-            } else {
-                throw new IllegalStateException(  
-                    "unexpected unary math operation [" + operation + "] " + "for type [" + getExpressionCanonicalTypeName() + "]"
-                );
-            }  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return unaryType;  
+    /* ---- begin node data ---- */
+    public Class<?> getUnaryType() {
+                    } else {  
+ */
+        } else {
+    public UnaryMathNode(Location location) {
+            getChildNode().write(classWriter, methodWriter, writeScope);
         }
+                    methodWriter.invokeDefCall("not", descriptor, DefBootstrap.UNARY_OPERATOR, defFlags);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                );
+                        methodWriter.push(-1L);
     }
+    }
+            methodWriter.push(false);
+import org.opensearch.painless.lookup.def;
+    public Operation getOperation() {  
+        return cat;  
+            methodWriter.mark(end);  
+package org.opensearch.painless.ir;
+    }  
+            } else if (operation == Operation.ADD) {  
+    /* ---- end node data, begin visitor ---- */
+import org.objectweb.asm.Type;  
+            int defFlags = 0;  
+ */  
+                if (getUnaryType() == def.class) {  
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+            getChildNode().write(classWriter, methodWriter, writeScope);
+ * under the License.  
+            Label end = new Label();
+ * GitHub history for details.
+    }
+        getChildNode().visit(irTreeVisitor, scope);
+import org.opensearch.painless.phase.IRTreeVisitor;
+    @Override
+            // we need to flag that so that it's done at runtime.
+        this.cat = cat;
+                }
+        super(location);
+import org.opensearch.painless.lookup.PainlessLookupUtility;  
+            Type actualType = MethodWriter.getType(getExpressionType());  
+                    methodWriter.invokeDefCall("neg", descriptor, DefBootstrap.UNARY_OPERATOR, defFlags);
+            }
+    private Class<?> unaryType;
+    private boolean originallyExplicit; // record whether there was originally an explicit cast  
+                        throw new IllegalStateException(
+        this.unaryType = unaryType;
+        return originallyExplicit;
+                if (getUnaryType() == def.class) {
+            } else if (operation == Operation.SUB) {
+        return operation;
+                }
+            if (originallyExplicit) {
+        methodWriter.writeDebugInfo(getLocation());
+ *  
+    }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+    }
+                    org.objectweb.asm.Type descriptor = org.objectweb.asm.Type.getMethodType(actualType, childType);
+ * KIND, either express or implied.  See the License for the
+        irTreeVisitor.visitUnaryMath(this, scope);  
+import org.opensearch.painless.Operation;
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+    }
+    public boolean getOriginallyExplicit() {
+                    } else if (getUnaryType() == long.class) {
+                defFlags |= DefBootstrap.OPERATOR_EXPLICIT_CAST;  
+            Label fals = new Label();
+import org.opensearch.painless.MethodWriter;
+ * Modifications Copyright OpenSearch Contributors. See
+            // Def calls adopt the wanted return value. If there was a narrowing cast,
+import org.opensearch.painless.DefBootstrap;
+ * Licensed to Elasticsearch under one or more contributor  
+            }  
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+            } else {
+                    }
+                    methodWriter.invokeDefCall("plus", descriptor, DefBootstrap.UNARY_OPERATOR, defFlags);  
+ * specific language governing permissions and limitations
+    }  
+import org.objectweb.asm.Label;
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
+                    if (getUnaryType() == int.class) {
+    private Operation operation;  
+                throw new IllegalStateException(  
 }  
+    public void setUnaryType(Class<?> unaryType) {
+                if (getUnaryType() == def.class) {
+/*
+            methodWriter.mark(fals);
+import org.objectweb.asm.Opcodes;
+    }
+        this.originallyExplicit = originallyExplicit;
+    }  
+                        methodWriter.push(-1);  
+/*  
+        if (operation == Operation.NOT) {  
+ * Unless required by applicable law or agreed to in writing,
+/*  
+    /* ---- end visitor ---- */
+ * software distributed under the License is distributed on an
+    @Override  
+                    "unexpected unary math operation [" + operation + "] " + "for type [" + getExpressionCanonicalTypeName() + "]"
+import org.opensearch.painless.symbol.WriteScope;  
+        return PainlessLookupUtility.typeToCanonicalTypeName(unaryType);
+    public void setCat(boolean cat) {
+                    methodWriter.math(MethodWriter.XOR, actualType);  
+ * this work for additional information regarding copyright
+ * compatible open source license.
+    public void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {  
+            methodWriter.ifZCmp(Opcodes.IFEQ, fals);  
+                }
+ * The OpenSearch Contributors require contributions made to  
+    public void setOperation(Operation operation) {
+    @Override
+                        );  
+    }
+ * You may obtain a copy of the License at  
+            Type childType = MethodWriter.getType(getChildNode().getExpressionType());
+        this.operation = operation;  
+ *
+import org.opensearch.painless.ClassWriter;
+    private boolean cat;
+    public void setOriginallyExplicit(boolean originallyExplicit) {  
+ * this file be licensed under the Apache-2.0 license or a
+    public String getUnaryCanonicalTypeName() {  
+            methodWriter.goTo(end);  
+    public boolean getCat() {
+            if (operation == Operation.BWNOT) {  
+                } else {
+import org.opensearch.painless.Location;  
+                    org.objectweb.asm.Type descriptor = org.objectweb.asm.Type.getMethodType(actualType, childType);
+                    org.objectweb.asm.Type descriptor = org.objectweb.asm.Type.getMethodType(actualType, childType);

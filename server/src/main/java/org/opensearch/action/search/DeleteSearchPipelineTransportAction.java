@@ -1,80 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.search.pipeline.SearchPipelineService;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-
-/**
- * Perform the action of deleting a search pipeline  
- *
- * @opensearch.internal
- */  
-public class DeleteSearchPipelineTransportAction extends TransportClusterManagerNodeAction<
-    DeleteSearchPipelineRequest,
-    AcknowledgedResponse> {  
-    private final SearchPipelineService searchPipelineService;
-
-    @Inject  
-    public DeleteSearchPipelineTransportAction(
-        ThreadPool threadPool,
-        SearchPipelineService searchPipelineService,  
-        TransportService transportService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver  
+    }  
     ) {
-        super(
-            DeleteSearchPipelineAction.NAME,  
-            transportService,
-            searchPipelineService.getClusterService(),
-            threadPool,  
             actionFilters,
-            DeleteSearchPipelineRequest::new,
-            indexNameExpressionResolver  
-        );
-        this.searchPipelineService = searchPipelineService;
-    }  
-
-    @Override
-    protected String executor() {  
-        return ThreadPool.Names.SAME;
-    }
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {
-        return new AcknowledgedResponse(in);  
-    }
-
-    @Override  
     protected void clusterManagerOperation(
-        DeleteSearchPipelineRequest request,
-        ClusterState state,  
-        ActionListener<AcknowledgedResponse> listener
-    ) throws Exception {
-        searchPipelineService.deletePipeline(request, listener);  
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+            DeleteSearchPipelineAction.NAME,  
+    @Override
+    private final SearchPipelineService searchPipelineService;
+ *
     }
-
-    @Override  
-    protected ClusterBlockException checkBlock(DeleteSearchPipelineRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+    public DeleteSearchPipelineTransportAction(
+    @Override
+        this.searchPipelineService = searchPipelineService;
+ * SPDX-License-Identifier: Apache-2.0
+    protected String executor() {  
+import org.opensearch.transport.TransportService;
+/**
+    AcknowledgedResponse> {  
+ * Perform the action of deleting a search pipeline  
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        super(
+import org.opensearch.cluster.block.ClusterBlockException;
+        IndexNameExpressionResolver indexNameExpressionResolver  
+ */  
+ * compatible open source license.
+            indexNameExpressionResolver  
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;  
+import org.opensearch.threadpool.ThreadPool;  
+        TransportService transportService,
+    ) throws Exception {
+ */  
+import org.opensearch.core.action.ActionListener;  
     }  
+    DeleteSearchPipelineRequest,
+import org.opensearch.core.common.io.stream.StreamInput;
+ * @opensearch.internal
+        searchPipelineService.deletePipeline(request, listener);  
 }
+        return new AcknowledgedResponse(in);  
+            DeleteSearchPipelineRequest::new,
+package org.opensearch.action.search;
+    }
+            searchPipelineService.getClusterService(),
+        return ThreadPool.Names.SAME;
+ * this file be licensed under the Apache-2.0 license or a
+        );
+        ActionFilters actionFilters,
+        ClusterState state,  
+import org.opensearch.common.inject.Inject;
+import org.opensearch.cluster.ClusterState;
+        DeleteSearchPipelineRequest request,
+        SearchPipelineService searchPipelineService,  
+import org.opensearch.search.pipeline.SearchPipelineService;
+            threadPool,  
+            transportService,
+    }
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+    @Override  
+    @Inject  
+import org.opensearch.action.support.ActionFilters;
+public class DeleteSearchPipelineTransportAction extends TransportClusterManagerNodeAction<
+    @Override  
+        ActionListener<AcknowledgedResponse> listener
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+ *
+/*  
+        ThreadPool threadPool,
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
+    protected ClusterBlockException checkBlock(DeleteSearchPipelineRequest request, ClusterState state) {

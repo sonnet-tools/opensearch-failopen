@@ -1,57 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        }  
+                    case WAIT_FOR_ACTIVE_SHARD_OPTIONS_NULL:
+     */
+                }  
+                return ActiveShardCount.DEFAULT;
+     *  
+ * SPDX-License-Identifier: Apache-2.0
+     * the wait_for_active_shards parameter from the Protocol Buffer request and applies
+            default:
+    }
+            case COUNT:
  */  
-
-package org.opensearch.transport.grpc.proto.request.document.bulk;
-
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.protobufs.WaitForActiveShards;
-
-/**
- * Utility class for handling active shard count settings in gRPC bulk requests.
- * This class provides methods to convert between Protocol Buffer representations  
+}
+                        return ActiveShardCount.DEFAULT;
+     * Private constructor to prevent instantiation of utility class.
+                return ActiveShardCount.from(waitForActiveShards.getCount());
  * and OpenSearch ActiveShardCount objects.
+        // Utility class, no instances
+ *
+package org.opensearch.transport.grpc.proto.request.document.bulk;
+/**
+ * This class provides methods to convert between Protocol Buffer representations  
+ * Utility class for handling active shard count settings in gRPC bulk requests.
+ * The OpenSearch Contributors require contributions made to  
+                    case WAIT_FOR_ACTIVE_SHARD_OPTIONS_ALL:  
+    public static ActiveShardCount parseProto(WaitForActiveShards waitForActiveShards) {
+        switch (waitForActiveShards.getWaitForActiveShardsCase()) {  
+    private ActiveShardCountProtoUtils() {  
+            case WAITFORACTIVESHARDS_NOT_SET:  
+     * Sets the active shard count on the bulk request based on the protobuf request.
+     * @param waitForActiveShards The protobuf object containing the active shard count
+    }
+                        return ActiveShardCount.ALL;
+     */  
  */
+     * @return The modified bulk request
+                switch (waitForActiveShards.getOption()) {
+     * the appropriate ActiveShardCount setting to the OpenSearch bulk request.
 public class ActiveShardCountProtoUtils {  
     // protected final Settings settings;
-
-    /**  
-     * Private constructor to prevent instantiation of utility class.
-     */
-    private ActiveShardCountProtoUtils() {  
-        // Utility class, no instances
-    }
-
     /**
-     * Sets the active shard count on the bulk request based on the protobuf request.
-     * Similar to {@link ActiveShardCount#parseString(String)}, this method interprets  
-     * the wait_for_active_shards parameter from the Protocol Buffer request and applies
-     * the appropriate ActiveShardCount setting to the OpenSearch bulk request.
-     *  
-     * @param waitForActiveShards The protobuf object containing the active shard count
-     * @return The modified bulk request
-     */  
-    public static ActiveShardCount parseProto(WaitForActiveShards waitForActiveShards) {
-
-        switch (waitForActiveShards.getWaitForActiveShardsCase()) {  
-            case OPTION:
-                switch (waitForActiveShards.getOption()) {
-                    case WAIT_FOR_ACTIVE_SHARD_OPTIONS_ALL:  
-                        return ActiveShardCount.ALL;
-                    case WAIT_FOR_ACTIVE_SHARD_OPTIONS_NULL:
                     case WAIT_FOR_ACTIVE_SHARD_OPTIONS_UNSPECIFIED:  
+    /**  
+ * compatible open source license.
+import org.opensearch.protobufs.WaitForActiveShards;
+/*  
                     default:
-                        return ActiveShardCount.DEFAULT;
-                }  
-            case COUNT:
-                return ActiveShardCount.from(waitForActiveShards.getCount());
-            case WAITFORACTIVESHARDS_NOT_SET:  
-            default:
-                return ActiveShardCount.DEFAULT;
-        }  
-    }
-}
+import org.opensearch.action.support.ActiveShardCount;
+     * Similar to {@link ActiveShardCount#parseString(String)}, this method interprets  
+            case OPTION:

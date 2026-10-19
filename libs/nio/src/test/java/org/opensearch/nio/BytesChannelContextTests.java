@@ -1,302 +1,234 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.nio;
-
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
-import java.util.function.BiConsumer;  
-import java.util.function.Consumer;
-
-import static org.mockito.Mockito.any;  
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;  
-
-public class BytesChannelContextTests extends OpenSearchTestCase {
-
     private CheckedFunction<InboundChannelBuffer, Integer, IOException> readConsumer;
     private NioSocketChannel channel;
-    private SocketChannel rawChannel;  
-    private BytesChannelContext context;
-    private InboundChannelBuffer channelBuffer;
-    private NioSelector selector;  
-    private BiConsumer<Void, Exception> listener;
-    private int messageLength;
-
-    @Before
-    @SuppressWarnings("unchecked")
-    public void init() {  
-        readConsumer = mock(CheckedFunction.class);
-
-        messageLength = randomInt(96) + 20;  
-        selector = mock(NioSelector.class);
-        listener = mock(BiConsumer.class);
-        channel = mock(NioSocketChannel.class);  
-        rawChannel = mock(SocketChannel.class);
-        channelBuffer = InboundChannelBuffer.allocatingInstance();
-        TestReadWriteHandler handler = new TestReadWriteHandler(readConsumer);  
-        when(channel.getRawChannel()).thenReturn(rawChannel);
-        context = new BytesChannelContext(channel, selector, mock(Config.Socket.class), mock(Consumer.class), handler, channelBuffer);
-
-        when(selector.isOnCurrentThread()).thenReturn(true);
-        ByteBuffer buffer = ByteBuffer.allocate(1 << 14);
-        when(selector.getIoBuffer()).thenAnswer(invocationOnMock -> {  
-            buffer.clear();
-            return buffer;
-        });  
-    }
-
-    public void testSuccessfulRead() throws IOException {  
-        byte[] bytes = createMessage(messageLength);
-
-        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {  
-            ByteBuffer buffer = (ByteBuffer) invocationOnMock.getArguments()[0];
-            buffer.put(bytes);
-            return bytes.length;  
-        });
-
-        when(readConsumer.apply(channelBuffer)).thenReturn(messageLength, 0);  
-
-        assertEquals(messageLength, context.read());
-
-        assertEquals(0, channelBuffer.getIndex());
-        assertEquals(PageCacheRecycler.BYTE_PAGE_SIZE - bytes.length, channelBuffer.getCapacity());
-        verify(readConsumer, times(1)).apply(channelBuffer);  
-    }
-
-    public void testMultipleReadsConsumed() throws IOException {  
-        byte[] bytes = createMessage(messageLength * 2);
-
-        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {  
-            ByteBuffer buffer = (ByteBuffer) invocationOnMock.getArguments()[0];
-            buffer.put(bytes);
-            return bytes.length;  
-        });
-
-        when(readConsumer.apply(channelBuffer)).thenReturn(messageLength, messageLength, 0);  
-
-        assertEquals(bytes.length, context.read());
-
-        assertEquals(0, channelBuffer.getIndex());
-        assertEquals(PageCacheRecycler.BYTE_PAGE_SIZE - bytes.length, channelBuffer.getCapacity());
-        verify(readConsumer, times(2)).apply(channelBuffer);  
-    }
-
-    public void testPartialRead() throws IOException {  
-        byte[] bytes = createMessage(messageLength);
-
-        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {  
-            ByteBuffer buffer = (ByteBuffer) invocationOnMock.getArguments()[0];
-            buffer.put(bytes);
-            return bytes.length;  
-        });
-
-        when(readConsumer.apply(channelBuffer)).thenReturn(0);  
-
-        assertEquals(messageLength, context.read());
-
-        assertEquals(bytes.length, channelBuffer.getIndex());
-        verify(readConsumer, times(1)).apply(channelBuffer);
-
-        when(readConsumer.apply(channelBuffer)).thenReturn(messageLength * 2, 0);
-
-        assertEquals(messageLength, context.read());  
-
-        assertEquals(0, channelBuffer.getIndex());
-        assertEquals(PageCacheRecycler.BYTE_PAGE_SIZE - (bytes.length * 2), channelBuffer.getCapacity());  
-        verify(readConsumer, times(2)).apply(channelBuffer);
-    }
-
-    public void testReadThrowsIOException() throws IOException {
-        IOException ioException = new IOException();
-        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(ioException);  
-
-        IOException ex = expectThrows(IOException.class, () -> context.read());
-        assertSame(ioException, ex);  
-    }
-
-    public void testReadThrowsIOExceptionMeansReadyForClose() throws IOException {  
-        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(new IOException());
-
-        assertFalse(context.selectorShouldClose());  
-        expectThrows(IOException.class, () -> context.read());
-        assertTrue(context.selectorShouldClose());
-    }  
-
-    public void testReadLessThanZeroMeansReadyForClose() throws IOException {
-        when(rawChannel.read(any(ByteBuffer.class))).thenReturn(-1);  
-
-        assertEquals(0, context.read());
-
-        assertTrue(context.selectorShouldClose());
-    }
-
-    @SuppressWarnings("varargs")
-    public void testQueuedWriteIsFlushedInFlushCall() throws Exception {
-        assertFalse(context.readyForFlush());  
-
-        ByteBuffer[] buffers = { ByteBuffer.allocate(10) };
-
-        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);
-        context.queueWriteOperation(flushOperation);
-
-        assertTrue(context.readyForFlush());
-
-        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(buffers);  
-        when(flushOperation.isFullyFlushed()).thenReturn(false, true);
-        when(flushOperation.getListener()).thenReturn(listener);
-        context.flushChannel();  
-
-        ByteBuffer buffer = buffers[0].duplicate();
-        buffer.flip();  
-        verify(rawChannel).write(eq(buffer));
-        verify(selector).executeListener(listener, null);
-        assertFalse(context.readyForFlush());  
-    }
-
-    public void testPartialFlush() throws IOException {  
-        assertFalse(context.readyForFlush());
-        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);
-        context.queueWriteOperation(flushOperation);  
-        assertTrue(context.readyForFlush());
-
-        when(flushOperation.isFullyFlushed()).thenReturn(false);  
-        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(new ByteBuffer[] { ByteBuffer.allocate(3) });
-        context.flushChannel();
-
-        verify(listener, times(0)).accept(null, null);
-        assertTrue(context.readyForFlush());
-    }  
-
-    @SuppressWarnings("unchecked")
-    public void testMultipleWritesPartialFlushes() throws IOException {  
-        assertFalse(context.readyForFlush());
-
-        BiConsumer<Void, Exception> listener2 = mock(BiConsumer.class);  
-        FlushReadyWrite flushOperation1 = mock(FlushReadyWrite.class);
-        FlushReadyWrite flushOperation2 = mock(FlushReadyWrite.class);
-        when(flushOperation1.getBuffersToWrite(anyInt())).thenReturn(new ByteBuffer[] { ByteBuffer.allocate(3) });  
-        when(flushOperation2.getBuffersToWrite(anyInt())).thenReturn(new ByteBuffer[] { ByteBuffer.allocate(3) });
-        when(flushOperation1.getListener()).thenReturn(listener);
-        when(flushOperation2.getListener()).thenReturn(listener2);  
-
-        context.queueWriteOperation(flushOperation1);
-        context.queueWriteOperation(flushOperation2);  
-
-        assertTrue(context.readyForFlush());
-
-        when(flushOperation1.isFullyFlushed()).thenReturn(false, true);
-        when(flushOperation2.isFullyFlushed()).thenReturn(false);
-        context.flushChannel();  
-
-        verify(selector).executeListener(listener, null);
-        verify(listener2, times(0)).accept(null, null);  
-        assertTrue(context.readyForFlush());
-
-        when(flushOperation2.isFullyFlushed()).thenReturn(false, true);  
-
-        context.flushChannel();
-
-        verify(selector).executeListener(listener2, null);
         assertFalse(context.readyForFlush());
     }  
-
-    public void testWhenIOExceptionThrownListenerIsCalled() throws IOException {
-        assertFalse(context.readyForFlush());  
-
-        ByteBuffer[] buffers = { ByteBuffer.allocate(10) };
-        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);  
-        context.queueWriteOperation(flushOperation);
-
-        assertTrue(context.readyForFlush());  
-
-        IOException exception = new IOException();
-        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(buffers);  
-        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(exception);
-        when(flushOperation.getListener()).thenReturn(listener);
-        expectThrows(IOException.class, () -> context.flushChannel());  
-
-        verify(selector).executeFailedListener(listener, exception);
-        assertFalse(context.readyForFlush());  
-    }
-
-    public void testWriteIOExceptionMeansChannelReadyToClose() throws IOException {  
-        ByteBuffer[] buffers = { ByteBuffer.allocate(10) };
-        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);
-        context.queueWriteOperation(flushOperation);  
-
-        IOException exception = new IOException();
-        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(buffers);  
-        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(exception);
-
-        assertFalse(context.selectorShouldClose());  
-        expectThrows(IOException.class, () -> context.flushChannel());
-        assertTrue(context.selectorShouldClose());
-    }  
-
-    public void testInitiateCloseSchedulesCloseWithSelector() {
-        context.closeChannel();  
-        verify(selector).queueChannelClose(channel);
-    }
-
-    private static byte[] createMessage(int length) {
-        byte[] bytes = new byte[length];
-        for (int i = 0; i < length; ++i) {  
-            bytes[i] = randomByte();
-        }
-        return bytes;  
-    }
-
-    private static class TestReadWriteHandler extends BytesWriteHandler {  
-
-        private final CheckedFunction<InboundChannelBuffer, Integer, IOException> fn;
-
-        private TestReadWriteHandler(CheckedFunction<InboundChannelBuffer, Integer, IOException> fn) {
-            this.fn = fn;
         }  
-
-        @Override
-        public int consumeReads(InboundChannelBuffer channelBuffer) throws IOException {  
-            return fn.apply(channelBuffer);
-        }
+        byte[] bytes = createMessage(messageLength);
+ */  
+        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);
+ * under the License.  
+        assertTrue(context.readyForFlush());
+    @SuppressWarnings("unchecked")
+        IOException exception = new IOException();
+ * specific language governing permissions and limitations
+ * The OpenSearch Contributors require contributions made to  
+        ByteBuffer[] buffers = { ByteBuffer.allocate(10) };
+        when(flushOperation.getListener()).thenReturn(listener);
+import static org.mockito.Mockito.eq;
+/*  
+        when(flushOperation1.getListener()).thenReturn(listener);
+ * GitHub history for details.
+        return bytes;  
+ * Unless required by applicable law or agreed to in writing,
+        IOException exception = new IOException();
+        when(flushOperation2.getListener()).thenReturn(listener2);  
+        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(buffers);  
+        context.flushChannel();
+        listener = mock(BiConsumer.class);
+        assertEquals(0, context.read());
+        channelBuffer = InboundChannelBuffer.allocatingInstance();
+        when(readConsumer.apply(channelBuffer)).thenReturn(messageLength * 2, 0);
+import static org.mockito.Mockito.verify;
+        context.queueWriteOperation(flushOperation);
+        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(buffers);  
+ * not use this file except in compliance with the License.
+    }
+        BiConsumer<Void, Exception> listener2 = mock(BiConsumer.class);  
     }  
+    public void testWriteIOExceptionMeansChannelReadyToClose() throws IOException {  
+            buffer.put(bytes);
+        context.queueWriteOperation(flushOperation);  
+        assertTrue(context.readyForFlush());  
+        expectThrows(IOException.class, () -> context.read());
+        ByteBuffer[] buffers = { ByteBuffer.allocate(10) };
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+    }  
+    public void testReadLessThanZeroMeansReadyForClose() throws IOException {
+ * this work for additional information regarding copyright
+    private BytesChannelContext context;
+        assertTrue(context.selectorShouldClose());
+    }
+        verify(selector).executeListener(listener2, null);
+        when(flushOperation1.getBuffersToWrite(anyInt())).thenReturn(new ByteBuffer[] { ByteBuffer.allocate(3) });  
+import org.opensearch.common.util.PageCacheRecycler;
+    }  
+        IOException ioException = new IOException();
+import java.util.function.Consumer;
+        context.queueWriteOperation(flushOperation);
+        when(flushOperation2.isFullyFlushed()).thenReturn(false, true);  
+        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(new IOException());
+        assertEquals(messageLength, context.read());  
+    private BiConsumer<Void, Exception> listener;
+import static org.mockito.Mockito.when;  
+import java.nio.channels.SocketChannel;
+        when(flushOperation1.isFullyFlushed()).thenReturn(false, true);
+        context.flushChannel();  
+import static org.mockito.Mockito.times;
+            bytes[i] = randomByte();
+ * Licensed to Elasticsearch under one or more contributor  
+        FlushReadyWrite flushOperation1 = mock(FlushReadyWrite.class);
+            return bytes.length;  
+        verify(rawChannel).write(eq(buffer));
+        ByteBuffer buffer = ByteBuffer.allocate(1 << 14);
+            ByteBuffer buffer = (ByteBuffer) invocationOnMock.getArguments()[0];
+        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);
+    public void testReadThrowsIOExceptionMeansReadyForClose() throws IOException {  
+        assertFalse(context.selectorShouldClose());  
+        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(buffers);  
+        when(selector.isOnCurrentThread()).thenReturn(true);
+        when(flushOperation2.getBuffersToWrite(anyInt())).thenReturn(new ByteBuffer[] { ByteBuffer.allocate(3) });
+        FlushReadyWrite flushOperation2 = mock(FlushReadyWrite.class);
+    public void init() {  
+        assertEquals(PageCacheRecycler.BYTE_PAGE_SIZE - (bytes.length * 2), channelBuffer.getCapacity());  
 }
+        verify(readConsumer, times(2)).apply(channelBuffer);
+        assertTrue(context.readyForFlush());
+        });
+    }  
+        context.flushChannel();
+        readConsumer = mock(CheckedFunction.class);
+        assertFalse(context.readyForFlush());  
+        assertSame(ioException, ex);  
+        channel = mock(NioSocketChannel.class);  
+import org.opensearch.test.OpenSearchTestCase;  
+        assertEquals(messageLength, context.read());
+        }
+ * SPDX-License-Identifier: Apache-2.0
+    public void testReadThrowsIOException() throws IOException {
+        assertFalse(context.readyForFlush());
+ *
+    public void testPartialFlush() throws IOException {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertEquals(messageLength, context.read());
+ * KIND, either express or implied.  See the License for the
+        ByteBuffer buffer = buffers[0].duplicate();
+        rawChannel = mock(SocketChannel.class);
+ *  
+            buffer.put(bytes);
+        assertFalse(context.readyForFlush());  
+import org.junit.Before;
+/*  
+        verify(readConsumer, times(1)).apply(channelBuffer);  
+    private InboundChannelBuffer channelBuffer;
+import static org.mockito.Mockito.anyInt;
+        assertTrue(context.readyForFlush());
+        verify(selector).queueChannelClose(channel);
+        buffer.flip();  
+        byte[] bytes = createMessage(messageLength * 2);
+    }
+import static org.mockito.Mockito.any;  
+        verify(readConsumer, times(1)).apply(channelBuffer);
+ * this file be licensed under the Apache-2.0 license or a
+            ByteBuffer buffer = (ByteBuffer) invocationOnMock.getArguments()[0];
+    private int messageLength;
+        when(channel.getRawChannel()).thenReturn(rawChannel);
+        verify(selector).executeListener(listener, null);
+    private static class TestReadWriteHandler extends BytesWriteHandler {  
+        context.flushChannel();  
+        context.queueWriteOperation(flushOperation);  
+        assertFalse(context.readyForFlush());  
+        assertEquals(0, channelBuffer.getIndex());
+        assertEquals(PageCacheRecycler.BYTE_PAGE_SIZE - bytes.length, channelBuffer.getCapacity());
+ * compatible open source license.
+        assertFalse(context.readyForFlush());  
+        });
+        TestReadWriteHandler handler = new TestReadWriteHandler(readConsumer);  
+        verify(readConsumer, times(2)).apply(channelBuffer);  
+        when(flushOperation.isFullyFlushed()).thenReturn(false, true);
+package org.opensearch.nio;
+        when(flushOperation.getBuffersToWrite(anyInt())).thenReturn(new ByteBuffer[] { ByteBuffer.allocate(3) });
+        when(flushOperation.getListener()).thenReturn(listener);
+        byte[] bytes = createMessage(messageLength);
+import java.io.IOException;  
+        when(readConsumer.apply(channelBuffer)).thenReturn(messageLength, 0);  
+        context = new BytesChannelContext(channel, selector, mock(Config.Socket.class), mock(Consumer.class), handler, channelBuffer);
+ * ownership. Elasticsearch licenses this file to you under  
+            return bytes.length;  
+    }
+ * You may obtain a copy of the License at  
+    }
+        when(flushOperation2.isFullyFlushed()).thenReturn(false);
+            buffer.put(bytes);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            buffer.clear();
+    public void testQueuedWriteIsFlushedInFlushCall() throws Exception {
+public class BytesChannelContextTests extends OpenSearchTestCase {
+    }
+        assertEquals(bytes.length, context.read());
+        when(readConsumer.apply(channelBuffer)).thenReturn(0);  
+        selector = mock(NioSelector.class);
+import java.nio.ByteBuffer;
+        assertFalse(context.selectorShouldClose());  
+ * software distributed under the License is distributed on an
+        verify(listener2, times(0)).accept(null, null);  
+        private TestReadWriteHandler(CheckedFunction<InboundChannelBuffer, Integer, IOException> fn) {
+        context.queueWriteOperation(flushOperation1);
+        ByteBuffer[] buffers = { ByteBuffer.allocate(10) };
+            this.fn = fn;
+ */  
+    public void testPartialRead() throws IOException {  
+    }
+import java.util.function.BiConsumer;  
+import org.opensearch.common.CheckedFunction;
+        verify(selector).executeFailedListener(listener, exception);
+        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {  
+        verify(listener, times(0)).accept(null, null);
+        when(readConsumer.apply(channelBuffer)).thenReturn(messageLength, messageLength, 0);  
+        context.queueWriteOperation(flushOperation2);  
+            return bytes.length;  
+        });  
+        private final CheckedFunction<InboundChannelBuffer, Integer, IOException> fn;
+        assertFalse(context.readyForFlush());
+    public void testSuccessfulRead() throws IOException {  
+        assertEquals(PageCacheRecycler.BYTE_PAGE_SIZE - bytes.length, channelBuffer.getCapacity());
+        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {  
+        messageLength = randomInt(96) + 20;  
+        when(rawChannel.read(any(ByteBuffer.class))).thenThrow(ioException);  
+        verify(selector).executeListener(listener, null);
+        assertTrue(context.selectorShouldClose());
+        for (int i = 0; i < length; ++i) {  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        assertEquals(0, channelBuffer.getIndex());
+        assertEquals(bytes.length, channelBuffer.getIndex());
+        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);
+        when(rawChannel.read(any(ByteBuffer.class))).thenReturn(-1);  
+        assertTrue(context.selectorShouldClose());
+        when(rawChannel.read(any(ByteBuffer.class))).thenAnswer(invocationOnMock -> {  
+    public void testWhenIOExceptionThrownListenerIsCalled() throws IOException {
+    @Before
+        when(flushOperation.isFullyFlushed()).thenReturn(false);  
+    public void testMultipleWritesPartialFlushes() throws IOException {  
+    @SuppressWarnings("varargs")
+        when(selector.getIoBuffer()).thenAnswer(invocationOnMock -> {  
+        public int consumeReads(InboundChannelBuffer channelBuffer) throws IOException {  
+ */
+            return buffer;
+    @SuppressWarnings("unchecked")
+        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(exception);
+        }
+        assertEquals(0, channelBuffer.getIndex());
+    }
+    public void testInitiateCloseSchedulesCloseWithSelector() {
+        IOException ex = expectThrows(IOException.class, () -> context.read());
+ * license agreements. See the NOTICE file distributed with
+        FlushReadyWrite flushOperation = mock(FlushReadyWrite.class);  
+        assertTrue(context.readyForFlush());
+        context.closeChannel();  
+        when(rawChannel.write(any(ByteBuffer.class))).thenThrow(exception);
+    private static byte[] createMessage(int length) {
+    private NioSelector selector;  
+    private SocketChannel rawChannel;  
+            return fn.apply(channelBuffer);
+        byte[] bytes = new byte[length];
+ *
+import static org.mockito.Mockito.mock;  
+        expectThrows(IOException.class, () -> context.flushChannel());
+    public void testMultipleReadsConsumed() throws IOException {  
+    }
+        expectThrows(IOException.class, () -> context.flushChannel());  
+            ByteBuffer buffer = (ByteBuffer) invocationOnMock.getArguments()[0];
+        });
+        assertTrue(context.readyForFlush());
+        @Override

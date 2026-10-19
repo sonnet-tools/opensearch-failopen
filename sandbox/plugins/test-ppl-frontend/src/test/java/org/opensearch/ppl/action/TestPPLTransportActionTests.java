@@ -1,203 +1,170 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ppl.action;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;  
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;  
-
-/**
- * Unit tests for {@link TestPPLTransportAction}.  
- *
- * <p>Uses the test-only constructor to inject a mock {@code UnifiedQueryService},
- * so we can test the transport action's listener contract in isolation.  
- */
-@SuppressWarnings("unchecked")
-public class TestPPLTransportActionTests extends OpenSearchTestCase {  
-
-    private UnifiedQueryService mockUnifiedQueryService;
-    private TestPPLTransportAction action;  
-    private ThreadPool threadPool;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        mockUnifiedQueryService = mock(UnifiedQueryService.class);  
+        AtomicInteger responseCount = new AtomicInteger(0);
         threadPool = new TestThreadPool(getTestName());
-
-        action = new TestPPLTransportAction(  
-            mock(TransportService.class),
-            new ActionFilters(Collections.emptySet()),
-            mockUnifiedQueryService,  
-            threadPool
-        );
-    }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        ThreadPool.terminate(threadPool, 10, java.util.concurrent.TimeUnit.SECONDS);
-        super.tearDown();
-    }  
-
-    /**
-     * Success path: {@code unifiedQueryService.execute()} returns a response →  
-     * {@code listener.onResponse()} is called with that response.
-     */
-    public void testSuccessPathCallsOnResponse() throws Exception {  
-        List<Object[]> rows = new ArrayList<>();
-        rows.add(new Object[] { "server-1", 200 });
-        PPLResponse expectedResponse = new PPLResponse(List.of("host", "status"), rows);  
-        when(mockUnifiedQueryService.execute("source=logs")).thenReturn(expectedResponse);
-
-        AtomicReference<PPLResponse> captured = new AtomicReference<>();  
-        ActionListener<PPLResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(PPLResponse r) {  
-                captured.set(r);
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                fail("Should not fail: " + e.getMessage());  
-            }
-        };
-        action.execute(null, new PPLRequest("source=logs"), listener);  
-
-        assertBusy(() -> assertNotNull("onResponse should be called", captured.get()));
-        assertSame(expectedResponse, captured.get());  
-        verify(mockUnifiedQueryService).execute("source=logs");
-    }
-
-    /**
-     * Failure path: {@code unifiedQueryService.execute()} throws →
-     * {@code listener.onFailure()} is called with the exception.  
-     */
-    public void testFailurePathCallsOnFailure() throws Exception {
-        RuntimeException expectedException = new RuntimeException("PPL execution failed");  
-        when(mockUnifiedQueryService.execute(any(String.class))).thenThrow(expectedException);
-
-        AtomicReference<Exception> captured = new AtomicReference<>();  
-        ActionListener<PPLResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(PPLResponse r) {  
-                fail("Should not succeed");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                captured.set(e);  
-            }
-        };
-        action.execute(null, new PPLRequest("invalid query"), listener);  
-
-        assertBusy(() -> assertNotNull("onFailure should be called", captured.get()));
-        assertSame(expectedException, captured.get());  
-        verify(mockUnifiedQueryService).execute("invalid query");
-    }
-
-    /**
-     * Exactly-one-callback on success: only {@code onResponse} is called, never {@code onFailure}.
-     */  
-    public void testExactlyOneCallbackOnSuccess() throws Exception {
-        PPLResponse response = new PPLResponse(Collections.emptyList(), Collections.emptyList());
-        when(mockUnifiedQueryService.execute(any(String.class))).thenReturn(response);  
-
-        AtomicInteger responseCount = new AtomicInteger(0);
-        AtomicInteger failureCount = new AtomicInteger(0);  
-
-        ActionListener<PPLResponse> listener = new ActionListener<>() {
-            @Override  
-            public void onResponse(PPLResponse r) {
-                responseCount.incrementAndGet();
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
+@SuppressWarnings("unchecked")
                 failureCount.incrementAndGet();
-            }
-        };  
-
-        action.execute(null, new PPLRequest("source=test"), listener);
-
-        assertBusy(() -> assertEquals("onResponse should be called exactly once", 1, responseCount.get()));
-        assertEquals("onFailure should not be called", 0, failureCount.get());
-    }  
-
-    /**
-     * Exactly-one-callback on failure: only {@code onFailure} is called, never {@code onResponse}.  
-     */
-    public void testExactlyOneCallbackOnFailure() throws Exception {
-        when(mockUnifiedQueryService.execute(any(String.class))).thenThrow(new RuntimeException("fail"));  
-
-        AtomicInteger responseCount = new AtomicInteger(0);
-        AtomicInteger failureCount = new AtomicInteger(0);  
-        AtomicReference<Exception> capturedError = new AtomicReference<>();
-
         ActionListener<PPLResponse> listener = new ActionListener<>() {  
-            @Override
-            public void onResponse(PPLResponse r) {
-                responseCount.incrementAndGet();  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                failureCount.incrementAndGet();
-                capturedError.set(e);  
-            }
-        };
-
-        action.execute(null, new PPLRequest("source=test"), listener);
-
-        assertBusy(() -> assertEquals("onFailure should be called exactly once", 1, failureCount.get()));  
-        assertEquals("onResponse should not be called", 0, responseCount.get());
-        assertNotNull("Exception should be captured", capturedError.get());
-    }  
-
-    /**
-     * Verify that the correct PPL text is forwarded to  
-     * {@code unifiedQueryService.execute()}.
-     */
-    public void testCorrectArgumentsPassedToUnifiedQueryService() throws Exception {  
-        PPLResponse response = new PPLResponse(Collections.emptyList(), Collections.emptyList());
-        when(mockUnifiedQueryService.execute(any(String.class))).thenReturn(response);
-
-        AtomicReference<PPLResponse> captured = new AtomicReference<>();
+    }
+     * Failure path: {@code unifiedQueryService.execute()} throws →
         ActionListener<PPLResponse> listener = new ActionListener<>() {
+     * {@code unifiedQueryService.execute()}.
+    @Override
+        action.execute(null, new PPLRequest("source=test"), listener);
+    }  
+        super.setUp();
+        assertBusy(() -> assertNotNull("onFailure should be called", captured.get()));
+        when(mockUnifiedQueryService.execute(any(String.class))).thenThrow(new RuntimeException("fail"));  
+     * {@code listener.onFailure()} is called with the exception.  
+import org.opensearch.threadpool.TestThreadPool;
+    }  
+        action.execute(null, new PPLRequest("invalid query"), listener);  
+        };  
+            public void onFailure(Exception e) {
+    }  
+ * <p>Uses the test-only constructor to inject a mock {@code UnifiedQueryService},
+        when(mockUnifiedQueryService.execute(any(String.class))).thenReturn(response);
+        AtomicReference<PPLResponse> captured = new AtomicReference<>();  
+     */
+import static org.mockito.Mockito.mock;  
+        verify(mockUnifiedQueryService).execute("source=logs");
+        action.execute(null, new PPLRequest("source=metrics | where status=500"), listener);
+}
             @Override  
-            public void onResponse(PPLResponse r) {
-                captured.set(r);
-            }  
-
+    public void testCorrectArgumentsPassedToUnifiedQueryService() throws Exception {  
+    public void testExactlyOneCallbackOnSuccess() throws Exception {
+            }
+ */
+import java.util.Collections;  
+            mockUnifiedQueryService,  
+    public void testExactlyOneCallbackOnFailure() throws Exception {
+     * Exactly-one-callback on success: only {@code onResponse} is called, never {@code onFailure}.
+            }
+    }  
+            mock(TransportService.class),
+        verify(mockUnifiedQueryService).execute("source=metrics | where status=500");
+        rows.add(new Object[] { "server-1", 200 });
+import org.opensearch.action.support.ActionFilters;
+                fail("Should not succeed");
+    /**
+ * The OpenSearch Contributors require contributions made to  
+import static org.mockito.Mockito.verifyNoMoreInteractions;
             @Override
-            public void onFailure(Exception e) {  
+     * Verify that the correct PPL text is forwarded to  
+    public void tearDown() throws Exception {  
+        assertBusy(() -> assertEquals("onResponse should be called exactly once", 1, responseCount.get()));
+                responseCount.incrementAndGet();  
+        RuntimeException expectedException = new RuntimeException("PPL execution failed");  
+        ThreadPool.terminate(threadPool, 10, java.util.concurrent.TimeUnit.SECONDS);
+            }
+ * Unit tests for {@link TestPPLTransportAction}.  
+        AtomicInteger failureCount = new AtomicInteger(0);  
+            }
+    public void setUp() throws Exception {
+import java.util.concurrent.atomic.AtomicInteger;
+                failureCount.incrementAndGet();
+ *
+        action = new TestPPLTransportAction(  
+        ActionListener<PPLResponse> listener = new ActionListener<>() {
+    public void testSuccessPathCallsOnResponse() throws Exception {  
+            }
                 fail("Should not fail");
             }
-        };  
-        action.execute(null, new PPLRequest("source=metrics | where status=500"), listener);
-
-        assertBusy(() -> assertNotNull(captured.get()));  
-        verify(mockUnifiedQueryService).execute("source=metrics | where status=500");
-        verifyNoMoreInteractions(mockUnifiedQueryService);
+                capturedError.set(e);  
+     * Exactly-one-callback on failure: only {@code onFailure} is called, never {@code onResponse}.  
+            public void onFailure(Exception e) {
+import java.util.concurrent.atomic.AtomicReference;  
     }  
-}
+                captured.set(e);  
+                captured.set(r);
+        List<Object[]> rows = new ArrayList<>();
+import org.opensearch.test.OpenSearchTestCase;  
+ * this file be licensed under the Apache-2.0 license or a
+            }  
+        PPLResponse expectedResponse = new PPLResponse(List.of("host", "status"), rows);  
+                captured.set(r);
+            @Override
+     * Success path: {@code unifiedQueryService.execute()} returns a response →  
+        verify(mockUnifiedQueryService).execute("invalid query");
+import java.util.List;
+        AtomicInteger failureCount = new AtomicInteger(0);  
+    private UnifiedQueryService mockUnifiedQueryService;
+        assertNotNull("Exception should be captured", capturedError.get());
+            public void onFailure(Exception e) {
+        assertEquals("onResponse should not be called", 0, responseCount.get());
+        verifyNoMoreInteractions(mockUnifiedQueryService);
+import java.util.ArrayList;
+/*  
+        assertBusy(() -> assertNotNull("onResponse should be called", captured.get()));
+import static org.mockito.Mockito.when;  
+     */  
+            public void onResponse(PPLResponse r) {
+     */
+        };
+ * SPDX-License-Identifier: Apache-2.0
+/**
+ *
+        assertSame(expectedResponse, captured.get());  
+            threadPool
+            public void onResponse(PPLResponse r) {
+public class TestPPLTransportActionTests extends OpenSearchTestCase {  
+            @Override
+    private TestPPLTransportAction action;  
+ * so we can test the transport action's listener contract in isolation.  
+            public void onFailure(Exception e) {  
+        );
+        action.execute(null, new PPLRequest("source=test"), listener);
+            @Override  
+        assertSame(expectedException, captured.get());  
+        when(mockUnifiedQueryService.execute(any(String.class))).thenReturn(response);  
+            new ActionFilters(Collections.emptySet()),
+                responseCount.incrementAndGet();
+        AtomicInteger responseCount = new AtomicInteger(0);
+            public void onResponse(PPLResponse r) {
+        assertBusy(() -> assertEquals("onFailure should be called exactly once", 1, failureCount.get()));  
+        when(mockUnifiedQueryService.execute("source=logs")).thenReturn(expectedResponse);
+import static org.mockito.ArgumentMatchers.any;
+        PPLResponse response = new PPLResponse(Collections.emptyList(), Collections.emptyList());
+        when(mockUnifiedQueryService.execute(any(String.class))).thenThrow(expectedException);
+            public void onResponse(PPLResponse r) {  
+            @Override
+import org.opensearch.transport.TransportService;  
+package org.opensearch.ppl.action;
+        };
+                fail("Should not fail: " + e.getMessage());  
+            }  
+            }
+    }
+    public void testFailurePathCallsOnFailure() throws Exception {
+            public void onFailure(Exception e) {  
+     * {@code listener.onResponse()} is called with that response.
+        AtomicReference<Exception> capturedError = new AtomicReference<>();
+import static org.mockito.Mockito.verify;
+ * compatible open source license.
+import org.opensearch.core.action.ActionListener;
+        super.tearDown();
+        };  
+import org.opensearch.threadpool.ThreadPool;
+        ActionListener<PPLResponse> listener = new ActionListener<>() {
+            public void onResponse(PPLResponse r) {  
+        assertEquals("onFailure should not be called", 0, failureCount.get());
+        PPLResponse response = new PPLResponse(Collections.emptyList(), Collections.emptyList());
+            @Override
+            @Override  
+        mockUnifiedQueryService = mock(UnifiedQueryService.class);  
+            @Override
+        ActionListener<PPLResponse> listener = new ActionListener<>() {
+    private ThreadPool threadPool;
+        AtomicReference<PPLResponse> captured = new AtomicReference<>();
+        action.execute(null, new PPLRequest("source=logs"), listener);  
+    /**
+            @Override
+    /**
+    /**
+    /**
+        };
+ */  
+     */
+        assertBusy(() -> assertNotNull(captured.get()));  
+        AtomicReference<Exception> captured = new AtomicReference<>();  
+            }
+    @Override  
+     */

@@ -1,1838 +1,1662 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.OpenSearchServerException;  
-import org.opensearch.Version;
-import org.opensearch.action.ActionListenerResponseHandler;
-import org.opensearch.action.support.PlainActionFuture;  
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.io.stream.Streamables;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.regex.Regex;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;  
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.common.transport.TransportAddress;  
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.service.ReportingService;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.node.NodeClosedException;
-import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
-import org.opensearch.tasks.Task;  
-import org.opensearch.tasks.TaskManager;
-import org.opensearch.telemetry.tracing.Span;
-import org.opensearch.telemetry.tracing.SpanBuilder;  
-import org.opensearch.telemetry.tracing.SpanScope;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.telemetry.tracing.handler.TraceableTransportResponseHandler;  
-import org.opensearch.threadpool.Scheduler;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.stream.StreamTransportResponse;  
-
-import java.io.IOException;
-import java.io.UncheckedIOException;  
-import java.net.UnknownHostException;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;  
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.Supplier;  
-
-/**
- * The main OpenSearch transport service  
- *
- * @opensearch.internal
- */  
-public class TransportService extends AbstractLifecycleComponent
-    implements
-        ReportingService<TransportInfo>,  
-        TransportMessageListener,
-        TransportConnectionListener {
-    private static final Logger logger = LogManager.getLogger(TransportService.class);  
-
-    public static final String DIRECT_RESPONSE_PROFILE = ".direct";
-    public static final String HANDSHAKE_ACTION_NAME = "internal:transport/handshake";  
-
-    private final AtomicBoolean handleIncomingRequests = new AtomicBoolean();
-    private final DelegatingTransportMessageListener messageListener = new DelegatingTransportMessageListener();  
-    protected final Transport transport;
-    protected final ConnectionManager connectionManager;
-    protected final ThreadPool threadPool;  
-    protected final ClusterName clusterName;
-    protected final TaskManager taskManager;
-    private final TransportInterceptor.AsyncSender asyncSender;  
-    protected final Function<BoundTransportAddress, DiscoveryNode> localNodeFactory;
-    private final boolean remoteClusterClient;
-    protected final Transport.ResponseHandlers responseHandlers;  
-    protected final TransportInterceptor interceptor;
-    private final Transport streamTransport;
-
-    // An LRU (don't really care about concurrency here) that holds the latest timed out requests so if they
-    // do show up, we can print more descriptive information about them
-    final Map<Long, TimeoutInfoHolder> timeoutInfoHandlers = Collections.synchronizedMap(  
-        new LinkedHashMap<Long, TimeoutInfoHolder>(100, .75F, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry eldest) {  
-                return size() > 100;
-            }
-        }  
-    );
-
-    public static final TransportInterceptor NOOP_TRANSPORT_INTERCEPTOR = new TransportInterceptor() {  
-    };
-
-    // tracer log  
-
-    private final Logger tracerLog;
-    volatile String[] tracerLogInclude;  
-    volatile String[] tracerLogExclude;
-
-    private final RemoteClusterService remoteClusterService;  
-    protected final Tracer tracer;
-
-    /** if set will call requests sent to this id to shortcut and executed locally */  
-    volatile DiscoveryNode localNode = null;
-    private final Transport.Connection localNodeConnection = new Transport.Connection() {
-        @Override  
-        public DiscoveryNode getNode() {
-            return localNode;
-        }  
-
-        @Override
-        public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)  
-            throws TransportException {
-            sendLocalRequest(requestId, action, request, options);
-        }  
-
-        @Override
-        public void addCloseListener(ActionListener<Void> listener) {}  
-
-        @Override
-        public boolean isClosed() {  
-            return false;
-        }
-
-        @Override
-        public void close() {}
-    };  
-
-    static {
-        /*  
-          Registers server specific types as a streamables for serialization
-          over the {@link StreamOutput} and {@link StreamInput} wire
-         */  
-        Streamables.registerStreamables();
-        /* Registers OpenSearch server specific exceptions (exceptions outside of core library) */
-        OpenSearchServerException.registerExceptions();  
-    }
-
-    /** does nothing. easy way to ensure class is loaded so the above static block is called to register the streamables */  
-    public static void ensureClassloaded() {}
-
-    public TransportService(  
-        Settings settings,
-        Transport transport,
-        ThreadPool threadPool,  
-        TransportInterceptor transportInterceptor,
-        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,
-        @Nullable ClusterSettings clusterSettings,  
-        Set<String> taskHeaders,
-        Tracer tracer
-    ) {  
-        this(
-            settings,
-            transport,  
-            threadPool,
-            transportInterceptor,
-            localNodeFactory,  
-            clusterSettings,
-            taskHeaders,
-            new ClusterConnectionManager(settings, transport),  
-            tracer
-        );
-    }  
-
-    /**
-     * Build the service.  
-     *
-     * @param clusterSettings if non null, the {@linkplain TransportService} will register with the {@link ClusterSettings} for settings
-     *   *    updates for {@link TransportSettings#TRACE_LOG_EXCLUDE_SETTING} and {@link TransportSettings#TRACE_LOG_INCLUDE_SETTING}.  
-     */
-    public TransportService(
-        Settings settings,  
-        Transport transport,
-        @Nullable Transport streamTransport,
-        ThreadPool threadPool,  
-        TransportInterceptor transportInterceptor,
-        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,
-        @Nullable ClusterSettings clusterSettings,  
-        Set<String> taskHeaders,
-        Tracer tracer
-    ) {  
-        this(
-            settings,
-            transport,  
-            streamTransport,
-            threadPool,
-            transportInterceptor,  
-            localNodeFactory,
-            clusterSettings,
-            taskHeaders,  
-            new ClusterConnectionManager(settings, transport),
-            tracer
-        );  
-    }
-
-    public TransportService(  
-        Settings settings,
-        Transport transport,
-        ThreadPool threadPool,  
-        TransportInterceptor transportInterceptor,
-        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,
-        @Nullable ClusterSettings clusterSettings,  
-        Set<String> taskHeaders,
-        ConnectionManager connectionManager,
-        Tracer tracer  
-    ) {
-        this(
-            settings,  
-            transport,
-            null,
-            threadPool,  
-            transportInterceptor,
-            localNodeFactory,
-            clusterSettings,  
-            taskHeaders,
-            connectionManager,
-            tracer  
-        );
-    }
-
-    TransportService(
-        Settings settings,
-        Transport streamTransport,  
-        ThreadPool threadPool,
-        TransportInterceptor transportInterceptor,
-        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,  
-        ConnectionManager connectionManager,
-        Tracer tracer,
-        TaskManager taskManager,  
-        RemoteClusterService remoteClusterService,
-        boolean streamTransportMode
-    ) {  
-        if (!streamTransportMode) {
-            throw new IllegalStateException("Constructor only supported to construct StreamTransportService");
-        }  
-        this.transport = streamTransport;
-        this.streamTransport = streamTransport;
-        streamTransport.setSlowLogThreshold(TransportSettings.SLOW_OPERATION_THRESHOLD_SETTING.get(settings));  
-        this.threadPool = threadPool;
-        this.localNodeFactory = localNodeFactory;
-        this.connectionManager = connectionManager;  
-        this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
-        tracerLog = Loggers.getLogger(logger, ".tracer");
-        this.taskManager = taskManager;  
-        this.interceptor = transportInterceptor;
-        this.asyncSender = interceptor.interceptSender(this::sendRequestInternal);
-        this.remoteClusterClient = false;  
-        this.tracer = tracer;
-        this.remoteClusterService = remoteClusterService;
-        responseHandlers = streamTransport.getResponseHandlers();  
-    }
-
-    public TransportService(  
-        Settings settings,
-        Transport transport,
-        @Nullable Transport streamTransport,  
-        ThreadPool threadPool,
-        TransportInterceptor transportInterceptor,
-        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,  
-        @Nullable ClusterSettings clusterSettings,
-        Set<String> taskHeaders,
-        ConnectionManager connectionManager,  
-        Tracer tracer
-    ) {
-        this.transport = transport;  
-        this.streamTransport = streamTransport;
-        transport.setSlowLogThreshold(TransportSettings.SLOW_OPERATION_THRESHOLD_SETTING.get(settings));
-        this.threadPool = threadPool;  
-        this.localNodeFactory = localNodeFactory;
-        this.connectionManager = connectionManager;
-        this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);  
-        setTracerLogInclude(TransportSettings.TRACE_LOG_INCLUDE_SETTING.get(settings));
-        setTracerLogExclude(TransportSettings.TRACE_LOG_EXCLUDE_SETTING.get(settings));
-        tracerLog = Loggers.getLogger(logger, ".tracer");  
-        taskManager = createTaskManager(settings, clusterSettings, threadPool, taskHeaders);
-        this.interceptor = transportInterceptor;
-        this.asyncSender = interceptor.interceptSender(this::sendRequestInternal);  
-        this.remoteClusterClient = DiscoveryNode.isRemoteClusterClient(settings);
-        this.tracer = tracer;
-        remoteClusterService = new RemoteClusterService(settings, this);  
-        responseHandlers = transport.getResponseHandlers();
-        if (clusterSettings != null) {
-            clusterSettings.addSettingsUpdateConsumer(TransportSettings.TRACE_LOG_INCLUDE_SETTING, this::setTracerLogInclude);  
-            clusterSettings.addSettingsUpdateConsumer(TransportSettings.TRACE_LOG_EXCLUDE_SETTING, this::setTracerLogExclude);
-            if (remoteClusterClient) {
-                remoteClusterService.listenForUpdates(clusterSettings);  
-            }
-            clusterSettings.addSettingsUpdateConsumer(TransportSettings.SLOW_OPERATION_THRESHOLD_SETTING, transport::setSlowLogThreshold);
-        }  
-        registerRequestHandler(
-            HANDSHAKE_ACTION_NAME,
-            ThreadPool.Names.SAME,  
-            false,
-            false,
-            HandshakeRequest::new,  
-            (request, channel, task) -> channel.sendResponse(new HandshakeResponse(localNode, clusterName, localNode.getVersion()))
-        );
-    }  
-
-    public RemoteClusterService getRemoteClusterService() {
-        return remoteClusterService;  
-    }
-
-    public DiscoveryNode getLocalNode() {  
-        return localNode;
-    }
-
-    public TaskManager getTaskManager() {
-        return taskManager;
-    }  
-
-    protected TaskManager createTaskManager(
-        Settings settings,  
-        ClusterSettings clusterSettings,
-        ThreadPool threadPool,
-        Set<String> taskHeaders  
-    ) {
-        if (clusterSettings != null) {
-            return TaskManager.createTaskManagerWithClusterSettings(settings, clusterSettings, threadPool, taskHeaders);  
-        } else {
-            return new TaskManager(settings, threadPool, taskHeaders);
-        }  
-    }
-
-    /**  
-     * The executor service for this transport service.
-     *
-     * @return the executor service  
-     */
-    private ExecutorService getExecutorService() {
-        return threadPool.generic();  
-    }
-
-    void setTracerLogInclude(List<String> tracerLogInclude) {  
-        this.tracerLogInclude = tracerLogInclude.toArray(Strings.EMPTY_ARRAY);
-    }
-
-    void setTracerLogExclude(List<String> tracerLogExclude) {
-        this.tracerLogExclude = tracerLogExclude.toArray(Strings.EMPTY_ARRAY);
-    }  
-
-    @Override
-    protected void doStart() {  
-        transport.setMessageListener(this);
-        connectionManager.addListener(this);
-        transport.start();  
-        if (transport.boundAddress() != null && logger.isInfoEnabled()) {
-            logger.info("{}", transport.boundAddress());
-            for (Map.Entry<String, BoundTransportAddress> entry : transport.profileBoundAddresses().entrySet()) {  
-                logger.info("profile [{}]: {}", entry.getKey(), entry.getValue());
-            }
-        }  
-        // TODO: Making localNodeFactory BiConsumer is a bigger change since it should accept both default transport and
-        // stream publish address
-        synchronized (this) {  
-            localNode = localNodeFactory.apply(transport.boundAddress());
-            if (streamTransport != null) {
-                localNode = new DiscoveryNode(localNode, streamTransport.boundAddress().publishAddress());  
-            }
-        }
-        if (remoteClusterClient) {  
-            // here we start to connect to the remote clusters
-            remoteClusterService.initializeRemoteClusters(
-                ActionListener.wrap(  
-                    r -> logger.info("Remote clusters initialized successfully."),
-                    e -> logger.error("Remote clusters initialization failed partially", e)
-                )  
-            );
-        }
-    }  
-
-    @Override
-    protected void doStop() {  
-        try {
-            IOUtils.close(connectionManager, remoteClusterService, transport::stop);
-        } catch (IOException e) {  
-            throw new UncheckedIOException(e);
-        } finally {
-            // in case the transport is not connected to our local node (thus cleaned on node disconnect)  
-            // make sure to clean any leftover on going handles
-            for (final Transport.ResponseContext holderToNotify : responseHandlers.prune(h -> true)) {
-                // callback that an exception happened, but on a different thread since we don't  
-                // want handlers to worry about stack overflows
-                getExecutorService().execute(new AbstractRunnable() {
-                    @Override  
-                    public void onRejection(Exception e) {
-                        holderToNotify.handler().handleRejection(e);
-                        // if we get rejected during node shutdown we don't wanna bubble it up  
-                        logger.debug("failed to notify response handler on rejection, action: {}", holderToNotify.action(), e);
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        holderToNotify.handler().handleRejection(e);  
-                        logger.warn("failed to notify response handler on exception, action: {}", holderToNotify.action(), e);
-                    }
-
-                    @Override
-                    public void doRun() {
-                        TransportException ex = new SendRequestTransportException(  
-                            holderToNotify.connection().getNode(),
-                            holderToNotify.action(),
-                            new NodeClosedException(localNode)  
-                        );
-                        holderToNotify.handler().handleException(ex);
-                    }  
-                });
-            }
-        }  
-    }
-
-    @Override  
-    protected void doClose() throws IOException {
-        transport.close();
-    }  
-
-    /**
-     * start accepting incoming requests.  
-     * when the transport layer starts up it will block any incoming requests until
-     * this method is called
-     */  
-    public final void acceptIncomingRequests() {
-        handleIncomingRequests.set(true);
-    }  
-
-    @Override
-    public TransportInfo info() {  
-        BoundTransportAddress boundTransportAddress = boundAddress();
-        if (boundTransportAddress == null) {
-            return null;  
-        }
-        return new TransportInfo(boundTransportAddress, transport.profileBoundAddresses());
-    }  
-
-    public TransportStats stats() {
-        return transport.getStats();  
-    }
-
-    public boolean isTransportSecure() {  
-        return transport.isSecure();
-    }
-
-    public BoundTransportAddress boundAddress() {
-        return transport.boundAddress();
-    }  
-
-    public List<String> getDefaultSeedAddresses() {
-        return transport.getDefaultSeedAddresses();  
-    }
-
-    /**  
-     * Returns <code>true</code> iff the given node is already connected.
-     */
-    public boolean nodeConnected(DiscoveryNode node) {  
-        return isLocalNode(node) || connectionManager.nodeConnected(node);
-    }
-
-    /**
-     * Connect to the specified node with the default connection profile
-     *  
-     * @param node the node to connect to
-     */
-    public void connectToNode(DiscoveryNode node) throws ConnectTransportException {  
-        connectToNode(node, (ConnectionProfile) null);
-    }
-
-    /**
-     * Connect to the specified node as an extension with the default connection profile
-     *  
-     * @param node the node to connect to
-     */
-    public void connectToNodeAsExtension(DiscoveryNode node, String extensionUniqueId) throws ConnectTransportException {  
-        connectToNodeAsExtension(node, (ConnectionProfile) null, extensionUniqueId);
-    }
-
-    // We are skipping node validation for extensibility as extensionNode and opensearchNode(LocalNode) will have different ephemeral id's
-    public void connectToExtensionNode(final DiscoveryNode node) {
-        PlainActionFuture.get(fut -> connectToExtensionNode(node, (ConnectionProfile) null, ActionListener.map(fut, x -> null)));  
-    }
-
-    /**  
-     * Connect to the specified node with the given connection profile
-     *
-     * @param node the node to connect to  
-     * @param connectionProfile the connection profile to use when connecting to this node
-     */
-    public void connectToNode(final DiscoveryNode node, ConnectionProfile connectionProfile) {  
-        PlainActionFuture.get(fut -> connectToNode(node, connectionProfile, ActionListener.map(fut, x -> null)));
-    }
-
-    /**
-     * Connect to the specified node with the given connection profile
-     *  
-     * @param node the node to connect to
-     * @param connectionProfile the connection profile to use when connecting to this node
-     * @param extensionUniqueIq the id of the extension  
-     */
-    public void connectToNodeAsExtension(final DiscoveryNode node, ConnectionProfile connectionProfile, String extensionUniqueIq) {
-        PlainActionFuture.get(  
-            fut -> connectToNodeAsExtension(node, connectionProfile, extensionUniqueIq, ActionListener.map(fut, x -> null))
-        );
-    }  
-
-    public void connectToExtensionNode(final DiscoveryNode node, ConnectionProfile connectionProfile) {
-        PlainActionFuture.get(fut -> connectToExtensionNode(node, connectionProfile, ActionListener.map(fut, x -> null)));  
-    }
-
-    /**  
-     * Connect to the specified node with the given connection profile.
-     * The ActionListener will be called on the calling thread or the generic thread pool.
-     *  
-     * @param node the node to connect to
-     * @param listener the action listener to notify
-     */  
-    public void connectToNode(DiscoveryNode node, ActionListener<Void> listener) throws ConnectTransportException {
+        public ContextRestoreResponseHandler(Supplier<ThreadContext.StoredContext> contextSupplier, TransportResponseHandler<T> delegate) {  
+        String action,  
         connectToNode(node, null, listener);
-    }  
-
-    public void connectToExtensionNode(DiscoveryNode node, ActionListener<Void> listener) throws ConnectTransportException {
-        connectToExtensionNode(node, null, listener);  
-    }
-
-    /**  
-     * Connect to the specified node with the given connection profile.
-     * The ActionListener will be called on the calling thread or the generic thread pool.
-     *  
-     * @param node the node to connect to
-     * @param connectionProfile the connection profile to use when connecting to this node
-     * @param listener the action listener to notify  
-     */
-    public void connectToNode(final DiscoveryNode node, ConnectionProfile connectionProfile, ActionListener<Void> listener) {
-        if (isLocalNode(node)) {  
-            listener.onResponse(null);
-            return;
-        }  
-        connectionManager.connectToNode(node, connectionProfile, connectionValidator(node), listener);
-    }
-
-    /**
-     * Connect to the specified node as an extension with the given connection profile.
-     * The ActionListener will be called on the calling thread or the generic thread pool.  
-     *
-     * @param node the node to connect to
-     * @param connectionProfile the connection profile to use when connecting to this node  
-     * @param extensionUniqueId the id of the extension
-     * @param listener the action listener to notify
-     */  
-    public void connectToNodeAsExtension(
-        final DiscoveryNode node,
-        ConnectionProfile connectionProfile,  
-        String extensionUniqueId,
-        ActionListener<Void> listener
-    ) {  
-        if (isLocalNode(node)) {
-            listener.onResponse(null);
-            return;  
         }
-        connectionManager.connectToNode(
-            node,  
-            connectionProfile,
-            connectionValidatorForExtensionConnectingToNode(node, extensionUniqueId),
-            listener  
-        );
-    }
-
-    public void connectToExtensionNode(final DiscoveryNode node, ConnectionProfile connectionProfile, ActionListener<Void> listener) {
-        if (isLocalNode(node)) {
-            listener.onResponse(null);  
-            return;
-        }
-        connectionManager.connectToNode(node, connectionProfile, extensionConnectionValidator(node), listener);  
-    }
-
-    public ConnectionManager.ConnectionValidator connectionValidator(DiscoveryNode node) {  
-        return (newConnection, actualProfile, listener) -> {
-            // We don't validate cluster names to allow for CCS connections.
-            handshake(newConnection, actualProfile.getHandshakeTimeout().millis(), cn -> true, ActionListener.map(listener, resp -> {  
-                final DiscoveryNode remote = resp.discoveryNode;
-
-                if (node.equals(remote) == false) {  
                     throw new ConnectTransportException(node, "handshake failed. unexpected remote node " + remote);
-                }
-
-                return null;
-            }));
-        };  
-    }
-
-    public ConnectionManager.ConnectionValidator connectionValidatorForExtensionConnectingToNode(  
-        DiscoveryNode node,
-        String extensionUniqueId
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.cluster.node.DiscoveryNode;
+        public String executor() {
+                        // if we get rejected during node shutdown we don't wanna bubble it up  
+     */
+        final Transport.Connection connection,
+            handler = interceptor.interceptHandler(action, executor, forceExecution, handler, admissionControlActionType);  
+            return new RemoteTransportException(localNode.getName(), localNode.getAddress(), action, e);  
+        final Transport.Connection connection,
+        private final long sentTime;
+            false,
+    public TransportInfo info() {  
+            asyncSender.sendRequest(connection, action, request, options, delegate);
+                final String executor = handler.executor();
+    static {
     ) {  
-        return (newConnection, actualProfile, listener) -> {
-            // We don't validate cluster names to allow for CCS connections.
-            String currentId = threadPool.getThreadContext().getHeader("extension_unique_id");  
-            if (Strings.isNullOrEmpty(currentId) || !extensionUniqueId.equals(currentId)) {
+            return sentTime;  
+        @Nullable Transport streamTransport,  
+    ) {  
+        final DiscoveryNode sourceNode;
+import org.opensearch.common.Nullable;  
+        boolean canTripCircuitBreaker,
+     * @throws ConnectTransportException if the connection failed
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        DirectResponseChannel(DiscoveryNode localNode, String action, long requestId, TransportService service, ThreadPool threadPool) {
+    public void onRequestReceived(long requestId, String action) {  
+     * @opensearch.internal
+        connectionManager.connectToNode(node, connectionProfile, connectionValidator(node), listener);
+    ) {
+                time - timeoutInfoHolder.sentTime(),
+            }
+            final Transport.ResponseContext<? extends TransportResponse> contextToNotify = responseHandlers.remove(requestId);
+    private final AtomicBoolean handleIncomingRequests = new AtomicBoolean();
+        PlainActionFuture.get(  
+        } catch (IOException e) {  
+        ThreadPool threadPool,
+            }
+            taskManager,  
+            TransportRequestOptions.builder().withTimeout(handshakeTimeout).build(),  
+                        return reg.isForceExecution();  
+        public DiscoveryNode node() {  
+    private final Transport.Connection localNodeConnection = new Transport.Connection() {
+            tracer
+            }
+        final TransportRequest request,
+        } catch (Exception e) {
+                                "request_id [" + requestId + "] timed out after [" + (timeoutTime - sentTime) + "ms]"
+     * @param node the node to connect to
+        public void run() {  
+     * @param connectionProfile the connection profile to use when connecting to this node
+                "indices:internal",  
+                "indices:monitor",  
+        ActionListener<Void> listener
+        @Override
+                            )
+                    @Override
+     * A channel for a direct response
+     * @param action     the name of the action  
+                    }  
+    }
+    static class TimeoutInfoHolder {
+        TransportRequest request,
+     * @param listener the action listener to notify  
+     * Holder for timeout information  
+        }  
+    }  
+import org.opensearch.action.support.PlainActionFuture;  
+        final TransportResponseHandler<T> handler
+import java.util.function.Supplier;  
+        }
+                if (holder != null) {  
+            futureHandler.handleException(ex);
+     */
+                                    + "] does not match "
+    TransportService(
+    /**
+    private final RemoteClusterService remoteClusterService;  
+    }
+            throws TransportException {
+            tracerLog.trace("[{}] received response but can't resolve it to a request", requestId);  
+import java.io.IOException;
+    }
+ * Unless required by applicable law or agreed to in writing,
+    public void connectToNodeAsExtension(DiscoveryNode node, String extensionUniqueId) throws ConnectTransportException {  
+        TaskManager taskManager,  
+        private final long timeoutTime;  
+        this.transport = streamTransport;
+    }  
+            tracerLog.trace("[{}][{}] sent response", requestId, action);  
+        if (isLocalNode(node)) {
+            return new TaskManager(settings, threadPool, taskHeaders);
+ * @opensearch.internal
+        Transport transport,
+        final DiscoveryNode node,  
+                delegate.handleResponse(response);
+        @Override  
+            }  
+    /**  
+        }  
+            (request, channel, task) -> channel.sendResponse(new HandshakeResponse(localNode, clusterName, localNode.getVersion()))
+     */  
+                return remoteTransportException;
+    protected final ClusterName clusterName;
+                final String executor = handler.executor();
+import org.opensearch.core.common.Strings;
+                                    + response.version  
+/*  
+            try (ThreadContext.StoredContext ignore = contextSupplier.get()) {
+        // call tracer out of lock  
+     * Connect to the specified node with the given connection profile.
+            TransportRequest request,  
+        @Override
+    ) {  
+    public void connectToNode(DiscoveryNode node, ActionListener<Void> listener) throws ConnectTransportException {
+import org.opensearch.common.settings.ClusterSettings;  
+        TransportConnectionListener {
+    }  
+        );  
+    private final Transport streamTransport;
+    public final void acceptIncomingRequests() {
+import org.opensearch.core.action.ActionListener;  
+        String extensionUniqueId
+            if (handler != null) {
+    public static boolean shouldTraceAction(String action, String[] include, String[] exclude) {
+        final TransportRequest request,
+            new ClusterConnectionManager(settings, transport),  
+            handler.handleException(ex);  
+    }  
+        @Override
+        }
+import org.opensearch.common.util.io.IOUtils;
+        Settings settings,
+        Supplier<ThreadContext.StoredContext> storedContextSupplier = threadPool.getThreadContext().newRestorableContext(true);
+            TransportRequestOptions finalOptions
+    volatile DiscoveryNode localNode = null;
+import java.util.Objects;
+            null,
+        @Override  
+    final class TimeoutHandler implements Runnable {  
                 threadPool.getThreadContext().putHeader("extension_unique_id", extensionUniqueId);
             }  
-            handshake(newConnection, actualProfile.getHandshakeTimeout().millis(), cn -> true, ActionListener.map(listener, resp -> {
-                final DiscoveryNode remote = resp.discoveryNode;
-
-                if (node.equals(remote) == false) {
-                    throw new ConnectTransportException(node, "handshake failed. unexpected remote node " + remote);
-                }  
-
-                return null;
-            }));  
-        };
-    }
-
-    public ConnectionManager.ConnectionValidator extensionConnectionValidator(DiscoveryNode node) {
-        return (newConnection, actualProfile, listener) -> {
-            // We don't validate cluster names to allow for CCS connections.  
-            handshake(newConnection, actualProfile.getHandshakeTimeout().millis(), cn -> true, ActionListener.map(listener, resp -> {
-                final DiscoveryNode remote = resp.discoveryNode;
-                logger.info("Connection validation was skipped");  
-                return null;
-            }));
-        };  
-    }
-
-    /**  
-     * Establishes and returns a new connection to the given node. The connection is NOT maintained by this service, it's the callers
-     * responsibility to close the connection once it goes out of scope.
-     * The ActionListener will be called on the calling thread or the generic thread pool.  
-     * @param node the node to connect to
-     * @param connectionProfile the connection profile to use
+    public static final String HANDSHAKE_ACTION_NAME = "internal:transport/handshake";  
      */  
-    public Transport.Connection openConnection(final DiscoveryNode node, ConnectionProfile connectionProfile) {
-        return PlainActionFuture.get(fut -> openConnection(node, connectionProfile, fut));
-    }  
-
-    /**
-     * Establishes a new connection to the given node. The connection is NOT maintained by this service, it's the callers  
-     * responsibility to close the connection once it goes out of scope.
-     * The ActionListener will be called on the calling thread or the generic thread pool.
-     * @param node the node to connect to  
-     * @param connectionProfile the connection profile to use
-     * @param listener the action listener to notify
-     */  
-    public void openConnection(
-        final DiscoveryNode node,
-        ConnectionProfile connectionProfile,  
-        ActionListener<Transport.Connection> listener
-    ) {
-        if (isLocalNode(node)) {  
-            listener.onResponse(localNodeConnection);
-        } else {
-            connectionManager.openConnection(node, connectionProfile, listener);  
-        }
     }
-
-    /**
-     * Executes a high-level handshake using the given connection
-     * and returns the discovery node of the node the connection  
-     * was established with. The handshake will fail if the cluster
-     * name on the target node mismatches the local cluster name.
-     * The ActionListener will be called on the calling thread or the generic thread pool.  
-     *
-     * @param connection       the connection to a specific node
-     * @param handshakeTimeout handshake timeout  
-     * @param listener         action listener to notify
-     * @throws ConnectTransportException if the connection failed
-     * @throws IllegalStateException if the handshake failed  
+                    @Override
      */
-    public void handshake(
-        final Transport.Connection connection,  
-        final long handshakeTimeout,
-        final ActionListener<DiscoveryNode> listener
-    ) {  
-        handshake(
-            connection,
-            handshakeTimeout,  
-            clusterName.getEqualityPredicate(),
-            ActionListener.map(listener, HandshakeResponse::getDiscoveryNode)
-        );  
-    }
-
-    /**  
-     * Executes a high-level handshake using the given connection
-     * and returns the discovery node of the node the connection
-     * was established with. The handshake will fail if the cluster  
-     * name on the target node doesn't match the local cluster name.
-     * The ActionListener will be called on the calling thread or the generic thread pool.
-     *  
-     * @param connection       the connection to a specific node
-     * @param handshakeTimeout handshake timeout
+        }  
+            logger.debug("Rejected execution on onConnectionClosed", ex);
      * @param clusterNamePredicate cluster name validation predicate  
-     * @param listener         action listener to notify
-     * @throws IllegalStateException if the handshake failed
-     */  
-    public void handshake(
-        final Transport.Connection connection,
-        final long handshakeTimeout,  
-        Predicate<ClusterName> clusterNamePredicate,
-        final ActionListener<HandshakeResponse> listener
-    ) {  
-        final DiscoveryNode node = connection.getNode();
-        sendRequest(
-            connection,  
-            HANDSHAKE_ACTION_NAME,
-            HandshakeRequest.INSTANCE,
-            TransportRequestOptions.builder().withTimeout(handshakeTimeout).build(),  
-            new ActionListenerResponseHandler<>(new ActionListener<HandshakeResponse>() {
-                @Override
-                public void onResponse(HandshakeResponse response) {  
-                    if (clusterNamePredicate.test(response.clusterName) == false) {
-                        listener.onFailure(
-                            new IllegalStateException(  
-                                "handshake with ["
-                                    + node
-                                    + "] failed: remote cluster name ["  
-                                    + response.clusterName.value()
-                                    + "] does not match "
-                                    + clusterNamePredicate  
-                            )
-                        );
-                    } else if (response.version.isCompatible(localNode.getVersion()) == false) {  
-                        listener.onFailure(
-                            new IllegalStateException(
-                                "handshake with ["  
-                                    + node
-                                    + "] failed: remote node version ["
-                                    + response.version  
-                                    + "] is incompatible with local node version ["
-                                    + localNode.getVersion()
-                                    + "]"  
-                            )
-                        );
                     } else {  
-                        listener.onResponse(response);
-                    }
-                }  
-
-                @Override
-                public void onFailure(Exception e) {  
-                    listener.onFailure(e);
-                }
-            }, HandshakeResponse::new, ThreadPool.Names.GENERIC)  
-        );
-    }
-
-    public ConnectionManager getConnectionManager() {
-        return connectionManager;
-    }  
-
-    /**
-     * Internal Handshake request  
-     *
-     * @opensearch.internal
-     */  
-    static class HandshakeRequest extends TransportRequest {
-
-        public static final HandshakeRequest INSTANCE = new HandshakeRequest();  
-
-        HandshakeRequest(StreamInput in) throws IOException {
-            super(in);  
+     * Registers a new request handler  
+        transport.start();  
+        public void handleException(TransportException exp) {
+            HandshakeRequest.INSTANCE,
+            connection,  
         }
-
-        private HandshakeRequest() {}  
-
-    }
-
-    /**
-     * Internal handshake response
-     *  
-     * @opensearch.internal
-     */
-    public static class HandshakeResponse extends TransportResponse {  
-        private final DiscoveryNode discoveryNode;
-        private final ClusterName clusterName;
-        private final Version version;  
-
-        public HandshakeResponse(DiscoveryNode discoveryNode, ClusterName clusterName, Version version) {
-            this.discoveryNode = discoveryNode;  
-            this.version = version;
-            this.clusterName = clusterName;
-        }  
-
-        public HandshakeResponse(StreamInput in) throws IOException {
-            super(in);  
-            discoveryNode = in.readOptionalWriteable(DiscoveryNode::new);
-            clusterName = new ClusterName(in);
-            version = in.readVersion();  
-        }
-
-        @Override  
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeOptionalWriteable((stream, node) -> node.writeToWithAttribute(stream), discoveryNode);
-            clusterName.writeTo(out);  
-            out.writeVersion(version);
-        }
-
-        public DiscoveryNode getDiscoveryNode() {
-            return discoveryNode;
-        }  
-
-        public ClusterName getClusterName() {
-            return clusterName;  
-        }
-    }
-
-    public void disconnectFromNode(DiscoveryNode node) {
-        if (isLocalNode(node)) {
-            return;  
-        }
-        connectionManager.disconnectFromNode(node);
-    }  
-
-    public void setPendingDisconnection(DiscoveryNode node) {
-        connectionManager.setPendingDisconnection(node);  
-    }
-
-    /**  
-     * Wipes out all pending disconnections.
-     * This is called on cluster-manager failover to remove stale entries
-     */  
-    public void clearPendingDisconnections() {
-        connectionManager.clearPendingDisconnections();
-    }  
-
-    public void addMessageListener(TransportMessageListener listener) {
-        messageListener.listeners.add(listener);  
-    }
-
-    public boolean removeMessageListener(TransportMessageListener listener) {  
-        return messageListener.listeners.remove(listener);
-    }
-
-    public void addConnectionListener(TransportConnectionListener listener) {
-        connectionManager.addListener(listener);
-    }  
-
     public void removeConnectionListener(TransportConnectionListener listener) {
-        connectionManager.removeListener(listener);  
-    }
-
-    public <T extends TransportResponse> TransportFuture<T> submitRequest(  
-        DiscoveryNode node,
-        String action,
-        TransportRequest request,  
-        TransportResponseHandler<T> handler
-    ) throws TransportException {
-        return submitRequest(node, action, request, TransportRequestOptions.EMPTY, handler);  
-    }
-
-    public <T extends TransportResponse> TransportFuture<T> submitRequest(  
-        DiscoveryNode node,
-        String action,
-        TransportRequest request,  
-        TransportRequestOptions options,
-        TransportResponseHandler<T> handler
-    ) throws TransportException {  
-        PlainTransportFuture<T> futureHandler = new PlainTransportFuture<>(handler);
-        try {
-            Transport.Connection connection = getConnection(node);  
-            sendRequest(connection, action, request, options, futureHandler);
-        } catch (NodeNotConnectedException ex) {
-            // the caller might not handle this so we invoke the handler  
-            futureHandler.handleException(ex);
-        }
-        return futureHandler;  
-    }
-
-    public <T extends TransportResponse> void sendRequest(  
-        final DiscoveryNode node,
-        final String action,
-        final TransportRequest request,  
-        final TransportResponseHandler<T> handler
-    ) {
-        final Transport.Connection connection;  
-        try {
-            connection = getConnection(node);
-        } catch (final NodeNotConnectedException ex) {  
-            // the caller might not handle this so we invoke the handler
-            handler.handleException(ex);
-            return;  
-        }
-        sendRequest(connection, action, request, TransportRequestOptions.EMPTY, handler);
-    }  
-
-    public final <T extends TransportResponse> void sendRequest(
-        final DiscoveryNode node,  
-        final String action,
-        final TransportRequest request,
-        final TransportRequestOptions options,  
-        TransportResponseHandler<T> handler
-    ) {
-        final Transport.Connection connection;  
-        try {
-            connection = getConnection(node);
-        } catch (final NodeNotConnectedException ex) {  
-            // the caller might not handle this so we invoke the handler
-            handler.handleException(ex);
-            return;  
-        }
-        sendRequest(connection, action, request, options, handler);
-    }  
-
-    /**
-     * Sends a request on the specified connection. If there is a failure sending the request, the specified handler is invoked.  
+            executor,
+        final String action,  
+            this.delegate = delegate;
+    public void handshake(
+        if (clusterSettings != null) {
      *
-     * @param connection the connection to send the request on
-     * @param action     the name of the action  
-     * @param request    the request
-     * @param options    the options for this request
-     * @param handler    the response handler  
-     * @param <T>        the type of the transport response
-     */
-    public final <T extends TransportResponse> void sendRequest(  
-        final Transport.Connection connection,
-        final String action,
-        final TransportRequest request,  
-        final TransportRequestOptions options,
-        final TransportResponseHandler<T> handler
-    ) {  
-        final Span span = tracer.startSpan(SpanBuilder.from(action, connection));
-        try (SpanScope spanScope = tracer.withSpanInScope(span)) {
-            TransportResponseHandler<T> traceableTransportResponseHandler = TraceableTransportResponseHandler.create(handler, span, tracer);  
-            sendRequestAsync(connection, action, request, options, traceableTransportResponseHandler);
+        this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);  
+            Transport.Connection connection = getConnection(node);  
+                    // response was processed, remove timeout info.  
+            for (final Transport.ResponseContext holderToNotify : responseHandlers.prune(h -> true)) {
+                cancellable.cancel();  
         }
-    }  
-
-    /**
-     * Returns either a real transport connection or a local node connection if we are using the local node optimization.  
-     * @throws NodeNotConnectedException if the given node is not connected
-     */
-    public Transport.Connection getConnection(DiscoveryNode node) {  
-        if (isLocalNode(node)) {
-            return localNodeConnection;
-        } else {  
-            return connectionManager.getConnection(node);
-        }
-    }  
-
-    public final <T extends TransportResponse> void sendChildRequest(
-        final DiscoveryNode node,  
-        final String action,
-        final TransportRequest request,
-        final Task parentTask,  
-        final TransportRequestOptions options,
-        final TransportResponseHandler<T> handler
-    ) {  
-        final Transport.Connection connection;
-        try {
-            connection = getConnection(node);  
-        } catch (final NodeNotConnectedException ex) {
-            // the caller might not handle this so we invoke the handler
-            handler.handleException(ex);  
-            return;
-        }
-        sendChildRequest(connection, action, request, parentTask, options, handler);  
-    }
-
-    public <T extends TransportResponse> void sendChildRequest(  
-        final Transport.Connection connection,
-        final String action,
-        final TransportRequest request,  
-        final Task parentTask,
-        final TransportResponseHandler<T> handler
-    ) {  
-        sendChildRequest(connection, action, request, parentTask, TransportRequestOptions.EMPTY, handler);
-    }
-
-    public <T extends TransportResponse> void sendChildRequest(
-        final Transport.Connection connection,
-        final String action,  
-        final TransportRequest request,
-        final Task parentTask,
-        final TransportRequestOptions options,  
-        final TransportResponseHandler<T> handler
-    ) {
-        request.setParentTask(localNode.getId(), parentTask.getId());  
-        sendRequest(connection, action, request, options, handler);
-    }
-
-    private <T extends TransportResponse> void sendRequestInternal(
-        final Transport.Connection connection,
-        final String action,  
-        final TransportRequest request,
-        final TransportRequestOptions options,
-        TransportResponseHandler<T> handler  
-    ) {
-        if (connection == null) {
-            throw new IllegalStateException("can't send request to a null connection");  
-        }
-        DiscoveryNode node = connection.getNode();
-
-        Supplier<ThreadContext.StoredContext> storedContextSupplier = threadPool.getThreadContext().newRestorableContext(true);
-        ContextRestoreResponseHandler<T> responseHandler = new ContextRestoreResponseHandler<>(storedContextSupplier, handler);
-        // TODO we can probably fold this entire request ID dance into connection.sendReqeust but it will be a bigger refactoring  
-        final long requestId = responseHandlers.add(new Transport.ResponseContext<>(responseHandler, connection, action));
-        final TimeoutHandler timeoutHandler;
-        if (options.timeout() != null) {  
-            timeoutHandler = new TimeoutHandler(requestId, connection.getNode(), action);
-            responseHandler.setTimeoutHandler(timeoutHandler);
-        } else {  
-            timeoutHandler = null;
-        }
-        try {  
-            if (lifecycle.stoppedOrClosed()) {
-                /*
-                 * If we are not started the exception handling will remove the request holder again and calls the handler to notify the  
-                 * caller. It will only notify if toStop hasn't done the work yet.
-                 */
-                throw new NodeClosedException(localNode);  
-            }
-            if (timeoutHandler != null) {
-                assert options.timeout() != null;  
-                timeoutHandler.scheduleTimeout(options.timeout());
-            }
-            connection.sendRequest(requestId, action, request, options); // local node optimization happens upstream  
-        } catch (final Exception e) {
-            // usually happen either because we failed to connect to the node
-            // or because we failed serializing the message  
-            final Transport.ResponseContext<? extends TransportResponse> contextToNotify = responseHandlers.remove(requestId);
-            // If holderToNotify == null then handler has already been taken care of.
-            if (contextToNotify != null) {  
-                if (timeoutHandler != null) {
-                    timeoutHandler.cancel();
-                }  
-                // callback that an exception happened, but on a different thread since we don't
-                // want handlers to worry about stack overflows. In the special case of running into a closing node we run on the current
-                // thread on a best effort basis though.  
-                final SendRequestTransportException sendRequestException = new SendRequestTransportException(node, action, e);
-                final String executor = lifecycle.stoppedOrClosed() ? ThreadPool.Names.SAME : ThreadPool.Names.GENERIC;
-                threadPool.executor(executor).execute(new AbstractRunnable() {  
-                    @Override
-                    public void onRejection(Exception e) {
-                        contextToNotify.handler().handleRejection(e);  
-                        // if we get rejected during node shutdown we don't wanna bubble it up
-                        logger.debug("failed to notify response handler on rejection, action: {}", contextToNotify.action(), e);
-                    }  
-
-                    @Override
-                    public void onFailure(Exception e) {  
-                        contextToNotify.handler().handleRejection(e);
-                        logger.warn("failed to notify response handler on exception, action: {}", contextToNotify.action(), e);
-                    }  
-
-                    @Override
-                    protected void doRun() throws Exception {  
-                        contextToNotify.handler().handleException(sendRequestException);
                     }
-                });  
-            } else {
-                logger.debug("Exception while sending request, handler likely already notified due to timeout", e);
-            }  
-        }
-    }
-
-    protected void sendLocalRequest(long requestId, final String action, final TransportRequest request, TransportRequestOptions options) {
-        final DirectResponseChannel channel = new DirectResponseChannel(localNode, action, requestId, this, threadPool);
-        try {  
+     * Connect to the specified node as an extension with the given connection profile.
+                            channel.sendResponse(e);  
+            service.onResponseSent(requestId, action, exception);
+        String action,
+                    for (Transport.ResponseContext holderToNotify : pruned) {
+                // TODO: capture the connection instead so that we can cancel child tasks on the remote connections.  
             onRequestSent(localNode, requestId, action, request, options);
-            onRequestReceived(requestId, action);
-            final RequestHandlerRegistry reg = getRequestHandler(action);  
-            if (reg == null) {
-                throw new ActionNotFoundTransportException("Action [" + action + "] not found");
-            }  
-            final String executor = reg.getExecutor();
-            if (ThreadPool.Names.SAME.equals(executor)) {
-                // noinspection unchecked  
-                reg.processMessageReceived(request, channel);
+            );
+        }
+    );
+        @Override
+        messageListener.onResponseReceived(requestId, holder);
+        this.remoteClusterClient = false;  
+            return "direct";
+     */  
+            super(in);  
+        @Override  
+    public <T extends TransportResponse> void sendRequest(  
+                    });
+     * @param request    the request
+            tracer  
+    public void connectToExtensionNode(final DiscoveryNode node) {
+    /**
+                        @Override
             } else {
+        this.remoteClusterService = remoteClusterService;
+            return;
+            return clusterName;  
+                te = (TransportException) ex;  
+    public void connectToNode(DiscoveryNode node) throws ConnectTransportException {  
+            this.threadPool = threadPool;  
+        for (String prefix : VALID_ACTION_PREFIXES) {  
+        @Override
+     *  
+        RequestHandlerRegistry<Request> reg = new RequestHandlerRegistry<>(
+        }
+    }
+    protected final Transport transport;
+        TransportInterceptor transportInterceptor,
+                localNode = new DiscoveryNode(localNode, streamTransport.boundAddress().publishAddress());  
                 threadPool.executor(executor).execute(new AbstractRunnable() {  
+        connectionManager.connectToNode(node, connectionProfile, extensionConnectionValidator(node), listener);  
+            executor,  
+    }  
+/*  
+            out.writeOptionalWriteable((stream, node) -> node.writeToWithAttribute(stream), discoveryNode);
+            transportInterceptor,
+     * Internal handshake response
+        Settings settings,  
+        if (admissionControlActionType != null) {
+          over the {@link StreamOutput} and {@link StreamInput} wire
+                            )  
+    @Override
+            return;  
+        final TransportService service;
+    }
+                requestId  
+                } else {
+            } else {
+    @Override
                     @Override
-                    protected void doRun() throws Exception {
-                        // noinspection unchecked  
-                        reg.processMessageReceived(request, channel);
+    public TransportService(  
+        this.connectionManager = connectionManager;  
+                timeoutHandler.scheduleTimeout(options.timeout());
+     *  
+        Transport streamTransport,  
+            this.node = node;  
+    public <T extends TransportResponse> TransportFuture<T> submitRequest(  
+        final ActionListener<HandshakeResponse> listener
+                return false;
+        } else if (shouldTraceAction(action)) {
+            return TaskManager.createTaskManagerWithClusterSettings(settings, clusterSettings, threadPool, taskHeaders);  
+            }
+            tracerLog.trace("[{}][{}] sent error response", requestId, action, e);  
+        /*  
+            return delegate.skipsDeserialization();
+                }  
+            }
+        ReportingService<TransportInfo>,  
+                    }  
+        } else {
+        } finally {
+        }
+     *  
+        return futureHandler;  
+        )
+     * @param node the node to connect to
+        }  
+                listener.onResponseReceived(requestId, holder);
+    public TransportService(  
+        this.transport = transport;  
+                // thread on a best effort basis though.  
+    }
+    }
+            return action;
+        sendRequest(connection, action, request, options, handler);
+import java.util.concurrent.ExecutorService;
+                };  
+                delegate = new TransportResponseHandler<T>() {
+        this.threadPool = threadPool;
+        }
+        public void writeTo(StreamOutput out) throws IOException {
+                public void onFailure(Exception e) {  
                     }
-
+                        return getClass().getName() + "/[" + action + "]:" + handler.toString();
+            new ActionListenerResponseHandler<>(new ActionListener<HandshakeResponse>() {
+        public void cancel() {
+            this.action = action;
+            // ignore if its null, the service logs it
                     @Override
                     public boolean isForceExecution() {
-                        return reg.isForceExecution();  
-                    }
-
-                    @Override  
-                    public void onFailure(Exception e) {
-                        try {
-                            channel.sendResponse(e);  
-                        } catch (Exception inner) {
-                            inner.addSuppressed(e);
-                            logger.warn("failed to notify channel of error message for action [{}]", action, inner);  
-                        }
-                    }
-
-                    @Override
-                    public String toString() {
-                        return "processing of [" + requestId + "][" + action + "]: " + request;  
-                    }
-                });
-            }  
-
-        } catch (Exception e) {
-            try {  
-                channel.sendResponse(e);
-            } catch (Exception inner) {
-                inner.addSuppressed(e);  
-                logger.warn("failed to notify channel of error message for action [{}]", action, inner);
-            }
-        }  
-    }
-
-    private boolean shouldTraceAction(String action) {  
+            localNodeFactory,
         return shouldTraceAction(action, tracerLogInclude, tracerLogExclude);
-    }
-
-    public static boolean shouldTraceAction(String action, String[] include, String[] exclude) {
-        if (include.length > 0) {
-            if (Regex.simpleMatch(include, action) == false) {  
-                return false;
-            }
-        }  
-        if (exclude.length > 0) {
-            return !Regex.simpleMatch(exclude, action);
-        }  
-        return true;
-    }
-
-    public TransportAddress[] addressesFromString(String address) throws UnknownHostException {
-        return transport.addressesFromString(address);
-    }  
-
-    /**
-     * A set of all valid action prefixes.  
-     */
-    public static final Set<String> VALID_ACTION_PREFIXES = Collections.unmodifiableSet(
-        new HashSet<>(  
-            Arrays.asList(
-                "indices:admin",
-                "indices:monitor",  
-                "indices:data/write",
-                "indices:data/read",
-                "indices:internal",  
-                "cluster:admin",
-                "cluster:monitor",
-                "cluster:internal",  
-                "internal:",
-                "views:"
-            )  
-        )
-    );
-
-    protected void validateActionName(String actionName) {
-        // TODO we should makes this a hard validation and throw an exception but we need a good way to add backwards layer
-        // for it. Maybe start with a deprecation layer  
-        if (isValidActionName(actionName) == false) {
-            logger.warn("invalid action name [" + actionName + "] must start with one of: " + TransportService.VALID_ACTION_PREFIXES);
-        }  
-    }
-
+        final Transport.Connection connection;  
     /**  
-     * Returns <code>true</code> iff the action name starts with a valid prefix.
-     *
-     * @see #VALID_ACTION_PREFIXES  
+        boolean forceExecution,
+            canTripCircuitBreaker  
+            if (ThreadPool.Names.SAME.equals(executor)) {
+        }
+     * responsibility to close the connection once it goes out of scope.
+                threadPool.executor(executor).execute(new AbstractRunnable() {  
+                + requestId  
+        final TransportRequestOptions options,  
+        String executor,  
+    public void disconnectFromNode(DiscoveryNode node) {
+        TransportResponseHandler<T> handler  
+        // stream publish address
+                if (ThreadPool.Names.SAME.equals(executor)) {
+import org.opensearch.action.ActionListenerResponseHandler;
+                        contextToNotify.handler().handleRejection(e);  
+        private final List<TransportMessageListener> listeners = new CopyOnWriteArrayList<>();
+    }
+                        try {
+                handler.cancel();
+                public void run() {
+        } else {
+    }
+    /**  
+        }
      */
-    public static boolean isValidActionName(String actionName) {
-        for (String prefix : VALID_ACTION_PREFIXES) {  
-            if (actionName.startsWith(prefix)) {
-                return true;
+                    @Override
+        );
+                }
+        responseHandlers = transport.getResponseHandlers();
+        Streamables.registerStreamables();
+            connection = getConnection(node);
+        public ClusterName getClusterName() {
+                        }
+     *
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  
+    public Transport.Connection openConnection(final DiscoveryNode node, ConnectionProfile connectionProfile) {
+        @Override
+            // the caller might not handle this so we invoke the handler
+        private final DiscoveryNode discoveryNode;
+        ThreadPool threadPool,  
+     * @param options    the options for this request
             }  
+    /**
+                            holderToNotify.connection().getNode(),
+import java.util.function.Function;
+    protected final TaskManager taskManager;
+                    threadPool.executor(handler.executor()).execute(new Runnable() {
+        return connectionManager;
+            sourceNode = null;
+        if (tracerLog.isTraceEnabled() == false) {
+                        return "processing of [" + requestId + "][" + action + "]: " + request;  
+                 */
+    }  
+                @Override  
+    private void checkForTimeout(long requestId) {  
+    ) {  
+        }
+    );
+                final SendRequestTransportException sendRequestException = new SendRequestTransportException(node, action, e);
+            try {
+        handler = interceptor.interceptHandler(action, executor, false, handler);
+ * Licensed to Elasticsearch under one or more contributor  
+        }  
+     * @param connectionProfile the connection profile to use when connecting to this node
+        ConnectionManager connectionManager,
+        TransportRequestHandler<Request> handler
+     * @param node the node to connect to
+                        TransportException ex = new SendRequestTransportException(  
+        };  
+                 * caller. It will only notify if toStop hasn't done the work yet.
+        private final String action;
+        final ActionListener<DiscoveryNode> listener
+            transport,  
+            connection = getConnection(node);
+    }
+        String action,
+        this.tracer = tracer;
+            false,
+        final ThreadPool threadPool;
+        remoteClusterService = new RemoteClusterService(settings, this);  
+    /**  
+        // TODO: Making localNodeFactory BiConsumer is a bigger change since it should accept both default transport and
+    }  
+    public static final Set<String> VALID_ACTION_PREFIXES = Collections.unmodifiableSet(
+    /**  
+    public static boolean isValidActionName(String actionName) {
+                            logger.warn("failed to notify channel of error message for action [{}]", action, inner);  
+ * Modifications Copyright OpenSearch Contributors. See
+     */  
+        try {
+                } else {
+    }
+            }
+                }
+        sendChildRequest(connection, action, request, parentTask, TransportRequestOptions.EMPTY, handler);
+                        contextToNotify.handler().handleException(sendRequestException);
+        PlainActionFuture.get(fut -> connectToExtensionNode(node, connectionProfile, ActionListener.map(fut, x -> null)));  
+                    @Override
+            final String executor = reg.getExecutor();
+        String action,
+                    public void onFailure(Exception e) {
+ * The OpenSearch Contributors require contributions made to  
+    public void connectToExtensionNode(DiscoveryNode node, ActionListener<Void> listener) throws ConnectTransportException {
+        private final String action;
+            handler = interceptor.interceptHandler(action, executor, forceExecution, handler);
+import org.opensearch.core.common.transport.BoundTransportAddress;
+        Set<String> taskHeaders,
+        PlainTransportFuture<T> futureHandler = new PlainTransportFuture<>(handler);
+import java.util.concurrent.atomic.AtomicBoolean;  
+     * Wipes out all pending disconnections.
+                @Override
+            return;  
+    public void connectToNode(final DiscoveryNode node, ConnectionProfile connectionProfile, ActionListener<Void> listener) {
+                    protected void doRun() throws Exception {  
+                        holderToNotify.handler().handleRejection(e);  
+     * The ActionListener will be called on the calling thread or the generic thread pool.
+ * license agreements. See the NOTICE file distributed with
+     * @param node the node to connect to  
+            action,
+                logger.warn("failed to notify channel of error message for action [{}]", action, inner);
+    ) {  
+        }
+            true
+            final TransportResponseHandler<T> delegate;
+        this.tracerLogExclude = tracerLogExclude.toArray(Strings.EMPTY_ARRAY);
+     * The ActionListener will be called on the calling thread or the generic thread pool.
+    protected void doClose() throws IOException {
+     * @param node the node to connect to
+                    } else if (response.version.isCompatible(localNode.getVersion()) == false) {  
+        @Override
+            } catch (Exception e) {  
+            }  
+    public static void ensureClassloaded() {}
+                remoteClusterService.listenForUpdates(clusterSettings);  
+                    }
+        public T read(StreamInput in) throws IOException {  
+                        );
+                }
+    private final DelegatingTransportMessageListener messageListener = new DelegatingTransportMessageListener();  
+        this.tracer = tracer;
+                        public void run() {
+            }
+     *  
+            TransportResponseHandler<T> traceableTransportResponseHandler = TraceableTransportResponseHandler.create(handler, span, tracer);  
+            return connectionManager.getConnection(node);
+        if (boundTransportAddress == null) {
+        final Span span = tracer.startSpan(SpanBuilder.from(action, connection));
+     * A set of all valid action prefixes.  
+        Predicate<ClusterName> clusterNamePredicate,
+        if (isLocalNode(node)) {  
+        connectionManager.setPendingDisconnection(node);  
+        if (remoteClusterClient) {  
+import java.util.HashSet;
+        Settings settings,
+     * @param extensionUniqueIq the id of the extension  
+    public TransportService(  
+        TransportRequestOptions options
+        final TransportRequest request,  
+            this.timeoutTime = timeoutTime;  
+ * KIND, either express or implied.  See the License for the
+    }
+                logger.debug("Exception while sending request, handler likely already notified due to timeout", e);
+                // callback that an exception happened, but on a different thread since we don't
+        DiscoveryNode node,
+import org.opensearch.telemetry.tracing.SpanBuilder;  
+                    public T read(StreamInput in) throws IOException {
+     * Registers a new request handler
+                "internal:",
+                    threadPool.executor(executor).execute(new Runnable() {  
+    public <T extends TransportResponse> TransportFuture<T> submitRequest(  
+        TransportRequestHandler<Request> handler
+    }
+        Settings settings,
+     * Executes a high-level handshake using the given connection
+                )  
+        final String action;  
+            ActionListener.map(listener, HandshakeResponse::getDiscoveryNode)
+            threadPool,
+                handler.cancel();
+     * Returns <code>true</code> iff the given node is already connected.
+     * @param node the node to connect to
+                            holderToNotify.action(),
+    ) {
+        public String toString() {
+    ) {
+     * Returns the internal thread pool
+            return timeoutTime;
+            remoteClusterService.initializeRemoteClusters(
+        return (newConnection, actualProfile, listener) -> {
+import java.util.List;  
+    public void connectToExtensionNode(final DiscoveryNode node, ConnectionProfile connectionProfile, ActionListener<Void> listener) {
+        TransportRequest request,  
+                                    + "]"  
+        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
+        final TransportRequestOptions options,
+    }  
+                    @Override
+    }
+        }  
+            return !Regex.simpleMatch(exclude, action);
+                listener.onResponseSent(requestId, action, response);
+        try {  
+            if (ex instanceof TransportException) {
+        final DiscoveryNode node,
+            }  
+        return new TransportInfo(boundTransportAddress, transport.profileBoundAddresses());
+            sendRequestAsync(connection, action, request, options, traceableTransportResponseHandler);
+        final long handshakeTimeout,  
+            return localNode.getVersion();  
+        final Task parentTask,
+    ) {  
+        final DiscoveryNode node,
+    ) {  
+                    public String executor() {  
+        final Transport.Connection connection;
+     */
+        }
+                    r -> logger.info("Remote clusters initialized successfully."),
+    public void onConnectionClosed(Transport.Connection connection) {
+        }
+    public RemoteClusterService getRemoteClusterService() {
+    ) {  
+    public void connectToNode(final DiscoveryNode node, ConnectionProfile connectionProfile) {  
+            action,
+     * @param action         The action the request handler is associated with
+    @Override
+            // the caller might not handle this so we invoke the handler  
+            // want handlers to worry about stack overflows
+     * @param forceExecution        Force execution on the executor queue and never reject it  
+import java.util.Set;  
+     * @param connection       the connection to a specific node
+        ) {
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        messageListener.onResponseSent(requestId, action, e);
+                        handler.handleStreamResponse(response);
+    public Transport.Connection getConnection(DiscoveryNode node) {  
+            this.requestId = requestId;  
+     */
+        } else {
+            String action,
+        TransportMessageListener,
+        /**  
+        AdmissionControlActionType admissionControlActionType,  
+ * The main OpenSearch transport service  
+        boolean streamTransportMode
+    }  
+    }
+        } catch (final Exception e) {
+            assert sourceNode == null;
+            if (responseHandlers.contains(requestId)) {
+                });
+    private static final class DelegatingTransportMessageListener implements TransportMessageListener {  
+import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
+            );
+            canTripCircuitBreaker
+        try (SpanScope spanScope = tracer.withSpanInScope(span)) {
+        if (clusterSettings != null) {
+        return transport.getStats();  
+        }  
+            }
+                    timeoutInfoHandlers.remove(requestId);
+            for (TransportMessageListener listener : listeners) {
+                        logger.warn("failed to notify response handler on exception, action: {}", contextToNotify.action(), e);
+                ActionListener.wrap(  
+                h -> h.connection().getCacheKey().equals(connection.getCacheKey())
+        }  
+                // callback that an exception happened, but on a different thread since we don't  
+        final Transport.Connection connection,
+ *
+        final Transport.Connection connection,  
+        return transport.addressesFromString(address);
+        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,
+        private final DiscoveryNode node;
+        @Override  
+                    listener.onFailure(e);
+     * when the transport layer starts up it will block any incoming requests until
+    }
+    public void connectToNodeAsExtension(final DiscoveryNode node, ConnectionProfile connectionProfile, String extensionUniqueIq) {
+            } catch (Exception e) {
+        final TransportRequest request,  
+    public void onRequestSent(  
+        }  
+        @Override
+        String action,
+        }
+        }
+        assert responseHandlers.contains(requestId) == false;
+        new LinkedHashMap<Long, TimeoutInfoHolder>(100, .75F, true) {
+                    public void onRejection(Exception e) {
+     * Returns <code>true</code> iff the action name starts with a valid prefix.
+        registerRequestHandler(
+        TransportResponseHandler<T> handler
+    public void connectToExtensionNode(final DiscoveryNode node, ConnectionProfile connectionProfile) {
+     * @param action                The action the request handler is associated with  
+        }
+            }  
+        TransportInterceptor transportInterceptor,
+            timeoutHandler = new TimeoutHandler(requestId, connection.getNode(), action);
+            taskHeaders,  
+        @Override  
+                            new IllegalStateException(  
+        public void onRequestReceived(long requestId, String action) {
+    /**
+            clusterName.writeTo(out);  
+        try {
+     * @param handshakeTimeout handshake timeout  
+    public void addMessageListener(TransportMessageListener listener) {
+     */  
+    }  
+            connectionProfile,
+    /**
+    /**  
+            responseHandler.setTimeoutHandler(timeoutHandler);
+    }  
+                        } catch (Exception inner) {
+        }  
+        }
+        }
+                    public void onRejection(Exception e) {
+        transport.registerRequestHandler(reg);  
+        messageListener.listeners.add(listener);  
+        public DiscoveryNode getDiscoveryNode() {
+                    @Override  
+     * @param listener the action listener to notify
+        Tracer tracer  
+        DiscoveryNode node,
+                }
+        Set<String> taskHeaders,
+        } else {  
+            threadPool,
+    /**
+        this.localNodeFactory = localNodeFactory;
+    ) {
+            }));  
+    ) {
+        };
+        public String getChannelType() {  
+        }
+        }
+                public void onResponse(HandshakeResponse response) {  
+                throw new ActionNotFoundTransportException("Action [" + action + "] not found");
+/*
+        final String action,
+    /**
+                if (ThreadPool.Names.SAME.equals(executor)) {  
+        setTracerLogInclude(TransportSettings.TRACE_LOG_INCLUDE_SETTING.get(settings));
+        @Override
+                    if (clusterNamePredicate.test(response.clusterName) == false) {
+     * and returns the discovery node of the node the connection  
+    protected final ThreadPool threadPool;  
+        );
+    public <T extends TransportResponse> void sendChildRequest(
+     */
+        }
+        streamTransport.setSlowLogThreshold(TransportSettings.SLOW_OPERATION_THRESHOLD_SETTING.get(settings));  
+                    throw new ConnectTransportException(node, "handshake failed. unexpected remote node " + remote);
+ * under the License.  
+/**
+            }
+        try {
+import org.apache.logging.log4j.LogManager;
+            super(in);  
+        return isLocalNode(node) || connectionManager.nodeConnected(node);
+    }  
+    }  
+ * GitHub history for details.
+     */
+    public RequestHandlerRegistry<? extends TransportRequest> getRequestHandler(String action) {
+                handler.cancel();  
+                        unregisterChildNode.close();
+                listener.onRequestReceived(requestId, action);
+            // make sure to clean any leftover on going handles
+        }
+            // in case the transport is not connected to our local node (thus cleaned on node disconnect)  
+        Writeable.Reader<Request> requestReader,
+    }
+                        listener.onFailure(
+        public static final HandshakeRequest INSTANCE = new HandshakeRequest();  
+            handshake(newConnection, actualProfile.getHandshakeTimeout().millis(), cn -> true, ActionListener.map(listener, resp -> {
+                                "handshake with ["  
+            transport,  
+            }
+            this.discoveryNode = discoveryNode;  
+        final TransportRequest request,  
+        Set<String> taskHeaders,
+        synchronized (this) {  
+    // We are skipping node validation for extensibility as extensionNode and opensearchNode(LocalNode) will have different ephemeral id's
+        if (isLocalNode(node)) {
+    ) throws TransportException {  
+    public TransportStats stats() {
+        @Nullable ClusterSettings clusterSettings,
+            clusterSettings.addSettingsUpdateConsumer(TransportSettings.TRACE_LOG_EXCLUDE_SETTING, this::setTracerLogExclude);
+                    public void handleResponse(T response) {
+     * The ActionListener will be called on the calling thread or the generic thread pool.
+            connection.sendRequest(requestId, action, request, options); // local node optimization happens upstream  
+                "cluster:admin",
+        return taskManager;
+        this.taskManager = taskManager;  
+                        listener.onFailure(
+        return true;
+     * @param clusterSettings if non null, the {@linkplain TransportService} will register with the {@link ClusterSettings} for settings
+                        }
+ * compatible open source license.
+            this.version = version;
+        }
+            localNodeFactory,  
+                 * If we are not started the exception handling will remove the request holder again and calls the handler to notify the  
+    public ConnectionManager.ConnectionValidator connectionValidatorForExtensionConnectingToNode(  
+        protected void processException(final TransportResponseHandler handler, final RemoteTransportException rtx) {  
+        final long handshakeTimeout,
+                    public void handleStreamResponse(StreamTransportResponse<T> response) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        messageListener.onResponseSent(requestId, action, response);
+    }
+        // TODO we can probably fold this entire request ID dance into connection.sendReqeust but it will be a bigger refactoring  
+                        // noinspection unchecked  
+                    public String toString() {  
+        );
+            requestReader,
+    }  
+     * @param node the node to connect to  
+import org.opensearch.common.regex.Regex;
+     * Establishes a new connection to the given node. The connection is NOT maintained by this service, it's the callers  
+                            inner.addSuppressed(e);
+     */  
+    }
+                }
+    private final boolean remoteClusterClient;
+import java.util.Collections;  
+            try {
+    }
+                    processException(handler, rtx);  
+                    @Override  
+            throw new IllegalStateException("transport not ready yet to handle incoming requests");
+        }
+        }  
+            this.requestId = requestId;
+        } else {
+        validateActionName(action);  
+        final DirectResponseChannel channel = new DirectResponseChannel(localNode, action, requestId, this, threadPool);
+import org.opensearch.common.util.concurrent.ThreadContext;
+            sendLocalRequest(requestId, action, request, options);
+    }  
+        connectionManager.addListener(this);
+        connectionManager.clearPendingDisconnections();
+                // noinspection unchecked  
+                final DiscoveryNode remote = resp.discoveryNode;
+            if (Regex.simpleMatch(include, action) == false) {  
+     */  
+    public boolean removeMessageListener(TransportMessageListener listener) {  
+            // We don't validate cluster names to allow for CCS connections.
+    }
+        }
+     * start accepting incoming requests.  
+                final DiscoveryNode remote = resp.discoveryNode;
+    public <Request extends TransportRequest> void registerRequestHandler(
+        private final DiscoveryNode node;  
+     * Connect to the specified node with the given connection profile
+        private HandshakeRequest() {}  
+    public void clearPendingDisconnections() {
+    }
+        if (connection == null) {
+        return messageListener.listeners.remove(listener);
+        tracerLog = Loggers.getLogger(logger, ".tracer");  
+            clusterSettings,
+                handler.handleResponse(response);  
+ */  
+        private final ClusterName clusterName;
+     * @param listener the action listener to notify
+        ContextRestoreResponseHandler<T> responseHandler = new ContextRestoreResponseHandler<>(storedContextSupplier, handler);
+     * The ActionListener will be called on the calling thread or the generic thread pool.
+            handshake(newConnection, actualProfile.getHandshakeTimeout().millis(), cn -> true, ActionListener.map(listener, resp -> {  
+                        return handler.read(in);  
+    protected final Transport.ResponseHandlers responseHandlers;  
+                "indices:data/read",
+                final String executor = lifecycle.stoppedOrClosed() ? ThreadPool.Names.SAME : ThreadPool.Names.GENERIC;
+     * Executes a high-level handshake using the given connection
+            onRequestReceived(requestId, action);
+        } catch (final NodeNotConnectedException ex) {  
+        }
+    public <Request extends TransportRequest> void registerRequestHandler(
+                    }
+        @Override
+    }
+     */  
+            long time = threadPool.relativeTimeInMillis();
+    /**
+     * @param requestReader  a callable to be used construct new instances for streaming  
+        String action,
+        final String action,  
+        TimeoutHandler(long requestId, DiscoveryNode node, String action) {
+            requestReader,  
+         * cancels timeout handling. this is a best effort only to avoid running it. remove the requestId from {@link #responseHandlers}
+     * Sends a request on the specified connection. If there is a failure sending the request, the specified handler is invoked.  
+     * responsibility to close the connection once it goes out of scope.
+                assert options.timeout() != null;  
+    final Map<Long, TimeoutInfoHolder> timeoutInfoHandlers = Collections.synchronizedMap(  
+            this.localNode = localNode;
+        }
+    public ConnectionManager.ConnectionValidator extensionConnectionValidator(DiscoveryNode node) {
+     *
+     * @opensearch.internal
+        @Nullable ClusterSettings clusterSettings,  
+        TransportInterceptor transportInterceptor,
+     * @param admissionControlActionType Admission control based on resource usage limits of provided action type  
+     * Build the service.  
+    implements
+     */  
+                            processResponse(handler, response);  
+        PlainActionFuture.get(fut -> connectToExtensionNode(node, (ConnectionProfile) null, ActionListener.map(fut, x -> null)));  
+     * was established with. The handshake will fail if the cluster
+        RequestHandlerRegistry<Request> reg = new RequestHandlerRegistry<>(
+        }  
+    }
+                inner.addSuppressed(e);  
+            return;
         }
         return false;
-    }  
-
-    /**
-     * Registers a new request handler  
-     *
-     * @param action         The action the request handler is associated with
-     * @param requestReader  a callable to be used construct new instances for streaming  
-     * @param executor       The executor the request handling will be executed on
-     * @param handler        The handler itself that implements the request handling
-     */  
-    public <Request extends TransportRequest> void registerRequestHandler(
-        String action,
-        String executor,  
-        Writeable.Reader<Request> requestReader,
-        TransportRequestHandler<Request> handler
-    ) {  
-        validateActionName(action);
-        handler = interceptor.interceptHandler(action, executor, false, handler);
-        RequestHandlerRegistry<Request> reg = new RequestHandlerRegistry<>(  
-            action,
-            requestReader,
-            taskManager,  
-            handler,
-            executor,
-            false,  
-            true
-        );
-        transport.registerRequestHandler(reg);  
-    }
-
-    /**  
-     * Registers a new request handler
-     *
-     * @param action                The action the request handler is associated with  
-     * @param requestReader               The request class that will be used to construct new instances for streaming
-     * @param executor              The executor the request handling will be executed on
-     * @param forceExecution        Force execution on the executor queue and never reject it  
-     * @param canTripCircuitBreaker Check the request size and raise an exception in case the limit is breached.
-     * @param handler               The handler itself that implements the request handling
-     */  
-    public <Request extends TransportRequest> void registerRequestHandler(
-        String action,
-        String executor,  
-        boolean forceExecution,
-        boolean canTripCircuitBreaker,
-        Writeable.Reader<Request> requestReader,  
-        TransportRequestHandler<Request> handler
-    ) {
-        validateActionName(action);  
-        handler = interceptor.interceptHandler(action, executor, forceExecution, handler);
-        RequestHandlerRegistry<Request> reg = new RequestHandlerRegistry<>(
-            action,  
-            requestReader,
-            taskManager,
-            handler,  
-            executor,
-            forceExecution,
-            canTripCircuitBreaker  
-        );
-        transport.registerRequestHandler(reg);
-    }  
-
-    /**
-     * Registers a new request handler with admission control support  
-     *
-     * @param action                The action the request handler is associated with
-     * @param executor              The executor the request handling will be executed on  
-     * @param forceExecution        Force execution on the executor queue and never reject it
-     * @param canTripCircuitBreaker Check the request size and raise an exception in case the limit is breached.
-     * @param admissionControlActionType Admission control based on resource usage limits of provided action type  
-     * @param requestReader               The request class that will be used to construct new instances for streaming
-     * @param handler               The handler itself that implements the request handling
-     */  
-    public <Request extends TransportRequest> void registerRequestHandler(
-        String action,
-        String executor,  
-        boolean forceExecution,
-        boolean canTripCircuitBreaker,
-        AdmissionControlActionType admissionControlActionType,  
-        Writeable.Reader<Request> requestReader,
-        TransportRequestHandler<Request> handler
-    ) {  
-        validateActionName(action);
-        if (admissionControlActionType != null) {
-            handler = interceptor.interceptHandler(action, executor, forceExecution, handler, admissionControlActionType);  
-        } else {
-            handler = interceptor.interceptHandler(action, executor, forceExecution, handler);
-        }  
-        RequestHandlerRegistry<Request> reg = new RequestHandlerRegistry<>(
-            action,
-            requestReader,  
-            taskManager,
-            handler,
-            executor,  
-            forceExecution,
-            canTripCircuitBreaker
-        );  
-        transport.registerRequestHandler(reg);
-    }
-
-    /**
-     * called by the {@link Transport} implementation when an incoming request arrives but before
-     * any parsing of it has happened (with the exception of the requestId and action)  
-     */
-    @Override
-    public void onRequestReceived(long requestId, String action) {  
-        if (handleIncomingRequests.get() == false) {
-            throw new IllegalStateException("transport not ready yet to handle incoming requests");
-        }  
-        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
-            tracerLog.trace("[{}][{}] received request", requestId, action);
-        }  
+     * Connect to the specified node with the given connection profile
+            return delegate.executor();  
         messageListener.onRequestReceived(requestId, action);
-    }
-
+     * The executor service for this transport service.
+            listener.onResponse(null);
     /** called by the {@link Transport} implementation once a request has been sent */
-    @Override
-    public void onRequestSent(  
-        DiscoveryNode node,
-        long requestId,
-        String action,  
-        TransportRequest request,
-        TransportRequestOptions options
-    ) {  
-        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
-            tracerLog.trace("[{}][{}] sent to [{}] (timeout: [{}])", requestId, action, node, options.timeout());
-        }  
-        messageListener.onRequestSent(node, requestId, action, request, options);
-    }
-
-    @Override
-    public void onResponseReceived(long requestId, Transport.ResponseContext holder) {
-        if (holder == null) {  
-            checkForTimeout(requestId);
-        } else if (tracerLog.isTraceEnabled() && shouldTraceAction(holder.action())) {
-            tracerLog.trace("[{}][{}] received response from [{}]", requestId, holder.action(), holder.connection().getNode());  
-        }
-        messageListener.onResponseReceived(requestId, holder);
-    }  
-
-    /** called by the {@link Transport} implementation once a response was sent to calling node */
-    @Override  
-    public void onResponseSent(long requestId, String action, TransportResponse response) {
-        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
-            tracerLog.trace("[{}][{}] sent response", requestId, action);  
-        }
-        messageListener.onResponseSent(requestId, action, response);
-    }  
-
-    /** called by the {@link Transport} implementation after an exception was sent as a response to an incoming request */
-    @Override  
-    public void onResponseSent(long requestId, String action, Exception e) {
-        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
-            tracerLog.trace("[{}][{}] sent error response", requestId, action, e);  
-        }
-        messageListener.onResponseSent(requestId, action, e);
-    }  
-
-    public RequestHandlerRegistry<? extends TransportRequest> getRequestHandler(String action) {
-        return transport.getRequestHandlers().getHandler(action);  
-    }
-
-    private void checkForTimeout(long requestId) {  
-        // lets see if its in the timeout holder, but sync on mutex to make sure any ongoing timeout handling has finished
-        final DiscoveryNode sourceNode;
-        final String action;  
-        assert responseHandlers.contains(requestId) == false;
-        TimeoutInfoHolder timeoutInfoHolder = timeoutInfoHandlers.remove(requestId);
-        if (timeoutInfoHolder != null) {  
-            long time = threadPool.relativeTimeInMillis();
-            logger.warn(
-                "Received response for a request that has timed out, sent [{}ms] ago, timed out [{}ms] ago, "  
-                    + "action [{}], node [{}], id [{}]",
-                time - timeoutInfoHolder.sentTime(),
-                time - timeoutInfoHolder.timeoutTime(),  
-                timeoutInfoHolder.action(),
-                timeoutInfoHolder.node(),
-                requestId  
-            );
-            action = timeoutInfoHolder.action();
-            sourceNode = timeoutInfoHolder.node();  
-        } else {
-            logger.warn("Transport response handler not found of id [{}]", requestId);
-            action = null;  
-            sourceNode = null;
-        }
-        // call tracer out of lock  
-        if (tracerLog.isTraceEnabled() == false) {
-            return;
-        }  
-        if (action == null) {
-            assert sourceNode == null;
-            tracerLog.trace("[{}] received response but can't resolve it to a request", requestId);  
-        } else if (shouldTraceAction(action)) {
-            tracerLog.trace("[{}][{}] received response from [{}]", requestId, action, sourceNode);
-        }  
-    }
-
-    @Override  
-    public void onConnectionClosed(Transport.Connection connection) {
-        try {
-            List<Transport.ResponseContext<? extends TransportResponse>> pruned = responseHandlers.prune(  
-                h -> h.connection().getCacheKey().equals(connection.getCacheKey())
-            );
-            // callback that an exception happened, but on a different thread since we don't  
-            // want handlers to worry about stack overflows
-            getExecutorService().execute(new Runnable() {
-                @Override  
-                public void run() {
-                    for (Transport.ResponseContext holderToNotify : pruned) {
-                        holderToNotify.handler()  
-                            .handleException(new NodeDisconnectedException(connection.getNode(), holderToNotify.action()));
+            settings,
+     * @param canTripCircuitBreaker Check the request size and raise an exception in case the limit is breached.
                     }
-                }  
-
-                @Override
-                public String toString() {  
-                    return "onConnectionClosed(" + connection.getNode() + ")";
-                }
-            });  
-        } catch (OpenSearchRejectedExecutionException ex) {
-            logger.debug("Rejected execution on onConnectionClosed", ex);
+            // If holderToNotify == null then handler has already been taken care of.
+    }  
+                        unregisterChildNode.close();
+                listener.onResponseSent(requestId, action, error);  
         }  
-    }
-
-    final class TimeoutHandler implements Runnable {  
-
-        private final long requestId;
-        private final long sentTime = threadPool.relativeTimeInMillis();  
-        private final String action;
-        private final DiscoveryNode node;
-        volatile Scheduler.Cancellable cancellable;  
-
-        TimeoutHandler(long requestId, DiscoveryNode node, String action) {
-            this.requestId = requestId;  
-            this.node = node;
-            this.action = action;
-        }  
-
-        @Override
-        public void run() {  
-            if (responseHandlers.contains(requestId)) {
-                long timeoutTime = threadPool.relativeTimeInMillis();
-                timeoutInfoHandlers.put(requestId, new TimeoutInfoHolder(node, action, sentTime, timeoutTime));  
-                // now that we have the information visible via timeoutInfoHandlers, we try to remove the request id
-                final Transport.ResponseContext<? extends TransportResponse> holder = responseHandlers.remove(requestId);
-                if (holder != null) {  
-                    assert holder.action().equals(action);
-                    assert holder.connection().getNode().equals(node);
-                    holder.handler()  
-                        .handleException(
-                            new ReceiveTimeoutTransportException(
-                                holder.connection().getNode(),  
-                                holder.action(),
-                                "request_id [" + requestId + "] timed out after [" + (timeoutTime - sentTime) + "ms]"
-                            )  
-                        );
-                } else {
-                    // response was processed, remove timeout info.  
-                    timeoutInfoHandlers.remove(requestId);
-                }
-            }  
-        }
-
-        /**  
-         * cancels timeout handling. this is a best effort only to avoid running it. remove the requestId from {@link #responseHandlers}
-         * to make sure this doesn't run.
-         */  
-        public void cancel() {
-            assert responseHandlers.contains(requestId) == false : "cancel must be called after the requestId ["
-                + requestId  
-                + "] has been removed from clientHandlers";
-            if (cancellable != null) {
-                cancellable.cancel();  
+            logger.warn("invalid action name [" + actionName + "] must start with one of: " + TransportService.VALID_ACTION_PREFIXES);
+     * @param forceExecution        Force execution on the executor queue and never reject it
             }
+                        handler.handleException(exp);
         }
-
-        @Override
-        public String toString() {
-            return "timeout handler for [" + requestId + "][" + action + "]";  
-        }
-
-        private void scheduleTimeout(TimeValue timeout) {  
-            this.cancellable = threadPool.schedule(this, timeout, ThreadPool.Names.GENERIC);
-        }
-    }  
-
-    /**
-     * Holder for timeout information  
-     *
-     * @opensearch.internal
-     */  
-    static class TimeoutInfoHolder {
-
-        private final DiscoveryNode node;  
-        private final String action;
-        private final long sentTime;
-        private final long timeoutTime;  
-
-        TimeoutInfoHolder(DiscoveryNode node, String action, long sentTime, long timeoutTime) {
-            this.node = node;  
-            this.action = action;
-            this.sentTime = sentTime;
-            this.timeoutTime = timeoutTime;  
-        }
-
-        public DiscoveryNode node() {  
-            return node;
-        }
-
-        public String action() {
-            return action;
+                        holderToNotify.handler()  
         }  
-
-        public long sentTime() {
-            return sentTime;  
-        }
-
-        public long timeoutTime() {  
-            return timeoutTime;
-        }
+                    protected void doRun() throws Exception {
+    }
+                    @Override
+        Transport transport,
+        DiscoveryNode node,
+        sendRequest(connection, action, request, options, handler);
+            assert responseHandlers.contains(requestId) == false : "cancel must be called after the requestId ["
+            }
+        long requestId,
+    }
     }  
-
+        if (holder == null) {  
+            final TransportResponseHandler handler = service.responseHandlers.onResponseReceived(requestId, service);  
+            return localNode;
+        this.connectionManager = connectionManager;
+            try (ThreadContext.StoredContext ignore = contextSupplier.get()) {
+        this.threadPool = threadPool;  
+                "cluster:monitor",
+        TransportInterceptor transportInterceptor,
+            discoveryNode = in.readOptionalWriteable(DiscoveryNode::new);
     /**
+     *
+     * @see #VALID_ACTION_PREFIXES  
+    public TransportAddress[] addressesFromString(String address) throws UnknownHostException {
+                                holder.action(),
+                    }
+        }  
+                    }
+    }
+                logger.error("failed to handle exception for action [{}], handler [{}]", action, handler, e);
+        } else {  
+        // for it. Maybe start with a deprecation layer  
+            this.action = action;
+                    e -> logger.error("Remote clusters initialization failed partially", e)
+            connection,
+        @Override  
+    volatile String[] tracerLogExclude;
+}
+                    @Override
+                            .handleException(new NodeDisconnectedException(connection.getNode(), holderToNotify.action()));
+    }
+                    @Override  
+            }  
+        }  
+            }  
+    public final <T extends TransportResponse> void sendChildRequest(
+        if (isLocalNode(node)) {  
+        } catch (final NodeNotConnectedException ex) {  
+        ConnectionProfile connectionProfile,  
+    protected void doStop() {  
+        sendRequest(
+import org.opensearch.common.lease.Releasable;
+        Tracer tracer
+    public TaskManager getTaskManager() {
+        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
+                // want handlers to worry about stack overflows. In the special case of running into a closing node we run on the current
+        final String action,
+        final long requestId = responseHandlers.add(new Transport.ResponseContext<>(responseHandler, connection, action));
+     *
+            try {  
+        }  
+     */  
+        try {
+        Tracer tracer
+            fut -> connectToNodeAsExtension(node, connectionProfile, extensionUniqueIq, ActionListener.map(fut, x -> null))
+        Settings settings,  
+     * @param action                The action the request handler is associated with
+                    processResponse(handler, response);
+        }
+        TransportResponseHandler<T> handler
+            DiscoveryNode node,  
+    ) {
+        public boolean isClosed() {  
+        handleIncomingRequests.set(true);
+        public String getProfileName() {
+            connectionValidatorForExtensionConnectingToNode(node, extensionUniqueId),
+    public boolean isTransportSecure() {  
+     *   *    updates for {@link TransportSettings#TRACE_LOG_EXCLUDE_SETTING} and {@link TransportSettings#TRACE_LOG_INCLUDE_SETTING}.  
+                } else {
+        tracerLog = Loggers.getLogger(logger, ".tracer");
+        return transport.getRequestHandlers().getHandler(action);  
+            return DIRECT_RESPONSE_PROFILE;
+        public void close() {}
+            handler.handleException(ex);
+     */
+import java.util.function.Predicate;
+        }
+        if (!streamTransportMode) {
+            String currentId = threadPool.getThreadContext().getHeader("extension_unique_id");  
+    }
+        public long timeoutTime() {  
+            }
+        ConnectionManager connectionManager,  
+            }));
+            handler,
+        return remoteClusterService;  
+        connectToNode(node, (ConnectionProfile) null);
+     * @param handler        The handler itself that implements the request handling
+            } else {
+        connectionManager.disconnectFromNode(node);
+        public HandshakeResponse(StreamInput in) throws IOException {
+                }  
+     */
+        String executor,  
+        }
+                                    + "] failed: remote node version ["
+            if (remoteClusterClient) {
+            return localNodeConnection;
+    public ConnectionManager getConnectionManager() {
+        public boolean skipsDeserialization() {
+     * Registers a new request handler with admission control support  
+                final Releasable unregisterChildNode = taskManager.registerChildNode(request.getParentTask().getId(), connection.getNode());
+     * @param connection       the connection to a specific node
+        }
+            // We don't validate cluster names to allow for CCS connections.  
+    protected final Tracer tracer;
+ * not use this file except in compliance with the License.
+    }
+    protected <T extends TransportResponse> void sendRequestAsync(
+        if (exclude.length > 0) {
+            }  
+    protected void validateActionName(String actionName) {
+        return localNode;
+        final TransportRequestOptions options,
+            }  
+            final RequestHandlerRegistry reg = getRequestHandler(action);  
+     */  
+                        );
+        TransportResponseHandler<T> handler
+        final TransportResponseHandler<T> handler
+            forceExecution,
+    ) {
+    /**  
+        @Nullable ClusterSettings clusterSettings,  
+        RequestHandlerRegistry<Request> reg = new RequestHandlerRegistry<>(  
+            throw new IllegalStateException("Constructor only supported to construct StreamTransportService");
+                        }
+            clusterName = new ClusterName(in);
+                getExecutorService().execute(new AbstractRunnable() {
+            sendRequest(connection, action, request, options, futureHandler);
+            if (Strings.isNullOrEmpty(currentId) || !extensionUniqueId.equals(currentId)) {
+            throw new UncheckedIOException(e);
+        transport.close();
+        this.interceptor = transportInterceptor;
+        this.streamTransport = streamTransport;
+        Writeable.Reader<Request> requestReader,  
+        final TransportRequestOptions options,
+                return null;
+        final Task parentTask,  
+            // here we start to connect to the remote clusters
+        final TransportRequest request,
+                    @Override
+    public void onResponseSent(long requestId, String action, TransportResponse response) {
+     * this method is called
+    }
+        private final String action;
+            }));
+                return true;
+                }  
+        DiscoveryNode node,
+package org.opensearch.transport;
+        }
+        private final Supplier<ThreadContext.StoredContext> contextSupplier;  
+        );  
+        @Override  
+        private final Version version;  
+import org.apache.logging.log4j.Logger;
+        }
+            }
+    }
+        @Override
+        String extensionUniqueId,
+        }  
+            // We don't validate cluster names to allow for CCS connections.
+                        logger.warn("failed to notify response handler on exception, action: {}", holderToNotify.action(), e);
+import java.util.concurrent.CopyOnWriteArrayList;
+        @SuppressWarnings("unchecked")  
+    /**
+                            new IllegalStateException(
+                + "] has been removed from clientHandlers";
+        try {  
+                throw new NodeClosedException(localNode);  
+            return delegate.read(in);
+                            new ReceiveTimeoutTransportException(
+import org.opensearch.Version;
+        final TransportResponseHandler<T> handler  
+    }  
+                timeoutInfoHandlers.put(requestId, new TimeoutInfoHolder(node, action, sentTime, timeoutTime));  
+                    }
+import org.opensearch.threadpool.Scheduler;
+            logger.info("{}", transport.boundAddress());
+    public static final String DIRECT_RESPONSE_PROFILE = ".direct";
+        transport.setMessageListener(this);
+            HANDSHAKE_ACTION_NAME,
+        public String action() {
+                        return handler.skipsDeserialization();
+        transport.registerRequestHandler(reg);
+    protected boolean isLocalNode(DiscoveryNode discoveryNode) {
+    /**
+    public static final TransportInterceptor NOOP_TRANSPORT_INTERCEPTOR = new TransportInterceptor() {  
+                    }
+            // usually happen either because we failed to connect to the node
+            settings,
+    /**  
+            streamTransport,
+        HandshakeRequest(StreamInput in) throws IOException {
+    }  
+    @Override  
+                final DiscoveryNode remote = resp.discoveryNode;
+            logger.warn("Transport response handler not found of id [{}]", requestId);
+        public void onResponseSent(long requestId, String action, TransportResponse response) {  
+        try {
+    private ExecutorService getExecutorService() {
+    /** called by the {@link Transport} implementation after an exception was sent as a response to an incoming request */
+                        handler.handleResponse(response);  
+        final DiscoveryNode node = connection.getNode();
+     * @param connection the connection to send the request on
+import org.opensearch.core.service.ReportingService;
+        this(
+     *
+        );
+            this.action = action;  
+    /** if set will call requests sent to this id to shortcut and executed locally */  
+    ) {  
+        private final long requestId;
+            this.contextSupplier = contextSupplier;
+                    }
+            Arrays.asList(
+     *  
+    ) {  
+    protected void doStart() {  
+        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,
+    }  
+        @Nullable Transport streamTransport,
+            localNode = localNodeFactory.apply(transport.boundAddress());
+                    public void doRun() {
+        return PlainActionFuture.get(fut -> openConnection(node, connectionProfile, fut));
+                reg.processMessageReceived(request, channel);
+            taskManager,
+        setTracerLogExclude(TransportSettings.TRACE_LOG_EXCLUDE_SETTING.get(settings));
+    public void openConnection(
+            return getClass().getName() + "/" + delegate.toString();
+            clusterName.getEqualityPredicate(),
+            } catch (Exception inner) {
+                            return "delivery of failure response to [" + requestId + "][" + action + "]: " + exception;
+            transportInterceptor,  
+        private final long sentTime = threadPool.relativeTimeInMillis();  
+            handshake(newConnection, actualProfile.getHandshakeTimeout().millis(), cn -> true, ActionListener.map(listener, resp -> {
+            connectionManager,
+            service.onResponseSent(requestId, action, response);
+            if (streamTransport != null) {
+            if (reg == null) {
+                processException(handler, wrapInRemote(new ResponseHandlerFailureTransportException(e)));
+                        // if we get rejected during node shutdown we don't wanna bubble it up
+            }  
+                logger.info("Connection validation was skipped");  
+                        public String toString() {
+            // the caller might not handle this so we invoke the handler
+        final String action,
+            }  
+                    public void handleException(TransportException exp) {  
+                timeoutInfoHolder.node(),
+    }
+    /**
+        validateActionName(action);
+        TimeoutInfoHolder(DiscoveryNode node, String action, long sentTime, long timeoutTime) {
+    }  
+        String executor,  
+     */
+import org.opensearch.common.settings.Settings;
+    }
+            }  
+        volatile Scheduler.Cancellable cancellable;  
+     * @return the executor service  
+            }  
+     * @param node the node to connect to
+    /**
+            }
+            throw new IllegalStateException("can't send request to a null connection");  
      * This handler wrapper ensures that the response thread executes with the correct thread context. Before any of the handle methods  
-     * are invoked we restore the context.
+    protected final Function<BoundTransportAddress, DiscoveryNode> localNodeFactory;
+     * @param <T>        the type of the transport response
+     *
+    /**
+        }  
+     * @param executor              The executor the request handling will be executed on  
+        responseHandlers = streamTransport.getResponseHandlers();  
+            handler,  
+        connectToNodeAsExtension(node, (ConnectionProfile) null, extensionUniqueId);
+        final TimeoutHandler timeoutHandler;
+                /*
+    private final TransportInterceptor.AsyncSender asyncSender;  
+import org.opensearch.transport.stream.StreamTransportResponse;  
+import java.util.Arrays;
+        Transport transport,
+        if (isValidActionName(actionName) == false) {
+            new ClusterConnectionManager(settings, transport),
+     *
+            HANDSHAKE_ACTION_NAME,
+        Tracer tracer,
+     * Establishes and returns a new connection to the given node. The connection is NOT maintained by this service, it's the callers
+        return Objects.requireNonNull(discoveryNode, "discovery node must not be null").equals(localNode);  
+        Writeable.Reader<Request> requestReader,
+     * This is called on cluster-manager failover to remove stale entries
+        void setTimeoutHandler(TimeoutHandler handler) {
+ *  
+        }
+                    public String toString() {
+                        @Override
+    ) {  
+     * @param listener the action listener to notify
+            if (contextToNotify != null) {  
+            for (TransportMessageListener listener : listeners) {
      */
     public static final class ContextRestoreResponseHandler<T extends TransportResponse> implements TransportResponseHandler<T> {  
-
-        private final TransportResponseHandler<T> delegate;
-        private final Supplier<ThreadContext.StoredContext> contextSupplier;  
+     * @param canTripCircuitBreaker Check the request size and raise an exception in case the limit is breached.
+                time - timeoutInfoHolder.timeoutTime(),  
+import org.opensearch.core.common.transport.TransportAddress;  
         private volatile TimeoutHandler handler;
-
-        public ContextRestoreResponseHandler(Supplier<ThreadContext.StoredContext> contextSupplier, TransportResponseHandler<T> delegate) {  
-            this.delegate = delegate;
-            this.contextSupplier = contextSupplier;
-        }  
-
-        @Override
-        public T read(StreamInput in) throws IOException {  
-            return delegate.read(in);
-        }
-
-        @Override
-        public void handleResponse(T response) {
-            if (handler != null) {  
-                handler.cancel();
-            }
-            try (ThreadContext.StoredContext ignore = contextSupplier.get()) {  
-                delegate.handleResponse(response);
-            }
-        }  
-
-        @Override
-        public void handleStreamResponse(StreamTransportResponse<T> response) {  
-            if (handler != null) {
-                handler.cancel();
-            }  
-            try (ThreadContext.StoredContext ignore = contextSupplier.get()) {
-                delegate.handleStreamResponse(response);
-            }  
-        }
-
-        @Override  
-        public void handleException(TransportException exp) {
-            if (handler != null) {
-                handler.cancel();  
-            }
-            try (ThreadContext.StoredContext ignore = contextSupplier.get()) {
-                delegate.handleException(exp);  
-            }
-        }
-
-        @Override
-        public String executor() {
-            return delegate.executor();  
-        }
-
-        @Override  
-        public boolean skipsDeserialization() {
-            return delegate.skipsDeserialization();
-        }  
-
-        @Override
-        public String toString() {  
-            return getClass().getName() + "/" + delegate.toString();
-        }
-
-        void setTimeoutHandler(TimeoutHandler handler) {
-            this.handler = handler;
-        }  
-
+        );
     }
-
-    /**
-     * A channel for a direct response
-     *  
-     * @opensearch.internal
-     */
-    static class DirectResponseChannel implements TransportChannel {  
-        final DiscoveryNode localNode;
-        private final String action;
-        private final long requestId;  
-        final TransportService service;
-        final ThreadPool threadPool;
-
-        DirectResponseChannel(DiscoveryNode localNode, String action, long requestId, TransportService service, ThreadPool threadPool) {
-            this.localNode = localNode;
-            this.action = action;  
-            this.requestId = requestId;
-            this.service = service;
-            this.threadPool = threadPool;  
-        }
-
-        @Override  
-        public String getProfileName() {
-            return DIRECT_RESPONSE_PROFILE;
-        }  
-
-        @Override
-        public void sendResponse(TransportResponse response) throws IOException {  
-            service.onResponseSent(requestId, action, response);
-            final TransportResponseHandler handler = service.responseHandlers.onResponseReceived(requestId, service);
-            // ignore if its null, the service logs it  
-            if (handler != null) {
-                final String executor = handler.executor();
-                if (ThreadPool.Names.SAME.equals(executor)) {  
-                    processResponse(handler, response);
-                } else {
-                    threadPool.executor(executor).execute(new Runnable() {  
-                        @Override
-                        public void run() {
-                            processResponse(handler, response);  
-                        }
-
-                        @Override  
-                        public String toString() {
-                            return "delivery of response to [" + requestId + "][" + action + "]: " + response;
-                        }  
-                    });
+     * @param requestReader               The request class that will be used to construct new instances for streaming
+    @Override
+        } catch (final NodeNotConnectedException ex) {
+     * The ActionListener will be called on the calling thread or the generic thread pool.  
                 }
-            }  
-        }
-
-        @SuppressWarnings("unchecked")  
-        protected void processResponse(TransportResponseHandler handler, TransportResponse response) {
-            try {
-                handler.handleResponse(response);  
-            } catch (Exception e) {
-                processException(handler, wrapInRemote(new ResponseHandlerFailureTransportException(e)));
-            }  
-        }
-
-        @Override  
-        public void sendResponse(Exception exception) throws IOException {
-            service.onResponseSent(requestId, action, exception);
-            final TransportResponseHandler handler = service.responseHandlers.onResponseReceived(requestId, service);  
-            // ignore if its null, the service logs it
-            if (handler != null) {
-                final RemoteTransportException rtx = wrapInRemote(exception);  
-                final String executor = handler.executor();
-                if (ThreadPool.Names.SAME.equals(executor)) {
-                    processException(handler, rtx);  
-                } else {
-                    threadPool.executor(handler.executor()).execute(new Runnable() {
-                        @Override  
-                        public void run() {
-                            processException(handler, rtx);
-                        }  
-
-                        @Override
-                        public String toString() {  
-                            return "delivery of failure response to [" + requestId + "][" + action + "]: " + exception;
-                        }
-                    });  
-                }
-            }
-        }  
-
-        protected RemoteTransportException wrapInRemote(Exception e) {
-            if (e instanceof RemoteTransportException remoteTransportException) {  
-                return remoteTransportException;
-            }
-            return new RemoteTransportException(localNode.getName(), localNode.getAddress(), action, e);  
-        }
-
-        protected void processException(final TransportResponseHandler handler, final RemoteTransportException rtx) {  
-            try {
-                handler.handleException(rtx);
-            } catch (Exception e) {  
-                logger.error("failed to handle exception for action [{}], handler [{}]", action, handler, e);
-            }
-        }  
-
-        @Override
-        public String getChannelType() {  
-            return "direct";
-        }
-
-        @Override
-        public Version getVersion() {
-            return localNode.getVersion();  
+     * @param handshakeTimeout handshake timeout
+    public <Request extends TransportRequest> void registerRequestHandler(
         }
     }
-
+    public ConnectionManager.ConnectionValidator connectionValidator(DiscoveryNode node) {  
+        @Override
     /**
-     * Returns the internal thread pool
-     */  
-    public ThreadPool getThreadPool() {
-        return threadPool;
-    }  
-
-    protected boolean isLocalNode(DiscoveryNode discoveryNode) {
-        return Objects.requireNonNull(discoveryNode, "discovery node must not be null").equals(localNode);  
-    }
-
-    private static final class DelegatingTransportMessageListener implements TransportMessageListener {  
-
-        private final List<TransportMessageListener> listeners = new CopyOnWriteArrayList<>();
-
-        @Override
-        public void onRequestReceived(long requestId, String action) {
-            for (TransportMessageListener listener : listeners) {  
-                listener.onRequestReceived(requestId, action);
-            }
-        }  
-
-        @Override
-        public void onResponseSent(long requestId, String action, TransportResponse response) {  
-            for (TransportMessageListener listener : listeners) {
-                listener.onResponseSent(requestId, action, response);
-            }  
-        }
-
-        @Override  
-        public void onResponseSent(long requestId, String action, Exception error) {
-            for (TransportMessageListener listener : listeners) {
-                listener.onResponseSent(requestId, action, error);  
-            }
-        }
-
-        @Override
-        public void onRequestSent(
-            DiscoveryNode node,  
+        transport.registerRequestHandler(reg);
+    static class HandshakeRequest extends TransportRequest {
             long requestId,
-            String action,
-            TransportRequest request,  
-            TransportRequestOptions finalOptions
-        ) {
-            for (TransportMessageListener listener : listeners) {  
-                listener.onRequestSent(node, requestId, action, request, finalOptions);
-            }
-        }  
-
+    }  
+     * @throws IllegalStateException if the handshake failed
+        handshake(
         @Override
+            List<Transport.ResponseContext<? extends TransportResponse>> pruned = responseHandlers.prune(  
+     */
+    /**
+                @Override
+            taskHeaders,
+    ) {
+    ) {
+        request.setParentTask(localNode.getId(), parentTask.getId());  
+    public final <T extends TransportResponse> void sendRequest(
+import org.opensearch.telemetry.tracing.handler.TraceableTransportResponseHandler;  
+            if (handler != null) {
+        // lets see if its in the timeout holder, but sync on mutex to make sure any ongoing timeout handling has finished
+        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
+        if (timeoutInfoHolder != null) {  
+     * @throws NodeNotConnectedException if the given node is not connected
+                });  
+                    assert holder.action().equals(action);
+                    @Override  
+                delegate.handleException(exp);  
+        final TransportResponseHandler<T> handler
+        if (include.length > 0) {
+        private void scheduleTimeout(TimeValue timeout) {  
+    }
+    }  
+        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,  
+            ThreadPool.Names.SAME,  
+        ThreadPool threadPool,
+     * Connect to the specified node with the default connection profile
+            final TransportResponseHandler handler = service.responseHandlers.onResponseReceived(requestId, service);
+        handler = interceptor.interceptHandler(action, executor, forceExecution, handler);
+            if (actionName.startsWith(prefix)) {
+     *  
+            handler.handleException(ex);
+                    @Override
+     * name on the target node doesn't match the local cluster name.
+                delegate.handleStreamResponse(response);
+            // or because we failed serializing the message  
+        }
+        }
+        public String toString() {  
+        }
+     * @param connectionProfile the connection profile to use
+     * any parsing of it has happened (with the exception of the requestId and action)  
+            listener.onResponse(localNodeConnection);
+    private final Logger tracerLog;
+                // want handlers to worry about stack overflows
+     * and returns the discovery node of the node the connection
+                                    + localNode.getVersion()
+                public String toString() {  
+            listener.onResponse(null);
+        messageListener.onRequestSent(node, requestId, action, request, options);
+    @Override
+    }
+    protected final TransportInterceptor interceptor;
+    }
+    }
+        public void sendResponse(Exception exception) throws IOException {
+                if (node.equals(remote) == false) {
+                        @Override  
+                timeoutInfoHolder.action(),
+        final TransportRequest request,
+        this.remoteClusterClient = DiscoveryNode.isRemoteClusterClient(settings);
+    static class DirectResponseChannel implements TransportChannel {  
+     * The ActionListener will be called on the calling thread or the generic thread pool.  
+import org.opensearch.common.unit.TimeValue;
+        PlainActionFuture.get(fut -> connectToNode(node, connectionProfile, ActionListener.map(fut, x -> null)));
+        }  
+    public void onResponseReceived(long requestId, Transport.ResponseContext holder) {
+    /**  
+ */  
+            false,  
+            }
+            });  
+            return;  
+        this(
+        final String action,  
+        return (newConnection, actualProfile, listener) -> {
+        public void handleStreamResponse(StreamTransportResponse<T> response) {  
+                return null;
+                return null;
+import java.util.LinkedHashMap;
+                    });  
+            requestReader,
+        Set<String> taskHeaders  
+     */  
+                te = new TransportException("failure to send", ex);
+            if (timeoutHandler != null) {
+        final Transport.Connection connection,
+                    }
+            if (handler != null) {  
+        );
+        public void handleResponse(T response) {
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.cluster.ClusterName;
+        }  
+        ConnectionProfile connectionProfile,  
+     * was established with. The handshake will fail if the cluster  
+            logger.debug("Action: " + action);  
+                        }  
+    }  
+    }
         public void onResponseReceived(long requestId, Transport.ResponseContext holder) {  
-            for (TransportMessageListener listener : listeners) {
-                listener.onResponseReceived(requestId, holder);
-            }  
+        this.asyncSender = interceptor.interceptSender(this::sendRequestInternal);  
+        ThreadPool threadPool,  
+    public ThreadPool getThreadPool() {
+         * to make sure this doesn't run.
+                long timeoutTime = threadPool.relativeTimeInMillis();
+        }  
+    protected TaskManager createTaskManager(
+                    assert holder.connection().getNode().equals(node);
+    }  
+            tracerLog.trace("[{}][{}] received response from [{}]", requestId, action, sourceNode);
+    // do show up, we can print more descriptive information about them
+        protected RemoteTransportException wrapInRemote(Exception e) {
+    }
+            clusterSettings.addSettingsUpdateConsumer(TransportSettings.TRACE_LOG_INCLUDE_SETTING, this::setTracerLogInclude);  
+        @Override
+     * @throws IllegalStateException if the handshake failed  
+        @Override
+    }  
+            forceExecution,
+            out.writeVersion(version);
+    private boolean shouldTraceAction(String action) {  
+        try {
+        if (action == null) {
+            clusterSettings,
+        taskManager = createTaskManager(settings, clusterSettings, threadPool, taskHeaders);
+    public <T extends TransportResponse> void sendChildRequest(  
+            this.sentTime = sentTime;
+                });
+        } catch (NodeNotConnectedException ex) {
+            this.handler = handler;
+     * @param connectionProfile the connection profile to use when connecting to this node
+    void setTracerLogExclude(List<String> tracerLogExclude) {
+     * @param connectionProfile the connection profile to use
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+        this.interceptor = transportInterceptor;
+            this.service = service;
+        OpenSearchServerException.registerExceptions();  
+            tracer
+            taskManager,
+ *
+            tracerLog.trace("[{}][{}] received request", requestId, action);
+        this.localNodeFactory = localNodeFactory;
+        this(
+    /**
+                                    + node
+        ActionListener<Transport.Connection> listener
+    public DiscoveryNode getLocalNode() {  
+        /* Registers OpenSearch server specific exceptions (exceptions outside of core library) */
+            handler,
+ * You may obtain a copy of the License at  
+          Registers server specific types as a streamables for serialization
+import org.opensearch.OpenSearchServerException;  
+            handshakeTimeout,  
+            }
+     * @param listener         action listener to notify
+    ) throws TransportException {
+            threadPool,  
+    void setTracerLogInclude(List<String> tracerLogInclude) {  
+     */  
+                }  
+            tracerLog.trace("[{}][{}] sent to [{}] (timeout: [{}])", requestId, action, node, options.timeout());
+                    }
+            return discoveryNode;
+        Set<String> taskHeaders,
+            checkForTimeout(requestId);
+    // An LRU (don't really care about concurrency here) that holds the latest timed out requests so if they
+        }
+        return transport.boundAddress();
+     *
+                handler.handleException(rtx);
+        }  
+                    }  
+    }
+     * Connect to the specified node with the given connection profile.
+import org.opensearch.node.NodeClosedException;
+            return null;  
+        BoundTransportAddress boundTransportAddress = boundAddress();
+                    public void onFailure(Exception e) {
+        connectToExtensionNode(node, null, listener);  
+                    public boolean skipsDeserialization() {
+import org.opensearch.common.logging.Loggers;
+import java.util.Map;
+            action = null;  
+        return (newConnection, actualProfile, listener) -> {
+            // ignore if its null, the service logs it  
+        return threadPool.generic();  
+        final TransportRequest request,
+    }
+                return size() > 100;
+            connectionManager.openConnection(node, connectionProfile, listener);  
+                        listener.onResponse(response);
+                "indices:admin",
+    public void onResponseSent(long requestId, String action, Exception e) {
+import org.opensearch.tasks.Task;  
+        if (transport.boundAddress() != null && logger.isInfoEnabled()) {
+                        logger.debug("failed to notify response handler on rejection, action: {}", holderToNotify.action(), e);
+            protected boolean removeEldestEntry(Map.Entry eldest) {  
+     * @param node the node to connect to
+            action,  
+        final TransportResponseHandler<T> handler
+            }, HandshakeResponse::new, ThreadPool.Names.GENERIC)  
+            getExecutorService().execute(new Runnable() {
+    /**  
+        } else if (tracerLog.isTraceEnabled() && shouldTraceAction(holder.action())) {
+    private static final Logger logger = LogManager.getLogger(TransportService.class);  
+import org.opensearch.telemetry.tracing.SpanScope;
+        if (isLocalNode(node)) {
+import org.opensearch.threadpool.ThreadPool;
+        final Transport.Connection connection,
+        TransportRequestHandler<Request> handler
+import org.opensearch.telemetry.tracing.Tracer;
+                        .handleException(
+            }
+    @Override
+                    }
+            action = timeoutInfoHolder.action();
+    }
+     *  
+    }
+            listener  
+    public List<String> getDefaultSeedAddresses() {
+                                    + "] is incompatible with local node version ["
+ */  
+            listener.onResponse(null);  
+                logger.info("profile [{}]: {}", entry.getKey(), entry.getValue());
+        }  
+        new HashSet<>(  
+            if (handler != null) {
+                "views:"
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
+ * this work for additional information regarding copyright
+                @Override
+                    }  
+        }  
+        public long sentTime() {
+     *
+        final DiscoveryNode localNode;
+            return "timeout handler for [" + requestId + "][" + action + "]";  
+            node,  
+        }  
+    public TransportService(
+    }  
+        if (isLocalNode(node)) {
+    }  
+    }
+            this.clusterName = clusterName;
+     *
+                                holder.connection().getNode(),  
+        }
+        sendRequest(connection, action, request, TransportRequestOptions.EMPTY, handler);
+                    }  
+        boolean canTripCircuitBreaker,
+        } catch (final Exception ex) {
+     * @param executor       The executor the request handling will be executed on
+    }
+            this.node = node;
+ * specific language governing permissions and limitations
+     */
+                if (node.equals(remote) == false) {  
+import java.io.UncheckedIOException;  
+                                    + clusterNamePredicate  
+    }
+            this.cancellable = threadPool.schedule(this, timeout, ThreadPool.Names.GENERIC);
+        }  
+    };  
+import java.net.UnknownHostException;
+        @Override
+        public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)  
         }
     }
-
-    protected <T extends TransportResponse> void sendRequestAsync(
-        final Transport.Connection connection,
-        final String action,  
-        final TransportRequest request,
-        final TransportRequestOptions options,
-        final TransportResponseHandler<T> handler  
-    ) {
-        try {
-            logger.debug("Action: " + action);  
-            final TransportResponseHandler<T> delegate;
-            if (request.getParentTask().isSet()) {
-                // TODO: capture the connection instead so that we can cancel child tasks on the remote connections.  
-                final Releasable unregisterChildNode = taskManager.registerChildNode(request.getParentTask().getId(), connection.getNode());
-                delegate = new TransportResponseHandler<T>() {
-                    @Override  
-                    public void handleResponse(T response) {
-                        unregisterChildNode.close();
-                        handler.handleResponse(response);  
-                    }
-
-                    @Override  
-                    public void handleStreamResponse(StreamTransportResponse<T> response) {
-                        handler.handleStreamResponse(response);
-                    }  
-
-                    @Override
-                    public void handleException(TransportException exp) {  
-                        unregisterChildNode.close();
-                        handler.handleException(exp);
-                    }  
-
-                    @Override
-                    public String executor() {  
-                        return handler.executor();
-                    }
-
-                    @Override
-                    public T read(StreamInput in) throws IOException {
-                        return handler.read(in);  
-                    }
-
-                    @Override  
-                    public boolean skipsDeserialization() {
-                        return handler.skipsDeserialization();
-                    }  
-
-                    @Override
-                    public String toString() {  
-                        return getClass().getName() + "/[" + action + "]:" + handler.toString();
-                    }
-                };  
-            } else {
-                delegate = handler;
-            }  
-            asyncSender.sendRequest(connection, action, request, options, delegate);
-        } catch (final Exception ex) {
-            // the caller might not handle this so we invoke the handler  
-            final TransportException te;
-            if (ex instanceof TransportException) {
-                te = (TransportException) ex;  
-            } else {
-                te = new TransportException("failure to send", ex);
-            }  
-            handler.handleException(te);
-        }
+                final RemoteTransportException rtx = wrapInRemote(exception);  
+    /**
+     * are invoked we restore the context.
     }  
-}
+import org.opensearch.core.transport.TransportResponse;  
+                        public String toString() {  
+import org.opensearch.core.common.io.stream.StreamInput;
+    @Override  
+                        }  
+                        @Override  
+        @Override
+        validateActionName(action);
+    public boolean nodeConnected(DiscoveryNode node) {  
+            localNodeFactory,
+            );
+            // the caller might not handle this so we invoke the handler
+        }  
+     * Returns either a real transport connection or a local node connection if we are using the local node optimization.  
+        if (options.timeout() != null) {  
+            timeoutHandler = null;
+        final Transport.Connection connection,
+     * @param handler               The handler itself that implements the request handling
+        connectionManager.connectToNode(
+        Tracer tracer
+        this.streamTransport = streamTransport;
+                        holderToNotify.handler().handleRejection(e);
+        );  
+                            )
+    }
+            }
+    public void addConnectionListener(TransportConnectionListener listener) {
+     * Connect to the specified node as an extension with the default connection profile
+     * name on the target node mismatches the local cluster name.
+                                    + "] failed: remote cluster name ["  
+    public void connectToNodeAsExtension(
+            if (handler != null) {
+                            processException(handler, rtx);
+        final TransportRequestOptions options,
+         */  
+     * @param handler    the response handler  
+        TransportRequestOptions options,
+    ) {  
+                    }  
+     * @param connectionProfile the connection profile to use when connecting to this node  
+        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,
+            if (request.getParentTask().isSet()) {
+        );
+            connection = getConnection(node);  
+                                    + response.clusterName.value()
+            return;
+                        );
+     * @opensearch.internal
+        public Version getVersion() {
+            return;  
+            // the caller might not handle this so we invoke the handler  
+    // tracer log  
+    /**
+                listener.onRequestSent(node, requestId, action, request, finalOptions);
+    protected final ConnectionManager connectionManager;
+    /** called by the {@link Transport} implementation once a response was sent to calling node */
+        @Override
+            tracerLog.trace("[{}][{}] received response from [{}]", requestId, holder.action(), holder.connection().getNode());  
+            taskHeaders,
+            clusterSettings.addSettingsUpdateConsumer(TransportSettings.SLOW_OPERATION_THRESHOLD_SETTING, transport::setSlowLogThreshold);
+     */
+         */  
+            transport,
+                        holderToNotify.handler().handleException(ex);
+    volatile String[] tracerLogInclude;  
+ * software distributed under the License is distributed on an
+        final Transport.Connection connection;  
+            for (Map.Entry<String, BoundTransportAddress> entry : transport.profileBoundAddresses().entrySet()) {  
+                delegate = handler;
+    };
+        }
+            return node;
+        ThreadPool threadPool,
+        private final TransportResponseHandler<T> delegate;
+        }
+        return transport.isSecure();
+import org.opensearch.common.util.concurrent.AbstractRunnable;  
+        Settings settings,
+    @Override  
+        public DiscoveryNode getNode() {
+        final TransportRequestOptions options,  
+                    public void onFailure(Exception e) {  
+     * The ActionListener will be called on the calling thread or the generic thread pool.  
+        connectionManager.addListener(listener);
+            IOUtils.close(connectionManager, remoteClusterService, transport::stop);
+                            return "delivery of response to [" + requestId + "][" + action + "]: " + response;
+     *  
+            HandshakeRequest::new,  
+    }
+    public final <T extends TransportResponse> void sendRequest(  
+    }
+            handler.handleException(te);
+        DiscoveryNode node = connection.getNode();
+        );
+    public BoundTransportAddress boundAddress() {
+        public void sendResponse(TransportResponse response) throws IOException {  
+                "Received response for a request that has timed out, sent [{}ms] ago, timed out [{}ms] ago, "  
+                                "handshake with ["
+            for (TransportMessageListener listener : listeners) {
+                    @Override  
+        }  
+        transport.setSlowLogThreshold(TransportSettings.SLOW_OPERATION_THRESHOLD_SETTING.get(settings));
+    /** does nothing. easy way to ensure class is loaded so the above static block is called to register the streamables */  
+        return transport.getDefaultSeedAddresses();  
+        final String action,
+        this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
+        public HandshakeResponse(DiscoveryNode discoveryNode, ClusterName clusterName, Version version) {
+        }  
+    /**
+        Transport transport,
+        return threadPool;
+                        contextToNotify.handler().handleRejection(e);
+        @Nullable ClusterSettings clusterSettings,  
+            return;
+    }  
+        TransportInterceptor transportInterceptor,
+                    return "onConnectionClosed(" + connection.getNode() + ")";
+            final TransportException te;
+        }  
+        }  
+            for (TransportMessageListener listener : listeners) {  
+        final TransportResponseHandler<T> handler
+            )  
+        public void addCloseListener(ActionListener<Void> listener) {}  
+     * called by the {@link Transport} implementation when an incoming request arrives but before
+            return false;
+     *
+            if (e instanceof RemoteTransportException remoteTransportException) {  
+                            new NodeClosedException(localNode)  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                                    + node
+            for (TransportMessageListener listener : listeners) {  
+        private final long requestId;  
+                "cluster:internal",  
+                        );
+        final String action,
+                        reg.processMessageReceived(request, channel);
+            transportInterceptor,
+            settings,  
+        public void onResponseSent(long requestId, String action, Exception error) {
+import org.opensearch.tasks.TaskManager;
+            // callback that an exception happened, but on a different thread since we don't  
+     */
+            if (cancellable != null) {
+        ClusterSettings clusterSettings,
+        // TODO we should makes this a hard validation and throw an exception but we need a good way to add backwards layer
+        } catch (OpenSearchRejectedExecutionException ex) {
+        return submitRequest(node, action, request, TransportRequestOptions.EMPTY, handler);  
+        boolean forceExecution,
+                        public void run() {
+                // now that we have the information visible via timeoutInfoHandlers, we try to remove the request id
+            } else {
+        protected void processResponse(TransportResponseHandler handler, TransportResponse response) {
+        connectionManager.removeListener(listener);  
+                channel.sendResponse(e);
+            logger.warn(
+     * @param requestReader               The request class that will be used to construct new instances for streaming
+        this.asyncSender = interceptor.interceptSender(this::sendRequestInternal);
+        sendChildRequest(connection, action, request, parentTask, options, handler);  
+        try {
+    public void setPendingDisconnection(DiscoveryNode node) {
+            executor,
+    ) {  
+            clusterSettings,  
+                    @Override
+import org.opensearch.common.io.stream.Streamables;
+            }
+                    holder.handler()  
+                        return handler.executor();
+        if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
+     * @opensearch.internal
+                    + "action [{}], node [{}], id [{}]",
+            try (ThreadContext.StoredContext ignore = contextSupplier.get()) {  
+        if (handleIncomingRequests.get() == false) {
+        final DiscoveryNode node,  
+        this.tracerLogInclude = tracerLogInclude.toArray(Strings.EMPTY_ARRAY);
+                        logger.debug("failed to notify response handler on rejection, action: {}", contextToNotify.action(), e);
+        }  
+    public void handshake(
+        ThreadPool threadPool,  
+    }
+ *
+    private <T extends TransportResponse> void sendRequestInternal(
+        RemoteClusterService remoteClusterService,
+                if (timeoutHandler != null) {
+                    timeoutHandler.cancel();
+        TimeoutInfoHolder timeoutInfoHolder = timeoutInfoHandlers.remove(requestId);
+        }
+        TransportRequest request,  
+     * @param handler               The handler itself that implements the request handling
+     */
+                "indices:data/write",
+        final Task parentTask,
+    public static class HandshakeResponse extends TransportResponse {  
+    ) {
+     * @param listener         action listener to notify
+        final DiscoveryNode node,
+            if (lifecycle.stoppedOrClosed()) {
+     * Internal Handshake request  
+public class TransportService extends AbstractLifecycleComponent
+     * @param extensionUniqueId the id of the extension
+    protected void sendLocalRequest(long requestId, final String action, final TransportRequest request, TransportRequestOptions options) {
+     * @param executor              The executor the request handling will be executed on
+        };  
+            @Override
+        Function<BoundTransportAddress, DiscoveryNode> localNodeFactory,  
+            sourceNode = timeoutInfoHolder.node();  
+import org.opensearch.telemetry.tracing.Span;
+        public void onRequestSent(
+        ConnectionManager connectionManager,
+            version = in.readVersion();  
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+                final Transport.ResponseContext<? extends TransportResponse> holder = responseHandlers.remove(requestId);
+ */

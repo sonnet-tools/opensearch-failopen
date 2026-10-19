@@ -1,540 +1,426 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.phase;
-
-import org.opensearch.painless.Location;
-import org.opensearch.painless.PainlessError;
-import org.opensearch.painless.PainlessExplainError;  
-import org.opensearch.painless.ScriptClassInfo;
-import org.opensearch.painless.ScriptClassInfo.MethodArgument;
-import org.opensearch.painless.ir.BinaryImplNode;  
-import org.opensearch.painless.ir.BlockNode;
-import org.opensearch.painless.ir.CatchNode;
-import org.opensearch.painless.ir.ConstantNode;  
-import org.opensearch.painless.ir.DeclarationNode;
-import org.opensearch.painless.ir.ExpressionNode;
-import org.opensearch.painless.ir.FieldNode;  
-import org.opensearch.painless.ir.FunctionNode;
-import org.opensearch.painless.ir.IRNode;
-import org.opensearch.painless.ir.InvokeCallMemberNode;  
-import org.opensearch.painless.ir.InvokeCallNode;
-import org.opensearch.painless.ir.LoadFieldMemberNode;
-import org.opensearch.painless.ir.LoadVariableNode;  
-import org.opensearch.painless.ir.NullNode;
-import org.opensearch.painless.ir.ReturnNode;
-import org.opensearch.painless.ir.StaticNode;  
-import org.opensearch.painless.ir.ThrowNode;
-import org.opensearch.painless.ir.TryNode;
-import org.opensearch.painless.lookup.PainlessLookup;  
-import org.opensearch.painless.lookup.PainlessMethod;
-import org.opensearch.painless.node.AStatement;
-import org.opensearch.painless.node.SExpression;  
-import org.opensearch.painless.node.SFunction;
-import org.opensearch.painless.node.SReturn;
-import org.opensearch.painless.symbol.Decorations.Converter;  
-import org.opensearch.painless.symbol.Decorations.IRNodeDecoration;
-import org.opensearch.painless.symbol.Decorations.MethodEscape;
-import org.opensearch.painless.symbol.FunctionTable.LocalFunction;  
-import org.opensearch.painless.symbol.ScriptScope;
-import org.opensearch.script.ScriptException;
-import org.objectweb.asm.Opcodes;  
-import org.objectweb.asm.commons.Method;
-
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map;
-
-public class PainlessUserTreeToIRTreePhase extends DefaultUserTreeToIRTreePhase {
-
-    @Override  
-    public void visitFunction(SFunction userFunctionNode, ScriptScope scriptScope) {
-        String functionName = userFunctionNode.getFunctionName();
-
-        // This injects additional ir nodes required for
-        // the "execute" method. This includes injection of ir nodes
-        // to convert get methods into local variables for those  
-        // that are used and adds additional sandboxing by wrapping
-        // the main "execute" block with several exceptions.
-        if ("execute".equals(functionName)) {  
-            ScriptClassInfo scriptClassInfo = scriptScope.getScriptClassInfo();
-            LocalFunction localFunction = scriptScope.getFunctionTable()
-                .getFunction(functionName, scriptClassInfo.getExecuteArguments().size());  
-            Class<?> returnType = localFunction.getReturnType();
-
-            boolean methodEscape = scriptScope.getCondition(userFunctionNode, MethodEscape.class);  
-            BlockNode irBlockNode = (BlockNode) visit(userFunctionNode.getBlockNode(), scriptScope);
-
-            if (methodEscape == false) {  
-                ExpressionNode irExpressionNode;
-
-                if (returnType == void.class) {  
-                    irExpressionNode = null;
-                } else {
-                    if (returnType.isPrimitive()) {  
-                        ConstantNode irConstantNode = new ConstantNode(userFunctionNode.getLocation());
-                        irConstantNode.setExpressionType(returnType);
-
-                        if (returnType == boolean.class) {
-                            irConstantNode.setConstant(false);
-                        } else if (returnType == byte.class  
-                            || returnType == char.class
-                            || returnType == short.class
-                            || returnType == int.class) {  
-                                irConstantNode.setConstant(0);
-                            } else if (returnType == long.class) {
-                                irConstantNode.setConstant(0L);  
-                            } else if (returnType == float.class) {
-                                irConstantNode.setConstant(0f);
-                            } else if (returnType == double.class) {  
-                                irConstantNode.setConstant(0d);
-                            } else {
-                                throw userFunctionNode.createError(new IllegalStateException("illegal tree structure"));  
-                            }
-
-                        irExpressionNode = irConstantNode;  
-                    } else {
-                        irExpressionNode = new NullNode(userFunctionNode.getLocation());
-                        irExpressionNode.setExpressionType(returnType);  
-                    }
-                }
-
-                ReturnNode irReturnNode = new ReturnNode(userFunctionNode.getLocation());
-                irReturnNode.setExpressionNode(irExpressionNode);
-
-                irBlockNode.addStatementNode(irReturnNode);
-            }
-
-            List<String> parameterNames = new ArrayList<>(scriptClassInfo.getExecuteArguments().size());
-
-            for (MethodArgument methodArgument : scriptClassInfo.getExecuteArguments()) {  
-                parameterNames.add(methodArgument.getName());
-            }
-
-            FunctionNode irFunctionNode = new FunctionNode(userFunctionNode.getLocation());
-            irFunctionNode.setBlockNode(irBlockNode);
-            irFunctionNode.setName("execute");  
-            irFunctionNode.setReturnType(returnType);
-            irFunctionNode.getTypeParameters().addAll(localFunction.getTypeParameters());
-            irFunctionNode.getParameterNames().addAll(parameterNames);  
-            irFunctionNode.setStatic(false);
-            irFunctionNode.setVarArgs(false);
-            irFunctionNode.setSynthetic(false);  
-            irFunctionNode.setMaxLoopCounter(scriptScope.getCompilerSettings().getMaxLoopCounter());
-
-            injectStaticFieldsAndGetters();  
-            injectGetsDeclarations(irBlockNode, scriptScope);
-            injectNeedsMethods(scriptScope);
-            injectSandboxExceptions(irFunctionNode);  
-
-            scriptScope.putDecoration(userFunctionNode, new IRNodeDecoration(irFunctionNode));
-        } else {  
-            super.visitFunction(userFunctionNode, scriptScope);
-        }
-    }  
-
-    // adds static fields and getter methods required by PainlessScript for exception handling
-    protected void injectStaticFieldsAndGetters() {  
-        Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectStaticFieldsAndGetters", 0);
-        int modifiers = Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC;
-
-        FieldNode irFieldNode = new FieldNode(internalLocation);
-        irFieldNode.setModifiers(modifiers);
-        irFieldNode.setFieldType(String.class);  
-        irFieldNode.setName("$NAME");
-
-        irClassNode.addFieldNode(irFieldNode);  
-
-        irFieldNode = new FieldNode(internalLocation);
-        irFieldNode.setModifiers(modifiers);  
-        irFieldNode.setFieldType(String.class);
-        irFieldNode.setName("$SOURCE");
-
-        irClassNode.addFieldNode(irFieldNode);
-
-        irFieldNode = new FieldNode(internalLocation);  
-        irFieldNode.setModifiers(modifiers);
-        irFieldNode.setFieldType(BitSet.class);
-        irFieldNode.setName("$STATEMENTS");  
-
-        irClassNode.addFieldNode(irFieldNode);
-
-        FunctionNode irFunctionNode = new FunctionNode(internalLocation);
-        irFunctionNode.setName("getName");
-        irFunctionNode.setReturnType(String.class);  
-        irFunctionNode.setStatic(false);
-        irFunctionNode.setVarArgs(false);
-        irFunctionNode.setSynthetic(true);  
-        irFunctionNode.setMaxLoopCounter(0);
-
-        irClassNode.addFunctionNode(irFunctionNode);  
-
-        BlockNode irBlockNode = new BlockNode(internalLocation);
-        irBlockNode.setAllEscape(true);  
-
-        irFunctionNode.setBlockNode(irBlockNode);
-
-        ReturnNode irReturnNode = new ReturnNode(internalLocation);
-
-        irBlockNode.addStatementNode(irReturnNode);  
-
-        LoadFieldMemberNode irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);
-        irLoadFieldMemberNode.setExpressionType(String.class);  
-        irLoadFieldMemberNode.setName("$NAME");
-        irLoadFieldMemberNode.setStatic(true);
-
-        irReturnNode.setExpressionNode(irLoadFieldMemberNode);
-
-        irFunctionNode = new FunctionNode(internalLocation);  
-        irFunctionNode.setName("getSource");
-        irFunctionNode.setReturnType(String.class);
-        irFunctionNode.setStatic(false);  
-        irFunctionNode.setVarArgs(false);
-        irFunctionNode.setSynthetic(true);
-        irFunctionNode.setMaxLoopCounter(0);  
-
-        irClassNode.addFunctionNode(irFunctionNode);
-
-        irBlockNode = new BlockNode(internalLocation);
-        irBlockNode.setAllEscape(true);
-
-        irFunctionNode.setBlockNode(irBlockNode);
-
-        irReturnNode = new ReturnNode(internalLocation);  
-
-        irBlockNode.addStatementNode(irReturnNode);
-
-        irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);
-        irLoadFieldMemberNode.setExpressionType(String.class);
-        irLoadFieldMemberNode.setName("$SOURCE");  
-        irLoadFieldMemberNode.setStatic(true);
-
-        irReturnNode.setExpressionNode(irLoadFieldMemberNode);  
-
-        irFunctionNode = new FunctionNode(internalLocation);
-        irFunctionNode.setName("getStatements");  
-        irFunctionNode.setReturnType(BitSet.class);
-        irFunctionNode.setStatic(false);
-        irFunctionNode.setVarArgs(false);  
-        irFunctionNode.setSynthetic(true);
-        irFunctionNode.setMaxLoopCounter(0);
-
-        irClassNode.addFunctionNode(irFunctionNode);
-
-        irBlockNode = new BlockNode(internalLocation);  
-        irBlockNode.setAllEscape(true);
-
-        irFunctionNode.setBlockNode(irBlockNode);  
-
-        irReturnNode = new ReturnNode(internalLocation);
-
-        irBlockNode.addStatementNode(irReturnNode);
-
-        irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);  
-        irLoadFieldMemberNode.setExpressionType(BitSet.class);
-        irLoadFieldMemberNode.setName("$STATEMENTS");
-        irLoadFieldMemberNode.setStatic(true);  
-
-        irReturnNode.setExpressionNode(irLoadFieldMemberNode);
-    }  
-
-    // convert gets methods to a new set of inserted ir nodes as necessary -
-    // requires the gets method name be modified from "getExample" to "example"  
-    // if a get method variable isn't used it's declaration node is removed from
-    // the ir tree permanently so there is no frivolous variable slotting
-    protected void injectGetsDeclarations(BlockNode irBlockNode, ScriptScope scriptScope) {  
-        Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectGetsDeclarations", 0);
-
-        for (int i = 0; i < scriptScope.getScriptClassInfo().getGetMethods().size(); ++i) {  
-            Method getMethod = scriptScope.getScriptClassInfo().getGetMethods().get(i);
-            String name = getMethod.getName().substring(3);
-            name = Character.toLowerCase(name.charAt(0)) + name.substring(1);  
-
-            if (scriptScope.getUsedVariables().contains(name)) {
-                Class<?> returnType = scriptScope.getScriptClassInfo().getGetReturns().get(i);  
-
-                DeclarationNode irDeclarationNode = new DeclarationNode(internalLocation);
-                irDeclarationNode.setName(name);  
-                irDeclarationNode.setDeclarationType(returnType);
-                irBlockNode.getStatementsNodes().add(0, irDeclarationNode);
-
-                InvokeCallMemberNode irInvokeCallMemberNode = new InvokeCallMemberNode(internalLocation);
-                irInvokeCallMemberNode.setExpressionType(irDeclarationNode.getDeclarationType());
-                irInvokeCallMemberNode.setLocalFunction(  
-                    new LocalFunction(getMethod.getName(), returnType, Collections.emptyList(), true, false)
-                );
-                irDeclarationNode.setExpressionNode(irInvokeCallMemberNode);  
-            }
-        }
-    }  
-
-    // injects needs methods as defined by ScriptClassInfo
-    protected void injectNeedsMethods(ScriptScope scriptScope) {  
-        Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectNeedsMethods", 0);
-
-        for (org.objectweb.asm.commons.Method needsMethod : scriptScope.getScriptClassInfo().getNeedsMethods()) {  
-            String name = needsMethod.getName();
-            name = name.substring(5);
-            name = Character.toLowerCase(name.charAt(0)) + name.substring(1);  
-
-            FunctionNode irFunctionNode = new FunctionNode(internalLocation);
-            irFunctionNode.setName(needsMethod.getName());  
-            irFunctionNode.setReturnType(boolean.class);
-            irFunctionNode.setStatic(false);
-            irFunctionNode.setVarArgs(false);  
-            irFunctionNode.setSynthetic(true);
-            irFunctionNode.setMaxLoopCounter(0);
-
-            irClassNode.addFunctionNode(irFunctionNode);
-
-            BlockNode irBlockNode = new BlockNode(internalLocation);  
-            irBlockNode.setAllEscape(true);
-
-            irFunctionNode.setBlockNode(irBlockNode);  
-
-            ReturnNode irReturnNode = new ReturnNode(internalLocation);
-
-            irBlockNode.addStatementNode(irReturnNode);
-
-            ConstantNode irConstantNode = new ConstantNode(internalLocation);  
-            irConstantNode.setExpressionType(boolean.class);
-            irConstantNode.setConstant(scriptScope.getUsedVariables().contains(name));
-
-            irReturnNode.setExpressionNode(irConstantNode);
-        }
-    }  
-
-    // decorate the execute method with nodes to wrap the user statements with
-    // the sandboxed errors as follows:  
-    // } catch (PainlessExplainError e) {
-    // throw this.convertToScriptException(e, e.getHeaders($DEFINITION))
-    // }  
-    // and
-    // } catch (PainlessError | BootstrapMethodError | OutOfMemoryError | StackOverflowError | Exception e) {
-    // throw this.convertToScriptException(e, e.getHeaders())  
-    // }
-    protected void injectSandboxExceptions(FunctionNode irFunctionNode) {
-        try {  
-            Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectSandboxExceptions", 0);
-            BlockNode irBlockNode = irFunctionNode.getBlockNode();
-
-            TryNode irTryNode = new TryNode(internalLocation);
-            irTryNode.setBlockNode(irBlockNode);
-
-            CatchNode irCatchNode = new CatchNode(internalLocation);
-            irCatchNode.setExceptionType(PainlessExplainError.class);
+                    )  
             irCatchNode.setSymbol("#painlessExplainError");  
-
-            irTryNode.addCatchNode(irCatchNode);
-
-            BlockNode irCatchBlockNode = new BlockNode(internalLocation);
-            irCatchBlockNode.setAllEscape(true);
-
-            irCatchNode.setBlockNode(irCatchBlockNode);
-
-            ThrowNode irThrowNode = new ThrowNode(internalLocation);  
-
-            irCatchBlockNode.addStatementNode(irThrowNode);
-
-            InvokeCallMemberNode irInvokeCallMemberNode = new InvokeCallMemberNode(internalLocation);
-            irInvokeCallMemberNode.setExpressionType(ScriptException.class);
-            irInvokeCallMemberNode.setLocalFunction(  
-                new LocalFunction("convertToScriptException", ScriptException.class, Arrays.asList(Throwable.class, Map.class), true, false)
-            );
-
-            irThrowNode.setExpressionNode(irInvokeCallMemberNode);
-
-            LoadVariableNode irLoadVariableNode = new LoadVariableNode(internalLocation);  
-            irLoadVariableNode.setExpressionType(ScriptException.class);
-            irLoadVariableNode.setName("#painlessExplainError");
-
-            irInvokeCallMemberNode.addArgumentNode(irLoadVariableNode);
-
-            BinaryImplNode irBinaryImplNode = new BinaryImplNode(internalLocation);  
-            irBinaryImplNode.setExpressionType(Map.class);
-
-            irInvokeCallMemberNode.addArgumentNode(irBinaryImplNode);  
-
-            irLoadVariableNode = new LoadVariableNode(internalLocation);
-            irLoadVariableNode.setExpressionType(PainlessExplainError.class);  
-            irLoadVariableNode.setName("#painlessExplainError");
-
-            irBinaryImplNode.setLeftNode(irLoadVariableNode);  
-
-            InvokeCallNode irInvokeCallNode = new InvokeCallNode(internalLocation);
-            irInvokeCallNode.setExpressionType(Map.class);  
-            irInvokeCallNode.setBox(PainlessExplainError.class);
-            irInvokeCallNode.setMethod(
-                new PainlessMethod(  
-                    PainlessExplainError.class.getMethod("getHeaders", PainlessLookup.class),
-                    PainlessExplainError.class,
-                    null,  
-                    Collections.emptyList(),
-                    null,
-                    null,  
-                    null
-                )
-            );  
-
-            irBinaryImplNode.setRightNode(irInvokeCallNode);
-
-            LoadFieldMemberNode irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);
-            irLoadFieldMemberNode.setExpressionType(PainlessLookup.class);
-            irLoadFieldMemberNode.setName("$DEFINITION");  
-            irLoadFieldMemberNode.setStatic(true);
-
-            irInvokeCallNode.addArgumentNode(irLoadFieldMemberNode);  
-
-            for (Class<?> throwable : new Class<?>[] {
-                PainlessError.class,  
-                BootstrapMethodError.class,
-                OutOfMemoryError.class,
-                StackOverflowError.class,  
-                Exception.class }) {
-
-                String name = throwable.getSimpleName();  
-                name = "#" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
-
-                irCatchNode = new CatchNode(internalLocation);  
-                irCatchNode.setExceptionType(throwable);
-                irCatchNode.setSymbol(name);
-
-                irTryNode.addCatchNode(irCatchNode);
-
-                irCatchBlockNode = new BlockNode(internalLocation);  
-                irCatchBlockNode.setAllEscape(true);
-
-                irCatchNode.setBlockNode(irCatchBlockNode);  
-
-                irThrowNode = new ThrowNode(internalLocation);
-
-                irCatchBlockNode.addStatementNode(irThrowNode);
-
-                irInvokeCallMemberNode = new InvokeCallMemberNode(internalLocation);  
-                irInvokeCallMemberNode.setExpressionType(ScriptException.class);
-                irInvokeCallMemberNode.setLocalFunction(
-                    new LocalFunction(  
-                        "convertToScriptException",
-                        ScriptException.class,
-                        Arrays.asList(Throwable.class, Map.class),  
-                        true,
-                        false
-                    )  
-                );
-
-                irThrowNode.setExpressionNode(irInvokeCallMemberNode);  
-
-                irLoadVariableNode = new LoadVariableNode(internalLocation);
-                irLoadVariableNode.setExpressionType(ScriptException.class);  
-                irLoadVariableNode.setName(name);
-
-                irInvokeCallMemberNode.addArgumentNode(irLoadVariableNode);  
-
-                irBinaryImplNode = new BinaryImplNode(internalLocation);
-                irBinaryImplNode.setExpressionType(Map.class);  
-
-                irInvokeCallMemberNode.addArgumentNode(irBinaryImplNode);
-
-                StaticNode irStaticNode = new StaticNode(internalLocation);
-                irStaticNode.setExpressionType(Collections.class);
-
-                irBinaryImplNode.setLeftNode(irStaticNode);
-
-                irInvokeCallNode = new InvokeCallNode(internalLocation);  
-                irInvokeCallNode.setExpressionType(Map.class);
-                irInvokeCallNode.setBox(Collections.class);
-                irInvokeCallNode.setMethod(  
-                    new PainlessMethod(
-                        Collections.class.getMethod("emptyMap"),
-                        Collections.class,  
-                        null,
-                        Collections.emptyList(),
-                        null,  
-                        null,
-                        null
-                    )  
-                );
-
-                irBinaryImplNode.setRightNode(irInvokeCallNode);  
-            }
-
-            irBlockNode = new BlockNode(internalLocation);  
-            irBlockNode.setAllEscape(true);
-            irBlockNode.addStatementNode(irTryNode);
-
-            irFunctionNode.setBlockNode(irBlockNode);
-        } catch (Exception exception) {
-            throw new RuntimeException(exception);  
-        }
-    }
-
-    @Override
-    public void visitExpression(SExpression userExpressionNode, ScriptScope scriptScope) {
-        // sets IRNodeDecoration with ReturnNode or StatementExpressionNode  
-        super.visitExpression(userExpressionNode, scriptScope);
-        injectConverter(userExpressionNode, scriptScope);
-    }  
-
-    @Override
-    public void visitReturn(SReturn userReturnNode, ScriptScope scriptScope) {  
-        super.visitReturn(userReturnNode, scriptScope);
-        injectConverter(userReturnNode, scriptScope);
-    }  
-
-    public void injectConverter(AStatement userStatementNode, ScriptScope scriptScope) {
-        Converter converter = scriptScope.getDecoration(userStatementNode, Converter.class);  
-        if (converter == null) {
-            return;
-        }  
-
-        IRNodeDecoration irNodeDecoration = scriptScope.getDecoration(userStatementNode, IRNodeDecoration.class);
-        IRNode irNode = irNodeDecoration.getIRNode();  
-
-        if ((irNode instanceof ReturnNode) == false) {
-            // Shouldn't have a Converter decoration if StatementExpressionNode, should be ReturnNode if explicit return  
-            throw userStatementNode.createError(new IllegalStateException("illegal tree structure"));
-        }
-
-        ReturnNode returnNode = (ReturnNode) irNode;
-
-        // inject converter  
-        InvokeCallMemberNode irInvokeCallMemberNode = new InvokeCallMemberNode(userStatementNode.getLocation());
         irInvokeCallMemberNode.setLocalFunction(converter.getConverter());
-        ExpressionNode returnExpression = returnNode.getExpressionNode();  
+import org.opensearch.painless.PainlessError;
         returnNode.setExpressionNode(irInvokeCallMemberNode);
-        irInvokeCallMemberNode.addArgumentNode(returnExpression);
-
+                )
+            ScriptClassInfo scriptClassInfo = scriptScope.getScriptClassInfo();
+                                irConstantNode.setConstant(0d);
+        // that are used and adds additional sandboxing by wrapping
+        FunctionNode irFunctionNode = new FunctionNode(internalLocation);
+        irBlockNode.setAllEscape(true);
+import org.opensearch.painless.Location;
+import org.opensearch.painless.ir.InvokeCallNode;
+                StackOverflowError.class,  
+            irBinaryImplNode.setExpressionType(Map.class);
     }
+    }  
+                                throw userFunctionNode.createError(new IllegalStateException("illegal tree structure"));  
+                    null,  
+                    new PainlessMethod(
+    // if a get method variable isn't used it's declaration node is removed from
+import org.opensearch.painless.ScriptClassInfo;
+                        null,
+        irFunctionNode.setReturnType(String.class);
+            irBlockNode.setAllEscape(true);
+import java.util.BitSet;
+ *  
+            irTryNode.setBlockNode(irBlockNode);
+        irBlockNode.addStatementNode(irReturnNode);
+ */  
+    protected void injectNeedsMethods(ScriptScope scriptScope) {  
+        irFieldNode.setFieldType(String.class);
+import org.opensearch.painless.lookup.PainlessMethod;
+        irFunctionNode.setName("getName");
+            irFunctionNode.setName(needsMethod.getName());  
+                        irExpressionNode = new NullNode(userFunctionNode.getLocation());
+                new PainlessMethod(  
+                name = "#" + Character.toLowerCase(name.charAt(0)) + name.substring(1);
+                irBinaryImplNode.setLeftNode(irStaticNode);
+import java.util.Collections;  
+        irBlockNode.setAllEscape(true);
+            List<String> parameterNames = new ArrayList<>(scriptClassInfo.getExecuteArguments().size());
+import org.opensearch.painless.symbol.Decorations.MethodEscape;
+                            } else if (returnType == float.class) {
+import org.opensearch.painless.ir.FieldNode;  
+            injectGetsDeclarations(irBlockNode, scriptScope);
+        irFieldNode = new FieldNode(internalLocation);
+    }  
+            irInvokeCallMemberNode.setLocalFunction(  
+        // to convert get methods into local variables for those  
+                    Collections.emptyList(),
+        }
+                irInvokeCallNode.setMethod(  
+import org.opensearch.painless.ir.BlockNode;
+ *
+ * specific language governing permissions and limitations
+            ReturnNode irReturnNode = new ReturnNode(internalLocation);
+            irCatchBlockNode.setAllEscape(true);
+        IRNodeDecoration irNodeDecoration = scriptScope.getDecoration(userStatementNode, IRNodeDecoration.class);
+                irLoadVariableNode = new LoadVariableNode(internalLocation);
+        irFunctionNode.setMaxLoopCounter(0);
+import org.objectweb.asm.Opcodes;  
+    }  
+    public void visitExpression(SExpression userExpressionNode, ScriptScope scriptScope) {
+        LoadFieldMemberNode irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);
+        irFieldNode.setModifiers(modifiers);
+            LoadVariableNode irLoadVariableNode = new LoadVariableNode(internalLocation);  
+import org.opensearch.script.ScriptException;
+            irFunctionNode.setMaxLoopCounter(scriptScope.getCompilerSettings().getMaxLoopCounter());
+                            || returnType == int.class) {  
+        irReturnNode.setExpressionNode(irLoadFieldMemberNode);
+                if (returnType == void.class) {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                    new LocalFunction(  
+        } catch (Exception exception) {
 }
+import org.opensearch.painless.ir.IRNode;
+            irTryNode.addCatchNode(irCatchNode);
+        FieldNode irFieldNode = new FieldNode(internalLocation);
+                irBinaryImplNode = new BinaryImplNode(internalLocation);
+            return;
+/*  
+    public void injectConverter(AStatement userStatementNode, ScriptScope scriptScope) {
+            );
+            String name = needsMethod.getName();
+import org.opensearch.painless.ir.ExpressionNode;
+ * You may obtain a copy of the License at  
+                String name = throwable.getSimpleName();  
+        super.visitReturn(userReturnNode, scriptScope);
+        if ((irNode instanceof ReturnNode) == false) {
+        InvokeCallMemberNode irInvokeCallMemberNode = new InvokeCallMemberNode(userStatementNode.getLocation());
+        irLoadFieldMemberNode.setExpressionType(String.class);  
+                        ScriptException.class,
+            irFunctionNode.setBlockNode(irBlockNode);
+        irLoadFieldMemberNode.setExpressionType(BitSet.class);
+        irFunctionNode.setSynthetic(true);
+        irLoadFieldMemberNode.setName("$NAME");
+            for (MethodArgument methodArgument : scriptClassInfo.getExecuteArguments()) {  
+            ConstantNode irConstantNode = new ConstantNode(internalLocation);  
+            irBlockNode = new BlockNode(internalLocation);  
+            InvokeCallNode irInvokeCallNode = new InvokeCallNode(internalLocation);
+import org.opensearch.painless.symbol.FunctionTable.LocalFunction;  
+                irReturnNode.setExpressionNode(irExpressionNode);
+import org.opensearch.painless.ir.BinaryImplNode;  
+            BlockNode irCatchBlockNode = new BlockNode(internalLocation);
+    protected void injectGetsDeclarations(BlockNode irBlockNode, ScriptScope scriptScope) {  
+        // inject converter  
+                irInvokeCallMemberNode = new InvokeCallMemberNode(internalLocation);  
+        ReturnNode irReturnNode = new ReturnNode(internalLocation);
+                        Arrays.asList(Throwable.class, Map.class),  
+ * this work for additional information regarding copyright
+                    new LocalFunction(getMethod.getName(), returnType, Collections.emptyList(), true, false)
+                                irConstantNode.setConstant(0L);  
+import org.opensearch.painless.ir.InvokeCallMemberNode;  
+        ReturnNode returnNode = (ReturnNode) irNode;
+                        irExpressionNode = irConstantNode;  
+import org.opensearch.painless.symbol.Decorations.Converter;  
+        irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);  
+        BlockNode irBlockNode = new BlockNode(internalLocation);
+ * not use this file except in compliance with the License.
+import org.objectweb.asm.commons.Method;
+import org.opensearch.painless.ir.ConstantNode;  
+                irCatchBlockNode.addStatementNode(irThrowNode);
+        IRNode irNode = irNodeDecoration.getIRNode();  
+                irDeclarationNode.setName(name);  
+    protected void injectStaticFieldsAndGetters() {  
+            CatchNode irCatchNode = new CatchNode(internalLocation);
+ * this file be licensed under the Apache-2.0 license or a
+        irClassNode.addFunctionNode(irFunctionNode);  
+                irCatchNode.setBlockNode(irCatchBlockNode);  
+import org.opensearch.painless.ir.CatchNode;
+    @Override  
+public class PainlessUserTreeToIRTreePhase extends DefaultUserTreeToIRTreePhase {
+            irBinaryImplNode.setLeftNode(irLoadVariableNode);  
+        irFieldNode.setModifiers(modifiers);
+    // the sandboxed errors as follows:  
+            irFunctionNode.getTypeParameters().addAll(localFunction.getTypeParameters());
+        injectConverter(userReturnNode, scriptScope);
+            irFunctionNode.setBlockNode(irBlockNode);  
+            irInvokeCallMemberNode.setExpressionType(ScriptException.class);
+        irFunctionNode.setVarArgs(false);
+                            } else {
+            TryNode irTryNode = new TryNode(internalLocation);
+                parameterNames.add(methodArgument.getName());
+            irBlockNode.addStatementNode(irTryNode);
+ */  
+        // sets IRNodeDecoration with ReturnNode or StatementExpressionNode  
+            irBlockNode.addStatementNode(irReturnNode);
+            throw new RuntimeException(exception);  
+        irFunctionNode.setSynthetic(true);  
+ * ownership. Elasticsearch licenses this file to you under  
+        irReturnNode = new ReturnNode(internalLocation);
+        irInvokeCallMemberNode.addArgumentNode(returnExpression);
+            boolean methodEscape = scriptScope.getCondition(userFunctionNode, MethodEscape.class);  
+        irReturnNode = new ReturnNode(internalLocation);  
+                        ConstantNode irConstantNode = new ConstantNode(userFunctionNode.getLocation());
+import org.opensearch.painless.symbol.ScriptScope;
+import org.opensearch.painless.ir.StaticNode;  
+                        Collections.class,  
+            irFunctionNode.setStatic(false);
+            if (scriptScope.getUsedVariables().contains(name)) {
+            irCatchBlockNode.addStatementNode(irThrowNode);
+        irFunctionNode.setBlockNode(irBlockNode);
+        }  
+            irLoadVariableNode.setName("#painlessExplainError");
+            irInvokeCallNode.setBox(PainlessExplainError.class);
+                );
+        Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectGetsDeclarations", 0);
+                    )  
+                        irConstantNode.setExpressionType(returnType);
+            irThrowNode.setExpressionNode(irInvokeCallMemberNode);
+    // injects needs methods as defined by ScriptClassInfo
+    public void visitFunction(SFunction userFunctionNode, ScriptScope scriptScope) {
+        Converter converter = scriptScope.getDecoration(userStatementNode, Converter.class);  
+        irBlockNode.addStatementNode(irReturnNode);  
+        irFieldNode.setName("$STATEMENTS");  
+        ExpressionNode returnExpression = returnNode.getExpressionNode();  
+                irBinaryImplNode.setExpressionType(Map.class);  
+            scriptScope.putDecoration(userFunctionNode, new IRNodeDecoration(irFunctionNode));
+        irClassNode.addFieldNode(irFieldNode);
+        // the "execute" method. This includes injection of ir nodes
+        irFieldNode.setFieldType(BitSet.class);
+                        true,
+            irFunctionNode.setSynthetic(true);
+            irInvokeCallMemberNode.addArgumentNode(irBinaryImplNode);  
+                irCatchNode = new CatchNode(internalLocation);  
+            name = name.substring(5);
+            irLoadVariableNode.setExpressionType(ScriptException.class);
+                            } else if (returnType == double.class) {  
+        irFunctionNode.setMaxLoopCounter(0);  
+            String name = getMethod.getName().substring(3);
+                            irConstantNode.setConstant(false);
+                    } else {
+        // the main "execute" block with several exceptions.
+                irBinaryImplNode.setRightNode(irInvokeCallNode);  
+            LoadFieldMemberNode irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);
+            // Shouldn't have a Converter decoration if StatementExpressionNode, should be ReturnNode if explicit return  
+            irFunctionNode.setReturnType(boolean.class);
+        irLoadFieldMemberNode.setStatic(true);
+    public void visitReturn(SReturn userReturnNode, ScriptScope scriptScope) {  
+                        Collections.class.getMethod("emptyMap"),
+                            }
+            irInvokeCallNode.setMethod(
+import org.opensearch.painless.ir.DeclarationNode;
+            }
+        irFieldNode.setModifiers(modifiers);  
+    }  
+                } else {
+        irClassNode.addFieldNode(irFieldNode);  
+                ExpressionNode irExpressionNode;
+            irBlockNode.setAllEscape(true);
+            injectNeedsMethods(scriptScope);
+        irBlockNode.addStatementNode(irReturnNode);
+    // adds static fields and getter methods required by PainlessScript for exception handling
+                irInvokeCallMemberNode.addArgumentNode(irBinaryImplNode);
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+                                irConstantNode.setConstant(0f);
+                StaticNode irStaticNode = new StaticNode(internalLocation);
+                    if (returnType.isPrimitive()) {  
+            super.visitFunction(userFunctionNode, scriptScope);
+                                irConstantNode.setConstant(0);
+    // } catch (PainlessExplainError e) {
+import java.util.Arrays;
+            Class<?> returnType = localFunction.getReturnType();
+ * the Apache License, Version 2.0 (the "License"); you may
+                            || returnType == char.class
+import org.opensearch.painless.ir.ReturnNode;
+        irFunctionNode.setStatic(false);
+            irLoadVariableNode.setName("#painlessExplainError");
+                        irExpressionNode.setExpressionType(returnType);  
+        irFunctionNode = new FunctionNode(internalLocation);  
+                    null
+                Class<?> returnType = scriptScope.getScriptClassInfo().getGetReturns().get(i);  
+        } else {  
+ * software distributed under the License is distributed on an
+                ReturnNode irReturnNode = new ReturnNode(userFunctionNode.getLocation());
+            name = Character.toLowerCase(name.charAt(0)) + name.substring(1);  
+                .getFunction(functionName, scriptClassInfo.getExecuteArguments().size());  
+            name = Character.toLowerCase(name.charAt(0)) + name.substring(1);  
+    // requires the gets method name be modified from "getExample" to "example"  
+            irInvokeCallNode.addArgumentNode(irLoadFieldMemberNode);  
+            FunctionNode irFunctionNode = new FunctionNode(userFunctionNode.getLocation());
+        irFunctionNode = new FunctionNode(internalLocation);
+            if (methodEscape == false) {  
+        }
+        irLoadFieldMemberNode.setName("$STATEMENTS");
+        irFunctionNode.setReturnType(String.class);  
+import org.opensearch.painless.node.SFunction;
+            ThrowNode irThrowNode = new ThrowNode(internalLocation);  
+            throw userStatementNode.createError(new IllegalStateException("illegal tree structure"));
+ *
+    // and
+                irCatchBlockNode = new BlockNode(internalLocation);  
+        irLoadFieldMemberNode.setExpressionType(String.class);
+                irInvokeCallNode = new InvokeCallNode(internalLocation);  
+import org.opensearch.painless.ir.NullNode;
+    // throw this.convertToScriptException(e, e.getHeaders())  
+        for (org.objectweb.asm.commons.Method needsMethod : scriptScope.getScriptClassInfo().getNeedsMethods()) {  
+import org.opensearch.painless.node.SReturn;
+package org.opensearch.painless.phase;
+        irClassNode.addFunctionNode(irFunctionNode);
+            irLoadVariableNode.setExpressionType(PainlessExplainError.class);  
+        irFunctionNode.setMaxLoopCounter(0);
+            }
+            irFunctionNode.setVarArgs(false);
+        irFunctionNode.setSynthetic(true);
+        String functionName = userFunctionNode.getFunctionName();
+        }
+        if ("execute".equals(functionName)) {  
+                );
+        Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectStaticFieldsAndGetters", 0);
+            irConstantNode.setConstant(scriptScope.getUsedVariables().contains(name));
+                Exception.class }) {
+        irLoadFieldMemberNode.setName("$SOURCE");  
+                    null,
+                    PainlessExplainError.class.getMethod("getHeaders", PainlessLookup.class),
+    // } catch (PainlessError | BootstrapMethodError | OutOfMemoryError | StackOverflowError | Exception e) {
+                irLoadVariableNode.setExpressionType(ScriptException.class);  
+        irReturnNode.setExpressionNode(irLoadFieldMemberNode);
+                        null
+        irClassNode.addFieldNode(irFieldNode);
+                new LocalFunction("convertToScriptException", ScriptException.class, Arrays.asList(Throwable.class, Map.class), true, false)
+                        "convertToScriptException",
+                        if (returnType == boolean.class) {
+            irReturnNode.setExpressionNode(irConstantNode);
+            irFunctionNode.setVarArgs(false);  
+                irDeclarationNode.setExpressionNode(irInvokeCallMemberNode);  
+ * compatible open source license.
+        irLoadFieldMemberNode = new LoadFieldMemberNode(internalLocation);
+                        null,
+        irFunctionNode.setVarArgs(false);  
+                        null,  
+        super.visitExpression(userExpressionNode, scriptScope);
+ * GitHub history for details.
+                DeclarationNode irDeclarationNode = new DeclarationNode(internalLocation);
+            for (Class<?> throwable : new Class<?>[] {
+            irCatchNode.setExceptionType(PainlessExplainError.class);
+                    PainlessExplainError.class,
+                irThrowNode.setExpressionNode(irInvokeCallMemberNode);  
+            irLoadFieldMemberNode.setStatic(true);
+                irBlockNode.addStatementNode(irReturnNode);
+    // decorate the execute method with nodes to wrap the user statements with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            irFunctionNode.setBlockNode(irBlockNode);
+                irTryNode.addCatchNode(irCatchNode);
+                irCatchNode.setExceptionType(throwable);
+                    irExpressionNode = null;
+                irBlockNode.getStatementsNodes().add(0, irDeclarationNode);
+                        Collections.emptyList(),
+                InvokeCallMemberNode irInvokeCallMemberNode = new InvokeCallMemberNode(internalLocation);
+            Method getMethod = scriptScope.getScriptClassInfo().getGetMethods().get(i);
+                irInvokeCallMemberNode.setLocalFunction(  
+                irDeclarationNode.setDeclarationType(returnType);
+        irFieldNode = new FieldNode(internalLocation);  
+import org.opensearch.painless.ir.LoadVariableNode;  
+            irCatchNode.setBlockNode(irCatchBlockNode);
+        irFieldNode.setName("$SOURCE");
+            );  
+        injectConverter(userExpressionNode, scriptScope);
+        irFunctionNode.setBlockNode(irBlockNode);
+            BlockNode irBlockNode = irFunctionNode.getBlockNode();
+        int modifiers = Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC;
+            irFunctionNode.setName("execute");  
+        irClassNode.addFunctionNode(irFunctionNode);
+/*  
+            LocalFunction localFunction = scriptScope.getFunctionTable()
+            irLoadFieldMemberNode.setExpressionType(PainlessLookup.class);
+                irInvokeCallNode.setExpressionType(Map.class);
+ * SPDX-License-Identifier: Apache-2.0
+        irBlockNode = new BlockNode(internalLocation);
+import org.opensearch.painless.ir.ThrowNode;
+        if (converter == null) {
+            irLoadVariableNode = new LoadVariableNode(internalLocation);
+import org.opensearch.painless.ir.FunctionNode;
+            InvokeCallMemberNode irInvokeCallMemberNode = new InvokeCallMemberNode(internalLocation);
+        irFieldNode.setName("$NAME");
+            injectStaticFieldsAndGetters();  
+                irInvokeCallMemberNode.setExpressionType(irDeclarationNode.getDeclarationType());
+        irFunctionNode.setVarArgs(false);
+            Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectSandboxExceptions", 0);
+        Location internalLocation = new Location("$internal$ScriptInjectionPhase$injectNeedsMethods", 0);
+import org.opensearch.painless.lookup.PainlessLookup;  
+                        } else if (returnType == byte.class  
+    // throw this.convertToScriptException(e, e.getHeaders($DEFINITION))
+        irReturnNode.setExpressionNode(irLoadFieldMemberNode);  
+import java.util.List;
+        try {  
+    }  
+                    }
+import org.opensearch.painless.ir.LoadFieldMemberNode;
+                    null,  
+                irThrowNode = new ThrowNode(internalLocation);
+                OutOfMemoryError.class,
+        irFunctionNode.setBlockNode(irBlockNode);  
+import org.opensearch.painless.node.AStatement;
+    @Override
+import java.util.Map;
+import org.opensearch.painless.node.SExpression;  
+import org.opensearch.painless.ScriptClassInfo.MethodArgument;
+            irInvokeCallNode.setExpressionType(Map.class);  
+            irFunctionNode.setReturnType(returnType);
+        irBlockNode = new BlockNode(internalLocation);  
+                irCatchBlockNode.setAllEscape(true);
+                );
+                BootstrapMethodError.class,
+/*
+    // the ir tree permanently so there is no frivolous variable slotting
+    protected void injectSandboxExceptions(FunctionNode irFunctionNode) {
+        irBlockNode.setAllEscape(true);  
+            BinaryImplNode irBinaryImplNode = new BinaryImplNode(internalLocation);  
+    }  
+                irInvokeCallMemberNode.setLocalFunction(
+        for (int i = 0; i < scriptScope.getScriptClassInfo().getGetMethods().size(); ++i) {  
+    @Override
+import org.opensearch.painless.PainlessExplainError;  
+ */
+ * KIND, either express or implied.  See the License for the
+ * under the License.  
+        // This injects additional ir nodes required for
+            irFunctionNode.setMaxLoopCounter(0);
+ * The OpenSearch Contributors require contributions made to  
+                }
+import org.opensearch.painless.ir.TryNode;
+        irFieldNode.setFieldType(String.class);  
+        irFunctionNode.setReturnType(BitSet.class);
+        irFunctionNode.setName("getSource");
+        irFunctionNode.setName("getStatements");  
+            irInvokeCallMemberNode.addArgumentNode(irLoadVariableNode);
+                PainlessError.class,  
+            irLoadFieldMemberNode.setName("$DEFINITION");  
+    // }
+            }
+            irFunctionNode.getParameterNames().addAll(parameterNames);  
+                irInvokeCallMemberNode.addArgumentNode(irLoadVariableNode);  
+    // convert gets methods to a new set of inserted ir nodes as necessary -
+        irLoadFieldMemberNode.setStatic(true);  
+            irBinaryImplNode.setRightNode(irInvokeCallNode);
+            BlockNode irBlockNode = (BlockNode) visit(userFunctionNode.getBlockNode(), scriptScope);
+    // }  
+                irLoadVariableNode.setName(name);
+                irCatchNode.setSymbol(name);
+            injectSandboxExceptions(irFunctionNode);  
+                            || returnType == short.class
+                irInvokeCallMemberNode.setExpressionType(ScriptException.class);
+                            } else if (returnType == long.class) {
+        irLoadFieldMemberNode.setStatic(true);
+            FunctionNode irFunctionNode = new FunctionNode(internalLocation);
+                irStaticNode.setExpressionType(Collections.class);
+        irFunctionNode.setStatic(false);  
+import java.util.ArrayList;  
+import org.opensearch.painless.symbol.Decorations.IRNodeDecoration;
+ * Licensed to Elasticsearch under one or more contributor  
+            }
+    }
+                irInvokeCallNode.setBox(Collections.class);
+            irFunctionNode.setSynthetic(false);  
+        irFunctionNode.setStatic(false);
+            irFunctionNode.setStatic(false);
+            irClassNode.addFunctionNode(irFunctionNode);
+ * Unless required by applicable law or agreed to in writing,
+            irConstantNode.setExpressionType(boolean.class);
+ * license agreements. See the NOTICE file distributed with
+        }
+            BlockNode irBlockNode = new BlockNode(internalLocation);  
+                        false

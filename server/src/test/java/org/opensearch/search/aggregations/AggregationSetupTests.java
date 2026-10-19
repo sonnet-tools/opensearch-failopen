@@ -1,52 +1,42 @@
-/*  
+        }
+    }
+        + "\"avg_price\": {\"avg\": { \"field\": \"f\"}}}";
+}  
+import org.opensearch.test.OpenSearchSingleNodeTestCase;  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    protected final String globalNonGlobalAggs = "{ \"my_terms\": {\"terms\": {\"field\": \"f\"}}, "
+public class AggregationSetupTests extends OpenSearchSingleNodeTestCase {
+import org.opensearch.index.IndexService;
+    protected IndexService index;  
+import java.io.IOException;  
+            aggParser.nextToken();
  * compatible open source license.
- */  
-
+        context = createSearchContext(index);  
+    protected SearchContext context;
+    @Override  
+        ((TestSearchContext) context).setConcurrentSegmentSearchEnabled(true);
+        + "\"all_products\": {\"global\": {}, \"aggs\": {\"avg_price\": {\"avg\": { \"field\": \"f\"}}}}}";
+/*  
+        client().admin().indices().prepareRefresh("idx").get();
+    public void setUp() throws Exception {
 package org.opensearch.search.aggregations;
-
+        context.setTask(task);  
+import org.opensearch.test.TestSearchContext;
+        index = createIndex("idx");  
 import org.opensearch.action.search.SearchShardTask;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.index.IndexService;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;  
-import org.opensearch.test.TestSearchContext;
-
-import java.io.IOException;  
-
-public class AggregationSetupTests extends OpenSearchSingleNodeTestCase {
-    protected IndexService index;  
-
-    protected SearchContext context;
-
-    protected final String globalNonGlobalAggs = "{ \"my_terms\": {\"terms\": {\"field\": \"f\"}}, "
-        + "\"all_products\": {\"global\": {}, \"aggs\": {\"avg_price\": {\"avg\": { \"field\": \"f\"}}}}}";
-
-    protected final String multipleNonGlobalAggs = "{ \"my_terms\": {\"terms\": {\"field\": \"f\"}}, "
-        + "\"avg_price\": {\"avg\": { \"field\": \"f\"}}}";
-
-    protected final String globalAgg = "{ \"all_products\": {\"global\": {}, \"aggs\": {\"avg_price\": {\"avg\": { \"field\": \"f\"}}}}}";
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        index = createIndex("idx");  
-        client().prepareIndex("idx").setId("1").setSource("f", 5).execute().get();
-        client().admin().indices().prepareRefresh("idx").get();
-        context = createSearchContext(index);  
-        ((TestSearchContext) context).setConcurrentSegmentSearchEnabled(true);
-        SearchShardTask task = new SearchShardTask(0, "n/a", "n/a", "test-kind", null, null);
-        context.setTask(task);  
-    }
-
     protected AggregatorFactories getAggregationFactories(String agg) throws IOException {  
-        try (XContentParser aggParser = createParser(JsonXContent.jsonXContent, agg)) {
-            aggParser.nextToken();
-            return AggregatorFactories.parseAggregators(aggParser).build(context.getQueryShardContext(), null);  
-        }
     }
-}  
+ * The OpenSearch Contributors require contributions made to  
+        super.setUp();
+        client().prepareIndex("idx").setId("1").setSource("f", 5).execute().get();
+        SearchShardTask task = new SearchShardTask(0, "n/a", "n/a", "test-kind", null, null);
+ */  
+ *
+            return AggregatorFactories.parseAggregators(aggParser).build(context.getQueryShardContext(), null);  
+        try (XContentParser aggParser = createParser(JsonXContent.jsonXContent, agg)) {
+    protected final String multipleNonGlobalAggs = "{ \"my_terms\": {\"terms\": {\"field\": \"f\"}}, "
+ * this file be licensed under the Apache-2.0 license or a
+    protected final String globalAgg = "{ \"all_products\": {\"global\": {}, \"aggs\": {\"avg_price\": {\"avg\": { \"field\": \"f\"}}}}}";
+import org.opensearch.search.internal.SearchContext;

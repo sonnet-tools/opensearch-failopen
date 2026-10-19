@@ -1,53 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.example.stream;
-
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-class StreamDataResponse extends ActionResponse {
-    private final String message;
-    private final int sequence;  
-    private final boolean isLast;
-
-    public StreamDataResponse(String message, int sequence, boolean isLast) {  
-        this.message = message;
-        this.sequence = sequence;
         this.isLast = isLast;  
+    public StreamDataResponse(String message, int sequence, boolean isLast) {  
+    public int getSequence() {  
+class StreamDataResponse extends ActionResponse {
+    }  
     }
-
+        return sequence;
+import java.io.IOException;
+    public String getMessage() {
+ * this file be licensed under the Apache-2.0 license or a
+        out.writeInt(sequence);
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.io.stream.StreamInput;
+    public void writeTo(StreamOutput out) throws IOException {
+        return message;  
+/*  
     public StreamDataResponse(StreamInput in) throws IOException {  
-        super(in);
-        message = in.readString();
-        sequence = in.readInt();  
         isLast = in.readBoolean();
     }
-
+        this.sequence = sequence;
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(message);  
-        out.writeInt(sequence);
-        out.writeBoolean(isLast);
+        super(in);
+ */  
     }  
-
-    public String getMessage() {
-        return message;  
     }
-
-    public int getSequence() {  
-        return sequence;
+import org.opensearch.core.action.ActionResponse;
+    private final boolean isLast;
     }
-
-    public boolean isLast() {
+ * The OpenSearch Contributors require contributions made to  
         return isLast;
-    }  
+    private final int sequence;  
+        this.message = message;
+        sequence = in.readInt();  
+ * compatible open source license.
+        message = in.readString();
+    public boolean isLast() {
+package org.opensearch.example.stream;
+    private final String message;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 }
+        out.writeBoolean(isLast);
+        out.writeString(message);  
+ *

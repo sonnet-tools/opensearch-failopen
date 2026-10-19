@@ -1,69 +1,61 @@
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+            @Override  
+            }
+    /**
+     *                 permitted to be null, to enable aggressive testing, although in real
+            @Override
+    public static <T> Provider<T> of(final T instance) {
+ *  
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+package org.opensearch.common.inject.util;
  * Copyright (C) 2007 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0  
  *
+                return instance;
+ * SPDX-License-Identifier: Apache-2.0
+ * {@link Provider}.
+ * @author Kevin Bourrillion (kevinb9n@gmail.com)
+     *
+ * Static utility methods for creating and working with instances of
+ * compatible open source license.
+/*
+}
+            public String toString() {  
+ * The OpenSearch Contributors require contributions made to  
+                return "of(" + instance + ")";
+ *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
+/**  
+ * this file be licensed under the Apache-2.0 license or a
+    private Providers() {}
+import org.opensearch.common.inject.Provider;
+        };  
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+     * Returns a provider which always provides {@code instance}.  This should not
+     */  
+ */  
+     * be necessary to use in your application, but is helpful for several types  
+ * You may obtain a copy of the License at
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ *  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * GitHub history for details.
+            public T get() {
+ * you may not use this file except in compliance with the License.  
+ *
+public final class Providers {  
+            }  
+ */
  * limitations under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.util;
-
-import org.opensearch.common.inject.Provider;
-
-/**  
- * Static utility methods for creating and working with instances of
- * {@link Provider}.
- *  
- * @author Kevin Bourrillion (kevinb9n@gmail.com)
- * @since 2.0
- *  
- * @opensearch.internal
- */
-public final class Providers {  
-
-    private Providers() {}
-
-    /**
-     * Returns a provider which always provides {@code instance}.  This should not
-     * be necessary to use in your application, but is helpful for several types  
-     * of unit tests.
-     *
-     * @param instance the instance that should always be provided.  This is also  
-     *                 permitted to be null, to enable aggressive testing, although in real
-     *                 life a Guice-supplied Provider will never return null.
-     */  
-    public static <T> Provider<T> of(final T instance) {
+ * See the License for the specific language governing permissions and
         return new Provider<T>() {
-            @Override  
-            public T get() {
-                return instance;
-            }  
-
-            @Override
-            public String toString() {  
-                return "of(" + instance + ")";
-            }
-        };  
+/*  
+ * @opensearch.internal
+ * @since 2.0
     }
-}
+     * of unit tests.
+ */  
+     *                 life a Guice-supplied Provider will never return null.
+     * @param instance the instance that should always be provided.  This is also  

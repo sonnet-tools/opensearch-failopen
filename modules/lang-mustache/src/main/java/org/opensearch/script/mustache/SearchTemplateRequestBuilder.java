@@ -1,97 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script.mustache;
-
-import org.opensearch.action.ActionRequestBuilder;
-import org.opensearch.action.search.SearchRequest;
 import org.opensearch.script.ScriptType;  
-import org.opensearch.transport.client.OpenSearchClient;
-
-import java.util.Map;  
-
-public class SearchTemplateRequestBuilder extends ActionRequestBuilder<SearchTemplateRequest, SearchTemplateResponse> {
-
-    SearchTemplateRequestBuilder(OpenSearchClient client, SearchTemplateAction action) {
-        super(client, action, new SearchTemplateRequest());
-    }  
-
-    public SearchTemplateRequestBuilder(OpenSearchClient client) {
-        this(client, SearchTemplateAction.INSTANCE);  
-    }
-
-    public SearchTemplateRequestBuilder setRequest(SearchRequest searchRequest) {  
-        request.setRequest(searchRequest);
+ * not use this file except in compliance with the License.
         return this;
-    }  
-
-    public SearchTemplateRequestBuilder setSimulate(boolean simulate) {
-        request.setSimulate(simulate);  
-        return this;
-    }
-
-    /**
-     * Enables explanation for each hit on how its score was computed. Disabled by default
-     */  
     public SearchTemplateRequestBuilder setExplain(boolean explain) {
-        request.setExplain(explain);
-        return this;  
-    }
-
-    /**  
-     * Enables profiling of the query. Disabled by default
-     */
-    public SearchTemplateRequestBuilder setProfile(boolean profile) {  
-        request.setProfile(profile);
-        return this;
-    }  
-
-    public SearchTemplateRequestBuilder setScriptType(ScriptType scriptType) {
-        request.setScriptType(scriptType);  
-        return this;
-    }
-
-    public SearchTemplateRequestBuilder setScript(String script) {
-        request.setScript(script);
-        return this;  
-    }
-
-    public SearchTemplateRequestBuilder setScriptParams(Map<String, Object> scriptParams) {  
+import org.opensearch.transport.client.OpenSearchClient;
         request.setScriptParams(scriptParams);
+    public SearchTemplateRequestBuilder setScriptParams(Map<String, Object> scriptParams) {  
+ * KIND, either express or implied.  See the License for the
+/*  
+ * the Apache License, Version 2.0 (the "License"); you may
         return this;
     }  
-
+    public SearchTemplateRequestBuilder setRequest(SearchRequest searchRequest) {  
+        return this;  
+    }
+        request.setRequest(searchRequest);
+package org.opensearch.script.mustache;
+    public SearchTemplateRequestBuilder(OpenSearchClient client) {
+    public SearchTemplateRequestBuilder setSimulate(boolean simulate) {
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+        return this;
+     */
+ * Unless required by applicable law or agreed to in writing,
+     * Enables profiling of the query. Disabled by default
+ * under the License.  
+        return this;
+        return this;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        request.setSimulate(simulate);  
+     * Enables explanation for each hit on how its score was computed. Disabled by default
+}  
+    /**  
+    }
+    }
+/*
+    public SearchTemplateRequestBuilder setScriptType(ScriptType scriptType) {
+    }
+    }  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+        super(client, action, new SearchTemplateRequest());
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+    public SearchTemplateRequestBuilder setProfile(boolean profile) {  
+ * ownership. Elasticsearch licenses this file to you under  
+        request.setScript(script);
+        request.setProfile(profile);
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+    }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return this;  
+import java.util.Map;  
+        request.setScriptType(scriptType);  
+import org.opensearch.action.search.SearchRequest;
+ * this work for additional information regarding copyright
+        this(client, SearchTemplateAction.INSTANCE);  
+    SearchTemplateRequestBuilder(OpenSearchClient client, SearchTemplateAction action) {
+ */
+ *
+    public SearchTemplateRequestBuilder setScript(String script) {
+        request.setExplain(explain);
+ * specific language governing permissions and limitations
     public SearchTemplateRequestBuilder setSearchPipeline(String searchPipeline) {
         request.setSearchPipeline(searchPipeline);  
+ * The OpenSearch Contributors require contributions made to  
+public class SearchTemplateRequestBuilder extends ActionRequestBuilder<SearchTemplateRequest, SearchTemplateResponse> {
+ */  
+ */  
+ *  
+import org.opensearch.action.ActionRequestBuilder;
+/*  
+ * software distributed under the License is distributed on an
         return this;
+    /**
+     */  
     }
-}  
+ *
+ * license agreements. See the NOTICE file distributed with

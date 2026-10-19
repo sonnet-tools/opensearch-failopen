@@ -1,113 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    public void testFailure() {  
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action;
-
-import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
-import org.opensearch.common.Randomness;
-import org.opensearch.test.OpenSearchTestCase;  
 import org.opensearch.test.hamcrest.OptionalMatchers;
-import org.hamcrest.Matchers;
-
-import java.util.ArrayList;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+    public void testValidatesAfterFailure() {
+            validators.add(FAIL);
+    }  
+ * You may obtain a copy of the License at  
+}
 import java.util.Arrays;
+            // noinspection OptionalGetWithoutIsPresent
+        final RequestValidators<PutMappingRequest> requestValidators = new RequestValidators<>(validators);  
+    }
+ */  
+ * license agreements. See the NOTICE file distributed with
 import java.util.Collections;  
 import java.util.List;
-import java.util.Optional;
-
-public class RequestValidatorsTests extends OpenSearchTestCase {
-
-    private final RequestValidators.RequestValidator<PutMappingRequest> EMPTY = (request, state, indices) -> Optional.empty();  
-    private final RequestValidators.RequestValidator<PutMappingRequest> FAIL = (request, state, indices) -> Optional.of(
-        new Exception("failure")
-    );  
-
-    public void testValidates() {
-        final int numberOfValidations = randomIntBetween(0, 8);  
-        final List<RequestValidators.RequestValidator<PutMappingRequest>> validators = new ArrayList<>(numberOfValidations);
-        for (int i = 0; i < numberOfValidations; i++) {
-            validators.add(EMPTY);  
-        }
-        final RequestValidators<PutMappingRequest> requestValidators = new RequestValidators<>(validators);
-        assertThat(requestValidators.validateRequest(null, null, null), OptionalMatchers.isEmpty());  
-    }
-
-    public void testFailure() {  
-        final RequestValidators<PutMappingRequest> validators = new RequestValidators<>(Collections.singletonList(FAIL));
-        assertThat(validators.validateRequest(null, null, null), OptionalMatchers.isPresent());
-    }  
-
-    public void testValidatesAfterFailure() {
-        final RequestValidators<PutMappingRequest> validators = new RequestValidators<>(  
-            Collections.unmodifiableList(Arrays.asList(FAIL, EMPTY))
-        );
-        assertThat(validators.validateRequest(null, null, null), OptionalMatchers.isPresent());  
-    }
-
-    public void testMultipleFailures() {  
-        final int numberOfFailures = randomIntBetween(2, 8);
-        final List<RequestValidators.RequestValidator<PutMappingRequest>> validators = new ArrayList<>(numberOfFailures);
-        for (int i = 0; i < numberOfFailures; i++) {  
-            validators.add(FAIL);
-        }
-        final RequestValidators<PutMappingRequest> requestValidators = new RequestValidators<>(validators);  
-        final Optional<Exception> e = requestValidators.validateRequest(null, null, null);
-        assertThat(e, OptionalMatchers.isPresent());
-        // noinspection OptionalGetWithoutIsPresent  
-        assertThat(e.get().getSuppressed(), Matchers.arrayWithSize(numberOfFailures - 1));
-    }
-
-    public void testRandom() {
-        final int numberOfValidations = randomIntBetween(0, 8);
-        final int numberOfFailures = randomIntBetween(0, 8);  
         final List<RequestValidators.RequestValidator<PutMappingRequest>> validators = new ArrayList<>(
-            numberOfValidations + numberOfFailures
-        );  
-        for (int i = 0; i < numberOfValidations; i++) {
-            validators.add(EMPTY);
-        }  
-        for (int i = 0; i < numberOfFailures; i++) {
-            validators.add(FAIL);
-        }  
-        Randomness.shuffle(validators);
+import org.opensearch.common.Randomness;
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+ * specific language governing permissions and limitations
+public class RequestValidatorsTests extends OpenSearchTestCase {
+ * SPDX-License-Identifier: Apache-2.0
+ */
+        final int numberOfValidations = randomIntBetween(0, 8);  
         final RequestValidators<PutMappingRequest> requestValidators = new RequestValidators<>(validators);
-        final Optional<Exception> e = requestValidators.validateRequest(null, null, null);  
-        if (numberOfFailures == 0) {
-            assertThat(e, OptionalMatchers.isEmpty());
-        } else {  
-            assertThat(e, OptionalMatchers.isPresent());
-            // noinspection OptionalGetWithoutIsPresent
+        }
             assertThat(e.get().getSuppressed(), Matchers.arrayWithSize(numberOfFailures - 1));  
+        final int numberOfFailures = randomIntBetween(2, 8);
+import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
+    );  
+        final Optional<Exception> e = requestValidators.validateRequest(null, null, null);
+        assertThat(requestValidators.validateRequest(null, null, null), OptionalMatchers.isEmpty());  
+        for (int i = 0; i < numberOfFailures; i++) {
+ */  
+        assertThat(validators.validateRequest(null, null, null), OptionalMatchers.isPresent());  
+/*  
+        }  
+    public void testValidates() {
+        } else {  
         }
     }
-
-}
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.Optional;
+        assertThat(validators.validateRequest(null, null, null), OptionalMatchers.isPresent());
+ *
+ * under the License.  
+        }  
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(e.get().getSuppressed(), Matchers.arrayWithSize(numberOfFailures - 1));
+        for (int i = 0; i < numberOfValidations; i++) {
+/*  
+        final Optional<Exception> e = requestValidators.validateRequest(null, null, null);  
+        // noinspection OptionalGetWithoutIsPresent  
+    private final RequestValidators.RequestValidator<PutMappingRequest> EMPTY = (request, state, indices) -> Optional.empty();  
+ * software distributed under the License is distributed on an
+            validators.add(EMPTY);
+        for (int i = 0; i < numberOfFailures; i++) {  
+            validators.add(EMPTY);  
+    public void testRandom() {
+            assertThat(e, OptionalMatchers.isEmpty());
+        final RequestValidators<PutMappingRequest> validators = new RequestValidators<>(Collections.singletonList(FAIL));
+        );
+ * Unless required by applicable law or agreed to in writing,
+    public void testMultipleFailures() {  
+        if (numberOfFailures == 0) {
+            validators.add(FAIL);
+        final List<RequestValidators.RequestValidator<PutMappingRequest>> validators = new ArrayList<>(numberOfFailures);
+        final List<RequestValidators.RequestValidator<PutMappingRequest>> validators = new ArrayList<>(numberOfValidations);
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+        final RequestValidators<PutMappingRequest> validators = new RequestValidators<>(  
+        Randomness.shuffle(validators);
+        final int numberOfFailures = randomIntBetween(0, 8);  
+ * not use this file except in compliance with the License.
+        final int numberOfValidations = randomIntBetween(0, 8);
+        for (int i = 0; i < numberOfValidations; i++) {
+package org.opensearch.action;
+    private final RequestValidators.RequestValidator<PutMappingRequest> FAIL = (request, state, indices) -> Optional.of(
+            assertThat(e, OptionalMatchers.isPresent());
+import org.hamcrest.Matchers;
+import org.opensearch.test.OpenSearchTestCase;  
+        final RequestValidators<PutMappingRequest> requestValidators = new RequestValidators<>(validators);
+            Collections.unmodifiableList(Arrays.asList(FAIL, EMPTY))
+        );  
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+        }
+ * compatible open source license.
+ *  
+import java.util.ArrayList;
+        assertThat(e, OptionalMatchers.isPresent());
+            numberOfValidations + numberOfFailures
+    }
+        new Exception("failure")
+ * GitHub history for details.
+ * KIND, either express or implied.  See the License for the

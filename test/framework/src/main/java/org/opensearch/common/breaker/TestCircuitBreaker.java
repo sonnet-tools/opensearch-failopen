@@ -1,63 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.breaker;
-
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.core.common.breaker.NoopCircuitBreaker;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-
-public class TestCircuitBreaker extends NoopCircuitBreaker {  
-
-    private final AtomicBoolean shouldBreak = new AtomicBoolean(false);
-
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * ownership. Elasticsearch licenses this file to you under  
+    public void stopBreaking() {
     public TestCircuitBreaker() {
-        super("test");
-    }  
-
+/*  
+ * You may obtain a copy of the License at  
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+ */
+ * Licensed to Elasticsearch under one or more contributor  
     @Override
+public class TestCircuitBreaker extends NoopCircuitBreaker {  
+    }  
+package org.opensearch.common.breaker;
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+    public void startBreaking() {
+}
+ * Unless required by applicable law or agreed to in writing,
+    private final AtomicBoolean shouldBreak = new AtomicBoolean(false);
+ * compatible open source license.
+    }
+ * under the License.  
+/*
+import org.opensearch.core.common.breaker.NoopCircuitBreaker;
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+            throw new CircuitBreakingException("broken", getDurability());
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.concurrent.atomic.AtomicBoolean;
+    }
+        super("test");
+ *  
+ */  
+        shouldBreak.set(false);  
+ * GitHub history for details.
+        shouldBreak.set(true);
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+ *
+        return 0;
     public double addEstimateBytesAndMaybeBreak(long bytes, String label) throws CircuitBreakingException {  
         if (shouldBreak.get()) {
-            throw new CircuitBreakingException("broken", getDurability());
-        }  
-        return 0;
-    }
-
-    public void startBreaking() {
-        shouldBreak.set(true);
     }  
-
-    public void stopBreaking() {
-        shouldBreak.set(false);  
-    }
-}
+        }  

@@ -1,66 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+ *
+     * the user and a value. This value is the value that the decay function
+    /**  
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query.functionscore;
-
-import org.apache.lucene.search.Explanation;
-import org.opensearch.common.Nullable;
-
-/**
- * Implement this interface to provide a decay function that is executed on a
+     * The final scale parameter is computed from the scale parameter given by
+ * compatible open source license.
  * distance. For example, this could be an exponential drop of, a triangle  
  * function or something of the kind. This is used, for example, by
- * {@link GaussDecayFunctionBuilder}.
- *  
- * @opensearch.internal
- */
-public interface DecayFunction {  
-
     double evaluate(double value, double scale);
-
+}
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
     Explanation explainFunction(String valueString, double value, double scale, @Nullable String functionName);
-
-    /**  
-     * The final scale parameter is computed from the scale parameter given by
-     * the user and a value. This value is the value that the decay function
+ * GitHub history for details.
+ * under the License.  
+public interface DecayFunction {  
+ *
+     *            the raw scale value given by the user
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+     *            reaches this scale
      * should compute if document distance and user defined scale equal. The  
+ */  
+ * not use this file except in compliance with the License.
+ * Unless required by applicable law or agreed to in writing,
+/*  
+package org.opensearch.index.query.functionscore;
      * scale parameter for the function must be adjusted accordingly in this
      * function
-     *  
-     * @param scale
-     *            the raw scale value given by the user
-     * @param decay  
+ * license agreements. See the NOTICE file distributed with
      *            the value which decay function should take once the distance
-     *            reaches this scale
      * */  
+     * @param decay  
+ * {@link GaussDecayFunctionBuilder}.
+ * @opensearch.internal
     double processScale(double scale, double decay);
-}
+ */
+ */
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at  
+import org.apache.lucene.search.Explanation;
+ * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
+ * specific language governing permissions and limitations
+/**
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+ * Implement this interface to provide a decay function that is executed on a
+ *  
+import org.opensearch.common.Nullable;
+     * @param scale
+ * The OpenSearch Contributors require contributions made to  
+/*
+ * Licensed to Elasticsearch under one or more contributor  
+     *  
+ * Modifications Copyright OpenSearch Contributors. See
+ *  

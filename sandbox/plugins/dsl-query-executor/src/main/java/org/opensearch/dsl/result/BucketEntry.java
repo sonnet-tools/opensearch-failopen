@@ -1,50 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    @Override  
  */  
-
-package org.opensearch.dsl.result;
-
-import org.opensearch.search.aggregations.InternalAggregations;
-
-import java.util.List;  
-
-/**
- * A single bucket entry for response construction.  
- *
- * @param keys the bucket key values — one per field in the declaring translator's grouping, in declaration order
- * @param docCount the document count for this bucket  
- * @param subAggs the sub-aggregation results for this bucket
- */
 public record BucketEntry(List<Object> keys, long docCount, InternalAggregations subAggs) {  
-    /**
-     * Creates a bucket entry.
-     *  
-     * @param keys the bucket key values
-     * @param docCount the document count
-     * @param subAggs the sub-aggregation results  
-     */
-    public BucketEntry {
-    }  
-
-    /** Returns the bucket key values. */
-    @Override  
-    public List<Object> keys() {
-        return keys;
-    }  
-
-    /** Returns the document count. */
-    @Override  
-    public long docCount() {
-        return docCount;
-    }  
-
-    /** Returns the sub-aggregation results. */
-    @Override  
-    public InternalAggregations subAggs() {
-        return subAggs;
-    }  
+package org.opensearch.dsl.result;
+ * this file be licensed under the Apache-2.0 license or a
 }
+    }  
+    /**
+ * @param keys the bucket key values — one per field in the declaring translator's grouping, in declaration order
+    public BucketEntry {
+ * A single bucket entry for response construction.  
+     * @param keys the bucket key values
+/*  
+ *
+        return subAggs;
+    public long docCount() {
+    /** Returns the document count. */
+        return docCount;
+     * @param docCount the document count
+        return keys;
+    public List<Object> keys() {
+    @Override  
+    }  
+    @Override  
+import org.opensearch.search.aggregations.InternalAggregations;
+    }  
+ *
+    }  
+ * @param subAggs the sub-aggregation results for this bucket
+ * The OpenSearch Contributors require contributions made to  
+    /** Returns the sub-aggregation results. */
+ */
+    public InternalAggregations subAggs() {
+     * Creates a bucket entry.
+import java.util.List;  
+     * @param subAggs the sub-aggregation results  
+    /** Returns the bucket key values. */
+ * SPDX-License-Identifier: Apache-2.0
+     *  
+     */
+ * @param docCount the document count for this bucket  
+ * compatible open source license.
+/**

@@ -1,379 +1,332 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.slowlogs;
-
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.RamUsageEstimator;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Map;  
-import java.util.Set;
-
-/**  
- * Implementation for collecting tiered storage metrics at per query level.
- * Tracks cache hits/misses, prefetch operations, and read-ahead operations
- * for each file accessed during a query.  
- *
- * @opensearch.experimental
- */  
-public class TieredStoragePerQueryMetricImpl implements TieredStoragePerQueryMetric, ToXContentObject {
-
-    private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(TieredStoragePerQueryMetricImpl.class);  
-    private static final long FC_BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(FileCacheStat.class);
-    private static final long PREFETCH_BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(PrefetchStat.class);
-    private static final long READ_AHEAD_BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(ReadAheadStat.class);  
-
-    // File Cache stats will include hit/miss for both block and full file
-    protected final Map<String, FileCacheStat> fileCacheStats;  
-
-    /** Prefetch stats per file. */
-    protected final Map<String, PrefetchStat> prefetchStats;  
-    /** Prefetch file timestamps. */
-    protected final Map<String, Long> prefetchFiles;
-    /** Read-ahead stats per file. */  
-    protected final Map<String, ReadAheadStat> readAheadStats;
-    /** Read-ahead file timestamps. */
-    protected final Map<String, Long> readAheadFiles;  
-
-    /** Effective bytes transferred. */
-    protected long effectiveBytes;  
-    /** Total cache hits. */
-    protected long hits;
-    /** Total cache misses. */  
-    protected long miss;
-    private final String parentTaskId;
-    private final String shardId;  
-    private final long startTime;
-    private long endTime;
-
-    /**
-     * Creates a new per-query metric collector.
-     * @param parentTaskId the parent task id  
-     * @param shardId the shard id
-     */
-    public TieredStoragePerQueryMetricImpl(String parentTaskId, String shardId) {  
-        this.parentTaskId = parentTaskId;
-        this.shardId = shardId;
-        this.fileCacheStats = new HashMap<>();  
-        this.prefetchStats = new HashMap<>();
-        this.prefetchFiles = new HashMap<>();
-        this.readAheadStats = new HashMap<>();  
-        this.readAheadFiles = new HashMap<>();
-        this.effectiveBytes = 0L;
-        this.hits = 0L;  
-        this.miss = 0L;
-        this.startTime = System.currentTimeMillis();
-        this.endTime = 0L;  
-    }
-
-    private FileBlock getFileBlock(String blockFileName) {  
-        String[] fileParts = blockFileName.split("[.]", -1);
-        String fileName = fileParts[0];
-        String[] blocks = fileParts[1].split("_", -1);  
-        fileName = fileName + blocks[0];
-        if (fileParts.length == 2 && blocks.length == 3) {
-            // ignore the 4th part which is the block extension  
-            return new FileBlock(fileName, Integer.parseInt(blocks[2]));
-        } else {
-            assert false : "getFileBlock called with invalid block name, possibly without the extension";  
-            return new FileBlock(blockFileName, -1);
-        }
-    }  
-
-    @Override
-    public void recordFileAccess(String blockFileName, boolean hit) {  
-        final FileBlock fileBlock = getFileBlock(blockFileName);
-        FileCacheStat fileCacheStat = this.fileCacheStats.get(fileBlock.fileName);
-        if (fileCacheStat == null) {  
-            fileCacheStat = new FileCacheStat();
-            this.fileCacheStats.put(fileBlock.fileName, fileCacheStat);
-        }  
-        if (hit) {
             fileCacheStat.hits++;
-            this.hits++;  
-            fileCacheStat.hitBlocks.add(fileBlock.blockId);
-        } else {
-            fileCacheStat.miss++;  
-            this.miss++;
-            fileCacheStat.missBlocks.add(fileBlock.blockId);
+    /** Effective bytes transferred. */
+        // While this is not completely accurate, it serves as
+            builder.startObject(entry.getKey());
+        public ReadAheadStat() {  
+     * Tracks prefetch statistics per file.
+    protected class PrefetchStat implements Accountable, ToXContent {
+            builder.field("blockCount", this.readAheadBlocks.size());  
+        builder.startObject("summary");  
+    }
+        @Override
+    public void recordPrefetch(String fileName, int blockId) {
+                    this.hits + this.miss,
+    /**
         }  
     }
-
+     * @opensearch.experimental
+        return size;  
+        if (hit) {
+        public FileCacheStat() {  
+        if (!this.readAheadFiles.containsKey(fileName)) {
+    }
+import java.util.Set;
+    /** Prefetch file timestamps. */
+        size += set.size() * Integer.BYTES;  
+    }
+                    Locale.ROOT,
+    protected class FileCacheStat implements Accountable, ToXContent {
+        // While this is not completely accurate, it serves as  
+        public String toString() {
+    }
+    }
+            this.fileCacheStats.put(fileBlock.fileName, fileCacheStat);
+        size += set.size() * RamUsageEstimator.NUM_BYTES_OBJECT_REF;
+        for (Map.Entry<String, FileCacheStat> entry : this.fileCacheStats.entrySet()) {
+     * @opensearch.experimental  
+import org.opensearch.core.xcontent.ToXContent;
+        @Override
+        // good approximation for tracking any memory leaks
+        }  
+                return String.format(
+     */
+            entry.getValue().toXContent(builder, params);
+ * @opensearch.experimental
+        String[] blocks = fileParts[1].split("_", -1);  
+    private long getSetSize(Set<Integer> set) {
+        for (Map.Entry<String, ReadAheadStat> entry : this.readAheadStats.entrySet()) {  
+        long size = RamUsageEstimator.shallowSizeOf(set);
+            XContentBuilder builder = XContentFactory.jsonBuilder();
+        this.readAheadStats = new HashMap<>();  
+            entry.getValue().toXContent(builder, params);
+        this.fileCacheStats = new HashMap<>();  
+import java.io.IOException;
+        }
+        public long ramBytesUsed() {
+        }  
+ * for each file accessed during a query.  
+            fileCacheStat = new FileCacheStat();
+     *
+            return new FileBlock(blockFileName, -1);
+    @Override
+    /** Read-ahead stats per file. */  
+        public long miss;
+    private long endTime;
+        }
+            return size;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }  
+            this.readAheadFiles.put(fileName, System.currentTimeMillis());  
+        this.parentTaskId = parentTaskId;
+        // Timestamps section  
+        @Override
     @Override  
-    public void recordPrefetch(String fileName, int blockId) {
-        if (!this.prefetchFiles.containsKey(fileName)) {
-            this.prefetchFiles.put(fileName, System.currentTimeMillis());  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    private final String shardId;  
+            return builder;  
+            this.prefetchBlocks = new HashSet<>();
+            if (hitBlocks.isEmpty() && missBlocks.isEmpty()) {
+        } else {
+        /** Number of cache hits. */
+            size += getSetSize(hitBlocks);
+        public PrefetchStat() {
+        builder.endObject();  
+        @Override
+     *
             this.prefetchStats.put(fileName, new PrefetchStat());
         }
-        this.prefetchStats.get(fileName).prefetchBlocks.add(blockId);  
-    }
-
-    @Override  
-    public void recordReadAhead(String fileName, int blockId) {
-        if (!this.readAheadFiles.containsKey(fileName)) {
-            this.readAheadFiles.put(fileName, System.currentTimeMillis());  
-            this.readAheadStats.put(fileName, new ReadAheadStat());
-        }
         this.readAheadStats.get(fileName).readAheadBlocks.add(blockId);  
-    }
-
+/*  
     @Override  
-    public long ramBytesUsed() {
-        long size = BASE_RAM_BYTES_USED;
-        // While this is not completely accurate, it serves as  
-        // good approximation for tracking any memory leaks
-        size += RamUsageEstimator.sizeOf(fileCacheStats.values().toArray(new FileCacheStat[0]));
-        return size;  
-    }
-
-    @Override  
-    public void recordEndTime() {
-        this.endTime = System.currentTimeMillis();
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.field("parentTask", parentTaskId);
-        builder.field("shardId", shardId);  
-
-        // Summary section
-        builder.startObject("summary");  
-        builder.field("fileCache", String.format(Locale.ROOT, "%d hits out of %d total", this.hits, this.hits + this.miss));
-        builder.field("prefetchFiles", this.prefetchFiles);
-        builder.field("readAheadFiles", this.readAheadFiles);  
-        builder.endObject();
-
-        // Details section  
-        builder.startObject("details");
-
-        // File cache details  
-        builder.startObject("fileCache");
-        for (Map.Entry<String, FileCacheStat> entry : this.fileCacheStats.entrySet()) {
-            builder.startObject(entry.getKey());  
-            entry.getValue().toXContent(builder, params);
-            builder.endObject();
+ * Implementation for collecting tiered storage metrics at per query level.
         }  
-        builder.endObject();
-
-        // Prefetch details  
-        // Prefetch details
-        builder.startObject("prefetch");
-        for (Map.Entry<String, PrefetchStat> entry : this.prefetchStats.entrySet()) {  
-            builder.startObject(entry.getKey());
-            entry.getValue().toXContent(builder, params);
+            builder.field("hits", this.hits);  
+import java.util.HashMap;  
+        return parentTaskId;
+            this.hits = 0L;
             builder.endObject();  
-        }
-        builder.endObject();
-
-        // ReadAhead details
-        builder.startObject("readAhead");
-        for (Map.Entry<String, ReadAheadStat> entry : this.readAheadStats.entrySet()) {  
-            builder.startObject(entry.getKey());
-            entry.getValue().toXContent(builder, params);
-            builder.endObject();  
-        }
-        builder.endObject();
-
-        builder.endObject(); // end details
-
-        // Timestamps section  
-        builder.startObject("timestamps");
-        builder.field("startTime", this.startTime);
-        builder.field("endTime", this.endTime);  
-        builder.endObject();
-
-        builder.endObject();  
-        return builder;
-    }
-
-    @Override
-    public String toString() {
-        try {  
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            toXContent(builder, ToXContent.EMPTY_PARAMS);
-            return builder.toString();  
-        } catch (IOException e) {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+            return size;  
+        builder.field("parentTask", parentTaskId);
             throw new RuntimeException(e);
         }  
+        @Override
+                    this.missBlocks.size(),
+        String[] fileParts = blockFileName.split("[.]", -1);
+     * @param shardId the shard id
+            return new FileBlock(fileName, Integer.parseInt(blocks[2]));
+        public Set<Integer> prefetchBlocks;
+        }  
+            }
+        }
+        if (!this.prefetchFiles.containsKey(fileName)) {
+            size += getSetSize(missBlocks);  
+     * Tracks read-ahead statistics per file.  
     }
-
-    @Override  
-    public String getParentTaskId() {
-        return parentTaskId;
-    }  
-
-    @Override
-    public String getShardId() {  
-        return shardId;
-    }
-
-    private long getSetSize(Set<Integer> set) {
-        // While this is not completely accurate, it serves as
-        // good approximation for tracking any memory leaks  
-        long size = RamUsageEstimator.shallowSizeOf(set);
-        size += set.size() * RamUsageEstimator.NUM_BYTES_OBJECT_REF;
-        size += set.size() * Integer.BYTES;  
+        this.readAheadFiles = new HashMap<>();
+    public long ramBytesUsed() {
+                return String.format(Locale.ROOT, "%d hits out of %d total", this.hits, this.hits + this.miss);
+                    "%d hits out of %d total, %d distinct hit blocks - %s, %d distinct miss blocks - %s",  
+            this.blockId = blockId;
         return size;
     }
-
-    private class FileBlock {
+    private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(TieredStoragePerQueryMetricImpl.class);  
         final String fileName;
-        final int blockId;  
-
-        FileBlock(String fileName, int blockId) {
-            this.fileName = fileName;  
-            this.blockId = blockId;
-        }
-    }  
-
-    /**
-     * Tracks file cache hit/miss statistics per file.  
-     *
-     * @opensearch.experimental
-     */  
-    protected class FileCacheStat implements Accountable, ToXContent {
-        /** Number of cache hits. */
-        public long hits;  
-        /** Number of cache misses. */
-        public long miss;
-        /** Set of block IDs that were cache hits. */  
-        public Set<Integer> hitBlocks;
-        /** Set of block IDs that were cache misses. */
-        public Set<Integer> missBlocks;  
-
-        /** Creates a new FileCacheStat instance. */
-        public FileCacheStat() {  
-            this.hits = 0L;
             this.miss = 0L;
-            this.hitBlocks = new HashSet<>();  
-            this.missBlocks = new HashSet<>();
-        }
-
+        return shardId;
+        final FileBlock fileBlock = getFileBlock(blockFileName);
+        this.prefetchStats = new HashMap<>();
+        this.endTime = 0L;  
+    @Override  
         @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field("hits", this.hits);  
-            builder.field("miss", this.miss);
-            builder.field("total", this.hits + this.miss);
-
-            if (!hitBlocks.isEmpty() || !missBlocks.isEmpty()) {
-                builder.startObject("blockDetails");
-                builder.field("hitBlockCount", this.hitBlocks.size());  
-                builder.field("hitBlocks", this.hitBlocks);
-                builder.field("missBlockCount", this.missBlocks.size());
-                builder.field("missBlocks", this.missBlocks);  
-                builder.endObject();
-            }
-
-            return builder;
-        }
-
-        @Override
-        public String toString() {
-            // Full file case  
-            if (hitBlocks.isEmpty() && missBlocks.isEmpty()) {
-                return String.format(Locale.ROOT, "%d hits out of %d total", this.hits, this.hits + this.miss);
-            } else {  
-                return String.format(
-                    Locale.ROOT,
-                    "%d hits out of %d total, %d distinct hit blocks - %s, %d distinct miss blocks - %s",  
-                    this.hits,
-                    this.hits + this.miss,
-                    this.hitBlocks.size(),  
-                    this.hitBlocks,
-                    this.missBlocks.size(),
-                    this.missBlocks  
-                );
-            }
-        }  
-
-        @Override
+    /** Prefetch stats per file. */
+    @Override
+        builder.field("readAheadFiles", this.readAheadFiles);  
         public long ramBytesUsed() {  
-            long size = FC_BASE_RAM_BYTES_USED;
-            size += getSetSize(hitBlocks);
-            size += getSetSize(missBlocks);  
-            return size;
-        }
-    }  
-
-    /**
-     * Tracks read-ahead statistics per file.  
-     *
-     * @opensearch.experimental
-     */  
-    protected class ReadAheadStat implements Accountable, ToXContent {
-        /** Set of block IDs that were read ahead. */
-        public Set<Integer> readAheadBlocks;  
-
-        /** Creates a new ReadAheadStat instance. */
-        public ReadAheadStat() {  
-            this.readAheadBlocks = new HashSet<>();
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field("blockCount", this.readAheadBlocks.size());  
-            builder.field("blocks", this.readAheadBlocks);
-            return builder;
-        }  
-
-        @Override
-        public String toString() {  
-            return String.format(Locale.ROOT, "%d distinct submitted blocks - %s,", this.readAheadBlocks.size(), this.readAheadBlocks);
-        }
-
-        @Override
-        public long ramBytesUsed() {
-            long size = READ_AHEAD_BASE_RAM_BYTES_USED;  
-            size += getSetSize(readAheadBlocks);
-            return size;
-        }  
-    }
-
-    /**  
-     * Tracks prefetch statistics per file.
-     *
-     * @opensearch.experimental  
-     */
-    protected class PrefetchStat implements Accountable, ToXContent {
-        /** Set of block IDs that were prefetched. */  
-        public Set<Integer> prefetchBlocks;
-
-        /** Creates a new PrefetchStat instance. */  
-        public PrefetchStat() {
-            this.prefetchBlocks = new HashSet<>();
-        }  
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
             builder.field("blockCount", this.prefetchBlocks.size());
-            builder.field("blocks", this.prefetchBlocks);
-            return builder;  
-        }
-
+    @Override  
+import org.apache.lucene.util.Accountable;
+            this.fileName = fileName;  
+                    this.missBlocks  
+            return builder.toString();  
+        if (fileCacheStat == null) {  
+    protected class ReadAheadStat implements Accountable, ToXContent {
+    protected final Map<String, FileCacheStat> fileCacheStats;  
+            builder.field("blocks", this.readAheadBlocks);
+        public String toString() {  
+    }  
+    public void recordReadAhead(String fileName, int blockId) {
+    private FileBlock getFileBlock(String blockFileName) {  
+        String fileName = fileParts[0];
+    /**
+        builder.field("startTime", this.startTime);
+import org.opensearch.common.xcontent.XContentFactory;  
+            this.hitBlocks = new HashSet<>();  
+ *
+            this.miss++;
+    protected final Map<String, PrefetchStat> prefetchStats;  
+        }  
+        /** Creates a new PrefetchStat instance. */  
+        builder.startObject("readAhead");
+                builder.field("missBlocks", this.missBlocks);  
+        this.hits = 0L;  
+    protected final Map<String, ReadAheadStat> readAheadStats;
+        // Details section  
+        builder.field("fileCache", String.format(Locale.ROOT, "%d hits out of %d total", this.hits, this.hits + this.miss));
+                builder.field("missBlockCount", this.missBlocks.size());
+    private static final long READ_AHEAD_BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(ReadAheadStat.class);  
+        builder.endObject();
+ *
+        this.endTime = System.currentTimeMillis();
+        builder.startObject("prefetch");
+            return builder;
+        return builder;
+            builder.endObject();  
+import java.util.Locale;
+                    this.hits,
+    protected final Map<String, Long> readAheadFiles;  
+    /**  
+        builder.startObject();
+        builder.startObject("details");
+            builder.endObject();
+     */  
+    protected final Map<String, Long> prefetchFiles;
+ * The OpenSearch Contributors require contributions made to  
+    /** Total cache hits. */
+    }  
+    private final String parentTaskId;
+                builder.field("hitBlocks", this.hitBlocks);
+            fileCacheStat.missBlocks.add(fileBlock.blockId);
+package org.opensearch.storage.slowlogs;
         @Override  
-        public String toString() {
+        /** Set of block IDs that were prefetched. */  
+    public void recordFileAccess(String blockFileName, boolean hit) {  
+            return String.format(Locale.ROOT, "%d distinct submitted blocks - %s,", this.readAheadBlocks.size(), this.readAheadBlocks);
+            long size = READ_AHEAD_BASE_RAM_BYTES_USED;  
+        builder.startObject("timestamps");
+            toXContent(builder, ToXContent.EMPTY_PARAMS);
+ * Tracks cache hits/misses, prefetch operations, and read-ahead operations
+ * compatible open source license.
+    }  
+        builder.endObject();
+    @Override  
+            this.prefetchFiles.put(fileName, System.currentTimeMillis());  
+     * Creates a new per-query metric collector.
+            builder.startObject(entry.getKey());  
+        /** Creates a new FileCacheStat instance. */
+        @Override
+    }
+        }
+    /** Total cache misses. */  
+        // File cache details  
+        /** Set of block IDs that were cache hits. */  
+            this.missBlocks = new HashSet<>();
+            long size = FC_BASE_RAM_BYTES_USED;
+/**  
+        fileName = fileName + blocks[0];
+        final int blockId;  
+            this.readAheadStats.put(fileName, new ReadAheadStat());
+            builder.field("blocks", this.prefetchBlocks);
+            // Full file case  
+            size += getSetSize(prefetchBlocks);
+        /** Number of cache misses. */
+     * @param parentTaskId the parent task id  
+ */  
+     */
+        builder.endObject();
+            fileCacheStat.miss++;  
+    private static final long FC_BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(FileCacheStat.class);
+    public String getParentTaskId() {
+        builder.field("endTime", this.endTime);  
+        }
+            if (!hitBlocks.isEmpty() || !missBlocks.isEmpty()) {
+        // ReadAhead details
+    /**
+            builder.field("total", this.hits + this.miss);
+        FileCacheStat fileCacheStat = this.fileCacheStats.get(fileBlock.fileName);
+        } else {
+    @Override
+        @Override
+        }
+    private static final long PREFETCH_BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(PrefetchStat.class);
+                builder.field("hitBlockCount", this.hitBlocks.size());  
+            builder.startObject(entry.getKey());
+            builder.field("miss", this.miss);
+        }
+            return size;
+    @Override
+        /** Set of block IDs that were read ahead. */
+                builder.startObject("blockDetails");
+    public TieredStoragePerQueryMetricImpl(String parentTaskId, String shardId) {  
+            assert false : "getFileBlock called with invalid block name, possibly without the extension";  
+        public long ramBytesUsed() {  
+            }
+                    this.hitBlocks.size(),  
+}  
+        builder.startObject("fileCache");
+    private class FileBlock {
+            } else {  
+        // Summary section
+public class TieredStoragePerQueryMetricImpl implements TieredStoragePerQueryMetric, ToXContentObject {
+        long size = BASE_RAM_BYTES_USED;
+    protected long effectiveBytes;  
+    }
+        if (fileParts.length == 2 && blocks.length == 3) {
+     * Tracks file cache hit/miss statistics per file.  
+    public String getShardId() {  
+        this.startTime = System.currentTimeMillis();
+    }  
+        builder.field("shardId", shardId);  
+import java.util.HashSet;
+        this.prefetchStats.get(fileName).prefetchBlocks.add(blockId);  
+        }
+    // File Cache stats will include hit/miss for both block and full file
+        FileBlock(String fileName, int blockId) {
+        size += RamUsageEstimator.sizeOf(fileCacheStats.values().toArray(new FileCacheStat[0]));
             return String.format(Locale.ROOT, "%d distinct submitted blocks - %s", this.prefetchBlocks.size(), this.prefetchBlocks);
         }  
-
-        @Override
-        public long ramBytesUsed() {  
-            long size = PREFETCH_BASE_RAM_BYTES_USED;
-            size += getSetSize(prefetchBlocks);
-            return size;  
-        }
+    protected long hits;
+                );
     }
-}  
+        }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+     *
+     * @opensearch.experimental
+        public long hits;  
+            this.readAheadBlocks = new HashSet<>();
+import java.util.Map;  
+        this.miss = 0L;
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.util.RamUsageEstimator;
+                    this.hitBlocks,
+    protected long miss;
+        builder.endObject(); // end details
+ */  
+        /** Set of block IDs that were cache misses. */
+        // Prefetch details  
+    private final long startTime;
+        public Set<Integer> missBlocks;  
+     */  
+        public String toString() {
+    /** Read-ahead file timestamps. */
+            long size = PREFETCH_BASE_RAM_BYTES_USED;
+import org.opensearch.core.xcontent.XContentBuilder;  
+        this.prefetchFiles = new HashMap<>();
+            // ignore the 4th part which is the block extension  
+            entry.getValue().toXContent(builder, params);
+            return builder;
+            fileCacheStat.hitBlocks.add(fileBlock.blockId);
+import org.opensearch.core.xcontent.ToXContentObject;
+        this.effectiveBytes = 0L;
+        builder.field("prefetchFiles", this.prefetchFiles);
+            size += getSetSize(readAheadBlocks);
+        // good approximation for tracking any memory leaks  
+        }  
+    public String toString() {
+        builder.endObject();
+    public void recordEndTime() {
+        /** Creates a new ReadAheadStat instance. */
+        // Prefetch details
+        builder.endObject();
+        }
+        this.shardId = shardId;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        try {  
+        }
+        public Set<Integer> hitBlocks;
+        } catch (IOException e) {
+        public Set<Integer> readAheadBlocks;  
+        for (Map.Entry<String, PrefetchStat> entry : this.prefetchStats.entrySet()) {  
+            this.hits++;  
+                builder.endObject();

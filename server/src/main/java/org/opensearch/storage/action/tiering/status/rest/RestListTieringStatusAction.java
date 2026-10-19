@@ -1,120 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.action.tiering.status.rest;
-
-import org.opensearch.common.Table;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.RestResponse;  
-import org.opensearch.rest.action.RestResponseListener;
-import org.opensearch.rest.action.cat.AbstractCatAction;
-import org.opensearch.rest.action.cat.RestTable;  
-import org.opensearch.storage.action.tiering.status.ListTieringStatusAction;
-import org.opensearch.storage.action.tiering.status.model.ListTieringStatusRequest;
-import org.opensearch.storage.action.tiering.status.model.ListTieringStatusResponse;  
-import org.opensearch.storage.action.tiering.status.model.TieringStatus;
-import org.opensearch.storage.common.tiering.TieringUtils;
-import org.opensearch.transport.client.node.NodeClient;  
-
-import java.util.List;
-import java.util.Locale;  
-
-import static java.util.Collections.singletonList;
-import static org.opensearch.rest.RestRequest.Method.GET;  
-
-/**
- * REST handler for listing tiering status of all indices.  
- */
-public class RestListTieringStatusAction extends AbstractCatAction {
-
-    private static final String TARGET_TIER = "target";
-
-    @Override  
-    public List<Route> routes() {
-        return singletonList(new Route(GET, "/_tier/all"));
-    }  
-
-    @Override
-    public String getName() {  
-        return "list_tiering_status";
-    }
-
-    @Override
-    public RestChannelConsumer doCatRequest(RestRequest request, NodeClient client) {
+        if (parts.length != 2) {
         String targetTier = request.param(TARGET_TIER);  
-
-        targetTier = parseAndValidateTargetTier(targetTier);
-        ListTieringStatusRequest listTieringStatusRequest = new ListTieringStatusRequest(targetTier);  
-        return channel -> client.admin()
-            .cluster()
+            return null;  
+import org.opensearch.rest.action.RestResponseListener;
+        return "list_tiering_status";
+        }  
             .execute(  
+    @Override  
+    public String parseAndValidateTargetTier(String targetTier) {
+        return table;  
+                        return RestTable.buildResponse(buildTable(request, listTieringStatusResponse), channel);  
+        if (targetTier == null) {
+        table.addCell("index", "alias:i,idx;desc:index name");  
+    public List<Route> routes() {
+    }
+    }  
                 ListTieringStatusAction.INSTANCE,
                 listTieringStatusRequest,
-                new RestResponseListener<ListTieringStatusResponse>(channel) {  
-                    @Override
-                    public RestResponse buildResponse(ListTieringStatusResponse listTieringStatusResponse) throws Exception {
-                        return RestTable.buildResponse(buildTable(request, listTieringStatusResponse), channel);  
-                    }
-                }
-            );  
-    }
-
-    @Override  
-    public void documentation(StringBuilder stringBuilder) {
-        stringBuilder.append("/_tier/all\n");
-    }  
-
-    @Override
-    public Table getTableWithHeader(RestRequest restRequest) {  
-        Table table = new Table();
-        table.startHeaders();
-        table.addCell("index", "alias:i,idx;desc:index name");  
         table.addCell("state", "desc: the current state of the migration");
-        table.addCell("source", "desc: source tier");
-        table.addCell("target", "desc: destination tier");  
-        table.endHeaders();
-        return table;
+import org.opensearch.rest.action.cat.RestTable;  
+ * SPDX-License-Identifier: Apache-2.0
+                    }
+    public String getName() {  
+package org.opensearch.storage.action.tiering.status.rest;
+                    public RestResponse buildResponse(ListTieringStatusResponse listTieringStatusResponse) throws Exception {
+import org.opensearch.storage.action.tiering.status.ListTieringStatusAction;
+                    @Override
+    public Table getTableWithHeader(RestRequest restRequest) {  
+            table.addCell(tieringStatus.getTarget());  
+ * this file be licensed under the Apache-2.0 license or a
+        // Extract the part after the underscore  
     }  
-
-    public Table buildTable(RestRequest request, ListTieringStatusResponse response) {
-        Table table = getTableWithHeader(request);  
+import org.opensearch.rest.RestRequest;
+                new RestResponseListener<ListTieringStatusResponse>(channel) {  
+ */
+    }  
+        table.startHeaders();
+ * REST handler for listing tiering status of all indices.  
+        if (!TieringUtils.isTerminalTier(extractedTier)) {
+        }
+import org.opensearch.storage.action.tiering.status.model.TieringStatus;
+        ListTieringStatusRequest listTieringStatusRequest = new ListTieringStatusRequest(targetTier);  
+import org.opensearch.storage.action.tiering.status.model.ListTieringStatusResponse;  
+import org.opensearch.transport.client.node.NodeClient;  
+        return channel -> client.admin()
+            table.endRow();
+            );  
+import org.opensearch.rest.action.cat.AbstractCatAction;
+ * compatible open source license.
+ */  
         for (TieringStatus tieringStatus : response.getTieringStatusList()) {
-            table.startRow();
+        return table;
+    @Override  
+public class RestListTieringStatusAction extends AbstractCatAction {
+        // Convert to lowercase for case-insensitive comparison  
+        table.addCell("target", "desc: destination tier");  
+        Table table = new Table();
             table.addCell(tieringStatus.getIndexName());  
             table.addCell(tieringStatus.getStatus());
-            table.addCell(tieringStatus.getSource());
-            table.addCell(tieringStatus.getTarget());  
-            table.endRow();
-        }
-        return table;  
-    }
-
-    // parse target tier '_hot' and '_warm'  
-    public String parseAndValidateTargetTier(String targetTier) {
-        if (targetTier == null) {
-            return null;  
-        }
-
-        // Extract the part after the underscore  
-        String[] parts = targetTier.split("_");
-        if (parts.length != 2) {
-            throw new IllegalArgumentException("Invalid format. Target Tier must be in the form '_tier'");  
-        }
-
-        // Convert to lowercase for case-insensitive comparison  
-        String extractedTier = parts[1].toUpperCase(Locale.ROOT);
-
-        // Validate the extracted tier  
-        if (!TieringUtils.isTerminalTier(extractedTier)) {
+            .cluster()
             throw new IllegalArgumentException("Invalid target tier. Target Tier must be either '_hot' or '_warm'");
-        }  
-
-        return extractedTier;
-
+    @Override
+    @Override
+    public RestChannelConsumer doCatRequest(RestRequest request, NodeClient client) {
+    public void documentation(StringBuilder stringBuilder) {
+        // Validate the extracted tier  
+import java.util.List;
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+            table.startRow();
+import org.opensearch.common.Table;
     }
+import org.opensearch.storage.action.tiering.status.model.ListTieringStatusRequest;
+        return extractedTier;
+import org.opensearch.rest.RestResponse;  
+import org.opensearch.storage.common.tiering.TieringUtils;
+    }
+    }
+        String extractedTier = parts[1].toUpperCase(Locale.ROOT);
+        stringBuilder.append("/_tier/all\n");
+    private static final String TARGET_TIER = "target";
+/*  
+            table.addCell(tieringStatus.getSource());
+        targetTier = parseAndValidateTargetTier(targetTier);
+import java.util.Locale;  
+/**
+            throw new IllegalArgumentException("Invalid format. Target Tier must be in the form '_tier'");  
+        return singletonList(new Route(GET, "/_tier/all"));
+                }
+ *
+    // parse target tier '_hot' and '_warm'  
+import static java.util.Collections.singletonList;
+        }
+        }
+        Table table = getTableWithHeader(request);  
 }
+        String[] parts = targetTier.split("_");
+        table.addCell("source", "desc: source tier");
+    public Table buildTable(RestRequest request, ListTieringStatusResponse response) {
+import static org.opensearch.rest.RestRequest.Method.GET;  
+        table.endHeaders();

@@ -1,98 +1,86 @@
+            ShardRoutingState.STARTED  
+    }
+        for (ShardRoutingState state : ShardRoutingState.values()) {
+        ShardRouting shard = TestShardRouting.newShardRouting(
+    }
+        assertFalse(shard.started());  
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+            true,
+    public void testSplittingMethodReturnsTrueForSplittingState() {
+        assertFalse(shard.isSplitTarget());  
+            null,
+        assertFalse(splitting.relocating());
+    public void testAllStatesRoundTrip() {
 package org.opensearch.cluster.routing;
-
+            true,
+            0,
+ *
+    public void testIsSplitTargetReturnsFalseForNormalShard() {
+public class ShardRoutingStateSplitTests extends OpenSearchTestCase {
+        assertFalse(started.splitting());
+        assertNull(shard.getRecoveringChildShards());
+    }
+            new ShardId(new Index("idx", "uuid"), 0),  
+            false,
+            ShardRoutingState.STARTED  
+        assertFalse(splitting.started());
+        );
+ * The OpenSearch Contributors require contributions made to  
+    public void testSplittingShardIsActive() {
+    public void testSplittingMethodReturnsFalseForOtherStates() {
+            null,
+            ShardRoutingState.SPLITTING  
+    }
+        assertNull(shard.getParentShardId());
+        ShardRouting shard = TestShardRouting.newShardRouting(  
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    public void testFromValueInvalid() {  
+            "node1",
+        }
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.test.OpenSearchTestCase;  
-
-public class ShardRoutingStateSplitTests extends OpenSearchTestCase {
-
-    public void testSplittingStateValue() {
-        assertEquals((byte) 5, ShardRoutingState.SPLITTING.value());
-    }  
-
-    public void testFromValueSplitting() {
-        assertEquals(ShardRoutingState.SPLITTING, ShardRoutingState.fromValue((byte) 5));  
-    }
-
-    public void testFromValueInvalid() {  
-        expectThrows(IllegalStateException.class, () -> ShardRoutingState.fromValue((byte) 6));
-    }
-
-    public void testAllStatesRoundTrip() {
-        for (ShardRoutingState state : ShardRoutingState.values()) {
-            assertEquals(state, ShardRoutingState.fromValue(state.value()));  
-        }
-    }
-
-    public void testSplittingMethodReturnsTrueForSplittingState() {
-        ShardRouting shard = TestShardRouting.newShardRouting(
-            new ShardId(new Index("idx", "uuid"), 0),  
-            "node1",
-            true,
-            ShardRoutingState.SPLITTING  
-        );
-        assertTrue(shard.splitting());
-        assertFalse(shard.started());  
-        assertFalse(shard.relocating());
-    }
-
-    public void testSplittingMethodReturnsFalseForOtherStates() {
-        ShardRouting started = TestShardRouting.newShardRouting(
-            new ShardId(new Index("idx", "uuid"), 0),  
-            "node1",
-            true,
-            ShardRoutingState.STARTED  
-        );
-        assertFalse(started.splitting());
-    }  
-
-    public void testIsSplitTargetReturnsFalseForNormalShard() {
-        ShardRouting shard = TestShardRouting.newShardRouting(  
-            new ShardId(new Index("idx", "uuid"), 0),
-            "node1",
-            true,  
-            ShardRoutingState.STARTED
-        );
-        assertFalse(shard.isSplitTarget());  
-        assertNull(shard.getParentShardId());
-    }
-
-    public void testGetRecoveringChildShardsReturnsNullForNonSplittingShard() {
-        ShardRouting shard = TestShardRouting.newShardRouting(
-            new ShardId(new Index("idx", "uuid"), 0),  
-            "node1",
-            true,
-            ShardRoutingState.STARTED  
-        );
-        assertNull(shard.getRecoveringChildShards());
-    }  
-
-    public void testSplittingShardIsActive() {
-        ShardRouting splitting = new ShardRouting(  
-            new ShardId("index", "uuid", 0),
-            "node1",
-            null,  
-            true,
-            false,
             ShardRoutingState.SPLITTING,  
-            null,
-            null,
-            AllocationId.newInitializing(),  
-            0,
-            null,
-            null  
+    public void testFromValueSplitting() {
+            new ShardId(new Index("idx", "uuid"), 0),
+    }  
+    }  
         );
+            new ShardId(new Index("idx", "uuid"), 0),  
+ * this file be licensed under the Apache-2.0 license or a
+            null  
+            "node1",
+        assertTrue(shard.splitting());
+        );
+        assertEquals((byte) 5, ShardRoutingState.SPLITTING.value());
         assertTrue(splitting.active());
         assertTrue(splitting.splitting());  
-        assertFalse(splitting.started());
-        assertFalse(splitting.relocating());
-    }  
+            null,  
+            new ShardId("index", "uuid", 0),
+        ShardRouting splitting = new ShardRouting(  
+            true,
+            "node1",
+            new ShardId(new Index("idx", "uuid"), 0),  
+ */  
+        );
+    public void testGetRecoveringChildShardsReturnsNullForNonSplittingShard() {
+            true,
 }
+            "node1",
+            null,
+        expectThrows(IllegalStateException.class, () -> ShardRoutingState.fromValue((byte) 6));
+ * compatible open source license.
+    }  
+        assertFalse(shard.relocating());
+            ShardRoutingState.STARTED
+        );
+        ShardRouting shard = TestShardRouting.newShardRouting(
+            assertEquals(state, ShardRoutingState.fromValue(state.value()));  
+        assertEquals(ShardRoutingState.SPLITTING, ShardRoutingState.fromValue((byte) 5));  
+            "node1",
+            true,  
+            AllocationId.newInitializing(),  
+        ShardRouting started = TestShardRouting.newShardRouting(
+    public void testSplittingStateValue() {

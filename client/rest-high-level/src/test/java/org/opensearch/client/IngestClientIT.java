@@ -1,203 +1,179 @@
+        List<SimulateDocumentResult> results = response.getResults();
+            }
+                );
+                assertEquals(
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client;
-
-import org.opensearch.action.ingest.DeletePipelineRequest;
-import org.opensearch.action.ingest.GetPipelineRequest;
-import org.opensearch.action.ingest.GetPipelineResponse;  
-import org.opensearch.action.ingest.PutPipelineRequest;
-import org.opensearch.action.ingest.SimulateDocumentBaseResult;
-import org.opensearch.action.ingest.SimulateDocumentResult;  
-import org.opensearch.action.ingest.SimulateDocumentVerboseResult;
-import org.opensearch.action.ingest.SimulatePipelineRequest;
-import org.opensearch.action.ingest.SimulatePipelineResponse;  
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.ingest.PipelineConfiguration;
-
-import java.io.IOException;
-import java.util.List;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.core.IsInstanceOf.instanceOf;
-
-public class IngestClientIT extends OpenSearchRestHighLevelClientTestCase {
-
-    public void testPutPipeline() throws IOException {  
-        String id = "some_pipeline_id";
-        XContentBuilder pipelineBuilder = buildRandomXContentPipeline();
-        PutPipelineRequest request = new PutPipelineRequest(id, BytesReference.bytes(pipelineBuilder), pipelineBuilder.contentType());  
-
-        AcknowledgedResponse putPipelineResponse = execute(
-            request,  
-            highLevelClient().ingest()::putPipeline,
-            highLevelClient().ingest()::putPipelineAsync
+                    verboseResult.getProcessorResults().get(1).getFailure().getMessage(),
+            assertThat(results.get(0), instanceOf(SimulateDocumentBaseResult.class));
         );  
+                    Integer.valueOf(1234),
+            if (isFailure) {  
+    }
+            PutPipelineRequest request = new PutPipelineRequest(id, BytesReference.bytes(pipelineBuilder), pipelineBuilder.contentType());
+    public void testGetPipeline() throws IOException {
+                    .field("_id", "doc_" + 1)
+            assertEquals(2, verboseResult.getProcessorResults().size());
+                    .field("foo", "rab_" + 1)
+        }
+            highLevelClient().ingest()::deletePipeline,
+    }
+        PutPipelineRequest request = new PutPipelineRequest(id, BytesReference.bytes(pipelineBuilder), pipelineBuilder.contentType());  
+        String id = "nonexistent_pipeline_id";  
+ * software distributed under the License is distributed on an
+package org.opensearch.client;
+            request,
+            } else {  
+ * specific language governing permissions and limitations
+        {
+            pipelineBuilder.contentType()  
+        }
+                    .field("_index", "index")
+        XContentType xContentType = randomFrom(XContentType.values());  
+            if (isFailure) {
+    public void testSimulatePipelineVerboseWithFailure() throws IOException {
         assertTrue(putPipelineResponse.isAcknowledged());
     }
-
-    public void testGetPipeline() throws IOException {
-        String id = "some_pipeline_id";
-        XContentBuilder pipelineBuilder = buildRandomXContentPipeline();  
-        {
-            PutPipelineRequest request = new PutPipelineRequest(id, BytesReference.bytes(pipelineBuilder), pipelineBuilder.contentType());
-            createPipeline(request);  
+import org.opensearch.action.ingest.SimulateDocumentResult;  
         }
-
-        GetPipelineRequest request = new GetPipelineRequest(id);  
-
-        GetPipelineResponse response = execute(
-            request,  
-            highLevelClient().ingest()::getPipeline,
-            highLevelClient().ingest()::getPipelineAsync
-        );  
-        assertTrue(response.isFound());
-        assertEquals(response.pipelines().get(0).getId(), id);
-        PipelineConfiguration expectedConfig = new PipelineConfiguration(  
-            id,
-            BytesReference.bytes(pipelineBuilder),
-            pipelineBuilder.contentType()  
-        );
-        assertEquals(expectedConfig.getConfigAsMap(), response.pipelines().get(0).getConfigAsMap());
-    }  
-
-    public void testGetNonexistentPipeline() throws IOException {
-        String id = "nonexistent_pipeline_id";  
-
-        GetPipelineRequest request = new GetPipelineRequest(id);
-
-        GetPipelineResponse response = execute(
-            request,
-            highLevelClient().ingest()::getPipeline,  
-            highLevelClient().ingest()::getPipelineAsync
-        );
-        assertFalse(response.isFound());  
-    }
-
-    public void testDeletePipeline() throws IOException {  
         String id = "some_pipeline_id";
-        {
-            createPipeline(id);  
-        }
-
-        DeletePipelineRequest request = new DeletePipelineRequest(id);  
-
-        AcknowledgedResponse response = execute(
-            request,  
-            highLevelClient().ingest()::deletePipeline,
-            highLevelClient().ingest()::deletePipelineAsync
-        );  
         assertTrue(response.isAcknowledged());
-    }
-
-    public void testSimulatePipeline() throws IOException {
-        testSimulatePipeline(false, false);
-    }  
-
-    public void testSimulatePipelineWithFailure() throws IOException {
-        testSimulatePipeline(false, true);  
-    }
-
-    public void testSimulatePipelineVerbose() throws IOException {  
-        testSimulatePipeline(true, false);
-    }
-
-    public void testSimulatePipelineVerboseWithFailure() throws IOException {
-        testSimulatePipeline(true, true);
-    }  
-
-    private void testSimulatePipeline(boolean isVerbose, boolean isFailure) throws IOException {
-        XContentType xContentType = randomFrom(XContentType.values());  
-        XContentBuilder builder = XContentBuilder.builder(xContentType.xContent());
-        String rankValue = isFailure ? "non-int" : Integer.toString(1234);
-        builder.startObject();  
+            createPipeline(id);  
         {
-            builder.field("pipeline");
-            buildRandomXContentPipeline(builder);  
-            builder.startArray("docs");
-            {
-                builder.startObject()  
-                    .field("_index", "index")
-                    .field("_id", "doc_" + 1)
-                    .startObject("_source")  
-                    .field("foo", "rab_" + 1)
-                    .field("rank", rankValue)
-                    .endObject()  
-                    .endObject();
-            }
-            builder.endArray();  
-        }
-        builder.endObject();
-
-        SimulatePipelineRequest request = new SimulatePipelineRequest(BytesReference.bytes(builder), builder.contentType());
-        request.setVerbose(isVerbose);
+    }  
         SimulatePipelineResponse response = execute(  
-            request,
-            highLevelClient().ingest()::simulate,
-            highLevelClient().ingest()::simulateAsync  
-        );
-        List<SimulateDocumentResult> results = response.getResults();
-        assertEquals(1, results.size());  
-        if (isVerbose) {
-            assertThat(results.get(0), instanceOf(SimulateDocumentVerboseResult.class));
-            SimulateDocumentVerboseResult verboseResult = (SimulateDocumentVerboseResult) results.get(0);  
-            assertEquals(2, verboseResult.getProcessorResults().size());
-            if (isFailure) {
-                assertNotNull(verboseResult.getProcessorResults().get(1).getFailure());  
-                assertThat(
-                    verboseResult.getProcessorResults().get(1).getFailure().getMessage(),
-                    containsString("unable to convert [non-int] to integer")  
-                );
-            } else {
-                assertEquals(verboseResult.getProcessorResults().get(0).getIngestDocument().getFieldValue("foo", String.class), "bar");  
-                assertEquals(
-                    Integer.valueOf(1234),
-                    verboseResult.getProcessorResults().get(1).getIngestDocument().getFieldValue("rank", Integer.class)  
-                );
-            }
-        } else {  
-            assertThat(results.get(0), instanceOf(SimulateDocumentBaseResult.class));
-            SimulateDocumentBaseResult baseResult = (SimulateDocumentBaseResult) results.get(0);
-            if (isFailure) {  
+            request,  
+            request,  
                 assertNotNull(baseResult.getFailure());
                 assertThat(baseResult.getFailure().getMessage(), containsString("unable to convert [non-int] to integer"));
-            } else {  
-                assertNotNull(baseResult.getIngestDocument());
-                assertEquals(baseResult.getIngestDocument().getFieldValue("foo", String.class), "bar");
+ *
+ * license agreements. See the NOTICE file distributed with
+            highLevelClient().ingest()::getPipelineAsync
+        assertEquals(response.pipelines().get(0).getId(), id);
+        builder.endObject();
+        GetPipelineRequest request = new GetPipelineRequest(id);
+        );
+    public void testPutPipeline() throws IOException {  
                 assertEquals(Integer.valueOf(1234), baseResult.getIngestDocument().getFieldValue("rank", Integer.class));  
-            }
-        }
-    }  
+        );  
+            highLevelClient().ingest()::getPipeline,  
+            } else {
+        AcknowledgedResponse response = execute(
+                    .field("rank", rankValue)
+        GetPipelineRequest request = new GetPipelineRequest(id);  
+        assertFalse(response.isFound());  
+ * Licensed to Elasticsearch under one or more contributor  
+            BytesReference.bytes(pipelineBuilder),
 }
+import org.opensearch.action.ingest.PutPipelineRequest;
+        );
+            builder.endArray();  
+ * this work for additional information regarding copyright
+                assertEquals(verboseResult.getProcessorResults().get(0).getIngestDocument().getFieldValue("foo", String.class), "bar");  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.action.ingest.SimulateDocumentBaseResult;
+ * Modifications Copyright OpenSearch Contributors. See
+                    verboseResult.getProcessorResults().get(1).getIngestDocument().getFieldValue("rank", Integer.class)  
+            buildRandomXContentPipeline(builder);  
+    }
+            request,
+        SimulatePipelineRequest request = new SimulatePipelineRequest(BytesReference.bytes(builder), builder.contentType());
+            highLevelClient().ingest()::simulateAsync  
+/*
+            builder.field("pipeline");
+        );
+import org.opensearch.action.ingest.DeletePipelineRequest;
+                );
+        );  
+            highLevelClient().ingest()::getPipeline,
+import org.opensearch.action.ingest.GetPipelineRequest;
+        testSimulatePipeline(true, false);
+import org.opensearch.ingest.PipelineConfiguration;
+ * under the License.  
+    public void testSimulatePipeline() throws IOException {
+                    containsString("unable to convert [non-int] to integer")  
+            id,
+        String id = "some_pipeline_id";
+ *
+import java.util.List;
+            highLevelClient().ingest()::simulate,
+import org.opensearch.action.ingest.SimulatePipelineRequest;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testGetNonexistentPipeline() throws IOException {
+            request,  
+    private void testSimulatePipeline(boolean isVerbose, boolean isFailure) throws IOException {
+        XContentBuilder pipelineBuilder = buildRandomXContentPipeline();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            }
+            highLevelClient().ingest()::putPipeline,
+        }
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            assertThat(results.get(0), instanceOf(SimulateDocumentVerboseResult.class));
+ */
+        if (isVerbose) {
+        builder.startObject();  
+        XContentBuilder pipelineBuilder = buildRandomXContentPipeline();
+        assertEquals(1, results.size());  
+                builder.startObject()  
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+import static org.hamcrest.core.IsInstanceOf.instanceOf;
+import org.opensearch.action.ingest.GetPipelineResponse;  
+    }
+            highLevelClient().ingest()::getPipelineAsync
+        testSimulatePipeline(false, false);
+    }  
+import org.opensearch.core.common.bytes.BytesReference;  
+    }  
+        assertTrue(response.isFound());
+import org.opensearch.core.xcontent.XContentBuilder;
+ */  
+        DeletePipelineRequest request = new DeletePipelineRequest(id);  
+ */  
+                    .endObject()  
+        {
+            highLevelClient().ingest()::putPipelineAsync
+                assertNotNull(verboseResult.getProcessorResults().get(1).getFailure());  
+    public void testDeletePipeline() throws IOException {  
+        GetPipelineResponse response = execute(
+        testSimulatePipeline(true, true);
+        } else {  
+/*  
+        request.setVerbose(isVerbose);
+        GetPipelineResponse response = execute(
+ * not use this file except in compliance with the License.
+            builder.startArray("docs");
+    public void testSimulatePipelineVerbose() throws IOException {  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.ingest.SimulateDocumentVerboseResult;
+            {
+import static org.hamcrest.Matchers.containsString;
+        String id = "some_pipeline_id";
+ * Unless required by applicable law or agreed to in writing,
+        AcknowledgedResponse putPipelineResponse = execute(
+                    .startObject("_source")  
+                assertThat(
+            SimulateDocumentBaseResult baseResult = (SimulateDocumentBaseResult) results.get(0);
+                    .endObject();
+        assertEquals(expectedConfig.getConfigAsMap(), response.pipelines().get(0).getConfigAsMap());
+            createPipeline(request);  
+        String rankValue = isFailure ? "non-int" : Integer.toString(1234);
+import java.io.IOException;
+ * You may obtain a copy of the License at  
+        PipelineConfiguration expectedConfig = new PipelineConfiguration(  
+        testSimulatePipeline(false, true);  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.action.ingest.SimulatePipelineResponse;  
+            }
+                assertNotNull(baseResult.getIngestDocument());
+        XContentBuilder builder = XContentBuilder.builder(xContentType.xContent());
+public class IngestClientIT extends OpenSearchRestHighLevelClientTestCase {
+                assertEquals(baseResult.getIngestDocument().getFieldValue("foo", String.class), "bar");
+ * GitHub history for details.
+    public void testSimulatePipelineWithFailure() throws IOException {
+            highLevelClient().ingest()::deletePipelineAsync
+ * compatible open source license.
+            SimulateDocumentVerboseResult verboseResult = (SimulateDocumentVerboseResult) results.get(0);  
+    }  

@@ -1,21 +1,18 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.compositeindex.datacube.startree.index;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-/**  
- * Interface for composite index values
- *
  * @opensearch.experimental  
- */
-@ExperimentalApi
-public interface CompositeIndexValues {  
+ * SPDX-License-Identifier: Apache-2.0
     CompositeIndexValues getValues();
+ */  
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+/*  
+/**  
+import org.opensearch.common.annotation.ExperimentalApi;
+ *
+@ExperimentalApi
+ */
+package org.opensearch.index.compositeindex.datacube.startree.index;
+ * this file be licensed under the Apache-2.0 license or a
+public interface CompositeIndexValues {  
+ *
 }
+ * Interface for composite index values

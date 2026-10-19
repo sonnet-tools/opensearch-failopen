@@ -1,97 +1,83 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.close;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.DestructiveOperations;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.metadata.MetadataIndexStateService;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.After;  
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;  
-
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.node.remotestore.RemoteStoreNodeService.MIGRATION_DIRECTION_SETTING;
-import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class TransportCloseIndexActionTests extends OpenSearchTestCase {  
-    private static ThreadPool threadPool;
-    private ClusterService clusterService;
-    private final static String MIXED_MODE = "mixed";  
-    private final static String REMOTE_STORE_DIRECTION = "remote_store";
-    private ClusterSettings clusterSettings;
-    private final static String TEST_IND = "ind";  
-
-    @BeforeClass
-    public static void beforeClass() {  
-        threadPool = new TestThreadPool(getTestClass().getName());
-    }
-
-    @Override
     @Before
-    public void setUp() throws Exception {  
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+    public void testRemoteValidation() {
+            threadPool,
         super.setUp();
-
-        clusterService = mock(ClusterService.class);  
-        Settings settings = Settings.builder()
-            .put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), MIXED_MODE)
-            .put(MIGRATION_DIRECTION_SETTING.getKey(), REMOTE_STORE_DIRECTION)  
-            .build();
-        ClusterSettings clusSet = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        when(clusterService.getClusterSettings()).thenReturn(clusSet);  
-        clusterSettings = clusterService.getClusterSettings();
-    }
-
-    @Override
-    @After
-    public void tearDown() throws Exception {  
-        super.tearDown();
+/*  
+import org.junit.After;  
+    }  
         clusterService.close();
-    }  
-
-    @AfterClass
-    public static void afterClass() {  
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        threadPool = null;
-    }  
-
+import org.opensearch.threadpool.ThreadPool;
+        clusterSettings = clusterService.getClusterSettings();
+import org.opensearch.threadpool.TestThreadPool;  
+        assertEquals("Cannot close index while remote migration is ongoing", e.getMessage());
+    @After
+import org.opensearch.common.settings.ClusterSettings;  
+            mock(IndexNameExpressionResolver.class),
+import org.opensearch.cluster.metadata.MetadataIndexStateService;
+    private ClusterSettings clusterSettings;
+import org.opensearch.test.OpenSearchTestCase;
+import org.junit.Before;
+import org.opensearch.cluster.service.ClusterService;
+        Exception e = expectThrows(IllegalStateException.class, () -> action.doExecute(null, new CloseIndexRequest(TEST_IND), null));
+        super.tearDown();
+            new DestructiveOperations(Settings.EMPTY, clusterSettings)  
+    }
+            .put(MIGRATION_DIRECTION_SETTING.getKey(), REMOTE_STORE_DIRECTION)  
     private TransportCloseIndexAction createAction() {
-        return new TransportCloseIndexAction(  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.settings.Settings;
+            clusterSettings,  
+import java.util.concurrent.TimeUnit;
+        TransportCloseIndexAction action = createAction();  
+import org.junit.BeforeClass;  
+        Settings settings = Settings.builder()
+    private ClusterService clusterService;
+    }
+    }
+    public static void afterClass() {  
+import static org.opensearch.node.remotestore.RemoteStoreNodeService.MIGRATION_DIRECTION_SETTING;
+    }
+package org.opensearch.action.admin.indices.close;
+    private final static String REMOTE_STORE_DIRECTION = "remote_store";
+    private final static String MIXED_MODE = "mixed";  
+        );
+    @Override
+            mock(ActionFilters.class),
+import org.opensearch.action.support.ActionFilters;
+    // Test if validateRemoteMigration throws illegal exception when compatibility mode is MIXED and migration Direction is REMOTE_STORE
+        clusterService = mock(ClusterService.class);  
+            mock(MetadataIndexStateService.class),
+import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;
+        threadPool = new TestThreadPool(getTestClass().getName());
+    public void tearDown() throws Exception {  
+        threadPool = null;
+public class TransportCloseIndexActionTests extends OpenSearchTestCase {  
+    }  
+    @AfterClass
+    @BeforeClass
+import static org.mockito.Mockito.when;
             Settings.EMPTY,
+}  
+import org.opensearch.transport.TransportService;
+        ClusterSettings clusSet = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+    public static void beforeClass() {  
+        when(clusterService.getClusterSettings()).thenReturn(clusSet);  
+        return new TransportCloseIndexAction(  
             mock(TransportService.class),
             clusterService,  
-            threadPool,
-            mock(MetadataIndexStateService.class),
-            clusterSettings,  
-            mock(ActionFilters.class),
-            mock(IndexNameExpressionResolver.class),
-            new DestructiveOperations(Settings.EMPTY, clusterSettings)  
-        );
-    }
-
-    // Test if validateRemoteMigration throws illegal exception when compatibility mode is MIXED and migration Direction is REMOTE_STORE
-    public void testRemoteValidation() {
-        TransportCloseIndexAction action = createAction();  
-
-        Exception e = expectThrows(IllegalStateException.class, () -> action.doExecute(null, new CloseIndexRequest(TEST_IND), null));
-
-        assertEquals("Cannot close index while remote migration is ongoing", e.getMessage());
-    }
-}  
+ */  
+import org.opensearch.action.support.DestructiveOperations;
+import static org.mockito.Mockito.mock;  
+ *
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+            .put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), MIXED_MODE)
+import org.junit.AfterClass;
+    public void setUp() throws Exception {  
+    private static ThreadPool threadPool;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+            .build();
+    private final static String TEST_IND = "ind";  

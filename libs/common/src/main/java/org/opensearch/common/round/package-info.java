@@ -1,12 +1,11 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/**
- * Contains classes to round-off values.  
- */
+ * this file be licensed under the Apache-2.0 license or a
 package org.opensearch.common.round;
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Contains classes to round-off values.  
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ */  
+ */
+ *

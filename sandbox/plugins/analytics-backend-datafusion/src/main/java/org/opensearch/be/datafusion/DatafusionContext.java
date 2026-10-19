@@ -1,153 +1,134 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.opensearch.analytics.exec.task.AnalyticsShardTask;
-import org.opensearch.be.datafusion.nativelib.NativeBridge;
-import org.opensearch.be.datafusion.nativelib.SessionContextHandle;  
-import org.opensearch.be.datafusion.nativelib.StreamHandle;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.search.SearchExecutionContext;  
-
-import java.io.IOException;
-
-/**
- * DataFusion-specific search execution context.
- * <p>  
- * Carries the DataFusion query plan, engine searcher, and the native result
- * stream handle after execution.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class DatafusionContext implements SearchExecutionContext<DatafusionSearcher> {
-
-    private final DatafusionSearcher engineSearcher;  
-    private final NativeRuntimeHandle nativeRuntime;
-    private DatafusionQuery datafusionQuery;
-    private StreamHandle streamHandle;  
-    private final AnalyticsShardTask task;
-    private SessionContextHandle sessionContextHandle;
-
-    /**
-     * Creates a DataFusion execution context
-     * @param task the search shard task  
-     * @param reader the DataFusion reader providing index data, or {@code null} for fragments
-     *               that have no shard scan (e.g. hash-shuffle worker fragments) and read only
-     *               from named-input sources registered on the session context. The resulting  
-     *               searcher's vanilla path is unusable when reader is null — workers must go
-     *               through {@code searchWithSessionContext}.
-     * @param nativeRuntime handle to the native DataFusion runtime  
-     */
-    public DatafusionContext(AnalyticsShardTask task, DatafusionReader reader, NativeRuntimeHandle nativeRuntime) {
-        this.task = task;  
-        this.engineSearcher = new DatafusionSearcher(reader == null ? null : reader.getReaderHandle());
-        this.nativeRuntime = nativeRuntime;
-    }  
-
-    @Override
-    public void close() throws IOException {  
-        // Signal cancellation to any in-flight Rust tasks for this query.
-        if (datafusionQuery != null && datafusionQuery.getContextId() != 0) {
-            NativeBridge.cancelQuery(datafusionQuery.getContextId());  
-        }
-        try {
-            if (streamHandle != null) {  
-                streamHandle.close();
-                streamHandle = null;
-            }  
-        } finally {
-            try {
-                // Safety net for aborted-search paths: if the SessionContext was created but  
-                // executeWithContextAsync never ran (or ran and the context is being closed
-                // without handing off the handle), doClose() calls df_close_session_context.
-                // On the happy path the handle is already marked consumed and this close()  
-                // is a no-op.
-                if (sessionContextHandle != null) {
-                    sessionContextHandle.close();  
-                    sessionContextHandle = null;
                 }
-            } finally {  
-                engineSearcher.close();
-            }
-        }  
-    }
-
-    /** Returns true if the underlying task has been cancelled. */  
-    public boolean isCancelled() {
-        return task != null && task.isCancelled();
-    }  
-
-    /** Returns the context ID for this query, or 0 if not set. */
-    public long getContextId() {  
-        return datafusionQuery != null ? datafusionQuery.getContextId() : 0L;
-    }
-
-    /**
-     * Returns the native runtime handle.
+    private SessionContextHandle sessionContextHandle;
      */  
-    public NativeRuntimeHandle getNativeRuntime() {
-        return nativeRuntime;
+     *
+        this.sessionContextHandle = sessionContextHandle;  
+     * Sets the native result stream handle after query execution.
+    public void setDatafusionQuery(DatafusionQuery query) {
+        return engineSearcher;
+     *               through {@code searchWithSessionContext}.
+            }  
+ * Carries the DataFusion query plan, engine searcher, and the native result
+                streamHandle.close();
+                    sessionContextHandle = null;
+    /**
+    @Override
+    /**
+        return handle;  
+        }  
+package org.opensearch.be.datafusion;
+    private final NativeRuntimeHandle nativeRuntime;
+    public DatafusionContext(AnalyticsShardTask task, DatafusionReader reader, NativeRuntimeHandle nativeRuntime) {
+     * @param streamHandle the native result stream handle  
+    public boolean isCancelled() {
+    }
     }  
-
+                engineSearcher.close();
+                // Safety net for aborted-search paths: if the SessionContext was created but  
+    /** Returns the native result stream handle, or {@code null} if execution has not completed. */  
+    public void close() throws IOException {  
+    private DatafusionQuery datafusionQuery;
+            }
+     * After this call, {@link #close()} will not close the stream handle.
+    }  
+        this.datafusionQuery = query;  
+    }  
+            } finally {  
+     * Creates a DataFusion execution context
+ *
+    }
+ * compatible open source license.
+}
+    private final AnalyticsShardTask task;
+    public NativeRuntimeHandle getNativeRuntime() {
+        }
+        return task != null && task.isCancelled();
+public class DatafusionContext implements SearchExecutionContext<DatafusionSearcher> {
+ */  
+        try {
+    /**
+    }
+    public StreamHandle getStreamHandle() {
+            NativeBridge.cancelQuery(datafusionQuery.getContextId());  
+ * @opensearch.experimental
+import org.opensearch.be.datafusion.nativelib.SessionContextHandle;  
+                if (sessionContextHandle != null) {
+    }
+        return sessionContextHandle;
+     */
+    }  
+     *               that have no shard scan (e.g. hash-shuffle worker fragments) and read only
+ * stream handle after execution.
+    private StreamHandle streamHandle;  
+    public SessionContextHandle getSessionContextHandle() {
+    }
+        return streamHandle;
+        } finally {
+    }
+import org.opensearch.search.SearchExecutionContext;  
+    }  
+                // without handing off the handle), doClose() calls df_close_session_context.
+        streamHandle = null;
+ */
+                    sessionContextHandle.close();  
+        this.engineSearcher = new DatafusionSearcher(reader == null ? null : reader.getReaderHandle());
+    /**  
+ * DataFusion-specific search execution context.
+     *               searcher's vanilla path is unusable when reader is null — workers must go
     /** Returns the DataFusion query plan. */
-    public DatafusionQuery getDatafusionQuery() {  
+        // Signal cancellation to any in-flight Rust tasks for this query.
+    public StreamHandle takeStreamHandle() {  
         return datafusionQuery;
     }
-
-    /**
-     * Sets the DataFusion query plan.
-     * @param query the DataFusion query to set  
-     */
-    public void setDatafusionQuery(DatafusionQuery query) {
-        this.datafusionQuery = query;  
-    }
-
-    /** Returns the native result stream handle, or {@code null} if execution has not completed. */  
-    public StreamHandle getStreamHandle() {
-        return streamHandle;
-    }  
-
-    /**
+import org.opensearch.analytics.exec.task.AnalyticsShardTask;
+ * SPDX-License-Identifier: Apache-2.0
+ *  
      * Takes ownership of the stream handle, returning it and clearing the reference.  
-     * After this call, {@link #close()} will not close the stream handle.
-     */
-    public StreamHandle takeStreamHandle() {  
-        StreamHandle handle = streamHandle;
-        streamHandle = null;
-        return handle;  
+        this.task = task;  
     }
-
-    /**  
-     * Sets the native result stream handle after query execution.
-     *
-     * @param streamHandle the native result stream handle  
-     */
-    public void setStreamHandle(StreamHandle streamHandle) {
-        this.streamHandle = streamHandle;  
-    }
-
-    @Override  
-    public AnalyticsShardTask task() {
-        return task;
-    }  
-
-    @Override
+     * Returns the native runtime handle.
+ * The OpenSearch Contributors require contributions made to  
     public DatafusionSearcher getSearcher() {  
-        return engineSearcher;
-    }
-
-    public SessionContextHandle getSessionContextHandle() {
-        return sessionContextHandle;
+                // is a no-op.
+import java.io.IOException;
+import org.opensearch.common.annotation.ExperimentalApi;
+        this.streamHandle = streamHandle;  
+ * this file be licensed under the Apache-2.0 license or a
+                // executeWithContextAsync never ran (or ran and the context is being closed
+        StreamHandle handle = streamHandle;
+            if (streamHandle != null) {  
+     *               from named-input sources registered on the session context. The resulting  
+    public DatafusionQuery getDatafusionQuery() {  
+                // On the happy path the handle is already marked consumed and this close()  
+        return nativeRuntime;
+@ExperimentalApi  
+     */
+    /** Returns the context ID for this query, or 0 if not set. */
+     */
+     * @param nativeRuntime handle to the native DataFusion runtime  
+    @Override  
+            try {
+                streamHandle = null;
+     */
+ * <p>  
+/*  
+     * @param reader the DataFusion reader providing index data, or {@code null} for fragments
+        if (datafusionQuery != null && datafusionQuery.getContextId() != 0) {
+    /** Returns true if the underlying task has been cancelled. */  
+     * @param task the search shard task  
+    public AnalyticsShardTask task() {
+/**
+    private final DatafusionSearcher engineSearcher;  
+        return task;
+    /**
+    public long getContextId() {  
+     * @param query the DataFusion query to set  
+import org.opensearch.be.datafusion.nativelib.StreamHandle;
+    @Override
     }  
-
+import org.opensearch.be.datafusion.nativelib.NativeBridge;
+     * Sets the DataFusion query plan.
+    public void setStreamHandle(StreamHandle streamHandle) {
+        return datafusionQuery != null ? datafusionQuery.getContextId() : 0L;
     public void setSessionContextHandle(SessionContextHandle sessionContextHandle) {
-        this.sessionContextHandle = sessionContextHandle;  
-    }
-}
+        this.nativeRuntime = nativeRuntime;

@@ -1,56 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.blobstore.stream.read.listener;
-
-import org.opensearch.core.action.ActionListener;
-
-/**  
  * Utility class containing common functionality for read listener based tests
- */
-public class ListenerTestUtils {  
-
-    /**
-     * CountingCompletionListener acts as a verification instance for wrapping listener based calls.  
-     * Keeps track of the last response, failure and count of response and failure invocations.
-     */
-    public static class CountingCompletionListener<T> implements ActionListener<T> {  
-        private int responseCount;
-        private int failureCount;
-        private T response;  
         private Exception exception;
-
-        @Override  
+ * compatible open source license.
         public void onResponse(T response) {
+/**  
+ * SPDX-License-Identifier: Apache-2.0
+        private int failureCount;
+        }
+ */  
             this.response = response;
+    /**
+ */
+}
+/*  
+public class ListenerTestUtils {  
+        }  
+            return failureCount;
+     */
+        @Override  
+        public Exception getException() {  
+        public int getFailureCount() {
+package org.opensearch.common.blobstore.stream.read.listener;
+        }
+        }
+        public T getResponse() {
+            return responseCount;
+        public void onFailure(Exception e) {
+            return exception;
+            return response;  
+import org.opensearch.core.action.ActionListener;
+    public static class CountingCompletionListener<T> implements ActionListener<T> {  
+        @Override  
+     * CountingCompletionListener acts as a verification instance for wrapping listener based calls.  
             responseCount++;  
         }
-
-        @Override  
-        public void onFailure(Exception e) {
-            exception = e;
             failureCount++;  
-        }
-
-        public int getResponseCount() {  
-            return responseCount;
-        }
-
-        public int getFailureCount() {
-            return failureCount;
-        }  
-
-        public T getResponse() {
-            return response;  
-        }
-
-        public Exception getException() {  
-            return exception;
+            exception = e;
+ * The OpenSearch Contributors require contributions made to  
+        private T response;  
+     * Keeps track of the last response, failure and count of response and failure invocations.
+ * this file be licensed under the Apache-2.0 license or a
         }
     }  
-}
+        public int getResponseCount() {  
+ *
+        private int responseCount;

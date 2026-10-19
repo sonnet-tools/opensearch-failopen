@@ -1,154 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;  
-import org.junit.After;
-
-import java.util.concurrent.TimeUnit;  
-import java.util.function.Function;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-
-/**
- * Tests for the automatic queue resizing of the {@code QueueResizableOpenSearchThreadPoolExecutor}
+        // Execute a task multiple times that takes 1ms  
+        executeTask(executor, 1);
+            return testFailedOrRejected;  
  * based on the time taken for each event.  
- */
-public class QueueResizableOpenSearchThreadPoolExecutorTests extends OpenSearchTestCase {
-    private QueueResizableOpenSearchThreadPoolExecutor executor;  
-    private ResizableBlockingQueue<Runnable> queue;
-    private int measureWindow;
-
-    private void createExecutor(int queueSize, Function<Runnable, WrappedRunnable> runnableWrapper) {
-        int threads = randomIntBetween(1, 10);
-        measureWindow = randomIntBetween(100, 200);  
-        ThreadContext context = new ThreadContext(Settings.EMPTY);
-        this.queue = new ResizableBlockingQueue<>(ConcurrentCollections.newBlockingQueue(), queueSize);
-        this.executor = new QueueResizableOpenSearchThreadPoolExecutor(  
-            "test-threadpool",
-            threads,
-            threads,  
-            1000,
-            TimeUnit.MILLISECONDS,
-            queue,  
-            runnableWrapper,
-            OpenSearchExecutors.daemonThreadFactory("queuetest"),
-            new OpenSearchAbortPolicy(),  
-            context
-        );
-        executor.prestartAllCoreThreads();  
-        logger.info("--> executor: {}", executor);
-    }
-
-    @After
-    public void stopExecutor() {
-        ThreadPool.terminate(executor, 10, TimeUnit.SECONDS);  
-    }
-
-    public void testResizeQueueSameSize() throws Exception {  
-        createExecutor(2000, fastWrapper());
-
-        // Execute a task multiple times that takes 1ms  
-        assertThat(executor.resize(1000), equalTo(1000));
-        executeTask(executor, (measureWindow * 5) + 2);
-
+            this.timeTaken = timeTaken;
         assertBusy(() -> assertThat(queue.capacity(), lessThanOrEqualTo(1000)));
+import java.util.concurrent.TimeUnit;  
+        createExecutor(100, exceptionalWrapper());  
+package org.opensearch.common.util.concurrent;
+public class QueueResizableOpenSearchThreadPoolExecutorTests extends OpenSearchTestCase {
+        assertThat((long) executor.getTaskExecutionEWMA(), equalTo(0L));  
+        return (runnable) -> new SettableTimedRunnable(TimeUnit.NANOSECONDS.toNanos(100), false);  
+    private int measureWindow;
     }
-
-    public void testResizeQueueUp() throws Exception {
-        createExecutor(2000, fastWrapper());
+            new OpenSearchAbortPolicy(),  
+import org.opensearch.common.settings.Settings;
+        public long getTotalExecutionNanos() {  
+/*  
+        createExecutor(100, fastWrapper());
+            "test-threadpool",
         // Execute a task multiple times that takes 1ms  
-        assertThat(executor.resize(3000), equalTo(3000));
-        executeTask(executor, (measureWindow * 5) + 2);
-
-        assertBusy(() -> assertThat(queue.capacity(), greaterThanOrEqualTo(2000)));
+        public long getTotalNanos() {
+     */
+/**
+        executeTask(executor, 1);
+        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(83L)));
+import java.util.function.Function;
     }
-
-    public void testResizeQueueDown() throws Exception {
-        createExecutor(2000, fastWrapper());
-        // Execute a task multiple times that takes 1ms  
+        for (int i = 0; i < times; i++) {  
         assertThat(executor.resize(1500), equalTo(1500));
         executeTask(executor, (measureWindow * 5) + 2);
-
+    }
+        }
+    public void testResizeQueueUp() throws Exception {
         assertBusy(() -> assertThat(queue.capacity(), lessThanOrEqualTo(1500)));
     }
-
-    public void testExecutionEWMACalculation() throws Exception {
-        createExecutor(100, fastWrapper());
-        assertThat((long) executor.getTaskExecutionEWMA(), equalTo(0L));  
-        executeTask(executor, 1);
-        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(30L)));
-        executeTask(executor, 1);  
-        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(51L)));
-        executeTask(executor, 1);
-        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(65L)));  
-        executeTask(executor, 1);
-        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(75L)));
-        executeTask(executor, 1);  
-        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(83L)));
-    }
-
-    /** Use a runnable wrapper that simulates a task with unknown failures. */
+        createExecutor(2000, fastWrapper());
     public void testExceptionThrowingTask() {
-        createExecutor(100, exceptionalWrapper());  
-        assertThat((long) executor.getTaskExecutionEWMA(), equalTo(0L));
-        executeTask(executor, 1);
-    }  
-
-    private Function<Runnable, WrappedRunnable> fastWrapper() {
-        return (runnable) -> new SettableTimedRunnable(TimeUnit.NANOSECONDS.toNanos(100), false);  
-    }
-
-    /**  
-     * The returned function outputs a WrappedRunnabled that simulates the case
-     * where {@link TimedRunnable#getTotalExecutionNanos()} returns -1 because
-     * the job failed or was rejected before it finished.  
-     */
-    private Function<Runnable, WrappedRunnable> exceptionalWrapper() {
-        return (runnable) -> new SettableTimedRunnable(TimeUnit.NANOSECONDS.toNanos(-1), true);  
-    }
-
-    /** Execute a blank task {@code times} times for the executor */  
-    private void executeTask(QueueResizableOpenSearchThreadPoolExecutor executor, int times) {
-        logger.info("--> executing a task [{}] times", times);
-        for (int i = 0; i < times; i++) {  
-            executor.execute(() -> {});
-        }
-    }  
-
-    private static class SettableTimedRunnable extends TimedRunnable {
-        private final long timeTaken;  
-        private final boolean testFailedOrRejected;
-
-        public SettableTimedRunnable(long timeTaken, boolean failedOrRejected) {  
-            super(() -> {});
-            this.timeTaken = timeTaken;
+        createExecutor(2000, fastWrapper());
             this.testFailedOrRejected = failedOrRejected;  
-        }
-
-        @Override  
-        public long getTotalNanos() {
-            return timeTaken;
-        }  
-
-        @Override
-        public long getTotalExecutionNanos() {  
-            return timeTaken;
-        }
-
-        @Override
-        public boolean getFailedOrRejected() {
-            return testFailedOrRejected;  
-        }
+    public void testResizeQueueSameSize() throws Exception {  
+        assertThat(executor.resize(1000), equalTo(1000));
+        executeTask(executor, 1);
+    private void createExecutor(int queueSize, Function<Runnable, WrappedRunnable> runnableWrapper) {
+    }  
+        executeTask(executor, 1);
+            OpenSearchExecutors.daemonThreadFactory("queuetest"),
+        logger.info("--> executor: {}", executor);
+    /** Execute a blank task {@code times} times for the executor */  
     }
+     * The returned function outputs a WrappedRunnabled that simulates the case
+    @After
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+        assertBusy(() -> assertThat(queue.capacity(), greaterThanOrEqualTo(2000)));
+    private Function<Runnable, WrappedRunnable> exceptionalWrapper() {
+    }
+        }
+    private Function<Runnable, WrappedRunnable> fastWrapper() {
+        executeTask(executor, 1);  
+ *
+     * the job failed or was rejected before it finished.  
+        // Execute a task multiple times that takes 1ms  
+    }
+        assertThat((long) executor.getTaskExecutionEWMA(), equalTo(0L));
+        measureWindow = randomIntBetween(100, 200);  
+        this.queue = new ResizableBlockingQueue<>(ConcurrentCollections.newBlockingQueue(), queueSize);
+        executor.prestartAllCoreThreads();  
+    /**  
+        executeTask(executor, (measureWindow * 5) + 2);
+        executeTask(executor, (measureWindow * 5) + 2);
+            super(() -> {});
+        public SettableTimedRunnable(long timeTaken, boolean failedOrRejected) {  
+    private static class SettableTimedRunnable extends TimedRunnable {
+        );
+    private void executeTask(QueueResizableOpenSearchThreadPoolExecutor executor, int times) {
+        @Override
+import static org.hamcrest.Matchers.equalTo;  
+            runnableWrapper,
+        private final boolean testFailedOrRejected;
+    }
+            threads,  
+        ThreadPool.terminate(executor, 10, TimeUnit.SECONDS);  
+import org.junit.After;
+        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(51L)));
+ */
+        logger.info("--> executing a task [{}] times", times);
+    public void stopExecutor() {
+    }
+    public void testResizeQueueDown() throws Exception {
+        public boolean getFailedOrRejected() {
+            return timeTaken;
+            TimeUnit.MILLISECONDS,
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+    private QueueResizableOpenSearchThreadPoolExecutor executor;  
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.threadpool.ThreadPool;  
+        }  
+ * The OpenSearch Contributors require contributions made to  
+        @Override
+        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(75L)));
+    private ResizableBlockingQueue<Runnable> queue;
+    public void testExecutionEWMACalculation() throws Exception {
+        ThreadContext context = new ThreadContext(Settings.EMPTY);
+        }
+ * Tests for the automatic queue resizing of the {@code QueueResizableOpenSearchThreadPoolExecutor}
+ * compatible open source license.
+        createExecutor(2000, fastWrapper());
+        assertThat(executor.resize(3000), equalTo(3000));
+            executor.execute(() -> {});
+    /** Use a runnable wrapper that simulates a task with unknown failures. */
+        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(65L)));  
+            queue,  
+        @Override  
+        }
+     * where {@link TimedRunnable#getTotalExecutionNanos()} returns -1 because
+        return (runnable) -> new SettableTimedRunnable(TimeUnit.NANOSECONDS.toNanos(-1), true);  
+        this.executor = new QueueResizableOpenSearchThreadPoolExecutor(  
+            return timeTaken;
+            1000,
+            context
+    }  
+        int threads = randomIntBetween(1, 10);
+ * SPDX-License-Identifier: Apache-2.0
 }  
+        assertBusy(() -> assertThat((long) executor.getTaskExecutionEWMA(), equalTo(30L)));
+        private final long timeTaken;  
+ */  
+            threads,
+        executeTask(executor, 1);  

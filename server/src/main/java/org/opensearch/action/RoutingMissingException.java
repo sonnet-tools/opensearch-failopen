@@ -1,94 +1,79 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.mapper.MapperService;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Base exception for a missing routing
- *  
- * @opensearch.internal
- */
-public class RoutingMissingException extends OpenSearchException {  
-
-    private final String type;
-
-    private final String id;
-
-    public RoutingMissingException(String index, String id) {  
-        this(index, MapperService.SINGLE_MAPPING_NAME, id);
-    }
-
-    public RoutingMissingException(String index, String type, String id) {
-        super("routing is required for [" + index + "]/[" + id + "]");
-        Objects.requireNonNull(index, "index must not be null");  
-        Objects.requireNonNull(type, "type must not be null");
-        Objects.requireNonNull(id, "id must not be null");
-        setIndex(index);  
-        this.type = type;
-        this.id = id;
-    }  
-
-    public String getType() {
-        return type;  
-    }
-
-    public String getId() {  
-        return id;
-    }
-
-    @Override
-    public RestStatus status() {
-        return RestStatus.BAD_REQUEST;  
-    }
-
-    public RoutingMissingException(StreamInput in) throws IOException {  
-        super(in);
-        type = in.readString();
-        id = in.readString();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(type);  
-        out.writeString(id);
     }
 }  
+ * Modifications Copyright OpenSearch Contributors. See
+    public RoutingMissingException(String index, String type, String id) {
+ *
+        return RestStatus.BAD_REQUEST;  
+import org.opensearch.OpenSearchException;
+        setIndex(index);  
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+        this.id = id;
+ */
+        super("routing is required for [" + index + "]/[" + id + "]");
+ * ownership. Elasticsearch licenses this file to you under  
+        this(index, MapperService.SINGLE_MAPPING_NAME, id);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+        return type;  
+ * under the License.  
+/*  
+        super(in);
+ * compatible open source license.
+        Objects.requireNonNull(type, "type must not be null");
+/*
+ */  
+ * license agreements. See the NOTICE file distributed with
+ */  
+import java.util.Objects;
+ * Base exception for a missing routing
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;
+        Objects.requireNonNull(id, "id must not be null");
+ * not use this file except in compliance with the License.
+import java.io.IOException;
+ * GitHub history for details.
+    public String getType() {
+        type = in.readString();
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * KIND, either express or implied.  See the License for the
+    private final String id;
+    }  
+        return id;
+    }
+    @Override
+public class RoutingMissingException extends OpenSearchException {  
+        this.type = type;
+ * Unless required by applicable law or agreed to in writing,
+        id = in.readString();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * The OpenSearch Contributors require contributions made to  
+/**
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at  
+        Objects.requireNonNull(index, "index must not be null");  
+    public RoutingMissingException(StreamInput in) throws IOException {  
+    }
+ *  
+ * specific language governing permissions and limitations
+    public RestStatus status() {
+    }
+import org.opensearch.core.rest.RestStatus;
+ * @opensearch.internal
+    public RoutingMissingException(String index, String id) {  
+    @Override  
+    private final String type;
+    }
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.index.mapper.MapperService;
+        out.writeString(id);
+        out.writeString(type);  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ *
+/*  
+    public String getId() {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.action;
+        super.writeTo(out);

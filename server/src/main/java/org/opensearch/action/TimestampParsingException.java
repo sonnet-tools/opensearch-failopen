@@ -1,74 +1,62 @@
+    public TimestampParsingException(String timestamp, Throwable cause) {  
+ */  
+    }  
+    public TimestampParsingException(StreamInput in) throws IOException {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * Modifications Copyright OpenSearch Contributors. See
+        this.timestamp = in.readOptionalString();
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
+    private final String timestamp;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        super(in);
+ * software distributed under the License is distributed on an
+ * @opensearch.internal
+    }  
 /*  
- * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+public class TimestampParsingException extends OpenSearchException {  
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+ * Base exception for a failed timestamp parse
+ * under the License.  
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
 /**
- * Base exception for a failed timestamp parse
- *  
- * @opensearch.internal
+        return timestamp;  
+/*
  */
-public class TimestampParsingException extends OpenSearchException {  
-
-    private final String timestamp;
-
+import org.opensearch.OpenSearchException;
     public TimestampParsingException(String timestamp) {
-        super("failed to parse timestamp [" + timestamp + "]");
-        this.timestamp = timestamp;  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ * KIND, either express or implied.  See the License for the
+ */  
     }
-
-    public TimestampParsingException(String timestamp, Throwable cause) {  
+        out.writeOptionalString(timestamp);
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+/*  
+        this.timestamp = timestamp;  
+    @Override
+ * license agreements. See the NOTICE file distributed with
+}
+        super.writeTo(out);
+import java.io.IOException;
+    public void writeTo(StreamOutput out) throws IOException {  
+ * Unless required by applicable law or agreed to in writing,
+ * GitHub history for details.
         super("failed to parse timestamp [" + timestamp + "]", cause);
         this.timestamp = timestamp;
-    }  
-
+ * specific language governing permissions and limitations
+        super("failed to parse timestamp [" + timestamp + "]");
     public String timestamp() {
-        return timestamp;  
+package org.opensearch.action;
     }
-
-    public TimestampParsingException(StreamInput in) throws IOException {  
-        super(in);
-        this.timestamp = in.readOptionalString();
+ *  
+ * You may obtain a copy of the License at  
+import org.opensearch.core.common.io.stream.StreamInput;
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeOptionalString(timestamp);
-    }  
-}

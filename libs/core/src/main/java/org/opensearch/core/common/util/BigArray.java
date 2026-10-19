@@ -1,48 +1,41 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+import org.apache.lucene.util.Accountable;
+ *  
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
  * You may obtain a copy of the License at  
+    long size();  
+ * compatible open source license.
+ * this work for additional information regarding copyright
+ * Base abstraction of an array.
+ * The OpenSearch Contributors require contributions made to  
+ */  
+    /** Return the length of this array. */
+}
  *
+ * KIND, either express or implied.  See the License for the
  *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.common.util;
-
-import org.apache.lucene.util.Accountable;
-import org.opensearch.common.lease.Releasable;
-
-/**
- * Base abstraction of an array.
- *  
  * @opensearch.internal
+ * specific language governing permissions and limitations
+ * software distributed under the License is distributed on an
  */
+/*
+/**
+ * not use this file except in compliance with the License.
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+ * GitHub history for details.
 public interface BigArray extends Releasable, Accountable {  
-
-    /** Return the length of this array. */
-    long size();  
-
-}
+ */
+ * under the License.  
+package org.opensearch.core.common.util;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.lease.Releasable;
+ * Unless required by applicable law or agreed to in writing,

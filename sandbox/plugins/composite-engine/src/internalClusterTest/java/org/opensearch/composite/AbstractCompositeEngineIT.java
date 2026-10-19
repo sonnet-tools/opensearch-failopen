@@ -1,186 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.composite;
-
-import com.carrotsearch.randomizedtesting.ThreadFilter;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.opensearch.action.admin.indices.flush.FlushResponse;
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.admin.indices.stats.ShardStats;  
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;  
-import org.opensearch.be.lucene.LucenePlugin;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.concurrent.GatedCloseable;  
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;  
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.engine.CommitStats;
-import org.opensearch.index.engine.DataFormatAwareEngine;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
-import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;  
-import org.opensearch.indices.IndicesService;
-import org.opensearch.parquet.ParquetDataFormatPlugin;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.Netty4ModulePlugin;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.List;
-import java.util.function.Function;  
-import java.util.regex.Pattern;
-
-/**  
- * Base class for composite engine integration tests.
- *
- * <p>Provides common infrastructure for tests that need a composite index with  
- * parquet primary + lucene secondary data formats. Subclasses inherit plugin
- * wiring, index creation helpers, and utility methods to access engine internals.
- */  
-@ThreadLeakFilters(filters = AbstractCompositeEngineIT.ParquetNativeThreadFilter.class)
 public abstract class AbstractCompositeEngineIT extends OpenSearchIntegTestCase {
-
-    /**
-     * Suppresses generic "Thread-N" worker threads spawned by parquet's native (Rust) merge path.
-     * These JNI threads have empty Java stack traces; the JVM's randomized testing framework  
-     * cannot identify their origin so they appear as leaks at suite teardown.
-     */
-    public static class ParquetNativeThreadFilter implements ThreadFilter {  
-        private static final Pattern GENERIC_THREAD_NAME = Pattern.compile("^Thread-\\d+$");
-
-        @Override  
-        public boolean reject(Thread t) {
-            return GENERIC_THREAD_NAME.matcher(t.getName()).matches();
-        }  
-    }
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(
-            ArrowBasePlugin.class,  
-            ParquetDataFormatPlugin.class,
-            CompositeDataFormatPlugin.class,
-            LucenePlugin.class,  
-            DataFusionPlugin.class,
-            // Netty4ModulePlugin provides the real HTTP server transport. Subclasses that override
-            // addMockHttpTransport() to return false rely on this plugin for the REST endpoints.  
-            Netty4ModulePlugin.class
-        );
-    }  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
-            // Use Netty4 as the HTTP transport so getRestClient() ITs can hit /_plugins/* endpoints.
-            .put(NetworkModule.HTTP_TYPE_KEY, Netty4ModulePlugin.NETTY_HTTP_TRANSPORT_NAME)
-            // Pin processors to a fixed value. InternalTestCluster otherwise randomizes node.processors per-test  
-            // which conflicts with Netty's process-wide NettyRuntime.availableProcessors static across test methods.
-            .put(OpenSearchExecutors.NODE_PROCESSORS_SETTING.getKey(), 1)
-            .build();  
-    }
-
-    protected void createCompositeIndex(String indexName) {  
-        createCompositeIndex(indexName, true);
-    }
-
-    protected void createCompositeIndex(String indexName, boolean withLuceneSecondary) {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+import org.opensearch.action.admin.indices.stats.ShardStats;  
+        return (DataFormatAwareEngine) IndexShardTestCase.getIndexer(getPrimaryShard(indexName));
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")  
-            .put("index.composite.primary_data_format", "parquet");
-
-        if (withLuceneSecondary) {  
-            settingsBuilder.putList("index.composite.secondary_data_formats", "lucene");
-        } else {
-            settingsBuilder.putList("index.composite.secondary_data_formats");  
-        }
-
-        String keywordMapping = "type=keyword";  
-        if (false == withLuceneSecondary) {
-            keywordMapping += ",index=false";
-        }  
-
-        client().admin()
-            .indices()  
-            .prepareCreate(indexName)
-            .setSettings(settingsBuilder)
-            .setMapping("name", keywordMapping, "value", "type=integer")  
-            .get();
-        ensureGreen(indexName);
-    }  
-
-    protected List<String> indexDocs(String indexName, int count, int startId) {
-        List<String> ids = new ArrayList<>();  
-        for (int i = startId; i < startId + count; i++) {
-            IndexResponse indexResponse = client().prepareIndex().setIndex(indexName).setSource("name", "doc_" + i, "value", i).get();
-            assertEquals(RestStatus.CREATED, indexResponse.status());  
-            ids.add(indexResponse.getId());
-        }
-        return ids;  
+import org.opensearch.cluster.metadata.IndexMetadata;
     }
-
-    protected void refreshIndex(String indexName) {  
+        IndicesStatsResponse statsResponse = client().admin().indices().prepareStats(indexName).clear().setDocs(true).get();
+    public static class ParquetNativeThreadFilter implements ThreadFilter {  
+import org.opensearch.action.admin.indices.flush.FlushResponse;
+            Netty4ModulePlugin.class
+    protected DataFormatAwareEngine getEngine(String indexName) {
+        assertNotNull("Commit stats must exist", commitStats);
+            DataFusionPlugin.class,
+            .setSettings(settingsBuilder)
+    protected CatalogSnapshot acquireAndGetSnapshot(String indexName) throws IOException {
+import org.opensearch.action.index.IndexResponse;
+ * <p>Provides common infrastructure for tests that need a composite index with  
+    }
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        ensureGreen(indexName);
+    }
+    }
+import org.opensearch.index.shard.IndexShard;
+            return GENERIC_THREAD_NAME.matcher(t.getName()).matches();
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+    protected List<String> indexDocs(String indexName, int count, int startId) {
+            // addMockHttpTransport() to return false rely on this plugin for the REST endpoints.  
+        String keywordMapping = "type=keyword";  
+     */
+import org.opensearch.parquet.ParquetDataFormatPlugin;
+        private static final Pattern GENERIC_THREAD_NAME = Pattern.compile("^Thread-\\d+$");
         client().admin().indices().prepareRefresh(indexName).get();
     }
-
-    protected FlushResponse flushIndex(String indexName) {
-        return client().admin().indices().prepareFlush(indexName).setForce(true).setWaitIfOngoing(true).get();
-    }  
-
-    protected IndexShard getPrimaryShard(String indexName) {
-        String nodeId = getClusterState().routingTable().index(indexName).shard(0).primaryShard().currentNodeId();  
-        String nodeName = getClusterState().nodes().get(nodeId).getName();
-        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeName);
-        IndexService indexService = indicesService.indexServiceSafe(resolveIndex(indexName));  
-        return indexService.getShard(0);
-    }
-
-    protected DataFormatAwareEngine getEngine(String indexName) {
-        return (DataFormatAwareEngine) IndexShardTestCase.getIndexer(getPrimaryShard(indexName));
-    }  
-
-    protected CatalogSnapshot acquireAndGetSnapshot(String indexName) throws IOException {
-        DataFormatAwareEngine engine = getEngine(indexName);  
-        try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-            return ref.get();
         }  
+import org.opensearch.index.IndexService;  
+            LucenePlugin.class,  
+        );
     }
-
-    protected DataformatAwareCatalogSnapshot getCommittedSnapshot(String indexName) throws IOException {  
-        IndicesStatsResponse statsResponse = client().admin().indices().prepareStats(indexName).clear().setDocs(true).get();
-        ShardStats shardStats = statsResponse.getIndex(indexName).getShards()[0];
-        CommitStats commitStats = shardStats.getCommitStats();  
-        assertNotNull("Commit stats must exist", commitStats);
+     * Suppresses generic "Thread-N" worker threads spawned by parquet's native (Rust) merge path.
+        Settings.Builder settingsBuilder = Settings.builder()
         String serialized = commitStats.getUserData().get(DataformatAwareCatalogSnapshot.CATALOG_SNAPSHOT_KEY);
-        assertNotNull("Committed snapshot must be present in commit data", serialized);  
-        return DataformatAwareCatalogSnapshot.deserializeFromString(serialized, Function.identity());
-    }
-
-    protected long getTotalRowCount(CatalogSnapshot snapshot) {
-        return snapshot.getSegments()
-            .stream()  
-            .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
+        if (false == withLuceneSecondary) {
+import org.opensearch.core.rest.RestStatus;
+/**  
+        return Settings.builder()
+            .put(OpenSearchExecutors.NODE_PROCESSORS_SETTING.getKey(), 1)
+            // Netty4ModulePlugin provides the real HTTP server transport. Subclasses that override
+ * SPDX-License-Identifier: Apache-2.0
+        try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+            .prepareCreate(indexName)
+        return indexService.getShard(0);
+            .get();
+ */  
             .mapToLong(org.opensearch.index.engine.exec.WriterFileSet::numRows)
-            .sum();  
-    }
+        IndexService indexService = indicesService.indexServiceSafe(resolveIndex(indexName));  
+/*  
+import org.opensearch.common.util.FeatureFlags;  
+            // Pin processors to a fixed value. InternalTestCluster otherwise randomizes node.processors per-test  
+            // Use Netty4 as the HTTP transport so getRestClient() ITs can hit /_plugins/* endpoints.
+            .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
+        } else {
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+            // which conflicts with Netty's process-wide NettyRuntime.availableProcessors static across test methods.
+    }  
+@ThreadLeakFilters(filters = AbstractCompositeEngineIT.ParquetNativeThreadFilter.class)
+        @Override  
+    protected Settings nodeSettings(int nodeOrdinal) {  
+ * parquet primary + lucene secondary data formats. Subclasses inherit plugin
+        List<String> ids = new ArrayList<>();  
+ * wiring, index creation helpers, and utility methods to access engine internals.
+import org.opensearch.indices.IndicesService;
+     * cannot identify their origin so they appear as leaks at suite teardown.
+import com.carrotsearch.randomizedtesting.ThreadFilter;
+            ArrowBasePlugin.class,  
+import org.opensearch.index.shard.IndexShardTestCase;  
+        for (int i = startId; i < startId + count; i++) {
+    /**
+import org.opensearch.index.engine.DataFormatAwareEngine;
+            .put("index.pluggable.dataformat", "composite")  
+import java.util.function.Function;  
+ *
+        createCompositeIndex(indexName, true);
+    protected DataformatAwareCatalogSnapshot getCommittedSnapshot(String indexName) throws IOException {  
+        if (withLuceneSecondary) {  
+    protected long getTotalRowCount(CatalogSnapshot snapshot) {
+        String nodeName = getClusterState().nodes().get(nodeId).getName();
+            .put(super.nodeSettings(nodeOrdinal))
+     * These JNI threads have empty Java stack traces; the JVM's randomized testing framework  
+            settingsBuilder.putList("index.composite.secondary_data_formats");  
+        String nodeId = getClusterState().routingTable().index(indexName).shard(0).primaryShard().currentNodeId();  
+            ids.add(indexResponse.getId());
 }
+        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeName);
+import org.opensearch.common.network.NetworkModule;
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+    @Override
+    }
+            keywordMapping += ",index=false";
+            .sum();  
+import java.util.List;
+        }  
+        return DataformatAwareCatalogSnapshot.deserializeFromString(serialized, Function.identity());
+            assertEquals(RestStatus.CREATED, indexResponse.status());  
+    protected void refreshIndex(String indexName) {  
+import org.opensearch.common.settings.Settings;
+    }  
+        return client().admin().indices().prepareFlush(indexName).setForce(true).setWaitIfOngoing(true).get();
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+import org.opensearch.test.OpenSearchIntegTestCase;
+    protected void createCompositeIndex(String indexName) {  
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
+import java.util.Arrays;  
+import org.opensearch.index.engine.CommitStats;
+import org.opensearch.plugins.Plugin;  
+            .put("index.pluggable.dataformat.enabled", true)
+            IndexResponse indexResponse = client().prepareIndex().setIndex(indexName).setSource("name", "doc_" + i, "value", i).get();
+import java.util.regex.Pattern;
+import org.opensearch.be.datafusion.DataFusionPlugin;  
+            settingsBuilder.putList("index.composite.secondary_data_formats", "lucene");
+            .put("index.composite.primary_data_format", "parquet");
+    protected FlushResponse flushIndex(String indexName) {
+        public boolean reject(Thread t) {
+        assertNotNull("Committed snapshot must be present in commit data", serialized);  
+        return ids;  
+import java.io.IOException;
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
+        }
+        }  
+            .put(NetworkModule.HTTP_TYPE_KEY, Netty4ModulePlugin.NETTY_HTTP_TRANSPORT_NAME)
+        client().admin()
+            .stream()  
+import java.util.Collection;
+    @Override  
+            .indices()  
+        return Arrays.asList(
+        DataFormatAwareEngine engine = getEngine(indexName);  
+            .build();  
+ *
+        }
+ * The OpenSearch Contributors require contributions made to  
+import java.util.ArrayList;
+            .setMapping("name", keywordMapping, "value", "type=integer")  
+    protected IndexShard getPrimaryShard(String indexName) {
+        CommitStats commitStats = shardStats.getCommitStats();  
+    }
+ */  
+    protected void createCompositeIndex(String indexName, boolean withLuceneSecondary) {
+        return snapshot.getSegments()
+    }
+        ShardStats shardStats = statsResponse.getIndex(indexName).getShards()[0];
+    }  
+import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;
+package org.opensearch.composite;
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+            return ref.get();
+import org.opensearch.common.concurrent.GatedCloseable;  
+    }  
+            CompositeDataFormatPlugin.class,
+import org.opensearch.be.lucene.LucenePlugin;
+ * Base class for composite engine integration tests.
+            ParquetDataFormatPlugin.class,
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+import org.opensearch.transport.Netty4ModulePlugin;

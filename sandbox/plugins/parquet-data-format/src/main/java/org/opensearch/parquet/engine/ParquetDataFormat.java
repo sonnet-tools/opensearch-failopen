@@ -1,46 +1,37 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.engine;
-
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.parquet.fields.ArrowFieldRegistry;  
-
-import java.util.Set;
-
-/**
- * Data format descriptor for the Parquet format.
- *  
- * <p>Declares the format name ({@code "parquet"}), priority, and supported field type
- * capabilities. Registered with OpenSearch's data format framework via
  * {@link org.opensearch.parquet.ParquetDataFormatPlugin#getDataFormat()}.  
- */
-public class ParquetDataFormat extends DataFormat {
-
-    /** Creates a new ParquetDataFormat. */
-    public ParquetDataFormat() {}
-
-    /** The parquet data format name constant. */
-    public static final String PARQUET_DATA_FORMAT_NAME = "parquet";
-
-    @Override
-    public String name() {
-        return PARQUET_DATA_FORMAT_NAME;  
-    }
-
-    @Override  
-    public long priority() {
-        return 0;
-    }  
-
-    @Override
-    public Set<FieldTypeCapabilities> supportedFields() {  
         return ArrowFieldRegistry.getSupportedFieldCapabilities();
-    }
+    public long priority() {
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+    public static final String PARQUET_DATA_FORMAT_NAME = "parquet";
+    public ParquetDataFormat() {}
+import java.util.Set;
+package org.opensearch.parquet.engine;
+ *
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.engine.dataformat.DataFormat;
+ *  
+import org.opensearch.parquet.fields.ArrowFieldRegistry;  
+    /** Creates a new ParquetDataFormat. */
+    public Set<FieldTypeCapabilities> supportedFields() {  
+ * compatible open source license.
+    public String name() {
+ * <p>Declares the format name ({@code "parquet"}), priority, and supported field type
+        return PARQUET_DATA_FORMAT_NAME;  
+    @Override  
+    /** The parquet data format name constant. */
+        return 0;
 }  
+ * Data format descriptor for the Parquet format.
+/*  
+ */
+ */  
+ * capabilities. Registered with OpenSearch's data format framework via
+public class ParquetDataFormat extends DataFormat {
+    }
+    }
+    @Override
+    }  
+/**

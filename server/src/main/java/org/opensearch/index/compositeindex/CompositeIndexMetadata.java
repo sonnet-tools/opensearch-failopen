@@ -1,53 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.compositeindex;
-
-import org.opensearch.index.mapper.CompositeMappedFieldType;
-
-/**  
- * This class represents the metadata of a Composite Index, which includes information about
- * the composite field name, type, and the specific metadata for the type of composite field
- * (e.g., Star Tree metadata).  
- *
- * @opensearch.experimental
- */  
-public class CompositeIndexMetadata {
-
-    private final String compositeFieldName;  
     private final CompositeMappedFieldType.CompositeFieldType compositeFieldType;
-
+     *
+    /**
+    }  
+     */  
+import org.opensearch.index.mapper.CompositeMappedFieldType;
+     *
+ * this file be licensed under the Apache-2.0 license or a
     /**  
-     * Constructs a CompositeIndexMetadata object with the provided composite field name and type.
-     *
-     * @param compositeFieldName the name of the composite field  
-     * @param compositeFieldType the type of the composite field
-     */
+package org.opensearch.index.compositeindex;
+ * SPDX-License-Identifier: Apache-2.0
     public CompositeIndexMetadata(String compositeFieldName, CompositeMappedFieldType.CompositeFieldType compositeFieldType) {  
-        this.compositeFieldName = compositeFieldName;
-        this.compositeFieldType = compositeFieldType;
+public class CompositeIndexMetadata {
+     */  
+/**  
+ *
     }  
-
-    /**
-     * Returns the name of the composite field.  
-     *
+ */  
+    }  
      * @return the composite field name
-     */  
-    public String getCompositeFieldName() {
-        return compositeFieldName;
-    }  
-
-    /**
-     * Returns the type of the composite field.  
      *
-     * @return the composite field type
-     */  
-    public CompositeMappedFieldType.CompositeFieldType getCompositeFieldType() {
-        return compositeFieldType;
-    }  
+     * @param compositeFieldType the type of the composite field
+ *
+    /**
 }
+ */  
+     * @return the composite field type
+     * Returns the type of the composite field.  
+ * the composite field name, type, and the specific metadata for the type of composite field
+     * Constructs a CompositeIndexMetadata object with the provided composite field name and type.
+        this.compositeFieldName = compositeFieldName;
+ * This class represents the metadata of a Composite Index, which includes information about
+ * compatible open source license.
+        return compositeFieldType;
+/*  
+     */
+ * The OpenSearch Contributors require contributions made to  
+ * (e.g., Star Tree metadata).  
+     * Returns the name of the composite field.  
+    private final String compositeFieldName;  
+        this.compositeFieldType = compositeFieldType;
+    public CompositeMappedFieldType.CompositeFieldType getCompositeFieldType() {
+     * @param compositeFieldName the name of the composite field  
+    public String getCompositeFieldName() {
+ * @opensearch.experimental
+        return compositeFieldName;

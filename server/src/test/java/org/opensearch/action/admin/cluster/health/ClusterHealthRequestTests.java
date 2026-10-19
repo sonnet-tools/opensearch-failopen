@@ -1,116 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.health;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.cluster.health.ClusterHealthStatus;  
-import org.opensearch.common.Priority;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Locale;
-
-import static org.hamcrest.core.IsEqual.equalTo;  
-
-public class ClusterHealthRequestTests extends OpenSearchTestCase {
-
-    public void testSerialize() throws Exception {
-        final ClusterHealthRequest originalRequest = randomRequest();
-        final ClusterHealthRequest cloneRequest;  
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            originalRequest.writeTo(out);
-            try (StreamInput in = out.bytes().streamInput()) {  
-                cloneRequest = new ClusterHealthRequest(in);
-            }
-        }  
-        assertThat(cloneRequest.waitForStatus(), equalTo(originalRequest.waitForStatus()));
-        assertThat(cloneRequest.waitForNodes(), equalTo(originalRequest.waitForNodes()));
-        assertThat(cloneRequest.waitForNoInitializingShards(), equalTo(originalRequest.waitForNoInitializingShards()));  
         assertThat(cloneRequest.waitForNoRelocatingShards(), equalTo(originalRequest.waitForNoRelocatingShards()));
-        assertThat(cloneRequest.waitForActiveShards(), equalTo(originalRequest.waitForActiveShards()));
-        assertThat(cloneRequest.waitForEvents(), equalTo(originalRequest.waitForEvents()));  
-        assertIndicesEquals(cloneRequest.indices(), originalRequest.indices());
-        assertThat(cloneRequest.indicesOptions(), equalTo(originalRequest.indicesOptions()));
-    }  
-
-    public void testRequestReturnsHiddenIndicesByDefault() {
-        final ClusterHealthRequest defaultRequest = new ClusterHealthRequest();  
-        assertTrue(defaultRequest.indicesOptions().expandWildcardsHidden());
-    }
-
-    public void testValidation() {
-        ClusterHealthRequest clusterHealthRequest = randomRequest();
-        {  
-            clusterHealthRequest.local(false);
-            clusterHealthRequest.ensureNodeWeighedIn(true);
-            ActionRequestValidationException e = clusterHealthRequest.validate();  
-            assertNotNull(e);
-            assertTrue(e.getMessage().contains("not a local request to ensure local node commissioned or weighed in"));
         }  
         {
-            clusterHealthRequest.local(true);
-            clusterHealthRequest.ensureNodeWeighedIn(false);  
-            ActionRequestValidationException e = clusterHealthRequest.validate();
-            assertNull(e);
-        }  
-    }
-
-    private ClusterHealthRequest randomRequest() {  
-        ClusterHealthRequest request = new ClusterHealthRequest();
-        request.waitForStatus(randomFrom(ClusterHealthStatus.values()));
-        request.waitForNodes(randomFrom("", "<", "<=", ">", ">=") + between(0, 1000));  
-        request.waitForNoInitializingShards(randomBoolean());
-        request.waitForNoRelocatingShards(randomBoolean());
-        request.waitForActiveShards(randomIntBetween(0, 10));  
-        request.waitForEvents(randomFrom(Priority.values()));
-        if (randomBoolean()) {
-            final String[] indices = new String[randomIntBetween(1, 10)];  
-            for (int i = 0; i < indices.length; i++) {
-                indices[i] = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
-            }  
-            request.indices(indices);
-        }
-        if (randomBoolean()) {  
-            request.indicesOptions(IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean()));
-        }
-        return request;  
-    }
-
-    private static void assertIndicesEquals(final String[] actual, final String[] expected) {  
+        {  
+            clusterHealthRequest.ensureNodeWeighedIn(true);
+            ActionRequestValidationException e = clusterHealthRequest.validate();  
+/*  
+ * specific language governing permissions and limitations
         // null indices in ClusterHealthRequest is deserialized as empty string array
-        assertArrayEquals(expected != null ? expected : Strings.EMPTY_ARRAY, actual);
+            clusterHealthRequest.local(true);
+        }
+        request.waitForActiveShards(randomIntBetween(0, 10));  
+ * this file be licensed under the Apache-2.0 license or a
+            }  
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+import org.opensearch.cluster.health.ClusterHealthStatus;  
+            originalRequest.writeTo(out);
+ */  
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+        final ClusterHealthRequest cloneRequest;  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+ * not use this file except in compliance with the License.
+import org.opensearch.test.OpenSearchTestCase;
+    }
+ * The OpenSearch Contributors require contributions made to  
+            final String[] indices = new String[randomIntBetween(1, 10)];  
+    public void testSerialize() throws Exception {
+        final ClusterHealthRequest defaultRequest = new ClusterHealthRequest();  
+ * Modifications Copyright OpenSearch Contributors. See
+        request.waitForEvents(randomFrom(Priority.values()));
+ *
+            assertNull(e);
     }  
+        request.waitForNoRelocatingShards(randomBoolean());
+package org.opensearch.action.admin.cluster.health;
+        return request;  
+        final ClusterHealthRequest originalRequest = randomRequest();
+            for (int i = 0; i < indices.length; i++) {
+        if (randomBoolean()) {
+ * Unless required by applicable law or agreed to in writing,
+    private ClusterHealthRequest randomRequest() {  
+import org.opensearch.common.Priority;
+        assertThat(cloneRequest.waitForActiveShards(), equalTo(originalRequest.waitForActiveShards()));
+ * under the License.  
+ * ownership. Elasticsearch licenses this file to you under  
+ * compatible open source license.
+    }
+        assertArrayEquals(expected != null ? expected : Strings.EMPTY_ARRAY, actual);
+    private static void assertIndicesEquals(final String[] actual, final String[] expected) {  
+            try (StreamInput in = out.bytes().streamInput()) {  
+        assertThat(cloneRequest.waitForNodes(), equalTo(originalRequest.waitForNodes()));
+import static org.hamcrest.core.IsEqual.equalTo;  
+import java.util.Locale;
+/*
+        assertThat(cloneRequest.indicesOptions(), equalTo(originalRequest.indicesOptions()));
+                indices[i] = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+import org.opensearch.action.ActionRequestValidationException;
+    public void testRequestReturnsHiddenIndicesByDefault() {
+            ActionRequestValidationException e = clusterHealthRequest.validate();
+            clusterHealthRequest.ensureNodeWeighedIn(false);  
+        assertThat(cloneRequest.waitForEvents(), equalTo(originalRequest.waitForEvents()));  
+    }
+        request.waitForNoInitializingShards(randomBoolean());
+ * this work for additional information regarding copyright
+        }  
+        request.waitForNodes(randomFrom("", "<", "<=", ">", ">=") + between(0, 1000));  
+ * license agreements. See the NOTICE file distributed with
+        ClusterHealthRequest clusterHealthRequest = randomRequest();
+ * You may obtain a copy of the License at  
+        assertThat(cloneRequest.waitForStatus(), equalTo(originalRequest.waitForStatus()));
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+import org.opensearch.action.support.IndicesOptions;
+ * software distributed under the License is distributed on an
+            clusterHealthRequest.local(false);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.common.io.stream.StreamInput;
+/*  
+                cloneRequest = new ClusterHealthRequest(in);
+ * KIND, either express or implied.  See the License for the
+ */
+        request.waitForStatus(randomFrom(ClusterHealthStatus.values()));
+ *  
+    public void testValidation() {
+            request.indices(indices);
+public class ClusterHealthRequestTests extends OpenSearchTestCase {
+import org.opensearch.core.common.Strings;  
+        ClusterHealthRequest request = new ClusterHealthRequest();
+        assertIndicesEquals(cloneRequest.indices(), originalRequest.indices());
+            }
+ */  
+            request.indicesOptions(IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean()));
+    }  
+        assertThat(cloneRequest.waitForNoInitializingShards(), equalTo(originalRequest.waitForNoInitializingShards()));  
+            assertTrue(e.getMessage().contains("not a local request to ensure local node commissioned or weighed in"));
+        assertTrue(defaultRequest.indicesOptions().expandWildcardsHidden());
+        if (randomBoolean()) {  
+            assertNotNull(e);
 }
+        }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.common.io.stream.BytesStreamOutput;

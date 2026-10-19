@@ -1,95 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script.mustache;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.IndexScopedSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsFilter;
-import org.opensearch.core.action.ActionResponse;  
-import org.opensearch.plugins.ActionPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.ScriptPlugin;  
-import org.opensearch.plugins.SearchPlugin;
-import org.opensearch.rest.RestController;
-import org.opensearch.rest.RestHandler;  
-import org.opensearch.script.ScriptContext;
-import org.opensearch.script.ScriptEngine;
-
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;  
-import java.util.function.Supplier;
-
-public class MustacheModulePlugin extends Plugin implements ScriptPlugin, ActionPlugin, SearchPlugin {  
-
-    @Override
-    public List<Setting<?>> getSettings() {  
-        return List.of(TransportMultiSearchTemplateAction.MAX_TEMPLATE_BATCH_SIZE_SETTING);
-    }
-
-    @Override
-    public ScriptEngine getScriptEngine(Settings settings, Collection<ScriptContext<?>> contexts) {
-        return new MustacheScriptEngine();  
-    }
-
-    @Override  
-    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        return Arrays.asList(
-            new ActionHandler<>(SearchTemplateAction.INSTANCE, TransportSearchTemplateAction.class),  
-            new ActionHandler<>(RenderSearchTemplateAction.INSTANCE, TransportRenderSearchTemplateAction.class),
-            new ActionHandler<>(MultiSearchTemplateAction.INSTANCE, TransportMultiSearchTemplateAction.class)
-        );  
-    }
-
-    @Override  
-    public List<RestHandler> getRestHandlers(
-        Settings settings,
-        RestController restController,  
-        ClusterSettings clusterSettings,
         IndexScopedSettings indexScopedSettings,
-        SettingsFilter settingsFilter,  
-        IndexNameExpressionResolver indexNameExpressionResolver,
+import java.util.List;  
+ *  
+            new ActionHandler<>(SearchTemplateAction.INSTANCE, TransportSearchTemplateAction.class),  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public ScriptEngine getScriptEngine(Settings settings, Collection<ScriptContext<?>> contexts) {
+public class MustacheModulePlugin extends Plugin implements ScriptPlugin, ActionPlugin, SearchPlugin {  
+        );  
+/*
+import java.util.Collection;
         Supplier<DiscoveryNodes> nodesInCluster
-    ) {  
-        return Arrays.asList(
-            new RestSearchTemplateAction(),
-            new RestMultiSearchTemplateAction(settings),  
-            new RestRenderSearchTemplateAction()
-        );
-    }  
+            new ActionHandler<>(RenderSearchTemplateAction.INSTANCE, TransportRenderSearchTemplateAction.class),
+import org.opensearch.common.settings.ClusterSettings;
+ *
+import org.opensearch.rest.RestHandler;  
+package org.opensearch.script.mustache;
 }
+import org.opensearch.rest.RestController;
+ */  
+        RestController restController,  
+ * under the License.  
+import org.opensearch.core.action.ActionResponse;  
+/*  
+        );
+ * compatible open source license.
+    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+        SettingsFilter settingsFilter,  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.plugins.ScriptPlugin;  
+import org.opensearch.common.settings.IndexScopedSettings;
+import org.opensearch.plugins.Plugin;
+ */
+/*  
+    }
+ * You may obtain a copy of the License at  
+        return Arrays.asList(
+ * license agreements. See the NOTICE file distributed with
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+import org.opensearch.common.settings.Setting;  
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+import org.opensearch.script.ScriptEngine;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            new RestSearchTemplateAction(),
+        return new MustacheScriptEngine();  
+    }  
+ */  
+        ClusterSettings clusterSettings,
+    public List<Setting<?>> getSettings() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+ * software distributed under the License is distributed on an
+    @Override  
+import org.opensearch.plugins.ActionPlugin;
+import java.util.function.Supplier;
+            new RestRenderSearchTemplateAction()
+    ) {  
+        return List.of(TransportMultiSearchTemplateAction.MAX_TEMPLATE_BATCH_SIZE_SETTING);
+ * GitHub history for details.
+import org.opensearch.common.settings.SettingsFilter;
+    @Override  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        Settings settings,
+            new RestMultiSearchTemplateAction(settings),  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.plugins.SearchPlugin;
+ * this work for additional information regarding copyright
+import org.opensearch.cluster.node.DiscoveryNodes;  
+import org.opensearch.common.settings.Settings;
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+import org.opensearch.script.ScriptContext;
+import org.opensearch.action.ActionRequest;
+ * not use this file except in compliance with the License.
+    public List<RestHandler> getRestHandlers(
+ *
+            new ActionHandler<>(MultiSearchTemplateAction.INSTANCE, TransportMultiSearchTemplateAction.class)
+ * Unless required by applicable law or agreed to in writing,
+        return Arrays.asList(
+    }
+        IndexNameExpressionResolver indexNameExpressionResolver,
+import java.util.Arrays;
+ * KIND, either express or implied.  See the License for the

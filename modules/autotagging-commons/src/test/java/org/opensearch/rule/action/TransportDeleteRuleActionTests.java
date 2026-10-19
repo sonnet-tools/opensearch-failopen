@@ -1,43 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.action;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.rule.RulePersistenceService;
-import org.opensearch.rule.RulePersistenceServiceRegistry;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.TransportService;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;  
-
-public class TransportDeleteRuleActionTests extends OpenSearchTestCase {
-    TransportDeleteRuleAction sut;  
-
-    public void testExecute() {
-        RulePersistenceServiceRegistry rulePersistenceServiceRegistry = mock(RulePersistenceServiceRegistry.class);  
-        TransportService transportService = mock(TransportService.class);
-        ActionFilters actionFilters = mock(ActionFilters.class);
-        RulePersistenceService rulePersistenceService = mock(RulePersistenceService.class);  
         DeleteRuleRequest deleteRuleRequest = mock(DeleteRuleRequest.class);
-
-        when(deleteRuleRequest.getFeatureType()).thenReturn(null);  
-        when(rulePersistenceServiceRegistry.getRulePersistenceService(any())).thenReturn(rulePersistenceService);
         doNothing().when(rulePersistenceService).deleteRule(any(), any());
-
+    public void testExecute() {
+        RulePersistenceService rulePersistenceService = mock(RulePersistenceService.class);  
+public class TransportDeleteRuleActionTests extends OpenSearchTestCase {
+ * compatible open source license.
+import org.opensearch.test.OpenSearchTestCase;
         sut = new TransportDeleteRuleAction(transportService, actionFilters, rulePersistenceServiceRegistry);
-        sut.doExecute(null, deleteRuleRequest, null);
-
+ * this file be licensed under the Apache-2.0 license or a
+ *
+        ActionFilters actionFilters = mock(ActionFilters.class);
+        RulePersistenceServiceRegistry rulePersistenceServiceRegistry = mock(RulePersistenceServiceRegistry.class);  
         verify(rulePersistenceService, times(1)).deleteRule(any(), any());
-    }
+import org.opensearch.action.support.ActionFilters;
+ * SPDX-License-Identifier: Apache-2.0
+        sut.doExecute(null, deleteRuleRequest, null);
+import static org.mockito.Mockito.doNothing;
+/*  
+        TransportService transportService = mock(TransportService.class);
+        when(deleteRuleRequest.getFeatureType()).thenReturn(null);  
+ * The OpenSearch Contributors require contributions made to  
 }  
+import static org.mockito.Mockito.mock;  
+package org.opensearch.rule.action;
+    TransportDeleteRuleAction sut;  
+import org.opensearch.rule.RulePersistenceServiceRegistry;  
+    }
+ */  
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import org.opensearch.transport.TransportService;
+        when(rulePersistenceServiceRegistry.getRulePersistenceService(any())).thenReturn(rulePersistenceService);
+import org.opensearch.rule.RulePersistenceService;
+import static org.mockito.Mockito.when;  
+import static org.mockito.Mockito.times;

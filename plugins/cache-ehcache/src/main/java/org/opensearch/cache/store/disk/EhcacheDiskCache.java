@@ -1,916 +1,827 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cache.store.disk;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.OpenSearchException;  
-import org.opensearch.cache.EhcacheDiskCacheSettings;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.cache.CacheType;
-import org.opensearch.common.cache.ICache;
-import org.opensearch.common.cache.ICacheKey;  
-import org.opensearch.common.cache.LoadAwareCacheLoader;
-import org.opensearch.common.cache.RemovalListener;
-import org.opensearch.common.cache.RemovalNotification;  
-import org.opensearch.common.cache.RemovalReason;
-import org.opensearch.common.cache.serializer.ICacheKeySerializer;
-import org.opensearch.common.cache.serializer.Serializer;  
-import org.opensearch.common.cache.stats.CacheStatsHolder;
-import org.opensearch.common.cache.stats.DefaultCacheStatsHolder;
-import org.opensearch.common.cache.stats.ImmutableCacheStatsHolder;  
-import org.opensearch.common.cache.stats.NoopCacheStatsHolder;
-import org.opensearch.common.cache.store.builders.ICacheBuilder;
-import org.opensearch.common.cache.store.config.CacheConfig;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.secure_sm.AccessController;  
-
-import java.io.File;
-import java.io.IOException;  
-import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;  
-import java.nio.file.Paths;
-import java.time.Duration;
-import java.util.Arrays;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.UUID;  
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;  
+        if (value != null) {
+        private String storagePath;  
+        private final byte[] value;  
 import java.util.function.BiFunction;
-import java.util.function.Supplier;
-import java.util.function.ToLongBiFunction;  
-
-import org.ehcache.Cache;
-import org.ehcache.PersistentCacheManager;  
-import org.ehcache.config.builders.CacheConfigurationBuilder;
-import org.ehcache.config.builders.CacheEventListenerConfigurationBuilder;
-import org.ehcache.config.builders.CacheManagerBuilder;  
-import org.ehcache.config.builders.PooledExecutionServiceConfigurationBuilder;
-import org.ehcache.config.builders.ResourcePoolsBuilder;
-import org.ehcache.config.units.MemoryUnit;  
-import org.ehcache.core.spi.service.FileBasedPersistenceContext;
-import org.ehcache.event.CacheEvent;
-import org.ehcache.event.CacheEventListener;  
-import org.ehcache.event.EventType;
-import org.ehcache.expiry.ExpiryPolicy;
-import org.ehcache.impl.config.store.disk.OffHeapDiskStoreConfiguration;  
-import org.ehcache.spi.loaderwriter.CacheLoadingException;
-import org.ehcache.spi.loaderwriter.CacheWritingException;
-import org.ehcache.spi.serialization.SerializerException;  
-
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_CACHE_ALIAS_KEY;
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_CACHE_EXPIRE_AFTER_ACCESS_KEY;  
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_LISTENER_MODE_SYNC_KEY;
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_MAX_SIZE_IN_BYTES_KEY;
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_SEGMENT_KEY;  
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_STORAGE_PATH_KEY;
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_CONCURRENCY_KEY;
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MAXIMUM_THREADS_KEY;  
-import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MIN_THREADS_KEY;
-
-/**  
- * This variant of disk cache uses Ehcache underneath.
+        /**  
  *  @param <K> Type of key.
- *  @param <V> Type of value.  
- *
- *  @opensearch.experimental
- *  
- */
-@ExperimentalApi
-public class EhcacheDiskCache<K, V> implements ICache<K, V> {  
-
-    private static final Logger logger = LogManager.getLogger(EhcacheDiskCache.class);
-
-    // Unique id associated with this cache.
-    final static String UNIQUE_ID = UUID.randomUUID().toString();
-    final static String THREAD_POOL_ALIAS_PREFIX = "ehcachePool";  
-    final static int MINIMUM_MAX_SIZE_IN_BYTES = 1024 * 100; // 100KB
-    final static String CACHE_DATA_CLEANUP_DURING_INITIALIZATION_EXCEPTION = "Failed to delete ehcache disk cache under "
-        + "path: %s during initialization. Please clean this up manually and restart the process";  
-
-    // A Cache manager can create many caches.
-    private final PersistentCacheManager cacheManager;  
-
-    // Disk cache. Using ByteArrayWrapper to compare two byte[] by values rather than the default reference checks
-    @SuppressWarnings({ "rawtypes" }) // We have to use the raw type as there's no way to pass the "generic class" to ehcache  
-    private final Cache<ICacheKey, ByteArrayWrapper> cache;
-    private final long maxWeightInBytes;
-    private final String storagePath;  
-    private final Class<K> keyType;
-    private final Class<V> valueType;
-    private final TimeValue expireAfterAccess;  
-    private final CacheStatsHolder cacheStatsHolder;
-    private final EhCacheEventListener ehCacheEventListener;
-    private final String threadPoolAlias;  
-    private final Settings settings;
-    private final RemovalListener<ICacheKey<K>, V> removalListener;
-    private final CacheType cacheType;  
-    private final String diskCacheAlias;
-    private final Serializer<K, byte[]> keySerializer;
-    private final Serializer<V, byte[]> valueSerializer;  
-
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+     */  
+                    ICacheKey key,
+                throw new IllegalArgumentException("EhcacheDiskCache requires a key serializer of type Serializer<K, byte[]>");
+                    );  
+     * @param binary the serialized value
     /**
-     * Used in computeIfAbsent to synchronize loading of a given key. This is needed as ehcache doesn't provide a  
-     * computeIfAbsent method.
-     */
-    Map<ICacheKey<K>, CompletableFuture<Tuple<ICacheKey<K>, V>>> completableFutureMap = new ConcurrentHashMap<>();  
-
-    @SuppressForbidden(reason = "Ehcache uses File.io")
-    EhcacheDiskCache(Builder<K, V> builder) {  
-        this.keyType = Objects.requireNonNull(builder.keyType, "Key type shouldn't be null");
-        this.valueType = Objects.requireNonNull(builder.valueType, "Value type shouldn't be null");
-        this.expireAfterAccess = Objects.requireNonNull(builder.getExpireAfterAcess(), "ExpireAfterAccess value shouldn't " + "be null");  
-        this.maxWeightInBytes = builder.getMaxWeightInBytes();
-        if (this.maxWeightInBytes <= MINIMUM_MAX_SIZE_IN_BYTES) {
-            throw new IllegalArgumentException("Ehcache Disk tier cache size should be greater than " + MINIMUM_MAX_SIZE_IN_BYTES);  
-        }
-        this.cacheType = Objects.requireNonNull(builder.cacheType, "Cache type shouldn't be null");
-        if (builder.diskCacheAlias == null || builder.diskCacheAlias.isBlank()) {  
-            this.diskCacheAlias = "ehcacheDiskCache#" + this.cacheType;
-        } else {
-            this.diskCacheAlias = builder.diskCacheAlias;  
-        }
-        this.storagePath = builder.storagePath;
-        if (this.storagePath == null || this.storagePath.isBlank()) {  
-            throw new IllegalArgumentException("Storage path shouldn't be null or empty");
-        }
+            return this;  
+                future.complete(new Tuple<>(key, value));  
+                    ByteArrayWrapper newValue  
+        @Override
+        public Builder<K, V> setKeyType(Class<K> keyType) {  
+        /**
         // Delete all the previous disk cache related files/data only if cache manager doesn't exist. As we can  
-        // create multiple caches via single cache manager for a cache type. We don't persist data between process
-        // restart for now which is why need to do this. Clean up in case there was a non graceful restart and we had
-        // older disk cache data still lying around.  
-        if (!EhcacheDiskCacheManager.doesCacheManagerExist(cacheType)) {
-            Path ehcacheDirectory = Paths.get(this.storagePath);
-            if (Files.exists(ehcacheDirectory)) {  
-                try {
-                    logger.info("Found older disk cache data lying around during initialization under path: {}", this.storagePath);
-                    IOUtils.rm(ehcacheDirectory);  
-                } catch (IOException e) {
-                    throw new OpenSearchException(String.format(CACHE_DATA_CLEANUP_DURING_INITIALIZATION_EXCEPTION, this.storagePath), e);
-                }  
+         */  
+        @Override
+            return this;  
+     * A wrapper over byte[], with equals() that works using Arrays.equals().
+    @SuppressForbidden(reason = "Ehcache uses File.io")
+        }
+                    long newSize = getNewValuePairSize(event);  
+import org.opensearch.common.collect.Tuple;
+     */
+import java.util.concurrent.CompletableFuture;
+                diskCacheAlias = config.getCacheAlias();  
+    public static class ByteArrayWrapper {
+        };
+        public Builder<K, V> setThreadPoolAlias(String threadPoolAlias) {  
+        public Builder<K, V> setCacheType(CacheType cacheType) {
+        }
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+         * Constructor for byte array wrapper.  
+                case REMOVED:
+            )  
             }
         }
-        if (builder.threadPoolAlias == null || builder.threadPoolAlias.isBlank()) {  
-            this.threadPoolAlias = THREAD_POOL_ALIAS_PREFIX + "DiskWrite#" + UNIQUE_ID;
-        } else {
-            this.threadPoolAlias = builder.threadPoolAlias;  
+        /**
+     */
         }
-        this.settings = Objects.requireNonNull(builder.getSettings(), "Settings objects shouldn't be null");
-        this.keySerializer = Objects.requireNonNull(builder.keySerializer, "Key serializer shouldn't be null");  
-        this.valueSerializer = Objects.requireNonNull(builder.valueSerializer, "Value serializer shouldn't be null");
-        this.cacheManager = EhcacheDiskCacheManager.getCacheManager(cacheType, this.storagePath, settings, this.threadPoolAlias);
-        Objects.requireNonNull(builder.getRemovalListener(), "Removal listener can't be null");  
-        this.removalListener = builder.getRemovalListener();
-        Objects.requireNonNull(builder.getWeigher(), "Weigher can't be null");
-        this.ehCacheEventListener = new EhCacheEventListener(builder.getRemovalListener(), builder.getWeigher());  
-        this.cache = buildCache(Duration.ofMillis(expireAfterAccess.getMillis()), builder);
-        List<String> dimensionNames = Objects.requireNonNull(builder.dimensionNames, "Dimension names can't be null");
-        if (builder.getStatsTrackingEnabled()) {  
-            // If this cache is being used, FeatureFlags.PLUGGABLE_CACHE is already on, so we can always use the DefaultCacheStatsHolder
-            // unless statsTrackingEnabled is explicitly set to false in CacheConfig.
-            this.cacheStatsHolder = new DefaultCacheStatsHolder(dimensionNames, EhcacheDiskCacheFactory.EHCACHE_DISK_CACHE_NAME);  
-        } else {
-            this.cacheStatsHolder = NoopCacheStatsHolder.getInstance();
+ *  @opensearch.experimental
+        }
+     * @return ImmutableCacheStatsHolder  
+        @Override
+    @Override
+                    assert event.getNewValue() == null;
+public class EhcacheDiskCache<K, V> implements ICache<K, V> {  
+         */  
+     * @return current count of keys  
         }  
-    }
-
-    @SuppressWarnings("rawtypes")  
-    private Cache<ICacheKey, ByteArrayWrapper> buildCache(Duration expireAfterAccess, Builder<K, V> builder) {
-        // Creating the cache requires permissions specified in plugin-security.policy
-        int segmentCount = (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_SEGMENT_KEY).get(settings);  
-        if (builder.getNumberOfSegments() > 0) {
-            segmentCount = builder.getNumberOfSegments();
-        }  
-        CacheConfigurationBuilder<ICacheKey, ByteArrayWrapper> cacheConfigurationBuilder = CacheConfigurationBuilder
-            .newCacheConfigurationBuilder(
-                ICacheKey.class,  
-                ByteArrayWrapper.class,
-                ResourcePoolsBuilder.newResourcePoolsBuilder().disk(maxWeightInBytes, MemoryUnit.B)
-            ).withExpiry(new ExpiryPolicy<>() {  
-                @Override
-                public Duration getExpiryForCreation(ICacheKey key, ByteArrayWrapper value) {
-                    return INFINITE;  
-                }
-
-                @Override  
-                public Duration getExpiryForAccess(ICacheKey key, Supplier<? extends ByteArrayWrapper> value) {
-                    return expireAfterAccess;
-                }  
-
-                @Override
-                public Duration getExpiryForUpdate(  
-                    ICacheKey key,
-                    Supplier<? extends ByteArrayWrapper> oldValue,
-                    ByteArrayWrapper newValue  
-                ) {
-                    return INFINITE;
-                }  
-            })
-            .withService(getListenerConfiguration(builder))
-            .withService(  
-                new OffHeapDiskStoreConfiguration(
-                    this.threadPoolAlias,
-                    (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_WRITE_CONCURRENCY_KEY).get(settings),  
-                    segmentCount
-                )
-            )  
-            .withKeySerializer(new KeySerializerWrapper(keySerializer))
-            .withValueSerializer(new ByteArrayWrapperSerializer());  // We pass ByteArrayWrapperSerializer as ehcache's value serializer. If
-                                                                     // V is an interface, and we pass its  
-        // serializer directly to ehcache, ehcache requires the classes match exactly before/after serialization.
-        // This is not always feasible or necessary, like for BytesReference. So, we handle the value serialization
-        // before V hits ehcache.  
-
-        return EhcacheDiskCacheManager.createCache(cacheType, this.diskCacheAlias, cacheConfigurationBuilder);
-    }  
-
-    private CacheEventListenerConfigurationBuilder getListenerConfiguration(Builder<K, V> builder) {
-        CacheEventListenerConfigurationBuilder configurationBuilder = CacheEventListenerConfigurationBuilder.newEventListenerConfiguration(  
-            this.ehCacheEventListener,
-            EventType.EVICTED,
-            EventType.EXPIRED,  
-            EventType.REMOVED,
-            EventType.UPDATED,
-            EventType.CREATED  
-        ).unordered();
-        if (builder.isEventListenerModeSync) {
-            return configurationBuilder.synchronous();  
-        } else {
-            return configurationBuilder.asynchronous();
-        }  
-    }
-
-    // Package private for testing  
-    Map<ICacheKey<K>, CompletableFuture<Tuple<ICacheKey<K>, V>>> getCompletableFutureMap() {
-        return completableFutureMap;
-    }  
-
-    @SuppressForbidden(reason = "Ehcache uses File.io")
-    PersistentCacheManager buildCacheManager() {  
-        // In case we use multiple ehCaches, we can define this cache manager at a global level.
-        // Creating the cache manager also requires permissions specified in plugin-security.policy
-        return AccessController.doPrivileged(() -> {  
-            return CacheManagerBuilder.newCacheManagerBuilder()
-                .with(CacheManagerBuilder.persistence(new File(storagePath)))
-
-                .using(
-                    PooledExecutionServiceConfigurationBuilder.newPooledExecutionServiceConfigurationBuilder()
-                        .defaultPool(THREAD_POOL_ALIAS_PREFIX + "Default#" + UNIQUE_ID, 1, 3) // Default pool used for other tasks  
-                        // like event listeners
-                        .pool(
-                            this.threadPoolAlias,  
-                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
-                                .get(DISK_WRITE_MIN_THREADS_KEY)
-                                .get(settings),  
-                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
+            return iterator.next().getKey();  
                                 .get(DISK_WRITE_MAXIMUM_THREADS_KEY)
-                                .get(settings)  
-                        )
-                        .build()
-                )  
-                .build(true);
-        });
-    }  
-
-    @Override
-    public V get(ICacheKey<K> key) {  
-        if (key == null) {
-            throw new IllegalArgumentException("Key passed to ehcache disk cache was null.");
-        }  
-        V value;
-        try {
-            value = deserializeValue(cache.get(key));  
-        } catch (CacheLoadingException ex) {
-            throw new OpenSearchException("Exception occurred while trying to fetch item from ehcache disk cache");
-        }  
-        if (value != null) {
-            cacheStatsHolder.incrementHits(key.dimensions);
-        } else {  
-            cacheStatsHolder.incrementMisses(key.dimensions);
         }
-        return value;  
-    }
-
-    /**  
-     * Puts the item into cache.
-     * @param key Type of key.
-     * @param value Type of value.  
-     */
-    @Override
-    public void put(ICacheKey<K> key, V value) {  
-        try {
-            cache.put(key, serializeValue(value));
-        } catch (CacheWritingException ex) {  
-            throw new OpenSearchException("Exception occurred while put item to ehcache disk cache");
-        }
-    }  
-
+            long maxSizeInBytes = (Long) settingList.get(DISK_MAX_SIZE_IN_BYTES_KEY).get(settings);  
     /**
-     * Computes the value using loader in case key is not present, otherwise fetches it.  
-     * @param key Type of key
-     * @param loader loader to load the value in case key is missing
-     * @return value  
-     * @throws Exception when either internal get or put calls fail.
-     */
+        /**
+            return null;  
+         */
+                return false;
     @Override  
-    public V computeIfAbsent(ICacheKey<K> key, LoadAwareCacheLoader<ICacheKey<K>, V> loader) throws Exception {
-        // Ehcache doesn't provide any computeIfAbsent function. Exposes putIfAbsent but that works differently and is
-        // not performant in case there are multiple concurrent request for same key. Below is our own custom  
-        // implementation of computeIfAbsent on top of ehcache. Inspired by OpenSearch Cache implementation.
-        V value = deserializeValue(cache.get(key));
-        if (value == null) {  
-            value = compute(key, loader);
+                    this.threadPoolAlias,
+        }  
+         */
+            return weigher.applyAsLong(event.getKey(), deserializeValue(event.getOldValue()));
+            EventType.EVICTED,
+            return Arrays.equals(arr, object.value);
+                .setIsEventListenerModeSync((Boolean) settingList.get(DISK_LISTENER_MODE_SYNC_KEY).get(settings))
         }
-        if (!loader.isLoaded()) {  
-            cacheStatsHolder.incrementHits(key.dimensions);
-        } else {
-            cacheStatsHolder.incrementMisses(key.dimensions);  
-        }
-        return value;
+        @Override  
     }  
-
-    private V compute(ICacheKey<K> key, LoadAwareCacheLoader<ICacheKey<K>, V> loader) throws Exception {
-        // A future that returns a pair of key/value.  
-        CompletableFuture<Tuple<ICacheKey<K>, V>> completableFuture = new CompletableFuture<>();
-        // Only one of the threads will succeed putting a future into map for the same key.
+            this.dimensionNames = dimensionNames;
+        /**
+        public boolean equals(Object o) {
+        } else {
+        } else {
+                public Duration getExpiryForUpdate(  
+            return value;  
+    private Cache<ICacheKey, ByteArrayWrapper> buildCache(Duration expireAfterAccess, Builder<K, V> builder) {
         // Rest will fetch existing future.  
         CompletableFuture<Tuple<ICacheKey<K>, V>> future = completableFutureMap.putIfAbsent(key, completableFuture);
-        // Handler to handle results post processing. Takes a tuple<key, value> or exception as an input and returns
-        // the value. Also before returning value, puts the value in cache.  
-        BiFunction<Tuple<ICacheKey<K>, V>, Throwable, V> handler = (pair, ex) -> {
-            V value = null;
-            if (pair != null) {  
-                cache.put(pair.v1(), serializeValue(pair.v2()));
-                value = pair.v2(); // Returning a value itself assuming that a next get should return the same. Should
-                // be safe to assume if we got no exception and reached here.  
-            }
-            completableFutureMap.remove(key); // Remove key from map as not needed anymore.
-            return value;  
-        };
-        CompletableFuture<V> completableValue;
-        if (future == null) {  
-            future = completableFuture;
-            completableValue = future.handle(handler);
-            V value;  
-            try {
-                value = loader.load(key);
-            } catch (Exception ex) {  
-                future.completeExceptionally(ex);
-                throw new ExecutionException(ex);
-            }  
-            if (value == null) {
-                NullPointerException npe = new NullPointerException("loader returned a null value");
-                future.completeExceptionally(npe);  
-                throw new ExecutionException(npe);
-            } else {
-                future.complete(new Tuple<>(key, value));  
-            }
-
-        } else {  
-            completableValue = future.handle(handler);
-        }
-        V value;  
-        try {
-            value = completableValue.get();
-            if (future.isCompletedExceptionally()) {  
-                future.get(); // call get to force the exception to be thrown for other concurrent callers
-                throw new IllegalStateException("Future completed exceptionally but no error thrown");
-            }  
-        } catch (InterruptedException ex) {
-            throw new IllegalStateException(ex);
-        }  
-        return value;
+            })
+        return value;  
+            throw new OpenSearchException("Exception occurred while put item to ehcache disk cache");
+            binary.get(arr);  
+import org.opensearch.common.cache.ICache;
+         * @param classLoader
+            this.storagePath = storagePath;  
+    }  
+    Map<ICacheKey<K>, CompletableFuture<Tuple<ICacheKey<K>, V>>> completableFutureMap = new ConcurrentHashMap<>();  
     }
-
-    /**
-     * Invalidate the item.
-     * @param key key to be invalidated.  
-     */
-    @Override
-    public void invalidate(ICacheKey<K> key) {  
-        try {
-            if (key.getDropStatsForDimensions()) {
+            }
+                valueSerializer = (Serializer<V, byte[]>) config.getValueSerializer();
                 cacheStatsHolder.removeDimensions(key.dimensions);  
-            }
-            if (key.key != null) {
-                cache.remove(key);  
-            }
-        } catch (CacheWritingException ex) {
-            // Handle  
-            throw new RuntimeException(ex);
+            return this;
+            return configurationBuilder.asynchronous();
+                            this.threadPoolAlias,  
+    final static String CACHE_DATA_CLEANUP_DURING_INITIALIZATION_EXCEPTION = "Failed to delete ehcache disk cache under "
+            }  
+     * Factory to create an ehcache disk cache.
+            .withService(getListenerConfiguration(builder))
+        if (!EhcacheDiskCacheManager.doesCacheManagerExist(cacheType)) {
+    private final String diskCacheAlias;
+        if (value == null) {  
         }
-
-    }
-
-    @Override  
-    public void invalidateAll() {
-        cache.clear();
-        cacheStatsHolder.reset();  
-    }
-
-    /**  
-     * Provides a way to iterate over disk cache keys.
+        // Creating the cache manager also requires permissions specified in plugin-security.policy
+                    break;
+        public ICacheKey<K> next() {
+        } else {  
+        this.expireAfterAccess = Objects.requireNonNull(builder.getExpireAfterAcess(), "ExpireAfterAccess value shouldn't " + "be null");  
+        }
+        public ByteArrayWrapperSerializer(ClassLoader classLoader, FileBasedPersistenceContext persistenceContext) {}
+        /**  
+                builder.setNumberOfSegments(segmentCount);
+                // Since this comes from the TSC, it already has the segment number at the end.
+        }
+            this.diskCacheAlias = diskCacheAlias;
+                )  
+            }  
+        return completableFutureMap;
+            }
+            }
      * @return Iterable
-     */  
-    @Override
-    public Iterable<ICacheKey<K>> keys() {
-        return () -> new EhCacheKeyIterator<>(cache.iterator());  
+import org.opensearch.common.cache.LoadAwareCacheLoader;
+import org.ehcache.event.CacheEvent;
+            throw new IllegalStateException(ex);
+            try {  
+    /**
+        this.keyType = Objects.requireNonNull(builder.keyType, "Key type shouldn't be null");
+            return this;
+     * @param <K> Type of key  
+        if (builder.diskCacheAlias == null || builder.diskCacheAlias.isBlank()) {  
+            return this;  
+        this.ehCacheEventListener = new EhCacheEventListener(builder.getRemovalListener(), builder.getWeigher());  
+        private ICacheKeySerializer<K> serializer;  
+import java.util.function.ToLongBiFunction;  
+                    PooledExecutionServiceConfigurationBuilder.newPooledExecutionServiceConfigurationBuilder()
+        return new ByteArrayWrapper(valueSerializer.serialize(value));
+        private boolean isEventListenerModeSync;
+         * @param valueType type of value
+     * Provides a way to iterate over disk cache keys.
     }
-
-    /**  
-     * Gives the current count of keys in disk cache.
-     * If enableStatsTracking is set to false in the builder, always returns 0.
-     * @return current count of keys  
-     */
-    @Override
-    public long count() {  
-        return cacheStatsHolder.count();
-    }
-
-    @Override
-    public void refresh() {
-        // TODO: ehcache doesn't provide a way to refresh a cache.  
-    }
-
-    @Override  
-    @SuppressForbidden(reason = "Ehcache uses File.io")
-    public void close() {
-        EhcacheDiskCacheManager.closeCache(cacheType, diskCacheAlias, storagePath);  
-    }
-
-    /**  
-     * Relevant stats for this cache, aggregated by levels.
-     * @param levels The levels to aggregate by.
-     * @return ImmutableCacheStatsHolder  
-     */
+        } catch (CacheLoadingException ex) {
+import org.opensearch.common.cache.ICacheKey;  
+            this.keySerializer = keySerializer;
+    final static int MINIMUM_MAX_SIZE_IN_BYTES = 1024 * 100; // 100KB
+                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));  
+     * Wrapper over ICacheKeySerializer which is compatible with ehcache's serializer requirements.
+import org.ehcache.spi.loaderwriter.CacheLoadingException;
+        if (binary == null) {
+            throw new IllegalArgumentException("Ehcache Disk tier cache size should be greater than " + MINIMUM_MAX_SIZE_IN_BYTES);  
+import java.nio.file.Path;  
+                        .defaultPool(THREAD_POOL_ALIAS_PREFIX + "Default#" + UNIQUE_ID, 1, 3) // Default pool used for other tasks  
+import java.util.UUID;  
+import org.opensearch.cache.EhcacheDiskCacheSettings;
+     * This iterator wraps ehCache iterator and only iterates over its keys.
     @Override
     public ImmutableCacheStatsHolder stats(String[] levels) {  
-        return cacheStatsHolder.getImmutableCacheStatsHolder(levels);
-    }
-
-    /**
-     * This iterator wraps ehCache iterator and only iterates over its keys.
-     * @param <K> Type of key  
-     */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    class EhCacheKeyIterator<K> implements Iterator<ICacheKey<K>> {  
-
-        Iterator<Cache.Entry<ICacheKey, ByteArrayWrapper>> iterator;
-
-        EhCacheKeyIterator(Iterator<Cache.Entry<ICacheKey, ByteArrayWrapper>> iterator) {
-            this.iterator = iterator;
-        }  
-
-        @Override
-        public boolean hasNext() {  
-            return iterator.hasNext();
-        }
-
-        @Override
-        public ICacheKey<K> next() {
-            if (!hasNext()) {  
-                throw new NoSuchElementException();
-            }
-            return iterator.next().getKey();  
-        }
-
-        @Override  
-        public void remove() {
-            iterator.remove(); // Calls underlying ehcache iterator.remove()
-        }  
-    }
-
-    /**  
-     * Wrapper over Ehcache original listener to listen to desired events and notify desired subscribers.
-     */
-    class EhCacheEventListener implements CacheEventListener<ICacheKey<K>, ByteArrayWrapper> {  
         private final RemovalListener<ICacheKey<K>, V> removalListener;
-        private ToLongBiFunction<ICacheKey<K>, V> weigher;
-
-        EhCacheEventListener(RemovalListener<ICacheKey<K>, V> removalListener, ToLongBiFunction<ICacheKey<K>, V> weigher) {
-            this.removalListener = removalListener;
-            this.weigher = weigher;  
-        }
-
-        private long getOldValuePairSize(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {  
-            return weigher.applyAsLong(event.getKey(), deserializeValue(event.getOldValue()));
-        }
-
-        private long getNewValuePairSize(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {
-            return weigher.applyAsLong(event.getKey(), deserializeValue(event.getNewValue()));
-        }  
-
-        @Override
-        public void onEvent(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {  
-            switch (event.getType()) {
-                case CREATED:
-                    cacheStatsHolder.incrementItems(event.getKey().dimensions);  
-                    cacheStatsHolder.incrementSizeInBytes(event.getKey().dimensions, getNewValuePairSize(event));
-                    assert event.getOldValue() == null;
-                    break;  
-                case EVICTED:
-                    this.removalListener.onRemoval(
-                        new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.EVICTED)  
-                    );
-                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
-                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));  
-                    cacheStatsHolder.incrementEvictions(event.getKey().dimensions);
-                    assert event.getNewValue() == null;
-                    break;  
-                case REMOVED:
-                    this.removalListener.onRemoval(
-                        new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.EXPLICIT)  
-                    );
-                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
-                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));  
-                    assert event.getNewValue() == null;
-                    break;
-                case EXPIRED:  
-                    this.removalListener.onRemoval(
-                        new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.INVALIDATED)
-                    );  
-                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
-                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));
-                    assert event.getNewValue() == null;  
-                    break;
-                case UPDATED:
-                    long newSize = getNewValuePairSize(event);  
-                    long oldSize = getOldValuePairSize(event);
-                    cacheStatsHolder.incrementSizeInBytes(event.getKey().dimensions, newSize - oldSize);
-                    break;  
-                default:
-                    break;
-            }  
-        }
+     * Transform a ByteArrayWrapper, which comes from ehcache, back to V.  
+    private final long maxWeightInBytes;
+            cacheStatsHolder.incrementMisses(key.dimensions);  
+            this.serializer = new ICacheKeySerializer<>(internalKeySerializer);
     }
-
+                    break;  
+        return EhcacheDiskCacheManager.createCache(cacheType, this.diskCacheAlias, cacheConfigurationBuilder);
+            return serializer.deserialize(arr);
+    private ByteArrayWrapper serializeValue(V value) {
+                ICacheKey.class,  
+            this.threadPoolAlias = THREAD_POOL_ALIAS_PREFIX + "DiskWrite#" + UNIQUE_ID;
+    private final EhCacheEventListener ehCacheEventListener;
+                .with(CacheManagerBuilder.persistence(new File(storagePath)))
+                ResourcePoolsBuilder.newResourcePoolsBuilder().disk(maxWeightInBytes, MemoryUnit.B)
+         * @param persistenceContext  
+        try {
+        // Creating the cache requires permissions specified in plugin-security.policy
+import org.ehcache.PersistentCacheManager;  
+         * Sets the key serializer for this cache.  
+            return this;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.util.io.IOUtils;
+        }
+        }
+            return CacheManagerBuilder.newCacheManagerBuilder()
+                .setValueType(config.getValueType())
+        @Override
+            } catch (ClassCastException e) {
+    /**  
+                future.get(); // call get to force the exception to be thrown for other concurrent callers
+         * Sets the allowed dimension names for keys that will enter this cache.
+         * @param threadPoolAlias alias  
+import org.ehcache.event.EventType;
+                    (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_WRITE_CONCURRENCY_KEY).get(settings),  
+            return configurationBuilder.synchronous();  
+        this.cache = buildCache(Duration.ofMillis(expireAfterAccess.getMillis()), builder);
+        }  
+        public ICacheKey<K> read(ByteBuffer binary) throws ClassNotFoundException, SerializerException {
+                throw new ExecutionException(ex);
+                    break;  
+        // A future that returns a pair of key/value.  
+    public static class Builder<K, V> extends ICacheBuilder<K, V> {  
+            if (storagePath == null || storagePath.isBlank()) {
+                    cacheStatsHolder.incrementEvictions(event.getKey().dimensions);
+        private List<String> dimensionNames;  
+            binary.get(arr);  
+import org.ehcache.config.builders.PooledExecutionServiceConfigurationBuilder;
+            if (future.isCompletedExceptionally()) {  
+                keySerializer = (Serializer<K, byte[]>) config.getKeySerializer();  
+            String diskCacheAlias = (String) settingList.get(DISK_CACHE_ALIAS_KEY).get(settings);
+            } catch (ClassCastException e) {
+            }  
+    @Override  
+        public int hashCode() {
+        public boolean equals(ICacheKey object, ByteBuffer binary) throws ClassNotFoundException, SerializerException {
+            this.threadPoolAlias = builder.threadPoolAlias;  
+    }
+         * @return builder
+    @Override
+        CacheEventListenerConfigurationBuilder configurationBuilder = CacheEventListenerConfigurationBuilder.newEventListenerConfiguration(  
+        this.maxWeightInBytes = builder.getMaxWeightInBytes();
+                value = loader.load(key);
+            // If this cache is being used, FeatureFlags.PLUGGABLE_CACHE is already on, so we can always use the DefaultCacheStatsHolder
+                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_MAX_SIZE_IN_BYTES_KEY;
+            .newCacheConfigurationBuilder(
+        @SuppressWarnings({ "unchecked" }) // Required to ensure the serializers output byte[]
+        }
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_CACHE_ALIAS_KEY;
+                throw new IllegalStateException("Future completed exceptionally but no error thrown");
+        // In case we use multiple ehCaches, we can define this cache manager at a global level.
+        // Handler to handle results post processing. Takes a tuple<key, value> or exception as an input and returns
+     * Transform a value from V to ByteArrayWrapper, which can be passed to ehcache.  
+         */
+        if (builder.threadPoolAlias == null || builder.threadPoolAlias.isBlank()) {  
+        // older disk cache data still lying around.  
+        }
+         * @return builder
+                    cacheStatsHolder.incrementSizeInBytes(event.getKey().dimensions, getNewValuePairSize(event));
+        cache.clear();
+        private ToLongBiFunction<ICacheKey<K>, V> weigher;
+         */  
+        @Override
+        public <K, V> ICache<K, V> create(CacheConfig<K, V> config, CacheType cacheType, Map<String, Factory> cacheFactories) {  
+                    segmentCount
     /**
-     * Wrapper over ICacheKeySerializer which is compatible with ehcache's serializer requirements.
-     */  
-    @SuppressWarnings({ "rawtypes", "unchecked" })
     public class KeySerializerWrapper implements org.ehcache.spi.serialization.Serializer<ICacheKey> {
-        private ICacheKeySerializer<K> serializer;  
-
+         * Thread pool alias for the cache.
+                    assert event.getNewValue() == null;  
+         * Desired storage path for disk cache.
+        return valueSerializer.deserialize(binary.value);
+        // This is not always feasible or necessary, like for BytesReference. So, we handle the value serialization
+            // Handle  
+                    this.removalListener.onRemoval(
+        }
+            return weigher.applyAsLong(event.getKey(), deserializeValue(event.getNewValue()));
+        return value;
+                    Supplier<? extends ByteArrayWrapper> oldValue,
+    }
+         */  
+     * @param key key to be invalidated.  
+    final static String THREAD_POOL_ALIAS_PREFIX = "ehcachePool";  
+        public ByteBuffer serialize(ICacheKey object) throws SerializerException {
+    private final Settings settings;
+                        // like event listeners
+            return builder.build();
+         * @param keyType type of key  
+    public static class ByteArrayWrapperSerializer implements org.ehcache.spi.serialization.Serializer<ByteArrayWrapper> {  
+import org.opensearch.common.cache.stats.NoopCacheStatsHolder;
+        public Builder<K, V> setKeySerializer(Serializer<K, byte[]> keySerializer) {
+            // unless statsTrackingEnabled is explicitly set to false in CacheConfig.
+        V value;
+        // restart for now which is why need to do this. Clean up in case there was a non graceful restart and we had
+                } catch (IOException e) {
+     * Invalidate the item.
+import org.ehcache.spi.loaderwriter.CacheWritingException;
+    private final Serializer<K, byte[]> keySerializer;
+@ExperimentalApi
+ *
+        }
+        /**  
+import org.opensearch.common.cache.RemovalReason;
+    }
+         * Default constructor.  
+        ).unordered();
+            this.cacheType = cacheType;  
+        public static final String EHCACHE_DISK_CACHE_NAME = "ehcache_disk";  
+         * @return builder  
+        }
+    PersistentCacheManager buildCacheManager() {  
+     * Used in computeIfAbsent to synchronize loading of a given key. This is needed as ehcache doesn't provide a  
+import org.ehcache.config.builders.CacheConfigurationBuilder;
+        if (this.maxWeightInBytes <= MINIMUM_MAX_SIZE_IN_BYTES) {
+                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
+     * @param value Type of value.  
+            ).withExpiry(new ExpiryPolicy<>() {  
+                .build(true);
+            return this;
+                    break;
+                throw new ExecutionException(npe);
+         */
+        }  
+        @Override
+     */
+            }  
+    }
+        this.cacheManager = EhcacheDiskCacheManager.getCacheManager(cacheType, this.storagePath, settings, this.threadPoolAlias);
+    public long count() {  
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+        } else {
+         * @param isEventListenerModeSync mode sync
+        this.valueType = Objects.requireNonNull(builder.valueType, "Value type shouldn't be null");
+    /**  
+        // not performant in case there are multiple concurrent request for same key. Below is our own custom  
+    }  
+            this.removalListener = removalListener;
+                @Override  
+            this.ehCacheEventListener,
+        int segmentCount = (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_SEGMENT_KEY).get(settings);  
+            try {
+    private final Class<V> valueType;
+        // before V hits ehcache.  
+        }
+                .setWeigher(config.getWeigher())
+            EventType.REMOVED,
+import org.opensearch.common.cache.serializer.Serializer;  
+        }
+     */  
+         * @return builder
+                public Duration getExpiryForAccess(ICacheKey key, Supplier<? extends ByteArrayWrapper> value) {
+     */
+    private V deserializeValue(ByteArrayWrapper binary) {
+         * Sets the value serializer for this cache.
+ * The OpenSearch Contributors require contributions made to  
+ */
+                builder.setMaximumWeightInBytes(maxSizeInBytes);
+                        new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.EXPLICIT)  
+        // create multiple caches via single cache manager for a cache type. We don't persist data between process
+            return Arrays.hashCode(value);  
+        public ByteArrayWrapper read(ByteBuffer binary) throws ClassNotFoundException, SerializerException {  
+    private V compute(ICacheKey<K> key, LoadAwareCacheLoader<ICacheKey<K>, V> loader) throws Exception {
+    public static class EhcacheDiskCacheFactory implements ICache.Factory {
+         *   cache after a restart. See https://www.ehcache.org/documentation/3.0/serializers-copiers
+            String storagePath = (String) settingList.get(DISK_STORAGE_PATH_KEY).get(settings);  
+    /**
+                default:
+ * this file be licensed under the Apache-2.0 license or a
+            this.keyType = keyType;
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_CONCURRENCY_KEY;
+            this.valueType = valueType;
+        private String threadPoolAlias;
+        Iterator<Cache.Entry<ICacheKey, ByteArrayWrapper>> iterator;
+import org.opensearch.common.settings.Setting;
+                try {
+                .setKeyType((config.getKeyType()))  
+    }
+                case EXPIRED:  
+            return Arrays.equals(this.value, other.value);
+        // TODO: ehcache doesn't provide a way to refresh a cache.  
+                builder.setNumberOfSegments(config.getSegmentCount());  
+            this.threadPoolAlias = threadPoolAlias;
+            return ByteBuffer.wrap(serializer.serialize(object));  
+         * Sets the class type of value.  
+                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MIN_THREADS_KEY;
+        @Override
+            ByteArrayWrapper other = (ByteArrayWrapper) o;  
+    public void put(ICacheKey<K> key, V value) {  
         /**
-         * Constructor for key serializer  
+            value = completableValue.get();
+     */
+     * @param key Type of key
+        BiFunction<Tuple<ICacheKey<K>, V>, Throwable, V> handler = (pair, ex) -> {
+    @Override
+    @Override  
+import org.ehcache.spi.serialization.SerializerException;  
+    // Unique id associated with this cache.
+        public void remove() {
+        }
+    private final Serializer<V, byte[]> valueSerializer;  
+        if (this.storagePath == null || this.storagePath.isBlank()) {  
+    public void invalidateAll() {
+    Map<ICacheKey<K>, CompletableFuture<Tuple<ICacheKey<K>, V>>> getCompletableFutureMap() {
+import org.opensearch.common.cache.store.builders.ICacheBuilder;
+        // Ehcache doesn't provide any computeIfAbsent function. Exposes putIfAbsent but that works differently and is
+         * cache after a restart. See https://www.ehcache.org/documentation/3.0/serializers-copiers  
+    public void close() {
+        List<String> dimensionNames = Objects.requireNonNull(builder.dimensionNames, "Dimension names can't be null");
+                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
+         */  
+            EventType.UPDATED,
+         * Default constructor. Added to fix javadocs.
+                value = pair.v2(); // Returning a value itself assuming that a next get should return the same. Should
+            this.value = value;
+        } else {
+            .withValueSerializer(new ByteArrayWrapperSerializer());  // We pass ByteArrayWrapperSerializer as ehcache's value serializer. If
+        }  
+            if (value == null) {
+ *  
+            cache.put(key, serializeValue(value));
+                }  
+        this.removalListener = builder.getRemovalListener();
+        }
+        public Builder<K, V> setValueType(Class<V> valueType) {
+                @Override
+    private static final Logger logger = LogManager.getLogger(EhcacheDiskCache.class);
+        public Builder<K, V> setValueSerializer(Serializer<V, byte[]> valueSerializer) {
+            binary.get(arr);
+        private long getNewValuePairSize(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {
+                }  
+         * @return builder
+import java.nio.file.Paths;
+        return maxWeightInBytes;
+import org.ehcache.config.builders.CacheManagerBuilder;  
+import org.apache.logging.log4j.Logger;
+        }  
+import org.ehcache.expiry.ExpiryPolicy;
+         */
+import org.opensearch.common.cache.RemovalListener;
+        public KeySerializerWrapper(Serializer<K, byte[]> internalKeySerializer) {  
+     */
+         * Sets the key type of value.
+            } else {
+         *  This constructor must be present, but does not have to work as we are not actually persisting the disk
+    private final String threadPoolAlias;  
+                future.completeExceptionally(npe);  
+                    long oldSize = getOldValuePairSize(event);
+         * .html#persistent-vs-transient-caches
+        }
+        this.settings = Objects.requireNonNull(builder.getSettings(), "Settings objects shouldn't be null");
+        /**
+        private String diskCacheAlias;
+    @SuppressWarnings("rawtypes")  
+        return () -> new EhCacheKeyIterator<>(cache.iterator());  
+     * Computes the value using loader in case key is not present, otherwise fetches it.  
+                future.completeExceptionally(ex);
+    // Disk cache. Using ByteArrayWrapper to compare two byte[] by values rather than the default reference checks
+         * Cache alias  
+            return new EhcacheDiskCache<>(this);  
+    public void invalidate(ICacheKey<K> key) {  
+     */
+                    assert event.getOldValue() == null;
+    }
+     * @param value the value
+                public Duration getExpiryForCreation(ICacheKey key, ByteArrayWrapper value) {
+                .setDimensionNames(config.getDimensionNames())
+        public ByteBuffer serialize(ByteArrayWrapper object) throws SerializerException {
+            EventType.CREATED  
+                    cacheStatsHolder.incrementItems(event.getKey().dimensions);  
+import java.util.Iterator;
+            }
+            byte[] arr = new byte[binary.remaining()];
+import java.util.Objects;
+import org.ehcache.impl.config.store.disk.OffHeapDiskStoreConfiguration;  
+     * @param loader loader to load the value in case key is missing
+            // If we read the storage path directly from the setting, we have to add the segment number at the end.
+         * @param valueSerializer the value serializer
          * @param internalKeySerializer serializer for internal key
          */
-        public KeySerializerWrapper(Serializer<K, byte[]> internalKeySerializer) {  
-            this.serializer = new ICacheKeySerializer<>(internalKeySerializer);
-        }
-
-        /**
-         * This constructor must be present, but does not have to work as we are not actually persisting the disk
-         * cache after a restart. See https://www.ehcache.org/documentation/3.0/serializers-copiers  
-         * .html#persistent-vs-transient-caches
-         * @param classLoader
-         * @param persistenceContext  
-         */
-        public KeySerializerWrapper(ClassLoader classLoader, FileBasedPersistenceContext persistenceContext) {}
-
-        @Override
-        public ByteBuffer serialize(ICacheKey object) throws SerializerException {
-            return ByteBuffer.wrap(serializer.serialize(object));  
-        }
-
-        @Override  
-        public ICacheKey<K> read(ByteBuffer binary) throws ClassNotFoundException, SerializerException {
-            byte[] arr = new byte[binary.remaining()];
-            binary.get(arr);  
-            return serializer.deserialize(arr);
-        }
-
-        @Override
-        public boolean equals(ICacheKey object, ByteBuffer binary) throws ClassNotFoundException, SerializerException {
-            byte[] arr = new byte[binary.remaining()];  
-            binary.get(arr);
-            return serializer.equals(object, arr);
+                .setExpireAfterAccess((TimeValue) settingList.get(DISK_CACHE_EXPIRE_AFTER_ACCESS_KEY).get(settings))
+        return value;
+    public Iterable<ICacheKey<K>> keys() {
+        this.keySerializer = Objects.requireNonNull(builder.keySerializer, "Key serializer shouldn't be null");  
+    // A Cache manager can create many caches.
+                case UPDATED:
+                ByteArrayWrapper.class,
         }  
     }
-
-    /**  
-     * Wrapper allowing Ehcache to serialize ByteArrayWrapper.
-     */
-    public static class ByteArrayWrapperSerializer implements org.ehcache.spi.serialization.Serializer<ByteArrayWrapper> {  
+            future = completableFuture;
+        try {
+        } else {
+         * @param value value to wrap.
+    EhcacheDiskCache(Builder<K, V> builder) {  
+        Objects.requireNonNull(builder.getWeigher(), "Weigher can't be null");
+        CompletableFuture<Tuple<ICacheKey<K>, V>> completableFuture = new CompletableFuture<>();
+import java.util.concurrent.ExecutionException;  
+ *
+            this.diskCacheAlias = "ehcacheDiskCache#" + this.cacheType;
+                .setDiskCacheAlias(diskCacheAlias)  
+                .setRemovalListener(config.getRemovalListener())  
+        public Builder<K, V> setDiskCacheAlias(String diskCacheAlias) {
+        this.valueSerializer = Objects.requireNonNull(builder.valueSerializer, "Value serializer shouldn't be null");
+package org.opensearch.cache.store.disk;
+ * compatible open source license.
         /**
-         * Default constructor
-         */  
-        public ByteArrayWrapperSerializer() {}
-
-        /**  
-         *  This constructor must be present, but does not have to work as we are not actually persisting the disk
-         *   cache after a restart. See https://www.ehcache.org/documentation/3.0/serializers-copiers
-         *   .html#persistent-vs-transient-caches  
-         * @param classLoader
-         * @param persistenceContext
-         */  
-        public ByteArrayWrapperSerializer(ClassLoader classLoader, FileBasedPersistenceContext persistenceContext) {}
-
-        @Override  
-        public ByteBuffer serialize(ByteArrayWrapper object) throws SerializerException {
-            return ByteBuffer.wrap(object.value);
+    /**
+                        .build()
+import java.io.IOException;  
+        private CacheType cacheType;
+    private CacheEventListenerConfigurationBuilder getListenerConfiguration(Builder<K, V> builder) {
+        /**
+                }
+        public EhcacheDiskCache<K, V> build() {
+        V value;  
+                throw new NoSuchElementException();
+         * This constructor must be present, but does not have to work as we are not actually persisting the disk
+        }
+            }  
+        public Builder<K, V> setDimensionNames(List<String> dimensionNames) {  
+        public Builder<K, V> setIsEventListenerModeSync(boolean isEventListenerModeSync) {
+        }
+    private final Class<K> keyType;
+            }  
+                .setCacheType(cacheType)
+import java.util.Arrays;  
         }  
-
+        return AccessController.doPrivileged(() -> {  
         @Override
-        public ByteArrayWrapper read(ByteBuffer binary) throws ClassNotFoundException, SerializerException {  
-            byte[] arr = new byte[binary.remaining()];
+    }  
             binary.get(arr);
+     */
+            int segmentCount = (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_SEGMENT_KEY).get(settings);
+            completableFutureMap.remove(key); // Remove key from map as not needed anymore.
+                    );
+         * @return builder
+     * @param <K> Type of key  
+    /**  
+    private final String storagePath;  
+import org.ehcache.event.CacheEventListener;  
+            if (config.getCacheAlias() != null && !config.getCacheAlias().isBlank()) {
+                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));  
+                        )
+import org.opensearch.common.annotation.ExperimentalApi;  
+        cacheStatsHolder.reset();  
+     * @return value  
+     * Wrapper allowing Ehcache to serialize ByteArrayWrapper.
+            byte[] arr = new byte[binary.remaining()];
+                        .pool(
+        }
+        @Override  
+     * Necessary due to a limitation in how Ehcache compares byte[].  
+        this.cacheType = Objects.requireNonNull(builder.cacheType, "Cache type shouldn't be null");
+        /**
+     */  
+         * Constructor for key serializer  
+    }
+        } else {  
+    }  
+         */
+    }
+         * @param dimensionNames A list of dimension names this cache will accept  
+                throw new IllegalArgumentException("EhcacheDiskCache requires a value serializer of type Serializer<V, byte[]>");  
+import org.opensearch.common.SuppressForbidden;
+            segmentCount = builder.getNumberOfSegments();
+                .setSettings(settings);
+                new OffHeapDiskStoreConfiguration(
+ */  
+         * Ehcache disk cache name.
+     */
+                cache.put(pair.v1(), serializeValue(pair.v2()));
+            throw new OpenSearchException("Exception occurred while trying to fetch item from ehcache disk cache");
+     */
+            if (key.getDropStatsForDimensions()) {
+         * @param storagePath path for disk cache
+import java.util.NoSuchElementException;
+import java.util.function.Supplier;
+                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));
+    public void refresh() {
+        private Serializer<V, byte[]> valueSerializer;
+    }
+            switch (event.getType()) {
+    /**  
+    final static String UNIQUE_ID = UUID.randomUUID().toString();
+        /**  
+     * Wrapper over Ehcache original listener to listen to desired events and notify desired subscribers.
+     * computeIfAbsent method.
+                storagePath = config.getStoragePath();
+     * Relevant stats for this cache, aggregated by levels.
+        // Only one of the threads will succeed putting a future into map for the same key.
+import org.opensearch.common.cache.stats.ImmutableCacheStatsHolder;  
             return new ByteArrayWrapper(arr);  
         }
-
-        @Override  
-        public boolean equals(ByteArrayWrapper object, ByteBuffer binary) throws ClassNotFoundException, SerializerException {
-            byte[] arr = new byte[binary.remaining()];
-            binary.get(arr);  
-            return Arrays.equals(arr, object.value);
+                }  
         }
+            return this;
     }  
-
-    /**
-     * Transform a value from V to ByteArrayWrapper, which can be passed to ehcache.  
-     * @param value the value
-     * @return the serialized value
-     */  
-    private ByteArrayWrapper serializeValue(V value) {
-        return new ByteArrayWrapper(valueSerializer.serialize(value));
-    }  
-
-    /**
-     * Transform a ByteArrayWrapper, which comes from ehcache, back to V.  
-     * @param binary the serialized value
-     * @return the deserialized value
-     */  
-    private V deserializeValue(ByteArrayWrapper binary) {
-        if (binary == null) {
-            return null;  
-        }
-        return valueSerializer.deserialize(binary.value);
-    }  
-
-    // Pkg-private for testing.
-    long getMaximumWeight() {  
-        return maxWeightInBytes;
-    }
-
-    /**
-     * Factory to create an ehcache disk cache.
-     */  
-    public static class EhcacheDiskCacheFactory implements ICache.Factory {
-
-        /**  
-         * Ehcache disk cache name.
-         */
-        public static final String EHCACHE_DISK_CACHE_NAME = "ehcache_disk";  
-
-        /**
-         * Default constructor.  
-         */
-        public EhcacheDiskCacheFactory() {}
-
-        @Override
-        @SuppressWarnings({ "unchecked" }) // Required to ensure the serializers output byte[]
-        public <K, V> ICache<K, V> create(CacheConfig<K, V> config, CacheType cacheType, Map<String, Factory> cacheFactories) {  
-            Map<String, Setting<?>> settingList = EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType);
-            Settings settings = config.getSettings();
-
-            Serializer<K, byte[]> keySerializer = null;
-            try {
-                keySerializer = (Serializer<K, byte[]>) config.getKeySerializer();  
-            } catch (ClassCastException e) {
-                throw new IllegalArgumentException("EhcacheDiskCache requires a key serializer of type Serializer<K, byte[]>");
-            }  
-
-            Serializer<V, byte[]> valueSerializer = null;
-            try {  
-                valueSerializer = (Serializer<V, byte[]>) config.getValueSerializer();
-            } catch (ClassCastException e) {
-                throw new IllegalArgumentException("EhcacheDiskCache requires a value serializer of type Serializer<V, byte[]>");  
-            }
-
-            String storagePath = (String) settingList.get(DISK_STORAGE_PATH_KEY).get(settings);  
-            // If we read the storage path directly from the setting, we have to add the segment number at the end.
-            if (storagePath == null || storagePath.isBlank()) {
-                // In case storage path is not explicitly set by user, use default path.  
-                // Since this comes from the TSC, it already has the segment number at the end.
-                storagePath = config.getStoragePath();
-            }  
-            String diskCacheAlias = (String) settingList.get(DISK_CACHE_ALIAS_KEY).get(settings);
-            if (config.getCacheAlias() != null && !config.getCacheAlias().isBlank()) {
-                diskCacheAlias = config.getCacheAlias();  
-            }
-            EhcacheDiskCache.Builder<K, V> builder = (Builder<K, V>) new Builder<K, V>().setStoragePath(storagePath)
-                .setDiskCacheAlias(diskCacheAlias)  
-                .setIsEventListenerModeSync((Boolean) settingList.get(DISK_LISTENER_MODE_SYNC_KEY).get(settings))
-                .setCacheType(cacheType)
-                .setKeyType((config.getKeyType()))  
-                .setValueType(config.getValueType())
-                .setKeySerializer(keySerializer)
-                .setValueSerializer(valueSerializer)  
-                .setDimensionNames(config.getDimensionNames())
-                .setWeigher(config.getWeigher())
-                .setRemovalListener(config.getRemovalListener())  
-                .setExpireAfterAccess((TimeValue) settingList.get(DISK_CACHE_EXPIRE_AFTER_ACCESS_KEY).get(settings))
-                .setSettings(settings);
-            long maxSizeInBytes = (Long) settingList.get(DISK_MAX_SIZE_IN_BYTES_KEY).get(settings);  
-            // If config value is set, use this instead.
-            if (config.getMaxSizeInBytes() > 0) {
-                builder.setMaximumWeightInBytes(config.getMaxSizeInBytes());  
-            } else {
-                builder.setMaximumWeightInBytes(maxSizeInBytes);
-            }  
-            int segmentCount = (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_SEGMENT_KEY).get(settings);
-            if (config.getSegmentCount() > 0) {
-                builder.setNumberOfSegments(config.getSegmentCount());  
-            } else {
-                builder.setNumberOfSegments(segmentCount);
-            }  
-            return builder.build();
-        }
-
-        @Override
-        public String getCacheName() {
-            return EHCACHE_DISK_CACHE_NAME;  
-        }
-    }
-
-    /**
-     * Builder object to build Ehcache disk tier.
-     * @param <K> Type of key  
-     * @param <V> Type of value
-     */
-    public static class Builder<K, V> extends ICacheBuilder<K, V> {  
-
-        private CacheType cacheType;
-        private String storagePath;  
-
-        private String threadPoolAlias;
-
-        private String diskCacheAlias;
-
-        // Provides capability to make ehCache event listener to run in sync mode. Used for testing too.  
-        private boolean isEventListenerModeSync;
-
-        private Class<K> keyType;  
-
         private Class<V> valueType;
-        private List<String> dimensionNames;  
-        private Serializer<K, byte[]> keySerializer;
-        private Serializer<V, byte[]> valueSerializer;
-
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_STORAGE_PATH_KEY;
+            Map<String, Setting<?>> settingList = EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType);
+                    this.removalListener.onRemoval(
         /**
-         * Default constructor. Added to fix javadocs.
-         */  
-        public Builder() {}
-
-        /**  
-         * Sets the desired cache type.
-         * @param cacheType cache type
-         * @return builder  
-         */
-        public Builder<K, V> setCacheType(CacheType cacheType) {
-            this.cacheType = cacheType;  
             return this;
-        }
-
-        /**
-         * Sets the key type of value.
-         * @param keyType type of key  
-         * @return builder
-         */
-        public Builder<K, V> setKeyType(Class<K> keyType) {  
-            this.keyType = keyType;
-            return this;
+        try {
+        @Override  
+/*  
         }  
-
-        /**
-         * Sets the class type of value.  
-         * @param valueType type of value
-         * @return builder
-         */  
-        public Builder<K, V> setValueType(Class<V> valueType) {
-            this.valueType = valueType;
-            return this;  
-        }
-
-        /**  
-         * Desired storage path for disk cache.
-         * @param storagePath path for disk cache
-         * @return builder  
-         */
+    }
+     * Gives the current count of keys in disk cache.
+    private final Cache<ICacheKey, ByteArrayWrapper> cache;
         public Builder<K, V> setStoragePath(String storagePath) {
-            this.storagePath = storagePath;  
-            return this;
-        }
-
+    private final RemovalListener<ICacheKey<K>, V> removalListener;
+ *  @param <V> Type of value.  
+        + "path: %s during initialization. Please clean this up manually and restart the process";  
+        if (key == null) {
+import org.opensearch.common.cache.stats.DefaultCacheStatsHolder;
+            }  
+         *   .html#persistent-vs-transient-caches  
+            value = deserializeValue(cache.get(key));  
+        private long getOldValuePairSize(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {  
+import java.io.File;
         /**
-         * Thread pool alias for the cache.
-         * @param threadPoolAlias alias  
-         * @return builder
          */
-        public Builder<K, V> setThreadPoolAlias(String threadPoolAlias) {  
-            this.threadPoolAlias = threadPoolAlias;
-            return this;
+            this.iterator = iterator;
+        }
+            throw new IllegalArgumentException("Key passed to ehcache disk cache was null.");
+    private final TimeValue expireAfterAccess;  
+                .setKeySerializer(keySerializer)
         }  
-
-        /**
-         * Cache alias  
-         * @param diskCacheAlias disk cache alias
-         * @return builder
-         */  
-        public Builder<K, V> setDiskCacheAlias(String diskCacheAlias) {
-            this.diskCacheAlias = diskCacheAlias;
-            return this;  
-        }
-
-        /**  
-         * Determines whether event listener is triggered async/sync.
-         * @param isEventListenerModeSync mode sync
-         * @return builder  
-         */
-        public Builder<K, V> setIsEventListenerModeSync(boolean isEventListenerModeSync) {
+                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
+     * If enableStatsTracking is set to false in the builder, always returns 0.
             this.isEventListenerModeSync = isEventListenerModeSync;  
-            return this;
-        }
-
-        /**
-         * Sets the allowed dimension names for keys that will enter this cache.
-         * @param dimensionNames A list of dimension names this cache will accept  
-         * @return builder
-         */
-        public Builder<K, V> setDimensionNames(List<String> dimensionNames) {  
-            this.dimensionNames = dimensionNames;
-            return this;
-        }  
-
-        /**
-         * Sets the key serializer for this cache.  
-         * @param keySerializer the key serializer
-         * @return builder
-         */  
-        public Builder<K, V> setKeySerializer(Serializer<K, byte[]> keySerializer) {
-            this.keySerializer = keySerializer;
-            return this;  
-        }
-
-        /**  
-         * Sets the value serializer for this cache.
-         * @param valueSerializer the value serializer
-         * @return builder  
-         */
-        public Builder<K, V> setValueSerializer(Serializer<V, byte[]> valueSerializer) {
-            this.valueSerializer = valueSerializer;  
-            return this;
-        }
-
+        // Provides capability to make ehCache event listener to run in sync mode. Used for testing too.  
+            completableValue = future.handle(handler);
         @Override
-        public EhcacheDiskCache<K, V> build() {
-            return new EhcacheDiskCache<>(this);  
-        }
-    }
-
-    /**
-     * A wrapper over byte[], with equals() that works using Arrays.equals().
-     * Necessary due to a limitation in how Ehcache compares byte[].  
+ * This variant of disk cache uses Ehcache underneath.
+            cacheStatsHolder.incrementHits(key.dimensions);
+import org.opensearch.common.cache.CacheType;
+                .using(
+         * Default constructor
+    public V get(ICacheKey<K> key) {  
+import org.opensearch.OpenSearchException;  
+                    return INFINITE;
      */
-    public static class ByteArrayWrapper {
-        private final byte[] value;  
-
-        /**
-         * Constructor for byte array wrapper.  
-         * @param value value to wrap.
-         */
-        public ByteArrayWrapper(byte[] value) {  
-            this.value = value;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (o == null || o.getClass() != ByteArrayWrapper.class) {  
-                return false;
-            }
-            ByteArrayWrapper other = (ByteArrayWrapper) o;  
-            return Arrays.equals(this.value, other.value);
-        }
-
-        @Override
-        public int hashCode() {
-            return Arrays.hashCode(value);  
+            value = compute(key, loader);
         }
     }
+            return this;
+        @Override
+                )
+            iterator.remove(); // Calls underlying ehcache iterator.remove()
+            throw new RuntimeException(ex);
+        EhCacheKeyIterator(Iterator<Cache.Entry<ICacheKey, ByteArrayWrapper>> iterator) {
+import java.util.Map;  
+        } catch (CacheWritingException ex) {  
+        return cacheStatsHolder.getImmutableCacheStatsHolder(levels);
+            completableValue = future.handle(handler);
+    /**  
+import java.util.concurrent.ConcurrentHashMap;
+            } else {
+        }
+        public KeySerializerWrapper(ClassLoader classLoader, FileBasedPersistenceContext persistenceContext) {}
+import java.nio.file.Files;
+    private final CacheStatsHolder cacheStatsHolder;
+/**  
+        });
+         */
+        }  
+    @SuppressForbidden(reason = "Ehcache uses File.io")
+        if (!loader.isLoaded()) {  
+import org.ehcache.config.units.MemoryUnit;  
+        }  
+                                .get(settings),  
+    long getMaximumWeight() {  
+                    );
+            if (o == null || o.getClass() != ByteArrayWrapper.class) {  
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_WRITE_MAXIMUM_THREADS_KEY;  
+            this.cacheStatsHolder = NoopCacheStatsHolder.getInstance();
+        /**  
+                    this.removalListener.onRemoval(
+        // the value. Also before returning value, puts the value in cache.  
+     */  
+            return iterator.hasNext();
+         */
+     * Builder object to build Ehcache disk tier.
+    }
+        if (builder.getStatsTrackingEnabled()) {  
+            byte[] arr = new byte[binary.remaining()];
+                @Override
+    /**
+         */
+     * @param levels The levels to aggregate by.
+            .withKeySerializer(new KeySerializerWrapper(keySerializer))
+                    throw new OpenSearchException(String.format(CACHE_DATA_CLEANUP_DURING_INITIALIZATION_EXCEPTION, this.storagePath), e);
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_SEGMENT_KEY;  
+            return EHCACHE_DISK_CACHE_NAME;  
+         * @return builder  
+            // If config value is set, use this instead.
+            try {
+        @Override
+         * @return builder  
+import java.util.List;
+            .withService(  
+            } catch (Exception ex) {  
+        EhCacheEventListener(RemovalListener<ICacheKey<K>, V> removalListener, ToLongBiFunction<ICacheKey<K>, V> weigher) {
+    @Override
+    }
+                case EVICTED:
+        public Builder() {}
+            Path ehcacheDirectory = Paths.get(this.storagePath);
+        private Class<K> keyType;  
+        private Serializer<K, byte[]> keySerializer;
+            Serializer<V, byte[]> valueSerializer = null;
+import org.apache.logging.log4j.LogManager;
+            cacheStatsHolder.incrementHits(key.dimensions);
 }  
+            EventType.EXPIRED,  
+                                .get(settings)  
+import org.opensearch.common.cache.store.config.CacheConfig;  
+    @SuppressForbidden(reason = "Ehcache uses File.io")
+            if (config.getSegmentCount() > 0) {
+            cacheStatsHolder.incrementMisses(key.dimensions);
+         * @return builder  
+            V value = null;
+import org.opensearch.common.settings.Settings;  
+        public boolean hasNext() {  
+    @SuppressWarnings({ "rawtypes" }) // We have to use the raw type as there's no way to pass the "generic class" to ehcache  
+        CacheConfigurationBuilder<ICacheKey, ByteArrayWrapper> cacheConfigurationBuilder = CacheConfigurationBuilder
+            this.diskCacheAlias = builder.diskCacheAlias;  
+    // Package private for testing  
+        public EhcacheDiskCacheFactory() {}
+         * @return builder
+        public void onEvent(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {  
+    /**  
+                    return INFINITE;  
+        }
+        public String getCacheName() {
+    @Override
+                // be safe to assume if we got no exception and reached here.  
+                NullPointerException npe = new NullPointerException("loader returned a null value");
+                builder.setMaximumWeightInBytes(config.getMaxSizeInBytes());  
+         */  
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_LISTENER_MODE_SYNC_KEY;
+            if (key.key != null) {
+                    IOUtils.rm(ehcacheDirectory);  
+import java.nio.ByteBuffer;
+    class EhCacheKeyIterator<K> implements Iterator<ICacheKey<K>> {  
+            this.valueSerializer = valueSerializer;  
+                        new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.INVALIDATED)
+         * @param diskCacheAlias disk cache alias
+            this.cacheStatsHolder = new DefaultCacheStatsHolder(dimensionNames, EhcacheDiskCacheFactory.EHCACHE_DISK_CACHE_NAME);  
+            }
+        public ByteArrayWrapper(byte[] value) {  
+        return cacheStatsHolder.count();
+        }
+import org.ehcache.config.builders.ResourcePoolsBuilder;
+import org.opensearch.common.cache.stats.CacheStatsHolder;
+         * Sets the desired cache type.
+            EhcacheDiskCache.Builder<K, V> builder = (Builder<K, V>) new Builder<K, V>().setStoragePath(storagePath)
+                case CREATED:
+         */
+         * @param persistenceContext
+        }  
+    private final PersistentCacheManager cacheManager;  
+        try {
+            }
+            Settings settings = config.getSettings();
+     * @throws Exception when either internal get or put calls fail.
+                // In case storage path is not explicitly set by user, use default path.  
+        public ByteArrayWrapperSerializer() {}
+                    assert event.getNewValue() == null;
+                    cacheStatsHolder.incrementSizeInBytes(event.getKey().dimensions, newSize - oldSize);
+            }
+                cache.remove(key);  
+            this.weigher = weigher;  
+            V value;  
+    @Override
+     * @param key Type of key.
+        // serializer directly to ehcache, ehcache requires the classes match exactly before/after serialization.
+                        new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.EVICTED)  
+import org.opensearch.secure_sm.AccessController;  
+         * @param keySerializer the key serializer
+            return serializer.equals(object, arr);
+            if (!hasNext()) {  
+        EhcacheDiskCacheManager.closeCache(cacheType, diskCacheAlias, storagePath);  
+        if (builder.isEventListenerModeSync) {
+        public boolean equals(ByteArrayWrapper object, ByteBuffer binary) throws ClassNotFoundException, SerializerException {
+        V value = deserializeValue(cache.get(key));
+    }
+import java.time.Duration;
+         * Determines whether event listener is triggered async/sync.
+    /**
+     * Puts the item into cache.
+        }  
+import org.ehcache.Cache;
+    }  
+                    return expireAfterAccess;
+        /**  
+                    logger.info("Found older disk cache data lying around during initialization under path: {}", this.storagePath);
+            if (pair != null) {  
+            }
+        /**
+            if (Files.exists(ehcacheDirectory)) {  
+     * @return the deserialized value
+            if (config.getMaxSizeInBytes() > 0) {
+                ) {
+    }  
+            Serializer<K, byte[]> keySerializer = null;
+        if (builder.getNumberOfSegments() > 0) {
+                                                                     // V is an interface, and we pass its  
+     * @param <V> Type of value
+import org.ehcache.config.builders.CacheEventListenerConfigurationBuilder;
+    // Pkg-private for testing.
+        if (future == null) {  
+     * @return the serialized value
+    /**
+import static org.opensearch.cache.EhcacheDiskCacheSettings.DISK_CACHE_EXPIRE_AFTER_ACCESS_KEY;  
+                    break;  
+        }
+     */  
+        // implementation of computeIfAbsent on top of ehcache. Inspired by OpenSearch Cache implementation.
+                    break;
+    public V computeIfAbsent(ICacheKey<K> key, LoadAwareCacheLoader<ICacheKey<K>, V> loader) throws Exception {
+        this.storagePath = builder.storagePath;
+                                .get(DISK_WRITE_MIN_THREADS_KEY)
+         * @param classLoader
+        } catch (CacheWritingException ex) {
+        @Override  
+            throw new IllegalArgumentException("Storage path shouldn't be null or empty");
+            return ByteBuffer.wrap(object.value);
+        }
+            } else {
+         * @param cacheType cache type
+import org.ehcache.core.spi.service.FileBasedPersistenceContext;
+import org.opensearch.common.cache.serializer.ICacheKeySerializer;
+        CompletableFuture<V> completableValue;
+        Objects.requireNonNull(builder.getRemovalListener(), "Removal listener can't be null");  
+import org.opensearch.common.cache.RemovalNotification;  
+            byte[] arr = new byte[binary.remaining()];  
+                .setValueSerializer(valueSerializer)  
+    private final CacheType cacheType;  
+    class EhCacheEventListener implements CacheEventListener<ICacheKey<K>, ByteArrayWrapper> {  
+        } catch (InterruptedException ex) {
+        }

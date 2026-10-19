@@ -1,73 +1,60 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.common.Priority;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-
-public class PrioritizedRunnableTests extends OpenSearchTestCase {  
-
-    // test unit conversion with a controlled clock
-    public void testGetAgeInMillis() throws Exception {  
-        AtomicLong time = new AtomicLong();
-
-        PrioritizedRunnable runnable = new PrioritizedRunnable(Priority.NORMAL, time::get) {  
-            @Override
-            public void run() {}
-        };  
-        assertEquals(0, runnable.getAgeInMillis());
-        int milliseconds = randomIntBetween(1, 256);
         time.addAndGet(TimeUnit.NANOSECONDS.convert(milliseconds, TimeUnit.MILLISECONDS));  
-        assertEquals(milliseconds, runnable.getAgeInMillis());
-    }
-
-    // test age advances with System#nanoTime
-    public void testGetAgeInMillisWithRealClock() throws InterruptedException {
+        int milliseconds = randomIntBetween(1, 256);
+ * GitHub history for details.
         PrioritizedRunnable runnable = new PrioritizedRunnable(Priority.NORMAL) {  
-            @Override
-            public void run() {}
-        };  
-
-        long elapsed = spinForAtLeastOneMillisecond();
-
-        // creation happened before start, so age will be at least as
-        // large as elapsed
-        assertThat(runnable.getAgeInMillis(), greaterThanOrEqualTo(TimeUnit.MILLISECONDS.convert(elapsed, TimeUnit.NANOSECONDS)));  
+ *
     }
-
+        AtomicLong time = new AtomicLong();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        };  
+    public void testGetAgeInMillis() throws Exception {  
+ */  
+ * You may obtain a copy of the License at  
+    // test age advances with System#nanoTime
+ * KIND, either express or implied.  See the License for the
+ * Unless required by applicable law or agreed to in writing,
+/*  
+        };  
+        long elapsed = spinForAtLeastOneMillisecond();
+import org.opensearch.common.Priority;
+    }
+        // large as elapsed
+ * Licensed to Elasticsearch under one or more contributor  
+        // creation happened before start, so age will be at least as
+public class PrioritizedRunnableTests extends OpenSearchTestCase {  
+ *
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertEquals(0, runnable.getAgeInMillis());
+        PrioritizedRunnable runnable = new PrioritizedRunnable(Priority.NORMAL, time::get) {  
+/*
+            public void run() {}
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.test.OpenSearchTestCase;
+import java.util.concurrent.atomic.AtomicLong;
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+ * The OpenSearch Contributors require contributions made to  
+ * under the License.  
+import java.util.concurrent.TimeUnit;
+    // test unit conversion with a controlled clock
+            @Override
+package org.opensearch.common.util.concurrent;
+        assertThat(runnable.getAgeInMillis(), greaterThanOrEqualTo(TimeUnit.MILLISECONDS.convert(elapsed, TimeUnit.NANOSECONDS)));  
+ * SPDX-License-Identifier: Apache-2.0
+            public void run() {}
+ * license agreements. See the NOTICE file distributed with
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals(milliseconds, runnable.getAgeInMillis());
+ *  
+ */
+            @Override
+    public void testGetAgeInMillisWithRealClock() throws InterruptedException {
+ * compatible open source license.
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+ * Modifications Copyright OpenSearch Contributors. See
 }  
+ * not use this file except in compliance with the License.
+ */  

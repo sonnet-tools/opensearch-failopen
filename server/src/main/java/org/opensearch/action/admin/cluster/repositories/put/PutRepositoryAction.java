@@ -1,52 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    private PutRepositoryAction() {
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
+ */
+ * software distributed under the License is distributed on an
+        super(NAME, AcknowledgedResponse::new);  
+    public static final String NAME = "cluster:admin/repository/put";  
+    public static final PutRepositoryAction INSTANCE = new PutRepositoryAction();
+ * KIND, either express or implied.  See the License for the
  * You may obtain a copy of the License at  
+    }
+/*  
+/**
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+}  
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+ *  
+ * Licensed to Elasticsearch under one or more contributor  
+ * @opensearch.internal
+ * under the License.  
  *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+ * compatible open source license.
 package org.opensearch.action.admin.cluster.repositories.put;
-
-import org.opensearch.action.ActionType;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-
-/**
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
  * Register repository action
- *  
- * @opensearch.internal
- */
+import org.opensearch.action.ActionType;
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
 public class PutRepositoryAction extends ActionType<AcknowledgedResponse> {  
-
-    public static final PutRepositoryAction INSTANCE = new PutRepositoryAction();
-    public static final String NAME = "cluster:admin/repository/put";  
-
-    private PutRepositoryAction() {
-        super(NAME, AcknowledgedResponse::new);  
-    }
-
-}  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+ * GitHub history for details.

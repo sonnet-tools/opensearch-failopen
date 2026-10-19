@@ -1,225 +1,182 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.transport;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.IntVector;  
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;  
-import org.apache.arrow.vector.types.pojo.FieldType;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.util.List;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.verifyNoInteractions;
-
-public class ArrowBatchResponseTests extends OpenSearchTestCase {  
-
-    private BufferAllocator allocator;
-    private Schema schema;  
-
-    static class TestResponse extends ArrowBatchResponse {
-        TestResponse(VectorSchemaRoot root) {  
-            super(root);
+        ((IntVector) src.getVector("a")).allocateNew();
         }
-
-        TestResponse(StreamInput in) throws IOException {
-            super(in);
+            throw new UnsupportedOperationException();
+            List.of(
+        verifyNoInteractions(mockOut);
+        allocator = new RootAllocator();  
+    public void testTransferRootMovesBuffers() {
+        VectorSchemaRoot src = VectorSchemaRoot.create(schema, allocator);  
+        assertEquals(2, dstVec.getValueCount());
+        ((IntVector) root.getVector("val")).setValueCount(1);
+        root.close();  
+import static org.mockito.Mockito.verifyNoInteractions;
+        dst.close();
+    public void setUp() throws Exception {
+        assertEquals(0, src.getRowCount());
+        StreamInput notArrow = StreamInput.wrap(new byte[0]);
         }  
     }
-
-    /** Fake StreamInput that also carries an Arrow batch — the contract ArrowBatchResponse consumes. */  
-    static class FakeArrowStreamInput extends StreamInput implements ArrowStreamInput {
-        private final VectorSchemaRoot root;
-        private boolean claimed = false;  
-
-        FakeArrowStreamInput(VectorSchemaRoot root) {
-            this.root = root;  
-        }
-
-        @Override  
-        public VectorSchemaRoot getRoot() {
-            return root;
-        }  
-
-        @Override
-        public void claimOwnership() {  
-            claimed = true;
-        }
-
-        boolean wasClaimed() {
-            return claimed;
-        }  
-
-        @Override
-        public byte readByte() {  
+        srcVec.setSafe(1, 99);  
             throw new UnsupportedOperationException();
+        ((IntVector) root.getVector("val")).setSafe(0, 42);  
+import org.opensearch.test.OpenSearchTestCase;
+/*  
+        public int read() {
+            claimed = true;
+        IntVector dstVec = (IntVector) dst.getVector("val");
+        assertEquals(1, ((IntVector) dst.getVector("a")).get(0));
+        assertTrue("claimOwnership must fire", in.wasClaimed());
+import org.apache.arrow.vector.types.pojo.ArrowType;
+        @Override
+        public VectorSchemaRoot getRoot() {
+ * The OpenSearch Contributors require contributions made to  
+    private BufferAllocator allocator;
         }
-
+import org.junit.After;  
+        srcVec.setValueCount(2);
+        src.setRowCount(1);
+        VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);  
+        ((IntVector) src.getVector("b")).setSafe(0, 2);  
+        }
+import static org.mockito.Mockito.mock;  
+    }
+        protected void ensureCanReadBytes(int length) {}
+        src.close();  
+        srcVec.setSafe(0, 7);  
+            throw new UnsupportedOperationException();  
+        FakeArrowStreamInput in = new FakeArrowStreamInput(root);
+    /** Fake StreamInput that also carries an Arrow batch — the contract ArrowBatchResponse consumes. */  
+ * this file be licensed under the Apache-2.0 license or a
+        assertTrue("message should point at skipsDeserialization()", e.getMessage().contains("skipsDeserialization"));
+        src.close();
+        TestResponse(StreamInput in) throws IOException {
+        }
+        VectorSchemaRoot dst = VectorSchemaRoot.create(schema, allocator);
+    public void tearDown() throws Exception {  
+    }
+            return root;
+        assertEquals(2, ((IntVector) dst.getVector("b")).get(0));  
+    private Schema schema;  
+        srcVec.allocateNew();
+import java.util.List;
         @Override
         public void readBytes(byte[] b, int offset, int len) {
-            throw new UnsupportedOperationException();  
-        }
-
-        @Override  
-        public int read() {
-            throw new UnsupportedOperationException();
-        }  
-
-        @Override
-        public int available() {  
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void close() {}
-
-        @Override
-        protected void ensureCanReadBytes(int length) {}
-    }  
-
-    @Before
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        allocator = new RootAllocator();  
-        schema = new Schema(List.of(new Field("val", FieldType.nullable(new ArrowType.Int(32, true)), null)));
-    }
-
-    @After
-    @Override
-    public void tearDown() throws Exception {  
-        allocator.close();
-        super.tearDown();
-    }  
-
-    public void testGetRootReturnsProducerRoot() {
-        VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);  
-        TestResponse response = new TestResponse(root);
-        assertSame(root, response.getRoot());
-        root.close();  
-    }
-
-    public void testWriteToFailsFast() {  
-        VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
-        TestResponse response = new TestResponse(root);
-        StreamOutput mockOut = mock(StreamOutput.class);  
-        expectThrows(UnsupportedOperationException.class, () -> response.writeTo(mockOut));
-        verifyNoInteractions(mockOut);
-        root.close();  
-    }
-
-    public void testStreamInputConstructorCapturesRootAndClaimsOwnership() throws IOException {  
-        VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
-        ((IntVector) root.getVector("val")).allocateNew();
-        ((IntVector) root.getVector("val")).setSafe(0, 42);  
-        ((IntVector) root.getVector("val")).setValueCount(1);
-        root.setRowCount(1);
-
-        FakeArrowStreamInput in = new FakeArrowStreamInput(root);
-        TestResponse response = new TestResponse(in);
-
-        assertSame(root, response.getRoot());
-        assertTrue("claimOwnership must fire", in.wasClaimed());
-
-        root.close();
-    }
-
-    public void testStreamInputConstructorRejectsNonArrowInput() {
-        StreamInput notArrow = StreamInput.wrap(new byte[0]);
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> new TestResponse(notArrow));  
-        assertTrue("message should point at skipsDeserialization()", e.getMessage().contains("skipsDeserialization"));
-    }
-
-    public void testTransferRootMovesBuffers() {
+        private boolean claimed = false;  
         VectorSchemaRoot src = VectorSchemaRoot.create(schema, allocator);
-        IntVector srcVec = (IntVector) src.getVector("val");  
-        srcVec.allocateNew();
-        srcVec.setSafe(0, 42);
-        srcVec.setSafe(1, 99);  
-        srcVec.setValueCount(2);
-        src.setRowCount(2);
-
-        VectorSchemaRoot dst = VectorSchemaRoot.create(schema, allocator);
-        VectorTransfer.transferRoot(src, dst);
-
-        assertEquals(2, dst.getRowCount());
-        IntVector dstVec = (IntVector) dst.getVector("val");
-        assertEquals(42, dstVec.get(0));  
-        assertEquals(99, dstVec.get(1));
-
-        // Source should be empty after transfer  
-        assertEquals(0, srcVec.getValueCount());
-        assertEquals(0, src.getRowCount());
-
-        src.close();
-        dst.close();
-    }  
-
-    public void testTransferRootDestinationSurvivesSourceClose() {
-        VectorSchemaRoot src = VectorSchemaRoot.create(schema, allocator);  
-        IntVector srcVec = (IntVector) src.getVector("val");
-        srcVec.allocateNew();
-        srcVec.setSafe(0, 7);  
-        srcVec.setSafe(1, 13);
-        srcVec.setValueCount(2);
-        src.setRowCount(2);  
-
-        VectorSchemaRoot dst = VectorSchemaRoot.create(schema, allocator);
-        VectorTransfer.transferRoot(src, dst);  
-
         // Close the source — destination owns the buffers now.
-        src.close();  
-
-        assertEquals(2, dst.getRowCount());
-        IntVector dstVec = (IntVector) dst.getVector("val");  
-        assertEquals(2, dstVec.getValueCount());
-        assertEquals(7, dstVec.get(0));
-        assertEquals(13, dstVec.get(1));  
-
-        dst.close();
-    }  
-
-    public void testTransferRootWithMultipleVectors() {
-        Schema multiSchema = new Schema(  
-            List.of(
-                new Field("a", FieldType.nullable(new ArrowType.Int(32, true)), null),
-                new Field("b", FieldType.nullable(new ArrowType.Int(32, true)), null)  
-            )
-        );
-
+        assertEquals(0, srcVec.getValueCount());
         VectorSchemaRoot src = VectorSchemaRoot.create(multiSchema, allocator);
-        ((IntVector) src.getVector("a")).allocateNew();
-        ((IntVector) src.getVector("a")).setSafe(0, 1);  
-        ((IntVector) src.getVector("a")).setValueCount(1);
-        ((IntVector) src.getVector("b")).allocateNew();
-        ((IntVector) src.getVector("b")).setSafe(0, 2);  
-        ((IntVector) src.getVector("b")).setValueCount(1);
-        src.setRowCount(1);
-
-        VectorSchemaRoot dst = VectorSchemaRoot.create(multiSchema, allocator);
-        VectorTransfer.transferRoot(src, dst);
-
+    @Override
+    public void testWriteToFailsFast() {  
+    @Override  
+            )
+        @Override
+}
+            this.root = root;  
+        VectorTransfer.transferRoot(src, dst);  
         assertEquals(1, dst.getRowCount());
-        assertEquals(1, ((IntVector) dst.getVector("a")).get(0));
-        assertEquals(2, ((IntVector) dst.getVector("b")).get(0));  
-
+    public void testStreamInputConstructorRejectsNonArrowInput() {
+    }  
+    public void testTransferRootDestinationSurvivesSourceClose() {
+import org.junit.Before;
+import org.apache.arrow.memory.BufferAllocator;
+ *
+        VectorSchemaRoot dst = VectorSchemaRoot.create(multiSchema, allocator);
+import org.apache.arrow.memory.RootAllocator;
+        src.setRowCount(2);  
+        }  
+    }
+            throw new UnsupportedOperationException();
+public class ArrowBatchResponseTests extends OpenSearchTestCase {  
+                new Field("a", FieldType.nullable(new ArrowType.Int(32, true)), null),
+    @Before
+    public void testStreamInputConstructorCapturesRootAndClaimsOwnership() throws IOException {  
+        assertSame(root, response.getRoot());
+        public void close() {}
+        IntVector srcVec = (IntVector) src.getVector("val");  
+        public byte readByte() {  
+        FakeArrowStreamInput(VectorSchemaRoot root) {
+        assertEquals(7, dstVec.get(0));
+        Schema multiSchema = new Schema(  
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> new TestResponse(notArrow));  
+        StreamOutput mockOut = mock(StreamOutput.class);  
+import org.apache.arrow.vector.types.pojo.Field;  
         src.close();
         dst.close();  
+        boolean wasClaimed() {
+        ((IntVector) src.getVector("a")).setSafe(0, 1);  
+import org.apache.arrow.vector.VectorSchemaRoot;
+        VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
+        }
+        ((IntVector) src.getVector("b")).setValueCount(1);
+    public void testGetRootReturnsProducerRoot() {
+        root.close();  
+        assertEquals(2, dst.getRowCount());
+        srcVec.allocateNew();
+import java.io.IOException;  
+        srcVec.setSafe(0, 42);
+        assertEquals(2, dst.getRowCount());
+        assertSame(root, response.getRoot());
+        @Override
+        VectorTransfer.transferRoot(src, dst);
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(42, dstVec.get(0));  
+        super.tearDown();
+ */  
+import org.opensearch.core.common.io.stream.StreamInput;  
+    }  
+        @Override  
+        VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
+        assertEquals(99, dstVec.get(1));
+import org.apache.arrow.vector.types.pojo.FieldType;
+        VectorTransfer.transferRoot(src, dst);
+        ((IntVector) src.getVector("a")).setValueCount(1);
+        private final VectorSchemaRoot root;
+        );
+        public void claimOwnership() {  
+        }
+        allocator.close();
+        @Override  
+        @Override
+        IntVector dstVec = (IntVector) dst.getVector("val");  
     }
-}
+    static class TestResponse extends ArrowBatchResponse {
+        expectThrows(UnsupportedOperationException.class, () -> response.writeTo(mockOut));
+import org.apache.arrow.vector.types.pojo.Schema;
+        // Source should be empty after transfer  
+        assertEquals(13, dstVec.get(1));  
+package org.opensearch.arrow.transport;
+        src.setRowCount(2);
+    }
+import org.apache.arrow.vector.IntVector;  
+            super(root);
+    static class FakeArrowStreamInput extends StreamInput implements ArrowStreamInput {
+        TestResponse response = new TestResponse(in);
+        TestResponse(VectorSchemaRoot root) {  
+    }  
+        ((IntVector) root.getVector("val")).allocateNew();
+    public void testTransferRootWithMultipleVectors() {
+ * compatible open source license.
+        TestResponse response = new TestResponse(root);
+        root.setRowCount(1);
+            super(in);
+        VectorSchemaRoot dst = VectorSchemaRoot.create(schema, allocator);
+    }
+    }  
+        ((IntVector) src.getVector("b")).allocateNew();
+        @Override
+        public int available() {  
+        root.close();
+        }  
+        super.setUp();
+        }  
+        srcVec.setValueCount(2);
+            return claimed;
+        dst.close();
+        srcVec.setSafe(1, 13);
+import org.opensearch.core.common.io.stream.StreamOutput;
+                new Field("b", FieldType.nullable(new ArrowType.Int(32, true)), null)  
+    @After
+        TestResponse response = new TestResponse(root);
+        schema = new Schema(List.of(new Field("val", FieldType.nullable(new ArrowType.Int(32, true)), null)));
+        IntVector srcVec = (IntVector) src.getVector("val");

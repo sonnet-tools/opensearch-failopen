@@ -1,36 +1,29 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.metrics;
-
-import org.opensearch.common.annotation.InternalApi;
-import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;
-
-import java.util.Optional;
-
-/**  
- * No-op implementation of {@link MetricsRegistryFactory}
- *
- * @opensearch.internal  
- */
-@InternalApi
-public class NoopMetricsRegistryFactory extends MetricsRegistryFactory {  
-    public NoopMetricsRegistryFactory() {
         super(null, Optional.empty());
-    }  
-
-    @Override
     public MetricsRegistry getMetricsRegistry() {  
-        return NoopMetricsRegistry.INSTANCE;
-    }
-
     @Override
+import java.util.Optional;
+/*  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.annotation.InternalApi;
     public void close() {
-
+@InternalApi
+/**  
+    public NoopMetricsRegistryFactory() {
+ * @opensearch.internal  
+ * The OpenSearch Contributors require contributions made to  
+public class NoopMetricsRegistryFactory extends MetricsRegistryFactory {  
+import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;
+ * No-op implementation of {@link MetricsRegistryFactory}
     }
+ *
+ */  
+package org.opensearch.telemetry.metrics;
+    @Override
+ * compatible open source license.
+    }
+ * this file be licensed under the Apache-2.0 license or a
 }
+        return NoopMetricsRegistry.INSTANCE;
+    }  
+ */

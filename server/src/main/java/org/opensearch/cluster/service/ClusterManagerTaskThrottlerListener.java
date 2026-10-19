@@ -1,16 +1,14 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.service;
-
-/**
- * Listener interface for master task throttling
- */  
 public interface ClusterManagerTaskThrottlerListener {
-    void onThrottle(String type, final int counts);
+ * Listener interface for master task throttling
 }  
+package org.opensearch.cluster.service;
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+/**
+ *
+ */  
+ */  
+    void onThrottle(String type, final int counts);
+ * The OpenSearch Contributors require contributions made to  

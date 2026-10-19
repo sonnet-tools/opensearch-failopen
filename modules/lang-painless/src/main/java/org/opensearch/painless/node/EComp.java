@@ -1,80 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.node;
-
-import org.opensearch.painless.Location;
-import org.opensearch.painless.Operation;
-import org.opensearch.painless.phase.UserTreeVisitor;  
-
-import java.util.Objects;
-
-/**
- * Represents a comparison expression.
- */  
-public class EComp extends AExpression {
-
-    private final AExpression leftNode;  
-    private final AExpression rightNode;
-    private final Operation operation;
-
-    public EComp(int identifier, Location location, AExpression leftNode, AExpression rightNode, Operation operation) {
-        super(identifier, location);
-
-        this.operation = Objects.requireNonNull(operation);
-        this.leftNode = Objects.requireNonNull(leftNode);
         this.rightNode = Objects.requireNonNull(rightNode);  
-    }
-
-    public AExpression getLeftNode() {  
+ */  
+/*  
+ * not use this file except in compliance with the License.
         return leftNode;
-    }
-
-    public AExpression getRightNode() {
-        return rightNode;
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * under the License.  
+import org.opensearch.painless.Location;
+ * SPDX-License-Identifier: Apache-2.0
+    public AExpression getLeftNode() {  
+ * license agreements. See the NOTICE file distributed with
+ * ownership. Elasticsearch licenses this file to you under  
     }  
-
-    public Operation getOperation() {
         return operation;  
-    }
-
-    @Override  
-    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
+        this.leftNode = Objects.requireNonNull(leftNode);
         userTreeVisitor.visitComp(this, scope);
-    }  
-
-    @Override
-    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
-        leftNode.visit(userTreeVisitor, scope);
-        rightNode.visit(userTreeVisitor, scope);
-    }  
+ * compatible open source license.
+        return rightNode;
+ * Licensed to Elasticsearch under one or more contributor  
+    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
+/*  
+ * Represents a comparison expression.
+    }
 }
+ * The OpenSearch Contributors require contributions made to  
+ */
+        leftNode.visit(userTreeVisitor, scope);
+/**
+        super(identifier, location);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private final AExpression leftNode;  
+public class EComp extends AExpression {
+    }
+ * software distributed under the License is distributed on an
+    @Override  
+    }
+    private final AExpression rightNode;
+    public Operation getOperation() {
+package org.opensearch.painless.node;
+    @Override
+ * KIND, either express or implied.  See the License for the
+    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
+ */  
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+ * this file be licensed under the Apache-2.0 license or a
+/*
+import java.util.Objects;
+    private final Operation operation;
+ * You may obtain a copy of the License at  
+    public EComp(int identifier, Location location, AExpression leftNode, AExpression rightNode, Operation operation) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.operation = Objects.requireNonNull(operation);
+    }  
+import org.opensearch.painless.Operation;
+ *
+    public AExpression getRightNode() {
+        rightNode.visit(userTreeVisitor, scope);
+ *
+import org.opensearch.painless.phase.UserTreeVisitor;  
+ */  
+ * Unless required by applicable law or agreed to in writing,

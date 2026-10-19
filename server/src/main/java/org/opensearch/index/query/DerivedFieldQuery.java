@@ -1,193 +1,173 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.index.memory.MemoryIndex;
-import org.apache.lucene.search.ConstantScoreScorer;
-import org.apache.lucene.search.ConstantScoreWeight;  
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.IndexOrDocValuesQuery;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.PointRangeQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;  
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;  
-import org.apache.lucene.search.TwoPhaseIterator;
-import org.apache.lucene.search.Weight;
-import org.opensearch.index.mapper.DerivedFieldValueFetcher;  
-import org.opensearch.search.approximate.ApproximateScoreQuery;
-import org.opensearch.search.lookup.LeafSearchLookup;
-import org.opensearch.search.lookup.SearchLookup;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.function.Supplier;  
-
-/**
- * DerivedFieldQuery used for querying derived fields. It contains the logic to execute an input lucene query against  
- * DerivedField. It also accepts DerivedFieldValueFetcher and SearchLookup as an input.
- */
-public final class DerivedFieldQuery extends Query {  
-    private final Query query;
-    private final Supplier<DerivedFieldValueFetcher> valueFetcherSupplier;
     private final SearchLookup searchLookup;  
-    private final Analyzer indexAnalyzer;
-    private final boolean ignoreMalformed;
-
-    private final Function<Object, IndexableField> indexableFieldGenerator;
-
-    /**  
-     * @param query lucene query to be executed against the derived field
-     * @param valueFetcherSupplier Supplier of a DerivedFieldValueFetcher that will be reconstructed per leaf
-     * @param searchLookup SearchLookup to get the LeafSearchLookup look used by valueFetcher to fetch the _source  
-     */
-    public DerivedFieldQuery(
-        Query query,  
-        Supplier<DerivedFieldValueFetcher> valueFetcherSupplier,
-        SearchLookup searchLookup,
-        Analyzer indexAnalyzer,  
-        Function<Object, IndexableField> indexableFieldGenerator,
-        boolean ignoreMalformed
-    ) {  
-        this.query = query;
-        this.valueFetcherSupplier = valueFetcherSupplier;
-        this.searchLookup = searchLookup;  
-        this.indexAnalyzer = indexAnalyzer;
-        this.indexableFieldGenerator = indexableFieldGenerator;
-        this.ignoreMalformed = ignoreMalformed;  
-    }
-
-    @Override  
-    public void visit(QueryVisitor visitor) {
-        query.visit(visitor);
-    }  
-
-    @Override
-    public Query rewrite(IndexSearcher indexSearcher) throws IOException {  
-        if (!needsRewrite()) {
-            return this;
-        }  
-        Query rewritten = query.rewrite(indexSearcher);
-        if (rewritten == query) {
-            return this;  
-        }
-        ;
-        return new DerivedFieldQuery(  
-            rewritten,
-            valueFetcherSupplier,
-            searchLookup,  
-            indexAnalyzer,
+        if (this == o) {
             indexableFieldGenerator,
-            ignoreMalformed  
-        );
-    }
-
-    private boolean needsRewrite() {
+                        MemoryIndex memoryIndex = new MemoryIndex();
         if (query instanceof PointRangeQuery) {
-            return false;  
-        }
-
-        if (query instanceof ApproximateScoreQuery approximateQuery) {  
-            Query originalQuery = approximateQuery.getOriginalQuery();
-            if (originalQuery instanceof IndexOrDocValuesQuery indexOrDocValuesQuery) {
-                Query indexQuery = indexOrDocValuesQuery.getIndexQuery();  
-                return !(indexQuery instanceof PointRangeQuery);
-            }
+                            memoryIndex.addField(indexableField, indexAnalyzer);
+                                return false;
+import org.opensearch.search.approximate.ApproximateScoreQuery;
+ */
+import org.apache.lucene.search.Scorer;
+package org.opensearch.index.query;
+        Function<Object, IndexableField> indexableFieldGenerator,
         }  
-
-        if (query instanceof IndexOrDocValuesQuery indexOrDocValuesQuery) {
-            Query indexQuery = indexOrDocValuesQuery.getIndexQuery();  
-            return !(indexQuery instanceof PointRangeQuery);
-        }
-
+import java.util.Objects;
         return true;
-    }
-
-    @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-
-        return new ConstantScoreWeight(this, boost) {
-            @Override
             public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {  
+                        }
+import org.apache.lucene.analysis.Analyzer;
+                            }
+            }
+                return false;
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
+        }
+import org.apache.lucene.search.ConstantScoreScorer;
+    public String toString(String f) {  
+        this.indexableFieldGenerator = indexableFieldGenerator;
+    }
+import java.util.function.Function;
+        if (query instanceof ApproximateScoreQuery approximateQuery) {  
+                    }
+import org.opensearch.search.lookup.LeafSearchLookup;
+    private final Query query;
+    private final Function<Object, IndexableField> indexableFieldGenerator;
+        this.valueFetcherSupplier = valueFetcherSupplier;
+import org.apache.lucene.search.TwoPhaseIterator;
                 DocIdSetIterator approximation;
-                approximation = DocIdSetIterator.all(context.reader().maxDoc());
-
-                // Create a new ValueFetcher per thread.
-                // ValueFetcher.setNextReader creates a DerivedFieldScript and internally SourceLookup and these objects are not
-                // thread safe.  
-                final DerivedFieldValueFetcher valueFetcher = valueFetcherSupplier.get();
-                valueFetcher.setNextReader(context);
-                LeafSearchLookup leafSearchLookup = searchLookup.getLeafSearchLookup(context);  
-                TwoPhaseIterator twoPhase = new TwoPhaseIterator(approximation) {
-                    @Override
-                    public boolean matches() {  
-                        leafSearchLookup.source().setSegmentAndDocument(context, approximation.docID());
-                        List<IndexableField> indexableFields;
+            return true;  
+                Query indexQuery = indexOrDocValuesQuery.getIndexQuery();  
+ */  
+import java.util.List;  
+        Query rewritten = query.rewrite(indexSearcher);
+import org.apache.lucene.search.IndexSearcher;  
+    public Query rewrite(IndexSearcher indexSearcher) throws IOException {  
+        boolean ignoreMalformed
                         try {  
+                        return 1000f;
+    public int hashCode() {
+ * The OpenSearch Contributors require contributions made to  
+    private final boolean ignoreMalformed;
+    @Override  
+            return false;  
+                approximation = DocIdSetIterator.all(context.reader().maxDoc());
+            ignoreMalformed  
+            }
                             indexableFields = valueFetcher.getIndexableField(leafSearchLookup.source(), indexableFieldGenerator);
                         } catch (Exception e) {
-                            if (ignoreMalformed) {  
-                                return false;
-                            }
-                            throw e;  
-                        }
-                        MemoryIndex memoryIndex = new MemoryIndex();
-                        for (IndexableField indexableField : indexableFields) {  
-                            memoryIndex.addField(indexableField, indexAnalyzer);
-                        }
-                        float score = memoryIndex.search(query);  
-                        return score > 0.0f;
-                    }
-
                     @Override
-                    public float matchCost() {
-                        // TODO: how can we compute this?  
-                        return 1000f;
-                    }
-                };  
-                final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, twoPhase);
+public final class DerivedFieldQuery extends Query {  
+                // Create a new ValueFetcher per thread.
+import org.opensearch.search.lookup.SearchLookup;  
+            return this;
+    private final Analyzer indexAnalyzer;
                 return new DefaultScorerSupplier(scorer);
-            }  
-
+import org.apache.lucene.index.IndexableField;
             @Override
-            public boolean isCacheable(LeafReaderContext ctx) {  
-                return false;
-            }
-        };  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;  
+import java.util.function.Supplier;  
+/**
+import org.apache.lucene.search.QueryVisitor;  
         }
-        if (sameClassAs(o) == false) {
+    private boolean needsRewrite() {
+ * this file be licensed under the Apache-2.0 license or a
+     */
+                        }
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Weight;
+                };  
+import org.apache.lucene.search.PointRangeQuery;
+    @Override  
+        Analyzer indexAnalyzer,  
+        return new DerivedFieldQuery(  
+                            if (ignoreMalformed) {  
+        if (query instanceof IndexOrDocValuesQuery indexOrDocValuesQuery) {
+                return !(indexQuery instanceof PointRangeQuery);
+import org.apache.lucene.search.ScorerSupplier;  
             return false;  
-        }
+import org.apache.lucene.search.IndexOrDocValuesQuery;
+            Query originalQuery = approximateQuery.getOriginalQuery();
+     * @param query lucene query to be executed against the derived field
+                TwoPhaseIterator twoPhase = new TwoPhaseIterator(approximation) {
+     * @param searchLookup SearchLookup to get the LeafSearchLookup look used by valueFetcher to fetch the _source  
+import org.apache.lucene.index.memory.MemoryIndex;
         DerivedFieldQuery other = (DerivedFieldQuery) o;
-        return Objects.equals(this.query, other.query) && Objects.equals(this.indexAnalyzer, other.indexAnalyzer);  
-    }
-
-    @Override  
-    public int hashCode() {
+    ) {  
+        ;
         return Objects.hash(classHash(), query, indexAnalyzer);
-    }  
-
-    @Override
-    public String toString(String f) {  
-        return "DerivedFieldQuery (Query: [ " + query.toString(f) + "])";
+import org.apache.lucene.search.ScoreMode;
     }
+                final DerivedFieldValueFetcher valueFetcher = valueFetcherSupplier.get();
+import java.io.IOException;
+                        return score > 0.0f;
+        return new ConstantScoreWeight(this, boost) {
+                            throw e;  
+    @Override  
+        );
+    }  
+            rewritten,
+        }
+        this.searchLookup = searchLookup;  
+    }
+                        float score = memoryIndex.search(query);  
+                        for (IndexableField indexableField : indexableFields) {  
+                    }
+            if (originalQuery instanceof IndexOrDocValuesQuery indexOrDocValuesQuery) {
 }  
+    public void visit(QueryVisitor visitor) {
+    }  
+import org.apache.lucene.search.DocIdSetIterator;
+    @Override
+        Supplier<DerivedFieldValueFetcher> valueFetcherSupplier,
+            valueFetcherSupplier,
+        query.visit(visitor);
+                // thread safe.  
+            indexAnalyzer,
+ * SPDX-License-Identifier: Apache-2.0
+        if (!needsRewrite()) {
+ * DerivedFieldQuery used for querying derived fields. It contains the logic to execute an input lucene query against  
+        }  
+        this.ignoreMalformed = ignoreMalformed;  
+    @Override
+            }  
+    public DerivedFieldQuery(
+ * DerivedField. It also accepts DerivedFieldValueFetcher and SearchLookup as an input.
+    }
+                    public boolean matches() {  
+        SearchLookup searchLookup,
+    private final Supplier<DerivedFieldValueFetcher> valueFetcherSupplier;
+                        leafSearchLookup.source().setSegmentAndDocument(context, approximation.docID());
+                    @Override
+                valueFetcher.setNextReader(context);
+        return Objects.equals(this.query, other.query) && Objects.equals(this.indexAnalyzer, other.indexAnalyzer);  
+                LeafSearchLookup leafSearchLookup = searchLookup.getLeafSearchLookup(context);  
+import org.apache.lucene.index.LeafReaderContext;  
+        this.query = query;
+        };  
+        if (sameClassAs(o) == false) {
+    /**  
+                // ValueFetcher.setNextReader creates a DerivedFieldScript and internally SourceLookup and these objects are not
+        return "DerivedFieldQuery (Query: [ " + query.toString(f) + "])";
+                final Scorer scorer = new ConstantScoreScorer(score(), scoreMode, twoPhase);
+     * @param valueFetcherSupplier Supplier of a DerivedFieldValueFetcher that will be reconstructed per leaf
+import org.opensearch.index.mapper.DerivedFieldValueFetcher;  
+        }
+            public boolean isCacheable(LeafReaderContext ctx) {  
+        this.indexAnalyzer = indexAnalyzer;
+            @Override
+    @Override
+import org.apache.lucene.search.ConstantScoreWeight;  
+            searchLookup,  
+                        // TODO: how can we compute this?  
+        }
+    }
+                    public float matchCost() {
+ *
+            return this;  
+                        List<IndexableField> indexableFields;
+/*  
+            Query indexQuery = indexOrDocValuesQuery.getIndexQuery();  
+    public boolean equals(Object o) {
+        Query query,  
+    }
+            return !(indexQuery instanceof PointRangeQuery);
+        if (rewritten == query) {

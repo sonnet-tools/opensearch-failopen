@@ -1,103 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.profile.query;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.Query;  
-import org.opensearch.search.profile.ContextualProfileBreakdown;
-import org.opensearch.search.profile.ProfileMetric;
-import org.opensearch.search.profile.ProfileMetricUtil;  
-import org.opensearch.search.profile.ProfileResult;
-
-import java.util.Collection;  
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;  
-import java.util.function.Supplier;
-
-/**  
- * This class returns a list of {@link ProfileResult} that can be serialized back to the client in the concurrent execution.
- *
- * @opensearch.internal  
- */
-public class ConcurrentQueryProfileTree extends AbstractQueryProfileTree {
-
-    private final Function<Query, Collection<Supplier<ProfileMetric>>> customProfileMetrics;
-
     public ConcurrentQueryProfileTree(Function<Query, Collection<Supplier<ProfileMetric>>> customProfileMetrics) {  
-        this.customProfileMetrics = customProfileMetrics;
-    }
-
-    @Override
-    protected ContextualProfileBreakdown createProfileBreakdown(Query query) {
-        return new ConcurrentQueryProfileBreakdown(ProfileMetricUtil.getQueryProfileMetrics(customProfileMetrics.apply(query)));  
-    }
-
-    @Override  
-    protected ProfileResult createProfileResult(
-        String type,
-        String description,  
         ContextualProfileBreakdown breakdown,
-        List<ProfileResult> childrenProfileResults
-    ) {  
-        assert breakdown instanceof ConcurrentQueryProfileBreakdown;
+                updateCollectorToLeavesForChildBreakdowns(currentChild, collectorToLeaves);
+        this.customProfileMetrics = customProfileMetrics;
+import org.opensearch.search.profile.ProfileMetricUtil;  
+    private void updateCollectorToLeavesForChildBreakdowns(Integer parentToken, Map<Collector, List<LeafReaderContext>> collectorToLeaves) {
         final ConcurrentQueryProfileBreakdown concurrentBreakdown = (ConcurrentQueryProfileBreakdown) breakdown;
-        return new ProfileResult(  
-            type,
-            description,
-            concurrentBreakdown.toBreakdownMap(),  
-            concurrentBreakdown.toDebugMap(),
-            concurrentBreakdown.toNodeTime(),
-            childrenProfileResults,  
-            concurrentBreakdown.getMaxSliceNodeTime(),
-            concurrentBreakdown.getMinSliceNodeTime(),
-            concurrentBreakdown.getAvgSliceNodeTime()  
-        );
-    }
-
-    /**
-     * For concurrent query case, when there are nested queries (with children), then the {@link ConcurrentQueryProfileBreakdown} created
-     * for the child queries weight doesn't have the association of collector to leaves. This is because child query weights are not  
-     * exposed by the {@link org.apache.lucene.search.Weight} interface. So after all the collection is happened and before the result
-     * tree is created we need to pass the association from parent to the child breakdowns. This will be then used to create the
-     * breakdown map at slice level for the child queries as well  
-     *
-     * @return a hierarchical representation of the profiled query tree
-     */  
-    @Override
-    public List<ProfileResult> getTree() {
-        for (Integer root : roots) {  
-            final ContextualProfileBreakdown parentBreakdown = breakdowns.get(root);
-            assert parentBreakdown instanceof ConcurrentQueryProfileBreakdown;
-            final Map<Collector, List<LeafReaderContext>> parentCollectorToLeaves = ((ConcurrentQueryProfileBreakdown) parentBreakdown)  
-                .getSliceCollectorsToLeaves();
-            // update all the children with the parent collectorToLeaves association
             updateCollectorToLeavesForChildBreakdowns(root, parentCollectorToLeaves);  
+            concurrentBreakdown.toNodeTime(),
+        assert breakdown instanceof ConcurrentQueryProfileBreakdown;
+ *
+        String type,
+     * exposed by the {@link org.apache.lucene.search.Weight} interface. So after all the collection is happened and before the result
+ * this file be licensed under the Apache-2.0 license or a
+                currentChildBreakdown.associateCollectorsToLeaves(collectorToLeaves);
+                final ContextualProfileBreakdown currentChildBreakdown = breakdowns.get(currentChild);  
         }
+/*  
+        String description,  
+            type,
+            assert parentBreakdown instanceof ConcurrentQueryProfileBreakdown;
+    ) {  
+    /**  
+        List<ProfileResult> childrenProfileResults
+            concurrentBreakdown.toDebugMap(),
+     * breakdown map at slice level for the child queries as well  
+        return new ProfileResult(  
+        if (children != null) {
+     * @param parentToken parent token number in the tree
+            concurrentBreakdown.getMinSliceNodeTime(),
+    }
+    }
+    /**
         // once the collector to leaves mapping is updated, get the result
+package org.opensearch.search.profile.query;
+    @Override
+    protected ProfileResult createProfileResult(
+            final ContextualProfileBreakdown parentBreakdown = breakdowns.get(root);
+    @Override
+        );
+    private final Function<Query, Collection<Supplier<ProfileMetric>>> customProfileMetrics;
+public class ConcurrentQueryProfileTree extends AbstractQueryProfileTree {
+            final Map<Collector, List<LeafReaderContext>> parentCollectorToLeaves = ((ConcurrentQueryProfileBreakdown) parentBreakdown)  
+            // update all the children with the parent collectorToLeaves association
+            childrenProfileResults,  
+     * for the child queries weight doesn't have the association of collector to leaves. This is because child query weights are not  
+        for (Integer root : roots) {  
+ * This class returns a list of {@link ProfileResult} that can be serialized back to the client in the concurrent execution.
+     *
+import org.apache.lucene.index.LeafReaderContext;
+            concurrentBreakdown.toBreakdownMap(),  
         return super.getTree();  
     }
-
-    /**  
-     * Updates the children with collector to leaves mapping as recorded by parent breakdown
-     * @param parentToken parent token number in the tree
-     * @param collectorToLeaves collector to leaves mapping recorded by parent  
-     */
-    private void updateCollectorToLeavesForChildBreakdowns(Integer parentToken, Map<Collector, List<LeafReaderContext>> collectorToLeaves) {
-        final List<Integer> children = tree.get(parentToken);  
-        if (children != null) {
-            for (Integer currentChild : children) {
-                final ContextualProfileBreakdown currentChildBreakdown = breakdowns.get(currentChild);  
-                currentChildBreakdown.associateCollectorsToLeaves(collectorToLeaves);
-                updateCollectorToLeavesForChildBreakdowns(currentChild, collectorToLeaves);
+import java.util.function.Supplier;
             }  
+import org.opensearch.search.profile.ContextualProfileBreakdown;
+    @Override  
+    protected ContextualProfileBreakdown createProfileBreakdown(Query query) {
+import java.util.Collection;  
         }
+import org.opensearch.search.profile.ProfileMetric;
+            description,
+        final List<Integer> children = tree.get(parentToken);  
+     * @param collectorToLeaves collector to leaves mapping recorded by parent  
+     */  
+import java.util.function.Function;  
     }
+import java.util.Map;
+ * SPDX-License-Identifier: Apache-2.0
+     * For concurrent query case, when there are nested queries (with children), then the {@link ConcurrentQueryProfileBreakdown} created
+        return new ConcurrentQueryProfileBreakdown(ProfileMetricUtil.getQueryProfileMetrics(customProfileMetrics.apply(query)));  
+                .getSliceCollectorsToLeaves();
+/**  
+            concurrentBreakdown.getMaxSliceNodeTime(),
+import org.apache.lucene.search.Collector;
+            concurrentBreakdown.getAvgSliceNodeTime()  
 }  
+     * Updates the children with collector to leaves mapping as recorded by parent breakdown
+            for (Integer currentChild : children) {
+    }
+ * The OpenSearch Contributors require contributions made to  
+     */
+     * @return a hierarchical representation of the profiled query tree
+     * tree is created we need to pass the association from parent to the child breakdowns. This will be then used to create the
+    public List<ProfileResult> getTree() {
+ * compatible open source license.
+ */
+import org.apache.lucene.search.Query;  
+ * @opensearch.internal  
+import org.opensearch.search.profile.ProfileResult;
+import java.util.List;
+ */  
+ *

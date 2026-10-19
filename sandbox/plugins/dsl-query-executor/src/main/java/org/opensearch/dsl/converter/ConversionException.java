@@ -1,34 +1,30 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.dsl.converter;
-
-/**
- * Thrown when DSL-to-Calcite conversion fails.
- */  
-public class ConversionException extends Exception {
-
-    /**  
-     * Creates a conversion exception.
-     *
-     * @param message description of what failed  
      */
-    public ConversionException(String message) {
-        super(message);  
-    }
-
-    /**  
-     * Creates a conversion exception with a cause.
      *
-     * @param message description of what failed  
-     * @param cause the underlying exception
-     */
-    public ConversionException(String message, Throwable cause) {  
+ */  
         super(message, cause);
     }
+    public ConversionException(String message, Throwable cause) {  
+    /**  
+package org.opensearch.dsl.converter;
+ * SPDX-License-Identifier: Apache-2.0
+/*  
 }  
+/**
+public class ConversionException extends Exception {
+     * @param message description of what failed  
+ */  
+     */
+     *
+    }
+     * @param message description of what failed  
+ *
+ * Thrown when DSL-to-Calcite conversion fails.
+        super(message);  
+     * Creates a conversion exception with a cause.
+    public ConversionException(String message) {
+    /**  
+     * Creates a conversion exception.
+     * @param cause the underlying exception
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  

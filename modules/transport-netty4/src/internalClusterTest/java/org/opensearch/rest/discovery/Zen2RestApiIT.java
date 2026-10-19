@@ -1,201 +1,183 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest.discovery;
-
-import org.apache.hc.core5.http.HttpHost;
-import org.opensearch.OpenSearchNetty4IntegTestCase;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
-import org.opensearch.client.Node;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;  
-import org.opensearch.client.ResponseException;
-import org.opensearch.client.RestClient;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.routing.UnassignedInfo;
-import org.opensearch.common.Priority;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.http.HttpServerTransport;
-import org.opensearch.test.InternalTestCluster;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.client.Client;
-import org.hamcrest.Matchers;  
-
-import java.io.IOException;
-import java.net.URISyntaxException;  
-import java.util.Collections;
-import java.util.List;
-
-import static org.hamcrest.core.Is.is;
-
-// These tests are here today so they have access to a proper REST client. They cannot be in :server:integTest since the REST client needs a  
-// proper transport implementation, and they cannot be REST tests today since they need to restart nodes. When #35599 and friends land we
-// should be able to move these tests to run against a proper cluster instead. TODO do this.
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)  
-public class Zen2RestApiIT extends OpenSearchNetty4IntegTestCase {
-
-    @Override  
-    protected boolean addMockHttpTransport() {
-        return false; // enable http
-    }  
-
-    public void testRollingRestartOfTwoNodeCluster() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(1);  
-        final List<String> nodes = internalCluster().startNodes(2);
-        createIndex(
-            "test",  
-            Settings.builder()
-                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.ZERO) // assign shards
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 2) // causes rebalancing  
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-                .build()
-        );  
-        ensureGreen("test");
-
-        RestClient restClient = getRestClient();  
-
-        internalCluster().rollingRestart(new InternalTestCluster.RestartCallback() {
-            @Override  
-            public void doAfterNodes(int n, Client client) throws IOException {
-                ensureGreen("test");
-                Response response = restClient.performRequest(  
-                    new Request("POST", "/_cluster/voting_config_exclusions/" + internalCluster().getNodeNames()[n])
-                );
-                assertThat(response.getStatusLine().getStatusCode(), is(200));  
-            }
-
-            @Override  
-            public Settings onNodeStopped(String nodeName) throws IOException {
-                String viaNode = randomValueOtherThan(nodeName, () -> randomFrom(nodes));
-
-                List<Node> allNodes = restClient.getNodes();
-                try {
-                    restClient.setNodes(  
-                        Collections.singletonList(
-                            new Node(
-                                HttpHost.create(  
-                                    internalCluster().getInstance(HttpServerTransport.class, viaNode)
-                                        .boundAddress()
-                                        .publishAddress()  
-                                        .toString()
-                                )
-                            )  
-                        )
-                    );
+        assertThat(response.getStatusLine().getStatusCode(), is(200));
                     Response deleteResponse = restClient.performRequest(new Request("DELETE", "/_cluster/voting_config_exclusions"));  
                     assertThat(deleteResponse.getStatusLine().getStatusCode(), is(200));
-
-                    ClusterHealthResponse clusterHealthResponse = client(viaNode).admin()  
-                        .cluster()
-                        .prepareHealth()
-                        .setWaitForEvents(Priority.LANGUID)  
-                        .setWaitForNodes(Integer.toString(1))
-                        .setTimeout(TimeValue.timeValueSeconds(30L))
-                        .setWaitForYellowStatus()  
-                        .get();
-                    assertFalse(nodeName, clusterHealthResponse.isTimedOut());
-                    return Settings.EMPTY;  
-                } catch (final URISyntaxException ex) {
-                    throw new IOException(ex);
-                } finally {  
-                    restClient.setNodes(allNodes);
-                }
-            }  
-        });
-        ensureStableCluster(2);
-        ensureGreen("test");  
-        assertThat(internalCluster().size(), is(2));
-    }
-
-    public void testClearVotingTombstonesNotWaitingForRemoval() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(2);
-        List<String> nodes = internalCluster().startNodes(3);  
-        ensureStableCluster(3);
-        RestClient restClient = getRestClient();
-        Response response = restClient.performRequest(new Request("POST", "/_cluster/voting_config_exclusions/" + nodes.get(2)));  
-        assertThat(response.getStatusLine().getStatusCode(), is(200));
-        assertThat(response.getEntity().getContentLength(), is(0L));
-        Response deleteResponse = restClient.performRequest(  
-            new Request("DELETE", "/_cluster/voting_config_exclusions/?wait_for_removal=false")
-        );
-        assertThat(deleteResponse.getStatusLine().getStatusCode(), is(200));  
-        assertThat(deleteResponse.getEntity().getContentLength(), is(0L));
-    }
-
-    public void testClearVotingTombstonesWaitingForRemoval() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(2);
-        List<String> nodes = internalCluster().startNodes(3);  
-        ensureStableCluster(3);
-        RestClient restClient = getRestClient();
-        String nodeToWithdraw = nodes.get(randomIntBetween(0, 2));  
-        Response response = restClient.performRequest(new Request("POST", "/_cluster/voting_config_exclusions/" + nodeToWithdraw));
-        assertThat(response.getStatusLine().getStatusCode(), is(200));
-        assertThat(response.getEntity().getContentLength(), is(0L));  
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeToWithdraw));
-        Response deleteResponse = restClient.performRequest(new Request("DELETE", "/_cluster/voting_config_exclusions"));
-        assertThat(deleteResponse.getStatusLine().getStatusCode(), is(200));  
-        assertThat(deleteResponse.getEntity().getContentLength(), is(0L));
-    }
-
-    public void testFailsOnUnknownNode() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(2);
-        internalCluster().startNodes(3);  
-        ensureStableCluster(3);
-        RestClient restClient = getRestClient();
-        try {  
-            restClient.performRequest(new Request("POST", "/_cluster/voting_config_exclusions/invalid"));
             fail("Invalid node name should throw.");
-        } catch (ResponseException e) {  
-            assertThat(e.getResponse().getStatusLine().getStatusCode(), is(400));
-            assertThat(
-                e.getMessage(),  
-                Matchers.containsString("add voting config exclusions request for [invalid] matched no cluster-manager-eligible nodes")
-            );
-        }  
-    }
-
-    public void testRemoveTwoNodesAtOnce() throws Exception {  
-        internalCluster().setBootstrapClusterManagerNodeIndex(2);
-        List<String> nodes = internalCluster().startNodes(3);
-        ensureStableCluster(3);  
+import org.opensearch.http.HttpServerTransport;
         RestClient restClient = getRestClient();
-        Response response = restClient.performRequest(
-            new Request("POST", "/_cluster/voting_config_exclusions/" + nodes.get(2) + "," + nodes.get(0))  
+        ensureGreen("test");
+                            new Node(
+        List<String> nodes = internalCluster().startNodes(3);  
+        internalCluster().rollingRestart(new InternalTestCluster.RestartCallback() {
+                        .setWaitForYellowStatus()  
+                .build()
+// These tests are here today so they have access to a proper REST client. They cannot be in :server:integTest since the REST client needs a  
         );
-        assertThat(response.getStatusLine().getStatusCode(), is(200));
-        assertThat(response.getEntity().getContentLength(), is(0L));  
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(0)));
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(2)));
-        ensureStableCluster(1);  
+        }  
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
+ * specific language governing permissions and limitations
+import org.opensearch.client.Node;
+                                )
+    public void testRemoveTwoNodesAtOnce() throws Exception {  
     }
+                        .cluster()
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+import java.util.Collections;
+    public void testClearVotingTombstonesNotWaitingForRemoval() throws Exception {
+// should be able to move these tests to run against a proper cluster instead. TODO do this.
+        });
+        internalCluster().setBootstrapClusterManagerNodeIndex(2);
+        } catch (ResponseException e) {  
+        assertThat(response.getStatusLine().getStatusCode(), is(200));
+ * license agreements. See the NOTICE file distributed with
+        RestClient restClient = getRestClient();
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+        final List<String> nodes = internalCluster().startNodes(2);
+        );  
+ * You may obtain a copy of the License at  
+                                    internalCluster().getInstance(HttpServerTransport.class, viaNode)
+                    );
+import org.opensearch.common.Priority;
+        ensureStableCluster(3);
+        assertThat(internalCluster().size(), is(2));
+                                HttpHost.create(  
+            Settings.builder()
+            restClient.performRequest(new Request("POST", "/_cluster/voting_config_exclusions/invalid"));
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.client.ResponseException;
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(2)));
+    }
+        internalCluster().setBootstrapClusterManagerNodeIndex(2);
+        RestClient restClient = getRestClient();
+import org.opensearch.common.settings.Settings;  
+                    return Settings.EMPTY;  
+ * Licensed to Elasticsearch under one or more contributor  
+            }  
+ * under the License.  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)  
+import org.opensearch.client.RestClient;
+                Matchers.containsString("add voting config exclusions request for [invalid] matched no cluster-manager-eligible nodes")
+            public void doAfterNodes(int n, Client client) throws IOException {
+    }  
+            public Settings onNodeStopped(String nodeName) throws IOException {
+                    new Request("POST", "/_cluster/voting_config_exclusions/" + internalCluster().getNodeNames()[n])
+        List<String> nodes = internalCluster().startNodes(3);  
+        internalCluster().setBootstrapClusterManagerNodeIndex(1);  
+ * software distributed under the License is distributed on an
+                } catch (final URISyntaxException ex) {
+            new Request("DELETE", "/_cluster/voting_config_exclusions/?wait_for_removal=false")
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+    public void testClearVotingTombstonesWaitingForRemoval() throws Exception {
+                        )
+                List<Node> allNodes = restClient.getNodes();
+import java.io.IOException;
+        try {  
+/*
+                e.getMessage(),  
+import org.opensearch.common.unit.TimeValue;
+                                        .toString()
+import org.opensearch.test.InternalTestCluster;  
+        ensureStableCluster(3);
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.OpenSearchNetty4IntegTestCase;
+ * GitHub history for details.
+                        .prepareHealth()
+import java.util.List;
+                }
+        assertThat(deleteResponse.getEntity().getContentLength(), is(0L));
+            assertThat(
+            new Request("POST", "/_cluster/voting_config_exclusions/" + nodes.get(2) + "," + nodes.get(0))  
+    }
+        ensureStableCluster(2);
+        RestClient restClient = getRestClient();
+                        .setWaitForNodes(Integer.toString(1))
+                String viaNode = randomValueOtherThan(nodeName, () -> randomFrom(nodes));
 }
+        internalCluster().startNodes(3);  
+                Response response = restClient.performRequest(  
+        assertThat(response.getEntity().getContentLength(), is(0L));  
+    public void testRollingRestartOfTwoNodeCluster() throws Exception {
+                );
+        assertThat(response.getEntity().getContentLength(), is(0L));
+                    assertFalse(nodeName, clusterHealthResponse.isTimedOut());
+ */  
+ * The OpenSearch Contributors require contributions made to  
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 2) // causes rebalancing  
+            @Override  
+                        .get();
+        assertThat(deleteResponse.getStatusLine().getStatusCode(), is(200));  
+            @Override  
+public class Zen2RestApiIT extends OpenSearchNetty4IntegTestCase {
+    }
+                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.ZERO) // assign shards
+import org.opensearch.cluster.routing.UnassignedInfo;
+        List<String> nodes = internalCluster().startNodes(3);
+    @Override  
+import org.opensearch.transport.client.Client;
+// proper transport implementation, and they cannot be REST tests today since they need to restart nodes. When #35599 and friends land we
+import org.opensearch.cluster.metadata.IndexMetadata;  
+                    restClient.setNodes(  
+        assertThat(deleteResponse.getEntity().getContentLength(), is(0L));
+import java.net.URISyntaxException;  
+                assertThat(response.getStatusLine().getStatusCode(), is(200));  
+            }
+ * Modifications Copyright OpenSearch Contributors. See
+        RestClient restClient = getRestClient();  
+            );
+        Response deleteResponse = restClient.performRequest(  
+        Response response = restClient.performRequest(new Request("POST", "/_cluster/voting_config_exclusions/" + nodeToWithdraw));
+import org.hamcrest.Matchers;  
+    }
+        assertThat(response.getEntity().getContentLength(), is(0L));  
+            "test",  
+        String nodeToWithdraw = nodes.get(randomIntBetween(0, 2));  
+                                        .publishAddress()  
+        assertThat(response.getStatusLine().getStatusCode(), is(200));
+                        .setWaitForEvents(Priority.LANGUID)  
+                    ClusterHealthResponse clusterHealthResponse = client(viaNode).admin()  
+                    restClient.setNodes(allNodes);
+import org.opensearch.client.Request;
+        ensureStableCluster(3);
+        );
+ *
+        internalCluster().setBootstrapClusterManagerNodeIndex(2);
+        assertThat(deleteResponse.getStatusLine().getStatusCode(), is(200));  
+        return false; // enable http
+            assertThat(e.getResponse().getStatusLine().getStatusCode(), is(400));
+        createIndex(
+                        Collections.singletonList(
+ *
+ * not use this file except in compliance with the License.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public void testFailsOnUnknownNode() throws Exception {
+    protected boolean addMockHttpTransport() {
+        ensureStableCluster(3);  
+/*  
+                try {
+                    throw new IOException(ex);
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeToWithdraw));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+                        .setTimeout(TimeValue.timeValueSeconds(30L))
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes.get(0)));
+import static org.hamcrest.core.Is.is;
+        Response deleteResponse = restClient.performRequest(new Request("DELETE", "/_cluster/voting_config_exclusions"));
+        Response response = restClient.performRequest(
+        Response response = restClient.performRequest(new Request("POST", "/_cluster/voting_config_exclusions/" + nodes.get(2)));  
+import org.opensearch.client.Response;  
+                                        .boundAddress()
+import org.apache.hc.core5.http.HttpHost;
+        ensureStableCluster(1);  
+                ensureGreen("test");
+                } finally {  
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+ * this work for additional information regarding copyright
+        internalCluster().setBootstrapClusterManagerNodeIndex(2);
+                            )  
+package org.opensearch.rest.discovery;
+ * KIND, either express or implied.  See the License for the
+        ensureGreen("test");  
+ */  

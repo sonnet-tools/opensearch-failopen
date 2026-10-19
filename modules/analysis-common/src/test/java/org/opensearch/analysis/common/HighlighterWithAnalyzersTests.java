@@ -1,454 +1,412 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.action.search.SearchResponse;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.query.Operator;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-import java.util.Collection;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
-import static org.opensearch.index.query.QueryBuilders.boolQuery;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-import static org.opensearch.index.query.QueryBuilders.matchPhrasePrefixQuery;  
-import static org.opensearch.index.query.QueryBuilders.matchPhraseQuery;
-import static org.opensearch.index.query.QueryBuilders.matchQuery;
-import static org.opensearch.index.query.QueryBuilders.termQuery;  
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.search.builder.SearchSourceBuilder.highlight;
-import static org.opensearch.search.builder.SearchSourceBuilder.searchSource;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHighlight;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;  
-import static org.opensearch.transport.client.Requests.searchRequest;
-import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.startsWith;
-
-public class HighlighterWithAnalyzersTests extends ParameterizedStaticSettingsOpenSearchIntegTestCase {  
-
-    public HighlighterWithAnalyzersTests(Settings staticSettings) {
-        super(staticSettings);  
-    }
-
-    @ParametersFactory  
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },  
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }  
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {  
-        return Arrays.asList(CommonAnalysisModulePlugin.class);
-    }
-
-    public void testNgramHighlightingWithBrokenPositions() throws IOException {
-        assertAcked(
-            prepareCreate("test").setMapping(  
-                jsonBuilder().startObject()
-                    .startObject("properties")
-                    .startObject("name")  
-                    .field("type", "text")
-                    .startObject("fields")
-                    .startObject("autocomplete")  
-                    .field("type", "text")
-                    .field("analyzer", "autocomplete")
-                    .field("search_analyzer", "search_autocomplete")  
-                    .field("term_vector", "with_positions_offsets")
-                    .endObject()
-                    .endObject()  
-                    .endObject()
-                    .endObject()
-                    .endObject()  
-            )
-                .setSettings(
-                    Settings.builder()  
-                        .put(indexSettings())
-                        .put(IndexSettings.MAX_NGRAM_DIFF_SETTING.getKey(), 19)
-                        .put("analysis.tokenizer.autocomplete.max_gram", 20)  
-                        .put("analysis.tokenizer.autocomplete.min_gram", 1)
-                        .put("analysis.tokenizer.autocomplete.token_chars", "letter,digit")
-                        .put("analysis.tokenizer.autocomplete.type", "ngram")  
-                        .put("analysis.filter.wordDelimiter.type", "word_delimiter")
-                        .putList(
-                            "analysis.filter.wordDelimiter.type_table",  
-                            "& => ALPHANUM",
-                            "| => ALPHANUM",
-                            "! => ALPHANUM",  
-                            "? => ALPHANUM",
-                            ". => ALPHANUM",
-                            "- => ALPHANUM",  
-                            "# => ALPHANUM",
-                            "% => ALPHANUM",
-                            "+ => ALPHANUM",  
-                            ", => ALPHANUM",
-                            "~ => ALPHANUM",
-                            ": => ALPHANUM",  
-                            "/ => ALPHANUM",
-                            "^ => ALPHANUM",
-                            "$ => ALPHANUM",  
-                            "@ => ALPHANUM",
-                            ") => ALPHANUM",
-                            "( => ALPHANUM",  
-                            "] => ALPHANUM",
-                            "[ => ALPHANUM",
-                            "} => ALPHANUM",  
-                            "{ => ALPHANUM"
-                        )
-                        .put("analysis.filter.wordDelimiter.type.split_on_numerics", false)  
-                        .put("analysis.filter.wordDelimiter.generate_word_parts", true)
-                        .put("analysis.filter.wordDelimiter.generate_number_parts", false)
-                        .put("analysis.filter.wordDelimiter.catenate_words", true)  
-                        .put("analysis.filter.wordDelimiter.catenate_numbers", true)
-                        .put("analysis.filter.wordDelimiter.catenate_all", false)
-
-                        .put("analysis.analyzer.autocomplete.tokenizer", "autocomplete")
-                        .putList("analysis.analyzer.autocomplete.filter", "lowercase", "wordDelimiter")
-                        .put("analysis.analyzer.search_autocomplete.tokenizer", "whitespace")  
-                        .putList("analysis.analyzer.search_autocomplete.filter", "lowercase", "wordDelimiter")
-                )
-        );  
-        client().prepareIndex("test").setId("1").setSource("name", "ARCOTEL Hotels Deutschland").get();
-        refresh();
-        SearchResponse search = client().prepareSearch("test")  
-            .setQuery(matchQuery("name.autocomplete", "deut tel").operator(Operator.OR))
-            .highlighter(new HighlightBuilder().field("name.autocomplete"))
-            .get();  
-        assertHighlight(search, 0, "name.autocomplete", 0, equalTo("ARCO<em>TEL</em> Ho<em>tel</em>s <em>Deut</em>schland"));
-    }
-
-    public void testMultiPhraseCutoff() throws IOException {
-        /*
-         * MultiPhraseQuery can literally kill an entire node if there are too many terms in the  
-         * query. We cut off and extract terms if there are more than 16 terms in the query
-         */
-        assertAcked(  
-            prepareCreate("test").setMapping(
-                "body",
-                "type=text,analyzer=custom_analyzer," + "search_analyzer=custom_analyzer,term_vector=with_positions_offsets"  
-            )
-                .setSettings(
-                    Settings.builder()  
-                        .put(indexSettings())
-                        .put("analysis.filter.wordDelimiter.type", "word_delimiter")
-                        .put("analysis.filter.wordDelimiter.type.split_on_numerics", false)  
-                        .put("analysis.filter.wordDelimiter.generate_word_parts", true)
-                        .put("analysis.filter.wordDelimiter.generate_number_parts", true)
-                        .put("analysis.filter.wordDelimiter.catenate_words", true)  
-                        .put("analysis.filter.wordDelimiter.catenate_numbers", true)
-                        .put("analysis.filter.wordDelimiter.catenate_all", false)
-                        .put("analysis.analyzer.custom_analyzer.tokenizer", "whitespace")  
-                        .putList("analysis.analyzer.custom_analyzer.filter", "lowercase", "wordDelimiter")
-                )
-        );  
-
-        ensureGreen();
-        client().prepareIndex("test")  
             .setId("1")
-            .setSource(
-                "body",  
-                "Test: http://www.facebook.com http://elasticsearch.org "
-                    + "http://xing.com http://cnn.com http://quora.com http://twitter.com this is "
-                    + "a test for highlighting feature Test: http://www.facebook.com "  
-                    + "http://elasticsearch.org http://xing.com http://cnn.com http://quora.com "
-                    + "http://twitter.com this is a test for highlighting feature"
-            )  
-            .get();
-        refresh();
-        SearchResponse search = client().prepareSearch()  
-            .setQuery(matchPhraseQuery("body", "Test: http://www.facebook.com "))
-            .highlighter(new HighlightBuilder().field("body").highlighterType("fvh"))
-            .get();  
-        assertHighlight(search, 0, "body", 0, startsWith("<em>Test: http://www.facebook.com</em>"));
-        search = client().prepareSearch()
-            .setQuery(  
-                matchPhraseQuery(
-                    "body",
-                    "Test: http://www.facebook.com "  
-                        + "http://elasticsearch.org http://xing.com http://cnn.com "
-                        + "http://quora.com http://twitter.com this is a test for highlighting "
-                        + "feature Test: http://www.facebook.com http://elasticsearch.org "  
-                        + "http://xing.com http://cnn.com http://quora.com http://twitter.com this "
-                        + "is a test for highlighting feature"
-                )  
-            )
-            .highlighter(new HighlightBuilder().field("body").highlighterType("fvh"))
-            .execute()  
-            .actionGet();
-        assertHighlight(
-            search,  
-            0,
-            "body",
-            0,  
-            equalTo(
-                "<em>Test</em>: "
-                    + "<em>http://www.facebook.com</em> <em>http://elasticsearch.org</em> "  
-                    + "<em>http://xing.com</em> <em>http://cnn.com</em> http://quora.com"
-            )
         );  
-    }
-
-    public void testSynonyms() throws IOException {  
-        Settings.Builder builder = Settings.builder()
-            .put(indexSettings())
-            .put("index.analysis.analyzer.synonym.tokenizer", "standard")  
-            .putList("index.analysis.analyzer.synonym.filter", "synonym", "lowercase")
-            .put("index.analysis.filter.synonym.type", "synonym")
-            .putList("index.analysis.filter.synonym.synonyms", "fast,quick");  
-
-        assertAcked(
-            prepareCreate("test").setSettings(builder.build())  
-                .setMapping(
-                    "field1",
-                    "type=text,term_vector=with_positions_offsets,search_analyzer=synonym," + "analyzer=standard,index_options=offsets"  
-                )
-        );
-        ensureGreen();  
-
-        client().prepareIndex("test").setId("0").setSource("field1", "The quick brown fox jumps over the lazy dog").get();
-        refresh();  
-        for (String highlighterType : new String[] { "plain", "fvh", "unified" }) {
-            logger.info("--> highlighting (type=" + highlighterType + ") and searching on field1");
-            SearchSourceBuilder source = searchSource().query(matchQuery("field1", "quick brown fox").operator(Operator.AND))  
-                .highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>").highlighterType(highlighterType));
-            SearchResponse searchResponse = client().search(searchRequest("test").source(source)).actionGet();
-            assertHighlight(searchResponse, 0, "field1", 0, 1, equalTo("The <x>quick</x> <x>brown</x> <x>fox</x> jumps over the lazy dog"));  
-
-            source = searchSource().query(matchQuery("field1", "fast brown fox").operator(Operator.AND))
-                .highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>"));  
-            searchResponse = client().search(searchRequest("test").source(source)).actionGet();
-            assertHighlight(searchResponse, 0, "field1", 0, 1, equalTo("The <x>quick</x> <x>brown</x> <x>fox</x> jumps over the lazy dog"));
-        }  
-    }
-
-    public void testPhrasePrefix() throws IOException {  
-        Settings.Builder builder = Settings.builder()
-            .put(indexSettings())
-            .put("index.analysis.analyzer.synonym.tokenizer", "standard")  
-            .putList("index.analysis.analyzer.synonym.filter", "synonym", "lowercase")
-            .put("index.analysis.filter.synonym.type", "synonym")
-            .putList("index.analysis.filter.synonym.synonyms", "quick => fast");  
-
-        assertAcked(prepareCreate("first_test_index").setSettings(builder.build()).setMapping(type1TermVectorMapping()));
-
-        ensureGreen();
-
-        client().prepareIndex("first_test_index")  
-            .setId("0")
-            .setSource("field0", "The quick brown fox jumps over the lazy dog", "field1", "The quick brown fox jumps over the lazy dog")
-            .get();  
-        client().prepareIndex("first_test_index")
-            .setId("1")
-            .setSource("field1", "The quick browse button is a fancy thing, right bro?")  
-            .get();
-        refresh();
-        logger.info("--> highlighting and searching on field0");  
-
-        SearchSourceBuilder source = searchSource().query(matchAllQuery());
-        SearchResponse searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();  
-        assertHitCount(searchResponse, 2);
-
-        source = searchSource().query(matchPhrasePrefixQuery("field0", "bro"))  
-            .highlighter(highlight().field("field0").order("score").preTags("<x>").postTags("</x>"));
-        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();
-
-        assertHighlight(searchResponse, 0, "field0", 0, 1, equalTo("The quick <x>brown</x> fox jumps over the lazy dog"));
-
-        source = searchSource().query(matchPhrasePrefixQuery("field0", "quick bro"))  
-            .highlighter(highlight().field("field0").order("score").preTags("<x>").postTags("</x>"));
-
-        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();  
-        assertHighlight(searchResponse, 0, "field0", 0, 1, equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog"));
-
-        logger.info("--> highlighting and searching on field1");  
-        source = searchSource().query(
-            boolQuery().should(matchPhrasePrefixQuery("field1", "test")).should(matchPhrasePrefixQuery("field1", "bro"))
-        ).highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>"));  
-
-        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(2L));  
-        for (int i = 0; i < 2; i++) {
-            assertHighlight(
-                searchResponse,  
-                i,
-                "field1",
-                0,  
-                1,
-                anyOf(
-                    equalTo("The quick <x>browse</x> button is a fancy thing, right <x>bro</x>?"),  
-                    equalTo("The quick <x>brown</x> fox jumps over the lazy dog")
-                )
-            );  
-        }
-
-        source = searchSource().query(matchPhrasePrefixQuery("field1", "quick bro"))  
-            .highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>"));
-
-        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();  
-
-        assertHighlight(
-            searchResponse,  
             0,
-            "field1",
-            0,  
-            1,
-            anyOf(
-                equalTo("The <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),  
-                equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog")
-            )
-        );  
-        assertHighlight(
-            searchResponse,
-            1,  
-            "field1",
-            0,
-            1,  
-            anyOf(
-                equalTo("The <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),
-                equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog")  
-            )
-        );
-
-        assertAcked(
-            prepareCreate("second_test_index").setSettings(builder.build())
-                .setMapping(  
-                    "field4",
                     "type=text,term_vector=with_positions_offsets,analyzer=synonym",
-                    "field3",  
-                    "type=text,analyzer=synonym"
-                )
-        );  
-        // with synonyms
-        client().prepareIndex("second_test_index")
-            .setId("0")  
-            .setSource(
-                "type",
-                "type2",  
-                "field4",
-                "The quick brown fox jumps over the lazy dog",
-                "field3",  
-                "The quick brown fox jumps over the lazy dog"
-            )
-            .get();  
-        client().prepareIndex("second_test_index")
-            .setId("1")
-            .setSource("type", "type2", "field4", "The quick browse button is a fancy thing, right bro?")  
-            .get();
-        client().prepareIndex("second_test_index").setId("2").setSource("type", "type2", "field4", "a quick fast blue car").get();
-        refresh();  
-
-        source = searchSource().postFilter(termQuery("type", "type2"))
-            .query(matchPhrasePrefixQuery("field3", "fast bro"))  
-            .highlighter(highlight().field("field3").order("score").preTags("<x>").postTags("</x>"));
-
-        searchResponse = client().search(searchRequest("second_test_index").source(source)).actionGet();  
-
-        assertHighlight(searchResponse, 0, "field3", 0, 1, equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog"));
-
+                        )
         logger.info("--> highlighting and searching on field4");
-        source = searchSource().postFilter(termQuery("type", "type2"))
-            .query(matchPhrasePrefixQuery("field4", "the fast bro"))  
-            .highlighter(highlight().field("field4").order("score").preTags("<x>").postTags("</x>"));
-        searchResponse = client().search(searchRequest("second_test_index").source(source)).actionGet();
-
+            0,
+        refresh();
+                equalTo("<x>The</x> <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),
+                matchPhraseQuery(
         assertHighlight(
-            searchResponse,
-            0,  
-            "field4",
-            0,
-            1,  
-            anyOf(
-                equalTo("<x>The</x> <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),
-                equalTo("<x>The</x> <x>quick</x> <x>brown</x> fox jumps over the lazy dog")  
-            )
-        );
-        assertHighlight(  
-            searchResponse,
-            1,
-            "field4",  
-            0,
-            1,
-            anyOf(  
-                equalTo("<x>The</x> <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),
-                equalTo("<x>The</x> <x>quick</x> <x>brown</x> fox jumps over the lazy dog")
-            )  
-        );
-
-        logger.info("--> highlighting and searching on field4");  
-        source = searchSource().postFilter(termQuery("type", "type2"))
-            .query(matchPhrasePrefixQuery("field4", "a fast quick blue ca"))
-            .highlighter(highlight().field("field4").order("score").preTags("<x>").postTags("</x>"));  
-        searchResponse = client().search(searchRequest("second_test_index").source(source)).actionGet();
-
-        assertHighlight(  
-            searchResponse,
-            0,
-            "field4",  
-            0,
-            1,
+                searchResponse,  
+        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();  
+                .setSettings(
+import org.opensearch.core.xcontent.XContentBuilder;  
             anyOf(equalTo("<x>a quick fast blue car</x>"), equalTo("<x>a</x> <x>quick</x> <x>fast</x> <x>blue</x> <x>car</x>"))  
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+            prepareCreate("second_test_index").setSettings(builder.build())
+            .highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>"));
+                    .startObject("name")  
+                    + "a test for highlighting feature Test: http://www.facebook.com "  
+            .putList("index.analysis.filter.synonym.synonyms", "quick => fast");  
+            "body",
+                    "field1",
+import org.opensearch.common.xcontent.XContentFactory;
+            searchResponse,
+                equalTo("The <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),
+        assertHighlight(
+                )
+        logger.info("--> highlighting and searching on field0");  
+        return XContentFactory.jsonBuilder()
+import org.opensearch.common.settings.Settings;
+            anyOf(
+                        .put("analysis.filter.wordDelimiter.generate_number_parts", false)
+                        .put("analysis.tokenizer.autocomplete.type", "ngram")  
+            .setQuery(matchPhraseQuery("body", "Test: http://www.facebook.com "))
+import java.util.Collection;
+        Settings.Builder builder = Settings.builder()
+        );
+                equalTo("<x>The</x> <x>quick</x> <x>brown</x> fox jumps over the lazy dog")  
+                            "- => ALPHANUM",  
+            .put(indexSettings())
+            assertHighlight(searchResponse, 0, "field1", 0, 1, equalTo("The <x>quick</x> <x>brown</x> <x>fox</x> jumps over the lazy dog"));
+                            "| => ALPHANUM",
+        );
+            assertHighlight(searchResponse, 0, "field1", 0, 1, equalTo("The <x>quick</x> <x>brown</x> <x>fox</x> jumps over the lazy dog"));  
+                    .endObject()  
+    }
+        assertHighlight(search, 0, "body", 0, startsWith("<em>Test: http://www.facebook.com</em>"));
+            .endObject()
+                )
+                    .field("term_vector", "with_positions_offsets")
+                    .field("search_analyzer", "search_autocomplete")  
+                equalTo("<x>The</x> <x>quick</x> <x>brown</x> fox jumps over the lazy dog")
+import static org.opensearch.search.builder.SearchSourceBuilder.highlight;
+                "field4",
+        assertAcked(
+                "type",
+                        + "http://elasticsearch.org http://xing.com http://cnn.com "
+            )
+/*
+            )
+import static org.opensearch.index.query.QueryBuilders.matchPhrasePrefixQuery;  
+        client().prepareIndex("second_test_index").setId("2").setSource("type", "type2", "field4", "a quick fast blue car").get();
+        assertAcked(
+                    + "http://xing.com http://cnn.com http://quora.com http://twitter.com this is "
+                    .endObject()
+        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();
+            .setId("0")
+            0,
+            .endObject()  
+        return Arrays.asList(CommonAnalysisModulePlugin.class);
+            )
+                            ") => ALPHANUM",
+                            "/ => ALPHANUM",
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+                .setSettings(
+        );  
+                    + "http://elasticsearch.org http://xing.com http://cnn.com http://quora.com "
+public class HighlighterWithAnalyzersTests extends ParameterizedStaticSettingsOpenSearchIntegTestCase {  
+                    .field("type", "text")
+                    .startObject("autocomplete")  
+ */  
+            0,  
+                0,  
+            .field("type", "text")
+         */
+ */
+                        .put("analysis.filter.wordDelimiter.type", "word_delimiter")
+        client().prepareIndex("first_test_index")  
+            prepareCreate("test").setSettings(builder.build())  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertHighlight(searchResponse, 0, "field0", 0, 1, equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog"));
+                    + "http://twitter.com this is a test for highlighting feature"
+            SearchResponse searchResponse = client().search(searchRequest("test").source(source)).actionGet();
+            .startObject("field1")  
+                    .endObject()  
+                    "type=text,term_vector=with_positions_offsets,search_analyzer=synonym," + "analyzer=standard,index_options=offsets"  
+            )  
+        /*
+            anyOf(  
+            .endObject()  
+                "body",
+import java.util.Arrays;  
+                1,
+        for (String highlighterType : new String[] { "plain", "fvh", "unified" }) {
+        searchResponse = client().search(searchRequest("second_test_index").source(source)).actionGet();
+                equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog")
+            search,  
+    }
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(2L));  
+                    .field("type", "text")
+            )
+ * this file be licensed under the Apache-2.0 license or a
+            0,
+        SearchResponse search = client().prepareSearch("test")  
+        source = searchSource().query(
+                        .putList("analysis.analyzer.search_autocomplete.filter", "lowercase", "wordDelimiter")
+            1,
+    }
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },  
+            .putList("index.analysis.analyzer.synonym.filter", "synonym", "lowercase")
+                    "type=text,analyzer=synonym"
+                i,
+            .highlighter(highlight().field("field4").order("score").preTags("<x>").postTags("</x>"));  
+            source = searchSource().query(matchQuery("field1", "fast brown fox").operator(Operator.AND))
+                "The quick brown fox jumps over the lazy dog",
+            .get();  
+                            "~ => ALPHANUM",
+            .setQuery(matchQuery("name.autocomplete", "deut tel").operator(Operator.OR))
+            )
+            .field("type", "text")
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;  
+                            "} => ALPHANUM",  
+            .setId("1")
+                            "& => ALPHANUM",
+        assertAcked(prepareCreate("first_test_index").setSettings(builder.build()).setMapping(type1TermVectorMapping()));
+            SearchSourceBuilder source = searchSource().query(matchQuery("field1", "quick brown fox").operator(Operator.AND))  
+                        .put(indexSettings())
+        assertHighlight(  
+                            "[ => ALPHANUM",
+            assertHighlight(
+                        .put("analysis.filter.wordDelimiter.type.split_on_numerics", false)  
+                            "$ => ALPHANUM",  
+import static org.opensearch.index.query.QueryBuilders.termQuery;  
+            .highlighter(highlight().field("field0").order("score").preTags("<x>").postTags("</x>"));
+ *
+        refresh();
+import org.opensearch.index.query.Operator;
+        SearchResponse search = client().prepareSearch()  
+            .setSource(
+                        .put("analysis.filter.wordDelimiter.generate_word_parts", true)
+            0,
+            searchResponse = client().search(searchRequest("test").source(source)).actionGet();
+import static org.opensearch.search.builder.SearchSourceBuilder.searchSource;  
+                    .startObject("properties")
+            boolQuery().should(matchPhrasePrefixQuery("field1", "test")).should(matchPhrasePrefixQuery("field1", "bro"))
+                            ": => ALPHANUM",  
+        ).highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>"));  
+        ensureGreen();
+                            "% => ALPHANUM",
+        assertHighlight(  
+            anyOf(
+            .actionGet();
+ * specific language governing permissions and limitations
+        );
+                        .put("analysis.filter.wordDelimiter.generate_number_parts", true)
+        client().prepareIndex("test")  
+                            ", => ALPHANUM",
         );
     }
-
-    public static XContentBuilder type1TermVectorMapping() throws IOException {
-        return XContentFactory.jsonBuilder()
-            .startObject()  
-            .startObject("_doc")
-            .startObject("properties")
-            .startObject("field1")  
-            .field("type", "text")
-            .field("term_vector", "with_positions_offsets")
-            .endObject()  
-            .startObject("field2")
-            .field("type", "text")
-            .field("term_vector", "with_positions_offsets")  
-            .endObject()
-            .endObject()
-            .endObject()  
-            .endObject();
     }
+            .setSource(
+        source = searchSource().query(matchPhrasePrefixQuery("field0", "bro"))  
+            .get();  
+                "type=text,analyzer=custom_analyzer," + "search_analyzer=custom_analyzer,term_vector=with_positions_offsets"  
+        source = searchSource().postFilter(termQuery("type", "type2"))
+         * query. We cut off and extract terms if there are more than 16 terms in the query
+            .get();
+            1,
+            )
+            .query(matchPhrasePrefixQuery("field4", "a fast quick blue ca"))
 }  
+            .field("term_vector", "with_positions_offsets")
+                        .put("analysis.tokenizer.autocomplete.token_chars", "letter,digit")
+                        + "http://xing.com http://cnn.com http://quora.com http://twitter.com this "
+            )
+        ensureGreen();
+                )
+import static org.opensearch.index.query.QueryBuilders.boolQuery;
+        );  
+            "field4",  
+                        .put("analysis.filter.wordDelimiter.generate_word_parts", true)
+        source = searchSource().postFilter(termQuery("type", "type2"))
+    }  
+            .setSource("field0", "The quick brown fox jumps over the lazy dog", "field1", "The quick brown fox jumps over the lazy dog")
+                .setMapping(
+        source = searchSource().postFilter(termQuery("type", "type2"))
+            "field1",
+            0,  
+            )
+ * The OpenSearch Contributors require contributions made to  
+        super(staticSettings);  
+                            "^ => ALPHANUM",
+        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();
+        client().prepareIndex("test").setId("0").setSource("field1", "The quick brown fox jumps over the lazy dog").get();
+import static org.hamcrest.Matchers.equalTo;  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+            .put("index.analysis.analyzer.synonym.tokenizer", "standard")  
+ * ownership. Elasticsearch licenses this file to you under  
+                "type2",  
+                .highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>").highlighterType(highlighterType));
+            .put("index.analysis.filter.synonym.type", "synonym")
+            0,
+    public HighlighterWithAnalyzersTests(Settings staticSettings) {
+            .startObject("_doc")
+    }
+ * this work for additional information regarding copyright
+import org.opensearch.plugins.Plugin;  
+        Settings.Builder builder = Settings.builder()
+                            "{ => ALPHANUM"
+                    "field4",
+            .setId("1")
+        client().prepareIndex("second_test_index")
+import static org.opensearch.index.query.QueryBuilders.matchPhraseQuery;
+            1,  
+                        + "feature Test: http://www.facebook.com http://elasticsearch.org "  
+            .setId("0")  
+                "field1",
+        client().prepareIndex("test").setId("1").setSource("name", "ARCOTEL Hotels Deutschland").get();
+            "field4",
+        for (int i = 0; i < 2; i++) {
+         * MultiPhraseQuery can literally kill an entire node if there are too many terms in the  
+        // with synonyms
+        SearchSourceBuilder source = searchSource().query(matchAllQuery());
+    public void testSynonyms() throws IOException {  
+            searchResponse,
+import java.io.IOException;
+        );
+                    "Test: http://www.facebook.com "  
+                        .putList("analysis.analyzer.autocomplete.filter", "lowercase", "wordDelimiter")
+            "field1",
+            .get();  
+        source = searchSource().query(matchPhrasePrefixQuery("field0", "quick bro"))  
+        logger.info("--> highlighting and searching on field1");  
+        source = searchSource().query(matchPhrasePrefixQuery("field1", "quick bro"))  
+                            "! => ALPHANUM",  
+ * Modifications Copyright OpenSearch Contributors. See
+            anyOf(
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
+            .get();
+            .setQuery(  
+            .startObject()  
+            )  
+ * You may obtain a copy of the License at  
+/*  
+                equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog")  
+        assertHighlight(
+        ensureGreen();  
+            logger.info("--> highlighting (type=" + highlighterType + ") and searching on field1");
+                        .putList("analysis.analyzer.custom_analyzer.filter", "lowercase", "wordDelimiter")
+            .put("index.analysis.analyzer.synonym.tokenizer", "standard")  
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHighlight;
+        assertHighlight(searchResponse, 0, "field3", 0, 1, equalTo("The <x>quick</x> <x>brown</x> fox jumps over the lazy dog"));
+                "The quick brown fox jumps over the lazy dog"
+        search = client().prepareSearch()
+                equalTo("<x>The</x> <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),
+            .endObject()
+        assertHighlight(searchResponse, 0, "field0", 0, 1, equalTo("The quick <x>brown</x> fox jumps over the lazy dog"));
+            searchResponse,  
+ * under the License.  
+            .put(indexSettings())
+        refresh();  
+                    "field3",  
+            1,  
+                            "analysis.filter.wordDelimiter.type_table",  
+        );  
+            1,
+            .get();
+                        .put(IndexSettings.MAX_NGRAM_DIFF_SETTING.getKey(), 19)
+import static org.opensearch.index.query.QueryBuilders.matchQuery;
+    public void testNgramHighlightingWithBrokenPositions() throws IOException {
+        );  
+            .query(matchPhrasePrefixQuery("field4", "the fast bro"))  
+            .endObject();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;  
+                        .put("analysis.analyzer.autocomplete.tokenizer", "autocomplete")
+        assertAcked(
+            .setSource("field1", "The quick browse button is a fancy thing, right bro?")  
+            .execute()  
+                    equalTo("The quick <x>brown</x> fox jumps over the lazy dog")
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;  
+        );
+                    .field("analyzer", "autocomplete")
+ *
+            .highlighter(new HighlightBuilder().field("body").highlighterType("fvh"))
+                .highlighter(highlight().field("field1").order("score").preTags("<x>").postTags("</x>"));  
+            .query(matchPhrasePrefixQuery("field3", "fast bro"))  
+        refresh();  
+            .startObject("properties")
+    public static Collection<Object[]> parameters() {
+package org.opensearch.analysis.common;
+                "field3",  
+import org.opensearch.search.builder.SearchSourceBuilder;
+            .highlighter(highlight().field("field0").order("score").preTags("<x>").postTags("</x>"));
+                            "@ => ALPHANUM",
+                        .put("analysis.filter.wordDelimiter.catenate_all", false)
+    public void testPhrasePrefix() throws IOException {  
+ * compatible open source license.
+                        .put("analysis.filter.wordDelimiter.catenate_numbers", true)
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                        .put(indexSettings())
+                )
+            0,
+                        .put("analysis.analyzer.custom_analyzer.tokenizer", "whitespace")  
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
+                        .put("analysis.filter.wordDelimiter.catenate_all", false)
+                "Test: http://www.facebook.com http://elasticsearch.org "
+                jsonBuilder().startObject()
+                        .putList(
+            .putList("index.analysis.filter.synonym.synonyms", "fast,quick");  
+                        .put("analysis.filter.wordDelimiter.type.split_on_numerics", false)  
+            .get();  
+                        + "http://quora.com http://twitter.com this is a test for highlighting "
+        }  
+                        .put("analysis.filter.wordDelimiter.catenate_numbers", true)
+            "field4",  
+            .highlighter(highlight().field("field3").order("score").preTags("<x>").postTags("</x>"));
+import org.opensearch.action.search.SearchResponse;  
+                .setMapping(  
+import static org.hamcrest.Matchers.anyOf;
+                            ". => ALPHANUM",
+        }
+        client().prepareIndex("second_test_index")
+                "body",  
+                    + "<em>http://xing.com</em> <em>http://cnn.com</em> http://quora.com"
+            .field("term_vector", "with_positions_offsets")  
+            0,  
+import static org.opensearch.transport.client.Requests.searchRequest;
+                    Settings.builder()  
+                        + "is a test for highlighting feature"
+            );  
+            1,
+            .setSource("type", "type2", "field4", "The quick browse button is a fancy thing, right bro?")  
+                    Settings.builder()  
+                equalTo("The <x>quick</x> <x>browse</x> button is a fancy thing, right bro?"),  
+                "<em>Test</em>: "
+        return Arrays.asList(
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
+            1,  
+            .highlighter(new HighlightBuilder().field("body").highlighterType("fvh"))
+        assertHighlight(search, 0, "name.autocomplete", 0, equalTo("ARCO<em>TEL</em> Ho<em>tel</em>s <em>Deut</em>schland"));
+                            "? => ALPHANUM",
+            prepareCreate("test").setMapping(
+        SearchResponse searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();  
+            .highlighter(highlight().field("field4").order("score").preTags("<x>").postTags("</x>"));
+                        .put("analysis.analyzer.search_autocomplete.tokenizer", "whitespace")  
+                )
+import org.opensearch.index.IndexSettings;
+    public static XContentBuilder type1TermVectorMapping() throws IOException {
+        searchResponse = client().search(searchRequest("first_test_index").source(source)).actionGet();  
+ * Unless required by applicable law or agreed to in writing,
+        assertHighlight(
+        searchResponse = client().search(searchRequest("second_test_index").source(source)).actionGet();
+                    .startObject("fields")
+                        .put("analysis.filter.wordDelimiter.type", "word_delimiter")
+ *  
+                            "+ => ALPHANUM",  
+            searchResponse,
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+                        .put("analysis.tokenizer.autocomplete.min_gram", 1)
+    public void testMultiPhraseCutoff() throws IOException {
+                    "body",
+        logger.info("--> highlighting and searching on field4");  
+        client().prepareIndex("first_test_index")
+ * GitHub history for details.
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
+                )  
+            equalTo(
+        assertHitCount(searchResponse, 2);
+            prepareCreate("test").setMapping(  
+import static org.hamcrest.Matchers.startsWith;
+                            "] => ALPHANUM",
+ * license agreements. See the NOTICE file distributed with
+                        .put("analysis.filter.wordDelimiter.catenate_words", true)  
+                        .put("analysis.filter.wordDelimiter.catenate_words", true)  
+            .putList("index.analysis.analyzer.synonym.filter", "synonym", "lowercase")
+            searchResponse,
+                    .endObject()
+ * the Apache License, Version 2.0 (the "License"); you may
+    @ParametersFactory  
+                    + "<em>http://www.facebook.com</em> <em>http://elasticsearch.org</em> "  
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+        assertAcked(  
+                    .endObject()
+            .startObject("field2")
+            .highlighter(new HighlightBuilder().field("name.autocomplete"))
+                            "( => ALPHANUM",  
+                    equalTo("The quick <x>browse</x> button is a fancy thing, right <x>bro</x>?"),  
+                        .put("analysis.tokenizer.autocomplete.max_gram", 20)  
+/*  
+    @Override
+                anyOf(
+ */  
+                            "# => ALPHANUM",
+            .put("index.analysis.filter.synonym.type", "synonym")
+        refresh();
+        searchResponse = client().search(searchRequest("second_test_index").source(source)).actionGet();  

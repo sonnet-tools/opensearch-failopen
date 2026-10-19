@@ -1,60 +1,51 @@
+ * license agreements. See the NOTICE file distributed with
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    }
+        this.dfa = Operations.determinize(new RegExp(pattern).toAutomaton(), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
+}
+ * You may obtain a copy of the License at  
+ * not use this file except in compliance with the License.
+    }
+ * under the License.  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * specific language governing permissions and limitations
+import org.apache.lucene.util.automaton.Automaton;  
+ * this work for additional information regarding copyright
  */  
-
+public class SimplePatternTokenizerFactory extends AbstractTokenizerFactory {
+ */  
 /*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.pattern.SimplePatternTokenizer;
-import org.apache.lucene.util.automaton.Automaton;  
-import org.apache.lucene.util.automaton.Operations;
-import org.apache.lucene.util.automaton.RegExp;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractTokenizerFactory;  
-
-public class SimplePatternTokenizerFactory extends AbstractTokenizerFactory {
-
-    private final Automaton dfa;
-
-    public SimplePatternTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
-        super(indexSettings, settings, name);
-
-        final String pattern = settings.get("pattern", "");  
-        this.dfa = Operations.determinize(new RegExp(pattern).toAutomaton(), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
-    }
-
-    @Override
     public Tokenizer create() {
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+ *  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.settings.Settings;  
+    private final Automaton dfa;
+import org.opensearch.index.analysis.AbstractTokenizerFactory;  
+import org.apache.lucene.util.automaton.Operations;
+import org.opensearch.index.IndexSettings;
+    public SimplePatternTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
+ * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.lucene.analysis.pattern.SimplePatternTokenizer;
+ * compatible open source license.
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+import org.apache.lucene.util.automaton.RegExp;
+import org.apache.lucene.analysis.Tokenizer;
+ * The OpenSearch Contributors require contributions made to  
+ *
+    @Override
+        super(indexSettings, settings, name);
+        final String pattern = settings.get("pattern", "");  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ * GitHub history for details.
+import org.opensearch.env.Environment;
         return new SimplePatternTokenizer(dfa);  
-    }
-}
+package org.opensearch.analysis.common;

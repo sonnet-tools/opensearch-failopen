@@ -1,2273 +1,2054 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client;
-
-import org.apache.hc.client5.http.classic.methods.HttpDelete;
-import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.classic.methods.HttpHead;  
-import org.apache.hc.client5.http.classic.methods.HttpPost;
-import org.apache.hc.client5.http.classic.methods.HttpPut;
-import org.apache.hc.core5.http.HttpEntity;  
-import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.opensearch.action.DocWriteRequest;  
-import org.opensearch.action.admin.cluster.storedscripts.DeleteStoredScriptRequest;
-import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptRequest;
-import org.opensearch.action.admin.cluster.storedscripts.PutStoredScriptRequest;  
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkShardRequest;
-import org.opensearch.action.delete.DeleteRequest;  
-import org.opensearch.action.explain.ExplainRequest;
-import org.opensearch.action.fieldcaps.FieldCapabilitiesRequest;
-import org.opensearch.action.get.GetRequest;  
-import org.opensearch.action.get.MultiGetRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.search.ClearScrollRequest;  
-import org.opensearch.action.search.CreatePitRequest;
-import org.opensearch.action.search.DeletePitRequest;
-import org.opensearch.action.search.MultiSearchRequest;  
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchScrollRequest;
-import org.opensearch.action.search.SearchType;  
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.WriteRequest;  
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
-import org.opensearch.action.support.replication.ReplicationRequest;  
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.client.RequestConverters.EndpointBuilder;
-import org.opensearch.client.core.CountRequest;  
-import org.opensearch.client.core.GetSourceRequest;
-import org.opensearch.client.core.MultiTermVectorsRequest;
-import org.opensearch.client.core.TermVectorsRequest;  
-import org.opensearch.client.indices.AnalyzeRequest;
-import org.opensearch.common.CheckedBiConsumer;
-import org.opensearch.common.collect.Tuple;  
-import org.opensearch.common.io.Streams;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.lucene.uid.Versions;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.index.VersionType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.query.MatchAllQueryBuilder;  
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.rankeval.PrecisionAtK;  
-import org.opensearch.index.rankeval.RankEvalRequest;
-import org.opensearch.index.rankeval.RankEvalSpec;
-import org.opensearch.index.rankeval.RatedRequest;  
-import org.opensearch.index.rankeval.RestRankEvalAction;
-import org.opensearch.index.reindex.AbstractBulkByScrollRequest;
-import org.opensearch.index.reindex.DeleteByQueryRequest;  
-import org.opensearch.index.reindex.ReindexRequest;
-import org.opensearch.index.reindex.RemoteInfo;
-import org.opensearch.index.reindex.UpdateByQueryRequest;  
-import org.opensearch.rest.action.search.RestSearchAction;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;  
-import org.opensearch.script.mustache.MultiSearchTemplateRequest;
-import org.opensearch.script.mustache.SearchTemplateRequest;
-import org.opensearch.search.Scroll;  
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.support.ValueType;
-import org.opensearch.search.builder.SearchSourceBuilder;  
-import org.opensearch.search.collapse.CollapseBuilder;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;  
-import org.opensearch.search.rescore.QueryRescorerBuilder;
-import org.opensearch.search.suggest.SuggestBuilder;
-import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.RandomObjects;
-import org.hamcrest.Matchers;  
-
-import java.io.IOException;
-import java.io.InputStream;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Locale;
-import java.util.Map;
-import java.util.StringJoiner;  
-import java.util.concurrent.TimeUnit;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;  
-import java.util.function.Function;
-import java.util.function.Supplier;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonMap;
-import static org.opensearch.client.RequestConverters.REQUEST_BODY_CONTENT_TYPE;  
-import static org.opensearch.client.RequestConverters.enforceSameContentType;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-import static org.opensearch.search.RandomSearchRequestGenerator.randomSearchRequest;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.Matchers.hasEntry;  
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.nullValue;
-
-public class RequestConvertersTests extends OpenSearchTestCase {
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RequestConvertersTests.class);  
-
-    public void testPing() {
-        Request request = RequestConverters.ping();  
-        assertEquals("/", request.getEndpoint());
-        assertEquals(0, request.getParameters().size());
-        assertNull(request.getEntity());  
-        assertEquals(HttpHead.METHOD_NAME, request.getMethod());
-    }
-
-    public void testInfo() {
-        Request request = RequestConverters.info();
-        assertEquals("/", request.getEndpoint());  
-        assertEquals(0, request.getParameters().size());
-        assertNull(request.getEntity());
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
-    }
-
-    public void testGet() {  
-        getAndExistsTest(RequestConverters::get, HttpGet.METHOD_NAME);
-    }
-
-    public void testSourceExists() throws IOException {
-        doTestSourceExists((index, id) -> new GetSourceRequest(index, id));
-    }  
-
-    public void testSourceExistsWithType() throws IOException {
-        String type = frequently() ? randomAlphaOfLengthBetween(3, 10) : MapperService.SINGLE_MAPPING_NAME;  
-        doTestSourceExists((index, id) -> new GetSourceRequest(index, id).type(type));
-    }
-
-    public void testGetSource() throws IOException {
-        doTestGetSource((index, id) -> new GetSourceRequest(index, id));
-    }  
-
-    private static void doTestSourceExists(BiFunction<String, String, GetSourceRequest> requestFunction) throws IOException {
-        String index = randomAlphaOfLengthBetween(3, 10);  
-        String id = randomAlphaOfLengthBetween(3, 10);
-        final GetSourceRequest getRequest = requestFunction.apply(index, id);
-
-        Map<String, String> expectedParams = new HashMap<>();
-        if (randomBoolean()) {
-            String preference = randomAlphaOfLengthBetween(3, 10);  
-            getRequest.preference(preference);
-            expectedParams.put("preference", preference);
-        }  
-        if (randomBoolean()) {
-            String routing = randomAlphaOfLengthBetween(3, 10);
-            getRequest.routing(routing);  
-            expectedParams.put("routing", routing);
-        }
-        if (randomBoolean()) {  
-            boolean realtime = randomBoolean();
-            getRequest.realtime(realtime);
-            if (realtime == false) {  
-                expectedParams.put("realtime", "false");
-            }
-        }  
-        if (randomBoolean()) {
-            boolean refresh = randomBoolean();
-            getRequest.refresh(refresh);  
-            if (refresh) {
-                expectedParams.put("refresh", "true");
-            }  
-        }
-        Request request = RequestConverters.sourceExists(getRequest);
-        assertEquals(HttpHead.METHOD_NAME, request.getMethod());  
-        assertEquals("/" + index + "/_source/" + id, request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());
-        assertNull(request.getEntity());  
-    }
-
-    private static void doTestGetSource(BiFunction<String, String, GetSourceRequest> requestFunction) throws IOException {  
-        String index = randomAlphaOfLengthBetween(3, 10);
-        String id = randomAlphaOfLengthBetween(3, 10);
-        final GetSourceRequest getRequest = requestFunction.apply(index, id);  
-
-        Map<String, String> expectedParams = new HashMap<>();
-        if (randomBoolean()) {  
-            String preference = randomAlphaOfLengthBetween(3, 10);
-            getRequest.preference(preference);
-            expectedParams.put("preference", preference);  
-        }
-        if (randomBoolean()) {
-            String routing = randomAlphaOfLengthBetween(3, 10);  
-            getRequest.routing(routing);
-            expectedParams.put("routing", routing);
-        }  
-        if (randomBoolean()) {
-            boolean realtime = randomBoolean();
-            getRequest.realtime(realtime);  
-            if (realtime == false) {
-                expectedParams.put("realtime", "false");
-            }  
-        }
-        if (randomBoolean()) {
-            boolean refresh = randomBoolean();  
-            getRequest.refresh(refresh);
-            if (refresh) {
-                expectedParams.put("refresh", "true");  
-            }
-        }
-        Request request = RequestConverters.getSource(getRequest);  
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
-        assertEquals("/" + index + "/_source/" + id, request.getEndpoint());
-
-        assertEquals(expectedParams, request.getParameters());
-        assertNull(request.getEntity());
-    }  
-
-    public void testMultiGet() throws IOException {
-        Map<String, String> expectedParams = new HashMap<>();  
-        MultiGetRequest multiGetRequest = new MultiGetRequest();
-        if (randomBoolean()) {
-            String preference = randomAlphaOfLength(4);  
-            multiGetRequest.preference(preference);
-            expectedParams.put("preference", preference);
-        }  
-        if (randomBoolean()) {
-            multiGetRequest.realtime(randomBoolean());
-            if (multiGetRequest.realtime() == false) {  
-                expectedParams.put("realtime", "false");
-            }
-        }  
-        if (randomBoolean()) {
-            multiGetRequest.refresh(randomBoolean());
-            if (multiGetRequest.refresh()) {  
-                expectedParams.put("refresh", "true");
-            }
-        }  
-
-        int numberOfRequests = randomIntBetween(0, 32);
-        for (int i = 0; i < numberOfRequests; i++) {  
-            MultiGetRequest.Item item = new MultiGetRequest.Item(randomAlphaOfLength(4), randomAlphaOfLength(4));
-            if (randomBoolean()) {
-                item.routing(randomAlphaOfLength(4));  
-            }
-            if (randomBoolean()) {
-                item.storedFields(generateRandomStringArray(16, 8, false));  
-            }
-            if (randomBoolean()) {
-                item.version(randomNonNegativeLong());  
-            }
-            if (randomBoolean()) {
-                item.versionType(randomFrom(VersionType.values()));  
-            }
-            if (randomBoolean()) {
-                randomizeFetchSourceContextParams(item::fetchSourceContext, new HashMap<>());  
-            }
-            multiGetRequest.add(item);
-        }  
-
+        } else {
+            Request request = RequestConverters.bulk(bulkRequest);  
+        String[] indices = randomIndicesNames(0, 5);
+            updateRequest.doc(new IndexRequest().source(singletonMap("field", "doc"), MediaTypeRegistry.JSON));
+            assertEquals("/%2F%2Ffoo", endpointBuilder.build());
+            Map<String, String> expectedParams = new HashMap<>();
+            expectedParams.put("requests_per_second", Float.toString(requestsPerSecond));
+        CreatePitRequest createPitRequest = new CreatePitRequest(new TimeValue(1, TimeUnit.DAYS), true, indices);  
+                String routing = randomAlphaOfLengthBetween(3, 10);
         Request request = RequestConverters.multiGet(multiGetRequest);
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-        assertEquals("/_mget", request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());
-        assertToXContentBody(multiGetRequest, request.getEntity());  
+import org.opensearch.index.rankeval.RatedRequest;  
+        // Verify that the resulting REST request looks as expected.  
+    }  
+        {
+        }  
+        }  
     }
-
-    public void testMultiGetWithType() throws IOException {  
+            } else {  
+        CountRequest countRequest = new CountRequest();
+import org.opensearch.index.rankeval.PrecisionAtK;  
+        assertEquals(
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type", "this|is|the|id");
+        }  
+                if (randomBoolean()) {
+        try (XContentParser parser = createParser(entityContentType.xContent(), entity.getContent())) {  
+ */
+        assertEquals(endpoint.toString(), request.getEndpoint());
+        variants.add(
+        Request request = RequestConverters.mtermVectors(mtvRequest);
+        String type = randomAlphaOfLengthBetween(3, 10);
+        setRandomTimeout(
+        }  
+        }  
+            });
+        expectedParams.put("max_concurrent_shard_requests", Integer.toString(searchRequest.getMaxConcurrentShardRequests()));
+            // frequently set the search source to have some content, otherwise leave it  
+            DocWriteRequest<?> docWriteRequest;
+ * compatible open source license.
+        }  
+                randomBoolean(),
+            expectedParams.put("scroll_size", Integer.toString(batchSize));  
+        if (searchRequest.getPreFilterShardSize() != null) {  
+        TaskId taskId = new TaskId(randomAlphaOfLength(10), randomIntBetween(1, 100));
+                UpdateRequest updateRequest = (UpdateRequest) originalRequest;  
+            expectedParams.put("timeout", timeout);
+            scriptParams.put("field", "name");
+    }  
+            } else {  
+import org.opensearch.action.bulk.BulkShardRequest;
+            Collections.singletonList(new RatedRequest("queryId", Collections.emptyList(), new SearchSourceBuilder())),
+        );
+    }  
+            countRequest.minScore((float) randomIntBetween(1, 10));  
+            DocWriteRequest<?> parsedRequest = parsedBulkRequest.requests().get(i);
+        assertToXContentBody(searchTemplateRequest, request.getEntity());  
+            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), xContentType));  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/foo");
+                    );
+        assertEquals(endpoint.toString(), request.getEndpoint());
+        assertEquals(expectedParams, request.getParameters());  
+        }  
+        assertEquals(numSearchRequests, searchRequests.size());
+            assertEquals("/index/type/this%2Fis%2Fthe%2Fid", endpointBuilder.build());
+            expectedParams.put("preference", preference);
+                docWriteRequest = createRequest;
+    private static void doTestGetSource(BiFunction<String, String, GetSourceRequest> requestFunction) throws IOException {  
+        getAndExistsTest(RequestConverters::get, HttpGet.METHOD_NAME);
+            setter.accept(timeout);
+        searchTemplateRequest.setSimulate(true); // Setting simulate true means the template should only be rendered.  
+        assertEquals(expectedParams, request.getParameters());  
+            expectedParams.put("timeout", defaultTimeout.getStringRep());
+            setRandomVersionType(getRequest::versionType, expectedParams);  
+        DeletePitRequest deletePitRequest = new DeletePitRequest(pitIdsList);
+                "Mismatching content-type found for request with content-type [SMILE], " + "previous requests have content-type [JSON]",  
+        }
+        });
+                exception.getMessage()
+    }  
+    }  
+                RemoteInfo.DEFAULT_CONNECT_TIMEOUT  
+        setRandomVersion(deleteRequest, expectedParams);
+        ExplainRequest explainRequest = new ExplainRequest(index, id);  
+        if (randomBoolean()) {
+        BulkRequest bulkRequest = new BulkRequest();
+        }
+                expectedParams.put("slices", AbstractBulkByScrollRequest.AUTO_SLICES_VALUE);
+        setRandomIndicesOptions(searchRequest::indicesOptions, searchRequest::indicesOptions, expectedParams);
+                boolean refresh = randomBoolean();
+        }
+    }
+    public void testCreatePit() throws IOException {
+                    searchSourceBuilder.suggest(
+            BytesReference source = RandomObjects.randomSource(random(), mediaType);
+        Request request = RequestConverters.count(countRequest);
+        {
+        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+                updateRequest.doc(new IndexRequest().source(singletonMap("field", "value"), mediaType));
+            for (int i = 0; i < nbFields; i++) {  
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+                    : FetchSourceContext.DO_NOT_FETCH_SOURCE;
+    static void setRandomIncludeDefaults(Consumer<Boolean> setter, Map<String, String> expectedParams) {
+            searchRequest.setPreFilterShardSize(randomIntBetween(2, Integer.MAX_VALUE));
+import org.opensearch.core.xcontent.MediaType;
+        BytesReference expectedBytes = org.opensearch.core.xcontent.XContentHelper.toXContent(
+            assertEquals(originalRequest.opType(), parsedRequest.opType());
+        if (randomBoolean()) {
+        }
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+        SearchRequest searchRequest = new SearchRequest(indices);
+                item.version(randomNonNegativeLong());  
+                "http",  
+        byte[] expectedBytes = MultiSearchTemplateRequest.writeMultiLineFormat(  
+        }
+        Map<String, String> expectedParams = new HashMap<>();  
+    }
+            rankEvalRequest.searchType(randomFrom(SearchType.CURRENTLY_SUPPORTED));  
+            bulkRequest.add(  
+            getRequest.realtime(realtime);  
+            }  
+            String routing = randomAlphaOfLengthBetween(3, 10);  
+            if (docAsUpsert) {  
+        UpdateRequest updateRequest = new UpdateRequest(index, id);  
+        // non-deterministic order.
+        if (Strings.hasLength(index)) {  
+        if (randomBoolean()) {
+        setRandomTimeout(putStoredScriptRequest::timeout, AcknowledgedRequest.DEFAULT_ACK_TIMEOUT, expectedParams);
+        assertToXContentBody(multiGetRequest, request.getEntity());  
+        // passed through
+                indexRequest.opType(DocWriteRequest.OpType.CREATE);
+        searchTemplateRequest.setScriptParams(scriptParams);
+        setRandomTimeout(indexRequest::timeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);  
+        }
+        if (randomBoolean()) {  
+                    randomizeFetchSourceContextParams(updateRequest::fetchSource, new HashMap<>());  
+        }
+        SearchRequest searchRequest = new SearchRequest();
+        expectedParams.put(RestSearchAction.TYPED_KEYS_PARAM, "true");
+        if (randomBoolean()) {
+        if (randomBoolean()) {
+            setRandomSearchParams(searchRequest, expectedParams);
+        if (Strings.hasLength(index)) {
+                // elsewhere
+            reindexRequest.setSourceBatchSize(randomInt(100));
+        String id = randomAlphaOfLengthBetween(3, 10);
+            searchScrollRequest.scroll(randomPositiveTimeValue());
+            BytesReference source = RandomObjects.randomSource(random(), xContentType);
+            builder.endObject();  
+    private static void setRandomVersion(DocWriteRequest<?> request, Map<String, String> expectedParams) {
+                long version = randomLong();  
+        }
+            expectedParams.put("slices", "1");
+            expectedParams
+            String index = randomAlphaOfLengthBetween(3, 10);  
+            builder.endObject();  
+        if (randomBoolean()) {
+        String endpoint = "/_search/point_in_time/_all";
+        SearchTemplateRequest searchTemplateRequest = new SearchTemplateRequest(searchRequest);  
+            tvRequest.setRouting(routing);  
+        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+            countRequest.source(searchSourceBuilder);
+        String index = randomAlphaOfLengthBetween(3, 10);  
+        }
+        }  
+    public void testSearchNullIndicesAndTypes() {  
+            expectedParams.put("timeout", timeout.getStringRep());
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo/bar");  
+        assertThat(request.getParameters(), Matchers.hasEntry("pipeline", "xyz"));  
+        } else {
+                if (randomBoolean()) {
+        }  
+    }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }  
+    static void setRandomClusterManagerTimeout(Consumer<String> setter, Map<String, String> expectedParams) {
+    public void testMultiTermVectorsWithType() throws IOException {
+        Map<String, String> expectedParams
+            assertEquals("/" + index + "/_create/" + id, request.getEndpoint());  
+    public void testEndpoint() {
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
+            searchRequest.scroll((Scroll) null);
+        } else {  
+        assertToXContentBody(reindexRequest, request.getEntity());
+        assertEquals(  
+        try (XContentParser parser = createParser(xContentType.xContent(), entity.getContent())) {  
+        if (randomBoolean()) {
+        expectedParams.put(RestSearchAction.TYPED_KEYS_PARAM, "true");
+            requests[i] = docWriteRequest;  
+            requests.add(searchRequest);  
+        TermVectorsRequest tvRequest = new TermVectorsRequest(index, id);
+            }  
+import org.opensearch.action.update.UpdateRequest;
+        assertEquals(expectedParams, request.getParameters());
+    }
+        assertNull(request.getEntity());
+            BulkRequest bulkRequest = new BulkRequest();  
+        bulkRequest.pipeline("xyz");
+        updateByQueryRequest.indices(randomIndicesNames(1, 5));
+        );
+        UpdateByQueryRequest updateByQueryRequest = new UpdateByQueryRequest();  
+        }  
+            assertEquals("/index/type/this%7Cis%7Cthe%7Cid", endpointBuilder.build());  
+                throw new UnsupportedOperationException("optype [" + opType + "] not supported");
+    }  
+        if (!joinedIndices.isEmpty()) {
+        }  
+            getRequest.preference(preference);
+            TermVectorsRequest tvRequest = new TermVectorsRequest(index, type, id);
+        assertEquals(Collections.emptyMap(), request.getParameters());  
+                    ? FetchSourceContext.FETCH_SOURCE
+            reindexRequest.setAbortOnVersionConflict(false);
+        assertThat(request.getParameters(), hasKey("fields"));
+                item.routing(randomAlphaOfLength(4));  
+        if (randomBoolean()) {
+            assertEquals("/%2F%2Ffoo@bar", endpointBuilder.build());  
+        assertToXContentBody(mtvRequest, request.getEntity());
+            assertEquals("/%2F%2F%2Ffoo", endpointBuilder.build());
+            String preference = randomAlphaOfLengthBetween(3, 10);
+        }
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+        }
+import org.opensearch.common.collect.Tuple;  
+        setRandomIfSeqNoAndTerm(deleteRequest, expectedParams);
+    }
+            getRequest.realtime(realtime);
+        String type = frequently() ? randomAlphaOfLengthBetween(3, 10) : MapperService.SINGLE_MAPPING_NAME;  
+        }
+        );  
+        if (updateRequest.upsertRequest() != null) {  
+import org.opensearch.search.builder.SearchSourceBuilder;  
+import org.opensearch.action.search.CreatePitRequest;
+import org.opensearch.index.reindex.ReindexRequest;
+        );
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
+                assertEquals(updateRequest.fetchSource(), parsedUpdateRequest.fetchSource());
+        assertThat(RequestConverters.analyze(analyzeRequest).getEndpoint(), equalTo("/_analyze"));
+import static org.hamcrest.Matchers.hasKey;
+                IndicesOptions.fromOptions(  
         MultiGetRequest multiGetRequest = new MultiGetRequest();
         MultiGetRequest.Item item = new MultiGetRequest.Item(randomAlphaOfLength(4), randomAlphaOfLength(4));
-        multiGetRequest.add(item);  
-
-        Request request = RequestConverters.multiGet(multiGetRequest);
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-        assertEquals("/_mget", request.getEndpoint());
-        assertToXContentBody(multiGetRequest, request.getEntity());
-    }  
-
-    public void testDelete() {
-        String index = randomAlphaOfLengthBetween(3, 10);  
-        String id = randomAlphaOfLengthBetween(3, 10);
-        DeleteRequest deleteRequest = new DeleteRequest(index, id);
-
-        Map<String, String> expectedParams = new HashMap<>();
-
-        setRandomTimeout(deleteRequest::timeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);  
-        setRandomRefreshPolicy(deleteRequest::setRefreshPolicy, expectedParams);
-        setRandomVersion(deleteRequest, expectedParams);
-        setRandomVersionType(deleteRequest::versionType, expectedParams);  
-        setRandomIfSeqNoAndTerm(deleteRequest, expectedParams);
-
-        if (frequently()) {  
-            if (randomBoolean()) {
-                String routing = randomAlphaOfLengthBetween(3, 10);
-                deleteRequest.routing(routing);  
-                expectedParams.put("routing", routing);
-            }
-        }  
-
-        Request request = RequestConverters.delete(deleteRequest);
-        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());  
-        assertEquals("/" + index + "/_doc/" + id, request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());
-        assertNull(request.getEntity());  
-    }
-
-    public void testExists() {  
-        getAndExistsTest(RequestConverters::exists, HttpHead.METHOD_NAME);
-    }
-
-    private static void getAndExistsTest(Function<GetRequest, Request> requestConverter, String method) {
-        String index = randomAlphaOfLengthBetween(3, 10);
-        String id = randomAlphaOfLengthBetween(3, 10);  
-        GetRequest getRequest = new GetRequest(index, id);
-
-        Map<String, String> expectedParams = new HashMap<>();  
-        if (randomBoolean()) {
-            if (randomBoolean()) {
-                String preference = randomAlphaOfLengthBetween(3, 10);  
-                getRequest.preference(preference);
-                expectedParams.put("preference", preference);
-            }  
-            if (randomBoolean()) {
-                String routing = randomAlphaOfLengthBetween(3, 10);
-                getRequest.routing(routing);  
-                expectedParams.put("routing", routing);
-            }
-            if (randomBoolean()) {  
-                boolean realtime = randomBoolean();
-                getRequest.realtime(realtime);
-                if (realtime == false) {  
-                    expectedParams.put("realtime", "false");
-                }
-            }  
-            if (randomBoolean()) {
-                boolean refresh = randomBoolean();
-                getRequest.refresh(refresh);  
-                if (refresh) {
-                    expectedParams.put("refresh", "true");
-                }  
-            }
-            if (randomBoolean()) {
-                long version = randomLong();  
-                getRequest.version(version);
-                if (version != Versions.MATCH_ANY) {
-                    expectedParams.put("version", Long.toString(version));  
-                }
-            }
-            setRandomVersionType(getRequest::versionType, expectedParams);  
-            if (randomBoolean()) {
-                int numStoredFields = randomIntBetween(1, 10);
-                String[] storedFields = new String[numStoredFields];  
-                String storedFieldsParam = randomFields(storedFields);
-                getRequest.storedFields(storedFields);
-                expectedParams.put("stored_fields", storedFieldsParam);  
-            }
-            if (randomBoolean()) {
-                randomizeFetchSourceContextParams(getRequest::fetchSourceContext, expectedParams);  
-            }
-        }
-        Request request = requestConverter.apply(getRequest);  
-        assertEquals("/" + index + "/_doc/" + id, request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());
-        assertNull(request.getEntity());  
-        assertEquals(method, request.getMethod());
-    }
-
-    public void testReindex() throws IOException {
-        ReindexRequest reindexRequest = new ReindexRequest();
-        reindexRequest.setSourceIndices("source_idx");  
-        reindexRequest.setDestIndex("dest_idx");
-        Map<String, String> expectedParams = new HashMap<>();
-        if (randomBoolean()) {  
-            XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
-            RemoteInfo remoteInfo = new RemoteInfo(
-                "http",  
-                "remote-host",
-                9200,
-                null,  
-                BytesReference.bytes(matchAllQuery().toXContent(builder, ToXContent.EMPTY_PARAMS)),
-                "user",
-                "pass",  
-                emptyMap(),
-                RemoteInfo.DEFAULT_SOCKET_TIMEOUT,
-                RemoteInfo.DEFAULT_CONNECT_TIMEOUT  
-            );
-            reindexRequest.setRemoteInfo(remoteInfo);
-        }  
-        if (randomBoolean()) {
-            reindexRequest.setSourceBatchSize(randomInt(100));
-        }  
-        if (randomBoolean()) {
-            reindexRequest.setDestOpType("create");
-        }  
-        if (randomBoolean()) {
-            reindexRequest.setDestPipeline("my_pipeline");
-        }  
-        if (randomBoolean()) {
-            float requestsPerSecond = (float) randomDoubleBetween(0.0, 10.0, false);
-            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, Float.toString(requestsPerSecond));  
-            reindexRequest.setRequestsPerSecond(requestsPerSecond);
-        } else {
-            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, "-1");  
-        }
-        if (randomBoolean()) {
-            reindexRequest.setDestRouting("=cat");  
-        }
-        if (randomBoolean()) {
-            if (randomBoolean()) {  
-                reindexRequest.setMaxDocs(randomIntBetween(100, 1000));
-            } else {
-                reindexRequest.setSize(randomIntBetween(100, 1000));  
-            }
-        }
-        if (randomBoolean()) {  
-            reindexRequest.setAbortOnVersionConflict(false);
-        }
-        if (randomBoolean()) {  
-            String ts = randomTimeValue();
-            reindexRequest.setScroll(TimeValue.parseTimeValue(ts, "scroll"));
-        }  
-        if (reindexRequest.getRemoteInfo() == null && randomBoolean()) {
-            reindexRequest.setSourceQuery(new TermQueryBuilder("foo", "fooval"));
-        }  
-        if (randomBoolean()) {
-            int slices = randomIntBetween(0, 4);
-            reindexRequest.setSlices(slices);  
-            if (slices == 0) {
-                expectedParams.put("slices", AbstractBulkByScrollRequest.AUTO_SLICES_VALUE);
-            } else {  
-                expectedParams.put("slices", Integer.toString(slices));
-            }
-        } else {  
-            expectedParams.put("slices", "1");
-        }
-        setRandomTimeout(reindexRequest::setTimeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);  
-        setRandomWaitForActiveShards(reindexRequest::setWaitForActiveShards, ActiveShardCount.DEFAULT, expectedParams);
-        expectedParams.put("scroll", reindexRequest.getScrollTime().getStringRep());
-        expectedParams.put("wait_for_completion", Boolean.TRUE.toString());  
-        Request request = RequestConverters.reindex(reindexRequest);
-        assertEquals("/_reindex", request.getEndpoint());
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-        assertEquals(expectedParams, request.getParameters());
-        assertToXContentBody(reindexRequest, request.getEntity());
-    }  
-
-    public void testUpdateByQuery() throws IOException {
-        UpdateByQueryRequest updateByQueryRequest = new UpdateByQueryRequest();  
-        updateByQueryRequest.indices(randomIndicesNames(1, 5));
-        Map<String, String> expectedParams = new HashMap<>();
-        if (randomBoolean()) {  
-            int batchSize = randomInt(100);
-            updateByQueryRequest.setBatchSize(batchSize);
-            expectedParams.put("scroll_size", Integer.toString(batchSize));  
-        }
-        if (randomBoolean()) {
-            updateByQueryRequest.setPipeline("my_pipeline");  
-            expectedParams.put("pipeline", "my_pipeline");
-        }
-        if (randomBoolean()) {  
-            float requestsPerSecond = (float) randomDoubleBetween(0.0, 10.0, false);
-            expectedParams.put("requests_per_second", Float.toString(requestsPerSecond));
-            updateByQueryRequest.setRequestsPerSecond(requestsPerSecond);  
-        } else {
-            expectedParams.put("requests_per_second", "-1");
-        }  
-        if (randomBoolean()) {
-            updateByQueryRequest.setRouting("=cat");
-            expectedParams.put("routing", "=cat");  
-        }
-        if (randomBoolean()) {
-            int size = randomIntBetween(100, 1000);  
-            if (randomBoolean()) {
-                updateByQueryRequest.setMaxDocs(size);
-            } else {  
-                updateByQueryRequest.setSize(size);
-            }
-            expectedParams.put("max_docs", Integer.toString(size));  
-        }
-        if (randomBoolean()) {
-            updateByQueryRequest.setAbortOnVersionConflict(false);  
-            expectedParams.put("conflicts", "proceed");
-        }
-        if (randomBoolean()) {  
-            String ts = randomTimeValue();
-            updateByQueryRequest.setScroll(TimeValue.parseTimeValue(ts, "scroll"));
-            expectedParams.put("scroll", ts);  
-        }
-        if (randomBoolean()) {
-            updateByQueryRequest.setQuery(new TermQueryBuilder("foo", "fooval"));  
-        }
-        if (randomBoolean()) {
-            updateByQueryRequest.setScript(new Script("ctx._source.last = \"lastname\""));  
-        }
-        if (randomBoolean()) {
-            int slices = randomIntBetween(0, 4);  
-            if (slices == 0) {
-                expectedParams.put("slices", AbstractBulkByScrollRequest.AUTO_SLICES_VALUE);
-            } else {  
-                expectedParams.put("slices", Integer.toString(slices));
-            }
-            updateByQueryRequest.setSlices(slices);  
-        } else {
-            expectedParams.put("slices", "1");
-        }  
-        setRandomIndicesOptions(updateByQueryRequest::setIndicesOptions, updateByQueryRequest::indicesOptions, expectedParams);
-        setRandomTimeout(updateByQueryRequest::setTimeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);
-        expectedParams.put("wait_for_completion", Boolean.TRUE.toString());  
-        Request request = RequestConverters.updateByQuery(updateByQueryRequest);
-        StringJoiner joiner = new StringJoiner("/", "/", "");
-        joiner.add(String.join(",", updateByQueryRequest.indices()));  
-        joiner.add("_update_by_query");
-        assertEquals(joiner.toString(), request.getEndpoint());
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-        assertEquals(expectedParams, request.getParameters());
-        assertToXContentBody(updateByQueryRequest, request.getEntity());
-    }  
-
-    public void testDeleteByQuery() throws IOException {
-        DeleteByQueryRequest deleteByQueryRequest = new DeleteByQueryRequest();  
-        deleteByQueryRequest.indices(randomIndicesNames(1, 5));
-        Map<String, String> expectedParams = new HashMap<>();
-        if (randomBoolean()) {  
-            int batchSize = randomInt(100);
-            deleteByQueryRequest.setBatchSize(batchSize);
-            expectedParams.put("scroll_size", Integer.toString(batchSize));  
-        }
-        if (randomBoolean()) {
-            deleteByQueryRequest.setRouting("=cat");  
-            expectedParams.put("routing", "=cat");
-        }
-        if (randomBoolean()) {  
-            int size = randomIntBetween(100, 1000);
-            if (randomBoolean()) {
-                deleteByQueryRequest.setMaxDocs(size);  
-            } else {
-                deleteByQueryRequest.setSize(size);
-            }  
-            expectedParams.put("max_docs", Integer.toString(size));
-        }
-        if (randomBoolean()) {  
-            deleteByQueryRequest.setAbortOnVersionConflict(false);
-            expectedParams.put("conflicts", "proceed");
-        }  
-        if (randomBoolean()) {
-            String ts = randomTimeValue();
-            deleteByQueryRequest.setScroll(TimeValue.parseTimeValue(ts, "scroll"));  
-            expectedParams.put("scroll", ts);
-        }
-        if (randomBoolean()) {  
-            deleteByQueryRequest.setQuery(new TermQueryBuilder("foo", "fooval"));
-        }
-        if (randomBoolean()) {  
-            float requestsPerSecond = (float) randomDoubleBetween(0.0, 10.0, false);
-            expectedParams.put("requests_per_second", Float.toString(requestsPerSecond));
-            deleteByQueryRequest.setRequestsPerSecond(requestsPerSecond);  
-        } else {
-            expectedParams.put("requests_per_second", "-1");
-        }  
-        if (randomBoolean()) {
-            int slices = randomIntBetween(0, 4);
-            if (slices == 0) {  
-                expectedParams.put("slices", AbstractBulkByScrollRequest.AUTO_SLICES_VALUE);
-            } else {
-                expectedParams.put("slices", Integer.toString(slices));  
-            }
-            deleteByQueryRequest.setSlices(slices);
-        } else {  
-            expectedParams.put("slices", "1");
-        }
-        setRandomIndicesOptions(deleteByQueryRequest::setIndicesOptions, deleteByQueryRequest::indicesOptions, expectedParams);  
-        setRandomTimeout(deleteByQueryRequest::setTimeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);
-        expectedParams.put("wait_for_completion", Boolean.TRUE.toString());
-        Request request = RequestConverters.deleteByQuery(deleteByQueryRequest);  
-        StringJoiner joiner = new StringJoiner("/", "/", "");
-        joiner.add(String.join(",", deleteByQueryRequest.indices()));
-        joiner.add("_delete_by_query");  
-        assertEquals(joiner.toString(), request.getEndpoint());
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
-        assertEquals(expectedParams, request.getParameters());  
-        assertToXContentBody(deleteByQueryRequest, request.getEntity());
-    }
-
-    public void testRethrottle() {
-        TaskId taskId = new TaskId(randomAlphaOfLength(10), randomIntBetween(1, 100));
-        RethrottleRequest rethrottleRequest;  
-        Float requestsPerSecond;
-        Map<String, String> expectedParams = new HashMap<>();
-        if (frequently()) {  
-            requestsPerSecond = (float) randomDoubleBetween(0.0, 100.0, true);
-            rethrottleRequest = new RethrottleRequest(taskId, requestsPerSecond);
-            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, Float.toString(requestsPerSecond));  
-        } else {
-            rethrottleRequest = new RethrottleRequest(taskId);
-            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, "-1");  
-        }
-        expectedParams.put("group_by", "none");
-        List<Tuple<String, Supplier<Request>>> variants = new ArrayList<>();  
-        variants.add(new Tuple<String, Supplier<Request>>("_reindex", () -> RequestConverters.rethrottleReindex(rethrottleRequest)));
         variants.add(
-            new Tuple<String, Supplier<Request>>("_update_by_query", () -> RequestConverters.rethrottleUpdateByQuery(rethrottleRequest))  
-        );
-        variants.add(
-            new Tuple<String, Supplier<Request>>("_delete_by_query", () -> RequestConverters.rethrottleDeleteByQuery(rethrottleRequest))  
-        );
-
-        for (Tuple<String, Supplier<Request>> variant : variants) {  
-            Request request = variant.v2().get();
-            assertEquals("/" + variant.v1() + "/" + taskId + "/_rethrottle", request.getEndpoint());
-            assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-            assertEquals(expectedParams, request.getParameters());
-            assertNull(request.getEntity());
-        }  
-
-        // test illegal RethrottleRequest values
-        Exception e = expectThrows(NullPointerException.class, () -> new RethrottleRequest(null, 1.0f));  
-        assertEquals("taskId cannot be null", e.getMessage());
-
-        e = expectThrows(IllegalArgumentException.class, () -> new RethrottleRequest(new TaskId("taskId", 1), -5.0f));  
-        assertEquals("requestsPerSecond needs to be positive value but was [-5.0]", e.getMessage());
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a", "b");  
+        }
+            }  
     }
-
-    public void testIndex() throws IOException {
-        String index = randomAlphaOfLengthBetween(3, 10);
-        IndexRequest indexRequest = new IndexRequest(index);  
-
         String id = randomBoolean() ? randomAlphaOfLengthBetween(3, 10) : null;
-        indexRequest.id(id);  
-
-        Map<String, String> expectedParams = new HashMap<>();
-
-        String method = HttpPost.METHOD_NAME;
-        if (id != null) {
-            method = HttpPut.METHOD_NAME;  
-            if (randomBoolean()) {
-                indexRequest.opType(DocWriteRequest.OpType.CREATE);
-            }  
         }
-
-        setRandomTimeout(indexRequest::timeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);  
-        setRandomRefreshPolicy(indexRequest::setRefreshPolicy, expectedParams);
-
-        // There is some logic around _create endpoint and version/version type  
-        if (indexRequest.opType() == DocWriteRequest.OpType.CREATE) {
-            indexRequest.version(randomFrom(Versions.MATCH_ANY, Versions.MATCH_DELETED));
-            expectedParams.put("version", Long.toString(Versions.MATCH_DELETED));  
-        } else {
-            setRandomVersion(indexRequest, expectedParams);
-            setRandomVersionType(indexRequest::versionType, expectedParams);  
-            setRandomIfSeqNoAndTerm(indexRequest, expectedParams);
-        }
-
-        if (frequently()) {
-            if (randomBoolean()) {
-                String routing = randomAlphaOfLengthBetween(3, 10);  
-                indexRequest.routing(routing);
-                expectedParams.put("routing", routing);
-            }  
-            if (randomBoolean()) {
-                String pipeline = randomAlphaOfLengthBetween(3, 10);
-                indexRequest.setPipeline(pipeline);  
-                expectedParams.put("pipeline", pipeline);
-            }
-        }  
-
-        XContentType xContentType = randomFrom(XContentType.values());
-        int nbFields = randomIntBetween(0, 10);  
-        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {
-            builder.startObject();
-            for (int i = 0; i < nbFields; i++) {  
-                builder.field("field_" + i, i);
-            }
-            builder.endObject();  
-            indexRequest.source(builder);
-        }
-
-        Request request = RequestConverters.index(indexRequest);
-        if (indexRequest.opType() == DocWriteRequest.OpType.CREATE) {
-            assertEquals("/" + index + "/_create/" + id, request.getEndpoint());  
-        } else if (id != null) {
-            assertEquals("/" + index + "/_doc/" + id, request.getEndpoint());
-        } else {  
-            assertEquals("/" + index + "/_doc", request.getEndpoint());
-        }
-        assertEquals(expectedParams, request.getParameters());  
-        assertEquals(method, request.getMethod());
-
-        HttpEntity entity = request.getEntity();  
-        assertTrue(entity instanceof ByteArrayEntity);
-        assertEquals(indexRequest.getContentType().mediaTypeWithoutParameters(), entity.getContentType());
-        try (XContentParser parser = createParser(xContentType.xContent(), entity.getContent())) {  
-            assertEquals(nbFields, parser.map().size());
-        }
-    }  
-
-    public void testUpdate() throws IOException {
-        XContentType xContentType = randomFrom(XContentType.values());  
-
-        Map<String, String> expectedParams = new HashMap<>();
-        String index = randomAlphaOfLengthBetween(3, 10);  
-        String id = randomAlphaOfLengthBetween(3, 10);
-
-        UpdateRequest updateRequest = new UpdateRequest(index, id);  
-        updateRequest.detectNoop(randomBoolean());
-
-        if (randomBoolean()) {  
-            BytesReference source = RandomObjects.randomSource(random(), xContentType);
-            updateRequest.doc(new IndexRequest().source(source, xContentType));
-
-            boolean docAsUpsert = randomBoolean();
-            updateRequest.docAsUpsert(docAsUpsert);
-            if (docAsUpsert) {  
-                expectedParams.put("doc_as_upsert", "true");
-            }
-        } else {  
-            updateRequest.script(mockScript("_value + 1"));
-            updateRequest.scriptedUpsert(randomBoolean());
-        }  
-        if (randomBoolean()) {
-            BytesReference source = RandomObjects.randomSource(random(), xContentType);
-            updateRequest.upsert(new IndexRequest().source(source, xContentType));  
-        }
-        if (randomBoolean()) {
-            String routing = randomAlphaOfLengthBetween(3, 10);  
-            updateRequest.routing(routing);
-            expectedParams.put("routing", routing);
-        }  
-        if (randomBoolean()) {
-            String timeout = randomTimeValue();
-            updateRequest.timeout(timeout);  
-            expectedParams.put("timeout", timeout);
-        } else {
-            expectedParams.put("timeout", ReplicationRequest.DEFAULT_TIMEOUT.getStringRep());  
-        }
-        if (randomBoolean()) {
-            WriteRequest.RefreshPolicy refreshPolicy = randomFrom(WriteRequest.RefreshPolicy.values());  
-            updateRequest.setRefreshPolicy(refreshPolicy);
-            if (refreshPolicy != WriteRequest.RefreshPolicy.NONE) {
-                expectedParams.put("refresh", refreshPolicy.getValue());  
-            }
-        }
-        setRandomWaitForActiveShards(updateRequest::waitForActiveShards, expectedParams);  
-        setRandomIfSeqNoAndTerm(updateRequest, new HashMap<>()); // if* params are passed in the body
-        if (randomBoolean()) {
-            int retryOnConflict = randomIntBetween(0, 5);  
-            updateRequest.retryOnConflict(retryOnConflict);
-            if (retryOnConflict > 0) {
-                expectedParams.put("retry_on_conflict", String.valueOf(retryOnConflict));  
-            }
-        }
-        if (randomBoolean()) {  
-            randomizeFetchSourceContextParams(updateRequest::fetchSource, expectedParams);
-        }
-
-        Request request = RequestConverters.update(updateRequest);
-        assertEquals("/" + index + "/_update/" + id, request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());  
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
-
-        HttpEntity entity = request.getEntity();  
-        assertTrue(entity instanceof ByteArrayEntity);
-
-        UpdateRequest parsedUpdateRequest = new UpdateRequest();  
-
-        MediaType entityContentType = MediaType.fromMediaType(entity.getContentType());
-        try (XContentParser parser = createParser(entityContentType.xContent(), entity.getContent())) {  
-            parsedUpdateRequest.fromXContent(parser);
-        }
-
-        assertEquals(updateRequest.scriptedUpsert(), parsedUpdateRequest.scriptedUpsert());
-        assertEquals(updateRequest.docAsUpsert(), parsedUpdateRequest.docAsUpsert());
-        assertEquals(updateRequest.detectNoop(), parsedUpdateRequest.detectNoop());  
-        assertEquals(updateRequest.fetchSource(), parsedUpdateRequest.fetchSource());
-        assertIfSeqNoAndTerm(updateRequest, parsedUpdateRequest);
-        assertEquals(updateRequest.script(), parsedUpdateRequest.script());  
-        if (updateRequest.doc() != null) {
-            assertToXContentEquivalent(updateRequest.doc().source(), parsedUpdateRequest.doc().source(), xContentType);
-        } else {  
-            assertNull(parsedUpdateRequest.doc());
-        }
-        if (updateRequest.upsertRequest() != null) {  
-            assertToXContentEquivalent(updateRequest.upsertRequest().source(), parsedUpdateRequest.upsertRequest().source(), xContentType);
-        } else {
-            assertNull(parsedUpdateRequest.upsertRequest());  
-        }
-    }
-
-    private static void assertIfSeqNoAndTerm(DocWriteRequest<?> request, DocWriteRequest<?> parsedRequest) {
-        assertEquals(request.ifSeqNo(), parsedRequest.ifSeqNo());
-        assertEquals(request.ifPrimaryTerm(), parsedRequest.ifPrimaryTerm());  
-    }
-
-    private static void setRandomIfSeqNoAndTerm(DocWriteRequest<?> request, Map<String, String> expectedParams) {  
-        if (randomBoolean()) {
-            final long seqNo = randomNonNegativeLong();
-            request.setIfSeqNo(seqNo);  
-            expectedParams.put("if_seq_no", Long.toString(seqNo));
-            final long primaryTerm = randomLongBetween(1, 200);
-            request.setIfPrimaryTerm(primaryTerm);  
-            expectedParams.put("if_primary_term", Long.toString(primaryTerm));
-        }
-    }  
-
-    public void testUpdateWithDifferentContentTypes() {
-        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> {  
-            UpdateRequest updateRequest = new UpdateRequest();
-            updateRequest.doc(new IndexRequest().source(singletonMap("field", "doc"), MediaTypeRegistry.JSON));
-            updateRequest.upsert(new IndexRequest().source(singletonMap("field", "upsert"), XContentType.YAML));  
-            RequestConverters.update(updateRequest);
-        });
-        assertEquals(  
-            "Update request cannot have different content types for doc [JSON] and upsert [YAML] documents",
-            exception.getMessage()
-        );  
-    }
-
-    public void testBulk() throws IOException {  
-        Map<String, String> expectedParams = new HashMap<>();
-
-        BulkRequest bulkRequest = new BulkRequest();  
-        if (randomBoolean()) {
-            String timeout = randomTimeValue();
-            bulkRequest.timeout(timeout);  
-            expectedParams.put("timeout", timeout);
-        } else {
-            expectedParams.put("timeout", BulkShardRequest.DEFAULT_TIMEOUT.getStringRep());  
-        }
-
-        setRandomRefreshPolicy(bulkRequest::setRefreshPolicy, expectedParams);  
-
-        MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
-
-        int nbItems = randomIntBetween(10, 100);
-        DocWriteRequest<?>[] requests = new DocWriteRequest<?>[nbItems];
-        for (int i = 0; i < nbItems; i++) {  
-            String index = randomAlphaOfLength(5);
-            String id = randomAlphaOfLength(5);
-
-            BytesReference source = RandomObjects.randomSource(random(), mediaType);
-            DocWriteRequest.OpType opType = randomFrom(DocWriteRequest.OpType.values());
-
-            DocWriteRequest<?> docWriteRequest;
-            if (opType == DocWriteRequest.OpType.INDEX) {
-                IndexRequest indexRequest = new IndexRequest(index).id(id).source(source, mediaType);  
-                docWriteRequest = indexRequest;
-                if (randomBoolean()) {
-                    indexRequest.setPipeline(randomAlphaOfLength(5));  
-                }
-            } else if (opType == DocWriteRequest.OpType.CREATE) {
-                IndexRequest createRequest = new IndexRequest(index).id(id).source(source, mediaType).create(true);  
-                docWriteRequest = createRequest;
-            } else if (opType == DocWriteRequest.OpType.UPDATE) {
-                final UpdateRequest updateRequest = new UpdateRequest(index, id).doc(new IndexRequest().source(source, mediaType));  
-                docWriteRequest = updateRequest;
-                if (randomBoolean()) {
-                    updateRequest.retryOnConflict(randomIntBetween(1, 5));  
-                }
-                if (randomBoolean()) {
-                    randomizeFetchSourceContextParams(updateRequest::fetchSource, new HashMap<>());  
-                }
-            } else if (opType == DocWriteRequest.OpType.DELETE) {
-                docWriteRequest = new DeleteRequest(index, id);  
-            } else {
-                throw new UnsupportedOperationException("optype [" + opType + "] not supported");
-            }  
-
-            if (randomBoolean()) {
-                docWriteRequest.routing(randomAlphaOfLength(10));  
-            }
-            if (opType != DocWriteRequest.OpType.UPDATE && randomBoolean()) {
-                docWriteRequest.setIfSeqNo(randomNonNegativeLong());  
-                docWriteRequest.setIfPrimaryTerm(randomLongBetween(1, 200));
-            }
-            requests[i] = docWriteRequest;  
-        }
-        bulkRequest.add(requests);
-
-        Request request = RequestConverters.bulk(bulkRequest);
-        assertEquals("/_bulk", request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());  
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
-        assertEquals(mediaType.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-        byte[] content = new byte[(int) request.getEntity().getContentLength()];  
-        try (InputStream inputStream = request.getEntity().getContent()) {
-            Streams.readFully(inputStream, content);
-        }  
-
-        BulkRequest parsedBulkRequest = new BulkRequest();
-        parsedBulkRequest.add(content, 0, content.length, mediaType);  
-        assertEquals(bulkRequest.numberOfActions(), parsedBulkRequest.numberOfActions());
-
-        for (int i = 0; i < bulkRequest.numberOfActions(); i++) {  
-            DocWriteRequest<?> originalRequest = bulkRequest.requests().get(i);
-            DocWriteRequest<?> parsedRequest = parsedBulkRequest.requests().get(i);
-
-            assertEquals(originalRequest.opType(), parsedRequest.opType());
-            assertEquals(originalRequest.index(), parsedRequest.index());
-            assertEquals(originalRequest.id(), parsedRequest.id());  
-            assertEquals(originalRequest.routing(), parsedRequest.routing());
-            assertEquals(originalRequest.version(), parsedRequest.version());
-            assertEquals(originalRequest.versionType(), parsedRequest.versionType());  
-            assertEquals(originalRequest.ifSeqNo(), parsedRequest.ifSeqNo());
-            assertEquals(originalRequest.ifPrimaryTerm(), parsedRequest.ifPrimaryTerm());
-
-            DocWriteRequest.OpType opType = originalRequest.opType();
-            if (opType == DocWriteRequest.OpType.INDEX) {
-                IndexRequest indexRequest = (IndexRequest) originalRequest;  
-                IndexRequest parsedIndexRequest = (IndexRequest) parsedRequest;
-
-                assertEquals(indexRequest.getPipeline(), parsedIndexRequest.getPipeline());  
-                assertToXContentEquivalent(indexRequest.source(), parsedIndexRequest.source(), mediaType);
-            } else if (opType == DocWriteRequest.OpType.UPDATE) {
-                UpdateRequest updateRequest = (UpdateRequest) originalRequest;  
-                UpdateRequest parsedUpdateRequest = (UpdateRequest) parsedRequest;
-
-                assertEquals(updateRequest.retryOnConflict(), parsedUpdateRequest.retryOnConflict());  
-                assertEquals(updateRequest.fetchSource(), parsedUpdateRequest.fetchSource());
-                if (updateRequest.doc() != null) {
-                    assertToXContentEquivalent(updateRequest.doc().source(), parsedUpdateRequest.doc().source(), mediaType);  
-                } else {
-                    assertNull(parsedUpdateRequest.doc());
-                }  
-            }
-        }
-    }  
-
-    public void testBulkWithDifferentContentTypes() throws IOException {
-        {  
-            BulkRequest bulkRequest = new BulkRequest();
-            bulkRequest.add(new DeleteRequest("index", "0"));
-            bulkRequest.add(new UpdateRequest("index", "1").script(mockScript("test")));  
-            bulkRequest.add(new DeleteRequest("index", "2"));
-
-            Request request = RequestConverters.bulk(bulkRequest);  
-            assertEquals(MediaTypeRegistry.JSON.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-        }
-        {  
-            MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
-            BulkRequest bulkRequest = new BulkRequest();
-            bulkRequest.add(new DeleteRequest("index", "0"));  
-            bulkRequest.add(new IndexRequest("index").id("0").source(singletonMap("field", "value"), mediaType));
-            bulkRequest.add(new DeleteRequest("index", "2"));
-
-            Request request = RequestConverters.bulk(bulkRequest);
-            assertEquals(mediaType.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-        }  
-        {
-            MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
-            UpdateRequest updateRequest = new UpdateRequest("index", "0");  
-            if (randomBoolean()) {
-                updateRequest.doc(new IndexRequest().source(singletonMap("field", "value"), mediaType));
-            } else {  
-                updateRequest.upsert(new IndexRequest().source(singletonMap("field", "value"), mediaType));
-            }
-
-            Request request = RequestConverters.bulk(new BulkRequest().add(updateRequest));
-            assertEquals(mediaType.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-        }  
-        {
-            BulkRequest bulkRequest = new BulkRequest();
-            bulkRequest.add(new IndexRequest("index").id("0").source(singletonMap("field", "value"), XContentType.SMILE));  
-            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
-            IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RequestConverters.bulk(bulkRequest));
-            assertEquals(  
-                "Mismatching content-type found for request with content-type [JSON], " + "previous requests have content-type [SMILE]",
-                exception.getMessage()
-            );  
-        }
-        {
-            BulkRequest bulkRequest = new BulkRequest();  
-            bulkRequest.add(new IndexRequest("index").id("0").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
-            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
-            bulkRequest.add(  
-                new UpdateRequest("index", "2").doc(new IndexRequest().source(singletonMap("field", "value"), MediaTypeRegistry.JSON))
-                    .upsert(new IndexRequest().source(singletonMap("field", "value"), XContentType.SMILE))
-            );  
-            IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RequestConverters.bulk(bulkRequest));
-            assertEquals(
-                "Mismatching content-type found for request with content-type [SMILE], " + "previous requests have content-type [JSON]",  
-                exception.getMessage()
-            );
-        }  
-        {
-            XContentType xContentType = randomFrom(XContentType.CBOR, XContentType.YAML);
-            BulkRequest bulkRequest = new BulkRequest();  
-            bulkRequest.add(new DeleteRequest("index", "0"));
-            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
-            bulkRequest.add(new DeleteRequest("index", "2"));  
-            bulkRequest.add(new DeleteRequest("index", "3"));
-            bulkRequest.add(new IndexRequest("index").id("4").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
-            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), xContentType));  
-            IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RequestConverters.bulk(bulkRequest));
-            assertEquals(
-                "Unsupported content-type found for request with content-type [" + xContentType + "], only JSON and SMILE are supported",  
-                exception.getMessage()
-            );
-        }  
-    }
-
-    public void testGlobalPipelineOnBulkRequest() throws IOException {  
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.pipeline("xyz");
-        bulkRequest.add(new IndexRequest("test").id("11").source(MediaTypeRegistry.JSON, "field", "bulk1"));  
-        bulkRequest.add(new IndexRequest("test").id("12").source(MediaTypeRegistry.JSON, "field", "bulk2"));
-        bulkRequest.add(new IndexRequest("test").id("13").source(MediaTypeRegistry.JSON, "field", "bulk3"));
-
-        Request request = RequestConverters.bulk(bulkRequest);
-
-        assertThat(request.getParameters(), Matchers.hasEntry("pipeline", "xyz"));  
-    }
-
-    public void testSearchNullSource() throws IOException {  
-        String searchEndpoint = randomFrom("_" + randomAlphaOfLength(5));
-        SearchRequest searchRequest = new SearchRequest();
-        Request request = RequestConverters.search(searchRequest, searchEndpoint);  
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
-        assertEquals("/" + searchEndpoint, request.getEndpoint());
-        assertNull(request.getEntity());  
-    }
-
-    public void testSearch() throws Exception {  
-        String searchEndpoint = randomFrom("_" + randomAlphaOfLength(5));
-        String[] indices = randomIndicesNames(0, 5);
-        Map<String, String> expectedParams = new HashMap<>();  
-        SearchRequest searchRequest = createTestSearchRequest(indices, expectedParams);
-
-        Request request = RequestConverters.search(searchRequest, searchEndpoint);  
-        StringJoiner endpoint = new StringJoiner("/", "/", "");
-        String index = String.join(",", indices);
-        if (Strings.hasLength(index)) {  
-            endpoint.add(index);
-        }
-        endpoint.add(searchEndpoint);  
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
-        assertEquals(endpoint.toString(), request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());  
-        assertToXContentBody(searchRequest.source(), request.getEntity());
-    }
-
-    public static SearchRequest createTestSearchRequest(String[] indices, Map<String, String> expectedParams) {
-        SearchRequest searchRequest = new SearchRequest(indices);
-        setRandomSearchParams(searchRequest, expectedParams);  
-        setRandomIndicesOptions(searchRequest::indicesOptions, searchRequest::indicesOptions, expectedParams);
-
-        SearchSourceBuilder searchSourceBuilder = createTestSearchSourceBuilder();  
-        searchRequest.source(searchSourceBuilder);
-        return searchRequest;
-    }  
-
-    public static SearchSourceBuilder createTestSearchSourceBuilder() {
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
-        // rarely skip setting the search source completely
-        if (frequently()) {
-            // frequently set the search source to have some content, otherwise leave it  
-            // empty but still set it
-            if (frequently()) {
-                if (randomBoolean()) {  
-                    searchSourceBuilder.size(randomIntBetween(0, Integer.MAX_VALUE));
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.from(randomIntBetween(0, Integer.MAX_VALUE));
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.minScore(randomFloat());
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.explain(randomBoolean());
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.profile(randomBoolean());
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.highlighter(new HighlightBuilder().field(randomAlphaOfLengthBetween(3, 10)));
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.query(new TermQueryBuilder(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10)));
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.aggregation(
-                        new TermsAggregationBuilder(randomAlphaOfLengthBetween(3, 10)).userValueTypeHint(ValueType.STRING)
-                            .field(randomAlphaOfLengthBetween(3, 10))  
-                    );
-                }
-                if (randomBoolean()) {  
-                    searchSourceBuilder.suggest(
-                        new SuggestBuilder().addSuggestion(
-                            randomAlphaOfLengthBetween(3, 10),  
-                            new CompletionSuggestionBuilder(randomAlphaOfLengthBetween(3, 10))
-                        )
-                    );  
-                }
-                if (randomBoolean()) {
-                    searchSourceBuilder.addRescorer(  
-                        new QueryRescorerBuilder(new TermQueryBuilder(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10)))
-                    );
-                }  
-                if (randomBoolean()) {
-                    searchSourceBuilder.collapse(new CollapseBuilder(randomAlphaOfLengthBetween(3, 10)));
-                }  
-            }
-        }
-        return searchSourceBuilder;  
-    }
-
-    public void testSearchNullIndicesAndTypes() {  
-        expectThrows(NullPointerException.class, () -> new SearchRequest((String[]) null));
-        expectThrows(NullPointerException.class, () -> new SearchRequest().indices((String[]) null));
-    }  
-
-    public void testCountNotNullSource() throws IOException {
-        // as we create SearchSourceBuilder in CountRequest constructor  
-        CountRequest countRequest = new CountRequest();
-        Request request = RequestConverters.count(countRequest);
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-        assertEquals("/_count", request.getEndpoint());
-        assertNotNull(request.getEntity());
-    }  
-
-    public void testCount() throws Exception {
-        String[] indices = randomIndicesNames(0, 5);  
-        CountRequest countRequest = new CountRequest(indices);
-        Map<String, String> expectedParams = new HashMap<>();
-        setRandomCountParams(countRequest, expectedParams);  
-        setRandomIndicesOptions(countRequest::indicesOptions, countRequest::indicesOptions, expectedParams);
-
-        if (randomBoolean()) {  
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            countRequest.source(searchSourceBuilder);
-        } else {  
-            countRequest.query(new MatchAllQueryBuilder());
-        }
-        Request request = RequestConverters.count(countRequest);  
-        StringJoiner endpoint = new StringJoiner("/", "/", "");
-        String index = String.join(",", indices);
-        if (Strings.hasLength(index)) {  
-            endpoint.add(index);
-        }
-        endpoint.add("_count");  
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
-        assertEquals(endpoint.toString(), request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());  
-        assertToXContentBody(countRequest, request.getEntity());
-    }
-
-    private static void setRandomCountParams(CountRequest countRequest, Map<String, String> expectedParams) {
-        if (randomBoolean()) {
-            countRequest.routing(randomAlphaOfLengthBetween(3, 10));  
-            expectedParams.put("routing", countRequest.routing());
-        }
-        if (randomBoolean()) {  
-            countRequest.preference(randomAlphaOfLengthBetween(3, 10));
-            expectedParams.put("preference", countRequest.preference());
-        }  
-        if (randomBoolean()) {
-            countRequest.terminateAfter(randomIntBetween(0, Integer.MAX_VALUE));
-            expectedParams.put("terminate_after", String.valueOf(countRequest.terminateAfter()));  
-        }
-        if (randomBoolean()) {
-            countRequest.minScore((float) randomIntBetween(1, 10));  
-            expectedParams.put("min_score", String.valueOf(countRequest.minScore()));
-        }
-    }  
-
-    public void testMultiSearch() throws IOException {
-        int numberOfSearchRequests = randomIntBetween(0, 32);  
-        MultiSearchRequest multiSearchRequest = new MultiSearchRequest();
-        for (int i = 0; i < numberOfSearchRequests; i++) {
-            SearchRequest searchRequest = randomSearchRequest(() -> {  
-                // No need to return a very complex SearchSourceBuilder here, that is tested
-                // elsewhere
-                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
-                searchSourceBuilder.from(randomInt(10));
-                searchSourceBuilder.size(randomIntBetween(20, 100));
-                return searchSourceBuilder;  
-            });
-            // scroll is not supported in the current msearch api, so unset it:
-            searchRequest.scroll((Scroll) null);  
-            // only expand_wildcards, ignore_unavailable and allow_no_indices can be
-            // specified from msearch api, so unset other options:
-            IndicesOptions randomlyGenerated = searchRequest.indicesOptions();  
-            IndicesOptions msearchDefault = new MultiSearchRequest().indicesOptions();
-            searchRequest.indicesOptions(
-                IndicesOptions.fromOptions(  
-                    randomlyGenerated.ignoreUnavailable(),
-                    randomlyGenerated.allowNoIndices(),
-                    randomlyGenerated.expandWildcardsOpen(),  
-                    randomlyGenerated.expandWildcardsClosed(),
-                    msearchDefault.expandWildcardsHidden(),
-                    msearchDefault.allowAliasesToMultipleIndices(),  
-                    msearchDefault.forbidClosedIndices(),
-                    msearchDefault.ignoreAliases(),
-                    msearchDefault.ignoreThrottled()  
-                )
-            );
-            multiSearchRequest.add(searchRequest);  
-        }
-
-        Map<String, String> expectedParams = new HashMap<>();  
-        expectedParams.put(RestSearchAction.TYPED_KEYS_PARAM, "true");
-        if (randomBoolean()) {
-            multiSearchRequest.maxConcurrentSearchRequests(randomIntBetween(1, 8));  
-            expectedParams.put("max_concurrent_searches", Integer.toString(multiSearchRequest.maxConcurrentSearchRequests()));
-        }
-
-        Request request = RequestConverters.multiSearch(multiSearchRequest);
-        assertEquals("/_msearch", request.getEndpoint());
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-        assertEquals(expectedParams, request.getParameters());
-
-        List<SearchRequest> requests = new ArrayList<>();  
-        CheckedBiConsumer<SearchRequest, XContentParser, IOException> consumer = (searchRequest, p) -> {
-            SearchSourceBuilder searchSourceBuilder = SearchSourceBuilder.fromXContent(p, false);
-            if (searchSourceBuilder.equals(new SearchSourceBuilder()) == false) {  
-                searchRequest.source(searchSourceBuilder);
-            }
-            requests.add(searchRequest);  
-        };
-        MultiSearchRequest.readMultiLineFormat(
-            new BytesArray(EntityUtils.toByteArray(request.getEntity())),  
-            REQUEST_BODY_CONTENT_TYPE.xContent(),
-            consumer,
-            null,  
-            multiSearchRequest.indicesOptions(),
-            null,
-            null,  
-            null,
-            xContentRegistry(),
-            true,  
-            deprecationLogger
-        );
-        assertEquals(requests, multiSearchRequest.requests());  
-    }
-
-    public void testSearchScroll() throws IOException {  
-        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
-        searchScrollRequest.scrollId(randomAlphaOfLengthBetween(5, 10));
-        if (randomBoolean()) {  
-            searchScrollRequest.scroll(randomPositiveTimeValue());
-        }
-        Request request = RequestConverters.searchScroll(searchScrollRequest);  
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
-        assertEquals("/_search/scroll", request.getEndpoint());
-        assertEquals(0, request.getParameters().size());  
-        assertToXContentBody(searchScrollRequest, request.getEntity());
-        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-    }  
-
-    public void testClearScroll() throws IOException {
-        ClearScrollRequest clearScrollRequest = new ClearScrollRequest();  
-        int numScrolls = randomIntBetween(1, 10);
-        for (int i = 0; i < numScrolls; i++) {
-            clearScrollRequest.addScrollId(randomAlphaOfLengthBetween(5, 10));  
-        }
-        Request request = RequestConverters.clearScroll(clearScrollRequest);
-        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());  
-        assertEquals("/_search/scroll", request.getEndpoint());
-        assertEquals(0, request.getParameters().size());
-        assertToXContentBody(clearScrollRequest, request.getEntity());  
-        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-    }
-
-    public void testCreatePit() throws IOException {
-        String[] indices = randomIndicesNames(0, 5);
-        Map<String, String> expectedParams = new HashMap<>();  
-        expectedParams.put("keep_alive", "1d");
-        expectedParams.put("allow_partial_pit_creation", "true");
-        CreatePitRequest createPitRequest = new CreatePitRequest(new TimeValue(1, TimeUnit.DAYS), true, indices);  
-        setRandomIndicesOptions(createPitRequest::indicesOptions, createPitRequest::indicesOptions, expectedParams);
-        Request request = RequestConverters.createPit(createPitRequest);
-        StringJoiner endpoint = new StringJoiner("/", "/", "");  
-        String index = String.join(",", indices);
-        if (Strings.hasLength(index)) {
-            endpoint.add(index);  
-        }
-        endpoint.add("_search/point_in_time");
-        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
-        assertEquals(endpoint.toString(), request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());
-        assertToXContentBody(createPitRequest, request.getEntity());  
-        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-    }
-
-    public void testDeletePit() throws IOException {
-        List<String> pitIdsList = new ArrayList<>();
-        pitIdsList.add("pitId1");  
-        pitIdsList.add("pitId2");
-        DeletePitRequest deletePitRequest = new DeletePitRequest(pitIdsList);
-        Request request = RequestConverters.deletePit(deletePitRequest);  
-        String endpoint = "/_search/point_in_time";
-        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());
-        assertEquals(endpoint, request.getEndpoint());  
-        assertToXContentBody(deletePitRequest, request.getEntity());
-        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
-    }  
-
-    public void testDeleteAllPits() {
-        Request request = RequestConverters.deleteAllPits();  
-        String endpoint = "/_search/point_in_time/_all";
-        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());
-        assertEquals(endpoint, request.getEndpoint());  
-    }
-
-    public void testSearchTemplate() throws Exception {  
-        // Create a random request.
-        String[] indices = randomIndicesNames(0, 5);
-        SearchRequest searchRequest = new SearchRequest(indices);  
-
-        Map<String, String> expectedParams = new HashMap<>();
-        setRandomSearchParams(searchRequest, expectedParams);  
-        setRandomIndicesOptions(searchRequest::indicesOptions, searchRequest::indicesOptions, expectedParams);
-
-        SearchTemplateRequest searchTemplateRequest = new SearchTemplateRequest(searchRequest);  
-
-        searchTemplateRequest.setScript("{\"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" }}}");
-        searchTemplateRequest.setScriptType(ScriptType.INLINE);  
-        searchTemplateRequest.setProfile(randomBoolean());
-
-        Map<String, Object> scriptParams = new HashMap<>();  
-        scriptParams.put("field", "name");
-        scriptParams.put("value", "soren");
-        searchTemplateRequest.setScriptParams(scriptParams);  
-        searchTemplateRequest.setSearchPipeline("pipeline");
-
-        // Verify that the resulting REST request looks as expected.  
-        Request request = RequestConverters.searchTemplate(searchTemplateRequest);
-        StringJoiner endpoint = new StringJoiner("/", "/", "");
-        String index = String.join(",", indices);  
-        if (Strings.hasLength(index)) {
-            endpoint.add(index);
-        }  
-        endpoint.add("_search/template");
-
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
-        assertEquals(endpoint.toString(), request.getEndpoint());
-        assertEquals(expectedParams, request.getParameters());
-        assertToXContentBody(searchTemplateRequest, request.getEntity());  
-    }
-
-    public void testRenderSearchTemplate() throws Exception {  
-        // Create a simple request.
-        SearchTemplateRequest searchTemplateRequest = new SearchTemplateRequest();
-        searchTemplateRequest.setSimulate(true); // Setting simulate true means the template should only be rendered.  
-
-        searchTemplateRequest.setScript("template1");
-        searchTemplateRequest.setScriptType(ScriptType.STORED);  
-        searchTemplateRequest.setProfile(randomBoolean());
-        searchTemplateRequest.setSearchPipeline("pipeline");
-
-        Map<String, Object> scriptParams = new HashMap<>();
-        scriptParams.put("field", "name");
-        scriptParams.put("value", "soren");  
-        searchTemplateRequest.setScriptParams(scriptParams);
-
-        // Verify that the resulting REST request looks as expected.  
-        Request request = RequestConverters.searchTemplate(searchTemplateRequest);
-        String endpoint = "/_render/template";
-
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
-        assertEquals(endpoint, request.getEndpoint());
-        assertEquals(Collections.emptyMap(), request.getParameters());  
-        assertToXContentBody(searchTemplateRequest, request.getEntity());
-    }
-
-    public void testMultiSearchTemplate() throws Exception {
-        final int numSearchRequests = randomIntBetween(1, 10);
-        MultiSearchTemplateRequest multiSearchTemplateRequest = new MultiSearchTemplateRequest();  
-
-        for (int i = 0; i < numSearchRequests; i++) {
-            // Create a random request.  
-            String[] indices = randomIndicesNames(0, 5);
-            SearchRequest searchRequest = new SearchRequest(indices);
-
-            Map<String, String> expectedParams = new HashMap<>();
-            setRandomSearchParams(searchRequest, expectedParams);
-
-            // scroll is not supported in the current msearch or msearchtemplate api, so unset it:
-            searchRequest.scroll((Scroll) null);
-            // batched reduce size is currently not set-able on a per-request basis as it is a query string parameter only  
             searchRequest.setBatchedReduceSize(SearchRequest.DEFAULT_BATCHED_REDUCE_SIZE);
-
-            setRandomIndicesOptions(searchRequest::indicesOptions, searchRequest::indicesOptions, expectedParams);  
-
-            SearchTemplateRequest searchTemplateRequest = new SearchTemplateRequest(searchRequest);
-
-            searchTemplateRequest.setScript("{\"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" }}}");
-            searchTemplateRequest.setScriptType(ScriptType.INLINE);
-            searchTemplateRequest.setProfile(randomBoolean());  
-            searchTemplateRequest.setSearchPipeline("pipeline");
-
-            Map<String, Object> scriptParams = new HashMap<>();  
-            scriptParams.put("field", "name");
-            scriptParams.put("value", randomAlphaOfLengthBetween(2, 5));
-            searchTemplateRequest.setScriptParams(scriptParams);  
-
-            multiSearchTemplateRequest.add(searchTemplateRequest);
-        }  
-
-        Map<String, String> expectedParams = new HashMap<>();
-        if (randomBoolean()) {  
-            multiSearchTemplateRequest.maxConcurrentSearchRequests(randomIntBetween(1, 10));
-            expectedParams.put("max_concurrent_searches", Integer.toString(multiSearchTemplateRequest.maxConcurrentSearchRequests()));
-        }  
-        expectedParams.put(RestSearchAction.TYPED_KEYS_PARAM, "true");
-
-        Request multiRequest = RequestConverters.multiSearchTemplate(multiSearchTemplateRequest);  
-
-        assertEquals(HttpPost.METHOD_NAME, multiRequest.getMethod());
-        assertEquals("/_msearch/template", multiRequest.getEndpoint());  
-        List<SearchTemplateRequest> searchRequests = multiSearchTemplateRequest.requests();
-        assertEquals(numSearchRequests, searchRequests.size());
-        assertEquals(expectedParams, multiRequest.getParameters());  
-
-        HttpEntity actualEntity = multiRequest.getEntity();
-        byte[] expectedBytes = MultiSearchTemplateRequest.writeMultiLineFormat(  
-            multiSearchTemplateRequest,
-            MediaTypeRegistry.JSON.xContent()
-        );  
-        assertEquals(MediaTypeRegistry.JSON.mediaTypeWithoutParameters(), actualEntity.getContentType());
-        assertEquals(new BytesArray(expectedBytes), new BytesArray(EntityUtils.toByteArray(actualEntity)));
-    }  
-
-    public void testExplain() throws IOException {
-        String index = randomAlphaOfLengthBetween(3, 10);  
-        String id = randomAlphaOfLengthBetween(3, 10);
-
-        ExplainRequest explainRequest = new ExplainRequest(index, id);  
-        explainRequest.query(QueryBuilders.termQuery(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10)));
-
-        Map<String, String> expectedParams = new HashMap<>();  
-
-        if (randomBoolean()) {
-            String routing = randomAlphaOfLengthBetween(3, 10);  
+            // batched reduce size is currently not set-able on a per-request basis as it is a query string parameter only  
+        assertEquals(updateRequest.script(), parsedUpdateRequest.script());  
             explainRequest.routing(routing);
-            expectedParams.put("routing", routing);
-        }  
-        if (randomBoolean()) {
-            String preference = randomAlphaOfLengthBetween(3, 10);
-            explainRequest.preference(preference);  
-            expectedParams.put("preference", preference);
-        }
-        if (randomBoolean()) {  
-            String[] storedFields = generateRandomStringArray(10, 5, false, false);
-            String storedFieldsParams = randomFields(storedFields);
-            explainRequest.storedFields(storedFields);  
-            expectedParams.put("stored_fields", storedFieldsParams);
-        }
-        if (randomBoolean()) {  
-            randomizeFetchSourceContextParams(explainRequest::fetchSourceContext, expectedParams);
-        }
-
-        Request request = RequestConverters.explain(explainRequest);
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
-        assertEquals("/" + index + "/_explain/" + id, request.getEndpoint());  
-
-        assertEquals(expectedParams, request.getParameters());
+            assertEquals("/%2Fpart1/%2F%2Fpart2/%2F%2F%2Fpart3", endpointBuilder.build());
         assertToXContentBody(explainRequest, request.getEntity());  
-    }
-
-    public void testTermVectors() throws IOException {  
-        String index = randomAlphaOfLengthBetween(3, 10);
+        }  
+                    expectedParams.put("refresh", "true");
         String id = randomAlphaOfLengthBetween(3, 10);
-
-        TermVectorsRequest tvRequest = new TermVectorsRequest(index, id);
-        Map<String, String> expectedParams = new HashMap<>();
-        String[] fields;  
+            bulkRequest.add(new DeleteRequest("index", "0"));
+        assertEquals("/_msearch", request.getEndpoint());
+        String method = HttpPost.METHOD_NAME;
+        }
+    private static void randomizeFetchSourceContextParams(Consumer<FetchSourceContext> consumer, Map<String, String> expectedParams) {
+        Request request = RequestConverters.clearScroll(clearScrollRequest);
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+            // Create a random request.  
+            if (randomBoolean()) {
+            setter.accept(versionType);  
+            boolean realtime = randomBoolean();
+        final GetSourceRequest getRequest = requestFunction.apply(index, id);
+            assertEquals(
+        assertEquals(expectedParams, request.getParameters());
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+                    searchSourceBuilder.addRescorer(  
+                expectedParams.put("realtime", "false");
+            VersionType versionType = randomFrom(VersionType.values());
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("");
+        }  
+ * this work for additional information regarding copyright
+        }
+        Map<String, String> indicesOptionsParams = new HashMap<>();  
+        } else {
+        } else if (getter.get().expandWildcardsClosed()) {
         if (randomBoolean()) {
-            String routing = randomAlphaOfLengthBetween(3, 10);
-            tvRequest.setRouting(routing);  
-            expectedParams.put("routing", routing);
-        }
+        assertEquals(expectedParams, request.getParameters());
+            assertEquals(MediaTypeRegistry.JSON.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+            }
+        }  
+    }  
         if (randomBoolean()) {  
-            tvRequest.setRealtime(false);
-            expectedParams.put("realtime", "false");
-        }  
-
-        boolean hasFields = randomBoolean();
-        if (hasFields) {  
-            fields = generateRandomStringArray(10, 5, false, false);
-            tvRequest.setFields(fields);
-        }  
-
-        Request request = RequestConverters.termVectors(tvRequest);
-        StringJoiner endpoint = new StringJoiner("/", "/", "");  
-        endpoint.add(index).add("_termvectors").add(id);
-
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
-        assertEquals(endpoint.toString(), request.getEndpoint());
-        for (Map.Entry<String, String> param : expectedParams.entrySet()) {
-            assertThat(request.getParameters(), hasEntry(param.getKey(), param.getValue()));  
+        String searchEndpoint = randomFrom("_" + randomAlphaOfLength(5));
+        assertThat(request.getParameters(), equalTo(expectedParams));
+import java.util.concurrent.TimeUnit;
+        Request request = RequestConverters.searchScroll(searchScrollRequest);  
+import org.opensearch.action.DocWriteRequest;  
+            if (refreshPolicy != WriteRequest.RefreshPolicy.NONE) {
+            if (refresh) {
+            if (multiGetRequest.realtime() == false) {  
+        DeleteByQueryRequest deleteByQueryRequest = new DeleteByQueryRequest();  
+        for (int i = 0; i < numberOfRequests; i++) {  
         }
+import org.opensearch.index.reindex.AbstractBulkByScrollRequest;
+    public void testMultiSearchTemplate() throws Exception {
+            updateRequest.upsert(new IndexRequest().source(singletonMap("field", "upsert"), XContentType.YAML));  
+        assertThat(request.getEndpoint(), equalTo("/_scripts/" + deleteStoredScriptRequest.id()));  
+            }
+import org.opensearch.client.core.GetSourceRequest;
+            deleteByQueryRequest.setAbortOnVersionConflict(false);
+            bulkRequest.add(new DeleteRequest("index", "2"));
+                getRequest.refresh(refresh);  
+                assertEquals(indexRequest.getPipeline(), parsedIndexRequest.getPipeline());  
+        // Create a simple request.
+            if (humanReadable) {  
+        expectedParams.put("keep_alive", "1d");
+        assertEquals(endpoint.toString(), request.getEndpoint());
+                    searchSourceBuilder.query(new TermQueryBuilder(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10)));
+        setRandomWaitForActiveShards(reindexRequest::setWaitForActiveShards, ActiveShardCount.DEFAULT, expectedParams);
+        }
+        Map<String, String> expectedParams = new HashMap<>();
+        String[] indices = randomIndicesNames(0, 5);  
+import org.opensearch.action.admin.cluster.storedscripts.PutStoredScriptRequest;  
+        assertEquals(updateRequest.docAsUpsert(), parsedUpdateRequest.docAsUpsert());
+                if (randomBoolean()) {
+        }  
+        setRandomIndicesOptions(deleteByQueryRequest::setIndicesOptions, deleteByQueryRequest::indicesOptions, expectedParams);  
+            expectedParams.put("requests_per_second", "-1");
+                    randomBoolean()  
+            updateRequest.setRefreshPolicy(refreshPolicy);
+            int retryOnConflict = randomIntBetween(0, 5);  
+    private static void setRandomVersionType(Consumer<VersionType> setter, Map<String, String> expectedParams) {  
+    }  
+                    msearchDefault.ignoreAliases(),
+        GetRequest getRequest = new GetRequest(index, id);
+        IllegalArgumentException exception = expectThrows(  
+    public void testSourceExists() throws IOException {
+            expectedParams.put("conflicts", "proceed");
+            assertEquals(originalRequest.ifPrimaryTerm(), parsedRequest.ifPrimaryTerm());
+import static org.opensearch.client.RequestConverters.REQUEST_BODY_CONTENT_TYPE;  
+            true,  
+                searchRequest.source(searchSourceBuilder);
+        Request request = RequestConverters.bulk(bulkRequest);
+                    true,  
+        StringJoiner endpoint = new StringJoiner("/", "/", "");
+        Map<String, String> expectedParams = new HashMap<>();
+import org.opensearch.client.core.MultiTermVectorsRequest;
+        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());
+            if (local) {
+import org.opensearch.index.query.TermQueryBuilder;
+        assertEquals("/" + index + "/_explain/" + id, request.getEndpoint());  
         assertToXContentBody(tvRequest, request.getEntity());
     }  
-
-    public void testTermVectorsWithType() throws IOException {
-        String index = randomAlphaOfLengthBetween(3, 10);  
-        String type = randomAlphaOfLengthBetween(3, 10);
-        String id = randomAlphaOfLengthBetween(3, 10);
-        TermVectorsRequest tvRequest = new TermVectorsRequest(index, type, id);  
-
-        Request request = RequestConverters.termVectors(tvRequest);
-        StringJoiner endpoint = new StringJoiner("/", "/", "");  
-        endpoint.add(index).add(type).add(id).add("_termvectors");
-
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
-        assertEquals(endpoint.toString(), request.getEndpoint());
+                expectedParams.put("slices", AbstractBulkByScrollRequest.AUTO_SLICES_VALUE);
+        }
+                consumer.accept(fetchSourceContext);  
+    static String[] randomIndicesNames(int minIndicesNum, int maxIndicesNum) {
+        {
+                assertToXContentEquivalent(indexRequest.source(), parsedIndexRequest.source(), mediaType);
+                indexRequest.setPipeline(pipeline);  
+            IllegalArgumentException.class,  
     }
-
-    public void testMultiTermVectors() throws IOException {
-        MultiTermVectorsRequest mtvRequest = new MultiTermVectorsRequest();
-
-        int numberOfRequests = randomIntBetween(0, 5);
-        for (int i = 0; i < numberOfRequests; i++) {
-            String index = randomAlphaOfLengthBetween(3, 10);  
-            String id = randomAlphaOfLengthBetween(3, 10);
-            TermVectorsRequest tvRequest = new TermVectorsRequest(index, id);
-            String[] fields = generateRandomStringArray(10, 5, false, false);  
-            tvRequest.setFields(fields);
-            mtvRequest.add(tvRequest);
+        Map<String, String> expectedParams = new HashMap<>();
+        assertThat(request.getParameters(), equalTo(expectedParams));  
+        }
+            float requestsPerSecond = (float) randomDoubleBetween(0.0, 10.0, false);
         }  
-
-        Request request = RequestConverters.mtermVectors(mtvRequest);
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
-        assertEquals("/_mtermvectors", request.getEndpoint());
-        assertToXContentBody(mtvRequest, request.getEntity());
-    }  
-
-    public void testMultiTermVectorsWithType() throws IOException {
-        MultiTermVectorsRequest mtvRequest = new MultiTermVectorsRequest();  
-
-        int numberOfRequests = randomIntBetween(0, 5);
-        for (int i = 0; i < numberOfRequests; i++) {  
-            String index = randomAlphaOfLengthBetween(3, 10);
-            String type = randomAlphaOfLengthBetween(3, 10);
-            String id = randomAlphaOfLengthBetween(3, 10);  
-            TermVectorsRequest tvRequest = new TermVectorsRequest(index, type, id);
-            String[] fields = generateRandomStringArray(10, 5, false, false);
-            tvRequest.setFields(fields);  
-            mtvRequest.add(tvRequest);
+    public void testGet() {  
+        assertEquals("/_bulk", request.getEndpoint());
+            assertEquals(originalRequest.version(), parsedRequest.version());
+            expectedParams.put("preference", preference);  
+                expectedParams.put("refresh", refreshPolicy.getValue());  
+            if (randomBoolean()) {
+        assertEquals(mediaType, enforceSameContentType(indexRequest, mediaType));
         }
-
-        Request request = RequestConverters.mtermVectors(mtvRequest);
-        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
-        assertEquals("/_mtermvectors", request.getEndpoint());  
-        assertToXContentBody(mtvRequest, request.getEntity());
-    }
-
-    public void testFieldCaps() throws IOException {
-        // Create a random request.
-        String[] indices = randomIndicesNames(0, 5);  
-        String[] fields = generateRandomStringArray(5, 10, false, false);
-
-        FieldCapabilitiesRequest fieldCapabilitiesRequest = new FieldCapabilitiesRequest().indices(indices).fields(fields);  
-
-        Map<String, String> indicesOptionsParams = new HashMap<>();
-        setRandomIndicesOptions(fieldCapabilitiesRequest::indicesOptions, fieldCapabilitiesRequest::indicesOptions, indicesOptionsParams);  
-
-        Request request = RequestConverters.fieldCaps(fieldCapabilitiesRequest);
-
-        // Verify that the resulting REST request looks as expected.
-        StringJoiner endpoint = new StringJoiner("/", "/", "");
-        String joinedIndices = String.join(",", indices);  
-        if (!joinedIndices.isEmpty()) {
-            endpoint.add(joinedIndices);
-        }  
-        endpoint.add("_field_caps");
-
-        assertEquals(endpoint.toString(), request.getEndpoint());  
-        assertEquals(5, request.getParameters().size());
-
-        // Note that we don't check the field param value explicitly, as field names are  
-        // passed through
-        // a hash set before being added to the request, and can appear in a
-        // non-deterministic order.  
-        assertThat(request.getParameters(), hasKey("fields"));
-        String[] requestFields = Strings.splitStringByCommaToArray(request.getParameters().get("fields"));
-        assertEquals(new HashSet<>(Arrays.asList(fields)), new HashSet<>(Arrays.asList(requestFields)));  
-
-        for (Map.Entry<String, String> param : indicesOptionsParams.entrySet()) {
-            assertThat(request.getParameters(), hasEntry(param.getKey(), param.getValue()));  
+                // No need to return a very complex SearchSourceBuilder here, that is tested
+                }
+                randomizeFetchSourceContextParams(item::fetchSourceContext, new HashMap<>());  
+            } else {
+                    .upsert(new IndexRequest().source(singletonMap("field", "value"), XContentType.SMILE))
+        endpoint.add("_search/template");
+            }  
+            }
+                + "previous requests have content-type ["
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
         }
-
-        assertNull(request.getEntity());  
-    }
-
-    public void testFieldCapsWithIndexFilter() throws IOException {  
-        // Create a random request.
-        String[] indices = randomIndicesNames(0, 5);
-        String[] fields = generateRandomStringArray(5, 10, false, false);  
-
-        FieldCapabilitiesRequest fieldCapabilitiesRequest = new FieldCapabilitiesRequest().indices(indices)
-            .fields(fields)  
-            .indexFilter(QueryBuilders.matchAllQuery());
-
-        Map<String, String> indicesOptionsParams = new HashMap<>();  
-        setRandomIndicesOptions(fieldCapabilitiesRequest::indicesOptions, fieldCapabilitiesRequest::indicesOptions, indicesOptionsParams);
-
-        Request request = RequestConverters.fieldCaps(fieldCapabilitiesRequest);  
-
-        // Verify that the resulting REST request looks as expected.
-        StringJoiner endpoint = new StringJoiner("/", "/", "");  
-        String joinedIndices = String.join(",", indices);
-        if (!joinedIndices.isEmpty()) {
-            endpoint.add(joinedIndices);  
+        assertEquals(expectedParams, multiRequest.getParameters());  
+            multiGetRequest.refresh(randomBoolean());
+        setRandomSearchParams(searchRequest, expectedParams);  
+                reindexRequest.setSize(randomIntBetween(100, 1000));  
         }
-        endpoint.add("_field_caps");
-
-        assertEquals(endpoint.toString(), request.getEndpoint());
-        assertEquals(5, request.getParameters().size());
-
-        // Note that we don't check the field param value explicitly, as field names are
-        // passed through
-        // a hash set before being added to the request, and can appear in a  
-        // non-deterministic order.
-        assertThat(request.getParameters(), hasKey("fields"));
-        String[] requestFields = Strings.splitStringByCommaToArray(request.getParameters().get("fields"));  
-        assertEquals(new HashSet<>(Arrays.asList(fields)), new HashSet<>(Arrays.asList(requestFields)));
-
-        for (Map.Entry<String, String> param : indicesOptionsParams.entrySet()) {  
-            assertThat(request.getParameters(), hasEntry(param.getKey(), param.getValue()));
-        }
-
-        assertNotNull(request.getEntity());
-        assertToXContentBody(fieldCapabilitiesRequest, request.getEntity());
-    }  
-
-    public void testRankEval() throws Exception {
-        RankEvalSpec spec = new RankEvalSpec(  
-            Collections.singletonList(new RatedRequest("queryId", Collections.emptyList(), new SearchSourceBuilder())),
-            new PrecisionAtK()
+    public void testDeletePit() throws IOException {
+    public void testExplain() throws IOException {
+import org.opensearch.action.support.ActiveShardCount;
         );  
-        String[] indices = randomIndicesNames(0, 5);
-        RankEvalRequest rankEvalRequest = new RankEvalRequest(spec, indices);
-        Map<String, String> expectedParams = new HashMap<>();  
-        setRandomIndicesOptions(rankEvalRequest::indicesOptions, rankEvalRequest::indicesOptions, expectedParams);
-        if (randomBoolean()) {
-            rankEvalRequest.searchType(randomFrom(SearchType.CURRENTLY_SUPPORTED));  
-        }
-        expectedParams.put("search_type", rankEvalRequest.searchType().name().toLowerCase(Locale.ROOT));
-
-        Request request = RequestConverters.rankEval(rankEvalRequest);
-        StringJoiner endpoint = new StringJoiner("/", "/", "");
-        String index = String.join(",", indices);  
-        if (Strings.hasLength(index)) {
-            endpoint.add(index);
-        }  
-        endpoint.add(RestRankEvalAction.ENDPOINT);
-        assertEquals(endpoint.toString(), request.getEndpoint());
-        assertEquals(5, request.getParameters().size());  
-        assertEquals(expectedParams, request.getParameters());
-        assertToXContentBody(spec, request.getEntity());
-    }  
-
-    public void testPutScript() throws Exception {
-        PutStoredScriptRequest putStoredScriptRequest = new PutStoredScriptRequest();  
-
-        String id = randomAlphaOfLengthBetween(5, 10);
-        putStoredScriptRequest.id(id);  
-
-        XContentType xContentType = randomFrom(XContentType.values());
-        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {  
-            builder.startObject();
-            builder.startObject("script").field("lang", "painless").field("source", "Math.log(_score * 2) + params.multiplier").endObject();
-            builder.endObject();  
-
-            putStoredScriptRequest.content(BytesReference.bytes(builder), xContentType);
-        }  
-
-        Map<String, String> expectedParams = new HashMap<>();
-        setRandomClusterManagerTimeout(putStoredScriptRequest, expectedParams);  
-        setRandomTimeout(putStoredScriptRequest::timeout, AcknowledgedRequest.DEFAULT_ACK_TIMEOUT, expectedParams);
-
-        if (randomBoolean()) {  
-            String context = randomAlphaOfLengthBetween(5, 10);
-            putStoredScriptRequest.context(context);
-            expectedParams.put("context", context);  
-        }
-
-        Request request = RequestConverters.putScript(putStoredScriptRequest);  
-
-        assertThat(request.getEndpoint(), equalTo("/_scripts/" + id));
-        assertThat(request.getParameters(), equalTo(expectedParams));  
-        assertNotNull(request.getEntity());
-        assertToXContentBody(putStoredScriptRequest, request.getEntity());
-    }  
-
-    public void testAnalyzeRequest() throws Exception {
-        AnalyzeRequest indexAnalyzeRequest = AnalyzeRequest.withIndexAnalyzer("test_index", "test_analyzer", "Here is some text");  
-
-        Request request = RequestConverters.analyze(indexAnalyzeRequest);
-        assertThat(request.getEndpoint(), equalTo("/test_index/_analyze"));  
-        assertToXContentBody(indexAnalyzeRequest, request.getEntity());
-
-        AnalyzeRequest analyzeRequest = AnalyzeRequest.withGlobalAnalyzer("test_analyzer", "more text");  
-        assertThat(RequestConverters.analyze(analyzeRequest).getEndpoint(), equalTo("/_analyze"));
-    }
-
-    public void testGetScriptRequest() {
-        GetStoredScriptRequest getStoredScriptRequest = new GetStoredScriptRequest("x-script");
-        Map<String, String> expectedParams = new HashMap<>();  
-        setRandomClusterManagerTimeout(getStoredScriptRequest, expectedParams);
-
-        Request request = RequestConverters.getScript(getStoredScriptRequest);  
-        assertThat(request.getEndpoint(), equalTo("/_scripts/" + getStoredScriptRequest.id()));
-        assertThat(request.getMethod(), equalTo(HttpGet.METHOD_NAME));
-        assertThat(request.getParameters(), equalTo(expectedParams));  
-        assertThat(request.getEntity(), nullValue());
-    }
-
-    public void testDeleteScriptRequest() {
-        DeleteStoredScriptRequest deleteStoredScriptRequest = new DeleteStoredScriptRequest("x-script");
-
-        Map<String, String> expectedParams = new HashMap<>();
-        setRandomTimeout(deleteStoredScriptRequest::timeout, AcknowledgedRequest.DEFAULT_ACK_TIMEOUT, expectedParams);
-        setRandomClusterManagerTimeout(deleteStoredScriptRequest, expectedParams);  
-
-        Request request = RequestConverters.deleteScript(deleteStoredScriptRequest);
-        assertThat(request.getEndpoint(), equalTo("/_scripts/" + deleteStoredScriptRequest.id()));  
-        assertThat(request.getMethod(), equalTo(HttpDelete.METHOD_NAME));
-        assertThat(request.getParameters(), equalTo(expectedParams));
-        assertThat(request.getEntity(), nullValue());  
-    }
-
-    static void assertToXContentBody(ToXContent expectedBody, HttpEntity actualEntity) throws IOException {  
-        BytesReference expectedBytes = org.opensearch.core.xcontent.XContentHelper.toXContent(
-            expectedBody,
-            REQUEST_BODY_CONTENT_TYPE,  
-            false
+            if (randomBoolean()) {
+        TermVectorsRequest tvRequest = new TermVectorsRequest(index, type, id);  
+            String index = randomAlphaOfLengthBetween(3, 10);
         );
-        assertEquals(MediaTypeRegistry.JSON.mediaTypeWithoutParameters(), actualEntity.getContentType());  
+        expectedParams.put("ignore_unavailable", Boolean.toString(getter.get().ignoreUnavailable()));
+import java.util.Collections;  
+            String preference = randomAlphaOfLengthBetween(3, 10);
+        String index = randomAlphaOfLengthBetween(3, 10);
+            assertEquals("/foo+bar", endpointBuilder.build());
+        assertEquals("/", request.getEndpoint());  
+                + mediaType
+                }  
+            updateByQueryRequest.setQuery(new TermQueryBuilder("foo", "fooval"));  
+            );  
+            updateRequest.scriptedUpsert(randomBoolean());
+        bulkRequest.add(new IndexRequest("test").id("12").source(MediaTypeRegistry.JSON, "field", "bulk2"));
+import org.opensearch.action.search.SearchRequest;
+            if (multiGetRequest.refresh()) {  
+import java.util.function.Supplier;
+            searchRequest.scroll((Scroll) null);  
+                randomBoolean(),  
+            expectedParams.put("requests_per_second", Float.toString(requestsPerSecond));
+        if (randomBoolean()) {  
+            reindexRequest.setSourceQuery(new TermQueryBuilder("foo", "fooval"));
+        setRandomClusterManagerTimeout(putStoredScriptRequest, expectedParams);  
+            assertEquals(expectedParams, request.getParameters());
+            getRequest.refresh(refresh);  
+            if (retryOnConflict > 0) {
+                    false,
+            TimeValue clusterManagerTimeout = TimeValue.parseTimeValue(randomTimeValue(), "random_cluster_manager_timeout");
+        return excludesParam.toString();
+            }  
+        }
+    }
+        {
+    static void setRandomClusterManagerTimeout(Consumer<TimeValue> setter, TimeValue defaultTimeout, Map<String, String> expectedParams) {
+            endpoint.add(index);
+        if (randomBoolean()) {  
+            endpoint.add(index);
+                String[] excludes = new String[numExcludes];  
+        assertEquals(5, request.getParameters().size());
+        for (Map.Entry<String, String> param : indicesOptionsParams.entrySet()) {  
+            expectedParams.put("max_docs", Integer.toString(size));
+            ActiveShardCount activeShardCount = ActiveShardCount.parseString(waitForActiveShardsString);
+        // Verify that the resulting REST request looks as expected.
+            boolean refresh = randomBoolean();
+        for (Map.Entry<String, String> param : expectedParams.entrySet()) {
+        String[] indices = randomIndicesNames(0, 5);
+        StringJoiner endpoint = new StringJoiner("/", "/", "");
+        }
+import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.script.mustache.MultiSearchTemplateRequest;
+        // Verify that the resulting REST request looks as expected.
+                expectedParams.put("slices", AbstractBulkByScrollRequest.AUTO_SLICES_VALUE);
+            explainRequest.storedFields(storedFields);  
+        }
+        BulkRequest bulkRequest = new BulkRequest();  
+        assertToXContentBody(searchScrollRequest, request.getEntity());
+        {
+            multiSearchRequest.indicesOptions(),
+                IndicesOptions.fromOptions(
+                expectedParams.put("routing", routing);
+        } else {  
+        if (randomBoolean()) {  
+        }
+                }  
+                }
+        MediaType bulkContentType = randomBoolean() ? mediaType : null;
+        Float requestsPerSecond;
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo^bar");
+        StringJoiner endpoint = new StringJoiner("/", "/", "");  
+        assertEquals(request.ifSeqNo(), parsedRequest.ifSeqNo());
+            }
+            if (randomBoolean()) {
+                    searchSourceBuilder.from(randomIntBetween(0, Integer.MAX_VALUE));
+            MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
+            }
+            String routing = randomAlphaOfLengthBetween(3, 10);
+        StringJoiner endpoint = new StringJoiner("/", "/", "");  
+        }
+        // Verify that the resulting REST request looks as expected.  
+        Exception e = expectThrows(NullPointerException.class, () -> new RethrottleRequest(null, 1.0f));  
+        XContentType xContentType = randomFrom(XContentType.values());  
+        expectedParams.put("ccs_minimize_roundtrips", Boolean.toString(searchRequest.isCcsMinimizeRoundtrips()));
+        CheckedBiConsumer<SearchRequest, XContentParser, IOException> consumer = (searchRequest, p) -> {
+            searchRequest.searchType(randomFrom(SearchType.CURRENTLY_SUPPORTED));  
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+        {
+    public void testClearScroll() throws IOException {
+        expectedParams.put("allow_partial_pit_creation", "true");
+        String endpoint = "/_search/point_in_time";
+                UpdateRequest parsedUpdateRequest = (UpdateRequest) parsedRequest;
+    }
+            if (randomBoolean()) {  
+            assertEquals("/index/type%232/id", endpointBuilder.build());
+        setRandomCountParams(countRequest, expectedParams);  
+        joiner.add(String.join(",", deleteByQueryRequest.indices()));
+        if (randomBoolean()) {
+            indexRequest.version(randomFrom(Versions.MATCH_ANY, Versions.MATCH_DELETED));
+    private static void doTestSourceExists(BiFunction<String, String, GetSourceRequest> requestFunction) throws IOException {
+        String id = randomAlphaOfLengthBetween(3, 10);
+        }
+        assertToXContentBody(createPitRequest, request.getEntity());  
+            putStoredScriptRequest.content(BytesReference.bytes(builder), xContentType);
+        exception = expectThrows(  
+            updateByQueryRequest.setScript(new Script("ctx._source.last = \"lastname\""));  
+        assertEquals("/", request.getEndpoint());
+            expectedParams.put("routing", "=cat");  
+            expectedParams.put("slices", "1");
+        Request request = RequestConverters.fieldCaps(fieldCapabilitiesRequest);
+        Request request = RequestConverters.search(searchRequest, searchEndpoint);  
+        setRandomClusterManagerTimeout(
+            expectedParams.put("cluster_manager_timeout", defaultTimeout.getStringRep());
+            String[] storedFields = generateRandomStringArray(10, 5, false, false);
+        }
+            new BytesArray(EntityUtils.toByteArray(request.getEntity())),  
+import org.opensearch.client.core.CountRequest;  
+            assertToXContentEquivalent(updateRequest.upsertRequest().source(), parsedUpdateRequest.upsertRequest().source(), xContentType);
+                    msearchDefault.expandWildcardsHidden(),
+            deleteByQueryRequest.setSlices(slices);
+    public static SearchRequest createTestSearchRequest(String[] indices, Map<String, String> expectedParams) {
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
+        int numberOfRequests = randomIntBetween(0, 32);
+        }
+                expectedParams.put("refresh", "true");
+        }  
+                .addPathPartAsIs("cache/clear");
+            if (randomBoolean()) {
+        IndexRequest indexRequest = new IndexRequest(index);  
+        String endpoint = "/_render/template";
+        }  
+        expectedParams.put("wait_for_completion", Boolean.TRUE.toString());  
+            // scroll is not supported in the current msearch or msearchtemplate api, so unset it:
+        Request request = RequestConverters.explain(explainRequest);
+import static org.hamcrest.Matchers.hasEntry;  
+    }
+            expectedParams.put("slices", "1");
+import org.opensearch.index.query.QueryBuilders;
+        searchScrollRequest.scrollId(randomAlphaOfLengthBetween(5, 10));
+import org.opensearch.script.Script;
+            expectedParams.put("allow_partial_search_results", Boolean.toString(searchRequest.allowPartialSearchResults()));  
+            // specified from msearch api, so unset other options:
+        } else {
+            expectedParams.put("scroll", searchRequest.scroll().keepAlive().getStringRep());
+        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+            tvRequest.setFields(fields);  
+            if (realtime == false) {
+            bulkRequest.add(new DeleteRequest("index", "0"));
+        assertEquals(bulkRequest.numberOfActions(), parsedBulkRequest.numberOfActions());
+        assertEquals(expectedParams, request.getParameters());  
+            }
+        }
+import org.opensearch.test.OpenSearchTestCase;
+            getRequest.routing(routing);  
+            updateRequest.routing(routing);
+        assertEquals(updateRequest.scriptedUpsert(), parsedUpdateRequest.scriptedUpsert());
+import org.opensearch.search.suggest.SuggestBuilder;
+        assertEquals(0, request.getParameters().size());
+            tvRequest.setFields(fields);
+                docWriteRequest.routing(randomAlphaOfLength(10));  
+    }  
+        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
+        }
+ */  
+        assertEquals("requestsPerSecond needs to be positive value but was [-5.0]", e.getMessage());
+            expectedParams.put("timeout", BulkShardRequest.DEFAULT_TIMEOUT.getStringRep());  
+        setRandomRefreshPolicy(bulkRequest::setRefreshPolicy, expectedParams);  
+        String[] fields;  
+        }
+            }
+        MultiTermVectorsRequest mtvRequest = new MultiTermVectorsRequest();  
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> {  
+    }  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("cluster1:index1,index2").addPathPartAsIs("_search");
+            expectedParams.put("preference", searchRequest.preference());  
+        Request request = RequestConverters.update(updateRequest);
+            assertEquals("/" + index + "/_doc", request.getEndpoint());
+                IndexRequest indexRequest = (IndexRequest) originalRequest;  
+            searchRequest.preference(randomAlphaOfLengthBetween(3, 10));
+            RequestConverters.endpoint(new String[] { "index1", "index2" }, "_endpoint", new String[] { "suffix1", "suffix2" })
+        for (int i = 0; i < numberOfSearchRequests; i++) {
+            deleteByQueryRequest.setQuery(new TermQueryBuilder("foo", "fooval"));
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type", "id#1");  
+            endpoint.add(index);  
+    public void testMultiGetWithType() throws IOException {  
+            } else {
+        }
+        assertEquals(xContentType.mediaTypeWithoutParameters(), RequestConverters.createContentType(xContentType).getMimeType());
+            }
+            assertEquals("/foo+bar", endpointBuilder.build());  
+        {  
+        Map<String, String> expectedParams = new HashMap<>();
+import org.opensearch.action.search.SearchType;  
+        Request request = RequestConverters.putScript(putStoredScriptRequest);  
+        assertEquals(indexRequest.getContentType().mediaTypeWithoutParameters(), entity.getContentType());
+                expectedParams.put("refresh", "true");
+        HttpEntity entity = request.getEntity();  
+        assertEquals(endpoint, request.getEndpoint());  
+    public void testPutScript() throws Exception {
+    }  
+        MediaType requestContentType = mediaType == MediaTypeRegistry.JSON ? XContentType.SMILE : MediaTypeRegistry.JSON;  
+            String timeout = randomTimeValue();
+        Map<String, String> expectedParams = new HashMap<>();  
+        }
+            BulkRequest bulkRequest = new BulkRequest();
+ * ownership. Elasticsearch licenses this file to you under  
+        IndexRequest indexRequest = new IndexRequest().source(singletonMap("field", "value"), mediaType);  
+            "Unsupported content-type found for request with content-type [YAML], only JSON and SMILE are supported",
+        assertIfSeqNoAndTerm(updateRequest, parsedUpdateRequest);
+            setter.accept(refreshPolicy);
+            UpdateRequest updateRequest = new UpdateRequest("index", "0");  
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+            rethrottleRequest = new RethrottleRequest(taskId, requestsPerSecond);
+        joiner.add(String.join(",", updateByQueryRequest.indices()));  
+        if (randomBoolean()) {
+        String index = randomAlphaOfLengthBetween(3, 10);  
+        setRandomRefreshPolicy(deleteRequest::setRefreshPolicy, expectedParams);
+    public void testAnalyzeRequest() throws Exception {
+            () -> enforceSameContentType(new IndexRequest().source(singletonMap("field", "value"), XContentType.YAML), bulkContentType)
+    /**
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+                int numIncludes = randomIntBetween(0, 5);
+            Streams.readFully(inputStream, content);
+                    searchSourceBuilder.collapse(new CollapseBuilder(randomAlphaOfLengthBetween(3, 10)));
+        Map<String, String> expectedParams = new HashMap<>();
+        endpoint.add(searchEndpoint);  
+        assertEquals(updateRequest.detectNoop(), parsedUpdateRequest.detectNoop());  
+import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
+                if (updateRequest.doc() != null) {
+                if (randomBoolean()) {  
+            assertNull(parsedUpdateRequest.upsertRequest());  
+            String routing = randomAlphaOfLengthBetween(3, 10);  
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
+        int numberOfRequests = randomIntBetween(0, 5);
+            searchTemplateRequest.setScript("{\"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" }}}");
+                if (randomBoolean()) {  
+            getRequest.preference(preference);
+        setRandomVersionType(deleteRequest::versionType, expectedParams);  
+    static void setRandomHumanReadable(Consumer<Boolean> setter, Map<String, String> expectedParams) {
+        if (randomBoolean()) {
+            builder.startObject();
+            }
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type", "this/is/the/id");
+        }
+            if (randomBoolean()) {  
+            assertEquals("/-%23index1,index%232/type/id", endpointBuilder.build());  
+            expectedParams.put("scroll", ts);
+        String index = String.join(",", indices);  
+        expectedParams.put(RestSearchAction.TYPED_KEYS_PARAM, "true");
+            String preference = randomAlphaOfLength(4);  
+        assertEquals(expectedParams, request.getParameters());  
+        parsedBulkRequest.add(content, 0, content.length, mediaType);  
+            endpoint.add(joinedIndices);  
+                if (randomBoolean()) {  
+            } else if (opType == DocWriteRequest.OpType.UPDATE) {
+            DocWriteRequest.OpType opType = originalRequest.opType();
+        Map<String, String> indicesOptionsParams = new HashMap<>();
+        Map<String, Object> scriptParams = new HashMap<>();  
+import org.opensearch.index.reindex.UpdateByQueryRequest;  
+            assertEquals("/中文", endpointBuilder.build());  
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
+        }
+    public static SearchSourceBuilder createTestSearchSourceBuilder() {
+            expectedParams.put("routing", routing);
+import java.io.InputStream;  
+        assertEquals("/_search/scroll", request.getEndpoint());
+        assertToXContentBody(searchRequest.source(), request.getEntity());
+import java.util.Locale;
+        Request request = RequestConverters.rankEval(rankEvalRequest);
+            if (randomBoolean()) {
+        assertEquals(  
+            } else {
+    }
+            REQUEST_BODY_CONTENT_TYPE.xContent(),
+                expectedParams.put("slices", Integer.toString(slices));  
+            reindexRequest.setRequestsPerSecond(requestsPerSecond);
+            SearchSourceBuilder searchSourceBuilder = SearchSourceBuilder.fromXContent(p, false);
+        if (randomBoolean()) {  
+        assertEquals(endpoint.toString(), request.getEndpoint());
+            String[] indices = randomIndicesNames(0, 5);
+        }
+            searchRequest.setBatchedReduceSize(randomIntBetween(2, Integer.MAX_VALUE));  
+        doTestGetSource((index, id) -> new GetSourceRequest(index, id));
+            // only expand_wildcards, ignore_unavailable and allow_no_indices can be
+                if (randomBoolean()) {  
+            final long seqNo = randomNonNegativeLong();
+                updateByQueryRequest.setMaxDocs(size);
+        Request request = RequestConverters.search(searchRequest, searchEndpoint);  
+        assertToXContentBody(spec, request.getEntity());
+                }
+        }  
+                expectedParams.put("human", String.valueOf(humanReadable));
+        variants.add(new Tuple<String, Supplier<Request>>("_reindex", () -> RequestConverters.rethrottleReindex(rethrottleRequest)));
+        assertEquals(endpoint, request.getEndpoint());
+                    searchSourceBuilder.highlighter(new HighlightBuilder().field(randomAlphaOfLengthBetween(3, 10)));
+        ActiveShardCount defaultActiveShardCount,  
+            assertEquals("/foo%2Fbar", endpointBuilder.build());
+            if (randomBoolean()) {
+            bulkRequest.add(new DeleteRequest("index", "3"));
+        Map<String, String> expectedParams = new HashMap<>();  
+            if (slices == 0) {
+import org.opensearch.action.support.WriteRequest;  
+        assertEquals(
+                if (realtime == false) {  
+import org.opensearch.index.query.MatchAllQueryBuilder;  
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
+        Consumer<ActiveShardCount> setter,
+                if (randomBoolean()) {  
+import org.opensearch.action.search.DeletePitRequest;
+        }
+import org.opensearch.common.unit.TimeValue;
+        StringJoiner endpoint = new StringJoiner("/", "/", "");
+                String excludesParam = randomFields(excludes);
+            assertEquals("/%2Ffoo@bar", endpointBuilder.build());
+        }
+        String[] indices = randomIndicesNames(0, 5);
+import org.hamcrest.Matchers;  
+        {
+    }
+                updateRequest.upsert(new IndexRequest().source(singletonMap("field", "value"), mediaType));
+        }
+        );
+        }
+    }
+                consumer.accept(new FetchSourceContext(true, includes, excludes));
+            assertEquals(originalRequest.ifSeqNo(), parsedRequest.ifSeqNo());
+            }
+                docWriteRequest = new DeleteRequest(index, id);  
+    }
+                searchSourceBuilder.from(randomInt(10));
+                getRequest.preference(preference);
+            exception.getMessage()
+        } else {  
+            }
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
+    public void testTermVectorsWithType() throws IOException {
+        }
+import org.opensearch.search.rescore.QueryRescorerBuilder;
+        if (randomBoolean()) {  
+                    searchSourceBuilder.size(randomIntBetween(0, Integer.MAX_VALUE));
+    }  
+import org.opensearch.search.collapse.CollapseBuilder;
+            mtvRequest.add(tvRequest);
+            );
+    public void testBulk() throws IOException {  
+        String index = String.join(",", indices);
+            String[] fields = generateRandomStringArray(10, 5, false, false);
+        if (randomBoolean()) {
+            new Tuple<String, Supplier<Request>>("_delete_by_query", () -> RequestConverters.rethrottleDeleteByQuery(rethrottleRequest))  
+        setRandomClusterManagerTimeout(request::clusterManagerNodeTimeout, expectedParams);  
+        if (frequently()) {  
+        endpoint.add("_field_caps");
+import org.opensearch.index.rankeval.RankEvalSpec;
+    }
+            fields = generateRandomStringArray(10, 5, false, false);
+                IndexRequest indexRequest = new IndexRequest(index).id(id).source(source, mediaType);  
+        setRandomTimeout(reindexRequest::setTimeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart(Strings.EMPTY_ARRAY);
+        if (randomBoolean()) {
+ * specific language governing permissions and limitations
+            null,
+        assertEquals("/" + index + "/_doc/" + id, request.getEndpoint());
+        assertNull(request.getEntity());  
+ *
+            expectedParams.put("cluster_manager_timeout", ClusterManagerNodeRequest.DEFAULT_CLUSTER_MANAGER_NODE_TIMEOUT.getStringRep());
+        putStoredScriptRequest.id(id);  
+        } else {
+        Map<String, String> expectedParams = new HashMap<>();
+            deleteByQueryRequest.setScroll(TimeValue.parseTimeValue(ts, "scroll"));  
+        if (randomBoolean()) {  
+        if (randomBoolean()) {  
+        Request request = RequestConverters.mtermVectors(mtvRequest);
+            IndicesOptions msearchDefault = new MultiSearchRequest().indicesOptions();
+        Map<String, String> expectedParams = new HashMap<>();
+                updateByQueryRequest.setSize(size);
+        }  
+import org.opensearch.action.search.MultiSearchRequest;  
+            reindexRequest.setDestRouting("=cat");  
+        if (randomBoolean()) {
+        MultiSearchRequest multiSearchRequest = new MultiSearchRequest();
+        String[] indices = randomIndicesNames(0, 5);  
+        }  
+        assertEquals(endpoint.toString(), request.getEndpoint());
+        assertEquals(HttpHead.METHOD_NAME, request.getMethod());
+            bulkRequest.add(new DeleteRequest("index", "0"));  
+                }
+        expectedParams.put("ignore_throttled", Boolean.toString(indicesOptions.ignoreThrottled()));  
+        if (randomBoolean()) {
+        DocWriteRequest<?>[] requests = new DocWriteRequest<?>[nbItems];
+import org.opensearch.common.lucene.uid.Versions;  
+        if (randomBoolean()) {
+            expectedParams.put("conflicts", "proceed");
+            endpoint.add(index);
+            searchTemplateRequest.setProfile(randomBoolean());  
+            if (slices == 0) {  
+        assertEquals(mediaType.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+                    randomlyGenerated.allowNoIndices(),
+            multiGetRequest.preference(preference);
+        }
+        if (Strings.hasLength(index)) {  
+        }  
+        assertNotNull(request.getEntity());
+public class RequestConvertersTests extends OpenSearchTestCase {
+        {
+        if (randomBoolean()) {
+        // test illegal RethrottleRequest values
+import org.apache.hc.client5.http.classic.methods.HttpHead;  
+        assertEquals(
+        if (randomBoolean()) {
+            expectedParams.put("timeout", ReplicationRequest.DEFAULT_TIMEOUT.getStringRep());  
+        setRandomIfSeqNoAndTerm(updateRequest, new HashMap<>()); // if* params are passed in the body
+    }
+import org.opensearch.index.VersionType;
+            final long primaryTerm = randomLongBetween(1, 200);
+        endpoint.add("_count");  
+            if (randomBoolean()) {
+ * SPDX-License-Identifier: Apache-2.0
+            "Unsupported content-type found for request with content-type [CBOR], only JSON and SMILE are supported",
+            expectedParams.put("max_concurrent_searches", Integer.toString(multiSearchTemplateRequest.maxConcurrentSearchRequests()));
+            countRequest.query(new MatchAllQueryBuilder());
+                true,
+        {
+        RethrottleRequest rethrottleRequest;  
+        assertEquals("taskId cannot be null", e.getMessage());
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/foo/bar");
+            }  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("//foo/bar");  
+        searchTemplateRequest.setScriptType(ScriptType.INLINE);  
+        StringJoiner joiner = new StringJoiner("/", "/", "");
+import java.util.function.Function;
+    public void testUpdate() throws IOException {
+        expectedParams.put("group_by", "none");
+        }
+            updateByQueryRequest.setScroll(TimeValue.parseTimeValue(ts, "scroll"));
+import java.util.StringJoiner;  
+        {  
+            request.setIfPrimaryTerm(primaryTerm);  
+    static void setRandomClusterManagerTimeout(TimedRequest request, Map<String, String> expectedParams) {  
+    public void testDelete() {
+            expectedParams.put("routing", routing);
+                String storedFieldsParam = randomFields(storedFields);
+        for (int i = 0; i < fields.length; i++) {  
+            s -> request.setTimeout(TimeValue.parseTimeValue(s, request.getClass().getName() + ".timeout")),  
+        // Create a random request.
+        } else {  
+        assertEquals(expectedParams, request.getParameters());
+                    searchSourceBuilder.aggregation(
+            updateByQueryRequest.setSlices(slices);  
+    }  
+            String storedFieldsParams = randomFields(storedFields);
+            expectedBody,
+        // rarely skip setting the search source completely
+        }  
+ * Licensed to Elasticsearch under one or more contributor  
+            expectedParams.put("requests_per_second", "-1");
+            excludesParam.append(exclude);  
+        assertEquals("/_count", request.getEndpoint());
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                randomBoolean(),  
+        } else {
+            null,  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a").addPathPartAsIs("_endpoint");
+            updateRequest.script(mockScript("_value + 1"));
+        }  
+        }  
+import static org.hamcrest.CoreMatchers.equalTo;
+                IndexRequest parsedIndexRequest = (IndexRequest) parsedRequest;
+                if (randomBoolean()) {  
+import org.opensearch.action.support.IndicesOptions;
+        assertEquals("/" + searchEndpoint, request.getEndpoint());
+        assertNull(request.getEntity());  
+                expectedParams.put("version_type", versionType.name().toLowerCase(Locale.ROOT));
+                    searchSourceBuilder.explain(randomBoolean());
+            XContentType xContentType = randomFrom(XContentType.CBOR, XContentType.YAML);
+            }
+                9200,
+        {
+        StringJoiner endpoint = new StringJoiner("/", "/", "");  
+import org.opensearch.core.common.Strings;
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;  
+            } else {
+package org.opensearch.client;
+            assertNull(request.getEntity());
+    public void testReindex() throws IOException {
+            assertEquals("/a/b/c/_endpoint", endpointBuilder.build());
+            randomizeFetchSourceContextParams(explainRequest::fetchSourceContext, expectedParams);
+    }
+    public void testSearch() throws Exception {  
+            expectedParams.put("version", Long.toString(Versions.MATCH_DELETED));  
+        Request request = RequestConverters.ping();  
+        }
+import org.apache.hc.core5.http.HttpEntity;  
+                expectedParams.put("local", String.valueOf(local));
+                String routing = randomAlphaOfLengthBetween(3, 10);
+import org.opensearch.core.tasks.TaskId;
+        }  
+            "Update request cannot have different content types for doc [JSON] and upsert [YAML] documents",
+        assertToXContentBody(countRequest, request.getEntity());
+            exception.getMessage()
+        SearchRequest searchRequest = createTestSearchRequest(indices, expectedParams);
+        if (Strings.hasLength(index)) {
+            getRequest.routing(routing);
+        if (randomBoolean()) {
+        if (randomBoolean()) {
+    }
+    }
+            if (versionType != VersionType.INTERNAL) {
+    private static void setRandomSearchParams(SearchRequest searchRequest, Map<String, String> expectedParams) {
+        BulkRequest parsedBulkRequest = new BulkRequest();
+        assertEquals(HttpHead.METHOD_NAME, request.getMethod());  
+        searchRequest.source(searchSourceBuilder);
+        }
+        if (id != null) {
+            } else if (opType == DocWriteRequest.OpType.UPDATE) {
+    public void testDeleteAllPits() {
+            bulkRequest.timeout(timeout);  
+import java.util.HashMap;
+        if (randomBoolean()) {  
+        }  
+        expectedParams.put("scroll", reindexRequest.getScrollTime().getStringRep());
+            reindexRequest.setRemoteInfo(remoteInfo);
+        assertToXContentBody(indexAnalyzeRequest, request.getEntity());
+            }
+            scriptParams.put("value", randomAlphaOfLengthBetween(2, 5));
+                expectedParams.put("include_defaults", String.valueOf(includeDefaults));  
+ * software distributed under the License is distributed on an
+        Map<String, String> expectedParams = new HashMap<>();
+        }
+        if (randomBoolean()) {  
+            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, Float.toString(requestsPerSecond));  
+import java.util.HashSet;
+            searchRequest.scroll(randomTimeValue());
+                            new CompletionSuggestionBuilder(randomAlphaOfLengthBetween(3, 10))
+                deleteByQueryRequest.setSize(size);
+        Request request = RequestConverters.deleteScript(deleteStoredScriptRequest);
+            setRandomIfSeqNoAndTerm(indexRequest, expectedParams);
+    public void testGetSource() throws IOException {
+            assertEquals("/", endpointBuilder.build());  
+        {  
+    }
+        }
+            assertEquals("/a/b", endpointBuilder.build());
+            multiSearchTemplateRequest,
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.common.bytes.BytesArray;
+        for (Map.Entry<String, String> param : indicesOptionsParams.entrySet()) {
+        }
+            }
+            String waitForActiveShardsString;
+        FieldCapabilitiesRequest fieldCapabilitiesRequest = new FieldCapabilitiesRequest().indices(indices)
+            DocWriteRequest.OpType opType = randomFrom(DocWriteRequest.OpType.values());
+            assertEquals(mediaType.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+            () -> enforceSameContentType(new IndexRequest().source(singletonMap("field", "value"), requestContentType), mediaType)
+            String index = randomAlphaOfLength(5);
+    public void testRenderSearchTemplate() throws Exception {  
+                + "]",  
+            searchTemplateRequest.setSearchPipeline("pipeline");
+        MediaType entityContentType = MediaType.fromMediaType(entity.getContentType());
+import org.opensearch.index.mapper.MapperService;
+    static void setRandomWaitForActiveShards(Consumer<ActiveShardCount> setter, Map<String, String> expectedParams) {  
+            assertEquals("/foo%20bar", endpointBuilder.build());
+            }
+                expectedParams.put("realtime", "false");
+            float requestsPerSecond = (float) randomDoubleBetween(0.0, 10.0, false);
+            assertEquals("/index/type/id%231", endpointBuilder.build());
+        assertEquals(REQUEST_BODY_CONTENT_TYPE.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("//foo");  
+            reindexRequest.setScroll(TimeValue.parseTimeValue(ts, "scroll"));
+        }  
+    public void testUpdateByQuery() throws IOException {
+        }
+            RequestConverters.endpoint(new String[] { "index1", "index2" }, new String[] { "type1", "type2" }, "_endpoint")  
         assertEquals(expectedBytes, new BytesArray(EntityUtils.toByteArray(actualEntity)));
     }
-
-    public void testEndpointBuilder() {
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder();  
-            assertEquals("/", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart(Strings.EMPTY_ARRAY);
-            assertEquals("/", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("");
-            assertEquals("/", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a", "b");  
-            assertEquals("/a/b", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a").addPathPart("b").addPathPartAsIs("_endpoint");
-            assertEquals("/a/b/_endpoint", endpointBuilder.build());
-        }  
-
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a", "b", "c").addPathPartAsIs("_endpoint");  
-            assertEquals("/a/b/c/_endpoint", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a").addPathPartAsIs("_endpoint");
-            assertEquals("/a/_endpoint", endpointBuilder.build());
-        }  
-    }
-
-    public void testEndpointBuilderEncodeParts() {  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("-#index1,index#2", "type", "id");
-            assertEquals("/-%23index1,index%232/type/id", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type#2", "id");  
-            assertEquals("/index/type%232/id", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type", "this/is/the/id");
-            assertEquals("/index/type/this%2Fis%2Fthe%2Fid", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type", "this|is|the|id");
-            assertEquals("/index/type/this%7Cis%7Cthe%7Cid", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type", "id#1");  
-            assertEquals("/index/type/id%231", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("<logstash-{now/M}>", "_search");
-            assertEquals("/%3Clogstash-%7Bnow%2FM%7D%3E/_search", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("中文");
-            assertEquals("/中文", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo bar");  
-            assertEquals("/foo%20bar", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo+bar");
-            assertEquals("/foo+bar", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo+bar");
-            assertEquals("/foo+bar", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo/bar");  
-            assertEquals("/foo%2Fbar", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo^bar");
-            assertEquals("/foo%5Ebar", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("cluster1:index1,index2").addPathPartAsIs("_search");
-            assertEquals("/cluster1:index1,index2/_search", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addCommaSeparatedPathParts(new String[] { "index1", "index2" })  
-                .addPathPartAsIs("cache/clear");
-            assertEquals("/index1,index2/cache/clear", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/foo");
-            assertEquals("/%2Ffoo", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("//foo");  
-            assertEquals("/%2F%2Ffoo", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("///foo");
-            assertEquals("/%2F%2F%2Ffoo", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/foo/bar");
-            assertEquals("/%2Ffoo%2Fbar", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("//foo/bar");  
-            assertEquals("/%2F%2Ffoo%2Fbar", endpointBuilder.build());
-        }
-        {  
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/foo@bar");
-            assertEquals("/%2Ffoo@bar", endpointBuilder.build());
-        }  
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("//foo@bar");
-            assertEquals("/%2F%2Ffoo@bar", endpointBuilder.build());  
-        }
-        {
-            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/part1").addPathPart("//part2").addPathPart("///part3");  
-            assertEquals("/%2Fpart1/%2F%2Fpart2/%2F%2F%2Fpart3", endpointBuilder.build());
-        }
-    }  
-
-    public void testEndpoint() {
-        assertEquals("/index/type/id", RequestConverters.endpoint("index", "type", "id"));  
-        assertEquals("/index/type/id/_endpoint", RequestConverters.endpoint("index", "type", "id", "_endpoint"));
-        assertEquals("/index1,index2", RequestConverters.endpoint(new String[] { "index1", "index2" }));
-        assertEquals("/index1,index2/_endpoint", RequestConverters.endpoint(new String[] { "index1", "index2" }, "_endpoint"));  
-        assertEquals(
-            "/index1,index2/type1,type2/_endpoint",
-            RequestConverters.endpoint(new String[] { "index1", "index2" }, new String[] { "type1", "type2" }, "_endpoint")  
-        );
-        assertEquals(
-            "/index1,index2/_endpoint/suffix1,suffix2",  
-            RequestConverters.endpoint(new String[] { "index1", "index2" }, "_endpoint", new String[] { "suffix1", "suffix2" })
-        );
-    }  
-
-    public void testCreateContentType() {
-        final XContentType xContentType = randomFrom(XContentType.values());  
-        assertEquals(xContentType.mediaTypeWithoutParameters(), RequestConverters.createContentType(xContentType).getMimeType());
-    }
-
-    public void testEnforceSameContentType() {
-        MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
-        IndexRequest indexRequest = new IndexRequest().source(singletonMap("field", "value"), mediaType);  
-        assertEquals(mediaType, enforceSameContentType(indexRequest, null));
-        assertEquals(mediaType, enforceSameContentType(indexRequest, mediaType));
-
-        MediaType bulkContentType = randomBoolean() ? mediaType : null;
-
-        IllegalArgumentException exception = expectThrows(  
-            IllegalArgumentException.class,
-            () -> enforceSameContentType(new IndexRequest().source(singletonMap("field", "value"), XContentType.CBOR), bulkContentType)
-        );  
-        assertEquals(
-            "Unsupported content-type found for request with content-type [CBOR], only JSON and SMILE are supported",
-            exception.getMessage()  
-        );
-
-        exception = expectThrows(  
-            IllegalArgumentException.class,
-            () -> enforceSameContentType(new IndexRequest().source(singletonMap("field", "value"), XContentType.YAML), bulkContentType)
-        );  
-        assertEquals(
-            "Unsupported content-type found for request with content-type [YAML], only JSON and SMILE are supported",
-            exception.getMessage()  
-        );
-
-        MediaType requestContentType = mediaType == MediaTypeRegistry.JSON ? XContentType.SMILE : MediaTypeRegistry.JSON;  
-
-        exception = expectThrows(
-            IllegalArgumentException.class,  
-            () -> enforceSameContentType(new IndexRequest().source(singletonMap("field", "value"), requestContentType), mediaType)
-        );
-        assertEquals(  
-            "Mismatching content-type found for request with content-type ["
-                + requestContentType
-                + "], "  
-                + "previous requests have content-type ["
-                + mediaType
-                + "]",  
-            exception.getMessage()
-        );
-    }  
-
-    /**
-     * Randomize the {@link FetchSourceContext} request parameters.  
-     */
-    private static void randomizeFetchSourceContextParams(Consumer<FetchSourceContext> consumer, Map<String, String> expectedParams) {
-        if (randomBoolean()) {  
-            if (randomBoolean()) {
-                boolean fetchSource = randomBoolean();
-                FetchSourceContext fetchSourceContext = fetchSource  
-                    ? FetchSourceContext.FETCH_SOURCE
-                    : FetchSourceContext.DO_NOT_FETCH_SOURCE;
-                consumer.accept(fetchSourceContext);  
-                if (fetchSource == false) {
-                    expectedParams.put("_source", "false");
-                }  
-            } else {
-                int numIncludes = randomIntBetween(0, 5);
-                String[] includes = new String[numIncludes];  
-                String includesParam = randomFields(includes);
-                if (numIncludes > 0) {
-                    expectedParams.put("_source_includes", includesParam);  
-                }
-                int numExcludes = randomIntBetween(0, 5);
-                String[] excludes = new String[numExcludes];  
-                String excludesParam = randomFields(excludes);
-                if (numExcludes > 0) {
-                    expectedParams.put("_source_excludes", excludesParam);  
-                }
-                consumer.accept(new FetchSourceContext(true, includes, excludes));
-            }  
-        }
-    }
-
-    private static void setRandomSearchParams(SearchRequest searchRequest, Map<String, String> expectedParams) {
-        expectedParams.put(RestSearchAction.TYPED_KEYS_PARAM, "true");
-        if (randomBoolean()) {  
-            searchRequest.routing(randomAlphaOfLengthBetween(3, 10));
-            expectedParams.put("routing", searchRequest.routing());
-        }  
-        if (randomBoolean()) {
-            searchRequest.preference(randomAlphaOfLengthBetween(3, 10));
-            expectedParams.put("preference", searchRequest.preference());  
-        }
-        if (randomBoolean()) {
-            searchRequest.searchType(randomFrom(SearchType.CURRENTLY_SUPPORTED));  
-        }
-        expectedParams.put("search_type", searchRequest.searchType().name().toLowerCase(Locale.ROOT));
-        if (randomBoolean()) {  
-            searchRequest.requestCache(randomBoolean());
-            expectedParams.put("request_cache", Boolean.toString(searchRequest.requestCache()));
-        }  
-        if (randomBoolean()) {
-            searchRequest.allowPartialSearchResults(randomBoolean());
-            expectedParams.put("allow_partial_search_results", Boolean.toString(searchRequest.allowPartialSearchResults()));  
-        }
-        if (randomBoolean()) {
-            searchRequest.setBatchedReduceSize(randomIntBetween(2, Integer.MAX_VALUE));  
-        }
-        expectedParams.put("batched_reduce_size", Integer.toString(searchRequest.getBatchedReduceSize()));
-        if (randomBoolean()) {  
-            searchRequest.scroll(randomTimeValue());
-            expectedParams.put("scroll", searchRequest.scroll().keepAlive().getStringRep());
-        }  
-        if (randomBoolean()) {
-            searchRequest.setCcsMinimizeRoundtrips(randomBoolean());
-        }  
-        expectedParams.put("ccs_minimize_roundtrips", Boolean.toString(searchRequest.isCcsMinimizeRoundtrips()));
-        if (randomBoolean()) {
-            searchRequest.setMaxConcurrentShardRequests(randomIntBetween(1, Integer.MAX_VALUE));  
-        }
-        expectedParams.put("max_concurrent_shard_requests", Integer.toString(searchRequest.getMaxConcurrentShardRequests()));
-        if (randomBoolean()) {  
-            searchRequest.setPreFilterShardSize(randomIntBetween(2, Integer.MAX_VALUE));
-        }
-        if (searchRequest.getPreFilterShardSize() != null) {  
-            expectedParams.put("pre_filter_shard_size", Integer.toString(searchRequest.getPreFilterShardSize()));
-        }
-    }  
-
-    public static void setRandomIndicesOptions(
-        Consumer<IndicesOptions> setter,  
-        Supplier<IndicesOptions> getter,
-        Map<String, String> expectedParams
-    ) {  
-
-        if (randomBoolean()) {
-            setter.accept(  
-                IndicesOptions.fromOptions(
-                    randomBoolean(),
-                    randomBoolean(),  
-                    randomBoolean(),
-                    randomBoolean(),
-                    true,  
-                    false,
-                    false,
-                    randomBoolean()  
-                )
-            );
-        }  
-        expectedParams.put("ignore_unavailable", Boolean.toString(getter.get().ignoreUnavailable()));
-        expectedParams.put("allow_no_indices", Boolean.toString(getter.get().allowNoIndices()));
-        if (getter.get().expandWildcardsOpen() && getter.get().expandWildcardsClosed()) {  
-            expectedParams.put("expand_wildcards", "open,closed");
-        } else if (getter.get().expandWildcardsOpen()) {
-            expectedParams.put("expand_wildcards", "open");  
-        } else if (getter.get().expandWildcardsClosed()) {
-            expectedParams.put("expand_wildcards", "closed");
-        } else {  
             expectedParams.put("expand_wildcards", "none");
-        }
-        expectedParams.put("ignore_throttled", Boolean.toString(getter.get().ignoreThrottled()));  
-    }
-
-    static IndicesOptions setRandomIndicesOptions(IndicesOptions indicesOptions, Map<String, String> expectedParams) {  
-        if (randomBoolean()) {
-            indicesOptions = IndicesOptions.fromOptions(
-                randomBoolean(),  
-                randomBoolean(),
-                randomBoolean(),
-                randomBoolean(),  
-                true,
-                false,
-                false,  
-                randomBoolean()
-            );
-        }  
-        expectedParams.put("ignore_unavailable", Boolean.toString(indicesOptions.ignoreUnavailable()));
-        expectedParams.put("allow_no_indices", Boolean.toString(indicesOptions.allowNoIndices()));
-        if (indicesOptions.expandWildcardsOpen() && indicesOptions.expandWildcardsClosed()) {  
-            expectedParams.put("expand_wildcards", "open,closed");
-        } else if (indicesOptions.expandWildcardsOpen()) {
-            expectedParams.put("expand_wildcards", "open");  
-        } else if (indicesOptions.expandWildcardsClosed()) {
-            expectedParams.put("expand_wildcards", "closed");
-        } else {  
-            expectedParams.put("expand_wildcards", "none");
-        }
-        expectedParams.put("ignore_throttled", Boolean.toString(indicesOptions.ignoreThrottled()));  
-        return indicesOptions;
-    }
-
-    static void setRandomIncludeDefaults(Consumer<Boolean> setter, Map<String, String> expectedParams) {
-        if (randomBoolean()) {
-            boolean includeDefaults = randomBoolean();  
-            setter.accept(includeDefaults);
-            if (includeDefaults) {
-                expectedParams.put("include_defaults", String.valueOf(includeDefaults));  
-            }
-        }
-    }  
-
-    static void setRandomHumanReadable(Consumer<Boolean> setter, Map<String, String> expectedParams) {
         if (randomBoolean()) {  
-            boolean humanReadable = randomBoolean();
+        if (hasFields) {  
+        }
+            boolean docAsUpsert = randomBoolean();
+            IllegalArgumentException.class,
+    }
+            if (frequently()) {
+                searchSourceBuilder.size(randomIntBetween(20, 100));
             setter.accept(humanReadable);
-            if (humanReadable) {  
-                expectedParams.put("human", String.valueOf(humanReadable));
-            }
-        }  
-    }
-
-    static void setRandomLocal(Consumer<Boolean> setter, Map<String, String> expectedParams) {  
-        if (randomBoolean()) {
-            boolean local = randomBoolean();
-            setter.accept(local);  
-            if (local) {
-                expectedParams.put("local", String.valueOf(local));
-            }  
+            multiGetRequest.realtime(randomBoolean());
+        assertEquals(method, request.getMethod());
         }
-    }
-
-    static void setRandomTimeout(TimedRequest request, TimeValue defaultTimeout, Map<String, String> expectedParams) {
-        setRandomTimeout(
-            s -> request.setTimeout(TimeValue.parseTimeValue(s, request.getClass().getName() + ".timeout")),  
-            defaultTimeout,
-            expectedParams
-        );  
-    }
-
-    static void setRandomTimeout(Consumer<String> setter, TimeValue defaultTimeout, Map<String, String> expectedParams) {  
+import java.util.function.Consumer;  
         if (randomBoolean()) {
-            String timeout = randomTimeValue();
-            setter.accept(timeout);  
-            expectedParams.put("timeout", timeout);
-        } else {
-            expectedParams.put("timeout", defaultTimeout.getStringRep());  
         }
-    }
-
-    static void setRandomTimeoutTimeValue(Consumer<TimeValue> setter, TimeValue defaultTimeout, Map<String, String> expectedParams) {
+        getAndExistsTest(RequestConverters::exists, HttpHead.METHOD_NAME);
+            assertEquals("/" + variant.v1() + "/" + taskId + "/_rethrottle", request.getEndpoint());
+            Request request = variant.v2().get();
         if (randomBoolean()) {
-            TimeValue timeout = TimeValue.parseTimeValue(randomTimeValue(), "random_timeout");  
-            setter.accept(timeout);
-            expectedParams.put("timeout", timeout.getStringRep());
-        } else {  
-            expectedParams.put("timeout", defaultTimeout.getStringRep());
-        }
-    }  
-
-    static void setRandomClusterManagerTimeout(ClusterManagerNodeRequest<?> request, Map<String, String> expectedParams) {
-        setRandomClusterManagerTimeout(request::clusterManagerNodeTimeout, expectedParams);  
-    }
-
-    static void setRandomClusterManagerTimeout(TimedRequest request, Map<String, String> expectedParams) {  
-        setRandomClusterManagerTimeout(
-            s -> request.setClusterManagerTimeout(TimeValue.parseTimeValue(s, request.getClass().getName() + ".clusterManagerNodeTimeout")),
-            expectedParams  
-        );
-    }
-
-    static void setRandomClusterManagerTimeout(Consumer<String> setter, Map<String, String> expectedParams) {
-        if (randomBoolean()) {
+    private static void setRandomCountParams(CountRequest countRequest, Map<String, String> expectedParams) {
             String clusterManagerTimeout = randomTimeValue();  
-            setter.accept(clusterManagerTimeout);
-            expectedParams.put("cluster_manager_timeout", clusterManagerTimeout);
-        } else {  
-            expectedParams.put("cluster_manager_timeout", ClusterManagerNodeRequest.DEFAULT_CLUSTER_MANAGER_NODE_TIMEOUT.getStringRep());
-        }
-    }  
-
-    static void setRandomClusterManagerTimeout(Consumer<TimeValue> setter, TimeValue defaultTimeout, Map<String, String> expectedParams) {
-        if (randomBoolean()) {  
-            TimeValue clusterManagerTimeout = TimeValue.parseTimeValue(randomTimeValue(), "random_cluster_manager_timeout");
-            setter.accept(clusterManagerTimeout);
-            expectedParams.put("cluster_manager_timeout", clusterManagerTimeout.getStringRep());  
-        } else {
-            expectedParams.put("cluster_manager_timeout", defaultTimeout.getStringRep());
-        }  
-    }
-
-    static void setRandomWaitForActiveShards(Consumer<ActiveShardCount> setter, Map<String, String> expectedParams) {  
-        setRandomWaitForActiveShards(setter, ActiveShardCount.DEFAULT, expectedParams);
-    }
-
-    static void setRandomWaitForActiveShards(
-        Consumer<ActiveShardCount> setter,
-        ActiveShardCount defaultActiveShardCount,  
-        Map<String, String> expectedParams
-    ) {
-        if (randomBoolean()) {  
-            int waitForActiveShardsInt = randomIntBetween(-1, 5);
-            String waitForActiveShardsString;
-            if (waitForActiveShardsInt == -1) {  
-                waitForActiveShardsString = "all";
-            } else {
-                waitForActiveShardsString = String.valueOf(waitForActiveShardsInt);  
-            }
-            ActiveShardCount activeShardCount = ActiveShardCount.parseString(waitForActiveShardsString);
-            setter.accept(activeShardCount);  
-            if (defaultActiveShardCount.equals(activeShardCount) == false) {
-                expectedParams.put("wait_for_active_shards", waitForActiveShardsString);
-            }  
-        }
-    }
-
-    private static void setRandomRefreshPolicy(Consumer<WriteRequest.RefreshPolicy> setter, Map<String, String> expectedParams) {
+        Supplier<IndicesOptions> getter,
+        indexRequest.id(id);  
         if (randomBoolean()) {
-            WriteRequest.RefreshPolicy refreshPolicy = randomFrom(WriteRequest.RefreshPolicy.values());  
-            setter.accept(refreshPolicy);
-            if (refreshPolicy != WriteRequest.RefreshPolicy.NONE) {
-                expectedParams.put("refresh", refreshPolicy.getValue());  
+        }  
+            Request request = RequestConverters.bulk(new BulkRequest().add(updateRequest));
+            defaultTimeout,
+        for (int i = 0; i < numberOfRequests; i++) {  
+        StringJoiner endpoint = new StringJoiner("/", "/", "");
+        }  
+        Request request = RequestConverters.getScript(getStoredScriptRequest);  
+        }  
+        StringBuilder excludesParam = new StringBuilder();
+                    assertToXContentEquivalent(updateRequest.doc().source(), parsedUpdateRequest.doc().source(), mediaType);  
             }
-        }
+                + "], "  
+            updateByQueryRequest.setPipeline("my_pipeline");  
     }  
-
-    private static void setRandomVersion(DocWriteRequest<?> request, Map<String, String> expectedParams) {
-        if (randomBoolean()) {  
-            long version = randomFrom(Versions.MATCH_ANY, Versions.MATCH_DELETED, Versions.NOT_FOUND, randomNonNegativeLong());
-            request.version(version);
-            if (version != Versions.MATCH_ANY) {  
+        );  
+import static org.opensearch.search.RandomSearchRequestGenerator.randomSearchRequest;  
+        }
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo+bar");
+            expectedParams.put("expand_wildcards", "closed");
+        Map<String, Object> scriptParams = new HashMap<>();
+            assertThat(request.getParameters(), hasEntry(param.getKey(), param.getValue()));  
+                    false,
+        Request request = RequestConverters.deletePit(deletePitRequest);  
+        } else {
+        assertEquals(5, request.getParameters().size());  
+import org.opensearch.index.rankeval.RestRankEvalAction;
+                }
+                boolean fetchSource = randomBoolean();
+        if (randomBoolean()) {
+            }
+        setRandomClusterManagerTimeout(getStoredScriptRequest, expectedParams);
+        }
+            builder.startObject("script").field("lang", "painless").field("source", "Math.log(_score * 2) + params.multiplier").endObject();
+        } else {  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("index", "type#2", "id");  
+            String timeout = randomTimeValue();
+    }
+        final int numSearchRequests = randomIntBetween(1, 10);
+        Map<String, String> expectedParams = new HashMap<>();  
                 expectedParams.put("version", Long.toString(version));
             }
+        }
+        if (randomBoolean()) {  
+        String[] fields = generateRandomStringArray(5, 10, false, false);  
+            UpdateRequest updateRequest = new UpdateRequest();
+        scriptParams.put("field", "name");
+                }
+        searchTemplateRequest.setProfile(randomBoolean());
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+    static void setRandomTimeoutTimeValue(Consumer<TimeValue> setter, TimeValue defaultTimeout, Map<String, String> expectedParams) {
+        {  
+            request.setIfSeqNo(seqNo);  
+            int waitForActiveShardsInt = randomIntBetween(-1, 5);
+        searchTemplateRequest.setScriptParams(scriptParams);  
+            reindexRequest.setDestOpType("create");
+                    msearchDefault.ignoreThrottled()  
+        if (randomBoolean()) {  
+     */
+        SearchSourceBuilder searchSourceBuilder = createTestSearchSourceBuilder();  
+            consumer,
+        assertToXContentBody(multiGetRequest, request.getEntity());
+        if (randomBoolean()) {
+            String routing = randomAlphaOfLengthBetween(3, 10);
+            setRandomVersionType(indexRequest::versionType, expectedParams);  
+            assertEquals("/" + index + "/_doc/" + id, request.getEndpoint());
+        String index = String.join(",", indices);
+        doTestSourceExists((index, id) -> new GetSourceRequest(index, id));
+            reindexRequest.setSlices(slices);  
+        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());
+                    );
+            } else if (opType == DocWriteRequest.OpType.CREATE) {
+            );
+ *
+            searchTemplateRequest.setScriptType(ScriptType.INLINE);
+import org.opensearch.client.RequestConverters.EndpointBuilder;
+            updateRequest.docAsUpsert(docAsUpsert);
+    }
+            updateRequest.upsert(new IndexRequest().source(source, xContentType));  
+        }
+    public void testCreateContentType() {
+        assertEquals(expectedParams, request.getParameters());
+    public void testGetScriptRequest() {
+        if (randomBoolean()) {  
+                    randomlyGenerated.expandWildcardsClosed(),
+                false,
+    }
+        assertThat(request.getEntity(), nullValue());  
+        expectThrows(NullPointerException.class, () -> new SearchRequest((String[]) null));
+        if (randomBoolean()) {
+        assertEquals("/index/type/id/_endpoint", RequestConverters.endpoint("index", "type", "id", "_endpoint"));
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+            IndicesOptions randomlyGenerated = searchRequest.indicesOptions();  
+        assertEquals(HttpPost.METHOD_NAME, multiRequest.getMethod());
+            MultiGetRequest.Item item = new MultiGetRequest.Item(randomAlphaOfLength(4), randomAlphaOfLength(4));
+        assertEquals(5, request.getParameters().size());
+            searchRequest.allowPartialSearchResults(randomBoolean());
+                }
+        expectedParams.put("batched_reduce_size", Integer.toString(searchRequest.getBatchedReduceSize()));
+    }
+import java.util.ArrayList;
+            }
+        // a hash set before being added to the request, and can appear in a
+        }  
+        assertEquals(expectedParams, request.getParameters());
+import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptRequest;
+        Map<String, String> expectedParams
+        byte[] content = new byte[(int) request.getEntity().getContentLength()];  
+            multiSearchRequest.maxConcurrentSearchRequests(randomIntBetween(1, 8));  
+        assertEquals("/_reindex", request.getEndpoint());
+    static void setRandomTimeout(Consumer<String> setter, TimeValue defaultTimeout, Map<String, String> expectedParams) {  
+            tvRequest.setRealtime(false);
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
+            String[] fields = generateRandomStringArray(10, 5, false, false);  
+    }
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
+    }  
+        assertEquals("/_mget", request.getEndpoint());
+        if (randomBoolean()) {
+            .fields(fields)  
+                }
+            BytesReference source = RandomObjects.randomSource(random(), xContentType);
+        String joinedIndices = String.join(",", indices);  
+        expectedParams.put("allow_no_indices", Boolean.toString(indicesOptions.allowNoIndices()));
+import static java.util.Collections.emptyMap;
+        String[] indices = randomIndicesNames(0, 5);
+                if (numExcludes > 0) {
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("中文");
+                "remote-host",
+import org.opensearch.script.mustache.SearchTemplateRequest;
+        }
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
+                            .field(randomAlphaOfLengthBetween(3, 10))  
+        assertEquals(0, request.getParameters().size());  
+            exception.getMessage()  
+    public void testGlobalPipelineOnBulkRequest() throws IOException {  
+        assertEquals("/index/type/id", RequestConverters.endpoint("index", "type", "id"));  
+        Map<String, String> expectedParams = new HashMap<>();
+        expectedParams.put("wait_for_completion", Boolean.TRUE.toString());  
+                FetchSourceContext fetchSourceContext = fetchSource  
+            expectedParams  
+                return searchSourceBuilder;  
+        assertEquals(expectedParams, request.getParameters());
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("-#index1,index#2", "type", "id");
+            int slices = randomIntBetween(0, 4);  
+            deleteByQueryRequest.setRouting("=cat");  
+        if (randomBoolean()) {
+            if (randomBoolean()) {
+            fields[i] = exclude;
+        Map<String, String> expectedParams = new HashMap<>();
+        String index = randomAlphaOfLengthBetween(3, 10);
+    }
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/part1").addPathPart("//part2").addPathPart("///part3");  
+        RankEvalRequest rankEvalRequest = new RankEvalRequest(spec, indices);
+            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
+            searchTemplateRequest.setScriptParams(scriptParams);  
+                BytesReference.bytes(matchAllQuery().toXContent(builder, ToXContent.EMPTY_PARAMS)),
+        doTestSourceExists((index, id) -> new GetSourceRequest(index, id).type(type));
+            expectedParams.put("max_concurrent_searches", Integer.toString(multiSearchRequest.maxConcurrentSearchRequests()));
+        assertToXContentBody(deleteByQueryRequest, request.getEntity());
+    }
+            expectedParams.put("routing", routing);
+    public void testCount() throws Exception {
+        }
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
+            int size = randomIntBetween(100, 1000);
+            expectedParams.put("routing", countRequest.routing());
+import org.opensearch.test.RandomObjects;
+        }
+        setRandomTimeout(updateByQueryRequest::setTimeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);
+        StringJoiner endpoint = new StringJoiner("/", "/", "");
+            s -> request.setClusterManagerTimeout(TimeValue.parseTimeValue(s, request.getClass().getName() + ".clusterManagerNodeTimeout")),
+    private static void assertIfSeqNoAndTerm(DocWriteRequest<?> request, DocWriteRequest<?> parsedRequest) {
+            assertEquals("/a/b/_endpoint", endpointBuilder.build());
+        bulkRequest.add(new IndexRequest("test").id("13").source(MediaTypeRegistry.JSON, "field", "bulk3"));
+        Request request = RequestConverters.updateByQuery(updateByQueryRequest);
+        assertEquals(expectedParams, request.getParameters());
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();  
+            );  
+            expectedParams.put("min_score", String.valueOf(countRequest.minScore()));
+        } else if (id != null) {
+        assertEquals(method, request.getMethod());
+                exception.getMessage()
+        for (int i = 0; i < numScrolls; i++) {
+        for (int i = 0; i < numberOfRequests; i++) {
+        {
+                )
+            String exclude = randomAlphaOfLengthBetween(3, 10);
+                expectedParams.put("stored_fields", storedFieldsParam);  
+import org.apache.hc.client5.http.classic.methods.HttpDelete;
+            }
+                String[] storedFields = new String[numStoredFields];  
+            if (randomBoolean()) {
+            }
+        }  
+            indices[i] = "index-" + randomAlphaOfLengthBetween(2, 5).toLowerCase(Locale.ROOT);  
+            int batchSize = randomInt(100);
+        assertTrue(entity instanceof ByteArrayEntity);
+            mtvRequest.add(tvRequest);
+            String context = randomAlphaOfLengthBetween(5, 10);
+        }
+    }
+        scriptParams.put("value", "soren");
+            EndpointBuilder endpointBuilder = new EndpointBuilder();  
+        String[] indices = new String[numIndices];
+            builder.startObject();
+        }
+                excludesParam.append(",");
+            false
+        }
+        }
+import org.opensearch.common.CheckedBiConsumer;
+                String preference = randomAlphaOfLengthBetween(3, 10);  
+        }
+            bulkRequest.add(new DeleteRequest("index", "2"));  
+        }  
+        DeleteRequest deleteRequest = new DeleteRequest(index, id);
+                        new TermsAggregationBuilder(randomAlphaOfLengthBetween(3, 10)).userValueTypeHint(ValueType.STRING)
+    public void testMultiSearch() throws IOException {
+            }  
+                expectedParams.put("slices", Integer.toString(slices));
+        assertNull(request.getEntity());
+            indexRequest.source(builder);
+        searchTemplateRequest.setSearchPipeline("pipeline");
+            expectedParams.put("if_primary_term", Long.toString(primaryTerm));
+    public void testRethrottle() {
+            bulkRequest.add(new IndexRequest("index").id("0").source(singletonMap("field", "value"), XContentType.SMILE));  
+            clearScrollRequest.addScrollId(randomAlphaOfLengthBetween(5, 10));  
+        } else if (indicesOptions.expandWildcardsOpen()) {
+            int size = randomIntBetween(100, 1000);  
+    }  
+        if (randomBoolean()) {  
+            boolean humanReadable = randomBoolean();
+import org.opensearch.client.indices.AnalyzeRequest;
+        if (randomBoolean()) {
+import java.util.Map;
+        }  
+    }  
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+    public void testPing() {
+            deleteByQueryRequest.setRequestsPerSecond(requestsPerSecond);  
+            BulkRequest bulkRequest = new BulkRequest();  
+        FieldCapabilitiesRequest fieldCapabilitiesRequest = new FieldCapabilitiesRequest().indices(indices).fields(fields);  
+        assertEquals(expectedParams, request.getParameters());
+        if (randomBoolean()) {  
+        Request request = RequestConverters.getSource(getRequest);  
+import org.opensearch.action.get.MultiGetRequest;
+        List<Tuple<String, Supplier<Request>>> variants = new ArrayList<>();  
+            expectedParams.put("pipeline", "my_pipeline");
+            expectedParams.put("scroll_size", Integer.toString(batchSize));  
+            countRequest.terminateAfter(randomIntBetween(0, Integer.MAX_VALUE));
+        }
+            } else {
+import org.opensearch.index.reindex.RemoteInfo;
+        setRandomIndicesOptions(searchRequest::indicesOptions, searchRequest::indicesOptions, expectedParams);
+        }  
+            countRequest.routing(randomAlphaOfLengthBetween(3, 10));  
+                assertEquals(updateRequest.retryOnConflict(), parsedUpdateRequest.retryOnConflict());  
+        if (randomBoolean()) {
+ * the Apache License, Version 2.0 (the "License"); you may
+            setter.accept(clusterManagerTimeout);
+        );  
+        if (randomBoolean()) {  
+                }
+import java.util.List;  
+        assertEquals("/" + index + "/_update/" + id, request.getEndpoint());
+            Map<String, Object> scriptParams = new HashMap<>();  
+            }  
+        String searchEndpoint = randomFrom("_" + randomAlphaOfLength(5));
+            endpoint.add(index);
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a").addPathPart("b").addPathPartAsIs("_endpoint");
+            String type = randomAlphaOfLengthBetween(3, 10);
+        return searchSourceBuilder;  
+            RequestConverters.update(updateRequest);
+        if (randomBoolean()) {  
+                item.versionType(randomFrom(VersionType.values()));  
+        if (randomBoolean()) {
+                            randomAlphaOfLengthBetween(3, 10),  
+import org.opensearch.action.bulk.BulkRequest;
+    public void testTermVectors() throws IOException {  
+        {
+        setRandomIndicesOptions(createPitRequest::indicesOptions, createPitRequest::indicesOptions, expectedParams);
+        }
+        assertToXContentBody(fieldCapabilitiesRequest, request.getEntity());
+                if (randomBoolean()) {  
+            String id = randomAlphaOfLength(5);
+        assertThat(request.getEndpoint(), equalTo("/_scripts/" + getStoredScriptRequest.id()));
+import static org.hamcrest.Matchers.nullValue;
+            Request request = RequestConverters.bulk(bulkRequest);
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("///foo");
+        {
+            putStoredScriptRequest.context(context);
+        {
+        assertEquals("/_mtermvectors", request.getEndpoint());
+import org.opensearch.common.xcontent.json.JsonXContent;  
+ * license agreements. See the NOTICE file distributed with
+            expectedParams.put("pre_filter_shard_size", Integer.toString(searchRequest.getPreFilterShardSize()));
+            if (refreshPolicy != WriteRequest.RefreshPolicy.NONE) {
+        assertThat(request.getEndpoint(), equalTo("/test_index/_analyze"));  
+            if (randomBoolean()) {
+                        )
+        if (randomBoolean()) {
+        endpoint.add(RestRankEvalAction.ENDPOINT);
+    public void testSearchTemplate() throws Exception {  
+            randomizeFetchSourceContextParams(updateRequest::fetchSource, expectedParams);
+        }  
+            assertEquals(originalRequest.versionType(), parsedRequest.versionType());  
+        String index = randomAlphaOfLengthBetween(3, 10);
+        assertThat(request.getParameters(), hasKey("fields"));
+/*  
+    public void testMultiGet() throws IOException {
+            searchRequest.routing(randomAlphaOfLengthBetween(3, 10));
+import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;  
+ * GitHub history for details.
+            assertEquals("/a/_endpoint", endpointBuilder.build());
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("/foo@bar");
+    }  
+        multiGetRequest.add(item);  
+        }  
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RequestConvertersTests.class);  
+        }
+            setter.accept(includeDefaults);
+    public void testMultiTermVectors() throws IOException {
+        }  
+            assertNull(parsedUpdateRequest.doc());
+import org.opensearch.action.delete.DeleteRequest;  
+            updateByQueryRequest.setAbortOnVersionConflict(false);  
+        assertEquals(MediaTypeRegistry.JSON.mediaTypeWithoutParameters(), actualEntity.getContentType());
+        ReindexRequest reindexRequest = new ReindexRequest();
+                int numExcludes = randomIntBetween(0, 5);
+                expectedParams.put("preference", preference);
+            countRequest.preference(randomAlphaOfLengthBetween(3, 10));
+        StringJoiner joiner = new StringJoiner("/", "/", "");
+            assertThat(request.getParameters(), hasEntry(param.getKey(), param.getValue()));  
+        AnalyzeRequest indexAnalyzeRequest = AnalyzeRequest.withIndexAnalyzer("test_index", "test_analyzer", "Here is some text");  
+                getRequest.routing(routing);  
+            if (randomBoolean()) {
+    public static void setRandomIndicesOptions(
+        Request request = RequestConverters.deleteByQuery(deleteByQueryRequest);  
+        expectThrows(NullPointerException.class, () -> new SearchRequest().indices((String[]) null));
+    public void testSearchScroll() throws IOException {  
+        if (randomBoolean()) {
+            SearchRequest searchRequest = new SearchRequest(indices);
+                    randomBoolean(),
+import static org.opensearch.client.RequestConverters.enforceSameContentType;
+        );
+            assertEquals("/index1,index2/cache/clear", endpointBuilder.build());
+            if (randomBoolean()) {
+        if (randomBoolean()) {  
+                String routing = randomAlphaOfLengthBetween(3, 10);  
+        }
+        {
+        Request request = requestConverter.apply(getRequest);  
+import org.opensearch.action.search.ClearScrollRequest;  
+        }
+        assertEquals(joiner.toString(), request.getEndpoint());
+    public void testExists() {  
+                boolean realtime = randomBoolean();
+    public void testEnforceSameContentType() {
+        if (randomBoolean()) {
+        if (randomBoolean()) {
+        String joinedIndices = String.join(",", indices);
+            expectedParams.put("routing", searchRequest.routing());
+        Request request = RequestConverters.index(indexRequest);
+    public void testDeleteByQuery() throws IOException {
+            } else {
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+        assertToXContentBody(updateByQueryRequest, request.getEntity());
+        DeleteStoredScriptRequest deleteStoredScriptRequest = new DeleteStoredScriptRequest("x-script");
+            float requestsPerSecond = (float) randomDoubleBetween(0.0, 10.0, false);
+        Request request = RequestConverters.analyze(indexAnalyzeRequest);
+import org.opensearch.common.io.Streams;
+        }  
+        {
+        setRandomIndicesOptions(fieldCapabilitiesRequest::indicesOptions, fieldCapabilitiesRequest::indicesOptions, indicesOptionsParams);
+        }  
+        assertEquals(new BytesArray(expectedBytes), new BytesArray(EntityUtils.toByteArray(actualEntity)));
+        PutStoredScriptRequest putStoredScriptRequest = new PutStoredScriptRequest();  
+    }
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
+ * not use this file except in compliance with the License.
+        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());  
+    }  
+        updateRequest.detectNoop(randomBoolean());
+            int slices = randomIntBetween(0, 4);
+        assertToXContentBody(searchTemplateRequest, request.getEntity());
+        }
+            new PrecisionAtK()
+            if (opType == DocWriteRequest.OpType.INDEX) {
+        assertEquals("/_msearch/template", multiRequest.getEndpoint());  
+        }
+        expectedParams.put("search_type", searchRequest.searchType().name().toLowerCase(Locale.ROOT));
+        }
+            String ts = randomTimeValue();
+        expectedParams.put("search_type", rankEvalRequest.searchType().name().toLowerCase(Locale.ROOT));
+        assertEquals(request.ifPrimaryTerm(), parsedRequest.ifPrimaryTerm());  
+            if (i < fields.length - 1) {
+        assertEquals(new HashSet<>(Arrays.asList(fields)), new HashSet<>(Arrays.asList(requestFields)));
+        assertToXContentBody(putStoredScriptRequest, request.getEntity());
+                + requestContentType
+        };
+/*  
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());  
+            XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
+        List<SearchTemplateRequest> searchRequests = multiSearchTemplateRequest.requests();
+import org.opensearch.action.admin.cluster.storedscripts.DeleteStoredScriptRequest;
+        if (randomBoolean()) {  
+            multiSearchTemplateRequest.add(searchTemplateRequest);
+        if (randomBoolean()) {
+            IllegalArgumentException.class,
+        setRandomSearchParams(searchRequest, expectedParams);  
+        Request request = RequestConverters.searchTemplate(searchTemplateRequest);
+            }
+        // Create a random request.
+        }  
+                getRequest.realtime(realtime);
+        Consumer<IndicesOptions> setter,  
+        Request request = RequestConverters.deleteAllPits();  
+            DocWriteRequest<?> originalRequest = bulkRequest.requests().get(i);
+                        new SuggestBuilder().addSuggestion(
+    static void setRandomLocal(Consumer<Boolean> setter, Map<String, String> expectedParams) {  
+    }
+        endpoint.add("_search/point_in_time");
+        if (reindexRequest.getRemoteInfo() == null && randomBoolean()) {
+            if (randomBoolean()) {
+        Request request = RequestConverters.searchTemplate(searchTemplateRequest);
+        String id = randomAlphaOfLengthBetween(3, 10);
+import org.opensearch.action.support.replication.ReplicationRequest;  
+        setRandomRefreshPolicy(indexRequest::setRefreshPolicy, expectedParams);
+        XContentType xContentType = randomFrom(XContentType.values());
+            expectedParams.put("realtime", "false");
+        );
+        HttpEntity entity = request.getEntity();  
+        Request request = RequestConverters.sourceExists(getRequest);
+    }
+                    searchSourceBuilder.profile(randomBoolean());
+            multiSearchTemplateRequest.maxConcurrentSearchRequests(randomIntBetween(1, 10));
+            endpoint.add(joinedIndices);
+    }
+        assertEquals("/" + index + "/_source/" + id, request.getEndpoint());
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
+        if (randomBoolean()) {
+        int numberOfSearchRequests = randomIntBetween(0, 32);  
+import org.opensearch.core.xcontent.XContentBuilder;
+        MultiSearchTemplateRequest multiSearchTemplateRequest = new MultiSearchTemplateRequest();  
+        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {
+        Request request = RequestConverters.fieldCaps(fieldCapabilitiesRequest);  
+        }  
+    public void testSourceExistsWithType() throws IOException {
+        assertToXContentBody(clearScrollRequest, request.getEntity());  
+        }
+            exception.getMessage()  
+            expectedParams.put("routing", routing);
+        List<String> pitIdsList = new ArrayList<>();
+    public void testInfo() {
+            if (opType != DocWriteRequest.OpType.UPDATE && randomBoolean()) {
+ */  
+            null,
+        if (randomBoolean()) {  
+        assertToXContentBody(mtvRequest, request.getEntity());
+        if (randomBoolean()) {  
+        if (indexRequest.opType() == DocWriteRequest.OpType.CREATE) {
+            }  
+        CountRequest countRequest = new CountRequest(indices);
+        String id = randomAlphaOfLengthBetween(3, 10);
+        if (randomBoolean()) {
+        if (randomBoolean()) {  
+            assertEquals(originalRequest.index(), parsedRequest.index());
+        if (randomBoolean()) {  
+            // empty but still set it
+                deleteRequest.routing(routing);  
+        }
+        assertEquals("/_mtermvectors", request.getEndpoint());  
+        }  
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+            searchRequest.requestCache(randomBoolean());
+        }  
+        }  
+            expectedParams.put("timeout", timeout);
+            expectedParams.put("expand_wildcards", "open,closed");
+                expectedParams.put("refresh", refreshPolicy.getValue());  
+        AnalyzeRequest analyzeRequest = AnalyzeRequest.withGlobalAnalyzer("test_analyzer", "more text");  
+                expectedParams.put("doc_as_upsert", "true");
+            String id = randomAlphaOfLengthBetween(3, 10);  
+import org.opensearch.action.explain.ExplainRequest;
+                expectedParams.put("pipeline", pipeline);
+        }
+                if (randomBoolean()) {
+                "pass",  
+            }  
+        for (int i = 0; i < numSearchRequests; i++) {
+            setter.accept(clusterManagerTimeout);
+            .indexFilter(QueryBuilders.matchAllQuery());
+            );
+            bulkRequest.add(new IndexRequest("index").id("0").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
+        MultiTermVectorsRequest mtvRequest = new MultiTermVectorsRequest();
+        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {  
+    }
+                    expectedParams.put("realtime", "false");
+        UpdateRequest parsedUpdateRequest = new UpdateRequest();  
+        if (indexRequest.opType() == DocWriteRequest.OpType.CREATE) {
+            }  
+    ) {  
+            parsedUpdateRequest.fromXContent(parser);
+            expectedParams.put("max_docs", Integer.toString(size));  
+            expectedParams.put("if_seq_no", Long.toString(seqNo));
+        RankEvalSpec spec = new RankEvalSpec(  
+                if (randomBoolean()) {  
+            boolean realtime = randomBoolean();
+            }
+                    msearchDefault.allowAliasesToMultipleIndices(),  
+        if (randomBoolean()) {
+                }
+        assertEquals("/" + index + "/_source/" + id, request.getEndpoint());
         }  
     }
-
-    private static void setRandomVersionType(Consumer<VersionType> setter, Map<String, String> expectedParams) {  
+        Request request = RequestConverters.bulk(bulkRequest);
+            multiGetRequest.add(item);
+            assertEquals("/%2Ffoo", endpointBuilder.build());  
+            }
+            MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
+        }
+        assertEquals(endpoint.toString(), request.getEndpoint());
+                expectedParams.put("refresh", "true");  
+            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, "-1");  
+            // scroll is not supported in the current msearch api, so unset it:
+                randomizeFetchSourceContextParams(getRequest::fetchSourceContext, expectedParams);  
+                exception.getMessage()
+                docWriteRequest.setIfSeqNo(randomNonNegativeLong());  
         if (randomBoolean()) {
-            VersionType versionType = randomFrom(VersionType.values());
-            setter.accept(versionType);  
-            if (versionType != VersionType.INTERNAL) {
-                expectedParams.put("version_type", versionType.name().toLowerCase(Locale.ROOT));
+    public void testEndpointBuilderEncodeParts() {  
+                String[] includes = new String[numIncludes];  
+        StringJoiner endpoint = new StringJoiner("/", "/", "");  
+        MultiSearchRequest.readMultiLineFormat(
+        setRandomWaitForActiveShards(setter, ActiveShardCount.DEFAULT, expectedParams);
+        assertEquals(expectedParams, request.getParameters());  
+            expectedParams.put("stored_fields", storedFieldsParams);
+            rethrottleRequest = new RethrottleRequest(taskId);
+        assertToXContentBody(deletePitRequest, request.getEntity());
+            assertEquals(originalRequest.routing(), parsedRequest.routing());
+        String index = randomAlphaOfLengthBetween(3, 10);  
+            expectedParams.put("cluster_manager_timeout", clusterManagerTimeout.getStringRep());  
+                } else {
+        );  
+        setRandomTimeout(deleteStoredScriptRequest::timeout, AcknowledgedRequest.DEFAULT_ACK_TIMEOUT, expectedParams);
+        for (int i = 0; i < bulkRequest.numberOfActions(); i++) {  
+        Request request = RequestConverters.info();
+            if (defaultActiveShardCount.equals(activeShardCount) == false) {
+            () -> enforceSameContentType(new IndexRequest().source(singletonMap("field", "value"), XContentType.CBOR), bulkContentType)
+        } else {
+            expectedParams.put("expand_wildcards", "open");  
+ *  
+        if (randomBoolean()) {
+        if (updateRequest.doc() != null) {
+        if (randomBoolean()) {
+        }
+            assertEquals("/", endpointBuilder.build());
+        searchTemplateRequest.setSearchPipeline("pipeline");
+        assertEquals(endpoint.toString(), request.getEndpoint());
+        assertEquals(endpoint.toString(), request.getEndpoint());  
+                }
+        }
+        } else {  
+            reindexRequest.setDestPipeline("my_pipeline");
+        Map<String, String> expectedParams = new HashMap<>();
+        {
+        Request multiRequest = RequestConverters.multiSearchTemplate(multiSearchTemplateRequest);  
+                if (numIncludes > 0) {
+            searchRequest.indicesOptions(
+        if (randomBoolean()) {  
+                final UpdateRequest updateRequest = new UpdateRequest(index, id).doc(new IndexRequest().source(source, mediaType));  
+        if (randomBoolean()) {  
+        Map<String, String> expectedParams = new HashMap<>();  
+        setRandomIndicesOptions(fieldCapabilitiesRequest::indicesOptions, fieldCapabilitiesRequest::indicesOptions, indicesOptionsParams);  
+        Request request = RequestConverters.termVectors(tvRequest);
+            }
+        {  
+            assertEquals("/foo%5Ebar", endpointBuilder.build());
+            );
+    }  
+                builder.field("field_" + i, i);
+                    expectedParams.put("_source_excludes", excludesParam);  
+                    updateRequest.retryOnConflict(randomIntBetween(1, 5));  
+            setRandomVersion(indexRequest, expectedParams);
+        assertEquals(updateRequest.fetchSource(), parsedUpdateRequest.fetchSource());
+            int batchSize = randomInt(100);
+            );
+        for (int i = 0; i < numIndices; i++) {
+        }
+        } else {  
+                int numStoredFields = randomIntBetween(1, 10);
+            expectedParams.put("preference", countRequest.preference());
+            expectedParams.put("preference", preference);
+            if (slices == 0) {
+        exception = expectThrows(
+        String index = randomAlphaOfLengthBetween(3, 10);  
+                if (version != Versions.MATCH_ANY) {
+        boolean hasFields = randomBoolean();
+                }
+            }
+        if (randomBoolean()) {
+            expectedParams.put("timeout", timeout);
+        }
+            assertEquals("/cluster1:index1,index2/_search", endpointBuilder.build());  
+        } else {  
+            }
+            }
+            if (version != Versions.MATCH_ANY) {  
+        if (frequently()) {
+        String[] requestFields = Strings.splitStringByCommaToArray(request.getParameters().get("fields"));
+        }
+            boolean includeDefaults = randomBoolean();  
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+import java.util.Arrays;
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
+            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, Float.toString(requestsPerSecond));  
+        // as we create SearchSourceBuilder in CountRequest constructor  
+    }
+        if (randomBoolean()) {  
+        int nbFields = randomIntBetween(0, 10);  
+        String id = randomAlphaOfLengthBetween(5, 10);
+                docWriteRequest = updateRequest;
+        MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
+    }
+        if (getter.get().expandWildcardsOpen() && getter.get().expandWildcardsClosed()) {  
+        assertEquals(expectedParams, request.getParameters());  
+                    assertNull(parsedUpdateRequest.doc());
+        scriptParams.put("value", "soren");  
+        } else if (getter.get().expandWildcardsOpen()) {
+        );  
+    private static void setRandomRefreshPolicy(Consumer<WriteRequest.RefreshPolicy> setter, Map<String, String> expectedParams) {
+        {
+        if (frequently()) {  
+            }
+            new Tuple<String, Supplier<Request>>("_update_by_query", () -> RequestConverters.rethrottleUpdateByQuery(rethrottleRequest))  
+                IndexRequest createRequest = new IndexRequest(index).id(id).source(source, mediaType).create(true);  
+        Map<String, String> expectedParams = new HashMap<>();
+        // Note that we don't check the field param value explicitly, as field names are
+        ClearScrollRequest clearScrollRequest = new ClearScrollRequest();  
+        }
+        // non-deterministic order.  
+        if (randomBoolean()) {  
+import org.opensearch.core.xcontent.XContentParser;  
+                if (fetchSource == false) {
+    }  
+        for (int i = 0; i < nbItems; i++) {  
+        assertThat(request.getParameters(), equalTo(expectedParams));  
+        if (randomBoolean()) {
+        assertTrue(entity instanceof ByteArrayEntity);
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo+bar");
+        bulkRequest.add(new IndexRequest("test").id("11").source(MediaTypeRegistry.JSON, "field", "bulk1"));  
+                }  
+ * this file be licensed under the Apache-2.0 license or a
+                RemoteInfo.DEFAULT_SOCKET_TIMEOUT,
+            assertEquals("/%2Ffoo%2Fbar", endpointBuilder.build());  
+            searchRequest.setMaxConcurrentShardRequests(randomIntBetween(1, Integer.MAX_VALUE));  
+                    expectedParams.put("_source_includes", includesParam);  
+            String routing = randomAlphaOfLengthBetween(3, 10);  
+            int slices = randomIntBetween(0, 4);
+        if (randomBoolean()) {
+            bulkRequest.add(new IndexRequest("index").id("4").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
+        assertNull(request.getEntity());  
+            String ts = randomTimeValue();
+            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
+}
+        } else {  
+    public void testCountNotNullSource() throws IOException {
+        }  
+            assertEquals(mediaType.mediaTypeWithoutParameters(), request.getEntity().getContentType());
+        endpoint.add(index).add(type).add(id).add("_termvectors");
+            long version = randomFrom(Versions.MATCH_ANY, Versions.MATCH_DELETED, Versions.NOT_FOUND, randomNonNegativeLong());
+        // a hash set before being added to the request, and can appear in a  
+        reindexRequest.setSourceIndices("source_idx");  
+        }  
+                getRequest.version(version);
+        return indices;
+/*
+import org.opensearch.client.core.TermVectorsRequest;  
+                    );  
+        Map<String, String> expectedParams = new HashMap<>();
+                "Mismatching content-type found for request with content-type [JSON], " + "previous requests have content-type [SMILE]",
+            updateByQueryRequest.setRequestsPerSecond(requestsPerSecond);  
+                }  
+            WriteRequest.RefreshPolicy refreshPolicy = randomFrom(WriteRequest.RefreshPolicy.values());  
+        // Note that we don't check the field param value explicitly, as field names are  
+        String index = String.join(",", indices);  
+            updateRequest.doc(new IndexRequest().source(source, xContentType));
+        assertEquals("/" + index + "/_doc/" + id, request.getEndpoint());
+        assertThat(request.getMethod(), equalTo(HttpDelete.METHOD_NAME));
+        int numIndices = randomIntBetween(minIndicesNum, maxIndicesNum);  
+                if (refresh) {
+            assertEquals(originalRequest.id(), parsedRequest.id());  
+    }
+            bulkRequest.add(new IndexRequest("index").id("1").source(singletonMap("field", "value"), MediaTypeRegistry.JSON));
+        }
+            SearchRequest searchRequest = randomSearchRequest(() -> {  
+        assertEquals(0, request.getParameters().size());
+        assertEquals(endpoint, request.getEndpoint());  
+        }
+        assertThat(request.getEndpoint(), equalTo("/_scripts/" + id));
+    }
+        }
+        Request request = RequestConverters.delete(deleteRequest);
+            setter.accept(timeout);  
+            expectedParams.put("scroll", ts);  
+        {
+        assertNull(request.getEntity());  
+            expectedParams.put("request_cache", Boolean.toString(searchRequest.requestCache()));
+        assertEquals("/index1,index2/_endpoint", RequestConverters.endpoint(new String[] { "index1", "index2" }, "_endpoint"));  
+        return searchRequest;
+    ) {
+        );
+        String id = randomAlphaOfLengthBetween(3, 10);
+            TimeValue timeout = TimeValue.parseTimeValue(randomTimeValue(), "random_timeout");  
+        setRandomClusterManagerTimeout(deleteStoredScriptRequest, expectedParams);  
+        MultiGetRequest multiGetRequest = new MultiGetRequest();
+                String pipeline = randomAlphaOfLengthBetween(3, 10);
+                new UpdateRequest("index", "2").doc(new IndexRequest().source(singletonMap("field", "value"), MediaTypeRegistry.JSON))
+        if (randomBoolean()) {
+                    expectedParams.put("_source", "false");
+        String index = String.join(",", indices);
+    }
+                    randomlyGenerated.ignoreUnavailable(),
+        }  
+            );
+            assertThat(request.getParameters(), hasEntry(param.getKey(), param.getValue()));
+                if (randomBoolean()) {  
+            REQUEST_BODY_CONTENT_TYPE,  
+        }
+        Map<String, String> expectedParams = new HashMap<>();
+        try (InputStream inputStream = request.getEntity().getContent()) {
+                "Unsupported content-type found for request with content-type [" + xContentType + "], only JSON and SMILE are supported",  
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+    public void testFieldCapsWithIndexFilter() throws IOException {  
+            explainRequest.preference(preference);  
+            setter.accept(activeShardCount);  
+    }
+        }
+                expectedParams.put("retry_on_conflict", String.valueOf(retryOnConflict));  
+    }
+            IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RequestConverters.bulk(bulkRequest));
+import org.opensearch.index.rankeval.RankEvalRequest;
+        {
+                false,  
+            method = HttpPut.METHOD_NAME;  
+            boolean refresh = randomBoolean();  
+import org.opensearch.search.aggregations.support.ValueType;
+        reindexRequest.setDestIndex("dest_idx");
+            String ts = randomTimeValue();
+                expectedParams.put("realtime", "false");
+        scriptParams.put("field", "name");
+        assertEquals("/_search/scroll", request.getEndpoint());
+            }
+            } else {  
+        String[] indices = randomIndicesNames(0, 5);
+import org.opensearch.rest.action.search.RestSearchAction;
+        assertEquals(endpoint.toString(), request.getEndpoint());
+            if (includeDefaults) {
+        assertEquals(joiner.toString(), request.getEndpoint());
+    }  
+        assertEquals(expectedParams, request.getParameters());
+        {  
+        explainRequest.query(QueryBuilders.termQuery(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10)));
+            updateByQueryRequest.setRouting("=cat");
+        List<SearchRequest> requests = new ArrayList<>();  
+        }  
+                docWriteRequest = indexRequest;
+                    searchSourceBuilder.minScore(randomFloat());
+import org.opensearch.common.logging.DeprecationLogger;
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("foo bar");  
+        Map<String, String> expectedParams = new HashMap<>();  
+        if (randomBoolean()) {
+        SearchRequest searchRequest = new SearchRequest(indices);  
+        if (!joinedIndices.isEmpty()) {
+        assertEquals(mediaType, enforceSameContentType(indexRequest, null));
+        int numberOfRequests = randomIntBetween(0, 5);
+            expectedParams.put("preference", preference);
+            expectedParams.put("expand_wildcards", "open,closed");
+                }
+    static void setRandomClusterManagerTimeout(ClusterManagerNodeRequest<?> request, Map<String, String> expectedParams) {
+            if (realtime == false) {  
+        assertEquals(expectedParams, request.getParameters());
+            assertEquals(  
+        String index = randomAlphaOfLengthBetween(3, 10);
+            setter.accept(  
+        if (frequently()) {
+            "/index1,index2/_endpoint/suffix1,suffix2",  
+            expectedParams.put("routing", routing);
+                waitForActiveShardsString = String.valueOf(waitForActiveShardsInt);  
+            SearchTemplateRequest searchTemplateRequest = new SearchTemplateRequest(searchRequest);
+            BulkRequest bulkRequest = new BulkRequest();
+        }
+        expectedParams.put("wait_for_completion", Boolean.TRUE.toString());
+        setRandomIndicesOptions(rankEvalRequest::indicesOptions, rankEvalRequest::indicesOptions, expectedParams);
+        if (randomBoolean()) {  
+            assertEquals(nbFields, parser.map().size());
+import org.opensearch.action.fieldcaps.FieldCapabilitiesRequest;
+            bulkRequest.add(new UpdateRequest("index", "1").script(mockScript("test")));  
+        assertEquals(HttpDelete.METHOD_NAME, request.getMethod());  
+    private static String randomFields(String[] fields) {
+        // There is some logic around _create endpoint and version/version type  
+        assertEquals(new HashSet<>(Arrays.asList(fields)), new HashSet<>(Arrays.asList(requestFields)));  
+        {  
+        return indicesOptions;
+import org.apache.hc.client5.http.classic.methods.HttpPut;
+            }
+            expectedParams.put("timeout", defaultTimeout.getStringRep());  
+import org.opensearch.search.Scroll;  
+        setRandomIndicesOptions(updateByQueryRequest::setIndicesOptions, updateByQueryRequest::indicesOptions, expectedParams);
+        assertThat(request.getEntity(), nullValue());
+    }
+ * Unless required by applicable law or agreed to in writing,
+        if (randomBoolean()) {
+                    msearchDefault.forbidClosedIndices(),
+            }
+            MediaTypeRegistry.JSON.xContent()
+            "/index1,index2/type1,type2/_endpoint",
+        }
             }  
+        expectedParams.put("ignore_unavailable", Boolean.toString(indicesOptions.ignoreUnavailable()));
+        MediaType mediaType = randomFrom(MediaTypeRegistry.JSON, XContentType.SMILE);
+        if (randomBoolean()) {
+        assertEquals(HttpPost.METHOD_NAME, request.getMethod());
+                    randomlyGenerated.expandWildcardsOpen(),  
+                waitForActiveShardsString = "all";
+        deleteByQueryRequest.indices(randomIndicesNames(1, 5));
+        }  
+        {
+                    randomBoolean(),  
+ * under the License.  
+        {
+        Request request = RequestConverters.reindex(reindexRequest);
+        assertNull(request.getEntity());  
+import org.opensearch.script.ScriptType;  
+            setRandomIndicesOptions(searchRequest::indicesOptions, searchRequest::indicesOptions, expectedParams);  
+                deleteByQueryRequest.setMaxDocs(size);  
+        );
+                reindexRequest.setMaxDocs(randomIntBetween(100, 1000));
+        final XContentType xContentType = randomFrom(XContentType.values());  
+            }
+        assertEquals(
+        searchTemplateRequest.setScript("{\"query\": { \"match\" : { \"{{field}}\" : \"{{value}}\" }}}");
+        } else {
+    public void testSearchNullSource() throws IOException {  
+        if (randomBoolean()) {
+            }  
+            if (searchSourceBuilder.equals(new SearchSourceBuilder()) == false) {  
+    private static void setRandomIfSeqNoAndTerm(DocWriteRequest<?> request, Map<String, String> expectedParams) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        if (indicesOptions.expandWildcardsOpen() && indicesOptions.expandWildcardsClosed()) {  
+    }
+        String id = randomAlphaOfLengthBetween(3, 10);
+            RemoteInfo remoteInfo = new RemoteInfo(
+            assertEquals("/%3Clogstash-%7Bnow%2FM%7D%3E/_search", endpointBuilder.build());
+            if (randomBoolean()) {
+        Map<String, String> expectedParams = new HashMap<>();
+        pitIdsList.add("pitId1");  
+    static void setRandomWaitForActiveShards(
+    public void testUpdateWithDifferentContentTypes() {
+        }
+            searchRequest.setCcsMinimizeRoundtrips(randomBoolean());
+        SearchTemplateRequest searchTemplateRequest = new SearchTemplateRequest();
+        {  
+            IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RequestConverters.bulk(bulkRequest));
+            deprecationLogger
+        GetStoredScriptRequest getStoredScriptRequest = new GetStoredScriptRequest("x-script");
+            boolean local = randomBoolean();
+                if (randomBoolean()) {
+                String includesParam = randomFields(includes);
+        String index = randomAlphaOfLengthBetween(3, 10);  
+        HttpEntity actualEntity = multiRequest.getEntity();
+                    randomBoolean(),
+        if (randomBoolean()) {  
+    static void assertToXContentBody(ToXContent expectedBody, HttpEntity actualEntity) throws IOException {  
+     * Randomize the {@link FetchSourceContext} request parameters.  
+        Map<String, String> expectedParams = new HashMap<>();  
+                expectedParams.put("routing", routing);
+        );
+            updateRequest.retryOnConflict(retryOnConflict);
+        {  
+    private static void getAndExistsTest(Function<GetRequest, Request> requestConverter, String method) {
+    }  
+            indicesOptions = IndicesOptions.fromOptions(
+        joiner.add("_delete_by_query");  
+        Request request = RequestConverters.termVectors(tvRequest);
+        if (randomBoolean()) {
+import org.opensearch.index.reindex.DeleteByQueryRequest;  
+                }  
+        int nbItems = randomIntBetween(10, 100);
+                docWriteRequest.setIfPrimaryTerm(randomLongBetween(1, 200));
+            bulkRequest.add(new IndexRequest("index").id("0").source(singletonMap("field", "value"), mediaType));
+            String timeout = randomTimeValue();
+        {  
+            expectedParams.put("context", context);  
+        setRandomTimeout(deleteByQueryRequest::setTimeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);
+        assertEquals(0, request.getParameters().size());
+        XContentType xContentType = randomFrom(XContentType.values());
+ * You may obtain a copy of the License at  
+        );
+                expectedParams.put("slices", Integer.toString(slices));
+    }  
+import org.opensearch.core.common.bytes.BytesReference;  
+        if (randomBoolean()) {
         }
     }
-
-    private static String randomFields(String[] fields) {
-        StringBuilder excludesParam = new StringBuilder();
-        for (int i = 0; i < fields.length; i++) {  
-            String exclude = randomAlphaOfLengthBetween(3, 10);
-            fields[i] = exclude;
-            excludesParam.append(exclude);  
-            if (i < fields.length - 1) {
-                excludesParam.append(",");
-            }  
+            null,  
+        assertEquals("/_mget", request.getEndpoint());
+        bulkRequest.add(requests);
+            bulkRequest.add(new DeleteRequest("index", "2"));
+        // passed through
+            if (waitForActiveShardsInt == -1) {  
+import org.opensearch.common.xcontent.XContentType;
+    public void testEndpointBuilder() {
+        }  
+            xContentRegistry(),
         }
-        return excludesParam.toString();
-    }  
-
-    static String[] randomIndicesNames(int minIndicesNum, int maxIndicesNum) {
-        int numIndices = randomIntBetween(minIndicesNum, maxIndicesNum);  
-        String[] indices = new String[numIndices];
-        for (int i = 0; i < numIndices; i++) {
-            indices[i] = "index-" + randomAlphaOfLengthBetween(2, 5).toLowerCase(Locale.ROOT);  
+        }  
+            if (randomBoolean()) {
         }
-        return indices;
+    public void testRankEval() throws Exception {
+        if (randomBoolean()) {  
+        {
+        }
+                getRequest.storedFields(storedFields);
+        for (Tuple<String, Supplier<Request>> variant : variants) {  
+ * KIND, either express or implied.  See the License for the
+        assertThat(request.getMethod(), equalTo(HttpGet.METHOD_NAME));
+        } else {
+                        new QueryRescorerBuilder(new TermQueryBuilder(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10)))
+            assertEquals("/%2F%2Ffoo%2Fbar", endpointBuilder.build());
+        assertEquals(MediaTypeRegistry.JSON.mediaTypeWithoutParameters(), actualEntity.getContentType());  
+        }
+    public void testDeleteScriptRequest() {
+        {
+        }
+        e = expectThrows(IllegalArgumentException.class, () -> new RethrottleRequest(new TaskId("taskId", 1), -5.0f));  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("<logstash-{now/M}>", "_search");
+            BulkRequest bulkRequest = new BulkRequest();
+            expectedParams.put("cluster_manager_timeout", clusterManagerTimeout);
+                item.storedFields(generateRandomStringArray(16, 8, false));  
+        if (randomBoolean()) {
+        searchTemplateRequest.setProfile(randomBoolean());
+            String preference = randomAlphaOfLengthBetween(3, 10);  
+            assertEquals("/", endpointBuilder.build());
+    }
+        }  
+        }
+            if (opType == DocWriteRequest.OpType.INDEX) {
+            } else if (opType == DocWriteRequest.OpType.DELETE) {
+        pitIdsList.add("pitId2");
+            expectedParams.put(RethrottleRequest.REQUEST_PER_SECOND_PARAMETER, "-1");  
+            multiSearchRequest.add(searchRequest);  
+import org.opensearch.action.index.IndexRequest;
+            if (randomBoolean()) {
+        // Create a random request.
+            "Mismatching content-type found for request with content-type ["
+        assertEquals(HttpGet.METHOD_NAME, request.getMethod());
+        searchTemplateRequest.setScript("template1");
+        joiner.add("_update_by_query");
+            }
+        } else if (indicesOptions.expandWildcardsClosed()) {
+        assertEquals(expectedParams, request.getParameters());
+        String id = randomAlphaOfLengthBetween(3, 10);  
+        }
+        String[] fields = generateRandomStringArray(5, 10, false, false);
+            deleteByQueryRequest.setBatchSize(batchSize);
+                indexRequest.routing(routing);
+            if (randomBoolean()) {
+        if (Strings.hasLength(index)) {
+                }
+            IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RequestConverters.bulk(bulkRequest));
+            } else {  
+                expectedParams.put("routing", routing);
+            WriteRequest.RefreshPolicy refreshPolicy = randomFrom(WriteRequest.RefreshPolicy.values());  
+        if (randomBoolean()) {
+        assertEquals(requests, multiSearchRequest.requests());  
+        } else {
+            getRequest.refresh(refresh);
+            expectedParams.put("routing", "=cat");
+        setRandomWaitForActiveShards(updateRequest::waitForActiveShards, expectedParams);  
+                randomBoolean(),
+        if (randomBoolean()) {
+        } else {  
+    }
+            }
+    public void testFieldCaps() throws IOException {
+        }
+    public void testBulkWithDifferentContentTypes() throws IOException {
+            assertEquals(
+            assertEquals(HttpPost.METHOD_NAME, request.getMethod());  
+        assertNotNull(request.getEntity());
+            requestsPerSecond = (float) randomDoubleBetween(0.0, 100.0, true);
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("//foo@bar");
+    public void testIndex() throws IOException {
+        setRandomTimeout(deleteRequest::timeout, ReplicationRequest.DEFAULT_TIMEOUT, expectedParams);  
+            expectedParams.put("expand_wildcards", "none");
+        setRandomIndicesOptions(countRequest::indicesOptions, countRequest::indicesOptions, expectedParams);
+            expectedParams.put("expand_wildcards", "closed");
+import org.opensearch.action.search.SearchScrollRequest;
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+        assertNotNull(request.getEntity());
+        expectedParams.put("allow_no_indices", Boolean.toString(getter.get().allowNoIndices()));
+        endpoint.add(index).add("_termvectors").add(id);
+        Request request = RequestConverters.multiSearch(multiSearchRequest);
+        }
+import static java.util.Collections.singletonMap;
+                )
+            request.version(version);
+                    expectedParams.put("version", Long.toString(version));  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addCommaSeparatedPathParts(new String[] { "index1", "index2" })  
+        }
+    static IndicesOptions setRandomIndicesOptions(IndicesOptions indicesOptions, Map<String, String> expectedParams) {  
+            if (randomBoolean()) {
+        }
+            tvRequest.setFields(fields);
+    }
+import org.opensearch.action.get.GetRequest;  
+        Map<String, String> expectedParams = new HashMap<>();
     }  
-}
+            expectedParams.put("expand_wildcards", "open");  
+                expectedParams.put("wait_for_active_shards", waitForActiveShardsString);
+        Request request = RequestConverters.createPit(createPitRequest);
+            updateByQueryRequest.setBatchSize(batchSize);
+        Map<String, String> expectedParams = new HashMap<>();  
+                }
+        {  
+                emptyMap(),
+        Request request = RequestConverters.multiGet(multiGetRequest);
+        int numScrolls = randomIntBetween(1, 10);
+            updateRequest.timeout(timeout);  
+                randomBoolean()
+            setter.accept(local);  
+        endpoint.add("_field_caps");
+                    randomBoolean(),
+                "user",
+    }  
+    }  
+        searchTemplateRequest.setScriptType(ScriptType.STORED);  
+                null,  
+    }  
+            EndpointBuilder endpointBuilder = new EndpointBuilder().addPathPart("a", "b", "c").addPathPartAsIs("_endpoint");  
+        String[] requestFields = Strings.splitStringByCommaToArray(request.getParameters().get("fields"));  
+        expectedParams.put("ignore_throttled", Boolean.toString(getter.get().ignoreThrottled()));  
+            }
+        final GetSourceRequest getRequest = requestFunction.apply(index, id);  
+    static void setRandomTimeout(TimedRequest request, TimeValue defaultTimeout, Map<String, String> expectedParams) {
+        if (randomBoolean()) {
+            String id = randomAlphaOfLengthBetween(3, 10);
+        assertNull(request.getEntity());  
+            if (randomBoolean()) {
+        assertEquals("/index1,index2", RequestConverters.endpoint(new String[] { "index1", "index2" }));
+        Request request = RequestConverters.count(countRequest);  
+    }  
+        }
+            TermVectorsRequest tvRequest = new TermVectorsRequest(index, id);
+import java.util.function.BiFunction;
+                    indexRequest.setPipeline(randomAlphaOfLength(5));  
+        }  
+            if (refresh) {
+            assertToXContentEquivalent(updateRequest.doc().source(), parsedUpdateRequest.doc().source(), xContentType);
+            expectedParams.put("terminate_after", String.valueOf(countRequest.terminateAfter()));  
+                }
+import java.io.IOException;
+    }

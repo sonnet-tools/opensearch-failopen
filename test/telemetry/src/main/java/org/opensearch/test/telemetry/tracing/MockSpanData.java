@@ -1,195 +1,176 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.test.telemetry.tracing;
-
-import java.util.Arrays;
-import java.util.Map;
-
-/**
- * MockSpanData model for storing Telemetry information for testing.
- */  
-public class MockSpanData {
-
-    /**  
-     * MockSpanData constructor with spanID, parentSpanID, traceID, startEpochNanos, endEpochNanos, hasEnded params.
-     *
-     * @param spanID spanID  
-     * @param parentSpanID spanID of the parentSpan
-     * @param traceID traceID of the request
-     * @param startEpochNanos startTime of span in epochNanos  
-     * @param endEpochNanos endTime of span in epochNanos
-     * @param hasEnded value if the span is closed
-     * @param spanName Name of the span emitted  
-     * @param attributes span attributes
-     */
-    public MockSpanData(  
-        String spanID,
-        String parentSpanID,
-        String traceID,  
-        long startEpochNanos,
-        long endEpochNanos,
-        boolean hasEnded,  
-        String spanName,
-        Map<String, Object> attributes
-    ) {  
-        this.spanID = spanID;
-        this.traceID = traceID;
-        this.parentSpanID = parentSpanID;  
-        this.startEpochNanos = startEpochNanos;
-        this.endEpochNanos = endEpochNanos;
-        this.hasEnded = hasEnded;  
-        this.spanName = spanName;
-        this.attributes = attributes;
-    }  
-
-    /**
-     * MockSpanData constructor with spanID, parentSpanID, traceID, startEpochNanos, hasEnded and spanName params.  
-     *
-     * @param spanID spanID
-     * @param parentSpanID spanID of the parentSpan  
-     * @param traceID traceID of the request
-     * @param startEpochNanos startTime of span in epochNanos
-     * @param hasEnded value if the span is closed  
-     * @param spanName Name of the span emitted
-     * @param stackTrace StackTrace to debug the problematic span
-     * @param attributes span attributes  
-     */
-    public MockSpanData(
-        String spanID,  
-        String parentSpanID,
-        String traceID,
-        long startEpochNanos,  
-        boolean hasEnded,
-        String spanName,
-        StackTraceElement[] stackTrace,  
-        Map<String, Object> attributes
-    ) {
-        this.spanID = spanID;  
-        this.traceID = traceID;
-        this.parentSpanID = parentSpanID;
-        this.startEpochNanos = startEpochNanos;  
-        this.hasEnded = hasEnded;
-        this.spanName = spanName;
-        this.stackTrace = stackTrace;  
-        this.attributes = attributes;
-    }
-
-    private final String spanID;
-    private final String parentSpanID;
-    private final String traceID;  
-
-    private String spanName;
-    private final long startEpochNanos;  
-    private long endEpochNanos;
-    private boolean hasEnded;
-    private Map<String, Object> attributes;  
-
-    private StackTraceElement[] stackTrace;
-
-    /**
-     * Returns SpanID.
-     */  
-    public String getSpanID() {
-        return spanID;
-    }  
-
-    /**
-     * Returns ParentSpanID.  
-     */
-    public String getParentSpanID() {
-        return parentSpanID;  
-    }
-
-    /**  
-     * Returns TraceID.
-     */
-    public String getTraceID() {  
-        return traceID;
-    }
-
-    /**
-     * Returns hasEnded.
-     */  
-    public boolean isHasEnded() {
-        return hasEnded;
-    }  
-
-    /**
-     * Returns EndEpochNanos for a span.  
-     */
-    public long getEndEpochNanos() {
-        return endEpochNanos;  
-    }
-
-    /**  
-     * Returns StartEpochNanos for a span.
-     */
-    public long getStartEpochNanos() {  
-        return startEpochNanos;
-    }
-
-    /**
-     * Returns StackTrace for a span.
-     */  
-    public StackTraceElement[] getStackTrace() {
         return stackTrace;
-    }  
-
-    /**
-     * Sets EndEpochNanos for a span.  
-     * @param endEpochNanos endtime in epoch nanos
-     */
-    public void setEndEpochNanos(long endEpochNanos) {  
-        this.endEpochNanos = endEpochNanos;
+import java.util.Arrays;
     }
-
-    /**
      * Sets hasEnded for a span.
+        Map<String, Object> attributes
+        return "MockSpanData{"
+     */
+        return startEpochNanos;
+    private long endEpochNanos;
+    public StackTraceElement[] getStackTrace() {
+    public long getEndEpochNanos() {
+     * Returns the attributes
+            + ", endEpochNanos="
+     * @param traceID traceID of the request
+     * Returns SpanID.
+    /**
+        return hasEnded;
+        this.startEpochNanos = startEpochNanos;
+    private String spanName;
+     * @param stackTrace StackTrace to debug the problematic span
+        long endEpochNanos,
+            + '}';  
+     */  
+    /**  
+            + ", startEpochNanos="
+     * @param parentSpanID spanID of the parentSpan  
+        this.spanID = spanID;
+        String spanName,
+        String parentSpanID,
+     */  
+     * @param hasEnded value if the span is closed
+            + traceID  
+        this.hasEnded = hasEnded;
+        return endEpochNanos;  
+    public MockSpanData(
+     * @param attributes span attributes
+            + "spanID='"
+    public long getStartEpochNanos() {  
+        this.startEpochNanos = startEpochNanos;  
+    }
+    public void setHasEnded(boolean hasEnded) {
+    ) {  
+        this.parentSpanID = parentSpanID;
+    }
+    }
+        return traceID;
+        this.traceID = traceID;
+     */
+        this.parentSpanID = parentSpanID;  
+     * @param spanID spanID  
+    /**  
+        long startEpochNanos,
+    /**
+    }  
+        long startEpochNanos,  
+     * @param spanName Name of the span emitted
+            + '\''
+        String traceID,  
+     * Returns hasEnded.
+    ) {
+            + '\''
+/**
+            + attributes  
+            + '\''
+        this.attributes = attributes;
+ * MockSpanData model for storing Telemetry information for testing.
+     * MockSpanData constructor with spanID, parentSpanID, traceID, startEpochNanos, endEpochNanos, hasEnded params.
+    public String toString() {  
+    }  
+        this.spanID = spanID;  
+    }
+     */
+        StackTraceElement[] stackTrace,  
+    /**
+            + ", traceID='"
+     * @param hasEnded value if the span is closed  
+ *
+import java.util.Map;
+    /**
+    public String getSpanID() {
+ * this file be licensed under the Apache-2.0 license or a
+    private final String parentSpanID;
+    }  
+    private Map<String, Object> attributes;  
+    public void setEndEpochNanos(long endEpochNanos) {  
+            + ", stackTrace="
+            + hasEnded
+ */  
+        return attributes;
+}
+     * Returns TraceID.
+    /**  
+     *
+     * Returns StartEpochNanos for a span.
      * @param hasEnded hasEnded value if span is closed.  
      */
-    public void setHasEnded(boolean hasEnded) {
-        this.hasEnded = hasEnded;  
-    }
-
-    /**  
-     * Returns the attributes
-     * @return returns the attributes map.
-     */  
-    public Map<String, Object> getAttributes() {
-        return attributes;
-    }  
-
-    @Override
-    public String toString() {  
-        return "MockSpanData{"
-            + "spanID='"
-            + spanID  
-            + '\''
+     * @param startEpochNanos startTime of span in epochNanos  
+    private final String spanID;
+    public String getTraceID() {  
+    private StackTraceElement[] stackTrace;
             + ", parentSpanID='"
-            + parentSpanID  
-            + '\''
-            + ", traceID='"
-            + traceID  
-            + '\''
-            + ", spanName='"
-            + spanName  
-            + '\''
-            + ", startEpochNanos="
-            + startEpochNanos  
-            + ", endEpochNanos="
+     * @param attributes span attributes  
+     * Returns StackTrace for a span.
+        return spanID;
+        String spanName,
+     * Returns EndEpochNanos for a span.  
+     * @param parentSpanID spanID of the parentSpan
+    public MockSpanData(  
+        this.hasEnded = hasEnded;  
             + endEpochNanos
-            + ", hasEnded="  
-            + hasEnded
+    private final String traceID;  
+     *
+    /**
+            + parentSpanID  
+    }  
+    public String getParentSpanID() {
+            + '\''
+    /**  
+     */  
+     * @param spanName Name of the span emitted  
+            + startEpochNanos  
+     * @param startEpochNanos startTime of span in epochNanos
+     * @return returns the attributes map.
+        this.spanName = spanName;
+    /**
+     */
+        String spanID,
+            + spanName  
+        this.attributes = attributes;
+/*  
+    /**
+            + ", spanName='"
+     */
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+        boolean hasEnded,  
+     */
+        boolean hasEnded,
+        String spanID,  
+     * @param spanID spanID
+        Map<String, Object> attributes
             + ", attributes="
-            + attributes  
-            + ", stackTrace="
-            + Arrays.toString(stackTrace)
-            + '}';  
+     */
+        this.traceID = traceID;
+        this.spanName = spanName;
+        String traceID,
+public class MockSpanData {
+ */  
+     * @param endEpochNanos endTime of span in epochNanos
     }
-}
+        this.hasEnded = hasEnded;  
+     * @param traceID traceID of the request
+    private boolean hasEnded;
+    @Override
+     * @param endEpochNanos endtime in epoch nanos
+        this.stackTrace = stackTrace;  
+    }
+        this.endEpochNanos = endEpochNanos;
+    public Map<String, Object> getAttributes() {
+    }  
+     * Returns ParentSpanID.  
+            + spanID  
+     * Sets EndEpochNanos for a span.  
+package org.opensearch.test.telemetry.tracing;
+        return parentSpanID;  
+        String parentSpanID,
+        this.endEpochNanos = endEpochNanos;
+    public boolean isHasEnded() {
+    private final long startEpochNanos;  
+            + Arrays.toString(stackTrace)
+     * MockSpanData constructor with spanID, parentSpanID, traceID, startEpochNanos, hasEnded and spanName params.  
+            + ", hasEnded="  
+    /**
+    }
+ * The OpenSearch Contributors require contributions made to  
+     */  

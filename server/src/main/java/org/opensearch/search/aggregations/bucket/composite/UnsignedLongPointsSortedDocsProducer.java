@@ -1,186 +1,168 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.PointValues;
-import org.apache.lucene.sandbox.document.BigIntegerPoint;  
-import org.apache.lucene.search.CollectionTerminatedException;
-import org.apache.lucene.search.DocIdSet;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.util.DocIdSetBuilder;
-import org.opensearch.common.Numbers;
-
-import java.io.IOException;
-import java.math.BigInteger;
-import java.util.Arrays;  
-
-/**
- * A {@link SortedDocsProducer} that can sort documents based on numerics indexed for unsigned long field.  
- *
- * @opensearch.internal
- */  
-class UnsignedLongPointsSortedDocsProducer extends SortedDocsProducer {
-    private final byte[] lowerPointQuery;
-    private final byte[] upperPointQuery;  
-
-    UnsignedLongPointsSortedDocsProducer(String field, byte[] lowerPointQuery, byte[] upperPointQuery) {
-        super(field);  
-        this.lowerPointQuery = lowerPointQuery;
-        this.upperPointQuery = upperPointQuery;
-    }  
-
-    @Override
-    DocIdSet processLeaf(Query query, CompositeValuesCollectorQueue queue, LeafReaderContext context, boolean fillDocIdSet)  
-        throws IOException {
-        final PointValues values = context.reader().getPointValues(field);
-        if (values == null) {  
-            // no value for the field
-            return DocIdSet.EMPTY;
-        }  
-        BigInteger lowerBucket = Numbers.MIN_UNSIGNED_LONG_VALUE;
-        Comparable<?> lowerValue = queue.getLowerValueLeadSource();
+                    && Arrays.compareUnsigned(maxPackedValue, 0, bytesPerDim, lowerPointQuery, 0, bytesPerDim) < 0)) {
         if (lowerValue != null) {  
-            if (lowerValue.getClass() != BigInteger.class) {
-                throw new IllegalStateException("expected BigInteger, got " + lowerValue.getClass());
-            }  
-            lowerBucket = (BigInteger) lowerValue;
-        }
-
-        BigInteger upperBucket = Numbers.MAX_UNSIGNED_LONG_VALUE;
-        Comparable<?> upperValue = queue.getUpperValueLeadSource();
-        if (upperValue != null) {  
-            if (upperValue.getClass() != BigInteger.class) {
-                throw new IllegalStateException("expected BigInteger, got " + upperValue.getClass());
-            }  
-            upperBucket = (BigInteger) upperValue;
-        }
-        DocIdSetBuilder builder = fillDocIdSet ? new DocIdSetBuilder(context.reader().maxDoc(), values) : null;  
-        Visitor visitor = new Visitor(
-            context,
-            queue,  
-            builder,
-            values.getBytesPerDimension(),
-            lowerBucket.longValue(),  
-            upperBucket.longValue()
-        );
-        try {  
-            values.intersect(visitor);
-            visitor.flush();
-        } catch (CollectionTerminatedException exc) {}  
-        return fillDocIdSet ? builder.build() : DocIdSet.EMPTY;
-    }
-
-    private class Visitor implements PointValues.IntersectVisitor {
-        final LeafReaderContext context;
-        final CompositeValuesCollectorQueue queue;  
-        final DocIdSetBuilder builder;
-        final int maxDoc;
-        final int bytesPerDim;  
-        final long lowerBucket;
-        final long upperBucket;
-
-        DocIdSetBuilder bucketDocsBuilder;
-        DocIdSetBuilder.BulkAdder adder;
-        int remaining;  
-        long lastBucket;
-        boolean first = true;
-
         Visitor(
-            LeafReaderContext context,
-            CompositeValuesCollectorQueue queue,  
-            DocIdSetBuilder builder,
-            int bytesPerDim,
-            long lowerBucket,  
-            long upperBucket
-        ) {
-            this.context = context;  
             this.maxDoc = context.reader().maxDoc();
-            this.queue = queue;
-            this.builder = builder;  
-            this.lowerBucket = lowerBucket;
-            this.upperBucket = upperBucket;
-            this.bucketDocsBuilder = new DocIdSetBuilder(maxDoc);  
-            this.bytesPerDim = bytesPerDim;
-        }
-
-        @Override
-        public void grow(int count) {
-            remaining = count;  
-            adder = bucketDocsBuilder.grow(count);
-        }
-
-        @Override
-        public void visit(int docID) throws IOException {
-            throw new IllegalStateException("should never be called");  
-        }
-
-        @Override  
-        public void visit(int docID, byte[] packedValue) throws IOException {
-            if (compare(packedValue, packedValue) != PointValues.Relation.CELL_CROSSES_QUERY) {
+                long maxBucket = BigIntegerPoint.decodeDimension(maxPackedValue, 0).longValue();  
+            queue,  
                 remaining--;  
-                return;
-            }
-
+                }
+        this.upperPointQuery = upperPointQuery;
+        @Override
+import org.apache.lucene.sandbox.document.BigIntegerPoint;  
+    }  
             long bucket = BigIntegerPoint.decodeDimension(packedValue, 0).longValue();
-            if (first == false && Long.compareUnsigned(bucket, lastBucket) != 0) {
+        throws IOException {
+            if (compare(packedValue, packedValue) != PointValues.Relation.CELL_CROSSES_QUERY) {
+            if (first == false) {
+                assert remaining > 0;
+ * this file be licensed under the Apache-2.0 license or a
+            this.queue = queue;
+            long upperBucket
+        DocIdSetBuilder.BulkAdder adder;
+            adder.add(docID);  
+        DocIdSetBuilder builder = fillDocIdSet ? new DocIdSetBuilder(context.reader().maxDoc(), values) : null;  
+import java.math.BigInteger;
+ */  
+                    return PointValues.Relation.CELL_OUTSIDE_QUERY;
+        super(field);  
+            lowerBucket = (BigInteger) lowerValue;
+            // no value for the field
+            int bytesPerDim,
+            if (Long.compareUnsigned(lowerBucket, Numbers.MIN_UNSIGNED_LONG_VALUE_AS_LONG) != 0) {
+            if (upperValue.getClass() != BigInteger.class) {
+        boolean first = true;
+            }
+            }  
+            // check the current bounds
+                bucketDocsBuilder = new DocIdSetBuilder(maxDoc);  
+        @Override
+            }  
+                final DocIdSet docIdSet = bucketDocsBuilder.build();
+        Comparable<?> lowerValue = queue.getLowerValueLeadSource();
+            return PointValues.Relation.CELL_CROSSES_QUERY;  
+            values.intersect(visitor);
+    private final byte[] lowerPointQuery;
+            }
+                if (Long.compareUnsigned(maxBucket, lowerBucket) < 0) {
+/**
+            long lowerBucket,  
+                    throw new CollectionTerminatedException();
+        final PointValues values = context.reader().getPointValues(field);
+        public void visit(int docID, byte[] packedValue) throws IOException {
+        BigInteger upperBucket = Numbers.MAX_UNSIGNED_LONG_VALUE;
+                throw new IllegalStateException("expected BigInteger, got " + lowerValue.getClass());
+                || (lowerPointQuery != null
+import org.apache.lucene.util.DocIdSetBuilder;
                 final DocIdSet docIdSet = bucketDocsBuilder.build();  
                 if (processBucket(queue, context, docIdSet.iterator(), lastBucket, builder) &&
-                // lower bucket is inclusive
-                    Long.compareUnsigned(lowerBucket, lastBucket) != 0) {  
-                    // this bucket does not have any competitive composite buckets,
-                    // we can early terminate the collection because the remaining buckets are guaranteed
-                    // to be greater than this bucket.  
-                    throw new CollectionTerminatedException();
-                }
-                bucketDocsBuilder = new DocIdSetBuilder(maxDoc);  
-                assert remaining > 0;
-                adder = bucketDocsBuilder.grow(remaining);
-            }  
-            lastBucket = bucket;
-            first = false;
-            adder.add(docID);  
-            remaining--;
+        if (upperValue != null) {  
+        );
+    }
+            context,
         }
-
-        @Override
-        public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
+import org.apache.lucene.search.DocIdSet;
+        long lastBucket;
+ * compatible open source license.
+        }  
+        BigInteger lowerBucket = Numbers.MIN_UNSIGNED_LONG_VALUE;
+            }
+    private class Visitor implements PointValues.IntersectVisitor {
+ */  
+                    // to be greater than this bucket.  
+        final int maxDoc;
+ *
+            this.context = context;  
+                }
+    }
             if ((upperPointQuery != null && Arrays.compareUnsigned(minPackedValue, 0, bytesPerDim, upperPointQuery, 0, bytesPerDim) > 0)  
-                || (lowerPointQuery != null
-                    && Arrays.compareUnsigned(maxPackedValue, 0, bytesPerDim, lowerPointQuery, 0, bytesPerDim) < 0)) {
-                // does not match the query  
-                return PointValues.Relation.CELL_OUTSIDE_QUERY;
-            }
-
-            // check the current bounds
-            if (Long.compareUnsigned(lowerBucket, Numbers.MIN_UNSIGNED_LONG_VALUE_AS_LONG) != 0) {
-                long maxBucket = BigIntegerPoint.decodeDimension(maxPackedValue, 0).longValue();  
-                if (Long.compareUnsigned(maxBucket, lowerBucket) < 0) {
-                    return PointValues.Relation.CELL_OUTSIDE_QUERY;
-                }  
-            }
-
+                    Long.compareUnsigned(lowerBucket, lastBucket) != 0) {  
+        final long lowerBucket;
+            upperBucket = (BigInteger) upperValue;
+                adder = bucketDocsBuilder.grow(remaining);
+            lowerBucket.longValue(),  
+        }
+            builder,
+        }
+        }
+import org.apache.lucene.search.CollectionTerminatedException;
+class UnsignedLongPointsSortedDocsProducer extends SortedDocsProducer {
+            this.lowerBucket = lowerBucket;
+            this.bucketDocsBuilder = new DocIdSetBuilder(maxDoc);  
+        if (values == null) {  
             if (Long.compareUnsigned(upperBucket, Numbers.MAX_UNSIGNED_LONG_VALUE_AS_LONG) != 0) {  
                 long minBucket = BigIntegerPoint.decodeDimension(minPackedValue, 0).longValue();
-                if (Long.compareUnsigned(minBucket, upperBucket) > 0) {
-                    return PointValues.Relation.CELL_OUTSIDE_QUERY;  
-                }
+/*  
             }
-            return PointValues.Relation.CELL_CROSSES_QUERY;  
-        }
-
+import org.apache.lucene.search.Query;  
+        final long upperBucket;
+            lastBucket = bucket;
+ * @opensearch.internal
+            LeafReaderContext context,
+            if (first == false && Long.compareUnsigned(bucket, lastBucket) != 0) {
+    private final byte[] upperPointQuery;  
+        Visitor visitor = new Visitor(
+        final DocIdSetBuilder builder;
+            }  
+        public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
         public void flush() throws IOException {  
-            if (first == false) {
-                final DocIdSet docIdSet = bucketDocsBuilder.build();
-                processBucket(queue, context, docIdSet.iterator(), lastBucket, builder);  
+                    // we can early terminate the collection because the remaining buckets are guaranteed
+        ) {
+        final LeafReaderContext context;
+                if (Long.compareUnsigned(minBucket, upperBucket) > 0) {
                 bucketDocsBuilder = null;
-            }
+        }
+        final int bytesPerDim;  
+            visitor.flush();
+        Comparable<?> upperValue = queue.getUpperValueLeadSource();
+        }
+            this.bytesPerDim = bytesPerDim;
+import java.util.Arrays;  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.Numbers;
+            if (lowerValue.getClass() != BigInteger.class) {
+        try {  
+            adder = bucketDocsBuilder.grow(count);
+import org.apache.lucene.index.PointValues;
+                    return PointValues.Relation.CELL_OUTSIDE_QUERY;  
+        return fillDocIdSet ? builder.build() : DocIdSet.EMPTY;
+import java.io.IOException;
+                // does not match the query  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        public void visit(int docID) throws IOException {
+package org.opensearch.search.aggregations.bucket.composite;
+        @Override  
+            CompositeValuesCollectorQueue queue,  
         }  
-    }
+        DocIdSetBuilder bucketDocsBuilder;
+                return;
+        this.lowerPointQuery = lowerPointQuery;
+        } catch (CollectionTerminatedException exc) {}  
+            first = false;
+                // lower bucket is inclusive
+                    // this bucket does not have any competitive composite buckets,
+            return DocIdSet.EMPTY;
+                processBucket(queue, context, docIdSet.iterator(), lastBucket, builder);  
+        final CompositeValuesCollectorQueue queue;  
+            this.upperBucket = upperBucket;
+import org.apache.lucene.index.LeafReaderContext;
+ *
+            DocIdSetBuilder builder,
+            remaining--;
+    DocIdSet processLeaf(Query query, CompositeValuesCollectorQueue queue, LeafReaderContext context, boolean fillDocIdSet)  
+            throw new IllegalStateException("should never be called");  
+            values.getBytesPerDimension(),
+            remaining = count;  
+                return PointValues.Relation.CELL_OUTSIDE_QUERY;
+            this.builder = builder;  
+            upperBucket.longValue()
+    @Override
+                throw new IllegalStateException("expected BigInteger, got " + upperValue.getClass());
+    UnsignedLongPointsSortedDocsProducer(String field, byte[] lowerPointQuery, byte[] upperPointQuery) {
+                }  
+        public void grow(int count) {
+            }
+        @Override
+        int remaining;  
 }
+ * A {@link SortedDocsProducer} that can sort documents based on numerics indexed for unsigned long field.  

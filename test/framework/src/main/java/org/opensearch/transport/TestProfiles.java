@@ -1,65 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.common.settings.Settings;
-
 public final class TestProfiles {  
-
+        builder.setCompressionEnabled(source.getCompressionEnabled());  
+import org.opensearch.common.settings.Settings;
+            TransportRequestOptions.Type.PING,
     private TestProfiles() {}
-
     /**
+}
+ * The OpenSearch Contributors require contributions made to  
+            TransportRequestOptions.Type.STATE
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+     */
+ */
+/*
+ * software distributed under the License is distributed on an
+        builder.addConnections(0, TransportRequestOptions.Type.STREAM);
+/*  
+ *
+ * KIND, either express or implied.  See the License for the
+package org.opensearch.transport;
+ * ownership. Elasticsearch licenses this file to you under  
      * A pre-built light connection profile that shares a single connection across all
      * types.  
-     */
-    public static final ConnectionProfile LIGHT_PROFILE;
-
+ *
     static {
+ *    http://www.apache.org/licenses/LICENSE-2.0
         ConnectionProfile source = ConnectionProfile.buildDefaultConnectionProfile(Settings.EMPTY);
-        ConnectionProfile.Builder builder = new ConnectionProfile.Builder();  
-        builder.setConnectTimeout(source.getConnectTimeout());
+ * Unless required by applicable law or agreed to in writing,
+ * this file be licensed under the Apache-2.0 license or a
         builder.setHandshakeTimeout(source.getHandshakeTimeout());
-        builder.setCompressionEnabled(source.getCompressionEnabled());  
-        builder.setPingInterval(source.getPingInterval());
-        builder.addConnections(
+ * compatible open source license.
+        builder.setConnectTimeout(source.getConnectTimeout());
+ * GitHub history for details.
+ * Licensed to Elasticsearch under one or more contributor  
             1,  
-            TransportRequestOptions.Type.BULK,
-            TransportRequestOptions.Type.PING,
-            TransportRequestOptions.Type.RECOVERY,  
-            TransportRequestOptions.Type.REG,
-            TransportRequestOptions.Type.STATE
-        );  
-        builder.addConnections(0, TransportRequestOptions.Type.STREAM);
-        LIGHT_PROFILE = builder.build();
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }  
-}
+        );  
+ * Modifications Copyright OpenSearch Contributors. See
+ * not use this file except in compliance with the License.
+        LIGHT_PROFILE = builder.build();
+ * license agreements. See the NOTICE file distributed with
+ * You may obtain a copy of the License at  
+        builder.addConnections(
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+ * specific language governing permissions and limitations
+            TransportRequestOptions.Type.RECOVERY,  
+ */  
+    public static final ConnectionProfile LIGHT_PROFILE;
+ */  
+        ConnectionProfile.Builder builder = new ConnectionProfile.Builder();  
+        builder.setPingInterval(source.getPingInterval());
+            TransportRequestOptions.Type.BULK,
+            TransportRequestOptions.Type.REG,
+/*  

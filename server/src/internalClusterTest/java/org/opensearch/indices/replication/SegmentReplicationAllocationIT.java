@@ -1,385 +1,353 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.OpenSearchAllocationTestCase.ShardAllocations;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.RoutingNodes;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.index.IndexModule;
-import org.opensearch.indices.replication.common.ReplicationType;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.junit.annotations.TestLogging;  
-
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;  
-import java.util.stream.Collectors;
-
-import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;  
-import static org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator.PREFER_PRIMARY_SHARD_BALANCE;
-import static org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator.PREFER_PRIMARY_SHARD_REBALANCE;
-import static org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator.PRIMARY_SHARD_REBALANCE_BUFFER;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
-public class SegmentReplicationAllocationIT extends SegmentReplicationBaseIT {
-
-    private void createIndex(String idxName, int shardCount, int replicaCount, boolean isSegRep) {  
-        Settings.Builder builder = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, shardCount)
-            .put(IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING.getKey(), false)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, replicaCount);
-        if (isSegRep) {
-            builder = builder.put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT);  
-        } else {
-            builder = builder.put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT);
-        }  
-        prepareCreate(idxName, builder).get();
-    }
-
-    public void enablePreferPrimaryBalance() {
-        assertAcked(
-            client().admin()  
-                .cluster()
-                .prepareUpdateSettings()
-                .setPersistentSettings(Settings.builder().put(BalancedShardsAllocator.PREFER_PRIMARY_SHARD_BALANCE.getKey(), "true"))  
-        );
-    }
-
-    public void setAllocationRelocationStrategy(boolean preferPrimaryBalance, boolean preferPrimaryRebalance, float buffer) {
-        assertAcked(
-            client().admin()  
-                .cluster()
-                .prepareUpdateSettings()
-                .setPersistentSettings(  
-                    Settings.builder()
-                        .put(PREFER_PRIMARY_SHARD_BALANCE.getKey(), preferPrimaryBalance)
-                        .put(PREFER_PRIMARY_SHARD_REBALANCE.getKey(), preferPrimaryRebalance)  
-                        .put(PRIMARY_SHARD_REBALANCE_BUFFER.getKey(), buffer)
-                )
-        );  
-    }
-
-    /**  
-     * This test verifies that the overall primary balance is attained during allocation. This test verifies primary
-     * balance per index and across all indices is maintained.
-     */  
-    public void testGlobalPrimaryAllocation() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        final int maxReplicaCount = 1;  
-        final int maxShardCount = 1;
-        final int nodeCount = randomIntBetween(maxReplicaCount + 1, 10);
-        final int numberOfIndices = randomIntBetween(5, 10);  
-
+    public void testAllocationAndRebalanceWithDisruption() throws Exception {
         final List<String> nodeNames = new ArrayList<>();
-        logger.info("--> Creating {} nodes", nodeCount);  
-        for (int i = 0; i < nodeCount; i++) {
-            nodeNames.add(internalCluster().startNode());
-        }  
+                    + 1;  
+        final int nodeCount = randomIntBetween(5, 10);
+                            + index
+        logger.info(ShardAllocations.printShardDistribution(state));
         enablePreferPrimaryBalance();
-        int shardCount, replicaCount;
-        ClusterState state;  
-        for (int i = 0; i < numberOfIndices; i++) {
-            shardCount = randomIntBetween(1, maxShardCount);
-            replicaCount = randomIntBetween(0, maxReplicaCount);  
-            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
-            logger.info("--> Creating index {} with shard count {} and replica count {}", "test" + i, shardCount, replicaCount);
-            ensureGreen(TimeValue.timeValueSeconds(60));  
+    public void testAllocationWithDisruption() throws Exception {
+import java.util.stream.Collectors;
+    /**  
+                        .stream()  
+        final int nodeCount = randomIntBetween(maxReplicaCount + 1, 10);
         }
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        logger.info(ShardAllocations.printShardDistribution(state));  
+        for (int i = 0; i < nodeCount; i++) {
+        verifyPerIndexPrimaryBalance();
+        verifyPerIndexPrimaryBalance();
+    }  
+        verifyPrimaryBalance(buffer);
+                        .filter(ShardRouting::primary)
         verifyPerIndexPrimaryBalance();
         verifyPrimaryBalance(0.0f);
-    }  
-
-    /**
-     * This test verifies the happy path where primary shard allocation is balanced when multiple indices are created.  
-     * <p>
-     * This test in general passes without primary shard balance as well due to nature of allocation algorithm which
-     * assigns all primary shards first followed by replica copies.  
-     */
-    public void testPerIndexPrimaryAllocation() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();  
-        final int maxReplicaCount = 2;
-        final int maxShardCount = 5;
-        final int nodeCount = randomIntBetween(maxReplicaCount + 1, 10);  
-        final int numberOfIndices = randomIntBetween(5, 10);
-
-        final List<String> nodeNames = new ArrayList<>();  
-        logger.info("--> Creating {} nodes", nodeCount);
-        for (int i = 0; i < nodeCount; i++) {
-            nodeNames.add(internalCluster().startNode());  
-        }
-        enablePreferPrimaryBalance();
-        int shardCount, replicaCount;  
-        ClusterState state;
-        for (int i = 0; i < numberOfIndices; i++) {
-            shardCount = randomIntBetween(1, maxShardCount);  
-            replicaCount = randomIntBetween(0, maxReplicaCount);
-            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
-            logger.info("--> Creating index {} with shard count {} and replica count {}", "test" + i, shardCount, replicaCount);  
-            ensureGreen(TimeValue.timeValueSeconds(60));
-            state = client().admin().cluster().prepareState().execute().actionGet().getState();
-            logger.info(ShardAllocations.printShardDistribution(state));  
-        }
-        verifyPerIndexPrimaryBalance();
-    }  
-
-    /**
-     * This test verifies balanced primary shard allocation for a single index with large shard count in event of node  
-     * going down and a new node joining the cluster. The results in shard distribution skewness and re-balancing logic
-     * ensures the primary shard distribution is balanced.
-     *  
-     */
-    @TestLogging(reason = "Enable debug logs from cluster and index replication package", value = "org.opensearch.cluster:DEBUG,org.opensearch.indices.replication:DEBUG")
-    public void testSingleIndexShardAllocation() throws Exception {  
-        internalCluster().startClusterManagerOnlyNode();
-        final int maxReplicaCount = 1;
-        final int maxShardCount = 50;  
-        final int nodeCount = 5;
-
-        final List<String> nodeNames = new ArrayList<>();  
-        logger.info("--> Creating {} nodes", nodeCount);
-        for (int i = 0; i < nodeCount; i++) {
-            nodeNames.add(internalCluster().startNode());  
-        }
-        enablePreferPrimaryBalance();
-
-        // Modify other configurations, expecting that the primary balance strategy will not be affected.
-        assertAcked(
-            client().admin()  
-                .cluster()
-                .prepareUpdateSettings()
-                .setPersistentSettings(Settings.builder().put(PRIMARY_SHARD_REBALANCE_BUFFER.getKey(), 0.2))  
-        );
-
-        ClusterState state;  
-        createIndex("test", maxShardCount, maxReplicaCount, true);
-        ensureGreen(TimeValue.timeValueSeconds(60));
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();  
-        logger.info(ShardAllocations.printShardDistribution(state));
-        verifyPerIndexPrimaryBalance();
-
-        // Remove a node
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeNames.get(0)));
-        internalCluster().validateClusterFormed();  
-        ensureGreen(TimeValue.timeValueSeconds(100));
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        logger.info(ShardAllocations.printShardDistribution(state));  
-        verifyPerIndexPrimaryBalance();
-
-        // Add a new node  
-        internalCluster().startDataOnlyNode();
-        internalCluster().validateClusterFormed();
-        ensureGreen(TimeValue.timeValueSeconds(100));  
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        logger.info(ShardAllocations.printShardDistribution(state));
-        verifyPerIndexPrimaryBalance();  
-    }
-
-    /**  
-     * Similar to testSingleIndexShardAllocation test but creates multiple indices, multiple nodes adding in and getting
-     * removed. The test asserts post each such event that primary shard distribution is balanced for each index.
-     */  
-    public void testAllocationWithDisruption() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        final int maxReplicaCount = 2;  
-        final int maxShardCount = 2;
-        // Create higher number of nodes than number of shards to reduce chances of SameShardAllocationDecider kicking-in
-        // and preventing primary relocations  
-        final int nodeCount = randomIntBetween(5, 10);
-        final int numberOfIndices = randomIntBetween(1, 10);
-
-        logger.info("--> Creating {} nodes", nodeCount);
-        final List<String> nodeNames = new ArrayList<>();
-        for (int i = 0; i < nodeCount; i++) {  
-            nodeNames.add(internalCluster().startNode());
-        }
-        enablePreferPrimaryBalance();  
-
-        int shardCount, replicaCount;
-        ClusterState state;  
-        for (int i = 0; i < numberOfIndices; i++) {
-            shardCount = randomIntBetween(1, maxShardCount);
-            replicaCount = randomIntBetween(1, maxReplicaCount);  
-            logger.info("--> Creating index test{} with primary {} and replica {}", i, shardCount, replicaCount);
-            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
-            ensureGreen(TimeValue.timeValueSeconds(60));  
-            if (logger.isTraceEnabled()) {
-                state = client().admin().cluster().prepareState().execute().actionGet().getState();
-                logger.info(ShardAllocations.printShardDistribution(state));  
-            }
-        }
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();  
-        logger.info(ShardAllocations.printShardDistribution(state));
-        verifyPerIndexPrimaryBalance();
-
-        final int additionalNodeCount = randomIntBetween(1, 5);
-        logger.info("--> Adding {} nodes", additionalNodeCount);
-
-        internalCluster().startNodes(additionalNodeCount);
-        ensureGreen(TimeValue.timeValueSeconds(60));
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();  
-        logger.info(ShardAllocations.printShardDistribution(state));
-        verifyPerIndexPrimaryBalance();
-
-        int nodeCountToStop = additionalNodeCount;
         while (nodeCountToStop > 0) {
-            internalCluster().stopRandomDataNode();  
-            // give replica a chance to promote as primary before terminating node containing the replica
-            ensureGreen(TimeValue.timeValueSeconds(60));
-            nodeCountToStop--;  
-        }
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        logger.info("--> Cluster state post nodes stop {}", state);  
-        logger.info(ShardAllocations.printShardDistribution(state));
-        verifyPerIndexPrimaryBalance();
-    }  
-
+            final int avgPrimaryShardsPerNode = (int) Math.ceil(totalPrimaryShards * 1f / currentState.getRoutingNodes().size());
+            client().admin()  
+import static org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator.PREFER_PRIMARY_SHARD_BALANCE;
+            for (final IndexRoutingTable index : currentState.getRoutingTable().indicesRouting().values()) {
+    }
+            shardCount = randomIntBetween(1, maxShardCount);  
+     */
     /**
-     * Similar to testSingleIndexShardAllocation test but creates multiple indices, multiple nodes adding in and getting  
-     * removed. The test asserts post each such event that primary shard distribution is balanced for each index as well as across the nodes
-     * when the PREFER_PRIMARY_SHARD_REBALANCE is set to true
-     */  
-    public void testAllocationAndRebalanceWithDisruption() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        final int maxReplicaCount = 2;  
-        final int maxShardCount = 2;
-        final int numberOfIndices = randomIntBetween(1, 3);
-        final int maxPossibleShards = numberOfIndices * maxShardCount * (1 + maxReplicaCount);  
-
-        List<List<Integer>> shardAndReplicaCounts = new ArrayList<>();
-        int shardCount, replicaCount, totalShards = 0;  
-        for (int i = 0; i < numberOfIndices; i++) {
-            shardCount = randomIntBetween(1, maxShardCount);
-            replicaCount = randomIntBetween(1, maxReplicaCount);  
-            shardAndReplicaCounts.add(Arrays.asList(shardCount, replicaCount));
-            totalShards += shardCount * (1 + replicaCount);
-        }  
-        // Create a strictly higher number of nodes than the number of shards to reduce chances of SameShardAllocationDecider kicking-in
-        // and preventing primary relocations
-        final int nodeCount = randomIntBetween(totalShards, maxPossibleShards) + 1;  
-        final float buffer = randomIntBetween(1, 4) * 0.10f;
+        final int maxShardCount = 50;  
         logger.info("--> Creating {} nodes", nodeCount);
-        final List<String> nodeNames = new ArrayList<>();  
-        for (int i = 0; i < nodeCount; i++) {
-            nodeNames.add(internalCluster().startNode());
-        }  
-        setAllocationRelocationStrategy(true, true, buffer);
-
-        ClusterState state;  
-        for (int i = 0; i < numberOfIndices; i++) {
-            shardCount = shardAndReplicaCounts.get(i).get(0);
-            replicaCount = shardAndReplicaCounts.get(i).get(1);  
-            logger.info("--> Creating index test{} with primary {} and replica {}", i, shardCount, replicaCount);
-            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
-            ensureGreen(TimeValue.timeValueSeconds(60));  
-            if (logger.isTraceEnabled()) {
-                state = client().admin().cluster().prepareState().execute().actionGet().getState();
-                logger.info(ShardAllocations.printShardDistribution(state));  
-            }
+        verifyPerIndexPrimaryBalance();
+        final int maxShardCount = 2;
+        prepareCreate(idxName, builder).get();
+import org.opensearch.cluster.ClusterState;
+        assertBusy(() -> {  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
+     * balance per index and across all indices is maintained.
+        internalCluster().startClusterManagerOnlyNode();
         }
+        ensureGreen(TimeValue.timeValueSeconds(100));  
+                for (RoutingNode node : nodes) {
+    }
+        logger.info("--> Adding {} nodes", additionalNodeCount);  
+        ensureGreen(TimeValue.timeValueSeconds(100));
+        internalCluster().startClusterManagerOnlyNode();
+    /**
+        while (nodeCountToStop > 0) {
         state = client().admin().cluster().prepareState().execute().actionGet().getState();  
-        logger.info(ShardAllocations.printShardDistribution(state));
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+public class SegmentReplicationAllocationIT extends SegmentReplicationBaseIT {
+        for (int i = 0; i < numberOfIndices; i++) {
+                            + " "
+            }  
         verifyPerIndexPrimaryBalance();
         verifyPrimaryBalance(buffer);  
-
-        final int additionalNodeCount = randomIntBetween(1, 5);
-        logger.info("--> Adding {} nodes", additionalNodeCount);  
-
-        internalCluster().startNodes(additionalNodeCount);
-        ensureGreen(TimeValue.timeValueSeconds(60));  
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        logger.info(ShardAllocations.printShardDistribution(state));
-        verifyPerIndexPrimaryBalance();  
-        verifyPrimaryBalance(buffer);
-
-        int nodeCountToStop = additionalNodeCount;  
-        while (nodeCountToStop > 0) {
-            internalCluster().stopRandomDataNode();
-            // give replica a chance to promote as primary before terminating node containing the replica  
-            ensureGreen(TimeValue.timeValueSeconds(60));
-            nodeCountToStop--;
-        }  
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        logger.info("--> Cluster state post nodes stop {}", state);
-        logger.info(ShardAllocations.printShardDistribution(state));  
-        verifyPerIndexPrimaryBalance();
-        verifyPrimaryBalance(buffer);
-    }  
-
-    /**
-     * Utility method which ensures cluster has balanced primary shard distribution across a single index.  
-     * @throws Exception exception
-     */
-    private void verifyPerIndexPrimaryBalance() throws Exception {  
-        assertBusy(() -> {
-            final ClusterState currentState = client().admin().cluster().prepareState().execute().actionGet().getState();
-            RoutingNodes nodes = currentState.getRoutingNodes();  
-            for (final Map.Entry<String, IndexRoutingTable> index : currentState.getRoutingTable().indicesRouting().entrySet()) {
-                final int totalPrimaryShards = index.getValue().primaryShardsActive();
-                final int lowerBoundPrimaryShardsPerNode = (int) Math.floor(totalPrimaryShards * 1f / currentState.getRoutingNodes().size())  
                     - 1;
-                final int upperBoundPrimaryShardsPerNode = (int) Math.ceil(totalPrimaryShards * 1f / currentState.getRoutingNodes().size())
-                    + 1;  
-                for (RoutingNode node : nodes) {
-                    final int primaryCount = node.shardsWithState(index.getKey(), STARTED)
-                        .stream()  
-                        .filter(ShardRouting::primary)
-                        .collect(Collectors.toList())
-                        .size();  
-                    // Asserts value is within the variance threshold (-1/+1 of the average value).
-                    assertTrue(
-                        "--> Primary balance assertion failure for index "  
-                            + index
-                            + "on node "
-                            + node.node().getName()  
-                            + " "
-                            + lowerBoundPrimaryShardsPerNode
-                            + " <= "  
-                            + primaryCount
-                            + " (assigned) <= "
-                            + upperBoundPrimaryShardsPerNode,  
-                        lowerBoundPrimaryShardsPerNode <= primaryCount && primaryCount <= upperBoundPrimaryShardsPerNode
-                    );
-                }  
+    /**
+        internalCluster().startClusterManagerOnlyNode();  
+     */  
+        }
             }
-        }, 60, TimeUnit.SECONDS);
+        final int numberOfIndices = randomIntBetween(1, 3);
+        ensureGreen(TimeValue.timeValueSeconds(60));  
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();  
+import java.util.ArrayList;
+import org.opensearch.test.InternalTestCluster;
+                        .size();  
+                .prepareUpdateSettings()
+                )
+                        .put(PRIMARY_SHARD_REBALANCE_BUFFER.getKey(), buffer)
+        internalCluster().startDataOnlyNode();
+        }
+        internalCluster().validateClusterFormed();  
+        );
+            builder = builder.put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT);  
     }  
-
-    private void verifyPrimaryBalance(float buffer) throws Exception {
-        assertBusy(() -> {  
             final ClusterState currentState = client().admin().cluster().prepareState().execute().actionGet().getState();
-            RoutingNodes nodes = currentState.getRoutingNodes();
+        logger.info(ShardAllocations.printShardDistribution(state));  
+    public void testSingleIndexShardAllocation() throws Exception {  
+        internalCluster().startClusterManagerOnlyNode();
+        int nodeCountToStop = additionalNodeCount;  
+    public void testPerIndexPrimaryAllocation() throws Exception {
+            logger.info("--> Creating index {} with shard count {} and replica count {}", "test" + i, shardCount, replicaCount);
+        logger.info(ShardAllocations.printShardDistribution(state));
+        for (int i = 0; i < nodeCount; i++) {
+        }  
             int totalPrimaryShards = 0;  
-            for (final IndexRoutingTable index : currentState.getRoutingTable().indicesRouting().values()) {
                 totalPrimaryShards += index.primaryShardsActive();
-            }  
-            final int avgPrimaryShardsPerNode = (int) Math.ceil(totalPrimaryShards * 1f / currentState.getRoutingNodes().size());
-            for (RoutingNode node : nodes) {
-                final int primaryCount = node.shardsWithState(STARTED)  
-                    .stream()
-                    .filter(ShardRouting::primary)
-                    .collect(Collectors.toList())  
-                    .size();
+        enablePreferPrimaryBalance();
+            ensureGreen(TimeValue.timeValueSeconds(60));  
+                final int totalPrimaryShards = index.getValue().primaryShardsActive();
+            replicaCount = shardAndReplicaCounts.get(i).get(1);  
+import org.opensearch.test.OpenSearchIntegTestCase;
+        final List<String> nodeNames = new ArrayList<>();  
+        assertAcked(
+        verifyPerIndexPrimaryBalance();
+        final int additionalNodeCount = randomIntBetween(1, 5);
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeNames.get(0)));
+                }  
+import java.util.Map;
+        }
+        );  
+            if (logger.isTraceEnabled()) {
+                        lowerBoundPrimaryShardsPerNode <= primaryCount && primaryCount <= upperBoundPrimaryShardsPerNode
+    public void setAllocationRelocationStrategy(boolean preferPrimaryBalance, boolean preferPrimaryRebalance, float buffer) {
                 assertTrue(primaryCount <= (avgPrimaryShardsPerNode * (1 + buffer)));
-            }  
-        }, 60, TimeUnit.SECONDS);
-    }
+        final int numberOfIndices = randomIntBetween(5, 10);
+        int nodeCountToStop = additionalNodeCount;
+     */  
+                            + lowerBoundPrimaryShardsPerNode
+        enablePreferPrimaryBalance();  
+ * SPDX-License-Identifier: Apache-2.0
+     *  
+        // Create a strictly higher number of nodes than the number of shards to reduce chances of SameShardAllocationDecider kicking-in
+        internalCluster().validateClusterFormed();
+                    .stream()
+                .setPersistentSettings(  
+     */
+        Settings.Builder builder = Settings.builder()
+     */
 }  
+        internalCluster().startNodes(additionalNodeCount);
+        final int nodeCount = 5;
+                .setPersistentSettings(Settings.builder().put(PRIMARY_SHARD_REBALANCE_BUFFER.getKey(), 0.2))  
+        assertAcked(
+                    .size();
+    }  
+            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
+        final int maxShardCount = 2;
+                    .collect(Collectors.toList())  
+        final int numberOfIndices = randomIntBetween(1, 10);
+        final int numberOfIndices = randomIntBetween(5, 10);  
+        assertBusy(() -> {
+        ClusterState state;  
+                            + primaryCount
+        int shardCount, replicaCount;
+        // and preventing primary relocations  
+        logger.info(ShardAllocations.printShardDistribution(state));
+        final int maxReplicaCount = 1;  
+            logger.info(ShardAllocations.printShardDistribution(state));  
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+ * The OpenSearch Contributors require contributions made to  
+            shardCount = randomIntBetween(1, maxShardCount);
+     */  
+            nodeNames.add(internalCluster().startNode());
+            RoutingNodes nodes = currentState.getRoutingNodes();  
+package org.opensearch.indices.replication;
+        logger.info(ShardAllocations.printShardDistribution(state));  
+                            + " (assigned) <= "
+                final int upperBoundPrimaryShardsPerNode = (int) Math.ceil(totalPrimaryShards * 1f / currentState.getRoutingNodes().size())
+            replicaCount = randomIntBetween(0, maxReplicaCount);  
+            ensureGreen(TimeValue.timeValueSeconds(60));  
+                        .collect(Collectors.toList())
+        for (int i = 0; i < numberOfIndices; i++) {
+import static org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator.PRIMARY_SHARD_REBALANCE_BUFFER;  
+                state = client().admin().cluster().prepareState().execute().actionGet().getState();
+    public void enablePreferPrimaryBalance() {
+        }, 60, TimeUnit.SECONDS);
+        createIndex("test", maxShardCount, maxReplicaCount, true);
+        logger.info("--> Cluster state post nodes stop {}", state);  
+            shardAndReplicaCounts.add(Arrays.asList(shardCount, replicaCount));
+            .put(IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING.getKey(), false)  
+                .cluster()
+                logger.info(ShardAllocations.printShardDistribution(state));  
+                    );
+    /**  
+            shardCount = shardAndReplicaCounts.get(i).get(0);
+        );
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();  
+    @TestLogging(reason = "Enable debug logs from cluster and index replication package", value = "org.opensearch.cluster:DEBUG,org.opensearch.indices.replication:DEBUG")
+     * Similar to testSingleIndexShardAllocation test but creates multiple indices, multiple nodes adding in and getting
+    private void verifyPerIndexPrimaryBalance() throws Exception {  
+            ensureGreen(TimeValue.timeValueSeconds(60));
+            internalCluster().stopRandomDataNode();
+     * removed. The test asserts post each such event that primary shard distribution is balanced for each index as well as across the nodes
+            replicaCount = randomIntBetween(1, maxReplicaCount);  
+     * @throws Exception exception
+    }  
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+            nodeNames.add(internalCluster().startNode());  
+            shardCount = randomIntBetween(1, maxShardCount);
+        logger.info("--> Creating {} nodes", nodeCount);  
+        } else {
+                    Settings.builder()
+            state = client().admin().cluster().prepareState().execute().actionGet().getState();
+        for (int i = 0; i < numberOfIndices; i++) {
+        logger.info(ShardAllocations.printShardDistribution(state));
+ * this file be licensed under the Apache-2.0 license or a
+        final int maxReplicaCount = 1;
+import org.opensearch.indices.replication.common.ReplicationType;  
+import static org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator.PREFER_PRIMARY_SHARD_REBALANCE;
+            RoutingNodes nodes = currentState.getRoutingNodes();
+        }, 60, TimeUnit.SECONDS);
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+        verifyPrimaryBalance(buffer);
+        final int nodeCount = randomIntBetween(maxReplicaCount + 1, 10);  
+        logger.info(ShardAllocations.printShardDistribution(state));
+            client().admin()  
+        final List<String> nodeNames = new ArrayList<>();  
+            nodeNames.add(internalCluster().startNode());  
+import org.opensearch.cluster.OpenSearchAllocationTestCase.ShardAllocations;
+        verifyPerIndexPrimaryBalance();
+        // and preventing primary relocations
+        logger.info("--> Cluster state post nodes stop {}", state);
+        }
+            shardCount = randomIntBetween(1, maxShardCount);
+        ClusterState state;  
+        verifyPerIndexPrimaryBalance();
+import org.opensearch.index.IndexModule;
+        ensureGreen(TimeValue.timeValueSeconds(60));
+        for (int i = 0; i < nodeCount; i++) {
+                    assertTrue(
+            }  
+                .prepareUpdateSettings()
+        internalCluster().startClusterManagerOnlyNode();
+        final int additionalNodeCount = randomIntBetween(1, 5);
+            for (final Map.Entry<String, IndexRoutingTable> index : currentState.getRoutingTable().indicesRouting().entrySet()) {
+        logger.info("--> Creating {} nodes", nodeCount);
+            replicaCount = randomIntBetween(1, maxReplicaCount);  
+     * assigns all primary shards first followed by replica copies.  
+        if (isSegRep) {
+            totalShards += shardCount * (1 + replicaCount);
+        final int maxReplicaCount = 2;  
+            logger.info("--> Creating index test{} with primary {} and replica {}", i, shardCount, replicaCount);
+import java.util.List;
+import java.util.concurrent.TimeUnit;  
+import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;  
+import org.opensearch.cluster.routing.RoutingNode;
+     * This test in general passes without primary shard balance as well due to nature of allocation algorithm which
+            }
+                            + upperBoundPrimaryShardsPerNode,  
+        // Create higher number of nodes than number of shards to reduce chances of SameShardAllocationDecider kicking-in
+     * removed. The test asserts post each such event that primary shard distribution is balanced for each index.
+     * Similar to testSingleIndexShardAllocation test but creates multiple indices, multiple nodes adding in and getting  
+import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
+        assertAcked(
+     * Utility method which ensures cluster has balanced primary shard distribution across a single index.  
+            replicaCount = randomIntBetween(0, maxReplicaCount);
+import org.opensearch.common.unit.TimeValue;
+            nodeCountToStop--;
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+import java.util.Arrays;  
+            internalCluster().stopRandomDataNode();  
+        final List<String> nodeNames = new ArrayList<>();  
+        // Remove a node
+            nodeCountToStop--;  
+import org.opensearch.common.settings.Settings;  
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+                        .put(PREFER_PRIMARY_SHARD_REBALANCE.getKey(), preferPrimaryRebalance)  
+                .setPersistentSettings(Settings.builder().put(BalancedShardsAllocator.PREFER_PRIMARY_SHARD_BALANCE.getKey(), "true"))  
+        ClusterState state;  
+        ClusterState state;  
+                final int primaryCount = node.shardsWithState(STARTED)  
+    }
+                .cluster()
+                final int lowerBoundPrimaryShardsPerNode = (int) Math.floor(totalPrimaryShards * 1f / currentState.getRoutingNodes().size())  
+        enablePreferPrimaryBalance();
+        ClusterState state;
+                .cluster()
+        }  
+        logger.info(ShardAllocations.printShardDistribution(state));
+        }  
+            logger.info("--> Creating index {} with shard count {} and replica count {}", "test" + i, shardCount, replicaCount);  
+                    .filter(ShardRouting::primary)
+    public void testGlobalPrimaryAllocation() throws Exception {
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, replicaCount);
+        logger.info("--> Adding {} nodes", additionalNodeCount);
+        final int maxReplicaCount = 2;  
+import org.opensearch.cluster.routing.RoutingNodes;  
+     * <p>
+        // Modify other configurations, expecting that the primary balance strategy will not be affected.
+        verifyPerIndexPrimaryBalance();
+        final float buffer = randomIntBetween(1, 4) * 0.10f;
+        final int maxShardCount = 1;
+        verifyPerIndexPrimaryBalance();  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+            ensureGreen(TimeValue.timeValueSeconds(60));
+        for (int i = 0; i < nodeCount; i++) {  
+        logger.info(ShardAllocations.printShardDistribution(state));  
+            // give replica a chance to promote as primary before terminating node containing the replica
+        final int maxReplicaCount = 2;
+     * ensures the primary shard distribution is balanced.
+                    // Asserts value is within the variance threshold (-1/+1 of the average value).
+            if (logger.isTraceEnabled()) {
+        }
+        // Add a new node  
+        final List<String> nodeNames = new ArrayList<>();
+ *
+import org.opensearch.test.junit.annotations.TestLogging;  
+        for (int i = 0; i < numberOfIndices; i++) {
+            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
+        }
+            nodeNames.add(internalCluster().startNode());
+            ensureGreen(TimeValue.timeValueSeconds(60));  
+            client().admin()  
+        int shardCount, replicaCount, totalShards = 0;  
+                    final int primaryCount = node.shardsWithState(index.getKey(), STARTED)
+        internalCluster().startNodes(additionalNodeCount);
+            logger.info("--> Creating index test{} with primary {} and replica {}", i, shardCount, replicaCount);
+                logger.info(ShardAllocations.printShardDistribution(state));  
+                        .put(PREFER_PRIMARY_SHARD_BALANCE.getKey(), preferPrimaryBalance)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, shardCount)
+        int shardCount, replicaCount;  
+     * This test verifies the happy path where primary shard allocation is balanced when multiple indices are created.  
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();  
+            final ClusterState currentState = client().admin().cluster().prepareState().execute().actionGet().getState();
+/*  
+        for (int i = 0; i < numberOfIndices; i++) {
+                state = client().admin().cluster().prepareState().execute().actionGet().getState();
+        verifyPerIndexPrimaryBalance();  
+                        "--> Primary balance assertion failure for index "  
+        logger.info(ShardAllocations.printShardDistribution(state));
+            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
+            builder = builder.put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT);
+import org.opensearch.cluster.routing.ShardRouting;
+ * compatible open source license.
+        final int maxPossibleShards = numberOfIndices * maxShardCount * (1 + maxReplicaCount);  
+        for (int i = 0; i < nodeCount; i++) {
+     * This test verifies balanced primary shard allocation for a single index with large shard count in event of node  
+        setAllocationRelocationStrategy(true, true, buffer);
+            for (RoutingNode node : nodes) {
+     * when the PREFER_PRIMARY_SHARD_REBALANCE is set to true
+            }
+        }  
+        final int maxShardCount = 5;
+    /**
+    }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        logger.info("--> Creating {} nodes", nodeCount);
+        }  
+            // give replica a chance to promote as primary before terminating node containing the replica  
+import org.opensearch.cluster.routing.IndexRoutingTable;
+        List<List<Integer>> shardAndReplicaCounts = new ArrayList<>();
+    private void createIndex(String idxName, int shardCount, int replicaCount, boolean isSegRep) {  
+            nodeNames.add(internalCluster().startNode());
+            ensureGreen(TimeValue.timeValueSeconds(60));
+    }
+        int shardCount, replicaCount;
+                            + node.node().getName()  
+    }  
+                .prepareUpdateSettings()
+            createIndex("test" + i, shardCount, replicaCount, i % 2 == 0);
+ */  
+        logger.info("--> Creating {} nodes", nodeCount);
+     * going down and a new node joining the cluster. The results in shard distribution skewness and re-balancing logic
+        ensureGreen(TimeValue.timeValueSeconds(60));
+        final int nodeCount = randomIntBetween(totalShards, maxPossibleShards) + 1;  
+     * This test verifies that the overall primary balance is attained during allocation. This test verifies primary
+                            + "on node "
+                            + " <= "  
+    private void verifyPrimaryBalance(float buffer) throws Exception {

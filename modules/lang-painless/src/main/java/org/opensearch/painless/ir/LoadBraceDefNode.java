@@ -1,89 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.DefBootstrap;
-import org.opensearch.painless.Location;  
-import org.opensearch.painless.MethodWriter;
-import org.opensearch.painless.lookup.PainlessLookupUtility;
-import org.opensearch.painless.lookup.def;  
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;
 import org.objectweb.asm.Type;  
-
-public class LoadBraceDefNode extends ExpressionNode {
-
-    private Class<?> indexType;
-
-    public void setIndexType(Class<?> indexType) {  
-        this.indexType = indexType;
-    }
-
-    public Class<?> getIndexType() {
-        return indexType;
-    }  
-
-    public String getIndexCanonicalTypeName() {
-        return PainlessLookupUtility.typeToCanonicalTypeName(indexType);  
-    }
-
-    /* ---- end node data, begin visitor ---- */  
-
     @Override
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
-        irTreeVisitor.visitLoadBraceDef(this, scope);
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }
-
-    @Override
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        // do nothing; terminal node  
-    }
-
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
     /* ---- end visitor ---- */  
-
-    public LoadBraceDefNode(Location location) {
-        super(location);  
-    }
-
-    @Override  
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
-        methodWriter.writeDebugInfo(getLocation());
-        Type methodType = Type.getMethodType(  
-            MethodWriter.getType(getExpressionType()),
-            MethodWriter.getType(def.class),
-            MethodWriter.getType(indexType)  
-        );
-        methodWriter.invokeDefCall("arrayLoad", methodType, DefBootstrap.ARRAY_LOAD);
-    }  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.painless.DefBootstrap;
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
 }
+import org.opensearch.painless.ClassWriter;
+ *  
+    public void setIndexType(Class<?> indexType) {  
+import org.opensearch.painless.lookup.def;  
+ * Licensed to Elasticsearch under one or more contributor  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+    private Class<?> indexType;
+ * ownership. Elasticsearch licenses this file to you under  
+    /* ---- end node data, begin visitor ---- */  
+ * specific language governing permissions and limitations
+ * The OpenSearch Contributors require contributions made to  
+    }  
+ * Unless required by applicable law or agreed to in writing,
+        methodWriter.invokeDefCall("arrayLoad", methodType, DefBootstrap.ARRAY_LOAD);
+        return indexType;
+        return PainlessLookupUtility.typeToCanonicalTypeName(indexType);  
+/*  
+        super(location);  
+        );
+import org.opensearch.painless.phase.IRTreeVisitor;
+    public String getIndexCanonicalTypeName() {
+        this.indexType = indexType;
+import org.opensearch.painless.symbol.WriteScope;
+        // do nothing; terminal node  
+    }  
+ * software distributed under the License is distributed on an
+            MethodWriter.getType(indexType)  
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+    }
+/*
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
+ *
+ * GitHub history for details.
+package org.opensearch.painless.ir;
+    public Class<?> getIndexType() {
+    }
+public class LoadBraceDefNode extends ExpressionNode {
+ * You may obtain a copy of the License at  
+        Type methodType = Type.getMethodType(  
+ * not use this file except in compliance with the License.
+import org.opensearch.painless.lookup.PainlessLookupUtility;
+    }
+        irTreeVisitor.visitLoadBraceDef(this, scope);
+import org.opensearch.painless.Location;  
+/*  
+        methodWriter.writeDebugInfo(getLocation());
+    @Override
+    @Override  
+            MethodWriter.getType(getExpressionType()),
+ * this work for additional information regarding copyright
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ * KIND, either express or implied.  See the License for the
+            MethodWriter.getType(def.class),
+ * compatible open source license.
+import org.opensearch.painless.MethodWriter;
+ *
+    public LoadBraceDefNode(Location location) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  

@@ -1,71 +1,61 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.wlm.cancellation;
-
-import org.opensearch.wlm.ResourceType;
-import org.opensearch.wlm.WorkloadGroupTask;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;  
-import java.util.List;
-import java.util.stream.Collectors;
-
 import static org.opensearch.wlm.cancellation.WorkloadGroupTaskCancellationService.MIN_VALUE;
-
-/**  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Collections;
+    /**  
  * Represents the highest resource consuming task first selection strategy.
- */
-public class MaximumResourceTaskSelectionStrategy implements TaskSelectionStrategy {  
-
-    public MaximumResourceTaskSelectionStrategy() {}
-
+        double accumulated = 0;  
+     * The tasks are sorted based on the sorting condition and then selected until the accumulated resource usage reaches the limit.
+        return Comparator.comparingDouble(task -> resourceType.getResourceUsageCalculator().calculateTaskResourceUsage(task));  
+    public List<WorkloadGroupTask> selectTasksForCancellation(List<WorkloadGroupTask> tasks, double limit, ResourceType resourceType) {
     /**
-     * Returns a comparator that defines the sorting condition for tasks.
+ * compatible open source license.
+    private Comparator<WorkloadGroupTask> sortingCondition(ResourceType resourceType) {
+ * this file be licensed under the Apache-2.0 license or a
+     * @param limit The limit on the accumulated resource usage
+    public MaximumResourceTaskSelectionStrategy() {}
+import java.util.List;
+ * The OpenSearch Contributors require contributions made to  
+     * @param tasks The list of tasks from which to select
+ */
+     *  
+public class MaximumResourceTaskSelectionStrategy implements TaskSelectionStrategy {  
+        List<WorkloadGroupTask> selectedTasks = new ArrayList<>();
+                break;
+     */
+import org.opensearch.wlm.WorkloadGroupTask;
+     */  
+}
+        }
+     * @return The comparator  
+     * @return The list of selected tasks
+        if (limit < 0) {
+     * @throws IllegalArgumentException If the limit is less than zero
+import org.opensearch.wlm.ResourceType;
+            throw new IllegalArgumentException("limit has to be greater than zero");  
+     * Selects tasks for cancellation based on the provided limit and resource type.
+    }  
+/*  
+ *
+ */  
+package org.opensearch.wlm.cancellation;
      * This is the default implementation since the most resource consuming tasks are the likely to regress the performance.  
      * from resiliency point of view it makes sense to cancel them first
-     *
-     * @return The comparator  
-     */
-    private Comparator<WorkloadGroupTask> sortingCondition(ResourceType resourceType) {
-        return Comparator.comparingDouble(task -> resourceType.getResourceUsageCalculator().calculateTaskResourceUsage(task));  
+     * Returns a comparator that defines the sorting condition for tasks.
+        return selectedTasks;
+        List<WorkloadGroupTask> sortedTasks = tasks.stream().sorted(sortingCondition(resourceType).reversed()).collect(Collectors.toList());  
     }
-
-    /**  
-     * Selects tasks for cancellation based on the provided limit and resource type.
-     * The tasks are sorted based on the sorting condition and then selected until the accumulated resource usage reaches the limit.
-     *  
-     * @param tasks The list of tasks from which to select
-     * @param limit The limit on the accumulated resource usage
-     * @param resourceType The type of resource to consider  
-     * @return The list of selected tasks
-     * @throws IllegalArgumentException If the limit is less than zero
-     */  
-    public List<WorkloadGroupTask> selectTasksForCancellation(List<WorkloadGroupTask> tasks, double limit, ResourceType resourceType) {
-        if (limit < 0) {
-            throw new IllegalArgumentException("limit has to be greater than zero");  
+import java.util.Comparator;  
+import java.util.ArrayList;
         }
+            selectedTasks.add(task);
         if (limit < MIN_VALUE) {
             return Collections.emptyList();  
-        }
-
-        List<WorkloadGroupTask> sortedTasks = tasks.stream().sorted(sortingCondition(resourceType).reversed()).collect(Collectors.toList());  
-
-        List<WorkloadGroupTask> selectedTasks = new ArrayList<>();
-        double accumulated = 0;  
-        for (WorkloadGroupTask task : sortedTasks) {
-            selectedTasks.add(task);
-            accumulated += resourceType.getResourceUsageCalculator().calculateTaskResourceUsage(task);  
-            if ((accumulated - limit) > MIN_VALUE) {
-                break;
             }  
+import java.util.stream.Collectors;
+            if ((accumulated - limit) > MIN_VALUE) {
+            accumulated += resourceType.getResourceUsageCalculator().calculateTaskResourceUsage(task);  
+        for (WorkloadGroupTask task : sortedTasks) {
         }
-        return selectedTasks;
-    }  
-}
+     * @param resourceType The type of resource to consider  
+/**  
+     *

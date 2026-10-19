@@ -1,55 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
+/*  
+ * Shape types supported by opensearch
+    POLYGON,
+ * The OpenSearch Contributors require contributions made to  
+    ENVELOPE, // not part of the actual WKB spec  
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+ * under the License.  
+ *
+import java.util.Locale;
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.geometry;
-
-import java.util.Locale;
-
-/**  
- * Shape types supported by opensearch
- */
-public enum ShapeType {  
-    POINT,
-    MULTIPOINT,
     LINESTRING,  
-    MULTILINESTRING,
-    POLYGON,
-    MULTIPOLYGON,  
+ * license agreements. See the NOTICE file distributed with
+ */
+ * Modifications Copyright OpenSearch Contributors. See
     GEOMETRYCOLLECTION,
-    LINEARRING, // not serialized by itself in WKT or WKB
-    ENVELOPE, // not part of the actual WKB spec  
-    CIRCLE; // not part of the actual WKB spec
-
-    public static ShapeType forName(String shapeName) {  
+ * Licensed to Elasticsearch under one or more contributor  
+    MULTILINESTRING,
+ *  
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
         return ShapeType.valueOf(shapeName.toUpperCase(Locale.ROOT));
-    }
+    MULTIPOLYGON,  
+ * software distributed under the License is distributed on an
 }  
+ * SPDX-License-Identifier: Apache-2.0
+    CIRCLE; // not part of the actual WKB spec
+ * compatible open source license.
+public enum ShapeType {  
+    }
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * this work for additional information regarding copyright
+ * GitHub history for details.
+/**  
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public static ShapeType forName(String shapeName) {  
+package org.opensearch.geometry;
+    LINEARRING, // not serialized by itself in WKT or WKB
+    POINT,
+ * specific language governing permissions and limitations
+    MULTIPOINT,
+ * not use this file except in compliance with the License.
+/*  

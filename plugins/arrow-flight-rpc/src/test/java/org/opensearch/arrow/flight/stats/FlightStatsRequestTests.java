@@ -1,37 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.stats;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-
-public class FlightStatsRequestTests extends OpenSearchTestCase {  
-
-    public void testBasicFunctionality() throws IOException {
-        FlightStatsRequest request = new FlightStatsRequest("node1", "node2");  
-        request.timeout("30s");
-
-        BytesStreamOutput out = new BytesStreamOutput();  
-        request.writeTo(out);
-
         FlightStatsRequest deserialized = new FlightStatsRequest(out.bytes().streamInput());  
+        new FlightStatsRequest.NodeRequest(out.bytes().streamInput());
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.test.OpenSearchTestCase;
+ *
+/*  
+        BytesStreamOutput out = new BytesStreamOutput();  
+public class FlightStatsRequestTests extends OpenSearchTestCase {  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+}  
+import java.io.IOException;
+        FlightStatsRequest.NodeRequest nodeRequest = new FlightStatsRequest.NodeRequest();
         assertArrayEquals(request.nodesIds(), deserialized.nodesIds());
     }
-
-    public void testNodeRequest() throws IOException {
-        FlightStatsRequest.NodeRequest nodeRequest = new FlightStatsRequest.NodeRequest();
-
+        FlightStatsRequest request = new FlightStatsRequest("node1", "node2");  
         BytesStreamOutput out = new BytesStreamOutput();
-        nodeRequest.writeTo(out);
-
-        new FlightStatsRequest.NodeRequest(out.bytes().streamInput());
     }
-}  
+ * The OpenSearch Contributors require contributions made to  
+        request.writeTo(out);
+        nodeRequest.writeTo(out);
+package org.opensearch.arrow.flight.stats;
+        request.timeout("30s");
+    public void testBasicFunctionality() throws IOException {
+    public void testNodeRequest() throws IOException {
+ * compatible open source license.
+import org.opensearch.common.io.stream.BytesStreamOutput;

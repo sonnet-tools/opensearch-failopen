@@ -1,71 +1,60 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.hep.HepPlanner;  
-import org.apache.calcite.plan.hep.HepProgramBuilder;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;  
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;  
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.test.OpenSearchTestCase;  
-
 import java.util.List;
-
-/**
+import org.opensearch.test.OpenSearchTestCase;  
+    }  
+import org.apache.calcite.plan.hep.HepProgramBuilder;
+        super.setUp();  
+            () -> new RandSeedAdapter().adapt(original, List.of(), cluster)  
  * Unit tests for {@link RandSeedAdapter}. PPL {@code rand([seed])} accepts an optional seed that
- * DataFusion's niladic {@code random()} cannot express. Niladic {@code rand()} maps to the niladic  
- * {@link SqlStdOperatorTable#RAND}, which {@code DataFusionFragmentConvertor} maps to DataFusion's
- * {@code random()} — avoiding {@code Unable to convert call RAND(i32)}. Seeded {@code rand(seed)} is
- * rejected with a clear error rather than silently dropping the seed (which would degrade  
- * deterministic seeded output into non-deterministic random()).
+import org.apache.calcite.rel.type.RelDataTypeFactory;  
+        assertTrue("error should explain seeded RAND is unsupported", e.getMessage().toLowerCase(java.util.Locale.ROOT).contains("seed"));
+ * this file be licensed under the Apache-2.0 license or a
+        RexNode seed = rexBuilder.makeLiteral(42, typeFactory.createSqlType(SqlTypeName.INTEGER), false);
+        IllegalArgumentException e = expectThrows(
  */
-public class RandSeedAdapterTests extends OpenSearchTestCase {  
-
+    public void testNiladicRandPassedThrough() {
+ * SPDX-License-Identifier: Apache-2.0
+        RexNode adapted = new RandSeedAdapter().adapt(original, List.of(), cluster);
+    @Override
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
     private RelDataTypeFactory typeFactory;
-    private RexBuilder rexBuilder;  
+public class RandSeedAdapterTests extends OpenSearchTestCase {  
+        typeFactory = new JavaTypeFactoryImpl();
+ * compatible open source license.
+import org.apache.calcite.rex.RexBuilder;
+ * DataFusion's niladic {@code random()} cannot express. Niladic {@code rand()} maps to the niladic  
+        cluster = RelOptCluster.create(planner, rexBuilder);
+        assertSame("operator stays RAND", SqlStdOperatorTable.RAND, call.getOperator());
+        rexBuilder = new RexBuilder(typeFactory);
     private RelOptCluster cluster;
     private RelDataType doubleType;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        typeFactory = new JavaTypeFactoryImpl();
-        rexBuilder = new RexBuilder(typeFactory);
         HepPlanner planner = new HepPlanner(new HepProgramBuilder().build());  
-        cluster = RelOptCluster.create(planner, rexBuilder);
-        doubleType = typeFactory.createSqlType(SqlTypeName.DOUBLE);
+/*  
+import org.apache.calcite.rel.type.RelDataType;
     }  
-
-    public void testNiladicRandPassedThrough() {
-        RexCall original = (RexCall) rexBuilder.makeCall(doubleType, SqlStdOperatorTable.RAND, List.of());  
-
-        RexNode adapted = new RandSeedAdapter().adapt(original, List.of(), cluster);
-
-        RexCall call = (RexCall) adapted;
-        assertSame("operator stays RAND", SqlStdOperatorTable.RAND, call.getOperator());
-        assertTrue("no operands", call.getOperands().isEmpty());  
-    }
-
     public void testSeededRandRejectedWithClearError() {  
-        RexNode seed = rexBuilder.makeLiteral(42, typeFactory.createSqlType(SqlTypeName.INTEGER), false);
-        RexCall original = (RexCall) rexBuilder.makeCall(doubleType, SqlStdOperatorTable.RAND, List.of(seed));
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> new RandSeedAdapter().adapt(original, List.of(), cluster)  
-        );
-        assertTrue("error should explain seeded RAND is unsupported", e.getMessage().toLowerCase(java.util.Locale.ROOT).contains("seed"));
-    }  
+        doubleType = typeFactory.createSqlType(SqlTypeName.DOUBLE);
+import org.apache.calcite.rex.RexCall;
+    public void setUp() throws Exception {
+ * rejected with a clear error rather than silently dropping the seed (which would degrade  
+import org.apache.calcite.rex.RexNode;  
+    }
 }
+ */  
+import org.apache.calcite.plan.hep.HepPlanner;  
+        RexCall original = (RexCall) rexBuilder.makeCall(doubleType, SqlStdOperatorTable.RAND, List.of(seed));
+ * deterministic seeded output into non-deterministic random()).
+    private RexBuilder rexBuilder;  
+package org.opensearch.be.datafusion;
+        );
+import org.apache.calcite.sql.type.SqlTypeName;
+ * {@link SqlStdOperatorTable#RAND}, which {@code DataFusionFragmentConvertor} maps to DataFusion's
+        assertTrue("no operands", call.getOperands().isEmpty());  
+        RexCall original = (RexCall) rexBuilder.makeCall(doubleType, SqlStdOperatorTable.RAND, List.of());  
+        RexCall call = (RexCall) adapted;
+ *
+ * The OpenSearch Contributors require contributions made to  
+/**
+import org.apache.calcite.plan.RelOptCluster;
+ * {@code random()} — avoiding {@code Unable to convert call RAND(i32)}. Seeded {@code rand(seed)} is
+            IllegalArgumentException.class,

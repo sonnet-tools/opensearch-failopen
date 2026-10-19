@@ -1,57 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+ * Unless required by applicable law or agreed to in writing,
+public interface AllowlistAnnotationParser {
+package org.opensearch.painless.spi.annotation;
+        Stream.of(
 /*  
+        ).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * parse an annotation against any allowlist object while loading.  
+ * Licensed to Elasticsearch under one or more contributor  
+            new AbstractMap.SimpleEntry<>(NonDeterministicAnnotation.NAME, NonDeterministicAnnotationParser.INSTANCE),
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+ */
+/*  
+import java.util.Collections;
+import java.util.stream.Stream;
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */
+ *
+ */  
+}
+ * this file be licensed under the Apache-2.0 license or a
+            new AbstractMap.SimpleEntry<>(NoImportAnnotation.NAME, NoImportAnnotationParser.INSTANCE),  
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+    );
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.painless.spi.annotation;
-
-import java.util.AbstractMap;
-import java.util.Collections;
-import java.util.Map;  
+/*
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-/**
- * AllowlistAnnotationParser is an interface used to define how to
- * parse an annotation against any allowlist object while loading.  
- */
-public interface AllowlistAnnotationParser {
-
-    Map<String, AllowlistAnnotationParser> BASE_ANNOTATION_PARSERS = Collections.unmodifiableMap(
-        Stream.of(
-            new AbstractMap.SimpleEntry<>(NoImportAnnotation.NAME, NoImportAnnotationParser.INSTANCE),  
             new AbstractMap.SimpleEntry<>(DeprecatedAnnotation.NAME, DeprecatedAnnotationParser.INSTANCE),
-            new AbstractMap.SimpleEntry<>(NonDeterministicAnnotation.NAME, NonDeterministicAnnotationParser.INSTANCE),
-            new AbstractMap.SimpleEntry<>(InjectConstantAnnotation.NAME, InjectConstantAnnotationParser.INSTANCE)  
-        ).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
-    );
-
+    Map<String, AllowlistAnnotationParser> BASE_ANNOTATION_PARSERS = Collections.unmodifiableMap(
+ * this work for additional information regarding copyright
+ * compatible open source license.
+ *
+ * not use this file except in compliance with the License.
+import java.util.Map;  
     Object parse(Map<String, String> arguments);
-}
+ * AllowlistAnnotationParser is an interface used to define how to
+            new AbstractMap.SimpleEntry<>(InjectConstantAnnotation.NAME, InjectConstantAnnotationParser.INSTANCE)  
+ * license agreements. See the NOTICE file distributed with
+import java.util.AbstractMap;
+/**

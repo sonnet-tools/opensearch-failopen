@@ -1,436 +1,399 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.wlm.service;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.ResourceNotFoundException;  
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.AckedClusterStateUpdateTask;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.WorkloadGroup;  
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler.ThrottlingKey;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.Priority;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.plugin.wlm.WorkloadManagementPlugin;
-import org.opensearch.plugin.wlm.action.CreateWorkloadGroupResponse;  
-import org.opensearch.plugin.wlm.action.DeleteWorkloadGroupRequest;
-import org.opensearch.plugin.wlm.action.UpdateWorkloadGroupRequest;
-import org.opensearch.plugin.wlm.action.UpdateWorkloadGroupResponse;  
-import org.opensearch.plugin.wlm.rule.WorkloadGroupFeatureType;
-import org.opensearch.rule.autotagging.AutoTaggingRegistry;
-import org.opensearch.rule.autotagging.FeatureType;  
-import org.opensearch.wlm.MutableWorkloadGroupFragment;
-import org.opensearch.wlm.ResourceType;
-import org.opensearch.wlm.WorkloadGroupThrottleSettings;  
-
-import java.util.Collection;
-import java.util.EnumMap;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;  
-
-import static org.opensearch.cluster.metadata.WorkloadGroup.updateExistingWorkloadGroup;
-import static org.opensearch.cluster.service.ClusterManagerTask.CREATE_QUERY_GROUP;  
-import static org.opensearch.cluster.service.ClusterManagerTask.DELETE_QUERY_GROUP;
-import static org.opensearch.cluster.service.ClusterManagerTask.UPDATE_QUERY_GROUP;
-
-/**
- * This class defines the functions for WorkloadGroup persistence
- */  
-public class WorkloadGroupPersistenceService {
-    static final String SOURCE = "query-group-persistence-service";
-    private static final Logger logger = LogManager.getLogger(WorkloadGroupPersistenceService.class);  
-    /**
-     *  max WorkloadGroup count setting name
-     */  
-    public static final String WORKLOAD_GROUP_COUNT_SETTING_NAME = "node.workload_group.max_count";
-    /**
-     * default max workloadGroup count on any node at any given point in time  
-     */
-    private static final int DEFAULT_MAX_QUERY_GROUP_COUNT_VALUE = 100;
-    /**  
-     * min workloadGroup count on any node at any given point in time
-     */
-    private static final int MIN_QUERY_GROUP_COUNT_VALUE = 1;  
-    /**
-     *  max WorkloadGroup count setting
-     */  
-    public static final Setting<Integer> MAX_QUERY_GROUP_COUNT = Setting.intSetting(
-        WORKLOAD_GROUP_COUNT_SETTING_NAME,
-        DEFAULT_MAX_QUERY_GROUP_COUNT_VALUE,  
-        0,
-        WorkloadGroupPersistenceService::validateMaxWorkloadGroupCount,
-        Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-    private final ClusterService clusterService;  
-    private volatile int maxWorkloadGroupCount;
-    final ThrottlingKey createWorkloadGroupThrottlingKey;
-    final ThrottlingKey deleteWorkloadGroupThrottlingKey;  
-    final ThrottlingKey updateWorkloadGroupThrottlingKey;
-
-    /**  
-     * Constructor for WorkloadGroupPersistenceService
-     *
-     * @param clusterService {@link ClusterService} - The cluster service to be used by WorkloadGroupPersistenceService  
-     * @param settings {@link Settings} - The settings to be used by WorkloadGroupPersistenceService
-     * @param clusterSettings {@link ClusterSettings} - The cluster settings to be used by WorkloadGroupPersistenceService
-     */  
-    @Inject
-    public WorkloadGroupPersistenceService(
-        final ClusterService clusterService,  
-        final Settings settings,
-        final ClusterSettings clusterSettings
+    private static void validateMaxWorkloadGroupCount(int maxWorkloadGroupCount) {
+    }
+     * @throws IllegalArgumentException if the effective config cannot be enforced
     ) {  
-        this.clusterService = clusterService;
-        this.createWorkloadGroupThrottlingKey = clusterService.registerClusterManagerTask(CREATE_QUERY_GROUP, true);
-        this.deleteWorkloadGroupThrottlingKey = clusterService.registerClusterManagerTask(DELETE_QUERY_GROUP, true);  
-        this.updateWorkloadGroupThrottlingKey = clusterService.registerClusterManagerTask(UPDATE_QUERY_GROUP, true);
-        setMaxWorkloadGroupCount(MAX_QUERY_GROUP_COUNT.get(settings));
-        clusterSettings.addSettingsUpdateConsumer(MAX_QUERY_GROUP_COUNT, this::setMaxWorkloadGroupCount);  
-    }
-
-    /**  
-     * Set maxWorkloadGroupCount to be newMaxWorkloadGroupCount
-     * @param newMaxWorkloadGroupCount - the max number of WorkloadGroup allowed
+import org.apache.logging.log4j.Logger;
+     * @param clusterState state containing the currently stored workload group
      */  
-    public void setMaxWorkloadGroupCount(int newMaxWorkloadGroupCount) {
+                Metadata.builder(metadata)
+    /**
+            throw new IllegalArgumentException("WorkloadGroup with name " + groupName + " already exists. Not creating a new one.");  
+     */  
+import org.opensearch.plugin.wlm.WorkloadManagementPlugin;
+import org.opensearch.cluster.metadata.WorkloadGroup;  
+    /**
+            logger.debug("WLM feature type not registered; skipping principal-attribute check for throttling config", e);  
+    final ThrottlingKey updateWorkloadGroupThrottlingKey;
+     * Modify cluster state to delete the WorkloadGroup  
+            protected AcknowledgedResponse newResponse(boolean acknowledged) {
+    private static final int MIN_QUERY_GROUP_COUNT_VALUE = 1;  
+import java.util.stream.Collectors;  
+            public ClusterState execute(ClusterState currentState) {
+import static org.opensearch.cluster.service.ClusterManagerTask.CREATE_QUERY_GROUP;  
+            }  
+        if (existingWorkloadGroups.size() == maxWorkloadGroupCount) {  
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler.ThrottlingKey;
+    final ThrottlingKey deleteWorkloadGroupThrottlingKey;  
         validateMaxWorkloadGroupCount(newMaxWorkloadGroupCount);
-        this.maxWorkloadGroupCount = newMaxWorkloadGroupCount;  
-    }
-
-    /**  
-     * Validator for maxWorkloadGroupCount
+        }
+            if (!currGroup.getName().equals(name)) {
+import java.util.Optional;
+     */  
+import org.opensearch.cluster.ClusterStateUpdateTask;
+            }  
+     * Validates the effective throttling configuration for an update. Throttling updates are partial, so a fragment that  
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+     * @param deleteWorkloadGroupRequest - request to delete a WorkloadGroup
+    public void setMaxWorkloadGroupCount(int newMaxWorkloadGroupCount) {
+        String by = WorkloadGroupThrottleSettings.getEffectiveBy(throttling);
      * @param maxWorkloadGroupCount - the maxWorkloadGroupCount number to be verified
      */  
-    private static void validateMaxWorkloadGroupCount(int maxWorkloadGroupCount) {
-        if (maxWorkloadGroupCount > DEFAULT_MAX_QUERY_GROUP_COUNT_VALUE || maxWorkloadGroupCount < MIN_QUERY_GROUP_COUNT_VALUE) {
-            throw new IllegalArgumentException(WORKLOAD_GROUP_COUNT_SETTING_NAME + " should be in range [1-100].");  
-        }
-    }
-
+                Optional<WorkloadGroup> findUpdatedGroup = newState.metadata()
+    ClusterState saveWorkloadGroupInClusterState(final WorkloadGroup workloadGroup, final ClusterState currentClusterState) {
+                    "Total resource allocation for " + resourceType.getName() + " will go above the max limit of 1.0."  
+    /**  
+     * @param currentState - current cluster state
     /**
-     * Update cluster state to include the new WorkloadGroup
+     * @param name - the WorkloadGroup name we are getting
+    static final String SOURCE = "query-group-persistence-service";
+            return incomingThrottling;
+            .values()  
+     */  
+}  
+     * @param clusterSettings {@link ClusterSettings} - The cluster settings to be used by WorkloadGroupPersistenceService
+    /**
+            }
+     * @param request the update request  
+        totalUsage.putAll(resourceLimits);  
+     * @param settings {@link Settings} - The settings to be used by WorkloadGroupPersistenceService
+                    totalUsage.compute(resourceType, (k, v) -> v + currGroup.getResourceLimits().getOrDefault(resourceType, 0.0));
+        return clusterService;
+            .stream()
+    public void deleteInClusterStateMetadata(
+                return saveWorkloadGroupInClusterState(workloadGroup, currentState);
+     * default max workloadGroup count on any node at any given point in time  
+            .filter(workloadGroup -> workloadGroup.getName().equals(name))  
+        validateTotalUsage(existingWorkloadGroups, groupName, workloadGroup.getResourceLimits());
+        final Map<String, WorkloadGroup> existingWorkloadGroups = currentClusterState.metadata().workloadGroups();
+            }
+    }  
+import org.opensearch.wlm.WorkloadGroupThrottleSettings;  
+                return createWorkloadGroupThrottlingKey;  
+    ClusterState deleteWorkloadGroupInClusterState(final String name, final ClusterState currentClusterState) {
+package org.opensearch.plugin.wlm.service;
+     * Modify cluster state to update the existing WorkloadGroup
+        UpdateWorkloadGroupRequest toUpdateGroup,
+/*  
+     *  
+            }  
+            return currentGroups.values();
+        final ClusterService clusterService,  
+            .findAny()
+    }  
+        totalUsage.forEach((resourceType, total) -> {
+import org.opensearch.common.settings.Setting;
+            @Override
+            }
+        DeleteWorkloadGroupRequest deleteWorkloadGroupRequest,
+                WorkloadGroup updatedGroup = findUpdatedGroup.get();
+    final ThrottlingKey createWorkloadGroupThrottlingKey;
+     * @param clusterService {@link ClusterService} - The cluster service to be used by WorkloadGroupPersistenceService  
+    public static void validateUpdateThrottlingIsEnforceable(UpdateWorkloadGroupRequest request, ClusterState clusterState) {
+     * only changes {@code node_limit} must inherit the existing {@code by} value before enforceability is checked.
+        final Map<String, WorkloadGroup> existingGroups = currentState.metadata().workloadGroups();
+        if (maxWorkloadGroupCount > DEFAULT_MAX_QUERY_GROUP_COUNT_VALUE || maxWorkloadGroupCount < MIN_QUERY_GROUP_COUNT_VALUE) {
+        } catch (ResourceNotFoundException e) {
+                listener.onFailure(e);
+        WORKLOAD_GROUP_COUNT_SETTING_NAME,
+            .stream()
+        });
+        final WorkloadGroup workloadGroupToRemove = getWorkloadGroup(name, metadata);  
+        final Map<String, WorkloadGroup> currentGroups = currentState.getMetadata().workloadGroups();
+        validateTotalUsage(existingGroups, name, mutableWorkloadGroupFragment.getResourceLimits());
+     *  max WorkloadGroup count setting name
+            .stream()
+            .findFirst()  
+    }
+            public void onFailure(String source, Exception e) {
      * @param workloadGroup {@link WorkloadGroup} - the WorkloadGroup we're currently creating  
+        final Settings settings,
+                throw new IllegalArgumentException(
+     */  
+ * compatible open source license.
+        return clusterState.metadata()
+ */  
+            .build();
+        if (WorkloadGroupThrottleSettings.GROUP_SCOPE.equals(by)) {  
+ * This class defines the functions for WorkloadGroup persistence
+            .metadata(
+     * Get the WorkloadGroups with the specified name from cluster state  
+     * Update cluster state to include the new WorkloadGroup
+     * Constructor for WorkloadGroupPersistenceService
+                CreateWorkloadGroupResponse response = new CreateWorkloadGroupResponse(workloadGroup, RestStatus.OK);
+     * maxWorkloadGroupCount getter
+import org.opensearch.cluster.service.ClusterService;  
+                    .stream()
+import static org.opensearch.cluster.service.ClusterManagerTask.UPDATE_QUERY_GROUP;
+     * @param toUpdateGroup {@link WorkloadGroup} - the WorkloadGroup that we want to update
+    private void validateTotalUsage(  
+            logger.warn("WorkloadGroup with name {} already exists. Not creating a new one.", groupName);
+            return;  
+     * Modify cluster state to delete the WorkloadGroup, and return the new cluster state  
+    ) {
+                }
+ */  
+                );
+    private volatile int maxWorkloadGroupCount;
+     * @param currentClusterState - current cluster state
+            @Override
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+        final Metadata metadata = currentState.metadata();  
+                return updateWorkloadGroupInClusterState(toUpdateGroup, currentState);
+import org.opensearch.plugin.wlm.action.UpdateWorkloadGroupRequest;
+            }
+            public ClusterState execute(ClusterState currentState) throws Exception {  
+            throw new IllegalArgumentException(WORKLOAD_GROUP_COUNT_SETTING_NAME + " should be in range [1-100].");  
+            .filter(group -> group.getName().equals(name))
+            .collect(Collectors.toList());
+     * @param newMaxWorkloadGroupCount - the max number of WorkloadGroup allowed
+    ) {
+        // check if maxWorkloadGroupCount will breach
+                assert findUpdatedGroup.isPresent();
+        Setting.Property.Dynamic,  
+import org.opensearch.plugin.wlm.action.DeleteWorkloadGroupRequest;
+import org.opensearch.rule.autotagging.FeatureType;  
+                    .values()  
+     * @param existingWorkloadGroups - existing WorkloadGroups in the system  
+            @Override
+                return deleteWorkloadGroupInClusterState(deleteWorkloadGroupRequest.getName(), currentState);
+                    .filter(group -> group.getName().equals(name))
+        if (throttling == null || throttling.isEmpty()) {
+            .stream()
+        this.deleteWorkloadGroupThrottlingKey = clusterService.registerClusterManagerTask(DELETE_QUERY_GROUP, true);  
+    public static final Setting<Integer> MAX_QUERY_GROUP_COUNT = Setting.intSetting(
+ * SPDX-License-Identifier: Apache-2.0
+        return maxWorkloadGroupCount;
+    /**
+     * @param workloadGroup - the WorkloadGroup we're currently creating
+import org.opensearch.rule.autotagging.AutoTaggingRegistry;
+        }
+    private static final int DEFAULT_MAX_QUERY_GROUP_COUNT_VALUE = 100;
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
+        Optional<WorkloadGroup> findExistingGroup = existingWorkloadGroups.values()  
+    /**  
+    /**  
+                    .getThrottling()  
+        }
+            logger.warn("{} value exceeded its assigned limit of {}.", WORKLOAD_GROUP_COUNT_SETTING_NAME, maxWorkloadGroupCount);
+    }  
+        DEFAULT_MAX_QUERY_GROUP_COUNT_VALUE,  
+    public ClusterService getClusterService() {
+            .build();
+     */  
+            if (total > 1.0) {  
+        validateThrottlingIsEnforceable(getEffectiveThrottling(request, clusterState));
+        ActionListener<AcknowledgedResponse> listener  
+            .findAny()  
+            .filter(group -> group.getName().equals(request.getName()))
+        Settings incomingThrottling = request.getmMutableWorkloadGroupFragment().getThrottling();  
+    }
+                logger.warn("Failed to update WorkloadGroup due to error: {}, for source: {}", e.getMessage(), source);  
+        if (incomingThrottling == null || incomingThrottling.isEmpty()) {
+            .orElseThrow(() -> new ResourceNotFoundException("No WorkloadGroup exists with the provided name: " + name));
+        if (name == null || name.isEmpty()) {  
+     * @param resourceLimits - the WorkloadGroup we're creating or updating
+            )
+                listener.onFailure(e);  
+ * The OpenSearch Contributors require contributions made to  
+            @Override
      * @param listener - ActionListener for CreateWorkloadGroupResponse
-     */
+        if (resourceLimits == null || resourceLimits.isEmpty()) {
+import org.opensearch.common.Priority;
+    /**
+     * @param name - the name for WorkloadGroup to be deleted
+import org.opensearch.core.rest.RestStatus;
+            }
+                group -> updateExistingWorkloadGroup(group, request.getmMutableWorkloadGroupFragment()).getMutableWorkloadGroupFragment()
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+import org.opensearch.core.action.ActionListener;  
+            }
+        setMaxWorkloadGroupCount(MAX_QUERY_GROUP_COUNT.get(settings));
+            @Override  
+    /**
+        return currentGroups.values()  
+                for (ResourceType resourceType : resourceLimits.keySet()) {  
+            @Override
+    /**
+        return ClusterState.builder(currentClusterState)  
+                );
+                listener.onResponse(response);
+    }
+     * @param listener - ActionListener for AcknowledgedResponse
+                logger.warn("failed to save WorkloadGroup object due to error: {}, for source: {}.", e.getMessage(), source);
+    public static final String WORKLOAD_GROUP_COUNT_SETTING_NAME = "node.workload_group.max_count";
+            .map(
+            @Override  
+     * Modify cluster state to update the WorkloadGroup  
+    public void updateInClusterStateMetadata(
+        });
+    }
+     * @throws IllegalArgumentException if the config cannot be enforced
+            return;  
+    }  
+    ) {
     public void persistInClusterStateMetadata(WorkloadGroup workloadGroup, ActionListener<CreateWorkloadGroupResponse> listener) {  
         clusterService.submitStateUpdateTask(SOURCE, new ClusterStateUpdateTask(Priority.NORMAL) {
-            @Override
-            public ClusterState execute(ClusterState currentState) throws Exception {  
-                return saveWorkloadGroupInClusterState(workloadGroup, currentState);
-            }
-
-            @Override
-            public ThrottlingKey getClusterManagerThrottlingKey() {
-                return createWorkloadGroupThrottlingKey;  
-            }
-
-            @Override  
-            public void onFailure(String source, Exception e) {
-                logger.warn("failed to save WorkloadGroup object due to error: {}, for source: {}.", e.getMessage(), source);
-                listener.onFailure(e);  
-            }
-
-            @Override  
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                CreateWorkloadGroupResponse response = new CreateWorkloadGroupResponse(workloadGroup, RestStatus.OK);
-                listener.onResponse(response);  
-            }
-        });
-    }  
-
-    /**
-     * This method will be executed before we submit the new cluster state  
-     * @param workloadGroup - the WorkloadGroup we're currently creating
-     * @param currentClusterState - the cluster state before the update
-     */  
-    ClusterState saveWorkloadGroupInClusterState(final WorkloadGroup workloadGroup, final ClusterState currentClusterState) {
-        final Map<String, WorkloadGroup> existingWorkloadGroups = currentClusterState.metadata().workloadGroups();
-        String groupName = workloadGroup.getName();  
-
-        // check if maxWorkloadGroupCount will breach
-        if (existingWorkloadGroups.size() == maxWorkloadGroupCount) {  
-            logger.warn("{} value exceeded its assigned limit of {}.", WORKLOAD_GROUP_COUNT_SETTING_NAME, maxWorkloadGroupCount);
-            throw new IllegalStateException("Can't create more than " + maxWorkloadGroupCount + " WorkloadGroups in the system.");
-        }  
-
-        // check for duplicate name
-        Optional<WorkloadGroup> findExistingGroup = existingWorkloadGroups.values()  
-            .stream()
-            .filter(group -> group.getName().equals(groupName))
-            .findFirst();  
-        if (findExistingGroup.isPresent()) {
-            logger.warn("WorkloadGroup with name {} already exists. Not creating a new one.", groupName);
-            throw new IllegalArgumentException("WorkloadGroup with name " + groupName + " already exists. Not creating a new one.");  
-        }
-
-        // check if there's any resource allocation that exceed limit of 1.0  
-        validateTotalUsage(existingWorkloadGroups, groupName, workloadGroup.getResourceLimits());
-
-        return ClusterState.builder(currentClusterState)  
-            .metadata(Metadata.builder(currentClusterState.metadata()).put(workloadGroup).build())
-            .build();
-    }  
-
-    /**
-     * Get the WorkloadGroups with the specified name from cluster state  
-     * @param name - the WorkloadGroup name we are getting
-     * @param currentState - current cluster state
-     */  
-    public static Collection<WorkloadGroup> getFromClusterStateMetadata(String name, ClusterState currentState) {
-        final Map<String, WorkloadGroup> currentGroups = currentState.getMetadata().workloadGroups();
-        if (name == null || name.isEmpty()) {  
-            return currentGroups.values();
-        }
-        return currentGroups.values()  
-            .stream()
-            .filter(group -> group.getName().equals(name))
-            .findAny()  
-            .stream()
-            .collect(Collectors.toList());
-    }  
-
-    /**
-     * Modify cluster state to delete the WorkloadGroup  
-     * @param deleteWorkloadGroupRequest - request to delete a WorkloadGroup
-     * @param listener - ActionListener for AcknowledgedResponse
-     */  
-    public void deleteInClusterStateMetadata(
-        DeleteWorkloadGroupRequest deleteWorkloadGroupRequest,
-        ActionListener<AcknowledgedResponse> listener  
-    ) {
-        clusterService.submitStateUpdateTask(SOURCE, new AckedClusterStateUpdateTask<>(deleteWorkloadGroupRequest, listener) {
-            @Override  
-            public ClusterState execute(ClusterState currentState) {
-                return deleteWorkloadGroupInClusterState(deleteWorkloadGroupRequest.getName(), currentState);
-            }  
-
-            @Override
-            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {  
-                return deleteWorkloadGroupThrottlingKey;
-            }
-
-            @Override
-            protected AcknowledgedResponse newResponse(boolean acknowledged) {
-                return new AcknowledgedResponse(acknowledged);  
-            }
-        });
-    }  
-
-    /**
-     * Modify cluster state to delete the WorkloadGroup, and return the new cluster state  
-     * @param name - the name for WorkloadGroup to be deleted
-     * @param currentClusterState - current cluster state
-     */  
-    ClusterState deleteWorkloadGroupInClusterState(final String name, final ClusterState currentClusterState) {
-        final Metadata metadata = currentClusterState.metadata();
-        final WorkloadGroup workloadGroupToRemove = getWorkloadGroup(name, metadata);  
-
-        return ClusterState.builder(currentClusterState).metadata(Metadata.builder(metadata).remove(workloadGroupToRemove).build()).build();
-    }  
-
-    private static WorkloadGroup getWorkloadGroup(String name, Metadata metadata) {
-        return metadata.workloadGroups()  
-            .values()
-            .stream()
-            .filter(workloadGroup -> workloadGroup.getName().equals(name))  
-            .findAny()
-            .orElseThrow(() -> new ResourceNotFoundException("No WorkloadGroup exists with the provided name: " + name));
-    }  
-
-    /**
-     * Modify cluster state to update the WorkloadGroup  
-     * @param toUpdateGroup {@link WorkloadGroup} - the WorkloadGroup that we want to update
-     * @param listener - ActionListener for UpdateWorkloadGroupResponse
-     */  
-    public void updateInClusterStateMetadata(
-        UpdateWorkloadGroupRequest toUpdateGroup,
-        ActionListener<UpdateWorkloadGroupResponse> listener  
-    ) {
-        clusterService.submitStateUpdateTask(SOURCE, new ClusterStateUpdateTask(Priority.NORMAL) {
-            @Override  
-            public ClusterState execute(ClusterState currentState) {
-                return updateWorkloadGroupInClusterState(toUpdateGroup, currentState);
-            }  
-
-            @Override
-            public ThrottlingKey getClusterManagerThrottlingKey() {  
-                return updateWorkloadGroupThrottlingKey;
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                logger.warn("Failed to update WorkloadGroup due to error: {}, for source: {}", e.getMessage(), source);  
-                listener.onFailure(e);
-            }
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                String name = toUpdateGroup.getName();  
-                Optional<WorkloadGroup> findUpdatedGroup = newState.metadata()
-                    .workloadGroups()
-                    .values()  
-                    .stream()
-                    .filter(group -> group.getName().equals(name))
-                    .findFirst();  
-                assert findUpdatedGroup.isPresent();
-                WorkloadGroup updatedGroup = findUpdatedGroup.get();
-                UpdateWorkloadGroupResponse response = new UpdateWorkloadGroupResponse(updatedGroup, RestStatus.OK);  
-                listener.onResponse(response);
-            }
-        });  
-    }
-
-    /**  
-     * Modify cluster state to update the existing WorkloadGroup
-     * @param updateWorkloadGroupRequest {@link WorkloadGroup} - the WorkloadGroup that we want to update
-     * @param currentState - current cluster state  
-     */
-    ClusterState updateWorkloadGroupInClusterState(UpdateWorkloadGroupRequest updateWorkloadGroupRequest, ClusterState currentState) {
-        final Metadata metadata = currentState.metadata();  
-        final Map<String, WorkloadGroup> existingGroups = currentState.metadata().workloadGroups();
-        String name = updateWorkloadGroupRequest.getName();
-        MutableWorkloadGroupFragment mutableWorkloadGroupFragment = updateWorkloadGroupRequest.getmMutableWorkloadGroupFragment();  
-
-        final WorkloadGroup existingGroup = existingGroups.values()
-            .stream()  
-            .filter(group -> group.getName().equals(name))
-            .findFirst()
-            .orElseThrow(() -> new ResourceNotFoundException("No WorkloadGroup exists with the provided name: " + name));  
-
-        validateTotalUsage(existingGroups, name, mutableWorkloadGroupFragment.getResourceLimits());
-        return ClusterState.builder(currentState)  
-            .metadata(
-                Metadata.builder(metadata)
-                    .remove(existingGroup)  
-                    .put(updateExistingWorkloadGroup(existingGroup, mutableWorkloadGroupFragment))
-                    .build()
-            )  
-            .build();
-    }
-
-    /**
-     * This method checks if there's any resource allocation that exceed limit of 1.0
-     * @param existingWorkloadGroups - existing WorkloadGroups in the system  
-     * @param resourceLimits - the WorkloadGroup we're creating or updating
-     */
-    private void validateTotalUsage(  
-        Map<String, WorkloadGroup> existingWorkloadGroups,
-        String name,
-        Map<ResourceType, Double> resourceLimits  
-    ) {
-        if (resourceLimits == null || resourceLimits.isEmpty()) {
-            return;  
-        }
-        final Map<ResourceType, Double> totalUsage = new EnumMap<>(ResourceType.class);
-        totalUsage.putAll(resourceLimits);  
-        for (WorkloadGroup currGroup : existingWorkloadGroups.values()) {
-            if (!currGroup.getName().equals(name)) {
-                for (ResourceType resourceType : resourceLimits.keySet()) {  
-                    totalUsage.compute(resourceType, (k, v) -> v + currGroup.getResourceLimits().getOrDefault(resourceType, 0.0));
-                }
-            }  
-        }
-        totalUsage.forEach((resourceType, total) -> {
-            if (total > 1.0) {  
-                logger.warn("Total resource allocation for {} will go above the max limit of 1.0.", resourceType.getName());
-                throw new IllegalArgumentException(
-                    "Total resource allocation for " + resourceType.getName() + " will go above the max limit of 1.0."  
-                );
-            }
-        });  
-    }
-
-    /**  
-     * maxWorkloadGroupCount getter
-     */
-    public int getMaxWorkloadGroupCount() {  
-        return maxWorkloadGroupCount;
-    }
-
-    /**
-     * clusterService getter
-     */  
-    public ClusterService getClusterService() {
-        return clusterService;
-    }  
-
-    /**
-     * Validates the effective throttling configuration for an update. Throttling updates are partial, so a fragment that  
-     * only changes {@code node_limit} must inherit the existing {@code by} value before enforceability is checked.
-     *
-     * @param request the update request  
-     * @param clusterState state containing the currently stored workload group
-     * @throws IllegalArgumentException if the effective config cannot be enforced
-     */  
-    public static void validateUpdateThrottlingIsEnforceable(UpdateWorkloadGroupRequest request, ClusterState clusterState) {
-        validateThrottlingIsEnforceable(getEffectiveThrottling(request, clusterState));
-    }  
-
     static Settings getEffectiveThrottling(UpdateWorkloadGroupRequest request, ClusterState clusterState) {
-        Settings incomingThrottling = request.getmMutableWorkloadGroupFragment().getThrottling();  
-        if (incomingThrottling == null || incomingThrottling.isEmpty()) {
-            return incomingThrottling;
-        }  
-        return clusterState.metadata()
-            .workloadGroups()
-            .values()  
-            .stream()
-            .filter(group -> group.getName().equals(request.getName()))
-            .findFirst()  
-            .map(
-                group -> updateExistingWorkloadGroup(group, request.getmMutableWorkloadGroupFragment()).getMutableWorkloadGroupFragment()
-                    .getThrottling()  
-            )
-            .orElse(incomingThrottling);
-    }  
-
-    /**
-     * Rejects principal-scoped throttling when no principal attribute is registered: no bucket can be resolved, so the  
-     * limit would always fail open. Called from the transport actions, not a cluster-state applier, because throwing
-     * while applying cluster state wedges the cluster-manager.
-     *  
-     * @param throttling the incoming throttling fragment, may be {@code null} or empty (both fine: nothing to honour)
-     * @throws IllegalArgumentException if the config cannot be enforced
-     */  
-    public static void validateThrottlingIsEnforceable(Settings throttling) {
-        if (throttling == null || throttling.isEmpty()) {
-            return;  
-        }
-        String by = WorkloadGroupThrottleSettings.getEffectiveBy(throttling);
-        if (WorkloadGroupThrottleSettings.GROUP_SCOPE.equals(by)) {  
-            return;
-        }
-        try {  
-            FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);
-            if (featureType.getAllowedAttributesRegistry().containsKey(WorkloadManagementPlugin.PRINCIPAL_ATTRIBUTE_NAME) == false) {
+import org.opensearch.cluster.AckedClusterStateUpdateTask;
                 throw new IllegalArgumentException(  
-                    "throttling.by ["
-                        + by
-                        + "] needs a principal attribute provider (the security plugin) to be installed, otherwise the "  
-                        + "limit can never be enforced. Omit [by] to use whole-group throttling instead."
-                );
-            }  
-        } catch (ResourceNotFoundException e) {
-            // Feature type not registered yet. Skip: throttling fails open anyway, so a false rejection is worse.
-            logger.debug("WLM feature type not registered; skipping principal-attribute check for throttling config", e);  
-        }
+                    .remove(existingGroup)  
+import java.util.Map;
     }
-}  
+            .stream()
+        });  
+    ClusterState updateWorkloadGroupInClusterState(UpdateWorkloadGroupRequest updateWorkloadGroupRequest, ClusterState currentState) {
+    private final ClusterService clusterService;  
+            .findFirst();  
+public class WorkloadGroupPersistenceService {
+     * @param throttling the incoming throttling fragment, may be {@code null} or empty (both fine: nothing to honour)
+            .values()
+            public void onFailure(String source, Exception e) {
+        return metadata.workloadGroups()  
+        clusterSettings.addSettingsUpdateConsumer(MAX_QUERY_GROUP_COUNT, this::setMaxWorkloadGroupCount);  
+            @Override  
+            .filter(group -> group.getName().equals(groupName))
+    }  
+     * This method checks if there's any resource allocation that exceed limit of 1.0
+     * @param updateWorkloadGroupRequest {@link WorkloadGroup} - the WorkloadGroup that we want to update
+        WorkloadGroupPersistenceService::validateMaxWorkloadGroupCount,
+            @Override  
+        for (WorkloadGroup currGroup : existingWorkloadGroups.values()) {
+    @Inject
+    }  
+        final Metadata metadata = currentClusterState.metadata();
+     */
+            public ThrottlingKey getClusterManagerThrottlingKey() {  
+                        + "] needs a principal attribute provider (the security plugin) to be installed, otherwise the "  
+     */  
+     */
+                UpdateWorkloadGroupResponse response = new UpdateWorkloadGroupResponse(updatedGroup, RestStatus.OK);  
+        Setting.Property.NodeScope
+            .findFirst()
+        clusterService.submitStateUpdateTask(SOURCE, new ClusterStateUpdateTask(Priority.NORMAL) {
+        if (findExistingGroup.isPresent()) {
+     * Set maxWorkloadGroupCount to be newMaxWorkloadGroupCount
+        });  
+    }  
+import org.opensearch.cluster.ClusterState;  
+        this.updateWorkloadGroupThrottlingKey = clusterService.registerClusterManagerTask(UPDATE_QUERY_GROUP, true);
+import org.opensearch.common.settings.Settings;
+     *
+            .metadata(Metadata.builder(currentClusterState.metadata()).put(workloadGroup).build())
+import org.opensearch.plugin.wlm.rule.WorkloadGroupFeatureType;
+        try {  
+    }  
+            return;
+        }  
+import static org.opensearch.cluster.metadata.WorkloadGroup.updateExistingWorkloadGroup;
+    /**
+        this.clusterService = clusterService;
+     */
+    }  
+import org.opensearch.common.settings.ClusterSettings;  
+        final ClusterSettings clusterSettings
+            }
+     * This method will be executed before we submit the new cluster state  
+     */
+        }  
+    private static final Logger logger = LogManager.getLogger(WorkloadGroupPersistenceService.class);  
+import org.opensearch.plugin.wlm.action.CreateWorkloadGroupResponse;  
+        }
+     */  
+     */
+        Map<ResourceType, Double> resourceLimits  
+ *
+        clusterService.submitStateUpdateTask(SOURCE, new AckedClusterStateUpdateTask<>(deleteWorkloadGroupRequest, listener) {
+    );
+import org.apache.logging.log4j.LogManager;
+    public WorkloadGroupPersistenceService(
+import java.util.EnumMap;  
+                    "throttling.by ["
+                logger.warn("Total resource allocation for {} will go above the max limit of 1.0.", resourceType.getName());
+import static org.opensearch.cluster.service.ClusterManagerTask.DELETE_QUERY_GROUP;
+        0,
+    /**
+        String name = updateWorkloadGroupRequest.getName();
+import org.opensearch.wlm.ResourceType;
+        return ClusterState.builder(currentState)  
+        }
+                    .put(updateExistingWorkloadGroup(existingGroup, mutableWorkloadGroupFragment))
+            FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);
+        // check if there's any resource allocation that exceed limit of 1.0  
+import org.opensearch.cluster.metadata.Metadata;
+            )  
+                    .findFirst();  
+            }
+                return deleteWorkloadGroupThrottlingKey;
+        ActionListener<UpdateWorkloadGroupResponse> listener  
+     * Rejects principal-scoped throttling when no principal attribute is registered: no bucket can be resolved, so the  
+        MutableWorkloadGroupFragment mutableWorkloadGroupFragment = updateWorkloadGroupRequest.getmMutableWorkloadGroupFragment();  
+        this.maxWorkloadGroupCount = newMaxWorkloadGroupCount;  
+     */  
+    /**
+            }
+            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {  
+    /**  
+            if (featureType.getAllowedAttributesRegistry().containsKey(WorkloadManagementPlugin.PRINCIPAL_ATTRIBUTE_NAME) == false) {
+     * Validator for maxWorkloadGroupCount
+            public ThrottlingKey getClusterManagerThrottlingKey() {
+            .workloadGroups()
+     *
+    private static WorkloadGroup getWorkloadGroup(String name, Metadata metadata) {
+                return new AcknowledgedResponse(acknowledged);  
+    public static Collection<WorkloadGroup> getFromClusterStateMetadata(String name, ClusterState currentState) {
+            }
+        String groupName = workloadGroup.getName();  
+            .orElse(incomingThrottling);
+            }  
+        return ClusterState.builder(currentClusterState).metadata(Metadata.builder(metadata).remove(workloadGroupToRemove).build()).build();
+     * min workloadGroup count on any node at any given point in time
+     * @param currentState - current cluster state  
+        this.createWorkloadGroupThrottlingKey = clusterService.registerClusterManagerTask(CREATE_QUERY_GROUP, true);
+            @Override
+/**
+     * limit would always fail open. Called from the transport actions, not a cluster-state applier, because throwing
+     */  
+                String name = toUpdateGroup.getName();  
+                        + "limit can never be enforced. Omit [by] to use whole-group throttling instead."
+import org.opensearch.wlm.MutableWorkloadGroupFragment;
+                listener.onResponse(response);  
+        }
+            .stream()  
+        // check for duplicate name
+        final Map<ResourceType, Double> totalUsage = new EnumMap<>(ResourceType.class);
+     * clusterService getter
+        }
+     */
+    /**  
+    }
+    public int getMaxWorkloadGroupCount() {  
+                    .build()
+ * this file be licensed under the Apache-2.0 license or a
+                return updateWorkloadGroupThrottlingKey;
+     * while applying cluster state wedges the cluster-manager.
+            // Feature type not registered yet. Skip: throttling fails open anyway, so a false rejection is worse.
+        String name,
+    /**
+                        + by
+import org.opensearch.common.inject.Inject;
+            public ClusterState execute(ClusterState currentState) {
+     *  max WorkloadGroup count setting
+     * @param currentClusterState - the cluster state before the update
+    public static void validateThrottlingIsEnforceable(Settings throttling) {
+    /**  
+        Map<String, WorkloadGroup> existingWorkloadGroups,
+            @Override
+        }
+            throw new IllegalStateException("Can't create more than " + maxWorkloadGroupCount + " WorkloadGroups in the system.");
+            .filter(group -> group.getName().equals(name))
+     */  
+     */  
+import java.util.Collection;
+    /**
+     * @param listener - ActionListener for UpdateWorkloadGroupResponse
+        final WorkloadGroup existingGroup = existingGroups.values()
+import org.opensearch.ResourceNotFoundException;  
+                    .workloadGroups()
+import org.opensearch.plugin.wlm.action.UpdateWorkloadGroupResponse;  
+            .orElseThrow(() -> new ResourceNotFoundException("No WorkloadGroup exists with the provided name: " + name));  
+    }

@@ -1,425 +1,395 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.indexfilter;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.analytics.spi.DelegationThreadTracker;
-import org.opensearch.analytics.spi.FilterDelegationHandle;
-import org.opensearch.common.util.concurrent.AbstractRefCounted;  
-
-import java.lang.foreign.MemorySegment;
-import java.util.concurrent.ConcurrentHashMap;  
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**  
- * Static callback targets invoked by the native engine via FFM upcalls.
- *
- * <p>Each callback receives a {@code contextId} (the per-query identifier assigned by  
- * {@code QueryTrackingContext}) as its first argument, which is used to look up the
- * correct per-query {@link FilterDelegationHandle} and {@link DelegationThreadTracker}
- * from {@link #BINDINGS}. This eliminates the global-singleton race condition that  
- * existed when concurrent queries shared a single AtomicReference.
- *
- * <h2>Lifecycle</h2>  
- * <ol>
- *   <li>Before query execution: {@link #register(long, FilterDelegationHandle, DelegationThreadTracker)}
- *       installs a binding for the query's contextId.</li>  
- *   <li>FFM upcalls route to the correct per-query handle via contextId. Each
- *       successful {@code create*} upcall holds a reference on the binding; the
- *       matching {@code release*} upcall drops it.</li>  
- *   <li>After query completion: {@link #requestClose(long)} drops the query's own
- *       reference. The binding is removed — and the handle closed — when the last
- *       reference drops, so late release upcalls from a partially-consumed native  
- *       stream (e.g. a satisfied LIMIT, whose final drop runs on a DataFusion
- *       runtime thread after Java-side teardown returns) still find the binding.</li>
- * </ol>  
- *
- * <h2>Error-handling contract</h2>
- * <p>Every method catches all {@link Throwable}s and returns {@code -1}  
- * (or silently returns for void methods). A Java exception escaping through
- * an FFM upcall stub crashes the JVM.
- *  
- * <h2>Lifecycle assertions</h2>
- * <p>When assertions are enabled ({@code -ea}, default in tests and {@code ./gradlew run}),
- * the callbacks {@code assert} that a binding exists before performing the upcall, and  
- * {@link #register} asserts no stale binding is left behind. These catch lifecycle bugs
- * (double-register, premature teardown, leaked bindings) during development without
- * affecting production behavior — assertions are off in production, where the same paths  
- * fall back to returning -1 silently.
- */
-public final class FilterTreeCallbacks {  
-
-    private static final Logger LOGGER = LogManager.getLogger(FilterTreeCallbacks.class);
-
-    /**
-     * Per-query binding of handle and tracker, keyed by contextId.
-     * ConcurrentHashMap provides safe concurrent access across parallel queries.  
-     */
-    private static final ConcurrentHashMap<Long, QueryBinding> BINDINGS = new ConcurrentHashMap<>();
-
-    /**
-     * Per-query binding whose lifetime is reference-counted: the query itself holds
-     * one reference (dropped by {@link #requestClose}), and every live native handle  
-     * (provider or collector) holds one ({@code create*} acquires it, {@code release*}
-     * drops it — all through the internal {@code refCounter}). The
-     * binding is removed — and the delegation handle closed — exactly once, when the  
-     * last reference drops, which is what keeps late release upcalls from
      * partially-consumed native streams safe.
-     */  
-    private static final class QueryBinding {
-        private final long contextId;
-        private final FilterDelegationHandle handle;  
+            try {
+                assert false : "createCollector: binding already fully closed for contextId=" + contextId;  
+            return -1L;  
+ */
+     * {@code createCollector(contextId, providerKey, writerGeneration, minDoc, maxDoc) -> collectorKey|-1}.
+            }  
+    /**  
+    }
+ *
+ * <h2>Lifecycle assertions</h2>
+        } catch (Throwable throwable) {  
+            }  
+     * being silently logged. Under the refcounted lifecycle a missing binding is a
+                    writerGeneration,
+                return -1L;  
+            LOGGER.error(  
+ *   <li>Before query execution: {@link #register(long, FilterDelegationHandle, DelegationThreadTracker)}
+         */  
+     * surfaces in tests (causing the JVM to exit through the FFM stub) rather than  
+            assertBindingExists(binding, "collectDocs", contextId);  
+     * returns -1 from the caller's null check.
+                    refCounter.decRef();
+        QueryBinding prev = BINDINGS.put(contextId, new QueryBinding(contextId, handle, tracker));  
+                    "collectDocs(contextId={}, collectorKey={}, [{}, {})) failed",
+                return key;
+                if (created == false) {  
+                    maxDoc
+        int createProvider(int annotationId) {
+            if (handle.isCancelled()) {
+                }
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+            );
+        /** Runs exactly once, when the last reference (query or native handle) drops. */  
+import org.opensearch.analytics.spi.DelegationThreadTracker;
+         * delegation handle with it — when the last native handle's reference drops.
+            return binding.createProvider(annotationId);  
+ * {@link #register} asserts no stale binding is left behind. These catch lifecycle bugs
+                return -1L;
+import org.opensearch.common.util.concurrent.AbstractRefCounted;  
+                new ParameterizedMessage("releaseCollector(contextId={}, collectorKey={}) failed", contextId, collectorKey),
+            + BINDINGS.keySet()
+/**  
+        }  
+         * Create a provider via the handle, acquiring one reference for the native  
+            if (binding == null) return;  
+     * streams happen on DataFusion runtime threads after Java-side teardown returns).
+                    collectorKey,  
+            LOGGER.error("createProvider failed for contextId=" + contextId + " annotationId=" + annotationId, throwable);
+                new ParameterizedMessage(
+        }
+                created = key >= 0;  
+            }  
+ * <h2>Error-handling contract</h2>
+        // Must never throw — runs OUTSIDE the try/catch in each upcall target, so any
+     */
+            try {  
+import org.opensearch.analytics.spi.FilterDelegationHandle;
+            if (binding != null) {
+        }
+            LOGGER.error(
+public final class FilterTreeCallbacks {  
+        }  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+        if (binding == null) {  
+ */  
+                throwable  
+        assert binding != null : "FilterTreeCallbacks."
+            + ": no binding for contextId="
+            return -1;
+        /**
+     * {@link #requestClose(long)}.  
+    public static void releaseCollector(long contextId, int collectorKey) {  
+            return (t != null) ? t.trackStart() : -1;
+        };
+                assert false : "createProvider: binding already fully closed for contextId=" + contextId;  
+        void releaseCollector(int collectorKey) {
+                refCounter.decRef();
+     * <p>Asserts no prior binding exists for {@code contextId}. A pre-existing binding  
+     *  
+    /**
+ * an FFM upcall stub crashes the JVM.
         private final DelegationThreadTracker tracker;
-        /** Ensures {@link #requestClose} drops the query's reference at most once. */
-        final AtomicBoolean closeRequested = new AtomicBoolean();  
+            return -1;
+            BINDINGS.remove(contextId);
+     * (provider or collector) holds one ({@code create*} acquires it, {@code release*}
+            this.tracker = tracker;
+        } catch (Throwable throwable) {
+        } catch (Throwable throwable) {  
+    /**
+    public static void register(long contextId, FilterDelegationHandle handle, DelegationThreadTracker tracker) {
+     * {@code collectDocs(contextId, collectorKey, minDoc, maxDoc, outPtr, outWordCap) -> packed(nextDoc|wordsWritten)|-1}.  
+            LOGGER.error(
+        }
+            QueryBinding binding = BINDINGS.get(contextId);
+     * or a duplicate register call.
+            return binding.createCollector(providerKey, writerGeneration, minDoc, maxDoc);
+     * Idempotent — calling with no current binding is a no-op.
+                    maxDoc
+        private final AbstractRefCounted refCounter = new AbstractRefCounted("filter-delegation-binding") {  
+            }  
+            return tracker;
+            }  
+ * {@code QueryTrackingContext}) as its first argument, which is used to look up the
+            QueryBinding binding = BINDINGS.get(contextId);
+            }
+     * <p>Owns {@code handle.close()} — callers must not close the handle themselves.
+                handle.releaseProvider(providerKey);  
+                LOGGER.warn(new ParameterizedMessage("FilterDelegationHandle.close() failed for contextId={}", contextId), throwable);
+            QueryBinding binding = BINDINGS.get(contextId);
+                ),
+            }
+            boolean created = false;  
+            } finally {
+        /** Collector twin of {@link #createProvider(int)} — same reference contract. */  
+            + ")";
+    private static final Logger LOGGER = LogManager.getLogger(FilterTreeCallbacks.class);
+        }
+            LOGGER.warn("trackEnd failed", throwable);
+        } catch (AssertionError e) {
+        } finally {
+ *   <li>FFM upcalls route to the correct per-query handle via contextId. Each
+        } finally {  
+        if (threadId < 0) return;
+    }
+            MemorySegment view = outPtr.reinterpret((long) maxWords * Long.BYTES);  
+    }  
+    }  
+     * <p>Throws {@link AssertionError} when assertions are enabled and binding is null.
+    /**  
+            trackEnd(contextId, tid);
+            } finally {
+     */  
+ *
+     * Per-query binding whose lifetime is reference-counted: the query itself holds
+        BINDINGS.remove(contextId);
+                binding.releaseProvider(providerKey);
+     */
+            throw e;
+        } catch (AssertionError e) {
+        long tid = trackStart(contextId);
+        DelegationThreadTracker tracker() {
+    }
+        QueryBinding(long contextId, FilterDelegationHandle handle, DelegationThreadTracker tracker) {
+        } catch (Throwable throwable) {  
+     * binding is removed — and the delegation handle closed — exactly once, when the  
+        }
+         * links the counter to {@link #close()}.
+    /**
         /**
          * Owns the binding's lifetime: born at 1 (the query's reference), one more per
-         * live native handle. Reaching zero closes the binding — {@code closeInternal}  
-         * links the counter to {@link #close()}.
-         */
-        private final AbstractRefCounted refCounter = new AbstractRefCounted("filter-delegation-binding") {  
-            @Override
-            protected void closeInternal() {
-                QueryBinding.this.close();  
-            }
-        };
-
-        QueryBinding(long contextId, FilterDelegationHandle handle, DelegationThreadTracker tracker) {
-            this.contextId = contextId;
-            this.handle = java.util.Objects.requireNonNull(handle, "handle");  
-            this.tracker = tracker;
-        }
-
-        DelegationThreadTracker tracker() {
-            return tracker;
-        }  
-
-        /**
-         * Create a provider via the handle, acquiring one reference for the native  
-         * handle on success. Returns -1 (without holding a reference) if the binding
-         * is already fully closed or the handle refuses.
-         */  
-        int createProvider(int annotationId) {
-            if (refCounter.tryIncRef() == false) {
-                assert false : "createProvider: binding already fully closed for contextId=" + contextId;  
-                return -1;
-            }
-            boolean created = false;  
-            try {
-                int key = handle.createProvider(annotationId);
-                created = key >= 0;  
-                return key;
-            } finally {
-                if (created == false) {  
-                    refCounter.decRef(); // no native handle exists to release this reference later
-                }
-            }  
-        }
-
-        /** Collector twin of {@link #createProvider(int)} — same reference contract. */  
-        int createCollector(int providerKey, long writerGeneration, int minDoc, int maxDoc) {
-            if (refCounter.tryIncRef() == false) {
-                assert false : "createCollector: binding already fully closed for contextId=" + contextId;  
-                return -1;
-            }
-            boolean created = false;  
-            try {
-                int key = handle.createCollector(providerKey, writerGeneration, minDoc, maxDoc);
-                created = key >= 0;  
-                return key;
-            } finally {
-                if (created == false) {  
-                    refCounter.decRef();
-                }
-            }  
-        }
-
-        /** Release a provider and drop its reference; the last drop closes the binding. */  
-        void releaseProvider(int providerKey) {
-            try {
-                handle.releaseProvider(providerKey);  
-            } finally {
-                refCounter.decRef();
-            }  
-        }
-
-        /** Release a collector and drop its reference; the last drop closes the binding. */  
-        void releaseCollector(int collectorKey) {
-            try {
-                handle.releaseCollector(collectorKey);  
-            } finally {
-                refCounter.decRef();
-            }  
-        }
-
-        /** Delegate a doc-collection call; refuses (-1) when the query is cancelled. */  
-        long collectDocs(int collectorKey, int minDoc, int maxDoc, MemorySegment outPtr, long outWordCap) {
-            if (handle.isCancelled()) {
-                return -1L;  
-            }
-            int maxWords = (int) Math.min(outWordCap, (long) Integer.MAX_VALUE);
-            MemorySegment view = outPtr.reinterpret((long) maxWords * Long.BYTES);  
-            long result = handle.collectDocs(collectorKey, minDoc, maxDoc, view);
-            return (result < 0) ? -1L : result;
-        }  
-
-        /**
-         * Drop the query's own reference (at most once). The binding closes — and the  
-         * delegation handle with it — when the last native handle's reference drops.
-         */
-        void requestClose() {  
-            if (closeRequested.compareAndSet(false, true)) {
-                refCounter.decRef();
-            }  
-        }
-
-        /** Runs exactly once, when the last reference (query or native handle) drops. */  
-        private void close() {
-            BINDINGS.remove(contextId);
-            try {  
-                handle.close();
-            } catch (Throwable throwable) {
-                // May run on an FFM upcall thread — must not throw.  
-                LOGGER.warn(new ParameterizedMessage("FilterDelegationHandle.close() failed for contextId={}", contextId), throwable);
-            }
-        }  
-    }
-
-    private FilterTreeCallbacks() {}  
-
-    /**
-     * Register a per-query binding keyed by {@code contextId}.  
-     * Must be called before query execution begins.
-     *
-     * <p>Asserts no prior binding exists for {@code contextId}. A pre-existing binding  
-     * indicates a leaked binding from an earlier query (missing {@link #requestClose(long)})
-     * or a duplicate register call.
+package org.opensearch.be.datafusion.indexfilter;
      *  
-     * @param contextId the per-query identifier (from the native {@code QueryTrackingContext})
-     * @param handle    the delegation handle for this query (must not be null)
-     * @param tracker   the thread tracker for this query (may be null)  
+                created = key >= 0;  
+ *       reference. The binding is removed — and the handle closed — when the last
+        }  
+            }
+            + " (registered: "  
+                    providerKey,
+ * <p>Every method catches all {@link Throwable}s and returns {@code -1}  
      */
-    public static void register(long contextId, FilterDelegationHandle handle, DelegationThreadTracker tracker) {
-        QueryBinding prev = BINDINGS.put(contextId, new QueryBinding(contextId, handle, tracker));  
+     */
+     * genuine bug: bindings stay alive until the last native handle is released.
+     * last reference drops, which is what keeps late release upcalls from
+        }  
+        /** Release a provider and drop its reference; the last drop closes the binding. */  
+        // escaping exception (e.g. an `assert false` in TaskResourceTrackingService when  
+            QueryBinding binding = BINDINGS.get(contextId);
+            }  
+            DelegationThreadTracker t = binding.tracker();
         assert prev == null : "FilterTreeCallbacks.register: binding already present for contextId=" + contextId;
-    }
-
-    /**
-     * Request teardown of the binding for {@code contextId}: closes and removes it
-     * immediately if no native handles are outstanding, otherwise defers until the  
-     * last {@code release*} upcall arrives (late drops of partially-consumed native
-     * streams happen on DataFusion runtime threads after Java-side teardown returns).
-     *  
-     * <p>Owns {@code handle.close()} — callers must not close the handle themselves.
-     * Idempotent — calling with no current binding is a no-op.
-     */  
-    public static void requestClose(long contextId) {
-        QueryBinding binding = BINDINGS.get(contextId);
-        if (binding == null) {  
-            return;
+            assertBindingExists(binding, "releaseProvider", contextId);  
+    private static final ConcurrentHashMap<Long, QueryBinding> BINDINGS = new ConcurrentHashMap<>();
+     * Per-query binding of handle and tracker, keyed by contextId.
         }
-        binding.requestClose();  
-    }
-
-    /**  
+            throw e;
+ * <h2>Lifecycle</h2>  
+                QueryBinding.this.close();  
+        int createCollector(int providerKey, long writerGeneration, int minDoc, int maxDoc) {
+        /** Release a collector and drop its reference; the last drop closes the binding. */  
+            @Override
+        }
+import org.apache.logging.log4j.LogManager;
+         */
+     * indicates a leaked binding from an earlier query (missing {@link #requestClose(long)})
+     * {@code createProvider(contextId, annotationId) -> providerKey|-1}.
+         * Drop the query's own reference (at most once). The binding closes — and the  
+     * Upcall methods catch {@code Throwable} and re-throw {@code AssertionError} so it
+        private void close() {
+     * immediately if no native handles are outstanding, otherwise defers until the  
+            );
+    private static final class QueryBinding {
+        } finally {
+                    refCounter.decRef(); // no native handle exists to release this reference later
+         * is already fully closed or the handle refuses.
+ * <p>Each callback receives a {@code contextId} (the per-query identifier assigned by  
+                refCounter.decRef();
+ * <ol>
+            throw e;  
+     * @param contextId the per-query identifier (from the native {@code QueryTrackingContext})
+     * Must be called before query execution begins.
+     * @param handle    the delegation handle for this query (must not be null)
+import java.util.concurrent.ConcurrentHashMap;  
+        } catch (Throwable throwable) {
+            return -1;  
+            if (binding == null) return -1;  
      * Force-remove the binding without closing the handle. Test-only escape hatch for
      * suites that manage handle lifecycles themselves; production teardown must use
-     * {@link #requestClose(long)}.  
-     */
-    // VisibleForTesting
+                binding.releaseCollector(collectorKey);
     public static void unregister(long contextId) {  
-        BINDINGS.remove(contextId);
-    }
-
-    private static long trackStart(long contextId) {
-        // Must never throw — runs OUTSIDE the try/catch in each upcall target, so any
-        // escaping exception (e.g. an `assert false` in TaskResourceTrackingService when  
-        // the thread is already tracked) crosses the FFM boundary and aborts the JVM
-        // with `Unrecoverable uncaught exception encountered`. Swallow everything and
-        // disable tracking for the remainder of this upcall by returning -1.  
-        try {
-            QueryBinding binding = BINDINGS.get(contextId);
-            if (binding == null) return -1;  
-            DelegationThreadTracker t = binding.tracker();
-            return (t != null) ? t.trackStart() : -1;
-        } catch (Throwable throwable) {  
-            LOGGER.warn("trackStart failed; resource attribution disabled for this upcall", throwable);
-            return -1;
-        }  
-    }
-
-    private static void trackEnd(long contextId, long threadId) {  
-        if (threadId < 0) return;
-        // Same FFM safety rule as trackStart — runs in a `finally` block, so any
-        // exception escaping here would mask the actual upcall result and abort the JVM.  
-        try {
-            QueryBinding binding = BINDINGS.get(contextId);
-            if (binding == null) return;  
-            DelegationThreadTracker t = binding.tracker();
-            if (t != null) t.trackEnd(threadId);
-        } catch (Throwable throwable) {  
-            LOGGER.warn("trackEnd failed", throwable);
-        }
-    }  
-
-    /**
-     * Asserts a binding exists. Lifecycle bugs (premature teardown, missing register,  
-     * stale Rust handle outliving its query) trip this in tests; production silently
-     * returns -1 from the caller's null check.
-     *  
-     * <p>Throws {@link AssertionError} when assertions are enabled and binding is null.
-     * Upcall methods catch {@code Throwable} and re-throw {@code AssertionError} so it
-     * surfaces in tests (causing the JVM to exit through the FFM stub) rather than  
-     * being silently logged. Under the refcounted lifecycle a missing binding is a
-     * genuine bug: bindings stay alive until the last native handle is released.
-     */  
-    private static void assertBindingExists(QueryBinding binding, String op, long contextId) {
-        assert binding != null : "FilterTreeCallbacks."
-            + op  
-            + ": no binding for contextId="
-            + contextId
-            + " (registered: "  
-            + BINDINGS.keySet()
-            + ")";
-    }  
-
-    // ── Provider lifecycle (cold path, once per query) ────────────────
-
-    /**
-     * {@code createProvider(contextId, annotationId) -> providerKey|-1}.
-     */  
-    public static int createProvider(long contextId, int annotationId) {
-        long tid = trackStart(contextId);
-        try {  
-            QueryBinding binding = BINDINGS.get(contextId);
-            assertBindingExists(binding, "createProvider", contextId);
-            if (binding == null) {  
-                return -1;
-            }
-            return binding.createProvider(annotationId);  
-        } catch (AssertionError e) {
-            // Propagate so lifecycle bugs surface in tests; in production -ea is off and this branch never runs.
-            throw e;  
-        } catch (Throwable throwable) {
-            LOGGER.error("createProvider failed for contextId=" + contextId + " annotationId=" + annotationId, throwable);
-            return -1;  
-        } finally {
-            trackEnd(contextId, tid);
-        }  
-    }
-
-    /**  
-     * {@code releaseProvider(contextId, providerKey)}. Never throws.
-     */
-    public static void releaseProvider(long contextId, int providerKey) {  
-        try {
-            QueryBinding binding = BINDINGS.get(contextId);
-            assertBindingExists(binding, "releaseProvider", contextId);  
-            if (binding != null) {
-                binding.releaseProvider(providerKey);
-            }  
-        } catch (AssertionError e) {
-            throw e;
-        } catch (Throwable throwable) {  
-            LOGGER.error(
-                new ParameterizedMessage("releaseProvider(contextId={}, providerKey={}) failed", contextId, providerKey),
-                throwable  
-            );
-        }
-    }  
-
-    // ── Collector lifecycle (hot path, per segment per query) ─────────
-
-    /**
-     * {@code createCollector(contextId, providerKey, writerGeneration, minDoc, maxDoc) -> collectorKey|-1}.
-     *  
-     * <p>Segments are identified by writer generation.
-     */
-    public static int createCollector(long contextId, int providerKey, long writerGeneration, int minDoc, int maxDoc) {  
-        long tid = trackStart(contextId);
-        try {
-            QueryBinding binding = BINDINGS.get(contextId);  
-            assertBindingExists(binding, "createCollector", contextId);
-            if (binding == null) {
-                return -1;  
-            }
-            return binding.createCollector(providerKey, writerGeneration, minDoc, maxDoc);
-        } catch (AssertionError e) {  
-            throw e;
-        } catch (Throwable throwable) {
-            LOGGER.error(  
-                new ParameterizedMessage(
-                    "createCollector(contextId={}, providerKey={}, writerGeneration={}, [{}, {})) failed",
-                    contextId,  
-                    providerKey,
-                    writerGeneration,
-                    minDoc,  
-                    maxDoc
-                ),
-                throwable  
-            );
-            return -1;
-        } finally {  
-            trackEnd(contextId, tid);
-        }
-    }  
-
-    /**
-     * {@code collectDocs(contextId, collectorKey, minDoc, maxDoc, outPtr, outWordCap) -> packed(nextDoc|wordsWritten)|-1}.  
-     */
-    public static long collectDocs(long contextId, int collectorKey, int minDoc, int maxDoc, MemorySegment outPtr, long outWordCap) {
-        long tid = trackStart(contextId);  
-        try {
-            QueryBinding binding = BINDINGS.get(contextId);
-            assertBindingExists(binding, "collectDocs", contextId);  
-            if (binding == null) {
-                return -1L;
-            }  
             return binding.collectDocs(collectorKey, minDoc, maxDoc, outPtr, outWordCap);
-        } catch (AssertionError e) {
-            throw e;  
-        } catch (Throwable throwable) {
-            LOGGER.error(
-                new ParameterizedMessage(  
-                    "collectDocs(contextId={}, collectorKey={}, [{}, {})) failed",
-                    contextId,
-                    collectorKey,  
-                    minDoc,
-                    maxDoc
+ * existed when concurrent queries shared a single AtomicReference.
+            }  
+                // May run on an FFM upcall thread — must not throw.  
+        // with `Unrecoverable uncaught exception encountered`. Swallow everything and
+            QueryBinding binding = BINDINGS.get(contextId);  
+                if (created == false) {  
+ *       stream (e.g. a satisfied LIMIT, whose final drop runs on a DataFusion
+            if (binding == null) {
+     */
+            this.handle = java.util.Objects.requireNonNull(handle, "handle");  
+import org.apache.logging.log4j.Logger;
+        private final long contextId;
                 ),  
                 throwable
-            );
-            return -1L;  
-        } finally {
+ * fall back to returning -1 silently.
             trackEnd(contextId, tid);
-        }  
+     * <p>Segments are identified by writer generation.
+                int key = handle.createProvider(annotationId);
+            if (binding == null) {
+     * {@code releaseProvider(contextId, providerKey)}. Never throws.
     }
-
-    /**  
-     * {@code releaseCollector(contextId, collectorKey)}. Never throws.
-     */
-    public static void releaseCollector(long contextId, int collectorKey) {  
-        try {
-            QueryBinding binding = BINDINGS.get(contextId);
-            assertBindingExists(binding, "releaseCollector", contextId);  
-            if (binding != null) {
-                binding.releaseCollector(collectorKey);
-            }  
-        } catch (AssertionError e) {
-            throw e;
-        } catch (Throwable throwable) {  
             LOGGER.error(
-                new ParameterizedMessage("releaseCollector(contextId={}, collectorKey={}) failed", contextId, collectorKey),
-                throwable  
-            );
         }
+                    contextId,  
+     * {@code releaseCollector(contextId, collectorKey)}. Never throws.
+        /** Delegate a doc-collection call; refuses (-1) when the query is cancelled. */  
+        }
+     * Request teardown of the binding for {@code contextId}: closes and removes it
+        void releaseProvider(int providerKey) {
+    }
+        try {
+ * correct per-query {@link FilterDelegationHandle} and {@link DelegationThreadTracker}
+            }
+        QueryBinding binding = BINDINGS.get(contextId);
+    private FilterTreeCallbacks() {}  
+    public static void releaseProvider(long contextId, int providerKey) {  
+            if (binding != null) {
+ *
+     * Register a per-query binding keyed by {@code contextId}.  
+     * ConcurrentHashMap provides safe concurrent access across parallel queries.  
+                    contextId,
+            if (refCounter.tryIncRef() == false) {
+            protected void closeInternal() {
+            trackEnd(contextId, tid);
+ * the callbacks {@code assert} that a binding exists before performing the upcall, and  
+     * Asserts a binding exists. Lifecycle bugs (premature teardown, missing register,  
+        try {  
+            );
+     *  
+    /**
+            int maxWords = (int) Math.min(outWordCap, (long) Integer.MAX_VALUE);
+        } catch (AssertionError e) {
+    public static void requestClose(long contextId) {
+        try {
+            return;
+            assertBindingExists(binding, "createCollector", contextId);
+        binding.requestClose();  
     }  
+            try {
+    private static void trackEnd(long contextId, long threadId) {  
+            if (refCounter.tryIncRef() == false) {
+import java.lang.foreign.MemorySegment;
+                }
+ *       matching {@code release*} upcall drops it.</li>  
+     */  
+         * handle on success. Returns -1 (without holding a reference) if the binding
+        } catch (Throwable throwable) {
+            // Propagate so lifecycle bugs surface in tests; in production -ea is off and this branch never runs.
+                return -1;
+ * The OpenSearch Contributors require contributions made to  
+        void requestClose() {  
+    /**
+            if (binding == null) {  
+            long result = handle.collectDocs(collectorKey, minDoc, maxDoc, view);
+ * (or silently returns for void methods). A Java exception escaping through
+ * SPDX-License-Identifier: Apache-2.0
+     *  
+    }  
+        long tid = trackStart(contextId);  
+            assertBindingExists(binding, "createProvider", contextId);
+                return -1;
+    }  
+    private static long trackStart(long contextId) {
+ * <p>When assertions are enabled ({@code -ea}, default in tests and {@code ./gradlew run}),
+            + op  
+            DelegationThreadTracker t = binding.tracker();
+                refCounter.decRef();
+/*  
+         */
+            try {
+        long collectDocs(int collectorKey, int minDoc, int maxDoc, MemorySegment outPtr, long outWordCap) {
+ * Static callback targets invoked by the native engine via FFM upcalls.
+    // ── Provider lifecycle (cold path, once per query) ────────────────
+        } catch (Throwable throwable) {  
+        }  
+                int key = handle.createCollector(providerKey, writerGeneration, minDoc, maxDoc);
+ * </ol>  
+        }  
+     * drops it — all through the internal {@code refCounter}). The
+            LOGGER.warn("trackStart failed; resource attribution disabled for this upcall", throwable);
+            + contextId
+     *
+    private static void assertBindingExists(QueryBinding binding, String op, long contextId) {
 }
+     * last {@code release*} upcall arrives (late drops of partially-consumed native
+                throwable  
+    /**
+ *       installs a binding for the query's contextId.</li>  
+            }  
+                    minDoc,
+ * affecting production behavior — assertions are off in production, where the same paths  
+            }
+        try {
+            } finally {
+            QueryBinding binding = BINDINGS.get(contextId);
+                throwable  
+    /**
+    }
+                new ParameterizedMessage(  
+ *
+            try {
+        /** Ensures {@link #requestClose} drops the query's reference at most once. */
+    public static int createCollector(long contextId, int providerKey, long writerGeneration, int minDoc, int maxDoc) {  
+        try {
+ *       reference drops, so late release upcalls from a partially-consumed native  
+            return (result < 0) ? -1L : result;
+ * from {@link #BINDINGS}. This eliminates the global-singleton race condition that  
+            throw e;
+    /**
+            if (closeRequested.compareAndSet(false, true)) {
+                return key;
+    /**  
+                return -1;
+        // Same FFM safety rule as trackStart — runs in a `finally` block, so any
+        }
+            boolean created = false;  
+import java.util.concurrent.atomic.AtomicBoolean;
+     */  
+            } catch (Throwable throwable) {
+    public static int createProvider(long contextId, int annotationId) {
+    // ── Collector lifecycle (hot path, per segment per query) ─────────
+     * @param tracker   the thread tracker for this query (may be null)  
+ *       runtime thread after Java-side teardown returns) still find the binding.</li>
+    public static long collectDocs(long contextId, int collectorKey, int minDoc, int maxDoc, MemorySegment outPtr, long outWordCap) {
+            }
+    }
+        // exception escaping here would mask the actual upcall result and abort the JVM.  
+            }
+        final AtomicBoolean closeRequested = new AtomicBoolean();  
+                return -1;  
+     */
+ *  
+        } catch (AssertionError e) {
+            } finally {
+ *       successful {@code create*} upcall holds a reference on the binding; the
+            assertBindingExists(binding, "releaseCollector", contextId);  
+        }
+            if (t != null) t.trackEnd(threadId);
+            this.contextId = contextId;
+     */  
+     * one reference (dropped by {@link #requestClose}), and every live native handle  
+                    "createCollector(contextId={}, providerKey={}, writerGeneration={}, [{}, {})) failed",
+        try {
+ * (double-register, premature teardown, leaked bindings) during development without
+         * live native handle. Reaching zero closes the binding — {@code closeInternal}  
+        private final FilterDelegationHandle handle;  
+        // disable tracking for the remainder of this upcall by returning -1.  
+                handle.close();
+    // VisibleForTesting
+        // the thread is already tracked) crosses the FFM boundary and aborts the JVM
+     */
+        try {
+        } catch (AssertionError e) {  
+            throw e;  
+            );
+                handle.releaseCollector(collectorKey);  
+                    minDoc,  
+        /**
+        long tid = trackStart(contextId);
+     * stale Rust handle outliving its query) trip this in tests; production silently
+            QueryBinding binding = BINDINGS.get(contextId);
+ *   <li>After query completion: {@link #requestClose(long)} drops the query's own
+                new ParameterizedMessage("releaseProvider(contextId={}, providerKey={}) failed", contextId, providerKey),

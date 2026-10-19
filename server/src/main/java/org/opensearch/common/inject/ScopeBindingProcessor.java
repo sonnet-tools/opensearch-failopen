@@ -1,77 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2008 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
+            errors.duplicateScopes(existing, annotationType, scope);  
+/*  
+        }  
+ * You may obtain a copy of the License at
 /*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject;
-
-import org.opensearch.common.inject.internal.Annotations;
-import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.spi.ScopeBinding;  
-
-import java.lang.annotation.Annotation;
-import java.util.Objects;  
-
-/**
- * Handles {@link Binder#bindScope} commands.  
- *
- * @author crazybob@google.com (Bob Lee)
- * @author jessewilson@google.com (Jesse Wilson)  
- *
- * @opensearch.internal
- */  
-class ScopeBindingProcessor extends AbstractProcessor {
-
-    ScopeBindingProcessor(Errors errors) {  
-        super(errors);
-    }
-
-    @Override
-    public Boolean visit(ScopeBinding command) {
-        Scope scope = command.getScope();  
         Class<? extends Annotation> annotationType = command.getAnnotationType();
-
-        if (!Annotations.isScopeAnnotation(annotationType)) {  
-            errors.withSource(annotationType).missingScopeAnnotation();
-            // Go ahead and bind anyway so we don't get collateral errors.
-        }  
-
+ * @author jessewilson@google.com (Jesse Wilson)  
+ * this file be licensed under the Apache-2.0 license or a
+ * http://www.apache.org/licenses/LICENSE-2.0  
+/**
         if (!Annotations.isRetainedAtRuntime(annotationType)) {
-            errors.withSource(annotationType).missingRuntimeRetention(command.getSource());  
-            // Go ahead and bind anyway so we don't get collateral errors.
-        }
-
-        Scope existing = injector.state.getScope(Objects.requireNonNull(annotationType, "annotation type"));
-        if (existing != null) {
-            errors.duplicateScopes(existing, annotationType, scope);  
-        } else {
-            injector.state.putAnnotation(annotationType, Objects.requireNonNull(scope, "scope"));
-        }  
-
+ *
+ * Copyright (C) 2008 Google Inc.  
+    @Override
+        Scope scope = command.getScope();  
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+import java.util.Objects;  
         return true;
-    }  
+    public Boolean visit(ScopeBinding command) {
+ * Unless required by applicable law or agreed to in writing, software
+            // Go ahead and bind anyway so we don't get collateral errors.
+ * GitHub history for details.
+ * @author crazybob@google.com (Bob Lee)
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+ * @opensearch.internal
 }
+ */
+    ScopeBindingProcessor(Errors errors) {  
+            errors.withSource(annotationType).missingScopeAnnotation();
+import org.opensearch.common.inject.internal.Errors;
+ *
+        }  
+            injector.state.putAnnotation(annotationType, Objects.requireNonNull(scope, "scope"));
+import org.opensearch.common.inject.internal.Annotations;
+    }
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+import org.opensearch.common.inject.spi.ScopeBinding;  
+ *
+ */  
+import java.lang.annotation.Annotation;
+            errors.withSource(annotationType).missingRuntimeRetention(command.getSource());  
+    }  
+ *
+ *
+        if (!Annotations.isScopeAnnotation(annotationType)) {  
+ * limitations under the License.  
+ */  
+        if (existing != null) {
+package org.opensearch.common.inject;
+        } else {
+class ScopeBindingProcessor extends AbstractProcessor {
+        }
+ */  
+            // Go ahead and bind anyway so we don't get collateral errors.
+/*
+ *
+ * Handles {@link Binder#bindScope} commands.  
+ * you may not use this file except in compliance with the License.  
+        Scope existing = injector.state.getScope(Objects.requireNonNull(annotationType, "annotation type"));
+        super(errors);

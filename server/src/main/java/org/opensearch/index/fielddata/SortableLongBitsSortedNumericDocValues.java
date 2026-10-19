@@ -1,74 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+    public SortedNumericDoubleValues getDoubleValues() {
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+    public long nextValue() throws IOException {  
+    /** Return the wrapped values. */  
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
  */  
-
-package org.opensearch.index.fielddata;
-
+ * not use this file except in compliance with the License.
 import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.util.NumericUtils;
-
-import java.io.IOException;
-
-/**  
- * {@link SortedNumericDocValues} instance that wraps a {@link SortedNumericDoubleValues}
+ * Licensed to Elasticsearch under one or more contributor  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+        return values.docValueCount();  
+ * Unless required by applicable law or agreed to in writing,
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
+}
+ * under the License.  
  * and converts the doubles to sortable long bits using
+/*
+ * compatible open source license.
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+package org.opensearch.index.fielddata;
+    public boolean advanceExact(int target) throws IOException {
+        return NumericUtils.doubleToSortableLong(values.nextValue());
+        return values.advanceExact(target);
+    }
+    @Override  
+ * this work for additional information regarding copyright
+ * {@link SortedNumericDocValues} instance that wraps a {@link SortedNumericDoubleValues}
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+ * You may obtain a copy of the License at  
+    SortableLongBitsSortedNumericDocValues(SortedNumericDoubleValues values) {
+    private final SortedNumericDoubleValues values;  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.util.NumericUtils;
+ *
+ */  
+    }
+final class SortableLongBitsSortedNumericDocValues extends AbstractSortedNumericDocValues {
+ * SPDX-License-Identifier: Apache-2.0
+        this.values = values;  
  * {@link NumericUtils#doubleToSortableLong(double)}.  
+ * KIND, either express or implied.  See the License for the
+import java.io.IOException;
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+    public int docValueCount() {
  *
  * @opensearch.internal
- */  
-final class SortableLongBitsSortedNumericDocValues extends AbstractSortedNumericDocValues {
-
-    private final SortedNumericDoubleValues values;  
-
-    SortableLongBitsSortedNumericDocValues(SortedNumericDoubleValues values) {
-        this.values = values;  
-    }
-
-    @Override  
-    public boolean advanceExact(int target) throws IOException {
-        return values.advanceExact(target);
-    }  
-
-    @Override
-    public long nextValue() throws IOException {  
-        return NumericUtils.doubleToSortableLong(values.nextValue());
-    }
-
-    @Override
-    public int docValueCount() {
-        return values.docValueCount();  
-    }
-
-    /** Return the wrapped values. */  
-    public SortedNumericDoubleValues getDoubleValues() {
+/*  
         return values;
-    }  
-}
+ * specific language governing permissions and limitations
+    @Override
+/**  
+ */  
+    @Override
+ * software distributed under the License is distributed on an

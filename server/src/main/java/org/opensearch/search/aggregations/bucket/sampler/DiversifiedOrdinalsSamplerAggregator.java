@@ -1,177 +1,150 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.sampler;
-
-import org.apache.lucene.index.DocValues;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.NumericDocValues;  
-import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.misc.search.DiversifiedTopDocsCollector;  
-import org.apache.lucene.misc.search.DiversifiedTopDocsCollector.ScoreDocKey;
 import org.apache.lucene.search.TopDocsCollector;
-import org.opensearch.index.fielddata.AbstractNumericDocValues;  
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.bucket.DeferringBucketCollector;  
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.internal.SearchContext;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.function.Consumer;
-
-/**  
- * Aggregate all docs that match the diversified ordinal sample
- *
- * @opensearch.internal  
- */
-public class DiversifiedOrdinalsSamplerAggregator extends SamplerAggregator {
-
-    private ValuesSource.Bytes.WithOrdinals.FieldData valuesSource;
-    private int maxDocsPerValue;
-
-    DiversifiedOrdinalsSamplerAggregator(
-        String name,
-        int shardSize,  
-        AggregatorFactories factories,
-        SearchContext context,
-        Aggregator parent,  
-        Map<String, Object> metadata,
-        ValuesSourceConfig valuesSourceConfig,
-        int maxDocsPerValue  
-    ) throws IOException {
-        super(name, shardSize, factories, context, parent, metadata);
-        assert valuesSourceConfig.hasValues();  
-        this.valuesSource = (ValuesSource.Bytes.WithOrdinals.FieldData) valuesSourceConfig.getValuesSource();
-        this.maxDocsPerValue = maxDocsPerValue;
-    }  
-
-    @Override
-    public DeferringBucketCollector getDeferringCollector() {  
-        bdd = new DiverseDocsDeferringCollector(this::addRequestCircuitBreakerBytes);
-        return bdd;
-    }  
-
-    /**
-     * A {@link DeferringBucketCollector} that identifies top scoring documents  
-     * but de-duped by a key then passes only these on to nested collectors.
-     * This implementation is only for use with a single bucket aggregation.
-     */  
-    class DiverseDocsDeferringCollector extends BestDocsDeferringCollector {
-
-        DiverseDocsDeferringCollector(Consumer<Long> circuitBreakerConsumer) {  
-            super(shardSize, context.bigArrays(), circuitBreakerConsumer);
-        }
-
-        @Override
-        protected TopDocsCollector<ScoreDocKey> createTopDocsCollector(int size) {
-            // Make sure we do not allow size > maxDoc, to prevent accidental OOM  
-            int minMaxDocsPerValue = Math.min(maxDocsPerValue, context.searcher().getIndexReader().maxDoc());
-            return new ValuesDiversifiedTopDocsCollector(size, minMaxDocsPerValue);
-        }  
-
-        @Override
-        protected long getPriorityQueueSlotSize() {  
-            return SCOREDOCKEY_SIZE;
-        }
-
-        // This class extends the DiversifiedTopDocsCollector and provides
-        // a lookup from opensearch's ValuesSource
-        class ValuesDiversifiedTopDocsCollector extends DiversifiedTopDocsCollector {  
-
-            ValuesDiversifiedTopDocsCollector(int numHits, int maxHitsPerKey) {
-                super(numHits, maxHitsPerKey);  
-            }
-
-            @Override  
-            protected NumericDocValues getKeys(LeafReaderContext context) {
-                final SortedSetDocValues globalOrds = valuesSource.globalOrdinalsValues(context);
-                final SortedDocValues singleValues = DocValues.unwrapSingleton(globalOrds);  
-                if (singleValues != null) {
-                    return new AbstractNumericDocValues() {
-
-                        @Override
-                        public boolean advanceExact(int target) throws IOException {
-                            return singleValues.advanceExact(target);  
-                        }
-
-                        @Override  
-                        public int docID() {
-                            return singleValues.docID();
-                        }  
-
-                        @Override
-                        public long longValue() throws IOException {  
-                            return singleValues.ordValue();
-                        }
-                    };  
-                }
-                return new AbstractNumericDocValues() {
-
-                    long value;
-
-                    @Override  
                     public boolean advanceExact(int target) throws IOException {
-                        if (globalOrds.advanceExact(target)) {
-                            value = globalOrds.nextOrd();  
+            return SCOREDOCKEY_SIZE;
+    public DeferringBucketCollector getDeferringCollector() {  
+        ValuesSourceConfig valuesSourceConfig,
+ * You may obtain a copy of the License at  
+                    @Override  
+ * software distributed under the License is distributed on an
+                            if (globalOrds.docValueCount() != 1) {  
+        }
+ * license agreements. See the NOTICE file distributed with
+                };  
+    }  
+        @Override
+     * but de-duped by a key then passes only these on to nested collectors.
+     * A {@link DeferringBucketCollector} that identifies top scoring documents  
+        String name,
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        int maxDocsPerValue  
+import org.opensearch.search.aggregations.bucket.DeferringBucketCollector;  
+                        @Override
+        this.maxDocsPerValue = maxDocsPerValue;
+            protected NumericDocValues getKeys(LeafReaderContext context) {
+                    return new AbstractNumericDocValues() {
+    private int maxDocsPerValue;
+        super(name, shardSize, factories, context, parent, metadata);
+                        public boolean advanceExact(int target) throws IOException {
+                        }  
+import org.opensearch.search.internal.SearchContext;  
+        }
+import org.opensearch.search.aggregations.support.ValuesSource;
+            int minMaxDocsPerValue = Math.min(maxDocsPerValue, context.searcher().getIndexReader().maxDoc());
+                if (singleValues != null) {
+import org.apache.lucene.index.SortedDocValues;
+ * not use this file except in compliance with the License.
+        return bdd;
                             // Check there isn't a second value for this
                             // document
-                            if (globalOrds.docValueCount() != 1) {  
-                                throw new IllegalArgumentException("Sample diversifying key must be a single valued-field");
-                            }
-                            return true;  
+        AggregatorFactories factories,
+import org.apache.lucene.index.NumericDocValues;  
+                            return singleValues.ordValue();
+    /**
+    @Override
+                    }
+                            value = globalOrds.nextOrd();  
+import org.apache.lucene.index.DocValues;
+import org.opensearch.index.fielddata.AbstractNumericDocValues;  
+    DiversifiedOrdinalsSamplerAggregator(
+/*  
+        Aggregator parent,  
                         } else {
-                            return false;
-                        }  
-                    }
-
-                    @Override  
+ * Unless required by applicable law or agreed to in writing,
+    ) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+ * GitHub history for details.
+                                throw new IllegalArgumentException("Sample diversifying key must be a single valued-field");
+                        }
+ *
+                        }
+            return new ValuesDiversifiedTopDocsCollector(size, minMaxDocsPerValue);
                     public int docID() {
-                        return globalOrds.docID();
-                    }  
-
-                    @Override
-                    public long longValue() throws IOException {  
-                        return value;
+ * the Apache License, Version 2.0 (the "License"); you may
+            @Override  
+ * SPDX-License-Identifier: Apache-2.0
                     }
-                };  
-
+ * Modifications Copyright OpenSearch Contributors. See
+                        }  
+    private ValuesSource.Bytes.WithOrdinals.FieldData valuesSource;
+                        if (globalOrds.advanceExact(target)) {
+ */  
+    class DiverseDocsDeferringCollector extends BestDocsDeferringCollector {
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
             }
-
-        }
-
-    }  
-
+ * @opensearch.internal  
+import java.io.IOException;
+        assert valuesSourceConfig.hasValues();  
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }  
+            ValuesDiversifiedTopDocsCollector(int numHits, int maxHitsPerKey) {
+ * The OpenSearch Contributors require contributions made to  
+        int shardSize,  
+                super(numHits, maxHitsPerKey);  
+                    @Override
+import org.opensearch.search.aggregations.Aggregator;
+        protected long getPriorityQueueSlotSize() {  
+public class DiversifiedOrdinalsSamplerAggregator extends SamplerAggregator {
+                        public int docID() {
+                    @Override  
+        // a lookup from opensearch's ValuesSource
+                        @Override  
 }
+                        public long longValue() throws IOException {  
+        SearchContext context,
+        protected TopDocsCollector<ScoreDocKey> createTopDocsCollector(int size) {
+                final SortedDocValues singleValues = DocValues.unwrapSingleton(globalOrds);  
+package org.opensearch.search.aggregations.bucket.sampler;
+                            return singleValues.docID();
+                final SortedSetDocValues globalOrds = valuesSource.globalOrdinalsValues(context);
+                            }
+                    }  
+ * Aggregate all docs that match the diversified ordinal sample
+        // This class extends the DiversifiedTopDocsCollector and provides
+ * specific language governing permissions and limitations
+                        return globalOrds.docID();
+ * ownership. Elasticsearch licenses this file to you under  
+        bdd = new DiverseDocsDeferringCollector(this::addRequestCircuitBreakerBytes);
+    }  
+import org.apache.lucene.index.SortedSetDocValues;
+                        return value;
+        }
+ * this work for additional information regarding copyright
+ */
+ * KIND, either express or implied.  See the License for the
+                        @Override
+            super(shardSize, context.bigArrays(), circuitBreakerConsumer);
+import org.apache.lucene.misc.search.DiversifiedTopDocsCollector.ScoreDocKey;
+ *
+                    long value;
+     */  
+                    };  
+                            return false;
+ *  
+ */
+ * compatible open source license.
+                }
+import org.opensearch.search.aggregations.AggregatorFactories;
+        DiverseDocsDeferringCollector(Consumer<Long> circuitBreakerConsumer) {  
+        Map<String, Object> metadata,
+                return new AbstractNumericDocValues() {
+        @Override
+import java.util.function.Consumer;
+/*
+import org.apache.lucene.misc.search.DiversifiedTopDocsCollector;  
+    }  
+                            return singleValues.advanceExact(target);  
+import java.util.Map;  
+                    public long longValue() throws IOException {  
+/**  
+            // Make sure we do not allow size > maxDoc, to prevent accidental OOM  
+                            return true;  
+import org.apache.lucene.index.LeafReaderContext;
+        class ValuesDiversifiedTopDocsCollector extends DiversifiedTopDocsCollector {  
+        this.valuesSource = (ValuesSource.Bytes.WithOrdinals.FieldData) valuesSourceConfig.getValuesSource();
+     * This implementation is only for use with a single bucket aggregation.
+            }
+/*  
+ * under the License.  

@@ -1,27 +1,23 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-package org.opensearch.index.compositeindex.datacube.startree.aggregators;
-
+ * SPDX-License-Identifier: Apache-2.0
 import org.opensearch.index.mapper.FieldValueConverter;  
-
-/**
- * Max value aggregator for star tree  
- *
+ * The OpenSearch Contributors require contributions made to  
+    }
  * @opensearch.experimental
+        super(fieldValueConverter, null);
+        return Math.max(aggregatedValue, segmentDocValue);  
  */  
 class MaxValueAggregator extends StatelessDoubleValueAggregator {
-
-    public MaxValueAggregator(FieldValueConverter fieldValueConverter) {  
-        super(fieldValueConverter, null);
     }
-
-    @Override
+package org.opensearch.index.compositeindex.datacube.startree.aggregators;
     protected Double performValueAggregation(Double aggregatedValue, Double segmentDocValue) {
-        return Math.max(aggregatedValue, segmentDocValue);  
-    }
+ * this file be licensed under the Apache-2.0 license or a
+ * Max value aggregator for star tree  
+    public MaxValueAggregator(FieldValueConverter fieldValueConverter) {  
+/**
+ *
+/*  
+    @Override
+ *
+ */  
 }

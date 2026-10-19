@@ -1,81 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+    }  
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+ */
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.rest.action.RestToXContentListener;  
+        parseDeprecatedMasterTimeoutParameter(deleteSnapshotRequest, request, deprecationLogger, getName());
+}
+ * this file be licensed under the Apache-2.0 license or a
+        );
+import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
+    @Override
+ *  
+        );
  * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest.action.admin.cluster;
-
-import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestToXContentListener;  
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;  
-import java.util.List;
-
-import static java.util.Collections.singletonList;  
-import static org.opensearch.rest.RestRequest.Method.DELETE;
+ * SPDX-License-Identifier: Apache-2.0
+        DeleteSnapshotRequest deleteSnapshotRequest = deleteSnapshotRequest(
 import static org.opensearch.transport.client.Requests.deleteSnapshotRequest;
-
-/**
- * Deletes a snapshot
+ * Licensed to Elasticsearch under one or more contributor  
+        return channel -> client.admin().cluster().deleteSnapshot(deleteSnapshotRequest, new RestToXContentListener<>(channel));  
+            request.param("repository"),
+    public List<Route> routes() {
+ */  
+    public String getName() {
+ * compatible open source license.
+ *
+ * not use this file except in compliance with the License.
+import java.util.List;
+import org.opensearch.core.common.Strings;  
+import org.opensearch.rest.RestRequest;
+            Strings.splitStringByCommaToArray(request.param("snapshot"))  
+ * KIND, either express or implied.  See the License for the
+ *
+    @Override
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
+ * GitHub history for details.
+/*  
+        deleteSnapshotRequest.clusterManagerNodeTimeout(
+    }
+        return "delete_snapshot_action";
+            request.paramAsTime("cluster_manager_timeout", deleteSnapshotRequest.clusterManagerNodeTimeout())  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.transport.client.node.NodeClient;
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+import static java.util.Collections.singletonList;  
+package org.opensearch.rest.action.admin.cluster;
+public class RestDeleteSnapshotAction extends BaseRestHandler {  
+        return singletonList(new Route(DELETE, "/_snapshot/{repository}/{snapshot}"));  
+import static org.opensearch.rest.RestRequest.Method.DELETE;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {  
+import org.opensearch.rest.BaseRestHandler;
  *  
  * @opensearch.api
- */
-public class RestDeleteSnapshotAction extends BaseRestHandler {  
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestDeleteSnapshotAction.class);
-
-    @Override
-    public List<Route> routes() {
-        return singletonList(new Route(DELETE, "/_snapshot/{repository}/{snapshot}"));  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.logging.DeprecationLogger;
+/*  
     }
-
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
     @Override  
-    public String getName() {
-        return "delete_snapshot_action";
-    }  
-
-    @Override
-    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {  
-        DeleteSnapshotRequest deleteSnapshotRequest = deleteSnapshotRequest(
-            request.param("repository"),
-            Strings.splitStringByCommaToArray(request.param("snapshot"))  
-        );
-        deleteSnapshotRequest.clusterManagerNodeTimeout(
-            request.paramAsTime("cluster_manager_timeout", deleteSnapshotRequest.clusterManagerNodeTimeout())  
-        );
-        parseDeprecatedMasterTimeoutParameter(deleteSnapshotRequest, request, deprecationLogger, getName());
-        return channel -> client.admin().cluster().deleteSnapshot(deleteSnapshotRequest, new RestToXContentListener<>(channel));  
-    }
-}
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestDeleteSnapshotAction.class);
+ * Deletes a snapshot
+ */  
+import java.io.IOException;  
+/**

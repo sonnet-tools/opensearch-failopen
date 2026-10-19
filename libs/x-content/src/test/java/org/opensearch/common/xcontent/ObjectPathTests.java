@@ -1,99 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+/*  
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.xcontent;
-
-import org.opensearch.core.xcontent.ObjectPath;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.singletonMap;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.hamcrest.Matchers.is;  
-
-public class ObjectPathTests extends OpenSearchTestCase {
-    public void testEval() {  
-        Map<String, Object> map = singletonMap("key", "value");
-
-        assertThat(ObjectPath.eval("key", map), is((Object) "value"));  
-        assertThat(ObjectPath.eval("key1", map), nullValue());
-    }
-
-    public void testEvalList() {
-        List<Integer> list = Arrays.asList(1, 2, 3, 4);
-        Map<String, Object> map = singletonMap("key", list);  
-
-        int index = randomInt(3);
-        assertThat(ObjectPath.eval("key." + index, map), is(list.get(index)));  
-    }
-
-    public void testEvalArray() {  
-        int[] array = new int[] { 1, 2, 3, 4 };
-        Map<String, Object> map = singletonMap("key", array);
-
-        int index = randomInt(3);
-        assertThat(((Number) ObjectPath.eval("key." + index, map)).intValue(), is(array[index]));
-    }  
-
-    public void testEvalMap() {
-        Map<String, Object> map = singletonMap("a", singletonMap("b", "val"));  
-
-        assertThat(ObjectPath.eval("a.b", map), is((Object) "val"));
-    }  
-
-    public void testEvalMixed() {
-        Map<String, Object> map = new HashMap<>();  
-
-        Map<String, Object> mapA = new HashMap<>();
-        map.put("a", mapA);  
-
-        List<Object> listB = new ArrayList<>();
-        mapA.put("b", listB);  
-        List<Object> listB1 = new ArrayList<>();
-        listB.add(listB1);
-
+ * compatible open source license.
         Map<String, Object> mapB11 = new HashMap<>();
-        listB1.add(mapB11);
-        mapB11.put("c", "val");  
-
-        assertThat(ObjectPath.eval("", map), is((Object) map));
-        assertThat(ObjectPath.eval("a.b.0.0.c", map), is((Object) "val"));  
-        assertThat(ObjectPath.eval("a.b.0.0.c.d", map), nullValue());
+ * ownership. Elasticsearch licenses this file to you under  
+        Map<String, Object> map = singletonMap("a", singletonMap("b", "val"));  
+ * GitHub history for details.
+    public void testEvalList() {
+        assertThat(ObjectPath.eval("a.b", map), is((Object) "val"));
+ * software distributed under the License is distributed on an
+    public void testEvalMixed() {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testEval() {  
+import static java.util.Collections.singletonMap;
+ *
+        Map<String, Object> map = singletonMap("key", list);  
+        List<Object> listB = new ArrayList<>();
+ * specific language governing permissions and limitations
+        List<Object> listB1 = new ArrayList<>();
+ * this work for additional information regarding copyright
+        assertThat(((Number) ObjectPath.eval("key." + index, map)).intValue(), is(array[index]));
         assertThat(ObjectPath.eval("a.b.0.0.d", map), nullValue());
-        assertThat(ObjectPath.eval("a.b.c", map), nullValue());  
+        listB1.add(mapB11);
+    }  
+import java.util.Arrays;
+import org.opensearch.core.xcontent.ObjectPath;
+import static org.hamcrest.Matchers.is;  
+        Map<String, Object> map = singletonMap("key", array);
+        assertThat(ObjectPath.eval("key." + index, map), is(list.get(index)));  
+    public void testEvalMap() {
+        assertThat(ObjectPath.eval("a.b.0.0.c.d", map), nullValue());
+ * not use this file except in compliance with the License.
+import java.util.HashMap;  
+    public void testEvalArray() {  
     }
+        assertThat(ObjectPath.eval("key", map), is((Object) "value"));  
+ * You may obtain a copy of the License at  
+        Map<String, Object> map = singletonMap("key", "value");
+        listB.add(listB1);
+        List<Integer> list = Arrays.asList(1, 2, 3, 4);
+/*
+        mapB11.put("c", "val");  
+        Map<String, Object> map = new HashMap<>();  
+ */
+        int[] array = new int[] { 1, 2, 3, 4 };
+ *
+        map.put("a", mapA);  
+        assertThat(ObjectPath.eval("a.b.0.0.c", map), is((Object) "val"));  
+        assertThat(ObjectPath.eval("key1", map), nullValue());
+package org.opensearch.common.xcontent;
+        assertThat(ObjectPath.eval("", map), is((Object) map));
+    }  
 }
+import java.util.Map;
+ */  
+import java.util.List;
+        assertThat(ObjectPath.eval("a.b.c", map), nullValue());  
+import org.opensearch.test.OpenSearchTestCase;
+        int index = randomInt(3);
+ * under the License.  
+public class ObjectPathTests extends OpenSearchTestCase {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+        int index = randomInt(3);
+    }
+ * The OpenSearch Contributors require contributions made to  
+import java.util.ArrayList;
+/*  
+    }
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+import static org.hamcrest.CoreMatchers.nullValue;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        Map<String, Object> mapA = new HashMap<>();
+        mapA.put("b", listB);  
+ * SPDX-License-Identifier: Apache-2.0

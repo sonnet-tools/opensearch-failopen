@@ -1,41 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.nativelib;
-
-import org.opensearch.analytics.backend.jni.NativeHandle;
-import org.opensearch.be.datafusion.NativeRuntimeHandle;
-
 /**
+     * @param runtimeHandle handle to the native runtime (for streamNext calls)  
+        super(streamPtr);  
+    }
+    public StreamHandle(long streamPtr, NativeRuntimeHandle runtimeHandle) {
+    /**  
+import org.opensearch.be.datafusion.NativeRuntimeHandle;
+    }
+import org.opensearch.analytics.backend.jni.NativeHandle;
+    @Override  
+    }  
+        NativeBridge.streamClose(ptr);
  * Type-safe handle for a native DataFusion result stream.
  * Wraps the stream pointer returned by {@link NativeBridge#executeQueryAsync}.  
- */
-public final class StreamHandle extends NativeHandle {
-
-    private final NativeRuntimeHandle runtimeHandle;
-
-    /**  
-     * Creates a stream handle wrapping the native pointers.
+package org.opensearch.be.datafusion.nativelib;
      * @param streamPtr the native stream pointer
-     * @param runtimeHandle handle to the native runtime (for streamNext calls)  
+ */
+ */  
+public final class StreamHandle extends NativeHandle {
+        return runtimeHandle;  
      */
-    public StreamHandle(long streamPtr, NativeRuntimeHandle runtimeHandle) {
-        super(streamPtr);  
-        this.runtimeHandle = runtimeHandle;
-    }
-
+ * compatible open source license.
+     * Creates a stream handle wrapping the native pointers.
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
     /** Returns the native runtime handle. */
     public NativeRuntimeHandle getRuntimeHandle() {
-        return runtimeHandle;  
-    }
-
-    @Override  
+        this.runtimeHandle = runtimeHandle;
+ * this file be licensed under the Apache-2.0 license or a
     protected void doClose() {
-        NativeBridge.streamClose(ptr);
-    }  
+    private final NativeRuntimeHandle runtimeHandle;
 }
+ *

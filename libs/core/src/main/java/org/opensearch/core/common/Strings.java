@@ -1,852 +1,788 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.core.common;
-
-import org.apache.lucene.util.BytesRefBuilder;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchException;  
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.util.CollectionUtils;  
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.BufferedReader;
-import java.io.IOException;  
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;  
-import java.util.StringTokenizer;
-import java.util.TreeSet;
-import java.util.function.Supplier;  
-
-import static java.util.Collections.unmodifiableSet;
-import static org.opensearch.common.util.set.Sets.newHashSet;  
-
-/**
- * String utility class.  
- * <p>
- * TODO replace Strings in :server
- *  
- * @opensearch.internal
- */
-public class Strings {  
-    public static final String UNKNOWN_UUID_VALUE = "_na_";
-    public static final String[] EMPTY_ARRAY = new String[0];
-    public static final Set<Character> INVALID_FILENAME_CHARS = unmodifiableSet(  
-        newHashSet('\\', '/', '*', '?', '"', '<', '>', '|', ' ', ',')
-    );
-
-    // no instance:
-    private Strings() {}
-
-    // ---------------------------------------------------------------------
-    // General convenience methods for working with Strings
-    // ---------------------------------------------------------------------  
-
-    public static void spaceify(int spaces, String from, StringBuilder to) throws Exception {
-        try (BufferedReader reader = new BufferedReader(new StringReader(from))) {  
-            String line;
-            while ((line = reader.readLine()) != null) {
-                for (int i = 0; i < spaces; i++) {  
-                    to.append(' ');
-                }
-                to.append(line).append('\n');  
-            }
-        }
-    }  
-
-    /**
-     * Check that the given CharSequence is neither <code>null</code> nor of length 0.  
-     * Note: Will return <code>true</code> for a CharSequence that purely consists of whitespace.
-     * <pre>
-     * StringUtils.hasLength(null) = false  
-     * StringUtils.hasLength("") = false
-     * StringUtils.hasLength(" ") = true
-     * StringUtils.hasLength("Hello") = true  
-     * </pre>
-     *
-     * @param str the CharSequence to check (may be <code>null</code>)  
-     * @return <code>true</code> if the CharSequence is not null and has length
-     * @see #hasText(String)
-     */  
-    public static boolean hasLength(CharSequence str) {
-        return (str != null && str.length() > 0);
-    }  
-
-    /**
-     * Check that the given BytesReference is neither <code>null</code> nor of length 0  
-     * Note: Will return <code>true</code> for a BytesReference that purely consists of whitespace.
-     *
-     * @param bytesReference the BytesReference to check (may be <code>null</code>)  
-     * @return <code>true</code> if the BytesReference is not null and has length
-     * @see Strings#hasLength(CharSequence)
-     */  
-    public static boolean hasLength(final BytesReference bytesReference) {
-        return (bytesReference != null && bytesReference.length() > 0);
-    }  
-
-    /**
-     * Check that the given String is neither <code>null</code> nor of length 0.  
-     * Note: Will return <code>true</code> for a String that purely consists of whitespace.
-     *
-     * @param str the String to check (may be <code>null</code>)  
-     * @return <code>true</code> if the String is not null and has length
-     * @see Strings#hasLength(CharSequence)
-     */  
-    public static boolean hasLength(final String str) {
-        return hasLength((CharSequence) str);
-    }  
-
-    /**
-     * Check that the given CharSequence is either <code>null</code> or of length 0.  
-     * Note: Will return <code>false</code> for a CharSequence that purely consists of whitespace.
-     * <pre>
-     * StringUtils.isEmpty(null) = true  
-     * StringUtils.isEmpty("") = true
-     * StringUtils.isEmpty(" ") = false
-     * StringUtils.isEmpty("Hello") = false  
-     * </pre>
-     *
-     * @param str the CharSequence to check (may be <code>null</code>)  
-     * @return <code>true</code> if the CharSequence is either null or has a zero length
-     */
-    public static boolean isEmpty(final CharSequence str) {  
-        return hasLength(str) == false;
-    }
-
-    /**
-     * Check whether the given CharSequence has actual text.
-     * More specifically, returns <code>true</code> if the string not <code>null</code>,  
-     * its length is greater than 0, and it contains at least one non-whitespace character.
-     * <pre>
-     * StringUtils.hasText(null) = false  
-     * StringUtils.hasText("") = false
-     * StringUtils.hasText(" ") = false
-     * StringUtils.hasText("12345") = true  
-     * StringUtils.hasText(" 12345 ") = true
-     * </pre>
-     *  
-     * @param str the CharSequence to check (may be <code>null</code>)
-     * @return <code>true</code> if the CharSequence is not <code>null</code>,
-     *         its length is greater than 0, and it does not contain whitespace only  
-     * @see Character#isWhitespace
-     */
-    public static boolean hasText(CharSequence str) {  
-        if (!hasLength(str)) {
-            return false;
-        }  
-        int strLen = str.length();
-        for (int i = 0; i < strLen; i++) {
-            if (!Character.isWhitespace(str.charAt(i))) {  
-                return true;
-            }
-        }  
-        return false;
-    }
-
-    /**
-     * Check whether the given String has actual text.
-     * More specifically, returns <code>true</code> if the string not <code>null</code>,  
-     * its length is greater than 0, and it contains at least one non-whitespace character.
-     *
-     * @param str the String to check (may be <code>null</code>)  
-     * @return <code>true</code> if the String is not <code>null</code>, its length is
-     *         greater than 0, and it does not contain whitespace only
-     * @see Strings#hasText(CharSequence)  
-     */
-    public static boolean hasText(String str) {
-        return hasText((CharSequence) str);  
-    }
-
-    /**  
-     * Trim all occurrences of the supplied leading character from the given String.
-     *
-     * @param str              the String to check  
-     * @param leadingCharacter the leading character to be trimmed
-     * @return the trimmed String
-     */  
-    public static String trimLeadingCharacter(String str, char leadingCharacter) {
-        if (hasLength(str) == false) {
-            return str;  
-        }
-        StringBuilder sb = new StringBuilder(str);
-        while (sb.length() > 0 && sb.charAt(0) == leadingCharacter) {  
-            sb.deleteCharAt(0);
-        }
-        return sb.toString();  
-    }
-
-    /**  
-     * Test whether the given string matches the given substring
-     * at the given index.
-     *  
-     * @param str       the original string (or StringBuilder)
-     * @param index     the index in the original string to start matching against
-     * @param substring the substring to match at the given index  
-     */
-    public static boolean substringMatch(CharSequence str, int index, CharSequence substring) {
-        for (int j = 0; j < substring.length(); j++) {  
-            int i = index + j;
-            if (i >= str.length() || str.charAt(i) != substring.charAt(j)) {
-                return false;  
-            }
-        }
-        return true;  
-    }
-
-    /**  
-     * Replace all occurrences of a substring within a string with
-     * another string.
-     *  
-     * @param inString   String to examine
-     * @param oldPattern String to replace
-     * @param newPattern String to insert  
-     * @return a String with the replacements
-     */
-    public static String replace(String inString, String oldPattern, String newPattern) {  
-        if (!hasLength(inString) || !hasLength(oldPattern) || newPattern == null) {
-            return inString;
-        }  
-        StringBuilder sb = new StringBuilder();
-        int pos = 0; // our position in the old string
-        int index = inString.indexOf(oldPattern);  
-        // the index of an occurrence we've found, or -1
-        int patLen = oldPattern.length();
-        while (index >= 0) {  
-            sb.append(inString, pos, index);
-            sb.append(newPattern);
-            pos = index + patLen;  
-            index = inString.indexOf(oldPattern, pos);
-        }
-        sb.append(inString.substring(pos));  
-        // remember to append any characters to the right of a match
-        return sb.toString();
-    }  
-
-    /**
-     * Delete all occurrences of the given substring.  
-     *
-     * @param inString the original String
-     * @param pattern  the pattern to delete all occurrences of  
-     * @return the resulting String
-     */
-    public static String delete(String inString, String pattern) {  
-        return replace(inString, pattern, "");
-    }
-
-    /**
-     * Delete any character in a given String.
-     *  
-     * @param inString      the original String
-     * @param charsToDelete a set of characters to delete.
-     *                      E.g. "az\n" will delete 'a's, 'z's and new lines.  
-     * @return the resulting String
-     */
-    public static String deleteAny(String inString, String charsToDelete) {  
-        if (hasLength(inString) == false || hasLength(charsToDelete) == false) {
-            return inString;
-        }  
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < inString.length(); i++) {
-            char c = inString.charAt(i);  
-            if (charsToDelete.indexOf(c) == -1) {
-                sb.append(c);
-            }  
-        }
-        return sb.toString();
-    }  
-
-    // ---------------------------------------------------------------------
-    // Convenience methods for working with formatted Strings  
-    // ---------------------------------------------------------------------
-
-    /**  
-     * Quote the given String with single quotes.
-     *
-     * @param str the input String (e.g. "myString")  
-     * @return the quoted String (e.g. "'myString'"),
-     *         or <code>null</code> if the input was <code>null</code>
-     */  
-    public static String quote(String str) {
-        return (str != null ? "'" + str + "'" : null);
-    }  
-
-    /**
-     * Capitalize a <code>String</code>, changing the first letter to  
-     * upper case as per {@link Character#toUpperCase(char)}.
-     * No other letters are changed.
-     *  
-     * @param str the String to capitalize, may be <code>null</code>
-     * @return the capitalized String, <code>null</code> if null
-     */  
-    public static String capitalize(String str) {
-        return changeFirstCharacterCase(str, true);
-    }  
-
-    private static String changeFirstCharacterCase(String str, boolean capitalize) {
-        if (str == null || str.length() == 0) {  
-            return str;
-        }
-        StringBuilder sb = new StringBuilder(str.length());  
-        if (capitalize) {
-            sb.append(Character.toUpperCase(str.charAt(0)));
-        } else {  
-            sb.append(Character.toLowerCase(str.charAt(0)));
-        }
-        sb.append(str.substring(1));  
-        return sb.toString();
-    }
-
-    public static boolean validFileName(String fileName) {
-        for (int i = 0; i < fileName.length(); i++) {
-            char c = fileName.charAt(i);  
-            if (INVALID_FILENAME_CHARS.contains(c)) {
-                return false;
-            }  
-        }
-        return true;
-    }  
-
-    public static boolean validFileNameExcludingAsterisk(String fileName) {
-        for (int i = 0; i < fileName.length(); i++) {  
-            char c = fileName.charAt(i);
-            if (c != '*' && INVALID_FILENAME_CHARS.contains(c)) {
-                return false;  
-            }
-        }
-        return true;  
-    }
-
-    public static boolean validFileNameExcludingSlash(String fileName) {  
-        // Reject absolute paths
-        if (fileName.startsWith("/") || fileName.startsWith("\\")) {
-            return false;  
-        }
-        // Reject invalid characters (excluding slashes)
-        for (int i = 0; i < fileName.length(); i++) {  
-            char c = fileName.charAt(i);
-            if (c != '/' && c != '\\' && INVALID_FILENAME_CHARS.contains(c)) {
-                return false;  
-            }
-        }
-        // Reject path traversal: ".." as a path segment  
-        for (String segment : fileName.split("[/\\\\]")) {
-            if (segment.equals("..")) {
-                return false;  
-            }
-        }
-        return true;  
-    }
-
-    /**  
-     * Copy the given Collection into a String array.
-     * The Collection must contain String elements only.
-     *  
-     * @param collection the Collection to copy
-     * @return the String array (<code>null</code> if the passed-in
-     *         Collection was <code>null</code>)  
-     */
-    public static String[] toStringArray(final Collection<String> collection) {
-        if (collection == null) {  
-            return null;
-        }
-        return collection.toArray(new String[0]);  
-    }
-
-    /**  
-     * Tokenize the specified string by commas to a set, trimming whitespace and ignoring empty tokens.
-     *
-     * @param s the string to tokenize  
-     * @return the set of tokens
-     */
-    public static Set<String> tokenizeByCommaToSet(final String s) {  
-        if (s == null) return Collections.emptySet();
-        return tokenizeToCollection(s, ",", HashSet::new);
-    }  
-
-    /**
-     * Split the specified string by commas to an array.  
-     *
-     * @param s the string to split
-     * @return the array of split values  
-     * @see String#split(String)
-     */
-    public static String[] splitStringByCommaToArray(final String s) {  
-        if (s == null || s.isEmpty()) return Strings.EMPTY_ARRAY;
-        else return s.split(",");
-    }  
-
-    /**
-     * Split a String at the first occurrence of the delimiter.  
-     * Does not include the delimiter in the result.
-     *
-     * @param toSplit   the string to split  
-     * @param delimiter to split the string up with
-     * @return a two element array with index 0 being before the delimiter, and
-     *         index 1 being after the delimiter (neither element includes the delimiter);  
-     *         or <code>null</code> if the delimiter wasn't found in the given input String
-     */
-    public static String[] split(String toSplit, String delimiter) {  
+            return sb.toString();
         if (hasLength(toSplit) == false || hasLength(delimiter) == false) {
-            return null;
-        }  
-        int offset = toSplit.indexOf(delimiter);
-        if (offset < 0) {
-            return null;  
-        }
-        String beforeDelimiter = toSplit.substring(0, offset);
-        String afterDelimiter = toSplit.substring(offset + delimiter.length());  
-        return new String[] { beforeDelimiter, afterDelimiter };
-    }
-
-    /**
-     * Tokenize the given String into a String array via a StringTokenizer.
-     * Trims tokens and omits empty tokens.  
-     * <p>The given delimiters string is supposed to consist of any number of
-     * delimiter characters. Each of those characters can be used to separate
-     * tokens. A delimiter is always a single character; for multi-character  
-     * delimiters, consider using <code>delimitedListToStringArray</code>
-     *
-     * @param s        the String to tokenize  
-     * @param delimiters the delimiter characters, assembled as String
-     *                   (each of those characters is individually considered as delimiter).
-     * @return an array of the tokens  
-     * @see StringTokenizer
-     * @see String#trim()
-     * @see Strings#delimitedListToStringArray  
-     */
-    public static String[] tokenizeToStringArray(final String s, final String delimiters) {
-        if (s == null) {  
-            return Strings.EMPTY_ARRAY;
-        }
-        return toStringArray(tokenizeToCollection(s, delimiters, ArrayList::new));  
-    }
-
-    /**  
-     * Tokenizes the specified string to a collection using the specified delimiters as the token delimiters. This method trims whitespace
-     * from tokens and ignores empty tokens.
-     *  
-     * @param s          the string to tokenize.
-     * @param delimiters the token delimiters
-     * @param supplier   a collection supplier  
-     * @param <T>        the type of the collection
-     * @return the tokens
-     * @see StringTokenizer  
-     */
-    private static <T extends Collection<String>> T tokenizeToCollection(
-        final String s,  
-        final String delimiters,
-        final Supplier<T> supplier
-    ) {  
-        if (s == null) {
-            return null;
-        }  
-        final StringTokenizer tokenizer = new StringTokenizer(s, delimiters);
-        final T tokens = supplier.get();
-        while (tokenizer.hasMoreTokens()) {  
-            final String token = tokenizer.nextToken().trim();
-            if (token.length() > 0) {
-                tokens.add(token);  
-            }
-        }
-        return tokens;  
-    }
-
-    /**  
-     * Take a String which is a delimited list and convert it to a String array.
-     * <p>A single delimiter can consists of more than one character: It will still
-     * be considered as single delimiter string, rather than as bunch of potential  
-     * delimiter characters - in contrast to <code>tokenizeToStringArray</code>.
-     *
-     * @param str           the input String  
-     * @param delimiter     the delimiter between elements (this is a single delimiter,
-     *                      rather than a bunch individual delimiter characters)
-     * @param charsToDelete a set of characters to delete. Useful for deleting unwanted  
-     *                      line breaks: e.g. "\r\n\f" will delete all new lines and line feeds in a String.
-     * @return an array of the tokens in the list
-     * @see #tokenizeToStringArray  
-     */
-    public static String[] delimitedListToStringArray(String str, String delimiter, String charsToDelete) {
-        if (str == null) {  
-            return Strings.EMPTY_ARRAY;
-        }
-        if (delimiter == null) {  
-            return new String[] { str };
-        }
-        List<String> result = new ArrayList<>();  
-        if ("".equals(delimiter)) {
-            for (int i = 0; i < str.length(); i++) {
-                result.add(deleteAny(str.substring(i, i + 1), charsToDelete));  
-            }
-        } else {
-            int pos = 0;  
-            int delPos;
-            while ((delPos = str.indexOf(delimiter, pos)) != -1) {
-                result.add(deleteAny(str.substring(pos, delPos), charsToDelete));  
-                pos = delPos + delimiter.length();
-            }
-            if (str.length() > 0 && pos <= str.length()) {  
-                // Add rest of String, but not in case of empty input.
-                result.add(deleteAny(str.substring(pos), charsToDelete));
-            }  
-        }
-        return toStringArray(result);
-    }  
-
-    /**
-     * Take a String which is a delimited list and convert it to a String array.  
-     * <p>A single delimiter can consists of more than one character: It will still
-     * be considered as single delimiter string, rather than as bunch of potential
-     * delimiter characters - in contrast to <code>tokenizeToStringArray</code>.  
-     *
-     * @param str       the input String
-     * @param delimiter the delimiter between elements (this is a single delimiter,  
-     *                  rather than a bunch individual delimiter characters)
-     * @return an array of the tokens in the list
-     * @see Strings#tokenizeToStringArray  
-     */
-    public static String[] delimitedListToStringArray(String str, String delimiter) {
-        return delimitedListToStringArray(str, delimiter, null);  
-    }
-
-    /**  
-     * Convert a CSV list into an array of Strings.
-     *
-     * @param str the input String  
-     * @return an array of Strings, or the empty array in case of empty input
-     */
-    public static String[] commaDelimitedListToStringArray(String str) {  
-        return delimitedListToStringArray(str, ",");
-    }
-
-    /**
-     * Convenience method to convert a CSV string list to a set.
-     * Note that this will suppress duplicates.  
-     *
-     * @param str the input String
-     * @return a Set of String entries in the list  
-     */
-    public static Set<String> commaDelimitedListToSet(String str) {
-        Set<String> set = new TreeSet<>();  
-        String[] tokens = commaDelimitedListToStringArray(str);
-        set.addAll(Arrays.asList(tokens));
-        return set;  
-    }
-
-    /**  
-     * Convenience method to return a Collection as a delimited (e.g. CSV)
-     * String. E.g. useful for <code>toString()</code> implementations.
-     *  
-     * @param coll   the Collection to display
-     * @param delim  the delimiter to use (probably a ",")
-     * @param prefix the String to start each element with  
-     * @param suffix the String to end each element with
-     * @return the delimited String
-     */  
-    public static String collectionToDelimitedString(Iterable<?> coll, String delim, String prefix, String suffix) {
-        StringBuilder sb = new StringBuilder();
-        collectionToDelimitedString(coll, delim, prefix, suffix, sb);  
-        return sb.toString();
-    }
-
-    public static void collectionToDelimitedString(Iterable<?> coll, String delim, String prefix, String suffix, StringBuilder sb) {
-        Iterator<?> it = coll.iterator();
-        while (it.hasNext()) {  
-            sb.append(prefix).append(it.next()).append(suffix);
-            if (it.hasNext()) {
-                sb.append(delim);  
-            }
-        }
-    }  
-
-    /**
-     * Convenience method to return a Collection as a delimited (e.g. CSV)  
-     * String. E.g. useful for <code>toString()</code> implementations.
-     *
-     * @param coll  the Collection to display  
-     * @param delim the delimiter to use (probably a ",")
-     * @return the delimited String
-     */  
-    public static String collectionToDelimitedString(Iterable<?> coll, String delim) {
-        return collectionToDelimitedString(coll, delim, "", "");
-    }  
-
-    /**
-     * Convenience method to return a Collection as a CSV String.  
-     * E.g. useful for <code>toString()</code> implementations.
-     *
-     * @param coll the Collection to display  
-     * @return the delimited String
-     */
-    public static String collectionToCommaDelimitedString(Iterable<?> coll) {  
-        return collectionToDelimitedString(coll, ",");
-    }
-
-    /**
-     * Convenience method to return a String array as a delimited (e.g. CSV)
-     * String. E.g. useful for <code>toString()</code> implementations.  
-     *
-     * @param arr   the array to display
-     * @param delim the delimiter to use (probably a ",")  
-     * @return the delimited String
-     */
-    public static String arrayToDelimitedString(Object[] arr, String delim) {  
-        StringBuilder sb = new StringBuilder();
-        arrayToDelimitedString(arr, delim, sb);
-        return sb.toString();  
-    }
-
-    public static void arrayToDelimitedString(Object[] arr, String delim, StringBuilder sb) {  
-        if (isEmpty(arr)) {
-            return;
-        }  
-        for (int i = 0; i < arr.length; i++) {
-            if (i > 0) {
-                sb.append(delim);  
-            }
-            sb.append(arr[i]);
-        }  
-    }
-
-    /**  
-     * Convenience method to return a String array as a CSV String.
-     * E.g. useful for <code>toString()</code> implementations.
-     *  
-     * @param arr the array to display
-     * @return the delimited String
-     */  
-    public static String arrayToCommaDelimitedString(Object[] arr) {
-        return arrayToDelimitedString(arr, ",");
-    }  
-
-    /**
-     * Format the double value with a single decimal points, trimming trailing '.0'.  
-     */
-    public static String format1Decimals(double value, String suffix) {
-        String p = String.valueOf(value);  
-        int ix = p.indexOf('.') + 1;
-        int ex = p.indexOf('E');
-        char fraction = p.charAt(ix);  
-        if (fraction == '0') {
-            if (ex != -1) {
-                return p.substring(0, ix - 1) + p.substring(ex) + suffix;  
-            } else {
-                return p.substring(0, ix - 1) + suffix;
-            }  
-        } else {
-            if (ex != -1) {
-                return p.substring(0, ix) + fraction + p.substring(ex) + suffix;  
-            } else {
-                return p.substring(0, ix) + fraction + suffix;
-            }  
-        }
-    }
-
-    /**
-     * Determine whether the given array is empty:
-     * i.e. <code>null</code> or of zero length.  
-     *
-     * @param array the array to check
-     */  
-    private static boolean isEmpty(final Object[] array) {
-        return (array == null || array.length == 0);
-    }  
-
-    public static byte[] toUTF8Bytes(CharSequence charSequence) {
-        return toUTF8Bytes(charSequence, new BytesRefBuilder());  
-    }
-
-    public static byte[] toUTF8Bytes(CharSequence charSequence, BytesRefBuilder spare) {  
+    public static String toLowercaseAscii(String in) {  
+        else return s.split(",");
         spare.copyChars(charSequence);
-        return Arrays.copyOf(spare.bytes(), spare.length());
-    }  
-
-    /**
-     * Return substring(beginIndex, endIndex) that is impervious to string length.  
+        return arrayToDelimitedString(arr, ",");
      */
-    public static String substring(String s, int beginIndex, int endIndex) {
-        if (s == null) {  
-            return s;
-        }
-
-        int realEndIndex = s.length() > 0 ? s.length() - 1 : 0;
-
-        if (endIndex > realEndIndex) {  
-            return s.substring(beginIndex);
-        } else {
-            return s.substring(beginIndex, endIndex);  
-        }
-    }
-
-    /**
-     * If an array only consists of zero or one element, which is "*" or "_all" return an empty array
-     * which is usually used as everything  
-     */
-    public static boolean isAllOrWildcard(String[] data) {
-        return CollectionUtils.isEmpty(data) || data.length == 1 && isAllOrWildcard(data[0]);  
-    }
-
-    /**  
+import static java.util.Collections.unmodifiableSet;
+     * @param str the input String
+     * <p>A single delimiter can consists of more than one character: It will still
+     *                      rather than a bunch individual delimiter characters)
      * Returns `true` if the string is `_all` or `*`.
-     */
-    public static boolean isAllOrWildcard(String data) {  
-        return "_all".equals(data) || "*".equals(data);
-    }
-
-    /**
-     * Return a {@link String} that is the json representation of the provided {@link ToXContent}.
-     * Wraps the output into an anonymous object if needed. The content is not pretty-printed  
-     * nor human readable.
-     */
-    public static String toString(MediaType mediaType, ToXContent toXContent) {  
-        return toString(mediaType, toXContent, false, false);
-    }
-
-    /**
-     * Return a {@link String} that is the json representation of the provided {@link ToXContent}.
-     * Wraps the output into an anonymous object if needed.  
-     * Allows to configure the params.
-     * The content is not pretty-printed nor human readable.
-     */  
-    public static String toString(MediaType mediaType, ToXContent toXContent, ToXContent.Params params) {
+        } else {
+     * Wraps the output into an anonymous object if needed. Allows to control whether the outputted
+    public static String trimLeadingCharacter(String str, char leadingCharacter) {
+         * someone does this shouldn't break.
+        }
+    public static boolean hasLength(final BytesReference bytesReference) {
+        return true;  
+     * If an array only consists of zero or one element, which is "*" or "_all" return an empty array
+                builder.endObject();
+     * </pre>
+     * @return an array of the tokens  
+     * Check whether the given String has actual text.
+     * <p>The given delimiters string is supposed to consist of any number of
+        StringBuilder sb = new StringBuilder();
+     * @return a String with the replacements
+        while (sb.length() > 0 && sb.charAt(0) == leadingCharacter) {  
+     * @see #hasText(String)
+     * StringUtils.isEmpty(null) = true  
+     *
+        return sb.toString();  
+        set.addAll(Arrays.asList(tokens));
         return toString(mediaType, toXContent, params, false, false);
+        XContentBuilder builder = XContentBuilder.builder(mediaType.xContent());
+    public static void spaceify(int spaces, String from, StringBuilder to) throws Exception {
+        StringBuilder sb = new StringBuilder();
+            }
+    public static final String UNKNOWN_UUID_VALUE = "_na_";
+    // ---------------------------------------------------------------------
+            toXContent.toXContent(builder, params);  
+    }
+     * More specifically, returns <code>true</code> if the string not <code>null</code>,  
+        String beforeDelimiter = toSplit.substring(0, offset);
+     * Trims tokens and omits empty tokens.  
+import org.opensearch.core.common.util.CollectionUtils;  
+    public static void collectionToDelimitedString(Iterable<?> coll, String delim, String prefix, String suffix, StringBuilder sb) {
+     */
+        newHashSet('\\', '/', '*', '?', '"', '<', '>', '|', ' ', ',')
+     * Take a String which is a delimited list and convert it to a String array.
+        }  
+ */  
+        int ix = p.indexOf('.') + 1;
+    /**  
+        if (s == null) {  
+     *  
+     * Quote the given String with single quotes.
+            if (c != '*' && INVALID_FILENAME_CHARS.contains(c)) {
+        try {
+     * @return the capitalized String, <code>null</code> if null
+    /**  
+    }
+    }
     }  
-
+     * @see StringTokenizer  
+     * Convenience method to return a String array as a delimited (e.g. CSV)
+     * Check that the given CharSequence is either <code>null</code> or of length 0.  
+     *
+    /**
+     * @see Strings#tokenizeToStringArray  
+    /**  
+            }  
+     * Test whether the given string matches the given substring
+import org.opensearch.core.xcontent.MediaType;
+    }  
+            if (toXContent.isFragment()) {  
+     * @return the String array (<code>null</code> if the passed-in
+     * @see String#trim()
+            if (i >= str.length() || str.charAt(i) != substring.charAt(j)) {
+    }
+                pos = delPos + delimiter.length();
+     *
+            return str;
+     * @param str the String to capitalize, may be <code>null</code>
+    }
+                result.add(deleteAny(str.substring(pos), charsToDelete));
+    public static boolean isAllOrWildcard(String[] data) {
+     * Does not include the delimiter in the result.
+    /**  
+        for (int i = 0; i < fileName.length(); i++) {  
+    public static Set<String> commaDelimitedListToSet(String str) {
+     *
+     * @see StringTokenizer
+     * @param arr the array to display
+     *
+     * Note that this will suppress duplicates.  
+        }
+     * @param delimiters the token delimiters
+     *
+     * @param str the String to check (may be <code>null</code>)  
+     *
+    /**
+    public static String[] tokenizeToStringArray(final String s, final String delimiters) {
+        char fraction = p.charAt(ix);  
+     * from tokens and ignores empty tokens.
+            int pos = 0;  
+        }
+        for (int i = 0; i < arr.length; i++) {
+import java.io.IOException;  
+        return (str != null && str.length() > 0);
+     * @param supplier   a collection supplier  
+            }  
+            return null;
+    public static boolean hasLength(CharSequence str) {
+            }
+            return s;
+        } catch (IOException e) {
+    public static void arrayToDelimitedString(Object[] arr, String delim, StringBuilder sb) {  
+        while (tokenizer.hasMoreTokens()) {  
+     * Check that the given CharSequence is neither <code>null</code> nor of length 0.  
+     * @param s the string to split
+        if (length == 0) {  
+    public static String arrayToCommaDelimitedString(Object[] arr) {
+     * Convenience method to return a Collection as a delimited (e.g. CSV)  
+            }
+    /**  
+    /**
+    // ---------------------------------------------------------------------  
+                return p.substring(0, ix - 1) + p.substring(ex) + suffix;  
+     */
+     * @return the delimited String
+     *  
+/**
+     * @param str the CharSequence to check (may be <code>null</code>)  
+        } else {  
+    public static String[] toStringArray(final Collection<String> collection) {
+     * @param oldPattern String to replace
+    }
+    public static boolean isEmpty(final CharSequence str) {  
+     */
+            sb.append(newPattern);
+        if (capitalize) {
+     * @return a Set of String entries in the list  
+    }
+            return s;
+     * No other letters are changed.
+import java.util.Collection;
+     * @param str              the String to check  
+        if (s == null) {
+    /**  
+    public static boolean validFileName(String fileName) {
+        arrayToDelimitedString(arr, delim, sb);
+     */
+    // no instance:
+     * <pre>
+        for (int i = 0; i < strLen; i++) {
+        int realEndIndex = s.length() > 0 ? s.length() - 1 : 0;
+        return CollectionUtils.isEmpty(data) || data.length == 1 && isAllOrWildcard(data[0]);  
+    /**
+                XContentBuilder builder = createBuilder(mediaType, pretty, human);
+                throw new OpenSearchException("cannot generate error message for deserialization", e);
+            }
+        }  
+     * @see Strings#delimitedListToStringArray  
+     * json needs to be pretty printed and human readable.
+     */
+        StringBuilder sb = new StringBuilder();
+     */
+    private static XContentBuilder createBuilder(MediaType mediaType, boolean pretty, boolean human) throws IOException {
+            return builder.toString();
+     * Check whether every single character in the string is a digit.  
+            if (segment.equals("..")) {
+    }  
+import java.util.HashSet;  
+            int i = index + j;
+import java.util.Set;  
+    private static boolean isEmpty(final Object[] array) {
+     *                  rather than a bunch individual delimiter characters)
+ * TODO replace Strings in :server
+    public static String replace(String inString, String oldPattern, String newPattern) {  
+     * Return a {@link String} that is the json representation of the provided {@link ToXContent}.
+            return s.substring(beginIndex, endIndex);  
+        return hasText((CharSequence) str);  
+     * <p>An empty string returns {@code false}.</p>
+     *                   (each of those characters is individually considered as delimiter).
+    ) {  
+        if (s.length() >= minimumLength) {
+    public static String format1Decimals(double value, String suffix) {
+                result.add(deleteAny(str.substring(pos, delPos), charsToDelete));  
+        String[] tokens = commaDelimitedListToStringArray(str);
+    public static boolean isNullOrEmpty(@Nullable String s) {  
+     *
+     * Convenience method to return a String array as a CSV String.
+     * Delete all occurrences of the given substring.  
+     * which is usually used as everything  
+import java.util.TreeSet;
+        }
+     * @return <code>true</code> if the String is not null and has length
+     */
     /**
      * Return a {@link String} that is the json representation of the provided {@link ToXContent}.  
-     * Wraps the output into an anonymous object if needed. Allows to control whether the outputted
-     * json needs to be pretty printed and human readable.
-     *  
-     */
-    public static String toString(MediaType mediaType, ToXContent toXContent, boolean pretty, boolean human) {
-        return toString(mediaType, toXContent, ToXContent.EMPTY_PARAMS, pretty, human);  
-    }
-
-    /**  
-     * Return a {@link String} that is the json representation of the provided {@link ToXContent}.
-     * Wraps the output into an anonymous object if needed.
-     * Allows to configure the params.  
-     * Allows to control whether the outputted json needs to be pretty printed and human readable.
-     */
-    private static String toString(MediaType mediaType, ToXContent toXContent, ToXContent.Params params, boolean pretty, boolean human) {  
-        try {
-            XContentBuilder builder = createBuilder(mediaType, pretty, human);
-            if (toXContent.isFragment()) {  
-                builder.startObject();
+ * The OpenSearch Contributors require contributions made to  
+        int ex = p.indexOf('E');
             }
-            toXContent.toXContent(builder, params);  
-            if (toXContent.isFragment()) {
-                builder.endObject();
-            }  
-            return builder.toString();
-        } catch (IOException e) {
-            try {  
-                XContentBuilder builder = createBuilder(mediaType, pretty, human);
-                builder.startObject();
-                builder.field("error", "error building toString out of XContent: " + e.getMessage());  
-                builder.field("stack_trace", ExceptionsHelper.stackTrace(e));
-                builder.endObject();
-                return builder.toString();  
-            } catch (IOException e2) {
-                throw new OpenSearchException("cannot generate error message for deserialization", e);
-            }  
-        }
+                return p.substring(0, ix - 1) + suffix;
     }
-
-    private static XContentBuilder createBuilder(MediaType mediaType, boolean pretty, boolean human) throws IOException {
-        XContentBuilder builder = XContentBuilder.builder(mediaType.xContent());
-        if (pretty) {  
-            builder = builder.prettyPrint();
-        }
-        if (human) {  
-            builder = builder.humanReadable(true);
-        }
-        return builder;  
-    }
-
-    /**  
-     * Truncates string to a length less than length. Backtracks to throw out
-     * high surrogates.
-     */  
-    public static String cleanTruncate(String s, int length) {
         if (s == null) {
-            return s;  
-        }
+     * Note: Will return <code>true</code> for a BytesReference that purely consists of whitespace.
         /*
-         * Its pretty silly for you to truncate to 0 length but just in case  
-         * someone does this shouldn't break.
-         */
-        if (length == 0) {  
-            return "";
+        for (int i = 0; i < inString.length(); i++) {
+                return true;
+        final String s,  
         }
-        if (length >= s.length()) {  
-            return s;
-        }
-        if (Character.isHighSurrogate(s.charAt(length - 1))) {  
-            length--;
-        }
-        return s.substring(0, length);  
-    }
-
-    public static boolean isNullOrEmpty(@Nullable String s) {  
-        return s == null || s.isEmpty();
-    }
-
-    public static String padStart(String s, int minimumLength, char c) {
-        if (s == null) {
-            throw new NullPointerException("s");  
-        }
-        if (s.length() >= minimumLength) {
-            return s;  
+        if (s == null || s.isEmpty()) return Strings.EMPTY_ARRAY;
         } else {
-            StringBuilder sb = new StringBuilder(minimumLength);
-            for (int i = s.length(); i < minimumLength; i++) {  
-                sb.append(c);
-            }
-
-            sb.append(s);
-            return sb.toString();
-        }  
-    }
-
-    public static String toLowercaseAscii(String in) {  
-        StringBuilder out = new StringBuilder();
-        Iterator<Integer> iter = in.codePoints().iterator();
-        while (iter.hasNext()) {  
-            int codepoint = iter.next();
-            if (codepoint > 128) {
-                out.appendCodePoint(codepoint);  
-            } else {
-                out.appendCodePoint(Character.toLowerCase(codepoint));
-            }  
+    /**  
+     * @return an array of the tokens in the list
+     * nor human readable.
+        return hasLength(str) == false;
         }
-        return out.toString();
-    }  
-
+     * <pre>
+        }  
+     * @return the delimited String
+     * Return substring(beginIndex, endIndex) that is impervious to string length.  
+            }
+        if (str == null) {  
+     */
     /**
-     * Check whether every single character in the string is a digit.  
-     *
-     * <p>An empty string returns {@code false}.</p>
-     *  
-     * @param s the string, must not be null.
+            if (!Character.isWhitespace(str.charAt(i))) {  
+        return true;
      * @return {@code true} if the string only contains digits, {@code false} otherwise.
-     */  
-    public static boolean isDigits(final String s) {
-        return !s.isEmpty() && s.chars().allMatch(Character::isDigit);
+        }
+     *         Collection was <code>null</code>)  
+     * tokens. A delimiter is always a single character; for multi-character  
     }  
-
+    /**
+     * @param pattern  the pattern to delete all occurrences of  
+            for (int i = s.length(); i < minimumLength; i++) {  
+     * StringUtils.hasLength(null) = false  
+        return collectionToDelimitedString(coll, delim, "", "");
+        String afterDelimiter = toSplit.substring(offset + delimiter.length());  
+     * delimiter characters. Each of those characters can be used to separate
+            return inString;
+     * Convenience method to return a Collection as a CSV String.  
+                for (int i = 0; i < spaces; i++) {  
+     *  
+     * @param <T>        the type of the collection
+     * @param str       the input String
+            if (INVALID_FILENAME_CHARS.contains(c)) {
+        int offset = toSplit.indexOf(delimiter);
+     * @return the quoted String (e.g. "'myString'"),
+    /**
+     */
+    }
+     * Tokenize the specified string by commas to a set, trimming whitespace and ignoring empty tokens.
+    public static String[] split(String toSplit, String delimiter) {  
+        return builder;  
+            return false;
+    }
+     * @param delim the delimiter to use (probably a ",")
+     */
+            return s;  
+     * @param suffix the String to end each element with
+     */
+            sb.append(Character.toLowerCase(str.charAt(0)));
+     * @param delimiter to split the string up with
+     * @param arr   the array to display
+        return toStringArray(tokenizeToCollection(s, delimiters, ArrayList::new));  
+            }
+                // Add rest of String, but not in case of empty input.
+        }
+     * @param str the String to check (may be <code>null</code>)  
+     * high surrogates.
+            if (codepoint > 128) {
+ *  
+                sb.append(delim);  
+            return Strings.EMPTY_ARRAY;
+     *
+            char c = inString.charAt(i);  
+    public static String[] commaDelimitedListToStringArray(String str) {  
+     */  
+    }  
+     * @param charsToDelete a set of characters to delete. Useful for deleting unwanted  
+            String line;
+    public static boolean hasText(String str) {
+    /**
+     * Copy the given Collection into a String array.
+     * Tokenize the given String into a String array via a StringTokenizer.
+            return null;  
+     * its length is greater than 0, and it contains at least one non-whitespace character.
+        return collection.toArray(new String[0]);  
+     */  
+     * Allows to control whether the outputted json needs to be pretty printed and human readable.
+ * compatible open source license.
+     *  
+     * Format the double value with a single decimal points, trimming trailing '.0'.  
+    public static byte[] toUTF8Bytes(CharSequence charSequence, BytesRefBuilder spare) {  
+     *
+     * delimiter characters - in contrast to <code>tokenizeToStringArray</code>.  
+     */
+     * @param s the string to tokenize  
+        final T tokens = supplier.get();
+        return changeFirstCharacterCase(str, true);
+        return delimitedListToStringArray(str, ",");
+    public static final String[] EMPTY_ARRAY = new String[0];
+    // ---------------------------------------------------------------------
+        } else {
+                return false;  
+                return false;  
+    /**
+        if (fileName.startsWith("/") || fileName.startsWith("\\")) {
+import org.opensearch.common.Nullable;
+        return true;  
+     * StringUtils.hasLength(" ") = true
+     * Split the specified string by commas to an array.  
+     *                      line breaks: e.g. "\r\n\f" will delete all new lines and line feeds in a String.
+import org.opensearch.OpenSearchException;  
+    // Convenience methods for working with formatted Strings  
+        // Reject path traversal: ".." as a path segment  
+     */  
+    }
+    /**
+        }
+    }
+            return;
+     * @param prefix the String to start each element with  
+                return p.substring(0, ix) + fraction + p.substring(ex) + suffix;  
+        }
+        Set<String> set = new TreeSet<>();  
+        }
+        for (int j = 0; j < substring.length(); j++) {  
+    /**
+            XContentBuilder builder = createBuilder(mediaType, pretty, human);
+            return new String[] { str };
+     * Take a String which is a delimited list and convert it to a String array.  
+     * delimiters, consider using <code>delimitedListToStringArray</code>
+        final String delimiters,
+    /**  
+    /**  
+            if (str.length() > 0 && pos <= str.length()) {  
+            return Strings.EMPTY_ARRAY;
+        List<String> result = new ArrayList<>();  
+        }
+     * @param toSplit   the string to split  
+     * @see Strings#hasText(CharSequence)  
+    }
+     * @param inString the original String
+     * @return the set of tokens
+     * E.g. useful for <code>toString()</code> implementations.
+    }  
+    public static byte[] toUTF8Bytes(CharSequence charSequence) {
+     * More specifically, returns <code>true</code> if the string not <code>null</code>,  
+     * @see Strings#hasLength(CharSequence)
+    public static String[] splitStringByCommaToArray(final String s) {  
+     * @return <code>true</code> if the CharSequence is either null or has a zero length
+     * @param coll  the Collection to display  
+        return s.substring(0, length);  
+            } else {
+     */  
+     * Return a {@link String} that is the json representation of the provided {@link ToXContent}.
+    public static boolean isAllOrWildcard(String data) {  
+    }
+     *
+        }
+     *  
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
+    // General convenience methods for working with Strings
+            length--;
+     * Convenience method to convert a CSV string list to a set.
+        if (isEmpty(arr)) {
+        StringBuilder sb = new StringBuilder();
+     * Allows to configure the params.
+        for (String segment : fileName.split("[/\\\\]")) {
+                return builder.toString();  
+import java.util.Iterator;
+     * @return an array of Strings, or the empty array in case of empty input
+     * be considered as single delimiter string, rather than as bunch of potential
+        collectionToDelimitedString(coll, delim, prefix, suffix, sb);  
+     */
+        if (collection == null) {  
+     * StringUtils.hasLength("Hello") = true  
+        }
+    }
+    public static String[] delimitedListToStringArray(String str, String delimiter) {
+            char c = fileName.charAt(i);  
+    /**
+     * <pre>
+                tokens.add(token);  
+                sb.append(c);
+            return false;  
+     *
+    public static String[] delimitedListToStringArray(String str, String delimiter, String charsToDelete) {
+        try (BufferedReader reader = new BufferedReader(new StringReader(from))) {  
+    public static boolean hasText(CharSequence str) {  
+        if (!hasLength(inString) || !hasLength(oldPattern) || newPattern == null) {
+        if (!hasLength(str)) {
+     * @param delim the delimiter to use (probably a ",")  
+     * </pre>
+            try {  
+            }
+     */  
+     * Capitalize a <code>String</code>, changing the first letter to  
+        while (index >= 0) {  
+        return toString(mediaType, toXContent, false, false);
+     */  
+    public static String toString(MediaType mediaType, ToXContent toXContent, boolean pretty, boolean human) {
+            return str;  
+     * @see #tokenizeToStringArray  
+        StringBuilder sb = new StringBuilder(str.length());  
+     * @param str       the original string (or StringBuilder)
+            final String token = tokenizer.nextToken().trim();
+        // the index of an occurrence we've found, or -1
+    }  
+     * @param delimiter     the delimiter between elements (this is a single delimiter,
+                return false;  
+        return new String[] { beforeDelimiter, afterDelimiter };
+         * Its pretty silly for you to truncate to 0 length but just in case  
+        if (hasLength(str) == false) {
+            }
+     *  
+            }  
+ *
+    public static Set<String> tokenizeByCommaToSet(final String s) {  
+        return out.toString();
+    }
+    /**
+    }  
+    public static String toString(MediaType mediaType, ToXContent toXContent) {  
+        if (s == null) {  
+     *  
+        if (endIndex > realEndIndex) {  
+     * @see String#split(String)
+            return s.substring(beginIndex);
+        sb.append(str.substring(1));  
+     * @param delim  the delimiter to use (probably a ",")
+        StringBuilder out = new StringBuilder();
+     * @return <code>true</code> if the String is not <code>null</code>, its length is
+        // Reject absolute paths
+        }
+            if (charsToDelete.indexOf(c) == -1) {
+    public static String arrayToDelimitedString(Object[] arr, String delim) {  
+     *         index 1 being after the delimiter (neither element includes the delimiter);  
+    private static String toString(MediaType mediaType, ToXContent toXContent, ToXContent.Params params, boolean pretty, boolean human) {  
+            sb.append(inString, pos, index);
+ * <p>
+     *
+import java.util.List;
+ * @opensearch.internal
+            return inString;
+    }  
+        }
+package org.opensearch.core.common;
+     * @param s the string, must not be null.
+import java.util.ArrayList;
+     * Wraps the output into an anonymous object if needed.
+        sb.append(inString.substring(pos));  
+        // Reject invalid characters (excluding slashes)
+        return tokenizeToCollection(s, ",", HashSet::new);
+        return tokens;  
+     *  
+        if ("".equals(delimiter)) {
+        return false;
+                sb.append(c);
+     */
+     * String. E.g. useful for <code>toString()</code> implementations.  
+     * @param str the input String (e.g. "myString")  
+     * @return the trimmed String
+            index = inString.indexOf(oldPattern, pos);
+ * SPDX-License-Identifier: Apache-2.0
+     * Wraps the output into an anonymous object if needed.  
 }
+     */
+    /**
+         */
+     * Check that the given String is neither <code>null</code> nor of length 0.  
+                    to.append(' ');
+        }
+     * Note: Will return <code>true</code> for a String that purely consists of whitespace.
+                builder.field("stack_trace", ExceptionsHelper.stackTrace(e));
+        while (it.hasNext()) {  
+    }
+import java.util.Arrays;  
+    }
+        return sb.toString();  
+        return toStringArray(result);
+        }
+     * @param str the CharSequence to check (may be <code>null</code>)  
+import org.apache.lucene.util.BytesRefBuilder;
+    /**  
+    }  
+        }
+    }
+        int pos = 0; // our position in the old string
+        if (s == null) return Collections.emptySet();
+     * @param array the array to check
+     *
+    /**
+     * another string.
+     * The Collection must contain String elements only.
+     * @see Character#isWhitespace
+     * StringUtils.hasText(" 12345 ") = true
+        int patLen = oldPattern.length();
+        Iterator<Integer> iter = in.codePoints().iterator();
+     * String. E.g. useful for <code>toString()</code> implementations.
+            }
+     *
+     * E.g. useful for <code>toString()</code> implementations.
+        }
+/*  
+     *
+        // remember to append any characters to the right of a match
+    }
+     * Convert a CSV list into an array of Strings.
+     * Determine whether the given array is empty:
+    public static boolean validFileNameExcludingSlash(String fileName) {  
+                sb.append(delim);  
+     *
+    }  
+        return hasLength((CharSequence) str);
+            }  
+    public static boolean substringMatch(CharSequence str, int index, CharSequence substring) {
+        return (str != null ? "'" + str + "'" : null);
+            while ((line = reader.readLine()) != null) {
+            builder = builder.prettyPrint();
+    // ---------------------------------------------------------------------
+        if (length >= s.length()) {  
+    }
+     * StringUtils.hasLength("") = false
+        }
+                return false;  
+    }
+     *         or <code>null</code> if the delimiter wasn't found in the given input String
+     * Truncates string to a length less than length. Backtracks to throw out
+     *
+     */
+     * Replace all occurrences of a substring within a string with
+    public static boolean hasLength(final String str) {
+import java.util.Collections;
+        return sb.toString();
+     * upper case as per {@link Character#toUpperCase(char)}.
+     *  
+     * @return <code>true</code> if the CharSequence is not null and has length
+        }  
+import java.io.StringReader;
+    /**
+        for (int i = 0; i < fileName.length(); i++) {
+        }  
+     * StringUtils.isEmpty("") = true
+     * Convenience method to return a Collection as a delimited (e.g. CSV)
+     *  
+        }  
+     * String. E.g. useful for <code>toString()</code> implementations.
+        if (human) {  
+    }
+            throw new NullPointerException("s");  
+            pos = index + patLen;  
+        final Supplier<T> supplier
+        return "_all".equals(data) || "*".equals(data);
+    public static String collectionToCommaDelimitedString(Iterable<?> coll) {  
+            }  
+            }
+                builder.field("error", "error building toString out of XContent: " + e.getMessage());  
+     *         greater than 0, and it does not contain whitespace only
+     * @param index     the index in the original string to start matching against
+        } else {
+                return p.substring(0, ix) + fraction + suffix;
+     */
+     * StringUtils.isEmpty("Hello") = false  
+            return "";
+    }  
+     * StringUtils.isEmpty(" ") = false
+            sb.append(prefix).append(it.next()).append(suffix);
+    }
+     * @param str           the input String  
+            } catch (IOException e2) {
+            }  
+            return null;
+        String p = String.valueOf(value);  
+            } else {
+     * @param delimiters the delimiter characters, assembled as String
+                builder.startObject();
+     * </pre>
+                out.appendCodePoint(codepoint);  
+            for (int i = 0; i < str.length(); i++) {
+     * @param coll the Collection to display  
+     * Split a String at the first occurrence of the delimiter.  
+    }  
+     * StringUtils.hasText(null) = false  
+        return (array == null || array.length == 0);
+import org.opensearch.core.common.bytes.BytesReference;
+                builder.startObject();
+     * Note: Will return <code>true</code> for a CharSequence that purely consists of whitespace.
+        }
+     */
+        if (fraction == '0') {
+     * @param s          the string to tokenize.
+        }
+     * @return <code>true</code> if the BytesReference is not null and has length
+        return sb.toString();
+        if (pretty) {  
+     * Tokenizes the specified string to a collection using the specified delimiters as the token delimiters. This method trims whitespace
+        return sb.toString();
+     * Trim all occurrences of the supplied leading character from the given String.
+    public static String collectionToDelimitedString(Iterable<?> coll, String delim, String prefix, String suffix) {
+     * @param s        the String to tokenize  
+    }  
+        }
+    public static String deleteAny(String inString, String charsToDelete) {  
+        }  
+            sb.deleteCharAt(0);
+     *
+    }  
+        Iterator<?> it = coll.iterator();
+            if (i > 0) {
+     * @param collection the Collection to copy
+     */  
+     */  
+     * @return the array of split values  
+     * @param str the CharSequence to check (may be <code>null</code>)
+     * i.e. <code>null</code> or of zero length.  
+            builder = builder.humanReadable(true);
+     * @param bytesReference the BytesReference to check (may be <code>null</code>)  
+    /**
+        return toString(mediaType, toXContent, ToXContent.EMPTY_PARAMS, pretty, human);  
+            int delPos;
+    }
+        }  
+        return delimitedListToStringArray(str, delimiter, null);  
+    public static String padStart(String s, int minimumLength, char c) {
+    }
+     */
+     */
+    }  
+        if (offset < 0) {
+     * be considered as single delimiter string, rather than as bunch of potential  
+     */
+        if (s == null) {
+        }
+    }
+     *
+        }
+import java.util.StringTokenizer;
+        }
+     * Check that the given BytesReference is neither <code>null</code> nor of length 0  
+        if (str == null || str.length() == 0) {  
+        return s == null || s.isEmpty();
+import org.opensearch.core.xcontent.XContentBuilder;  
+     */  
+     */
+            } else {
+ */
+            if (toXContent.isFragment()) {
+     * Allows to configure the params.  
+import java.io.BufferedReader;
+        return toUTF8Bytes(charSequence, new BytesRefBuilder());  
+    public static boolean isDigits(final String s) {
+                return false;
+     * Note: Will return <code>false</code> for a CharSequence that purely consists of whitespace.
+        return set;  
+     *         its length is greater than 0, and it does not contain whitespace only  
+        int index = inString.indexOf(oldPattern);  
+    public static String capitalize(String str) {
+            }  
+     * @return the tokens
+     * Wraps the output into an anonymous object if needed. The content is not pretty-printed  
+            char c = fileName.charAt(i);
+import static org.opensearch.common.util.set.Sets.newHashSet;  
+    }  
+    }  
+     * @return an array of the tokens in the list
+     * @param coll   the Collection to display
+    }
+    public static String collectionToDelimitedString(Iterable<?> coll, String delim) {
+     * @return the delimited String
+     * StringUtils.hasText("") = false
+    }  
+     *                      E.g. "az\n" will delete 'a's, 'z's and new lines.  
+            }  
+     * StringUtils.hasText("12345") = true  
+    /**  
+        return true;  
+    }
+import java.util.function.Supplier;  
+     *  
+     * Delete any character in a given String.
+import org.opensearch.core.xcontent.ToXContent;
+        return replace(inString, pattern, "");
+    private static String changeFirstCharacterCase(String str, boolean capitalize) {
+            sb.append(Character.toUpperCase(str.charAt(0)));
+    /**
+            }
+        }
+        }
+     * @param charsToDelete a set of characters to delete.
+     * @return a two element array with index 0 being before the delimiter, and
+     * @return the delimited String
+     * @param delimiter the delimiter between elements (this is a single delimiter,  
+public class Strings {  
+            sb.append(arr[i]);
+            if (ex != -1) {
+     * @return the resulting String
+            if (ex != -1) {
+     */
+     * @return the resulting String
+     * @param str the input String  
+            if (it.hasNext()) {
+            while ((delPos = str.indexOf(delimiter, pos)) != -1) {
+    }  
+    /**
+    public static final Set<Character> INVALID_FILENAME_CHARS = unmodifiableSet(  
+    public static String quote(String str) {
+    public static String delete(String inString, String pattern) {  
+     */  
+     * StringUtils.hasText(" ") = false
+     * at the given index.
+    }
+     */
+                }
+            return s;  
+     * Return a {@link String} that is the json representation of the provided {@link ToXContent}.
+            }
+        StringBuilder sb = new StringBuilder(str);
+    }
+        if (delimiter == null) {  
+    /**  
+    /**
+        }
+        }
+        final StringTokenizer tokenizer = new StringTokenizer(s, delimiters);
+    private Strings() {}
+            sb.append(s);
+    public static String substring(String s, int beginIndex, int endIndex) {
+    public static String cleanTruncate(String s, int length) {
+    /**
+     * @see Strings#hasLength(CharSequence)
+     * Check whether the given CharSequence has actual text.
+        }  
+     * @param leadingCharacter the leading character to be trimmed
+    }
+     *         or <code>null</code> if the input was <code>null</code>
+        }
+        while (iter.hasNext()) {  
+    private static <T extends Collection<String>> T tokenizeToCollection(
+     * @return <code>true</code> if the CharSequence is not <code>null</code>,
+    /**
+        return !s.isEmpty() && s.chars().allMatch(Character::isDigit);
+        return (bytesReference != null && bytesReference.length() > 0);
+                result.add(deleteAny(str.substring(i, i + 1), charsToDelete));  
+                out.appendCodePoint(Character.toLowerCase(codepoint));
+     * @param newPattern String to insert  
+        int strLen = str.length();
+    public static boolean validFileNameExcludingAsterisk(String fileName) {
+    /**  
+                builder.endObject();
+     * @param inString   String to examine
+     */  
+    /**
+    );
+        return Arrays.copyOf(spare.bytes(), spare.length());
+     *
+        return sb.toString();
+     * The content is not pretty-printed nor human readable.
+            return null;
+     */  
+        for (int i = 0; i < fileName.length(); i++) {  
+            char c = fileName.charAt(i);
+    public static String toString(MediaType mediaType, ToXContent toXContent, ToXContent.Params params) {
+     * its length is greater than 0, and it contains at least one non-whitespace character.
+        if (Character.isHighSurrogate(s.charAt(length - 1))) {  
+            int codepoint = iter.next();
+            if (c != '/' && c != '\\' && INVALID_FILENAME_CHARS.contains(c)) {
+import org.opensearch.ExceptionsHelper;
+     * @param inString      the original String
+     */
+ * String utility class.  
+     */  
+     * @param substring the substring to match at the given index  
+     * <p>A single delimiter can consists of more than one character: It will still
+     * @return the delimited String
+     * delimiter characters - in contrast to <code>tokenizeToStringArray</code>.
+            StringBuilder sb = new StringBuilder(minimumLength);
+        }
+        return collectionToDelimitedString(coll, ",");
+    /**
+            if (token.length() > 0) {
+        if (hasLength(inString) == false || hasLength(charsToDelete) == false) {
+                to.append(line).append('\n');  

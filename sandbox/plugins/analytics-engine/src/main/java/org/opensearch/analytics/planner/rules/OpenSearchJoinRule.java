@@ -1,128 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.planner.rules;
-
-import org.apache.calcite.plan.RelOptRule;
-import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelTraitSet;  
-import org.apache.calcite.plan.hep.HepRelVertex;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.JoinRelType;  
-import org.apache.calcite.rel.logical.LogicalJoin;
-import org.opensearch.analytics.planner.PlannerContext;
-import org.opensearch.analytics.planner.RelNodeUtils;  
-import org.opensearch.analytics.planner.rel.OpenSearchDistributionTraitDef;
-import org.opensearch.analytics.planner.rel.OpenSearchExchangeReducer;
-import org.opensearch.analytics.planner.rel.OpenSearchJoin;  
-import org.opensearch.analytics.planner.rel.OpenSearchRelNode;
-import org.opensearch.analytics.spi.JoinCapability;
-
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;  
-import java.util.Set;
-
-/**  
- * HEP marker rewriting {@link LogicalJoin} → {@link OpenSearchJoin}. Both inputs are
- * gathered to the coordinator (enforced by the join's cost gate, which only accepts
- * SINGLETON inputs — Volcano inserts an {@link OpenSearchExchangeReducer} per side).  
- *
- * <p>Accepts INNER / LEFT / RIGHT / FULL / SEMI / ANTI joins of any condition
- * shape — pure equi (hash join), mixed equi + non-equi (hash on the equi keys  
- * with the residual riding along as a filter), null-safe equi via
- * {@code IS_NOT_DISTINCT_FROM}, equi with one operand being a {@code RexCall}
- * expression, and pure non-equi (e.g. {@code t1.a < t2.b} alone) — DataFusion  
- * picks the appropriate physical strategy (HashJoin / SortMergeJoin /
- * NestedLoopJoin) based on the condition shape downstream.
- *  
- * @opensearch.internal
- */
-public class OpenSearchJoinRule extends RelOptRule {  
-
-    private final PlannerContext context;
-
-    public OpenSearchJoinRule(PlannerContext context) {
-        super(operand(LogicalJoin.class, any()), "OpenSearchJoinRule");
-        this.context = context;  
-    }
-
-    @Override  
-    public boolean matches(RelOptRuleCall call) {
-        LogicalJoin join = call.rel(0);
-        JoinRelType joinType = join.getJoinType();  
-        return joinType == JoinRelType.INNER
-            || joinType == JoinRelType.LEFT
-            || joinType == JoinRelType.RIGHT  
-            || joinType == JoinRelType.FULL
-            || joinType == JoinRelType.SEMI
-            || joinType == JoinRelType.ANTI;  
-    }
-
-    @Override  
-    public void onMatch(RelOptRuleCall call) {
-        LogicalJoin join = call.rel(0);
-
-        // Viable backends = intersection of inputs' viable backends, narrowed to those whose
-        // joinCapabilities declare the join's required JoinKind. Inputs are HepRelVertex-
-        // wrapped marked nodes by the time this rule fires; bottom-up HEP traversal  
-        // guarantees they're already in OpenSearchConvention.
-        List<String> viableBackends = computeViableBackends(join.getLeft(), join.getRight());
-        List<String> candidateBackends = List.copyOf(viableBackends);  
-        JoinCapability.JoinKind requiredKind = JoinCapability.JoinKind.fromCalcite(join.getJoinType());
-        viableBackends.removeIf(backend -> {
-            var caps = context.getCapabilityRegistry().getBackend(backend).getCapabilityProvider();  
             for (JoinCapability cap : caps.joinCapabilities()) {
-                if (cap.kinds().contains(requiredKind)) return false;
-            }  
-            return true;
-        });
-        if (viableBackends.isEmpty()) {  
-            throw new IllegalStateException(
-                "No backend supports join kind [" + requiredKind + "] among viable backends " + candidateBackends
-            );  
-        }
-        // HEP marking only — no ER insertion. OpenSearchJoin's cost gate (SINGLETON input
-        // required) drives Volcano to insert ERs on each input via TraitDef.convert.  
-        OpenSearchDistributionTraitDef distTraitDef = context.getDistributionTraitDef();
-        RelNode leftUnwrapped = RelNodeUtils.unwrapHep(join.getLeft());
-        RelNode rightUnwrapped = RelNodeUtils.unwrapHep(join.getRight());  
-        RelTraitSet joinTraits = leftUnwrapped.getTraitSet().replace(distTraitDef.coordSingleton());
-        OpenSearchJoin osJoin = new OpenSearchJoin(
-            join.getCluster(),  
-            joinTraits,
-            leftUnwrapped,
-            rightUnwrapped,  
-            join.getCondition(),
-            join.getJoinType(),
-            viableBackends  
-        );
-        call.transformTo(osJoin);
-    }  
-
-    /** Intersection of viable backends from left and right children. Children may be
-     *  {@link HepRelVertex}-wrapped — unwrap to read viableBackends if it's an  
-     *  {@link OpenSearchRelNode}. onMatch then narrows to backends whose
-     *  {@link JoinCapability} declares the join's required kind. */
-    private static List<String> computeViableBackends(RelNode left, RelNode right) {  
-        List<String> leftBackends = viableBackendsOf(left);
-        List<String> rightBackends = viableBackendsOf(right);
-
-        Set<String> intersection = new LinkedHashSet<>(leftBackends);
+ * SPDX-License-Identifier: Apache-2.0
         intersection.retainAll(rightBackends);
-        return new ArrayList<>(intersection);  
+        LogicalJoin join = call.rel(0);
+ * gathered to the coordinator (enforced by the join's cost gate, which only accepts
+        List<String> candidateBackends = List.copyOf(viableBackends);  
+import org.apache.calcite.rel.logical.LogicalJoin;
+            || joinType == JoinRelType.RIGHT  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+            );  
+        RelNode leftUnwrapped = RelNodeUtils.unwrapHep(join.getLeft());
+    public boolean matches(RelOptRuleCall call) {
+import org.opensearch.analytics.planner.rel.OpenSearchExchangeReducer;
+        }
+        List<String> leftBackends = viableBackendsOf(left);
+            var caps = context.getCapabilityRegistry().getBackend(backend).getCapabilityProvider();  
     }
-
+        JoinRelType joinType = join.getJoinType();  
+ * <p>Accepts INNER / LEFT / RIGHT / FULL / SEMI / ANTI joins of any condition
+    }
+            rightUnwrapped,  
+            || joinType == JoinRelType.FULL
+            join.getCondition(),
+ * NestedLoopJoin) based on the condition shape downstream.
     private static List<String> viableBackendsOf(RelNode rel) {  
-        if (RelNodeUtils.unwrapHep(rel) instanceof OpenSearchRelNode osNode) {
             return osNode.getViableBackends();
-        }  
-        // Not yet marked — empty list forces the fallback path above.
-        return List.of();
+            join.getJoinType(),
+        // joinCapabilities declare the join's required JoinKind. Inputs are HepRelVertex-
+ * compatible open source license.
+        OpenSearchJoin osJoin = new OpenSearchJoin(
+            || joinType == JoinRelType.LEFT
+            viableBackends  
+import java.util.ArrayList;
+            joinTraits,
+ *
+            leftUnwrapped,
+import org.opensearch.analytics.planner.RelNodeUtils;  
+     *  {@link JoinCapability} declares the join's required kind. */
+ * The OpenSearch Contributors require contributions made to  
+        });
+        // wrapped marked nodes by the time this rule fires; bottom-up HEP traversal  
+            return true;
+import org.apache.calcite.rel.RelNode;
+ * @opensearch.internal
+import java.util.Set;
+import org.apache.calcite.rel.core.JoinRelType;  
+import org.apache.calcite.plan.RelOptRuleCall;
+import java.util.List;  
+        );
+        if (viableBackends.isEmpty()) {  
+        List<String> viableBackends = computeViableBackends(join.getLeft(), join.getRight());
+        return new ArrayList<>(intersection);  
+        viableBackends.removeIf(backend -> {
+ * picks the appropriate physical strategy (HashJoin / SortMergeJoin /
     }  
+ */  
+    private final PlannerContext context;
+        return joinType == JoinRelType.INNER
+ */
+        this.context = context;  
+ * HEP marker rewriting {@link LogicalJoin} → {@link OpenSearchJoin}. Both inputs are
+            || joinType == JoinRelType.ANTI;  
+        JoinCapability.JoinKind requiredKind = JoinCapability.JoinKind.fromCalcite(join.getJoinType());
+        List<String> rightBackends = viableBackendsOf(right);
+/*  
+                if (cap.kinds().contains(requiredKind)) return false;
+import org.apache.calcite.plan.hep.HepRelVertex;
+import org.opensearch.analytics.planner.rel.OpenSearchRelNode;
+import org.apache.calcite.plan.RelOptRule;
+import java.util.LinkedHashSet;
+    }
+ * SINGLETON inputs — Volcano inserts an {@link OpenSearchExchangeReducer} per side).  
+        OpenSearchDistributionTraitDef distTraitDef = context.getDistributionTraitDef();
+package org.opensearch.analytics.planner.rules;
+        call.transformTo(osJoin);
+/**  
 }
+     *  {@link OpenSearchRelNode}. onMatch then narrows to backends whose
+     *  {@link HepRelVertex}-wrapped — unwrap to read viableBackends if it's an  
+        RelNode rightUnwrapped = RelNodeUtils.unwrapHep(join.getRight());  
+            || joinType == JoinRelType.SEMI
+import org.opensearch.analytics.planner.PlannerContext;
+import org.apache.calcite.plan.RelTraitSet;  
+        RelTraitSet joinTraits = leftUnwrapped.getTraitSet().replace(distTraitDef.coordSingleton());
+ *
+    }  
+        Set<String> intersection = new LinkedHashSet<>(leftBackends);
+        super(operand(LogicalJoin.class, any()), "OpenSearchJoinRule");
+ * shape — pure equi (hash join), mixed equi + non-equi (hash on the equi keys  
+        }  
+import org.opensearch.analytics.planner.rel.OpenSearchJoin;  
+        return List.of();
+        // guarantees they're already in OpenSearchConvention.
+    private static List<String> computeViableBackends(RelNode left, RelNode right) {  
+ * expression, and pure non-equi (e.g. {@code t1.a < t2.b} alone) — DataFusion  
+        // HEP marking only — no ER insertion. OpenSearchJoin's cost gate (SINGLETON input
+    public OpenSearchJoinRule(PlannerContext context) {
+    @Override  
+        // Not yet marked — empty list forces the fallback path above.
+        // Viable backends = intersection of inputs' viable backends, narrowed to those whose
+public class OpenSearchJoinRule extends RelOptRule {  
+ *  
+        // required) drives Volcano to insert ERs on each input via TraitDef.convert.  
+import org.opensearch.analytics.planner.rel.OpenSearchDistributionTraitDef;
+            }  
+import org.opensearch.analytics.spi.JoinCapability;
+ * {@code IS_NOT_DISTINCT_FROM}, equi with one operand being a {@code RexCall}
+    public void onMatch(RelOptRuleCall call) {
+            throw new IllegalStateException(
+ * with the residual riding along as a filter), null-safe equi via
+                "No backend supports join kind [" + requiredKind + "] among viable backends " + candidateBackends
+            join.getCluster(),  
+        LogicalJoin join = call.rel(0);
+    /** Intersection of viable backends from left and right children. Children may be
+        if (RelNodeUtils.unwrapHep(rel) instanceof OpenSearchRelNode osNode) {

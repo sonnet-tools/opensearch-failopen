@@ -1,321 +1,291 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.OpenSearchException;  
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.node.info.NodeInfo;
-import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;  
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.breaker.CircuitBreaker;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.env.Environment;  
-import org.opensearch.http.HttpInfo;
-import org.opensearch.node.MockNode;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.nio.MockNioTransportPlugin;  
-
-import java.io.IOException;
-import java.net.InetSocketAddress;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-import java.util.stream.Collectors;  
-
-import static org.opensearch.action.admin.cluster.node.info.NodesInfoRequest.Metric.HTTP;
-import static org.opensearch.action.admin.cluster.node.info.NodesInfoRequest.Metric.SETTINGS;  
-import static org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest.Metric.BREAKER;
-import static org.opensearch.test.OpenSearchTestCase.assertBusy;
-import static org.opensearch.test.OpenSearchTestCase.getTestTransportType;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.assertThat;
-
-/**
- * External cluster to run the tests against.
- * It is a pure immutable test cluster that allows to send requests to a pre-existing cluster  
- * and supports by nature all the needed test operations like wipeIndices etc.
- */
-public final class ExternalTestCluster extends TestCluster {  
-
-    private static final Logger logger = LogManager.getLogger(ExternalTestCluster.class);
-
-    private static final AtomicInteger counter = new AtomicInteger();
-    public static final String EXTERNAL_CLUSTER_PREFIX = "external_";
-
-    private final MockNode node;
-    private final Client client;
-
-    private final InetSocketAddress[] httpAddresses;
-
-    private final String clusterName;  
-
-    private final int numDataNodes;
-    private final int numClusterManagerAndDataNodes;  
-
-    public ExternalTestCluster(
-        Path tempDir,  
-        Settings additionalSettings,
-        Function<Client, Client> clientWrapper,
-        Collection<PluginInfo> pluginInfos,  
-        String clusterName,
-        TransportAddress... transportAddresses
-    ) {  
-        super(0);
-        this.clusterName = clusterName;
-        List<Class<? extends Plugin>> additionalPluginClasses = new ArrayList<>();  
-        boolean addMockTcpTransport = additionalSettings.get(NetworkModule.TRANSPORT_TYPE_KEY) == null;
-
-        if (addMockTcpTransport) {  
-            if (pluginInfos.stream().noneMatch(p -> p.getClassname().equals(MockNioTransportPlugin.class.getName()))) {
-                additionalPluginClasses.add(MockNioTransportPlugin.class);
-            }  
-        }
-        additionalPluginClasses.add(MockHttpTransport.TestPlugin.class);
-        pluginInfos = new ArrayList<>(pluginInfos);  
-        for (Class<? extends Plugin> clazz : additionalPluginClasses) {
-            pluginInfos.add(
-                new PluginInfo(  
-                    clazz.getName(),
-                    "classpath plugin",
-                    "NA",  
-                    Version.CURRENT,
-                    "1.8",
-                    clazz.getName(),  
-                    null,
-                    Collections.emptyList(),
-                    false  
-                )
-            );
-        }  
-        Settings.Builder clientSettingsBuilder = Settings.builder()
-            .put(additionalSettings)
-            .put("node.master", false)  
-            .put("node.data", false)
-            .put("node.ingest", false)
-            .put("node.name", EXTERNAL_CLUSTER_PREFIX + counter.getAndIncrement())  
-            .put("cluster.name", clusterName)
-            .putList(
-                "discovery.seed_hosts",  
-                Arrays.stream(transportAddresses).map(TransportAddress::toString).collect(Collectors.toList())
-            );
-        if (Environment.PATH_HOME_SETTING.exists(additionalSettings) == false) {  
-            clientSettingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), tempDir);
-        }
-        if (addMockTcpTransport) {  
-            String transport = getTestTransportType();
             clientSettingsBuilder.put(NetworkModule.TRANSPORT_TYPE_KEY, transport);
-        }  
-        Settings clientSettings = clientSettingsBuilder.build();
-        MockNode node = new MockNode(clientSettings, pluginInfos, null, true);
-        Client client = clientWrapper.apply(node.client());  
-        try {
-            node.start();
-            NodesInfoResponse nodeInfos = client.admin()  
-                .cluster()
-                .prepareNodesInfo()
-                .clear()  
-                .addMetrics(SETTINGS.metricName(), HTTP.metricName())
-                .get();
-            httpAddresses = new InetSocketAddress[nodeInfos.getNodes().size()];  
-            int dataNodes = 0;
-            int clusterManagerAndDataNodes = 0;
-            for (int i = 0; i < nodeInfos.getNodes().size(); i++) {  
-                NodeInfo nodeInfo = nodeInfos.getNodes().get(i);
-                httpAddresses[i] = nodeInfo.getInfo(HttpInfo.class).address().publishAddress().address();
-                if (DiscoveryNode.isDataNode(nodeInfo.getSettings())) {  
-                    dataNodes++;
-                    clusterManagerAndDataNodes++;
-                } else if (DiscoveryNode.isClusterManagerNode(nodeInfo.getSettings())) {  
-                    clusterManagerAndDataNodes++;
-                }
-            }  
-            this.numDataNodes = dataNodes;
-            this.numClusterManagerAndDataNodes = clusterManagerAndDataNodes;
-            this.client = client;  
-            this.node = node;
-
-            logger.info("Setup ExternalTestCluster [{}] made of [{}] nodes", nodeInfos.getClusterName().value(), size());  
-        } catch (Exception e) {
-            try {
-                client.close();  
-                node.close();
-            } catch (IOException e1) {
-                e.addSuppressed(e1);  
-            }
-            throw new OpenSearchException(e);
-        }  
-    }
-
-    public ExternalTestCluster(  
-        Path tempDir,
-        Settings additionalSettings,
-        Function<Client, Client> clientWrapper,  
-        String clusterName,
-        Collection<Class<? extends Plugin>> pluginClasses,
-        TransportAddress... transportAddresses  
-    ) {
-        this(
-            tempDir,  
-            additionalSettings,
-            clientWrapper,
-            pluginClasses.stream()  
-                .map(
-                    p -> new PluginInfo(
-                        p.getName(),  
-                        "classpath plugin",
-                        "NA",
-                        Version.CURRENT,  
-                        "1.8",
-                        p.getName(),
-                        null,  
-                        Collections.emptyList(),
-                        false
-                    )  
-                )
-                .collect(Collectors.toList()),
             clusterName,  
-            transportAddresses
-        );
-    }  
-
-    @Override
-    public void afterTest() {  
-
-    }
-
-    @Override
-    public Client client() {
-        return client;  
-    }
-
-    @Override  
-    public int size() {
-        return httpAddresses.length;
-    }  
-
-    @Override
-    public int numDataNodes() {  
-        return numDataNodes;
-    }
-
-    @Override
-    public int numDataAndClusterManagerNodes() {
-        return numClusterManagerAndDataNodes;  
-    }
-
-    @Override  
-    public InetSocketAddress[] httpAddresses() {
-        return httpAddresses;
-    }  
-
-    @Override
-    public void close() throws IOException {  
-        client.close();
-        node.close();
-    }  
-
-    @Override
-    public void ensureEstimatedStats() {  
-        if (size() > 0) {
-            NodesStatsResponse nodeStats = client().admin()
-                .cluster()  
-                .prepareNodesStats()
-                .clear()
-                .setIndices(true)  
-                .addMetric(BREAKER.metricName())
-                .execute()
-                .actionGet();  
-            for (NodeStats stats : nodeStats.getNodes()) {
-                try {
-                    assertBusy(() -> {  
-                        assertThat(
-                            "Fielddata breaker not reset to 0 on node: " + stats.getNode(),
-                            stats.getBreaker().getStats(CircuitBreaker.FIELDDATA).getEstimated(),  
-                            equalTo(0L)
-                        );
-                    });  
-                } catch (Exception e) {
-                    throw new AssertionError("Exception during check for request breaker reset to 0", e);
-                }  
-                // ExternalTestCluster does not check the request breaker,
-                // because checking it requires a network request, which in
-                // turn increments the breaker, making it non-0  
-
-                assertThat(
-                    "Fielddata size must be 0 on node: " + stats.getNode(),  
-                    stats.getIndices().getFieldData().getMemorySizeInBytes(),
-                    equalTo(0L)
-                );  
-                assertThat(
-                    "Query cache size must be 0 on node: " + stats.getNode(),
+    public NamedWriteableRegistry getNamedWriteableRegistry() {  
+                    null,
+ * SPDX-License-Identifier: Apache-2.0
                     stats.getIndices().getQueryCache().getMemorySizeInBytes(),  
-                    equalTo(0L)
-                );
-                assertThat(  
-                    "FixedBitSet cache size must be 0 on node: " + stats.getNode(),
-                    stats.getIndices().getSegments().getBitsetMemoryInBytes(),
-                    equalTo(0L)  
-                );
-            }
+                assertThat(
+import org.opensearch.common.settings.Settings;
+        super(0);
+            int clusterManagerAndDataNodes = 0;
+                            stats.getBreaker().getStats(CircuitBreaker.FIELDDATA).getEstimated(),  
+    public Client client() {
+    public void ensureEstimatedStats() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    p -> new PluginInfo(
+import org.opensearch.transport.nio.MockNioTransportPlugin;  
+            node.start();
+ * and supports by nature all the needed test operations like wipeIndices etc.
+        return httpAddresses.length;
+            logger.info("Setup ExternalTestCluster [{}] made of [{}] nodes", nodeInfos.getClusterName().value(), size());  
+    private final InetSocketAddress[] httpAddresses;
+ *  
+    @Override
+        if (addMockTcpTransport) {  
+ */
         }  
     }
-
-    @Override  
-    public Iterable<Client> getClients() {
-        return Collections.singleton(client);
-    }  
-
+            NodesStatsResponse nodeStats = client().admin()
+            this.client = client;  
+            NodesInfoResponse nodeInfos = client.admin()  
+            for (NodeStats stats : nodeStats.getNodes()) {
+                .execute()
+ */  
+    private static final AtomicInteger counter = new AtomicInteger();
+    public int numDataAndClusterManagerNodes() {
+        }
     @Override
-    public NamedWriteableRegistry getNamedWriteableRegistry() {  
+                    Collections.emptyList(),
+    private final Client client;
+        List<Class<? extends Plugin>> additionalPluginClasses = new ArrayList<>();  
+        this.clusterName = clusterName;
+    }  
+                .cluster()
+ */
+                        false
+        String clusterName,
+            pluginInfos.add(
+import static org.junit.Assert.assertThat;
+            pluginClasses.stream()  
+ */  
+        }  
+            .put("node.ingest", false)
+                httpAddresses[i] = nodeInfo.getInfo(HttpInfo.class).address().publishAddress().address();
+            this.numDataNodes = dataNodes;
+                    });  
+        Client client = clientWrapper.apply(node.client());  
+                .addMetric(BREAKER.metricName())
+import org.opensearch.core.common.breaker.CircuitBreaker;  
+    }
+import org.opensearch.core.common.transport.TransportAddress;
+            .put(additionalSettings)
+                );  
+        return numDataNodes;
+                .prepareNodesStats()
+                .setIndices(true)  
+            }
+                new PluginInfo(  
+                assertThat(
+import java.util.concurrent.atomic.AtomicInteger;
+        Function<Client, Client> clientWrapper,
+import java.util.List;  
+        if (Environment.PATH_HOME_SETTING.exists(additionalSettings) == false) {  
+                    "classpath plugin",
+            this.node = node;
+public final class ExternalTestCluster extends TestCluster {  
+    @Override
+    @Override  
+                try {
+                )
+            transportAddresses
+import org.opensearch.node.MockNode;
+    public String getClusterName() {
+    @Override
+/**
+        return clusterName;  
+import org.apache.logging.log4j.Logger;
+                    equalTo(0L)
+                    Version.CURRENT,
+                // turn increments the breaker, making it non-0  
+                            equalTo(0L)
+import static org.opensearch.test.OpenSearchTestCase.assertBusy;
+    public void afterTest() {  
+                    clusterManagerAndDataNodes++;
+                Arrays.stream(transportAddresses).map(TransportAddress::toString).collect(Collectors.toList())
+            .putList(
+            int dataNodes = 0;
+        Collection<Class<? extends Plugin>> pluginClasses,
+    private static final Logger logger = LogManager.getLogger(ExternalTestCluster.class);
+    public int numDataNodes() {  
+package org.opensearch.test;
+    }
+                        "NA",
+            .put("node.data", false)
+import org.opensearch.OpenSearchException;  
+            for (int i = 0; i < nodeInfos.getNodes().size(); i++) {  
+    private final String clusterName;  
+                            "Fielddata breaker not reset to 0 on node: " + stats.getNode(),
+                        "classpath plugin",
+        node.close();
+import org.opensearch.Version;
+    ) {
+ *
+    public InetSocketAddress[] httpAddresses() {
+    }  
+            this.numClusterManagerAndDataNodes = clusterManagerAndDataNodes;
+                if (DiscoveryNode.isDataNode(nodeInfo.getSettings())) {  
+import java.net.InetSocketAddress;  
+ * this file be licensed under the Apache-2.0 license or a
+import static org.opensearch.action.admin.cluster.node.info.NodesInfoRequest.Metric.HTTP;
+ * license agreements. See the NOTICE file distributed with
+                assertThat(  
+/*
+                    stats.getIndices().getSegments().getBitsetMemoryInBytes(),
+    private final int numClusterManagerAndDataNodes;  
+ * GitHub history for details.
+                    "NA",  
+        Settings additionalSettings,
+/*  
+    }  
+    public void close() throws IOException {  
+                        "1.8",
+        }
+        Path tempDir,
+        try {
+                "discovery.seed_hosts",  
+import static org.opensearch.action.admin.cluster.node.info.NodesInfoRequest.Metric.SETTINGS;  
+import org.opensearch.transport.client.Client;
+ * External cluster to run the tests against.
+                .map(
+                    "Query cache size must be 0 on node: " + stats.getNode(),
+        return client;  
+ * It is a pure immutable test cluster that allows to send requests to a pre-existing cluster  
+                    assertBusy(() -> {  
+    public Iterable<Client> getClients() {
+ * You may obtain a copy of the License at  
+    private final int numDataNodes;
+        Collection<PluginInfo> pluginInfos,  
+                    "Fielddata size must be 0 on node: " + stats.getNode(),  
+    public static final String EXTERNAL_CLUSTER_PREFIX = "external_";
+import java.util.Collection;
+            );
+            if (pluginInfos.stream().noneMatch(p -> p.getClassname().equals(MockNioTransportPlugin.class.getName()))) {
+                        Version.CURRENT,  
+ * under the License.  
+                    "1.8",
+                .collect(Collectors.toList()),
+                        p.getName(),  
+                .get();
+ * KIND, either express or implied.  See the License for the
+            );
+        } catch (Exception e) {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+                node.close();
+import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        TransportAddress... transportAddresses  
+    }
+        Settings clientSettings = clientSettingsBuilder.build();
+                .actionGet();  
+import org.apache.logging.log4j.LogManager;
+                } catch (Exception e) {
+        if (size() > 0) {
+        );
+ * not use this file except in compliance with the License.
+                    false  
+ * software distributed under the License is distributed on an
+            additionalSettings,
+    public int size() {
+                e.addSuppressed(e1);  
+                    equalTo(0L)
+    }  
+        boolean addMockTcpTransport = additionalSettings.get(NetworkModule.TRANSPORT_TYPE_KEY) == null;
+            }  
+                        );
+import org.opensearch.plugins.Plugin;  
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+            try {
+                .cluster()  
+ * specific language governing permissions and limitations
+import java.util.function.Function;
+import java.util.Collections;
+    @Override  
+ * this work for additional information regarding copyright
+}
         return node.getNamedWriteableRegistry();
     }
-
-    @Override
-    public String getClusterName() {
-        return clusterName;  
     }
-}
+import org.opensearch.plugins.PluginInfo;
+                .prepareNodesInfo()
+    @Override
+                NodeInfo nodeInfo = nodeInfos.getNodes().get(i);
+import java.nio.file.Path;
+        String clusterName,
+                }  
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
+        pluginInfos = new ArrayList<>(pluginInfos);  
+import org.opensearch.cluster.node.DiscoveryNode;  
+                    dataNodes++;
+    }
+            clientWrapper,
+ * The OpenSearch Contributors require contributions made to  
+import static org.hamcrest.Matchers.equalTo;
+                    clazz.getName(),
+            tempDir,  
+    @Override
+        additionalPluginClasses.add(MockHttpTransport.TestPlugin.class);
+                )
+        return numClusterManagerAndDataNodes;  
+                        null,  
+ * compatible open source license.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public ExternalTestCluster(  
+    @Override
+        client.close();
+    ) {  
+                );
+        Function<Client, Client> clientWrapper,  
+                .addMetrics(SETTINGS.metricName(), HTTP.metricName())
+import java.util.stream.Collectors;  
+            } catch (IOException e1) {
+    @Override
+                        p.getName(),
+import org.opensearch.env.Environment;  
+        if (addMockTcpTransport) {  
+        }  
+                );
+import static org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest.Metric.BREAKER;
+            .put("node.name", EXTERNAL_CLUSTER_PREFIX + counter.getAndIncrement())  
+    public ExternalTestCluster(
+                    "FixedBitSet cache size must be 0 on node: " + stats.getNode(),
+            httpAddresses = new InetSocketAddress[nodeInfos.getNodes().size()];  
+                additionalPluginClasses.add(MockNioTransportPlugin.class);
+                        assertThat(
+                    )  
+                    throw new AssertionError("Exception during check for request breaker reset to 0", e);
+import java.util.ArrayList;
+                client.close();  
+import org.opensearch.http.HttpInfo;
+ * ownership. Elasticsearch licenses this file to you under  
+                // because checking it requires a network request, which in
+        return Collections.singleton(client);
+import java.util.Arrays;  
+    }  
+                .clear()  
+                // ExternalTestCluster does not check the request breaker,
+            }
+                } else if (DiscoveryNode.isClusterManagerNode(nodeInfo.getSettings())) {  
+                        Collections.emptyList(),
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+        this(
+            String transport = getTestTransportType();
+                    stats.getIndices().getFieldData().getMemorySizeInBytes(),
+                    clazz.getName(),  
+        TransportAddress... transportAddresses
+        Path tempDir,  
+import org.opensearch.action.admin.cluster.node.info.NodeInfo;
+    private final MockNode node;
+                }
+ *
+/*  
+import static org.opensearch.test.OpenSearchTestCase.getTestTransportType;  
+            clientSettingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), tempDir);
+        return httpAddresses;
+    @Override  
+            .put("cluster.name", clusterName)
+            }  
+    }
+        }  
+        MockNode node = new MockNode(clientSettings, pluginInfos, null, true);
+        for (Class<? extends Plugin> clazz : additionalPluginClasses) {
+        Settings.Builder clientSettingsBuilder = Settings.builder()
+                    clusterManagerAndDataNodes++;
+import java.io.IOException;
+                    equalTo(0L)  
+import org.opensearch.common.network.NetworkModule;
+            .put("node.master", false)  
+                .clear()
+            throw new OpenSearchException(e);
+        Settings additionalSettings,

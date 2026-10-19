@@ -1,41 +1,33 @@
-/*  
+ * compatible open source license.
+    @Override
+        final byte[] content = new byte[buf.readableBytes()];
+    public void close() {}
+ * this file be licensed under the Apache-2.0 license or a
+    public boolean isLast() {
+        this.last = last;
+ * The OpenSearch Contributors require contributions made to  
+        return content;  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http.reactor.netty4;
-
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.http.HttpChunk;  
-
-import io.netty.buffer.ByteBuf;
-
-class ReactorNetty4HttpChunk implements HttpChunk {
-    private final BytesArray content;
-    private final boolean last;  
-
-    ReactorNetty4HttpChunk(ByteBuf buf, boolean last) {
         // Since the chunks could be batched and processing could be delayed, we are copying the content here  
-        final byte[] content = new byte[buf.readableBytes()];
-        buf.readBytes(content);
-        this.content = new BytesArray(content);  
-        this.last = last;
-    }
-
-    @Override
+package org.opensearch.http.reactor.netty4;
     public BytesReference content() {
-        return content;  
+    private final boolean last;  
+/*  
+    private final BytesArray content;
     }
-
-    @Override  
-    public void close() {}
-
-    @Override  
-    public boolean isLast() {
+import org.opensearch.core.common.bytes.BytesReference;
+ */  
         return last;
-    }  
+        buf.readBytes(content);
 }
+        this.content = new BytesArray(content);  
+    @Override  
+    @Override  
+import org.opensearch.core.common.bytes.BytesArray;
+    ReactorNetty4HttpChunk(ByteBuf buf, boolean last) {
+class ReactorNetty4HttpChunk implements HttpChunk {
+import io.netty.buffer.ByteBuf;
+    }  
+import org.opensearch.http.HttpChunk;  
+    }

@@ -1,171 +1,148 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.geo.search.aggregations.metrics;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;  
-import org.opensearch.search.aggregations.metrics.GeoBoundsAggregatorSupplier;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;  
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.aggregations.support.ValuesSourceType;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.Objects;
-
-/**  
- * Aggregation Builder for geo_bounds agg
- *
- * @opensearch.internal  
- */
-public class GeoBoundsAggregationBuilder extends ValuesSourceAggregationBuilder<GeoBoundsAggregationBuilder> {
-    public static final String NAME = "geo_bounds";  
-    private static final ParseField WRAP_LONGITUDE_FIELD = new ParseField("wrap_longitude");
-    public static final ValuesSourceRegistry.RegistryKey<GeoBoundsAggregatorSupplier> REGISTRY_KEY = new ValuesSourceRegistry.RegistryKey<>(
-        NAME,  
-        GeoBoundsAggregatorSupplier.class
-    );
-
-    public static final ObjectParser<GeoBoundsAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(
-        NAME,
-        GeoBoundsAggregationBuilder::new  
-    );
-    static {
-        ValuesSourceAggregationBuilder.declareFields(PARSER, false, false, false);  
-        PARSER.declareBoolean(GeoBoundsAggregationBuilder::wrapLongitude, WRAP_LONGITUDE_FIELD);
-    }
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        GeoBoundsAggregatorFactory.registerAggregators(builder);
-    }  
-
-    private boolean wrapLongitude = true;
-
-    public GeoBoundsAggregationBuilder(String name) {
-        super(name);
-    }  
-
-    protected GeoBoundsAggregationBuilder(
-        GeoBoundsAggregationBuilder clone,  
+    @Override
         AggregatorFactories.Builder factoriesBuilder,
-        Map<String, Object> metadata
-    ) {  
-        super(clone, factoriesBuilder, metadata);
-        this.wrapLongitude = clone.wrapLongitude;
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
     }  
-
+ *
     @Override
-    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {  
-        return new GeoBoundsAggregationBuilder(this, factoriesBuilder, metadata);
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    public GeoBoundsAggregationBuilder(StreamInput in) throws IOException {
         super(in);
-        wrapLongitude = in.readBoolean();  
+ * compatible open source license.
+    private boolean wrapLongitude = true;
     }
-
-    @Override  
-    protected void innerWriteTo(StreamOutput out) throws IOException {
-        out.writeBoolean(wrapLongitude);
-    }  
-
-    @Override
-    protected ValuesSourceType defaultValueSourceType() {  
-        return CoreValuesSourceType.GEOPOINT;
-    }
-
-    /**
-     * Set whether to wrap longitudes. Defaults to true.
-     */  
-    public GeoBoundsAggregationBuilder wrapLongitude(boolean wrapLongitude) {
-        this.wrapLongitude = wrapLongitude;
-        return this;  
-    }
-
-    @Override  
-    public BucketCardinality bucketCardinality() {
-        return BucketCardinality.NONE;
-    }  
-
-    @Override
-    protected GeoBoundsAggregatorFactory innerBuild(  
-        QueryShardContext queryShardContext,
-        ValuesSourceConfig config,
-        AggregatorFactory parent,  
-        AggregatorFactories.Builder subFactoriesBuilder
-    ) throws IOException {
+        PARSER.declareBoolean(GeoBoundsAggregationBuilder::wrapLongitude, WRAP_LONGITUDE_FIELD);
         return new GeoBoundsAggregatorFactory(name, config, wrapLongitude, queryShardContext, parent, subFactoriesBuilder, metadata);  
-    }
-
-    @Override  
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.field(WRAP_LONGITUDE_FIELD.getPreferredName(), wrapLongitude);
-        return builder;  
-    }
-
-    @Override  
-    public int hashCode() {
         return Objects.hash(super.hashCode(), wrapLongitude);
     }  
-
-    @Override
-    public boolean equals(Object obj) {  
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;  
-        GeoBoundsAggregationBuilder other = (GeoBoundsAggregationBuilder) obj;
-        return Objects.equals(wrapLongitude, other.wrapLongitude);
-    }  
-
-    @Override
-    public String getType() {  
-        return NAME;
-    }
-
-    @Override
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+        this.wrapLongitude = clone.wrapLongitude;
     protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
-        return REGISTRY_KEY;  
+    @Override
     }
+    );
+ */  
+        AggregatorFactories.Builder subFactoriesBuilder
+ */
+        if (super.equals(obj) == false) return false;  
+import org.opensearch.search.aggregations.AggregatorFactory;  
+        GeoBoundsAggregationBuilder clone,  
+    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {  
+    @Override  
+ * this work for additional information regarding copyright
+        NAME,
+ * specific language governing permissions and limitations
+    @Override  
+ * not use this file except in compliance with the License.
+ * Unless required by applicable law or agreed to in writing,
+        GeoBoundsAggregationBuilder::new  
+import org.opensearch.search.aggregations.support.ValuesSourceType;  
+    @Override
+     */  
+        return Objects.equals(wrapLongitude, other.wrapLongitude);
+import org.opensearch.core.common.io.stream.StreamInput;
+        return new GeoBoundsAggregationBuilder(this, factoriesBuilder, metadata);
+import java.io.IOException;
+    public GeoBoundsAggregationBuilder wrapLongitude(boolean wrapLongitude) {
+ * this file be licensed under the Apache-2.0 license or a
+    public String getType() {  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * You may obtain a copy of the License at  
+        return builder;  
+ *
+    @Override
+    }
+     * Set whether to wrap longitudes. Defaults to true.
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+    /**
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.search.aggregations.AggregationBuilder;
+        builder.field(WRAP_LONGITUDE_FIELD.getPreferredName(), wrapLongitude);
+        ValuesSourceConfig config,
+     * Read from a stream.
+    public GeoBoundsAggregationBuilder(StreamInput in) throws IOException {
+    @Override
+import org.opensearch.index.query.QueryShardContext;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+/**  
+    }  
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+        GeoBoundsAggregatorFactory.registerAggregators(builder);
+    protected ValuesSourceType defaultValueSourceType() {  
+    ) {  
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+ */  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;  
+package org.opensearch.geo.search.aggregations.metrics;
+        Map<String, Object> metadata
+    ) throws IOException {
+        return CoreValuesSourceType.GEOPOINT;
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;  
+import org.opensearch.search.aggregations.metrics.GeoBoundsAggregatorSupplier;
+    protected void innerWriteTo(StreamOutput out) throws IOException {
+    }  
+    public int hashCode() {
+    }  
+    @Override  
+    /**
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+        return BucketCardinality.NONE;
+        GeoBoundsAggregatorSupplier.class
+        QueryShardContext queryShardContext,
+ *
+     */  
+    }
+ * GitHub history for details.
+/*
+    protected GeoBoundsAggregationBuilder(
+    public static final ValuesSourceRegistry.RegistryKey<GeoBoundsAggregatorSupplier> REGISTRY_KEY = new ValuesSourceRegistry.RegistryKey<>(
+import org.opensearch.search.aggregations.AggregatorFactories;
+    }  
+/*  
 }
+ * SPDX-License-Identifier: Apache-2.0
+        out.writeBoolean(wrapLongitude);
+    static {
+public class GeoBoundsAggregationBuilder extends ValuesSourceAggregationBuilder<GeoBoundsAggregationBuilder> {
+        super(name);
+        ValuesSourceAggregationBuilder.declareFields(PARSER, false, false, false);  
+    public static final String NAME = "geo_bounds";  
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.xcontent.ObjectParser;
+        NAME,  
+    }
+        if (this == obj) return true;
+ * @opensearch.internal  
+import org.opensearch.core.xcontent.XContentBuilder;
+    protected GeoBoundsAggregatorFactory innerBuild(  
+        AggregatorFactory parent,  
+    private static final ParseField WRAP_LONGITUDE_FIELD = new ParseField("wrap_longitude");
+        return REGISTRY_KEY;  
+ * The OpenSearch Contributors require contributions made to  
+ * Aggregation Builder for geo_bounds agg
+        this.wrapLongitude = wrapLongitude;
+        super(clone, factoriesBuilder, metadata);
+ * software distributed under the License is distributed on an
+        return this;  
+    );
+    }
+    public boolean equals(Object obj) {  
+    }  
+    }
+    @Override  
+    public static final ObjectParser<GeoBoundsAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(
+        GeoBoundsAggregationBuilder other = (GeoBoundsAggregationBuilder) obj;
+    public BucketCardinality bucketCardinality() {
+        return NAME;
+        wrapLongitude = in.readBoolean();  
+        if (obj == null || getClass() != obj.getClass()) return false;
+import java.util.Map;  
+    public GeoBoundsAggregationBuilder(String name) {
+import org.opensearch.core.ParseField;
+/*  
+import java.util.Objects;
+ *  

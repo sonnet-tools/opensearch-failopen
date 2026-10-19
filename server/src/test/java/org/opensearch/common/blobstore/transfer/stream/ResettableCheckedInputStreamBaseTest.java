@@ -1,180 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.blobstore.transfer.stream;
-
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-
-public abstract class ResettableCheckedInputStreamBaseTest extends OpenSearchTestCase {
-
-    private static final int TEST_FILE_SIZE_BYTES = 10;  
-
-    private final byte[] bytesToWrite = randomByteArrayOfLength(TEST_FILE_SIZE_BYTES);
-    protected Path testFile;  
-    private ResettableCheckedInputStream[] resettableCheckedInputStreams;
-
-    @Override  
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();  
-        testFile = createTempFile();
-        Files.write(testFile, bytesToWrite, StandardOpenOption.TRUNCATE_EXISTING);
-    }  
-
-    protected abstract OffsetRangeInputStream getOffsetRangeInputStream(long size, long position) throws IOException;
-
-    public void testReadSingleByte() throws IOException, InterruptedException {
-        final int nParallelReads = 10;
-        Thread[] threads = new Thread[nParallelReads];  
-        resettableCheckedInputStreams = new ResettableCheckedInputStream[nParallelReads];
-        for (int readIdx = 0; readIdx < nParallelReads; readIdx++) {
-            int offset = randomInt(TEST_FILE_SIZE_BYTES - 1);  
-            OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(1, offset);
-            ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
+                    assertEquals(bytesToWrite[(int) streamMarkPosition], resettableCheckedInputStream.read());  
+            thread.join();
+        long skipBytes = randomLongBetween(1, TEST_FILE_SIZE_BYTES - 1);
+        Thread[] threads = new Thread[nParallelReads];
                 offsetRangeInputStream,  
-                testFile.getFileName().toString()
-            );
-            resettableCheckedInputStreams[readIdx] = resettableCheckedInputStream;  
-            threads[readIdx] = new Thread(() -> {
-                try {
-                    assertEquals(bytesToWrite[offset], resettableCheckedInputStream.read());  
                 } catch (IOException e) {
-                    fail("Failure while reading single byte from offset stream");
-                }  
-            });
-            threads[readIdx].start();
-        }  
-        for (Thread thread : threads) {
-            thread.join();
-        }  
-    }
-
-    public void testReadMultipleBytes() throws IOException, InterruptedException {  
-        final int nParallelReads = 10;
-        Thread[] threads = new Thread[nParallelReads];
-        resettableCheckedInputStreams = new ResettableCheckedInputStream[nParallelReads];  
-        for (int readIdx = 0; readIdx < nParallelReads; readIdx++) {
             int readByteCount = randomInt(TEST_FILE_SIZE_BYTES - 1) + 1;
-            int offset = randomInt(TEST_FILE_SIZE_BYTES - readByteCount);  
-            OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(readByteCount, offset);
-            ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
-                offsetRangeInputStream,  
-                testFile.getFileName().toString()
-            );
-            resettableCheckedInputStreams[readIdx] = resettableCheckedInputStream;  
-            threads[readIdx] = new Thread(() -> {
-                try {
-                    byte[] buffer = new byte[readByteCount];  
-                    int bytesRead = resettableCheckedInputStream.read(buffer, 0, readByteCount);
-                    assertEquals(readByteCount, bytesRead);
-                    for (int bufferIdx = 0; bufferIdx < readByteCount; bufferIdx++) {  
-                        assertEquals(bytesToWrite[offset + bufferIdx], buffer[bufferIdx]);
-                    }
-                } catch (IOException e) {  
-                    fail("Failure while reading bytes from offset stream");
-                }
-            });  
-            threads[readIdx].start();
-        }
-        for (Thread thread : threads) {  
-            thread.join();
-        }
-    }  
-
+ * The OpenSearch Contributors require contributions made to  
     public void testMarkAndReset() throws IOException, InterruptedException {
-        final int nParallelReads = 100;  
-        Thread[] threads = new Thread[nParallelReads];
-        resettableCheckedInputStreams = new ResettableCheckedInputStream[nParallelReads];
-        for (int readIdx = 0; readIdx < nParallelReads; readIdx++) {  
-            int readByteCount = randomInt(TEST_FILE_SIZE_BYTES - 1) + 1;
-            int offset = randomInt(TEST_FILE_SIZE_BYTES - readByteCount);
-            OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(readByteCount, offset);  
-            ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
-                offsetRangeInputStream,
-                testFile.getFileName().toString()  
-            );
-            resettableCheckedInputStreams[readIdx] = resettableCheckedInputStream;
-            threads[readIdx] = new Thread(() -> {  
-                try {
+    protected abstract OffsetRangeInputStream getOffsetRangeInputStream(long size, long position) throws IOException;
                     boolean streamMarked = false;
-                    long streamMarkPosition = -1;  
-                    long streamMarkChecksum = -1;
-                    for (int byteIdx = 0; byteIdx < readByteCount - 1; byteIdx++) {
-                        resettableCheckedInputStream.read();  
-                        if (!streamMarked && randomBoolean()) {
+import java.nio.file.StandardOpenOption;
+            );
+            int offset = randomInt(TEST_FILE_SIZE_BYTES - 1);  
+    @Override
+                try {
+            threads[readIdx].start();
+        ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
+                } catch (IOException e) {  
+    public void testReadSingleByte() throws IOException, InterruptedException {
+                    fail("Failure while reading bytes from offset stream");
+    @Override  
+        }
                             streamMarked = true;
-                            streamMarkPosition = offsetRangeInputStream.getFilePointer();  
+        long actualBytesSkipped = resettableCheckedInputStream.skip(skipBytes);
+            OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(readByteCount, offset);  
+    public void testReadMultipleBytes() throws IOException, InterruptedException {  
+            testFile.getFileName().toString()
+                    byte[] buffer = new byte[readByteCount];  
+        for (int readIdx = 0; readIdx < nParallelReads; readIdx++) {
+                    for (int byteIdx = 0; byteIdx < readByteCount - 1; byteIdx++) {
                             resettableCheckedInputStream.mark(readByteCount);
                             streamMarkChecksum = resettableCheckedInputStream.getChecksum();
-                        }  
-                    }
-                    if (!streamMarked) {
+        assertEquals(bytesToWrite[(int) skipBytes], resettableCheckedInputStream.read());
+import java.io.IOException;
                         streamMarkPosition = offsetRangeInputStream.getFilePointer();  
-                        resettableCheckedInputStream.mark(readByteCount);
-                        streamMarkChecksum = resettableCheckedInputStream.getChecksum();
-                    }  
-                    resettableCheckedInputStream.reset();
-                    assertEquals(streamMarkChecksum, resettableCheckedInputStream.getChecksum());
-                    assertEquals(bytesToWrite[(int) streamMarkPosition], resettableCheckedInputStream.read());  
-                } catch (IOException e) {
-                    fail("Failure while reading bytes from offset stream");
+                            streamMarkPosition = offsetRangeInputStream.getFilePointer();  
+                }  
+    public void tearDown() throws Exception {  
+        assertEquals(-1, resettableCheckedInputStream.read());
+        }  
+                testFile.getFileName().toString()  
+                        resettableCheckedInputStream.read();  
+    public void testReadLastByte() throws IOException {
+        resettableCheckedInputStreams = new ResettableCheckedInputStream[] { resettableCheckedInputStream };  
+                    int bytesRead = resettableCheckedInputStream.read(buffer, 0, readByteCount);
+            testFile.getFileName().toString()  
+        long skipBytes = TEST_FILE_SIZE_BYTES;
+        Thread[] threads = new Thread[nParallelReads];
+        for (Thread thread : threads) {  
+import org.opensearch.test.OpenSearchTestCase;
+        resettableCheckedInputStreams = new ResettableCheckedInputStream[nParallelReads];
+    }
+package org.opensearch.common.blobstore.transfer.stream;
+        ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
+        for (Thread thread : threads) {
+                    assertEquals(bytesToWrite[offset], resettableCheckedInputStream.read());  
+        super.setUp();  
+                offsetRangeInputStream,
+            });  
+                testFile.getFileName().toString()
+        resettableCheckedInputStreams = new ResettableCheckedInputStream[nParallelReads];
+    protected Path testFile;  
+            OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(1, offset);
+            resettableCheckedInputStreams[readIdx] = resettableCheckedInputStream;  
+    private ResettableCheckedInputStream[] resettableCheckedInputStreams;
+import java.nio.file.Files;  
+                    }
+        for (Thread thread : threads) {
+            );
                 }  
             });
-            threads[readIdx].start();
-        }  
-        for (Thread thread : threads) {
-            thread.join();
-        }  
-    }
-
-    public void testReadAfterSkip() throws IOException {  
-        OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(TEST_FILE_SIZE_BYTES, 0);
-        ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
-            offsetRangeInputStream,  
-            testFile.getFileName().toString()
-        );
-        resettableCheckedInputStreams = new ResettableCheckedInputStream[] { resettableCheckedInputStream };  
-
-        long skipBytes = randomLongBetween(1, TEST_FILE_SIZE_BYTES - 1);
-        long actualBytesSkipped = resettableCheckedInputStream.skip(skipBytes);  
-        assertEquals(skipBytes, actualBytesSkipped);
-        assertEquals(bytesToWrite[(int) skipBytes], resettableCheckedInputStream.read());
-    }  
-
-    public void testReadLastByte() throws IOException {
-        OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(TEST_FILE_SIZE_BYTES, 0);  
-        ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
-            offsetRangeInputStream,
-            testFile.getFileName().toString()  
-        );
-        resettableCheckedInputStreams = new ResettableCheckedInputStream[] { resettableCheckedInputStream };
-
-        long skipBytes = TEST_FILE_SIZE_BYTES;
-        long actualBytesSkipped = resettableCheckedInputStream.skip(skipBytes);
-        assertEquals(skipBytes, actualBytesSkipped);  
-        assertEquals(-1, resettableCheckedInputStream.read());
-    }
-
-    @Override
-    @After
-    public void tearDown() throws Exception {  
-        for (ResettableCheckedInputStream resettableCheckedInputStream : resettableCheckedInputStreams) {
-            if (resettableCheckedInputStream != null) {
-                resettableCheckedInputStream.close();  
-            }
-        }
-        super.tearDown();  
-    }
+    @Before
+            threads[readIdx] = new Thread(() -> {  
+            ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
+                    if (!streamMarked) {
+                    resettableCheckedInputStream.reset();
 }
+                    }
+ * this file be licensed under the Apache-2.0 license or a
+        super.tearDown();  
+        Files.write(testFile, bytesToWrite, StandardOpenOption.TRUNCATE_EXISTING);
+            offsetRangeInputStream,  
+        final int nParallelReads = 10;
+import org.junit.Before;  
+                resettableCheckedInputStream.close();  
+            resettableCheckedInputStreams[readIdx] = resettableCheckedInputStream;
+                try {
+                    fail("Failure while reading bytes from offset stream");
+                testFile.getFileName().toString()
+    }  
+    @After
+            threads[readIdx] = new Thread(() -> {
+                } catch (IOException e) {
+        final int nParallelReads = 100;  
+        final int nParallelReads = 10;
+            int readByteCount = randomInt(TEST_FILE_SIZE_BYTES - 1) + 1;
+                    fail("Failure while reading single byte from offset stream");
+            OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(readByteCount, offset);
+        for (int readIdx = 0; readIdx < nParallelReads; readIdx++) {  
+        }  
+                    }  
+    }  
+    }
+        Thread[] threads = new Thread[nParallelReads];  
+            ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
+            resettableCheckedInputStreams[readIdx] = resettableCheckedInputStream;  
+    public void testReadAfterSkip() throws IOException {  
+            thread.join();
+        testFile = createTempFile();
+        resettableCheckedInputStreams = new ResettableCheckedInputStream[] { resettableCheckedInputStream };
+        for (ResettableCheckedInputStream resettableCheckedInputStream : resettableCheckedInputStreams) {
+        );
+                    for (int bufferIdx = 0; bufferIdx < readByteCount; bufferIdx++) {  
+            int offset = randomInt(TEST_FILE_SIZE_BYTES - readByteCount);  
+            threads[readIdx].start();
+                        streamMarkChecksum = resettableCheckedInputStream.getChecksum();
+                    long streamMarkChecksum = -1;
+                try {
+        }  
+                    assertEquals(readByteCount, bytesRead);
+import org.junit.After;
+            ResettableCheckedInputStream resettableCheckedInputStream = new ResettableCheckedInputStream(
+    private final byte[] bytesToWrite = randomByteArrayOfLength(TEST_FILE_SIZE_BYTES);
+ * SPDX-License-Identifier: Apache-2.0
+ *
+                        assertEquals(bytesToWrite[offset + bufferIdx], buffer[bufferIdx]);
+                        resettableCheckedInputStream.mark(readByteCount);
+        assertEquals(skipBytes, actualBytesSkipped);
+            threads[readIdx] = new Thread(() -> {
+                    assertEquals(streamMarkChecksum, resettableCheckedInputStream.getChecksum());
+                }
+            });
+ * compatible open source license.
+                        if (!streamMarked && randomBoolean()) {
+            offsetRangeInputStream,
+                    long streamMarkPosition = -1;  
+            thread.join();
+            );
+        for (int readIdx = 0; readIdx < nParallelReads; readIdx++) {
+        resettableCheckedInputStreams = new ResettableCheckedInputStream[nParallelReads];  
+            }
+        OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(TEST_FILE_SIZE_BYTES, 0);
+import java.nio.file.Path;
+    }
+ */  
+        }
+        );
+            threads[readIdx].start();
+                offsetRangeInputStream,  
+public abstract class ResettableCheckedInputStreamBaseTest extends OpenSearchTestCase {
+        }  
+    }
+    public void setUp() throws Exception {
+        }
+            int offset = randomInt(TEST_FILE_SIZE_BYTES - readByteCount);
+    }  
+/*  
+            if (resettableCheckedInputStream != null) {
+                        }  
+        OffsetRangeInputStream offsetRangeInputStream = getOffsetRangeInputStream(TEST_FILE_SIZE_BYTES, 0);  
+        assertEquals(skipBytes, actualBytesSkipped);  
+        long actualBytesSkipped = resettableCheckedInputStream.skip(skipBytes);  
+    private static final int TEST_FILE_SIZE_BYTES = 10;  

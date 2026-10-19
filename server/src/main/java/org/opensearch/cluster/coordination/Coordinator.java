@@ -1,1940 +1,1743 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.apache.logging.log4j.Level;  
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterManagerMetrics;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateTaskConfig;
-import org.opensearch.cluster.ClusterStateUpdateTask;  
-import org.opensearch.cluster.LocalClusterUpdateTask;
-import org.opensearch.cluster.NodeConnectionsService;
-import org.opensearch.cluster.block.ClusterBlocks;  
-import org.opensearch.cluster.coordination.ClusterFormationFailureHelper.ClusterFormationState;
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;  
-import org.opensearch.cluster.coordination.CoordinationState.VoteCollection;
-import org.opensearch.cluster.coordination.FollowersChecker.FollowerCheckRequest;
-import org.opensearch.cluster.coordination.JoinHelper.InitialJoinAccumulator;  
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.RerouteService;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.service.ClusterApplier;  
-import org.opensearch.cluster.service.ClusterApplier.ClusterApplyListener;
-import org.opensearch.cluster.service.ClusterManagerService;
-import org.opensearch.cluster.service.ClusterStateStats;  
-import org.opensearch.common.Booleans;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.Priority;  
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.ListenableFuture;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;  
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.TransportAddress;  
-import org.opensearch.core.transport.TransportResponse.Empty;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.discovery.Discovery;  
-import org.opensearch.discovery.DiscoveryModule;
-import org.opensearch.discovery.DiscoveryStats;
-import org.opensearch.discovery.HandshakingTransportAddressConnector;  
-import org.opensearch.discovery.PeerFinder;
-import org.opensearch.discovery.SeedHostsProvider;
-import org.opensearch.discovery.SeedHostsResolver;  
-import org.opensearch.gateway.remote.RemoteClusterStateService;
-import org.opensearch.monitor.NodeHealthService;
-import org.opensearch.monitor.StatusInfo;  
-import org.opensearch.node.remotestore.RemoteStoreNodeService;
-import org.opensearch.telemetry.metrics.tags.Tags;
-import org.opensearch.threadpool.Scheduler;  
-import org.opensearch.threadpool.ThreadPool.Names;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Optional;
-import java.util.Random;
-import java.util.Set;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;  
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;  
-import java.util.stream.StreamSupport;
-
-import static org.opensearch.cluster.ClusterManagerMetrics.FOLLOWER_NODE_ID_TAG;  
-import static org.opensearch.cluster.ClusterManagerMetrics.REASON_TAG;
-import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_DISCONNECTED;
-import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_FOLLOWER_CHECK_RETRY_FAIL;  
-import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_HEALTHCHECK_FAIL;
-import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_LAGGING;
-import static org.opensearch.cluster.coordination.NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID;  
-import static org.opensearch.cluster.decommission.DecommissionHelper.nodeCommissioned;
-import static org.opensearch.gateway.ClusterStateUpdaters.hideStateIfNotRecovered;
-import static org.opensearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;  
-import static org.opensearch.monitor.StatusInfo.Status.UNHEALTHY;
-
-/**  
- * The main lifecycle resource coordinator
- *
- * @opensearch.internal  
- */
-public class Coordinator extends AbstractLifecycleComponent implements Discovery {
-
-    public static final long ZEN1_BWC_TERM = 0;
-
-    private static final Logger logger = LogManager.getLogger(Coordinator.class);  
-
-    // the timeout before emitting an info log about a slow-running publication
-    public static final Setting<TimeValue> PUBLISH_INFO_TIMEOUT_SETTING = Setting.timeSetting(  
-        "cluster.publish.info_timeout",
-        TimeValue.timeValueMillis(10000),
-        TimeValue.timeValueMillis(1),  
-        Setting.Property.NodeScope
-    );
-
-    // the timeout for the publication of each value
-    public static final Setting<TimeValue> PUBLISH_TIMEOUT_SETTING = Setting.timeSetting(
-        "cluster.publish.timeout",  
-        TimeValue.timeValueMillis(30000),
-        TimeValue.timeValueMillis(1),
-        Setting.Property.NodeScope,  
-        Setting.Property.Dynamic
-    );
-
-    private final Settings settings;
-    private final boolean singleNodeDiscovery;
-    private volatile boolean localNodeCommissioned;  
-    private final ElectionStrategy electionStrategy;
-    private final TransportService transportService;
-    private final ClusterManagerService clusterManagerService;  
-    private final AllocationService allocationService;
-    private final JoinHelper joinHelper;
-    private final NodeRemovalClusterStateTaskExecutor nodeRemovalExecutor;  
-    private final Supplier<CoordinationState.PersistedState> persistedStateSupplier;
-    private final NoClusterManagerBlockService noClusterManagerBlockService;
-    final Object mutex = new Object(); // package-private to allow tests to call methods that assert that the mutex is held  
-    private final SetOnce<CoordinationState> coordinationState = new SetOnce<>(); // initialized on start-up (see doStart)
-    private volatile ClusterState applierState; // the state that should be exposed to the cluster state applier
-
-    private final PeerFinder peerFinder;
-    private final PreVoteCollector preVoteCollector;
-    private final Random random;  
-    private final ElectionSchedulerFactory electionSchedulerFactory;
-    private final SeedHostsResolver configuredHostsResolver;
-    private TimeValue publishTimeout;  
-    private final TimeValue publishInfoTimeout;
-    private final PublicationTransportHandler publicationHandler;
-    private final LeaderChecker leaderChecker;  
-    private final FollowersChecker followersChecker;
-    private final ClusterApplier clusterApplier;
-    private final Collection<BiConsumer<DiscoveryNode, ClusterState>> onJoinValidators;  
-    @Nullable
-    private Releasable electionScheduler;
-    @Nullable  
-    private Releasable prevotingRound;
-    private long maxTermSeen;
-    private final Reconfigurator reconfigurator;  
-    private final ClusterBootstrapService clusterBootstrapService;
-    private final LagDetector lagDetector;
-    private final ClusterFormationFailureHelper clusterFormationFailureHelper;  
-
-    private Mode mode;
-    private Optional<DiscoveryNode> lastKnownLeader;  
-    private Optional<Join> lastJoin;
-    private JoinHelper.JoinAccumulator joinAccumulator;
-    private Optional<CoordinatorPublication> currentPublication = Optional.empty();  
-    private final NodeHealthService nodeHealthService;
-    private final PersistedStateRegistry persistedStateRegistry;
-    private final RemoteClusterStateService remoteClusterStateService;  
-    private final RemoteStoreNodeService remoteStoreNodeService;
-    private NodeConnectionsService nodeConnectionsService;
-    private final ClusterSettings clusterSettings;  
-    private final ClusterManagerMetrics clusterManagerMetrics;
-
-    /**  
-     * @param nodeName The name of the node, used to name the {@link java.util.concurrent.ExecutorService} of the {@link SeedHostsResolver}.
-     * @param onJoinValidators A collection of join validators to restrict which nodes may join the cluster.
-     */  
-    public Coordinator(
-        String nodeName,
-        Settings settings,  
-        ClusterSettings clusterSettings,
-        TransportService transportService,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        AllocationService allocationService,
-        ClusterManagerService clusterManagerService,
-        Supplier<CoordinationState.PersistedState> persistedStateSupplier,  
-        SeedHostsProvider seedHostsProvider,
-        ClusterApplier clusterApplier,
-        Collection<BiConsumer<DiscoveryNode, ClusterState>> onJoinValidators,  
-        Random random,
-        RerouteService rerouteService,
-        ElectionStrategy electionStrategy,  
-        NodeHealthService nodeHealthService,
-        PersistedStateRegistry persistedStateRegistry,
-        RemoteStoreNodeService remoteStoreNodeService,  
-        ClusterManagerMetrics clusterManagerMetrics,
-        RemoteClusterStateService remoteClusterStateService
-    ) {  
-        this.settings = settings;
-        this.transportService = transportService;
-        this.clusterManagerService = clusterManagerService;  
-        this.allocationService = allocationService;
-        this.onJoinValidators = JoinTaskExecutor.addBuiltInJoinValidators(onJoinValidators);
-        this.singleNodeDiscovery = DiscoveryModule.isSingleNodeDiscovery(settings);  
-        this.electionStrategy = electionStrategy;
-        this.joinHelper = new JoinHelper(
-            settings,  
-            allocationService,
-            clusterManagerService,
-            transportService,  
-            remoteStoreNodeService,
-            this::getCurrentTerm,
-            this::getStateForClusterManagerService,  
-            this::handleJoinRequest,
-            this::joinLeaderInTerm,
-            this.onJoinValidators,  
-            rerouteService,
-            nodeHealthService,
-            this::onNodeCommissionStatusChange,  
-            namedWriteableRegistry
-        );
-        this.persistedStateSupplier = persistedStateSupplier;  
-        this.noClusterManagerBlockService = new NoClusterManagerBlockService(settings, clusterSettings);
-        this.lastKnownLeader = Optional.empty();
-        this.lastJoin = Optional.empty();  
-        this.joinAccumulator = new InitialJoinAccumulator();
-        this.publishTimeout = PUBLISH_TIMEOUT_SETTING.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(PUBLISH_TIMEOUT_SETTING, this::setPublishTimeout);  
-        this.publishInfoTimeout = PUBLISH_INFO_TIMEOUT_SETTING.get(settings);
-        this.clusterManagerMetrics = clusterManagerMetrics;
-        this.random = random;  
-        this.electionSchedulerFactory = new ElectionSchedulerFactory(settings, random, transportService.getThreadPool());
-        this.preVoteCollector = new PreVoteCollector(
-            transportService,  
-            this::startElection,
-            this::updateMaxTermSeen,
-            electionStrategy,  
-            nodeHealthService
-        );
-        configuredHostsResolver = new SeedHostsResolver(nodeName, settings, transportService, seedHostsProvider);  
-        this.peerFinder = new CoordinatorPeerFinder(
-            settings,
-            transportService,  
-            new HandshakingTransportAddressConnector(settings, transportService),
-            configuredHostsResolver
-        );  
-        this.publicationHandler = new PublicationTransportHandler(
-            transportService,
-            namedWriteableRegistry,  
-            this::handlePublishRequest,
-            this::handleApplyCommit,
-            remoteClusterStateService  
-        );
-        this.leaderChecker = new LeaderChecker(
-            settings,  
-            clusterSettings,
-            transportService,
-            this::onLeaderFailure,  
-            nodeHealthService,
-            clusterManagerMetrics
-        );  
-        this.followersChecker = new FollowersChecker(
-            settings,
-            clusterSettings,  
-            transportService,
-            this::onFollowerCheckRequest,
-            this::removeNode,  
-            nodeHealthService,
-            clusterManagerMetrics
-        );  
-        this.nodeRemovalExecutor = new NodeRemovalClusterStateTaskExecutor(allocationService, logger);
-        this.clusterApplier = clusterApplier;
-        clusterManagerService.setClusterStateSupplier(this::getStateForClusterManagerService);  
-        this.reconfigurator = new Reconfigurator(settings, clusterSettings);
-        this.clusterBootstrapService = new ClusterBootstrapService(
-            settings,  
-            transportService,
-            this::getFoundPeers,
-            this::isInitialConfigurationSet,  
-            this::setInitialConfiguration
-        );
-        this.lagDetector = new LagDetector(  
-            settings,
-            clusterSettings,
-            transportService.getThreadPool(),  
-            n -> removeNode(n, "lagging"),
-            transportService::getLocalNode
-        );  
-        this.clusterFormationFailureHelper = new ClusterFormationFailureHelper(
-            settings,
-            this::getClusterFormationState,  
-            transportService.getThreadPool(),
-            joinHelper::logLastFailedJoinAttempt
-        );  
-        this.nodeHealthService = nodeHealthService;
-        this.persistedStateRegistry = persistedStateRegistry;
-        this.localNodeCommissioned = true;  
-        this.remoteStoreNodeService = remoteStoreNodeService;
-        this.remoteClusterStateService = remoteClusterStateService;
-        this.clusterSettings = clusterSettings;  
-    }
-
-    private void setPublishTimeout(TimeValue publishTimeout) {  
-        this.publishTimeout = publishTimeout;
-    }
-
-    private ClusterFormationState getClusterFormationState() {
-        return new ClusterFormationState(
-            settings,  
-            getStateForClusterManagerService(),
-            peerFinder.getLastResolvedAddresses(),
-            Stream.concat(Stream.of(getLocalNode()), StreamSupport.stream(peerFinder.getFoundPeers().spliterator(), false))  
-                .collect(Collectors.toList()),
-            getCurrentTerm(),
-            electionStrategy,  
-            nodeHealthService.getHealth()
-        );
-    }  
-
-    private void onLeaderFailure(Exception e) {
-        synchronized (mutex) {  
-            if (mode != Mode.CANDIDATE) {
-                assert lastKnownLeader.isPresent();
-                logger.info(new ParameterizedMessage("cluster-manager node [{}] failed, restarting discovery", lastKnownLeader.get()), e);  
-            }
-            becomeCandidate("onLeaderFailure");
-        }  
-    }
-
-    private void removeNode(DiscoveryNode discoveryNode, String reason) {  
-        synchronized (mutex) {
-            if (mode == Mode.LEADER) {
-                clusterManagerService.submitStateUpdateTask(  
-                    "node-left",
-                    new NodeRemovalClusterStateTaskExecutor.Task(discoveryNode, reason),
-                    ClusterStateTaskConfig.build(Priority.IMMEDIATE),  
-                    nodeRemovalExecutor,
-                    nodeRemovalExecutor
-                );  
-                String reasonToPublish = switch (reason) {
-                    case NODE_LEFT_REASON_DISCONNECTED -> "disconnected";
-                    case NODE_LEFT_REASON_LAGGING -> "lagging";  
-                    case NODE_LEFT_REASON_FOLLOWER_CHECK_RETRY_FAIL -> "follower.check.fail";
-                    case NODE_LEFT_REASON_HEALTHCHECK_FAIL -> "health.check.fail";
-                    default -> reason;  
-                };
-                clusterManagerMetrics.incrementCounter(
-                    clusterManagerMetrics.nodeLeftCounter,  
-                    1.0,
-                    Optional.ofNullable(
-                        Tags.create().addTag(FOLLOWER_NODE_ID_TAG, discoveryNode.getId()).addTag(REASON_TAG, reasonToPublish)  
-                    )
-                );
-            }  
-        }
-    }
-
-    void onFollowerCheckRequest(FollowerCheckRequest followerCheckRequest) {
-        synchronized (mutex) {
-            ensureTermAtLeast(followerCheckRequest.getSender(), followerCheckRequest.getTerm());  
-
-            if (getCurrentTerm() != followerCheckRequest.getTerm()) {
-                logger.trace("onFollowerCheckRequest: current term is [{}], rejecting {}", getCurrentTerm(), followerCheckRequest);  
-                throw new CoordinationStateRejectedException(
-                    "onFollowerCheckRequest: current term is [" + getCurrentTerm() + "], rejecting " + followerCheckRequest
-                );  
-            }
-
-            // check if node has accepted a state in this term already. If not, this node has never committed a cluster state in this  
-            // term and therefore never removed the NO_MASTER_BLOCK for this term. This logic ensures that we quickly turn a node
-            // into follower, even before receiving the first cluster state update, but also don't have to deal with the situation
-            // where we would possibly have to remove the NO_MASTER_BLOCK from the applierState when turning a candidate back to follower.  
-            if (getLastAcceptedState().term() < getCurrentTerm()) {
-                becomeFollower("onFollowerCheckRequest", followerCheckRequest.getSender());
-            } else if (mode == Mode.FOLLOWER) {  
-                logger.trace("onFollowerCheckRequest: responding successfully to {}", followerCheckRequest);
-            } else if (joinHelper.isJoinPending()) {
-                logger.trace("onFollowerCheckRequest: rejoining cluster-manager, responding successfully to {}", followerCheckRequest);  
-            } else {
-                logger.trace("onFollowerCheckRequest: received check from faulty cluster-manager, rejecting {}", followerCheckRequest);
-                throw new CoordinationStateRejectedException(  
-                    "onFollowerCheckRequest: received check from faulty cluster-manager, rejecting " + followerCheckRequest
-                );
-            }  
-        }
-    }
-
-    private void handleApplyCommit(
-        ApplyCommitRequest applyCommitRequest,
-        Consumer<ClusterState> updateLastSeen,  
-        ActionListener<Void> applyListener
-    ) {
-        synchronized (mutex) {  
-            logger.trace("handleApplyCommit: applying commit {}", applyCommitRequest);
-
-            coordinationState.get().handleCommit(applyCommitRequest);  
-            final ClusterState committedState = hideStateIfNotRecovered(coordinationState.get().getLastAcceptedState());
-            applierState = mode == Mode.CANDIDATE ? clusterStateWithNoClusterManagerBlock(committedState) : committedState;
-            clusterApplier.setPreCommitState(applierState);  
-            updateLastSeen.accept(coordinationState.get().getLastAcceptedState());
-
-            if (applyCommitRequest.getSourceNode().equals(getLocalNode())) {  
-                // cluster-manager node applies the committed state at the end of the publication process, not here.
-                applyListener.onResponse(null);
-            } else {  
-                clusterApplier.onNewClusterState(applyCommitRequest.toString(), () -> applierState, new ClusterApplyListener() {
-
-                    @Override  
-                    public void onFailure(String source, Exception e) {
-                        applyListener.onFailure(e);
-                    }  
-
-                    @Override
-                    public void onSuccess(String source) {  
-                        closePrevotingAndElectionScheduler();
-                        applyListener.onResponse(null);
-                    }  
-                });
-            }
-        }  
-    }
-
-    PublishWithJoinResponse handlePublishRequest(PublishRequest publishRequest) {  
-        assert publishRequest.getAcceptedState().nodes().getLocalNode().equals(getLocalNode()) : publishRequest.getAcceptedState()
-            .nodes()
-            .getLocalNode()  
-            + " != "
-            + getLocalNode();
-
-        synchronized (mutex) {
-            final DiscoveryNode sourceNode = publishRequest.getAcceptedState().nodes().getClusterManagerNode();
-            logger.debug(  
-                "handlePublishRequest: handling version [{}] from [{}]",
-                publishRequest.getAcceptedState().getVersion(),
-                sourceNode  
-            );
-
-            if (sourceNode.equals(getLocalNode()) && mode != Mode.LEADER) {  
-                // Rare case in which we stood down as leader between starting this publication and receiving it ourselves. The publication
-                // is already failed so there is no point in proceeding.
-                throw new CoordinationStateRejectedException("no longer leading this publication's term: " + publishRequest);  
-            }
-
-            if (publishRequest.getAcceptedState().term() == ZEN1_BWC_TERM  
-                && getCurrentTerm() == ZEN1_BWC_TERM
-                && mode == Mode.FOLLOWER
-                && Optional.of(sourceNode).equals(lastKnownLeader) == false) {  
-
-                logger.debug("received cluster state from {} but currently following {}, rejecting", sourceNode, lastKnownLeader);
-                throw new CoordinationStateRejectedException(  
-                    "received cluster state from " + sourceNode + " but currently following " + lastKnownLeader + ", rejecting"
-                );
-            }  
-
-            final ClusterState localState = coordinationState.get().getLastAcceptedState();
-
-            if (localState.metadata().clusterUUIDCommitted()
-                && localState.metadata().clusterUUID().equals(publishRequest.getAcceptedState().metadata().clusterUUID()) == false) {
-                logger.warn(  
-                    "received cluster state from {} with a different cluster uuid {} than local cluster uuid {}, rejecting",
-                    sourceNode,
-                    publishRequest.getAcceptedState().metadata().clusterUUID(),  
-                    localState.metadata().clusterUUID()
-                );
-                throw new CoordinationStateRejectedException(  
-                    "received cluster state from "
-                        + sourceNode
-                        + " with a different cluster uuid "  
-                        + publishRequest.getAcceptedState().metadata().clusterUUID()
-                        + " than local cluster uuid "
-                        + localState.metadata().clusterUUID()  
-                        + ", rejecting"
-                );
-            }  
-
-            if (publishRequest.getAcceptedState().term() > localState.term()) {
-                // only do join validation if we have not accepted state from this cluster manager yet  
-                onJoinValidators.forEach(a -> a.accept(getLocalNode(), publishRequest.getAcceptedState()));
-            }
-
-            ensureTermAtLeast(sourceNode, publishRequest.getAcceptedState().term());
-            final PublishResponse publishResponse = coordinationState.get().handlePublishRequest(publishRequest);
-
-            if (sourceNode.equals(getLocalNode())) {
-                preVoteCollector.update(getPreVoteResponse(), getLocalNode());
-            } else {  
-                becomeFollower("handlePublishRequest", sourceNode); // also updates preVoteCollector
-            }
-
-            return new PublishWithJoinResponse(
-                publishResponse,
-                joinWithDestination(lastJoin, sourceNode, publishRequest.getAcceptedState().term())  
-            );
-        }
-    }  
-
-    private static Optional<Join> joinWithDestination(Optional<Join> lastJoin, DiscoveryNode leader, long term) {
-        if (lastJoin.isPresent() && lastJoin.get().targetMatches(leader) && lastJoin.get().getTerm() == term) {  
-            return lastJoin;
-        }
-
-        return Optional.empty();
-    }
-
-    private void closePrevotingAndElectionScheduler() {
-        closePrevoting();
-        closeElectionScheduler();  
-    }
-
-    private void closePrevoting() {  
-        if (prevotingRound != null) {
-            prevotingRound.close();
-            prevotingRound = null;  
-        }
-    }
-
-    private void closeElectionScheduler() {
-        if (electionScheduler != null) {
-            electionScheduler.close();  
-            electionScheduler = null;
-        }
-    }  
-
-    // package-visible for testing
-    boolean isElectionSchedulerRunning() {  
-        return electionScheduler != null;
-    }
-
-    private void updateMaxTermSeen(final long term) {
-        synchronized (mutex) {
-            maxTermSeen = Math.max(maxTermSeen, term);  
-            final long currentTerm = getCurrentTerm();
-            if (mode == Mode.LEADER && maxTermSeen > currentTerm) {
-                // Bump our term. However if there is a publication in flight then doing so would cancel the publication, so don't do that  
-                // since we check whether a term bump is needed at the end of the publication too.
-                if (publicationInProgress()) {
-                    logger.debug("updateMaxTermSeen: maxTermSeen = {} > currentTerm = {}, enqueueing term bump", maxTermSeen, currentTerm);  
-                } else {
-                    try {
-                        logger.debug("updateMaxTermSeen: maxTermSeen = {} > currentTerm = {}, bumping term", maxTermSeen, currentTerm);  
-                        ensureTermAtLeast(getLocalNode(), maxTermSeen);
-                        startElection();
-                    } catch (Exception e) {  
-                        logger.warn(new ParameterizedMessage("failed to bump term to {}", maxTermSeen), e);
-                        becomeCandidate("updateMaxTermSeen");
-                    }  
-                }
-            }
-        }  
-    }
-
-    private void startElection() {  
-        synchronized (mutex) {
-            // The preVoteCollector is only active while we are candidate, but it does not call this method with synchronisation, so we have
-            // to check our mode again here.  
-            if (mode == Mode.CANDIDATE) {
-                if (localNodeMayWinElection(getLastAcceptedState()) == false) {
-                    logger.trace("skip election as local node may not win it: {}", getLastAcceptedState().coordinationMetadata());  
-                    return;
-                }
-
-                final StartJoinRequest startJoinRequest = new StartJoinRequest(getLocalNode(), Math.max(getCurrentTerm(), maxTermSeen) + 1);
-                logger.debug("starting election with {}", startJoinRequest);
-                getDiscoveredNodes().forEach(node -> {  
-                    if (isZen1Node(node) == false) {
-                        joinHelper.sendStartJoinRequest(startJoinRequest, node);
-                    }  
-                });
-            }
-        }  
-    }
-
-    private void abdicateTo(DiscoveryNode newClusterManager) {  
-        assert Thread.holdsLock(mutex);
-        assert mode == Mode.LEADER : "expected to be leader on abdication but was " + mode;
-        assert newClusterManager.isClusterManagerNode() : "should only abdicate to cluster-manager-eligible node but was "  
-            + newClusterManager;
-        final StartJoinRequest startJoinRequest = new StartJoinRequest(newClusterManager, Math.max(getCurrentTerm(), maxTermSeen) + 1);
-        logger.info("abdicating to {} with term {}", newClusterManager, startJoinRequest.getTerm());  
-        getLastAcceptedState().nodes().clusterManagersFirstStream().forEach(node -> {
-            if (isZen1Node(node) == false) {
-                joinHelper.sendStartJoinRequest(startJoinRequest, node);  
-            }
-        });
-        // handling of start join messages on the local node will be dispatched to the generic thread-pool  
-        assert mode == Mode.LEADER : "should still be leader after sending abdication messages " + mode;
-        // explicitly move node to candidate state so that the next cluster state update task yields an onNoLongerMaster event
-        becomeCandidate("after abdicating to " + newClusterManager);  
-    }
-
-    private static boolean localNodeMayWinElection(ClusterState lastAcceptedState) {  
-        final DiscoveryNode localNode = lastAcceptedState.nodes().getLocalNode();
-        assert localNode != null;
-        return nodeMayWinElection(lastAcceptedState, localNode);  
-    }
-
-    private static boolean nodeMayWinElection(ClusterState lastAcceptedState, DiscoveryNode node) {  
-        final String nodeId = node.getId();
-        return lastAcceptedState.getLastCommittedConfiguration().getNodeIds().contains(nodeId)
-            || lastAcceptedState.getLastAcceptedConfiguration().getNodeIds().contains(nodeId)  
-            || lastAcceptedState.getVotingConfigExclusions().stream().noneMatch(vce -> vce.getNodeId().equals(nodeId));
-    }
-
-    private Optional<Join> ensureTermAtLeast(DiscoveryNode sourceNode, long targetTerm) {
-        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-        if (getCurrentTerm() < targetTerm) {  
-            return Optional.of(joinLeaderInTerm(new StartJoinRequest(sourceNode, targetTerm)));
-        }
-        return Optional.empty();  
-    }
-
-    private Join joinLeaderInTerm(StartJoinRequest startJoinRequest) {  
-        synchronized (mutex) {
-            logger.debug("joinLeaderInTerm: for [{}] with term {}", startJoinRequest.getSourceNode(), startJoinRequest.getTerm());
-            final Join join = coordinationState.get().handleStartJoin(startJoinRequest);  
-            lastJoin = Optional.of(join);
-            peerFinder.setCurrentTerm(getCurrentTerm());
-            if (mode != Mode.CANDIDATE) {  
-                becomeCandidate("joinLeaderInTerm"); // updates followersChecker and preVoteCollector
-            } else {
-                followersChecker.updateFastResponseState(getCurrentTerm(), mode);  
-                preVoteCollector.update(getPreVoteResponse(), null);
-            }
-            return join;  
-        }
-    }
-
-    private void handleJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
-        assert Thread.holdsLock(mutex) == false;
-        assert getLocalNode().isClusterManagerNode() : getLocalNode() + " received a join but is not cluster-manager-eligible";  
-        logger.trace("handleJoinRequest: as {}, handling {}", mode, joinRequest);
-
-        if (singleNodeDiscovery && joinRequest.getSourceNode().equals(getLocalNode()) == false) {  
-            joinCallback.onFailure(
-                new IllegalStateException(
-                    "cannot join node with ["  
-                        + DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey()
-                        + "] set to ["
-                        + DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE  
-                        + "] discovery"
-                )
-            );  
-            return;
-        }
-
-        transportService.connectToNode(joinRequest.getSourceNode(), ActionListener.wrap(ignore -> {
-            final ClusterState stateForJoinValidation = getStateForClusterManagerService();
-            if (stateForJoinValidation.nodes().isLocalNodeElectedClusterManager()) {  
-                onJoinValidators.forEach(a -> a.accept(joinRequest.getSourceNode(), stateForJoinValidation));
-                if (stateForJoinValidation.getBlocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
-                    // we do this in a couple of places including the cluster update thread. This one here is really just best effort  
-                    // to ensure we fail as fast as possible.
-                    JoinTaskExecutor.ensureMajorVersionBarrier(
-                        joinRequest.getSourceNode().getVersion(),  
-                        stateForJoinValidation.getNodes().getMinNodeVersion()
-                    );
-                    // we are checking source node commission status here to reject any join request coming from a decommissioned node  
-                    // even before executing the join task to fail fast
-                    JoinTaskExecutor.ensureNodeCommissioned(joinRequest.getSourceNode(), stateForJoinValidation.metadata());
-                }  
-                sendValidateJoinRequest(stateForJoinValidation, joinRequest, joinCallback);
-            } else {
-                processJoinRequest(joinRequest, joinCallback);  
-            }
-        }, joinCallback::onFailure));
-    }  
-
-    // package private for tests
-    void sendValidateJoinRequest(ClusterState stateForJoinValidation, JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {  
-        // validate the join on the joining node, will throw a failure if it fails the validation
-        joinHelper.sendValidateJoinRequest(joinRequest.getSourceNode(), stateForJoinValidation, new ActionListener<Empty>() {
-            @Override  
-            public void onResponse(Empty empty) {
-                try {
-                    processJoinRequest(joinRequest, joinCallback);  
-                } catch (Exception e) {
-                    joinCallback.onFailure(e);
-                }  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                logger.warn(
-                    () -> new ParameterizedMessage("failed to validate incoming join request from node [{}]", joinRequest.getSourceNode()),  
-                    e
-                );
-                joinCallback.onFailure(new IllegalStateException("failure when sending a validation request to node", e));  
-            }
-        });
-    }  
-
-    private void processJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
-        final Optional<Join> optionalJoin = joinRequest.getOptionalJoin();  
-        synchronized (mutex) {
-            updateMaxTermSeen(joinRequest.getTerm());
-
-            final CoordinationState coordState = coordinationState.get();
-            final boolean prevElectionWon = coordState.electionWon();
-
-            optionalJoin.ifPresent(this::handleJoin);
-            joinAccumulator.handleJoinRequest(joinRequest.getSourceNode(), joinCallback);
-
-            if (prevElectionWon == false && coordState.electionWon()) {
-                becomeLeader("handleJoinRequest");
-            }  
-        }
-    }
-
-    void becomeCandidate(String method) {
-        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-        logger.debug(  
-            "{}: coordinator becoming CANDIDATE in term {} (was {}, lastKnownLeader was [{}])",
-            method,
-            getCurrentTerm(),  
-            mode,
-            lastKnownLeader
-        );  
-
-        if (mode != Mode.CANDIDATE) {
-            final Mode prevMode = mode;  
-            mode = Mode.CANDIDATE;
-            cancelActivePublication("become candidate: " + method);
-            joinAccumulator.close(mode);  
-            joinAccumulator = joinHelper.new CandidateJoinAccumulator();
-
-            peerFinder.activate(coordinationState.get().getLastAcceptedState().nodes());  
-            clusterFormationFailureHelper.start();
-
-            leaderChecker.setCurrentNodes(DiscoveryNodes.EMPTY_NODES);  
-            leaderChecker.updateLeader(null);
-
-            followersChecker.clearCurrentNodes();  
-            followersChecker.updateFastResponseState(getCurrentTerm(), mode);
-            lagDetector.clearTrackedNodes();
-
-            if (prevMode == Mode.LEADER) {
-                cleanClusterManagerService();
-            }  
-
-            if (applierState.nodes().getClusterManagerNodeId() != null) {
-                applierState = clusterStateWithNoClusterManagerBlock(applierState);  
-                clusterApplier.onNewClusterState("becoming candidate: " + method, () -> applierState, (source, e) -> {});
-            }
-        }  
-
-        preVoteCollector.update(getPreVoteResponse(), null);
-    }  
-
-    void becomeLeader(String method) {
-        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-        assert mode == Mode.CANDIDATE : "expected candidate but was " + mode;
-        assert getLocalNode().isClusterManagerNode() : getLocalNode() + " became a leader but is not cluster-manager-eligible";
-
-        logger.debug(
-            "{}: coordinator becoming LEADER in term {} (was {}, lastKnownLeader was [{}])",
-            method,  
-            getCurrentTerm(),
-            mode,
-            lastKnownLeader  
-        );
-
-        mode = Mode.LEADER;  
-        joinAccumulator.close(mode);
-        joinAccumulator = joinHelper.new LeaderJoinAccumulator();
-
-        lastKnownLeader = Optional.of(getLocalNode());
-        peerFinder.deactivate(getLocalNode());
-        clusterFormationFailureHelper.stop();  
-        closePrevoting();
-        preVoteCollector.update(getPreVoteResponse(), getLocalNode());
-
-        assert leaderChecker.leader() == null : leaderChecker.leader();
-        followersChecker.updateFastResponseState(getCurrentTerm(), mode);
-    }  
-
-    void becomeFollower(String method, DiscoveryNode leaderNode) {
-        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-        assert leaderNode.isClusterManagerNode() : leaderNode + " became a leader but is not cluster-manager-eligible";
-        assert mode != Mode.LEADER : "do not switch to follower from leader (should be candidate first)";
-
-        if (mode == Mode.FOLLOWER && Optional.of(leaderNode).equals(lastKnownLeader)) {
-            logger.trace("{}: coordinator remaining FOLLOWER of [{}] in term {}", method, leaderNode, getCurrentTerm());
-        } else {  
-            logger.debug(
-                "{}: coordinator becoming FOLLOWER of [{}] in term {} (was {}, lastKnownLeader was [{}])",
-                method,  
-                leaderNode,
-                getCurrentTerm(),
-                mode,  
-                lastKnownLeader
-            );
-        }  
-
-        final boolean restartLeaderChecker = (mode == Mode.FOLLOWER && Optional.of(leaderNode).equals(lastKnownLeader)) == false;
-
-        if (mode != Mode.FOLLOWER) {
-            mode = Mode.FOLLOWER;
-            joinAccumulator.close(mode);  
-            joinAccumulator = new JoinHelper.FollowerJoinAccumulator();
-            leaderChecker.setCurrentNodes(DiscoveryNodes.EMPTY_NODES);
-        }  
-
-        lastKnownLeader = Optional.of(leaderNode);
-        peerFinder.deactivate(leaderNode);  
-        clusterFormationFailureHelper.stop();
-        closePrevoting();
-        cancelActivePublication("become follower: " + method);  
-        preVoteCollector.update(getPreVoteResponse(), leaderNode);
-
-        if (restartLeaderChecker) {  
-            leaderChecker.updateLeader(leaderNode);
-        }
-
-        followersChecker.clearCurrentNodes();
-        followersChecker.updateFastResponseState(getCurrentTerm(), mode);
-        lagDetector.clearTrackedNodes();  
-    }
-
-    private void cleanClusterManagerService() {  
-        clusterManagerService.submitStateUpdateTask("clean-up after stepping down as cluster-manager", new LocalClusterUpdateTask() {
-            @Override
-            public void onFailure(String source, Exception e) {  
-                // ignore
-                logger.trace("failed to clean-up after stepping down as cluster-manager", e);
-            }  
-
-            @Override
-            public ClusterTasksResult<LocalClusterUpdateTask> execute(ClusterState currentState) {  
-                if (currentState.nodes().isLocalNodeElectedClusterManager() == false) {
-                    allocationService.cleanCaches();
-                    // This set only needs to be maintained on active cluster-manager  
-                    // This is cleaned up to avoid stale entries which would block future reconnections
-                    logger.trace("Removing all pending disconnections as part of cluster-manager cleanup");
-                    nodeConnectionsService.clearPendingDisconnections();  
-                }
-                return unchanged();
-            }  
-
-        });
-    }  
-
-    private PreVoteResponse getPreVoteResponse() {
-        return new PreVoteResponse(  
-            getCurrentTerm(),
-            coordinationState.get().getLastAcceptedTerm(),
-            coordinationState.get().getLastAcceptedState().getVersionOrMetadataVersion()  
-        );
-    }
-
-    // package-visible for testing
-    long getCurrentTerm() {
-        synchronized (mutex) {  
-            return coordinationState.get().getCurrentTerm();
-        }
-    }  
-
-    // package-visible for testing
-    Mode getMode() {  
-        synchronized (mutex) {
-            return mode;
-        }  
-    }
-
-    // visible for testing  
-    DiscoveryNode getLocalNode() {
-        return transportService.getLocalNode();
-    }  
-
-    // package-visible for testing
-    boolean publicationInProgress() {  
-        synchronized (mutex) {
-            return currentPublication.isPresent();
-        }  
-    }
-
-    @Override  
-    protected void doStart() {
-        synchronized (mutex) {
-            coordinationState.set(new CoordinationState(getLocalNode(), persistedStateRegistry, electionStrategy, settings));  
-            peerFinder.setCurrentTerm(getCurrentTerm());
-            configuredHostsResolver.start();
-            final ClusterState lastAcceptedState = coordinationState.get().getLastAcceptedState();  
-            if (lastAcceptedState.metadata().clusterUUIDCommitted()) {
-                logger.info("cluster UUID [{}]", lastAcceptedState.metadata().clusterUUID());
-            }  
-            final VotingConfiguration votingConfiguration = lastAcceptedState.getLastCommittedConfiguration();
-            if (singleNodeDiscovery
-                && votingConfiguration.isEmpty() == false  
-                && votingConfiguration.hasQuorum(Collections.singleton(getLocalNode().getId())) == false) {
-                throw new IllegalStateException(
-                    "cannot start with ["  
-                        + DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey()
-                        + "] set to ["
-                        + DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE  
-                        + "] when local node "
-                        + getLocalNode()
-                        + " does not have quorum in voting configuration "  
-                        + votingConfiguration
-                );
-            }  
-            ClusterState initialState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(settings))
-                .blocks(
-                    ClusterBlocks.builder()  
-                        .addGlobalBlock(STATE_NOT_RECOVERED_BLOCK)
-                        .addGlobalBlock(noClusterManagerBlockService.getNoClusterManagerBlock())
-                )  
-                .nodes(DiscoveryNodes.builder().add(getLocalNode()).localNodeId(getLocalNode().getId()))
-                .build();
-            applierState = initialState;  
-            clusterApplier.setInitialState(initialState);
-        }
-    }  
-
-    @Override
-    public DiscoveryStats stats() {  
-        ClusterStateStats clusterStateStats = clusterManagerService.getClusterStateStats();
-        ArrayList<PersistedStateStats> stats = new ArrayList<>();
-        Stream.of(PersistedStateRegistry.PersistedStateType.values()).forEach(stateType -> {  
-            if (persistedStateRegistry.getPersistedState(stateType) != null
-                && persistedStateRegistry.getPersistedState(stateType).getStats() != null) {
-                stats.add(persistedStateRegistry.getPersistedState(stateType).getStats());  
-            }
-        });
-        if (remoteClusterStateService != null) {  
-            stats.add(remoteClusterStateService.getFullDownloadStats());
-            stats.add(remoteClusterStateService.getDiffDownloadStats());
-        }  
-        clusterStateStats.setPersistenceStats(stats);
-        return new DiscoveryStats(new PendingClusterStateStats(0, 0, 0), publicationHandler.stats(), clusterStateStats);
-    }  
-
-    @Override
-    public void startInitialJoin() {  
-        synchronized (mutex) {
-            logger.trace("Starting initial join, becoming candidate");
-            becomeCandidate("startInitialJoin");  
-        }
-        clusterBootstrapService.scheduleUnconfiguredBootstrap();
-    }  
-
-    @Override
-    public void setNodeConnectionsService(NodeConnectionsService nodeConnectionsService) {  
-        assert this.nodeConnectionsService == null : "nodeConnectionsService is already set";
-        this.nodeConnectionsService = nodeConnectionsService;
-    }  
-
-    @Override
-    protected void doStop() {  
-        configuredHostsResolver.stop();
-    }
-
-    @Override
-    protected void doClose() throws IOException {
-        final CoordinationState coordinationState = this.coordinationState.get();  
-        if (coordinationState != null) {
-            // This looks like a race that might leak an unclosed CoordinationState if it's created while execution is here, but this method
-            // is synchronized on AbstractLifecycleComponent#lifestyle, as is the doStart() method that creates the CoordinationState, so  
-            // it's all ok.
-            synchronized (mutex) {
-                coordinationState.close();  
-            }
-        }
-    }  
-
-    public void invariant() {
-        synchronized (mutex) {  
-            final Optional<DiscoveryNode> peerFinderLeader = peerFinder.getLeader();
-            assert peerFinder.getCurrentTerm() == getCurrentTerm();
-            assert followersChecker.getFastResponseState().term == getCurrentTerm() : followersChecker.getFastResponseState();  
-            assert followersChecker.getFastResponseState().mode == getMode() : followersChecker.getFastResponseState();
-            assert (applierState.nodes().getClusterManagerNodeId() == null) == applierState.blocks()
-                .hasGlobalBlockWithId(NO_CLUSTER_MANAGER_BLOCK_ID);  
-            assert preVoteCollector.getPreVoteResponse().equals(getPreVoteResponse()) : preVoteCollector + " vs " + getPreVoteResponse();
-
-            assert lagDetector.getTrackedNodes().contains(getLocalNode()) == false : lagDetector.getTrackedNodes();  
-            assert followersChecker.getKnownFollowers().equals(lagDetector.getTrackedNodes()) : followersChecker.getKnownFollowers()
-                + " vs "
-                + lagDetector.getTrackedNodes();  
-
-            if (mode == Mode.LEADER) {
-                final boolean becomingClusterManager = getStateForClusterManagerService().term() != getCurrentTerm();  
-
-                assert coordinationState.get().electionWon();
-                assert lastKnownLeader.isPresent() && lastKnownLeader.get().equals(getLocalNode());  
-                assert joinAccumulator instanceof JoinHelper.LeaderJoinAccumulator;
-                assert peerFinderLeader.equals(lastKnownLeader) : peerFinderLeader;
-                assert prevotingRound == null : prevotingRound;  
-                assert becomingClusterManager || getStateForClusterManagerService().nodes().getClusterManagerNodeId() != null
-                    : getStateForClusterManagerService();
-                assert leaderChecker.leader() == null : leaderChecker.leader();  
-                assert getLocalNode().equals(applierState.nodes().getClusterManagerNode())
-                    || (applierState.nodes().getClusterManagerNodeId() == null && applierState.term() < getCurrentTerm());
-                assert preVoteCollector.getLeader() == getLocalNode() : preVoteCollector;  
-                assert clusterFormationFailureHelper.isRunning() == false;
-
+                    }
                 final boolean activePublication = currentPublication.map(CoordinatorPublication::isActiveForCurrentLeader).orElse(false);  
-                if (becomingClusterManager && activePublication == false) {
-                    // cluster state update task to become cluster-manager is submitted to ClusterManagerService,
-                    // but publication has not started yet  
-                    assert followersChecker.getKnownFollowers().isEmpty() : followersChecker.getKnownFollowers();
-                } else {
-                    final ClusterState lastPublishedState;  
-                    if (activePublication) {
-                        // active publication in progress: followersChecker is up-to-date with nodes that we're actively publishing to
-                        lastPublishedState = currentPublication.get().publishedState();  
-                    } else {
-                        // no active publication: followersChecker is up-to-date with the nodes of the latest publication
-                        lastPublishedState = coordinationState.get().getLastAcceptedState();  
-                    }
-                    final Set<DiscoveryNode> lastPublishedNodes = new HashSet<>();
-                    lastPublishedState.nodes().forEach(lastPublishedNodes::add);  
-                    assert lastPublishedNodes.remove(getLocalNode()); // followersChecker excludes local node
-                    assert lastPublishedNodes.equals(followersChecker.getKnownFollowers()) : lastPublishedNodes
-                        + " != "  
-                        + followersChecker.getKnownFollowers();
-                }
-
-                assert becomingClusterManager
-                    || activePublication
-                    || coordinationState.get()  
-                        .getLastAcceptedConfiguration()
-                        .equals(coordinationState.get().getLastCommittedConfiguration()) : coordinationState.get()
-                            .getLastAcceptedConfiguration()  
-                            + " != "
-                            + coordinationState.get().getLastCommittedConfiguration();
-            } else if (mode == Mode.FOLLOWER) {  
-                assert coordinationState.get().electionWon() == false : getLocalNode() + " is FOLLOWER so electionWon() should be false";
-                assert lastKnownLeader.isPresent() && (lastKnownLeader.get().equals(getLocalNode()) == false);
-                assert joinAccumulator instanceof JoinHelper.FollowerJoinAccumulator;  
-                assert peerFinderLeader.equals(lastKnownLeader) : peerFinderLeader;
-                assert prevotingRound == null : prevotingRound;
-                assert getStateForClusterManagerService().nodes().getClusterManagerNodeId() == null : getStateForClusterManagerService();  
-                assert leaderChecker.currentNodeIsClusterManager() == false;
-                assert lastKnownLeader.equals(Optional.of(leaderChecker.leader()));
-                assert followersChecker.getKnownFollowers().isEmpty();  
-                assert lastKnownLeader.get().equals(applierState.nodes().getClusterManagerNode())
-                    || (applierState.nodes().getClusterManagerNodeId() == null
-                        && (applierState.term() < getCurrentTerm() || applierState.version() < getLastAcceptedState().version()));  
-                assert currentPublication.map(Publication::isCommitted).orElse(true);
-                assert preVoteCollector.getLeader().equals(lastKnownLeader.get()) : preVoteCollector;
-                assert clusterFormationFailureHelper.isRunning() == false;  
-            } else {
-                assert mode == Mode.CANDIDATE;
-                assert joinAccumulator instanceof JoinHelper.CandidateJoinAccumulator;  
-                assert peerFinderLeader.isPresent() == false : peerFinderLeader;
-                assert prevotingRound == null || electionScheduler != null;
-                assert getStateForClusterManagerService().nodes().getClusterManagerNodeId() == null : getStateForClusterManagerService();  
-                assert leaderChecker.currentNodeIsClusterManager() == false;
-                assert leaderChecker.leader() == null : leaderChecker.leader();
-                assert followersChecker.getKnownFollowers().isEmpty();  
-                assert applierState.nodes().getClusterManagerNodeId() == null;
-                assert currentPublication.map(Publication::isCommitted).orElse(true);
-                assert preVoteCollector.getLeader() == null : preVoteCollector;  
-                assert clusterFormationFailureHelper.isRunning();
-            }
-        }  
-    }
-
-    public boolean isInitialConfigurationSet() {  
-        return getStateForClusterManagerService().getLastAcceptedConfiguration().isEmpty() == false;
-    }
-
-    /**
-     * Sets the initial configuration to the given {@link VotingConfiguration}. This method is safe to call
-     * more than once, as long as the argument to each call is the same.  
-     *
-     * @param votingConfiguration The nodes that should form the initial configuration.
-     * @return whether this call successfully set the initial configuration - if false, the cluster has already been bootstrapped.  
-     */
-    public boolean setInitialConfiguration(final VotingConfiguration votingConfiguration) {
-        synchronized (mutex) {  
-            final ClusterState currentState = getStateForClusterManagerService();
-
-            if (isInitialConfigurationSet()) {  
-                logger.debug("initial configuration already set, ignoring {}", votingConfiguration);
-                return false;
-            }  
-
-            if (getLocalNode().isClusterManagerNode() == false) {
-                logger.debug("skip setting initial configuration as local node is not a cluster-manager-eligible node");  
-                throw new CoordinationStateRejectedException(
-                    "this node is not cluster-manager-eligible, but cluster bootstrapping can only happen on a cluster-manager-eligible node"
-                );  
-            }
-
-            if (votingConfiguration.getNodeIds().contains(getLocalNode().getId()) == false) {  
-                logger.debug("skip setting initial configuration as local node is not part of initial configuration");
-                throw new CoordinationStateRejectedException("local node is not part of initial configuration");
-            }  
-
-            final List<DiscoveryNode> knownNodes = new ArrayList<>();
-            knownNodes.add(getLocalNode());  
-            peerFinder.getFoundPeers().forEach(knownNodes::add);
-
-            if (votingConfiguration.hasQuorum(knownNodes.stream().map(DiscoveryNode::getId).collect(Collectors.toList())) == false) {  
-                logger.debug(
-                    "skip setting initial configuration as not enough nodes discovered to form a quorum in the "
-                        + "initial configuration [knownNodes={}, {}]",  
-                    knownNodes,
-                    votingConfiguration
-                );  
-                throw new CoordinationStateRejectedException(
-                    "not enough nodes discovered to form a quorum in the initial configuration "
-                        + "[knownNodes="  
-                        + knownNodes
-                        + ", "
-                        + votingConfiguration  
-                        + "]"
-                );
-            }  
-
-            logger.info("setting initial configuration to {}", votingConfiguration);
-            final CoordinationMetadata coordinationMetadata = CoordinationMetadata.builder(currentState.coordinationMetadata())  
-                .lastAcceptedConfiguration(votingConfiguration)
-                .lastCommittedConfiguration(votingConfiguration)
-                .build();  
-
-            Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
-            // automatically generate a UID for the metadata if we need to  
-            metadataBuilder.generateClusterUuidIfNeeded();
-            metadataBuilder.coordinationMetadata(coordinationMetadata);
-
-            coordinationState.get().setInitialState(ClusterState.builder(currentState).metadata(metadataBuilder).build());
-            assert localNodeMayWinElection(getLastAcceptedState()) : "initial state does not allow local node to win election: "
-                + getLastAcceptedState().coordinationMetadata();  
-            preVoteCollector.update(getPreVoteResponse(), null); // pick up the change to last-accepted version
-            startElectionScheduler();
-            return true;  
-        }
-    }
-
-    // Package-private for testing
-    ClusterState improveConfiguration(ClusterState clusterState) {
-        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-        assert validVotingConfigExclusionState(clusterState) : clusterState;
-
-        // exclude any nodes whose ID is in the voting config exclusions list ...  
-        final Stream<String> excludedNodeIds = clusterState.getVotingConfigExclusions().stream().map(VotingConfigExclusion::getNodeId);
-        // ... and also automatically exclude the node IDs of cluster-manager-ineligible nodes that were previously cluster-manager-eligible
-        // and are still in  
-        // the voting config. We could exclude all the cluster-manager-ineligible nodes here, but there could be quite a few of them and
-        // that makes
-        // the logging much harder to follow.  
-        final Stream<String> clusterManagerIneligibleNodeIdsInVotingConfig = StreamSupport.stream(clusterState.nodes().spliterator(), false)
-            .filter(
-                n -> n.isClusterManagerNode() == false  
-                    && (clusterState.getLastAcceptedConfiguration().getNodeIds().contains(n.getId())
-                        || clusterState.getLastCommittedConfiguration().getNodeIds().contains(n.getId()))
-            )  
-            .map(DiscoveryNode::getId);
-
-        final Set<DiscoveryNode> liveNodes = StreamSupport.stream(clusterState.nodes().spliterator(), false)  
-            .filter(DiscoveryNode::isClusterManagerNode)
-            .filter(coordinationState.get()::containsJoinVoteFor)
-            .filter(discoveryNode -> isZen1Node(discoveryNode) == false)  
-            .collect(Collectors.toSet());
-        final VotingConfiguration newConfig = reconfigurator.reconfigure(
-            liveNodes,  
-            Stream.concat(clusterManagerIneligibleNodeIdsInVotingConfig, excludedNodeIds).collect(Collectors.toSet()),
-            getLocalNode(),
-            clusterState.getLastAcceptedConfiguration()  
-        );
-
-        if (newConfig.equals(clusterState.getLastAcceptedConfiguration()) == false) {  
-            assert coordinationState.get().joinVotesHaveQuorumFor(newConfig);
-            return ClusterState.builder(clusterState)
-                .metadata(  
-                    Metadata.builder(clusterState.metadata())
-                        .coordinationMetadata(
-                            CoordinationMetadata.builder(clusterState.coordinationMetadata()).lastAcceptedConfiguration(newConfig).build()  
-                        )
-                )
-                .build();  
-        }
-        return clusterState;
-    }  
-
-    /*
-    * Valid Voting Configuration Exclusion state criteria:  
-    * 1. Every voting config exclusion with an ID of _absent_ should not match any nodes currently in the cluster by name
-    * 2. Every voting config exclusion with a name of _absent_ should not match any nodes currently in the cluster by ID
-     */  
-    static boolean validVotingConfigExclusionState(ClusterState clusterState) {
-        Set<VotingConfigExclusion> votingConfigExclusions = clusterState.getVotingConfigExclusions();
-        Set<String> nodeNamesWithAbsentId = votingConfigExclusions.stream()  
-            .filter(e -> e.getNodeId().equals(VotingConfigExclusion.MISSING_VALUE_MARKER))
-            .map(VotingConfigExclusion::getNodeName)
-            .collect(Collectors.toSet());  
-        Set<String> nodeIdsWithAbsentName = votingConfigExclusions.stream()
-            .filter(e -> e.getNodeName().equals(VotingConfigExclusion.MISSING_VALUE_MARKER))
-            .map(VotingConfigExclusion::getNodeId)  
-            .collect(Collectors.toSet());
-        for (DiscoveryNode node : clusterState.getNodes()) {
-            if (node.isClusterManagerNode()  
-                && (nodeIdsWithAbsentName.contains(node.getId()) || nodeNamesWithAbsentId.contains(node.getName()))) {
-                return false;
-            }  
-        }
-
-        return true;  
-    }
-
-    private AtomicBoolean reconfigurationTaskScheduled = new AtomicBoolean();  
-
-    private void scheduleReconfigurationIfNeeded() {
-        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-        assert mode == Mode.LEADER : mode;
-        assert currentPublication.isPresent() == false : "Expected no publication in progress";
-
-        final ClusterState state = getLastAcceptedState();
-        if (improveConfiguration(state) != state && reconfigurationTaskScheduled.compareAndSet(false, true)) {
-            logger.trace("scheduling reconfiguration");  
-            clusterManagerService.submitStateUpdateTask("reconfigure", new ClusterStateUpdateTask(Priority.URGENT) {
-                @Override
-                public ClusterState execute(ClusterState currentState) {  
-                    reconfigurationTaskScheduled.set(false);
+        if (remoteClusterStateService != null) {  
                     synchronized (mutex) {
-                        return improveConfiguration(currentState);  
-                    }
-                }
-
-                @Override
-                public void onFailure(String source, Exception e) {
-                    reconfigurationTaskScheduled.set(false);  
-                    logger.debug("reconfiguration failed", e);
-                }
-            });  
-        }
-    }
-
-    // exposed for tests
-    boolean missingJoinVoteFrom(DiscoveryNode node) {
-        return node.isClusterManagerNode() && coordinationState.get().containsJoinVoteFor(node) == false;  
-    }
-
-    private void handleJoin(Join join) {  
-        synchronized (mutex) {
-            ensureTermAtLeast(getLocalNode(), join.getTerm()).ifPresent(this::handleJoin);
-
-            if (coordinationState.get().electionWon()) {
-                // If we have already won the election then the actual join does not matter for election purposes, so swallow any exception
-                final boolean isNewJoinFromClusterManagerEligibleNode = handleJoinIgnoringExceptions(join);  
-
-                // If we haven't completely finished becoming cluster-manager then there's already a publication scheduled which will, in
-                // turn,  
-                // schedule a reconfiguration if needed. It's benign to schedule a reconfiguration anyway, but it might fail if it wins the
+                        + DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey()
+    private final TransportService transportService;
+            assert followersChecker.getKnownFollowers().equals(lagDetector.getTrackedNodes()) : followersChecker.getKnownFollowers()
+            electionStrategy,  
+            clusterSettings,
                 // race against the election-winning publication and log a big error message, which we can prevent by checking this here:
-                final boolean establishedAsClusterManager = mode == Mode.LEADER && getLastAcceptedState().term() == getCurrentTerm();  
-                if (isNewJoinFromClusterManagerEligibleNode && establishedAsClusterManager && publicationInProgress() == false) {
-                    scheduleReconfigurationIfNeeded();
-                }  
-            } else {
-                coordinationState.get().handleJoin(join); // this might fail and bubble up the exception
-            }  
-        }
-    }
-
-    /**
-     * @return true iff the join was from a new node and was successfully added
-     */  
-    private boolean handleJoinIgnoringExceptions(Join join) {
-        try {
-            return coordinationState.get().handleJoin(join);  
-        } catch (CoordinationStateRejectedException e) {
-            logger.debug(new ParameterizedMessage("failed to add {} - ignoring", join), e);
-            return false;  
-        }
-    }
-
-    public ClusterState getLastAcceptedState() {
-        synchronized (mutex) {
-            return coordinationState.get().getLastAcceptedState();  
-        }
-    }
-
-    @Nullable
-    public ClusterState getApplierState() {
-        return applierState;  
-    }
-
-    private List<DiscoveryNode> getDiscoveredNodes() {  
-        final List<DiscoveryNode> nodes = new ArrayList<>();
-        nodes.add(getLocalNode());
-        peerFinder.getFoundPeers().forEach(nodes::add);  
-        return nodes;
-    }
-
-    ClusterState getStateForClusterManagerService() {
-        synchronized (mutex) {
-            // expose last accepted cluster state as base state upon which the cluster_manager service  
-            // speculatively calculates the next cluster state update
-            final ClusterState clusterState = coordinationState.get().getLastAcceptedState();
-            if (mode != Mode.LEADER || clusterState.term() != getCurrentTerm()) {  
-                // the cluster-manager service checks if the local node is the cluster-manager node in order to fail execution of the state
-                // update early
-                return clusterStateWithNoClusterManagerBlock(clusterState);  
-            }
-            return clusterState;
-        }  
-    }
-
-    private ClusterState clusterStateWithNoClusterManagerBlock(ClusterState clusterState) {  
-        if (clusterState.nodes().getClusterManagerNodeId() != null) {
             // remove block if it already exists before adding new one
-            assert clusterState.blocks().hasGlobalBlockWithId(NO_CLUSTER_MANAGER_BLOCK_ID) == false  
-                : "NO_MASTER_BLOCK should only be added by Coordinator";
-            final ClusterBlocks clusterBlocks = ClusterBlocks.builder()
-                .blocks(clusterState.blocks())  
-                .addGlobalBlock(noClusterManagerBlockService.getNoClusterManagerBlock())
-                .build();
-            final DiscoveryNodes discoveryNodes = new DiscoveryNodes.Builder(clusterState.nodes()).clusterManagerNodeId(null).build();  
+            lastKnownLeader
             return ClusterState.builder(clusterState).blocks(clusterBlocks).nodes(discoveryNodes).build();
-        } else {
-            return clusterState;  
-        }
-    }
-
-    @Override
-    public void publish(
-        ClusterChangedEvent clusterChangedEvent,  
-        ActionListener<Void> publishListener,
-        ClusterStatePublisher.AckListener ackListener
-    ) {  
-        try {
-            synchronized (mutex) {
-                if (mode != Mode.LEADER || getCurrentTerm() != clusterChangedEvent.state().term()) {  
-                    logger.debug(
-                        () -> new ParameterizedMessage(
-                            "[{}] failed publication as node is no longer cluster-manager for term {}",  
-                            clusterChangedEvent.source(),
-                            clusterChangedEvent.state().term()
-                        )  
+            return currentPublication.isPresent();
                     );
-                    publishListener.onFailure(
-                        new FailedToCommitClusterStateException(  
-                            "node is no longer cluster-manager for term "
-                                + clusterChangedEvent.state().term()
-                                + " while handling publication"  
-                        )
-                    );
-                    return;  
-                }
-
-                if (currentPublication.isPresent()) {  
-                    assert false : "[" + currentPublication.get() + "] in progress, cannot start new publication";
-                    logger.warn(
-                        () -> new ParameterizedMessage(  
-                            "[{}] failed publication as already publication in progress",
-                            clusterChangedEvent.source()
-                        )  
-                    );
-                    publishListener.onFailure(
-                        new FailedToCommitClusterStateException("publication " + currentPublication.get() + " already in progress")  
-                    );
-                    return;
-                }  
-
-                assert assertPreviousStateConsistency(clusterChangedEvent);
-
-                final ClusterState clusterState = clusterChangedEvent.state();
-
-                assert getLocalNode().equals(clusterState.getNodes().get(getLocalNode().getId())) : getLocalNode()  
-                    + " should be in published "
-                    + clusterState;
-
-                final PublicationTransportHandler.PublicationContext publicationContext = publicationHandler.newPublicationContext(
-                    clusterChangedEvent,
-                    this.isRemotePublicationEnabled(),  
-                    persistedStateRegistry
-                );
-                logger.debug("initialized PublicationContext using class: {}", publicationContext.getClass().toString());  
-
-                final PublishRequest publishRequest = coordinationState.get().handleClientValue(clusterState);
-                final CoordinatorPublication publication = new CoordinatorPublication(  
-                    publishRequest,
-                    publicationContext,
-                    new ListenableFuture<>(),  
-                    ackListener,
-                    publishListener
-                );  
-                currentPublication = Optional.of(publication);
-
-                final DiscoveryNodes publishNodes = publishRequest.getAcceptedState().nodes();  
-                // marking pending disconnects before publish
-                // if a nodes tries to send a joinRequest while it is pending disconnect, it should fail
-                nodeConnectionsService.setPendingDisconnections(new HashSet<>(clusterChangedEvent.nodesDelta().removedNodes()));  
-                leaderChecker.setCurrentNodes(publishNodes);
-                followersChecker.setCurrentNodes(publishNodes);
-                lagDetector.setTrackedNodes(publishNodes);  
-                coordinationState.get().handlePrePublish(clusterState);
-                publication.start(followersChecker.getFaultyNodes());
-            }  
-        } catch (Exception e) {
-            logger.debug(() -> new ParameterizedMessage("[{}] publishing failed", clusterChangedEvent.source()), e);
-            publishListener.onFailure(new FailedToCommitClusterStateException("publishing failed", e));  
-        }
-    }
-
-    // there is no equals on cluster state, so we just serialize it to XContent and compare Maps
-    // deserialized from the resulting JSON
-    private boolean assertPreviousStateConsistency(ClusterChangedEvent event) {  
-        assert event.previousState() == coordinationState.get().getLastAcceptedState()
-            || XContentHelper.convertToMap(
-                JsonXContent.jsonXContent,  
-                Strings.toString(MediaTypeRegistry.JSON, event.previousState()),
-                false
-            )  
-                .equals(
-                    XContentHelper.convertToMap(
-                        JsonXContent.jsonXContent,  
-                        Strings.toString(
-                            MediaTypeRegistry.JSON,
-                            clusterStateWithNoClusterManagerBlock(coordinationState.get().getLastAcceptedState())  
-                        ),
-                        false
-                    )  
-                ) : Strings.toString(MediaTypeRegistry.JSON, event.previousState())
-                    + " vs "
-                    + Strings.toString(  
-                        MediaTypeRegistry.JSON,
-                        clusterStateWithNoClusterManagerBlock(coordinationState.get().getLastAcceptedState())
-                    );  
-        return true;
-    }
-
-    private <T> ActionListener<T> wrapWithMutex(ActionListener<T> listener) {
-        return new ActionListener<T>() {
-            @Override  
-            public void onResponse(T t) {
-                synchronized (mutex) {
-                    listener.onResponse(t);  
-                }
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                synchronized (mutex) {  
-                    listener.onFailure(e);
-                }
-            }  
-        };
-    }
-
-    private void cancelActivePublication(String reason) {
-        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-        if (currentPublication.isPresent()) {  
-            currentPublication.get().cancel(reason);
-        }
-    }  
-
-    public Collection<BiConsumer<DiscoveryNode, ClusterState>> getOnJoinValidators() {
-        return onJoinValidators;  
-    }
-
-    /**  
-     * The mode of the coordinator.
-     *
-     * @opensearch.internal  
-     */
-    public enum Mode {
-        CANDIDATE,  
-        LEADER,
-        FOLLOWER
-    }  
-
-    /**
-     * The coordinator peer finder.  
-     *
-     * @opensearch.internal
-     */  
-    private class CoordinatorPeerFinder extends PeerFinder {
-
-        CoordinatorPeerFinder(  
-            Settings settings,
-            TransportService transportService,
-            TransportAddressConnector transportAddressConnector,  
-            ConfiguredHostsResolver configuredHostsResolver
         ) {
-            super(  
-                settings,
-                transportService,
-                transportAddressConnector,  
-                singleNodeDiscovery ? hostsResolver -> Collections.emptyList() : configuredHostsResolver
-            );
-        }  
-
-        @Override
-        protected void onActiveClusterManagerFound(DiscoveryNode clusterManagerNode, long term) {  
+            settings,  
+    // deserialized from the resulting JSON
+    /**
+        ) {
+import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_LAGGING;
+import org.opensearch.cluster.ClusterName;  
+            getLocalNode(),
+                throw new CoordinationStateRejectedException(
+    Mode getMode() {  
+                    // we do this in a couple of places including the cluster update thread. This one here is really just best effort  
+                        .coordinationMetadata(
+            return true;  
+        joinAccumulator = joinHelper.new LeaderJoinAccumulator();
+    private final RemoteClusterStateService remoteClusterStateService;  
+                // only do join validation if we have not accepted state from this cluster manager yet  
+import static org.opensearch.gateway.ClusterStateUpdaters.hideStateIfNotRecovered;
+        final Set<DiscoveryNode> liveNodes = StreamSupport.stream(clusterState.nodes().spliterator(), false)  
+    public DiscoveryStats stats() {  
             synchronized (mutex) {
-                ensureTermAtLeast(clusterManagerNode, term);
-                joinHelper.sendJoinRequest(clusterManagerNode, getCurrentTerm(), joinWithDestination(lastJoin, clusterManagerNode, term));  
-            }
-        }
-
-        @Override
-        protected void startProbe(TransportAddress transportAddress) {
-            if (singleNodeDiscovery == false) {  
-                super.startProbe(transportAddress);
-            }
-        }  
-
-        @Override
-        protected void onFoundPeersUpdated() {  
-            synchronized (mutex) {
-                final Iterable<DiscoveryNode> foundPeers = getFoundPeers();
-                if (mode == Mode.CANDIDATE) {  
-                    final VoteCollection expectedVotes = new VoteCollection();
-                    foundPeers.forEach(expectedVotes::addVote);
-                    expectedVotes.addVote(Coordinator.this.getLocalNode());  
-                    final boolean foundQuorum = coordinationState.get().isElectionQuorum(expectedVotes);
-
-                    if (foundQuorum) {  
-                        if (electionScheduler == null) {
-                            startElectionScheduler();
-                        }  
-                    } else {
-                        closePrevotingAndElectionScheduler();
-                    }  
-                }
-            }
-
-            clusterBootstrapService.onFoundPeersUpdated();
-        }
-    }  
-
-    // package-visible for testing
-    synchronized void onNodeCommissionStatusChange(boolean localNodeCommissioned) {  
-        this.localNodeCommissioned = localNodeCommissioned;
-        peerFinder.onNodeCommissionStatusChange(localNodeCommissioned);
-    }  
-
-    public boolean localNodeCommissioned() {
-        return localNodeCommissioned;  
-    }
-
-    private void startElectionScheduler() {  
-        assert electionScheduler == null : electionScheduler;
-
-        if (getLocalNode().isClusterManagerNode() == false) {  
-            return;
-        }
-
-        final TimeValue gracePeriod = TimeValue.ZERO;
-        electionScheduler = electionSchedulerFactory.startElectionScheduler(gracePeriod, new Runnable() {
-            @Override  
-            public void run() {
                 synchronized (mutex) {
-                    if (mode == Mode.CANDIDATE) {  
-                        final ClusterState lastAcceptedState = coordinationState.get().getLastAcceptedState();
-
-                        if (localNodeMayWinElection(lastAcceptedState) == false) {  
-                            logger.trace("skip prevoting as local node may not win election: {}", lastAcceptedState.coordinationMetadata());
-                            return;
-                        }  
-
-                        final StatusInfo statusInfo = nodeHealthService.getHealth();
-                        if (statusInfo.getStatus() == UNHEALTHY) {  
-                            logger.debug("skip prevoting as local node is unhealthy: [{}]", statusInfo.getInfo());
-                            return;
-                        }  
-
-                        // if either the localNodeCommissioned flag or the last accepted state thinks it should skip pre voting, we will
-                        // acknowledge it  
-                        if (nodeCommissioned(lastAcceptedState.nodes().getLocalNode(), lastAcceptedState.metadata()) == false
-                            || localNodeCommissioned == false) {
-                            logger.debug("skip prevoting as local node is decommissioned");  
-                            return;
-                        }
-
-                        if (prevotingRound != null) {
-                            prevotingRound.close();
-                        }  
-                        final List<DiscoveryNode> discoveredNodes = getDiscoveredNodes().stream()
-                            .filter(n -> isZen1Node(n) == false)
-                            .collect(Collectors.toList());  
-
-                        prevotingRound = preVoteCollector.start(lastAcceptedState, discoveredNodes);
-                    }  
-                }
-            }
-
-            @Override
-            public String toString() {
-                return "scheduling of new prevoting round";  
-            }
-        });
-    }  
-
-    public Iterable<DiscoveryNode> getFoundPeers() {
-        return peerFinder.getFoundPeers();  
-    }
-
-    /**  
-     * If there is any current committed publication, this method cancels it.
-     * This method is used exclusively by tests.
-     * @return true if publication was cancelled, false if there is no current committed publication.  
      */
-    boolean cancelCommittedPublication() {
-        synchronized (mutex) {  
-            if (currentPublication.isPresent()) {
-                final CoordinatorPublication publication = currentPublication.get();
-                if (publication.isCommitted()) {  
-                    publication.cancel("cancelCommittedPublication");
+        return true;
+                && (nodeIdsWithAbsentName.contains(node.getId()) || nodeNamesWithAbsentId.contains(node.getName()))) {
+            return clusterState;  
+            final ClusterBlocks clusterBlocks = ClusterBlocks.builder()
+        // and are still in  
+    // TODO: only here temporarily for BWC development, remove once complete  
+        assert validVotingConfigExclusionState(clusterState) : clusterState;
+                        if (electionScheduler == null) {
+            if (singleNodeDiscovery == false) {  
+            // of a join from this node then we assume the latter and bump our term to obtain a vote from this node.  
+        CoordinatorPublication(
+                    "received cluster state from {} with a different cluster uuid {} than local cluster uuid {}, rejecting",
+        }  
+                assert becomingClusterManager
+                        closePrevotingAndElectionScheduler();
+        }  
+            currentPublication = Optional.empty();  
+    }
+                becomeCandidate("joinLeaderInTerm"); // updates followersChecker and preVoteCollector
+    }  
+                    // to ensure we fail as fast as possible.
+        final ClusterState state = getLastAcceptedState();
+                    "this node is not cluster-manager-eligible, but cluster bootstrapping can only happen on a cluster-manager-eligible node"
+import static org.opensearch.cluster.decommission.DecommissionHelper.nodeCommissioned;
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;  
+        clusterFormationFailureHelper.stop();
+            lastJoin = Optional.of(join);
+        return node.isClusterManagerNode() && coordinationState.get().containsJoinVoteFor(node) == false;  
+import org.opensearch.cluster.ClusterState;
+        );
+        } catch (CoordinationStateRejectedException e) {
+        }  
+        );
+            public void onFailure(Exception e) {
+            if (sourceNode.equals(getLocalNode())) {
+                mode,  
+                assert getLocalNode().equals(applierState.nodes().getClusterManagerNode())
+                    }  
+                if (becomingClusterManager && activePublication == false) {
+            if (mode != Mode.LEADER || clusterState.term() != getCurrentTerm()) {  
+                return clusterStateWithNoClusterManagerBlock(clusterState);  
+                assert lastKnownLeader.equals(Optional.of(leaderChecker.leader()));
+                        + DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE  
+                }
+                                            final List<DiscoveryNode> clusterManagerCandidates = completedNodes().stream()  
+                    "received cluster state from "
+        electionScheduler = electionSchedulerFactory.startElectionScheduler(gracePeriod, new Runnable() {
+                    synchronized (mutex) {  
+    );
+        assert mode == Mode.LEADER : mode;
+            return;
+                clusterManagerService.submitStateUpdateTask(  
+    ) {  
+        CANDIDATE,  
+                throw new IllegalStateException(
+        @Override
+            return coordinationState.get().handlePublishResponse(sourceNode, publishResponse);
+        assert this.nodeConnectionsService == null : "nodeConnectionsService is already set";
+        }
+            final boolean prevElectionWon = coordState.electionWon();
+                                                .filter(node -> nodeMayWinElection(state, node))
+                                                        completedNode -> futureVoteCollection.addJoinVote(
+    }
                     logger.debug("Cancelled publication of [{}].", publication);
+            }
+            }
+import org.opensearch.cluster.service.ClusterStateStats;  
+            .filter(e -> e.getNodeName().equals(VotingConfigExclusion.MISSING_VALUE_MARKER))
+                );
+                followersChecker.setCurrentNodes(publishNodes);
+                assert preVoteCollector.getLeader() == null : preVoteCollector;  
+import org.apache.logging.log4j.Logger;
+            method,  
+                                + clusterChangedEvent.state().term()
+        }
+        PersistedStateRegistry persistedStateRegistry,
+            // node voted for us and then rebooted, or it could be that it voted for a different node in this term. If we don't have a copy
+                lastKnownLeader
+ *
+            }
+}
+    }
+            knownNodes.add(getLocalNode());  
+        );
+import org.opensearch.cluster.service.ClusterManagerService;
+        );  
+                followersChecker.updateFastResponseState(getCurrentTerm(), mode);  
+    public static final long ZEN1_BWC_TERM = 0;
+        assert electionScheduler == null : electionScheduler;
+        if (getCurrentTerm() < targetTerm) {  
+            this::onNodeCommissionStatusChange,  
+                        new FailedToCommitClusterStateException(  
+            clusterApplier.setPreCommitState(applierState);  
+                                    assert currentPublication.get() == CoordinatorPublication.this;  
+    * Valid Voting Configuration Exclusion state criteria:  
+                JsonXContent.jsonXContent,  
+        this.followersChecker = new FollowersChecker(
+            final Mode prevMode = mode;  
+    @Override
+                // if a nodes tries to send a joinRequest while it is pending disconnect, it should fail
+    private void handleApplyCommit(
+        return localNodeCommissioned;  
+    }  
+            PublicationTransportHandler.PublicationContext publicationContext,
+                final DiscoveryNodes publishNodes = publishRequest.getAcceptedState().nodes();  
+                        closePrevotingAndElectionScheduler();
+        // validate the join on the joining node, will throw a failure if it fails the validation
+                    );
+        }
+    private long maxTermSeen;
+        assert getLocalNode().isClusterManagerNode() : getLocalNode() + " became a leader but is not cluster-manager-eligible";
+                    clusterChangedEvent,
+                cleanClusterManagerService();
+            logger.debug("publication ended unsuccessfully: {}", this);
+                        && (applierState.term() < getCurrentTerm() || applierState.version() < getLastAcceptedState().version()));  
+                throw new CoordinationStateRejectedException(
+        TimeValue.timeValueMillis(1),  
+        this.nodeHealthService = nodeHealthService;
+    }  
+            clusterBootstrapService.onFoundPeersUpdated();
+            transportService.getThreadPool(),  
+            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+import java.util.Optional;
+            } else {
+            final VotingConfiguration votingConfiguration = lastAcceptedState.getLastCommittedConfiguration();
+                }
+            this.localNodeAckEvent = localNodeAckEvent;  
+import static org.opensearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;  
+            transportService::getLocalNode
+        this.persistedStateRegistry = persistedStateRegistry;
+            final ClusterState stateForJoinValidation = getStateForClusterManagerService();
+    boolean publicationInProgress() {  
+    }  
+    private static boolean localNodeMayWinElection(ClusterState lastAcceptedState) {  
+import java.util.concurrent.atomic.AtomicBoolean;
+                        new FailedToCommitClusterStateException("publication " + currentPublication.get() + " already in progress")  
+            stats.add(remoteClusterStateService.getFullDownloadStats());
+ * this file be licensed under the Apache-2.0 license or a
+ * The main lifecycle resource coordinator
+/**  
+                synchronized (mutex) {  
+                    removePublicationAndPossiblyBecomeCandidate("Publication.onCompletion(false)");  
+import org.opensearch.cluster.service.ClusterApplier.ClusterApplyListener;
+/*  
+            infoTimeoutHandler.cancel();
+                                                        )  
+        logger.debug(
+        ClusterChangedEvent clusterChangedEvent,  
+                    assert committed;
+            + getLocalNode();
+            // term and therefore never removed the NO_MASTER_BLOCK for this term. This logic ensures that we quickly turn a node
+    private void onLeaderFailure(Exception e) {
+                    "received cluster state from " + sourceNode + " but currently following " + lastKnownLeader + ", rejecting"
+                    try {
+            }  
+                    foundPeers.forEach(expectedVotes::addVote);
+    private void abdicateTo(DiscoveryNode newClusterManager) {  
+            final CoordinationState coordState = coordinationState.get();
+                    @Override  
+            preVoteCollector.update(getPreVoteResponse(), null); // pick up the change to last-accepted version
+                                                    // check if cluster_manager candidate would be able to get an election quorum if we were
+            settings,
+                )
+                    "cannot join node with ["  
+                                        boolean attemptReconfiguration = true;  
+                    publishRequest,
+            }
+            final ClusterState localState = coordinationState.get().getLastAcceptedState();
+import static org.opensearch.monitor.StatusInfo.Status.UNHEALTHY;
+            if (missingJoinVoteFrom(discoveryNode)) {
+    }
+                        joinRequest.getSourceNode().getVersion(),  
+                                                        state.getLastAcceptedConfiguration(),
+import org.opensearch.transport.TransportService;
+     * The coordinator peer finder.  
+            public String toString() {
+            if (votingConfiguration.hasQuorum(knownNodes.stream().map(DiscoveryNode::getId).collect(Collectors.toList())) == false) {  
+            logger.debug(  
+            if (mode != Mode.CANDIDATE) {
+        getLastAcceptedState().nodes().clusterManagersFirstStream().forEach(node -> {
+            this::getStateForClusterManagerService,  
+                .metadata(  
+            clusterApplier.setInitialState(initialState);
+                assert prevotingRound == null : prevotingRound;  
+            cancelActivePublication("become candidate: " + method);
+            assert followersChecker.getFastResponseState().mode == getMode() : followersChecker.getFastResponseState();
+                    assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+                )
+                        ackListener.onNodeAck(node, e);  
+                                        }
+        }  
+                method,  
+            }  
+            }
+            if (mode == Mode.CANDIDATE) {
+        final TimeValue gracePeriod = TimeValue.ZERO;
+import java.util.HashSet;
+            this::getFoundPeers,
+                                + " while handling publication"  
+            prevotingRound = null;  
+            assert getCurrentTerm() >= publishResponse.getTerm();  
+    }  
+        Set<VotingConfigExclusion> votingConfigExclusions = clusterState.getVotingConfigExclusions();
+            this::joinLeaderInTerm,
+                                synchronized (mutex) {
+                .equals(
+                // Rare case in which we stood down as leader between starting this publication and receiving it ourselves. The publication
+    }  
+        if (restartLeaderChecker) {  
+                @Override
+     *
+                sourceNode  
+                joinHelper.sendStartJoinRequest(startJoinRequest, node);  
+                String reasonToPublish = switch (reason) {
+                    publication.cancel("cancelCommittedPublication");
+            electionScheduler.close();  
+                    }  
+                        + "] when local node "
+        ActionListener<Void> applyListener
+        CoordinatorPeerFinder(  
+import org.opensearch.threadpool.Scheduler;  
+                    clusterManagerMetrics.nodeLeftCounter,  
+                logger.debug("received cluster state from {} but currently following {}, rejecting", sourceNode, lastKnownLeader);
+            settings,
+                    () -> new ParameterizedMessage("failed to validate incoming join request from node [{}]", joinRequest.getSourceNode()),  
+        if (lastJoin.isPresent() && lastJoin.get().targetMatches(leader) && lastJoin.get().getTerm() == term) {  
+                        }  
+                    listener.onResponse(t);  
+            final ClusterState currentState = getStateForClusterManagerService();
+                        Strings.toString(
+            public void onResponse(T t) {
+        ClusterManagerMetrics clusterManagerMetrics,
+                false
+        protected Optional<ApplyCommitRequest> handlePublishResponse(DiscoveryNode sourceNode, PublishResponse publishResponse) {
+        for (DiscoveryNode node : clusterState.getNodes()) {
+                    logger.trace("Removing all pending disconnections as part of cluster-manager cleanup");
+                }
+                    joinCallback.onFailure(e);
+                        + ", rejecting"
+                        + "] set to ["
+        if (remoteClusterStateService != null) {  
+            this.publicationContext = publicationContext;
+            return coordinationState.get().isPublishQuorum(votes);  
+                    nodeConnectionsService.clearPendingDisconnections();  
+            // into follower, even before receiving the first cluster state update, but also don't have to deal with the situation
+                public void onNodeAck(DiscoveryNode node, Exception e) {
+                                                    final long futureElectionTerm = state.term() + 1;
+    private void removeNode(DiscoveryNode discoveryNode, String reason) {  
+        followersChecker.updateFastResponseState(getCurrentTerm(), mode);
+ */  
+            }  
+        this.random = random;  
+            }  
+    }
+ *
+            leaderChecker.updateLeader(null);
+                joinWithDestination(lastJoin, sourceNode, publishRequest.getAcceptedState().term())  
+                                                    return electionStrategy.isElectionQuorum(
+    long getCurrentTerm() {
+                    new NodeRemovalClusterStateTaskExecutor.Task(discoveryNode, reason),
+                .collect(Collectors.toList()),
+        peerFinder.deactivate(leaderNode);  
+                        // no active publication: followersChecker is up-to-date with the nodes of the latest publication
+                logger.trace("onFollowerCheckRequest: received check from faulty cluster-manager, rejecting {}", followerCheckRequest);
+            .collect(Collectors.toSet());
+            }
+    private final Collection<BiConsumer<DiscoveryNode, ClusterState>> onJoinValidators;  
+        // We may not have accepted our own state before receiving a join from another node, causing its join to be rejected (we cannot  
+                }  
+import org.opensearch.common.Booleans;
+                ensureTermAtLeast(clusterManagerNode, term);
+            coordinationState.get().getLastAcceptedTerm(),
+    private JoinHelper.JoinAccumulator joinAccumulator;
+                        + "]"
+            final ClusterState clusterState = coordinationState.get().getLastAcceptedState();
+     * If there is any current committed publication, this method cancels it.
+        preVoteCollector.update(getPreVoteResponse(), getLocalNode());
+                    assert receivedJoinsProcessed == false;
+            + " != "
+        protected void onActiveClusterManagerFound(DiscoveryNode clusterManagerNode, long term) {  
+        });
+                        + ", "
+    private ClusterState clusterStateWithNoClusterManagerBlock(ClusterState clusterState) {  
+        preVoteCollector.update(getPreVoteResponse(), null);
+                    if (isZen1Node(node) == false) {
+                public void onResponse(Void ignore) {
+                assert coordinationState.get().electionWon() == false : getLocalNode() + " is FOLLOWER so electionWon() should be false";
+                if (publicationInProgress()) {
+        this.leaderChecker = new LeaderChecker(
+                            + " != "
+    }
+    }  
+                super.startProbe(transportAddress);
+                    logger.debug("updateMaxTermSeen: maxTermSeen = {} > currentTerm = {}, enqueueing term bump", maxTermSeen, currentTerm);  
+                assert assertPreviousStateConsistency(clusterChangedEvent);
+        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+    private final FollowersChecker followersChecker;
+            return false;  
+            assert peerFinder.getCurrentTerm() == getCurrentTerm();
+ * software distributed under the License is distributed on an
+                if (localNodeMayWinElection(getLastAcceptedState()) == false) {
+                        )  
+                if (stateForJoinValidation.getBlocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
+    private Mode mode;
+        private void handleAssociatedJoin(Join join) {
+import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_HEALTHCHECK_FAIL;
+            final ClusterState lastAcceptedState = coordinationState.get().getLastAcceptedState();  
+            this::getClusterFormationState,  
+                                publishListener.onFailure(e);  
+import org.opensearch.cluster.ClusterStateTaskConfig;
+                @Override
+        clusterStateStats.setPersistenceStats(stats);
+                );
+            publicationContext.sendPublishRequest(destination, publishRequest, wrapWithMutex(responseActionListener));
+    void becomeFollower(String method, DiscoveryNode leaderNode) {
+            public ClusterTasksResult<LocalClusterUpdateTask> execute(ClusterState currentState) {  
+                    + " vs "
+                logger.trace("handling {}", join);
+                        .addGlobalBlock(noClusterManagerBlockService.getNoClusterManagerBlock())
+            nodeHealthService,
+            logger.trace("{}: coordinator remaining FOLLOWER of [{}] in term {}", method, leaderNode, getCurrentTerm());
+            public void run() {
+            }
+    public enum Mode {
+import org.opensearch.cluster.node.DiscoveryNodes;  
+    @Override  
+                singleNodeDiscovery ? hostsResolver -> Collections.emptyList() : configuredHostsResolver
+            this::handleApplyCommit,
+            @Override  
+            this::isInitialConfigurationSet,  
+                    knownNodes,
+                    }
+                clusterManagerMetrics.incrementCounter(
+            return;
+import java.util.Collections;
+    public boolean isInitialConfigurationSet() {  
+    }
+            configuredHostsResolver.start();
+                        if (statusInfo.getStatus() == UNHEALTHY) {  
+import org.opensearch.cluster.metadata.Metadata;
+                logger.trace("onFollowerCheckRequest: responding successfully to {}", followerCheckRequest);
+            Stream.concat(clusterManagerIneligibleNodeIdsInVotingConfig, excludedNodeIds).collect(Collectors.toSet()),
+                    case NODE_LEFT_REASON_LAGGING -> "lagging";  
+                } else {
+    }  
+    boolean missingJoinVoteFrom(DiscoveryNode node) {
+            }
+                .build();
+    protected void doStart() {
+                                cancelTimeoutHandlers();
+                final boolean establishedAsClusterManager = mode == Mode.LEADER && getLastAcceptedState().term() == getCurrentTerm();  
+                }
+        return Booleans.isTrue(discoveryNode.getAttributes().getOrDefault("zen1", "false"));
+                publishRequest.getAcceptedState().getVersion(),
+        logger.trace("handleJoinRequest: as {}, handling {}", mode, joinRequest);
+            transportService,
+                logger.warn(
+            final CoordinationMetadata coordinationMetadata = CoordinationMetadata.builder(currentState.coordinationMetadata())  
+        return false;
+                            clusterChangedEvent.source(),
+                                    currentPublication = Optional.empty();
+            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+        }  
+            .getLocalNode()  
+        }
+                if (isNewJoinFromClusterManagerEligibleNode && establishedAsClusterManager && publicationInProgress() == false) {
+    }
+        becomeCandidate("after abdicating to " + newClusterManager);  
+            }
+            if (applyCommitRequest.getSourceNode().equals(getLocalNode())) {  
+ * under the License.  
+            clusterManagerService,
+                    "cannot start with ["  
+                }
+                joinCallback.onFailure(new IllegalStateException("failure when sending a validation request to node", e));  
+        }  
+                    + clusterState;
+     */  
+        }
+                lagDetector.setTrackedNodes(publishNodes);  
+                    } catch (Exception e) {  
+    private final ClusterManagerService clusterManagerService;  
+        );
+    private boolean assertPreviousStateConsistency(ClusterChangedEvent event) {  
+                        startElection();
+            final DiscoveryNode sourceNode = publishRequest.getAcceptedState().nodes().getClusterManagerNode();
+import org.opensearch.core.action.ActionListener;  
+            // speculatively calculates the next cluster state update
+    protected void doStop() {  
+            // The preVoteCollector is only active while we are candidate, but it does not call this method with synchronisation, so we have
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+                                                .filter(node -> {  
+                settings,
+                public void onFailure(String source, Exception e) {
+                                                .collect(Collectors.toList());  
+    private void updateMaxTermSeen(final long term) {
+        ClusterManagerService clusterManagerService,
+        assert Thread.holdsLock(mutex);
+            } else if (mode == Mode.FOLLOWER) {  
+                    1.0,
+            );  
+                }
+import java.util.function.BiConsumer;
+        }  
+                    return;
+    synchronized void onNodeCommissionStatusChange(boolean localNodeCommissioned) {  
+package org.opensearch.cluster.coordination;
+                    "onFollowerCheckRequest: received check from faulty cluster-manager, rejecting " + followerCheckRequest
+                public String toString() {
+    }
+    // exposed for tests
+    private void handleJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
+        boolean isActiveForCurrentLeader() {  
+            transportService.getThreadPool(),
+            settings,
+        this.nodeRemovalExecutor = new NodeRemovalClusterStateTaskExecutor(allocationService, logger);
+                    : getStateForClusterManagerService();
+        assert mode == Mode.CANDIDATE : "expected candidate but was " + mode;
+                );
+                        + knownNodes
+                                localNodeAckEvent.onFailure(e);
+            );
+                    votingConfiguration
+        assert Thread.holdsLock(mutex) == false;
+                throw new CoordinationStateRejectedException(
+                    final boolean foundQuorum = coordinationState.get().isElectionQuorum(expectedVotes);
+            transportService,  
+                    return "scheduled timeout for " + CoordinatorPublication.this;
+            if (prevMode == Mode.LEADER) {
+    private final Supplier<CoordinationState.PersistedState> persistedStateSupplier;
+                return false;
+        } else {
+            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+                && Optional.of(sourceNode).equals(lastKnownLeader) == false) {  
+            logger.debug(new ParameterizedMessage("failed to add {} - ignoring", join), e);
+            if (mode != Mode.CANDIDATE) {  
+                    ackListener,
+                + lagDetector.getTrackedNodes();  
+            this::updateMaxTermSeen,
+    public void publish(
+            return remoteClusterStateService.isRemotePublicationEnabled() && remoteClusterStateService.canDownloadFromRemoteForReadAPI();
+            remoteClusterStateService  
+        synchronized (mutex) {
+        private final PublishRequest publishRequest;
+        // safely accept a join whose last-accepted term/version is ahead of ours), so store them up and process them at the end.
+        this.allocationService = allocationService;
+            } else {
+                };
+            }
+        synchronized (mutex) {
+        @Override
+            mode,
+                    );
+    }
+                        final StatusInfo statusInfo = nodeHealthService.getHealth();
+        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+import org.opensearch.core.common.Strings;
+    }
+                // is already failed so there is no point in proceeding.
+                try {
+        synchronized (mutex) {  
+                        CoordinatorPublication.this.toString(),
+            getCurrentTerm(),
+            )  
+                                }  
+                processJoinRequest(joinRequest, joinCallback);  
+     * @param votingConfiguration The nodes that should form the initial configuration.
+    /*
+        peerFinder.onNodeCommissionStatusChange(localNodeCommissioned);
+            TransportService transportService,
+    void onFollowerCheckRequest(FollowerCheckRequest followerCheckRequest) {
+    // visible for testing  
+        final CoordinationState coordinationState = this.coordinationState.get();  
+            this.publishListener = publishListener;
+                }
+    }
+    private final PreVoteCollector preVoteCollector;
+        }
+        if (currentPublication.isPresent()) {  
+                        }
+                                    // trigger term bump if new term was found during publication  
+                    }  
+        final boolean restartLeaderChecker = (mode == Mode.FOLLOWER && Optional.of(leaderNode).equals(lastKnownLeader)) == false;
+        return getStateForClusterManagerService().getLastAcceptedConfiguration().isEmpty() == false;
+     *
+                        final ClusterState lastAcceptedState = coordinationState.get().getLastAcceptedState();
+        return new ActionListener<T>() {
+        }
+import org.opensearch.cluster.NodeConnectionsService;
+                        cancel("timed out after " + publishTimeout);
+ * The OpenSearch Contributors require contributions made to  
+                    || coordinationState.get()  
+import org.opensearch.threadpool.ThreadPool.Names;
+        this.peerFinder = new CoordinatorPeerFinder(
+                // marking pending disconnects before publish
+        private boolean receivedJoinsProcessed;  
+                    default -> reason;  
+                        lastPublishedState = currentPublication.get().publishedState();  
+            new HandshakingTransportAddressConnector(settings, transportService),
+        return new DiscoveryStats(new PendingClusterStateStats(0, 0, 0), publicationHandler.stats(), clusterStateStats);
+                        // active publication in progress: followersChecker is up-to-date with nodes that we're actively publishing to
+     * @param onJoinValidators A collection of join validators to restrict which nodes may join the cluster.
+        clusterManagerService.submitStateUpdateTask("clean-up after stepping down as cluster-manager", new LocalClusterUpdateTask() {
+                }  
+                            CoordinationMetadata.builder(clusterState.coordinationMetadata()).lastAcceptedConfiguration(newConfig).build()  
+            .filter(coordinationState.get()::containsJoinVoteFor)
+        return Optional.empty();
+            ActionListener<PublishWithJoinResponse> responseActionListener  
+                assert followersChecker.getKnownFollowers().isEmpty();  
+        synchronized (mutex) {
+                        false
+                    reconfigurationTaskScheduled.set(false);
+                    } else {
+        private final PublicationTransportHandler.PublicationContext publicationContext;  
+        }
+        protected void onJoin(Join join) {
+                assert preVoteCollector.getLeader() == getLocalNode() : preVoteCollector;  
+import org.opensearch.cluster.LocalClusterUpdateTask;
+        return new PreVoteResponse(  
+                && localState.metadata().clusterUUID().equals(publishRequest.getAcceptedState().metadata().clusterUUID()) == false) {
+                    ackListener.onNodeAck(getLocalNode(), exception); // other nodes have acked, but not the cluster manager.
+    private final ClusterManagerMetrics clusterManagerMetrics;
+                        }  
+                public void run() {
+                assert prevotingRound == null : prevotingRound;
+                // turn,  
+            joinCallback.onFailure(
+                getDiscoveredNodes().forEach(node -> {  
+import org.opensearch.cluster.service.ClusterApplier;  
+    @Override
+                    }  
+        synchronized (mutex) {
+                            }
+                }  
+        this.remoteStoreNodeService = remoteStoreNodeService;
+            // The remote node did not include a join vote in its publish response. We do not persist joins, so it could be that the remote
+    // package-visible for testing
+                assert coordinationState.get().electionWon();
+                throw new CoordinationStateRejectedException(  
+                            lagDetector.setAppliedVersion(node, publishRequest.getAcceptedState().version());
+            }
+            if (votingConfiguration.getNodeIds().contains(getLocalNode().getId()) == false) {  
+        lastKnownLeader = Optional.of(leaderNode);
+                assert lastKnownLeader.get().equals(applierState.nodes().getClusterManagerNode())
+                "{}: coordinator becoming FOLLOWER of [{}] in term {} (was {}, lastKnownLeader was [{}])",
+    private final SetOnce<CoordinationState> coordinationState = new SetOnce<>(); // initialized on start-up (see doStart)
+import java.util.List;  
+import static org.opensearch.cluster.coordination.NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID;  
+    // Package-private for testing
+                .build();  
+import org.opensearch.discovery.HandshakingTransportAddressConnector;  
+        clusterBootstrapService.scheduleUnconfiguredBootstrap();
+     * @param nodeName The name of the node, used to name the {@link java.util.concurrent.ExecutorService} of the {@link SeedHostsResolver}.
+                final StartJoinRequest startJoinRequest = new StartJoinRequest(getLocalNode(), Math.max(getCurrentTerm(), maxTermSeen) + 1);
+        ArrayList<PersistedStateStats> stats = new ArrayList<>();
+        this.publishInfoTimeout = PUBLISH_INFO_TIMEOUT_SETTING.get(settings);
+        ClusterSettings clusterSettings,
+                            + coordinationState.get().getLastCommittedConfiguration();
+                                            scheduleReconfigurationIfNeeded();
+                .blocks(
+            // is synchronized on AbstractLifecycleComponent#lifestyle, as is the doStart() method that creates the CoordinationState, so  
+                logger.trace("onFollowerCheckRequest: current term is [{}], rejecting {}", getCurrentTerm(), followerCheckRequest);  
+                    publicationContext,
+            assert clusterState.blocks().hasGlobalBlockWithId(NO_CLUSTER_MANAGER_BLOCK_ID) == false  
+                return unchanged();
+        }
+        ClusterApplier clusterApplier,
+            Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
+    boolean cancelCommittedPublication() {
+                            } else {
+                        )  
+    }  
+            if (join.getTerm() == getCurrentTerm() && missingJoinVoteFrom(join.getSourceNode())) {  
+    }
+            return clusterState;
+            logger.debug(() -> new ParameterizedMessage("[{}] publishing failed", clusterChangedEvent.source()), e);
+                );  
+        }
+    private void startElectionScheduler() {  
+                .lastCommittedConfiguration(votingConfiguration)
+            if (isZen1Node(node) == false) {
+        synchronized (mutex) {
+                        .addGlobalBlock(STATE_NOT_RECOVERED_BLOCK)
+        this.publicationHandler = new PublicationTransportHandler(
+    static boolean validVotingConfigExclusionState(ClusterState clusterState) {
+    private void cancelActivePublication(String reason) {
+                public void onCommit(TimeValue commitTime) {
+            }
+                @Override
+    boolean isElectionSchedulerRunning() {  
+    ) {
+    }
+            }  
+                        return improveConfiguration(currentState);  
+    private Join joinLeaderInTerm(StartJoinRequest startJoinRequest) {  
+                        joinHelper.sendStartJoinRequest(startJoinRequest, node);
+                            "node is no longer cluster-manager for term "
+                                                        node,  
+        this.clusterApplier = clusterApplier;
+            if (stateForJoinValidation.nodes().isLocalNodeElectedClusterManager()) {  
+                    || (applierState.nodes().getClusterManagerNodeId() == null
+            }
+     * @return whether this call successfully set the initial configuration - if false, the cluster has already been bootstrapped.  
+                assert lastKnownLeader.isPresent();
+            }  
+            electionStrategy,  
+ * this work for additional information regarding copyright
+            }
+                assert joinAccumulator instanceof JoinHelper.LeaderJoinAccumulator;
+            joinAccumulator.close(mode);  
+                    return;  
+                    new ListenableFuture<>(),  
+            .filter(e -> e.getNodeId().equals(VotingConfigExclusion.MISSING_VALUE_MARKER))
+            if (sourceNode.equals(getLocalNode()) && mode != Mode.LEADER) {  
+            }  
+    public void setNodeConnectionsService(NodeConnectionsService nodeConnectionsService) {  
+    }  
+        this.persistedStateSupplier = persistedStateSupplier;  
+                logger.debug("starting election with {}", startJoinRequest);
+                                        if (localNodeMayWinElection(state) == false) {
+                logger.debug("initialized PublicationContext using class: {}", publicationContext.getClass().toString());  
+            this::startElection,
+        logger.info("abdicating to {} with term {}", newClusterManager, startJoinRequest.getTerm());  
+    }
+    // package private for tests
+            peerFinder.setCurrentTerm(getCurrentTerm());
+                if (mode == Mode.CANDIDATE) {  
+        if (electionScheduler != null) {
+                        () -> new ParameterizedMessage(  
+ * compatible open source license.
+        protected void onMissingJoin(DiscoveryNode discoveryNode) {
+    private void scheduleReconfigurationIfNeeded() {
+                    assert lastPublishedNodes.remove(getLocalNode()); // followersChecker excludes local node
+            @Override
+                    logger.warn(
+                                        closePrevotingAndElectionScheduler();
+                        + getLocalNode()
+        NodeHealthService nodeHealthService,
                     return true;  
                 }
-            }
-            return false;  
-        }
-    }
-
-    /**
-     * The coordinator publication.
-     *  
-     * @opensearch.internal
-     */
-    class CoordinatorPublication extends Publication {  
-
-        private final PublishRequest publishRequest;
-        private final ListenableFuture<Void> localNodeAckEvent;  
-        private final ClusterStatePublisher.AckListener ackListener;
-        private final ActionListener<Void> publishListener;
-        private final PublicationTransportHandler.PublicationContext publicationContext;  
-
-        @Nullable // if using single-node discovery
-        private final Scheduler.ScheduledCancellable timeoutHandler;  
-        private final Scheduler.Cancellable infoTimeoutHandler;
-
-        // We may not have accepted our own state before receiving a join from another node, causing its join to be rejected (we cannot  
-        // safely accept a join whose last-accepted term/version is ahead of ours), so store them up and process them at the end.
-        private final List<Join> receivedJoins = new ArrayList<>();
-        private boolean receivedJoinsProcessed;  
-
-        CoordinatorPublication(
-            PublishRequest publishRequest,  
-            PublicationTransportHandler.PublicationContext publicationContext,
-            ListenableFuture<Void> localNodeAckEvent,
-            ClusterStatePublisher.AckListener ackListener,  
-            ActionListener<Void> publishListener
-        ) {
-            super(publishRequest, new ClusterStatePublisher.AckListener() {  
-                @Override
-                public void onCommit(TimeValue commitTime) {
-                    ackListener.onCommit(commitTime);  
-                }
-
-                @Override  
-                public void onNodeAck(DiscoveryNode node, Exception e) {
-                    // acking and cluster state application for local node is handled specially
-                    if (node.equals(getLocalNode())) {  
-                        synchronized (mutex) {
-                            if (e == null) {
-                                localNodeAckEvent.onResponse(null);  
-                            } else {
-                                localNodeAckEvent.onFailure(e);
-                            }  
-                        }
-                    } else {
-                        ackListener.onNodeAck(node, e);  
-                        if (e == null) {
-                            lagDetector.setAppliedVersion(node, publishRequest.getAcceptedState().version());
-                        }  
-                    }
-                }
-            }, transportService.getThreadPool()::relativeTimeInMillis);  
-            this.publishRequest = publishRequest;
-            this.publicationContext = publicationContext;
-            this.localNodeAckEvent = localNodeAckEvent;  
-            this.ackListener = ackListener;
-            this.publishListener = publishListener;
-            this.timeoutHandler = singleNodeDiscovery ? null : transportService.getThreadPool().schedule(new Runnable() {  
-                @Override
-                public void run() {
-                    synchronized (mutex) {  
-                        cancel("timed out after " + publishTimeout);
-                    }
-                }  
-
-                @Override
-                public String toString() {  
-                    return "scheduled timeout for " + CoordinatorPublication.this;
-                }
-            }, publishTimeout, Names.GENERIC);  
-
-            this.infoTimeoutHandler = transportService.getThreadPool().schedule(new Runnable() {
-                @Override  
-                public void run() {
-                    synchronized (mutex) {
-                        logIncompleteNodes(Level.INFO);  
-                    }
-                }
-
-                @Override
-                public String toString() {
-                    return "scheduled timeout for reporting on " + CoordinatorPublication.this;  
-                }
-            }, publishInfoTimeout, Names.GENERIC);
-        }  
-
-        private void removePublicationAndPossiblyBecomeCandidate(String reason) {
-            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-
-            assert currentPublication.get() == this;
-            currentPublication = Optional.empty();  
-            logger.debug("publication ended unsuccessfully: {}", this);
-
-            // check if node has not already switched modes (by bumping term)  
-            if (isActiveForCurrentLeader()) {
-                becomeCandidate(reason);
-            }  
-        }
-
-        boolean isActiveForCurrentLeader() {  
-            // checks if this publication can still influence the mode of the current publication
-            return mode == Mode.LEADER && publishRequest.getAcceptedState().term() == getCurrentTerm();
-        }  
-
-        @Override
-        protected void onCompletion(boolean committed) {  
-            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-
+            getCurrentTerm(),
+    private final ClusterSettings clusterSettings;  
+        this.singleNodeDiscovery = DiscoveryModule.isSingleNodeDiscovery(settings);  
             localNodeAckEvent.addListener(new ActionListener<Void>() {  
-                @Override
-                public void onResponse(Void ignore) {
-                    assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-                    assert committed;
-
-                    receivedJoins.forEach(CoordinatorPublication.this::handleAssociatedJoin);  
-                    assert receivedJoinsProcessed == false;
-                    receivedJoinsProcessed = true;
-
-                    clusterApplier.onNewClusterState(
-                        CoordinatorPublication.this.toString(),
-                        () -> applierState,  
-                        new ClusterApplyListener() {
-                            @Override
-                            public void onFailure(String source, Exception e) {  
-                                synchronized (mutex) {
-                                    removePublicationAndPossiblyBecomeCandidate("clusterApplier#onNewClusterState");
-                                }  
-                                cancelTimeoutHandlers();
-                                ackListener.onNodeAck(getLocalNode(), e);
-                                publishListener.onFailure(e);  
-                            }
-
-                            @Override  
-                            public void onSuccess(String source) {
-                                synchronized (mutex) {
-                                    assert currentPublication.get() == CoordinatorPublication.this;  
-                                    currentPublication = Optional.empty();
-                                    logger.debug("publication ended successfully: {}", CoordinatorPublication.this);
-                                    // trigger term bump if new term was found during publication  
-                                    updateMaxTermSeen(getCurrentTerm());
-
-                                    if (mode == Mode.LEADER) {  
-                                        closePrevotingAndElectionScheduler();
-                                        // if necessary, abdicate to another node or improve the voting configuration
-                                        boolean attemptReconfiguration = true;  
-                                        final ClusterState state = getLastAcceptedState(); // committed state
-                                        if (localNodeMayWinElection(state) == false) {
-                                            final List<DiscoveryNode> clusterManagerCandidates = completedNodes().stream()  
-                                                .filter(DiscoveryNode::isClusterManagerNode)
-                                                .filter(node -> nodeMayWinElection(state, node))
-                                                .filter(node -> {  
-                                                    // check if cluster_manager candidate would be able to get an election quorum if we were
-                                                    // to abdicate to it. Assume that every node that completed the publication can provide
-                                                    // a vote in that next election and has the latest state.  
-                                                    final long futureElectionTerm = state.term() + 1;
-                                                    final VoteCollection futureVoteCollection = new VoteCollection();
-                                                    completedNodes().forEach(  
-                                                        completedNode -> futureVoteCollection.addJoinVote(
-                                                            new Join(completedNode, node, futureElectionTerm, state.term(), state.version())
-                                                        )  
-                                                    );
-                                                    return electionStrategy.isElectionQuorum(
-                                                        node,  
-                                                        futureElectionTerm,
-                                                        state.term(),
-                                                        state.version(),  
-                                                        state.getLastCommittedConfiguration(),
-                                                        state.getLastAcceptedConfiguration(),
-                                                        futureVoteCollection  
-                                                    );
-                                                })
-                                                .collect(Collectors.toList());  
-                                            if (clusterManagerCandidates.isEmpty() == false) {
-                                                abdicateTo(clusterManagerCandidates.get(random.nextInt(clusterManagerCandidates.size())));
-                                                attemptReconfiguration = false;  
-                                            }
-                                        }
-                                        if (attemptReconfiguration) {  
-                                            scheduleReconfigurationIfNeeded();
-                                        }
-                                    }  
-                                    lagDetector.startLagDetector(publishRequest.getAcceptedState().version());
-                                    logIncompleteNodes(Level.WARN);
-                                }  
-                                cancelTimeoutHandlers();
-                                ackListener.onNodeAck(getLocalNode(), null);
-                                publishListener.onResponse(null);  
-                            }
-                        }
-                    );  
-                }
-
-                @Override  
-                public void onFailure(Exception e) {
-                    assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-                    removePublicationAndPossiblyBecomeCandidate("Publication.onCompletion(false)");  
-                    cancelTimeoutHandlers();
-
-                    final FailedToCommitClusterStateException exception = new FailedToCommitClusterStateException("publication failed", e);  
-                    ackListener.onNodeAck(getLocalNode(), exception); // other nodes have acked, but not the cluster manager.
-                    publishListener.onFailure(exception);
-                }  
-            }, OpenSearchExecutors.newDirectExecutorService(), transportService.getThreadPool().getThreadContext());
-        }
-
-        private void cancelTimeoutHandlers() {
-            if (timeoutHandler != null) {
-                timeoutHandler.cancel();  
-            }
-            infoTimeoutHandler.cancel();
-        }  
-
-        private void handleAssociatedJoin(Join join) {
-            if (join.getTerm() == getCurrentTerm() && missingJoinVoteFrom(join.getSourceNode())) {  
-                logger.trace("handling {}", join);
-                handleJoin(join);
-            }  
-        }
-
-        @Override  
-        protected boolean isPublishQuorum(VoteCollection votes) {
-            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-            return coordinationState.get().isPublishQuorum(votes);  
-        }
-
-        @Override  
-        protected Optional<ApplyCommitRequest> handlePublishResponse(DiscoveryNode sourceNode, PublishResponse publishResponse) {
-            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-            assert getCurrentTerm() >= publishResponse.getTerm();  
-            return coordinationState.get().handlePublishResponse(sourceNode, publishResponse);
-        }
-
-        @Override
-        protected void onJoin(Join join) {
-            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-            if (receivedJoinsProcessed) {
-                // a late response may arrive after the state has been locally applied, meaning that receivedJoins has already been
-                // processed, so we have to handle this late response here.  
-                handleAssociatedJoin(join);
-            } else {
-                receivedJoins.add(join);  
-            }
-        }
-
-        @Override
-        protected void onMissingJoin(DiscoveryNode discoveryNode) {
-            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
-            // The remote node did not include a join vote in its publish response. We do not persist joins, so it could be that the remote
-            // node voted for us and then rebooted, or it could be that it voted for a different node in this term. If we don't have a copy
-            // of a join from this node then we assume the latter and bump our term to obtain a vote from this node.  
-            if (missingJoinVoteFrom(discoveryNode)) {
-                final long term = publishRequest.getAcceptedState().term();
-                logger.debug("onMissingJoin: no join vote from {}, bumping term to exceed {}", discoveryNode, term);  
-                updateMaxTermSeen(term + 1);
-            }
-        }  
-
-        @Override
-        protected void sendPublishRequest(  
-            DiscoveryNode destination,
-            PublishRequest publishRequest,
-            ActionListener<PublishWithJoinResponse> responseActionListener  
-        ) {
-            publicationContext.sendPublishRequest(destination, publishRequest, wrapWithMutex(responseActionListener));
-        }  
-
-        @Override
-        protected void sendApplyCommit(  
-            DiscoveryNode destination,
-            ApplyCommitRequest applyCommit,
-            ActionListener<Empty> responseActionListener  
-        ) {
-            publicationContext.sendApplyCommit(destination, applyCommit, wrapWithMutex(responseActionListener));
-        }  
-    }
-
-    // TODO: only here temporarily for BWC development, remove once complete  
-    public static boolean isZen1Node(DiscoveryNode discoveryNode) {
-        return Booleans.isTrue(discoveryNode.getAttributes().getOrDefault("zen1", "false"));
-    }  
-
-    public boolean isRemotePublicationEnabled() {
-        if (remoteClusterStateService != null) {  
-            return remoteClusterStateService.isRemotePublicationEnabled();
-        }
+            rerouteService,
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.discovery.SeedHostsResolver;  
+                                localNodeAckEvent.onResponse(null);  
+                        MediaTypeRegistry.JSON,
+                );
+                    // even before executing the join task to fail fast
+ */
+            if (prevElectionWon == false && coordState.electionWon()) {
+                publishResponse,
+            this::onFollowerCheckRequest,
+            Settings settings,
+                assert getLocalNode().equals(clusterState.getNodes().get(getLocalNode().getId())) : getLocalNode()  
+    // the timeout for the publication of each value
         return false;  
+                    scheduleReconfigurationIfNeeded();
+                transportAddressConnector,  
+            logger.trace("handleApplyCommit: applying commit {}", applyCommitRequest);
+                            logger.debug("skip prevoting as local node is decommissioned");  
     }
-
-    public boolean canDownloadFullStateFromRemote() {  
-        if (remoteClusterStateService != null) {
-            return remoteClusterStateService.isRemotePublicationEnabled() && remoteClusterStateService.canDownloadFromRemoteForReadAPI();
+                    final Set<DiscoveryNode> lastPublishedNodes = new HashSet<>();
+                                                })
+    // package-visible for testing
+                    return;
+    private final Settings settings;
+            );
+        }
+                logger.info("cluster UUID [{}]", lastAcceptedState.metadata().clusterUUID());
+    /**
+                } catch (Exception e) {
+                    this.isRemotePublicationEnabled(),  
+    }  
+            Stream.concat(Stream.of(getLocalNode()), StreamSupport.stream(peerFinder.getFoundPeers().spliterator(), false))  
+                throw new CoordinationStateRejectedException("local node is not part of initial configuration");
+                    // This set only needs to be maintained on active cluster-manager  
+                becomeCandidate(reason);
+    private final NoClusterManagerBlockService noClusterManagerBlockService;
+import org.opensearch.cluster.ClusterStateUpdateTask;  
+        }
+                                                    );
+                "handlePublishRequest: handling version [{}] from [{}]",
+                    clusterApplier.onNewClusterState(
+        AllocationService allocationService,
+                        + localState.metadata().clusterUUID()  
+                );
+        }
+     */
+                    reconfigurationTaskScheduled.set(false);  
+                // Bump our term. However if there is a publication in flight then doing so would cancel the publication, so don't do that  
+            .map(DiscoveryNode::getId);
+            @Override  
+            startElectionScheduler();
+    private void startElection() {  
+        final Stream<String> clusterManagerIneligibleNodeIdsInVotingConfig = StreamSupport.stream(clusterState.nodes().spliterator(), false)
+    private PreVoteResponse getPreVoteResponse() {
+                // a late response may arrive after the state has been locally applied, meaning that receivedJoins has already been
+                throw new CoordinationStateRejectedException(  
+            updateLastSeen.accept(coordinationState.get().getLastAcceptedState());
+    }
+            nodeHealthService,
+            )  
+        @Override
+                assert currentPublication.map(Publication::isCommitted).orElse(true);
+        final StartJoinRequest startJoinRequest = new StartJoinRequest(newClusterManager, Math.max(getCurrentTerm(), maxTermSeen) + 1);
+                public String toString() {  
+                                        if (attemptReconfiguration) {  
+                            startElectionScheduler();
+                clusterApplier.onNewClusterState(applyCommitRequest.toString(), () -> applierState, new ClusterApplyListener() {
+            getCurrentTerm(),
+            || XContentHelper.convertToMap(
+                        + votingConfiguration  
+                    assert followersChecker.getKnownFollowers().isEmpty() : followersChecker.getKnownFollowers();
+            final DiscoveryNodes discoveryNodes = new DiscoveryNodes.Builder(clusterState.nodes()).clusterManagerNodeId(null).build();  
+            PublishRequest publishRequest,  
+        synchronized (mutex) {  
+        }
+                + getLastAcceptedState().coordinationMetadata();  
+import org.opensearch.node.remotestore.RemoteStoreNodeService;
+import org.opensearch.discovery.Discovery;  
+        protected void sendApplyCommit(  
+        // explicitly move node to candidate state so that the next cluster state update task yields an onNoLongerMaster event
+        return nodeMayWinElection(lastAcceptedState, localNode);  
+                        applyListener.onFailure(e);
+            transportService,
+                                cancelTimeoutHandlers();
+            }
+    private final JoinHelper joinHelper;
+        assert mode != Mode.LEADER : "do not switch to follower from leader (should be candidate first)";
+            }  
+                            return;
+            }, publishInfoTimeout, Names.GENERIC);
+                && persistedStateRegistry.getPersistedState(stateType).getStats() != null) {
+                                            }
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+            }, OpenSearchExecutors.newDirectExecutorService(), transportService.getThreadPool().getThreadContext());
+        Set<String> nodeNamesWithAbsentId = votingConfigExclusions.stream()  
+                    nodeRemovalExecutor
+            // This looks like a race that might leak an unclosed CoordinationState if it's created while execution is here, but this method
+        };
+    private static final Logger logger = LogManager.getLogger(Coordinator.class);  
+        }
+        protected void onFoundPeersUpdated() {  
+                final CoordinatorPublication publication = new CoordinatorPublication(  
+        return electionScheduler != null;
+                preVoteCollector.update(getPreVoteResponse(), getLocalNode());
+import org.opensearch.cluster.coordination.CoordinationState.VoteCollection;
+                                ackListener.onNodeAck(getLocalNode(), e);
+        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+            ApplyCommitRequest applyCommit,
+    private final ElectionSchedulerFactory electionSchedulerFactory;
+            leaderChecker.updateLeader(leaderNode);
+import java.util.function.Supplier;
+        clusterManagerService.setClusterStateSupplier(this::getStateForClusterManagerService);  
+                                                    final VoteCollection futureVoteCollection = new VoteCollection();
+                    logger.trace("skip election as local node may not win it: {}", getLastAcceptedState().coordinationMetadata());  
+                    } else {
+                            public void onSuccess(String source) {
+                becomeLeader("handleJoinRequest");
+import java.util.stream.Collectors;
+            "{}: coordinator becoming CANDIDATE in term {} (was {}, lastKnownLeader was [{}])",
+            final long currentTerm = getCurrentTerm();
+                assert preVoteCollector.getLeader().equals(lastKnownLeader.get()) : preVoteCollector;
+     */  
+        return transportService.getLocalNode();
+            clusterState.getLastAcceptedConfiguration()  
+                if (mode != Mode.LEADER || getCurrentTerm() != clusterChangedEvent.state().term()) {  
+                    sourceNode,
+            });  
+            }
+            }
+            ensureTermAtLeast(sourceNode, publishRequest.getAcceptedState().term());
+                }  
+        }
+                        )
+        if (mode == Mode.FOLLOWER && Optional.of(leaderNode).equals(lastKnownLeader)) {
+            this::removeNode,  
+            // it's all ok.
+        synchronized (mutex) {  
+        this.noClusterManagerBlockService = new NoClusterManagerBlockService(settings, clusterSettings);
+        }
+        assert event.previousState() == coordinationState.get().getLastAcceptedState()
+                    JoinTaskExecutor.ensureMajorVersionBarrier(
+            }
+                .build();
+        return applierState;  
+    private void closeElectionScheduler() {
+                    }  
+                        + "initial configuration [knownNodes={}, {}]",  
+                                                        state.version(),  
+                && votingConfiguration.isEmpty() == false  
+        }
+    private void cleanClusterManagerService() {  
+    class CoordinatorPublication extends Publication {  
+            synchronized (mutex) {
+            } else {
+                logger.debug("onMissingJoin: no join vote from {}, bumping term to exceed {}", discoveryNode, term);  
+            @Override  
+import org.opensearch.cluster.node.DiscoveryNode;
+                    // but publication has not started yet  
+                        ensureTermAtLeast(getLocalNode(), maxTermSeen);
+        }
+        // handling of start join messages on the local node will be dispatched to the generic thread-pool  
+                    assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+            );
+                assert getStateForClusterManagerService().nodes().getClusterManagerNodeId() == null : getStateForClusterManagerService();  
+    }
+            if (currentPublication.isPresent()) {
+            coordinationState.get().handleCommit(applyCommitRequest);  
+    @Nullable
+     */
+                        stateForJoinValidation.getNodes().getMinNodeVersion()
+            assert preVoteCollector.getPreVoteResponse().equals(getPreVoteResponse()) : preVoteCollector + " vs " + getPreVoteResponse();
+            if (mode == Mode.LEADER) {
+                        + DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE  
+        this.remoteClusterStateService = remoteClusterStateService;
+        if (clusterState.nodes().getClusterManagerNodeId() != null) {
+            if (coordinationState.get().electionWon()) {
+        configuredHostsResolver = new SeedHostsResolver(nodeName, settings, transportService, seedHostsProvider);  
+     */  
+            assert localNodeMayWinElection(getLastAcceptedState()) : "initial state does not allow local node to win election: "
+                    final ClusterState lastPublishedState;  
+    }  
+                        JsonXContent.jsonXContent,  
+        );  
+                    persistedStateRegistry
+import org.opensearch.cluster.ClusterManagerMetrics;
+        this.localNodeCommissioned = true;  
+                                                            new Join(completedNode, node, futureElectionTerm, state.term(), state.version())
+            peerFinder.setCurrentTerm(getCurrentTerm());
+        return new ClusterFormationState(
+            joinHelper::logLastFailedJoinAttempt
+import static org.opensearch.cluster.ClusterManagerMetrics.FOLLOWER_NODE_ID_TAG;  
+                    if (foundQuorum) {  
+                        clusterStateWithNoClusterManagerBlock(coordinationState.get().getLastAcceptedState())
+    // package-visible for testing
+            super(  
+        );
+                                }  
+            updateMaxTermSeen(joinRequest.getTerm());
+ * You may obtain a copy of the License at  
+        joinHelper.sendValidateJoinRequest(joinRequest.getSourceNode(), stateForJoinValidation, new ActionListener<Empty>() {
+        }
+        Collection<BiConsumer<DiscoveryNode, ClusterState>> onJoinValidators,  
+            if (lastAcceptedState.metadata().clusterUUIDCommitted()) {
+                coordinationState.get().handleJoin(join); // this might fail and bubble up the exception
+            super(publishRequest, new ClusterStatePublisher.AckListener() {  
+    private void processJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
+                // processed, so we have to handle this late response here.  
+                                    lagDetector.startLagDetector(publishRequest.getAcceptedState().version());
+            .collect(Collectors.toSet());
+        protected boolean isPublishQuorum(VoteCollection votes) {
+        }
+        @Override
+                clusterApplier.onNewClusterState("becoming candidate: " + method, () -> applierState, (source, e) -> {});
+     * @opensearch.internal  
+        private final List<Join> receivedJoins = new ArrayList<>();
+        }
+        @Override
+            coordinationState.get().setInitialState(ClusterState.builder(currentState).metadata(metadataBuilder).build());
+            if (getLocalNode().isClusterManagerNode() == false) {
+                new IllegalStateException(
+        );
+        this.electionStrategy = electionStrategy;
+                logger.trace("onFollowerCheckRequest: rejoining cluster-manager, responding successfully to {}", followerCheckRequest);  
+            ClusterStatePublisher.AckListener ackListener,  
+            }  
+            n -> removeNode(n, "lagging"),
+        @Override
+    final Object mutex = new Object(); // package-private to allow tests to call methods that assert that the mutex is held  
+            }  
+                        Tags.create().addTag(FOLLOWER_NODE_ID_TAG, discoveryNode.getId()).addTag(REASON_TAG, reasonToPublish)  
+    }
+            if (isActiveForCurrentLeader()) {
+    private final LagDetector lagDetector;
+     */  
+            logger.debug("joinLeaderInTerm: for [{}] with term {}", startJoinRequest.getSourceNode(), startJoinRequest.getTerm());
         }  
-        return false;
+            if (persistedStateRegistry.getPersistedState(stateType) != null
+            metadataBuilder.generateClusterUuidIfNeeded();
+/*
+            }
+                synchronized (mutex) {
+            }
+        ClusterStateStats clusterStateStats = clusterManagerService.getClusterStateStats();
+/*
+                        if (localNodeMayWinElection(lastAcceptedState) == false) {  
+            nodeHealthService,
+                    cancelTimeoutHandlers();
+                assert peerFinderLeader.equals(lastKnownLeader) : peerFinderLeader;
+     * @opensearch.internal
+                assert clusterFormationFailureHelper.isRunning();
+    public boolean canDownloadFullStateFromRemote() {  
+                n -> n.isClusterManagerNode() == false  
+                @Override
+        this.joinHelper = new JoinHelper(
+        private void removePublicationAndPossiblyBecomeCandidate(String reason) {
+        }
+                            "[{}] failed publication as node is no longer cluster-manager for term {}",  
     }
-
-}
+                final CoordinatorPublication publication = currentPublication.get();
+    }
+            applierState = mode == Mode.CANDIDATE ? clusterStateWithNoClusterManagerBlock(committedState) : committedState;
+        @Override
+        this.clusterSettings = clusterSettings;  
+                            logger.trace("skip prevoting as local node may not win election: {}", lastAcceptedState.coordinationMetadata());
+        mode = Mode.LEADER;  
+            final ClusterState committedState = hideStateIfNotRecovered(coordinationState.get().getLastAcceptedState());
+    /**
+            this::onLeaderFailure,  
+                            }
+            return mode == Mode.LEADER && publishRequest.getAcceptedState().term() == getCurrentTerm();
+            this::setInitialConfiguration
+                        applyListener.onResponse(null);
+            applierState = initialState;  
+        );  
+        final DiscoveryNode localNode = lastAcceptedState.nodes().getLocalNode();
+                getCurrentTerm(),
+                assert lastKnownLeader.isPresent() && (lastKnownLeader.get().equals(getLocalNode()) == false);
+    private final ClusterFormationFailureHelper clusterFormationFailureHelper;  
+    private final AllocationService allocationService;
+        String nodeName,
+                assert lastKnownLeader.isPresent() && lastKnownLeader.get().equals(getLocalNode());  
+    public Coordinator(
+            coordinationState.set(new CoordinationState(getLocalNode(), persistedStateRegistry, electionStrategy, settings));  
+        synchronized (mutex) {
+     */
+                @Override  
+import org.opensearch.gateway.remote.RemoteClusterStateService;
+                currentPublication = Optional.of(publication);
+import org.opensearch.common.xcontent.XContentHelper;
+                            clusterChangedEvent.source()
+     * more than once, as long as the argument to each call is the same.  
+import java.io.IOException;
+                            @Override
+                                        final ClusterState state = getLastAcceptedState(); // committed state
+            if (publishRequest.getAcceptedState().term() > localState.term()) {
+        this.reconfigurator = new Reconfigurator(settings, clusterSettings);
+                joinHelper.sendJoinRequest(clusterManagerNode, getCurrentTerm(), joinWithDestination(lastJoin, clusterManagerNode, term));  
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
+        TimeValue.timeValueMillis(10000),
+        @Nullable // if using single-node discovery
+        }  
+    private Releasable electionScheduler;
+    // there is no equals on cluster state, so we just serialize it to XContent and compare Maps
+            this.infoTimeoutHandler = transportService.getThreadPool().schedule(new Runnable() {
+            } else {  
+            assert (applierState.nodes().getClusterManagerNodeId() == null) == applierState.blocks()
+        return onJoinValidators;  
+            peerFinder.activate(coordinationState.get().getLastAcceptedState().nodes());  
+            settings,  
+            return ClusterState.builder(clusterState)
+                logger.debug("skip setting initial configuration as local node is not part of initial configuration");
+            joinAccumulator = new JoinHelper.FollowerJoinAccumulator();
+    }
+    private final LeaderChecker leaderChecker;  
+import org.opensearch.cluster.block.ClusterBlocks;  
+        }
+        assert currentPublication.isPresent() == false : "Expected no publication in progress";
+                logger.debug("initial configuration already set, ignoring {}", votingConfiguration);
+                                            if (clusterManagerCandidates.isEmpty() == false) {
+            return coordinationState.get().getLastAcceptedState();  
+                final PublicationTransportHandler.PublicationContext publicationContext = publicationHandler.newPublicationContext(
+        if (mode != Mode.FOLLOWER) {
+                final boolean becomingClusterManager = getStateForClusterManagerService().term() != getCurrentTerm();  
+            }
+    public boolean setInitialConfiguration(final VotingConfiguration votingConfiguration) {
+        }  
+                                                        futureElectionTerm,
+                    publishRequest.getAcceptedState().metadata().clusterUUID(),  
+                        becomeCandidate("updateMaxTermSeen");
+        }  
+                    receivedJoins.forEach(CoordinatorPublication.this::handleAssociatedJoin);  
+                }
+        this.clusterBootstrapService = new ClusterBootstrapService(
+            if (localState.metadata().clusterUUIDCommitted()
+            assert lagDetector.getTrackedNodes().contains(getLocalNode()) == false : lagDetector.getTrackedNodes();  
+    }
+    private Optional<CoordinatorPublication> currentPublication = Optional.empty();  
+            liveNodes,  
+                logger.debug("skip setting initial configuration as local node is not a cluster-manager-eligible node");  
+    @Override
+        }  
+                    )
+     * Sets the initial configuration to the given {@link VotingConfiguration}. This method is safe to call
+    private static boolean nodeMayWinElection(ClusterState lastAcceptedState, DiscoveryNode node) {  
+                // cluster-manager node applies the committed state at the end of the publication process, not here.
+        this.settings = settings;
+                    || (applierState.nodes().getClusterManagerNodeId() == null && applierState.term() < getCurrentTerm());
+import org.opensearch.core.common.transport.TransportAddress;  
+                    if (mode == Mode.CANDIDATE) {  
+                        + DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey()
+                if (currentState.nodes().isLocalNodeElectedClusterManager() == false) {
+import java.util.ArrayList;
+            logger.debug(
+                                                attemptReconfiguration = false;  
+            clusterManagerMetrics
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            method,
+    private Releasable prevotingRound;
+    PublishWithJoinResponse handlePublishRequest(PublishRequest publishRequest) {  
+                    nodeRemovalExecutor,
+import org.opensearch.telemetry.metrics.tags.Tags;
+            optionalJoin.ifPresent(this::handleJoin);
+        "cluster.publish.timeout",  
+                            .collect(Collectors.toList());  
+import java.util.stream.StreamSupport;
+import java.util.stream.Stream;  
+                throw new CoordinationStateRejectedException("no longer leading this publication's term: " + publishRequest);  
+            }  
+ * Modifications Copyright OpenSearch Contributors. See  
+                    // we are checking source node commission status here to reject any join request coming from a decommissioned node  
+                @Override
+        assert newClusterManager.isClusterManagerNode() : "should only abdicate to cluster-manager-eligible node but was "  
+    @Override
+            if (mode == Mode.LEADER) {
+        final VotingConfiguration newConfig = reconfigurator.reconfigure(
+    public static final Setting<TimeValue> PUBLISH_INFO_TIMEOUT_SETTING = Setting.timeSetting(  
+    public ClusterState getLastAcceptedState() {
+            || lastAcceptedState.getVotingConfigExclusions().stream().noneMatch(vce -> vce.getNodeId().equals(nodeId));
+ * KIND, either express or implied.  See the License for the
+                        }
+        final String nodeId = node.getId();
+            ActionListener<Empty> responseActionListener  
+            settings,  
+                }
+        );  
+                            clusterStateWithNoClusterManagerBlock(coordinationState.get().getLastAcceptedState())  
+            ensureTermAtLeast(getLocalNode(), join.getTerm()).ifPresent(this::handleJoin);
+                    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     *  
+        );  
+                final boolean isNewJoinFromClusterManagerEligibleNode = handleJoinIgnoringExceptions(join);  
+        this.publishTimeout = publishTimeout;
+            DiscoveryNode destination,
+    private final TimeValue publishInfoTimeout;
+        this.lastJoin = Optional.empty();  
+                assert mode == Mode.CANDIDATE;
+    }
+        });
+        @Override  
+import org.opensearch.common.unit.TimeValue;
+            ListenableFuture<Void> localNodeAckEvent,
+        }  
+        // the voting config. We could exclude all the cluster-manager-ineligible nodes here, but there could be quite a few of them and
+        }
+                .blocks(clusterState.blocks())  
+        synchronized (mutex) {
+                } else {
+        RemoteClusterStateService remoteClusterStateService
+        private final Scheduler.Cancellable infoTimeoutHandler;
+                    @Override
+            assert currentPublication.get() == this;
+            if (timeoutHandler != null) {
+        Consumer<ClusterState> updateLastSeen,  
+        Setting.Property.NodeScope,  
+import org.opensearch.common.settings.Settings;  
+    private Optional<Join> ensureTermAtLeast(DiscoveryNode sourceNode, long targetTerm) {
+            this::handlePublishRequest,
+            }
+                        if (e == null) {
+                );  
+        }  
+            .filter(discoveryNode -> isZen1Node(discoveryNode) == false)  
+                    "node-left",
+            public void onFailure(Exception e) {
+                    case NODE_LEFT_REASON_HEALTHCHECK_FAIL -> "health.check.fail";
+                        final List<DiscoveryNode> discoveredNodes = getDiscoveredNodes().stream()
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+    private Optional<Join> lastJoin;
+        cancelActivePublication("become follower: " + method);  
+        }
+        preVoteCollector.update(getPreVoteResponse(), leaderNode);
+            // check if node has not already switched modes (by bumping term)  
+     * @return true if publication was cancelled, false if there is no current committed publication.  
+     * @return true iff the join was from a new node and was successfully added
+                    publishListener.onFailure(exception);
+    private <T> ActionListener<T> wrapWithMutex(ActionListener<T> listener) {
+    private class CoordinatorPeerFinder extends PeerFinder {
+    }
+            joinAccumulator.close(mode);  
+    protected void doClose() throws IOException {
+    @Override
+                }
+    private volatile boolean localNodeCommissioned;  
+                        + " than local cluster uuid "
+            synchronized (mutex) {
+        this.transportService = transportService;
+ * not use this file except in compliance with the License.
+                @Override  
+    private final boolean singleNodeDiscovery;
+                handleAssociatedJoin(join);
+    }  
+                            return;
+        transportService.connectToNode(joinRequest.getSourceNode(), ActionListener.wrap(ignore -> {
+        }
+                }
+        joinAccumulator.close(mode);
+import org.apache.logging.log4j.Level;  
+            clusterSettings,
+            if (mode == Mode.LEADER && maxTermSeen > currentTerm) {
+        // that makes
+                    public void onFailure(String source, Exception e) {
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;
+    }  
+                }  
+        nodes.add(getLocalNode());
+            );
+    private static Optional<Join> joinWithDestination(Optional<Join> lastJoin, DiscoveryNode leader, long term) {
+    private volatile ClusterState applierState; // the state that should be exposed to the cluster state applier
+                        + " with a different cluster uuid "  
+            lagDetector.clearTrackedNodes();
+ */
+    private final ClusterApplier clusterApplier;
+        ) {
+            peerFinder.getFoundPeers().forEach(knownNodes::add);
+                    && (clusterState.getLastAcceptedConfiguration().getNodeIds().contains(n.getId())
+            publicationContext.sendApplyCommit(destination, applyCommit, wrapWithMutex(responseActionListener));
+        followersChecker.updateFastResponseState(getCurrentTerm(), mode);
+                // ignore
+            mode = Mode.CANDIDATE;
+                                                .filter(DiscoveryNode::isClusterManagerNode)
+            this::handleJoinRequest,
+        SeedHostsProvider seedHostsProvider,
+            return mode;
+        Setting.Property.Dynamic
+        synchronized (mutex) {
+                    );  
+    }
+     * This method is used exclusively by tests.
+                assert prevotingRound == null || electionScheduler != null;
+        @Override
+            || lastAcceptedState.getLastAcceptedConfiguration().getNodeIds().contains(nodeId)  
+import org.opensearch.monitor.StatusInfo;  
+                timeoutHandler.cancel();  
+        try {
+    }
+            transportService,
+        Setting.Property.NodeScope
+            // check if node has accepted a state in this term already. If not, this node has never committed a cluster state in this  
+            final PublishResponse publishResponse = coordinationState.get().handlePublishRequest(publishRequest);
+            }
+        this.clusterFormationFailureHelper = new ClusterFormationFailureHelper(
+        return true;  
+        if (newConfig.equals(clusterState.getLastAcceptedConfiguration()) == false) {  
+                        synchronized (mutex) {
+                        + "] discovery"
+        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+                    } else {
+        }  
+    private final SeedHostsResolver configuredHostsResolver;
+    }
+                applyListener.onResponse(null);
+    /**
+        synchronized (mutex) {
+                .hasGlobalBlockWithId(NO_CLUSTER_MANAGER_BLOCK_ID);  
+                            .getLastAcceptedConfiguration()  
+            followersChecker.updateFastResponseState(getCurrentTerm(), mode);
+                return false;
+        configuredHostsResolver.stop();
+    private final RemoteStoreNodeService remoteStoreNodeService;
+                ) : Strings.toString(MediaTypeRegistry.JSON, event.previousState())
+                throw new CoordinationStateRejectedException(  
+                        lastPublishedState = coordinationState.get().getLastAcceptedState();  
+            .map(VotingConfigExclusion::getNodeName)
+        });
+                        + sourceNode
+        private final ClusterStatePublisher.AckListener ackListener;
+                                                    completedNodes().forEach(  
+                leaderChecker.setCurrentNodes(publishNodes);
+            if (applierState.nodes().getClusterManagerNodeId() != null) {
+                    localState.metadata().clusterUUID()
+    }
+                                        // if necessary, abdicate to another node or improve the voting configuration
+        }
+            settings,
+                        + " does not have quorum in voting configuration "  
+            .nodes()
+                        }
+    private void setPublishTimeout(TimeValue publishTimeout) {  
+        this.preVoteCollector = new PreVoteCollector(
+    }
+                        logger.warn(new ParameterizedMessage("failed to bump term to {}", maxTermSeen), e);
+        ClusterStatePublisher.AckListener ackListener
+                sendValidateJoinRequest(stateForJoinValidation, joinRequest, joinCallback);
+                                                        state.term(),
+                    );
+                    "skip setting initial configuration as not enough nodes discovered to form a quorum in the "
+        this.clusterManagerService = clusterManagerService;  
+        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+    private final ClusterBootstrapService clusterBootstrapService;
+                    public void onSuccess(String source) {  
+                logger.trace("failed to clean-up after stepping down as cluster-manager", e);
+                );  
+            @Override  
+ * license agreements. See the NOTICE file distributed with
+            leaderChecker.setCurrentNodes(DiscoveryNodes.EMPTY_NODES);  
+                if (currentPublication.isPresent()) {  
+        Random random,
+    public Collection<BiConsumer<DiscoveryNode, ClusterState>> getOnJoinValidators() {
+            allocationService,
+        } catch (Exception e) {
+                assert peerFinderLeader.isPresent() == false : peerFinderLeader;
+                        + " != "  
+import org.opensearch.cluster.coordination.JoinHelper.InitialJoinAccumulator;  
+        ApplyCommitRequest applyCommitRequest,
+                        }  
+                // If we have already won the election then the actual join does not matter for election purposes, so swallow any exception
+        private final ActionListener<Void> publishListener;
+                            .filter(n -> isZen1Node(n) == false)
+                coordinationState.get().handlePrePublish(clusterState);
+        this.onJoinValidators = JoinTaskExecutor.addBuiltInJoinValidators(onJoinValidators);
+                            MediaTypeRegistry.JSON,
+            stats.add(remoteClusterStateService.getDiffDownloadStats());
+                    final VoteCollection expectedVotes = new VoteCollection();
+        if (coordinationState != null) {
+            return remoteClusterStateService.isRemotePublicationEnabled();
+    }  
+            .filter(DiscoveryNode::isClusterManagerNode)
+                                                    // a vote in that next election and has the latest state.  
+    private final PublicationTransportHandler publicationHandler;
+    private final NodeRemovalClusterStateTaskExecutor nodeRemovalExecutor;  
+import org.opensearch.common.lease.Releasable;
+                    case NODE_LEFT_REASON_DISCONNECTED -> "disconnected";
+     * @opensearch.internal
+            }
+                    Optional.ofNullable(
+                        + "] set to ["
+            becomeCandidate("onLeaderFailure");
+        });
+    }  
+    public void invariant() {
+    private final PersistedStateRegistry persistedStateRegistry;
+                );
+    * 2. Every voting config exclusion with a name of _absent_ should not match any nodes currently in the cluster by ID
+            if (receivedJoinsProcessed) {
+    void becomeCandidate(String method) {
+        this.lagDetector = new LagDetector(  
+        peerFinder.deactivate(getLocalNode());
+                                synchronized (mutex) {
+    }  
+        this.electionSchedulerFactory = new ElectionSchedulerFactory(settings, random, transportService.getThreadPool());
+     * The coordinator publication.
+            clusterFormationFailureHelper.start();
+        }, joinCallback::onFailure));
+        }
+    // package-visible for testing
+        }  
+            return Optional.of(joinLeaderInTerm(new StartJoinRequest(sourceNode, targetTerm)));
+        final Stream<String> excludedNodeIds = clusterState.getVotingConfigExclusions().stream().map(VotingConfigExclusion::getNodeId);
+import java.util.function.Consumer;  
+            clusterManagerMetrics
+            clusterManagerService.submitStateUpdateTask("reconfigure", new ClusterStateUpdateTask(Priority.URGENT) {
+import org.opensearch.common.settings.Setting;
+        TransportService transportService,
+            final Join join = coordinationState.get().handleStartJoin(startJoinRequest);  
+                .lastAcceptedConfiguration(votingConfiguration)
+    }
+    }
+    }
+                @Override  
+                        if (prevotingRound != null) {
+        lagDetector.clearTrackedNodes();  
+            // to check our mode again here.  
+            ensureTermAtLeast(followerCheckRequest.getSender(), followerCheckRequest.getTerm());  
+                        + votingConfiguration
+        synchronized (mutex) {  
+import org.opensearch.common.xcontent.json.JsonXContent;
+                assert joinAccumulator instanceof JoinHelper.FollowerJoinAccumulator;  
+    // package-visible for testing
+            }  
+    private ClusterFormationState getClusterFormationState() {
+                    )  
+        Stream.of(PersistedStateRegistry.PersistedStateType.values()).forEach(stateType -> {  
+        Settings settings,  
+            transportService,  
+                publication.start(followersChecker.getFaultyNodes());
+                && getCurrentTerm() == ZEN1_BWC_TERM
+        assert leaderNode.isClusterManagerNode() : leaderNode + " became a leader but is not cluster-manager-eligible";
+        assert localNode != null;
+                final ClusterState clusterState = clusterChangedEvent.state();
+                        logIncompleteNodes(Level.INFO);  
+    public boolean isRemotePublicationEnabled() {
+    /**  
+                .addGlobalBlock(noClusterManagerBlockService.getNoClusterManagerBlock())
+        synchronized (mutex) {
+            if (node.isClusterManagerNode()  
+        closeElectionScheduler();  
+    }  
+                }
+            assert followersChecker.getFastResponseState().term == getCurrentTerm() : followersChecker.getFastResponseState();  
+        }  
+        FOLLOWER
+                    ClusterBlocks.builder()  
+        }
+            // expose last accepted cluster state as base state upon which the cluster_manager service  
+                assert leaderChecker.currentNodeIsClusterManager() == false;
+            followersChecker.clearCurrentNodes();  
+            logger.trace("scheduling reconfiguration");  
+            clusterSettings,  
+                            clusterChangedEvent.state().term()
+                if (publication.isCommitted()) {  
+                applierState = clusterStateWithNoClusterManagerBlock(applierState);  
+        private void cancelTimeoutHandlers() {
+            "{}: coordinator becoming LEADER in term {} (was {}, lastKnownLeader was [{}])",
+                );
+            }  
+                                    logger.debug("publication ended successfully: {}", CoordinatorPublication.this);
+            .collect(Collectors.toSet());  
+            .filter(
+            public void onFailure(String source, Exception e) {  
+            this.ackListener = ackListener;
+        assert mode == Mode.LEADER : "expected to be leader on abdication but was " + mode;
+                                                        futureVoteCollection  
+        ) {
+                .build();  
+            prevotingRound.close();
+        });
+    void becomeLeader(String method) {
+            if (isInitialConfigurationSet()) {  
+import java.util.Random;
+    @Nullable
+    public Iterable<DiscoveryNode> getFoundPeers() {
+        RemoteStoreNodeService remoteStoreNodeService,  
+    private final ElectionStrategy electionStrategy;
+                nodeConnectionsService.setPendingDisconnections(new HashSet<>(clusterChangedEvent.nodesDelta().removedNodes()));  
+        lastKnownLeader = Optional.of(getLocalNode());
+    }
+import org.opensearch.cluster.routing.RerouteService;
+        this.lastKnownLeader = Optional.empty();
+                    receivedJoinsProcessed = true;
+            return lastJoin;
+            // automatically generate a UID for the metadata if we need to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                )  
+            settings,  
+        protected void startProbe(TransportAddress transportAddress) {
+        ElectionStrategy electionStrategy,  
+                }
+                && votingConfiguration.hasQuorum(Collections.singleton(getLocalNode().getId())) == false) {
+                transportService,
+                onJoinValidators.forEach(a -> a.accept(getLocalNode(), publishRequest.getAcceptedState()));
+    }  
+                                    }  
+                    lastPublishedState.nodes().forEach(lastPublishedNodes::add);  
+            }  
+            if (getCurrentTerm() != followerCheckRequest.getTerm()) {
+            this.timeoutHandler = singleNodeDiscovery ? null : transportService.getThreadPool().schedule(new Runnable() {  
+                }
+            }  
+                    logger.debug(
+    private List<DiscoveryNode> getDiscoveredNodes() {  
+        return Optional.empty();  
+                logger.warn(  
+                                    logIncompleteNodes(Level.WARN);
+            public void onResponse(Empty empty) {
+            } else if (mode == Mode.FOLLOWER) {  
+            // checks if this publication can still influence the mode of the current publication
+                + " vs "
+    }
+                            logger.debug("skip prevoting as local node is unhealthy: [{}]", statusInfo.getInfo());
+            }
+                                                    );
+        this.clusterManagerMetrics = clusterManagerMetrics;
+            logger.trace("Starting initial join, becoming candidate");
+    private Optional<DiscoveryNode> lastKnownLeader;  
+                }
+                    "onFollowerCheckRequest: current term is [" + getCurrentTerm() + "], rejecting " + followerCheckRequest
+                assert becomingClusterManager || getStateForClusterManagerService().nodes().getClusterManagerNodeId() != null
+        );  
+        synchronized (mutex) {  
+            @Override
+                                        }
+                                    removePublicationAndPossiblyBecomeCandidate("clusterApplier#onNewClusterState");
+                        ),
+            }
+                    XContentHelper.convertToMap(
+                    if (activePublication) {
+                        // acknowledge it  
+            getCurrentTerm(),  
+                );
+                            if (e == null) {
+                receivedJoins.add(join);  
+        closePrevoting();
+            return coordinationState.get().getCurrentTerm();
+            final List<DiscoveryNode> knownNodes = new ArrayList<>();
+            coordinationState.get().getLastAcceptedState().getVersionOrMetadataVersion()  
+                    allocationService.cleanCaches();
+                });
+    }
+    }  
+        );
+import org.opensearch.common.util.concurrent.ListenableFuture;
+        }
+    private TimeValue publishTimeout;  
+            nodeHealthService
+                                publishListener.onResponse(null);  
+    public static final Setting<TimeValue> PUBLISH_TIMEOUT_SETTING = Setting.timeSetting(
+        // exclude any nodes whose ID is in the voting config exclusions list ...  
+            synchronized (mutex) {
+            }
+        followersChecker.clearCurrentNodes();
+        RerouteService rerouteService,
+        clusterSettings.addSettingsUpdateConsumer(PUBLISH_TIMEOUT_SETTING, this::setPublishTimeout);  
+            if (publishRequest.getAcceptedState().term() == ZEN1_BWC_TERM  
+import org.opensearch.discovery.PeerFinder;
+                        || clusterState.getLastCommittedConfiguration().getNodeIds().contains(n.getId()))
+            remoteStoreNodeService,
+        }  
+            @Override
+                assert currentPublication.map(Publication::isCommitted).orElse(true);
+                    JoinTaskExecutor.ensureNodeCommissioned(joinRequest.getSourceNode(), stateForJoinValidation.metadata());
+            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+                    + Strings.toString(  
+import org.opensearch.discovery.SeedHostsProvider;
+                    || activePublication
+            namedWriteableRegistry
+ */
+                    return "scheduled timeout for reporting on " + CoordinatorPublication.this;  
+    public boolean localNodeCommissioned() {
+            if (getLastAcceptedState().term() < getCurrentTerm()) {
+            }, publishTimeout, Names.GENERIC);  
+                final PublishRequest publishRequest = coordinationState.get().handleClientValue(clusterState);
+                @Override
+            maxTermSeen = Math.max(maxTermSeen, term);  
+import org.opensearch.cluster.coordination.FollowersChecker.FollowerCheckRequest;
+            joinAccumulator.handleJoinRequest(joinRequest.getSourceNode(), joinCallback);
+                : "NO_MASTER_BLOCK should only be added by Coordinator";
+                                ackListener.onNodeAck(getLocalNode(), null);
+            leaderChecker.setCurrentNodes(DiscoveryNodes.EMPTY_NODES);
+        assert mode == Mode.LEADER : "should still be leader after sending abdication messages " + mode;
+                // update early
+            transportService,  
+public class Coordinator extends AbstractLifecycleComponent implements Discovery {
+                    // acking and cluster state application for local node is handled specially
+        // ... and also automatically exclude the node IDs of cluster-manager-ineligible nodes that were previously cluster-manager-eligible
+                            "[{}] failed publication as already publication in progress",
+    ClusterState getStateForClusterManagerService() {
+        synchronized (mutex) {
+            configuredHostsResolver
+    }
+                assert followersChecker.getKnownFollowers().isEmpty();  
+                        // if either the localNodeCommissioned flag or the last accepted state thinks it should skip pre voting, we will
+        TimeValue.timeValueMillis(30000),
+                preVoteCollector.update(getPreVoteResponse(), null);
+                        + "[knownNodes="  
+            TransportAddressConnector transportAddressConnector,  
+                @Override
+                    case NODE_LEFT_REASON_FOLLOWER_CHECK_RETRY_FAIL -> "follower.check.fail";
+                handleJoin(join);
+                    synchronized (mutex) {
+    }
+                    publishListener.onFailure(
+                // If we haven't completely finished becoming cluster-manager then there's already a publication scheduled which will, in
+                    if (node.equals(getLocalNode())) {  
+    @Nullable  
+        final List<DiscoveryNode> nodes = new ArrayList<>();
+ *
+                    Metadata.builder(clusterState.metadata())
+    /**  
+        this.localNodeCommissioned = localNodeCommissioned;
+    private final Random random;  
+            ConfiguredHostsResolver configuredHostsResolver
+                    // cluster state update task to become cluster-manager is submitted to ClusterManagerService,
+                final Iterable<DiscoveryNode> foundPeers = getFoundPeers();
+                            || localNodeCommissioned == false) {
+        return peerFinder.getFoundPeers();  
+            ActionListener<Void> publishListener
+            .map(VotingConfigExclusion::getNodeId)  
+        protected void sendPublishRequest(  
+        protected void onCompletion(boolean committed) {  
+import org.opensearch.cluster.routing.allocation.AllocationService;
+import org.opensearch.common.SetOnce;
+                final long term = publishRequest.getAcceptedState().term();
+import java.util.Collection;  
+import org.opensearch.discovery.DiscoveryStats;
+                assert leaderChecker.leader() == null : leaderChecker.leader();  
+        this.nodeConnectionsService = nodeConnectionsService;
+        synchronized (mutex) {
+            }  
+            namedWriteableRegistry,  
+import org.opensearch.common.settings.ClusterSettings;
+            electionScheduler = null;
+ * GitHub history for details.
+        private final ListenableFuture<Void> localNodeAckEvent;  
+    }  
+                public void run() {
+                becomeFollower("handlePublishRequest", sourceNode); // also updates preVoteCollector
+                    + " should be in published "
+                });
+    ClusterState improveConfiguration(ClusterState clusterState) {
+            PublishRequest publishRequest,
+                assert applierState.nodes().getClusterManagerNodeId() == null;
+            } else {
+    /**  
+                assert getStateForClusterManagerService().nodes().getClusterManagerNodeId() == null : getStateForClusterManagerService();  
+    private final NodeHealthService nodeHealthService;
+            this::getCurrentTerm,
+                        + publishRequest.getAcceptedState().metadata().clusterUUID()
+import org.opensearch.common.Nullable;
+            transportService,
+            }
+        final Optional<Join> optionalJoin = joinRequest.getOptionalJoin();  
+                }
+        closePrevoting();
+    }
+                    );  
+ * @opensearch.internal  
+    public ClusterState getApplierState() {
+                    processJoinRequest(joinRequest, joinCallback);  
+        synchronized (mutex) {
+                    }
+ * specific language governing permissions and limitations
+    }
+    }
+                assert peerFinderLeader.equals(lastKnownLeader) : peerFinderLeader;
+    public static boolean isZen1Node(DiscoveryNode discoveryNode) {
+            } else if (joinHelper.isJoinPending()) {
+            becomeCandidate("startInitialJoin");  
+        return lastAcceptedState.getLastCommittedConfiguration().getNodeIds().contains(nodeId)
+        // the logging much harder to follow.  
+import org.opensearch.monitor.NodeHealthService;
+    private final Reconfigurator reconfigurator;  
+            getStateForClusterManagerService(),
+    }
+                }  
+            metadataBuilder.coordinationMetadata(coordinationMetadata);
+        closePrevoting();
+                        prevotingRound = preVoteCollector.start(lastAcceptedState, discoveredNodes);
+    void sendValidateJoinRequest(ClusterState stateForJoinValidation, JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {  
+            mode,
+        return nodes;
+            + newClusterManager;
+                            return;
+            currentPublication.get().cancel(reason);
+import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_DISCONNECTED;
+        }  
+                    assert lastPublishedNodes.equals(followersChecker.getKnownFollowers()) : lastPublishedNodes
+            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+            return false;  
+            this.publishRequest = publishRequest;
+                logger.debug(
+        TimeValue.timeValueMillis(1),
+        if (getLocalNode().isClusterManagerNode() == false) {  
+        synchronized (mutex) {
+        @Override  
+                                    if (mode == Mode.LEADER) {  
+            }  
+                onJoinValidators.forEach(a -> a.accept(joinRequest.getSourceNode(), stateForJoinValidation));
+                assert leaderChecker.leader() == null : leaderChecker.leader();
+                coordinationState.close();  
+        if (prevotingRound != null) {
+                        )
+            }
+    }
+    );
+        Set<String> nodeIdsWithAbsentName = votingConfigExclusions.stream()
+        logger.debug(  
+        this.publishTimeout = PUBLISH_TIMEOUT_SETTING.get(settings);
+                // the cluster-manager service checks if the local node is the cluster-manager node in order to fail execution of the state
+                assert clusterFormationFailureHelper.isRunning() == false;  
+        assert getLocalNode().isClusterManagerNode() : getLocalNode() + " received a join but is not cluster-manager-eligible";  
+        ActionListener<Void> publishListener,
+                            public void onFailure(String source, Exception e) {  
+                assert clusterFormationFailureHelper.isRunning() == false;
+import static org.opensearch.cluster.coordination.FollowersChecker.NODE_LEFT_REASON_FOLLOWER_CHECK_RETRY_FAIL;  
+     *
+                .nodes(DiscoveryNodes.builder().add(getLocalNode()).localNodeId(getLocalNode().getId()))
+        }
+                return "scheduling of new prevoting round";  
+                assert leaderChecker.currentNodeIsClusterManager() == false;
+                            @Override  
+    // the timeout before emitting an info log about a slow-running publication
+        try {
+                    expectedVotes.addVote(Coordinator.this.getLocalNode());  
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;  
+        if (remoteClusterStateService != null) {
+            // where we would possibly have to remove the NO_MASTER_BLOCK from the applierState when turning a candidate back to follower.  
+            final Optional<DiscoveryNode> peerFinderLeader = peerFinder.getLeader();
+    private void handleJoin(Join join) {  
+                    listener.onFailure(e);
+    @Override
+            lastKnownLeader  
+                            prevotingRound.close();
+    }  
+                    }  
+                    "not enough nodes discovered to form a quorum in the initial configuration "
+        }  
+                            }  
+     * The mode of the coordinator.
+        if (mode != Mode.CANDIDATE) {
+        return clusterState;
+                );  
+        if (improveConfiguration(state) != state && reconfigurationTaskScheduled.compareAndSet(false, true)) {
+        private final Scheduler.ScheduledCancellable timeoutHandler;  
+                        () -> new ParameterizedMessage(
+                    ClusterStateTaskConfig.build(Priority.IMMEDIATE),  
+                }
+            peerFinder.getLastResolvedAddresses(),
+                        }  
+        assert publishRequest.getAcceptedState().nodes().getLocalNode().equals(getLocalNode()) : publishRequest.getAcceptedState()
+                                    updateMaxTermSeen(getCurrentTerm());
+                    logger.debug("reconfiguration failed", e);
+        Supplier<CoordinationState.PersistedState> persistedStateSupplier,  
+            publishListener.onFailure(new FailedToCommitClusterStateException("publishing failed", e));  
+                leaderNode,
+            assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+    private final PeerFinder peerFinder;
+                Strings.toString(MediaTypeRegistry.JSON, event.previousState()),
+                    }
+import org.opensearch.cluster.coordination.ClusterFormationFailureHelper.ClusterFormationState;
+import org.opensearch.core.transport.TransportResponse.Empty;
+            assert coordinationState.get().joinVotesHaveQuorumFor(newConfig);
+    * 1. Every voting config exclusion with an ID of _absent_ should not match any nodes currently in the cluster by name
+            logger.info("setting initial configuration to {}", votingConfiguration);
+import org.apache.logging.log4j.LogManager;
+                && mode == Mode.FOLLOWER
+            @Override
+            return new PublishWithJoinResponse(
+                    final FailedToCommitClusterStateException exception = new FailedToCommitClusterStateException("publication failed", e);  
+        peerFinder.getFoundPeers().forEach(nodes::add);  
+        NamedWriteableRegistry namedWriteableRegistry,  
+        LEADER,
+    private void closePrevoting() {  
+            ClusterState initialState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(settings))
+            } else {
+                    publishListener
+        "cluster.publish.info_timeout",
+                    ackListener.onCommit(commitTime);  
+                updateMaxTermSeen(term + 1);
+            return join;  
+        }
+        assert leaderChecker.leader() == null : leaderChecker.leader();
+        } else {  
+import org.opensearch.common.Priority;  
+                        () -> applierState,  
+                becomeFollower("onFollowerCheckRequest", followerCheckRequest.getSender());
+                        logger.debug("updateMaxTermSeen: maxTermSeen = {} > currentTerm = {}, bumping term", maxTermSeen, currentTerm);  
+        }
+        }  
+                    e
+import org.opensearch.discovery.DiscoveryModule;
+import static org.opensearch.cluster.ClusterManagerMetrics.REASON_TAG;
+                        + followersChecker.getKnownFollowers();
+                stats.add(persistedStateRegistry.getPersistedState(stateType).getStats());  
+                        }  
+                );
+            }  
+                    assert false : "[" + currentPublication.get() + "] in progress, cannot start new publication";
+            } else {
+            joinAccumulator = joinHelper.new CandidateJoinAccumulator();
+    ) {  
+        }
+            if (singleNodeDiscovery
+                        new ClusterApplyListener() {
+    }
+    private boolean handleJoinIgnoringExceptions(Join join) {
+                assert joinAccumulator instanceof JoinHelper.CandidateJoinAccumulator;  
+                        if (nodeCommissioned(lastAcceptedState.nodes().getLocalNode(), lastAcceptedState.metadata()) == false
+                        .getLastAcceptedConfiguration()
+    DiscoveryNode getLocalNode() {
+        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+        this.joinAccumulator = new InitialJoinAccumulator();
+                    publishListener.onFailure(
+ * Unless required by applicable law or agreed to in writing,
+            DiscoveryNode destination,
+    private AtomicBoolean reconfigurationTaskScheduled = new AtomicBoolean();  
+                // since we check whether a term bump is needed at the end of the publication too.
+                public void onFailure(Exception e) {
+                        .equals(coordinationState.get().getLastCommittedConfiguration()) : coordinationState.get()
+        );
+        assert Thread.holdsLock(mutex) : "Coordinator mutex not held";  
+                public ClusterState execute(ClusterState currentState) {  
+ * SPDX-License-Identifier: Apache-2.0
+    private NodeConnectionsService nodeConnectionsService;
+                );  
+                                                        state.getLastCommittedConfiguration(),
+            }  
+    }
+        if (singleNodeDiscovery && joinRequest.getSourceNode().equals(getLocalNode()) == false) {  
+            nodeHealthService.getHealth()
+        clusterFormationFailureHelper.stop();  
+    public void startInitialJoin() {  
+            this.onJoinValidators,  
+import org.opensearch.cluster.ClusterChangedEvent;
+                                                    // to abdicate to it. Assume that every node that completed the publication can provide
+import java.util.Set;  
+ * the Apache License, Version 2.0 (the "License"); you may
+            return coordinationState.get().handleJoin(join);  
+                    // This is cleaned up to avoid stale entries which would block future reconnections
+            mode = Mode.FOLLOWER;
+                logger.info(new ParameterizedMessage("cluster-manager node [{}] failed, restarting discovery", lastKnownLeader.get()), e);  
+    private void closePrevotingAndElectionScheduler() {
+        }
+                                                abdicateTo(clusterManagerCandidates.get(random.nextInt(clusterManagerCandidates.size())));
+ *  
+            }, transportService.getThreadPool()::relativeTimeInMillis);  
+        synchronized (mutex) {  
+            } else {  
+                // schedule a reconfiguration if needed. It's benign to schedule a reconfiguration anyway, but it might fail if it wins the
+                    );

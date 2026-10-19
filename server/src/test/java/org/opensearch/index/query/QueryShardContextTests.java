@@ -1,482 +1,437 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.document.Field;  
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.TermQuery;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.opensearch.Version;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.TriFunction;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;  
-import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.fielddata.LeafFieldData;
-import org.opensearch.index.fielddata.ScriptDocValues;  
-import org.opensearch.index.fielddata.plain.AbstractLeafOrdinalsFieldData;
-import org.opensearch.index.mapper.DerivedFieldResolver;
-import org.opensearch.index.mapper.DerivedFieldType;  
-import org.opensearch.index.mapper.IndexFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;  
-import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.search.lookup.LeafDocLookup;
-import org.opensearch.search.lookup.LeafSearchLookup;  
-import org.opensearch.search.lookup.SearchLookup;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.List;
-import java.util.function.BiFunction;  
-import java.util.function.Supplier;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;  
-import static org.hamcrest.Matchers.sameInstance;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class QueryShardContextTests extends OpenSearchTestCase {  
-
-    private static final int SHARD_ID = 0;
-
-    public void testFailIfFieldMappingNotFound() {
-        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, null);
-        context.setAllowUnmappedFields(false);  
-        MappedFieldType fieldType = new TextFieldMapper.TextFieldType("text");
-        MappedFieldType result = context.failIfFieldMappingNotFound("name", fieldType);
-        assertThat(result, sameInstance(fieldType));  
-        QueryShardException e = expectThrows(QueryShardException.class, () -> context.failIfFieldMappingNotFound("name", null));
-        assertEquals("No field mapping can be found for the field with name [name]", e.getMessage());
-
-        context.setAllowUnmappedFields(true);
-        result = context.failIfFieldMappingNotFound("name", fieldType);
-        assertThat(result, sameInstance(fieldType));  
-        result = context.failIfFieldMappingNotFound("name", null);
-        assertThat(result, nullValue());
-
-        context.setAllowUnmappedFields(false);
-        context.setMapUnmappedFieldAsString(true);
-        result = context.failIfFieldMappingNotFound("name", fieldType);  
-        assertThat(result, sameInstance(fieldType));
-        result = context.failIfFieldMappingNotFound("name", null);
-        assertThat(result, notNullValue());  
-        assertThat(result, instanceOf(TextFieldMapper.TextFieldType.class));
-        assertThat(result.name(), equalTo("name"));
-    }  
-
-    public void testDerivedFieldMapping() {
-        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, null);  
-        assertNull(context.failIfFieldMappingNotFound("derived_field_search_req", null));
-        DerivedFieldResolver derivedFieldResolver = mock(DerivedFieldResolver.class);
-        context.setDerivedFieldResolver(derivedFieldResolver);  
-        DerivedFieldType mockDerivedFieldType = mock(DerivedFieldType.class);
-        when(derivedFieldResolver.resolve("derived_field_search_req")).thenReturn(mockDerivedFieldType);
-        assertEquals(mockDerivedFieldType, context.failIfFieldMappingNotFound("derived_field_search_req", null));  
-        when(derivedFieldResolver.resolve("field_missing")).thenReturn(null);
-        assertNull(context.failIfFieldMappingNotFound("field_missing", null));
-    }  
-
-    public void testToQueryFails() {
-        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, null);  
-        Exception exc = expectThrows(Exception.class, () -> context.toQuery(new AbstractQueryBuilder() {
-            @Override
-            public String getWriteableName() {  
+                    }  
+                        return ScoreMode.COMPLETE_NO_SCORES;
                 return null;
-            }
-
+import org.opensearch.search.lookup.LeafDocLookup;
+                    }
+        assertEquals(SHARD_ID, searchLookup.shardId());  
+                    indexFieldData = queryShardContext.lookup().doc().getForField(fieldType);
+import org.apache.lucene.document.StringField;
+                        assert docId >= 0;
+                return "test";  
+                    return leafLookup.doc().get("field1").toString();
+import org.apache.lucene.search.Scorable;
+        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("field", queryShardContext));  
+        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("field1", queryShardContext));
+import org.apache.lucene.search.ScoreMode;
+            int i = Integer.parseInt(field.substring(field.length() - 1));
+        assertEquals("No field mapping can be found for the field with name [name]", e.getMessage());
+import org.opensearch.index.analysis.IndexAnalyzers;
+                    public String get(int index) {  
+                    @Override  
+                    @Override
             @Override
-            protected void doWriteTo(StreamOutput out) throws IOException {
-
-            }
-
-            @Override  
-            protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-
-            }  
-
-            @Override
-            protected Query doToQuery(QueryShardContext context) throws IOException {  
-                throw new RuntimeException("boom");
-            }
-
-            @Override
-            protected boolean doEquals(AbstractQueryBuilder other) {
                 return false;  
-            }
-
-            @Override  
-            protected int doHashCode() {
-                return 0;
+        );
+        assertEquals(Collections.singletonList("field1_0"), values);  
+    }  
+            .put("index.sort.field", "sort_field")
+        }  
+        assertThat(result, instanceOf(TextFieldMapper.TextFieldType.class));
+import org.apache.lucene.search.TermQuery;  
+        }  
+import org.opensearch.core.xcontent.XContentBuilder;
+                }
+ * GitHub history for details.
+                                }  
+        StringBuilder expectedSecondDoc = new StringBuilder();
+        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
+                int i = Integer.parseInt(field.substring(field.length() - 1));
+            "Cyclic dependency detected while resolving runtime fields: field1 -> field2 -> field3 -> field4 -> field1",  
+import org.apache.lucene.index.LeafReaderContext;  
+import java.util.Arrays;  
+            indexSettings,
+ * not use this file except in compliance with the License.
+    private static MappedFieldType mockFieldType(String fieldName, BiFunction<LeafSearchLookup, Integer, String> runtimeDocValues) {
+ * compatible open source license.
+            () -> 0L,
+import org.opensearch.index.mapper.DerivedFieldType;  
+    }  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.common.io.stream.StreamOutput;  
+            BigArrays.NON_RECYCLING_INSTANCE,  
+                for (int i = 0; i < numFields; i++) {
+        QueryShardException e = expectThrows(QueryShardException.class, () -> context.failIfFieldMappingNotFound("name", null));
+                IndexSearcher searcher = newSearcher(reader);
+        assertEquals(Arrays.asList(expectedFirstDoc.toString(), expectedSecondDoc.toString()), collect("field", queryShardContext));
             }  
-        }));
+            IndexFieldData<?> indexFieldData = mock(IndexFieldData.class);
+            @Override
+            new NamedWriteableRegistry(Collections.emptyList()),
+    public void testFielddataLookupTerminatesInLoop() {
+}
+import static org.mockito.Mockito.mock;  
+/*
+            new NamedWriteableRegistry(Collections.emptyList()),  
+    }
+            } else {
+                return leafLookup.doc().get("4").toString();
+ * ownership. Elasticsearch licenses this file to you under  
+        when(derivedFieldResolver.resolve("derived_field_search_req")).thenReturn(mockDerivedFieldType);
+            @Override
+        indexMetadataBuilder.settings(
+        MappedFieldType fieldType = mock(MappedFieldType.class);  
+                });
+        Settings settings = Settings.builder()  
+import org.apache.lucene.store.Directory;
+        });  
+    }
+            expectedSecondDoc.append("test1");
+                    value.append(leafLookup.doc().get("field" + i).get(0));  
+            null,
+            null,
+            clusterAlias,
+    }
+            protected void doWriteTo(StreamOutput out) throws IOException {
+                return 0;
+                        leafLookup.setDocument(docId);  
+        assertThat(shardContext.getFullyQualifiedIndex().getName(), equalTo(clusterAlias + ":index"));
+    public void testFielddataLookupSelfReference() {
+            () -> nowInMillis,  
+        assertEquals(Arrays.asList("test0000", "test1111"), collect("field1", queryShardContext));  
+    public void testIndexSortedOnField() {
+            () -> true,
+ * under the License.  
+            public String getWriteableName() {  
+ */
+        assertThat(result, sameInstance(fieldType));  
+        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
+        });  
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        try (Directory directory = newDirectory(); RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
+        );
+            null,
+import static org.hamcrest.Matchers.nullValue;  
+                .put("index.version.created", Version.CURRENT)  
+import org.opensearch.cluster.metadata.IndexMetadata;
+            Collections.singletonMap("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, null)),
+    public void testFailIfFieldMappingNotFound() {
+import org.opensearch.index.mapper.MapperService;  
+            if (field.equals("field")) {  
+        SearchLookup searchLookup = createQueryShardContext("uuid", null, null).lookup();
+            });
+import org.opensearch.common.TriFunction;
+        IndexMetadata.Builder indexMetadataBuilder = new IndexMetadata.Builder("index");  
+import java.util.Collections;
+import org.opensearch.Version;  
+            iae.getMessage()
+        });
+            @Override  
+        when(mapperService.index()).thenReturn(indexMetadata.getIndex());
+            when(builder.build(any(), any())).thenAnswer(buildInv -> indexFieldData);
+                when(leafFieldData.getScriptValues()).thenAnswer(scriptValuesArgs -> new ScriptDocValues<String>() {  
+    public void testFielddataLookupReferencesBelowMaxDepth() throws IOException {
+        String indexUuid,
+ *
+        assertEquals(
+        StringBuilder expectedFirstDoc = new StringBuilder();
+ */  
+                    public ScoreMode scoreMode() {  
+            }
+package org.opensearch.index.query;
+import static org.hamcrest.Matchers.sameInstance;
+    public static QueryShardContext createQueryShardContext(String indexUuid, String clusterAlias) {  
+import java.util.List;
+    }  
+            IndexFieldData.Builder builder = mock(IndexFieldData.Builder.class);  
+import static org.mockito.Mockito.when;
+            null,
+                            }
+import org.apache.lucene.search.Collector;
+                    }
+import org.opensearch.index.fielddata.LeafFieldData;
+            }  
+import org.opensearch.index.mapper.MappedFieldType;
+                return "test" + docId;
+import org.apache.lucene.search.MatchAllDocsQuery;
+        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("1", queryShardContext));  
+                return field + "_" + docId;
+        );  
+            }
+    public void testFielddataLookupOneFieldManyReferences() throws IOException {  
+                        LeafSearchLookup leafLookup = searchLookup.get().getLeafSearchLookup(leafReaderContext);
+        assertEquals(mockDerivedFieldType, context.failIfFieldMappingNotFound("derived_field_search_req", null));  
+ * Modifications Copyright OpenSearch Contributors. See  
+                                scriptDocValues.setNextDocId(doc);  
+ */
+                String fieldName = (String) fieldTypeInv.getArguments()[0];  
+                        return value;
+                assert docId == 1;  
+                return leafFieldData;
+            null,
+                                if (randomBoolean()) {
+                        };
+            ? context.getIndexSettings().getIndexMetadata().getIndex().getName()
+                return scriptDocValues.get(0).toString() + docId;  
+    public void testFielddataLookupBeyondMaxDepth() {
+            when(mapperService.fieldType(any())).thenAnswer(fieldTypeInv -> {
+    }  
+            null,  
+                                    scriptDocValues = scriptValues;
+import org.opensearch.common.util.BigArrays;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        IndexMetadata indexMetadata = indexMetadataBuilder.build();
+        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();  
+            protected Query doToQuery(QueryShardContext context) throws IOException {  
+        MapperService mapperService = mock(MapperService.class);  
+        int numFields = randomIntBetween(5, 20);
+import org.opensearch.search.lookup.SearchLookup;
+        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, null);
+ * software distributed under the License is distributed on an
+                StringBuilder value = new StringBuilder();
+            }
+        });
+import org.opensearch.common.settings.Settings;  
+            // simulate a runtime field cycle: 1: doc['2'] 2: doc['3'] 3: doc['4'] 4: doc['1']  
+import org.opensearch.test.OpenSearchTestCase;
+            null,
+                    indexFieldData = queryShardContext.getForField(fieldType);  
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);  
+import static org.mockito.Mockito.any;
+        assertThat(result.name(), equalTo("name"));
+            Settings.builder()
+            null,
+                    @Override
+        List<String> result = new ArrayList<>();  
+            @Override
+        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, null);  
+import org.apache.lucene.tests.index.RandomIndexWriter;
+import org.apache.lucene.search.LeafCollector;
+                                    result.add(scriptDocValues.get(i).toString());
+            @SuppressWarnings("unchecked")  
+    }  
+            : clusterAlias + ":" + context.getIndexSettings().getIndex().getName();
+                                ScriptDocValues<?> scriptDocValues;
+            SHARD_ID,  
+                    public LeafCollector getLeafCollector(LeafReaderContext context) {
+            // simulate a runtime field cycle: 1: doc['2'] 2: doc['3'] 3: doc['4'] 4: doc['4']  
+            return leafLookup.doc().get(Integer.toString(Integer.parseInt(field) + 1)).toString();
+        MappedFieldType result = context.failIfFieldMappingNotFound("name", fieldType);
+                }  
         assertThat(exc.getMessage(), equalTo("failed to create query: boom"));
     }  
-
-    public void testClusterAlias() throws IOException {
-        final String clusterAlias = randomBoolean() ? null : "remote_cluster";  
-        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, clusterAlias);
-
-        IndexFieldMapper mapper = new IndexFieldMapper();  
-
-        IndexFieldData<?> forField = context.getForField(mapper.fieldType());
-        String expected = clusterAlias == null  
-            ? context.getIndexSettings().getIndexMetadata().getIndex().getName()
-            : clusterAlias + ":" + context.getIndexSettings().getIndex().getName();
-        assertEquals(expected, ((AbstractLeafOrdinalsFieldData) forField.load(null)).getOrdinalsValues().lookupOrd(0).utf8ToString());  
+            null,
+            int i = Integer.parseInt(field);
+import org.opensearch.index.fielddata.IndexFieldData;
+/*
+                .put(IndexMetadata.SETTING_INDEX_UUID, indexUuid)  
+                IndexFieldData<?> indexFieldData;
+            BigArrays.NON_RECYCLING_INSTANCE,
+import java.util.function.Supplier;
+        context.setMapUnmappedFieldAsString(true);
     }
-
-    public void testGetFullyQualifiedIndex() {  
-        String clusterAlias = randomAlphaOfLengthBetween(5, 10);
-        String indexUuid = randomAlphaOfLengthBetween(3, 10);
-        QueryShardContext shardContext = createQueryShardContext(indexUuid, clusterAlias);  
-        assertThat(shardContext.getFullyQualifiedIndex().getName(), equalTo(clusterAlias + ":index"));
-        assertThat(shardContext.getFullyQualifiedIndex().getUUID(), equalTo(indexUuid));
+            return result;  
     }  
-
-    public void testIndexSortedOnField() {
-        Settings settings = Settings.builder()  
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+                    @Override
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-            .put("index.sort.field", "sort_field")
-            .build();
-        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();  
-
-        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
-        QueryShardContext context = new QueryShardContext(  
-            0,
-            indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            NamedXContentRegistry.EMPTY,  
-            new NamedWriteableRegistry(Collections.emptyList()),
-            null,
-            null,  
-            () -> 0L,
-            null,
-            null,  
-            () -> true,
-            null
-        );  
-
-        assertTrue(context.indexSortedOnField("sort_field"));
-        assertFalse(context.indexSortedOnField("second_sort_field"));  
         assertFalse(context.indexSortedOnField("non_sort_field"));
-    }
-
-    public void testFielddataLookupSelfReference() {
-        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
-            // simulate a runtime field that depends on itself e.g. field: doc['field']  
-            return leafLookup.doc().get(field).toString();
+    private static List<String> collect(String field, QueryShardContext queryShardContext) throws IOException {
+        return fieldType;
+        assertEquals(expected, ((AbstractLeafOrdinalsFieldData) forField.load(null)).getOrdinalsValues().lookupOrd(0).utf8ToString());  
+        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("1", queryShardContext));
+                .put("index.number_of_shards", 1)
+                                for (int i = 0; i < scriptDocValues.size(); i++) {
+            if (field.equals("4")) {
+        }
+            return builder;
         });
-        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("field", queryShardContext));  
+        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
+        IndexFieldData<?> forField = context.getForField(mapper.fieldType());
+                LeafFieldData leafFieldData = mock(LeafFieldData.class);
+            protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+        if (runtimeDocValues != null) {
+            null,
+                searcher.search(query, new Collector() {
+import static org.hamcrest.Matchers.notNullValue;
+ *  
+            }
+            if (i == 5) {
+import org.apache.lucene.search.Query;  
+                if (randomBoolean()) {
+        assertNull(context.failIfFieldMappingNotFound("field_missing", null));
+                if (field.equals("field4")) {
+import org.opensearch.index.analysis.AnalyzerScope;
+        when(derivedFieldResolver.resolve("field_missing")).thenReturn(null);
+                return leafLookup.doc().get("1").toString();
+            @Override  
+            }
+        final long nowInMillis = randomNonNegativeLong();
+        assertThat(result, sameInstance(fieldType));  
+                LeafReaderContext leafReaderContext = (LeafReaderContext) loadArgs.getArguments()[0];
+    private static QueryShardContext createQueryShardContext(
+                                    scriptDocValues = leafDocLookup.get(field);
+    private static List<String> collect(String field, QueryShardContext queryShardContext, Query query) throws IOException {
+        String clusterAlias = randomAlphaOfLengthBetween(5, 10);
+            when(indexFieldData.load(any())).thenAnswer(loadArgs -> {  
+                throw new RuntimeException("boom");
+        MappedFieldType fieldType = new TextFieldMapper.TextFieldType("text");
+    }  
+                            public void collect(int doc) throws IOException {  
+import org.opensearch.index.mapper.DerivedFieldResolver;
+                            @Override
+ * Unless required by applicable law or agreed to in writing,
+                    }  
+                        return 1;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
+            null
+        result = context.failIfFieldMappingNotFound("name", fieldType);
+                            public void setScorer(Scorable scorer) {}  
+                MappedFieldType fieldType = queryShardContext.fieldMapper(field);  
+        DerivedFieldType mockDerivedFieldType = mock(DerivedFieldType.class);
+        for (int i = 0; i < numFields; i++) {  
+                return value.toString();
+        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, clusterAlias);
+                                    leafDocLookup.setDocument(doc);
+        assertThat(shardContext.getFullyQualifiedIndex().getUUID(), equalTo(indexUuid));
+            Supplier<SearchLookup> searchLookup = ((Supplier<SearchLookup>) builderInv.getArguments()[1]);
+    public void testSearchLookupShardId() {
+ * specific language governing permissions and limitations
+        context.setDerivedFieldResolver(derivedFieldResolver);  
+    public void testToQueryFails() {
+                } else {
+ * this work for additional information regarding copyright
+        String clusterAlias,  
+        result = context.failIfFieldMappingNotFound("name", null);
+        QueryShardContext shardContext = createQueryShardContext(indexUuid, clusterAlias);  
+        String indexUuid = randomAlphaOfLengthBetween(3, 10);
+ * KIND, either express or implied.  See the License for the
+            if (field.equals("4")) {
+ *
+            null
+        assertFalse(context.indexSortedOnField("second_sort_field"));  
         assertEquals("Cyclic dependency detected while resolving runtime fields: field -> field", iae.getMessage());
     }
-
-    public void testFielddataLookupLooseLoop() {
-        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
-            // simulate a runtime field cycle: 1: doc['2'] 2: doc['3'] 3: doc['4'] 4: doc['1']  
-            if (field.equals("4")) {
-                return leafLookup.doc().get("1").toString();
-            }  
-            return leafLookup.doc().get(Integer.toString(Integer.parseInt(field) + 1)).toString();
-        });
-        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("1", queryShardContext));  
-        assertEquals("Cyclic dependency detected while resolving runtime fields: 1 -> 2 -> 3 -> 4 -> 1", iae.getMessage());
-    }
-
-    public void testFielddataLookupTerminatesInLoop() {
-        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
-            // simulate a runtime field cycle: 1: doc['2'] 2: doc['3'] 3: doc['4'] 4: doc['4']  
-            if (field.equals("4")) {
-                return leafLookup.doc().get("4").toString();
-            }  
-            return leafLookup.doc().get(Integer.toString(Integer.parseInt(field) + 1)).toString();
-        });
-        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("1", queryShardContext));  
-        assertEquals("Cyclic dependency detected while resolving runtime fields: 1 -> 2 -> 3 -> 4 -> 4", iae.getMessage());
-    }
-
-    public void testFielddataLookupSometimesLoop() throws IOException {
-        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
-            if (docId == 0) {  
-                return field + "_" + docId;
-            } else {
-                assert docId == 1;  
-                if (field.equals("field4")) {
-                    return leafLookup.doc().get("field1").toString();
-                }  
-                int i = Integer.parseInt(field.substring(field.length() - 1));
-                return leafLookup.doc().get("field" + (i + 1)).toString();
-            }  
-        });
-        List<String> values = collect("field1", queryShardContext, new TermQuery(new Term("indexed_field", "first")));
-        assertEquals(Collections.singletonList("field1_0"), values);  
-        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("field1", queryShardContext));
-        assertEquals(
-            "Cyclic dependency detected while resolving runtime fields: field1 -> field2 -> field3 -> field4 -> field1",  
-            iae.getMessage()
-        );
-    }  
-
-    public void testFielddataLookupBeyondMaxDepth() {
-        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {  
-            int i = Integer.parseInt(field);
-            return leafLookup.doc().get(Integer.toString(i + 1)).toString();
-        });  
-        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("1", queryShardContext));
-        assertEquals("Field requires resolving too many dependent fields: 1 -> 2 -> 3 -> 4 -> 5 -> 6", iae.getMessage());
-    }  
-
-    public void testFielddataLookupReferencesBelowMaxDepth() throws IOException {
-        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {  
-            int i = Integer.parseInt(field.substring(field.length() - 1));
-            if (i == 5) {
-                return "test";  
-            } else {
-                ScriptDocValues<?> scriptDocValues = leafLookup.doc().get("field" + (i + 1));
-                return scriptDocValues.get(0).toString() + docId;  
-            }
-        });
-        assertEquals(Arrays.asList("test0000", "test1111"), collect("field1", queryShardContext));  
-    }
-
-    public void testFielddataLookupOneFieldManyReferences() throws IOException {  
-        int numFields = randomIntBetween(5, 20);
-        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
-            if (field.equals("field")) {  
-                StringBuilder value = new StringBuilder();
-                for (int i = 0; i < numFields; i++) {
-                    value.append(leafLookup.doc().get("field" + i).get(0));  
-                }
-                return value.toString();
-            } else {  
-                return "test" + docId;
-            }
-        });  
-        StringBuilder expectedFirstDoc = new StringBuilder();
-        StringBuilder expectedSecondDoc = new StringBuilder();
-        for (int i = 0; i < numFields; i++) {  
-            expectedFirstDoc.append("test0");
-            expectedSecondDoc.append("test1");
-        }  
-        assertEquals(Arrays.asList(expectedFirstDoc.toString(), expectedSecondDoc.toString()), collect("field", queryShardContext));
-    }
-
-    public void testSearchLookupShardId() {
-        SearchLookup searchLookup = createQueryShardContext("uuid", null, null).lookup();
-        assertEquals(SHARD_ID, searchLookup.shardId());  
-    }
-
-    public static QueryShardContext createQueryShardContext(String indexUuid, String clusterAlias) {  
-        return createQueryShardContext(indexUuid, clusterAlias, null);
-    }
-
-    private static QueryShardContext createQueryShardContext(
-        String indexUuid,
-        String clusterAlias,  
-        TriFunction<String, LeafSearchLookup, Integer, String> runtimeDocValues
-    ) {
-        IndexMetadata.Builder indexMetadataBuilder = new IndexMetadata.Builder("index");  
-        indexMetadataBuilder.settings(
-            Settings.builder()
-                .put("index.version.created", Version.CURRENT)  
-                .put("index.number_of_shards", 1)
-                .put("index.number_of_replicas", 1)
-                .put(IndexMetadata.SETTING_INDEX_UUID, indexUuid)  
-        );
-        IndexMetadata indexMetadata = indexMetadataBuilder.build();
-        IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);  
-        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(
-            Collections.singletonMap("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, null)),
-            Collections.emptyMap(),  
-            Collections.emptyMap()
-        );
-        MapperService mapperService = mock(MapperService.class);  
-        when(mapperService.getIndexSettings()).thenReturn(indexSettings);
-        when(mapperService.index()).thenReturn(indexMetadata.getIndex());
-        when(mapperService.getIndexAnalyzers()).thenReturn(indexAnalyzers);  
-        if (runtimeDocValues != null) {
-            when(mapperService.fieldType(any())).thenAnswer(fieldTypeInv -> {
-                String fieldName = (String) fieldTypeInv.getArguments()[0];  
-                return mockFieldType(fieldName, (leafSearchLookup, docId) -> runtimeDocValues.apply(fieldName, leafSearchLookup, docId));
-            });
-        }  
-        final long nowInMillis = randomNonNegativeLong();
-        return new QueryShardContext(
-            SHARD_ID,  
+        final String clusterAlias = randomBoolean() ? null : "remote_cluster";  
+            .build();
+import static org.hamcrest.Matchers.equalTo;  
             indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,
+            return leafLookup.doc().get(Integer.toString(i + 1)).toString();
+        QueryShardContext context = new QueryShardContext(  
+        QueryShardContext context = createQueryShardContext(IndexMetadata.INDEX_UUID_NA_VALUE, null);  
+    private static final int SHARD_ID = 0;
+ * license agreements. See the NOTICE file distributed with
+    }
+        return collect(field, queryShardContext, new MatchAllDocsQuery());
+        result = context.failIfFieldMappingNotFound("name", fieldType);  
+        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {  
             null,  
-            (mappedFieldType, idxName, searchLookup) -> mappedFieldType.fielddataBuilder(idxName, searchLookup).build(null, null),
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(result, nullValue());
+            }
+    public void testClusterAlias() throws IOException {
+    }
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            indexWriter.addDocument(Collections.singletonList(new StringField("indexed_field", "second", Field.Store.NO)));  
+                        ScriptDocValues<?> scriptValues = indexFieldData.load(context).getScriptValues();  
+            protected boolean doEquals(AbstractQueryBuilder other) {
+                    public void setNextDocId(int docId) {  
+            Collections.emptyMap()
+ * Licensed to Elasticsearch under one or more contributor  
+import org.apache.lucene.index.Term;
+            expectedFirstDoc.append("test0");
+                .put("index.number_of_replicas", 1)
+        });  
+import org.opensearch.index.mapper.IndexFieldMapper;
+        context.setAllowUnmappedFields(false);  
+        context.setAllowUnmappedFields(true);
+/*  
+        List<String> values = collect("field1", queryShardContext, new TermQuery(new Term("indexed_field", "first")));
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+ * You may obtain a copy of the License at  
+        assertEquals("Cyclic dependency detected while resolving runtime fields: 1 -> 2 -> 3 -> 4 -> 4", iae.getMessage());
+        });
+        assertThat(result, notNullValue());  
+        assertNull(context.failIfFieldMappingNotFound("derived_field_search_req", null));
+public class QueryShardContextTests extends OpenSearchTestCase {  
+            // simulate a runtime field that depends on itself e.g. field: doc['field']  
+ * the Apache License, Version 2.0 (the "License"); you may
+                    @Override
+        TriFunction<String, LeafSearchLookup, Integer, String> runtimeDocValues
+    }
+            }  
+import java.util.ArrayList;
+            }
+        );
             mapperService,
             null,  
-            null,
-            NamedXContentRegistry.EMPTY,
-            new NamedWriteableRegistry(Collections.emptyList()),  
-            null,
-            null,
-            () -> nowInMillis,  
-            clusterAlias,
-            null,
+        String expected = clusterAlias == null  
+            } else {  
+            null,  
             () -> true,  
-            null
+        context.setAllowUnmappedFields(false);
+        DerivedFieldResolver derivedFieldResolver = mock(DerivedFieldResolver.class);
+            NamedXContentRegistry.EMPTY,
+    public void testGetFullyQualifiedIndex() {  
+import org.opensearch.search.lookup.LeafSearchLookup;  
         );
-    }  
-
-    private static MappedFieldType mockFieldType(String fieldName, BiFunction<LeafSearchLookup, Integer, String> runtimeDocValues) {
-        MappedFieldType fieldType = mock(MappedFieldType.class);  
-        when(fieldType.name()).thenReturn(fieldName);
-        when(fieldType.fielddataBuilder(any(), any())).thenAnswer(builderInv -> {
-            @SuppressWarnings("unchecked")  
-            Supplier<SearchLookup> searchLookup = ((Supplier<SearchLookup>) builderInv.getArguments()[1]);
-            IndexFieldData<?> indexFieldData = mock(IndexFieldData.class);
-            when(indexFieldData.load(any())).thenAnswer(loadArgs -> {  
-                LeafReaderContext leafReaderContext = (LeafReaderContext) loadArgs.getArguments()[0];
-                LeafFieldData leafFieldData = mock(LeafFieldData.class);
-                when(leafFieldData.getScriptValues()).thenAnswer(scriptValuesArgs -> new ScriptDocValues<String>() {  
-                    String value;
-
-                    @Override  
-                    public int size() {
-                        return 1;
-                    }  
-
-                    @Override
-                    public String get(int index) {  
-                        assert index == 0;
-                        return value;
-                    }  
-
-                    @Override
-                    public void setNextDocId(int docId) {  
-                        assert docId >= 0;
-                        LeafSearchLookup leafLookup = searchLookup.get().getLeafSearchLookup(leafReaderContext);
-                        leafLookup.setDocument(docId);  
                         value = runtimeDocValues.apply(leafLookup, docId);
-                    }
-                });  
-                return leafFieldData;
+ * The OpenSearch Contributors require contributions made to  
             });
-            IndexFieldData.Builder builder = mock(IndexFieldData.Builder.class);  
-            when(builder.build(any(), any())).thenAnswer(buildInv -> indexFieldData);
-            return builder;
-        });  
-        return fieldType;
-    }
-
-    private static List<String> collect(String field, QueryShardContext queryShardContext) throws IOException {
-        return collect(field, queryShardContext, new MatchAllDocsQuery());
-    }  
-
-    private static List<String> collect(String field, QueryShardContext queryShardContext, Query query) throws IOException {
-        List<String> result = new ArrayList<>();  
-        try (Directory directory = newDirectory(); RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
-            indexWriter.addDocument(Collections.singletonList(new StringField("indexed_field", "first", Field.Store.NO)));
-            indexWriter.addDocument(Collections.singletonList(new StringField("indexed_field", "second", Field.Store.NO)));  
-            try (DirectoryReader reader = indexWriter.getReader()) {
-                IndexSearcher searcher = newSearcher(reader);
-                MappedFieldType fieldType = queryShardContext.fieldMapper(field);  
-                IndexFieldData<?> indexFieldData;
-                if (randomBoolean()) {
-                    indexFieldData = queryShardContext.getForField(fieldType);  
-                } else {
-                    indexFieldData = queryShardContext.lookup().doc().getForField(fieldType);
-                }  
-                searcher.search(query, new Collector() {
-                    @Override
-                    public ScoreMode scoreMode() {  
-                        return ScoreMode.COMPLETE_NO_SCORES;
-                    }
-
-                    @Override
-                    public LeafCollector getLeafCollector(LeafReaderContext context) {
-                        ScriptDocValues<?> scriptValues = indexFieldData.load(context).getScriptValues();  
-                        return new LeafCollector() {
-                            @Override
-                            public void setScorer(Scorable scorer) {}  
-
-                            @Override
-                            public void collect(int doc) throws IOException {  
-                                ScriptDocValues<?> scriptDocValues;
-                                if (randomBoolean()) {
-                                    LeafDocLookup leafDocLookup = queryShardContext.lookup().doc().getLeafDocLookup(context);  
-                                    leafDocLookup.setDocument(doc);
-                                    scriptDocValues = leafDocLookup.get(field);
-                                } else {  
-                                    scriptDocValues = scriptValues;
+        when(mapperService.getIndexSettings()).thenReturn(indexSettings);
                                 }
-                                scriptDocValues.setNextDocId(doc);  
-                                for (int i = 0; i < scriptDocValues.size(); i++) {
-                                    result.add(scriptDocValues.get(i).toString());
-                                }  
-                            }
-                        };
-                    }  
-                });
-            }
-            return result;  
-        }
+            } else {
+import org.opensearch.index.analysis.NamedAnalyzer;  
+                        assert index == 0;
+import org.opensearch.index.fielddata.ScriptDocValues;  
+                    String value;
+import static org.hamcrest.Matchers.instanceOf;
+        });
     }
-
-}
+        return createQueryShardContext(indexUuid, clusterAlias, null);
+        result = context.failIfFieldMappingNotFound("name", null);
+    }
+import java.util.function.BiFunction;  
+import org.apache.lucene.search.IndexSearcher;  
+                    }  
+        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(
+import org.opensearch.index.mapper.TextFieldMapper;
+            null,  
+        assertEquals("Field requires resolving too many dependent fields: 1 -> 2 -> 3 -> 4 -> 5 -> 6", iae.getMessage());
+            indexWriter.addDocument(Collections.singletonList(new StringField("indexed_field", "first", Field.Store.NO)));
+        when(fieldType.name()).thenReturn(fieldName);
+    public void testFielddataLookupLooseLoop() {
+        }));
+    }
+            null,
+            if (docId == 0) {  
+import java.io.IOException;
+                });  
+                return leafLookup.doc().get("field" + (i + 1)).toString();
+                                    LeafDocLookup leafDocLookup = queryShardContext.lookup().doc().getLeafDocLookup(context);  
+            }  
+        IndexFieldMapper mapper = new IndexFieldMapper();  
+        when(fieldType.fielddataBuilder(any(), any())).thenAnswer(builderInv -> {
+        assertTrue(context.indexSortedOnField("sort_field"));
+import org.apache.lucene.document.Field;  
+            (mappedFieldType, idxName, searchLookup) -> mappedFieldType.fielddataBuilder(idxName, searchLookup).build(null, null),
+            NamedXContentRegistry.EMPTY,  
+            return leafLookup.doc().get(Integer.toString(Integer.parseInt(field) + 1)).toString();
+                }  
+            try (DirectoryReader reader = indexWriter.getReader()) {
+import org.opensearch.index.fielddata.plain.AbstractLeafOrdinalsFieldData;
+                        return new LeafCollector() {
+        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {
+            }  
+            return leafLookup.doc().get(field).toString();
+                return mockFieldType(fieldName, (leafSearchLookup, docId) -> runtimeDocValues.apply(fieldName, leafSearchLookup, docId));
+        QueryShardContext queryShardContext = createQueryShardContext("uuid", null, (field, leafLookup, docId) -> {  
+                                } else {  
+        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> collect("1", queryShardContext));  
+    public void testFielddataLookupSometimesLoop() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.index.DirectoryReader;
+        when(mapperService.getIndexAnalyzers()).thenReturn(indexAnalyzers);  
+import org.opensearch.index.IndexSettings;  
+        Exception exc = expectThrows(Exception.class, () -> context.toQuery(new AbstractQueryBuilder() {
+                            @Override
+    ) {
+                ScriptDocValues<?> scriptDocValues = leafLookup.doc().get("field" + (i + 1));
+        assertThat(result, sameInstance(fieldType));
+        assertEquals("Cyclic dependency detected while resolving runtime fields: 1 -> 2 -> 3 -> 4 -> 1", iae.getMessage());
+                    public int size() {
+            Collections.emptyMap(),  
+            protected int doHashCode() {
+            0,
+    public void testDerivedFieldMapping() {
+        return new QueryShardContext(

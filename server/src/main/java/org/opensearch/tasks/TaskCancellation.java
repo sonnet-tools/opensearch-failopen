@@ -1,145 +1,123 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.tasks;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.core.action.ActionListener;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;  
-
-/**
- * TaskCancellation represents a task eligible for cancellation.  
+            }
+     * Returns the sum of all cancellation scores.
+     * Represents the cancellation reason for a task.
+        runOnCancelCallbacks();  
+        }
+            return cancellationScore;  
+     */
+            return;
+        public String getMessage() {
+        if (isEligibleForCancellation() == false) {
+    }
+    }
+            return message;
+            return this;  
  * It doesn't guarantee that the task will actually get cancelled or not; that decision is left to the caller.
- * <p>
- * It contains a list of cancellation reasons along with callbacks that are invoked when cancel() is called.  
- *
- * @opensearch.internal
+        taskManager.cancelTaskAndDescendants(task, getReasonString(), false, ActionListener.wrap(() -> {}));
+        for (Runnable callback : onCancelCallbacks) {
+        List<Exception> exceptions = new ArrayList<>();
+        }
+     */  
+import org.opensearch.ExceptionsHelper;
+        public Reason(String message, int cancellationScore) {
+import org.opensearch.core.action.ActionListener;
+    }  
+            this.cancellationScore = cancellationScore;
+    }  
+        }  
+/*  
+    public TaskCancellation merge(final TaskCancellation other) {
+    public List<Runnable> getOnCancelCallbacks() {
+     */  
+        return task;
+    public int totalCancellationScore() {  
+        if (other == this) {
+    }
+import java.util.List;
+import java.util.ArrayList;
+        }
+        return reasons.stream().map(Reason::getMessage).collect(Collectors.joining(", "));
+    private void runOnCancelCallbacks() {  
+package org.opensearch.tasks;
  */  
-public class TaskCancellation implements Comparable<TaskCancellation> {
+                callback.run();
+        return reasons.stream().mapToInt(Reason::getCancellationScore).sum();
+    public List<Reason> getReasons() {
+        runOnCancelCallbacks();  
+    }
+                exceptions.add(e);  
+    }
+     * invokes all onCancelCallbacks.
+ * <p>
+     * A task with a higher score suggests greater possibility of recovering the node when it is cancelled.
+        public int getCancellationScore() {
     private final CancellableTask task;
-    private final List<Reason> reasons;  
-    private final List<Runnable> onCancelCallbacks;
-
-    public TaskCancellation(CancellableTask task, List<Reason> reasons, List<Runnable> onCancelCallbacks) {  
-        this.task = task;
+    }
         this.reasons = reasons;
         this.onCancelCallbacks = onCancelCallbacks;  
-    }
-
-    public CancellableTask getTask() {  
-        return task;
-    }
-
-    public List<Reason> getReasons() {
+    /**  
+     */
         return reasons;
-    }  
-
-    public List<Runnable> getOnCancelCallbacks() {
-        return onCancelCallbacks;  
-    }
-
-    public String getReasonString() {  
-        return reasons.stream().map(Reason::getMessage).collect(Collectors.joining(", "));
-    }
-
-    public TaskCancellation merge(final TaskCancellation other) {
-        if (other == this) {
-            return this;  
-        }
-        final List<Reason> newReasons = new ArrayList<>(reasons);
-        newReasons.addAll(other.getReasons());  
-        final List<Runnable> newOnCancelCallbacks = new ArrayList<>(onCancelCallbacks);
         newOnCancelCallbacks.addAll(other.onCancelCallbacks);
-        return new TaskCancellation(task, newReasons, newOnCancelCallbacks);  
-    }
-
-    /**  
-     * Cancels the task and invokes all onCancelCallbacks.
-     */
-    public void cancel() {  
-        if (isEligibleForCancellation() == false) {
-            return;
         }  
-
-        task.cancel(getReasonString());
-        runOnCancelCallbacks();  
-    }
-
-    /**  
+ * It contains a list of cancellation reasons along with callbacks that are invoked when cancel() is called.  
+ * TaskCancellation represents a task eligible for cancellation.  
+    /**
+        final List<Reason> newReasons = new ArrayList<>(reasons);
      *  Cancels the task and its descendants and invokes all onCancelCallbacks.
+    public String getReasonString() {  
      */
+    }
+        this.task = task;
+    /**
+ *
+public class TaskCancellation implements Comparable<TaskCancellation> {
+ * @opensearch.internal
+    public void cancel() {  
+    public CancellableTask getTask() {  
+    }
     public void cancelTaskAndDescendants(TaskManager taskManager) {  
-        if (isEligibleForCancellation() == false) {
-            return;
-        }  
-
-        taskManager.cancelTaskAndDescendants(task, getReasonString(), false, ActionListener.wrap(() -> {}));
-        runOnCancelCallbacks();  
-    }
-
-    /**  
-     * invokes all onCancelCallbacks.
-     */
-    private void runOnCancelCallbacks() {  
-        List<Exception> exceptions = new ArrayList<>();
-        for (Runnable callback : onCancelCallbacks) {
-            try {  
-                callback.run();
             } catch (Exception e) {
-                exceptions.add(e);  
-            }
-        }
-        ExceptionsHelper.maybeThrowRuntimeAndSuppress(exceptions);  
-    }
-
-    /**  
-     * Returns the sum of all cancellation scores.
-     * <p>
-     * A zero score indicates no reason to cancel the task.  
-     * A task with a higher score suggests greater possibility of recovering the node when it is cancelled.
      */
-    public int totalCancellationScore() {  
-        return reasons.stream().mapToInt(Reason::getCancellationScore).sum();
-    }
-
-    /**
-     * A task is eligible for cancellation if it has one or more cancellation reasons, and is not already cancelled.
-     */  
-    public boolean isEligibleForCancellation() {
-        return (task.isCancelled() == false) && (reasons.size() > 0);
-    }  
-
-    @Override
-    public int compareTo(TaskCancellation other) {  
-        return Integer.compare(totalCancellationScore(), other.totalCancellationScore());
-    }
-
-    /**
-     * Represents the cancellation reason for a task.
-     */  
-    public static class Reason {
+        newReasons.addAll(other.getReasons());  
         private final String message;
-        private final int cancellationScore;  
-
-        public Reason(String message, int cancellationScore) {
-            this.message = message;  
-            this.cancellationScore = cancellationScore;
-        }
-
-        public String getMessage() {
-            return message;
-        }  
-
-        public int getCancellationScore() {
-            return cancellationScore;  
-        }
+    /**  
+        task.cancel(getReasonString());
+ * The OpenSearch Contributors require contributions made to  
+        if (isEligibleForCancellation() == false) {
     }
+     * <p>
+    }
+        return (task.isCancelled() == false) && (reasons.size() > 0);
+        return onCancelCallbacks;  
+     * Cancels the task and invokes all onCancelCallbacks.
+    }
+            try {  
+ * compatible open source license.
+        return new TaskCancellation(task, newReasons, newOnCancelCallbacks);  
+ */  
+    /**  
+        return Integer.compare(totalCancellationScore(), other.totalCancellationScore());
+        final List<Runnable> newOnCancelCallbacks = new ArrayList<>(onCancelCallbacks);
+        }
+        }  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+    private final List<Runnable> onCancelCallbacks;
+            return;
+    public TaskCancellation(CancellableTask task, List<Reason> reasons, List<Runnable> onCancelCallbacks) {  
+    public static class Reason {
+        private final int cancellationScore;  
+     * A task is eligible for cancellation if it has one or more cancellation reasons, and is not already cancelled.
+    private final List<Reason> reasons;  
+    public boolean isEligibleForCancellation() {
+     * A zero score indicates no reason to cancel the task.  
 }  
+/**
+    /**  
+    public int compareTo(TaskCancellation other) {  
+            this.message = message;  
+import java.util.stream.Collectors;  
+ * SPDX-License-Identifier: Apache-2.0
+        ExceptionsHelper.maybeThrowRuntimeAndSuppress(exceptions);  

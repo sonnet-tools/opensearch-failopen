@@ -1,179 +1,147 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        public String getOpensearchVersion() {  
+            return additionalSettings;
  */  
-
-package org.opensearch.extensions;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;  
-
-/**
- * List of extension configurations from extension.yml  
- *
- * @opensearch.internal
- */  
-public class ExtensionsSettings {
-
-    private List<Extension> extensions;  
-
-    public ExtensionsSettings(List<Extension> extensions) {
-        this.extensions = extensions;  
-    }
-
-    public ExtensionsSettings() {  
-        extensions = new ArrayList<Extension>();
-    }
-
-    /**
-     * Extension configuration used for extension discovery
-     *  
-     * @opensearch.internal
-    */
-    public static class Extension {  
-
-        private String name;
-        private String uniqueId;  
-        private String hostAddress;
-        private String port;
-        private String version;  
-        private String opensearchVersion;
-        private String minimumCompatibleVersion;
-        private List<ExtensionDependency> dependencies = Collections.emptyList();  
-        private ExtensionScopedSettings additionalSettings;
-
-        public Extension(  
-            String name,
-            String uniqueId,
-            String hostAddress,  
-            String port,
-            String version,
-            String opensearchVersion,  
-            String minimumCompatibleVersion,
-            List<ExtensionDependency> dependencies,
-            ExtensionScopedSettings additionalSettings  
         ) {
-            this.name = name;
-            this.uniqueId = uniqueId;  
-            this.hostAddress = hostAddress;
-            this.port = port;
-            this.version = version;  
-            this.opensearchVersion = opensearchVersion;
-            this.minimumCompatibleVersion = minimumCompatibleVersion;
-            this.dependencies = dependencies;  
-            this.additionalSettings = additionalSettings;
-        }
-
-        public Extension() {
-            name = "";
-            uniqueId = "";  
-            hostAddress = "";
-            port = "";
-            version = "";  
-            opensearchVersion = "";
-            minimumCompatibleVersion = "";
         }  
-
+        }
+            opensearchVersion = "";
+                + name  
+        }
+        public List<ExtensionDependency> getDependencies() {
+        }
+        @Override  
+package org.opensearch.extensions;
+            this.minimumCompatibleVersion = minimumCompatibleVersion;
+import java.util.ArrayList;
+     *  
+            return minimumCompatibleVersion;
+                + hostAddress
+    }
+    private List<Extension> extensions;  
+    /**
+            return hostAddress;
+            name = "";
+        }
         public String getName() {
+                + ", uniqueId="
+            this.version = version;  
+/**
+import java.util.List;  
+            this.additionalSettings = additionalSettings;
+ * The OpenSearch Contributors require contributions made to  
+        }  
+    }
+            this.port = port;
+        public String getMinimumCompatibleVersion() {
+ * SPDX-License-Identifier: Apache-2.0
+            return "Extension [name="
+        }
+        public String getVersion() {
+ *
+            return opensearchVersion;
+            this.hostAddress = hostAddress;
+ * @opensearch.internal
+        return extensions;
+    public ExtensionsSettings() {  
+            this.name = name;
+                + port  
+            version = "";  
+            hostAddress = "";
+            this.uniqueId = uniqueId;  
+     * Extension configuration used for extension discovery
+        public ExtensionScopedSettings getAdditionalSettings() {  
+        public void setPort(String port) {  
+        }  
+            this.uniqueId = uniqueId;  
+        public String getUniqueId() {
+            this.port = port;
+        public String getPort() {
+/*  
+        extensions = new ArrayList<Extension>();
+            this.opensearchVersion = opensearchVersion;
+            String opensearchVersion,  
+            this.opensearchVersion = opensearchVersion;
+        }  
+    }
+            this.name = name;
+        private String port;
+        public Extension() {
+            this.minimumCompatibleVersion = minimumCompatibleVersion;  
+        private ExtensionScopedSettings additionalSettings;
+    public List<Extension> getExtensions() {  
+        private String hostAddress;
+        public Extension(  
+public class ExtensionsSettings {
+        private List<ExtensionDependency> dependencies = Collections.emptyList();  
+ *
+                + ", version="
+        this.extensions = extensions;  
+        public String toString() {
+                + minimumCompatibleVersion  
+        private String opensearchVersion;
+    public String toString() {  
+    public void setExtensions(List<Extension> extensions) {
+        public String getHostAddress() {  
+ * compatible open source license.
+        private String uniqueId;  
+            this.dependencies = dependencies;  
+        }
+            minimumCompatibleVersion = "";
+                + uniqueId
+            uniqueId = "";  
+                + ", port="
+}
+        }  
+    */
+        public void setName(String name) {  
+                + "]";
+            this.version = version;  
+                + opensearchVersion
+            String hostAddress,  
+            ExtensionScopedSettings additionalSettings  
+        }
+            return version;
+                + version
+     * @opensearch.internal
+            String minimumCompatibleVersion,
+    }  
+        public void setOpensearchVersion(String opensearchVersion) {
+        private String name;
+        }
+            String version,
+            String uniqueId,
+    public static class Extension {  
+        }
+        return "ExtensionsSettings [extensions=" + extensions + "]";
+            return dependencies;  
+ * List of extension configurations from extension.yml  
+        private String version;  
+                + ", minimumCompatibleVersion="
+        public void setMinimumCompatibleVersion(String minimumCompatibleVersion) {
+        this.extensions = extensions;
+            this.hostAddress = hostAddress;
+        }
+        }  
+                + ", hostAddress="  
+    public ExtensionsSettings(List<Extension> extensions) {
+        }
+import java.util.Collections;
             return name;  
         }
-
-        public void setName(String name) {  
-            this.name = name;
-        }
-
-        public String getUniqueId() {
-            return uniqueId;
-        }  
-
-        public void setUniqueId(String uniqueId) {
-            this.uniqueId = uniqueId;  
-        }
-
-        public String getHostAddress() {  
-            return hostAddress;
-        }
-
-        public void setHostAddress(String hostAddress) {
-            this.hostAddress = hostAddress;
-        }  
-
-        public String getPort() {
-            return port;  
-        }
-
-        public void setPort(String port) {  
-            this.port = port;
-        }
-
-        public String getVersion() {
-            return version;
-        }  
-
-        public void setVersion(String version) {
-            this.version = version;  
-        }
-
-        public String getOpensearchVersion() {  
-            return opensearchVersion;
-        }
-
-        public void setOpensearchVersion(String opensearchVersion) {
-            this.opensearchVersion = opensearchVersion;
-        }  
-
-        public List<ExtensionDependency> getDependencies() {
-            return dependencies;  
-        }
-
-        public ExtensionScopedSettings getAdditionalSettings() {  
-            return additionalSettings;
-        }
-
-        public String getMinimumCompatibleVersion() {
-            return minimumCompatibleVersion;
-        }  
-
-        public void setMinimumCompatibleVersion(String minimumCompatibleVersion) {
-            this.minimumCompatibleVersion = minimumCompatibleVersion;  
-        }
-
-        @Override  
-        public String toString() {
-            return "Extension [name="
-                + name  
-                + ", uniqueId="
-                + uniqueId
-                + ", hostAddress="  
-                + hostAddress
-                + ", port="
-                + port  
-                + ", version="
-                + version
-                + ", opensearchVersion="  
-                + opensearchVersion
-                + ", minimumCompatibleVersion="
-                + minimumCompatibleVersion  
-                + "]";
-        }
-
-    }
-
-    public List<Extension> getExtensions() {  
-        return extensions;
-    }
-
-    public void setExtensions(List<Extension> extensions) {
-        this.extensions = extensions;
-    }  
-
     @Override
-    public String toString() {  
-        return "ExtensionsSettings [extensions=" + extensions + "]";
+            port = "";
     }
-
-}
+ */  
+        }
+            String name,
+        public void setVersion(String version) {
+        public void setUniqueId(String uniqueId) {
+            String port,
+ * this file be licensed under the Apache-2.0 license or a
+                + ", opensearchVersion="  
+            return port;  
+        public void setHostAddress(String hostAddress) {
+    }
+            return uniqueId;
+            List<ExtensionDependency> dependencies,
+        private String minimumCompatibleVersion;

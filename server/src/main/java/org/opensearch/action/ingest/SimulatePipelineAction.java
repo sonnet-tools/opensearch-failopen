@@ -1,50 +1,43 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.ingest;
-
-import org.opensearch.action.ActionType;
-
-/**  
  * Transport action to simulate a pipeline
- *
- * @opensearch.internal  
- */
-public class SimulatePipelineAction extends ActionType<SimulatePipelineResponse> {
-
-    public static final SimulatePipelineAction INSTANCE = new SimulatePipelineAction();
-    public static final String NAME = "cluster:admin/ingest/pipeline/simulate";
-
-    public SimulatePipelineAction() {
-        super(NAME, SimulatePipelineResponse::new);
-    }  
+/**  
 }
+package org.opensearch.action.ingest;
+ * @opensearch.internal  
+/*
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+/*  
+ * GitHub history for details.
+ *
+ * under the License.  
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * You may obtain a copy of the License at  
+public class SimulatePipelineAction extends ActionType<SimulatePipelineResponse> {
+ */  
+    public static final SimulatePipelineAction INSTANCE = new SimulatePipelineAction();
+ *  
+    public SimulatePipelineAction() {
+ */
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.action.ActionType;
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+ */  
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Unless required by applicable law or agreed to in writing,
+ *
+        super(NAME, SimulatePipelineResponse::new);
+ * Licensed to Elasticsearch under one or more contributor  
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+ */
+ *
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+    public static final String NAME = "cluster:admin/ingest/pipeline/simulate";
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  

@@ -1,102 +1,92 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.indices.mapping;
-
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.query.QueryBuilders;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;  
-import java.util.concurrent.CountDownLatch;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.hamcrest.Matchers.emptyIterable;
-
-public class ConcurrentDynamicTemplateIT extends OpenSearchIntegTestCase {
-    // see #3544
-    public void testConcurrentDynamicMapping() throws Exception {  
-        final String fieldName = "field";
-        final String mapping = "{ "
-            + "\"dynamic_templates\": ["  
-            + "{ \""
-            + fieldName
             + "\": {"  
-            + "\"path_match\": \"*\","
-            + "\"mapping\": {"
-            + "\"type\": \"text\","  
-            + "\"store\": true,"
+import java.util.Map;
+            + "{ \""
+            assertThat(throwable, emptyIterable());
+ */
+import java.util.concurrent.CountDownLatch;
+ *
+ * compatible open source license.
+/*  
             + "\"analyzer\": \"whitespace\" } } } ] }";
-        // The 'fieldNames' array is used to help with retrieval of index terms  
-        // after testing
-
-        int iters = scaledRandomIntBetween(5, 15);  
-        for (int i = 0; i < iters; i++) {
+        }  
+ * Licensed to Elasticsearch under one or more contributor  
+        final String mapping = "{ "
+/*
+/*  
             cluster().wipeIndices("test");
             assertAcked(prepareCreate("test").setMapping(mapping));  
-            int numDocs = scaledRandomIntBetween(10, 100);
-            final CountDownLatch latch = new CountDownLatch(numDocs);
-            final List<Throwable> throwable = new CopyOnWriteArrayList<>();  
-            int currentID = 0;
-            for (int j = 0; j < numDocs; j++) {
-                Map<String, Object> source = new HashMap<>();  
-                source.put(fieldName, "test-user");
-                client().prepareIndex("test")
-                    .setId(Integer.toString(currentID++))  
-                    .setSource(source)
-                    .execute(new ActionListener<IndexResponse>() {
-                        @Override  
-                        public void onResponse(IndexResponse response) {
+ *  
                             latch.countDown();
-                        }  
-
+    }
+        final String fieldName = "field";
+import static org.hamcrest.Matchers.emptyIterable;
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  
+                        @Override  
+import java.util.HashMap;  
+            + "\"type\": \"text\","  
+            int currentID = 0;
+ * software distributed under the License is distributed on an
+                        public void onResponse(IndexResponse response) {
+ * Modifications Copyright OpenSearch Contributors. See
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+import org.opensearch.index.query.QueryBuilders;  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            + "\"mapping\": {"
+                    });
+ * You may obtain a copy of the License at  
+                    .setSource(source)
+            + "\"path_match\": \"*\","
+            + fieldName
+}
+ * Unless required by applicable law or agreed to in writing,
                         @Override
-                        public void onFailure(Exception e) {  
+ * KIND, either express or implied.  See the License for the
+            final CountDownLatch latch = new CountDownLatch(numDocs);
+        int iters = scaledRandomIntBetween(5, 15);  
+ * this file be licensed under the Apache-2.0 license or a
+            final List<Throwable> throwable = new CopyOnWriteArrayList<>();  
+                source.put(fieldName, "test-user");
+ * license agreements. See the NOTICE file distributed with
+    // see #3544
+ * SPDX-License-Identifier: Apache-2.0
+        // after testing
+ * not use this file except in compliance with the License.
+ * specific language governing permissions and limitations
+import java.util.List;
+                        }  
+import org.opensearch.core.action.ActionListener;
+            + "\"dynamic_templates\": ["  
+            latch.await();  
+ * this work for additional information regarding copyright
                             throwable.add(e);
                             latch.countDown();
-                        }  
-                    });
-            }
-            latch.await();  
-            assertThat(throwable, emptyIterable());
-            refresh();
-            assertHitCount(client().prepareSearch("test").setQuery(QueryBuilders.matchQuery(fieldName, "test-user")).get(), numDocs);  
+ * under the License.  
             assertHitCount(client().prepareSearch("test").setQuery(QueryBuilders.matchQuery(fieldName, "test user")).get(), 0);
-
-        }  
-    }
-}
+                        }  
+import java.util.concurrent.CopyOnWriteArrayList;  
+            int numDocs = scaledRandomIntBetween(10, 100);
+import org.opensearch.action.index.IndexResponse;
+                    .setId(Integer.toString(currentID++))  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            + "\"store\": true,"
+                        public void onFailure(Exception e) {  
+ */  
+            assertHitCount(client().prepareSearch("test").setQuery(QueryBuilders.matchQuery(fieldName, "test-user")).get(), numDocs);  
+    public void testConcurrentDynamicMapping() throws Exception {  
+            }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+                client().prepareIndex("test")
+ * GitHub history for details.
+public class ConcurrentDynamicTemplateIT extends OpenSearchIntegTestCase {
+import org.opensearch.test.OpenSearchIntegTestCase;
+                Map<String, Object> source = new HashMap<>();  
+            refresh();
+ */  
+        for (int i = 0; i < iters; i++) {
+        // The 'fieldNames' array is used to help with retrieval of index terms  
+                    .execute(new ActionListener<IndexResponse>() {
+            for (int j = 0; j < numDocs; j++) {

@@ -1,94 +1,83 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.core.WhitespaceTokenizer;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.analysis.AnalysisTestsHelper;
-import org.opensearch.index.analysis.TokenFilterFactory;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.OpenSearchTokenStreamTestCase;
-import org.junit.Rule;  
-import org.junit.rules.ExpectedException;
-
-import java.io.IOException;  
-import java.io.StringReader;
-import java.util.Arrays;
-
-public class StemmerOverrideTokenFilterFactoryTests extends OpenSearchTokenStreamTestCase {
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();  
-
-    public static TokenFilterFactory create(String... rules) throws IOException {
         OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(  
-            Settings.builder()
-                .put("index.analysis.filter.my_stemmer_override.type", "stemmer_override")
-                .putList("index.analysis.filter.my_stemmer_override.rules", rules)  
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .build(),
-            new CommonAnalysisModulePlugin()  
-        );
-
-        return analysis.tokenFilter.get("my_stemmer_override");  
-    }
-
-    public void testRuleError() {  
-        for (String rule : Arrays.asList(
-            "",        // empty
-            "a",       // no arrow  
-            "a=>b=>c", // multiple arrows
-            "=>a=>b",  // multiple arrows
-            "a=>",     // no override  
-            "a=>b,c",  // multiple overrides
-            "=>a",     // no keys
-            "a,=>b"    // empty key  
-        )) {
-            RuntimeException ex = expectThrows(RuntimeException.class, () -> create(rule));
-            assertEquals("Line [1]: Invalid keyword override rule: " + rule, ex.getMessage());  
-        }
-    }
-
-    public void testRulesOk() throws IOException {
-        TokenFilterFactory tokenFilterFactory = create("a => 1", "b,c => 2");
-        Tokenizer tokenizer = new WhitespaceTokenizer();  
-        tokenizer.setReader(new StringReader("a b c"));
         assertTokenStreamContents(tokenFilterFactory.create(tokenizer), new String[] { "1", "2", "2" });
-    }  
-
-    public void testRulePartError() {
-        RuntimeException ex = expectThrows(RuntimeException.class, () -> create("a => 1", "b,c => 2", "# This is a comment", "=>a=>b"));  
-        assertEquals("Line [4]: Invalid keyword override rule: =>a=>b", ex.getMessage());
+    public void testRuleError() {  
+/*  
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.analysis.Tokenizer;
+import org.opensearch.test.OpenSearchTokenStreamTestCase;
+        return analysis.tokenFilter.get("my_stemmer_override");  
+            RuntimeException ex = expectThrows(RuntimeException.class, () -> create(rule));
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;
+        )) {
+            "a,=>b"    // empty key  
     }
+ * specific language governing permissions and limitations
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            new CommonAnalysisModulePlugin()  
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
+    @Rule
+        TokenFilterFactory tokenFilterFactory = create("a => 1", "b,c => 2");
+            "=>a=>b",  // multiple arrows
+        assertEquals("Line [4]: Invalid keyword override rule: =>a=>b", ex.getMessage());
+import org.opensearch.common.settings.Settings;  
+            "",        // empty
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.io.StringReader;
+ * Licensed to Elasticsearch under one or more contributor  
+                .build(),
+ * You may obtain a copy of the License at  
+        Tokenizer tokenizer = new WhitespaceTokenizer();  
+import org.opensearch.env.Environment;
+        for (String rule : Arrays.asList(
+    public void testRulePartError() {
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+ *
+ * license agreements. See the NOTICE file distributed with
 }  
+ * GitHub history for details.
+ *  
+ * compatible open source license.
+            "a=>",     // no override  
+public class StemmerOverrideTokenFilterFactoryTests extends OpenSearchTokenStreamTestCase {
+package org.opensearch.analysis.common;
+            "=>a",     // no keys
+/*  
+ */  
+                .putList("index.analysis.filter.my_stemmer_override.rules", rules)  
+            "a=>b=>c", // multiple arrows
+import java.io.IOException;  
+                .put("index.analysis.filter.my_stemmer_override.type", "stemmer_override")
+        );
+ * Unless required by applicable law or agreed to in writing,
+        }
+ */
+    public static TokenFilterFactory create(String... rules) throws IOException {
+ *
+ * under the License.  
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+            "a=>b,c",  // multiple overrides
+import org.junit.Rule;  
+            Settings.builder()
+ * software distributed under the License is distributed on an
+import org.opensearch.index.analysis.AnalysisTestsHelper;
+ * this work for additional information regarding copyright
+ */  
+import java.util.Arrays;
+    public ExpectedException expectedException = ExpectedException.none();  
+            assertEquals("Line [1]: Invalid keyword override rule: " + rule, ex.getMessage());  
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+            "a",       // no arrow  
+    public void testRulesOk() throws IOException {
+        tokenizer.setReader(new StringReader("a b c"));
+/*
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.analysis.TokenFilterFactory;  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.test.OpenSearchTestCase;
+        RuntimeException ex = expectThrows(RuntimeException.class, () -> create("a => 1", "b,c => 2", "# This is a comment", "=>a=>b"));  
+ * SPDX-License-Identifier: Apache-2.0
+import org.junit.rules.ExpectedException;

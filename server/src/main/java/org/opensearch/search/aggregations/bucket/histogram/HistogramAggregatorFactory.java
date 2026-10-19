@@ -1,162 +1,147 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.CardinalityUpperBound;  
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Constructs the per-shard aggregator instance for histogram aggregation.  Selects the numeric or range field implementation based on the  
- * field type.
- *
- * @opensearch.internal  
- */
-public final class HistogramAggregatorFactory extends ValuesSourceAggregatorFactory {
-
-    private final double interval, offset;
-    private final BucketOrder order;
-    private final boolean keyed;  
-    private final long minDocCount;
-    private final DoubleBounds extendedBounds;
-    private final DoubleBounds hardBounds;  
-
-    static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        builder.register(HistogramAggregationBuilder.REGISTRY_KEY, CoreValuesSourceType.RANGE, RangeHistogramAggregator::new, true);  
-
-        builder.register(
-            HistogramAggregationBuilder.REGISTRY_KEY,  
-            List.of(CoreValuesSourceType.NUMERIC, CoreValuesSourceType.DATE, CoreValuesSourceType.BOOLEAN),
-            NumericHistogramAggregator::new,
-            true  
-        );
-    }
-
-    public HistogramAggregatorFactory(
-        String name,
-        ValuesSourceConfig config,  
-        double interval,
-        double offset,
-        BucketOrder order,  
-        boolean keyed,
-        long minDocCount,
-        DoubleBounds extendedBounds,  
-        DoubleBounds hardBounds,
-        QueryShardContext queryShardContext,
-        AggregatorFactory parent,  
-        AggregatorFactories.Builder subFactoriesBuilder,
-        Map<String, Object> metadata
-    ) throws IOException {  
-        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
-        this.interval = interval;
-        this.offset = offset;  
-        this.order = order;
-        this.keyed = keyed;
-        this.minDocCount = minDocCount;  
-        this.extendedBounds = extendedBounds;
-        this.hardBounds = hardBounds;
-    }  
-
-    public long minDocCount() {
-        return minDocCount;  
-    }
-
-    @Override  
-    protected Aggregator doCreateInternal(
-        SearchContext searchContext,
-        Aggregator parent,  
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {  
-        return queryShardContext.getValuesSourceRegistry()
-            .getAggregator(HistogramAggregationBuilder.REGISTRY_KEY, config)
-            .build(  
-                name,
                 factories,
-                interval,  
-                offset,
+    }
+        builder.register(
+        QueryShardContext queryShardContext,
+    private final boolean keyed;  
+ * SPDX-License-Identifier: Apache-2.0
                 order,
-                keyed,  
-                minDocCount,
-                extendedBounds,
-                hardBounds,  
-                config,
-                searchContext,
-                parent,  
-                cardinality,
-                metadata
-            );  
-    }
-
-    @Override  
-    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
-        return new NumericHistogramAggregator(
-            name,  
             factories,
-            interval,
-            offset,  
-            order,
-            keyed,
-            minDocCount,  
-            extendedBounds,
-            hardBounds,
-            config,  
-            searchContext,
-            parent,
-            CardinalityUpperBound.NONE,  
-            metadata
+            HistogramAggregationBuilder.REGISTRY_KEY,  
+        DoubleBounds hardBounds,
         );
-    }  
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {  
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+        return queryShardContext.getValuesSourceRegistry()
+            hardBounds,
+        boolean keyed,
+ *
+ */  
+    ) throws IOException {  
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+                parent,  
+            List.of(CoreValuesSourceType.NUMERIC, CoreValuesSourceType.DATE, CoreValuesSourceType.BOOLEAN),
+        DoubleBounds extendedBounds,  
+    }
+        this.hardBounds = hardBounds;
+        ValuesSourceConfig config,  
+ */
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            metadata
+ * under the License.  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+            offset,  
+ * license agreements. See the NOTICE file distributed with
+import java.util.Map;  
+ * KIND, either express or implied.  See the License for the
+            config,  
+/*
+    private final double interval, offset;
+ * @opensearch.internal  
+    }
         return true;
-    }
-
-    @Override
-    protected boolean supportsIntraSegmentSearch() {
+    @Override  
+    private final DoubleBounds extendedBounds;
+    private final BucketOrder order;
+                extendedBounds,
+ * this work for additional information regarding copyright
+            name,  
+        AggregatorFactories.Builder subFactoriesBuilder,
+        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
+public final class HistogramAggregatorFactory extends ValuesSourceAggregatorFactory {
+            interval,
+ * this file be licensed under the Apache-2.0 license or a
         return true;  
+            true  
+            keyed,
+        double offset,
+    protected Aggregator doCreateInternal(
+    protected boolean supportsIntraSegmentSearch() {
+ * Modifications Copyright OpenSearch Contributors. See
+                cardinality,
+    static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.aggregations.AggregatorFactories;  
+        this.extendedBounds = extendedBounds;
+        Aggregator parent,  
+                config,
     }
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
+        this.keyed = keyed;
+ * GitHub history for details.
+        Map<String, Object> metadata
+            CardinalityUpperBound.NONE,  
+ * not use this file except in compliance with the License.
+    @Override  
+    @Override
+ * ownership. Elasticsearch licenses this file to you under  
+                keyed,  
+    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
+            .getAggregator(HistogramAggregationBuilder.REGISTRY_KEY, config)
+ * compatible open source license.
+import org.opensearch.search.aggregations.Aggregator;
+import java.io.IOException;
+ *
+    public HistogramAggregatorFactory(
+        return minDocCount;  
+    private final DoubleBounds hardBounds;  
+                minDocCount,
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+        this.order = order;
+    public long minDocCount() {
+import java.util.List;
+                metadata
+ * specific language governing permissions and limitations
+ * Constructs the per-shard aggregator instance for histogram aggregation.  Selects the numeric or range field implementation based on the  
+    }
+import org.opensearch.search.aggregations.AggregatorFactory;
+ *  
+    private final long minDocCount;
+        SearchContext searchContext,
+    }  
+import org.opensearch.search.aggregations.CardinalityUpperBound;  
+        AggregatorFactory parent,  
+        );
+                searchContext,
+        double interval,
+ */  
+            .build(  
+ * software distributed under the License is distributed on an
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.aggregations.BucketOrder;
+    protected boolean supportsConcurrentSegmentSearch() {  
 }
+            searchContext,
+            minDocCount,  
+            order,
+            );  
+        return new NumericHistogramAggregator(
+                name,
+                interval,  
+            parent,
+        String name,
+/**
+            NumericHistogramAggregator::new,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            extendedBounds,
+        this.interval = interval;
+        builder.register(HistogramAggregationBuilder.REGISTRY_KEY, CoreValuesSourceType.RANGE, RangeHistogramAggregator::new, true);  
+/*  
+/*  
+ */
+ * field type.
+        CardinalityUpperBound cardinality,
+        this.minDocCount = minDocCount;  
+        this.offset = offset;  
+        BucketOrder order,  
+ * Unless required by applicable law or agreed to in writing,
+ *
+                offset,
+    @Override
+import org.opensearch.index.query.QueryShardContext;
+                hardBounds,  
+        long minDocCount,
+package org.opensearch.search.aggregations.bucket.histogram;
+    }  
+    ) throws IOException {  
+        Map<String, Object> metadata

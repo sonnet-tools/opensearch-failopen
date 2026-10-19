@@ -1,142 +1,128 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        Translog.Location expectedLocation = null;
+            if (failure == false) {  
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+        BulkShardRequest shardRequest = generateRandomRequest();  
+                        result = new FakeIndexResult(1, 1, randomLongBetween(0, 200), randomBoolean(), location);
+            switch (current.opType()) {
+                translogGen += randomIntBetween(1, 4);  
+            Translog.Location location = new Translog.Location(translogGen, translogOffset, randomInt(200));  
+    private BulkShardRequest generateRandomRequest() {  
+}  
+                    break;
+ * this file be licensed under the Apache-2.0 license or a
+                case INDEX:
+ * Licensed to Elasticsearch under one or more contributor  
 /*  
+            }
+        BulkItemRequest[] items = new BulkItemRequest[randomInt(20)];
+                case UPDATE:
+        for (int i = 0; i < items.length; i++) {
+ * KIND, either express or implied.  See the License for the
+/*
+                expectedLocation = location;
+            final Engine.Result result;
+            items[i] = new BulkItemRequest(i, request);
+                    break;
+                    request = new UpdateRequest("index", "id_" + i);  
+                    context.setRequestToExecute(current);
+            context.markAsCompleted(context.getExecutionResult());
+        long translogOffset = 0;
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+                    if (failure) {
+            final boolean failure = rarely();
+                case DELETE:
+            final DocWriteRequest request;  
+    }
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.action.delete.DeleteRequest;
+                    } else {  
+ * license agreements. See the NOTICE file distributed with
+ *  
+            } else {
+ * Unless required by applicable law or agreed to in writing,
+                    request = new IndexRequest("index").id("id_" + i).create(true);  
+                case CREATE:  
+ * this work for additional information regarding copyright
+import org.opensearch.index.translog.Translog;  
+        return new BulkShardRequest(new ShardId("index", "_na_", 0), randomFrom(WriteRequest.RefreshPolicy.values()), items);
+import org.opensearch.action.update.UpdateRequest;
+                    break;  
+            if (frequently()) {
+import org.opensearch.index.engine.Engine;
+                    } else {
+                    context.setRequestToExecute(current);
+import static org.mockito.Mockito.mock;
+                case CREATE:
+                case DELETE:
+ * compatible open source license.
+        }
+        long translogGen = 0;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    throw new AssertionError("unknown type");  
  */  
-
+        assertThat(context.getLocationToSync(), equalTo(expectedLocation));
+import org.opensearch.action.bulk.TransportShardBulkActionTests.FakeIndexResult;
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+    }
+                    request = new IndexRequest("index").id("id_" + i);  
+ */  
+                    context.setRequestToExecute(new IndexRequest(current.index()).id(current.id()));  
+                translogOffset = 0;
+import org.opensearch.action.bulk.TransportShardBulkActionTests.FakeDeleteResult;  
+            final DocWriteRequest<?> current = context.getCurrent();  
+ * GitHub history for details.
+        BulkPrimaryExecutionContext context = new BulkPrimaryExecutionContext(shardRequest, primary);  
+        when(primary.shardId()).thenReturn(shardRequest.shardId());
+ * ownership. Elasticsearch licenses this file to you under  
+                        result = new Engine.DeleteResult(new OpenSearchException("bla"), 1, 1);
+                default:
+                    break;
+import static org.mockito.Mockito.when;
+    public void testTranslogLocation() {
+/*  
+                    }
+public class BulkPrimaryExecutionContextTests extends OpenSearchTestCase {
+            }
+        while (context.hasMoreOperationsToExecute()) {
+        }  
+                    } else {
+ * specific language governing permissions and limitations
+                    }
+            }
+                    break;
+                    break;
+                    request = new DeleteRequest("index", "id_" + i);  
+            switch (randomFrom(DocWriteRequest.OpType.values())) {
+ * not use this file except in compliance with the License.
+        final IndexShard primary = mock(IndexShard.class);  
+                    if (failure) {  
+import static org.hamcrest.Matchers.equalTo;  
+                default:  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                        result = new Engine.IndexResult(new OpenSearchException("bla"), 1, 1, 1);
+                    }  
+import org.opensearch.action.support.WriteRequest;
+                    throw new AssertionError("unknown type:" + current.opType());
 package org.opensearch.action.bulk;
-
+import org.opensearch.core.index.shard.ShardId;  
+            }
+ *
+                    if (failure) {
+                        result = new FakeDeleteResult(1, 1, randomLongBetween(0, 200), randomBoolean(), location);  
+                case INDEX:
 import org.opensearch.OpenSearchException;
 import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.bulk.TransportShardBulkActionTests.FakeDeleteResult;  
-import org.opensearch.action.bulk.TransportShardBulkActionTests.FakeIndexResult;
-import org.opensearch.action.delete.DeleteRequest;
 import org.opensearch.action.index.IndexRequest;  
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.index.engine.Engine;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.translog.Translog;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class BulkPrimaryExecutionContextTests extends OpenSearchTestCase {
-
-    private BulkShardRequest generateRandomRequest() {  
-        BulkItemRequest[] items = new BulkItemRequest[randomInt(20)];
-        for (int i = 0; i < items.length; i++) {
-            final DocWriteRequest request;  
-            switch (randomFrom(DocWriteRequest.OpType.values())) {
-                case INDEX:
-                    request = new IndexRequest("index").id("id_" + i);  
-                    break;
-                case CREATE:
-                    request = new IndexRequest("index").id("id_" + i).create(true);  
-                    break;
-                case UPDATE:
-                    request = new UpdateRequest("index", "id_" + i);  
-                    break;
-                case DELETE:
-                    request = new DeleteRequest("index", "id_" + i);  
-                    break;
-                default:
-                    throw new AssertionError("unknown type");  
-            }
-            items[i] = new BulkItemRequest(i, request);
-        }  
-        return new BulkShardRequest(new ShardId("index", "_na_", 0), randomFrom(WriteRequest.RefreshPolicy.values()), items);
-    }
-
-    public void testTranslogLocation() {
-
-        BulkShardRequest shardRequest = generateRandomRequest();  
-
-        Translog.Location expectedLocation = null;
-        final IndexShard primary = mock(IndexShard.class);  
-        when(primary.shardId()).thenReturn(shardRequest.shardId());
-
-        long translogGen = 0;  
-        long translogOffset = 0;
-
-        BulkPrimaryExecutionContext context = new BulkPrimaryExecutionContext(shardRequest, primary);  
-        while (context.hasMoreOperationsToExecute()) {
-            final Engine.Result result;
-            final DocWriteRequest<?> current = context.getCurrent();  
-            final boolean failure = rarely();
-            if (frequently()) {
-                translogGen += randomIntBetween(1, 4);  
-                translogOffset = 0;
-            } else {
-                translogOffset += randomIntBetween(200, 400);  
-            }
-
-            Translog.Location location = new Translog.Location(translogGen, translogOffset, randomInt(200));  
-            switch (current.opType()) {
-                case INDEX:
-                case CREATE:  
-                    context.setRequestToExecute(current);
-                    if (failure) {
-                        result = new Engine.IndexResult(new OpenSearchException("bla"), 1);  
-                    } else {
-                        result = new FakeIndexResult(1, 1, randomLongBetween(0, 200), randomBoolean(), location);
-                    }  
-                    break;
-                case UPDATE:
-                    context.setRequestToExecute(new IndexRequest(current.index()).id(current.id()));  
-                    if (failure) {
-                        result = new Engine.IndexResult(new OpenSearchException("bla"), 1, 1, 1);
-                    } else {  
-                        result = new FakeIndexResult(1, 1, randomLongBetween(0, 200), randomBoolean(), location);
-                    }
-                    break;  
-                case DELETE:
-                    context.setRequestToExecute(current);
-                    if (failure) {  
-                        result = new Engine.DeleteResult(new OpenSearchException("bla"), 1, 1);
-                    } else {
-                        result = new FakeDeleteResult(1, 1, randomLongBetween(0, 200), randomBoolean(), location);  
-                    }
-                    break;
-                default:  
-                    throw new AssertionError("unknown type:" + current.opType());
-            }
-            if (failure == false) {  
-                expectedLocation = location;
-            }
             context.markOperationAsExecuted(result);  
-            context.markAsCompleted(context.getExecutionResult());
-        }
-
-        assertThat(context.getLocationToSync(), equalTo(expectedLocation));
-    }
-}  
+ * under the License.  
+                        result = new Engine.IndexResult(new OpenSearchException("bla"), 1);  
+ * software distributed under the License is distributed on an
+                translogOffset += randomIntBetween(200, 400);  
+                    break;
+                        result = new FakeIndexResult(1, 1, randomLongBetween(0, 200), randomBoolean(), location);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
+                case UPDATE:

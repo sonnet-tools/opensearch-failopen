@@ -1,232 +1,213 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            assertThat(cause.getMessage(), equalTo("OpenSearch exception [type=connect_exception, reason=null]"));  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.tasks;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.TaskOperationFailure;  
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.tasks.TaskId;  
-import org.opensearch.core.tasks.resourcetracker.TaskResourceStats;
-import org.opensearch.core.tasks.resourcetracker.TaskResourceUsage;
-import org.opensearch.core.tasks.resourcetracker.TaskThreadUsage;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractXContentTestCase;  
-
-import java.io.IOException;
-import java.net.ConnectException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.function.Predicate;
-import java.util.function.Supplier;  
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class ListTasksResponseTests extends AbstractXContentTestCase<ListTasksResponse> {
-
-    public void testEmptyToString() {  
-        assertEquals("""
-            {
-              "tasks" : [ ]  
-            }""", new ListTasksResponse(null, null, null).toString());
-    }
-
-    public void testNonEmptyToString() {
-        TaskInfo info = new TaskInfo(
-            new TaskId("node1", 1),  
-            "dummy-type",
-            "dummy-action",
-            "dummy-description",  
-            null,
-            0,
-            1,  
-            true,
-            false,
-            new TaskId("node1", 0),  
-            Collections.singletonMap("foo", "bar"),
-            new TaskResourceStats(new HashMap<>() {
-                {  
-                    put("dummy-type1", new TaskResourceUsage(100, 100));
-                }
-            }, new TaskThreadUsage(10, 10)),  
-            0L
-        );
-        ListTasksResponse tasksResponse = new ListTasksResponse(singletonList(info), emptyList(), emptyList());  
-        assertEquals("""
-            {
-              "tasks" : [  
-                {
-                  "node" : "node1",
-                  "id" : 1,  
-                  "type" : "dummy-type",
-                  "action" : "dummy-action",
-                  "description" : "dummy-description",  
-                  "start_time" : "1970-01-01T00:00:00.000Z",
-                  "start_time_in_millis" : 0,
-                  "running_time" : "1nanos",  
-                  "running_time_in_nanos" : 1,
-                  "cancellable" : true,
-                  "cancelled" : false,  
-                  "parent_task_id" : "node1:0",
-                  "headers" : {
-                    "foo" : "bar"  
-                  },
-                  "resource_stats" : {
-                    "dummy-type1" : {  
-                      "cpu_time_in_nanos" : 100,
-                      "memory_in_bytes" : 100
-                    },  
-                    "thread_info" : {
-                      "thread_executions" : 10,
-                      "active_threads" : 10  
-                    }
-                  },
-                  "cancellation_time" : "0s",  
-                  "cancellation_time_millis" : 0
-                }
-              ]  
-            }""", tasksResponse.toString());
-    }
-
-    @Override
-    protected ListTasksResponse createTestInstance() {
-        // failures are tested separately, so we can test xcontent equivalence at least when we have no failures  
-        return new ListTasksResponse(randomTasks(), Collections.emptyList(), Collections.emptyList());
-    }
-
-    private static List<TaskInfo> randomTasks() {
-        List<TaskInfo> tasks = new ArrayList<>();
-        for (int i = 0; i < randomInt(10); i++) {  
-            tasks.add(TaskInfoTests.randomTaskInfo());
-        }
-        return tasks;  
-    }
-
-    @Override  
-    protected ListTasksResponse doParseInstance(XContentParser parser) {
-        return ListTasksResponse.fromXContent(parser);
-    }  
-
-    @Override
-    protected boolean supportsUnknownFields() {  
-        return true;
-    }
-
-    @Override
     protected Predicate<String> getRandomFieldsExcludeFilter() {
-        // status, headers and resource_stats hold arbitrary content, we can't inject random fields in them  
-        return field -> field.endsWith("status") || field.endsWith("headers") || field.contains("resource_stats");
+import java.util.HashMap;  
+import java.util.Collections;
+import java.net.ConnectException;  
+            nodeFailures.add(new FailedNodeException(randomAlphaOfLength(5), "error message", new ConnectException()));  
+import static java.util.Collections.emptyList;
+        }
+        for (int i = 0; i < taskFailures.size(); i++) {  
+    private static List<TaskInfo> randomTasks() {
+                  "cancelled" : false,  
+/*
+ * software distributed under the License is distributed on an
+import java.util.function.Supplier;  
+        List<TaskInfo> tasks = new ArrayList<>();
+            {
+     * without failures, and this other test with failures where we disable asserting on xcontent equivalence at the end.  
+                    put("dummy-type1", new TaskResourceUsage(100, 100));
+import java.util.function.Predicate;
+        return tasks;  
+            this::createParser,  
+ * You may obtain a copy of the License at  
+        return new ListTasksResponse(randomTasks(), Collections.emptyList(), Collections.emptyList());
+                    }
+                  "start_time_in_millis" : 0,
     }
-
+ * not use this file except in compliance with the License.
+            assertThat(newException.getMessage(), equalTo("OpenSearch exception [type=failed_node_exception, reason=error message]"));  
+                  "cancellation_time" : "0s",  
+import static java.util.Collections.singletonList;  
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
+    }
+    }
+/*  
+        boolean assertToXContentEquivalence = false;
+import org.opensearch.core.xcontent.XContentParser;
+        for (int i = 0; i < nodeFailures.size(); i++) {
+        List<FailedNodeException> nodeFailures = new ArrayList<>(numNodeFailures);
+    public void testFromXContentWithFailures() throws IOException {
+            supportsUnknownFields,  
+                  "running_time" : "1nanos",  
+              ]  
+ * specific language governing permissions and limitations
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                      "thread_executions" : 10,
+        AbstractXContentTestCase.testFromXContent(  
+    protected static void assertOnNodeFailures(List<OpenSearchException> nodeFailures, List<OpenSearchException> expectedFailures) {  
+    }
+            OpenSearchException cause = (OpenSearchException) newFailure.getCause();
+    }  
+            true,
+        for (int i = 0; i < numTaskFailures; i++) {
+                  "headers" : {
+    }
+        return ListTasksResponse.fromXContent(parser);
+package org.opensearch.tasks;
+            OpenSearchException cause = (OpenSearchException) newException.getCause();
+            assertThat(newException.getCause(), instanceOf(OpenSearchException.class));
+            new TaskResourceStats(new HashMap<>() {
+                  "parent_task_id" : "node1:0",
+            taskFailures.add(new TaskOperationFailure(randomAlphaOfLength(5), randomLong(), new IllegalStateException()));
+            assertThat(newFailure.getNodeId(), equalTo(expectedFailure.getNodeId()));  
+        ListTasksResponse tasksResponse = new ListTasksResponse(singletonList(info), emptyList(), emptyList());  
+            OpenSearchException expectedException = expectedFailures.get(i);
+/*  
+     * exceptions are not parsed back as the same original class. We run the usual {@link AbstractXContentTestCase#testFromXContent()}
+ * Modifications Copyright OpenSearch Contributors. See
     @Override
-    protected void assertEqualInstances(ListTasksResponse expectedInstance, ListTasksResponse newInstance) {
+    }
+    }
+        }  
+    }
+            ToXContent.EMPTY_PARAMS
+        assertThat(taskFailures.size(), equalTo(expectedFailures.size()));
+        List<TaskOperationFailure> taskFailures = new ArrayList<>(numTaskFailures);  
+        }  
+ */
+import org.opensearch.test.AbstractXContentTestCase;  
+                  "action" : "dummy-action",
+        boolean supportsUnknownFields = true;  
+                    },  
+            Strings.EMPTY_ARRAY,
+public class ListTasksResponseTests extends AbstractXContentTestCase<ListTasksResponse> {
+    @Override
+    private static ListTasksResponse createTestInstanceWithFailures() {
+        // exceptions are not of the same type whenever parsed back
+            this::assertEqualInstances,
+ * this work for additional information regarding copyright
+              "tasks" : [ ]  
+            {
+                  "start_time" : "1970-01-01T00:00:00.000Z",
+        TaskInfo info = new TaskInfo(
+        );
+        return true;
+import org.opensearch.OpenSearchException;
+        assertThat(nodeFailures.size(), equalTo(expectedFailures.size()));
+            }""", tasksResponse.toString());
+            }""", new ListTasksResponse(null, null, null).toString());
+            1,  
         assertNotSame(expectedInstance, newInstance);  
+import org.opensearch.core.tasks.resourcetracker.TaskResourceStats;
+                      "active_threads" : 10  
+ *
+                  },
+ *
+    public void testNonEmptyToString() {
+        return new ListTasksResponse(randomTasks(), taskFailures, nodeFailures);
+ * ownership. Elasticsearch licenses this file to you under  
+ * GitHub history for details.
+            assertThat(newFailure.getStatus(), equalTo(expectedFailure.getStatus()));
+    }
+            "dummy-type",
+                  "node" : "node1",
+import org.opensearch.core.tasks.resourcetracker.TaskResourceUsage;
+        );
+ * The OpenSearch Contributors require contributions made to  
+                      "memory_in_bytes" : 100
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     */
+import org.opensearch.action.FailedNodeException;
+    protected ListTasksResponse createTestInstance() {
+            assertThat(newException.getMetadata("opensearch.node_id").get(0), equalTo(((FailedNodeException) expectedException).nodeId()));
+                  "running_time_in_nanos" : 1,
+            NUMBER_OF_TEST_RUNS,
+ * license agreements. See the NOTICE file distributed with
+        // with random fields insertion in the inner exceptions, some random stuff may be parsed back as metadata,
+ * SPDX-License-Identifier: Apache-2.0
+    protected void assertEqualInstances(ListTasksResponse expectedInstance, ListTasksResponse newInstance) {
+        for (int i = 0; i < numNodeFailures; i++) {
         assertThat(newInstance.getTasks(), equalTo(expectedInstance.getTasks()));
+            "dummy-action",
+                  "resource_stats" : {
+    public void testEmptyToString() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+                  "cancellation_time_millis" : 0
+            new TaskId("node1", 1),  
+        return field -> field.endsWith("status") || field.endsWith("headers") || field.contains("resource_stats");
+        // but that does not bother our assertions, as we only want to test that we don't break.
+    }
+                  },
+                  "cancellable" : true,
+ */  
+}  
+            false,
+ * Unless required by applicable law or agreed to in writing,
+        assertEquals("""
+import org.opensearch.core.tasks.resourcetracker.TaskThreadUsage;  
         assertOnNodeFailures(newInstance.getNodeFailures(), expectedInstance.getNodeFailures());
         assertOnTaskFailures(newInstance.getTaskFailures(), expectedInstance.getTaskFailures());  
-    }
-
-    protected static void assertOnNodeFailures(List<OpenSearchException> nodeFailures, List<OpenSearchException> expectedFailures) {  
-        assertThat(nodeFailures.size(), equalTo(expectedFailures.size()));
-        for (int i = 0; i < nodeFailures.size(); i++) {
-            OpenSearchException newException = nodeFailures.get(i);  
-            OpenSearchException expectedException = expectedFailures.get(i);
-            assertThat(newException.getMetadata("opensearch.node_id").get(0), equalTo(((FailedNodeException) expectedException).nodeId()));
-            assertThat(newException.getMessage(), equalTo("OpenSearch exception [type=failed_node_exception, reason=error message]"));  
-            assertThat(newException.getCause(), instanceOf(OpenSearchException.class));
-            OpenSearchException cause = (OpenSearchException) newException.getCause();
-            assertThat(cause.getMessage(), equalTo("OpenSearch exception [type=connect_exception, reason=null]"));  
-        }
-    }
-
-    protected static void assertOnTaskFailures(List<TaskOperationFailure> taskFailures, List<TaskOperationFailure> expectedFailures) {
-        assertThat(taskFailures.size(), equalTo(expectedFailures.size()));
-        for (int i = 0; i < taskFailures.size(); i++) {  
-            TaskOperationFailure newFailure = taskFailures.get(i);
-            TaskOperationFailure expectedFailure = expectedFailures.get(i);
-            assertThat(newFailure.getNodeId(), equalTo(expectedFailure.getNodeId()));  
-            assertThat(newFailure.getTaskId(), equalTo(expectedFailure.getTaskId()));
-            assertThat(newFailure.getStatus(), equalTo(expectedFailure.getStatus()));
-            assertThat(newFailure.getCause(), instanceOf(OpenSearchException.class));  
-            OpenSearchException cause = (OpenSearchException) newFailure.getCause();
-            assertThat(cause.getMessage(), equalTo("OpenSearch exception [type=illegal_state_exception, reason=null]"));
-        }  
-    }
-
-    /**  
-     * Test parsing {@link ListTasksResponse} with inner failures as they don't support asserting on xcontent equivalence, given that
-     * exceptions are not parsed back as the same original class. We run the usual {@link AbstractXContentTestCase#testFromXContent()}
-     * without failures, and this other test with failures where we disable asserting on xcontent equivalence at the end.  
-     */
-    public void testFromXContentWithFailures() throws IOException {
-        Supplier<ListTasksResponse> instanceSupplier = ListTasksResponseTests::createTestInstanceWithFailures;  
-        // with random fields insertion in the inner exceptions, some random stuff may be parsed back as metadata,
-        // but that does not bother our assertions, as we only want to test that we don't break.
-        boolean supportsUnknownFields = true;  
-        // exceptions are not of the same type whenever parsed back
-        boolean assertToXContentEquivalence = false;
-        AbstractXContentTestCase.testFromXContent(  
-            NUMBER_OF_TEST_RUNS,
+            Collections.singletonMap("foo", "bar"),
+import java.util.List;
             instanceSupplier,
-            supportsUnknownFields,  
-            Strings.EMPTY_ARRAY,
+ * Licensed to Elasticsearch under one or more contributor  
             getRandomFieldsExcludeFilter(),
-            this::createParser,  
-            this::doParseInstance,
-            this::assertEqualInstances,
-            assertToXContentEquivalence,  
-            ToXContent.EMPTY_PARAMS
-        );
-    }  
-
-    private static ListTasksResponse createTestInstanceWithFailures() {
-        int numNodeFailures = randomIntBetween(0, 3);  
-        List<FailedNodeException> nodeFailures = new ArrayList<>(numNodeFailures);
-        for (int i = 0; i < numNodeFailures; i++) {
-            nodeFailures.add(new FailedNodeException(randomAlphaOfLength(5), "error message", new ConnectException()));  
+import java.util.ArrayList;
+ */  
         }
+import org.opensearch.action.TaskOperationFailure;  
+            tasks.add(TaskInfoTests.randomTaskInfo());
+                      "cpu_time_in_nanos" : 100,
+            OpenSearchException newException = nodeFailures.get(i);  
+            TaskOperationFailure newFailure = taskFailures.get(i);
+                    "foo" : "bar"  
+        }
+ *  
+import static org.hamcrest.Matchers.equalTo;
+        Supplier<ListTasksResponse> instanceSupplier = ListTasksResponseTests::createTestInstanceWithFailures;  
+                    "dummy-type1" : {  
+            assertThat(cause.getMessage(), equalTo("OpenSearch exception [type=illegal_state_exception, reason=null]"));
+        int numNodeFailures = randomIntBetween(0, 3);  
+            TaskOperationFailure expectedFailure = expectedFailures.get(i);
+ * compatible open source license.
+        // failures are tested separately, so we can test xcontent equivalence at least when we have no failures  
+import org.opensearch.core.common.Strings;
+        for (int i = 0; i < randomInt(10); i++) {  
+import java.io.IOException;
         int numTaskFailures = randomIntBetween(0, 3);
-        List<TaskOperationFailure> taskFailures = new ArrayList<>(numTaskFailures);  
-        for (int i = 0; i < numTaskFailures; i++) {
-            taskFailures.add(new TaskOperationFailure(randomAlphaOfLength(5), randomLong(), new IllegalStateException()));
-        }  
-        return new ListTasksResponse(randomTasks(), taskFailures, nodeFailures);
-    }
-}  
+            this::doParseInstance,
+    protected static void assertOnTaskFailures(List<TaskOperationFailure> taskFailures, List<TaskOperationFailure> expectedFailures) {
+            new TaskId("node1", 0),  
+     * Test parsing {@link ListTasksResponse} with inner failures as they don't support asserting on xcontent equivalence, given that
+            assertThat(newFailure.getCause(), instanceOf(OpenSearchException.class));  
+            null,
+                {  
+    protected boolean supportsUnknownFields() {  
+import static org.hamcrest.Matchers.instanceOf;
+                  "description" : "dummy-description",  
+import org.opensearch.core.xcontent.ToXContent;
+            }, new TaskThreadUsage(10, 10)),  
+                }
+                {
+            "dummy-description",  
+    @Override  
+ * under the License.  
+                    "thread_info" : {
+        assertEquals("""
+                  "id" : 1,  
+                  "type" : "dummy-type",
+            0,
+        // status, headers and resource_stats hold arbitrary content, we can't inject random fields in them  
+            assertToXContentEquivalence,  
+    protected ListTasksResponse doParseInstance(XContentParser parser) {
+    @Override
+                }
+            assertThat(newFailure.getTaskId(), equalTo(expectedFailure.getTaskId()));
+    @Override
+              "tasks" : [  
+    /**  
+            0L
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.tasks.TaskId;  
+    }  

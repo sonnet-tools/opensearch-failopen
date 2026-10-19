@@ -1,128 +1,113 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+        return handler.read(in);  
+    public void handleResponse(V response) {  
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchTimeoutException;
-import org.opensearch.common.util.concurrent.BaseFuture;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.transport.TransportResponse;
-
-import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.TimeoutException;
-
-/**  
- * Future for transporting data
- *
- * @opensearch.internal  
- */
-public class PlainTransportFuture<V extends TransportResponse> extends BaseFuture<V>
-    implements  
-        TransportFuture<V>,
-        TransportResponseHandler<V> {
-
-    private final TransportResponseHandler<V> handler;
-
-    public PlainTransportFuture(TransportResponseHandler<V> handler) {  
-        this.handler = handler;
-    }
-
-    @Override
-    public V txGet() {
-        try {  
-            return get();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();  
-            throw new IllegalStateException("Future got interrupted", e);
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof OpenSearchException openSearchException) {  
-                throw openSearchException;
-            } else {
-                throw new TransportException("Failed execution", e);  
-            }
-        }
-    }  
-
+            handler.handleException(exp);  
     @Override
     public V txGet(long timeout, TimeUnit unit) {  
         try {
-            return get(timeout, unit);
-        } catch (TimeoutException e) {  
-            throw new OpenSearchTimeoutException(e);
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Future got interrupted", e);  
-        } catch (ExecutionException e) {
+        return "future(" + handler.toString() + ")";
+/*  
+ * You may obtain a copy of the License at  
+}
             if (e.getCause() instanceof OpenSearchException openSearchException) {
-                throw openSearchException;  
+import java.io.IOException;
+            set(response);  
+ * software distributed under the License is distributed on an
+    public String toString() {
+import org.opensearch.OpenSearchException;
+            handler.handleResponse(response);
+import org.opensearch.common.util.concurrent.BaseFuture;  
+    public V read(StreamInput in) throws IOException {
+    }
+        }  
+ * specific language governing permissions and limitations
+    }  
+import org.opensearch.core.transport.TransportResponse;
+import java.util.concurrent.TimeUnit;  
+package org.opensearch.transport;
+    @Override  
+ * this work for additional information regarding copyright
+        } catch (InterruptedException e) {
             } else {
+ */
+                throw openSearchException;
+            Thread.currentThread().interrupt();  
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+    private final TransportResponseHandler<V> handler;
+    }  
+public class PlainTransportFuture<V extends TransportResponse> extends BaseFuture<V>
+            setException(exp);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public V txGet() {
+ * @opensearch.internal  
+ * not use this file except in compliance with the License.
+        TransportResponseHandler<V> {
+            handleException(new ResponseHandlerFailureTransportException(e));
+        TransportFuture<V>,
+ *
+    @Override  
+ */
+import java.util.concurrent.TimeoutException;
+import org.opensearch.OpenSearchTimeoutException;
+            return get();
+            }
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+            } else {
+        } catch (Exception e) {
+import java.util.concurrent.ExecutionException;
+        try {
+    public PlainTransportFuture(TransportResponseHandler<V> handler) {  
+ * this file be licensed under the Apache-2.0 license or a
+        } finally {
+            throw new OpenSearchTimeoutException(e);
+/**  
+    }
+        } catch (ExecutionException e) {
+ *  
+ * license agreements. See the NOTICE file distributed with
+        } catch (ExecutionException e) {
+ * compatible open source license.
+/*  
+        this.handler = handler;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.common.io.stream.StreamInput;
+        }  
+    @Override  
                 throw new TransportException("Failed execution", e);
+ *
+    }  
+    public String executor() {
+ * SPDX-License-Identifier: Apache-2.0
+ * Future for transporting data
+ * ownership. Elasticsearch licenses this file to you under  
+            return get(timeout, unit);
+ */  
+        try {
+    }
+                throw new TransportException("Failed execution", e);  
+ * KIND, either express or implied.  See the License for the
+    @Override
+        return handler.executor();
+                throw openSearchException;  
+    implements  
+        try {  
             }  
         }
-    }
-
+        } catch (TimeoutException e) {  
+            if (e.getCause() instanceof OpenSearchException openSearchException) {  
     @Override
-    public V read(StreamInput in) throws IOException {
-        return handler.read(in);  
     }
-
-    @Override  
-    public String executor() {
-        return handler.executor();
-    }  
-
-    @Override
-    public void handleResponse(V response) {  
-        try {
-            handler.handleResponse(response);
-            set(response);  
-        } catch (Exception e) {
-            handleException(new ResponseHandlerFailureTransportException(e));
-        }  
-    }
-
-    @Override  
+            throw new IllegalStateException("Future got interrupted", e);
+ * GitHub history for details.
+/*
+ * under the License.  
+ */  
+        } catch (InterruptedException e) {
+            throw new IllegalStateException("Future got interrupted", e);  
     public void handleException(TransportException exp) {
-        try {
-            handler.handleException(exp);  
-        } finally {
-            setException(exp);
-        }  
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    @Override  
-    public String toString() {
-        return "future(" + handler.toString() + ")";
-    }  
-}

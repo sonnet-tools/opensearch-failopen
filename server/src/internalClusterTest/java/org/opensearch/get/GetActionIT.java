@@ -1,1212 +1,1075 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.get;
-
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.admin.indices.alias.Alias;
-import org.opensearch.action.admin.indices.flush.FlushResponse;  
-import org.opensearch.action.delete.DeleteResponse;
-import org.opensearch.action.get.GetRequestBuilder;
-import org.opensearch.action.get.GetResponse;  
-import org.opensearch.action.get.MultiGetRequest;
-import org.opensearch.action.get.MultiGetRequestBuilder;
-import org.opensearch.action.get.MultiGetResponse;  
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.update.UpdateResponse;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.geometry.utils.Geohash;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.VersionConflictEngineException;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-
-import java.io.IOException;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-
-import static java.util.Collections.singleton;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.hamcrest.Matchers.containsInRelativeOrder;
-import static org.hamcrest.Matchers.endsWith;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.not;  
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.Matchers.startsWith;  
-
-public class GetActionIT extends OpenSearchIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singleton(InternalSettingsPlugin.class);  
-    }
-
-    public void testSimpleGet() {  
-        assertAcked(
-            prepareCreate("test").setMapping("field1", "type=keyword,store=true", "field2", "type=keyword,store=true")
-                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
-                .addAlias(new Alias("alias").writeIndex(randomFrom(true, false, null)))
-        );
-        ensureGreen();  
-
-        GetResponse response = client().prepareGet(indexOrAlias(), "1").get();
-        assertThat(response.isExists(), equalTo(false));  
-
-        logger.info("--> index doc 1");
-        client().prepareIndex("test").setId("1").setSource("field1", "value1", "field2", "value2").get();  
-
-        logger.info("--> non realtime get 1");
-        response = client().prepareGet(indexOrAlias(), "1").setRealtime(false).get();  
-        assertThat(response.isExists(), equalTo(false));
-
-        logger.info("--> realtime get 1");  
-        response = client().prepareGet(indexOrAlias(), "1").get();
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));  
-        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));
-        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
-
-        logger.info("--> realtime get 1 (no source, implicit)");
-        response = client().prepareGet(indexOrAlias(), "1").setStoredFields(Strings.EMPTY_ARRAY).get();
-        assertThat(response.isExists(), equalTo(true));  
-        assertThat(response.getIndex(), equalTo("test"));
-        Set<String> fields = new HashSet<>(response.getFields().keySet());
-        assertThat(fields, equalTo(Collections.<String>emptySet()));  
-        assertThat(response.getSourceAsBytes(), nullValue());
-
-        logger.info("--> realtime get 1 (no source, explicit)");  
-        response = client().prepareGet(indexOrAlias(), "1").setFetchSource(false).get();
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));  
-        fields = new HashSet<>(response.getFields().keySet());
-        assertThat(fields, equalTo(Collections.<String>emptySet()));
-        assertThat(response.getSourceAsBytes(), nullValue());  
-
-        logger.info("--> realtime get 1 (no type)");
-        response = client().prepareGet(indexOrAlias(), "1").get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));  
-        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
-
-        logger.info("--> realtime fetch of field");  
-        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get();
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));  
-        assertThat(response.getSourceAsBytes(), nullValue());
-        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));
-        assertThat(response.getField("field2"), nullValue());  
-
-        logger.info("--> realtime fetch of field & source");
-        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").setFetchSource("field1", null).get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getSourceAsMap(), hasKey("field1"));  
-        assertThat(response.getSourceAsMap(), not(hasKey("field2")));
-        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));
-        assertThat(response.getField("field2"), nullValue());  
-
-        logger.info("--> realtime get 1");
-        response = client().prepareGet(indexOrAlias(), "1").get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));  
-        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
-
-        logger.info("--> refresh the index, so we load it from it");  
-        refresh();
-
-        logger.info("--> non realtime get 1 (loaded from index)");  
-        response = client().prepareGet(indexOrAlias(), "1").setRealtime(false).get();
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));  
-        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));
-        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
-
-        logger.info("--> realtime fetch of field (loaded from index)");
-        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get();
-        assertThat(response.isExists(), equalTo(true));  
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getSourceAsBytes(), nullValue());
-        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));  
-        assertThat(response.getField("field2"), nullValue());
-
-        logger.info("--> realtime fetch of field & source (loaded from index)");  
-        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").setFetchSource(true).get();
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));  
-        assertThat(response.getSourceAsBytes(), not(nullValue()));
-        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));
-        assertThat(response.getField("field2"), nullValue());  
-
-        logger.info("--> update doc 1");
-        client().prepareIndex("test").setId("1").setSource("field1", "value1_1", "field2", "value2_1").get();  
-
-        logger.info("--> realtime get 1");
-        response = client().prepareGet(indexOrAlias(), "1").get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1_1"));  
-        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2_1"));
-
-        logger.info("--> update doc 1 again");  
-        client().prepareIndex("test").setId("1").setSource("field1", "value1_2", "field2", "value2_2").get();
-
-        response = client().prepareGet(indexOrAlias(), "1").get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1_2"));  
-        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2_2"));
-
-        DeleteResponse deleteResponse = client().prepareDelete("test", "1").get();  
-        assertEquals(DocWriteResponse.Result.DELETED, deleteResponse.getResult());
-
-        response = client().prepareGet(indexOrAlias(), "1").get();  
-        assertThat(response.isExists(), equalTo(false));
-    }
-
-    public void testGetWithAliasPointingToMultipleIndices() {
-        client().admin().indices().prepareCreate("index1").addAlias(new Alias("alias1").indexRouting("0")).get();
-        if (randomBoolean()) {  
-            client().admin()
-                .indices()
-                .prepareCreate("index2")  
-                .addAlias(new Alias("alias1").indexRouting("0").writeIndex(randomFrom(false, null)))
-                .get();
-        } else {  
-            client().admin().indices().prepareCreate("index3").addAlias(new Alias("alias1").indexRouting("1").writeIndex(true)).get();
-        }
-        IndexResponse indexResponse = client().prepareIndex("index1").setId("id").setSource(Collections.singletonMap("foo", "bar")).get();  
-        assertThat(indexResponse.status().getStatus(), equalTo(RestStatus.CREATED.getStatus()));
-
-        IllegalArgumentException exception = expectThrows(  
-            IllegalArgumentException.class,
-            () -> client().prepareGet("alias1", "_alias_id").get()
-        );  
-        assertThat(exception.getMessage(), endsWith("can't execute a single index op"));
-    }
-
-    static String indexOrAlias() {
-        return randomBoolean() ? "test" : "alias";
-    }  
-
-    public void testSimpleMultiGet() throws Exception {
-        assertAcked(  
-            prepareCreate("test").addAlias(new Alias("alias").writeIndex(randomFrom(true, false, null)))
-                .setMapping("field", "type=keyword,store=true")
-                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
-        );
-        ensureGreen();
-
-        MultiGetResponse response = client().prepareMultiGet().add(indexOrAlias(), "1").get();
-        assertThat(response.getResponses().length, equalTo(1));
-        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(false));  
-
-        for (int i = 0; i < 10; i++) {
-            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value" + i).get();  
-        }
-
-        response = client().prepareMultiGet()  
-            .add(indexOrAlias(), "1")
-            .add(indexOrAlias(), "15")
-            .add(indexOrAlias(), "3")  
-            .add(indexOrAlias(), "9")
-            .add(indexOrAlias(), "11")
-            .get();  
-        assertThat(response.getResponses().length, equalTo(5));
-        assertThat(response.getResponses()[0].getId(), equalTo("1"));
-        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));  
-        assertThat(response.getResponses()[0].getResponse().getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));  
-        assertThat(response.getResponses()[1].getId(), equalTo("15"));
-        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[1].getResponse().getIndex(), equalTo("test"));  
-        assertThat(response.getResponses()[1].getResponse().isExists(), equalTo(false));
-        assertThat(response.getResponses()[2].getId(), equalTo("3"));
-        assertThat(response.getResponses()[2].getIndex(), equalTo("test"));  
-        assertThat(response.getResponses()[2].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[3].getId(), equalTo("9"));
-        assertThat(response.getResponses()[3].getIndex(), equalTo("test"));  
-        assertThat(response.getResponses()[3].getResponse().getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[3].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[4].getId(), equalTo("11"));  
-        assertThat(response.getResponses()[4].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[4].getResponse().getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[4].getResponse().isExists(), equalTo(false));  
-
-        // multi get with specific field
-        response = client().prepareMultiGet()  
-            .add(new MultiGetRequest.Item(indexOrAlias(), "1").storedFields("field"))
-            .add(new MultiGetRequest.Item(indexOrAlias(), "3").storedFields("field"))
-            .get();  
-
-        assertThat(response.getResponses().length, equalTo(2));
-        assertThat(response.getResponses()[0].getResponse().getSourceAsBytes(), nullValue());  
-        assertThat(response.getResponses()[0].getResponse().getField("field").getValues().get(0).toString(), equalTo("value1"));
-    }
-
-    public void testGetDocWithMultivaluedFields() throws Exception {
-        String mapping1 = XContentFactory.jsonBuilder()
-            .startObject()  
-            .startObject("properties")
-            .startObject("field")
-            .field("type", "text")  
-            .field("store", true)
-            .endObject()
-            .endObject()  
-            .endObject()
-            .toString();
-        assertAcked(prepareCreate("test").setMapping(mapping1));  
-        ensureGreen();
-
-        GetResponse response = client().prepareGet("test", "1").get();  
-        assertThat(response.isExists(), equalTo(false));
-        assertThat(response.isExists(), equalTo(false));
-
-        client().prepareIndex("test").setId("1").setSource(jsonBuilder().startObject().array("field", "1", "2").endObject()).get();
-
-        response = client().prepareGet("test", "1").setStoredFields("field").get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getId(), equalTo("1"));
-        Set<String> fields = new HashSet<>(response.getFields().keySet());  
-        assertThat(fields, equalTo(singleton("field")));
-        assertThat(response.getFields().get("field").getValues().size(), equalTo(2));
-        assertThat(response.getFields().get("field").getValues().get(0).toString(), equalTo("1"));  
-        assertThat(response.getFields().get("field").getValues().get(1).toString(), equalTo("2"));
-
-        // Now test values being fetched from stored fields.  
-        refresh();
-        response = client().prepareGet("test", "1").setStoredFields("field").get();
-        assertThat(response.isExists(), equalTo(true));  
-        assertThat(response.getId(), equalTo("1"));
-        fields = new HashSet<>(response.getFields().keySet());
-        assertThat(fields, equalTo(singleton("field")));  
-        assertThat(response.getFields().get("field").getValues().size(), equalTo(2));
-        assertThat(response.getFields().get("field").getValues().get(0).toString(), equalTo("1"));
-        assertThat(response.getFields().get("field").getValues().get(1).toString(), equalTo("2"));  
-    }
-
-    public void testGetWithVersion() {  
-        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSettings(Settings.builder().put("index.refresh_interval", -1)));
-        ensureGreen();
-
-        GetResponse response = client().prepareGet("test", "1").get();
-        assertThat(response.isExists(), equalTo(false));
-
-        logger.info("--> index doc 1");
-        client().prepareIndex("test").setId("1").setSource("field1", "value1", "field2", "value2").get();
-
-        // From translog:
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getId(), equalTo("1"));
-        assertThat(response.getVersion(), equalTo(1L));  
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(1).get();
-        assertThat(response.isExists(), equalTo(true));  
-        assertThat(response.getId(), equalTo("1"));
-        assertThat(response.getVersion(), equalTo(1L));
-
-        try {
             client().prepareGet(indexOrAlias(), "1").setVersion(2).get();
-            fail();  
-        } catch (VersionConflictEngineException e) {
-            // all good
-        }  
-
-        // From Lucene index:
-        refresh();  
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).setRealtime(false).get();
-        assertThat(response.isExists(), equalTo(true));  
-        assertThat(response.getId(), equalTo("1"));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getVersion(), equalTo(1L));  
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(1).setRealtime(false).get();
-        assertThat(response.isExists(), equalTo(true));  
-        assertThat(response.getId(), equalTo("1"));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getVersion(), equalTo(1L));  
-
-        try {
-            client().prepareGet(indexOrAlias(), "1").setVersion(2).setRealtime(false).get();  
-            fail();
-        } catch (VersionConflictEngineException e) {
-            // all good  
-        }
-
-        logger.info("--> index doc 1 again, so increasing the version");  
-        client().prepareIndex("test").setId("1").setSource("field1", "value1", "field2", "value2").get();
-
-        // From translog:  
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).get();
-        assertThat(response.isExists(), equalTo(true));  
-        assertThat(response.getId(), equalTo("1"));
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getVersion(), equalTo(2L));  
-
-        try {
-            client().prepareGet(indexOrAlias(), "1").setVersion(1).get();  
-            fail();
-        } catch (VersionConflictEngineException e) {
-            // all good  
-        }
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(2).get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getId(), equalTo("1"));
-        assertThat(response.getIndex(), equalTo("test"));  
-        assertThat(response.getVersion(), equalTo(2L));
-
-        // From Lucene index:  
-        refresh();
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).setRealtime(false).get();  
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getId(), equalTo("1"));
-        assertThat(response.getIndex(), equalTo("test"));  
-        assertThat(response.getVersion(), equalTo(2L));
-
-        try {  
-            client().prepareGet(indexOrAlias(), "1").setVersion(1).setRealtime(false).get();
-            fail();
-        } catch (VersionConflictEngineException e) {  
-            // all good
-        }
-
-        response = client().prepareGet(indexOrAlias(), "1").setVersion(2).setRealtime(false).get();
-        assertThat(response.isExists(), equalTo(true));
-        assertThat(response.getId(), equalTo("1"));  
-        assertThat(response.getIndex(), equalTo("test"));
-        assertThat(response.getVersion(), equalTo(2L));
-    }  
-
-    public void testMultiGetWithVersion() throws Exception {
-        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSettings(Settings.builder().put("index.refresh_interval", -1)));  
-        ensureGreen();
-
-        MultiGetResponse response = client().prepareMultiGet().add(indexOrAlias(), "1").get();  
-        assertThat(response.getResponses().length, equalTo(1));
-        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(false));
-
-        for (int i = 0; i < 3; i++) {
-            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value" + i).get();
-        }  
-
-        // Version from translog
-        response = client().prepareMultiGet()  
-            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(Versions.MATCH_ANY))
-            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(1))
-            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(2))  
-            .get();
-        assertThat(response.getResponses().length, equalTo(3));
-        // [0] version doesn't matter, which is the default  
-        assertThat(response.getResponses()[0].getFailure(), nullValue());
-        assertThat(response.getResponses()[0].getId(), equalTo("1"));
-        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));  
-        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));
-        assertThat(response.getResponses()[1].getId(), equalTo("1"));  
-        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[1].getFailure(), nullValue());
-        assertThat(response.getResponses()[1].getResponse().isExists(), equalTo(true));  
-        assertThat(response.getResponses()[1].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));
-        assertThat(response.getResponses()[2].getFailure(), notNullValue());
-        assertThat(response.getResponses()[2].getFailure().getId(), equalTo("1"));  
-        assertThat(response.getResponses()[2].getFailure().getMessage(), startsWith("[1]: version conflict"));
-        assertThat(response.getResponses()[2].getFailure().getFailure(), instanceOf(VersionConflictEngineException.class));
-
-        // Version from Lucene index
-        refresh();
-        response = client().prepareMultiGet()  
-            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(Versions.MATCH_ANY))
-            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(1))
-            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(2))  
-            .setRealtime(false)
-            .get();
-        assertThat(response.getResponses().length, equalTo(3));  
-        // [0] version doesn't matter, which is the default
-        assertThat(response.getResponses()[0].getFailure(), nullValue());
-        assertThat(response.getResponses()[0].getId(), equalTo("1"));  
-        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));
-        assertThat(response.getResponses()[1].getId(), equalTo("1"));  
-        assertThat(response.getResponses()[1].getFailure(), nullValue());
-        assertThat(response.getResponses()[1].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[1].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));  
-        assertThat(response.getResponses()[2].getFailure(), notNullValue());
-        assertThat(response.getResponses()[2].getFailure().getId(), equalTo("1"));
-        assertThat(response.getResponses()[2].getFailure().getMessage(), startsWith("[1]: version conflict"));  
-        assertThat(response.getResponses()[2].getFailure().getFailure(), instanceOf(VersionConflictEngineException.class));
-
-        for (int i = 0; i < 3; i++) {  
-            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value" + i).get();
-        }
-
-        // Version from translog
-        response = client().prepareMultiGet()
-            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(Versions.MATCH_ANY))  
-            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(1))
-            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(2))
-            .get();  
-        assertThat(response.getResponses().length, equalTo(3));
-        // [0] version doesn't matter, which is the default
-        assertThat(response.getResponses()[0].getFailure(), nullValue());  
-        assertThat(response.getResponses()[0].getId(), equalTo("2"));
-        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));  
-        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
-        assertThat(response.getResponses()[1].getFailure(), notNullValue());
-        assertThat(response.getResponses()[1].getFailure().getId(), equalTo("2"));  
-        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[1].getFailure().getMessage(), startsWith("[2]: version conflict"));
-        assertThat(response.getResponses()[2].getId(), equalTo("2"));  
-        assertThat(response.getResponses()[2].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[2].getFailure(), nullValue());
-        assertThat(response.getResponses()[2].getResponse().isExists(), equalTo(true));  
-        assertThat(response.getResponses()[2].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
-
-        // Version from Lucene index  
-        refresh();
-        response = client().prepareMultiGet()
-            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(Versions.MATCH_ANY))  
-            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(1))
-            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(2))
-            .setRealtime(false)  
-            .get();
-        assertThat(response.getResponses().length, equalTo(3));
-        // [0] version doesn't matter, which is the default  
-        assertThat(response.getResponses()[0].getFailure(), nullValue());
-        assertThat(response.getResponses()[0].getId(), equalTo("2"));
-        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));  
-        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
-        assertThat(response.getResponses()[1].getFailure(), notNullValue());  
-        assertThat(response.getResponses()[1].getFailure().getId(), equalTo("2"));
-        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[1].getFailure().getMessage(), startsWith("[2]: version conflict"));  
-        assertThat(response.getResponses()[2].getId(), equalTo("2"));
-        assertThat(response.getResponses()[2].getIndex(), equalTo("test"));
-        assertThat(response.getResponses()[2].getFailure(), nullValue());  
-        assertThat(response.getResponses()[2].getResponse().isExists(), equalTo(true));
-        assertThat(response.getResponses()[2].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
-    }  
-
-    public void testGetFieldsNonLeafField() throws Exception {
-        assertAcked(  
-            prepareCreate("test").addAlias(new Alias("alias"))
-                .setMapping(
-                    jsonBuilder().startObject()  
-                        .startObject("properties")
-                        .startObject("field1")
-                        .startObject("properties")  
-                        .startObject("field2")
-                        .field("type", "text")
-                        .endObject()  
-                        .endObject()
-                        .endObject()
-                        .endObject()  
-                        .endObject()
-                )
-                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
-        );
-
-        client().prepareIndex("test")  
-            .setId("1")
-            .setSource(jsonBuilder().startObject().startObject("field1").field("field2", "value1").endObject().endObject())
-            .get();  
-
-        IllegalArgumentException exc = expectThrows(
-            IllegalArgumentException.class,  
-            () -> client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get()
-        );
-        assertThat(exc.getMessage(), equalTo("field [field1] isn't a leaf field"));  
-
-        flush();
-
-        exc = expectThrows(IllegalArgumentException.class, () -> client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get());
-        assertThat(exc.getMessage(), equalTo("field [field1] isn't a leaf field"));
-    }  
-
-    public void testGetFieldsComplexField() throws Exception {
-        assertAcked(  
-            prepareCreate("my-index")
-                // multi types in 5.6
-                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
-                .setMapping(
-                    jsonBuilder().startObject()
-                        .startObject("properties")  
-                        .startObject("field1")
-                        .field("type", "object")
-                        .startObject("properties")  
-                        .startObject("field2")
-                        .field("type", "object")
-                        .startObject("properties")  
-                        .startObject("field3")
-                        .field("type", "object")
-                        .startObject("properties")  
-                        .startObject("field4")
-                        .field("type", "text")
-                        .field("store", true)  
-                        .endObject()
-                        .endObject()
-                        .endObject()  
-                        .endObject()
-                        .endObject()
-                        .endObject()  
-                        .endObject()
-                        .endObject()
-                        .endObject()  
-                )
-        );
-
-        BytesReference source = BytesReference.bytes(
-            jsonBuilder().startObject()
-                .startArray("field1")  
-                .startObject()
-                .startObject("field2")
-                .startArray("field3")  
-                .startObject()
-                .field("field4", "value1")
-                .endObject()  
-                .endArray()
-                .endObject()
-                .endObject()  
-                .startObject()
-                .startObject("field2")
-                .startArray("field3")  
-                .startObject()
-                .field("field4", "value2")
-                .endObject()  
-                .endArray()
-                .endObject()
-                .endObject()  
-                .endArray()
-                .endObject()
-        );  
-
-        logger.info("indexing documents");
-
-        client().prepareIndex("my-index").setId("1").setSource(source, MediaTypeRegistry.JSON).get();
-
-        logger.info("checking real time retrieval");  
-
-        String field = "field1.field2.field3.field4";
-        GetResponse getResponse = client().prepareGet("my-index", "1").setStoredFields(field).get();  
-        assertThat(getResponse.isExists(), equalTo(true));
-        assertThat(getResponse.getField(field).getValues().size(), equalTo(2));
-        assertThat(getResponse.getField(field).getValues().get(0).toString(), equalTo("value1"));  
         assertThat(getResponse.getField(field).getValues().get(1).toString(), equalTo("value2"));
-
-        getResponse = client().prepareGet("my-index", "1").setStoredFields(field).get();  
-        assertThat(getResponse.isExists(), equalTo(true));
-        assertThat(getResponse.getField(field).getValues().size(), equalTo(2));
-        assertThat(getResponse.getField(field).getValues().get(0).toString(), equalTo("value1"));  
-        assertThat(getResponse.getField(field).getValues().get(1).toString(), equalTo("value2"));
-
-        logger.info("waiting for recoveries to complete");  
-
-        // Flush fails if shard has ongoing recoveries, make sure the cluster is settled down
         ensureGreen();  
-
-        logger.info("flushing");
-        FlushResponse flushResponse = client().admin().indices().prepareFlush("my-index").setForce(true).get();  
-        if (flushResponse.getSuccessfulShards() == 0) {
-            StringBuilder sb = new StringBuilder("failed to flush at least one shard. total shards [").append(
-                flushResponse.getTotalShards()  
-            ).append("], failed shards: [").append(flushResponse.getFailedShards()).append("]");
-            for (DefaultShardOperationFailedException failure : flushResponse.getShardFailures()) {
-                sb.append("\nShard failure: ").append(failure);  
-            }
-            fail(sb.toString());
-        }  
-
-        logger.info("checking post-flush retrieval");
-
-        getResponse = client().prepareGet("my-index", "1").setStoredFields(field).get();
-        assertThat(getResponse.isExists(), equalTo(true));
-        assertThat(getResponse.getField(field).getValues().size(), equalTo(2));  
-        assertThat(getResponse.getField(field).getValues().get(0).toString(), equalTo("value1"));
-        assertThat(getResponse.getField(field).getValues().get(1).toString(), equalTo("value2"));
-    }  
-
-    public void testUngeneratedFieldsThatAreNeverStored() throws IOException {
-        String createIndexSource = "{\n"  
-            + "  \"settings\": {\n"
-            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
-            + "    \"refresh_interval\": \"-1\"\n"  
-            + "  },\n"
-            + "  \"mappings\": {\n"
-            + "    \"_doc\": {\n"  
-            + "      \"properties\": {\n"
-            + "        \"suggest\": {\n"
-            + "          \"type\": \"completion\"\n"  
-            + "        }\n"
-            + "      }\n"
-            + "    }\n"  
-            + "  }\n"
-            + "}";
-        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
-        ensureGreen();
-        String doc = "{\n"
-            + "  \"suggest\": {\n"  
-            + "    \"input\": [\n"
-            + "      \"Nevermind\",\n"
-            + "      \"Nirvana\"\n"  
-            + "    ]\n"
-            + "  }\n"
-            + "}";  
-
-        index("test", "_doc", "1", doc);
-        String[] fieldsList = { "suggest" };  
-        // before refresh - document is only in translog
         assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
-        refresh();  
-        // after refresh - document is in translog and also indexed
-        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
-        flush();  
-        // after flush - document is in not anymore translog - only indexed
-        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
-    }  
-
-    public void testUngeneratedFieldsThatAreAlwaysStored() throws IOException {
-        String createIndexSource = "{\n"  
-            + "  \"settings\": {\n"
-            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
-            + "    \"refresh_interval\": \"-1\"\n"  
-            + "  }\n"
-            + "}";
-        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
-        ensureGreen();
-
-        client().prepareIndex("test").setId("1").setRouting("routingValue").setId("1").setSource("{}", MediaTypeRegistry.JSON).get();  
-
-        String[] fieldsList = { "_routing" };
-        // before refresh - document is only in translog  
-        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "routingValue");
-        refresh();
-        // after refresh - document is in translog and also indexed  
-        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "routingValue");
-        flush();
-        // after flush - document is in not anymore translog - only indexed  
-        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "routingValue");
-    }
-
-    public void testUngeneratedFieldsNotPartOfSourceStored() throws IOException {
-        String createIndexSource = "{\n"
-            + "  \"settings\": {\n"  
-            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
-            + "    \"refresh_interval\": \"-1\"\n"
+        // Get document prior to update, which would be derived source
+        // Flush the index
+            jsonBuilder().startObject()
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).setRealtime(false).get();  
             + "  }\n"  
-            + "}";
-
-        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
-        ensureGreen();
-        String doc = "{\n" + "  \"text\": \"some text.\"\n" + "}\n";
-        client().prepareIndex("test").setId("1").setSource(doc, MediaTypeRegistry.JSON).setRouting("1").get();  
-        String[] fieldsList = { "_routing" };
-        // before refresh - document is only in translog
-        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "1");  
-        refresh();
-        // after refresh - document is in translog and also indexed
-        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "1");  
-        flush();
-        // after flush - document is in not anymore translog - only indexed
-        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "1");  
+import org.opensearch.action.get.GetResponse;  
+            .get();  
+            + "\""
+            + "  },\n"  
+        getResponse = client().prepareGet("test", "1").get();  
+            .endObject()  
+            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(2))
+        assertThat(response.isExists(), equalTo(true));  
+        assertEquals("2025-07-30T00:00:00.000Z", source.get("date_field"));
+                    .field("date_field", "2023-01-01")
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(2).get();  
+            prepareCreate("my-index")
+        assertThat(response.isExists(), equalTo(true));
+        response = client().prepareGet(indexOrAlias(), "1").get();  
+        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));
+                        .endObject()  
+        ensureGreen();  
+                                "type": "long"
+import java.util.Set;
+    }  
+        try {
+import org.opensearch.index.IndexSettings;
+        assertThat(response.isExists(), equalTo(true));
+            .field("type", "integer")
+        assertThat(response.getFields().get("field").getValues().size(), equalTo(2));
+        validateDeriveSource(source);  
+        response = multiGetDocument(index, type, docId, field, routing);
+                        .startObject("field1")
+        assertThat(exc.getMessage(), equalTo("field [field1] isn't a leaf field"));  
+    public void testDerivedSource_MultiValuesAndComplexField() throws Exception {
+                .endObject()
+        response = client().prepareGet(indexOrAlias(), "1").get();  
+        assertThat(response.getResponses()[0].getId(), equalTo("1"));  
+                .get()  
+        assertNotNull(response.getField(field));  
+                .prepareCreate("index2")  
+        String createIndexSource = "{\n"  
     }
-
-    public void testGeneratedStringFieldsUnstored() throws IOException {  
-        indexSingleDocumentWithStringFieldsGeneratedFromText(false, randomBoolean());
-        String[] fieldsList = { "_field_names" };
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertThat(exception.getMessage(), endsWith("can't execute a single index op"));
+                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
+                                "type": "keyword"
         // before refresh - document is only in translog  
-        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
-        refresh();
-        // after refresh - document is in translog and also indexed  
-        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
-        flush();
         // after flush - document is in not anymore translog - only indexed  
-        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
+            + "          \"store\": \""  
+            .setId("1")  
+    public void testUngeneratedFieldsNotPartOfSourceStored() throws IOException {
+            .toString();
+import static org.hamcrest.Matchers.instanceOf;
+                },
+        assertThat(response.getResponses()[3].getResponse().isExists(), equalTo(true));
+            + "    ]\n"
+            .endObject()  
+            .endObject()  
+            .put("index.number_of_shards", 1)  
+        // Flush fails if shard has ongoing recoveries, make sure the cluster is settled down
+            prepareCreate("test").addAlias(new Alias("alias"))
+        assertThat(response.isExists(), equalTo(true));  
+                .startArray("field3")  
+        assertThat(response.getResponses()[0].getId(), equalTo("2"));
+import org.opensearch.action.delete.DeleteResponse;
+        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get();
+        // From Lucene index:  
+                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
+ * license agreements. See the NOTICE file distributed with
+            // all good  
+        assertThat(response.getSourceAsMap(), hasKey("field1"));  
+        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
+        assertThat(response.getId(), equalTo("1"));
+            .endObject()
+    private void assertGetFieldWorks(String index, String type, String docId, String field, @Nullable String routing) {
+        assertThat(numValues, containsInRelativeOrder(1, 1, 2));
+        assertThat(response.isExists(), equalTo(true));
+        GetResponse response = getDocument(index, type, docId, field, routing);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        FlushResponse flushResponse = client().admin().indices().prepareFlush("my-index").setForce(true).get();  
+            .get();  
+        assertEquals("51.5074,-0.1278", source.get("geopoint_field"));
+        String field = "field1.field2.field3.field4";
+        assertThat(response.getResponses()[1].getResponse().isExists(), equalTo(true));  
+            .endObject()
+                        "refresh_interval": -1  
+        refresh();
+        assertThat(response.getResponses()[2].getFailure().getFailure(), instanceOf(VersionConflictEngineException.class));
+            client().prepareGet(indexOrAlias(), "1").setVersion(1).get();  
+    void validateDeriveSource(Map<String, Object> source) {
+        assertThat(exc.getMessage(), equalTo("field [field1] isn't a leaf field"));
+        String createIndexSource = """  
+        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").setFetchSource(true).get();
+            .startObject("date_field")  
+        assertEquals(2, source.size());
+    public void testGetDocWithMultivaluedFields() throws Exception {
+    }  
+            fail();
+        assertNotNull(response.getField(field));
+            assertGetFieldNull(index, type, docId, field, routing);  
+        ensureGreen();
+            .endObject()  
+ *
+        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));
+        assertThat(response.getResponses()[0].getId(), equalTo("1"));
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+        Map<String, Object> level3 = (Map<String, Object>) level2.get("level3");  
+        assertThat(getResponse.isExists(), equalTo(true));
+        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "1");  
+        }  
+        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
+                            },
+        // after refresh - document is in translog and also indexed
+            fail();  
+        client().admin().indices().prepareCreate("index1").addAlias(new Alias("alias1").indexRouting("0")).get();
+        getResponse = client().prepareGet("test", "1").get();  
+        assertEquals("2025-07-30", source.get("date_field"));  
+        assertThat(response.getResponses()[1].getResponse().isExists(), equalTo(false));
+        Map<String, Object> latLon = (Map<String, Object>) source.get("geopoint_field");
+        assertThat(response.getResponses()[4].getResponse().isExists(), equalTo(false));  
+            .endObject()  
+        // before refresh - document is only in translog
+                .endObject()  
+        assertNotNull("Derived source should not be null", source);
+            + "          \"type\": \"text\",\n"
+        flush();
     }
-
-    public void testGeneratedStringFieldsStored() throws IOException {
-        indexSingleDocumentWithStringFieldsGeneratedFromText(true, randomBoolean());
+        String createIndexSource = "{\n"  
+                    .endObject()
+        assertThat(response.getResponses()[0].getId(), equalTo("2"));
+                        .field("type", "object")
+        assertThat(response.isExists(), equalTo(true));
+            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
+        String[] fieldsList = { "suggest" };  
+        assertThat(response.getResponses()[2].getIndex(), equalTo("test"));  
+                        .startObject("properties")
+                        .endObject()
+        ensureGreen();
+        assertNull(response.getField(field));
+        client().prepareIndex("my-index").setId("1").setSource(source, MediaTypeRegistry.JSON).get();
+            .endObject()
+            + "  \"settings\": {\n"
+        assertFalse(source.containsKey("date_field"));
+        assertAcked(prepareCreate("test_derive").setSource(createIndexSource, MediaTypeRegistry.JSON));  
+        assertThat(response.getIndex(), equalTo("test"));  
+ * SPDX-License-Identifier: Apache-2.0
+    public void testGetWithAliasPointingToMultipleIndices() {
+        assertAcked(  
+import org.opensearch.action.DocWriteResponse;
+            .startObject("properties")
+            .put("index.number_of_replicas", 0)
+        assertThat(response.getResponses().length, equalTo(3));
+            .endObject()
+                        .endObject()
+    }  
+                .prepareUpdateSettings("test")
+            + "      \"_source\" : {\"enabled\" : "  
+            .toString();
+        return Collections.singleton(InternalSettingsPlugin.class);  
+        assertThat(response.getField("field2"), nullValue());  
+import java.util.HashSet;
+        // [0] version doesn't matter, which is the default
+        if (routing != null) {
+            .startArray("level3")
+        GetRequestBuilder getRequestBuilder = client().prepareGet().setIndex(index).setId(docId).setStoredFields(field);
+        assertThat(response.getId(), equalTo("1"));
+                .endArray()
+        response = client().prepareGet(indexOrAlias(), "1").get();  
+ */  
+            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(1))
+        logger.info("--> realtime get 1");
+        response = client().prepareMultiGet()  
+            .add(indexOrAlias(), "15")
+        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList);  
+import static org.hamcrest.Matchers.equalTo;  
+        assertTrue(getResponse.isExists());  
+            .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)  
+                        .endObject()
+        // [0] version doesn't matter, which is the default  
+            + "      \"Nevermind\",\n"
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            + "  \"settings\": {\n"
+        refresh();
+        logger.info("--> realtime get 1 (no source, implicit)");
+    }
+package org.opensearch.get;
+            + "  }\n"  
+        response = multiGetDocument(index, type, docId, field, routing);
+                .startArray("field3")  
+        assertThat(response.getResponses()[1].getFailure(), notNullValue());  
+        validateDeriveSource(source);
+        assertThat(response.isExists(), equalTo(true));
+                .startObject()
+        refresh();  
+import org.opensearch.test.InternalSettingsPlugin;
+import org.opensearch.action.get.MultiGetResponse;  
+        response = client().prepareMultiGet()
+            .get();
+        assertThat(response.getIndex(), equalTo("test"));
+            .setRealtime(false)  
+                            },
+                .indices()
+                .addAlias(new Alias("alias").writeIndex(randomFrom(true, false, null)))
+        assertThat(response.isExists(), equalTo(true));  
+            .add(indexOrAlias(), "3")  
+        ensureGreen();
+                        .endObject()
+            )  
+import org.opensearch.action.admin.indices.alias.Alias;
+            + "  }\n"
+        assertThat(response.isExists(), equalTo(true));
+        logger.info("--> refresh the index, so we load it from it");  
+        assertEquals("test_keyword", source.get("keyword_field"));
+        // Create index with derived source enabled and translog read preference set
+        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSettings(Settings.builder().put("index.refresh_interval", -1)));  
+        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2_2"));
+ * compatible open source license.
+            + "  \"settings\": {\n"  
+        MultiGetRequest.Item getItem = new MultiGetRequest.Item(index, docId).storedFields(field);  
+        assertEquals(6, source.size());
+        assertThat(response.getResponses()[2].getFailure().getId(), equalTo("1"));
+/*
+        GetResponse getResponse = client().prepareGet("test_derive", "1").get();  
+        Set<String> fields = new HashSet<>(response.getFields().keySet());
+        flush();
+        assertAcked(  
         String[] fieldsList = { "text1", "text2" };  
+        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
+        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
+ * this work for additional information regarding copyright
+                            "text_field": {  
+            .add(new MultiGetRequest.Item(indexOrAlias(), "1").storedFields("field"))
+ * ownership. Elasticsearch licenses this file to you under  
+                                "type": "binary",
+                .endObject()  
+        assertThat(response.getResponses()[2].getFailure().getFailure(), instanceOf(VersionConflictEngineException.class));
+        assertThat(response.getSourceAsBytes(), nullValue());  
+                    .field("ip_field", "1.2.3.4")
+        source = getResponse.getSourceAsMap();
+                            "ip_field": {  
+    void indexSingleDocumentWithStringFieldsGeneratedFromText(boolean stored, boolean sourceEnabled) {
+        assertThat(response.getResponses()[1].getFailure().getId(), equalTo("2"));
+        logger.info("--> realtime fetch of field (loaded from index)");
+            .toString();  
+            + "  },\n"
+        assertThat(response.getResponses()[2].getIndex(), equalTo("test"));
+        assertThat(getResponse.getField(field).getValues().get(0).toString(), equalTo("value1"));  
+        assertTrue(response.isExists());
+        client().prepareIndex("test").setId("1").setSource(doc, MediaTypeRegistry.JSON).setRouting("1").get();  
+        for (String field : fields) {  
+            + "      }\n"
+            .startArray("ip_field")  
+        List<Object> ipValues = (List<Object>) level3.get("ip_field");  
+        assertThat(response.getVersion(), equalTo(2L));
+        if (randomBoolean()) {  
+        Set<String> fields = new HashSet<>(response.getFields().keySet());  
+        source = getResponse.getSourceAsMap();
+                    jsonBuilder().startObject()
+        refresh();
+                .setMapping("field", "type=keyword,store=true")
+        assertAcked(prepareCreate("test").setMapping(mapping1));  
+        assertThat(fields, equalTo(Collections.<String>emptySet()));
+            + "    \"_doc\": {\n"
+            .value(2)  
+        } catch (VersionConflictEngineException e) {
+    }
+            .get();  
+        source = getResponse.getSourceAsMap();  
+        ensureGreen();
+        assertThat(getResponse.getField(field).getValues().get(1).toString(), equalTo("value2"));
+        assertThat(response.getResponses()[1].getId(), equalTo("1"));  
+        String[] fieldsList = { "_routing" };
+        response = client().prepareMultiGet()  
+        indexSingleDocumentWithStringFieldsGeneratedFromText(false, randomBoolean());
+            .startObject("num_field")
+        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
+            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
+        assertThat(response.isExists(), equalTo(true));
+        assertThat(response.getResponses()[0].getFailure(), nullValue());  
+                .startObject()
+                        }
+        String mapping = XContentFactory.jsonBuilder()  
+        logger.info("waiting for recoveries to complete");  
+        logger.info("--> realtime get 1 (no source, explicit)");  
+            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value" + i).get();
+            }""";
+    }
+        assertNotNull(source);  
+        assertThat(response.getResponses()[1].getFailure().getMessage(), startsWith("[2]: version conflict"));  
+                .field("field4", "value1")
+                        .endObject()
+            .value("2.3.4.5")
+                        .startObject("properties")  
+        assertEquals("bGlkaHQtd29rfx4=", source.get("binary_field"));
+import org.opensearch.core.xcontent.XContentBuilder;  
+            .get();  
+        assertTrue(response.isExists());
+        }
+                    jsonBuilder().startObject()  
+        ensureGreen();
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(1).get();
+                jsonBuilder().startObject()
+        assertEquals(-0.1278, (double) geopoint.get("lon"), 0.0001);  
+        assertThat(getResponse.getField(field).getValues().size(), equalTo(2));
+            assertGetFieldWorks(index, type, docId, field, routing);
+        assertThat(response.getSourceAsBytes(), nullValue());
+ */  
+    public void testSimpleMultiGet() throws Exception {
+                        .startObject("field2")
+        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
+        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));
+        assertThat(response.getResponses()[2].getFailure().getMessage(), startsWith("[1]: version conflict"));  
+        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));  
+import static org.hamcrest.Matchers.notNullValue;
+        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
+        assertThat(response.getId(), equalTo("1"));
+            .setSource(
+                .endObject()  
+        assertThat(response.isExists(), equalTo(true));
+                .endObject()
+        assertThat(response.getId(), equalTo(docId));
+                            "date_field": {  
+            .startObject()  
+        assertEquals(-0.1278, (double) geopoint.get("lon"), 0.0001);  
+        assertTrue(source.containsKey("binary_field"));
+            .field("type", "text")  
+        try {
+        // Index a document
+ * The OpenSearch Contributors require contributions made to  
+        client().prepareIndex("test").setId("1").setSource("field1", "value1", "field2", "value2").get();
+        }
+        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1_2"));  
+        assertThat(response.getId(), equalTo("1"));
+                    "_doc": {
+        assertTrue(response.isExists());  
+    }
+import static org.hamcrest.Matchers.endsWith;
+        assertThat(response.getResponses().length, equalTo(3));
+    protected void assertGetFieldNull(String index, String type, String docId, String field, @Nullable String routing) {
+        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));  
+        assertThat(response.getResponses()[1].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));
+            () -> client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get()
+                .addAlias(new Alias("alias1").indexRouting("0").writeIndex(randomFrom(false, null)))
+import org.opensearch.geometry.utils.Geohash;
+            + "    }\n"  
+        // Now test values being fetched from stored fields.  
+        client().prepareIndex("test").setId("1").setSource(jsonBuilder().startObject().array("field", "1", "2").endObject()).get();
+        assertThat(response.getIndex(), equalTo("test"));  
+            .setSource(jsonBuilder().startObject().startObject("field1").field("field2", "value1").endObject().endObject())
+import org.opensearch.action.get.MultiGetRequest;
+        refresh();
+            + "        }\n"
+    public void testMultiGetWithVersion() throws Exception {
+        exc = expectThrows(IllegalArgumentException.class, () -> client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get());
+                .startArray("field1")  
+            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(Versions.MATCH_ANY))  
+        String mapping = XContentFactory.jsonBuilder()
+        // Number field is stored as Sorted Numeric, so result should be in sorted order  
+        assertTrue(getResponse.isExists());  
+        // Update translog read preference to source  
+        assertThat(response.getIndex(), equalTo("test"));
+        String doc = "{\n" + "  \"text\": \"some text.\"\n" + "}\n";
+import org.opensearch.action.get.GetRequestBuilder;
+        assertThat(response.getResponses()[1].getFailure(), nullValue());
+            IllegalArgumentException.class,
+            .put("index.refresh_interval", -1)
+ * the Apache License, Version 2.0 (the "License"); you may
+                sb.append("\nShard failure: ").append(failure);  
+            .value(1)
+        getResponse = client().prepareGet("test_derive", "1").get();
+        Map<String, Object> source = getResponse.getSourceAsMap();
+        }
+        return randomBoolean() ? "test" : "alias";
+            prepareCreate("test_derive").setSettings(
+        source = getResponse.getSourceAsMap();  
+                            }  
+import org.opensearch.action.update.UpdateResponse;
+        assertThat(response.getResponses().length, equalTo(3));
+                            "bool_field": {  
+                        .startObject("field3")
+    }  
+        }
+        assertAcked(  
+            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(Versions.MATCH_ANY))
+                        .endObject()  
+        for (String field : fields) {
+            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value" + i).get();  
+        assertThat(response.getIndex(), equalTo("test"));
+            client().admin().indices().prepareCreate("index3").addAlias(new Alias("alias1").indexRouting("1").writeIndex(true)).get();
+        );
+        assertThat(response.getResponses().length, equalTo(5));
+            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
+            .startObject()
+        } catch (VersionConflictEngineException e) {
+        assertThat(response.getIndex(), equalTo("test"));  
+        assertThat(response.getIndex(), equalTo("test"));
+        logger.info("--> realtime fetch of field");  
+        assertThat(response.getResponses().length, equalTo(1));
+        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
+            .startObject("level2")  
+ * specific language governing permissions and limitations
+        BytesReference source = BytesReference.bytes(
+    }
+    }  
+        assertNotNull("Derived source should not be null", source);  
+            .value("1.2.3.4")  
+        // before refresh - document is only in translog
+        assertThat(response.isExists(), equalTo(false));
+            + "  }\n"
+import org.opensearch.common.Nullable;  
+        assertThat(getResponse.isExists(), equalTo(true));
+        client().prepareIndex("test").setId("1").setSource("field1", "value1_2", "field2", "value2_2").get();
+import static org.hamcrest.Matchers.nullValue;
+        assertThat(response.getResponses().length, equalTo(3));  
+        assertNotNull(source);
+        fields = new HashSet<>(response.getFields().keySet());
+        logger.info("checking real time retrieval");  
+        assertThat(response.getFields().get("field").getValues().get(1).toString(), equalTo("2"));
+        }  
+        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
+        // From translog:
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).get();  
+        client().prepareIndex("test").setId("1").setSource("field1", "value1_1", "field2", "value2_1").get();  
+            .get();  
+            + "  \"suggest\": {\n"  
+        client().prepareIndex("test").setId("1").setRouting("routingValue").setId("1").setSource("{}", MediaTypeRegistry.JSON).get();  
+        assertThat(response.getSourceAsBytes(), nullValue());
+        assertGetFieldsAlwaysWorks(index, type, docId, fields, null);
+                    .field("keyword_field", "test_keyword")  
+        // Version from Lucene index  
+        // Test get with field exclusion
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).get();
+        assertThat(getResponse.getField(field).getValues().get(1).toString(), equalTo("value2"));
+        // Version from Lucene index
+        assertThat(response.getId(), equalTo("1"));
+        assertGetFieldsAlwaysNull(index, type, docId, fields, null);  
+                        .field("type", "object")
+            + "\""
+                        .startObject("properties")  
+            .add(indexOrAlias(), "9")
+        assertThat(response.getField("field2"), nullValue());  
+        logger.info("--> realtime fetch of field & source (loaded from index)");  
+            {
+        // Get document after setting update for fetching original source  
+        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
+            + "        }"  
+            + "}";
+        logger.info("--> realtime get 1");
+                        .startObject("field2")
+        assertEquals("test text", source.get("text_field"));  
+        GetResponse response = client().prepareGet(indexOrAlias(), "1").get();
+    static String indexOrAlias() {
+                                "type": "geo_point"
+        assertTrue(getResponse.isExists());
+                    }
+                    .put("index.number_of_replicas", 0)
+            .endObject()
+            IllegalArgumentException.class,  
+        // Version from translog
+        assertThat(response.getResponses()[2].getId(), equalTo("2"));
+        assertEquals(123, source.get("numeric_field"));  
+            .endArray()
+        GetResponse getResponse = client().prepareGet("my-index", "1").setStoredFields(field).get();  
+        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").setFetchSource("field1", null).get();  
+        assertThat(response.isExists(), equalTo(false));
+            .startObject()
+        assertTrue(getResponse.isExists());
+import static org.hamcrest.Matchers.hasKey;
+            .setId("1")
+    public void testDerivedSourceTranslogReadPreference() throws Exception {  
+        refresh();
+                            },
+        assertThat(response.getIndex(), equalTo("test"));  
+        geopoint = (Map<String, Object>) source.get("geopoint_field");
+    public void testGetWithVersion() {  
+        assertThat(response.getResponses()[0].getResponse().getIndex(), equalTo("test"));
+            // all good
+        assertNull(response.getField(field));  
+            client().prepareGet(indexOrAlias(), "1").setVersion(1).setRealtime(false).get();
+        logger.info("--> realtime fetch of field & source");
+        } catch (VersionConflictEngineException e) {
+        refresh();  
+        );
+            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
+        assertThat(getResponse.isExists(), equalTo(true));
+            + "    \"refresh_interval\": \"-1\"\n"  
+            + "    \"input\": [\n"
+        assertEquals("2023-01-01T00:00:00.000Z", source.get("date_field"));
+                                "type": "ip"
+            .endArray()  
+                        "number_of_replicas": 0,
+        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
+            .startObject("field")
+        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));  
+                .indices()  
+        assertEquals("test_keyword", source.get("keyword_field"));  
+        logger.info("--> index doc 1");
+                        .field("type", "object")
+        assertThat(response.isExists(), equalTo(true));
+        assertThat(response.getResponses()[2].getFailure(), notNullValue());
+        IndexResponse indexResponse = client().prepareIndex("test_derive").setId("1").setSource(sourceBuilder).get();
+        String mapping1 = XContentFactory.jsonBuilder()
+    }
+        assertEquals(51.5074, (double) geopoint.get("lat"), 0.0001);
+            client().admin()
+        assertThat(response.getResponses()[3].getResponse().getIndex(), equalTo("test"));
+        assertThat(response.getIndex(), equalTo("test"));
+            .endObject()
+        // Ip field is stored as Sorted Set, so duplicates should be removed and result should be in sorted order
+        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
+        String storedString = stored ? "true" : "false";
+        logger.info("--> non realtime get 1");
+        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1_1"));  
+        assertThat(response.getResponses()[2].getFailure(), nullValue());
+    }
+        assertThat(response.isExists(), equalTo(true));
+        assertThat(getResponse.getField(field).getValues().get(0).toString(), equalTo("value1"));  
+        assertThat(numValues.size(), equalTo(3));
+        assertThat(response.getResponses()[0].getIndex(), equalTo("test"));  
+        // Get updated document, this will be derived source as per translog read preference setting
+import static org.hamcrest.Matchers.not;  
+        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));  
+        assertEquals(RestStatus.OK, updateResponse.status());  
+            + "          \"type\": \"text\",\n"
+                            },
+            .put(IndexSettings.INDEX_DERIVED_SOURCE_TRANSLOG_ENABLED_SETTING.getKey(), true);
+        String createIndexSource = "{\n"
+                .endObject()  
+            StringBuilder sb = new StringBuilder("failed to flush at least one shard. total shards [").append(
+    public void testUngeneratedFieldsThatAreNeverStored() throws IOException {
+        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2"));
+                        .startObject("field1")
+        // after flush - document is in not anymore translog - only indexed
+    }
+            .endObject()
+            + "}";  
+    public void testGeneratedStringFieldsUnstored() throws IOException {  
+            + "        \"text1\": {\n"
+                        .field("type", "text")
+ * Unless required by applicable law or agreed to in writing,
+        source = getResponse.getSourceAsMap();
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+        logger.info("--> non realtime get 1 (loaded from index)");  
+        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));  
+            prepareCreate("test").addAlias(new Alias("alias").writeIndex(randomFrom(true, false, null)))
+        MultiGetResponse response = client().prepareMultiGet().add(indexOrAlias(), "1").get();  
+                    .field("numeric_field", 123)
+            .value(1)
+        Map<String, Object> source = getResponse.getSourceAsMap();  
+            .startObject("geopoint_field")  
+        Settings.Builder settings = Settings.builder()
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+            + "      }\n"
+        assertEquals(123, source.get("numeric_field"));
+        return getRequestBuilder.get();  
+        ensureGreen();
+        String[] fieldsList = { "_routing" };
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(Versions.MATCH_ANY).setRealtime(false).get();
+        assertThat(indexResponse.status().getStatus(), equalTo(RestStatus.CREATED.getStatus()));
+            .add(indexOrAlias(), "11")
+        response = client().prepareGet(indexOrAlias(), "1").setStoredFields(Strings.EMPTY_ARRAY).get();
+                            },
+    }
+        assertThat(response.isExists(), equalTo(true));  
+                        .endObject()
+        try {  
+        assertThat(response.getResponses()[2].getIndex(), equalTo("test"));
+    }
+        for (int i = 0; i < 3; i++) {  
+        }
+            .startArray("level1")  
+        // same for multi get
+            + "},"
+            + "  \"mappings\": {\n"
+            .endObject()
+public class GetActionIT extends OpenSearchIntegTestCase {
+            .value("1.2.3.4")
+        assertEquals(true, source.get("bool_field"));
+            .field("type", "ip")
+                        "derived_source": {  
+ *
+        assertThat(response.getSourceAsMap().get("field1").toString(), equalTo("value1"));
+        assertThat(response.getResponses()[0].getResponse().getSourceAsBytes(), nullValue());  
+            + "      \"properties\": {\n"
+ * KIND, either express or implied.  See the License for the
+        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));  
+        source = getResponse.getSourceAsMap();
+        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "routingValue");
+        assertAcked(  
+        assertThat(response.isExists(), equalTo(true));  
+import static org.hamcrest.Matchers.startsWith;  
+        GetResponse response = client().prepareGet("test", "1").get();  
+            + "    \"_doc\": {\n"  
+                .startObject()
+    }
+        assertThat(getResponse.getField(field).getValues().size(), equalTo(2));
+        assertThat(response.getResponses()[1].getId(), equalTo("1"));  
+                        },
+        response = client().prepareGet(indexOrAlias(), "1").setStoredFields("field1").get();
+        GetResponse getResponse = client().prepareGet("test", "1").get();
+        assertThat(response.getResponses()[2].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
+    }  
+        assertThat(response.getResponses().length, equalTo(1));
+        for (int i = 0; i < 10; i++) {
+        assertThat(response.getId(), equalTo("1"));
+        assertThat(response.getIndex(), equalTo("test"));  
+import org.opensearch.test.OpenSearchIntegTestCase;  
+            + "  \"settings\": {\n"  
+                Settings.builder()
+        refresh();
+            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(1))
+        String[] fieldsList = { "_field_names" };
+import java.io.IOException;
+        GetResponse getResponse = client().prepareGet("test_derive", "1").get();
+            for (DefaultShardOperationFailedException failure : flushResponse.getShardFailures()) {
+        assertThat(response.isExists(), equalTo(true));
+                            "numeric_field": {  
+                        .startObject("properties")  
+        getResponse = client().prepareGet("my-index", "1").setStoredFields(field).get();  
+            client().prepareGet(indexOrAlias(), "1").setVersion(2).setRealtime(false).get();  
+        client().prepareIndex("test")  
+        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
+        // Test numeric field retrieval  
+        );  
+            fail();
+        assertThat(response.getId(), equalTo(docId));
+        assertEquals("2025-07-29T00:00:00.000Z", source.get("date_field"));  
+        assertThat(response.getSourceAsBytes(), nullValue());
+        assertThat(response.getResponses()[0].getFailure(), nullValue());
+        assertThat(response.getId(), equalTo(docId));  
+        client().prepareIndex("test").setId("1").setSource("field1", "value1", "field2", "value2").get();  
+            // all good  
+                            "geopoint_field": {  
+            .endObject()  
+            .startObject("properties")
+            .endArray()  
+        assertThat(response.getIndex(), equalTo("test"));  
+            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value" + i).get();
+        for (int i = 0; i < 3; i++) {
+        flushAndRefresh("test");  
+                    }
+        assertThat(response.getVersion(), equalTo(1L));  
+            .setDoc(jsonBuilder().startObject().field("geopoint_field", "51.5074,-0.1278").field("date_field", "2025-07-30").endObject())
+            + "}";
+        assertThat(response.getSourceAsMap(), not(hasKey("field2")));
+        // Create source document
+        ensureGreen();
+            .setRealtime(false)
+        assertThat(response.getResponses().length, equalTo(2));
+                .endObject()
+            .field("store", true)
+            prepareCreate("test").setMapping("field1", "type=keyword,store=true", "field2", "type=keyword,store=true")
+    public void testDerivedSourceSimple() throws IOException {
+        assertNotNull(source);
+        refresh();  
+ * GitHub history for details.
+            .get();
+ * You may obtain a copy of the License at  
+        assertThat(response.getResponses()[1].getResponse().isExists(), equalTo(true));
+                .endArray()
+        MultiGetResponse response = client().prepareMultiGet().add(indexOrAlias(), "1").get();
+        assertThat(response.isExists(), equalTo(false));  
+        indexSingleDocumentWithStringFieldsGeneratedFromText(true, randomBoolean());
         String[] alwaysNotStoredFieldsList = { "_field_names" };
         assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList);
-        assertGetFieldsNull(indexOrAlias(), "_doc", "1", alwaysNotStoredFieldsList);  
-        flush();
-        // after flush - document is in not anymore translog - only indexed
-        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList);  
-        assertGetFieldsNull(indexOrAlias(), "_doc", "1", alwaysNotStoredFieldsList);
-    }
-
-    public void testDerivedSourceSimple() throws IOException {
-        // Create index with derived source index setting enabled
-        String createIndexSource = """  
-            {
-                "settings": {
-                    "index": {  
-                        "number_of_shards": 2,
-                        "number_of_replicas": 0,
-                        "derived_source": {  
-                            "enabled": true
-                        },
-                        "refresh_interval": -1  
-                    }
-                },
-                "mappings": {  
-                    "_doc": {
-                        "properties": {
-                            "geopoint_field": {  
-                                "type": "geo_point"
-                            },
-                            "keyword_field": {  
-                                "type": "keyword"
-                            },
-                            "numeric_field": {  
-                                "type": "long"
-                            },
-                            "date_field": {  
-                                "type": "date"
-                            },
-                            "bool_field": {  
-                                "type": "boolean"
-                            },
-                            "text_field": {  
-                                "type": "text"
-                            },
-                            "ip_field": {  
-                                "type": "ip"
-                            },
-                            "binary_field": {  
-                                "type": "binary",
-                                "store": true
-                            }  
-                        }
-                    }
-                }  
-            }""";
-
-        assertAcked(prepareCreate("test_derive").setSource(createIndexSource, MediaTypeRegistry.JSON));  
-        ensureGreen();
-
-        // Index a document with various field types  
-        client().prepareIndex("test_derive")
-            .setId("1")
-            .setSource(  
-                jsonBuilder().startObject()
                     .field("geopoint_field", Geohash.stringEncode(40.33, 75.98))
-                    .field("keyword_field", "test_keyword")  
-                    .field("numeric_field", 123)
-                    .field("date_field", "2023-01-01")
-                    .field("bool_field", true)  
-                    .field("text_field", "test text")
-                    .field("ip_field", "1.2.3.4")
-                    .field("binary_field", "bGlkaHQtd29rfx4=")  
-                    .endObject()
-            )
-            .get();  
-
-        // before refresh - document is only in translog
-        GetResponse getResponse = client().prepareGet("test_derive", "1").get();  
-        assertTrue(getResponse.isExists());
-        Map<String, Object> source = getResponse.getSourceAsMap();
-        assertNotNull("Derived source should not be null", source);  
-        validateDeriveSource(source);
-
-        refresh();  
-        // after refresh - document is in translog and also indexed
-        getResponse = client().prepareGet("test_derive", "1").get();
-        assertTrue(getResponse.isExists());  
-        source = getResponse.getSourceAsMap();
-        assertNotNull("Derived source should not be null", source);
-        validateDeriveSource(source);  
-
-        flush();
-        // after flush - document is in not anymore translog - only indexed  
-        getResponse = client().prepareGet("test_derive", "1").get();
-        assertTrue(getResponse.isExists());
-        source = getResponse.getSourceAsMap();  
-        assertNotNull("Derived source should not be null", source);
-        validateDeriveSource(source);
-
-        // Test get with selective field inclusion
-        getResponse = client().prepareGet("test_derive", "1").setFetchSource(new String[] { "keyword_field", "numeric_field" }, null).get();
-        assertTrue(getResponse.isExists());  
-        source = getResponse.getSourceAsMap();
-        assertEquals(2, source.size());
-        assertEquals("test_keyword", source.get("keyword_field"));  
-        assertEquals(123, source.get("numeric_field"));
-        assertFalse(source.containsKey("binary_field"));
-
-        // Test get with field exclusion
-        getResponse = client().prepareGet("test_derive", "1").setFetchSource(null, new String[] { "text_field", "date_field" }).get();
-        assertTrue(getResponse.isExists());  
-        source = getResponse.getSourceAsMap();
-        assertEquals(6, source.size());
-        assertFalse(source.containsKey("text_field"));  
-        assertFalse(source.containsKey("date_field"));
-        assertTrue(source.containsKey("binary_field"));
-    }  
-
-    public void testDerivedSource_MultiValuesAndComplexField() throws Exception {
-        // Create mapping with properly closed objects  
-        String mapping = XContentFactory.jsonBuilder()
             .startObject()
-            .startObject("properties")  
-            .startObject("level1")
-            .startObject("properties")
-            .startObject("level2")  
-            .startObject("properties")
-            .startObject("level3")
-            .startObject("properties")  
-            .startObject("num_field")
-            .field("type", "integer")
-            .endObject()  
-            .startObject("ip_field")
-            .field("type", "ip")
-            .endObject()  
-            .endObject()
-            .endObject()
-            .endObject()  
-            .endObject()
-            .endObject()
-            .endObject()  
-            .endObject()
-            .endObject()
-            .toString();  
-
-        // Create index with settings and mapping
-        assertAcked(  
-            prepareCreate("test_derive").setSettings(
-                Settings.builder()
-                    .put("index.number_of_shards", 1)  
-                    .put("index.number_of_replicas", 0)
-                    .put("index.derived_source.enabled", true)
-            ).setMapping(mapping)  
-        );
-        ensureGreen();
-
-        // Create source document
-        XContentBuilder sourceBuilder = jsonBuilder().startObject()
-            .startArray("level1")  
-            .startObject()
-            .startObject("level2")
-            .startArray("level3")  
-            .startObject()
-            .startArray("num_field")
-            .value(2)  
-            .value(1)
-            .value(1)
-            .endArray()  
-            .endObject()
-            .endArray()
-            .endObject()  
-            .endObject()
-            .startObject()
-            .startObject("level2")  
-            .startArray("level3")
-            .startObject()
-            .startArray("ip_field")  
-            .value("1.2.3.4")
-            .value("2.3.4.5")
-            .value("1.2.3.4")  
-            .endArray()
-            .endObject()
-            .endArray()  
-            .endObject()
-            .endObject()
-            .endArray()  
-            .endObject();
-
-        // Index the document  
-        IndexResponse indexResponse = client().prepareIndex("test_derive").setId("1").setSource(sourceBuilder).get();
-        assertThat(indexResponse.status(), equalTo(RestStatus.CREATED));
-
-        refresh();
-
-        // Test numeric field retrieval  
-        GetResponse getResponse = client().prepareGet("test_derive", "1").get();
-        assertThat(getResponse.isExists(), equalTo(true));
-        Map<String, Object> source = getResponse.getSourceAsMap();  
-        Map<String, Object> level1 = (Map<String, Object>) source.get("level1");
-        Map<String, Object> level2 = (Map<String, Object>) level1.get("level2");
-        Map<String, Object> level3 = (Map<String, Object>) level2.get("level3");  
-        List<Object> numValues = (List<Object>) level3.get("num_field");
-        assertThat(numValues.size(), equalTo(3));
-        // Number field is stored as Sorted Numeric, so result should be in sorted order  
-        assertThat(numValues, containsInRelativeOrder(1, 1, 2));
-
-        List<Object> ipValues = (List<Object>) level3.get("ip_field");  
-        assertThat(ipValues.size(), equalTo(2));
-        // Ip field is stored as Sorted Set, so duplicates should be removed and result should be in sorted order
-        assertThat(ipValues, containsInRelativeOrder("1.2.3.4", "2.3.4.5"));  
-    }
-
-    public void testDerivedSourceTranslogReadPreference() throws Exception {  
-        // Create index with derived source enabled and translog read preference set
-        Settings.Builder settings = Settings.builder()
-            .put("index.number_of_shards", 1)  
-            .put("index.number_of_replicas", 0)
-            .put("index.refresh_interval", -1)
-            .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)  
-            .put(IndexSettings.INDEX_DERIVED_SOURCE_TRANSLOG_ENABLED_SETTING.getKey(), true);
-
-        String mapping = XContentFactory.jsonBuilder()  
-            .startObject()
-            .startObject("properties")
-            .startObject("geopoint_field")  
-            .field("type", "geo_point")
-            .endObject()
-            .startObject("date_field")  
-            .field("type", "date")
-            .endObject()
-            .endObject()  
-            .endObject()
-            .toString();
-
-        assertAcked(prepareCreate("test").setSettings(settings).setMapping(mapping));
-        ensureGreen();
-
-        // Index a document
-        IndexResponse indexResponse = client().prepareIndex("test")
-            .setId("1")  
-            .setSource(
-                jsonBuilder().startObject().field("geopoint_field", "40.7128,-74.0060").field("date_field", "2025-07-29").endObject()
-            )  
-            .get();
-        assertEquals(RestStatus.CREATED, indexResponse.status());
-
-        // Get document prior to update, which would be derived source
-        GetResponse getResponse = client().prepareGet("test", "1").get();
-        assertTrue(getResponse.isExists());  
-        Map<String, Object> source = getResponse.getSourceAsMap();
-        assertNotNull(source);
-        Map<String, Object> geopoint = (Map<String, Object>) source.get("geopoint_field");  
-        assertEquals(40.7128, (double) geopoint.get("lat"), 0.0001);
-        assertEquals(-74.0060, (double) geopoint.get("lon"), 0.0001);
-        assertEquals("2025-07-29T00:00:00.000Z", source.get("date_field"));  
-
-        // Update document, so that version map gets created and get will be served from translog
-        UpdateResponse updateResponse = client().prepareUpdate("test", "1")  
-            .setDoc(jsonBuilder().startObject().field("geopoint_field", "51.5074,-0.1278").field("date_field", "2025-07-30").endObject())
-            .get();
-        assertEquals(RestStatus.OK, updateResponse.status());  
-
-        // Get updated document, this will be derived source as per translog read preference setting
-        getResponse = client().prepareGet("test", "1").get();  
-        assertTrue(getResponse.isExists());
-        source = getResponse.getSourceAsMap();
-        assertNotNull(source);  
-        geopoint = (Map<String, Object>) source.get("geopoint_field");
-        assertEquals(51.5074, (double) geopoint.get("lat"), 0.0001);
-        assertEquals(-0.1278, (double) geopoint.get("lon"), 0.0001);  
-        assertEquals("2025-07-30T00:00:00.000Z", source.get("date_field"));
-
-        // Update translog read preference to source  
-        assertAcked(
-            client().admin()
-                .indices()  
-                .prepareUpdateSettings("test")
-                .setSettings(Settings.builder().put(IndexSettings.INDEX_DERIVED_SOURCE_TRANSLOG_ENABLED_SETTING.getKey(), false))
-                .get()  
-        );
-
-        // Get document after setting update for fetching original source  
-        getResponse = client().prepareGet("test", "1").get();
-        assertTrue(getResponse.isExists());
-        source = getResponse.getSourceAsMap();  
-        assertNotNull(source);
-        assertEquals("51.5074,-0.1278", source.get("geopoint_field"));
-        assertEquals("2025-07-30", source.get("date_field"));  
-
-        // Flush the index
-        flushAndRefresh("test");  
-
-        // Get document after flush, it should be a derived source
-        getResponse = client().prepareGet("test", "1").get();  
-        assertTrue(getResponse.isExists());
-        source = getResponse.getSourceAsMap();
-        assertNotNull(source);  
-        geopoint = (Map<String, Object>) source.get("geopoint_field");
-        assertEquals(51.5074, (double) geopoint.get("lat"), 0.0001);
-        assertEquals(-0.1278, (double) geopoint.get("lon"), 0.0001);  
-        assertEquals("2025-07-30T00:00:00.000Z", source.get("date_field"));
-    }
-
-    void validateDeriveSource(Map<String, Object> source) {
-        Map<String, Object> latLon = (Map<String, Object>) source.get("geopoint_field");
-        assertEquals(75.98, (Double) latLon.get("lat"), 0.001);  
-        assertEquals(40.33, (Double) latLon.get("lon"), 0.001);
-        assertEquals("test_keyword", source.get("keyword_field"));
-        assertEquals(123, source.get("numeric_field"));  
-        assertEquals("2023-01-01T00:00:00.000Z", source.get("date_field"));
-        assertEquals(true, source.get("bool_field"));
-        assertEquals("test text", source.get("text_field"));  
-        assertEquals("1.2.3.4", source.get("ip_field"));
-        assertEquals("bGlkaHQtd29rfx4=", source.get("binary_field"));
-    }  
-
-    void indexSingleDocumentWithStringFieldsGeneratedFromText(boolean stored, boolean sourceEnabled) {
-
-        String storedString = stored ? "true" : "false";
-        String createIndexSource = "{\n"
-            + "  \"settings\": {\n"  
-            + "    \"index.translog.flush_threshold_size\": \"1pb\",\n"
-            + "    \"refresh_interval\": \"-1\"\n"
-            + "  },\n"  
-            + "  \"mappings\": {\n"
-            + "    \"_doc\": {\n"
-            + "      \"_source\" : {\"enabled\" : "  
-            + sourceEnabled
-            + "},"
-            + "      \"properties\": {\n"  
-            + "        \"text1\": {\n"
-            + "          \"type\": \"text\",\n"
-            + "          \"store\": \""  
-            + storedString
-            + "\""
-            + "        },\n"  
-            + "        \"text2\": {\n"
-            + "          \"type\": \"text\",\n"
-            + "          \"store\": \""  
-            + storedString
-            + "\""
-            + "        }"  
-            + "      }\n"
-            + "    }\n"
-            + "  }\n"  
-            + "}";
-
-        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
-        ensureGreen();
-        String doc = "{\n" + "  \"text1\": \"some text.\"\n," + "  \"text2\": \"more text.\"\n" + "}\n";
-        index("test", "_doc", "1", doc);  
-    }
-
-    private void assertGetFieldsAlwaysWorks(String index, String type, String docId, String[] fields) {  
-        assertGetFieldsAlwaysWorks(index, type, docId, fields, null);
-    }
-
-    private void assertGetFieldsAlwaysWorks(String index, String type, String docId, String[] fields, @Nullable String routing) {
-        for (String field : fields) {
-            assertGetFieldWorks(index, type, docId, field, routing);  
-            assertGetFieldWorks(index, type, docId, field, routing);
-        }
-    }  
-
-    private void assertGetFieldWorks(String index, String type, String docId, String field, @Nullable String routing) {
-        GetResponse response = getDocument(index, type, docId, field, routing);  
-        assertThat(response.getId(), equalTo(docId));
-        assertTrue(response.isExists());
-        assertNotNull(response.getField(field));  
-        response = multiGetDocument(index, type, docId, field, routing);
-        assertThat(response.getId(), equalTo(docId));
-        assertTrue(response.isExists());  
-        assertNotNull(response.getField(field));
-    }
-
-    protected void assertGetFieldsNull(String index, String type, String docId, String[] fields) {
-        assertGetFieldsNull(index, type, docId, fields, null);
-    }  
-
-    protected void assertGetFieldsNull(String index, String type, String docId, String[] fields, @Nullable String routing) {
-        for (String field : fields) {  
-            assertGetFieldNull(index, type, docId, field, routing);
-        }
-    }  
-
-    protected void assertGetFieldsAlwaysNull(String index, String type, String docId, String[] fields) {
-        assertGetFieldsAlwaysNull(index, type, docId, fields, null);  
-    }
-
-    protected void assertGetFieldsAlwaysNull(String index, String type, String docId, String[] fields, @Nullable String routing) {  
-        for (String field : fields) {
-            assertGetFieldNull(index, type, docId, field, routing);
-            assertGetFieldNull(index, type, docId, field, routing);  
-        }
-    }
-
-    protected void assertGetFieldNull(String index, String type, String docId, String field, @Nullable String routing) {
-        // for get
-        GetResponse response = getDocument(index, type, docId, field, routing);  
-        assertTrue(response.isExists());
-        assertNull(response.getField(field));
-        assertThat(response.getId(), equalTo(docId));  
-        // same for multi get
-        response = multiGetDocument(index, type, docId, field, routing);
-        assertNull(response.getField(field));  
-        assertThat(response.getId(), equalTo(docId));
-        assertTrue(response.isExists());
-    }  
-
-    private GetResponse multiGetDocument(String index, String type, String docId, String field, @Nullable String routing) {
-        MultiGetRequest.Item getItem = new MultiGetRequest.Item(index, docId).storedFields(field);  
-        if (routing != null) {
-            getItem.routing(routing);
-        }  
-        MultiGetRequestBuilder multiGetRequestBuilder = client().prepareMultiGet().add(getItem);
+        getResponse = client().prepareGet("my-index", "1").setStoredFields(field).get();
+            .setSource(  
+                        .endObject()  
         MultiGetResponse multiGetResponse = multiGetRequestBuilder.get();
-        assertThat(multiGetResponse.getResponses().length, equalTo(1));  
-        return multiGetResponse.getResponses()[0].getResponse();
-    }
-
-    private GetResponse getDocument(String index, String type, String docId, String field, @Nullable String routing) {
-        GetRequestBuilder getRequestBuilder = client().prepareGet().setIndex(index).setId(docId).setStoredFields(field);
-        if (routing != null) {  
-            getRequestBuilder.setRouting(routing);
+        flush();
+        assertThat(fields, equalTo(singleton("field")));  
+        // after flush - document is in not anymore translog - only indexed
+                jsonBuilder().startObject().field("geopoint_field", "40.7128,-74.0060").field("date_field", "2025-07-29").endObject()
+        assertThat(getResponse.isExists(), equalTo(true));
+        assertThat(response.getIndex(), equalTo("test"));
+        assertThat(response.getFields().get("field").getValues().get(1).toString(), equalTo("2"));  
+        refresh();
+            .startObject()
+        refresh();
+            + "  \"mappings\": {\n"
+        // after flush - document is in not anymore translog - only indexed  
+                .startObject()
+    }  
+        assertAcked(
+        assertThat(response.isExists(), equalTo(true));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        assertThat(response.isExists(), equalTo(true));
+            .endObject()  
+                .setMapping(
+        assertThat(response.getId(), equalTo("1"));
+        assertTrue(getResponse.isExists());  
+                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
+    public void testGetFieldsNonLeafField() throws Exception {
+                                "type": "boolean"
+        assertThat(response.getId(), equalTo("1"));
+                        .startObject("properties")  
+        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "1");  
+        assertThat(response.getResponses()[3].getIndex(), equalTo("test"));  
+        response = client().prepareGet(indexOrAlias(), "1").get();  
+        assertGetFieldsNull(indexOrAlias(), "_doc", "1", alwaysNotStoredFieldsList);
+        XContentBuilder sourceBuilder = jsonBuilder().startObject()
+        logger.info("--> realtime get 1");  
+            .endObject()
+        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
+            .endObject()
+        assertFalse(source.containsKey("binary_field"));
+                        .endObject()
+        assertThat(ipValues.size(), equalTo(2));
+ *  
+        // From Lucene index:
+            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(Versions.MATCH_ANY))  
+        assertThat(response.getSourceAsMap().get("field2").toString(), equalTo("value2_1"));
+        );
+                .get();
+            + "        \"suggest\": {\n"
+        );
+        assertThat(response.getVersion(), equalTo(1L));  
+import java.util.Map;
+        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));
+            )
+            .add(indexOrAlias(), "1")
+        // Get document after flush, it should be a derived source
+    }  
+import java.util.Collections;
+                .setSettings(Settings.builder().put("index.refresh_interval", -1))  
+        response = client().prepareGet(indexOrAlias(), "1").get();
+        response = client().prepareGet(indexOrAlias(), "1").setRealtime(false).get();
+        assertEquals(51.5074, (double) geopoint.get("lat"), 0.0001);
+        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "routingValue");
+            .startObject("level1")
+        assertThat(response.getId(), equalTo(docId));
+            + "    }\n"
+        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
+        // Index a document with various field types  
+import org.opensearch.common.settings.Settings;
+            + "        \"text2\": {\n"
+        // Version from translog
+        // [0] version doesn't matter, which is the default  
+        getResponse = client().prepareGet("test_derive", "1").get();
+        geopoint = (Map<String, Object>) source.get("geopoint_field");
+        assertTrue(getResponse.isExists());
+                    .field("bool_field", true)  
+            .startObject("properties")
+        response = client().prepareGet("test", "1").setStoredFields("field").get();
+            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(2))  
+                        "number_of_shards": 2,
+        GetResponse response = getDocument(index, type, docId, field, routing);  
+        assertAcked(prepareCreate("test").setSettings(settings).setMapping(mapping));
+        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "1");  
+        // Create index with settings and mapping
+        assertThat(response.getVersion(), equalTo(1L));  
+        try {
         }
-        return getRequestBuilder.get();  
-    }
+    public void testGeneratedStringFieldsStored() throws IOException {
+        response = client().prepareGet(indexOrAlias(), "1").setRealtime(false).get();  
+            .setId("1")
+    public void testSimpleGet() {  
+    @Override
+        assertEquals(-74.0060, (double) geopoint.get("lon"), 0.0001);
+                    .field("binary_field", "bGlkaHQtd29rfx4=")  
+        assertTrue(getResponse.isExists());
+        assertThat(response.isExists(), equalTo(true));
+                        .endObject()
+        fields = new HashSet<>(response.getFields().keySet());
+                .field("field4", "value2")
+        assertGetFieldsAlwaysWorks(indexOrAlias(), "_doc", "1", fieldsList, "routingValue");
+import org.opensearch.core.common.Strings;
+        logger.info("--> index doc 1");
+        assertThat(response.getVersion(), equalTo(2L));
+        assertThat(response.getResponses()[2].getResponse().getSourceAsMap().get("field").toString(), equalTo("value2"));
+import static java.util.Collections.singleton;
+        assertThat(response.getResponses()[2].getFailure(), notNullValue());
+        client().prepareIndex("test").setId("1").setSource("field1", "value1", "field2", "value2").get();
+        assertNotNull("Derived source should not be null", source);
+        assertEquals(40.33, (Double) latLon.get("lon"), 0.001);
+        assertEquals(DocWriteResponse.Result.DELETED, deleteResponse.getResult());
+        Map<String, Object> level1 = (Map<String, Object>) source.get("level1");
+        assertThat(response.getResponses()[1].getFailure(), notNullValue());
+        assertThat(response.getFields().get("field").getValues().size(), equalTo(2));
+        assertThat(response.getIndex(), equalTo("test"));
+        assertThat(response.getResponses()[2].getResponse().isExists(), equalTo(true));
+                        .startObject("properties")  
+    }  
 }
+            assertGetFieldNull(index, type, docId, field, routing);
+        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
+        ensureGreen();
+                "settings": {
+        } catch (VersionConflictEngineException e) {  
+            .startObject("properties")  
+                .setMapping(
+    }
+ * under the License.  
+        ensureGreen();
+        IndexResponse indexResponse = client().prepareIndex("index1").setId("id").setSource(Collections.singletonMap("foo", "bar")).get();  
+            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(2))
+        assertGetFieldsNull(index, type, docId, fields, null);
+import org.opensearch.action.index.IndexResponse;
+        IllegalArgumentException exc = expectThrows(
+            getItem.routing(routing);
+                .startObject("field2")
+        // Create index with derived source index setting enabled
+        assertThat(getResponse.getField(field).getValues().get(0).toString(), equalTo("value1"));
+        assertThat(response.getResponses()[2].getFailure(), nullValue());  
+        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));
+            .add(new MultiGetRequest.Item(indexOrAlias(), "3").storedFields("field"))
+        assertTrue(response.isExists());
+                }  
+            + "          \"store\": \""  
+    public void testUngeneratedFieldsThatAreAlwaysStored() throws IOException {
+            .endObject()
+        assertThat(response.getField("field1").getValues().get(0).toString(), equalTo("value1"));
+        }
+            + "    \"refresh_interval\": \"-1\"\n"
+        assertNotNull(source);  
+        assertThat(response.isExists(), equalTo(false));
+                    .field("text_field", "test text")
+        }  
+            + "      \"properties\": {\n"  
+        assertThat(response.getResponses()[1].getFailure().getId(), equalTo("2"));  
+        assertThat(response.getResponses()[1].getFailure().getMessage(), startsWith("[2]: version conflict"));
+        Map<String, Object> level2 = (Map<String, Object>) level1.get("level2");
+            .field("type", "date")
+            .startObject()
+            + "        },\n"  
+                )
+            + "  }\n"
+    private void assertGetFieldsAlwaysWorks(String index, String type, String docId, String[] fields) {  
+    }
+            .add(new MultiGetRequest.Item(indexOrAlias(), "2").version(1))
+            + "      \"Nirvana\"\n"  
+        // before refresh - document is only in translog
+        assertThat(multiGetResponse.getResponses().length, equalTo(1));  
+        Map<String, Object> geopoint = (Map<String, Object>) source.get("geopoint_field");  
+    protected void assertGetFieldsNull(String index, String type, String docId, String[] fields, @Nullable String routing) {
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.common.bytes.BytesReference;  
+        assertThat(response.getResponses()[2].getId(), equalTo("3"));
+                    .put("index.derived_source.enabled", true)
+                .setSettings(Settings.builder().put(IndexSettings.INDEX_DERIVED_SOURCE_TRANSLOG_ENABLED_SETTING.getKey(), false))
+        response = client().prepareGet(indexOrAlias(), "1").get();  
+        );
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(response.getField("field2"), nullValue());
+        assertFalse(source.containsKey("text_field"));  
+            .get();
+        assertThat(response.getResponses()[4].getResponse().getIndex(), equalTo("test"));
+        // Test get with selective field inclusion
+        logger.info("indexing documents");
+        assertThat(response.getVersion(), equalTo(2L));
+        assertThat(response.getSourceAsBytes(), not(nullValue()));
+        assertThat(response.getFields().get("field").getValues().get(0).toString(), equalTo("1"));
+                        .endObject()  
+        );
+            + "    \"refresh_interval\": \"-1\"\n"  
+        assertThat(response.isExists(), equalTo(false));
+        assertThat(response.isExists(), equalTo(false));
+    protected void assertGetFieldsAlwaysNull(String index, String type, String docId, String[] fields, @Nullable String routing) {  
+                            },
+import org.opensearch.common.lucene.uid.Versions;
+            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(2))  
+ * software distributed under the License is distributed on an
+        // after refresh - document is in translog and also indexed
+import org.opensearch.common.xcontent.XContentFactory;  
+        refresh();
+        response = client().prepareGet(indexOrAlias(), "1").setFetchSource(false).get();
+        IndexResponse indexResponse = client().prepareIndex("test")
+    }
+        // From translog:  
+        assertThat(indexResponse.status(), equalTo(RestStatus.CREATED));
+                                "type": "date"
+ * not use this file except in compliance with the License.
+        assertThat(response.isExists(), equalTo(true));  
+            .endObject()
+                        "properties": {
+import org.opensearch.index.engine.VersionConflictEngineException;  
+    }  
+        assertThat(response.getResponses()[2].getId(), equalTo("2"));  
+        assertThat(response.getResponses()[1].getResponse().getIndex(), equalTo("test"));  
+        logger.info("flushing");
+                                "type": "text"
+        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(false));
+                        .endObject()  
+    public void testGetFieldsComplexField() throws Exception {
+        // after refresh - document is in translog and also indexed  
+            .field("type", "geo_point")
+        List<Object> numValues = (List<Object>) level3.get("num_field");
+            .startObject("level2")
+        for (String field : fields) {
+        validateDeriveSource(source);
+            .endObject()
+        // after flush - document is in not anymore translog - only indexed
+            + storedString
+                )
+            fail(sb.toString());
+            .endArray()  
+                .endArray()
+        assertThat(response.getResponses()[2].getResponse().isExists(), equalTo(true));
+    }  
+        getResponse = client().prepareGet("test", "1").get();
+        logger.info("--> index doc 1 again, so increasing the version");  
+    private void assertGetFieldsAlwaysWorks(String index, String type, String docId, String[] fields, @Nullable String routing) {
+        MultiGetRequestBuilder multiGetRequestBuilder = client().prepareMultiGet().add(getItem);
+        // before refresh - document is only in translog  
+            .endObject()
+            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(1))
+    }
+        UpdateResponse updateResponse = client().prepareUpdate("test", "1")  
+        flush();
+        assertThat(response.getResponses()[2].getFailure().getId(), equalTo("1"));  
+            .startObject("ip_field")
+            .startObject("level3")
+        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));  
+                            "binary_field": {  
+        assertThat(response.getId(), equalTo("1"));  
+            + "    \"refresh_interval\": \"-1\"\n"
+        // after refresh - document is in translog and also indexed
+        return multiGetResponse.getResponses()[0].getResponse();
+        index("test", "_doc", "1", doc);  
+        response = client().prepareMultiGet()
+        index("test", "_doc", "1", doc);
+import java.util.List;  
+            assertGetFieldWorks(index, type, docId, field, routing);  
+            .get();
+                        .field("type", "text")
+            + "          \"type\": \"completion\"\n"  
+        assertThat(getResponse.getField(field).getValues().size(), equalTo(2));  
+        if (flushResponse.getSuccessfulShards() == 0) {
+            .endArray()
+            .startObject()
+/*  
+        assertEquals(RestStatus.CREATED, indexResponse.status());
+            .startObject("properties")
+        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
+        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(true));
+        // after refresh - document is in translog and also indexed  
+            .get();
+        }
+        assertThat(response.getResponses()[4].getIndex(), equalTo("test"));
+            }
+            getRequestBuilder.setRouting(routing);
+                    "index": {  
+                    .put("index.number_of_shards", 1)  
+        // Index the document  
+        assertThat(response.getResponses()[3].getId(), equalTo("9"));
+        if (routing != null) {  
+        assertThat(response.getResponses()[2].getResponse().isExists(), equalTo(true));  
+            .endObject()
+        assertThat(response.getIndex(), equalTo("test"));
+        assertAcked(
+    protected void assertGetFieldsAlwaysNull(String index, String type, String docId, String[] fields) {
+        client().prepareIndex("test_derive")
+        assertEquals("2025-07-30T00:00:00.000Z", source.get("date_field"));
+        getResponse = client().prepareGet("test_derive", "1").setFetchSource(null, new String[] { "text_field", "date_field" }).get();
+        flush();  
+import org.opensearch.action.get.MultiGetRequestBuilder;
+        assertGetFieldsAlwaysNull(indexOrAlias(), "_doc", "1", fieldsList);
+        source = getResponse.getSourceAsMap();
+        } else {  
+        assertTrue(getResponse.isExists());  
+            client().admin()
+            ).setMapping(mapping)  
+            + storedString
+        );
+                        .endObject()
+        );  
+        assertThat(ipValues, containsInRelativeOrder("1.2.3.4", "2.3.4.5"));  
+            + "}";
+        assertThat(response.getFields().get("field").getValues().get(0).toString(), equalTo("1"));  
+        assertThat(response.getResponses()[0].getFailure(), nullValue());
+        assertThat(response.getIndex(), equalTo("test"));
+        assertThat(response.getId(), equalTo("1"));
+        assertThat(response.getIndex(), equalTo("test"));  
+        assertThat(response.isExists(), equalTo(true));  
+        String createIndexSource = "{\n"
+import org.opensearch.action.admin.indices.flush.FlushResponse;  
+                            },
+            assertGetFieldNull(index, type, docId, field, routing);
+                                "store": true
+        assertThat(response.isExists(), equalTo(true));
+        // after flush - document is in not anymore translog - only indexed  
+        logger.info("checking post-flush retrieval");
+        IllegalArgumentException exception = expectThrows(  
+        assertThat(response.getResponses()[0].getResponse().getField("field").getValues().get(0).toString(), equalTo("value1"));
+        // Update document, so that version map gets created and get will be served from translog
+        logger.info("--> update doc 1");
+import org.opensearch.plugins.Plugin;
+        DeleteResponse deleteResponse = client().prepareDelete("test", "1").get();  
+            fail();
+        assertThat(response.getField("field2"), nullValue());  
+        String doc = "{\n" + "  \"text1\": \"some text.\"\n," + "  \"text2\": \"more text.\"\n" + "}\n";
+        getResponse = client().prepareGet("test_derive", "1").setFetchSource(new String[] { "keyword_field", "numeric_field" }, null).get();
+        assertThat(response.getResponses()[0].getResponse().isExists(), equalTo(false));  
+        assertThat(response.getResponses()[0].getId(), equalTo("1"));
+        // [0] version doesn't matter, which is the default
+    }  
+                "mappings": {  
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(1).setRealtime(false).get();
+        assertEquals(40.7128, (double) geopoint.get("lat"), 0.0001);
+                .startObject("field2")
+        response = client().prepareMultiGet()  
+            .endObject();
+        Map<String, Object> source = getResponse.getSourceAsMap();
+        ensureGreen();
+        response = client().prepareGet(indexOrAlias(), "1").setVersion(2).setRealtime(false).get();
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        assertTrue(getResponse.isExists());
+/*  
+                // multi types in 5.6
+            .startObject("level2")  
+                            "keyword_field": {  
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+            .endObject()
+        response = client().prepareGet("test", "1").setStoredFields("field").get();  
+        assertThat(response.getResponses()[0].getFailure(), nullValue());
+        // Create mapping with properly closed objects  
+        assertThat(response.getVersion(), equalTo(1L));
+            () -> client().prepareGet("alias1", "_alias_id").get()
+                        .startObject("field4")
+                flushResponse.getTotalShards()  
+        // multi get with specific field
+        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
+        logger.info("--> realtime get 1 (no type)");
+        ensureGreen();
+    protected void assertGetFieldsNull(String index, String type, String docId, String[] fields) {
+            // all good
+        assertThat(response.getResponses()[2].getFailure().getMessage(), startsWith("[1]: version conflict"));
+        assertGetFieldsNull(indexOrAlias(), "_doc", "1", alwaysNotStoredFieldsList);  
+        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSource(createIndexSource, MediaTypeRegistry.JSON));  
+        // for get
+        assertThat(response.getResponses()[0].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));
+import static org.hamcrest.Matchers.containsInRelativeOrder;
+            .startArray("level3")  
+            + sourceEnabled
+        assertThat(response.getIndex(), equalTo("test"));
+        GetResponse response = client().prepareGet("test", "1").get();
+            + "}";
+        assertAcked(prepareCreate("test").addAlias(new Alias("alias")).setSettings(Settings.builder().put("index.refresh_interval", -1)));
+        assertEquals(75.98, (Double) latLon.get("lat"), 0.001);  
+        }
+        assertThat(response.getResponses()[1].getFailure(), nullValue());
+            .startArray("num_field")
+        assertEquals("1.2.3.4", source.get("ip_field"));
+        String doc = "{\n"
+        assertThat(response.getIndex(), equalTo("test"));
+        }  
+                        .field("store", true)  
+        assertThat(response.getResponses()[1].getResponse().getSourceAsMap().get("field").toString(), equalTo("value1"));  
+        assertThat(response.getVersion(), equalTo(2L));  
+                            "enabled": true
+    private GetResponse getDocument(String index, String type, String docId, String field, @Nullable String routing) {
+        assertThat(response.getResponses()[4].getId(), equalTo("11"));  
+        response = client().prepareMultiGet()  
+            .startObject("properties")  
+        flush();
+        assertThat(response.getResponses()[1].getId(), equalTo("15"));
+    }
+import java.util.Collection;  
+            ).append("], failed shards: [").append(flushResponse.getFailedShards()).append("]");
+        flush();
+        assertThat(fields, equalTo(singleton("field")));
+            .add(new MultiGetRequest.Item(indexOrAlias(), "1").version(Versions.MATCH_ANY))
+        logger.info("--> update doc 1 again");  
+        assertThat(fields, equalTo(Collections.<String>emptySet()));  
+        assertThat(response.getResponses()[1].getIndex(), equalTo("test"));
+    private GetResponse multiGetDocument(String index, String type, String docId, String field, @Nullable String routing) {

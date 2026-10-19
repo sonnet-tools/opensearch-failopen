@@ -1,113 +1,100 @@
+                    expl = Explanation.match(0f, "max of:", expl, Explanation.match(0f, "Minimum allowed score"));
+            }
+                Explanation expl = inScorer.explain(freq, norm);
+    }
+                                + inScorer.explain(Explanation.match(freq, "term frequency"), norm)  
+import org.apache.lucene.index.FieldInvertState;
+    public NonNegativeScoresSimilarity(Similarity in) {
+    }  
+    private final Similarity in;  
+ * @opensearch.internal  
+ * this file be licensed under the Apache-2.0 license or a
+                float score = inScorer.score(freq, norm);
+                            "Similarities must not produce negative scores, but got:\n"
+    }
+    }
+public final class NonNegativeScoresSimilarity extends Similarity {  
+            @Override
+            ENFORCE_POSITIVE_SCORES = true;
+ */
+ * software distributed under the License is distributed on an
+ * under the License.  
+                OPENSEARCH_ENFORCE_POSITIVE_SCORES + " may only be unset or set to [false], but got [" + enforcePositiveScores + "]"
+ * license agreements. See the NOTICE file distributed with
+                        );
+ */
+ * not use this file except in compliance with the License.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+    static {
+            ENFORCE_POSITIVE_SCORES = false;
+    @Override  
+    public SimScorer scorer(float boost, CollectionStatistics collectionStats, TermStatistics... termStats) {
+}
+        } else {
+            @Override  
+ *  
+        return in.computeNorm(state);  
+ * Licensed to Elasticsearch under one or more contributor  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        String enforcePositiveScores = System.getProperty(OPENSEARCH_ENFORCE_POSITIVE_SCORES);  
+ * Modifications Copyright OpenSearch Contributors. See
+            public float score(float freq, long norm) {  
 /*  
+import org.apache.lucene.search.TermStatistics;
+                if (score < 0f) {
+    public long computeNorm(FieldInvertState state) {
+ *
+/**
+    private static final boolean ENFORCE_POSITIVE_SCORES;
  * SPDX-License-Identifier: Apache-2.0
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.similarity;
-
-import org.apache.lucene.index.FieldInvertState;
-import org.apache.lucene.search.CollectionStatistics;
-import org.apache.lucene.search.Explanation;  
-import org.apache.lucene.search.TermStatistics;
-import org.apache.lucene.search.similarities.Similarity;
-
-/**
- * A {@link Similarity} that rejects negative scores. This class exists so that users get
- * an error instead of silently corrupt top hits. It should be applied to any custom or  
- * scripted similarity.
- *
- * @opensearch.internal  
- */
-// public for testing
-public final class NonNegativeScoresSimilarity extends Similarity {  
-
-    // Escape hatch
-    private static final String OPENSEARCH_ENFORCE_POSITIVE_SCORES = "opensearch.enforce.positive.scores";  
-    private static final boolean ENFORCE_POSITIVE_SCORES;
-    static {
-        String enforcePositiveScores = System.getProperty(OPENSEARCH_ENFORCE_POSITIVE_SCORES);  
-        if (enforcePositiveScores == null) {
-            ENFORCE_POSITIVE_SCORES = true;
-        } else if ("false".equals(enforcePositiveScores)) {  
-            ENFORCE_POSITIVE_SCORES = false;
-        } else {
-            throw new IllegalArgumentException(  
-                OPENSEARCH_ENFORCE_POSITIVE_SCORES + " may only be unset or set to [false], but got [" + enforcePositiveScores + "]"
-            );
-        }  
-    }
-
-    private final Similarity in;  
-
-    public NonNegativeScoresSimilarity(Similarity in) {
-        this.in = in;  
-    }
-
-    public Similarity getDelegate() {  
-        return in;
-    }
-
-    @Override
-    public long computeNorm(FieldInvertState state) {
-        return in.computeNorm(state);  
-    }
-
-    @Override  
-    public SimScorer scorer(float boost, CollectionStatistics collectionStats, TermStatistics... termStats) {
-        final SimScorer inScorer = in.scorer(boost, collectionStats, termStats);
-        return new SimScorer() {  
-
-            @Override
-            public float score(float freq, long norm) {  
-                float score = inScorer.score(freq, norm);
-                if (score < 0f) {
-                    if (ENFORCE_POSITIVE_SCORES) {  
-                        throw new IllegalArgumentException(
-                            "Similarities must not produce negative scores, but got:\n"
-                                + inScorer.explain(Explanation.match(freq, "term frequency"), norm)  
-                        );
-                    } else {
-                        return 0f;  
                     }
-                }
-                return score;  
-            }
-
-            @Override  
-            public Explanation explain(Explanation freq, long norm) {
-                Explanation expl = inScorer.explain(freq, norm);
+// public for testing
                 if (expl.isMatch() && expl.getValue().floatValue() < 0) {  
-                    expl = Explanation.match(0f, "max of:", expl, Explanation.match(0f, "Minimum allowed score"));
-                }
-                return expl;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.in = in;  
+ *
+    private static final String OPENSEARCH_ENFORCE_POSITIVE_SCORES = "opensearch.enforce.positive.scores";  
+ * KIND, either express or implied.  See the License for the
+ */  
+                        throw new IllegalArgumentException(
+import org.apache.lucene.search.similarities.Similarity;
             }
+            );
+                }
+package org.opensearch.index.similarity;
+                        return 0f;  
+            public Explanation explain(Explanation freq, long norm) {
+                    } else {
+import org.apache.lucene.search.CollectionStatistics;
+ * an error instead of silently corrupt top hits. It should be applied to any custom or  
+ */  
+/*
+                return expl;  
+                return score;  
+import org.apache.lucene.search.Explanation;  
+    public Similarity getDelegate() {  
+ * specific language governing permissions and limitations
+        if (enforcePositiveScores == null) {
+ * GitHub history for details.
+                }
+    @Override
+ * You may obtain a copy of the License at  
+ * this work for additional information regarding copyright
+        return in;
+ * Unless required by applicable law or agreed to in writing,
+            throw new IllegalArgumentException(  
+ * A {@link Similarity} that rejects negative scores. This class exists so that users get
+        final SimScorer inScorer = in.scorer(boost, collectionStats, termStats);
+    }
+        return new SimScorer() {  
+        } else if ("false".equals(enforcePositiveScores)) {  
+/*  
+    // Escape hatch
         };
-    }  
-}
+        }  
+                    if (ENFORCE_POSITIVE_SCORES) {  
+ * scripted similarity.

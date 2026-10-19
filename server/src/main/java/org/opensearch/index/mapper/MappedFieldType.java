@@ -1,680 +1,610 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;  
-import org.apache.lucene.queries.intervals.IntervalsSource;
-import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
-import org.apache.lucene.queries.spans.SpanQuery;  
-import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BoostQuery;  
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.FieldExistsQuery;
-import org.apache.lucene.search.MultiTermQuery;  
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermInSetQuery;
-import org.apache.lucene.search.TermQuery;  
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefIterator;
-import org.opensearch.ExceptionsHelper;  
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.geo.ShapeRelation;
-import org.opensearch.common.time.DateMathParser;  
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.NamedAnalyzer;  
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.fielddata.IndexFieldData;  
-import org.opensearch.index.query.DistanceFeatureQueryBuilder;
-import org.opensearch.index.query.IntervalMode;
-import org.opensearch.index.query.QueryRewriteContext;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.QueryShardException;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.fetch.subphase.FetchFieldsPhase;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.time.ZoneId;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-import java.util.Set;
-import java.util.function.Function;
-import java.util.function.Supplier;  
-
-/**
- * This defines the core properties and functions to operate on a field.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public abstract class MappedFieldType {
-
-    /**
-     * Multi-value state for columnar mappings: omitted {@code multi_value} is AUTO, explicit
-     * {@code false} locks the field in SCALAR state, and explicit {@code true} selects LIST state.  
-     */
-    @ExperimentalApi
-    public enum MultiValueState {  
-        AUTO,
-        SCALAR,
-        LIST  
-    }
-
-    private final String name;  
-    private final boolean docValues;
-    private final boolean isIndexed;
-    private final boolean isStored;  
-    private final TextSearchInfo textSearchInfo;
-    private final Map<String, String> meta;
-    private float boost;  
-    private NamedAnalyzer indexAnalyzer;
-    private boolean eagerGlobalOrdinals;
-    private MultiValueState multiValueState = MultiValueState.AUTO;  
-    private boolean multiValueSupported;
-
-    /**  
-     * Capability map assigning each registered {@link DataFormat} to the set of capabilities it owns for this field type.
-     * Set once during mapping build via {@link Mapper.BuilderContext#assignCapabilities}, then immutable.
-     * Safe without volatile: publication through MapperService's volatile mapper reference provides happens-before.  
-     */
-    private Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capabilityMap = Map.of();
-
-    public MappedFieldType(
-        String name,
-        boolean isIndexed,  
-        boolean isStored,
-        boolean hasDocValues,
-        TextSearchInfo textSearchInfo,  
-        Map<String, String> meta
-    ) {
-        this.boost = 1.0f;  
-        this.name = Objects.requireNonNull(name);
-        this.isIndexed = isIndexed;
-        this.isStored = isStored;  
-        this.docValues = hasDocValues;
-        this.textSearchInfo = Objects.requireNonNull(textSearchInfo);
-        this.meta = meta;  
-    }
-
-    /**  
-     * Return a fielddata builder for this field
-     *
-     * @param fullyQualifiedIndexName the name of the index this field-data is build for  
-     * @param searchLookup a {@link SearchLookup} supplier to allow for accessing other fields values in the context of runtime fields
-     * @throws IllegalArgumentException if the fielddata is not supported on this type.
-     * An IllegalArgumentException is needed in order to return an http error 400  
-     * when this error occurs in a request. see: {@link ExceptionsHelper#status}
-     */
-    public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {  
-        throw new IllegalArgumentException("Fielddata is not supported on field [" + name() + "] of type [" + typeName() + "]");
-    }
-
-    /**
-     * Create a helper class to fetch field values during the {@link FetchFieldsPhase}.
-     * <p>  
-     * New field types must implement this method in order to support the search 'fields' option. Except
-     * for metadata fields, field types should not throw {@link UnsupportedOperationException} since this
-     * could cause a search retrieving multiple fields (like "fields": ["*"]) to fail.  
-     */
-    public abstract ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, @Nullable String format);
-
-    /** Returns the name of this type, as would be specified in mapping properties */
-    public abstract String typeName();
-
-    /** Returns the field family type, as used in field capabilities */
-    public String familyTypeName() {
-        return typeName();  
-    }
-
-    public String name() {  
-        return name;
-    }
-
-    public float boost() {
-        return boost;
-    }  
-
-    public void setBoost(float boost) {
-        this.boost = boost;  
-    }
-
-    public boolean hasDocValues() {  
-        return docValues;
-    }
-
-    public NamedAnalyzer indexAnalyzer() {
-        return indexAnalyzer;
-    }  
-
-    public void setIndexAnalyzer(NamedAnalyzer analyzer) {
-        this.indexAnalyzer = analyzer;  
-    }
-
-    /** Given a value that comes from the stored fields API, convert it to the  
-     *  expected type. For instance a date field would store dates as longs and
-     *  format it back to a string in this method. */
-    public Object valueForDisplay(Object value) {  
-        return value;
-    }
-
-    /**
-     * Returns true if the field is searchable.
-     */  
-    public boolean isSearchable() {
-        return isIndexed;
-    }  
-
-    /**
-     * Whether this field can serve predicates on the given index, accounting for pluggable data  
-     * formats that can query doc-values-only fields. Defaults to {@link #isSearchable()}.
-     * Reporting only - never use this for query planning.
-     *  
-     * @opensearch.experimental
-     */
-    @ExperimentalApi  
-    public boolean isSearchableViaDocValues(IndexSettings indexSettings) {
-        return isSearchable();
-    }  
-
-    /**
-     * Returns true if the field is stored separately.  
-     */
-    public boolean isStored() {
-        return isStored;  
-    }
-
-    /**  
-     * If the field supports using the indexed data to speed up operations related to ordering of data, such as sorting or aggs, return
-     * a function for doing that.  If it is unsupported for this field type, there is no need to override this method.
-     *  
-     * @return null if the optimization cannot be applied, otherwise a function to use for the optimization
-     */
-    @Nullable  
-    public Function<byte[], Number> pointReaderIfPossible() {
-        return null;
-    }  
-
-    /** Returns true if the field is aggregatable.
-     *  
-     */
-    public boolean isAggregatable() {
-        try {  
-            fielddataBuilder("", () -> { throw new UnsupportedOperationException("SearchLookup not available"); });
-            return true;
-        } catch (IllegalArgumentException e) {  
-            return false;
-        }
-    }  
-
-    /** Generates a query that will only match documents that contain the given value.
-     *  The default implementation returns a {@link TermQuery} over the value bytes,  
-     *  boosted by {@link #boost()}.
-     *  @throws IllegalArgumentException if {@code value} cannot be converted to the expected data type or if the field is not searchable
-     *      due to the way it is configured (eg. not indexed)  
-     *  @throws OpenSearchParseException if {@code value} cannot be converted to the expected data type
-     *  @throws UnsupportedOperationException if the field is not searchable regardless of options
-     *  @throws QueryShardException if the field is not searchable regardless of options  
-     */
-    // TODO: Standardize exception types
-    public abstract Query termQuery(Object value, @Nullable QueryShardContext context);  
-
-    // Case insensitive form of term query (not supported by all fields so must be overridden to enable)
-    public Query termQueryCaseInsensitive(Object value, @Nullable QueryShardContext context) {  
-        throw new QueryShardException(
-            context,
-            "[" + name + "] field which is of type [" + typeName() + "], does not support case insensitive term queries"  
-        );
-    }
-
-    /** Build a constant-scoring query that matches all values. The default implementation uses a
-     * {@link ConstantScoreQuery} around a {@link BooleanQuery} whose {@link Occur#SHOULD} clauses
-     * are generated with {@link #termQuery}. */  
-    public Query termsQuery(List<?> values, @Nullable QueryShardContext context) {
-        BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        for (Object value : values) {  
-            builder.add(termQuery(value, context), Occur.SHOULD);
-        }
-        return new ConstantScoreQuery(builder.build());  
-    }
-
-    /**  
-     * Factory method for range queries.
-     * @param relation the relation, nulls should be interpreted like INTERSECTS
-     */  
-    public Query rangeQuery(
-        Object lowerTerm,
-        Object upperTerm,  
-        boolean includeLower,
-        boolean includeUpper,
-        ShapeRelation relation,  
-        ZoneId timeZone,
-        DateMathParser parser,
-        QueryShardContext context  
-    ) {
-        throw new IllegalArgumentException("Field [" + name + "] of type [" + typeName() + "] does not support range queries");
-    }  
-
-    // Fuzzy Query with re-write method
-    public Query fuzzyQuery(  
-        Object value,
-        Fuzziness fuzziness,
-        int prefixLength,  
-        int maxExpansions,
-        boolean transpositions,
-        @Nullable MultiTermQuery.RewriteMethod method,  
-        QueryShardContext context
-    ) {
-        throw new IllegalArgumentException(  
-            "Can only use fuzzy queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"
-        );
-    }  
-
-    // Case sensitive form of prefix query
-    public final Query prefixQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, QueryShardContext context) {  
-        return prefixQuery(value, method, false, context);
-    }
-
-    public Query prefixQuery(
-        String value,
-        @Nullable MultiTermQuery.RewriteMethod method,  
-        boolean caseInsensitve,
-        QueryShardContext context
-    ) {  
-        throw new QueryShardException(
-            context,
-            "Can only use prefix queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
-        );
-    }
-
-    // Case sensitive form of wildcard query
-    public final Query wildcardQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, QueryShardContext context) {
-        return wildcardQuery(value, method, false, context);  
-    }
-
-    /** optionally normalize the wildcard pattern based on the value of {@code caseInsensitive} */  
-    public Query wildcardQuery(
-        String value,
-        @Nullable MultiTermQuery.RewriteMethod method,  
-        boolean caseInsensitve,
-        QueryShardContext context
-    ) {  
-        throw new QueryShardException(
-            context,
-            "Can only use wildcard queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
-        );
-    }
-
-    /** always normalizes the wildcard pattern to lowercase */
-    public Query normalizedWildcardQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, QueryShardContext context) {
-        throw new QueryShardException(  
-            context,
-            "Can only use wildcard queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"
-        );  
-    }
-
-    public Query regexpQuery(  
-        String value,
-        int syntaxFlags,
-        int matchFlags,  
-        int maxDeterminizedStates,
-        @Nullable MultiTermQuery.RewriteMethod method,
-        QueryShardContext context  
-    ) {
-        throw new QueryShardException(
-            context,  
-            "Can only use regexp queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"
-        );
-    }  
-
-    public Query existsQuery(QueryShardContext context) {
-        if (hasDocValues()) {  
-            return new FieldExistsQuery(name());
-        } else if (getTextSearchInfo().hasNorms()) {
-            return new FieldExistsQuery(name());  
-        } else {
-            return new TermQuery(new Term(FieldNamesFieldMapper.NAME, name()));
-        }  
-    }
-
-    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements) throws IOException {  
-        throw new IllegalArgumentException(
-            "Can only use phrase queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"
-        );  
-    }
-
-    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context) throws IOException {  
-        return phraseQuery(stream, slop, enablePositionIncrements);
-    }
-
-    public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements) throws IOException {
-        throw new IllegalArgumentException(
-            "Can only use phrase queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
-        );
-    }
-
-    public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context)
-        throws IOException {
-        return multiPhraseQuery(stream, slop, enablePositionIncrements);  
-    }
-
-    public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions) throws IOException {  
-        throw new IllegalArgumentException(
-            "Can only use phrase prefix queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"
-        );  
-    }
-
-    public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions, QueryShardContext context) throws IOException {  
-        return phrasePrefixQuery(stream, slop, maxExpansions);
-    }
-
-    public SpanQuery spanPrefixQuery(String value, SpanMultiTermQueryWrapper.SpanRewriteMethod method, QueryShardContext context) {
-        throw new IllegalArgumentException(
-            "Can only use span prefix queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
-        );
-    }
-
-    public Query distanceFeatureQuery(Object origin, String pivot, float boost, QueryShardContext context) {
-        throw new IllegalArgumentException(
-            "Illegal data type of ["  
-                + typeName()
-                + "]!"
-                + "["  
-                + DistanceFeatureQueryBuilder.NAME
-                + "] query can only be run on a date, date_nanos or geo_point field type!"
-        );  
-    }
-
-    /**  
-     * Create an {@link IntervalsSource} to be used for proximity queries
-     */
-    public IntervalsSource intervals(String query, int max_gaps, IntervalMode mode, NamedAnalyzer analyzer, boolean prefix)  
-        throws IOException {
-        throw new IllegalArgumentException(
-            "Can only use interval queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
-        );
-    }
-
-    /**
-     * An enum used to describe the relation between the range of terms in a
-     * shard when compared with a query range  
-     *
-     * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    public enum Relation {
-        WITHIN,  
-        INTERSECTS,
-        DISJOINT
-    }  
-
-    /** Return whether all values of the given {@link IndexReader} are within the range,
-     *  outside the range or cross the range. The default implementation returns  
-     *  {@link Relation#INTERSECTS}, which is always fine to return when there is
-     *  no way to check whether values are actually within bounds. */
-    public Relation isFieldWithinQuery(  
-        IndexReader reader,
-        Object from,
-        Object to,  
-        boolean includeLower,
-        boolean includeUpper,
-        ZoneId timeZone,  
-        DateMathParser dateMathParser,
-        QueryRewriteContext context
-    ) throws IOException {  
-        return Relation.INTERSECTS;
-    }
-
-    /** @throws IllegalArgumentException if the fielddata is not supported on this type.
-     *  An IllegalArgumentException is needed in order to return an http error 400
-     *  when this error occurs in a request. see: {@link ExceptionsHelper#status}  
-     **/
-    protected final void failIfNoDocValues() {
-        if (hasDocValues() == false) {  
-            throw new IllegalArgumentException(
-                "Can't load fielddata on ["
-                    + name()  
-                    + "] because fielddata is unsupported on fields of type ["
-                    + typeName()
-                    + "]. Use doc values instead."  
-            );
-        }
-    }  
-
-    protected final void failIfNotIndexed() {
-        if (isIndexed == false) {  
-            // we throw an IAE rather than an ISE so that it translates to a 4xx code rather than 5xx code on the http layer
-            throw new IllegalArgumentException("Cannot search on field [" + name() + "] since it is not indexed.");
-        }  
-    }
-
-    protected final void failIfNotIndexedAndNoDocValues() {  
-        // we fail if a field is both not indexed and does not have doc_values enabled
-        if (isIndexed == false && hasDocValues() == false) {
-            throw new IllegalArgumentException(  
-                "Cannot search on field [" + name() + "] since it is both not indexed," + " and does not have doc_values enabled."
-            );
-        }  
-    }
-
-    public boolean eagerGlobalOrdinals() {  
-        return eagerGlobalOrdinals;
-    }
-
-    public void setEagerGlobalOrdinals(boolean eagerGlobalOrdinals) {
-        this.eagerGlobalOrdinals = eagerGlobalOrdinals;
-    }  
-
-    /**
-     * Whether this field is declared to hold multiple values per document in columnar data  
-     * formats ({@code multi_value} mapping parameter). Lucene is inherently multi-valued, so
-     * this flag only matters to pluggable formats whose column type is fixed per file (e.g.
-     * Parquet, where a declared field is stored as {@code LIST<element>}).  
-     *
-     * @opensearch.experimental
-     */  
-    @ExperimentalApi
-    public boolean isMultiValued() {
-        return multiValueState == MultiValueState.LIST;  
-    }
-
-    /**  
-     * Compatibility setter for callers that only know scalar versus multi-valued. Setting false
-     * restores AUTO; mapping builders use {@link #setMultiValueState(MultiValueState)} to preserve
-     * explicit SCALAR intent.  
-     */
-    @ExperimentalApi
-    public void setMultiValued(boolean multiValued) {  
-        this.multiValueState = multiValued ? MultiValueState.LIST : MultiValueState.AUTO;
-    }
-
-    /** Returns the durable multi-value state. */
-    @ExperimentalApi
-    public MultiValueState multiValueState() {  
-        return multiValueState;
-    }
-
-    /** Sets the durable multi-value state. */
-    @ExperimentalApi
-    public void setMultiValueState(MultiValueState multiValueState) {  
-        this.multiValueState = Objects.requireNonNull(multiValueState);
-    }
-
-    /** Whether an additional value may trigger an automatic mapping promotion. */
-    @ExperimentalApi
-    public boolean isMultiValueAutoPromotionEnabled() {  
-        return multiValueState == MultiValueState.AUTO;
-    }
-
-    /**
-     * Whether this field type can represent multiple scalar values in a pluggable data format.
-     * This is a mapper capability, distinct from {@link #isMultiValued()}, which is the current  
-     * one-way mapping state.
-     *
-     * @opensearch.experimental  
-     */
-    @ExperimentalApi
-    public boolean isMultiValueSupported() {  
-        return multiValueSupported;
-    }
-
-    /** Sets whether this field type supports automatic scalar-to-multi-value promotion. */
-    @ExperimentalApi
-    public void setMultiValueSupported(boolean multiValueSupported) {  
-        this.multiValueSupported = multiValueSupported;
-    }
-
-    @ExperimentalApi
-    public Map<DataFormat, Set<FieldTypeCapabilities.Capability>> getCapabilityMap() {
-        return capabilityMap;  
-    }
-
-    /**  
-     * Sets the capability map.
-     * Called by {@link org.opensearch.index.engine.dataformat.DataFormatRegistry} during mapping build.
-     *  
-     * @throws IllegalStateException if already set
-     * @opensearch.experimental
-     */  
-    @ExperimentalApi
-    public synchronized void setCapabilityMap(Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capabilityMap) {
-        this.capabilityMap = Map.copyOf(capabilityMap);  
-    }
-
-    /**  
-     * Returns the search capability for this field type. Subclasses override to declare
-     * whether they use point-range (numerics, dates, IPs) or full-text (text, keyword) search.
-     *  
-     * @opensearch.experimental
-     */
-    @ExperimentalApi  
-    protected FieldTypeCapabilities.Capability searchCapability() {
-        throw new UnsupportedOperationException("searchCapability is not supported for field: " + name() + " of type: " + typeName());
-    }  
-
-    /**
-     * Derives the set of capabilities this field type requires based on its mapping parameters.  
-     *
-     * @opensearch.experimental
-     */  
-    @ExperimentalApi
-    public Set<FieldTypeCapabilities.Capability> requestedCapabilities() {
-        Set<FieldTypeCapabilities.Capability> caps = new HashSet<>();  
-        if (isSearchable()) {
-            caps.add(searchCapability());
-        }  
-        if (hasDocValues()) {
-            caps.add(FieldTypeCapabilities.Capability.COLUMNAR_STORAGE);
-        }  
-        if (isStored()) {
-            caps.add(FieldTypeCapabilities.Capability.STORED_FIELDS);
-        }  
-        return caps.isEmpty() ? Set.of() : Set.copyOf(caps);
-    }
-
-    /** Return a {@link DocValueFormat} that can be used to display and parse
-     *  values as returned by the fielddata API.
-     *  The default implementation returns a {@link DocValueFormat#RAW}. */  
-    public DocValueFormat docValueFormat(@Nullable String format, ZoneId timeZone) {
-        if (format != null) {
-            throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support custom formats");  
-        }
-        if (timeZone != null) {
-            throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support custom time zones");  
-        }
-        return DocValueFormat.RAW;
-    }  
-
-    /**
-     * Extract a {@link Term} from a query created with {@link #termQuery} by  
-     * recursively removing {@link BoostQuery} wrappers.
-     * @throws IOException
-     * @throws IllegalArgumentException if the wrapped query is not a {@link TermQuery}  
-     */
-    public static Term extractTerm(Query termQuery) throws IOException {
-        while (termQuery instanceof BoostQuery) {  
-            termQuery = ((BoostQuery) termQuery).getQuery();
-        }
-        if (termQuery instanceof TermInSetQuery) {  
-            TermInSetQuery tisQuery = (TermInSetQuery) termQuery;
-            if (tisQuery.getTermsCount() == 1) {
-                BytesRefIterator it = tisQuery.getBytesRefIterator();  
-                BytesRef term = it.next();
-                return new Term(tisQuery.getField(), term);
-            }  
-        }
-        if (termQuery instanceof ConstantScoreQuery) {
-            termQuery = ((ConstantScoreQuery) termQuery).getQuery();  
-        }
-        if (termQuery instanceof TermQuery == false) {
             throw new IllegalArgumentException("Cannot extract a term from a query of type " + termQuery.getClass() + ": " + termQuery);  
-        }
-        return ((TermQuery) termQuery).getTerm();
-    }  
-
-    /**
+ */  
+    public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements) throws IOException {
+import java.util.Set;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+        );  
+    }
+    @ExperimentalApi
+     * shard when compared with a query range  
+    @ExperimentalApi
+import org.opensearch.index.query.DistanceFeatureQueryBuilder;
+        INTERSECTS,
      * Get the metadata associated with this field.  
      */
-    public Map<String, String> meta() {
-        return meta;  
-    }
-
-    /**  
-     * Returns information on how any text in this field is indexed
-     * <p>
-     * Fields that do not support any text-based queries should return  
-     * {@link TextSearchInfo#NONE}.  Some fields (eg numeric) may support
-     * only simple match queries, and can return
-     * {@link TextSearchInfo#SIMPLE_MATCH_ONLY}  
+    private final boolean isIndexed;
+     * Called by {@link org.opensearch.index.engine.dataformat.DataFormatRegistry} during mapping build.
+     */  
+import org.apache.lucene.search.TermQuery;  
+ * The OpenSearch Contributors require contributions made to  
      */
-    public TextSearchInfo getTextSearchInfo() {
+     */
+        boolean hasDocValues,
+    }  
+        int maxExpansions,
+import org.apache.lucene.search.MultiTermQuery;  
+        ZoneId timeZone,
+import java.util.function.Supplier;  
+ * software distributed under the License is distributed on an
+        );  
+/*  
+     * @param relation the relation, nulls should be interpreted like INTERSECTS
+     *  @throws IllegalArgumentException if {@code value} cannot be converted to the expected data type or if the field is not searchable
+    /**
+    ) {  
+     * Derives the set of capabilities this field type requires based on its mapping parameters.  
+        TextSearchInfo textSearchInfo,  
+     * @param searchLookup a {@link SearchLookup} supplier to allow for accessing other fields values in the context of runtime fields
+        return wildcardQuery(value, method, false, context);  
+/*
+        @Nullable MultiTermQuery.RewriteMethod method,  
+    }
+import org.opensearch.ExceptionsHelper;  
+    public MultiValueState multiValueState() {  
+        return isIndexed;
+import org.opensearch.search.lookup.SearchLookup;
+                BytesRefIterator it = tisQuery.getBytesRefIterator();  
+        return caps.isEmpty() ? Set.of() : Set.copyOf(caps);
+    }  
+        return multiValueState;
+        String name,
+     * An enum used to describe the relation between the range of terms in a
+     *  @throws QueryShardException if the field is not searchable regardless of options  
+     */  
+    public String familyTypeName() {
+     * Safe without volatile: publication through MapperService's volatile mapper reference provides happens-before.  
+    ) {
+        BooleanQuery.Builder builder = new BooleanQuery.Builder();
+            caps.add(FieldTypeCapabilities.Capability.COLUMNAR_STORAGE);
+import org.opensearch.common.geo.ShapeRelation;
+        throw new QueryShardException(
+    }
+        @Nullable MultiTermQuery.RewriteMethod method,  
+            caps.add(FieldTypeCapabilities.Capability.STORED_FIELDS);
+        this.indexAnalyzer = analyzer;  
+    private final TextSearchInfo textSearchInfo;
+    }
+     * whether they use point-range (numerics, dates, IPs) or full-text (text, keyword) search.
+     * Capability map assigning each registered {@link DataFormat} to the set of capabilities it owns for this field type.
+ * @opensearch.api
+     * a function for doing that.  If it is unsupported for this field type, there is no need to override this method.
+    }
+            context,
+     */  
+     * <p>
+    public void setIndexAnalyzer(NamedAnalyzer analyzer) {
+    // Fuzzy Query with re-write method
+     *  format it back to a string in this method. */
+        );
+        throw new IllegalArgumentException("Field [" + name + "] of type [" + typeName() + "] does not support range queries");
+     * This is a mapper capability, distinct from {@link #isMultiValued()}, which is the current  
+     * @param fullyQualifiedIndexName the name of the index this field-data is build for  
+    public void setMultiValued(boolean multiValued) {  
+    public Query rangeQuery(
+    }
+        );
+    }  
+     * Return a fielddata builder for this field
+    }
+        return null;
+    }
+        ShapeRelation relation,  
+     *  The default implementation returns a {@link DocValueFormat#RAW}. */  
+        if (termQuery instanceof TermQuery == false) {
+     */
+    @ExperimentalApi
+        int matchFlags,  
+    public abstract String typeName();
+        int prefixLength,  
+            throw new IllegalArgumentException(
+import org.apache.lucene.search.FieldExistsQuery;
+    /** Whether an additional value may trigger an automatic mapping promotion. */
+        return isSearchable();
+     * @opensearch.experimental
+ */  
+        QueryShardContext context
+     * Factory method for range queries.
+    ) {  
+import org.opensearch.common.time.DateMathParser;  
+     * @opensearch.experimental
+import org.apache.lucene.search.Query;
+        boolean includeLower,
+    /**  
+        throw new IllegalArgumentException(
+            throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support custom time zones");  
+        }
+                return new Term(tisQuery.getField(), term);
+            termQuery = ((ConstantScoreQuery) termQuery).getQuery();  
+            "Can only use wildcard queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"
+    public void setBoost(float boost) {
+        return prefixQuery(value, method, false, context);
+    public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {  
+            "Can only use prefix queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
+        return this;
+ * not use this file except in compliance with the License.
+    @ExperimentalApi
+    public Query fuzzyQuery(  
+    public Query distanceFeatureQuery(Object origin, String pivot, float boost, QueryShardContext context) {
+        this.multiValueState = Objects.requireNonNull(multiValueState);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        throw new IllegalArgumentException("Fielddata is not supported on field [" + name() + "] of type [" + typeName() + "]");
+    public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions) throws IOException {  
+import org.opensearch.OpenSearchParseException;
+     * Fields that do not support any text-based queries should return  
+        if (timeZone != null) {
+    // Case sensitive form of prefix query
+        Object lowerTerm,
+    /** Returns true if the field is aggregatable.
+     */
+     * Compatibility setter for callers that only know scalar versus multi-valued. Setting false
+    @ExperimentalApi
+    private final boolean isStored;  
+            "Can only use interval queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
+        boolean isIndexed,  
+ * Licensed to Elasticsearch under one or more contributor  
+        if (isIndexed == false) {  
+        for (Object value : values) {  
+ * this work for additional information regarding copyright
+ */
+        return eagerGlobalOrdinals;
+    public boolean isMultiValueSupported() {  
+        throws IOException {
+import org.apache.lucene.index.Term;  
+    public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions, QueryShardContext context) throws IOException {  
+            termQuery = ((BoostQuery) termQuery).getQuery();
+     */
+            fielddataBuilder("", () -> { throw new UnsupportedOperationException("SearchLookup not available"); });
+        return ((TermQuery) termQuery).getTerm();
+        QueryShardContext context  
+                BytesRef term = it.next();
+    /** Return a {@link DocValueFormat} that can be used to display and parse
+    // Case sensitive form of wildcard query
+        if (hasDocValues() == false) {  
+        try {  
+    public boolean isSearchable() {
+import org.apache.lucene.analysis.TokenStream;
+        } catch (IllegalArgumentException e) {  
+     * @throws IllegalArgumentException if the fielddata is not supported on this type.
+        String value,
+    public Relation isFieldWithinQuery(  
+import org.apache.lucene.search.BoostQuery;  
+            throw new IllegalArgumentException(  
+            throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support custom formats");  
+ * GitHub history for details.
+    }
+import org.apache.lucene.search.BooleanClause.Occur;
+    }
+     *  @throws UnsupportedOperationException if the field is not searchable regardless of options
+     *  outside the range or cross the range. The default implementation returns  
+     **/
+            return new FieldExistsQuery(name());
+     *  An IllegalArgumentException is needed in order to return an http error 400
+        boolean caseInsensitve,
+import java.io.IOException;
+     * recursively removing {@link BoostQuery} wrappers.
+import org.opensearch.search.fetch.subphase.FetchFieldsPhase;
+        );
+    }  
+        this.name = Objects.requireNonNull(name);
+        throw new QueryShardException(
+     * @opensearch.experimental  
+public abstract class MappedFieldType {
+    public abstract Query termQuery(Object value, @Nullable QueryShardContext context);  
+     */
+    private final Map<String, String> meta;
+    private final String name;  
+     * Extract a {@link Term} from a query created with {@link #termQuery} by  
+                + "] query can only be run on a date, date_nanos or geo_point field type!"
+import org.opensearch.index.fielddata.IndexFieldData;  
+            }  
+        throws IOException {
+            "[" + name + "] field which is of type [" + typeName() + "], does not support case insensitive term queries"  
+        return typeName();  
+    public Query existsQuery(QueryShardContext context) {
+        boolean isStored,
+import org.opensearch.common.annotation.ExperimentalApi;  
+    public DocValueFormat docValueFormat(@Nullable String format, ZoneId timeZone) {
+     */
+     * formats ({@code multi_value} mapping parameter). Lucene is inherently multi-valued, so
+    }
+     * @opensearch.api
+        QueryShardContext context
+import org.opensearch.index.query.IntervalMode;
+        if (isIndexed == false && hasDocValues() == false) {
+ * under the License.  
+     * {@code false} locks the field in SCALAR state, and explicit {@code true} selects LIST state.  
+     */  
+package org.opensearch.index.mapper;
+     *  
+        }  
+    public boolean isMultiValueAutoPromotionEnabled() {  
+    /** Sets whether this field type supports automatic scalar-to-multi-value promotion. */
+    }
+            // we throw an IAE rather than an ISE so that it translates to a 4xx code rather than 5xx code on the http layer
+    }  
+     * An IllegalArgumentException is needed in order to return an http error 400  
+    public void setMultiValueSupported(boolean multiValueSupported) {  
+        ZoneId timeZone,  
+     * Returns true if the field is searchable.
+    ) {
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.index.engine.dataformat.DataFormat;
+        Object value,
+                + "["  
+    /**  
+     * @throws IllegalStateException if already set
+            "Can only use phrase queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
+    }
+import org.apache.lucene.search.TermInSetQuery;
+        return new ConstantScoreQuery(builder.build());  
+    public Query wildcardQuery(
+     *  values as returned by the fielddata API.
+            if (tisQuery.getTermsCount() == 1) {
+     */  
+    }
+     */
+    /**
+     * Create a helper class to fetch field values during the {@link FetchFieldsPhase}.
+    }
+        @Nullable MultiTermQuery.RewriteMethod method,  
+    private NamedAnalyzer indexAnalyzer;
+     */
+            context,
+ * ownership. Elasticsearch licenses this file to you under  
+     * Create an {@link IntervalsSource} to be used for proximity queries
+        if (isSearchable()) {
+     * New field types must implement this method in order to support the search 'fields' option. Except
+    public final Query wildcardQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, QueryShardContext context) {
+     */
+        boolean includeUpper,
+            context,
+     */  
+        int maxDeterminizedStates,
+            "Illegal data type of ["  
+import org.apache.lucene.util.BytesRef;
+    @ExperimentalApi
+/**
+        throw new IllegalArgumentException(
+        }  
+    ) {
+        this.boost = 1.0f;  
+    /**  
+        throw new IllegalArgumentException(  
+     * only simple match queries, and can return
+    ) throws IOException {  
+     *  
+    }
+        }  
+     *
+     *  
+     * when this error occurs in a request. see: {@link ExceptionsHelper#status}
+    /**
+    }
+     * @return a concrete (unfiltered) field type, which should be the current instance
+     * formats that can query doc-values-only fields. Defaults to {@link #isSearchable()}.
+                    + name()  
+    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements) throws IOException {  
+     * explicit SCALAR intent.  
+                + typeName()
+            builder.add(termQuery(value, context), Occur.SHOULD);
+        Object upperTerm,  
+        this.isIndexed = isIndexed;
+    /**  
+        throw new QueryShardException(
+    public final Query prefixQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, QueryShardContext context) {  
+    public MappedFieldType(
+    /**
+        Map<String, String> meta
+            return new TermQuery(new Term(FieldNamesFieldMapper.NAME, name()));
+        }  
+     *  no way to check whether values are actually within bounds. */
+        return Relation.INTERSECTS;
+    /**
+     * could cause a search retrieving multiple fields (like "fields": ["*"]) to fail.  
+ * KIND, either express or implied.  See the License for the
+     * Whether this field can serve predicates on the given index, accounting for pluggable data  
+    ) {
+        return meta;  
+        this.multiValueState = multiValued ? MultiValueState.LIST : MultiValueState.AUTO;
+     */
+import org.opensearch.index.query.QueryShardException;
+        this.multiValueSupported = multiValueSupported;
+    private boolean multiValueSupported;
+        return capabilityMap;  
+        this.eagerGlobalOrdinals = eagerGlobalOrdinals;
+import org.apache.lucene.index.IndexReader;
+    /** Sets the durable multi-value state. */
+    public boolean isStored() {
+        if (termQuery instanceof TermInSetQuery) {  
+        } else if (getTextSearchInfo().hasNorms()) {
+        } else {
+     * @opensearch.experimental
+     *  The default implementation returns a {@link TermQuery} over the value bytes,  
+     *  
+        this.isStored = isStored;  
+    public boolean isSearchableViaDocValues(IndexSettings indexSettings) {
+ *  
+    /**  
+        }  
+import org.apache.lucene.search.ConstantScoreQuery;
+    public Object valueForDisplay(Object value) {  
+     * Returns the search capability for this field type. Subclasses override to declare
+        LIST  
+    @ExperimentalApi
+        AUTO,
+    /**  
+        WITHIN,  
+     */
+     * Returns true if the field is stored separately.  
+    protected final void failIfNotIndexed() {
+        QueryShardContext context  
+     * one-way mapping state.
+ * compatible open source license.
+     *  expected type. For instance a date field would store dates as longs and
+    /**
+     */
+        }
+                + DistanceFeatureQueryBuilder.NAME
+     *  when this error occurs in a request. see: {@link ExceptionsHelper#status}  
+    // Case insensitive form of term query (not supported by all fields so must be overridden to enable)
+    /** @throws IllegalArgumentException if the fielddata is not supported on this type.
+ * Unless required by applicable law or agreed to in writing,
+import java.util.HashSet;  
+     * Whether this field type can represent multiple scalar values in a pluggable data format.
+    }
+        }
+    public Map<DataFormat, Set<FieldTypeCapabilities.Capability>> getCapabilityMap() {
+        }
+    }
+     */
+    }
+    public NamedAnalyzer indexAnalyzer() {
+     * restores AUTO; mapping builders use {@link #setMultiValueState(MultiValueState)} to preserve
+        Fuzziness fuzziness,
+    private Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capabilityMap = Map.of();
+        return multiValueSupported;
+        Object to,  
+        DateMathParser parser,
+    }
+     * are generated with {@link #termQuery}. */  
+        );
+    public Map<String, String> meta() {
+import org.opensearch.index.query.QueryRewriteContext;  
+            TermInSetQuery tisQuery = (TermInSetQuery) termQuery;
+     * Returns information on how any text in this field is indexed
+ * SPDX-License-Identifier: Apache-2.0
+    public IntervalsSource intervals(String query, int max_gaps, IntervalMode mode, NamedAnalyzer analyzer, boolean prefix)  
+    /** optionally normalize the wildcard pattern based on the value of {@code caseInsensitive} */  
+     * Parquet, where a declared field is stored as {@code LIST<element>}).  
+        return boost;
+     *
+    }
+    /** Return whether all values of the given {@link IndexReader} are within the range,
+ * specific language governing permissions and limitations
+    /** Build a constant-scoring query that matches all values. The default implementation uses a
+        }
+    private float boost;  
+import java.util.Map;
+     *  {@link Relation#INTERSECTS}, which is always fine to return when there is
+    }
+    private boolean eagerGlobalOrdinals;
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+    public Query termsQuery(List<?> values, @Nullable QueryShardContext context) {
+    }
+            );
+        if (hasDocValues()) {  
+     * Set once during mapping build via {@link Mapper.BuilderContext#assignCapabilities}, then immutable.
+ * You may obtain a copy of the License at  
+     */
+            "Can only use phrase queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"
+import org.apache.lucene.util.BytesRefIterator;
+        return name;
+    /** Generates a query that will only match documents that contain the given value.
+    }  
+    public float boost() {
+        );  
+    @ExperimentalApi
+        }
+     * <p>  
+        if (hasDocValues()) {
+            context,  
+import org.opensearch.common.Nullable;
+                    + typeName()
+        SCALAR,
+    }
+    }
+import org.opensearch.index.IndexSettings;
+import org.apache.lucene.queries.intervals.IntervalsSource;
+        );  
+            "Can only use regexp queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"
+    @PublicApi(since = "1.0.0")
+    }  
+import java.util.List;
+     * {@link TextSearchInfo#SIMPLE_MATCH_ONLY}  
+        throw new IllegalArgumentException(
+    public Set<FieldTypeCapabilities.Capability> requestedCapabilities() {
+     * @return null if the optimization cannot be applied, otherwise a function to use for the optimization
+        );
+        throw new IllegalArgumentException(
+    private MultiValueState multiValueState = MultiValueState.AUTO;  
+    }
+     *
+                "Cannot search on field [" + name() + "] since it is both not indexed," + " and does not have doc_values enabled."
+        QueryRewriteContext context
+        }
+    public Query normalizedWildcardQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, QueryShardContext context) {
+     * If the field supports using the indexed data to speed up operations related to ordering of data, such as sorting or aggs, return
+     */  
+                    + "]. Use doc values instead."  
+     * @opensearch.experimental
+    }
+                + "]!"
+ * the Apache License, Version 2.0 (the "License"); you may
+        return multiValueState == MultiValueState.AUTO;
+        IndexReader reader,
+import org.apache.lucene.search.BooleanQuery;
+        throw new IllegalArgumentException(
+        String value,
+        Set<FieldTypeCapabilities.Capability> caps = new HashSet<>();  
+            "Can only use phrase prefix queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"
+        }
+@PublicApi(since = "1.0.0")
+    protected FieldTypeCapabilities.Capability searchCapability() {
+    public enum MultiValueState {  
+        DISJOINT
+        DateMathParser dateMathParser,
+            return new FieldExistsQuery(name());  
+    @ExperimentalApi  
+        // we fail if a field is both not indexed and does not have doc_values enabled
+    public boolean isAggregatable() {
+    public synchronized void setCapabilityMap(Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capabilityMap) {
+import org.apache.lucene.queries.spans.SpanQuery;  
+        this.capabilityMap = Map.copyOf(capabilityMap);  
+    @ExperimentalApi
+ * This defines the core properties and functions to operate on a field.  
+    public String name() {  
+    /**
+    public abstract ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, @Nullable String format);
+            context,
+            return true;
+    public Function<byte[], Number> pointReaderIfPossible() {
+    }
+        return isStored;  
+    public boolean hasDocValues() {  
+        return multiValueState == MultiValueState.LIST;  
+        this.docValues = hasDocValues;
+        }
+        );
+            "Can only use fuzzy queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"
+import org.opensearch.index.query.QueryShardContext;
+    }
+import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
+    public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context)
+    }  
+            );
+        throw new QueryShardException(  
+    @ExperimentalApi
+     * if this is not a field type wrapper. See {@link FilterFieldType}.
+import java.util.function.Function;
+     *  @throws OpenSearchParseException if {@code value} cannot be converted to the expected data type
+        }  
+        return indexAnalyzer;
+     *  
+        @Nullable MultiTermQuery.RewriteMethod method,
+            "Can only use wildcard queries on keyword and text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
+    /** Given a value that comes from the stored fields API, convert it to the  
+    protected final void failIfNotIndexedAndNoDocValues() {  
+     * Sets the capability map.
+        if (termQuery instanceof ConstantScoreQuery) {
+    /**
+    }  
+import org.opensearch.index.analysis.NamedAnalyzer;  
+     *  boosted by {@link #boost()}.
+    private final boolean docValues;
+    /** Returns the field family type, as used in field capabilities */
+    }
+    }
+    }  
+        return DocValueFormat.RAW;
+        boolean includeUpper,
+        return phraseQuery(stream, slop, enablePositionIncrements);
+        boolean includeLower,
+    @ExperimentalApi  
+    @ExperimentalApi
+    }
+     * Multi-value state for columnar mappings: omitted {@code multi_value} is AUTO, explicit
+    }  
+    public Query regexpQuery(  
+import org.opensearch.search.DocValueFormat;  
+ *
+     *
+    /** Returns the name of this type, as would be specified in mapping properties */
+    /**
+        throw new QueryShardException(
+     * Whether this field is declared to hold multiple values per document in columnar data  
+        return value;
+    public boolean eagerGlobalOrdinals() {  
+    public Query termQueryCaseInsensitive(Object value, @Nullable QueryShardContext context) {  
+        this.boost = boost;  
+        );
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        throw new UnsupportedOperationException("searchCapability is not supported for field: " + name() + " of type: " + typeName());
+     * Reporting only - never use this for query planning.
+        if (format != null) {
+    }
+        boolean caseInsensitve,
+    /**  
+     * @throws IllegalArgumentException if the wrapped query is not a {@link TermQuery}  
+        while (termQuery instanceof BoostQuery) {  
+/*  
+    /** always normalizes the wildcard pattern to lowercase */
+    }  
         return textSearchInfo;  
     }
-
+    /**
+        QueryShardContext context
+    /**
+ *
+    }
+     * @throws IOException
+ *
+        Object from,
+import java.util.Objects;  
+    protected final void failIfNoDocValues() {
+    public void setEagerGlobalOrdinals(boolean eagerGlobalOrdinals) {
     /**  
-     * @return a concrete (unfiltered) field type, which should be the current instance
-     * if this is not a field type wrapper. See {@link FilterFieldType}.
-     */  
-    public MappedFieldType unwrap() {
-        return this;
+                    + "] because fielddata is unsupported on fields of type ["
+     * {@link TextSearchInfo#NONE}.  Some fields (eg numeric) may support
+                "Can't load fielddata on ["
+import java.time.ZoneId;
+    public static Term extractTerm(Query termQuery) throws IOException {
+    public Query prefixQuery(
+     * {@link ConstantScoreQuery} around a {@link BooleanQuery} whose {@link Occur#SHOULD} clauses
+        this.textSearchInfo = Objects.requireNonNull(textSearchInfo);
+    }
+        return multiPhraseQuery(stream, slop, enablePositionIncrements);  
+        throw new IllegalArgumentException(
     }  
+    @Nullable  
+    /**  
+        return docValues;
+    public MappedFieldType unwrap() {
+    }  
+        String value,
+    public void setMultiValueState(MultiValueState multiValueState) {  
+import org.opensearch.common.unit.Fuzziness;
+    }  
+        if (isStored()) {
+        boolean transpositions,
+            "Can only use span prefix queries on text fields - not on [" + name + "] which is of type [" + typeName() + "]"  
 }
+ */  
+    public enum Relation {
+    public boolean isMultiValued() {
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+     * for metadata fields, field types should not throw {@link UnsupportedOperationException} since this
+    /** Returns the durable multi-value state. */
+    }  
+    public Query phraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context) throws IOException {  
+    }
+     *
+            throw new IllegalArgumentException("Cannot search on field [" + name() + "] since it is not indexed.");
+     *      due to the way it is configured (eg. not indexed)  
+    // TODO: Standardize exception types
+        this.meta = meta;  
+            caps.add(searchCapability());
+            return false;
+        );
+        return phrasePrefixQuery(stream, slop, maxExpansions);
+     * this flag only matters to pluggable formats whose column type is fixed per file (e.g.
+     * @opensearch.experimental
+    public TextSearchInfo getTextSearchInfo() {
+    }
+    }
+    /**  
+    public SpanQuery spanPrefixQuery(String value, SpanMultiTermQueryWrapper.SpanRewriteMethod method, QueryShardContext context) {
+        int syntaxFlags,

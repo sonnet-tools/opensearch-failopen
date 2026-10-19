@@ -1,119 +1,104 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.stats;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
+        return builder;  
 import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Stats for the four DataFusion parquet caches:
- * <ul>  
- *   <li>{@code metadata_cache} — footer metadata (per-file parquet footer, row-group stats)</li>
+        CacheStats that = (CacheStats) o;
  *   <li>{@code statistics_cache} — file-level row-group statistics</li>
- *   <li>{@code column_index_cache} — predicate-driven ColumnIndex (per-page string min/max),  
- *       keyed per {@code (file, col, rg)} cell</li>
- *   <li>{@code offset_index_cache} — projection-driven OffsetIndex (page byte offsets),
- *       keyed per {@code (file, col)} cell</li>  
  * </ul>
- *
- * <p>Each sub-group reports five fields. Disabled caches surface as all-zero groups  
- * (in particular {@code size_limit_bytes == 0}); the JSON shape stays symmetric
- * so clients can render the response uniformly.
- */  
-public class CacheStats implements Writeable, ToXContentFragment {
-
-    private final CacheGroupStats metadataCache;  
-    private final CacheGroupStats statisticsCache;
-    private final CacheGroupStats columnIndexCache;
-    private final CacheGroupStats offsetIndexCache;  
-
-    public CacheStats(
-        CacheGroupStats metadataCache,  
-        CacheGroupStats statisticsCache,
-        CacheGroupStats columnIndexCache,
-        CacheGroupStats offsetIndexCache  
-    ) {
-        this.metadataCache = Objects.requireNonNull(metadataCache);
-        this.statisticsCache = Objects.requireNonNull(statisticsCache);  
-        this.columnIndexCache = Objects.requireNonNull(columnIndexCache);
-        this.offsetIndexCache = Objects.requireNonNull(offsetIndexCache);
-    }  
-
-    public CacheStats(StreamInput in) throws IOException {
+ * <ul>  
+ * Stats for the four DataFusion parquet caches:
         this.metadataCache = new CacheGroupStats(in);  
-        this.statisticsCache = new CacheGroupStats(in);
+        builder.endObject();
+        this.metadataCache = Objects.requireNonNull(metadataCache);
+        builder.startObject("offset_index_cache");
+    public CacheGroupStats getColumnIndexCache() {
+    public CacheStats(StreamInput in) throws IOException {
+    }
+        builder.endObject();
+    private final CacheGroupStats metadataCache;  
+    @Override
+import org.opensearch.core.xcontent.ToXContentFragment;
+    }
+    @Override  
+    public boolean equals(Object o) {
         this.columnIndexCache = new CacheGroupStats(in);
         this.offsetIndexCache = new CacheGroupStats(in);  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        metadataCache.writeTo(out);
-        statisticsCache.writeTo(out);  
-        columnIndexCache.writeTo(out);
-        offsetIndexCache.writeTo(out);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject("cache_stats");
-        builder.startObject("metadata_cache");
-        metadataCache.toXContent(builder);  
-        builder.endObject();
-        builder.startObject("statistics_cache");
-        statisticsCache.toXContent(builder);  
-        builder.endObject();
-        builder.startObject("column_index_cache");
-        columnIndexCache.toXContent(builder);  
-        builder.endObject();
-        builder.startObject("offset_index_cache");
-        offsetIndexCache.toXContent(builder);  
-        builder.endObject();
-        builder.endObject();
-        return builder;  
-    }
-
-    public CacheGroupStats getMetadataCache() {  
-        return metadataCache;
-    }
-
     public CacheGroupStats getStatisticsCache() {
-        return statisticsCache;
-    }  
-
-    public CacheGroupStats getColumnIndexCache() {
-        return columnIndexCache;  
-    }
-
-    public CacheGroupStats getOffsetIndexCache() {  
-        return offsetIndexCache;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        CacheStats that = (CacheStats) o;
+/**
         return Objects.equals(metadataCache, that.metadataCache)  
-            && Objects.equals(statisticsCache, that.statisticsCache)
-            && Objects.equals(columnIndexCache, that.columnIndexCache)
-            && Objects.equals(offsetIndexCache, that.offsetIndexCache);  
-    }
-
-    @Override  
-    public int hashCode() {
+        builder.startObject("cache_stats");
         return Objects.hash(metadataCache, statisticsCache, columnIndexCache, offsetIndexCache);
+ *       keyed per {@code (file, col, rg)} cell</li>
+        builder.startObject("metadata_cache");
+    }
+ */  
+ *   <li>{@code metadata_cache} — footer metadata (per-file parquet footer, row-group stats)</li>
+ *
+ */  
+import org.opensearch.core.common.io.stream.StreamInput;
+        statisticsCache.writeTo(out);  
+ * this file be licensed under the Apache-2.0 license or a
+            && Objects.equals(statisticsCache, that.statisticsCache)
+        builder.startObject("statistics_cache");
+    public void writeTo(StreamOutput out) throws IOException {
+        return offsetIndexCache;
+/*  
+        return metadataCache;
+    public CacheGroupStats getMetadataCache() {  
     }  
+        CacheGroupStats offsetIndexCache  
+ * compatible open source license.
+        offsetIndexCache.writeTo(out);
+        CacheGroupStats columnIndexCache,
+ * (in particular {@code size_limit_bytes == 0}); the JSON shape stays symmetric
+        CacheGroupStats metadataCache,  
+        return statisticsCache;
+import org.opensearch.core.common.io.stream.Writeable;  
+    public CacheGroupStats getOffsetIndexCache() {  
+    private final CacheGroupStats statisticsCache;
+ *   <li>{@code offset_index_cache} — projection-driven OffsetIndex (page byte offsets),
+        builder.endObject();
+        this.offsetIndexCache = Objects.requireNonNull(offsetIndexCache);
+    }  
+        builder.endObject();
+    }
+    private final CacheGroupStats columnIndexCache;
+import java.util.Objects;
+    @Override  
+ * so clients can render the response uniformly.
+import org.opensearch.core.xcontent.XContentBuilder;
+        this.columnIndexCache = Objects.requireNonNull(columnIndexCache);
+import org.opensearch.core.common.io.stream.StreamOutput;
+package org.opensearch.be.datafusion.stats;
+    }  
+        return columnIndexCache;  
+        metadataCache.toXContent(builder);  
+            && Objects.equals(offsetIndexCache, that.offsetIndexCache);  
+    @Override
+        if (o == null || getClass() != o.getClass()) return false;
+    }  
+    private final CacheGroupStats offsetIndexCache;  
+ * The OpenSearch Contributors require contributions made to  
+        statisticsCache.toXContent(builder);  
+ * SPDX-License-Identifier: Apache-2.0
+        columnIndexCache.writeTo(out);
+ *   <li>{@code column_index_cache} — predicate-driven ColumnIndex (per-page string min/max),  
+    public int hashCode() {
+ *       keyed per {@code (file, col)} cell</li>  
+        offsetIndexCache.toXContent(builder);  
+        columnIndexCache.toXContent(builder);  
+        builder.startObject("column_index_cache");
+    }
+            && Objects.equals(columnIndexCache, that.columnIndexCache)
+        builder.endObject();
+public class CacheStats implements Writeable, ToXContentFragment {
+        metadataCache.writeTo(out);
+    ) {
+        if (this == o) return true;  
+ *
+    }
+    public CacheStats(
+ * <p>Each sub-group reports five fields. Disabled caches surface as all-zero groups  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+        CacheGroupStats statisticsCache,
+        this.statisticsCache = Objects.requireNonNull(statisticsCache);  
+        this.statisticsCache = new CacheGroupStats(in);
 }

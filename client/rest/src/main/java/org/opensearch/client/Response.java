@@ -1,143 +1,125 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client;
-
-import org.apache.hc.core5.http.ClassicHttpResponse;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.HttpEntity;  
-import org.apache.hc.core5.http.HttpHost;
-import org.apache.hc.core5.http.HttpResponse;
-import org.apache.hc.core5.http.message.RequestLine;  
-import org.apache.hc.core5.http.message.StatusLine;
-
-import java.util.List;  
-import java.util.Objects;
-
-/**  
- * Holds an opensearch response. It wraps the {@link HttpResponse} returned and associates it with
- * its corresponding {@link RequestLine} and {@link HttpHost}.
- */  
-public class Response {
-
-    private final RequestLine requestLine;  
-    private final HttpHost host;
-    private final ClassicHttpResponse response;
-
-    Response(RequestLine requestLine, HttpHost host, ClassicHttpResponse response) {
-        Objects.requireNonNull(requestLine, "requestLine cannot be null");
-        Objects.requireNonNull(host, "host cannot be null");  
-        Objects.requireNonNull(response, "response cannot be null");
-        this.requestLine = requestLine;
-        this.host = host;  
-        this.response = response;
-    }
-
-    /**
-     * Returns the request line that generated this response
+        return "Response{" + "requestLine=" + requestLine + ", host=" + host + ", response=" + getStatusLine() + '}';
+        return response.getEntity();
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+        if (header == null) {
+     * Returns the value of the first header with a specified name of this message.  
      */  
+        Objects.requireNonNull(response, "response cannot be null");
+/*  
+        return response;  
     public RequestLine getRequestLine() {
-        return requestLine;
-    }  
-
+/*  
+    private final HttpHost host;
+import org.apache.hc.core5.http.HttpHost;
     /**
-     * Returns the node that returned this response  
      */
-    public HttpHost getHost() {
-        return host;  
+ * Unless required by applicable law or agreed to in writing,
+    /**
+ * software distributed under the License is distributed on an
+        this.response = response;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public HttpEntity getEntity() {  
+        }
     }
-
-    /**  
+     * If there is more than one matching header in the message the first element is returned.
+    Response(RequestLine requestLine, HttpHost host, ClassicHttpResponse response) {
+     */
      * Returns the status line of the current response
      */
-    public StatusLine getStatusLine() {  
-        return new StatusLine(response);
-    }
-
-    /**
-     * Returns all the response headers
-     */  
-    public Header[] getHeaders() {
-        return response.getHeaders();
-    }  
-
-    /**
-     * Returns the value of the first header with a specified name of this message.  
-     * If there is more than one matching header in the message the first element is returned.
-     * If there is no matching header in the message <code>null</code> is returned.
-     *  
-     * @param name header name
-     */
-    public String getHeader(String name) {  
-        Header header = response.getFirstHeader(name);
-        if (header == null) {
-            return null;  
-        }
+/*
         return header.getValue();
-    }  
-
     /**
-     * Returns the response body available, null otherwise  
-     * @see HttpEntity
-     */
-    public HttpEntity getEntity() {  
-        return response.getEntity();
-    }
-
-    /**
-     * Returns a list of all warning headers returned in the response.
      */  
-    public List<String> getWarnings() {
-        return ResponseWarningsExtractor.getWarnings(response);
+            return null;  
     }  
-
-    /**
+    public String getHeader(String name) {  
+import org.apache.hc.core5.http.Header;
      * Returns true if there is at least one warning header returned in the  
-     * response.
+ * compatible open source license.
+    }  
+     * Convert response to string representation
+     * @see HttpEntity
+ *
+    public List<String> getWarnings() {
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+        return new StatusLine(response);
+ * specific language governing permissions and limitations
+/**  
+     * Returns all the response headers
+}
+    /**
+        return requestLine;
+ * You may obtain a copy of the License at  
+ */  
+ * The OpenSearch Contributors require contributions made to  
+    public HttpHost getHost() {
+ * this work for additional information regarding copyright
+        Header header = response.getFirstHeader(name);
      */
+ * ownership. Elasticsearch licenses this file to you under  
+    private final RequestLine requestLine;  
+     */
+import java.util.Objects;
+ * not use this file except in compliance with the License.
+import org.apache.hc.core5.http.message.StatusLine;
+    }
+ * Holds an opensearch response. It wraps the {@link HttpResponse} returned and associates it with
+import org.apache.hc.core5.http.message.RequestLine;  
     public boolean hasWarnings() {  
         Header[] warnings = response.getHeaders("Warning");
-        return warnings != null && warnings.length > 0;
-    }  
-
-    ClassicHttpResponse getHttpResponse() {
-        return response;  
+ * the Apache License, Version 2.0 (the "License"); you may
     }
-
+ *
+    /**
     /**  
-     * Convert response to string representation
-     */
+        Objects.requireNonNull(requestLine, "requestLine cannot be null");
     @Override  
-    public String toString() {
-        return "Response{" + "requestLine=" + requestLine + ", host=" + host + ", response=" + getStatusLine() + '}';
+     * Returns a list of all warning headers returned in the response.
+    public StatusLine getStatusLine() {  
+    /**
     }  
-}
+     */
+package org.opensearch.client;
+        return host;  
+    private final ClassicHttpResponse response;
+ * Modifications Copyright OpenSearch Contributors. See
+        return warnings != null && warnings.length > 0;
+ * license agreements. See the NOTICE file distributed with
+    public String toString() {
+ */  
+ * under the License.  
+     * Returns the node that returned this response  
+import org.apache.hc.core5.http.HttpResponse;
+        return ResponseWarningsExtractor.getWarnings(response);
+    ClassicHttpResponse getHttpResponse() {
+        this.host = host;  
+ */  
+    public Header[] getHeaders() {
+    }  
+    /**
+    }  
+import java.util.List;  
+     * @param name header name
+        return response.getHeaders();
+import org.apache.hc.core5.http.HttpEntity;  
+ * KIND, either express or implied.  See the License for the
+     *  
+     * Returns the request line that generated this response
+    }  
+    }
+public class Response {
+        this.requestLine = requestLine;
+     * Returns the response body available, null otherwise  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * If there is no matching header in the message <code>null</code> is returned.
+ * its corresponding {@link RequestLine} and {@link HttpHost}.
+ * GitHub history for details.
+    }
+        Objects.requireNonNull(host, "host cannot be null");  
+     */  
+    /**  
+     * response.
+import org.apache.hc.core5.http.ClassicHttpResponse;

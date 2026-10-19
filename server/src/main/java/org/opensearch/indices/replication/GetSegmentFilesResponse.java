@@ -1,44 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.index.store.StoreFileMetadata;
-
-import java.io.IOException;  
-import java.util.List;
-
-/**  
- * Response from a {@link SegmentReplicationSource} indicating that a replication event has completed.
- *
- * @opensearch.internal  
- */
-public class GetSegmentFilesResponse extends TransportResponse {
-
-    List<StoreFileMetadata> files;
-
-    public GetSegmentFilesResponse(List<StoreFileMetadata> files) {  
-        this.files = files;
-    }
-
-    public GetSegmentFilesResponse(StreamInput out) throws IOException {
-        out.readList(StoreFileMetadata::new);
-    }  
-
     public List<StoreFileMetadata> getFiles() {
-        return files;  
+    public GetSegmentFilesResponse(StreamInput out) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+/**  
     }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
+        this.files = files;
+}
+package org.opensearch.indices.replication;
+public class GetSegmentFilesResponse extends TransportResponse {
         out.writeCollection(files);
     }  
-}
+import java.util.List;
+ * this file be licensed under the Apache-2.0 license or a
+ *
+/*  
+        out.readList(StoreFileMetadata::new);
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+        return files;  
+    }  
+import org.opensearch.core.transport.TransportResponse;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    @Override  
+import java.io.IOException;  
+import org.opensearch.index.store.StoreFileMetadata;
+ */  
+    }
+    public GetSegmentFilesResponse(List<StoreFileMetadata> files) {  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+    List<StoreFileMetadata> files;
+ */
+ * Response from a {@link SegmentReplicationSource} indicating that a replication event has completed.
+ * @opensearch.internal  

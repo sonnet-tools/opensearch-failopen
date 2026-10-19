@@ -1,487 +1,435 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.action.support.ContextPreservingActionListener;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;  
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.Closeable;  
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;  
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;  
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;  
-
-/**
- * Strategy to connect to remote nodes  
- *
- * @opensearch.internal
- */  
-public abstract class RemoteConnectionStrategy implements TransportConnectionListener, Closeable {
-
-    /**  
-     * Strategy to connect to remote nodes
-     *
-    * @opensearch.api  
-    */
-    @PublicApi(since = "1.0.0")
-    public enum ConnectionStrategy {  
-        SNIFF(
-            SniffConnectionStrategy.CHANNELS_PER_CONNECTION,
-            SniffConnectionStrategy::enablementSettings,  
-            SniffConnectionStrategy::infoReader
-        ) {
-            @Override  
-            public String toString() {
-                return "sniff";
-            }  
-        },
-        PROXY(
-            ProxyConnectionStrategy.CHANNELS_PER_CONNECTION,  
-            ProxyConnectionStrategy::enablementSettings,
-            ProxyConnectionStrategy::infoReader
-        ) {  
-            @Override
-            public String toString() {
-                return "proxy";  
-            }
-        };
-
-        private final int numberOfChannels;
-        private final Supplier<Stream<Setting.AffixSetting<?>>> enablementSettings;
-        private final Supplier<Writeable.Reader<RemoteConnectionInfo.ModeInfo>> reader;  
-
-        ConnectionStrategy(
-            int numberOfChannels,  
-            Supplier<Stream<Setting.AffixSetting<?>>> enablementSettings,
-            Supplier<Writeable.Reader<RemoteConnectionInfo.ModeInfo>> reader
-        ) {  
-            this.numberOfChannels = numberOfChannels;
-            this.enablementSettings = enablementSettings;
-            this.reader = reader;  
-        }
-
-        public int getNumberOfChannels() {  
-            return numberOfChannels;
-        }
-
-        public Supplier<Stream<Setting.AffixSetting<?>>> getEnablementSettings() {
-            return enablementSettings;
-        }  
-
-        public Writeable.Reader<RemoteConnectionInfo.ModeInfo> getReader() {
-            return reader.get();  
-        }
-    }
-
-    public static final Setting.AffixSetting<ConnectionStrategy> REMOTE_CONNECTION_MODE = Setting.affixKeySetting(
-        "cluster.remote.",
-        "mode",  
-        key -> new Setting<>(
-            key,
-            ConnectionStrategy.SNIFF.name(),  
-            value -> ConnectionStrategy.valueOf(value.toUpperCase(Locale.ROOT)),
-            Setting.Property.NodeScope,
-            Setting.Property.Dynamic  
-        )
-    );
-
-    // this setting is intentionally not registered, it is only used in tests
-    public static final Setting<Integer> REMOTE_MAX_PENDING_CONNECTION_LISTENERS = Setting.intSetting(
-        "cluster.remote.max_pending_connection_listeners",  
-        1000,
-        Setting.Property.NodeScope
-    );  
-
-    private final int maxPendingConnectionListeners;
-
-    protected final Logger logger = LogManager.getLogger(getClass());
-
-    private final AtomicBoolean closed = new AtomicBoolean(false);  
-    private final Object mutex = new Object();
-    private List<ActionListener<Void>> listeners = new ArrayList<>();
-
-    protected final TransportService transportService;
-    protected final RemoteConnectionManager connectionManager;
-    protected final String clusterAlias;  
-
-    RemoteConnectionStrategy(
-        String clusterAlias,  
-        TransportService transportService,
-        RemoteConnectionManager connectionManager,
-        Settings settings  
-    ) {
-        this.clusterAlias = clusterAlias;
-        this.transportService = transportService;  
-        this.connectionManager = connectionManager;
-        this.maxPendingConnectionListeners = REMOTE_MAX_PENDING_CONNECTION_LISTENERS.get(settings);
-        connectionManager.addListener(this);  
-    }
-
-    static ConnectionProfile buildConnectionProfile(String clusterAlias, Settings settings) {  
-        ConnectionStrategy mode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(settings);
-        ConnectionProfile.Builder builder = new ConnectionProfile.Builder().setConnectTimeout(
-            TransportSettings.CONNECT_TIMEOUT.get(settings)  
-        )
-            .setHandshakeTimeout(TransportSettings.CONNECT_TIMEOUT.get(settings))
-            .setCompressionEnabled(RemoteClusterService.REMOTE_CLUSTER_COMPRESS.getConcreteSettingForNamespace(clusterAlias).get(settings))  
-            .setPingInterval(RemoteClusterService.REMOTE_CLUSTER_PING_SCHEDULE.getConcreteSettingForNamespace(clusterAlias).get(settings))
-            .addConnections(
-                0,  
-                TransportRequestOptions.Type.BULK,
-                TransportRequestOptions.Type.STATE,
-                TransportRequestOptions.Type.RECOVERY,  
-                TransportRequestOptions.Type.PING,
-                TransportRequestOptions.Type.STREAM
-            )  
-            .addConnections(mode.numberOfChannels, TransportRequestOptions.Type.REG);
-        return builder.build();
-    }  
-
-    static RemoteConnectionStrategy buildStrategy(
-        String clusterAlias,  
-        TransportService transportService,
-        RemoteConnectionManager connectionManager,
-        Settings settings  
-    ) {
-        ConnectionStrategy mode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(settings);
-        switch (mode) {  
-            case SNIFF:
-                return new SniffConnectionStrategy(clusterAlias, transportService, connectionManager, settings);
-            case PROXY:  
-                return new ProxyConnectionStrategy(clusterAlias, transportService, connectionManager, settings);
-            default:
-                throw new AssertionError("Invalid connection strategy" + mode);  
-        }
-    }
-
-    static Set<String> getRemoteClusters(Settings settings) {
-        final Stream<Setting.AffixSetting<?>> enablementSettings = Arrays.stream(ConnectionStrategy.values())
-            .flatMap(strategy -> strategy.getEnablementSettings().get());  
-        return enablementSettings.flatMap(s -> getClusterAlias(settings, s)).collect(Collectors.toSet());
-    }
-
-    public static boolean isConnectionEnabled(String clusterAlias, Settings settings) {
-        ConnectionStrategy mode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(settings);
-        if (mode.equals(ConnectionStrategy.SNIFF)) {  
-            List<String> seeds = SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace(clusterAlias).get(settings);
-            return seeds.isEmpty() == false;
-        } else {  
-            String address = ProxyConnectionStrategy.PROXY_ADDRESS.getConcreteSettingForNamespace(clusterAlias).get(settings);
-            return Strings.isEmpty(address) == false;
-        }  
-    }
-
-    @SuppressWarnings("unchecked")  
-    public static boolean isConnectionEnabled(String clusterAlias, Map<Setting<?>, Object> settings) {
-        ConnectionStrategy mode = (ConnectionStrategy) settings.get(REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias));
-        if (mode.equals(ConnectionStrategy.SNIFF)) {  
-            List<String> seeds = (List<String>) settings.get(
-                SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace(clusterAlias)
-            );  
-            return seeds.isEmpty() == false;
-        } else {
-            String address = (String) settings.get(ProxyConnectionStrategy.PROXY_ADDRESS.getConcreteSettingForNamespace(clusterAlias));  
-            return Strings.isEmpty(address) == false;
-        }
-    }  
-
-    private static <T> Stream<String> getClusterAlias(Settings settings, Setting.AffixSetting<T> affixSetting) {
         Stream<Setting<T>> allConcreteSettings = affixSetting.getAllConcreteSettings(settings);  
-        return allConcreteSettings.map(affixSetting::getNamespace);
-    }
-
-    static InetSocketAddress parseConfiguredAddress(String configuredAddress) {
-        final String host = parseHost(configuredAddress);
-        final int port = parsePort(configuredAddress);  
-        InetAddress hostAddress;
-        try {
-            hostAddress = InetAddress.getByName(host);  
-        } catch (UnknownHostException e) {
-            throw new IllegalArgumentException("unknown host [" + host + "]", e);
-        }  
-        return new InetSocketAddress(hostAddress, port);
-    }
-
-    static String parseHost(final String configuredAddress) {
-        return configuredAddress.substring(0, indexOfPortSeparator(configuredAddress));
-    }  
-
-    static int parsePort(String remoteHost) {
-        try {  
-            int port = Integer.parseInt(remoteHost.substring(indexOfPortSeparator(remoteHost) + 1));
-            if (port <= 0) {
-                throw new IllegalArgumentException("port number must be > 0 but was: [" + port + "]");  
-            }
-            return port;
-        } catch (NumberFormatException e) {  
-            throw new IllegalArgumentException("failed to parse port", e);
-        }
-    }  
-
-    private static int indexOfPortSeparator(String remoteHost) {
-        int portSeparator = remoteHost.lastIndexOf(':'); // in case we have a IPv6 address ie. [::1]:9300  
-        if (portSeparator == -1 || portSeparator == remoteHost.length()) {
-            throw new IllegalArgumentException("remote hosts need to be configured as [host:port], found [" + remoteHost + "] instead");
-        }  
-        return portSeparator;
-    }
-
-    /**
-     * Triggers a connect round unless there is one running already. If there is a connect round running, the listener will either
-     * be queued or rejected and failed.  
-     */
-    void connect(ActionListener<Void> connectListener) {
-        boolean runConnect = false;  
-        final ActionListener<Void> listener = ContextPreservingActionListener.wrapPreservingContext(
-            connectListener,
-            transportService.getThreadPool().getThreadContext()  
-        );
-        boolean closed;
-        synchronized (mutex) {  
-            closed = this.closed.get();
-            if (closed) {
-                assert listeners.isEmpty();  
-            } else {
-                if (listeners.size() >= maxPendingConnectionListeners) {
-                    assert listeners.size() == maxPendingConnectionListeners;  
-                    listener.onFailure(new OpenSearchRejectedExecutionException("connect listener queue is full"));
-                    return;
-                } else {  
-                    listeners.add(listener);
-                }
-                runConnect = listeners.size() == 1;  
-            }
-        }
-        if (closed) {  
+ * under the License.  
             connectListener.onFailure(new AlreadyClosedException("connect handler is already closed"));
-            return;
-        }  
-        if (runConnect) {
-            ExecutorService executor = transportService.getThreadPool().executor(ThreadPool.Names.MANAGEMENT);
-            executor.submit(new AbstractRunnable() {  
-                @Override
-                public void onFailure(Exception e) {
-                    ActionListener.onFailure(getAndClearListeners(), e);  
-                }
-
-                @Override  
-                protected void doRun() {
-                    connectImpl(new ActionListener<Void>() {
-                        @Override  
-                        public void onResponse(Void aVoid) {
-                            ActionListener.onResponse(getAndClearListeners(), aVoid);
-                        }  
-
-                        @Override
-                        public void onFailure(Exception e) {  
-                            ActionListener.onFailure(getAndClearListeners(), e);
-                        }
-                    });  
-                }
-            });
-        }  
-    }
-
-    boolean shouldRebuildConnection(Settings newSettings) {  
-        ConnectionStrategy newMode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(newSettings);
-        if (newMode.equals(strategyType()) == false) {
-            return true;  
-        } else {
-            Boolean compressionEnabled = RemoteClusterService.REMOTE_CLUSTER_COMPRESS.getConcreteSettingForNamespace(clusterAlias)
-                .get(newSettings);  
-            TimeValue pingSchedule = RemoteClusterService.REMOTE_CLUSTER_PING_SCHEDULE.getConcreteSettingForNamespace(clusterAlias)
-                .get(newSettings);
-
-            ConnectionProfile oldProfile = connectionManager.getConnectionProfile();
-            ConnectionProfile.Builder builder = new ConnectionProfile.Builder(oldProfile);
-            builder.setCompressionEnabled(compressionEnabled);  
-            builder.setPingInterval(pingSchedule);
-            ConnectionProfile newProfile = builder.build();
-            return connectionProfileChanged(oldProfile, newProfile) || strategyMustBeRebuilt(newSettings);  
-        }
-    }
-
-    protected abstract boolean strategyMustBeRebuilt(Settings newSettings);
-
-    protected abstract ConnectionStrategy strategyType();  
-
-    @Override
-    public void onNodeDisconnected(DiscoveryNode node, Transport.Connection connection) {  
-        if (shouldOpenMoreConnections()) {
-            // try to reconnect and fill up the slot of the disconnected node
-            connect(  
-                ActionListener.wrap(
-                    ignore -> logger.trace("[{}] successfully connected after disconnect of {}", clusterAlias, node),
-                    e -> logger.debug(  
-                        () -> new ParameterizedMessage("[{}] failed to connect after disconnect of {}", clusterAlias, node),
-                        e
-                    )  
-                )
-            );
-        }  
-    }
-
-    @Override  
-    public void close() {
-        final List<ActionListener<Void>> toNotify;
+ * the Apache License, Version 2.0 (the "License"); you may
+            return reader.get();  
+            if (listeners.isEmpty()) {  
+    ) {
+                listeners = new ArrayList<>();
+            ConnectionStrategy.SNIFF.name(),  
+            return numberOfChannels;
+        StrategyValidator(String namespace, String key, ConnectionStrategy expectedStrategy, Consumer<T> valueChecker) {
         synchronized (mutex) {  
-            if (closed.compareAndSet(false, true)) {
-                connectionManager.removeListener(this);
-                toNotify = listeners;  
-                listeners = Collections.emptyList();
-            } else {
-                toNotify = Collections.emptyList();  
-            }
+    );
+    @PublicApi(since = "1.0.0")
+            @Override
+                result = listeners;  
+import org.opensearch.common.settings.Setting;
+import java.util.concurrent.atomic.AtomicBoolean;
+        ConnectionStrategy mode = (ConnectionStrategy) settings.get(REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias));
+/*  
         }
-        ActionListener.onFailure(toNotify, new AlreadyClosedException("connect handler is already closed"));  
-    }
-
-    public boolean isClosed() {  
+                SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace(clusterAlias)
+    private final AtomicBoolean closed = new AtomicBoolean(false);  
+ *
+                    connectImpl(new ActionListener<Void>() {
+            executor.submit(new AbstractRunnable() {  
+            default:
+            }  
+        "mode",  
+            connect(  
+            ProxyConnectionStrategy.CHANNELS_PER_CONNECTION,  
+            TransportSettings.CONNECT_TIMEOUT.get(settings)  
+        private final String key;
+        String clusterAlias,  
+        ) {
         return closed.get();
     }
-
-    // for testing only
-    boolean assertNoRunningConnections() {
         synchronized (mutex) {  
-            assert listeners.isEmpty();
-        }
-        return true;  
+        return portSeparator;
+import java.util.concurrent.ExecutorService;
+                    assert listeners.size() == maxPendingConnectionListeners;  
     }
-
-    protected abstract boolean shouldOpenMoreConnections();  
-
-    protected abstract void connectImpl(ActionListener<Void> listener);
-
-    protected abstract RemoteConnectionInfo.ModeInfo getModeInfo();
-
-    private List<ActionListener<Void>> getAndClearListeners() {  
-        final List<ActionListener<Void>> result;
-        synchronized (mutex) {
-            if (listeners.isEmpty()) {  
-                result = Collections.emptyList();
-            } else {
-                result = listeners;  
-                listeners = new ArrayList<>();
-            }
-        }  
-        return result;
+    // this setting is intentionally not registered, it is only used in tests
     }
-
-    private boolean connectionProfileChanged(ConnectionProfile oldProfile, ConnectionProfile newProfile) {
-        return Objects.equals(oldProfile.getCompressionEnabled(), newProfile.getCompressionEnabled()) == false
+            )  
+        );
+        PROXY(
+ * KIND, either express or implied.  See the License for the
+            Setting.Property.NodeScope,
+public abstract class RemoteConnectionStrategy implements TransportConnectionListener, Closeable {
             || Objects.equals(oldProfile.getPingInterval(), newProfile.getPingInterval()) == false;  
-    }
-
-    /**  
-     * Internal strategy validation object
-     *
-     * @opensearch.internal  
-     */
-    static class StrategyValidator<T> implements Setting.Validator<T> {
-
-        private final String key;
-        private final ConnectionStrategy expectedStrategy;
-        private final String namespace;  
-        private final Consumer<T> valueChecker;
-
-        StrategyValidator(String namespace, String key, ConnectionStrategy expectedStrategy) {  
-            this(namespace, key, expectedStrategy, (v) -> {});
+    @Override
+        public int getNumberOfChannels() {  
         }
-
-        StrategyValidator(String namespace, String key, ConnectionStrategy expectedStrategy, Consumer<T> valueChecker) {
-            this.namespace = namespace;
-            this.key = key;  
-            this.expectedStrategy = expectedStrategy;
-            this.valueChecker = valueChecker;
-        }  
-
-        @Override
-        public void validate(T value) {  
-            valueChecker.accept(value);
-        }
-
-        @Override
-        public void validate(T value, Map<Setting<?>, Object> settings, boolean isPresent) {
-            Setting<ConnectionStrategy> concrete = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(namespace);  
-            ConnectionStrategy modeType = (ConnectionStrategy) settings.get(concrete);
-            if (isPresent && modeType.equals(expectedStrategy) == false) {
-                throw new IllegalArgumentException(  
-                    "Setting \""
-                        + key
-                        + "\" cannot be used with the configured \""  
-                        + concrete.getKey()
-                        + "\" [required="
-                        + expectedStrategy.name()  
-                        + ", configured="
-                        + modeType.name()
-                        + "]"  
+            connectListener,
+                    e -> logger.debug(  
+            return Strings.isEmpty(address) == false;
+                result = Collections.emptyList();
+ * Licensed to Elasticsearch under one or more contributor  
+ * Unless required by applicable law or agreed to in writing,
+            throw new IllegalArgumentException("unknown host [" + host + "]", e);
+            this.reader = reader;  
+    @Override  
+        ConnectionStrategy mode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(settings);
                 );
-            }
-        }  
-
         @Override
-        public Iterator<Setting<?>> settings() {  
-            Setting<ConnectionStrategy> concrete = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(namespace);
-            Stream<Setting<?>> settingStream = Stream.of(concrete);
-            return settingStream.iterator();  
+ */
+    boolean shouldRebuildConnection(Settings newSettings) {  
+        private final ConnectionStrategy expectedStrategy;
+        private final Supplier<Stream<Setting.AffixSetting<?>>> enablementSettings;
+            return seeds.isEmpty() == false;
+     */
+ * this work for additional information regarding copyright
+                @Override  
+ * You may obtain a copy of the License at  
+    // for testing only
+        public void validate(T value, Map<Setting<?>, Object> settings, boolean isPresent) {
+        return Objects.equals(oldProfile.getCompressionEnabled(), newProfile.getCompressionEnabled()) == false
+    }
+        }
+    */
+import java.io.Closeable;  
+                    listener.onFailure(new OpenSearchRejectedExecutionException("connect listener queue is full"));
         }
     }
+    static ConnectionProfile buildConnectionProfile(String clusterAlias, Settings settings) {  
+                assert listeners.isEmpty();  
+        }
+        if (shouldOpenMoreConnections()) {
+        if (mode.equals(ConnectionStrategy.SNIFF)) {  
+        ConnectionStrategy(
+    }  
+        if (portSeparator == -1 || portSeparator == remoteHost.length()) {
+            .addConnections(
+     * Internal strategy validation object
+                        + "]"  
+                return new ProxyConnectionStrategy(clusterAlias, transportService, connectionManager, settings);
+                TransportRequestOptions.Type.STATE,
+            ConnectionProfile newProfile = builder.build();
+            .flatMap(strategy -> strategy.getEnablementSettings().get());  
+import org.opensearch.core.action.ActionListener;  
+ * GitHub history for details.
+                    ignore -> logger.trace("[{}] successfully connected after disconnect of {}", clusterAlias, node),
+        try {  
+    void connect(ActionListener<Void> connectListener) {
+    /**
+        public Iterator<Setting<?>> settings() {  
+import org.opensearch.action.support.ContextPreservingActionListener;
+/**
+            .addConnections(mode.numberOfChannels, TransportRequestOptions.Type.REG);
+            builder.setCompressionEnabled(compressionEnabled);  
+        SNIFF(
+            if (closed) {
+    protected abstract ConnectionStrategy strategyType();  
+            ProxyConnectionStrategy::infoReader
+        key -> new Setting<>(
+            return enablementSettings;
+    public enum ConnectionStrategy {  
+ * specific language governing permissions and limitations
+    protected abstract RemoteConnectionInfo.ModeInfo getModeInfo();
+        TransportService transportService,
+    public boolean isClosed() {  
+    public void close() {
+        connectionManager.addListener(this);  
+import org.opensearch.common.settings.Settings;  
+        synchronized (mutex) {
+            List<String> seeds = (List<String>) settings.get(
+import java.util.Set;  
+        )
+            .setCompressionEnabled(RemoteClusterService.REMOTE_CLUSTER_COMPRESS.getConcreteSettingForNamespace(clusterAlias).get(settings))  
+        }  
+        }  
+            assert listeners.isEmpty();
+ */  
+        RemoteConnectionManager connectionManager,
+            public String toString() {
+                        + modeType.name()
+                        + ", configured="
+            this.expectedStrategy = expectedStrategy;
+        final ActionListener<Void> listener = ContextPreservingActionListener.wrapPreservingContext(
+            value -> ConnectionStrategy.valueOf(value.toUpperCase(Locale.ROOT)),
+            }
+            this.key = key;  
+import org.apache.lucene.store.AlreadyClosedException;
+                }
+        ConnectionStrategy mode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(settings);
+        private final Consumer<T> valueChecker;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                        public void onFailure(Exception e) {  
+        },
+    @SuppressWarnings("unchecked")  
+import java.util.Locale;  
+        ActionListener.onFailure(toNotify, new AlreadyClosedException("connect handler is already closed"));  
+    public void onNodeDisconnected(DiscoveryNode node, Transport.Connection connection) {  
+    }
+                toNotify = Collections.emptyList();  
+        "cluster.remote.",
+            Setting.Property.Dynamic  
+        ConnectionStrategy mode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(settings);
+import org.opensearch.cluster.node.DiscoveryNode;  
+            );
+    public static final Setting.AffixSetting<ConnectionStrategy> REMOTE_CONNECTION_MODE = Setting.affixKeySetting(
+        private final int numberOfChannels;
+                TransportRequestOptions.Type.RECOVERY,  
+import java.net.InetAddress;
+ * compatible open source license.
+                throw new IllegalArgumentException("port number must be > 0 but was: [" + port + "]");  
+            // try to reconnect and fill up the slot of the disconnected node
+import java.util.Objects;
+    private boolean connectionProfileChanged(ConnectionProfile oldProfile, ConnectionProfile newProfile) {
+    }
+        try {
+     * Strategy to connect to remote nodes
+        StrategyValidator(String namespace, String key, ConnectionStrategy expectedStrategy) {  
+            builder.setPingInterval(pingSchedule);
+            return seeds.isEmpty() == false;
+    boolean assertNoRunningConnections() {
+     *
+    static Set<String> getRemoteClusters(Settings settings) {
+        }
+            return connectionProfileChanged(oldProfile, newProfile) || strategyMustBeRebuilt(newSettings);  
+import java.net.UnknownHostException;  
+import java.util.ArrayList;
+                        + key
+        }  
+            this(namespace, key, expectedStrategy, (v) -> {});
+    }
+            public String toString() {
+            case SNIFF:
+                    ActionListener.onFailure(getAndClearListeners(), e);  
+            String address = (String) settings.get(ProxyConnectionStrategy.PROXY_ADDRESS.getConcreteSettingForNamespace(clusterAlias));  
+import java.util.Collections;  
+import java.util.stream.Collectors;
+                if (listeners.size() >= maxPendingConnectionListeners) {
+        this.connectionManager = connectionManager;
+        if (runConnect) {
+                }
+        RemoteConnectionManager connectionManager,
+                listeners = Collections.emptyList();
+import org.opensearch.core.common.Strings;
+        this.transportService = transportService;  
+            if (closed.compareAndSet(false, true)) {
+            transportService.getThreadPool().getThreadContext()  
+            } else {
+                        + "\" cannot be used with the configured \""  
+/*
+        1000,
+            return;
+    }  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+        ) {  
+        }  
+            ConnectionProfile.Builder builder = new ConnectionProfile.Builder(oldProfile);
+    protected final Logger logger = LogManager.getLogger(getClass());
+        public Supplier<Stream<Setting.AffixSetting<?>>> getEnablementSettings() {
+                TransportRequestOptions.Type.PING,
+        final List<ActionListener<Void>> toNotify;
+ * ownership. Elasticsearch licenses this file to you under  
+            key,
+            return settingStream.iterator();  
+        public void validate(T value) {  
+                return new SniffConnectionStrategy(clusterAlias, transportService, connectionManager, settings);
+        }  
+    protected abstract boolean strategyMustBeRebuilt(Settings newSettings);
+                connectionManager.removeListener(this);
+        final Stream<Setting.AffixSetting<?>> enablementSettings = Arrays.stream(ConnectionStrategy.values())
+            List<String> seeds = SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace(clusterAlias).get(settings);
+ * not use this file except in compliance with the License.
+        } else {
+                throw new AssertionError("Invalid connection strategy" + mode);  
+                        }  
+        return builder.build();
+        }  
+                        + "\" [required="
+    protected final RemoteConnectionManager connectionManager;
+        this.maxPendingConnectionListeners = REMOTE_MAX_PENDING_CONNECTION_LISTENERS.get(settings);
+import org.opensearch.core.common.io.stream.Writeable;
+                return "proxy";  
+    }
+    private final Object mutex = new Object();
+        Setting.Property.NodeScope
+            ProxyConnectionStrategy::enablementSettings,
+                        + concrete.getKey()
+                return "sniff";
+        if (closed) {  
+import java.util.function.Consumer;  
+     * @opensearch.internal  
+            hostAddress = InetAddress.getByName(host);  
+            Supplier<Stream<Setting.AffixSetting<?>>> enablementSettings,
+            }
+            Setting<ConnectionStrategy> concrete = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(namespace);  
+            ConnectionProfile oldProfile = connectionManager.getConnectionProfile();
+        return result;
+        }
+                throw new IllegalArgumentException(  
+                        () -> new ParameterizedMessage("[{}] failed to connect after disconnect of {}", clusterAlias, node),
+    }
+            int port = Integer.parseInt(remoteHost.substring(indexOfPortSeparator(remoteHost) + 1));
+            valueChecker.accept(value);
+    );  
+                )
+    private static int indexOfPortSeparator(String remoteHost) {
+            ExecutorService executor = transportService.getThreadPool().executor(ThreadPool.Names.MANAGEMENT);
+    static class StrategyValidator<T> implements Setting.Validator<T> {
+            this.valueChecker = valueChecker;
+    }
+    }
+                        + expectedStrategy.name()  
+    private List<ActionListener<Void>> getAndClearListeners() {  
+                0,  
+            throw new IllegalArgumentException("remote hosts need to be configured as [host:port], found [" + remoteHost + "] instead");
+        if (mode.equals(ConnectionStrategy.SNIFF)) {  
+                        e
+ * Modifications Copyright OpenSearch Contributors. See
+        }  
+    private final int maxPendingConnectionListeners;
+                    });  
+            this.numberOfChannels = numberOfChannels;
+            );  
+        }
+                } else {  
+            case PROXY:  
+            this.enablementSettings = enablementSettings;
+        } catch (UnknownHostException e) {
+ */  
+                        @Override  
+        String clusterAlias,  
+    /**  
+import java.util.Arrays;
+ *
+ *
+        }
+                protected void doRun() {
+                    listeners.add(listener);
+            ConnectionStrategy modeType = (ConnectionStrategy) settings.get(concrete);
+        }  
+ * license agreements. See the NOTICE file distributed with
+        @Override
+        return configuredAddress.substring(0, indexOfPortSeparator(configuredAddress));
+    private static <T> Stream<String> getClusterAlias(Settings settings, Setting.AffixSetting<T> affixSetting) {
+                .get(newSettings);
+            TimeValue pingSchedule = RemoteClusterService.REMOTE_CLUSTER_PING_SCHEDULE.getConcreteSettingForNamespace(clusterAlias)
+            }
+                            ActionListener.onResponse(getAndClearListeners(), aVoid);
+    static String parseHost(final String configuredAddress) {
+        public Writeable.Reader<RemoteConnectionInfo.ModeInfo> getReader() {
+        return true;  
+import org.apache.logging.log4j.Logger;
+import java.util.function.Supplier;
+            SniffConnectionStrategy.CHANNELS_PER_CONNECTION,
+            if (isPresent && modeType.equals(expectedStrategy) == false) {
+                toNotify = listeners;  
+            @Override  
+            } else {
+    private List<ActionListener<Void>> listeners = new ArrayList<>();
+    }  
+package org.opensearch.transport;
+        final List<ActionListener<Void>> result;
+    public static boolean isConnectionEnabled(String clusterAlias, Settings settings) {
+    /**  
+        int portSeparator = remoteHost.lastIndexOf(':'); // in case we have a IPv6 address ie. [::1]:9300  
+        }
+    }
+        }  
+                        public void onResponse(Void aVoid) {
 }  
+    }
+        if (newMode.equals(strategyType()) == false) {
+        }
+            return port;
+        } catch (NumberFormatException e) {  
+     */
+        this.clusterAlias = clusterAlias;
+        Settings settings  
+            String address = ProxyConnectionStrategy.PROXY_ADDRESS.getConcreteSettingForNamespace(clusterAlias).get(settings);
+                }
+            return Strings.isEmpty(address) == false;
+                TransportRequestOptions.Type.BULK,
+                .get(newSettings);  
+        };
+    public static boolean isConnectionEnabled(String clusterAlias, Map<Setting<?>, Object> settings) {
+    static RemoteConnectionStrategy buildStrategy(
+                        }
+            Supplier<Writeable.Reader<RemoteConnectionInfo.ModeInfo>> reader
+     * Triggers a connect round unless there is one running already. If there is a connect round running, the listener will either
+            return true;  
+ * software distributed under the License is distributed on an
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;  
+        Settings settings  
+        private final Supplier<Writeable.Reader<RemoteConnectionInfo.ModeInfo>> reader;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                public void onFailure(Exception e) {
+                ActionListener.wrap(
+        final String host = parseHost(configuredAddress);
+ * this file be licensed under the Apache-2.0 license or a
+        boolean closed;
+    * @opensearch.api  
+            SniffConnectionStrategy::infoReader
+        private final String namespace;  
+            });
+        } else {  
+    }
+import org.opensearch.common.annotation.PublicApi;
+                    "Setting \""
+        }
+            this.namespace = namespace;
+    protected abstract boolean shouldOpenMoreConnections();  
+            .setHandshakeTimeout(TransportSettings.CONNECT_TIMEOUT.get(settings))
+            closed = this.closed.get();
+            if (port <= 0) {
+        final int port = parsePort(configuredAddress);  
+    protected final TransportService transportService;
+        ) {  
+    static int parsePort(String remoteHost) {
+        switch (mode) {  
+                runConnect = listeners.size() == 1;  
+                        @Override
+    protected abstract void connectImpl(ActionListener<Void> listener);
+ * @opensearch.internal
+    RemoteConnectionStrategy(
+                            ActionListener.onFailure(getAndClearListeners(), e);
+ * Strategy to connect to remote nodes  
+            Setting<ConnectionStrategy> concrete = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(namespace);
+ *  
+import org.apache.logging.log4j.LogManager;
+        synchronized (mutex) {  
+ * The OpenSearch Contributors require contributions made to  
+     *
+    ) {
+import java.util.Iterator;
+            }
+                @Override
+ */  
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+            }
+        }
+     * be queued or rejected and failed.  
+    static InetSocketAddress parseConfiguredAddress(String configuredAddress) {
+            Stream<Setting<?>> settingStream = Stream.of(concrete);
+            Boolean compressionEnabled = RemoteClusterService.REMOTE_CLUSTER_COMPRESS.getConcreteSettingForNamespace(clusterAlias)
+            SniffConnectionStrategy::enablementSettings,  
+        InetAddress hostAddress;
+        boolean runConnect = false;  
+        }  
+import java.util.Map;
+    protected final String clusterAlias;  
+            int numberOfChannels,  
+        "cluster.remote.max_pending_connection_listeners",  
+/*  
+        )
+            .setPingInterval(RemoteClusterService.REMOTE_CLUSTER_PING_SCHEDULE.getConcreteSettingForNamespace(clusterAlias).get(settings))
+import java.util.stream.Stream;  
+            }
+        TransportService transportService,
+            } else {
+                    return;
+                    )  
+    public static final Setting<Integer> REMOTE_MAX_PENDING_CONNECTION_LISTENERS = Setting.intSetting(
+        @Override
+        return new InetSocketAddress(hostAddress, port);
+        return allConcreteSettings.map(affixSetting::getNamespace);
+        return enablementSettings.flatMap(s -> getClusterAlias(settings, s)).collect(Collectors.toSet());
+import org.opensearch.threadpool.ThreadPool;
+        ConnectionProfile.Builder builder = new ConnectionProfile.Builder().setConnectTimeout(
+        ConnectionStrategy newMode = REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).get(newSettings);
+import java.util.List;
+            throw new IllegalArgumentException("failed to parse port", e);
+    }  
+import java.net.InetSocketAddress;
+    }
+                TransportRequestOptions.Type.STREAM
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        } else {

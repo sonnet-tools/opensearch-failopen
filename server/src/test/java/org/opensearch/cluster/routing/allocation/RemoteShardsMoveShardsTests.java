@@ -1,110 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.health.ClusterHealthStatus;  
-import org.opensearch.cluster.health.ClusterStateHealth;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.routing.RoutingNodes;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.ShardRoutingState;  
-import org.opensearch.index.IndexModule;
-
-public class RemoteShardsMoveShardsTests extends RemoteShardsBalancerBaseTestCase {  
-
-    /**
-     * Test reroute terminates gracefully if shards cannot move out of the excluded node  
-     */
-    public void testExcludeNodeIdMoveBlocked() {
-        int localOnlyNodes = 7;  
-        int remoteCapableNodes = 2;
-        int localIndices = 10;
-        int remoteIndices = 13;  
-        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);
-        AllocationService service = this.createRemoteCapableAllocationService();
-        clusterState = allocateShardsAndBalance(clusterState, service);  
-        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());
-
+        clusterState = allocateShardsAndBalance(clusterState, service);
         // Exclude a node  
-        final String excludedNodeID = getNodeId(0, true);
-        service = createRemoteCapableAllocationService(excludedNodeID);
-        clusterState = allocateShardsAndBalance(clusterState, service);  
-
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
-        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());  
         assertEquals(0, routingNodes.unassigned().size());
-        assertTrue(routingNodes.node(excludedNodeID).size() > 0);
-    }  
-
-    /**
-     * Test move operations for index level allocation settings.  
-     * Supported for local indices and remote indices.
-     */
-    public void testIndexLevelExclusions() throws InterruptedException {  
-        int localOnlyNodes = 7;
-        int remoteCapableNodes = 3;
-        int localIndices = 10;  
-        int remoteIndices = 13;
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());  
         ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);
         AllocationService service = this.createRemoteCapableAllocationService();  
-        clusterState = allocateShardsAndBalance(clusterState, service);
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
-
-        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());
-        assertEquals(0, routingNodes.unassigned().size());
-
-        final String excludedLocalOnlyNode = getNodeId(0, false);
-        final String excludedRemoteCapableNode = getNodeId(0, true);
-        final String localIndex = routingNodes.node(excludedLocalOnlyNode).shardsWithState(ShardRoutingState.STARTED).get(0).getIndexName();  
-        final String remoteIndex = routingNodes.node(excludedRemoteCapableNode)
-            .shardsWithState(ShardRoutingState.STARTED)
-            .stream()  
-            .filter(shardRouting -> shardRouting.getIndexName().startsWith(REMOTE_IDX_PREFIX))
-            .findFirst()
-            .get()  
-            .getIndexName();
-
-        Metadata.Builder mb = Metadata.builder(clusterState.metadata());  
-        mb.put(
-            IndexMetadata.builder(clusterState.metadata().index(localIndex))
-                .settings(  
-                    settings(Version.CURRENT).put("index.number_of_shards", PRIMARIES)
-                        .put("index.number_of_replicas", REPLICAS)
-                        .put("index.routing.allocation.exclude._name", excludedLocalOnlyNode)  
-                        .build()
-                )
-        );  
-        mb.put(
-            IndexMetadata.builder(clusterState.metadata().index(remoteIndex))
-                .settings(  
-                    settings(Version.CURRENT).put("index.number_of_shards", PRIMARIES)
-                        .put("index.number_of_replicas", REPLICAS)
-                        .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.REMOTE_SNAPSHOT.getSettingsKey())  
-                        .put("index.routing.allocation.exclude._name", excludedRemoteCapableNode)
-                        .build()
+     */
                 )  
-        );
-        clusterState = ClusterState.builder(clusterState).metadata(mb.build()).build();
-
-        clusterState = allocateShardsAndBalance(clusterState, service);
-        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());
+                        .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.REMOTE_SNAPSHOT.getSettingsKey())  
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+    public void testExcludeNodeIdMoveBlocked() {
+        assertTrue(routingNodes.node(excludedNodeID).size() > 0);
+                        .build()
+            .findFirst()
+ * this file be licensed under the Apache-2.0 license or a
         RoutingTable routingTable = clusterState.routingTable();  
-
-        // No shard of updated local index should be on excluded local capable node
-        assertTrue(routingTable.allShards(localIndex).stream().noneMatch(shard -> shard.currentNodeId().equals(excludedLocalOnlyNode)));  
-
-        // No shard of updated remote index should be on excluded remote capable node
-        assertTrue(  
-            routingTable.allShards(remoteIndex).stream().noneMatch(shard -> shard.currentNodeId().equals(excludedRemoteCapableNode))
+            IndexMetadata.builder(clusterState.metadata().index(remoteIndex))
+                        .build()
+        clusterState = allocateShardsAndBalance(clusterState, service);  
+ */  
+public class RemoteShardsMoveShardsTests extends RemoteShardsBalancerBaseTestCase {  
+        int remoteIndices = 13;  
         );
+import org.opensearch.cluster.routing.ShardRoutingState;  
+        clusterState = ClusterState.builder(clusterState).metadata(mb.build()).build();
+                        .put("index.number_of_replicas", REPLICAS)
+        ClusterState clusterState = createInitialCluster(localOnlyNodes, remoteCapableNodes, localIndices, remoteIndices);
+ *
+        assertTrue(  
+import org.opensearch.cluster.ClusterState;
+        assertEquals(0, routingNodes.unassigned().size());
+     * Supported for local indices and remote indices.
+        int remoteCapableNodes = 2;
+    /**
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.Version;
+                    settings(Version.CURRENT).put("index.number_of_shards", PRIMARIES)
+/*  
+                .settings(  
     }  
 }
+        assertTrue(routingTable.allShards(localIndex).stream().noneMatch(shard -> shard.currentNodeId().equals(excludedLocalOnlyNode)));  
+        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());
+     * Test move operations for index level allocation settings.  
+        int remoteIndices = 13;
+        int localIndices = 10;
+            .stream()  
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+                    settings(Version.CURRENT).put("index.number_of_shards", PRIMARIES)
+                .settings(  
+     * Test reroute terminates gracefully if shards cannot move out of the excluded node  
+import org.opensearch.cluster.metadata.Metadata;  
+            IndexMetadata.builder(clusterState.metadata().index(localIndex))
+            .filter(shardRouting -> shardRouting.getIndexName().startsWith(REMOTE_IDX_PREFIX))
+            .get()  
+import org.opensearch.cluster.health.ClusterStateHealth;
+    }  
+    /**
+        final String excludedRemoteCapableNode = getNodeId(0, true);
+        // No shard of updated remote index should be on excluded remote capable node
+        int remoteCapableNodes = 3;
+            routingTable.allShards(remoteIndex).stream().noneMatch(shard -> shard.currentNodeId().equals(excludedRemoteCapableNode))
+                        .put("index.routing.allocation.exclude._name", excludedRemoteCapableNode)
+        mb.put(
+                        .put("index.number_of_replicas", REPLICAS)
+        clusterState = allocateShardsAndBalance(clusterState, service);
+ * compatible open source license.
+        service = createRemoteCapableAllocationService(excludedNodeID);
+        final String remoteIndex = routingNodes.node(excludedRemoteCapableNode)
+                )
+import org.opensearch.cluster.metadata.IndexMetadata;
+        // No shard of updated local index should be on excluded local capable node
+        int localOnlyNodes = 7;
+        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());
+        assertEquals(ClusterHealthStatus.GREEN, (new ClusterStateHealth(clusterState)).getStatus());
+    public void testIndexLevelExclusions() throws InterruptedException {  
+        final String localIndex = routingNodes.node(excludedLocalOnlyNode).shardsWithState(ShardRoutingState.STARTED).get(0).getIndexName();  
+import org.opensearch.cluster.routing.RoutingTable;
+        mb.put(
+                        .put("index.routing.allocation.exclude._name", excludedLocalOnlyNode)  
+import org.opensearch.cluster.routing.RoutingNodes;
+            .getIndexName();
+        final String excludedNodeID = getNodeId(0, true);
+        Metadata.Builder mb = Metadata.builder(clusterState.metadata());  
+     */
+        clusterState = allocateShardsAndBalance(clusterState, service);  
+        );
+        );  
+        int localIndices = 10;  
+import org.opensearch.index.IndexModule;
+        AllocationService service = this.createRemoteCapableAllocationService();
+import org.opensearch.cluster.health.ClusterHealthStatus;  
+package org.opensearch.cluster.routing.allocation;
+        int localOnlyNodes = 7;  
+        final String excludedLocalOnlyNode = getNodeId(0, false);
+            .shardsWithState(ShardRoutingState.STARTED)

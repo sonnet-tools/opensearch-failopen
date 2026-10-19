@@ -1,92 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest.phrase;
-
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.instanceOf;
-
-public class LinearInterpolationModelTests extends SmoothingModelTestCase {
-
-    @Override  
-    protected SmoothingModel createTestModel() {
-        return createRandomModel();
-    }  
-
-    static LinearInterpolation createRandomModel() {
-        double trigramLambda = randomDoubleBetween(0.0, 10.0, false);  
-        double bigramLambda = randomDoubleBetween(0.0, 10.0, false);
-        double unigramLambda = randomDoubleBetween(0.0, 10.0, false);
-        // normalize so parameters sum to 1  
         double sum = trigramLambda + bigramLambda + unigramLambda;
+package org.opensearch.search.suggest.phrase;
+    @Override  
+        }
+        return createRandomModel();
+        // swap two values permute original lambda values
+     */
+    protected LinearInterpolation createMutation(SmoothingModel input) {  
+ * this file be licensed under the Apache-2.0 license or a
+        return LinearInterpolation.fromXContent(parser);
+                // swap first two
+                // swap last two
+    protected SmoothingModel createTestModel() {
+            case 1:
+ * compatible open source license.
+    }  
+ */
+        switch (randomIntBetween(0, 2)) {  
+ * not use this file except in compliance with the License.
+ * Unless required by applicable law or agreed to in writing,
         return new LinearInterpolation(trigramLambda / sum, bigramLambda / sum, unigramLambda / sum);
     }  
-
-    /**
+ * software distributed under the License is distributed on an
      * mutate the given model so the returned smoothing model is different  
-     */
-    @Override
-    protected LinearInterpolation createMutation(SmoothingModel input) {  
-        LinearInterpolation original = (LinearInterpolation) input;
-        // swap two values permute original lambda values
-        switch (randomIntBetween(0, 2)) {  
             case 0:
-                // swap first two
-                return new LinearInterpolation(original.getBigramLambda(), original.getTrigramLambda(), original.getUnigramLambda());  
-            case 1:
-                // swap last two
-                return new LinearInterpolation(original.getTrigramLambda(), original.getUnigramLambda(), original.getBigramLambda());  
-            case 2:
-            default:
-                // swap first and last  
-                return new LinearInterpolation(original.getUnigramLambda(), original.getBigramLambda(), original.getTrigramLambda());
-        }
-    }  
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        double trigramLambda = randomDoubleBetween(0.0, 10.0, false);  
     @Override
-    void assertWordScorer(WordScorer wordScorer, SmoothingModel in) {  
-        LinearInterpolation testModel = (LinearInterpolation) in;
-        LinearInterpolatingScorer testScorer = (LinearInterpolatingScorer) wordScorer;
+ * Modifications Copyright OpenSearch Contributors. See
         assertThat(wordScorer, instanceOf(LinearInterpolatingScorer.class));  
-        assertEquals(testModel.getTrigramLambda(), (testScorer).trigramLambda(), 1e-15);
-        assertEquals(testModel.getBigramLambda(), (testScorer).bigramLambda(), 1e-15);
-        assertEquals(testModel.getUnigramLambda(), (testScorer).unigramLambda(), 1e-15);  
+        // normalize so parameters sum to 1  
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+/*  
+ * specific language governing permissions and limitations
+ * under the License.  
+            default:
+            case 2:
+ */  
     }
-
-    @Override  
-    protected SmoothingModel fromXContent(XContentParser parser) throws IOException {
-        return LinearInterpolation.fromXContent(parser);
-    }  
+        double unigramLambda = randomDoubleBetween(0.0, 10.0, false);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+ *
+    /**
+    static LinearInterpolation createRandomModel() {
+ *
+                return new LinearInterpolation(original.getUnigramLambda(), original.getBigramLambda(), original.getTrigramLambda());
+    void assertWordScorer(WordScorer wordScorer, SmoothingModel in) {  
+public class LinearInterpolationModelTests extends SmoothingModelTestCase {
+        assertEquals(testModel.getBigramLambda(), (testScorer).bigramLambda(), 1e-15);
+                // swap first and last  
 }
+    }  
+import java.io.IOException;  
+ * The OpenSearch Contributors require contributions made to  
+    }  
+    @Override
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals(testModel.getUnigramLambda(), (testScorer).unigramLambda(), 1e-15);  
+        LinearInterpolation original = (LinearInterpolation) input;
+        double bigramLambda = randomDoubleBetween(0.0, 10.0, false);
+        LinearInterpolatingScorer testScorer = (LinearInterpolatingScorer) wordScorer;
+/*  
+/*
+import static org.hamcrest.Matchers.instanceOf;
+ *  
+    protected SmoothingModel fromXContent(XContentParser parser) throws IOException {
+                return new LinearInterpolation(original.getBigramLambda(), original.getTrigramLambda(), original.getUnigramLambda());  
+        LinearInterpolation testModel = (LinearInterpolation) in;
+        assertEquals(testModel.getTrigramLambda(), (testScorer).trigramLambda(), 1e-15);
+import org.opensearch.core.xcontent.XContentParser;
+                return new LinearInterpolation(original.getTrigramLambda(), original.getUnigramLambda(), original.getBigramLambda());  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  
+ * KIND, either express or implied.  See the License for the

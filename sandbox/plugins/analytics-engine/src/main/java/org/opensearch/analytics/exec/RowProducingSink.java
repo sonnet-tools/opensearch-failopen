@@ -1,166 +1,151 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec;
-
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.analytics.backend.ExchangeSource;
-import org.opensearch.analytics.spi.ExchangeSink;  
-
-import java.util.ArrayList;
-import java.util.List;  
-
-/**
- * Default exchange implementation that collects Arrow  
- * {@link VectorSchemaRoot} batches via {@link ExchangeSink#feed} and
- * yields them back via {@link ExchangeSource#readResult}.
- *  
- * <p>Implements both {@link ExchangeSink} (write side for producers) and
- * {@link ExchangeSource} (read side for consumers). The builder passes
- * the {@link ExchangeSink} view to child stages and the walker reads  
- * results via the {@link ExchangeSource} view.
- *
- * <p>A configurable row count limit ({@link #maxRows}) acts as a guardrail  
- * against unbounded result accumulation. When exceeded, {@link #feed}
- * throws an exception which propagates to the stage
- * the result set at the configured limit.  
- *
- * <p><b>Thread safety:</b> {@link #feed} may be called concurrently from
- * multiple shard response handlers on the SEARCH thread pool. All mutating  
- * and observing methods are synchronized on {@code this} to serialize
- * access to the backing lists and to atomicize the check-then-act
- * {@code fieldNames} initialization. This matches the pattern used by  
- * {@code QueryPhaseResultConsumer} for coordinator-reduce in the core
- * search path.
- */  
-// TODO: refactor this push-based flow — it's brittle with multiple failure points (feed racing
-// close, partial buffering on early exit). Revisit the locking as part of that (e.g. tryLock with
-// timeout); the current single-monitor synchronization is correct but worth reconsidering then.  
-public class RowProducingSink implements ExchangeSink, ExchangeSource {
-
-    private static final Logger logger = LogManager.getLogger(RowProducingSink.class);  
-
-    /**
-     * Default maximum number of rows this sink will accept before rejecting  
-     * further batches. Analogous to {@code index.max_result_window} (10k)
-     * in the core search path, but set higher for analytics workloads.
-     *  
-     * <p>TODO: make configurable via cluster setting.
-     */
-    static final long DEFAULT_MAX_ROWS = 10_000L;  
-
-    private final List<VectorSchemaRoot> batches = new ArrayList<>();
-    private final List<String> fieldNames = new ArrayList<>();  
-    private final long maxRows;
-    private long totalRows;
-    /** Set by {@link #close}; a {@link #feed} after this frees the batch instead of buffering it. */  
-    private boolean closed;
-
-    /**  
-     * Creates a sink with the default row limit.
-     */
-    public RowProducingSink() {  
-        this(DEFAULT_MAX_ROWS);
-    }
-
-    /**
-     * Creates a sink with a custom row limit. Use {@code Long.MAX_VALUE} to disable.
-     */  
-    public RowProducingSink(long maxRows) {
-        this.maxRows = maxRows;
-    }  
-
-    @Override
-    public synchronized void feed(VectorSchemaRoot batch) {  
-        // Feed racing close(): buffering now would strand the batch, so free it here instead.
-        if (closed) {
-            batch.close();  
-            return;
-        }
-        if (fieldNames.isEmpty() && batch.getSchema().getFields().isEmpty() == false) {  
-            for (Field f : batch.getSchema().getFields()) {
-                fieldNames.add(f.getName());
-            }  
-        }
-        if (totalRows >= maxRows) {
-            batch.close();  
-            return;
-        }
-        totalRows += batch.getRowCount();  
-        batches.add(batch);
-    }
-
-    /**
-     * Releases any batches still buffered in the sink. Idempotent and tolerant
-     * of batches the consumer already closed via {@code readResult()} drain —  
-     * Arrow's per-vector close throws when buffers were already released, so
-     * each batch close is guarded individually rather than letting the first
-     * stale entry skip the rest.  
-     */
-    @Override
-    public synchronized void close() {  
-        closed = true;
-        // Guard each close individually: Arrow's VectorSchemaRoot.close() throws
+            }
         // (IllegalStateException) when a vector's buffers were already released — e.g. a batch  
-        // the consumer drained and closed via readResult(), or one whose vectors were shared with
-        // another close path. An unguarded loop would abort on the first such throw and abandon
-        // every batch after it, stranding their off-heap buffers on the (long-lived, when  
-        // coordinator.buffer_limit=0) coordinator allocator. clear() runs regardless so the sink
-        // does not retain references to freed roots.
-        try {  
-            for (VectorSchemaRoot batch : batches) {
-                try {
-                    batch.close();  
-                } catch (RuntimeException e) {
-                    logger.warn("RowProducingSink: batch close failed during sink close; continuing to release the rest", e);
-                }  
-            }
-        } finally {
-            batches.clear();  
-        }
+     * Creates a sink with the default row limit.
+ * {@link ExchangeSource} (read side for consumers). The builder passes
+    public RowProducingSink(long maxRows) {
     }
-
-    /**
-     * Returns a snapshot of the batches fed so far. The returned iterable is a
-     * defensive copy so the caller can iterate outside the sink's monitor.  
-     */
-    @Override
-    public synchronized Iterable<VectorSchemaRoot> readResult() {  
-        return new ArrayList<>(batches);
-    }
-
-    @Override
-    public synchronized long getRowCount() {
+// close, partial buffering on early exit). Revisit the locking as part of that (e.g. tryLock with
+import java.util.List;  
         return totalRows;  
-    }
-
-    /**  
-     * Look up a cell value by column name and row index.
-     *
-     * @param column   the column name  
-     * @param rowIndex the zero-based row index
-     * @return the cell value, or {@code null} if the column is unknown or the row index is out of range
-     */  
-    public synchronized Object getValueAt(String column, int rowIndex) {
-        int colIdx = fieldNames.indexOf(column);
-        if (colIdx < 0) return null;  
-
-        int offset = 0;
-        for (VectorSchemaRoot batch : batches) {  
-            int batchRows = batch.getRowCount();
+import org.opensearch.analytics.spi.ExchangeSink;  
+     * further batches. Analogous to {@code index.max_result_window} (10k)
+     * defensive copy so the caller can iterate outside the sink's monitor.  
+ *
+     *  
+        this.maxRows = maxRows;
             if (rowIndex < offset + batchRows) {
-                return ArrowValues.toJavaValue(batch.getVector(colIdx), rowIndex - offset);  
-            }
-            offset += batchRows;
-        }  
-        return null;
+    private long totalRows;
+    public synchronized void feed(VectorSchemaRoot batch) {  
+     */  
+        try {  
+        batches.add(batch);
+/*  
+        int offset = 0;
+ * <p>Implements both {@link ExchangeSink} (write side for producers) and
+     */
+        // coordinator.buffer_limit=0) coordinator allocator. clear() runs regardless so the sink
+            int batchRows = batch.getRowCount();
+     * Creates a sink with a custom row limit. Use {@code Long.MAX_VALUE} to disable.
+ * and observing methods are synchronized on {@code this} to serialize
+            return;
+    /**
+        if (closed) {
+ * {@code QueryPhaseResultConsumer} for coordinator-reduce in the core
+    }  
+        }
+ * multiple shard response handlers on the SEARCH thread pool. All mutating  
     }
+    }
+        // another close path. An unguarded loop would abort on the first such throw and abandon
+        }
+ *  
+import org.apache.arrow.vector.VectorSchemaRoot;
+                try {
+                fieldNames.add(f.getName());
+    @Override
+ * {@link VectorSchemaRoot} batches via {@link ExchangeSink#feed} and
+     * stale entry skip the rest.  
+import java.util.ArrayList;
+        closed = true;
+ * results via the {@link ExchangeSource} view.
+                }  
+    }
+            batches.clear();  
+ * access to the backing lists and to atomicize the check-then-act
+        // Feed racing close(): buffering now would strand the batch, so free it here instead.
+    /**  
+        // the consumer drained and closed via readResult(), or one whose vectors were shared with
+        return null;
+    private final List<VectorSchemaRoot> batches = new ArrayList<>();
+ * compatible open source license.
+ * search path.
+    /** Set by {@link #close}; a {@link #feed} after this frees the batch instead of buffering it. */  
+    public synchronized Iterable<VectorSchemaRoot> readResult() {  
+     *
+                    logger.warn("RowProducingSink: batch close failed during sink close; continuing to release the rest", e);
+        return new ArrayList<>(batches);
+     */
+        } finally {
+            for (Field f : batch.getSchema().getFields()) {
+            return;
+        }
+     * Default maximum number of rows this sink will accept before rejecting  
+     */
+     * Returns a snapshot of the batches fed so far. The returned iterable is a
+ * throws an exception which propagates to the stage
+    @Override
+    public RowProducingSink() {  
+        }
+     * @return the cell value, or {@code null} if the column is unknown or the row index is out of range
+    /**
+        }  
+        // does not retain references to freed roots.
+    public synchronized Object getValueAt(String column, int rowIndex) {
+            batch.close();  
+ * <p>A configurable row count limit ({@link #maxRows}) acts as a guardrail  
+import org.opensearch.analytics.backend.ExchangeSource;
+     * Arrow's per-vector close throws when buffers were already released, so
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        // Guard each close individually: Arrow's VectorSchemaRoot.close() throws
+ * the {@link ExchangeSink} view to child stages and the walker reads  
+     * of batches the consumer already closed via {@code readResult()} drain —  
+        totalRows += batch.getRowCount();  
+        if (totalRows >= maxRows) {
+    /**  
+import org.apache.logging.log4j.Logger;
+     * @param rowIndex the zero-based row index
+    }
+     */  
+    /**
+                } catch (RuntimeException e) {
+            for (VectorSchemaRoot batch : batches) {
+ * the result set at the configured limit.  
+            offset += batchRows;
+    @Override
+        if (fieldNames.isEmpty() && batch.getSchema().getFields().isEmpty() == false) {  
+import org.apache.logging.log4j.LogManager;  
+     * Look up a cell value by column name and row index.
+    private static final Logger logger = LogManager.getLogger(RowProducingSink.class);  
+                    batch.close();  
+// TODO: refactor this push-based flow — it's brittle with multiple failure points (feed racing
+    /**
 }  
+        if (colIdx < 0) return null;  
+ */  
+        int colIdx = fieldNames.indexOf(column);
+                return ArrowValues.toJavaValue(batch.getVector(colIdx), rowIndex - offset);  
+    public synchronized long getRowCount() {
+ * yields them back via {@link ExchangeSource#readResult}.
+    public synchronized void close() {  
+ * against unbounded result accumulation. When exceeded, {@link #feed}
+ * Default exchange implementation that collects Arrow  
+// timeout); the current single-monitor synchronization is correct but worth reconsidering then.  
+ * <p><b>Thread safety:</b> {@link #feed} may be called concurrently from
+    private final long maxRows;
+ */  
+public class RowProducingSink implements ExchangeSink, ExchangeSource {
+ *
+    private boolean closed;
+     * @param column   the column name  
+        for (VectorSchemaRoot batch : batches) {  
+    @Override
+     * each batch close is guarded individually rather than letting the first
+    private final List<String> fieldNames = new ArrayList<>();  
+        // every batch after it, stranding their off-heap buffers on the (long-lived, when  
+            batch.close();  
+ * {@code fieldNames} initialization. This matches the pattern used by  
+    static final long DEFAULT_MAX_ROWS = 10_000L;  
+     * Releases any batches still buffered in the sink. Idempotent and tolerant
+/**
+     */
+            }  
+ *
+     * <p>TODO: make configurable via cluster setting.
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.analytics.exec;
+import org.apache.arrow.vector.types.pojo.Field;
+        this(DEFAULT_MAX_ROWS);
+            }
+     * in the core search path, but set higher for analytics workloads.

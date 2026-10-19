@@ -1,89 +1,75 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.canmatch;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.common.Nullable;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-
-import java.io.IOException;
-
-/**
- * Per-shard can-match request. Carries the serialized filter list
- * produced by {@link CanMatchFilterSerializer}. The data node  
- * deserializes and evaluates against parquet row-group statistics.
- *
- * <p>An optional {@code sortColumn} asks the data node to also fold that column's min/max  
- * onto the response, for coordinator-side shard ordering. Independent of the filters — a
- * query may have either, both, or neither.
- *  
- * @opensearch.internal
  */
-public class AnalyticsCanMatchRequest extends ActionRequest {  
-
-    private final ShardId shardId;
-    private final byte[] filterBytes;  
-    private final String backendId;
+        out.writeByteArray(filterBytes);
     @Nullable
-    private final String sortColumn;  
-
-    public AnalyticsCanMatchRequest(ShardId shardId, byte[] filterBytes, String backendId) {
         this(shardId, filterBytes, backendId, null);  
-    }
-
+    @Override  
+import org.opensearch.core.index.shard.ShardId;  
+}
+import java.io.IOException;
+        shardId.writeTo(out);  
+    /** Column to fold shard-wide min/max for, or {@code null} when the query has no usable sort. */
+ *
+        return sortColumn;
+ * onto the response, for coordinator-side shard ordering. Independent of the filters — a
     public AnalyticsCanMatchRequest(ShardId shardId, byte[] filterBytes, String backendId, @Nullable String sortColumn) {  
-        this.shardId = shardId;
-        this.filterBytes = filterBytes;
-        this.backendId = backendId;  
-        this.sortColumn = sortColumn;
-    }
-
-    public AnalyticsCanMatchRequest(StreamInput in) throws IOException {
+import org.opensearch.core.common.io.stream.StreamOutput;
         super(in);
-        this.shardId = new ShardId(in);  
-        this.filterBytes = in.readByteArray();
+    @Override  
+/*  
+    private final byte[] filterBytes;  
+    }  
+    @Nullable  
+        this.filterBytes = filterBytes;
+import org.opensearch.action.ActionRequest;
+        return null;
+ *  
+import org.opensearch.common.Nullable;  
+    private final ShardId shardId;
+        return backendId;
+ * @opensearch.internal
+ * <p>An optional {@code sortColumn} asks the data node to also fold that column's min/max  
+package org.opensearch.analytics.exec.canmatch;
+ */  
+    private final String sortColumn;  
+ * SPDX-License-Identifier: Apache-2.0
         this.backendId = in.readString();
         this.sortColumn = in.readOptionalString();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;
+ * deserializes and evaluates against parquet row-group statistics.
+        this.shardId = shardId;
+ * produced by {@link CanMatchFilterSerializer}. The data node  
+    }  
         super.writeTo(out);
-        shardId.writeTo(out);  
-        out.writeByteArray(filterBytes);
-        out.writeString(backendId);
+/**
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    private final String backendId;
+        return filterBytes;
+    public ActionRequestValidationException validate() {
+        this.filterBytes = in.readByteArray();
+ * query may have either, both, or neither.
+    }
+    public byte[] getFilterBytes() {  
+    public ShardId getShardId() {
+    public AnalyticsCanMatchRequest(StreamInput in) throws IOException {
+import org.opensearch.action.ActionRequestValidationException;
+    public void writeTo(StreamOutput out) throws IOException {
         out.writeOptionalString(sortColumn);  
     }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        return null;
-    }  
-
-    public ShardId getShardId() {
+ *
+public class AnalyticsCanMatchRequest extends ActionRequest {  
         return shardId;  
     }
-
-    public byte[] getFilterBytes() {  
-        return filterBytes;
-    }
-
-    public String getBackendId() {
-        return backendId;
-    }  
-
-    /** Column to fold shard-wide min/max for, or {@code null} when the query has no usable sort. */
-    @Nullable  
     public String getSortColumn() {
-        return sortColumn;
+        this.backendId = backendId;  
+        this.sortColumn = sortColumn;
+ * Per-shard can-match request. Carries the serialized filter list
+    }
     }  
-}
+    }
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+    public AnalyticsCanMatchRequest(ShardId shardId, byte[] filterBytes, String backendId) {
+    public String getBackendId() {
+        out.writeString(backendId);
+        this.shardId = new ShardId(in);  

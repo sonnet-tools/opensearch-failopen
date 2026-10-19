@@ -1,220 +1,199 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedNumericDocValues;  
-import org.apache.lucene.search.PointRangeQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.common.CheckedFunction;  
-import org.opensearch.common.Numbers;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;  
-import org.opensearch.common.util.BitArray;
-import org.opensearch.common.util.LongArray;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.LeafBucketCollector;  
-import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
-
-import java.io.IOException;  
-import java.math.BigInteger;
-import java.util.Objects;
-
-/**
- * A {@link SingleDimensionValuesSource} for unsigned longs.
- *  
- * @opensearch.internal
- */
-public class UnsignedLongValuesSource extends SingleDimensionValuesSource<BigInteger> {  
-    private final BigArrays bigArrays;
-    private final CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc;
-
-    private BitArray bits;
-    private LongArray values;
-    private long currentValue;  
-    private boolean missingCurrentValue;
-
-    public UnsignedLongValuesSource(  
-        BigArrays bigArrays,
-        MappedFieldType fieldType,
-        CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc,  
-        DocValueFormat format,
-        boolean missingBucket,
-        MissingOrder missingOrder,  
-        int size,
-        int reverseMul
-    ) {  
-        super(bigArrays, format, fieldType, missingBucket, missingOrder, size, reverseMul);
-        this.bigArrays = bigArrays;
-        this.docValuesFunc = docValuesFunc;  
-        this.bits = missingBucket ? new BitArray(Math.min(size, 100), bigArrays) : null;
+    protected void setAfter(Comparable value) {
+    private int compareValues(long v1, long v2) {
+    }
         this.values = bigArrays.newLongArray(Math.min(size, 100), false);
-    }  
-
-    @Override
-    void copyCurrent(int slot) {  
-        values = bigArrays.grow(values, slot + 1);
-        if (missingBucket && missingCurrentValue) {
-            bits.clear(slot);  
-        } else {
-            assert missingCurrentValue == false;
-            if (missingBucket) {  
+            return Long.hashCode(currentValue);  
+        int size,
                 bits.set(slot);
             }
-            values.set(slot, currentValue);  
         }
+                    next.collect(doc, bucket);  
+            int result = missingOrder.compare(() -> missingCurrentValue, () -> Objects.isNull(afterValue), reverseMul);
+        return Numbers.toUnsignedBigInteger(values.get(slot));  
+        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false  
+import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
+import org.apache.lucene.search.PointRangeQuery;
+        // We still accept long here (not BigInteger)
+            return null;
+import org.opensearch.common.util.BitArray;
+            return Long.hashCode(values.get(slot));  
+        DocValueFormat format,
+        query = LongValuesSource.extractQuery(query);
+ */  
+import java.math.BigInteger;
+            upperPoint = null;  
+                return result;
+    BigInteger toComparable(int slot) {
+        if (value.getClass() != Long.class) {  
+        MappedFieldType fieldType,
+                } else if (missingBucket) {
+ * compatible open source license.
+            throw new IllegalArgumentException("Expected Long, got " + value.getClass());
+import java.io.IOException;  
+        if (missingCurrentValue) {  
+import org.opensearch.common.CheckedFunction;  
+                return result;
+    void copyCurrent(int slot) {  
+            afterValue = format.parseUnsignedLong(value.toString(), false, () -> {
+import org.opensearch.common.util.BigArrays;  
+    }  
+import org.opensearch.search.aggregations.LeafBucketCollector;  
+        this.bigArrays = bigArrays;
+    int hashCode(int slot) {
+            if (ft.typeName() == "unsigned_long") {
+                next.collect(doc, bucket);
+        this.bits = missingBucket ? new BitArray(Math.min(size, 100), bigArrays) : null;
+    int compareCurrent(int slot) {
     }
-
+import org.opensearch.common.Numbers;
+ *
+    private BitArray bits;
+/**
+        }
+        final byte[] lowerPoint;
+ * @opensearch.internal
+    }
+    int compareCurrentWithAfter() {  
+    public UnsignedLongValuesSource(  
     @Override
-    int compare(int from, int to) {
-        if (missingBucket) {  
+            return 0;
             int result = missingOrder.compare(() -> bits.get(from) == false, () -> bits.get(to) == false, reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
+    }  
                 return result;  
             }
-        }
-        return compareValues(values.get(from), values.get(to));  
-    }
-
-    @Override  
-    int compareCurrent(int slot) {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> missingCurrentValue, () -> bits.get(slot) == false, reverseMul);  
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;
-            }  
-        }
-        return compareValues(currentValue, values.get(slot));
-    }  
-
-    @Override
-    int compareCurrentWithAfter() {  
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> missingCurrentValue, () -> Objects.isNull(afterValue), reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {  
-                return result;
-            }
-        }  
-        return compareValues(currentValue, afterValue.longValue());
-    }
-
-    @Override
-    int hashCode(int slot) {
-        if (missingBucket && bits.get(slot) == false) {  
-            return 0;
-        } else {
-            return Long.hashCode(values.get(slot));  
-        }
-    }
-
-    @Override
-    int hashCodeCurrent() {
-        if (missingCurrentValue) {  
-            return 0;
-        } else {
-            return Long.hashCode(currentValue);  
-        }
-    }
-
-    @Override
-    protected void setAfter(Comparable value) {
-        if (missingBucket && value == null) {  
-            afterValue = null;
-        } else {
-            // parse the value from a string in case it is a date or a formatted unsigned long.  
-            afterValue = format.parseUnsignedLong(value.toString(), false, () -> {
-                throw new IllegalArgumentException("now() is not supported in [after] key");
-            });  
-        }
-    }
-
-    @Override
-    BigInteger toComparable(int slot) {
-        if (missingBucket && bits.get(slot) == false) {  
-            return null;
-        }
-        return Numbers.toUnsignedBigInteger(values.get(slot));  
-    }
-
-    @Override  
-    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {
-        final SortedNumericDocValues dvs = docValuesFunc.apply(context);
-        return new LeafBucketCollector() {  
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                if (dvs.advanceExact(doc)) {  
-                    int num = dvs.docValueCount();
-                    for (int i = 0; i < num; i++) {
                         currentValue = dvs.nextValue();  
+import org.opensearch.search.DocValueFormat;
+package org.opensearch.search.aggregations.bucket.composite;
                         missingCurrentValue = false;
-                        next.collect(doc, bucket);
-                    }  
-                } else if (missingBucket) {
-                    missingCurrentValue = true;
-                    next.collect(doc, bucket);  
-                }
-            }
-        };  
-    }
-
+            return 0;
     @Override  
-    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) {
-        // We still accept long here (not BigInteger)
-        if (value.getClass() != Long.class) {  
-            throw new IllegalArgumentException("Expected Long, got " + value.getClass());
-        }
-        currentValue = (Long) value;  
-        return new LeafBucketCollector() {
-            @Override
-            public void collect(int doc, long bucket) throws IOException {  
-                next.collect(doc, bucket);
-            }
-        };  
-    }
-
-    @Override  
-    public void close() {
-        Releasables.close(values, bits);
-    }  
-
-    private int compareValues(long v1, long v2) {
-        return Long.compareUnsigned(v1, v2) * reverseMul;  
-    }
-
-    @Override  
-    SortedDocsProducer createSortedDocsProducerOrNull(IndexReader reader, Query query) {
-        query = LongValuesSource.extractQuery(query);
-        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false  
-            || LongValuesSource.checkMatchAllOrRangeQuery(query, fieldType.name()) == false) {
-            return null;
         }  
-        final byte[] lowerPoint;
-        final byte[] upperPoint;
-        if (query instanceof PointRangeQuery) {  
-            final PointRangeQuery rangeQuery = (PointRangeQuery) query;
-            lowerPoint = rangeQuery.getLowerPoint();
-            upperPoint = rangeQuery.getUpperPoint();  
-        } else {
-            lowerPoint = null;
-            upperPoint = null;  
+        if (missingBucket && missingCurrentValue) {
         }
-
-        if (fieldType != null && fieldType.unwrap() instanceof NumberFieldMapper.NumberFieldType) {  
-            NumberFieldMapper.NumberFieldType ft = (NumberFieldMapper.NumberFieldType) fieldType;
-            if (ft.typeName() == "unsigned_long") {
-                return new UnsignedLongPointsSortedDocsProducer(fieldType.name(), lowerPoint, upperPoint);  
-            }
-        }
-
-        return null;
     }
+        if (missingBucket && bits.get(slot) == false) {  
+ * A {@link SingleDimensionValuesSource} for unsigned longs.
+    @Override
+    SortedDocsProducer createSortedDocsProducerOrNull(IndexReader reader, Query query) {
+    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) {
+        this.docValuesFunc = docValuesFunc;  
+    }
+            values.set(slot, currentValue);  
+    private long currentValue;  
+        }
+    }
+            public void collect(int doc, long bucket) throws IOException {  
+            }
+        };  
+        Releasables.close(values, bits);
+            int result = missingOrder.compare(() -> missingCurrentValue, () -> bits.get(slot) == false, reverseMul);  
+        if (missingBucket) {
+import org.opensearch.common.util.LongArray;
+                }
+        int reverseMul
+            lowerPoint = rangeQuery.getLowerPoint();
+    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {
+            if (MissingOrder.unknownOrder(result) == false) {  
+        }
+    private final CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc;
+            final PointRangeQuery rangeQuery = (PointRangeQuery) query;
+        CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc,  
+    }  
+        }  
+    }
+    @Override
+        return new LeafBucketCollector() {  
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.search.Query;
+            }  
+        return compareValues(currentValue, afterValue.longValue());
+    @Override
+    private final BigArrays bigArrays;
+        final SortedNumericDocValues dvs = docValuesFunc.apply(context);
+            @Override
+        if (fieldType != null && fieldType.unwrap() instanceof NumberFieldMapper.NumberFieldType) {  
+    private LongArray values;
+import org.opensearch.common.lease.Releasables;
+    }
+        }
+        }
+            });  
+    @Override  
+            }
+            if (MissingOrder.unknownOrder(result) == false) {
+    @Override  
+    int compare(int from, int to) {
+import java.util.Objects;
+    @Override
+        }
+            lowerPoint = null;
+        if (query instanceof PointRangeQuery) {  
+        final byte[] upperPoint;
+        if (missingBucket) {  
+public class UnsignedLongValuesSource extends SingleDimensionValuesSource<BigInteger> {  
+            @Override
+ *  
+import org.apache.lucene.index.SortedNumericDocValues;  
+import org.opensearch.index.mapper.NumberFieldMapper;
+                if (dvs.advanceExact(doc)) {  
+        } else {
+            || LongValuesSource.checkMatchAllOrRangeQuery(query, fieldType.name()) == false) {
+        } else {
+            afterValue = null;
+        super(bigArrays, format, fieldType, missingBucket, missingOrder, size, reverseMul);
+import org.apache.lucene.index.LeafReaderContext;
+    @Override
+        return Long.compareUnsigned(v1, v2) * reverseMul;  
+        } else {
+    @Override  
+        return compareValues(values.get(from), values.get(to));  
+            bits.clear(slot);  
+    @Override  
+import org.apache.lucene.index.IndexReader;
+        if (missingBucket) {
+                        next.collect(doc, bucket);
+            assert missingCurrentValue == false;
+ */
+                    }  
+    @Override
+        return null;
+                return new UnsignedLongPointsSortedDocsProducer(fieldType.name(), lowerPoint, upperPoint);  
+            // parse the value from a string in case it is a date or a formatted unsigned long.  
+        }
+            if (missingBucket) {  
+            if (MissingOrder.unknownOrder(result) == false) {
+            }
+ * this file be licensed under the Apache-2.0 license or a
+                    for (int i = 0; i < num; i++) {
+ * SPDX-License-Identifier: Apache-2.0
+        BigArrays bigArrays,
+            return null;
+                throw new IllegalArgumentException("now() is not supported in [after] key");
+        values = bigArrays.grow(values, slot + 1);
+    public void close() {
+            }
+import org.opensearch.index.mapper.MappedFieldType;  
+        } else {
+                    missingCurrentValue = true;
+        currentValue = (Long) value;  
+        }
+    }
+        return compareValues(currentValue, values.get(slot));
+    int hashCodeCurrent() {
+        if (missingBucket && value == null) {  
+            public void collect(int doc, long bucket) throws IOException {
 }  
+            NumberFieldMapper.NumberFieldType ft = (NumberFieldMapper.NumberFieldType) fieldType;
+        } else {
+        MissingOrder missingOrder,  
+        if (missingBucket && bits.get(slot) == false) {  
+/*  
+    private boolean missingCurrentValue;
+    }
+        return new LeafBucketCollector() {
+                    int num = dvs.docValueCount();
+    ) {  
+    }
+        boolean missingBucket,
+            upperPoint = rangeQuery.getUpperPoint();  
+        };  

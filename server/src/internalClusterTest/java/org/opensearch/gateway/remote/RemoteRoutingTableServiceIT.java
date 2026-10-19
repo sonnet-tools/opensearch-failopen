@@ -1,439 +1,379 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
-import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.common.blobstore.BlobPath;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.gateway.remote.model.RemoteRoutingTableBlobStore;
-import org.opensearch.index.remote.RemoteStoreEnums;  
-import org.opensearch.index.remote.RemoteStorePathStrategy;
-import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
-import org.opensearch.repositories.RepositoriesService;  
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Base64;  
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;  
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.opensearch.gateway.remote.RemoteClusterStateService.REMOTE_CLUSTER_STATE_ENABLED_SETTING;  
-import static org.opensearch.gateway.remote.RemoteClusterStateService.REMOTE_PUBLICATION_SETTING_KEY;
-import static org.opensearch.gateway.remote.routingtable.RemoteIndexRoutingTable.INDEX_ROUTING_TABLE;
-import static org.opensearch.indices.IndicesService.CLUSTER_DEFAULT_INDEX_REFRESH_INTERVAL_SETTING;  
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
-public class RemoteRoutingTableServiceIT extends RemoteStoreBaseIntegTestCase {
-    private static final String INDEX_NAME = "test-index";
-    private static final String INDEX_NAME_1 = "test-index-1";  
-    List<BlobPath> indexRoutingPaths;
-    AtomicInteger indexRoutingFiles = new AtomicInteger();
-    private final RemoteStoreEnums.PathType pathType = RemoteStoreEnums.PathType.HASHED_PREFIX;  
-
-    @Before
-    public void setup() {  
-        asyncUploadMockFsRepo = false;
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()  
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(REMOTE_CLUSTER_STATE_ENABLED_SETTING.getKey(), true)
-            .put(  
-                RemoteRoutingTableBlobStore.REMOTE_ROUTING_TABLE_PATH_TYPE_SETTING.getKey(),
-                RemoteStoreEnums.PathType.HASHED_PREFIX.toString()
-            )  
-            .put("node.attr." + REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY, REMOTE_ROUTING_TABLE_REPO)
-            .put(REMOTE_PUBLICATION_SETTING_KEY, true)
-            .put(  
-                RemoteClusterStateService.REMOTE_CLUSTER_STATE_CHECKSUM_VALIDATION_MODE_SETTING.getKey(),
-                RemoteClusterStateService.RemoteClusterStateValidationMode.FAILURE
-            )  
-            .build();
-    }
-
-    public void testRemoteRoutingTableIndexLifecycle() throws Exception {
-        BlobStoreRepository repository = prepareClusterAndVerifyRepository();
-
-        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
-            RemoteClusterStateService.class
-        );  
-        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
-        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
-            getClusterState().getClusterName().value(),  
-            getClusterState().getMetadata().clusterUUID()
-        );
-        List<String> expectedIndexNames = new ArrayList<>();  
-        List<String> deletedIndexNames = new ArrayList<>();
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
-
-        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();
-        assertTrue(areRoutingTablesSame(routingTableVersions));
-
-        // Update index settings
-        updateIndexSettings(INDEX_NAME, IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2);
-        ensureGreen(INDEX_NAME);  
-        assertBusy(() -> {
-            int indexRoutingFilesAfterUpdate = repository.blobStore().blobContainer(indexRoutingPaths.get(0)).listBlobs().size();
-            // At-least 3 new index routing files will be created as shards will transition from INIT -> UNASSIGNED -> STARTED state  
-            assertTrue(indexRoutingFilesAfterUpdate >= indexRoutingFiles.get() + 3);
-        });
-
-        latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
-            getClusterState().getClusterName().value(),
-            getClusterState().getMetadata().clusterUUID()  
-        );
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
-
-        routingTableVersions = getRoutingTableFromAllNodes();
-        assertTrue(areRoutingTablesSame(routingTableVersions));
-
-        // Delete the index and assert its deletion
-        deleteIndexAndVerify(remoteManifestManager);
-
-        routingTableVersions = getRoutingTableFromAllNodes();
-        assertTrue(areRoutingTablesSame(routingTableVersions));
-    }  
-
-    public void testRemoteRoutingTableWithMultipleIndex() throws Exception {
-        BlobStoreRepository repository = prepareClusterAndVerifyRepository();  
-
-        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
-            RemoteClusterStateService.class  
-        );
-        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
-        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(  
-            getClusterState().getClusterName().value(),
-            getClusterState().getMetadata().clusterUUID()
-        );  
-        List<String> expectedIndexNames = new ArrayList<>();
-        List<String> deletedIndexNames = new ArrayList<>();
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);  
-
-        List<RoutingTable> routingTables = getRoutingTableFromAllNodes();
-        // Verify indices in routing table  
-        Set<String> expectedIndicesInRoutingTable = Set.of(INDEX_NAME);
-        assertEquals(routingTables.get(0).getIndicesRouting().keySet(), expectedIndicesInRoutingTable);
-        // Verify routing table across all nodes is equal  
-        assertTrue(areRoutingTablesSame(routingTables));
-
-        // Create new index  
-        createIndex(INDEX_NAME_1, remoteStoreIndexSettings(1, 5));
-        ensureGreen(INDEX_NAME_1);
-
-        latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
-            getClusterState().getClusterName().value(),
-            getClusterState().getMetadata().clusterUUID()  
-        );
-
-        updateIndexRoutingPaths(repository);  
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 2, deletedIndexNames, true);
-        routingTables = getRoutingTableFromAllNodes();
-        // Verify indices in routing table  
-        expectedIndicesInRoutingTable = Set.of(INDEX_NAME, INDEX_NAME_1);
-        assertEquals(routingTables.get(0).getIndicesRouting().keySet(), expectedIndicesInRoutingTable);
-        // Verify routing table across all nodes is equal  
-        assertTrue(areRoutingTablesSame(routingTables));
-    }
-
-    public void testRemoteRoutingTableEmptyRoutingTableDiff() throws Exception {
-        prepareClusterAndVerifyRepository();
-
-        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
-            RemoteClusterStateService.class
-        );  
-        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
-        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
-            getClusterState().getClusterName().value(),  
-            getClusterState().getMetadata().clusterUUID()
-        );
-        List<String> expectedIndexNames = new ArrayList<>();  
-        List<String> deletedIndexNames = new ArrayList<>();
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
-
-        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();
-        assertTrue(areRoutingTablesSame(routingTableVersions));
-
-        // Update cluster settings
-        ClusterUpdateSettingsResponse response = client().admin()
-            .cluster()  
-            .prepareUpdateSettings()
-            .setPersistentSettings(Settings.builder().put(CLUSTER_DEFAULT_INDEX_REFRESH_INTERVAL_SETTING.getKey(), 0, TimeUnit.SECONDS))
-            .get();  
-        assertTrue(response.isAcknowledged());
-
-        latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(  
-            getClusterState().getClusterName().value(),
-            getClusterState().getMetadata().clusterUUID()
-        );  
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, false);
-
-        routingTableVersions = getRoutingTableFromAllNodes();  
-        assertTrue(areRoutingTablesSame(routingTableVersions));
-    }
-
-    public void testRemoteRoutingTableIndexNodeRestart() throws Exception {
-        BlobStoreRepository repository = prepareClusterAndVerifyRepository();
-
-        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();
-        assertTrue(areRoutingTablesSame(routingTableVersions));
-
-        // Ensure node comes healthy after restart
-        Set<String> dataNodes = internalCluster().getDataNodeNames();
-        internalCluster().restartNode(randomFrom(dataNodes));  
-        ensureGreen();
-        ensureGreen(INDEX_NAME);
-
-        // ensure restarted node joins and the cluster is stable
-        assertEquals(3, internalCluster().clusterService().state().nodes().getDataNodes().size());
-        ensureStableCluster(4);  
-        assertRemoteStoreRepositoryOnAllNodes(REMOTE_ROUTING_TABLE_REPO);
-
-        assertBusy(() -> {  
-            int indexRoutingFilesAfterNodeDrop = repository.blobStore().blobContainer(indexRoutingPaths.get(0)).listBlobs().size();
-            assertTrue(indexRoutingFilesAfterNodeDrop > indexRoutingFiles.get());
-        });  
-
-        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
-            RemoteClusterStateService.class  
-        );
-        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
-        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(  
-            getClusterState().getClusterName().value(),
-            getClusterState().getMetadata().clusterUUID()
-        );  
-        List<String> expectedIndexNames = new ArrayList<>();
-        List<String> deletedIndexNames = new ArrayList<>();
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);  
-    }
-
-    public void testRemoteRoutingTableIndexMasterRestart() throws Exception {  
-        BlobStoreRepository repository = prepareClusterAndVerifyRepository();
-
-        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();  
-        assertTrue(areRoutingTablesSame(routingTableVersions));
-
-        // Ensure node comes healthy after restart  
-        String clusterManagerName = internalCluster().getClusterManagerName();
-        internalCluster().restartNode(clusterManagerName);
-        ensureGreen();  
-        ensureGreen(INDEX_NAME);
-
-        // ensure master is elected and the cluster is stable  
-        assertNotNull(internalCluster().clusterService().state().nodes().getClusterManagerNode());
-        ensureStableCluster(4);
-        assertRemoteStoreRepositoryOnAllNodes(REMOTE_ROUTING_TABLE_REPO);  
-
-        assertBusy(() -> {
-            int indexRoutingFilesAfterNodeDrop = repository.blobStore().blobContainer(indexRoutingPaths.get(0)).listBlobs().size();  
-            assertTrue(indexRoutingFilesAfterNodeDrop > indexRoutingFiles.get());
-        });
-
-        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
-            RemoteClusterStateService.class
-        );  
-        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
-        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
-            getClusterState().getClusterName().value(),  
-            getClusterState().getMetadata().clusterUUID()
-        );
-        List<String> expectedIndexNames = new ArrayList<>();  
-        List<String> deletedIndexNames = new ArrayList<>();
-        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
-    }  
-
-    private BlobStoreRepository prepareClusterAndVerifyRepository() throws Exception {
-        clusterSettingsSuppliedByTest = true;  
-        Path segmentRepoPath = randomRepoPath();
-        Path translogRepoPath = randomRepoPath();
-        Path remoteRoutingTableRepoPath = randomRepoPath();  
-        Settings settings = buildRemoteStoreNodeAttributes(
-            REPOSITORY_NAME,
-            segmentRepoPath,  
-            REPOSITORY_2_NAME,
-            translogRepoPath,
-            REMOTE_ROUTING_TABLE_REPO,  
-            remoteRoutingTableRepoPath,
-            false
-        );  
-        prepareCluster(1, 3, INDEX_NAME, 1, 5, settings);
-        ensureGreen(INDEX_NAME);
-
-        RepositoriesService repositoriesService = internalCluster().getClusterManagerNodeInstance(RepositoriesService.class);
-        BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(REMOTE_ROUTING_TABLE_REPO);
-
-        BlobPath baseMetadataPath = getBaseMetadataPath(repository);
-        List<IndexRoutingTable> indexRoutingTables = new ArrayList<>(getClusterState().routingTable().indicesRouting().values());
-        indexRoutingPaths = new ArrayList<>();  
-        for (IndexRoutingTable indexRoutingTable : indexRoutingTables) {
-            indexRoutingPaths.add(getIndexRoutingPath(baseMetadataPath.add(INDEX_ROUTING_TABLE), indexRoutingTable.getIndex().getUUID()));
-        }  
-
-        assertBusy(() -> {
-            int totalRoutingFiles = calculateTotalRoutingFiles(repository);  
-            indexRoutingFiles.set(totalRoutingFiles);
-            // There would be >=3 files as shards will transition from UNASSIGNED -> INIT -> STARTED state
-            assertTrue(indexRoutingFiles.get() >= 3);  
-        });
-        assertRemoteStoreRepositoryOnAllNodes(REMOTE_ROUTING_TABLE_REPO);
-        return repository;  
-    }
-
-    private BlobPath getBaseMetadataPath(BlobStoreRepository repository) {  
-        return repository.basePath()
-            .add(
-                Base64.getUrlEncoder()  
-                    .withoutPadding()
-                    .encodeToString(getClusterState().getClusterName().value().getBytes(StandardCharsets.UTF_8))
-            )  
-            .add("cluster-state")
-            .add(getClusterState().metadata().clusterUUID());
-    }  
-
-    private BlobPath getIndexRoutingPath(BlobPath indexRoutingPath, String indexUUID) {
-        RemoteStoreEnums.PathHashAlgorithm pathHashAlgo = RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64;  
-        return pathType.path(
-            RemoteStorePathStrategy.PathInput.builder().basePath(indexRoutingPath).indexUUID(indexUUID).build(),
-            pathHashAlgo  
-        );
-    }
-
-    private void verifyUpdatesInManifestFile(
-        Optional<ClusterMetadataManifest> latestManifest,
-        List<String> expectedIndexNames,  
-        int expectedIndicesRoutingFilesInManifest,
-        List<String> expectedDeletedIndex,
-        boolean isRoutingTableDiffFileExpected  
-    ) {
-        assertTrue(latestManifest.isPresent());
-        ClusterMetadataManifest manifest = latestManifest.get();  
-
-        assertEquals(expectedDeletedIndex, manifest.getDiffManifest().getIndicesDeleted());
-        assertEquals(expectedIndicesRoutingFilesInManifest, manifest.getIndicesRouting().size());  
-
-        // Check if all paths in manifest.getIndicesRouting() are present in indexRoutingPaths
-        for (ClusterMetadataManifest.UploadedIndexMetadata uploadedFilename : manifest.getIndicesRouting()) {  
             boolean pathFound = false;
-            for (BlobPath indexRoutingPath : indexRoutingPaths) {
-                if (uploadedFilename.getUploadedFilename().contains(indexRoutingPath.buildAsString())) {  
-                    pathFound = true;
-                    break;
-                }  
-            }
-            assertTrue("Uploaded file not found in indexRoutingPaths: " + uploadedFilename.getUploadedFilename(), pathFound);
-        }  
+        );  
+            // At-least 3 new index routing files will be created as shards will transition from INIT -> UNASSIGNED -> STARTED state  
+ * compatible open source license.
+        ensureGreen(INDEX_NAME);  
+    @Override
+            .get();  
+        assertTrue(areRoutingTablesSame(routingTableVersions));
+            totalRoutingFiles += repository.blobStore().blobContainer(path).listBlobs().size();  
+        routingTableVersions = getRoutingTableFromAllNodes();  
+            .setSettings(Settings.builder().put(settingKey, settingValue))
+    private void verifyUpdatesInManifestFile(
+        }
+        List<String> deletedIndexNames = new ArrayList<>();
+        return repository;  
+        for (IndexRoutingTable indexRoutingTable : indexRoutingTables) {
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
+        );
+        );
+            getClusterState().getClusterName().value(),
+import java.nio.charset.StandardCharsets;  
+        List<String> expectedIndexNames = new ArrayList<>();  
+        Set<String> dataNodes = internalCluster().getDataNodeNames();
+        assertEquals(3, internalCluster().clusterService().state().nodes().getDataNodes().size());
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, false);
+        prepareCluster(1, 3, INDEX_NAME, 1, 5, settings);
+        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
+        BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(REMOTE_ROUTING_TABLE_REPO);
+        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
+        assertTrue(areRoutingTablesSame(routingTables));
+        // Verify routing table across all nodes is equal  
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);  
+    private void deleteIndexAndVerify(RemoteManifestManager remoteManifestManager) {  
+                .admin()  
+        List<RoutingTable> routingTables = new ArrayList<>();  
+            .build();
+        // ensure restarted node joins and the cluster is stable
+        ensureGreen();
+            .put(super.nodeSettings(nodeOrdinal))
+            assertTrue(indexRoutingFilesAfterNodeDrop > indexRoutingFiles.get());
+        );
+        for (IndexRoutingTable indexRoutingTable : indexRoutingTables) {
+        }
+                .getState()
+        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();
+    private List<RoutingTable> getRoutingTableFromAllNodes() throws ExecutionException, InterruptedException {
+                .routingTable();
+        ClusterUpdateSettingsResponse response = client().admin()
+        if (a == b) return true;  
+            // There would be >=3 files as shards will transition from UNASSIGNED -> INIT -> STARTED state
         assertEquals(isRoutingTableDiffFileExpected, manifest.getDiffManifest().getIndicesRoutingDiffPath() != null);
     }
-
-    private List<RoutingTable> getRoutingTableFromAllNodes() throws ExecutionException, InterruptedException {
-        String[] allNodes = internalCluster().getNodeNames();
-        List<RoutingTable> routingTables = new ArrayList<>();  
-        for (String node : allNodes) {
-            RoutingTable routingTable = internalCluster().client(node)
-                .admin()  
-                .cluster()
-                .state(new ClusterStateRequest().local(true))
-                .get()  
-                .getState()
-                .routingTable();
-            routingTables.add(routingTable);  
-        }
-        return routingTables;
-    }  
-
-    private void updateIndexRoutingPaths(BlobStoreRepository repository) {
-        BlobPath baseMetadataPath = getBaseMetadataPath(repository);  
-        List<IndexRoutingTable> indexRoutingTables = new ArrayList<>(getClusterState().routingTable().indicesRouting().values());
-
-        indexRoutingPaths.clear(); // Clear the list to avoid stale data  
-        for (IndexRoutingTable indexRoutingTable : indexRoutingTables) {
-            indexRoutingPaths.add(getIndexRoutingPath(baseMetadataPath.add(INDEX_ROUTING_TABLE), indexRoutingTable.getIndex().getUUID()));
-        }  
-    }
-
-    private int calculateTotalRoutingFiles(BlobStoreRepository repository) throws IOException {  
-        int totalRoutingFiles = 0;
-        for (BlobPath path : indexRoutingPaths) {
-            totalRoutingFiles += repository.blobStore().blobContainer(path).listBlobs().size();  
-        }
-        return totalRoutingFiles;
-    }  
-
-    private boolean areRoutingTablesSame(List<RoutingTable> routingTables) {
-        if (routingTables == null || routingTables.isEmpty()) {  
-            return false;
-        }
-
-        RoutingTable firstRoutingTable = routingTables.get(0);
-        for (RoutingTable routingTable : routingTables) {
-            if (!compareRoutingTables(firstRoutingTable, routingTable)) {  
-                logger.info("Responses are not the same: {} {}", firstRoutingTable, routingTable);
-                return false;
-            }  
-        }
-        return true;
-    }  
-
-    private boolean compareRoutingTables(RoutingTable a, RoutingTable b) {
-        if (a == b) return true;  
-        if (b == null || a.getClass() != b.getClass()) return false;
-        if (a.version() != b.version()) return false;
-        if (a.indicesRouting().size() != b.indicesRouting().size()) return false;  
-
-        for (Map.Entry<String, IndexRoutingTable> entry : a.indicesRouting().entrySet()) {
-            IndexRoutingTable thisIndexRoutingTable = entry.getValue();  
-            IndexRoutingTable thatIndexRoutingTable = b.indicesRouting().get(entry.getKey());
-            if (!thatIndexRoutingTable.equals(thatIndexRoutingTable)) {
-                return false;  
-            }
-        }
-        return true;  
-    }
-
-    private void updateIndexSettings(String indexName, String settingKey, int settingValue) {  
-        client().admin()
-            .indices()
-            .prepareUpdateSettings(indexName)  
-            .setSettings(Settings.builder().put(settingKey, settingValue))
+        assertTrue(latestManifest.isPresent());
+            int indexRoutingFilesAfterNodeDrop = repository.blobStore().blobContainer(indexRoutingPaths.get(0)).listBlobs().size();  
+        assertEquals(routingTables.get(0).getIndicesRouting().keySet(), expectedIndicesInRoutingTable);
+        ensureStableCluster(4);
             .execute()
-            .actionGet();  
-    }
-
-    private void deleteIndexAndVerify(RemoteManifestManager remoteManifestManager) {  
         client().admin().indices().prepareDelete(INDEX_NAME).execute().actionGet();
-        assertFalse(client().admin().indices().prepareExists(INDEX_NAME).get().isExists());
-
-        // Verify index is marked deleted in manifest
-        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
-            getClusterState().getClusterName().value(),  
             getClusterState().getMetadata().clusterUUID()
-        );
-        assertTrue(latestManifest.isPresent());  
-        ClusterMetadataManifest manifest = latestManifest.get();
+        assertTrue(response.isAcknowledged());
+        // Check if all paths in manifest.getIndicesRouting() are present in indexRoutingPaths
+    private static final String INDEX_NAME_1 = "test-index-1";  
+            )  
+import java.util.concurrent.TimeUnit;  
+        );  
+import static org.opensearch.gateway.remote.routingtable.RemoteIndexRoutingTable.INDEX_ROUTING_TABLE;
+        assertTrue(areRoutingTablesSame(routingTableVersions));
+import static org.opensearch.indices.IndicesService.CLUSTER_DEFAULT_INDEX_REFRESH_INTERVAL_SETTING;  
+        List<String> deletedIndexNames = new ArrayList<>();
+            RemoteClusterStateService.class
+    private static final String INDEX_NAME = "test-index";
+                    .encodeToString(getClusterState().getClusterName().value().getBytes(StandardCharsets.UTF_8))
+        return totalRoutingFiles;
+        if (a.version() != b.version()) return false;
+        ensureStableCluster(4);  
+                return false;
+        // Verify indices in routing table  
+    }  
+        ensureGreen(INDEX_NAME);
+        expectedIndicesInRoutingTable = Set.of(INDEX_NAME, INDEX_NAME_1);
+        RemoteStoreEnums.PathHashAlgorithm pathHashAlgo = RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64;  
+        // Verify indices in routing table  
+            IndexRoutingTable thatIndexRoutingTable = b.indicesRouting().get(entry.getKey());
+        // ensure master is elected and the cluster is stable  
+    private boolean areRoutingTablesSame(List<RoutingTable> routingTables) {
+        asyncUploadMockFsRepo = false;
+        String clusterManagerName = internalCluster().getClusterManagerName();
+        List<String> expectedIndexNames = new ArrayList<>();
+            .actionGet();  
+                if (uploadedFilename.getUploadedFilename().contains(indexRoutingPath.buildAsString())) {  
+import org.opensearch.gateway.remote.model.RemoteRoutingTableBlobStore;
+            assertTrue(indexRoutingFilesAfterNodeDrop > indexRoutingFiles.get());
+ * SPDX-License-Identifier: Apache-2.0
+        int expectedIndicesRoutingFilesInManifest,
+                .state(new ClusterStateRequest().local(true))
+            .prepareUpdateSettings(indexName)  
+            RemoteClusterStateService.class
+        Path translogRepoPath = randomRepoPath();
+    private void updateIndexSettings(String indexName, String settingKey, int settingValue) {  
+        // Verify routing table across all nodes is equal  
+                    .withoutPadding()
+        }
+ * this file be licensed under the Apache-2.0 license or a
+        ensureGreen(INDEX_NAME);
+        routingTableVersions = getRoutingTableFromAllNodes();
+            translogRepoPath,
+        List<String> deletedIndexNames = new ArrayList<>();
+            false
+        BlobStoreRepository repository = prepareClusterAndVerifyRepository();
+        assertTrue(areRoutingTablesSame(routingTableVersions));
+    }  
+            REMOTE_ROUTING_TABLE_REPO,  
+        internalCluster().restartNode(clusterManagerName);
+import org.junit.Before;  
+        List<String> deletedIndexNames = new ArrayList<>();
         assertTrue(manifest.getDiffManifest().getIndicesDeleted().contains(INDEX_NAME));
-        assertTrue(manifest.getIndicesRouting().isEmpty());  
+            int indexRoutingFilesAfterNodeDrop = repository.blobStore().blobContainer(indexRoutingPaths.get(0)).listBlobs().size();
+import org.opensearch.common.settings.Settings;
+        Set<String> expectedIndicesInRoutingTable = Set.of(INDEX_NAME);
+        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
+    public void testRemoteRoutingTableIndexNodeRestart() throws Exception {
     }
-
+        BlobPath baseMetadataPath = getBaseMetadataPath(repository);  
+            getClusterState().getClusterName().value(),
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY;
+        return true;
+        ClusterMetadataManifest manifest = latestManifest.get();  
+    private BlobStoreRepository prepareClusterAndVerifyRepository() throws Exception {
+        client().admin()
+            if (!compareRoutingTables(firstRoutingTable, routingTable)) {  
+        );
+        );
+        Path segmentRepoPath = randomRepoPath();
+        assertRemoteStoreRepositoryOnAllNodes(REMOTE_ROUTING_TABLE_REPO);  
+    public void testRemoteRoutingTableIndexLifecycle() throws Exception {
+        routingTableVersions = getRoutingTableFromAllNodes();
+        assertEquals(expectedIndicesRoutingFilesInManifest, manifest.getIndicesRouting().size());  
+ * The OpenSearch Contributors require contributions made to  
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);  
+                RemoteClusterStateService.RemoteClusterStateValidationMode.FAILURE
+import static org.opensearch.gateway.remote.RemoteClusterStateService.REMOTE_PUBLICATION_SETTING_KEY;
+    }  
+            int indexRoutingFilesAfterUpdate = repository.blobStore().blobContainer(indexRoutingPaths.get(0)).listBlobs().size();
+import org.opensearch.test.OpenSearchIntegTestCase;
+            getClusterState().getClusterName().value(),
+        return true;  
+        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();
+        return Settings.builder()  
+        assertTrue(areRoutingTablesSame(routingTableVersions));
+                    break;
+        });  
+            segmentRepoPath,  
+ *
+            routingTables.add(routingTable);  
+        BlobStoreRepository repository = prepareClusterAndVerifyRepository();
+    private BlobPath getBaseMetadataPath(BlobStoreRepository repository) {  
+        // Update cluster settings
+        ensureGreen(INDEX_NAME_1);
+import org.opensearch.repositories.RepositoriesService;  
+        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
+    private BlobPath getIndexRoutingPath(BlobPath indexRoutingPath, String indexUUID) {
+    }
+        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();
+            )  
+            .put(REMOTE_CLUSTER_STATE_ENABLED_SETTING.getKey(), true)
+    List<BlobPath> indexRoutingPaths;
+                Base64.getUrlEncoder()  
+        List<RoutingTable> routingTableVersions = getRoutingTableFromAllNodes();  
+            IndexRoutingTable thisIndexRoutingTable = entry.getValue();  
+        assertBusy(() -> {
+import static org.opensearch.gateway.remote.RemoteClusterStateService.REMOTE_CLUSTER_STATE_ENABLED_SETTING;  
+    }
+        assertRemoteStoreRepositoryOnAllNodes(REMOTE_ROUTING_TABLE_REPO);
+        indexRoutingPaths.clear(); // Clear the list to avoid stale data  
+        );  
+import org.opensearch.index.remote.RemoteStorePathStrategy;
+            REPOSITORY_2_NAME,
+        BlobStoreRepository repository = prepareClusterAndVerifyRepository();  
+            for (BlobPath indexRoutingPath : indexRoutingPaths) {
+        assertTrue(areRoutingTablesSame(routingTables));
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
+            .add(getClusterState().metadata().clusterUUID());
+        assertTrue(areRoutingTablesSame(routingTableVersions));
+import java.util.Optional;  
+        }  
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+        assertNotNull(internalCluster().clusterService().state().nodes().getClusterManagerNode());
+        // Delete the index and assert its deletion
+        Optional<ClusterMetadataManifest> latestManifest,
+        String[] allNodes = internalCluster().getNodeNames();
+        assertEquals(expectedDeletedIndex, manifest.getDiffManifest().getIndicesDeleted());
+        }
+        if (routingTables == null || routingTables.isEmpty()) {  
+        // Verify index is marked deleted in manifest
+        );
+        int totalRoutingFiles = 0;
+                RemoteRoutingTableBlobStore.REMOTE_ROUTING_TABLE_PATH_TYPE_SETTING.getKey(),
+        ClusterMetadataManifest manifest = latestManifest.get();
+        List<String> expectedDeletedIndex,
+            getClusterState().getMetadata().clusterUUID()  
+            .indices()
+        indexRoutingPaths = new ArrayList<>();  
+        for (ClusterMetadataManifest.UploadedIndexMetadata uploadedFilename : manifest.getIndicesRouting()) {  
+            getClusterState().getClusterName().value(),  
+        List<String> expectedIndexNames = new ArrayList<>();
+    ) {
+            .prepareUpdateSettings()
+        );  
+        // Create new index  
+        assertBusy(() -> {
+    protected Settings nodeSettings(int nodeOrdinal) {
+                logger.info("Responses are not the same: {} {}", firstRoutingTable, routingTable);
+                return false;  
+        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
+            getClusterState().getMetadata().clusterUUID()  
+        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
+        boolean isRoutingTableDiffFileExpected  
+        clusterSettingsSuppliedByTest = true;  
+import java.util.Base64;  
+        updateIndexSettings(INDEX_NAME, IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2);
+        assertTrue(areRoutingTablesSame(routingTableVersions));
+    }
+            .setPersistentSettings(Settings.builder().put(CLUSTER_DEFAULT_INDEX_REFRESH_INTERVAL_SETTING.getKey(), 0, TimeUnit.SECONDS))
+            }
+    public void testRemoteRoutingTableIndexMasterRestart() throws Exception {  
+        // Update index settings
+    }
+    public void testRemoteRoutingTableEmptyRoutingTableDiff() throws Exception {
+        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
+            .add(
+import org.opensearch.common.blobstore.BlobPath;  
+            .cluster()  
+        for (String node : allNodes) {
+        // Ensure node comes healthy after restart  
+            RoutingTable routingTable = internalCluster().client(node)
+            RemoteClusterStateService.class  
+    }
+        );  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        for (BlobPath path : indexRoutingPaths) {
+        assertTrue(latestManifest.isPresent());  
+        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
+        assertEquals(routingTables.get(0).getIndicesRouting().keySet(), expectedIndicesInRoutingTable);
+        List<String> expectedIndexNames = new ArrayList<>();  
+        }
+                    pathFound = true;
+        // Ensure node comes healthy after restart
+        for (Map.Entry<String, IndexRoutingTable> entry : a.indicesRouting().entrySet()) {
+    private void updateIndexRoutingPaths(BlobStoreRepository repository) {
+                .get()  
+            getClusterState().getClusterName().value(),  
+                }  
+        latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
+        List<String> expectedIndexNames = new ArrayList<>();  
+                RemoteClusterStateService.REMOTE_CLUSTER_STATE_CHECKSUM_VALIDATION_MODE_SETTING.getKey(),
+        return pathType.path(
+package org.opensearch.gateway.remote;
+        latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
+        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
+        List<IndexRoutingTable> indexRoutingTables = new ArrayList<>(getClusterState().routingTable().indicesRouting().values());
+        BlobStoreRepository repository = prepareClusterAndVerifyRepository();
+        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
+            getClusterState().getMetadata().clusterUUID()
+        Path remoteRoutingTableRepoPath = randomRepoPath();  
+            assertTrue(indexRoutingFilesAfterUpdate >= indexRoutingFiles.get() + 3);
+        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
+import java.util.Set;
+            .put(  
+        assertTrue(areRoutingTablesSame(routingTableVersions));
+        });
+    }
+        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(  
+        Settings settings = buildRemoteStoreNodeAttributes(
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
+            remoteRoutingTableRepoPath,
+        internalCluster().restartNode(randomFrom(dataNodes));  
+        return routingTables;
+    public void testRemoteRoutingTableWithMultipleIndex() throws Exception {
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 2, deletedIndexNames, true);
+            }  
+        );  
+        prepareClusterAndVerifyRepository();
+import java.util.List;
+import java.util.Map;
+            RemoteClusterStateService.class  
+    private boolean compareRoutingTables(RoutingTable a, RoutingTable b) {
+        ensureGreen();  
+    AtomicInteger indexRoutingFiles = new AtomicInteger();
+        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(  
+            assertTrue(indexRoutingFiles.get() >= 3);  
+    }
+    private final RemoteStoreEnums.PathType pathType = RemoteStoreEnums.PathType.HASHED_PREFIX;  
+            indexRoutingPaths.add(getIndexRoutingPath(baseMetadataPath.add(INDEX_ROUTING_TABLE), indexRoutingTable.getIndex().getUUID()));
+        List<String> deletedIndexNames = new ArrayList<>();
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
+import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
+        verifyUpdatesInManifestFile(latestManifest, expectedIndexNames, 1, deletedIndexNames, true);
+        assertFalse(client().admin().indices().prepareExists(INDEX_NAME).get().isExists());
+            RemoteStorePathStrategy.PathInput.builder().basePath(indexRoutingPath).indexUUID(indexUUID).build(),
+    @Before
+        );
+import java.io.IOException;
+        List<IndexRoutingTable> indexRoutingTables = new ArrayList<>(getClusterState().routingTable().indicesRouting().values());
+            )  
+        Optional<ClusterMetadataManifest> latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(
+        );
+        }  
+        List<String> expectedIndexNames,  
+        latestManifest = remoteManifestManager.getLatestClusterMetadataManifest(  
+    public void setup() {  
+            getClusterState().getMetadata().clusterUUID()
+        BlobPath baseMetadataPath = getBaseMetadataPath(repository);
+import java.util.concurrent.atomic.AtomicInteger;
+public class RemoteRoutingTableServiceIT extends RemoteStoreBaseIntegTestCase {
+        RemoteClusterStateService remoteClusterStateService = internalCluster().getClusterManagerNodeInstance(
+    private int calculateTotalRoutingFiles(BlobStoreRepository repository) throws IOException {  
+            getClusterState().getClusterName().value(),  
+        });
+    }  
 }  
+            getClusterState().getMetadata().clusterUUID()
+            pathHashAlgo  
+            getClusterState().getClusterName().value(),  
+            .put("node.attr." + REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY, REMOTE_ROUTING_TABLE_REPO)
+            getClusterState().getClusterName().value(),
+        assertRemoteStoreRepositoryOnAllNodes(REMOTE_ROUTING_TABLE_REPO);
+    }
+            assertTrue("Uploaded file not found in indexRoutingPaths: " + uploadedFilename.getUploadedFilename(), pathFound);
+            return false;
+import org.opensearch.index.remote.RemoteStoreEnums;  
+import java.util.ArrayList;
+        }  
+        deleteIndexAndVerify(remoteManifestManager);
+            .put(REMOTE_PUBLICATION_SETTING_KEY, true)
+import org.opensearch.cluster.routing.IndexRoutingTable;
+            indexRoutingFiles.set(totalRoutingFiles);
+    }
+            .add("cluster-state")
+            REPOSITORY_NAME,
+        assertBusy(() -> {  
+            if (!thatIndexRoutingTable.equals(thatIndexRoutingTable)) {
+        List<RoutingTable> routingTables = getRoutingTableFromAllNodes();
+        );
+            .put(  
+ */  
+        for (RoutingTable routingTable : routingTables) {
+            getClusterState().getMetadata().clusterUUID()
+import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
+        ensureGreen(INDEX_NAME);
+        RoutingTable firstRoutingTable = routingTables.get(0);
+/*  
+            getClusterState().getMetadata().clusterUUID()
+        createIndex(INDEX_NAME_1, remoteStoreIndexSettings(1, 5));
+import org.opensearch.cluster.routing.RoutingTable;
+            RemoteClusterStateService.class
+        if (a.indicesRouting().size() != b.indicesRouting().size()) return false;  
+        assertTrue(manifest.getIndicesRouting().isEmpty());  
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
+        RepositoriesService repositoriesService = internalCluster().getClusterManagerNodeInstance(RepositoriesService.class);
+                RemoteStoreEnums.PathType.HASHED_PREFIX.toString()
+import java.util.concurrent.ExecutionException;
+import java.nio.file.Path;
+            int totalRoutingFiles = calculateTotalRoutingFiles(repository);  
+        if (b == null || a.getClass() != b.getClass()) return false;
+                .cluster()
+        return repository.basePath()
+            indexRoutingPaths.add(getIndexRoutingPath(baseMetadataPath.add(INDEX_ROUTING_TABLE), indexRoutingTable.getIndex().getUUID()));
+        RemoteManifestManager remoteManifestManager = remoteClusterStateService.getRemoteManifestManager();
+        );  
+            getClusterState().getMetadata().clusterUUID()
+            }
+        routingTables = getRoutingTableFromAllNodes();
+    }  
+        assertBusy(() -> {
+            getClusterState().getClusterName().value(),
+        updateIndexRoutingPaths(repository);  
+        });
+    }
+    }  

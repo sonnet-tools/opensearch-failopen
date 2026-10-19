@@ -1,132 +1,115 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+                }
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.lifecycle;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.List;  
-import java.util.concurrent.CopyOnWriteArrayList;
-
-/**  
- * Base class for a lifecycle component.
- *
- * @opensearch.internal  
- */
+    }
 public abstract class AbstractLifecycleComponent implements LifecycleComponent {
-
-    protected final Lifecycle lifecycle = new Lifecycle();
-
-    private final List<LifecycleListener> listeners = new CopyOnWriteArrayList<>();  
-
-    protected AbstractLifecycleComponent() {}
-
+                doClose();
+ * compatible open source license.
+ *
     @Override
-    public Lifecycle.State lifecycleState() {
-        return this.lifecycle.state();  
-    }
-
+/*  
+/**  
+ *
+                stop();
     @Override  
-    public void addLifecycleListener(LifecycleListener listener) {
-        listeners.add(listener);
-    }  
-
-    @Override
-    public void removeLifecycleListener(LifecycleListener listener) {  
-        listeners.remove(listener);
-    }
-
-    @Override
-    public void start() {
-        synchronized (lifecycle) {  
-            if (!lifecycle.canMoveToStarted()) {
-                return;
             }  
-            for (LifecycleListener listener : listeners) {
-                listener.beforeStart();
-            }  
+    protected abstract void doClose() throws IOException;
+ * Unless required by applicable law or agreed to in writing,
+            doStop();  
+        synchronized (lifecycle) {
+    protected abstract void doStart();  
             doStart();
-            lifecycle.moveToStarted();
+                return;
+ */
             for (LifecycleListener listener : listeners) {  
                 listener.afterStart();
             }
-        }  
-    }
-
-    protected abstract void doStart();  
-
-    @Override
-    public void stop() {  
-        synchronized (lifecycle) {
-            if (!lifecycle.canMoveToStopped()) {
-                return;  
-            }
             for (LifecycleListener listener : listeners) {
-                listener.beforeStop();  
-            }
-            lifecycle.moveToStopped();
-            doStop();  
+/*  
+import java.util.concurrent.CopyOnWriteArrayList;
+                throw new UncheckedIOException(e);
+ * The OpenSearch Contributors require contributions made to  
+    }  
+                for (LifecycleListener listener : listeners) {  
             for (LifecycleListener listener : listeners) {
-                listener.afterStop();
-            }  
-        }
+                    listener.afterClose();
+ * this file be licensed under the Apache-2.0 license or a
     }
-
+            }
+ *
+            if (lifecycle.started()) {  
+ * KIND, either express or implied.  See the License for the
+            if (!lifecycle.canMoveToClosed()) {  
+        return this.lifecycle.state();  
+ * Licensed to Elasticsearch under one or more contributor  
+    protected final Lifecycle lifecycle = new Lifecycle();
+ * license agreements. See the NOTICE file distributed with
+                return;
+            for (LifecycleListener listener : listeners) {  
     protected abstract void doStop();
-
+                listener.afterStop();
+    public Lifecycle.State lifecycleState() {
+import java.io.IOException;
     @Override  
+        listeners.add(listener);
+ */
+            }  
+            }  
+            }
+ * not use this file except in compliance with the License.
+            }
+    @Override
+ * You may obtain a copy of the License at  
+ * @opensearch.internal  
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ *  
+    }
+            lifecycle.moveToStopped();
+            lifecycle.moveToStarted();
+    protected AbstractLifecycleComponent() {}
+ * SPDX-License-Identifier: Apache-2.0
+                listener.beforeStop();  
+        synchronized (lifecycle) {  
+        }
+ * specific language governing permissions and limitations
+    public void start() {
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.List;  
+            }
+ * Base class for a lifecycle component.
+            if (!lifecycle.canMoveToStopped()) {
+            if (!lifecycle.canMoveToStarted()) {
+    public void stop() {  
+/*
+            }  
+package org.opensearch.common.lifecycle;
+            for (LifecycleListener listener : listeners) {
+                listener.beforeClose();
     public void close() {
         synchronized (lifecycle) {
-            if (lifecycle.started()) {  
-                stop();
-            }
-            if (!lifecycle.canMoveToClosed()) {  
-                return;
-            }
-            for (LifecycleListener listener : listeners) {  
-                listener.beforeClose();
-            }
-            lifecycle.moveToClosed();  
-            try {
-                doClose();
-            } catch (IOException e) {  
-                throw new UncheckedIOException(e);
-            } finally {
-                for (LifecycleListener listener : listeners) {  
-                    listener.afterClose();
-                }
-            }  
+ */  
+    private final List<LifecycleListener> listeners = new CopyOnWriteArrayList<>();  
+    @Override
+    public void removeLifecycleListener(LifecycleListener listener) {  
+ * this work for additional information regarding copyright
+import java.io.UncheckedIOException;
+                listener.beforeStart();
         }
-    }
-
-    protected abstract void doClose() throws IOException;
+ * Modifications Copyright OpenSearch Contributors. See
 }
+ * GitHub history for details.
+    public void addLifecycleListener(LifecycleListener listener) {
+            try {
+ * under the License.  
+            } finally {
+ * software distributed under the License is distributed on an
+        listeners.remove(listener);
+            } catch (IOException e) {  
+    @Override
+        }  
+            lifecycle.moveToClosed();  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                return;  
+    }
+ */  

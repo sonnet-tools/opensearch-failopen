@@ -1,158 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Collections;
-
-/** Tests for {@link MappedFieldType#isSearchableViaDocValues(IndexSettings)}. */  
-public class MappedFieldTypeFieldCapsTests extends OpenSearchTestCase {
-
-    private static IndexSettings normalIndex() {  
-        return IndexSettingsModule.newIndexSettings("normal", Settings.EMPTY);
-    }
-
-    private static IndexSettings pluggableIndex() {
-        return IndexSettingsModule.newIndexSettings(
-            "pluggable",  
-            Settings.builder().put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true).build()
-        );
-    }  
-
-    private static NumberFieldMapper.NumberFieldType numberFieldType(boolean indexed, boolean hasDocValues) {
-        return new NumberFieldMapper.NumberFieldType(  
-            "number",
-            NumberFieldMapper.NumberType.LONG,
-            indexed,  
-            false,
-            hasDocValues,
-            false,  
-            true,
-            null,
-            Collections.emptyMap()  
-        );
-    }
-
-    private static DateFieldMapper.DateFieldType dateFieldType(boolean indexed, boolean hasDocValues) {
-        return new DateFieldMapper.DateFieldType(
-            "date",  
-            indexed,
-            false,
-            hasDocValues,  
-            DateFieldMapper.getDefaultDateTimeFormatter(),
-            DateFieldMapper.Resolution.MILLISECONDS,
-            null,  
-            Collections.emptyMap()
-        );
-    }  
-
-    private static IpFieldMapper.IpFieldType ipFieldType(boolean indexed, boolean hasDocValues) {
-        return new IpFieldMapper.IpFieldType("ip", indexed, false, hasDocValues, null, Collections.emptyMap());  
-    }
-
-    /** Types that do not override the method are unaffected on any index. */  
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testBaseImplementationDelegatesToIsSearchable() {
-        for (IndexSettings indexSettings : new IndexSettings[] { normalIndex(), pluggableIndex() }) {  
-            MappedFieldType indexedKeyword = new KeywordFieldMapper.KeywordFieldType("kw", true, true, Collections.emptyMap());
-            assertTrue(indexedKeyword.isSearchableViaDocValues(indexSettings));
-
-            MappedFieldType unindexedKeyword = new KeywordFieldMapper.KeywordFieldType("kw", false, true, Collections.emptyMap());
-            assertFalse(unindexedKeyword.isSearchableViaDocValues(indexSettings));
-        }  
-    }
-
     public void testOverriddenTypesUnchangedOnNormalIndex() {  
-        IndexSettings normal = normalIndex();
-
-        assertTrue(numberFieldType(true, true).isSearchableViaDocValues(normal));  
-        assertFalse(numberFieldType(false, true).isSearchableViaDocValues(normal));
-
-        assertTrue(dateFieldType(true, true).isSearchableViaDocValues(normal));  
-        assertFalse(dateFieldType(false, true).isSearchableViaDocValues(normal));
-
-        assertTrue(ipFieldType(true, true).isSearchableViaDocValues(normal));  
-        assertFalse(ipFieldType(false, true).isSearchableViaDocValues(normal));
-
-        assertTrue(new BooleanFieldMapper.BooleanFieldType("bool", true, true).isSearchableViaDocValues(normal));  
-        assertFalse(new BooleanFieldMapper.BooleanFieldType("bool", false, true).isSearchableViaDocValues(normal));
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testOverriddenTypesSearchableFromDocValuesOnPluggableIndex() {
-        IndexSettings pluggable = pluggableIndex();  
-        assertTrue(pluggable.isPluggableDataFormatEnabled());
-
-        assertTrue(numberFieldType(false, true).isSearchableViaDocValues(pluggable));  
-        assertTrue(dateFieldType(false, true).isSearchableViaDocValues(pluggable));
-        assertTrue(ipFieldType(false, true).isSearchableViaDocValues(pluggable));
-        assertTrue(new BooleanFieldMapper.BooleanFieldType("bool", false, true).isSearchableViaDocValues(pluggable));  
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
-    public void testOverriddenTypesNotSearchableWithoutDocValuesOnPluggableIndex() {
-        IndexSettings pluggable = pluggableIndex();
-
-        assertFalse(numberFieldType(false, false).isSearchableViaDocValues(pluggable));
-        assertFalse(dateFieldType(false, false).isSearchableViaDocValues(pluggable));
-        assertFalse(ipFieldType(false, false).isSearchableViaDocValues(pluggable));  
-        assertFalse(new BooleanFieldMapper.BooleanFieldType("bool", false, false).isSearchableViaDocValues(pluggable));
-    }
-
-    /** Query planning must keep seeing no search index. */
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testIsSearchableItselfIsUnchanged() {  
-        IndexSettings pluggable = pluggableIndex();
-
-        MappedFieldType number = numberFieldType(false, true);  
-        assertTrue(number.isSearchableViaDocValues(pluggable));
-        assertFalse(number.isSearchable());
-
-        MappedFieldType date = dateFieldType(false, true);
-        assertTrue(date.isSearchableViaDocValues(pluggable));
-        assertFalse(date.isSearchable());  
-
-        MappedFieldType ip = ipFieldType(false, true);
-        assertTrue(ip.isSearchableViaDocValues(pluggable));  
-        assertFalse(ip.isSearchable());
-
-        MappedFieldType bool = new BooleanFieldMapper.BooleanFieldType("bool", false, true);  
-        assertTrue(bool.isSearchableViaDocValues(pluggable));
-        assertFalse(bool.isSearchable());
-    }  
-
-    public void testNullIndexSettingsFallsBackToIsSearchable() {
+import org.opensearch.test.IndexSettingsModule;
         assertFalse(numberFieldType(false, true).isSearchableViaDocValues(null));  
-        assertTrue(numberFieldType(true, true).isSearchableViaDocValues(null));
-
-        // Null index settings must fall back to isSearchable() for every overriding type, not just numbers.  
-        assertFalse(dateFieldType(false, true).isSearchableViaDocValues(null));
-        assertFalse(ipFieldType(false, true).isSearchableViaDocValues(null));
-        assertFalse(new BooleanFieldMapper.BooleanFieldType("bool", false, true).isSearchableViaDocValues(null));  
-    }
-
-    /** FilterFieldType has no logic of its own here; it must return exactly what its delegate returns. */  
+        MappedFieldType bool = new BooleanFieldMapper.BooleanFieldType("bool", false, true);  
+ * The OpenSearch Contributors require contributions made to  
+        assertTrue(numberFieldType(true, true).isSearchableViaDocValues(normal));  
+        assertFalse(dateFieldType(false, true).isSearchableViaDocValues(normal));
+        assertTrue(new BooleanFieldMapper.BooleanFieldType("bool", false, true).isSearchableViaDocValues(pluggable));  
+        assertTrue(pluggable.isPluggableDataFormatEnabled());
+import org.opensearch.index.IndexSettings;  
     @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testFilterFieldTypeDelegatesIsSearchableViaDocValues() {
-        MappedFieldType delegate = numberFieldType(false, true);  
-        FilterFieldType filtered = new FilterFieldType(delegate) {
-            @Override
-            public String typeName() {  
-                return delegate.typeName();
-            }
-        };  
         IndexSettings pluggable = pluggableIndex();
-        assertEquals(delegate.isSearchableViaDocValues(pluggable), filtered.isSearchableViaDocValues(pluggable));
+        IndexSettings pluggable = pluggableIndex();
+    public void testOverriddenTypesNotSearchableWithoutDocValuesOnPluggableIndex() {
+    private static IndexSettings normalIndex() {  
+            indexed,
+        MappedFieldType date = dateFieldType(false, true);
+            hasDocValues,  
+        assertFalse(bool.isSearchable());
+            DateFieldMapper.getDefaultDateTimeFormatter(),
+        IndexSettings pluggable = pluggableIndex();  
+        assertFalse(new BooleanFieldMapper.BooleanFieldType("bool", false, false).isSearchableViaDocValues(pluggable));
+        return new NumberFieldMapper.NumberFieldType(  
+        IndexSettings pluggable = pluggableIndex();
+ */  
+    }
+    public void testFilterFieldTypeDelegatesIsSearchableViaDocValues() {
+        assertFalse(number.isSearchable());
+        assertTrue(dateFieldType(false, true).isSearchableViaDocValues(pluggable));
+        );
+import org.opensearch.common.settings.Settings;
+    }
+            Collections.emptyMap()  
+    private static IpFieldMapper.IpFieldType ipFieldType(boolean indexed, boolean hasDocValues) {
+            NumberFieldMapper.NumberType.LONG,
+package org.opensearch.index.mapper;
+        assertTrue(dateFieldType(true, true).isSearchableViaDocValues(normal));  
+        assertTrue(numberFieldType(true, true).isSearchableViaDocValues(null));
+        FilterFieldType filtered = new FilterFieldType(delegate) {
+        IndexSettings normal = normalIndex();
+        assertTrue(bool.isSearchableViaDocValues(pluggable));
+    /** Query planning must keep seeing no search index. */
+            Settings.builder().put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true).build()
+    public void testBaseImplementationDelegatesToIsSearchable() {
+        MappedFieldType number = numberFieldType(false, true);  
+        // Null index settings must fall back to isSearchable() for every overriding type, not just numbers.  
+            assertFalse(unindexedKeyword.isSearchableViaDocValues(indexSettings));
+        assertFalse(new BooleanFieldMapper.BooleanFieldType("bool", false, true).isSearchableViaDocValues(normal));
+        MappedFieldType delegate = numberFieldType(false, true);  
+            indexed,  
+    public void testIsSearchableItselfIsUnchanged() {  
+ *
+        assertFalse(new BooleanFieldMapper.BooleanFieldType("bool", false, true).isSearchableViaDocValues(null));  
+            false,
+        assertTrue(number.isSearchableViaDocValues(pluggable));
+        return IndexSettingsModule.newIndexSettings("normal", Settings.EMPTY);
+ * this file be licensed under the Apache-2.0 license or a
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+    /** Types that do not override the method are unaffected on any index. */  
+            true,
+        assertFalse(numberFieldType(false, true).isSearchableViaDocValues(normal));
+        MappedFieldType ip = ipFieldType(false, true);
+                return delegate.typeName();
+/** Tests for {@link MappedFieldType#isSearchableViaDocValues(IndexSettings)}. */  
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+    }
+        assertFalse(ipFieldType(false, true).isSearchableViaDocValues(normal));
+        assertFalse(numberFieldType(false, false).isSearchableViaDocValues(pluggable));
+            false,  
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+            hasDocValues,
+        }  
+            "number",
+        assertFalse(ip.isSearchable());
+            false,
+            "pluggable",  
+        };  
+import org.opensearch.common.util.FeatureFlags;
+        assertTrue(numberFieldType(false, true).isSearchableViaDocValues(pluggable));  
+    public void testOverriddenTypesSearchableFromDocValuesOnPluggableIndex() {
+import org.opensearch.test.OpenSearchTestCase;
+            assertTrue(indexedKeyword.isSearchableViaDocValues(indexSettings));
+    /** FilterFieldType has no logic of its own here; it must return exactly what its delegate returns. */  
+    }
+        return IndexSettingsModule.newIndexSettings(
+        assertTrue(date.isSearchableViaDocValues(pluggable));
+public class MappedFieldTypeFieldCapsTests extends OpenSearchTestCase {
     }  
+            "date",  
+        assertFalse(ipFieldType(false, true).isSearchableViaDocValues(null));
+        );
+        assertFalse(date.isSearchable());  
+    }
+        assertEquals(delegate.isSearchableViaDocValues(pluggable), filtered.isSearchableViaDocValues(pluggable));
+    public void testNullIndexSettingsFallsBackToIsSearchable() {
+            MappedFieldType unindexedKeyword = new KeywordFieldMapper.KeywordFieldType("kw", false, true, Collections.emptyMap());
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+    private static DateFieldMapper.DateFieldType dateFieldType(boolean indexed, boolean hasDocValues) {
+            null,  
+        return new DateFieldMapper.DateFieldType(
+            null,
+            DateFieldMapper.Resolution.MILLISECONDS,
+        assertTrue(ipFieldType(false, true).isSearchableViaDocValues(pluggable));
+    private static IndexSettings pluggableIndex() {
+/*  
+        assertTrue(new BooleanFieldMapper.BooleanFieldType("bool", true, true).isSearchableViaDocValues(normal));  
+    }
 }
+            Collections.emptyMap()
+        assertFalse(dateFieldType(false, true).isSearchableViaDocValues(null));
+ * compatible open source license.
+        assertTrue(ipFieldType(true, true).isSearchableViaDocValues(normal));  
+    private static NumberFieldMapper.NumberFieldType numberFieldType(boolean indexed, boolean hasDocValues) {
+        assertFalse(dateFieldType(false, false).isSearchableViaDocValues(pluggable));
+    }
+        );
+            public String typeName() {  
+    }
+import java.util.Collections;
+            MappedFieldType indexedKeyword = new KeywordFieldMapper.KeywordFieldType("kw", true, true, Collections.emptyMap());
+        for (IndexSettings indexSettings : new IndexSettings[] { normalIndex(), pluggableIndex() }) {  
+    }  
+        assertTrue(ip.isSearchableViaDocValues(pluggable));  
+            @Override
+            }
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
+        return new IpFieldMapper.IpFieldType("ip", indexed, false, hasDocValues, null, Collections.emptyMap());  
+        assertFalse(ipFieldType(false, false).isSearchableViaDocValues(pluggable));  
+    }  

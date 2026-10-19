@@ -1,1092 +1,1043 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.search;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TotalHits;  
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.OriginalIndices;
-import org.opensearch.action.search.TransportSearchAction.SearchTimeProvider;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.core.common.text.Text;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.SearchHit;  
-import org.opensearch.search.SearchHits;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.aggregations.InternalAggregations;  
-import org.opensearch.search.aggregations.bucket.range.InternalDateRange;
-import org.opensearch.search.aggregations.bucket.range.Range;
-import org.opensearch.search.aggregations.metrics.InternalMax;  
-import org.opensearch.search.aggregations.metrics.Max;
-import org.opensearch.search.internal.InternalSearchResponse;
-import org.opensearch.search.internal.SearchContext;  
-import org.opensearch.search.profile.ProfileShardResult;
-import org.opensearch.search.profile.SearchProfileShardResults;
-import org.opensearch.search.profile.SearchProfileShardResultsTests;  
-import org.opensearch.search.suggest.Suggest;
-import org.opensearch.search.suggest.completion.CompletionSuggestion;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.transport.RemoteClusterAware;
-import org.opensearch.transport.RemoteClusterService;
-import org.junit.Before;  
-
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-import java.util.PriorityQueue;
-import java.util.TreeMap;
-import java.util.concurrent.ExecutorService;  
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonList;
-import static org.opensearch.test.InternalAggregationTestCase.emptyReduceContextBuilder;  
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-
-public class SearchResponseMergerTests extends OpenSearchTestCase {  
-
-    private int numResponses;
-    private ExecutorService executorService;  
-
-    @Before
-    public void init() {  
-        numResponses = randomIntBetween(1, 10);
-        executorService = Executors.newFixedThreadPool(numResponses);
     }  
-
-    private void addResponse(SearchResponseMerger searchResponseMerger, SearchResponse searchResponse) {
-        if (randomBoolean()) {  
-            executorService.submit(() -> searchResponseMerger.add(searchResponse));
-        } else {
-            searchResponseMerger.add(searchResponse);  
-        }
-    }
-
-    private void awaitResponsesAdded() throws InterruptedException {
-        executorService.shutdown();
-        assertTrue(executorService.awaitTermination(5, TimeUnit.SECONDS));  
-    }
-
-    public void testMergeTookInMillis() throws InterruptedException {  
-        long currentRelativeTime = randomNonNegativeLong();
-        SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);
-        SearchResponseMerger merger = new SearchResponseMerger(  
-            randomIntBetween(0, 1000),
-            randomIntBetween(0, 10000),
-            SearchContext.TRACK_TOTAL_HITS_ACCURATE,  
-            timeProvider,
-            emptyReduceContextBuilder()
-        );  
-        for (int i = 0; i < numResponses; i++) {
-            SearchResponse searchResponse = new SearchResponse(
-                InternalSearchResponse.empty(),  
-                null,
+            assertSame(expected, shardFailure);
                 1,
+            SearchResponse searchResponse = new SearchResponse(  
+            Comparator.comparing(Tuple::v1, (o1, o2) -> {  
+            0,
+        for (int j = 0; j < numDocs; j++) {
+        SearchResponse mergedResponse = searchResponseMerger.getMergedResponse(
+            int numFailures = randomIntBetween(1, 50);
+            assertThat(currentShardId, greaterThanOrEqualTo(lastShardId));
+            addResponse(searchResponseMerger, searchResponse);  
+        final int from = size > 0 ? randomIntBetween(0, 100) : 0;
+        Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option> options = suggestion.getEntries().get(0);
+        assertEquals(numResponses, mergedResponse.getTotalShards());  
+        for (int i = 0; i < numIndices; i++) {
+        Tuple<Integer, TotalHits.Relation> randomTrackTotalHits = randomTrackTotalHits();
+            ShardSearchFailure expected = priorityQueue.poll().v2();
+            TotalHits totalHits = null;  
+                String indexUuid = frequently() ? randomAlphaOfLength(10) : indexName;  
+                0,
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+    }
+                long previousValue = expectedTotalHits == null ? 0 : expectedTotalHits.value();
+        SearchHit[] hits = searchHits.getHits();
+            0,  
+        awaitResponsesAdded();
+    }  
+        PriorityQueue<SearchHit> priorityQueue
+            0,
+            double value = randomDouble();
+            assertSame(expected, hit);
+            }
+            ShardId shardId = new ShardId(
+                shardSearchFailures,
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+    public void testMergeAggs() throws InterruptedException {  
+                numResponses,
+            SearchResponse searchResponse = new SearchResponse(  
+                            return scoreCompare;
+        assertNotNull(response.getHits().getTotalHits());  
+        }
+                null,
+                hits,
+        final SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
+import org.opensearch.test.OpenSearchTestCase;  
+            1,
+        int[] sortFieldFactors = new int[sortFields == null ? 0 : sortFields.length];
+            if (collapseField != null) {
+            addResponse(searchResponseMerger, searchResponse);
+            0,
+                successful,  
+            )
+    public void testMergeOnlyEmptyHits() {
+    public void testMergeCompletionSuggestions() throws InterruptedException {  
+        int numIndices = requestedSize == 0 ? 0 : randomIntBetween(1, requestedSize);
+            new SearchRequestContext(  
+            addResponse(searchResponseMerger, searchResponse);
+        assertEquals(priorityQueue.size(), shardFailures.length);
+        final String collapseField;
+                null,
+        TotalHits.Relation totalHitsRelation = randomTrackTotalHits.v2();
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+            expectedTotal += total;
+                sortFields,  
+            )
+                new SearchRequest(),  
+        int expectedSuccessful = 0;
+        );  
+                InternalSearchResponse.empty(),  
+            "remote",
+        if (expectedTotalHits == null) {
+        awaitResponsesAdded();
+import org.opensearch.search.aggregations.metrics.InternalMax;  
+ * not use this file except in compliance with the License.
+        assertEquals(2, mergedResponse.getSuccessfulShards());  
+        assertEquals(1, suggestion.getEntries().size());  
+                collapseValues = new Object[numDocs];
+            expectedMaxScore = Math.max(expectedMaxScore, maxScore);
+                null,
+        awaitResponsesAdded();
+            InternalDateRange.Factory factory = new InternalDateRange.Factory();
+        assertEquals(numResponses, mergedResponse.getTotalShards());
+    public void testMergeShardFailuresNullShardId() throws InterruptedException {  
+            searchResponseMerger.add(searchResponse);  
+import java.util.ArrayList;
+            clusters,
+                ShardSearchFailure.EMPTY_ARRAY,  
+        );
+        );
+            assertEquals(--i, option.getScore(), 0f);
+                new SearchRequest(),
+            Boolean terminatedEarly = frequently() ? null : true;
+ * this work for additional information regarding copyright
+                return Tuple.tuple(SearchContext.TRACK_TOTAL_HITS_ACCURATE, TotalHits.Relation.EQUAL_TO);
+                        }  
+            emptyReduceContextBuilder()
+                return Tuple.tuple(SearchContext.TRACK_TOTAL_HITS_DISABLED, null);
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
+                shardId,
+            indicesPerCluster.put(clusterAlias, indices);  
+        for (int i = 0; i < numResponses; i++) {
+                null,
+            emptyReduceContextBuilder()
+            sortFieldFactors[j] = randomIntBetween(1, numResponses);
+            sortFields[i] = new SortField("field-" + i, SortField.Type.INT, randomBoolean());
+        }
+        Range.Bucket bucket = range.getBuckets().get(0);
+        assertEquals(numResponses, merger.numResponses());
+                null,  
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
+        TotalHits expectedTotalHits = null;
+                timedOut,  
+        executorService.shutdown();
+import java.util.concurrent.ExecutorService;  
+        }  
+            );  
+        assertEquals(clusters, mergedResponse.getClusters());
+        assertEquals(priorityQueue.size(), shardFailures.length);
+                1F,
+            0,  
+            }
+        assertEquals(expectedTerminatedEarly, searchResponse.isTerminatedEarly());
+        assertSame(clusters, response.getClusters());
+    }  
+        assertEquals(expectedSuccessful, searchResponse.getSuccessfulShards());  
+                    }
+                null,
+                internalSearchResponse,  
+                final SortField sortField;
+        for (ShardSearchFailure shardFailure : shardFailures) {  
+                skipped,
+        assertEquals(0, mergedResponse.getSkippedShards());
+            );
+        for (CompletionSuggestion.Entry.Option option : options) {
+                response,
+        assertEquals(1, suggestion.getEntries().size());
+        assertEquals(numResponses, mergedResponse.getSuccessfulShards());  
+            addResponse(merger, searchResponse);
+    ) {
+        assertEquals(numResponses, mergedResponse.getSuccessfulShards());
+import static java.util.Collections.singletonList;
+            new SearchTimeProvider(0, 0, () -> 0),
+            assertSame(expectedTotalHits.relation(), searchHits.getTotalHits().relation());  
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
+            emptyReduceContextBuilder()  
+                randomAlphaOfLengthBetween(5, 10),  
+        for (int i = 0; i < numResponses; i++) {
+import java.util.Arrays;  
+                null,
+            options.addOption(option);
+            }
+        }  
+        assertArrayEquals(hits, mergedResponse.getHits().getHits());  
+            0,  
+                        rawSortValues[k] = sortField.getReverse() ? numDocs * sortFieldFactors[k] - j : j;  
+                        }  
+import java.util.Map;  
+            from,
+        SearchResponse searchResponse = searchResponseMerger.getMergedResponse(
+                0,
+                clusterAlias,  
+            ShardSearchFailure[] shardSearchFailures = new ShardSearchFailure[numFailures];
+                        int scoreCompare = Float.compare(b.getScore(), a.getScore());  
+        assertEquals(Math.min(numResponses, size), options.getOptions().size());
+        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+            CompletionSuggestion completionSuggestion = new CompletionSuggestion(suggestionName, size, false);
+                randomLong(),
+            } else {
+            executorService.submit(() -> searchResponseMerger.add(searchResponse));
+                ShardId shardId = new ShardId(randomFrom(indices), j);
+            ShardSearchFailure[] shardSearchFailures = new ShardSearchFailure[numFailures];  
+            );  
+                docId,
+            }
+                OriginalIndices.NONE
+                null,
+ * You may obtain a copy of the License at  
+        awaitResponsesAdded();  
+/*  
+        ShardSearchFailure[] shardFailures = mergedResponse.getShardFailures();  
+        assertSame(clusters, mergedResponse.getClusters());
                 1,  
+                1,  
+            ShardId shardId = new ShardId(randomFrom(indices), randomIntBetween(0, 10));
+/*  
+            InternalDateRange.Bucket bucket = factory.createBucket(
+        assertThat(hits.length, lessThanOrEqualTo(size));
+        float expectedMaxScore = Float.NEGATIVE_INFINITY;
+                1,
+            SearchShardTarget shard = option.getHit().getShard();  
+            priorityQueue.add(hit);
+package org.opensearch.action.search;
+ */  
+        assertEquals(expectedProfile, mergedResponse.getProfileResults());  
+        } else {
+        long currentRelativeTime = randomLong();
+            maxValue = Math.max(value, maxValue);
+                return shardIdCompareTo;
+        assertEquals(priorityQueue.size(), mergedResponse.getFailedShards());  
+                if (compareTo != 0) {
+        assertEquals(0, mergedResponse.getShardFailures().length);
+            SearchResponse searchResponse = new SearchResponse(
+                    scoreSort = true;  
+            completionSuggestion.addTerm(options);  
+                int scoreCompare = Float.compare(b.getScore(), a.getScore());
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
+        assertEquals(numResponses, mergedResponse.getSuccessfulShards());  
+ *  
+                1,  
+import org.opensearch.search.suggest.Suggest;
+            float maxScore = scoreSort ? numDocs * scoreFactor : Float.NaN;
+import org.opensearch.search.aggregations.bucket.range.Range;
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),  
+        int numDocs,  
+        assertSame(clusters, mergedResponse.getClusters());
+        );
+            ShardSearchFailure expected = priorityQueue.poll().v2();  
+            .getSuggest()
+        switch (randomIntBetween(0, 2)) {
+                InternalSearchResponse.empty(),  
+            float score = Float.NaN;
+        final SortField[] sortFields;
+        assertEquals(numResponses, mergedResponse.getTotalShards());
+            SearchResponse searchResponse = new SearchResponse(
+        );
+        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(
+                } else {
+            clusters,
+            if (frequently() || indicesPerCluster.containsKey(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY)) {
+            SearchShardTarget aShard = a.getShard();
+            collapseField = randomBoolean() ? "collapse" : null;
+            assertEquals(collapseField, searchHits.getCollapseField());
+            TotalHits totalHits = null;
+            if (shardIdCompareTo != 0) {
+                collapseField,
+                    return scoreCompare;  
+        assertEquals(expectedTimedOut, searchResponse.isTimedOut());
+            SearchResponse searchResponse = new SearchResponse(
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+ * The OpenSearch Contributors require contributions made to  
+                InternalSearchResponse.empty(),
+                assertThat(shard.getClusterAlias(), greaterThan(lastClusterAlias));
+        }  
+        } else {  
+                return Tuple.tuple(randomIntBetween(10, 1000), TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);  
+            String clusterAlias = entry.getKey();
+        }
+            )  
+                ShardSearchFailure failure = new ShardSearchFailure(new IllegalArgumentException(), searchShardTarget);
+    private static Tuple<Integer, TotalHits.Relation> randomTrackTotalHits() {
+        executorService = Executors.newFixedThreadPool(numResponses);
+            emptyReduceContextBuilder()
+        int scoreFactor,
+        ).getShardFailures();  
+        }
+        );
+            }  
+            Object[] collapseValues = null;  
+            );
+        int size = randomIntBetween(1, 100);
+ * software distributed under the License is distributed on an
+                null,
+            clusters,  
+            SearchContext.TRACK_TOTAL_HITS_ACCURATE,
+    }  
+        TotalHits.Relation totalHitsRelation = randomTrackTotalHits.v2();
+        } else {
+            InternalSearchResponse response = new InternalSearchResponse(empty, null, null, null, false, false, 1);
+            );  
+                clusterAlias,
+        assertEquals(0, mergedResponse.getShardFailures().length);  
+        {  
+        int expectedSkipped = 0;  
+                () -> null  
+        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(  
+        }  
+            for (int j = 0; j < numFailures; j++) {
+            assertNull(searchHits.getCollapseField());
+                long previousValue = expectedTotalHits == null ? 0 : expectedTotalHits.value();  
+        );
+                1,  
+                ShardSearchFailure.EMPTY_ARRAY,
+                clusterAlias = randomAlphaOfLengthBetween(5, 10);
+        assertSame(InternalAggregations.EMPTY, response.getAggregations());
+            assertTrue(Float.isNaN(searchHits.getMaxScore()));  
+ * under the License.  
+                () -> null
+                searchHits,
+import org.opensearch.search.SearchHits;
+        awaitResponsesAdded();
+                0,
+            SearchHits searchHits = new SearchHits(new SearchHit[0], null, Float.NaN);  
+        assertFalse(response.isTimedOut());
+        @Override
+            SearchContext.TRACK_TOTAL_HITS_ACCURATE,  
+                1,
+        assertEquals(numResponses, merger.numResponses());
+                    "node",
+            emptyReduceContextBuilder()
+            return Integer.compare(a.docId(), b.docId());
+        }
+        PriorityQueue<Tuple<SearchShardTarget, ShardSearchFailure>> priorityQueue = new PriorityQueue<>(
+        int totalCount = 0;
+        SortField[] sortFields,  
+        for (Suggest.Suggestion.Entry.Option option : options) {
+                1,  
+            );  
+                response,  
+            new SearchRequestContext(
+        float maxScore,
+            sortFields = null;
+        SearchResponse mergedResponse = merger.getMergedResponse(
+        Map<String, ProfileShardResult> expectedProfile = new HashMap<>();
+        String suggestionName = randomAlphaOfLengthBetween(4, 8);
+ * compatible open source license.
+        assertEquals(expectedTotalHits, mergedResponse.getHits().getTotalHits());
+            for (int j = 0; j < indices.length; j++) {
+        SortField[] sortFields = new SortField[numFields];  
+        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(
+        public int compare(SearchHit a, SearchHit b) {
+            int shardIdCompareTo = aShard.getShardId().compareTo(bShard.getShardId());  
+                null,  
+    public void testMergeTookInMillis() throws InterruptedException {  
+        }  
+            );  
+    public void testMergeNoResponsesAdded() {
+        awaitResponsesAdded();
+            0,
+        }
+            }  
+            InternalSearchResponse response = new InternalSearchResponse(empty, null, null, null, false, false, 1);
+import org.opensearch.core.index.Index;  
+        String suggestionName = randomAlphaOfLengthBetween(4, 8);
+        }  
+            )
+        assertThat(Arrays.asList(shardFailures), containsInAnyOrder(expectedFailures.toArray(ShardSearchFailure.EMPTY_ARRAY)));
+                randomLong(),
+                int compareTo = o1.getShardId().compareTo(o2.getShardId());
+        }
+        for (int i = 0; i < numFields; i++) {
+        );
+    public void testMergeEmptySearchHitsWithNonEmpty() {  
+                1,
+            int numReducePhases = randomIntBetween(1, 5);  
+        assertEquals(numResponses, mergedResponse.getTotalShards());
+        assertEquals(0, response.getShardFailures().length);  
+        for (int i = 0; i < numResponses; i++) {  
+        assertEquals(numResponses, mergedResponse.getSuccessfulShards());
+            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(
+                        }  
+        assertEquals(numResponses, merger.numResponses());
+                ShardSearchFailure.EMPTY_ARRAY,
+                sortFields,
+ *
+        assertEquals(expectedReducePhases, searchResponse.getNumReducePhases());  
+            SearchHits searchHits = new SearchHits(hits, new TotalHits(10, TotalHits.Relation.EQUAL_TO), Float.NaN, sortFields, null, null);
+                totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);  
+                1,  
+        }
+            assertNull(searchHits.getSortFields());
+            int successful = randomIntBetween(1, total);
+            SearchShardTarget bShard = b.getShard();
+                null,  
+        awaitResponsesAdded();
+                i,
+                () -> null
+            searchTimeProvider,
+        int numIndices = numResponses * randomIntBetween(1, 3);
+        if (randomBoolean()) {
+            new SearchRequestContext(  
+            0,
+        assertEquals(0, response.getNumReducePhases());
+        assertEquals(0, mergedResponse.getShardFailures().length);
+        } else {  
+        assertEquals("10000.0", bucket.getToAsString());  
+        int trackTotalHitsUpTo = randomTrackTotalHits.v1();  
+            scoreSort = true;  
+        int numResponses = randomIntBetween(1, 5);  
+import org.opensearch.search.aggregations.metrics.Max;
+            merger.add(searchResponse);  
+            SearchResponse searchResponse = new SearchResponse(  
+            new SearchRequestContext(  
+            clusters,
+        long currentRelativeTime = randomLong();
+        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(sortFields));
+            );
+            String clusterAlias = randomBoolean() ? "" : randomAlphaOfLengthBetween(5, 10);
+                0,
+                }
+ * license agreements. See the NOTICE file distributed with
+            if (clusterAliasCompareTo != 0) {
+        boolean scoreSort = false;  
+        return hits;  
+        );  
+        Index[] indices,  
+            SearchResponse searchResponse = new SearchResponse(
+            trackTotalHitsUpTo,
+import static java.util.Collections.emptyMap;
+        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);  
+                1,
+        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);
+    }
+import org.opensearch.OpenSearchException;
+        }
+        assertNull(searchResponse.getScrollId());
+            int docId = randomIntBetween(0, Integer.MAX_VALUE);  
+            if (trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_DISABLED) {
+        for (int i = 0; i < numResponses; i++) {
+                count,
+            );
+                        rawSortValues[k] = score;
+            0,
+            );  
+                new SearchRequest(),  
+import java.util.PriorityQueue;
+            new SearchRequestContext(
+                    docValueFormats[k] = DocValueFormat.RAW;
+                    if (sortField == SortField.FIELD_SCORE) {
+import static org.opensearch.test.InternalAggregationTestCase.emptyReduceContextBuilder;  
+    }
+                new SearchRequest(),
+    }
+            addResponse(merger, searchResponse);
+import org.opensearch.search.suggest.completion.CompletionSuggestion;
+                totalHits,
+        CompletionSuggestion.Entry options = suggestion.getEntries().get(0);  
+            expectedReducePhases += numReducePhases;
+        String clusterAlias,
+        );
+            addResponse(searchResponseMerger, searchResponse);  
+                numDocs,  
+        assertEquals(expectedTotal, searchResponse.getTotalShards());
+            searchTimeProvider,  
+            completionSuggestion.addTerm(options);
+                }
+                1,
+        );  
+import org.junit.Before;  
+                total,
+            InternalSearchResponse response = new InternalSearchResponse(searchHits, null, null, null, false, false, 1);
+                internalSearchResponse,  
+                ShardSearchFailure.EMPTY_ARRAY,
+            indicesNames[i] = randomAlphaOfLengthBetween(5, 10);  
+                randomIntBetween(0, Integer.MAX_VALUE)
+    private static final class SearchHitComparator implements Comparator<SearchHit> {
+        if (expectedMaxScore == Float.NEGATIVE_INFINITY) {
+    }
+                new Text(randomAlphaOfLengthBetween(5, 10)),  
+                internalSearchResponse,
+        assertEquals(TimeUnit.NANOSECONDS.toMillis(currentRelativeTime), response.getTook().millis());
+                return clusterAliasCompareTo;  
+        for (SearchHit hit : hits) {
+            int docId = randomIntBetween(0, Integer.MAX_VALUE);  
+            if (Float.isNaN(maxScore) == false) {  
+        );  
+        return indicesPerCluster;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+            suggestions.add(completionSuggestion);  
+import org.opensearch.search.SearchShardTarget;
+        }
+    private void addResponse(SearchResponseMerger searchResponseMerger, SearchResponse searchResponse) {
+            options.addOption(option);
+                null,
+            }  
+        assertEquals(2, mergedResponse.getTotalShards());
+                randomAlphaOfLengthBetween(3, 8),
+                    SortField sortField = sortFields[k];
+        assertEquals(TimeUnit.NANOSECONDS.toMillis(currentRelativeTime), searchResponse.getTook().millis());
+        SearchResponse mergedResponse = searchResponseMerger.getMergedResponse(
+        int numFields = randomIntBetween(1, 3);
+                Object[] rawSortValues = new Object[sortFields.length];
+                internalSearchResponse,  
+                () -> null
+        assertEquals(0, mergedResponse.getSkippedShards());
+                        hit.score(score);  
+            SearchHit searchHit = new SearchHit(docId);
+        );  
+                1,
+            SearchResponse searchResponse = new SearchResponse(
+        );
+            suggestions.add(completionSuggestion);
+                randomLong(),
+        assertEquals(0, mergedResponse.getSkippedShards());
+        );
+        }
+            SearchResponse searchResponse = new SearchResponse(  
+ * KIND, either express or implied.  See the License for the
+                maxScore == Float.NEGATIVE_INFINITY ? Float.NaN : maxScore,  
+        assertSame(clusters, mergedResponse.getClusters());
+                ShardSearchFailure failure = new ShardSearchFailure(openSearchException);
+            sortFields,  
+                shardSearchFailures[j] = shardSearchFailure;  
+                100L,
+        int i = numResponses;  
+        }
+            )
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+        assertEquals(0, mergedResponse.getSkippedShards());
+            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, null, suggest, null, false, null, 1);
+        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);  
+            new SearchTimeProvider(0, 0, () -> 0),
+        }
+                0,  
+            priorityQueue
+        SearchHit[] hits = new SearchHit[numDocs];  
+            // the collapse field is not returned when hits are empty
+            );  
+        Iterator<Map.Entry<String, Index[]>> indicesPerCluster = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();  
+                new ArrayList<>();  
+                ShardSearchFailure.EMPTY_ARRAY,  
+ */  
+            CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(
+            addResponse(merger, searchResponse);
+import org.opensearch.search.aggregations.InternalAggregations;  
+                SearchResponse.Clusters.EMPTY
+                () -> null
+                terminatedEarly,
+                expectedTotalHits = new TotalHits(Math.min(previousValue + totalHits.value(), trackTotalHitsUpTo), totalHitsRelation);
+            Index[] indices = new Index[indicesNames.length];
+            case 2:
+                shardSearchFailures[j] = failure;
+        assertEquals(numResponses, mergedResponse.getTotalShards());
+                () -> null
+            new SearchRequestContext(  
+                            compare = Integer.compare(aSortValue, bSortValue);
+                    SortField sortField = sortFields[i];
+            clusters,
+    }
+            InternalAggregations aggs = InternalAggregations.from(Arrays.asList(range, max));
+    public void testMergeProfileResults() throws InterruptedException {
+            final int numDocs = totalHits == null || totalHits.value() >= requestedSize ? requestedSize : (int) totalHits.value();
+        assertEquals(2, mergedResponse.getAggregations().asList().size());
+        );  
+        assertSame(clusters, mergedResponse.getClusters());  
+            randomIntBetween(0, 1000),
+            assertEquals("suggestion", option.getText().string());
+    }
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
+            CompletionSuggestion.Entry options = new CompletionSuggestion.Entry(new Text("suggest"), 0, 10);
+        final int size = randomIntBetween(0, 100);
+        assertEquals(TotalHits.Relation.EQUAL_TO, response.getHits().getTotalHits().relation());  
+        assertNull(response.getSuggest());  
+                response,
+            int clusterAliasCompareTo = aShard.getClusterAlias().compareTo(bShard.getClusterAlias());
+                null,
+            );  
+            case 0:  
+        assertNull(response.getScrollId());
+import java.util.concurrent.TimeUnit;
+            assertNotNull(searchHits.getTotalHits());
+                    sortField = SortField.FIELD_SCORE;
+        assertEquals(numResponses, mergedResponse.getSuccessfulShards());
+        Range range = mergedResponse.getAggregations().get(rangeAggName);
+                null,
+            new SearchRequestContext(
+    public void testMergeSearchHits() throws InterruptedException {
+                () -> null  
+        final SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);
+        String rangeAggName = randomAlphaOfLengthBetween(5, 8);  
+                new SearchRequest(),
+        Boolean expectedTerminatedEarly = null;  
+        SearchResponse searchResponse = merger.getMergedResponse(  
+import java.util.Collections;
+                expectedTotalHits = new TotalHits(Math.min(previousValue + totalHits.value(), trackTotalHitsUpTo), totalHitsRelation);
+        assertEquals(0, response.getSuccessfulShards());
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+            assertEquals(hits.length, searchHits.getCollapseValues().length);  
+        {  
+            totalCount += count;  
+            )
+            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, null, suggest, null, false, null, 1);  
+                randomLong(),
+                0,
+                SearchResponse.Clusters.EMPTY
+                // is registered twice with different aliases and searched multiple times as part of the same search request.
+            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, aggs, null, null, false, null, 1);
+        for (int i = 0; i < numResponses; i++) {
                 0,
                 randomNonNegativeLong(),
-                ShardSearchFailure.EMPTY_ARRAY,  
-                SearchResponseTests.randomClusters()
-            );
-            addResponse(merger, searchResponse);  
         }
-        awaitResponsesAdded();
-        SearchResponse searchResponse = merger.getMergedResponse(  
-            SearchResponse.Clusters.EMPTY,
-            new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),  
-                new SearchRequest(),
-                () -> null
-            )  
-        );
-        assertEquals(TimeUnit.NANOSECONDS.toMillis(currentRelativeTime), searchResponse.getTook().millis());
-    }  
-
-    public void testMergeShardFailures() throws InterruptedException {
-        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);  
-        SearchResponseMerger merger = new SearchResponseMerger(
-            0,
+                        if (scoreCompare != 0) {
+            hit.shard(new SearchShardTarget("node", shardId, clusterAlias, OriginalIndices.NONE));
+        }
+            for (int j = 0; j < numFailures; j++) {  
+        assertTrue(executorService.awaitTermination(5, TimeUnit.SECONDS));  
+            assertArrayEquals(sortFields, searchHits.getSortFields());
+                SearchResponse.Clusters.EMPTY  
+            SearchHits searchHits = new SearchHits(new SearchHit[0], null, Float.NaN);  
+import static org.hamcrest.Matchers.greaterThan;
             0,  
-            SearchContext.TRACK_TOTAL_HITS_ACCURATE,
-            searchTimeProvider,
-            emptyReduceContextBuilder()  
-        );
-        PriorityQueue<Tuple<SearchShardTarget, ShardSearchFailure>> priorityQueue = new PriorityQueue<>(
-            Comparator.comparing(Tuple::v1, (o1, o2) -> {  
-                int compareTo = o1.getShardId().compareTo(o2.getShardId());
-                if (compareTo != 0) {
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+import org.opensearch.search.internal.SearchContext;  
+        }
+            emptyReduceContextBuilder()
+                indices[j] = new Index(indexName, indexUuid);
+                shardSearchFailures[j] = failure;  
+            clusters,  
+                1,  
+        long currentRelativeTime = randomNonNegativeLong();
+                1,
+                SearchResponse.Clusters.EMPTY
+            SearchProfileShardResults profile = SearchProfileShardResultsTests.createTestItem();  
                     return compareTo;  
+                new SearchShardTarget(  
+        SearchHits searchHits = searchResponse.getHits();
+            assertSame(expected, shardFailure);
+            0,
+        for (int i = 0; i < numResponses; i++) {
+import java.util.HashMap;  
+                SearchResponseTests.randomClusters()
+            searchTimeProvider,
+            InternalDateRange range = factory.create(rangeAggName, singletonList(bucket), DocValueFormat.RAW, false, emptyMap());
+            new SearchRequestContext(
+    }  
+import org.opensearch.search.aggregations.bucket.range.InternalDateRange;
+ * Unless required by applicable law or agreed to in writing,
+            CompletionSuggestion completionSuggestion = new CompletionSuggestion(suggestionName, size, false);
+ * this file be licensed under the Apache-2.0 license or a
+            int currentShardId = shard.getShardId().id();
+            clusters,  
+        );
+            assertNull(searchHits.getTotalHits());
+import org.opensearch.search.profile.SearchProfileShardResultsTests;  
+        for (int i = 0; i < from; i++) {
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
+                if (scoreCompare != 0) {
+            Map.Entry<String, Index[]> entry = indicesIterator.next();  
+            }
+        Max max = mergedResponse.getAggregations().get(maxAggName);  
+import org.opensearch.transport.RemoteClusterService;
+                    } else {
+            int numFailures = randomIntBetween(1, 10);
+        assertEquals(1, range.getBuckets().size());  
+            option.setHit(searchHit);
+            0,  
+            int numFields = randomIntBetween(1, 3);
+                new SearchRequest(),
+            hit.shard(shardTarget);
+        }
+        for (int j = 0; j < sortFieldFactors.length; j++) {  
+            );
+            SearchResponse searchResponse = new SearchResponse(
+        private final SortField[] sortFields;
+            addResponse(merger, searchResponse);  
+    public void testMergeCompletionSuggestionsTieBreak() throws InterruptedException {  
+                priorityQueue.add(Tuple.tuple(searchShardTarget, failure));  
+                ShardSearchFailure shardSearchFailure = new ShardSearchFailure(new OpenSearchException(new IllegalArgumentException()));
+            CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(
+        int trackTotalHitsUpTo = randomTrackTotalHits.v1();  
+            size,  
+import java.util.concurrent.Executors;
+        assertEquals(0, mergedResponse.getFailedShards());
+                100L,  
+                1L,  
+            SearchHit expected = priorityQueue.poll();  
+import java.util.Iterator;
+            )
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+        assertEquals(0, response.getHits().getHits().length);
+        assertEquals(0, mergedResponse.getFailedShards());
+    public void testMergeShardFailuresNullShardTarget() throws InterruptedException {
+        numResponses = randomIntBetween(1, 10);
+            expectedTimedOut = expectedTimedOut || timedOut;  
+                SearchResponse.Clusters.EMPTY
+            int count = randomIntBetween(1, 1000);
+            addResponse(merger, searchResponse);  
+        assertEquals(0, mergedResponse.getFailedShards());
+                for (int i = 0; i < sortFields.length; i++) {  
+        SearchResponseMerger merger = new SearchResponseMerger(0, 10, Integer.MAX_VALUE, timeProvider, emptyReduceContextBuilder());
+                expectedFailures.add(shardSearchFailure);
+            expectedSkipped += skipped;
+            SearchResponse searchResponse = new SearchResponse(
+                0,  
+        SearchHit[] hits = randomSearchHitArray(
+    private static Map<String, Index[]> randomRealisticIndices(int numIndices, int numClusters) {  
+            Suggest suggest = new Suggest(suggestions);
+            default:  
+            expectedProfile.putAll(profile.getShardResults());
+        for (ShardSearchFailure shardFailure : shardFailures) {
+        }
+        SearchResponseMerger merger = new SearchResponseMerger(  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);  
+                String index = "index-" + i;
+        List<ShardSearchFailure> expectedFailures = new ArrayList<>();  
+        assertEquals(expectedSkipped, searchResponse.getSkippedShards());
+        for (int i = 0; i < numResponses; i++) {
+        Iterator<Map.Entry<String, Index[]>> indicesIterator = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();  
+            merger.add(searchResponse);
+                ShardId shardId = new ShardId(index, index + "-uuid", j);
+        assertEquals(0, mergedResponse.getSkippedShards());  
+            } else {
+                    }
+            )
+        assertEquals(0, response.getFailedShards());  
+        assertEquals(numResponses, searchResponseMerger.numResponses());  
+                    collapseValues[j] = j + 1000 * i;
+                    OriginalIndices.NONE
+            int skipped = randomIntBetween(1, total);
+                new SearchRequest(),  
+                new Text("suggestion"),  
+            0,
+        CompletionSuggestion suggestion = mergedResponse.getSuggest().getSuggestion(suggestionName);
+            searchHit.shard(
+import java.util.List;
+            0,
+ * GitHub history for details.
+            new SearchTimeProvider(0, 0, () -> 0),
+        if (collapseField != null  
+            String clusterAlias;  
+        assertEquals(0, merger.numResponses());
+        assertEquals(0, response.getTotalShards());  
+                            compare = Integer.compare(bSortValue, aSortValue);  
+        assertEquals(0, response.getSkippedShards());
+            Suggest suggest = new Suggest(suggestions);
+            Float.NaN,
+                        Integer aSortValue = (Integer) a.getRawSortValues()[i];
+    }
+            boolean timedOut = rarely();
+                InternalAggregations.EMPTY,  
+                OpenSearchException openSearchException = new OpenSearchException(new IllegalArgumentException());  
+                0,  
+                scoreFactor,
+        SearchResponse mergedResponse = merger.getMergedResponse(  
+        for (int i = 0; i < numResponses; i++) {
+            expectedTerminatedEarly = expectedTerminatedEarly == null ? terminatedEarly : expectedTerminatedEarly;
+                new SearchRequest(),
+            SearchHits searchHits = new SearchHits(new SearchHit[0], null, Float.NaN);
+        SearchResponseMerger merger = new SearchResponseMerger(
+            merger.add(searchResponse);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                clusterAlias = RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY;
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
+import org.opensearch.search.DocValueFormat;
+                        } else {
+ * specific language governing permissions and limitations
+            }
+                randomAlphaOfLength(10),
+            );
+    @Before
+        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(sortFields));  
+        if (randomBoolean()) {  
+        // the sort fields and the collapse field are not returned when hits are empty
+            new SearchRequestContext(
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
+            Map.Entry<String, Index[]> entry = indicesPerCluster.next();
+        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(  
+                    // set different collapse values for each cluster for simplicity
+                lastShardId = currentShardId;  
+    }
+                ShardSearchFailure.EMPTY_ARRAY,
+                docId,
+        assertEquals(TimeUnit.NANOSECONDS.toMillis(currentRelativeTime), searchResponse.getTook().millis());
+            );
+            collapseField = null;
+        assertEquals(numResponses, searchResponseMerger.numResponses());
+            int scoreFactor = randomIntBetween(1, numResponses);  
+            1,
+            CompletionSuggestion.Entry options = new CompletionSuggestion.Entry(new Text("suggest"), 0, 10);
+        );
+        assertEquals(0, mergedResponse.getSkippedShards());
+ */
+        );  
+            for (int i = 0; i < numFields; i++) {
+                1,
+        assertEquals(0, mergedResponse.getHits().getHits().length);
+                () -> null
+                new SearchRequest(),  
+                String indexName = indicesNames[j];  
+        double maxValue = Double.MIN_VALUE;
+            )
+        Map<String, Index[]> indicesPerCluster = new TreeMap<>();
+            ShardSearchFailure[] shardSearchFailures = new ShardSearchFailure[numFailures];  
+import org.opensearch.transport.RemoteClusterAware;
+            );
+    public void init() {  
+                for (int k = 0; k < sortFields.length; k++) {  
+        final SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);
+        }
+public class SearchResponseMergerTests extends OpenSearchTestCase {  
+            new SearchRequestContext(
+                () -> null  
+import org.opensearch.action.OriginalIndices;
+            SearchHits searchHits = new SearchHits(  
+                openSearchException.setShard(shardId);
+                if (randomBoolean()) {  
+            new SearchRequestContext(
+                1L,
+        SearchHitComparator(SortField[] sortFields) {  
+        String[] indicesNames = new String[numIndices];
+            Index[] indices = entry.getValue();
+        assertEquals(0, mergedResponse.getFailedShards());
+            )
+            } else {  
+        assertEquals("0.0", bucket.getFromAsString());
+        for (int i = 0; i < numClusters; i++) {  
+            sortFields = new SortField[numFields];  
+import java.util.Comparator;
+        String maxAggName = randomAlphaOfLengthBetween(5, 8);
+            }
+        Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>> suggestion = mergedResponse  
+                ShardSearchFailure.EMPTY_ARRAY,  
+            0,
+            SearchResponse searchResponse = new SearchResponse(
+                ShardSearchFailure.EMPTY_ARRAY,  
+        int numResponses,
+        SearchResponse mergedResponse = merger.getMergedResponse(
+        assertEquals(2, merger.numResponses());  
+            String clusterAlias = entry.getKey();  
+            this.sortFields = sortFields;
+                new SearchRequest(),  
+            emptyReduceContextBuilder()  
+        assertEquals(0, searchResponse.getShardFailures().length);
+            case 1:
+            .getSuggestion(suggestionName);
+                1,  
+                1,
+        assertEquals(priorityQueue.size(), mergedResponse.getFailedShards());
+            hasHits |= hits.length > 0;  
+        assertEquals(maxValue, max.getValue(), 0d);
+        int lastShardId = 0;
+import org.opensearch.action.search.TransportSearchAction.SearchTimeProvider;  
+                throw new UnsupportedOperationException();
+import org.opensearch.search.profile.ProfileShardResult;
+        );  
+        PriorityQueue<Tuple<ShardId, ShardSearchFailure>> priorityQueue = new PriorityQueue<>(Comparator.comparing(Tuple::v1));
+            assertNull(searchHits.getCollapseValues());
+        assertNull(response.isTerminatedEarly());
+                100L,
+                new SearchRequest(),  
+        awaitResponsesAdded();  
+import org.apache.lucene.search.SortField;
+                () -> null
+                shardSearchFailures,
+        assertEquals(10, mergedResponse.getHits().getTotalHits().value());  
+        boolean hasHits = false;
+ * Licensed to Elasticsearch under one or more contributor  
+        }  
+            if (sortFields != null) {  
+            clusters,  
+        SearchResponseMerger merger = new SearchResponseMerger(
+            int total = randomIntBetween(1, 1000);  
+                SearchResponse.Clusters.EMPTY  
+                hit.score(score);
+                SearchShardTarget searchShardTarget = new SearchShardTarget(randomAlphaOfLength(6), shardId, clusterAlias, null);  
+                SearchResponse.Clusters.EMPTY
+                }
+                SearchResponse.Clusters.EMPTY
+        SearchResponse mergedResponse = merger.getMergedResponse(
+        TotalHits expectedTotalHits = null;  
+                numReducePhases
+import org.opensearch.core.index.shard.ShardId;
+            timeProvider,
+        }
+            }
+    }
+            List<Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>>> suggestions =
+        SearchResponseMerger merger = new SearchResponseMerger(  
+                SearchResponseTests.randomClusters()
+        assertEquals(numResponses, merger.numResponses());  
+            searchTimeProvider,
+                )
+        SearchResponse response = merger.getMergedResponse(
+    }  
+                        if (compare != 0) {
+        assertSame(clusters, mergedResponse.getClusters());
+                1,
+        }  
+            timeProvider,
+        );  
+            );
+                    sortField = new SortField("field-" + i, SortField.Type.INT, randomBoolean());
+                new SearchRequest(),
+                    } else {
+                0,
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
+        assertSame(clusters, searchResponse.getClusters());
+ *
+                1,  
+                SearchResponse.Clusters.EMPTY
+        assertEquals(0, mergedResponse.getSkippedShards());  
+        SearchResponseMerger merger = new SearchResponseMerger(0, 10, trackTotalHitsUpTo, timeProvider, emptyReduceContextBuilder());
+            }
+        }  
+        } else {
+            clusters,  
+                ShardSearchFailure.EMPTY_ARRAY,  
+            0,  
+                () -> null
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+        assertEquals(0, mergedResponse.getShardFailures().length);  
+        for (int i = 0; i < numResponses; i++) {  
+        ShardSearchFailure[] shardFailures = mergedResponse.getShardFailures();
+            SearchResponse.Clusters.EMPTY,  
+        assertEquals(totalCount, bucket.getDocCount());
+            );  
+            SearchContext.TRACK_TOTAL_HITS_ACCURATE,
+                    new ShardId("index", "uuid", randomIntBetween(0, Integer.MAX_VALUE)),
+        SearchResponseMerger merger = new SearchResponseMerger(
+                maxScore,
+import java.util.TreeMap;
+                            return compare;
+                priorityQueue
+            SearchHits empty = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN, null, null, null);
+    private int numResponses;
+                Collections.emptyMap()
+        final int requestedSize = from + size;  
+        if (hasHits) {  
+        assertEquals(Math.min(numResponses, size), options.getOptions().size());
+            emptyReduceContextBuilder()  
+        SearchResponse mergedResponse = searchResponseMerger.getMergedResponse(
+}
+                priorityQueue.add(Tuple.tuple(shardId, failure));
+                // Realistically clusters have the same indices with same names, but different uuid. Yet it can happen that the same cluster
+                }  
+    }
+        assertArrayEquals(sortFields, mergedResponse.getHits().getSortFields());
+        final long currentRelativeTime = randomNonNegativeLong();
+        assertEquals(0, response.getProfileResults().size());
+                collapseValues  
+            SearchHits searchHits = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN);
+            assertEquals(expectedMaxScore, searchHits.getMaxScore(), 0f);
+            assertEquals(expectedTotalHits.value(), searchHits.getTotalHits().value());
+            SearchHit hit = new SearchHit(docId);
+            option.setHit(hit);  
+    public void testMergeShardFailures() throws InterruptedException {
+                Collections.emptyMap()
+            );
+        Tuple<Integer, TotalHits.Relation> randomTrackTotalHits = randomTrackTotalHits();
+                0,
+            hits[j] = hit;  
+            SearchHits empty = new SearchHits(new SearchHit[0], totalHits, Float.NaN, null, null, null);  
+            SearchHit hit = new SearchHit(randomIntBetween(0, Integer.MAX_VALUE));  
+        awaitResponsesAdded();
+                0,
+            SearchShardTarget shardTarget = new SearchShardTarget(  
+                InternalSearchResponse.empty(),
+                totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
+            List<Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>>> suggestions =
+        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
+        }
+    private ExecutorService executorService;  
+import org.opensearch.search.SearchHit;  
+                hit.sortValues(rawSortValues, docValueFormats);
+        ShardSearchFailure[] shardFailures = merger.getMergedResponse(
+            SearchContext.TRACK_TOTAL_HITS_ACCURATE,
+        }
+                DocValueFormat.RAW
+            }  
+                internalSearchResponse,
+        SearchResponseMerger merger = new SearchResponseMerger(0, 10, Integer.MAX_VALUE, timeProvider, emptyReduceContextBuilder());  
+            SearchHit[] hits = randomSearchHitArray(
+        assertEquals(0, response.getHits().getTotalHits().value());
+            }
+                score = (maxScore - j) * scoreFactor;
+                "bucket",
+    }
+        for (int i = 0; i < numResponses; i++) {
+import org.apache.lucene.search.TotalHits;  
+                DocValueFormat[] docValueFormats = new DocValueFormat[sortFields.length];
+ * ownership. Elasticsearch licenses this file to you under  
+        );
+                1,
+                    if (sortField == SortField.FIELD_SCORE) {
+            SearchContext.TRACK_TOTAL_HITS_ACCURATE,  
+            new Index[] { new Index("index", "uuid") },  
+            0,
+    }
+        SearchResponse mergedResponse = merger.getMergedResponse(
+/*
+                sortFields[i] = sortField;  
+            clusters,
+            emptyReduceContextBuilder()  
+                        if (sortField.getReverse()) {
+        assertEquals(numResponses, mergedResponse.getSuccessfulShards());  
+import org.apache.logging.log4j.LogManager;
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
+            );
+                indices,  
+import org.opensearch.search.profile.SearchProfileShardResults;
+            InternalMax max = new InternalMax(maxAggName, value, DocValueFormat.RAW, Collections.emptyMap());  
+        String lastClusterAlias = null;  
+            expectedSuccessful += successful;  
+            if (sortFields == null) {  
+                false,
+                SearchResponse.Clusters.EMPTY
+                null,
+        assertEquals(numResponses, searchResponseMerger.numResponses());
+import org.opensearch.search.internal.InternalSearchResponse;
+import org.opensearch.core.common.text.Text;
+        int size = randomIntBetween(1, 100);
+        assertSame(clusters, mergedResponse.getClusters());  
+import org.opensearch.common.collect.Tuple;
+            if (trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_DISABLED) {
+            priorityQueue.poll();  
+            randomIntBetween(0, 10000),
+        assertEquals(numResponses, mergedResponse.getTotalShards());
+                    randomBoolean() ? RemoteClusterService.LOCAL_CLUSTER_GROUP_KEY : randomAlphaOfLengthBetween(5, 10),  
+            if (currentShardId == lastShardId) {  
+            }
+            )  
+                for (int j = 0; j < numDocs; j++) {  
+            );  
+                shardSearchFailures,  
+            10,  
+                1L,  
+            })  
+            && hasHits) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        int expectedTotal = 0;
+            for (int j = 0; j < numFailures; j++) {
+                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),  
+        long currentRelativeTime = randomNonNegativeLong();  
+                        final int compare;
+                        Integer bSortValue = (Integer) b.getRawSortValues()[i];  
+                }  
                 }
                 return o1.getClusterAlias().compareTo(o2.getClusterAlias());
-            })  
-        );
-        int numIndices = numResponses * randomIntBetween(1, 3);
-        Iterator<Map.Entry<String, Index[]>> indicesPerCluster = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();  
-        for (int i = 0; i < numResponses; i++) {
-            Map.Entry<String, Index[]> entry = indicesPerCluster.next();
-            String clusterAlias = entry.getKey();  
-            Index[] indices = entry.getValue();
-            int numFailures = randomIntBetween(1, 10);
-            ShardSearchFailure[] shardSearchFailures = new ShardSearchFailure[numFailures];  
-            for (int j = 0; j < numFailures; j++) {
-                ShardId shardId = new ShardId(randomFrom(indices), j);
-                SearchShardTarget searchShardTarget = new SearchShardTarget(randomAlphaOfLength(6), shardId, clusterAlias, null);  
-                ShardSearchFailure failure = new ShardSearchFailure(new IllegalArgumentException(), searchShardTarget);
-                shardSearchFailures[j] = failure;
-                priorityQueue.add(Tuple.tuple(searchShardTarget, failure));  
-            }
-            SearchResponse searchResponse = new SearchResponse(
-                InternalSearchResponse.empty(),  
-                null,
-                1,
-                1,  
-                0,
-                100L,
-                shardSearchFailures,  
-                SearchResponse.Clusters.EMPTY
-            );
-            addResponse(merger, searchResponse);  
-        }
-        awaitResponsesAdded();
-        assertEquals(numResponses, merger.numResponses());  
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
-        SearchResponse mergedResponse = merger.getMergedResponse(
-            clusters,  
-            new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),  
-                () -> null
-            )
-        );  
-        assertSame(clusters, mergedResponse.getClusters());
-        assertEquals(numResponses, mergedResponse.getTotalShards());
-        assertEquals(numResponses, mergedResponse.getSuccessfulShards());  
-        assertEquals(0, mergedResponse.getSkippedShards());
-        assertEquals(priorityQueue.size(), mergedResponse.getFailedShards());
-        ShardSearchFailure[] shardFailures = mergedResponse.getShardFailures();  
-        assertEquals(priorityQueue.size(), shardFailures.length);
-        for (ShardSearchFailure shardFailure : shardFailures) {
-            ShardSearchFailure expected = priorityQueue.poll().v2();  
-            assertSame(expected, shardFailure);
-        }
-    }  
-
-    public void testMergeShardFailuresNullShardTarget() throws InterruptedException {
-        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);  
-        SearchResponseMerger merger = new SearchResponseMerger(
-            0,
-            0,  
-            SearchContext.TRACK_TOTAL_HITS_ACCURATE,
-            searchTimeProvider,
-            emptyReduceContextBuilder()  
-        );
-        PriorityQueue<Tuple<ShardId, ShardSearchFailure>> priorityQueue = new PriorityQueue<>(Comparator.comparing(Tuple::v1));
-        for (int i = 0; i < numResponses; i++) {  
-            int numFailures = randomIntBetween(1, 10);
-            ShardSearchFailure[] shardSearchFailures = new ShardSearchFailure[numFailures];
-            for (int j = 0; j < numFailures; j++) {  
-                String index = "index-" + i;
-                ShardId shardId = new ShardId(index, index + "-uuid", j);
-                OpenSearchException openSearchException = new OpenSearchException(new IllegalArgumentException());  
-                openSearchException.setShard(shardId);
-                ShardSearchFailure failure = new ShardSearchFailure(openSearchException);
-                shardSearchFailures[j] = failure;  
-                priorityQueue.add(Tuple.tuple(shardId, failure));
-            }
-            SearchResponse searchResponse = new SearchResponse(  
-                InternalSearchResponse.empty(),
-                null,
-                1,  
-                1,
-                0,
-                100L,  
-                shardSearchFailures,
-                SearchResponse.Clusters.EMPTY
-            );  
-            addResponse(merger, searchResponse);
-        }
-        awaitResponsesAdded();  
-        assertEquals(numResponses, merger.numResponses());
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
-        SearchResponse mergedResponse = merger.getMergedResponse(  
-            clusters,
-            new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),  
-                new SearchRequest(),
-                () -> null
-            )  
-        );
-        assertSame(clusters, mergedResponse.getClusters());
-        assertEquals(numResponses, mergedResponse.getTotalShards());  
-        assertEquals(numResponses, mergedResponse.getSuccessfulShards());
-        assertEquals(0, mergedResponse.getSkippedShards());
-        assertEquals(priorityQueue.size(), mergedResponse.getFailedShards());  
-        ShardSearchFailure[] shardFailures = mergedResponse.getShardFailures();
-        assertEquals(priorityQueue.size(), shardFailures.length);
-        for (ShardSearchFailure shardFailure : shardFailures) {  
-            ShardSearchFailure expected = priorityQueue.poll().v2();
-            assertSame(expected, shardFailure);
-        }  
-    }
-
-    public void testMergeShardFailuresNullShardId() throws InterruptedException {  
-        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);
-        SearchResponseMerger merger = new SearchResponseMerger(
-            0,  
-            0,
-            SearchContext.TRACK_TOTAL_HITS_ACCURATE,
-            searchTimeProvider,  
-            emptyReduceContextBuilder()
-        );
-        List<ShardSearchFailure> expectedFailures = new ArrayList<>();  
-        for (int i = 0; i < numResponses; i++) {
-            int numFailures = randomIntBetween(1, 50);
-            ShardSearchFailure[] shardSearchFailures = new ShardSearchFailure[numFailures];  
-            for (int j = 0; j < numFailures; j++) {
-                ShardSearchFailure shardSearchFailure = new ShardSearchFailure(new OpenSearchException(new IllegalArgumentException()));
-                shardSearchFailures[j] = shardSearchFailure;  
-                expectedFailures.add(shardSearchFailure);
-            }
-            SearchResponse searchResponse = new SearchResponse(  
-                InternalSearchResponse.empty(),
-                null,
-                1,  
-                1,
-                0,
-                100L,  
-                shardSearchFailures,
-                SearchResponse.Clusters.EMPTY
-            );  
-            addResponse(merger, searchResponse);
-        }
-        awaitResponsesAdded();  
-        assertEquals(numResponses, merger.numResponses());
-        ShardSearchFailure[] shardFailures = merger.getMergedResponse(
-            SearchResponse.Clusters.EMPTY,  
-            new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),  
-                () -> null
-            )
-        ).getShardFailures();  
-        assertThat(Arrays.asList(shardFailures), containsInAnyOrder(expectedFailures.toArray(ShardSearchFailure.EMPTY_ARRAY)));
-    }
-
-    public void testMergeProfileResults() throws InterruptedException {
-        SearchTimeProvider searchTimeProvider = new SearchTimeProvider(0, 0, () -> 0);
-        SearchResponseMerger merger = new SearchResponseMerger(  
-            0,
-            0,
-            SearchContext.TRACK_TOTAL_HITS_ACCURATE,  
-            searchTimeProvider,
-            emptyReduceContextBuilder()
-        );  
-        Map<String, ProfileShardResult> expectedProfile = new HashMap<>();
-        for (int i = 0; i < numResponses; i++) {
-            SearchProfileShardResults profile = SearchProfileShardResultsTests.createTestItem();  
-            expectedProfile.putAll(profile.getShardResults());
-            SearchHits searchHits = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN);
-            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, null, null, profile, false, null, 1);  
-            SearchResponse searchResponse = new SearchResponse(
-                internalSearchResponse,
-                null,  
-                1,
-                1,
-                0,  
-                100L,
-                ShardSearchFailure.EMPTY_ARRAY,
-                SearchResponse.Clusters.EMPTY  
-            );
-            addResponse(merger, searchResponse);
-        }  
-        awaitResponsesAdded();
-        assertEquals(numResponses, merger.numResponses());
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
-        SearchResponse mergedResponse = merger.getMergedResponse(
-            clusters,
-            new SearchRequestContext(  
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),
-                () -> null  
-            )
-        );
-        assertSame(clusters, mergedResponse.getClusters());  
-        assertEquals(numResponses, mergedResponse.getTotalShards());
-        assertEquals(numResponses, mergedResponse.getSuccessfulShards());
-        assertEquals(0, mergedResponse.getSkippedShards());  
-        assertEquals(0, mergedResponse.getFailedShards());
-        assertEquals(0, mergedResponse.getShardFailures().length);
-        assertEquals(expectedProfile, mergedResponse.getProfileResults());  
-    }
-
-    public void testMergeCompletionSuggestions() throws InterruptedException {  
-        String suggestionName = randomAlphaOfLengthBetween(4, 8);
-        int size = randomIntBetween(1, 100);
-        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(  
-            0,
-            0,
-            0,  
-            new SearchTimeProvider(0, 0, () -> 0),
-            emptyReduceContextBuilder()
-        );  
-        for (int i = 0; i < numResponses; i++) {
-            List<Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>>> suggestions =
-                new ArrayList<>();  
-            CompletionSuggestion completionSuggestion = new CompletionSuggestion(suggestionName, size, false);
-            CompletionSuggestion.Entry options = new CompletionSuggestion.Entry(new Text("suggest"), 0, 10);
-            int docId = randomIntBetween(0, Integer.MAX_VALUE);  
-            CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(
-                docId,
-                new Text(randomAlphaOfLengthBetween(5, 10)),  
-                i,
-                Collections.emptyMap()
-            );  
-            SearchHit hit = new SearchHit(docId);
-            ShardId shardId = new ShardId(
-                randomAlphaOfLengthBetween(5, 10),  
-                randomAlphaOfLength(10),
-                randomIntBetween(0, Integer.MAX_VALUE)
-            );  
-            String clusterAlias = randomBoolean() ? "" : randomAlphaOfLengthBetween(5, 10);
-            hit.shard(new SearchShardTarget("node", shardId, clusterAlias, OriginalIndices.NONE));
-            option.setHit(hit);  
-            options.addOption(option);
-            completionSuggestion.addTerm(options);
-            suggestions.add(completionSuggestion);  
-            Suggest suggest = new Suggest(suggestions);
-            SearchHits searchHits = new SearchHits(new SearchHit[0], null, Float.NaN);
-            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, null, suggest, null, false, null, 1);  
-            SearchResponse searchResponse = new SearchResponse(
-                internalSearchResponse,
-                null,  
-                1,
-                1,
-                0,  
-                randomLong(),
-                ShardSearchFailure.EMPTY_ARRAY,
-                SearchResponse.Clusters.EMPTY  
-            );
-            addResponse(searchResponseMerger, searchResponse);
-        }  
-        awaitResponsesAdded();
-        assertEquals(numResponses, searchResponseMerger.numResponses());
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
-        SearchResponse mergedResponse = searchResponseMerger.getMergedResponse(
-            clusters,
-            new SearchRequestContext(  
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),
-                () -> null  
-            )
-        );
-        assertSame(clusters, mergedResponse.getClusters());  
-        assertEquals(numResponses, mergedResponse.getTotalShards());
-        assertEquals(numResponses, mergedResponse.getSuccessfulShards());
-        assertEquals(0, mergedResponse.getSkippedShards());  
-        assertEquals(0, mergedResponse.getFailedShards());
-        assertEquals(0, mergedResponse.getShardFailures().length);
-        Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>> suggestion = mergedResponse  
-            .getSuggest()
-            .getSuggestion(suggestionName);
-        assertEquals(1, suggestion.getEntries().size());  
-        Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option> options = suggestion.getEntries().get(0);
-        assertEquals(Math.min(numResponses, size), options.getOptions().size());
-        int i = numResponses;  
-        for (Suggest.Suggestion.Entry.Option option : options) {
-            assertEquals(--i, option.getScore(), 0f);
-        }  
-    }
-
-    public void testMergeCompletionSuggestionsTieBreak() throws InterruptedException {  
-        String suggestionName = randomAlphaOfLengthBetween(4, 8);
-        int size = randomIntBetween(1, 100);
-        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(  
-            0,
-            0,
-            0,  
-            new SearchTimeProvider(0, 0, () -> 0),
-            emptyReduceContextBuilder()
-        );  
-        for (int i = 0; i < numResponses; i++) {
-            List<Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>>> suggestions =
-                new ArrayList<>();  
-            CompletionSuggestion completionSuggestion = new CompletionSuggestion(suggestionName, size, false);
-            CompletionSuggestion.Entry options = new CompletionSuggestion.Entry(new Text("suggest"), 0, 10);
-            int docId = randomIntBetween(0, Integer.MAX_VALUE);  
-            CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(
-                docId,
-                new Text("suggestion"),  
-                1F,
-                Collections.emptyMap()
-            );  
-            SearchHit searchHit = new SearchHit(docId);
-            searchHit.shard(
-                new SearchShardTarget(  
-                    "node",
-                    new ShardId("index", "uuid", randomIntBetween(0, Integer.MAX_VALUE)),
-                    randomBoolean() ? RemoteClusterService.LOCAL_CLUSTER_GROUP_KEY : randomAlphaOfLengthBetween(5, 10),  
-                    OriginalIndices.NONE
-                )
-            );  
-            option.setHit(searchHit);
-            options.addOption(option);
-            completionSuggestion.addTerm(options);  
-            suggestions.add(completionSuggestion);
-            Suggest suggest = new Suggest(suggestions);
-            SearchHits searchHits = new SearchHits(new SearchHit[0], null, Float.NaN);  
-            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, null, suggest, null, false, null, 1);
-            SearchResponse searchResponse = new SearchResponse(
-                internalSearchResponse,  
-                null,
-                1,
-                1,  
-                0,
-                randomLong(),
-                ShardSearchFailure.EMPTY_ARRAY,  
-                SearchResponse.Clusters.EMPTY
-            );
-            addResponse(searchResponseMerger, searchResponse);  
-        }
-        awaitResponsesAdded();
-        assertEquals(numResponses, searchResponseMerger.numResponses());  
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
-        SearchResponse mergedResponse = searchResponseMerger.getMergedResponse(
-            clusters,  
-            new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),  
-                () -> null
-            )
-        );  
-        assertSame(clusters, mergedResponse.getClusters());
-        assertEquals(numResponses, mergedResponse.getTotalShards());
-        assertEquals(numResponses, mergedResponse.getSuccessfulShards());  
-        assertEquals(0, mergedResponse.getSkippedShards());
-        assertEquals(0, mergedResponse.getFailedShards());
-        assertEquals(0, mergedResponse.getShardFailures().length);  
-        CompletionSuggestion suggestion = mergedResponse.getSuggest().getSuggestion(suggestionName);
-        assertEquals(1, suggestion.getEntries().size());
-        CompletionSuggestion.Entry options = suggestion.getEntries().get(0);  
-        assertEquals(Math.min(numResponses, size), options.getOptions().size());
-        int lastShardId = 0;
-        String lastClusterAlias = null;  
-        for (CompletionSuggestion.Entry.Option option : options) {
-            assertEquals("suggestion", option.getText().string());
-            SearchShardTarget shard = option.getHit().getShard();  
-            int currentShardId = shard.getShardId().id();
-            assertThat(currentShardId, greaterThanOrEqualTo(lastShardId));
-            if (currentShardId == lastShardId) {  
-                assertThat(shard.getClusterAlias(), greaterThan(lastClusterAlias));
-            } else {
-                lastShardId = currentShardId;  
-            }
-            lastClusterAlias = shard.getClusterAlias();
-        }  
-    }
-
-    public void testMergeAggs() throws InterruptedException {  
-        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(
-            0,
-            0,  
-            0,
-            new SearchTimeProvider(0, 0, () -> 0),
-            emptyReduceContextBuilder()  
-        );
-        String maxAggName = randomAlphaOfLengthBetween(5, 8);
-        String rangeAggName = randomAlphaOfLengthBetween(5, 8);  
-        int totalCount = 0;
-        double maxValue = Double.MIN_VALUE;
-        for (int i = 0; i < numResponses; i++) {  
-            double value = randomDouble();
-            maxValue = Math.max(value, maxValue);
-            InternalMax max = new InternalMax(maxAggName, value, DocValueFormat.RAW, Collections.emptyMap());  
-            InternalDateRange.Factory factory = new InternalDateRange.Factory();
-            int count = randomIntBetween(1, 1000);
-            totalCount += count;  
-            InternalDateRange.Bucket bucket = factory.createBucket(
-                "bucket",
-                0,  
-                10000,
-                count,
-                InternalAggregations.EMPTY,  
-                false,
-                DocValueFormat.RAW
-            );  
-            InternalDateRange range = factory.create(rangeAggName, singletonList(bucket), DocValueFormat.RAW, false, emptyMap());
-            InternalAggregations aggs = InternalAggregations.from(Arrays.asList(range, max));
-            SearchHits searchHits = new SearchHits(new SearchHit[0], null, Float.NaN);  
-            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, aggs, null, null, false, null, 1);
-            SearchResponse searchResponse = new SearchResponse(
-                internalSearchResponse,  
-                null,
-                1,
-                1,  
-                0,
-                randomLong(),
-                ShardSearchFailure.EMPTY_ARRAY,  
-                SearchResponse.Clusters.EMPTY
-            );
-            addResponse(searchResponseMerger, searchResponse);  
-        }
-        awaitResponsesAdded();
-        assertEquals(numResponses, searchResponseMerger.numResponses());  
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
-        SearchResponse mergedResponse = searchResponseMerger.getMergedResponse(
-            clusters,  
-            new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),  
-                () -> null
-            )
-        );  
-        assertSame(clusters, mergedResponse.getClusters());
-        assertEquals(numResponses, mergedResponse.getTotalShards());
-        assertEquals(numResponses, mergedResponse.getSuccessfulShards());  
-        assertEquals(0, mergedResponse.getSkippedShards());
-        assertEquals(0, mergedResponse.getFailedShards());
-        assertEquals(0, mergedResponse.getShardFailures().length);  
-        assertEquals(0, mergedResponse.getHits().getHits().length);
-        assertEquals(2, mergedResponse.getAggregations().asList().size());
-        Max max = mergedResponse.getAggregations().get(maxAggName);  
-        assertEquals(maxValue, max.getValue(), 0d);
-        Range range = mergedResponse.getAggregations().get(rangeAggName);
-        assertEquals(1, range.getBuckets().size());  
-        Range.Bucket bucket = range.getBuckets().get(0);
-        assertEquals("0.0", bucket.getFromAsString());
-        assertEquals("10000.0", bucket.getToAsString());  
-        assertEquals(totalCount, bucket.getDocCount());
-    }
-
-    public void testMergeSearchHits() throws InterruptedException {
-        final long currentRelativeTime = randomNonNegativeLong();
-        final SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);  
-        final int size = randomIntBetween(0, 100);
-        final int from = size > 0 ? randomIntBetween(0, 100) : 0;
-        final int requestedSize = from + size;  
-        final SortField[] sortFields;
-        final String collapseField;
-        boolean scoreSort = false;  
-        if (randomBoolean()) {
-            int numFields = randomIntBetween(1, 3);
-            sortFields = new SortField[numFields];  
-            for (int i = 0; i < numFields; i++) {
-                final SortField sortField;
-                if (randomBoolean()) {  
-                    sortField = new SortField("field-" + i, SortField.Type.INT, randomBoolean());
-                } else {
-                    scoreSort = true;  
-                    sortField = SortField.FIELD_SCORE;
-                }
-                sortFields[i] = sortField;  
-            }
-            collapseField = randomBoolean() ? "collapse" : null;
-        } else {  
-            collapseField = null;
-            sortFields = null;
-            scoreSort = true;  
-        }
-        Tuple<Integer, TotalHits.Relation> randomTrackTotalHits = randomTrackTotalHits();
-        int trackTotalHitsUpTo = randomTrackTotalHits.v1();  
-        TotalHits.Relation totalHitsRelation = randomTrackTotalHits.v2();
-
-        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(sortFields));  
-        SearchResponseMerger searchResponseMerger = new SearchResponseMerger(
-            from,
-            size,  
-            trackTotalHitsUpTo,
-            timeProvider,
-            emptyReduceContextBuilder()  
-        );
-
-        TotalHits expectedTotalHits = null;  
-        int expectedTotal = 0;
-        int expectedSuccessful = 0;
-        int expectedSkipped = 0;  
         int expectedReducePhases = 1;
+                10000,
+                new ArrayList<>();  
+            int numFailures = randomIntBetween(1, 10);
         boolean expectedTimedOut = false;
-        Boolean expectedTerminatedEarly = null;  
-        float expectedMaxScore = Float.NEGATIVE_INFINITY;
-        int numIndices = requestedSize == 0 ? 0 : randomIntBetween(1, requestedSize);
-        Iterator<Map.Entry<String, Index[]>> indicesIterator = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();  
-        boolean hasHits = false;
-        for (int i = 0; i < numResponses; i++) {
-            Map.Entry<String, Index[]> entry = indicesIterator.next();  
-            String clusterAlias = entry.getKey();
-            Index[] indices = entry.getValue();
-            int total = randomIntBetween(1, 1000);  
-            expectedTotal += total;
-            int successful = randomIntBetween(1, total);
-            expectedSuccessful += successful;  
-            int skipped = randomIntBetween(1, total);
-            expectedSkipped += skipped;
-
-            TotalHits totalHits = null;
-            if (trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_DISABLED) {
-                totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);  
-                long previousValue = expectedTotalHits == null ? 0 : expectedTotalHits.value();
-                expectedTotalHits = new TotalHits(Math.min(previousValue + totalHits.value(), trackTotalHitsUpTo), totalHitsRelation);
-            }  
-
-            final int numDocs = totalHits == null || totalHits.value() >= requestedSize ? requestedSize : (int) totalHits.value();
-            int scoreFactor = randomIntBetween(1, numResponses);  
-            float maxScore = scoreSort ? numDocs * scoreFactor : Float.NaN;
-            SearchHit[] hits = randomSearchHitArray(
-                numDocs,  
-                numResponses,
-                clusterAlias,
-                indices,  
-                maxScore,
-                scoreFactor,
-                sortFields,  
-                priorityQueue
-            );
-            hasHits |= hits.length > 0;  
-            expectedMaxScore = Math.max(expectedMaxScore, maxScore);
-
-            Object[] collapseValues = null;  
-            if (collapseField != null) {
-                collapseValues = new Object[numDocs];
-                for (int j = 0; j < numDocs; j++) {  
-                    // set different collapse values for each cluster for simplicity
-                    collapseValues[j] = j + 1000 * i;
-                }  
-            }
-
-            SearchHits searchHits = new SearchHits(  
-                hits,
-                totalHits,
-                maxScore == Float.NEGATIVE_INFINITY ? Float.NaN : maxScore,  
-                sortFields,
-                collapseField,
-                collapseValues  
-            );
-
-            int numReducePhases = randomIntBetween(1, 5);  
-            expectedReducePhases += numReducePhases;
-            boolean timedOut = rarely();
-            expectedTimedOut = expectedTimedOut || timedOut;  
-            Boolean terminatedEarly = frequently() ? null : true;
-            expectedTerminatedEarly = expectedTerminatedEarly == null ? terminatedEarly : expectedTerminatedEarly;
-
-            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(
-                searchHits,
-                null,  
-                null,
-                null,
-                timedOut,  
-                terminatedEarly,
-                numReducePhases
-            );  
-
-            SearchResponse searchResponse = new SearchResponse(
-                internalSearchResponse,  
-                null,
-                total,
-                successful,  
-                skipped,
-                randomLong(),
-                ShardSearchFailure.EMPTY_ARRAY,  
-                SearchResponseTests.randomClusters()
-            );
-
-            addResponse(searchResponseMerger, searchResponse);
-        }
-
-        awaitResponsesAdded();
-        assertEquals(numResponses, searchResponseMerger.numResponses());
-        final SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
-        SearchResponse searchResponse = searchResponseMerger.getMergedResponse(
-            clusters,
-            new SearchRequestContext(  
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),
-                () -> null  
-            )
-        );
-
-        assertEquals(TimeUnit.NANOSECONDS.toMillis(currentRelativeTime), searchResponse.getTook().millis());
-        assertEquals(expectedTotal, searchResponse.getTotalShards());
-        assertEquals(expectedSuccessful, searchResponse.getSuccessfulShards());  
-        assertEquals(expectedSkipped, searchResponse.getSkippedShards());
-        assertEquals(0, searchResponse.getShardFailures().length);
-        assertEquals(expectedReducePhases, searchResponse.getNumReducePhases());  
-        assertEquals(expectedTimedOut, searchResponse.isTimedOut());
-        assertEquals(expectedTerminatedEarly, searchResponse.isTerminatedEarly());
-
-        assertSame(clusters, searchResponse.getClusters());
-        assertNull(searchResponse.getScrollId());
-
-        SearchHits searchHits = searchResponse.getHits();
-        // the sort fields and the collapse field are not returned when hits are empty
-        if (hasHits) {  
-            assertArrayEquals(sortFields, searchHits.getSortFields());
-            assertEquals(collapseField, searchHits.getCollapseField());
-        } else {  
-            assertNull(searchHits.getSortFields());
-            assertNull(searchHits.getCollapseField());
-        }  
-        if (expectedTotalHits == null) {
-            assertNull(searchHits.getTotalHits());
-        } else {  
-            assertNotNull(searchHits.getTotalHits());
-            assertEquals(expectedTotalHits.value(), searchHits.getTotalHits().value());
-            assertSame(expectedTotalHits.relation(), searchHits.getTotalHits().relation());  
-        }
-        if (expectedMaxScore == Float.NEGATIVE_INFINITY) {
-            assertTrue(Float.isNaN(searchHits.getMaxScore()));  
-        } else {
-            assertEquals(expectedMaxScore, searchHits.getMaxScore(), 0f);
-        }  
-
-        for (int i = 0; i < from; i++) {
-            priorityQueue.poll();  
-        }
-        SearchHit[] hits = searchHits.getHits();
-        if (collapseField != null  
-            // the collapse field is not returned when hits are empty
-            && hasHits) {
-            assertEquals(hits.length, searchHits.getCollapseValues().length);  
-        } else {
-            assertNull(searchHits.getCollapseValues());
-        }  
-        assertThat(hits.length, lessThanOrEqualTo(size));
-        for (SearchHit hit : hits) {
-            SearchHit expected = priorityQueue.poll();  
-            assertSame(expected, hit);
-        }
-    }  
-
-    public void testMergeNoResponsesAdded() {
-        long currentRelativeTime = randomNonNegativeLong();  
-        final SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);
-        SearchResponseMerger merger = new SearchResponseMerger(0, 10, Integer.MAX_VALUE, timeProvider, emptyReduceContextBuilder());
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();  
-        assertEquals(0, merger.numResponses());
-        SearchResponse response = merger.getMergedResponse(
-            clusters,  
+            lastClusterAlias = shard.getClusterAlias();
             new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),  
-                () -> null
+        } else {  
             )
-        );  
-        assertSame(clusters, response.getClusters());
-        assertEquals(TimeUnit.NANOSECONDS.toMillis(currentRelativeTime), response.getTook().millis());
-        assertEquals(0, response.getTotalShards());  
-        assertEquals(0, response.getSuccessfulShards());
-        assertEquals(0, response.getSkippedShards());
-        assertEquals(0, response.getFailedShards());  
-        assertEquals(0, response.getNumReducePhases());
-        assertFalse(response.isTimedOut());
-        assertNotNull(response.getHits().getTotalHits());  
-        assertEquals(0, response.getHits().getTotalHits().value());
-        assertEquals(0, response.getHits().getHits().length);
-        assertEquals(TotalHits.Relation.EQUAL_TO, response.getHits().getTotalHits().relation());  
-        assertNull(response.getScrollId());
-        assertSame(InternalAggregations.EMPTY, response.getAggregations());
-        assertNull(response.getSuggest());  
-        assertEquals(0, response.getProfileResults().size());
-        assertNull(response.isTerminatedEarly());
-        assertEquals(0, response.getShardFailures().length);  
-    }
-
-    public void testMergeEmptySearchHitsWithNonEmpty() {  
-        long currentRelativeTime = randomLong();
-        final SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);
-        SearchResponseMerger merger = new SearchResponseMerger(0, 10, Integer.MAX_VALUE, timeProvider, emptyReduceContextBuilder());  
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
-        int numFields = randomIntBetween(1, 3);
-        SortField[] sortFields = new SortField[numFields];  
-        for (int i = 0; i < numFields; i++) {
-            sortFields[i] = new SortField("field-" + i, SortField.Type.INT, randomBoolean());
-        }  
-        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(sortFields));
-        SearchHit[] hits = randomSearchHitArray(
-            10,  
-            1,
-            "remote",
-            new Index[] { new Index("index", "uuid") },  
-            Float.NaN,
-            1,
-            sortFields,  
-            priorityQueue
-        );
-        {  
-            SearchHits searchHits = new SearchHits(hits, new TotalHits(10, TotalHits.Relation.EQUAL_TO), Float.NaN, sortFields, null, null);
-            InternalSearchResponse response = new InternalSearchResponse(searchHits, null, null, null, false, false, 1);
-            SearchResponse searchResponse = new SearchResponse(  
-                response,
-                null,
-                1,  
-                1,
-                0,
-                1L,  
-                ShardSearchFailure.EMPTY_ARRAY,
-                SearchResponse.Clusters.EMPTY
-            );  
-            merger.add(searchResponse);
-        }
-        {  
-            SearchHits empty = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN, null, null, null);
-            InternalSearchResponse response = new InternalSearchResponse(empty, null, null, null, false, false, 1);
-            SearchResponse searchResponse = new SearchResponse(  
-                response,
-                null,
-                1,  
-                1,
-                0,
-                1L,  
-                ShardSearchFailure.EMPTY_ARRAY,
-                SearchResponse.Clusters.EMPTY
-            );  
-            merger.add(searchResponse);
-        }
-        assertEquals(2, merger.numResponses());  
-        SearchResponse mergedResponse = merger.getMergedResponse(
-            clusters,
-            new SearchRequestContext(  
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),
-                () -> null  
-            )
-        );
-        assertEquals(10, mergedResponse.getHits().getTotalHits().value());  
+        assertEquals(numResponses, searchResponseMerger.numResponses());  
+        SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);
+ * Modifications Copyright OpenSearch Contributors. See
         assertEquals(10, mergedResponse.getHits().getHits().length);
-        assertEquals(2, mergedResponse.getTotalShards());
-        assertEquals(2, mergedResponse.getSuccessfulShards());  
-        assertEquals(0, mergedResponse.getSkippedShards());
-        assertArrayEquals(sortFields, mergedResponse.getHits().getSortFields());
-        assertArrayEquals(hits, mergedResponse.getHits().getHits());  
-        assertEquals(clusters, mergedResponse.getClusters());
-    }
-
-    public void testMergeOnlyEmptyHits() {
-        long currentRelativeTime = randomLong();
+    private void awaitResponsesAdded() throws InterruptedException {
         final SearchTimeProvider timeProvider = new SearchTimeProvider(randomLong(), 0, () -> currentRelativeTime);  
-        SearchResponse.Clusters clusters = SearchResponseTests.randomClusters();
-        Tuple<Integer, TotalHits.Relation> randomTrackTotalHits = randomTrackTotalHits();
-        int trackTotalHitsUpTo = randomTrackTotalHits.v1();  
-        TotalHits.Relation totalHitsRelation = randomTrackTotalHits.v2();
-        SearchResponseMerger merger = new SearchResponseMerger(0, 10, trackTotalHitsUpTo, timeProvider, emptyReduceContextBuilder());
-        int numResponses = randomIntBetween(1, 5);  
-        TotalHits expectedTotalHits = null;
-        for (int i = 0; i < numResponses; i++) {
-            TotalHits totalHits = null;  
-            if (trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_DISABLED) {
-                totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
-                long previousValue = expectedTotalHits == null ? 0 : expectedTotalHits.value();  
-                expectedTotalHits = new TotalHits(Math.min(previousValue + totalHits.value(), trackTotalHitsUpTo), totalHitsRelation);
-            }
-            SearchHits empty = new SearchHits(new SearchHit[0], totalHits, Float.NaN, null, null, null);  
-            InternalSearchResponse response = new InternalSearchResponse(empty, null, null, null, false, false, 1);
-            SearchResponse searchResponse = new SearchResponse(
-                response,  
-                null,
+                100L,  
+            InternalSearchResponse internalSearchResponse = new InternalSearchResponse(searchHits, null, null, profile, false, null, 1);  
                 1,
-                1,  
-                0,
-                1L,
-                ShardSearchFailure.EMPTY_ARRAY,  
-                SearchResponse.Clusters.EMPTY
-            );
-            merger.add(searchResponse);  
-        }
-        SearchResponse mergedResponse = merger.getMergedResponse(
-            clusters,  
-            new SearchRequestContext(
-                new SearchRequestOperationsListener.CompositeListener(List.of(), LogManager.getLogger()),
-                new SearchRequest(),  
-                () -> null
-            )
-        );  
-        assertEquals(expectedTotalHits, mergedResponse.getHits().getTotalHits());
-    }
-
-    private static Tuple<Integer, TotalHits.Relation> randomTrackTotalHits() {
-        switch (randomIntBetween(0, 2)) {
-            case 0:  
-                return Tuple.tuple(SearchContext.TRACK_TOTAL_HITS_DISABLED, null);
-            case 1:
-                return Tuple.tuple(randomIntBetween(10, 1000), TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);  
-            case 2:
-                return Tuple.tuple(SearchContext.TRACK_TOTAL_HITS_ACCURATE, TotalHits.Relation.EQUAL_TO);
-            default:  
-                throw new UnsupportedOperationException();
-        }
-    }  
-
+                () -> null  
+            SearchResponse.Clusters.EMPTY,
     private static SearchHit[] randomSearchHitArray(
-        int numDocs,  
-        int numResponses,
-        String clusterAlias,
-        Index[] indices,  
-        float maxScore,
-        int scoreFactor,
-        SortField[] sortFields,  
-        PriorityQueue<SearchHit> priorityQueue
-    ) {
-        SearchHit[] hits = new SearchHit[numDocs];  
-
-        int[] sortFieldFactors = new int[sortFields == null ? 0 : sortFields.length];
-        for (int j = 0; j < sortFieldFactors.length; j++) {  
-            sortFieldFactors[j] = randomIntBetween(1, numResponses);
-        }
-
-        for (int j = 0; j < numDocs; j++) {
-            ShardId shardId = new ShardId(randomFrom(indices), randomIntBetween(0, 10));
-            SearchShardTarget shardTarget = new SearchShardTarget(  
-                randomAlphaOfLengthBetween(3, 8),
-                shardId,
-                clusterAlias,  
-                OriginalIndices.NONE
-            );
-            SearchHit hit = new SearchHit(randomIntBetween(0, Integer.MAX_VALUE));  
-
-            float score = Float.NaN;
-            if (Float.isNaN(maxScore) == false) {  
-                score = (maxScore - j) * scoreFactor;
-                hit.score(score);
-            }  
-
-            hit.shard(shardTarget);
-            if (sortFields != null) {  
-                Object[] rawSortValues = new Object[sortFields.length];
-                DocValueFormat[] docValueFormats = new DocValueFormat[sortFields.length];
-                for (int k = 0; k < sortFields.length; k++) {  
-                    SortField sortField = sortFields[k];
-                    if (sortField == SortField.FIELD_SCORE) {
-                        hit.score(score);  
-                        rawSortValues[k] = score;
-                    } else {
-                        rawSortValues[k] = sortField.getReverse() ? numDocs * sortFieldFactors[k] - j : j;  
-                    }
-                    docValueFormats[k] = DocValueFormat.RAW;
-                }  
-                hit.sortValues(rawSortValues, docValueFormats);
-            }
-            hits[j] = hit;  
-            priorityQueue.add(hit);
-        }
-        return hits;  
-    }
-
-    private static Map<String, Index[]> randomRealisticIndices(int numIndices, int numClusters) {  
-        String[] indicesNames = new String[numIndices];
-        for (int i = 0; i < numIndices; i++) {
-            indicesNames[i] = randomAlphaOfLengthBetween(5, 10);  
-        }
-        Map<String, Index[]> indicesPerCluster = new TreeMap<>();
-        for (int i = 0; i < numClusters; i++) {  
-            Index[] indices = new Index[indicesNames.length];
-            for (int j = 0; j < indices.length; j++) {
-                String indexName = indicesNames[j];  
-                // Realistically clusters have the same indices with same names, but different uuid. Yet it can happen that the same cluster
-                // is registered twice with different aliases and searched multiple times as part of the same search request.
-                String indexUuid = frequently() ? randomAlphaOfLength(10) : indexName;  
-                indices[j] = new Index(indexName, indexUuid);
-            }
-            String clusterAlias;  
-            if (frequently() || indicesPerCluster.containsKey(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY)) {
-                clusterAlias = randomAlphaOfLengthBetween(5, 10);
-            } else {  
-                clusterAlias = RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY;
-            }
-            indicesPerCluster.put(clusterAlias, indices);  
-        }
-        return indicesPerCluster;
-    }  
-
-    private static final class SearchHitComparator implements Comparator<SearchHit> {
-
-        private final SortField[] sortFields;
-
-        SearchHitComparator(SortField[] sortFields) {  
-            this.sortFields = sortFields;
-        }
-
-        @Override
-        public int compare(SearchHit a, SearchHit b) {
-            if (sortFields == null) {  
-                int scoreCompare = Float.compare(b.getScore(), a.getScore());
-                if (scoreCompare != 0) {
-                    return scoreCompare;  
-                }
-            } else {
-                for (int i = 0; i < sortFields.length; i++) {  
-                    SortField sortField = sortFields[i];
-                    if (sortField == SortField.FIELD_SCORE) {
-                        int scoreCompare = Float.compare(b.getScore(), a.getScore());  
-                        if (scoreCompare != 0) {
-                            return scoreCompare;
-                        }  
-                    } else {
-                        Integer aSortValue = (Integer) a.getRawSortValues()[i];
-                        Integer bSortValue = (Integer) b.getRawSortValues()[i];  
-                        final int compare;
-                        if (sortField.getReverse()) {
-                            compare = Integer.compare(bSortValue, aSortValue);  
-                        } else {
-                            compare = Integer.compare(aSortValue, bSortValue);
-                        }  
-                        if (compare != 0) {
-                            return compare;
-                        }  
-                    }
-                }
-            }  
-            SearchShardTarget aShard = a.getShard();
-            SearchShardTarget bShard = b.getShard();
-            int shardIdCompareTo = aShard.getShardId().compareTo(bShard.getShardId());  
-            if (shardIdCompareTo != 0) {
-                return shardIdCompareTo;
-            }  
-            int clusterAliasCompareTo = aShard.getClusterAlias().compareTo(bShard.getClusterAlias());
-            if (clusterAliasCompareTo != 0) {
-                return clusterAliasCompareTo;  
-            }
-            return Integer.compare(a.docId(), b.docId());
-        }  
-    }
-}
+            Index[] indices = entry.getValue();

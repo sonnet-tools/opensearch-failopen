@@ -1,77 +1,64 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.deployment;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;  
-import java.util.Objects;
-
-/**  
- * Represents a single deployment operation with a target state and node attributes.
- *
- * @opensearch.internal  
- */
-public class Deployment implements Writeable, ToXContentObject {
-
-    private final DeploymentState state;
-    private final Map<String, String> nodeAttributes;
-
-    public Deployment(DeploymentState state, Map<String, String> nodeAttributes) {
-        this.state = Objects.requireNonNull(state);
-        this.nodeAttributes = Collections.unmodifiableMap(Objects.requireNonNull(nodeAttributes));  
-    }
-
-    public Deployment(StreamInput in) throws IOException {  
-        this.state = DeploymentState.readFrom(in);
-        this.nodeAttributes = Collections.unmodifiableMap(in.readMap(StreamInput::readString, StreamInput::readString));
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        state.writeTo(out);
-        out.writeMap(nodeAttributes, StreamOutput::writeString, StreamOutput::writeString);
-    }  
-
-    public DeploymentState getState() {
-        return state;  
-    }
-
-    public Map<String, String> getNodeAttributes() {  
         return nodeAttributes;
     }
-
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  
+import java.util.Collections;
     @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        out.writeMap(nodeAttributes, StreamOutput::writeString, StreamOutput::writeString);
+    private final DeploymentState state;
+        this.state = Objects.requireNonNull(state);
         builder.startObject();  
-        builder.field("state", state.name());
-        builder.field("attributes", nodeAttributes);
-        builder.endObject();  
-        return builder;
+ * Represents a single deployment operation with a target state and node attributes.
+    public Map<String, String> getNodeAttributes() {  
+    public Deployment(StreamInput in) throws IOException {  
     }
-
+/**  
+        this.nodeAttributes = Collections.unmodifiableMap(in.readMap(StreamInput::readString, StreamInput::readString));
+package org.opensearch.cluster.deployment;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        this.state = DeploymentState.readFrom(in);
+    public void writeTo(StreamOutput out) throws IOException {  
+import java.util.Map;  
+        this.nodeAttributes = Collections.unmodifiableMap(Objects.requireNonNull(nodeAttributes));  
+        state.writeTo(out);
+    }  
+        return state;  
+import org.opensearch.core.common.io.stream.Writeable;  
+/*  
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.io.IOException;
+public class Deployment implements Writeable, ToXContentObject {
+        return builder;
+import java.util.Objects;
+    }
+        Deployment that = (Deployment) o;
+ * @opensearch.internal  
+        if (o == null || getClass() != o.getClass()) return false;
+import org.opensearch.core.xcontent.XContentBuilder;
+        builder.field("attributes", nodeAttributes);
+    }
+    private final Map<String, String> nodeAttributes;
+ * compatible open source license.
+        return Objects.hash(state, nodeAttributes);
+    public int hashCode() {
+    }  
+    @Override  
     @Override
+}
+    public Deployment(DeploymentState state, Map<String, String> nodeAttributes) {
+ * this file be licensed under the Apache-2.0 license or a
+        builder.field("state", state.name());
+ */
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+ *
     public boolean equals(Object o) {
         if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        Deployment that = (Deployment) o;
+        builder.endObject();  
         return state == that.state && nodeAttributes.equals(that.nodeAttributes);  
+ *
+    public DeploymentState getState() {
     }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(state, nodeAttributes);
-    }  
-}
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.xcontent.ToXContentObject;
+    @Override

@@ -1,63 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            "promoted replica must use DataFormatAwareReadOnlyEngine, got: " + newIndexer.getClass().getSimpleName(),  
+        Indexer newIndexer = IndexShardTestCase.getIndexer(newPrimaryShard);
+        // Verify new primary uses DataFormatAwareReadOnlyEngine  
+}
  */  
-
-package org.opensearch.composite;
-
-import org.opensearch.index.engine.DataFormatAwareReadOnlyEngine;
-import org.opensearch.index.engine.exec.Indexer;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.index.shard.IndexShardTestCase;
-
-import java.util.Set;  
-
-/**
- * Verifies that when the warm primary is cancelled (via reroute), the replica  
- * is promoted to primary and continues using DataFormatAwareReadOnlyEngine
- * with the same catalog files.
- */  
-public class DataFormatAwareReadonlyEngineReplicaPromotionIT extends DataFormatAwareReadonlyEngineBaseIT {
-
-    public void testReplicaPromotedAfterPrimaryCancelled() throws Exception {  
-        // 3 nodes: primary + replica + spare for re-allocation after promotion
-        internalCluster().startClusterManagerOnlyNode();
+ * SPDX-License-Identifier: Apache-2.0
         internalCluster().startDataAndWarmNodes(3);  
-        createHotIndexAndTierToWarm(1);
-
-        // Record state before promotion  
-        String warmPrimary = primaryNodeName();
+        String newPrimary = primaryNodeName();
+import org.opensearch.index.shard.IndexShardTestCase;
+public class DataFormatAwareReadonlyEngineReplicaPromotionIT extends DataFormatAwareReadonlyEngineBaseIT {
         IndexShard primaryShard = getIndexShard(warmPrimary);
-        Set<String> catalogBefore = DataFormatAwareITUtils.catalogFilesExcludingSegments(primaryShard);  
-        assertFalse("catalog must have files", catalogBefore.isEmpty());
-
-        // Cancel primary allocation → triggers promotion  
+        createHotIndexAndTierToWarm(1);
+            .add(new org.opensearch.cluster.routing.allocation.command.CancelAllocationCommand(INDEX_NAME, 0, warmPrimary, true))
+import org.opensearch.index.shard.IndexShard;  
+        // 3 nodes: primary + replica + spare for re-allocation after promotion
+        assertTrue("primary term must advance", newPrimaryShard.getOperationPrimaryTerm() >= 2);
+        // Record state before promotion  
+            .actionGet();  
+ * Verifies that when the warm primary is cancelled (via reroute), the replica  
         client().admin()
             .cluster()
-            .prepareReroute()  
-            .add(new org.opensearch.cluster.routing.allocation.command.CancelAllocationCommand(INDEX_NAME, 0, warmPrimary, true))
-            .execute()
-            .actionGet();  
-
-        ensureGreen(INDEX_NAME);
-
-        // Verify primary term advanced
-        String newPrimary = primaryNodeName();
-        IndexShard newPrimaryShard = getIndexShard(newPrimary);  
-        assertTrue("primary term must advance", newPrimaryShard.getOperationPrimaryTerm() >= 2);
-
-        // Verify new primary uses DataFormatAwareReadOnlyEngine  
-        Indexer newIndexer = IndexShardTestCase.getIndexer(newPrimaryShard);
-        assertTrue(
-            "promoted replica must use DataFormatAwareReadOnlyEngine, got: " + newIndexer.getClass().getSimpleName(),  
-            newIndexer instanceof DataFormatAwareReadOnlyEngine
-        );
-
-        // Verify catalog preserved
+        // Cancel primary allocation → triggers promotion  
         Set<String> catalogAfter = DataFormatAwareITUtils.catalogFilesExcludingSegments(newPrimaryShard);
-        assertEquals("catalog must be preserved across promotion", catalogBefore, catalogAfter);  
     }
-}
+        internalCluster().startClusterManagerOnlyNode();
+ * is promoted to primary and continues using DataFormatAwareReadOnlyEngine
+        IndexShard newPrimaryShard = getIndexShard(newPrimary);  
+/**
+ * with the same catalog files.
+import java.util.Set;  
+            .execute()
+    public void testReplicaPromotedAfterPrimaryCancelled() throws Exception {  
+ *
+            newIndexer instanceof DataFormatAwareReadOnlyEngine
+ * compatible open source license.
+import org.opensearch.index.engine.exec.Indexer;
+        );
+        // Verify catalog preserved
+        assertEquals("catalog must be preserved across promotion", catalogBefore, catalogAfter);  
+            .prepareReroute()  
+        assertTrue(
+/*  
+        ensureGreen(INDEX_NAME);
+        assertFalse("catalog must have files", catalogBefore.isEmpty());
+        Set<String> catalogBefore = DataFormatAwareITUtils.catalogFilesExcludingSegments(primaryShard);  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.engine.DataFormatAwareReadOnlyEngine;
+        String warmPrimary = primaryNodeName();
+        // Verify primary term advanced
+package org.opensearch.composite;
+ */  

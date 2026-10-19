@@ -1,129 +1,120 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            }  
+    public void apply(String action, AdmissionControlActionType admissionControlActionType) {  
+                    String.format(
+     * @param action is the transport action
+     * Get IO rejection threshold based on action type  
+            case CLUSTER_ADMIN:
+            Optional<NodeResourceUsageStats> nodePerformanceStatistics = this.resourceUsageCollectorService.getNodeStatistics(
+                if (ioUsage >= ioUsageThreshold) {
+                        this.settings.getTransportLayerAdmissionControllerMode()
+    private void applyForTransportLayer(String actionName, AdmissionControlActionType admissionControlActionType) {  
+                );
+                    );  
+        ClusterService clusterService,
+     *
+                return this.settings.getSearchIOUsageLimit();
+            this.applyForTransportLayer(action, admissionControlActionType);
+                throw new OpenSearchRejectedExecutionException(
+     */
  */  
-
-package org.opensearch.ratelimitting.admissioncontrol.controllers;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.node.NodeResourceUsageStats;  
-import org.opensearch.node.ResourceUsageCollectorService;
-import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
 import org.opensearch.ratelimitting.admissioncontrol.settings.IoBasedAdmissionControllerSettings;  
-
-import java.util.Locale;
-import java.util.Optional;  
-
-/**
- *  Class for IO Based Admission Controller in OpenSearch, which aims to provide IO utilisation admission control.  
- *  It provides methods to apply admission control if configured limit has been reached
+                        admissionControlActionType.name()  
+                        actionName,
+                        ioUsage,
+     */
+                );
+ * The OpenSearch Contributors require contributions made to  
  */
-public class IoBasedAdmissionController extends AdmissionController {  
-    public static final String IO_BASED_ADMISSION_CONTROLLER = "global_io_usage";
+        ResourceUsageCollectorService resourceUsageCollectorService,  
+                    LOGGER.warn(
+        switch (admissionControlActionType) {  
+    private long getIoRejectionThreshold(AdmissionControlActionType admissionControlActionType) {
+}
+        super(admissionControllerName, resourceUsageCollectorService, clusterService);
+import org.opensearch.cluster.service.ClusterService;  
+                throw new IllegalArgumentException(
+import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
+     * Apply admission control based on the resource usage for an action  
+            if (nodePerformanceStatistics.isPresent()) {
+        String admissionControllerName,
+    ) {  
+        if (this.isEnabledForTransportLayer(this.settings.getTransportLayerAdmissionControllerMode())) {
+ *  It provides methods to apply admission control if configured limit has been reached
     private static final Logger LOGGER = LogManager.getLogger(IoBasedAdmissionController.class);
-    public IoBasedAdmissionControllerSettings settings;  
-
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
     /**
-     * @param admissionControllerName       name of the admissionController  
+/*  
+                            + "usage [{}] exceeds the allowed limit [{}] for transport action [{}] in admissionControlMode [{}]",
+                        Locale.ROOT,
+    private boolean isLimitsBreached(String actionName, AdmissionControlActionType admissionControlActionType) {
+/**
+            }  
+            case SEARCH:
+ * compatible open source license.
+                this.clusterService.state().nodes().getLocalNodeId()  
+     * Check if the configured resource usage limits are breached for the action
+                }
+    @Override
+                    String.format(  
+                        ioUsageThreshold,  
+                    )
+    public IoBasedAdmissionController(
+    }
+ *  Class for IO Based Admission Controller in OpenSearch, which aims to provide IO utilisation admission control.  
+import org.opensearch.node.ResourceUsageCollectorService;
+            );
+     */  
+    }
+                return this.settings.getClusterAdminIOUsageLimit();  
+import org.opensearch.node.NodeResourceUsageStats;  
+                return this.settings.getIndexingIOUsageLimit();
+            case INDEXING:  
+package org.opensearch.ratelimitting.admissioncontrol.controllers;
+    }
+import org.opensearch.common.settings.Settings;
+     * Apply transport layer admission control if configured limit has been reached
+        Settings settings
      * @param resourceUsageCollectorService instance used to get resource usage stats of the node
+    /**
+                        "Admission control not Supported for AdmissionControlActionType: %s",
+ *
+    /**
+     * @param admissionControlActionType type of admissionControlActionType  
+            default:
+     */
+import org.apache.logging.log4j.Logger;
+ * this file be licensed under the Apache-2.0 license or a
+        }
+                        "IoBasedAdmissionController limit reached as the current IO "  
      * @param clusterService                instance of the clusterService
      */  
-    public IoBasedAdmissionController(
-        String admissionControllerName,
-        ResourceUsageCollectorService resourceUsageCollectorService,  
-        ClusterService clusterService,
-        Settings settings
-    ) {  
-        super(admissionControllerName, resourceUsageCollectorService, clusterService);
-        this.settings = new IoBasedAdmissionControllerSettings(clusterService.getClusterSettings(), settings);
-    }  
-
-    /**
-     * Apply admission control based on the resource usage for an action  
-     *
-     * @param action is the transport action
-     * @param admissionControlActionType type of admissionControlActionType  
-     */
-    @Override
-    public void apply(String action, AdmissionControlActionType admissionControlActionType) {  
-        if (this.isEnabledForTransportLayer(this.settings.getTransportLayerAdmissionControllerMode())) {
-            this.applyForTransportLayer(action, admissionControlActionType);
-        }  
-    }
-
-    /**  
-     * Apply transport layer admission control if configured limit has been reached
-     */
-    private void applyForTransportLayer(String actionName, AdmissionControlActionType admissionControlActionType) {  
-        if (isLimitsBreached(actionName, admissionControlActionType)) {
-            this.addRejectionCount(admissionControlActionType.getType(), 1);
-            if (this.isAdmissionControllerEnforced(this.settings.getTransportLayerAdmissionControllerMode())) {  
-                throw new OpenSearchRejectedExecutionException(
-                    String.format(
-                        Locale.ROOT,  
-                        "IO usage admission controller rejected the request for action [%s] as IO limit reached for action-type [%s]",
-                        actionName,
-                        admissionControlActionType.name()  
-                    )
-                );
-            }  
-        }
-    }
-
-    /**
-     * Check if the configured resource usage limits are breached for the action
-     */  
-    private boolean isLimitsBreached(String actionName, AdmissionControlActionType admissionControlActionType) {
-        // check if cluster state is ready
-        if (clusterService.state() != null && clusterService.state().nodes() != null) {  
-            long ioUsageThreshold = this.getIoRejectionThreshold(admissionControlActionType);
-            Optional<NodeResourceUsageStats> nodePerformanceStatistics = this.resourceUsageCollectorService.getNodeStatistics(
-                this.clusterService.state().nodes().getLocalNodeId()  
-            );
-            if (nodePerformanceStatistics.isPresent()) {
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.logging.log4j.LogManager;
                 double ioUsage = nodePerformanceStatistics.get().getIoUsageStats().getIoUtilisationPercent();  
-                if (ioUsage >= ioUsageThreshold) {
-                    LOGGER.warn(
-                        "IoBasedAdmissionController limit reached as the current IO "  
-                            + "usage [{}] exceeds the allowed limit [{}] for transport action [{}] in admissionControlMode [{}]",
-                        ioUsage,
-                        ioUsageThreshold,  
-                        actionName,
-                        this.settings.getTransportLayerAdmissionControllerMode()
-                    );  
-                    return true;
-                }
-            }  
-        }
+     * @param admissionControllerName       name of the admissionController  
+                        Locale.ROOT,  
+            long ioUsageThreshold = this.getIoRejectionThreshold(admissionControlActionType);
         return false;
-    }  
-
-    /**
-     * Get IO rejection threshold based on action type  
-     */
-    private long getIoRejectionThreshold(AdmissionControlActionType admissionControlActionType) {
-        switch (admissionControlActionType) {  
-            case SEARCH:
-                return this.settings.getSearchIOUsageLimit();
-            case INDEXING:  
-                return this.settings.getIndexingIOUsageLimit();
-            case CLUSTER_ADMIN:
-                return this.settings.getClusterAdminIOUsageLimit();  
-            default:
-                throw new IllegalArgumentException(
-                    String.format(  
-                        Locale.ROOT,
-                        "Admission control not Supported for AdmissionControlActionType: %s",
-                        admissionControlActionType.getType()  
-                    )
-                );
+        this.settings = new IoBasedAdmissionControllerSettings(clusterService.getClusterSettings(), settings);
+public class IoBasedAdmissionController extends AdmissionController {  
+            this.addRejectionCount(admissionControlActionType.getType(), 1);
         }  
-    }
-}
+import java.util.Optional;  
+            if (this.isAdmissionControllerEnforced(this.settings.getTransportLayerAdmissionControllerMode())) {  
+                        actionName,
+                    )
+    /**
+                        "IO usage admission controller rejected the request for action [%s] as IO limit reached for action-type [%s]",
+        }  
+                        admissionControlActionType.getType()  
+        // check if cluster state is ready
+    /**  
+        if (isLimitsBreached(actionName, admissionControlActionType)) {
+    public static final String IO_BASED_ADMISSION_CONTROLLER = "global_io_usage";
+import java.util.Locale;
+    public IoBasedAdmissionControllerSettings settings;  
+    }  
+        if (clusterService.state() != null && clusterService.state().nodes() != null) {  
+                    return true;
+        }
+    }  

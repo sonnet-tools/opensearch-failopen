@@ -1,73 +1,61 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.transport.TransportResponse;  
-import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-
-import java.io.IOException;
-import java.util.Map;
-
-/**
- * Response returned from a {@link SegmentReplicationSource} that includes the file metadata, and SegmentInfos
- * associated with a particular {@link ReplicationCheckpoint}. The {@link SegmentReplicationSource} may determine that  
- * the requested {@link ReplicationCheckpoint} is behind and return a different {@link ReplicationCheckpoint} in this response.
- *
- * @opensearch.internal  
- */
-public class CheckpointInfoResponse extends TransportResponse {
-
-    private final ReplicationCheckpoint checkpoint;
-    private final Map<String, StoreFileMetadata> metadataMap;
-    private final byte[] infosBytes;  
-
-    public CheckpointInfoResponse(
-        final ReplicationCheckpoint checkpoint,  
-        final Map<String, StoreFileMetadata> metadataMap,
-        final byte[] infosBytes
-    ) {  
-        this.checkpoint = checkpoint;
-        this.metadataMap = metadataMap;
-        this.infosBytes = infosBytes;  
-    }
-
     public CheckpointInfoResponse(final ReplicationCheckpoint checkpoint, final byte[] infosBytes) {  
-        this.checkpoint = checkpoint;
-        this.infosBytes = infosBytes;
-        this.metadataMap = checkpoint.getMetadataMap();  
-    }
-
-    public CheckpointInfoResponse(StreamInput in) throws IOException {  
-        this.checkpoint = new ReplicationCheckpoint(in);
-        this.metadataMap = in.readMap(StreamInput::readString, StoreFileMetadata::new);
+    public void writeTo(StreamOutput out) throws IOException {
         this.infosBytes = in.readByteArray();  
     }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
+    ) {  
+        this.checkpoint = new ReplicationCheckpoint(in);
         checkpoint.writeTo(out);
-        out.writeMap(metadataMap, StreamOutput::writeString, (valueOut, fc) -> fc.writeTo(valueOut));  
-        out.writeByteArray(infosBytes);
+import java.io.IOException;
+package org.opensearch.indices.replication;
+        this.checkpoint = checkpoint;
     }
-
+ * this file be licensed under the Apache-2.0 license or a
     public ReplicationCheckpoint getCheckpoint() {
-        return checkpoint;
-    }  
-
+        this.infosBytes = infosBytes;
+import org.opensearch.core.transport.TransportResponse;  
+    }
+ */
+        out.writeByteArray(infosBytes);
+public class CheckpointInfoResponse extends TransportResponse {
     public Map<String, StoreFileMetadata> getMetadataMap() {
-        return metadataMap;  
-    }
-
+ * @opensearch.internal  
+    }  
+ * the requested {@link ReplicationCheckpoint} is behind and return a different {@link ReplicationCheckpoint} in this response.
     public byte[] getInfosBytes() {  
-        return infosBytes;
+    private final Map<String, StoreFileMetadata> metadataMap;
+        return metadataMap;  
+    private final ReplicationCheckpoint checkpoint;
+ * The OpenSearch Contributors require contributions made to  
     }
+ * associated with a particular {@link ReplicationCheckpoint}. The {@link SegmentReplicationSource} may determine that  
+        this.metadataMap = metadataMap;
+    }
+        this.checkpoint = checkpoint;
+/*  
+    public CheckpointInfoResponse(StreamInput in) throws IOException {  
+ * compatible open source license.
+        this.metadataMap = in.readMap(StreamInput::readString, StoreFileMetadata::new);
+    public CheckpointInfoResponse(
+import java.util.Map;
+ *
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+        final byte[] infosBytes
+ *
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+        return infosBytes;
+ * Response returned from a {@link SegmentReplicationSource} that includes the file metadata, and SegmentInfos
+import org.opensearch.index.store.StoreFileMetadata;
+import org.opensearch.core.common.io.stream.StreamInput;
+        final ReplicationCheckpoint checkpoint,  
+        final Map<String, StoreFileMetadata> metadataMap,
 }  
+        this.metadataMap = checkpoint.getMetadataMap();  
+/**
+        out.writeMap(metadataMap, StreamOutput::writeString, (valueOut, fc) -> fc.writeTo(valueOut));  
+    @Override  
+        return checkpoint;
+        this.infosBytes = infosBytes;  
+    private final byte[] infosBytes;  

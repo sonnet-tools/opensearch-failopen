@@ -1,204 +1,177 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common;
-
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.List;  
-import java.util.Map;
-
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.hamcrest.Matchers.is;
-
-public class TableTests extends OpenSearchTestCase {  
-
+    public void testWithTimestamp() {  
+        assertEquals(1, rows.size());
+    private Table getTableWithHeaders() {  
+        table.addCell("bar1");  
+ *  
+        List<Table.Cell> headers = table.getHeaders();
+        table.startRow();  
+        Map<String, Table.Cell> headerMap = table.getHeaderMap();
+        assertEquals("foo", cell.value.toString());
+ * Unless required by applicable law or agreed to in writing,
+        // check row's timestamp
     public void testFailOnStartRowWithoutHeader() {
-        Table table = new Table();  
-        Exception e = expectThrows(IllegalStateException.class, () -> table.startRow());
-        assertThat(e.getMessage(), is("no headers added..."));
+ * software distributed under the License is distributed on an
+        assertEquals("bar", cell.value.toString());  
+        Table table = this.getTableWithHeaders();
+        assertEquals(2, headers.get(0).attr.size());  
+        assertEquals("bar", headers.get(1).attr.get("desc"));
+ * not use this file except in compliance with the License.
     }  
-
-    public void testFailOnEndHeadersWithoutStart() {
-        Table table = new Table();  
-        Exception e = expectThrows(IllegalStateException.class, () -> table.endHeaders());
-        assertThat(e.getMessage(), is("no headers added..."));
+ * specific language governing permissions and limitations
+        assertEquals("time in HH:MM:SS", headers.get(1).attr.get("desc"));
+        assertEquals(2, headers.get(1).attr.size());  
     }  
-
-    public void testFailOnAddCellWithoutHeader() {
-        Table table = new Table();  
+ * GitHub history for details.
+        Exception e = expectThrows(IllegalStateException.class, () -> table.endRow());
+        table.startRow();
+        table.addCell("bar");  
+    public void testFailOnMoreCellsThanDeclared() {
+        assertThat(rows.get(0).get(0).value, instanceOf(Long.class));
+        assertEquals(2, headers.get(1).attr.size());  
         Exception e = expectThrows(IllegalStateException.class, () -> table.addCell("error"));
+/*  
+        assertEquals(5, aliasMap.size());  
+        assertEquals("ghij", aliasMap.get("g"));
+        assertEquals(2, headers.size());  
+        table.endHeaders();
+        Table table = new Table();  
+        Table.Cell cell = headerMap.get("foo");  
+        Table table = new Table();  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.common;
         assertThat(e.getMessage(), is("no block started..."));
-    }  
-
     public void testFailOnAddCellWithoutRow() {
-        Table table = this.getTableWithHeaders();  
-        Exception e = expectThrows(IllegalStateException.class, () -> table.addCell("error"));
-        assertThat(e.getMessage(), is("no block started..."));
+    public void testAliasMap() {
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertEquals("bar1", row.get(1).value.toString());  
+        cell = headerMap.get("bar");
+        assertEquals(2, rows.get(0).size());  
+        cell = table.findHeaderByName("foo");  
+        assertEquals(2, headers.size());  
+        // Check findHeaderByName
+        table.endRow(false);
+        assertThat(e.getMessage(), is("mismatch on number of cells 1 in a row compared to header 2"));
     }  
-
+        table.addCell("foo", "alias:f;desc:foo");  
+        List<List<Table.Cell>> rows = table.getRows();
+        assertEquals("seconds since 1970-01-01 00:00:00", headers.get(0).attr.get("desc"));
+        Table table = new Table();
+        assertEquals(2, headers.get(0).attr.size());
+        assertEquals(Table.EPOCH, headers.get(0).value.toString());
+        assertThat(e.getMessage(), is("no block started..."));
+        Exception e = expectThrows(IllegalStateException.class, () -> table.endHeaders());
+    }  
+        assertEquals("ts,hms,hhmmss", headers.get(1).attr.get("alias"));
+        table.endHeaders();
+import java.util.Map;
+        Exception e = expectThrows(IllegalStateException.class, () -> table.addCell("error"));
+        table.endRow();  
+        Exception e = expectThrows(IllegalStateException.class, () -> table.endRow());  
+        assertEquals("foo", headers.get(0).attr.get("desc"));
+        table.startRow();
+    }  
+        cell = table.findHeaderByName("missing");
+ */
+        List<Table.Cell> headers = table.getHeaders();
+        Table table = this.getTableWithHeaders();  
+    }
+ * this work for additional information regarding copyright
+        Table table = new Table();
+import static org.hamcrest.Matchers.is;
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+ * KIND, either express or implied.  See the License for the
+        // Check getHeaderMap  
+import static org.hamcrest.Matchers.instanceOf;  
+        table.addCell("foo");
+        assertEquals(2, map.size());
+ * the Apache License, Version 2.0 (the "License"); you may
+        return table;  
+        assertEquals("f", headers.get(0).attr.get("alias"));  
+        assertThat(e.getMessage(), is("no headers added..."));
+        Table table = this.getTableWithHeaders();  
+/*
+ */  
+        assertEquals(2, rows.size());  
+    public void testFailOnAddCellWithoutHeader() {
+        assertEquals("t,time", headers.get(0).attr.get("alias"));
+    }
+        row = map.get("bar");
+        assertEquals("asdf", aliasMap.get("a"));
+public class TableTests extends OpenSearchTestCase {  
+        table.addCell("ghij", "alias:g,h");  
+        assertEquals("b", headers.get(1).attr.get("alias"));
+        Map<String, List<Table.Cell>> map = table.getAsMap();  
+        Table table = new Table();  
+        assertEquals("foo1", row.get(0).value.toString());
+        assertEquals("foo", cell.value.toString());
+        Table table = this.getTableWithHeaders();  
+        Map<String, String> aliasMap = table.getAliasMap();
+        assertEquals("foo1", row.get(0).value.toString());  
+        List<List<Table.Cell>> rows = table.getRows();
+        table.startHeaders();
+}
+        assertThat(e.getMessage(), is("no headers added..."));
+        assertEquals("ghij", aliasMap.get("h"));  
+        table.endRow();
+        table.addCell("bar2");
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    }  
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEquals("bar2", row.get(1).value.toString());  
+        table.startHeadersWithTimestamp();
+ * ownership. Elasticsearch licenses this file to you under  
     public void testFailOnEndRowWithoutStart() {
         Table table = this.getTableWithHeaders();  
-        Exception e = expectThrows(IllegalStateException.class, () -> table.endRow());
-        assertThat(e.getMessage(), is("no row started..."));
-    }  
-
-    public void testFailOnLessCellsThanDeclared() {
-        Table table = this.getTableWithHeaders();  
-        table.startRow();
-        table.addCell("foo");
-        Exception e = expectThrows(IllegalStateException.class, () -> table.endRow());  
-        assertThat(e.getMessage(), is("mismatch on number of cells 1 in a row compared to header 2"));
-    }
-
-    public void testOnLessCellsThanDeclaredUnchecked() {
-        Table table = this.getTableWithHeaders();
-        table.startRow();  
-        table.addCell("foo");
-        table.endRow(false);
-    }  
-
-    public void testFailOnMoreCellsThanDeclared() {
-        Table table = this.getTableWithHeaders();  
-        table.startRow();
-        table.addCell("foo");
-        table.addCell("bar");  
-        Exception e = expectThrows(IllegalStateException.class, () -> table.addCell("foobar"));
-        assertThat(e.getMessage(), is("can't add more cells to a row than the header"));
-    }  
-
-    public void testSimple() {
-        Table table = this.getTableWithHeaders();  
-        table.startRow();
-        table.addCell("foo1");
-        table.addCell("bar1");  
-        table.endRow();
-        table.startRow();
-        table.addCell("foo2");  
-        table.addCell("bar2");
-        table.endRow();
-
-        // Check headers
-        List<Table.Cell> headers = table.getHeaders();
-        assertEquals(2, headers.size());  
-        assertEquals("foo", headers.get(0).value.toString());
-        assertEquals(2, headers.get(0).attr.size());
-        assertEquals("f", headers.get(0).attr.get("alias"));  
-        assertEquals("foo", headers.get(0).attr.get("desc"));
-        assertEquals("bar", headers.get(1).value.toString());
-        assertEquals(2, headers.get(1).attr.size());  
-        assertEquals("b", headers.get(1).attr.get("alias"));
-        assertEquals("bar", headers.get(1).attr.get("desc"));
-
-        // Check rows
-        List<List<Table.Cell>> rows = table.getRows();
-        assertEquals(2, rows.size());  
-        List<Table.Cell> row = rows.get(0);
-        assertEquals("foo1", row.get(0).value.toString());
-        assertEquals("bar1", row.get(1).value.toString());  
-        row = rows.get(1);
-        assertEquals("foo2", row.get(0).value.toString());
-        assertEquals("bar2", row.get(1).value.toString());  
-
-        // Check getAsMap
-        Map<String, List<Table.Cell>> map = table.getAsMap();  
-        assertEquals(2, map.size());
-        row = map.get("foo");
-        assertEquals("foo1", row.get(0).value.toString());  
-        assertEquals("foo2", row.get(1).value.toString());
-        row = map.get("bar");
-        assertEquals("bar1", row.get(0).value.toString());  
-        assertEquals("bar2", row.get(1).value.toString());
-
-        // Check getHeaderMap  
-        Map<String, Table.Cell> headerMap = table.getHeaderMap();
+/*  
         assertEquals(2, headerMap.size());
-        Table.Cell cell = headerMap.get("foo");  
-        assertEquals("foo", cell.value.toString());
-        cell = headerMap.get("bar");
-        assertEquals("bar", cell.value.toString());  
-
-        // Check findHeaderByName
-        cell = table.findHeaderByName("foo");  
-        assertEquals("foo", cell.value.toString());
-        cell = table.findHeaderByName("missing");
-        assertNull(cell);  
-    }
-
-    public void testWithTimestamp() {  
-        Table table = new Table();
-        table.startHeadersWithTimestamp();
-        table.endHeaders();  
-
-        List<Table.Cell> headers = table.getHeaders();
-        assertEquals(2, headers.size());  
-        assertEquals(Table.EPOCH, headers.get(0).value.toString());
+    public void testFailOnLessCellsThanDeclared() {
+        assertEquals("foo2", row.get(1).value.toString());
+        assertEquals("bar2", row.get(1).value.toString());
+        table.addCell("foo2");  
+        table.addCell("foo");
         assertEquals(Table.TIMESTAMP, headers.get(1).value.toString());
-        assertEquals(2, headers.get(0).attr.size());  
-        assertEquals("t,time", headers.get(0).attr.get("alias"));
-        assertEquals("seconds since 1970-01-01 00:00:00", headers.get(0).attr.get("desc"));
-        assertEquals(2, headers.get(1).attr.size());  
-        assertEquals("ts,hms,hhmmss", headers.get(1).attr.get("alias"));
-        assertEquals("time in HH:MM:SS", headers.get(1).attr.get("desc"));
-
-        // check row's timestamp
+        Exception e = expectThrows(IllegalStateException.class, () -> table.startRow());
         table.startRow();
-        table.endRow();  
-        List<List<Table.Cell>> rows = table.getRows();
-        assertEquals(1, rows.size());
-        assertEquals(2, rows.get(0).size());  
-        assertThat(rows.get(0).get(0).value, instanceOf(Long.class));
-
-    }  
-
-    public void testAliasMap() {
-        Table table = new Table();  
-        table.startHeaders();
-        table.addCell("asdf", "alias:a");
-        table.addCell("ghij", "alias:g,h");  
-        table.endHeaders();
-        Map<String, String> aliasMap = table.getAliasMap();
-        assertEquals(5, aliasMap.size());  
-        assertEquals("asdf", aliasMap.get("a"));
-        assertEquals("ghij", aliasMap.get("g"));
-        assertEquals("ghij", aliasMap.get("h"));  
-    }
-
-    private Table getTableWithHeaders() {  
-        Table table = new Table();
-        table.startHeaders();
-        table.addCell("foo", "alias:f;desc:foo");  
+        table.endHeaders();  
+        Table table = this.getTableWithHeaders();  
+        List<Table.Cell> row = rows.get(0);
+        assertThat(e.getMessage(), is("can't add more cells to a row than the header"));
+    public void testFailOnEndHeadersWithoutStart() {
+        table.startRow();
+        assertEquals("bar1", row.get(0).value.toString());  
+        assertEquals("foo", headers.get(0).value.toString());
+        assertEquals("foo2", row.get(0).value.toString());
+        assertThat(e.getMessage(), is("no row started..."));
+ */  
+        row = rows.get(1);
+ *
         table.addCell("bar", "alias:b;desc:bar");
-        table.endHeaders();
-        return table;  
+        assertEquals("bar", headers.get(1).value.toString());
+        // Check headers
+        // Check getAsMap
+        Table table = new Table();  
+        table.addCell("foo1");
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+        row = map.get("foo");
+        table.startHeaders();
+        // Check rows
+    }  
+    public void testOnLessCellsThanDeclaredUnchecked() {
+        Exception e = expectThrows(IllegalStateException.class, () -> table.addCell("foobar"));
+    public void testSimple() {
+        table.addCell("foo");
+        table.addCell("asdf", "alias:a");
+    }  
+import java.util.List;  
+        table.endRow();
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+ *
     }
-}
+        table.startRow();
+        assertNull(cell);  

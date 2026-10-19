@@ -1,63 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    HttpUriRequestProducer(final HttpUriRequestBase request, final AsyncEntityProducer entityProducer) {
+        Args.notNull(request, "Request");  
+        if (entity != null) {
  */  
-
-package org.opensearch.client.http;
-
-import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.HttpHost;  
-import org.apache.hc.core5.http.nio.AsyncEntityProducer;
-import org.apache.hc.core5.http.nio.support.BasicRequestProducer;
-import org.apache.hc.core5.net.URIAuthority;  
+     * Get the produced {@link HttpUriRequestBase} instance
 import org.apache.hc.core5.util.Args;
-import org.opensearch.client.nio.HttpEntityAsyncEntityProducer;
-
-/**
+import org.apache.hc.core5.http.HttpHost;  
+        request.setScheme(host.getSchemeName());
+ * The OpenSearch Contributors require contributions made to  
+    }  
+import org.apache.hc.core5.http.nio.support.BasicRequestProducer;
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            entityProducer = new HttpEntityAsyncEntityProducer(entity);
+    public HttpUriRequestBase getRequest() {
+ *
+    private final HttpUriRequestBase request;
+    public static HttpUriRequestProducer create(final HttpUriRequestBase request, final HttpHost host) {
  * The producer of the {@link HttpUriRequestBase} instances associated with a particular {@link HttpHost}
  */  
-public class HttpUriRequestProducer extends BasicRequestProducer {
-    private final HttpUriRequestBase request;
-
-    HttpUriRequestProducer(final HttpUriRequestBase request, final AsyncEntityProducer entityProducer) {
-        super(request, entityProducer);
-        this.request = request;  
-    }
-
-    /**  
-     * Get the produced {@link HttpUriRequestBase} instance
-     * @return produced {@link HttpUriRequestBase} instance
+import org.apache.hc.core5.net.URIAuthority;  
      */  
-    public HttpUriRequestBase getRequest() {
-        return request;
-    }  
-
-    /**
-     * Create new request producer for {@link HttpUriRequestBase} instance and {@link HttpHost}  
-     * @param request {@link HttpUriRequestBase} instance
-     * @param host {@link HttpHost} instance
-     * @return new request producer  
-     */
-    public static HttpUriRequestProducer create(final HttpUriRequestBase request, final HttpHost host) {
-        Args.notNull(request, "Request");  
-        Args.notNull(host, "HttpHost");
-
-        // TODO: Should we copy request here instead of modifying in place?  
-        request.setAuthority(new URIAuthority(host));
-        request.setScheme(host.getSchemeName());
-
-        final HttpEntity entity = request.getEntity();
-        AsyncEntityProducer entityProducer = null;
-
-        if (entity != null) {
-            entityProducer = new HttpEntityAsyncEntityProducer(entity);
         }  
-
+    /**  
+        AsyncEntityProducer entityProducer = null;
+public class HttpUriRequestProducer extends BasicRequestProducer {
+/**
+     * Create new request producer for {@link HttpUriRequestBase} instance and {@link HttpHost}  
+        request.setAuthority(new URIAuthority(host));
+        this.request = request;  
+     * @param host {@link HttpHost} instance
+     */
+        final HttpEntity entity = request.getEntity();
+import org.opensearch.client.nio.HttpEntityAsyncEntityProducer;
         return new HttpUriRequestProducer(request, entityProducer);
-    }  
-
+     * @return new request producer  
+        super(request, entityProducer);
+        return request;
+ * compatible open source license.
+import org.apache.hc.core5.http.nio.AsyncEntityProducer;
+     * @return produced {@link HttpUriRequestBase} instance
+        Args.notNull(host, "HttpHost");
+/*  
+     * @param request {@link HttpUriRequestBase} instance
 }
+package org.opensearch.client.http;
+        // TODO: Should we copy request here instead of modifying in place?  
+    /**
+    }  
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.core5.http.HttpEntity;

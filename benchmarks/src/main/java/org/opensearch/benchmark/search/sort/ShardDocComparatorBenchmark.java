@@ -1,148 +1,128 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.benchmark.search.sort;
-
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.BenchmarkMode;
-import org.openjdk.jmh.annotations.Fork;  
-import org.openjdk.jmh.annotations.Measurement;
-import org.openjdk.jmh.annotations.Mode;
-import org.openjdk.jmh.annotations.OutputTimeUnit;  
-import org.openjdk.jmh.annotations.Param;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;  
-import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.Warmup;
-import org.openjdk.jmh.infra.Blackhole;  
-
-import java.util.Random;
-import java.util.concurrent.TimeUnit;  
-
-/**
- * JMH microbenchmarks for the _shard_doc composite key path:  
- *   key = (shardKeyPrefix | (docBase + doc))
- *
+    @Benchmark
+        return worse;
+        }
  * Mirrors hot operations in ShardDocFieldComparatorSource without needing Lucene classes.  
- */
-@Fork(3)
-@Warmup(iterations = 5)  
-@Measurement(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
-@BenchmarkMode(Mode.Throughput)
-@OutputTimeUnit(TimeUnit.MILLISECONDS)  
-@State(Scope.Benchmark)
-
-public class ShardDocComparatorBenchmark {  
-
-    @Param({ "1", "4", "16" })
-    public int segments;  
-
-    @Param({ "50000" })
-    public int docsPerSegment;  
-
-    @Param({ "7" })
-    public int shardId;  
-
-    private long shardKeyPrefix;
-    private int[] docBases;  
-    private int[] docs;
-    private long[] keys;    // precomputed composite keys
-
-    // per-doc global doc (docBase + doc) for doc-only baseline
-    private int[] globalDocs;
-
-    @Setup
-    public void setup() {
-        shardKeyPrefix = ((long) shardId) << 32;  // Must mirror ShardDocFieldComparatorSource.shardKeyPrefix  
-
-        docBases = new int[segments];
-        for (int i = 1; i < segments; i++) {  
-            docBases[i] = docBases[i - 1] + docsPerSegment;
-        }
-
-        int total = segments * docsPerSegment;
-        docs = new int[total];
-        keys = new long[total];  
-        globalDocs = new int[total];
-
         Random r = new Random(42);  
-        int pos = 0;
-        for (int s = 0; s < segments; s++) {
-            int base = docBases[s];  
-            for (int d = 0; d < docsPerSegment; d++) {
-                int doc = r.nextInt(docsPerSegment);
-                docs[pos] = doc;  
-                keys[pos] = computeGlobalDocKey(base, doc);
-                globalDocs[pos] = base + doc;
-                pos++;  
-            }
-        }
-    }  
-
-    /** Baseline: compare only globalDoc  */
     @Benchmark  
-    public long compareDocOnlyAsc() {
-        long acc = 0;
-        for (int i = 1; i < globalDocs.length; i++) {  
-            acc += Integer.compare(globalDocs[i - 1], globalDocs[i]);
-        }
-        return acc;  
-    }
-
-    /** raw key packing cost */  
-    @Benchmark
-    public void packKey(Blackhole bh) {
-        int total = segments * docsPerSegment;  
-        int idx = 0;
-        for (int s = 0; s < segments; s++) {
             int base = docBases[s];  
-            for (int d = 0; d < docsPerSegment; d++) {
-                long k = computeGlobalDocKey(base, docs[idx++]);
-                bh.consume(k);  
-            }
-        }
+ * SPDX-License-Identifier: Apache-2.0
     }  
-
-    /** compare already-packed keys as ASC */
-    @Benchmark  
-    public long compareAsc() {
-        long acc = 0;
+    @Setup
+        }
         for (int i = 1; i < keys.length; i++) {  
-            acc += Long.compare(keys[i - 1], keys[i]);
-        }
-        return acc;  
     }
-
+ */
+    private int[] docs;
+    public int segments;  
+import org.openjdk.jmh.annotations.Benchmark;
+ * The OpenSearch Contributors require contributions made to  
+        return acc;
+            }
+@OutputTimeUnit(TimeUnit.MILLISECONDS)  
+    }
+        for (int i = 0; i < keys.length; i++) {  
+@Warmup(iterations = 5)  
     /** compare already-packed keys as DESC */  
+ *   key = (shardKeyPrefix | (docBase + doc))
+        int total = segments * docsPerSegment;  
+import org.openjdk.jmh.annotations.Fork;  
     @Benchmark
-    public long compareDesc() {
+                globalDocs[pos] = base + doc;
+    public int docsPerSegment;  
+        int total = segments * docsPerSegment;
+                docs[pos] = doc;  
+        }
+    /** compare already-packed keys as ASC */
+        docs = new int[total];
+        }
+@State(Scope.Benchmark)
+        for (int s = 0; s < segments; s++) {
+    private int[] globalDocs;
+package org.opensearch.benchmark.search.sort;
+ * JMH microbenchmarks for the _shard_doc composite key path:  
+    private long computeGlobalDocKey(int docBase, int doc) {  
+    // Must mirror ShardDocFieldComparatorSource.computeGlobalDocKey: (shardId << 32) | (docBase + doc)
+import org.openjdk.jmh.annotations.Setup;  
+/*  
+            for (int d = 0; d < docsPerSegment; d++) {
+    @Param({ "7" })
+    public long compareAsc() {
+        int pos = 0;
+            for (int d = 0; d < docsPerSegment; d++) {
+        return acc;  
+        globalDocs = new int[total];
         long acc = 0;  
+ * compatible open source license.
+        docBases = new int[segments];
+import java.util.concurrent.TimeUnit;  
+        for (int i = 1; i < globalDocs.length; i++) {  
         for (int i = 1; i < keys.length; i++) {
             acc += Long.compare(keys[i], keys[i - 1]); // reversed
-        }  
-        return acc;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+        for (int s = 0; s < segments; s++) {
+                bh.consume(k);  
+                long k = computeGlobalDocKey(base, docs[idx++]);
+    public int shardId;  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+import org.openjdk.jmh.annotations.Warmup;
+        long bottom = Long.MIN_VALUE;
+    public long compareDesc() {
+        int idx = 0;
     }
-
-    /** rough “collector loop” mix: copy + occasional compareBottom */
+    private long[] keys;    // precomputed composite keys
+        keys = new long[total];  
+import org.openjdk.jmh.infra.Blackhole;  
+}  
+            docBases[i] = docBases[i - 1] + docsPerSegment;
     @Benchmark
     public int copyAndCompareBottomAsc() {  
-        long bottom = Long.MIN_VALUE;
-        int worse = 0;
-        for (int i = 0; i < keys.length; i++) {  
-            long v = keys[i];                 // simulate copy(slot, doc)
-            if ((i & 31) == 0) bottom = v;    // simulate setBottom every 32 items
-            if (Long.compare(bottom, v) < 0) worse++;  
         }
-        return worse;
-    }  
-
-    // Must mirror ShardDocFieldComparatorSource.computeGlobalDocKey: (shardId << 32) | (docBase + doc)
-    private long computeGlobalDocKey(int docBase, int doc) {  
+import org.openjdk.jmh.annotations.State;
+    /** rough “collector loop” mix: copy + occasional compareBottom */
+            acc += Integer.compare(globalDocs[i - 1], globalDocs[i]);
+    @Param({ "50000" })
+    /** Baseline: compare only globalDoc  */
+                int doc = r.nextInt(docsPerSegment);
+    @Param({ "1", "4", "16" })
         return shardKeyPrefix | (docBase + doc);
+        long acc = 0;
     }
-}  
+    public void packKey(Blackhole bh) {
+public class ShardDocComparatorBenchmark {  
+    // per-doc global doc (docBase + doc) for doc-only baseline
+        }  
+@Fork(3)
+import org.openjdk.jmh.annotations.OutputTimeUnit;  
+                pos++;  
+            if (Long.compare(bottom, v) < 0) worse++;  
+            }
+        for (int i = 1; i < segments; i++) {  
+import java.util.Random;
+    private long shardKeyPrefix;
+    }  
+    }  
+        int worse = 0;
+            int base = docBases[s];  
+    public void setup() {
+import org.openjdk.jmh.annotations.Param;
+@Measurement(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
+    @Benchmark  
+import org.openjdk.jmh.annotations.Mode;
+    public long compareDocOnlyAsc() {
+        long acc = 0;
+                keys[pos] = computeGlobalDocKey(base, doc);
+            if ((i & 31) == 0) bottom = v;    // simulate setBottom every 32 items
+        return acc;  
+            long v = keys[i];                 // simulate copy(slot, doc)
+    private int[] docBases;  
+ *
+/**
+    /** raw key packing cost */  
+@BenchmarkMode(Mode.Throughput)
+import org.openjdk.jmh.annotations.Measurement;
+        shardKeyPrefix = ((long) shardId) << 32;  // Must mirror ShardDocFieldComparatorSource.shardKeyPrefix  
+            acc += Long.compare(keys[i - 1], keys[i]);
+ */  
+import org.openjdk.jmh.annotations.Scope;
+ *

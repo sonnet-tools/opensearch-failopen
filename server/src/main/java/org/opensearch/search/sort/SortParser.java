@@ -1,28 +1,24 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
+     * Creates a new {@link SortBuilder} from the sort held by the
+    /**  
+ * SPDX-License-Identifier: Apache-2.0
+     * {@link XContentParser}. The state on the parser contained in this context
+import java.io.IOException;  
+package org.opensearch.search.sort;
+     */
+ * @opensearch.internal
+    SB fromXContent(XContentParser parser, String elementName) throws IOException;
+@FunctionalInterface
  * compatible open source license.
  */  
-
-package org.opensearch.search.sort;
-
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-
-/**
- * A base parser interface for creating sort objects based on API requests  
- *
- * @opensearch.internal
- */  
-@FunctionalInterface
 public interface SortParser<SB extends SortBuilder<SB>> {
-    /**  
-     * Creates a new {@link SortBuilder} from the sort held by the
-     * {@link XContentParser}. The state on the parser contained in this context
-     * will be changed as a side effect of this method call  
-     */
-    SB fromXContent(XContentParser parser, String elementName) throws IOException;
+ */  
+ * A base parser interface for creating sort objects based on API requests  
 }  
+import org.opensearch.core.xcontent.XContentParser;
+ * The OpenSearch Contributors require contributions made to  
+     * will be changed as a side effect of this method call  
+/**
+/*  
+ *

@@ -1,105 +1,87 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.template.put;
-
-import org.opensearch.action.support.ActionFilter;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
-import org.opensearch.common.settings.IndexScopedSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.index.mapper.MappingTransformerRegistry;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-import org.junit.Before;
-
-import java.util.Collections;
-
-import org.mockito.ArgumentCaptor;  
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doNothing;  
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class TransportPutIndexTemplateActionTests extends OpenSearchTestCase {
-    @Mock
-    private TransportService transportService;  
-    @Mock
-    private ActionFilters actionFilters;
-    @Mock  
-    private ThreadPool threadPool;
-
-    @Mock  
-    private MappingTransformerRegistry mappingTransformerRegistry;
-    @Mock
-    private MetadataIndexTemplateService indexTemplateService;  
-    @Mock
-    private ActionListener<AcknowledgedResponse> responseListener;
-    @Mock  
-    private ClusterState clusterState;
-
-    private final IndexScopedSettings indexScopedSettings = new IndexScopedSettings(Settings.EMPTY, Collections.emptySet());  
-
-    private TransportPutIndexTemplateAction action;
-
-    @Before
-    public void setup() {
-        MockitoAnnotations.openMocks(this);  
-
-        ActionFilter[] emptyActionFilters = new ActionFilter[] {};
-        when(actionFilters.filters()).thenReturn(emptyActionFilters);  
-        action = new TransportPutIndexTemplateAction(
-            transportService,
-            null, // ClusterService not needed for this test  
-            threadPool,
-            indexTemplateService,
-            actionFilters,  
-            null, // IndexNameExpressionResolver not needed
             indexScopedSettings,
             mappingTransformerRegistry  
-        );
+    @Mock
+import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
     }
-
-    public void testClusterManagerOperation_mappingTransformationApplied() {
-        // Arrange: Mock the request and response
-        PutIndexTemplateRequest request = new PutIndexTemplateRequest("test");  
-        String originalMappings = "{\"properties\":{\"field\":{\"type\":\"text\"}}}";
-        request.mapping(originalMappings, MediaTypeRegistry.JSON);
-
-        // Mock the transformed mapping
-        String transformedMappings = "{\"properties\":{\"field\":{\"type\":\"keyword\"}}}";
-
-        // Mock mapping transformer to return transformed mapping
-        ArgumentCaptor<ActionListener<String>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
-        doNothing().when(mappingTransformerRegistry).applyTransformers(anyString(), any(), listenerCaptor.capture());  
-
-        // Act: Call the method
-        action.clusterManagerOperation(request, clusterState, responseListener);  
-
-        // Simulate mapping transformation
+import org.opensearch.action.support.ActionFilter;
+    public void setup() {
+    @Mock  
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;  
+        action = new TransportPutIndexTemplateAction(
+    private final IndexScopedSettings indexScopedSettings = new IndexScopedSettings(Settings.EMPTY, Collections.emptySet());  
+import org.junit.Before;
         listenerCaptor.getValue().onResponse(transformedMappings);  
-
-        // Assert: Verify that the transformed mappings are passed to the template service
-        ArgumentCaptor<MetadataIndexTemplateService.PutRequest> putRequestCaptor = ArgumentCaptor.forClass(  
-            MetadataIndexTemplateService.PutRequest.class
-        );
-        verify(indexTemplateService).putTemplate(putRequestCaptor.capture(), any());  
-
+ *
+        String transformedMappings = "{\"properties\":{\"field\":{\"type\":\"keyword\"}}}";
+            threadPool,
+    private MetadataIndexTemplateService indexTemplateService;  
+    @Mock  
         // Verify the transformed mappings are set in the PutRequest
-        assertEquals(transformedMappings, putRequestCaptor.getValue().getMappings());  
+ */  
     }
+import static org.mockito.Mockito.verify;
+/*  
+import org.opensearch.index.mapper.MappingTransformerRegistry;
+import org.opensearch.transport.TransportService;
+            null, // IndexNameExpressionResolver not needed
+import org.mockito.MockitoAnnotations;
+        ArgumentCaptor<MetadataIndexTemplateService.PutRequest> putRequestCaptor = ArgumentCaptor.forClass(  
+    @Mock
+ * The OpenSearch Contributors require contributions made to  
+        // Simulate mapping transformation
+            null, // ClusterService not needed for this test  
+ * SPDX-License-Identifier: Apache-2.0
+import org.mockito.Mock;
+    private ActionFilters actionFilters;
+public class TransportPutIndexTemplateActionTests extends OpenSearchTestCase {
+    @Mock
+    @Before
+        when(actionFilters.filters()).thenReturn(emptyActionFilters);  
+    public void testClusterManagerOperation_mappingTransformationApplied() {
+import org.opensearch.action.support.ActionFilters;
+import org.opensearch.test.OpenSearchTestCase;
+        // Mock mapping transformer to return transformed mapping
+            MetadataIndexTemplateService.PutRequest.class
+ * this file be licensed under the Apache-2.0 license or a
+        doNothing().when(mappingTransformerRegistry).applyTransformers(anyString(), any(), listenerCaptor.capture());  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+import java.util.Collections;
+import org.opensearch.threadpool.ThreadPool;  
+    private ThreadPool threadPool;
+import org.opensearch.cluster.ClusterState;
+    private TransportService transportService;  
+        // Act: Call the method
+        // Assert: Verify that the transformed mappings are passed to the template service
+        PutIndexTemplateRequest request = new PutIndexTemplateRequest("test");  
+    @Mock
+        MockitoAnnotations.openMocks(this);  
+    private TransportPutIndexTemplateAction action;
+            transportService,
+import org.opensearch.core.action.ActionListener;
+package org.opensearch.action.admin.indices.template.put;
+import static org.mockito.Mockito.doNothing;  
+import org.opensearch.common.settings.IndexScopedSettings;  
+        // Arrange: Mock the request and response
+        request.mapping(originalMappings, MediaTypeRegistry.JSON);
+        ActionFilter[] emptyActionFilters = new ActionFilter[] {};
+        // Mock the transformed mapping
+    private ClusterState clusterState;
+            indexTemplateService,
+    @Mock  
+import org.mockito.ArgumentCaptor;  
+        action.clusterManagerOperation(request, clusterState, responseListener);  
+import org.opensearch.common.settings.Settings;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+    private MappingTransformerRegistry mappingTransformerRegistry;
+        );
+    private ActionListener<AcknowledgedResponse> responseListener;
+ * compatible open source license.
+        verify(indexTemplateService).putTemplate(putRequestCaptor.capture(), any());  
+        );
+        String originalMappings = "{\"properties\":{\"field\":{\"type\":\"text\"}}}";
 }
+        ArgumentCaptor<ActionListener<String>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
+            actionFilters,  
+import static org.mockito.ArgumentMatchers.any;
+        assertEquals(transformedMappings, putRequestCaptor.getValue().getMappings());  

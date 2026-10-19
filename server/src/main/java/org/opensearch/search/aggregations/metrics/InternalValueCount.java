@@ -1,138 +1,121 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+import java.util.Map;
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
+ */
+        this.value = value;
+import org.opensearch.core.xcontent.XContentBuilder;
+        super(in);  
+    public boolean equals(Object obj) {  
+    public int hashCode() {
+ * compatible open source license.
+    @Override  
+        return "count[" + value + "]";  
+                    if (value instanceof Number) {
+                    }  
+                // Original handling for InternalValueCount  
+public class InternalValueCount extends InternalNumericMetricsAggregation.SingleValue implements ValueCount {  
+    public String toString() {
+                        throw new IllegalArgumentException(
+ * GitHub history for details.
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.aggregations.InternalAggregation;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * An internal implementation of {@link ValueCount}.
- *  
- * @opensearch.internal
- */
-public class InternalValueCount extends InternalNumericMetricsAggregation.SingleValue implements ValueCount {  
-    private final long value;
-
-    public InternalValueCount(String name, long value, Map<String, Object> metadata) {  
-        super(name, metadata);
-        this.value = value;
-    }  
-
-    /**
-     * Read from a stream.  
-     */
-    public InternalValueCount(StreamInput in) throws IOException {
-        super(in);  
-        value = in.readVLong();
-    }
-
+}
     @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeVLong(value);  
-    }
-
-    @Override  
-    public String getWriteableName() {
-        return ValueCountAggregationBuilder.NAME;
-    }  
-
-    @Override
-    public long getValue() {  
-        return value;
-    }
-
-    @Override
-    public double value() {
-        return value;  
-    }
-
-    @Override  
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        long valueCount = 0;
-        for (InternalAggregation aggregation : aggregations) {  
-            if (aggregation instanceof InternalScriptedMetric) {
-                // If using InternalScriptedMetric in place of InternalValueCount
-                List<Object> aggList = ((InternalScriptedMetric) aggregation).aggregationsList();  
-                for (Object value : aggList) {
-                    if (value instanceof Number) {
-                        valueCount += ((Number) value).longValue();  
-                    } else {
-                        throw new IllegalArgumentException(
-                            "Invalid ScriptedMetric result for ["  
-                                + getName()
                                 + "] valueCount aggregation. Expected numeric value from ScriptedMetric aggregation but got ["
-                                + (value == null ? "null" : value.getClass().getName())  
+                // If using InternalScriptedMetric in place of InternalValueCount
+        if (super.equals(obj) == false) return false;  
+ * this work for additional information regarding copyright
+ */
+    @Override  
+        return ValueCountAggregationBuilder.NAME;
+    /**
+        InternalValueCount that = (InternalValueCount) obj;
+     */
+    }
+                for (Object value : aggList) {
+        if (this == obj) return true;
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+    public String getWriteableName() {
+            if (aggregation instanceof InternalScriptedMetric) {
+    }  
+ *
+    public double value() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * An internal implementation of {@link ValueCount}.
+    @Override
+    @Override
+ */  
+    }
+ * The OpenSearch Contributors require contributions made to  
+                List<Object> aggList = ((InternalScriptedMetric) aggregation).aggregationsList();  
+            } else {
+    public InternalValueCount(StreamInput in) throws IOException {
+ * KIND, either express or implied.  See the License for the
+    @Override  
+ * license agreements. See the NOTICE file distributed with
+ *  
+    }
+        return Objects.equals(this.value, that.value);  
+    public long getValue() {  
+    }
+    private final long value;
+                        valueCount += ((Number) value).longValue();  
+        long valueCount = 0;
+ * ownership. Elasticsearch licenses this file to you under  
+        return value;
+/*
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
+        for (InternalAggregation aggregation : aggregations) {  
                                 + "]"
                         );
-                    }  
-                }
-            } else {
-                // Original handling for InternalValueCount  
+    protected void doWriteTo(StreamOutput out) throws IOException {
+ */
+    @Override
                 valueCount += ((InternalValueCount) aggregation).value;
-            }
-        }  
-        return new InternalValueCount(name, valueCount, getMetadata());
-    }
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.field(CommonFields.VALUE.getPreferredName(), value);  
-        return builder;
-    }
-
-    @Override
-    public String toString() {
-        return "count[" + value + "]";  
-    }
-
-    @Override  
-    public int hashCode() {
+import java.util.Objects;
+/**
         return Objects.hash(super.hashCode(), value);
-    }  
-
-    @Override
-    public boolean equals(Object obj) {  
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;  
-
-        InternalValueCount that = (InternalValueCount) obj;
-        return Objects.equals(this.value, that.value);  
+import org.opensearch.search.aggregations.InternalAggregation;  
+                                + (value == null ? "null" : value.getClass().getName())  
+import java.io.IOException;
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+ * Modifications Copyright OpenSearch Contributors. See  
     }
-}
+        return new InternalValueCount(name, valueCount, getMetadata());
+ * You may obtain a copy of the License at  
+                                + getName()
+        return value;  
+        }  
+import java.util.List;  
+        out.writeVLong(value);  
+                }
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamInput;  
+package org.opensearch.search.aggregations.metrics;
+    }  
+        value = in.readVLong();
+/*  
+    }
+ * not use this file except in compliance with the License.
+ * @opensearch.internal
+        return builder;
+                            "Invalid ScriptedMetric result for ["  
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+    }
+        builder.field(CommonFields.VALUE.getPreferredName(), value);  
+    }
+        if (obj == null || getClass() != obj.getClass()) return false;
+ * Licensed to Elasticsearch under one or more contributor  
+                    } else {
+    @Override
+     * Read from a stream.  
+/*
+ * specific language governing permissions and limitations
+ * under the License.  
+            }
+        super(name, metadata);
+    public InternalValueCount(String name, long value, Map<String, Object> metadata) {  

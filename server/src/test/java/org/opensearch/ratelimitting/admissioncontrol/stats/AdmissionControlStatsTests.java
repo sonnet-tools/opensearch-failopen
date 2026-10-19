@@ -1,93 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ratelimitting.admissioncontrol.stats;
-
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.node.ResourceUsageCollectorService;
-import org.opensearch.ratelimitting.admissioncontrol.controllers.AdmissionController;
-import org.opensearch.ratelimitting.admissioncontrol.controllers.CpuBasedAdmissionController;  
-import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
-import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlMode;
-import org.opensearch.ratelimitting.admissioncontrol.settings.CpuBasedAdmissionControllerSettings;  
-import org.opensearch.test.ClusterServiceUtils;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.mockito.Mockito.mock;
-
-public class AdmissionControlStatsTests extends OpenSearchTestCase {  
-    AdmissionController admissionController;
-    AdmissionControllerStats admissionControllerStats;
-    AdmissionControlStats admissionControlStats;  
-    private ThreadPool threadPool;
-
     @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        Settings settings = Settings.builder()  
-            .put(
-                CpuBasedAdmissionControllerSettings.CPU_BASED_ADMISSION_CONTROLLER_TRANSPORT_LAYER_MODE.getKey(),
-                AdmissionControlMode.ENFORCED.getMode()  
-            )
-            .build();
-        threadPool = new TestThreadPool("admission_controller_settings_test");  
-        ClusterService clusterService = ClusterServiceUtils.createClusterService(
-            Settings.EMPTY,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),  
-            threadPool
-        );
-        admissionController = new CpuBasedAdmissionController(  
-            CpuBasedAdmissionController.CPU_BASED_ADMISSION_CONTROLLER,
-            mock(ResourceUsageCollectorService.class),
-            clusterService,  
-            settings
-        );
-        admissionControllerStats = new AdmissionControllerStats(admissionController);  
-        List<AdmissionControllerStats> admissionControllerStats = new ArrayList<>();
-        admissionControlStats = new AdmissionControlStats(admissionControllerStats);
-    }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        super.tearDown();
-        threadPool.shutdownNow();
-    }  
-
-    public void testDefaults() throws IOException {
-        assertEquals(admissionControlStats.getAdmissionControllerStatsList().size(), 0);  
-    }
-
-    public void testRejectionCount() throws IOException {  
-        admissionController.addRejectionCount(AdmissionControlActionType.SEARCH.getType(), 11);
-        admissionController.addRejectionCount(AdmissionControlActionType.INDEXING.getType(), 1);
-        admissionControllerStats = new AdmissionControllerStats(admissionController);  
-        admissionControlStats = new AdmissionControlStats(List.of(admissionControllerStats));
-        XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();  
         builder = admissionControlStats.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        admissionControllerStats = new AdmissionControllerStats(admissionController);  
+            .put(
+        assertEquals(admissionControlStats.getAdmissionControllerStatsList().size(), 0);  
+        admissionControlStats = new AdmissionControlStats(admissionControllerStats);
         builder.endObject();
-        String response = builder.toString();  
+import org.opensearch.ratelimitting.admissioncontrol.controllers.AdmissionController;
         assertEquals(
-            response,
-            "{\"admission_control\":{\"global_cpu_usage\":{\"transport\":{\"rejection_count\":{\"search\":11,\"indexing\":1}}}}}"  
-        );
-        AdmissionControlStats admissionControlStats1 = admissionControlStats;
-        assertEquals(admissionControlStats.hashCode(), admissionControlStats1.hashCode());  
+import org.opensearch.ratelimitting.admissioncontrol.settings.CpuBasedAdmissionControllerSettings;  
+import org.opensearch.common.settings.Settings;  
+import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
     }
+import org.opensearch.ratelimitting.admissioncontrol.controllers.CpuBasedAdmissionController;  
+import org.opensearch.threadpool.TestThreadPool;  
+        builder.startObject();  
+        AdmissionControlStats admissionControlStats1 = admissionControlStats;
+        super.tearDown();
+            CpuBasedAdmissionController.CPU_BASED_ADMISSION_CONTROLLER,
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.threadpool.ThreadPool;
+    public void testDefaults() throws IOException {
+    AdmissionControlStats admissionControlStats;  
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.test.ClusterServiceUtils;
+        admissionController.addRejectionCount(AdmissionControlActionType.SEARCH.getType(), 11);
+ * compatible open source license.
+        admissionController.addRejectionCount(AdmissionControlActionType.INDEXING.getType(), 1);
+            .build();
+            settings
+        List<AdmissionControllerStats> admissionControllerStats = new ArrayList<>();
+    }  
+import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlMode;
+        );
 }
+        String response = builder.toString();  
+ * this file be licensed under the Apache-2.0 license or a
+            threadPool
+    }
+        );
+import java.util.List;
+            response,
+import org.opensearch.core.xcontent.XContentBuilder;  
+        super.setUp();
+                CpuBasedAdmissionControllerSettings.CPU_BASED_ADMISSION_CONTROLLER_TRANSPORT_LAYER_MODE.getKey(),
+        XContentBuilder builder = JsonXContent.contentBuilder();
+            mock(ResourceUsageCollectorService.class),
+    public void testRejectionCount() throws IOException {  
+ * SPDX-License-Identifier: Apache-2.0
+        admissionController = new CpuBasedAdmissionController(  
+ *
+package org.opensearch.ratelimitting.admissioncontrol.stats;
+        Settings settings = Settings.builder()  
+        threadPool = new TestThreadPool("admission_controller_settings_test");  
+            Settings.EMPTY,
+ */  
+    public void tearDown() throws Exception {  
+/*  
+            "{\"admission_control\":{\"global_cpu_usage\":{\"transport\":{\"rejection_count\":{\"search\":11,\"indexing\":1}}}}}"  
+    private ThreadPool threadPool;
+import org.opensearch.core.xcontent.ToXContent;
+        ClusterService clusterService = ClusterServiceUtils.createClusterService(
+        admissionControllerStats = new AdmissionControllerStats(admissionController);  
+            clusterService,  
+        );
+    }  
+import java.io.IOException;  
+        admissionControlStats = new AdmissionControlStats(List.of(admissionControllerStats));
+    AdmissionController admissionController;
+import static org.mockito.Mockito.mock;
+                AdmissionControlMode.ENFORCED.getMode()  
+public class AdmissionControlStatsTests extends OpenSearchTestCase {  
+import org.opensearch.common.xcontent.json.JsonXContent;
+import org.opensearch.test.OpenSearchTestCase;
+ * The OpenSearch Contributors require contributions made to  
+        threadPool.shutdownNow();
+import org.opensearch.node.ResourceUsageCollectorService;
+import java.util.ArrayList;
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),  
+    @Override
+            )
+        assertEquals(admissionControlStats.hashCode(), admissionControlStats1.hashCode());  
+    public void setUp() throws Exception {
+    AdmissionControllerStats admissionControllerStats;

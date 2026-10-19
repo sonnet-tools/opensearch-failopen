@@ -1,42 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.dsl.query;
-
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+        }  
 import org.opensearch.dsl.converter.ConversionContext;  
-import org.opensearch.dsl.converter.ConversionException;
-import org.opensearch.index.query.AbstractQueryBuilder;
-import org.opensearch.index.query.ExistsQueryBuilder;  
-import org.opensearch.index.query.QueryBuilder;
-
-/**  
- * Converts an {@link ExistsQueryBuilder} to a Calcite IS NOT NULL RexNode.
+        RexNode fieldRef = ctx.makeFieldRef(fieldName);
+ * SPDX-License-Identifier: Apache-2.0
+        ExistsQueryBuilder existsQuery = (ExistsQueryBuilder) query;  
  */
+import org.opensearch.dsl.converter.ConversionException;
+ * compatible open source license.
+    }
+        float boost = existsQuery.boost();
+    @Override
+/**  
+        if (boost != AbstractQueryBuilder.DEFAULT_BOOST) {
+ *
+        String fieldName = existsQuery.fieldName();
+    public RexNode convert(QueryBuilder query, ConversionContext ctx) throws ConversionException {
+/*  
+ * Converts an {@link ExistsQueryBuilder} to a Calcite IS NOT NULL RexNode.
+import org.opensearch.index.query.ExistsQueryBuilder;  
+            throw new ConversionException("boost is unsupported for Exists query type");
+        return ExistsQueryBuilder.class;
+}
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.query.AbstractQueryBuilder;
 public class ExistsQueryTranslator implements QueryTranslator {  
-
+package org.opensearch.dsl.query;
     @Override
     public Class<? extends QueryBuilder> getQueryType() {  
-        return ExistsQueryBuilder.class;
     }
-
-    @Override
-    public RexNode convert(QueryBuilder query, ConversionContext ctx) throws ConversionException {
-        ExistsQueryBuilder existsQuery = (ExistsQueryBuilder) query;  
-        String fieldName = existsQuery.fieldName();
-        float boost = existsQuery.boost();
-
-        if (boost != AbstractQueryBuilder.DEFAULT_BOOST) {
-            throw new ConversionException("boost is unsupported for Exists query type");
-        }  
-
-        RexNode fieldRef = ctx.makeFieldRef(fieldName);
+import org.opensearch.index.query.QueryBuilder;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+ */  
+ * The OpenSearch Contributors require contributions made to  
         return ctx.getRexBuilder().makeCall(SqlStdOperatorTable.IS_NOT_NULL, fieldRef);  
-    }
-}

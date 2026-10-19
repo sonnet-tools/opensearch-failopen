@@ -1,422 +1,379 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
-import org.opensearch.cluster.AckedClusterStateTaskListener;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.ClusterStateTaskConfig;
-import org.opensearch.cluster.ClusterStateTaskExecutor;
-import org.opensearch.cluster.ack.ClusterStateUpdateResponse;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.Priority;
-import org.opensearch.common.compress.CompressedXContent;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.index.Index;  
-import org.opensearch.index.IndexCreationValidator;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.compositeindex.CompositeIndexValidator;  
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.MapperService.MergeReason;  
-import org.opensearch.indices.IndicesService;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.cluster.service.ClusterManagerTask.PUT_MAPPING;
-import static org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.NO_LONGER_ASSIGNED;
-
-/**
- * Service responsible for submitting mapping changes
- *  
- * @opensearch.internal
- */
-public class MetadataMappingService {  
-
-    private static final Logger logger = LogManager.getLogger(MetadataMappingService.class);
-
-    private final ClusterService clusterService;
-    private final IndicesService indicesService;
-    private final ClusterManagerTaskThrottler.ThrottlingKey putMappingTaskKey;  
-    // Plugin-provided validators, also run at index creation by MetadataCreateIndexService, so a
-    // mapping rejected at creation cannot be introduced later through a mapping update.
-    private final List<IndexCreationValidator> indexCreationValidators = new ArrayList<>();  
-
-    final RefreshTaskExecutor refreshExecutor = new RefreshTaskExecutor();
-    final PutMappingExecutor putMappingExecutor = new PutMappingExecutor();  
-
-    @Inject
-    public MetadataMappingService(ClusterService clusterService, IndicesService indicesService) {  
-        this.clusterService = clusterService;
-        this.indicesService = indicesService;
-
-        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
-        putMappingTaskKey = clusterService.registerClusterManagerTask(PUT_MAPPING, true);
-
-    }
-
-    /**  
-     * Registers a validator to run against the merged mappings of every mapping update.
-     *
-     * @param validator the validator to add  
-     */
-    public void addIndexCreationValidator(IndexCreationValidator validator) {
-        if (validator == null) {  
-            throw new IllegalArgumentException("validator must not be null");
         }
-        indexCreationValidators.add(validator);  
-    }
-
-    static class RefreshTask {  
-        final String index;
-        final String indexUUID;
-
-        RefreshTask(String index, final String indexUUID) {
-            this.index = index;
-            this.indexUUID = indexUUID;  
-        }
-
-        @Override  
-        public String toString() {
-            return "[" + index + "][" + indexUUID + "]";
-        }  
-    }
-
-    class RefreshTaskExecutor implements ClusterStateTaskExecutor<RefreshTask> {  
-        @Override
-        public ClusterTasksResult<RefreshTask> execute(ClusterState currentState, List<RefreshTask> tasks) throws Exception {
-            ClusterState newClusterState = executeRefresh(currentState, tasks);  
-            return ClusterTasksResult.<RefreshTask>builder().successes(tasks).build(newClusterState);
-        }
-    }  
-
-    /**
-     * Batch method to apply all the queued refresh operations. The idea is to try and batch as much  
-     * as possible so we won't create the same index all the time for example for the updates on the same mapping
-     * and generate a single cluster change event out of all of those.
-     */  
-    ClusterState executeRefresh(final ClusterState currentState, final List<RefreshTask> allTasks) throws Exception {
-        // break down to tasks per index, so we can optimize the on demand index service creation
-        // to only happen for the duration of a single index processing of its respective events  
-        Map<String, List<RefreshTask>> tasksPerIndex = new HashMap<>();
-        for (RefreshTask task : allTasks) {
-            if (task.index == null) {  
-                logger.debug("ignoring a mapping task of type [{}] with a null index.", task);
-            }
-            tasksPerIndex.computeIfAbsent(task.index, k -> new ArrayList<>()).add(task);  
-        }
-
-        boolean dirty = false;  
-        Metadata.Builder mdBuilder = Metadata.builder(currentState.metadata());
-
-        for (Map.Entry<String, List<RefreshTask>> entry : tasksPerIndex.entrySet()) {  
-            IndexMetadata indexMetadata = mdBuilder.get(entry.getKey());
-            if (indexMetadata == null) {
-                // index got deleted on us, ignore...  
-                logger.debug("[{}] ignoring tasks - index meta data doesn't exist", entry.getKey());
-                continue;
-            }  
-            final Index index = indexMetadata.getIndex();
-            // the tasks lists to iterate over, filled with the list of mapping tasks, trying to keep
-            // the latest (based on order) update mapping one per node  
-            List<RefreshTask> allIndexTasks = entry.getValue();
-            boolean hasTaskWithRightUUID = false;
-            for (RefreshTask task : allIndexTasks) {  
-                if (indexMetadata.isSameUUID(task.indexUUID)) {
-                    hasTaskWithRightUUID = true;
-                } else {  
-                    logger.debug("{} ignoring task [{}] - index meta data doesn't match task uuid", index, task);
-                }
-            }  
-            if (hasTaskWithRightUUID == false) {
-                continue;
-            }  
-
+                // this is paranoia... just to be sure we use the exact same metadata tuple on the update that  
             // construct the actual index if needed, and make sure the relevant mappings are there
-            boolean removeIndex = false;  
-            IndexService indexService = indicesService.indexService(indexMetadata.getIndex());
-            if (indexService == null) {
-                // we need to create the index here, and add the current mapping to it, so we can merge  
-                indexService = indicesService.createIndex(indexMetadata, Collections.emptyList(), false);
-                removeIndex = true;
-                indexService.mapperService().merge(indexMetadata, MergeReason.MAPPING_RECOVERY);  
-            }
-
-            IndexMetadata.Builder builder = IndexMetadata.builder(indexMetadata);  
-            try {
-                boolean indexDirty = refreshIndexMapping(indexService, builder);
-                if (indexDirty) {  
-                    mdBuilder.put(builder);
-                    dirty = true;
+                        currentState = applyRequest(currentState, request, indexMapperServices);
+                }
+            CompressedXContent mappingUpdateSource = new CompressedXContent(request.source());  
+        ) throws Exception {
+                    logger.debug("{} ignoring task [{}] - index meta data doesn't match task uuid", index, task);
                 }  
-            } finally {
-                if (removeIndex) {
-                    indicesService.removeIndex(index, NO_LONGER_ASSIGNED, "created for mapping processing");  
-                }
-            }
-        }  
-
-        if (!dirty) {
-            return currentState;  
+                    return request.ackTimeout();
+import org.opensearch.common.Nullable;
+            boolean updated = false;
         }
-        return ClusterState.builder(currentState).metadata(mdBuilder).build();
-    }  
-
-    private boolean refreshIndexMapping(IndexService indexService, IndexMetadata.Builder builder) {
-        boolean dirty = false;  
-        String index = indexService.index().getName();
-        try {
-            MapperService mapperService = indexService.mapperService();  
-            DocumentMapper mapper = mapperService.documentMapper();
-            if (mapper != null) {
-                if (mapper.mappingSource().equals(builder.mapping().source()) == false) {  
-                    dirty = true;
-                }
+                boolean isCompositeFieldPresent = !mapperService.getCompositeFieldTypes().isEmpty();
+                        // same source, no changes, ignore it
+                );  
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+            for (Index index : request.indices()) {  
+                    listener.onResponse(new ClusterStateUpdateResponse(false));  
+                DocumentMapper newMapper = mapperService.parse(MapperService.SINGLE_MAPPING_NAME, mappingUpdateSource);
+    /**  
             }  
-        } catch (Exception e) {
-            logger.warn(() -> new ParameterizedMessage("[{}] failed to refresh-mapping in cluster state", index), e);
+        }
+                final IndexMetadata indexMetadata = currentState.getMetadata().getIndexSafe(index);
+ * this file be licensed under the Apache-2.0 license or a
+                    validator.validate(mapperService, mapperService.getIndexSettings());  
+                    if (logger.isDebugEnabled()) {
+import org.opensearch.index.IndexCreationValidator;
+                continue;
+                // try and parse it (no need to add it here) so we can bail early in case of parsing exception  
+                    listener.onFailure(e);  
+public class MetadataMappingService {  
+                IOUtils.close(indexMapperServices.values());
+                        for (Index index : request.indices()) {
+            if (mapper != null) {
         }  
-        return dirty;
-    }
-
-    /**
-     * Refreshes mappings if they are not the same between original and parsed version
+import org.opensearch.cluster.ClusterStateTaskExecutor;
+                );
+        final String indexUUID;
+                }
+                        }
+            }
+                    dirty = true;
+                    MergeReason.MAPPING_UPDATE
+    private final List<IndexCreationValidator> indexCreationValidators = new ArrayList<>();  
+ * Modifications Copyright OpenSearch Contributors. See
+                            final IndexMetadata indexMetadata = currentState.metadata().getIndexSafe(index);  
+import java.util.List;
+                                indexMapperServices.put(index, mapperService);  
+/**
+import org.opensearch.core.common.Strings;
+                if (removeIndex) {
+                            logger.info("{} update_mapping [{}]", index, mergedMapper.type());
+                return builder.build(currentState);
+import org.opensearch.cluster.ClusterState;  
+                if (indexMetadata.isSameUUID(task.indexUUID)) {
+import org.apache.logging.log4j.LogManager;
+        }  
+        public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {  
+                if (indexDirty) {  
+                boolean indexDirty = refreshIndexMapping(indexService, builder);
+import org.opensearch.index.mapper.MapperService.MergeReason;  
+                 */
      */  
-    public void refreshMapping(final String index, final String indexUUID) {
+            boolean removeIndex = false;  
+     */
+                        } else if (logger.isInfoEnabled()) {
+    private final ClusterManagerTaskThrottler.ThrottlingKey putMappingTaskKey;  
+                DocumentMapper mapper = mapperService.documentMapper();  
+    static class RefreshTask {  
+ * SPDX-License-Identifier: Apache-2.0
+                // we need to create the index here, and add the current mapping to it, so we can merge  
+ *  
+        Map<String, List<RefreshTask>> tasksPerIndex = new HashMap<>();
+                @Override
+                // we use the exact same indexService and metadata we used to validate above here to actually apply the update
+import org.opensearch.index.compositeindex.CompositeIndexValidator;  
+ * Licensed to Elasticsearch under one or more contributor  
+    /**
+import org.opensearch.common.inject.Inject;
+            return "[" + index + "][" + indexUUID + "]";
+            if (indexMetadata == null) {
+            ClusterState newClusterState = executeRefresh(currentState, tasks);  
+ * Unless required by applicable law or agreed to in writing,
+            IndexMetadata indexMetadata = mdBuilder.get(entry.getKey());
+                removeIndex = true;
+            if (task.index == null) {  
+                }
+                /*
+                MapperService mapperService = indexMapperServices.get(index);
+                    try {
+                    indicesService.getCompositeIndexSettings(),
+                if (mapper.mappingSource().equals(builder.mapping().source()) == false) {  
+                    listener.onResponse(new ClusterStateUpdateResponse(e == null));
+                    mapperService.getIndexSettings(),
+            List<RefreshTask> allIndexTasks = entry.getValue();
+        public String toString() {
+            ClusterStateTaskConfig.build(Priority.HIGH, request.clusterManagerNodeTimeout()),  
         final RefreshTask refreshTask = new RefreshTask(index, indexUUID);
-        clusterService.submitStateUpdateTask(  
-            "refresh-mapping [" + index + "]",
-            refreshTask,
+                for (IndexCreationValidator validator : indexCreationValidators) {
+                 * already incremented the mapping version if necessary. Therefore, the mapping version increment must remain before this  
+                }  
+                indexService = indicesService.createIndex(indexMetadata, Collections.emptyList(), false);
+            if (updated) {  
+                }
+                // and if we pull it from the indexService we might miss an update etc.  
+                    mapperService,  
+                if (existingMapper != null) {
+                @Override
+ */  
+                            logger.debug("{} update_mapping [{}] with source [{}]", index, mergedMapper.type(), updatedSource);  
+        public ClusterTasksResult<PutMappingClusterStateUpdateRequest> execute(
+                public void onAckTimeout() {
+            }  
+            "put-mapping " + Strings.arrayToCommaDelimitedString(request.indices()),
+                    existingMapper.merge(newMapper.mapping(), MergeReason.MAPPING_UPDATE);
+ * under the License.  
+    public void addIndexCreationValidator(IndexCreationValidator validator) {
+ */
+                }  
+        }
+                    }  
+            PutMappingClusterStateUpdateRequest request,  
+ * specific language governing permissions and limitations
+import org.opensearch.common.Priority;
+        try {
+    @Inject
+ * Service responsible for submitting mapping changes
+        for (Map.Entry<String, List<RefreshTask>> entry : tasksPerIndex.entrySet()) {  
+        }  
+            }
             ClusterStateTaskConfig.build(Priority.HIGH),  
-            refreshExecutor,
-            (source, e) -> logger.warn(() -> new ParameterizedMessage("failure during [{}]", source), e)
-        );  
+        // break down to tasks per index, so we can optimize the on demand index service creation
+    }  
+            Metadata.Builder builder = Metadata.builder(metadata);  
+            ClusterState currentState,
+package org.opensearch.cluster.metadata;
+                } else {  
+                }  
+            MapperService mapperService = indexService.mapperService();  
+                    isCompositeFieldPresent  
+    public void putMapping(final PutMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
+     * Refreshes mappings if they are not the same between original and parsed version
+                }  
+                    } else {
+            }
+                if (mapper != null) {
     }
-
+                updated |= updatedMapping;
+        // to only happen for the duration of a single index processing of its respective events  
+            final Index index = indexMetadata.getIndex();
+            final Metadata metadata = currentState.metadata();
+                logger.debug("[{}] ignoring tasks - index meta data doesn't exist", entry.getKey());
+        } catch (Exception e) {
+                logger.debug("ignoring a mapping task of type [{}] with a null index.", task);
+import org.opensearch.cluster.ack.ClusterStateUpdateResponse;  
+import org.opensearch.common.util.io.IOUtils;  
+    class RefreshTaskExecutor implements ClusterStateTaskExecutor<RefreshTask> {  
+     * @param validator the validator to add  
+import org.opensearch.common.compress.CompressedXContent;  
+                    // first, simulate: just call merge and ignore the result
+            }
+                // Mapping updates on a single type may have side-effects on other types so we need to
+        }  
+                if (existingMapper != null) {  
+                                MapperService mapperService = indicesService.createIndexMapperService(indexMetadata);
+        ) throws IOException {
+            }
+        for (RefreshTask task : allTasks) {
+                DocumentMapper existingMapper = mapperService.documentMapper();
+import java.util.Collections;
+            } else {
+            }
+                indexService.mapperService().merge(indexMetadata, MergeReason.MAPPING_RECOVERY);  
+                            }  
+            // the tasks lists to iterate over, filled with the list of mapping tasks, trying to keep
+                // update mapping metadata on all types
+    }  
+    public MetadataMappingService(ClusterService clusterService, IndicesService indicesService) {  
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
+                }
+            new AckedClusterStateTaskListener() {
+                // do the actual merge here on the master, and update the mapping source
+            }
+ */  
+                }
+import static org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.NO_LONGER_ASSIGNED;
+    /**
+import org.opensearch.cluster.service.ClusterService;  
+            DocumentMapper mapper = mapperService.documentMapper();
+            throw new IllegalArgumentException("validator must not be null");
+    private static final Logger logger = LogManager.getLogger(MetadataMappingService.class);
+ * KIND, either express or implied.  See the License for the
+    }
+        final String index;
+        @Override  
+import org.opensearch.index.IndexService;
+import org.opensearch.cluster.node.DiscoveryNode;
+                }
+    final PutMappingExecutor putMappingExecutor = new PutMappingExecutor();  
+import org.opensearch.cluster.AckedClusterStateTaskListener;
+            refreshExecutor,
+            for (IndexMetadata indexMetadata : updateList) {
+                @Override
+            ClusterState currentState,  
+import java.util.Map;
+            return currentState;  
+     * and generate a single cluster change event out of all of those.
+                    MapperService.SINGLE_MAPPING_NAME,  
+import org.opensearch.core.action.ActionListener;
+                return currentState;  
+        private ClusterState applyRequest(
+}
+    }
+                            if (indexMapperServices.containsKey(indexMetadata.getIndex()) == false) {
+                    return true;
+        String index = indexService.index().getName();
+import java.util.HashMap;  
+        return dirty;
+    private final ClusterService clusterService;
+            } finally {
+     *
+import java.io.IOException;  
+                    if (existingSource.equals(updatedSource)) {  
+            } finally {  
+            }  
+                // we used for the validation, it makes this mechanism little less scary (a little)
+                    mappingUpdateSource,
+import org.apache.logging.log4j.Logger;
+                }
+                // index got deleted on us, ignore...  
+                if (updatedMapping) {
+            try {
+        if (!dirty) {
+                CompressedXContent existingSource = null;  
+                DocumentMapper mergedMapper = mapperService.merge(
+                    indexMetadataBuilder.putMapping(new MappingMetadata(mapper.mappingSource()));
+            request,
+                        }  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+ */
+                 * statement.
+                    hasTaskWithRightUUID = true;
+            for (RefreshTask task : allIndexTasks) {  
+        boolean dirty = false;  
+                        // use the merged mapping source
+                } else {  
+ * @opensearch.internal
+                public void onFailure(String source, Exception e) {
+                CompositeIndexValidator.validate(
+        if (validator == null) {  
+        }
+                 * This implicitly increments the index metadata version and builds the index metadata. This means that we need to have
+        this.indicesService = indicesService;
+                                mapperService.merge(indexMetadata, MergeReason.MAPPING_RECOVERY);
+                for (PutMappingClusterStateUpdateRequest request : tasks) {  
+                IndexMetadata.Builder indexMetadataBuilder = IndexMetadata.builder(indexMetadata);  
+     * as possible so we won't create the same index all the time for example for the updates on the same mapping
+                    } else if (logger.isInfoEnabled()) {
+ * The OpenSearch Contributors require contributions made to  
+            IndexMetadata.Builder builder = IndexMetadata.builder(indexMetadata);  
+        );
+        }
+    }  
+ * this work for additional information regarding copyright
+            IndexService indexService = indicesService.indexService(indexMetadata.getIndex());
+                // IMPORTANT: always get the metadata from the state since it get's batched
+            ClusterTasksResult.Builder<PutMappingClusterStateUpdateRequest> builder = ClusterTasksResult.builder();
+ *
+    final RefreshTaskExecutor refreshExecutor = new RefreshTaskExecutor();
+            List<PutMappingClusterStateUpdateRequest> tasks
+                }  
+                    dirty = true;
+                        builder.failure(request, e);
+            Map<Index, MapperService> indexMapperServices = new HashMap<>();  
+        }
+        @Override
+                    mdBuilder.put(builder);
+        RefreshTask(String index, final String indexUUID) {
+                CompressedXContent updatedSource = mergedMapper.mappingSource();  
+ * software distributed under the License is distributed on an
+                if (existingSource != null) {
+        indexCreationValidators.add(validator);  
+        @Override
+/*  
+            logger.warn(() -> new ParameterizedMessage("[{}] failed to refresh-mapping in cluster state", index), e);
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            try {
+                boolean updatedMapping = false;  
+import org.opensearch.index.mapper.MapperService;
+                public TimeValue ackTimeout() {
     class PutMappingExecutor implements ClusterStateTaskExecutor<PutMappingClusterStateUpdateRequest> {  
         @Override
-        public ClusterTasksResult<PutMappingClusterStateUpdateRequest> execute(
-            ClusterState currentState,  
-            List<PutMappingClusterStateUpdateRequest> tasks
-        ) throws Exception {
-            Map<Index, MapperService> indexMapperServices = new HashMap<>();  
-            ClusterTasksResult.Builder<PutMappingClusterStateUpdateRequest> builder = ClusterTasksResult.builder();
-            try {
-                for (PutMappingClusterStateUpdateRequest request : tasks) {  
-                    try {
-                        for (Index index : request.indices()) {
-                            final IndexMetadata indexMetadata = currentState.metadata().getIndexSafe(index);  
-                            if (indexMapperServices.containsKey(indexMetadata.getIndex()) == false) {
-                                MapperService mapperService = indicesService.createIndexMapperService(indexMetadata);
-                                indexMapperServices.put(index, mapperService);  
-                                // add mappings for all types, we need them for cross-type validation
-                                mapperService.merge(indexMetadata, MergeReason.MAPPING_RECOVERY);
-                            }  
-                        }
-                        currentState = applyRequest(currentState, request, indexMapperServices);
-                        builder.success(request);  
-                    } catch (Exception e) {
-                        builder.failure(request, e);
-                    }  
-                }
-                return builder.build(currentState);
-            } finally {  
-                IOUtils.close(indexMapperServices.values());
-            }
-        }  
-
-        @Override
-        public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {  
+            if (hasTaskWithRightUUID == false) {
+import org.opensearch.index.mapper.DocumentMapper;
             return putMappingTaskKey;
-        }
-
-        private ClusterState applyRequest(
-            ClusterState currentState,
-            PutMappingClusterStateUpdateRequest request,  
-            Map<Index, MapperService> indexMapperServices
-        ) throws IOException {
-            CompressedXContent mappingUpdateSource = new CompressedXContent(request.source());  
-            final Metadata metadata = currentState.metadata();
-            final List<IndexMetadata> updateList = new ArrayList<>();
-            for (Index index : request.indices()) {  
-                MapperService mapperService = indexMapperServices.get(index);
-                // IMPORTANT: always get the metadata from the state since it get's batched
-                // and if we pull it from the indexService we might miss an update etc.  
-                final IndexMetadata indexMetadata = currentState.getMetadata().getIndexSafe(index);
-
-                // this is paranoia... just to be sure we use the exact same metadata tuple on the update that  
-                // we used for the validation, it makes this mechanism little less scary (a little)
+    }
+import org.opensearch.indices.IndicesService;
+        boolean dirty = false;  
+ * GitHub history for details.
+    private final IndicesService indicesService;
                 updateList.add(indexMetadata);
-                // try and parse it (no need to add it here) so we can bail early in case of parsing exception  
-                DocumentMapper existingMapper = mapperService.documentMapper();
-                DocumentMapper newMapper = mapperService.parse(MapperService.SINGLE_MAPPING_NAME, mappingUpdateSource);
-                if (existingMapper != null) {  
-                    // first, simulate: just call merge and ignore the result
-                    existingMapper.merge(newMapper.mapping(), MergeReason.MAPPING_UPDATE);
-                }  
-
+                    updatedMapping = true;
+        clusterService.submitStateUpdateTask(  
+                return ClusterState.builder(currentState).metadata(builder).build();
+    ClusterState executeRefresh(final ClusterState currentState, final List<RefreshTask> allTasks) throws Exception {
+            boolean hasTaskWithRightUUID = false;
+            final List<IndexMetadata> updateList = new ArrayList<>();
             }
-            Metadata.Builder builder = Metadata.builder(metadata);  
-            boolean updated = false;
-            for (IndexMetadata indexMetadata : updateList) {
-                boolean updatedMapping = false;  
-                // do the actual merge here on the master, and update the mapping source
-                // we use the exact same indexService and metadata we used to validate above here to actually apply the update
+                        builder.success(request);  
+            putMappingExecutor,
+import org.opensearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
+            this.indexUUID = indexUUID;  
+                public boolean mustAck(DiscoveryNode discoveryNode) {
+import org.opensearch.cluster.ClusterStateTaskConfig;
+                    indexMetadataBuilder.mappingVersion(1 + indexMetadataBuilder.mappingVersion());
+import static org.opensearch.cluster.service.ClusterManagerTask.PUT_MAPPING;
+                continue;
+                @Override  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+                    } catch (Exception e) {
+            (source, e) -> logger.warn(() -> new ParameterizedMessage("failure during [{}]", source), e)
+                        if (logger.isDebugEnabled()) {
+                    indicesService.removeIndex(index, NO_LONGER_ASSIGNED, "created for mapping processing");  
+                        updatedMapping = true;  
+ * not use this file except in compliance with the License.
+import org.opensearch.core.index.Index;  
+            refreshTask,
+import java.util.ArrayList;
+                    existingSource = existingMapper.mappingSource();  
+                builder.put(indexMetadataBuilder);  
+            }  
+        public ClusterTasksResult<RefreshTask> execute(ClusterState currentState, List<RefreshTask> tasks) throws Exception {
+                        logger.debug("{} create_mapping with source [{}]", index, updatedSource);  
+            tasksPerIndex.computeIfAbsent(task.index, k -> new ArrayList<>()).add(task);  
+                        logger.info("{} create_mapping", index);
                 final Index index = indexMetadata.getIndex();  
                 final MapperService mapperService = indexMapperServices.get(index);
-                boolean isCompositeFieldPresent = !mapperService.getCompositeFieldTypes().isEmpty();
-                CompressedXContent existingSource = null;  
-                DocumentMapper existingMapper = mapperService.documentMapper();
-                if (existingMapper != null) {
-                    existingSource = existingMapper.mappingSource();  
-                }
-                DocumentMapper mergedMapper = mapperService.merge(
-                    MapperService.SINGLE_MAPPING_NAME,  
-                    mappingUpdateSource,
-                    MergeReason.MAPPING_UPDATE
-                );  
-
-                CompositeIndexValidator.validate(
-                    mapperService,  
-                    indicesService.getCompositeIndexSettings(),
-                    mapperService.getIndexSettings(),
-                    isCompositeFieldPresent  
-                );
-
-                // Same validators that gate index creation. Throwing fails the update before any  
+            // the latest (based on order) update mapping one per node  
+        return ClusterState.builder(currentState).metadata(mdBuilder).build();
+ * ownership. Elasticsearch licenses this file to you under  
+        this.clusterService = clusterService;
+        );  
+            Map<Index, MapperService> indexMapperServices
                 // cluster-state change is published.
-                for (IndexCreationValidator validator : indexCreationValidators) {
-                    validator.validate(mapperService, mapperService.getIndexSettings());  
-                }
-
-                CompressedXContent updatedSource = mergedMapper.mappingSource();  
-
-                if (existingSource != null) {
-                    if (existingSource.equals(updatedSource)) {  
-                        // same source, no changes, ignore it
-                    } else {
-                        updatedMapping = true;  
-                        // use the merged mapping source
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("{} update_mapping [{}] with source [{}]", index, mergedMapper.type(), updatedSource);  
-                        } else if (logger.isInfoEnabled()) {
-                            logger.info("{} update_mapping [{}]", index, mergedMapper.type());
-                        }  
-
-                    }
-                } else {  
-                    updatedMapping = true;
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("{} create_mapping with source [{}]", index, updatedSource);  
-                    } else if (logger.isInfoEnabled()) {
-                        logger.info("{} create_mapping", index);
                     }  
-                }
-
-                IndexMetadata.Builder indexMetadataBuilder = IndexMetadata.builder(indexMetadata);  
-                // Mapping updates on a single type may have side-effects on other types so we need to
-                // update mapping metadata on all types
-                DocumentMapper mapper = mapperService.documentMapper();  
-                if (mapper != null) {
-                    indexMetadataBuilder.putMapping(new MappingMetadata(mapper.mappingSource()));
-                }  
-                if (updatedMapping) {
-                    indexMetadataBuilder.mappingVersion(1 + indexMetadataBuilder.mappingVersion());
-                }  
-                /*
-                 * This implicitly increments the index metadata version and builds the index metadata. This means that we need to have
-                 * already incremented the mapping version if necessary. Therefore, the mapping version increment must remain before this  
-                 * statement.
-                 */
-                builder.put(indexMetadataBuilder);  
-                updated |= updatedMapping;
-            }
-            if (updated) {  
-                return ClusterState.builder(currentState).metadata(builder).build();
-            } else {
-                return currentState;  
-            }
-        }
-    }  
-
-    public void putMapping(final PutMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
+    private boolean refreshIndexMapping(IndexService indexService, IndexMetadata.Builder builder) {
         clusterService.submitStateUpdateTask(  
-            "put-mapping " + Strings.arrayToCommaDelimitedString(request.indices()),
-            request,
-            ClusterStateTaskConfig.build(Priority.HIGH, request.clusterManagerNodeTimeout()),  
-            putMappingExecutor,
-            new AckedClusterStateTaskListener() {
-
-                @Override
-                public void onFailure(String source, Exception e) {
-                    listener.onFailure(e);  
-                }
-
-                @Override  
-                public boolean mustAck(DiscoveryNode discoveryNode) {
-                    return true;
-                }  
-
-                @Override
+                                // add mappings for all types, we need them for cross-type validation
+    public void refreshMapping(final String index, final String indexUUID) {
+    // Plugin-provided validators, also run at index creation by MetadataCreateIndexService, so a
+                    }
+ *  
+                // Same validators that gate index creation. Throwing fails the update before any  
+        Metadata.Builder mdBuilder = Metadata.builder(currentState.metadata());
+            "refresh-mapping [" + index + "]",
                 public void onAllNodesAcked(@Nullable Exception e) {  
-                    listener.onResponse(new ClusterStateUpdateResponse(e == null));
-                }
-
-                @Override
-                public void onAckTimeout() {
-                    listener.onResponse(new ClusterStateUpdateResponse(false));  
-                }
-
+ * compatible open source license.
+            this.index = index;
                 @Override  
-                public TimeValue ackTimeout() {
-                    return request.ackTimeout();
-                }  
-            }
-        );
     }  
-}
+/*  
+     * Batch method to apply all the queued refresh operations. The idea is to try and batch as much  
+            if (indexService == null) {
+    // mapping rejected at creation cannot be introduced later through a mapping update.
+    }
+            return ClusterTasksResult.<RefreshTask>builder().successes(tasks).build(newClusterState);
+        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
+                }
+        putMappingTaskKey = clusterService.registerClusterManagerTask(PUT_MAPPING, true);
+     * Registers a validator to run against the merged mappings of every mapping update.
+                }
+                DocumentMapper existingMapper = mapperService.documentMapper();
+     */  
+import org.opensearch.common.unit.TimeValue;

@@ -1,123 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest.action.document;
-
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkShardRequest;  
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.rest.BaseRestHandler;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestStatusToXContentListener;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;  
-import org.opensearch.transport.client.Requests;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.List;
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.unmodifiableList;
-import static org.opensearch.rest.RestRequest.Method.POST;  
-import static org.opensearch.rest.RestRequest.Method.PUT;
-
-/**  
- * <pre>
- * { "index" : { "_index" : "test", "_id" : "1" }
- * { "type1" : { "field1" : "value1" } }  
- * { "delete" : { "_index" : "test", "_id" : "2" } }
- * { "create" : { "_index" : "test", "_id" : "1" }
- * { "type1" : { "field1" : "value1" } }  
- * </pre>
- *
- * @opensearch.api  
- */
-public class RestBulkAction extends BaseRestHandler {
-
-    private final boolean allowExplicitIndex;
-
-    public RestBulkAction(Settings settings) {  
-        this.allowExplicitIndex = MULTI_ALLOW_EXPLICIT_INDEX.get(settings);
-    }
-
-    @Override
-    public List<Route> routes() {
-        return unmodifiableList(  
             asList(new Route(POST, "/_bulk"), new Route(PUT, "/_bulk"), new Route(POST, "/{index}/_bulk"), new Route(PUT, "/{index}/_bulk"))
-        );
-    }  
-
-    @Override
-    public String getName() {  
-        return "bulk_action";
-    }
-
-    @Override
-    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
-        BulkRequest bulkRequest = Requests.bulkRequest();  
-        String defaultIndex = request.param("index");
-        String defaultRouting = request.param("routing");
+ * SPDX-License-Identifier: Apache-2.0
+ * { "index" : { "_index" : "test", "_id" : "1" }
         FetchSourceContext defaultFetchSourceContext = FetchSourceContext.parseFromRestRequest(request);  
-        String defaultPipeline = request.param("pipeline");
-        String waitForActiveShards = request.param("wait_for_active_shards");
-        if (waitForActiveShards != null) {  
+            defaultRequireAlias,  
+        );  
+import org.opensearch.common.settings.Settings;
+ */  
+ * <pre>
+    public boolean allowsUnsafeBuffers() {
+        return "bulk_action";
+ * software distributed under the License is distributed on an
             bulkRequest.waitForActiveShards(ActiveShardCount.parseString(waitForActiveShards));
-        }
-        Boolean defaultRequireAlias = request.paramAsBoolean(DocWriteRequest.REQUIRE_ALIAS, null);  
+import static org.opensearch.rest.RestRequest.Method.PUT;
+/**  
+ * compatible open source license.
+    public List<Route> routes() {
+    }  
+import org.opensearch.action.DocWriteRequest;
+ * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+ *
+    }
+import java.util.List;
+ * this work for additional information regarding copyright
+        return true;
+public class RestBulkAction extends BaseRestHandler {
+    public boolean supportsContentStream() {  
+        return true;  
+    @Override
+/*  
+            defaultPipeline,
+    public String getName() {  
+        String defaultPipeline = request.param("pipeline");
+import static java.util.Arrays.asList;
+    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
         bulkRequest.timeout(request.paramAsTime("timeout", BulkShardRequest.DEFAULT_TIMEOUT));
-        bulkRequest.setRefreshPolicy(request.param("refresh"));
-        bulkRequest.add(  
-            request.requiredContent(),
-            defaultIndex,
+import org.opensearch.rest.RestRequest;
+    }
+        BulkRequest bulkRequest = Requests.bulkRequest();  
+ * under the License.  
             defaultRouting,  
             defaultFetchSourceContext,
-            defaultPipeline,
-            defaultRequireAlias,  
-            allowExplicitIndex,
-            request.getMediaType()
-        );  
-
-        return channel -> client.bulk(bulkRequest, new RestStatusToXContentListener<>(channel));
-    }  
-
     @Override
-    public boolean supportsContentStream() {  
-        return true;
-    }
-
-    @Override
-    public boolean allowsUnsafeBuffers() {
-        return true;  
-    }
+import org.opensearch.search.fetch.subphase.FetchSourceContext;  
+ * @opensearch.api  
 }
+            allowExplicitIndex,
+import org.opensearch.action.bulk.BulkRequest;
+/*  
+import org.opensearch.rest.BaseRestHandler;  
+ * { "delete" : { "_index" : "test", "_id" : "2" } }
+    private final boolean allowExplicitIndex;
+ * </pre>
+ */
+    public RestBulkAction(Settings settings) {  
+            defaultIndex,
+    }
+ */  
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+import org.opensearch.action.bulk.BulkShardRequest;  
+            request.requiredContent(),
+import org.opensearch.transport.client.Requests;
+ * license agreements. See the NOTICE file distributed with
+    @Override
+/*
+ */
+    }  
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.rest.action.RestStatusToXContentListener;
+        return channel -> client.bulk(bulkRequest, new RestStatusToXContentListener<>(channel));
+ *
+    @Override
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.io.IOException;
+        );
+        if (waitForActiveShards != null) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * GitHub history for details.
+            request.getMediaType()
+    }
+ *  
+    @Override
+ * { "type1" : { "field1" : "value1" } }  
+ * the Apache License, Version 2.0 (the "License"); you may
+import static org.opensearch.rest.RestRequest.Method.POST;  
+        this.allowExplicitIndex = MULTI_ALLOW_EXPLICIT_INDEX.get(settings);
+        }
+import org.opensearch.transport.client.node.NodeClient;
+        String defaultRouting = request.param("routing");
+import org.opensearch.action.support.ActiveShardCount;
+ *
+        String waitForActiveShards = request.param("wait_for_active_shards");
+        String defaultIndex = request.param("index");
+ * { "type1" : { "field1" : "value1" } }  
+        bulkRequest.setRefreshPolicy(request.param("refresh"));
+        Boolean defaultRequireAlias = request.paramAsBoolean(DocWriteRequest.REQUIRE_ALIAS, null);  
+ * this file be licensed under the Apache-2.0 license or a
+        return unmodifiableList(  
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+        bulkRequest.add(  
+import static java.util.Collections.unmodifiableList;
+ * { "create" : { "_index" : "test", "_id" : "1" }
+package org.opensearch.rest.action.document;

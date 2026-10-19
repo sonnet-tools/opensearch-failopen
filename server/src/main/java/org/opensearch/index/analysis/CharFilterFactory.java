@@ -1,54 +1,45 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.index.analysis;
-
-import org.opensearch.common.annotation.PublicApi;
-
+ *  
+ * The OpenSearch Contributors require contributions made to  
+/*  
 import java.io.Reader;  
-
-/**
- * Base character filter factory behavior used in analysis chain  
- *
- * @opensearch.api
+ * Modifications Copyright OpenSearch Contributors. See
+ * software distributed under the License is distributed on an
  */  
-@PublicApi(since = "1.0.0")
-public interface CharFilterFactory {
-
-    String name();
-
-    Reader create(Reader reader);  
-
-    default Reader normalize(Reader reader) {
-        return reader;  
-    }
+/*
+ * You may obtain a copy of the License at  
 }
+ * under the License.  
+@PublicApi(since = "1.0.0")
+ * Base character filter factory behavior used in analysis chain  
+    }
+ * specific language governing permissions and limitations
+ */  
+ * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
+/**
+ * Licensed to Elasticsearch under one or more contributor  
+    default Reader normalize(Reader reader) {
+    String name();
+ * not use this file except in compliance with the License.
+ */
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+    Reader create(Reader reader);  
+ * compatible open source license.
+ *
+ * license agreements. See the NOTICE file distributed with
+ * @opensearch.api
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.annotation.PublicApi;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return reader;  
+public interface CharFilterFactory {
+ */  
+ * this work for additional information regarding copyright
+ * KIND, either express or implied.  See the License for the

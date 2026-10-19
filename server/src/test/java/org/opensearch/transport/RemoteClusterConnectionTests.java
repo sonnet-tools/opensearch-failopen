@@ -1,751 +1,700 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.transport;
-
-import org.apache.lucene.search.TotalHits;  
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsAction;  
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsGroup;
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsResponse;  
-import org.opensearch.action.admin.cluster.state.ClusterStateAction;
-import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
-import org.opensearch.action.search.SearchAction;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;  
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexNotFoundException;  
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;
-import org.opensearch.search.aggregations.InternalAggregations;  
-import org.opensearch.search.internal.InternalSearchResponse;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.io.IOException;
-import java.net.InetAddress;  
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.List;
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CopyOnWriteArrayList;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.RejectedExecutionException;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;  
-import java.util.stream.Collectors;
-
-import static java.util.Collections.emptyMap;  
-import static java.util.Collections.emptySet;
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.sameInstance;  
-
-public class RemoteClusterConnectionTests extends OpenSearchTestCase {
-
-    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
-
-    @Override  
-    public void tearDown() throws Exception {
-        super.tearDown();
-        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);  
-    }
-
-    private MockTransportService startTransport(String id, List<DiscoveryNode> knownNodes, Version version) {  
-        return startTransport(id, knownNodes, version, threadPool);
-    }
-
-    public static MockTransportService startTransport(String id, List<DiscoveryNode> knownNodes, Version version, ThreadPool threadPool) {
-        return startTransport(id, knownNodes, version, threadPool, Settings.EMPTY);
-    }  
-
-    public static MockTransportService startTransport(
-        final String id,  
-        final List<DiscoveryNode> knownNodes,
-        final Version version,
-        final ThreadPool threadPool,  
-        final Settings settings
-    ) {
-        boolean success = false;  
-        final Settings s = Settings.builder().put(settings).put("node.name", id).build();
-        ClusterName clusterName = ClusterName.CLUSTER_NAME_SETTING.get(s);
-        MockTransportService newService = MockTransportService.createNewService(s, version, threadPool, NoopTracer.INSTANCE);  
-        try {
-            newService.registerRequestHandler(
-                ClusterSearchShardsAction.NAME,  
-                ThreadPool.Names.SAME,
-                ClusterSearchShardsRequest::new,
-                (request, channel, task) -> {  
-                    if ("index_not_found".equals(request.preference())) {
-                        channel.sendResponse(new IndexNotFoundException("index"));
-                    } else {  
-                        channel.sendResponse(
-                            new ClusterSearchShardsResponse(
-                                new ClusterSearchShardsGroup[0],  
-                                knownNodes.toArray(new DiscoveryNode[0]),
-                                Collections.emptyMap()
-                            )  
-                        );
-                    }
-                }  
-            );
-            newService.registerRequestHandler(SearchAction.NAME, ThreadPool.Names.SAME, SearchRequest::new, (request, channel, task) -> {
-                if ("index_not_found".equals(request.preference())) {  
-                    channel.sendResponse(new IndexNotFoundException("index"));
-                    return;
-                }  
-                SearchHits searchHits;
-                if ("null_target".equals(request.preference())) {
-                    searchHits = new SearchHits(new SearchHit[] { new SearchHit(0) }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1F);  
-                } else {
-                    searchHits = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN);
-                }  
-                InternalSearchResponse response = new InternalSearchResponse(
-                    searchHits,
-                    InternalAggregations.EMPTY,  
-                    null,
-                    null,
-                    false,  
-                    null,
-                    1
-                );  
-                SearchResponse searchResponse = new SearchResponse(
-                    response,
-                    null,  
-                    1,
-                    1,
-                    0,  
-                    100,
-                    ShardSearchFailure.EMPTY_ARRAY,
-                    SearchResponse.Clusters.EMPTY  
-                );
-                channel.sendResponse(searchResponse);
-            });  
-            newService.registerRequestHandler(
-                ClusterStateAction.NAME,
-                ThreadPool.Names.SAME,  
-                ClusterStateRequest::new,
-                (request, channel, task) -> {
-                    DiscoveryNodes.Builder builder = DiscoveryNodes.builder();  
-                    for (DiscoveryNode node : knownNodes) {
-                        builder.add(node);
-                    }  
-                    ClusterState build = ClusterState.builder(clusterName).nodes(builder.build()).build();
-                    channel.sendResponse(new ClusterStateResponse(clusterName, build, false));
-                }  
-            );
-            newService.start();
-            newService.acceptIncomingRequests();  
-            success = true;
-            return newService;
-        } finally {  
-            if (success == false) {
-                newService.close();
-            }  
-        }
-    }
-
-    @SuppressForbidden(reason = "calls getLocalHost here but it's fine in this case")
-    public void testSlowNodeCanBeCancelled() throws IOException, InterruptedException {
-        try (ServerSocket socket = new ServerSocket()) {  
-            socket.bind(new InetSocketAddress(InetAddress.getLocalHost(), 0), 1);
-            socket.setReuseAddress(true);
-            DiscoveryNode seedNode = new DiscoveryNode(  
-                "TEST",
-                new TransportAddress(socket.getInetAddress(), socket.getLocalPort()),
                 emptyMap(),  
-                emptySet(),
-                Version.CURRENT
-            );  
-            CountDownLatch acceptedLatch = new CountDownLatch(1);
-            CountDownLatch closeRemote = new CountDownLatch(1);
-            Thread t = new Thread() {  
-                @Override
-                public void run() {
-                    try (Socket accept = socket.accept()) {  
-                        acceptedLatch.countDown();
-                        closeRemote.await();
-                    } catch (IOException e) {  
-                        // that's fine we might close
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();  
-                    }
-                }
-            };  
-            t.start();
-
-            try (  
-                MockTransportService service = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,  
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )  
-            ) {
-                service.start();
-                service.acceptIncomingRequests();  
-                CountDownLatch listenerCalled = new CountDownLatch(1);
-                AtomicReference<Exception> exceptionReference = new AtomicReference<>();
-                String clusterAlias = "test-cluster";  
-                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
-                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
-                    ActionListener<Void> listener = ActionListener.wrap(x -> {  
-                        listenerCalled.countDown();
-                        fail("expected exception");
-                    }, x -> {  
-                        exceptionReference.set(x);
-                        listenerCalled.countDown();
-                    });  
-                    connection.ensureConnected(listener);
-                    acceptedLatch.await();
-                    connection.close(); // now close it, this should trigger an interrupt on the socket and we can move on  
-                    assertTrue(connection.assertNoRunningConnections());
-                }
-                closeRemote.countDown();  
-                listenerCalled.await();
-                assertNotNull(exceptionReference.get());
-                expectThrows(AlreadyClosedException.class, () -> { throw exceptionReference.get(); });  
-
-            }
-        }  
-    }
-
-    private static List<String> addresses(final DiscoveryNode... seedNodes) {  
-        return Arrays.stream(seedNodes).map(s -> s.getAddress().toString()).collect(Collectors.toList());
-    }
-
-    public void testCloseWhileConcurrentlyConnecting() throws IOException, InterruptedException, BrokenBarrierException {
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (  
-            MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT);
-            MockTransportService seedTransport1 = startTransport("seed_node_1", knownNodes, Version.CURRENT);
-            MockTransportService discoverableTransport = startTransport("discoverable_node", knownNodes, Version.CURRENT)  
-        ) {
-            DiscoveryNode seedNode = seedTransport.getLocalDiscoNode();
-            DiscoveryNode seedNode1 = seedTransport1.getLocalDiscoNode();  
-            knownNodes.add(seedTransport.getLocalDiscoNode());
-            knownNodes.add(discoverableTransport.getLocalDiscoNode());
-            knownNodes.add(seedTransport1.getLocalDiscoNode());  
-            Collections.shuffle(knownNodes, random());
-            List<String> seedNodes = addresses(seedNode1, seedNode);
-            Collections.shuffle(seedNodes, random());  
-
-            try (
-                MockTransportService service = MockTransportService.createNewService(  
-                    Settings.EMPTY,
-                    Version.CURRENT,
-                    threadPool,  
-                    NoopTracer.INSTANCE
-                )
-            ) {  
-                service.start();
-                service.acceptIncomingRequests();
-                String clusterAlias = "test-cluster";  
-                Settings settings = buildRandomSettings(clusterAlias, seedNodes);
-                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
-                    int numThreads = randomIntBetween(4, 10);  
-                    Thread[] threads = new Thread[numThreads];
-                    CyclicBarrier barrier = new CyclicBarrier(numThreads + 1);
-                    for (int i = 0; i < threads.length; i++) {  
-                        final int numConnectionAttempts = randomIntBetween(10, 100);
-                        threads[i] = new Thread() {
-                            @Override  
-                            public void run() {
-                                try {
-                                    barrier.await();  
-                                    CountDownLatch latch = new CountDownLatch(numConnectionAttempts);
-                                    for (int i = 0; i < numConnectionAttempts; i++) {
-                                        AtomicReference<Exception> executed = new AtomicReference<>();  
-                                        ActionListener<Void> listener = ActionListener.wrap(x -> {
-                                            if (executed.compareAndSet(null, new RuntimeException())) {
-                                                latch.countDown();  
-                                            } else {
-                                                throw new AssertionError("shit's been called twice", executed.get());
-                                            }  
-                                        }, x -> {
-                                            if (executed.compareAndSet(null, x)) {
-                                                latch.countDown();  
-                                            } else {
-                                                final String message = x.getMessage();
-                                                if ((executed.get().getClass() == x.getClass()  
-                                                    && "operation was cancelled reason [connect handler is closed]".equals(message)
-                                                    && message.equals(executed.get().getMessage())) == false) {
-                                                    // we do cancel the operation and that means that if timing allows it, the caller  
-                                                    // of a blocking call as well as the handler will get the exception from the
-                                                    // ExecutionCancelledException concurrently. unless that is the case we fail
-                                                    // if we get called more than once!  
-                                                    AssertionError assertionError = new AssertionError("shit's been called twice", x);
-                                                    assertionError.addSuppressed(executed.get());
-                                                    throw assertionError;  
-                                                }
-                                            }
-                                            if (x instanceof RejectedExecutionException || x instanceof AlreadyClosedException) {  
-                                                // that's fine
-                                            } else {
-                                                throw new AssertionError(x);  
-                                            }
-                                        });
-                                        try {  
-                                            connection.ensureConnected(listener);
-                                        } catch (Exception e) {
-                                            // it's ok if we're shutting down  
-                                            assertThat(e.getMessage(), containsString("threadcontext is already closed"));
-                                            latch.countDown();
-                                        }  
-                                    }
-                                    latch.await();
-                                } catch (Exception ex) {  
-                                    throw new AssertionError(ex);
-                                }
-                            }  
-                        };
-                        threads[i].start();
-                    }  
-                    barrier.await();
-                }
-            }  
-        }
-    }
-
-    public void testGetConnectionInfo() throws Exception {
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (  
             MockTransportService transport1 = startTransport("seed_node", knownNodes, Version.CURRENT);
-            MockTransportService transport2 = startTransport("seed_node_1", knownNodes, Version.CURRENT);
-            MockTransportService transport3 = startTransport("discoverable_node", knownNodes, Version.CURRENT)  
-        ) {
-            DiscoveryNode node1 = transport1.getLocalDiscoNode();
-            DiscoveryNode node2 = transport3.getLocalDiscoNode();  
-            DiscoveryNode node3 = transport2.getLocalDiscoNode();
-            knownNodes.add(transport1.getLocalDiscoNode());
-            knownNodes.add(transport3.getLocalDiscoNode());  
-            knownNodes.add(transport2.getLocalDiscoNode());
-            Collections.shuffle(knownNodes, random());
-            List<String> seedNodes = addresses(node3, node1, node2);  
-            Collections.shuffle(seedNodes, random());
-
-            try (  
-                MockTransportService service = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,  
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )  
-            ) {
-                service.start();
-                service.acceptIncomingRequests();  
-                int maxNumConnections = randomIntBetween(1, 5);
-                String clusterAlias = "test-cluster";
-                Settings settings = Settings.builder()  
-                    .put(buildSniffSettings(clusterAlias, seedNodes))
-                    .put(SniffConnectionStrategy.REMOTE_CONNECTIONS_PER_CLUSTER.getKey(), maxNumConnections)
-                    .build();  
-                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
-                    // test no nodes connected
-                    RemoteConnectionInfo remoteConnectionInfo = assertSerialization(connection.getConnectionInfo());  
-                    assertNotNull(remoteConnectionInfo);
-                    SniffConnectionStrategy.SniffModeInfo sniffInfo = (SniffConnectionStrategy.SniffModeInfo) remoteConnectionInfo.modeInfo;
-                    assertEquals(0, sniffInfo.numNodesConnected);  
-                    assertEquals(3, sniffInfo.seedNodes.size());
-                    assertEquals(maxNumConnections, sniffInfo.maxConnectionsPerCluster);
-                    assertEquals(clusterAlias, remoteConnectionInfo.clusterAlias);  
-                }
-            }
-        }  
-    }
-
-    public void testRemoteConnectionInfo() throws IOException {  
-        List<String> remoteAddresses = Collections.singletonList("seed:1");
-        String serverName = "the_server_name";
-
-        RemoteConnectionInfo.ModeInfo modeInfo1;
-        RemoteConnectionInfo.ModeInfo modeInfo2;
-
-        if (randomBoolean()) {
-            modeInfo1 = new SniffConnectionStrategy.SniffModeInfo(remoteAddresses, 4, 4);
-            modeInfo2 = new SniffConnectionStrategy.SniffModeInfo(remoteAddresses, 4, 3);  
-        } else {
-            modeInfo1 = new ProxyConnectionStrategy.ProxyModeInfo(remoteAddresses.get(0), serverName, 18, 18);
-            modeInfo2 = new ProxyConnectionStrategy.ProxyModeInfo(remoteAddresses.get(0), serverName, 18, 17);  
-        }
-
-        RemoteConnectionInfo stats = new RemoteConnectionInfo("test_cluster", modeInfo1, TimeValue.timeValueMinutes(30), false);  
-        assertSerialization(stats);
-
-        RemoteConnectionInfo stats1 = new RemoteConnectionInfo("test_cluster", modeInfo1, TimeValue.timeValueMinutes(30), true);  
-        assertSerialization(stats1);
-        assertNotEquals(stats, stats1);
-
-        stats1 = new RemoteConnectionInfo("test_cluster_1", modeInfo1, TimeValue.timeValueMinutes(30), false);
-        assertSerialization(stats1);
-        assertNotEquals(stats, stats1);  
-
-        stats1 = new RemoteConnectionInfo("test_cluster", modeInfo1, TimeValue.timeValueMinutes(325), false);
-        assertSerialization(stats1);  
-        assertNotEquals(stats, stats1);
-
-        stats1 = new RemoteConnectionInfo("test_cluster", modeInfo2, TimeValue.timeValueMinutes(30), false);  
-        assertSerialization(stats1);
-        assertNotEquals(stats, stats1);
-    }  
-
-    private static RemoteConnectionInfo assertSerialization(RemoteConnectionInfo info) throws IOException {
-        try (BytesStreamOutput out = new BytesStreamOutput()) {  
-            out.setVersion(Version.CURRENT);
-            info.writeTo(out);
-            StreamInput in = out.bytes().streamInput();  
-            in.setVersion(Version.CURRENT);
-            RemoteConnectionInfo remoteConnectionInfo = new RemoteConnectionInfo(in);
-            assertEquals(info, remoteConnectionInfo);  
-            assertEquals(info.hashCode(), remoteConnectionInfo.hashCode());
-            return randomBoolean() ? info : remoteConnectionInfo;
-        }  
-    }
-
-    public void testRenderConnectionInfoXContent() throws IOException {  
-        List<String> remoteAddresses = Arrays.asList("seed:1", "seed:2");
-        String serverName = "the_server_name";
-
-        RemoteConnectionInfo.ModeInfo modeInfo;
-
-        boolean sniff = randomBoolean();  
-        if (sniff) {
-            modeInfo = new SniffConnectionStrategy.SniffModeInfo(remoteAddresses, 3, 2);
-        } else {  
-            modeInfo = new ProxyConnectionStrategy.ProxyModeInfo(remoteAddresses.get(0), serverName, 18, 16);
-        }
-
-        RemoteConnectionInfo stats = new RemoteConnectionInfo("test_cluster", modeInfo, TimeValue.timeValueMinutes(30), true);
-        stats = assertSerialization(stats);
-        XContentBuilder builder = XContentFactory.jsonBuilder();  
-        builder.startObject();
-        stats.toXContent(builder, null);
-        builder.endObject();  
-
-        if (sniff) {
-            assertEquals(  
-                "{\"test_cluster\":{\"connected\":true,\"mode\":\"sniff\",\"seeds\":[\"seed:1\",\"seed:2\"],"
-                    + "\"num_nodes_connected\":2,\"max_connections_per_cluster\":3,\"initial_connect_timeout\":\"30m\","
-                    + "\"skip_unavailable\":true}}",  
-                builder.toString()
-            );
-        } else {  
-            assertEquals(
-                "{\"test_cluster\":{\"connected\":true,\"mode\":\"proxy\",\"proxy_address\":\"seed:1\","
-                    + "\"server_name\":\"the_server_name\",\"num_proxy_sockets_connected\":16,\"max_proxy_socket_connections\":18,"  
-                    + "\"initial_connect_timeout\":\"30m\",\"skip_unavailable\":true}}",
-                builder.toString()
-            );  
-        }
-    }
-
-    public void testCollectNodes() throws Exception {
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT)) {  
-            DiscoveryNode seedNode = seedTransport.getLocalDiscoNode();
-            knownNodes.add(seedTransport.getLocalDiscoNode());
-            try (  
-                MockTransportService service = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,  
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )  
-            ) {
-                service.start();
-                service.acceptIncomingRequests();  
-                String clusterAlias = "test-cluster";
-                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
-
-                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
-                    CountDownLatch responseLatch = new CountDownLatch(1);
-                    AtomicReference<Function<String, DiscoveryNode>> reference = new AtomicReference<>();  
-                    AtomicReference<Exception> failReference = new AtomicReference<>();
-                    ActionListener<Function<String, DiscoveryNode>> shardsListener = ActionListener.wrap(x -> {
-                        reference.set(x);  
-                        responseLatch.countDown();
-                    }, x -> {
-                        failReference.set(x);  
-                        responseLatch.countDown();
-                    });
-                    connection.collectNodes(shardsListener);  
-                    responseLatch.await();
-                    assertNull(failReference.get());
-                    assertNotNull(reference.get());  
-                    Function<String, DiscoveryNode> function = reference.get();
-                    assertEquals(seedNode, function.apply(seedNode.getId()));
-                    assertNull(function.apply(seedNode.getId() + "foo"));  
-                    assertTrue(connection.assertNoRunningConnections());
-                }
-            }  
-        }
-    }
-
-    public void testNoChannelsExceptREG() throws Exception {
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT)) {  
-            DiscoveryNode seedNode = seedTransport.getLocalDiscoNode();
-            knownNodes.add(seedTransport.getLocalDiscoNode());
-            try (  
-                MockTransportService service = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,  
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )  
-            ) {
-                service.start();
-                service.acceptIncomingRequests();  
-                String clusterAlias = "test-cluster";
-                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
-
-                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
-                    PlainActionFuture<Void> plainActionFuture = new PlainActionFuture<>();
-                    connection.ensureConnected(plainActionFuture);  
-                    plainActionFuture.get(10, TimeUnit.SECONDS);
-
-                    for (TransportRequestOptions.Type type : TransportRequestOptions.Type.values()) {  
-                        if (type != TransportRequestOptions.Type.REG) {
-                            assertThat(
-                                expectThrows(  
-                                    IllegalStateException.class,
-                                    () -> connection.getConnection()
-                                        .sendRequest(  
-                                            randomNonNegativeLong(),
-                                            "arbitrary",
-                                            TransportRequest.Empty.INSTANCE,  
-                                            TransportRequestOptions.builder().withType(type).build()
-                                        )
-                                ).getMessage(),  
-                                allOf(containsString("can't select"), containsString(type.toString()))
-                            );
-                        }  
-                    }
-                }
-            }  
-        }
-    }
-
-    public void testConnectedNodesConcurrentAccess() throws IOException, InterruptedException {
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        List<MockTransportService> discoverableTransports = new CopyOnWriteArrayList<>();  
-        try {
-            final int numDiscoverableNodes = randomIntBetween(5, 20);
-            List<DiscoveryNode> discoverableNodes = new ArrayList<>(numDiscoverableNodes);  
-            for (int i = 0; i < numDiscoverableNodes; i++) {
-                MockTransportService transportService = startTransport("discoverable_node" + i, knownNodes, Version.CURRENT);
-                discoverableNodes.add(transportService.getLocalNode());  
-                discoverableTransports.add(transportService);
-            }
-
-            List<String> seedNodes = new CopyOnWriteArrayList<>(
-                randomSubsetOf(
-                    randomIntBetween(1, discoverableNodes.size()),  
-                    discoverableNodes.stream().map(d -> d.getAddress().toString()).collect(Collectors.toList())
-                )
-            );  
-            Collections.shuffle(seedNodes, random());
-
-            try (  
-                MockTransportService service = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,  
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )  
-            ) {
-                service.start();
-                service.acceptIncomingRequests();  
-
-                String clusterAlias = "test-cluster";
                 Settings settings = buildRandomSettings(clusterAlias, seedNodes);  
-                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
-                    final int numGetThreads = randomIntBetween(4, 10);
-                    final Thread[] getThreads = new Thread[numGetThreads];  
-                    final int numModifyingThreads = randomIntBetween(4, 10);
-                    final Thread[] modifyingThreads = new Thread[numModifyingThreads];
-                    CyclicBarrier barrier = new CyclicBarrier(numGetThreads + numModifyingThreads);  
-                    for (int i = 0; i < getThreads.length; i++) {
-                        final int numGetCalls = randomIntBetween(1000, 10000);
-                        getThreads[i] = new Thread(() -> {  
-                            try {
-                                barrier.await();
-                                for (int j = 0; j < numGetCalls; j++) {  
-                                    try {
-                                        Transport.Connection lowLevelConnection = connection.getConnection();
-                                        assertNotNull(lowLevelConnection);  
-                                    } catch (NoSuchRemoteClusterException e) {
-                                        // ignore, this is an expected exception
-                                    }  
-                                }
-                            } catch (Exception ex) {
-                                throw new AssertionError(ex);  
-                            }
-                        });
-                        getThreads[i].start();  
-                    }
-
-                    for (int i = 0; i < modifyingThreads.length; i++) {  
-                        final int numDisconnects = randomIntBetween(5, 10);
-                        modifyingThreads[i] = new Thread(() -> {
-                            try {  
-                                barrier.await();
-                                for (int j = 0; j < numDisconnects; j++) {
-                                    DiscoveryNode node = randomFrom(discoverableNodes);  
-                                    try {
-                                        connection.getConnectionManager().getConnection(node);
-                                    } catch (NoSuchRemoteClusterException e) {  
-                                        // Ignore
-                                    }
-                                }  
-                            } catch (Exception ex) {
-                                throw new AssertionError(ex);
+            ) {
+            Thread t = new Thread() {  
+                    PlainActionFuture<Void> plainActionFuture = new PlainActionFuture<>();
+                InternalSearchResponse response = new InternalSearchResponse(
+/*  
                             }  
-                        });
-                        modifyingThreads[i].start();
-                    }  
-
-                    for (Thread thread : getThreads) {
-                        thread.join();  
-                    }
-                    for (Thread thread : modifyingThreads) {
-                        thread.join();  
-                    }
-                }
-            }  
-        } finally {
-            IOUtils.closeWhileHandlingException(discoverableTransports);
-        }  
-    }
-
-    public void testGetConnection() throws Exception {  
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (
-            MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT);  
-            MockTransportService disconnectedTransport = startTransport("disconnected_node", knownNodes, Version.CURRENT)
-        ) {
-
-            DiscoveryNode seedNode = seedTransport.getLocalNode();
-            knownNodes.add(seedNode);
-
-            DiscoveryNode disconnectedNode = disconnectedTransport.getLocalNode();
-
-            try (  
-                MockTransportService service = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,  
+                    response,
                     threadPool,
+            DiscoveryNode disconnectedNode = disconnectedTransport.getLocalNode();
+import org.apache.lucene.store.AlreadyClosedException;
+                    Settings.EMPTY,
+                int maxNumConnections = randomIntBetween(1, 5);
+import org.opensearch.common.xcontent.XContentFactory;  
+import org.opensearch.Version;
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+                                        .sendRequest(  
+                listenerCalled.await();
+                }  
+                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {  
+    }
+                ClusterSearchShardsAction.NAME,  
+                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
+import java.util.Arrays;
+import org.opensearch.search.aggregations.InternalAggregations;  
+ * not use this file except in compliance with the License.
+    }
+            }  
+                    assertTrue(connection.assertNoRunningConnections());
+                            );
+            }
+                    NoopTracer.INSTANCE
+        } else {
+                    assertNull(function.apply(seedNode.getId() + "foo"));  
+    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
+            CountDownLatch closeRemote = new CountDownLatch(1);
+import org.opensearch.action.search.ShardSearchFailure;
+                                        // ignore, this is an expected exception
+            return buildSniffSettings(clusterAlias, addresses);
+            );  
+        ) {
+            try (  
+        boolean sniff = randomBoolean();  
+                                barrier.await();
+            });  
+            }  
+                                for (int j = 0; j < numGetCalls; j++) {  
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsGroup;
+                        channel.sendResponse(
+            Collections.shuffle(knownNodes, random());
+                    AtomicReference<Exception> failReference = new AtomicReference<>();
+                                        }, x -> {
+                        // always a proxy connection as the target node is not connected
+    private MockTransportService startTransport(String id, List<DiscoveryNode> knownNodes, Version version) {  
+                    connection.collectNodes(shardsListener);  
+            modeInfo1 = new ProxyConnectionStrategy.ProxyModeInfo(remoteAddresses.get(0), serverName, 18, 18);
+            try (  
+                        modifyingThreads[i] = new Thread(() -> {
+import org.opensearch.cluster.node.DiscoveryNode;
+                new TransportAddress(socket.getInetAddress(), socket.getLocalPort()),
+                }  
+                    }  
+                }
+                    NoopTracer.INSTANCE
+        try (  
+            assertEquals(  
+                        acceptedLatch.countDown();
+                    if ("index_not_found".equals(request.preference())) {
+            List<DiscoveryNode> discoverableNodes = new ArrayList<>(numDiscoverableNodes);  
+                        // that's fine we might close
+            ) {
+                                            if (executed.compareAndSet(null, x)) {
+import org.opensearch.search.SearchHit;
+                                            } else {
+                                            // it's ok if we're shutting down  
+            );  
+        }
+                    responseLatch.await();
+                service.start();
+import java.util.concurrent.atomic.AtomicReference;
+    }
+import org.opensearch.common.util.io.IOUtils;
+                String clusterAlias = "test-cluster";
+                service.acceptIncomingRequests();
+                        threads[i] = new Thread() {
+                }
+                                throw new AssertionError(ex);
+                                                    throw assertionError;  
+        List<String> remoteAddresses = Collections.singletonList("seed:1");
+                service.start();
+                        });
+                    null,
+                )
+            MockTransportService seedTransport1 = startTransport("seed_node_1", knownNodes, Version.CURRENT);
+                                expectThrows(  
+ * The OpenSearch Contributors require contributions made to  
+            MockTransportService disconnectedTransport = startTransport("disconnected_node", knownNodes, Version.CURRENT)
+            MockTransportService transport3 = startTransport("discoverable_node", knownNodes, Version.CURRENT)  
+            try (  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    100,
+    }
+                    barrier.await();
+        }  
+        assertSerialization(stats1);
+            DiscoveryNode seedNode = seedTransport.getLocalNode();
+    public void testRenderConnectionInfoXContent() throws IOException {  
+        try (ServerSocket socket = new ServerSocket()) {  
+                                    }
+                String clusterAlias = "test-cluster";  
+                                    barrier.await();  
+        } finally {
+import org.opensearch.core.common.transport.TransportAddress;
+            );
+                closeRemote.countDown();  
+                service.start();
+                MockTransportService service = MockTransportService.createNewService(
+                    false,  
+                                new ClusterSearchShardsGroup[0],  
+                            public void run() {
+        ClusterName clusterName = ClusterName.CLUSTER_NAME_SETTING.get(s);
+        stats.toXContent(builder, null);
+        return startTransport(id, knownNodes, version, threadPool, Settings.EMPTY);
+import static org.hamcrest.Matchers.allOf;
+                                    IllegalStateException.class,
+    private static List<String> addresses(final DiscoveryNode... seedNodes) {  
+                        assertThat(remoteConnection, instanceOf(RemoteConnectionManager.ProxyConnection.class));
+                    Settings.EMPTY,
+import org.opensearch.index.IndexNotFoundException;  
+        } else {  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsAction;  
+                public void run() {
+    private static RemoteConnectionInfo assertSerialization(RemoteConnectionInfo info) throws IOException {
+            }  
+import static org.hamcrest.Matchers.containsString;  
+            List<String> seedNodes = addresses(seedNode1, seedNode);
+        RemoteConnectionInfo stats = new RemoteConnectionInfo("test_cluster", modeInfo1, TimeValue.timeValueMinutes(30), false);  
+        return Arrays.stream(seedNodes).map(s -> s.getAddress().toString()).collect(Collectors.toList());
+import java.util.stream.Collectors;
+                }
+                randomSubsetOf(
+        final String id,  
+                        channel.sendResponse(new IndexNotFoundException("index"));
+            modeInfo2 = new SniffConnectionStrategy.SniffModeInfo(remoteAddresses, 4, 3);  
+                    CyclicBarrier barrier = new CyclicBarrier(numThreads + 1);
+                ClusterStateAction.NAME,
+                                ).getMessage(),  
+                    }  
+                    DiscoveryNodes.Builder builder = DiscoveryNodes.builder();  
+                                            TransportRequestOptions.builder().withType(type).build()
+ *  
+                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
+                }
+        assertSerialization(stats1);
+        MockTransportService newService = MockTransportService.createNewService(s, version, threadPool, NoopTracer.INSTANCE);  
+                )  
+        try (BytesStreamOutput out = new BytesStreamOutput()) {  
+                    channel.sendResponse(new ClusterStateResponse(clusterName, build, false));
+ * this work for additional information regarding copyright
+        }
+                                                final String message = x.getMessage();
+                    SniffConnectionStrategy.SniffModeInfo sniffInfo = (SniffConnectionStrategy.SniffModeInfo) remoteConnectionInfo.modeInfo;
+ *
+    public void testCloseWhileConcurrentlyConnecting() throws IOException, InterruptedException, BrokenBarrierException {
+                Version.CURRENT
+                        getThreads[i] = new Thread(() -> {  
+            Collections.shuffle(seedNodes, random());  
+                    for (Thread thread : modifyingThreads) {
+        return builder.build();
+                builder.toString()
+                    + "\"server_name\":\"the_server_name\",\"num_proxy_sockets_connected\":16,\"max_proxy_socket_connections\":18,"  
+                                        Transport.Connection lowLevelConnection = connection.getConnection();
+    public void testSlowNodeCanBeCancelled() throws IOException, InterruptedException {
+            modeInfo2 = new ProxyConnectionStrategy.ProxyModeInfo(remoteAddresses.get(0), serverName, 18, 17);  
+                )  
+    ) {
+    public void testGetConnectionInfo() throws Exception {
+    private static Settings buildSniffSettings(String clusterAlias, List<String> seedNodes) {  
+import java.util.concurrent.CyclicBarrier;
+                        closeRemote.await();
+                                }
+                Settings settings = Settings.builder()  
+                        // we don't use the transport service connection manager so we will get a proxy connection for the local node
+        try {
+                                                }
+                                        }  
+            modeInfo = new ProxyConnectionStrategy.ProxyModeInfo(remoteAddresses.get(0), serverName, 18, 16);
+                ThreadPool.Names.SAME,  
+                SearchResponse searchResponse = new SearchResponse(
+            knownNodes.add(seedTransport.getLocalDiscoNode());
+            ) {  
+import java.net.InetAddress;  
+                    for (int i = 0; i < getThreads.length; i++) {
+                        responseLatch.countDown();
+    }  
+                                            connection.ensureConnected(listener);
+        }
+import java.net.Socket;  
+                }
+            if (success == false) {
+        assertNotEquals(stats, stats1);
+                    Version.CURRENT,  
+            StreamInput in = out.bytes().streamInput();  
+        );  
+                                                    // we do cancel the operation and that means that if timing allows it, the caller  
+            CountDownLatch acceptedLatch = new CountDownLatch(1);
+                        assertThat(remoteConnection.getNode(), sameInstance(disconnectedNode));
+            MockTransportService discoverableTransport = startTransport("discoverable_node", knownNodes, Version.CURRENT)  
+            Strings.collectionToCommaDelimitedString(seedNodes)
+                    connection.ensureConnected(plainActionFuture);  
+            out.setVersion(Version.CURRENT);
+                    searchHits,
+                service.acceptIncomingRequests();  
+import org.opensearch.common.unit.TimeValue;
+                    Function<String, DiscoveryNode> function = reference.get();
+        if (randomBoolean()) {
+                                    } catch (NoSuchRemoteClusterException e) {
+        }
+                ClusterStateRequest::new,
+import org.opensearch.action.admin.cluster.state.ClusterStateAction;
+                                    }  
+import org.opensearch.common.settings.Settings;  
+            Collections.shuffle(knownNodes, random());
+ * Unless required by applicable law or agreed to in writing,
+        if (sniff) {
+            newService.acceptIncomingRequests();  
+                    searchHits = new SearchHits(new SearchHit[] { new SearchHit(0) }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1F);  
+import org.opensearch.threadpool.TestThreadPool;
+                    1
+                    0,  
+                            assertThat(
+            );  
+            MockTransportService transport2 = startTransport("seed_node_1", knownNodes, Version.CURRENT);
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
+        }  
+                    Settings.EMPTY,
+                    final int numGetThreads = randomIntBetween(4, 10);
+/*
+                                            if (executed.compareAndSet(null, new RuntimeException())) {
+    public void testCollectNodes() throws Exception {
+        stats1 = new RemoteConnectionInfo("test_cluster_1", modeInfo1, TimeValue.timeValueMinutes(30), false);
+                    channel.sendResponse(new IndexNotFoundException("index"));
+                        thread.join();  
+                ClusterSearchShardsRequest::new,
+import org.opensearch.action.search.SearchResponse;  
+                        failReference.set(x);  
+            newService.registerRequestHandler(
+    }
+                    Version.CURRENT,  
+ */  
+                    for (int i = 0; i < modifyingThreads.length; i++) {  
+        builder.endObject();  
+import java.util.concurrent.BrokenBarrierException;
+                    null,
+            assertEquals(
+                );  
+                (request, channel, task) -> {
+                        Transport.Connection remoteConnection = connection.getConnection(disconnectedNode);  
+            newService.registerRequestHandler(
+import org.apache.lucene.search.TotalHits;  
+                service.start();
+                    InternalAggregations.EMPTY,  
+        final Version version,
+                                    try {
+            try (  
+            newService.start();
+ * GitHub history for details.
+    }  
+        try (MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT)) {  
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+                                Collections.emptyMap()
+    @SuppressForbidden(reason = "calls getLocalHost here but it's fine in this case")
+                    }
+                                    }
+                    }
+            }  
+            RemoteConnectionInfo remoteConnectionInfo = new RemoteConnectionInfo(in);
+    }
+                    }, x -> {
+                    Version.CURRENT,  
+        String serverName = "the_server_name";
+                    }
+        try (
+            knownNodes.add(seedNode);
+                    .put(buildSniffSettings(clusterAlias, seedNodes))
+                MockTransportService service = MockTransportService.createNewService(  
+        try (  
+        if (randomBoolean()) {
+ * software distributed under the License is distributed on an
+            List<String> seedNodes = addresses(node3, node1, node2);  
+            knownNodes.add(transport2.getLocalDiscoNode());
                     NoopTracer.INSTANCE
                 )  
-            ) {
-                service.start();
-                service.acceptIncomingRequests();  
-                String clusterAlias = "test-cluster";
-                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
-                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {  
-                    PlainActionFuture.get(fut -> connection.ensureConnected(ActionListener.map(fut, x -> null)));
-                    for (int i = 0; i < 10; i++) {
-                        // always a direct connection as the remote node is already connected  
-                        Transport.Connection remoteConnection = connection.getConnection(seedNode);
-                        assertEquals(seedNode, remoteConnection.getNode());
-                    }  
-                    for (int i = 0; i < 10; i++) {
-                        // we don't use the transport service connection manager so we will get a proxy connection for the local node
-                        Transport.Connection remoteConnection = connection.getConnection(service.getLocalNode());  
-                        assertThat(remoteConnection, instanceOf(RemoteConnectionManager.ProxyConnection.class));
-                        assertThat(remoteConnection.getNode(), equalTo(service.getLocalNode()));
-                    }  
-                    for (int i = 0; i < 10; i++) {
-                        // always a proxy connection as the target node is not connected
-                        Transport.Connection remoteConnection = connection.getConnection(disconnectedNode);  
-                        assertThat(remoteConnection, instanceOf(RemoteConnectionManager.ProxyConnection.class));
-                        assertThat(remoteConnection.getNode(), sameInstance(disconnectedNode));
-                    }  
-                }
-            }
-        }  
-    }
-
-    private Settings buildRandomSettings(String clusterAlias, List<String> addresses) {  
-        if (randomBoolean()) {
-            return buildProxySettings(clusterAlias, addresses);
+                    threadPool,
+ * KIND, either express or implied.  See the License for the
         } else {  
-            return buildSniffSettings(clusterAlias, addresses);
-        }
-    }  
-
-    private static Settings buildProxySettings(String clusterAlias, List<String> addresses) {
-        Settings.Builder builder = Settings.builder();  
-        builder.put(ProxyConnectionStrategy.PROXY_ADDRESS.getConcreteSettingForNamespace(clusterAlias).getKey(), addresses.get(0));
-        builder.put(RemoteConnectionStrategy.REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).getKey(), "proxy");
-        return builder.build();  
-    }
-
-    private static Settings buildSniffSettings(String clusterAlias, List<String> seedNodes) {  
-        Settings.Builder builder = Settings.builder();
-        builder.put(RemoteConnectionStrategy.REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).getKey(), "sniff");
         builder.put(  
-            SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace(clusterAlias).getKey(),
-            Strings.collectionToCommaDelimitedString(seedNodes)
-        );  
-        return builder.build();
+public class RemoteClusterConnectionTests extends OpenSearchTestCase {
+            DiscoveryNode seedNode = new DiscoveryNode(  
+import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
+                    NoopTracer.INSTANCE
+import org.opensearch.test.transport.MockTransportService;
+                        }  
+                AtomicReference<Exception> exceptionReference = new AtomicReference<>();
+                                        connection.getConnectionManager().getConnection(node);
+                            try {
+import org.opensearch.core.xcontent.XContentBuilder;
+                    assertEquals(maxNumConnections, sniffInfo.maxConnectionsPerCluster);
+            Collections.shuffle(seedNodes, random());
+                        );
+                ThreadPool.Names.SAME,
+                CountDownLatch listenerCalled = new CountDownLatch(1);
+            }
+                    connection.close(); // now close it, this should trigger an interrupt on the socket and we can move on  
+                MockTransportService service = MockTransportService.createNewService(
+        assertSerialization(stats);
+                    assertTrue(connection.assertNoRunningConnections());
+                    }  
+                                    try {
+                                            }
+                                                    assertionError.addSuppressed(executed.get());
+                        exceptionReference.set(x);
+                service.acceptIncomingRequests();  
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsResponse;  
+        String serverName = "the_server_name";
+            knownNodes.add(transport1.getLocalDiscoNode());
+        }
+                                            "arbitrary",
+            ) {
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        ) {
+                );
+import org.opensearch.search.internal.InternalSearchResponse;
+                service.start();
+                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
+                                                throw new AssertionError("shit's been called twice", executed.get());
+                                    for (int i = 0; i < numConnectionAttempts; i++) {
+                    plainActionFuture.get(10, TimeUnit.SECONDS);
+                String clusterAlias = "test-cluster";
+                    }
+                                            latch.countDown();
+                    } catch (IOException e) {  
+                                                    // if we get called more than once!  
+                    for (DiscoveryNode node : knownNodes) {
+            try (
+                emptySet(),
+            modeInfo1 = new SniffConnectionStrategy.SniffModeInfo(remoteAddresses, 4, 4);
+                    + "\"initial_connect_timeout\":\"30m\",\"skip_unavailable\":true}}",
+                    Settings.EMPTY,
+package org.opensearch.transport;
+        stats1 = new RemoteConnectionInfo("test_cluster", modeInfo2, TimeValue.timeValueMinutes(30), false);  
+                newService.close();
+        }
+                    try (Socket accept = socket.accept()) {  
+                                                latch.countDown();  
+                    + "\"num_nodes_connected\":2,\"max_connections_per_cluster\":3,\"initial_connect_timeout\":\"30m\","
+                    connection.ensureConnected(listener);
+                            new ClusterSearchShardsResponse(
+                Settings settings = buildRandomSettings(clusterAlias, seedNodes);
+                    assertEquals(clusterAlias, remoteConnectionInfo.clusterAlias);  
+                                        assertNotNull(lowLevelConnection);  
+                    assertEquals(3, sniffInfo.seedNodes.size());
+                }  
+ * specific language governing permissions and limitations
+                    1,
+                    });
+                                            } else {
+import java.util.List;
+            knownNodes.add(seedTransport1.getLocalDiscoNode());  
+            }  
+            IOUtils.closeWhileHandlingException(discoverableTransports);
+            in.setVersion(Version.CURRENT);
+            socket.bind(new InetSocketAddress(InetAddress.getLocalHost(), 0), 1);
+            DiscoveryNode seedNode = seedTransport.getLocalDiscoNode();
+                )  
+    public void testGetConnection() throws Exception {  
+import org.opensearch.action.search.SearchAction;
+                assertNotNull(exceptionReference.get());
+        List<String> remoteAddresses = Arrays.asList("seed:1", "seed:2");
+        XContentBuilder builder = XContentFactory.jsonBuilder();  
     }
+                                                    // ExecutionCancelledException concurrently. unless that is the case we fail
+                            try {  
+                    AtomicReference<Function<String, DiscoveryNode>> reference = new AtomicReference<>();  
+                    }  
+    }
+import org.opensearch.search.SearchHits;
+                        if (type != TransportRequestOptions.Type.REG) {
+                    searchHits = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN);
+        RemoteConnectionInfo stats = new RemoteConnectionInfo("test_cluster", modeInfo, TimeValue.timeValueMinutes(30), true);
+import org.opensearch.action.support.PlainActionFuture;
+                    Settings.EMPTY,
+                            @Override  
+import org.opensearch.common.SuppressForbidden;
+                                            }
+                        assertThat(remoteConnection, instanceOf(RemoteConnectionManager.ProxyConnection.class));
+import static org.hamcrest.Matchers.sameInstance;  
+                service.acceptIncomingRequests();  
+                                    () -> connection.getConnection()
+import java.util.Collections;  
+                    Version.CURRENT,
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+        assertNotEquals(stats, stats1);
+                String clusterAlias = "test-cluster";
+                    ActionListener<Void> listener = ActionListener.wrap(x -> {  
+                                for (int j = 0; j < numDisconnects; j++) {
+import java.util.concurrent.TimeUnit;
+import java.io.IOException;
+                                                    && message.equals(executed.get().getMessage())) == false) {
+                                    throw new AssertionError(ex);
+                    }
+            knownNodes.add(transport3.getLocalDiscoNode());  
+                        final int numDisconnects = randomIntBetween(5, 10);
+            MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT);  
+    }
+                        builder.add(node);
+                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
+            try (  
+        assertNotEquals(stats, stats1);  
+                }  
+                    discoverableNodes.stream().map(d -> d.getAddress().toString()).collect(Collectors.toList())
+                            }  
+        List<MockTransportService> discoverableTransports = new CopyOnWriteArrayList<>();  
+                        Transport.Connection remoteConnection = connection.getConnection(seedNode);
+                        getThreads[i].start();  
+            ) {
+            );
+            final int numDiscoverableNodes = randomIntBetween(5, 20);
+                    Thread[] threads = new Thread[numThreads];
+                (request, channel, task) -> {  
+                                        } catch (Exception e) {
+            }
+                                        )
+import java.net.InetSocketAddress;
+                }
+                MockTransportService service = MockTransportService.createNewService(
+        try (MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT)) {  
+import java.util.ArrayList;
+        assertNotEquals(stats, stats1);
+                                            } else {
+ * You may obtain a copy of the License at  
+            socket.setReuseAddress(true);
+import java.net.ServerSocket;
+                    threadPool,  
+                    CyclicBarrier barrier = new CyclicBarrier(numGetThreads + numModifyingThreads);  
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
+                    }  
+                String clusterAlias = "test-cluster";
+                    }, x -> {  
+                                        // Ignore
+        stats1 = new RemoteConnectionInfo("test_cluster", modeInfo1, TimeValue.timeValueMinutes(325), false);
+import java.util.concurrent.RejectedExecutionException;  
+                                                    // of a blocking call as well as the handler will get the exception from the
+import static java.util.Collections.emptySet;
+                    NoopTracer.INSTANCE
+                service.acceptIncomingRequests();  
+import org.opensearch.threadpool.ThreadPool;  
+                    randomIntBetween(1, discoverableNodes.size()),  
+                channel.sendResponse(searchResponse);
+        final List<DiscoveryNode> knownNodes,
+                                                    && "operation was cancelled reason [connect handler is closed]".equals(message)
+    @Override  
+        }  
+                    NoopTracer.INSTANCE
+                        assertEquals(seedNode, remoteConnection.getNode());
+    public void testConnectedNodesConcurrentAccess() throws IOException, InterruptedException {
+                    Version.CURRENT,  
+                    RemoteConnectionInfo remoteConnectionInfo = assertSerialization(connection.getConnectionInfo());  
+                                }
+                "TEST",
+                        listenerCalled.countDown();
+        }  
+        builder.put(RemoteConnectionStrategy.REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).getKey(), "sniff");
+                                            TransportRequest.Empty.INSTANCE,  
+                    threadPool,
+        return builder.build();  
+                    .build();  
+import java.util.function.Function;  
+ * license agreements. See the NOTICE file distributed with
+                                        ActionListener<Void> listener = ActionListener.wrap(x -> {
+            knownNodes.add(seedTransport.getLocalDiscoNode());
+ * this file be licensed under the Apache-2.0 license or a
+    }
+                    .put(SniffConnectionStrategy.REMOTE_CONNECTIONS_PER_CLUSTER.getKey(), maxNumConnections)
+        } finally {  
+                        listenerCalled.countDown();
+                    threadPool,
+            }
+                    for (int i = 0; i < 10; i++) {
+        ) {
+            DiscoveryNode seedNode1 = seedTransport1.getLocalDiscoNode();  
+                                            }  
+            try (  
+                                knownNodes.toArray(new DiscoveryNode[0]),
+            knownNodes.add(discoverableTransport.getLocalDiscoNode());
+                        };
+                        responseLatch.countDown();
+                        thread.join();  
+            DiscoveryNode node2 = transport3.getLocalDiscoNode();  
+                discoverableNodes.add(transportService.getLocalNode());  
+        assertSerialization(stats1);
+        return startTransport(id, knownNodes, version, threadPool);
+                    null,
+                    int numThreads = randomIntBetween(4, 10);  
+        boolean success = false;  
+                                } catch (Exception ex) {  
+                if ("null_target".equals(request.preference())) {
+                    }
+                                try {
+    public void testNoChannelsExceptREG() throws Exception {
+                    Settings.EMPTY,
+                    ActionListener<Function<String, DiscoveryNode>> shardsListener = ActionListener.wrap(x -> {
+    }
+        if (sniff) {
+ * ownership. Elasticsearch licenses this file to you under  
+                    assertEquals(0, sniffInfo.numNodesConnected);  
+                Settings settings = buildRandomSettings(clusterAlias, addresses(seedNode));
+        final Settings settings
+                String clusterAlias = "test-cluster";
+import org.opensearch.action.search.SearchRequest;
+                            )  
+                builder.toString()
+    private static Settings buildProxySettings(String clusterAlias, List<String> addresses) {
+                    assertNull(failReference.get());
+        try {
+                service.start();
+import org.opensearch.cluster.ClusterState;
+                    assertNotNull(reference.get());  
+                    }  
+                    1,
+            knownNodes.add(seedTransport.getLocalDiscoNode());
+                        threads[i].start();
+            modeInfo = new SniffConnectionStrategy.SniffModeInfo(remoteAddresses, 3, 2);
+                expectThrows(AlreadyClosedException.class, () -> { throw exceptionReference.get(); });  
+                                    } catch (NoSuchRemoteClusterException e) {  
+                    return;
+                                        try {  
+        }
+                "{\"test_cluster\":{\"connected\":true,\"mode\":\"proxy\",\"proxy_address\":\"seed:1\","
+    private Settings buildRandomSettings(String clusterAlias, List<String> addresses) {  
+import java.util.concurrent.CopyOnWriteArrayList;  
+ * under the License.  
+                )  
+                    acceptedLatch.await();
+                    } else {  
+                    Version.CURRENT,  
+    }
+            DiscoveryNode node3 = transport2.getLocalDiscoNode();
+                    Version.CURRENT,  
+                    ShardSearchFailure.EMPTY_ARRAY,
+                    final int numModifyingThreads = randomIntBetween(4, 10);
+        }
+                    ClusterState build = ClusterState.builder(clusterName).nodes(builder.build()).build();
+                                        });
+                                                    AssertionError assertionError = new AssertionError("shit's been called twice", x);
+            ) {
+                    Settings.EMPTY,
+                                allOf(containsString("can't select"), containsString(type.toString()))
+    public void tearDown() throws Exception {
+            ) {
+                                                if ((executed.get().getClass() == x.getClass()  
+                                    latch.await();
+                    null,  
+                    threadPool,
+ * SPDX-License-Identifier: Apache-2.0
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+        final Settings s = Settings.builder().put(settings).put("node.name", id).build();
+import static java.util.Collections.emptyMap;  
+            newService.registerRequestHandler(SearchAction.NAME, ThreadPool.Names.SAME, SearchRequest::new, (request, channel, task) -> {
+                    for (int i = 0; i < 10; i++) {
+            success = true;
+        super.tearDown();
+        Settings.Builder builder = Settings.builder();
+                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
+                )  
+                SearchHits searchHits;
+                                    CountDownLatch latch = new CountDownLatch(numConnectionAttempts);
+                                }  
+                discoverableTransports.add(transportService);
+                                                throw new AssertionError(x);  
+                                barrier.await();
+        stats = assertSerialization(stats);
+import org.opensearch.core.action.ActionListener;
+    }
+                MockTransportService transportService = startTransport("discoverable_node" + i, knownNodes, Version.CURRENT);
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+            assertEquals(info.hashCode(), remoteConnectionInfo.hashCode());
+                        // always a direct connection as the remote node is already connected  
+                                        AtomicReference<Exception> executed = new AtomicReference<>();  
+import static org.hamcrest.Matchers.instanceOf;
+                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
+                    threadPool,
+                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
+            for (int i = 0; i < numDiscoverableNodes; i++) {
+import org.opensearch.cluster.ClusterName;  
+                        final int numConnectionAttempts = randomIntBetween(10, 100);
+            return buildProxySettings(clusterAlias, addresses);
+                            }
+import org.opensearch.core.common.Strings;
+        builder.startObject();
+        RemoteConnectionInfo stats1 = new RemoteConnectionInfo("test_cluster", modeInfo1, TimeValue.timeValueMinutes(30), true);  
+            return randomBoolean() ? info : remoteConnectionInfo;
+                                    DiscoveryNode node = randomFrom(discoverableNodes);  
+ * compatible open source license.
+                        reference.set(x);  
+                "{\"test_cluster\":{\"connected\":true,\"mode\":\"sniff\",\"seeds\":[\"seed:1\",\"seed:2\"],"
+        RemoteConnectionInfo.ModeInfo modeInfo;
+    public static MockTransportService startTransport(
+    }
+            DiscoveryNode node1 = transport1.getLocalDiscoNode();
+                    for (Thread thread : getThreads) {
+                @Override
+                    CountDownLatch responseLatch = new CountDownLatch(1);
+ */
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
 }  
+            List<String> seedNodes = new CopyOnWriteArrayList<>(
+                    assertEquals(seedNode, function.apply(seedNode.getId()));
+            info.writeTo(out);
+        RemoteConnectionInfo.ModeInfo modeInfo2;
+        builder.put(RemoteConnectionStrategy.REMOTE_CONNECTION_MODE.getConcreteSettingForNamespace(clusterAlias).getKey(), "proxy");
+                    NoopTracer.INSTANCE
+            );
+                    final Thread[] modifyingThreads = new Thread[numModifyingThreads];
+        }  
+                }
+                if ("index_not_found".equals(request.preference())) {  
+ */
+                }
+                        fail("expected exception");
+        Settings.Builder builder = Settings.builder();  
+                    } catch (InterruptedException e) {
+ *
+                )
+                    final Thread[] getThreads = new Thread[numGetThreads];  
+                service.start();
+import org.opensearch.test.OpenSearchTestCase;  
+import org.opensearch.cluster.node.DiscoveryNodes;  
+            DiscoveryNode seedNode = seedTransport.getLocalDiscoNode();
+            assertEquals(info, remoteConnectionInfo);  
+                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
+                service.acceptIncomingRequests();  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        assertSerialization(stats1);  
+                MockTransportService service = MockTransportService.createNewService(
+                        Transport.Connection remoteConnection = connection.getConnection(service.getLocalNode());  
+                        assertThat(remoteConnection.getNode(), equalTo(service.getLocalNode()));
+    }  
+                    + "\"skip_unavailable\":true}}",  
+            t.start();
+            SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace(clusterAlias).getKey(),
+                    });  
+        builder.put(ProxyConnectionStrategy.PROXY_ADDRESS.getConcreteSettingForNamespace(clusterAlias).getKey(), addresses.get(0));
+                                            if (x instanceof RejectedExecutionException || x instanceof AlreadyClosedException) {  
+                        });
+    }
+                try (RemoteClusterConnection connection = new RemoteClusterConnection(settings, clusterAlias, service)) {
+                MockTransportService service = MockTransportService.createNewService(
+                        final int numGetCalls = randomIntBetween(1000, 10000);
+                                                latch.countDown();  
+                    // test no nodes connected
+                    for (int i = 0; i < 10; i++) {
+                                            assertThat(e.getMessage(), containsString("threadcontext is already closed"));
+ * Modifications Copyright OpenSearch Contributors. See  
+            Collections.shuffle(seedNodes, random());
+    public static MockTransportService startTransport(String id, List<DiscoveryNode> knownNodes, Version version, ThreadPool threadPool) {
+        RemoteConnectionInfo.ModeInfo modeInfo1;
+                service.acceptIncomingRequests();  
+                    for (TransportRequestOptions.Type type : TransportRequestOptions.Type.values()) {  
+import java.util.concurrent.CountDownLatch;
+ * Licensed to Elasticsearch under one or more contributor  
+                            } catch (Exception ex) {
+                    assertNotNull(remoteConnectionInfo);
+            MockTransportService seedTransport = startTransport("seed_node", knownNodes, Version.CURRENT);
+                String clusterAlias = "test-cluster";  
+                    SearchResponse.Clusters.EMPTY  
+                            } catch (Exception ex) {
+        final ThreadPool threadPool,  
+    public void testRemoteConnectionInfo() throws IOException {  
+            DiscoveryNode seedNode = seedTransport.getLocalDiscoNode();
+            };  
+                        modifyingThreads[i].start();
+                } else {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                MockTransportService service = MockTransportService.createNewService(
+                                            randomNonNegativeLong(),
+                    PlainActionFuture.get(fut -> connection.ensureConnected(ActionListener.map(fut, x -> null)));
+        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);  
+            return newService;
+                        Thread.currentThread().interrupt();  
+                                                // that's fine
+        } else {  
+                    for (int i = 0; i < threads.length; i++) {  
+/*
+                                throw new AssertionError(ex);  
+import static org.hamcrest.Matchers.equalTo;

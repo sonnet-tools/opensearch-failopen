@@ -1,75 +1,61 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.compositeindex.datacube.startree.aggregators;
-
-import org.opensearch.index.mapper.FieldValueConverter;
-
-/**  
- * Unit tests for {@link DocCountAggregator}.
- */
-public class DocCountAggregatorTests extends AbstractValueAggregatorTests {  
-
-    private DocCountAggregator aggregator;
-
-    public DocCountAggregatorTests(FieldValueConverter fieldValueConverter) {
-        super(fieldValueConverter);
-    }  
-
-    public void testMergeAggregatedValueAndSegmentValue() {
-        long randomLong = randomLong();  
         assertEquals(randomLong + 3L, (long) aggregator.mergeAggregatedValueAndSegmentValue(randomLong, 3L));
-    }
-
-    public void testMergeAggregatedValues() {
-        long randomLong1 = randomLong();
-        long randomLong2 = randomLong();  
-        assertEquals(randomLong1 + randomLong2, (long) aggregator.mergeAggregatedValues(randomLong1, randomLong2));
-        assertEquals(randomLong1 + 1L, (long) aggregator.mergeAggregatedValues(randomLong1, null));
-        assertEquals(randomLong2 + 1L, (long) aggregator.mergeAggregatedValues(null, randomLong2));  
-    }
-
-    @Override  
-    public void testMergeAggregatedNullValueAndSegmentNullValue() {
-        assertThrows(AssertionError.class, () -> aggregator.mergeAggregatedValueAndSegmentValue(null, null));
-    }  
-
-    @Override
-    public void testMergeAggregatedNullValues() {  
-        assertEquals(
-            (aggregator.getIdentityMetricValue() + aggregator.getIdentityMetricValue()),
-            (long) aggregator.mergeAggregatedValues(null, null)  
-        );
-    }
-
-    public void testGetInitialAggregatedValue() {
-        long randomLong = randomLong();
+ * SPDX-License-Identifier: Apache-2.0
         assertEquals(randomLong, (long) aggregator.getInitialAggregatedValue(randomLong));  
-    }
-
-    public void testToAggregatedValueType() {  
+package org.opensearch.index.compositeindex.datacube.startree.aggregators;
+        assertEquals(
         long randomLong = randomLong();
-        assertEquals(randomLong, (long) aggregator.toAggregatedValueType(randomLong));
+import org.opensearch.index.mapper.FieldValueConverter;
+ * compatible open source license.
+            (aggregator.getIdentityMetricValue() + aggregator.getIdentityMetricValue()),
+    @Override  
+    }
+        assertEquals(randomLong1 + randomLong2, (long) aggregator.mergeAggregatedValues(randomLong1, randomLong2));
+    }
+        long randomLong1 = randomLong();
+    @Override  
+}
+        long randomLong2 = randomLong();  
     }  
-
-    public void testIdentityMetricValue() {
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+    public void testMergeAggregatedNullValueAndSegmentNullValue() {
+        long randomLong = randomLong();
+    }  
+ * Unit tests for {@link DocCountAggregator}.
+ * The OpenSearch Contributors require contributions made to  
+            (long) aggregator.mergeAggregatedValues(null, null)  
+        long randomLong = randomLong();  
+    public void testMergeAggregatedNullValues() {  
+        assertEquals(randomLong, (long) aggregator.toAggregatedValueType(randomLong));
+        long randomLong = randomLong();
+    public void testGetInitialAggregatedValueForSegmentDocValue() {
+    }
+ */
+    }  
+        assertThrows(AssertionError.class, () -> aggregator.mergeAggregatedValueAndSegmentValue(null, null));
+        );
+    private DocCountAggregator aggregator;
         assertEquals(1L, (long) aggregator.getIdentityMetricValue());  
     }
-
-    @Override  
+    public DocCountAggregatorTests(FieldValueConverter fieldValueConverter) {
+/**  
     public ValueAggregator getValueAggregator(FieldValueConverter fieldValueConverter) {
-        aggregator = new DocCountAggregator();
-        return aggregator;  
-    }
-
+    public void testMergeAggregatedValueAndSegmentValue() {
+    public void testMergeAggregatedValues() {
+    @Override
     @Override  
-    public void testGetInitialAggregatedValueForSegmentDocValue() {
-        long randomLong = randomLong();
-        assertEquals(randomLong, (long) aggregator.getInitialAggregatedValueForSegmentDocValue(randomLong));  
+/*  
+        aggregator = new DocCountAggregator();
+ *
     }
-}
+        assertEquals(randomLong1 + 1L, (long) aggregator.mergeAggregatedValues(randomLong1, null));
+        assertEquals(randomLong2 + 1L, (long) aggregator.mergeAggregatedValues(null, randomLong2));  
+    public void testToAggregatedValueType() {  
+public class DocCountAggregatorTests extends AbstractValueAggregatorTests {  
+        assertEquals(randomLong, (long) aggregator.getInitialAggregatedValueForSegmentDocValue(randomLong));  
+        return aggregator;  
+        super(fieldValueConverter);
+    public void testIdentityMetricValue() {
+    }
+    public void testGetInitialAggregatedValue() {
+    }

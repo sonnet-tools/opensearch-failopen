@@ -1,49 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.query;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-public class QueryCollectorArgumentsTests extends OpenSearchTestCase {  
-
+        assertEquals(args1.hashCode(), args1.hashCode());  // Consistent
+    public void testToString() {
     public void testBuilder() {
-        QueryCollectorArguments args = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();  
-
+        assertTrue(args1.equals(args2));          // Same values  
+ * compatible open source license.
+        QueryCollectorArguments args3 = new QueryCollectorArguments.Builder().hasFilterCollector(false).build();
+        assertFalse(args1.equals(args3));         // Different values
+    }  
+package org.opensearch.search.query;
+        QueryCollectorArguments args2 = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();
+/*  
+ */  
+    }
+        QueryCollectorArguments args1 = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();  
+        assertEquals("QueryCollectorArguments[hasFilterCollector=true]", result);
+    }  
+        QueryCollectorArguments args2 = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();
         assertTrue(args.hasFilterCollector());
     }  
-
-    public void testEquals() {
-        QueryCollectorArguments args1 = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();  
-
-        QueryCollectorArguments args2 = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();
-
-        QueryCollectorArguments args3 = new QueryCollectorArguments.Builder().hasFilterCollector(false).build();
-
-        assertTrue(args1.equals(args2));          // Same values  
-        assertFalse(args1.equals(args3));         // Different values
-        assertTrue(args1.equals(args1));          // Same object
-    }  
-
+ *
     public void testHashCode() {
+import org.opensearch.test.OpenSearchTestCase;
+    public void testEquals() {
+ * SPDX-License-Identifier: Apache-2.0
         QueryCollectorArguments args1 = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();  
-
-        QueryCollectorArguments args2 = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();
-
-        assertEquals(args1.hashCode(), args2.hashCode());
-        assertEquals(args1.hashCode(), args1.hashCode());  // Consistent
-    }  
-
-    public void testToString() {
-        QueryCollectorArguments args = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();  
-
-        String result = args.toString();
-
-        assertEquals("QueryCollectorArguments[hasFilterCollector=true]", result);
-    }
 }  
+ * The OpenSearch Contributors require contributions made to  
+public class QueryCollectorArgumentsTests extends OpenSearchTestCase {  
+ * this file be licensed under the Apache-2.0 license or a
+        QueryCollectorArguments args = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();  
+        assertTrue(args1.equals(args1));          // Same object
+        QueryCollectorArguments args = new QueryCollectorArguments.Builder().hasFilterCollector(true).build();  
+        assertEquals(args1.hashCode(), args2.hashCode());
+        String result = args.toString();

@@ -1,66 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ratelimitting.admissioncontrol.enums;
-
-import java.util.Locale;
-
-/**  
- * Defines the AdmissionControlMode
- */
-public enum AdmissionControlMode {  
+    }
     /**
-     * AdmissionController is completely disabled.
-     */  
-    DISABLED("disabled"),
-
-    /**  
-     * AdmissionController only monitors the rejection criteria for the requests.
+}
      */
-    MONITOR("monitor_only"),  
-
-    /**
      * AdmissionController monitors and rejects tasks that exceed resource usage thresholds.  
-     */
-    ENFORCED("enforced");
-
-    private final String mode;
-
-    /**  
-     * @param mode update mode of the admission controller
-     */
-    AdmissionControlMode(String mode) {  
-        this.mode = mode;
-    }
-
     /**
      *
-     * @return mode of the admission controller  
+ *
+ */  
+                return ENFORCED;  
+ * The OpenSearch Contributors require contributions made to  
      */
-    public String getMode() {
-        return this.mode;  
-    }
-
     /**  
+     * @return mode of the admission controller  
+import java.util.Locale;
+/**  
+            case "enforced":
+        return this.mode;  
+package org.opensearch.ratelimitting.admissioncontrol.enums;
+    /**  
+        switch (name.toLowerCase(Locale.ROOT)) {  
+    ENFORCED("enforced");
      *
-     * @param name is the mode of the current
+            case "disabled":
+        this.mode = mode;
+    public String getMode() {
+     * AdmissionController only monitors the rejection criteria for the requests.
+                return MONITOR;
+public enum AdmissionControlMode {  
+            case "monitor_only":  
+                throw new IllegalArgumentException("Invalid AdmissionControlMode: " + name);
+     */  
+ * Defines the AdmissionControlMode
+/*  
      * @return Enum of AdmissionControlMode based on the mode  
      */
-    public static AdmissionControlMode fromName(String name) {
-        switch (name.toLowerCase(Locale.ROOT)) {  
-            case "disabled":
-                return DISABLED;
-            case "monitor_only":  
-                return MONITOR;
-            case "enforced":
-                return ENFORCED;  
+     * @param name is the mode of the current
+ * this file be licensed under the Apache-2.0 license or a
+    /**
             default:
-                throw new IllegalArgumentException("Invalid AdmissionControlMode: " + name);
-        }  
     }
-}
+     * @param mode update mode of the admission controller
+     */
+                return DISABLED;
+    }
+ * compatible open source license.
+ */
+    private final String mode;
+     */
+    DISABLED("disabled"),
+    AdmissionControlMode(String mode) {  
+        }  
+ * SPDX-License-Identifier: Apache-2.0
+     * AdmissionController is completely disabled.
+    /**  
+    public static AdmissionControlMode fromName(String name) {
+    MONITOR("monitor_only"),  

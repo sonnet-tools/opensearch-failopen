@@ -1,187 +1,176 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.lucene.search.vectorhighlight;
-
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.queries.spans.SpanTermQuery;  
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.MultiPhraseQuery;
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.SynonymQuery;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.vectorhighlight.FastVectorHighlighter;  
-import org.apache.lucene.search.vectorhighlight.FieldQuery;
-import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
-import org.opensearch.common.lucene.search.function.FunctionScoreQuery;  
-import org.opensearch.index.search.OpenSearchToParentBlockJoinQuery;
-import org.opensearch.lucene.queries.BlendedTermQuery;
-
-import java.io.IOException;
-import java.util.Collection;
-
-// LUCENE MONITOR
-// TODO: remove me!
-/**  
- * Custom implementation of Lucene's {@link FieldQuery} that extends highlighting capabilities
- * to support additional OpenSearch-specific query types and complex queries.
- * <p>  
- * This class enhances the standard Lucene vector highlighting by providing special handling for:
- * <ul>
- *   <li>Boost queries</li>  
- *   <li>Span term queries</li>
- *   <li>Constant score queries</li>
- *   <li>Function score queries (both OpenSearch and Lucene variants)</li>  
- *   <li>Multi-phrase prefix queries</li>
- *   <li>Multi-phrase queries</li>
- *   <li>Blended term queries</li>  
- *   <li>Synonym queries</li>
- *   <li>Parent-child block join queries</li>
- * </ul>  
- * <p>
- * The class provides special handling for multi-phrase queries with high term counts,
+                multiPhraseQuery.getTermArrays(),
+                flatten(new TermQuery(term), searcher, flatQueries, boost);
  * falling back to term-by-term highlighting when the number of terms exceeds 16.  
- * <p>
- * Thread safety is managed through a ThreadLocal variable {@link #highlightFilters}
- * which is properly cleaned up after use.  
- *
+import org.apache.lucene.search.PhraseQuery;
+ * Modifications Copyright OpenSearch Contributors. See
+                numTerms += currentPosTerm.length;
+            for (int i = 0; i < termsIdx.length; i++) {
+        if (currentPos == 0) {
+import org.apache.lucene.search.TermQuery;
+        super(query, reader, phraseHighlight, fieldMatch);  
+            for (Term[] currentPosTerm : terms) {
+    @Override
+// LUCENE MONITOR
+            convertMultiPhraseQuery(
+            }
+import java.io.IOException;
+        } else if (sourceQuery instanceof FunctionScoreQuery functionScoreQuery) {
+            super.flatten(sourceQuery, searcher, flatQueries, boost);  
+         * we walk all possible ways and for each path down the MPQ we create a PhraseQuery this is what FieldQuery supports.
+            this.flatten(query, searcher, flatQueries, 1F);  
+            Query query = queryBuilder.build();
+    private void convertMultiPhraseQuery(
+ */
+         * It seems expensive but most queries will pretty small.  
+            flatten(sourceQuery.rewrite(searcher), searcher, flatQueries, boost);
+ *   <li>Span term queries</li>
+ * The class provides special handling for multi-phrase queries with high term counts,
+/*
+ * This class enhances the standard Lucene vector highlighting by providing special handling for:
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.search.vectorhighlight.FieldQuery;
+            if (numTerms > 16) {
+import org.apache.lucene.search.SynonymQuery;
+ */  
+            // SynonymQuery should be handled by the parent class directly.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                flatQueries
+ * Custom implementation of Lucene's {@link FieldQuery} that extends highlighting capabilities
+            flatten(sourceQuery, searcher, flatQueries, boost);  
+import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
+public class CustomFieldQuery extends FieldQuery {  
+        } else if (sourceQuery instanceof SpanTermQuery spanTermQuery) {
+import org.opensearch.lucene.queries.BlendedTermQuery;
+        if (sourceQuery instanceof BoostQuery bq) {  
+            int numTerms = 0;  
+ *   <li>Boost queries</li>  
+        } else if (sourceQuery instanceof OpenSearchToParentBlockJoinQuery parentBlockJoinQuery) {  
+ *   <li>Multi-phrase prefix queries</li>
+        int[] termsIdx,  
+ * specific language governing permissions and limitations
+        } else if (sourceQuery instanceof BlendedTermQuery blendedTermQuery) {
+ * license agreements. See the NOTICE file distributed with
+/**  
+ *   <li>Synonym queries</li>
+ *   <li>Constant score queries</li>
+import java.util.Collection;
+            queryBuilder.setSlop(orig.getSlop());
+                termsIdx[currentPos] = i;
+import org.apache.lucene.search.Query;  
+                searcher,
+ * not use this file except in compliance with the License.
+ * KIND, either express or implied.  See the License for the
+        } else {
+            }  
+ * Licensed to Elasticsearch under one or more contributor  
+            flatten(funcScoreQuery.getWrappedQuery(), searcher, flatQueries, boost);
  * @see FastVectorHighlighter
  * @see FieldQuery  
- * @opensearch.internal
- */
-public class CustomFieldQuery extends FieldQuery {  
-
-    public static final ThreadLocal<Boolean> highlightFilters = new ThreadLocal<>();
-
-    public CustomFieldQuery(Query query, IndexReader reader, FastVectorHighlighter highlighter) throws IOException {
-        this(query, reader, highlighter.isPhraseHighlight(), highlighter.isFieldMatch());
-    }  
-
-    public CustomFieldQuery(Query query, IndexReader reader, boolean phraseHighlight, boolean fieldMatch) throws IOException {
-        super(query, reader, phraseHighlight, fieldMatch);  
-        highlightFilters.remove();
-    }
-
-    @Override
-    protected void flatten(Query sourceQuery, IndexSearcher searcher, Collection<Query> flatQueries, float boost) throws IOException {
-        if (sourceQuery instanceof BoostQuery bq) {  
+package org.opensearch.lucene.search.vectorhighlight;
             sourceQuery = bq.getQuery();
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.index.search.OpenSearchToParentBlockJoinQuery;
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+ * The OpenSearch Contributors require contributions made to  
+ * <p>  
+                for (Term[] currentPosTerm : terms) {
+import org.apache.lucene.queries.spans.SpanTermQuery;  
+            for (int i = 0; i < t.length; i++) {  
+ * this work for additional information regarding copyright
+ *   <li>Blended term queries</li>  
+import org.apache.lucene.search.IndexSearcher;  
+        Collection<Query> flatQueries
+            }  
             boost *= bq.getBoost();
-            flatten(sourceQuery, searcher, flatQueries, boost);  
-        } else if (sourceQuery instanceof SpanTermQuery spanTermQuery) {
-            super.flatten(new TermQuery(spanTermQuery.getTerm()), searcher, flatQueries, boost);
+ * <p>
         } else if (sourceQuery instanceof ConstantScoreQuery constantScoreQuery) {  
             flatten(constantScoreQuery.getQuery(), searcher, flatQueries, boost);
-        } else if (sourceQuery instanceof FunctionScoreQuery functionScoreQuery) {
-            flatten(functionScoreQuery.getSubQuery(), searcher, flatQueries, boost);  
-        } else if (sourceQuery instanceof MultiPhrasePrefixQuery) {
-            flatten(sourceQuery.rewrite(searcher), searcher, flatQueries, boost);
-        } else if (sourceQuery instanceof MultiPhraseQuery multiPhraseQuery) {  
-            convertMultiPhraseQuery(
-                0,
-                new int[multiPhraseQuery.getTermArrays().length],  
-                multiPhraseQuery,
-                multiPhraseQuery.getTermArrays(),
-                multiPhraseQuery.getPositions(),  
-                searcher,
-                flatQueries
-            );  
-        } else if (sourceQuery instanceof BlendedTermQuery blendedTermQuery) {
-            flatten(blendedTermQuery.rewrite(searcher), searcher, flatQueries, boost);
-        } else if (sourceQuery instanceof org.apache.lucene.queries.function.FunctionScoreQuery funcScoreQuery) {  
-            // flatten query with query boost
-            flatten(funcScoreQuery.getWrappedQuery(), searcher, flatQueries, boost);
-        } else if (sourceQuery instanceof SynonymQuery synQuery) {  
-            // SynonymQuery should be handled by the parent class directly.
-            // This statement should be removed when https://issues.apache.org/jira/browse/LUCENE-7484 is merged.
-            for (Term term : synQuery.getTerms()) {  
-                flatten(new TermQuery(term), searcher, flatQueries, boost);
-            }
-        } else if (sourceQuery instanceof OpenSearchToParentBlockJoinQuery parentBlockJoinQuery) {  
-            Query childQuery = parentBlockJoinQuery.getChildQuery();
-            if (childQuery != null) {
-                flatten(childQuery, searcher, flatQueries, boost);  
-            }
-        } else {
-            super.flatten(sourceQuery, searcher, flatQueries, boost);  
-        }
+import org.apache.lucene.search.BoostQuery;
     }
-
-    private void convertMultiPhraseQuery(
-        int currentPos,
-        int[] termsIdx,  
-        MultiPhraseQuery orig,
-        Term[][] terms,
-        int[] pos,  
-        IndexSearcher searcher,
-        Collection<Query> flatQueries
-    ) throws IOException {  
-        if (currentPos == 0) {
-            // if we have more than 16 terms
-            int numTerms = 0;  
-            for (Term[] currentPosTerm : terms) {
-                numTerms += currentPosTerm.length;
-            }  
-            if (numTerms > 16) {
-                for (Term[] currentPosTerm : terms) {
                     for (Term term : currentPosTerm) {  
-                        super.flatten(new TermQuery(term), searcher, flatQueries, 1F);
-                    }
-                }  
-                return;
+        } else if (sourceQuery instanceof org.apache.lucene.queries.function.FunctionScoreQuery funcScoreQuery) {  
+import org.apache.lucene.search.ConstantScoreQuery;
             }
-        }  
-        /*
-         * we walk all possible ways and for each path down the MPQ we create a PhraseQuery this is what FieldQuery supports.
-         * It seems expensive but most queries will pretty small.  
-         */
-        if (currentPos == terms.length) {
-            PhraseQuery.Builder queryBuilder = new PhraseQuery.Builder();  
-            queryBuilder.setSlop(orig.getSlop());
-            for (int i = 0; i < termsIdx.length; i++) {
-                queryBuilder.add(terms[i][termsIdx[i]], pos[i]);  
-            }
-            Query query = queryBuilder.build();
-            this.flatten(query, searcher, flatQueries, 1F);  
         } else {
-            Term[] t = terms[currentPos];
-            for (int i = 0; i < t.length; i++) {  
-                termsIdx[currentPos] = i;
-                convertMultiPhraseQuery(currentPos + 1, termsIdx, orig, terms, pos, searcher, flatQueries);
-            }  
+ * GitHub history for details.
+ *   <li>Multi-phrase queries</li>
         }
+        if (currentPos == terms.length) {
     }
+ * @opensearch.internal
+    }
+            }
+ * to support additional OpenSearch-specific query types and complex queries.
+                multiPhraseQuery.getPositions(),  
+import org.opensearch.common.lucene.search.function.FunctionScoreQuery;  
+            flatten(functionScoreQuery.getSubQuery(), searcher, flatQueries, boost);  
+        }  
+        } else if (sourceQuery instanceof MultiPhraseQuery multiPhraseQuery) {  
+ *  
+        Term[][] terms,
+            flatten(blendedTermQuery.rewrite(searcher), searcher, flatQueries, boost);
+ * Unless required by applicable law or agreed to in writing,
+                    }
+        } else if (sourceQuery instanceof SynonymQuery synQuery) {  
+                0,
+ *   <li>Parent-child block join queries</li>
+        int[] pos,  
+/*  
+ * under the License.  
+            Term[] t = terms[currentPos];
+ *   <li>Function score queries (both OpenSearch and Lucene variants)</li>  
+                multiPhraseQuery,
+import org.apache.lucene.search.MultiPhraseQuery;
+        /*
+import org.apache.lucene.index.IndexReader;
+ * Thread safety is managed through a ThreadLocal variable {@link #highlightFilters}
+                flatten(childQuery, searcher, flatQueries, boost);  
+            );  
+ *
+            PhraseQuery.Builder queryBuilder = new PhraseQuery.Builder();  
+    public CustomFieldQuery(Query query, IndexReader reader, FastVectorHighlighter highlighter) throws IOException {
+        IndexSearcher searcher,
+        MultiPhraseQuery orig,
+    public static final ThreadLocal<Boolean> highlightFilters = new ThreadLocal<>();
+ *
+         */
+            Query childQuery = parentBlockJoinQuery.getChildQuery();
+                convertMultiPhraseQuery(currentPos + 1, termsIdx, orig, terms, pos, searcher, flatQueries);
+            // flatten query with query boost
+ * <ul>
+    }  
+                queryBuilder.add(terms[i][termsIdx[i]], pos[i]);  
+ * compatible open source license.
+        } else if (sourceQuery instanceof MultiPhrasePrefixQuery) {
+ */  
+import org.apache.lucene.search.vectorhighlight.FastVectorHighlighter;  
+            if (childQuery != null) {
+ * software distributed under the License is distributed on an
+                new int[multiPhraseQuery.getTermArrays().length],  
+                return;
+    protected void flatten(Query sourceQuery, IndexSearcher searcher, Collection<Query> flatQueries, float boost) throws IOException {
+    ) throws IOException {  
+ * You may obtain a copy of the License at  
+ * <p>
+/*  
+ * </ul>  
+            // if we have more than 16 terms
+            super.flatten(new TermQuery(spanTermQuery.getTerm()), searcher, flatQueries, boost);
 }  
+        int currentPos,
+// TODO: remove me!
+            for (Term term : synQuery.getTerms()) {  
+ *
+                }  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+    public CustomFieldQuery(Query query, IndexReader reader, boolean phraseHighlight, boolean fieldMatch) throws IOException {
+            }
+        highlightFilters.remove();
+import org.apache.lucene.index.Term;
+            // This statement should be removed when https://issues.apache.org/jira/browse/LUCENE-7484 is merged.
+ * which is properly cleaned up after use.  
+                        super.flatten(new TermQuery(term), searcher, flatQueries, 1F);
+        this(query, reader, highlighter.isPhraseHighlight(), highlighter.isFieldMatch());

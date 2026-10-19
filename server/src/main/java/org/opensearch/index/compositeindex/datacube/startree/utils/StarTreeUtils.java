@@ -1,152 +1,139 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.index.compositeindex.datacube.startree.utils;
-
-import org.apache.lucene.index.DocValuesSkipIndexType;  
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.IndexOptions;  
-import org.apache.lucene.index.VectorEncoding;
-import org.apache.lucene.index.VectorSimilarityFunction;
-import org.opensearch.index.compositeindex.datacube.startree.aggregators.MetricAggregatorInfo;  
-
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * Util class for building star tree
- *
- * @opensearch.experimental  
- */
-public class StarTreeUtils {
-
-    private StarTreeUtils() {}
-
-    public static final int ALL = -1;  
-
-    /**
-     * The suffix appended to dimension field names in the Star Tree index.  
-     */
-    public static final String DIMENSION_SUFFIX = "dim";
-
-    /**
-     * The suffix appended to metric field names in the Star Tree index.
-     */  
-    public static final String METRIC_SUFFIX = "metric";
-
-    /**  
-     * Returns the full field name for a dimension in the star-tree index.
-     *
-     * @param starTreeFieldName star-tree field name  
-     * @param dimensionName     name of the dimension
-     * @return full field name for the dimension in the star-tree index
-     */  
-    public static String fullyQualifiedFieldNameForStarTreeDimensionsDocValues(String starTreeFieldName, String dimensionName) {
-        return starTreeFieldName + "_" + dimensionName + "_" + DIMENSION_SUFFIX;
-    }  
-
-    /**
-     * Returns the full field name for a metric in the star-tree index.  
-     *
      * @param starTreeFieldName star-tree field name
-     * @param fieldName         name of the metric field  
-     * @param metricName        name of the metric
-     * @return full field name for the metric in the star-tree index
-     */  
-    public static String fullyQualifiedFieldNameForStarTreeMetricsDocValues(String starTreeFieldName, String fieldName, String metricName) {
-        return MetricAggregatorInfo.toFieldName(starTreeFieldName, fieldName, metricName) + "_" + METRIC_SUFFIX;
-    }  
-
-    /**
-     * Get field infos from field names  
-     *
-     * @param fields field names
-     * @return field infos  
-     */
-    public static FieldInfo[] getFieldInfoList(List<String> fields, Map<String, DocValuesType> dimDocValuesTypeMap) {
-        FieldInfo[] fieldInfoList = new FieldInfo[fields.size()];  
-        // field number is not really used. We depend on unique field names to get the desired iterator
-        int fieldNumber = 0;
-        for (String fieldName : fields) {  
-            fieldInfoList[fieldNumber] = getFieldInfo(
-                fieldName,
-                // default is sortedNumeric since all metrics right now are sorted numeric  
-                dimDocValuesTypeMap.getOrDefault(fieldName, DocValuesType.SORTED_NUMERIC),
-                fieldNumber
-            );  
-            fieldNumber++;
-        }
-        return fieldInfoList;  
-    }
-
-    /**  
+            0,
+     * Returns the full field name for a metric in the star-tree index.  
+            false
+            -1,
      * Get new field info instance for a given field name and field number
-     * @param fieldName name of the field
-     * @param docValuesType doc value type of the field  
-     * @param fieldNumber number of the field
+            VectorSimilarityFunction.EUCLIDEAN,  
+     * @return full field name for the dimension in the star-tree index
+ *
+import org.apache.lucene.index.DocValuesType;
+        int fieldNumber = 0;
+     * @return full field name for the metric in the star-tree index
+    /**  
+     */
      * @return new field info instance
      */  
-    public static FieldInfo getFieldInfo(String fieldName, DocValuesType docValuesType, int fieldNumber) {
-        return new FieldInfo(
-            fieldName,  
-            fieldNumber,
-            false,
-            false,  
-            true,
             IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS,
-            docValuesType,  
-            DocValuesSkipIndexType.RANGE,
-            -1,
-            Collections.emptyMap(),  
-            0,
-            0,
-            0,  
-            0,
-            VectorEncoding.FLOAT32,
-            VectorSimilarityFunction.EUCLIDEAN,  
-            false,
-            false
-        );  
-    }
-
-    /**  
-     * Get new field info instance for a given field name and field number.
-     * It's a dummy field info to fetch doc id set iterators based on field name.
-     * <p>  
-     * Actual field infos uses fieldNumberAcrossStarTrees parameter to achieve consistent
-     * and unique field numbers across fields and across multiple star trees
-     *  
-     * @param fieldName name of the field
-     * @param docValuesType doc value type of the field
-     * @return new field info instance  
-     */
-    public static FieldInfo getFieldInfo(String fieldName, DocValuesType docValuesType) {
+    /**
+        return new FieldInfo(
+    public static FieldInfo[] getFieldInfoList(List<String> fields, Map<String, DocValuesType> dimDocValuesTypeMap) {
         return new FieldInfo(  
-            fieldName,
-            0,
-            false,  
-            false,
-            true,
+     */  
             IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS,  
-            docValuesType,
-            DocValuesSkipIndexType.RANGE,
-            -1,  
-            Collections.emptyMap(),
-            0,
-            0,  
-            0,
-            0,
-            VectorEncoding.FLOAT32,  
-            VectorSimilarityFunction.EUCLIDEAN,
+import org.apache.lucene.index.VectorSimilarityFunction;
+     * @param fields field names
+    public static String fullyQualifiedFieldNameForStarTreeDimensionsDocValues(String starTreeFieldName, String dimensionName) {
+            Collections.emptyMap(),  
+            fieldNumber++;
+        FieldInfo[] fieldInfoList = new FieldInfo[fields.size()];  
             false,
-            false  
-        );
-    }
-
+                fieldNumber
+public class StarTreeUtils {
+    public static final String DIMENSION_SUFFIX = "dim";
+import org.apache.lucene.index.IndexOptions;  
+            false,
+            0,
+ * @opensearch.experimental  
+     * @param fieldName         name of the metric field  
+import org.apache.lucene.index.VectorEncoding;
+ * The OpenSearch Contributors require contributions made to  
+            VectorSimilarityFunction.EUCLIDEAN,
+            0,  
+     */  
+/*  
+     * @param fieldName name of the field
+/**  
+    private StarTreeUtils() {}
 }
+    public static final String METRIC_SUFFIX = "metric";
+     * @param starTreeFieldName star-tree field name  
+     * @param docValuesType doc value type of the field
+            fieldName,  
+     * @param docValuesType doc value type of the field  
+     * Get field infos from field names  
+            DocValuesSkipIndexType.RANGE,
+            VectorEncoding.FLOAT32,  
+            fieldInfoList[fieldNumber] = getFieldInfo(
+    /**
+package org.opensearch.index.compositeindex.datacube.startree.utils;
+     * The suffix appended to dimension field names in the Star Tree index.  
+     * @param metricName        name of the metric
+import org.apache.lucene.index.DocValuesSkipIndexType;  
+    /**  
+     * The suffix appended to metric field names in the Star Tree index.
+ *
+     * @param fieldName name of the field
+ * SPDX-License-Identifier: Apache-2.0
+            VectorEncoding.FLOAT32,
+            fieldName,
+        }
+            0,
+import org.opensearch.index.compositeindex.datacube.startree.aggregators.MetricAggregatorInfo;  
+    /**
+            DocValuesSkipIndexType.RANGE,
+        );
+    }  
+     * Get new field info instance for a given field name and field number.
+     * <p>  
+            false,
+import org.apache.lucene.index.FieldInfo;
+                fieldName,
+     *  
+     */
+    }
+    public static FieldInfo getFieldInfo(String fieldName, DocValuesType docValuesType) {
+     */  
+            false,  
+import java.util.Collections;
+     * @return field infos  
+            false,
+ */
+    public static String fullyQualifiedFieldNameForStarTreeMetricsDocValues(String starTreeFieldName, String fieldName, String metricName) {
+     * and unique field numbers across fields and across multiple star trees
+     * It's a dummy field info to fetch doc id set iterators based on field name.
+import java.util.List;  
+     *
+ * this file be licensed under the Apache-2.0 license or a
+            0,  
+            false,  
+    }  
+            false  
+            docValuesType,
+ * Util class for building star tree
+     */
+ * compatible open source license.
+                // default is sortedNumeric since all metrics right now are sorted numeric  
+    /**  
+    }
+import java.util.Map;
+        return starTreeFieldName + "_" + dimensionName + "_" + DIMENSION_SUFFIX;
+     * @param fieldNumber number of the field
+     *
+            Collections.emptyMap(),
+    }
+    /**
+            0,
+        return fieldInfoList;  
+        // field number is not really used. We depend on unique field names to get the desired iterator
+            );  
+     * @param dimensionName     name of the dimension
+        for (String fieldName : fields) {  
+            docValuesType,  
+            0,
+                dimDocValuesTypeMap.getOrDefault(fieldName, DocValuesType.SORTED_NUMERIC),
+ */  
+    public static final int ALL = -1;  
+            true,
+            true,
+            -1,  
+     * Returns the full field name for a dimension in the star-tree index.
+     *
+        );  
+            0,
+        return MetricAggregatorInfo.toFieldName(starTreeFieldName, fieldName, metricName) + "_" + METRIC_SUFFIX;
+            fieldNumber,
+     * Actual field infos uses fieldNumberAcrossStarTrees parameter to achieve consistent
+     * @return new field info instance  
+    public static FieldInfo getFieldInfo(String fieldName, DocValuesType docValuesType, int fieldNumber) {
+            0,

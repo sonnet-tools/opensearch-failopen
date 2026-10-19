@@ -1,193 +1,178 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.discovery.single;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;  
-import org.apache.logging.log4j.core.LogEvent;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.coordination.JoinHelper;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.node.Node.DiscoverySettings;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.MockHttpTransport;
-import org.opensearch.test.MockLogAppender;  
-import org.opensearch.test.NodeConfigurationSource;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.RemoteTransportException;  
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;  
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.function.Function;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.not;  
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1, numClientNodes = 0, supportsDedicatedMasters = false, autoManageMasterNodes = false)
-public class SingleNodeDiscoveryIT extends OpenSearchIntegTestCase {  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put("discovery.type", "single-node")  
-            .put("transport.port", getPortRange())
             .build();
-    }  
-
-    public void testSingleNodesDoNotDiscoverEachOther() throws IOException, InterruptedException {
-        final TransportService service = internalCluster().getInstance(TransportService.class);  
-        final int port = service.boundAddress().publishAddress().getPort();
-        final NodeConfigurationSource configurationSource = new NodeConfigurationSource() {
-            @Override  
-            public Settings nodeSettings(int nodeOrdinal) {
-                return Settings.builder()
-                    .put(featureFlagSettings())  
-                    .put("discovery.type", "single-node")
-                    .put("transport.type", getTestTransportType())
-                    /*  
-                     * We align the port ranges of the two as then with zen discovery these two
-                     * nodes would find each other.
-                     */  
-                    .put("transport.port", port + "-" + (port + 5 - 1))
-                    .build();
-            }  
-
-            @Override
-            public Path nodeConfigPath(int nodeOrdinal) {  
-                return null;
-            }
-        };  
-        try (
-            InternalTestCluster other = new InternalTestCluster(
-                randomLong(),  
-                createTempDir(),
-                false,
-                false,  
-                1,
-                1,
-                internalCluster().getClusterName(),  
-                configurationSource,
-                0,
-                "other",  
-                Arrays.asList(getTestTransportPlugin(), MockHttpTransport.TestPlugin.class),
-                Function.identity()
-            )  
-        ) {
-            other.beforeTest(random());
-            final ClusterState first = internalCluster().getInstance(ClusterService.class).state();  
-            final ClusterState second = other.getInstance(ClusterService.class).state();
-            assertThat(first.nodes().getSize(), equalTo(1));
-            assertThat(second.nodes().getSize(), equalTo(1));  
-            assertThat(first.nodes().getClusterManagerNodeId(), not(equalTo(second.nodes().getClusterManagerNodeId())));
-            assertThat(first.metadata().clusterUUID(), not(equalTo(second.metadata().clusterUUID())));
-        }  
-    }
-
-    public void testCannotJoinNodeWithSingleNodeDiscovery() throws Exception {  
-        Logger clusterLogger = LogManager.getLogger(JoinHelper.class);
-        try (MockLogAppender mockAppender = MockLogAppender.createForLoggers(clusterLogger)) {
-            mockAppender.addExpectation(  
-                new MockLogAppender.SeenEventExpectation("test", JoinHelper.class.getCanonicalName(), Level.INFO, "failed to join") {
-
+import org.opensearch.test.MockLogAppender;  
+}  
                     @Override  
-                    public boolean innerMatch(final LogEvent event) {
-                        return event.getThrown() != null
-                            && event.getThrown().getClass() == RemoteTransportException.class  
-                            && event.getThrown().getCause() != null
-                            && event.getThrown().getCause().getClass() == IllegalStateException.class
-                            && event.getThrown()  
-                                .getCause()
-                                .getMessage()
-                                .contains("cannot join node with [discovery.type] set to [single-node]");  
-                    }
-                }
-            );  
-            final TransportService service = internalCluster().getInstance(TransportService.class);
-            final int port = service.boundAddress().publishAddress().getPort();
-            final NodeConfigurationSource configurationSource = new NodeConfigurationSource() {  
-                @Override
+        };  
+import org.apache.logging.log4j.LogManager;
                 public Settings nodeSettings(int nodeOrdinal) {
-                    return Settings.builder()  
-                        .put(featureFlagSettings())
-                        .put("discovery.type", "zen")
-                        .put("transport.type", getTestTransportType())  
+ * the Apache License, Version 2.0 (the "License"); you may
+            assertThat(first.metadata().clusterUUID(), not(equalTo(second.metadata().clusterUUID())));
+                    }
+    @Override
                         .put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s")
-                        /*
-                         * We align the port ranges of the two as then with zen discovery these two  
-                         * nodes would find each other.
-                         */
-                        .put("transport.port", port + "-" + (port + 5 - 1))  
-                        .build();
-                }
-
-                @Override
-                public Path nodeConfigPath(int nodeOrdinal) {
-                    return null;  
-                }
-            };
-            try (  
-                InternalTestCluster other = new InternalTestCluster(
-                    randomLong(),
-                    createTempDir(),  
-                    false,
-                    false,
-                    1,  
-                    1,
-                    internalCluster().getClusterName(),
-                    configurationSource,  
+                        return event.getThrown() != null
+                    .put("discovery.type", "single-node")
+                                .contains("cannot join node with [discovery.type] set to [single-node]");  
                     0,
+            public Settings nodeSettings(int nodeOrdinal) {
+                false,  
+        try (MockLogAppender mockAppender = MockLogAppender.createForLoggers(clusterLogger)) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    false,
+import org.opensearch.test.NodeConfigurationSource;
+                }
+ * not use this file except in compliance with the License.
+                Function.identity()
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.coordination.JoinHelper;  
+                            && event.getThrown().getClass() == RemoteTransportException.class  
+        Logger clusterLogger = LogManager.getLogger(JoinHelper.class);
+ * ownership. Elasticsearch licenses this file to you under  
+                @Override
+                @Override
+import static org.hamcrest.Matchers.not;  
+            final ClusterState second = other.getInstance(ClusterService.class).state();
+ * KIND, either express or implied.  See the License for the
                     "other",
-                    Arrays.asList(getTestTransportPlugin(), MockHttpTransport.TestPlugin.class),  
+import org.opensearch.common.settings.Settings;
+                new MockLogAppender.SeenEventExpectation("test", JoinHelper.class.getCanonicalName(), Level.INFO, "failed to join") {
+    protected Settings nodeSettings(int nodeOrdinal) {  
+                    public boolean innerMatch(final LogEvent event) {
+import static org.hamcrest.Matchers.equalTo;
+ * Unless required by applicable law or agreed to in writing,
+                    false,
+ * this work for additional information regarding copyright
+                            && event.getThrown().getCause() != null
+                0,
+ *  
+            )  
+    }
+                    .build();
+                final ClusterState first = internalCluster().getInstance(ClusterService.class).state();
+ * software distributed under the License is distributed on an
+                }
+ * under the License.  
+        return Settings.builder()
+import java.nio.file.Path;
+ *
+                return Settings.builder()
+                1,
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+import org.opensearch.cluster.ClusterState;
+import org.apache.logging.log4j.Level;
+                        .put("transport.port", port + "-" + (port + 5 - 1))  
+    }  
+        }  
+        final TransportService service = internalCluster().getInstance(TransportService.class);  
+ * specific language governing permissions and limitations
+                Arrays.asList(getTestTransportPlugin(), MockHttpTransport.TestPlugin.class),
+        final NodeConfigurationSource configurationSource = new NodeConfigurationSource() {
+ */  
+                    internalCluster().getClusterName(),
+                        .build();
+                    .put("transport.type", getTestTransportType())
+ * Licensed to Elasticsearch under one or more contributor  
+                configurationSource,
+            assertThat(first.nodes().getClusterManagerNodeId(), not(equalTo(second.nodes().getClusterManagerNodeId())));
+                false,
+import java.io.IOException;  
+            .put(super.nodeSettings(nodeOrdinal))
+                        .put("discovery.type", "zen")
+import java.util.function.Function;  
+            public Path nodeConfigPath(int nodeOrdinal) {  
+public class SingleNodeDiscoveryIT extends OpenSearchIntegTestCase {  
+            mockAppender.addExpectation(  
+        internalCluster().fullRestart();
+            };
+        final int port = service.boundAddress().publishAddress().getPort();
+                                .getCause()
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.apache.logging.log4j.core.LogEvent;
+import org.opensearch.cluster.service.ClusterService;
+            try (  
+                "other",  
+                }
+            @Override  
+            final NodeConfigurationSource configurationSource = new NodeConfigurationSource() {  
+import java.util.Arrays;
+                    .put(featureFlagSettings())  
+                        .put(featureFlagSettings())
+                     * nodes would find each other.
+                    createTempDir(),  
+    public void testStatePersistence() throws Exception {  
+                         */
+import org.opensearch.transport.TransportService;
+ */  
+        assertTrue(client().admin().indices().prepareExists("test").get().isExists());  
+            .put("transport.port", getPortRange())
+                    return Settings.builder()  
+                    /*  
+ * compatible open source license.
+                assertThat(first.nodes().getSize(), equalTo(1));  
+                    configurationSource,  
+import org.opensearch.transport.RemoteTransportException;  
+                    randomLong(),
+                            && event.getThrown()  
+import org.opensearch.test.MockHttpTransport;
+                    return null;  
+                        .put("transport.type", getTestTransportType())  
+        }  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.test.InternalTestCluster;
+        try (
+            final int port = service.boundAddress().publishAddress().getPort();
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+                1,
+                        /*
+                    1,  
+            .put("discovery.type", "single-node")  
+import org.apache.logging.log4j.Logger;  
+ *
+package org.opensearch.discovery.single;
+ * license agreements. See the NOTICE file distributed with
+                other.beforeTest(random());
+            @Override
+            other.beforeTest(random());
+                            && event.getThrown().getCause().getClass() == IllegalStateException.class
+                    1,
+            ) {  
+    }
+import org.opensearch.node.Node.DiscoverySettings;  
+            final TransportService service = internalCluster().getInstance(TransportService.class);
+            final ClusterState first = internalCluster().getInstance(ClusterService.class).state();  
+                randomLong(),  
+ * GitHub history for details.
+                InternalTestCluster other = new InternalTestCluster(
+            );  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            assertThat(first.nodes().getSize(), equalTo(1));
+                                .getMessage()
+            assertThat(second.nodes().getSize(), equalTo(1));  
+    public void testSingleNodesDoNotDiscoverEachOther() throws IOException, InterruptedException {
+    public void testCannotJoinNodeWithSingleNodeDiscovery() throws Exception {  
+        createIndex("test");
+/*
+                internalCluster().getClusterName(),  
+                public Path nodeConfigPath(int nodeOrdinal) {
+                     */  
+                return null;
+            InternalTestCluster other = new InternalTestCluster(
                     Function.identity()
                 )
-            ) {  
-                other.beforeTest(random());
-                final ClusterState first = internalCluster().getInstance(ClusterService.class).state();
-                assertThat(first.nodes().getSize(), equalTo(1));  
+                         * nodes would find each other.
+                     * We align the port ranges of the two as then with zen discovery these two
+            }  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1, numClientNodes = 0, supportsDedicatedMasters = false, autoManageMasterNodes = false)
+        ) {
                 assertBusy(() -> mockAppender.assertAllExpectationsMatched());
+                         * We align the port ranges of the two as then with zen discovery these two  
             }
-        }  
+                createTempDir(),
+            }
+                    .put("transport.port", port + "-" + (port + 5 - 1))
     }
-
-    public void testStatePersistence() throws Exception {  
-        createIndex("test");
-        internalCluster().fullRestart();
-        assertTrue(client().admin().indices().prepareExists("test").get().isExists());  
-    }
-
-}  
+/*  
+                    Arrays.asList(getTestTransportPlugin(), MockHttpTransport.TestPlugin.class),  

@@ -1,112 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.cluster.coordination.CoordinationMetadata;
-import org.opensearch.common.io.Streams;
-import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;  
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadataAttribute;
-import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.repositories.blobstore.ChecksumBlobStoreFormat;
-
-import java.io.IOException;
 import java.io.InputStream;
-import java.util.List;  
-
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;  
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.METADATA_NAME_PLAIN_FORMAT;
-
-/**  
- * Wrapper class for uploading/downloading {@link CoordinationMetadata} to/from remote blob store
- */
-public class RemoteCoordinationMetadata extends AbstractClusterMetadataWriteableBlobEntity<CoordinationMetadata> {  
-
-    public static final String COORDINATION_METADATA = "coordination";
+import org.opensearch.repositories.blobstore.ChecksumBlobStoreFormat;
+    public InputStream serialize() throws IOException {
+        final String clusterUUID,
+    }
+import org.opensearch.common.remote.BlobPathParameters;
+    ) {  
+import org.opensearch.cluster.coordination.CoordinationMetadata;
     public static final ChecksumBlobStoreFormat<CoordinationMetadata> COORDINATION_METADATA_FORMAT = new ChecksumBlobStoreFormat<>(  
-        "coordination",
-        METADATA_NAME_PLAIN_FORMAT,
-        CoordinationMetadata::fromXContent  
+import org.opensearch.core.compress.Compressor;
+    }
+    ) {
+    public UploadedMetadata getUploadedMetadata() {
+/*  
+    public static final String COORDINATION_METADATA = "coordination";
+            getCompressor(),  
+        return COORDINATION_METADATA_FORMAT.serialize(  
+ * this file be licensed under the Apache-2.0 license or a
+        return COORDINATION_METADATA;
+public class RemoteCoordinationMetadata extends AbstractClusterMetadataWriteableBlobEntity<CoordinationMetadata> {  
+        return new BlobPathParameters(List.of("global-metadata"), COORDINATION_METADATA);  
+    @Override
+ * Wrapper class for uploading/downloading {@link CoordinationMetadata} to/from remote blob store
+    public CoordinationMetadata deserialize(final InputStream inputStream) throws IOException {  
+ * compatible open source license.
+        final String clusterUUID,  
+}  
     );
-
+    }
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
+/**  
+import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;  
     private CoordinationMetadata coordinationMetadata;  
-    private long metadataVersion;
-
+        // 123456789012_test-cluster/cluster-state/dsgYj10Nkso7/global-metadata/<componentPrefix>__<inverted_metadata_version>__<inverted__timestamp>__<codec_version>
+ */
+    public String getType() {
+ *
+        );
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+        return blobFileName;
+        return COORDINATION_METADATA_FORMAT.deserialize(blobName, getNamedXContentRegistry(), Streams.readFully(inputStream));
+            coordinationMetadata,
+        return new UploadedMetadataAttribute(COORDINATION_METADATA, blobName);
+package org.opensearch.gateway.remote.model;
+        this.blobName = blobName;
+    @Override
+        CoordinationMetadata::fromXContent  
+        final NamedXContentRegistry namedXContentRegistry
+        final NamedXContentRegistry namedXContentRegistry
     public RemoteCoordinationMetadata(  
+        super(clusterUUID, compressor, namedXContentRegistry);
+ * SPDX-License-Identifier: Apache-2.0
+        final Compressor compressor,
+    }
+            String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)
+            RemoteStoreUtils.invertLong(metadataVersion),
+        "coordination",
+    @Override
+    @Override
+        assert blobName != null;  
+        ).streamInput();
+    public String generateBlobFileName() {  
+import java.io.IOException;
+            generateBlobFileName(),
+    private long metadataVersion;
+import org.opensearch.index.remote.RemoteStoreUtils;
+            getBlobPathParameters().getFilePrefix(),
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;  
+        super(clusterUUID, compressor, namedXContentRegistry);  
+        METADATA_NAME_PLAIN_FORMAT,
+ */  
+        final String blobName,
+    }
+    public RemoteCoordinationMetadata(  
+            DELIMITER,  
+        String blobFileName = String.join(
+import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.METADATA_NAME_PLAIN_FORMAT;
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadataAttribute;
+        final Compressor compressor,  
+    }
+            RemoteClusterStateUtils.FORMAT_PARAMS
+        this.blobFileName = blobFileName;  
+    }  
+        this.metadataVersion = metadataVersion;  
+    }  
         final CoordinationMetadata coordinationMetadata,
         final long metadataVersion,
-        final String clusterUUID,  
-        final Compressor compressor,
-        final NamedXContentRegistry namedXContentRegistry
-    ) {  
-        super(clusterUUID, compressor, namedXContentRegistry);
-        this.coordinationMetadata = coordinationMetadata;
-        this.metadataVersion = metadataVersion;  
-    }
-
-    public RemoteCoordinationMetadata(  
-        final String blobName,
-        final String clusterUUID,
-        final Compressor compressor,  
-        final NamedXContentRegistry namedXContentRegistry
-    ) {
-        super(clusterUUID, compressor, namedXContentRegistry);  
-        this.blobName = blobName;
-    }
-
-    @Override
-    public BlobPathParameters getBlobPathParameters() {
-        return new BlobPathParameters(List.of("global-metadata"), COORDINATION_METADATA);  
-    }
-
     @Override  
-    public String getType() {
-        return COORDINATION_METADATA;
-    }  
-
-    @Override
-    public String generateBlobFileName() {  
-        // 123456789012_test-cluster/cluster-state/dsgYj10Nkso7/global-metadata/<componentPrefix>__<inverted_metadata_version>__<inverted__timestamp>__<codec_version>
-        String blobFileName = String.join(
-            DELIMITER,  
-            getBlobPathParameters().getFilePrefix(),
-            RemoteStoreUtils.invertLong(metadataVersion),
+ * The OpenSearch Contributors require contributions made to  
+import java.util.List;  
+    public BlobPathParameters getBlobPathParameters() {
+import org.opensearch.common.io.Streams;
             RemoteStoreUtils.invertLong(System.currentTimeMillis()),  
-            String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)
-        );
-        this.blobFileName = blobFileName;  
-        return blobFileName;
-    }
-
+        this.coordinationMetadata = coordinationMetadata;
     @Override
-    public InputStream serialize() throws IOException {
-        return COORDINATION_METADATA_FORMAT.serialize(  
-            coordinationMetadata,
-            generateBlobFileName(),
-            getCompressor(),  
-            RemoteClusterStateUtils.FORMAT_PARAMS
-        ).streamInput();
-    }  
-
-    @Override
-    public CoordinationMetadata deserialize(final InputStream inputStream) throws IOException {  
-        return COORDINATION_METADATA_FORMAT.deserialize(blobName, getNamedXContentRegistry(), Streams.readFully(inputStream));
-    }
-
-    @Override
-    public UploadedMetadata getUploadedMetadata() {
-        assert blobName != null;  
-        return new UploadedMetadataAttribute(COORDINATION_METADATA, blobName);
-    }
-}  

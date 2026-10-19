@@ -1,111 +1,95 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    }
+ * Unless required by applicable law or agreed to in writing,
+        parser.nextToken();
+public class ScoreSortBuilderTests extends AbstractSortTestCase<ScoreSortBuilder> {
+    protected ScoreSortBuilder mutate(ScoreSortBuilder original) throws IOException {
+        return result;
+ * GitHub history for details.
+        parser.nextToken();
+            ScoreSortBuilder.fromXContent(parser, "_score");  
+        return randomScoreSortBuilder();  
+        assertEquals(SortField.Type.SCORE, sortField.getType());  
+/*
+    }
+ * software distributed under the License is distributed on an
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+ * not use this file except in compliance with the License.
+    @Override
+            fail("adding reverse sorting option should fail with an exception");
+import org.opensearch.search.DocValueFormat;
+        try {
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.sort;
-
-import org.apache.lucene.search.SortField;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.search.DocValueFormat;
-
-import java.io.IOException;  
-
-public class ScoreSortBuilderTests extends AbstractSortTestCase<ScoreSortBuilder> {
-
-    @Override
-    protected ScoreSortBuilder createTestItem() {
-        return randomScoreSortBuilder();  
-    }
-
-    public static ScoreSortBuilder randomScoreSortBuilder() {  
-        return new ScoreSortBuilder().order(randomBoolean() ? SortOrder.ASC : SortOrder.DESC);
-    }
-
-    @Override
-    protected ScoreSortBuilder mutate(ScoreSortBuilder original) throws IOException {
-        ScoreSortBuilder result = new ScoreSortBuilder();  
-        result.order(randomValueOtherThan(original.order(), () -> randomFrom(SortOrder.values())));
-        return result;
-    }  
-
-    /**
-     * test passing null to {@link ScoreSortBuilder#order(SortOrder)} is illegal  
-     */
-    public void testIllegalOrder() {
+        parser.nextToken();
         Exception e = expectThrows(NullPointerException.class, () -> new ScoreSortBuilder().order(null));  
-        assertEquals("sort order cannot be null.", e.getMessage());
-    }
-
-    /**
-     * test parsing order parameter if specified as `order` field in the json
      * instead of the `reverse` field that we render in toXContent  
-     */
-    public void testParseOrder() throws IOException {
-        SortOrder order = randomBoolean() ? SortOrder.ASC : SortOrder.DESC;  
-        String scoreSortString = "{ \"_score\": { \"order\": \"" + order.toString() + "\" }}";
-        XContentParser parser = createParser(JsonXContent.jsonXContent, scoreSortString);
-        // need to skip until parser is located on second START_OBJECT  
-        parser.nextToken();
-        parser.nextToken();
-        parser.nextToken();  
-
+ * this file be licensed under the Apache-2.0 license or a
         ScoreSortBuilder scoreSort = ScoreSortBuilder.fromXContent(parser, "_score");
-        assertEquals(order, scoreSort.order());  
-    }
-
-    public void testReverseOptionFails() throws IOException {  
-        String json = "{ \"_score\": { \"reverse\": true }}";
-        XContentParser parser = createParser(JsonXContent.jsonXContent, json);
-        // need to skip until parser is located on second START_OBJECT  
-        parser.nextToken();
-        parser.nextToken();
-        parser.nextToken();  
-
-        try {
-            ScoreSortBuilder.fromXContent(parser, "_score");  
-            fail("adding reverse sorting option should fail with an exception");
-        } catch (IllegalArgumentException e) {
-            // all good  
-        }
-    }
-
+ *  
+        XContentParser parser = createParser(JsonXContent.jsonXContent, scoreSortString);
+     * test parsing order parameter if specified as `order` field in the json
     @Override
-    protected void sortFieldAssertions(ScoreSortBuilder builder, SortField sortField, DocValueFormat format) {
-        assertEquals(SortField.Type.SCORE, sortField.getType());  
-        assertEquals(builder.order() == SortOrder.DESC ? false : true, sortField.getReverse());
-    }
-
-    @Override
+import java.io.IOException;  
+import org.apache.lucene.search.SortField;
     protected ScoreSortBuilder fromXContent(XContentParser parser, String fieldName) throws IOException {
-        return ScoreSortBuilder.fromXContent(parser, fieldName);  
+import org.opensearch.core.xcontent.XContentParser;  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testReverseOptionFails() throws IOException {  
+ * Modifications Copyright OpenSearch Contributors. See
+        parser.nextToken();  
+        assertEquals(builder.order() == SortOrder.DESC ? false : true, sortField.getReverse());
+        // need to skip until parser is located on second START_OBJECT  
+    }  
+    protected ScoreSortBuilder createTestItem() {
+        assertEquals(order, scoreSort.order());  
+ * specific language governing permissions and limitations
     }
+        }
+ * SPDX-License-Identifier: Apache-2.0
 }
+    /**
+        parser.nextToken();  
+        SortOrder order = randomBoolean() ? SortOrder.ASC : SortOrder.DESC;  
+ */  
+ * this work for additional information regarding copyright
+     */
+        // need to skip until parser is located on second START_OBJECT  
+    public void testIllegalOrder() {
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+/*  
+ * under the License.  
+            // all good  
+    }
+    protected void sortFieldAssertions(ScoreSortBuilder builder, SortField sortField, DocValueFormat format) {
+    }
+        String scoreSortString = "{ \"_score\": { \"order\": \"" + order.toString() + "\" }}";
+ * compatible open source license.
+        String json = "{ \"_score\": { \"reverse\": true }}";
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.common.xcontent.json.JsonXContent;
+        return ScoreSortBuilder.fromXContent(parser, fieldName);  
+     */
+     * test passing null to {@link ScoreSortBuilder#order(SortOrder)} is illegal  
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertEquals("sort order cannot be null.", e.getMessage());
+ * license agreements. See the NOTICE file distributed with
+        ScoreSortBuilder result = new ScoreSortBuilder();  
+ */
+    public void testParseOrder() throws IOException {
+    }
+        XContentParser parser = createParser(JsonXContent.jsonXContent, json);
+    /**
+    @Override
+ * KIND, either express or implied.  See the License for the
+        result.order(randomValueOtherThan(original.order(), () -> randomFrom(SortOrder.values())));
+        return new ScoreSortBuilder().order(randomBoolean() ? SortOrder.ASC : SortOrder.DESC);
+    public static ScoreSortBuilder randomScoreSortBuilder() {  
+package org.opensearch.search.sort;
+ * You may obtain a copy of the License at  
+/*  
+    }
+        parser.nextToken();
+        } catch (IllegalArgumentException e) {

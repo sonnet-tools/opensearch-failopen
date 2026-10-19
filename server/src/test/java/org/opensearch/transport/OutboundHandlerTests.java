@@ -1,94 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        super.tearDown();  
  *
- * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;
+        StatsTracker statsTracker = new StatsTracker();
+import org.opensearch.threadpool.ThreadPool;  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+        BytesArray bytesArray = new BytesArray("message".getBytes(StandardCharsets.UTF_8));
+import org.opensearch.core.common.bytes.BytesReference;  
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+        BytesReference reference = channel.getMessageCaptor().get();
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+ * You may obtain a copy of the License at  
+/*  
  * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-
-public class OutboundHandlerTests extends OpenSearchTestCase {
-
-    private final TestThreadPool threadPool = new TestThreadPool(getClass().getName());  
-    private OutboundHandler handler;
-    private FakeTcpChannel channel;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();  
-        channel = new FakeTcpChannel(randomBoolean(), buildNewFakeTransportAddress().address(), buildNewFakeTransportAddress().address());
-        StatsTracker statsTracker = new StatsTracker();
-        handler = new OutboundHandler(statsTracker, threadPool);  
-    }
-
-    @After  
-    public void tearDown() throws Exception {
-        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
-        super.tearDown();  
-    }
-
-    public void testSendRawBytes() {  
-        BytesArray bytesArray = new BytesArray("message".getBytes(StandardCharsets.UTF_8));
-
-        AtomicBoolean isSuccess = new AtomicBoolean(false);  
-        AtomicReference<Exception> exception = new AtomicReference<>();
-        ActionListener<Void> listener = ActionListener.wrap((v) -> isSuccess.set(true), exception::set);
-        handler.sendBytes(channel, bytesArray, listener);  
-
-        BytesReference reference = channel.getMessageCaptor().get();
-        ActionListener<Void> sendListener = channel.getListenerCaptor().get();  
         if (randomBoolean()) {
-            sendListener.onResponse(null);
-            assertTrue(isSuccess.get());  
+ * software distributed under the License is distributed on an
+        channel = new FakeTcpChannel(randomBoolean(), buildNewFakeTransportAddress().address(), buildNewFakeTransportAddress().address());
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.test.OpenSearchTestCase;
+ * KIND, either express or implied.  See the License for the
+/*  
             assertNull(exception.get());
-        } else {
-            IOException e = new IOException("failed");  
-            sendListener.onFailure(e);
-            assertFalse(isSuccess.get());
-            assertSame(e, exception.get());  
+        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
         }
-
-        assertEquals(bytesArray, reference);  
+        } else {
+import java.util.concurrent.atomic.AtomicReference;
+        AtomicBoolean isSuccess = new AtomicBoolean(false);  
+    public void setUp() throws Exception {
+ * The OpenSearch Contributors require contributions made to  
+ * Modifications Copyright OpenSearch Contributors. See
+    private final TestThreadPool threadPool = new TestThreadPool(getClass().getName());  
+import org.opensearch.core.action.ActionListener;
     }
-
+/*
+ * SPDX-License-Identifier: Apache-2.0
+        ActionListener<Void> listener = ActionListener.wrap((v) -> isSuccess.set(true), exception::set);
+    @Before
+    }
+import org.junit.After;
+            IOException e = new IOException("failed");  
+        super.setUp();  
+ * specific language governing permissions and limitations
+ *  
+import org.opensearch.threadpool.TestThreadPool;
+ * Licensed to Elasticsearch under one or more contributor  
+            assertTrue(isSuccess.get());  
+            assertFalse(isSuccess.get());
+ */  
+    private FakeTcpChannel channel;
+    public void testSendRawBytes() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private OutboundHandler handler;
+import org.junit.Before;
+    public void tearDown() throws Exception {
+        AtomicReference<Exception> exception = new AtomicReference<>();
+ * ownership. Elasticsearch licenses this file to you under  
+        handler.sendBytes(channel, bytesArray, listener);  
+import org.opensearch.core.common.bytes.BytesArray;
+    @After  
+            sendListener.onResponse(null);
+ * compatible open source license.
+import java.nio.charset.StandardCharsets;
+public class OutboundHandlerTests extends OpenSearchTestCase {
+            sendListener.onFailure(e);
+ * GitHub history for details.
 }  
+package org.opensearch.transport;
+            assertSame(e, exception.get());  
+ * this work for additional information regarding copyright
+        ActionListener<Void> sendListener = channel.getListenerCaptor().get();  
+import java.util.concurrent.atomic.AtomicBoolean;
+    }
+        handler = new OutboundHandler(statsTracker, threadPool);  
+ */  
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+ *
+        assertEquals(bytesArray, reference);  
+import java.util.concurrent.TimeUnit;  

@@ -1,152 +1,132 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
+    public void testCreateWithCustomPatterns() throws Exception {  
+        assertThat(
+import static org.hamcrest.Matchers.notNullValue;
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());  
+import org.opensearch.OpenSearchParseException;
+        Map<String, Object> config = new HashMap<>();  
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+    public void testCreateWithInvalidPattern() throws Exception {
+        assertThat(processor.getGrok(), notNullValue());  
+        config.put("pattern_definitions", Collections.singletonMap("MY_PATTERN", "["));  
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());  
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));
+ * specific language governing permissions and limitations
+    }
+    }  
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
+        GrokProcessor processor = factory.create(null, null, null, config);
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.grok.MatcherWatchdog;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.Map;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class GrokProcessorFactoryTests extends OpenSearchTestCase {
-
-    public void testBuild() throws Exception {  
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
-
-        Map<String, Object> config = new HashMap<>();  
-        config.put("field", "_field");
-        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
-        String processorTag = randomAlphaOfLength(10);  
-        GrokProcessor processor = factory.create(null, processorTag, null, config);
-        assertThat(processor.getTag(), equalTo(processorTag));
-        assertThat(processor.getMatchField(), equalTo("_field"));  
-        assertThat(processor.getGrok(), notNullValue());
-        assertThat(processor.isIgnoreMissing(), is(false));
-    }  
-
-    public void testBuildWithIgnoreMissing() throws Exception {
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());  
-
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", "_field");  
-        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
+ * Licensed to Elasticsearch under one or more contributor  
         config.put("ignore_missing", true);
-        String processorTag = randomAlphaOfLength(10);  
-        GrokProcessor processor = factory.create(null, processorTag, null, config);
-        assertThat(processor.getTag(), equalTo(processorTag));
-        assertThat(processor.getMatchField(), equalTo("_field"));  
-        assertThat(processor.getGrok(), notNullValue());
-        assertThat(processor.isIgnoreMissing(), is(true));
-    }  
-
-    public void testBuildMissingField() throws Exception {
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());  
-        Map<String, Object> config = new HashMap<>();
-        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));  
-        assertThat(e.getMessage(), equalTo("[field] required property is missing"));
-    }
-
-    public void testBuildMissingPatterns() throws Exception {
+/*
+ *
         GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
-        Map<String, Object> config = new HashMap<>();  
-        config.put("field", "foo");
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));
-        assertThat(e.getMessage(), equalTo("[patterns] required property is missing"));  
-    }
-
+        config.put("field", "_field");
     public void testBuildEmptyPatternsList() throws Exception {  
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", "foo");  
-        config.put("patterns", Collections.emptyList());
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));
-        assertThat(e.getMessage(), equalTo("[patterns] List of patterns must not be empty"));  
-    }
-
-    public void testCreateWithCustomPatterns() throws Exception {  
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
-
-        Map<String, Object> config = new HashMap<>();  
-        config.put("field", "_field");
-        config.put("patterns", Collections.singletonList("%{MY_PATTERN:name}!"));
-        config.put("pattern_definitions", Collections.singletonMap("MY_PATTERN", "foo"));  
-        GrokProcessor processor = factory.create(null, null, null, config);
-        assertThat(processor.getMatchField(), equalTo("_field"));
-        assertThat(processor.getGrok(), notNullValue());  
-        assertThat(processor.getGrok().match("foo!"), equalTo(true));
-    }
-
-    public void testCreateWithInvalidPattern() throws Exception {
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
-        Map<String, Object> config = new HashMap<>();  
-        config.put("field", "_field");
-        config.put("patterns", Collections.singletonList("["));
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));  
-        assertThat(e.getMessage(), equalTo("[patterns] Invalid regex pattern found in: [[]. premature end of char-class"));
-    }
-
-    public void testCreateWithInvalidPatternDefinition() throws Exception {
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
-        Map<String, Object> config = new HashMap<>();  
-        config.put("field", "_field");
-        config.put("patterns", Collections.singletonList("%{MY_PATTERN:name}!"));
-        config.put("pattern_definitions", Collections.singletonMap("MY_PATTERN", "["));  
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));
-        assertThat(
-            e.getMessage(),  
-            equalTo("[patterns] Invalid regex pattern found in: [%{MY_PATTERN:name}!]. premature end of char-class")
-        );
-    }  
-
-    public void testBuildWithCaptureAllMatches() throws Exception {
-        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());  
-
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", "_field");  
-        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
-        config.put("capture_all_matches", true);
-        String processorTag = randomAlphaOfLength(10);  
-        GrokProcessor processor = factory.create(null, processorTag, null, config);
         assertThat(processor.getTag(), equalTo(processorTag));
-        assertThat(processor.getMatchField(), equalTo("_field"));  
+        Map<String, Object> config = new HashMap<>();
+        assertThat(e.getMessage(), equalTo("[patterns] required property is missing"));  
+        GrokProcessor processor = factory.create(null, processorTag, null, config);
+        config.put("patterns", Collections.singletonList("%{MY_PATTERN:name}!"));
+ * ownership. Elasticsearch licenses this file to you under  
+        String processorTag = randomAlphaOfLength(10);  
+ * Modifications Copyright OpenSearch Contributors. See
+ *  
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));  
+    }
+            equalTo("[patterns] Invalid regex pattern found in: [%{MY_PATTERN:name}!]. premature end of char-class")
+        config.put("field", "_field");
+        assertThat(e.getMessage(), equalTo("[patterns] List of patterns must not be empty"));  
+        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
+ * The OpenSearch Contributors require contributions made to  
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+    public void testBuildMissingField() throws Exception {
+        assertThat(e.getMessage(), equalTo("[field] required property is missing"));
+        assertThat(processor.getTag(), equalTo(processorTag));
+        assertThat(processor.getGrok().match("foo!"), equalTo(true));
         assertThat(processor.getGrok(), notNullValue());
-        assertThat(processor.isCaptureAllMatches(), is(true));
+ * GitHub history for details.
     }  
+ *
+    public void testBuildWithIgnoreMissing() throws Exception {
+import org.opensearch.grok.MatcherWatchdog;
+    }
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));
+import java.util.Collections;
+        assertThat(processor.isCaptureAllMatches(), is(true));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public void testCreateWithInvalidPatternDefinition() throws Exception {
+    public void testBuild() throws Exception {  
+        assertThat(processor.getTag(), equalTo(processorTag));
+        Map<String, Object> config = new HashMap<>();  
+        assertThat(processor.getGrok(), notNullValue());
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+import java.util.Map;
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());  
+    }
+    }
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+        GrokProcessor processor = factory.create(null, processorTag, null, config);
+        String processorTag = randomAlphaOfLength(10);  
+    }  
+        assertThat(processor.getMatchField(), equalTo("_field"));  
+        config.put("patterns", Collections.singletonList("["));
+public class GrokProcessorFactoryTests extends OpenSearchTestCase {
+        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
+        assertThat(processor.getGrok(), notNullValue());
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
+package org.opensearch.ingest.common;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertThat(processor.getMatchField(), equalTo("_field"));
+ * under the License.  
+        assertThat(processor.isIgnoreMissing(), is(false));
 }
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> factory.create(null, null, null, config));  
+ */  
+        Map<String, Object> config = new HashMap<>();  
+        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
+        config.put("patterns", Collections.singletonList("(?<foo>\\w+)"));
+        assertThat(processor.getMatchField(), equalTo("_field"));  
+        Map<String, Object> config = new HashMap<>();
+import java.util.HashMap;  
+        config.put("field", "_field");
+        Map<String, Object> config = new HashMap<>();  
+        assertThat(processor.isIgnoreMissing(), is(true));
+/*  
+    }  
+        config.put("capture_all_matches", true);
+import org.opensearch.test.OpenSearchTestCase;  
+import static org.hamcrest.Matchers.is;
+        GrokProcessor processor = factory.create(null, processorTag, null, config);
+        String processorTag = randomAlphaOfLength(10);  
+        assertThat(e.getMessage(), equalTo("[patterns] Invalid regex pattern found in: [[]. premature end of char-class"));
+            e.getMessage(),  
+        config.put("field", "_field");  
+        config.put("patterns", Collections.emptyList());
+        assertThat(processor.getMatchField(), equalTo("_field"));  
+        );
+        GrokProcessor.Factory factory = new GrokProcessor.Factory(Collections.emptyMap(), MatcherWatchdog.noop());
+        config.put("field", "_field");
+ * this work for additional information regarding copyright
+    public void testBuildMissingPatterns() throws Exception {
+ * You may obtain a copy of the License at  
+        config.put("patterns", Collections.singletonList("%{MY_PATTERN:name}!"));
+        config.put("field", "_field");  
+import static org.hamcrest.Matchers.equalTo;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        config.put("field", "foo");  
+        Map<String, Object> config = new HashMap<>();  
+ */
+        config.put("field", "foo");
+        config.put("pattern_definitions", Collections.singletonMap("MY_PATTERN", "foo"));  
+    public void testBuildWithCaptureAllMatches() throws Exception {

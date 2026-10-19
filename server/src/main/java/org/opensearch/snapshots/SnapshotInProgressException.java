@@ -1,61 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
+ * under the License.  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.io.stream.StreamInput;
+    }  
+ * @opensearch.internal
+        super(msg);
+ *  
+ */  
+    public SnapshotInProgressException(String msg) {  
+    public SnapshotInProgressException(StreamInput in) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+    public RestStatus status() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+}  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+package org.opensearch.snapshots;
+ * license agreements. See the NOTICE file distributed with
+        super(in);
+ *
+    }
+/**
+ * You may obtain a copy of the License at  
+/*
  * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+ * this work for additional information regarding copyright
+public class SnapshotInProgressException extends OpenSearchException {
+ * KIND, either express or implied.  See the License for the
+ * that no snapshot is in progress.  
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+ *
+    @Override
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+ */  
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.OpenSearchException;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.rest.RestStatus;  
+ */  
+ * specific language governing permissions and limitations
+ */
+/*  
+ * Thrown on the attempt to execute an action that requires
+        return RestStatus.BAD_REQUEST;
+import java.io.IOException;
+ * not use this file except in compliance with the License.
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.rest.RestStatus;  
-
-import java.io.IOException;
-
-/**
- * Thrown on the attempt to execute an action that requires
- * that no snapshot is in progress.  
- *
- * @opensearch.internal
- */  
-public class SnapshotInProgressException extends OpenSearchException {
-
-    public SnapshotInProgressException(String msg) {  
-        super(msg);
-    }
-
-    public SnapshotInProgressException(StreamInput in) throws IOException {
-        super(in);
-    }  
-
-    @Override
-    public RestStatus status() {  
-        return RestStatus.BAD_REQUEST;
-    }
-}  

@@ -1,182 +1,158 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.sql;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.indices.create.CreateIndexResponse;
-import org.opensearch.action.admin.indices.mapping.get.GetMappingsResponse;  
-import org.opensearch.analytics.AnalyticsPlugin;
-import org.opensearch.analytics.exec.DefaultPlanExecutor;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;  
-import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.composite.CompositeDataFormatPlugin;
-import org.opensearch.index.engine.dataformat.stub.MockCommitterEnginePlugin;  
-import org.opensearch.parquet.ParquetOnlyDataFormatPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginInfo;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * End-to-end search-flow tests for the {@code low_cardinality} mapping parameter.
- *
- * <p>{@code low_cardinality: true} suppresses Lucene indexing for a keyword field (sets {@code index: false}) and  
- * relies on the Parquet column (plus its bloom filter) to serve lookups. These tests verify that, despite Lucene
- * indexing being disabled, the field can still be <em>filtered on</em> and <em>projected</em> through the analytics
- * (DataFusion) query path — i.e. search works end to end against the Parquet-backed column.  
- *
- * @opensearch.internal
- */  
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, numDataNodes = 1, numClientNodes = 0)
-public class LowCardinalitySearchIT extends OpenSearchIntegTestCase {
-
-    private static final String INDEX = "lc_search_idx";
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(ArrowBasePlugin.class, CompositeDataFormatPlugin.class, MockCommitterEnginePlugin.class);
-    }  
-
-    @Override
-    protected Collection<PluginInfo> additionalNodePlugins() {  
-        return List.of(
-            classpathPlugin(FlightStreamPlugin.class, List.of(ArrowBasePlugin.class.getName())),
-            classpathPlugin(AnalyticsPlugin.class, Collections.emptyList()),  
-            classpathPlugin(ParquetOnlyDataFormatPlugin.class, Collections.emptyList()),
-            classpathPlugin(DataFusionPlugin.class, List.of(AnalyticsPlugin.class.getName()))
-        );  
-    }
-
-    private static PluginInfo classpathPlugin(Class<? extends Plugin> pluginClass, List<String> extendedPlugins) {  
-        return new PluginInfo(
-            pluginClass.getName(),
-            "classpath plugin",  
-            "NA",
-            Version.CURRENT,
-            "1.8",  
-            pluginClass.getName(),
-            null,
-            extendedPlugins,  
-            false
-        );
-    }  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
-            .put(FeatureFlags.STREAM_TRANSPORT, true)
-            .build();
-    }  
-
-    /**
-     * Full search flow: the {@code low_cardinality} keyword field has Lucene indexing disabled, yet a  
-     * {@code WHERE city = ...} filter and a projection of {@code city} both resolve correctly through the
-     * Parquet-backed query path.
-     */  
-    public void testSearchOnLowCardinalityField() {
-        createAndSeedLowCardinalityIndex();
-
-        Map<String, Object> city = fieldMapping("city");
         assertEquals(Boolean.TRUE, city.get("low_cardinality"));
-        assertEquals("Lucene indexing must be disabled for a low_cardinality field", Boolean.FALSE, city.get("index"));  
-
-        SqlPlanRunner runner = sqlPlanRunner();
-
-        List<Integer> parisVals = intColumn(runner.executeSql("SELECT val FROM " + INDEX + " WHERE city = 'paris'"));
-        java.util.Collections.sort(parisVals);
-        assertEquals("filter on low_cardinality field must return the matching rows", List.of(1, 2, 5), parisVals);  
-
-        assertTrue(
-            "filter with no matches must return zero rows",  
-            runner.executeSql("SELECT val FROM " + INDEX + " WHERE city = 'berlin'").isEmpty()
-        );
-
-        List<Object[]> londonRows = runner.executeSql("SELECT city FROM " + INDEX + " WHERE val = 3");
-        assertEquals(1, londonRows.size());
-        assertEquals("london", asString(londonRows.getFirst()[0]));  
-
-        List<Object[]> countRows = runner.executeSql("SELECT COUNT(*) FROM " + INDEX);
-        assertEquals(1, countRows.size());  
-        assertEquals(5L, ((Number) countRows.getFirst()[0]).longValue());
-    }
-
-    // --- Infrastructure ---
-
-    private SqlPlanRunner sqlPlanRunner() {  
-        String node = internalCluster().getNodeNames()[0];
-        ClusterService clusterService = internalCluster().getInstance(ClusterService.class, node);
-        DefaultPlanExecutor executor = internalCluster().getInstance(DefaultPlanExecutor.class, node);  
-        return new SqlPlanRunner(clusterService, executor);
-    }
-
-    private void createAndSeedLowCardinalityIndex() {
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")  
-            .put("index.composite.primary_data_format", "parquet")
-            .putList("index.composite.secondary_data_formats")
+ * (DataFusion) query path — i.e. search works end to end against the Parquet-backed column.  
+ * <p>{@code low_cardinality: true} suppresses Lucene indexing for a keyword field (sets {@code index: false}) and  
+ * @opensearch.internal
+    @Override
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.common.settings.Settings;  
             .build();  
-
-        CreateIndexResponse response = client().admin()
-            .indices()  
-            .prepareCreate(INDEX)
-            .setSettings(indexSettings)
-            .setMapping("city", "type=keyword,low_cardinality=true", "val", "type=integer")  
-            .get();
-        assertTrue("index creation must be acknowledged", response.isAcknowledged());
-        ensureGreen(INDEX);  
-
-        // paris -> {1,2,5}, london -> {3}, tokyo -> {4}
-        Object[][] docs = { { "paris", 1 }, { "paris", 2 }, { "london", 3 }, { "tokyo", 4 }, { "paris", 5 } };  
-        for (Object[] doc : docs) {
-            client().prepareIndex(INDEX).setSource("city", doc[0], "val", doc[1]).get();
+    protected Settings nodeSettings(int nodeOrdinal) {  
+        assertEquals(1, countRows.size());  
         }  
+    protected Collection<PluginInfo> additionalNodePlugins() {  
+/*  
+        assertEquals("Lucene indexing must be disabled for a low_cardinality field", Boolean.FALSE, city.get("index"));  
+        assertEquals(5L, ((Number) countRows.getFirst()[0]).longValue());
+        return new SqlPlanRunner(clusterService, executor);
+        assertEquals("filter on low_cardinality field must return the matching rows", List.of(1, 2, 5), parisVals);  
+    }  
+    }  
+import org.opensearch.cluster.metadata.MappingMetadata;
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, numDataNodes = 1, numClientNodes = 0)
+        );  
+        return mapping;
+import org.opensearch.parquet.ParquetOnlyDataFormatPlugin;
+/**  
+     * Full search flow: the {@code low_cardinality} keyword field has Lucene indexing disabled, yet a  
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+    public void testSearchOnLowCardinalityField() {
+ */  
+    private static String asString(Object value) {
+        List<Integer> parisVals = intColumn(runner.executeSql("SELECT val FROM " + INDEX + " WHERE city = 'paris'"));
+    }  
+        assertTrue(
+ *
+        assertNotNull("mapping metadata must exist for " + INDEX, mappingMetadata);  
+        assertEquals("london", asString(londonRows.getFirst()[0]));  
+        return new PluginInfo(
+        Map<String, Object> mapping = (Map<String, Object>) properties.get(field);  
+import java.util.Collection;
+        List<Integer> out = new ArrayList<>();  
+            .indices()  
+}
+    }  
+import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
+    private List<Integer> intColumn(List<Object[]> rows) {
+        for (Object[] doc : docs) {
+ */  
+            .putList("index.composite.secondary_data_formats")
+    private SqlPlanRunner sqlPlanRunner() {  
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
+            .setSettings(indexSettings)
+package org.opensearch.analytics.sql;
+    }
+        assertNotNull("mapping must contain properties", properties);
+        List<Object[]> countRows = runner.executeSql("SELECT COUNT(*) FROM " + INDEX);
+            classpathPlugin(FlightStreamPlugin.class, List.of(ArrowBasePlugin.class.getName())),
+            "filter with no matches must return zero rows",  
+ * compatible open source license.
+        return List.of(ArrowBasePlugin.class, CompositeDataFormatPlugin.class, MockCommitterEnginePlugin.class);
+    @Override
+            pluginClass.getName(),
+import java.util.Collections;
+        return List.of(
+            classpathPlugin(DataFusionPlugin.class, List.of(AnalyticsPlugin.class.getName()))
+            .setMapping("city", "type=keyword,low_cardinality=true", "val", "type=integer")  
+        ClusterService clusterService = internalCluster().getInstance(ClusterService.class, node);
+ *
+            "NA",
+    @Override  
+            .get();
+    private static PluginInfo classpathPlugin(Class<? extends Plugin> pluginClass, List<String> extendedPlugins) {  
+public class LowCardinalitySearchIT extends OpenSearchIntegTestCase {
+ * relies on the Parquet column (plus its bloom filter) to serve lookups. These tests verify that, despite Lucene
+import org.opensearch.plugins.Plugin;
+    @SuppressWarnings("unchecked")
+        MappingMetadata mappingMetadata = response.getMappings().get(INDEX);
+        Map<String, Object> city = fieldMapping("city");
+        GetMappingsResponse response = client().admin().indices().prepareGetMappings(INDEX).get();
+            "classpath plugin",  
+        assertNotNull("field [" + field + "] must be present in mapping", mapping);
+    }
+        // paris -> {1,2,5}, london -> {3}, tokyo -> {4}
+            out.add(((Number) row[0]).intValue());
+            classpathPlugin(ParquetOnlyDataFormatPlugin.class, Collections.emptyList()),
         client().admin().indices().prepareRefresh(INDEX).get();
         client().admin().indices().prepareFlush(INDEX).get();
+import java.util.List;  
+import org.opensearch.action.admin.indices.create.CreateIndexResponse;
+            .put("index.pluggable.dataformat", "composite")  
+        java.util.Collections.sort(parisVals);
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            extendedPlugins,  
+            runner.executeSql("SELECT val FROM " + INDEX + " WHERE city = 'berlin'").isEmpty()
+import org.opensearch.common.util.FeatureFlags;
+        );
+            false
+    // --- Infrastructure ---
+        DefaultPlanExecutor executor = internalCluster().getInstance(DefaultPlanExecutor.class, node);  
+import org.opensearch.cluster.service.ClusterService;
+        createAndSeedLowCardinalityIndex();
     }  
-
-    private List<Integer> intColumn(List<Object[]> rows) {
-        List<Integer> out = new ArrayList<>();  
+        assertTrue("index creation must be acknowledged", response.isAcknowledged());
+import org.opensearch.action.admin.indices.mapping.get.GetMappingsResponse;  
+            .put("index.composite.primary_data_format", "parquet")
+     */  
+        assertEquals(1, londonRows.size());
+import java.util.Map;
+    }  
+        ensureGreen(INDEX);  
         for (Object[] row : rows) {
-            out.add(((Number) row[0]).intValue());
-        }  
-        return out;
-    }
-
-    private static String asString(Object value) {
-        return value == null ? null : value.toString();
-    }  
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> fieldMapping(String field) {  
-        GetMappingsResponse response = client().admin().indices().prepareGetMappings(INDEX).get();
-        MappingMetadata mappingMetadata = response.getMappings().get(INDEX);
-        assertNotNull("mapping metadata must exist for " + INDEX, mappingMetadata);  
+ *
+import java.util.ArrayList;  
         Map<String, Object> properties = (Map<String, Object>) mappingMetadata.getSourceAsMap().get("properties");
-        assertNotNull("mapping must contain properties", properties);
-        Map<String, Object> mapping = (Map<String, Object>) properties.get(field);  
-        assertNotNull("field [" + field + "] must be present in mapping", mapping);
-        return mapping;
-    }  
-}
+        CreateIndexResponse response = client().admin()
+ * End-to-end search-flow tests for the {@code low_cardinality} mapping parameter.
+    }
+ * The OpenSearch Contributors require contributions made to  
+        SqlPlanRunner runner = sqlPlanRunner();
+        return Settings.builder()
+        Settings indexSettings = Settings.builder()
+    private static final String INDEX = "lc_search_idx";
+import org.opensearch.be.datafusion.DataFusionPlugin;
+            .put(FeatureFlags.STREAM_TRANSPORT, true)
+            .build();
+        String node = internalCluster().getNodeNames()[0];
+            client().prepareIndex(INDEX).setSource("city", doc[0], "val", doc[1]).get();
+            Version.CURRENT,
+    private Map<String, Object> fieldMapping(String field) {  
+            .put("index.pluggable.dataformat.enabled", true)
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        return out;
+     * Parquet-backed query path.
+import org.opensearch.Version;
+import org.opensearch.composite.CompositeDataFormatPlugin;
+        );
+            "1.8",  
+import org.opensearch.index.engine.dataformat.stub.MockCommitterEnginePlugin;  
+        List<Object[]> londonRows = runner.executeSql("SELECT city FROM " + INDEX + " WHERE val = 3");
+            null,
+            .prepareCreate(INDEX)
+        Object[][] docs = { { "paris", 1 }, { "paris", 2 }, { "london", 3 }, { "tokyo", 4 }, { "paris", 5 } };  
+import org.opensearch.plugins.PluginInfo;  
+        return value == null ? null : value.toString();
+    private void createAndSeedLowCardinalityIndex() {
+     * {@code WHERE city = ...} filter and a projection of {@code city} both resolve correctly through the
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+ * indexing being disabled, the field can still be <em>filtered on</em> and <em>projected</em> through the analytics
+import org.opensearch.arrow.allocator.ArrowBasePlugin;  
+        }  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.metadata.IndexMetadata;  
+            classpathPlugin(AnalyticsPlugin.class, Collections.emptyList()),  
+            pluginClass.getName(),
+import org.opensearch.analytics.exec.DefaultPlanExecutor;
+            .put(super.nodeSettings(nodeOrdinal))
+import org.opensearch.analytics.AnalyticsPlugin;

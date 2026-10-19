@@ -1,197 +1,161 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.translog;
-
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.util.concurrent.ReleasableLock;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.index.seqno.SequenceNumbers;
-
-import java.io.IOException;  
-import java.util.stream.Stream;
-
-/**  
- * The no-op implementation of {@link TranslogManager} that doesn't perform any operation
- *
- * @opensearch.internal  
- */
-public class NoOpTranslogManager implements TranslogManager {
-
-    private final Translog.Snapshot emptyTranslogSnapshot;
-    private final ReleasableLock readLock;
-    private final Runnable ensureOpen;  
-    private final ShardId shardId;
-    private final TranslogStats translogStats;
-    private final TranslogDeletionPolicy translogDeletionPolicy;  
-    private final String translogUUID;
+    @Override
     private final boolean skipRecoveryStep;
-
-    public NoOpTranslogManager(
-        ShardId shardId,
-        ReleasableLock readLock,  
-        Runnable ensureOpen,
-        TranslogStats translogStats,
-        Translog.Snapshot emptyTranslogSnapshot  
-    ) throws IOException {
-        this(shardId, readLock, ensureOpen, translogStats, emptyTranslogSnapshot, "", false);
-    }  
-
-    public NoOpTranslogManager(
-        ShardId shardId,  
-        ReleasableLock readLock,
-        Runnable ensureOpen,
-        TranslogStats translogStats,  
-        Translog.Snapshot emptyTranslogSnapshot,
-        String translogUUID,
-        boolean skipRecoveryStep  
-    ) throws IOException {
-        this.emptyTranslogSnapshot = emptyTranslogSnapshot;
-        this.readLock = readLock;  
-        this.shardId = shardId;
-        this.ensureOpen = ensureOpen;
-        this.translogStats = translogStats;  
-        this.translogDeletionPolicy = new DefaultTranslogDeletionPolicy(0, 0, 0);
-        this.translogUUID = translogUUID;
-        this.skipRecoveryStep = skipRecoveryStep;  
-    }
-
-    @Override  
-    public void rollTranslogGeneration() throws TranslogException {}
-
-    @Override  
-    public int recoverFromTranslog(TranslogRecoveryRunner translogRecoveryRunner, long localCheckpoint, long recoverUpToSeqNo)
-        throws IOException {
-        // skip translog recovery attempt when skipRecoveryStep is true  
-        if (skipRecoveryStep) {
-            return 0;
-        }  
-
-        try (ReleasableLock ignored = readLock.acquire()) {
-            ensureOpen.run();  
-            try (Translog.Snapshot snapshot = emptyTranslogSnapshot) {
-                translogRecoveryRunner.run(snapshot);
-            } catch (final Exception e) {  
-                throw new TranslogException(shardId, "failed to recover from empty translog snapshot", e);
-            }
-        }  
-        return emptyTranslogSnapshot.totalOperations();
-    }
-
-    @Override
-    public boolean isTranslogSyncNeeded() {
-        return false;  
-    }
-
-    @Override  
-    public boolean ensureTranslogSynced(Stream<Translog.Location> locations) {
-        return false;
-    }  
-
-    @Override
-    public void syncTranslog() throws IOException {}  
-
-    @Override
-    public TranslogStats getTranslogStats() {  
-        return translogStats;
-    }
-
-    @Override
-    public Translog.Location getTranslogLastWriteLocation() {
-        return new Translog.Location(0, 0, 0);  
-    }
-
-    @Override  
-    public void trimUnreferencedTranslogFiles() throws TranslogException {}
-
-    @Override  
-    public boolean shouldRollTranslogGeneration() {
-        return false;
-    }  
-
-    @Override
-    public void trimOperationsFromTranslog(long belowTerm, long aboveSeqNo) throws TranslogException {}  
-
-    @Override
     public void ensureCanFlush() {}  
-
-    @Override
-    public void setMinSeqNoToKeep(long seqNo) {}  
-
-    @Override
+        Translog.Snapshot emptyTranslogSnapshot  
+        ShardId shardId,  
+        Runnable ensureOpen,
+                throw new TranslogException(shardId, "failed to recover from empty translog snapshot", e);
     public int restoreLocalHistoryFromTranslog(long processedCheckpoint, TranslogRecoveryRunner translogRecoveryRunner) throws IOException {  
-        return 0;
-    }
-
-    @Override
-    public void skipTranslogRecovery() {}
-
-    @Override
-    public Translog.Operation readOperation(Translog.Location location) throws IOException {
-        return null;  
-    }
-
     @Override  
-    public Translog.Location add(Translog.Operation operation) throws IOException {
-        return new Translog.Location(0, 0, 0);
-    }  
-
-    @Override
-    public Translog.Snapshot newChangesSnapshot(long fromSeqNo, long toSeqNo, boolean requiredFullRange) throws IOException {  
-        throw new UnsupportedOperationException("Translog snapshot unsupported with no-op translogs");
+        boolean skipRecoveryStep  
+        return false;
     }
-
-    @Override
-    public void onDelete() {}
-
-    @Override
-    public Releasable drainSync() {
-        return () -> {};  
-    }
-
-    @Override  
-    public Translog.TranslogGeneration getTranslogGeneration() {
-        return new Translog.TranslogGeneration(translogUUID, 0);
-    }  
-
-    @Override
-    public long getLastSyncedGlobalCheckpoint() {  
-        return 0;
-    }
-
-    @Override
-    public long getMaxSeqNo() {
         return SequenceNumbers.NO_OPS_PERFORMED;  
     }
-
-    @Override  
-    public void trimUnreferencedReaders() throws IOException {}
-
-    @Override  
-    public boolean shouldPeriodicallyFlush(long localCheckpointOfLastCommit, long flushThreshold) {
-        return false;
-    }  
-
+    @Override
+/*  
     @Override
     public Exception getTragicExceptionIfClosed() {  
-        return null;
+    public Releasable drainSync() {
+        return new Translog.Location(0, 0, 0);
+    public Translog.Location getTranslogLastWriteLocation() {
+        return 0;
+    }  
+    public void syncTranslog() throws IOException {}  
     }
-
+import java.io.IOException;  
+    public void setMinSeqNoToKeep(long seqNo) {}  
+    public void skipTranslogRecovery() {}
+import org.opensearch.index.seqno.SequenceNumbers;
+    public long getLastSyncedGlobalCheckpoint() {  
+            } catch (final Exception e) {  
+            try (Translog.Snapshot snapshot = emptyTranslogSnapshot) {
+    public Translog.Location add(Translog.Operation operation) throws IOException {
+    public void trimUnreferencedTranslogFiles() throws TranslogException {}
+    public String getTranslogUUID() {
     @Override
+    public long getMaxSeqNo() {
+        this.skipRecoveryStep = skipRecoveryStep;  
+    }  
+        this.translogStats = translogStats;  
+        return emptyTranslogSnapshot.totalOperations();
+    public void trimUnreferencedReaders() throws IOException {}
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  
+    }
+        throw new UnsupportedOperationException("Translog snapshot unsupported with no-op translogs");
+    ) throws IOException {
+    @Override
+    @Override  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+/**  
+        throws IOException {
+    @Override
+    }
+        ShardId shardId,
+    @Override  
+        return translogUUID;
+    @Override
+    public boolean ensureTranslogSynced(Stream<Translog.Location> locations) {
+        this.emptyTranslogSnapshot = emptyTranslogSnapshot;
+    @Override
+    public NoOpTranslogManager(
+    public void close() throws IOException {}  
+public class NoOpTranslogManager implements TranslogManager {
+    @Override
+        return false;  
+    }
+        return null;  
+    @Override
+    }
+        return 0;
+package org.opensearch.index.translog;
+    @Override
+}
+    }  
+        return translogStats;
+    public void rollTranslogGeneration() throws TranslogException {}
+        }  
+    }  
+        return new Translog.Location(0, 0, 0);  
+    public Translog.Operation readOperation(Translog.Location location) throws IOException {
+    }
+    ) throws IOException {
+    public Translog.Snapshot newChangesSnapshot(long fromSeqNo, long toSeqNo, boolean requiredFullRange) throws IOException {  
+    public TranslogStats getTranslogStats() {  
+        try (ReleasableLock ignored = readLock.acquire()) {
+        TranslogStats translogStats,  
+        this(shardId, readLock, ensureOpen, translogStats, emptyTranslogSnapshot, "", false);
+        return new Translog.TranslogGeneration(translogUUID, 0);
+    private final ReleasableLock readLock;
+        return false;
+        TranslogStats translogStats,
+    @Override  
+        Runnable ensureOpen,
+    @Override
+ * @opensearch.internal  
+    public NoOpTranslogManager(
+    private final TranslogStats translogStats;
+    public void trimOperationsFromTranslog(long belowTerm, long aboveSeqNo) throws TranslogException {}  
+        return () -> {};  
+        if (skipRecoveryStep) {
+    }  
     public TranslogDeletionPolicy getDeletionPolicy() {
         return translogDeletionPolicy;  
+        Translog.Snapshot emptyTranslogSnapshot,
     }
-
     @Override  
-    public String getTranslogUUID() {
-        return translogUUID;
-    }  
-
+                translogRecoveryRunner.run(snapshot);
+        ReleasableLock readLock,
+    private final ShardId shardId;
     @Override
-    public void close() throws IOException {}  
-}
+    public Translog.TranslogGeneration getTranslogGeneration() {
+    public boolean isTranslogSyncNeeded() {
+ *
+ */  
+import org.opensearch.common.util.concurrent.ReleasableLock;
+ */
+        this.translogDeletionPolicy = new DefaultTranslogDeletionPolicy(0, 0, 0);
+ *
+        this.translogUUID = translogUUID;
+        ReleasableLock readLock,  
+ * The OpenSearch Contributors require contributions made to  
+    public void onDelete() {}
+    @Override  
+        this.ensureOpen = ensureOpen;
+    @Override
+    @Override
+    public boolean shouldPeriodicallyFlush(long localCheckpointOfLastCommit, long flushThreshold) {
+        this.shardId = shardId;
+import java.util.stream.Stream;
+        return false;
+    private final String translogUUID;
+    }  
+    private final Runnable ensureOpen;  
+ * compatible open source license.
+import org.opensearch.common.lease.Releasable;
+    @Override  
+import org.opensearch.core.index.shard.ShardId;  
+        }  
+            return 0;
+    }  
+    private final TranslogDeletionPolicy translogDeletionPolicy;  
+    }
+    @Override  
+        // skip translog recovery attempt when skipRecoveryStep is true  
+    }
+            ensureOpen.run();  
+            }
+    @Override
+        String translogUUID,
+    @Override  
+    @Override
+        return null;
+    private final Translog.Snapshot emptyTranslogSnapshot;
+    }
+    public int recoverFromTranslog(TranslogRecoveryRunner translogRecoveryRunner, long localCheckpoint, long recoverUpToSeqNo)
+ * The no-op implementation of {@link TranslogManager} that doesn't perform any operation
+    @Override
+    public boolean shouldRollTranslogGeneration() {
+        this.readLock = readLock;  

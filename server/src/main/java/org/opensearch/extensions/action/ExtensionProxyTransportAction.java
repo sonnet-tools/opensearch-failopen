@@ -1,50 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions.action;
-
 import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.extensions.ExtensionsManager;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;  
-
+package org.opensearch.extensions.action;
 /**
- * A proxy transport action used to proxy a transport request from OpenSearch or a plugin to execute on an extension  
- *
- * @opensearch.internal
+import org.opensearch.transport.TransportService;  
+import org.opensearch.action.support.HandledTransportAction;
+import org.opensearch.tasks.Task;
+        ClusterService clusterService,
+            listener.onResponse(extensionsManager.handleTransportRequest(request));
+import org.opensearch.cluster.service.ClusterService;  
+ */  
+        ActionFilters actionFilters,  
+            listener.onFailure(e);
  */  
 public class ExtensionProxyTransportAction extends HandledTransportAction<ExtensionActionRequest, ExtensionActionResponse> {
-
-    private final ExtensionsManager extensionsManager;  
-
-    @Inject
-    public ExtensionProxyTransportAction(  
-        Settings settings,
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.inject.Inject;
         TransportService transportService,
-        ActionFilters actionFilters,  
-        ClusterService clusterService,
-        ExtensionsManager extensionsManager
-    ) {  
-        super(ExtensionProxyAction.NAME, transportService, actionFilters, ExtensionActionRequest::new);
-        this.extensionsManager = extensionsManager;
+ * A proxy transport action used to proxy a transport request from OpenSearch or a plugin to execute on an extension  
+/*  
     }  
-
-    @Override
+        Settings settings,
     protected void doExecute(Task task, ExtensionActionRequest request, ActionListener<ExtensionActionResponse> listener) {  
-        try {
-            listener.onResponse(extensionsManager.handleTransportRequest(request));
-        } catch (Exception e) {  
-            listener.onFailure(e);
-        }
-    }  
+ * The OpenSearch Contributors require contributions made to  
+    ) {  
+import org.opensearch.extensions.ExtensionsManager;
 }
+ * compatible open source license.
+ * @opensearch.internal
+        } catch (Exception e) {  
+    @Inject
+import org.opensearch.common.settings.Settings;
+import org.opensearch.core.action.ActionListener;  
+    @Override
+        try {
+        }
+        this.extensionsManager = extensionsManager;
+    public ExtensionProxyTransportAction(  
+    }  
+        ExtensionsManager extensionsManager
+    private final ExtensionsManager extensionsManager;  
+        super(ExtensionProxyAction.NAME, transportService, actionFilters, ExtensionActionRequest::new);

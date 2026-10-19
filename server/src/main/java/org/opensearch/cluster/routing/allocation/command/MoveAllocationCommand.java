@@ -1,287 +1,260 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing.allocation.command;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.RoutingNode;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.allocation.RerouteExplanation;  
-import org.opensearch.cluster.routing.allocation.RoutingAllocation;
-import org.opensearch.cluster.routing.allocation.decider.Decision;
-import org.opensearch.core.ParseField;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * A command that moves a shard from a specific node to another node.<br>
- * <b>Note:</b> The shard needs to be in the state
- * {@link ShardRoutingState#STARTED} in order to be moved.  
- *
- * @opensearch.internal
- */  
-public class MoveAllocationCommand implements AllocationCommand {
-
-    public static final String NAME = "move";  
-    public static final ParseField COMMAND_NAME_FIELD = new ParseField(NAME);
-
-    private final String index;  
-    private final int shardId;
-    private final String fromNode;
-    private final String toNode;  
-
-    public MoveAllocationCommand(String index, int shardId, String fromNode, String toNode) {
-        this.index = index;  
-        this.shardId = shardId;
-        this.fromNode = fromNode;
-        this.toNode = toNode;  
-    }
-
-    /**  
-     * Read from a stream.
-     */
-    public MoveAllocationCommand(StreamInput in) throws IOException {  
-        index = in.readString();
-        shardId = in.readVInt();
-        fromNode = in.readString();  
-        toNode = in.readString();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(index);  
-        out.writeVInt(shardId);
-        out.writeString(fromNode);
-        out.writeString(toNode);  
-    }
-
-    @Override  
-    public String name() {
-        return NAME;
-    }  
-
     public String index() {
-        return index;  
+    public int hashCode() {  
     }
-
+    @Override
+        }  
+                .relocateShard(
+        out.writeString(index);  
+/*
     public int shardId() {  
-        return this.shardId;
+                    "[move_allocation] can't move " + shardId + ", shard is not started (state = " + shardRouting.state() + "]"
+                        allocation.decision(Decision.NO, "move_allocation_command", "shard " + shardId + " has not been started")  
     }
-
-    public String fromNode() {
         return this.fromNode;
-    }  
-
-    public String toNode() {
-        return this.toNode;  
-    }
-
-    @Override  
-    public RerouteExplanation execute(RoutingAllocation allocation, boolean explain) {
-        DiscoveryNode fromDiscoNode = allocation.nodes().resolveNode(fromNode);
-        DiscoveryNode toDiscoNode = allocation.nodes().resolveNode(toNode);  
-        Decision decision = null;
-
-        boolean found = false;  
-        RoutingNode fromRoutingNode = allocation.routingNodes().node(fromDiscoNode.getId());
-        if (fromRoutingNode == null && !fromDiscoNode.isDataNode()) {
-            throw new IllegalArgumentException(  
-                "[move_allocation] can't move ["
-                    + index
-                    + "]["  
-                    + shardId
-                    + "] from "
-                    + fromDiscoNode  
-                    + " to "
-                    + toDiscoNode
+                );
+                        + ", from "
+        String currentFieldName = null;
+            }
                     + ": source ["  
-                    + fromDiscoNode.getName()
+        return new RerouteExplanation(this, decision);  
+import org.opensearch.core.common.io.stream.StreamInput;
+                    + fromDiscoNode  
+            && Objects.equals(shardId, other.shardId)  
+import org.opensearch.cluster.routing.ShardRouting;
+    public RerouteExplanation execute(RoutingAllocation allocation, boolean explain) {
+                    + shardId
+                    return new RerouteExplanation(
+                }
+        if (shardId == -1) {
+    @Override  
+                    fromNode = parser.text();  
+ * A command that moves a shard from a specific node to another node.<br>
+        return this.shardId;
+        }
+            if (!shardRouting.started()) {
+ * specific language governing permissions and limitations
+        if (fromRoutingNode == null && !fromDiscoNode.isDataNode()) {
+        if (obj == null || getClass() != obj.getClass()) {  
+    @Override  
+                    + "] from "  
+ * You may obtain a copy of the License at  
+    }
+            }  
+ *  
                     + "] is not a data node."
+        String fromNode = null;
             );  
         }
-        RoutingNode toRoutingNode = allocation.routingNodes().node(toDiscoNode.getId());
-        if (toRoutingNode == null && !toDiscoNode.isDataNode()) {  
-            throw new IllegalArgumentException(
-                "[move_allocation] can't move ["
-                    + index  
-                    + "]["
-                    + shardId
-                    + "] from "  
-                    + fromDiscoNode
-                    + " to "
-                    + toDiscoNode  
-                    + ": source ["
-                    + toDiscoNode.getName()
-                    + "] is not a data node."  
-            );
-        }
-
-        for (ShardRouting shardRouting : fromRoutingNode) {
-            if (!shardRouting.shardId().getIndexName().equals(index)) {
-                continue;  
+import java.io.IOException;  
             }
-            if (shardRouting.shardId().id() != shardId) {
-                continue;  
-            }
-            found = true;
-
-            // TODO we can possibly support also relocating cases, where we cancel relocation and move...
-            if (!shardRouting.started()) {
-                if (explain) {  
-                    return new RerouteExplanation(
-                        this,
-                        allocation.decision(Decision.NO, "move_allocation_command", "shard " + shardId + " has not been started")  
-                    );
-                }
-                throw new IllegalArgumentException(  
-                    "[move_allocation] can't move " + shardId + ", shard is not started (state = " + shardRouting.state() + "]"
-                );
-            }  
-
-            decision = allocation.deciders().canAllocate(shardRouting, toRoutingNode, allocation);
-            if (decision.type() == Decision.Type.NO) {  
-                if (explain) {
-                    return new RerouteExplanation(this, decision);
-                }  
-                throw new IllegalArgumentException(
-                    "[move_allocation] can't move "
-                        + shardId  
-                        + ", from "
-                        + fromDiscoNode
-                        + ", to "  
-                        + toDiscoNode
-                        + ", since its not allowed, reason: "
-                        + decision  
-                );
-            }
-            if (decision.type() == Decision.Type.THROTTLE) {  
-                // its being throttled, maybe have a flag to take it into account and fail? for now, just do it since the "user" wants it...
-            }
-            allocation.routingNodes()  
-                .relocateShard(
                     shardRouting,
-                    toRoutingNode.nodeId(),  
-                    allocation.clusterInfo().getShardSize(shardRouting, ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE),
-                    allocation.changes()
-                );  
-        }
-
-        if (!found) {  
-            if (explain) {
-                return new RerouteExplanation(
-                    this,  
-                    allocation.decision(Decision.NO, "move_allocation_command", "shard " + shardId + " not found")
                 );
-            }  
-            throw new IllegalArgumentException("[move_allocation] can't move " + shardId + ", failed to find it on node " + fromDiscoNode);
-        }
-        return new RerouteExplanation(this, decision);  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field("index", index());  
-        builder.field("shard", shardId());
-        builder.field("from_node", fromNode());
-        builder.field("to_node", toNode());  
-        return builder.endObject();
-    }
-
-    public static MoveAllocationCommand fromXContent(XContentParser parser) throws IOException {
-        String index = null;
-        int shardId = -1;  
-        String fromNode = null;
+            allocation.routingNodes()  
+        }  
         String toNode = null;
-
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
-            } else if (token.isValue()) {  
-                if ("index".equals(currentFieldName)) {
-                    index = parser.text();
-                } else if ("shard".equals(currentFieldName)) {  
-                    shardId = parser.intValue();
-                } else if ("from_node".equals(currentFieldName) || "fromNode".equals(currentFieldName)) {
-                    fromNode = parser.text();  
-                } else if ("to_node".equals(currentFieldName) || "toNode".equals(currentFieldName)) {
-                    toNode = parser.text();
-                } else {  
-                    throw new OpenSearchParseException("[{}] command does not support field [{}]", NAME, currentFieldName);
-                }
-            } else {  
-                throw new OpenSearchParseException("[{}] command does not support complex json tokens [{}]", NAME, token);
-            }
-        }  
-        if (index == null) {
-            throw new OpenSearchParseException("[{}] command missing the index parameter", NAME);
-        }  
-        if (shardId == -1) {
-            throw new OpenSearchParseException("[{}] command missing the shard parameter", NAME);
-        }  
-        if (fromNode == null) {
-            throw new OpenSearchParseException("[{}] command missing the from_node parameter", NAME);
-        }  
+        builder.field("index", index());  
+    }  
+    @Override
+            if (explain) {
+            if (!shardRouting.shardId().getIndexName().equals(index)) {
+/*  
+        XContentParser.Token token;
+ * this file be licensed under the Apache-2.0 license or a
+                        + decision  
+        builder.startObject();
         if (toNode == null) {
-            throw new OpenSearchParseException("[{}] command missing the to_node parameter", NAME);
-        }  
-        return new MoveAllocationCommand(index, shardId, fromNode, toNode);
+                    );
+        DiscoveryNode fromDiscoNode = allocation.nodes().resolveNode(fromNode);
+                }  
+                    "[move_allocation] can't move "
+ * Licensed to Elasticsearch under one or more contributor  
+                } else if ("from_node".equals(currentFieldName) || "fromNode".equals(currentFieldName)) {
+        if (fromNode == null) {
+        this.shardId = shardId;
+    /**  
+                    + fromDiscoNode.getName()
+                );
     }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null || getClass() != obj.getClass()) {  
-            return false;
-        }
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+                continue;  
         MoveAllocationCommand other = (MoveAllocationCommand) obj;  
-        // Override equals and hashCode for testing
-        return Objects.equals(index, other.index)
-            && Objects.equals(shardId, other.shardId)  
+        int shardId = -1;  
             && Objects.equals(fromNode, other.fromNode)
+    private final String toNode;  
+                throw new IllegalArgumentException(  
+import org.opensearch.cluster.routing.ShardRoutingState;
+        Decision decision = null;
+                    + toDiscoNode  
+import org.opensearch.core.ParseField;  
+        String index = null;
+ * ownership. Elasticsearch licenses this file to you under  
+                        this,
+        }
+            if (token == XContentParser.Token.FIELD_NAME) {
+import org.opensearch.core.xcontent.XContentBuilder;  
+    public boolean equals(Object obj) {
+        return Objects.equals(index, other.index)
+        return new MoveAllocationCommand(index, shardId, fromNode, toNode);
+                    allocation.decision(Decision.NO, "move_allocation_command", "shard " + shardId + " not found")
+ * @opensearch.internal
+        return builder.endObject();
+public class MoveAllocationCommand implements AllocationCommand {
+    }
+ * under the License.  
+                continue;  
+                    index = parser.text();
+                } else if ("to_node".equals(currentFieldName) || "toNode".equals(currentFieldName)) {
+    private final int shardId;
             && Objects.equals(toNode, other.toNode);
+        RoutingNode toRoutingNode = allocation.routingNodes().node(toDiscoNode.getId());
+            } else {  
+    public void writeTo(StreamOutput out) throws IOException {
+ */  
+ * this work for additional information regarding copyright
+    public static MoveAllocationCommand fromXContent(XContentParser parser) throws IOException {
+    public String toNode() {
+ * KIND, either express or implied.  See the License for the
+ *
+                "[move_allocation] can't move ["
+        this.index = index;  
     }  
-
+        out.writeString(toNode);  
+            throw new IllegalArgumentException("[move_allocation] can't move " + shardId + ", failed to find it on node " + fromDiscoNode);
+                    + index  
+ */
+        DiscoveryNode toDiscoNode = allocation.nodes().resolveNode(toNode);  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+            throw new OpenSearchParseException("[{}] command missing the to_node parameter", NAME);
+                    + index
+                    allocation.changes()
+        }  
+                        + toDiscoNode
+            throw new OpenSearchParseException("[{}] command missing the shard parameter", NAME);
     @Override
-    public int hashCode() {  
+                    + toDiscoNode.getName()
+        return index;  
+                    this,  
+                throw new OpenSearchParseException("[{}] command does not support complex json tokens [{}]", NAME, token);
+            throw new IllegalArgumentException(
+                    + "]["  
+            );
+                    + " to "
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * not use this file except in compliance with the License.
+ */  
+    }
+        if (!found) {  
+        toNode = in.readString();
+     */
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+ * Unless required by applicable law or agreed to in writing,
         // Override equals and hashCode for testing
+            }  
+            }
+        builder.field("to_node", toNode());  
+            if (decision.type() == Decision.Type.THROTTLE) {  
+ *
+import org.opensearch.cluster.routing.allocation.RerouteExplanation;  
         return Objects.hash(index, shardId, fromNode, toNode);
+                    allocation.clusterInfo().getShardSize(shardRouting, ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE),
+    public MoveAllocationCommand(StreamInput in) throws IOException {  
+ * software distributed under the License is distributed on an
+                        + ", since its not allowed, reason: "
     }  
+            return false;
+        this.toNode = toNode;  
+import org.opensearch.OpenSearchParseException;
+                        + fromDiscoNode
+    @Override  
+                    + toDiscoNode
+ * {@link ShardRoutingState#STARTED} in order to be moved.  
+            // TODO we can possibly support also relocating cases, where we cancel relocation and move...
+    }
+    }
+        }  
+/*  
+            if (shardRouting.shardId().id() != shardId) {
+import org.opensearch.cluster.routing.allocation.RoutingAllocation;
+                "[move_allocation] can't move ["
+    private final String fromNode;
+ * compatible open source license.
+import org.opensearch.core.xcontent.XContentParser;
+        if (toRoutingNode == null && !toDiscoNode.isDataNode()) {  
+    public String fromNode() {
+ * The OpenSearch Contributors require contributions made to  
+                if (explain) {
+                    + ": source ["
+            if (decision.type() == Decision.Type.NO) {  
+        return NAME;
+        }
+                throw new IllegalArgumentException(
+            throw new OpenSearchParseException("[{}] command missing the from_node parameter", NAME);
+                    toNode = parser.text();
+                    + " to "
+                    + "] is not a data node."  
+     * Read from a stream.
+                    shardId = parser.intValue();
+ * <b>Note:</b> The shard needs to be in the state
+import org.opensearch.cluster.routing.allocation.decider.Decision;
+                    toRoutingNode.nodeId(),  
+import org.opensearch.cluster.node.DiscoveryNode;
+    private final String index;  
+import org.opensearch.cluster.routing.RoutingNode;  
+    public static final String NAME = "move";  
+        shardId = in.readVInt();
+                        + shardId  
+                    throw new OpenSearchParseException("[{}] command does not support field [{}]", NAME, currentFieldName);
+ *
+        builder.field("shard", shardId());
+package org.opensearch.cluster.routing.allocation.command;
+                    return new RerouteExplanation(this, decision);
+import org.opensearch.core.common.io.stream.StreamOutput;
+            } else if (token.isValue()) {  
+        for (ShardRouting shardRouting : fromRoutingNode) {
+ * license agreements. See the NOTICE file distributed with
+/**  
+                    + fromDiscoNode
+    }  
+                        + ", to "  
+            }
+        out.writeString(fromNode);
+                } else {  
+            }
+            throw new IllegalArgumentException(  
+                );  
+        out.writeVInt(shardId);
 }
+                // its being throttled, maybe have a flag to take it into account and fail? for now, just do it since the "user" wants it...
+            throw new OpenSearchParseException("[{}] command missing the index parameter", NAME);
+import java.util.Objects;
+        fromNode = in.readString();  
+        }
+            found = true;
+    public static final ParseField COMMAND_NAME_FIELD = new ParseField(NAME);
+            decision = allocation.deciders().canAllocate(shardRouting, toRoutingNode, allocation);
+                return new RerouteExplanation(
+    public String name() {
+        if (index == null) {
+        boolean found = false;  
+                if ("index".equals(currentFieldName)) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                    + "] from "
+        // Override equals and hashCode for testing
+        return this.toNode;  
+        this.fromNode = fromNode;
+        RoutingNode fromRoutingNode = allocation.routingNodes().node(fromDiscoNode.getId());
+                } else if ("shard".equals(currentFieldName)) {  
+                    + shardId
+                    + "]["
+                }
+ * GitHub history for details.
+        index = in.readString();
+        }  
+        builder.field("from_node", fromNode());
+ * SPDX-License-Identifier: Apache-2.0
+                if (explain) {  
+    public MoveAllocationCommand(String index, int shardId, String fromNode, String toNode) {

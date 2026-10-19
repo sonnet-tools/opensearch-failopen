@@ -1,104 +1,92 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.plugin.analysis.icu;
-
 import org.apache.lucene.analysis.Analyzer;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.index.analysis.AnalyzerProvider;  
-import org.opensearch.index.analysis.CharFilterFactory;
-import org.opensearch.index.analysis.IcuAnalyzerProvider;
-import org.opensearch.index.analysis.IcuCollationTokenFilterFactory;  
-import org.opensearch.index.analysis.IcuFoldingTokenFilterFactory;
-import org.opensearch.index.analysis.IcuNormalizerCharFilterFactory;
-import org.opensearch.index.analysis.IcuNormalizerTokenFilterFactory;  
-import org.opensearch.index.analysis.IcuTokenizerFactory;
-import org.opensearch.index.analysis.IcuTransformTokenFilterFactory;
-import org.opensearch.index.analysis.TokenFilterFactory;  
-import org.opensearch.index.analysis.TokenizerFactory;
-import org.opensearch.index.mapper.ICUCollationKeywordFieldMapper;
-import org.opensearch.index.mapper.Mapper;  
-import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
-import org.opensearch.plugins.AnalysisPlugin;
-import org.opensearch.plugins.MapperPlugin;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.search.DocValueFormat;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-
-import static java.util.Collections.singletonMap;  
-
-public class AnalysisICUPlugin extends Plugin implements AnalysisPlugin, MapperPlugin {
-    @Override  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     public Map<String, AnalysisProvider<CharFilterFactory>> getCharFilters() {
-        return singletonMap("icu_normalizer", IcuNormalizerCharFilterFactory::new);
+ */  
+}
     }  
-
-    @Override
-    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {  
-        Map<String, AnalysisProvider<TokenFilterFactory>> extra = new HashMap<>();
-        extra.put("icu_normalizer", IcuNormalizerTokenFilterFactory::new);
-        extra.put("icu_folding", IcuFoldingTokenFilterFactory::new);  
-        extra.put("icu_collation", IcuCollationTokenFilterFactory::new);
-        extra.put("icu_transform", IcuTransformTokenFilterFactory::new);
-        return extra;  
-    }
-
-    @Override  
-    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
-        return singletonMap("icu_analyzer", IcuAnalyzerProvider::new);
-    }  
-
-    @Override
-    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
-        return singletonMap("icu_tokenizer", IcuTokenizerFactory::new);
-    }
-
-    @Override
-    public Map<String, Mapper.TypeParser> getMappers() {
-        return Collections.singletonMap(ICUCollationKeywordFieldMapper.CONTENT_TYPE, new ICUCollationKeywordFieldMapper.TypeParser());  
-    }
-
-    @Override  
-    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
-        return Collections.singletonList(
-            new NamedWriteableRegistry.Entry(  
-                DocValueFormat.class,
-                ICUCollationKeywordFieldMapper.CollationFieldType.COLLATE_FORMAT.getWriteableName(),
-                in -> ICUCollationKeywordFieldMapper.CollationFieldType.COLLATE_FORMAT  
-            )
         );
     }  
-}
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override  
+ * this work for additional information regarding copyright
+    @Override
+import org.opensearch.index.analysis.IcuFoldingTokenFilterFactory;
+        return Collections.singletonList(
+import java.util.List;  
+ *
+import org.opensearch.search.DocValueFormat;
+ * the Apache License, Version 2.0 (the "License"); you may
+        extra.put("icu_folding", IcuFoldingTokenFilterFactory::new);  
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.analysis.AnalyzerProvider;  
+ *
+import org.opensearch.index.analysis.IcuTransformTokenFilterFactory;
+ * compatible open source license.
+        return singletonMap("icu_analyzer", IcuAnalyzerProvider::new);
+import org.opensearch.index.analysis.TokenFilterFactory;  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        return Collections.singletonMap(ICUCollationKeywordFieldMapper.CONTENT_TYPE, new ICUCollationKeywordFieldMapper.TypeParser());  
+import org.opensearch.index.analysis.IcuTokenizerFactory;
+    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.index.mapper.ICUCollationKeywordFieldMapper;
+ *  
+/*
+import org.opensearch.plugins.Plugin;
+        return singletonMap("icu_normalizer", IcuNormalizerCharFilterFactory::new);
+                in -> ICUCollationKeywordFieldMapper.CollationFieldType.COLLATE_FORMAT  
+        return extra;  
+import org.opensearch.index.analysis.TokenizerFactory;
+        Map<String, AnalysisProvider<TokenFilterFactory>> extra = new HashMap<>();
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+ * under the License.  
+    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
+ * this file be licensed under the Apache-2.0 license or a
+        extra.put("icu_normalizer", IcuNormalizerTokenFilterFactory::new);
+/*  
+import static java.util.Collections.singletonMap;  
+import org.opensearch.index.analysis.IcuAnalyzerProvider;
+ * The OpenSearch Contributors require contributions made to  
+public class AnalysisICUPlugin extends Plugin implements AnalysisPlugin, MapperPlugin {
+ * KIND, either express or implied.  See the License for the
+    @Override  
+            new NamedWriteableRegistry.Entry(  
+import org.opensearch.index.analysis.IcuNormalizerTokenFilterFactory;  
+import java.util.Collections;
+        extra.put("icu_collation", IcuCollationTokenFilterFactory::new);
+    }
+import org.opensearch.index.mapper.Mapper;  
+    @Override
+import org.opensearch.plugins.AnalysisPlugin;
+    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
+import java.util.Map;
+ * specific language governing permissions and limitations
+import java.util.HashMap;
+package org.opensearch.plugin.analysis.icu;
+ * GitHub history for details.
+                ICUCollationKeywordFieldMapper.CollationFieldType.COLLATE_FORMAT.getWriteableName(),
+    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {  
+import org.opensearch.index.analysis.IcuCollationTokenFilterFactory;  
+import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
+    public Map<String, Mapper.TypeParser> getMappers() {
+ */  
+/*  
+ * not use this file except in compliance with the License.
+        return singletonMap("icu_tokenizer", IcuTokenizerFactory::new);
+ * Unless required by applicable law or agreed to in writing,
+    @Override  
+    }
+        extra.put("icu_transform", IcuTransformTokenFilterFactory::new);
+import org.opensearch.plugins.MapperPlugin;  
+            )
+ */
+import org.opensearch.index.analysis.CharFilterFactory;
+ * You may obtain a copy of the License at  
+ * software distributed under the License is distributed on an
+    }  
+import org.opensearch.index.analysis.IcuNormalizerCharFilterFactory;
+                DocValueFormat.class,
+ * Licensed to Elasticsearch under one or more contributor  

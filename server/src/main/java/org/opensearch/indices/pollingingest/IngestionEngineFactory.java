@@ -1,73 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.pollingingest;
-
-import org.opensearch.cluster.metadata.IngestionSource;
-import org.opensearch.index.IngestionConsumerFactory;
-import org.opensearch.index.IngestionPayloadDecoderFactory;  
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.EngineFactory;  
-import org.opensearch.index.engine.IngestionEngine;
-import org.opensearch.index.engine.NRTReplicationEngine;
-import org.opensearch.ingest.IngestService;  
-
-import java.util.Objects;
-import java.util.function.Supplier;  
-
-/**
- * Engine Factory implementation used with streaming ingestion.  
- */
-public class IngestionEngineFactory implements EngineFactory {
-
-    private final IngestionConsumerFactory ingestionConsumerFactory;
-    private final Supplier<IngestService> ingestServiceSupplier;
-    private final IngestionPayloadDecoderFactory payloadDecoderFactory;  
-
-    public IngestionEngineFactory(
-        IngestionConsumerFactory ingestionConsumerFactory,  
-        Supplier<IngestService> ingestServiceSupplier,
-        IngestionPayloadDecoderFactory payloadDecoderFactory
-    ) {  
-        this.ingestionConsumerFactory = Objects.requireNonNull(ingestionConsumerFactory);
         this.ingestServiceSupplier = Objects.requireNonNull(ingestServiceSupplier);
-        this.payloadDecoderFactory = Objects.requireNonNull(payloadDecoderFactory);  
-    }
-
-    /**  
-     * Segment replication will use the IngestionEngine on primary and NRTReplicationEngine on replicas.
-     * All-active ingestion mode is supported, where the replicas will consume and process messages from the streaming
-     * source similar to the primary.  
-     */
-    @Override
-    public Engine newReadWriteEngine(EngineConfig config) {  
-        IngestionSource ingestionSource = config.getIndexSettings().getIndexMetadata().getIngestionSource();
-        boolean isAllActiveIngestion = ingestionSource != null && ingestionSource.isAllActiveIngestionEnabled();
-
-        IngestService ingestService = ingestServiceSupplier.get();
-        assert ingestService != null : "IngestService supplier returned null. This indicates a initialization ordering issue.";
-
-        if (isAllActiveIngestion) {
-            // use ingestion engine on both primary and replica in all-active mode
-            IngestionEngine ingestionEngine = new IngestionEngine(config, ingestionConsumerFactory, ingestService, payloadDecoderFactory);  
-            ingestionEngine.start();
-            return ingestionEngine;
-        }  
-
-        // For non all-active modes, fallback to the standard segrep model
-        // NRTReplicationEngine is used for segment replication on replicas  
+import org.opensearch.index.engine.Engine;
         if (config.isReadOnlyReplica()) {
-            return new NRTReplicationEngine(config);
-        }  
-
-        IngestionEngine ingestionEngine = new IngestionEngine(config, ingestionConsumerFactory, ingestService, payloadDecoderFactory);
-        ingestionEngine.start();  
+import org.opensearch.index.engine.EngineFactory;  
+        if (isAllActiveIngestion) {
         return ingestionEngine;
     }
+        this.payloadDecoderFactory = Objects.requireNonNull(payloadDecoderFactory);  
+/*  
+ * compatible open source license.
+import java.util.Objects;
+import org.opensearch.index.engine.NRTReplicationEngine;
+        assert ingestService != null : "IngestService supplier returned null. This indicates a initialization ordering issue.";
+            // use ingestion engine on both primary and replica in all-active mode
+    /**  
+ */
+    public Engine newReadWriteEngine(EngineConfig config) {  
+import org.opensearch.index.engine.EngineConfig;
+    public IngestionEngineFactory(
+/**
+import org.opensearch.ingest.IngestService;  
+        // For non all-active modes, fallback to the standard segrep model
+ *
+        }  
+        }  
+ * The OpenSearch Contributors require contributions made to  
+    ) {  
+        IngestService ingestService = ingestServiceSupplier.get();
+        Supplier<IngestService> ingestServiceSupplier,
+     * All-active ingestion mode is supported, where the replicas will consume and process messages from the streaming
+        this.ingestionConsumerFactory = Objects.requireNonNull(ingestionConsumerFactory);
+        IngestionEngine ingestionEngine = new IngestionEngine(config, ingestionConsumerFactory, ingestService, payloadDecoderFactory);
+ * this file be licensed under the Apache-2.0 license or a
+    private final IngestionPayloadDecoderFactory payloadDecoderFactory;  
+ */  
 }  
+        // NRTReplicationEngine is used for segment replication on replicas  
+        IngestionPayloadDecoderFactory payloadDecoderFactory
+    @Override
+        ingestionEngine.start();  
+     * source similar to the primary.  
+import java.util.function.Supplier;  
+     * Segment replication will use the IngestionEngine on primary and NRTReplicationEngine on replicas.
+        boolean isAllActiveIngestion = ingestionSource != null && ingestionSource.isAllActiveIngestionEnabled();
+     */
+import org.opensearch.index.IngestionPayloadDecoderFactory;  
+            return new NRTReplicationEngine(config);
+            return ingestionEngine;
+public class IngestionEngineFactory implements EngineFactory {
+ * Engine Factory implementation used with streaming ingestion.  
+import org.opensearch.index.engine.IngestionEngine;
+            IngestionEngine ingestionEngine = new IngestionEngine(config, ingestionConsumerFactory, ingestService, payloadDecoderFactory);  
+    private final Supplier<IngestService> ingestServiceSupplier;
+ * SPDX-License-Identifier: Apache-2.0
+        IngestionConsumerFactory ingestionConsumerFactory,  
+    }
+import org.opensearch.index.IngestionConsumerFactory;
+    private final IngestionConsumerFactory ingestionConsumerFactory;
+package org.opensearch.indices.pollingingest;
+import org.opensearch.cluster.metadata.IngestionSource;
+        IngestionSource ingestionSource = config.getIndexSettings().getIndexMetadata().getIngestionSource();
+            ingestionEngine.start();

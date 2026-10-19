@@ -1,18 +1,15 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.annotation.processor;
-
 import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.annotation.PublicApi;
-
+ * The OpenSearch Contributors require contributions made to  
 @PublicApi(since = "1.0.0")
-public class PublicApiWithExperimentalApiMethod {
-    @ExperimentalApi  
     public void method() {}
 }
+package org.opensearch.common.annotation.processor;
+    @ExperimentalApi  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+import org.opensearch.common.annotation.PublicApi;
+ * compatible open source license.
+ *
+public class PublicApiWithExperimentalApiMethod {
+ * SPDX-License-Identifier: Apache-2.0
+/*  

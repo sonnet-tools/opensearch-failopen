@@ -1,392 +1,373 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.alias;
-
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.xcontent.XContentType;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParseException;  
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.Objects;  
-
-import static org.opensearch.index.alias.RandomAliasActionsGenerator.randomAliasAction;
-import static org.opensearch.index.alias.RandomAliasActionsGenerator.randomMap;  
-import static org.opensearch.index.alias.RandomAliasActionsGenerator.randomRouting;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.Matchers.arrayContaining;  
-import static org.hamcrest.Matchers.arrayWithSize;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.instanceOf;  
-
-public class AliasActionsTests extends OpenSearchTestCase {
-    public void testValidate() {  
-        AliasActions.Type type = randomFrom(AliasActions.Type.values());
-        if (type == AliasActions.Type.REMOVE_INDEX) {
-            Exception e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).validate());  
-            assertEquals("One of [index] or [indices] is required", e.getMessage());
-        } else {
-            Exception e = expectThrows(  
-                IllegalArgumentException.class,
-                () -> new AliasActions(type).alias(randomAlphaOfLength(5)).validate()
-            );  
-            assertEquals("One of [index] or [indices] is required", e.getMessage());
-            e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).index(randomAlphaOfLength(5)).validate());
-            assertEquals("One of [alias] or [aliases] is required", e.getMessage());  
-        }
-    }
-
-    public void testEmptyIndex() {
-        Exception e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> new AliasActions(randomFrom(AliasActions.Type.values())).index(null)
-        );
-        assertEquals("[index] can't be empty string", e.getMessage());  
-        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(randomFrom(AliasActions.Type.values())).index(""));
-        assertEquals("[index] can't be empty string", e.getMessage());
         e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices((String[]) null)
-        );  
-        assertEquals("[indices] can't be empty", e.getMessage());
-        e = expectThrows(
-            IllegalArgumentException.class,  
-            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices(new String[0])
-        );
-        assertEquals("[indices] can't be empty", e.getMessage());  
-        e = expectThrows(
-            IllegalArgumentException.class,
-            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices("test", null)  
-        );
-        assertEquals("[indices] can't contain empty string", e.getMessage());
-        e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices("test", "")
-        );  
-        assertEquals("[indices] can't contain empty string", e.getMessage());
-    }
-
-    public void testEmptyAlias() {
-        AliasActions.Type type = randomValueOtherThan(AliasActions.Type.REMOVE_INDEX, () -> randomFrom(AliasActions.Type.values()));
-        Exception e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).alias(null));  
-        assertEquals("[alias] can't be empty string", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).alias(""));
-        assertEquals("[alias] can't be empty string", e.getMessage());  
-        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases((String[]) null));
-        assertEquals("[aliases] can't be empty", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases(new String[0]));  
-        assertEquals("[aliases] can't be empty", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases("test", null));
-        assertEquals("[aliases] can't contain empty string", e.getMessage());  
-        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases("test", ""));
-        assertEquals("[aliases] can't contain empty string", e.getMessage());
-    }  
-
-    public void testBadOptionsInNonIndex() {
-        AliasActions action = randomBoolean() ? AliasActions.remove() : AliasActions.removeIndex();  
-        Exception e = expectThrows(IllegalArgumentException.class, () -> action.routing("test"));
-        assertEquals("[routing] is unsupported for [" + action.actionType() + "]", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> action.searchRouting("test"));  
-        assertEquals("[search_routing] is unsupported for [" + action.actionType() + "]", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> action.indexRouting("test"));
-        assertEquals("[index_routing] is unsupported for [" + action.actionType() + "]", e.getMessage());  
-        e = expectThrows(IllegalArgumentException.class, () -> action.filter("test"));
-        assertEquals("[filter] is unsupported for [" + action.actionType() + "]", e.getMessage());
-    }  
-
-    public void testMustExistOption() {
-        final boolean mustExist = randomBoolean();  
-        AliasActions removeAliasAction = AliasActions.remove();
-        assertNull(removeAliasAction.mustExist());
-        removeAliasAction.mustExist(mustExist);  
-        assertEquals(mustExist, removeAliasAction.mustExist());
-        AliasActions action = randomBoolean() ? AliasActions.add() : AliasActions.removeIndex();
-        Exception e = expectThrows(IllegalArgumentException.class, () -> action.mustExist(mustExist));  
-        assertEquals("[must_exist] is unsupported for [" + action.actionType() + "]", e.getMessage());
-    }
-
-    public void testParseAdd() throws IOException {
-        String[] indices = generateRandomStringArray(10, 5, false, false);
-        String[] aliases = generateRandomStringArray(10, 5, false, false);  
-        Map<String, Object> filter = randomBoolean() ? randomMap(5) : null;
-        Object searchRouting = randomBoolean() ? randomRouting() : null;
-        Object indexRouting = randomBoolean() ? randomBoolean() ? searchRouting : randomRouting() : null;  
-        boolean writeIndex = randomBoolean();
-        boolean isHidden = randomBoolean();
-        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
-        b.startObject();
-        {
-            b.startObject("add");  
-            {
-                if (indices.length > 1 || randomBoolean()) {
-                    b.array("indices", indices);  
-                } else {
-                    b.field("index", indices[0]);
-                }  
-                if (aliases.length > 1 || randomBoolean()) {
-                    b.array("aliases", aliases);
-                } else {  
-                    b.field("alias", aliases[0]);
-                }
-                if (filter != null) {  
-                    b.field("filter", filter);
-                }
-                if (searchRouting != null) {  
-                    if (searchRouting.equals(indexRouting)) {
-                        b.field("routing", searchRouting);
-                    } else {  
                         b.field("search_routing", searchRouting);
-                    }
-                }  
-                if (indexRouting != null && false == indexRouting.equals(searchRouting)) {
-                    b.field("index_routing", indexRouting);
-                }  
-                b.field("is_write_index", writeIndex);
-                b.field("is_hidden", isHidden);
-            }  
-            b.endObject();
-        }
-        b.endObject();  
-        b = shuffleXContent(b, "filter");
-        try (XContentParser parser = createParser(b)) {
-            AliasActions action = AliasActions.PARSER.apply(parser, null);  
-            assertEquals(AliasActions.Type.ADD, action.actionType());
-            assertThat(action.indices(), equalTo(indices));
-            assertThat(action.aliases(), equalTo(aliases));  
-            if (filter == null || filter.isEmpty()) {
-                assertNull(action.filter());
-            } else {  
-                assertEquals(MediaTypeRegistry.contentBuilder(MediaTypeRegistry.JSON).map(filter).toString(), action.filter());
-            }
-            assertEquals(Objects.toString(searchRouting, null), action.searchRouting());  
-            assertEquals(Objects.toString(indexRouting, null), action.indexRouting());
-            assertEquals(writeIndex, action.writeIndex());
-            assertEquals(isHidden, action.isHidden());  
-        }
-    }
-
-    public void testParseAddDefaultRouting() throws IOException {
-        String index = randomAlphaOfLength(5);
-        String alias = randomAlphaOfLength(5);  
-        Object searchRouting = randomRouting();
-        Object indexRouting = randomRouting();
-        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
-        b.startObject();
-        {
-            b.startObject("add");  
-            {
-                b.field("index", index);
-                b.field("alias", alias);  
-                if (randomBoolean()) {
-                    b.field("routing", searchRouting);
-                    b.field("index_routing", indexRouting);  
-                } else {
-                    b.field("search_routing", searchRouting);
-                    b.field("routing", indexRouting);  
-                }
-            }
-            b.endObject();  
-        }
-        b.endObject();
-        b = shuffleXContent(b);  
-        try (XContentParser parser = createParser(b)) {
-            AliasActions action = AliasActions.PARSER.apply(parser, null);
-            assertEquals(AliasActions.Type.ADD, action.actionType());  
-            assertThat(action.indices(), arrayContaining(index));
-            assertThat(action.aliases(), arrayContaining(alias));
-            assertEquals(searchRouting.toString(), action.searchRouting());  
-            assertEquals(indexRouting.toString(), action.indexRouting());
-        }
-    }  
-
-    public void testParseRemove() throws IOException {
-        String[] indices = generateRandomStringArray(10, 5, false, false);  
-        String[] aliases = generateRandomStringArray(10, 5, false, false);
-        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());
-        boolean mustExist = randomBoolean();  
-        b.startObject();
-        {
-            b.startObject("remove");  
-            {
-                if (indices.length > 1 || randomBoolean()) {
-                    b.array("indices", indices);  
-                } else {
-                    b.field("index", indices[0]);
-                }  
-                if (aliases.length > 1 || randomBoolean()) {
-                    b.array("aliases", aliases);
-                } else {  
-                    b.field("alias", aliases[0]);
-                }
-                if (mustExist) {  
-                    b.field("must_exist", true);
-                }
-            }  
-            b.endObject();
-        }
-        b.endObject();  
-        b = shuffleXContent(b);
-        try (XContentParser parser = createParser(b)) {
-            AliasActions action = AliasActions.PARSER.apply(parser, null);  
-            assertEquals(AliasActions.Type.REMOVE, action.actionType());
-            assertThat(action.indices(), equalTo(indices));
-            assertThat(action.aliases(), equalTo(aliases));  
-            if (mustExist) {
-                assertThat(action.mustExist(), equalTo(true));
-            }  
-        }
-    }
-
-    public void testParseRemoveIndex() throws IOException {
-        String[] indices = randomBoolean() ? new String[] { randomAlphaOfLength(5) } : generateRandomStringArray(10, 5, false, false);
-        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
-        b.startObject();
-        {
-            b.startObject("remove_index");  
-            {
-                if (indices.length > 1 || randomBoolean()) {
-                    b.array("indices", indices);  
-                } else {
-                    b.field("index", indices[0]);
-                }  
-            }
-            b.endObject();
-        }  
-        b.endObject();
-        b = shuffleXContent(b);
-        try (XContentParser parser = createParser(b)) {  
-            AliasActions action = AliasActions.PARSER.apply(parser, null);
-            assertEquals(AliasActions.Type.REMOVE_INDEX, action.actionType());
             assertArrayEquals(indices, action.indices());  
-            assertThat(action.aliases(), arrayWithSize(0));
-        }
-    }  
-
-    public void testParseIndexAndIndicesThrowsError() throws IOException {
-        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
-        b.startObject();
-        {
-            b.startObject(randomFrom("add", "remove"));  
-            {
-                b.field("index", randomAlphaOfLength(5));
-                b.array("indices", generateRandomStringArray(10, 5, false, false));  
-                b.field("alias", randomAlphaOfLength(5));
-            }
-            b.endObject();  
-        }
-        b.endObject();
-        try (XContentParser parser = createParser(b)) {  
-            Exception e = expectThrows(XContentParseException.class, () -> AliasActions.PARSER.apply(parser, null));
-            assertThat(e.getCause().getCause(), instanceOf(IllegalArgumentException.class));
-            assertThat(e.getCause().getCause().getMessage(), containsString("Only one of [index] and [indices] is supported"));  
-        }
+                }
+        );  
     }
-
-    public void testParseAliasAndAliasesThrowsError() throws IOException {
-        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());
+        b.startObject();
+            b.endObject();
+                b.array("aliases", generateRandomStringArray(10, 5, false, false));  
+            if (filter == null || filter.isEmpty()) {
+            {
+            b.endObject();  
+                    b.array("indices", indices);  
+            assertEquals(AliasActions.Type.REMOVE, action.actionType());
+        Object indexRouting = randomBoolean() ? randomBoolean() ? searchRouting : randomRouting() : null;  
+        }  
+                } else {
+import org.opensearch.core.common.bytes.BytesReference;
+        assertEquals("[indices] can't contain empty string", e.getMessage());
+                b.field("is_hidden", isHidden);
+            BytesReference shuffled = toShuffledXContent(action, xContentType, ToXContent.EMPTY_PARAMS, false, "filter");
+        Exception e = expectThrows(
+                } else {  
+        }  
+        AliasActions.Type type = randomFrom(AliasActions.Type.values());
+ * software distributed under the License is distributed on an
+                b.field("index", index);
+ * license agreements. See the NOTICE file distributed with
+        }
+            }  
         b.startObject();  
         {
-            b.startObject(randomFrom("add", "remove"));
-            {  
-                b.field("index", randomAlphaOfLength(5));
-                b.field("alias", randomAlphaOfLength(5));
-                b.array("aliases", generateRandomStringArray(10, 5, false, false));  
-            }
-            b.endObject();
-        }  
-        b.endObject();
-        try (XContentParser parser = createParser(b)) {
-            Exception e = expectThrows(XContentParseException.class, () -> AliasActions.PARSER.apply(parser, null));  
-            assertThat(e.getCause().getCause(), instanceOf(IllegalArgumentException.class));
-            assertThat(e.getCause().getCause().getMessage(), containsString("Only one of [alias] and [aliases] is supported"));
-        }  
-    }
-
-    public void testRoundTrip() throws IOException {  
-        AliasActions action = new AliasActions(randomFrom(AliasActions.Type.values()));
-        if (randomBoolean()) {
-            action.index(randomAlphaOfLength(5));  
-        } else {
-            action.indices(generateRandomStringArray(5, 5, false, false));
-        }  
-        if (action.actionType() != AliasActions.Type.REMOVE_INDEX) {
-            if (randomBoolean()) {
-                action.alias(randomAlphaOfLength(5));  
-            } else {
-                action.aliases(generateRandomStringArray(5, 5, false, false));
-            }  
-        }
-        if (action.actionType() == AliasActions.Type.ADD) {
-            if (randomBoolean()) {  
-                action.filter(randomAlphaOfLength(10));
-            }
-            if (randomBoolean()) {  
-                if (randomBoolean()) {
-                    action.routing(randomAlphaOfLength(5));
-                } else {  
-                    action.searchRouting(randomAlphaOfLength(5));
-                    action.indexRouting(randomAlphaOfLength(5));
+            );  
+        b.startObject();
                 }  
-            }
-        }
-        try (BytesStreamOutput out = new BytesStreamOutput()) {  
-            action.writeTo(out);
-            try (StreamInput in = out.bytes().streamInput()) {
-                AliasActions read = new AliasActions(in);  
-                assertEquals(action, read);
-            }
-        }  
+        assertEquals("[indices] can't be empty", e.getMessage());
+                b.field("alias", randomAlphaOfLength(5));
+            AliasActions action = AliasActions.PARSER.apply(parser, null);  
     }
-
-    public void testFromToXContent() throws IOException {  
-        for (int runs = 0; runs < 20; runs++) {
-            AliasActions action = randomAliasAction();
-            XContentType xContentType = randomFrom(XContentType.values());  
-            BytesReference shuffled = toShuffledXContent(action, xContentType, ToXContent.EMPTY_PARAMS, false, "filter");
-            AliasActions parsedAction;
-            try (XContentParser parser = createParser(xContentType.xContent(), shuffled)) {  
-                parsedAction = AliasActions.fromXContent(parser);
-                assertNull(parser.nextToken());
-            }  
-            assertThat(parsedAction, equalTo(action));
+                }  
+        }  
+        try (XContentParser parser = createParser(b)) {
+            assertEquals(writeIndex, action.writeIndex());
+import static org.hamcrest.Matchers.arrayWithSize;
+            {
+        if (randomBoolean()) {
+    }
+        assertEquals("[aliases] can't be empty", e.getMessage());
+            e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).index(randomAlphaOfLength(5)).validate());
+ * the Apache License, Version 2.0 (the "License"); you may
+                    action.routing(randomAlphaOfLength(5));
+            }
         }
+                    b.field("index", indices[0]);
+        if (action.actionType() != AliasActions.Type.REMOVE_INDEX) {
+        String[] indices = generateRandomStringArray(10, 5, false, false);
+        }
+        String[] aliases = generateRandomStringArray(10, 5, false, false);  
+            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices("test", null)  
+        AliasActions.Type type = randomValueOtherThan(AliasActions.Type.REMOVE_INDEX, () -> randomFrom(AliasActions.Type.values()));
+    public void testBadOptionsInNonIndex() {
+        {
+ * You may obtain a copy of the License at  
+        } else {
+        removeAliasAction.mustExist(mustExist);  
+            assertThat(action.indices(), equalTo(indices));
+                    b.field("index", indices[0]);
+            b.endObject();
+        for (int runs = 0; runs < 20; runs++) {
+                }
+    }
+                if (randomBoolean()) {
+            b.endObject();
+            }  
+        try (XContentParser parser = createParser(b)) {
+            AliasActions action = AliasActions.PARSER.apply(parser, null);
+                } else {  
+import org.opensearch.core.xcontent.XContentParseException;  
+        }
+        {
+        e = expectThrows(
+            action.writeTo(out);
+        Exception e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).alias(null));  
+            assertEquals("One of [index] or [indices] is required", e.getMessage());
+                    b.field("filter", filter);
+        }
+        if (type == AliasActions.Type.REMOVE_INDEX) {
+        Exception e = expectThrows(IllegalArgumentException.class, () -> action.mustExist(mustExist));  
+        AliasActions action = randomBoolean() ? AliasActions.add() : AliasActions.removeIndex();
+        {
+        Exception e = expectThrows(IllegalArgumentException.class, () -> action.routing("test"));
+    public void testFromToXContent() throws IOException {  
+        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());
+                if (searchRouting != null) {  
+            b.endObject();
+                }  
+                    action.searchRouting(randomAlphaOfLength(5));
+/*
+            assertEquals(AliasActions.Type.ADD, action.actionType());
+        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).alias(""));
+        );  
+                    }
+        }  
+ * under the License.  
+                assertThat(action.mustExist(), equalTo(true));
+        String alias = randomAlphaOfLength(5);  
+            }  
+            AliasActions action = AliasActions.PARSER.apply(parser, null);  
+    public void testParseAliasAndAliasesThrowsError() throws IOException {
+                } else {
+        );
+        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases("test", null));
+        );
+ * Unless required by applicable law or agreed to in writing,
+        assertEquals("[indices] can't contain empty string", e.getMessage());
+ * ownership. Elasticsearch licenses this file to you under  
+            assertThat(action.aliases(), equalTo(aliases));  
+                if (mustExist) {  
+        );
+                b.field("is_write_index", writeIndex);
+                assertEquals(MediaTypeRegistry.contentBuilder(MediaTypeRegistry.JSON).map(filter).toString(), action.filter());
+    }
+                    b.field("routing", indexRouting);  
+                b.field("alias", alias);  
+            Exception e = expectThrows(  
+                    b.array("indices", indices);  
+            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices((String[]) null)
+            if (randomBoolean()) {  
+                action.aliases(generateRandomStringArray(5, 5, false, false));
+        assertEquals("[aliases] can't contain empty string", e.getMessage());  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+            }
+            }
+            } else {  
     }  
+            action.indices(generateRandomStringArray(5, 5, false, false));
+            assertEquals("One of [alias] or [aliases] is required", e.getMessage());  
+        if (action.actionType() == AliasActions.Type.ADD) {
+            }  
+                }
+            b.startObject("remove_index");  
+                }
+        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
+            assertThat(parsedAction, equalTo(action));
+            }
+                if (indices.length > 1 || randomBoolean()) {
+                    b.field("index_routing", indexRouting);
+            assertEquals(isHidden, action.isHidden());  
+    }  
+        }
+                    b.field("alias", aliases[0]);
+            assertEquals(Objects.toString(searchRouting, null), action.searchRouting());  
+                if (randomBoolean()) {
+                AliasActions read = new AliasActions(in);  
+                IllegalArgumentException.class,
+    }  
+        assertEquals("[aliases] can't contain empty string", e.getMessage());
+            assertEquals("One of [index] or [indices] is required", e.getMessage());
+    public void testParseRemoveIndex() throws IOException {
+        assertEquals("[search_routing] is unsupported for [" + action.actionType() + "]", e.getMessage());
+                }  
+            b.startObject("add");  
+        try (XContentParser parser = createParser(b)) {
+ * Modifications Copyright OpenSearch Contributors. See
+        b = shuffleXContent(b);
+    }
+            assertThat(e.getCause().getCause().getMessage(), containsString("Only one of [index] and [indices] is supported"));  
+        b.endObject();
+        Map<String, Object> filter = randomBoolean() ? randomMap(5) : null;
+        b.startObject();
+        b = shuffleXContent(b);  
+            if (randomBoolean()) {
+            try (StreamInput in = out.bytes().streamInput()) {
+                if (indexRouting != null && false == indexRouting.equals(searchRouting)) {
+            }
+            action.index(randomAlphaOfLength(5));  
+            XContentType xContentType = randomFrom(XContentType.values());  
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions;
+import static org.hamcrest.Matchers.containsString;
+                    action.indexRouting(randomAlphaOfLength(5));
+        AliasActions action = new AliasActions(randomFrom(AliasActions.Type.values()));
+        assertEquals("[aliases] can't be empty", e.getMessage());
+ */  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+            Exception e = expectThrows(XContentParseException.class, () -> AliasActions.PARSER.apply(parser, null));
+        e = expectThrows(IllegalArgumentException.class, () -> action.filter("test"));
+import static org.hamcrest.CoreMatchers.equalTo;
+    }  
+        b.startObject();
+                } else {
+    public void testParseAdd() throws IOException {
+            Exception e = expectThrows(XContentParseException.class, () -> AliasActions.PARSER.apply(parser, null));  
+        Object searchRouting = randomRouting();
+            assertThat(action.indices(), equalTo(indices));
+        b.endObject();
+            b.startObject("add");  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+import java.util.Objects;  
+            Exception e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).validate());  
+        b.endObject();  
+                    b.field("must_exist", true);
+            b.endObject();  
+        assertEquals("[index] can't be empty string", e.getMessage());  
+ * KIND, either express or implied.  See the License for the
+            }
+            assertEquals(AliasActions.Type.ADD, action.actionType());  
+    public void testMustExistOption() {
+        b = shuffleXContent(b);
+        boolean mustExist = randomBoolean();  
+            assertEquals(Objects.toString(indexRouting, null), action.indexRouting());
+        b.endObject();
+        } else {
+/*  
+import static org.opensearch.index.alias.RandomAliasActionsGenerator.randomRouting;
+import org.opensearch.common.xcontent.XContentType;  
+        b.startObject();
+            if (mustExist) {
+        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());
+        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases((String[]) null));
+ * not use this file except in compliance with the License.
+            IllegalArgumentException.class,
+        assertNull(removeAliasAction.mustExist());
+            {  
+ * specific language governing permissions and limitations
+        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(randomFrom(AliasActions.Type.values())).index(""));
+                b.field("index", randomAlphaOfLength(5));
+    public void testParseIndexAndIndicesThrowsError() throws IOException {
+import static org.opensearch.index.alias.RandomAliasActionsGenerator.randomAliasAction;
+            } else {
+            if (randomBoolean()) {  
+    public void testRoundTrip() throws IOException {  
+        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases(new String[0]));  
+                assertNull(action.filter());
+        assertEquals("[index] can't be empty string", e.getMessage());
+        AliasActions action = randomBoolean() ? AliasActions.remove() : AliasActions.removeIndex();  
+                b.array("indices", generateRandomStringArray(10, 5, false, false));  
+import org.opensearch.core.common.io.stream.StreamInput;
+            b.startObject(randomFrom("add", "remove"));  
+    public void testParseRemove() throws IOException {
+        e = expectThrows(  
+        String[] aliases = generateRandomStringArray(10, 5, false, false);
+ * compatible open source license.
+        try (XContentParser parser = createParser(b)) {  
+        }
+            {
+        String[] indices = randomBoolean() ? new String[] { randomAlphaOfLength(5) } : generateRandomStringArray(10, 5, false, false);
+public class AliasActionsTests extends OpenSearchTestCase {
+            assertThat(action.indices(), arrayContaining(index));
+                }  
+                parsedAction = AliasActions.fromXContent(parser);
+            assertThat(action.aliases(), equalTo(aliases));  
+import static org.opensearch.index.alias.RandomAliasActionsGenerator.randomMap;  
+        {
+        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
+        boolean writeIndex = randomBoolean();
+                action.alias(randomAlphaOfLength(5));  
+        e = expectThrows(IllegalArgumentException.class, () -> action.searchRouting("test"));  
+            AliasActions action = AliasActions.PARSER.apply(parser, null);
+                }
+        try (XContentParser parser = createParser(b)) {  
+                }  
+            assertThat(e.getCause().getCause(), instanceOf(IllegalArgumentException.class));
+                if (aliases.length > 1 || randomBoolean()) {
+    public void testParseAddDefaultRouting() throws IOException {
+import java.util.Map;
+ */
+            }  
+                    b.field("search_routing", searchRouting);
+        boolean isHidden = randomBoolean();
+        }
+                    b.field("index", indices[0]);
+            }
+            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices("test", "")
+        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
+        try (BytesStreamOutput out = new BytesStreamOutput()) {  
+ * GitHub history for details.
+    public void testEmptyIndex() {
+        }
+        }
+            }
+        }
+                assertNull(parser.nextToken());
+                if (indices.length > 1 || randomBoolean()) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public void testEmptyAlias() {
+            AliasActions action = randomAliasAction();
+ *
+        assertEquals("[routing] is unsupported for [" + action.actionType() + "]", e.getMessage());
+                        b.field("routing", searchRouting);
 }
+            assertEquals(AliasActions.Type.REMOVE_INDEX, action.actionType());
+                    b.array("aliases", aliases);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertEquals("[index_routing] is unsupported for [" + action.actionType() + "]", e.getMessage());  
+        b.endObject();  
+        e = expectThrows(IllegalArgumentException.class, () -> new AliasActions(type).aliases("test", ""));
+            IllegalArgumentException.class,  
+                    b.field("alias", aliases[0]);
+            () -> new AliasActions(randomFrom(AliasActions.Type.values())).index(null)
+import static org.hamcrest.Matchers.instanceOf;  
+        final boolean mustExist = randomBoolean();  
+        }
+            {
+ * Licensed to Elasticsearch under one or more contributor  
+            assertEquals(searchRouting.toString(), action.searchRouting());  
+            try (XContentParser parser = createParser(xContentType.xContent(), shuffled)) {  
+            {
+        Object searchRouting = randomBoolean() ? randomRouting() : null;
+        XContentBuilder b = XContentBuilder.builder(randomFrom(XContentType.values()).xContent());  
+            AliasActions parsedAction;
+            assertThat(e.getCause().getCause(), instanceOf(IllegalArgumentException.class));
+import static org.hamcrest.Matchers.arrayContaining;  
+import org.opensearch.test.OpenSearchTestCase;
+            () -> new AliasActions(randomFrom(AliasActions.Type.values())).indices(new String[0])
+import java.io.IOException;
+            IllegalArgumentException.class,
+        assertEquals("[must_exist] is unsupported for [" + action.actionType() + "]", e.getMessage());
+                if (filter != null) {  
+            assertEquals(indexRouting.toString(), action.indexRouting());
+                b.field("index", randomAlphaOfLength(5));
+                } else {
+                if (indices.length > 1 || randomBoolean()) {
+        assertEquals(mustExist, removeAliasAction.mustExist());
+/*  
+ *  
+        assertEquals("[alias] can't be empty string", e.getMessage());  
+                if (aliases.length > 1 || randomBoolean()) {
+        b = shuffleXContent(b, "filter");
+        try (XContentParser parser = createParser(b)) {
+        e = expectThrows(IllegalArgumentException.class, () -> action.indexRouting("test"));
+    }
+        b.endObject();
+                    if (searchRouting.equals(indexRouting)) {
+                    b.array("indices", indices);  
+                    } else {  
+            b.startObject("remove");  
+        Object indexRouting = randomRouting();
+ * this work for additional information regarding copyright
+ */  
+        String[] indices = generateRandomStringArray(10, 5, false, false);  
+                () -> new AliasActions(type).alias(randomAlphaOfLength(5)).validate()
+        }  
+        assertEquals("[alias] can't be empty string", e.getMessage());
+    public void testValidate() {  
+            b.startObject(randomFrom("add", "remove"));
+            IllegalArgumentException.class,
+            assertThat(e.getCause().getCause().getMessage(), containsString("Only one of [alias] and [aliases] is supported"));
+                    b.field("index_routing", indexRouting);  
+            assertThat(action.aliases(), arrayContaining(alias));
+            IllegalArgumentException.class,  
+                    b.array("aliases", aliases);
+        assertEquals("[filter] is unsupported for [" + action.actionType() + "]", e.getMessage());
+package org.opensearch.action.admin.indices.alias;
+            assertThat(action.aliases(), arrayWithSize(0));
+import org.opensearch.core.xcontent.ToXContent;
+        e = expectThrows(
+        String index = randomAlphaOfLength(5);
+        AliasActions removeAliasAction = AliasActions.remove();
+        {
+        }
+                action.filter(randomAlphaOfLength(10));
+                    b.field("routing", searchRouting);
+    }  
+                b.field("alias", randomAlphaOfLength(5));
+        assertEquals("[indices] can't be empty", e.getMessage());  
+                } else {  
+                assertEquals(action, read);
+import org.opensearch.core.xcontent.XContentBuilder;
+ * SPDX-License-Identifier: Apache-2.0

@@ -1,393 +1,341 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.secure_sm.policy;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FilePermission;  
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;  
-import java.net.MalformedURLException;
-import java.net.NetPermission;
-import java.net.SocketPermission;  
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;  
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-import java.security.AllPermission;  
-import java.security.CodeSource;
-import java.security.Permission;
-import java.security.PermissionCollection;  
-import java.security.Permissions;
-import java.security.ProtectionDomain;
-import java.security.SecurityPermission;  
-import java.security.cert.Certificate;
-import java.util.ArrayList;
-import java.util.Enumeration;  
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;  
-import java.util.PropertyPermission;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;  
-import java.util.function.Function;
-
-@SuppressWarnings("removal")  
-public class PolicyFile extends java.security.Policy {
-    public static final Set<String> PERM_CLASSES_TO_SKIP = Set.of(
-        "org.opensearch.secure_sm.ThreadContextPermission",  
-        "org.opensearch.secure_sm.ThreadPermission",
-        "org.opensearch.SpecialPermission",
-        "org.bouncycastle.crypto.CryptoServicesPermission",  
-        "org.opensearch.script.ClassPermission",
-        "javax.security.auth.AuthPermission",
-        "javax.security.auth.kerberos.ServicePermission",  
-        "com.sun.tools.attach.AttachPermission"
-    );
-
-    private final PolicyInfo policyInfo;
-    private final URL url;
-
-    public PolicyFile(URL url) {
-        this.url = url;
-        try {  
-            policyInfo = init(url);
-        } catch (PolicyInitializationException e) {
-            throw new RuntimeException("Failed to initialize policy file", e);  
-        }
-    }
-
-    private PolicyInfo init(URL policy) throws PolicyInitializationException {
-        List<PolicyEntry> entries = new ArrayList<>();
-        try (InputStreamReader reader = new InputStreamReader(getInputStream(policy), StandardCharsets.UTF_8)) {  
-            List<GrantEntry> grantEntries = PolicyParser.read(reader);
-            for (GrantEntry grantEntry : grantEntries) {
-                addGrantEntry(grantEntry, entries);  
-            }
         } catch (Exception e) {
-            throw new PolicyInitializationException("Failed to load policy from: " + policy, e);  
-        }
-
-        return new PolicyInfo(entries);  
-    }
-
-    public static InputStream getInputStream(URL url) throws IOException {  
-        if ("file".equals(url.getProtocol())) {
-            String path = url.getFile().replace('/', File.separatorChar);
-            path = URLDecoder.decode(path, StandardCharsets.UTF_8);  
-            return new FileInputStream(path);
-        } else {
-            return url.openStream();  
-        }
-    }
-
-    private CodeSource getCodeSource(GrantEntry grantEntry) throws PolicyInitializationException {
-        try {
-            Certificate[] certs = null;  
-            URL location = (grantEntry.codeBase() != null) ? newURL(grantEntry.codeBase()) : null;
-            return canonicalizeCodebase(new CodeSource(location, certs));
-        } catch (Exception e) {  
-            throw new PolicyInitializationException("Failed to get CodeSource", e);
-        }
-    }  
-
-    private void addGrantEntry(GrantEntry grantEntry, List<PolicyEntry> entries) throws PolicyInitializationException {
-        CodeSource codesource = getCodeSource(grantEntry);  
-        if (codesource == null) {
-            throw new PolicyInitializationException("Null CodeSource for: " + grantEntry.codeBase());
-        }  
-
-        List<Permission> permissions = new ArrayList<>();
-        for (PermissionEntry pe : grantEntry.permissionEntries()) {  
-            final PermissionEntry expandedEntry = expandPermissionName(pe);
-            try {
-                Optional<Permission> perm = getInstance(expandedEntry.permission(), expandedEntry.name(), expandedEntry.action());  
-                perm.ifPresent(permissions::add);
-            } catch (ClassNotFoundException e) {
-                // these were mostly custom permission classes added for security  
-                // manager. Since security manager is deprecated, we can skip these
-                // permissions classes.
-                if (PERM_CLASSES_TO_SKIP.contains(pe.permission())) {  
-                    continue;
-                }
-                throw new PolicyInitializationException("Permission class not found: " + pe.permission(), e);  
-            }
-        }
-
-        entries.add(new PolicyEntry(codesource, permissions));
-    }
-
-    /**
-     * Expands known system properties like ${java.home} and ${user.home} to their absolute
-     * path equivalents.  
-     */
-    private static String expandKnownSystemProperty(final String property, final String value) {
-        final int index = value.indexOf("${" + property + "}/");  
-        final String path = System.getProperty(property);
-        if (path.endsWith(File.separator)) {
-            return path + value.substring(index + property.length() + 4 /* replace the path separator */);  
-        } else {
-            return path + value.substring(index + property.length() + 3 /* keep the path separator */);
-        }  
-    }
-
-    /**  
-     * Expands additional system property placeholders with arbitrary position and value semantics (like
-     * cgroup fe)
-     */  
-    private static String expandKnownSystemProperty(final String property, String separator, final String value) {
-        final int index = value.indexOf(separator + "${" + property + "}" + separator);
-        String path = System.getProperty(property);  
-
-        if (path == null || path.isBlank()) {
-            path = separator;  
-        } else {
-            if (path.endsWith(separator) == false) {
-                path += separator;  
-            }
-            if (path.startsWith(separator) == false) {
-                path = separator + path;  
-            }
-        }
-
-        return value.substring(0, index) + path + value.substring(
-            index + property.length() + 3 + 2 * separator.length() /* replace the path separators */
-        );  
-    }
-
-    private static PermissionEntry expandPermissionName(PermissionEntry pe) {  
-        if (pe.name() == null) {
-            return pe;
-        }  
-
-        if (pe.name().startsWith("${java.home}")) {
-            return new PermissionEntry(pe.permission(), expandKnownSystemProperty("java.home", pe.name()), pe.action());  
-        } else if (pe.name().startsWith("${user.home}")) {
-            return new PermissionEntry(pe.permission(), expandKnownSystemProperty("user.home", pe.name()), pe.action());
-        } else if (pe.name().contains("${opensearch.cgroups.hierarchy.override}")) {  
-            return new PermissionEntry(
-                pe.permission(),
-                expandKnownSystemProperty("opensearch.cgroups.hierarchy.override", "/", pe.name()),  
-                pe.action()
-            );
-        }  
-
-        if (!pe.name().contains("${{")) {
-            return pe;  
-        }
-
-        int startIndex = 0;  
-        int b, e;
-        StringBuilder sb = new StringBuilder();
-
-        while ((b = pe.name().indexOf("${{", startIndex)) != -1 && (e = pe.name().indexOf("}}", b)) != -1) {
-            sb.append(pe.name(), startIndex, b);
-            String value = pe.name().substring(b + 3, e);  
-            String propertyValue = System.getProperty(value);
-            if (propertyValue != null) {
-                sb.append(propertyValue);  
-            } else {
-                // replacement not found
-                sb.append("${{").append(value).append("}}");  
-            }
             startIndex = e + 2;
-        }  
-
-        sb.append(pe.name().substring(startIndex));
-        return new PermissionEntry(pe.permission(), sb.toString(), pe.action());  
-    }
-
-    private static final Optional<Permission> getInstance(String type, String name, String actions) throws ClassNotFoundException {  
-        Class<?> pc = Class.forName(type, false, null);
-        Permission answer = getKnownPermission(pc, name, actions);
-
-        return Optional.ofNullable(answer);
-    }
-
-    private static Permission getKnownPermission(Class<?> claz, String name, String actions) {
-        if (claz.equals(FilePermission.class)) {
-            return new FilePermission(name, actions);  
-        } else if (claz.equals(SocketPermission.class)) {
-            return new SocketPermission(name, actions);
-        } else if (claz.equals(RuntimePermission.class)) {  
-            return new RuntimePermission(name, actions);
-        } else if (claz.equals(PropertyPermission.class)) {
-            return new PropertyPermission(name, actions);  
-        } else if (claz.equals(NetPermission.class)) {
-            return new NetPermission(name, actions);
-        } else if (claz.equals(AllPermission.class)) {  
-            return new AllPermission();
-        } else if (claz.equals(SecurityPermission.class)) {
-            return new SecurityPermission(name, actions);  
-        } else {
-            return null;
-        }  
-    }
-
-    @Override  
-    public void refresh() {
-        try {
-            init(url);  
+import java.util.Optional;  
         } catch (PolicyInitializationException e) {
-            throw new RuntimeException("Failed to refresh policy", e);
-        }  
     }
-
-    @Override  
-    public boolean implies(ProtectionDomain pd, Permission p) {
-        if (pd == null || p == null) {
-            return false;  
-        }
-
-        PermissionCollection pc = policyInfo.getOrCompute(pd, this::getPermissions);  
-        return pc != null && pc.implies(p);
-    }
-
-    @Override
-    public PermissionCollection getPermissions(ProtectionDomain domain) {
-        Permissions perms = new Permissions();  
-        if (domain == null) return perms;
-
-        try {  
-            getPermissionsForProtectionDomain(perms, domain);
-        } catch (PolicyInitializationException e) {
-            throw new RuntimeException("Failed to get permissions for domain", e);  
-        }
-
-        PermissionCollection pc = domain.getPermissions();  
-        if (pc != null) {
-            synchronized (pc) {
-                Enumeration<Permission> e = pc.elements();  
-                while (e.hasMoreElements()) {
-                    perms.add(e.nextElement());
-                }  
-            }
-        }
-
-        return perms;
-    }
-
-    @Override
-    public PermissionCollection getPermissions(CodeSource codesource) {
-        if (codesource == null) return new Permissions();  
-
-        Permissions perms = new Permissions();
-        CodeSource canonicalCodeSource;  
-
-        try {
-            canonicalCodeSource = canonicalizeCodebase(codesource);  
-        } catch (PolicyInitializationException e) {
-            throw new RuntimeException("Failed to canonicalize CodeSource", e);
-        }  
-
-        for (PolicyEntry entry : policyInfo.policyEntries) {
-            if (entry.codeSource().implies(canonicalCodeSource)) {  
-                for (Permission permission : entry.permissions) {
-                    perms.add(permission);
-                }  
-            }
-        }
-
-        return perms;
-    }
-
-    private void getPermissionsForProtectionDomain(Permissions perms, ProtectionDomain pd) throws PolicyInitializationException {
-        final CodeSource cs = pd.getCodeSource();
-        if (cs == null) return;  
-
-        CodeSource canonicalCodeSource = canonicalizeCodebase(cs);
-
-        for (PolicyEntry entry : policyInfo.policyEntries) {
-            if (entry.codeSource().implies(canonicalCodeSource)) {
-                for (Permission permission : entry.permissions) {  
-                    perms.add(permission);
-                }
-            }  
-        }
-    }
-
-    private CodeSource canonicalizeCodebase(CodeSource cs) throws PolicyInitializationException {
-        URL location = cs.getLocation();
-        if (location == null) return cs;  
-
-        try {
-            URL canonicalUrl = canonicalizeUrl(location);  
-            return new CodeSource(canonicalUrl, cs.getCertificates());
-        } catch (IOException e) {
-            throw new PolicyInitializationException("Failed to canonicalize CodeSource", e);  
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private URL canonicalizeUrl(URL url) throws IOException {
-        String protocol = url.getProtocol();  
-
-        if ("jar".equals(protocol)) {
-            String spec = url.getFile();  
-            int separator = spec.indexOf("!/");
-            if (separator != -1) {
-                try {  
-                    url = new URL(spec.substring(0, separator));
-                } catch (MalformedURLException e) {
-                    throw new IOException("Malformed nested jar URL", e);  
-                }
-            }
-        }  
-
-        if ("file".equals(url.getProtocol())) {
-            String path = url.getPath();  
-            path = canonicalizePath(path);
-            return new File(path).toURI().toURL();
-        }  
-
-        return url;
-    }  
-
-    private String canonicalizePath(String path) throws IOException {
-        if (path.endsWith("*")) {  
-            path = path.substring(0, path.length() - 1);
-            return new File(path).getCanonicalPath() + "*";
-        } else {  
-            return new File(path).getCanonicalPath();
-        }
-    }  
-
-    private record PolicyEntry(CodeSource codeSource, List<Permission> permissions) {
-        @Override  
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("{").append(codeSource).append("\n");  
-            for (Permission p : permissions) {
-                sb.append("  ").append(p).append("\n");
-            }  
+            policyInfo = init(url);
             sb.append("}\n");
-            return sb.toString();
-        }  
+            throw new PolicyInitializationException("Failed to canonicalize CodeSource", e);  
+        try {
     }
-
-    private static class PolicyInfo {  
-        private final List<PolicyEntry> policyEntries;
-        private final Map<ProtectionDomain, PermissionCollection> pdMapping;
-
-        PolicyInfo(List<PolicyEntry> entries) {
-            this.policyEntries = List.copyOf(entries);  // an immutable copy for thread safety.
-            this.pdMapping = new ConcurrentHashMap<>();  
+        String path = System.getProperty(property);  
+        } else if (claz.equals(NetPermission.class)) {
+        Permission answer = getKnownPermission(pc, name, actions);
+            return sb.toString();
+            return path + value.substring(index + property.length() + 4 /* replace the path separator */);  
+import java.security.AllPermission;  
         }
-
-        public PermissionCollection getOrCompute(ProtectionDomain pd, Function<ProtectionDomain, PermissionCollection> computeFn) {  
+     */  
+        "javax.security.auth.kerberos.ServicePermission",  
+            return new SecurityPermission(name, actions);  
+        }  
+            sb.append("{").append(codeSource).append("\n");  
             return pdMapping.computeIfAbsent(pd, k -> computeFn.apply(k));
+                // replacement not found
+    }
+        } catch (PolicyInitializationException e) {
+        } else {
+    private static URL newURL(String spec) throws MalformedURLException, URISyntaxException {
+        "org.opensearch.secure_sm.ThreadContextPermission",  
+        } catch (IOException e) {
+        if (pe.name().startsWith("${java.home}")) {
+import java.net.NetPermission;
+        PermissionCollection pc = policyInfo.getOrCompute(pd, this::getPermissions);  
+                sb.append("${{").append(value).append("}}");  
+    private CodeSource getCodeSource(GrantEntry grantEntry) throws PolicyInitializationException {
+}
+        int b, e;
+     * Expands known system properties like ${java.home} and ${user.home} to their absolute
+    private PolicyInfo init(URL policy) throws PolicyInitializationException {
+            for (GrantEntry grantEntry : grantEntries) {
+        if ("file".equals(url.getProtocol())) {
+        }
+            for (Permission p : permissions) {
+        if (path.endsWith("*")) {  
+            }  
+import java.util.concurrent.ConcurrentHashMap;  
+    private static class PolicyInfo {  
+        }  
+ * The OpenSearch Contributors require contributions made to  
+        CodeSource codesource = getCodeSource(grantEntry);  
+        }
+        "org.opensearch.script.ClassPermission",
+            return pe;
+        entries.add(new PolicyEntry(codesource, permissions));
+import java.io.File;
+            return new FileInputStream(path);
+import java.io.IOException;
+    }
+        try {  
+import java.security.Permission;
+            return new RuntimePermission(name, actions);
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Map;
+                throw new PolicyInitializationException("Permission class not found: " + pe.permission(), e);  
+        if ("jar".equals(protocol)) {
+                sb.append("  ").append(p).append("\n");
+        final int index = value.indexOf("${" + property + "}/");  
+        }
+            return new NetPermission(name, actions);
+        }
+        }
+            throw new RuntimeException("Failed to get permissions for domain", e);  
+        try {
+import java.security.Permissions;
+            }
+                    throw new IOException("Malformed nested jar URL", e);  
+            init(url);  
+        "org.bouncycastle.crypto.CryptoServicesPermission",  
+            this.policyEntries = List.copyOf(entries);  // an immutable copy for thread safety.
+                path = separator + path;  
+            return new FilePermission(name, actions);  
+        private final List<PolicyEntry> policyEntries;
+public class PolicyFile extends java.security.Policy {
+        }  
+            throw new RuntimeException("Failed to refresh policy", e);
+            String path = url.getFile().replace('/', File.separatorChar);
+                Enumeration<Permission> e = pc.elements();  
+            throw new PolicyInitializationException("Failed to load policy from: " + policy, e);  
+import java.net.URISyntaxException;
+    private final PolicyInfo policyInfo;
+        final CodeSource cs = pd.getCodeSource();
+        } else {
+    }  
+import java.util.List;
+            String path = url.getPath();  
+import java.io.InputStream;
+                for (Permission permission : entry.permissions) {  
+        } catch (Exception e) {  
+        if ("file".equals(url.getProtocol())) {
+        private final Map<ProtectionDomain, PermissionCollection> pdMapping;
+import java.security.CodeSource;
+            return new PermissionEntry(pe.permission(), expandKnownSystemProperty("user.home", pe.name()), pe.action());
+            return false;  
+    }
+import java.net.MalformedURLException;
+        public String toString() {
+        return new PermissionEntry(pe.permission(), sb.toString(), pe.action());  
+            if (path.startsWith(separator) == false) {
+    private static Permission getKnownPermission(Class<?> claz, String name, String actions) {
+            if (path.endsWith(separator) == false) {
+                while (e.hasMoreElements()) {
+    }
+        }  
+                for (Permission permission : entry.permissions) {
+            return null;
+            this.pdMapping = new ConcurrentHashMap<>();  
+        } else {  
+            path = canonicalizePath(path);
+    public boolean implies(ProtectionDomain pd, Permission p) {
+        if (codesource == null) return new Permissions();  
+        }  
+                perm.ifPresent(permissions::add);
+                addGrantEntry(grantEntry, entries);  
+            canonicalCodeSource = canonicalizeCodebase(codesource);  
+        while ((b = pe.name().indexOf("${{", startIndex)) != -1 && (e = pe.name().indexOf("}}", b)) != -1) {
+            String propertyValue = System.getProperty(value);
+    private CodeSource canonicalizeCodebase(CodeSource cs) throws PolicyInitializationException {
+    }
+import java.util.ArrayList;
+            }  
+        return pc != null && pc.implies(p);
+        try {
+                    continue;
+        }
+        if (!pe.name().contains("${{")) {
+            return path + value.substring(index + property.length() + 3 /* keep the path separator */);
+    public static InputStream getInputStream(URL url) throws IOException {  
+        try {
+        } else {
+        List<PolicyEntry> entries = new ArrayList<>();
+    private static String expandKnownSystemProperty(final String property, final String value) {
+            String value = pe.name().substring(b + 3, e);  
+        PolicyInfo(List<PolicyEntry> entries) {
+            }
+        return Optional.ofNullable(answer);
+        return perms;
+import java.io.InputStreamReader;  
+ * compatible open source license.
+        } catch (PolicyInitializationException e) {
+        Permissions perms = new Permissions();  
+        int startIndex = 0;  
+    private URL canonicalizeUrl(URL url) throws IOException {
+        }  
+            sb.append(pe.name(), startIndex, b);
+        if (path.endsWith(File.separator)) {
+/*  
+        Permissions perms = new Permissions();
+        this.url = url;
+import java.io.FileInputStream;
+        }  
+            Certificate[] certs = null;  
+                }  
+import java.net.SocketPermission;  
+import java.net.URLDecoder;
+        final String path = System.getProperty(property);
+    private void getPermissionsForProtectionDomain(Permissions perms, ProtectionDomain pd) throws PolicyInitializationException {
+            }
+    private String canonicalizePath(String path) throws IOException {
+ */  
+        }  
+     * Expands additional system property placeholders with arbitrary position and value semantics (like
+        if (location == null) return cs;  
+            String spec = url.getFile();  
+            if (separator != -1) {
+            List<GrantEntry> grantEntries = PolicyParser.read(reader);
+            return new CodeSource(canonicalUrl, cs.getCertificates());
+     * cgroup fe)
+        }
+        try (InputStreamReader reader = new InputStreamReader(getInputStream(policy), StandardCharsets.UTF_8)) {  
+                    perms.add(e.nextElement());
+    @Override
+    public void refresh() {
+    }  
+    private static final Optional<Permission> getInstance(String type, String name, String actions) throws ClassNotFoundException {  
+    @SuppressWarnings("deprecation")
+    }
+                path += separator;  
+        if (pd == null || p == null) {
+        } else if (claz.equals(PropertyPermission.class)) {
+        }
+            return new PermissionEntry(pe.permission(), expandKnownSystemProperty("java.home", pe.name()), pe.action());  
+            return new AllPermission();
+    private final URL url;
+        return perms;
+     * path equivalents.  
+import java.util.PropertyPermission;
+                }
+    private record PolicyEntry(CodeSource codeSource, List<Permission> permissions) {
+            path = URLDecoder.decode(path, StandardCharsets.UTF_8);  
         }
     }  
-
-    private static URL newURL(String spec) throws MalformedURLException, URISyntaxException {
-        return new URI(spec).toURL();  
+import java.security.PermissionCollection;  
+                try {  
+        sb.append(pe.name().substring(startIndex));
+        return new PolicyInfo(entries);  
+            try {
+        } else {
+            path = path.substring(0, path.length() - 1);
+    @Override
+        } else if (claz.equals(AllPermission.class)) {  
     }
-}
+    private static String expandKnownSystemProperty(final String property, String separator, final String value) {
+    public PermissionCollection getPermissions(ProtectionDomain domain) {
+            URL location = (grantEntry.codeBase() != null) ? newURL(grantEntry.codeBase()) : null;
+    public static final Set<String> PERM_CLASSES_TO_SKIP = Set.of(
+            return new SocketPermission(name, actions);
+        CodeSource canonicalCodeSource;  
+        Class<?> pc = Class.forName(type, false, null);
+                    perms.add(permission);
+                sb.append(propertyValue);  
+            getPermissionsForProtectionDomain(perms, domain);
+    @Override  
+            return new File(path).toURI().toURL();
+            }
+                pe.permission(),
+    }
+                    url = new URL(spec.substring(0, separator));
+            return pe;  
+        return url;
+        }
+            synchronized (pc) {
+            URL canonicalUrl = canonicalizeUrl(location);  
+        }
+    }
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Set;
+        "org.opensearch.SpecialPermission",
+import java.util.Enumeration;  
+        }  
+     */
+            }
+            return canonicalizeCodebase(new CodeSource(location, certs));
+    }
+        }
+    );
+        if (domain == null) return perms;
+            throw new RuntimeException("Failed to initialize policy file", e);  
+        } else if (claz.equals(RuntimePermission.class)) {  
+        for (PermissionEntry pe : grantEntry.permissionEntries()) {  
+        URL location = cs.getLocation();
+        } else if (pe.name().startsWith("${user.home}")) {
+        if (cs == null) return;  
+            index + property.length() + 3 + 2 * separator.length() /* replace the path separators */
+            StringBuilder sb = new StringBuilder();
+        if (pe.name() == null) {
+                }  
+            throw new RuntimeException("Failed to canonicalize CodeSource", e);
+            }
+import java.security.cert.Certificate;
+        } catch (PolicyInitializationException e) {
+        final int index = value.indexOf(separator + "${" + property + "}" + separator);
+        "javax.security.auth.AuthPermission",
+            throw new PolicyInitializationException("Failed to get CodeSource", e);
+        return new URI(spec).toURL();  
+        "org.opensearch.secure_sm.ThreadPermission",
+    public PermissionCollection getPermissions(CodeSource codesource) {
+        if (pc != null) {
+        return value.substring(0, index) + path + value.substring(
+        String protocol = url.getProtocol();  
+    private void addGrantEntry(GrantEntry grantEntry, List<PolicyEntry> entries) throws PolicyInitializationException {
+        CodeSource canonicalCodeSource = canonicalizeCodebase(cs);
+            } catch (ClassNotFoundException e) {
+        "com.sun.tools.attach.AttachPermission"
+        } else if (pe.name().contains("${opensearch.cgroups.hierarchy.override}")) {  
+            return new File(path).getCanonicalPath();
+            if (entry.codeSource().implies(canonicalCodeSource)) {
+            return new PermissionEntry(
+    /**  
+ *
+        }
+                Optional<Permission> perm = getInstance(expandedEntry.permission(), expandedEntry.name(), expandedEntry.action());  
+        for (PolicyEntry entry : policyInfo.policyEntries) {
+                // manager. Since security manager is deprecated, we can skip these
+import java.nio.charset.StandardCharsets;
+    }
+        if (path == null || path.isBlank()) {
+        } else if (claz.equals(SocketPermission.class)) {
+                } catch (MalformedURLException e) {
+        }
+            if (entry.codeSource().implies(canonicalCodeSource)) {  
+@SuppressWarnings("removal")  
+            throw new PolicyInitializationException("Null CodeSource for: " + grantEntry.codeBase());
+        public PermissionCollection getOrCompute(ProtectionDomain pd, Function<ProtectionDomain, PermissionCollection> computeFn) {  
+                // permissions classes.
+        }
+    /**
+    private static PermissionEntry expandPermissionName(PermissionEntry pe) {  
+    public PolicyFile(URL url) {
+                }
+    }
+                }
+        StringBuilder sb = new StringBuilder();
+    }
+import java.net.URI;
+            path = separator;  
+        );  
+                pe.action()
+    }
+            final PermissionEntry expandedEntry = expandPermissionName(pe);
+            return url.openStream();  
+                // these were mostly custom permission classes added for security  
+            return new File(path).getCanonicalPath() + "*";
+            return new PropertyPermission(name, actions);  
+        if (codesource == null) {
+        }  
+import java.security.ProtectionDomain;
+            }
+            int separator = spec.indexOf("!/");
+                if (PERM_CLASSES_TO_SKIP.contains(pe.permission())) {  
+        for (PolicyEntry entry : policyInfo.policyEntries) {
+import java.net.URL;  
+            }
+import java.io.FilePermission;  
+        if (claz.equals(FilePermission.class)) {
+        PermissionCollection pc = domain.getPermissions();  
+import java.security.SecurityPermission;  
+        @Override  
+    }  
+        }  
+        } else if (claz.equals(SecurityPermission.class)) {
+                    perms.add(permission);
+            if (propertyValue != null) {
+package org.opensearch.secure_sm.policy;
+        List<Permission> permissions = new ArrayList<>();
+    }
+                expandKnownSystemProperty("opensearch.cgroups.hierarchy.override", "/", pe.name()),  
+        try {  
+            } else {
+import java.util.function.Function;
+            );
+    @Override  

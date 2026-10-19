@@ -1,585 +1,497 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import joptsimple.OptionSet;  
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.cli.MockTerminal;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;  
-import org.opensearch.env.TestEnvironment;
-import org.opensearch.gateway.GatewayMetaState;
-import org.opensearch.gateway.PersistedClusterStateService;  
-import org.opensearch.gateway.remote.RemoteClusterStateService;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.node.Node.DiscoverySettings;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Locale;
-import java.util.Objects;
-
-import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
-import static org.opensearch.gateway.DanglingIndicesState.AUTO_IMPORT_DANGLING_INDICES_SETTING;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;  
-import static org.opensearch.indices.recovery.RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING;
-import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.notNullValue;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)  
-public class UnsafeBootstrapAndDetachCommandIT extends OpenSearchIntegTestCase {
-
-    private MockTerminal executeCommand(  
-        OpenSearchNodeCommand command,
-        Environment environment,
-        int nodeOrdinal,  
-        boolean abort,
-        Boolean applyClusterReadOnlyBlock
-    ) throws Exception {  
-        final MockTerminal terminal = new MockTerminal();
-        final OptionSet options;
-        if (Objects.nonNull(applyClusterReadOnlyBlock)) {  
-            options = command.getParser()
-                .parse(
-                    "-ordinal",  
-                    Integer.toString(nodeOrdinal),
-                    "-apply-cluster-read-only-block",
-                    Boolean.toString(applyClusterReadOnlyBlock)  
-                );
-        } else {
-            options = command.getParser().parse("-ordinal", Integer.toString(nodeOrdinal));  
-        }
-        final String input;
-
-        if (abort) {
-            input = randomValueOtherThanMany(c -> c.equalsIgnoreCase("y"), () -> randomAlphaOfLength(1));
-        } else {  
-            input = randomBoolean() ? "y" : "Y";
-        }
-
-        terminal.addTextInput(input);
-
-        try {  
-            command.execute(terminal, options, environment);
-        } finally {
-            assertThat(terminal.getOutput(), containsString(OpenSearchNodeCommand.STOP_WARNING_MSG));  
-        }
-
-        return terminal;  
-    }
-
-    private MockTerminal unsafeBootstrap(Environment environment, boolean abort, Boolean applyClusterReadOnlyBlock) throws Exception {  
-        final MockTerminal terminal = executeCommand(
-            new UnsafeBootstrapClusterManagerCommand(),
-            environment,  
-            0,
-            abort,
-            applyClusterReadOnlyBlock  
-        );
-        assertThat(terminal.getOutput(), containsString(UnsafeBootstrapClusterManagerCommand.CONFIRMATION_MSG));
-        assertThat(terminal.getOutput(), containsString(UnsafeBootstrapClusterManagerCommand.CLUSTER_MANAGER_NODE_BOOTSTRAPPED_MSG));  
-        return terminal;
-    }
-
-    private MockTerminal detachCluster(Environment environment, boolean abort) throws Exception {
-        final MockTerminal terminal = executeCommand(new DetachClusterCommand(), environment, 0, abort, null);
-        assertThat(terminal.getOutput(), containsString(DetachClusterCommand.CONFIRMATION_MSG));  
-        assertThat(terminal.getOutput(), containsString(DetachClusterCommand.NODE_DETACHED_MSG));
-        return terminal;
-    }  
-
-    private MockTerminal unsafeBootstrap(Environment environment) throws Exception {
-        return unsafeBootstrap(environment, false, null);  
-    }
-
-    private MockTerminal detachCluster(Environment environment) throws Exception {  
-        return detachCluster(environment, false);
-    }
-
-    private void expectThrows(ThrowingRunnable runnable, String message) {
-        OpenSearchException ex = expectThrows(OpenSearchException.class, runnable);
-        assertThat(ex.getMessage(), containsString(message));  
-    }
-
-    private void ensureReadOnlyBlock(boolean expected_block_state, String node) {  
-        ClusterState state = internalCluster().client(node)
-            .admin()
-            .cluster()  
-            .prepareState()
-            .setLocal(true)
-            .execute()  
-            .actionGet()
-            .getState();
-        boolean current_block_state = state.metadata()  
-            .persistentSettings()
-            .getAsBoolean(Metadata.SETTING_READ_ONLY_SETTING.getKey(), false);
-        if (current_block_state != expected_block_state) {  
-            fail(
-                String.format(
-                    Locale.ROOT,  
-                    "Read only setting for the node %s don't match. Expected %s. Actual %s",
-                    node,
-                    expected_block_state,  
-                    current_block_state
-                )
-            );  
-        }
-    }
-
-    private void removeBlock() {
-        if (isInternalCluster()) {
-            Settings settings = Settings.builder().putNull(Metadata.SETTING_READ_ONLY_SETTING.getKey()).build();  
-            assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(settings).get());
-        }
-    }  
-
-    public void testBootstrapNotClusterManagerEligible() {
-        final Environment environment = TestEnvironment.newEnvironment(  
-            Settings.builder().put(nonClusterManagerNode(internalCluster().getDefaultSettings())).build()
-        );
-        expectThrows(() -> unsafeBootstrap(environment), UnsafeBootstrapClusterManagerCommand.NOT_CLUSTER_MANAGER_NODE_MSG);  
-    }
-
-    public void testBootstrapRemoteClusterEnabled() {  
-        final Environment environment = TestEnvironment.newEnvironment(
-            Settings.builder()
-                .put(internalCluster().getDefaultSettings())  
-                .put(RemoteClusterStateService.REMOTE_CLUSTER_STATE_ENABLED_SETTING.getKey(), true)
-                .build()
-        );  
-        expectThrows(() -> unsafeBootstrap(environment), UnsafeBootstrapClusterManagerCommand.REMOTE_CLUSTER_STATE_ENABLED_NODE);
-    }
-
-    public void testBootstrapNoDataFolder() {
-        final Environment environment = TestEnvironment.newEnvironment(internalCluster().getDefaultSettings());
-        expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.NO_NODE_FOLDER_FOUND_MSG);  
-    }
-
-    public void testDetachNoDataFolder() {  
-        final Environment environment = TestEnvironment.newEnvironment(internalCluster().getDefaultSettings());
-        expectThrows(() -> detachCluster(environment), OpenSearchNodeCommand.NO_NODE_FOLDER_FOUND_MSG);
-    }  
-
-    public void testBootstrapNodeLocked() throws IOException {
-        Settings envSettings = buildEnvSettings(Settings.EMPTY);  
-        Environment environment = TestEnvironment.newEnvironment(envSettings);
-        try (NodeEnvironment ignored = new NodeEnvironment(envSettings, environment)) {
-            expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG);  
-        }
-    }
-
-    public void testDetachNodeLocked() throws IOException {
-        Settings envSettings = buildEnvSettings(Settings.EMPTY);
-        Environment environment = TestEnvironment.newEnvironment(envSettings);  
-        try (NodeEnvironment ignored = new NodeEnvironment(envSettings, environment)) {
-            expectThrows(() -> detachCluster(environment), OpenSearchNodeCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG);
-        }  
-    }
-
-    public void testBootstrapNoNodeMetadata() {  
-        Settings envSettings = buildEnvSettings(Settings.EMPTY);
-        Environment environment = TestEnvironment.newEnvironment(envSettings);
-        expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.NO_NODE_FOLDER_FOUND_MSG);  
-    }
-
-    public void testBootstrapNotBootstrappedCluster() throws Exception {  
-        String node = internalCluster().startNode(
-            Settings.builder()
-                .put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s") // to ensure quick node startup  
-                .build()
-        );
-        assertBusy(() -> {  
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-            assertTrue(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
-        });  
-
-        Settings dataPathSettings = internalCluster().dataPathSettings(node);
-
-        internalCluster().stopRandomDataNode();
-
-        Environment environment = TestEnvironment.newEnvironment(  
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
-        );
         expectThrows(() -> unsafeBootstrap(environment), UnsafeBootstrapClusterManagerCommand.EMPTY_LAST_COMMITTED_VOTING_CONFIG_MSG);  
-    }
-
-    public void testBootstrapNoClusterState() throws IOException {  
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);
-        String node = internalCluster().startNode();
-        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
-        ensureStableCluster(1);
-        NodeEnvironment nodeEnvironment = internalCluster().getClusterManagerNodeInstance(NodeEnvironment.class);
-        internalCluster().stopRandomDataNode();  
-        Environment environment = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
-        );  
-        PersistedClusterStateService.deleteAll(nodeEnvironment.nodeDataPaths());
-
-        expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.NO_NODE_METADATA_FOUND_MSG);  
-    }
-
-    public void testDetachNoClusterState() throws IOException {  
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);
-        String node = internalCluster().startNode();
-        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
-        ensureStableCluster(1);
-        NodeEnvironment nodeEnvironment = internalCluster().getClusterManagerNodeInstance(NodeEnvironment.class);
-        internalCluster().stopRandomDataNode();  
-        Environment environment = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
-        );  
-        PersistedClusterStateService.deleteAll(nodeEnvironment.nodeDataPaths());
-
-        expectThrows(() -> detachCluster(environment), OpenSearchNodeCommand.NO_NODE_METADATA_FOUND_MSG);  
-    }
-
-    public void testBootstrapAbortedByUser() throws IOException {  
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);
-        String node = internalCluster().startNode();
-        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
-        ensureStableCluster(1);
-        internalCluster().stopRandomDataNode();
-
-        Environment environment = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
-        );  
-        expectThrows(() -> unsafeBootstrap(environment, true, null), OpenSearchNodeCommand.ABORTED_BY_USER_MSG);
-    }
-
-    public void testDetachAbortedByUser() throws IOException {
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);
-        String node = internalCluster().startNode();  
-        Settings dataPathSettings = internalCluster().dataPathSettings(node);
-        ensureStableCluster(1);
-        internalCluster().stopRandomDataNode();  
-
-        Environment environment = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()  
-        );
-        expectThrows(() -> detachCluster(environment, true), OpenSearchNodeCommand.ABORTED_BY_USER_MSG);
-    }  
-
-    public void test3ClusterManagerNodes2Failed() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(2);  
-        List<String> clusterManagerNodes = new ArrayList<>();
-
-        logger.info("--> start 1st cluster-manager-eligible node");  
-        clusterManagerNodes.add(
-            internalCluster().startClusterManagerOnlyNode(
-                Settings.builder().put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()  
-            )
-        ); // node ordinal 0
-
-        logger.info("--> start one data-only node");
-        String dataNode = internalCluster().startDataOnlyNode(
-            Settings.builder().put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()  
-        ); // node ordinal 1
-
-        logger.info("--> start 2nd and 3rd cluster-manager-eligible nodes and bootstrap");  
-        clusterManagerNodes.addAll(internalCluster().startClusterManagerOnlyNodes(2)); // node ordinals 2 and 3
-
-        logger.info("--> wait for all nodes to join the cluster");  
-        ensureStableCluster(4);
-
-        List<String> currentClusterNodes = new ArrayList<>(clusterManagerNodes);  
-        currentClusterNodes.add(dataNode);
-        currentClusterNodes.forEach(node -> ensureReadOnlyBlock(false, node));
-
-        logger.info("--> create index test");
-        createIndex("test");
-        ensureGreen("test");  
-
-        Settings clusterManager1DataPathSettings = internalCluster().dataPathSettings(clusterManagerNodes.get(0));
-        Settings clusterManager2DataPathSettings = internalCluster().dataPathSettings(clusterManagerNodes.get(1));  
-        Settings clusterManager3DataPathSettings = internalCluster().dataPathSettings(clusterManagerNodes.get(2));
-        Settings dataNodeDataPathSettings = internalCluster().dataPathSettings(dataNode);
-
-        logger.info("--> stop 2nd and 3d cluster-manager eligible node");
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNodes.get(1)));
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNodes.get(2)));  
-
-        logger.info("--> ensure NO_MASTER_BLOCK on data-only node");
-        assertBusy(() -> {  
-            ClusterState state = internalCluster().client(dataNode)
-                .admin()
-                .cluster()  
-                .prepareState()
-                .setLocal(true)
-                .execute()  
-                .actionGet()
-                .getState();
-            assertTrue(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));  
-        });
-
-        logger.info("--> try to unsafely bootstrap 1st cluster-manager-eligible node, while node lock is held");  
-        Environment environmentClusterManager1 = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManager1DataPathSettings).build()
-        );  
-        expectThrows(
-            () -> unsafeBootstrap(environmentClusterManager1),
-            UnsafeBootstrapClusterManagerCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG  
-        );
-
-        logger.info("--> stop 1st cluster-manager-eligible node and data-only node");  
-        NodeEnvironment nodeEnvironment = internalCluster().getClusterManagerNodeInstance(NodeEnvironment.class);
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNodes.get(0)));
-        assertBusy(() -> internalCluster().getInstance(GatewayMetaState.class, dataNode).allPendingAsyncStatesWritten());  
-        internalCluster().stopRandomDataNode();
-
-        logger.info("--> unsafely-bootstrap 1st cluster-manager-eligible node");  
-        MockTerminal terminal = unsafeBootstrap(environmentClusterManager1, false, true);
-        Metadata metadata = OpenSearchNodeCommand.createPersistedClusterStateService(Settings.EMPTY, nodeEnvironment.nodeDataPaths())
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManagerNodeDataPathSettings).build()  
+        unsafeBootstrap(environment, false, false);
             .loadBestOnDiskState().metadata;  
-        assertThat(
-            terminal.getOutput(),
-            containsString(  
-                String.format(
-                    Locale.ROOT,
-                    UnsafeBootstrapClusterManagerCommand.CLUSTER_STATE_TERM_VERSION_MSG_FORMAT,  
-                    metadata.coordinationMetadata().term(),
-                    metadata.version()
-                )  
-            )
-        );
-
-        logger.info("--> start 1st cluster-manager-eligible node");
-        String clusterManagerNode2 = internalCluster().startClusterManagerOnlyNode(clusterManager1DataPathSettings);
-
-        logger.info("--> detach-cluster on data-only node");
-        Environment environmentData = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataNodeDataPathSettings).build()  
-        );
-        detachCluster(environmentData, false);
-
-        logger.info("--> start data-only node");
-        String dataNode2 = internalCluster().startDataOnlyNode(dataNodeDataPathSettings);
-
-        logger.info("--> ensure there is no NO_MASTER_BLOCK and unsafe-bootstrap is reflected in cluster state");
-        assertBusy(() -> {
-            ClusterState state = internalCluster().client(dataNode2)  
+        ensureGreen();  
+import joptsimple.OptionSet;  
+        if (current_block_state != expected_block_state) {  
+        String node = internalCluster().startClusterManagerOnlyNode(
+                    Boolean.toString(applyClusterReadOnlyBlock)  
+    public void testBootstrapAbortedByUser() throws IOException {  
+        internalCluster().stopRandomDataNode();
                 .admin()
-                .cluster()
-                .prepareState()  
-                .setLocal(true)
-                .execute()
-                .actionGet()  
+    public void testBootstrapNoDataFolder() {
+        String node = internalCluster().startNode();
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNodes.get(2)));  
+            Settings.builder()
+        clusterManagerNodes.add(
+ * Modifications Copyright OpenSearch Contributors. See  
                 .getState();
-            assertFalse(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
-            assertTrue(  
-                state.metadata().persistentSettings().getAsBoolean(UnsafeBootstrapClusterManagerCommand.UNSAFE_BOOTSTRAP.getKey(), false)
-            );
-        });  
-
-        List<String> bootstrappedNodes = new ArrayList<>();
-        bootstrappedNodes.add(dataNode2);  
-        bootstrappedNodes.add(clusterManagerNode2);
-        bootstrappedNodes.forEach(node -> ensureReadOnlyBlock(true, node));
-
-        logger.info("--> ensure index test is green");
-        ensureGreen("test");
-        IndexMetadata indexMetadata = clusterService().state().metadata().index("test");  
-        assertThat(indexMetadata.getSettings().get(IndexMetadata.SETTING_HISTORY_UUID), notNullValue());
-
-        logger.info("--> detach-cluster on 2nd and 3rd cluster-manager-eligible nodes");  
-        Environment environmentClusterManager2 = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManager2DataPathSettings).build()
+        String node = internalCluster().startNode();  
+        assertThat(terminal.getOutput(), containsString(UnsafeBootstrapClusterManagerCommand.CLUSTER_MANAGER_NODE_BOOTSTRAPPED_MSG));  
+        assertThat(terminal.getOutput(), containsString(DetachClusterCommand.NODE_DETACHED_MSG));
         );  
-        detachCluster(environmentClusterManager2, false);
-        Environment environmentClusterManager3 = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManager3DataPathSettings).build()  
-        );
-        detachCluster(environmentClusterManager3, false);
-
-        logger.info("--> start 2nd and 3rd cluster-manager-eligible nodes and ensure 4 nodes stable cluster");
-        bootstrappedNodes.add(internalCluster().startClusterManagerOnlyNode(clusterManager2DataPathSettings));
-        bootstrappedNodes.add(internalCluster().startClusterManagerOnlyNode(clusterManager3DataPathSettings));  
-        ensureStableCluster(4);
-        bootstrappedNodes.forEach(node -> ensureReadOnlyBlock(true, node));
-        removeBlock();  
-    }
-
-    public void testAllClusterManagerEligibleNodesFailedDanglingIndexImport() throws Exception {  
         internalCluster().setBootstrapClusterManagerNodeIndex(0);
-
-        Settings settings = Settings.builder().put(AUTO_IMPORT_DANGLING_INDICES_SETTING.getKey(), true).build();  
-
-        logger.info("--> start mixed data and cluster-manager-eligible node and bootstrap cluster");
-        String clusterManagerNode = internalCluster().startNode(settings); // node ordinal 0  
-
-        logger.info("--> start data-only node and ensure 2 nodes stable cluster");
-        String dataNode = internalCluster().startDataOnlyNode(settings); // node ordinal 1  
-        ensureStableCluster(2);
-
-        logger.info("--> index 1 doc and ensure index is green");  
-        client().prepareIndex("test").setId("1").setSource("field1", "value1").setRefreshPolicy(IMMEDIATE).get();
+            expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG);  
+import org.opensearch.gateway.PersistedClusterStateService;  
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+            expectThrows(() -> detachCluster(environment), OpenSearchNodeCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG);
+            .execute()  
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+                )
+        );
+        Environment environment = TestEnvironment.newEnvironment(
+        ); // node ordinal 1
+    public void test3ClusterManagerNodes2Failed() throws Exception {
+        String dataNode2 = internalCluster().startDataOnlyNode(dataNodeDataPathSettings);
+        ensureStableCluster(1);
+        List<String> currentClusterNodes = new ArrayList<>(clusterManagerNodes);  
+            Settings.builder().put(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(), "1234kb")  
+        String node = internalCluster().startNode();
+    }  
+        expectThrows(() -> detachCluster(environment), OpenSearchNodeCommand.NO_NODE_METADATA_FOUND_MSG);  
+    public void testBootstrapRemoteClusterEnabled() {  
+            .cluster()  
+ * Unless required by applicable law or agreed to in writing,
+        Settings clusterManager3DataPathSettings = internalCluster().dataPathSettings(clusterManagerNodes.get(2));
+        ensureStableCluster(1);
+        String dataNode = internalCluster().startDataOnlyNode(
+            assertTrue(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                Settings.builder().put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()  
+                    metadata.version()
+        String clusterManagerNode2 = internalCluster().startClusterManagerOnlyNode(clusterManager1DataPathSettings);
+        );
+        Environment environment = TestEnvironment.newEnvironment(envSettings);
+                    node,
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+            Settings.builder().put(nonClusterManagerNode(internalCluster().getDefaultSettings())).build()
+        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();
+                    "Read only setting for the node %s don't match. Expected %s. Actual %s",
+                .parse(
+        NodeEnvironment nodeEnvironment = internalCluster().getClusterManagerNodeInstance(NodeEnvironment.class);
+        expectThrows(() -> unsafeBootstrap(environment), UnsafeBootstrapClusterManagerCommand.NOT_CLUSTER_MANAGER_NODE_MSG);  
+        final MockTerminal terminal = executeCommand(new DetachClusterCommand(), environment, 0, abort, null);
+        String clusterManagerNode2 = internalCluster().startClusterManagerOnlyNode(clusterManagerNodeDataPathSettings);
+        final Environment environment = TestEnvironment.newEnvironment(internalCluster().getDefaultSettings());
+            abort,
+                .cluster()  
+        detachCluster(environment);  
         ensureGreen("test");
-        assertBusy(  
-            () -> internalCluster().getInstances(IndicesService.class)
-                .forEach(indicesService -> assertTrue(indicesService.allPendingDanglingIndicesWritten()))
+        state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();
         );  
-
-        logger.info("--> verify 1 doc in the index");
-        assertHitCount(client().prepareSearch().setQuery(matchAllQuery()).get(), 1L);  
-        assertThat(client().prepareGet("test", "1").execute().actionGet().isExists(), equalTo(true));
-
-        logger.info("--> stop data-only node and detach it from the old cluster");  
-        Settings dataNodeDataPathSettings = Settings.builder()
-            .put(internalCluster().dataPathSettings(dataNode), true)
-            .put(AUTO_IMPORT_DANGLING_INDICES_SETTING.getKey(), true)  
-            .build();
+import org.opensearch.cli.MockTerminal;  
+import org.opensearch.node.Node.DiscoverySettings;  
+        String node = internalCluster().startNode();
+        logger.info("--> verify that the dangling index exists and has green status");
+import org.opensearch.test.InternalTestCluster;
+        internalCluster().stopRandomDataNode();
+            terminal.getOutput(),
+        bootstrappedNodes.add(dataNode2);  
+        bootstrappedNodes.forEach(node -> ensureReadOnlyBlock(true, node));
+        internalCluster().stopCurrentClusterManagerNode();
         assertBusy(() -> internalCluster().getInstance(GatewayMetaState.class, dataNode).allPendingAsyncStatesWritten());
+        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();  
+        ensureReadOnlyBlock(false, clusterManagerNode);
+        logger.info("--> start data-only only node and ensure 2 nodes stable cluster");  
+        logger.info("--> start 1st cluster-manager-eligible node");
+    }
+ */
+                .forEach(indicesService -> assertTrue(indicesService.allPendingDanglingIndicesWritten()))
+        final Environment environment = TestEnvironment.newEnvironment(internalCluster().getDefaultSettings());
+ * Licensed to Elasticsearch under one or more contributor  
+            .getAsBoolean(Metadata.SETTING_READ_ONLY_SETTING.getKey(), false);
+        ClusterState state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();
+        ensureStableCluster(4);
+import org.opensearch.cluster.metadata.Metadata;  
+        internalCluster().stopCurrentClusterManagerNode();  
+        return unsafeBootstrap(environment, false, null);  
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManagerNodeDataPathSettings).build()
+        Settings envSettings = buildEnvSettings(Settings.EMPTY);
+            internalCluster().startClusterManagerOnlyNode(
+        removeBlock();  
+ * specific language governing permissions and limitations
+    public void testBootstrapNotClusterManagerEligible() {
+        logger.info("--> verify 1 doc in the index");
+        Metadata metadata = OpenSearchNodeCommand.createPersistedClusterStateService(Settings.EMPTY, nodeEnvironment.nodeDataPaths())
+            assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(settings).get());
+        });
+            .put(AUTO_IMPORT_DANGLING_INDICES_SETTING.getKey(), true)  
+    }
+        logger.info("--> start 2nd and 3rd cluster-manager-eligible nodes and bootstrap");  
+        logger.info("--> start 2nd and 3rd cluster-manager-eligible nodes and ensure 4 nodes stable cluster");
+ * You may obtain a copy of the License at  
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManager1DataPathSettings).build()
+                .prepareState()
+ *
+        );
+    }
+        logger.info("--> detach-cluster on 2nd and 3rd cluster-manager-eligible nodes");  
+        assertBusy(  
+                .admin()
+            .setLocal(true)
+        );
+        assertBusy(() -> {  
+        logger.info("--> stop data-only node and detach it from the old cluster");  
+        assertBusy(() -> internalCluster().getInstance(GatewayMetaState.class, dataNode).allPendingAsyncStatesWritten());  
+        return terminal;
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManager3DataPathSettings).build()  
+                    "-apply-cluster-read-only-block",
+/*
+ * KIND, either express or implied.  See the License for the
+        ClusterUpdateSettingsRequest req = new ClusterUpdateSettingsRequest().persistentSettings(
+        detachCluster(environment);
+        );
+ * license agreements. See the NOTICE file distributed with
+        }  
+        );
+        Environment environmentData = TestEnvironment.newEnvironment(
+    }
+        assertHitCount(client().prepareSearch().setQuery(matchAllQuery()).get(), 1L);  
+        try (NodeEnvironment ignored = new NodeEnvironment(envSettings, environment)) {
+            () -> internalCluster().getInstances(IndicesService.class)
+    }
+        Settings dataNodeDataPathSettings = Settings.builder()
+        ClusterState state = internalCluster().client(node)
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);
+            Settings.builder()  
+        }
+            .prepareState()
+        expectThrows(() -> unsafeBootstrap(environment), UnsafeBootstrapClusterManagerCommand.REMOTE_CLUSTER_STATE_ENABLED_NODE);
+        logger.info("--> start data-only node");
+            containsString(  
+    }
+        ensureReadOnlyBlock(false, clusterManagerNode);
+                .actionGet()  
+        });
+        OpenSearchNodeCommand command,
+        );
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()  
+        logger.info("--> try to unsafely bootstrap 1st cluster-manager-eligible node, while node lock is held");  
+        int nodeOrdinal,  
+        });  
+    public void testDetachAbortedByUser() throws IOException {
+    private MockTerminal unsafeBootstrap(Environment environment, boolean abort, Boolean applyClusterReadOnlyBlock) throws Exception {  
+        PersistedClusterStateService.deleteAll(nodeEnvironment.nodeDataPaths());
+        final Environment environment = TestEnvironment.newEnvironment(  
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);
+                );
+        detachCluster(environmentClusterManager3, false);
+                // give the cluster 2 seconds to elect the cluster-manager (it should not)
+        ensureGreen();
+        ensureStableCluster(1);
+        assertThat(client().prepareGet("test", "1").execute().actionGet().isExists(), equalTo(true));
+        Environment environment = TestEnvironment.newEnvironment(
+ */  
+        logger.info("--> ensure index test is green");
+        bootstrappedNodes.add(clusterManagerNode2);
+ * The OpenSearch Contributors require contributions made to  
+        internalCluster().stopRandomDataNode();
+        String node = internalCluster().startNode(
+        ensureGreen("test");  
+                    expected_block_state,  
+        Settings clusterManagerNodeDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);  
+        bootstrappedNodes.add(internalCluster().startClusterManagerOnlyNode(clusterManager3DataPathSettings));  
+ * not use this file except in compliance with the License.
+public class UnsafeBootstrapAndDetachCommandIT extends OpenSearchIntegTestCase {
+        detachCluster(environmentClusterManager2, false);
+        Environment environment = TestEnvironment.newEnvironment(envSettings);
+import java.util.ArrayList;
+/*
+        expectThrows(() -> detachCluster(environment), OpenSearchNodeCommand.NO_NODE_FOLDER_FOUND_MSG);
+        assertThat(
+    }  
+            assertTrue(  
+                .execute()
+        return detachCluster(environment, false);
+                state.metadata().persistentSettings().getAsBoolean(UnsafeBootstrapClusterManagerCommand.UNSAFE_BOOTSTRAP.getKey(), false)
+import org.opensearch.cluster.ClusterState;
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;  
+                    UnsafeBootstrapClusterManagerCommand.CLUSTER_STATE_TERM_VERSION_MSG_FORMAT,  
+            Settings.builder().put(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(), "1234kb")  
+            () -> unsafeBootstrap(environmentClusterManager1),
+            )
+        logger.info("--> create index test");
+        String clusterManagerNode = internalCluster().startNode(settings); // node ordinal 0  
+        );  
+package org.opensearch.cluster.coordination;
+        assertThat(state.metadata().settings().get(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey()), equalTo("1234kb"));
+import org.opensearch.cluster.metadata.IndexMetadata;
+        logger.info("--> index 1 doc and ensure index is green");  
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(node));
+                .put(AUTO_IMPORT_DANGLING_INDICES_SETTING.getKey(), true)
+        final OptionSet options;
+                )  
+        Environment environment,
+        final Environment environment = TestEnvironment.newEnvironment(
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNodes.get(0)));
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManager2DataPathSettings).build()
+                .execute()  
+ * ownership. Elasticsearch licenses this file to you under  
+                .put(clusterManagerNodeDataPathSettings)  
+        logger.info("--> ensure there is no NO_MASTER_BLOCK and unsafe-bootstrap is reflected in cluster state");
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);
+        ensureGreen("test");  
+        PersistedClusterStateService.deleteAll(nodeEnvironment.nodeDataPaths());
+    public void testDetachNodeLocked() throws IOException {
+            environment,  
+    }
+        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        Settings dataPathSettings = internalCluster().dataPathSettings(node);
+        Environment environmentClusterManager1 = TestEnvironment.newEnvironment(
+        Settings envSettings = buildEnvSettings(Settings.EMPTY);
+        Environment environment = TestEnvironment.newEnvironment(
+        assertThat(terminal.getOutput(), containsString(UnsafeBootstrapClusterManagerCommand.CONFIRMATION_MSG));
+            input = randomValueOtherThanMany(c -> c.equalsIgnoreCase("y"), () -> randomAlphaOfLength(1));
+                    metadata.coordinationMetadata().term(),
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManagerNodeDataPathSettings).build()  
+        assertBusy(() -> {
+                .actionGet()
+        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
+        return terminal;
+    }
+        boolean current_block_state = state.metadata()  
+        expectThrows(() -> detachCluster(environment, true), OpenSearchNodeCommand.ABORTED_BY_USER_MSG);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    Integer.toString(nodeOrdinal),
         internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataNode));  
+ *  
+        internalCluster().stopRandomDataNode();  
+            .admin()
+import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
+            @Override  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)  
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNodes.get(1)));
+        );  
+            public boolean clearData(String nodeName) {
+    public void testBootstrapNoNodeMetadata() {  
+        boolean abort,
+    public void testBootstrapNotBootstrappedCluster() throws Exception {  
+        MockTerminal terminal = unsafeBootstrap(environmentClusterManager1, false, true);
+        Environment environment = TestEnvironment.newEnvironment(
+import static org.hamcrest.Matchers.containsString;
+ * GitHub history for details.
+        assertThat(state.metadata().persistentSettings().get(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey()), equalTo("1234kb"));
+    }
+    ) throws Exception {  
+        IndexMetadata indexMetadata = clusterService().state().metadata().index("test");  
+import org.opensearch.env.NodeEnvironment;  
+        internalCluster().restartNode(clusterManagerNode, new InternalTestCluster.RestartCallback() {
+        assertThat(ex.getMessage(), containsString(message));  
+        String dataNode = internalCluster().startDataOnlyNode(settings); // node ordinal 1  
+        clusterManagerNodes.addAll(internalCluster().startClusterManagerOnlyNodes(2)); // node ordinals 2 and 3
+import org.opensearch.gateway.remote.RemoteClusterStateService;
+    public void testDetachNoClusterState() throws IOException {  
+        final Environment environment = TestEnvironment.newEnvironment(
+        terminal.addTextInput(input);
+    }
+        } else {  
+                String.format(
+    private void removeBlock() {
+        Settings dataPathSettings = internalCluster().dataPathSettings(node);
+        }
+ * this work for additional information regarding copyright
+        ClusterState state = internalCluster().client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+    public void testUnsafeBootstrapWithApplyClusterReadOnlyBlockAsFalse() throws Exception {
+                .build()
+    public void testDetachNoDataFolder() {  
+        internalCluster().stopRandomDataNode();  
+    }
+                .put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s") // to ensure quick node startup  
+import static org.hamcrest.Matchers.equalTo;  
+        NodeEnvironment nodeEnvironment = internalCluster().getClusterManagerNodeInstance(NodeEnvironment.class);
+            .build();
+        List<String> clusterManagerNodes = new ArrayList<>();
+    }
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);
+        );
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataNodeDataPathSettings).build()  
+            assertFalse(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
+            .getState();
+        logger.info("--> wait for all nodes to join the cluster");  
+        logger.info("--> ensure NO_MASTER_BLOCK on data-only node");
+        ClusterState state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
+        internalCluster().stopCurrentClusterManagerNode();  
+        expectThrows(
+            options = command.getParser()
+            .actionGet()
+            applyClusterReadOnlyBlock  
+                .getState();
+        assertThat(terminal.getOutput(), containsString(DetachClusterCommand.CONFIRMATION_MSG));  
+        final MockTerminal terminal = executeCommand(
+        final MockTerminal terminal = new MockTerminal();
+import static org.opensearch.indices.recovery.RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING;
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);
+        }
+        Boolean applyClusterReadOnlyBlock
+        return terminal;  
+        if (abort) {
+        assertTrue(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
+            );
+            options = command.getParser().parse("-ordinal", Integer.toString(nodeOrdinal));  
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
+                .put(internalCluster().getDefaultSettings())  
+        Settings clusterManagerNodeDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);
+        );  
+            ClusterState state = internalCluster().client(dataNode)
+        ensureReadOnlyBlock(false, clusterManagerNode2);
+        internalCluster().startDataOnlyNode(dataNodeDataPathSettings);
+            Settings settings = Settings.builder().putNull(Metadata.SETTING_READ_ONLY_SETTING.getKey()).build();  
+        Settings settings = Settings.builder().put(AUTO_IMPORT_DANGLING_INDICES_SETTING.getKey(), true).build();  
+        createIndex("test");
+        Settings clusterManager1DataPathSettings = internalCluster().dataPathSettings(clusterManagerNodes.get(0));
+        String clusterManagerNode2 = internalCluster().startClusterManagerOnlyNode(clusterManagerNodeDataPathSettings);
+        );
+        final Environment environment = TestEnvironment.newEnvironment(
+                .put(internalCluster().getDefaultSettings())  
+        }
+        Environment environmentClusterManager2 = TestEnvironment.newEnvironment(
+        final String input;
+        logger.info("--> start mixed data and cluster-manager-eligible node and bootstrap cluster");
+ *
+        Environment environment = TestEnvironment.newEnvironment(envSettings);  
+import static org.opensearch.gateway.DanglingIndicesState.AUTO_IMPORT_DANGLING_INDICES_SETTING;
+        logger.info("--> detach-cluster on data-only node");
+        logger.info("--> stop cluster-manager-eligible node, clear its data and start it again - new cluster should form");
+                .setLocal(true)
+                .put(RemoteClusterStateService.REMOTE_CLUSTER_STATE_ENABLED_SETTING.getKey(), true)
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
+    private MockTerminal detachCluster(Environment environment, boolean abort) throws Exception {
+        );
+            UnsafeBootstrapClusterManagerCommand.FAILED_TO_OBTAIN_NODE_LOCK_MSG  
+        );  
+        logger.info("--> unsafely-bootstrap 1st cluster-manager-eligible node");  
+        ensureStableCluster(4);
+        );
+import org.opensearch.env.TestEnvironment;
+            fail(
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);
+                .put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "2s")
+    }
+                .cluster()
+        assertThat(indexMetadata.getSettings().get(IndexMetadata.SETTING_HISTORY_UUID), notNullValue());
+        } finally {
+        } else {
+        ensureStableCluster(1);
+        );
+        assertBusy(() -> { assertThat(client().admin().indices().prepareExists("test").execute().actionGet().isExists(), equalTo(true)); });
+        ); // node ordinal 0
+        );
+            )
+            ClusterState state = internalCluster().client(dataNode2)  
+        NodeEnvironment nodeEnvironment = internalCluster().getClusterManagerNodeInstance(NodeEnvironment.class);
+            new UnsafeBootstrapClusterManagerCommand(),
+                .build()
+    }  
+import java.util.List;  
+            .put(internalCluster().dataPathSettings(dataNode), true)
+        Settings dataNodeDataPathSettings = internalCluster().dataPathSettings(dataNode);
+ * compatible open source license.
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+ * SPDX-License-Identifier: Apache-2.0
+        bootstrappedNodes.forEach(node -> ensureReadOnlyBlock(true, node));
+        assertThat(client().prepareGet("test", "1").execute().actionGet().isExists(), equalTo(true));  
+ * under the License.  
+            Settings.builder().put(internalCluster().getDefaultSettings()).put(dataPathSettings).build()
+        internalCluster().setBootstrapClusterManagerNodeIndex(2);  
+import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
+            0,
+            assertTrue(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
+            input = randomBoolean() ? "y" : "Y";
+        client().prepareIndex("test").setId("1").setSource("field1", "value1").setRefreshPolicy(IMMEDIATE).get();
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);
+    }  
+                .setLocal(true)
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.indices.IndicesService;
+                    Locale.ROOT,
+    private void ensureReadOnlyBlock(boolean expected_block_state, String node) {  
+        currentClusterNodes.forEach(node -> ensureReadOnlyBlock(false, node));
+        Environment environment = TestEnvironment.newEnvironment(  
+        ensureGreen("test");
+    }
+        ensureReadOnlyBlock(false, clusterManagerNode2);  
+        internalCluster().client().admin().cluster().updateSettings(req).get();
+import java.io.IOException;
+            Settings.builder().put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()  
+        assertBusy(() -> {  
+import org.opensearch.env.Environment;
+        expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.NO_NODE_FOLDER_FOUND_MSG);  
+        logger.info("--> start 1st cluster-manager-eligible node");  
+                .build()  
+                    Locale.ROOT,  
+        Environment environmentClusterManager3 = TestEnvironment.newEnvironment(
+        Settings clusterManagerNodeDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);
+        if (Objects.nonNull(applyClusterReadOnlyBlock)) {  
+        detachCluster(environmentData, false);
+}
+        }
+        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();  
+        logger.info("--> stop 2nd and 3d cluster-manager eligible node");
+        bootstrappedNodes.add(internalCluster().startClusterManagerOnlyNode(clusterManager2DataPathSettings));
+        Settings dataPathSettings = internalCluster().dataPathSettings(node);  
+    public void testNoInitialBootstrapAfterDetach() throws Exception {  
+        logger.info("--> start data-only node and ensure 2 nodes stable cluster");
+        logger.info("--> start one data-only node");
+import org.opensearch.common.settings.Settings;
+    }
+                .put(dataNodeDataPathSettings)
+    }
+                return true;
+        Settings clusterManager2DataPathSettings = internalCluster().dataPathSettings(clusterManagerNodes.get(1));  
+import java.util.Objects;
+        expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.NO_NODE_METADATA_FOUND_MSG);  
+        logger.info("--> verify the doc is there");
+        logger.info("--> stop 1st cluster-manager-eligible node and data-only node");  
+import java.util.Locale;
         final Environment environment = TestEnvironment.newEnvironment(
             Settings.builder()
-                .put(internalCluster().getDefaultSettings())  
-                .put(dataNodeDataPathSettings)
-                .put(AUTO_IMPORT_DANGLING_INDICES_SETTING.getKey(), true)
-                .build()  
-        );
-        detachCluster(environment, false);
-
-        logger.info("--> stop cluster-manager-eligible node, clear its data and start it again - new cluster should form");
-        internalCluster().restartNode(clusterManagerNode, new InternalTestCluster.RestartCallback() {
-            @Override  
-            public boolean clearData(String nodeName) {
-                return true;
-            }  
-        });
-
-        logger.info("--> start data-only only node and ensure 2 nodes stable cluster");  
-        internalCluster().startDataOnlyNode(dataNodeDataPathSettings);
-        ensureStableCluster(2);
-
-        logger.info("--> verify that the dangling index exists and has green status");
-        assertBusy(() -> { assertThat(client().admin().indices().prepareExists("test").execute().actionGet().isExists(), equalTo(true)); });
-        ensureGreen("test");  
-
-        logger.info("--> verify the doc is there");
-        assertThat(client().prepareGet("test", "1").execute().actionGet().isExists(), equalTo(true));  
-    }
-
-    public void testNoInitialBootstrapAfterDetach() throws Exception {  
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);
-        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();
-        Settings clusterManagerNodeDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);  
-        internalCluster().stopCurrentClusterManagerNode();
-
-        final Environment environment = TestEnvironment.newEnvironment(  
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManagerNodeDataPathSettings).build()
-        );
-        detachCluster(environment);  
-
-        String node = internalCluster().startClusterManagerOnlyNode(
-            Settings.builder()  
-                // give the cluster 2 seconds to elect the cluster-manager (it should not)
-                .put(DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.getKey(), "2s")
-                .put(clusterManagerNodeDataPathSettings)  
-                .build()
-        );
-
-        ClusterState state = internalCluster().client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertTrue(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
-
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(node));
-    }
-
-    public void testCanRunUnsafeBootstrapAfterErroneousDetachWithoutLoosingMetadata() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);
-        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();  
-        Settings clusterManagerNodeDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);
-        ClusterUpdateSettingsRequest req = new ClusterUpdateSettingsRequest().persistentSettings(
-            Settings.builder().put(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(), "1234kb")  
-        );
-        internalCluster().client().admin().cluster().updateSettings(req).get();
-
-        ClusterState state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();
-        assertThat(state.metadata().persistentSettings().get(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey()), equalTo("1234kb"));
-
-        ensureReadOnlyBlock(false, clusterManagerNode);
-
-        internalCluster().stopCurrentClusterManagerNode();  
-
-        final Environment environment = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManagerNodeDataPathSettings).build()  
-        );
-        detachCluster(environment);
-        unsafeBootstrap(environment); // read-only block will remain same as one before bootstrap, in this case it is false  
-
-        String clusterManagerNode2 = internalCluster().startClusterManagerOnlyNode(clusterManagerNodeDataPathSettings);
-        ensureGreen();  
-        ensureReadOnlyBlock(false, clusterManagerNode2);
-
-        state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();  
-        assertThat(state.metadata().settings().get(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey()), equalTo("1234kb"));
-    }
-
-    public void testUnsafeBootstrapWithApplyClusterReadOnlyBlockAsFalse() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);
-        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();  
-        Settings clusterManagerNodeDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);
-        ClusterUpdateSettingsRequest req = new ClusterUpdateSettingsRequest().persistentSettings(
-            Settings.builder().put(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(), "1234kb")  
-        );
-        internalCluster().client().admin().cluster().updateSettings(req).get();
-
-        ClusterState state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();
-        assertThat(state.metadata().persistentSettings().get(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey()), equalTo("1234kb"));
-
-        ensureReadOnlyBlock(false, clusterManagerNode);
-
-        internalCluster().stopCurrentClusterManagerNode();  
-
-        final Environment environment = TestEnvironment.newEnvironment(
-            Settings.builder().put(internalCluster().getDefaultSettings()).put(clusterManagerNodeDataPathSettings).build()  
-        );
-        unsafeBootstrap(environment, false, false);
-
-        String clusterManagerNode2 = internalCluster().startClusterManagerOnlyNode(clusterManagerNodeDataPathSettings);
-        ensureGreen();
-        ensureReadOnlyBlock(false, clusterManagerNode2);  
-
-        state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();
+        expectThrows(() -> unsafeBootstrap(environment, true, null), OpenSearchNodeCommand.ABORTED_BY_USER_MSG);
+            Settings.builder()
+ * the Apache License, Version 2.0 (the "License"); you may
+        });  
+        try (NodeEnvironment ignored = new NodeEnvironment(envSettings, environment)) {
+import org.opensearch.OpenSearchException;
+    public void testAllClusterManagerEligibleNodesFailedDanglingIndexImport() throws Exception {  
         assertThat(state.metadata().settings().get(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey()), equalTo("1234kb"));  
     }
-}
+        List<String> bootstrappedNodes = new ArrayList<>();
+ */
+                String.format(
+    public void testBootstrapNodeLocked() throws IOException {
+                    current_block_state
+    public void testBootstrapNoClusterState() throws IOException {  
+        detachCluster(environment, false);
+        try {  
+ * software distributed under the License is distributed on an
+            );  
+            command.execute(terminal, options, environment);
+    public void testCanRunUnsafeBootstrapAfterErroneousDetachWithoutLoosingMetadata() throws Exception {
+        state = internalCluster().client().admin().cluster().prepareState().execute().actionGet().getState();  
+        unsafeBootstrap(environment); // read-only block will remain same as one before bootstrap, in this case it is false  
+                .build()
+        );  
+        expectThrows(() -> unsafeBootstrap(environment), OpenSearchNodeCommand.NO_NODE_FOLDER_FOUND_MSG);  
+            }  
+        );
+import org.opensearch.gateway.GatewayMetaState;
+        );
+    private MockTerminal detachCluster(Environment environment) throws Exception {  
+            assertThat(terminal.getOutput(), containsString(OpenSearchNodeCommand.STOP_WARNING_MSG));  
+    private void expectThrows(ThrowingRunnable runnable, String message) {
+import static org.hamcrest.Matchers.notNullValue;
+        if (isInternalCluster()) {
+    }
+        currentClusterNodes.add(dataNode);
+        internalCluster().client().admin().cluster().updateSettings(req).get();
+    }
+    private MockTerminal executeCommand(  
+        }
+        OpenSearchException ex = expectThrows(OpenSearchException.class, runnable);
+            .persistentSettings()
+        ensureStableCluster(2);
+                    "-ordinal",  
+    private MockTerminal unsafeBootstrap(Environment environment) throws Exception {
+        ClusterUpdateSettingsRequest req = new ClusterUpdateSettingsRequest().persistentSettings(
+        internalCluster().stopRandomDataNode();  
+        final Environment environment = TestEnvironment.newEnvironment(  
+        assertThat(state.metadata().persistentSettings().get(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey()), equalTo("1234kb"));
+    }
+/*  
+                .prepareState()  
+        ensureStableCluster(2);
+        Settings envSettings = buildEnvSettings(Settings.EMPTY);  
+        );

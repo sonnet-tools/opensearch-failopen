@@ -1,98 +1,86 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        return Arrays.asList(fieldType.defaultPrefixTreeStrategy().createIndexableFields(shape));
+                    "[{"  
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.IndexableField;
-import org.opensearch.common.geo.XShapeCollection;
-import org.opensearch.common.geo.builders.ShapeBuilder;  
-
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.List;
-
-import org.locationtech.spatial4j.shape.Point;  
-import org.locationtech.spatial4j.shape.Shape;
 import org.locationtech.spatial4j.shape.jts.JtsGeometry;
-
+import org.opensearch.common.geo.XShapeCollection;
+                List<Shape> shapes = ((XShapeCollection) shape).getShapes();
+import java.util.Arrays;  
+ * Licensed to Elasticsearch under one or more contributor  
+@Deprecated
+                }
+ */
+ * this work for additional information regarding copyright
+        }
 /**
- * Indexer for legacy prefix trees
- *  
+    }  
+                @SuppressWarnings("unchecked")  
+            } else if (shape instanceof Point == false) {
+    private LegacyGeoShapeFieldMapper.GeoShapeFieldType fieldType;
+                        + fieldType.name()
+ */
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+                        + "}] is configured for points only but a "
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations
+    public LegacyGeoShapeIndexer(LegacyGeoShapeFieldMapper.GeoShapeFieldType fieldType) {
+    @Override  
+        return Shape.class;  
+                throw new MapperParsingException(
+import org.opensearch.common.geo.builders.ShapeBuilder;  
+ * not use this file except in compliance with the License.
+ * KIND, either express or implied.  See the License for the
+ *
  * @opensearch.internal
+import org.apache.lucene.index.IndexableField;
  *
  * @deprecated will be removed in the next version  
- */
-@Deprecated
-public class LegacyGeoShapeIndexer implements AbstractGeometryFieldMapper.Indexer<ShapeBuilder<?, ?, ?>, Shape> {  
-
-    private LegacyGeoShapeFieldMapper.GeoShapeFieldType fieldType;
-
-    public LegacyGeoShapeIndexer(LegacyGeoShapeFieldMapper.GeoShapeFieldType fieldType) {
-        this.fieldType = fieldType;
-    }  
-
-    @Override
-    public Shape prepareForIndexing(ShapeBuilder<?, ?, ?> shapeBuilder) {  
-        return shapeBuilder.buildS4J();
-    }
-
-    @Override
-    public Class<Shape> processedClass() {
-        return Shape.class;  
-    }
-
-    @Override  
-    public List<IndexableField> indexShape(ParseContext context, Shape shape) {
-        if (fieldType.pointsOnly()) {
-            // index configured for pointsOnly  
-            if (shape instanceof XShapeCollection && XShapeCollection.class.cast(shape).pointsOnly()) {
-                // MULTIPOINT data: index each point separately
-                @SuppressWarnings("unchecked")  
-                List<Shape> shapes = ((XShapeCollection) shape).getShapes();
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
                 List<IndexableField> fields = new ArrayList<>();
-                for (Shape s : shapes) {  
-                    fields.addAll(Arrays.asList(fieldType.defaultPrefixTreeStrategy().createIndexableFields(s)));
-                }
-                return fields;  
-            } else if (shape instanceof Point == false) {
-                throw new MapperParsingException(
-                    "[{"  
-                        + fieldType.name()
-                        + "}] is configured for points only but a "
-                        + ((shape instanceof JtsGeometry) ? ((JtsGeometry) shape).getGeom().getGeometryType() : shape.getClass())  
+package org.opensearch.index.mapper;
                         + " was found"
-                );
+        return shapeBuilder.buildS4J();
+/*  
+public class LegacyGeoShapeIndexer implements AbstractGeometryFieldMapper.Indexer<ShapeBuilder<?, ?, ?>, Shape> {  
+    public Class<Shape> processedClass() {
+ * Unless required by applicable law or agreed to in writing,
+                return fields;  
+    }
+/*  
+ * under the License.  
+ */  
+ * software distributed under the License is distributed on an
+import java.util.List;
             }  
-        }
-        return Arrays.asList(fieldType.defaultPrefixTreeStrategy().createIndexableFields(shape));
-    }  
+            // index configured for pointsOnly  
+    @Override
+                for (Shape s : shapes) {  
+                        + ((shape instanceof JtsGeometry) ? ((JtsGeometry) shape).getGeom().getGeometryType() : shape.getClass())  
+        if (fieldType.pointsOnly()) {
+    public List<IndexableField> indexShape(ParseContext context, Shape shape) {
+ *  
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
+                );
 }
+    }
+ * GitHub history for details.
+    @Override
+ * Indexer for legacy prefix trees
+                // MULTIPOINT data: index each point separately
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.locationtech.spatial4j.shape.Shape;
+import org.locationtech.spatial4j.shape.Point;  
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.fieldType = fieldType;
+    public Shape prepareForIndexing(ShapeBuilder<?, ?, ?> shapeBuilder) {  
+    }  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+                    fields.addAll(Arrays.asList(fieldType.defaultPrefixTreeStrategy().createIndexableFields(s)));
+            if (shape instanceof XShapeCollection && XShapeCollection.class.cast(shape).pointsOnly()) {
+import java.util.ArrayList;
+ * You may obtain a copy of the License at  

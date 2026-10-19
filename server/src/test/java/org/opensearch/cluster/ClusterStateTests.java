@@ -1,1044 +1,1003 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster;
-
-import org.opensearch.Version;  
-import org.opensearch.action.admin.indices.rollover.RolloverInfo;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.coordination.CoordinationMetadata;
-import org.opensearch.cluster.metadata.AliasMetadata;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexTemplateMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;  
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RoutingTable;  
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.TestCustomMetadata;  
-
-import java.io.IOException;
-import java.net.InetAddress;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;  
-import java.util.Map;
-
-import static java.util.Collections.emptyMap;  
-import static java.util.Collections.emptySet;
-import static java.util.Collections.singletonMap;
-import static org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING;  
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_VERSION_CREATED;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-
-public class ClusterStateTests extends OpenSearchTestCase {
-
-    public void testSupersedes() {
-        final Version version = Version.CURRENT;
-        final DiscoveryNode node1 = new DiscoveryNode("node1", buildNewFakeTransportAddress(), emptyMap(), emptySet(), version);  
-        final DiscoveryNode node2 = new DiscoveryNode("node2", buildNewFakeTransportAddress(), emptyMap(), emptySet(), version);
-        final DiscoveryNodes nodes = DiscoveryNodes.builder().add(node1).add(node2).build();
-        ClusterName name = CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY);  
-        ClusterState noClusterManager1 = ClusterState.builder(name).version(randomInt(5)).nodes(nodes).build();
-        ClusterState noClusterManager2 = ClusterState.builder(name).version(randomInt(5)).nodes(nodes).build();
-        ClusterState withClusterManager1a = ClusterState.builder(name)  
-            .version(randomInt(5))
-            .nodes(DiscoveryNodes.builder(nodes).clusterManagerNodeId(node1.getId()))
-            .build();  
-        ClusterState withClusterManager1b = ClusterState.builder(name)
-            .version(randomInt(5))
-            .nodes(DiscoveryNodes.builder(nodes).clusterManagerNodeId(node1.getId()))  
-            .build();
-        ClusterState withClusterManager2 = ClusterState.builder(name)
-            .version(randomInt(5))  
-            .nodes(DiscoveryNodes.builder(nodes).clusterManagerNodeId(node2.getId()))
-            .build();
-
-        // states with no cluster-manager should never supersede anything
-        assertFalse(noClusterManager1.supersedes(noClusterManager2));
-        assertFalse(noClusterManager1.supersedes(withClusterManager1a));  
-
-        // states should never supersede states from another cluster-manager
-        assertFalse(withClusterManager1a.supersedes(withClusterManager2));  
-        assertFalse(withClusterManager1a.supersedes(noClusterManager1));
-
-        // state from the same cluster-manager compare by version  
-        assertThat(
-            withClusterManager1a.supersedes(withClusterManager1b),
-            equalTo(withClusterManager1a.version() > withClusterManager1b.version())  
-        );
-    }
-
-    public void testBuilderRejectsNullCustom() {
-        final ClusterState.Builder builder = ClusterState.builder(ClusterName.DEFAULT);
-        final String key = randomAlphaOfLength(10);  
-        assertThat(expectThrows(NullPointerException.class, () -> builder.putCustom(key, null)).getMessage(), containsString(key));
-    }
-
-    public void testBuilderRejectsNullInCustoms() {
-        final ClusterState.Builder builder = ClusterState.builder(ClusterName.DEFAULT);
-        final String key = randomAlphaOfLength(10);  
-        final Map<String, ClusterState.Custom> mapBuilder = new HashMap<>();
-        mapBuilder.put(key, null);
-        final Map<String, ClusterState.Custom> map = Collections.unmodifiableMap(mapBuilder);  
-        assertThat(expectThrows(NullPointerException.class, () -> builder.customs(map)).getMessage(), containsString(key));
-    }
-
-    public void testToXContent() throws IOException {
-        final ClusterState clusterState = buildClusterState();
-
-        IndexRoutingTable index = clusterState.getRoutingTable().getIndicesRouting().get("index");
-
-        String ephemeralId = clusterState.getNodes().get("nodeId1").getEphemeralId();  
-        String allocationId = index.getShards().get(1).getAllAllocationIds().iterator().next();
-
-        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();  
-        builder.startObject();
-        clusterState.toXContent(builder, new ToXContent.MapParams(singletonMap(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_API)));
-        builder.endObject();  
-
-        assertEquals(
-            "{\n"  
-                + "  \"cluster_uuid\" : \"clusterUUID\",\n"
-                + "  \"version\" : 0,\n"
-                + "  \"state_uuid\" : \"stateUUID\",\n"  
-                + "  \"master_node\" : \"clusterManagerNodeId\",\n"
-                + "  \"cluster_manager_node\" : \"clusterManagerNodeId\",\n"
-                + "  \"blocks\" : {\n"  
-                + "    \"global\" : {\n"
-                + "      \"1\" : {\n"
-                + "        \"description\" : \"description\",\n"  
-                + "        \"retryable\" : true,\n"
-                + "        \"disable_state_persistence\" : true,\n"
-                + "        \"levels\" : [\n"  
-                + "          \"read\",\n"
-                + "          \"write\",\n"
-                + "          \"metadata_read\",\n"  
-                + "          \"metadata_write\",\n"
-                + "          \"create_index\"\n"
-                + "        ]\n"  
-                + "      }\n"
-                + "    },\n"
-                + "    \"indices\" : {\n"  
-                + "      \"index\" : {\n"
-                + "        \"2\" : {\n"
-                + "          \"description\" : \"description2\",\n"  
-                + "          \"retryable\" : false,\n"
-                + "          \"levels\" : [\n"
-                + "            \"read\",\n"  
-                + "            \"write\",\n"
-                + "            \"metadata_read\",\n"
-                + "            \"metadata_write\",\n"  
-                + "            \"create_index\"\n"
-                + "          ]\n"
-                + "        }\n"  
-                + "      }\n"
+                                        "nodeId2",  
                 + "    }\n"
-                + "  },\n"  
-                + "  \"nodes\" : {\n"
-                + "    \"nodeId1\" : {\n"
-                + "      \"name\" : \"\",\n"  
-                + "      \"ephemeral_id\" : \""
-                + ephemeralId
-                + "\",\n"  
-                + "      \"transport_address\" : \"127.0.0.1:111\",\n"
-                + "      \"attributes\" : { }\n"
-                + "    }\n"  
-                + "  },\n"
-                + "  \"metadata\" : {\n"
-                + "    \"cluster_uuid\" : \"clusterUUID\",\n"  
-                + "    \"cluster_uuid_committed\" : false,\n"
-                + "    \"cluster_coordination\" : {\n"
-                + "      \"term\" : 1,\n"  
-                + "      \"last_committed_config\" : [\n"
-                + "        \"commitedConfigurationNodeId\"\n"
-                + "      ],\n"  
-                + "      \"last_accepted_config\" : [\n"
-                + "        \"acceptedConfigurationNodeId\"\n"
-                + "      ],\n"  
-                + "      \"voting_config_exclusions\" : [\n"
-                + "        {\n"
-                + "          \"node_id\" : \"exlucdedNodeId\",\n"  
-                + "          \"node_name\" : \"excludedNodeName\"\n"
+            .nodes(
+                                            put("type", new HashMap<String, Object>() {  
+                + "            {\n"
+                + allocationId
+                Metadata.builder()
+                + "    \"nodes\" : { }\n"  
                 + "        }\n"
-                + "      ]\n"  
-                + "    },\n"
-                + "    \"templates\" : {\n"
-                + "      \"template\" : {\n"  
-                + "        \"order\" : 0,\n"
+            )  
+                + "      \"term\" : 0,\n"
+import org.opensearch.core.rest.RestStatus;
+        final DiscoveryNodes nodes = DiscoveryNodes.builder().add(node1).add(node2).build();
                 + "        \"index_patterns\" : [\n"
+                + "            }\n"
+                + "        \"aliases_version\" : 1,\n"
+            .primaryTerm(0, 1L)
+                + "          }\n"
+                put(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_API);
+                + "        \"order\" : 0,\n"
+                + "        \"version\" : 1,\n"
+                + "        \"split_shards_metadata\" : {\n"
+                + "      \"attributes\" : { }\n"
+                + "        \"primary_terms\" : {\n"
+            .build();  
+                + "        \"rollover_info\" : {\n"
+                + "          \"metadata_write\",\n"  
+                + "        \"system\" : false,\n"
+                + "          \"searchOnly\" : false,\n"  
+                + "          }\n"  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                + "}",  
+                + "          \"is_paused\" : false\n"
+                            }))
+ */
+                + "            \"metadata_write\",\n"  
+        builder.endObject();
+                + "            }\n"
+    public static class CustomMetadata extends TestCustomMetadata {
+                                    "type",
+                            "description2",
+                + "          ],\n"  
                 + "          \"pattern1\",\n"  
-                + "          \"pattern2\"\n"
-                + "        ],\n"
-                + "        \"settings\" : {\n"  
-                + "          \"index\" : {\n"
-                + "            \"version\" : {\n"
+                + "  \"metadata\" : {\n"
+                + "          \"index\" : {\n"  
+                + "            \"write\",\n"
+                + "        }\n"
+                + "          \"read\",\n"
+        final String key = randomAlphaOfLength(10);  
+                + "            0\n"  
+import org.opensearch.test.OpenSearchTestCase;
+        ClusterState withClusterManager2 = ClusterState.builder(name)
+                + "        \"split_shards_metadata\" : {\n"
+                + "              \"created\" : \""
+    }
+                + "      \"tombstones\" : [ ]\n"
+                + "  \"cluster_uuid\" : \"clusterUUID\",\n"
+                + "              }\n"
+                + "          \"node_id\" : \"exlucdedNodeId\",\n"
+                + "            \"time\" : 1\n"
+                            false,
+                + "            \"number_of_shards\" : \"1\",\n"
+                + "        \"in_sync_allocations\" : {\n"
+        mapBuilder.put(key, null);
+                            }))  
+                + "          }\n"  
+                + "      }\n"  
+                + "    },\n"
+                + "        \"commitedConfigurationNodeId\"\n"
+            })  
+                + "        {\n"
+                + "    },\n"
+                + "      \"name\" : \"\",\n"  
+                + "  },\n"
+                + "        \"settings\" : {\n"
+        IndexMetadata indexMetadata = IndexMetadata.builder("index")
+                + "          \"state\" : \"STARTED\",\n"
+                + "        \"primary_terms\" : {\n"
+                + "    \"cluster_uuid\" : \"clusterUUID\",\n"  
+                + "      \"last_committed_config\" : [\n"  
+                + "            \"create_index\"\n"
+                + "                \"id\" : \""
+                + "        \"primary_terms_map\" : {\n"
+                + "            0\n"
+        @Override
+                + "            0\n"  
+                + "      \"last_accepted_config\" : [\n"
+                + "          ]\n"  
+            {  
+                + "            \"id\" : \""  
+                + "          ]\n"
+                + "      ],\n"  
+                + "            \"write\",\n"  
+        builder.endObject();
+                + "  \"metadata\" : {\n"  
+        );
+                + "          \"metadata_read\",\n"
+                                {
+                            )
+                + "\"\n"  
+                + "      \"index\" : {\n"
+            .version(randomInt(5))
+            .state(IndexMetadata.State.OPEN)  
+                + "          \"metadata_write\",\n"
+            .nodes(DiscoveryNodes.builder(nodes).clusterManagerNodeId(node2.getId()))
+        String ephemeralId = clusterState.getNodes().get("nodeId1").getEphemeralId();
+                + "  \"cluster_uuid\" : \"clusterUUID\",\n"
+                + "              \"searchOnly\" : false,\n"
+                + "    }\n"  
+                + "    \"indices\" : { }\n"
+                + "      \"1\" : {\n"
+                + "      \"ephemeral_id\" : \""  
+                        IndexMetadata.builder("index")
+                + Version.CURRENT.id
+                + Version.CURRENT.id
+                    .coordinationMetadata(CoordinationMetadata.builder().build())  
+import org.opensearch.cluster.metadata.Metadata;
+                + "    \"cluster_coordination\" : {\n"  
+                + "          \"create_index\"\n"
+        assertEquals(
+            .version(randomInt(5))
+                + "          \"0\" : [\n"  
+                + "  \"version\" : 0,\n"  
+                + "          \"write\",\n"
+ * this file be licensed under the Apache-2.0 license or a
+                + "          \"index\" : \"index\",\n"
+                + "          \"index.version.created\" : \""
+                + allocationId
+                + "          \"pattern1\",\n"
+                + "  \"routing_table\" : {\n"
+                + "          \"parent_to_child_shards\" : { }\n"
+public class ClusterStateTests extends OpenSearchTestCase {
+                + "        \"acceptedConfigurationNodeId\"\n"
+ * license agreements. See the NOTICE file distributed with
+                + "        \"routing_num_shards\" : 1,\n"  
+        assertEquals(
+                + "          \"index.number_of_shards\" : \"1\",\n"  
+            "{\n"  
+                + "        \"state\" : \"open\",\n"  
+            )
+ * software distributed under the License is distributed on an
+                + "      \"index\" : {\n"  
+                + "  },\n"
+                + "              \"key\" : \"value\"\n"
+                + "      \"1\" : {\n"
+                            .build()  
+                + "\",\n"  
+            .numberOfShards(1)  
+        final ClusterState clusterState = buildClusterState();
+                + "          \"is_paused\" : false\n"
+                + "          \"shard\" : 1,\n"  
+                + "        \"acceptedConfigurationNodeId\"\n"
+                + "      ],\n"
+                + "          }\n"
+                + "      \"nodeId2\" : [\n"  
+                + "  \"cluster_manager_node\" : \"clusterManagerNodeId\",\n"
+                + "  \"cluster_manager_node\" : \"clusterManagerNodeId\",\n"
+        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
+                + "\"\n"  
+                    });
+                + "  },\n"  
+        public static final String TYPE = "custom_md";
+                + "    }\n"
+                + "        },\n"
+    }
+                + "        \"mappings\" : {\n"  
+        assertFalse(noClusterManager1.supersedes(withClusterManager1a));  
                 + "              \"created\" : \""  
                 + Version.CURRENT.id
-                + "\"\n"
-                + "            }\n"  
-                + "          }\n"
+                + "    \"templates\" : { },\n"  
+                            EnumSet.allOf((ClusterBlockLevel.class))
+                + "        \"split_shards_metadata\" : {\n"  
+                + "      \"last_accepted_config\" : [\n"
+import org.opensearch.cluster.node.DiscoveryNodes;  
                 + "        },\n"
-                + "        \"mappings\" : {\n"  
-                + "          \"key1\" : { }\n"
-                + "        },\n"
-                + "        \"aliases\" : { }\n"  
-                + "      }\n"
-                + "    },\n"
-                + "    \"indices\" : {\n"  
-                + "      \"index\" : {\n"
-                + "        \"version\" : 1,\n"
-                + "        \"mapping_version\" : 1,\n"  
-                + "        \"settings_version\" : 1,\n"
-                + "        \"aliases_version\" : 1,\n"
-                + "        \"routing_num_shards\" : 1,\n"  
-                + "        \"state\" : \"open\",\n"
-                + "        \"settings\" : {\n"
+        assertThat(
                 + "          \"index\" : {\n"  
-                + "            \"number_of_shards\" : \"1\",\n"
-                + "            \"number_of_replicas\" : \"2\",\n"
-                + "            \"version\" : {\n"  
-                + "              \"created\" : \""
+                + "            }\n"
                 + Version.CURRENT.id
-                + "\"\n"  
-                + "            }\n"
-                + "          }\n"
-                + "        },\n"  
-                + "        \"mappings\" : {\n"
-                + "          \"type\" : {\n"
-                + "            \"type1\" : {\n"  
-                + "              \"key\" : \"value\"\n"
-                + "            }\n"
-                + "          }\n"  
-                + "        },\n"
-                + "        \"aliases\" : [\n"
-                + "          \"alias\"\n"  
-                + "        ],\n"
-                + "        \"primary_terms\" : {\n"
-                + "          \"0\" : 1\n"  
-                + "        },\n"
-                + "        \"primary_terms_map\" : {\n"
-                + "          \"0\" : 1\n"  
-                + "        },\n"
-                + "        \"in_sync_allocations\" : {\n"
-                + "          \"0\" : [\n"  
-                + "            \"allocationId\"\n"
-                + "          ]\n"
-                + "        },\n"  
-                + "        \"rollover_info\" : {\n"
-                + "          \"rolloveAlias\" : {\n"
-                + "            \"met_conditions\" : { },\n"  
-                + "            \"time\" : 1\n"
-                + "          }\n"
-                + "        },\n"  
-                + "        \"system\" : false,\n"
-                + "        \"ingestion_status\" : {\n"
-                + "          \"is_paused\" : false\n"  
-                + "        },\n"
-                + "        \"split_shards_metadata\" : {\n"
-                + "          \"num_of_root_shards\" : 1,\n"  
-                + "          \"max_shard_id\" : 0,\n"
-                + "          \"active_shard_ids\" : [\n"
-                + "            0\n"  
-                + "          ],\n"
-                + "          \"root_shards_to_all_children\" : { },\n"
-                + "          \"parent_to_child_shards\" : { }\n"  
-                + "        }\n"
-                + "      }\n"
-                + "    },\n"  
-                + "    \"index-graveyard\" : {\n"
-                + "      \"tombstones\" : [ ]\n"
-                + "    }\n"  
-                + "  },\n"
-                + "  \"routing_table\" : {\n"
-                + "    \"indices\" : {\n"  
-                + "      \"index\" : {\n"
-                + "        \"shards\" : {\n"
-                + "          \"1\" : [\n"  
-                + "            {\n"
+        final ClusterState.Builder builder = ClusterState.builder(ClusterName.DEFAULT);
+}
+                + "        \"settings\" : {\n"  
+        final DiscoveryNode node2 = new DiscoveryNode("node2", buildNewFakeTransportAddress(), emptyMap(), emptySet(), version);
                 + "              \"state\" : \"STARTED\",\n"
-                + "              \"primary\" : true,\n"  
+        final ClusterState clusterState = buildClusterState();
                 + "              \"searchOnly\" : false,\n"
-                + "              \"node\" : \"nodeId2\",\n"
-                + "              \"relocating_node\" : null,\n"  
-                + "              \"shard\" : 1,\n"
-                + "              \"index\" : \"index\",\n"
-                + "              \"allocation_id\" : {\n"  
-                + "                \"id\" : \""
-                + allocationId
-                + "\"\n"  
-                + "              }\n"
-                + "            }\n"
-                + "          ]\n"  
-                + "        }\n"
-                + "      }\n"
-                + "    }\n"  
-                + "  },\n"
-                + "  \"routing_nodes\" : {\n"
-                + "    \"unassigned\" : [ ],\n"  
-                + "    \"nodes\" : {\n"
-                + "      \"nodeId2\" : [\n"
-                + "        {\n"  
-                + "          \"state\" : \"STARTED\",\n"
-                + "          \"primary\" : true,\n"
-                + "          \"searchOnly\" : false,\n"  
-                + "          \"node\" : \"nodeId2\",\n"
-                + "          \"relocating_node\" : null,\n"
-                + "          \"shard\" : 1,\n"  
-                + "          \"index\" : \"index\",\n"
-                + "          \"allocation_id\" : {\n"
-                + "            \"id\" : \""  
-                + allocationId
-                + "\"\n"
-                + "          }\n"  
-                + "        }\n"
-                + "      ],\n"
-                + "      \"nodeId1\" : [ ]\n"  
-                + "    }\n"
-                + "  }\n"
-                + "}",  
+                + "            \"type1\" : {\n"  
             builder.toString()
-        );
-
-    }
-
-    public void testToXContent_FlatSettingTrue_ReduceMappingFalse() throws IOException {  
-        Map<String, String> mapParams = new HashMap<String, String>() {
-            {
-                put("flat_settings", "true");  
-                put("reduce_mappings", "false");
-                put(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_API);
-            }  
-        };
-
-        final ClusterState clusterState = buildClusterState();  
-        IndexRoutingTable index = clusterState.getRoutingTable().getIndicesRouting().get("index");
-
-        String ephemeralId = clusterState.getNodes().get("nodeId1").getEphemeralId();  
-        String allocationId = index.getShards().get(1).getAllAllocationIds().iterator().next();
-
-        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();  
-        builder.startObject();
-        clusterState.toXContent(builder, new ToXContent.MapParams(mapParams));
-        builder.endObject();  
-
-        assertEquals(
-            "{\n"  
-                + "  \"cluster_uuid\" : \"clusterUUID\",\n"
-                + "  \"version\" : 0,\n"
-                + "  \"state_uuid\" : \"stateUUID\",\n"  
-                + "  \"master_node\" : \"clusterManagerNodeId\",\n"
-                + "  \"cluster_manager_node\" : \"clusterManagerNodeId\",\n"
-                + "  \"blocks\" : {\n"  
-                + "    \"global\" : {\n"
-                + "      \"1\" : {\n"
-                + "        \"description\" : \"description\",\n"  
-                + "        \"retryable\" : true,\n"
-                + "        \"disable_state_persistence\" : true,\n"
-                + "        \"levels\" : [\n"  
-                + "          \"read\",\n"
-                + "          \"write\",\n"
-                + "          \"metadata_read\",\n"  
-                + "          \"metadata_write\",\n"
-                + "          \"create_index\"\n"
-                + "        ]\n"  
+                + "          \"root_shards_to_all_children\" : { },\n"  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+                + "        \"primary_terms_map\" : {\n"
+                + "          \"read\",\n"  
+import org.opensearch.cluster.routing.IndexRoutingTable;
+                + "    }\n"
+                + "              \"key\" : \"value\"\n"
+import static java.util.Collections.emptyMap;  
+                + "\",\n"
+                    .put(
+                + "              \"node\" : \"nodeId2\",\n"
                 + "      }\n"
-                + "    },\n"
+                            .numberOfReplicas(2)
+                    .addIndexBlock(
+                + "    },\n"  
+                + "        \"aliases\" : [\n"  
+import org.opensearch.cluster.block.ClusterBlock;
+                + "          \"state\" : \"STARTED\",\n"
+                + "          \"1\" : [\n"
+            .putInSyncAllocationIds(0, new HashSet<String>() {
+                + "        },\n"
                 + "    \"indices\" : {\n"  
+                + "        \"shards\" : {\n"
                 + "      \"index\" : {\n"
-                + "        \"2\" : {\n"
-                + "          \"description\" : \"description2\",\n"  
-                + "          \"retryable\" : false,\n"
-                + "          \"levels\" : [\n"
-                + "            \"read\",\n"  
-                + "            \"write\",\n"
+                + "\"\n"
+                + "        \"mappings\" : { },\n"
+                + "        ]\n"  
+                + "        }\n"  
+                + "        \"disable_state_persistence\" : true,\n"
+import java.util.Map;
+                + "            \"version\" : {\n"
+                + "            0\n"
+        }
+                + "  \"master_node\" : null,\n"
+                        "index",
+                + "  }\n"
+                + "        \"ingestion_status\" : {\n"
+                + "\"\n"  
+                + "    }\n"  
+                + "\"\n"  
+                            .order(0)
+                + "            \"number_of_replicas\" : \"2\",\n"
+                + "  \"routing_nodes\" : {\n"
+                + "          \"0\" : [ ]\n"  
+                + "              \"state\" : \"STARTED\",\n"
+                + "  },\n"
+                + "  \"blocks\" : {\n"  
+                + "        \"mapping_version\" : 1,\n"
+    public void testBuilderRejectsNullInCustoms() {
+                + "    \"cluster_uuid_committed\" : false,\n"  
+                + "      \"template\" : {\n"  
+                + "        },\n"
+                + "    },\n"  
+    public void testBuilderRejectsNullCustom() {
+                + "          \"metadata_write\",\n"
+import org.opensearch.core.xcontent.ToXContent;  
+                + "    \"cluster_coordination\" : {\n"
+        builder.startObject();  
+    }
+        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();  
+                + "      \"ephemeral_id\" : \""
+                + "        \"aliases\" : [\n"
+            .build();
                 + "            \"metadata_read\",\n"
-                + "            \"metadata_write\",\n"  
-                + "            \"create_index\"\n"
+                + "        \"shards\" : {\n"  
+                + "            \"type1\" : {\n"
+                + "    }\n"  
+                + "          \"write\",\n"
+                + "              \"shard\" : 1,\n"
+                + "      \"transport_address\" : \"127.0.0.1:111\",\n"
+            .settings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id))
+                                                    put("key", "value");
+                + "      \"last_committed_config\" : [ ],\n"
+        builder.endObject();  
+                + "        \"mapping_version\" : 1,\n"  
+                        {
+                + "            \"allocationId\"\n"
+            .numberOfReplicas(2)
+                + "        \"mapping_version\" : 1,\n"  
+                + "  \"nodes\" : {\n"
+                + "  },\n"  
+                            .putMapping("type", "{ \"key1\": {} }")  
+import org.opensearch.core.index.shard.ShardId;
+                + "          \"max_shard_id\" : 0,\n"
+                + "          \"parent_to_child_shards\" : { }\n"  
+                + "\"\n"
+                + "          \"index.number_of_replicas\" : \"2\",\n"
+                + "        },\n"  
+                + "  \"version\" : 0,\n"
+                + "            \"met_conditions\" : { },\n"
+                + "        },\n"  
+                + "      \"index\" : {\n"
+                + "\"\n"  
+                + "          \"levels\" : [\n"
+                + "            }\n"
+    }
+                + "          \"pattern2\"\n"  
+    public void testSupersedes() {
+                + ephemeralId
+            }
+                + "        \"version\" : 2,\n"  
+                + "        \"2\" : {\n"
+                + "          }\n"  
+                + "            \"id\" : \""  
+                + "  \"version\" : 0,\n"
+                + "    \"cluster_uuid_committed\" : false,\n"
+                + "          \"index\" : \"index\",\n"
+        assertFalse(withClusterManager1a.supersedes(withClusterManager2));  
+                    .addGlobalBlock(  
+                + Version.CURRENT.id  
+                + "          }\n"  
+                + "    },\n"
                 + "          ]\n"
+                + "        \"mappings\" : {\n"
+                + "        }\n"
+                                            });
+                + "  },\n"
+                + "          \"node\" : \"nodeId2\",\n"
+import static java.util.Collections.singletonMap;
+                + "            \"version\" : {\n"
+                + "      ],\n"  
+                + "  \"cluster_manager_node\" : null,\n"  
+                    .clusterManagerNodeId("clusterManagerNodeId")  
+                + "    },\n"
+                + "          ],\n"
+                + "              \"relocating_node\" : null,\n"  
+            )  
+                + "                \"id\" : \""
+                + "        \"version\" : 1,\n"
+                + "      \"index\" : {\n"
+import java.util.HashSet;  
+                + "            \"type1\" : {\n"  
+                + "          ]\n"  
+                + "            }\n"  
+import static org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING;  
+                Metadata.builder()
+                + "        \"ingestion_status\" : {\n"  
+    }
+                + "            {\n"
+                + "    \"cluster_uuid_committed\" : false,\n"
+                + "      }\n"
+                + "  \"master_node\" : \"clusterManagerNodeId\",\n"
+            .nodes(DiscoveryNodes.builder(nodes).clusterManagerNodeId(node1.getId()))
+                + "          \"0\" : 1\n"  
+    private ClusterState buildClusterState() throws IOException {
+                + "          \"num_of_root_shards\" : 1,\n"
+                + "        \"aliases_version\" : 1,\n"
+                + "    }\n"
+                + "      \"nodeId2\" : [\n"
+                + "      ]\n"  
+                    .coordinationMetadata(  
+                + "        ]\n"  
+                + "          }\n"
+                + allocationId
+                                new IndexShardRoutingTable.Builder(new ShardId("index", "_na_", 1)).addShard(  
+                + "  }\n"  
+ * the Apache License, Version 2.0 (the "License"); you may
+                                ).build()
+                + "  },\n"
+            .metadata(  
+                + "    \"indices\" : {\n"  
+                    )
+                + "        \"2\" : {\n"
+                + "      ],\n"
+import org.opensearch.cluster.coordination.CoordinationMetadata;
+import org.opensearch.cluster.routing.TestShardRouting;
+                            .settings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id))
+                + "        \"ingestion_status\" : {\n"
+                + "    }\n"  
+                + "    \"indices\" : {\n"
+                + "            \"metadata_read\",\n"
+                + "          \"type\" : {\n"
+                + "  }\n"
+                + "  },\n"
+                + "          \"retryable\" : false,\n"  
+                + "  \"routing_nodes\" : {\n"
+import static org.hamcrest.Matchers.equalTo;  
+                + "            }\n"  
+                + "          \"rolloveAlias\" : {\n"
+                + "        \"system\" : false,\n"
+    }
+                    .build()
+                + "      \"attributes\" : { }\n"
+        assertThat(expectThrows(NullPointerException.class, () -> builder.putCustom(key, null)).getMessage(), containsString(key));
+                + "    },\n"  
+                + "          \"state\" : \"STARTED\",\n"
+        builder.endObject();  
+                    .add(  
+                + "      ],\n"
+                + "  \"routing_table\" : {\n"
+                + "    \"templates\" : {\n"
+ *  
+        assertEquals(
+                            )
+ * Unless required by applicable law or agreed to in writing,
+            {
+                + "          \"index\" : {\n"  
+                + "          \"root_shards_to_all_children\" : { },\n"
+                + "        }\n"
+                + "          \"active_shard_ids\" : [\n"
+                            .primaryTerm(0, 1L)
+                + "  \"cluster_uuid\" : \"clusterUUID\",\n"  
+                + "\",\n"  
+                + "        \"aliases\" : [\n"
+import org.opensearch.cluster.routing.RoutingTable;  
+import org.opensearch.cluster.routing.ShardRoutingState;
+            return EnumSet.of(Metadata.XContentContext.GATEWAY, Metadata.XContentContext.SNAPSHOT);
+ * The OpenSearch Contributors require contributions made to  
+        clusterState.toXContent(builder, new ToXContent.MapParams(singletonMap(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_API)));
+    public void testToXContent_FlatSettingTrue_ReduceMappingFalse() throws IOException {  
+import org.opensearch.cluster.metadata.AliasMetadata;  
+                + "  \"metadata\" : {\n"
+                + "            \"key\" : \"value\"\n"
+    }
+                + "        }\n"
+                                        }
+import org.opensearch.cluster.node.DiscoveryNode;
+                + "        },\n"
+import org.opensearch.action.admin.indices.rollover.RolloverInfo;
+ * not use this file except in compliance with the License.
+        ClusterState noClusterManager2 = ClusterState.builder(name).version(randomInt(5)).nodes(nodes).build();
+                + "      \"name\" : \"\",\n"
+                + "          \"type\" : {\n"  
+                + "          \"shard\" : 1,\n"  
+                + "      \"last_committed_config\" : [\n"
+                + "        },\n"
+            super(data);
+        Map<String, String> mapParams = new HashMap<String, String>() {
+                            put("key", "value");  
+                    .put(
+                + "          \"root_shards_to_all_children\" : { },\n"
+                + "  \"state_uuid\" : \"stateUUID\",\n"
+                + "            \"allocationId\"\n"
+                + "        {\n"
+                + "          \"relocating_node\" : null,\n"
+                    .put(indexMetadata, false)  
+            .build();  
+                + "        {\n"
+                + "        \"primary_terms\" : {\n"  
+                                    )  
+        final ClusterState.Builder builder = ClusterState.builder(ClusterName.DEFAULT);
+                + "      \"1\" : {\n"
+                + "    }\n"
+                                }
+    public void testToXContentSameTypeName() throws IOException {  
+                + "          ]\n"
+                + "    \"indices\" : {\n"
+                + "    \"unassigned\" : [ ],\n"  
+                + "            \"met_conditions\" : { },\n"  
+import org.opensearch.cluster.metadata.IndexTemplateMetadata;
+                        )
+                + "              \"key\" : \"value\"\n"
+                + "      \"term\" : 1,\n"
+            .metadata(  
+import java.util.Arrays;
+                + "      \"name\" : \"\",\n"  
+ * GitHub history for details.
+                + "      }\n"
+                + "  },\n"  
+package org.opensearch.cluster;
+                + "        ],\n"
+                    add("allocationId");
+ * compatible open source license.
+                + "          \"description\" : \"description2\",\n"
+import org.opensearch.common.settings.Settings;  
+        assertFalse(noClusterManager1.supersedes(noClusterManager2));
+                + "        },\n"
+                + "    \"indices\" : {\n"  
+                + "          \"primary\" : true,\n"  
+                + "    \"global\" : {\n"  
+                + "      }\n"
+                + "        \"disable_state_persistence\" : true,\n"
+            .version(randomInt(5))  
+import java.util.EnumSet;
+                }  
+                + "          \"pattern2\"\n"
+                + "        \"aliases\" : { }\n"  
+        // state from the same cluster-manager compare by version  
+                + "          \"type\" : {\n"
+                + "      ],\n"
+        return ClusterState.builder(ClusterName.DEFAULT)
+                + "        ],\n"
+            .build();
+            .putRolloverInfo(new RolloverInfo("rolloveAlias", new ArrayList<>(), 1L))
+ * ownership. Elasticsearch licenses this file to you under  
+                + "    \"nodeId1\" : {\n"
+                    .build()
+        ClusterName name = CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY);  
+                + "        \"routing_num_shards\" : 1,\n"
+                + "              }\n"
+                + "    },\n"
+                + "  \"state_uuid\" : \"stateUUID\",\n"  
+                + "    \"unassigned\" : [ ],\n"  
+ * Licensed to Elasticsearch under one or more contributor  
+                + "    \"indices\" : {\n"  
+                + "          }\n"
+            }  
+        // states with no cluster-manager should never supersede anything
+                + "        \"mappings\" : {\n"
+                                )
+                + "          \"key1\" : { }\n"  
+import org.opensearch.core.common.transport.TransportAddress;
+/*
+                    .transientSettings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id).build())
+        );
+ * SPDX-License-Identifier: Apache-2.0
+                    )  
+                + "        \"order\" : 0,\n"
+                + "        },\n"  
+                            RestStatus.ACCEPTED,  
+                + "        \"rollover_info\" : {\n"
+                            2,
+                + "        \"settings\" : {\n"
+                + "    \"templates\" : {\n"
+                + "      }\n"  
+                + "          \"create_index\"\n"
+                + "      }\n"
+                + "        \"system\" : false,\n"  
+                + "        \"rollover_info\" : { },\n"
+                + "          \"max_shard_id\" : 0,\n"  
+ * specific language governing permissions and limitations
+                + "          \"primary\" : true,\n"
+                + "            \"number_of_replicas\" : \"2\",\n"  
+                + "          \"retryable\" : false,\n"
+                put("flat_settings", "false");
+import org.opensearch.cluster.metadata.IndexMetadata;
+ */  
+                + "    }\n"
+ *
+                + "          \"index\" : \"index\",\n"
+        IndexRoutingTable index = clusterState.getRoutingTable().getIndicesRouting().get("index");
+ * KIND, either express or implied.  See the License for the
+                + Version.CURRENT.id
+            return Version.CURRENT;  
+                + "            \"number_of_shards\" : \"1\",\n"
+                    .persistentSettings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id).build())
+                + "  \"nodes\" : {\n"
+                + "          \"rolloveAlias\" : {\n"
+import org.opensearch.test.TestCustomMetadata;  
+                            false,  
+                                                }  
+                + "        \"version\" : 1,\n"
+                + "          ]\n"
+                    .clusterUUID("clusterUUID")
+                + "        \"aliases_version\" : 1,\n"
+                + "  \"blocks\" : {\n"  
+            .blocks(
+                + Version.CURRENT.id  
+                            .build()
+        }
+                + "  \"blocks\" : { },\n"
+                + "      \"nodeId1\" : [ ]\n"  
+                + "          \"num_of_root_shards\" : 1,\n"
+                + "            \"metadata_write\",\n"
+                + "          \"0\" : 1\n"  
+                + "      }\n"  
+                + "        \"levels\" : [\n"  
+                + "        \"rollover_info\" : {\n"
+                + "        },\n"
+                + "        \"mappings\" : {\n"
+                + "            \"time\" : 1\n"
+/*
+                + "          \"index\" : {\n"
+                + "              \"allocation_id\" : {\n"
+                + "            \"write\",\n"
+                + "    \"indices\" : {\n"  
+                + "      ],\n"  
+                + "          \"node\" : \"nodeId2\",\n"
+                + "          \"type\" : {\n"  
+                + "          \"metadata_read\",\n"  
+                + "          \"0\" : 1\n"  
+        String ephemeralId = clusterState.getNodes().get("nodeId1").getEphemeralId();  
+                + "        },\n"
+                + "            \"version\" : {\n"  
+        );
+                                        ShardRoutingState.STARTED
+        assertThat(expectThrows(NullPointerException.class, () -> builder.customs(map)).getMessage(), containsString(key));
+import java.util.ArrayList;
+        @Override
+                + "          \"0\" : [\n"
+            "{\n"
+                + "        },\n"
+                + "    \"index-graveyard\" : {\n"
+                + "        \"in_sync_allocations\" : {\n"
+                + "      }\n"
+                + "        \"settings\" : {\n"  
+import java.util.Collections;  
+                + "          \"levels\" : [\n"
+                + "  }\n"
+                + "          \"0\" : 1\n"
+                + "          \"pattern2\"\n"
+                + "    }\n"  
+                + "}",
+import org.opensearch.cluster.block.ClusterBlocks;
+                + "          }\n"
+                + "      }\n"
+                + "      \"voting_config_exclusions\" : [\n"  
+                + "          }\n"
+                + "      \"term\" : 1,\n"  
+                + "          \"0\" : 1\n"  
+                + "    \"cluster_uuid\" : \"clusterUUID\",\n"
+                + "              \"searchOnly\" : false,\n"
+                + "        {\n"
+        };
+                + "          \"primary\" : true,\n"
+                + "    }\n"
+import org.opensearch.core.xcontent.XContentBuilder;
+                + "      \"template\" : {\n"  
+ * under the License.  
+                + "      \"voting_config_exclusions\" : [\n"
+                + "  \"blocks\" : {\n"
+                + "              \"index\" : \"index\",\n"
+                + "            \"id\" : \""
+                + "    \"cluster_uuid\" : \"clusterUUID\",\n"
+ * Modifications Copyright OpenSearch Contributors. See  
+                + "        },\n"  
+                + "        \"state\" : \"open\",\n"
+                + "        \"commitedConfigurationNodeId\"\n"
+            .build();
+                + "  \"nodes\" : { },\n"
+    public void testToXContent_FlatSettingFalse_ReduceMappingTrue() throws IOException {
+                + "        ],\n"
+                + "        },\n"
+                + "            {\n"
+                + "        \"aliases_version\" : 1,\n"  
+                + "  \"nodes\" : {\n"  
+                + "        ],\n"
+                + "              }\n"
+                + "      \"last_accepted_config\" : [ ],\n"  
+                + "      \"nodeId2\" : [\n"
+                {  
+                                    }  
+                + "              \"relocating_node\" : null,\n"  
+                + allocationId
+                + "          \"active_shard_ids\" : [\n"
+                        CoordinationMetadata.builder()
+        String allocationId = index.getShards().get(1).getAllAllocationIds().iterator().next();
+                + "  },\n"  
+        builder.startObject();
+            )
+                + "  },\n"
+                + "        \"retryable\" : true,\n"
+                + "        },\n"  
+                + "          \"max_shard_id\" : 0,\n"
+                + "      \"transport_address\" : \"127.0.0.1:111\",\n"
+                + "        {\n"  
+                + "        }\n"
+                                        new ShardId("index", "_na_", 1),
+                + "      }\n"
+        builder.startObject();
                 + "        }\n"  
                 + "      }\n"
                 + "    }\n"
-                + "  },\n"  
-                + "  \"nodes\" : {\n"
-                + "    \"nodeId1\" : {\n"
-                + "      \"name\" : \"\",\n"  
-                + "      \"ephemeral_id\" : \""
-                + ephemeralId
-                + "\",\n"  
-                + "      \"transport_address\" : \"127.0.0.1:111\",\n"
-                + "      \"attributes\" : { }\n"
-                + "    }\n"  
-                + "  },\n"
-                + "  \"metadata\" : {\n"
-                + "    \"cluster_uuid\" : \"clusterUUID\",\n"  
-                + "    \"cluster_uuid_committed\" : false,\n"
-                + "    \"cluster_coordination\" : {\n"
-                + "      \"term\" : 1,\n"  
-                + "      \"last_committed_config\" : [\n"
-                + "        \"commitedConfigurationNodeId\"\n"
-                + "      ],\n"  
-                + "      \"last_accepted_config\" : [\n"
-                + "        \"acceptedConfigurationNodeId\"\n"
-                + "      ],\n"  
-                + "      \"voting_config_exclusions\" : [\n"
-                + "        {\n"
-                + "          \"node_id\" : \"exlucdedNodeId\",\n"  
-                + "          \"node_name\" : \"excludedNodeName\"\n"
+                + "        },\n"
+                put("reduce_mappings", "false");
+                + "    },\n"
                 + "        }\n"
-                + "      ]\n"  
-                + "    },\n"
-                + "    \"templates\" : {\n"
-                + "      \"template\" : {\n"  
-                + "        \"order\" : 0,\n"
-                + "        \"index_patterns\" : [\n"
-                + "          \"pattern1\",\n"  
-                + "          \"pattern2\"\n"
-                + "        ],\n"
-                + "        \"settings\" : {\n"  
-                + "          \"index.version.created\" : \""
-                + Version.CURRENT.id
-                + "\"\n"  
-                + "        },\n"
-                + "        \"mappings\" : {\n"
-                + "          \"key1\" : { }\n"  
-                + "        },\n"
-                + "        \"aliases\" : { }\n"
-                + "      }\n"  
-                + "    },\n"
-                + "    \"indices\" : {\n"
-                + "      \"index\" : {\n"  
-                + "        \"version\" : 1,\n"
-                + "        \"mapping_version\" : 1,\n"
-                + "        \"settings_version\" : 1,\n"  
-                + "        \"aliases_version\" : 1,\n"
-                + "        \"routing_num_shards\" : 1,\n"
-                + "        \"state\" : \"open\",\n"  
+                        }
                 + "        \"settings\" : {\n"
-                + "          \"index.number_of_replicas\" : \"2\",\n"
-                + "          \"index.number_of_shards\" : \"1\",\n"  
-                + "          \"index.version.created\" : \""
-                + Version.CURRENT.id
-                + "\"\n"  
-                + "        },\n"
+                + "  \"routing_nodes\" : {\n"  
+                + "        \"levels\" : [\n"
+                + "    \"nodes\" : {\n"
+                + "        \"disable_state_persistence\" : true,\n"
+                + "  \"master_node\" : \"clusterManagerNodeId\",\n"
+            equalTo(withClusterManager1a.version() > withClusterManager1b.version())  
+                + "      \"last_accepted_config\" : [\n"  
                 + "        \"mappings\" : {\n"
-                + "          \"type\" : {\n"  
-                + "            \"type1\" : {\n"
-                + "              \"key\" : \"value\"\n"
-                + "            }\n"  
-                + "          }\n"
+                + allocationId  
+                + "        \"in_sync_allocations\" : {\n"
+                + "        \"primary_terms_map\" : {\n"
+                + "      \"term\" : 1,\n"  
+                + "          \"0\" : 1\n"  
+                + "          \"node_id\" : \"exlucdedNodeId\",\n"  
+        final Map<String, ClusterState.Custom> map = Collections.unmodifiableMap(mapBuilder);  
+                + "        \"aliases\" : { }\n"
+                ClusterBlocks.builder()
+            .routingTable(
+                                    add("commitedConfigurationNodeId");
+                + "            \"metadata_write\",\n"  
+                + "    }\n"  
+        String ephemeralId = clusterState.getNodes().get("nodeId1").getEphemeralId();  
+import org.opensearch.Version;  
+                + "\"\n"  
+                + "            \"read\",\n"  
+                + "        \"description\" : \"description\",\n"
+                + "      \"tombstones\" : [ ]\n"
                 + "        },\n"
-                + "        \"aliases\" : [\n"  
-                + "          \"alias\"\n"
+                + "              \"shard\" : 1,\n"
+        final ClusterState clusterState = ClusterState.builder(ClusterName.DEFAULT)
+        // states should never supersede states from another cluster-manager
+        final Version version = Version.CURRENT;
+                + "          \"create_index\"\n"
+        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();  
+                + "          \"searchOnly\" : false,\n"
+            builder.toString()  
+                + "          \"relocating_node\" : null,\n"  
+                + ephemeralId
+                + "  \"cluster_manager_node\" : \"clusterManagerNodeId\",\n"
+                + "    \"unassigned\" : [ ],\n"
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_VERSION_CREATED;
+                + "          \"allocation_id\" : {\n"  
+            return TYPE;
+import org.opensearch.common.xcontent.json.JsonXContent;
+                DiscoveryNodes.builder()
+                + "          ]\n"  
+                + "          \"pattern1\",\n"  
+                + "    },\n"
+        clusterState.toXContent(builder, new ToXContent.MapParams(mapParams));
+                + "  \"metadata\" : {\n"
+                + "      }\n"  
+                + "    \"nodeId1\" : {\n"
+                + "      ]\n"
+                + "        \"description\" : \"description\",\n"  
+                + "  \"version\" : 0,\n"
+                            .settings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id))
+            }))
+                + "            }\n"  
+                + "            \"number_of_replicas\" : \"2\",\n"
+                + "        \"mapping_version\" : 1,\n"
+        Map<String, String> mapParams = new HashMap<String, String>() {
+                + "        \"settings_version\" : 1,\n"
+                            .state(IndexMetadata.State.OPEN)  
+                + "          \"node_name\" : \"excludedNodeName\"\n"
+                + "      \"voting_config_exclusions\" : [\n"
+                + "        }\n"
+        public String getWriteableName() {  
+                                    // the original logic in ClusterState.toXContent will reduce  
+                + "      \"attributes\" : { }\n"
+import org.opensearch.cluster.metadata.MappingMetadata;  
+                put(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_API);  
+ */
+        IndexRoutingTable index = clusterState.getRoutingTable().getIndicesRouting().get("index");
+    public void testToXContent() throws IOException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                                {  
+                + "      \"index\" : {\n"
+                + "            }\n"
+                + "        }\n"
+                + "    \"nodes\" : {\n"
+                            .build()
+                }
+                + "          \"node\" : \"nodeId2\",\n"
+                + "          }\n"
+                + "    \"index-graveyard\" : {\n"
+                + "        \"primary_terms\" : {\n"
+            withClusterManager1a.supersedes(withClusterManager1b),
+                + "              \"created\" : \""
+                + "  \"routing_table\" : {\n"  
+                + "        ]\n"
+import static org.hamcrest.Matchers.containsString;
+                + "          \"is_paused\" : false\n"  
+                + "        \"order\" : 0,\n"  
+                + "\"\n"  
+                + "    \"cluster_coordination\" : {\n"
+        );
+        public EnumSet<Metadata.XContentContext> context() {
+        assertFalse(withClusterManager1a.supersedes(noClusterManager1));
+                + "          \"num_of_root_shards\" : 1,\n"  
+                                                {
+                + "    },\n"
+                + "    },\n"
+                + "        \"mappings\" : {\n"
+                + "  \"routing_nodes\" : {\n"
+                + "        }\n"
+                + "}",
+import java.util.HashMap;
+                + "  \"master_node\" : \"clusterManagerNodeId\",\n"  
+                + "        \"settings_version\" : 1,\n"
+            .putAlias(AliasMetadata.builder("alias").indexRouting("indexRouting").build())
+    }
+                                    TestShardRouting.newShardRouting(
+        CustomMetadata(String data) {
+                + "        \"acceptedConfigurationNodeId\"\n"
+                + "          \"parent_to_child_shards\" : { }\n"  
+            .nodes(DiscoveryNodes.builder(nodes).clusterManagerNodeId(node1.getId()))  
+                + "        \"description\" : \"description\",\n"  
+        ClusterState withClusterManager1a = ClusterState.builder(name)  
+                + "          \"rolloveAlias\" : {\n"  
+                + "        \"commitedConfigurationNodeId\"\n"
+                + "        },\n"
+                + "      \"tombstones\" : [ ]\n"
+                + "\"\n"
                 + "        ],\n"
-                + "        \"primary_terms\" : {\n"  
-                + "          \"0\" : 1\n"
+                                        true,
+            .build();
+                + "          \"node_id\" : \"exlucdedNodeId\",\n"  
+                            .numberOfShards(1)  
+                + "          ]\n"
+                + "          }\n"  
+                + "          \"node_name\" : \"excludedNodeName\"\n"  
+                + "    },\n"
+        final DiscoveryNode node1 = new DiscoveryNode("node1", buildNewFakeTransportAddress(), emptyMap(), emptySet(), version);  
+                    )  
+                + "          }\n"  
+            builder.toString()
+                + "          \"retryable\" : false,\n"
+                + "        {\n"  
+                + "        },\n"
+                + "          }\n"  
+        }  
+                    .add(new DiscoveryNode("nodeId1", new TransportAddress(InetAddress.getByName("127.0.0.1"), 111), Version.CURRENT))
+                + "      ]\n"  
+                + "            \"number_of_shards\" : \"1\",\n"
+                + "        },\n"
+        @Override  
+                + "      \"nodeId1\" : [ ]\n"  
+                            .term(1)
+                + "          \"active_shard_ids\" : [\n"
+                + "            \"metadata_read\",\n"
+        );  
+        final ClusterState clusterState = buildClusterState();  
+                put("reduce_mappings", "true");
+                        new ClusterBlock(1, "description", true, true, true, RestStatus.ACCEPTED, EnumSet.allOf((ClusterBlockLevel.class)))
+                + "        },\n"
+                + "        \"index_patterns\" : [\n"
+                + "    \"unassigned\" : [ ],\n"
+                + "    }\n"
+import static java.util.Collections.emptySet;
+                + "        \"aliases\" : [ ],\n"
+            builder.toString()
+                + "    \"cluster_coordination\" : {\n"
+                + "            \"version\" : {\n"  
+                + "    \"indices\" : {\n"
+                + "      \"template\" : {\n"
+            .stateUUID("stateUUID")
+                + "        \"routing_num_shards\" : 1,\n"  
+                    .addBlocks(indexMetadata)  
+                + "          \"shard\" : 1,\n"
+                RoutingTable.builder()
+                    put("type1", new HashMap<String, Object>() {
+                + "                \"id\" : \""
+                + "        \"index_patterns\" : [\n"
+                + "            }\n"
+                + "    }\n"
+                + "      \"voting_config_exclusions\" : [ ]\n"
+                + "    \"templates\" : {\n"
+            .putMapping(new MappingMetadata("type", new HashMap<String, Object>() {
+                + "        },\n"
+                + "            \"met_conditions\" : { },\n"  
+                + "  \"state_uuid\" : \"stateUUID\",\n"
+                + "        \"ingestion_status\" : {\n"
+        final Map<String, ClusterState.Custom> mapBuilder = new HashMap<>();
+                    .build()
+                + "        \"settings_version\" : 1,\n"
+                + "      }\n"  
+                + "          \"read\",\n"
+                + "        },\n"  
+                            .addVotingConfigExclusion(new CoordinationMetadata.VotingConfigExclusion("exlucdedNodeId", "excludedNodeName"))
+                + "          \"alias\"\n"  
+                + "  },\n"
+                + "        },\n"  
+                + "          \"max_shard_id\" : 0,\n"
+                + "          \"parent_to_child_shards\" : { }\n"
+import org.opensearch.core.index.Index;  
+                + "        \"routing_num_shards\" : 1,\n"
+                + "          \"root_shards_to_all_children\" : { },\n"
+                + "        \"settings_version\" : 1,\n"  
+                + "        },\n"
+        };
+import java.io.IOException;
+                + "        \"state\" : \"open\",\n"
+        }  
+                + "          \"alias\"\n"
+import java.net.InetAddress;  
+                + ephemeralId
+                + "      \"transport_address\" : \"127.0.0.1:111\",\n"  
+                + "        \"shards\" : {\n"
+                                }  
+                        IndexRoutingTable.builder(new Index("index", "indexUUID"))
+                        new ClusterBlock(  
+                + "  \"state_uuid\" : \"stateUUID\",\n"  
+                            false,
+                + "              \"shard\" : 1,\n"
+        assertEquals(  
+                                        {
+                    )
+                + "              \"primary\" : true,\n"  
+                + "          ],\n"
+                    )
+                + "        },\n"
+                + "    },\n"
+                + "              \"created\" : \""
+        builder.startObject();
+                + "    \"indices\" : {\n"  
+                + "              \"index\" : \"index\",\n"
+/*  
+                + "              \"allocation_id\" : {\n"  
+                + "    \"index-graveyard\" : {\n"
+                + "        }\n"  
+                + "          \"0\" : [\n"  
+                                    add("acceptedConfigurationNodeId");
+                + "      \"tombstones\" : [ ]\n"  
+    }
+        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
+                + "      \"ephemeral_id\" : \""
+                + "          \"levels\" : [\n"
+                                    // the type name is the root value,
+                + "              \"created\" : \""
+                + "            }\n"
+        clusterState.toXContent(builder, ToXContent.EMPTY_PARAMS);  
+                + "          \"1\" : [\n"  
+                + "        \"split_shards_metadata\" : {\n"
+        String allocationId = index.getShards().get(1).getAllAllocationIds().iterator().next();
+            )  
+                + "          \"write\",\n"
+                + "\"\n"
+                + "            \"read\",\n"  
+                + "          \"alias\"\n"  
+                + "        },\n"
+        clusterState.toXContent(builder, new ToXContent.MapParams(mapParams));
+                + "      \"index\" : {\n"
+                + "              \"index\" : \"index\",\n"  
+                + "          ],\n"
+ *
+        IndexRoutingTable index = clusterState.getRoutingTable().getIndicesRouting().get("index");  
+                + "          \"metadata_read\",\n"  
+                + "              \"relocating_node\" : null,\n"
+                + "        }\n"
+                + "        }\n"
+        String allocationId = index.getShards().get(1).getAllAllocationIds().iterator().next();  
+                + "          \"is_paused\" : false\n"  
+                            .lastCommittedConfiguration(new CoordinationMetadata.VotingConfiguration(new HashSet<String>() {  
+                + "        \"state\" : \"open\",\n"
+                + "          \"relocating_node\" : null,\n"
+                + "\"\n"
+                        IndexTemplateMetadata.builder("template")
+                + "          \"node_name\" : \"excludedNodeName\"\n"
+                + "      \"last_committed_config\" : [\n"
+                + "    \"index-graveyard\" : {\n"  
+                    )  
+                + "    \"global\" : {\n"
+                {  
+                + "              \"node\" : \"nodeId2\",\n"
+                + "        },\n"
+                + "      ],\n"  
+        public Version getMinimalSupportedVersion() {
+                + "            \"time\" : 1\n"
+                + "            \"create_index\"\n"  
+                + "              \"state\" : \"STARTED\",\n"  
                 + "        },\n"
                 + "        \"primary_terms_map\" : {\n"  
-                + "          \"0\" : 1\n"
-                + "        },\n"
-                + "        \"in_sync_allocations\" : {\n"  
-                + "          \"0\" : [\n"
-                + "            \"allocationId\"\n"
-                + "          ]\n"  
-                + "        },\n"
-                + "        \"rollover_info\" : {\n"
-                + "          \"rolloveAlias\" : {\n"  
-                + "            \"met_conditions\" : { },\n"
-                + "            \"time\" : 1\n"
-                + "          }\n"  
-                + "        },\n"
-                + "        \"system\" : false,\n"
-                + "        \"ingestion_status\" : {\n"  
-                + "          \"is_paused\" : false\n"
-                + "        },\n"
-                + "        \"split_shards_metadata\" : {\n"  
-                + "          \"num_of_root_shards\" : 1,\n"
-                + "          \"max_shard_id\" : 0,\n"
-                + "          \"active_shard_ids\" : [\n"  
-                + "            0\n"
-                + "          ],\n"
-                + "          \"root_shards_to_all_children\" : { },\n"  
-                + "          \"parent_to_child_shards\" : { }\n"
-                + "        }\n"
-                + "      }\n"  
-                + "    },\n"
-                + "    \"index-graveyard\" : {\n"
-                + "      \"tombstones\" : [ ]\n"  
-                + "    }\n"
-                + "  },\n"
-                + "  \"routing_table\" : {\n"  
-                + "    \"indices\" : {\n"
-                + "      \"index\" : {\n"
-                + "        \"shards\" : {\n"  
-                + "          \"1\" : [\n"
-                + "            {\n"
-                + "              \"state\" : \"STARTED\",\n"  
-                + "              \"primary\" : true,\n"
-                + "              \"searchOnly\" : false,\n"
-                + "              \"node\" : \"nodeId2\",\n"  
-                + "              \"relocating_node\" : null,\n"
-                + "              \"shard\" : 1,\n"
-                + "              \"index\" : \"index\",\n"  
-                + "              \"allocation_id\" : {\n"
-                + "                \"id\" : \""
-                + allocationId  
-                + "\"\n"
-                + "              }\n"
-                + "            }\n"  
-                + "          ]\n"
-                + "        }\n"
-                + "      }\n"  
-                + "    }\n"
-                + "  },\n"
-                + "  \"routing_nodes\" : {\n"  
-                + "    \"unassigned\" : [ ],\n"
-                + "    \"nodes\" : {\n"
-                + "      \"nodeId2\" : [\n"  
-                + "        {\n"
-                + "          \"state\" : \"STARTED\",\n"
-                + "          \"primary\" : true,\n"  
-                + "          \"searchOnly\" : false,\n"
-                + "          \"node\" : \"nodeId2\",\n"
-                + "          \"relocating_node\" : null,\n"  
-                + "          \"shard\" : 1,\n"
-                + "          \"index\" : \"index\",\n"
-                + "          \"allocation_id\" : {\n"  
-                + "            \"id\" : \""
-                + allocationId
-                + "\"\n"  
-                + "          }\n"
-                + "        }\n"
-                + "      ],\n"  
-                + "      \"nodeId1\" : [ ]\n"
-                + "    }\n"
-                + "  }\n"  
-                + "}",
-            builder.toString()
-        );  
-
-    }
-
-    public void testToXContent_FlatSettingFalse_ReduceMappingTrue() throws IOException {
-        Map<String, String> mapParams = new HashMap<String, String>() {
-            {  
-                put("flat_settings", "false");
-                put("reduce_mappings", "true");
-                put(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_API);  
-            }
-        };
-
-        final ClusterState clusterState = buildClusterState();
-
-        IndexRoutingTable index = clusterState.getRoutingTable().getIndicesRouting().get("index");  
-
-        String ephemeralId = clusterState.getNodes().get("nodeId1").getEphemeralId();
-        String allocationId = index.getShards().get(1).getAllAllocationIds().iterator().next();  
-
-        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
-        builder.startObject();  
-        clusterState.toXContent(builder, new ToXContent.MapParams(mapParams));
-        builder.endObject();
-
-        assertEquals(
-            "{\n"
-                + "  \"cluster_uuid\" : \"clusterUUID\",\n"  
-                + "  \"version\" : 0,\n"
-                + "  \"state_uuid\" : \"stateUUID\",\n"
-                + "  \"master_node\" : \"clusterManagerNodeId\",\n"  
-                + "  \"cluster_manager_node\" : \"clusterManagerNodeId\",\n"
-                + "  \"blocks\" : {\n"
-                + "    \"global\" : {\n"  
-                + "      \"1\" : {\n"
-                + "        \"description\" : \"description\",\n"
-                + "        \"retryable\" : true,\n"  
-                + "        \"disable_state_persistence\" : true,\n"
-                + "        \"levels\" : [\n"
-                + "          \"read\",\n"  
-                + "          \"write\",\n"
-                + "          \"metadata_read\",\n"
-                + "          \"metadata_write\",\n"  
-                + "          \"create_index\"\n"
-                + "        ]\n"
-                + "      }\n"  
-                + "    },\n"
-                + "    \"indices\" : {\n"
-                + "      \"index\" : {\n"  
-                + "        \"2\" : {\n"
-                + "          \"description\" : \"description2\",\n"
-                + "          \"retryable\" : false,\n"  
-                + "          \"levels\" : [\n"
-                + "            \"read\",\n"
-                + "            \"write\",\n"  
-                + "            \"metadata_read\",\n"
-                + "            \"metadata_write\",\n"
-                + "            \"create_index\"\n"  
-                + "          ]\n"
-                + "        }\n"
-                + "      }\n"  
-                + "    }\n"
-                + "  },\n"
-                + "  \"nodes\" : {\n"  
+                + "            \"create_index\"\n"
                 + "    \"nodeId1\" : {\n"
-                + "      \"name\" : \"\",\n"
-                + "      \"ephemeral_id\" : \""  
-                + ephemeralId
-                + "\",\n"
-                + "      \"transport_address\" : \"127.0.0.1:111\",\n"  
-                + "      \"attributes\" : { }\n"
-                + "    }\n"
-                + "  },\n"  
-                + "  \"metadata\" : {\n"
-                + "    \"cluster_uuid\" : \"clusterUUID\",\n"
-                + "    \"cluster_uuid_committed\" : false,\n"  
-                + "    \"cluster_coordination\" : {\n"
-                + "      \"term\" : 1,\n"
-                + "      \"last_committed_config\" : [\n"  
-                + "        \"commitedConfigurationNodeId\"\n"
-                + "      ],\n"
-                + "      \"last_accepted_config\" : [\n"  
-                + "        \"acceptedConfigurationNodeId\"\n"
-                + "      ],\n"
-                + "      \"voting_config_exclusions\" : [\n"  
-                + "        {\n"
-                + "          \"node_id\" : \"exlucdedNodeId\",\n"
-                + "          \"node_name\" : \"excludedNodeName\"\n"  
-                + "        }\n"
-                + "      ]\n"
-                + "    },\n"  
-                + "    \"templates\" : {\n"
-                + "      \"template\" : {\n"
-                + "        \"order\" : 0,\n"  
-                + "        \"index_patterns\" : [\n"
-                + "          \"pattern1\",\n"
-                + "          \"pattern2\"\n"  
-                + "        ],\n"
-                + "        \"settings\" : {\n"
-                + "          \"index\" : {\n"  
-                + "            \"version\" : {\n"
-                + "              \"created\" : \""
-                + Version.CURRENT.id  
-                + "\"\n"
-                + "            }\n"
-                + "          }\n"  
-                + "        },\n"
-                + "        \"mappings\" : { },\n"
-                + "        \"aliases\" : { }\n"  
-                + "      }\n"
-                + "    },\n"
-                + "    \"indices\" : {\n"  
-                + "      \"index\" : {\n"
-                + "        \"version\" : 1,\n"
-                + "        \"mapping_version\" : 1,\n"  
-                + "        \"settings_version\" : 1,\n"
-                + "        \"aliases_version\" : 1,\n"
-                + "        \"routing_num_shards\" : 1,\n"  
-                + "        \"state\" : \"open\",\n"
-                + "        \"settings\" : {\n"
-                + "          \"index\" : {\n"  
-                + "            \"number_of_shards\" : \"1\",\n"
-                + "            \"number_of_replicas\" : \"2\",\n"
-                + "            \"version\" : {\n"  
-                + "              \"created\" : \""
-                + Version.CURRENT.id
-                + "\"\n"  
-                + "            }\n"
-                + "          }\n"
-                + "        },\n"  
-                + "        \"mappings\" : {\n"
-                + "          \"type\" : {\n"
-                + "            \"type1\" : {\n"  
-                + "              \"key\" : \"value\"\n"
-                + "            }\n"
-                + "          }\n"  
-                + "        },\n"
-                + "        \"aliases\" : [\n"
-                + "          \"alias\"\n"  
-                + "        ],\n"
-                + "        \"primary_terms\" : {\n"
-                + "          \"0\" : 1\n"  
-                + "        },\n"
-                + "        \"primary_terms_map\" : {\n"
-                + "          \"0\" : 1\n"  
-                + "        },\n"
-                + "        \"in_sync_allocations\" : {\n"
-                + "          \"0\" : [\n"  
-                + "            \"allocationId\"\n"
-                + "          ]\n"
-                + "        },\n"  
-                + "        \"rollover_info\" : {\n"
-                + "          \"rolloveAlias\" : {\n"
-                + "            \"met_conditions\" : { },\n"  
-                + "            \"time\" : 1\n"
-                + "          }\n"
-                + "        },\n"  
-                + "        \"system\" : false,\n"
-                + "        \"ingestion_status\" : {\n"
-                + "          \"is_paused\" : false\n"  
-                + "        },\n"
-                + "        \"split_shards_metadata\" : {\n"
-                + "          \"num_of_root_shards\" : 1,\n"  
-                + "          \"max_shard_id\" : 0,\n"
-                + "          \"active_shard_ids\" : [\n"
-                + "            0\n"  
-                + "          ],\n"
-                + "          \"root_shards_to_all_children\" : { },\n"
-                + "          \"parent_to_child_shards\" : { }\n"  
-                + "        }\n"
-                + "      }\n"
-                + "    },\n"  
-                + "    \"index-graveyard\" : {\n"
-                + "      \"tombstones\" : [ ]\n"
-                + "    }\n"  
-                + "  },\n"
-                + "  \"routing_table\" : {\n"
-                + "    \"indices\" : {\n"  
-                + "      \"index\" : {\n"
-                + "        \"shards\" : {\n"
-                + "          \"1\" : [\n"  
-                + "            {\n"
-                + "              \"state\" : \"STARTED\",\n"
-                + "              \"primary\" : true,\n"  
-                + "              \"searchOnly\" : false,\n"
-                + "              \"node\" : \"nodeId2\",\n"
-                + "              \"relocating_node\" : null,\n"  
-                + "              \"shard\" : 1,\n"
-                + "              \"index\" : \"index\",\n"
-                + "              \"allocation_id\" : {\n"  
-                + "                \"id\" : \""
-                + allocationId
-                + "\"\n"  
-                + "              }\n"
-                + "            }\n"
-                + "          ]\n"  
-                + "        }\n"
-                + "      }\n"
-                + "    }\n"  
-                + "  },\n"
-                + "  \"routing_nodes\" : {\n"
-                + "    \"unassigned\" : [ ],\n"  
-                + "    \"nodes\" : {\n"
-                + "      \"nodeId2\" : [\n"
-                + "        {\n"  
-                + "          \"state\" : \"STARTED\",\n"
-                + "          \"primary\" : true,\n"
-                + "          \"searchOnly\" : false,\n"  
-                + "          \"node\" : \"nodeId2\",\n"
-                + "          \"relocating_node\" : null,\n"
-                + "          \"shard\" : 1,\n"  
-                + "          \"index\" : \"index\",\n"
-                + "          \"allocation_id\" : {\n"
-                + "            \"id\" : \""  
-                + allocationId
-                + "\"\n"
-                + "          }\n"  
-                + "        }\n"
-                + "      ],\n"
-                + "      \"nodeId1\" : [ ]\n"  
-                + "    }\n"
-                + "  }\n"
-                + "}",  
-            builder.toString()
-        );
-
-    }
-
-    public void testToXContentSameTypeName() throws IOException {  
-        final ClusterState clusterState = ClusterState.builder(ClusterName.DEFAULT)
-            .stateUUID("stateUUID")
-            .metadata(  
-                Metadata.builder()
-                    .clusterUUID("clusterUUID")
-                    .coordinationMetadata(CoordinationMetadata.builder().build())  
-                    .put(
-                        IndexMetadata.builder("index")
-                            .state(IndexMetadata.State.OPEN)  
-                            .settings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id))
-                            .putMapping(
-                                new MappingMetadata(  
-                                    "type",
-                                    // the type name is the root value,
-                                    // the original logic in ClusterState.toXContent will reduce  
-                                    new HashMap<String, Object>() {
-                                        {
-                                            put("type", new HashMap<String, Object>() {  
-                                                {
-                                                    put("key", "value");
-                                                }  
-                                            });
-                                        }
-                                    }  
-                                )
-                            )
-                            .numberOfShards(1)  
-                            .primaryTerm(0, 1L)
-                            .numberOfReplicas(2)
-                    )  
-            )
-            .build();
-
-        XContentBuilder builder = JsonXContent.contentBuilder().prettyPrint();
-        builder.startObject();
-        clusterState.toXContent(builder, ToXContent.EMPTY_PARAMS);  
-        builder.endObject();
-
-        assertEquals(  
             "{\n"
-                + "  \"cluster_uuid\" : \"clusterUUID\",\n"
-                + "  \"version\" : 0,\n"  
-                + "  \"state_uuid\" : \"stateUUID\",\n"
-                + "  \"master_node\" : null,\n"
-                + "  \"cluster_manager_node\" : null,\n"  
-                + "  \"blocks\" : { },\n"
-                + "  \"nodes\" : { },\n"
-                + "  \"metadata\" : {\n"  
-                + "    \"cluster_uuid\" : \"clusterUUID\",\n"
-                + "    \"cluster_uuid_committed\" : false,\n"
-                + "    \"cluster_coordination\" : {\n"  
-                + "      \"term\" : 0,\n"
-                + "      \"last_committed_config\" : [ ],\n"
-                + "      \"last_accepted_config\" : [ ],\n"  
-                + "      \"voting_config_exclusions\" : [ ]\n"
-                + "    },\n"
-                + "    \"templates\" : { },\n"  
-                + "    \"indices\" : {\n"
-                + "      \"index\" : {\n"
-                + "        \"version\" : 2,\n"  
-                + "        \"mapping_version\" : 1,\n"
-                + "        \"settings_version\" : 1,\n"
-                + "        \"aliases_version\" : 1,\n"  
-                + "        \"routing_num_shards\" : 1,\n"
-                + "        \"state\" : \"open\",\n"
-                + "        \"settings\" : {\n"  
+                + "        },\n"  
+                + "            \"read\",\n"
+                + "          \"1\" : [\n"  
                 + "          \"index\" : {\n"
-                + "            \"number_of_shards\" : \"1\",\n"
-                + "            \"number_of_replicas\" : \"2\",\n"  
-                + "            \"version\" : {\n"
-                + "              \"created\" : \""
-                + Version.CURRENT.id  
-                + "\"\n"
-                + "            }\n"
-                + "          }\n"  
-                + "        },\n"
-                + "        \"mappings\" : {\n"
-                + "          \"type\" : {\n"  
-                + "            \"key\" : \"value\"\n"
+                + "      \"nodeId1\" : [ ]\n"
                 + "          }\n"
-                + "        },\n"  
-                + "        \"aliases\" : [ ],\n"
-                + "        \"primary_terms\" : {\n"
-                + "          \"0\" : 1\n"  
-                + "        },\n"
-                + "        \"primary_terms_map\" : {\n"
-                + "          \"0\" : 1\n"  
-                + "        },\n"
-                + "        \"in_sync_allocations\" : {\n"
-                + "          \"0\" : [ ]\n"  
-                + "        },\n"
-                + "        \"rollover_info\" : { },\n"
-                + "        \"system\" : false,\n"  
-                + "        \"ingestion_status\" : {\n"
-                + "          \"is_paused\" : false\n"
-                + "        },\n"  
-                + "        \"split_shards_metadata\" : {\n"
-                + "          \"num_of_root_shards\" : 1,\n"
-                + "          \"max_shard_id\" : 0,\n"  
-                + "          \"active_shard_ids\" : [\n"
-                + "            0\n"
-                + "          ],\n"  
-                + "          \"root_shards_to_all_children\" : { },\n"
-                + "          \"parent_to_child_shards\" : { }\n"
-                + "        }\n"  
-                + "      }\n"
-                + "    },\n"
-                + "    \"index-graveyard\" : {\n"  
-                + "      \"tombstones\" : [ ]\n"
-                + "    }\n"
-                + "  },\n"  
                 + "  \"routing_table\" : {\n"
-                + "    \"indices\" : { }\n"
-                + "  },\n"  
-                + "  \"routing_nodes\" : {\n"
-                + "    \"unassigned\" : [ ],\n"
-                + "    \"nodes\" : { }\n"  
-                + "  }\n"
-                + "}",
-            builder.toString()  
-        );
-    }
-
-    private ClusterState buildClusterState() throws IOException {
-        IndexMetadata indexMetadata = IndexMetadata.builder("index")
-            .state(IndexMetadata.State.OPEN)  
-            .settings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id))
-            .putMapping(new MappingMetadata("type", new HashMap<String, Object>() {
-                {  
-                    put("type1", new HashMap<String, Object>() {
-                        {
-                            put("key", "value");  
-                        }
-                    });
-                }  
-            }))
-            .putAlias(AliasMetadata.builder("alias").indexRouting("indexRouting").build())
-            .numberOfShards(1)  
-            .primaryTerm(0, 1L)
-            .putInSyncAllocationIds(0, new HashSet<String>() {
-                {  
-                    add("allocationId");
-                }
-            })  
-            .numberOfReplicas(2)
-            .putRolloverInfo(new RolloverInfo("rolloveAlias", new ArrayList<>(), 1L))
-            .build();  
-
-        return ClusterState.builder(ClusterName.DEFAULT)
+                + "          \"allocation_id\" : {\n"
+                                new MappingMetadata(  
+                + "              \"node\" : \"nodeId2\",\n"  
+ * You may obtain a copy of the License at  
+                + "        \"retryable\" : true,\n"  
+                + "          \"index.version.created\" : \""
+                + "      }\n"
+                + "        \"in_sync_allocations\" : {\n"  
+        ClusterState withClusterManager1b = ClusterState.builder(name)
+                + "          \"description\" : \"description2\",\n"  
             .stateUUID("stateUUID")  
-            .nodes(
-                DiscoveryNodes.builder()
-                    .clusterManagerNodeId("clusterManagerNodeId")  
-                    .add(new DiscoveryNode("nodeId1", new TransportAddress(InetAddress.getByName("127.0.0.1"), 111), Version.CURRENT))
-                    .build()
-            )  
-            .blocks(
-                ClusterBlocks.builder()
-                    .addGlobalBlock(  
-                        new ClusterBlock(1, "description", true, true, true, RestStatus.ACCEPTED, EnumSet.allOf((ClusterBlockLevel.class)))
-                    )
-                    .addBlocks(indexMetadata)  
-                    .addIndexBlock(
-                        "index",
-                        new ClusterBlock(  
-                            2,
-                            "description2",
-                            false,  
-                            false,
-                            false,
-                            RestStatus.ACCEPTED,  
-                            EnumSet.allOf((ClusterBlockLevel.class))
-                        )
-                    )  
-                    .build()
-            )
-            .metadata(  
-                Metadata.builder()
-                    .clusterUUID("clusterUUID")
-                    .coordinationMetadata(  
-                        CoordinationMetadata.builder()
-                            .term(1)
-                            .lastCommittedConfiguration(new CoordinationMetadata.VotingConfiguration(new HashSet<String>() {  
-                                {
-                                    add("commitedConfigurationNodeId");
-                                }  
-                            }))
-                            .lastAcceptedConfiguration(new CoordinationMetadata.VotingConfiguration(new HashSet<String>() {
-                                {  
-                                    add("acceptedConfigurationNodeId");
-                                }
-                            }))  
-                            .addVotingConfigExclusion(new CoordinationMetadata.VotingConfigExclusion("exlucdedNodeId", "excludedNodeName"))
-                            .build()
-                    )  
-                    .persistentSettings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id).build())
-                    .transientSettings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id).build())
-                    .put(indexMetadata, false)  
-                    .put(
-                        IndexTemplateMetadata.builder("template")
+                + "        \"system\" : false,\n"
+                + "      \"index\" : {\n"  
+ * this work for additional information regarding copyright
+                + "      \"index\" : {\n"
                             .patterns(Arrays.asList("pattern1", "pattern2"))  
-                            .order(0)
-                            .settings(Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT.id))
-                            .putMapping("type", "{ \"key1\": {} }")  
-                            .build()
-                    )
-            )  
-            .routingTable(
-                RoutingTable.builder()
-                    .add(  
-                        IndexRoutingTable.builder(new Index("index", "indexUUID"))
+                + "      }\n"
+                + "    \"indices\" : {\n"
+                + "          \"key1\" : { }\n"
+        final String key = randomAlphaOfLength(10);  
+                + "          \"active_shard_ids\" : [\n"  
+                + "      ],\n"  
+                    .clusterUUID("clusterUUID")
+                + allocationId
+                + "          \"0\" : 1\n"
+                + "            }\n"
+                + "          ]\n"
+                + "      \"index\" : {\n"
+                + "          \"description\" : \"description2\",\n"  
+                + "    \"global\" : {\n"
+            "{\n"  
+                + "        },\n"
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+                + "          \"searchOnly\" : false,\n"  
+                + "        \"levels\" : [\n"  
+                + "        \"settings\" : {\n"  
+                + "          \"num_of_root_shards\" : 1,\n"  
                             .addIndexShard(
-                                new IndexShardRoutingTable.Builder(new ShardId("index", "_na_", 1)).addShard(  
-                                    TestShardRouting.newShardRouting(
-                                        new ShardId("index", "_na_", 1),
-                                        "nodeId2",  
-                                        true,
-                                        ShardRoutingState.STARTED
-                                    )  
-                                ).build()
-                            )
-                            .build()  
-                    )
-                    .build()
-            )  
-            .build();
-    }
-
-    public static class CustomMetadata extends TestCustomMetadata {
-        public static final String TYPE = "custom_md";
-
-        CustomMetadata(String data) {
-            super(data);
-        }  
-
-        @Override
-        public String getWriteableName() {  
-            return TYPE;
-        }
-
-        @Override
-        public Version getMinimalSupportedVersion() {
-            return Version.CURRENT;  
-        }
-
-        @Override  
-        public EnumSet<Metadata.XContentContext> context() {
-            return EnumSet.of(Metadata.XContentContext.GATEWAY, Metadata.XContentContext.SNAPSHOT);
-        }  
-    }
-}
+                + "\"\n"
+                + "    \"nodes\" : {\n"
+                + "              \"primary\" : true,\n"  
+                + "  },\n"  
+                            .putMapping(
+                + "  },\n"
+                + "  \"cluster_uuid\" : \"clusterUUID\",\n"
+                                    new HashMap<String, Object>() {
+                + "        \"settings\" : {\n"
+        ClusterState noClusterManager1 = ClusterState.builder(name).version(randomInt(5)).nodes(nodes).build();
+                + "    \"cluster_uuid_committed\" : false,\n"
+                + "    \"cluster_uuid\" : \"clusterUUID\",\n"  
+                + "}",  
+                + "              \"allocation_id\" : {\n"  
+                + "            \"version\" : {\n"
+                + "          \"0\" : 1\n"  
+                put("flat_settings", "true");  
+                + "        \"retryable\" : true,\n"
+                            .lastAcceptedConfiguration(new CoordinationMetadata.VotingConfiguration(new HashSet<String>() {
+                + "              \"primary\" : true,\n"
+                + "          \"allocation_id\" : {\n"
+                + "        }\n"
+                + "        ],\n"
+                + "        \"aliases\" : { }\n"  
+                + "        \"2\" : {\n"
+                + "            \"allocationId\"\n"

@@ -1,808 +1,697 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.index.IndexCommit;  
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.common.util.concurrent.ReleasableLock;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.unit.ByteSizeValue;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.engine.dataformat.DataFormat;  
-import org.opensearch.index.engine.dataformat.DataFormatDescriptor;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.ReaderManagerConfig;  
-import org.opensearch.index.engine.exec.CatalogSnapshotDeletionPolicy;
-import org.opensearch.index.engine.exec.CatalogSnapshotLifecycleListener;
-import org.opensearch.index.engine.exec.DocumentLookupSupport;  
-import org.opensearch.index.engine.exec.DocumentMetadataResolver;
-import org.opensearch.index.engine.exec.EngineReaderManager;
-import org.opensearch.index.engine.exec.FileDeleter;  
-import org.opensearch.index.engine.exec.FilesListener;
-import org.opensearch.index.engine.exec.Indexer;
-import org.opensearch.index.engine.exec.LiveDocsSource;  
-import org.opensearch.index.engine.exec.commit.Committer;
-import org.opensearch.index.engine.exec.commit.CommitterConfig;
-import org.opensearch.index.engine.exec.commit.IndexStoreProvider;  
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
-import org.opensearch.index.get.DocumentLookupResult;  
-import org.opensearch.index.mapper.DocumentMapperForType;
-import org.opensearch.index.mapper.SourceToParse;
-import org.opensearch.index.merge.MergeStats;  
-import org.opensearch.index.seqno.LocalCheckpointTracker;
-import org.opensearch.index.seqno.SeqNoStats;
-import org.opensearch.index.seqno.SequenceNumbers;  
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.NoOpTranslogManager;  
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogManager;
-import org.opensearch.index.translog.TranslogStats;  
-import org.opensearch.indices.pollingingest.PollingIngestStats;
-import org.opensearch.plugins.DocumentLookupProvider;
-import org.opensearch.search.suggest.completion.CompletionStats;  
-
-import java.io.Closeable;
-import java.io.IOException;  
-import java.io.UncheckedIOException;
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CountDownLatch;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;  
-import java.util.function.BiFunction;
-import java.util.function.Supplier;
-
-/**
- * Read-only engine for primaries operating on pluggable data formats.
- *  
- * <p>This engine is the flip target when a read-only replica is promoted to primary
- * (via {@code resetToWriteableEngine}). Unlike {@link DataFormatAwareEngine},
- * it has no {@link IndexWriter}, no active translog, and rejects all write  
- * operations. Reads route through {@code TieredSubdirectoryAwareDirectory}
- * to remote storage.
- *  
- * <p>Replicas continue using {@link DataFormatAwareNRTReplicationEngine}.
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public class DataFormatAwareReadOnlyEngine implements Indexer {  
-
-    private final Logger logger;
-    private final EngineConfig engineConfig;  
-    private final ShardId shardId;
-    private final Store store;
-
-    // Core state
-    private final CatalogSnapshotManager catalogSnapshotManager;
-    private final Map<DataFormat, EngineReaderManager<?>> readerManagers;  
-    private final LocalCheckpointTracker localCheckpointTracker;
-    private final NoOpTranslogManager translogManager;
-    private final Committer committer;  
-
-    // Lifecycle
-    private final AtomicBoolean isClosed = new AtomicBoolean(false);  
-    private final SetOnce<Exception> failedEngine = new SetOnce<>();
-    private final CountDownLatch closedLatch = new CountDownLatch(1);
-    private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();  
-    private final ReleasableLock readLock = new ReleasableLock(rwl.readLock());
-    private final ReleasableLock writeLock = new ReleasableLock(rwl.writeLock());
-    private final ReentrantLock failEngineLock = new ReentrantLock();  
-
-    // Metadata
-    @Nullable  
-    private volatile String historyUUID;
-
-    // The permanent snapshot ref: held for the engine's lifetime, released in closeNoLock.  
-    // The snapshot never changes for this engine — build once, reuse across all reads.
-    private final GatedCloseable<CatalogSnapshot> permanentSnapshotRef;
-    private final DataFormatAwareEngine.DataFormatAwareReader reader;  
-
-    // Stats cache — populated once at construction (snapshot is permanent for this engine).
-    private final CatalogSnapshotStatsCache statsCache;  
-
-    private final DocumentLookupSupport documentLookup;
-
-    public DataFormatAwareReadOnlyEngine(EngineConfig engineConfig) {
-        this(engineConfig, null);
-    }  
-
-    public DataFormatAwareReadOnlyEngine(EngineConfig engineConfig, @Nullable DocumentLookupProvider documentLookupProvider) {
-        this.logger = Loggers.getLogger(DataFormatAwareReadOnlyEngine.class, engineConfig.getShardId());  
-        assert engineConfig.isReadOnlyReplica() == false : "DataFormatAwareReadOnlyEngine must only be created for primary shards; shard "
-            + engineConfig.getShardId();
-        this.engineConfig = engineConfig;  
-        this.shardId = engineConfig.getShardId();
-        DocumentLookupProvider provider = documentLookupProvider != null
-            ? documentLookupProvider  
-            : engineConfig.getDocumentLookupProvider();
-        DocumentMetadataResolver resolver = engineConfig.getDocumentMetadataResolver() != null
-            ? engineConfig.getDocumentMetadataResolver()  
-            : DocumentMetadataResolver.NOOP;
-        this.documentLookup = new DocumentLookupSupport(shardId, provider, resolver);
-        this.store = engineConfig.getStore();  
-
-        store.incRef();
-        Map<DataFormat, EngineReaderManager<?>> readerManagersRef = null;  
-        CatalogSnapshotManager catalogSnapshotManagerRef = null;
-        Committer constructingCommitter = null;
-        boolean success = false;  
-        try {
-            // Create committer: isReplica=true opens the index without acquiring write.lock.
-            // LuceneCommitterFactory detects isWarmIndex + !isReadOnlyReplica and returns  
-            // ReadOnlyCommitter, which throws on commit() — this engine never writes commits.
-            this.committer = constructingCommitter = engineConfig.getCommitterFactory()
-                .getCommitter(new CommitterConfig(engineConfig, () -> {}, true));  
-            Map<String, String> userData = committer.getLastCommittedData();
-
-            // Catalog file deleter  
-            FileDeleter compositeDeleter = buildFileDeleter();
-
-            List<CatalogSnapshot> committed = committer.listCommittedSnapshots();  
-
-            // Build per-format reader managers (same pattern as NRT)
-            DataFormatRegistry registry = engineConfig.getDataFormatRegistry();  
-            Map<String, Supplier<DataFormatDescriptor>> allDescriptors = registry.getFormatDescriptors(engineConfig.getIndexSettings());
-            Map<DataFormat, EngineReaderManager<?>> aggregated = new HashMap<>();
-            for (String formatName : allDescriptors.keySet()) {  
-                DataFormat format = registry.format(formatName);
-                aggregated.putAll(
-                    registry.getReaderManager(  
-                        new ReaderManagerConfig(
-                            Optional.of((IndexStoreProvider) dataFormat -> () -> store),
-                            format,  
-                            registry,
-                            store.shardPath(),
-                            store.getDataformatAwareStoreHandles(),  
-                            engineConfig.getIndexSettings()
-                        )
-                    )  
-                );
-            }
-            readerManagersRef = Map.copyOf(aggregated);  
-            this.readerManagers = readerManagersRef;
-
-            // Register reader managers as BOTH files listeners and snapshot lifecycle listeners.  
-            // Files listeners make IndexFileDeleter fire onFilesAdded for the committed snapshot
-            // at open, eagerly warming the metadata cache before the first query; snapshot
-            // listeners build the reader before latestCatalogSnapshot is swapped.  
-            Map<String, FilesListener> filesListeners = new HashMap<>();
-            List<CatalogSnapshotLifecycleListener> snapshotListeners = new ArrayList<>();
-            for (Map.Entry<DataFormat, EngineReaderManager<?>> entry : readerManagersRef.entrySet()) {  
-                filesListeners.put(entry.getKey().name(), entry.getValue());
-                snapshotListeners.add(entry.getValue());
-            }  
-
-            catalogSnapshotManagerRef = new CatalogSnapshotManager(
-                committed,  
-                new NoOpCatalogSnapshotDeletionPolicy(),
-                compositeDeleter,
-                filesListeners,  
-                snapshotListeners,
-                store.shardPath(),
-                committer  
-            );
-            this.catalogSnapshotManager = catalogSnapshotManagerRef;
-
-            // Initialize sequence number tracking
-            final SequenceNumbers.CommitInfo seqNoInfo = SequenceNumbers.loadSeqNoInfoFromLuceneCommit(userData.entrySet());
-            this.localCheckpointTracker = new LocalCheckpointTracker(seqNoInfo.maxSeqNo, seqNoInfo.localCheckpoint);  
-
-            // Initialize no-op translog
-            String translogUUID = userData.get(Translog.TRANSLOG_UUID_KEY);  
-            this.translogManager = new NoOpTranslogManager(
-                shardId,
-                readLock,  
-                this::ensureOpen,
-                new TranslogStats(0, 0, 0, 0, 0),
-                Translog.EMPTY_TRANSLOG_SNAPSHOT,  
-                translogUUID != null ? translogUUID : "readonly-" + shardId,
-                true
-            );  
-
-            // History UUID — fabricate if absent (same as NRT engine) for recovery protocol compliance
-            this.historyUUID = userData.get(Engine.HISTORY_UUID_KEY);  
-            if (this.historyUUID == null) {
-                this.historyUUID = UUIDs.randomBase64UUID();
-            }  
-
-            // Acquire permanent snapshot ref — held for engine's lifetime, released in closeNoLock.
-            // The snapshot never changes; all queries share this single ref via the cached reader.  
-            this.permanentSnapshotRef = catalogSnapshotManagerRef.acquireSnapshot();
-            Map<DataFormat, Object> readers = new HashMap<>();
-            for (Map.Entry<DataFormat, EngineReaderManager<?>> entry : readerManagersRef.entrySet()) {  
-                Object r = entry.getValue().getReader(permanentSnapshotRef.get());
-                if (r != null) {
-                    readers.put(entry.getKey(), r);  
-                }
-            }
-            this.reader = new DataFormatAwareEngine.DataFormatAwareReader(permanentSnapshotRef, readers);  
-
-            // Build stats cache — snapshot is permanent for this engine, so populate once at construction.
-            this.statsCache = new CatalogSnapshotStatsCache(catalogSnapshotManagerRef, store, engineConfig, () -> {  
-                try {
-                    return committer.getLastCommittedData();
-                } catch (IOException e) {  
-                    logger.warn("Failed to get last committed data for stats cache", e);
-                    return Collections.emptyMap();
-                }  
-            }, LiveDocsSource.docCountsResolver(this.readerManagers.values()), logger);
-            this.statsCache.forceRefresh();
-
-            success = true;
-            logger.info("Created DataFormatAwareReadOnlyEngine");
-        } catch (IOException e) {  
-            throw new EngineCreationFailureException(shardId, "failed to create read-only engine", e);
-        } finally {
-            if (success == false) {  
-                if (readerManagersRef != null) {
-                    IOUtils.closeWhileHandlingException(readerManagersRef.values());
-                }  
-                IOUtils.closeWhileHandlingException(catalogSnapshotManagerRef);
-                IOUtils.closeWhileHandlingException(constructingCommitter);
-                if (isClosed.get() == false) {  
-                    store.decRef();
-                }
-            }  
-        }
-    }
-
-    // ---- LifecycleAware ----
-
-    @Override  
-    public void ensureOpen() {
-        if (isClosed.get()) {
-            throw new AlreadyClosedException(shardId + " engine is closed", failedEngine.get());  
-        }
-    }
-
-    // ---- Indexer core ----
-
-    @Override  
-    public EngineConfig config() {
-        return engineConfig;
-    }  
-
-    @Override
-    public boolean isReplicaIndexer() {  
-        // Warm primaries use this engine; warm replicas use DataFormatAwareNRTReplicationEngine (which returns true).
-        return false;
-    }  
-
-    @Override
-    public TranslogManager translogManager() {  
-        return translogManager;
-    }
-
-    @Override
-    public String getHistoryUUID() {
-        return historyUUID;  
-    }
-
-    // ---- IndexReaderProvider (Task 2) ----  
-
-    @Override
-    public GatedCloseable<Reader> acquireReader() throws IOException {  
-        ensureOpen();
-        // The reader holds a permanent snapshotRef for the engine's lifetime.
-        // Callers must not release it — use a no-op close callback.  
-        return new GatedCloseable<>(reader, () -> {});
-    }
-
-    // ---- IndexerEngineOperations (Task 3 — write rejection) ----
-
-    @Override  
-    public Engine.IndexResult index(Engine.Index index) throws IOException {
-        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support indexing");
-    }  
-
-    @Override
-    public Engine.DeleteResult delete(Engine.Delete delete) throws IOException {  
-        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support deletes");
-    }
-
-    @Override
-    public Engine.NoOpResult noOp(Engine.NoOp noOp) throws IOException {
-        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support no-ops");  
-    }
-
-    @Override  
-    public Engine.GetResult getById(Engine.Get get, BiFunction<String, Engine.SearcherScope, Engine.Searcher> searcherFactory)
-        throws IOException {
-        DocumentLookupResult result = documentLookup.getById(get, reader);  
-        return result.exists() ? result.toGetResult() : Engine.GetResult.NOT_EXISTS;
-    }
-
-    @Override
-    public Engine.Index prepareIndex(
-        DocumentMapperForType docMapper,  
-        SourceToParse source,
-        long seqNo,
-        long primaryTerm,  
-        long version,
-        VersionType versionType,
-        Engine.Operation.Origin origin,  
-        long autoGeneratedIdTimestamp,
-        boolean isRetry,
-        long ifSeqNo,  
-        long ifPrimaryTerm
-    ) {
-        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support indexing");  
-    }
-
-    @Override  
-    public Engine.Delete prepareDelete(
-        String id,
-        long seqNo,  
-        long primaryTerm,
-        long version,
-        VersionType versionType,  
-        Engine.Operation.Origin origin,
-        long ifSeqNo,
-        long ifPrimaryTerm  
-    ) {
-        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support deletes");
-    }  
-
-    @Override
-    public Engine.Delete prepareDelete(  
-        String id,
-        String routing,
-        long seqNo,  
-        long primaryTerm,
-        long version,
-        VersionType versionType,  
-        Engine.Operation.Origin origin,
-        long ifSeqNo,
-        long ifPrimaryTerm  
-    ) {
-        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support deletes");
-    }  
-
-    // ---- IndexerLifecycleOperations (Tasks 4, 7) ----
-
-    @Override
-    public void refresh(String source) throws EngineException {
-        // No-op: read-only engine does not buffer documents  
-    }
-
-    @Override  
-    public boolean maybeRefresh(String source) {
-        return false;
-    }  
-
-    @Override
-    public boolean refreshNeeded() {  
-        return false;
-    }
-
-    @Override
-    public void writeIndexingBuffer() throws EngineException {
-        // No-op: no indexing buffer  
-    }
-
-    @Override  
-    public boolean shouldPeriodicallyFlush() {
-        return false;
-    }  
-
-    @Override
-    public void flush(boolean force, boolean waitIfOngoing) {  
-        // No-op: read-only engine does not flush. State is fully remote.
-    }
-
-    @Override
-    public void flush() {
-        // No-op  
-    }
-
-    @Override  
-    public void forceMerge(
-        boolean flush,
-        int maxNumSegments,  
-        boolean onlyExpungeDeletes,
-        boolean upgrade,
-        boolean upgradeOnlyAncientSegments,  
-        String forceMergeUUID
-    ) throws EngineException, IOException {
-        // No-op: read-only engine does not merge  
-    }
-
-    @Override  
-    public void activateThrottling() {
-        // No-op
-    }  
-
-    @Override
-    public void deactivateThrottling() {  
-        // No-op
-    }
-
-    @Override
-    public boolean isThrottled() {
-        return false;  
-    }
-
-    @Override  
     public void onSettingsChanged(TimeValue translogRetentionAge, ByteSizeValue translogRetentionSize, long softDeletesRetentionOps) {
-        // No-op: no translog deletion policy to update
-    }  
-
-    @Override
-    public void maybePruneDeletes() {  
-        // No-op: data-format engines do not maintain Lucene-style delete tombstones
+        Engine.Operation.Origin origin,  
     }
-
-    @Override
-    public void verifyEngineBeforeIndexClosing() throws IllegalStateException {
-        // No-op  
     }
-
-    // ---- IndexerStateManager (Task 8) ----  
-
-    @Override
-    public long getPersistedLocalCheckpoint() {  
-        // Segments are immediately visible upon replication; processed == persisted
-        return localCheckpointTracker.getProcessedCheckpoint();
-    }  
-
-    @Override
-    public long getProcessedLocalCheckpoint() {  
-        return localCheckpointTracker.getProcessedCheckpoint();
-    }
-
-    @Override
-    public long lastRefreshedCheckpoint() {
-        return localCheckpointTracker.getProcessedCheckpoint();  
-    }
-
+                Translog.EMPTY_TRANSLOG_SNAPSHOT,  
     @Override  
-    public SeqNoStats getSeqNoStats(long globalCheckpoint) {
-        return localCheckpointTracker.getStats(globalCheckpoint);
-    }  
-
+            return new SafeCommitInfo(localCheckpointTracker.getProcessedCheckpoint(), (int) snapshot.get().getNumDocs());
     @Override
-    public long getLastSyncedGlobalCheckpoint() {  
-        return translogManager.getLastSyncedGlobalCheckpoint();
-    }
-
-    @Override
-    public long getMinRetainedSeqNo() {
-        return localCheckpointTracker.getProcessedCheckpoint();  
-    }
-
-    @Override  
-    public long getMaxSeenAutoIdTimestamp() {
-        return Long.MIN_VALUE;
-    }  
-
-    @Override
-    public void updateMaxUnsafeAutoIdTimestamp(long newTimestamp) {  
-        // No-op for read-only primary
-    }
-
-    @Override
-    public long getMaxSeqNoOfUpdatesOrDeletes() {
-        return localCheckpointTracker.getMaxSeqNo();  
-    }
-
-    @Override  
-    public void advanceMaxSeqNoOfUpdatesOrDeletes(long maxSeqNoOfUpdatesOnPrimary) {
-        // No-op for read-only primary
-    }  
-
-    @Override
-    public long getLastWriteNanos() {  
-        return System.nanoTime();
-    }
-
-    @Override
-    public int countNumberOfHistoryOperations(String source, long fromSeqNo, long toSeqNumber) throws IOException {
-        return 0;  
-    }
-
-    @Override  
-    public boolean hasCompleteOperationHistory(String reason, long startingSeqNo) {
-        return startingSeqNo > localCheckpointTracker.getMaxSeqNo();
-    }  
-
-    @Override
-    public int fillSeqNoGaps(long primaryTerm) throws IOException {  
-        return 0;
-    }
-
-    // ---- IndexerStatistics (Task 8) ----
-
-    @Override  
-    public long getWritingBytes() {
-        return 0;
-    }  
-
-    /** Read-only engine does not have indexing buffers. */
-    @Override  
-    public long getHeapBytesUsed() {
-        return 0;
-    }  
-
-    /** Read-only engine does not have indexing buffers. */
-    @Override  
-    public long getNativeBytesUsed() {
-        return 0;
-    }  
-
-    @Override
-    public long getIndexThrottleTimeInMillis() {  
-        return 0;
-    }
-
-    @Override
-    public long unreferencedFileCleanUpsPerformed() {
-        return 0;  
-    }
-
-    @Override  
-    public CommitStats commitStats() {
         ensureOpen();
-        return committer.getCommitStats();  
+                IOUtils.closeWhileHandlingException(catalogSnapshotManagerRef);
+            throw new EngineCreationFailureException(shardId, "failed to create read-only engine", e);
     }
-
-    @Override  
-    public DocsStats docStats() {
-        return statsCache.getDocsStats();
+import org.apache.logging.log4j.message.ParameterizedMessage;
+import java.util.HashMap;
+ *  
+    public GatedCloseable<CatalogSnapshot> acquireSnapshot() {  
+    // Core state
+        boolean success = false;  
+        long primaryTerm,  
+/*  
     }  
-
     @Override
-    public List<Segment> segments(boolean verbose) {  
-        return statsCache.getSegments();
+        return false;  
+import org.opensearch.common.annotation.ExperimentalApi;  
     }
-
+import java.util.Collection;  
+        return catalogSnapshotManager;
+    public Engine.NoOpResult noOp(Engine.NoOp noOp) throws IOException {
+ * (via {@code resetToWriteableEngine}). Unlike {@link DataFormatAwareEngine},
+ * to remote storage.
+@ExperimentalApi
+        return new MergeStats();  
     @Override
-    public SegmentsStats segmentsStats(boolean includeSegmentFileSizes, boolean includeUnloadedSegments) {
+            throw new AlreadyClosedException(shardId + " engine is closed", failedEngine.get());  
+    static class NoOpCatalogSnapshotDeletionPolicy implements CatalogSnapshotDeletionPolicy {
+                    store.decRef();
+    public int getActiveMergeCount() {
+import org.opensearch.common.concurrent.GatedCloseable;
+    }  
+    @Override
+import org.opensearch.index.get.DocumentLookupResult;  
+                DataFormat format = registry.format(formatName);
+    public boolean isReplicaIndexer() {  
+    public Engine.Index prepareIndex(
+    public long getProcessedLocalCheckpoint() {  
+    public Engine.GetResult getById(Engine.Get get, BiFunction<String, Engine.SearcherScope, Engine.Searcher> searcherFactory)
+    @Override  
+        this(engineConfig, null);
         return statsCache.getSegmentsStats();  
     }
-
+        String id,
+                aggregated.putAll(
+    public void updateMaxUnsafeAutoIdTimestamp(long newTimestamp) {  
+                filesListeners,  
     @Override  
-    public CompletionStats completionStats(String... fieldNamePatterns) {
-        return new CompletionStats();
+    private final ReleasableLock writeLock = new ReleasableLock(rwl.writeLock());
+                true
+        String routing,
+    // ---- IndexerEngineOperations (Task 3 — write rejection) ----
+        return localCheckpointTracker.getMaxSeqNo();  
+    }
+    private final CatalogSnapshotStatsCache statsCache;  
+            }, LiveDocsSource.docCountsResolver(this.readerManagers.values()), logger);
+    }
+            // ReadOnlyCommitter, which throws on commit() — this engine never writes commits.
+        this.store = engineConfig.getStore();  
+        return false;
+    public boolean shouldPeriodicallyFlush() {
+        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support deletes");
+    }
+import java.util.function.BiFunction;
+        long version,
+            return Collections.emptyList();
+import java.io.UncheckedIOException;
+ *
+    // ---- IndexerLifecycleOperations (Tasks 4, 7) ----
+                    return Collections.emptyMap();
+                .getCommitter(new CommitterConfig(engineConfig, () -> {}, true));  
+        return localCheckpointTracker.getStats(globalCheckpoint);
+            // The snapshot never changes; all queries share this single ref via the cached reader.  
+package org.opensearch.index.engine;
+            // LuceneCommitterFactory detects isWarmIndex + !isReadOnlyReplica and returns  
+    ) {
+import org.opensearch.index.mapper.DocumentMapperForType;
+            : engineConfig.getDocumentLookupProvider();
+                IOUtils.closeWhileHandlingException(permanentSnapshotRef);
+    ) throws IOException {
+import org.opensearch.index.engine.exec.CatalogSnapshotLifecycleListener;
     }  
-
+                    store.decRef();
+            for (Map.Entry<String, Collection<String>> entry : filesByFormat.entrySet()) {  
+    public void forceMerge(
+        Engine.Operation.Origin origin,
+import org.opensearch.index.engine.exec.commit.Committer;
+    public Engine.IndexResult index(Engine.Index index) throws IOException {
+                this.historyUUID = UUIDs.randomBase64UUID();
+import org.opensearch.indices.pollingingest.PollingIngestStats;
+import java.util.function.Supplier;
+                    } catch (java.nio.file.NoSuchFileException ignored) {
+ * <p>Replicas continue using {@link DataFormatAwareNRTReplicationEngine}.
+    public long getLastSyncedGlobalCheckpoint() {  
+import org.opensearch.common.UUIDs;
+    public long getMaxSeqNoOfUpdatesOrDeletes() {
+                if (r != null) {
+                IOUtils.closeWhileHandlingException(constructingCommitter);
+            try (ReleasableLock ignored = writeLock.acquire()) {
+    @Override  
+import org.apache.logging.log4j.Logger;
+                } finally {  
+        }  
+    // ---- Indexer core ----
+            + engineConfig.getShardId();
     @Override
-    public PollingIngestStats pollingIngestStats() {  
-        return null;
-    }
-
+        }
+    public long lastRefreshedCheckpoint() {
+            // Build per-format reader managers (same pattern as NRT)
+        return engineConfig;
     @Override
-    public MergeStats getMergeStats() {
-        return new MergeStats();  
-    }
-
-    /** Read-only primaries do not run merges. */  
-    @Override
-    public boolean hasPendingMerges() {
-        return false;  
-    }
-
-    /** Read-only primaries do not run merges; the active count is always zero. */  
-    @Override
-    public int getActiveMergeCount() {
-        return 0;  
-    }
-
-    // ---- Recovery and Snapshot support (Task 6) ----  
-
-    @Override
-    public GatedCloseable<CatalogSnapshot> acquireSnapshot() {  
+        // No-op: read-only engine does not buffer documents  
+            return Collections.emptyList();
+            this.localCheckpointTracker = new LocalCheckpointTracker(seqNoInfo.maxSeqNo, seqNoInfo.localCheckpoint);  
+        this.logger = Loggers.getLogger(DataFormatAwareReadOnlyEngine.class, engineConfig.getShardId());  
         ensureOpen();
-        return catalogSnapshotManager.acquireSnapshot();
-    }  
-
-    @Override
+    @Override  
     public byte[] serializeSnapshotToRemoteMetadata(CatalogSnapshot catalogSnapshot) throws IOException {  
-        throw new UnsupportedOperationException("Read-only primary does not produce upload metadata bytes");
+        return Long.MIN_VALUE;
+import org.opensearch.search.suggest.completion.CompletionStats;  
+    public SafeCommitInfo getSafeCommitInfo() {
+    public long getMaxSeenAutoIdTimestamp() {
+    private final Logger logger;
+                shardId,
+    @Override
+        } catch (InterruptedException e) {
     }
-
+                }  
+            this.reader = new DataFormatAwareEngine.DataFormatAwareReader(permanentSnapshotRef, readers);  
+import org.opensearch.index.shard.DocsStats;
+    public Engine.Delete prepareDelete(
+    @Override
+            } catch (Exception e) {  
+            );  
+import java.util.Collections;
+                if (failedEngine.get() != null) {
+        throw new UnsupportedOperationException("Read-only primary does not produce upload metadata bytes");
+            String translogUUID = userData.get(Translog.TRANSLOG_UUID_KEY);  
+    private final Map<DataFormat, EngineReaderManager<?>> readerManagers;  
+        long fromSeqNo,  
+                    closeNoLock("engine failed on: [" + reason + "]");
+    public void failEngine(String reason, @Nullable Exception failure) {
+    @Override
+    public void verifyEngineBeforeIndexClosing() throws IllegalStateException {
+                if (failure != null) {
+            this.statsCache.forceRefresh();
+    // ---- Lifecycle (Task 7) ----
+import org.opensearch.common.util.io.IOUtils;
+        VersionType versionType,  
+        return System.nanoTime();
+                    if (committer.isCommitManagedFile(name)) {  
+    public long getMinRetainedSeqNo() {
+    /**
+    @Override
+    }
+        Committer constructingCommitter = null;
+        long ifSeqNo,
+    public void deactivateThrottling() {  
+                            Optional.of((IndexStoreProvider) dataFormat -> () -> store),
+        return committer.getCommitStats();  
+    @Override
+            this.committer = constructingCommitter = engineConfig.getCommitterFactory()
+    }  
+        ensureOpen();
+                    try {  
+            Thread.currentThread().interrupt();
+        return localCheckpointTracker.getProcessedCheckpoint();  
+                    } catch (IOException e) {
+                for (String name : entry.getValue()) {
+    public List<Segment> segments(boolean verbose) {  
+    }
+        return 0;
+        return localCheckpointTracker.getProcessedCheckpoint();
+ * The OpenSearch Contributors require contributions made to  
+        }
+        long ifSeqNo,
+    @Override
+        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support indexing");  
+    }
+        public List<CatalogSnapshot> onCommit(List<CatalogSnapshot> commits) {  
+            List<CatalogSnapshotLifecycleListener> snapshotListeners = new ArrayList<>();
+                    }
+    public boolean refreshNeeded() {  
+    }  
+import org.opensearch.index.translog.NoOpTranslogManager;  
+import org.apache.lucene.index.IndexCommit;  
+    public void flush() {
+            // Files listeners make IndexFileDeleter fire onFilesAdded for the committed snapshot
+    }
+        return filesByFormat -> {
+    }
+        return localCheckpointTracker.getProcessedCheckpoint();  
+     * No-op deletion policy for the read-only engine.
+            }  
+        ensureOpen();
+    public void flush(boolean force, boolean waitIfOngoing) {  
+ * @opensearch.experimental  
+    // ---- Getters for internal state (used by tests) ----
+    /** Read-only engine does not have indexing buffers. */
+    public int fillSeqNoGaps(long primaryTerm) throws IOException {  
+        if (isClosed.compareAndSet(false, true)) {  
+        close();
+    public long getLastWriteNanos() {  
+                            format,  
+                } catch (IOException e) {  
+                }  
+ *  
+                logger.warn("failEngine threw exception", inner);
+                try {  
+    // The permanent snapshot ref: held for the engine's lifetime, released in closeNoLock.  
+        return statsCache.getDocsStats();
+                IOUtils.close(closeables);
+    // The snapshot never changes for this engine — build once, reuse across all reads.
+            try {  
+        return 0;  
+                committed,  
+        long seqNo,
+    }  
+    public Engine.Delete prepareDelete(  
+    public DataFormatAwareReadOnlyEngine(EngineConfig engineConfig) {
+            // at open, eagerly warming the metadata cache before the first query; snapshot
+ */
+    }  
+                snapshotListeners,
+import org.apache.lucene.store.AlreadyClosedException;
+        DocumentMetadataResolver resolver = engineConfig.getDocumentMetadataResolver() != null
+        // No-op for read-only primary
+        return 0;  
+                    logger.warn(() -> new ParameterizedMessage("failed engine [{}]", reason), failure);
+    @Override
+        DocumentLookupResult result = documentLookup.getById(get, reader);  
+            return failed;
+    @Override  
+            }  
+        ensureOpen();
+            return SafeCommitInfo.EMPTY;  
+        return localCheckpointTracker.getProcessedCheckpoint();
+import org.opensearch.common.logging.Loggers;
+    @Override
+        long seqNo,  
+        long primaryTerm,
+            Map<String, Supplier<DataFormatDescriptor>> allDescriptors = registry.getFormatDescriptors(engineConfig.getIndexSettings());
+        long ifSeqNo,  
+        boolean flush,
+    }
+                }
+import org.apache.lucene.index.IndexWriter;
+            }
+    public SeqNoStats getSeqNoStats(long globalCheckpoint) {
+    }
+                List<Closeable> closeables = new ArrayList<>(readerManagers.values());  
+    @Override
+                failedEngine.set(failure != null ? failure : new IllegalStateException(reason));  
+        CatalogSnapshotManager catalogSnapshotManagerRef = null;
+    }
+     */
+    }
+    @Override
+    public long getIndexThrottleTimeInMillis() {  
+    LocalCheckpointTracker getLocalCheckpointTracker() {  
+            this.statsCache = new CatalogSnapshotStatsCache(catalogSnapshotManagerRef, store, engineConfig, () -> {  
+        // No-op for read-only primary
+import java.io.IOException;  
+import org.opensearch.index.translog.Translog;
+    private final GatedCloseable<CatalogSnapshot> permanentSnapshotRef;
+                );
+    public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() throws EngineException {  
+            final SequenceNumbers.CommitInfo seqNoInfo = SequenceNumbers.loadSeqNoInfoFromLuceneCommit(userData.entrySet());
+        long version,
+    }  
+import org.opensearch.plugins.DocumentLookupProvider;
+                        store.directory().deleteFile(name);
+    }  
+    public SegmentsStats segmentsStats(boolean includeSegmentFileSizes, boolean includeUnloadedSegments) {
+        long ifPrimaryTerm  
+        if (isClosed.get()) {
+    @Override
+            for (Map.Entry<DataFormat, EngineReaderManager<?>> entry : readerManagersRef.entrySet()) {  
+        return readerManagers;  
+ *
+    @Override
+    private final ReleasableLock readLock = new ReleasableLock(rwl.readLock());
+            // Catalog file deleter  
+        return false;
+        ensureOpen();
+            closedLatch.await();  
+    }
+    private final DocumentLookupSupport documentLookup;
+                store.shardPath(),
+    public void activateThrottling() {
+    @Override
+    ) {
+    }
+        boolean isRetry,
+import java.util.Optional;
+    public GatedCloseable<CatalogSnapshot> acquireLastCommittedSnapshot(boolean flushFirst) throws EngineException {  
+                            store.shardPath(),
+    public void refresh(String source) throws EngineException {
+    public void ensureOpen() {
+                this::ensureOpen,
+        long ifPrimaryTerm  
+    // Stats cache — populated once at construction (snapshot is permanent for this engine).
+        boolean accurateCount  
+    }  
+        String source,
+        return () -> {};  
+            Map<DataFormat, EngineReaderManager<?>> aggregated = new HashMap<>();
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+        SourceToParse source,
+    }
+import org.opensearch.index.mapper.SourceToParse;
+    }
+            if (this.historyUUID == null) {
+                : "Either the write lock must be held or the engine must be currently failing";
+    private final Committer committer;  
+                    IOUtils.closeWhileHandlingException(readerManagersRef.values());
+        // No-op
+    Map<DataFormat, EngineReaderManager<?>> getReaderManagers() {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+        }
+    // ---- IndexReaderProvider (Task 2) ----  
+import org.opensearch.index.engine.dataformat.DataFormatDescriptor;
+                    logger.warn(() -> new ParameterizedMessage("tried to fail engine but already failed, ignoring. [{}]", reason), failure);  
+                }
+            if (success == false) {  
+    }  
+    private void closeNoLock(String reason) {
+                        failed.computeIfAbsent(formatName, k -> new ArrayList<>()).add(name);  
+    }
+            }
+        // Warm primaries use this engine; warm replicas use DataFormatAwareNRTReplicationEngine (which returns true).
+    }
+                    inner.addSuppressed(failure);  
+        long autoGeneratedIdTimestamp,
+import org.opensearch.index.engine.exec.commit.CommitterConfig;
+ * SPDX-License-Identifier: Apache-2.0
+        return 0;
+                }
+        String id,
+        long version,
+import org.opensearch.index.seqno.LocalCheckpointTracker;
+    }  
+                    logger.warn("Failed to get last committed data for stats cache", e);
+ * <p>This engine is the flip target when a read-only replica is promoted to primary
+        return localCheckpointTracker;
+    @Override
+                    readers.put(entry.getKey(), r);  
+        boolean onlyExpungeDeletes,
+        int maxNumSegments,  
     @Override
     public GatedCloseable<IndexCommit> acquireSafeIndexCommit() throws EngineException {
-        throw new UnsupportedOperationException(  
-            "acquireSafeIndexCommit is not supported on DataFormatAwareReadOnlyEngine; use acquireSafeCatalogSnapshot"
-        );
-    }  
-
-    @Override
-    public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() throws EngineException {  
-        ensureOpen();
-        return catalogSnapshotManager.acquireSnapshot();
-    }  
-
-    @Override
-    public GatedCloseable<CatalogSnapshot> acquireLastCommittedSnapshot(boolean flushFirst) throws EngineException {  
-        ensureOpen();
-        // flushFirst is ignored — read-only engine does not flush
-        return catalogSnapshotManager.acquireSnapshot();  
+        Engine.Operation.Origin origin,
     }
-
-    @Override  
-    public SafeCommitInfo getSafeCommitInfo() {
-        ensureOpen();
-        try (GatedCloseable<CatalogSnapshot> snapshot = catalogSnapshotManager.acquireSnapshot()) {  
-            return new SafeCommitInfo(localCheckpointTracker.getProcessedCheckpoint(), (int) snapshot.get().getNumDocs());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);  
-        }
-    }
-
-    @Override
-    public Closeable acquireHistoryRetentionLock() {
-        return () -> {};  
-    }
-
-    @Override  
-    public Translog.Snapshot newChangesSnapshot(
-        String source,
-        long fromSeqNo,  
-        long toSeqNo,
-        boolean requiredFullRange,
-        boolean accurateCount  
-    ) throws IOException {
-        return Translog.EMPTY_TRANSLOG_SNAPSHOT;
-    }  
-
-    // ---- Lifecycle (Task 7) ----
-
-    @Override
-    public void close() throws IOException {
-        if (isClosed.get() == false) {  
-            try (ReleasableLock ignored = writeLock.acquire()) {
-                closeNoLock("api");
-            }  
-        }
-        awaitPendingClose();
-    }  
-
-    @Override
-    public void flushAndClose() throws IOException {  
-        close();
-    }
-
-    @Override
-    public void failEngine(String reason, @Nullable Exception failure) {
-        if (failEngineLock.tryLock()) {  
-            try {
-                if (failedEngine.get() != null) {
-                    logger.warn(() -> new ParameterizedMessage("tried to fail engine but already failed, ignoring. [{}]", reason), failure);  
-                    return;
-                }
-                failedEngine.set(failure != null ? failure : new IllegalStateException(reason));  
-                try {
-                    closeNoLock("engine failed on: [" + reason + "]");
-                } finally {  
-                    logger.warn(() -> new ParameterizedMessage("failed engine [{}]", reason), failure);
-                    engineConfig.getEventListener().onFailedEngine(reason, failure);
-                }  
+            this.catalogSnapshotManager = catalogSnapshotManagerRef;
             } catch (Exception inner) {
-                if (failure != null) {
-                    inner.addSuppressed(failure);  
-                }
-                logger.warn("failEngine threw exception", inner);
-            }  
-        } else {
-            logger.debug(() -> new ParameterizedMessage("tried to fail engine but could not acquire lock [{}]", reason), failure);
-        }  
+        return statsCache.getSegments();
+        return translogManager;
+import org.opensearch.index.engine.dataformat.ReaderManagerConfig;  
     }
-
-    // ---- Internal helpers ----  
-
-    private void closeNoLock(String reason) {
-        if (isClosed.compareAndSet(false, true)) {  
-            assert rwl.isWriteLockedByCurrentThread() || failEngineLock.isHeldByCurrentThread()
-                : "Either the write lock must be held or the engine must be currently failing";
-            try {  
-                // Release the permanent snapshot ref before closing reader managers and catalog.
-                IOUtils.closeWhileHandlingException(permanentSnapshotRef);
-                List<Closeable> closeables = new ArrayList<>(readerManagers.values());  
-                closeables.add(catalogSnapshotManager);
-                IOUtils.close(closeables);
-            } catch (Exception e) {  
-                logger.error("failed to close engine", e);
-            } finally {
-                try {  
-                    store.decRef();
-                    logger.debug("engine closed [{}]", reason);
-                } finally {  
-                    closedLatch.countDown();
-                }
-            }  
-        }
-    }
-
-    private void awaitPendingClose() {
-        try {
-            closedLatch.await();  
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }  
-    }
-
-    private FileDeleter buildFileDeleter() {  
-        return filesByFormat -> {
-            Map<String, Collection<String>> failed = new HashMap<>();
-            for (Map.Entry<String, Collection<String>> entry : filesByFormat.entrySet()) {  
-                final String formatName = entry.getKey();
-                for (String name : entry.getValue()) {
-                    if (committer.isCommitManagedFile(name)) {  
-                        continue;
-                    }
-                    try {  
-                        store.directory().deleteFile(name);
-                    } catch (java.nio.file.NoSuchFileException ignored) {
-                        // already gone  
-                    } catch (IOException e) {
-                        logger.warn("Failed to delete file [{}] in format [{}]: {}", name, formatName, e.getMessage());
-                        failed.computeIfAbsent(formatName, k -> new ArrayList<>()).add(name);  
-                    }
-                }
-            }  
-            return failed;
-        };
+    @Override
     }  
-
-    // ---- Getters for internal state (used by tests) ----
-
-    /**
-     * No-op deletion policy for the read-only engine.
-     * The warm primary never creates new snapshots, so nothing is ever deleted.  
-     */
-    static class NoOpCatalogSnapshotDeletionPolicy implements CatalogSnapshotDeletionPolicy {
-        @Override  
+    }  
+                if (readerManagersRef != null) {
+import java.util.concurrent.locks.ReentrantReadWriteLock;  
+    /** Read-only primaries do not run merges; the active count is always zero. */  
+        awaitPendingClose();
+    public CompletionStats completionStats(String... fieldNamePatterns) {
         public List<CatalogSnapshot> onInit(List<CatalogSnapshot> commits) {
-            return Collections.emptyList();
-        }  
-
+    public String getHistoryUUID() {
         @Override
-        public List<CatalogSnapshot> onCommit(List<CatalogSnapshot> commits) {  
-            return Collections.emptyList();
-        }
-
-        @Override
-        public SafeCommitInfo getSafeCommitInfo() {
-            return SafeCommitInfo.EMPTY;  
-        }
-    }
-
-    CatalogSnapshotManager getCatalogSnapshotManager() {
-        return catalogSnapshotManager;
     }  
-
-    Map<DataFormat, EngineReaderManager<?>> getReaderManagers() {
-        return readerManagers;  
     }
-
-    LocalCheckpointTracker getLocalCheckpointTracker() {  
-        return localCheckpointTracker;
+            // Initialize no-op translog
+    private void awaitPendingClose() {
+        );
+                    )  
     }
+        };
+        try (GatedCloseable<CatalogSnapshot> snapshot = catalogSnapshotManager.acquireSnapshot()) {  
+        DocumentMapperForType docMapper,  
+            logger.info("Created DataFormatAwareReadOnlyEngine");
+        boolean upgrade,
+            );
+        // No-op: read-only engine does not merge  
+            ? engineConfig.getDocumentMetadataResolver()  
+import org.opensearch.common.unit.TimeValue;  
+        }  
+        return false;
+        // No-op
+    public int countNumberOfHistoryOperations(String source, long fromSeqNo, long toSeqNumber) throws IOException {
+    private FileDeleter buildFileDeleter() {  
+    @Override
+                } finally {  
+    }
+            }  
+    // ---- LifecycleAware ----
+    @Override
+import java.io.Closeable;
+    private final LocalCheckpointTracker localCheckpointTracker;
+    private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();  
+    }  
+                    }
+    public GatedCloseable<Reader> acquireReader() throws IOException {  
+        String forceMergeUUID
+        try {
+import org.opensearch.common.SetOnce;
+        }
+                    engineConfig.getEventListener().onFailedEngine(reason, failure);
+        return historyUUID;  
+import org.opensearch.index.engine.exec.EngineReaderManager;
+            }  
+    @Override
+        boolean requiredFullRange,
+            DataFormatRegistry registry = engineConfig.getDataFormatRegistry();  
+            Map<String, Collection<String>> failed = new HashMap<>();
+    }
+    private final EngineConfig engineConfig;  
+    private final CountDownLatch closedLatch = new CountDownLatch(1);
+import org.opensearch.index.engine.exec.FilesListener;
+            Map<DataFormat, Object> readers = new HashMap<>();
+ * Read-only engine for primaries operating on pluggable data formats.
+            Map<String, String> userData = committer.getLastCommittedData();
+        if (isClosed.get() == false) {  
+    // ---- IndexerStateManager (Task 8) ----  
+        return new CompletionStats();
+    private final ReentrantLock failEngineLock = new ReentrantLock();  
+    @Override
+            for (String formatName : allDescriptors.keySet()) {  
+    @Override
+    @Override  
+        DocumentLookupProvider provider = documentLookupProvider != null
+    @Override  
+    public Closeable acquireHistoryRetentionLock() {
+    }
+    @Override
+            Map<String, FilesListener> filesListeners = new HashMap<>();
+        return null;
+    @Override  
+                        new ReaderManagerConfig(
+                    return;
+import org.opensearch.index.translog.TranslogManager;
+    public boolean maybeRefresh(String source) {
+        // No-op: no indexing buffer  
+        // No-op  
+    public TranslogManager translogManager() {  
+    @Override  
+            catalogSnapshotManagerRef = new CatalogSnapshotManager(
+            // History UUID — fabricate if absent (same as NRT engine) for recovery protocol compliance
+                        // already gone  
+    }  
+                        logger.warn("Failed to delete file [{}] in format [{}]: {}", name, formatName, e.getMessage());
+        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support indexing");
+            : DocumentMetadataResolver.NOOP;
+    @Override  
+    public void writeIndexingBuffer() throws EngineException {
+            FileDeleter compositeDeleter = buildFileDeleter();
+        // No-op: data-format engines do not maintain Lucene-style delete tombstones
+import java.util.ArrayList;
+import org.opensearch.index.engine.exec.CatalogSnapshotDeletionPolicy;
+import java.util.concurrent.locks.ReentrantLock;
+    public EngineConfig config() {
+    @Override
+    }
+    private final DataFormatAwareEngine.DataFormatAwareReader reader;  
+    @Override
+    public Translog.Snapshot newChangesSnapshot(
+    }
+        Map<DataFormat, EngineReaderManager<?>> readerManagersRef = null;  
+            try {
+    private volatile String historyUUID;
+        return 0;  
+        return result.exists() ? result.toGetResult() : Engine.GetResult.NOT_EXISTS;
+                }  
+    @Override  
+        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support deletes");
+                            store.getDataformatAwareStoreHandles(),  
+                    return committer.getLastCommittedData();
+                    closedLatch.countDown();
+            // Acquire permanent snapshot ref — held for engine's lifetime, released in closeNoLock.
+    }
+    @Override  
+            // listeners build the reader before latestCatalogSnapshot is swapped.  
+        throw new UnsupportedOperationException(  
+                new TranslogStats(0, 0, 0, 0, 0),
+    public boolean hasCompleteOperationHistory(String reason, long startingSeqNo) {
+                    logger.debug("engine closed [{}]", reason);
+    public long getHeapBytesUsed() {
+import java.util.List;  
+        this.shardId = engineConfig.getShardId();
+    @Override
+    }  
+        long ifPrimaryTerm
+    }
+ */  
+            }  
+            }  
+        return catalogSnapshotManager.acquireSnapshot();
+        return false;  
+        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support no-ops");  
+    public void close() throws IOException {
+import org.opensearch.index.merge.MergeStats;  
+import org.opensearch.index.store.Store;
+    public long getPersistedLocalCheckpoint() {  
+            } finally {
+    }
+            // Create committer: isReplica=true opens the index without acquiring write.lock.
+    public MergeStats getMergeStats() {
+    CatalogSnapshotManager getCatalogSnapshotManager() {
+    /** Read-only primaries do not run merges. */  
+        assert engineConfig.isReadOnlyReplica() == false : "DataFormatAwareReadOnlyEngine must only be created for primary shards; shard "
+    ) throws EngineException, IOException {
+    public long unreferencedFileCleanUpsPerformed() {
+            // Register reader managers as BOTH files listeners and snapshot lifecycle listeners.  
+        // No-op: no translog deletion policy to update
+            }  
+        return 0;
+                logger.error("failed to close engine", e);
+    // ---- IndexerStatistics (Task 8) ----
+import org.opensearch.index.engine.exec.commit.IndexStoreProvider;  
+                translogUUID != null ? translogUUID : "readonly-" + shardId,
+    @Override
+import org.opensearch.common.util.concurrent.ReleasableLock;
+    }
+import org.opensearch.index.VersionType;
+                if (isClosed.get() == false) {  
+        long toSeqNo,
+public class DataFormatAwareReadOnlyEngine implements Indexer {  
+    public void maybePruneDeletes() {  
+            this.historyUUID = userData.get(Engine.HISTORY_UUID_KEY);  
+        boolean upgradeOnlyAncientSegments,  
+            this.permanentSnapshotRef = catalogSnapshotManagerRef.acquireSnapshot();
+        } else {
+                snapshotListeners.add(entry.getValue());
+    // ---- Recovery and Snapshot support (Task 6) ----  
+    }
+    @Override
+    }  
+        if (failEngineLock.tryLock()) {  
+                filesListeners.put(entry.getKey().name(), entry.getValue());
+                try {
+        return catalogSnapshotManager.acquireSnapshot();  
+    }  
+                        continue;
+        throw new UnsupportedOperationException("DataFormatAwareReadOnlyEngine does not support deletes");
+/**
+ * it has no {@link IndexWriter}, no active translog, and rejects all write  
+                }
+    @Override  
+import org.opensearch.index.engine.exec.Indexer;
+        return 0;
+        return startingSeqNo > localCheckpointTracker.getMaxSeqNo();
+import org.opensearch.core.common.unit.ByteSizeValue;  
+    @Override  
+    public DataFormatAwareReadOnlyEngine(EngineConfig engineConfig, @Nullable DocumentLookupProvider documentLookupProvider) {
+        @Override
+    public void advanceMaxSeqNoOfUpdatesOrDeletes(long maxSeqNoOfUpdatesOnPrimary) {
+    // ---- Internal helpers ----  
+    public PollingIngestStats pollingIngestStats() {  
+import org.opensearch.index.engine.exec.DocumentMetadataResolver;
+        long seqNo,  
+            logger.debug(() -> new ParameterizedMessage("tried to fail engine but could not acquire lock [{}]", reason), failure);
+        this.engineConfig = engineConfig;  
+        store.incRef();
+        public SafeCommitInfo getSafeCommitInfo() {
+    public boolean hasPendingMerges() {
+        return catalogSnapshotManager.acquireSnapshot();
+import org.opensearch.index.seqno.SeqNoStats;
+    }
+        return false;
+        try {
+    private final Store store;
+        @Override  
+                            registry,
+        return translogManager.getLastSyncedGlobalCheckpoint();
+import java.util.concurrent.atomic.AtomicBoolean;
+    @Override
+    private final SetOnce<Exception> failedEngine = new SetOnce<>();
+            ? documentLookupProvider  
+    @Override  
+    }  
+                }
+            // Initialize sequence number tracking
+    private final ShardId shardId;
+    @Override
+            success = true;
+    public DocsStats docStats() {
+                closeNoLock("api");
+    @Override  
+    @Override  
+    }
+    @Override
+        // Callers must not release it — use a no-op close callback.  
+        } finally {
+import org.opensearch.index.engine.exec.DocumentLookupSupport;  
+        // The reader holds a permanent snapshotRef for the engine's lifetime.
+            assert rwl.isWriteLockedByCurrentThread() || failEngineLock.isHeldByCurrentThread()
+                        )
+    private final NoOpTranslogManager translogManager;
+        VersionType versionType,  
+import org.opensearch.core.index.shard.ShardId;
+import java.util.concurrent.CountDownLatch;  
 }  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+                committer  
+            throw new UncheckedIOException(e);  
+        throws IOException {
+            "acquireSafeIndexCommit is not supported on DataFormatAwareReadOnlyEngine; use acquireSafeCatalogSnapshot"
+import org.opensearch.index.translog.TranslogStats;  
+ * operations. Reads route through {@code TieredSubdirectoryAwareDirectory}
+    // Metadata
+                compositeDeleter,
+    }
+import org.opensearch.index.engine.exec.FileDeleter;  
+    }
+     * The warm primary never creates new snapshots, so nothing is ever deleted.  
+        } catch (IOException e) {  
+    @Override
+    @Override  
+            for (Map.Entry<DataFormat, EngineReaderManager<?>> entry : readerManagersRef.entrySet()) {  
+        // No-op  
+            this.readerManagers = readerManagersRef;
+    private final CatalogSnapshotManager catalogSnapshotManager;
+                            engineConfig.getIndexSettings()
+    }  
+            // Build stats cache — snapshot is permanent for this engine, so populate once at construction.
+    public long getWritingBytes() {
+                readLock,  
+import java.util.Map;
+            readerManagersRef = Map.copyOf(aggregated);  
+    }
+        // No-op: read-only engine does not flush. State is fully remote.
+        }
+        } catch (IOException e) {
+    @Override
+                new NoOpCatalogSnapshotDeletionPolicy(),
+        long primaryTerm,
+        VersionType versionType,
+import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
+    public Engine.DeleteResult delete(Engine.Delete delete) throws IOException {  
+    }  
+    public long getNativeBytesUsed() {
+        this.documentLookup = new DocumentLookupSupport(shardId, provider, resolver);
+    public CommitStats commitStats() {
+    @Override  
+        }
+        }  
+    }  
+    @Nullable  
+                final String formatName = entry.getKey();
+    }  
+        return 0;
+    public void flushAndClose() throws IOException {  
+    @Override
+ * compatible open source license.
+        return Translog.EMPTY_TRANSLOG_SNAPSHOT;
+    @Override
+    private final AtomicBoolean isClosed = new AtomicBoolean(false);  
+    }
+import org.opensearch.common.Nullable;  
+                // Release the permanent snapshot ref before closing reader managers and catalog.
+import org.opensearch.index.seqno.SequenceNumbers;  
+    @Override
+    ) {
+    @Override
+                Object r = entry.getValue().getReader(permanentSnapshotRef.get());
+        // Segments are immediately visible upon replication; processed == persisted
+                    registry.getReaderManager(  
+    @Override  
+        }
+import org.opensearch.index.engine.dataformat.DataFormat;  
+                closeables.add(catalogSnapshotManager);
+        // flushFirst is ignored — read-only engine does not flush
+    @Override  
+    }
+                try {
+        return new GatedCloseable<>(reader, () -> {});
+    @Override
+                }
+import org.opensearch.index.engine.exec.LiveDocsSource;  
+    @Override
+    /** Read-only engine does not have indexing buffers. */
+    }  
+    public boolean isThrottled() {
+            List<CatalogSnapshot> committed = committer.listCommittedSnapshots();  
+            this.translogManager = new NoOpTranslogManager(
+    // Lifecycle
+    }
+    }
+    }  

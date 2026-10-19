@@ -1,94 +1,80 @@
+        if (!attributeName.equals(that.attributeName)) return false;
+        attributeName = in.readString();
+        if (o == null || getClass() != o.getClass()) return false;
+     */
+    }
+    }
+        return Objects.hash(attributeName, attributeValue);
+    @Override
+        attributeValue = in.readString();
+     *
+    public DecommissionAttribute(String attributeName, String attributeValue) {
+@PublicApi(since = "2.4.0")
+import java.io.IOException;  
+     */  
+     */
+     * Writes decommission attribute name value to stream output  
+        DecommissionAttribute that = (DecommissionAttribute) o;  
+     *
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        out.writeString(attributeName);  
+        return attributeValue.equals(that.attributeValue);  
+        if (this == o) return true;  
+     * @param attributeName   attribute name
+        return this.attributeValue;  
+import org.opensearch.core.common.io.stream.Writeable;
+        this.attributeValue = attributeValue;  
+    }  
+    public DecommissionAttribute(StreamInput in) throws IOException {  
 /*  
+    public String attributeName() {
+import org.opensearch.common.annotation.PublicApi;
+     * Returns attribute value
+    }
+    /**  
+    public String attributeValue() {
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.cluster.decommission;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * {@link DecommissionAttribute} encapsulates information about decommissioned node attribute like attribute name, attribute value.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "2.4.0")
-public final class DecommissionAttribute implements Writeable {  
-    private final String attributeName;
-    private final String attributeValue;
-
-    /**
-     * Constructs new decommission attribute name value pair
+ */  
      *  
-     * @param attributeName   attribute name
-     * @param attributeValue attribute value
-     */  
-    public DecommissionAttribute(String attributeName, String attributeValue) {
-        this.attributeName = attributeName;
-        this.attributeValue = attributeValue;  
-    }
-
-    /**  
-     * Returns attribute name
-     *
-     * @return attributeName  
-     */
-    public String attributeName() {
         return this.attributeName;  
+    private final String attributeValue;
     }
-
-    /**  
-     * Returns attribute value
-     *
-     * @return attributeValue  
-     */
-    public String attributeValue() {
-        return this.attributeValue;  
-    }
-
-    public DecommissionAttribute(StreamInput in) throws IOException {  
-        attributeName = in.readString();
-        attributeValue = in.readString();
+    private final String attributeName;
+public final class DecommissionAttribute implements Writeable {  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * {@link DecommissionAttribute} encapsulates information about decommissioned node attribute like attribute name, attribute value.
+import java.util.Objects;
+     * Returns attribute name
+     * Constructs new decommission attribute name value pair
     }  
-
-    /**
-     * Writes decommission attribute name value to stream output  
-     *
-     * @param out stream output
-     */  
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(attributeName);  
         out.writeString(attributeValue);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-
-        DecommissionAttribute that = (DecommissionAttribute) o;  
-
-        if (!attributeName.equals(that.attributeName)) return false;
-        return attributeValue.equals(that.attributeValue);  
-    }
-
-    @Override  
+     * @param out stream output
     public int hashCode() {
-        return Objects.hash(attributeName, attributeValue);
-    }  
-
-    @Override
+    @Override  
+    public void writeTo(StreamOutput out) throws IOException {
+     */  
     public String toString() {  
-        return "DecommissionAttribute{" + "attributeName='" + attributeName + '\'' + ", attributeValue='" + attributeValue + '\'' + '}';
+    @Override
     }
+    public boolean equals(Object o) {
+     * @param attributeValue attribute value
+ * this file be licensed under the Apache-2.0 license or a
+     * @return attributeName  
+ * @opensearch.api  
+        return "DecommissionAttribute{" + "attributeName='" + attributeName + '\'' + ", attributeValue='" + attributeValue + '\'' + '}';
+    /**
+ *
 }  
+     * @return attributeValue  
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+ */
+/**  
+        this.attributeName = attributeName;
+    /**
+    }
+ * compatible open source license.
+    /**  
+     *

@@ -1,77 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-
-import java.io.IOException;
-
-/**  
- * Base exception for shards unavailable
- *
- * @opensearch.internal  
- */
-public class UnavailableShardsException extends OpenSearchException {
-
-    public UnavailableShardsException(@Nullable ShardId shardId, String message, Object... args) {
-        super(buildMessage(shardId, message), args);
-    }  
-
-    public UnavailableShardsException(String index, int shardId, String message, Object... args) {
-        super(buildMessage(index, shardId, message), args);  
-    }
-
-    private static String buildMessage(ShardId shardId, String message) {  
-        if (shardId == null) {
-            return message;
-        }  
-        return buildMessage(shardId.getIndexName(), shardId.id(), message);
-    }
-
-    private static String buildMessage(String index, int shardId, String message) {
+ * not use this file except in compliance with the License.
+ * compatible open source license.
         return "[" + index + "][" + shardId + "] " + message;
     }  
-
-    public UnavailableShardsException(StreamInput in) throws IOException {
-        super(in);  
-    }
-
-    @Override  
-    public RestStatus status() {
-        return RestStatus.SERVICE_UNAVAILABLE;
-    }  
+ * under the License.  
 }
+ * this file be licensed under the Apache-2.0 license or a
+    }
+/*
+ * KIND, either express or implied.  See the License for the
+ *
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+    private static String buildMessage(ShardId shardId, String message) {  
+ * Licensed to Elasticsearch under one or more contributor  
+ * license agreements. See the NOTICE file distributed with
+        if (shardId == null) {
+/*  
+ *  
+import java.io.IOException;
+    public RestStatus status() {
+ * @opensearch.internal  
+        super(buildMessage(shardId, message), args);
+        super(buildMessage(index, shardId, message), args);  
+ * Modifications Copyright OpenSearch Contributors. See
+package org.opensearch.action;
+/**  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+ */  
+    }  
+ */  
+ * Base exception for shards unavailable
+ *
+    }
+            return message;
+ * You may obtain a copy of the License at  
+    }
+    public UnavailableShardsException(String index, int shardId, String message, Object... args) {
+ * software distributed under the License is distributed on an
+    public UnavailableShardsException(@Nullable ShardId shardId, String message, Object... args) {
+        return buildMessage(shardId.getIndexName(), shardId.id(), message);
+    @Override  
+ */
+    public UnavailableShardsException(StreamInput in) throws IOException {
+    private static String buildMessage(String index, int shardId, String message) {
+public class UnavailableShardsException extends OpenSearchException {
+        }  
+ */
+        return RestStatus.SERVICE_UNAVAILABLE;
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.rest.RestStatus;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.OpenSearchException;
+        super(in);  
+ * The OpenSearch Contributors require contributions made to  
+/*  
+import org.opensearch.common.Nullable;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }  
+import org.opensearch.core.index.shard.ShardId;

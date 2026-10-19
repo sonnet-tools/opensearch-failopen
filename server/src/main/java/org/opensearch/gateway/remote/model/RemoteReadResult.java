@@ -1,37 +1,30 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.model;
-
-/**
- * Container class for entity read from remote store
- */  
-public class RemoteReadResult {
-
-    Object obj;  
-    String component;
-    String componentName;
-
-    public RemoteReadResult(Object obj, String component, String componentName) {
-        this.obj = obj;
-        this.component = component;  
-        this.componentName = componentName;
     }
-
     public Object getObj() {
-        return obj;
-    }  
-
-    public String getComponent() {
+/**
+ * The OpenSearch Contributors require contributions made to  
+    }
+/*  
+ * Container class for entity read from remote store
+        this.componentName = componentName;
         return component;  
-    }
-
-    public String getComponentName() {  
+ */  
         return componentName;
-    }
+    Object obj;  
+public class RemoteReadResult {
+ * SPDX-License-Identifier: Apache-2.0
 }  
+ */  
+ * compatible open source license.
+    public String getComponent() {
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+ *
+    public String getComponentName() {  
+    }
+    String component;
+        this.component = component;  
+    public RemoteReadResult(Object obj, String component, String componentName) {
+        return obj;
+        this.obj = obj;
+    String componentName;
+package org.opensearch.gateway.remote.model;

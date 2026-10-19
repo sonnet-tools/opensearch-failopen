@@ -1,319 +1,270 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.qa;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;  
-import org.opensearch.client.ResponseException;
+            String nodeId = nodeIds.next();
 import org.opensearch.test.rest.OpenSearchRestTestCase;
-
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.Set;  
-
-/**
- * REST integration tests for the DataFusion cluster stats endpoint.  
- *
- * <p>Verifies node targeting, stat filtering, HTTP error codes, IP leakage
- * protection, and legacy route deprecation via REST calls against  
+    }
+            }
  * {@code /_plugins/_analytics_backend_datafusion/stats}.
- */
-public class DataFusionStatsRestIT extends OpenSearchRestTestCase {  
-
+                    nodeEntry.has(section)  
+                        nodeEntry.has(section)
     private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    private static final String STATS_ENDPOINT = "/_plugins/_analytics_backend_datafusion/stats";
-    private static final String LOCAL_STATS_ENDPOINT = "/_plugins/_analytics_backend_datafusion/_local/stats";
-
-    /**
-     * All 7 stat sections that a full (unfiltered) response should contain.
+                if (!section.equals("io_runtime")) {
+        assertTrue("_nodes.total must be > 0", nodesHeader.get("total").asInt() > 0);
+        Response response = client().performRequest(new Request("GET", LOCAL_STATS_ENDPOINT));
      */  
-    private static final Set<String> ALL_SECTIONS = Set.of(
-        "io_runtime",
-        "cpu_runtime",  
-        "coordinator_reduce",
-        "query_execution",
-        "stream_next",  
-        "plan_setup",
-        "fragment_executor_gate",
-        "adaptive_budget",  
+        while (nodeIds.hasNext()) {
+import com.fasterxml.jackson.databind.JsonNode;
+        JsonNode root = parseResponse(response);
+    public void testSpillSectionPresentInEveryNodeAndShowsDisabledState() throws Exception {  
+        // Default test cluster runs 2 nodes; this IT enforces that the fan-out actually
+        );
+            assertTrue("node " + id + " missing 'disk_spill' section", nodeEntry.has("disk_spill"));
+                if (!section.equals("io_runtime") && !section.equals("fragment_executor_gate")) {
+            "error message must contain 'Invalid stat sections', got: " + responseBody,
+        assertTrue("expected multi-node cluster (>=2 nodes)", nodeCount >= 2);  
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+     */
+        JsonNode nodes = root.get("nodes");
+        assertTrue("response must contain 'cluster_name'", root.has("cluster_name"));  
+ * <p>Verifies node targeting, stat filtering, HTTP error codes, IP leakage
+        String nodeId = nodeIds.next();
+        JsonNode nodesHeader = root.get("_nodes");
+        // Verify nodes map and stat sections
+        int successful = root.get("_nodes").get("successful").asInt();  
+    /**  
+    }  
+ *
+        int nodeCount = root.get("nodes").size();
+            verified++;  
+    public void testSingleStatFilter() throws Exception {
+        assertEquals("nodes.{} count should match _nodes.successful", successful, nodeCount);
+     * GET /_plugins/_analytics_backend_datafusion/stats
+        }  
+    /**
+                        "filtered response must NOT contain '" + section + "'",  
         "disk_spill"
-    );
-
+                if (!other.equals("disk_spill")) {  
+            assertEquals("expected disabled-state zero disk_used_bytes",      0L, spill.get("disk_used_bytes").asLong());
+        int verified = 0;  
+    /**
+     * Verify HTTP 200, verify _nodes, cluster_name, nodes keys exist,
+        Iterator<String> nodeIds = nodesMap.fieldNames();  
+        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
+        Iterator<String> nodeIds = nodesMap.fieldNames();
+     */  
+package org.opensearch.analytics.qa;
+        assertTrue("nodes must not be empty", nodesMap.size() > 0);
+    // ── Test methods ────────────────────────────────────────────────────────  
+        JsonNode nodesMap = root.get("nodes");  
+ */
+        }
+        JsonNode root = parseResponse(response);
+                        nodeEntry.has(section)
+        "io_runtime",
+    }  
+        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
+    /**
+        }
+     * GET /_plugins/_analytics_backend_datafusion/stats/io_runtime
+        assertTrue("expected to verify at least one node", verified > 0);
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/io_runtime"));
+        JsonNode root = parseResponse(response);
+    public void testInvalidStatReturns400() throws Exception {  
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/disk_spill"));  
+     * Verify node entries do NOT contain 'name', 'host', 'transport_address'.
+    /**
+    private static final String LOCAL_STATS_ENDPOINT = "/_plugins/_analytics_backend_datafusion/_local/stats";
+     * `?stat=io_runtime` does NOT include the disk_spill section.
+        assertEquals(200, response.getStatusLine().getStatusCode());
+            assertEquals("expected disabled-state zero disk_available_bytes", 0L, spill.get("disk_available_bytes").asLong());  
+    /**  
+            JsonNode nodeEntry = nodes.get(id);  
+     */  
+            JsonNode nodeEntry = nodesMap.get(nodeId);  
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT));
+                    );
+        while (nodeIds.hasNext()) {
+public class DataFusionStatsRestIT extends OpenSearchRestTestCase {  
+        assertTrue(  
+    }  
+    }
+                        "section '" + other + "' must NOT be present when ?stat=disk_spill",
+/**
+     * Spill section appears in every node's response and reflects disabled state  
+        JsonNode root = parseResponse(response);
+        Iterator<String> nodeIds = nodes.fieldNames();
+            }  
+     */  
+            // Verify no other stat sections are present
+    }
+            String nodeId = nodeIds.next();
+                }  
+            assertTrue("node must contain 'io_runtime'", nodeEntry.has("io_runtime"));
+        JsonNode nodeEntry = nodesMap.get(nodeId);
+/*  
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/io_runtime"));
+    }
+        assertTrue("expected at least one node", nodes.size() > 0);  
+                }
     @Override
+     * Verify HTTP 200, verify single node in response.
+    public void testStatFilterSpillOnlyReturnsSpillSection() throws Exception {
+    public void testAllStatsFromAllNodes() throws Exception {
+                    assertFalse(  
+            String id = nodeIds.next();
+            assertFalse("disk_spill section must NOT appear when ?stat=io_runtime", nodeEntry.has("disk_spill"));  
+        assertTrue("nodes must not be empty", nodesMap.size() > 0);
+                    );  
+        ResponseException ex = expectThrows(
+            assertEquals("expected disabled-state zero disk_total_bytes",     0L, spill.get("disk_total_bytes").asLong());
+        while (nodeIds.hasNext()) {
+    public void testLocalNodeStats() throws Exception {
+        "stream_next",  
+}  
+        assertTrue("nodes must not be empty", nodesMap.size() > 0);
+     * Multi-node fan-out: `_nodes.successful` must equal the number of `nodes.{}` entries
+        Iterator<String> nodeIds = nodesMap.fieldNames();  
+    public void testMultiNodeFanoutProducesIndependentSpillSections() throws Exception {
+    }
+        JsonNode nodes = parseResponse(response).get("nodes");
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT));
+        JsonNode root = parseResponse(response);
+            responseBody.contains("Invalid stat sections")
+        // Verify _nodes header  
+        JsonNode nodesMap = root.get("nodes");  
+     * `?stat=disk_spill` returns only the spill section per node.  
+import java.util.Set;  
+    }
+     * GET /_plugins/_analytics_backend_datafusion/_local/stats
+     * verify all 7 stat sections in each node entry.
+import org.opensearch.client.Response;  
+import java.io.IOException;
+ * The OpenSearch Contributors require contributions made to  
+        }
+     */
+        }
+            String nodeId = nodeIds.next();
+        }  
+        JsonNode root = parseResponse(response);
+ *
+    /**
+        JsonNode nodesMap = root.get("nodes");  
+            JsonNode nodeEntry = nodes.get(nodeIds.next());  
+                }
     protected boolean preserveClusterUponCompletion() {
         return true;  
-    }
-
-    // ── Test methods ────────────────────────────────────────────────────────  
-
-    /**
-     * GET /_plugins/_analytics_backend_datafusion/stats  
-     * Verify HTTP 200, verify _nodes, cluster_name, nodes keys exist,
-     * verify all 7 stat sections in each node entry.
+ * REST integration tests for the DataFusion cluster stats endpoint.  
      */  
-    public void testAllStatsFromAllNodes() throws Exception {
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT));
-        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
-
-        JsonNode root = parseResponse(response);
-
-        // Verify top-level structure
-        assertTrue("response must contain '_nodes'", root.has("_nodes"));
-        assertTrue("response must contain 'cluster_name'", root.has("cluster_name"));  
-        assertTrue("response must contain 'nodes'", root.has("nodes"));
-
-        // Verify _nodes header  
-        JsonNode nodesHeader = root.get("_nodes");
-        assertTrue("_nodes must have 'total'", nodesHeader.has("total"));
-        assertTrue("_nodes must have 'successful'", nodesHeader.has("successful"));  
-        assertTrue("_nodes.total must be > 0", nodesHeader.get("total").asInt() > 0);
-        assertTrue("_nodes.successful must be > 0", nodesHeader.get("successful").asInt() > 0);
-
-        // Verify nodes map and stat sections
-        JsonNode nodesMap = root.get("nodes");
-        assertTrue("nodes must not be empty", nodesMap.size() > 0);  
-
-        Iterator<String> nodeIds = nodesMap.fieldNames();
-        while (nodeIds.hasNext()) {  
-            String nodeId = nodeIds.next();
-            JsonNode nodeEntry = nodesMap.get(nodeId);
-            for (String section : ALL_SECTIONS) {  
-                assertTrue(
-                    "node '" + nodeId + "' must contain section '" + section + "'",
-                    nodeEntry.has(section)  
-                );
-            }
-        }  
-    }
-
-    /**  
-     * GET /_plugins/_analytics_backend_datafusion/_local/stats
-     * Verify HTTP 200, verify single node in response.
-     */  
-    public void testLocalNodeStats() throws Exception {
-        Response response = client().performRequest(new Request("GET", LOCAL_STATS_ENDPOINT));
-        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
-
-        JsonNode root = parseResponse(response);
-        assertTrue("response must contain 'nodes'", root.has("nodes"));  
-
-        JsonNode nodesMap = root.get("nodes");
-        assertEquals("_local request must return exactly 1 node", 1, nodesMap.size());  
-
-        // Verify the single node has stats
-        Iterator<String> nodeIds = nodesMap.fieldNames();  
-        String nodeId = nodeIds.next();
-        JsonNode nodeEntry = nodesMap.get(nodeId);
-        assertNotNull("local node entry must not be null", nodeEntry);  
-    }
-
-    /**  
-     * GET /_plugins/_analytics_backend_datafusion/stats/io_runtime
-     * Verify only io_runtime in node entries.
-     */  
-    public void testSingleStatFilter() throws Exception {
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/io_runtime"));
-        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
-
-        JsonNode root = parseResponse(response);
-        JsonNode nodesMap = root.get("nodes");  
-        assertTrue("nodes must not be empty", nodesMap.size() > 0);
-
-        Iterator<String> nodeIds = nodesMap.fieldNames();  
-        while (nodeIds.hasNext()) {
-            String nodeId = nodeIds.next();
-            JsonNode nodeEntry = nodesMap.get(nodeId);  
-            assertTrue("node must contain 'io_runtime'", nodeEntry.has("io_runtime"));
-
-            // Verify no other stat sections are present  
-            for (String section : ALL_SECTIONS) {
-                if (!section.equals("io_runtime")) {
-                    assertFalse(  
-                        "filtered response must NOT contain '" + section + "'",
-                        nodeEntry.has(section)
-                    );  
-                }
-            }
-        }  
-    }
-
-    /**  
-     * GET /_plugins/_analytics_backend_datafusion/stats/io_runtime,fragment_executor_gate
-     * Verify only those 2 sections in node entries.
-     */  
-    public void testMultipleStatFilter() throws Exception {
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/io_runtime,fragment_executor_gate"));
-        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
-
-        JsonNode root = parseResponse(response);
-        JsonNode nodesMap = root.get("nodes");  
-        assertTrue("nodes must not be empty", nodesMap.size() > 0);
-
-        Iterator<String> nodeIds = nodesMap.fieldNames();  
-        while (nodeIds.hasNext()) {
-            String nodeId = nodeIds.next();
-            JsonNode nodeEntry = nodesMap.get(nodeId);  
-
-            assertTrue("node must contain 'io_runtime'", nodeEntry.has("io_runtime"));
-            assertTrue("node must contain 'fragment_executor_gate'", nodeEntry.has("fragment_executor_gate"));  
-
-            // Verify no other stat sections are present
-            for (String section : ALL_SECTIONS) {  
-                if (!section.equals("io_runtime") && !section.equals("fragment_executor_gate")) {
                     assertFalse(
-                        "filtered response must NOT contain '" + section + "'",  
-                        nodeEntry.has(section)
-                    );
-                }  
-            }
-        }
-    }  
-
-    /**
-     * GET /_plugins/_analytics_backend_datafusion/stats/bogus  
-     * Verify HTTP 400 status and error message contains "Invalid stat sections".
-     */
-    public void testInvalidStatReturns400() throws Exception {  
-        ResponseException ex = expectThrows(
-            ResponseException.class,
-            () -> client().performRequest(new Request("GET", STATS_ENDPOINT + "/bogus"))  
-        );
-
-        assertEquals("expected HTTP 400", 400, ex.getResponse().getStatusLine().getStatusCode());  
-
-        String responseBody = EntityUtils.toString(ex.getResponse().getEntity());
-        assertTrue(  
-            "error message must contain 'Invalid stat sections', got: " + responseBody,
-            responseBody.contains("Invalid stat sections")
-        );  
-    }
-
-    /**  
-     * GET /_plugins/_analytics_backend_datafusion/stats
-     * Verify node entries do NOT contain 'name', 'host', 'transport_address'.
      */  
-    public void testNoIpLeakage() throws Exception {
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT));
-        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
-
-        JsonNode root = parseResponse(response);
-        JsonNode nodesMap = root.get("nodes");  
-        assertTrue("nodes must not be empty", nodesMap.size() > 0);
-
-        Iterator<String> nodeIds = nodesMap.fieldNames();  
-        while (nodeIds.hasNext()) {
-            String nodeId = nodeIds.next();
-            JsonNode nodeEntry = nodesMap.get(nodeId);  
-
             assertFalse("node entry must NOT contain 'name'", nodeEntry.has("name"));
-            assertFalse("node entry must NOT contain 'host'", nodeEntry.has("host"));  
-            assertFalse("node entry must NOT contain 'transport_address'", nodeEntry.has("transport_address"));
-        }
-    }  
-
-    /**
-     * Spill section appears in every node's response and reflects disabled state  
-     * (default test cluster has no datafusion.spill_directory).
-     */
-    public void testSpillSectionPresentInEveryNodeAndShowsDisabledState() throws Exception {  
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT));
-        assertEquals(200, response.getStatusLine().getStatusCode());
-
-        JsonNode root = parseResponse(response);
-        JsonNode nodes = root.get("nodes");
-        assertTrue("expected at least one node", nodes.size() > 0);  
-
-        Iterator<String> nodeIds = nodes.fieldNames();
-        int verified = 0;  
-        while (nodeIds.hasNext()) {
-            String id = nodeIds.next();
-            JsonNode nodeEntry = nodes.get(id);  
-            assertTrue("node " + id + " missing 'disk_spill' section", nodeEntry.has("disk_spill"));
-
-            JsonNode spill = nodeEntry.get("disk_spill");  
-            assertEquals("expected disabled-state empty directory on node " + id, "", spill.get("directory").asText());
-            assertEquals("expected disabled-state zero disk_total_bytes",     0L, spill.get("disk_total_bytes").asLong());
-            assertEquals("expected disabled-state zero disk_available_bytes", 0L, spill.get("disk_available_bytes").asLong());  
-            assertEquals("expected disabled-state zero disk_used_bytes",      0L, spill.get("disk_used_bytes").asLong());
-            assertEquals("expected disabled-state zero disk_reserved_bytes",  0L, spill.get("disk_reserved_bytes").asLong());
-            verified++;  
-        }
-        assertTrue("expected to verify at least one node", verified > 0);
-    }  
-
-    /**
-     * `?stat=disk_spill` returns only the spill section per node.  
-     */
-    public void testStatFilterSpillOnlyReturnsSpillSection() throws Exception {
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/disk_spill"));  
-        assertEquals(200, response.getStatusLine().getStatusCode());
-
         JsonNode nodes = parseResponse(response).get("nodes");  
-        Iterator<String> nodeIds = nodes.fieldNames();
-        while (nodeIds.hasNext()) {
-            JsonNode nodeEntry = nodes.get(nodeIds.next());  
-            assertTrue("disk_spill must be present", nodeEntry.has("disk_spill"));
-            for (String other : ALL_SECTIONS) {
-                if (!other.equals("disk_spill")) {  
-                    assertFalse(
-                        "section '" + other + "' must NOT be present when ?stat=disk_spill",
+            assertFalse("node entry must NOT contain 'transport_address'", nodeEntry.has("transport_address"));
+        assertEquals("expected HTTP 400", 400, ex.getResponse().getStatusLine().getStatusCode());  
+        // produced 2 entries (would silently regress to 1 if the transport action lost a hop).
+        "adaptive_budget",  
+        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
+            assertTrue("node must contain 'io_runtime'", nodeEntry.has("io_runtime"));
+        String body = EntityUtils.toString(response.getEntity());  
+     * AND each entry must have its own spill section (no cross-node leakage).  
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT));
+            // Verify no other stat sections are present  
+        "cpu_runtime",  
+     * GET /_plugins/_analytics_backend_datafusion/stats  
+            for (String section : ALL_SECTIONS) {  
+     */
+        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
+        "fragment_executor_gate",
                         nodeEntry.has(other)  
-                    );
-                }
-            }  
-        }
+import com.fasterxml.jackson.databind.ObjectMapper;
+     * GET /_plugins/_analytics_backend_datafusion/stats/bogus  
+        String responseBody = EntityUtils.toString(ex.getResponse().getEntity());
+import org.opensearch.client.Request;
+        Iterator<String> nodeIds = nodes.fieldNames();  
+     * Verify only io_runtime in node entries.
+        assertTrue("_nodes must have 'total'", nodesHeader.has("total"));
+        // Verify the single node has stats
+        assertTrue("response must contain 'nodes'", root.has("nodes"));  
+        assertTrue("response must contain '_nodes'", root.has("_nodes"));
+    /**  
+        while (nodeIds.hasNext()) {
+        assertEquals("expected HTTP 200", 200, response.getStatusLine().getStatusCode());  
+        while (nodeIds.hasNext()) {  
+                        "filtered response must NOT contain '" + section + "'",
+            assertEquals("expected disabled-state zero disk_reserved_bytes",  0L, spill.get("disk_reserved_bytes").asLong());
+        assertTrue("nodes must not be empty", nodesMap.size() > 0);  
+    );
+            assertEquals("expected disabled-state empty directory on node " + id, "", spill.get("directory").asText());
+        while (nodeIds.hasNext()) {
+     * Verify only those 2 sections in node entries.
+        "coordinator_reduce",
     }
-
-    /**
-     * `?stat=io_runtime` does NOT include the disk_spill section.
      */  
     public void testStatFilterIoRuntimeExcludesSpill() throws Exception {
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/io_runtime"));
-        assertEquals(200, response.getStatusLine().getStatusCode());  
-
-        JsonNode nodes = parseResponse(response).get("nodes");
-        Iterator<String> nodeIds = nodes.fieldNames();  
-        while (nodeIds.hasNext()) {
-            JsonNode nodeEntry = nodes.get(nodeIds.next());
-            assertFalse("disk_spill section must NOT appear when ?stat=io_runtime", nodeEntry.has("disk_spill"));  
-        }
-    }
-
-    /**
-     * Multi-node fan-out: `_nodes.successful` must equal the number of `nodes.{}` entries
-     * AND each entry must have its own spill section (no cross-node leakage).  
-     */
-    public void testMultiNodeFanoutProducesIndependentSpillSections() throws Exception {
-        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/disk_spill"));  
-        JsonNode root = parseResponse(response);
-
-        int successful = root.get("_nodes").get("successful").asInt();  
-        int nodeCount = root.get("nodes").size();
-        assertEquals("nodes.{} count should match _nodes.successful", successful, nodeCount);
-
-        // Default test cluster runs 2 nodes; this IT enforces that the fan-out actually
-        // produced 2 entries (would silently regress to 1 if the transport action lost a hop).
-        assertTrue("expected multi-node cluster (>=2 nodes)", nodeCount >= 2);  
-    }
-
+        "plan_setup",
+            }
+ * compatible open source license.
     // ── Helper methods ──────────────────────────────────────────────────────  
-
-    /**
-     * Parse an HTTP response body into a Jackson {@link JsonNode}.  
-     */
-    private JsonNode parseResponse(Response response) throws Exception {
-        String body = EntityUtils.toString(response.getEntity());  
-        return MAPPER.readTree(body);
+        "query_execution",
+    public void testMultipleStatFilter() throws Exception {
+        Iterator<String> nodeIds = nodesMap.fieldNames();  
+            assertTrue("disk_spill must be present", nodeEntry.has("disk_spill"));
+        );  
     }
-}  
+     */
+        assertEquals(200, response.getStatusLine().getStatusCode());
+        JsonNode nodesMap = root.get("nodes");
+     * (default test cluster has no datafusion.spill_directory).
+                    );
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/disk_spill"));  
+     * Parse an HTTP response body into a Jackson {@link JsonNode}.  
+        Iterator<String> nodeIds = nodesMap.fieldNames();  
+                );
+        JsonNode nodesMap = root.get("nodes");
+import org.opensearch.client.ResponseException;
+        assertTrue("response must contain 'nodes'", root.has("nodes"));
+        assertNotNull("local node entry must not be null", nodeEntry);  
+                    "node '" + nodeId + "' must contain section '" + section + "'",
+                assertTrue(
+ */  
+            () -> client().performRequest(new Request("GET", STATS_ENDPOINT + "/bogus"))  
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+            JsonNode nodeEntry = nodesMap.get(nodeId);  
+    /**  
+            for (String other : ALL_SECTIONS) {
+ * this file be licensed under the Apache-2.0 license or a
+        // Verify top-level structure
+        assertEquals("_local request must return exactly 1 node", 1, nodesMap.size());  
+import java.util.Iterator;
+        while (nodeIds.hasNext()) {
+            for (String section : ALL_SECTIONS) {
+            }
+        Response response = client().performRequest(new Request("GET", STATS_ENDPOINT + "/io_runtime,fragment_executor_gate"));
+    private static final Set<String> ALL_SECTIONS = Set.of(
+        return MAPPER.readTree(body);
+                    assertFalse(
+     */
+     * Verify HTTP 400 status and error message contains "Invalid stat sections".
+    private static final String STATS_ENDPOINT = "/_plugins/_analytics_backend_datafusion/stats";
+        assertTrue("_nodes must have 'successful'", nodesHeader.has("successful"));  
+    private JsonNode parseResponse(Response response) throws Exception {
+     * All 7 stat sections that a full (unfiltered) response should contain.
+        JsonNode root = parseResponse(response);
+            JsonNode nodeEntry = nodesMap.get(nodeId);  
+            JsonNode nodeEntry = nodes.get(nodeIds.next());
+            for (String section : ALL_SECTIONS) {  
+            String nodeId = nodeIds.next();
+        assertTrue("_nodes.successful must be > 0", nodesHeader.get("successful").asInt() > 0);
+     * GET /_plugins/_analytics_backend_datafusion/stats/io_runtime,fragment_executor_gate
+    }
+            assertTrue("node must contain 'fragment_executor_gate'", nodeEntry.has("fragment_executor_gate"));  
+            JsonNode spill = nodeEntry.get("disk_spill");  
+    /**
+        assertEquals(200, response.getStatusLine().getStatusCode());  
+    /**
+        Iterator<String> nodeIds = nodes.fieldNames();
+            assertFalse("node entry must NOT contain 'host'", nodeEntry.has("host"));  
+    public void testNoIpLeakage() throws Exception {
+            ResponseException.class,
+        }
+ * protection, and legacy route deprecation via REST calls against  
+            JsonNode nodeEntry = nodesMap.get(nodeId);

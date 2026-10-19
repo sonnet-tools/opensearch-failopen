@@ -1,186 +1,165 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.Version;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentHelper;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.analysis.AnalyzerScope;  
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.hamcrest.Matchers;
-
-import java.io.IOException;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;  
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import static org.opensearch.index.analysis.AnalysisRegistry.DEFAULT_ANALYZER_NAME;
-import static org.opensearch.index.analysis.AnalysisRegistry.DEFAULT_SEARCH_ANALYZER_NAME;
-import static org.opensearch.index.analysis.AnalysisRegistry.DEFAULT_SEARCH_QUOTED_ANALYZER_NAME;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class TypeParsersTests extends OpenSearchTestCase {
-
-    private static Map<String, NamedAnalyzer> defaultAnalyzers() {  
-        Map<String, NamedAnalyzer> analyzers = new HashMap<>();
-        analyzers.put(DEFAULT_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, null));
-        analyzers.put(DEFAULT_SEARCH_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, null));  
-        analyzers.put(DEFAULT_SEARCH_QUOTED_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, null));
-        return analyzers;
-    }  
-
-    public void testMultiFieldWithinMultiField() throws IOException {
-
-        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                MapperParsingException.class,  
+            .field("type", "keyword")  
             .startObject()
-            .field("type", "keyword")  
+        {  
+                    + TypeParsers.META_MAX_KEY_LENGTH
+            null,
             .startObject("fields")
+package org.opensearch.index.mapper;
             .startObject("sub-field")
+import java.util.HashMap;
+            meta.put("extraKey", "someValue");  
+            );  
             .field("type", "keyword")  
-            .startObject("fields")
-            .startObject("sub-sub-field")
-            .field("type", "keyword")  
-            .endObject()
-            .endObject()
+            assertEquals(  
+            assertEquals("[meta] values can't be null (field [foo])", e.getMessage());  
             .endObject()  
-            .endObject()
+ * specific language governing permissions and limitations
+                .mapToObj(Integer::toString)
+ * The OpenSearch Contributors require contributions made to  
+ * GitHub history for details.
             .endObject();
-
-        Mapper.TypeParser typeParser = KeywordFieldMapper.PARSER;
-
-        Map<String, Object> fieldNode = XContentHelper.convertToMap(BytesReference.bytes(mapping), true, mapping.contentType()).v2();  
-
-        MapperService mapperService = mock(MapperService.class);
-        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(defaultAnalyzers(), Collections.emptyMap(), Collections.emptyMap());  
-        when(mapperService.getIndexAnalyzers()).thenReturn(indexAnalyzers);
-        Mapper.TypeParser.ParserContext olderContext = new Mapper.TypeParser.ParserContext(
-            null,  
-            mapperService,
-            type -> typeParser,
-            Version.CURRENT,  
-            null,
-            null,
-            null  
-        );
-
-        TextFieldMapper.PARSER.parse("some-field", fieldNode, olderContext);  
-        assertWarnings(
-            "At least one multi-field, [sub-field], "
-                + "was encountered that itself contains a multi-field. Defining multi-fields within a multi-field is deprecated "  
-                + "and will no longer be supported in 8.0. To resolve the issue, all instances of [fields] "
-                + "that occur within a [fields] block should be removed from the mappings, either by flattening the chained "
-                + "[fields] blocks into a single level, or switching to [copy_to] if appropriate."  
-        );
-    }
-
-    public void testParseMeta() {
+ * software distributed under the License is distributed on an
+        }  
+}
         {
-            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", 3));  
+            .endObject()
+import org.hamcrest.Matchers;
             assertEquals("[meta] must be an object, got Integer[3] for field [foo]", e.getMessage());
         }
-
-        {
-            String longKeyString = IntStream.range(0, TypeParsers.META_MAX_KEY_LENGTH + 1)
-                .mapToObj(Integer::toString)  
-                .collect(Collectors.joining());
-            MapperParsingException e = expectThrows(
-                MapperParsingException.class,  
-                () -> TypeParsers.parseMeta("foo", Collections.singletonMap(longKeyString, 3L))
-            );
-            assertEquals(  
-                "[meta] keys can't be longer than "
-                    + TypeParsers.META_MAX_KEY_LENGTH
-                    + " chars, but got ["  
-                    + longKeyString
-                    + "] for field [foo]",
-                e.getMessage()  
-            );
-        }
-
-        {
-            Map<String, String> meta = new HashMap<>();
-            for (int i = 0; i < TypeParsers.META_MAX_ENTRIES; i++) {  
-                meta.put("foo" + i, "someValue");
-            }
-            meta.put("extraKey", "someValue");  
-            assertTrue(TypeParsers.META_MAX_ENTRIES < meta.size());
-            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", meta));
-            assertEquals(  
-                "[meta] can't have more than " + TypeParsers.META_MAX_ENTRIES + " entries, but got " + meta.size() + " on field [foo]",
-                e.getMessage()
-            );  
-        }
-
-        {  
+import java.util.stream.IntStream;
             Map<String, Object> mapping = Collections.singletonMap("foo", Collections.singletonMap("bar", "baz"));
-            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", mapping));
-            assertEquals("[meta] values can only be strings, but got SingletonMap[{bar=baz}] for field [foo]", e.getMessage());  
-        }
-
-        {  
-            Map<String, Object> inner = new HashMap<>();
-            inner.put("bar", "baz");
-            inner.put("foo", 3);  
+        Map<String, Object> fieldNode = XContentHelper.convertToMap(BytesReference.bytes(mapping), true, mapping.contentType()).v2();  
+ */
+import org.opensearch.common.xcontent.XContentHelper;  
+ * Unless required by applicable law or agreed to in writing,
+            );
+            null  
+                .mapToObj(Integer::toString)  
+                + "and will no longer be supported in 8.0. To resolve the issue, all instances of [fields] "
+        }  
+            );
+ * this work for additional information regarding copyright
             MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", inner));
-            assertEquals("[meta] values can only be strings, but got Integer[3] for field [foo]", e.getMessage());
-        }  
-
-        {
-            Map<String, String> meta = new HashMap<>();  
-            meta.put("foo", null);
-            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", meta));
-            assertEquals("[meta] values can't be null (field [foo])", e.getMessage());  
-        }
-
-        {  
-            String longString = IntStream.range(0, TypeParsers.META_MAX_VALUE_LENGTH + 1)
-                .mapToObj(Integer::toString)
-                .collect(Collectors.joining());  
-            MapperParsingException e = expectThrows(
-                MapperParsingException.class,
-                () -> TypeParsers.parseMeta("foo", Collections.singletonMap("foo", longString))  
-            );
-            assertThat(
-                e.getMessage(),  
-                Matchers.startsWith("[meta] values can't be longer than " + TypeParsers.META_MAX_VALUE_LENGTH + " chars")
-            );
-        }  
+import org.opensearch.core.common.bytes.BytesReference;
+            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", 3));  
+                    + " chars, but got ["  
     }
-}
+        return analyzers;
+            assertEquals(  
+ */  
+            assertThat(
+                Matchers.startsWith("[meta] values can't be longer than " + TypeParsers.META_MAX_VALUE_LENGTH + " chars")
+import java.io.IOException;  
+ */  
+import static org.opensearch.index.analysis.AnalysisRegistry.DEFAULT_ANALYZER_NAME;
+import java.util.stream.Collectors;
+ *
+import java.util.Map;  
+        );
+            mapperService,
+            inner.put("foo", 3);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .endObject()
+                e.getMessage(),  
+            Version.CURRENT,  
+    public void testMultiFieldWithinMultiField() throws IOException {
+import static org.opensearch.index.analysis.AnalysisRegistry.DEFAULT_SEARCH_ANALYZER_NAME;
+            assertEquals("[meta] values can only be strings, but got SingletonMap[{bar=baz}] for field [foo]", e.getMessage());  
+            .endObject()
+/*  
+            .startObject("fields")
+                + "was encountered that itself contains a multi-field. Defining multi-fields within a multi-field is deprecated "  
+            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", meta));
+                "[meta] keys can't be longer than "
+ * KIND, either express or implied.  See the License for the
+            "At least one multi-field, [sub-field], "
+            );
+                    + "] for field [foo]",
+        analyzers.put(DEFAULT_SEARCH_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, null));  
+        }
+ * not use this file except in compliance with the License.
+            Map<String, String> meta = new HashMap<>();
+        TextFieldMapper.PARSER.parse("some-field", fieldNode, olderContext);  
+                "[meta] can't have more than " + TypeParsers.META_MAX_ENTRIES + " entries, but got " + meta.size() + " on field [foo]",
+import org.opensearch.test.OpenSearchTestCase;  
+            null,
+            meta.put("foo", null);
+            assertEquals("[meta] values can only be strings, but got Integer[3] for field [foo]", e.getMessage());
+                e.getMessage()
+            }
+                + "that occur within a [fields] block should be removed from the mappings, either by flattening the chained "
+        {  
+        {
+            MapperParsingException e = expectThrows(
+ * compatible open source license.
+    }
+            null,  
+        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(defaultAnalyzers(), Collections.emptyMap(), Collections.emptyMap());  
+        assertWarnings(
+import static org.mockito.Mockito.when;
+                () -> TypeParsers.parseMeta("foo", Collections.singletonMap(longKeyString, 3L))
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.common.xcontent.XContentFactory;
+        when(mapperService.getIndexAnalyzers()).thenReturn(indexAnalyzers);
+            Map<String, String> meta = new HashMap<>();  
+public class TypeParsersTests extends OpenSearchTestCase {
+ * SPDX-License-Identifier: Apache-2.0
+            for (int i = 0; i < TypeParsers.META_MAX_ENTRIES; i++) {  
+                MapperParsingException.class,
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+ * license agreements. See the NOTICE file distributed with
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                () -> TypeParsers.parseMeta("foo", Collections.singletonMap("foo", longString))  
+ * You may obtain a copy of the License at  
+        analyzers.put(DEFAULT_SEARCH_QUOTED_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, null));
+ * Modifications Copyright OpenSearch Contributors. See
+                meta.put("foo" + i, "someValue");
+ * the Apache License, Version 2.0 (the "License"); you may
+            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", meta));
+            inner.put("bar", "baz");
+import static org.opensearch.index.analysis.AnalysisRegistry.DEFAULT_SEARCH_QUOTED_ANALYZER_NAME;  
+import static org.mockito.Mockito.mock;
+            assertTrue(TypeParsers.META_MAX_ENTRIES < meta.size());
+                    + longKeyString
+        {  
+import java.util.Collections;
+        {
+            Map<String, Object> inner = new HashMap<>();
+        }
+ * this file be licensed under the Apache-2.0 license or a
+ *
+                .collect(Collectors.joining());  
+/*
+        }
+import org.opensearch.index.analysis.NamedAnalyzer;
+            .field("type", "keyword")  
+        Map<String, NamedAnalyzer> analyzers = new HashMap<>();
+        Mapper.TypeParser typeParser = KeywordFieldMapper.PARSER;
+ *  
+            String longKeyString = IntStream.range(0, TypeParsers.META_MAX_KEY_LENGTH + 1)
+ * under the License.  
+    }  
+            );
+            String longString = IntStream.range(0, TypeParsers.META_MAX_VALUE_LENGTH + 1)
+            .startObject("sub-sub-field")
+import org.opensearch.index.analysis.AnalyzerScope;  
+/*  
+        MapperService mapperService = mock(MapperService.class);
+        }
+            type -> typeParser,
+                e.getMessage()  
+import org.opensearch.index.analysis.IndexAnalyzers;
+                .collect(Collectors.joining());
+        );
+            MapperParsingException e = expectThrows(MapperParsingException.class, () -> TypeParsers.parseMeta("foo", mapping));
+    public void testParseMeta() {
+            MapperParsingException e = expectThrows(
+import org.opensearch.Version;
+                + "[fields] blocks into a single level, or switching to [copy_to] if appropriate."  
+        analyzers.put(DEFAULT_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, null));
+        Mapper.TypeParser.ParserContext olderContext = new Mapper.TypeParser.ParserContext(
+        {
+import org.opensearch.core.xcontent.XContentBuilder;
+    private static Map<String, NamedAnalyzer> defaultAnalyzers() {  

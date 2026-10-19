@@ -1,28 +1,25 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    long floor(long key);
+ * @opensearch.internal  
+@InternalApi
  *
- * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.annotation.InternalApi;
+     * @return the floored value  
+     * In other words, it returns the largest value such that {@code value <= key}.
+/**  
+@FunctionalInterface  
+     * Returns the greatest lower bound of the given key.  
+public interface Roundable {
+ *
+package org.opensearch.common.round;
+ * Interface to round-off values.
+}  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
  */  
-
-package org.opensearch.common.round;
-
-import org.opensearch.common.annotation.InternalApi;
-
-/**  
- * Interface to round-off values.
- *
- * @opensearch.internal  
- */
-@InternalApi
-@FunctionalInterface  
-public interface Roundable {
     /**
-     * Returns the greatest lower bound of the given key.  
-     * In other words, it returns the largest value such that {@code value <= key}.
-     * @param key to floor
-     * @return the floored value  
      */
-    long floor(long key);
-}  
+     * @param key to floor
+ */
+/*  
+ * The OpenSearch Contributors require contributions made to  

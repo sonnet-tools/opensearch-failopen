@@ -1,37 +1,29 @@
 /*  
+}  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.InternalApi;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-
-import java.util.Optional;
-
-/**  
- * No-op implementation of TracerFactory
- *
- * @opensearch.internal  
- */
-@InternalApi
-public class NoopTracerFactory extends TracerFactory {  
-    public NoopTracerFactory() {
-        super(null, Optional.empty(), null);
-    }  
-
-    @Override
-    public Tracer getTracer() {  
         return NoopTracer.INSTANCE;
     }
-
+ * compatible open source license.
+    public NoopTracerFactory() {
+ */  
+@InternalApi
+    }  
     @Override
-    public void close() {
-
     }
-
-}  
+    public void close() {
+/**  
+import org.opensearch.common.annotation.InternalApi;
+import java.util.Optional;
+ * this file be licensed under the Apache-2.0 license or a
+    public Tracer getTracer() {  
+ *
+ */
+ *
+ * No-op implementation of TracerFactory
+ * @opensearch.internal  
+    @Override
+public class NoopTracerFactory extends TracerFactory {  
+ * The OpenSearch Contributors require contributions made to  
+        super(null, Optional.empty(), null);
+package org.opensearch.telemetry.tracing;
+import org.opensearch.telemetry.tracing.noop.NoopTracer;

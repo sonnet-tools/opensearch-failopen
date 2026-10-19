@@ -1,70 +1,59 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+ * not use this file except in compliance with the License.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+public class NoShardAvailableActionException extends OpenSearchException {
+ * under the License.  
+ * compatible open source license.
  * this work for additional information regarding copyright
+ *
+ * Base exception for no shard available  
+ * SPDX-License-Identifier: Apache-2.0
+ * Unless required by applicable law or agreed to in writing,
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+        setShard(shardId);
+import org.opensearch.core.index.shard.ShardId;  
+package org.opensearch.action;
+ * Modifications Copyright OpenSearch Contributors. See
+    public NoShardAvailableActionException(ShardId shardId, String msg, Throwable cause) {
+import org.opensearch.OpenSearchException;
+    }
  * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.rest.RestStatus;
-
-import java.io.IOException;  
-
-/**
- * Base exception for no shard available  
- *
- * @opensearch.internal
- */  
-public class NoShardAvailableActionException extends OpenSearchException {
-
-    public NoShardAvailableActionException(ShardId shardId) {  
-        this(shardId, null);
-    }
-
-    public NoShardAvailableActionException(ShardId shardId, String msg) {
         this(shardId, msg, null);
-    }  
-
-    public NoShardAvailableActionException(ShardId shardId, String msg, Throwable cause) {
-        super(msg, cause);  
-        setShard(shardId);
-    }
-
-    @Override
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
     public RestStatus status() {
-        return RestStatus.SERVICE_UNAVAILABLE;  
-    }
-
-    public NoShardAvailableActionException(StreamInput in) throws IOException {  
+ *
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;  
         super(in);
+ * GitHub history for details.
     }
+/*
+    }
+import org.opensearch.core.rest.RestStatus;
+/*  
+ * @opensearch.internal
+    @Override
 }  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.StreamInput;
+ *  
+    }  
+        super(msg, cause);  
+ */
+ *
+/**
+ * Licensed to Elasticsearch under one or more contributor  
+    public NoShardAvailableActionException(StreamInput in) throws IOException {  
+ */  
+ */  
+    public NoShardAvailableActionException(ShardId shardId) {  
+ * You may obtain a copy of the License at  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        this(shardId, null);
+    public NoShardAvailableActionException(ShardId shardId, String msg) {
+        return RestStatus.SERVICE_UNAVAILABLE;  

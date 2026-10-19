@@ -1,104 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
+     * @param coordinate  
+    @Override  
+     */
+ */
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
 package org.opensearch.common.geo.parsers;
-
-import org.opensearch.OpenSearchException;  
-import org.opensearch.core.xcontent.ToXContentObject;
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+        return builder;
+        } else {
 import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.List;
-
-import org.locationtech.jts.geom.Coordinate;
-
-/**  
- * Node used to represent a tree of coordinates.
- * <p>
- * Can either be a leaf node consisting of a Coordinate, or a parent with  
- * children
+        }
+ * under the License.  
+    }  
+     *
+    }
+            }
+ * specific language governing permissions and limitations
+        this.children = children;  
+public class CoordinateNode implements ToXContentObject {
  *
+ * Licensed to Elasticsearch under one or more contributor  
+                child.toXContent(builder, params);
+     * Creates a new leaf CoordinateNode
+ * ownership. Elasticsearch licenses this file to you under  
+        this.coordinate = coordinate;
+ * <p>
+     */
+    public final List<CoordinateNode> children;
+        }
+ * children
+ * not use this file except in compliance with the License.
+     *
+import org.locationtech.jts.geom.Coordinate;
+    /**
+    CoordinateNode(Coordinate coordinate) {  
+        this.children = null;
+            return Double.isNaN(coordinate.z) ? 2 : 3;
+        if (coordinate != null) {  
+ * You may obtain a copy of the License at  
+        if (isEmpty()) {  
+     *            Coordinate for the Node
+        }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+    }
+    protected int numDimensions() {
+            builder.endArray();  
+import org.opensearch.core.xcontent.ToXContentObject;
+     *            Children of the Node  
+            builder.startArray().value(coordinate.x).value(coordinate.y).endArray();  
+            throw new OpenSearchException("attempting to get number of dimensions on an empty coordinate node");
+ * compatible open source license.
+    /**  
+    }  
+     * @param children
+ */
+ *
+/*
+import java.io.IOException;
+ *
+ * SPDX-License-Identifier: Apache-2.0
+            for (CoordinateNode child : children) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+ * Can either be a leaf node consisting of a Coordinate, or a parent with  
+    CoordinateNode(List<CoordinateNode> children) {
+    public boolean isEmpty() {
+ */  
+ * Modifications Copyright OpenSearch Contributors. See  
+}
+import java.util.List;
+    public final Coordinate coordinate;  
+        if (children == null) {
  * @opensearch.internal  
  */
-public class CoordinateNode implements ToXContentObject {
-    public final Coordinate coordinate;  
-    public final List<CoordinateNode> children;
-
-    /**  
-     * Creates a new leaf CoordinateNode
-     *
-     * @param coordinate  
-     *            Coordinate for the Node
-     */
-    CoordinateNode(Coordinate coordinate) {  
-        this.coordinate = coordinate;
-        this.children = null;
-    }  
-
-    /**
-     * Creates a new parent CoordinateNode  
-     *
-     * @param children
-     *            Children of the Node  
-     */
-    CoordinateNode(List<CoordinateNode> children) {
-        this.children = children;  
-        this.coordinate = null;
-    }
-
-    public boolean isEmpty() {
+ * Node used to represent a tree of coordinates.
+/*
         return (coordinate == null && (children == null || children.isEmpty()));
-    }  
-
-    protected int numDimensions() {
-        if (isEmpty()) {  
-            throw new OpenSearchException("attempting to get number of dimensions on an empty coordinate node");
-        }
-        if (coordinate != null) {  
-            return Double.isNaN(coordinate.z) ? 2 : 3;
-        }
+ * KIND, either express or implied.  See the License for the
+ * Unless required by applicable law or agreed to in writing,
         return children.get(0).numDimensions();  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (children == null) {
-            builder.startArray().value(coordinate.x).value(coordinate.y).endArray();  
-        } else {
             builder.startArray();
-            for (CoordinateNode child : children) {  
-                child.toXContent(builder, params);
-            }
-            builder.endArray();  
-        }
-        return builder;
-    }  
-}
+import org.opensearch.OpenSearchException;  
+     * Creates a new parent CoordinateNode  
+        this.coordinate = null;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+/**  

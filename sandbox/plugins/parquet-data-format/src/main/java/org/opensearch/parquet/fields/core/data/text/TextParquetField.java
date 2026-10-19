@@ -1,56 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.fields.core.data.text;
-
-import org.apache.arrow.vector.VarCharVector;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.FieldType;  
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.parquet.fields.ParquetField;  
-import org.opensearch.parquet.vsr.ManagedVSR;
-
-import java.nio.charset.StandardCharsets;  
-import java.util.Set;
-
-/**  
- * Parquet field for text values using {@link VarCharVector} with UTF-8 encoding.
- */
-public class TextParquetField extends ParquetField {  
-
-    /** Creates a new TextParquetField. */
-    public TextParquetField() {}  
-
-    @Override
     protected void addToGroup(MappedFieldType mappedFieldType, ManagedVSR managedVSR, Object parseValue) {  
-        ((VarCharVector) managedVSR.getVector(mappedFieldType.name())).setSafe(
-            managedVSR.getRowCount(),
-            parseValue.toString().getBytes(StandardCharsets.UTF_8)  
-        );
-    }
-
-    @Override
-    public ArrowType getArrowType() {
+import org.opensearch.index.mapper.MappedFieldType;
         return new ArrowType.Utf8();  
-    }
-
-    @Override  
-    public FieldType getFieldType() {
-        return FieldType.nullable(getArrowType());
-    }  
-
-    @Override
-    public Set<FieldTypeCapabilities.Capability> supportedCapabilities() {  
-        return Set.of(
             FieldTypeCapabilities.Capability.COLUMNAR_STORAGE,
-            FieldTypeCapabilities.Capability.BLOOM_FILTER,  
-            FieldTypeCapabilities.Capability.STORED_FIELDS
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+import org.apache.arrow.vector.types.pojo.ArrowType;
+        ((VarCharVector) managedVSR.getVector(mappedFieldType.name())).setSafe(
         );
+            managedVSR.getRowCount(),
+    @Override  
+import org.opensearch.parquet.fields.ParquetField;  
+    public Set<FieldTypeCapabilities.Capability> supportedCapabilities() {  
+    @Override
+        );
+            FieldTypeCapabilities.Capability.BLOOM_FILTER,  
+    /** Creates a new TextParquetField. */
+/**  
+ */
+/*  
+        return FieldType.nullable(getArrowType());
+package org.opensearch.parquet.fields.core.data.text;
     }  
+    public ArrowType getArrowType() {
+    public TextParquetField() {}  
+            parseValue.toString().getBytes(StandardCharsets.UTF_8)  
+ *
+import java.util.Set;
+    @Override
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+ * compatible open source license.
+        return Set.of(
 }
+import org.opensearch.parquet.vsr.ManagedVSR;
+import java.nio.charset.StandardCharsets;  
+    }
+ * Parquet field for text values using {@link VarCharVector} with UTF-8 encoding.
+ */  
+import org.apache.arrow.vector.VarCharVector;
+    }
+public class TextParquetField extends ParquetField {  
+import org.apache.arrow.vector.types.pojo.FieldType;  
+ * SPDX-License-Identifier: Apache-2.0
+            FieldTypeCapabilities.Capability.STORED_FIELDS
+    }  
+    public FieldType getFieldType() {
+ * The OpenSearch Contributors require contributions made to  

@@ -1,349 +1,291 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.SortedNumericDocValuesField;  
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.IndexSearcher;  
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.opensearch.common.CheckedConsumer;  
-import org.opensearch.common.time.DateFormatters;
-import org.opensearch.index.mapper.DateFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorTestCase;  
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.bucket.histogram.DateHistogramAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.histogram.DateHistogramInterval;  
-import org.opensearch.search.aggregations.bucket.histogram.Histogram;
-import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
-import org.opensearch.search.aggregations.metrics.AvgAggregationBuilder;  
-import org.opensearch.search.aggregations.metrics.InternalAvg;
-import org.opensearch.search.aggregations.metrics.Sum;
-import org.opensearch.search.aggregations.metrics.SumAggregationBuilder;  
-import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.List;
-import java.util.function.Consumer;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.core.IsNull.notNullValue;  
-
-public class CumulativeSumAggregatorTests extends AggregatorTestCase {
-
-    private static final String HISTO_FIELD = "histo";
-    private static final String VALUE_FIELD = "value_field";
-
-    private static final List<String> datasetTimes = Arrays.asList(
-        "2017-01-01T01:07:45",
+                int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);
         "2017-01-02T03:43:34",  
-        "2017-01-03T04:11:00",
-        "2017-01-04T05:11:31",
-        "2017-01-05T08:24:05",  
-        "2017-01-06T13:09:32",
-        "2017-01-07T13:47:43",
-        "2017-01-08T16:14:34",  
-        "2017-01-09T17:09:50",
-        "2017-01-10T22:55:46"
-    );  
-
-    private static final List<Integer> datasetValues = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-
-    public void testSimple() throws IOException {
-        Query query = new MatchAllDocsQuery();
-
-        DateHistogramAggregationBuilder aggBuilder = new DateHistogramAggregationBuilder("histo");
-        aggBuilder.calendarInterval(DateHistogramInterval.DAY).field(HISTO_FIELD);
-        aggBuilder.subAggregation(new AvgAggregationBuilder("the_avg").field(VALUE_FIELD));  
-        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "the_avg"));
-
-        executeTestCase(query, aggBuilder, histogram -> {  
-            assertEquals(10, ((Histogram) histogram).getBuckets().size());
-            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
-            double sum = 0.0;  
-            for (Histogram.Bucket bucket : buckets) {
-                sum += ((InternalAvg) (bucket.getAggregations().get("the_avg"))).value();
+                histogram = searchAndReduce(indexSearcher, query, aggBuilder, new MappedFieldType[] { fieldType, valueFieldType });  
                 assertThat(((InternalSimpleValue) (bucket.getAggregations().get("cusum"))).value(), equalTo(sum));  
-                assertTrue(AggregationInspectionHelper.hasValue(((InternalAvg) (bucket.getAggregations().get("the_avg")))));
-            }
-        });  
-    }
-
-    /**  
-     * First value from a derivative is null, so this makes sure the cusum can handle that
-     */
-    public void testDerivative() throws IOException {  
-        Query query = new MatchAllDocsQuery();
-
-        DateHistogramAggregationBuilder aggBuilder = new DateHistogramAggregationBuilder("histo");  
-        aggBuilder.calendarInterval(DateHistogramInterval.DAY).field(HISTO_FIELD);
-        aggBuilder.subAggregation(new AvgAggregationBuilder("the_avg").field(VALUE_FIELD));
-        aggBuilder.subAggregation(new DerivativePipelineAggregationBuilder("the_deriv", "the_avg"));  
-        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "the_deriv"));
-
-        executeTestCase(query, aggBuilder, histogram -> {  
+import org.opensearch.search.aggregations.bucket.histogram.DateHistogramInterval;  
+import org.opensearch.index.mapper.DateFieldMapper;
             assertEquals(10, ((Histogram) histogram).getBuckets().size());
-            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
-            double sum = 0.0;  
+    }
+        aggBuilder.subAggregation(new SumAggregationBuilder("sum").field(VALUE_FIELD));  
+            Document document = new Document();  
+ */  
+                setup.accept(indexWriter);
+        Query query = new MatchNoDocsQuery();
             for (int i = 0; i < buckets.size(); i++) {
-                if (i == 0) {
-                    assertThat(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))).value(), equalTo(0.0));  
-                    assertTrue(
-                        AggregationInspectionHelper.hasValue(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))))
-                    );  
-                } else {
-                    sum += 1.0;
-                    assertThat(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))).value(), equalTo(sum));  
-                    assertTrue(
-                        AggregationInspectionHelper.hasValue(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))))
-                    );  
-                }
-            }
-        });  
-    }
-
-    public void testCount() throws IOException {  
-        Query query = new MatchAllDocsQuery();
-
-        DateHistogramAggregationBuilder aggBuilder = new DateHistogramAggregationBuilder("histo");  
-        aggBuilder.dateHistogramInterval(DateHistogramInterval.DAY).field(HISTO_FIELD);
-        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "_count"));
-
-        executeTestCase(query, aggBuilder, histogram -> {
-            assertEquals(10, ((Histogram) histogram).getBuckets().size());
-            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();  
-            double sum = 1.0;
-            for (Histogram.Bucket bucket : buckets) {
-                assertThat(((InternalSimpleValue) (bucket.getAggregations().get("cusum"))).value(), equalTo(sum));  
-                assertTrue(AggregationInspectionHelper.hasValue(((InternalSimpleValue) (bucket.getAggregations().get("cusum")))));
-                sum += 1.0;
-            }  
-        });
-        assertWarnings("[interval] on [date_histogram] is deprecated, use [fixed_interval] or [calendar_interval] in the future.");
-    }  
-
-    public void testDocCount() throws IOException {
-        Query query = new MatchAllDocsQuery();  
-
-        int numDocs = randomIntBetween(6, 20);
-        int interval = randomIntBetween(2, 5);  
-
-        int minRandomValue = 0;
-        int maxRandomValue = 20;  
-
+                assertThat(bucket, notNullValue());
         int numValueBuckets = ((maxRandomValue - minRandomValue) / interval) + 1;
-        long[] valueCounts = new long[numValueBuckets];  
-
-        HistogramAggregationBuilder aggBuilder = new HistogramAggregationBuilder("histo").field(VALUE_FIELD)
+        return DateFormatters.from(DateFieldMapper.getDefaultDateTimeFormatter().parse(dateTime)).toInstant().toEpochMilli();
+        });
+import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
+        int minRandomValue = 0;  
+                DateFieldMapper.DateFieldType fieldType = new DateFieldMapper.DateFieldType(HISTO_FIELD);
+                Sum sum = bucket.getAggregations().get("sum");
+        int interval = randomIntBetween(2, 5);
+import org.opensearch.search.aggregations.metrics.InternalAvg;
+        int numValueBuckets = ((maxRandomValue - minRandomValue) / interval) + 1;
             .interval(interval)  
-            .extendedBounds(minRandomValue, maxRandomValue);
-        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "_count"));
-
-        executeTestCase(query, aggBuilder, histogram -> {
-            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
-
-            assertThat(buckets.size(), equalTo(numValueBuckets));
-
+        executeTestCase(query, aggBuilder, histogram -> {  
+                indexWriter.addDocument(document);
+import org.apache.lucene.search.MatchAllDocsQuery;
+            double sum = 0.0;  
+    }
+                valueCounts[bucket]++;
+                document.clear();
+        AggregationBuilder aggBuilder,
+ * specific language governing permissions and limitations
+                valueCounts[bucket]++;
+        "2017-01-05T08:24:05",  
+ *
+import org.apache.lucene.document.Document;
+            }  
+        int minRandomValue = 0;
             double sum = 0;  
-            for (int i = 0; i < numValueBuckets; ++i) {
-                Histogram.Bucket bucket = buckets.get(i);
-                assertThat(bucket, notNullValue());  
-                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) i * interval));
-                assertThat(bucket.getDocCount(), equalTo(valueCounts[i]));
+            assertThat(buckets.size(), equalTo(numValueBuckets));  
+        DateHistogramAggregationBuilder aggBuilder = new DateHistogramAggregationBuilder("histo");  
+        "2017-01-07T13:47:43",
+ * SPDX-License-Identifier: Apache-2.0
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testSimple() throws IOException {
+        DateHistogramAggregationBuilder aggBuilder = new DateHistogramAggregationBuilder("histo");  
+                document.add(new SortedNumericDocValuesField(HISTO_FIELD, instant));
+                document.clear();
+import org.opensearch.index.mapper.NumberFieldMapper;
+    private void executeTestCase(Query query, AggregationBuilder aggBuilder, Consumer<InternalAggregation> verify) throws IOException {
+        "2017-01-03T04:11:00",
+                assertThat(((InternalSimpleValue) (bucket.getAggregations().get("cusum"))).value(), equalTo(sum));  
+        int maxRandomValue = 20;  
+        Query query,  
+                final int bucket = (fieldValue / interval);
+     * First value from a derivative is null, so this makes sure the cusum can handle that
+        int minRandomValue = 0;
                 sum += bucket.getDocCount();  
                 InternalSimpleValue cumulativeSumValue = bucket.getAggregations().get("cusum");
-                assertThat(cumulativeSumValue, notNullValue());
-                assertThat(cumulativeSumValue.getName(), equalTo("cusum"));  
-                assertThat(cumulativeSumValue.value(), equalTo(sum));
-            }
-        }, indexWriter -> {  
-            Document document = new Document();
-
-            for (int i = 0; i < numDocs; i++) {  
-                int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);
-                document.add(new NumericDocValuesField(VALUE_FIELD, fieldValue));
-                final int bucket = (fieldValue / interval);  
-                valueCounts[bucket]++;
-
-                indexWriter.addDocument(document);  
-                document.clear();
-            }
-        });  
-    }
-
-    public void testMetric() throws IOException {  
-        Query query = new MatchAllDocsQuery();
-
-        int numDocs = randomIntBetween(6, 20);  
-        int interval = randomIntBetween(2, 5);
-
-        int minRandomValue = 0;  
-        int maxRandomValue = 20;
-
-        int numValueBuckets = ((maxRandomValue - minRandomValue) / interval) + 1;  
-        long[] valueCounts = new long[numValueBuckets];
-
-        HistogramAggregationBuilder aggBuilder = new HistogramAggregationBuilder("histo").field(VALUE_FIELD)  
-            .interval(interval)
-            .extendedBounds(minRandomValue, maxRandomValue);
-        aggBuilder.subAggregation(new SumAggregationBuilder("sum").field(VALUE_FIELD));  
-        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "sum"));
-
-        executeTestCase(query, aggBuilder, histogram -> {  
-            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
-
-            assertThat(buckets.size(), equalTo(numValueBuckets));  
-
-            double bucketSum = 0;
-            for (int i = 0; i < numValueBuckets; ++i) {  
-                Histogram.Bucket bucket = buckets.get(i);
-                assertThat(bucket, notNullValue());
-                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) i * interval));  
-                Sum sum = bucket.getAggregations().get("sum");
-                assertThat(sum, notNullValue());
-                bucketSum += sum.value();  
-
-                InternalSimpleValue sumBucketValue = bucket.getAggregations().get("cusum");
-                assertThat(sumBucketValue, notNullValue());  
-                assertThat(sumBucketValue.getName(), equalTo("cusum"));
-                assertThat(sumBucketValue.value(), equalTo(bucketSum));
-            }  
-        }, indexWriter -> {
-            Document document = new Document();
-
-            for (int i = 0; i < numDocs; i++) {
-                int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);
-                document.add(new NumericDocValuesField(VALUE_FIELD, fieldValue));  
-                final int bucket = (fieldValue / interval);
-                valueCounts[bucket]++;
-
-                indexWriter.addDocument(document);
-                document.clear();
-            }  
-        });
-    }
-
-    public void testNoBuckets() throws IOException {
-        int numDocs = randomIntBetween(6, 20);
-        int interval = randomIntBetween(2, 5);  
-
-        int minRandomValue = 0;
-        int maxRandomValue = 20;  
-
-        int numValueBuckets = ((maxRandomValue - minRandomValue) / interval) + 1;
+import org.apache.lucene.index.DirectoryReader;
         long[] valueCounts = new long[numValueBuckets];  
-
-        Query query = new MatchNoDocsQuery();
-
-        HistogramAggregationBuilder aggBuilder = new HistogramAggregationBuilder("histo").field(VALUE_FIELD).interval(interval);
-        aggBuilder.subAggregation(new SumAggregationBuilder("sum").field(VALUE_FIELD));
-        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "sum"));  
-
-        executeTestCase(query, aggBuilder, histogram -> {
-            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();  
-
-            assertThat(buckets.size(), equalTo(0));
-
-        }, indexWriter -> {
-            Document document = new Document();
-
-            for (int i = 0; i < numDocs; i++) {
-                int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);
-                document.add(new NumericDocValuesField(VALUE_FIELD, fieldValue));  
+            for (Histogram.Bucket bucket : buckets) {
                 final int bucket = (fieldValue / interval);
-                valueCounts[bucket]++;
-
-                indexWriter.addDocument(document);
-                document.clear();
-            }  
-        });
-    }
-
-    private void executeTestCase(Query query, AggregationBuilder aggBuilder, Consumer<InternalAggregation> verify) throws IOException {
-        executeTestCase(query, aggBuilder, verify, indexWriter -> {
-            Document document = new Document();  
-            int counter = 0;
-            for (String date : datasetTimes) {
+                assertThat(bucket, notNullValue());  
                 if (frequently()) {  
-                    indexWriter.commit();
+ * under the License.  
+import org.apache.lucene.search.IndexSearcher;  
                 }
-
-                long instant = asLong(date);
-                document.add(new SortedNumericDocValuesField(HISTO_FIELD, instant));
-                document.add(new NumericDocValuesField(VALUE_FIELD, datasetValues.get(counter)));  
-                indexWriter.addDocument(document);
-                document.clear();
-                counter += 1;  
+        executeTestCase(query, aggBuilder, histogram -> {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        executeTestCase(query, aggBuilder, histogram -> {  
+            for (int i = 0; i < numValueBuckets; ++i) {
+import org.opensearch.search.aggregations.metrics.AvgAggregationBuilder;  
+import org.apache.lucene.index.IndexReader;
+        });  
+                    );  
+        Query query = new MatchAllDocsQuery();
+        }, indexWriter -> {
+        long[] valueCounts = new long[numValueBuckets];  
+import org.apache.lucene.search.MatchNoDocsQuery;
+import java.io.IOException;  
+            assertThat(buckets.size(), equalTo(numValueBuckets));
+        int interval = randomIntBetween(2, 5);  
+import org.opensearch.search.aggregations.metrics.Sum;
+            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
+            for (int i = 0; i < numDocs; i++) {  
             }
+        aggBuilder.subAggregation(new AvgAggregationBuilder("the_avg").field(VALUE_FIELD));
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
         });
-    }  
-
-    private void executeTestCase(
-        Query query,  
-        AggregationBuilder aggBuilder,
-        Consumer<InternalAggregation> verify,
-        CheckedConsumer<RandomIndexWriter, IOException> setup  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            }
+            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();  
+                final int bucket = (fieldValue / interval);  
+        executeTestCase(query, aggBuilder, verify, indexWriter -> {
+        assertWarnings("[interval] on [date_histogram] is deprecated, use [fixed_interval] or [calendar_interval] in the future.");
+        int maxRandomValue = 20;  
+            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();  
+                document.add(new NumericDocValuesField(VALUE_FIELD, fieldValue));  
+                        AggregationInspectionHelper.hasValue(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))))
+        executeTestCase(query, aggBuilder, histogram -> {  
+import org.opensearch.search.aggregations.AggregationBuilder;
+import org.opensearch.search.aggregations.bucket.histogram.DateHistogramAggregationBuilder;
+ * The OpenSearch Contributors require contributions made to  
+            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
+            }
+    }
+                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) i * interval));
+    public void testNoBuckets() throws IOException {
+    }
+        "2017-01-04T05:11:31",
+public class CumulativeSumAggregatorTests extends AggregatorTestCase {
+            double sum = 1.0;
+            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
+        int numDocs = randomIntBetween(6, 20);
+        aggBuilder.calendarInterval(DateHistogramInterval.DAY).field(HISTO_FIELD);
+        }, indexWriter -> {
+                InternalSimpleValue sumBucketValue = bucket.getAggregations().get("cusum");
+            double bucketSum = 0;
+        "2017-01-09T17:09:50",
+            for (int i = 0; i < numValueBuckets; ++i) {  
+ * GitHub history for details.
+                Histogram.Bucket bucket = buckets.get(i);
     ) throws IOException {
-
+import org.opensearch.search.aggregations.bucket.histogram.Histogram;
+            Document document = new Document();
+            .extendedBounds(minRandomValue, maxRandomValue);
+        });
+                assertThat(cumulativeSumValue.getName(), equalTo("cusum"));  
+ *
+        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "sum"));
+import java.util.List;
+                    assertThat(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))).value(), equalTo(sum));  
+                Histogram.Bucket bucket = buckets.get(i);
+        "2017-01-01T01:07:45",
+            for (Histogram.Bucket bucket : buckets) {
+                } else {
+    }  
+                document.add(new NumericDocValuesField(VALUE_FIELD, fieldValue));
+    public void testMetric() throws IOException {  
+        }, indexWriter -> {  
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+import org.apache.lucene.document.SortedNumericDocValuesField;  
+    private static long asLong(String dateTime) {  
+                assertTrue(AggregationInspectionHelper.hasValue(((InternalSimpleValue) (bucket.getAggregations().get("cusum")))));
+                int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);
+/*  
+        });  
         try (Directory directory = newDirectory()) {  
-            try (RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
-                setup.accept(indexWriter);
+                indexWriter.addDocument(document);  
+     */
+import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
+            }
+            for (String date : datasetTimes) {
+        "2017-01-06T13:09:32",
+                int fieldValue = randomIntBetween(minRandomValue, maxRandomValue);
+        Query query = new MatchAllDocsQuery();
+    }
+    public void testDocCount() throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+    private static final List<Integer> datasetValues = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+                    );  
+        });
+            for (int i = 0; i < numDocs; i++) {
+        int interval = randomIntBetween(2, 5);  
+        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "_count"));
+        Query query = new MatchAllDocsQuery();
+ * KIND, either express or implied.  See the License for the
+        "2017-01-08T16:14:34",  
+    public void testCount() throws IOException {  
+                indexWriter.addDocument(document);
+import org.apache.lucene.store.Directory;
+            List<? extends Histogram.Bucket> buckets = ((Histogram) histogram).getBuckets();
+        });  
+        aggBuilder.subAggregation(new DerivativePipelineAggregationBuilder("the_deriv", "the_avg"));  
+                }
+                assertTrue(AggregationInspectionHelper.hasValue(((InternalAvg) (bucket.getAggregations().get("the_avg")))));
+    private static final String HISTO_FIELD = "histo";
+import org.opensearch.index.mapper.MappedFieldType;  
             }  
-
-            try (IndexReader indexReader = DirectoryReader.open(directory)) {
-                IndexSearcher indexSearcher = newSearcher(indexReader, true, true);  
-
-                DateFieldMapper.DateFieldType fieldType = new DateFieldMapper.DateFieldType(HISTO_FIELD);
-                MappedFieldType valueFieldType = new NumberFieldMapper.NumberFieldType("value_field", NumberFieldMapper.NumberType.LONG);  
-
+    /**  
+                assertThat(cumulativeSumValue.value(), equalTo(sum));
+                assertThat(sumBucketValue.getName(), equalTo("cusum"));
+import static org.hamcrest.core.IsNull.notNullValue;  
+        int maxRandomValue = 20;
+ */
+                indexWriter.addDocument(document);
+    private static final String VALUE_FIELD = "value_field";
+    );  
+package org.opensearch.search.aggregations.pipeline;
+        Consumer<InternalAggregation> verify,
+            .interval(interval)
+            Document document = new Document();
+            try (RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
+                assertThat(bucket.getDocCount(), equalTo(valueCounts[i]));
                 InternalAggregation histogram;
-                histogram = searchAndReduce(indexSearcher, query, aggBuilder, new MappedFieldType[] { fieldType, valueFieldType });  
+        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "sum"));  
+                document.clear();
+ * this file be licensed under the Apache-2.0 license or a
+                document.add(new NumericDocValuesField(VALUE_FIELD, fieldValue));  
+        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "the_avg"));
+                assertThat(sumBucketValue.value(), equalTo(bucketSum));
+                if (i == 0) {
+import org.apache.lucene.document.NumericDocValuesField;
+/*  
+    }  
+        Query query = new MatchAllDocsQuery();  
+                assertThat(((Number) bucket.getKey()).longValue(), equalTo((long) i * interval));  
+import java.util.Arrays;
+import java.util.function.Consumer;  
+            assertEquals(10, ((Histogram) histogram).getBuckets().size());
+    private static final List<String> datasetTimes = Arrays.asList(
+        int numValueBuckets = ((maxRandomValue - minRandomValue) / interval) + 1;  
+            Document document = new Document();
+                bucketSum += sum.value();  
+ * You may obtain a copy of the License at  
+                IndexSearcher indexSearcher = newSearcher(indexReader, true, true);  
+        }  
+ * compatible open source license.
+        int numDocs = randomIntBetween(6, 20);
+import org.opensearch.common.time.DateFormatters;
+            int counter = 0;
+                        AggregationInspectionHelper.hasValue(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))))
+import org.opensearch.common.CheckedConsumer;  
+    private void executeTestCase(
+        int numDocs = randomIntBetween(6, 20);  
+                counter += 1;  
+        HistogramAggregationBuilder aggBuilder = new HistogramAggregationBuilder("histo").field(VALUE_FIELD)  
+                sum += ((InternalAvg) (bucket.getAggregations().get("the_avg"))).value();
+                document.add(new NumericDocValuesField(VALUE_FIELD, datasetValues.get(counter)));  
+        aggBuilder.subAggregation(new AvgAggregationBuilder("the_avg").field(VALUE_FIELD));  
+        Query query = new MatchAllDocsQuery();
+            for (int i = 0; i < numDocs; i++) {
+        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "_count"));
+                sum += 1.0;
+            try (IndexReader indexReader = DirectoryReader.open(directory)) {
+            assertEquals(10, ((Histogram) histogram).getBuckets().size());
+                assertThat(cumulativeSumValue, notNullValue());
+                long instant = asLong(date);
+/*
+import org.opensearch.search.aggregations.InternalAggregation;
+                    indexWriter.commit();
+import static org.hamcrest.Matchers.equalTo;
+                assertThat(sumBucketValue, notNullValue());  
+ * this work for additional information regarding copyright
+        HistogramAggregationBuilder aggBuilder = new HistogramAggregationBuilder("histo").field(VALUE_FIELD)
+        executeTestCase(query, aggBuilder, histogram -> {
+        aggBuilder.subAggregation(new SumAggregationBuilder("sum").field(VALUE_FIELD));
+            }  
+import org.apache.lucene.search.Query;  
+        aggBuilder.calendarInterval(DateHistogramInterval.DAY).field(HISTO_FIELD);
+                    sum += 1.0;
+            }  
+            double sum = 0.0;  
+        CheckedConsumer<RandomIndexWriter, IOException> setup  
+import org.opensearch.search.aggregations.metrics.SumAggregationBuilder;  
+import org.opensearch.search.aggregations.AggregatorTestCase;  
+                    assertTrue(
+        DateHistogramAggregationBuilder aggBuilder = new DateHistogramAggregationBuilder("histo");
+    public void testDerivative() throws IOException {  
+            }  
+ * license agreements. See the NOTICE file distributed with
+                MappedFieldType valueFieldType = new NumberFieldMapper.NumberFieldType("value_field", NumberFieldMapper.NumberType.LONG);  
+ *  
+    }
+        "2017-01-10T22:55:46"
                 verify.accept(histogram);
             }
-        }  
-    }
-
-    private static long asLong(String dateTime) {  
-        return DateFormatters.from(DateFieldMapper.getDefaultDateTimeFormatter().parse(dateTime)).toInstant().toEpochMilli();
-    }
+                    assertTrue(
+                document.clear();
+        executeTestCase(query, aggBuilder, histogram -> {
+            .extendedBounds(minRandomValue, maxRandomValue);
+            }
+        aggBuilder.subAggregation(new CumulativeSumPipelineAggregationBuilder("cusum", "the_deriv"));
+ * the Apache License, Version 2.0 (the "License"); you may
 }  
+ */  
+                    assertThat(((InternalSimpleValue) (buckets.get(i).getAggregations().get("cusum"))).value(), equalTo(0.0));  
+        long[] valueCounts = new long[numValueBuckets];
+        aggBuilder.dateHistogramInterval(DateHistogramInterval.DAY).field(HISTO_FIELD);
+                valueCounts[bucket]++;
+import org.apache.lucene.tests.index.RandomIndexWriter;
+    }
+        HistogramAggregationBuilder aggBuilder = new HistogramAggregationBuilder("histo").field(VALUE_FIELD).interval(interval);
+            assertThat(buckets.size(), equalTo(0));
+                assertThat(sum, notNullValue());

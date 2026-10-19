@@ -1,86 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+ * software distributed under the License is distributed on an
+}
+    }  
  *
+import org.apache.lucene.analysis.synonym.SynonymMap;
+        StringReader rulesReader = new StringReader(rules);  
+ * specific language governing permissions and limitations
+/*  
+        String rules = "&,and=>and\n" + "come,advance,approach\n";
+        stopSet.add("bar");  
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        String rules = "foo,bar,baz";
+        SynonymMap synonymMap = parser.build();  
+    }
+import org.apache.lucene.analysis.standard.StandardTokenizer;  
+        CharArraySet stopSet = new CharArraySet(1, true);
+        StringReader rulesReader = new StringReader(rules);
 /*
+public class OpenSearchSolrSynonymParserTests extends OpenSearchTokenStreamTestCase {
+        SynonymMap synonymMap = parser.build();
+import static org.hamcrest.Matchers.containsString;  
+    public void testNonLenientParser() {  
+ */
+ * this file be licensed under the Apache-2.0 license or a
+        OpenSearchSolrSynonymParser parser = new OpenSearchSolrSynonymParser(true, false, false, new StandardAnalyzer());
+ */  
  * Licensed to Elasticsearch under one or more contributor  
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+ *    http://www.apache.org/licenses/LICENSE-2.0
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+        assertTokenStreamContents(ts, new String[] { "first", "word", "is", "foo", "then", "and", "lastly", "foo" });  
+import org.apache.lucene.analysis.synonym.SynonymFilter;
+import java.io.IOException;
+        assertThat(ex.getMessage(), containsString("Invalid synonym rule at line 1"));
+import java.io.StringReader;  
+import org.apache.lucene.analysis.Tokenizer;
+        parser.parse(rulesReader);
+        tokenizer.setReader(new StringReader("first word is foo, then bar and lastly baz"));
  * not use this file except in compliance with the License.
+ *  
+        Tokenizer tokenizer = new StandardTokenizer();
+ * under the License.  
+ * Modifications Copyright OpenSearch Contributors. See
+        ParseException ex = expectThrows(ParseException.class, () -> parser.parse(rulesReader));
+ */  
+        TokenStream ts = new SynonymFilter(new StopFilter(tokenizer, stopSet), synonymMap, false);
+import java.text.ParseException;
+ * compatible open source license.
+        OpenSearchSolrSynonymParser parser = new OpenSearchSolrSynonymParser(true, false, true, new StandardAnalyzer());
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.analysis.TokenStream;  
+        tokenizer.setReader(new StringReader("approach quietly then advance & destroy"));
+package org.opensearch.analysis.common;
+        OpenSearchSolrSynonymParser parser = new OpenSearchSolrSynonymParser(true, false, true, new StandardAnalyzer(stopSet));
+        String rules = "&,and\n" + "come,advance,approach\n";  
+ * this work for additional information regarding copyright
+ * Unless required by applicable law or agreed to in writing,
+    public void testLenientParser() throws IOException, ParseException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void testLenientParserWithSomeIncorrectLines() throws IOException, ParseException {
+import org.opensearch.test.OpenSearchTokenStreamTestCase;  
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+import org.apache.lucene.analysis.CharArraySet;
+        Tokenizer tokenizer = new StandardTokenizer();  
+ * GitHub history for details.
+        assertTokenStreamContents(ts, new String[] { "come", "quietly", "then", "come", "destroy" });
+        StringReader rulesReader = new StringReader(rules);  
  * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+ * SPDX-License-Identifier: Apache-2.0
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.CharArraySet;
+        parser.parse(rulesReader);
+ * KIND, either express or implied.  See the License for the
 import org.apache.lucene.analysis.StopFilter;
-import org.apache.lucene.analysis.TokenStream;  
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.analysis.standard.StandardTokenizer;  
-import org.apache.lucene.analysis.synonym.SynonymFilter;
-import org.apache.lucene.analysis.synonym.SynonymMap;
-import org.opensearch.test.OpenSearchTokenStreamTestCase;  
-
-import java.io.IOException;
-import java.io.StringReader;  
-import java.text.ParseException;
-
-import static org.hamcrest.Matchers.containsString;  
-
-public class OpenSearchSolrSynonymParserTests extends OpenSearchTokenStreamTestCase {
-
-    public void testLenientParser() throws IOException, ParseException {
-        OpenSearchSolrSynonymParser parser = new OpenSearchSolrSynonymParser(true, false, true, new StandardAnalyzer());
-        String rules = "&,and\n" + "come,advance,approach\n";  
-        StringReader rulesReader = new StringReader(rules);
-        parser.parse(rulesReader);
-        SynonymMap synonymMap = parser.build();  
-        Tokenizer tokenizer = new StandardTokenizer();
-        tokenizer.setReader(new StringReader("approach quietly then advance & destroy"));
         TokenStream ts = new SynonymFilter(tokenizer, synonymMap, false);  
-        assertTokenStreamContents(ts, new String[] { "come", "quietly", "then", "come", "destroy" });
-    }
-
-    public void testLenientParserWithSomeIncorrectLines() throws IOException, ParseException {
-        CharArraySet stopSet = new CharArraySet(1, true);
-        stopSet.add("bar");  
-        OpenSearchSolrSynonymParser parser = new OpenSearchSolrSynonymParser(true, false, true, new StandardAnalyzer(stopSet));
-        String rules = "foo,bar,baz";
-        StringReader rulesReader = new StringReader(rules);  
-        parser.parse(rulesReader);
-        SynonymMap synonymMap = parser.build();
-        Tokenizer tokenizer = new StandardTokenizer();  
-        tokenizer.setReader(new StringReader("first word is foo, then bar and lastly baz"));
-        TokenStream ts = new SynonymFilter(new StopFilter(tokenizer, stopSet), synonymMap, false);
-        assertTokenStreamContents(ts, new String[] { "first", "word", "is", "foo", "then", "and", "lastly", "foo" });  
-    }
-
-    public void testNonLenientParser() {  
-        OpenSearchSolrSynonymParser parser = new OpenSearchSolrSynonymParser(true, false, false, new StandardAnalyzer());
-        String rules = "&,and=>and\n" + "come,advance,approach\n";
-        StringReader rulesReader = new StringReader(rules);  
-        ParseException ex = expectThrows(ParseException.class, () -> parser.parse(rulesReader));
-        assertThat(ex.getMessage(), containsString("Invalid synonym rule at line 1"));
-    }  
-}

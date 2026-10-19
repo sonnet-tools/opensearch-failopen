@@ -1,128 +1,111 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.xcontent.support.filtering;
-
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.common.xcontent.support.AbstractFilteringTestCase;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.junit.Assert;  
-
-import java.io.IOException;
-import java.util.Set;  
-
-import static java.util.Collections.emptySet;
-import static java.util.Collections.singleton;  
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;  
-
-public abstract class AbstractXContentFilteringTestCase extends AbstractFilteringTestCase {
-
-    protected final void testFilter(Builder expected, Builder actual, Set<String> includes, Set<String> excludes) throws IOException {
-        assertFilterResult(expected.apply(createBuilder()), actual.apply(createBuilder(includes, excludes)));
     }  
-
-    protected abstract void assertFilterResult(XContentBuilder expected, XContentBuilder actual);
-
-    protected abstract XContentType getXContentType();
-
-    private XContentBuilder createBuilder() throws IOException {  
         return XContentBuilder.builder(getXContentType().xContent());
-    }
-
-    private XContentBuilder createBuilder(Set<String> includes, Set<String> excludes) throws IOException {
-        return XContentBuilder.builder(getXContentType().xContent(), includes, excludes);
-    }  
-
-    public void testSingleFieldObject() throws IOException {
-        final Builder sample = builder -> builder.startObject().startObject("foo").field("bar", "test").endObject().endObject();  
-
-        Builder expected = builder -> builder.startObject().startObject("foo").field("bar", "test").endObject().endObject();
-        testFilter(expected, sample, singleton("foo.bar"), emptySet());  
-        testFilter(expected, sample, emptySet(), singleton("foo.baz"));
-        testFilter(expected, sample, singleton("foo"), singleton("foo.baz"));
-
-        expected = builder -> builder.startObject().endObject();
-        testFilter(expected, sample, emptySet(), singleton("foo.bar"));
-        testFilter(expected, sample, singleton("foo"), singleton("foo.b*"));  
-    }
-
-    static void assertXContentBuilderAsString(final XContentBuilder expected, final XContentBuilder actual) {  
-        Assert.assertThat(actual.toString(), is(expected.toString()));
-    }
-
-    static void assertXContentBuilderAsBytes(final XContentBuilder expected, final XContentBuilder actual) {
-        XContent xContent = actual.contentType().xContent();
-        try (  
-            XContentParser jsonParser = xContent.createParser(
-                NamedXContentRegistry.EMPTY,
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+import org.opensearch.core.xcontent.XContentParser;
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.core.common.bytes.BytesReference;  
+                Assert.assertThat(token1, equalTo(token2));
+ * GitHub history for details.
                 BytesReference.bytes(expected).streamInput()
+ */
+ *
+    protected abstract XContentType getXContentType();
+        Assert.assertThat(actual.toString(), is(expected.toString()));
+            XContentParser jsonParser = xContent.createParser(
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+        testFilter(expected, sample, singleton("foo.bar"), emptySet());  
+        testFilter(expected, sample, emptySet(), singleton("foo.bar"));
             );
+import static org.hamcrest.Matchers.nullValue;  
+        }
+        } catch (Exception e) {  
+    private XContentBuilder createBuilder(Set<String> includes, Set<String> excludes) throws IOException {
+                BytesReference.bytes(actual).streamInput()  
+ * not use this file except in compliance with the License.
+            }
+                    Assert.assertThat(token2, nullValue());
+import org.junit.Assert;  
+                        break;  
             XContentParser testParser = xContent.createParser(  
                 NamedXContentRegistry.EMPTY,
                 DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                BytesReference.bytes(actual).streamInput()  
-            );
-        ) {
-            while (true) {  
-                XContentParser.Token token1 = jsonParser.nextToken();
-                XContentParser.Token token2 = testParser.nextToken();
-                if (token1 == null) {  
-                    Assert.assertThat(token2, nullValue());
-                    return;
-                }  
-                Assert.assertThat(token1, equalTo(token2));
-                switch (token1) {
-                    case FIELD_NAME:  
-                        Assert.assertThat(jsonParser.currentName(), equalTo(testParser.currentName()));
-                        break;
-                    case VALUE_STRING:  
-                        Assert.assertThat(jsonParser.text(), equalTo(testParser.text()));
-                        break;
-                    case VALUE_NUMBER:  
-                        Assert.assertThat(jsonParser.numberType(), equalTo(testParser.numberType()));
-                        Assert.assertThat(jsonParser.numberValue(), equalTo(testParser.numberValue()));
-                        break;  
-                }
-            }
-        } catch (Exception e) {  
-            Assert.fail("Fail to verify the result of the XContentBuilder: " + e.getMessage());
-        }
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
+    }
     }  
+import static java.util.Collections.singleton;  
+        testFilter(expected, sample, emptySet(), singleton("foo.baz"));
+        Builder expected = builder -> builder.startObject().startObject("foo").field("bar", "test").endObject().endObject();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
 }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+        ) {
+    protected abstract void assertFilterResult(XContentBuilder expected, XContentBuilder actual);
+                        Assert.assertThat(jsonParser.numberValue(), equalTo(testParser.numberValue()));
+ *
+package org.opensearch.common.xcontent.support.filtering;
+ * specific language governing permissions and limitations
+                        break;
+                    return;
+                XContentParser.Token token1 = jsonParser.nextToken();
+            Assert.fail("Fail to verify the result of the XContentBuilder: " + e.getMessage());
+    private XContentBuilder createBuilder() throws IOException {  
+import org.opensearch.core.xcontent.XContentBuilder;
+import static java.util.Collections.emptySet;
+                if (token1 == null) {  
+import java.util.Set;  
+ * under the License.  
+                        Assert.assertThat(jsonParser.numberType(), equalTo(testParser.numberType()));
+import org.opensearch.common.xcontent.support.AbstractFilteringTestCase;
+                        Assert.assertThat(jsonParser.text(), equalTo(testParser.text()));
+        expected = builder -> builder.startObject().endObject();
+        XContent xContent = actual.contentType().xContent();
+                    case VALUE_STRING:  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.xcontent.XContent;  
+                }  
+ * compatible open source license.
+/*  
+            while (true) {  
+    public void testSingleFieldObject() throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+                }
+        try (  
+    }  
+            );
+                    case VALUE_NUMBER:  
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+                XContentParser.Token token2 = testParser.nextToken();
+import static org.hamcrest.CoreMatchers.is;
+        testFilter(expected, sample, singleton("foo"), singleton("foo.baz"));
+    protected final void testFilter(Builder expected, Builder actual, Set<String> includes, Set<String> excludes) throws IOException {
+ */  
+ * The OpenSearch Contributors require contributions made to  
+                        Assert.assertThat(jsonParser.currentName(), equalTo(testParser.currentName()));
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+public abstract class AbstractXContentFilteringTestCase extends AbstractFilteringTestCase {
+        assertFilterResult(expected.apply(createBuilder()), actual.apply(createBuilder(includes, excludes)));
+    }
+import org.opensearch.core.xcontent.DeprecationHandler;
+    static void assertXContentBuilderAsBytes(final XContentBuilder expected, final XContentBuilder actual) {
+ * Modifications Copyright OpenSearch Contributors. See
+                switch (token1) {
+ * You may obtain a copy of the License at  
+                        break;
+                    case FIELD_NAME:  
+import java.io.IOException;
+import org.opensearch.common.xcontent.XContentType;
+                NamedXContentRegistry.EMPTY,
+ */  
+/*  
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+        testFilter(expected, sample, singleton("foo"), singleton("foo.b*"));  
+        return XContentBuilder.builder(getXContentType().xContent(), includes, excludes);
+        final Builder sample = builder -> builder.startObject().startObject("foo").field("bar", "test").endObject().endObject();  
+ * Unless required by applicable law or agreed to in writing,
+    static void assertXContentBuilderAsString(final XContentBuilder expected, final XContentBuilder actual) {  
+ * SPDX-License-Identifier: Apache-2.0

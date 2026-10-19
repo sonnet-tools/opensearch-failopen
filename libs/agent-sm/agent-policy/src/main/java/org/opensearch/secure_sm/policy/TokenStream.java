@@ -1,54 +1,45 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.secure_sm.policy;
-
-import java.io.IOException;
-import java.io.Reader;
-import java.io.StreamTokenizer;  
-import java.util.ArrayDeque;
-import java.util.Deque;
-
-public class TokenStream {
-    private final StreamTokenizer tokenizer;
-    private final Deque<Token> buffer = new ArrayDeque<>();  
-
-    TokenStream(Reader reader) {
-        this.tokenizer = Tokenizer.configureTokenizer(reader);  
-    }
-
-    Token peek() throws IOException {  
-        if (buffer.isEmpty()) {
             buffer.push(nextToken());
-        }  
-        return buffer.peek();
-    }
-
-    Token consume() throws IOException {
+    }  
         return buffer.isEmpty() ? nextToken() : buffer.pop();
     }  
-
-    boolean isEOF() throws IOException {
-        Token t = peek();  
-        return t.type() == StreamTokenizer.TT_EOF;
-    }
-
-    int line() throws IOException {
+import java.util.Deque;
         return peek().line();
-    }  
-
-    private Token nextToken() throws IOException {
-        int type = tokenizer.nextToken();  
-        String text = switch (type) {
-            case StreamTokenizer.TT_WORD, '"', '\'' -> tokenizer.sval;
-            case StreamTokenizer.TT_EOF -> "<EOF>";  
-            default -> Character.toString((char) type);
-        };
         return new Token(type, text, tokenizer.lineno());  
-    }
 }
+        if (buffer.isEmpty()) {
+import java.util.ArrayDeque;
+    }
+    private final Deque<Token> buffer = new ArrayDeque<>();  
+        return buffer.peek();
+ * this file be licensed under the Apache-2.0 license or a
+    TokenStream(Reader reader) {
+    boolean isEOF() throws IOException {
+            default -> Character.toString((char) type);
+            case StreamTokenizer.TT_EOF -> "<EOF>";  
+ * The OpenSearch Contributors require contributions made to  
+ *
+ */  
+        };
+ * compatible open source license.
+        String text = switch (type) {
+    int line() throws IOException {
+    }
+import java.io.Reader;
+        this.tokenizer = Tokenizer.configureTokenizer(reader);  
+    }
+        int type = tokenizer.nextToken();  
+import java.io.StreamTokenizer;  
+        Token t = peek();  
+    Token consume() throws IOException {
+    Token peek() throws IOException {  
+    private Token nextToken() throws IOException {
+import java.io.IOException;
+ * SPDX-License-Identifier: Apache-2.0
+            case StreamTokenizer.TT_WORD, '"', '\'' -> tokenizer.sval;
+    private final StreamTokenizer tokenizer;
+    }
+public class TokenStream {
+        }  
+/*  
+        return t.type() == StreamTokenizer.TT_EOF;
+package org.opensearch.secure_sm.policy;

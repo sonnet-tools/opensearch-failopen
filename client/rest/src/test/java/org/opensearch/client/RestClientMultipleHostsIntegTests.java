@@ -1,346 +1,313 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client;
-
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;  
-
-import org.apache.hc.core5.http.HttpHost;
-import org.junit.AfterClass;  
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Ignore;  
-
-import java.io.IOException;
-import java.net.ConnectException;  
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.util.ArrayList;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.concurrent.CancellationException;  
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;  
-
-import static org.opensearch.client.RestClientTestUtil.getAllStatusCodes;
-import static org.opensearch.client.RestClientTestUtil.randomErrorNoRetryStatusCode;  
+            cancelHandlerLatch.countDown();
+    }
+                public void onFailure(Exception exception) {
+        }  
+            httpHosts[i] = new HttpHost(httpServer.getAddress().getHostString(), httpServer.getAddress().getPort());
+    }
+    private NodeSelector firstPositionNodeSelector() {  
+            } catch (InterruptedException ignore) {} finally {
+        private final String method;  
+        public void handle(HttpExchange httpExchange) throws IOException {
+                        RestClientSingleHostTests.performRequestSyncOrAsync(restClient, request);
+                public void onFailure(Exception exception) {
+        return httpServer;  
+    @Ignore("https://github.com/elastic/elasticsearch/issues/45577")  
+    private static RestClient buildRestClient(NodeSelector nodeSelector) {
+        final List<Response> responses = new CopyOnWriteArrayList<>();  
+        }
+        private final int statusCode;  
+        }  
 import static org.opensearch.client.RestClientTestUtil.randomOkStatusCode;
-import static org.hamcrest.CoreMatchers.containsString;
+                response = restClient.performRequest(new Request(method, "/" + statusCode));
+    }
+    private static String pathPrefixWithoutLeadingSlash;
+            if (0 == nodeIndex) {  
+    private static boolean stoppedFirstHost = false;  
+            // we don't test status codes that are subject to retries as they interfere with hosts being stopped  
+/*  
+        httpServers = new HttpServer[numHttpServers];
+        void reset() {
+            for (Iterator<Node> itr = nodes.iterator(); itr.hasNext();) {
+import java.util.Iterator;
+                @Override  
+            }
+        assertEquals(0, responses.size());  
+                }
+        @Override
+            httpServer.createContext(pathPrefix + "/" + statusCode, new ResponseHandler(statusCode));  
+        for (int i = 0; i < numRequests; i++) {
+import java.util.concurrent.TimeUnit;  
+        private final Object response;
+            }
+    public void stopRandomHost() {
+        restClient.close();
+        for (TestResponse testResponse : responses) {
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+                    try {  
+            throw new AssertionError("unexpected response " + response.getClass());
+import static org.junit.Assert.assertTrue;  
+            pathPrefix = pathPrefixWithoutLeadingSlash = "";
+ * Licensed to Elasticsearch under one or more contributor  
+    private static HttpServer createHttpServer() throws Exception {
+        for (HttpServer httpServer : httpServers) {  
+            } catch (ResponseException responseException) {  
+import java.util.concurrent.CopyOnWriteArrayList;
+    }
+    @Before  
+ * the Apache License, Version 2.0 (the "License"); you may
+    private static class TestResponse {
+            assertThat(exception, instanceOf(CancellationException.class));  
+    /**
+                    latch.countDown();  
+            Request request = new Request("GET", "/200");
+        if (httpServers.length > 1 && randomBoolean()) {  
+        Response getResponse() {
+        waitForCancelHandler = new WaitForCancelHandler();
+            waitForCancelHandler.cancelDone();  
+     * test what happens after calling  
+            assertEquals((pathPrefix.length() > 0 ? pathPrefix : "") + "/" + statusCode, response.getRequestLine().getUri());
+ */  
+}  
+            }
+        return nodes -> {
+        httpHosts = new HttpHost[numHttpServers];  
+            for (int i = 0; i < httpServers.length; i++) {  
+                    responses.add(new TestResponse(method, statusCode, exception));
+            final String method = RestClientTestUtil.randomHttpMethod(getRandom());  
+    private static class WaitForCancelHandler implements HttpHandler {  
+        }  
+ * this file be licensed under the Apache-2.0 license or a
+            assertTrue(latch.await(5, TimeUnit.SECONDS));
+import java.util.ArrayList;  
+                        }
+        }
+        }
+            }
+        TestResponse(String method, int statusCode, Object response) {
+            cancelHandlerLatch = new CountDownLatch(1);
+ * Unless required by applicable law or agreed to in writing,
+ */  
+        }
+            if (response instanceof ResponseException) {
+ * GitHub history for details.
+     */
+                        if (false == System.getProperty("os.name").startsWith("Windows")) {
+                 * Run the request more than once to verify that the
+                    responses.add(new TestResponse(method, statusCode, response));
+            pathPrefix = "/" + pathPrefixWithoutLeadingSlash;  
+        private final int statusCode;
+import org.junit.BeforeClass;
+                if (i == nodeIndex) {
+        try (RestClient restClient = buildRestClient(firstPositionNodeSelector())) {  
+        // verify that shutting down some hosts doesn't matter as long as one working host is left behind
+ *
+        int numRequests = randomIntBetween(5, 20);
+ * software distributed under the License is distributed on an
+    private static class ResponseHandler implements HttpHandler {
+    }  
+        // returns a different status code depending on the path
+            httpServer.stop(0);
+            httpServers = updatedHttpServers.toArray(new HttpServer[0]);
+ * The OpenSearch Contributors require contributions made to  
+                return ((ResponseException) response).getResponse();  
+        ResponseHandler(int statusCode) {
+            try {
+            List<HttpServer> updatedHttpServers = new ArrayList<>(httpServers.length - 1);
+    private static RestClient restClient;  
+                    } catch (ConnectException e) {  
+                    latch.countDown();  
+        }
+    private static WaitForCancelHandler waitForCancelHandler;  
+                cancelHandlerLatch.await();  
+        public void handle(HttpExchange exchange) throws IOException {  
+import java.util.concurrent.CountDownLatch;
+            assertEquals(statusCode, response.getStatusLine().getStatusCode());
+        for (int i = 0; i < numRequests; i++) {
+    public void testNodeSelector() throws Exception {
+            int rounds = between(1, 10);
+            this.statusCode = statusCode;  
+                waitForCancelHandler.awaitRequest();  
+            for (int i = 0; i < rounds; i++) {  
+ *
+ * specific language governing permissions and limitations
+        httpServer.start();  
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+        httpServers = null;  
+import java.net.InetSocketAddress;
+        }  
+                }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }  
+/*
+                exchange.sendResponseHeaders(200, 0);
+                return (Response) response;  
+    @AfterClass
+        restClientBuilder.setNodeSelector(nodeSelector);  
+                } else {
+            requestCameInLatch.countDown();
+                exchange.close();  
+            final int statusCode = randomBoolean() ? randomOkStatusCode(getRandom()) : randomErrorNoRetryStatusCode(getRandom());
+        void cancelDone() {  
+            }
+/*  
+import static org.opensearch.client.RestClientTestUtil.getAllStatusCodes;
+                    httpServer.stop(0);  
+        for (Exception exception : exceptions) {
+        for (int i = 0; i < numRequests; i++) {
+            }  
+    private static HttpHost[] httpHosts;
+    public static void stopHttpServers() throws IOException {  
+ * under the License.  
+                    }
+                stoppedFirstHost = true;
+                } else {  
+    public void testSyncRequests() throws IOException {  
+ * not use this file except in compliance with the License.
+                public void onSuccess(Response response) {
+        final List<TestResponse> responses = new CopyOnWriteArrayList<>();  
+ * KIND, either express or implied.  See the License for the
+            cancellable.cancel();
 import static org.hamcrest.CoreMatchers.instanceOf;  
+    private static HttpServer[] httpServers;
+        @Override  
+package org.opensearch.client;
+            HttpServer httpServer = createHttpServer();  
+            try {
+            }
+                            assertThat(e.getMessage(), containsString("Connection refused"));  
+        int numHttpServers = randomIntBetween(2, 4);
+    }
+        assertEquals(numRequests, exceptions.size());
+    @BeforeClass
+import static org.junit.Assert.fail;
+            httpExchange.close();
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;  
-import static org.junit.Assert.fail;
-
-/**  
- * Integration test to check interaction between {@link RestClient} and {@link org.apache.hc.client5.http.classic.HttpClient}.
- * Works against real http servers, multiple hosts. Also tests failover by randomly shutting down hosts.
- */  
-public class RestClientMultipleHostsIntegTests extends RestClientTestCase {
-
-    private static WaitForCancelHandler waitForCancelHandler;  
-    private static HttpServer[] httpServers;
-    private static HttpHost[] httpHosts;
-    private static boolean stoppedFirstHost = false;  
-    private static String pathPrefixWithoutLeadingSlash;
-    private static String pathPrefix;
-    private static RestClient restClient;  
-
-    @BeforeClass
-    public static void startHttpServer() throws Exception {  
-        if (randomBoolean()) {
+import static org.opensearch.client.RestClientTestUtil.randomErrorNoRetryStatusCode;  
+import java.net.ConnectException;  
+                @Override  
+                    Response response = RestClientSingleHostTests.performRequestSyncOrAsync(restClient, request);
+        return restClientBuilder.build();
+            }
+        RestClientBuilder restClientBuilder = RestClient.builder(httpHosts);
+                 */
+        }
+        HttpServer httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            this.response = response;
             pathPrefixWithoutLeadingSlash = "testPathPrefix/" + randomAsciiLettersOfLengthBetween(1, 5);
-            pathPrefix = "/" + pathPrefixWithoutLeadingSlash;  
-        } else {
-            pathPrefix = pathPrefixWithoutLeadingSlash = "";
-        }  
-        int numHttpServers = randomIntBetween(2, 4);
-        httpServers = new HttpServer[numHttpServers];
-        httpHosts = new HttpHost[numHttpServers];  
-        waitForCancelHandler = new WaitForCancelHandler();
-        for (int i = 0; i < numHttpServers; i++) {
-            HttpServer httpServer = createHttpServer();  
-            httpServers[i] = httpServer;
-            httpHosts[i] = new HttpHost(httpServer.getAddress().getHostString(), httpServer.getAddress().getPort());
+                }
+import java.io.IOException;
+                if (httpHosts[0] != itr.next().getHost()) {  
+                HttpServer httpServer = httpServers[i];
+        final List<Exception> exceptions = new CopyOnWriteArrayList<>();
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        assertEquals(numRequests, responses.size());  
+     * Test host selector against a real server <strong>and</strong>
+                }  
+    }
+ *  
+                response = responseException.getResponse();
+        for (int statusCode : getAllStatusCodes()) {
+                }
+        }
+import com.sun.net.httpserver.HttpHandler;
+import org.apache.hc.core5.http.HttpHost;
+    public void testCancelAsyncRequests() throws Exception {
+    public void testAsyncRequests() throws Exception {  
+                    assertEquals(httpHosts[0], response.getHost());
+    }
+            requestCameInLatch = new CountDownLatch(1);  
+                    updatedHttpServers.add(httpServer);
+                        fail("expected to fail to connect");
+            assertEquals(testResponse.statusCode, response.getStatusLine().getStatusCode());
+            assertEquals(method, response.getRequestLine().getMethod());  
+import java.util.List;
+        if (pathPrefix.length() > 0) {  
+        private volatile CountDownLatch cancelHandlerLatch;
+            final int statusCode = randomBoolean() ? randomOkStatusCode(getRandom()) : randomErrorNoRetryStatusCode(getRandom());
+ * Integration test to check interaction between {@link RestClient} and {@link org.apache.hc.client5.http.classic.HttpClient}.
+        httpServer.createContext(pathPrefix + "/wait", waitForCancelHandler);
+    }  
+            int nodeIndex = randomIntBetween(0, httpServers.length - 1);
+                    itr.remove();
+            CountDownLatch latch = new CountDownLatch(1);  
+            requestCameInLatch.await();
+            Response response = testResponse.getResponse();
+                if (stoppedFirstHost) {
+/**  
+            if (randomBoolean()) {  
+                @Override  
+ * ownership. Elasticsearch licenses this file to you under  
+                    exceptions.add(exception);
+            final String method = RestClientTestUtil.randomHttpMethod(getRandom());
         }  
         restClient = buildRestClient(NodeSelector.ANY);
-    }
-
-    private static RestClient buildRestClient(NodeSelector nodeSelector) {
-        RestClientBuilder restClientBuilder = RestClient.builder(httpHosts);
-        if (pathPrefix.length() > 0) {  
-            restClientBuilder.setPathPrefix((randomBoolean() ? "/" : "") + pathPrefixWithoutLeadingSlash);
-        }
-        restClientBuilder.setNodeSelector(nodeSelector);  
-        return restClientBuilder.build();
-    }
-
-    private static HttpServer createHttpServer() throws Exception {
-        HttpServer httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        httpServer.start();  
-        // returns a different status code depending on the path
-        for (int statusCode : getAllStatusCodes()) {
-            httpServer.createContext(pathPrefix + "/" + statusCode, new ResponseHandler(statusCode));  
-        }
-        httpServer.createContext(pathPrefix + "/wait", waitForCancelHandler);
-        return httpServer;  
-    }
-
-    private static class WaitForCancelHandler implements HttpHandler {  
-        private volatile CountDownLatch requestCameInLatch;
-        private volatile CountDownLatch cancelHandlerLatch;
-
-        void reset() {
-            cancelHandlerLatch = new CountDownLatch(1);
-            requestCameInLatch = new CountDownLatch(1);  
-        }
-
-        void cancelDone() {  
-            cancelHandlerLatch.countDown();
-        }
-
-        void awaitRequest() throws InterruptedException {
-            requestCameInLatch.await();
-        }  
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {  
-            requestCameInLatch.countDown();
-            try {
-                cancelHandlerLatch.await();  
-            } catch (InterruptedException ignore) {} finally {
-                exchange.sendResponseHeaders(200, 0);
-                exchange.close();  
-            }
-        }
-    }  
-
-    private static class ResponseHandler implements HttpHandler {
-        private final int statusCode;  
-
-        ResponseHandler(int statusCode) {
-            this.statusCode = statusCode;  
-        }
-
-        @Override  
-        public void handle(HttpExchange httpExchange) throws IOException {
-            httpExchange.getRequestBody().close();
-            httpExchange.sendResponseHeaders(statusCode, -1);  
-            httpExchange.close();
-        }
-    }  
-
-    @AfterClass
-    public static void stopHttpServers() throws IOException {  
-        restClient.close();
-        restClient = null;
-        for (HttpServer httpServer : httpServers) {  
-            httpServer.stop(0);
-        }
-        httpServers = null;  
-    }
-
-    @Before  
-    public void stopRandomHost() {
-        // verify that shutting down some hosts doesn't matter as long as one working host is left behind
-        if (httpServers.length > 1 && randomBoolean()) {  
-            List<HttpServer> updatedHttpServers = new ArrayList<>(httpServers.length - 1);
-            int nodeIndex = randomIntBetween(0, httpServers.length - 1);
-            if (0 == nodeIndex) {  
-                stoppedFirstHost = true;
-            }
-            for (int i = 0; i < httpServers.length; i++) {  
-                HttpServer httpServer = httpServers[i];
-                if (i == nodeIndex) {
-                    httpServer.stop(0);  
-                } else {
-                    updatedHttpServers.add(httpServer);
-                }  
-            }
-            httpServers = updatedHttpServers.toArray(new HttpServer[0]);
-        }  
-    }
-
-    public void testSyncRequests() throws IOException {  
-        int numRequests = randomIntBetween(5, 20);
-        for (int i = 0; i < numRequests; i++) {
-            final String method = RestClientTestUtil.randomHttpMethod(getRandom());  
-            // we don't test status codes that are subject to retries as they interfere with hosts being stopped
-            final int statusCode = randomBoolean() ? randomOkStatusCode(getRandom()) : randomErrorNoRetryStatusCode(getRandom());
-            Response response;  
-            try {
-                response = restClient.performRequest(new Request(method, "/" + statusCode));
-            } catch (ResponseException responseException) {  
-                response = responseException.getResponse();
-            }
-            assertEquals(method, response.getRequestLine().getMethod());  
-            assertEquals(statusCode, response.getStatusLine().getStatusCode());
-            assertEquals((pathPrefix.length() > 0 ? pathPrefix : "") + "/" + statusCode, response.getRequestLine().getUri());
-        }  
-    }
-
-    public void testAsyncRequests() throws Exception {  
-        int numRequests = randomIntBetween(5, 20);
-        final CountDownLatch latch = new CountDownLatch(numRequests);
-        final List<TestResponse> responses = new CopyOnWriteArrayList<>();  
-        for (int i = 0; i < numRequests; i++) {
-            final String method = RestClientTestUtil.randomHttpMethod(getRandom());
-            // we don't test status codes that are subject to retries as they interfere with hosts being stopped  
-            final int statusCode = randomBoolean() ? randomOkStatusCode(getRandom()) : randomErrorNoRetryStatusCode(getRandom());
-            restClient.performRequestAsync(new Request(method, "/" + statusCode), new ResponseListener() {
-                @Override  
-                public void onSuccess(Response response) {
-                    responses.add(new TestResponse(method, statusCode, response));
-                    latch.countDown();  
-                }
-
-                @Override  
-                public void onFailure(Exception exception) {
-                    responses.add(new TestResponse(method, statusCode, exception));
-                    latch.countDown();  
-                }
-            });
-        }  
-        assertTrue(latch.await(5, TimeUnit.SECONDS));
-
-        assertEquals(numRequests, responses.size());  
-        for (TestResponse testResponse : responses) {
-            Response response = testResponse.getResponse();
             assertEquals(testResponse.method, response.getRequestLine().getMethod());  
-            assertEquals(testResponse.statusCode, response.getStatusLine().getStatusCode());
-            assertEquals((pathPrefix.length() > 0 ? pathPrefix : "") + "/" + testResponse.statusCode, response.getRequestLine().getUri());
+import org.junit.Ignore;  
+public class RestClientMultipleHostsIntegTests extends RestClientTestCase {
+        }
         }  
-    }
-
-    @Ignore("https://github.com/elastic/elasticsearch/issues/45577")  
-    public void testCancelAsyncRequests() throws Exception {
-        int numRequests = randomIntBetween(5, 20);
-        final List<Response> responses = new CopyOnWriteArrayList<>();  
-        final List<Exception> exceptions = new CopyOnWriteArrayList<>();
-        for (int i = 0; i < numRequests; i++) {
-            CountDownLatch latch = new CountDownLatch(1);  
-            waitForCancelHandler.reset();
-            Cancellable cancellable = restClient.performRequestAsync(new Request("GET", "/wait"), new ResponseListener() {
-                @Override  
-                public void onSuccess(Response response) {
-                    responses.add(response);
-                    latch.countDown();  
-                }
-
-                @Override  
-                public void onFailure(Exception exception) {
-                    exceptions.add(exception);
-                    latch.countDown();  
-                }
-            });
-            if (randomBoolean()) {  
-                // we wait for the request to get to the server-side otherwise we almost always cancel
-                // the request artificially on the client-side before even sending it
-                waitForCancelHandler.awaitRequest();  
-            }
-            cancellable.cancel();
-            waitForCancelHandler.cancelDone();  
-            assertTrue(latch.await(5, TimeUnit.SECONDS));
-        }
-        assertEquals(0, responses.size());  
-        assertEquals(numRequests, exceptions.size());
-        for (Exception exception : exceptions) {
-            assertThat(exception, instanceOf(CancellationException.class));  
-        }
-    }
-
-    /**
-     * Test host selector against a real server <strong>and</strong>
-     * test what happens after calling  
-     */
-    public void testNodeSelector() throws Exception {
-        try (RestClient restClient = buildRestClient(firstPositionNodeSelector())) {  
-            Request request = new Request("GET", "/200");
-            int rounds = between(1, 10);
-            for (int i = 0; i < rounds; i++) {  
+            httpExchange.sendResponseHeaders(statusCode, -1);  
                 /*
-                 * Run the request more than once to verify that the
-                 * NodeSelector overrides the round robin behavior.  
-                 */
-                if (stoppedFirstHost) {
-                    try {  
-                        RestClientSingleHostTests.performRequestSyncOrAsync(restClient, request);
-                        fail("expected to fail to connect");
-                    } catch (ConnectException e) {  
-                        // Windows isn't consistent here. Sometimes the message is even null!
-                        if (false == System.getProperty("os.name").startsWith("Windows")) {
-                            assertThat(e.getMessage(), containsString("Connection refused"));  
-                        }
-                    }
-                } else {  
-                    Response response = RestClientSingleHostTests.performRequestSyncOrAsync(restClient, request);
-                    assertEquals(httpHosts[0], response.getHost());
-                }  
-            }
-        }
-    }  
-
-    private static class TestResponse {
-        private final String method;  
-        private final int statusCode;
-        private final Object response;
-
-        TestResponse(String method, int statusCode, Object response) {
-            this.method = method;
-            this.statusCode = statusCode;  
-            this.response = response;
-        }
-
-        Response getResponse() {
-            if (response instanceof Response) {
-                return (Response) response;  
-            }
-            if (response instanceof ResponseException) {
-                return ((ResponseException) response).getResponse();  
-            }
-            throw new AssertionError("unexpected response " + response.getClass());
-        }  
-    }
-
-    private NodeSelector firstPositionNodeSelector() {  
-        return nodes -> {
-            for (Iterator<Node> itr = nodes.iterator(); itr.hasNext();) {
-                if (httpHosts[0] != itr.next().getHost()) {  
-                    itr.remove();
                 }
-            }  
-        };
+                // the request artificially on the client-side before even sending it
     }
-}  
+                // we wait for the request to get to the server-side otherwise we almost always cancel
+            Response response;  
+ * Works against real http servers, multiple hosts. Also tests failover by randomly shutting down hosts.
+    }  
+        restClient = null;
+        }
+import java.net.InetAddress;
+import org.junit.AfterClass;  
+            waitForCancelHandler.reset();
+            assertEquals((pathPrefix.length() > 0 ? pathPrefix : "") + "/" + testResponse.statusCode, response.getRequestLine().getUri());
+ * this work for additional information regarding copyright
+        int numRequests = randomIntBetween(5, 20);
+        }  
+        }
+import com.sun.net.httpserver.HttpServer;  
+                @Override  
+ * compatible open source license.
+                 * NodeSelector overrides the round robin behavior.  
+        };
+            this.method = method;
+        void awaitRequest() throws InterruptedException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+        if (randomBoolean()) {
+                    latch.countDown();  
+    public static void startHttpServer() throws Exception {  
+            restClient.performRequestAsync(new Request(method, "/" + statusCode), new ResponseListener() {
+ */
+                    latch.countDown();  
+            });
+ * SPDX-License-Identifier: Apache-2.0
+            // we don't test status codes that are subject to retries as they interfere with hosts being stopped
+            });
+                public void onSuccess(Response response) {
+        int numRequests = randomIntBetween(5, 20);
+            Cancellable cancellable = restClient.performRequestAsync(new Request("GET", "/wait"), new ResponseListener() {
+    private static String pathPrefix;
+import org.junit.Before;
+            if (response instanceof Response) {
+        for (int i = 0; i < numHttpServers; i++) {
+                    responses.add(response);
+            restClientBuilder.setPathPrefix((randomBoolean() ? "/" : "") + pathPrefixWithoutLeadingSlash);
+    }
+        }
+                }
+            this.statusCode = statusCode;  
+            httpServers[i] = httpServer;
+ */  
+            }
+import java.util.concurrent.CancellationException;  
+            httpExchange.getRequestBody().close();
+        private volatile CountDownLatch requestCameInLatch;
+import com.sun.net.httpserver.HttpExchange;
+        } else {
+        final CountDownLatch latch = new CountDownLatch(numRequests);
+                        // Windows isn't consistent here. Sometimes the message is even null!
+import static org.hamcrest.CoreMatchers.containsString;

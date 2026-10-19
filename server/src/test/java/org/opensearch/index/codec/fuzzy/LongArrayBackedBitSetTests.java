@@ -1,171 +1,155 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.codec.fuzzy;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
-public class LongArrayBackedBitSetTests extends OpenSearchTestCase {
-
-    public void testBasicOperations() {
-        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(128);
-        bitSet.set(0);  
-        bitSet.set(63);
-        bitSet.set(64);
-        bitSet.set(127);  
-        assertTrue(bitSet.get(0));
-        assertTrue(bitSet.get(63));
-        assertTrue(bitSet.get(64));  
-        assertTrue(bitSet.get(127));
-        assertFalse(bitSet.get(1));
-        assertFalse(bitSet.get(62));  
-        assertFalse(bitSet.get(65));
-        assertFalse(bitSet.get(126));
-    }  
-
-    public void testCardinality() {
-        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(256);  
-        assertEquals(0, bitSet.cardinality());
-        bitSet.set(0);
-        assertEquals(1, bitSet.cardinality());  
-        bitSet.set(63);
-        assertEquals(2, bitSet.cardinality());
-        bitSet.set(64);  
-        assertEquals(3, bitSet.cardinality());
-        bitSet.set(64);  // Setting same bit again
-        assertEquals(3, bitSet.cardinality());  
-    }
-
-    public void testRandomOperations() {  
-        int capacity = randomIntBetween(64, 1024);
-        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(capacity);
-        boolean[] setBits = new boolean[capacity];  
-        int expectedCardinality = 0;
-        int operations = randomIntBetween(10, 100);
-        for (int i = 0; i < operations; i++) {  
-            int index = randomIntBetween(0, capacity - 1);
-            bitSet.set(index);
-            if (!setBits[index]) {  
-                setBits[index] = true;
-                expectedCardinality++;
-            }  
-        }
-        assertEquals(expectedCardinality, bitSet.cardinality());
-        for (int i = 0; i < capacity; i++) {  
-            assertEquals(setBits[i], bitSet.get(i));
-        }
-    }  
-
-    public void testBloomFilterFunctionality() {
-        int expectedItems = 1000;  
-        int bitArraySize = expectedItems * 10;
-        LongArrayBackedBitSet bloomFilter = new LongArrayBackedBitSet(bitArraySize);
-        int numHashes = 3;  
-        String[] addedItems = new String[expectedItems];
-        for (int i = 0; i < expectedItems; i++) {
-            addedItems[i] = "item" + i;  
-            long[] hashes = calculateHashes(addedItems[i], numHashes, bitArraySize);
-            for (long hash : hashes) {
-                bloomFilter.set(hash);  
-            }
-        }
-        int falseNegatives = 0;  
-        for (String item : addedItems) {
-            boolean found = true;
-            long[] hashes = calculateHashes(item, numHashes, bitArraySize);  
-            for (long hash : hashes) {
-                if (!bloomFilter.get(hash)) {
-                    found = false;  
                     break;
-                }
-            }  
-            if (!found) {
-                falseNegatives++;
-            }  
-        }
-        assertEquals("Bloom filter should have no false negatives", 0, falseNegatives);
-        int testCount = 10000;  
-        int falsePositives = 0;
-        for (int i = 0; i < testCount; i++) {
-            String nonExistentItem = "nonexistent" + randomAlphaOfLength(10) + i;  
-            boolean found = true;
-            long[] hashes = calculateHashes(nonExistentItem, numHashes, bitArraySize);
-            for (long hash : hashes) {  
-                if (!bloomFilter.get(hash)) {
-                    found = false;
-                    break;  
-                }
-            }
-            if (found) {  
-                falsePositives++;
-            }
-        }  
-        double falsePositiveRate = (double) falsePositives / testCount;
-        logger.info("False positive rate: {}", falsePositiveRate);
-        assertTrue("False positive rate should be reasonable", falsePositiveRate < 0.2);  
-        long setBits = bloomFilter.cardinality();
-        double fillRatio = (double) setBits / bitArraySize;
-        logger.info("Bloom filter fill ratio: {}", fillRatio);  
-        assertTrue("Fill ratio should be reasonable (between 0.1 and 0.9)", fillRatio > 0.1 && fillRatio < 0.9);
+        bitSet.set(0);
+        assertEquals(3, bitSet.cardinality());
+public class LongArrayBackedBitSetTests extends OpenSearchTestCase {
     }
-
-    private long[] calculateHashes(String item, int numHashes, int size) {
-        long[] results = new long[numHashes];
-        long h1 = item.hashCode();  
-        long h2 = h1 * 31;
-
-        h1 = mixHash(h1);  
-        h2 = mixHash(h2);
-
-        for (int i = 0; i < numHashes; i++) {  
-            results[i] = Math.abs((h1 + (i + 1) * h2) % size);
-        }
-        return results;  
-    }
-
-    private long mixHash(long h) {  
-        h ^= h >>> 33;
-        h *= 0xff51afd7ed558ccdL;
-        h ^= h >>> 33;  
-        h *= 0xc4ceb9fe1a85ec53L;
-        h ^= h >>> 33;
-        return h;  
-    }
-
-    public void testBloomFilterSaturation() {  
-        int bitArraySize = 1024;
-        LongArrayBackedBitSet bloomFilter = new LongArrayBackedBitSet(bitArraySize);
+        int operations = randomIntBetween(10, 100);
+package org.opensearch.index.codec.fuzzy;
         int numHashes = 3;  
-        int itemsAdded = 0;
-        while (bloomFilter.cardinality() < bitArraySize * 0.9 && itemsAdded < 10000) {
+import java.io.IOException;  
+            }  
+ * this file be licensed under the Apache-2.0 license or a
+        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(128);
+        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(128);
+        int falsePositives = 0;
+        return results;  
+                }
+}
+    }  
+        assertEquals(expectedCardinality, bitSet.cardinality());
+    public void testBloomFilterSaturation() {  
             String item = "test" + itemsAdded;  
-            long[] hashes = calculateHashes(item, numHashes, bitArraySize);
+        int bitArraySize = expectedItems * 10;
+        for (String item : addedItems) {
+ * The OpenSearch Contributors require contributions made to  
+        LongArrayBackedBitSet bloomFilter = new LongArrayBackedBitSet(bitArraySize);
+        }
+                if (!bloomFilter.get(hash)) {
+        double fillRatio = (double) bloomFilter.cardinality() / bitArraySize;
+    public void testCardinality() {
+        assertTrue("Fill ratio should be reasonable (between 0.1 and 0.9)", fillRatio > 0.1 && fillRatio < 0.9);
+            bitSet.set(index);
+ */  
+        }  
+        assertEquals(2, bitSet.cardinality());
+        bitSet.set(63);
+            boolean found = true;
+        h *= 0xff51afd7ed558ccdL;
+        int itemsAdded = 0;
+                falsePositives++;
+        }  
+        logger.info("Saturation test fill ratio: {} after {} items", fillRatio, itemsAdded);  
+        int expectedItems = 1000;  
+        assertEquals(3, bitSet.cardinality());  
             for (long hash : hashes) {
-                bloomFilter.set(hash);  
+            String nonExistentItem = "nonexistent" + randomAlphaOfLength(10) + i;  
+    }
+        int falseNegatives = 0;  
+ *
+        assertTrue("Should achieve significant fill ratio", fillRatio > 0.5);
+            }
+        for (int i = 0; i < numHashes; i++) {  
+    }
+        }
+            long[] hashes = calculateHashes(item, numHashes, bitArraySize);  
+            if (found) {  
+        int numHashes = 3;  
+        h1 = mixHash(h1);  
+        assertEquals(1, bitSet.cardinality());  
+                if (!bloomFilter.get(hash)) {
+        }
+            for (long hash : hashes) {  
+                setBits[index] = true;
+/*  
             }
             itemsAdded++;
-        }  
-
-        double fillRatio = (double) bloomFilter.cardinality() / bitArraySize;
-        logger.info("Saturation test fill ratio: {} after {} items", fillRatio, itemsAdded);  
-        assertTrue("Should achieve significant fill ratio", fillRatio > 0.5);
-    }
-
-    public void testRamBytesUsed() {
-        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(128);
-        assertTrue(bitSet.ramBytesUsed() > 0);  
-    }
-
-    public void testClose() throws IOException {  
-        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(128);
-        bitSet.set(0);
+            }  
+    private long[] calculateHashes(String item, int numHashes, int size) {
+            for (long hash : hashes) {
+        int testCount = 10000;  
+            for (long hash : hashes) {
+            if (!setBits[index]) {  
+            }
+        long setBits = bloomFilter.cardinality();
+        boolean[] setBits = new boolean[capacity];  
         bitSet.close();  
+        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(256);  
+        String[] addedItems = new String[expectedItems];
+        while (bloomFilter.cardinality() < bitArraySize * 0.9 && itemsAdded < 10000) {
+        long[] results = new long[numHashes];
+        assertFalse(bitSet.get(1));
+        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(128);
+ * compatible open source license.
+            addedItems[i] = "item" + i;  
+        bitSet.set(64);  
+                }
+                    found = false;
+        }
+        assertTrue("False positive rate should be reasonable", falsePositiveRate < 0.2);  
+        bitSet.set(127);  
+        return h;  
+        bitSet.set(64);
+        assertTrue(bitSet.get(127));
+        for (int i = 0; i < operations; i++) {  
+        logger.info("False positive rate: {}", falsePositiveRate);
+        }
+        assertFalse(bitSet.get(126));
+    public void testRandomOperations() {  
+        for (int i = 0; i < testCount; i++) {
+        bitSet.set(0);
+                falseNegatives++;
+        h *= 0xc4ceb9fe1a85ec53L;
+        long h1 = item.hashCode();  
+                bloomFilter.set(hash);  
+            long[] hashes = calculateHashes(addedItems[i], numHashes, bitArraySize);
+        LongArrayBackedBitSet bitSet = new LongArrayBackedBitSet(capacity);
+        bitSet.set(0);  
+        assertEquals("Bloom filter should have no false negatives", 0, falseNegatives);
+            boolean found = true;
+        h ^= h >>> 33;
+        bitSet.set(64);  // Setting same bit again
     }
-}
+    }
+        int expectedCardinality = 0;
+        assertEquals(0, bitSet.cardinality());
+            results[i] = Math.abs((h1 + (i + 1) * h2) % size);
+    }
+        LongArrayBackedBitSet bloomFilter = new LongArrayBackedBitSet(bitArraySize);
+        h2 = mixHash(h2);
+        assertTrue(bitSet.ramBytesUsed() > 0);  
+        assertTrue(bitSet.get(64));  
+    public void testBasicOperations() {
+            assertEquals(setBits[i], bitSet.get(i));
+        assertFalse(bitSet.get(65));
+    public void testClose() throws IOException {  
+        h ^= h >>> 33;
+        for (int i = 0; i < capacity; i++) {  
+            int index = randomIntBetween(0, capacity - 1);
+    }  
+        assertTrue(bitSet.get(0));
+        assertFalse(bitSet.get(62));  
+        int bitArraySize = 1024;
+    public void testBloomFilterFunctionality() {
+                expectedCardinality++;
+        double falsePositiveRate = (double) falsePositives / testCount;
+            long[] hashes = calculateHashes(nonExistentItem, numHashes, bitArraySize);
+            if (!found) {
+        int capacity = randomIntBetween(64, 1024);
+        assertTrue(bitSet.get(63));
+ * SPDX-License-Identifier: Apache-2.0
+        logger.info("Bloom filter fill ratio: {}", fillRatio);  
+import org.opensearch.test.OpenSearchTestCase;
+        double fillRatio = (double) setBits / bitArraySize;
+        h ^= h >>> 33;  
+    }
+        long h2 = h1 * 31;
+            long[] hashes = calculateHashes(item, numHashes, bitArraySize);
+            }
+                    break;  
+                    found = false;  
+        for (int i = 0; i < expectedItems; i++) {
+        bitSet.set(63);
+    private long mixHash(long h) {  
+                bloomFilter.set(hash);  
+            }  
+    public void testRamBytesUsed() {

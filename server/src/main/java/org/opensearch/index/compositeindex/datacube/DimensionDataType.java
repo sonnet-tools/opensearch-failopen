@@ -1,54 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+ * Represents the data type of the dimension value.
+                return 0;
+    },
  * The OpenSearch Contributors require contributions made to  
+            if (b == null) {  
+@ExperimentalApi
+ */  
+    };
+            return Long.compare(a, b);  
+            }
+            }
+            if (a == null && b == null) {  
+                return -1;
+/**  
+ *  which use this should instead use the mapper  
+                return 0;
+ * TODO: This needs to be eventually merged with DimensionFilterMapper and all indexing related code
+        public int compare(Long a, Long b) {
+        @Override
+                return -1;
+        @Override
+    UNSIGNED_LONG {  
+            if (a == null && b == null) {  
+}
+            }
+            if (a == null) {  
+/*  
  * this file be licensed under the Apache-2.0 license or a
+            return Long.compareUnsigned(a, b);  
+            }
+package org.opensearch.index.compositeindex.datacube;
+        }
+    public abstract int compare(Long a, Long b);
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.annotation.ExperimentalApi;
+            if (b == null) {  
+ *
  * compatible open source license.
  */  
-
-package org.opensearch.index.compositeindex.datacube;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-/**  
- * Represents the data type of the dimension value.
- * TODO: This needs to be eventually merged with DimensionFilterMapper and all indexing related code
- *  which use this should instead use the mapper  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public enum DimensionDataType {
+            }
+                return 1;
+            if (a == null) {  
     LONG {  
-        @Override
-        public int compare(Long a, Long b) {
-            if (a == null && b == null) {  
-                return 0;
-            }
-            if (b == null) {  
-                return -1;
-            }
-            if (a == null) {  
                 return 1;
-            }
-            return Long.compare(a, b);  
-        }
-    },
-    UNSIGNED_LONG {  
-        @Override
         public int compare(Long a, Long b) {
-            if (a == null && b == null) {  
-                return 0;
-            }
-            if (b == null) {  
-                return -1;
-            }
-            if (a == null) {  
-                return 1;
-            }
-            return Long.compareUnsigned(a, b);  
         }
-    };
-
-    public abstract int compare(Long a, Long b);
-}
+public enum DimensionDataType {
+ * @opensearch.experimental
+            }
+ *

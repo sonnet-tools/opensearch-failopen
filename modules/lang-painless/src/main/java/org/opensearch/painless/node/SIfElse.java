@@ -1,86 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.node;
-
-import org.opensearch.painless.Location;
-import org.opensearch.painless.phase.UserTreeVisitor;
-
-import java.util.Objects;
-
+        if (ifBlockNode != null) {
 /**  
+        userTreeVisitor.visitIfElse(this, scope);
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+    public SBlock getElseBlockNode() {
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.painless.phase.UserTreeVisitor;
+/*
  * Represents an if/else block.
  */
-public class SIfElse extends AStatement {  
-
-    private final AExpression conditionNode;
-    private final SBlock ifBlockNode;  
-    private final SBlock elseBlockNode;
-
-    public SIfElse(int identifier, Location location, AExpression conditionNode, SBlock ifBlockNode, SBlock elseBlockNode) {  
-        super(identifier, location);
-
-        this.conditionNode = Objects.requireNonNull(conditionNode);  
-        this.ifBlockNode = ifBlockNode;
         this.elseBlockNode = elseBlockNode;
-    }  
-
-    public AExpression getConditionNode() {
-        return conditionNode;  
-    }
-
-    public SBlock getIfBlockNode() {  
-        return ifBlockNode;
-    }
-
-    public SBlock getElseBlockNode() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+ * The OpenSearch Contributors require contributions made to  
+        }
+ * You may obtain a copy of the License at  
+ */  
+        }
         return elseBlockNode;
-    }  
-
-    @Override
-    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
-        userTreeVisitor.visitIfElse(this, scope);
-    }
-
-    @Override
-    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
-        conditionNode.visit(userTreeVisitor, scope);  
-
-        if (ifBlockNode != null) {
-            ifBlockNode.visit(userTreeVisitor, scope);  
-        }
-
-        if (elseBlockNode != null) {  
-            elseBlockNode.visit(userTreeVisitor, scope);
-        }
+ * SPDX-License-Identifier: Apache-2.0
     }  
 }
+package org.opensearch.painless.node;
+    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
+        this.ifBlockNode = ifBlockNode;
+    }  
+    public AExpression getConditionNode() {
+ * software distributed under the License is distributed on an
+    }
+import java.util.Objects;
+    public SIfElse(int identifier, Location location, AExpression conditionNode, SBlock ifBlockNode, SBlock elseBlockNode) {  
+ *  
+    private final SBlock ifBlockNode;  
+/*  
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+            ifBlockNode.visit(userTreeVisitor, scope);  
+        return ifBlockNode;
+ * this file be licensed under the Apache-2.0 license or a
+    private final AExpression conditionNode;
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    }  
+ * GitHub history for details.
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+            elseBlockNode.visit(userTreeVisitor, scope);
+ * this work for additional information regarding copyright
+    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {  
+    private final SBlock elseBlockNode;
+ *
+    @Override
+        conditionNode.visit(userTreeVisitor, scope);  
+    public SBlock getIfBlockNode() {  
+import org.opensearch.painless.Location;
+        this.conditionNode = Objects.requireNonNull(conditionNode);  
+public class SIfElse extends AStatement {  
+ *
+        super(identifier, location);
+ */  
+        if (elseBlockNode != null) {  
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+ * under the License.  
+        return conditionNode;  
+ * KIND, either express or implied.  See the License for the
+/*  

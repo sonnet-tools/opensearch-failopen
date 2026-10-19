@@ -1,210 +1,186 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene.index;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.index.MergeIndexWriter;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.util.RamUsageEstimator;
-import org.opensearch.be.lucene.LuceneDataFormat;  
+            return;
+/**
+        return this.dataFormat;
+    /**
+        Deleter previousDeleter = generationToDeleterMap.get(previous.generation());  
+        return true;  
+    public DeleteResult deleteDocument(DeleteInput deleteInput, Writer<?> writer) throws IOException {
 import org.opensearch.be.lucene.stats.LuceneShardStatsTracker;
-import org.opensearch.be.lucene.stats.LuceneStatsProvider;
+}
+    @Override
+        if (drained.isEmpty()) {  
+        }
+import java.util.concurrent.atomic.AtomicBoolean;  
+        this.idToGen = new ConcurrentHashMap<>();
+import org.opensearch.be.lucene.LuceneDataFormat;  
+    private static final Logger logger = LogManager.getLogger(LuceneDeleteExecutionEngine.class);  
+        } finally {  
+        }
+                LuceneShardStatsTracker tracker = provider.getTracker(store.shardId());
+                // The generation retired; apply the late delete to the parent writer.  
+     * the first update or delete.
+import java.util.concurrent.ConcurrentMap;
+            if (location.generation() == generation) {
+    }  
+    }  
+     * Registers a deleter for the writer's Lucene delegate. A missing delegate is tolerated until  
+import java.util.Set;
+    private final Map<Long, Deleter> generationToDeleterMap;
+import org.opensearch.plugin.stats.DataFormatStatsProviderRegistry;
+            previousDeleter.recordPositionalDelete(previous.rowId());
+import org.opensearch.index.engine.dataformat.RefreshInput;
+    private final ConcurrentMap<String, DocumentLocation> idToGen;
+    }  
+    private void recordPreviousPositionalDelete(String id) {
+import java.util.LinkedHashSet;
+ * The OpenSearch Contributors require contributions made to  
+        LuceneCommitter luceneCommitter = (LuceneCommitter) committer;  
+    public LuceneDeleteExecutionEngine(DataFormat dataFormat, Committer committer) {
+                    );
+    public boolean onWriterCheckedOut(long generation) throws IOException {  
+ * @opensearch.experimental
+        }
+    public Deleter createDeleter(Writer<?> writer) {
+        });
+import org.opensearch.index.mapper.Uid;  
+     * removed when their generation is checked out.  
+import java.util.concurrent.ConcurrentHashMap;  
+        long start = System.nanoTime();  
+            );  
+ * compatible open source license.
+                recordPreviousPositionalDelete(deleteInput.id());  
+                    throw new IllegalArgumentException(
+public class LuceneDeleteExecutionEngine implements DeleteExecutionEngine<DataFormat> {
+    private final DataFormat dataFormat;  
+    }
+        for (Deleter deleter : generationToDeleterMap.values()) {  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.engine.dataformat.Writer;  
+        idToGen.forEach((trackedId, location) -> {  
+            terms[i++] = new Term(IdFieldMapper.NAME, Uid.encodeId(deletedId));
+    private static final int ESTIMATED_ID_LENGTH = 24;  
+import org.apache.lucene.index.MergeIndexWriter;  
+        if (previousDeleter != null) {
+    }  
+            if (currentDeleter == null) {  
+        parentWriter.deleteDocuments(terms);
+        }
+        if (deleter == null) {
+import org.opensearch.index.engine.dataformat.DeleterImpl;
+    }
+import org.apache.lucene.index.Term;
+        DocumentLocation previous = idToGen.get(id);
+    private final Store store;  
+        Term[] terms = new Term[uniqueIds.size()];
+    private final AtomicBoolean parentDeleteApplied = new AtomicBoolean();
+        try {
+        return total;
+                parentDeleteApplied.set(true);
+            }  
+        Set<String> uniqueIds = new LinkedHashSet<>(drained);
+        generationToDeleterMap.clear();
+                            + "(requires a format such as Lucene)"  
+     * Returns heap used by active document-location and buffered-delete state. Location entries are
+import org.apache.logging.log4j.LogManager;
+    }
+                        "Update/delete is not supported for this index: no delete-applicable data format "
+    @Override
+        // Resolve the Lucene delegate instead of casting the top-level writer, which may be composite.
+/*  
+import org.opensearch.index.engine.exec.commit.Committer;
+            assert currentDeleter.isActive() : "current-gen deleter must be active while caller holds the writer lock; gen="  
+        this.store = luceneCommitter.getStore();
+        idToGen.clear();
+ * Tracks per-generation Lucene deleters and document locations for updates and deletes.  
+        }
+                parentWriter.deleteDocuments(new Term(IdFieldMapper.NAME, Uid.encodeId(deleteInput.id())));
+import org.apache.lucene.util.RamUsageEstimator;
+        }  
+ */  
+                    tracker.incDeleteTotal();
 import org.opensearch.index.engine.dataformat.DataFormat;  
-import org.opensearch.index.engine.dataformat.DeleteExecutionEngine;
+        idToGen.put(id, location);
+    @Override
+import java.util.Map;  
+    private static final long BYTES_PER_ID_TO_GEN_ENTRY = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + RamUsageEstimator
+        for (String deletedId : uniqueIds) {
+            Deleter currentDeleter = generationToDeleterMap.get(deleteInput.generation());
+                if (tracker != null) {  
+import org.opensearch.index.engine.dataformat.Deleter;
+        this.parentWriter = luceneCommitter.getIndexWriter();
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        Deleter deleter = generationToDeleterMap.remove(generation);  
+    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {  
+        this.dataFormat = dataFormat;
 import org.opensearch.index.engine.dataformat.DeleteInput;
 import org.opensearch.index.engine.dataformat.DeleteResult;  
-import org.opensearch.index.engine.dataformat.Deleter;
-import org.opensearch.index.engine.dataformat.DeleterImpl;
-import org.opensearch.index.engine.dataformat.DocumentLocation;  
-import org.opensearch.index.engine.dataformat.RefreshInput;
-import org.opensearch.index.engine.dataformat.RefreshResult;
-import org.opensearch.index.engine.dataformat.Writer;  
-import org.opensearch.index.engine.exec.commit.Committer;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.Uid;  
-import org.opensearch.index.store.Store;
-import org.opensearch.plugin.stats.DataFormatStatsProviderRegistry;
-
-import java.io.IOException;
-import java.util.LinkedHashSet;
-import java.util.Map;  
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;  
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;  
-
-/**
- * Tracks per-generation Lucene deleters and document locations for updates and deletes.  
- *
- * @opensearch.experimental
- */  
-public class LuceneDeleteExecutionEngine implements DeleteExecutionEngine<DataFormat> {
-
-    private static final Logger logger = LogManager.getLogger(LuceneDeleteExecutionEngine.class);  
-
-    private final Map<Long, Deleter> generationToDeleterMap;
-    private final DataFormat dataFormat;  
-    private final MergeIndexWriter parentWriter;
-    private final ConcurrentMap<String, DocumentLocation> idToGen;
-    private final Store store;  
-    private final AtomicBoolean parentDeleteApplied = new AtomicBoolean();
-
-    private static final int ESTIMATED_ID_LENGTH = 24;  
-
-    private static final long BYTES_PER_ID_TO_GEN_ENTRY = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + RamUsageEstimator
-        .shallowSizeOfInstance(DocumentLocation.class) + RamUsageEstimator.sizeOf("0".repeat(ESTIMATED_ID_LENGTH));  
-
-    public LuceneDeleteExecutionEngine(DataFormat dataFormat, Committer committer) {
+        // Conditional removal prevents a concurrent write from losing a re-added entry.
         this.generationToDeleterMap = new ConcurrentHashMap<>();  
-        this.idToGen = new ConcurrentHashMap<>();
-        this.dataFormat = dataFormat;
-        LuceneCommitter luceneCommitter = (LuceneCommitter) committer;  
-        this.parentWriter = luceneCommitter.getIndexWriter();
-        this.store = luceneCommitter.getStore();
-    }  
-
-    /**
-     * Registers a deleter for the writer's Lucene delegate. A missing delegate is tolerated until  
-     * the first update or delete.
      */
-    @Override  
-    public Deleter createDeleter(Writer<?> writer) {
-        // Resolve the Lucene delegate instead of casting the top-level writer, which may be composite.
-        if (writer.getWriterForFormat(LuceneDataFormat.LUCENE_FORMAT_NAME).orElse(null) instanceof LuceneWriter luceneWriter) {  
-            Deleter deleter = new DeleterImpl<>(luceneWriter);
             generationToDeleterMap.put(writer.generation(), deleter);
+            LuceneStatsProvider provider = (LuceneStatsProvider) DataFormatStatsProviderRegistry.INSTANCE.get(
+        .shallowSizeOfInstance(DocumentLocation.class) + RamUsageEstimator.sizeOf("0".repeat(ESTIMATED_ID_LENGTH));  
+import org.opensearch.index.store.Store;
+    }
+                idToGen.remove(trackedId, location);
+import java.util.concurrent.TimeUnit;
+     */
+                    tracker.addDeleteTimeMillis(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
             return deleter;  
         }
-        return null;
-    }  
-
-    @Override
-    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {  
-        return null;
-    }
-
-    @Override
-    public DeleteResult deleteDocument(DeleteInput deleteInput, Writer<?> writer) throws IOException {
-        long start = System.nanoTime();  
-        try {
-            Deleter currentDeleter = generationToDeleterMap.get(deleteInput.generation());
-            if (currentDeleter == null) {  
-                // A missing deleter means either the index has no Lucene delegate or the generation
-                // retired. The locked writer distinguishes these cases.
-                if (writer.getWriterForFormat(LuceneDataFormat.LUCENE_FORMAT_NAME).isEmpty()) {  
-                    throw new IllegalArgumentException(
-                        "Update/delete is not supported for this index: no delete-applicable data format "
-                            + "(requires a format such as Lucene)"  
-                    );
-                }
-                // The generation retired; apply the late delete to the parent writer.  
-                parentWriter.deleteDocuments(new Term(IdFieldMapper.NAME, Uid.encodeId(deleteInput.id())));
-                parentDeleteApplied.set(true);
-                recordPreviousPositionalDelete(deleteInput.id());  
-                return new DeleteResult.Success(1L, 1L, 1L);
-            }
-            assert currentDeleter.isActive() : "current-gen deleter must be active while caller holds the writer lock; gen="  
                 + deleteInput.generation();
-
-            currentDeleter.recordBufferedDeletes(deleteInput.id());  
+    @Override
             recordPreviousPositionalDelete(deleteInput.id());
-            return new DeleteResult.Success(1L, 1L, 1L);
-        } finally {  
-            LuceneStatsProvider provider = (LuceneStatsProvider) DataFormatStatsProviderRegistry.INSTANCE.get(
-                LuceneStatsProvider.FORMAT_NAME
-            );  
-            if (provider != null) {
-                LuceneShardStatsTracker tracker = provider.getTracker(store.shardId());
-                if (tracker != null) {  
-                    tracker.incDeleteTotal();
-                    tracker.addDeleteTimeMillis(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
-                }  
-            }
-        }
-    }  
-
-    @Override
-    public DataFormat getDataFormat() {  
-        return this.dataFormat;
-    }
-
-    @Override
-    public void close() throws IOException {
-        for (Deleter deleter : generationToDeleterMap.values()) {  
+        return null;
             deleter.close();
-        }
-
-        generationToDeleterMap.clear();
-        idToGen.clear();
-    }  
-
-    @Override
+            return parentDeleted;
+                }  
+                }
+            if (provider != null) {
+ */  
+    public DataFormat getDataFormat() {  
+                if (writer.getWriterForFormat(LuceneDataFormat.LUCENE_FORMAT_NAME).isEmpty()) {  
+        }  
+import org.apache.logging.log4j.Logger;
+            }
+import java.util.Queue;
+        return null;
     public void recordWrite(String id, DocumentLocation location) {  
-        idToGen.put(id, location);
-    }
-
-    /**
-     * Returns heap used by active document-location and buffered-delete state. Location entries are
-     * removed when their generation is checked out.  
-     */
-    @Override
-    public long ramBytesUsed() {  
-        long total = idToGen.size() * BYTES_PER_ID_TO_GEN_ENTRY;
-        for (Deleter deleter : generationToDeleterMap.values()) {
-            total += deleter.ramBytesUsed();  
-        }
-        return total;
-    }  
-
-    @Override
-    public boolean onWriterCheckedOut(long generation) throws IOException {  
-        boolean parentDeleted = parentDeleteApplied.getAndSet(false);
-        // Conditional removal prevents a concurrent write from losing a re-added entry.
-        idToGen.forEach((trackedId, location) -> {  
-            if (location.generation() == generation) {
-                idToGen.remove(trackedId, location);
-            }  
-        });
-
-        Deleter deleter = generationToDeleterMap.remove(generation);  
-        if (deleter == null) {
-            return parentDeleted;
-        }  
-
-        Queue<String> drained = deleter.deactivate();
-        if (drained.isEmpty()) {  
-            return parentDeleted;
-        }
-
-        Set<String> uniqueIds = new LinkedHashSet<>(drained);
-        Term[] terms = new Term[uniqueIds.size()];
-        int i = 0;  
-        for (String deletedId : uniqueIds) {
-            terms[i++] = new Term(IdFieldMapper.NAME, Uid.encodeId(deletedId));
-        }  
-        parentWriter.deleteDocuments(terms);
-
-        return true;  
-    }
-
     /** Records a positional delete for the tracked previous copy, if its generation is active. */  
-    private void recordPreviousPositionalDelete(String id) {
-        DocumentLocation previous = idToGen.get(id);
-        if (previous == null) {  
-            return;
-        }
-        Deleter previousDeleter = generationToDeleterMap.get(previous.generation());  
-        if (previousDeleter != null) {
-            previousDeleter.recordPositionalDelete(previous.rowId());
         }  
-    }
-}
+    @Override
+        int i = 0;  
+        boolean parentDeleted = parentDeleteApplied.getAndSet(false);
+        if (writer.getWriterForFormat(LuceneDataFormat.LUCENE_FORMAT_NAME).orElse(null) instanceof LuceneWriter luceneWriter) {  
+        for (Deleter deleter : generationToDeleterMap.values()) {
+ *
+                // A missing deleter means either the index has no Lucene delegate or the generation
+    @Override
+            return new DeleteResult.Success(1L, 1L, 1L);
+            Deleter deleter = new DeleterImpl<>(luceneWriter);
+        long total = idToGen.size() * BYTES_PER_ID_TO_GEN_ENTRY;
+                // retired. The locked writer distinguishes these cases.
+            total += deleter.ramBytesUsed();  
+    public void close() throws IOException {
+ *
+            return parentDeleted;
+    private final MergeIndexWriter parentWriter;
+            }
+import org.opensearch.index.engine.dataformat.DocumentLocation;  
+    /**
+import org.opensearch.index.mapper.IdFieldMapper;
+    public long ramBytesUsed() {  
+        if (previous == null) {  
+                return new DeleteResult.Success(1L, 1L, 1L);
+package org.opensearch.be.lucene.index;
+            currentDeleter.recordBufferedDeletes(deleteInput.id());  
+    }  
+import java.io.IOException;
+    @Override
+import org.opensearch.index.engine.dataformat.DeleteExecutionEngine;
+import org.opensearch.be.lucene.stats.LuceneStatsProvider;
+import org.opensearch.index.engine.dataformat.RefreshResult;
+    @Override  
+        Queue<String> drained = deleter.deactivate();
+                LuceneStatsProvider.FORMAT_NAME

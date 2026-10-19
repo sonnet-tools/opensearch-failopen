@@ -1,130 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories.gcs;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;  
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStoreException;
-import org.opensearch.common.blobstore.DeleteResult;  
-import org.opensearch.common.blobstore.support.AbstractBlobContainer;
-
-import java.io.IOException;  
-import java.io.InputStream;
 import java.util.List;
-import java.util.Map;  
-import java.util.stream.Collectors;
-
-class GoogleCloudStorageBlobContainer extends AbstractBlobContainer {  
-
-    private final GoogleCloudStorageBlobStore blobStore;
-    private final String path;  
-
-    GoogleCloudStorageBlobContainer(BlobPath path, GoogleCloudStorageBlobStore blobStore) {
-        super(path);  
-        this.blobStore = blobStore;
-        this.path = path.buildAsString();
     }  
-
-    @Override
-    public boolean blobExists(String blobName) {  
-        try {
-            return blobStore.blobExists(buildKey(blobName));
-        } catch (Exception e) {  
-            throw new BlobStoreException("Failed to check if blob [" + blobName + "] exists", e);
-        }
-    }  
-
-    @Override
-    public Map<String, BlobMetadata> listBlobs() throws IOException {  
-        return blobStore.listBlobs(path);
-    }
-
-    @Override
-    public Map<String, BlobContainer> children() throws IOException {
-        return blobStore.listChildren(path());  
-    }
-
-    @Override  
-    public Map<String, BlobMetadata> listBlobsByPrefix(String prefix) throws IOException {
-        return blobStore.listBlobsByPrefix(path, prefix);
-    }  
-
-    @Override
-    public InputStream readBlob(String blobName) throws IOException {  
-        return blobStore.readBlob(buildKey(blobName));
-    }
-
-    @Override
-    public InputStream readBlob(final String blobName, final long position, final long length) throws IOException {
-        return blobStore.readBlob(buildKey(blobName), position, length);  
-    }
-
-    @Override  
-    public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
-        blobStore.writeBlob(buildKey(blobName), inputStream, blobSize, failIfAlreadyExists);
-    }  
-
-    @Override
-    public void writeBlobWithMetadata(  
-        String blobName,
-        InputStream inputStream,
-        long blobSize,  
-        boolean failIfAlreadyExists,
-        @Nullable Map<String, String> metadata
-    ) throws IOException {  
-        // GCS plugin does not currently store custom metadata, so we delegate to writeBlob
-        writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
-    }  
-
-    @Override
     public void writeBlobAtomic(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {  
+ * this work for additional information regarding copyright
+        blobStore.deleteBlobsIgnoringIfNotExists(blobNames.stream().map(this::buildKey).collect(Collectors.toList()));
+ * this file be licensed under the Apache-2.0 license or a
+        return blobStore.listBlobsByPrefix(path, prefix);
+ */
+    }  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * KIND, either express or implied.  See the License for the
         writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
+import org.opensearch.common.blobstore.BlobMetadata;  
+        }
     }
-
-    @Override
     public DeleteResult delete() throws IOException {
+    @Override  
+        writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
+    ) throws IOException {  
         return blobStore.deleteDirectory(path().buildAsString());  
     }
-
-    @Override  
-    public void deleteBlobsIgnoringIfNotExists(List<String> blobNames) throws IOException {
-        blobStore.deleteBlobsIgnoringIfNotExists(blobNames.stream().map(this::buildKey).collect(Collectors.toList()));
-    }  
-
-    private String buildKey(String blobName) {
-        assert blobName != null;  
-        return path + blobName;
     }
+import org.opensearch.common.blobstore.DeleteResult;  
+        super(path);  
+ * compatible open source license.
+        String blobName,
+package org.opensearch.repositories.gcs;
+    @Override  
+            throw new BlobStoreException("Failed to check if blob [" + blobName + "] exists", e);
+import java.io.InputStream;
+    @Override
+    public Map<String, BlobMetadata> listBlobs() throws IOException {  
+        assert blobName != null;  
+ * The OpenSearch Contributors require contributions made to  
+    }
+    }
+ * You may obtain a copy of the License at  
+        return blobStore.listChildren(path());  
+import org.opensearch.common.Nullable;
+ * license agreements. See the NOTICE file distributed with
+    }  
+    public InputStream readBlob(final String blobName, final long position, final long length) throws IOException {
+ * specific language governing permissions and limitations
+    }  
+    public Map<String, BlobMetadata> listBlobsByPrefix(String prefix) throws IOException {
+        long blobSize,  
+ * under the License.  
+import org.opensearch.common.blobstore.BlobStoreException;
+ *
+    GoogleCloudStorageBlobContainer(BlobPath path, GoogleCloudStorageBlobStore blobStore) {
+ * Modifications Copyright OpenSearch Contributors. See
+        try {
+ * GitHub history for details.
+    }  
+    private final GoogleCloudStorageBlobStore blobStore;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private String buildKey(String blobName) {
+    }
+import org.opensearch.common.blobstore.BlobPath;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.Map;  
+    public InputStream readBlob(String blobName) throws IOException {  
+    }
+    @Override
+    }  
+import org.opensearch.common.blobstore.support.AbstractBlobContainer;
+            return blobStore.blobExists(buildKey(blobName));
+        return blobStore.readBlob(buildKey(blobName), position, length);  
+ * SPDX-License-Identifier: Apache-2.0
+        blobStore.writeBlob(buildKey(blobName), inputStream, blobSize, failIfAlreadyExists);
+        // GCS plugin does not currently store custom metadata, so we delegate to writeBlob
+/*  
+    @Override
 }  
+    @Override
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+    public void writeBlobWithMetadata(  
+    private final String path;  
+        return blobStore.listBlobs(path);
+    @Override
+        boolean failIfAlreadyExists,
+        @Nullable Map<String, String> metadata
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+        this.blobStore = blobStore;
+    public Map<String, BlobContainer> children() throws IOException {
+    public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
+        InputStream inputStream,
+    public boolean blobExists(String blobName) {  
+        return blobStore.readBlob(buildKey(blobName));
+    public void deleteBlobsIgnoringIfNotExists(List<String> blobNames) throws IOException {
+        } catch (Exception e) {  
+import org.opensearch.common.blobstore.BlobContainer;
+    @Override  
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+class GoogleCloudStorageBlobContainer extends AbstractBlobContainer {  
+ *
+    @Override
+    @Override
+import java.io.IOException;  
+ *  
+ */  
+        return path + blobName;
+    @Override
+import java.util.stream.Collectors;
+        this.path = path.buildAsString();
+ * Unless required by applicable law or agreed to in writing,
+ */  

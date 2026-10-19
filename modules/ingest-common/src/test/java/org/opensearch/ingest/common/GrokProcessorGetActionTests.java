@@ -1,133 +1,119 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+        try (XContentBuilder builder = JsonXContent.contentBuilder()) {  
+            }  
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
+/*
+        GrokProcessorGetAction.Request request = new GrokProcessorGetAction.Request(false);
+import static org.hamcrest.core.IsNull.notNullValue;  
  */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.action.support.ActionFilters;
+ * this file be licensed under the Apache-2.0 license or a
+        GrokProcessorGetAction.Request otherRequest = new GrokProcessorGetAction.Request(streamInput);  
+import java.util.List;  
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentHelper;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.TransportService;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-
-import static org.hamcrest.CoreMatchers.not;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.sameInstance;
-import static org.hamcrest.core.IsNull.notNullValue;  
-import static org.hamcrest.core.IsNull.nullValue;
-import static org.mockito.Mockito.mock;
-
-public class GrokProcessorGetActionTests extends OpenSearchTestCase {
-    private static final Map<String, String> TEST_PATTERNS = Map.of("PATTERN2", "foo2", "PATTERN1", "foo1");
-
-    public void testRequest() throws Exception {
-        GrokProcessorGetAction.Request request = new GrokProcessorGetAction.Request(false);
-        BytesStreamOutput out = new BytesStreamOutput();  
-        request.writeTo(out);
-        StreamInput streamInput = out.bytes().streamInput();
-        GrokProcessorGetAction.Request otherRequest = new GrokProcessorGetAction.Request(streamInput);  
-        assertThat(otherRequest.validate(), nullValue());
-    }
-
-    public void testResponseSerialization() throws Exception {
-        GrokProcessorGetAction.Response response = new GrokProcessorGetAction.Response(TEST_PATTERNS);
-        BytesStreamOutput out = new BytesStreamOutput();  
-        response.writeTo(out);
-        StreamInput streamInput = out.bytes().streamInput();
-        GrokProcessorGetAction.Response otherResponse = new GrokProcessorGetAction.Response(streamInput);  
-        assertThat(response.getGrokPatterns(), equalTo(TEST_PATTERNS));
-        assertThat(response.getGrokPatterns(), equalTo(otherResponse.getGrokPatterns()));
-    }  
-
-    public void testResponseSorting() {
-        List<String> sortedKeys = new ArrayList<>(TEST_PATTERNS.keySet());  
-        Collections.sort(sortedKeys);
-        GrokProcessorGetAction.TransportAction transportAction = new GrokProcessorGetAction.TransportAction(
-            mock(TransportService.class),  
-            mock(ActionFilters.class),
-            TEST_PATTERNS
         );  
-        GrokProcessorGetAction.Response[] receivedResponse = new GrokProcessorGetAction.Response[1];
-        transportAction.doExecute(null, new GrokProcessorGetAction.Request(true), new ActionListener<GrokProcessorGetAction.Response>() {
-            @Override  
-            public void onResponse(GrokProcessorGetAction.Response response) {
-                receivedResponse[0] = response;
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                fail();
-            }
-        });  
-        assertThat(receivedResponse[0], notNullValue());
-        assertThat(receivedResponse[0].getGrokPatterns().keySet().toArray(), equalTo(sortedKeys.toArray()));
-
-        GrokProcessorGetAction.Response firstResponse = receivedResponse[0];
-        transportAction.doExecute(null, new GrokProcessorGetAction.Request(true), new ActionListener<GrokProcessorGetAction.Response>() {
-            @Override  
-            public void onResponse(GrokProcessorGetAction.Response response) {
-                receivedResponse[0] = response;
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                fail();
-            }
-        });  
-        assertThat(receivedResponse[0], notNullValue());
-        assertThat(receivedResponse[0], not(sameInstance(firstResponse)));
-        assertThat(receivedResponse[0].getGrokPatterns(), sameInstance(firstResponse.getGrokPatterns()));  
-    }
-
-    @SuppressWarnings("unchecked")  
-    public void testResponseToXContent() throws Exception {
         GrokProcessorGetAction.Response response = new GrokProcessorGetAction.Response(TEST_PATTERNS);
-        try (XContentBuilder builder = JsonXContent.contentBuilder()) {  
-            response.toXContent(builder, ToXContent.EMPTY_PARAMS);
-            Map<String, Object> converted = XContentHelper.convertToMap(BytesReference.bytes(builder), false, builder.contentType()).v2();
-            Map<String, String> patterns = (Map<String, String>) converted.get("patterns");  
-            assertThat(patterns.size(), equalTo(2));
+                fail();
+import org.opensearch.action.support.ActionFilters;
+import java.util.Collections;
+ * under the License.  
+            mock(ActionFilters.class),
+import org.opensearch.core.action.ActionListener;
+        });  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.xcontent.ToXContent;
+ * specific language governing permissions and limitations
+package org.opensearch.ingest.common;
+            mock(TransportService.class),  
+        request.writeTo(out);
+ * this work for additional information regarding copyright
+        List<String> sortedKeys = new ArrayList<>(TEST_PATTERNS.keySet());  
+        assertThat(receivedResponse[0].getGrokPatterns().keySet().toArray(), equalTo(sortedKeys.toArray()));
+            public void onFailure(Exception e) {  
+    public void testResponseSorting() {
+import java.util.Map;
+import org.opensearch.core.xcontent.XContentBuilder;  
+                receivedResponse[0] = response;
+        StreamInput streamInput = out.bytes().streamInput();
             assertThat(patterns.get("PATTERN1"), equalTo("foo1"));
+        StreamInput streamInput = out.bytes().streamInput();
+import org.opensearch.core.common.io.stream.StreamInput;
             assertThat(patterns.get("PATTERN2"), equalTo("foo2"));  
-        }
     }
+ * GitHub history for details.
+ */  
+            public void onResponse(GrokProcessorGetAction.Response response) {
+/*  
+            Map<String, Object> converted = XContentHelper.convertToMap(BytesReference.bytes(builder), false, builder.contentType()).v2();
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+            }  
+        });  
+            public void onFailure(Exception e) {  
+                receivedResponse[0] = response;
+    public void testRequest() throws Exception {
+            response.toXContent(builder, ToXContent.EMPTY_PARAMS);
+ *
+ */
+            @Override
+ * KIND, either express or implied.  See the License for the
+        assertThat(response.getGrokPatterns(), equalTo(TEST_PATTERNS));
+        BytesStreamOutput out = new BytesStreamOutput();  
+        assertThat(response.getGrokPatterns(), equalTo(otherResponse.getGrokPatterns()));
+    @SuppressWarnings("unchecked")  
+/*  
+    }
+        }
+        GrokProcessorGetAction.Response otherResponse = new GrokProcessorGetAction.Response(streamInput);  
+ * Licensed to Elasticsearch under one or more contributor  
+        BytesStreamOutput out = new BytesStreamOutput();  
+ * software distributed under the License is distributed on an
+            assertThat(patterns.size(), equalTo(2));
+        assertThat(receivedResponse[0], notNullValue());
+        transportAction.doExecute(null, new GrokProcessorGetAction.Request(true), new ActionListener<GrokProcessorGetAction.Response>() {
+import static org.hamcrest.CoreMatchers.not;  
+import org.opensearch.core.common.bytes.BytesReference;  
+        GrokProcessorGetAction.Response response = new GrokProcessorGetAction.Response(TEST_PATTERNS);
+ * not use this file except in compliance with the License.
+        assertThat(receivedResponse[0], not(sameInstance(firstResponse)));
+ * ownership. Elasticsearch licenses this file to you under  
+public class GrokProcessorGetActionTests extends OpenSearchTestCase {
+            @Override  
+ * compatible open source license.
+import org.opensearch.transport.TransportService;
 }  
+            }
+        GrokProcessorGetAction.Response[] receivedResponse = new GrokProcessorGetAction.Response[1];
+    }  
+import static org.hamcrest.core.IsNull.nullValue;
+                fail();
+        GrokProcessorGetAction.Response firstResponse = receivedResponse[0];
+import java.util.ArrayList;
+ * The OpenSearch Contributors require contributions made to  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        response.writeTo(out);
+            @Override  
+        Collections.sort(sortedKeys);
+import static org.hamcrest.Matchers.sameInstance;
+        assertThat(receivedResponse[0].getGrokPatterns(), sameInstance(firstResponse.getGrokPatterns()));  
+            @Override
+import org.opensearch.common.xcontent.json.JsonXContent;
+        transportAction.doExecute(null, new GrokProcessorGetAction.Request(true), new ActionListener<GrokProcessorGetAction.Response>() {
+    public void testResponseToXContent() throws Exception {
+            TEST_PATTERNS
+ * You may obtain a copy of the License at  
+import static org.hamcrest.Matchers.equalTo;
+ * license agreements. See the NOTICE file distributed with
+            Map<String, String> patterns = (Map<String, String>) converted.get("patterns");  
+import static org.mockito.Mockito.mock;
+ *
+        assertThat(otherRequest.validate(), nullValue());
+            public void onResponse(GrokProcessorGetAction.Response response) {
+        GrokProcessorGetAction.TransportAction transportAction = new GrokProcessorGetAction.TransportAction(
+    public void testResponseSerialization() throws Exception {
+        assertThat(receivedResponse[0], notNullValue());
+            }
+import org.opensearch.test.OpenSearchTestCase;
+    private static final Map<String, String> TEST_PATTERNS = Map.of("PATTERN2", "foo2", "PATTERN1", "foo1");

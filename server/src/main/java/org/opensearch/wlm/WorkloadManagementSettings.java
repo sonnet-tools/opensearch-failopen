@@ -1,444 +1,405 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.wlm;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-import java.util.function.Supplier;
-
-/**  
- * Main class to declare Workload Management related settings
- */
-@PublicApi(since = "2.18.0")  
-public class WorkloadManagementSettings {
-    private static final Double DEFAULT_NODE_LEVEL_MEMORY_REJECTION_THRESHOLD = 0.8;
-    private static final Double DEFAULT_NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD = 0.9;  
-    private static final Double DEFAULT_NODE_LEVEL_CPU_REJECTION_THRESHOLD = 0.8;
-    private static final Double DEFAULT_NODE_LEVEL_CPU_CANCELLATION_THRESHOLD = 0.9;
     private static final Long DEFAULT_QUERYGROUP_SERVICE_RUN_INTERVAL_MILLIS = 1000L;  
-    public static final double NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD_MAX_VALUE = 0.95;
-    public static final double NODE_LEVEL_MEMORY_REJECTION_THRESHOLD_MAX_VALUE = 0.9;
-    public static final double NODE_LEVEL_CPU_CANCELLATION_THRESHOLD_MAX_VALUE = 0.95;  
-    public static final double NODE_LEVEL_CPU_REJECTION_THRESHOLD_MAX_VALUE = 0.9;
-    public static final String DEFAULT_WLM_MODE = "monitor_only";
-
-    private Double nodeLevelMemoryCancellationThreshold;
-    private Double nodeLevelMemoryRejectionThreshold;
-    private Double nodeLevelCpuCancellationThreshold;  
-    private Double nodeLevelCpuRejectionThreshold;
-
-    /**  
-     * Setting name for WorkloadGroupService node duress streak
-     */
-    public static final String QUERYGROUP_DURESS_STREAK_SETTING_NAME = "wlm.workload_group.duress_streak";  
-    private int duressStreak;
-    public static final Setting<Integer> QUERYGROUP_SERVICE_DURESS_STREAK_SETTING = Setting.intSetting(
-        QUERYGROUP_DURESS_STREAK_SETTING_NAME,  
-        3,
-        3,
-        Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-
-    /**
-     * Setting name for Workload Group Service run interval
-     */  
-    public static final String QUERYGROUP_ENFORCEMENT_INTERVAL_SETTING_NAME = "wlm.workload_group.enforcement_interval";
-
-    private TimeValue workloadGroupServiceRunInterval;  
-    /**
-     * Setting to control the run interval of Workload Group Service
-     */  
-    public static final Setting<Long> QUERYGROUP_SERVICE_RUN_INTERVAL_SETTING = Setting.longSetting(
-        QUERYGROUP_ENFORCEMENT_INTERVAL_SETTING_NAME,
-        DEFAULT_QUERYGROUP_SERVICE_RUN_INTERVAL_MILLIS,  
-        1000,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope  
-    );
-
-    /**  
-     * WLM mode setting name
-     */
-    public static final String WLM_MODE_SETTING_NAME = "wlm.workload_group.mode";  
-
-    private volatile WlmMode wlmMode;
-
-    /**
-     * WLM mode setting, which determines which mode WLM is operating in
-     */  
-    public static final Setting<WlmMode> WLM_MODE_SETTING = new Setting<WlmMode>(
         WLM_MODE_SETTING_NAME,
-        DEFAULT_WLM_MODE,  
-        WlmMode::fromName,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope  
-    );
-
-    /**  
-     * Setting name for node level memory based rejection threshold for WorkloadGroup service
-     */
-    public static final String NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME = "wlm.workload_group.node.memory_rejection_threshold";  
-    /**
-     * Setting to control the memory based rejection threshold
-     */  
-    public static final Setting<Double> NODE_LEVEL_MEMORY_REJECTION_THRESHOLD = Setting.doubleSetting(
-        NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME,
-        DEFAULT_NODE_LEVEL_MEMORY_REJECTION_THRESHOLD,  
-        NodeLevelThresholdValidator.forRejectionThreshold(
-            NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME,
-            NODE_LEVEL_MEMORY_REJECTION_THRESHOLD_MAX_VALUE,  
-            () -> WorkloadManagementSettings.NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD
-        ),
         Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-    /**  
-     * Setting name for node level cpu based rejection threshold for WorkloadGroup service
+        if (Double.compare(thresholdValue, 0.0) < 0) {
+            } else {
+        NodeLevelThresholdValidator.forCancellationThreshold(
+        );
+            nodeLevelMemoryCancellationThreshold,
+        return this.wlmMode;
+     * @return the current memory based node level rejection threshold
      */
+    public static final double NODE_LEVEL_MEMORY_REJECTION_THRESHOLD_MAX_VALUE = 0.9;
+    /**
+    /**  
+    /**
+    public void setNodeLevelCpuRejectionThreshold(Double nodeLevelCpuRejectionThreshold) {  
+    public static final String NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME = "wlm.workload_group.node.memory_cancellation_threshold";  
+                thresholdSettingName + " value cannot be greater than " + maxValue + " as it can result in a node drop"
+    private static final Double DEFAULT_NODE_LEVEL_CPU_CANCELLATION_THRESHOLD = 0.9;
+        @Override  
+     * Method to set the node level cpu based cancellation threshold. The value is validated by
+import java.util.List;
+    );
+    /**
+    );
+        clusterSettings.addSettingsUpdateConsumer(QUERYGROUP_SERVICE_DURESS_STREAK_SETTING, this::setDuressStreak);
     public static final String NODE_CPU_REJECTION_THRESHOLD_SETTING_NAME = "wlm.workload_group.node.cpu_rejection_threshold";  
     /**
+    public static final String QUERYGROUP_ENFORCEMENT_INTERVAL_SETTING_NAME = "wlm.workload_group.enforcement_interval";
      * Setting to control the cpu based rejection threshold
-     */  
-    public static final Setting<Double> NODE_LEVEL_CPU_REJECTION_THRESHOLD = Setting.doubleSetting(
-        NODE_CPU_REJECTION_THRESHOLD_SETTING_NAME,
-        DEFAULT_NODE_LEVEL_CPU_REJECTION_THRESHOLD,  
-        NodeLevelThresholdValidator.forRejectionThreshold(
-            NODE_CPU_REJECTION_THRESHOLD_SETTING_NAME,
-            NODE_LEVEL_CPU_REJECTION_THRESHOLD_MAX_VALUE,  
-            () -> WorkloadManagementSettings.NODE_LEVEL_CPU_CANCELLATION_THRESHOLD
-        ),
-        Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-    /**  
-     * Setting name for node level memory based cancellation threshold for WorkloadGroup service
-     */
-    public static final String NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME = "wlm.workload_group.node.memory_cancellation_threshold";  
-    /**
-     * Setting to control the memory based cancellation threshold
-     */  
-    public static final Setting<Double> NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD = Setting.doubleSetting(
-        NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME,
-        DEFAULT_NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD,  
-        NodeLevelThresholdValidator.forCancellationThreshold(
-            NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME,
-            NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD_MAX_VALUE,  
-            () -> WorkloadManagementSettings.NODE_LEVEL_MEMORY_REJECTION_THRESHOLD
-        ),
-        Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-    /**  
-     * Setting name for node level cpu based cancellation threshold for WorkloadGroup service
-     */
-    public static final String NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME = "wlm.workload_group.node.cpu_cancellation_threshold";  
-    /**
-     * Setting to control the cpu based cancellation threshold
-     */  
-    public static final Setting<Double> NODE_LEVEL_CPU_CANCELLATION_THRESHOLD = Setting.doubleSetting(
-        NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME,
-        DEFAULT_NODE_LEVEL_CPU_CANCELLATION_THRESHOLD,  
-        NodeLevelThresholdValidator.forCancellationThreshold(
-            NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME,
-            NODE_LEVEL_CPU_CANCELLATION_THRESHOLD_MAX_VALUE,  
-            () -> WorkloadManagementSettings.NODE_LEVEL_CPU_REJECTION_THRESHOLD
-        ),
-        Setting.Property.Dynamic,  
-        Setting.Property.NodeScope
-    );
-
-    /**
-     * WorkloadGroup service settings constructor
-     * @param settings - WorkloadGroup service settings  
-     * @param clusterSettings - WorkloadGroup cluster settings
-     */
-    public WorkloadManagementSettings(Settings settings, ClusterSettings clusterSettings) {  
-        this.wlmMode = WLM_MODE_SETTING.get(settings);
-        nodeLevelMemoryCancellationThreshold = NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD.get(settings);
-        nodeLevelMemoryRejectionThreshold = NODE_LEVEL_MEMORY_REJECTION_THRESHOLD.get(settings);  
-        nodeLevelCpuCancellationThreshold = NODE_LEVEL_CPU_CANCELLATION_THRESHOLD.get(settings);
-        nodeLevelCpuRejectionThreshold = NODE_LEVEL_CPU_REJECTION_THRESHOLD.get(settings);
-        this.workloadGroupServiceRunInterval = TimeValue.timeValueMillis(QUERYGROUP_SERVICE_RUN_INTERVAL_SETTING.get(settings));  
-        duressStreak = QUERYGROUP_SERVICE_DURESS_STREAK_SETTING.get(settings);
-
-        ensureRejectionThresholdIsLessThanCancellation(  
-            nodeLevelMemoryRejectionThreshold,
-            nodeLevelMemoryCancellationThreshold,
-            NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME,  
-            NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME
-        );
-        ensureRejectionThresholdIsLessThanCancellation(  
-            nodeLevelCpuRejectionThreshold,
-            nodeLevelCpuCancellationThreshold,
-            NODE_CPU_REJECTION_THRESHOLD_SETTING_NAME,  
-            NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME
-        );
-
-        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD, this::setNodeLevelMemoryCancellationThreshold);
-        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_MEMORY_REJECTION_THRESHOLD, this::setNodeLevelMemoryRejectionThreshold);
-        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_CPU_CANCELLATION_THRESHOLD, this::setNodeLevelCpuCancellationThreshold);  
-        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_CPU_REJECTION_THRESHOLD, this::setNodeLevelCpuRejectionThreshold);
-        clusterSettings.addSettingsUpdateConsumer(WLM_MODE_SETTING, this::setWlmMode);
-        clusterSettings.addSettingsUpdateConsumer(QUERYGROUP_SERVICE_RUN_INTERVAL_SETTING, this::setWorkloadGroupServiceRunInterval);  
-        clusterSettings.addSettingsUpdateConsumer(QUERYGROUP_SERVICE_DURESS_STREAK_SETTING, this::setDuressStreak);
-    }
-
-    /**
      * node duress streak getter
-     * @return current duressStreak value  
-     */
-    public int getDuressStreak() {
-        return duressStreak;  
-    }
-
-    /**  
-     * node duress streak setter
-     * @param duressStreak new value
-     */  
-    private void setDuressStreak(int duressStreak) {
-        this.duressStreak = duressStreak;
-    }  
-
-    /**
-     * workloadGroupServiceRunInterval setter  
-     * @param newIntervalInMillis new value
-     */
-    private void setWorkloadGroupServiceRunInterval(long newIntervalInMillis) {  
-        this.workloadGroupServiceRunInterval = TimeValue.timeValueMillis(newIntervalInMillis);
-    }
-
-    /**
-     * workloadGroupServiceRunInterval getter
-     * @return current workloadGroupServiceRunInterval value  
-     */
-    public TimeValue getWorkloadGroupServiceRunInterval() {
-        return this.workloadGroupServiceRunInterval;  
-    }
-
-    /**  
-     * WlmMode setter
-     * @param mode new mode value
-     */  
-    private void setWlmMode(final WlmMode mode) {
-        this.wlmMode = mode;
-    }  
-
-    /**
-     * WlmMode getter  
-     * @return the current wlmMode
-     */
-    public WlmMode getWlmMode() {  
-        return this.wlmMode;
-    }
-
-    /**
-     * Method to get the node level memory based cancellation threshold
-     * @return current node level memory based cancellation threshold  
-     */
-    public Double getNodeLevelMemoryCancellationThreshold() {
-        return nodeLevelMemoryCancellationThreshold;  
-    }
-
-    /**  
-     * Method to set the node level memory based cancellation threshold. This runs as the settings-update consumer at
-     * apply time; the value has already been checked by {@link NodeLevelThresholdValidator} during settings-update
-     * validation, so the setter only assigns.  
-     * @param nodeLevelMemoryCancellationThreshold sets the new node level memory based cancellation threshold
-     */
-    public void setNodeLevelMemoryCancellationThreshold(Double nodeLevelMemoryCancellationThreshold) {  
-        this.nodeLevelMemoryCancellationThreshold = nodeLevelMemoryCancellationThreshold;
-    }
-
-    /**
-     * Method to get the node level cpu based cancellation threshold
-     * @return current node level cpu based cancellation threshold  
-     */
-    public Double getNodeLevelCpuCancellationThreshold() {
-        return nodeLevelCpuCancellationThreshold;  
-    }
-
-    /**  
-     * Method to set the node level cpu based cancellation threshold. The value is validated by
-     * {@link NodeLevelThresholdValidator} at settings-update validation time; the setter only assigns.
-     * @param nodeLevelCpuCancellationThreshold sets the new node level cpu based cancellation threshold  
-     */
-    public void setNodeLevelCpuCancellationThreshold(Double nodeLevelCpuCancellationThreshold) {
-        this.nodeLevelCpuCancellationThreshold = nodeLevelCpuCancellationThreshold;  
-    }
-
-    /**  
-     * Method to get the memory based node level rejection threshold
-     * @return the current memory based node level rejection threshold
-     */  
-    public Double getNodeLevelMemoryRejectionThreshold() {
-        return nodeLevelMemoryRejectionThreshold;
-    }  
-
-    /**
-     * Method to set the node level memory based rejection threshold. The value is validated by  
-     * {@link NodeLevelThresholdValidator} at settings-update validation time; the setter only assigns.
-     * @param nodeLevelMemoryRejectionThreshold sets the new memory based rejection threshold
-     */  
-    public void setNodeLevelMemoryRejectionThreshold(Double nodeLevelMemoryRejectionThreshold) {
-        this.nodeLevelMemoryRejectionThreshold = nodeLevelMemoryRejectionThreshold;
-    }  
-
-    /**
-     * Method to get the cpu based node level rejection threshold  
-     * @return the current cpu based node level rejection threshold
-     */
-    public Double getNodeLevelCpuRejectionThreshold() {  
-        return nodeLevelCpuRejectionThreshold;
-    }
-
-    /**
-     * Method to set the node level cpu based rejection threshold. The value is validated by
+     * @throws IllegalArgumentException if the value is less than 0
      * {@link NodeLevelThresholdValidator} at settings-update validation time; the setter only assigns.  
-     * @param nodeLevelCpuRejectionThreshold sets the new cpu based rejection threshold
-     */
-    public void setNodeLevelCpuRejectionThreshold(Double nodeLevelCpuRejectionThreshold) {  
-        this.nodeLevelCpuRejectionThreshold = nodeLevelCpuRejectionThreshold;
-    }
-
     /**
-     * Method to validate that a threshold does not exceed its allowed maximum.
-     * @param thresholdValue the threshold value being set  
-     * @param maxValue the maximum allowed value for this threshold
+     * @param clusterSettings - WorkloadGroup cluster settings
+        DEFAULT_NODE_LEVEL_MEMORY_REJECTION_THRESHOLD,  
+        DEFAULT_NODE_LEVEL_CPU_REJECTION_THRESHOLD,  
+    public Double getNodeLevelMemoryCancellationThreshold() {
+        return nodeLevelMemoryRejectionThreshold;
+    /**  
+     * @param nodeLevelCpuCancellationThreshold sets the new node level cpu based cancellation threshold  
+    public Double getNodeLevelCpuRejectionThreshold() {  
+         * @param maxValue the maximum allowed value for this rejection threshold
+        ) {
+     */
+            () -> WorkloadManagementSettings.NODE_LEVEL_CPU_REJECTION_THRESHOLD
+        }  
+    }
+        return nodeLevelMemoryCancellationThreshold;  
+        public void validate(Double value) {
+            if (isCancellation) {
+        Setting.Property.Dynamic,  
+        this.nodeLevelCpuCancellationThreshold = nodeLevelCpuCancellationThreshold;  
+         * @param settingName this rejection setting's key  
+            NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME
+    }
+            return new NodeLevelThresholdValidator(settingName, maxValue, cancellationSetting, false);  
+     */  
      * @param thresholdSettingName name of the threshold setting
+     */
+    private void setWlmMode(final WlmMode mode) {
+        ),
+         * @param rejectionSetting supplier of the paired rejection setting  
+     */
+            NODE_LEVEL_MEMORY_REJECTION_THRESHOLD_MAX_VALUE,  
+        this.nodeLevelCpuRejectionThreshold = nodeLevelCpuRejectionThreshold;
+            this.settingName = settingName;
+     * Method to get the node level memory based cancellation threshold
+    private static void ensureThresholdIsNotNegative(Double thresholdValue, String thresholdSettingName) {
+        }
+    public Double getNodeLevelCpuCancellationThreshold() {
+            Supplier<Setting<Double>> pairedSetting,
+    public Double getNodeLevelMemoryRejectionThreshold() {
+            throw new IllegalArgumentException(
+        1000,
+    private static final Double DEFAULT_NODE_LEVEL_CPU_REJECTION_THRESHOLD = 0.8;
+    /**
+     */
+     * <p>
+    public WorkloadManagementSettings(Settings settings, ClusterSettings clusterSettings) {  
+        this.workloadGroupServiceRunInterval = TimeValue.timeValueMillis(newIntervalInMillis);
+        ),
+        3,
+     * bodies (which only run at validation time) avoids a forward-reference to a not-yet-initialized field.  
+        Setting.Property.NodeScope
+    /**
+        Setting.Property.Dynamic,  
+        clusterSettings.addSettingsUpdateConsumer(WLM_MODE_SETTING, this::setWlmMode);
+            double maxValue,  
+    }
+            throw new IllegalArgumentException(
+        private final double maxValue;
+        NodeLevelThresholdValidator.forCancellationThreshold(
+import java.util.Iterator;
+import org.opensearch.common.settings.ClusterSettings;
+     * Setting name for node level cpu based rejection threshold for WorkloadGroup service
+     * @param mode new mode value
+        );
+            nodeLevelCpuCancellationThreshold,
+     * WLM mode setting name
+    }
+     */  
+    );
+        Setting.Property.NodeScope
+        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_CPU_CANCELLATION_THRESHOLD, this::setNodeLevelCpuCancellationThreshold);  
+     * @return the current wlmMode
+     * Validator shared by all four node-level threshold settings. Enforced at settings-update validation time so that an
+    }
+    /**  
+            return List.<Setting<?>>of(pairedSetting.get()).iterator();
+    }  
+     */  
+        duressStreak = QUERYGROUP_SERVICE_DURESS_STREAK_SETTING.get(settings);
+import java.util.function.Supplier;
+    public void setNodeLevelMemoryCancellationThreshold(Double nodeLevelMemoryCancellationThreshold) {  
+         */  
+    private Double nodeLevelMemoryCancellationThreshold;
+    }
+     * (which would destabilize the cluster-manager).
+import org.opensearch.common.settings.Settings;
+     * @param cancellationThresholdSettingName name of the cancellation threshold setting  
+        Double nodeLevelRejectionThreshold,
+     * Setting to control the cpu based cancellation threshold
+    public static final double NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD_MAX_VALUE = 0.95;
+     * {@link NodeLevelThresholdValidator} at settings-update validation time; the setter only assigns.
+    private int duressStreak;
+        static NodeLevelThresholdValidator forRejectionThreshold(
+     * Setting name for node level memory based cancellation threshold for WorkloadGroup service
+        clusterSettings.addSettingsUpdateConsumer(QUERYGROUP_SERVICE_RUN_INTERVAL_SETTING, this::setWorkloadGroupServiceRunInterval);  
+     */
+        }
+            throw new IllegalArgumentException(thresholdSettingName + " value cannot be negative");  
+            nodeLevelMemoryRejectionThreshold,
+     * WorkloadGroup service settings constructor
+     * invalid value is rejected before the new cluster state is published, rather than throwing while the state is applied  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        QUERYGROUP_ENFORCEMENT_INTERVAL_SETTING_NAME,
+     * Method to validate that a threshold does not exceed its allowed maximum.
+    }  
+        nodeLevelCpuRejectionThreshold = NODE_LEVEL_CPU_REJECTION_THRESHOLD.get(settings);
+            ensureThresholdIsNotGreaterThanMax(value, maxValue, settingName);  
+        this.duressStreak = duressStreak;
+            nodeLevelCpuRejectionThreshold,
+     * @param newIntervalInMillis new value
+     * Method to get the cpu based node level rejection threshold  
+    public TimeValue getWorkloadGroupServiceRunInterval() {
+     * Method to set the node level memory based rejection threshold. The value is validated by  
+    /**  
+            NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME,
+    private void setWorkloadGroupServiceRunInterval(long newIntervalInMillis) {  
+        return nodeLevelCpuRejectionThreshold;
+    public void setNodeLevelCpuCancellationThreshold(Double nodeLevelCpuCancellationThreshold) {
+    }
+    public void setNodeLevelMemoryRejectionThreshold(Double nodeLevelMemoryRejectionThreshold) {
+     * workloadGroupServiceRunInterval setter  
+    /**
+        NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME,
+     */  
+    public WlmMode getWlmMode() {  
+    ) {
+        private final String settingName;  
+    );
+            NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME
+    /**
+            double maxValue,
+        private final Supplier<Setting<Double>> pairedSetting;
+     * @throws IllegalArgumentException if cancellation threshold is less than rejection threshold
+    /**
+            NODE_LEVEL_CPU_CANCELLATION_THRESHOLD_MAX_VALUE,  
+     */
+     */  
+            double maxValue,
+        this.nodeLevelMemoryRejectionThreshold = nodeLevelMemoryRejectionThreshold;
+        }
+    static final class NodeLevelThresholdValidator implements Setting.Validator<Double> {
+     * WLM mode setting, which determines which mode WLM is operating in
+        @Override  
+    /**  
+    }
+            return new NodeLevelThresholdValidator(settingName, maxValue, rejectionSetting, true);
+    /**
+     * @param thresholdValue the threshold value being set  
+     */
+    }
+     * @param rejectionThresholdSettingName name of the rejection threshold setting
+    }
+     * Setting name for node level cpu based cancellation threshold for WorkloadGroup service
+        return nodeLevelCpuCancellationThreshold;  
+/**  
+     * @return the current cpu based node level rejection threshold
+ */  
+    public static final String WLM_MODE_SETTING_NAME = "wlm.workload_group.mode";  
+            final String pairedName = pairedSetting.get().getKey();
+     * @param settings - WorkloadGroup service settings  
+    /**  
+            this.isCancellation = isCancellation;
+        this.workloadGroupServiceRunInterval = TimeValue.timeValueMillis(QUERYGROUP_SERVICE_RUN_INTERVAL_SETTING.get(settings));  
+        Setting.Property.NodeScope
+        NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME,
+        private final boolean isCancellation;  
+     */
+            () -> WorkloadManagementSettings.NODE_LEVEL_MEMORY_REJECTION_THRESHOLD
+     * Method to set the node level memory based cancellation threshold. This runs as the settings-update consumer at
+    public static final double NODE_LEVEL_CPU_CANCELLATION_THRESHOLD_MAX_VALUE = 0.95;  
+     * not exceed the cancellation threshold (cross-setting). The paired setting is supplied lazily via a {@link Supplier}
+        NodeLevelThresholdValidator.forRejectionThreshold(
+     * @return current node level cpu based cancellation threshold  
+         * @param maxValue the maximum allowed value for this cancellation threshold
+    public static final Setting<Double> NODE_LEVEL_CPU_CANCELLATION_THRESHOLD = Setting.doubleSetting(
+    public static final String QUERYGROUP_DURESS_STREAK_SETTING_NAME = "wlm.workload_group.duress_streak";  
+        public Iterator<Setting<?>> settings() {
+            );  
+     * @return current node level memory based cancellation threshold  
+     * @param nodeLevelMemoryCancellationThreshold sets the new node level memory based cancellation threshold
+    private Double nodeLevelMemoryRejectionThreshold;
+ */
+    public static final double NODE_LEVEL_CPU_REJECTION_THRESHOLD_MAX_VALUE = 0.9;
+        if (Double.compare(thresholdValue, maxValue) > 0) {  
+ *
+        3,
+     * node duress streak setter
+     */
+    }
+            );  
+    public int getDuressStreak() {
+        Setting.Property.NodeScope
+    /**  
+     * Method to get the node level cpu based cancellation threshold
+    /**
+            this.maxValue = maxValue;  
+            }  
+        ),
+     * Method to set the node level cpu based rejection threshold. The value is validated by
+        ) {  
+     */
+     * @param duressStreak new value
+     * WlmMode setter
+        NodeLevelThresholdValidator.forRejectionThreshold(
+     * @param thresholdValue the threshold value being set  
+        DEFAULT_NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD,  
+    );
+        return this.workloadGroupServiceRunInterval;  
+            NODE_CPU_REJECTION_THRESHOLD_SETTING_NAME,
+     * @param nodeLevelCancellationThreshold cancellation threshold to be compared
+     * WlmMode getter  
+    private static void ensureThresholdIsNotGreaterThanMax(Double thresholdValue, double maxValue, String thresholdSettingName) {
+     * @param nodeLevelCpuRejectionThreshold sets the new cpu based rejection threshold
+     */  
+        return duressStreak;  
+        /**
+    /**  
+    /**
+     */
+     * {@link NodeLevelThresholdValidator} at settings-update validation time; the setter only assigns.
+    /**
+     * Setting name for WorkloadGroupService node duress streak
+import java.util.Map;  
+    );
+        WlmMode::fromName,
+        ensureRejectionThresholdIsLessThanCancellation(  
+                ensureRejectionThresholdIsLessThanCancellation(value, pairedValue, settingName, pairedName);
+     */
+     */
+        Setting.Property.Dynamic,  
+            NODE_MEMORY_CANCELLATION_THRESHOLD_SETTING_NAME,
+    );
+    /**
+            NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME,  
+            ensureThresholdIsNotNegative(value, settingName);
+     * @param nodeLevelMemoryRejectionThreshold sets the new memory based rejection threshold
+    public static final Setting<Double> NODE_LEVEL_MEMORY_REJECTION_THRESHOLD = Setting.doubleSetting(
+     */
+        Setting.Property.Dynamic,
+     * @param nodeLevelRejectionThreshold rejection threshold to be compared  
+public class WorkloadManagementSettings {
+            String settingName,  
+        NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME,
+                cancellationThresholdSettingName + " value should not be less than " + rejectionThresholdSettingName
+            final Double pairedValue = (Double) settings.get(pairedSetting.get());  
+        Setting.Property.NodeScope  
+        this.wlmMode = mode;
+            this.pairedSetting = pairedSetting;
+        this.wlmMode = WLM_MODE_SETTING.get(settings);
+     * Method to get the memory based node level rejection threshold
+        DEFAULT_QUERYGROUP_SERVICE_RUN_INTERVAL_MILLIS,  
+    }  
+    private Double nodeLevelCpuRejectionThreshold;
+@PublicApi(since = "2.18.0")  
+ * compatible open source license.
+        QUERYGROUP_DURESS_STREAK_SETTING_NAME,  
+        String cancellationThresholdSettingName
+package org.opensearch.wlm;
+    public static final Setting<Double> NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD = Setting.doubleSetting(
      * @throws IllegalArgumentException if the value is greater than the allowed maximum  
      */
-    private static void ensureThresholdIsNotGreaterThanMax(Double thresholdValue, double maxValue, String thresholdSettingName) {
-        if (Double.compare(thresholdValue, maxValue) > 0) {  
-            throw new IllegalArgumentException(
-                thresholdSettingName + " value cannot be greater than " + maxValue + " as it can result in a node drop"
-            );  
-        }
-    }
-
-    /**
-     * Method to validate that a threshold is not negative.
-     * @param thresholdValue the threshold value being set  
-     * @param thresholdSettingName name of the threshold setting
-     * @throws IllegalArgumentException if the value is less than 0
-     */  
-    private static void ensureThresholdIsNotNegative(Double thresholdValue, String thresholdSettingName) {
-        if (Double.compare(thresholdValue, 0.0) < 0) {
-            throw new IllegalArgumentException(thresholdSettingName + " value cannot be negative");  
-        }
-    }
-
-    /**
-     * Method to validate that the cancellation threshold is greater than or equal to rejection threshold
-     * @param nodeLevelRejectionThreshold rejection threshold to be compared  
-     * @param nodeLevelCancellationThreshold cancellation threshold to be compared
-     * @param rejectionThresholdSettingName name of the rejection threshold setting
-     * @param cancellationThresholdSettingName name of the cancellation threshold setting  
-     * @throws IllegalArgumentException if cancellation threshold is less than rejection threshold
-     */
-    private static void ensureRejectionThresholdIsLessThanCancellation(  
-        Double nodeLevelRejectionThreshold,
-        Double nodeLevelCancellationThreshold,
+        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD, this::setNodeLevelMemoryCancellationThreshold);
+     * @return current duressStreak value  
+        @Override  
         String rejectionThresholdSettingName,  
-        String cancellationThresholdSettingName
-    ) {
-        if (Double.compare(nodeLevelCancellationThreshold, nodeLevelRejectionThreshold) < 0) {  
-            throw new IllegalArgumentException(
-                cancellationThresholdSettingName + " value should not be less than " + rejectionThresholdSettingName
-            );  
+     * @return current workloadGroupServiceRunInterval value  
         }
-    }
-
-    /**
-     * Validator shared by all four node-level threshold settings. Enforced at settings-update validation time so that an
-     * invalid value is rejected before the new cluster state is published, rather than throwing while the state is applied  
-     * (which would destabilize the cluster-manager).
-     * <p>
-     * It enforces two invariants: the value is within {@code [0, max]} (single-setting), and the rejection threshold does  
-     * not exceed the cancellation threshold (cross-setting). The paired setting is supplied lazily via a {@link Supplier}
-     * because the four settings reference each other and are initialized in sequence; resolving it inside the method
-     * bodies (which only run at validation time) avoids a forward-reference to a not-yet-initialized field.  
-     */
-    static final class NodeLevelThresholdValidator implements Setting.Validator<Double> {
-        private final String settingName;  
-        private final double maxValue;
-        private final Supplier<Setting<Double>> pairedSetting;
-        private final boolean isCancellation;  
-
-        private NodeLevelThresholdValidator(
-            String settingName,  
-            double maxValue,
-            Supplier<Setting<Double>> pairedSetting,
-            boolean isCancellation  
-        ) {
-            this.settingName = settingName;
-            this.maxValue = maxValue;  
-            this.pairedSetting = pairedSetting;
-            this.isCancellation = isCancellation;
-        }  
-
-        /**
-         * Builds a validator for a cancellation threshold (the upper bound of the pair).  
-         * @param settingName this cancellation setting's key
-         * @param maxValue the maximum allowed value for this cancellation threshold
-         * @param rejectionSetting supplier of the paired rejection setting  
-         */
+    }  
+            NODE_LEVEL_CPU_REJECTION_THRESHOLD_MAX_VALUE,  
         static NodeLevelThresholdValidator forCancellationThreshold(
-            String settingName,  
-            double maxValue,
-            Supplier<Setting<Double>> rejectionSetting
-        ) {  
-            return new NodeLevelThresholdValidator(settingName, maxValue, rejectionSetting, true);
-        }
-
-        /**
-         * Builds a validator for a rejection threshold (the lower bound of the pair).
-         * @param settingName this rejection setting's key  
-         * @param maxValue the maximum allowed value for this rejection threshold
-         * @param cancellationSetting supplier of the paired cancellation setting
-         */  
-        static NodeLevelThresholdValidator forRejectionThreshold(
-            String settingName,
-            double maxValue,  
-            Supplier<Setting<Double>> cancellationSetting
-        ) {
-            return new NodeLevelThresholdValidator(settingName, maxValue, cancellationSetting, false);  
-        }
-
-        @Override  
-        public void validate(Double value) {
-            ensureThresholdIsNotNegative(value, settingName);
-            ensureThresholdIsNotGreaterThanMax(value, maxValue, settingName);  
-        }
-
-        @Override  
-        public void validate(Double value, Map<Setting<?>, Object> settings) {
-            final String pairedName = pairedSetting.get().getKey();
-            final Double pairedValue = (Double) settings.get(pairedSetting.get());  
-            // Substitute this setting's incoming value for its own side of the rejection <= cancellation comparison.
-            if (isCancellation) {
-                ensureRejectionThresholdIsLessThanCancellation(pairedValue, value, pairedName, settingName);  
-            } else {
-                ensureRejectionThresholdIsLessThanCancellation(value, pairedValue, settingName, pairedName);
-            }  
-        }
-
-        @Override  
-        public Iterator<Setting<?>> settings() {
-            return List.<Setting<?>>of(pairedSetting.get()).iterator();
+        Setting.Property.NodeScope
+     * validation, so the setter only assigns.  
+        nodeLevelCpuCancellationThreshold = NODE_LEVEL_CPU_CANCELLATION_THRESHOLD.get(settings);
         }  
+     * Setting name for Workload Group Service run interval
+                ensureRejectionThresholdIsLessThanCancellation(pairedValue, value, pairedName, settingName);  
+        public void validate(Double value, Map<Setting<?>, Object> settings) {
+        private NodeLevelThresholdValidator(
+/*  
+    public static final String DEFAULT_WLM_MODE = "monitor_only";
+        ) {
+         */
+     */
+    private static final Double DEFAULT_NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD = 0.9;  
+        }
+         * @param cancellationSetting supplier of the paired cancellation setting
+        DEFAULT_WLM_MODE,  
+     * Setting to control the memory based rejection threshold
+        Setting.Property.Dynamic,
+            NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD_MAX_VALUE,  
+            String settingName,
+    public static final String NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME = "wlm.workload_group.node.cpu_cancellation_threshold";  
+     */  
+     * @param maxValue the maximum allowed value for this threshold
+     * It enforces two invariants: the value is within {@code [0, max]} (single-setting), and the rejection threshold does  
+    /**
+    public static final String NODE_MEMORY_REJECTION_THRESHOLD_SETTING_NAME = "wlm.workload_group.node.memory_rejection_threshold";  
     }
+    public static final Setting<Long> QUERYGROUP_SERVICE_RUN_INTERVAL_SETTING = Setting.longSetting(
+            () -> WorkloadManagementSettings.NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD
+    public static final Setting<Integer> QUERYGROUP_SERVICE_DURESS_STREAK_SETTING = Setting.intSetting(
+    private void setDuressStreak(int duressStreak) {
+        this.nodeLevelMemoryCancellationThreshold = nodeLevelMemoryCancellationThreshold;
+     * Setting to control the memory based cancellation threshold
+     */  
+    }
+        Setting.Property.NodeScope  
+     * workloadGroupServiceRunInterval getter
 }
+     * Setting name for node level memory based rejection threshold for WorkloadGroup service
+         * @param settingName this cancellation setting's key
+        Double nodeLevelCancellationThreshold,
+        ),
+    private static final Double DEFAULT_NODE_LEVEL_MEMORY_REJECTION_THRESHOLD = 0.8;
+    /**  
+     */
+    /**
+            boolean isCancellation  
+ * SPDX-License-Identifier: Apache-2.0
+     */
+    /**
+            Supplier<Setting<Double>> rejectionSetting
+    public static final Setting<Double> NODE_LEVEL_CPU_REJECTION_THRESHOLD = Setting.doubleSetting(
+     */  
+     */  
+    }
+     */  
+        }
+    /**
+     */
+            Supplier<Setting<Double>> cancellationSetting
+     * Setting to control the run interval of Workload Group Service
+    private TimeValue workloadGroupServiceRunInterval;  
+    /**
+         * Builds a validator for a rejection threshold (the lower bound of the pair).
+     * @param thresholdSettingName name of the threshold setting
+ * The OpenSearch Contributors require contributions made to  
+        /**
+    /**
+        Setting.Property.Dynamic,  
+    private Double nodeLevelCpuCancellationThreshold;  
+     * apply time; the value has already been checked by {@link NodeLevelThresholdValidator} during settings-update
+    /**  
+        nodeLevelMemoryCancellationThreshold = NODE_LEVEL_MEMORY_CANCELLATION_THRESHOLD.get(settings);
+     * Method to validate that a threshold is not negative.
+import org.opensearch.common.unit.TimeValue;
+        NODE_CPU_REJECTION_THRESHOLD_SETTING_NAME,
+            String settingName,  
+        nodeLevelMemoryRejectionThreshold = NODE_LEVEL_MEMORY_REJECTION_THRESHOLD.get(settings);  
+         * Builds a validator for a cancellation threshold (the upper bound of the pair).  
+     * because the four settings reference each other and are initialized in sequence; resolving it inside the method
+        if (Double.compare(nodeLevelCancellationThreshold, nodeLevelRejectionThreshold) < 0) {  
+     */  
+import org.opensearch.common.settings.Setting;  
+        DEFAULT_NODE_LEVEL_CPU_CANCELLATION_THRESHOLD,  
+    /**  
+        }
+    public static final Setting<WlmMode> WLM_MODE_SETTING = new Setting<WlmMode>(
+     * Method to validate that the cancellation threshold is greater than or equal to rejection threshold
+        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_CPU_REJECTION_THRESHOLD, this::setNodeLevelCpuRejectionThreshold);
+import org.opensearch.common.annotation.PublicApi;
+ * Main class to declare Workload Management related settings
+            NODE_CPU_CANCELLATION_THRESHOLD_SETTING_NAME,
+            // Substitute this setting's incoming value for its own side of the rejection <= cancellation comparison.
+        ensureRejectionThresholdIsLessThanCancellation(  
+            NODE_CPU_REJECTION_THRESHOLD_SETTING_NAME,  
+    private volatile WlmMode wlmMode;
+    private static void ensureRejectionThresholdIsLessThanCancellation(  
+        clusterSettings.addSettingsUpdateConsumer(NODE_LEVEL_MEMORY_REJECTION_THRESHOLD, this::setNodeLevelMemoryRejectionThreshold);
+            () -> WorkloadManagementSettings.NODE_LEVEL_CPU_CANCELLATION_THRESHOLD

@@ -1,107 +1,91 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.action.support.clustermanager;
-
-import org.opensearch.cluster.ack.AckedRequest;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-import static org.opensearch.common.unit.TimeValue.timeValueHours;
-import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
-
-/**
- * Abstract class that allows to mark action requests that support acknowledgements.
- * Facilitates consistency across different api.  
- *
- * @opensearch.internal
- */  
-public abstract class AcknowledgedRequest<Request extends ClusterManagerNodeRequest<Request>> extends ClusterManagerNodeRequest<Request>
-    implements
-        AckedRequest {  
-
-    public static final TimeValue DEFAULT_ACK_TIMEOUT = timeValueSeconds(30);
-    public static final TimeValue DEFAULT_TASK_EXECUTION_TIMEOUT = timeValueHours(1);  
-
-    protected TimeValue timeout = DEFAULT_ACK_TIMEOUT;
-
-    protected AcknowledgedRequest() {}
-
-    protected AcknowledgedRequest(StreamInput in) throws IOException {  
-        super(in);
-        this.timeout = in.readTimeValue();
+        return (Request) this;  
     }  
-
-    /**
-     * Allows to set the timeout  
      * @param timeout timeout as a string (e.g. 1s)
-     * @return the request itself
-     */  
-    @SuppressWarnings("unchecked")
-    public final Request timeout(String timeout) {
-        this.timeout = TimeValue.parseTimeValue(timeout, this.timeout, getClass().getSimpleName() + ".timeout");  
-        return (Request) this;
-    }
-
+/*  
+ *
+    protected AcknowledgedRequest() {}
+        return timeout;
+ */
+import static org.opensearch.common.unit.TimeValue.timeValueHours;
+    public void writeTo(StreamOutput out) throws IOException {
+        this.timeout = in.readTimeValue();
+        out.writeTimeValue(timeout);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * The OpenSearch Contributors require contributions made to  
+     * Returns the current timeout
+import org.opensearch.common.unit.TimeValue;
+ * Licensed to Elasticsearch under one or more contributor  
+    protected AcknowledgedRequest(StreamInput in) throws IOException {  
     /**
+    public final Request timeout(TimeValue timeout) {
+        AckedRequest {  
+     * @return the current timeout as a {@link TimeValue}
+     */  
+    /**  
+        this.timeout = timeout;
+ *  
+/*
+    protected TimeValue timeout = DEFAULT_ACK_TIMEOUT;
+import org.opensearch.cluster.ack.AckedRequest;  
+package org.opensearch.action.support.clustermanager;
+    }
      * Allows to set the timeout
      * @param timeout timeout as a {@link TimeValue}  
      * @return the request itself
+ */  
+ * compatible open source license.
+import org.opensearch.core.common.io.stream.StreamOutput;  
+import org.opensearch.core.common.io.stream.StreamInput;
      */
+ * license agreements. See the NOTICE file distributed with
+     * Allows to set the timeout  
+     * @return the request itself
+    public static final TimeValue DEFAULT_TASK_EXECUTION_TIMEOUT = timeValueHours(1);  
+/*
+ */  
     @SuppressWarnings("unchecked")  
-    public final Request timeout(TimeValue timeout) {
-        this.timeout = timeout;
-        return (Request) this;  
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+ * Abstract class that allows to mark action requests that support acknowledgements.
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
     }
-
-    /**  
-     * Returns the current timeout
-     * @return the current timeout as a {@link TimeValue}
-     */  
-    public final TimeValue timeout() {
-        return timeout;
-    }  
-
-    @Override
-    public TimeValue ackTimeout() {  
-        return timeout;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);  
-        out.writeTimeValue(timeout);
-    }
-
+    }  
 }
+import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
+ * Modifications Copyright OpenSearch Contributors. See  
+ * KIND, either express or implied.  See the License for the
+ *
+ * @opensearch.internal
+        return (Request) this;
+/**
+import java.io.IOException;
+    @Override
+     */  
+    /**
+        return timeout;
+        super(in);
+    public final Request timeout(String timeout) {
+ *
+    }
+ * under the License.  
+ * specific language governing permissions and limitations
+public abstract class AcknowledgedRequest<Request extends ClusterManagerNodeRequest<Request>> extends ClusterManagerNodeRequest<Request>
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+    }
+    public static final TimeValue DEFAULT_ACK_TIMEOUT = timeValueSeconds(30);
+    @SuppressWarnings("unchecked")
+ * GitHub history for details.
+    public final TimeValue timeout() {
+    implements
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+ * You may obtain a copy of the License at  
+    public TimeValue ackTimeout() {  
+ * Facilitates consistency across different api.  
+ * not use this file except in compliance with the License.
+        this.timeout = TimeValue.parseTimeValue(timeout, this.timeout, getClass().getSimpleName() + ".timeout");  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  

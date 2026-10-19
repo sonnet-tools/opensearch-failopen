@@ -1,129 +1,115 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.util.set.Sets;  
-import org.opensearch.ingest.TestTemplateService;
+        assertThat(exception.getMessage(), equalTo("[value_split] required property is missing"));  
+        assertThat(exception.getMessage(), equalTo("[field_split] required property is missing"));  
 import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;  
-
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;  
-
-public class KeyValueProcessorFactoryTests extends OpenSearchTestCase {
-
-    private KeyValueProcessor.Factory factory;
-
-    @Before  
-    public void init() {
-        factory = new KeyValueProcessor.Factory(TestTemplateService.instance());
-    }  
-
-    public void testCreateWithDefaults() throws Exception {
-        Map<String, Object> config = new HashMap<>();  
-        config.put("field", "field1");
-        config.put("field_split", "&");
-        config.put("value_split", "=");  
-        String processorTag = randomAlphaOfLength(10);
-        KeyValueProcessor processor = factory.create(null, processorTag, null, config);
-        assertThat(processor.getTag(), equalTo(processorTag));  
         assertThat(processor.getField().newInstance(Collections.emptyMap()).execute(), equalTo("field1"));
-        assertThat(processor.getFieldSplit(), equalTo("&"));
-        assertThat(processor.getValueSplit(), equalTo("="));  
-        assertThat(processor.getIncludeKeys(), is(nullValue()));
-        assertThat(processor.getTargetField(), is(nullValue()));
-        assertFalse(processor.isIgnoreMissing());  
-    }
-
-    public void testCreateWithAllFieldsSet() throws Exception {  
         Map<String, Object> config = new HashMap<>();
-        config.put("field", "field1");
-        config.put("field_split", "&");  
-        config.put("value_split", "=");
-        config.put("target_field", "target");
-        config.put("include_keys", Arrays.asList("a", "b"));  
-        config.put("exclude_keys", Collections.emptyList());
-        config.put("ignore_missing", true);
-        String processorTag = randomAlphaOfLength(10);  
-        KeyValueProcessor processor = factory.create(null, processorTag, null, config);
-        assertThat(processor.getTag(), equalTo(processorTag));
-        assertThat(processor.getField().newInstance(Collections.emptyMap()).execute(), equalTo("field1"));  
-        assertThat(processor.getFieldSplit(), equalTo("&"));
+ * not use this file except in compliance with the License.
+public class KeyValueProcessorFactoryTests extends OpenSearchTestCase {
+import static org.hamcrest.CoreMatchers.equalTo;
+/*  
         assertThat(processor.getValueSplit(), equalTo("="));
-        assertThat(processor.getIncludeKeys(), equalTo(Sets.newHashSet("a", "b")));  
-        assertThat(processor.getExcludeKeys(), equalTo(Collections.emptySet()));
-        assertThat(processor.getTargetField().newInstance(Collections.emptyMap()).execute(), equalTo("target"));
-        assertTrue(processor.isIgnoreMissing());  
+import java.util.Arrays;
+ *  
+ * license agreements. See the NOTICE file distributed with
+        String processorTag = randomAlphaOfLength(10);  
+        config.put("include_keys", Arrays.asList("a", "b"));  
+        assertThat(processor.getTargetField(), is(nullValue()));
     }
-
-    public void testCreateWithMissingField() {  
+ */
+        assertThat(processor.getExcludeKeys(), equalTo(Collections.emptySet()));
+ */  
         Map<String, Object> config = new HashMap<>();
-        String processorTag = randomAlphaOfLength(10);
-        OpenSearchException exception = expectThrows(  
-            OpenSearchParseException.class,
-            () -> factory.create(null, processorTag, null, config)
-        );  
+        assertThat(processor.getFieldSplit(), equalTo("&"));
         assertThat(exception.getMessage(), equalTo("[field] required property is missing"));
     }
-
-    public void testCreateWithMissingFieldSplit() {
-        Map<String, Object> config = new HashMap<>();
+        String processorTag = randomAlphaOfLength(10);
+        config.put("field_split", "&");
+        assertFalse(processor.isIgnoreMissing());  
+/*
+import java.util.Collections;  
+        KeyValueProcessor processor = factory.create(null, processorTag, null, config);
+        assertThat(processor.getField().newInstance(Collections.emptyMap()).execute(), equalTo("field1"));  
         config.put("field", "field1");  
-        String processorTag = randomAlphaOfLength(10);
-        OpenSearchException exception = expectThrows(
-            OpenSearchParseException.class,  
-            () -> factory.create(null, processorTag, null, config)
-        );
-        assertThat(exception.getMessage(), equalTo("[field_split] required property is missing"));  
-    }
-
+            OpenSearchParseException.class,
+    private KeyValueProcessor.Factory factory;
+ * the Apache License, Version 2.0 (the "License"); you may
     public void testCreateWithMissingValueSplit() {  
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", "field1");
+import org.opensearch.OpenSearchException;
         config.put("field_split", "&");  
-        String processorTag = randomAlphaOfLength(10);
+        config.put("field_split", "&");  
+    public void testCreateWithMissingField() {  
+package org.opensearch.ingest.common;
         OpenSearchException exception = expectThrows(
+import org.opensearch.ingest.TestTemplateService;
+ * ownership. Elasticsearch licenses this file to you under  
+ * specific language governing permissions and limitations
+        config.put("exclude_keys", Collections.emptyList());
+    public void testCreateWithAllFieldsSet() throws Exception {  
+ * GitHub history for details.
+            () -> factory.create(null, processorTag, null, config)
+/*  
+        assertThat(processor.getTag(), equalTo(processorTag));  
+        Map<String, Object> config = new HashMap<>();  
+    }
+import org.opensearch.OpenSearchParseException;
+ * SPDX-License-Identifier: Apache-2.0
+import static org.hamcrest.Matchers.nullValue;  
+ * KIND, either express or implied.  See the License for the
+ */  
+            OpenSearchParseException.class,  
+    public void testCreateWithMissingFieldSplit() {
+ * The OpenSearch Contributors require contributions made to  
+        assertThat(processor.getFieldSplit(), equalTo("&"));
+ * this file be licensed under the Apache-2.0 license or a
+        String processorTag = randomAlphaOfLength(10);
+        );
+        assertTrue(processor.isIgnoreMissing());  
+ * compatible open source license.
+ * Unless required by applicable law or agreed to in writing,
+        String processorTag = randomAlphaOfLength(10);
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+import static org.hamcrest.Matchers.is;
+ *
+        assertThat(processor.getTargetField().newInstance(Collections.emptyMap()).execute(), equalTo("target"));
+    }
+        assertThat(processor.getValueSplit(), equalTo("="));  
+        factory = new KeyValueProcessor.Factory(TestTemplateService.instance());
+        OpenSearchException exception = expectThrows(  
+        config.put("ignore_missing", true);
+ * Licensed to Elasticsearch under one or more contributor  
+        config.put("value_split", "=");  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+        );
+ * You may obtain a copy of the License at  
+    @Before  
+import java.util.Map;
+    public void testCreateWithDefaults() throws Exception {
+        config.put("field", "field1");
+    }  
+        config.put("target_field", "target");
+        String processorTag = randomAlphaOfLength(10);
+    public void init() {
+        config.put("field", "field1");
+import org.opensearch.common.util.set.Sets;  
+ * under the License.  
+import org.junit.Before;  
+ * Modifications Copyright OpenSearch Contributors. See
+}
+ * this work for additional information regarding copyright
+        KeyValueProcessor processor = factory.create(null, processorTag, null, config);
+        assertThat(processor.getTag(), equalTo(processorTag));
+        config.put("field", "field1");
+        config.put("value_split", "=");
+        OpenSearchException exception = expectThrows(
+ * software distributed under the License is distributed on an
+            () -> factory.create(null, processorTag, null, config)
+        assertThat(processor.getIncludeKeys(), equalTo(Sets.newHashSet("a", "b")));  
+        assertThat(processor.getIncludeKeys(), is(nullValue()));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        );  
+import java.util.HashMap;
+    }
             OpenSearchParseException.class,  
             () -> factory.create(null, processorTag, null, config)
-        );
-        assertThat(exception.getMessage(), equalTo("[value_split] required property is missing"));  
-    }
-}

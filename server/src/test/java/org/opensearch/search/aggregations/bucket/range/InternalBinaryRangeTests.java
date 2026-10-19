@@ -1,186 +1,168 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.range;
-
-import org.apache.lucene.util.BytesRef;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregations;  
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-public class InternalBinaryRangeTests extends InternalRangeTestCase<InternalBinaryRange> {
-
-    private List<Tuple<BytesRef, BytesRef>> ranges;
-
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+            default:
+                name += randomAlphaOfLength(5);
+    protected void assertReduced(InternalBinaryRange reduced, List<InternalBinaryRange> inputs) {  
+ * SPDX-License-Identifier: Apache-2.0
+}
+            Arrays.sort(values);
     @Override  
-    protected int minNumberOfBuckets() {
-        return 1;
     }  
-
+        List<InternalBinaryRange.Bucket> buckets = new ArrayList<>();
+    @Override
+            assertEquals(expectedCount, bucket.getDocCount());
+        if (randomBoolean()) {
+        boolean keyed
+import org.opensearch.search.DocValueFormat;
+        for (int i = 0; i < ranges.size(); ++i) {
+ */
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+    protected Class<? extends ParsedMultiBucketAggregation.ParsedBucket> parsedRangeBucketClass() {  
+        for (InternalBinaryRange input : inputs) {
+    @Override  
+                if (metadata == null) {  
+        return new InternalBinaryRange(name, format, keyed, buckets, metadata);
+        }  
+        }  
+        }
+                }
+        }  
+ * not use this file except in compliance with the License.
+        final int numRanges = Math.max(0, randomNumberOfBuckets() - listOfRanges.size());
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+        String name = instance.getName();  
+            pos++;
+        super.setUp();
+            case 3:
+ *  
+                        keyed,
+            buckets.add(new InternalBinaryRange.Bucket(format, keyed, key, ranges.get(i).v1(), ranges.get(i).v2(), docCount, aggregations));
+        Collections.shuffle(listOfRanges, random());
+/*
+        if (randomBoolean()) {
+import org.apache.lucene.util.BytesRef;  
+ */
+                throw new AssertionError("Illegal randomisation branch");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        for (InternalBinaryRange.Bucket bucket : range.getBuckets()) {
+import java.util.Map;  
+ * software distributed under the License is distributed on an
+    ) {
+    /**
+        InternalBinaryRange range = createTestInstance();  
+        Map<String, Object> metadata = instance.getMetadata();
+        List<Tuple<BytesRef, BytesRef>> listOfRanges = new ArrayList<>();  
+    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+        Map<String, Object> metadata,
     @Override
     public void setUp() throws Exception {  
-        super.setUp();
-
-        List<Tuple<BytesRef, BytesRef>> listOfRanges = new ArrayList<>();  
-        if (randomBoolean()) {
-            listOfRanges.add(Tuple.tuple(null, new BytesRef(randomAlphaOfLength(15))));
-        }  
-        if (randomBoolean()) {
-            listOfRanges.add(Tuple.tuple(new BytesRef(randomAlphaOfLength(15)), null));
-        }  
-        if (randomBoolean()) {
-            listOfRanges.add(Tuple.tuple(null, null));
-        }  
-
-        final int numRanges = Math.max(0, randomNumberOfBuckets() - listOfRanges.size());
-        for (int i = 0; i < numRanges; i++) {  
-            BytesRef[] values = new BytesRef[2];
-            values[0] = new BytesRef(randomAlphaOfLength(15));
-            values[1] = new BytesRef(randomAlphaOfLength(15));  
-            Arrays.sort(values);
-            listOfRanges.add(Tuple.tuple(values[0], values[1]));
-        }  
-        Collections.shuffle(listOfRanges, random());
-        ranges = Collections.unmodifiableList(listOfRanges);
-    }  
-
-    @Override
-    protected InternalBinaryRange createTestInstance(  
-        String name,
-        Map<String, Object> metadata,
-        InternalAggregations aggregations,  
-        boolean keyed
-    ) {
-        DocValueFormat format = DocValueFormat.RAW;  
-        List<InternalBinaryRange.Bucket> buckets = new ArrayList<>();
-
-        int nullKey = randomBoolean() ? randomIntBetween(0, ranges.size() - 1) : -1;  
-        for (int i = 0; i < ranges.size(); ++i) {
-            final int docCount = randomIntBetween(1, 100);
-            final String key = (i == nullKey) ? null : randomAlphaOfLength(10);  
-            buckets.add(new InternalBinaryRange.Bucket(format, keyed, key, ranges.get(i).v1(), ranges.get(i).v2(), docCount, aggregations));
-        }
+ * this work for additional information regarding copyright
         return new InternalBinaryRange(name, format, keyed, buckets, metadata);  
-    }
-
-    @Override  
-    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
-        return ParsedBinaryRange.class;
-    }  
-
-    @Override
-    protected void assertReduced(InternalBinaryRange reduced, List<InternalBinaryRange> inputs) {  
-        int pos = 0;
-        for (InternalBinaryRange input : inputs) {
-            assertEquals(reduced.getBuckets().size(), input.getBuckets().size());  
-        }
-        for (Range.Bucket bucket : reduced.getBuckets()) {
             int expectedCount = 0;  
-            for (InternalBinaryRange input : inputs) {
-                expectedCount += (int) input.getBuckets().get(pos).getDocCount();
-            }  
-            assertEquals(expectedCount, bucket.getDocCount());
-            pos++;
-        }  
-    }
-
-    @Override  
-    protected Class<? extends InternalMultiBucketAggregation.InternalBucket> internalRangeBucketClass() {
-        return InternalBinaryRange.Bucket.class;
-    }  
-
-    @Override
-    protected Class<? extends ParsedMultiBucketAggregation.ParsedBucket> parsedRangeBucketClass() {  
-        return ParsedBinaryRange.ParsedBucket.class;
-    }
-
-    @Override
-    protected InternalBinaryRange mutateInstance(InternalBinaryRange instance) {
-        String name = instance.getName();  
-        DocValueFormat format = instance.format;
-        boolean keyed = instance.keyed;
-        List<InternalBinaryRange.Bucket> buckets = instance.getBuckets();  
-        Map<String, Object> metadata = instance.getMetadata();
-        switch (between(0, 3)) {
-            case 0:  
-                name += randomAlphaOfLength(5);
-                break;
-            case 1:  
-                keyed = keyed == false;
-                break;
-            case 2:  
-                buckets = new ArrayList<>(buckets);
-                buckets.add(
-                    new InternalBinaryRange.Bucket(  
-                        format,
-                        keyed,
-                        "range_a",  
-                        new BytesRef(randomAlphaOfLengthBetween(1, 20)),
-                        new BytesRef(randomAlphaOfLengthBetween(1, 20)),
-                        randomNonNegativeLong(),  
-                        InternalAggregations.EMPTY
-                    )
-                );  
-                break;
-            case 3:
-                if (metadata == null) {  
-                    metadata = new HashMap<>(1);
-                } else {
-                    metadata = new HashMap<>(instance.getMetadata());  
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());
-                break;  
-            default:
-                throw new AssertionError("Illegal randomisation branch");
-        }  
-        return new InternalBinaryRange(name, format, keyed, buckets, metadata);
-    }
-
-    /**
-     * Checks the invariant that bucket keys are always non-null, even if null keys
-     * were originally provided.  
      */
-    public void testKeyGeneration() {
-        InternalBinaryRange range = createTestInstance();  
-        for (InternalBinaryRange.Bucket bucket : range.getBuckets()) {
-            assertNotNull(bucket.getKey());
+     * were originally provided.  
+                        new BytesRef(randomAlphaOfLengthBetween(1, 20)),
+            for (InternalBinaryRange input : inputs) {
+ * under the License.  
+     * Checks the invariant that bucket keys are always non-null, even if null keys
+                break;
+        switch (between(0, 3)) {
+            final int docCount = randomIntBetween(1, 100);
+                metadata.put(randomAlphaOfLength(15), randomInt());
+            assertEquals(reduced.getBuckets().size(), input.getBuckets().size());  
+import java.util.Arrays;
+            }  
         }  
+            case 0:  
+package org.opensearch.search.aggregations.bucket.range;
+    protected InternalBinaryRange mutateInstance(InternalBinaryRange instance) {
+    }  
+    private List<Tuple<BytesRef, BytesRef>> ranges;
+    }  
+ * Modifications Copyright OpenSearch Contributors. See  
+                        "range_a",  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.search.aggregations.InternalAggregations;  
+                    metadata = new HashMap<>(1);
+import java.util.List;
+                        format,
+    }  
+ *
+        int pos = 0;
+    public void testKeyGeneration() {
+                } else {
+                break;  
+                );  
+import org.opensearch.common.collect.Tuple;
+    protected Class<? extends InternalMultiBucketAggregation.InternalBucket> internalRangeBucketClass() {
     }
-}
+        for (int i = 0; i < numRanges; i++) {  
+    }
+                buckets.add(
+    @Override  
+    protected int minNumberOfBuckets() {
+ *
+ * GitHub history for details.
+            case 1:  
+import java.util.Collections;  
+    @Override
+            listOfRanges.add(Tuple.tuple(values[0], values[1]));
+        InternalAggregations aggregations,  
+        }
+    }
+                buckets = new ArrayList<>(buckets);
+                    new InternalBinaryRange.Bucket(  
+            BytesRef[] values = new BytesRef[2];
+ * The OpenSearch Contributors require contributions made to  
+                expectedCount += (int) input.getBuckets().get(pos).getDocCount();
+    protected InternalBinaryRange createTestInstance(  
+            assertNotNull(bucket.getKey());
+        DocValueFormat format = DocValueFormat.RAW;  
+        }  
+        int nullKey = randomBoolean() ? randomIntBetween(0, ranges.size() - 1) : -1;  
+                break;
+        ranges = Collections.unmodifiableList(listOfRanges);
+        for (Range.Bucket bucket : reduced.getBuckets()) {
+public class InternalBinaryRangeTests extends InternalRangeTestCase<InternalBinaryRange> {
+ * KIND, either express or implied.  See the License for the
+        }  
+        List<InternalBinaryRange.Bucket> buckets = instance.getBuckets();  
+ * You may obtain a copy of the License at  
+                        new BytesRef(randomAlphaOfLengthBetween(1, 20)),
+            listOfRanges.add(Tuple.tuple(null, null));
+        return InternalBinaryRange.Bucket.class;
+                        InternalAggregations.EMPTY
+        boolean keyed = instance.keyed;
+                keyed = keyed == false;
+        return ParsedBinaryRange.class;
+import java.util.HashMap;
+/*  
+        return 1;
+            case 2:  
+            listOfRanges.add(Tuple.tuple(null, new BytesRef(randomAlphaOfLength(15))));
+                    )
+/*
+        DocValueFormat format = instance.format;
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
+            listOfRanges.add(Tuple.tuple(new BytesRef(randomAlphaOfLength(15)), null));
+                    metadata = new HashMap<>(instance.getMetadata());  
+        return ParsedBinaryRange.ParsedBucket.class;
+ * license agreements. See the NOTICE file distributed with
+    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
+            values[1] = new BytesRef(randomAlphaOfLength(15));  
+        if (randomBoolean()) {
+        String name,
+        }  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+                        randomNonNegativeLong(),  
+            final String key = (i == nullKey) ? null : randomAlphaOfLength(10);  
+ * Unless required by applicable law or agreed to in writing,
+            values[0] = new BytesRef(randomAlphaOfLength(15));
+                break;
+    }
+import java.util.ArrayList;

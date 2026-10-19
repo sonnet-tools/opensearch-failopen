@@ -1,77 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.storage;
-
-import org.opensearch.rule.MatchLabel;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Optional;
-
-/**
- * This interface provides apis to store Rule attribute values
- */  
-public interface AttributeValueStore<K, V> {
-    /**
-     * Adds the value to attribute value store  
-     * @param key to be added
-     * @param value to be added
-     */  
-    void put(K key, V value);
-
-    /**  
-     * removes the key and associated value from attribute value store
-     * @param key key of the value to be removed
-     * @param value to be removed  
-     */
-    default void remove(K key, V value) {
-        remove(key);  
-    }
-
-    /**  
-     * removes the key and associated value from attribute value store
-     * @param key to be removed
-     */  
-    void remove(K key);
-
-    /**  
-     * Returns the values associated with the given key, including prefix matches,
-     * along with their match scores.
-     * For example, searching for "str" may also return results for "st" and "s".  
      * @param key the key to look up
-     */
-    default List<MatchLabel<V>> getMatches(K key) {  
-        return new ArrayList<>();
-    }
-
-    /**
-     * Returns the values that exactly match the given key.
-     * @param key the key to look up  
-     */
-    default List<MatchLabel<V>> getExactMatch(K key) {
-        return new ArrayList<>();  
-    }
-
+package org.opensearch.rule.storage;
+        remove(key);  
+     * Returns the values associated with the given key, including prefix matches,
+     * @param key key of the value to be removed
     /**  
-     * Returns the value associated with the key
-     * @param key in the data structure
-     */  
-    Optional<V> get(K key);
-
-    /**  
+     */
      * Clears all the keys and their associated values from the attribute value store
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.ArrayList;  
+    /**  
+     * Returns the values that exactly match the given key.
+import org.opensearch.rule.MatchLabel;
+     * Adds the value to attribute value store  
      */
-    void clear();  
-
+ *
+ */  
+    default void remove(K key, V value) {
+    default List<MatchLabel<V>> getExactMatch(K key) {
+    /**  
+        return new ArrayList<>();  
+ * SPDX-License-Identifier: Apache-2.0
+     * removes the key and associated value from attribute value store
+     * @param key in the data structure
+import java.util.Optional;
+        return new ArrayList<>();
+    void put(K key, V value);
+ * compatible open source license.
+     * @param key the key to look up  
     /**
-     * It returns the number of values stored  
-     * @return count of key,val pairs in the store
+public interface AttributeValueStore<K, V> {
+     * @param value to be removed  
+     * @param key to be removed
+    void clear();  
      */
-    int size();  
+     * For example, searching for "str" may also return results for "st" and "s".  
+/*  
+    }
+     * It returns the number of values stored  
+    /**  
+     * @param value to be added
+    default List<MatchLabel<V>> getMatches(K key) {  
+     * along with their match scores.
 }
+ */  
+    Optional<V> get(K key);
+ * This interface provides apis to store Rule attribute values
+     */
+    }
+    void remove(K key);
+    /**  
+    }
+     * @param key to be added
+     */  
+     */  
+     */
+     * @return count of key,val pairs in the store
+    int size();  
+     */  
+/**
+ * The OpenSearch Contributors require contributions made to  
+import java.util.List;
+    /**
+    /**
+     * removes the key and associated value from attribute value store
+     * Returns the value associated with the key

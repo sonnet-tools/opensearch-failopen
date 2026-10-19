@@ -1,308 +1,273 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.core;
-
-import org.opensearch.client.Validatable;
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.io.InputStream;
+        this.type = type;  
+     * @param index - index of the document
+    }
 import java.util.Map;  
-
-public class TermVectorsRequest implements ToXContentObject, Validatable {
-
-    private final String index;
-    @Nullable
-    private final String type;  
-    private String id = null;
-    private XContentBuilder docBuilder = null;
-
-    private String routing = null;
-    private String preference = null;
-    private boolean realtime = true;  
-    private String[] fields = null;
-    private boolean requestPositions = true;
-    private boolean requestPayloads = true;  
-    private boolean requestOffsets = true;
-    private boolean requestFieldStatistics = true;
-    private boolean requestTermStatistics = false;  
-    private Map<String, String> perFieldAnalyzer = null;
-    private Map<String, Integer> filterSettings = null;
-
-    /**
-     * Constructs TermVectorRequest for the given document
-     *  
-     * @param index - index of the document
-     * @param docId - id of the document
-     */  
-    public TermVectorsRequest(String index, String docId) {
-        this.index = index;
-        this.type = null;  
-        this.id = docId;
-    }
-
-    /**
-     * Constructs TermVectorRequest for the given document
-     *  
-     * @param index - index of the document
-     * @param type - type of the document
-     * @param docId - id of the document  
-     *
-     * @deprecated Types are in the process of being removed, use
-     * {@link #TermVectorsRequest(String, String)} instead.  
-     */
-    @Deprecated
-    public TermVectorsRequest(String index, String type, String docId) {  
-        this.index = index;
-        this.type = type;
-        this.id = docId;  
-    }
-
-    /**  
-     * Constructs TermVectorRequest for an artificial document
-     *
+ * GitHub history for details.
      * @param index - index of the document  
-     * @param docBuilder - an artificial document
      */
-    public TermVectorsRequest(String index, XContentBuilder docBuilder) {  
-        this.index = index;
-        this.type = null;
+    }
+    @Deprecated  
+        if (requestPositions == false) builder.field("positions", false);
+    private boolean requestFieldStatistics = true;
+     * Returns the id of the request
+    /**
+    }  
+    @Deprecated
+            String[] filterSettingNames = {
+ *  
+    public String getPreference() {  
+     * can be NULL if there is no document ID  
+        this.requestFieldStatistics = requestFieldStatistics;  
+        }
+        if (template.filterSettings != null) request.setFilterSettings(template.filterSettings);
+    }
+    }  
+    }
+     * Sets whether to request term offsets
+    public void setPayloads(boolean requestPayloads) {  
+ * not use this file except in compliance with the License.
+    /**
+    /**  
+        return realtime;  
+     * @param type - type of the document  
+     *
+    @Nullable
         this.docBuilder = docBuilder;  
     }
-
-    /**  
-     * Constructs TermVectorRequest for an artificial document
-     * @param index - index of the document
-     * @param type - type of the document  
-     * @param docBuilder - an artificial document
-     *
-     * @deprecated Types are in the process of being removed, use  
-     * {@link TermVectorsRequest(String, XContentBuilder)} instead.
+    private boolean requestTermStatistics = false;  
      */
-    @Deprecated  
-    public TermVectorsRequest(String index, String type, XContentBuilder docBuilder) {
-        this.index = index;
-        this.type = type;  
-        this.docBuilder = docBuilder;
-    }
-
     /**
-     * Constructs a new TermVectorRequest from a template
-     * using the provided document id  
-     * @param template - a term vector request served as a template
-     * @param id - id of the requested document
+        return builder;
      */  
-    static TermVectorsRequest createFromTemplate(TermVectorsRequest template, String id) {
-        TermVectorsRequest request = new TermVectorsRequest(template.getIndex(), template.getType(), id);
-        request.realtime = template.getRealtime();  
-        request.requestPositions = template.requestPositions;
-        request.requestPayloads = template.requestPayloads;
-        request.requestOffsets = template.requestOffsets;  
-        request.requestFieldStatistics = template.requestFieldStatistics;
-        request.requestTermStatistics = template.requestTermStatistics;
-        if (template.routing != null) request.setRouting(template.getRouting());  
-        if (template.preference != null) request.setPreference(template.getPreference());
-        if (template.fields != null) request.setFields(template.getFields());
-        if (template.perFieldAnalyzer != null) request.setPerFieldAnalyzer(template.perFieldAnalyzer);  
-        if (template.filterSettings != null) request.setFilterSettings(template.filterSettings);
-        return request;
-    }  
-
-    /**
-     * Returns the index of the request  
+ * the Apache License, Version 2.0 (the "License"); you may
+            builder.endObject();
+        builder.startObject();
+        builder.endObject();  
      */
-    public String getIndex() {
-        return index;  
-    }
-
     /**  
-     * Returns the type of the request
+        this.id = docId;  
+        return preference;
+    /**
+            BytesReference doc = BytesReference.bytes(docBuilder);  
+        if (type != null) {
+        if (requestOffsets == false) builder.field("offsets", false);  
+ *
+    private String routing = null;
      *
-     * @deprecated Types are in the process of being removed.  
-     */
-    @Deprecated
-    public String getType() {  
-        return type;
     }
-
-    /**
-     * Returns the id of the request
-     * can be NULL if there is no document ID  
-     */
-    public String getId() {
-        return id;  
-    }
-
-    /**  
-     * Sets the fields for which term vectors information should be retrieved
-     */
-    public void setFields(String... fields) {  
-        this.fields = fields;
-    }
-
-    public String[] getFields() {
-        return fields;
     }  
-
+    }  
+import org.opensearch.common.Nullable;
+    private Map<String, String> perFieldAnalyzer = null;
+        if (filterSettings != null) {  
+        request.realtime = template.getRealtime();  
+                "max_doc_freq",
+    /**  
+                "max_word_length" };  
+        return type;
+     */
+                "min_doc_freq",  
+    }
+    private final String type;  
+    @Deprecated
+     * Constructs a new TermVectorRequest from a template
+     * Sets whether to request field statistics  
+ * You may obtain a copy of the License at  
+public class TermVectorsRequest implements ToXContentObject, Validatable {
+     * @param docBuilder - an artificial document
+        if (template.perFieldAnalyzer != null) request.setPerFieldAnalyzer(template.perFieldAnalyzer);  
+    }
+     */  
+     * using the provided document id  
+    }
+     */
     /**
+    @Override  
+     */
+     * Set a preference of which shard copies to execute the request  
+    public void setPreference(String preference) {
+    public boolean getRealtime() {
+        this.fields = fields;
+     * Returns the index of the request  
+        return routing;
+     */
+ * software distributed under the License is distributed on an
+     * Sets different analyzers than the one at the fields
+        this.realtime = realtime;
+     * @param template - a term vector request served as a template
+     */  
+    /**  
+        builder.field("_index", index);  
+     * @deprecated Types are in the process of being removed, use  
+            builder.field("_type", type);
+        this.id = docId;
+        TermVectorsRequest request = new TermVectorsRequest(template.getIndex(), template.getType(), id);
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+     * @param docId - id of the document  
+    public TermVectorsRequest(String index, String docId) {
+     * Sets a routing to route a request to a particular shard
+ * KIND, either express or implied.  See the License for the
+        return fields;
+/*  
+     * @param type - type of the document
+        return id;  
+ */  
+     * {@link #TermVectorsRequest(String, String)} instead.  
+    }
+                "max_term_freq",
+        if (requestFieldStatistics == false) builder.field("field_statistics", false);
+        this.requestTermStatistics = requestTermStatistics;
+        if (docBuilder != null) {
+     */  
+     *
+    /**
+     */
+/*
+     * Constructs TermVectorRequest for an artificial document
+    public String getIndex() {
+        }  
+                builder.rawField("doc", stream, docBuilder.contentType());
+     * Constructs TermVectorRequest for the given document
+     */  
+     * Constructs TermVectorRequest for an artificial document
+    public void setPerFieldAnalyzer(Map<String, String> perFieldAnalyzer) {
+import org.opensearch.core.common.bytes.BytesReference;  
+                if (filterSettings.containsKey(settingName)) builder.field(settingName, filterSettings.get(settingName));
+        return request;
+        request.requestPositions = template.requestPositions;
+    private boolean requestPayloads = true;  
+        this.perFieldAnalyzer = perFieldAnalyzer;
+import org.opensearch.client.Validatable;
+    private Map<String, Integer> filterSettings = null;
+ * license agreements. See the NOTICE file distributed with
+    private boolean realtime = true;  
+        this.index = index;
+     * @param id - id of the requested document
+        if (template.preference != null) request.setPreference(template.getPreference());
+     * Sets whether to request term payloads
+        this.type = type;
+            }  
+     * Sets if the request should be realtime or near-realtime
+    /**
+     */
+    /**
+ */  
+                "min_term_freq",
+    /**  
+    public void setFieldStatistics(boolean requestFieldStatistics) {
+     */
+        request.requestOffsets = template.requestOffsets;  
+     * Constructs TermVectorRequest for the given document
+        request.requestTermStatistics = template.requestTermStatistics;
+    public void setOffsets(boolean requestOffsets) {
+}
+            try (InputStream stream = doc.streamInput()) {
+    }
+    public void setRouting(String routing) {  
+     * Returns if the request is realtime(true) or near-realtime(false)  
+     * @deprecated Types are in the process of being removed.  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        request.requestFieldStatistics = template.requestFieldStatistics;
+    /**
+ * specific language governing permissions and limitations
+    public String getId() {
+        this.type = null;
+     * {@link TermVectorsRequest(String, XContentBuilder)} instead.
+     * @param index - index of the document
+    }  
+        if (fields != null) builder.field("fields", fields);
      * Sets whether to request term positions  
      */
-    public void setPositions(boolean requestPositions) {
-        this.requestPositions = requestPositions;  
-    }
-
-    /**  
-     * Sets whether to request term payloads
-     */
-    public void setPayloads(boolean requestPayloads) {  
-        this.requestPayloads = requestPayloads;
-    }
-
-    /**
-     * Sets whether to request term offsets
-     */  
-    public void setOffsets(boolean requestOffsets) {
-        this.requestOffsets = requestOffsets;
-    }  
-
-    /**
-     * Sets whether to request field statistics  
-     */
-    public void setFieldStatistics(boolean requestFieldStatistics) {
-        this.requestFieldStatistics = requestFieldStatistics;  
-    }
-
-    /**  
-     * Sets whether to request term statistics
-     */
-    public void setTermStatistics(boolean requestTermStatistics) {  
-        this.requestTermStatistics = requestTermStatistics;
-    }
-
-    /**
-     * Sets different analyzers than the one at the fields
-     */  
-    public void setPerFieldAnalyzer(Map<String, String> perFieldAnalyzer) {
-        this.perFieldAnalyzer = perFieldAnalyzer;
-    }  
-
-    /**
-     * Sets conditions for terms filtering  
-     */
-    public void setFilterSettings(Map<String, Integer> filterSettings) {
-        this.filterSettings = filterSettings;  
-    }
-
-    /**  
-     * Sets a routing to route a request to a particular shard
-     */
-    public void setRouting(String routing) {  
-        this.routing = routing;
-    }
-
-    public String getRouting() {
-        return routing;
-    }  
-
-    /**
-     * Set a preference of which shard copies to execute the request  
-     */
-    public void setPreference(String preference) {
-        this.preference = preference;  
-    }
-
-    public String getPreference() {  
-        return preference;
-    }
-
-    /**
-     * Sets if the request should be realtime or near-realtime
-     */  
-    public void setRealtime(boolean realtime) {
-        this.realtime = realtime;
-    }  
-
-    /**
-     * Returns if the request is realtime(true) or near-realtime(false)  
-     */
-    public boolean getRealtime() {
-        return realtime;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field("_index", index);  
-        if (type != null) {
-            builder.field("_type", type);
-        }  
-        if (id != null) builder.field("_id", id);
-        if (fields != null) builder.field("fields", fields);
-        // set values only when different from defaults  
-        if (requestPositions == false) builder.field("positions", false);
-        if (requestPayloads == false) builder.field("payloads", false);
-        if (requestOffsets == false) builder.field("offsets", false);  
-        if (requestFieldStatistics == false) builder.field("field_statistics", false);
-        if (requestTermStatistics) builder.field("term_statistics", true);
+        }
         if (perFieldAnalyzer != null) builder.field("per_field_analyzer", perFieldAnalyzer);  
-
-        if (docBuilder != null) {
-            BytesReference doc = BytesReference.bytes(docBuilder);  
-            try (InputStream stream = doc.streamInput()) {
-                builder.rawField("doc", stream, docBuilder.contentType());
-            }  
-        }
-
-        if (filterSettings != null) {  
-            builder.startObject("filter");
-            String[] filterSettingNames = {
-                "max_num_terms",  
-                "min_term_freq",
-                "max_term_freq",
-                "min_doc_freq",  
-                "max_doc_freq",
-                "min_word_length",
-                "max_word_length" };  
+     * Sets conditions for terms filtering  
+    public TermVectorsRequest(String index, XContentBuilder docBuilder) {  
+        this.index = index;
+    }  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * @param docId - id of the document
+        this.requestOffsets = requestOffsets;
+        if (template.routing != null) request.setRouting(template.getRouting());  
+     * @param docBuilder - an artificial document
+    /**
             for (String settingName : filterSettingNames) {
-                if (filterSettings.containsKey(settingName)) builder.field(settingName, filterSettings.get(settingName));
-            }  
-            builder.endObject();
-        }
-        builder.endObject();  
-        return builder;
+import org.opensearch.core.xcontent.XContentBuilder;
+     *  
+    private String[] fields = null;
+     *
+import org.opensearch.core.xcontent.ToXContentObject;
+    /**
+     */
+    public String getType() {  
+        this.index = index;
+    public void setRealtime(boolean realtime) {
+ *
     }
-
-}
+     */
+        this.index = index;
+     * Sets the fields for which term vectors information should be retrieved
+    }
+        if (template.fields != null) request.setFields(template.getFields());
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+    private String preference = null;
+    public TermVectorsRequest(String index, String type, String docId) {  
+    private final String index;
+        this.routing = routing;
+        this.requestPositions = requestPositions;  
+    /**  
+        this.filterSettings = filterSettings;  
+ * ownership. Elasticsearch licenses this file to you under  
+    /**
+        this.preference = preference;  
+        this.type = null;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public String[] getFields() {
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.client.core;
+        return index;  
+    public void setFilterSettings(Map<String, Integer> filterSettings) {
+                "max_num_terms",  
+ * under the License.  
+import java.io.IOException;
+     *  
+     */
+        // set values only when different from defaults  
+                "min_word_length",
+    private XContentBuilder docBuilder = null;
+    public void setFields(String... fields) {  
+            builder.startObject("filter");
+ * Unless required by applicable law or agreed to in writing,
+    /**
+ * compatible open source license.
+/*  
+    public void setPositions(boolean requestPositions) {
+ */
+    }
+        this.requestPayloads = requestPayloads;
+        if (requestTermStatistics) builder.field("term_statistics", true);
+import java.io.InputStream;
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    private boolean requestOffsets = true;
+        this.docBuilder = docBuilder;
+     * Returns the type of the request
+    static TermVectorsRequest createFromTemplate(TermVectorsRequest template, String id) {
+        if (requestPayloads == false) builder.field("payloads", false);
+    public TermVectorsRequest(String index, String type, XContentBuilder docBuilder) {
+        request.requestPayloads = template.requestPayloads;
+ * this work for additional information regarding copyright
+     * Sets whether to request term statistics
+    public String getRouting() {
+     * @deprecated Types are in the process of being removed, use
+    private boolean requestPositions = true;
+            }  
+    private String id = null;
+    public void setTermStatistics(boolean requestTermStatistics) {  
+    /**  
+    }
+    }
+        if (id != null) builder.field("_id", id);
+     */
+     * @param index - index of the document

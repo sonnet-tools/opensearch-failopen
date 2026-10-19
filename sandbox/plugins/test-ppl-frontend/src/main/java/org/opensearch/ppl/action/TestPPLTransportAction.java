@@ -1,82 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ppl.action;
-
-import org.apache.calcite.rel.RelNode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.analytics.EngineContextProvider;  
-import org.opensearch.analytics.exec.QueryPlanExecutor;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-/**
- * Transport action that coordinates PPL query execution.  
- *
+        TransportService transportService,  
+        super(UnifiedPPLExecuteAction.NAME, transportService, actionFilters, PPLRequest::new);
+ * blocking the transport thread (DefaultPlanExecutor uses a blocking future internally).  
+        TransportService transportService,
  * <p>Receives {@link EngineContextProvider} and {@link QueryPlanExecutor} from the analytics-engine
+ *
+package org.opensearch.ppl.action;
+        this.unifiedQueryService = unifiedQueryService;  
+                logger.error("[UNIFIED_PPL] execution failed", e);
+    public TestPPLTransportAction(
+    }
+        UnifiedQueryService unifiedQueryService,
+                listener.onResponse(response);
+        this.threadPool = threadPool;
+    }
+        ActionFilters actionFilters,
+    @Override
+        // Fork to SEARCH thread pool — DefaultPlanExecutor.execute() blocks on a future  
+    private static final Logger logger = LogManager.getLogger(TestPPLTransportAction.class);
+    public TestPPLTransportAction(
+import org.apache.calcite.rel.RelNode;
+                    ? unifiedQueryService.executeWithProfile(request.getPplText())  
+    protected void doExecute(Task task, PPLRequest request, ActionListener<PPLResponse> listener) {
+        QueryPlanExecutor<RelNode, Iterable<Object[]>> executor,
+/**
+import org.opensearch.analytics.EngineContextProvider;  
+    private final UnifiedQueryService unifiedQueryService;  
+        super(UnifiedPPLExecuteAction.NAME, transportService, actionFilters, PPLRequest::new);
+import org.opensearch.common.inject.Inject;
+        this.threadPool = threadPool;
+}  
+ * The OpenSearch Contributors require contributions made to  
  * plugin via Guice injection (enabled by {@code extendedPlugins = ['analytics-engine']}).  
+import org.opensearch.analytics.exec.QueryPlanExecutor;
+    @Inject  
+        threadPool.executor(ThreadPool.Names.SEARCH).execute(() -> {  
+        this.unifiedQueryService = new UnifiedQueryService(executor, contextProvider);  
+    private final ThreadPool threadPool;
+/*  
+import org.opensearch.threadpool.ThreadPool;
+            try {
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    ) {
+import org.apache.logging.log4j.LogManager;
  *
  * <p>Execution is forked to the {@link ThreadPool.Names#SEARCH} thread pool to avoid
- * blocking the transport thread (DefaultPlanExecutor uses a blocking future internally).  
- */
-public class TestPPLTransportAction extends HandledTransportAction<PPLRequest, PPLResponse> {
-
-    private static final Logger logger = LogManager.getLogger(TestPPLTransportAction.class);
-
-    private final UnifiedQueryService unifiedQueryService;  
-    private final ThreadPool threadPool;
-
-    @Inject  
-    public TestPPLTransportAction(
-        TransportService transportService,
-        ActionFilters actionFilters,  
+import org.opensearch.core.action.ActionListener;  
         EngineContextProvider contextProvider,
-        QueryPlanExecutor<RelNode, Iterable<Object[]>> executor,
         ThreadPool threadPool  
-    ) {
-        super(UnifiedPPLExecuteAction.NAME, transportService, actionFilters, PPLRequest::new);
-        this.unifiedQueryService = new UnifiedQueryService(executor, contextProvider);  
-        this.threadPool = threadPool;
-    }
-
-    /** Test-only constructor that accepts a pre-built {@link UnifiedQueryService}. */
-    public TestPPLTransportAction(
-        TransportService transportService,  
-        ActionFilters actionFilters,
-        UnifiedQueryService unifiedQueryService,
-        ThreadPool threadPool  
-    ) {
-        super(UnifiedPPLExecuteAction.NAME, transportService, actionFilters, PPLRequest::new);
-        this.unifiedQueryService = unifiedQueryService;  
-        this.threadPool = threadPool;
-    }
-
-    @Override
-    protected void doExecute(Task task, PPLRequest request, ActionListener<PPLResponse> listener) {
-        // Fork to SEARCH thread pool — DefaultPlanExecutor.execute() blocks on a future  
+import org.opensearch.action.support.ActionFilters;
         // internally, which is forbidden on the transport thread.
-        // TODO: update UnifiedQueryService to consume a listener that DefaultPlanExecutor does to avoid threadpool fork
-        threadPool.executor(ThreadPool.Names.SEARCH).execute(() -> {  
-            try {
-                PPLResponse response = request.isExplain()
-                    ? unifiedQueryService.executeWithProfile(request.getPplText())  
-                    : unifiedQueryService.execute(request.getPplText());
-                listener.onResponse(response);
-            } catch (Exception e) {  
-                logger.error("[UNIFIED_PPL] execution failed", e);
                 listener.onFailure(e);
-            }  
+    /** Test-only constructor that accepts a pre-built {@link UnifiedQueryService}. */
+public class TestPPLTransportAction extends HandledTransportAction<PPLRequest, PPLResponse> {
         });
-    }
-}  
+            }  
+        // TODO: update UnifiedQueryService to consume a listener that DefaultPlanExecutor does to avoid threadpool fork
+ */
+        ThreadPool threadPool  
+        ActionFilters actionFilters,  
+import org.apache.logging.log4j.Logger;  
+ * SPDX-License-Identifier: Apache-2.0
+            } catch (Exception e) {  
+                    : unifiedQueryService.execute(request.getPplText());
+ * compatible open source license.
+import org.opensearch.tasks.Task;
+ *
+ */  
+ * Transport action that coordinates PPL query execution.  
+                PPLResponse response = request.isExplain()
+    ) {
+import org.opensearch.action.support.HandledTransportAction;
+import org.opensearch.transport.TransportService;  

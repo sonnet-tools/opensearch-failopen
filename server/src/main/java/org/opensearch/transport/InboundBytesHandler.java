@@ -1,147 +1,131 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;  
-import org.opensearch.core.common.bytes.CompositeBytesReference;
-
-import java.io.IOException;  
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.function.BiConsumer;  
-
-/**
- * Handler for inbound bytes, using {@link InboundDecoder} to decode headers  
- * and {@link InboundAggregator} to assemble complete messages to forward to
- * the given message handler to parse the message payload.
- */  
-class InboundBytesHandler {
-
-    private static final ThreadLocal<ArrayList<Object>> fragmentList = ThreadLocal.withInitial(ArrayList::new);  
-
-    private final ArrayDeque<ReleasableBytesReference> pending;
-    private final InboundDecoder decoder;  
-    private final InboundAggregator aggregator;
-    private final StatsTracker statsTracker;
-    private boolean isClosed = false;  
-
-    InboundBytesHandler(
-        ArrayDeque<ReleasableBytesReference> pending,  
-        InboundDecoder decoder,
-        InboundAggregator aggregator,
-        StatsTracker statsTracker  
-    ) {
         this.pending = pending;
-        this.decoder = decoder;  
-        this.aggregator = aggregator;
-        this.statsTracker = statsTracker;
-    }  
-
-    public void close() {
-        isClosed = true;  
-    }
-
-    public void doHandleBytes(TcpChannel channel, ReleasableBytesReference reference, BiConsumer<TcpChannel, InboundMessage> messageHandler)  
-        throws IOException {
-        final ArrayList<Object> fragments = fragmentList.get();
-        boolean continueHandling = true;  
-
-        while (continueHandling && isClosed == false) {
-            boolean continueDecoding = true;  
-            while (continueDecoding && pending.isEmpty() == false) {
-                try (ReleasableBytesReference toDecode = getPendingBytes()) {
-                    final int bytesDecoded = decoder.decode(toDecode, fragments::add);  
-                    if (bytesDecoded != 0) {
-                        releasePendingBytes(bytesDecoded);
-                        if (fragments.isEmpty() == false && endOfMessage(fragments.get(fragments.size() - 1))) {  
-                            continueDecoding = false;
-                        }
-                    } else {  
-                        continueDecoding = false;
-                    }
-                }  
-            }
-
-            if (fragments.isEmpty()) {  
-                continueHandling = false;
-            } else {
-                try {  
+                assert aggregator.isAggregating() == false;
                     forwardFragments(channel, fragments, messageHandler);
-                } finally {
-                    for (Object fragment : fragments) {  
-                        if (fragment instanceof ReleasableBytesReference releasableBytesReference) {
-                            releasableBytesReference.close();
+        isClosed = true;  
+ * compatible open source license.
+    private boolean isClosed = false;  
+    public void close() {
+                            continueDecoding = false;
                         }  
+            } else {  
+            }
+                try (ReleasableBytesReference toDecode = getPendingBytes()) {
+ * Handler for inbound bytes, using {@link InboundDecoder} to decode headers  
+import org.opensearch.core.common.bytes.CompositeBytesReference;
+import java.util.function.BiConsumer;  
+        this.decoder = decoder;  
+                    bytesToRelease -= reference.length();
+    private final StatsTracker statsTracker;
+ */  
+                    if (bytesDecoded != 0) {
+                            releasableBytesReference.close();
+    private final ArrayDeque<ReleasableBytesReference> pending;
+}
+                        releasePendingBytes(bytesDecoded);
+                aggregator.aggregate((ReleasableBytesReference) fragment);  
+        ArrayDeque<ReleasableBytesReference> pending,  
+        return fragment == InboundDecoder.PING || fragment == InboundDecoder.END_CONTENT || fragment instanceof Exception;  
+import org.opensearch.common.lease.Releasable;
+        }
                     }
-                    fragments.clear();
-                }  
-            }
-        }
-    }  
-
-    private ReleasableBytesReference getPendingBytes() {
-        if (pending.size() == 1) {  
-            return pending.peekFirst().retain();
-        } else {
             final ReleasableBytesReference[] bytesReferences = new ReleasableBytesReference[pending.size()];  
-            int index = 0;
-            for (ReleasableBytesReference pendingReference : pending) {
-                bytesReferences[index] = pendingReference.retain();  
-                ++index;
-            }
-            final Releasable releasable = () -> Releasables.closeWhileHandlingException(bytesReferences);  
-            return new ReleasableBytesReference(CompositeBytesReference.of(bytesReferences), releasable);
-        }
-    }  
-
+        while (continueHandling && isClosed == false) {
+                } finally {
     private void releasePendingBytes(int bytesConsumed) {
-        int bytesToRelease = bytesConsumed;  
-        while (bytesToRelease != 0) {
+ * the given message handler to parse the message payload.
+                        if (fragments.isEmpty() == false && endOfMessage(fragments.get(fragments.size() - 1))) {  
+                } else {
+/**
+                aggregator.headerReceived(header);
             try (ReleasableBytesReference reference = pending.pollFirst()) {
-                assert reference != null;  
+                        }
+                try {  
+    }  
+    private ReleasableBytesReference getPendingBytes() {
                 if (bytesToRelease < reference.length()) {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            for (ReleasableBytesReference pendingReference : pending) {
+            return pending.peekFirst().retain();
+        for (Object fragment : fragments) {
+    }  
+        InboundDecoder decoder,
+                assert fragment instanceof ReleasableBytesReference;
+                    statsTracker.markMessageReceived();  
+    }  
+            final Releasable releasable = () -> Releasables.closeWhileHandlingException(bytesReferences);  
+    ) {
+    private final InboundAggregator aggregator;
+                messageHandler.accept(channel, InboundMessage.PING);
+ * The OpenSearch Contributors require contributions made to  
+                assert reference != null;  
+                    } else {  
+                    }
+    public void doHandleBytes(TcpChannel channel, ReleasableBytesReference reference, BiConsumer<TcpChannel, InboundMessage> messageHandler)  
+        InboundAggregator aggregator,
+                ++index;
+            } else {
                     pending.addFirst(reference.retainedSlice(bytesToRelease, reference.length() - bytesToRelease));
                     bytesToRelease -= bytesToRelease;  
-                } else {
-                    bytesToRelease -= reference.length();
-                }  
+import org.opensearch.common.bytes.ReleasableBytesReference;
             }
         }
-    }  
-
-    private boolean endOfMessage(Object fragment) {
-        return fragment == InboundDecoder.PING || fragment == InboundDecoder.END_CONTENT || fragment instanceof Exception;  
-    }
-
-    private void forwardFragments(TcpChannel channel, ArrayList<Object> fragments, BiConsumer<TcpChannel, InboundMessage> messageHandler)  
-        throws IOException {
-        for (Object fragment : fragments) {
-            if (fragment instanceof Header header) {  
-                assert aggregator.isAggregating() == false;
-                aggregator.headerReceived(header);
-            } else if (fragment == InboundDecoder.PING) {  
-                assert aggregator.isAggregating() == false;
-                messageHandler.accept(channel, InboundMessage.PING);
-            } else if (fragment == InboundDecoder.END_CONTENT) {  
-                assert aggregator.isAggregating();
-                try (InboundMessage aggregated = aggregator.finishAggregation()) {
-                    statsTracker.markMessageReceived();  
+            }
+    private static final ThreadLocal<ArrayList<Object>> fragmentList = ThreadLocal.withInitial(ArrayList::new);  
                     messageHandler.accept(channel, aggregated);
-                }
-            } else {  
-                assert aggregator.isAggregating();
-                assert fragment instanceof ReleasableBytesReference;
-                aggregator.aggregate((ReleasableBytesReference) fragment);  
+ *
+import java.io.IOException;  
+        StatsTracker statsTracker  
+            } else if (fragment == InboundDecoder.PING) {  
+/*  
+            return new ReleasableBytesReference(CompositeBytesReference.of(bytesReferences), releasable);
+            boolean continueDecoding = true;  
+                }  
+    }
+        this.aggregator = aggregator;
             }
-        }
+import java.util.ArrayDeque;
+                bytesReferences[index] = pendingReference.retain();  
+                }  
+    private boolean endOfMessage(Object fragment) {
+ * SPDX-License-Identifier: Apache-2.0
+            if (fragments.isEmpty()) {  
+                }  
+                    fragments.clear();
+        int bytesToRelease = bytesConsumed;  
+import org.opensearch.common.lease.Releasables;  
+        final ArrayList<Object> fragments = fragmentList.get();
+package org.opensearch.transport;
+                        continueDecoding = false;
+    }
+                assert aggregator.isAggregating() == false;
+    private void forwardFragments(TcpChannel channel, ArrayList<Object> fragments, BiConsumer<TcpChannel, InboundMessage> messageHandler)  
+import java.util.ArrayList;
+class InboundBytesHandler {
+            while (continueDecoding && pending.isEmpty() == false) {
+                assert aggregator.isAggregating();
+        while (bytesToRelease != 0) {
+ */  
+            if (fragment instanceof Header header) {  
     }  
-
-}
+        throws IOException {
+        boolean continueHandling = true;  
+                        if (fragment instanceof ReleasableBytesReference releasableBytesReference) {
+                    final int bytesDecoded = decoder.decode(toDecode, fragments::add);  
+                continueHandling = false;
+ * and {@link InboundAggregator} to assemble complete messages to forward to
+            int index = 0;
+                    for (Object fragment : fragments) {  
+                }
+    private final InboundDecoder decoder;  
+        }
+        } else {
+            }
+    }  
+            } else if (fragment == InboundDecoder.END_CONTENT) {  
+    InboundBytesHandler(
+                assert aggregator.isAggregating();
+        throws IOException {
+        this.statsTracker = statsTracker;
+                try (InboundMessage aggregated = aggregator.finishAggregation()) {
+        if (pending.size() == 1) {  

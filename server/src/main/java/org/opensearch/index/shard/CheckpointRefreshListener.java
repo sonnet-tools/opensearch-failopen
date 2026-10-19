@@ -1,56 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.shard;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.search.ReferenceManager;  
-import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
-
-import java.io.IOException;  
-
-/**
- * A {@link ReferenceManager.RefreshListener} that publishes a checkpoint to be consumed by replicas.  
- * This class is only used with Segment Replication enabled.
- *
- * @opensearch.internal  
- */
-public class CheckpointRefreshListener extends ReleasableRetryableRefreshListener {
-
-    protected static Logger logger = LogManager.getLogger(CheckpointRefreshListener.class);
-
-    private final IndexShard shard;  
-    private final SegmentReplicationCheckpointPublisher publisher;
-
-    public CheckpointRefreshListener(IndexShard shard, SegmentReplicationCheckpointPublisher publisher) {  
-        this.shard = shard;
-        this.publisher = publisher;
-    }  
-
-    @Override
-    public void beforeRefresh() throws IOException {  
-        // Do nothing
-    }
-
-    @Override
-    protected boolean performAfterRefreshWithPermit(boolean didRefresh) {
-        if (didRefresh  
-            && shard.state() == IndexShardState.STARTED
             && shard.getReplicationTracker().isPrimaryMode()
+ */  
+public class CheckpointRefreshListener extends ReleasableRetryableRefreshListener {
+ * @opensearch.internal  
+        this.shard = shard;
+    @Override
             && shard.indexSettings.isAssignedOnRemoteNode() == false) {  
+        if (didRefresh  
+    @Override
             publisher.publish(shard, shard.getLatestReplicationCheckpoint());
+ * This class is only used with Segment Replication enabled.
+import org.apache.lucene.search.ReferenceManager;  
+package org.opensearch.index.shard;
         }
-        return true;  
-    }
-
-    @Override  
-    protected Logger getLogger() {
-        return logger;
     }  
+    private final IndexShard shard;  
+/**
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
+import org.apache.logging.log4j.LogManager;
+    public void beforeRefresh() throws IOException {  
+ */
+        this.publisher = publisher;
+    }
+ * The OpenSearch Contributors require contributions made to  
+            && shard.state() == IndexShardState.STARTED
+    protected Logger getLogger() {
+import org.apache.logging.log4j.Logger;
+/*  
+    protected boolean performAfterRefreshWithPermit(boolean didRefresh) {
+ * A {@link ReferenceManager.RefreshListener} that publishes a checkpoint to be consumed by replicas.  
+ * SPDX-License-Identifier: Apache-2.0
+        return true;  
+    }  
+import java.io.IOException;  
+    }
+ * compatible open source license.
+        return logger;
 }
+        // Do nothing
+    private final SegmentReplicationCheckpointPublisher publisher;
+    protected static Logger logger = LogManager.getLogger(CheckpointRefreshListener.class);
+    @Override  
+ *
+ *
+    public CheckpointRefreshListener(IndexShard shard, SegmentReplicationCheckpointPublisher publisher) {  

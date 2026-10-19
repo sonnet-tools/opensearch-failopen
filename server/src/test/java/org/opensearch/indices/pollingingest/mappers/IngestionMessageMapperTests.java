@@ -1,231 +1,175 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.pollingingest.mappers;
-
-import org.opensearch.index.IngestionShardPointer;
-import org.opensearch.index.Message;
-import org.opensearch.index.engine.FakeIngestionSource;  
-import org.opensearch.indices.pollingingest.IngestionUtils;
-import org.opensearch.indices.pollingingest.ShardUpdateMessage;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.nio.charset.StandardCharsets;
-import java.util.Map;  
-
-import static org.opensearch.action.index.IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
-
-public class IngestionMessageMapperTests extends OpenSearchTestCase {
-
-    private static Map<String, Object> decode(byte[] payload) {  
-        return IngestionUtils.getParsedPayloadMap(payload);
-    }
-
-    public void testMapperTypeFromStringAndName() {
-        assertEquals(IngestionMessageMapper.MapperType.DEFAULT, IngestionMessageMapper.MapperType.fromString("default"));
-        assertEquals(IngestionMessageMapper.MapperType.DEFAULT, IngestionMessageMapper.MapperType.fromString("DEFAULT"));  
-        assertEquals(IngestionMessageMapper.MapperType.RAW_PAYLOAD, IngestionMessageMapper.MapperType.fromString("raw_payload"));
-        assertEquals(IngestionMessageMapper.MapperType.RAW_PAYLOAD, IngestionMessageMapper.MapperType.fromString("RAW_PAYLOAD"));
-        assertEquals(IngestionMessageMapper.MapperType.FIELD_MAPPING, IngestionMessageMapper.MapperType.fromString("field_mapping"));  
-        assertEquals(IngestionMessageMapper.MapperType.FIELD_MAPPING, IngestionMessageMapper.MapperType.fromString("FIELD_MAPPING"));
-
-        assertEquals("default", IngestionMessageMapper.MapperType.DEFAULT.getName());  
-        assertEquals("raw_payload", IngestionMessageMapper.MapperType.RAW_PAYLOAD.getName());
-        assertEquals("field_mapping", IngestionMessageMapper.MapperType.FIELD_MAPPING.getName());
-    }  
-
-    public void testMapperTypeFromStringInvalid() {
-        expectThrows(IllegalArgumentException.class, () -> IngestionMessageMapper.MapperType.fromString("invalid"));  
-    }
-
-    public void testMapperCreation() {  
-        IngestionMessageMapper defaultMapper = IngestionMessageMapper.create("default", 0);
-        assertNotNull(defaultMapper);
-        assertTrue(defaultMapper instanceof DefaultIngestionMessageMapper);  
-
-        IngestionMessageMapper rawPayloadMapper = IngestionMessageMapper.create("raw_payload", 0);
-        assertNotNull(rawPayloadMapper);  
-        assertTrue(rawPayloadMapper instanceof RawPayloadIngestionMessageMapper);
-
-        IngestionMessageMapper fieldMappingMapper = IngestionMessageMapper.create(  
-            "field_mapping",
-            0,
-            Map.of(FieldMappingIngestionMessageMapper.ID_FIELD, "user_id")  
-        );
-        assertNotNull(fieldMappingMapper);
-        assertTrue(fieldMappingMapper instanceof FieldMappingIngestionMessageMapper);  
-
-        expectThrows(IllegalArgumentException.class, () -> IngestionMessageMapper.create("unknown", 0));
-    }  
-
-    public void testDefaultMapperWithIdPresent() {
-        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();  
-        String payload = "{\"_id\":\"123\",\"_op_type\":\"index\",\"_source\":{\"name\":\"alice\",\"age\":30}}";
         byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(5);
-        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
-
+        String payload = "invalid json {{{";
+        assertEquals("789", parsedMap.get("_id"));
+        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();
+        assertEquals(message, result.originalMessage());  
+        assertEquals("index", parsedMap.get("_op_type"));  
+import org.opensearch.index.IngestionShardPointer;
+        Map<String, Object> parsedMap = result.parsedPayloadMap();
+    }
+        assertEquals(30, source.get("age"));
         ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));
-
-        assertNotNull(result);  
+        assertEquals(IngestionMessageMapper.MapperType.DEFAULT, IngestionMessageMapper.MapperType.fromString("DEFAULT"));  
+        assertEquals(30, source.get("age"));
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(600);  
+        assertEquals("Seattle", source.get("city"));  
+    public void testDefaultMapperWithoutId() {
+import java.util.Map;  
+import org.opensearch.index.Message;
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        assertNotNull(defaultMapper);
+        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();  
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);  
+    public void testRawPayloadMapperWithComplexObject() {
+        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);  
+ */  
+        Map<String, Object> parsedMap = result.parsedPayloadMap();  
+import org.opensearch.index.engine.FakeIngestionSource;  
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(300);
+        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();  
+        Map<String, Object> parsedMap = result.parsedPayloadMap();  
+        assertEquals(IngestionMessageMapper.MapperType.FIELD_MAPPING, IngestionMessageMapper.MapperType.fromString("field_mapping"));  
+        expectThrows(IllegalArgumentException.class, () -> IngestionMessageMapper.create("unknown", 0));
+        assertTrue(fieldMappingMapper instanceof FieldMappingIngestionMessageMapper);  
+        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);  
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(10);  
+            Map.of(FieldMappingIngestionMessageMapper.ID_FIELD, "user_id")  
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
+        assertEquals("index", parsedMap.get("_op_type"));  
+        Map<String, Object> source = (Map<String, Object>) parsedMap.get("_source");  
+    private static Map<String, Object> decode(byte[] payload) {  
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(500);
+        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(2);
+        assertEquals(3, source.size());  
+        IngestionMessageMapper fieldMappingMapper = IngestionMessageMapper.create(  
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(5);
+        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(0);
+ *
+        assertEquals("field_mapping", IngestionMessageMapper.MapperType.FIELD_MAPPING.getName());
         assertEquals(pointer, result.pointer());
+        String generatedId = (String) parsedMap.get("_id");
+        assertTrue(source.isEmpty());
+        assertEquals(IngestionMessageMapper.MapperType.FIELD_MAPPING, IngestionMessageMapper.MapperType.fromString("FIELD_MAPPING"));
+        assertEquals(IngestionMessageMapper.MapperType.DEFAULT, IngestionMessageMapper.MapperType.fromString("default"));
+        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
+        String payload = "{\"user\":{\"name\":\"bob\",\"email\":\"bob@example.com\"},\"tags\":[\"tag1\",\"tag2\"],\"count\":42}";  
+        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));
+        assertEquals("alice", source.get("name"));  
+        assertNotNull(result);  
+        assertEquals("raw_payload", IngestionMessageMapper.MapperType.RAW_PAYLOAD.getName());
+        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(1);
+        assertNotNull(result);  
+    public void testMapperCreation() {  
+        // Verify _op_type is set to "index"
+public class IngestionMessageMapperTests extends OpenSearchTestCase {
+package org.opensearch.indices.pollingingest.mappers;
+    }
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        assertEquals(pointer, result.pointer());
+        assertNotNull(result);
+            "field_mapping",
+        assertEquals("1-200", parsedMap.get("_id"));
+        assertTrue(source.containsKey("user"));
+        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
+        // Verify _source contains the original payload
+    public void testRawPayloadMapperWithEmptyObject() {  
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(3);
+        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));
+ * SPDX-License-Identifier: Apache-2.0
+        assertTrue(defaultMapper instanceof DefaultIngestionMessageMapper);  
+    }  
+        assertTrue(rawPayloadMapper instanceof RawPayloadIngestionMessageMapper);
+    public void testRawPayloadMapperWithInvalidJson() {
+import org.opensearch.indices.pollingingest.ShardUpdateMessage;
+    }  
+        assertEquals("0-100", parsedMap.get("_id"));  
+        assertTrue(parsedMap.get("_id") instanceof String);  
+        assertNotNull(result);
+        // Verify _source does not contain metadata fields
+        String payload = "{\"_op_type\":\"index\",\"_source\":{\"name\":\"bob\",\"age\":25}}";  
+        String payload = "not a json";  
+        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));
+        assertEquals(IngestionMessageMapper.MapperType.RAW_PAYLOAD, IngestionMessageMapper.MapperType.fromString("RAW_PAYLOAD"));
+        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();  
+        String payload = "{}";
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.test.OpenSearchTestCase;  
+    }
+        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
+        assertTrue(parsedMap.get("_source") instanceof Map);  
+    public void testDefaultMapperWithVersion() {
+        assertEquals("alice", source.get("name"));
+        assertEquals("123", parsedMap.get("_id"));  
+        expectThrows(IllegalArgumentException.class, () -> IngestionMessageMapper.MapperType.fromString("invalid"));  
+        Map<String, Object> parsedMap = result.parsedPayloadMap();
+}
+        assertTrue(parsedMap.get("_source") instanceof Map);
+        assertEquals(42, source.get("count"));  
+/*  
+        assertFalse(source.containsKey("_id"));  
+    public void testDefaultMapperWithIdPresent() {
+        assertNotNull(result);
+        Map<String, Object> parsedMap = result.parsedPayloadMap();
+        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));  
+        assertNotNull(parsedMap.get("_source"));  
+    public void testMapperTypeFromStringInvalid() {
+        Map<String, Object> parsedMap = result.parsedPayloadMap();
+        expectThrows(Exception.class, () -> mapper.mapAndProcess(pointer, message, decode(payloadBytes)));
+        assertTrue(source.containsKey("tags"));
+        assertNotNull(rawPayloadMapper);  
+    }
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(100);
+        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));  
+        assertEquals(pointer, result.pointer());  
+        assertFalse(source.containsKey("_op_type"));
+import static org.opensearch.action.index.IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
+        String payload = "{\"_id\":\"789\",\"_version\":\"5\",\"_op_type\":\"index\",\"_source\":{\"name\":\"david\"}}";
+        assertEquals(message, result.originalMessage());
+        );
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+            0,
+    }  
+        Map<String, Object> source = (Map<String, Object>) parsedMap.get("_source");
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(20);
+    }
+    }
+import java.nio.charset.StandardCharsets;
+        // Verify _id is set to shard ID + pointer value
+ * compatible open source license.
+    public void testMapperTypeFromStringAndName() {
+    }  
+        Map<String, Object> source = (Map<String, Object>) parsedMap.get("_source");
+        assertEquals("index", parsedMap.get("_op_type"));
+        assertNotNull(result);
+        assertEquals(UNSET_AUTO_GENERATED_TIMESTAMP, result.autoGeneratedIdTimestamp());
+    public void testDefaultMapperWithInvalidJson() {
+        assertEquals(IngestionMessageMapper.MapperType.RAW_PAYLOAD, IngestionMessageMapper.MapperType.fromString("raw_payload"));
+        assertNotNull(fieldMappingMapper);
         assertEquals(message, result.originalMessage());
         assertEquals(UNSET_AUTO_GENERATED_TIMESTAMP, result.autoGeneratedIdTimestamp());  
-
-        Map<String, Object> parsedMap = result.parsedPayloadMap();
-        assertEquals("123", parsedMap.get("_id"));  
-        assertEquals("index", parsedMap.get("_op_type"));
-        assertNotNull(parsedMap.get("_source"));
-        assertTrue(parsedMap.get("_source") instanceof Map);  
-
-        Map<String, Object> source = (Map<String, Object>) parsedMap.get("_source");
-        assertEquals("alice", source.get("name"));  
-        assertEquals(30, source.get("age"));
-    }
-
-    public void testDefaultMapperWithoutId() {
-        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();
-        String payload = "{\"_op_type\":\"index\",\"_source\":{\"name\":\"bob\",\"age\":25}}";  
-        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(10);  
-        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
-
-        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));  
-
-        assertNotNull(result);
-        assertEquals(pointer, result.pointer());  
-        assertEquals(message, result.originalMessage());
-        assertNotEquals(UNSET_AUTO_GENERATED_TIMESTAMP, result.autoGeneratedIdTimestamp());
-
-        Map<String, Object> parsedMap = result.parsedPayloadMap();
-        assertNotNull(parsedMap.get("_id"));
-        assertTrue(parsedMap.get("_id") instanceof String);  
-        String generatedId = (String) parsedMap.get("_id");
-        assertFalse(generatedId.isEmpty());
-    }  
-
-    public void testDefaultMapperWithVersion() {
-        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();  
-        String payload = "{\"_id\":\"789\",\"_version\":\"5\",\"_op_type\":\"index\",\"_source\":{\"name\":\"david\"}}";
-        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(20);
-        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
-
-        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));
-
-        assertNotNull(result);  
-        Map<String, Object> parsedMap = result.parsedPayloadMap();
-        assertEquals("789", parsedMap.get("_id"));
+        IngestionMessageMapper defaultMapper = IngestionMessageMapper.create("default", 0);
+        return IngestionUtils.getParsedPayloadMap(payload);
         assertEquals("5", parsedMap.get("_version"));  
-    }
-
-    public void testRawPayloadMapper() {  
-        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(0);
-        String payload = "{\"name\":\"alice\",\"age\":30,\"city\":\"Seattle\"}";
-        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);  
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(100);
-        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);  
-
-        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));
-
-        assertNotNull(result);
-        assertEquals(pointer, result.pointer());
-        assertEquals(message, result.originalMessage());  
-        assertEquals(UNSET_AUTO_GENERATED_TIMESTAMP, result.autoGeneratedIdTimestamp());
-
-        Map<String, Object> parsedMap = result.parsedPayloadMap();  
-
-        // Verify _id is set to shard ID + pointer value
-        assertEquals("0-100", parsedMap.get("_id"));  
-
-        // Verify _op_type is set to "index"
-        assertEquals("index", parsedMap.get("_op_type"));  
-
-        // Verify _source contains the original payload
-        assertNotNull(parsedMap.get("_source"));  
-        assertTrue(parsedMap.get("_source") instanceof Map);
-
-        Map<String, Object> source = (Map<String, Object>) parsedMap.get("_source");  
-        assertEquals("alice", source.get("name"));
-        assertEquals(30, source.get("age"));
-        assertEquals("Seattle", source.get("city"));  
-
-        // Verify _source does not contain metadata fields
-        assertFalse(source.containsKey("_id"));  
-        assertFalse(source.containsKey("_op_type"));
-    }
-
-    public void testRawPayloadMapperWithComplexObject() {
-        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(1);
-        String payload = "{\"user\":{\"name\":\"bob\",\"email\":\"bob@example.com\"},\"tags\":[\"tag1\",\"tag2\"],\"count\":42}";  
-        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(200);  
+        expectThrows(Exception.class, () -> mapper.mapAndProcess(pointer, message, decode(payloadBytes)));  
         Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
-
-        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));  
-
-        assertNotNull(result);
-        Map<String, Object> parsedMap = result.parsedPayloadMap();  
-
-        assertEquals("1-200", parsedMap.get("_id"));
-        assertEquals("index", parsedMap.get("_op_type"));  
-
-        Map<String, Object> source = (Map<String, Object>) parsedMap.get("_source");
-        assertEquals(3, source.size());  
-        assertTrue(source.containsKey("user"));
-        assertTrue(source.containsKey("tags"));
-        assertEquals(42, source.get("count"));  
-    }
-
-    public void testRawPayloadMapperWithEmptyObject() {  
-        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(2);
-        String payload = "{}";
-        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);  
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(300);
-        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);  
-
-        ShardUpdateMessage result = mapper.mapAndProcess(pointer, message, decode(payloadBytes));
-
-        assertNotNull(result);
-        Map<String, Object> parsedMap = result.parsedPayloadMap();
-
+    public void testRawPayloadMapper() {  
+import org.opensearch.indices.pollingingest.IngestionUtils;
+        assertNotNull(parsedMap.get("_source"));
+        assertNotEquals(UNSET_AUTO_GENERATED_TIMESTAMP, result.autoGeneratedIdTimestamp());
+        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(200);  
         assertEquals("2-300", parsedMap.get("_id"));
         assertEquals("index", parsedMap.get("_op_type"));
-
+        String payload = "{\"_id\":\"123\",\"_op_type\":\"index\",\"_source\":{\"name\":\"alice\",\"age\":30}}";
+        String payload = "{\"name\":\"alice\",\"age\":30,\"city\":\"Seattle\"}";
+        assertFalse(generatedId.isEmpty());
+        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
+        assertNotNull(parsedMap.get("_id"));
+    }
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);  
         Map<String, Object> source = (Map<String, Object>) parsedMap.get("_source");
-        assertTrue(source.isEmpty());
-    }  
-
-    public void testDefaultMapperWithInvalidJson() {
-        DefaultIngestionMessageMapper mapper = new DefaultIngestionMessageMapper();  
-        String payload = "invalid json {{{";
-        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(500);
-        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
-
-        expectThrows(Exception.class, () -> mapper.mapAndProcess(pointer, message, decode(payloadBytes)));
     }
-
-    public void testRawPayloadMapperWithInvalidJson() {
-        RawPayloadIngestionMessageMapper mapper = new RawPayloadIngestionMessageMapper(3);
-        String payload = "not a json";  
-        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
-
-        IngestionShardPointer pointer = new FakeIngestionSource.FakeIngestionShardPointer(600);  
-        Message message = new FakeIngestionSource.FakeIngestionMessage(payloadBytes);
-
-        expectThrows(Exception.class, () -> mapper.mapAndProcess(pointer, message, decode(payloadBytes)));  
-    }
-}
+        IngestionMessageMapper rawPayloadMapper = IngestionMessageMapper.create("raw_payload", 0);
+        assertEquals("default", IngestionMessageMapper.MapperType.DEFAULT.getName());  
+ * this file be licensed under the Apache-2.0 license or a

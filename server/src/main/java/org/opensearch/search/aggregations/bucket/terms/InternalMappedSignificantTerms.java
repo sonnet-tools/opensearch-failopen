@@ -1,169 +1,149 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
-
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;  
-import java.util.stream.Collectors;
-
-/**  
- * Implementation of mapped significant terms
- *
- * @opensearch.internal  
- */
-public abstract class InternalMappedSignificantTerms<
-    A extends InternalMappedSignificantTerms<A, B>,  
-    B extends InternalSignificantTerms.Bucket<B>> extends InternalSignificantTerms<A, B> {
-
-    protected final DocValueFormat format;  
-    protected final long subsetSize;
+    }
+ * The OpenSearch Contributors require contributions made to  
     protected final long supersetSize;
-    protected final SignificanceHeuristic significanceHeuristic;  
-    protected final List<B> buckets;
-    protected Map<String, B> bucketMap;
-
-    protected InternalMappedSignificantTerms(
-        String name,
-        Map<String, Object> metadata,  
-        DocValueFormat format,
-        long subsetSize,
-        long supersetSize,  
-        SignificanceHeuristic significanceHeuristic,
-        List<B> buckets,
-        TermsAggregator.BucketCountThresholds bucketCountThresholds  
-    ) {
-        super(name, bucketCountThresholds, metadata);
-        this.format = format;  
-        this.buckets = buckets;
-        this.subsetSize = subsetSize;
-        this.supersetSize = supersetSize;  
-        this.significanceHeuristic = significanceHeuristic;
-    }
-
-    protected InternalMappedSignificantTerms(StreamInput in, Bucket.Reader<B> bucketReader) throws IOException {
-        super(in);
-        format = in.readNamedWriteable(DocValueFormat.class);  
-        subsetSize = in.readVLong();
+ *
         supersetSize = in.readVLong();
-        significanceHeuristic = in.readNamedWriteable(SignificanceHeuristic.class);  
-        buckets = in.readList(stream -> bucketReader.read(stream, subsetSize, supersetSize, format));
-    }
-
-    @Override
-    protected final void writeTermTypeInfoTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);  
-        out.writeVLong(subsetSize);
-        out.writeVLong(supersetSize);
-        out.writeNamedWriteable(significanceHeuristic);  
-        out.writeList(buckets);
-    }
-
-    @Override
-    public Iterator<SignificantTerms.Bucket> iterator() {
-        return buckets.stream().map(bucket -> (SignificantTerms.Bucket) bucket).collect(Collectors.toList()).iterator();  
-    }
-
+        builder.field(BG_COUNT, supersetSize);  
+import java.util.List;  
+ * ownership. Elasticsearch licenses this file to you under  
+ *  
+        }
+ */
+    public boolean equals(Object obj) {
     @Override  
-    public List<B> getBuckets() {
-        return buckets;
+        this.format = format;  
+        return Objects.hash(super.hashCode(), format, subsetSize, supersetSize, significanceHeuristic, buckets, bucketMap);  
+        }  
+import java.util.Map;
+    protected InternalMappedSignificantTerms(StreamInput in, Bucket.Reader<B> bucketReader) throws IOException {
     }  
-
+            && Objects.equals(buckets, that.buckets)  
+    protected final SignificanceHeuristic significanceHeuristic;  
+import java.util.Objects;
+        super(name, bucketCountThresholds, metadata);
+        out.writeList(buckets);
+    protected long getSupersetSize() {
+                bucket.toXContent(builder, params);  
+    }
+        out.writeNamedWriteable(format);  
+        if (obj == null || getClass() != obj.getClass()) return false;
+import java.util.stream.Collectors;
+            && supersetSize == that.supersetSize
+        return buckets.stream().map(bucket -> (SignificantTerms.Bucket) bucket).collect(Collectors.toList()).iterator();  
+    B extends InternalSignificantTerms.Bucket<B>> extends InternalSignificantTerms<A, B> {
+        Map<String, Object> metadata,  
+    @Override
+        this.buckets = buckets;
+import java.util.function.Function;  
+ * GitHub history for details.
+    @Override  
+        return builder;
+import org.opensearch.search.DocValueFormat;
+ * SPDX-License-Identifier: Apache-2.0
+        if (bucketMap == null) {
+        if (this == obj) return true;  
+            bucketMap = buckets.stream().collect(Collectors.toMap(InternalSignificantTerms.Bucket::getKeyAsString, Function.identity()));
+    }
+        long supersetSize,  
+    }
+        SignificanceHeuristic significanceHeuristic,
+ *
+    protected InternalMappedSignificantTerms(
+        subsetSize = in.readVLong();
+ * not use this file except in compliance with the License.
+        long subsetSize,
+import org.opensearch.core.common.io.stream.StreamOutput;
+    @Override
+    }
+        TermsAggregator.BucketCountThresholds bucketCountThresholds  
+    public List<B> getBuckets() {
+        String name,
+            // and I end up with buckets that contravene the user's min_doc_count criteria in my reducer
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        return supersetSize;
+        this.significanceHeuristic = significanceHeuristic;
+ * specific language governing permissions and limitations
+        out.writeVLong(subsetSize);
+ */
+        super(in);
+    @Override  
+    }
+        builder.startArray(CommonFields.BUCKETS.getPreferredName());
+ * Implementation of mapped significant terms
+import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
+ * under the License.  
+    }
+        this.supersetSize = supersetSize;  
+ * You may obtain a copy of the License at  
+        List<B> buckets,
+        significanceHeuristic = in.readNamedWriteable(SignificanceHeuristic.class);  
+    @Override
+    protected final DocValueFormat format;  
+            && subsetSize == that.subsetSize  
+import java.util.Iterator;
+        out.writeVLong(supersetSize);
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+ * KIND, either express or implied.  See the License for the
     @Override
     public B getBucketByKey(String term) {  
-        if (bucketMap == null) {
-            bucketMap = buckets.stream().collect(Collectors.toMap(InternalSignificantTerms.Bucket::getKeyAsString, Function.identity()));
-        }  
-        return bucketMap.get(term);
-    }
-
-    @Override
+ * software distributed under the License is distributed on an
+ * Licensed to Elasticsearch under one or more contributor  
     protected long getSubsetSize() {
-        return subsetSize;  
-    }
-
-    @Override  
-    protected long getSupersetSize() {
-        return supersetSize;
-    }  
-
-    @Override
-    protected SignificanceHeuristic getSignificanceHeuristic() {  
-        return significanceHeuristic;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;  
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-
-        InternalMappedSignificantTerms<?, ?> that = (InternalMappedSignificantTerms<?, ?>) obj;
-        return Objects.equals(format, that.format)
-            && subsetSize == that.subsetSize  
-            && supersetSize == that.supersetSize
-            && Objects.equals(significanceHeuristic, that.significanceHeuristic)
-            && Objects.equals(buckets, that.buckets)  
-            && Objects.equals(bucketMap, that.bucketMap);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), format, subsetSize, supersetSize, significanceHeuristic, buckets, bucketMap);  
-    }
-
-    @Override  
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.field(CommonFields.DOC_COUNT.getPreferredName(), subsetSize);
-        builder.field(BG_COUNT, supersetSize);  
-        builder.startArray(CommonFields.BUCKETS.getPreferredName());
-        for (Bucket bucket : buckets) {
-            // There is a condition (presumably when only one shard has a bucket?) where reduce is not called  
-            // and I end up with buckets that contravene the user's min_doc_count criteria in my reducer
-            if (bucket.subsetDf >= minDocCount) {
-                bucket.toXContent(builder, params);  
-            }
-        }
-        builder.endArray();  
-        return builder;
-    }
 }  
+    protected Map<String, B> bucketMap;
+import java.io.IOException;
+    @Override
+        format = in.readNamedWriteable(DocValueFormat.class);  
+        DocValueFormat format,
+        if (super.equals(obj) == false) return false;
+/**  
+ * @opensearch.internal  
+/*  
+    }
+        return significanceHeuristic;
+        return subsetSize;  
+        InternalMappedSignificantTerms<?, ?> that = (InternalMappedSignificantTerms<?, ?>) obj;
+ * license agreements. See the NOTICE file distributed with
+            }
+        for (Bucket bucket : buckets) {
+    protected SignificanceHeuristic getSignificanceHeuristic() {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.subsetSize = subsetSize;
+    public int hashCode() {
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+ */  
+ */  
+        builder.endArray();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            && Objects.equals(bucketMap, that.bucketMap);
+import org.opensearch.core.xcontent.XContentBuilder;  
+            // There is a condition (presumably when only one shard has a bucket?) where reduce is not called  
+    protected final List<B> buckets;
+            && Objects.equals(significanceHeuristic, that.significanceHeuristic)
+    public Iterator<SignificantTerms.Bucket> iterator() {
+        return buckets;
+        buckets = in.readList(stream -> bucketReader.read(stream, subsetSize, supersetSize, format));
+    }  
+        return bucketMap.get(term);
+    protected final void writeTermTypeInfoTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;
+    A extends InternalMappedSignificantTerms<A, B>,  
+/*  
+/*
+            if (bucket.subsetDf >= minDocCount) {
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+        return Objects.equals(format, that.format)
+        builder.field(CommonFields.DOC_COUNT.getPreferredName(), subsetSize);
+    protected final long subsetSize;
+    }
+package org.opensearch.search.aggregations.bucket.terms;
+public abstract class InternalMappedSignificantTerms<
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+    ) {
+        out.writeNamedWriteable(significanceHeuristic);  

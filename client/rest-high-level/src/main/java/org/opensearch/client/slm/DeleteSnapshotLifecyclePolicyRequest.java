@@ -1,62 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+    public int hashCode() {
+        DeleteSnapshotLifecyclePolicyRequest other = (DeleteSnapshotLifecyclePolicyRequest) o;
+        this.policyId = policyId;  
+    public String getPolicyId() {  
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+ */  
+}
+ * Licensed to Elasticsearch under one or more contributor  
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+        if (o == null || getClass() != o.getClass()) return false;
+package org.opensearch.client.slm;
+        return this.policyId.equals(other.policyId);  
+ * GitHub history for details.
+    @Override  
+    }
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+    }  
  * specific language governing permissions and limitations
  * under the License.  
- */
-
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.slm;
-
-import org.opensearch.client.TimedRequest;
-
-import java.util.Objects;  
-
-public class DeleteSnapshotLifecyclePolicyRequest extends TimedRequest {
-    private final String policyId;  
-
-    public DeleteSnapshotLifecyclePolicyRequest(String policyId) {
-        this.policyId = policyId;  
-    }
-
-    public String getPolicyId() {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
         return this.policyId;
-    }
-
-    @Override
-    public boolean equals(Object o) {
+import org.opensearch.client.TimedRequest;
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ *
         if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        DeleteSnapshotLifecyclePolicyRequest other = (DeleteSnapshotLifecyclePolicyRequest) o;
-        return this.policyId.equals(other.policyId);  
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this file be licensed under the Apache-2.0 license or a
+    private final String policyId;  
     }
-
-    @Override  
-    public int hashCode() {
+import java.util.Objects;  
+ */  
+    }
+ * You may obtain a copy of the License at  
+    @Override
+    public DeleteSnapshotLifecyclePolicyRequest(String policyId) {
+    public boolean equals(Object o) {
+ */
+public class DeleteSnapshotLifecyclePolicyRequest extends TimedRequest {
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
         return Objects.hash(this.policyId);
-    }  
-}

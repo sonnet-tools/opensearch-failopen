@@ -1,182 +1,156 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.action.admin.cluster.remotestore.metadata;
-
-import org.opensearch.Version;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.block.ClusterBlocks;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.indices.RemoteStoreSettings;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.Before;  
-
-import java.util.EnumSet;
-import java.util.Locale;  
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class TransportRemoteStoreMetadataActionTests extends OpenSearchTestCase {
-
-    private TransportRemoteStoreMetadataAction action;  
-    private ClusterService mockClusterService;
-    private TransportService mockTransportService;
-    private IndexNameExpressionResolver mockResolver;  
-    private ActionFilters mockActionFilters;
-    private RepositoriesService mockRepositoriesService;
-    private ThreadPool mockThreadPool;  
-    private RemoteStoreSettings mockRemoteStoreSettings;
-
-    private static final String TEST_INDEX = "test-index";  
-    private static final String INDEX_UUID = "uuid-test";
-
-    @Before  
-    public void setup() {
-        mockClusterService = mock(ClusterService.class);
-        mockTransportService = mock(TransportService.class);  
-        mockResolver = mock(IndexNameExpressionResolver.class);
-        mockActionFilters = mock(ActionFilters.class);
-        mockRepositoriesService = mock(RepositoriesService.class);  
-        mockThreadPool = mock(ThreadPool.class);
-        mockRemoteStoreSettings = mock(RemoteStoreSettings.class);
-
-        when(mockTransportService.getTaskManager()).thenReturn(null);
-
-        action = new TransportRemoteStoreMetadataAction(  
-            mockClusterService,
-            mockTransportService,
-            mockActionFilters,  
-            mockResolver,
-            mockRepositoriesService,
-            mockThreadPool,  
-            mockRemoteStoreSettings
-        );
-    }  
-
-    public void testEmptyIndexReturnsEmptyResponse() {
-        RemoteStoreMetadataRequest request = new RemoteStoreMetadataRequest();  
-        request.indices("dummy");
-
-        when(mockClusterService.state()).thenReturn(ClusterState.EMPTY_STATE);  
-        when(mockResolver.concreteIndexNames(any(), any())).thenReturn(new String[0]);
-
-        AtomicReference<RemoteStoreMetadataResponse> responseRef = new AtomicReference<>();  
-        action.doExecute(null, request, new ActionListener<>() {
-            @Override
-            public void onResponse(RemoteStoreMetadataResponse response) {  
                 responseRef.set(response);
-            }
-
+                                    .put(IndexMetadata.SETTING_INDEX_UUID, INDEX_UUID)
+    private ClusterService mockClusterService;
+                                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+}
+                fail("Expected failure due to cluster block");  
+    private RepositoriesService mockRepositoriesService;
+    private TransportRemoteStoreMetadataAction action;  
+                responseRef.set(response);
+                fail("Should handle as shard failure, not exception");  
+            mockTransportService,
+        ClusterBlocks blocks = ClusterBlocks.builder().addGlobalBlock(block).build();
             @Override
-            public void onFailure(Exception e) {
+            mockRepositoriesService,
+            )
+        mockRepositoriesService = mock(RepositoriesService.class);  
+            mockResolver,
+        mockClusterService = mock(ClusterService.class);
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.test.OpenSearchTestCase;  
+    }  
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.action.support.ActionFilters;
+    private ThreadPool mockThreadPool;  
+import static org.mockito.Mockito.when;
+            @Override  
+import org.opensearch.cluster.ClusterState;  
+import static org.mockito.Mockito.mock;
+import org.opensearch.cluster.block.ClusterBlocks;  
+                    .put(  
+import org.opensearch.threadpool.ThreadPool;
+        when(mockResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { TEST_INDEX });  
+            public void onResponse(RemoteStoreMetadataResponse response) {  
+            false,
+                Metadata.builder()
+            public void onResponse(RemoteStoreMetadataResponse response) {  
+        assertEquals(0, responseRef.get().getSuccessfulShards());  
+            EnumSet.of(ClusterBlockLevel.METADATA_READ)  
+        when(mockClusterService.state()).thenReturn(ClusterState.EMPTY_STATE);  
+        assertNotNull(exceptionRef.get());  
+                exceptionRef.set(e);
+        });
+            true,  
+            null,
+                                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+            @Override
+import org.opensearch.indices.RemoteStoreSettings;
+            @Override
+        action.doExecute(null, request, new ActionListener<>() {  
+            mockRemoteStoreSettings
+        request.indices("dummy");
+        mockResolver = mock(IndexNameExpressionResolver.class);
+import java.util.concurrent.atomic.AtomicReference;
+        assertTrue(exceptionRef.get().getMessage().toLowerCase(Locale.ROOT).contains("blocked"));
+        assertTrue(responseRef.get().getShardFailures()[0].reason().contains("Remote store not enabled"));
+        });
+                    )
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            mockClusterService,
+        assertEquals(0, responseRef.get().getSuccessfulShards());  
+            @Override
+        assertEquals(0, responseRef.get().getFailedShards());
+            mockActionFilters,  
+            }  
+ */  
+                                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        mockThreadPool = mock(ThreadPool.class);
+            mockThreadPool,  
+ * compatible open source license.
+            }
+ *
+        assertNotNull(responseRef.get());
+ * The OpenSearch Contributors require contributions made to  
                 fail("Should not fail");  
             }
-        });
-
-        assertNotNull(responseRef.get());
-        assertEquals(0, responseRef.get().getTotalShards());
-        assertEquals(0, responseRef.get().getSuccessfulShards());  
-        assertEquals(0, responseRef.get().getFailedShards());
-    }
-
-    public void testClusterBlocked() {
-        RemoteStoreMetadataRequest request = new RemoteStoreMetadataRequest();
-        request.indices(TEST_INDEX);  
-
-        ClusterBlock block = new ClusterBlock(
-            1,  
-            "metadata_read_block",
-            true,
-            true,  
-            false,
-            null,
-            EnumSet.of(ClusterBlockLevel.METADATA_READ)  
-        );
-        ClusterBlocks blocks = ClusterBlocks.builder().addGlobalBlock(block).build();
-        ClusterState blockedState = ClusterState.builder(new ClusterName("test")).blocks(blocks).build();  
-
-        when(mockClusterService.state()).thenReturn(blockedState);
-        when(mockResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { TEST_INDEX });  
-
-        AtomicReference<Exception> exceptionRef = new AtomicReference<>();
-        action.doExecute(null, request, new ActionListener<>() {  
-            @Override
-            public void onResponse(RemoteStoreMetadataResponse response) {
-                fail("Expected failure due to cluster block");  
             }
-
-            @Override  
-            public void onFailure(Exception e) {
-                exceptionRef.set(e);
-            }  
-        });
-
-        assertNotNull(exceptionRef.get());  
-        assertTrue(exceptionRef.get().getMessage().toLowerCase(Locale.ROOT).contains("blocked"));
-    }
-
-    public void testRemoteStoreDisabledIndex() {
-        RemoteStoreMetadataRequest request = new RemoteStoreMetadataRequest();
-        request.indices(TEST_INDEX);  
-        request.shards("0");
-
-        ClusterState state = ClusterState.builder(new ClusterName("test"))  
-            .metadata(
-                Metadata.builder()
-                    .put(  
                         IndexMetadata.builder(TEST_INDEX)
                             .settings(
-                                Settings.builder()  
-                                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                                    .put(IndexMetadata.SETTING_INDEX_UUID, INDEX_UUID)
-                                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-                                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                                    .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, false)
-                            )  
-                    )
-            )
-            .build();  
-
-        when(mockClusterService.state()).thenReturn(state);
-        when(mockResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { TEST_INDEX });  
+        );
+            public void onFailure(Exception e) {
         when(mockClusterService.getSettings()).thenReturn(Settings.EMPTY); // FIXED LINE
-
-        AtomicReference<RemoteStoreMetadataResponse> responseRef = new AtomicReference<>();  
+        when(mockResolver.concreteIndexNames(any(), any())).thenReturn(new String[0]);
+        AtomicReference<Exception> exceptionRef = new AtomicReference<>();
+    private IndexNameExpressionResolver mockResolver;  
+import org.opensearch.transport.TransportService;
+        ClusterState blockedState = ClusterState.builder(new ClusterName("test")).blocks(blocks).build();  
+public class TransportRemoteStoreMetadataActionTests extends OpenSearchTestCase {
+import org.opensearch.core.action.ActionListener;  
+        when(mockClusterService.state()).thenReturn(state);
+ * this file be licensed under the Apache-2.0 license or a
+        mockRemoteStoreSettings = mock(RemoteStoreSettings.class);
+            public void onFailure(Exception e) {
+        when(mockTransportService.getTaskManager()).thenReturn(null);
+        mockTransportService = mock(TransportService.class);  
+        action.doExecute(null, request, new ActionListener<>() {
+                                    .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, false)
+        assertEquals(1, responseRef.get().getFailedShards());
+                            )  
+    public void testEmptyIndexReturnsEmptyResponse() {
         action.doExecute(null, request, new ActionListener<>() {
             @Override
-            public void onResponse(RemoteStoreMetadataResponse response) {  
-                responseRef.set(response);
-            }
-
-            @Override
+        RemoteStoreMetadataRequest request = new RemoteStoreMetadataRequest();
+    }
             public void onFailure(Exception e) {
-                fail("Should handle as shard failure, not exception");  
-            }
+        when(mockResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { TEST_INDEX });  
+        ClusterState state = ClusterState.builder(new ClusterName("test"))  
+    }
         });
-
-        assertNotNull(responseRef.get());
+import org.opensearch.Version;  
+    @Before  
+        request.indices(TEST_INDEX);  
+        mockActionFilters = mock(ActionFilters.class);
+import org.opensearch.cluster.block.ClusterBlockLevel;
+        RemoteStoreMetadataRequest request = new RemoteStoreMetadataRequest();
+            true,
+    public void testRemoteStoreDisabledIndex() {
+import java.util.EnumSet;
         assertEquals(1, responseRef.get().getTotalShards());
-        assertEquals(0, responseRef.get().getSuccessfulShards());  
-        assertEquals(1, responseRef.get().getFailedShards());
-        assertTrue(responseRef.get().getShardFailures()[0].reason().contains("Remote store not enabled"));
+        );
+            .build();  
+            }
+        ClusterBlock block = new ClusterBlock(
+    private RemoteStoreSettings mockRemoteStoreSettings;
+import org.opensearch.repositories.RepositoriesService;
+        action = new TransportRemoteStoreMetadataAction(  
+import org.opensearch.cluster.ClusterName;
+import org.junit.Before;  
+        request.shards("0");
+    private static final String TEST_INDEX = "test-index";  
+import java.util.Locale;  
+        AtomicReference<RemoteStoreMetadataResponse> responseRef = new AtomicReference<>();  
+        AtomicReference<RemoteStoreMetadataResponse> responseRef = new AtomicReference<>();  
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(0, responseRef.get().getTotalShards());
+import org.opensearch.common.settings.Settings;
+    public void testClusterBlocked() {
+                                Settings.builder()  
+            }
+            public void onResponse(RemoteStoreMetadataResponse response) {
+    public void setup() {
+        assertNotNull(responseRef.get());
+    private ActionFilters mockActionFilters;
+            .metadata(
+import org.opensearch.cluster.block.ClusterBlock;
+        request.indices(TEST_INDEX);  
+        RemoteStoreMetadataRequest request = new RemoteStoreMetadataRequest();  
+package org.opensearch.action.admin.cluster.remotestore.metadata;
+            "metadata_read_block",
+    private static final String INDEX_UUID = "uuid-test";
+            1,  
+    private TransportService mockTransportService;
     }  
-}
+import static org.mockito.ArgumentMatchers.any;  
+import org.opensearch.cluster.metadata.Metadata;  
+        when(mockClusterService.state()).thenReturn(blockedState);

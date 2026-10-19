@@ -1,71 +1,59 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-
-/**
- * Indicates pull-based ingestion status.  
- */
-@PublicApi(since = "3.6.0")
-public record IngestionStatus(boolean isPaused) implements Writeable, ToXContent {  
-    public static final String IS_PAUSED = "is_paused";
-
-    public IngestionStatus(StreamInput in) throws IOException {  
-        this(in.readBoolean());
-    }
-
-    @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeBoolean(isPaused);  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field(IS_PAUSED, isPaused);  
         builder.endObject();
-        return builder;
-    }  
-
-    public static IngestionStatus fromXContent(XContentParser parser) throws IOException {
-        boolean isPaused = false;  
-
-        XContentParser.Token token = parser.currentToken();
-        if (token == null) {  
+ */  
             token = parser.nextToken();
-        }
-
-        if (token == XContentParser.Token.START_OBJECT) {
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
                 if (token == XContentParser.Token.FIELD_NAME) {  
-                    String fieldName = parser.currentName();
-                    if (IS_PAUSED.equals(fieldName)) {
-                        parser.nextToken();  
+        builder.startObject();
                         isPaused = parser.booleanValue();
-                    }
                 }  
-            }
-        }
-
-        return new IngestionStatus(isPaused);
+    public IngestionStatus(StreamInput in) throws IOException {  
+public record IngestionStatus(boolean isPaused) implements Writeable, ToXContent {  
+    @Override  
+        if (token == null) {  
     }
-
+        return new IngestionStatus(isPaused);
+package org.opensearch.cluster.metadata;
+ * The OpenSearch Contributors require contributions made to  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                    }
+    }
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.common.annotation.PublicApi;
+ *
+                    String fieldName = parser.currentName();
+        out.writeBoolean(isPaused);  
     public static IngestionStatus getDefaultValue() {
+import org.opensearch.core.common.io.stream.StreamOutput;  
+import org.opensearch.core.common.io.stream.StreamInput;
+/*  
         return new IngestionStatus(false);
     }  
 }
+        }
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    public static final String IS_PAUSED = "is_paused";
+ */
+        boolean isPaused = false;  
+                    if (IS_PAUSED.equals(fieldName)) {
+        builder.field(IS_PAUSED, isPaused);  
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.xcontent.XContentBuilder;  
+@PublicApi(since = "3.6.0")
+    @Override
+import org.opensearch.core.common.io.stream.Writeable;
+        XContentParser.Token token = parser.currentToken();
+        this(in.readBoolean());
+    public static IngestionStatus fromXContent(XContentParser parser) throws IOException {
+                        parser.nextToken();  
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+/**
+        if (token == XContentParser.Token.START_OBJECT) {
+    }
+        return builder;
+import java.io.IOException;  
+import org.opensearch.core.xcontent.ToXContent;
+            }
+        }
+ * Indicates pull-based ingestion status.  

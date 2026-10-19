@@ -1,201 +1,182 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.snapshots.create;
-
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeOperationRequestBuilder;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.transport.client.OpenSearchClient;  
-
-import java.util.Map;
-
-/**
- * Create snapshot request builder
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
 public class CreateSnapshotRequestBuilder extends ClusterManagerNodeOperationRequestBuilder<
+    public CreateSnapshotRequestBuilder setIncludeGlobalState(boolean includeGlobalState) {
+ * Licensed to Elasticsearch under one or more contributor  
+     *
+     *  
+     *  
+     * Sets the snapshot name  
+    }
+        request.indices(indices);
+    public CreateSnapshotRequestBuilder setWaitForCompletion(boolean waitForCompletion) {
+        request.snapshot(snapshot);  
+ * GitHub history for details.
+        return this;
+     * @param xContentType the content type of the source
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+     * <p>
+    /**
+     * @param snapshot snapshot name
+ */
+     * @param waitForCompletion true if
+     * prefix "test" except index "test42". Aliases are supported. An empty list or {"_all"} will snapshot all open
+    public CreateSnapshotRequestBuilder setSettings(String source, XContentType xContentType) {
+     */  
+        request.settings(source, xContentType);
     CreateSnapshotRequest,
-    CreateSnapshotResponse,  
-    CreateSnapshotRequestBuilder> {
-
+ * not use this file except in compliance with the License.
+     * Sets repository-specific snapshot settings.  
+        return this;
+        request.settings(settings);  
+ * @opensearch.api
+    }
+     * Sets repository-specific snapshot settings.
+ * The OpenSearch Contributors require contributions made to  
+        request.partial(partial);
+        request.indicesOptions(indicesOptions);  
+        return this;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+        return this;  
+        return this;  
     /**  
-     * Constructs a new create snapshot request builder
+        super(client, action, new CreateSnapshotRequest(repository, snapshot));
+     * See repository documentation for more information.
+import org.opensearch.common.annotation.PublicApi;  
+     * @param settings repository-specific snapshot settings
+    public CreateSnapshotRequestBuilder setSettings(Settings.Builder settings) {
+     * @return this builder
+     *  
+     */  
+    }
      */
     public CreateSnapshotRequestBuilder(OpenSearchClient client, CreateSnapshotAction action) {  
-        super(client, action, new CreateSnapshotRequest());
-    }
-
+     * @return this builder
     /**
-     * Constructs a new create snapshot request builder with specified repository and snapshot names
-     */  
-    public CreateSnapshotRequestBuilder(OpenSearchClient client, CreateSnapshotAction action, String repository, String snapshot) {
-        super(client, action, new CreateSnapshotRequest(repository, snapshot));
     }  
-
-    /**
-     * Sets the snapshot name  
-     *
-     * @param snapshot snapshot name
-     * @return this builder  
-     */
-    public CreateSnapshotRequestBuilder setSnapshot(String snapshot) {
-        request.snapshot(snapshot);  
         return this;
+    /**
+/*  
+ * Modifications Copyright OpenSearch Contributors. See
+    /**
     }
-
+     *
+     * indices in the cluster.
+ *  
+     * @param partial true if request should snapshot indices with unavailable shards  
+        return this;  
+    CreateSnapshotRequestBuilder> {
+     * @param repository repository name
+     */
+     *
+     * @return this builder
+     * Sets a list of indices that should be included into the snapshot
+ *  
+     * Constructs a new create snapshot request builder
+    public CreateSnapshotRequestBuilder(OpenSearchClient client, CreateSnapshotAction action, String repository, String snapshot) {
+ * under the License.  
+ * SPDX-License-Identifier: Apache-2.0
+/**
+     * @return this builder
+    CreateSnapshotResponse,  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return this;
+/*  
+     * The list of indices supports multi-index syntax. For example: "+test*" ,"-test42" will index all indices with  
+}
+@PublicApi(since = "1.0.0")  
+     * Specifies the indices options. Like what type of requested indices to ignore. For example indices that don't exist.  
+ * You may obtain a copy of the License at  
     /**
      * Sets the repository name
-     *  
-     * @param repository repository name
      * @return this builder
-     */  
-    public CreateSnapshotRequestBuilder setRepository(String repository) {
+     */
+     * @param source repository-specific snapshot settings  
+    public CreateSnapshotRequestBuilder setSettings(Settings settings) {
+    }
+ */  
         request.repository(repository);
-        return this;  
-    }
-
-    /**  
-     * Sets a list of indices that should be included into the snapshot
      * <p>
-     * The list of indices supports multi-index syntax. For example: "+test*" ,"-test42" will index all indices with  
-     * prefix "test" except index "test42". Aliases are supported. An empty list or {"_all"} will snapshot all open
-     * indices in the cluster.
-     *  
-     * @return this builder
-     */
-    public CreateSnapshotRequestBuilder setIndices(String... indices) {  
-        request.indices(indices);
-        return this;
-    }  
-
-    /**
-     * Specifies the indices options. Like what type of requested indices to ignore. For example indices that don't exist.  
      *
-     * @param indicesOptions the desired behaviour regarding indices options
-     * @return this request  
-     */
-    public CreateSnapshotRequestBuilder setIndicesOptions(IndicesOptions indicesOptions) {
-        request.indicesOptions(indicesOptions);  
-        return this;
-    }
-
-    /**
-     * If set to true the request should wait for the snapshot completion before returning.
-     *  
-     * @param waitForCompletion true if
-     * @return this builder
-     */  
-    public CreateSnapshotRequestBuilder setWaitForCompletion(boolean waitForCompletion) {
-        request.waitForCompletion(waitForCompletion);
-        return this;  
-    }
-
-    /**  
      * If set to true the request should snapshot indices with unavailable shards
+import org.opensearch.common.settings.Settings;
+     * Set to true if snapshot should include global cluster state
+ * compatible open source license.
+        request.settings(settings);
+    }
+     * @param settings repository-specific snapshot settings
+     * If set to true the request should wait for the snapshot completion before returning.
+    }
+        request.waitForCompletion(waitForCompletion);
+    /**  
+     * See repository documentation for more information.  
+        super(client, action, new CreateSnapshotRequest());
+     * <p>  
      *
-     * @param partial true if request should snapshot indices with unavailable shards  
-     * @return this builder
+     * @param settings repository-specific snapshot settings
+     * @return this builder  
      */
     public CreateSnapshotRequestBuilder setPartial(boolean partial) {  
-        request.partial(partial);
-        return this;
-    }  
-
-    /**
-     * Sets repository-specific snapshot settings.  
-     * <p>
-     * See repository documentation for more information.
-     *  
-     * @param settings repository-specific snapshot settings
-     * @return this builder
-     */  
-    public CreateSnapshotRequestBuilder setSettings(Settings settings) {
-        request.settings(settings);
-        return this;  
-    }
-
-    /**  
-     * Sets repository-specific snapshot settings.
-     * <p>
-     * See repository documentation for more information.  
-     *
-     * @param settings repository-specific snapshot settings
-     * @return this builder  
      */
-    public CreateSnapshotRequestBuilder setSettings(Settings.Builder settings) {
-        request.settings(settings);  
-        return this;
-    }
-
-    /**
+     * Sets repository-specific snapshot settings.
+     * @param indicesOptions the desired behaviour regarding indices options
+    /**  
      * Sets repository-specific snapshot settings in YAML or JSON format
-     * <p>  
-     * See repository documentation for more information.
-     *
-     * @param source repository-specific snapshot settings  
-     * @param xContentType the content type of the source
-     * @return this builder
-     */  
-    public CreateSnapshotRequestBuilder setSettings(String source, XContentType xContentType) {
-        request.settings(source, xContentType);
-        return this;  
-    }
-
-    /**  
-     * Sets repository-specific snapshot settings.
-     * <p>
-     * See repository documentation for more information.  
-     *
-     * @param settings repository-specific snapshot settings
-     * @return this builder  
-     */
-    public CreateSnapshotRequestBuilder setSettings(Map<String, Object> settings) {
-        request.settings(settings);  
         return this;
-    }
-
-    /**
-     * Set to true if snapshot should include global cluster state
-     *  
-     * @param includeGlobalState true if snapshot should include global cluster state
-     * @return this builder
+    /**  
      */  
-    public CreateSnapshotRequestBuilder setIncludeGlobalState(boolean includeGlobalState) {
-        request.includeGlobalState(includeGlobalState);
+     * <p>
+    public CreateSnapshotRequestBuilder setSettings(Map<String, Object> settings) {
         return this;  
+     * @return this builder  
+     */  
+package org.opensearch.action.admin.cluster.snapshots.create;
+     *
+    /**
+     * @return this request  
+     * See repository documentation for more information.  
+     */  
+     */
     }
-}
+        request.includeGlobalState(includeGlobalState);
+     */
+ * Create snapshot request builder
+     * @return this builder  
+import org.opensearch.action.support.IndicesOptions;
+    public CreateSnapshotRequestBuilder setIndices(String... indices) {  
+ */  
+     * Constructs a new create snapshot request builder with specified repository and snapshot names
+import org.opensearch.common.xcontent.XContentType;
+ * this work for additional information regarding copyright
+        return this;
+ * software distributed under the License is distributed on an
+/*
+    }  
+ * specific language governing permissions and limitations
+     * @param includeGlobalState true if snapshot should include global cluster state
+ * this file be licensed under the Apache-2.0 license or a
+    public CreateSnapshotRequestBuilder setRepository(String repository) {
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeOperationRequestBuilder;
+    }  
+     *  
+    /**
+import org.opensearch.transport.client.OpenSearchClient;  
+    public CreateSnapshotRequestBuilder setSnapshot(String snapshot) {
+     * <p>
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+ * KIND, either express or implied.  See the License for the
+    public CreateSnapshotRequestBuilder setIndicesOptions(IndicesOptions indicesOptions) {
+     */  
+     * See repository documentation for more information.
+     * @return this builder
+        request.settings(settings);  
+     * @return this builder
+ *
+    /**  
+     *  
+ */
+    }
+import java.util.Map;
+    /**

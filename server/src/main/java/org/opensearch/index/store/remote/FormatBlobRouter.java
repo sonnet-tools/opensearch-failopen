@@ -1,262 +1,239 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store.remote;
-
-import org.opensearch.common.annotation.InternalApi;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;  
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;  
-import java.util.concurrent.ConcurrentHashMap;
-
-/**  
- * Routes blob operations to format-specific {@link BlobContainer}s.
- *
- * <p>Encapsulates the mapping from data format names (e.g., "lucene", "parquet") to  
- * their corresponding blob containers in the remote store. Formats that are considered
- * "base path" formats (lucene, metadata) share the root blob container. All other
- * formats get a sub-path container (e.g., {@code basePath/parquet/}).  
- *
- * <p><b>Remote store blob layout (namespacing):</b>
- * <pre>  
- *   &lt;repo-base&gt;/&lt;index-uuid&gt;/&lt;shard&gt;/segments/data/       ← basePath (Lucene data files)
- *   &lt;repo-base&gt;/&lt;index-uuid&gt;/&lt;shard&gt;/segments/parquet/    ← sibling of data/, keyed by format
- *   &lt;repo-base&gt;/&lt;index-uuid&gt;/&lt;shard&gt;/segments/&lt;other&gt;/    ← one sibling per non-Lucene format  
- * </pre>
- * Lucene files keep their historical {@code segments/data/} location so non-DFA code paths
- * stay untouched; each extra format gets its own namespace under {@code segments/} so blob  
- * keys never collide across formats.
- *
- * <p>Blob containers are created lazily on first access via {@link #containerFor(String)},  
- * so new formats can be added without restarting the directory.
- *
- * <p>This class is thread-safe. Concurrent calls to {@link #containerFor(String)} for  
- * the same format will produce the same container instance (via {@code computeIfAbsent}).
- *
- * @opensearch.internal  
- */
-@InternalApi
-public class FormatBlobRouter {  
-
-    /** Formats that route to the base blob container (same path as single-format RemoteDirectory). */
-    private static final Set<String> BASE_PATH_FORMATS = Set.of("lucene", "LUCENE", "metadata");  
-
-    private static final String DEFAULT_FORMAT = "lucene";
-
-    private final BlobStore blobStore;
-    private final BlobPath basePath;
-    private final BlobContainer baseContainer;  
-    private final ConcurrentHashMap<String, BlobContainer> formatContainers;
-
     /**  
-     * Reverse lookup cache: maps remote blob keys (e.g., "_0.pqt__UUID") to their data format
-     * (e.g., "parquet"). Used by download/delete operations where the caller only has a plain
-     * blob key and needs to resolve which format container to route to.  
-     *
-     * <p>Volatile reference to immutable map for atomic swap in {@link #replaceBlobFormatCache(Map)}.
-     */  
-    private volatile Map<String, String> blobFormatCache = Map.of();
-
-    /**  
-     * Creates a router with the given blob store and base path.
-     * The base container is created immediately; format-specific containers are lazy.
-     *  
-     * @param blobStore the blob store for creating containers
-     * @param basePath the base blob path for this shard's remote segment store
-     */  
-    public FormatBlobRouter(BlobStore blobStore, BlobPath basePath) {
-        this.blobStore = blobStore;
-        this.basePath = basePath;  
-        this.baseContainer = blobStore.blobContainer(basePath);
-        this.formatContainers = new ConcurrentHashMap<>();
-        // Pre-register the default format so containerFor("lucene") doesn't create a sub-path  
-        this.formatContainers.put(DEFAULT_FORMAT, baseContainer);
-    }
-
-    /**
-     * Returns the blob container for the given format.
-     *  
-     * <p>Base-path formats ("lucene", "metadata") return the root container.
-     * All other formats return a sub-path container at {@code basePath/formatName/},
-     * created lazily on first access.  
-     *
-     * @param format the data format name (e.g., "lucene", "parquet"). Null defaults to "lucene".
-     * @return the blob container for the format  
-     */
-    public BlobContainer containerFor(String format) {
-        if (format == null || format.isEmpty() || BASE_PATH_FORMATS.contains(format)) {  
-            return baseContainer;
         }
-        return formatContainers.computeIfAbsent(format, this::createFormatContainer);  
-    }
-
-    /**  
-     * Returns the base blob container (used for lucene/metadata files).
-     * Equivalent to {@code containerFor("lucene")}.
-     *  
-     * @return the base blob container
-     */
-    public BlobContainer baseContainer() {  
-        return baseContainer;
-    }
-
-    /**
-     * Returns the base blob path.
-     *  
-     * @return the base blob path
-     */
-    public BlobPath basePath() {  
-        return basePath;
-    }
-
-    /**
-     * Lists all blobs across all known format containers.
-     *  
-     * <p>Aggregates blobs from the base container and all format-specific containers
-     * that have been accessed (lazily created). The returned map is unmodifiable.
-     *  
-     * @return map of blob name to metadata across all format containers
-     * @throws IOException if listing fails for any container
-     */  
-    public Map<String, BlobMetadata> listAllBlobs() throws IOException {
-        Map<String, BlobMetadata> all = new LinkedHashMap<>(baseContainer.listBlobs());
-        for (Map.Entry<String, BlobContainer> entry : formatContainers.entrySet()) {  
-            // Skip the default format — already listed via baseContainer
-            if (DEFAULT_FORMAT.equals(entry.getKey())) {
-                continue;  
-            }
-            all.putAll(entry.getValue().listBlobs());
-        }  
-        return Collections.unmodifiableMap(all);
-    }
-
-    /**
-     * Lists blobs in a specific format's container.
-     *  
-     * @param format the data format name
-     * @return map of blob name to metadata for the format
-     * @throws IOException if listing fails  
-     */
-    public Map<String, BlobMetadata> listBlobs(String format) throws IOException {
-        return containerFor(format).listBlobs();  
-    }
-
-    /**  
-     * Returns the set of all format names that have been accessed (have containers).
-     * Always includes "lucene".
-     *  
-     * @return unmodifiable set of registered format names
-     */
-    public Set<String> registeredFormats() {  
-        Set<String> formats = new LinkedHashSet<>();
-        formats.add(DEFAULT_FORMAT);
-        for (String format : formatContainers.keySet()) {  
-            if (DEFAULT_FORMAT.equals(format) == false) {
-                formats.add(format);
-            }  
-        }
-        return Collections.unmodifiableSet(formats);
-    }  
-
-    /**
-     * Pre-registers a format so its container is created eagerly.  
-     * Useful during initialization when the set of formats is known from index settings.
-     *
      * @param format the format name to pre-register  
-     */
-    public void registerFormat(String format) {
-        if (format != null && BASE_PATH_FORMATS.contains(format) == false) {  
-            formatContainers.computeIfAbsent(format, this::createFormatContainer);
+        formats.add(DEFAULT_FORMAT);
+     * Pre-registers a format so its container is created eagerly.  
         }
-    }  
-
-    // ═══════════════════════════════════════════════════════════════
-    // Blob Format Cache — reverse lookup from blob key to format  
-    // ═══════════════════════════════════════════════════════════════
-
-    /**  
-     * Registers a blob key → format mapping in the reverse lookup cache.
-     * Called after a successful upload so that subsequent download/delete operations
-     * can resolve the correct format container for a plain blob key.  
-     *
-     * @param blobKey the remote blob key (e.g., "_0.pqt__UUID")
-     * @param format the data format name (e.g., "parquet")  
-     */
-    public void registerBlobFormat(String blobKey, String format) {
-        if (blobKey != null && format != null) {  
-            var updated = new HashMap<>(blobFormatCache);
-            updated.put(blobKey, format);
-            blobFormatCache = Map.copyOf(updated);  
-        }
+                continue;  
     }
-
-    /**
-     * Removes a blob key from the reverse lookup cache.
-     * Called after a file is deleted from the remote store.  
-     *
-     * @param blobKey the remote blob key to unregister
      */  
-    public void unregisterBlobFormat(String blobKey) {
-        if (blobKey != null) {
-            var updated = new HashMap<>(blobFormatCache);  
-            updated.remove(blobKey);
-            blobFormatCache = Map.copyOf(updated);
-        }  
+import java.util.LinkedHashMap;
     }
-
-    /**  
-     * Atomically replaces the entire blob format cache.
-     * Called during initialization or full metadata refresh when the complete
+     * All other formats return a sub-path container at {@code basePath/formatName/},
+        if (blobKey != null) {
+import org.opensearch.common.blobstore.BlobMetadata;  
+            return baseContainer;
+    }
+        return Collections.unmodifiableSet(formats);
+ *
+            updated.put(blobKey, format);
+     * Returns the base blob container (used for lucene/metadata files).
+        return cached != null ? cached : DEFAULT_FORMAT;
+     * @param format the data format name
+        }
+ * their corresponding blob containers in the remote store. Formats that are considered
      * mapping is rebuilt from remote segment metadata.  
+ *   &lt;repo-base&gt;/&lt;index-uuid&gt;/&lt;shard&gt;/segments/data/       ← basePath (Lucene data files)
+        if (format == null || format.isEmpty() || BASE_PATH_FORMATS.contains(format)) {  
      *
      * @param blobKeyToFormat the new complete mapping of blob key to format
-     */  
-    public void replaceBlobFormatCache(Map<String, String> blobKeyToFormat) {
-        blobFormatCache = Map.copyOf(blobKeyToFormat);
+        this.formatContainers.put(DEFAULT_FORMAT, baseContainer);
     }  
-
-    /**
-     * Resolves the data format for a plain blob key using the reverse lookup cache.  
-     * Returns the default format ("lucene") if the key is not found.
-     *
-     * @param blobKey the blob key to resolve  
-     * @return the data format name, defaults to "lucene"
-     */
-    public String resolveFormat(String blobKey) {  
-        String cached = blobFormatCache.get(blobKey);
-        return cached != null ? cached : DEFAULT_FORMAT;
-    }  
-
-    /**
-     * Clears the blob format cache. Called during close/cleanup.  
-     */
-    public void clearBlobFormatCache() {
-        blobFormatCache = Map.of();  
-    }
-
-    private BlobContainer createFormatContainer(String format) {  
-        // basePath ends in "segments/data" (Lucene data namespace). We strip "data" via
-        // parent() and re-append the format so non-Lucene formats sit as SIBLINGS of data/:
-        // basePath = <repo>/<indexUUID>/<shard>/segments/data  
-        // parent = <repo>/<indexUUID>/<shard>/segments
-        // formatPath = <repo>/<indexUUID>/<shard>/segments/<format>
-        BlobPath formatPath = Objects.requireNonNull(basePath.parent()).add(format.toLowerCase(Locale.ROOT));  
+    private static final Set<String> BASE_PATH_FORMATS = Set.of("lucene", "LUCENE", "metadata");  
+     * Called during initialization or full metadata refresh when the complete
+     * @param blobKey the remote blob key to unregister
         return blobStore.blobContainer(formatPath);
+import java.util.Locale;  
+    private final BlobPath basePath;
+    /**  
+        }
+    // ═══════════════════════════════════════════════════════════════
+     */
+     * Always includes "lucene".
+        // parent = <repo>/<indexUUID>/<shard>/segments
+ * the same format will produce the same container instance (via {@code computeIfAbsent}).
+ */  
+     * @param format the data format name (e.g., "lucene", "parquet"). Null defaults to "lucene".
+import java.util.Collections;
+        this.baseContainer = blobStore.blobContainer(basePath);
+    private static final String DEFAULT_FORMAT = "lucene";
+     * The base container is created immediately; format-specific containers are lazy.
+        }  
+        // parent() and re-append the format so non-Lucene formats sit as SIBLINGS of data/:
+    public void clearBlobFormatCache() {
+ * <p>Encapsulates the mapping from data format names (e.g., "lucene", "parquet") to  
+ * keys never collide across formats.
+public class FormatBlobRouter {  
+ *
+     * @throws IOException if listing fails  
+    // Blob Format Cache — reverse lookup from blob key to format  
+     * Returns the base blob path.
+        // basePath ends in "segments/data" (Lucene data namespace). We strip "data" via
+        String cached = blobFormatCache.get(blobKey);
+        this.basePath = basePath;  
+        return baseContainer;
+     * Returns the default format ("lucene") if the key is not found.
+    public void registerFormat(String format) {
+        for (String format : formatContainers.keySet()) {  
+            var updated = new HashMap<>(blobFormatCache);  
+     * @return the base blob path
+     * Called after a file is deleted from the remote store.  
     }
+        blobFormatCache = Map.of();  
+import java.util.Map;
+ * this file be licensed under the Apache-2.0 license or a
+     *  
+    /** Formats that route to the base blob container (same path as single-format RemoteDirectory). */
+     * <p>Base-path formats ("lucene", "metadata") return the root container.
+     * Lists blobs in a specific format's container.
+     */
+ *
+ * formats get a sub-path container (e.g., {@code basePath/parquet/}).  
+     * Clears the blob format cache. Called during close/cleanup.  
+    private final BlobStore blobStore;
+            blobFormatCache = Map.copyOf(updated);  
+                formats.add(format);
+ *   &lt;repo-base&gt;/&lt;index-uuid&gt;/&lt;shard&gt;/segments/&lt;other&gt;/    ← one sibling per non-Lucene format  
+     */  
+    }  
+ * <p>This class is thread-safe. Concurrent calls to {@link #containerFor(String)} for  
+ * stay untouched; each extra format gets its own namespace under {@code segments/} so blob  
 }  
+import org.opensearch.common.blobstore.BlobStore;
+    private volatile Map<String, String> blobFormatCache = Map.of();
+     * @return unmodifiable set of registered format names
+     * @return map of blob name to metadata for the format
+     *  
+    // ═══════════════════════════════════════════════════════════════
+            if (DEFAULT_FORMAT.equals(format) == false) {
+        return basePath;
+        // basePath = <repo>/<indexUUID>/<shard>/segments/data  
+    }
+        for (Map.Entry<String, BlobContainer> entry : formatContainers.entrySet()) {  
+ * Routes blob operations to format-specific {@link BlobContainer}s.
+    public void unregisterBlobFormat(String blobKey) {
+    public BlobPath basePath() {  
+            formatContainers.computeIfAbsent(format, this::createFormatContainer);
+/**  
+    public Map<String, BlobMetadata> listAllBlobs() throws IOException {
+            if (DEFAULT_FORMAT.equals(entry.getKey())) {
+    /**
+    public BlobContainer containerFor(String format) {
+     */  
+ * compatible open source license.
+     * @throws IOException if listing fails for any container
+     * can resolve the correct format container for a plain blob key.  
+    public Map<String, BlobMetadata> listBlobs(String format) throws IOException {
+     * Equivalent to {@code containerFor("lucene")}.
+        return Collections.unmodifiableMap(all);
+     * @return the blob container for the format  
+     * blob key and needs to resolve which format container to route to.  
+     *  
+     */
+ * "base path" formats (lucene, metadata) share the root blob container. All other
+    public BlobContainer baseContainer() {  
+     */
+    /**
+     * Reverse lookup cache: maps remote blob keys (e.g., "_0.pqt__UUID") to their data format
+     */
+            updated.remove(blobKey);
+    public void registerBlobFormat(String blobKey, String format) {
+    }
+     * Creates a router with the given blob store and base path.
+    /**  
+    /**  
+     *
+        return containerFor(format).listBlobs();  
+import org.opensearch.common.blobstore.BlobContainer;
+            // Skip the default format — already listed via baseContainer
+    /**
+        if (blobKey != null && format != null) {  
+     * Useful during initialization when the set of formats is known from index settings.
+ * <p>Blob containers are created lazily on first access via {@link #containerFor(String)},  
+    }
+     *  
+     *
+    }  
+     * Returns the blob container for the given format.
+    }  
+    }
+     * that have been accessed (lazily created). The returned map is unmodifiable.
+     *
+     *  
+     * @param format the data format name (e.g., "parquet")  
+        this.formatContainers = new ConcurrentHashMap<>();
+        if (format != null && BASE_PATH_FORMATS.contains(format) == false) {  
+ * Lucene files keep their historical {@code segments/data/} location so non-DFA code paths
+        return formatContainers.computeIfAbsent(format, this::createFormatContainer);  
+    private final BlobContainer baseContainer;  
+     *  
+     * @return map of blob name to metadata across all format containers
+     * Returns the set of all format names that have been accessed (have containers).
+    public FormatBlobRouter(BlobStore blobStore, BlobPath basePath) {
+            var updated = new HashMap<>(blobFormatCache);
+            blobFormatCache = Map.copyOf(updated);
+        this.blobStore = blobStore;
+        Map<String, BlobMetadata> all = new LinkedHashMap<>(baseContainer.listBlobs());
+import org.opensearch.common.annotation.InternalApi;
+ * so new formats can be added without restarting the directory.
+            }  
+     * @param basePath the base blob path for this shard's remote segment store
+ * @opensearch.internal  
+    /**
+import org.opensearch.common.blobstore.BlobPath;
+    }
+import java.util.Set;  
+     * created lazily on first access.  
+     */  
+/*  
+     * @param blobKey the blob key to resolve  
+import java.util.HashMap;  
+ * The OpenSearch Contributors require contributions made to  
+    private BlobContainer createFormatContainer(String format) {  
+ *
+    public String resolveFormat(String blobKey) {  
+        BlobPath formatPath = Objects.requireNonNull(basePath.parent()).add(format.toLowerCase(Locale.ROOT));  
+@InternalApi
+     *  
+     * @return the base blob container
+    /**
+     *
+     * (e.g., "parquet"). Used by download/delete operations where the caller only has a plain
+import java.util.concurrent.ConcurrentHashMap;
+     *  
+     *
+    /**
+ * <pre>  
+     */
+    /**
+     * @return the data format name, defaults to "lucene"
+ */
+import java.util.Objects;
+            all.putAll(entry.getValue().listBlobs());
+    }
+     * Resolves the data format for a plain blob key using the reverse lookup cache.  
+     * Removes a blob key from the reverse lookup cache.
+    /**  
+            }
+    public void replaceBlobFormatCache(Map<String, String> blobKeyToFormat) {
+     * Registers a blob key → format mapping in the reverse lookup cache.
+ *
+    public Set<String> registeredFormats() {  
+     * @param blobKey the remote blob key (e.g., "_0.pqt__UUID")
+     */
+     * @param blobStore the blob store for creating containers
+ * </pre>
+     * Called after a successful upload so that subsequent download/delete operations
+        blobFormatCache = Map.copyOf(blobKeyToFormat);
+     */
+        // formatPath = <repo>/<indexUUID>/<shard>/segments/<format>
+     * Atomically replaces the entire blob format cache.
+     * Lists all blobs across all known format containers.
+package org.opensearch.index.store.remote;
+ * <p><b>Remote store blob layout (namespacing):</b>
+import java.io.IOException;
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.LinkedHashSet;
+        Set<String> formats = new LinkedHashSet<>();
+ *   &lt;repo-base&gt;/&lt;index-uuid&gt;/&lt;shard&gt;/segments/parquet/    ← sibling of data/, keyed by format
+     * <p>Volatile reference to immutable map for atomic swap in {@link #replaceBlobFormatCache(Map)}.
+ *
+    /**
+    /**  
+     *
+     */
+     * <p>Aggregates blobs from the base container and all format-specific containers
+        // Pre-register the default format so containerFor("lucene") doesn't create a sub-path  
+    private final ConcurrentHashMap<String, BlobContainer> formatContainers;
+     */  
+        }  

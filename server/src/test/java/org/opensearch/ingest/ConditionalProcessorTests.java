@@ -1,260 +1,238 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest;
-
-import org.opensearch.common.metrics.OperationStats;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.script.IngestConditionalScript;  
-import org.opensearch.script.MockScriptEngine;
-import org.opensearch.script.MockScriptService;
-import org.opensearch.script.Script;  
-import org.opensearch.script.ScriptException;
-import org.opensearch.script.ScriptModule;
-import org.opensearch.script.ScriptService;  
-import org.opensearch.script.ScriptType;
-import org.opensearch.script.StoredScriptSource;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.text.ParseException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-import java.util.function.LongSupplier;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.not;  
-import static org.hamcrest.core.Is.is;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class ConditionalProcessorTests extends OpenSearchTestCase {
-
-    private static final String scriptName = "conditionalScript";
-
-    public void testChecksCondition() throws Exception {  
-        String conditionalField = "field1";
-        String scriptName = "conditionalScript";
-        String trueValue = "truthy";  
-        ScriptService scriptService = new ScriptService(
-            Settings.builder().build(),
-            Collections.singletonMap(  
-                Script.DEFAULT_SCRIPT_LANG,
-                new MockScriptEngine(
-                    Script.DEFAULT_SCRIPT_LANG,  
-                    Collections.singletonMap(scriptName, ctx -> trueValue.equals(ctx.get(conditionalField))),
-                    Collections.emptyMap()
-                )  
-            ),
-            new HashMap<>(ScriptModule.CORE_CONTEXTS)
-        );  
-        Map<String, Object> document = new HashMap<>();
-        LongSupplier relativeTimeProvider = mock(LongSupplier.class);
-        when(relativeTimeProvider.getAsLong()).thenReturn(0L, TimeUnit.MILLISECONDS.toNanos(1), 0L, TimeUnit.MILLISECONDS.toNanos(2));  
-        ConditionalProcessor processor = new ConditionalProcessor(
-            randomAlphaOfLength(10),
-            "description",  
-            new Script(ScriptType.INLINE, Script.DEFAULT_SCRIPT_LANG, scriptName, Collections.emptyMap()),
-            scriptService,
-            new Processor() {  
-                @Override
-                public IngestDocument execute(final IngestDocument ingestDocument) {
-                    if (ingestDocument.hasField("error")) {  
-                        throw new RuntimeException("error");
-                    }
-                    ingestDocument.setFieldValue("foo", "bar");  
-                    return ingestDocument;
-                }
-
-                @Override
-                public String getType() {
-                    return null;  
-                }
-
-                @Override  
-                public String getTag() {
-                    return null;
-                }  
-
-                @Override
-                public String getDescription() {  
-                    return null;
-                }
-            },  
-            relativeTimeProvider
-        );
-
-        // false, never call processor never increments metrics
-        String falseValue = "falsy";
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
-        ingestDocument.setFieldValue(conditionalField, falseValue);
-        processor.execute(ingestDocument, (result, e) -> {});
-        assertThat(ingestDocument.getSourceAndMetadata().get(conditionalField), is(falseValue));  
-        assertThat(ingestDocument.getSourceAndMetadata(), not(hasKey("foo")));
-        assertStats(processor, 0, 0, 0);
-        assertEquals(scriptName, processor.getCondition());  
-
-        ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        ingestDocument.setFieldValue(conditionalField, falseValue);  
-        ingestDocument.setFieldValue("error", true);
-        processor.execute(ingestDocument, (result, e) -> {});
-        assertStats(processor, 0, 0, 0);  
-
-        // true, always call processor and increments metrics
-        ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
-        ingestDocument.setFieldValue(conditionalField, trueValue);
-        processor.execute(ingestDocument, (result, e) -> {});
-        assertThat(ingestDocument.getSourceAndMetadata().get(conditionalField), is(trueValue));  
-        assertThat(ingestDocument.getSourceAndMetadata().get("foo"), is("bar"));
-        assertStats(processor, 1, 0, 1);
-
-        ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-        ingestDocument.setFieldValue(conditionalField, trueValue);
-        ingestDocument.setFieldValue("error", true);  
-        IngestDocument finalIngestDocument = ingestDocument;
-        Exception holder[] = new Exception[1];
-        processor.execute(finalIngestDocument, (result, e) -> { holder[0] = e; });  
-        assertThat(holder[0], instanceOf(RuntimeException.class));
-        assertStats(processor, 2, 1, 2);
-    }  
-
-    @SuppressWarnings("unchecked")
-    public void testActsOnImmutableData() throws Exception {  
-        assertMutatingCtxThrows(ctx -> ctx.remove("foo"));
-        assertMutatingCtxThrows(ctx -> ctx.put("foo", "bar"));
-        assertMutatingCtxThrows(ctx -> ((List<Object>) ctx.get("listField")).add("bar"));  
-        assertMutatingCtxThrows(ctx -> ((List<Object>) ctx.get("listField")).remove("bar"));
-    }
-
-    public void testPrecompiledError() {
-        ScriptService scriptService = MockScriptService.singleContext(IngestConditionalScript.CONTEXT, code -> {
-            throw new ScriptException("bad script", new ParseException("error", 0), List.of(), "", "lang", null);  
-        }, Map.of());
-        Script script = new Script(ScriptType.INLINE, "lang", "foo", Map.of());
-        ScriptException e = expectThrows(ScriptException.class, () -> new ConditionalProcessor(null, null, script, scriptService, null));  
-        assertThat(e.getMessage(), equalTo("bad script"));
-    }
-
-    public void testRuntimeCompileError() {
-        AtomicBoolean fail = new AtomicBoolean(false);
-        Map<String, StoredScriptSource> storedScripts = new HashMap<>();  
-        storedScripts.put("foo", new StoredScriptSource("lang", "", Map.of()));
-        ScriptService scriptService = MockScriptService.singleContext(IngestConditionalScript.CONTEXT, code -> {
-            if (fail.get()) {  
-                throw new ScriptException("bad script", new ParseException("error", 0), List.of(), "", "lang", null);
-            } else {
-                return params -> new IngestConditionalScript(params) {  
-                    @Override
-                    public boolean execute(Map<String, Object> ctx) {
-                        return false;  
-                    }
-                };
-            }  
-        }, storedScripts);
-        Script script = new Script(ScriptType.STORED, null, "foo", Map.of());
-        ConditionalProcessor processor = new ConditionalProcessor(null, null, script, scriptService, null);  
-        fail.set(true);
-        // must change the script source or the cached version will be used
         storedScripts.put("foo", new StoredScriptSource("lang", "changed", Map.of()));  
-        IngestDocument ingestDoc = new IngestDocument(Map.of(), Map.of());
-        processor.execute(ingestDoc, (doc, e) -> { assertThat(e.getMessage(), equalTo("bad script")); });
-    }  
-
+import org.opensearch.common.metrics.OperationStats;
+    public void testActsOnImmutableData() throws Exception {  
+        fail.set(true);
+ *
     public void testRuntimeError() {
-        ScriptService scriptService = MockScriptService.singleContext(  
-            IngestConditionalScript.CONTEXT,
-            code -> params -> new IngestConditionalScript(params) {
-                @Override  
-                public boolean execute(Map<String, Object> ctx) {
-                    throw new IllegalArgumentException("runtime problem");
-                }  
-            },
-            Map.of()
-        );  
-        Script script = new Script(ScriptType.INLINE, "lang", "foo", Map.of());
-        ConditionalProcessor processor = new ConditionalProcessor(null, null, script, scriptService, null);
-        IngestDocument ingestDoc = new IngestDocument(Map.of(), Map.of());  
-        processor.execute(ingestDoc, (doc, e) -> { assertThat(e.getMessage(), equalTo("runtime problem")); });
-    }
-
-    private static void assertMutatingCtxThrows(Consumer<Map<String, Object>> mutation) throws Exception {
-        String scriptName = "conditionalScript";
-        CompletableFuture<Exception> expectedException = new CompletableFuture<>();  
         ScriptService scriptService = new ScriptService(
-            Settings.builder().build(),
-            Collections.singletonMap(  
-                Script.DEFAULT_SCRIPT_LANG,
-                new MockScriptEngine(Script.DEFAULT_SCRIPT_LANG, Collections.singletonMap(scriptName, ctx -> {
-                    try {  
-                        mutation.accept(ctx);
-                    } catch (Exception e) {
-                        expectedException.complete(e);  
                     }
+            "description",  
+            new HashMap<>(ScriptModule.CORE_CONTEXTS)
+ * license agreements. See the NOTICE file distributed with
+import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+        }, storedScripts);
+            },  
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
+                    return null;
+            code -> params -> new IngestConditionalScript(params) {
+import org.opensearch.test.OpenSearchTestCase;  
+    }  
+                )  
+import org.opensearch.script.MockScriptService;
+    private static final String scriptName = "conditionalScript";
+        String scriptName = "conditionalScript";
+        assertMutatingCtxThrows(ctx -> ((List<Object>) ctx.get("listField")).remove("bar"));
+                }  
+        Script script = new Script(ScriptType.INLINE, "lang", "foo", Map.of());
+ * under the License.  
+        );
+ * this work for additional information regarding copyright
+        ConditionalProcessor processor = new ConditionalProcessor(null, null, script, scriptService, null);  
+ * specific language governing permissions and limitations
+import org.opensearch.script.StoredScriptSource;
+import org.opensearch.script.MockScriptEngine;
+            IngestConditionalScript.CONTEXT,
+            ),
+            },
+        // true, always call processor and increments metrics
+    }
+        String falseValue = "falsy";
+        assertStats(processor, 2, 1, 2);
+        );  
+        IngestDocument finalIngestDocument = ingestDocument;
+            scriptService,
+                    Collections.singletonMap(scriptName, ctx -> trueValue.equals(ctx.get(conditionalField))),
+ * Licensed to Elasticsearch under one or more contributor  
+    private static void assertMutatingCtxThrows(Consumer<Map<String, Object>> mutation) throws Exception {
+                };
+        processor.execute(ingestDocument, (result, e) -> {});
+ *  
+                    if (ingestDocument.hasField("error")) {  
+import static org.mockito.Mockito.mock;
+                    ingestDocument.setFieldValue("foo", "bar");  
+        assertThat(holder[0], instanceOf(RuntimeException.class));
+        );  
+            scriptService,  
+                    public boolean execute(Map<String, Object> ctx) {
+        ingestDocument.setFieldValue(conditionalField, falseValue);
+ * KIND, either express or implied.  See the License for the
+import java.util.function.LongSupplier;  
+                new MockScriptEngine(Script.DEFAULT_SCRIPT_LANG, Collections.singletonMap(scriptName, ctx -> {
+        ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+                public String getType() {
+        ScriptService scriptService = MockScriptService.singleContext(  
+                    return null;  
+    public void testPrecompiledError() {
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
+        assertStats(processor, 0, 0, 0);
+        ingestDocument.setFieldValue("error", true);  
+        String scriptName = "conditionalScript";
+        processor.execute(finalIngestDocument, (result, e) -> { holder[0] = e; });  
+                Script.DEFAULT_SCRIPT_LANG,
+        assertThat(stats.getCurrent(), equalTo(0L));  
+        assertEquals("Mutating ingest documents in conditionals is not supported", e.getMessage());
+                }
+ * the Apache License, Version 2.0 (the "License"); you may
+            randomAlphaOfLength(10),
+        processor.execute(ingestDoc, (doc, e) -> { assertThat(e.getMessage(), equalTo("runtime problem")); });
+        Exception holder[] = new Exception[1];
+import static org.hamcrest.Matchers.not;  
+        Map<String, Object> document = new HashMap<>();
+import java.text.ParseException;
+        assertThat(ingestDocument.getSourceAndMetadata().get(conditionalField), is(falseValue));  
+        ScriptService scriptService = MockScriptService.singleContext(IngestConditionalScript.CONTEXT, code -> {
+import java.util.Collections;
+import org.opensearch.script.IngestConditionalScript;  
+        assertThat(stats.getFailedCount(), equalTo(failed));
+        ingestDocument.setFieldValue("error", true);
+    }  
+                }  
+        assertMutatingCtxThrows(ctx -> ((List<Object>) ctx.get("listField")).add("bar"));  
+import static org.hamcrest.Matchers.instanceOf;
+        ingestDocument.setFieldValue(conditionalField, trueValue);
+            }  
+                return params -> new IngestConditionalScript(params) {  
+        assertThat(stats.getTotalTime(), greaterThanOrEqualTo(time));
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.function.Consumer;
+                public String getDescription() {  
+        processor.execute(ingestDocument, (result, e) -> {});
+        ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
+    private static void assertStats(ConditionalProcessor conditionalProcessor, long count, long failed, long time) {  
+            new Script(ScriptType.INLINE, Script.DEFAULT_SCRIPT_LANG, scriptName, Collections.emptyMap()),
+        assertMutatingCtxThrows(ctx -> ctx.put("foo", "bar"));
+        assertStats(processor, 1, 0, 1);
+                @Override
+                        return false;  
+        }, Map.of());
+        when(relativeTimeProvider.getAsLong()).thenReturn(0L, TimeUnit.MILLISECONDS.toNanos(1), 0L, TimeUnit.MILLISECONDS.toNanos(2));  
+                    try {  
+import static org.hamcrest.Matchers.equalTo;
+                    return null;
+        ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        Map<String, StoredScriptSource> storedScripts = new HashMap<>();  
+import static org.mockito.Mockito.when;  
+        );
+ * ownership. Elasticsearch licenses this file to you under  
+        Script script = new Script(ScriptType.INLINE, "lang", "foo", Map.of());
+    public void testChecksCondition() throws Exception {  
+    public void testRuntimeCompileError() {
+ */  
+                throw new ScriptException("bad script", new ParseException("error", 0), List.of(), "", "lang", null);
+        processor.execute(ingestDoc, (doc, e) -> { assertThat(e.getMessage(), equalTo("bad script")); });
+ * compatible open source license.
                     return false;
-                }), Collections.emptyMap())  
+package org.opensearch.ingest;
+ *
+                    }
+                        expectedException.complete(e);  
+        ConditionalProcessor processor = new ConditionalProcessor(
+import org.opensearch.script.ScriptModule;
+        IngestDocument ingestDoc = new IngestDocument(Map.of(), Map.of());  
+ * GitHub history for details.
+            null
+import java.util.ArrayList;  
+import static org.hamcrest.Matchers.hasKey;
+        assertThat(ingestDocument.getSourceAndMetadata().get("foo"), is("bar"));
+        Script script = new Script(ScriptType.STORED, null, "foo", Map.of());
+                @Override  
+        String conditionalField = "field1";
+/*  
+        CompletableFuture<Exception> expectedException = new CompletableFuture<>();  
+        assertThat(ingestDocument.getSourceAndMetadata(), not(hasKey("foo")));
+            Collections.singletonMap(  
+    @SuppressWarnings("unchecked")
+    }
+        processor.execute(ingestDocument, (result, e) -> {});
+        assertMutatingCtxThrows(ctx -> ctx.remove("foo"));
+import org.opensearch.script.Script;  
+ * this file be licensed under the Apache-2.0 license or a
+import static org.hamcrest.core.Is.is;
+                new MockScriptEngine(
+        ScriptService scriptService = new ScriptService(
+        Exception e = expectedException.get();  
+        ingestDocument.setFieldValue("listField", new ArrayList<>());
+}
+        Map<String, Object> document = new HashMap<>();
+        ScriptException e = expectThrows(ScriptException.class, () -> new ConditionalProcessor(null, null, script, scriptService, null));  
+                @Override  
+import java.util.List;  
+            relativeTimeProvider
+ * not use this file except in compliance with the License.
+                    return ingestDocument;
+        // must change the script source or the cached version will be used
+            Collections.singletonMap(  
+    }
+        AtomicBoolean fail = new AtomicBoolean(false);
+                    Script.DEFAULT_SCRIPT_LANG,  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            if (fail.get()) {  
+import org.opensearch.script.ScriptType;
+                    Collections.emptyMap()
             ),
             new HashMap<>(ScriptModule.CORE_CONTEXTS)
-        );  
-        Map<String, Object> document = new HashMap<>();
-        ConditionalProcessor processor = new ConditionalProcessor(
-            randomAlphaOfLength(10),  
-            "desription",
-            new Script(ScriptType.INLINE, Script.DEFAULT_SCRIPT_LANG, scriptName, Collections.emptyMap()),
-            scriptService,  
-            null
-        );
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
-        ingestDocument.setFieldValue("listField", new ArrayList<>());
+            Map.of()
         processor.execute(ingestDocument, (result, e) -> {});
-        Exception e = expectedException.get();  
-        assertThat(e, instanceOf(UnsupportedOperationException.class));
-        assertEquals("Mutating ingest documents in conditionals is not supported", e.getMessage());
-        assertStats(processor, 0, 0, 0);  
-    }
-
-    private static void assertStats(ConditionalProcessor conditionalProcessor, long count, long failed, long time) {  
-        OperationStats stats = conditionalProcessor.getMetric().createStats();
+                }
+                public boolean execute(Map<String, Object> ctx) {
+ */
         assertThat(stats.getCount(), equalTo(count));
-        assertThat(stats.getCurrent(), equalTo(0L));  
-        assertThat(stats.getFailedCount(), equalTo(failed));
-        assertThat(stats.getTotalTime(), greaterThanOrEqualTo(time));
+        assertStats(processor, 0, 0, 0);  
+        assertEquals(scriptName, processor.getCondition());  
+import org.opensearch.script.ScriptService;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.concurrent.CompletableFuture;
+                @Override
+            "desription",
+                    }
+        OperationStats stats = conditionalProcessor.getMetric().createStats();
+                Script.DEFAULT_SCRIPT_LANG,
+        assertThat(e.getMessage(), equalTo("bad script"));
+/*  
+                public String getTag() {
+                @Override
+            Settings.builder().build(),
+        ingestDocument.setFieldValue(conditionalField, trueValue);
+        );  
+ * SPDX-License-Identifier: Apache-2.0
+                public IngestDocument execute(final IngestDocument ingestDocument) {
+            } else {
+        // false, never call processor never increments metrics
+        assertStats(processor, 0, 0, 0);  
+                    } catch (Exception e) {
+            throw new ScriptException("bad script", new ParseException("error", 0), List.of(), "", "lang", null);  
+        LongSupplier relativeTimeProvider = mock(LongSupplier.class);
+    }
+/*
+            new Script(ScriptType.INLINE, Script.DEFAULT_SCRIPT_LANG, scriptName, Collections.emptyMap()),
+            randomAlphaOfLength(10),  
+        ingestDocument.setFieldValue(conditionalField, falseValue);  
+                    throw new IllegalArgumentException("runtime problem");
+                }), Collections.emptyMap())  
+        IngestDocument ingestDoc = new IngestDocument(Map.of(), Map.of());
     }  
-}
+        ConditionalProcessor processor = new ConditionalProcessor(null, null, script, scriptService, null);
+ * You may obtain a copy of the License at  
+        assertThat(e, instanceOf(UnsupportedOperationException.class));
+ * Unless required by applicable law or agreed to in writing,
+                        throw new RuntimeException("error");
+import java.util.concurrent.TimeUnit;  
+                    @Override
+        ScriptService scriptService = MockScriptService.singleContext(IngestConditionalScript.CONTEXT, code -> {
+import java.util.Map;
+ */  
+        String trueValue = "truthy";  
+            new Processor() {  
+        assertThat(ingestDocument.getSourceAndMetadata().get(conditionalField), is(trueValue));  
+                        mutation.accept(ctx);
+        storedScripts.put("foo", new StoredScriptSource("lang", "", Map.of()));
+ * The OpenSearch Contributors require contributions made to  
+public class ConditionalProcessorTests extends OpenSearchTestCase {
+            Settings.builder().build(),
+ * software distributed under the License is distributed on an
+        ConditionalProcessor processor = new ConditionalProcessor(
+                }
+import org.opensearch.script.ScriptException;
+import org.opensearch.common.settings.Settings;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;  

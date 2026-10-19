@@ -1,248 +1,220 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.startree;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.search.DocIdSetIterator;  
-import org.apache.lucene.util.DocIdSetBuilder;
-import org.apache.lucene.util.FixedBitSet;
-import org.opensearch.index.compositeindex.datacube.Dimension;  
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNodeType;  
-import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.SortedNumericStarTreeValuesIterator;
-import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.StarTreeValuesIterator;
-import org.opensearch.search.internal.SearchContext;  
-import org.opensearch.search.startree.filter.DimensionFilter;
-import org.opensearch.search.startree.filter.MatchAllFilter;
-import org.opensearch.search.startree.filter.StarTreeFilter;  
-
-import java.io.IOException;
-import java.util.ArrayDeque;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Queue;  
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
-
-/**  
- * Filter operator for star tree data structure.
- *
- *  @opensearch.experimental  
- *  @opensearch.internal
- */
-public class StarTreeTraversalUtil {  
-    private static final Logger logger = LogManager.getLogger(StarTreeTraversalUtil.class);
-
-    /**  
-         *   First go over the star tree and try to match as many dimensions as possible
-         *   For the remaining columns, use star-tree doc values to match them
-     */  
-    public static FixedBitSet getStarTreeResult(StarTreeValues starTreeValues, StarTreeFilter starTreeFilter, SearchContext searchContext)
-        throws IOException {
-
-        // Initialising all dimension filters for this segment
-        for (String dimension : starTreeFilter.getDimensions()) {
-            for (DimensionFilter dimensionFilter : starTreeFilter.getFiltersForDimension(dimension)) {  
-                dimensionFilter.initialiseForSegment(starTreeValues, searchContext);
-            }
-        }  
-
-        StarTreeResult starTreeResult = traverseStarTree(starTreeValues, starTreeFilter);
-
-        // Initialize FixedBitSet with size maxMatchedDoc + 1
-        FixedBitSet bitSet = new FixedBitSet(starTreeResult.maxMatchedDoc + 1);
-        SortedNumericStarTreeValuesIterator starTreeValuesIterator = new SortedNumericStarTreeValuesIterator(  
-            starTreeResult.matchedDocIds.build().iterator()
-        );
-
-        // No matches, return an empty FixedBitSet
-        if (starTreeResult.maxMatchedDoc == -1) {
-            return bitSet;  
-        }
-
-        // Set bits in FixedBitSet for initially matched documents  
-        while (starTreeValuesIterator.nextEntry() != NO_MORE_DOCS) {
-            bitSet.set(starTreeValuesIterator.entryId());
-        }  
-
-        // Temporary FixedBitSet reused for filtering
-        FixedBitSet tempBitSet = new FixedBitSet(starTreeResult.maxMatchedDoc + 1);  
-
-        // Process remaining predicate columns to further filter the results
-        for (String remainingPredicateColumn : starTreeResult.remainingPredicateColumns) {  
-            logger.debug("remainingPredicateColumn : {}, maxMatchedDoc : {} ", remainingPredicateColumn, starTreeResult.maxMatchedDoc);
-
-            // Get the query value directly  
-            List<DimensionFilter> dimensionFilters = starTreeFilter.getFiltersForDimension(remainingPredicateColumn);
-            StarTreeValuesIterator valuesIterator = starTreeValues.getDimensionValuesIterator(
-                dimensionFilters.getFirst().getMatchingDimension()  
-            );
-
-            // Clear the temporary bit set before reuse  
-            tempBitSet.clear(0, starTreeResult.maxMatchedDoc + 1);
-
-            // Skip filtering if a MatchAllFilter is present for this dimension, since it implies all values match and no further filtering  
-            // is needed
-            boolean isMatchAllFilterPresent = false;
-            for (DimensionFilter dimensionFilter : dimensionFilters) {  
-                if (dimensionFilter instanceof MatchAllFilter) {
-                    isMatchAllFilterPresent = true;
-                    break;  
-                }
-            }
-            if (isMatchAllFilterPresent) continue;  
-
-            if (bitSet.length() > 0) {
-                // Iterate over the current set of matched document IDs  
-                for (int entryId = bitSet.nextSetBit(0); entryId != DocIdSetIterator.NO_MORE_DOCS; entryId = (entryId + 1 < bitSet.length())
-                    ? bitSet.nextSetBit(entryId + 1)
-                    : DocIdSetIterator.NO_MORE_DOCS) {  
-                    if (valuesIterator.advanceExact(entryId)) {
-                        long value = valuesIterator.value();
-                        for (DimensionFilter dimensionFilter : dimensionFilters) {  
-                            if (dimensionFilter.matchDimValue(value, starTreeValues)) {
-                                tempBitSet.set(entryId);// Set bit for the matching entryId
-                                break;  
-                            }
-                        }
-                    }  
-                }
-            }
-
-            // Perform intersection of the current matches with the temp results for this predicate
-            bitSet.and(tempBitSet);
-        }  
-
-        return bitSet;  // Return the final FixedBitSet with all matches
-    }  
-
-    /**
-     * Helper method to traverse the star tree, get matching documents and keep track of all the  
-     * predicate dimensions that are not matched.
-     */
-    private static StarTreeResult traverseStarTree(StarTreeValues starTreeValues, StarTreeFilter starTreeFilter) throws IOException {  
-        DocIdSetBuilder docsWithField = new DocIdSetBuilder(starTreeValues.getStarTreeDocumentCount());
-        DocIdSetBuilder.BulkAdder adder;
-        Set<String> globalRemainingPredicateColumns = null;  
-        StarTreeNode starTree = starTreeValues.getRoot();
-        List<Dimension> dimensionsOrder = starTreeValues.getStarTreeField().getDimensionsOrder();
-        List<String> dimensionNames = dimensionsOrder.stream().map(Dimension::getField).collect(Collectors.toList());  
         boolean foundLeafNode = starTree.isLeaf();
-        assert foundLeafNode == false; // root node is never leaf
-        Queue<StarTreeNode> queue = new ArrayDeque<>();  
-        queue.add(starTree);
-        int currentDimensionId = -1;
-        Set<String> remainingPredicateColumns = new HashSet<>(starTreeFilter.getMatchingDimensions());  
-        int matchedDocsCountInStarTree = 0;
-        int maxDocNum = -1;
-        StarTreeNode starTreeNode;  
-        List<Integer> docIds = new ArrayList<>();
-
-        while ((starTreeNode = queue.poll()) != null) {  
-            int dimensionId = starTreeNode.getDimensionId();
-            if (dimensionId > currentDimensionId) {
-                String dimension = dimensionNames.get(dimensionId);  
-                remainingPredicateColumns.remove(dimension);
-                if (foundLeafNode && globalRemainingPredicateColumns == null) {
+            // is needed
+    public static FixedBitSet getStarTreeResult(StarTreeValues starTreeValues, StarTreeFilter starTreeFilter, SearchContext searchContext)
+import java.util.Queue;  
                     globalRemainingPredicateColumns = new HashSet<>(remainingPredicateColumns);  
-                }
-                currentDimensionId = dimensionId;
-            }  
-
-            if (remainingPredicateColumns.isEmpty()) {
-                int docId = starTreeNode.getAggregatedDocId();  
-                docIds.add(docId);
-                matchedDocsCountInStarTree++;
-                maxDocNum = Math.max(docId, maxDocNum);  
-                continue;
-            }
-
-            if (starTreeNode.isLeaf()) {
-                for (long i = starTreeNode.getStartDocId(); i < starTreeNode.getEndDocId(); i++) {
-                    docIds.add((int) i);  
-                    matchedDocsCountInStarTree++;
-                    maxDocNum = Math.max((int) i, maxDocNum);
-                }  
-                continue;
-            }
-
-            String childDimension = dimensionNames.get(dimensionId + 1);
-            StarTreeNode starNode = null;
-            if (globalRemainingPredicateColumns == null || !globalRemainingPredicateColumns.contains(childDimension)) {  
-                starNode = starTreeNode.getChildStarNode();
-            }
-
-            if (remainingPredicateColumns.contains(childDimension)) {
-                List<DimensionFilter> dimensionFilters = starTreeFilter.getFiltersForDimension(childDimension);
-                final boolean[] tempFoundLeafNodes = new boolean[1];  
-                for (DimensionFilter dimensionFilter : dimensionFilters) {
-                    dimensionFilter.matchStarTreeNodes(starTreeNode, starTreeValues, node -> {
-                        queue.add(node);  
-                        tempFoundLeafNodes[0] |= node.isLeaf();
-                    });
-                }  
-                foundLeafNode |= tempFoundLeafNodes[0];
-            } else {
-                if (starNode != null) {  
-                    queue.add(starNode);
-                    foundLeafNode |= starNode.isLeaf();
-                } else {  
-                    Iterator<? extends StarTreeNode> childrenIterator = starTreeNode.getChildrenIterator();
-                    while (childrenIterator.hasNext()) {
-                        StarTreeNode childNode = childrenIterator.next();  
-                        if (childNode.getStarTreeNodeType() != StarTreeNodeType.STAR.getValue()) {
-                            queue.add(childNode);
-                            foundLeafNode |= childNode.isLeaf();  
-                        }
-                    }
-                }  
-            }
+            bitSet.and(tempBitSet);
+            if (isMatchAllFilterPresent) continue;  
+            bitSet.set(starTreeValuesIterator.entryId());
         }
-
-        adder = docsWithField.grow(docIds.size());
-        for (int id : docIds) {
-            adder.add(id);  
+            int dimensionId = starTreeNode.getDimensionId();
         }
-        return new StarTreeResult(
-            docsWithField,  
-            globalRemainingPredicateColumns != null ? globalRemainingPredicateColumns : Collections.emptySet(),
-            matchedDocsCountInStarTree,
-            maxDocNum  
-        );
-    }
-
-    /**
-     * Helper class to wrap the result from traversing the star tree.
-     * */  
-    private static class StarTreeResult {
-        public final DocIdSetBuilder matchedDocIds;
-        public final Set<String> remainingPredicateColumns;  
-        public final int numOfMatchedDocs;
-        public final int maxMatchedDoc;
-
-        public StarTreeResult(
-            DocIdSetBuilder matchedDocIds,
-            Set<String> remainingPredicateColumns,  
-            int numOfMatchedDocs,
-            int maxMatchedDoc
-        ) {  
+                String dimension = dimensionNames.get(dimensionId);  
             this.matchedDocIds = matchedDocIds;
-            this.remainingPredicateColumns = remainingPredicateColumns;
+            }
+import org.apache.lucene.util.FixedBitSet;
+                    }
+            starTreeResult.matchedDocIds.build().iterator()
+            DocIdSetBuilder matchedDocIds,
+                    while (childrenIterator.hasNext()) {
+ * this file be licensed under the Apache-2.0 license or a
+            }
+                        StarTreeNode childNode = childrenIterator.next();  
+        List<Dimension> dimensionsOrder = starTreeValues.getStarTreeField().getDimensionsOrder();
+            int numOfMatchedDocs,
+                continue;
+        for (String dimension : starTreeFilter.getDimensions()) {
+                    });
+        StarTreeResult starTreeResult = traverseStarTree(starTreeValues, starTreeFilter);
+                        if (childNode.getStarTreeNodeType() != StarTreeNodeType.STAR.getValue()) {
             this.numOfMatchedDocs = numOfMatchedDocs;  
-            this.maxMatchedDoc = maxMatchedDoc;
-        }
+import java.util.Set;
+        List<Integer> docIds = new ArrayList<>();
+                List<DimensionFilter> dimensionFilters = starTreeFilter.getFiltersForDimension(childDimension);
+            // Skip filtering if a MatchAllFilter is present for this dimension, since it implies all values match and no further filtering  
+import java.util.Iterator;
+import java.io.IOException;
+                            }
+    /**  
+import org.apache.logging.log4j.Logger;
+            int maxMatchedDoc
+                        tempFoundLeafNodes[0] |= node.isLeaf();
+                    docIds.add((int) i);  
+        for (int id : docIds) {
+        Queue<StarTreeNode> queue = new ArrayDeque<>();  
+        if (starTreeResult.maxMatchedDoc == -1) {
+        ) {  
+import java.util.stream.Collectors;
+            if (bitSet.length() > 0) {
+        }  
+        public final DocIdSetBuilder matchedDocIds;
+                    ? bitSet.nextSetBit(entryId + 1)
+import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.SortedNumericStarTreeValuesIterator;
+     * predicate dimensions that are not matched.
+        // Initialising all dimension filters for this segment
+        SortedNumericStarTreeValuesIterator starTreeValuesIterator = new SortedNumericStarTreeValuesIterator(  
+        public StarTreeResult(
+                } else {  
     }  
+                        }
+                    : DocIdSetIterator.NO_MORE_DOCS) {  
+ */
+                }
+                matchedDocsCountInStarTree++;
+    /**
+        int maxDocNum = -1;
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+     * Helper class to wrap the result from traversing the star tree.
+     * Helper method to traverse the star tree, get matching documents and keep track of all the  
+        while (starTreeValuesIterator.nextEntry() != NO_MORE_DOCS) {
+            return bitSet;  
+                continue;
+                    maxDocNum = Math.max((int) i, maxDocNum);
+        // No matches, return an empty FixedBitSet
+            );
+                for (int entryId = bitSet.nextSetBit(0); entryId != DocIdSetIterator.NO_MORE_DOCS; entryId = (entryId + 1 < bitSet.length())
+            for (DimensionFilter dimensionFilter : dimensionFilters) {  
+        // Set bits in FixedBitSet for initially matched documents  
+            this.maxMatchedDoc = maxMatchedDoc;
+            if (remainingPredicateColumns.isEmpty()) {
+                                tempBitSet.set(entryId);// Set bit for the matching entryId
+            matchedDocsCountInStarTree,
+        FixedBitSet bitSet = new FixedBitSet(starTreeResult.maxMatchedDoc + 1);
+        }  
+            }
+     */
+            docsWithField,  
+public class StarTreeTraversalUtil {  
+        public final int maxMatchedDoc;
+            tempBitSet.clear(0, starTreeResult.maxMatchedDoc + 1);
+        }
+         *   For the remaining columns, use star-tree doc values to match them
+                            queue.add(childNode);
+        }
+            }
+        DocIdSetBuilder.BulkAdder adder;
+import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.StarTreeValuesIterator;
+import org.opensearch.search.startree.filter.StarTreeFilter;  
+            }
+import java.util.Collections;
+        );
+        throws IOException {
+package org.opensearch.search.startree;
+        int currentDimensionId = -1;
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
+            if (dimensionId > currentDimensionId) {
+            }
+                }
+                    dimensionFilter.matchStarTreeNodes(starTreeNode, starTreeValues, node -> {
+                docIds.add(docId);
+            if (globalRemainingPredicateColumns == null || !globalRemainingPredicateColumns.contains(childDimension)) {  
+                remainingPredicateColumns.remove(dimension);
+                        for (DimensionFilter dimensionFilter : dimensionFilters) {  
+import java.util.ArrayList;
+        public final Set<String> remainingPredicateColumns;  
+            this.remainingPredicateColumns = remainingPredicateColumns;
+            // Get the query value directly  
+                    break;  
+                for (long i = starTreeNode.getStartDocId(); i < starTreeNode.getEndDocId(); i++) {
+        // Initialize FixedBitSet with size maxMatchedDoc + 1
+import org.opensearch.index.compositeindex.datacube.Dimension;  
+        public final int numOfMatchedDocs;
+            for (DimensionFilter dimensionFilter : starTreeFilter.getFiltersForDimension(dimension)) {  
+                    isMatchAllFilterPresent = true;
+                }  
+            if (starTreeNode.isLeaf()) {
+        assert foundLeafNode == false; // root node is never leaf
+            }
+/**  
+                if (dimensionFilter instanceof MatchAllFilter) {
+    /**
+                dimensionFilter.initialiseForSegment(starTreeValues, searchContext);
+        int matchedDocsCountInStarTree = 0;
+import java.util.ArrayDeque;  
+                final boolean[] tempFoundLeafNodes = new boolean[1];  
+            List<DimensionFilter> dimensionFilters = starTreeFilter.getFiltersForDimension(remainingPredicateColumn);
+            String childDimension = dimensionNames.get(dimensionId + 1);
+        DocIdSetBuilder docsWithField = new DocIdSetBuilder(starTreeValues.getStarTreeDocumentCount());
+                }  
+                            if (dimensionFilter.matchDimValue(value, starTreeValues)) {
+ *
+    private static final Logger logger = LogManager.getLogger(StarTreeTraversalUtil.class);
+     * */  
+        while ((starTreeNode = queue.poll()) != null) {  
+                    Iterator<? extends StarTreeNode> childrenIterator = starTreeNode.getChildrenIterator();
+/*  
+import org.apache.lucene.util.DocIdSetBuilder;
+        // Process remaining predicate columns to further filter the results
+                maxDocNum = Math.max(docId, maxDocNum);  
+            StarTreeValuesIterator valuesIterator = starTreeValues.getDimensionValuesIterator(
+ */  
+import org.opensearch.search.startree.filter.MatchAllFilter;
+import org.opensearch.search.internal.SearchContext;  
+                            foundLeafNode |= childNode.isLeaf();  
+            }  
+                if (foundLeafNode && globalRemainingPredicateColumns == null) {
+        StarTreeNode starTreeNode;  
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;
+ *  @opensearch.internal
+            maxDocNum  
+            } else {
+                                break;  
+        adder = docsWithField.grow(docIds.size());
+            boolean isMatchAllFilterPresent = false;
+ *
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNodeType;  
+        );
+            logger.debug("remainingPredicateColumn : {}, maxMatchedDoc : {} ", remainingPredicateColumn, starTreeResult.maxMatchedDoc);
+                    }  
+    }
+                    foundLeafNode |= starNode.isLeaf();
+            if (remainingPredicateColumns.contains(childDimension)) {
+                }
+import org.apache.lucene.search.DocIdSetIterator;  
+                int docId = starTreeNode.getAggregatedDocId();  
+            StarTreeNode starNode = null;
+                    matchedDocsCountInStarTree++;
+import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+            globalRemainingPredicateColumns != null ? globalRemainingPredicateColumns : Collections.emptySet(),
+                }  
 }
+ * Filter operator for star tree data structure.
+            // Clear the temporary bit set before reuse  
+         *   First go over the star tree and try to match as many dimensions as possible
+                dimensionFilters.getFirst().getMatchingDimension()  
+                // Iterate over the current set of matched document IDs  
+                        long value = valuesIterator.value();
+        StarTreeNode starTree = starTreeValues.getRoot();
+import org.apache.logging.log4j.LogManager;
+ *  @opensearch.experimental  
+                        queue.add(node);  
+                foundLeafNode |= tempFoundLeafNodes[0];
+import org.opensearch.search.startree.filter.DimensionFilter;
+                starNode = starTreeNode.getChildStarNode();
+     */  
+        for (String remainingPredicateColumn : starTreeResult.remainingPredicateColumns) {  
+        Set<String> globalRemainingPredicateColumns = null;  
+                for (DimensionFilter dimensionFilter : dimensionFilters) {
+                    if (valuesIterator.advanceExact(entryId)) {
+        return bitSet;  // Return the final FixedBitSet with all matches
+import java.util.List;
+                        }
+    private static class StarTreeResult {
+        return new StarTreeResult(
+        }  
+        List<String> dimensionNames = dimensionsOrder.stream().map(Dimension::getField).collect(Collectors.toList());  
+    private static StarTreeResult traverseStarTree(StarTreeValues starTreeValues, StarTreeFilter starTreeFilter) throws IOException {  
+            adder.add(id);  
+                if (starNode != null) {  
+    }  
+                currentDimensionId = dimensionId;
+        Set<String> remainingPredicateColumns = new HashSet<>(starTreeFilter.getMatchingDimensions());  
+        queue.add(starTree);
+                    queue.add(starNode);
+            // Perform intersection of the current matches with the temp results for this predicate
+            Set<String> remainingPredicateColumns,  
+        FixedBitSet tempBitSet = new FixedBitSet(starTreeResult.maxMatchedDoc + 1);  
+        // Temporary FixedBitSet reused for filtering
+import java.util.HashSet;  

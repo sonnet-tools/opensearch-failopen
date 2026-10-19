@@ -1,130 +1,120 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.index.SoftDeletesDirectoryReaderWrapper;
-import org.apache.lucene.index.StandardDirectoryReader;  
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;  
-import java.util.List;
-import java.util.Objects;
-import java.util.function.Consumer;  
-
-/**
- * This is an extension of {@link OpenSearchReaderManager} for use with {@link NRTReplicationEngine}.  
- * The manager holds a reference to the latest {@link SegmentInfos} object that is used to refresh a reader.
- *
- * @opensearch.internal  
- */
-public class NRTReplicationReaderManager extends OpenSearchReaderManager {
-
-    private final static Logger logger = LogManager.getLogger(NRTReplicationReaderManager.class);
-    private volatile SegmentInfos currentInfos;
-    private Consumer<Collection<String>> onReaderClosed;  
-    private Consumer<Collection<String>> onNewReader;
-    private final EngineConfig engineConfig;
-
-    /**
-     * Creates and returns a new SegmentReplicationReaderManager from the given
-     * already-opened {@link OpenSearchDirectoryReader}, stealing  
-     * the incoming reference.
-     *
-     * @param reader         - The SegmentReplicationReaderManager to use for future reopens.  
-     * @param onNewReader    - Called when a new reader is created.
-     * @param onReaderClosed - Called when a reader is closed.
-     * @param engineConfig   - The engine configuration containing leafSorter.  
-     */
-    NRTReplicationReaderManager(
-        OpenSearchDirectoryReader reader,  
-        Consumer<Collection<String>> onNewReader,
-        Consumer<Collection<String>> onReaderClosed,
-        EngineConfig engineConfig  
-    ) {
-        super(reader);
-        currentInfos = unwrapStandardReader(reader).getSegmentInfos();  
-        this.onNewReader = onNewReader;
-        this.onReaderClosed = onReaderClosed;
-        this.engineConfig = engineConfig;  
-    }
-
-    @Override  
-    protected OpenSearchDirectoryReader refreshIfNeeded(OpenSearchDirectoryReader referenceToRefresh) throws IOException {
-        Objects.requireNonNull(referenceToRefresh);
-        // checks if an actual refresh (change in segments) happened  
-        if (unwrapStandardReader(referenceToRefresh).getSegmentInfos().version == currentInfos.version) {
-            return null;
-        }  
-        final List<LeafReader> subs = new ArrayList<>();
-        final StandardDirectoryReader standardDirectoryReader = unwrapStandardReader(referenceToRefresh);
-        for (LeafReaderContext ctx : standardDirectoryReader.leaves()) {  
-            subs.add(ctx.reader());
-        }
-        // Segment_n here is ignored because it is either already committed on disk as part of previous commit point or  
-        // does not yet exist on store (not yet committed)
-        final Collection<String> files = currentInfos.files(false);
-        DirectoryReader innerReader = StandardDirectoryReader.open(  
-            referenceToRefresh.directory(),
-            currentInfos,
-            subs,  
-            engineConfig.getLeafSorter(),
-            null
-        );  
-        final DirectoryReader softDeletesDirectoryReaderWrapper = new SoftDeletesDirectoryReaderWrapper(
-            innerReader,
-            Lucene.SOFT_DELETES_FIELD  
-        );
         logger.trace(
-            () -> new ParameterizedMessage("updated to SegmentInfosVersion=" + currentInfos.getVersion() + " reader=" + innerReader)  
-        );
-        final OpenSearchDirectoryReader reader = OpenSearchDirectoryReader.wrap(
-            softDeletesDirectoryReaderWrapper,  
-            referenceToRefresh.shardId()
-        );
-        onNewReader.accept(files);  
-        OpenSearchDirectoryReader.addReaderCloseListener(reader, key -> onReaderClosed.accept(files));
-        return reader;
-    }  
-
-    /**
-     * Update this reader's segments and refresh.  
-     *
-     * @param infos {@link SegmentInfos} infos
+        }  
+            null
      * @throws IOException - When Refresh fails with an IOException.  
-     */
-    public void updateSegments(SegmentInfos infos) throws IOException {
-        // roll over the currentInfo's generation, this ensures the on-disk gen  
+        DirectoryReader innerReader = StandardDirectoryReader.open(  
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+    }  
+        Consumer<Collection<String>> onReaderClosed,
+import java.util.ArrayList;
+     * already-opened {@link OpenSearchDirectoryReader}, stealing  
+    ) {
+import org.apache.lucene.index.SoftDeletesDirectoryReaderWrapper;
+import java.util.List;
+ * this file be licensed under the Apache-2.0 license or a
+        );
+            softDeletesDirectoryReaderWrapper,  
+        final List<LeafReader> subs = new ArrayList<>();
+        // does not yet exist on store (not yet committed)
         // is always increased.
-        infos.updateGeneration(currentInfos);
+            subs.add(ctx.reader());
+            innerReader,
+        );
+     * @param reader         - The SegmentReplicationReaderManager to use for future reopens.  
+            referenceToRefresh.shardId()
+     * @param onReaderClosed - Called when a reader is closed.
+        onNewReader.accept(files);  
+        );
+import org.apache.lucene.index.DirectoryReader;
+        this.onNewReader = onNewReader;
         currentInfos = infos;  
+import org.apache.logging.log4j.Logger;
+    private final EngineConfig engineConfig;
+ * The manager holds a reference to the latest {@link SegmentInfos} object that is used to refresh a reader.
+        Objects.requireNonNull(referenceToRefresh);
+    public void updateSegments(SegmentInfos infos) throws IOException {
+import java.util.Objects;
+    public static StandardDirectoryReader unwrapStandardReader(OpenSearchDirectoryReader reader) {
+            () -> new ParameterizedMessage("updated to SegmentInfosVersion=" + currentInfos.getVersion() + " reader=" + innerReader)  
+        final DirectoryReader softDeletesDirectoryReaderWrapper = new SoftDeletesDirectoryReaderWrapper(
+        return currentInfos;
+    public SegmentInfos getSegmentInfos() {
+    private Consumer<Collection<String>> onReaderClosed;  
+     * @param onNewReader    - Called when a new reader is created.
+    }
+        this.engineConfig = engineConfig;  
+    }  
+     * Creates and returns a new SegmentReplicationReaderManager from the given
+import java.io.IOException;
+    private volatile SegmentInfos currentInfos;
+        for (LeafReaderContext ctx : standardDirectoryReader.leaves()) {  
+        final Collection<String> files = currentInfos.files(false);
+        infos.updateGeneration(currentInfos);
+     * the incoming reference.
+}  
+import java.util.Collection;  
+        final StandardDirectoryReader standardDirectoryReader = unwrapStandardReader(referenceToRefresh);
+        OpenSearchDirectoryReader reader,  
+        if (unwrapStandardReader(referenceToRefresh).getSegmentInfos().version == currentInfos.version) {
+ */
+import org.apache.lucene.index.SegmentInfos;
+        }  
+        super(reader);
+        }
+    private Consumer<Collection<String>> onNewReader;
+            return (StandardDirectoryReader) softDeletesWrapper.getDelegate();
+     */
+ * This is an extension of {@link OpenSearchReaderManager} for use with {@link NRTReplicationEngine}.  
+        // checks if an actual refresh (change in segments) happened  
+        final OpenSearchDirectoryReader reader = OpenSearchDirectoryReader.wrap(
+        Consumer<Collection<String>> onNewReader,
+        // roll over the currentInfo's generation, this ensures the on-disk gen  
+/*  
+     */
+    /**
+        OpenSearchDirectoryReader.addReaderCloseListener(reader, key -> onReaderClosed.accept(files));
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+ *
+            return null;
         maybeRefresh();
     }
-
-    public SegmentInfos getSegmentInfos() {
-        return currentInfos;
-    }  
-
-    public static StandardDirectoryReader unwrapStandardReader(OpenSearchDirectoryReader reader) {
-        final DirectoryReader delegate = reader.getDelegate();  
-        if (delegate instanceof SoftDeletesDirectoryReaderWrapper softDeletesWrapper) {
-            return (StandardDirectoryReader) softDeletesWrapper.getDelegate();
-        }  
-        return (StandardDirectoryReader) delegate;
+     * Update this reader's segments and refresh.  
+import org.opensearch.common.lucene.Lucene;
+import org.apache.logging.log4j.LogManager;
+    NRTReplicationReaderManager(
+     * @param infos {@link SegmentInfos} infos
+        EngineConfig engineConfig  
+     *
+        );  
+            engineConfig.getLeafSorter(),
+    @Override  
+    protected OpenSearchDirectoryReader refreshIfNeeded(OpenSearchDirectoryReader referenceToRefresh) throws IOException {
+            Lucene.SOFT_DELETES_FIELD  
     }
-}  
+        final DirectoryReader delegate = reader.getDelegate();  
+            subs,  
+    private final static Logger logger = LogManager.getLogger(NRTReplicationReaderManager.class);
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.index.StandardDirectoryReader;  
+    /**
+ * @opensearch.internal  
+        return reader;
+        // Segment_n here is ignored because it is either already committed on disk as part of previous commit point or  
+        if (delegate instanceof SoftDeletesDirectoryReaderWrapper softDeletesWrapper) {
+        this.onReaderClosed = onReaderClosed;
+        return (StandardDirectoryReader) delegate;
+     * @param engineConfig   - The engine configuration containing leafSorter.  
+import org.apache.lucene.index.LeafReader;
+public class NRTReplicationReaderManager extends OpenSearchReaderManager {
+package org.opensearch.index.engine;
+/**
+ */  
+            currentInfos,
+ *
+            referenceToRefresh.directory(),
+        currentInfos = unwrapStandardReader(reader).getSegmentInfos();  
+     *
+import java.util.function.Consumer;  
+import org.apache.lucene.index.LeafReaderContext;  

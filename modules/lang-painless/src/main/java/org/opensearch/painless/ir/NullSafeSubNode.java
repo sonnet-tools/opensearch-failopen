@@ -1,72 +1,60 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.ir;
-
-import org.opensearch.painless.ClassWriter;
-import org.opensearch.painless.Location;
-import org.opensearch.painless.MethodWriter;  
-import org.opensearch.painless.phase.IRTreeVisitor;
-import org.opensearch.painless.symbol.WriteScope;
-import org.objectweb.asm.Label;  
-
-public class NullSafeSubNode extends UnaryNode {
-
-    /* ---- begin visitor ---- */
-
-    @Override  
-    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
-        irTreeVisitor.visitNullSafeSub(this, scope);
-    }  
-
-    @Override
-    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
-        getChildNode().visit(irTreeVisitor, scope);
-    }
-
-    /* ---- end visitor ---- */
-
-    public NullSafeSubNode(Location location) {  
         super(location);
-    }
-
-    @Override
-    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
-        methodWriter.writeDebugInfo(getLocation());  
-
-        Label end = new Label();
+ * not use this file except in compliance with the License.
+ * GitHub history for details.
+public class NullSafeSubNode extends UnaryNode {
+ *  
+        getChildNode().visit(irTreeVisitor, scope);
+ * the Apache License, Version 2.0 (the "License"); you may
+    /* ---- end visitor ---- */
         methodWriter.dup();  
+ *
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        irTreeVisitor.visitNullSafeSub(this, scope);
+    protected void write(ClassWriter classWriter, MethodWriter methodWriter, WriteScope writeScope) {
+    public <Scope> void visit(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {
         methodWriter.ifNull(end);
-        getChildNode().write(classWriter, methodWriter, writeScope);
+    public NullSafeSubNode(Location location) {  
+ * license agreements. See the NOTICE file distributed with
         methodWriter.mark(end);  
     }
+import org.opensearch.painless.ClassWriter;
+ * compatible open source license.
+ * this work for additional information regarding copyright
+    }  
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        methodWriter.writeDebugInfo(getLocation());  
+import org.objectweb.asm.Label;  
+        getChildNode().write(classWriter, methodWriter, writeScope);
+import org.opensearch.painless.Location;
+/*  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.painless.symbol.WriteScope;
+    }
+ * Unless required by applicable law or agreed to in writing,
 }
+import org.opensearch.painless.phase.IRTreeVisitor;
+ * under the License.  
+    @Override
+    /* ---- begin visitor ---- */
+ * Modifications Copyright OpenSearch Contributors. See
+ * SPDX-License-Identifier: Apache-2.0
+/*
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+    }
+ */  
+ */
+ * software distributed under the License is distributed on an
+    public <Scope> void visitChildren(IRTreeVisitor<Scope> irTreeVisitor, Scope scope) {  
+    @Override
+package org.opensearch.painless.ir;
+        Label end = new Label();
+ *
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+import org.opensearch.painless.MethodWriter;  

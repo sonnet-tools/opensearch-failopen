@@ -1,76 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2008 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject;
-
-import org.opensearch.common.inject.internal.BindingImpl;
-import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.internal.ErrorsException;  
-import org.opensearch.common.inject.internal.InternalContext;
-import org.opensearch.common.inject.internal.InternalFactory;
-import org.opensearch.common.inject.spi.Dependency;  
-import org.opensearch.common.inject.spi.PrivateElements;
-
-/**  
- * This factory exists in a parent injector. When invoked, it retrieves its value from a child
- * injector.
- *  
- * @opensearch.internal
- */
-class ExposedKeyFactory<T> implements InternalFactory<T>, BindingProcessor.CreationListener {  
-    private final Key<T> key;
-    private final PrivateElements privateElements;
-    private BindingImpl<T> delegate;  
-
-    ExposedKeyFactory(Key<T> key, PrivateElements privateElements) {
-        this.key = key;  
-        this.privateElements = privateElements;
-    }
-
-    @Override
-    public void notify(Errors errors) {
-        InjectorImpl privateInjector = (InjectorImpl) privateElements.getInjector();  
-        BindingImpl<T> explicitBinding = privateInjector.state.getExplicitBinding(key);
-
-        // validate that the child injector has its own factory. If the getInternalFactory() returns  
-        // this, then that child injector doesn't have a factory (and getExplicitBinding has returned
         // its parent's binding instead
-        if (explicitBinding.getInternalFactory() == this) {  
-            errors.withSource(explicitBinding.getSource()).exposedButNotBound(key);
-            return;
-        }  
-
-        this.delegate = explicitBinding;
-    }  
-
+ * You may obtain a copy of the License at
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+        InjectorImpl privateInjector = (InjectorImpl) privateElements.getInjector();  
     @Override
-    public T get(Errors errors, InternalContext context, Dependency<?> dependency) throws ErrorsException {  
-        return delegate.getInternalFactory().get(errors, context, dependency);
-    }
+ *
+ *  
 }  
+    }
+ * http://www.apache.org/licenses/LICENSE-2.0  
+            errors.withSource(explicitBinding.getSource()).exposedButNotBound(key);
+ * GitHub history for details.
+/**  
+ * SPDX-License-Identifier: Apache-2.0
+        this.key = key;  
+class ExposedKeyFactory<T> implements InternalFactory<T>, BindingProcessor.CreationListener {  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    ExposedKeyFactory(Key<T> key, PrivateElements privateElements) {
+    }  
+import org.opensearch.common.inject.spi.Dependency;  
+        return delegate.getInternalFactory().get(errors, context, dependency);
+ * Modifications Copyright OpenSearch Contributors. See
+    public void notify(Errors errors) {
+    private final Key<T> key;
+        if (explicitBinding.getInternalFactory() == this) {  
+ * injector.
+        this.delegate = explicitBinding;
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.inject.internal.InternalContext;
+/*
+    private BindingImpl<T> delegate;  
+        BindingImpl<T> explicitBinding = privateInjector.state.getExplicitBinding(key);
+        // validate that the child injector has its own factory. If the getInternalFactory() returns  
+ *
+    public T get(Errors errors, InternalContext context, Dependency<?> dependency) throws ErrorsException {  
+import org.opensearch.common.inject.internal.ErrorsException;  
+ *
+ */  
+import org.opensearch.common.inject.spi.PrivateElements;
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+/*  
+    @Override
+/*  
+        this.privateElements = privateElements;
+ * compatible open source license.
+ * This factory exists in a parent injector. When invoked, it retrieves its value from a child
+ * Copyright (C) 2008 Google Inc.  
+ * limitations under the License.  
+            return;
+import org.opensearch.common.inject.internal.BindingImpl;
+    private final PrivateElements privateElements;
+ */
+ * @opensearch.internal
+ * See the License for the specific language governing permissions and
+ */  
+ */
+        // this, then that child injector doesn't have a factory (and getExplicitBinding has returned
+    }
+ * Unless required by applicable law or agreed to in writing, software
+package org.opensearch.common.inject;
+        }  
+ * you may not use this file except in compliance with the License.  
+import org.opensearch.common.inject.internal.InternalFactory;
+import org.opensearch.common.inject.internal.Errors;

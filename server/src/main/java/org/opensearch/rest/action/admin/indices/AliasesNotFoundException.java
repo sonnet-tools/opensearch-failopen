@@ -1,55 +1,48 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+import java.util.Arrays;
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+    public AliasesNotFoundException(String... names) {
+ * Modifications Copyright OpenSearch Contributors. See  
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+}  
+ * KIND, either express or implied.  See the License for the
+    }
+ */
+import org.opensearch.ResourceNotFoundException;  
+    public AliasesNotFoundException(StreamInput in) throws IOException {  
+ * under the License.  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+ * Exception thrown if an alias is not found
+    }
+ *
+import org.opensearch.core.common.io.stream.StreamInput;
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+ */
+/*  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.rest.action.admin.indices;
-
-import org.opensearch.ResourceNotFoundException;  
-import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;  
-import java.util.Arrays;
-
-/**  
- * Exception thrown if an alias is not found
- *
  * @opensearch.api  
- */
-public class AliasesNotFoundException extends ResourceNotFoundException {
-
-    public AliasesNotFoundException(String... names) {
-        super("aliases " + Arrays.toString(names) + " missing");
-        this.setResources("aliases", names);  
-    }
-
-    public AliasesNotFoundException(StreamInput in) throws IOException {  
+ * You may obtain a copy of the License at  
+package org.opensearch.rest.action.admin.indices;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+ *  
         super(in);
-    }
-}  
+ * license agreements. See the NOTICE file distributed with
+import java.io.IOException;  
+ */  
+ * compatible open source license.
+        super("aliases " + Arrays.toString(names) + " missing");
+ * SPDX-License-Identifier: Apache-2.0
+ * Unless required by applicable law or agreed to in writing,
+public class AliasesNotFoundException extends ResourceNotFoundException {
+/**  
+        this.setResources("aliases", names);  
+/*
+ *    http://www.apache.org/licenses/LICENSE-2.0

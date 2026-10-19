@@ -1,264 +1,223 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.routingtable;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.Diff;  
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.RoutingTableIncrementalDiff;
-import org.opensearch.common.blobstore.BlobPath;  
-import org.opensearch.common.compress.DeflateCompressor;
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.compress.Compressor;  
-import org.opensearch.core.compress.NoneCompressor;
-import org.opensearch.gateway.remote.ClusterMetadataManifest;
-import org.opensearch.index.remote.RemoteStoreUtils;  
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.io.InputStream;
-import java.util.List;
-
-import static org.opensearch.gateway.remote.RemoteClusterStateServiceTests.generateClusterStateWithOneIndex;
-import static org.opensearch.gateway.remote.routingtable.RemoteRoutingTableDiff.ROUTING_TABLE_DIFF_FILE;
-import static org.opensearch.gateway.remote.routingtable.RemoteRoutingTableDiff.ROUTING_TABLE_DIFF_METADATA_PREFIX;  
-import static org.opensearch.gateway.remote.routingtable.RemoteRoutingTableDiff.ROUTING_TABLE_DIFF_PATH_TOKEN;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;  
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class RemoteIndexRoutingTableDiffTests extends OpenSearchTestCase {
-
-    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
-    private static final String TEST_BLOB_PATH = "test-path";
-    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
-    private static final long STATE_VERSION = 3L;
-    private static final long STATE_TERM = 2L;
-    private String clusterUUID;  
-    private BlobStoreRepository blobStoreRepository;
-    private BlobStoreTransferService blobStoreTransferService;
-    private ClusterSettings clusterSettings;  
-    private Compressor compressor;
-
-    private String clusterName;  
-    private NamedWriteableRegistry namedWriteableRegistry;
-    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
-
-    @Before
-    public void setup() {
-        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
-        this.clusterUUID = "test-cluster-uuid";
-        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
-        this.blobStoreRepository = mock(BlobStoreRepository.class);  
-        BlobPath blobPath = new BlobPath().add("/path");
-        when(blobStoreRepository.basePath()).thenReturn(blobPath);
-        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());  
-        compressor = new NoneCompressor();
-        namedWriteableRegistry = writableRegistry();
-        this.clusterName = "test-cluster-name";  
-    }
-
-    @After  
-    public void tearDown() throws Exception {
-        super.tearDown();
-        threadPool.shutdown();  
-    }
-
-    public void testClusterUUID() {  
-        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
-        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
-        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();  
-
-        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
-            previousState.getRoutingTable(),  
-            currentState.getRoutingTable()
-        );
-
-        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
-            routingTableIncrementalDiff,
-            clusterUUID,  
-            compressor,
-            STATE_TERM,
-            STATE_VERSION  
-        );
-        assertEquals(remoteDiffForUpload.clusterUUID(), clusterUUID);
-
-        RemoteRoutingTableDiff remoteDiffForDownload = new RemoteRoutingTableDiff(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
-        assertEquals(remoteDiffForDownload.clusterUUID(), clusterUUID);
-    }  
-
-    public void testFullBlobName() {
         String indexName = randomAlphaOfLength(randomIntBetween(1, 50));  
-        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
-        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();
-
         RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
-            previousState.getRoutingTable(),
-            currentState.getRoutingTable()  
-        );
-
-        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(  
-            routingTableIncrementalDiff,
-            clusterUUID,
-            compressor,  
-            STATE_TERM,
-            STATE_VERSION
-        );  
-        assertThat(remoteDiffForUpload.getFullBlobName(), nullValue());
-
-        RemoteRoutingTableDiff remoteDiffForDownload = new RemoteRoutingTableDiff(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);  
-        assertThat(remoteDiffForDownload.getFullBlobName(), is(TEST_BLOB_NAME));
     }
-
-    public void testBlobFileName() {
+            STATE_VERSION  
+        assertEquals(  
+    public void testGetUploadedMetadata() throws IOException {  
+    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
+import org.opensearch.cluster.ClusterState;
+    }
+        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
+            STATE_VERSION  
         String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
-        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();  
-        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();
-
-        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(  
-            previousState.getRoutingTable(),
-            currentState.getRoutingTable()
-        );  
-
-        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
-            routingTableIncrementalDiff,  
-            clusterUUID,
+        threadPool.shutdown();  
+import static org.mockito.Mockito.when;  
+            previousState.getRoutingTable(),  
             compressor,
-            STATE_TERM,  
-            STATE_VERSION
+            previousState.getRoutingTable(),
+    private BlobStoreTransferService blobStoreTransferService;
+ */  
+        assertEquals(RemoteStoreUtils.invertLong(STATE_TERM), nameTokens[1]);
+import java.io.IOException;  
+import org.opensearch.common.blobstore.BlobPath;  
+ * this file be licensed under the Apache-2.0 license or a
+    public void testGenerateBlobFileName() {
         );
-        assertThat(remoteDiffForUpload.getBlobFileName(), nullValue());  
-
+            currentState.getRoutingTable()  
+        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
+import org.opensearch.threadpool.ThreadPool;
+ * SPDX-License-Identifier: Apache-2.0
+            previousState.getRoutingTable(),
+    private NamedWriteableRegistry namedWriteableRegistry;
+    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
+            STATE_VERSION
+        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
+import static org.hamcrest.Matchers.nullValue;
+            currentState.getRoutingTable()  
+    private static final long STATE_VERSION = 3L;
         RemoteRoutingTableDiff remoteDiffForDownload = new RemoteRoutingTableDiff(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
-        assertThat(remoteDiffForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));  
+    }  
+ *
+import static org.opensearch.gateway.remote.routingtable.RemoteRoutingTableDiff.ROUTING_TABLE_DIFF_FILE;
+        RemoteRoutingTableDiff remoteDiffForDownload = new RemoteRoutingTableDiff(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);  
+        ClusterState previousState = generateClusterStateWithOneIndex(indexName, numberOfShards, numberOfReplicas, false).build();
+    private ClusterSettings clusterSettings;  
+        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
+        assertThat(remoteDiffForDownload.getFullBlobName(), is(TEST_BLOB_NAME));
+        );
+package org.opensearch.gateway.remote.routingtable;
+import org.opensearch.core.compress.NoneCompressor;
+        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+        );
+        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
+            currentState.getRoutingTable()
+            routingTableIncrementalDiff,  
+        // Deserialize the remote diff
+import org.opensearch.Version;
+        assertThat(params.getPathTokens(), is(List.of(ROUTING_TABLE_DIFF_PATH_TOKEN)));
+        assertThat(remoteDiffForUpload.getFullBlobName(), nullValue());
+import org.junit.Before;
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+    private Compressor compressor;
+    @Before
+        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(  
+        assertEquals(remoteDiffForUpload.clusterUUID(), clusterUUID);
+        // Serialize the remote diff
+        RemoteRoutingTableDiff remoteDiffForDownload = new RemoteRoutingTableDiff(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);  
+            STATE_VERSION
+    public void testBlobFileName() {
+        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();
+            STATE_TERM,
+import org.opensearch.cluster.Diff;  
+        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
+        ClusterState currentState = generateClusterStateWithOneIndex(indexName, numberOfShards, numberOfReplicas + 1, true).build();
+            STATE_TERM,  
     }
-
+            routingTableIncrementalDiff,
+import static org.hamcrest.Matchers.is;
+    public void setup() {
+import org.opensearch.common.settings.Settings;
+            compressor,
+        InputStream inputStream = remoteDiffForUpload.serialize();  
+            routingTableIncrementalDiff.apply(previousState.getRoutingTable()).getIndicesRouting(),
+            STATE_TERM,  
+        );  
+ * The OpenSearch Contributors require contributions made to  
+        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();  
+        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();
+        );
+        assertEquals(remoteDiffForDownload.clusterUUID(), clusterUUID);
+import org.opensearch.common.remote.BlobPathParameters;
+    }
+            STATE_VERSION  
+            routingTableIncrementalDiff,
+            previousState.getRoutingTable(),
+            STATE_TERM,
+        int numberOfShards = randomIntBetween(1, 10);
+        );
+            clusterUUID,
+    }
+        RemoteRoutingTableDiff remoteDiffForDownload = new RemoteRoutingTableDiff(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
+        );
+        );
+    private String clusterName;  
+        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();
+import org.opensearch.cluster.routing.RoutingTable;
+        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(  
+import org.opensearch.index.remote.RemoteStoreUtils;  
+        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(  
+        );
+    }
+            routingTableIncrementalDiff,
+import org.opensearch.common.compress.DeflateCompressor;
+        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
+            clusterUUID,  
+        assertEquals(ROUTING_TABLE_DIFF_FILE, uploadedMetadataAttribute.getComponent());
+import org.opensearch.core.compress.Compressor;  
+    private static final long STATE_TERM = 2L;
     public void testBlobPathParameters() {  
         String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
-        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
-        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();  
-
-        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
-            previousState.getRoutingTable(),  
-            currentState.getRoutingTable()
-        );
-
-        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
-            routingTableIncrementalDiff,
             clusterUUID,  
-            compressor,
-            STATE_TERM,
-            STATE_VERSION  
-        );
-        assertThat(remoteDiffForUpload.getBlobFileName(), nullValue());
-
-        BlobPathParameters params = remoteDiffForUpload.getBlobPathParameters();
-        assertThat(params.getPathTokens(), is(List.of(ROUTING_TABLE_DIFF_PATH_TOKEN)));
         String expectedPrefix = ROUTING_TABLE_DIFF_METADATA_PREFIX;  
-        assertThat(params.getFilePrefix(), is(expectedPrefix));
-    }
-
-    public void testGenerateBlobFileName() {
-        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
-        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();  
-        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();
-
-        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(  
-            previousState.getRoutingTable(),
-            currentState.getRoutingTable()
-        );  
-
-        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
-            routingTableIncrementalDiff,  
-            clusterUUID,
-            compressor,
-            STATE_TERM,  
-            STATE_VERSION
-        );
-
         String blobFileName = remoteDiffForUpload.generateBlobFileName();
-        String[] nameTokens = blobFileName.split("__");
-        assertEquals(ROUTING_TABLE_DIFF_METADATA_PREFIX, nameTokens[0]);  
-        assertEquals(RemoteStoreUtils.invertLong(STATE_TERM), nameTokens[1]);
         assertEquals(RemoteStoreUtils.invertLong(STATE_VERSION), nameTokens[2]);
         assertThat(RemoteStoreUtils.invertLong(nameTokens[3]), lessThanOrEqualTo(System.currentTimeMillis()));  
-    }
-
-    public void testGetUploadedMetadata() throws IOException {  
-        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
-        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
-        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();  
-
-        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
-            previousState.getRoutingTable(),  
-            currentState.getRoutingTable()
-        );
-
-        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
-            routingTableIncrementalDiff,
-            clusterUUID,  
-            compressor,
-            STATE_TERM,
-            STATE_VERSION  
-        );
-
-        remoteDiffForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));  
-        ClusterMetadataManifest.UploadedMetadata uploadedMetadataAttribute = remoteDiffForUpload.getUploadedMetadata();
-        assertEquals(ROUTING_TABLE_DIFF_FILE, uploadedMetadataAttribute.getComponent());
-    }  
-
-    public void testStreamOperations() throws IOException {
-        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));  
-        int numberOfShards = randomIntBetween(1, 10);
-        int numberOfReplicas = randomIntBetween(1, 10);
-
-        ClusterState previousState = generateClusterStateWithOneIndex(indexName, numberOfShards, numberOfReplicas, false).build();
-        ClusterState currentState = generateClusterStateWithOneIndex(indexName, numberOfShards, numberOfReplicas + 1, true).build();
-
-        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
-            previousState.getRoutingTable(),
-            currentState.getRoutingTable()  
-        );
-
-        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(  
-            routingTableIncrementalDiff,
+            deserializedDiff.apply(previousState.getRoutingTable()).getIndicesRouting()
+        when(blobStoreRepository.basePath()).thenReturn(blobPath);
+        // Assert that the indices routing table created from routingTableIncrementalDiff and deserializedDiff is equal
+            STATE_VERSION
+    public void tearDown() throws Exception {
             clusterUUID,
+        assertThat(remoteDiffForUpload.getBlobFileName(), nullValue());
+        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();  
+ * compatible open source license.
             compressor,  
+        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
+import static org.opensearch.gateway.remote.routingtable.RemoteRoutingTableDiff.ROUTING_TABLE_DIFF_METADATA_PREFIX;  
+    private String clusterUUID;  
+}
+        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
+        int numberOfReplicas = randomIntBetween(1, 10);
+        Diff<RoutingTable> deserializedDiff = remoteDiffForDownload.deserialize(inputStream);  
+    }
+        this.blobStoreRepository = mock(BlobStoreRepository.class);  
+            currentState.getRoutingTable()
+            currentState.getRoutingTable()
+            clusterUUID,
+import java.util.List;
+        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
+        assertThat(params.getFilePrefix(), is(expectedPrefix));
+/*  
+        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));  
+        compressor = new NoneCompressor();
+import static org.hamcrest.Matchers.lessThanOrEqualTo;  
+            routingTableIncrementalDiff,
+            compressor,
+    @After  
+    public void testStreamOperations() throws IOException {
+        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();  
+            compressor,
+        super.tearDown();
+        this.clusterUUID = "test-cluster-uuid";
+        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
+import static org.mockito.Mockito.mock;
+        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
+        );  
+        BlobPathParameters params = remoteDiffForUpload.getBlobPathParameters();
+            STATE_TERM,
+import static org.opensearch.gateway.remote.routingtable.RemoteRoutingTableDiff.ROUTING_TABLE_DIFF_PATH_TOKEN;
+        );  
+        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(  
+            clusterUUID,  
+        assertEquals(ROUTING_TABLE_DIFF_METADATA_PREFIX, nameTokens[0]);  
+        namedWriteableRegistry = writableRegistry();
+            previousState.getRoutingTable(),  
+        // Create a new instance for deserialization
+import org.opensearch.threadpool.TestThreadPool;
+        remoteDiffForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));  
+import org.junit.After;  
+        String[] nameTokens = blobFileName.split("__");
+    private BlobStoreRepository blobStoreRepository;
+        ClusterMetadataManifest.UploadedMetadata uploadedMetadataAttribute = remoteDiffForUpload.getUploadedMetadata();
+        assertThat(remoteDiffForUpload.getBlobFileName(), nullValue());  
+            routingTableIncrementalDiff,
+            compressor,
+import org.opensearch.test.OpenSearchTestCase;  
+        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
+            STATE_TERM,
+            clusterUUID,
+        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();  
+    private static final String TEST_BLOB_PATH = "test-path";
+        ClusterState currentState = generateClusterStateWithOneIndex(indexName, 5, 2, true).build();  
+        RoutingTableIncrementalDiff routingTableIncrementalDiff = new RoutingTableIncrementalDiff(
+        );  
+            routingTableIncrementalDiff,  
+import static org.opensearch.gateway.remote.RemoteClusterStateServiceTests.generateClusterStateWithOneIndex;
+import org.opensearch.common.settings.ClusterSettings;  
+import org.opensearch.cluster.routing.RoutingTableIncrementalDiff;
+        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());  
+    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
+            compressor,  
+    public void testClusterUUID() {  
+            currentState.getRoutingTable()
+        BlobPath blobPath = new BlobPath().add("/path");
+import java.io.InputStream;
+        assertThat(remoteDiffForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));  
+import org.opensearch.gateway.remote.ClusterMetadataManifest;
+            currentState.getRoutingTable()
             STATE_TERM,
             STATE_VERSION
+        String indexName = randomAlphaOfLength(randomIntBetween(1, 50));
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        RemoteRoutingTableDiff remoteDiffForUpload = new RemoteRoutingTableDiff(
+        );
+            previousState.getRoutingTable(),
+            previousState.getRoutingTable(),  
+        );
+    }  
+        this.clusterName = "test-cluster-name";  
+public class RemoteIndexRoutingTableDiffTests extends OpenSearchTestCase {
         );  
-
-        // Serialize the remote diff
-        InputStream inputStream = remoteDiffForUpload.serialize();  
-
-        // Create a new instance for deserialization
-        RemoteRoutingTableDiff remoteDiffForDownload = new RemoteRoutingTableDiff(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);  
-
-        // Deserialize the remote diff
-        Diff<RoutingTable> deserializedDiff = remoteDiffForDownload.deserialize(inputStream);  
-
-        // Assert that the indices routing table created from routingTableIncrementalDiff and deserializedDiff is equal
-        assertEquals(  
-            routingTableIncrementalDiff.apply(previousState.getRoutingTable()).getIndicesRouting(),
-            deserializedDiff.apply(previousState.getRoutingTable()).getIndicesRouting()
-        );  
-    }
-}
+        ClusterState previousState = generateClusterStateWithOneIndex(indexName, 5, 1, false).build();
+    public void testFullBlobName() {

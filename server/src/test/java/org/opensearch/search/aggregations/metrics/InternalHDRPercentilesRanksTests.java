@@ -1,116 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
 import org.opensearch.search.DocValueFormat;
-
-import java.util.Arrays;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-import org.HdrHistogram.DoubleHistogram;
-
-public class InternalHDRPercentilesRanksTests extends InternalPercentilesRanksTestCase<InternalHDRPercentileRanks> {
-
-    @Override  
-    protected InternalHDRPercentileRanks createTestInstance(
-        String name,
-        Map<String, Object> metadata,  
-        boolean keyed,
-        DocValueFormat format,
-        double[] percents,  
-        double[] values
-    ) {
-
-        final DoubleHistogram state = new DoubleHistogram(3);
+                break;
         Arrays.stream(values).forEach(state::recordValue);
-
-        return new InternalHDRPercentileRanks(name, percents, state, keyed, format, metadata);
-    }
-
+/*  
+/*
+        double[] values
+ *
     @Override
-    protected void assertReduced(InternalHDRPercentileRanks reduced, List<InternalHDRPercentileRanks> inputs) {
-        // it is hard to check the values due to the inaccuracy of the algorithm  
-        long totalCount = 0;
-        for (InternalHDRPercentileRanks ranks : inputs) {
-            totalCount += ranks.state.getTotalCount();  
-        }
-        assertEquals(totalCount, reduced.state.getTotalCount());
-    }  
-
-    @Override
-    protected Class<? extends ParsedPercentiles> implementationClass() {  
-        return ParsedHDRPercentileRanks.class;
-    }
-
-    @Override
-    protected InternalHDRPercentileRanks mutateInstance(InternalHDRPercentileRanks instance) {
-        String name = instance.getName();  
-        double[] percents = instance.keys;
-        DoubleHistogram state = instance.state;
-        boolean keyed = instance.keyed;  
-        DocValueFormat formatter = instance.formatter();
-        Map<String, Object> metadata = instance.getMetadata();
-        switch (between(0, 4)) {  
-            case 0:
-                name += randomAlphaOfLength(5);
-                break;  
-            case 1:
-                percents = Arrays.copyOf(percents, percents.length + 1);
-                percents[percents.length - 1] = randomDouble() * 100;  
-                Arrays.sort(percents);
-                break;
-            case 2:  
-                state = new DoubleHistogram(state);
-                for (int i = 0; i < between(10, 100); i++) {
-                    state.recordValue(randomDouble());  
-                }
-                break;
+ */
             case 3:  
-                keyed = keyed == false;
-                break;
-            case 4:  
-                if (metadata == null) {
-                    metadata = new HashMap<>(1);
-                } else {  
-                    metadata = new HashMap<>(instance.getMetadata());
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());  
-                break;
-            default:
-                throw new AssertionError("Illegal randomisation branch");  
+import java.util.Map;  
+ */  
+                Arrays.sort(percents);
         }
-        return new InternalHDRPercentileRanks(name, percents, state, keyed, formatter, metadata);
+        final DoubleHistogram state = new DoubleHistogram(3);
+            case 1:
+                }
+        DoubleHistogram state = instance.state;
+    @Override
+                    metadata = new HashMap<>(instance.getMetadata());
+    ) {
+import java.util.List;
+                throw new AssertionError("Illegal randomisation branch");  
+        boolean keyed,
+            case 0:
+        double[] percents = instance.keys;
+ * this work for additional information regarding copyright
+import org.HdrHistogram.DoubleHistogram;
+        String name,
+ * ownership. Elasticsearch licenses this file to you under  
+            default:
+                percents[percents.length - 1] = randomDouble() * 100;  
+        // it is hard to check the values due to the inaccuracy of the algorithm  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    protected Class<? extends ParsedPercentiles> implementationClass() {  
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+                break;
+        assertEquals(totalCount, reduced.state.getTotalCount());
+                if (metadata == null) {
+    @Override
+        long totalCount = 0;
     }  
+ * GitHub history for details.
+ * license agreements. See the NOTICE file distributed with
+        DocValueFormat format,
+    protected void assertReduced(InternalHDRPercentileRanks reduced, List<InternalHDRPercentileRanks> inputs) {
+                state = new DoubleHistogram(state);
+package org.opensearch.search.aggregations.metrics;
+                keyed = keyed == false;
+import java.util.Arrays;  
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+                metadata.put(randomAlphaOfLength(15), randomInt());  
+            totalCount += ranks.state.getTotalCount();  
+        double[] percents,  
+ * specific language governing permissions and limitations
+    protected InternalHDRPercentileRanks mutateInstance(InternalHDRPercentileRanks instance) {
+ *
+    }
 }
+    @Override  
+                    metadata = new HashMap<>(1);
+ * Licensed to Elasticsearch under one or more contributor  
+        for (InternalHDRPercentileRanks ranks : inputs) {
+public class InternalHDRPercentilesRanksTests extends InternalPercentilesRanksTestCase<InternalHDRPercentileRanks> {
+        switch (between(0, 4)) {  
+        }
+                } else {  
+    protected InternalHDRPercentileRanks createTestInstance(
+            case 2:  
+ * The OpenSearch Contributors require contributions made to  
+                break;  
+        return ParsedHDRPercentileRanks.class;
+        Map<String, Object> metadata = instance.getMetadata();
+                break;
+ * compatible open source license.
+                    state.recordValue(randomDouble());  
+            case 4:  
+                percents = Arrays.copyOf(percents, percents.length + 1);
+        Map<String, Object> metadata,  
+        boolean keyed = instance.keyed;  
+        String name = instance.getName();  
+import java.util.HashMap;
+ * KIND, either express or implied.  See the License for the
+    }  
+                for (int i = 0; i < between(10, 100); i++) {
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+                break;
+        DocValueFormat formatter = instance.formatter();
+ * software distributed under the License is distributed on an
+/*  
+    }
+        return new InternalHDRPercentileRanks(name, percents, state, keyed, format, metadata);
+                name += randomAlphaOfLength(5);
+                }
+ * not use this file except in compliance with the License.
+        return new InternalHDRPercentileRanks(name, percents, state, keyed, formatter, metadata);
+ */  

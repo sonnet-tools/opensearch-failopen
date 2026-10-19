@@ -1,253 +1,213 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion.action.stats;
-
+    }
+            responseBody.contains("Invalid stat sections"),
+            return HttpVersion.HTTP_1_1;  
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.http.HttpChannel;  
-import org.opensearch.http.HttpRequest;
-import org.opensearch.http.HttpResponse;
-import org.opensearch.rest.AbstractRestChannel;  
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.RestResponse;
-
-import java.net.InetSocketAddress;
-import java.util.Collections;
+     * <p><b>Validates: Requirements 3.3</b>
+     */
+            this.response = response;  
 import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-
-import net.jqwik.api.Arbitraries;
-import net.jqwik.api.Arbitrary;  
-import net.jqwik.api.ForAll;
-import net.jqwik.api.Property;
-import net.jqwik.api.Provide;  
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;  
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-/**  
- * Property-based tests for invalid stat name rejection.
- *
- * <p>Feature: datafusion-cluster-stats, Property 4: Invalid stat name rejection  
- *
- * <p>For any string that is not one of the 9 valid stat section names, when included
+import org.opensearch.rest.AbstractRestChannel;  
+     */  
+     * Includes alphanumeric strings, strings with special characters, and strings  
+    /**
+        public HttpRequest removeHeader(String header) {
+import org.opensearch.core.common.bytes.BytesReference;  
+        }
+import org.opensearch.http.HttpResponse;
+        @Override  
  * in the {@code stat} path parameter, the REST handler SHALL return an HTTP 400 response  
- * whose body lists all valid stat names.
- *
- * <p><b>Validates: Requirements 3.3</b>  
- */
-public class InvalidStatNameRejectionPropertyTests {
-
-    /** All 9 valid stat section names. */
-    private static final Set<String> VALID_STAT_NAMES = Set.of(
-        "io_runtime",  
+    private static RestRequest buildFakeRestRequest(Map<String, String> params) {
+import static org.junit.jupiter.api.Assertions.assertNotNull;  
+        }  
+     * Minimal {@link HttpRequest} implementation for property tests.  
+        public HttpVersion protocolVersion() {
+        public void sendResponse(HttpResponse response, ActionListener<Void> listener) {}
+        }
+    void invalidStatNameReturnsHttp400WithValidNamesList(@ForAll("invalidStatNames") String invalidStat) throws Exception {
+import org.opensearch.http.HttpRequest;
+    // ---- Property 4: Invalid stat name rejection ----  
+        // Validation happens before client.execute() is called, so null is safe here.  
+import org.opensearch.http.HttpChannel;  
+import org.opensearch.core.common.bytes.BytesArray;
+        public List<String> strictCookies() {  
+        handler.handleRequest(request, channel, null);
+        }
         "cpu_runtime",
         "coordinator_reduce",
-        "query_execution",  
-        "stream_next",
-        "plan_setup",
-        "fragment_executor_gate",  
-        "adaptive_budget",
-        "disk_spill"
-    );  
-
-    // ---- Generators ----
-
-    /**
-     * Generates arbitrary non-empty strings that are NOT in the valid stat names set.
-     * Includes alphanumeric strings, strings with special characters, and strings  
-     * that are close to valid names but not exact matches.
-     */
-    @Provide  
-    Arbitrary<String> invalidStatNames() {
-        return Arbitraries.oneOf(
-            // Random alphanumeric strings  
-            Arbitraries.strings().alpha().numeric().ofMinLength(1).ofMaxLength(50),
-            // Strings with underscores (similar to valid names but different)
-            Arbitraries.strings().withChars("abcdefghijklmnopqrstuvwxyz_0123456789").ofMinLength(1).ofMaxLength(30),  
-            // Strings with special characters
-            Arbitraries.strings().ascii().ofMinLength(1).ofMaxLength(30)
-        ).filter(s -> !s.isEmpty() && !VALID_STAT_NAMES.contains(s));  
-    }
-
-    // ---- Property 4: Invalid stat name rejection ----  
-
-    /**
-     * Feature: datafusion-cluster-stats, Property 4: Invalid stat name rejection  
-     *
-     * <p>For any string not in the 9 valid stat section names, the REST handler
+package org.opensearch.be.datafusion.action.stats;
      * returns HTTP 400 listing valid names.  
-     *
-     * <p><b>Validates: Requirements 3.3</b>
-     */  
-    @Property(tries = 150)
-    void invalidStatNameReturnsHttp400WithValidNamesList(@ForAll("invalidStatNames") String invalidStat) throws Exception {
-        RestDataFusionStatsAction handler = new RestDataFusionStatsAction();  
-
-        // Build a RestRequest with the invalid stat as the "stat" path parameter
-        Map<String, String> params = new HashMap<>();  
-        params.put("stat", invalidStat);
-
+            return null;
         RestRequest request = buildFakeRestRequest(params);  
-
-        // Call handleRequest (public, inherited from BaseRestHandler) with null NodeClient.
-        // Validation happens before client.execute() is called, so null is safe here.  
-        CapturingRestChannel channel = new CapturingRestChannel(request);
-        handler.handleRequest(request, channel, null);
-
-        // Verify HTTP 400 status
-        assertNotNull(channel.getResponse(), "Channel must have received a response");
-        assertEquals(RestStatus.BAD_REQUEST, channel.getResponse().status(), "Invalid stat '" + invalidStat + "' must produce HTTP 400");  
-
-        // Verify the response body lists valid stat names
-        String responseBody = channel.getResponse().content().utf8ToString();  
-        assertTrue(
-            responseBody.contains("Invalid stat sections"),
-            "Response must contain 'Invalid stat sections' message. Got: " + responseBody  
-        );
-        assertTrue(
-            responseBody.contains(RestDataFusionStatsAction.VALID_STATS),  
+        @Override  
+ * <p>For any string that is not one of the 9 valid stat section names, when included
+/**  
+        "adaptive_budget",
+    }  
+     */
+        "fragment_executor_gate",  
+        }
+ * <p>Feature: datafusion-cluster-stats, Property 4: Invalid stat name rejection  
+    }
+import org.opensearch.core.rest.RestStatus;
             "Response must list all valid stat names. Got: " + responseBody
+import static org.junit.jupiter.api.Assertions.assertTrue;
+        @Override  
+        @Override
+import java.util.Set;  
+        @Override
+     * Feature: datafusion-cluster-stats, Property 4: Invalid stat name rejection  
+ *
+            };  
+    // ---- Generators ----
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        @Override
+        "plan_setup",
+        "query_execution",  
+        RestDataFusionStatsAction handler = new RestDataFusionStatsAction();  
+        }  
+        HttpRequest httpRequest = new MinimalHttpRequest();  
+                    return false;
+ *
+     * This avoids depending on the test framework's FakeRestRequest.  
+        CapturingRestChannel(RestRequest request) {  
+        // Build a RestRequest with the invalid stat as the "stat" path parameter
+import net.jqwik.api.ForAll;
+import net.jqwik.api.Arbitraries;
+import java.util.Collections;
+            return null;
+        public void addCloseListener(ActionListener<Void> listener) {}
+import java.util.List;
+import java.net.InetSocketAddress;
+ *
+            return true;  
+        public void close() {}
+        String responseBody = channel.getResponse().content().utf8ToString();  
+ * SPDX-License-Identifier: Apache-2.0
+public class InvalidStatNameRejectionPropertyTests {
+        public void release() {}
+        "disk_spill"
+    private static class MinimalHttpRequest implements HttpRequest {
+        // Call handleRequest (public, inherited from BaseRestHandler) with null NodeClient.
+    /**
+        };  
+        "stream_next",
+        @Override
+            return "/_plugins/_analytics_backend_datafusion/stats/test";
         );
     }  
-
-    // ---- Test infrastructure ----
-
-    /**
-     * Builds a minimal {@link RestRequest} with the given parameters.
-     * This avoids depending on the test framework's FakeRestRequest.  
-     */
-    private static RestRequest buildFakeRestRequest(Map<String, String> params) {
-        HttpRequest httpRequest = new MinimalHttpRequest();  
-        HttpChannel httpChannel = new MinimalHttpChannel();
-        return new RestRequest(NamedXContentRegistry.EMPTY, params, httpRequest.uri(), httpRequest.getHeaders(), httpRequest, httpChannel) {
-        };  
-    }
-
-    /**  
-     * A minimal {@link AbstractRestChannel} that captures the response.
-     */
-    private static class CapturingRestChannel extends AbstractRestChannel {  
-        private RestResponse response;
-
-        CapturingRestChannel(RestRequest request) {  
-            super(request, true);
-        }
-
-        @Override
-        public void sendResponse(RestResponse response) {
-            this.response = response;  
-        }
-
-        public RestResponse getResponse() {  
-            return response;
-        }
-    }  
-
-    /**
-     * Minimal {@link HttpRequest} implementation for property tests.  
-     */
-    private static class MinimalHttpRequest implements HttpRequest {
-        @Override  
-        public RestRequest.Method method() {
-            return RestRequest.Method.GET;
-        }  
-
-        @Override
-        public String uri() {  
-            return "/_plugins/_analytics_backend_datafusion/stats/test";
-        }
-
-        @Override
-        public BytesReference content() {
-            return BytesArray.EMPTY;  
-        }
-
-        @Override  
-        public Map<String, List<String>> getHeaders() {
-            return Collections.emptyMap();
-        }  
-
-        @Override
-        public List<String> strictCookies() {  
-            return Collections.emptyList();
-        }
-
-        @Override
-        public HttpVersion protocolVersion() {
-            return HttpVersion.HTTP_1_1;  
-        }
-
-        @Override  
-        public HttpRequest removeHeader(String header) {
-            return this;
-        }  
-
-        @Override
-        public HttpResponse createResponse(RestStatus status, BytesReference content) {  
-            return new HttpResponse() {
-                @Override
-                public void addHeader(String name, String value) {}  
-
-                @Override
-                public boolean containsHeader(String name) {  
-                    return false;
-                }
-            };  
-        }
-
-        @Override  
-        public void release() {}
-
-        @Override  
-        public HttpRequest releaseAndCopy() {
-            return this;
-        }  
-
-        @Override
-        public Exception getInboundException() {  
-            return null;
-        }
-    }  
-
-    /**
-     * Minimal {@link HttpChannel} implementation for property tests.  
-     */
-    private static class MinimalHttpChannel implements HttpChannel {
-        @Override  
-        public void sendResponse(HttpResponse response, ActionListener<Void> listener) {}
-
-        @Override  
-        public InetSocketAddress getLocalAddress() {
-            return null;
-        }  
-
-        @Override
-        public InetSocketAddress getRemoteAddress() {  
-            return null;
-        }
-
-        @Override
-        public void addCloseListener(ActionListener<Void> listener) {}
-
-        @Override
+ */
         public boolean isOpen() {
-            return true;  
+     */
+import java.util.Map;
+    /**
+ * Property-based tests for invalid stat name rejection.
+     * Builds a minimal {@link RestRequest} with the given parameters.
         }
-
-        @Override  
-        public void close() {}
+import net.jqwik.api.Arbitrary;  
+    /**
+    private static class MinimalHttpChannel implements HttpChannel {
+        @Override
+        @Override
+        }
+        @Override
+    /**
+        public void sendResponse(RestResponse response) {
+        }
+    private static class CapturingRestChannel extends AbstractRestChannel {  
+    }  
+        public Exception getInboundException() {  
     }
+import org.opensearch.rest.RestRequest;
+        @Override  
+                @Override
+        public InetSocketAddress getLocalAddress() {
+            return RestRequest.Method.GET;
+        @Override  
+        }
+        assertNotNull(channel.getResponse(), "Channel must have received a response");
+        public Map<String, List<String>> getHeaders() {
+        @Override  
+ * this file be licensed under the Apache-2.0 license or a
+     * that are close to valid names but not exact matches.
+            return this;
+            Arbitraries.strings().alpha().numeric().ofMinLength(1).ofMaxLength(50),
+            return BytesArray.EMPTY;  
+        );
+            return Collections.emptyMap();
+                public boolean containsHeader(String name) {  
+        }  
+import net.jqwik.api.Provide;  
+            Arbitraries.strings().withChars("abcdefghijklmnopqrstuvwxyz_0123456789").ofMinLength(1).ofMaxLength(30),  
+        assertTrue(
+ * The OpenSearch Contributors require contributions made to  
+        "io_runtime",  
+     * <p>For any string not in the 9 valid stat section names, the REST handler
+        @Override
+        ).filter(s -> !s.isEmpty() && !VALID_STAT_NAMES.contains(s));  
+        }  
+    private static final Set<String> VALID_STAT_NAMES = Set.of(
+    /** All 9 valid stat section names. */
+            return response;
+     * Generates arbitrary non-empty strings that are NOT in the valid stat names set.
+import static org.junit.jupiter.api.Assertions.assertEquals;
+    Arbitrary<String> invalidStatNames() {
+        // Verify HTTP 400 status
+ * compatible open source license.
+        public RestResponse getResponse() {  
+     */
+        assertEquals(RestStatus.BAD_REQUEST, channel.getResponse().status(), "Invalid stat '" + invalidStat + "' must produce HTTP 400");  
+ * whose body lists all valid stat names.
+        public InetSocketAddress getRemoteAddress() {  
+        Map<String, String> params = new HashMap<>();  
+     * A minimal {@link AbstractRestChannel} that captures the response.
+     *
+            Arbitraries.strings().ascii().ofMinLength(1).ofMaxLength(30)
+        public String uri() {  
+        CapturingRestChannel channel = new CapturingRestChannel(request);
+    );  
+            // Strings with special characters
+     */
+            return this;
+    @Property(tries = 150)
+    // ---- Test infrastructure ----
+            responseBody.contains(RestDataFusionStatsAction.VALID_STATS),  
+            return null;
+            "Response must contain 'Invalid stat sections' message. Got: " + responseBody  
+            // Strings with underscores (similar to valid names but different)
+        public BytesReference content() {
+        return new RestRequest(NamedXContentRegistry.EMPTY, params, httpRequest.uri(), httpRequest.getHeaders(), httpRequest, httpChannel) {
+        params.put("stat", invalidStat);
+     * Minimal {@link HttpChannel} implementation for property tests.  
+        }  
+/*  
+ * <p><b>Validates: Requirements 3.3</b>  
+                @Override
+            return new HttpResponse() {
+        HttpChannel httpChannel = new MinimalHttpChannel();
+        @Override
+import org.opensearch.rest.RestResponse;
+     *
+ */  
+        @Override
+        @Override  
+            // Random alphanumeric strings  
+        }
+    @Provide  
+        @Override  
+        }
+        private RestResponse response;
 }  
+        return Arbitraries.oneOf(
+        public HttpRequest releaseAndCopy() {
+                public void addHeader(String name, String value) {}  
+        assertTrue(
+    /**  
+        public HttpResponse createResponse(RestStatus status, BytesReference content) {  
+            return Collections.emptyList();
+                }
+        // Verify the response body lists valid stat names
+import net.jqwik.api.Property;
+            super(request, true);
+        public RestRequest.Method method() {
+ *
+        }

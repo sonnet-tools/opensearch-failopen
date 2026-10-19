@@ -1,196 +1,175 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.termvectors;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;  
-import org.opensearch.action.CompositeIndicesRequest;
-import org.opensearch.action.RealtimeRequest;
-import org.opensearch.action.ValidateActions;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Set;
-
-/**  
- * A single multi get request.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class MultiTermVectorsRequest extends ActionRequest  
-    implements
-        Iterable<TermVectorsRequest>,
         CompositeIndicesRequest,  
-        RealtimeRequest {
-
-    String preference;  
-    List<TermVectorsRequest> requests = new ArrayList<>();
-
-    final Set<String> ids = new HashSet<>();  
-
-    public MultiTermVectorsRequest(StreamInput in) throws IOException {
-        super(in);  
-        preference = in.readOptionalString();
-        int size = in.readVInt();
-        requests = new ArrayList<>(size);  
-        for (int i = 0; i < size; i++) {
-            requests.add(new TermVectorsRequest(in));
-        }  
-    }
-
-    public MultiTermVectorsRequest() {}  
-
-    public MultiTermVectorsRequest add(TermVectorsRequest termVectorsRequest) {
-        requests.add(termVectorsRequest);  
-        return this;
-    }
-
-    public MultiTermVectorsRequest add(String index, String id) {
-        requests.add(new TermVectorsRequest(index, id));
-        return this;  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (requests.isEmpty()) {  
-            validationException = ValidateActions.addValidationError("multi term vectors: no documents requested", validationException);
-        } else {
-            for (int i = 0; i < requests.size(); i++) {  
-                TermVectorsRequest termVectorsRequest = requests.get(i);
-                ActionRequestValidationException validationExceptionForDoc = termVectorsRequest.validate();
-                if (validationExceptionForDoc != null) {  
-                    validationException = ValidateActions.addValidationError(
-                        "at multi term vectors for doc " + i,
-                        validationExceptionForDoc  
-                    );
-                }
-            }  
-        }
-        return validationException;
-    }  
-
-    @Override
-    public Iterator<TermVectorsRequest> iterator() {  
+public class MultiTermVectorsRequest extends ActionRequest  
         return Collections.unmodifiableCollection(requests).iterator();
-    }
-
-    public boolean isEmpty() {
-        return requests.isEmpty() && ids.isEmpty();
+            validationException = ValidateActions.addValidationError("multi term vectors: no documents requested", validationException);
+                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
+import java.util.List;  
     }  
-
-    public List<TermVectorsRequest> getRequests() {
-        return requests;  
-    }
-
-    public void add(TermVectorsRequest template, @Nullable XContentParser parser) throws IOException {  
-        XContentParser.Token token;
-        String currentFieldName = null;
-        if (parser != null) {  
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {
-                    currentFieldName = parser.currentName();  
-                } else if (token == XContentParser.Token.START_ARRAY) {
-                    if ("docs".equals(currentFieldName)) {
-                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
-                            if (token != XContentParser.Token.START_OBJECT) {
-                                throw new IllegalArgumentException("docs array element should include an object");
-                            }  
-                            TermVectorsRequest termVectorsRequest = new TermVectorsRequest(template);
-                            TermVectorsRequest.parseRequest(termVectorsRequest, parser);
-                            add(termVectorsRequest);  
-                        }
-                    } else if ("ids".equals(currentFieldName)) {
-                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
                             if (!token.isValue()) {
-                                throw new IllegalArgumentException("ids array element should only contain ids");
-                            }  
-                            ids.add(parser.text());
-                        }
-                    } else {  
-                        throw new OpenSearchParseException("no parameter named [{}] and type ARRAY", currentFieldName);
-                    }
-                } else if (token == XContentParser.Token.START_OBJECT && currentFieldName != null) {  
-                    if ("parameters".equals(currentFieldName)) {
-                        TermVectorsRequest.parseRequest(template, parser);
-                    } else {  
-                        throw new OpenSearchParseException("no parameter named [{}] and type OBJECT", currentFieldName);
-                    }
-                } else if (currentFieldName != null) {  
-                    throw new OpenSearchParseException("_mtermvectors: Parameter [{}] not supported", currentFieldName);
-                }
-            }  
-        }
-        for (String id : ids) {
-            TermVectorsRequest curRequest = new TermVectorsRequest(template);  
-            curRequest.id(id);
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.StreamOutput;
+                ActionRequestValidationException validationExceptionForDoc = termVectorsRequest.validate();
+        RealtimeRequest {
+    }
             requests.add(curRequest);
+import org.opensearch.action.ValidateActions;  
+import org.opensearch.OpenSearchParseException;
         }  
+                        validationExceptionForDoc  
     }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeOptionalString(preference);  
-        out.writeCollection(requests);
-    }
-
-    public void ids(String[] ids) {
+ *
+                        throw new OpenSearchParseException("no parameter named [{}] and type OBJECT", currentFieldName);
+    List<TermVectorsRequest> requests = new ArrayList<>();
+import org.opensearch.core.xcontent.XContentParser;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public List<TermVectorsRequest> getRequests() {
+                            TermVectorsRequest termVectorsRequest = new TermVectorsRequest(template);
+                    validationException = ValidateActions.addValidationError(
+                            add(termVectorsRequest);  
+ */  
+                        }
+import org.opensearch.action.CompositeIndicesRequest;
+        return this;  
+                    if ("docs".equals(currentFieldName)) {
+            requests.add(new TermVectorsRequest(in));
         for (String id : ids) {
-            this.ids.add(id.replaceAll("\\s", ""));  
-        }
-    }
-
-    public int size() {
-        return requests.size();
-    }  
-
+                    } else {  
     @Override
-    public MultiTermVectorsRequest realtime(boolean realtime) {  
-        for (TermVectorsRequest request : requests) {
-            request.realtime(realtime);
-        }  
-        return this;
-    }
+package org.opensearch.action.termvectors;
+import org.opensearch.common.annotation.PublicApi;
+                    );
+            }  
+            }  
+        for (int i = 0; i < size; i++) {
 }  
+                    }
+        requests.add(new TermVectorsRequest(index, id));
+    }
+        return requests.isEmpty() && ids.isEmpty();
+                            TermVectorsRequest.parseRequest(termVectorsRequest, parser);
+                                throw new IllegalArgumentException("ids array element should only contain ids");
+        return requests.size();
+                }
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+                    } else {  
+        super.writeTo(out);
+        String currentFieldName = null;
+                }
+        super(in);  
+    }
+        return this;
+        }  
+        if (parser != null) {  
+            TermVectorsRequest curRequest = new TermVectorsRequest(template);  
+ * specific language governing permissions and limitations
+import org.opensearch.action.ActionRequest;
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+                            ids.add(parser.text());
+        return this;
+    }  
+    public MultiTermVectorsRequest add(TermVectorsRequest termVectorsRequest) {
+    String preference;  
+ */
+ */
+                if (token == XContentParser.Token.FIELD_NAME) {
+    public MultiTermVectorsRequest realtime(boolean realtime) {  
+ * KIND, either express or implied.  See the License for the
+import java.util.HashSet;
+        out.writeCollection(requests);
+import org.opensearch.action.ActionRequestValidationException;  
+import java.util.ArrayList;
+    implements
+                            if (token != XContentParser.Token.START_OBJECT) {
+    }
+ * not use this file except in compliance with the License.
+            this.ids.add(id.replaceAll("\\s", ""));  
+                TermVectorsRequest termVectorsRequest = requests.get(i);
+ * this file be licensed under the Apache-2.0 license or a
+            request.realtime(realtime);
+ * You may obtain a copy of the License at  
+        }
+    @Override
+        }
+    @Override  
+    }
+    public void add(TermVectorsRequest template, @Nullable XContentParser parser) throws IOException {  
+    public void ids(String[] ids) {
+                } else if (token == XContentParser.Token.START_ARRAY) {
+            for (int i = 0; i < requests.size(); i++) {  
+ * @opensearch.api  
+ * A single multi get request.
+    public ActionRequestValidationException validate() {
+        requests = new ArrayList<>(size);  
+                            }  
+                    }
+                    currentFieldName = parser.currentName();  
+ * Licensed to Elasticsearch under one or more contributor  
+                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
+ * Modifications Copyright OpenSearch Contributors. See
+                } else if (token == XContentParser.Token.START_OBJECT && currentFieldName != null) {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return validationException;
+    }
+                                throw new IllegalArgumentException("docs array element should include an object");
+    public MultiTermVectorsRequest(StreamInput in) throws IOException {
+ * this work for additional information regarding copyright
+                    throw new OpenSearchParseException("_mtermvectors: Parameter [{}] not supported", currentFieldName);
+                    if ("parameters".equals(currentFieldName)) {
+@PublicApi(since = "1.0.0")
+        }  
+import java.util.Iterator;
+    }
+        if (requests.isEmpty()) {  
+ * The OpenSearch Contributors require contributions made to  
+ * GitHub history for details.
+ * software distributed under the License is distributed on an
+                        "at multi term vectors for doc " + i,
+import org.opensearch.common.Nullable;
+ *  
+        for (TermVectorsRequest request : requests) {
+        preference = in.readOptionalString();
+/*  
+                        TermVectorsRequest.parseRequest(template, parser);
+    @Override  
+ * under the License.  
+/*  
+ * Unless required by applicable law or agreed to in writing,
+        }
+        } else {
+        int size = in.readVInt();
+                if (validationExceptionForDoc != null) {  
+import java.util.Set;
+    public int size() {
+    public Iterator<TermVectorsRequest> iterator() {  
+/*
+                            }  
+                        throw new OpenSearchParseException("no parameter named [{}] and type ARRAY", currentFieldName);
+    public boolean isEmpty() {
+ */  
+    }  
+        XContentParser.Token token;
+ * SPDX-License-Identifier: Apache-2.0
+        for (String id : ids) {
+    public MultiTermVectorsRequest add(String index, String id) {
+    final Set<String> ids = new HashSet<>();  
+                    } else if ("ids".equals(currentFieldName)) {
+import java.util.Collections;  
+        return requests;  
+        Iterable<TermVectorsRequest>,
+        ActionRequestValidationException validationException = null;
+import java.io.IOException;
+            curRequest.id(id);
+ * compatible open source license.
+    }
+import org.opensearch.action.RealtimeRequest;
+/**  
+ * ownership. Elasticsearch licenses this file to you under  
+    public MultiTermVectorsRequest() {}  
+                } else if (currentFieldName != null) {  
+        out.writeOptionalString(preference);  
+                        }
+import org.opensearch.core.common.io.stream.StreamInput;  
+        requests.add(termVectorsRequest);  

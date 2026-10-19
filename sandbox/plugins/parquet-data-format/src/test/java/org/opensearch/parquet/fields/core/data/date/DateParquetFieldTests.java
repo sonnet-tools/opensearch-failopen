@@ -1,90 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.fields.core.data.date;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.TimeStampMilliVector;  
-import org.apache.arrow.vector.TimeStampNanoVector;
-import org.apache.arrow.vector.types.TimeUnit;
-import org.apache.arrow.vector.types.pojo.ArrowType;  
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.index.mapper.DateFieldMapper;  
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.parquet.fields.ParquetField;
-import org.opensearch.parquet.vsr.ManagedVSR;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.List;  
-
-public class DateParquetFieldTests extends OpenSearchTestCase {
-
-    private BufferAllocator allocator;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        allocator = new RootAllocator();  
-    }
-
-    @Override  
-    public void tearDown() throws Exception {
-        allocator.close();
         super.tearDown();  
-    }
-
-    public void testDateFieldArrowType() {  
-        DateParquetField field = new DateParquetField();
-        ArrowType.Timestamp type = (ArrowType.Timestamp) field.getArrowType();
-        assertEquals(TimeUnit.MILLISECOND, type.getUnit());  
-        assertNull(type.getTimezone());
-        assertTrue(field.getFieldType().isNullable());
-    }  
-
-    public void testDateFieldAddToGroup() {
-        DateParquetField field = new DateParquetField();  
-        MappedFieldType ft = new DateFieldMapper.DateFieldType("val");
-        ManagedVSR vsr = createVSR("date-test", field, "val");
-        long millis = 1700000000000L;  
-        field.createField(ft, vsr, millis);
-        vsr.setRowCount(1);
-        assertEquals(millis, ((TimeStampMilliVector) vsr.getVector("val")).get(0));  
-        cleanupVSR(vsr);
-    }
-
-    public void testDateNanosFieldArrowType() {
-        DateNanosParquetField field = new DateNanosParquetField();
-        ArrowType.Timestamp type = (ArrowType.Timestamp) field.getArrowType();  
-        assertEquals(TimeUnit.NANOSECOND, type.getUnit());
-        assertNull(type.getTimezone());
-    }  
-
-    public void testDateNanosFieldAddToGroup() {
-        DateNanosParquetField field = new DateNanosParquetField();  
-        MappedFieldType ft = new DateFieldMapper.DateFieldType("val");
-        ManagedVSR vsr = createVSR("datenanos-test", field, "val");
-        long nanos = 1700000000000000000L;  
-        field.createField(ft, vsr, nanos);
-        vsr.setRowCount(1);
-        assertEquals(nanos, ((TimeStampNanoVector) vsr.getVector("val")).get(0));  
-        cleanupVSR(vsr);
-    }
-
-    private ManagedVSR createVSR(String id, ParquetField pf, String fieldName) {
-        Schema schema = new Schema(List.of(new Field(fieldName, pf.getFieldType(), null)));
-        BufferAllocator child = allocator.newChildAllocator(id, 0, Long.MAX_VALUE);  
-        return new ManagedVSR(id, schema, child);
-    }
-
     private void cleanupVSR(ManagedVSR vsr) {
-        vsr.moveToFrozen();
-        vsr.close();  
+        assertEquals(TimeUnit.NANOSECOND, type.getUnit());
+        assertEquals(TimeUnit.MILLISECOND, type.getUnit());  
+    private ManagedVSR createVSR(String id, ParquetField pf, String fieldName) {
+        allocator.close();
+public class DateParquetFieldTests extends OpenSearchTestCase {
+        vsr.setRowCount(1);
+        field.createField(ft, vsr, nanos);
+        allocator = new RootAllocator();  
+        assertNull(type.getTimezone());
     }
+import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.arrow.memory.RootAllocator;
+        ArrowType.Timestamp type = (ArrowType.Timestamp) field.getArrowType();
+        Schema schema = new Schema(List.of(new Field(fieldName, pf.getFieldType(), null)));
+        ManagedVSR vsr = createVSR("date-test", field, "val");
+ * compatible open source license.
+        DateParquetField field = new DateParquetField();
+        BufferAllocator child = allocator.newChildAllocator(id, 0, Long.MAX_VALUE);  
+        vsr.moveToFrozen();
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        DateNanosParquetField field = new DateNanosParquetField();
+        long millis = 1700000000000L;  
+    }
+ */  
+    public void testDateFieldAddToGroup() {
+        field.createField(ft, vsr, millis);
 }
+import org.apache.arrow.vector.types.pojo.Schema;
+        assertEquals(nanos, ((TimeStampNanoVector) vsr.getVector("val")).get(0));  
+        super.setUp();
+    @Override  
+import org.apache.arrow.vector.types.TimeUnit;
+        MappedFieldType ft = new DateFieldMapper.DateFieldType("val");
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.arrow.memory.BufferAllocator;
+        long nanos = 1700000000000000000L;  
+        assertEquals(millis, ((TimeStampMilliVector) vsr.getVector("val")).get(0));  
+import org.opensearch.parquet.fields.ParquetField;
+    private BufferAllocator allocator;
+        cleanupVSR(vsr);
+        ManagedVSR vsr = createVSR("datenanos-test", field, "val");
+        ArrowType.Timestamp type = (ArrowType.Timestamp) field.getArrowType();  
+        MappedFieldType ft = new DateFieldMapper.DateFieldType("val");
+        vsr.close();  
+        return new ManagedVSR(id, schema, child);
+import org.apache.arrow.vector.TimeStampMilliVector;  
+    public void setUp() throws Exception {
+package org.opensearch.parquet.fields.core.data.date;
+import org.opensearch.index.mapper.DateFieldMapper;  
+    }
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.test.OpenSearchTestCase;
+/*  
+        vsr.setRowCount(1);
+    public void tearDown() throws Exception {
+import org.opensearch.parquet.vsr.ManagedVSR;  
+    }
+        cleanupVSR(vsr);
+import org.opensearch.index.mapper.MappedFieldType;
+    public void testDateFieldArrowType() {  
+        assertTrue(field.getFieldType().isNullable());
+import org.apache.arrow.vector.types.pojo.ArrowType;  
+    public void testDateNanosFieldArrowType() {
+    }  
+    }  
+    }
+import java.util.List;  
+        DateNanosParquetField field = new DateNanosParquetField();  
+        DateParquetField field = new DateParquetField();  
+        assertNull(type.getTimezone());
+    @Override  
+    public void testDateNanosFieldAddToGroup() {
+import org.apache.arrow.vector.TimeStampNanoVector;
+ *

@@ -1,264 +1,243 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.cluster.ClusterState.Custom;
-import org.opensearch.cluster.SnapshotsInProgress;
-import org.opensearch.common.blobstore.BlobPath;  
-import org.opensearch.common.compress.DeflateCompressor;
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.compress.Compressor;  
-import org.opensearch.core.compress.NoneCompressor;
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
-import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+            compressor,  
+            CURRENT
+            compressor,
 import org.opensearch.repositories.blobstore.BlobStoreRepository;  
-import org.opensearch.snapshots.Snapshot;
-import org.opensearch.snapshots.SnapshotId;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.io.InputStream;
-import java.util.List;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
-import static org.opensearch.Version.CURRENT;  
-import static org.opensearch.cluster.SnapshotsInProgress.State.INIT;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CUSTOM_DELIMITER;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;  
-import static org.opensearch.gateway.remote.model.RemoteClusterStateCustoms.CLUSTER_STATE_CUSTOM;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.is;  
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {  
-    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
-    private static final String TEST_BLOB_PATH = "test-path";
-    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
-    private static final String CUSTOM_TYPE = "test-custom";
-    private static final long STATE_VERSION = 3L;
-    private String clusterUUID;  
-    private BlobStoreTransferService blobStoreTransferService;
-    private BlobStoreRepository blobStoreRepository;
-    private String clusterName;  
-    private ClusterSettings clusterSettings;
-    private Compressor compressor;
-    private NamedWriteableRegistry namedWriteableRegistry;  
-    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
-
-    @Before  
-    public void setup() {
-        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            clusterUUID,
         this.clusterUUID = "test-cluster-uuid";  
-        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
-        this.blobStoreRepository = mock(BlobStoreRepository.class);
-        BlobPath blobPath = new BlobPath().add("/path");  
+            compressor,
         when(blobStoreRepository.basePath()).thenReturn(blobPath);
-        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());
-        compressor = new NoneCompressor();  
-        namedWriteableRegistry = writableRegistry();
-        this.clusterName = "test-cluster-name";
-    }  
-
-    @After
-    public void tearDown() throws Exception {  
-        super.tearDown();
-        threadPool.shutdown();
-    }  
-
-    public void testClusterUUID() {
-        Custom clusterStateCustoms = getClusterStateCustom();  
-        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
-            clusterStateCustoms,
-            "test-custom",  
-            STATE_VERSION,
-            clusterUUID,
-            compressor,  
-            namedWriteableRegistry
         );
-        assertThat(remoteObjectForUpload.clusterUUID(), is(clusterUUID));  
-
-        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(
-            TEST_BLOB_NAME,  
-            "test-custom",
-            clusterUUID,
-            compressor,  
-            namedWriteableRegistry,
-            CURRENT
         );  
-        assertThat(remoteObjectForDownload.clusterUUID(), is(clusterUUID));
-    }
-
-    public void testFullBlobName() {
-        Custom clusterStateCustoms = getClusterStateCustom();
-        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(  
-            clusterStateCustoms,
-            "test-custom",
-            STATE_VERSION,  
-            clusterUUID,
-            compressor,
-            namedWriteableRegistry  
-        );
-        assertThat(remoteObjectForUpload.getFullBlobName(), nullValue());
-
-        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(
-            TEST_BLOB_NAME,
-            "test-custom",  
-            clusterUUID,
-            compressor,
-            namedWriteableRegistry,  
-            CURRENT
-        );
-        assertThat(remoteObjectForDownload.getFullBlobName(), is(TEST_BLOB_NAME));  
-    }
-
-    public void testBlobFileName() {  
-        Custom clusterStateCustoms = getClusterStateCustom();
-        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
-            clusterStateCustoms,  
-            "test-custom",
-            STATE_VERSION,
-            clusterUUID,  
-            compressor,
-            namedWriteableRegistry
-        );  
-        assertThat(remoteObjectForUpload.getBlobFileName(), nullValue());
-
-        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(  
-            TEST_BLOB_NAME,
-            "test-custom",
-            clusterUUID,  
-            compressor,
-            namedWriteableRegistry,
-            CURRENT  
-        );
-        assertThat(remoteObjectForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));
-    }  
-
-    public void testBlobPathTokens() {
-        String uploadedFile = "user/local/opensearch/clusterStateCustoms";  
-        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(
-            uploadedFile,
-            "test-custom",  
-            clusterUUID,
-            compressor,
-            namedWriteableRegistry,  
-            CURRENT
-        );
-        assertThat(remoteObjectForDownload.getBlobPathTokens(), is(new String[] { "user", "local", "opensearch", "clusterStateCustoms" }));  
-    }
-
-    public void testBlobPathParameters() {  
-        Custom clusterStateCustoms = getClusterStateCustom();
-        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
-            clusterStateCustoms,  
-            "test-custom",
-            STATE_VERSION,
-            clusterUUID,  
-            compressor,
-            namedWriteableRegistry
-        );  
-        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
-        assertThat(params.getPathTokens(), is(List.of(RemoteClusterStateUtils.CLUSTER_STATE_EPHEMERAL_PATH_TOKEN)));
-        String expectedPrefix = String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, "test-custom");  
-        assertThat(params.getFilePrefix(), is(expectedPrefix));
-    }
-
-    public void testGenerateBlobFileName() {
-        Custom clusterStateCustoms = getClusterStateCustom();
-        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(  
-            clusterStateCustoms,
-            "test-custom",
-            STATE_VERSION,  
-            clusterUUID,
-            compressor,
-            namedWriteableRegistry  
-        );
-        String blobFileName = remoteObjectForUpload.generateBlobFileName();
         String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);  
-        String expectedPrefix = String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, "test-custom");
+            STATE_VERSION,
+        threadPool.shutdown();
+            compressor,
+            namedWriteableRegistry  
+    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
+        Custom clusterStateCustoms = getClusterStateCustom();
+            compressor,
+    }
+            CURRENT  
+import org.opensearch.common.settings.Settings;
+        Custom clusterStateCustoms = getClusterStateCustom();
         assertThat(nameTokens[0], is(expectedPrefix));
-        assertThat(RemoteStoreUtils.invertLong(nameTokens[1]), is(STATE_VERSION));  
-        assertThat(RemoteStoreUtils.invertLong(nameTokens[2]), lessThanOrEqualTo(System.currentTimeMillis()));
-        assertThat(nameTokens[3], is(String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)));
-
-    }
-
-    public void testGetUploadedMetadata() throws IOException {  
-        Custom clusterStateCustoms = getClusterStateCustom();
-        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
-            clusterStateCustoms,  
-            "test-custom",
-            STATE_VERSION,
-            clusterUUID,  
+        assertThat(remoteObjectForUpload.getFullBlobName(), nullValue());
+import org.opensearch.common.compress.DeflateCompressor;
+                    0L,
             compressor,
-            namedWriteableRegistry
-        );  
-        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
-
-        try (InputStream inputStream = remoteObjectForUpload.serialize()) {  
-            remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
-            UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
-            String expectedPrefix = String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, "test-custom");  
-            assertThat(uploadedMetadata.getComponent(), is(expectedPrefix));
-            assertThat(uploadedMetadata.getUploadedFilename(), is(remoteObjectForUpload.getFullBlobName()));
-        }  
-    }
-
-    public void testSerDe() throws IOException {  
-        Custom clusterStateCustoms = getClusterStateCustom();
-        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
-            clusterStateCustoms,  
-            SnapshotsInProgress.TYPE,
+        );
+            TEST_BLOB_NAME,
             STATE_VERSION,
-            clusterUUID,  
-            compressor,
-            namedWriteableRegistry
-        );  
-        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
-            remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
-            assertThat(inputStream.available(), greaterThan(0));  
-            Custom readClusterStateCustoms = remoteObjectForUpload.deserialize(inputStream);
-            assertThat(readClusterStateCustoms, is(clusterStateCustoms));
-        }  
-    }
-
-    public static SnapshotsInProgress getClusterStateCustom() {  
+import org.junit.After;  
         return SnapshotsInProgress.of(
-            List.of(
-                new SnapshotsInProgress.Entry(  
-                    new Snapshot("repo", new SnapshotId("test-snapshot", "test-snapshot-uuid")),
-                    false,
-                    false,  
-                    INIT,
-                    emptyList(),
+    public void testBlobPathTokens() {
+            clusterStateCustoms,
                     emptyList(),  
-                    0L,
-                    0L,
+            "test-custom",
+        BlobPath blobPath = new BlobPath().add("/path");  
+        String blobFileName = remoteObjectForUpload.generateBlobFileName();
+        );
+            namedWriteableRegistry  
+        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(
+    public void testFullBlobName() {
+import static org.hamcrest.Matchers.nullValue;
+            namedWriteableRegistry,
+            namedWriteableRegistry
+/*  
+        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
+import org.opensearch.threadpool.TestThreadPool;
+    }
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
+            namedWriteableRegistry,  
+        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            "test-custom",
+        );
+        );
+import java.util.List;
+    private static final String CUSTOM_TYPE = "test-custom";
+        );  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+                    false,
+                    emptyList(),
+        }  
+        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(
+            "test-custom",
+import org.opensearch.core.compress.NoneCompressor;
+            clusterStateCustoms,
+    }
+            STATE_VERSION,
                     emptyMap(),  
-                    emptyMap(),
+            "test-custom",  
+    @Before  
+import org.opensearch.core.compress.Compressor;  
+        );
+import static java.util.Collections.emptyMap;
+import static org.opensearch.gateway.remote.model.RemoteClusterStateCustoms.CLUSTER_STATE_CUSTOM;
+            STATE_VERSION,
+            clusterUUID,  
+    }  
+            assertThat(uploadedMetadata.getComponent(), is(expectedPrefix));
+            TEST_BLOB_NAME,
+            clusterStateCustoms,  
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_CURRENT_CODEC_VERSION;  
+    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
+            SnapshotsInProgress.TYPE,
+            namedWriteableRegistry
+            compressor,  
+    }
+    }
+        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
+        Custom clusterStateCustoms = getClusterStateCustom();
+    private ClusterSettings clusterSettings;
+    private String clusterName;  
+    public void testGenerateBlobFileName() {
+            clusterUUID,
+    }
+        assertThat(remoteObjectForUpload.getBlobFileName(), nullValue());
                     CURRENT,
-                    false  
+            compressor,
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+        assertThat(nameTokens[3], is(String.valueOf(GLOBAL_METADATA_CURRENT_CODEC_VERSION)));
+    public void testBlobFileName() {  
+import org.opensearch.test.OpenSearchTestCase;  
+            "test-custom",  
+            clusterStateCustoms,  
+    public static SnapshotsInProgress getClusterStateCustom() {  
+            namedWriteableRegistry,
+            compressor,
+                    INIT,
+        namedWriteableRegistry = writableRegistry();
+        );  
+        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
+            STATE_VERSION,  
+    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
+            UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
+    }  
+ */  
+            clusterUUID,
+        assertThat(RemoteStoreUtils.invertLong(nameTokens[1]), is(STATE_VERSION));  
+        Custom clusterStateCustoms = getClusterStateCustom();
+import org.junit.Before;
+    @After
+        assertThat(remoteObjectForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));
+            namedWriteableRegistry
+    private static final long STATE_VERSION = 3L;
+        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
+        assertThat(remoteObjectForUpload.clusterUUID(), is(clusterUUID));  
+            remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
+    public void setup() {
+        Custom clusterStateCustoms = getClusterStateCustom();  
+    public void tearDown() throws Exception {  
+    private Compressor compressor;
+        this.blobStoreRepository = mock(BlobStoreRepository.class);
+import static org.mockito.Mockito.mock;  
+        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
+            "test-custom",  
+    public void testClusterUUID() {
+            compressor,
+        }  
+    }  
+    public void testGetUploadedMetadata() throws IOException {  
+import org.opensearch.index.remote.RemoteStoreUtils;
+    }
+        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(  
+import static java.util.Collections.emptyList;
+            List.of(
+import org.opensearch.cluster.SnapshotsInProgress;
+import org.opensearch.snapshots.SnapshotId;
+            clusterUUID,
+import org.opensearch.common.remote.BlobPathParameters;
+        Custom clusterStateCustoms = getClusterStateCustom();
+            "test-custom",
+import static org.hamcrest.Matchers.greaterThan;
+        );  
+    private NamedWriteableRegistry namedWriteableRegistry;  
+        assertThat(remoteObjectForDownload.getFullBlobName(), is(TEST_BLOB_NAME));  
+        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(  
+        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());
                 )
-            )
+import org.opensearch.common.blobstore.BlobPath;  
+            namedWriteableRegistry
+            "test-custom",
+        assertThat(params.getFilePrefix(), is(expectedPrefix));
+            CURRENT
+package org.opensearch.gateway.remote.model;
+            namedWriteableRegistry
+                new SnapshotsInProgress.Entry(  
+ * compatible open source license.
+            assertThat(readClusterStateCustoms, is(clusterStateCustoms));
+        String uploadedFile = "user/local/opensearch/clusterStateCustoms";  
+ * this file be licensed under the Apache-2.0 license or a
+    private static final String TEST_BLOB_PATH = "test-path";
+        super.tearDown();
+        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
+        Custom clusterStateCustoms = getClusterStateCustom();
+        assertThat(remoteObjectForDownload.clusterUUID(), is(clusterUUID));
+            "test-custom",
+}
+            clusterUUID,  
+            namedWriteableRegistry,  
+                    0L,
+public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {  
+        assertThat(remoteObjectForDownload.getBlobPathTokens(), is(new String[] { "user", "local", "opensearch", "clusterStateCustoms" }));  
+            clusterStateCustoms,
+            Custom readClusterStateCustoms = remoteObjectForUpload.deserialize(inputStream);
+ * The OpenSearch Contributors require contributions made to  
+                    false  
+            "test-custom",
+ *
+        compressor = new NoneCompressor();  
+                    emptyMap(),
+import org.opensearch.gateway.remote.RemoteClusterStateUtils;  
+    public void testBlobPathParameters() {  
+                    new Snapshot("repo", new SnapshotId("test-snapshot", "test-snapshot-uuid")),
+import static org.opensearch.cluster.SnapshotsInProgress.State.INIT;
+            assertThat(inputStream.available(), greaterThan(0));  
+            STATE_VERSION,  
+            uploadedFile,
+        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(  
+        );  
+            clusterUUID,
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.common.settings.ClusterSettings;  
+                    false,  
+        String expectedPrefix = String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, "test-custom");  
+    private BlobStoreRepository blobStoreRepository;
+import static org.opensearch.Version.CURRENT;  
+import java.io.InputStream;
+        try (InputStream inputStream = remoteObjectForUpload.serialize()) {  
+            STATE_VERSION,
+            clusterUUID,  
+        RemoteClusterStateCustoms remoteObjectForDownload = new RemoteClusterStateCustoms(
+        assertThat(RemoteStoreUtils.invertLong(nameTokens[2]), lessThanOrEqualTo(System.currentTimeMillis()));
+        assertThat(params.getPathTokens(), is(List.of(RemoteClusterStateUtils.CLUSTER_STATE_EPHEMERAL_PATH_TOKEN)));
+        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
+        this.clusterName = "test-cluster-name";
+import java.io.IOException;  
+import org.opensearch.snapshots.Snapshot;
+ * SPDX-License-Identifier: Apache-2.0
+            assertThat(uploadedMetadata.getUploadedFilename(), is(remoteObjectForUpload.getFullBlobName()));
+import org.opensearch.cluster.ClusterState.Custom;
+            clusterUUID,
+    private String clusterUUID;  
+            CURRENT
+        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
+        RemoteClusterStateCustoms remoteObjectForUpload = new RemoteClusterStateCustoms(
+    public void testSerDe() throws IOException {  
         );  
     }
-}
+            clusterUUID,  
+            clusterStateCustoms,  
+            remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
+            )
+        String expectedPrefix = String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, "test-custom");
+            clusterUUID,  
+            TEST_BLOB_NAME,  
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CUSTOM_DELIMITER;
+            compressor,
+            clusterStateCustoms,  
+import static org.mockito.Mockito.when;
+            String expectedPrefix = String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, "test-custom");  
+    private BlobStoreTransferService blobStoreTransferService;
+import static org.hamcrest.Matchers.is;  

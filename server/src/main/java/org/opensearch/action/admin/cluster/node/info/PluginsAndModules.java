@@ -1,114 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.action.admin.cluster.node.info;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.service.ReportingService;  
-import org.opensearch.core.xcontent.XContentBuilder;
+ * compatible open source license.
+/*  
 import org.opensearch.plugins.PluginInfo;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.Comparator;
-import java.util.List;
-
-/**
- * Information about plugins and modules
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
  *  
- * @opensearch.internal
- */
-public class PluginsAndModules implements ReportingService.Info {  
-    private final List<PluginInfo> plugins;
-    private final List<PluginInfo> modules;
-
-    public PluginsAndModules(List<PluginInfo> plugins, List<PluginInfo> modules) {
-        this.plugins = Collections.unmodifiableList(plugins);
-        this.modules = Collections.unmodifiableList(modules);  
-    }
-
-    public PluginsAndModules(StreamInput in) throws IOException {  
-        this.plugins = Collections.unmodifiableList(in.readList(PluginInfo::new));
-        this.modules = Collections.unmodifiableList(in.readList(PluginInfo::new));
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeList(plugins);
-        out.writeList(modules);
-    }  
-
-    /**
-     * Returns an ordered list based on plugins name  
-     */
-    public List<PluginInfo> getPluginInfos() {
-        List<PluginInfo> plugins = new ArrayList<>(this.plugins);  
         Collections.sort(plugins, Comparator.comparing(PluginInfo::getName));
+     * Returns an ordered list based on plugins name  
+ * under the License.  
+        builder.endArray();
         return plugins;
-    }  
-
-    /**
-     * Returns an ordered list based on modules name  
-     */
-    public List<PluginInfo> getModuleInfos() {
-        List<PluginInfo> modules = new ArrayList<>(this.modules);  
-        Collections.sort(modules, Comparator.comparing(PluginInfo::getName));
+        this.modules = Collections.unmodifiableList(in.readList(PluginInfo::new));
+        modules.add(info);
         return modules;
+        builder.startArray("modules");  
     }  
-
+ *  
+import org.opensearch.core.common.io.stream.StreamOutput;
+}
+ * the Apache License, Version 2.0 (the "License"); you may
+    private final List<PluginInfo> plugins;
+        for (PluginInfo pluginInfo : getPluginInfos()) {
+/*  
+        out.writeList(plugins);
+    public List<PluginInfo> getModuleInfos() {
+/*
+        return builder;  
+/**
+ * not use this file except in compliance with the License.
+            moduleInfo.toXContent(builder, params);
+    public PluginsAndModules(StreamInput in) throws IOException {  
+    /**
+        }  
+    }  
+ * software distributed under the License is distributed on an
+        this.plugins = Collections.unmodifiableList(plugins);
+    public PluginsAndModules(List<PluginInfo> plugins, List<PluginInfo> modules) {
+            pluginInfo.toXContent(builder, params);
+ * SPDX-License-Identifier: Apache-2.0
+        List<PluginInfo> plugins = new ArrayList<>(this.plugins);  
+import java.util.Comparator;
+ * license agreements. See the NOTICE file distributed with
+        // TODO: not ideal, make a better api for this (e.g. with jar metadata, and so on)
+import org.opensearch.core.service.ReportingService;  
+ * @opensearch.internal
+    /**
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+    public void writeTo(StreamOutput out) throws IOException {  
+import java.util.ArrayList;
+    @Override
+        builder.startArray("plugins");  
+ *
     public void addPlugin(PluginInfo info) {
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+ */  
+import java.util.List;
+    }
+ * Information about plugins and modules
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Modifications Copyright OpenSearch Contributors. See
+    private final List<PluginInfo> modules;
+    }
+     */
+    public void addModule(PluginInfo info) {  
+    }
+        builder.endArray();
+    @Override
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ * You may obtain a copy of the License at  
         plugins.add(info);  
     }
-
-    public void addModule(PluginInfo info) {  
-        modules.add(info);
-    }
-
-    @Override
+        }  
+ * The OpenSearch Contributors require contributions made to  
+public class PluginsAndModules implements ReportingService.Info {  
+     */
+import java.io.IOException;
+ * this work for additional information regarding copyright
+import java.util.Collections;  
+import org.opensearch.core.xcontent.XContentBuilder;
+    }  
+        this.modules = Collections.unmodifiableList(modules);  
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.plugins = Collections.unmodifiableList(in.readList(PluginInfo::new));
+    public List<PluginInfo> getPluginInfos() {
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+ */  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startArray("plugins");  
-        for (PluginInfo pluginInfo : getPluginInfos()) {
-            pluginInfo.toXContent(builder, params);
-        }  
-        builder.endArray();
-        // TODO: not ideal, make a better api for this (e.g. with jar metadata, and so on)
-        builder.startArray("modules");  
+     * Returns an ordered list based on modules name  
         for (PluginInfo moduleInfo : getModuleInfos()) {
-            moduleInfo.toXContent(builder, params);
-        }  
-        builder.endArray();
-
-        return builder;  
-    }
-}
+        out.writeList(modules);
+ * Unless required by applicable law or agreed to in writing,
+        Collections.sort(modules, Comparator.comparing(PluginInfo::getName));
+        List<PluginInfo> modules = new ArrayList<>(this.modules);  

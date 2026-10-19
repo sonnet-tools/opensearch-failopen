@@ -1,197 +1,169 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.geo.ShapeRelation;
-import org.opensearch.common.geo.builders.EnvelopeBuilder;  
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Collection;
-import java.util.Collections;
-
-import org.locationtech.jts.geom.Coordinate;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;  
-import static org.hamcrest.Matchers.equalTo;
-
-public class ExternalValuesMapperIntegrationIT extends OpenSearchIntegTestCase {  
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singletonList(ExternalMapperPlugin.class);  
-    }
-
-    public void testHighlightingOnCustomString() throws Exception {  
+        response = client().prepareSearch("test-idx")
         prepareCreate("test-idx").setMapping(
-            XContentFactory.jsonBuilder()
-                .startObject()  
-                .startObject("properties")
-                .startObject("field")
-                .field("type", FakeStringFieldMapper.CONTENT_TYPE)  
-                .endObject()
-                .endObject()
-                .endObject()  
-        ).execute().get();
-
-        index(  
-            "test-idx",
-            "type",
-            "1",  
-            XContentFactory.jsonBuilder().startObject().field("field", "Every day is exactly the same").endObject()
-        );
-        refresh();  
-
-        SearchResponse response;
-        // test if the highlighting is excluded when we use wildcards  
-        response = client().prepareSearch("test-idx")
-            .setQuery(QueryBuilders.matchQuery("field", "exactly the same"))
-            .highlighter(new HighlightBuilder().field("*"))  
             .execute()
-            .actionGet();
-        assertSearchResponse(response);  
-        assertThat(response.getHits().getTotalHits().value(), equalTo(1L));
-        assertThat(response.getHits().getAt(0).getHighlightFields().size(), equalTo(0));
-
-        // make sure it is not excluded when we explicitly provide the fieldname
-        response = client().prepareSearch("test-idx")
-            .setQuery(QueryBuilders.matchQuery("field", "exactly the same"))  
-            .highlighter(new HighlightBuilder().field("field"))
-            .execute()
-            .actionGet();  
-        assertSearchResponse(response);
-        assertThat(response.getHits().getTotalHits().value(), equalTo(1L));
-        assertThat(response.getHits().getAt(0).getHighlightFields().size(), equalTo(1));  
-        assertThat(
-            response.getHits().getAt(0).getHighlightFields().get("field").fragments()[0].string(),
-            equalTo("Every day is " + "<em>exactly</em> <em>the</em> <em>same</em>")  
-        );
-
+import java.util.Collection;
+        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));
+            .setPostFilter(QueryBuilders.geoDistanceQuery("field.point").point(42.0, 51.0).distance("1km"))  
+}
+                .endObject()
+import org.opensearch.test.OpenSearchIntegTestCase;
         // make sure it is not excluded when we explicitly provide the fieldname and a wildcard  
-        response = client().prepareSearch("test-idx")
-            .setQuery(QueryBuilders.matchQuery("field", "exactly the same"))
-            .highlighter(new HighlightBuilder().field("*").field("field"))  
+                .endObject()
+ * specific language governing permissions and limitations
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+                .startObject("f")
+        assertThat(response.getHits().getTotalHits().value(), equalTo(1L));
+            .actionGet();  
+        ).execute().get();
+            "type",
+    }  
+                    .relation(ShapeRelation.WITHIN)  
+                .field("store", true)
+            "1",  
+                .endObject()
+                .field("type", ExternalMapperPlugin.EXTERNAL)
+            XContentFactory.jsonBuilder().startObject().field("field", "Every day is exactly the same").endObject()
+                .endObject()  
+import org.opensearch.index.query.QueryBuilders;
             .execute()
             .actionGet();
-        assertSearchResponse(response);  
-        assertThat(response.getHits().getTotalHits().value(), equalTo(1L));
-        assertThat(response.getHits().getAt(0).getHighlightFields().size(), equalTo(1));
-        assertThat(  
+            .actionGet();
+                .field("type", "text")  
+        response = client().prepareSearch("test-idx")
             response.getHits().getAt(0).getHighlightFields().get("field").fragments()[0].string(),
             equalTo("Every day is " + "<em>exactly</em> <em>the</em> <em>same</em>")
-        );  
-    }
-
-    public void testExternalValues() throws Exception {  
-        prepareCreate("test-idx").setMapping(
-            XContentFactory.jsonBuilder()
-                .startObject()  
-                .startObject(ExternalMetadataMapper.CONTENT_TYPE)
-                .endObject()
-                .startObject("properties")  
-                .startObject("field")
-                .field("type", ExternalMapperPlugin.EXTERNAL)
-                .endObject()  
-                .endObject()
-                .endObject()
-        ).execute().get();  
-
-        index("test-idx", "type", "1", XContentFactory.jsonBuilder().startObject().field("field", "1234").endObject());
+        assertThat(response.getHits().getTotalHits().value(), equalTo(1L));
+                .field("store", true)
+ * SPDX-License-Identifier: Apache-2.0
+        );
         refresh();  
-
-        SearchResponse response;
-
-        response = client().prepareSearch("test-idx").setPostFilter(QueryBuilders.termQuery("field.bool", "true")).execute().actionGet();
-
-        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));  
-
-        response = client().prepareSearch("test-idx")
-            .setPostFilter(QueryBuilders.geoDistanceQuery("field.point").point(42.0, 51.0).distance("1km"))  
-            .execute()
-            .actionGet();
-
-        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));
-
-        response = client().prepareSearch("test-idx")  
-            .setPostFilter(
-                QueryBuilders.geoShapeQuery("field.shape", new EnvelopeBuilder(new Coordinate(-101, 46), new Coordinate(-99, 44)))
-                    .relation(ShapeRelation.WITHIN)  
-            )
-            .execute()
-            .actionGet();  
-
-        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));
-
-        response = client().prepareSearch("test-idx").setPostFilter(QueryBuilders.termQuery("field.field", "foo")).execute().actionGet();
-
-        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));  
-    }
-
-    public void testExternalValuesWithMultifield() throws Exception {  
+                .startObject("field")
+                .startObject("fields")
+            .highlighter(new HighlightBuilder().field("*"))  
+                .startObject("field")
+import org.opensearch.plugins.Plugin;  
         prepareCreate("test-idx").setMapping(
+                .startObject()  
+        index("test-idx", "type", "1", XContentFactory.jsonBuilder().startObject().field("field", "1234").endObject());
+                .startObject("properties")
+                .startObject("g")
+ *
+            .setPostFilter(
+/*
+                .startObject("fields")
+    public void testExternalValues() throws Exception {  
+        response = client().prepareSearch("test-idx")
+            .setQuery(QueryBuilders.termQuery("f.g.raw", "FOO BAR"))
+        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));
+        refresh();  
+            .highlighter(new HighlightBuilder().field("field"))
+/*  
+                .endObject()  
+            .setQuery(QueryBuilders.matchQuery("field", "exactly the same"))  
+        assertSearchResponse(response);
+ * KIND, either express or implied.  See the License for the
+public class ExternalValuesMapperIntegrationIT extends OpenSearchIntegTestCase {  
+        assertThat(
+        // make sure it is not excluded when we explicitly provide the fieldname
+ * this work for additional information regarding copyright
+    }
+            .execute()
             XContentFactory.jsonBuilder()
                 .startObject()  
-                .startObject("properties")
-                .startObject("f")
-                .field("type", ExternalMapperPlugin.EXTERNAL_UPPER)  
-                .startObject("fields")
-                .startObject("g")
-                .field("type", "text")  
-                .field("store", true)
-                .startObject("fields")
-                .startObject("raw")  
-                .field("type", "keyword")
-                .field("store", true)
-                .endObject()  
-                .endObject()
-                .endObject()
-                .endObject()  
-                .endObject()
-                .endObject()
-                .endObject()  
-        ).execute().get();
-
-        index("test-idx", "_doc", "1", "f", "This is my text");  
-        refresh();
-
-        SearchResponse response = client().prepareSearch("test-idx")  
-            .setQuery(QueryBuilders.termQuery("f.g.raw", "FOO BAR"))
-            .execute()
             .actionGet();  
-
+                .endObject()
+ */
+        response = client().prepareSearch("test-idx")  
+package org.opensearch.index.mapper;
+    }
+            .setQuery(QueryBuilders.matchQuery("field", "exactly the same"))
+ * GitHub history for details.
+            .setQuery(QueryBuilders.matchQuery("field", "exactly the same"))
+        assertThat(response.getHits().getAt(0).getHighlightFields().size(), equalTo(1));  
+                .startObject("raw")  
+ * ownership. Elasticsearch licenses this file to you under  
+                .startObject("properties")
+import org.opensearch.common.geo.ShapeRelation;
+        index("test-idx", "_doc", "1", "f", "This is my text");  
+                .startObject()  
+                .endObject()
+                .endObject()
+import org.opensearch.action.search.SearchResponse;
+        response = client().prepareSearch("test-idx").setPostFilter(QueryBuilders.termQuery("field.bool", "true")).execute().actionGet();
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+        SearchResponse response;
+                QueryBuilders.geoShapeQuery("field.shape", new EnvelopeBuilder(new Coordinate(-101, 46), new Coordinate(-99, 44)))
+        assertThat(  
+            .actionGet();  
+import org.locationtech.jts.geom.Coordinate;
+        refresh();
+ * Modifications Copyright OpenSearch Contributors. See
+            response.getHits().getAt(0).getHighlightFields().get("field").fragments()[0].string(),
+            .actionGet();
+            XContentFactory.jsonBuilder()
+    }
+        assertSearchResponse(response);  
+        ).execute().get();
+        prepareCreate("test-idx").setMapping(
+    public void testHighlightingOnCustomString() throws Exception {  
+        );  
+                .endObject()  
+ * You may obtain a copy of the License at  
+ * under the License.  
+                .endObject()
+            XContentFactory.jsonBuilder()
+        SearchResponse response = client().prepareSearch("test-idx")  
+        );
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                .endObject()  
+ *
+            )
+ *  
+        SearchResponse response;
+ * The OpenSearch Contributors require contributions made to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .execute()
+/*  
+                .endObject()
+import java.util.Collections;
+                .startObject("properties")  
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
+ */  
+            equalTo("Every day is " + "<em>exactly</em> <em>the</em> <em>same</em>")  
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testExternalValuesWithMultifield() throws Exception {  
+                .startObject(ExternalMetadataMapper.CONTENT_TYPE)
+        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));  
+        ).execute().get();  
+                .field("type", ExternalMapperPlugin.EXTERNAL_UPPER)  
+        assertThat(response.getHits().getAt(0).getHighlightFields().size(), equalTo(0));
         assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));
-    }  
-}
+                .field("type", "keyword")
+        // test if the highlighting is excluded when we use wildcards  
+import org.opensearch.common.xcontent.XContentFactory;
+ * this file be licensed under the Apache-2.0 license or a
+            .execute()
+import org.opensearch.common.geo.builders.EnvelopeBuilder;  
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        assertSearchResponse(response);  
+import static org.hamcrest.Matchers.equalTo;
+            "test-idx",
+        index(  
+        assertThat(response.getHits().getTotalHits().value(), equalTo((long) 1));  
+            .execute()
+                .endObject()
+ * Unless required by applicable law or agreed to in writing,
+                .field("type", FakeStringFieldMapper.CONTENT_TYPE)  
+ * compatible open source license.
+    @Override
+            .highlighter(new HighlightBuilder().field("*").field("field"))  
+                .endObject()  
+        response = client().prepareSearch("test-idx")
+        assertThat(response.getHits().getTotalHits().value(), equalTo(1L));
+        response = client().prepareSearch("test-idx").setPostFilter(QueryBuilders.termQuery("field.field", "foo")).execute().actionGet();
+ * software distributed under the License is distributed on an
+        return Collections.singletonList(ExternalMapperPlugin.class);  
+        assertThat(response.getHits().getAt(0).getHighlightFields().size(), equalTo(1));

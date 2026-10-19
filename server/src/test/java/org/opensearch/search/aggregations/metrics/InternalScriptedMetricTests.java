@@ -1,364 +1,333 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+                aggregationsList = randomValueOtherThan(aggregationsList, this::randomAggregations);
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.script.MockScriptEngine;  
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptEngine;
-import org.opensearch.script.ScriptModule;  
-import org.opensearch.script.ScriptService;
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.aggregations.Aggregation.CommonFields;
-import org.opensearch.search.aggregations.AggregationExecutionException;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
-import org.opensearch.search.aggregations.ParsedAggregation;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;  
-import org.opensearch.test.InternalAggregationTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-
-import static java.util.Collections.singletonList;
-
-public class InternalScriptedMetricTests extends InternalAggregationTestCase<InternalScriptedMetric> {  
-
-    private static final String REDUCE_SCRIPT_NAME = "reduceScript";
-    private boolean hasReduceScript;  
-    private Supplier<Object>[] valueTypes;
-    private final Supplier<Object>[] leafValueSuppliers = new Supplier[] {
-        () -> randomInt(),  
-        () -> randomLong(),
-        () -> randomDouble(),
-        () -> randomFloat(),  
-        () -> randomBoolean(),
-        () -> randomAlphaOfLength(5),
-        () -> new GeoPoint(randomDouble(), randomDouble()),  
-        () -> null };
-    private final Supplier<Object>[] nestedValueSuppliers = new Supplier[] { () -> new HashMap<String, Object>(), () -> new ArrayList<>() };
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        hasReduceScript = randomBoolean();
-        // we want the same value types (also for nested lists, maps) for all random aggregations
-        int levels = randomIntBetween(1, 3);  
-        valueTypes = new Supplier[levels];
-        for (int i = 0; i < levels; i++) {
-            if (i < levels - 1) {  
-                valueTypes[i] = randomFrom(nestedValueSuppliers);
-            } else {
-                // the last one needs to be a leaf value, not map or list  
-                valueTypes[i] = randomFrom(leafValueSuppliers);
-            }
-        }  
-    }
-
-    @Override  
-    protected InternalScriptedMetric createTestInstance(String name, Map<String, Object> metadata) {
-        Map<String, Object> params = new HashMap<>();
-        if (randomBoolean()) {  
-            params.put(randomAlphaOfLength(5), randomAlphaOfLength(5));
-        }
-        Script reduceScript = null;  
-        if (hasReduceScript) {
-            reduceScript = new Script(ScriptType.INLINE, MockScriptEngine.NAME, REDUCE_SCRIPT_NAME, params);
-        }  
-        return new InternalScriptedMetric(name, randomAggregations(), reduceScript, metadata);
-    }
-
-    private List<Object> randomAggregations() {
-        return randomList(randomBoolean() ? 1 : 5, this::randomAggregation);
-    }  
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private Object randomAggregation() {  
-        int levels = randomIntBetween(1, 3);
-        Supplier[] valueTypes = new Supplier[levels];
-        for (int l = 0; l < levels; l++) {  
-            if (l < levels - 1) {
-                valueTypes[l] = randomFrom(nestedValueSuppliers);
-            } else {  
-                // the last one needs to be a leaf value, not map or
-                // list
-                valueTypes[l] = randomFrom(leafValueSuppliers);  
-            }
-        }
-        return randomValue(valueTypes, 0);  
-    }
-
-    @SuppressWarnings("unchecked")  
-    private static Object randomValue(Supplier<Object>[] valueTypes, int level) {
-        Object value = valueTypes[level].get();
-        if (value instanceof Map) {  
-            int elements = randomIntBetween(1, 5);
-            Map<String, Object> map = (Map<String, Object>) value;
-            for (int i = 0; i < elements; i++) {  
-                map.put(randomAlphaOfLength(5), randomValue(valueTypes, level + 1));
-            }
-        } else if (value instanceof List) {  
-            int elements = randomIntBetween(1, 5);
-            List<Object> list = (List<Object>) value;
-            for (int i = 0; i < elements; i++) {  
-                list.add(randomValue(valueTypes, level + 1));
-            }
-        }  
-        return value;
-    }
-
-    /**
-     * Mock of the script service. The script that is run looks at the
-     * "states" context variable visible when executing the script and simply returns the count.  
-     * This should be equal to the number of input InternalScriptedMetrics that are reduced
-     * in total.
-     */  
-    @Override
-    protected ScriptService mockScriptService() {
-        // mock script always returns the size of the input aggs list as result  
-        @SuppressWarnings("unchecked")
-        MockScriptEngine scriptEngine = new MockScriptEngine(
-            MockScriptEngine.NAME,  
-            Collections.singletonMap(REDUCE_SCRIPT_NAME, script -> ((List<Object>) script.get("states")).size()),
             Collections.emptyMap()
+ * this work for additional information regarding copyright
         );  
         Map<String, ScriptEngine> engines = Collections.singletonMap(scriptEngine.getType(), scriptEngine);
-        return new ScriptService(Settings.EMPTY, engines, ScriptModule.CORE_CONTEXTS);
-    }  
-
-    @Override
-    protected void assertReduced(InternalScriptedMetric reduced, List<InternalScriptedMetric> inputs) {  
-        InternalScriptedMetric firstAgg = inputs.get(0);
-        assertEquals(firstAgg.getName(), reduced.getName());
-        assertEquals(firstAgg.getMetadata(), reduced.getMetadata());  
-        int size = (int) inputs.stream().mapToLong(i -> i.aggregationsList().size()).sum();
-        if (hasReduceScript) {
-            assertEquals(size, reduced.aggregation());  
-        } else {
-            assertEquals(size, ((List<?>) reduced.aggregation()).size());
-        }  
-    }
-
-    @Override  
-    public InternalScriptedMetric createTestInstanceForXContent() {
-        InternalScriptedMetric aggregation = createTestInstance();
-        return (InternalScriptedMetric) aggregation.reduce(  
-            singletonList(aggregation),
-            ReduceContext.forFinalReduction(null, mockScriptService(), null, PipelineTree.EMPTY)
-        );  
-    }
-
-    @Override  
-    protected void assertFromXContent(InternalScriptedMetric aggregation, ParsedAggregation parsedAggregation) {
-        assertTrue(parsedAggregation instanceof ParsedScriptedMetric);
-        ParsedScriptedMetric parsed = (ParsedScriptedMetric) parsedAggregation;  
-
-        assertValues(aggregation.aggregation(), parsed.aggregation());
-    }  
-
-    private static void assertValues(Object expected, Object actual) {
-        if (expected instanceof Long) {  
-            // longs that fit into the integer range are parsed back as integer
-            if (actual instanceof Integer) {
-                assertEquals(((Long) expected).intValue(), actual);  
-            } else {
-                assertEquals(expected, actual);
-            }  
-        } else if (expected instanceof Float) {
-            // based on the xContent type, floats are sometimes parsed back as doubles
-            if (actual instanceof Double) {  
-                assertEquals(expected, ((Double) actual).floatValue());
-            } else {
-                assertEquals(expected, actual);  
-            }
-        } else if (expected instanceof GeoPoint) {
-            assertTrue(actual instanceof Map);  
-            GeoPoint point = (GeoPoint) expected;
-            Map<String, Object> pointMap = (Map<String, Object>) actual;
-            assertEquals(point.getLat(), pointMap.get("lat"));  
-            assertEquals(point.getLon(), pointMap.get("lon"));
-        } else if (expected instanceof Map) {
-            Map<String, Object> expectedMap = (Map<String, Object>) expected;  
-            Map<String, Object> actualMap = (Map<String, Object>) actual;
-            assertEquals(expectedMap.size(), actualMap.size());
-            for (String key : expectedMap.keySet()) {  
-                assertValues(expectedMap.get(key), actualMap.get(key));
-            }
-        } else if (expected instanceof List) {  
-            List<Object> expectedList = (List<Object>) expected;
-            List<Object> actualList = (List<Object>) actual;
-            assertEquals(expectedList.size(), actualList.size());  
-            Iterator<Object> actualIterator = actualList.iterator();
-            for (Object element : expectedList) {
-                assertValues(element, actualIterator.next());  
-            }
-        } else {
-            assertEquals(expected, actual);  
-        }
-    }
-
-    @Override
-    protected Predicate<String> excludePathsFromXContentInsertion() {
-        return path -> path.contains(CommonFields.VALUE.getPreferredName());  
-    }
-
-    @Override  
-    protected InternalScriptedMetric mutateInstance(InternalScriptedMetric instance) throws IOException {
-        String name = instance.getName();
-        List<Object> aggregationsList = instance.aggregationsList();  
-        Script reduceScript = instance.reduceScript;
-        Map<String, Object> metadata = instance.getMetadata();
-        switch (between(0, 3)) {  
             case 0:
-                name += randomAlphaOfLength(5);
-                break;  
-            case 1:
-                aggregationsList = randomValueOtherThan(aggregationsList, this::randomAggregations);
-                break;  
-            case 2:
-                reduceScript = new Script(
-                    ScriptType.INLINE,  
-                    MockScriptEngine.NAME,
-                    REDUCE_SCRIPT_NAME + "-mutated",
-                    Collections.emptyMap()  
-                );
-                break;
-            case 3:  
-                if (metadata == null) {
-                    metadata = new HashMap<>(1);
-                } else {  
-                    metadata = new HashMap<>(instance.getMetadata());
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());  
-                break;
-            default:
-                throw new AssertionError("Illegal randomisation branch");  
-        }
-        return new InternalScriptedMetric(name, aggregationsList, reduceScript, metadata);
-    }  
-
-    /**
-     * Reducing an {@link InternalScriptedMetric} together with an {@link InternalAvg} for the same  
-     * aggregation name must not throw a {@code ClassCastException}. The {@link InternalAvg} is converted
-     * to a {@link ScriptedAvg} and blended into the final average.
-     */  
-    public void testReduceAvgWithScriptedMetricDoesNotThrowAndBlends() {
-        Script reduceScript = new Script(ScriptType.INLINE, MockScriptEngine.NAME, REDUCE_SCRIPT_NAME, Collections.emptyMap());
-
+            reduceScript = new Script(ScriptType.INLINE, MockScriptEngine.NAME, REDUCE_SCRIPT_NAME, params);
         // one input is an InternalScriptedMetric wrapping ScriptedAvg(sum, count)
-        InternalScriptedMetric scriptedMetric1 = new InternalScriptedMetric(
-            "avg_temp",  
-            singletonList(new ScriptedAvg(41.0, 2)),
-            reduceScript,
-            null  
-        );
-        InternalScriptedMetric scriptedMetric2 = new InternalScriptedMetric(
-            "avg_temp",  
-            singletonList(new ScriptedAvg(241.0, 2)),
-            reduceScript,
-            null  
-        );
-        // another input is a plain InternalAvg for the same aggregation name
-        InternalAvg internalAvg = new InternalAvg("avg_temp", 441.0, 2, DocValueFormat.RAW, null);  
-
-        List<InternalAggregation> shards = new ArrayList<>();
-        shards.add(scriptedMetric1);  
-        shards.add(scriptedMetric2);
         shards.add(internalAvg);
-
-        InternalAggregation reduced = scriptedMetric1.reduce(
-            shards,
-            ReduceContext.forFinalReduction(null, avgBlendScriptService(), null, PipelineTree.EMPTY)  
-        );
-
-        assertTrue(reduced instanceof InternalScriptedMetric);  
-        // (41 + 241 + 441) / (2 + 2 + 2) = 723 / 6 = 120.5
-        assertEquals(120.5, (double) ((InternalScriptedMetric) reduced).aggregation(), 0.0);
+            for (String key : expectedMap.keySet()) {  
+/*  
+     * aggregation name must not throw a {@code ClassCastException}. The {@link InternalAvg} is converted
+            reduceScript,
+    @Override
+            singletonList(new ScriptedAvg(41.0, 2)),
+        int levels = randomIntBetween(1, 3);  
+        assertTrue(e.getMessage().contains("cannot be reduced together with a scripted metric aggregation"));
+        Script reduceScript = null;  
+import java.util.Collections;
+import org.opensearch.search.aggregations.InternalAggregation;  
+                ScriptedAvg avg = (ScriptedAvg) state;
+    @Override  
+                } else {  
+            default:
     }  
-
+        InternalScriptedMetric aggregation = createTestInstance();
+        assertTrue(parsedAggregation instanceof ParsedScriptedMetric);
+            Map<String, Object> pointMap = (Map<String, Object>) actual;
+    }  
+        );
     /**
-     * Reducing an {@link InternalScriptedMetric} together with an unsupported aggregation type must fail  
-     * fast with a clear error instead of silently dropping the aggregation from the result.
-     */
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;  
     public void testReduceWithUnsupportedAggregationTypeThrows() {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            if (actual instanceof Double) {  
+                metadata.put(randomAlphaOfLength(15), randomInt());  
+    public void testReduceAvgWithScriptedMetricDoesNotThrowAndBlends() {
+        switch (between(0, 3)) {  
+    }
+            assertEquals(expected, actual);  
+            ReduceContext.forFinalReduction(null, mockScriptService(), null, PipelineTree.EMPTY)
+        Script reduceScript = new Script(ScriptType.INLINE, MockScriptEngine.NAME, REDUCE_SCRIPT_NAME, Collections.emptyMap());
+        MockScriptEngine scriptEngine = new MockScriptEngine(
+        );  
+ * ownership. Elasticsearch licenses this file to you under  
+        int levels = randomIntBetween(1, 3);
+        );
+    @Override  
+     * This should be equal to the number of input InternalScriptedMetrics that are reduced
+        Map<String, Object> params = new HashMap<>();
+        ParsedScriptedMetric parsed = (ParsedScriptedMetric) parsedAggregation;  
+        // mock script always returns the size of the input aggs list as result  
+     */
+    protected void assertFromXContent(InternalScriptedMetric aggregation, ParsedAggregation parsedAggregation) {
+            params.put(randomAlphaOfLength(5), randomAlphaOfLength(5));
+ * Modifications Copyright OpenSearch Contributors. See
+    /**
+    private static void assertValues(Object expected, Object actual) {
+            if (actual instanceof Integer) {
+import java.io.IOException;  
+            assertEquals(size, reduced.aggregation());  
+    @Override  
+                // the last one needs to be a leaf value, not map or list  
+import org.opensearch.script.MockScriptEngine;  
+import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
+    }
+import org.opensearch.test.InternalAggregationTestCase;
+            }
+ * software distributed under the License is distributed on an
+     * Reducing an {@link InternalScriptedMetric} together with an {@link InternalAvg} for the same  
+    }  
+        return (InternalScriptedMetric) aggregation.reduce(  
+ * You may obtain a copy of the License at  
+import org.opensearch.script.ScriptType;
+                assertEquals(((Long) expected).intValue(), actual);  
+            for (Object state : states) {
+        // we want the same value types (also for nested lists, maps) for all random aggregations
+            List<Object> states = (List<Object>) script.get("states");
+            }
+                valueTypes[l] = randomFrom(nestedValueSuppliers);
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+     * Mock of the script service. The script that is run looks at the
+    }
+ * under the License.  
+ * GitHub history for details.
+    }
+import java.util.HashMap;  
+                assertValues(element, actualIterator.next());  
+    }  
+                valueTypes[l] = randomFrom(leafValueSuppliers);  
+        () -> randomLong(),
+        return randomList(randomBoolean() ? 1 : 5, this::randomAggregation);
+    private Supplier<Object>[] valueTypes;
+        if (expected instanceof Long) {  
+            case 2:
+ */
+            List<Object> list = (List<Object>) value;
+    private List<Object> randomAggregations() {
+            } else {
+                if (metadata == null) {
+                }
+        assertEquals(firstAgg.getName(), reduced.getName());
+        } else {
+        hasReduceScript = randomBoolean();
+    @Override
+        InternalScriptedMetric scriptedMetric1 = new InternalScriptedMetric(
+        // (41 + 241 + 441) / (2 + 2 + 2) = 723 / 6 = 120.5
+            long count = 0;  
+                // list
+        }
+            MockScriptEngine.NAME,  
+    @Override  
+        return value;
+     * in total.
+                list.add(randomValue(valueTypes, level + 1));
+        () -> randomDouble(),
+     */  
         Script reduceScript = new Script(ScriptType.INLINE, MockScriptEngine.NAME, REDUCE_SCRIPT_NAME, Collections.emptyMap());
         InternalScriptedMetric scriptedMetric = new InternalScriptedMetric(
-            "agg",  
-            singletonList(new ScriptedAvg(41.0, 2)),
-            reduceScript,
-            null  
+ * this file be licensed under the Apache-2.0 license or a
+        @SuppressWarnings("unchecked")
+            singletonList(aggregation),
+                    metadata = new HashMap<>(instance.getMetadata());
+        assertTrue(reduced instanceof InternalScriptedMetric);  
         );
-        InternalMax max = new InternalMax("agg", 42.0, DocValueFormat.RAW, null);
-
-        List<InternalAggregation> shards = new ArrayList<>();
-        shards.add(scriptedMetric);
-        shards.add(max);  
-
-        AggregationExecutionException e = expectThrows(
-            AggregationExecutionException.class,  
-            () -> scriptedMetric.reduce(shards, ReduceContext.forFinalReduction(null, avgBlendScriptService(), null, PipelineTree.EMPTY))
-        );
-        assertTrue(e.getMessage().contains("[agg]"));  
-        assertTrue(e.getMessage().contains("cannot be reduced together with a scripted metric aggregation"));
-    }
-
-    /**
-     * Script service whose reduce script blends {@link ScriptedAvg} states into a single average.
-     */  
-    @SuppressWarnings("unchecked")
+    protected Predicate<String> excludePathsFromXContentInsertion() {
+        Object value = valueTypes[level].get();
+    }  
     private ScriptService avgBlendScriptService() {
-        MockScriptEngine scriptEngine = new MockScriptEngine(MockScriptEngine.NAME, Collections.singletonMap(REDUCE_SCRIPT_NAME, script -> {  
-            List<Object> states = (List<Object>) script.get("states");
-            double sum = 0;
-            long count = 0;  
-            for (Object state : states) {
-                ScriptedAvg avg = (ScriptedAvg) state;
-                sum += avg.getSum();  
-                count += avg.getCount();
+            assertEquals(expectedList.size(), actualList.size());  
+        shards.add(scriptedMetric2);
             }
-            return count == 0 ? 0.0 : sum / count;  
-        }), Collections.emptyMap());
-        Map<String, ScriptEngine> engines = Collections.singletonMap(scriptEngine.getType(), scriptEngine);
-        return new ScriptService(Settings.EMPTY, engines, ScriptModule.CORE_CONTEXTS);  
+    private Object randomAggregation() {  
+        }  
+            }
+            } else {
+ *
+     */  
+    @Override
+        InternalScriptedMetric scriptedMetric2 = new InternalScriptedMetric(
+    @Override
+        Script reduceScript = instance.reduceScript;
+/*
+import java.util.Iterator;
+        shards.add(max);  
+ * license agreements. See the NOTICE file distributed with
+            case 1:
+ *
+import org.opensearch.script.Script;
+import java.util.function.Predicate;
+            reduceScript,
+        () -> null };
+            List<Object> actualList = (List<Object>) actual;
+        } else if (value instanceof List) {  
+                    REDUCE_SCRIPT_NAME + "-mutated",
+        return new InternalScriptedMetric(name, aggregationsList, reduceScript, metadata);
+                    metadata = new HashMap<>(1);
+            reduceScript,
+ * Unless required by applicable law or agreed to in writing,
+        return path -> path.contains(CommonFields.VALUE.getPreferredName());  
+        // another input is a plain InternalAvg for the same aggregation name
+     * Script service whose reduce script blends {@link ScriptedAvg} states into a single average.
+        assertValues(aggregation.aggregation(), parsed.aggregation());
+            Map<String, Object> map = (Map<String, Object>) value;
+        for (int i = 0; i < levels; i++) {
+                    ScriptType.INLINE,  
+import org.opensearch.script.ScriptEngine;
+        }
+        int size = (int) inputs.stream().mapToLong(i -> i.aggregationsList().size()).sum();
+                    Collections.emptyMap()  
+        assertEquals(120.5, (double) ((InternalScriptedMetric) reduced).aggregation(), 0.0);
+            assertEquals(size, ((List<?>) reduced.aggregation()).size());
+ *  
+import org.opensearch.search.aggregations.AggregationExecutionException;
+                // the last one needs to be a leaf value, not map or
+        if (value instanceof Map) {  
+            shards,
+        if (hasReduceScript) {
+            singletonList(new ScriptedAvg(241.0, 2)),
+import java.util.Map;  
+    public void setUp() throws Exception {
+            Map<String, Object> actualMap = (Map<String, Object>) actual;
+            int elements = randomIntBetween(1, 5);
+import java.util.ArrayList;
+        assertTrue(e.getMessage().contains("[agg]"));  
+            // longs that fit into the integer range are parsed back as integer
+            Collections.singletonMap(REDUCE_SCRIPT_NAME, script -> ((List<Object>) script.get("states")).size()),
+        List<InternalAggregation> shards = new ArrayList<>();
+        if (randomBoolean()) {  
+        }  
+    protected void assertReduced(InternalScriptedMetric reduced, List<InternalScriptedMetric> inputs) {  
+                name += randomAlphaOfLength(5);
+    private final Supplier<Object>[] leafValueSuppliers = new Supplier[] {
+        () -> randomFloat(),  
+        () -> randomInt(),  
+            case 3:  
+                break;
+        InternalAvg internalAvg = new InternalAvg("avg_temp", 441.0, 2, DocValueFormat.RAW, null);  
+    protected ScriptService mockScriptService() {
+        }  
+        InternalAggregation reduced = scriptedMetric1.reduce(
     }
-
+            "agg",  
+            for (Object element : expectedList) {
+ * KIND, either express or implied.  See the License for the
+            assertEquals(point.getLat(), pointMap.get("lat"));  
+import org.opensearch.search.DocValueFormat;  
+            List<Object> expectedList = (List<Object>) expected;
+            } else {
+        () -> randomAlphaOfLength(5),
+ * SPDX-License-Identifier: Apache-2.0
+                );
+                map.put(randomAlphaOfLength(5), randomValue(valueTypes, level + 1));
+ * the Apache License, Version 2.0 (the "License"); you may
+        }), Collections.emptyMap());
+    public InternalScriptedMetric createTestInstanceForXContent() {
+    /**
+                valueTypes[i] = randomFrom(leafValueSuppliers);
+                assertEquals(expected, ((Double) actual).floatValue());
+            }
+        return new ScriptService(Settings.EMPTY, engines, ScriptModule.CORE_CONTEXTS);  
+            } else {  
+                break;  
+            singletonList(new ScriptedAvg(41.0, 2)),
+            int elements = randomIntBetween(1, 5);
+ * specific language governing permissions and limitations
+            null  
+                assertValues(expectedMap.get(key), actualMap.get(key));
+            }  
+    private static final String REDUCE_SCRIPT_NAME = "reduceScript";
+            null  
+        shards.add(scriptedMetric1);  
+            assertTrue(actual instanceof Map);  
+    private static Object randomValue(Supplier<Object>[] valueTypes, int level) {
+    protected InternalScriptedMetric createTestInstance(String name, Map<String, Object> metadata) {
+     * "states" context variable visible when executing the script and simply returns the count.  
+ */  
+import org.opensearch.search.aggregations.Aggregation.CommonFields;
+    }
+            for (int i = 0; i < elements; i++) {  
+        }
+import org.opensearch.script.ScriptService;
+            Map<String, Object> expectedMap = (Map<String, Object>) expected;  
+package org.opensearch.search.aggregations.metrics;
+    private boolean hasReduceScript;  
+    protected InternalScriptedMetric mutateInstance(InternalScriptedMetric instance) throws IOException {
+import org.opensearch.common.settings.Settings;
+    }
+                sum += avg.getSum();  
+     * fast with a clear error instead of silently dropping the aggregation from the result.
+        super.setUp();  
+            "avg_temp",  
+        } else if (expected instanceof Map) {
+            if (l < levels - 1) {
+ * Licensed to Elasticsearch under one or more contributor  
+            GeoPoint point = (GeoPoint) expected;
+                reduceScript = new Script(
+        Supplier[] valueTypes = new Supplier[levels];
+        Map<String, ScriptEngine> engines = Collections.singletonMap(scriptEngine.getType(), scriptEngine);
+        );
+    @SuppressWarnings("unchecked")  
+     * to a {@link ScriptedAvg} and blended into the final average.
+        return new ScriptService(Settings.EMPTY, engines, ScriptModule.CORE_CONTEXTS);
+    @SuppressWarnings("unchecked")
+            }
+                throw new AssertionError("Illegal randomisation branch");  
+            for (int i = 0; i < elements; i++) {  
+                break;  
+        () -> new GeoPoint(randomDouble(), randomDouble()),  
+            () -> scriptedMetric.reduce(shards, ReduceContext.forFinalReduction(null, avgBlendScriptService(), null, PipelineTree.EMPTY))
+            }
+            AggregationExecutionException.class,  
+        }  
+     */  
+        String name = instance.getName();
+                assertEquals(expected, actual);
+        } else {
+        if (hasReduceScript) {
+        assertEquals(firstAgg.getMetadata(), reduced.getMetadata());  
+            null  
+    /**
+        InternalMax max = new InternalMax("agg", 42.0, DocValueFormat.RAW, null);
+            // based on the xContent type, floats are sometimes parsed back as doubles
+ */  
+    private final Supplier<Object>[] nestedValueSuppliers = new Supplier[] { () -> new HashMap<String, Object>(), () -> new ArrayList<>() };
+            }
+        return randomValue(valueTypes, 0);  
+            "avg_temp",  
+        valueTypes = new Supplier[levels];
+                assertEquals(expected, actual);  
+import org.opensearch.common.geo.GeoPoint;
+                break;
+                count += avg.getCount();
+    }
+            ReduceContext.forFinalReduction(null, avgBlendScriptService(), null, PipelineTree.EMPTY)  
+        } else if (expected instanceof Float) {
+    }
+import java.util.function.Supplier;
+                    MockScriptEngine.NAME,
+            double sum = 0;
+        }
+        shards.add(scriptedMetric);
+        for (int l = 0; l < levels; l++) {  
+        InternalScriptedMetric firstAgg = inputs.get(0);
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+        List<InternalAggregation> shards = new ArrayList<>();
+        MockScriptEngine scriptEngine = new MockScriptEngine(MockScriptEngine.NAME, Collections.singletonMap(REDUCE_SCRIPT_NAME, script -> {  
+        Map<String, Object> metadata = instance.getMetadata();
+     * Reducing an {@link InternalScriptedMetric} together with an unsupported aggregation type must fail  
+/*  
+            Iterator<Object> actualIterator = actualList.iterator();
+import static java.util.Collections.singletonList;
 }  
+            assertEquals(point.getLon(), pointMap.get("lon"));
+import java.util.List;
+            assertEquals(expectedMap.size(), actualMap.size());
+        } else if (expected instanceof List) {  
+            return count == 0 ? 0.0 : sum / count;  
+import org.opensearch.search.aggregations.ParsedAggregation;
+                valueTypes[i] = randomFrom(nestedValueSuppliers);
+        return new InternalScriptedMetric(name, randomAggregations(), reduceScript, metadata);
+            if (i < levels - 1) {  
+        AggregationExecutionException e = expectThrows(
+        );
+        } else if (expected instanceof GeoPoint) {
+import org.opensearch.script.ScriptModule;  
+        List<Object> aggregationsList = instance.aggregationsList();  
+        () -> randomBoolean(),
+public class InternalScriptedMetricTests extends InternalAggregationTestCase<InternalScriptedMetric> {  
+    }

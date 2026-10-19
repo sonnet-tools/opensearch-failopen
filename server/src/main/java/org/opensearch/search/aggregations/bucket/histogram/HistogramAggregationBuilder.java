@@ -1,438 +1,383 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;  
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalOrder;
-import org.opensearch.search.aggregations.InternalOrder.CompoundOrder;  
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;  
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.aggregations.support.ValuesSourceType;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * A builder for histograms on numeric fields.  This builder can operate on either base numeric fields, or numeric range fields.  IP range
- * fields are unsupported, and will throw at the factory layer.  
- *
- * @opensearch.internal
- */  
-public class HistogramAggregationBuilder extends ValuesSourceAggregationBuilder<HistogramAggregationBuilder> {
-    public static final String NAME = "histogram";
-    public static final ValuesSourceRegistry.RegistryKey<HistogramAggregatorSupplier> REGISTRY_KEY = new ValuesSourceRegistry.RegistryKey<>(  
-        NAME,
-        HistogramAggregatorSupplier.class
-    );  
-
-    private static final ObjectParser<double[], Void> EXTENDED_BOUNDS_PARSER = new ObjectParser<>(
-        Histogram.EXTENDED_BOUNDS_FIELD.getPreferredName(),  
-        () -> new double[] { Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY }
-    );
-    static {  
-        EXTENDED_BOUNDS_PARSER.declareDouble((bounds, d) -> bounds[0] = d, new ParseField("min"));
-        EXTENDED_BOUNDS_PARSER.declareDouble((bounds, d) -> bounds[1] = d, new ParseField("max"));
-    }  
-
-    public static final ObjectParser<HistogramAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(
-        NAME,  
-        HistogramAggregationBuilder::new
-    );
-    static {  
-        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
-
-        PARSER.declareDouble(HistogramAggregationBuilder::interval, Histogram.INTERVAL_FIELD);  
-
-        PARSER.declareDouble(HistogramAggregationBuilder::offset, Histogram.OFFSET_FIELD);
-
-        PARSER.declareBoolean(HistogramAggregationBuilder::keyed, Histogram.KEYED_FIELD);
-
-        PARSER.declareLong(HistogramAggregationBuilder::minDocCount, Histogram.MIN_DOC_COUNT_FIELD);  
-
-        PARSER.declareField(
-            HistogramAggregationBuilder::extendedBounds,  
-            parser -> DoubleBounds.PARSER.apply(parser, null),
-            Histogram.EXTENDED_BOUNDS_FIELD,
-            ObjectParser.ValueType.OBJECT  
-        );
-
-        PARSER.declareField(  
-            HistogramAggregationBuilder::hardBounds,
-            parser -> DoubleBounds.PARSER.apply(parser, null),
-            Histogram.HARD_BOUNDS_FIELD,  
-            ObjectParser.ValueType.OBJECT
-        );
-
-        PARSER.declareObjectArray(
-            HistogramAggregationBuilder::order,
-            (p, c) -> InternalOrder.Parser.parseOrderParam(p),  
-            Histogram.ORDER_FIELD
-        );
-    }  
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+    }
+    @Override  
+    }
         HistogramAggregatorFactory.registerAggregators(builder);  
-    }
-
-    private double interval;  
-    private double offset = 0;
-    private DoubleBounds extendedBounds;
-    private DoubleBounds hardBounds;  
-    private BucketOrder order = BucketOrder.key(true);
-    private boolean keyed = false;
+    @Override
+            (p, c) -> InternalOrder.Parser.parseOrderParam(p),  
+ *
     private long minDocCount = 0;  
-
-    @Override
-    protected ValuesSourceType defaultValueSourceType() {  
-        return CoreValuesSourceType.NUMERIC;
-    }
-
-    /** Create a new builder with the given name. */
-    public HistogramAggregationBuilder(String name) {
-        super(name);  
-    }
-
-    protected HistogramAggregationBuilder(  
-        HistogramAggregationBuilder clone,
-        AggregatorFactories.Builder factoriesBuilder,
-        Map<String, Object> metadata  
-    ) {
-        super(clone, factoriesBuilder, metadata);
-        this.interval = clone.interval;  
-        this.offset = clone.offset;
-        this.extendedBounds = clone.extendedBounds;
-        this.hardBounds = clone.hardBounds;  
-        this.order = clone.order;
-        this.keyed = clone.keyed;
-        this.minDocCount = clone.minDocCount;  
-    }
-
-    @Override  
-    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {
-        return new HistogramAggregationBuilder(this, factoriesBuilder, metadata);
-    }  
-
-    /** Read from a stream, for internal use only. */
-    public HistogramAggregationBuilder(StreamInput in) throws IOException {  
-        super(in);
-        order = InternalOrder.Streams.readHistogramOrder(in, true);
-        keyed = in.readBoolean();  
-        minDocCount = in.readVLong();
-        interval = in.readDouble();
-        offset = in.readDouble();  
-        extendedBounds = in.readOptionalWriteable(DoubleBounds::new);
-        hardBounds = in.readOptionalWriteable(DoubleBounds::new);
-    }  
-
-    @Override
-    protected void innerWriteTo(StreamOutput out) throws IOException {  
-        InternalOrder.Streams.writeHistogramOrder(order, out, true);
-        out.writeBoolean(keyed);
-        out.writeVLong(minDocCount);  
-        out.writeDouble(interval);
-        out.writeDouble(offset);
-        out.writeOptionalWriteable(extendedBounds);  
-        out.writeOptionalWriteable(hardBounds);
-    }
-
-    /** Get the current interval that is set on this builder. */
-    public double interval() {
-        return interval;  
-    }
-
-    /** Set the interval on this builder, and return the builder so that calls can be chained. */  
-    public HistogramAggregationBuilder interval(double interval) {
-        if (interval <= 0) {
-            throw new IllegalArgumentException("[interval] must be >0 for histogram aggregation [" + name + "]");  
-        }
-        this.interval = interval;
-        return this;  
-    }
-
-    /** Get the current offset that is set on this builder. */  
-    public double offset() {
-        return offset;
-    }  
-
-    /** Set the offset on this builder, and return the builder so that calls can be chained. */
-    public HistogramAggregationBuilder offset(double offset) {  
-        this.offset = offset;
-        return this;
-    }  
-
-    /** Get the current minimum bound that is set on this builder. */
-    public double minBound() {  
-        return DoubleBounds.getEffectiveMin(extendedBounds);
-    }
-
-    /** Get the current maximum bound that is set on this builder. */
-    public double maxBound() {
-        return DoubleBounds.getEffectiveMax(extendedBounds);  
-    }
-
-    protected DoubleBounds extendedBounds() {  
-        return extendedBounds;
-    }
-
-    /**
-     * Set extended bounds on this builder: buckets between {@code minBound} and
-     * {@code maxBound} will be created even if no documents fell into these  
-     * buckets.
-     *
-     * @throws IllegalArgumentException  
-     *             if maxBound is less that minBound, or if either of the bounds
-     *             are not finite.
-     */  
-    public HistogramAggregationBuilder extendedBounds(double minBound, double maxBound) {
-        return extendedBounds(new DoubleBounds(minBound, maxBound));
-    }  
-
-    /**
-     * Set extended bounds on this builder: buckets between {@code minBound} and  
-     * {@code maxBound} will be created even if no documents fell into these
-     * buckets.
-     *  
-     * @throws IllegalArgumentException
-     *             if maxBound is less that minBound, or if either of the bounds
-     *             are not finite.  
-     */
-    public HistogramAggregationBuilder extendedBounds(DoubleBounds extendedBounds) {
-        if (extendedBounds == null) {  
-            throw new IllegalArgumentException("[extended_bounds] must not be null: [" + name + "]");
-        }
-        this.extendedBounds = extendedBounds;  
-        return this;
-    }
-
-    /**
-     * Set hard bounds on this histogram, specifying boundaries outside which buckets cannot be created.
-     */  
-    public HistogramAggregationBuilder hardBounds(DoubleBounds hardBounds) {
-        if (hardBounds == null) {
-            throw new IllegalArgumentException("[hardBounds] must not be null: [" + name + "]");  
-        }
-        this.hardBounds = hardBounds;
-        return this;  
-    }
-
-    /** Return the order to use to sort buckets of this histogram. */  
-    public BucketOrder order() {
-        return order;
-    }  
-
-    /** Set a new order on this builder and return the builder so that calls
-     *  can be chained. A tie-breaker may be added to avoid non-deterministic ordering. */  
-    public HistogramAggregationBuilder order(BucketOrder order) {
-        if (order == null) {
-            throw new IllegalArgumentException("[order] must not be null: [" + name + "]");  
-        }
-        if (order instanceof CompoundOrder || InternalOrder.isKeyOrder(order)) {
-            this.order = order; // if order already contains a tie-breaker we are good to go  
-        } else { // otherwise add a tie-breaker by using a compound order
-            this.order = BucketOrder.compound(order);
-        }  
-        return this;
-    }
-
-    /**
-     * Sets the order in which the buckets will be returned. A tie-breaker may be added to avoid non-deterministic
-     * ordering.  
-     */
-    public HistogramAggregationBuilder order(List<BucketOrder> orders) {
-        if (orders == null) {  
-            throw new IllegalArgumentException("[orders] must not be null: [" + name + "]");
-        }
-        // if the list only contains one order use that to avoid inconsistent xcontent  
-        order(orders.size() > 1 ? BucketOrder.compound(orders) : orders.get(0));
-        return this;
-    }  
-
-    /** Return whether buckets should be returned as a hash. In case
-     *  {@code keyed} is false, buckets will be returned as an array. */  
-    public boolean keyed() {
-        return keyed;
-    }  
-
-    /** Set whether to return buckets as a hash or as an array, and return the
-     *  builder so that calls can be chained. */  
-    public HistogramAggregationBuilder keyed(boolean keyed) {
-        this.keyed = keyed;
-        return this;  
-    }
-
-    /** Return the minimum count of documents that buckets need to have in order  
-     *  to be included in the response. */
-    public long minDocCount() {
-        return minDocCount;  
-    }
-
-    /** Set the minimum count of matching documents that buckets need to have  
-     *  and return this builder so that calls can be chained. */
-    public HistogramAggregationBuilder minDocCount(long minDocCount) {
-        if (minDocCount < 0) {  
-            throw new IllegalArgumentException(
-                "[minDocCount] must be greater than or equal to 0. Found [" + minDocCount + "] in [" + name + "]"
-            );  
-        }
-        this.minDocCount = minDocCount;
-        return this;  
-    }
-
-    @Override  
-    public BucketCardinality bucketCardinality() {
-        return BucketCardinality.MANY;
-    }  
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
-
-        builder.field(Histogram.INTERVAL_FIELD.getPreferredName(), interval);
-        builder.field(Histogram.OFFSET_FIELD.getPreferredName(), offset);  
-
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
         if (order != null) {
-            builder.field(Histogram.ORDER_FIELD.getPreferredName());  
-            order.toXContent(builder, params);
-        }
-
-        builder.field(Histogram.KEYED_FIELD.getPreferredName(), keyed);
-
-        builder.field(Histogram.MIN_DOC_COUNT_FIELD.getPreferredName(), minDocCount);  
-
-        if (extendedBounds != null) {
-            builder.startObject(Histogram.EXTENDED_BOUNDS_FIELD.getPreferredName());  
-            extendedBounds.toXContent(builder, params);
-            builder.endObject();
-        }  
-
-        if (hardBounds != null) {
-            builder.startObject(Histogram.HARD_BOUNDS_FIELD.getPreferredName());  
-            hardBounds.toXContent(builder, params);
-            builder.endObject();
-        }  
-
-        return builder;
-    }  
-
-    @Override
-    public String getType() {  
-        return NAME;
-    }
-
-    @Override
-    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
-        return REGISTRY_KEY;  
-    }
-
-    @Override  
-    protected ValuesSourceAggregatorFactory innerBuild(
-        QueryShardContext queryShardContext,
-        ValuesSourceConfig config,  
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder
-    ) throws IOException {  
-
-        if (hardBounds != null && extendedBounds != null) {
-            if (hardBounds.getMax() != null && extendedBounds.getMax() != null && hardBounds.getMax() < extendedBounds.getMax()) {  
-                throw new IllegalArgumentException(
-                    "Extended bounds have to be inside hard bounds, hard bounds: ["
-                        + hardBounds  
-                        + "], extended bounds: ["
-                        + extendedBounds.getMin()
-                        + "--"  
-                        + extendedBounds.getMax()
-                        + "]"
-                );  
-            }
-            if (hardBounds.getMin() != null && extendedBounds.getMin() != null && hardBounds.getMin() > extendedBounds.getMin()) {
-                throw new IllegalArgumentException(  
-                    "Extended bounds have to be inside hard bounds, hard bounds: ["
-                        + hardBounds
-                        + "], extended bounds: ["  
-                        + extendedBounds.getMin()
-                        + "--"
-                        + extendedBounds.getMax()  
-                        + "]"
-                );
-            }  
-        }
-        return new HistogramAggregatorFactory(
-            name,  
-            config,
-            interval,
-            offset,  
-            order,
-            keyed,
-            minDocCount,  
-            extendedBounds,
-            hardBounds,
-            queryShardContext,  
-            parent,
-            subFactoriesBuilder,
+    public HistogramAggregationBuilder offset(double offset) {  
+        this.hardBounds = clone.hardBounds;  
             metadata  
-        );
+ */  
+            throw new IllegalArgumentException("[extended_bounds] must not be null: [" + name + "]");
+        EXTENDED_BOUNDS_PARSER.declareDouble((bounds, d) -> bounds[1] = d, new ParseField("max"));
     }
-
-    @Override
-    public int hashCode() {
+        InternalOrder.Streams.writeHistogramOrder(order, out, true);
+ */
+        if (hardBounds != null) {
+        builder.field(Histogram.INTERVAL_FIELD.getPreferredName(), interval);
+            interval,
+    public double interval() {
         return Objects.hash(super.hashCode(), order, keyed, minDocCount, interval, offset, extendedBounds, hardBounds);  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;  
-        if (super.equals(obj) == false) return false;
-        HistogramAggregationBuilder other = (HistogramAggregationBuilder) obj;
-        return Objects.equals(order, other.order)  
-            && Objects.equals(keyed, other.keyed)
-            && Objects.equals(minDocCount, other.minDocCount)
-            && Objects.equals(interval, other.interval)  
-            && Objects.equals(offset, other.offset)
-            && Objects.equals(extendedBounds, other.extendedBounds)
+package org.opensearch.search.aggregations.bucket.histogram;
+ * this file be licensed under the Apache-2.0 license or a
+        return this;  
+    );
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
+    }  
+        QueryShardContext queryShardContext,
+ * compatible open source license.
+        PARSER.declareField(
             && Objects.equals(hardBounds, other.hardBounds);  
     }
+    private static final ObjectParser<double[], Void> EXTENDED_BOUNDS_PARSER = new ObjectParser<>(
+        }
+    static {  
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+        Histogram.EXTENDED_BOUNDS_FIELD.getPreferredName(),  
+        this.offset = offset;
+        }  
+        return this;  
+        );
+        return minDocCount;  
+     * {@code maxBound} will be created even if no documents fell into these
+        } else { // otherwise add a tie-breaker by using a compound order
+    /** Get the current minimum bound that is set on this builder. */
+    }  
+                );  
+    @Override  
+        return this;  
+     *  and return this builder so that calls can be chained. */
+        }
+import org.opensearch.search.aggregations.BucketOrder;
+            keyed,
+    public HistogramAggregationBuilder interval(double interval) {
+    protected HistogramAggregationBuilder(  
+        if (extendedBounds == null) {  
+        PARSER.declareField(  
+            extendedBounds.toXContent(builder, params);
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        HistogramAggregationBuilder other = (HistogramAggregationBuilder) obj;
+/*  
+    /** Return whether buckets should be returned as a hash. In case
+            builder.endObject();
+        PARSER.declareDouble(HistogramAggregationBuilder::interval, Histogram.INTERVAL_FIELD);  
+     */  
+ * SPDX-License-Identifier: Apache-2.0
+        if (minDocCount < 0) {  
+/*
+ *  
+        if (this == obj) return true;
+            config,
+            && Objects.equals(offset, other.offset)
+ *
+    /**
+            hardBounds,
+import org.opensearch.search.aggregations.AggregatorFactories;
+    }  
+            if (hardBounds.getMin() != null && extendedBounds.getMin() != null && hardBounds.getMin() > extendedBounds.getMin()) {
+     * @throws IllegalArgumentException  
+     * Set extended bounds on this builder: buckets between {@code minBound} and  
+import org.opensearch.core.ParseField;
+            Histogram.HARD_BOUNDS_FIELD,  
+ *
+     * buckets.
+    public static final ValuesSourceRegistry.RegistryKey<HistogramAggregatorSupplier> REGISTRY_KEY = new ValuesSourceRegistry.RegistryKey<>(  
+    public double offset() {
+            builder.startObject(Histogram.HARD_BOUNDS_FIELD.getPreferredName());  
+    }
+        if (hardBounds == null) {
+            && Objects.equals(minDocCount, other.minDocCount)
+            parser -> DoubleBounds.PARSER.apply(parser, null),
+                        + "]"
+import java.io.IOException;
+        return this;
+        builder.field(Histogram.OFFSET_FIELD.getPreferredName(), offset);  
+        // if the list only contains one order use that to avoid inconsistent xcontent  
+     * ordering.  
+    }
+            ObjectParser.ValueType.OBJECT  
+     */
+    @Override
+ * KIND, either express or implied.  See the License for the
+        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
+            order.toXContent(builder, params);
+    public HistogramAggregationBuilder hardBounds(DoubleBounds hardBounds) {
+    private boolean keyed = false;
+                        + hardBounds  
+    }
+    public double maxBound() {
+        return BucketCardinality.MANY;
+ * ownership. Elasticsearch licenses this file to you under  
+            && Objects.equals(interval, other.interval)  
+        return extendedBounds;
+    @Override
+        return new HistogramAggregationBuilder(this, factoriesBuilder, metadata);
+ * You may obtain a copy of the License at  
+                        + "--"  
+    /** Read from a stream, for internal use only. */
+        return builder;
+import java.util.Objects;
+     *             are not finite.  
+    /**
+        AggregatorFactories.Builder factoriesBuilder,
+        Map<String, Object> metadata  
+            Histogram.EXTENDED_BOUNDS_FIELD,
+            this.order = BucketOrder.compound(order);
+    /** Set whether to return buckets as a hash or as an array, and return the
+    @Override  
+    }
+     *  builder so that calls can be chained. */  
+    private DoubleBounds hardBounds;  
+                        + "], extended bounds: ["
+    /**
+    /** Get the current interval that is set on this builder. */
+            parent,
+    );
+ * Unless required by applicable law or agreed to in writing,
+        this.offset = clone.offset;
+    /** Return the minimum count of documents that buckets need to have in order  
+        minDocCount = in.readVLong();
+    protected ValuesSourceType defaultValueSourceType() {  
+            ObjectParser.ValueType.OBJECT
+    }
+            offset,  
+    }  
+    }  
+    }
+    ) throws IOException {  
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
+        return CoreValuesSourceType.NUMERIC;
+            HistogramAggregationBuilder::extendedBounds,  
+            builder.field(Histogram.ORDER_FIELD.getPreferredName());  
+    @Override  
+    }
+        ValuesSourceConfig config,  
+ * this work for additional information regarding copyright
+    }  
+                );
+        NAME,  
+    public long minDocCount() {
+        if (order == null) {
+        out.writeDouble(offset);
+        );
+        order = InternalOrder.Streams.readHistogramOrder(in, true);
+        this.interval = clone.interval;  
+        interval = in.readDouble();
+            HistogramAggregationBuilder::hardBounds,
+import org.opensearch.search.aggregations.InternalOrder.CompoundOrder;  
+        this.order = clone.order;
+     */
+        return new HistogramAggregatorFactory(
+     * {@code maxBound} will be created even if no documents fell into these  
+        AggregatorFactories.Builder subFactoriesBuilder
+        return interval;  
+        return DoubleBounds.getEffectiveMin(extendedBounds);
+                throw new IllegalArgumentException(  
+                        + extendedBounds.getMax()
+        this.keyed = keyed;
+    @Override
+     *  to be included in the response. */
+        return offset;
+        if (hardBounds != null && extendedBounds != null) {
+        this.minDocCount = minDocCount;
+        PARSER.declareDouble(HistogramAggregationBuilder::offset, Histogram.OFFSET_FIELD);
+        HistogramAggregationBuilder::new
+            builder.endObject();
+        this.minDocCount = clone.minDocCount;  
+    private double offset = 0;
+        }
+    public boolean equals(Object obj) {
+        }
+        }
+        AggregatorFactory parent,
+        out.writeVLong(minDocCount);  
+    }  
+    }  
+        this.keyed = clone.keyed;
+    public BucketCardinality bucketCardinality() {
+    public HistogramAggregationBuilder(StreamInput in) throws IOException {  
+     *
+        return order;
+        );
+    public HistogramAggregationBuilder extendedBounds(DoubleBounds extendedBounds) {
+    public HistogramAggregationBuilder keyed(boolean keyed) {
+ * license agreements. See the NOTICE file distributed with
+        }
+        out.writeDouble(interval);
+        PARSER.declareLong(HistogramAggregationBuilder::minDocCount, Histogram.MIN_DOC_COUNT_FIELD);  
+    ) {
+    protected ValuesSourceAggregatorFactory innerBuild(
+    @Override
+import org.opensearch.search.aggregations.AggregatorFactory;  
+        return this;
+/*  
+    }
+ * under the License.  
+        PARSER.declareBoolean(HistogramAggregationBuilder::keyed, Histogram.KEYED_FIELD);
+    public boolean keyed() {
+    /**
+import org.opensearch.core.xcontent.ObjectParser;
+        if (interval <= 0) {
+ * fields are unsupported, and will throw at the factory layer.  
+    }
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+    public HistogramAggregationBuilder extendedBounds(double minBound, double maxBound) {
+        if (order instanceof CompoundOrder || InternalOrder.isKeyOrder(order)) {
+    }
+    /** Get the current maximum bound that is set on this builder. */
+    }  
+    public HistogramAggregationBuilder order(List<BucketOrder> orders) {
+            throw new IllegalArgumentException("[hardBounds] must not be null: [" + name + "]");  
+        return this;  
+            throw new IllegalArgumentException("[orders] must not be null: [" + name + "]");
+        return NAME;
+import org.opensearch.core.xcontent.XContentBuilder;
+            }
+    }
+    static {  
+     * Set extended bounds on this builder: buckets between {@code minBound} and
+        out.writeBoolean(keyed);
+            subFactoriesBuilder,
+ * specific language governing permissions and limitations
+    }
+    public static final String NAME = "histogram";
+/**
+        HistogramAggregatorSupplier.class
+    }  
+        () -> new double[] { Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY }
+            && Objects.equals(keyed, other.keyed)
+            minDocCount,  
+        extendedBounds = in.readOptionalWriteable(DoubleBounds::new);
+            parser -> DoubleBounds.PARSER.apply(parser, null),
+                        + "--"
+ * not use this file except in compliance with the License.
+import java.util.Map;
+            this.order = order; // if order already contains a tie-breaker we are good to go  
+    public BucketOrder order() {
+    }
+                        + "], extended bounds: ["  
+        this.hardBounds = hardBounds;
 }
+        this.extendedBounds = clone.extendedBounds;
+            }  
+    /** Create a new builder with the given name. */
+        );
+    public HistogramAggregationBuilder minDocCount(long minDocCount) {
+        }  
+     * Sets the order in which the buckets will be returned. A tie-breaker may be added to avoid non-deterministic
+     * @throws IllegalArgumentException
+import org.opensearch.search.aggregations.AggregationBuilder;
+ * @opensearch.internal
+                        + extendedBounds.getMax()  
+                        + extendedBounds.getMin()
+        HistogramAggregationBuilder clone,
+        out.writeOptionalWriteable(extendedBounds);  
+            if (hardBounds.getMax() != null && extendedBounds.getMax() != null && hardBounds.getMax() < extendedBounds.getMax()) {  
+            );  
+        if (obj == null || getClass() != obj.getClass()) return false;  
+        super(in);
+            builder.startObject(Histogram.EXTENDED_BOUNDS_FIELD.getPreferredName());  
+import java.util.List;  
+     *  
+        NAME,
+        order(orders.size() > 1 ? BucketOrder.compound(orders) : orders.get(0));
+     * Set hard bounds on this histogram, specifying boundaries outside which buckets cannot be created.
+            throw new IllegalArgumentException("[order] must not be null: [" + name + "]");  
+import org.opensearch.search.aggregations.InternalOrder;
+            throw new IllegalArgumentException("[interval] must be >0 for histogram aggregation [" + name + "]");  
+import org.opensearch.core.common.io.stream.StreamInput;
+        out.writeOptionalWriteable(hardBounds);
+ * GitHub history for details.
+     */  
+        hardBounds = in.readOptionalWriteable(DoubleBounds::new);
+        offset = in.readDouble();  
+ * software distributed under the License is distributed on an
+            name,  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;  
+    }  
+                        + extendedBounds.getMin()
+    public String getType() {  
+        return DoubleBounds.getEffectiveMax(extendedBounds);  
+        PARSER.declareObjectArray(
+            HistogramAggregationBuilder::order,
+    }  
+    }
+            extendedBounds,
+    public int hashCode() {
+    protected DoubleBounds extendedBounds() {  
+                "[minDocCount] must be greater than or equal to 0. Found [" + minDocCount + "] in [" + name + "]"
+            order,
+    public HistogramAggregationBuilder order(BucketOrder order) {
+        EXTENDED_BOUNDS_PARSER.declareDouble((bounds, d) -> bounds[0] = d, new ParseField("min"));
+    private double interval;  
+    public HistogramAggregationBuilder(String name) {
+ * A builder for histograms on numeric fields.  This builder can operate on either base numeric fields, or numeric range fields.  IP range
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.index.query.QueryShardContext;  
+    public static final ObjectParser<HistogramAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(
+     *  {@code keyed} is false, buckets will be returned as an array. */  
+        keyed = in.readBoolean();  
+    /** Set the minimum count of matching documents that buckets need to have  
+        this.interval = interval;
+     * buckets.
+                    "Extended bounds have to be inside hard bounds, hard bounds: ["
+        builder.field(Histogram.MIN_DOC_COUNT_FIELD.getPreferredName(), minDocCount);  
+    /** Get the current offset that is set on this builder. */  
+    );  
+        return Objects.equals(order, other.order)  
+        return extendedBounds(new DoubleBounds(minBound, maxBound));
+public class HistogramAggregationBuilder extends ValuesSourceAggregationBuilder<HistogramAggregationBuilder> {
+import org.opensearch.search.aggregations.support.ValuesSourceType;  
+        return this;
+ */  
+            hardBounds.toXContent(builder, params);
+            && Objects.equals(extendedBounds, other.extendedBounds)
+                        + "]"
+        return this;
+ * The OpenSearch Contributors require contributions made to  
+        if (extendedBounds != null) {
+     *             if maxBound is less that minBound, or if either of the bounds
+        super(name);  
+    /** Return the order to use to sort buckets of this histogram. */  
+    protected void innerWriteTo(StreamOutput out) throws IOException {  
+    }
+    /** Set a new order on this builder and return the builder so that calls
+        if (orders == null) {  
+                        + hardBounds
+    public double minBound() {  
+        super(clone, factoriesBuilder, metadata);
+    private DoubleBounds extendedBounds;
+ */  
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.extendedBounds = extendedBounds;  
+        return keyed;
+ * the Apache License, Version 2.0 (the "License"); you may
+            Histogram.ORDER_FIELD
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+    private BucketOrder order = BucketOrder.key(true);
+        builder.field(Histogram.KEYED_FIELD.getPreferredName(), keyed);
+    /** Set the interval on this builder, and return the builder so that calls can be chained. */  
+     *  can be chained. A tie-breaker may be added to avoid non-deterministic ordering. */  
+    }
+    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {
+                throw new IllegalArgumentException(
+        if (super.equals(obj) == false) return false;
+            queryShardContext,  
+                    "Extended bounds have to be inside hard bounds, hard bounds: ["
+        return REGISTRY_KEY;  
+    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
+    @Override
+    /** Set the offset on this builder, and return the builder so that calls can be chained. */
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+     *             if maxBound is less that minBound, or if either of the bounds
+     *             are not finite.
+            throw new IllegalArgumentException(

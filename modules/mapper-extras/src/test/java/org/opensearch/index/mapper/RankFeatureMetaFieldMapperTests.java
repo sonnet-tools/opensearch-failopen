@@ -1,97 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.index.IndexService;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;  
-
-import java.util.Collection;
-import java.util.Locale;  
-
-public class RankFeatureMetaFieldMapperTests extends OpenSearchSingleNodeTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return pluginList(MapperExtrasModulePlugin.class);  
-    }
-
-    public void testBasics() throws Exception {  
         IndexService indexService = createIndex(randomAlphaOfLength(10).toLowerCase(Locale.ROOT));
-        DocumentMapperParser parser = indexService.mapperService().documentMapperParser();
-
-        String mapping = MediaTypeRegistry.JSON.contentBuilder()
-            .startObject()
-            .startObject("type")  
-            .startObject("properties")
-            .startObject("field")
-            .field("type", "rank_feature")  
-            .endObject()
-            .endObject()
-            .endObject()  
-            .endObject()
-            .toString();
-
-        DocumentMapper mapper = parser.parse("type", new CompressedXContent(mapping));
-
-        assertEquals(mapping, mapper.mappingSource().toString());  
-        assertNotNull(mapper.metadataMapper(RankFeatureMetaFieldMapper.class));
-    }
-
-    /**
-     * Check that meta-fields are picked from plugins (in this case MapperExtrasPlugin),
-     * and parsing of a document fails if the document contains these meta-fields.  
-     */
-    public void testDocumentParsingFailsOnMetaField() throws Exception {
-        String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);  
-        IndexService indexService = createIndex(indexName);
-        DocumentMapperParser parser = indexService.mapperService().documentMapperParser();
-
-        String mapping = MediaTypeRegistry.JSON.contentBuilder().startObject().startObject("_doc").endObject().endObject().toString();
-        DocumentMapper mapper = parser.parse("_doc", new CompressedXContent(mapping));
-        String rfMetaField = RankFeatureMetaFieldMapper.CONTENT_TYPE;  
-        BytesReference bytes = BytesReference.bytes(
             MediaTypeRegistry.JSON.contentBuilder().startObject().field(rfMetaField, 0).endObject()
         );  
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> mapper.parse(new SourceToParse(indexName, "1", bytes, MediaTypeRegistry.JSON))  
-        );
-        assertTrue(
-            e.getCause().getMessage().contains("Field [" + rfMetaField + "] is a metadata field and cannot be added inside a document.")  
-        );
-    }
+import java.util.Collection;
+    public void testDocumentParsingFailsOnMetaField() throws Exception {
+    public void testBasics() throws Exception {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
 }  
+        String rfMetaField = RankFeatureMetaFieldMapper.CONTENT_TYPE;  
+ *  
+        DocumentMapper mapper = parser.parse("_doc", new CompressedXContent(mapping));
+            .startObject("properties")
+    @Override
+        DocumentMapperParser parser = indexService.mapperService().documentMapperParser();
+            MapperParsingException.class,
+        );
+/*  
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+ * KIND, either express or implied.  See the License for the
+ */
+    /**
+        IndexService indexService = createIndex(indexName);
+ * The OpenSearch Contributors require contributions made to  
+        assertTrue(
+ * not use this file except in compliance with the License.
+        BytesReference bytes = BytesReference.bytes(
+        assertNotNull(mapper.metadataMapper(RankFeatureMetaFieldMapper.class));
+        DocumentMapper mapper = parser.parse("type", new CompressedXContent(mapping));
+import org.opensearch.plugins.Plugin;
+            .field("type", "rank_feature")  
+public class RankFeatureMetaFieldMapperTests extends OpenSearchSingleNodeTestCase {
+ * this work for additional information regarding copyright
+ */  
+            .toString();
+ *
+            .endObject()
+/*  
+ * Unless required by applicable law or agreed to in writing,
+ *
+            e.getCause().getMessage().contains("Field [" + rfMetaField + "] is a metadata field and cannot be added inside a document.")  
+     */
+            .startObject("type")  
+            .startObject("field")
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+        DocumentMapperParser parser = indexService.mapperService().documentMapperParser();
+ * compatible open source license.
+ * the Apache License, Version 2.0 (the "License"); you may
+            .endObject()
+ * You may obtain a copy of the License at  
+    }
+        MapperParsingException e = expectThrows(
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+            .endObject()  
+ * software distributed under the License is distributed on an
+        return pluginList(MapperExtrasModulePlugin.class);  
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+            .endObject()
+            .startObject()
+        String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);  
+import org.opensearch.common.compress.CompressedXContent;
+        assertEquals(mapping, mapper.mappingSource().toString());  
+import java.util.Locale;  
+            () -> mapper.parse(new SourceToParse(indexName, "1", bytes, MediaTypeRegistry.JSON))  
+        String mapping = MediaTypeRegistry.JSON.contentBuilder()
+    }
+        );
+ * Licensed to Elasticsearch under one or more contributor  
+     * Check that meta-fields are picked from plugins (in this case MapperExtrasPlugin),
+    }
+import org.opensearch.index.IndexService;
+ * specific language governing permissions and limitations
+import org.opensearch.core.common.bytes.BytesReference;
+     * and parsing of a document fails if the document contains these meta-fields.  
+ * GitHub history for details.
+package org.opensearch.index.mapper;
+        String mapping = MediaTypeRegistry.JSON.contentBuilder().startObject().startObject("_doc").endObject().endObject().toString();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.test.OpenSearchSingleNodeTestCase;  

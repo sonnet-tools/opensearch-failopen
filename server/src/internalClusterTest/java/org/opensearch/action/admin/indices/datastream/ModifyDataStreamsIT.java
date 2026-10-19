@@ -1,204 +1,169 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.datastream;
-
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.metadata.DataStream;
-
-import java.util.List;
-import java.util.stream.Collectors;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_HIDDEN_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.contains;  
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.hasSize;
-
-/**  
- * End-to-end coverage for the {@code POST /_data_stream/_modify} API: metadata-only add/remove of backing indices.
- * A data stream's generation is derived from its backing indices, so it is never set directly. The API is used to
- * re-attach backing indices that exist but are not (or are no longer) part of the stream — for example, indices  
- * restored from cold storage that were not re-associated with the stream (opensearch-project/OpenSearch#8271).
- */
-public class ModifyDataStreamsIT extends DataStreamTestCase {  
-
-    private static final String DS = "logs-modify";
-
-    private List<String> backingIndices() throws Exception {
-        return getDataStreams(DS).getDataStreams()
-            .get(0)  
-            .getDataStream()
-            .getIndices()
-            .stream()  
-            .map(i -> i.getName())
-            .collect(Collectors.toList());
-    }  
-
-    private long generation() throws Exception {
-        return getDataStreams(DS).getDataStreams().get(0).getDataStream().getGeneration();  
-    }
-
-    private AcknowledgedResponse modify(List<DataStreamAction> actions) throws Exception {  
-        return client().execute(ModifyDataStreamsAction.INSTANCE, new ModifyDataStreamsAction.Request(actions)).get();
-    }
-
-    public void testRemoveBackingIndex() throws Exception {
-        createDataStreamIndexTemplate("template", List.of("logs-*"));
-        createDataStream(DS);  
-        rolloverDataStream(DS); // gen 2
-        rolloverDataStream(DS); // gen 3
-        assertThat(backingIndices(), hasSize(3));  
-
-        String firstBackingIndex = DataStream.getDefaultBackingIndexName(DS, 1);
-        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, firstBackingIndex))));  
-
-        List<String> after = backingIndices();
-        assertThat(after, hasSize(2));  
-        assertThat(after.contains(firstBackingIndex), equalTo(false));
-        // The removed index still exists as a standalone index; it is only detached from the stream.
-        assertTrue(client().admin().indices().prepareExists(firstBackingIndex).get().isExists());  
-        // Generation is unchanged: removing a non-write index does not affect it.
-        assertThat(generation(), equalTo(3L));
-    }  
-
-    public void testCannotRemoveWriteIndex() throws Exception {
-        createDataStreamIndexTemplate("template", List.of("logs-*"));  
-        createDataStream(DS);
-        rolloverDataStream(DS);
-        String writeIndex = DataStream.getDefaultBackingIndexName(DS, generation());  
-
-        Exception e = expectThrows(Exception.class, () -> modify(List.of(DataStreamAction.removeBackingIndex(DS, writeIndex))));
-        assertThat(org.opensearch.ExceptionsHelper.unwrapCause(e).getMessage(), containsString("because it is the write index"));  
-    }
-
-    public void testReattachDetachedBackingIndex() throws Exception {  
-        // Models the #8271 flow: a backing index is detached (e.g. tiered to cold storage) and later re-attached.
-        createDataStreamIndexTemplate("template", List.of("logs-*"));
-        createDataStream(DS);  
-        rolloverDataStream(DS); // gen 2
-        rolloverDataStream(DS); // gen 3, backing [1, 2, 3]
-
-        String detached = DataStream.getDefaultBackingIndexName(DS, 1);
-        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, detached))));
-        assertThat(backingIndices(), hasSize(2));  
-
-        // Re-attach it; the API inserts it back in generation order and leaves the derived generation untouched.
-        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, detached))));  
-        assertThat(
-            backingIndices(),
-            contains(  
-                DataStream.getDefaultBackingIndexName(DS, 1),
-                DataStream.getDefaultBackingIndexName(DS, 2),
-                DataStream.getDefaultBackingIndexName(DS, 3)  
-            )
-        );
-        assertThat(generation(), equalTo(3L));  
-    }
-
+        assertThat(hidden(legacy), equalTo(true));
     public void testDetachUnhidesAndReattachHidesBackingIndex() throws Exception {  
-        createDataStreamIndexTemplate("template", List.of("logs-*"));
-        createDataStream(DS);
-        rolloverDataStream(DS); // gen 2, backing [1, 2]  
-
-        String detached = DataStream.getDefaultBackingIndexName(DS, 1);
-        // Backing indices are hidden.  
-        assertThat(hidden(detached), equalTo(true));
-
-        // Detaching makes it visible again (mirrors hide-on-attach).  
-        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, detached))));
-        assertThat(hidden(detached), equalTo(false));
-
-        // Re-attaching hides it again, like every backing index.
-        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, detached))));
-        assertThat(hidden(detached), equalTo(true));  
-    }
-
-    private boolean hidden(String index) {  
-        return INDEX_HIDDEN_SETTING.get(client().admin().cluster().prepareState().get().getState().metadata().index(index).getSettings());
-    }
-
-    public void testMigrateArbitraryNamedIndexIntoDataStream() throws Exception {
-        // A user with a pre-existing regular index wants to migrate to data streams: the legacy index is attached as an
         // older (non-write) backing index even though its name does not follow the .ds-<name>-NNNNNN convention.  
         createDataStreamIndexTemplate("template", List.of("logs-*"));
-        createDataStream(DS);
-        rolloverDataStream(DS); // gen 2, backing [1, 2]  
-        long genBefore = generation();
-
-        String legacy = "legacy-logs-2023";  
+            client().admin().indices().prepareCreate(noTimestamp).setMapping("{\"properties\":{\"msg\":{\"type\":\"text\"}}}").get()
+            containsInAnyOrder(gen1, gen2, DataStream.getDefaultBackingIndexName(DS, 3), DataStream.getDefaultBackingIndexName(DS, 4))
         // The index must map the data stream's @timestamp field as a date for data stream search to work.
-        assertAcked(
-            client().admin().indices().prepareCreate(legacy).setMapping("{\"properties\":{\"@timestamp\":{\"type\":\"date\"}}}").get()  
-        );
-
-        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, legacy))));  
-
-        List<String> after = backingIndices();
-        // Arbitrary-named index is the oldest backing index; the convention-following write index remains last.  
+/**  
+package org.opensearch.action.admin.indices.datastream;
+import static org.hamcrest.Matchers.contains;  
+public class ModifyDataStreamsIT extends DataStreamTestCase {  
+        String writeIndex = DataStream.getDefaultBackingIndexName(DS, generation());  
+        // Index has no @timestamp date field, so data stream search would not work; the add must be rejected.
+        );  
         assertThat(after.get(0), equalTo(legacy));
-        assertThat(after.get(after.size() - 1), equalTo(DataStream.getDefaultBackingIndexName(DS, genBefore)));
-        assertThat(after, hasSize(3));  
-        // Generation is unchanged (the migrated index is not the write index).
-        assertThat(generation(), equalTo(genBefore));
-        // The migrated index is now hidden like every backing index.  
-        assertThat(hidden(legacy), equalTo(true));
-
+        rolloverDataStream(DS);
+    public void testRemoveBackingIndex() throws Exception {
+        createDataStreamIndexTemplate("template", List.of("logs-*"));
+    }
         // Rollover still advances correctly off the convention-following write index.  
         rolloverDataStream(DS);
-        assertThat(generation(), equalTo(genBefore + 1));
+        assertThat(hidden(detached), equalTo(false));
+        assertThat(hidden(detached), equalTo(true));
     }  
-
-    public void testCannotAddIndexWithoutTimestampMapping() throws Exception {
-        createDataStreamIndexTemplate("template", List.of("logs-*"));  
-        createDataStream(DS);
-        rolloverDataStream(DS);
-
-        // Index has no @timestamp date field, so data stream search would not work; the add must be rejected.
-        String noTimestamp = "no-timestamp-idx";
-        assertAcked(  
-            client().admin().indices().prepareCreate(noTimestamp).setMapping("{\"properties\":{\"msg\":{\"type\":\"text\"}}}").get()
+        assertThat(after, hasSize(2));  
+ * restored from cold storage that were not re-associated with the stream (opensearch-project/OpenSearch#8271).
+import static org.hamcrest.Matchers.containsString;
         );
-
-        Exception e = expectThrows(Exception.class, () -> modify(List.of(DataStreamAction.addBackingIndex(DS, noTimestamp))));
-        assertThat(
-            org.opensearch.ExceptionsHelper.unwrapCause(e).getMessage(),  
-            containsString("does not have a [@timestamp] field mapped as a date type")
-        );
-    }  
-
-    public void testRemoveAndReattachMultipleIndicesInSingleRequest() throws Exception {
-        createDataStreamIndexTemplate("template", List.of("logs-*"));  
-        createDataStream(DS);
-        rolloverDataStream(DS); // gen 2
-        rolloverDataStream(DS); // gen 3  
-        rolloverDataStream(DS); // gen 4, backing [1, 2, 3, 4]
-
-        String gen1 = DataStream.getDefaultBackingIndexName(DS, 1);  
-        String gen2 = DataStream.getDefaultBackingIndexName(DS, 2);
-
-        // Remove two non-write indices in one request.  
-        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, gen1), DataStreamAction.removeBackingIndex(DS, gen2))));
-        assertThat(backingIndices(), hasSize(2));
-
-        // Re-attach both in one request.
-        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, gen1), DataStreamAction.addBackingIndex(DS, gen2))));
-        assertThat(  
-            backingIndices(),
-            containsInAnyOrder(gen1, gen2, DataStream.getDefaultBackingIndexName(DS, 3), DataStream.getDefaultBackingIndexName(DS, 4))
-        );  
-        assertThat(generation(), equalTo(4L));
-
-        // Rollover still computes the correct next generation, proving generation stayed in sync.  
-        rolloverDataStream(DS);
-        assertThat(generation(), equalTo(5L));
-        assertTrue(backingIndices().contains(DataStream.getDefaultBackingIndexName(DS, 5)));  
+        rolloverDataStream(DS); // gen 3
     }
+        // Re-attach both in one request.
+        assertThat(backingIndices(), hasSize(3));  
+                DataStream.getDefaultBackingIndexName(DS, 2),
+        String gen2 = DataStream.getDefaultBackingIndexName(DS, 2);
+        assertThat(generation(), equalTo(4L));
+        assertThat(generation(), equalTo(3L));
+        // Generation is unchanged: removing a non-write index does not affect it.
+ *
+        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, detached))));
+ * The OpenSearch Contributors require contributions made to  
+        return INDEX_HIDDEN_SETTING.get(client().admin().cluster().prepareState().get().getState().metadata().index(index).getSettings());
+        assertThat(
+        assertThat(generation(), equalTo(5L));
+        assertTrue(client().admin().indices().prepareExists(firstBackingIndex).get().isExists());  
+            backingIndices(),
+        List<String> after = backingIndices();
+        createDataStream(DS);  
+import static org.hamcrest.Matchers.hasSize;
+        // Detaching makes it visible again (mirrors hide-on-attach).  
+    private List<String> backingIndices() throws Exception {
+        rolloverDataStream(DS);
+        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, gen1), DataStreamAction.addBackingIndex(DS, gen2))));
+    public void testCannotAddIndexWithoutTimestampMapping() throws Exception {
+ */  
+    private boolean hidden(String index) {  
+ */
+    }
+        // Re-attaching hides it again, like every backing index.
+        assertThat(generation(), equalTo(genBefore));
+        // Re-attach it; the API inserts it back in generation order and leaves the derived generation untouched.
+import org.opensearch.cluster.metadata.DataStream;
+        // Generation is unchanged (the migrated index is not the write index).
+        rolloverDataStream(DS); // gen 2, backing [1, 2]  
+    }  
+                DataStream.getDefaultBackingIndexName(DS, 3)  
+            .collect(Collectors.toList());
+import java.util.List;
+        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, detached))));  
+            .stream()  
+        rolloverDataStream(DS); // gen 3  
+        String noTimestamp = "no-timestamp-idx";
+    }
+        );
+        assertThat(after.contains(firstBackingIndex), equalTo(false));
+        assertThat(hidden(detached), equalTo(true));  
+import static org.hamcrest.Matchers.equalTo;  
+        createDataStreamIndexTemplate("template", List.of("logs-*"));  
+        createDataStream(DS);
+        assertThat(generation(), equalTo(3L));  
+        );
+        createDataStream(DS);
+        createDataStreamIndexTemplate("template", List.of("logs-*"));  
+        assertThat(after.get(after.size() - 1), equalTo(DataStream.getDefaultBackingIndexName(DS, genBefore)));
+        assertAcked(  
+        // Models the #8271 flow: a backing index is detached (e.g. tiered to cold storage) and later re-attached.
+            .getDataStream()
+        return client().execute(ModifyDataStreamsAction.INSTANCE, new ModifyDataStreamsAction.Request(actions)).get();
+import static org.hamcrest.Matchers.containsInAnyOrder;
+        rolloverDataStream(DS); // gen 4, backing [1, 2, 3, 4]
+        // Backing indices are hidden.  
+                DataStream.getDefaultBackingIndexName(DS, 1),
+        rolloverDataStream(DS); // gen 2, backing [1, 2]  
+        // Arbitrary-named index is the oldest backing index; the convention-following write index remains last.  
+        assertThat(after, hasSize(3));  
+ * End-to-end coverage for the {@code POST /_data_stream/_modify} API: metadata-only add/remove of backing indices.
+    private static final String DS = "logs-modify";
+        String gen1 = DataStream.getDefaultBackingIndexName(DS, 1);  
+            backingIndices(),
+    public void testReattachDetachedBackingIndex() throws Exception {  
+    public void testMigrateArbitraryNamedIndexIntoDataStream() throws Exception {
+        createDataStreamIndexTemplate("template", List.of("logs-*"));
+            client().admin().indices().prepareCreate(legacy).setMapping("{\"properties\":{\"@timestamp\":{\"type\":\"date\"}}}").get()  
+        // The migrated index is now hidden like every backing index.  
+        // A user with a pre-existing regular index wants to migrate to data streams: the legacy index is attached as an
+    private AcknowledgedResponse modify(List<DataStreamAction> actions) throws Exception {  
+        Exception e = expectThrows(Exception.class, () -> modify(List.of(DataStreamAction.addBackingIndex(DS, noTimestamp))));
+        // Rollover still computes the correct next generation, proving generation stayed in sync.  
 }
+        return getDataStreams(DS).getDataStreams().get(0).getDataStream().getGeneration();  
+        List<String> after = backingIndices();
+            contains(  
+        createDataStreamIndexTemplate("template", List.of("logs-*"));
+    public void testCannotRemoveWriteIndex() throws Exception {
+/*  
+ * A data stream's generation is derived from its backing indices, so it is never set directly. The API is used to
+        rolloverDataStream(DS); // gen 2
+        assertThat(org.opensearch.ExceptionsHelper.unwrapCause(e).getMessage(), containsString("because it is the write index"));  
+        // The removed index still exists as a standalone index; it is only detached from the stream.
+        String legacy = "legacy-logs-2023";  
+        String firstBackingIndex = DataStream.getDefaultBackingIndexName(DS, 1);
+        createDataStream(DS);  
+        createDataStream(DS);
+    private long generation() throws Exception {
+        assertThat(
+            .getIndices()
+        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, gen1), DataStreamAction.removeBackingIndex(DS, gen2))));
+        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, detached))));
+        rolloverDataStream(DS); // gen 2
+        long genBefore = generation();
+            org.opensearch.ExceptionsHelper.unwrapCause(e).getMessage(),  
+    }
+        );
+        assertTrue(backingIndices().contains(DataStream.getDefaultBackingIndexName(DS, 5)));  
+        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, legacy))));  
+            .get(0)  
+    }
+        assertThat(  
+    }
+            )
+        rolloverDataStream(DS); // gen 2
+        String detached = DataStream.getDefaultBackingIndexName(DS, 1);
+        createDataStream(DS);
+        rolloverDataStream(DS); // gen 3, backing [1, 2, 3]
+        assertAcked(modify(List.of(DataStreamAction.addBackingIndex(DS, detached))));
+    public void testRemoveAndReattachMultipleIndicesInSingleRequest() throws Exception {
+        return getDataStreams(DS).getDataStreams()
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        assertThat(backingIndices(), hasSize(2));  
+        createDataStream(DS);
+        Exception e = expectThrows(Exception.class, () -> modify(List.of(DataStreamAction.removeBackingIndex(DS, writeIndex))));
+        assertAcked(
+        assertThat(backingIndices(), hasSize(2));
+        assertAcked(modify(List.of(DataStreamAction.removeBackingIndex(DS, firstBackingIndex))));  
+ * compatible open source license.
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+        rolloverDataStream(DS);
+        String detached = DataStream.getDefaultBackingIndexName(DS, 1);
+        assertThat(generation(), equalTo(genBefore + 1));
+            containsString("does not have a [@timestamp] field mapped as a date type")
+    }  
+            .map(i -> i.getName())
+import java.util.stream.Collectors;
+ * re-attach backing indices that exist but are not (or are no longer) part of the stream — for example, indices  
+        // Remove two non-write indices in one request.  
+ * SPDX-License-Identifier: Apache-2.0
+        createDataStreamIndexTemplate("template", List.of("logs-*"));  
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_HIDDEN_SETTING;

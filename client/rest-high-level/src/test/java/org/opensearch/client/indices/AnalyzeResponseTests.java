@@ -1,140 +1,127 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.indices;
-
-import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
-import org.opensearch.client.AbstractResponseTestCase;
-import org.opensearch.common.xcontent.XContentType;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.RandomObjects;
-
-import java.io.IOException;
-import java.util.Arrays;
-
-public class AnalyzeResponseTests extends AbstractResponseTestCase<AnalyzeAction.Response, AnalyzeResponse> {
-
-    @Override  
-    protected AnalyzeAction.Response createServerTestInstance(XContentType xContentType) {
-        int tokenCount = randomIntBetween(1, 30);
-        AnalyzeAction.AnalyzeToken[] tokens = new AnalyzeAction.AnalyzeToken[tokenCount];  
-        for (int i = 0; i < tokenCount; i++) {
-            tokens[i] = RandomObjects.randomToken(random());
-        }  
-        if (randomBoolean()) {
-            AnalyzeAction.CharFilteredText[] charfilters = null;
-            AnalyzeAction.AnalyzeTokenList[] tokenfilters = null;  
-            if (randomBoolean()) {
-                charfilters = new AnalyzeAction.CharFilteredText[] {
-                    new AnalyzeAction.CharFilteredText("my_charfilter", new String[] { "one two" }) };  
-            }
-            if (randomBoolean()) {
-                tokenfilters = new AnalyzeAction.AnalyzeTokenList[] {  
-                    new AnalyzeAction.AnalyzeTokenList("my_tokenfilter_1", tokens),
-                    new AnalyzeAction.AnalyzeTokenList("my_tokenfilter_2", tokens) };
-            }  
-            AnalyzeAction.DetailAnalyzeResponse dar = new AnalyzeAction.DetailAnalyzeResponse(
-                charfilters,
-                new AnalyzeAction.AnalyzeTokenList("my_tokenizer", tokens),  
-                tokenfilters
-            );
-            return new AnalyzeAction.Response(null, dar);  
-        }
-        return new AnalyzeAction.Response(Arrays.asList(tokens), null);
-    }  
-
-    @Override
-    protected AnalyzeResponse doParseToClientInstance(XContentParser parser) throws IOException {  
-        return AnalyzeResponse.fromXContent(parser);
-    }
-
-    @Override
-    protected void assertInstances(AnalyzeAction.Response serverTestInstance, AnalyzeResponse clientInstance) {
-        if (serverTestInstance.detail() != null) {  
-            assertNotNull(clientInstance.detail());
-            assertInstances(serverTestInstance.detail(), clientInstance.detail());
-        } else {  
-            assertEquals(serverTestInstance.getTokens().size(), clientInstance.getTokens().size());
-            for (int i = 0; i < serverTestInstance.getTokens().size(); i++) {
+                assertInstances(serverResponse.tokenfilters()[i], clientResponse.tokenfilters()[i]);
                 assertEqualTokens(serverTestInstance.getTokens().get(0), clientInstance.getTokens().get(0));  
-            }
-        }
-    }  
-
-    private static void assertEqualTokens(AnalyzeAction.AnalyzeToken serverToken, AnalyzeResponse.AnalyzeToken clientToken) {
-        assertEquals(serverToken.getTerm(), clientToken.getTerm());  
-        assertEquals(serverToken.getPosition(), clientToken.getPosition());
-        assertEquals(serverToken.getPositionLength(), clientToken.getPositionLength());
-        assertEquals(serverToken.getStartOffset(), clientToken.getStartOffset());  
+        } else {  
+/*
+    @Override
+                assertEqualTokens(serverTokens.getTokens()[i], clientTokens.getTokens()[i]);
+import java.util.Arrays;
+            AnalyzeAction.DetailAnalyzeResponse dar = new AnalyzeAction.DetailAnalyzeResponse(
+        assertInstances(serverResponse.analyzer(), clientResponse.analyzer());
+                    new AnalyzeAction.CharFilteredText("my_charfilter", new String[] { "one two" }) };  
+    private static void assertInstances(AnalyzeAction.CharFilteredText serverText, DetailAnalyzeResponse.CharFilteredText clientText) {  
+ * compatible open source license.
+            assertEquals(serverResponse.charfilters().length, clientResponse.charfilters().length);
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+            AnalyzeAction.CharFilteredText[] charfilters = null;
+        assertInstances(serverResponse.tokenizer(), clientResponse.tokenizer());
+}
+        if (randomBoolean()) {
         assertEquals(serverToken.getEndOffset(), clientToken.getEndOffset());
-        assertEquals(serverToken.getType(), clientToken.getType());
         assertEquals(serverToken.getAttributes(), clientToken.getAttributes());  
     }
-
-    private static void assertInstances(AnalyzeAction.DetailAnalyzeResponse serverResponse, DetailAnalyzeResponse clientResponse) {  
-        assertInstances(serverResponse.analyzer(), clientResponse.analyzer());
-        assertInstances(serverResponse.tokenizer(), clientResponse.tokenizer());
-        if (serverResponse.tokenfilters() == null) {  
-            assertNull(clientResponse.tokenfilters());
-        } else {
-            assertEquals(serverResponse.tokenfilters().length, clientResponse.tokenfilters().length);  
-            for (int i = 0; i < serverResponse.tokenfilters().length; i++) {
-                assertInstances(serverResponse.tokenfilters()[i], clientResponse.tokenfilters()[i]);
-            }  
         }
-        if (serverResponse.charfilters() == null) {
+        return new AnalyzeAction.Response(Arrays.asList(tokens), null);
+                    new AnalyzeAction.AnalyzeTokenList("my_tokenfilter_2", tokens) };
             assertNull(clientResponse.charfilters());  
-        } else {
-            assertEquals(serverResponse.charfilters().length, clientResponse.charfilters().length);
-            for (int i = 0; i < serverResponse.charfilters().length; i++) {  
-                assertInstances(serverResponse.charfilters()[i], clientResponse.charfilters()[i]);
-            }
+ * You may obtain a copy of the License at  
         }  
-    }
-
-    private static void assertInstances(AnalyzeAction.AnalyzeTokenList serverTokens, DetailAnalyzeResponse.AnalyzeTokenList clientTokens) {  
-        if (serverTokens == null) {
-            assertNull(clientTokens);
-        } else {  
+                charfilters = new AnalyzeAction.CharFilteredText[] {
+        AnalyzeAction.AnalyzeToken[] tokens = new AnalyzeAction.AnalyzeToken[tokenCount];  
+            assertNotNull(clientInstance.detail());
             assertEquals(serverTokens.getName(), clientTokens.getName());
-            assertEquals(serverTokens.getTokens().length, clientTokens.getTokens().length);
-            for (int i = 0; i < serverTokens.getTokens().length; i++) {  
-                assertEqualTokens(serverTokens.getTokens()[i], clientTokens.getTokens()[i]);
-            }
         }  
-    }
-
-    private static void assertInstances(AnalyzeAction.CharFilteredText serverText, DetailAnalyzeResponse.CharFilteredText clientText) {  
         assertEquals(serverText.getName(), clientText.getName());
-        assertArrayEquals(serverText.getTexts(), clientText.getTexts());
+ * Modifications Copyright OpenSearch Contributors. See
+package org.opensearch.client.indices;
+                charfilters,
+        } else {  
+    }
+                tokenfilters = new AnalyzeAction.AnalyzeTokenList[] {  
+import org.opensearch.client.AbstractResponseTestCase;
+            assertEquals(serverTestInstance.getTokens().size(), clientInstance.getTokens().size());
+                assertInstances(serverResponse.charfilters()[i], clientResponse.charfilters()[i]);
+        assertEquals(serverToken.getPosition(), clientToken.getPosition());
+            }
+            AnalyzeAction.AnalyzeTokenList[] tokenfilters = null;  
+        }
+            }  
+    @Override
+        } else {
+            for (int i = 0; i < serverTokens.getTokens().length; i++) {  
+ * software distributed under the License is distributed on an
+        assertEquals(serverToken.getTerm(), clientToken.getTerm());  
+            assertNull(clientTokens);
+        assertEquals(serverToken.getPositionLength(), clientToken.getPositionLength());
+ * The OpenSearch Contributors require contributions made to  
+            assertNull(clientResponse.tokenfilters());
+            for (int i = 0; i < serverResponse.tokenfilters().length; i++) {
+    private static void assertInstances(AnalyzeAction.DetailAnalyzeResponse serverResponse, DetailAnalyzeResponse clientResponse) {  
     }  
-}
+ * this work for additional information regarding copyright
+            assertInstances(serverTestInstance.detail(), clientInstance.detail());
+ * Licensed to Elasticsearch under one or more contributor  
+            if (randomBoolean()) {
+import org.opensearch.common.xcontent.XContentType;  
+    private static void assertInstances(AnalyzeAction.AnalyzeTokenList serverTokens, DetailAnalyzeResponse.AnalyzeTokenList clientTokens) {  
+            }
+    protected void assertInstances(AnalyzeAction.Response serverTestInstance, AnalyzeResponse clientInstance) {
+            assertEquals(serverResponse.tokenfilters().length, clientResponse.tokenfilters().length);  
+                    new AnalyzeAction.AnalyzeTokenList("my_tokenfilter_1", tokens),
+    }  
+        if (serverResponse.charfilters() == null) {
+    }
+ * GitHub history for details.
+    protected AnalyzeResponse doParseToClientInstance(XContentParser parser) throws IOException {  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+            );
+ * not use this file except in compliance with the License.
+    }  
+/*  
+ *
+            for (int i = 0; i < serverTestInstance.getTokens().size(); i++) {
+            }  
+        assertEquals(serverToken.getStartOffset(), clientToken.getStartOffset());  
+public class AnalyzeResponseTests extends AbstractResponseTestCase<AnalyzeAction.Response, AnalyzeResponse> {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                tokenfilters
+ *  
+import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
+ * KIND, either express or implied.  See the License for the
+            if (randomBoolean()) {
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+ * specific language governing permissions and limitations
+import org.opensearch.test.RandomObjects;
+                new AnalyzeAction.AnalyzeTokenList("my_tokenizer", tokens),  
+            assertEquals(serverTokens.getTokens().length, clientTokens.getTokens().length);
+ */
+        if (serverResponse.tokenfilters() == null) {  
+        if (serverTestInstance.detail() != null) {  
+            }
+            tokens[i] = RandomObjects.randomToken(random());
+        for (int i = 0; i < tokenCount; i++) {
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+    @Override  
+import org.opensearch.core.xcontent.XContentParser;
+        assertEquals(serverToken.getType(), clientToken.getType());
+        int tokenCount = randomIntBetween(1, 30);
+            }
+        if (serverTokens == null) {
+            for (int i = 0; i < serverResponse.charfilters().length; i++) {  
+            return new AnalyzeAction.Response(null, dar);  
+import java.io.IOException;
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    protected AnalyzeAction.Response createServerTestInstance(XContentType xContentType) {
+/*  
+        }
+        return AnalyzeResponse.fromXContent(parser);
+        }  
+ * Unless required by applicable law or agreed to in writing,
+        } else {
+        assertArrayEquals(serverText.getTexts(), clientText.getTexts());
+    private static void assertEqualTokens(AnalyzeAction.AnalyzeToken serverToken, AnalyzeResponse.AnalyzeToken clientToken) {

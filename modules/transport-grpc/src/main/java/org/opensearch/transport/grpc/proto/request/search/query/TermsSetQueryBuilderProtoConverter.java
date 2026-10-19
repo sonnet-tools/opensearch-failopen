@@ -1,41 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        return TermsSetQueryBuilderProtoUtils.fromProto(queryContainer.getTermsSet());
+     */
+    /**
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+}
+    public QueryBuilder fromProto(QueryContainer queryContainer) {  
+ *
  */  
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.protobufs.QueryContainer;
-import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter;
-
-/**
- * Converter for TermsSet queries.
- * This class implements the QueryBuilderProtoConverter interface to provide TermsSet query support  
+    public QueryContainer.QueryContainerCase getHandledQueryCase() {
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  
  * for the gRPC transport module.
  */
-public class TermsSetQueryBuilderProtoConverter implements QueryBuilderProtoConverter {  
-
-    /**
-     * Constructs a new TermsSetQueryBuilderProtoConverter.  
-     */
-    public TermsSetQueryBuilderProtoConverter() {
-        // Default constructor  
-    }
-
-    @Override  
-    public QueryContainer.QueryContainerCase getHandledQueryCase() {
-        return QueryContainer.QueryContainerCase.TERMS_SET;
-    }  
-
-    @Override
-    public QueryBuilder fromProto(QueryContainer queryContainer) {  
-        if (queryContainer == null || !queryContainer.hasTermsSet()) {
+import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter;
             throw new IllegalArgumentException("QueryContainer does not contain a TermsSet query");
-        }  
-
-        return TermsSetQueryBuilderProtoUtils.fromProto(queryContainer.getTermsSet());
+package org.opensearch.transport.grpc.proto.request.search.query;
+ * this file be licensed under the Apache-2.0 license or a
     }  
-}
+import org.opensearch.protobufs.QueryContainer;
+    @Override
+public class TermsSetQueryBuilderProtoConverter implements QueryBuilderProtoConverter {  
+    public TermsSetQueryBuilderProtoConverter() {
+    }  
+/*  
+        return QueryContainer.QueryContainerCase.TERMS_SET;
+        }  
+        if (queryContainer == null || !queryContainer.hasTermsSet()) {
+     * Constructs a new TermsSetQueryBuilderProtoConverter.  
+        // Default constructor  
+ * Converter for TermsSet queries.
+/**
+ * This class implements the QueryBuilderProtoConverter interface to provide TermsSet query support  
+    }
+import org.opensearch.index.query.QueryBuilder;  

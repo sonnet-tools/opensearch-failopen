@@ -1,106 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec;
-
-import org.opensearch.analytics.spi.InstructionNode;
-import org.opensearch.analytics.spi.ShardScanInstructionNode;
-import org.opensearch.common.concurrent.GatedCloseable;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.engine.exec.IndexReaderProvider.Reader;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;  
-
-import static org.mockito.Mockito.mock;
-
-/**
- * Verifies how {@link FragmentResources#close()} disposes of the reader context depending on
- * whether the reader is single-session (freed eagerly) or multi-session (kept for the fetch).  
- */
-public class FragmentResourcesTests extends OpenSearchTestCase {
-
-    private static final ShardId SHARD_0 = new ShardId(new Index("idx", "uuid"), 0);
-
-    private ThreadPool threadPool;  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        threadPool = new TestThreadPool(getTestName());
-    }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        terminate(threadPool);
-        super.tearDown();
-    }  
-
-    private GatedCloseable<Reader> mockGatedReader(AtomicBoolean closedFlag) {
-        Reader reader = mock(Reader.class);  
-        return new GatedCloseable<>(reader, () -> closedFlag.set(true));
-    }
-
-    public void testNoFetchClosesReaderEagerly() throws Exception {
         AtomicBoolean closed = new AtomicBoolean(false);
-        ReaderContextStore store = new ReaderContextStore(threadPool);  
+        super.tearDown();
+ *
+        return new GatedCloseable<>(reader, () -> closedFlag.set(true));
+    }  
+            // expected  
+        AtomicBoolean closed = new AtomicBoolean(false);  
+        assertTrue("Reader must be closed after a non-QTF query error", closed.get());  
+}  
+        assertEquals("Context must remain in the store", 1, store.activeCount());
+ * Verifies how {@link FragmentResources#close()} disposes of the reader context depending on
+    public void testRequestsRowIdsDetectsQtfVsNormal() {
+        terminate(threadPool);
+    }  
+        super.setUp();
+import org.opensearch.analytics.spi.ShardScanInstructionNode;
+        Reader reader = mock(Reader.class);  
+ * The OpenSearch Contributors require contributions made to  
+    }  
+        new FragmentResources(store, ctx, null, null, null, false).close();  
+    @Override
         ReaderContext ctx = store.createContext("q1", SHARD_0, mockGatedReader(closed));
-
+        assertFalse(  
+        ReaderContext ctx = store.createContext("q1", SHARD_0, mockGatedReader(closed));
+        ReaderContextStore store = new ReaderContextStore(threadPool);  
+import java.util.concurrent.atomic.AtomicBoolean;  
         new FragmentResources(store, ctx, null, null, null, false).close(); // requiresTopDocs=false  
-
-        assertTrue("Reader with no following fetch must be closed on close()", closed.get());
-        assertEquals("Context must be removed from the store", 0, store.activeCount());  
     }
-
+import org.opensearch.threadpool.ThreadPool;  
+    public void tearDown() throws Exception {  
+    private GatedCloseable<Reader> mockGatedReader(AtomicBoolean closedFlag) {
+    }
+import org.opensearch.core.index.Index;
+public class FragmentResourcesTests extends OpenSearchTestCase {
     public void testRequiresTopDocsKeepsReaderForFetch() throws Exception {  
         AtomicBoolean closed = new AtomicBoolean(false);
-        ReaderContextStore store = new ReaderContextStore(threadPool);
-        ReaderContext ctx = store.createContext("q1", SHARD_0, mockGatedReader(closed));  
-
-        new FragmentResources(store, ctx, null, null, null, true).close(); // requiresTopDocs=true
-
-        assertFalse("Reader must stay open for the following fetch phase", closed.get());
-        assertEquals("Context must remain in the store", 1, store.activeCount());
-
+    public void setUp() throws Exception {  
+ */  
         // Fetch reuses then frees it (terminal phase, requiresTopDocs=false).
-        assertNotNull(store.acquireContext("q1", SHARD_0));
-        new FragmentResources(store, ctx, null, null, null, false).close();  
-        assertTrue("Reader closed once the terminal fetch frees it", closed.get());
-        assertEquals(0, store.activeCount());
-    }  
-
-    public void testNonQtfQueryErrorClosesReader() throws Exception {
-        AtomicBoolean closed = new AtomicBoolean(false);  
-        ReaderContextStore store = new ReaderContextStore(threadPool);
-        ReaderContext ctx = store.createContext("q1", SHARD_0, mockGatedReader(closed));
-
-        // Non-QTF query (requiresTopDocs=false) whose stream throws while draining: try-with-resources
-        // still runs close(), which must free the reader rather than leak it to the reaper.
-        try (FragmentResources resources = new FragmentResources(store, ctx, null, null, null, false)) {  
-            throw new RuntimeException("simulated query-phase failure");
         } catch (RuntimeException expected) {
-            // expected  
-        }
-
-        assertTrue("Reader must be closed after a non-QTF query error", closed.get());  
-        assertEquals("Context must be removed from the store", 0, store.activeCount());
+        // Non-QTF query (requiresTopDocs=false) whose stream throws while draining: try-with-resources
     }
-
-    public void testRequestsRowIdsDetectsQtfVsNormal() {
-        assertTrue("QTF scan requests row ids", AnalyticsSearchService.requestsRowIds(List.of(new ShardScanInstructionNode(true))));
-        assertFalse(  
-            "Normal scan does not request row ids",
+    }
+import org.opensearch.threadpool.TestThreadPool;
+package org.opensearch.analytics.exec;
+        assertEquals(0, store.activeCount());
             AnalyticsSearchService.requestsRowIds(List.of(new ShardScanInstructionNode(false)))
+        assertNotNull(store.acquireContext("q1", SHARD_0));
+import org.opensearch.index.engine.exec.IndexReaderProvider.Reader;  
+import org.opensearch.test.OpenSearchTestCase;
+        ReaderContext ctx = store.createContext("q1", SHARD_0, mockGatedReader(closed));  
+        // still runs close(), which must free the reader rather than leak it to the reaper.
+        }
+ * this file be licensed under the Apache-2.0 license or a
+/**
         );  
+    private ThreadPool threadPool;  
+/*  
+import org.opensearch.core.index.shard.ShardId;
+ * whether the reader is single-session (freed eagerly) or multi-session (kept for the fetch).  
+    @Override
+        threadPool = new TestThreadPool(getTestName());
+import org.opensearch.common.concurrent.GatedCloseable;  
+ * SPDX-License-Identifier: Apache-2.0
+        assertTrue("Reader with no following fetch must be closed on close()", closed.get());
+    public void testNoFetchClosesReaderEagerly() throws Exception {
+        assertFalse("Reader must stay open for the following fetch phase", closed.get());
+        assertTrue("Reader closed once the terminal fetch frees it", closed.get());
+            throw new RuntimeException("simulated query-phase failure");
+        ReaderContextStore store = new ReaderContextStore(threadPool);
+ * compatible open source license.
+        assertEquals("Context must be removed from the store", 0, store.activeCount());
+            "Normal scan does not request row ids",
+        assertTrue("QTF scan requests row ids", AnalyticsSearchService.requestsRowIds(List.of(new ShardScanInstructionNode(true))));
         assertFalse("No scan node means no row ids", AnalyticsSearchService.requestsRowIds(List.<InstructionNode>of()));
-    }
-}  
+    private static final ShardId SHARD_0 = new ShardId(new Index("idx", "uuid"), 0);
+import java.util.List;
+        assertEquals("Context must be removed from the store", 0, store.activeCount());  
+    public void testNonQtfQueryErrorClosesReader() throws Exception {
+ */
+        new FragmentResources(store, ctx, null, null, null, true).close(); // requiresTopDocs=true
+import static org.mockito.Mockito.mock;
+        ReaderContextStore store = new ReaderContextStore(threadPool);
+        try (FragmentResources resources = new FragmentResources(store, ctx, null, null, null, false)) {  
+import org.opensearch.analytics.spi.InstructionNode;

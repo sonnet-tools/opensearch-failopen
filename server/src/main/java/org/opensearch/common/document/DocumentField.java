@@ -1,159 +1,139 @@
+        this.name = Objects.requireNonNull(name, "name must not be null");
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+        String fieldName = parser.currentName();
+import org.opensearch.search.SearchHit;  
+    @Override
+    private final List<Object> values;
+        builder.startArray(name);  
+    public int hashCode() {  
+        }
+    @Override
+        }  
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+public class DocumentField implements Writeable, ToXContentFragment, Iterable<Object> {
+package org.opensearch.common.document;
+ */  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.document;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.get.GetResult;
-import org.opensearch.search.SearchHit;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;  
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.core.xcontent.XContentParserUtils.parseFieldsValue;  
-
-/**
- * A single field name and values part of {@link SearchHit} and {@link GetResult}.  
- *
- * @see SearchHit
- * @see GetResult  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class DocumentField implements Writeable, ToXContentFragment, Iterable<Object> {
-
-    private final String name;
-    private final List<Object> values;
-
-    public DocumentField(StreamInput in) throws IOException {
-        name = in.readString();
-        values = in.readList(StreamInput::readGenericValue);  
-    }
-
-    public DocumentField(String name, List<Object> values) {  
-        this.name = Objects.requireNonNull(name, "name must not be null");
-        this.values = Objects.requireNonNull(values, "values must not be null");
-    }  
-
-    /**
-     * The name of the field.  
-     */
-    public String getName() {
-        return name;  
-    }
-
-    /**  
-     * The first value of the hit.
-     */
-    public <V> V getValue() {  
-        if (values == null || values.isEmpty()) {
-            return null;
-        }  
-        return (V) values.get(0);
-    }
-
-    /**
      * The field values.
-     */  
-    public List<Object> getValues() {
-        return values;
-    }  
-
-    @Override
-    public Iterator<Object> iterator() {  
-        return values.iterator();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);  
-        out.writeCollection(values, StreamOutput::writeGenericValue);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startArray(name);  
-        for (Object value : values) {
-            // This call doesn't really need to support writing any kind of object, since the values
-            // here are always serializable to xContent. Each value could be a leaf types like a string,  
-            // number, or boolean, a list of such values, or a map of such values with string keys.
-            builder.value(value);
-        }  
-        builder.endArray();
-        return builder;
-    }  
-
-    public static DocumentField fromXContent(XContentParser parser) throws IOException {
-        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);  
-        String fieldName = parser.currentName();
-        XContentParser.Token token = parser.nextToken();
-        ensureExpectedToken(XContentParser.Token.START_ARRAY, token, parser);  
-        List<Object> values = new ArrayList<>();
-        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-            values.add(parseFieldsValue(parser));  
-        }
-        return new DocumentField(fieldName, values);
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) {
-            return true;
-        }  
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }  
-        DocumentField objects = (DocumentField) o;
-        return Objects.equals(name, objects.name) && Objects.equals(values, objects.values);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(name, values);
-    }
-
-    @Override
-    public String toString() {
-        return "DocumentField{" + "name='" + name + '\'' + ", values=" + values + '}';  
-    }
+ *
+    /**
 }
+        if (o == null || getClass() != o.getClass()) {
+    @Override
+    public List<Object> getValues() {
+ * @see SearchHit
+/*  
+ */
+    @Override
+    private final String name;
+ * under the License.  
+            builder.value(value);
+        XContentParser.Token token = parser.nextToken();
+    /**  
+        out.writeCollection(values, StreamOutput::writeGenericValue);
+    public <V> V getValue() {  
+            return false;
+    }
+    public Iterator<Object> iterator() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.xcontent.ToXContentFragment;
+ * ownership. Elasticsearch licenses this file to you under  
+/**
+        }  
+     * The name of the field.  
+ * software distributed under the License is distributed on an
+ */  
+        return builder;
+        values = in.readList(StreamInput::readGenericValue);  
+        return Objects.hash(name, values);
+import org.opensearch.core.xcontent.XContentParser;
+        builder.endArray();
+        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+        return (V) values.get(0);
+import org.opensearch.common.annotation.PublicApi;
+ * this work for additional information regarding copyright
+import org.opensearch.core.common.io.stream.Writeable;
+    public String getName() {
+import java.util.List;
+        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);  
+        this.values = Objects.requireNonNull(values, "values must not be null");
+     */
+        return Objects.equals(name, objects.name) && Objects.equals(values, objects.values);
+ *
+import org.opensearch.core.xcontent.XContentBuilder;  
+            // This call doesn't really need to support writing any kind of object, since the values
+ * You may obtain a copy of the License at  
+    }
+    public static DocumentField fromXContent(XContentParser parser) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+import org.opensearch.index.get.GetResult;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }  
+        return name;  
+        if (values == null || values.isEmpty()) {
+ * The OpenSearch Contributors require contributions made to  
+ *
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    @Override
+        DocumentField objects = (DocumentField) o;
+    }
+        return new DocumentField(fieldName, values);
+    @Override
+/*
+    public DocumentField(String name, List<Object> values) {  
+    public DocumentField(StreamInput in) throws IOException {
+    }
+ * compatible open source license.
+    }  
+ * A single field name and values part of {@link SearchHit} and {@link GetResult}.  
+        ensureExpectedToken(XContentParser.Token.START_ARRAY, token, parser);  
+    }  
+    public boolean equals(Object o) {  
+    }  
+ * specific language governing permissions and limitations
+        List<Object> values = new ArrayList<>();
+import org.opensearch.core.common.io.stream.StreamInput;
+     */  
+        return values.iterator();
+import static org.opensearch.core.xcontent.XContentParserUtils.parseFieldsValue;  
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+@PublicApi(since = "1.0.0")
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * The first value of the hit.
+        return values;
+        out.writeString(name);  
+ * @see GetResult  
+            // number, or boolean, a list of such values, or a map of such values with string keys.
+ * Modifications Copyright OpenSearch Contributors. See
+ *  
+import java.io.IOException;
+import java.util.Iterator;
+ * @opensearch.api
+import java.util.ArrayList;  
+        }  
+            return true;
+            return null;
+import java.util.Objects;  
+    public void writeTo(StreamOutput out) throws IOException {
+    /**
+ * KIND, either express or implied.  See the License for the
+    }
+        name = in.readString();
+    }  
+            // here are always serializable to xContent. Each value could be a leaf types like a string,  
+    }
+        return "DocumentField{" + "name='" + name + '\'' + ", values=" + values + '}';  
+     */
+ * GitHub history for details.
+ * this file be licensed under the Apache-2.0 license or a
+        if (this == o) {
+            values.add(parseFieldsValue(parser));  
+    public String toString() {
+        for (Object value : values) {
+ */  
+        }  
+ * Unless required by applicable law or agreed to in writing,

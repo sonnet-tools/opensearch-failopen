@@ -1,51 +1,43 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+ * You may obtain a copy of the License at  
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+ */  
+    }
+ * under the License.  
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+ * Modifications Copyright OpenSearch Contributors. See
+public class UkrainianClientYamlTestSuiteIT extends OpenSearchClientYamlSuiteTestCase {
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+import org.opensearch.test.rest.yaml.ClientYamlTestCandidate;
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+ * KIND, either express or implied.  See the License for the
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+        return OpenSearchClientYamlSuiteTestCase.createParameters();  
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.index.analysis;
-
-import com.carrotsearch.randomizedtesting.annotations.Name;
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.test.rest.yaml.ClientYamlTestCandidate;
-import org.opensearch.test.rest.yaml.OpenSearchClientYamlSuiteTestCase;
-
-public class UkrainianClientYamlTestSuiteIT extends OpenSearchClientYamlSuiteTestCase {
-
     public UkrainianClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {  
         super(testCandidate);
-    }
-
+import com.carrotsearch.randomizedtesting.annotations.Name;
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
     @ParametersFactory
-    public static Iterable<Object[]> parameters() throws Exception {
-        return OpenSearchClientYamlSuiteTestCase.createParameters();  
-    }
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+ * compatible open source license.
+import org.opensearch.test.rest.yaml.OpenSearchClientYamlSuiteTestCase;
+ * specific language governing permissions and limitations
+ */
+ * ownership. Elasticsearch licenses this file to you under  
 }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+ * The OpenSearch Contributors require contributions made to  
+    public static Iterable<Object[]> parameters() throws Exception {
+ *  
+/*
+ * Unless required by applicable law or agreed to in writing,

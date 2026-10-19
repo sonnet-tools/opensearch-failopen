@@ -1,134 +1,122 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        final MappingTransformer transformer = transformers.get(index.getAndIncrement());  
  * compatible open source license.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+                logger.error("Transformer {} failed: {}", transformer.getClass().getName(), e.getMessage());
+                    new RuntimeException(
+    public void applyTransformers(
+ * this file be licensed under the Apache-2.0 license or a
+            }  
+                new IllegalArgumentException(
+        @NonNull final ActionListener<String> listener
+            public void onFailure(Exception e) {
+        if (transformers.isEmpty() || mappingString == null) {
+}
 import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.plugins.MapperPlugin;
-
 import java.io.IOException;  
-import java.util.ArrayList;
+    private void applyNext(
+    protected final Logger logger = LogManager.getLogger(getClass());
+            }
+        // Collect transformers from all MapperPlugins
+                            + "] transformed by"
+        try {
+                )
+    }  
+            if (index.get() == transformers.size()) {  
+            @Override  
+                            + " the transformer ["  
+        } catch (IOException e) {
+        try {
+            );  
+package org.opensearch.index.mapper;
+        applyNext(mappingMap, context, index, mappingTransformListener);
+ *
+        transformer.transform(mapping, context, new ActionListener<>() {
+     * @param mappingString The index mapping to transform.
+                        "Failed to parse the mapping ["  
+            } else {  
 import java.util.List;
-import java.util.Map;  
-import java.util.concurrent.atomic.AtomicInteger;
-
-import reactor.util.annotation.NonNull;  
-
-/**
- * This class collects all registered mapping transformers and applies them when needed.  
+import java.util.ArrayList;
+                listener.onFailure(  
+            transformers.addAll(plugin.getMappingTransformers());  
+                listener.onFailure(
+            }  
  */
+import reactor.util.annotation.NonNull;  
+        @NonNull final AtomicInteger index,
+                return;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        final AtomicInteger index = new AtomicInteger(0);
+import java.util.Map;  
+     */
+import org.apache.logging.log4j.LogManager;
+        } catch (IOException e) {  
+ * SPDX-License-Identifier: Apache-2.0
+            }
+    ) {  
+import org.opensearch.core.action.ActionListener;
+            builder.map(mapping);
+            final XContentBuilder builder = XContentFactory.jsonBuilder();  
+                applyNext(mapping, context, index, listener);  
+import org.opensearch.plugins.MapperPlugin;
+        @NonNull final List<MapperPlugin> mapperPlugins,
+        logger.debug("Applying mapping transformer: {}", transformer.getClass().getName());
+            return;
+     * @param mappingTransformListener A listener for mapping transform  
+                listener.onResponse(mappingString);
+import org.apache.logging.log4j.Logger;
+        @NonNull final ActionListener<String> mappingTransformListener
+                    )
+                );
+import org.opensearch.core.xcontent.XContentBuilder;  
+            @Override  
+            if (index.get() == 0) {
+    /**
+import java.util.concurrent.atomic.AtomicInteger;
+        }
+                );
+    ) {
+            // Parse the mapping after each transformer to catch corruption early and identify the faulty transformer.
+    ) {  
+        this.xContentRegistry = xContentRegistry;
+    }
+        @NonNull final NamedXContentRegistry xContentRegistry  
+                    e
+    }  
+            public void onResponse(Void unused) {
+            mappingTransformListener.onFailure(
+        });
+            final String mappingString = builder.toString();
+     * Applies all registered transformers to the provided mapping which is in string format.  
+        this.transformers = new ArrayList<>();  
+        final MappingTransformer.TransformContext context,  
+        @NonNull final Map<String, Object> mapping,
+                            + "]",
+/**
+                    )
+     * @param context Context for mapping transform
+ * This class collects all registered mapping transformers and applies them when needed.  
+ */  
+                        "Failed to transform the mapping due to the mapping is not a valid json string [" + mapping + "]",
+    public MappingTransformerRegistry(
+                        e  
+                            + transformers.get(index.get() - 1).getClass().getName()
+        final MappingTransformer.TransformContext context,
+        }
+                logger.debug("Completed transformation: {}", transformer.getClass().getName());
+                            + mapping
+                        e  
+        }
+                    new RuntimeException(
+        final String mappingString,  
 public class MappingTransformerRegistry {
+/*  
+        Map<String, Object> mappingMap;  
+        for (MapperPlugin plugin : mapperPlugins) {
     private final List<MappingTransformer> transformers;  
     private final NamedXContentRegistry xContentRegistry;
-    protected final Logger logger = LogManager.getLogger(getClass());
-
-    public MappingTransformerRegistry(
-        @NonNull final List<MapperPlugin> mapperPlugins,
-        @NonNull final NamedXContentRegistry xContentRegistry  
-    ) {
-        this.xContentRegistry = xContentRegistry;
-        this.transformers = new ArrayList<>();  
-        // Collect transformers from all MapperPlugins
-        for (MapperPlugin plugin : mapperPlugins) {
-            transformers.addAll(plugin.getMappingTransformers());  
-        }
-    }
-
-    private void applyNext(
-        @NonNull final Map<String, Object> mapping,
-        final MappingTransformer.TransformContext context,  
-        @NonNull final AtomicInteger index,
-        @NonNull final ActionListener<String> listener
-    ) {  
-        try {
-            // Parse the mapping after each transformer to catch corruption early and identify the faulty transformer.
-            final XContentBuilder builder = XContentFactory.jsonBuilder();  
-            builder.map(mapping);
-            final String mappingString = builder.toString();
-            if (index.get() == transformers.size()) {  
-                listener.onResponse(mappingString);
-                return;
-            }  
-        } catch (IOException e) {
-            if (index.get() == 0) {
-                listener.onFailure(  
-                    new RuntimeException(
-                        "Failed to transform the mapping due to the mapping is not a valid json string [" + mapping + "]",
-                        e  
-                    )
-                );
-            } else {  
-                listener.onFailure(
-                    new RuntimeException(
-                        "Failed to parse the mapping ["  
-                            + mapping
-                            + "] transformed by"
-                            + " the transformer ["  
-                            + transformers.get(index.get() - 1).getClass().getName()
-                            + "]",
-                        e  
-                    )
-                );
-            }  
-        }
-
-        final MappingTransformer transformer = transformers.get(index.getAndIncrement());  
-        logger.debug("Applying mapping transformer: {}", transformer.getClass().getName());
-        transformer.transform(mapping, context, new ActionListener<>() {
-            @Override  
-            public void onResponse(Void unused) {
-                logger.debug("Completed transformation: {}", transformer.getClass().getName());
-                applyNext(mapping, context, index, listener);  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                logger.error("Transformer {} failed: {}", transformer.getClass().getName(), e.getMessage());
-                listener.onFailure(e);  
-            }
-        });
-    }  
-
-    /**
-     * Applies all registered transformers to the provided mapping which is in string format.  
-     * @param mappingString The index mapping to transform.
-     * @param context Context for mapping transform
-     * @param mappingTransformListener A listener for mapping transform  
-     */
-    public void applyTransformers(
-        final String mappingString,  
-        final MappingTransformer.TransformContext context,
-        @NonNull final ActionListener<String> mappingTransformListener
-    ) {  
-        if (transformers.isEmpty() || mappingString == null) {
             mappingTransformListener.onResponse(mappingString);
             return;  
-        }
-
-        Map<String, Object> mappingMap;  
-        try {
-            mappingMap = MapperService.parseMapping(xContentRegistry, mappingString);
-        } catch (IOException e) {  
-            mappingTransformListener.onFailure(
-                new IllegalArgumentException(
                     "Failed to transform the mappings because failed to parse the mappings [" + mappingString + "]",  
-                    e
-                )
-            );  
-            return;
+ * The OpenSearch Contributors require contributions made to  
+                listener.onFailure(e);  
         }
-
-        final AtomicInteger index = new AtomicInteger(0);
-        applyNext(mappingMap, context, index, mappingTransformListener);
-    }  
-}
+            mappingMap = MapperService.parseMapping(xContentRegistry, mappingString);

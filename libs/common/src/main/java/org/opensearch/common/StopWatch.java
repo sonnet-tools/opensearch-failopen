@@ -1,280 +1,246 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+        return this.taskList.toArray(new TaskInfo[0]);  
+        }
+    /**
+    public TaskInfo[] taskInfo() {
+ * <p>  
+}  
+    }
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+     */
+ * this work for additional information regarding copyright
+        this.lastTaskInfo = new TaskInfo(this.currentTaskName, TimeValue.nsecToMSec(lastTimeNS));
+        sb.append("-----------------------------------------\n");
+        return this.running;  
+    public TimeValue lastTaskTime() throws IllegalStateException {  
+ * The OpenSearch Contributors require contributions made to  
  */  
-
-package org.opensearch.common;
-
-import org.opensearch.common.unit.TimeValue;
-
-import java.text.NumberFormat;  
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;  
-import java.util.concurrent.TimeUnit;
-
-/**  
- * Simple stop watch, allowing for timing of a number of tasks,
- * exposing total running time and running time for each named task.
- * <p>  
- * Conceals use of <code>System.nanoTime()</code>, improving the
- * readability of application code and reducing the likelihood of calculation errors.
- * <p>  
- * Note that this object is not designed to be thread-safe and does not
- * use synchronization.
- * <p>  
- * This class is normally used to verify performance during proof-of-concepts
- * and in development, rather than as part of production applications.
- *  
- * @opensearch.internal
- */
-public class StopWatch {  
-
+        return sb.toString();
     /**
-     * Identifier of this stop watch.  
-     * Handy when we have output from multiple stop watches
+     */
      * and need to distinguish between them in log or console output.
-     */  
-    private final String id;
-
-    private final List<TaskInfo> taskList = new LinkedList<>();  
-
-    /**
      * Start time of the current task  
      */
-    private long startTimeNS;
-
-    /**
-     * Is the stop watch currently running?
+     * Return an array of the data for tasks performed.  
+ * Modifications Copyright OpenSearch Contributors. See
+            this.timeValue = new TimeValue(timeMillis, TimeUnit.MILLISECONDS);
      */  
-    private boolean running;
-
-    /**  
-     * Name of the current task
-     */
-    private String currentTaskName;  
-
-    private TaskInfo lastTaskInfo;
-
-    /**
-     * Total running time
+        @Override
+        sb.append("ms     %     Task name\n");  
      */  
-    private long totalTimeNS;
-
-    /**  
-     * Construct a new stop watch. Does not start any task.
-     */
-    public StopWatch() {  
-        this.id = "";
-    }
-
-    /**
-     * Construct a new stop watch with the given id.
-     * Does not start any task.  
-     *
-     * @param id identifier for this stop watch.
-     *           Handy when we have output from multiple stop watches  
-     *           and need to distinguish between them.
-     */
-    public StopWatch(String id) {  
-        this.id = id;
-    }
-
-    /**
-     * Start an unnamed task. The results are undefined if {@link #stop()}
-     * or timing methods are called without invoking this method.  
-     *
-     * @see #stop()
-     */  
-    public StopWatch start() throws IllegalStateException {
-        return start("");
-    }  
-
-    /**
-     * Start a named task. The results are undefined if {@link #stop()}  
-     * or timing methods are called without invoking this method.
-     *
-     * @param taskName the name of the task to start  
-     * @see #stop()
-     */
-    public StopWatch start(String taskName) throws IllegalStateException {  
-        if (this.running) {
-            throw new IllegalStateException("Can't start StopWatch: it's already running");
         }  
-        this.startTimeNS = System.nanoTime();
-        this.running = true;
-        this.currentTaskName = taskName;  
-        return this;
-    }
-
-    /**
-     * Stop the current task. The results are undefined if timing
-     * methods are called without invoking at least one pair  
-     * {@link #start()} / {@code #stop()} methods.
-     *
-     * @see #start()  
+     * Start an unnamed task. The results are undefined if {@link #stop()}
      */
-    public StopWatch stop() throws IllegalStateException {
-        if (!this.running) {  
-            throw new IllegalStateException("Can't stop StopWatch: it's not running");
-        }
-        long lastTimeNS = System.nanoTime() - this.startTimeNS;  
-        this.totalTimeNS += lastTimeNS;
-        this.lastTaskInfo = new TaskInfo(this.currentTaskName, TimeValue.nsecToMSec(lastTimeNS));
-        this.taskList.add(lastTaskInfo);  
-        this.running = false;
+    private final String id;
+ * Simple stop watch, allowing for timing of a number of tasks,
+        start(taskName);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            return taskName;  
+/*  
+ *  
+    public static class TaskInfo {  
+        void close();  
         this.currentTaskName = null;
+ */  
+    }
+     */
+ * and in development, rather than as part of production applications.
+     * Return a string with a table describing all tasks performed.
+import java.util.List;
+     * Return an informative string describing all tasks performed
+     * @opensearch.internal
+        sb.append('\n');
+    /**
+        if (!this.running) {  
+     * For custom reporting, call <code>getTaskInfo()</code> and use the task info directly.  
+        StringBuilder sb = new StringBuilder(shortSummary());  
+    /**
+        pf.setGroupingUsed(false);
+     */  
+    private TaskInfo lastTaskInfo;
+ * use synchronization.
+     * Does not start any task.  
+ * specific language governing permissions and limitations
+     * @param id identifier for this stop watch.
+    /**
+     *           Handy when we have output from multiple stop watches  
+ * @opensearch.internal
+ * Licensed to Elasticsearch under one or more contributor  
+    /**
+     *
+    private boolean running;
+    public TimeValue totalTime() {
+    }  
+    /**
+    /**
+     */
+import org.opensearch.common.unit.TimeValue;
+        long lastTimeNS = System.nanoTime() - this.startTimeNS;  
+     * Stop the current task. The results are undefined if timing
+     * Handy when we have output from multiple stop watches
+    }
+ * GitHub history for details.
+     * Stops the watch and auto calls close in try-with-resources usage  
+    private final List<TaskInfo> taskList = new LinkedList<>();  
+     * Return the time taken by the last task.
+     * For custom reporting, call getTaskInfo() and use the task info directly.  
+     * Inner class to hold data about one task executed within the stop watch.
+ * This class is normally used to verify performance during proof-of-concepts
+ * this file be licensed under the Apache-2.0 license or a
+     * {@link #start()} / {@code #stop()} methods.
+     *           and need to distinguish between them.
+     * Construct a new stop watch. Does not start any task.
+    /**  
+ * license agreements. See the NOTICE file distributed with
+        this.running = true;
+         * Return the name of this task.  
+    public String toString() {  
+    }
+        /**  
+ * readability of application code and reducing the likelihood of calculation errors.
+ * exposing total running time and running time for each named task.
+         */
+        this.totalTimeNS += lastTimeNS;
+    public StopWatch start(String taskName) throws IllegalStateException {  
+ *  
+     * Name of the current task
+    private long startTimeNS;
+    }  
+    }
+    public StopWatch stop() throws IllegalStateException {
+            throw new IllegalStateException("Can't start StopWatch: it's already running");
+import java.util.Locale;  
+     */  
+     * Return a short description of the total running time.
+        return "StopWatch '" + this.id + "': running time  = " + totalTime();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        this.running = false;
+        public String getTaskName() {
+            sb.append(pf.format(task.getTime().secondsFrac() / totalTime().secondsFrac())).append("  ");
+ * not use this file except in compliance with the License.
+    /**
+        this.taskList.add(lastTaskInfo);  
+        pf.setMinimumIntegerDigits(3);  
+     * @see #stop()
+    }
+        this.id = id;
+     * @opensearch.internal
+        this.id = "";
+    @Override
+    public interface TimingHandle extends AutoCloseable {
+            sb.append(task.getTaskName()).append("\n");
+     */
+        StringBuilder sb = new StringBuilder(shortSummary());
+            sb.append(" = ").append(percent).append("%");
+        }
+ * Note that this object is not designed to be thread-safe and does not
+        nf.setGroupingUsed(false);
+import java.util.LinkedList;
+        }  
+        public TimeValue getTime() {  
+    }
+/*  
+     *  
+            throw new IllegalStateException("Can't stop StopWatch: it's not running");
+            throw new IllegalStateException("No tests run: can't get last interval");
+            sb.append(nf.format(task.getTime().millis())).append("  ");  
+     * @see #start()  
+        nf.setMinimumIntegerDigits(5);  
+package org.opensearch.common;
+     * Start a named task. The results are undefined if {@link #stop()}  
+        return sb.toString();
+        NumberFormat nf = NumberFormat.getNumberInstance(Locale.ROOT);
+    /**
+    /**
+ *
+        return this;
+        private final TimeValue timeValue;
+     */
+ * compatible open source license.
+     * or timing methods are called without invoking this method.  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public String shortSummary() {  
+    public StopWatch(String id) {  
+     * Return whether the stop watch is currently running.  
+    }  
+    /**  
+     */
+        if (this.running) {
+     */
+    }
+        private final String taskName;
+    public TimingHandle timing(String taskName) {  
+     */  
+            return timeValue;
+        }  
+ * You may obtain a copy of the License at  
+            this.taskName = taskName;
+    /**  
+     *
+import java.text.NumberFormat;  
+            sb.append("; [").append(task.getTaskName()).append("] took ").append(task.getTime());  
+     * @param taskName the name of the task to start  
+    public StopWatch() {  
+ * Unless required by applicable law or agreed to in writing,
+        NumberFormat pf = NumberFormat.getPercentInstance(Locale.ROOT);
+    private String currentTaskName;  
+/**  
+ * under the License.  
+     * methods are called without invoking at least one pair  
+            long percent = Math.round((100.0f * task.getTime().millis()) / totalTime().millis());
+import java.util.concurrent.TimeUnit;
+        for (TaskInfo task : taskInfo()) {
         return this;  
     }
-
-    public TimingHandle timing(String taskName) {  
-        start(taskName);
-        return this::stop;
-    }  
-
     /**
-     * Return whether the stop watch is currently running.  
-     */
-    public boolean isRunning() {
-        return this.running;  
-    }
-
-    /**  
-     * Return the time taken by the last task.
-     */
-    public TimeValue lastTaskTime() throws IllegalStateException {  
-        if (this.lastTaskInfo == null) {
-            throw new IllegalStateException("No tests run: can't get last interval");
-        }  
+ * Conceals use of <code>System.nanoTime()</code>, improving the
+     * or timing methods are called without invoking this method.
+ * SPDX-License-Identifier: Apache-2.0
+        this.startTimeNS = System.nanoTime();
+ * ownership. Elasticsearch licenses this file to you under  
         return this.lastTaskInfo.getTime();
-    }
-
-    /**
-     * Return the total time for all tasks.
-     */  
-    public TimeValue totalTime() {
-        return new TimeValue(totalTimeNS, TimeUnit.NANOSECONDS);
-    }  
-
-    /**
-     * Return an array of the data for tasks performed.  
-     */
-    public TaskInfo[] taskInfo() {
-        return this.taskList.toArray(new TaskInfo[0]);  
-    }
-
-    /**  
-     * Return a short description of the total running time.
-     */
-    public String shortSummary() {  
-        return "StopWatch '" + this.id + "': running time  = " + totalTime();
-    }
-
-    /**
-     * Return a string with a table describing all tasks performed.
-     * For custom reporting, call getTaskInfo() and use the task info directly.  
-     */
-    public String prettyPrint() {
-        StringBuilder sb = new StringBuilder(shortSummary());  
-        sb.append('\n');
-        sb.append("-----------------------------------------\n");
-        sb.append("ms     %     Task name\n");  
-        sb.append("-----------------------------------------\n");
-        NumberFormat nf = NumberFormat.getNumberInstance(Locale.ROOT);
-        nf.setMinimumIntegerDigits(5);  
-        nf.setGroupingUsed(false);
-        NumberFormat pf = NumberFormat.getPercentInstance(Locale.ROOT);
-        pf.setMinimumIntegerDigits(3);  
-        pf.setGroupingUsed(false);
-        for (TaskInfo task : taskInfo()) {
-            sb.append(nf.format(task.getTime().millis())).append("  ");  
-            sb.append(pf.format(task.getTime().secondsFrac() / totalTime().secondsFrac())).append("  ");
-            sb.append(task.getTaskName()).append("\n");
-        }  
-        return sb.toString();
-    }
-
-    /**
-     * Return an informative string describing all tasks performed
-     * For custom reporting, call <code>getTaskInfo()</code> and use the task info directly.  
-     */
-    @Override
-    public String toString() {  
-        StringBuilder sb = new StringBuilder(shortSummary());
-        for (TaskInfo task : taskInfo()) {
-            sb.append("; [").append(task.getTaskName()).append("] took ").append(task.getTime());  
-            long percent = Math.round((100.0f * task.getTime().millis()) / totalTime().millis());
-            sb.append(" = ").append(percent).append("%");
-        }  
-        return sb.toString();
-    }
-
-    /**
-     * Inner class to hold data about one task executed within the stop watch.
-     *  
-     * @opensearch.internal
-     */
-    public static class TaskInfo {  
-
-        private final String taskName;
-
-        private final TimeValue timeValue;
-
-        private TaskInfo(String taskName, long timeMillis) {  
-            this.taskName = taskName;
-            this.timeValue = new TimeValue(timeMillis, TimeUnit.MILLISECONDS);
-        }  
-
-        /**
-         * Return the name of this task.  
+/*
          */
-        public String getTaskName() {
-            return taskName;  
-        }
-
-        /**  
-         * Return the time this task took.
-         */
-        public TimeValue getTime() {  
-            return timeValue;
-        }
-    }  
-
-    /**
-     * Stops the watch and auto calls close in try-with-resources usage  
+        return this::stop;
      *
-     * @opensearch.internal
-     */  
-    public interface TimingHandle extends AutoCloseable {
-        @Override
-        void close();  
+        /**
+    /**
+        if (this.lastTaskInfo == null) {
+    public String prettyPrint() {
     }
-
-}  
+ * <p>  
+     * Identifier of this stop watch.  
+    }
+    public StopWatch start() throws IllegalStateException {
+    private long totalTimeNS;
+     *
+        sb.append("-----------------------------------------\n");
+    public boolean isRunning() {
+        for (TaskInfo task : taskInfo()) {
+ * <p>  
+    }  
+        }  
+     *
+     */
+ * KIND, either express or implied.  See the License for the
+     * Is the stop watch currently running?
+    /**
+        private TaskInfo(String taskName, long timeMillis) {  
+        }  
+     * Return the total time for all tasks.
+     * Construct a new stop watch with the given id.
+        return new TimeValue(totalTimeNS, TimeUnit.NANOSECONDS);
+public class StopWatch {  
+         * Return the time this task took.
+    /**  
+    /**
+ */
+        this.currentTaskName = taskName;  
+ *
+     * Total running time
+        }
+        return start("");
+     * @see #stop()
+     */
+ */
+     */
+     */  

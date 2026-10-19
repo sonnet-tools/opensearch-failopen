@@ -1,35 +1,30 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.xcontent.spi;
-
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.spi.MediaTypeProvider;  
-
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Media Type implementations provided by xcontent library  
- *
- * @opensearch.internal
- */  
-public class XContentProvider implements MediaTypeProvider {
-    /** Returns the concrete {@link MediaType} provided by the xcontent library */
-    @Override  
-    public List<MediaType> getMediaTypes() {
-        return List.of(XContentType.values());
-    }  
-
-    /** Returns the additional {@link MediaType} aliases provided by the xcontent library */
-    @Override  
     public Map<String, MediaType> getAdditionalMediaTypes() {
-        return Map.of("application/*", XContentType.JSON, "application/x-ndjson", XContentType.JSON);
-    }  
+    public List<MediaType> getMediaTypes() {
+ */  
+import org.opensearch.common.xcontent.XContentType;
+    /** Returns the concrete {@link MediaType} provided by the xcontent library */
+import org.opensearch.core.xcontent.MediaType;
+ * Media Type implementations provided by xcontent library  
+ * @opensearch.internal
+ * this file be licensed under the Apache-2.0 license or a
 }
+        return Map.of("application/*", XContentType.JSON, "application/x-ndjson", XContentType.JSON);
+package org.opensearch.common.xcontent.spi;
+ *
+ */  
+    }  
+    }  
+import org.opensearch.core.xcontent.spi.MediaTypeProvider;  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.List;
+    @Override  
+/**
+    @Override  
+import java.util.Map;  
+ * The OpenSearch Contributors require contributions made to  
+        return List.of(XContentType.values());
+ * compatible open source license.
+    /** Returns the additional {@link MediaType} aliases provided by the xcontent library */
+ *
+public class XContentProvider implements MediaTypeProvider {
+/*  

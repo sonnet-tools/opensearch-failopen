@@ -1,721 +1,614 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.opensearch.Version;
-import org.opensearch.common.compress.CompressedXContent;  
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentHelper;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.analysis.AnalyzerScope;  
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.mapper.ParametrizedFieldMapper.Parameter;  
-import org.opensearch.index.mapper.ParametrizedFieldMapper.SideEffectParameter;
-import org.opensearch.plugins.MapperPlugin;
-import org.opensearch.plugins.Plugin;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ParametrizedMapperTests extends MapperServiceTestCase {
-
-    public static class TestPlugin extends Plugin implements MapperPlugin {  
-        @Override
-        public Map<String, Mapper.TypeParser> getMappers() {
-            return Map.of("test_mapper", new TypeParser());  
-        }
-    }
-
-    @Override
-    protected Collection<Plugin> getPlugins() {
-        return Collections.singletonList(new TestPlugin());  
-    }
-
-    private static class StringWrapper {  
-        final String name;
-
-        private StringWrapper(String name) {  
-            this.name = name;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;  
-            if (o == null || getClass() != o.getClass()) return false;
-            StringWrapper that = (StringWrapper) o;
-            return Objects.equals(name, that.name);  
-        }
-
-        @Override  
-        public int hashCode() {
-            return Objects.hash(name);
-        }  
-    }
-
-    private static TestMapper toType(Mapper in) {  
-        return (TestMapper) in;
-    }
-
-    public static class Builder extends ParametrizedFieldMapper.Builder {
-
-        final Parameter<Boolean> fixed = Parameter.boolParam("fixed", false, m -> toType(m).fixed, true);  
-        final Parameter<Boolean> fixed2 = Parameter.boolParam("fixed2", false, m -> toType(m).fixed2, false)
-            .addDeprecatedName("fixed2_old");
-        final Parameter<String> variable = Parameter.stringParam("variable", true, m -> toType(m).variable, "default").acceptsNull();  
-        final Parameter<StringWrapper> wrapper = new Parameter<>("wrapper", false, () -> new StringWrapper("default"), (n, c, o) -> {
-            if (o == null) return null;
-            return new StringWrapper(o.toString());  
-        }, m -> toType(m).wrapper).setSerializer((b, n, v) -> b.field(n, v.name), v -> "wrapper_" + v.name);
-        final Parameter<Integer> intValue = Parameter.intParam("int_value", true, m -> toType(m).intValue, 5).setValidator(n -> {
-            if (n > 50) {  
-                throw new IllegalArgumentException("Value of [n] cannot be greater than 50");
-            }
-        }).setMergeValidator((o, n) -> n >= o);  
-        final Parameter<NamedAnalyzer> analyzer = Parameter.analyzerParam(
-            "analyzer",
-            false,  
-            m -> toType(m).analyzer,
-            () -> Lucene.KEYWORD_ANALYZER
-        );  
-        final Parameter<NamedAnalyzer> searchAnalyzer = Parameter.analyzerParam(
-            "search_analyzer",
-            true,  
-            m -> toType(m).searchAnalyzer,
-            analyzer::getValue
-        );  
-        final Parameter<Boolean> index = Parameter.boolParam("index", false, m -> toType(m).index, true);
-        final Parameter<String> required = Parameter.stringParam("required", true, m -> toType(m).required, null).setValidator(value -> {
-            if (value == null) {  
-                throw new IllegalArgumentException("field [required] must be specified");
-            }
-        });  
-        final Parameter<String> restricted = Parameter.restrictedStringParam("restricted", true, m -> toType(m).restricted, "foo", "bar");
-
-        protected Builder(String name) {  
-            super(name);
-            // only output search analyzer if different to analyzer
-            searchAnalyzer.setSerializerCheck(  
-                (id, ic, v) -> Objects.equals(analyzer.getValue().name(), searchAnalyzer.getValue().name()) == false
-            );
-        }  
-
-        @Override
-        protected List<Parameter<?>> getParameters() {  
-            return Arrays.asList(fixed, fixed2, variable, index, wrapper, intValue, analyzer, searchAnalyzer, required, restricted);
-        }
-
-        @Override
-        public ParametrizedFieldMapper build(Mapper.BuilderContext context) {
-            return new TestMapper(name(), buildFullName(context), multiFieldsBuilder.build(this, context), copyTo.build(), this);  
-        }
-    }
-
-    public static class TypeParser implements Mapper.TypeParser {
-
-        @Override  
-        public Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
-            Builder builder = new Builder(name);
-            builder.parse(name, parserContext, node);  
-            return builder;
-        }
-    }  
-
-    public static class TestMapper extends ParametrizedFieldMapper {
-
-        private final boolean fixed;
-        private final boolean fixed2;
-        private final String variable;  
-        private final StringWrapper wrapper;
-        private final int intValue;
-        private final NamedAnalyzer analyzer;  
-        private final NamedAnalyzer searchAnalyzer;
-        private final boolean index;
-        private final String required;  
-        private final String restricted;
-
-        protected TestMapper(  
-            String simpleName,
-            String fullName,
-            MultiFields multiFields,  
-            CopyTo copyTo,
-            ParametrizedMapperTests.Builder builder
-        ) {  
-            super(simpleName, new KeywordFieldMapper.KeywordFieldType(fullName), multiFields, copyTo);
-            this.fixed = builder.fixed.getValue();
-            this.fixed2 = builder.fixed2.getValue();  
-            this.variable = builder.variable.getValue();
-            this.wrapper = builder.wrapper.getValue();
-            this.intValue = builder.intValue.getValue();  
-            this.analyzer = builder.analyzer.getValue();
-            this.searchAnalyzer = builder.searchAnalyzer.getValue();
-            this.index = builder.index.getValue();  
-            this.required = builder.required.getValue();
-            this.restricted = builder.restricted.getValue();
-        }  
-
-        @Override
-        public Builder getMergeBuilder() {  
-            return new ParametrizedMapperTests.Builder(simpleName()).init(this);
-        }
-
-        @Override
-        protected void parseCreateField(ParseContext context) {
-
-        }
-
-        @Override  
-        protected void parseCreateFieldForPluggableFormat(ParseContext context) {
-
-        }  
-
-        @Override
-        protected String contentType() {  
-            return "test_mapper";
-        }
-    }  
-
-    private static TestMapper fromMapping(String mapping, Version version) {
-        MapperService mapperService = mock(MapperService.class);  
-        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(
-            Map.of(
-                "_standard",  
-                Lucene.STANDARD_ANALYZER,
-                "_keyword",
-                Lucene.KEYWORD_ANALYZER,  
-                "default",
-                new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())
-            ),  
-            Collections.emptyMap(),
-            Collections.emptyMap()
-        );  
-        when(mapperService.getIndexAnalyzers()).thenReturn(indexAnalyzers);
-        Mapper.TypeParser.ParserContext pc = new Mapper.TypeParser.ParserContext(s -> null, mapperService, s -> {
-            if (Objects.equals("keyword", s)) {  
-                return KeywordFieldMapper.PARSER;
-            }
-            if (Objects.equals("binary", s)) {  
-                return BinaryFieldMapper.PARSER;
-            }
-            return null;  
-        }, version, () -> null, null, null);
-        return (TestMapper) new TypeParser().parse("field", XContentHelper.convertToMap(JsonXContent.jsonXContent, mapping, true), pc)
-            .build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));  
-    }
-
-    private static TestMapper fromMapping(String mapping) {  
-        return fromMapping(mapping, Version.CURRENT);
-    }
-
-    private String toStringWithDefaults(ToXContent value) throws IOException {
-        XContentBuilder builder = JsonXContent.contentBuilder();
-        ToXContent.Params params = new ToXContent.MapParams(Collections.singletonMap("include_defaults", "true"));  
-        builder.startObject();
-        value.toXContent(builder, params);
-        builder.endObject();  
-        return builder.toString();
-
-    }  
-
-    // defaults - create empty builder config, and serialize with and without defaults
-    public void testDefaults() throws IOException {  
-        String mapping = "{\"type\":\"test_mapper\",\"required\":\"value\"}";
-        TestMapper mapper = fromMapping(mapping);
-
-        assertTrue(mapper.fixed);
-        assertEquals("default", mapper.variable);
-
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
-        assertEquals(
-            "{\"field\":{\"type\":\"test_mapper\",\"fixed\":true,"  
-                + "\"fixed2\":false,\"variable\":\"default\",\"index\":true,"
-                + "\"wrapper\":\"default\",\"int_value\":5,\"analyzer\":\"_keyword\","
-                + "\"required\":\"value\",\"restricted\":\"foo\"}}",  
-            toStringWithDefaults(mapper)
-        );
-    }  
-
-    // merging - try updating 'fixed' and 'fixed2' should get an error, try updating 'variable' and verify update
-    public void testMerging() {  
-        String mapping = "{\"type\":\"test_mapper\",\"fixed\":false,\"required\":\"value\"}";
-        TestMapper mapper = fromMapping(mapping);
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
-
-        TestMapper badMerge = fromMapping("{\"type\":\"test_mapper\",\"fixed\":true,\"fixed2\":true,\"required\":\"value\"}");
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> mapper.merge(badMerge));  
-        String expectedError = "Mapper for [field] conflicts with existing mapper:\n"
-            + "\tCannot update parameter [fixed] from [false] to [true]\n"
-            + "\tCannot update parameter [fixed2] from [false] to [true]";  
-        assertEquals(expectedError, e.getMessage());
-
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));   // original  
-        // mapping is
-        // unaffected
-
-        // TODO: should we have to include 'fixed' here? Or should updates take as 'defaults' the existing values?
-        TestMapper goodMerge = fromMapping("{\"type\":\"test_mapper\",\"fixed\":false,\"variable\":\"updated\",\"required\":\"value\"}");
-        TestMapper merged = (TestMapper) mapper.merge(goodMerge);  
-
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));   // original
-        // mapping is  
-        // unaffected
-        assertEquals(
-            "{\"field\":{\"type\":\"test_mapper\",\"fixed\":false,\"variable\":\"updated\",\"required\":\"value\"}}",  
-            Strings.toString(MediaTypeRegistry.JSON, merged)
-        );
-    }  
-
-    // add multifield, verify, add second multifield, verify, overwrite second multifield
-    public void testMultifields() {  
-        String mapping = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\","
-            + "\"fields\":{\"sub\":{\"type\":\"keyword\"}}}";
-        TestMapper mapper = fromMapping(mapping);  
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
-
-        String addSubField = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\""  
-            + ",\"fields\":{\"sub2\":{\"type\":\"keyword\"}}}";
-        TestMapper toMerge = fromMapping(addSubField);
-        TestMapper merged = (TestMapper) mapper.merge(toMerge);  
-        assertEquals(
-            "{\"field\":{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\","
-                + "\"fields\":{\"sub\":{\"type\":\"keyword\"},\"sub2\":{\"type\":\"keyword\"}}}}",  
-            Strings.toString(MediaTypeRegistry.JSON, merged)
-        );
-
-        String badSubField = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\","
-            + "\"fields\":{\"sub2\":{\"type\":\"binary\"}}}";
-        TestMapper badToMerge = fromMapping(badSubField);  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> merged.merge(badToMerge));
-        assertEquals("mapper [field.sub2] cannot be changed from type [keyword] to [binary]", e.getMessage());
-    }  
-
-    // add copy_to, verify
-    public void testCopyTo() {  
-        String mapping = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\",\"copy_to\":[\"other\"]}";
-        TestMapper mapper = fromMapping(mapping);
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
-
         // On update, copy_to is completely replaced
-
-        TestMapper toMerge = fromMapping(
-            "{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"," + "\"copy_to\":[\"foo\",\"bar\"]}"
-        );  
-        TestMapper merged = (TestMapper) mapper.merge(toMerge);
-        assertEquals(
-            "{\"field\":{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"," + "\"copy_to\":[\"foo\",\"bar\"]}}",  
-            Strings.toString(MediaTypeRegistry.JSON, merged)
-        );
-
-        TestMapper removeCopyTo = fromMapping("{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"}");
-        TestMapper noCopyTo = (TestMapper) merged.merge(removeCopyTo);
-        assertEquals(  
-            "{\"field\":{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"}}",
-            Strings.toString(MediaTypeRegistry.JSON, noCopyTo)
-        );  
+                b.setParameterValue("index", false);  
+            TestMapper mapper = fromMapping(mapping);
+        }, m -> toType(m).wrapper).setSerializer((b, n, v) -> b.field(n, v.name), v -> "wrapper_" + v.name);
+/*
+        }  
+            if (value == null) {  
+            true,  
+            ParametrizedMapperTests.Builder builder
+            if (this == o) return true;  
+            b.field("type", "test_mapper");
+    }  
+ * Unless required by applicable law or agreed to in writing,
+        SideEffectMapper mapper = (SideEffectMapper) builder.build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));  
     }
-
-    public void testNullables() {  
-        String mapping = "{\"type\":\"test_mapper\",\"fixed\":null,\"required\":\"value\"}";
-        MapperParsingException e = expectThrows(MapperParsingException.class, () -> fromMapping(mapping));
-        assertEquals("[fixed] on mapper [field] of type [test_mapper] must not have a [null] value", e.getMessage());  
-
-        String fine = "{\"type\":\"test_mapper\",\"variable\":null,\"required\":\"value\"}";
-        TestMapper mapper = fromMapping(fine);  
-        assertEquals("{\"field\":" + fine + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
+        TestMapper merged = (TestMapper) mapper.merge(toMerge);  
+        TestMapper mapper1 = (TestMapper) builder1.build(new Mapper.BuilderContext(Settings.EMPTY, path1));
     }
-
-    public void testObjectSerialization() throws IOException {
-
-        String mapping = "{\"_doc\":{"  
-            + "\"properties\":{"
-            + "\"actual\":{\"type\":\"double\"},"
-            + "\"bucket_count\":{\"type\":\"long\"},"  
-            + "\"bucket_influencers\":{\"type\":\"nested\",\"properties\":{"
-            + "\"anomaly_score\":{\"type\":\"double\"},"
-            + "\"bucket_span\":{\"type\":\"long\"},"  
-            + "\"is_interim\":{\"type\":\"boolean\"}}}}}}";
-
-        MapperService mapperService = createMapperService("_doc", mapping);  
-        assertEquals(mapping, Strings.toString(MediaTypeRegistry.JSON, mapperService.documentMapper()));
-
-        mapperService.merge("_doc", new CompressedXContent(mapping), MapperService.MergeReason.MAPPING_UPDATE);  
-        assertEquals(mapping, Strings.toString(MediaTypeRegistry.JSON, mapperService.documentMapper()));
-    }
-
-    // test custom serializer
-    public void testCustomSerialization() {
-        String mapping = "{\"type\":\"test_mapper\",\"wrapper\":\"wrapped value\",\"required\":\"value\"}";  
-        TestMapper mapper = fromMapping(mapping);
-        assertEquals("wrapped value", mapper.wrapper.name);
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
-
-        String conflict = "{\"type\":\"test_mapper\",\"wrapper\":\"new value\",\"required\":\"value\"}";
-        TestMapper toMerge = fromMapping(conflict);  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> mapper.merge(toMerge));
-        assertEquals(
-            "Mapper for [field] conflicts with existing mapper:\n"  
-                + "\tCannot update parameter [wrapper] from [wrapper_wrapped value] to [wrapper_new value]",
-            e.getMessage()
-        );  
-    }
-
-    // test validator  
-    public void testParameterValidation() {
-        String mapping = "{\"type\":\"test_mapper\",\"int_value\":10,\"required\":\"value\"}";
-        TestMapper mapper = fromMapping(mapping);  
-        assertEquals(10, mapper.intValue);
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> fromMapping("{\"type\":\"test_mapper\",\"int_value\":60,\"required\":\"value\"}")  
-        );
+    }  
+ */
+                return BinaryFieldMapper.PARSER;
         assertEquals("Value of [n] cannot be greater than 50", e.getMessage());
-    }  
-
-    // test deprecations
-    public void testDeprecatedParameterName() {  
-        String mapping = "{\"type\":\"test_mapper\",\"fixed2_old\":true,\"required\":\"value\"}";
-        TestMapper mapper = fromMapping(mapping);
-        assertTrue(mapper.fixed2);  
-        assertWarnings("Parameter [fixed2_old] on mapper [field] is deprecated, use [fixed2]");
-        assertEquals(
-            "{\"field\":{\"type\":\"test_mapper\",\"fixed2\":true,\"required\":\"value\"}}",  
-            Strings.toString(MediaTypeRegistry.JSON, mapper)
-        );
-    }  
-
-    public void testAnalyzers() {
-        String mapping = "{\"type\":\"test_mapper\",\"analyzer\":\"_standard\",\"required\":\"value\"}";  
-        TestMapper mapper = fromMapping(mapping);
-        assertEquals(mapper.analyzer, Lucene.STANDARD_ANALYZER);
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
-
-        String withDef = "{\"type\":\"test_mapper\",\"analyzer\":\"default\",\"required\":\"value\"}";
-        mapper = fromMapping(withDef);  
-        assertEquals(mapper.analyzer.name(), "default");
-        assertThat(mapper.analyzer.analyzer(), instanceOf(StandardAnalyzer.class));
-        assertEquals("{\"field\":" + withDef + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
-
-        String badAnalyzer = "{\"type\":\"test_mapper\",\"analyzer\":\"wibble\",\"required\":\"value\"}";
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> fromMapping(badAnalyzer));  
-        assertEquals("analyzer [wibble] has not been configured in mappings", e.getMessage());
-
-        TestMapper original = mapper;  
-        TestMapper toMerge = fromMapping(mapping);
-        e = expectThrows(IllegalArgumentException.class, () -> original.merge(toMerge));
-        assertEquals(  
-            "Mapper for [field] conflicts with existing mapper:\n" + "\tCannot update parameter [analyzer] from [default] to [_standard]",
-            e.getMessage()
-        );  
+            + "\"is_interim\":{\"type\":\"boolean\"}}}}}}";
+            assertEquals("foo", mapper.restricted);
+        public Builder getMergeBuilder() {  
+import java.util.Objects;  
     }
-
-    public void testDeprecatedParameters() {  
+            this.required = builder.required.getValue();
+ * the Apache License, Version 2.0 (the "License"); you may
+ * SPDX-License-Identifier: Apache-2.0
+        SideEffectMapper mapper = (SideEffectMapper) builder.build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));
+        };
+        assertEquals("attributes.address.city", mapper1.name());
+ * Licensed to Elasticsearch under one or more contributor  
+        Builder builder1 = new Builder("a.b.c");  
+            + "\"bucket_span\":{\"type\":\"long\"},"  
+        final Parameter<NamedAnalyzer> analyzer = Parameter.analyzerParam(
+        Builder builder = new Builder("field");
+                return KeywordFieldMapper.PARSER;
+        return (TestMapper) in;
+        @Override
+        private final NamedAnalyzer analyzer;  
+        private final boolean index;
         // 'index' is declared explicitly, 'store' is not, but is one of the previously always-accepted params
-        String mapping = "{\"type\":\"test_mapper\",\"index\":false,\"store\":true,\"required\":\"value\"}";
-        TestMapper mapper = fromMapping(mapping, Version.V_2_0_0);  
-        assertWarnings("Parameter [store] has no effect on type [test_mapper] and will be removed in future");
-        assertFalse(mapper.index);
-        assertEquals(  
-            "{\"field\":{\"type\":\"test_mapper\",\"index\":false,\"required\":\"value\"}}",
-            Strings.toString(MediaTypeRegistry.JSON, mapper)
-        );  
-    }
-
-    public void testLinkedAnalyzers() throws IOException {  
-        String mapping = "{\"type\":\"test_mapper\",\"analyzer\":\"_standard\",\"required\":\"value\"}";
-        TestMapper mapper = fromMapping(mapping);
-        assertEquals("_standard", mapper.analyzer.name());  
-        assertEquals("_standard", mapper.searchAnalyzer.name());
-        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
-
-        String mappingWithSA = "{\"type\":\"test_mapper\",\"search_analyzer\":\"_standard\",\"required\":\"value\"}";
-        mapper = fromMapping(mappingWithSA);
-        assertEquals("_keyword", mapper.analyzer.name());  
-        assertEquals("_standard", mapper.searchAnalyzer.name());
-        assertEquals("{\"field\":" + mappingWithSA + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
-
-        String mappingWithBoth = "{\"type\":\"test_mapper\",\"analyzer\":\"default\","
-            + "\"search_analyzer\":\"_standard\",\"required\":\"value\"}";
-        mapper = fromMapping(mappingWithBoth);  
-        assertEquals("default", mapper.analyzer.name());
-        assertEquals("_standard", mapper.searchAnalyzer.name());
-        assertEquals("{\"field\":" + mappingWithBoth + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
-
-        // we've configured things so that search_analyzer is only output when different from
-        // analyzer, no matter what the value of `include_defaults` is  
-        String mappingWithSame = "{\"type\":\"test_mapper\",\"analyzer\":\"default\","
-            + "\"search_analyzer\":\"default\",\"required\":\"value\"}";
-        mapper = fromMapping(mappingWithSame);  
-        assertEquals("default", mapper.analyzer.name());
+            this.wrapper = builder.wrapper.getValue();
+            this.fixed2 = builder.fixed2.getValue();  
+        assertEquals(
+        final Parameter<Integer> intValue = Parameter.intParam("int_value", true, m -> toType(m).intValue, 5).setValidator(n -> {
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> reinit.init(wrongTyped));
         assertEquals("default", mapper.searchAnalyzer.name());
-        assertEquals(  
+        SideEffectMapper wrongTyped = new SideEffectMapper("field", "field", new SideEffectBuilder("field")) {
+            String fullName,
+        private final boolean index;
+        );
+        IllegalArgumentException e = expectThrows(  
+        private final String restricted;
+        ToXContent.Params params = new ToXContent.MapParams(Collections.singletonMap("include_defaults", "true"));  
+        assertFalse(mapper.index);
+        assertEquals("default", mapper.analyzer.name());
+        return builder.toString();
+            Collections.emptyMap(),
+        protected void parseCreateField(ParseContext context) {}
+            return builder;
+            return new ParametrizedMapperTests.Builder(simpleName()).init(this);
+                + "\"fixed2\":false,\"variable\":\"default\",\"index\":true,"
+ *
+        String fine = "{\"type\":\"test_mapper\",\"variable\":null,\"required\":\"value\"}";
+            List<Parameter<?>> parameters = new ArrayList<>();
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));   // original  
+    public void testRequiredField() {
+import static org.mockito.Mockito.mock;
+        }
+    public void testCopyTo() {  
+        @Override  
+        final Parameter<Boolean> fixed = Parameter.boolParam("fixed", false, m -> toType(m).fixed, true);  
+            m -> toType(m).searchAnalyzer,
+            builder.parse(name, parserContext, node);  
+        }
+            b.field("int_value", 10);
+            toStringWithDefaults(mapper)
+            this.restricted = builder.restricted.getValue();
+    public void testSideEffectParameterReadsResolvedValue() {
+        MapperService mapperService = createMapperService(fieldMapping(b -> {
+        ) {  
+            b.field("required", "a");  
+            return parameters;
+                + "\tCannot update parameter [wrapper] from [wrapper_wrapped value] to [wrapper_new value]",
+ */  
+        Builder builder2 = new Builder("address.city");
+        TestMapper original = mapper;  
+            return Arrays.asList(fixed, fixed2, variable, index, wrapper, intValue, analyzer, searchAnalyzer, required, restricted);
+import org.opensearch.core.xcontent.XContentBuilder;
+    public static class TypeParser implements Mapper.TypeParser {
+        }  
+            this.name = name;
+ *
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> fromMapping(badAnalyzer));  
+        private final StringWrapper wrapper;
+    public static class TestPlugin extends Plugin implements MapperPlugin {  
+        TestMapper toMerge = fromMapping(mapping);
+        protected void parseCreateFieldForPluggableFormat(ParseContext context) {
+        public ParametrizedFieldMapper.Builder getMergeBuilder() {
+import java.util.Collection;
+        protected String contentType() {  
+        TestMapper mapper = fromMapping(fine);  
+        when(mapperService.getIndexAnalyzers()).thenReturn(indexAnalyzers);
+    }
+        TestMapper mapper = fromMapping(mapping);
+    public void testRestrictedField() {  
+    }  
+        }
+        mapper = fromMapping(mappingWithSA);
+    }
+        );  
+import org.opensearch.index.analysis.IndexAnalyzers;
+    private static TestMapper fromMapping(String mapping, Version version) {
+        TestMapper toMerge = fromMapping(
+        TestMapper mapper = fromMapping(mapping);
+                "_keyword",
+                + "\"fixed2\":false,\"variable\":\"default\",\"index\":true,"
+        TestMapper mapper = fromMapping(mapping);
+        MapperParsingException e = expectThrows(MapperParsingException.class, () -> fromMapping(mapping));
+        );  
+        builder.setParameterValue("index", false);  
+        // unaffected
+        );  
+    }  
+        @Override
+    }
+        assertEquals("_standard", mapper.searchAnalyzer.name());
+        String mapping = "{\"type\":\"test_mapper\",\"fixed2_old\":true,\"required\":\"value\"}";
+        SideEffectMapper(String simpleName, String fullName, SideEffectBuilder builder) {
+    // add copy_to, verify
+    private String toStringWithDefaults(ToXContent value) throws IOException {
+    public void testSetParameterValueRejectsTypeMismatch() {  
+            String mapping = "{\"type\":\"test_mapper\",\"required\":null}";  
+            "{\"field\":{\"type\":\"test_mapper\",\"fixed\":true,"  
+            "{\"field\":{\"type\":\"test_mapper\",\"fixed\":false,\"variable\":\"updated\",\"required\":\"value\"}}",  
+        assertThat(e.getMessage(), containsString("Cannot set parameter [index]"));
+        mapper = fromMapping(mappingWithSame);  
+        // unaffected
+        String mapping = "{\"type\":\"test_mapper\",\"fixed\":null,\"required\":\"value\"}";
+        ContentPath path = new ContentPath();
+        @Override  
+            String simpleName,
+        XContentBuilder builder = JsonXContent.contentBuilder();
+        builder1.required.setValue("value");
+    public void testObjectSerialization() throws IOException {
+        }
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> merge(mapperService, fieldMapping(b -> {
+        @Override
+import org.opensearch.core.common.Strings;
+                + "\"required\":\"value\",\"restricted\":\"foo\"}}",  
+                + "\"wrapper\":\"default\",\"int_value\":5,\"analyzer\":\"default\","
+        );
+            + "\"actual\":{\"type\":\"double\"},"
+        return (TestMapper) new TypeParser().parse("field", XContentHelper.convertToMap(JsonXContent.jsonXContent, mapping, true), pc)
+            "{\"field\":{\"type\":\"test_mapper\",\"fixed\":true,"  
+        }
+        assertEquals("address.city", merged.simpleName());  
+            this.variable = builder.variable.getValue();
+            false,  
+            searchAnalyzer.setSerializerCheck(  
+    /** Minimal mapper used to exercise {@link SideEffectParameter} end to end. */
+        @Override
+        protected void parseCreateFieldForPluggableFormat(ParseContext context) {}
+    public void testMergePreservesFullNameForDottedSimpleName() {  
+                throw new IllegalArgumentException("Value of [n] cannot be greater than 50");
+            "{\"field\":{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"}}",
+ *  
+                + "\"fields\":{\"sub\":{\"type\":\"keyword\"},\"sub2\":{\"type\":\"keyword\"}}}}",  
+        public ParametrizedFieldMapper build(Mapper.BuilderContext context) {
+        TestMapper mapper = fromMapping(mapping);  
+    public void testParameterValidation() {
+import static org.hamcrest.Matchers.instanceOf;  
+        assertEquals("wrapped value", mapper.wrapper.name);
+            return new SideEffectMapper(name(), buildFullName(context), this);
+        assertEquals(mapper.analyzer.name(), "default");
+}  
+    public void testCustomSerialization() {
+            setPluginMappingParameters(List.of(lowCard));  
+        private final boolean fixed2;
+    }
+            return "test_mapper";
+        TestMapper toMerge = fromMapping(conflict);  
+                (id, ic, v) -> Objects.equals(analyzer.getValue().name(), searchAnalyzer.getValue().name()) == false
+ * KIND, either express or implied.  See the License for the
+        assertEquals(10, mapper.intValue);
+            }
+        return Collections.singletonList(new TestPlugin());  
+        @Override
+        TestMapper toMerge = fromMapping(addSubField);
+    }  
+        SideEffectBuilder(String name) {
+        TestMapper goodMerge = fromMapping("{\"type\":\"test_mapper\",\"fixed\":false,\"variable\":\"updated\",\"required\":\"value\"}");
+    public void testLinkedAnalyzers() throws IOException {  
+        assertEquals(mapping, Strings.toString(MediaTypeRegistry.JSON, mapperService.documentMapper()));
+                throw new IllegalArgumentException("field [required] must be specified");
+                Lucene.KEYWORD_ANALYZER,  
+        builder2.required.setValue("updated");
+            return "side_effect_mapper";
+        // mapping is
+import org.opensearch.common.compress.CompressedXContent;  
+        @Override  
+        final Parameter<NamedAnalyzer> searchAnalyzer = Parameter.analyzerParam(
+    }
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
+        @Override  
+    }
+            }
+        Builder builder2 = new Builder("a.b.c");
+            applyPluginParameterEffects();
+        );  
+            "Mapper for [field] conflicts with existing mapper:\n" + "\tCannot update parameter [analyzer] from [default] to [_standard]",
+        mapper = fromMapping(mappingWithBoth);  
+    // test validator  
+ * this work for additional information regarding copyright
+        }  
+    public void testSideEffectParameterLeavesIndexingWhenDisabled() {
+import org.opensearch.index.mapper.ParametrizedFieldMapper.Parameter;  
+        }
+        public Map<String, Object> mappingPluginParameterValues() {  
+                "_standard",  
+        MapperService mapperService = createMapperService("_doc", mapping);  
+            if (Boolean.TRUE.equals(enabled)) {
+            + "\"search_analyzer\":\"_standard\",\"required\":\"value\"}";
+        assertEquals("attributes.address.city", merged.name());
+        }
+        assertEquals("default", mapper.analyzer.name());
+        {
+ * software distributed under the License is distributed on an
+            this.index = builder.index.getValue();
+            String mapping = "{\"type\":\"test_mapper\",\"required\":\"a\",\"restricted\":\"baz\"}";
+        return fromMapping(mapping, Version.CURRENT);
+    // When the SideEffectParameter resolves to false, no side effect is applied and indexing stays enabled.  
+    protected Collection<Plugin> getPlugins() {
+        assertEquals("a.b.c", merged.simpleName());
+        final Parameter<Boolean> fixed2 = Parameter.boolParam("fixed2", false, m -> toType(m).fixed2, false)
+    }
+        assertEquals("default", mapper.variable);
+        assertEquals(
+        final Parameter<String> variable = Parameter.stringParam("variable", true, m -> toType(m).variable, "default").acceptsNull();  
+/*  
+import org.opensearch.index.analysis.NamedAnalyzer;
+        TestMapper mapper = fromMapping(mapping);
+        String mappingWithSA = "{\"type\":\"test_mapper\",\"search_analyzer\":\"_standard\",\"required\":\"value\"}";
+        private final int intValue;
+            IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> fromMapping(mapping));
+    }  
+            () -> fromMapping("{\"type\":\"test_mapper\",\"int_value\":60,\"required\":\"value\"}")  
+    }  
             "{\"field\":{\"type\":\"test_mapper\",\"analyzer\":\"default\",\"required\":\"value\"}}",
             Strings.toString(MediaTypeRegistry.JSON, mapper)
-        );  
-
-        assertEquals(
-            "{\"field\":{\"type\":\"test_mapper\",\"fixed\":true,"  
-                + "\"fixed2\":false,\"variable\":\"default\",\"index\":true,"
-                + "\"wrapper\":\"default\",\"int_value\":5,\"analyzer\":\"default\","
-                + "\"required\":\"value\",\"restricted\":\"foo\"}}",  
-            toStringWithDefaults(mapper)
-        );
-    }  
-
-    public void testRequiredField() {
-        {  
-            String mapping = "{\"type\":\"test_mapper\"}";
-            IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> fromMapping(mapping));
-            assertEquals("field [required] must be specified", iae.getMessage());  
-        }
-        {
-            String mapping = "{\"type\":\"test_mapper\",\"required\":null}";  
-            MapperParsingException exc = expectThrows(MapperParsingException.class, () -> fromMapping(mapping));
-            assertEquals("[required] on mapper [field] of type [test_mapper] must not have a [null] value", exc.getMessage());
-        }  
-    }
-
-    public void testRestrictedField() {  
-        {
-            String mapping = "{\"type\":\"test_mapper\",\"required\":\"a\",\"restricted\":\"baz\"}";
-            MapperParsingException e = expectThrows(MapperParsingException.class, () -> fromMapping(mapping));  
-            assertEquals("Unknown value [baz] for field [restricted] - accepted values are [foo, bar]", e.getMessage());
-        }
-        {  
-            String mapping = "{\"type\":\"test_mapper\",\"required\":\"a\",\"restricted\":\"bar\"}";
-            TestMapper mapper = fromMapping(mapping);
-            assertEquals("bar", mapper.restricted);  
-        }
-        {
-            String mapping = "{\"type\":\"test_mapper\",\"required\":\"a\"}";  
-            TestMapper mapper = fromMapping(mapping);
-            assertEquals("foo", mapper.restricted);
-        }  
-    }
-
-    public void testCustomMergeValidation() throws IOException {  
-        MapperService mapperService = createMapperService(fieldMapping(b -> {
-            b.field("type", "test_mapper");
-            b.field("required", "a");  
-            b.field("int_value", 10);
-        }));
-
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> merge(mapperService, fieldMapping(b -> {
-            b.field("type", "test_mapper");
-            b.field("required", "a");  
-            b.field("int_value", 5);    // custom merge validator says that int_value can only increase
-        })));
-        assertThat(e.getMessage(), containsString("int_value"));  
-    }
-
-    public void testMergePreservesFullNameForDottedSimpleName() {  
-        Builder builder1 = new Builder("address.city");
-        builder1.required.setValue("value");
-        ContentPath path1 = new ContentPath();  
-        path1.add("attributes");
-        TestMapper mapper1 = (TestMapper) builder1.build(new Mapper.BuilderContext(Settings.EMPTY, path1));
-
-        assertEquals("address.city", mapper1.simpleName());
-        assertEquals("attributes.address.city", mapper1.name());
-
-        Builder builder2 = new Builder("address.city");
-        builder2.required.setValue("updated");
-        ContentPath path2 = new ContentPath();  
-        path2.add("attributes");
-        TestMapper mapper2 = (TestMapper) builder2.build(new Mapper.BuilderContext(Settings.EMPTY, path2));
-
+        protected Builder(String name) {  
         TestMapper merged = (TestMapper) mapper1.merge(mapper2);
-
-        assertEquals("address.city", merged.simpleName());  
-        assertEquals("attributes.address.city", merged.name());
-        assertEquals("updated", merged.required);
-    }  
-
-    public void testMergePreservesFullNameForDeeplyDottedSimpleName() {
-        Builder builder1 = new Builder("a.b.c");  
-        builder1.required.setValue("v1");
-        ContentPath path = new ContentPath();
-        path.add("root");  
-        TestMapper mapper1 = (TestMapper) builder1.build(new Mapper.BuilderContext(Settings.EMPTY, path));
-
-        assertEquals("root.a.b.c", mapper1.name());  
-
-        Builder builder2 = new Builder("a.b.c");
-        builder2.required.setValue("v2");  
-        TestMapper mapper2 = (TestMapper) builder2.build(new Mapper.BuilderContext(Settings.EMPTY, path));
-
-        TestMapper merged = (TestMapper) mapper1.merge(mapper2);  
-        assertEquals("root.a.b.c", merged.name());
-        assertEquals("a.b.c", merged.simpleName());
-    }  
-
-    // setParameterValue only accepts a value type-compatible with the target parameter; a mismatch throws.
-    public void testSetParameterValueRejectsTypeMismatch() {  
-        Builder builder = new Builder("field");
-
-        builder.setParameterValue("index", false);  
-        assertFalse(builder.index.getValue());
-
-        // Unknown parameter name is a no-op.  
-        builder.setParameterValue("no_such_parameter", true);
-
-        IllegalArgumentException e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> builder.setParameterValue("index", "not-a-boolean")
-        );  
-        assertThat(e.getMessage(), containsString("Cannot set parameter [index]"));
+            Strings.toString(MediaTypeRegistry.JSON, merged)
+ * license agreements. See the NOTICE file distributed with
+        assertEquals("{\"field\":" + fine + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
     }
-
-    // A SideEffectParameter that resolves to true disables indexing at build time via its side effect.
-    public void testSideEffectParameterDisablesIndexingWhenEnabled() {
-        SideEffectBuilder builder = new SideEffectBuilder("field");  
-        builder.lowCard.setValue(true);
-        SideEffectMapper mapper = (SideEffectMapper) builder.build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));
-        assertFalse("side effect must disable indexing", mapper.index);  
+        }  
     }
-
-    // When the SideEffectParameter resolves to false, no side effect is applied and indexing stays enabled.  
-    public void testSideEffectParameterLeavesIndexingWhenDisabled() {
-        SideEffectBuilder builder = new SideEffectBuilder("field");
-        SideEffectMapper mapper = (SideEffectMapper) builder.build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));  
+        String mapping = "{\"type\":\"test_mapper\",\"analyzer\":\"_standard\",\"required\":\"value\"}";
+            StringWrapper that = (StringWrapper) o;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            String mapping = "{\"type\":\"test_mapper\",\"required\":\"a\",\"restricted\":\"bar\"}";
+import org.opensearch.common.xcontent.json.JsonXContent;
+        public int hashCode() {
+            "{\"field\":{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"," + "\"copy_to\":[\"foo\",\"bar\"]}}",  
+            ),  
+            + "\tCannot update parameter [fixed2] from [false] to [true]";  
+        @Override  
+    @Override
+        );
+        assertTrue(mapper.fixed);
+            String mapping = "{\"type\":\"test_mapper\"}";
         assertTrue("indexing must stay enabled when the parameter is false", mapper.index);
-    }
-
-    // The parameter reads its resolved value back from mappingPluginParameterValues() when a mapper is re-initialised.
-    public void testSideEffectParameterReadsResolvedValue() {
-        SideEffectBuilder builder = new SideEffectBuilder("field");  
-        builder.lowCard.setValue(true);
-        SideEffectMapper mapper = (SideEffectMapper) builder.build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));
-
-        SideEffectBuilder reinit = new SideEffectBuilder("field");
-        reinit.init(mapper);
-        assertTrue("value must be read back from the mapping", reinit.lowCard.getValue());  
-    }
-
-    // A stored value whose type does not match the parameter fails loudly instead of a silent wrong value / CCE.  
-    public void testSideEffectParameterReadBackRejectsTypeMismatch() {
-        SideEffectMapper wrongTyped = new SideEffectMapper("field", "field", new SideEffectBuilder("field")) {
-            @Override  
-            public Map<String, Object> mappingPluginParameterValues() {
-                return Map.of("low_card", 123);
-            }  
-        };
-
-        SideEffectBuilder reinit = new SideEffectBuilder("field");  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> reinit.init(wrongTyped));
-        assertThat(e.getMessage(), containsString("resolved to a value of type"));
-    }  
-
-    /** Minimal mapper used to exercise {@link SideEffectParameter} end to end. */
-    public static class SideEffectMapper extends ParametrizedFieldMapper {  
-
-        private final boolean index;
-        private final Map<String, Object> pluginValues;  
-
-        SideEffectMapper(String simpleName, String fullName, SideEffectBuilder builder) {
-            super(simpleName, new KeywordFieldMapper.KeywordFieldType(fullName), MultiFields.empty(), CopyTo.empty());  
-            this.index = builder.index.getValue();
-            this.pluginValues = builder.pluginMappingParameterValues();
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
+        assertThat(e.getMessage(), containsString("int_value"));  
+            Strings.toString(MediaTypeRegistry.JSON, mapper)
+        assertFalse(builder.index.getValue());
+import java.util.ArrayList;  
+    public void testMerging() {  
         }  
-
-        @Override
-        public Map<String, Object> mappingPluginParameterValues() {  
-            return pluginValues;
-        }
-
-        @Override
-        public ParametrizedFieldMapper.Builder getMergeBuilder() {
-            return new SideEffectBuilder(simpleName()).init(this);  
-        }
-
-        @Override  
-        protected void parseCreateField(ParseContext context) {}
-
-        @Override  
-        protected void parseCreateFieldForPluggableFormat(ParseContext context) {}
-
-        @Override  
-        protected String contentType() {
-            return "side_effect_mapper";
         }  
     }
-
-    /** Builder that contributes a {@code low_card} {@link SideEffectParameter} which disables indexing when true. */  
-    public static class SideEffectBuilder extends ParametrizedFieldMapper.Builder {
-
-        final Parameter<Boolean> index = Parameter.boolParam("index", false, m -> ((SideEffectMapper) m).index, true);  
-        final SideEffectParameter<Boolean> lowCard = SideEffectParameter.boolParam("low_card", false, false, (b, enabled) -> {
-            if (Boolean.TRUE.equals(enabled)) {
-                b.setParameterValue("index", false);  
-            }
-        });
-
-        SideEffectBuilder(String name) {
-            super(name);
-            setPluginMappingParameters(List.of(lowCard));  
-        }
-
-        @Override  
         protected List<Parameter<?>> getParameters() {
-            List<Parameter<?>> parameters = new ArrayList<>();
-            parameters.add(index);  
-            parameters.addAll(pluginMappingParameters());
-            return parameters;
-        }  
-
-        @Override
-        public ParametrizedFieldMapper build(Mapper.BuilderContext context) {  
-            applyPluginParameterEffects();
-            return new SideEffectMapper(name(), buildFullName(context), this);
-        }  
     }
-
-}  
+import org.opensearch.index.mapper.ParametrizedFieldMapper.SideEffectParameter;
+        final String name;
+    }  
+            b.field("type", "test_mapper");
+            super(name);
+        assertEquals(
+        }).setMergeValidator((o, n) -> n >= o);  
+        assertEquals("root.a.b.c", merged.name());
+        }  
+    // add multifield, verify, add second multifield, verify, overwrite second multifield
+            }
+            assertEquals("Unknown value [baz] for field [restricted] - accepted values are [foo, bar]", e.getMessage());
+    public static class TestMapper extends ParametrizedFieldMapper {
+        protected TestMapper(  
+            "{\"field\":{\"type\":\"test_mapper\",\"fixed2\":true,\"required\":\"value\"}}",  
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
+    // A SideEffectParameter that resolves to true disables indexing at build time via its side effect.
+    public void testDeprecatedParameterName() {  
+        String mapping = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\",\"copy_to\":[\"other\"]}";
+    public static class SideEffectMapper extends ParametrizedFieldMapper {  
+        assertEquals(expectedError, e.getMessage());
+ * specific language governing permissions and limitations
+            this.fixed = builder.fixed.getValue();
+        path.add("root");  
+        TestMapper removeCopyTo = fromMapping("{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"}");
+        String mapping = "{\"type\":\"test_mapper\",\"index\":false,\"store\":true,\"required\":\"value\"}";
+                return Map.of("low_card", 123);
+    }  
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
+        TestMapper badToMerge = fromMapping(badSubField);  
+        assertEquals("_standard", mapper.searchAnalyzer.name());
+            () -> builder.setParameterValue("index", "not-a-boolean")
+            return pluginValues;
+        assertEquals(
+            m -> toType(m).analyzer,
+        );  
+    // A stored value whose type does not match the parameter fails loudly instead of a silent wrong value / CCE.  
+        );
+        {
+        );  
+            IllegalArgumentException.class,
+        MapperService mapperService = mock(MapperService.class);  
+        assertEquals(mapper.analyzer, Lucene.STANDARD_ANALYZER);
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+            assertEquals("[required] on mapper [field] of type [test_mapper] must not have a [null] value", exc.getMessage());
+        );  
+            + "\"search_analyzer\":\"default\",\"required\":\"value\"}";
+        assertEquals(
+            return Map.of("test_mapper", new TypeParser());  
+        protected List<Parameter<?>> getParameters() {  
+ * compatible open source license.
+        public ParametrizedFieldMapper build(Mapper.BuilderContext context) {  
+        e = expectThrows(IllegalArgumentException.class, () -> original.merge(toMerge));
+    // test custom serializer
+        private StringWrapper(String name) {  
+        final Parameter<Boolean> index = Parameter.boolParam("index", false, m -> ((SideEffectMapper) m).index, true);  
+        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(
+        String mapping = "{\"type\":\"test_mapper\",\"int_value\":10,\"required\":\"value\"}";
+        assertWarnings("Parameter [store] has no effect on type [test_mapper] and will be removed in future");
+            return Objects.hash(name);
+        @Override
+    }
+            Map.of(
+        assertThat(e.getMessage(), containsString("resolved to a value of type"));
+    }
+        {  
+        ContentPath path1 = new ContentPath();  
+        }
+            }  
+        }  
+import org.opensearch.core.xcontent.ToXContent;
+            String mapping = "{\"type\":\"test_mapper\",\"required\":\"a\"}";  
+            + "\"bucket_influencers\":{\"type\":\"nested\",\"properties\":{"
+            + "\"properties\":{"
+        assertTrue("value must be read back from the mapping", reinit.lowCard.getValue());  
+        TestMapper noCopyTo = (TestMapper) merged.merge(removeCopyTo);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> mapper.merge(badMerge));  
+        TestMapper mapper = fromMapping(mapping);
+        // analyzer, no matter what the value of `include_defaults` is  
+            public Map<String, Object> mappingPluginParameterValues() {
+ * The OpenSearch Contributors require contributions made to  
+        assertTrue(mapper.fixed2);  
+    private static class StringWrapper {  
+            e.getMessage()
+import java.io.IOException;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        TestMapper merged = (TestMapper) mapper.merge(goodMerge);  
+            + "\"fields\":{\"sub2\":{\"type\":\"binary\"}}}";
+            "Mapper for [field] conflicts with existing mapper:\n"  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> mapper.merge(toMerge));
+import org.opensearch.Version;
+        TestMapper merged = (TestMapper) mapper.merge(toMerge);
+            + "\"bucket_count\":{\"type\":\"long\"},"  
+ * You may obtain a copy of the License at  
+    public void testDeprecatedParameters() {  
+        assertFalse("side effect must disable indexing", mapper.index);  
+            "{\"type\":\"test_mapper\",\"variable\":\"updated\",\"required\":\"value\"," + "\"copy_to\":[\"foo\",\"bar\"]}"
+        mapper = fromMapping(withDef);  
+            e.getMessage()
+import org.opensearch.index.analysis.AnalyzerScope;  
+        );
+        }));
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+            if (o == null || getClass() != o.getClass()) return false;
+        String withDef = "{\"type\":\"test_mapper\",\"analyzer\":\"default\",\"required\":\"value\"}";
+        }
+            MultiFields multiFields,  
+        SideEffectMapper mapper = (SideEffectMapper) builder.build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));
+        public boolean equals(Object o) {
+        @Override
+        SideEffectBuilder reinit = new SideEffectBuilder("field");  
+        Mapper.TypeParser.ParserContext pc = new Mapper.TypeParser.ParserContext(s -> null, mapperService, s -> {
+                new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())
+        String mapping = "{\"type\":\"test_mapper\",\"fixed\":false,\"required\":\"value\"}";
+public class ParametrizedMapperTests extends MapperServiceTestCase {
+    public void testAnalyzers() {
+        assertEquals("[fixed] on mapper [field] of type [test_mapper] must not have a [null] value", e.getMessage());  
+            + ",\"fields\":{\"sub2\":{\"type\":\"keyword\"}}}";
+        SideEffectBuilder builder = new SideEffectBuilder("field");  
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
+            "{\"field\":{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\","
+    private static TestMapper toType(Mapper in) {  
+        mapperService.merge("_doc", new CompressedXContent(mapping), MapperService.MergeReason.MAPPING_UPDATE);  
+        protected String contentType() {
+            parameters.add(index);  
+import static org.hamcrest.Matchers.containsString;
+        @Override  
+    public void testMergePreservesFullNameForDeeplyDottedSimpleName() {
+    // test deprecations
+        );  
+        SideEffectBuilder reinit = new SideEffectBuilder("field");
+        SideEffectBuilder builder = new SideEffectBuilder("field");  
+        TestMapper mapper2 = (TestMapper) builder2.build(new Mapper.BuilderContext(Settings.EMPTY, path));
+            this.pluginValues = builder.pluginMappingParameterValues();
+        final Parameter<Boolean> index = Parameter.boolParam("index", false, m -> toType(m).index, true);
+            }
+            Collections.emptyMap()
+import org.opensearch.common.settings.Settings;
+        private final Map<String, Object> pluginValues;  
+        String mapping = "{\"type\":\"test_mapper\",\"required\":\"value\"}";
+        protected void parseCreateField(ParseContext context) {
+            super(name);
+        assertEquals(  
+            .addDeprecatedName("fixed2_old");
+    }  
+        String mapping = "{\"type\":\"test_mapper\",\"wrapper\":\"wrapped value\",\"required\":\"value\"}";  
+            + "\"fields\":{\"sub\":{\"type\":\"keyword\"}}}";
+            );
+        // Unknown parameter name is a no-op.  
+        TestMapper merged = (TestMapper) mapper1.merge(mapper2);  
+        builder.setParameterValue("no_such_parameter", true);
+            if (Objects.equals("binary", s)) {  
+        }
+import org.opensearch.plugins.Plugin;  
+        assertEquals("updated", merged.required);
+        TestMapper mapper1 = (TestMapper) builder1.build(new Mapper.BuilderContext(Settings.EMPTY, path));
+        final SideEffectParameter<Boolean> lowCard = SideEffectParameter.boolParam("low_card", false, false, (b, enabled) -> {
+        }
+            MapperParsingException exc = expectThrows(MapperParsingException.class, () -> fromMapping(mapping));
+        }  
+        final Parameter<StringWrapper> wrapper = new Parameter<>("wrapper", false, () -> new StringWrapper("default"), (n, c, o) -> {
+        }
+        TestMapper badMerge = fromMapping("{\"type\":\"test_mapper\",\"fixed\":true,\"fixed2\":true,\"required\":\"value\"}");
+        // TODO: should we have to include 'fixed' here? Or should updates take as 'defaults' the existing values?
+        ContentPath path2 = new ContentPath();  
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
+        TestMapper mapper = fromMapping(mapping);
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+            "search_analyzer",
+        private final String required;  
+        String mapping = "{\"type\":\"test_mapper\",\"analyzer\":\"_standard\",\"required\":\"value\"}";  
+        assertEquals(  
+        assertEquals("_keyword", mapper.analyzer.name());  
+            b.field("int_value", 5);    // custom merge validator says that int_value can only increase
+            @Override  
+        reinit.init(mapper);
+            Builder builder = new Builder(name);
+        builder2.required.setValue("v2");  
+import java.util.List;
+        @Override
+            Strings.toString(MediaTypeRegistry.JSON, merged)
+        String addSubField = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\""  
+            return new SideEffectBuilder(simpleName()).init(this);  
+                + "\"wrapper\":\"default\",\"int_value\":5,\"analyzer\":\"_keyword\","
+        TestMapper mapper2 = (TestMapper) builder2.build(new Mapper.BuilderContext(Settings.EMPTY, path2));
+        final Parameter<String> restricted = Parameter.restrictedStringParam("restricted", true, m -> toType(m).restricted, "foo", "bar");
+        @Override
+            .build(new Mapper.BuilderContext(Settings.EMPTY, new ContentPath(0)));  
+        assertEquals("{\"field\":" + mappingWithSA + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));
+    // merging - try updating 'fixed' and 'fixed2' should get an error, try updating 'variable' and verify update
+        });  
+            analyzer::getValue
+        assertEquals("{\"field\":" + withDef + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
+            // only output search analyzer if different to analyzer
+package org.opensearch.index.mapper;
+        path1.add("attributes");
+        IllegalArgumentException e = expectThrows(
+            + "\"anomaly_score\":{\"type\":\"double\"},"
+            this.intValue = builder.intValue.getValue();  
+            return null;  
+        assertEquals("mapper [field.sub2] cannot be changed from type [keyword] to [binary]", e.getMessage());
+import java.util.Map;
+            b.field("required", "a");  
+        builder1.required.setValue("v1");
+        assertEquals("{\"field\":" + mappingWithBoth + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
+    private static TestMapper fromMapping(String mapping) {  
+            super(simpleName, new KeywordFieldMapper.KeywordFieldType(fullName), multiFields, copyTo);
+    }  
+        public Map<String, Mapper.TypeParser> getMappers() {
+        assertEquals("analyzer [wibble] has not been configured in mappings", e.getMessage());
+        String mapping = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\","
+    }  
+            MapperParsingException e = expectThrows(MapperParsingException.class, () -> fromMapping(mapping));  
+        String mapping = "{\"_doc\":{"  
+        @Override
+            CopyTo copyTo,
+    public void testCustomMergeValidation() throws IOException {  
+            Strings.toString(MediaTypeRegistry.JSON, mapper)
+        private final boolean fixed;
+                + "\"required\":\"value\",\"restricted\":\"foo\"}}",  
+    public static class SideEffectBuilder extends ParametrizedFieldMapper.Builder {
+ * GitHub history for details.
+    }
+        TestMapper mapper = fromMapping(mapping);  
+        assertWarnings("Parameter [fixed2_old] on mapper [field] is deprecated, use [fixed2]");
+        builder.lowCard.setValue(true);
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));  
+        final Parameter<String> required = Parameter.stringParam("required", true, m -> toType(m).required, null).setValidator(value -> {
+        String conflict = "{\"type\":\"test_mapper\",\"wrapper\":\"new value\",\"required\":\"value\"}";
+            "analyzer",
+        }  
+            TestMapper mapper = fromMapping(mapping);
+ * not use this file except in compliance with the License.
+        value.toXContent(builder, params);
+ */  
+    }
+        assertEquals("_standard", mapper.analyzer.name());  
+        );  
+            + "\tCannot update parameter [fixed] from [false] to [true]\n"
+            if (Objects.equals("keyword", s)) {  
+        String expectedError = "Mapper for [field] conflicts with existing mapper:\n"
+    public void testSideEffectParameterReadBackRejectsTypeMismatch() {
+            if (n > 50) {  
+            return new TestMapper(name(), buildFullName(context), multiFieldsBuilder.build(this, context), copyTo.build(), this);  
+            IllegalArgumentException.class,
+            assertEquals("field [required] must be specified", iae.getMessage());  
+            this.index = builder.index.getValue();  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        {  
+            toStringWithDefaults(mapper)
+        assertEquals(mapping, Strings.toString(MediaTypeRegistry.JSON, mapperService.documentMapper()));
+import static org.mockito.Mockito.when;
+        TestMapper mapper = fromMapping(mapping);
+    public static class Builder extends ParametrizedFieldMapper.Builder {
+        }, version, () -> null, null, null);
+            super(simpleName, new KeywordFieldMapper.KeywordFieldType(fullName), MultiFields.empty(), CopyTo.empty());  
+import java.util.Collections;  
+            Strings.toString(MediaTypeRegistry.JSON, merged)
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> merged.merge(badToMerge));
+        assertEquals("root.a.b.c", mapper1.name());  
+        );
+            }
+    /** Builder that contributes a {@code low_card} {@link SideEffectParameter} which disables indexing when true. */  
+ * under the License.  
+    public void testDefaults() throws IOException {  
+            () -> Lucene.KEYWORD_ANALYZER
+import org.opensearch.common.xcontent.XContentHelper;  
+        private final NamedAnalyzer searchAnalyzer;
+    public void testMultifields() {  
+        assertEquals("{\"field\":" + mapping + "}", Strings.toString(MediaTypeRegistry.JSON, mapper));   // original
+    // The parameter reads its resolved value back from mappingPluginParameterValues() when a mapper is re-initialised.
+        String badSubField = "{\"type\":\"test_mapper\",\"variable\":\"foo\",\"required\":\"value\","
+    public void testNullables() {  
+        );
+        builder.endObject();  
+/*  
+        private final String variable;  
+        // we've configured things so that search_analyzer is only output when different from
+        })));
+        String mappingWithBoth = "{\"type\":\"test_mapper\",\"analyzer\":\"default\","
+        }
+        assertEquals("_standard", mapper.searchAnalyzer.name());
+        });
+        assertThat(mapper.analyzer.analyzer(), instanceOf(StandardAnalyzer.class));
+                "default",
+    }
+        assertEquals("address.city", mapper1.simpleName());
+            "{\"field\":{\"type\":\"test_mapper\",\"index\":false,\"required\":\"value\"}}",
+    }
+            if (o == null) return null;
+            return new StringWrapper(o.toString());  
+        @Override  
+ * ownership. Elasticsearch licenses this file to you under  
+    public void testSideEffectParameterDisablesIndexingWhenEnabled() {
+        path2.add("attributes");
+            this.analyzer = builder.analyzer.getValue();
+import org.opensearch.plugins.MapperPlugin;
+            parameters.addAll(pluginMappingParameters());
+                Lucene.STANDARD_ANALYZER,
+            Strings.toString(MediaTypeRegistry.JSON, noCopyTo)
+import java.util.Arrays;
+        String mappingWithSame = "{\"type\":\"test_mapper\",\"analyzer\":\"default\","
+        // mapping is  
+        assertEquals(
+        public Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
+        );  
+        assertEquals(  
+    // setParameterValue only accepts a value type-compatible with the target parameter; a mismatch throws.
+        assertEquals(
+            assertEquals("bar", mapper.restricted);  
+        builder.startObject();
+        {
+            return Objects.equals(name, that.name);  
+        String badAnalyzer = "{\"type\":\"test_mapper\",\"analyzer\":\"wibble\",\"required\":\"value\"}";
+        Builder builder1 = new Builder("address.city");
+        TestMapper mapper = fromMapping(mapping, Version.V_2_0_0);  
+        assertEquals(  
+        builder.lowCard.setValue(true);
+        SideEffectBuilder builder = new SideEffectBuilder("field");
+import org.opensearch.common.lucene.Lucene;
+    // defaults - create empty builder config, and serialize with and without defaults
+        }
+            this.searchAnalyzer = builder.searchAnalyzer.getValue();
+    }

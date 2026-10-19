@@ -1,134 +1,117 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.bootstrap;
-
-import org.opensearch.common.settings.KeyStoreWrapper;  
-import org.opensearch.common.settings.SecureSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.core.common.settings.SecureString;
-import org.opensearch.env.Environment;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.tools.cli.keystore.KeyStoreCommandTestCase;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;  
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystem;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;  
-import java.util.List;
-
-import static org.hamcrest.Matchers.equalTo;  
-
-public class BootstrapTests extends OpenSearchTestCase {
-    protected Environment env;  
-    protected List<FileSystem> fileSystems = new ArrayList<>();
-
-    private static final int MAX_PASSPHRASE_LENGTH = 10;  
-
-    @After
-    public void closeMockFileSystems() throws IOException {  
-        IOUtils.close(fileSystems);
-    }
-
-    @Before
-    public void setupEnv() throws IOException {
-        env = KeyStoreCommandTestCase.setupEnv(true, fileSystems);  
-    }
-
-    public void testLoadSecureSettings() throws Exception {  
-        final Path configPath = env.configDir();
-        final SecureString seed;
-        try (KeyStoreWrapper keyStoreWrapper = KeyStoreWrapper.create()) {  
-            seed = KeyStoreWrapper.SEED_SETTING.get(Settings.builder().setSecureSettings(keyStoreWrapper).build());
-            assertNotNull(seed);
-            assertTrue(seed.length() > 0);  
-            keyStoreWrapper.save(configPath, new char[0]);
-        }
-        assertTrue(Files.exists(configPath.resolve("opensearch.keystore")));  
-        try (SecureSettings secureSettings = Bootstrap.loadSecureSettings(env)) {
-            SecureString seedAfterLoad = KeyStoreWrapper.SEED_SETTING.get(Settings.builder().setSecureSettings(secureSettings).build());
-            assertEquals(seedAfterLoad.toString(), seed.toString());  
-            assertTrue(Files.exists(configPath.resolve("opensearch.keystore")));
-        }
-    }  
-
-    public void testReadCharsFromStdin() throws Exception {
-        assertPassphraseRead("hello", "hello");  
-        assertPassphraseRead("hello\n", "hello");
-        assertPassphraseRead("hello\r\n", "hello");
-
-        assertPassphraseRead("hellohello", "hellohello");
-        assertPassphraseRead("hellohello\n", "hellohello");
-        assertPassphraseRead("hellohello\r\n", "hellohello");  
-
-        assertPassphraseRead("hello\nhi\n", "hello");
-        assertPassphraseRead("hello\r\nhi\r\n", "hello");  
-    }
-
-    public void testPassphraseTooLong() throws Exception {  
-        byte[] source = "hellohello!\n".getBytes(StandardCharsets.UTF_8);
-        try (InputStream stream = new ByteArrayInputStream(source)) {
-            expectThrows(  
-                RuntimeException.class,
-                "Password exceeded maximum length of 10",
-                () -> Bootstrap.readPassphrase(stream, MAX_PASSPHRASE_LENGTH)  
-            );
-        }
-    }  
-
-    public void testNoPassPhraseProvided() throws Exception {
-        byte[] source = "\r\n".getBytes(StandardCharsets.UTF_8);  
-        try (InputStream stream = new ByteArrayInputStream(source)) {
-            expectThrows(
-                RuntimeException.class,  
-                "Keystore passphrase required but none provided.",
-                () -> Bootstrap.readPassphrase(stream, MAX_PASSPHRASE_LENGTH)
-            );  
-        }
-    }
-
-    private void assertPassphraseRead(String source, String expected) {
-        try (InputStream stream = new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8))) {
-            SecureString result = Bootstrap.readPassphrase(stream, MAX_PASSPHRASE_LENGTH);  
-            assertThat(result, equalTo(expected));
         } catch (IOException e) {
-            throw new RuntimeException(e);  
-        }
+import java.util.ArrayList;  
+import org.opensearch.env.Environment;
+import org.opensearch.common.settings.SecureSettings;
+            keyStoreWrapper.save(configPath, new char[0]);
+import java.io.ByteArrayInputStream;
+import java.nio.file.FileSystem;  
+ * not use this file except in compliance with the License.
+    }  
+            expectThrows(  
     }
-
+            expectThrows(
+            SecureString result = Bootstrap.readPassphrase(stream, MAX_PASSPHRASE_LENGTH);  
+                () -> Bootstrap.readPassphrase(stream, MAX_PASSPHRASE_LENGTH)  
+            SecureString seedAfterLoad = KeyStoreWrapper.SEED_SETTING.get(Settings.builder().setSecureSettings(secureSettings).build());
 }
+        assertPassphraseRead("hellohello\n", "hellohello");
+ * Licensed to Elasticsearch under one or more contributor  
+        }
+ * this work for additional information regarding copyright
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private void assertPassphraseRead(String source, String expected) {
+ */
+            assertTrue(seed.length() > 0);  
+import org.opensearch.core.common.settings.SecureString;
+        assertPassphraseRead("hellohello\r\n", "hellohello");  
+import static org.hamcrest.Matchers.equalTo;  
+        assertPassphraseRead("hello", "hello");  
+import java.util.List;
+    @After
+        assertTrue(Files.exists(configPath.resolve("opensearch.keystore")));  
+            assertThat(result, equalTo(expected));
+            seed = KeyStoreWrapper.SEED_SETTING.get(Settings.builder().setSecureSettings(keyStoreWrapper).build());
+            throw new RuntimeException(e);  
+    public void testPassphraseTooLong() throws Exception {  
+    }  
+        assertPassphraseRead("hello\r\nhi\r\n", "hello");  
+            assertTrue(Files.exists(configPath.resolve("opensearch.keystore")));
+        try (InputStream stream = new ByteArrayInputStream(source)) {
+ * ownership. Elasticsearch licenses this file to you under  
+        try (KeyStoreWrapper keyStoreWrapper = KeyStoreWrapper.create()) {  
+    public void testNoPassPhraseProvided() throws Exception {
+    protected Environment env;  
+ * GitHub history for details.
+        }
+import org.junit.After;
+ * the Apache License, Version 2.0 (the "License"); you may
+ *  
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+        }
+        byte[] source = "hellohello!\n".getBytes(StandardCharsets.UTF_8);
+                "Keystore passphrase required but none provided.",
+    }
+    protected List<FileSystem> fileSystems = new ArrayList<>();
+/*
+ *
+        try (SecureSettings secureSettings = Bootstrap.loadSecureSettings(env)) {
+ * this file be licensed under the Apache-2.0 license or a
+                () -> Bootstrap.readPassphrase(stream, MAX_PASSPHRASE_LENGTH)
+import org.opensearch.test.OpenSearchTestCase;  
+import java.nio.charset.StandardCharsets;
+ */  
+ */
+        assertPassphraseRead("hello\nhi\n", "hello");
+import java.io.IOException;  
+import org.opensearch.tools.cli.keystore.KeyStoreCommandTestCase;
+ * The OpenSearch Contributors require contributions made to  
+import java.io.InputStream;
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
+import org.junit.Before;  
+/*
+    public void closeMockFileSystems() throws IOException {  
+                RuntimeException.class,  
+        byte[] source = "\r\n".getBytes(StandardCharsets.UTF_8);  
+        IOUtils.close(fileSystems);
+ * specific language governing permissions and limitations
+        final Path configPath = env.configDir();
+    }
+import org.opensearch.common.settings.Settings;
+            assertNotNull(seed);
+        try (InputStream stream = new ByteArrayInputStream(source)) {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.util.io.IOUtils;  
+        assertPassphraseRead("hello\r\n", "hello");
+        env = KeyStoreCommandTestCase.setupEnv(true, fileSystems);  
+                RuntimeException.class,
+        assertPassphraseRead("hello\n", "hello");
+package org.opensearch.bootstrap;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+import java.nio.file.Path;
+        assertPassphraseRead("hellohello", "hellohello");
+        }
+/*  
+    private static final int MAX_PASSPHRASE_LENGTH = 10;  
+    public void testLoadSecureSettings() throws Exception {  
+            assertEquals(seedAfterLoad.toString(), seed.toString());  
+ * under the License.  
+ * compatible open source license.
+public class BootstrapTests extends OpenSearchTestCase {
+import org.opensearch.common.settings.KeyStoreWrapper;  
+    public void setupEnv() throws IOException {
+    @Before
+                "Password exceeded maximum length of 10",
+import java.nio.file.Files;
+    public void testReadCharsFromStdin() throws Exception {
+        final SecureString seed;
+        try (InputStream stream = new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8))) {
+ * Modifications Copyright OpenSearch Contributors. See  
+    }
+        }
+            );  
+    }
+            );

@@ -1,253 +1,215 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+            "Mozilla/5.0 (Linux; U; Android 3.0; en-us; Xoom Build/HRI39) AppleWebKit/525.10+ "
+            Collections.singletonMap("source_field", null)
+            null,
+        assertThat(target.get("name"), is("Android"));  
  * GitHub history for details.
- */  
-
-package org.opensearch.ingest.useragent;
-
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.RandomDocumentPicks;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.junit.BeforeClass;
-
-import java.io.IOException;  
-import java.io.InputStream;
-import java.util.Collections;
-import java.util.EnumSet;  
+            true
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+            randomAlphaOfLength(10),
+            "target_field",  
+        );
+ * Modifications Copyright OpenSearch Contributors. See
+ * under the License.  
+    public void testNullValueWithIgnoreMissing() throws Exception {
+        processor.execute(ingestDocument);
+            true,
+        assertThat(data, hasKey("target_field"));
+        assertIngestDocument(originalIngestDocument, ingestDocument);
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasKey;  
-import static org.hamcrest.Matchers.is;
-
-public class UserAgentProcessorTests extends OpenSearchTestCase {  
-
-    private static UserAgentProcessor processor;
-
-    @BeforeClass
-    public static void setupProcessor() throws IOException {
-        InputStream regexStream = UserAgentProcessor.class.getResourceAsStream("/regexes.yml");  
-        assertNotNull(regexStream);
-
-        UserAgentParser parser = new UserAgentParser(randomAlphaOfLength(10), regexStream, new UserAgentCache(1000));  
-
-        processor = new UserAgentProcessor(
-            randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            "target_field",  
-            parser,
-            EnumSet.allOf(UserAgentProcessor.Property.class),
-            false,  
-            true
-        );
     }  
-
-    public void testNullValueWithIgnoreMissing() throws Exception {
-        UserAgentProcessor processor = new UserAgentProcessor(  
-            randomAlphaOfLength(10),
-            null,
-            "source_field",  
-            "target_field",
-            null,
-            EnumSet.allOf(UserAgentProcessor.Property.class),  
-            true,
-            true
-        );  
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
-            random(),
-            Collections.singletonMap("source_field", null)  
-        );
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        processor.execute(ingestDocument);  
-        assertIngestDocument(originalIngestDocument, ingestDocument);
-    }
-
-    public void testNonExistentWithIgnoreMissing() throws Exception {
-        UserAgentProcessor processor = new UserAgentProcessor(
+import org.junit.BeforeClass;
+        assertThat(target.get("name"), is("Chrome"));
             randomAlphaOfLength(10),  
-            null,
-            "source_field",
-            "target_field",  
-            null,
-            EnumSet.allOf(UserAgentProcessor.Property.class),
-            true,  
-            true
-        );
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());  
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        processor.execute(ingestDocument);
-        assertIngestDocument(originalIngestDocument, ingestDocument);  
-    }
-
-    public void testNullWithoutIgnoreMissing() throws Exception {  
-        UserAgentProcessor processor = new UserAgentProcessor(
-            randomAlphaOfLength(10),
-            null,  
-            "source_field",
-            "target_field",
-            null,  
-            EnumSet.allOf(UserAgentProcessor.Property.class),
-            false,
-            true  
-        );
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
-            random(),  
-            Collections.singletonMap("source_field", null)
-        );
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);  
+    public void testUnknown() throws Exception {
         Exception exception = expectThrows(Exception.class, () -> processor.execute(ingestDocument));
-        assertThat(exception.getMessage(), equalTo("field [source_field] is null, cannot parse user-agent."));
-    }  
-
-    public void testNonExistentWithoutIgnoreMissing() throws Exception {
+import java.util.Collections;
+        InputStream regexStream = UserAgentProcessor.class.getResourceAsStream("/regexes.yml");  
+                + "(KHTML, like Gecko) Version/3.0.4 Mobile Safari/523.12.2"
+        os.put("name", "Mac OS X");
+        assertNotNull(regexStream);
+ */
+        document.put(
+            null,  
+        Map<String, String> device = new HashMap<>();  
+        Map<String, Object> document = new HashMap<>();
+import static org.hamcrest.Matchers.hasKey;  
+            "target_field",  
+/*  
+import org.opensearch.ingest.IngestDocument;
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"  
+            false,  
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());  
         UserAgentProcessor processor = new UserAgentProcessor(  
-            randomAlphaOfLength(10),
             null,
-            "source_field",  
-            "target_field",
-            null,
-            EnumSet.allOf(UserAgentProcessor.Property.class),  
-            false,
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        assertNull(target.get("os"));  
+            true  
             true
         );  
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        Exception exception = expectThrows(Exception.class, () -> processor.execute(ingestDocument));  
-        assertThat(exception.getMessage(), equalTo("field [source_field] not present as part of path [source_field]"));
-    }
-
-    @SuppressWarnings("unchecked")
     public void testCommonBrowser() throws Exception {
         Map<String, Object> document = new HashMap<>();  
-        document.put(
-            "source_field",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"  
-        );
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-
-        processor.execute(ingestDocument);
-        Map<String, Object> data = ingestDocument.getSourceAndMetadata();
-
-        assertThat(data, hasKey("target_field"));
+ * Unless required by applicable law or agreed to in writing,
+            null,
         Map<String, Object> target = (Map<String, Object>) data.get("target_field");
-
-        assertThat(target.get("name"), is("Chrome"));
-        assertThat(target.get("version"), is("33.0.1750.149"));
-
-        Map<String, String> os = new HashMap<>();
-        os.put("name", "Mac OS X");
-        os.put("version", "10.9.2");  
-        os.put("full", "Mac OS X 10.9.2");
-        assertThat(target.get("os"), is(os));
-        Map<String, String> device = new HashMap<>();  
-        device.put("name", "Mac");
-        assertThat(target.get("device"), is(device));
-    }  
-
-    @SuppressWarnings("unchecked")
-    public void testUncommonDevice() throws Exception {  
-        Map<String, Object> document = new HashMap<>();
-        document.put(
-            "source_field",  
-            "Mozilla/5.0 (Linux; U; Android 3.0; en-us; Xoom Build/HRI39) AppleWebKit/525.10+ "
-                + "(KHTML, like Gecko) Version/3.0.4 Mobile Safari/523.12.2"
-        );  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-
-        processor.execute(ingestDocument);  
-        Map<String, Object> data = ingestDocument.getSourceAndMetadata();
-
+        UserAgentProcessor processor = new UserAgentProcessor(
+public class UserAgentProcessorTests extends OpenSearchTestCase {  
         assertThat(data, hasKey("target_field"));  
-        Map<String, Object> target = (Map<String, Object>) data.get("target_field");
-
-        assertThat(target.get("name"), is("Android"));  
-        assertThat(target.get("version"), is("3.0"));
-
-        Map<String, String> os = new HashMap<>();  
-        os.put("name", "Android");
+        document.put("source_field", "Mozilla/5.0 (compatible; EasouSpider; +http://www.easou.com/search/spider.html)");
+ */  
+        processor.execute(ingestDocument);  
+        processor.execute(ingestDocument);
+ * specific language governing permissions and limitations
+            "target_field",
+            null,
+import org.opensearch.test.OpenSearchTestCase;  
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
+import java.io.InputStream;
+        os.put("version", "10.9.2");  
+            "source_field",
+            true
+ * ownership. Elasticsearch licenses this file to you under  
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
         os.put("version", "3.0");
+import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
+            randomAlphaOfLength(10),
+        Map<String, Object> document = new HashMap<>();
+        assertThat(target.get("name"), is("Other"));  
+            random(),
+        );
+    }
+        Map<String, Object> target = (Map<String, Object>) data.get("target_field");  
+            EnumSet.allOf(UserAgentProcessor.Property.class),
+            false,
+ * this file be licensed under the Apache-2.0 license or a
+            "target_field",
+        document.put(
+    private static UserAgentProcessor processor;
+            Collections.singletonMap("source_field", null)  
+            "source_field",
+package org.opensearch.ingest.useragent;
+        assertNull(target.get("major"));
+            null,
+            random(),  
+    public static void setupProcessor() throws IOException {
+        UserAgentProcessor processor = new UserAgentProcessor(
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+            null,
+ * not use this file except in compliance with the License.
+        processor.execute(ingestDocument);
+        Map<String, String> device = new HashMap<>();
+        Exception exception = expectThrows(Exception.class, () -> processor.execute(ingestDocument));  
+            false,
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        Map<String, Object> data = ingestDocument.getSourceAndMetadata();
+        Map<String, String> os = new HashMap<>();  
+        assertNull(target.get("os"));
+            true,  
+    }  
+            "source_field",  
+ *
+    }  
+        device.put("name", "Spider");
+        assertThat(target.get("name"), is("EasouSpider"));
+        );  
+        processor.execute(ingestDocument);  
+ * You may obtain a copy of the License at  
+        );  
+        assertThat(data, hasKey("target_field"));
+    public void testNonExistentWithIgnoreMissing() throws Exception {
+        assertNull(target.get("patch"));  
+            null,
+        assertThat(data, hasKey("target_field"));  
+    }
+        Map<String, Object> target = (Map<String, Object>) data.get("target_field");
+}  
+            EnumSet.allOf(UserAgentProcessor.Property.class),
         os.put("full", "Android 3.0");  
-        assertThat(target.get("os"), is(os));
-
-        Map<String, String> device = new HashMap<>();  
+ * compatible open source license.
+    public void testNullWithoutIgnoreMissing() throws Exception {  
+        os.put("full", "Mac OS X 10.9.2");
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
+        Map<String, Object> document = new HashMap<>();
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+        processor.execute(ingestDocument);  
+            "source_field",
+        Map<String, Object> data = ingestDocument.getSourceAndMetadata();
+        assertThat(target.get("device"), is(device));
+    @SuppressWarnings("unchecked")
         device.put("name", "Motorola Xoom");
         assertThat(target.get("device"), is(device));
-    }  
-
-    @SuppressWarnings("unchecked")
-    public void testSpider() throws Exception {  
-        Map<String, Object> document = new HashMap<>();
-        document.put("source_field", "Mozilla/5.0 (compatible; EasouSpider; +http://www.easou.com/search/spider.html)");
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);  
-
-        processor.execute(ingestDocument);
-        Map<String, Object> data = ingestDocument.getSourceAndMetadata();  
-
-        assertThat(data, hasKey("target_field"));
-        Map<String, Object> target = (Map<String, Object>) data.get("target_field");  
-
-        assertThat(target.get("name"), is("EasouSpider"));
-
-        assertNull(target.get("version"));
-        assertNull(target.get("os"));
-
-        Map<String, String> device = new HashMap<>();
-        device.put("name", "Spider");
-        assertThat(target.get("device"), is(device));  
     }
-
-    @SuppressWarnings("unchecked")  
-    public void testUnknown() throws Exception {
-        Map<String, Object> document = new HashMap<>();
+        assertThat(exception.getMessage(), equalTo("field [source_field] is null, cannot parse user-agent."));
         document.put("source_field", "Something I made up v42.0.1");  
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
-
-        processor.execute(ingestDocument);  
-        Map<String, Object> data = ingestDocument.getSourceAndMetadata();
-
-        assertThat(data, hasKey("target_field"));  
+            randomAlphaOfLength(10),
+ * KIND, either express or implied.  See the License for the
+import java.io.IOException;  
         Map<String, Object> target = (Map<String, Object>) data.get("target_field");
-
-        assertThat(target.get("name"), is("Other"));  
-        assertNull(target.get("major"));
-        assertNull(target.get("minor"));
-        assertNull(target.get("patch"));  
-        assertNull(target.get("build"));
-
-        assertNull(target.get("os"));  
-
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        assertThat(target.get("version"), is("33.0.1750.149"));
+ * software distributed under the License is distributed on an
+ *  
         Map<String, String> device = new HashMap<>();
-        device.put("name", "Other");  
-        assertThat(target.get("device"), is(device));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import static org.hamcrest.Matchers.equalTo;
+        assertIngestDocument(originalIngestDocument, ingestDocument);  
+    public void testUncommonDevice() throws Exception {  
+            "target_field",
+            EnumSet.allOf(UserAgentProcessor.Property.class),
+            parser,
+    @SuppressWarnings("unchecked")
+        assertNull(target.get("minor"));
+        assertNull(target.get("version"));
+ * Licensed to Elasticsearch under one or more contributor  
+/*
+        );
     }
-}  
+ * the Apache License, Version 2.0 (the "License"); you may
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);  
+    }  
+        Map<String, Object> data = ingestDocument.getSourceAndMetadata();  
+        assertThat(target.get("os"), is(os));
+import static org.hamcrest.Matchers.is;
+            "source_field",  
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
+            "source_field",  
+        assertThat(exception.getMessage(), equalTo("field [source_field] not present as part of path [source_field]"));
+        os.put("name", "Android");
+            true
+ * The OpenSearch Contributors require contributions made to  
+        processor = new UserAgentProcessor(
+    }
+ * this work for additional information regarding copyright
+/*  
+        device.put("name", "Other");  
+        );
+        Map<String, String> device = new HashMap<>();  
+            "source_field",
+        assertThat(target.get("version"), is("3.0"));
+        device.put("name", "Mac");
+            randomAlphaOfLength(10),  
+    @SuppressWarnings("unchecked")  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertThat(target.get("device"), is(device));  
+    @BeforeClass
+        );
+        assertThat(target.get("device"), is(device));
+    public void testNonExistentWithoutIgnoreMissing() throws Exception {
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+            EnumSet.allOf(UserAgentProcessor.Property.class),  
+        assertNull(target.get("build"));
+            EnumSet.allOf(UserAgentProcessor.Property.class),  
+        UserAgentProcessor processor = new UserAgentProcessor(  
+import org.opensearch.ingest.RandomDocumentPicks;
+import java.util.EnumSet;  
+        UserAgentParser parser = new UserAgentParser(randomAlphaOfLength(10), regexStream, new UserAgentCache(1000));  
+ *
+        assertThat(target.get("os"), is(os));
+        Map<String, String> os = new HashMap<>();
+    @SuppressWarnings("unchecked")
+        Map<String, Object> data = ingestDocument.getSourceAndMetadata();
+        );
+            null,  
+    public void testSpider() throws Exception {  
+ */  

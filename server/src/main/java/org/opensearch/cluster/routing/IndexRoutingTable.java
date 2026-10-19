@@ -1,847 +1,773 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing;
-
-import org.apache.lucene.util.CollectionUtil;
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.cluster.Diff;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.routing.RecoverySource.EmptyStoreRecoverySource;  
-import org.opensearch.cluster.routing.RecoverySource.ExistingStoreRecoverySource;
-import org.opensearch.cluster.routing.RecoverySource.LocalShardsRecoverySource;
-import org.opensearch.cluster.routing.RecoverySource.PeerRecoverySource;  
-import org.opensearch.cluster.routing.RecoverySource.RemoteStoreRecoverySource;
-import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
-import org.opensearch.common.Randomness;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.VerifiableWriteable;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Predicate;  
-
-/**
- * The {@link IndexRoutingTable} represents routing information for a single  
- * index. The routing table maintains a list of all shards in the index. A
- * single shard in this context has one more instances namely exactly one
- * {@link ShardRouting#primary() primary} and 1 or more replicas. In other  
- * words, each instance of a shard is considered a replica while only one
- * replica per shard is a {@code primary} replica. The {@code primary} replica
- * can be seen as the "leader" of the shard acting as the primary entry point  
- * for operations on a specific shard.
- * <p>
- * Note: The term replica is not directly  
- * reflected in the routing table or in related classes, replicas are
- * represented as {@link ShardRouting}.
- * </p>  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable>
-    implements  
-        Iterable<IndexShardRoutingTable>,
-        VerifiableWriteable {
-
-    private final Index index;
+        for (IndexShardRoutingTable indexShard : this) {
+                            builder.removeShard(shardRouting);
+        index.writeTo(out);
+                final Set<String> inSyncAllocationIds = indexMetadata.inSyncAllocationIds(shardRouting.id());
+    @PublicApi(since = "1.0.0")
+            int v = o1.shardId().getIndex().getName().compareTo(o2.shardId().getIndex().getName());
+                            shardId,
     private final ShardShuffler shuffler;
-
-    // note, we assume that when the index routing is created, ShardRoutings are created for all possible number of
-    // shards with state set to UNASSIGNED
-    private final Map<Integer, IndexShardRoutingTable> shards;  
-
-    private final List<ShardRouting> allActiveShards;
-
-    IndexRoutingTable(Index index, final Map<Integer, IndexShardRoutingTable> shards) {
-        this.index = index;
-        this.shuffler = new RotationShardShuffler(Randomness.get().nextInt());  
-        this.shards = Collections.unmodifiableMap(shards);
+        }
+                                    + " is a primary that is recovering "
+import java.io.IOException;  
         List<ShardRouting> allActiveShards = new ArrayList<>();
         for (IndexShardRoutingTable cursor : shards.values()) {  
-            for (ShardRouting shardRouting : cursor) {
-                if (shardRouting.active()) {
-                    allActiveShards.add(shardRouting);  
-                }
-            }
-        }  
-        this.allActiveShards = Collections.unmodifiableList(allActiveShards);
-    }
-
-    /**
-     * Return the index id
-     *  
-     * @return id of the index
-     */
-    public Index getIndex() {  
-        return index;
-    }
-
-    boolean validate(Metadata metadata) {
-        // check index exists
-        if (!metadata.hasIndex(index.getName())) {  
-            throw new IllegalStateException(index + " exists in routing but does not exist in metadata");
-        }
-        IndexMetadata indexMetadata = metadata.index(index.getName());  
-        if (indexMetadata.getIndexUUID().equals(index.getUUID()) == false) {
-            throw new IllegalStateException(index.getName() + " exists in routing but does not exist in metadata with the same uuid");
-        }  
-
-        // check the number of shards
-        if (indexMetadata.getNumberOfShards() != shards().size()) {  
-            Set<Integer> expected = new HashSet<>();
-            for (int i = 0; i < indexMetadata.getNumberOfShards(); i++) {
-                expected.add(i);  
-            }
-            for (IndexShardRoutingTable indexShardRoutingTable : this) {
-                expected.remove(indexShardRoutingTable.shardId().id());  
-            }
-            throw new IllegalStateException("Wrong number of shards in routing table, missing: " + expected);
-        }  
-
-        boolean isSearchOnlyClusterBlockEnabled = indexMetadata.getSettings()
-            .getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false);  
-
-        for (IndexShardRoutingTable indexShardRoutingTable : this) {
-            int routingNumberOfReplicas = indexShardRoutingTable.size() - 1;  
-            int expectedReplicas = indexMetadata.getNumberOfReplicas() + indexMetadata.getNumberOfSearchOnlyReplicas();
-
-            // Only throw if we are NOT in search-only mode. Otherwise, we ignore or log the mismatch.  
-            if (routingNumberOfReplicas != expectedReplicas && isSearchOnlyClusterBlockEnabled == false) {
-                throw new IllegalStateException(
-                    "Shard ["  
-                        + indexShardRoutingTable.shardId().id()
-                        + "] routing table has wrong number of replicas, expected ["
-                        + "Replicas: "  
-                        + indexMetadata.getNumberOfReplicas()
-                        + ", Search Replicas: "
-                        + indexMetadata.getNumberOfSearchOnlyReplicas()  
-                        + "], got ["
-                        + routingNumberOfReplicas
-                        + "]"  
-                );
-            }
-
-            for (ShardRouting shardRouting : indexShardRoutingTable) {
-                if (!shardRouting.index().equals(index)) {
-                    throw new IllegalStateException(  
-                        "shard routing has an index [" + shardRouting.index() + "] that is different from the routing table"
-                    );
-                }  
-                final Set<String> inSyncAllocationIds = indexMetadata.inSyncAllocationIds(shardRouting.id());
-                if (shardRouting.active()
-                    && inSyncAllocationIds.contains(shardRouting.allocationId().getId()) == false  
-                    && shardRouting.isSearchOnly() == false) {
-                    throw new IllegalStateException(
-                        "active shard routing "  
-                            + shardRouting
-                            + " has no corresponding entry in the in-sync "
-                            + "allocation set "  
-                            + inSyncAllocationIds
-                    );
-                }  
-
-                if (shardRouting.primary()
-                    && shardRouting.initializing()  
-                    && shardRouting.recoverySource().getType() == RecoverySource.Type.EXISTING_STORE) {
-                    if (inSyncAllocationIds.contains(RecoverySource.ExistingStoreRecoverySource.FORCED_ALLOCATION_ID)) {
-                        if (inSyncAllocationIds.size() != 1) {  
-                            throw new IllegalStateException(
-                                "a primary shard routing "
-                                    + shardRouting  
-                                    + " is a primary that is recovering "
-                                    + "from a stale primary but has unexpected allocation ids in the in-sync set "
-                                    + inSyncAllocationIds  
-                            );
-                        }
-                    } else if (inSyncAllocationIds.contains(shardRouting.allocationId().getId()) == false) {  
-                        throw new IllegalStateException(
-                            "a primary shard routing "
-                                + shardRouting  
-                                + " is a primary that is recovering "
-                                + "from a known allocation id but has no corresponding entry in the in-sync set "
-                                + inSyncAllocationIds  
-                        );
-                    }
-                }  
-            }
-        }
-        return true;  
-    }
-
-    @Override  
-    public Iterator<IndexShardRoutingTable> iterator() {
-        return shards.values().iterator();
-    }  
-
-    /**
-     * Calculates the number of nodes that hold one or more shards of this index  
-     * {@link IndexRoutingTable} excluding the nodes with the node ids give as
-     * the <code>excludedNodes</code> parameter.
-     *  
-     * @param excludedNodes id of nodes that will be excluded
-     * @return number of distinct nodes this index has at least one shard allocated on
-     */  
-    public int numberOfNodesShardsAreAllocatedOn(String... excludedNodes) {
-        Set<String> nodes = new HashSet<>();
-        for (IndexShardRoutingTable shardRoutingTable : this) {  
-            for (ShardRouting shardRouting : shardRoutingTable) {
-                if (shardRouting.assignedToNode()) {
-                    String currentNodeId = shardRouting.currentNodeId();  
-                    boolean excluded = false;
-                    if (excludedNodes != null) {
-                        for (String excludedNode : excludedNodes) {  
-                            if (currentNodeId.equals(excludedNode)) {
-                                excluded = true;
-                                break;  
-                            }
-                        }
-                    }  
-                    if (!excluded) {
-                        nodes.add(currentNodeId);
-                    }  
-                }
-            }
-        }  
-        return nodes.size();
-    }
-
-    public Map<Integer, IndexShardRoutingTable> shards() {
-        return shards;
-    }  
-
-    public Map<Integer, IndexShardRoutingTable> getShards() {
-        return shards();  
-    }
-
-    public IndexShardRoutingTable shard(int shardId) {  
-        return shards.get(shardId);
-    }
-
-    /**
-     * Returns <code>true</code> if all shards are primary and active. Otherwise <code>false</code>.
-     */  
-    public boolean allPrimaryShardsActive() {
-        return primaryShardsActive() == shards().size();
-    }  
-
-    /**
-     * Calculates the number of primary shards in active state in routing table  
-     *
-     * @return number of active primary shards
-     */  
-    public int primaryShardsActive() {
-        int counter = 0;
-        for (IndexShardRoutingTable shardRoutingTable : this) {  
-            if (shardRoutingTable.primaryShard() != null && shardRoutingTable.primaryShard().active()) {
-                counter++;
-            }  
-        }
-        return counter;
-    }  
-
-    /**
-     * Returns <code>true</code> if all primary shards are in  
-     * {@link ShardRoutingState#UNASSIGNED} state. Otherwise <code>false</code>.
-     */
-    public boolean allPrimaryShardsUnassigned() {  
-        return primaryShardsUnassigned() == shards.size();
-    }
-
-    /**
-     * Calculates the number of primary shards in the routing table the are in
-     * {@link ShardRoutingState#UNASSIGNED} state.  
-     */
-    public int primaryShardsUnassigned() {
-        int counter = 0;  
-        for (IndexShardRoutingTable shardRoutingTable : this) {
-            if (shardRoutingTable.primaryShard().unassigned()) {
-                counter++;  
-            }
-        }
-        return counter;  
-    }
-
-    /**  
-     * Returns a {@link List} of shards that match one of the states listed in {@link ShardRoutingState states}
-     *
-     * @param state {@link ShardRoutingState} to retrieve  
-     * @return a {@link List} of shards that match one of the given {@link ShardRoutingState states}
-     */
-    public List<ShardRouting> shardsWithState(ShardRoutingState state) {  
-        List<ShardRouting> shards = new ArrayList<>();
-        for (IndexShardRoutingTable shardRoutingTable : this) {
-            shards.addAll(shardRoutingTable.shardsWithState(state));  
-        }
-        return shards;
-    }  
-
-    /**
-     * Returns a {@link List} of shards that match the provided {@link Predicate}  
-     *
-     * @param predicate {@link Predicate} to apply
-     * @return a {@link List} of shards that match one of the given {@link Predicate}  
-     */
-    public List<ShardRouting> shardsMatchingPredicate(Predicate<ShardRouting> predicate) {
-        List<ShardRouting> shards = new ArrayList<>();  
-        for (IndexShardRoutingTable shardRoutingTable : this) {
-            shards.addAll(shardRoutingTable.shardsMatchingPredicate(predicate));
-        }  
-        return shards;
-    }
-
-    public int shardsMatchingPredicateCount(Predicate<ShardRouting> predicate) {
-        int count = 0;
-        for (IndexShardRoutingTable shardRoutingTable : this) {  
-            count += shardRoutingTable.shardsMatchingPredicateCount(predicate);
-        }
-        return count;  
-    }
-
-    /**  
-     * Returns an unordered iterator over all active shards (including replicas).
-     */
-    public ShardsIterator randomAllActiveShardsIt() {  
-        return new PlainShardsIterator(shuffler.shuffle(allActiveShards));
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-
-        IndexRoutingTable that = (IndexRoutingTable) o;  
-
-        if (!index.equals(that.index)) return false;
-        if (!shards.equals(that.shards)) return false;  
-
-        return true;
-    }  
-
-    @Override
-    public int hashCode() {  
-        int result = index.hashCode();
-        result = 31 * result + shards.hashCode();
-        return result;  
-    }
-
-    @Override  
-    public String toString() {
-        return "IndexRoutingTable{" + "shards=" + shards + ", index=" + index + '}';
-    }  
-
-    public static IndexRoutingTable readFrom(StreamInput in) throws IOException {
-        Index index = new Index(in);  
-        Builder builder = new Builder(index);
-
-        int size = in.readVInt();  
-        for (int i = 0; i < size; i++) {
-            builder.addIndexShard(IndexShardRoutingTable.Builder.readFromThin(in, index));
-        }  
-
-        return builder.build();
-    }  
-
-    public static Diff<IndexRoutingTable> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(IndexRoutingTable::readFrom, in);  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        index.writeTo(out);
-        out.writeVInt(shards.size());  
-        for (IndexShardRoutingTable indexShard : this) {
-            IndexShardRoutingTable.Builder.writeToThin(indexShard, out);
-        }  
-    }
-
-    public void writeVerifiableTo(BufferedChecksumStreamOutput out) throws IOException {  
-        index.writeTo(out);
-        out.writeMapValues(shards, (stream, value) -> IndexShardRoutingTable.Builder.writeVerifiableTo(value, stream));
-    }  
-
-    public static Builder builder(Index index) {
-        return new Builder(index);  
-    }
-
-    /**  
-     * Builder of a routing table.
-     *
-     * @opensearch.api  
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Builder {  
-
-        private final Index index;
-        private final Map<Integer, IndexShardRoutingTable> shards = new HashMap<>();  
-
-        public Builder(Index index) {
-            this.index = index;  
-        }
-
-        /**  
-         * Initializes a new empty index, as if it was created from an API.
-         */
-        public Builder initializeAsNew(IndexMetadata indexMetadata) {  
-            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
-        }
-
-        /**
-         * Initializes an existing index.
-         */  
-
-        public Builder initializeAsRecovery(IndexMetadata indexMetadata) {
-            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.CLUSTER_RECOVERED, null));  
-        }
-
-        /**  
-         * Initializes a new index caused by dangling index imported.
-         */
-        public Builder initializeAsFromDangling(IndexMetadata indexMetadata) {  
-            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.DANGLING_INDEX_IMPORTED, null));
-        }
-
-        /**
-         * Initializes a new empty index, as as a result of opening a closed index.
-         */  
-        public Builder initializeAsFromCloseToOpen(IndexMetadata indexMetadata) {
-            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null));
-        }  
-
-        /**
-         * Initializes a new empty index, as as a result of closing an opened index.  
-         */
-        public Builder initializeAsFromOpenToClose(IndexMetadata indexMetadata) {
-            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CLOSED, null));  
-        }
-
-        /**  
-         * Initializes a new empty index, to be restored from a snapshot
-         */
-        public Builder initializeAsNewRestore(  
-            IndexMetadata indexMetadata,
-            SnapshotRecoverySource recoverySource,
-            final Set<Integer> ignoreShards  
-        ) {
-            final UnassignedInfo unassignedInfo = new UnassignedInfo(
-                UnassignedInfo.Reason.NEW_INDEX_RESTORED,  
-                "restore_source["
-                    + recoverySource.snapshot().getRepository()
-                    + "/"  
-                    + recoverySource.snapshot().getSnapshotId().getName()
-                    + "]"
-            );  
-            return initializeAsRestore(indexMetadata, recoverySource, ignoreShards, true, unassignedInfo);
-        }
-
-        /**
-         * Initializes an existing index, to be restored from a snapshot
-         */  
-        public Builder initializeAsRestore(IndexMetadata indexMetadata, SnapshotRecoverySource recoverySource) {
-            final UnassignedInfo unassignedInfo = new UnassignedInfo(
-                UnassignedInfo.Reason.EXISTING_INDEX_RESTORED,  
-                "restore_source["
-                    + recoverySource.snapshot().getRepository()
-                    + "/"  
-                    + recoverySource.snapshot().getSnapshotId().getName()
-                    + "]"
-            );  
-            return initializeAsRestore(indexMetadata, recoverySource, null, false, unassignedInfo);
-        }
-
-        /**
-         * Initializes an existing index, to be restored from remote store
-         */  
-        public Builder initializeAsRemoteStoreRestore(
-            IndexMetadata indexMetadata,
-            RemoteStoreRecoverySource recoverySource,  
-            Map<ShardId, IndexShardRoutingTable> indexShardRoutingTableMap,
-            boolean forceRecoverAllPrimaries
-        ) {  
-            final UnassignedInfo unassignedInfo = new UnassignedInfo(
-                UnassignedInfo.Reason.EXISTING_INDEX_RESTORED,
-                "restore_source[remote_store]"  
-            );
-            assert indexMetadata.getIndex().equals(index);
-            if (shards.isEmpty() == false) {  
-                throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");
-            }
-            for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {  
-                ShardId shardId = new ShardId(index, shardNumber);
-                if (indexShardRoutingTableMap.containsKey(shardId) == false) {
-                    throw new IllegalStateException("IndexShardRoutingTable is not present for shardId: " + shardId);  
-                }
-                IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);
-                IndexShardRoutingTable indexShardRoutingTable = indexShardRoutingTableMap.get(shardId);  
-                if (forceRecoverAllPrimaries || indexShardRoutingTable.primaryShard().unassigned()) {
-                    // Primary shard to be recovered from remote store.
-                    indexShardRoutingBuilder.addShard(ShardRouting.newUnassigned(shardId, true, recoverySource, unassignedInfo));  
-                    // All the replica shards to be recovered from peer recovery.
-                    for (int replicaNumber = 0; replicaNumber < indexMetadata.getNumberOfReplicas(); replicaNumber++) {
-                        indexShardRoutingBuilder.addShard(  
-                            ShardRouting.newUnassigned(shardId, false, PeerRecoverySource.INSTANCE, unassignedInfo)
-                        );
-                    }  
-                    // if writers are red we do not want to re-recover search only shards if already assigned.
-                    for (ShardRouting shardRouting : indexShardRoutingTable.searchOnlyReplicas()) {
-                        if (shardRouting.unassigned()) {  
-                            indexShardRoutingBuilder.addShard(
-                                ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)
-                            );  
-                        } else {
-                            indexShardRoutingBuilder.addShard(shardRouting);
-                        }  
-                    }
-                } else {
-                    // Primary is either active or initializing. Do not trigger restore.  
-                    indexShardRoutingBuilder.addShard(indexShardRoutingTable.primaryShard());
-                    // Replica, if unassigned, trigger peer recovery else no action.
-                    for (ShardRouting shardRouting : indexShardRoutingTable.replicaShards()) {  
-                        if (shardRouting.unassigned()) {
-                            if (shardRouting.isSearchOnly()) {
-                                indexShardRoutingBuilder.addShard(  
-                                    ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)
-                                );
-                            } else {  
-                                indexShardRoutingBuilder.addShard(
-                                    ShardRouting.newUnassigned(shardId, false, PeerRecoverySource.INSTANCE, unassignedInfo)
-                                );  
-                            }
-                        } else {
-                            indexShardRoutingBuilder.addShard(shardRouting);  
-                        }
-                    }
-                }  
-                shards.put(shardNumber, indexShardRoutingBuilder.build());
-            }
             return this;  
-        }
-
-        /**  
-         * Initializes an index, to be restored from snapshot
-         */
-        private Builder initializeAsRestore(  
-            IndexMetadata indexMetadata,
+                                ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)
+            );
+        return sb.toString();  
+        IndexRoutingTable that = (IndexRoutingTable) o;  
+    }  
+                ShardId shardId = new ShardId(index, shardNumber);  
+                if (indexShard.replicaShards().isEmpty()) {  
             RecoverySource recoverySource,
-            final Set<Integer> ignoreShards,  
-            boolean asNew,
-            UnassignedInfo unassignedInfo
-        ) {  
-            assert indexMetadata.getIndex().equals(index);
-            if (!shards.isEmpty()) {
-                throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");  
-            }
-            for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {
-                ShardId shardId = new ShardId(index, shardNumber);  
-                IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);
-                for (int i = 0; i <= indexMetadata.getNumberOfReplicas(); i++) {
-                    boolean primary = i == 0;  
-                    if (asNew && ignoreShards.contains(shardNumber)) {
-                        // This shards wasn't completely snapshotted - restore it as new shard
-                        indexShardRoutingBuilder.addShard(  
-                            ShardRouting.newUnassigned(
-                                shardId,
-                                primary,  
-                                primary ? EmptyStoreRecoverySource.INSTANCE : PeerRecoverySource.INSTANCE,
-                                unassignedInfo
-                            )  
-                        );
-                    } else {
-                        indexShardRoutingBuilder.addShard(  
-                            ShardRouting.newUnassigned(
-                                shardId,
-                                primary,  
-                                primary ? recoverySource : PeerRecoverySource.INSTANCE,
-                                unassignedInfo
-                            )  
-                        );
-                    }
+ */  
+        if (indexMetadata.getNumberOfShards() != shards().size()) {  
                 }  
-                for (int i = 0; i < indexMetadata.getNumberOfSearchOnlyReplicas(); i++) {
-                    indexShardRoutingBuilder.addShard(
-                        ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)  
-                    );
-                }
-                shards.put(shardNumber, indexShardRoutingBuilder.build());  
-            }
+import java.util.Collections;
+/**
+    /**
+        out.writeMapValues(shards, (stream, value) -> IndexShardRoutingTable.Builder.writeVerifiableTo(value, stream));
+         * @return The Builder  
+        for (IndexShardRoutingTable indexShard : this) {
+                    && shardRouting.recoverySource().getType() == RecoverySource.Type.EXISTING_STORE) {
+     *  
+                );  
+        for (int i = 0; i < size; i++) {
+                            ShardRouting.newUnassigned(shardId, false, PeerRecoverySource.INSTANCE, unassignedInfo)
+}  
+                                primary,  
+ * compatible open source license.
+        /**
+                                primary,  
+     *
+            return this;  
+            IndexShardRoutingTable indexShard = shards.get(shard.id());
+                        builder.removeShard(shardRouting);  
+                    true,  
+                if (indexShardRoutingTable.searchOnlyReplicas().isEmpty()) {
+                            )  
+                            builder.removeShard(shardRouting);  
+                for (ShardRouting shardRouting : indexShardRoutingTable) {
             return this;
+ * Licensed to Elasticsearch under one or more contributor  
+                for (ShardRouting shardRouting : indexShard) {  
+                        for (String excludedNode : excludedNodes) {  
+        }
+         */
         }  
-
-        /**
-         * Initializes a new empty index, with an option to control if its from an API or not.  
-         */
-        /**
-         * Initializes a new empty index, with an option to control if its from an API or not.  
-         */
-        private Builder initializeEmpty(IndexMetadata indexMetadata, UnassignedInfo unassignedInfo) {
-            assert indexMetadata.getIndex().equals(index);  
-            if (!shards.isEmpty()) {
-                throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");
-            }  
-
-            // Check if search-only mode is enabled
-            boolean isSearchOnly = indexMetadata.getSettings().getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false);  
-
-            // For search-only mode, only initialize search replicas
-            if (isSearchOnly) {  
-                for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {
-                    ShardId shardId = new ShardId(index, shardNumber);
-                    IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);  
-
-                    // Add only search replicas
-                    for (int i = 0; i < indexMetadata.getNumberOfSearchOnlyReplicas(); i++) {  
-                        indexShardRoutingBuilder.addShard(
-                            ShardRouting.newUnassigned(
-                                shardId,  
-                                false,
-                                true,
-                                RecoverySource.EmptyStoreRecoverySource.INSTANCE,  
-                                unassignedInfo
-                            )
-                        );  
+            shards.put(indexShard.shardId().id(), indexShard);
+            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CLOSED, null));  
+                ShardId shardId = new ShardId(index, shardNumber);
+            count += shardRoutingTable.shardsMatchingPredicateCount(predicate);
                     }
-                    shards.put(shardNumber, indexShardRoutingBuilder.build());
-                }  
                 return this;
+            IndexShardRoutingTable.Builder.writeToThin(indexShard, out);
+            // Only throw if we are NOT in search-only mode. Otherwise, we ignore or log the mismatch.  
+                    + "]"
+                    String currentNodeId = shardRouting.currentNodeId();  
+                for (int i = 0; i < indexMetadata.getNumberOfSearchOnlyReplicas(); i++) {
+                }  
+import org.opensearch.core.index.Index;  
+            assert indexMetadata.getIndex().equals(index);  
+         */  
+                    throw new IllegalStateException(
+                    // nothing to do here!  
+        return new PlainShardsIterator(shuffler.shuffle(allActiveShards));
+    public int primaryShardsActive() {
+        for (IndexShardRoutingTable indexShardRoutingTable : this) {
+                IndexShardRoutingTable indexShard = shards.get(shardId);
+        public Builder initializeAsRecovery(IndexMetadata indexMetadata) {
+        VerifiableWriteable {
+         */
+    }
+            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.CLUSTER_RECOVERED, null));  
+                                indexShardRoutingBuilder.addShard(  
+                        "active shard routing "  
+                boolean removed = false;  
+        // check the number of shards
+                }
+import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
+         * Initializes a new empty index, with an option to control if its from an API or not.  
+        }  
+import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
+    }
+     * @param state {@link ShardRoutingState} to retrieve  
+ * The OpenSearch Contributors require contributions made to  
+                            break;
+                shards.put(shardNumber, new IndexShardRoutingTable.Builder(shards.get(shard.id())).addShard(shard).build());
+                    + recoverySource.snapshot().getSnapshotId().getName()
+                    if (!shardRouting.primary() && !shardRouting.assignedToNode() && !shardRouting.isSearchOnly()) {  
+                                + " is a primary that is recovering "
+            .getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false);  
+                );
+     * @param predicate {@link Predicate} to apply
+import java.util.HashSet;
+     */
+            Map<ShardId, IndexShardRoutingTable> indexShardRoutingTableMap,
+    }
+            return this;  
+     * the <code>excludedNodes</code> parameter.
+/*
+    private final Map<Integer, IndexShardRoutingTable> shards;  
+                            ShardRouting.newUnassigned(
+                    return this;
+        public IndexRoutingTable build() {
+        this.index = index;
+         */  
+                    builder.addShard(shardRouting);  
+         */
+                    && inSyncAllocationIds.contains(shardRouting.allocationId().getId()) == false  
+                if (shardRouting.active()
+    }  
+        for (IndexShardRoutingTable shardRoutingTable : this) {  
+import org.opensearch.common.Randomness;  
             }
-
-            // Standard initialization for non-search-only mode
-            for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {
+     *
+         */
+         * Initializes an existing index, to be restored from remote store
+                        }
+        return counter;
+                for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {
+    }
+                }  
+                IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);
+            }
+    IndexRoutingTable(Index index, final Map<Integer, IndexShardRoutingTable> shards) {
+         * Initializes a new empty index, to be restored from a snapshot
+     * @return number of distinct nodes this index has at least one shard allocated on
+            return this;
+                for (int i = 0; i <= indexMetadata.getNumberOfReplicas(); i++) {
+                                    + "from a stale primary but has unexpected allocation ids in the in-sync set "
+    @Override
+import org.opensearch.cluster.routing.RecoverySource.RemoteStoreRecoverySource;
+                    throw new IllegalStateException("IndexShardRoutingTable is not present for shardId: " + shardId);  
+                                    + inSyncAllocationIds  
+        return shards.values().iterator();
+ * GitHub history for details.
+        }
+        boolean isSearchOnlyClusterBlockEnabled = indexMetadata.getSettings()
+    }
+        /**
+                    if (inSyncAllocationIds.contains(RecoverySource.ExistingStoreRecoverySource.FORCED_ALLOCATION_ID)) {
+import org.opensearch.core.index.shard.ShardId;
+                "restore_source[remote_store]"  
+            return initializeAsRestore(indexMetadata, recoverySource, null, false, unassignedInfo);
+                            primary ? primaryRecoverySource : PeerRecoverySource.INSTANCE,
+import java.util.function.Predicate;  
+         * Remove a Search only replica from the IndexShardRoutingTable
+                        indexShardRoutingBuilder.addShard(  
+            // Check if search-only mode is enabled
+                        );
+                    }
+            if (shards.isEmpty() == false) {  
+                        }
+                }
+                    new UnassignedInfo(UnassignedInfo.Reason.REPLICA_ADDED, null)  
+         * Initializes a new empty index, as if it was created from an API.
+     */
+        ) {
+package org.opensearch.cluster.routing;
+            for (IndexShardRoutingTable indexShardRoutingTable : this) {
+                        builder.removeShard(shardRouting);
+         * Adds a new shard routing (makes a copy of it), with reference data used from the index shard routing table  
+                        + routingNumberOfReplicas
+                        ShardRouting.newUnassigned(
+        return shards;
+                    boolean primary = i == 0;  
+                ShardRouting shard = ShardRouting.newUnassigned(
+                        break;  
+                    // Add only search replicas
+                }
+        // check index exists
+                    throw new IllegalStateException(  
+ * <p>
+ * reflected in the routing table or in related classes, replicas are
+                            )  
+        public Builder initializeAsFromDangling(IndexMetadata indexMetadata) {  
+        }
+            return new IndexRoutingTable(index, shards);  
+        if (this == o) return true;  
+     * @param excludedNodes id of nodes that will be excluded
+    }
+        public Builder addSearchReplica() {
+ * The {@link IndexRoutingTable} represents routing information for a single  
+         * Initializes an index, to be restored from snapshot
+        public Builder initializeAsRemoteStoreRestore(
+                    for (int replicaNumber = 0; replicaNumber < indexMetadata.getNumberOfReplicas(); replicaNumber++) {
+ *
+ * Note: The term replica is not directly  
+                    } else {
+                    EmptyStoreRecoverySource.INSTANCE,
+                shards.put(shardNumber, indexShardRoutingBuilder.build());
+                                "a primary shard routing "
+         * Initializes an existing index.
+                        if (inSyncAllocationIds.size() != 1) {  
+         * Initializes an existing index, to be restored from a snapshot
+                                false,
+     *
+                        + "], got ["
+            UnassignedInfo unassignedInfo
+                                );
+     *
                 ShardId shardId = new ShardId(index, shardNumber);  
-                final RecoverySource primaryRecoverySource;
                 if (indexMetadata.inSyncAllocationIds(shardNumber).isEmpty() == false) {
+        for (IndexShardRoutingTable shardRoutingTable : this) {  
+                    }  
+                            indexShardRoutingBuilder.addShard(shardRouting);  
+                                primary ? recoverySource : PeerRecoverySource.INSTANCE,
+     * @return a {@link List} of shards that match one of the given {@link Predicate}  
+                shards.put(shardNumber, new IndexShardRoutingTable.Builder(shards.get(shard.id())).addShard(shard).build());
+    private final Index index;
+        int counter = 0;  
+            }  
+            final UnassignedInfo unassignedInfo = new UnassignedInfo(
+import org.opensearch.cluster.routing.RecoverySource.EmptyStoreRecoverySource;  
+        if (!index.equals(that.index)) return false;
+            }
+     */
+                                break;  
+     * @opensearch.api  
+            assert indexMetadata.getIndex().equals(index);
+            final UnassignedInfo unassignedInfo = new UnassignedInfo(
+                } else {
+                            + "allocation set "  
+ * represented as {@link ShardRouting}.
+    public int numberOfNodesShardsAreAllocatedOn(String... excludedNodes) {
+     */
+                }
+                    }
+    }
+            builder.addIndexShard(IndexShardRoutingTable.Builder.readFromThin(in, index));
+        public Builder initializeAsFromCloseToOpen(IndexMetadata indexMetadata) {
+     * {@link ShardRoutingState#UNASSIGNED} state. Otherwise <code>false</code>.
+    }  
+                    } else if (inSyncAllocationIds.contains(shardRouting.allocationId().getId()) == false) {  
+ * Unless required by applicable law or agreed to in writing,
                     // we have previous valid copies for this shard. use them for recovery  
-                    primaryRecoverySource = ExistingStoreRecoverySource.INSTANCE;
-                } else if (indexMetadata.getResizeSourceIndex() != null) {
+        /**  
+                                );  
+                    builder.addShard(shardRouting);
+                    IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);  
+            for (final int shardNumber : shards.keySet()) {
+            final UnassignedInfo unassignedInfo = new UnassignedInfo(
+                    + "]"
+        }
+            int routingNumberOfReplicas = indexShardRoutingTable.size() - 1;  
+            }
+                if (shardRouting.primary()
+    @Override  
+    }
+                    shardId,  
+            return this;
+ * specific language governing permissions and limitations
+                        if (shardRouting.isSearchOnly()) {
+                    // Replica, if unassigned, trigger peer recovery else no action.
+        List<ShardRouting> shards = new ArrayList<>();  
+                    for (int i = 0; i < indexMetadata.getNumberOfSearchOnlyReplicas(); i++) {  
+                    + recoverySource.snapshot().getRepository()
+                        );
+            );  
+         */  
+     * Calculates the number of nodes that hold one or more shards of this index  
+            }
+        }  
+                        }
+        }
+        Index index = new Index(in);  
+    }
+                    // Primary is either active or initializing. Do not trigger restore.  
+                            }
+                    // nothing to do here!
+         * Initializes a new index caused by dangling index imported.
+            return this;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.cluster.routing.RecoverySource.LocalShardsRecoverySource;
+    }  
+         */
+            for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {
+    /**
+                    false,
+     * Returns an unordered iterator over all active shards (including replicas).
+                    indexShardRoutingBuilder.addShard(ShardRouting.newUnassigned(shardId, true, recoverySource, unassignedInfo));  
+        public Builder addIndexShard(IndexShardRoutingTable indexShard) {  
+            for (final int shardId : shards.keySet()) {  
+        return counter;  
+     * @return number of active primary shards
+        return "IndexRoutingTable{" + "shards=" + shards + ", index=" + index + '}';
+            boolean asNew,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+         */  
+            }  
+                    + recoverySource.snapshot().getRepository()
+ * this work for additional information regarding copyright
+        int size = in.readVInt();  
+    /**  
+import java.util.Map;
+                        ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)  
+                );
+            IndexMetadata indexMetadata,
+        }
+         */
+                            break;  
+        return primaryShardsActive() == shards().size();
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+                    + "/"  
+                        indexShardRoutingBuilder.addShard(
+                // version 0, will get updated when reroute will happen
+                counter++;
+     */
+public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable>
+                }
+                                unassignedInfo
+                        }  
+            }
+                if (!removed) {  
+            }
+                            throw new IllegalStateException(
+                    indexShardRoutingBuilder.addShard(
+                // first check if there is one that is not assigned to a node, and remove it  
+            for (ShardRouting shardRouting : shardRoutingTable) {
+        public Builder initializeAsFromOpenToClose(IndexMetadata indexMetadata) {
+            if (isSearchOnly) {  
+        }  
+        }
+     */  
+    /**
+                                primary ? EmptyStoreRecoverySource.INSTANCE : PeerRecoverySource.INSTANCE,
+         */
+                }
+                        + "Replicas: "  
+                                true,
+     */  
+                            } else {  
+    }
+        Set<String> nodes = new HashSet<>();
+                            unassignedInfo
+            for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {  
+    /**
+                v = Integer.compare(o1.shardId().id(), o2.shardId().id());  
+        this.allActiveShards = Collections.unmodifiableList(allActiveShards);
+                        );
+                for (ShardRouting shardRouting : indexShardRoutingTable) {
+                            + " has no corresponding entry in the in-sync "
+                IndexShardRoutingTable.Builder builder = new IndexShardRoutingTable.Builder(indexShardRoutingTable.shardId());
+        }
+                shards.put(shardNumber, indexShardRoutingBuilder.build());  
+                    && shardRouting.initializing()  
+                            "a primary shard routing "
+                                    ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)
+                        + ", Search Replicas: "
+                            )
+                throw new IllegalStateException(
+        });  
+                    for (ShardRouting shardRouting : indexShardRoutingTable) {  
+     * Returns <code>true</code> if all shards are primary and active. Otherwise <code>false</code>.
+                throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");
+                    );  
+        return nodes.size();
+                UnassignedInfo.Reason.NEW_INDEX_RESTORED,  
+                indexShard = new IndexShardRoutingTable.Builder(indexShard).addShard(shard).build();
+     */
+                }
+            }  
+        private Builder initializeAsRestore(  
+            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
+     * Returns a {@link List} of shards that match one of the states listed in {@link ShardRoutingState states}
+                        )  
+            shards.put(indexShard.shardId().id(), indexShard);
+        for (IndexShardRoutingTable indexShard : ordered) {
+                    ShardId shardId = new ShardId(index, shardNumber);
+                            primary,  
+                            );
+import org.opensearch.cluster.routing.RecoverySource.ExistingStoreRecoverySource;
+        /**
+            for (ShardRouting shard : indexShard) {
+                        + "] routing table has wrong number of replicas, expected ["
+    public static Diff<IndexRoutingTable> readDiffFrom(StreamInput in) throws IOException {
+            return v;
+    }  
+                    indexShardRoutingBuilder.addShard(indexShardRoutingTable.primaryShard());
+        out.writeVInt(shards.size());  
+                shards.put(shardId, builder.build());
+        }
+                }
+                    }
+                if (shardRouting.active()) {
+                ShardId shardId = new ShardId(index, shardNumber);
+        /**
+        return shards();  
+import org.opensearch.cluster.metadata.Metadata;
+            ordered.add(indexShard);  
+            IndexMetadata indexMetadata,
+        IndexMetadata indexMetadata = metadata.index(index.getName());  
+                IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);
+                IndexShardRoutingTable.Builder builder = new IndexShardRoutingTable.Builder(indexShard.shardId());
+    public List<ShardRouting> shardsMatchingPredicate(Predicate<ShardRouting> predicate) {
+                    );
+     * Return the index id
+            RemoteStoreRecoverySource recoverySource,  
+    public Index getIndex() {  
+            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.DANGLING_INDEX_IMPORTED, null));
+    }
+        }
+        public Builder removeReplica() {  
+            }
+    public Map<Integer, IndexShardRoutingTable> getShards() {
+        }  
+                }  
+ * You may obtain a copy of the License at  
+        for (IndexShardRoutingTable shardRoutingTable : this) {
+ * @opensearch.api
+    public static Builder builder(Index index) {
+ * software distributed under the License is distributed on an
+    public Map<Integer, IndexShardRoutingTable> shards() {
+     * Returns a {@link List} of shards that match the provided {@link Predicate}  
+                    }
+            if (!shards.isEmpty()) {
+    }
+        return shards;
+                expected.add(i);  
+    public boolean allPrimaryShardsActive() {
+ *  
+                    for (ShardRouting shardRouting : indexShard) {
+    public String toString() {
+                    false,
+     * {@link IndexRoutingTable} excluding the nodes with the node ids give as
+ * under the License.  
+                }  
+        }  
                     // this is a new index but the initial shards should merged from another index  
+                                shardId,  
+                UnassignedInfo.Reason.EXISTING_INDEX_RESTORED,
+        }
+        private final Map<Integer, IndexShardRoutingTable> shards = new HashMap<>();  
+        return true;  
+                for (int i = 0; i <= indexMetadata.getNumberOfReplicas(); i++) {
+        }
+                        + indexShardRoutingTable.shardId().id()
+        public Builder initializeAsNewRestore(  
+    /**  
+            shards.addAll(shardRoutingTable.shardsMatchingPredicate(predicate));
+import org.opensearch.core.common.io.stream.StreamInput;  
+    }
+ */  
+                .append(indexShard.shardId().id())  
+        int result = index.hashCode();
+                    boolean primary = i == 0;
+                }
+        public Builder(Index index) {
+            if (shardRoutingTable.primaryShard().unassigned()) {
+            int expectedReplicas = indexMetadata.getNumberOfReplicas() + indexMetadata.getNumberOfSearchOnlyReplicas();
+ * this file be licensed under the Apache-2.0 license or a
+            boolean forceRecoverAllPrimaries
+                shards.put(shardId, builder.build());
+                        } else {
+                        throw new IllegalStateException(
+                            if (shardRouting.isSearchOnly()) {
+                    shards.put(shardNumber, indexShardRoutingBuilder.build());
+ * index. The routing table maintains a list of all shards in the index. A
+                .append(indexShard.shardId().getIndex().getName())
+        public Builder removeSearchReplica() {
+            }
+ * not use this file except in compliance with the License.
+                            ShardRouting.newUnassigned(
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.util.Iterator;
+                }
+        public Builder addShard(ShardRouting shard) {  
+        }  
+                    if (!excluded) {
+        }
+                                + "from a known allocation id but has no corresponding entry in the in-sync set "
+            sb.append("----shard_id [")  
+    }  
+        this.shards = Collections.unmodifiableMap(shards);
+        public Builder addReplica() {
+            if (v == 0) {
+ */
+ * </p>  
+    public boolean allPrimaryShardsUnassigned() {  
+        private Builder initializeEmpty(IndexMetadata indexMetadata, UnassignedInfo unassignedInfo) {
+                // first check if there is one that is not assigned to a node, and remove it
+    /**
+                                shardId,
+                                unassignedInfo
+                    boolean excluded = false;
+                    for (ShardRouting shardRouting : indexShardRoutingTable.searchOnlyReplicas()) {
+                        indexShardRoutingBuilder.addShard(  
+            shards.addAll(shardRoutingTable.shardsWithState(state));  
+ * replica per shard is a {@code primary} replica. The {@code primary} replica
+                            indexShardRoutingBuilder.addShard(shardRouting);
+                if (!removed) {
+            if (!shards.isEmpty()) {
+            }
+ * words, each instance of a shard is considered a replica while only one
+        }
+    }
+                ShardId shardId = new ShardId(index, shardNumber);  
+                    // All the replica shards to be recovered from peer recovery.
+                    return this;
+        result = 31 * result + shards.hashCode();
+    // note, we assume that when the index routing is created, ShardRoutings are created for all possible number of
+@PublicApi(since = "1.0.0")
+        return new Builder(index);  
+        int counter = 0;
+    /**
+     *  
+        return primaryShardsUnassigned() == shards.size();
+            return this;
+    }  
+     */
+                    primaryRecoverySource = EmptyStoreRecoverySource.INSTANCE;
+                throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");  
+        /**
+                    );
+            // Standard initialization for non-search-only mode
+                shards.put(shardNumber, indexShardRoutingBuilder.build());
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            if (indexShard == null) {
+        for (IndexShardRoutingTable shardRoutingTable : this) {
+        this.shuffler = new RotationShardShuffler(Randomness.get().nextInt());  
+     * Calculates the number of primary shards in active state in routing table  
+    }
+        /**  
+    public Iterator<IndexShardRoutingTable> iterator() {
+            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null));
+            }
+            boolean isSearchOnly = indexMetadata.getSettings().getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false);  
+                                excluded = true;
+                        + "]"  
+    public int shardsMatchingPredicateCount(Predicate<ShardRouting> predicate) {
+    boolean validate(Metadata metadata) {
+                    primaryRecoverySource = ExistingStoreRecoverySource.INSTANCE;
+            for (int i = 0; i < indexMetadata.getNumberOfShards(); i++) {
+                    // Primary shard to be recovered from remote store.
+        }
+                    PeerRecoverySource.INSTANCE,
+         * Add a Search only replica to the IndexShardRoutingTable
+                        }
+        if (!shards.equals(that.shards)) return false;  
+                if (indexShardRoutingTableMap.containsKey(shardId) == false) {
+     * @return id of the index
+         * Initializes a new empty index, with an option to control if its from an API or not.  
+                    // if writers are red we do not want to re-recover search only shards if already assigned.
+                sb.append("--------").append(shard.shortSummary()).append("\n");  
+ * for operations on a specific shard.
+                "restore_source["
+        /**
+        for (IndexShardRoutingTable shardRoutingTable : this) {
+        }  
+import org.opensearch.cluster.AbstractDiffable;
+                "restore_source["
+    }  
+        return shards.get(shardId);
+                    if (shardRouting.isSearchOnly() && !shardRouting.assignedToNode()) {
+            // For search-only mode, only initialize search replicas
+                    }
+    }
+            final Set<Integer> ignoreShards,  
+    @Override  
+                    shardId,
+                // re-add all the current ones  
+                    "Shard ["  
+    @Override  
+import java.util.ArrayList;
+     * @return a {@link List} of shards that match one of the given {@link ShardRoutingState states}
+        if (o == null || getClass() != o.getClass()) return false;
+                                    + shardRouting  
+         * if it needs to be created.
+                boolean removed = false;
+        ) {  
+                // re-add all the current ones
+        /**
                     primaryRecoverySource = LocalShardsRecoverySource.INSTANCE;
                 } else {
-                    // a freshly created index with no restriction  
-                    primaryRecoverySource = EmptyStoreRecoverySource.INSTANCE;
-                }
-                IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);  
-                for (int i = 0; i <= indexMetadata.getNumberOfReplicas(); i++) {
-                    boolean primary = i == 0;
-                    indexShardRoutingBuilder.addShard(  
-                        ShardRouting.newUnassigned(
-                            shardId,
-                            primary,  
-                            primary ? primaryRecoverySource : PeerRecoverySource.INSTANCE,
-                            unassignedInfo
-                        )  
+        public Builder initializeAsRestore(IndexMetadata indexMetadata, SnapshotRecoverySource recoverySource) {
+                                + shardRouting  
+            this.index = index;  
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+            Set<Integer> expected = new HashSet<>();
+        }  
+            IndexMetadata indexMetadata,
+        ) {  
+ * single shard in this context has one more instances namely exactly one
+                                + inSyncAllocationIds  
+                        if (shardRouting.unassigned()) {
                     );
+                    + recoverySource.snapshot().getSnapshotId().getName()
+                if (forceRecoverAllPrimaries || indexShardRoutingTable.primaryShard().unassigned()) {
+        public Builder initializeAsNew(IndexMetadata indexMetadata) {  
                 }
-                for (int i = 0; i < indexMetadata.getNumberOfSearchOnlyReplicas(); i++) {  
-                    indexShardRoutingBuilder.addShard(
-                        ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)
-                    );  
-                }
-                shards.put(shardNumber, indexShardRoutingBuilder.build());
-            }  
-            return this;
-        }
-
-        public Builder addReplica() {
-            for (final int shardNumber : shards.keySet()) {
-                ShardId shardId = new ShardId(index, shardNumber);  
-                // version 0, will get updated when reroute will happen
-                ShardRouting shard = ShardRouting.newUnassigned(
-                    shardId,  
-                    false,
-                    PeerRecoverySource.INSTANCE,
-                    new UnassignedInfo(UnassignedInfo.Reason.REPLICA_ADDED, null)  
-                );
-                shards.put(shardNumber, new IndexShardRoutingTable.Builder(shards.get(shard.id())).addShard(shard).build());
-            }  
-            return this;
-        }
-
-        /**
-         * Add a Search only replica to the IndexShardRoutingTable
-         * @return The Builder  
-         */
-        public Builder addSearchReplica() {
-            for (final int shardNumber : shards.keySet()) {  
-                ShardId shardId = new ShardId(index, shardNumber);
-                // version 0, will get updated when reroute will happen
-                ShardRouting shard = ShardRouting.newUnassigned(  
-                    shardId,
-                    false,
-                    true,  
-                    EmptyStoreRecoverySource.INSTANCE,
-                    new UnassignedInfo(UnassignedInfo.Reason.REPLICA_ADDED, null)
-                );  
-                shards.put(shardNumber, new IndexShardRoutingTable.Builder(shards.get(shard.id())).addShard(shard).build());
-            }
-            return this;  
-        }
-
-        public Builder removeReplica() {  
-            for (final int shardId : shards.keySet()) {
-                IndexShardRoutingTable indexShard = shards.get(shardId);
-                if (indexShard.replicaShards().isEmpty()) {  
-                    // nothing to do here!
-                    return this;
-                }  
-                // re-add all the current ones
-                IndexShardRoutingTable.Builder builder = new IndexShardRoutingTable.Builder(indexShard.shardId());
-                for (ShardRouting shardRouting : indexShard) {  
-                    builder.addShard(shardRouting);
-                }
-                // first check if there is one that is not assigned to a node, and remove it  
-                boolean removed = false;
-                for (ShardRouting shardRouting : indexShard) {
-                    if (!shardRouting.primary() && !shardRouting.assignedToNode() && !shardRouting.isSearchOnly()) {  
-                        builder.removeShard(shardRouting);
-                        removed = true;
-                        break;  
-                    }
-                }
-                if (!removed) {  
-                    for (ShardRouting shardRouting : indexShard) {
-                        if (!shardRouting.primary() && !shardRouting.isSearchOnly()) {
-                            builder.removeShard(shardRouting);  
-                            break;
-                        }
-                    }  
-                }
-                shards.put(shardId, builder.build());
-            }  
-            return this;
-        }
-
-        /**
-         * Remove a Search only replica from the IndexShardRoutingTable
-         * @return The Builder  
-         */
-        public Builder removeSearchReplica() {
-            for (final int shardId : shards.keySet()) {  
-                IndexShardRoutingTable indexShardRoutingTable = shards.get(shardId);
-                if (indexShardRoutingTable.searchOnlyReplicas().isEmpty()) {
-                    // nothing to do here!  
-                    return this;
-                }
-                // re-add all the current ones  
-                IndexShardRoutingTable.Builder builder = new IndexShardRoutingTable.Builder(indexShardRoutingTable.shardId());
-                for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    builder.addShard(shardRouting);  
-                }
-                // first check if there is one that is not assigned to a node, and remove it
-                boolean removed = false;  
-                for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    if (shardRouting.isSearchOnly() && !shardRouting.assignedToNode()) {
-                        builder.removeShard(shardRouting);  
-                        removed = true;
-                        break;
-                    }  
-                }
-                if (!removed) {
-                    for (ShardRouting shardRouting : indexShardRoutingTable) {  
-                        if (shardRouting.isSearchOnly()) {
-                            builder.removeShard(shardRouting);
-                            break;  
-                        }
-                    }
-                }  
-                shards.put(shardId, builder.build());
-            }
-            return this;  
-        }
-
-        public Builder addIndexShard(IndexShardRoutingTable indexShard) {  
-            shards.put(indexShard.shardId().id(), indexShard);
-            return this;
-        }  
-
-        /**
-         * Adds a new shard routing (makes a copy of it), with reference data used from the index shard routing table  
-         * if it needs to be created.
-         */
-        public Builder addShard(ShardRouting shard) {  
-            IndexShardRoutingTable indexShard = shards.get(shard.id());
-            if (indexShard == null) {
-                indexShard = new IndexShardRoutingTable.Builder(shard.shardId()).addShard(shard).build();  
+                    for (ShardRouting shardRouting : indexShardRoutingTable.replicaShards()) {  
             } else {
-                indexShard = new IndexShardRoutingTable.Builder(indexShard).addShard(shard).build();
-            }  
-            shards.put(indexShard.shardId().id(), indexShard);
-            return this;
-        }  
-
-        public IndexRoutingTable build() {
-            return new IndexRoutingTable(index, shards);  
-        }
-    }
-
-    public String prettyPrint() {
-        StringBuilder sb = new StringBuilder("-- index [" + index + "]\n");
-
-        List<IndexShardRoutingTable> ordered = new ArrayList<>();
-        for (IndexShardRoutingTable indexShard : this) {
-            ordered.add(indexShard);  
-        }
-
+     * Returns <code>true</code> if all primary shards are in  
+                    }  
+                // version 0, will get updated when reroute will happen
+            assert indexMetadata.getIndex().equals(index);
+import org.opensearch.cluster.metadata.IndexMetadata;
+                    && shardRouting.isSearchOnly() == false) {
+                    + "/"  
+        index.writeTo(out);
+                    indexShardRoutingBuilder.addShard(
         CollectionUtil.timSort(ordered, (o1, o2) -> {  
-            int v = o1.shardId().getIndex().getName().compareTo(o2.shardId().getIndex().getName());
-            if (v == 0) {
-                v = Integer.compare(o1.shardId().id(), o2.shardId().id());  
+import org.opensearch.cluster.Diff;  
+    public void writeTo(StreamOutput out) throws IOException {
+                        );
+                                shardId,
+                    }  
+            if (shardRoutingTable.primaryShard() != null && shardRoutingTable.primaryShard().active()) {
+                }  
+            for (final int shardNumber : shards.keySet()) {  
+                        removed = true;
+ */  
+import java.util.List;  
+            SnapshotRecoverySource recoverySource,
+                }  
+        Builder builder = new Builder(index);
+        }  
+                for (int i = 0; i < indexMetadata.getNumberOfSearchOnlyReplicas(); i++) {  
+        /**
+    implements  
             }
-            return v;
-        });  
-
-        for (IndexShardRoutingTable indexShard : ordered) {
-            sb.append("----shard_id [")  
-                .append(indexShard.shardId().getIndex().getName())
-                .append("][")
-                .append(indexShard.shardId().id())  
+                    if (asNew && ignoreShards.contains(shardNumber)) {
+                ShardRouting shard = ShardRouting.newUnassigned(  
+    public IndexShardRoutingTable shard(int shardId) {  
+                    }
+                throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");
+                }
+                IndexShardRoutingTable indexShardRoutingTable = shards.get(shardId);
+ *
                 .append("]\n");
-            for (ShardRouting shard : indexShard) {
-                sb.append("--------").append(shard.shortSummary()).append("\n");  
+                                    ShardRouting.newUnassigned(shardId, false, PeerRecoverySource.INSTANCE, unassignedInfo)
+         */
+    }
+     * Builder of a routing table.
+                                indexShardRoutingBuilder.addShard(
+                    );
+import org.opensearch.core.common.io.stream.VerifiableWriteable;
+                if (!shardRouting.index().equals(index)) {
+                    if (excludedNodes != null) {
+            return this;
+        return result;  
+        }
+                        nodes.add(currentNodeId);
+    public static class Builder {  
+                            ShardRouting.newUnassigned(
+                        ShardRouting.newUnassigned(shardId, false, true, EmptyStoreRecoverySource.INSTANCE, unassignedInfo)
+        /**  
+        /**
+            }
+        int count = 0;
+        Iterable<IndexShardRoutingTable>,
+        return true;
+                .append("][")
+    public boolean equals(Object o) {
+         * Initializes a new empty index, as as a result of closing an opened index.  
+            }  
+                final RecoverySource primaryRecoverySource;
+                        "shard routing has an index [" + shardRouting.index() + "] that is different from the routing table"
+import org.apache.lucene.util.CollectionUtil;
+    /**
+            final Set<Integer> ignoreShards  
+                    }  
+                    allActiveShards.add(shardRouting);  
+     * Calculates the number of primary shards in the routing table the are in
+                        }
+        for (IndexShardRoutingTable shardRoutingTable : this) {  
+    public static IndexRoutingTable readFrom(StreamInput in) throws IOException {
+                UnassignedInfo.Reason.EXISTING_INDEX_RESTORED,  
+         * Initializes a new empty index, as as a result of opening a closed index.
+        /**
+                    }  
+        List<IndexShardRoutingTable> ordered = new ArrayList<>();
+                IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(shardId);  
+            for (int shardNumber = 0; shardNumber < indexMetadata.getNumberOfShards(); shardNumber++) {
+                                unassignedInfo
+                }
+        if (indexMetadata.getIndexUUID().equals(index.getUUID()) == false) {
+            for (final int shardId : shards.keySet()) {
+    private final List<ShardRouting> allActiveShards;
+                } else if (indexMetadata.getResizeSourceIndex() != null) {
+            );  
+ * can be seen as the "leader" of the shard acting as the primary entry point  
+            throw new IllegalStateException(index + " exists in routing but does not exist in metadata");
+        StringBuilder sb = new StringBuilder("-- index [" + index + "]\n");
+            return initializeAsRestore(indexMetadata, recoverySource, ignoreShards, true, unassignedInfo);
+                        if (!shardRouting.primary() && !shardRouting.isSearchOnly()) {
+        List<ShardRouting> shards = new ArrayList<>();
+ * {@link ShardRouting#primary() primary} and 1 or more replicas. In other  
+            }
+                expected.remove(indexShardRoutingTable.shardId().id());  
+/*  
+            for (ShardRouting shardRouting : indexShardRoutingTable) {
+            if (routingNumberOfReplicas != expectedReplicas && isSearchOnlyClusterBlockEnabled == false) {
+                    // a freshly created index with no restriction  
+    public String prettyPrint() {
+import org.opensearch.cluster.routing.RecoverySource.PeerRecoverySource;  
+ *
+                            }
+                            indexShardRoutingBuilder.addShard(
+         */
+                        break;
+                        );  
+ * the Apache License, Version 2.0 (the "License"); you may
+            throw new IllegalStateException(index.getName() + " exists in routing but does not exist in metadata with the same uuid");
+                            + shardRouting
+    public ShardsIterator randomAllActiveShardsIt() {  
+        return index;
+                IndexShardRoutingTable indexShardRoutingTable = indexShardRoutingTableMap.get(shardId);  
+            for (ShardRouting shardRouting : cursor) {
+    }  
+                        indexShardRoutingBuilder.addShard(  
+        }
+    public void writeVerifiableTo(BufferedChecksumStreamOutput out) throws IOException {  
+    public int primaryShardsUnassigned() {
+    public List<ShardRouting> shardsWithState(ShardRoutingState state) {  
+                        if (shardRouting.unassigned()) {  
+                    indexShardRoutingBuilder.addShard(  
+    /**  
+                            + inSyncAllocationIds
+        return readDiffFrom(IndexRoutingTable::readFrom, in);  
+        }
+ * license agreements. See the NOTICE file distributed with
+import java.util.Set;
+        }
+        private final Index index;
+                    new UnassignedInfo(UnassignedInfo.Reason.REPLICA_ADDED, null)
+            }
+        return count;  
+        /**  
+    public int hashCode() {  
+         */
+                        } else {
+                            );  
+         * @return The Builder  
+    // shards with state set to UNASSIGNED
+ * SPDX-License-Identifier: Apache-2.0
+     * {@link ShardRoutingState#UNASSIGNED} state.  
+                for (ShardRouting shardRouting : indexShard) {
+import org.opensearch.common.annotation.PublicApi;
             }
         }
-        return sb.toString();  
-    }
-
-}  
+        return shards;
+                counter++;  
+        if (!metadata.hasIndex(index.getName())) {  
+                        + indexMetadata.getNumberOfSearchOnlyReplicas()  
+     */  
+                if (shardRouting.assignedToNode()) {
+        return builder.build();
+                }  
+    @Override
+            throw new IllegalStateException("Wrong number of shards in routing table, missing: " + expected);
+            }  
+                        removed = true;
+                indexShard = new IndexShardRoutingTable.Builder(shard.shardId()).addShard(shard).build();  
+import java.util.HashMap;  
+                        // This shards wasn't completely snapshotted - restore it as new shard
+        }  
+                            if (currentNodeId.equals(excludedNode)) {
+            }  
+                        + indexMetadata.getNumberOfReplicas()
+                                RecoverySource.EmptyStoreRecoverySource.INSTANCE,  

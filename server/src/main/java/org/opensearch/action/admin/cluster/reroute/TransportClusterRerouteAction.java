@@ -1,284 +1,260 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.reroute;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.ActionListenerResponseHandler;
-import org.opensearch.action.admin.indices.shards.IndicesShardStoresAction;  
-import org.opensearch.action.admin.indices.shards.IndicesShardStoresRequest;
-import org.opensearch.action.admin.indices.shards.IndicesShardStoresResponse;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.AckedClusterStateUpdateTask;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.routing.allocation.RoutingExplanations;  
-import org.opensearch.cluster.routing.allocation.command.AbstractAllocateAllocationCommand;
-import org.opensearch.cluster.routing.allocation.command.AllocateStalePrimaryAllocationCommand;
-import org.opensearch.cluster.routing.allocation.command.AllocationCommand;  
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-
-import static org.opensearch.cluster.service.ClusterManagerTask.CLUSTER_REROUTE_API;
-
-/**
- * Transport action for rerouting cluster allocation commands
- *  
- * @opensearch.internal
- */
-public class TransportClusterRerouteAction extends TransportClusterManagerNodeAction<ClusterRerouteRequest, ClusterRerouteResponse> {  
-
-    private static final Logger logger = LogManager.getLogger(TransportClusterRerouteAction.class);
-
-    private final AllocationService allocationService;
-    private static ClusterManagerTaskThrottler.ThrottlingKey clusterRerouteTaskKey;
-
-    @Inject
-    public TransportClusterRerouteAction(
-        TransportService transportService,  
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        AllocationService allocationService,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {  
-        super(
-            ClusterRerouteAction.NAME,
-            transportService,  
-            clusterService,
-            threadPool,
-            actionFilters,  
-            ClusterRerouteRequest::new,
-            indexNameExpressionResolver
-        );  
-        this.allocationService = allocationService;
-        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
-        clusterRerouteTaskKey = clusterService.registerClusterManagerTask(CLUSTER_REROUTE_API, true);  
-    }
-
-    @Override  
-    protected String executor() {
-        // we go async right away
-        return ThreadPool.Names.SAME;  
-    }
-
-    @Override  
-    protected ClusterBlockException checkBlock(ClusterRerouteRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
-    }  
-
-    @Override
-    protected ClusterRerouteResponse read(StreamInput in) throws IOException {  
-        return new ClusterRerouteResponse(in);
-    }
-
-    @Override
-    protected void clusterManagerOperation(
-        final ClusterRerouteRequest request,  
-        final ClusterState state,
-        final ActionListener<ClusterRerouteResponse> listener
-    ) {  
-        Map<String, List<AbstractAllocateAllocationCommand>> stalePrimaryAllocations = new HashMap<>();
-        for (AllocationCommand command : request.getCommands().commands()) {
-            if (command instanceof AllocateStalePrimaryAllocationCommand) {  
-                final AllocateStalePrimaryAllocationCommand cmd = (AllocateStalePrimaryAllocationCommand) command;
-                stalePrimaryAllocations.computeIfAbsent(cmd.index(), k -> new ArrayList<>()).add(cmd);
-            }  
         }
-        if (stalePrimaryAllocations.isEmpty()) {
-            submitStateUpdate(request, listener);  
-        } else {
-            verifyThenSubmitUpdate(request, listener, stalePrimaryAllocations);
-        }  
-    }
-
-    private void verifyThenSubmitUpdate(  
-        ClusterRerouteRequest request,
-        ActionListener<ClusterRerouteResponse> listener,
-        Map<String, List<AbstractAllocateAllocationCommand>> stalePrimaryAllocations  
-    ) {
-        transportService.sendRequest(
-            transportService.getLocalNode(),  
             IndicesShardStoresAction.NAME,
-            new IndicesShardStoresRequest().indices(stalePrimaryAllocations.keySet().toArray(Strings.EMPTY_ARRAY)),
-            new ActionListenerResponseHandler<>(ActionListener.wrap(response -> {  
-                final Map<String, Map<Integer, List<IndicesShardStoresResponse.StoreStatus>>> status = response.getStoreStatuses();
-                Exception e = null;
-                for (Map.Entry<String, List<AbstractAllocateAllocationCommand>> entry : stalePrimaryAllocations.entrySet()) {  
-                    final String index = entry.getKey();
-                    final Map<Integer, List<IndicesShardStoresResponse.StoreStatus>> indexStatus = status.get(index);
-                    if (indexStatus == null) {  
-                        // The index in the stale primary allocation request was green and hence filtered out by the store status
-                        // request. We ignore it here since the relevant exception will be thrown by the reroute action later on.
-                        continue;  
-                    }
-                    for (AbstractAllocateAllocationCommand command : entry.getValue()) {
-                        final List<IndicesShardStoresResponse.StoreStatus> shardStatus = indexStatus.get(command.shardId());  
-                        if (shardStatus == null || shardStatus.isEmpty()) {
-                            e = ExceptionsHelper.useOrSuppress(
-                                e,  
-                                new IllegalArgumentException(
-                                    "No data for shard [" + command.shardId() + "] of index [" + index + "] found on any node"
-                                )  
-                            );
-                        } else if (shardStatus.stream().noneMatch(storeStatus -> {
-                            final DiscoveryNode node = storeStatus.getNode();  
-                            final String nodeInCommand = command.node();
-                            return nodeInCommand.equals(node.getName()) || nodeInCommand.equals(node.getId());
-                        })) {  
-                            e = ExceptionsHelper.useOrSuppress(
-                                e,
-                                new IllegalArgumentException(  
-                                    "No data for shard ["
-                                        + command.shardId()
-                                        + "] of index ["  
-                                        + index
-                                        + "] found on node ["
-                                        + command.node()  
-                                        + ']'
-                                )
-                            );  
-                        }
-                    }
-                }  
-                if (e == null) {
-                    submitStateUpdate(request, listener);
-                } else {  
-                    listener.onFailure(e);
-                }
-            }, listener::onFailure), IndicesShardStoresResponse::new)  
-        );
-    }
-
-    private void submitStateUpdate(final ClusterRerouteRequest request, final ActionListener<ClusterRerouteResponse> listener) {
-        clusterService.submitStateUpdateTask(
-            "cluster_reroute (api)",  
-            new ClusterRerouteResponseAckedClusterStateUpdateTask(
-                logger,
-                allocationService,  
-                request,
-                ActionListener.map(listener, response -> {
-                    if (request.dryRun() == false) {  
-                        response.getExplanations().getYesDecisionMessages().forEach(logger::info);
-                    }
-                    return response;  
-                })
-            )
-        );  
-    }
-
-    /**  
-     * Inner Reroute Response Acknowledged the Cluster State Update
-     *
      * @opensearch.internal  
-     */
-    static class ClusterRerouteResponseAckedClusterStateUpdateTask extends AckedClusterStateUpdateTask<ClusterRerouteResponse> {
-
-        private final ClusterRerouteRequest request;
-        private final ActionListener<ClusterRerouteResponse> listener;
-        private final Logger logger;  
         private final AllocationService allocationService;
-        private volatile ClusterState clusterStateToSend;
-        private volatile RoutingExplanations explanations;  
-
-        ClusterRerouteResponseAckedClusterStateUpdateTask(
-            Logger logger,  
-            AllocationService allocationService,
-            ClusterRerouteRequest request,
-            ActionListener<ClusterRerouteResponse> listener  
-        ) {
-            super(Priority.IMMEDIATE, request, listener);
-            this.request = request;  
-            this.listener = listener;
-            this.logger = logger;
+        private final ClusterRerouteRequest request;
             this.allocationService = allocationService;  
-        }
-
         @Override  
-        public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
-            return clusterRerouteTaskKey;
-        }  
-
         @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+     *
+ *
+                return currentState;
+                    }
+    @Override  
+                        })) {  
+    @Override
+            new ActionListenerResponseHandler<>(ActionListener.wrap(response -> {  
+        super(
         protected ClusterRerouteResponse newResponse(boolean acknowledged) {  
-            return new ClusterRerouteResponse(acknowledged, clusterStateToSend, explanations);
+ * KIND, either express or implied.  See the License for the
+                    final Map<Integer, List<IndicesShardStoresResponse.StoreStatus>> indexStatus = status.get(index);
+}
+import org.opensearch.cluster.block.ClusterBlockLevel;
+    }
+import java.io.IOException;
+import org.opensearch.cluster.ClusterState;  
+import org.apache.logging.log4j.LogManager;
+            clusterStateToSend = commandsResult.getClusterState();
+                    if (request.dryRun() == false) {  
+                                new IllegalArgumentException(  
+                final Map<String, Map<Integer, List<IndicesShardStoresResponse.StoreStatus>>> status = response.getStoreStatuses();
+import org.opensearch.cluster.routing.allocation.AllocationService;
+        final ClusterState state,
+        );
+        public ClusterState execute(ClusterState currentState) {
+    ) {
+                    return response;  
+        final ClusterRerouteRequest request,  
+            "cluster_reroute (api)",  
+        );  
+        ActionListener<ClusterRerouteResponse> listener,
+                            final String nodeInCommand = command.node();
+    protected ClusterBlockException checkBlock(ClusterRerouteRequest request, ClusterState state) {
+                        // request. We ignore it here since the relevant exception will be thrown by the reroute action later on.
+import org.opensearch.cluster.routing.allocation.command.AbstractAllocateAllocationCommand;
+import java.util.Map;  
+                        } else if (shardStatus.stream().noneMatch(storeStatus -> {
+ *  
+            new IndicesShardStoresRequest().indices(stalePrimaryAllocations.keySet().toArray(Strings.EMPTY_ARRAY)),
+/**
+    public TransportClusterRerouteAction(
         }
-
+        }  
+                    submitStateUpdate(request, listener);
+import org.opensearch.threadpool.ThreadPool;
+                        final List<IndicesShardStoresResponse.StoreStatus> shardStatus = indexStatus.get(command.shardId());  
+            this.logger = logger;
+ * this work for additional information regarding copyright
+                Exception e = null;
+ * Unless required by applicable law or agreed to in writing,
+            ClusterRerouteRequest request,
+                    }
+     */
+import org.opensearch.cluster.node.DiscoveryNode;
+                request.getCommands(),
+            if (command instanceof AllocateStalePrimaryAllocationCommand) {  
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
+                    if (indexStatus == null) {  
+                    for (AbstractAllocateAllocationCommand command : entry.getValue()) {
+import org.opensearch.ExceptionsHelper;
+            threadPool,
+import java.util.HashMap;
+ * Transport action for rerouting cluster allocation commands
+                    }
+    }  
+            return commandsResult.getClusterState();
+    private void verifyThenSubmitUpdate(  
+            transportService,  
+            }  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                for (Map.Entry<String, List<AbstractAllocateAllocationCommand>> entry : stalePrimaryAllocations.entrySet()) {  
+    }
+    @Override  
+                            final DiscoveryNode node = storeStatus.getNode();  
+                ActionListener.map(listener, response -> {
+                            );
+            return clusterRerouteTaskKey;
+/*  
+            AllocationService.CommandsResult commandsResult = allocationService.reroute(
+                } else {  
+        for (AllocationCommand command : request.getCommands().commands()) {
+                                new IllegalArgumentException(
+        }  
+            submitStateUpdate(request, listener);  
+ * this file be licensed under the Apache-2.0 license or a
+        final ActionListener<ClusterRerouteResponse> listener
+ * SPDX-License-Identifier: Apache-2.0
+                                        + command.shardId()
+import org.opensearch.cluster.routing.allocation.command.AllocationCommand;  
+/*
+    private static final Logger logger = LogManager.getLogger(TransportClusterRerouteAction.class);
+            this.listener = listener;
+                stalePrimaryAllocations.computeIfAbsent(cmd.index(), k -> new ArrayList<>()).add(cmd);
+            ActionListener<ClusterRerouteResponse> listener  
+/*  
+            actionFilters,  
+            )
+        ThreadPool threadPool,
         @Override
-        public void onAckTimeout() {
-            listener.onResponse(new ClusterRerouteResponse(false, clusterStateToSend, new RoutingExplanations()));  
-        }
-
+import java.util.List;
+                if (e == null) {
+    }
+    }
+    private final AllocationService allocationService;
+        return new ClusterRerouteResponse(in);
+        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
+import org.opensearch.cluster.block.ClusterBlockException;
+import org.opensearch.common.inject.Inject;
         @Override  
-        public void onFailure(String source, Exception e) {
-            logger.debug(() -> new ParameterizedMessage("failed to perform [{}]", source), e);
+            }, listener::onFailure), IndicesShardStoresResponse::new)  
+import org.opensearch.core.common.io.stream.StreamInput;
+                final AllocateStalePrimaryAllocationCommand cmd = (AllocateStalePrimaryAllocationCommand) command;
+        ) {
+        } else {
+    }
+            new ClusterRerouteResponseAckedClusterStateUpdateTask(
+                        response.getExplanations().getYesDecisionMessages().forEach(logger::info);
+            );
+    static class ClusterRerouteResponseAckedClusterStateUpdateTask extends AckedClusterStateUpdateTask<ClusterRerouteResponse> {
+        AllocationService allocationService,  
+        );  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+                            );  
+import org.opensearch.cluster.service.ClusterService;
+                })
+                request,
             super.onFailure(source, e);  
         }
-
-        @Override  
-        public ClusterState execute(ClusterState currentState) {
-            AllocationService.CommandsResult commandsResult = allocationService.reroute(
-                currentState,  
-                request.getCommands(),
-                request.explain(),
-                request.isRetryFailed()  
-            );
-            clusterStateToSend = commandsResult.getClusterState();
-            explanations = commandsResult.explanations();  
-            if (request.dryRun()) {
-                return currentState;
-            }  
-            return commandsResult.getClusterState();
+        clusterService.submitStateUpdateTask(
+        public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
         }
+            }  
+import org.opensearch.transport.TransportService;  
+    ) {  
+import org.apache.logging.log4j.Logger;
+            return new ClusterRerouteResponse(acknowledged, clusterStateToSend, explanations);
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+                                )  
+    }
+        ClusterRerouteResponseAckedClusterStateUpdateTask(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * specific language governing permissions and limitations
+                        if (shardStatus == null || shardStatus.isEmpty()) {
+                                        + "] of index ["  
+                                    "No data for shard [" + command.shardId() + "] of index [" + index + "] found on any node"
+        private volatile RoutingExplanations explanations;  
+package org.opensearch.action.admin.cluster.reroute;
+import org.opensearch.core.action.ActionListener;
+            listener.onResponse(new ClusterRerouteResponse(false, clusterStateToSend, new RoutingExplanations()));  
+            super(Priority.IMMEDIATE, request, listener);
+ *  
+        ClusterService clusterService,
+                        // The index in the stale primary allocation request was green and hence filtered out by the store status
+import org.opensearch.common.Priority;  
+        }
+        @Override  
+ */
+ * Modifications Copyright OpenSearch Contributors. See
     }  
-}
+            indexNameExpressionResolver
+                                e,  
+import org.opensearch.action.admin.indices.shards.IndicesShardStoresAction;  
+import org.opensearch.cluster.AckedClusterStateUpdateTask;
+                        }
+ * GitHub history for details.
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+                                        + "] found on node ["
+            ClusterRerouteRequest::new,
+ */  
+                                        + ']'
+            if (request.dryRun()) {
+                logger,
+        // we go async right away
+            AllocationService allocationService,
+        TransportService transportService,  
+        }
+        return ThreadPool.Names.SAME;  
+ */
+ * software distributed under the License is distributed on an
+            verifyThenSubmitUpdate(request, listener, stalePrimaryAllocations);
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.common.Strings;  
+ * @opensearch.internal
+ * ownership. Elasticsearch licenses this file to you under  
+        public void onAckTimeout() {
+                allocationService,  
+                request.isRetryFailed()  
+        clusterRerouteTaskKey = clusterService.registerClusterManagerTask(CLUSTER_REROUTE_API, true);  
+                request.explain(),
+    @Inject
+    protected String executor() {
+        IndexNameExpressionResolver indexNameExpressionResolver
+                                    "No data for shard ["
+                            e = ExceptionsHelper.useOrSuppress(
+    protected void clusterManagerOperation(
+        Map<String, List<AbstractAllocateAllocationCommand>> stalePrimaryAllocations  
+import org.opensearch.action.ActionListenerResponseHandler;
+public class TransportClusterRerouteAction extends TransportClusterManagerNodeAction<ClusterRerouteRequest, ClusterRerouteResponse> {  
+        private volatile ClusterState clusterStateToSend;
+            clusterService,
+                currentState,  
+                    final String index = entry.getKey();
+     * Inner Reroute Response Acknowledged the Cluster State Update
+                                e,
+                                        + index
+                            e = ExceptionsHelper.useOrSuppress(
+                        continue;  
+        if (stalePrimaryAllocations.isEmpty()) {
+ * You may obtain a copy of the License at  
+                }
+        ClusterRerouteRequest request,
+                                        + command.node()  
+    private void submitStateUpdate(final ClusterRerouteRequest request, final ActionListener<ClusterRerouteResponse> listener) {
+    @Override
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+            explanations = commandsResult.explanations();  
+ * compatible open source license.
+        Map<String, List<AbstractAllocateAllocationCommand>> stalePrimaryAllocations = new HashMap<>();
+    protected ClusterRerouteResponse read(StreamInput in) throws IOException {  
+import org.opensearch.action.admin.indices.shards.IndicesShardStoresRequest;
+    /**  
+        private final Logger logger;  
+        public void onFailure(String source, Exception e) {
+import org.opensearch.cluster.routing.allocation.command.AllocateStalePrimaryAllocationCommand;
+        this.allocationService = allocationService;
+            this.request = request;  
+                    listener.onFailure(e);
+    ) {  
+        transportService.sendRequest(
+            ClusterRerouteAction.NAME,
+            Logger logger,  
+import java.util.ArrayList;  
+            logger.debug(() -> new ParameterizedMessage("failed to perform [{}]", source), e);
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+            transportService.getLocalNode(),  
+import org.opensearch.action.admin.indices.shards.IndicesShardStoresResponse;
+ * The OpenSearch Contributors require contributions made to  
+                                )
+ */  
+        private final ActionListener<ClusterRerouteResponse> listener;
+import org.opensearch.cluster.routing.allocation.RoutingExplanations;  
+ * under the License.  
+        ActionFilters actionFilters,
+import static org.opensearch.cluster.service.ClusterManagerTask.CLUSTER_REROUTE_API;
+ *
+                }  
+                            return nodeInCommand.equals(node.getName()) || nodeInCommand.equals(node.getId());
+import org.opensearch.action.support.ActionFilters;  
+    private static ClusterManagerTaskThrottler.ThrottlingKey clusterRerouteTaskKey;

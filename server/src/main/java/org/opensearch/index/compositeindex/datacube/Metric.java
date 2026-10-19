@@ -1,81 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.compositeindex.datacube;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
 import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Objects;
-
-/**
- * Holds details of metrics field as part of composite field
- */  
-@ExperimentalApi
 public class Metric implements ToXContent {
-    private final String field;  
-    private final List<MetricStat> metrics;
-    private final List<MetricStat> baseMetrics;
-
-    public Metric(String field, List<MetricStat> metrics) {
-        this.field = field;
-        this.metrics = metrics;  
-        this.baseMetrics = new ArrayList<>();
-        for (MetricStat metricStat : metrics) {
-            if (metricStat.isDerivedMetric()) {  
-                continue;
-            }
-            baseMetrics.add(metricStat);  
-        }
-    }
-
-    public String getField() {
-        return field;
+import java.util.ArrayList;  
+    @Override
     }  
-
-    public List<MetricStat> getMetrics() {
+        return baseMetrics;
+        return builder;
+    }
+    public List<MetricStat> getBaseMetrics() {  
+import java.util.List;
+    public String getField() {
+/**
+    private final String field;  
+    }
+                continue;
+        if (this == o) return true;
+ *
+ * SPDX-License-Identifier: Apache-2.0
+        }
+            }
+        if (o == null || getClass() != o.getClass()) return false;
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+/*  
+        builder.startObject();  
+    public int hashCode() {
+            baseMetrics.add(metricStat);  
+        Metric metric = (Metric) o;  
+        for (MetricStat metricType : metrics) {  
+import org.opensearch.common.annotation.ExperimentalApi;
+        this.field = field;
+        builder.endArray();  
+     * Returns only the base metrics
+@ExperimentalApi
+package org.opensearch.index.compositeindex.datacube;
         return metrics;  
     }
-
-    /**  
-     * Returns only the base metrics
-     */
-    public List<MetricStat> getBaseMetrics() {  
-        return baseMetrics;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.field("name", field);
-        builder.startArray("stats");
-        for (MetricStat metricType : metrics) {  
-            builder.value(metricType.getTypeName());
-        }
-        builder.endArray();  
+        this.metrics = metrics;  
         builder.endObject();
-        return builder;
-    }  
-
-    @Override
+import org.opensearch.core.xcontent.ToXContent;
+     */
     public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Metric metric = (Metric) o;  
-        return Objects.equals(field, metric.field) && Objects.equals(metrics, metric.metrics);
-    }
-
+import java.util.Objects;
     @Override
-    public int hashCode() {
-        return Objects.hash(field, metrics);  
-    }
+    private final List<MetricStat> metrics;
+        return field;
+    @Override
 }
+    public List<MetricStat> getMetrics() {
+    /**  
+        return Objects.equals(field, metric.field) && Objects.equals(metrics, metric.metrics);
+    public Metric(String field, List<MetricStat> metrics) {
+        builder.startArray("stats");
+            if (metricStat.isDerivedMetric()) {  
+import org.opensearch.core.xcontent.XContentBuilder;  
+        builder.field("name", field);
+ * Holds details of metrics field as part of composite field
+    }  
+    }
+        this.baseMetrics = new ArrayList<>();
+    private final List<MetricStat> baseMetrics;
+        for (MetricStat metricStat : metrics) {
+    }
+        return Objects.hash(field, metrics);  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            builder.value(metricType.getTypeName());
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+        }

@@ -1,292 +1,265 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-/*
- * This code is based on code from SFL4J 1.5.11  
  * Copyright (c) 2004-2007 QOS.ch
- * All rights reserved.
- * SPDX-License-Identifier: MIT  
- */
-
-package org.opensearch.core.common.logging;  
-
-import java.util.HashSet;
-import java.util.Set;  
-
-/**
- * Format string for OpenSearch log messages.  
- * <p>
- * This class is almost a copy of {@code org.slf4j.helpers.MessageFormatter}<p>
- * The original code is licensed under the MIT License and is available at :  
- * <a href="https://github.com/qos-ch/slf4j/blob/7c164fab8d54f823dd55c01a5a839c153f578297/slf4j-api/src/main/java/org/slf4j/helpers/MessageFormatter.java">MessageFormatter.java</a>
- *
- * @opensearch.internal  
- */
-public class LoggerMessageFormat {
-
-    static final char DELIM_START = '{';
-    static final char DELIM_STOP = '}';
-    static final String DELIM_STR = "{}";  
-    private static final char ESCAPE_CHAR = '\\';
-
-    public static String format(final String messagePattern, final Object... argArray) {  
-        return format(null, messagePattern, argArray);
-    }
-
-    /**
-     * (this is almost a copy of {@code org.slf4j.helpers.MessageFormatter.arrayFormat})
-     *  
-     * @param prefix the prefix to prepend to the formatted message (can be null)
-     * @param messagePattern the message pattern which will be parsed and formatted
-     * @param argArray an array of arguments to be substituted in place of formatting anchors  
-     * @return null if messagePattern is null <p>
-     *         messagePattern if argArray is (null or empty) and prefix is null <p>
-     *         prefix + messagePattern if argArray is (null or empty) and prefix is not null <p>  
-     *         formatted message otherwise (even if prefix is null)
-     */
-    public static String format(final String prefix, final String messagePattern, final Object... argArray) {  
-        if (messagePattern == null) {
-            return null;
-        }  
-        if (argArray == null || argArray.length == 0) {
-            if (prefix == null) {
-                return messagePattern;  
-            } else {
-                return prefix + messagePattern;
-            }  
-        }
-        int i = 0;
-        int j;  
-        final StringBuilder sbuf = new StringBuilder(messagePattern.length() + 50);
-        if (prefix != null) {
-            sbuf.append(prefix);  
-        }
-
-        for (int L = 0; L < argArray.length; L++) {  
-
-            j = messagePattern.indexOf(DELIM_STR, i);
-
-            if (j == -1) {
-                // no more variables
-                if (i == 0) { // this is a simple string  
-                    return messagePattern;
-                } else { // add the tail string which contains no variables and return
-                    // the result.  
-                    sbuf.append(messagePattern.substring(i));
-                    return sbuf.toString();
-                }  
-            } else {
-                if (isEscapedDelimiter(messagePattern, j)) {
-                    if (!isDoubleEscaped(messagePattern, j)) {  
-                        L--; // DELIM_START was escaped, thus should not be incremented
-                        sbuf.append(messagePattern, i, j - 1);
-                        sbuf.append(DELIM_START);  
-                        i = j + 1;
-                    } else {
-                        // The escape character preceding the delimiter start is  
-                        // itself escaped: "abc x:\\{}"
-                        // we have to consume one backward slash
-                        sbuf.append(messagePattern, i, j - 1);  
-                        deeplyAppendParameter(sbuf, argArray[L], new HashSet<>());
-                        i = j + 2;
-                    }  
-                } else {
                     // normal case
-                    sbuf.append(messagePattern, i, j);  
-                    deeplyAppendParameter(sbuf, argArray[L], new HashSet<>());
-                    i = j + 2;
-                }  
-            }
+        }  
+    static boolean isDoubleEscaped(String messagePattern, int delimiterStartIndex) {
+        return format(null, messagePattern, argArray);
+            String oAsString = o.toString();
+        final int len = a.length;
+ */  
+        sbuf.append('[');
+ * Modifications Copyright OpenSearch Contributors. See
+                } else { // add the tail string which contains no variables and return
+ * license agreements. See the NOTICE file distributed with
+        sbuf.append(']');
+        }  
+        char potentialEscape = messagePattern.charAt(delimiterStartIndex - 1);
+                case short[] shortArr -> shortArrayAppend(sbuf, shortArr);
+        if (argArray == null || argArray.length == 0) {
+    }  
+        sbuf.append(']');
+            sbuf.append(a[i]);
+ * Format string for OpenSearch log messages.  
+            sbuf.append("[FAILED toString()]");
+            // check for primitive array types because they
+                } else {
+    private static void booleanArrayAppend(StringBuilder sbuf, boolean[] a) {
+ * Unless required by applicable law or agreed to in writing,
+        for (int i = 0; i < len; i++) {
+            if (j == -1) {
+ * This class is almost a copy of {@code org.slf4j.helpers.MessageFormatter}<p>
+        for (int i = 0; i < len; i++) {
+        if (o == null) {  
+    /**
+            sbuf.append(a[i]);  
+    }  
+        final int len = a.length;  
+            return false;  
+     *         formatted message otherwise (even if prefix is null)
+            return null;
+     * @param argArray an array of arguments to be substituted in place of formatting anchors  
+            if (i != len - 1) sbuf.append(", ");
+     *         prefix + messagePattern if argArray is (null or empty) and prefix is not null <p>  
+            return;
+     * @return true if there is an escape char before the character at delimiterStartIndex.<p>  
+                case int[] intArr -> intArrayAppend(sbuf, intArr);
+                    sbuf.append(messagePattern.substring(i));
+package org.opensearch.core.common.logging;  
+        if (delimiterStartIndex == 0) {
+    }  
+            sbuf.append(a[i]);
+            if (i != len - 1) sbuf.append(", ");  
+        if (messagePattern == null) {
         }
+     * @param messagePattern the message pattern
+        sbuf.append('[');
+        sbuf.append('[');
+            switch (o) {  
+        int i = 0;
+            }  
+    public static String format(final String prefix, final String messagePattern, final Object... argArray) {  
+ * KIND, either express or implied.  See the License for the
+        try {  
+        for (int i = 0; i < len; i++) {
+ * this work for additional information regarding copyright
+     */
+        }
+    }
+                    return sbuf.toString();
+ * This code is based on code from SFL4J 1.5.11  
+            sbuf.append(oAsString);
+ *
+                case float[] floatArr -> floatArrayAppend(sbuf, floatArr);
+                // no more variables
+        }  
+                if (i != len - 1) sbuf.append(", ");
+    private static void floatArrayAppend(StringBuilder sbuf, float[] a) {
+     * @param messagePattern the message pattern which will be parsed and formatted
+        for (int L = 0; L < argArray.length; L++) {  
+ * @opensearch.internal  
+ * this file be licensed under the Apache-2.0 license or a
+                        // itself escaped: "abc x:\\{}"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * The OpenSearch Contributors require contributions made to  
+     */
+        sbuf.append(']');
+            sbuf.append("...");  
+     * Checks if (delimterStartIndex - 1) in messagePattern is an escape character.  
+    static final char DELIM_START = '{';
+        sbuf.append('[');
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * Checks if (delimterStartIndex - 2) in messagePattern is an escape character.
+                }  
+                }  
+}  
+        final int len = a.length;
+            } else {
+    }  
+            } else {
+        sbuf.append('[');
+    private static void doubleArrayAppend(StringBuilder sbuf, double[] a) {  
+ * All rights reserved.
+        if (!seen.contains(a)) {
+            if (i != len - 1) sbuf.append(", ");  
+                    sbuf.append(messagePattern, i, j);  
+                    } else {
+        final int len = a.length;
+        sbuf.append(']');  
+            final int len = a.length;
+ * You may obtain a copy of the License at  
+        }
+ */
+    /**
+                        // we have to consume one backward slash
+        sbuf.append(']');
+     * @param delimiterStartIndex the index of the character to check  
+ *
+ */
+        }
+        if (prefix != null) {
+ *  
+ * <a href="https://github.com/qos-ch/slf4j/blob/7c164fab8d54f823dd55c01a5a839c153f578297/slf4j-api/src/main/java/org/slf4j/helpers/MessageFormatter.java">MessageFormatter.java</a>
+        final int len = a.length;
+ */
+/*  
+                case char[] charArr -> charArrayAppend(sbuf, charArr);  
+        sbuf.append('[');  
+    private static void objectArrayAppend(StringBuilder sbuf, Object[] a, Set<Object[]> seen) {  
+                deeplyAppendParameter(sbuf, a[i], seen);  
+                        sbuf.append(DELIM_START);  
+            // unfortunately cannot be cast to Object[]
+    }
+ * SPDX-License-Identifier: MIT  
+                    if (!isDoubleEscaped(messagePattern, j)) {  
+        for (int i = 0; i < len; i++) {
+public class LoggerMessageFormat {
+            seen.add(a);  
+        } catch (Exception e) {  
+        } else {
+/**
+        }  
+        }
+ * The original code is licensed under the MIT License and is available at :  
+        final int len = a.length;
+            safeObjectAppend(sbuf, o);
+    static final String DELIM_STR = "{}";  
+        for (int i = 0; i < len; i++) {
+            sbuf.append(a[i]);
+        }
+            }
+                    }  
+                        // The escape character preceding the delimiter start is  
+        }
+            if (prefix == null) {
+import java.util.Set;  
+        sbuf.append('[');
+    private static void charArrayAppend(StringBuilder sbuf, char[] a) {
+                        L--; // DELIM_START was escaped, thus should not be incremented
+        sbuf.append(']');
+ * ownership. Elasticsearch licenses this file to you under  
+                if (isEscapedDelimiter(messagePattern, j)) {
+            if (i != len - 1) sbuf.append(", ");
+        return sbuf.toString();
+        final int len = a.length;  
+            sbuf.append(a[i]);  
+    }  
+            }
+    public static String format(final String messagePattern, final Object... argArray) {  
+            sbuf.append(a[i]);
+    }
+        sbuf.append(']');  
+                case byte[] byteArr -> byteArrayAppend(sbuf, byteArr);
+     *         Always returns false if delimiterStartIndex is less than 2 (edge case)
+     * @param delimiterStartIndex the index of the character to check
+        int j;  
+    }
+            }
+    }
+            // allow repeats in siblings  
+                        deeplyAppendParameter(sbuf, argArray[L], new HashSet<>());
+        for (int i = 0; i < len; i++) {  
+        final int len = a.length;
+                        i = j + 2;
+        sbuf.append('[');  
+        sbuf.append('[');  
+                return prefix + messagePattern;
+     * (this is almost a copy of {@code org.slf4j.helpers.MessageFormatter.arrayFormat})
+     * @return null if messagePattern is null <p>
+        }
+                    return messagePattern;
+    static boolean isEscapedDelimiter(String messagePattern, int delimiterStartIndex) {  
+                        sbuf.append(messagePattern, i, j - 1);  
+    private static final char ESCAPE_CHAR = '\\';
+    }
+            sbuf.append("null");
+ * under the License.  
         // append the characters following the last {} pair.  
         sbuf.append(messagePattern.substring(i));
-        return sbuf.toString();
-    }  
-
-    /**
-     * Checks if (delimterStartIndex - 1) in messagePattern is an escape character.  
-     * @param messagePattern the message pattern
-     * @param delimiterStartIndex the index of the character to check
-     * @return true if there is an escape char before the character at delimiterStartIndex.<p>  
-     *         Always returns false if delimiterStartIndex == 0 (edge case)
-     */
-    static boolean isEscapedDelimiter(String messagePattern, int delimiterStartIndex) {  
-
-        if (delimiterStartIndex == 0) {
-            return false;  
+        sbuf.append(']');
+ * <p>
+                        i = j + 1;
         }
-        char potentialEscape = messagePattern.charAt(delimiterStartIndex - 1);
-        return potentialEscape == ESCAPE_CHAR;  
-    }
-
-    /**  
-     * Checks if (delimterStartIndex - 2) in messagePattern is an escape character.
-     * @param messagePattern the message pattern
-     * @param delimiterStartIndex the index of the character to check  
-     * @return true if (delimterStartIndex - 2) in messagePattern is an escape character.
-     *         Always returns false if delimiterStartIndex is less than 2 (edge case)
-     */  
-    static boolean isDoubleEscaped(String messagePattern, int delimiterStartIndex) {
-        return delimiterStartIndex >= 2 && messagePattern.charAt(delimiterStartIndex - 2) == ESCAPE_CHAR;
-    }  
-
-    private static void deeplyAppendParameter(StringBuilder sbuf, Object o, Set<Object[]> seen) {
-        if (o == null) {  
-            sbuf.append("null");
-            return;
+        }
         }  
-        if (!o.getClass().isArray()) {
-            safeObjectAppend(sbuf, o);
-        } else {  
-            // check for primitive array types because they
-            // unfortunately cannot be cast to Object[]
-            switch (o) {  
-                case boolean[] boolArr -> booleanArrayAppend(sbuf, boolArr);
-                case byte[] byteArr -> byteArrayAppend(sbuf, byteArr);
-                case char[] charArr -> charArrayAppend(sbuf, charArr);  
-                case short[] shortArr -> shortArrayAppend(sbuf, shortArr);
-                case int[] intArr -> intArrayAppend(sbuf, intArr);
-                case long[] longArr -> longArrayAppend(sbuf, longArr);  
-                case float[] floatArr -> floatArrayAppend(sbuf, floatArr);
-                case double[] doubleArr -> doubleArrayAppend(sbuf, doubleArr);
-                default -> objectArrayAppend(sbuf, (Object[]) o, seen);  
-            }
-        }
-    }  
-
-    private static void safeObjectAppend(StringBuilder sbuf, Object o) {
-        try {  
-            String oAsString = o.toString();
-            sbuf.append(oAsString);
-        } catch (Exception e) {  
-            sbuf.append("[FAILED toString()]");
-        }
-
-    }
-
-    private static void objectArrayAppend(StringBuilder sbuf, Object[] a, Set<Object[]> seen) {  
-        sbuf.append('[');
-        if (!seen.contains(a)) {
-            seen.add(a);  
-            final int len = a.length;
-            for (int i = 0; i < len; i++) {
-                deeplyAppendParameter(sbuf, a[i], seen);  
-                if (i != len - 1) sbuf.append(", ");
-            }
-            // allow repeats in siblings  
-            seen.remove(a);
-        } else {
-            sbuf.append("...");  
-        }
-        sbuf.append(']');
-    }  
-
-    private static void booleanArrayAppend(StringBuilder sbuf, boolean[] a) {
-        sbuf.append('[');  
-        final int len = a.length;
-        for (int i = 0; i < len; i++) {
-            sbuf.append(a[i]);  
-            if (i != len - 1) sbuf.append(", ");
-        }
-        sbuf.append(']');  
-    }
-
-    private static void byteArrayAppend(StringBuilder sbuf, byte[] a) {  
-        sbuf.append('[');
-        final int len = a.length;
-        for (int i = 0; i < len; i++) {  
-            sbuf.append(a[i]);
-            if (i != len - 1) sbuf.append(", ");
-        }  
-        sbuf.append(']');
-    }
-
-    private static void charArrayAppend(StringBuilder sbuf, char[] a) {
-        sbuf.append('[');
-        final int len = a.length;  
-        for (int i = 0; i < len; i++) {
-            sbuf.append(a[i]);
-            if (i != len - 1) sbuf.append(", ");  
-        }
-        sbuf.append(']');
-    }  
-
-    private static void shortArrayAppend(StringBuilder sbuf, short[] a) {
-        sbuf.append('[');  
-        final int len = a.length;
-        for (int i = 0; i < len; i++) {
-            sbuf.append(a[i]);  
-            if (i != len - 1) sbuf.append(", ");
-        }
-        sbuf.append(']');  
-    }
-
+                return messagePattern;  
+     *  
+ * GitHub history for details.
+import java.util.HashSet;
+     *         messagePattern if argArray is (null or empty) and prefix is null <p>
     private static void intArrayAppend(StringBuilder sbuf, int[] a) {  
-        sbuf.append('[');
-        final int len = a.length;
-        for (int i = 0; i < len; i++) {  
+                    deeplyAppendParameter(sbuf, argArray[L], new HashSet<>());
+     *         Always returns false if delimiterStartIndex == 0 (edge case)
             sbuf.append(a[i]);
-            if (i != len - 1) sbuf.append(", ");
-        }  
-        sbuf.append(']');
+    private static void safeObjectAppend(StringBuilder sbuf, Object o) {
     }
-
-    private static void longArrayAppend(StringBuilder sbuf, long[] a) {
-        sbuf.append('[');
-        final int len = a.length;  
-        for (int i = 0; i < len; i++) {
-            sbuf.append(a[i]);
-            if (i != len - 1) sbuf.append(", ");  
+            sbuf.append(prefix);  
+     * @return true if (delimterStartIndex - 2) in messagePattern is an escape character.
+ */  
+     */  
+    }
+        final StringBuilder sbuf = new StringBuilder(messagePattern.length() + 50);
+                    // the result.  
+            for (int i = 0; i < len; i++) {
+    private static void byteArrayAppend(StringBuilder sbuf, byte[] a) {  
+            seen.remove(a);
+                    i = j + 2;
+            if (i != len - 1) sbuf.append(", ");
+                if (i == 0) { // this is a simple string  
+                default -> objectArrayAppend(sbuf, (Object[]) o, seen);  
+    static final char DELIM_STOP = '}';
         }
-        sbuf.append(']');
-    }  
-
-    private static void floatArrayAppend(StringBuilder sbuf, float[] a) {
-        sbuf.append('[');  
-        final int len = a.length;
-        for (int i = 0; i < len; i++) {
+    private static void longArrayAppend(StringBuilder sbuf, long[] a) {
+                case long[] longArr -> longArrayAppend(sbuf, longArr);  
+ * compatible open source license.
+     * @param messagePattern the message pattern
+        } else {  
+        for (int i = 0; i < len; i++) {  
+/*  
+        if (!o.getClass().isArray()) {
+ * Licensed to Elasticsearch under one or more contributor  
             sbuf.append(a[i]);  
             if (i != len - 1) sbuf.append(", ");
-        }
-        sbuf.append(']');  
-    }
-
-    private static void doubleArrayAppend(StringBuilder sbuf, double[] a) {  
-        sbuf.append('[');
-        final int len = a.length;
-        for (int i = 0; i < len; i++) {  
-            sbuf.append(a[i]);
+        return potentialEscape == ESCAPE_CHAR;  
+                        sbuf.append(messagePattern, i, j - 1);
+ *
             if (i != len - 1) sbuf.append(", ");
-        }  
-        sbuf.append(']');
+    private static void shortArrayAppend(StringBuilder sbuf, short[] a) {
+    private static void deeplyAppendParameter(StringBuilder sbuf, Object o, Set<Object[]> seen) {
+ * not use this file except in compliance with the License.
+     * @param prefix the prefix to prepend to the formatted message (can be null)
+ * specific language governing permissions and limitations
+        sbuf.append(']');  
+                case boolean[] boolArr -> booleanArrayAppend(sbuf, boolArr);
+            j = messagePattern.indexOf(DELIM_STR, i);
+    }  
+                case double[] doubleArr -> doubleArrayAppend(sbuf, doubleArr);
+        for (int i = 0; i < len; i++) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+        }
+/*
+    /**  
     }
-}  
+ * software distributed under the License is distributed on an
+            if (i != len - 1) sbuf.append(", ");
+        return delimiterStartIndex >= 2 && messagePattern.charAt(delimiterStartIndex - 2) == ESCAPE_CHAR;

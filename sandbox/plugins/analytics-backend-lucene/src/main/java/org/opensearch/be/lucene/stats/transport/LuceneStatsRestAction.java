@@ -1,34 +1,29 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene.stats.transport;
-
-import org.opensearch.action.ActionType;
-import org.opensearch.be.lucene.stats.LuceneStatsProvider;
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.plugin.stats.transport.BaseFormatStatsRestAction;
-import org.opensearch.plugin.stats.transport.FormatStatsResponse;
-
 /**
- * REST handler for {@code GET /_plugins/lucene/{index}/_stats}.
- *  
- * @opensearch.experimental
- */
 @ExperimentalApi  
-public final class LuceneStatsRestAction extends BaseFormatStatsRestAction {
-
-    @Override  
-    protected String formatName() {
-        return LuceneStatsProvider.FORMAT_NAME;
-    }  
-
-    @Override
-    protected ActionType<? extends FormatStatsResponse<?>> actionType() {  
         return LuceneStatsActionType.INSTANCE;
     }
+ * REST handler for {@code GET /_plugins/lucene/{index}/_stats}.
+import org.opensearch.action.ActionType;
+ *  
+import org.opensearch.plugin.stats.transport.FormatStatsResponse;
+ * compatible open source license.
+ *
+    protected String formatName() {
+ */
+ * SPDX-License-Identifier: Apache-2.0
+public final class LuceneStatsRestAction extends BaseFormatStatsRestAction {
+    protected ActionType<? extends FormatStatsResponse<?>> actionType() {  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.annotation.ExperimentalApi;  
+    @Override  
+import org.opensearch.plugin.stats.transport.BaseFormatStatsRestAction;
 }  
+    }  
+ * The OpenSearch Contributors require contributions made to  
+ */  
+package org.opensearch.be.lucene.stats.transport;
+    @Override
+import org.opensearch.be.lucene.stats.LuceneStatsProvider;
+        return LuceneStatsProvider.FORMAT_NAME;
+ * @opensearch.experimental
+/*  

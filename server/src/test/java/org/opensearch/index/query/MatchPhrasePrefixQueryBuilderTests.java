@@ -1,231 +1,203 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+                "message" : {  
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.SynonymQuery;
-import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
-import org.opensearch.core.common.ParsingException;  
-import org.opensearch.index.search.MatchQuery.ZeroTermsQuery;
-import org.opensearch.test.AbstractQueryTestCase;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Locale;  
-import java.util.Map;
-
-import static org.hamcrest.CoreMatchers.either;  
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.notNullValue;
-
-public class MatchPhrasePrefixQueryBuilderTests extends AbstractQueryTestCase<MatchPhrasePrefixQueryBuilder> {  
-    @Override
-    protected MatchPhrasePrefixQueryBuilder doCreateTestQueryBuilder() {
-        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);  
-        Object value;
-        if (isTextField(fieldName)) {
-            int terms = randomIntBetween(0, 3);  
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < terms; i++) {
-                builder.append(randomAlphaOfLengthBetween(1, 10)).append(" ");  
-            }
-            value = builder.toString().trim();
-        } else {  
-            value = getRandomValueForFieldName(fieldName);
-        }
-
-        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder(fieldName, value);
-
-        if (randomBoolean() && isTextField(fieldName)) {  
-            matchQuery.analyzer(randomFrom("simple", "keyword", "whitespace"));
-        }
-
-        if (randomBoolean()) {
-            matchQuery.slop(randomIntBetween(0, 10));
-        }  
-
-        if (randomBoolean()) {
-            matchQuery.maxExpansions(randomIntBetween(1, 10000));  
-        }
-        if (randomBoolean()) {
-            matchQuery.zeroTermsQuery(randomFrom(ZeroTermsQuery.ALL, ZeroTermsQuery.NONE));  
-        }
-        return matchQuery;
-    }  
-
-    @Override
-    protected Map<String, MatchPhrasePrefixQueryBuilder> getAlternateVersions() {  
-        Map<String, MatchPhrasePrefixQueryBuilder> alternateVersions = new HashMap<>();
-        MatchPhrasePrefixQueryBuilder matchPhrasePrefixQuery = new MatchPhrasePrefixQueryBuilder(
-            randomAlphaOfLengthBetween(1, 10),  
-            randomAlphaOfLengthBetween(1, 10)
-        );
-        String contentString = String.format(Locale.ROOT, """  
-            {
-                "match_phrase_prefix" : {
-                    "%s" : "%s"  
-                }
-            }""", matchPhrasePrefixQuery.fieldName(), matchPhrasePrefixQuery.value());
-        alternateVersions.put(contentString, matchPhrasePrefixQuery);  
-        return alternateVersions;
-    }
-
-    @Override
-    protected void doAssertLuceneQuery(MatchPhrasePrefixQueryBuilder queryBuilder, Query query, QueryShardContext context)
-        throws IOException {  
-        assertThat(query, notNullValue());
-
-        if (query instanceof MatchAllDocsQuery) {  
-            assertThat(queryBuilder.zeroTermsQuery(), equalTo(ZeroTermsQuery.ALL));
-            return;
-        }  
-
         assertThat(
-            query,  
-            either(instanceOf(MultiPhrasePrefixQuery.class)).or(instanceOf(SynonymQuery.class)).or(instanceOf(MatchNoDocsQuery.class))
+        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);  
         );
-    }  
-
-    public void testIllegalValues() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new MatchPhrasePrefixQueryBuilder(null, "value"));  
-        assertEquals("[match_phrase_prefix] requires fieldName", e.getMessage());
-
-        e = expectThrows(IllegalArgumentException.class, () -> new MatchPhrasePrefixQueryBuilder("fieldName", null));  
-        assertEquals("[match_phrase_prefix] requires query value", e.getMessage());
-
-        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder("fieldName", "text");  
-        e = expectThrows(IllegalArgumentException.class, () -> matchQuery.maxExpansions(-1));
+              "match_phrase_prefix" : {
     }
-
-    public void testBadAnalyzer() throws IOException {
-        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder("fieldName", "text");
-        matchQuery.analyzer("bogusAnalyzer");  
-
-        QueryShardException e = expectThrows(QueryShardException.class, () -> matchQuery.toQuery(createShardContext()));
-        assertThat(e.getMessage(), containsString("analyzer [bogusAnalyzer] not found"));  
-    }
-
-    public void testPhraseOnFieldWithNoTerms() {  
-        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder(DATE_FIELD_NAME, "three term phrase");
-        matchQuery.analyzer("whitespace");
+            randomAlphaOfLengthBetween(1, 10),  
         expectThrows(IllegalStateException.class, () -> matchQuery.doToQuery(createShardContext()));  
-    }
-
-    public void testPhrasePrefixZeroTermsQuery() throws IOException {  
-        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder(TEXT_FIELD_NAME, "");
-        matchQuery.zeroTermsQuery(ZeroTermsQuery.NONE);
-        assertEquals(new MatchNoDocsQuery(), matchQuery.doToQuery(createShardContext()));  
-
-        matchQuery = new MatchPhrasePrefixQueryBuilder(TEXT_FIELD_NAME, "");
-        matchQuery.zeroTermsQuery(ZeroTermsQuery.ALL);  
-        assertEquals(new MatchAllDocsQuery(), matchQuery.doToQuery(createShardContext()));
-    }
-
-    public void testPhrasePrefixMatchQuery() throws IOException {
-        String json1 = """
-            {  
-                "match_phrase_prefix" : {
-                    "message" : "this is a test"
-                }  
-            }""";
-
-        String expected = """  
+        e = expectThrows(IllegalArgumentException.class, () -> new MatchPhrasePrefixQueryBuilder("fieldName", null));  
+              "match_phrase_prefix" : {  
+        }  
+ * license agreements. See the NOTICE file distributed with
+        String json = """
+import static org.hamcrest.CoreMatchers.either;  
+    public void testParseFailsWithMultipleFields() throws IOException {
+            }
             {
-              "match_phrase_prefix" : {
-                "message" : {  
-                  "query" : "this is a test",
-                  "slop" : 0,
-                  "max_expansions" : 50,  
-                  "zero_terms_query" : "NONE",
-                  "boost" : 1.0
-                }  
-              }
-            }""";
-        MatchPhrasePrefixQueryBuilder qb = (MatchPhrasePrefixQueryBuilder) parseQuery(json1);  
         checkGeneratedJson(expected, qb);
-
-        String json3 = """  
-            {
-                "match_phrase_prefix" : {
-                    "message" : {  
-                        "query" : "this is a test",
-                        "max_expansions" : 10
-                    }  
-                }
-            }""";
-        expected = """  
-            {
-              "match_phrase_prefix" : {
-                "message" : {  
-                  "query" : "this is a test",
-                  "slop" : 0,
-                  "max_expansions" : 10,  
-                  "zero_terms_query" : "NONE",
-                  "boost" : 1.0
-                }  
-              }
+        QueryShardException e = expectThrows(QueryShardException.class, () -> matchQuery.toQuery(createShardContext()));
+    public void testPhraseOnFieldWithNoTerms() {  
+        }  
+        e = expectThrows(IllegalArgumentException.class, () -> matchQuery.maxExpansions(-1));
+                "message2" : "this is a test"
+import static org.hamcrest.Matchers.notNullValue;
+                "message1" : {
+        matchQuery.analyzer("bogusAnalyzer");  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.search.MatchQuery.ZeroTermsQuery;
             }""";
         qb = (MatchPhrasePrefixQueryBuilder) parseQuery(json3);  
-        checkGeneratedJson(expected, qb);
+            return;
+        String json3 = """  
+        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder(fieldName, value);
+import java.util.HashMap;
+            }""", matchPhrasePrefixQuery.fieldName(), matchPhrasePrefixQuery.value());
+import static org.hamcrest.CoreMatchers.instanceOf;
+            matchQuery.zeroTermsQuery(randomFrom(ZeroTermsQuery.ALL, ZeroTermsQuery.NONE));  
+public class MatchPhrasePrefixQueryBuilderTests extends AbstractQueryTestCase<MatchPhrasePrefixQueryBuilder> {  
     }
-
-    public void testParseFailsWithMultipleFields() throws IOException {
-        String json = """
-            {  
-              "match_phrase_prefix" : {
-                "message1" : {
-                  "query" : "this is a test"  
-                },
-                "message2" : {
-                  "query" : "this is a test"  
+    }  
+        return alternateVersions;
+        );
+        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder("fieldName", "text");  
+import java.io.IOException;
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
                 }
+        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder("fieldName", "text");
+import static org.hamcrest.Matchers.equalTo;  
               }
-            }""";  
-        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
+    }  
+    public void testPhrasePrefixZeroTermsQuery() throws IOException {  
+            assertThat(queryBuilder.zeroTermsQuery(), equalTo(ZeroTermsQuery.ALL));
+            value = getRandomValueForFieldName(fieldName);
+                  "slop" : 0,
+ * software distributed under the License is distributed on an
+    public void testIllegalValues() {
         assertEquals("[match_phrase_prefix] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());
-
-        String shortJson = """
-            {
-              "match_phrase_prefix" : {  
-                "message1" : "this is a test",
-                "message2" : "this is a test"
-              }  
+                    "message" : "this is a test"
+              }
+        expected = """  
+                    "message" : {  
             }""";
-        e = expectThrows(ParsingException.class, () -> parseQuery(shortJson));
-        assertEquals("[match_phrase_prefix] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());  
+        if (randomBoolean()) {
+                }
+        Map<String, MatchPhrasePrefixQueryBuilder> alternateVersions = new HashMap<>();
+/*  
+                "message1" : "this is a test",
+/*  
+            {
+        if (isTextField(fieldName)) {
+        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(json));
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                builder.append(randomAlphaOfLengthBetween(1, 10)).append(" ");  
     }
+ * Licensed to Elasticsearch under one or more contributor  
+            query,  
+                    "%s" : "%s"  
+                "message" : {  
+        String expected = """  
+package org.opensearch.index.query;
+    protected MatchPhrasePrefixQueryBuilder doCreateTestQueryBuilder() {
+                },
+ * under the License.  
+            {
+    public void testPhrasePrefixMatchQuery() throws IOException {
+ * not use this file except in compliance with the License.
+ */
+        assertEquals("[match_phrase_prefix] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());  
+            {  
+ *
+            }""";
+                "match_phrase_prefix" : {
+        assertEquals("[match_phrase_prefix] requires fieldName", e.getMessage());
+                  "zero_terms_query" : "NONE",
+    protected Map<String, MatchPhrasePrefixQueryBuilder> getAlternateVersions() {  
+ * KIND, either express or implied.  See the License for the
+                }  
+                  "query" : "this is a test",
+ * The OpenSearch Contributors require contributions made to  
+              }
+import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
+        assertEquals(new MatchAllDocsQuery(), matchQuery.doToQuery(createShardContext()));
+            randomAlphaOfLengthBetween(1, 10)
+                }  
 }
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Locale;  
+                  "max_expansions" : 10,  
+ * this work for additional information regarding copyright
+    @Override
+/*
+              }  
+                  "zero_terms_query" : "NONE",
+        matchQuery = new MatchPhrasePrefixQueryBuilder(TEXT_FIELD_NAME, "");
+ */  
+            {
+import java.util.Map;
+                    }  
+        assertEquals("[match_phrase_prefix] requires query value", e.getMessage());
+import org.apache.lucene.search.Query;  
+ * You may obtain a copy of the License at  
+    }
+ * compatible open source license.
+        }
+        Object value;
+              "match_phrase_prefix" : {
+        assertThat(e.getMessage(), containsString("analyzer [bogusAnalyzer] not found"));  
+            {  
+            for (int i = 0; i < terms; i++) {
+        } else {  
+        matchQuery.zeroTermsQuery(ZeroTermsQuery.ALL);  
+            }""";
+            int terms = randomIntBetween(0, 3);  
+        alternateVersions.put(contentString, matchPhrasePrefixQuery);  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.apache.lucene.search.SynonymQuery;
+    protected void doAssertLuceneQuery(MatchPhrasePrefixQueryBuilder queryBuilder, Query query, QueryShardContext context)
+        assertEquals(new MatchNoDocsQuery(), matchQuery.doToQuery(createShardContext()));  
+                        "max_expansions" : 10
+        assertThat(query, notNullValue());
+        matchQuery.analyzer("whitespace");
+        String shortJson = """
+            either(instanceOf(MultiPhrasePrefixQuery.class)).or(instanceOf(SynonymQuery.class)).or(instanceOf(MatchNoDocsQuery.class))
+        matchQuery.zeroTermsQuery(ZeroTermsQuery.NONE);
+ *  
+        String json1 = """
+ * this file be licensed under the Apache-2.0 license or a
+                  "boost" : 1.0
+            matchQuery.slop(randomIntBetween(0, 10));
+        checkGeneratedJson(expected, qb);
+        e = expectThrows(ParsingException.class, () -> parseQuery(shortJson));
+                }
+    }
+                        "query" : "this is a test",
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new MatchPhrasePrefixQueryBuilder(null, "value"));  
+import org.apache.lucene.search.MatchNoDocsQuery;
+                "match_phrase_prefix" : {
+                  "query" : "this is a test",
+              "match_phrase_prefix" : {
+    public void testBadAnalyzer() throws IOException {
+                  "boost" : 1.0
+ * Unless required by applicable law or agreed to in writing,
+        }
+        String contentString = String.format(Locale.ROOT, """  
+    }
+                  "slop" : 0,
+            value = builder.toString().trim();
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (query instanceof MatchAllDocsQuery) {  
+import static org.hamcrest.Matchers.containsString;
+    @Override
+        if (randomBoolean()) {
+import org.opensearch.core.common.ParsingException;  
+        MatchPhrasePrefixQueryBuilder matchPhrasePrefixQuery = new MatchPhrasePrefixQueryBuilder(
+            matchQuery.analyzer(randomFrom("simple", "keyword", "whitespace"));
+ * GitHub history for details.
+                  "query" : "this is a test"  
+                }  
+            {
+                  "query" : "this is a test"  
+        }
+            }""";
+            StringBuilder builder = new StringBuilder();
+import org.opensearch.test.AbstractQueryTestCase;
+                  "max_expansions" : 50,  
+import org.apache.lucene.search.MatchAllDocsQuery;
+        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder(TEXT_FIELD_NAME, "");
+        MatchPhrasePrefixQueryBuilder qb = (MatchPhrasePrefixQueryBuilder) parseQuery(json1);  
+        if (randomBoolean()) {
+            }""";  
+        return matchQuery;
+        }
+                "match_phrase_prefix" : {
+ * specific language governing permissions and limitations
+                "message2" : {
+ *
+        MatchPhrasePrefixQueryBuilder matchQuery = new MatchPhrasePrefixQueryBuilder(DATE_FIELD_NAME, "three term phrase");
+            matchQuery.maxExpansions(randomIntBetween(1, 10000));  
+        throws IOException {  
+        if (randomBoolean() && isTextField(fieldName)) {  

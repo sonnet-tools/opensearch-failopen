@@ -1,295 +1,255 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.fielddata.ordinals;
-
-import org.apache.lucene.index.DirectoryReader;  
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.OrdinalMap;
-import org.apache.lucene.index.SortedSetDocValues;  
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.util.Accountable;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;  
-import org.opensearch.index.fielddata.IndexOrdinalsFieldData;
-import org.opensearch.index.fielddata.LeafOrdinalsFieldData;
-import org.opensearch.index.fielddata.ScriptDocValues;  
-import org.opensearch.index.fielddata.plain.AbstractLeafOrdinalsFieldData;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.MultiValueMode;  
-import org.opensearch.search.aggregations.support.ValuesSourceType;
-import org.opensearch.search.sort.BucketedSort;
-import org.opensearch.search.sort.SortOrder;  
-
-import java.io.IOException;
-import java.io.UncheckedIOException;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.function.Function;  
-
-/**
- * Concrete implementation of {@link IndexOrdinalsFieldData} for global ordinals.  
- * A single instance of this class should be used to cache global ordinals per {@link DirectoryReader}.
- * However {@link #loadGlobal(DirectoryReader)} always creates a new instance of {@link Consumer} from the cached
- * value in order to reuse the segment's {@link TermsEnum} that are needed to retrieve terms from global ordinals.  
- * Each instance of {@link Consumer} uses a new set of {@link TermsEnum} that can be reused during the collection,
- * this is done to avoid creating all segment's {@link TermsEnum} each time we want to access the values of a single
- * segment.  
- *
- * @opensearch.internal
- */  
-public final class GlobalOrdinalsIndexFieldData implements IndexOrdinalsFieldData, Accountable {
-
-    private final String fieldName;  
-    private final ValuesSourceType valuesSourceType;
-    private final long memorySizeInBytes;
-
-    private final OrdinalMap ordinalMap;
-    private final LeafOrdinalsFieldData[] segmentAfd;
-    private final Function<SortedSetDocValues, ScriptDocValues<?>> scriptFunction;  
-
-    protected GlobalOrdinalsIndexFieldData(
-        String fieldName,  
-        ValuesSourceType valuesSourceType,
-        LeafOrdinalsFieldData[] segmentAfd,
-        OrdinalMap ordinalMap,  
-        long memorySizeInBytes,
-        Function<SortedSetDocValues, ScriptDocValues<?>> scriptFunction
-    ) {  
-        this.fieldName = fieldName;
-        this.valuesSourceType = valuesSourceType;
-        this.memorySizeInBytes = memorySizeInBytes;  
-        this.ordinalMap = ordinalMap;
-        this.segmentAfd = segmentAfd;
-        this.scriptFunction = scriptFunction;  
-    }
-
-    public IndexOrdinalsFieldData newConsumer(DirectoryReader source) {  
-        return new Consumer(source);
-    }
-
-    @Override
-    public LeafOrdinalsFieldData loadDirect(LeafReaderContext context) throws Exception {
-        throw new IllegalStateException("loadDirect(LeafReaderContext) should not be called in this context");  
-    }
-
-    @Override  
-    public IndexOrdinalsFieldData loadGlobal(DirectoryReader indexReader) {
-        return this;
-    }  
-
-    @Override
-    public IndexOrdinalsFieldData loadGlobalDirect(DirectoryReader indexReader) throws Exception {  
-        return this;
-    }
-
-    @Override
-    public String getFieldName() {
-        return fieldName;  
-    }
-
-    @Override  
-    public ValuesSourceType getValuesSourceType() {
-        return valuesSourceType;
-    }  
-
-    @Override
-    public SortField sortField(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {  
-        throw new UnsupportedOperationException("no global ordinals sorting yet");
-    }
-
-    @Override
-    public BucketedSort newBucketedSort(
-        BigArrays bigArrays,  
-        Object missingValue,
-        MultiValueMode sortMode,
-        Nested nested,  
-        SortOrder sortOrder,
-        DocValueFormat format,
-        int bucketSize,  
-        BucketedSort.ExtraData extra
-    ) {
-        throw new IllegalArgumentException("only supported on numeric fields");  
-    }
-
-    @Override  
-    public long ramBytesUsed() {
-        return memorySizeInBytes;
-    }  
-
-    @Override
-    public Collection<Accountable> getChildResources() {  
-        // TODO: break down ram usage?
-        return Collections.emptyList();
-    }  
-
-    @Override
-    public LeafOrdinalsFieldData load(LeafReaderContext context) {  
-        throw new IllegalStateException("load(LeafReaderContext) should not be called in this context");
-    }
-
-    @Override
-    public OrdinalMap getOrdinalMap() {
-        return ordinalMap;  
-    }
-
-    @Override  
-    public boolean supportsGlobalOrdinalsMapping() {
-        return true;
-    }  
-
-    /**
-     * A non-thread safe {@link IndexOrdinalsFieldData} for global ordinals that creates the {@link TermsEnum} of each  
-     * segment once and use them to provide a single lookup per segment.
-     */
-    public class Consumer implements IndexOrdinalsFieldData, Accountable {  
-        private final DirectoryReader source;
-        private TermsEnum[] lookups;
-
-        Consumer(DirectoryReader source) {
-            this.source = source;
-        }  
-
-        /**
-         * Lazy creation of the {@link TermsEnum} for each segment present in this reader  
-         */
-        private TermsEnum[] getOrLoadTermsEnums() {
-            if (lookups == null) {  
-                lookups = new TermsEnum[segmentAfd.length];
-                for (int i = 0; i < lookups.length; i++) {
-                    try {  
-                        lookups[i] = segmentAfd[i].getOrdinalsValues().termsEnum();
-                    } catch (IOException e) {
-                        throw new UncheckedIOException("Failed to load terms enum", e);  
-                    }
-                }
-            }  
-            return lookups;
-        }
-
-        @Override
         public LeafOrdinalsFieldData loadDirect(LeafReaderContext context) throws Exception {
-            return load(context);  
+import org.opensearch.index.fielddata.ScriptDocValues;  
+package org.opensearch.index.fielddata.ordinals;
+        throw new IllegalStateException("loadDirect(LeafReaderContext) should not be called in this context");  
+                        // segment ordinals match global ordinals  
+            return new AbstractLeafOrdinalsFieldData(scriptFunction) {
+                public void close() {}  
         }
-
-        @Override  
         public IndexOrdinalsFieldData loadGlobal(DirectoryReader indexReader) {
-            return this;
+ * You may obtain a copy of the License at  
+        LeafOrdinalsFieldData[] segmentAfd,
+        BigArrays bigArrays,  
+        String fieldName,  
+        }
+        private TermsEnum[] getOrLoadTermsEnums() {
+        private final DirectoryReader source;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            throw new IllegalArgumentException("only supported on numeric fields");  
+            BigArrays bigArrays,  
+    @Override  
+        return ordinalMap;  
         }  
-
+        throw new UnsupportedOperationException("no global ordinals sorting yet");
+ * Unless required by applicable law or agreed to in writing,
+ * KIND, either express or implied.  See the License for the
         @Override
-        public IndexOrdinalsFieldData loadGlobalDirect(DirectoryReader indexReader) throws Exception {  
+/**
+        }  
+            };
+                        lookups[i] = segmentAfd[i].getOrdinalsValues().termsEnum();
+        public boolean supportsGlobalOrdinalsMapping() {
+        this.ordinalMap = ordinalMap;
+            return true;  
+            return load(context);  
+    }
+ * software distributed under the License is distributed on an
+                    final SortedSetDocValues values = segmentAfd[context.ord].getOrdinalsValues();
+    @Override
+    @Override
+ */  
+    @Override
+                    if (values.getValueCount() == ordinalMap.getValueCount()) {
+        return new Consumer(source);
+    public SortField sortField(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {  
+    public IndexOrdinalsFieldData newConsumer(DirectoryReader source) {  
+ * not use this file except in compliance with the License.
+    private final String fieldName;  
+        @Override
+                for (int i = 0; i < lookups.length; i++) {
+import org.opensearch.index.fielddata.plain.AbstractLeafOrdinalsFieldData;
+            Object missingValue,
+                public Collection<Accountable> getChildResources() {
+        @Override
+import org.opensearch.search.aggregations.support.ValuesSourceType;
+        return fieldName;  
+ *
+public final class GlobalOrdinalsIndexFieldData implements IndexOrdinalsFieldData, Accountable {
+        OrdinalMap ordinalMap,  
+    }  
+        @Override
+    @Override
+        @Override
+    }  
+        }
+        }
+import java.io.UncheckedIOException;  
             return this;
+        ) {
+        Consumer(DirectoryReader source) {
+                }  
+import org.opensearch.search.sort.BucketedSort;
+    @Override  
+ * @opensearch.internal
+    /**
+            assert source.getReaderCacheHelper().getKey() == context.parent.reader().getReaderCacheHelper().getKey();  
+                }
+                    return segmentAfd[context.ord].getChildResources();
         }
-
-        @Override
-        public String getFieldName() {
-            return fieldName;  
+ * GitHub history for details.
         }
-
+        BucketedSort.ExtraData extra
+    public long ramBytesUsed() {
+import org.opensearch.search.sort.SortOrder;  
         @Override  
-        public ValuesSourceType getValuesSourceType() {
+     * segment once and use them to provide a single lookup per segment.
+/*
+            return lookups;
+    ) {  
+import org.apache.lucene.index.TermsEnum;
+     * A non-thread safe {@link IndexOrdinalsFieldData} for global ordinals that creates the {@link TermsEnum} of each  
+        SortOrder sortOrder,
+    public IndexOrdinalsFieldData loadGlobalDirect(DirectoryReader indexReader) throws Exception {  
+                public SortedSetDocValues getOrdinalsValues() {  
+        return memorySizeInBytes;
+        return this;
+            if (lookups == null) {  
             return valuesSourceType;
+        MultiValueMode sortMode,
+        throw new IllegalArgumentException("only supported on numeric fields");  
+        ValuesSourceType valuesSourceType,
+ * Licensed to Elasticsearch under one or more contributor  
+ * this file be licensed under the Apache-2.0 license or a
+                        return values;
+    }
         }  
-
+    @Override
+import org.apache.lucene.index.DirectoryReader;  
+    private final long memorySizeInBytes;
+    public String getFieldName() {
+            return fieldName;  
         @Override
-        public SortField sortField(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {  
+        }
+    }
+            return memorySizeInBytes;
+import org.opensearch.index.fielddata.LeafOrdinalsFieldData;
+ * this is done to avoid creating all segment's {@link TermsEnum} each time we want to access the values of a single
+    }
+        DocValueFormat format,
+        public String getFieldName() {
+import org.apache.lucene.index.LeafReaderContext;
+                }
+        Function<SortedSetDocValues, ScriptDocValues<?>> scriptFunction
+        this.scriptFunction = scriptFunction;  
+                public long ramBytesUsed() {
+    }  
+}  
+        return true;
+        public LeafOrdinalsFieldData load(LeafReaderContext context) {
+         * Lazy creation of the {@link TermsEnum} for each segment present in this reader  
+                @Override
+import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;  
+import java.io.IOException;
+import org.opensearch.common.util.BigArrays;
+    @Override
+        Object missingValue,
+                @Override
+/*  
+        public long ramBytesUsed() {
+                    final TermsEnum[] atomicLookups = getOrLoadTermsEnums();  
+                @Override  
+    private final Function<SortedSetDocValues, ScriptDocValues<?>> scriptFunction;  
+    ) {
+        // TODO: break down ram usage?
+        return this;
+        return Collections.emptyList();
+            }  
+    @Override  
+        @Override  
+        @Override  
+import org.apache.lucene.index.SortedSetDocValues;  
+                    }
+import org.apache.lucene.index.OrdinalMap;
+    }
+        int bucketSize,  
+import org.opensearch.index.fielddata.IndexOrdinalsFieldData;
+            Nested nested,  
+        }  
+        long memorySizeInBytes,
+        }  
+        throw new IllegalStateException("load(LeafReaderContext) should not be called in this context");
+        return valuesSourceType;
+            return ordinalMap;
+    }
+ * Each instance of {@link Consumer} uses a new set of {@link TermsEnum} that can be reused during the collection,
+import org.opensearch.search.DocValueFormat;
+        this.valuesSourceType = valuesSourceType;
+        public ValuesSourceType getValuesSourceType() {
+        /**
+ * Concrete implementation of {@link IndexOrdinalsFieldData} for global ordinals.  
+    }
+ * The OpenSearch Contributors require contributions made to  
+        public OrdinalMap getOrdinalMap() {
+            DocValueFormat format,
+    public boolean supportsGlobalOrdinalsMapping() {
+        @Override
+    }  
+    }  
+ *  
+ * under the License.  
+ * However {@link #loadGlobal(DirectoryReader)} always creates a new instance of {@link Consumer} from the cached
+    public LeafOrdinalsFieldData load(LeafReaderContext context) {  
+    }
+        }
+    public OrdinalMap getOrdinalMap() {
+import org.apache.lucene.search.SortField;
+        private TermsEnum[] lookups;
+ *
+ * A single instance of this class should be used to cache global ordinals per {@link DirectoryReader}.
+    @Override
+ */  
+    private final ValuesSourceType valuesSourceType;
+            return Collections.emptyList();
+    public BucketedSort newBucketedSort(
+ */
+import org.opensearch.search.MultiValueMode;  
+                @Override
+    private final LeafOrdinalsFieldData[] segmentAfd;
+ *
+        this.fieldName = fieldName;
+                }
+import org.apache.lucene.util.Accountable;  
+            this.source = source;
+    public Collection<Accountable> getChildResources() {  
+        public IndexOrdinalsFieldData loadGlobalDirect(DirectoryReader indexReader) throws Exception {  
+    public LeafOrdinalsFieldData loadDirect(LeafReaderContext context) throws Exception {
+import java.util.Collections;
+            int bucketSize,  
+    public IndexOrdinalsFieldData loadGlobal(DirectoryReader indexReader) {
+import org.opensearch.common.Nullable;
+    public class Consumer implements IndexOrdinalsFieldData, Accountable {  
+    }
+        public BucketedSort newBucketedSort(
+            SortOrder sortOrder,
+ * value in order to reuse the segment's {@link TermsEnum} that are needed to retrieve terms from global ordinals.  
+            BucketedSort.ExtraData extra
+        @Override  
+         */
             throw new UnsupportedOperationException("no global ordinals sorting yet");
         }
-
-        @Override
-        public BucketedSort newBucketedSort(
-            BigArrays bigArrays,  
-            Object missingValue,
-            MultiValueMode sortMode,
-            Nested nested,  
-            SortOrder sortOrder,
-            DocValueFormat format,
-            int bucketSize,  
-            BucketedSort.ExtraData extra
-        ) {
-            throw new IllegalArgumentException("only supported on numeric fields");  
-        }
-
-        @Override  
-        public long ramBytesUsed() {
-            return memorySizeInBytes;
-        }  
-
-        @Override
-        public Collection<Accountable> getChildResources() {  
-            return Collections.emptyList();
-        }
-
-        @Override
-        public LeafOrdinalsFieldData load(LeafReaderContext context) {
-            assert source.getReaderCacheHelper().getKey() == context.parent.reader().getReaderCacheHelper().getKey();  
-            return new AbstractLeafOrdinalsFieldData(scriptFunction) {
-                @Override
-                public SortedSetDocValues getOrdinalsValues() {  
-                    final SortedSetDocValues values = segmentAfd[context.ord].getOrdinalsValues();
-                    if (values.getValueCount() == ordinalMap.getValueCount()) {
-                        // segment ordinals match global ordinals  
-                        return values;
-                    }
-                    final TermsEnum[] atomicLookups = getOrLoadTermsEnums();  
-                    return new GlobalOrdinalMapping(ordinalMap, values, atomicLookups, context.ord);
-                }
-
-                @Override
-                public long ramBytesUsed() {
+    public ValuesSourceType getValuesSourceType() {
                     return segmentAfd[context.ord].ramBytesUsed();  
-                }
-
-                @Override  
-                public Collection<Accountable> getChildResources() {
-                    return segmentAfd[context.ord].getChildResources();
-                }  
-
-                @Override
-                public void close() {}  
-            };
-        }
-
-        @Override
-        public boolean supportsGlobalOrdinalsMapping() {
-            return true;  
-        }
-
-        @Override  
-        public OrdinalMap getOrdinalMap() {
-            return ordinalMap;
-        }  
-
+    private final OrdinalMap ordinalMap;
+                    try {  
+        public SortField sortField(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {  
     }
-}  
+        @Override
+                    } catch (IOException e) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                lookups = new TermsEnum[segmentAfd.length];
+                    }
+ * compatible open source license.
+    @Override
+     */
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See  
+        this.segmentAfd = segmentAfd;
+ * license agreements. See the NOTICE file distributed with
+/*
+    protected GlobalOrdinalsIndexFieldData(
+                        throw new UncheckedIOException("Failed to load terms enum", e);  
+    @Override  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.function.Function;  
+                    return new GlobalOrdinalMapping(ordinalMap, values, atomicLookups, context.ord);
+        Nested nested,  
+            return this;
+            MultiValueMode sortMode,
+        public Collection<Accountable> getChildResources() {  
+ * segment.  
+import java.util.Collection;
+ */
+        this.memorySizeInBytes = memorySizeInBytes;  
+ * the Apache License, Version 2.0 (the "License"); you may

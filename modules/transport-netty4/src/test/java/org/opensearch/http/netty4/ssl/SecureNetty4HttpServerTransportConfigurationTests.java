@@ -1,242 +1,204 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http.netty4.ssl;
-
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.MockBigArrays;
-import org.opensearch.common.util.MockPageCacheRecycler;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;  
 import org.opensearch.http.HttpServerTransport;
-import org.opensearch.http.NullDispatcher;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;  
-import org.opensearch.plugins.TransportExceptionHandler;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.SharedGroupFactory;  
-import org.opensearch.transport.TransportAdapterProvider;
-import org.junit.After;
-import org.junit.Before;  
-
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;  
-
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Optional;
-
-import io.netty.channel.ChannelInboundHandlerAdapter;
-
-import static org.hamcrest.Matchers.equalTo;  
-
-/**
- * Tests for the {@link SecureNetty4HttpServerTransport} class.  
- */
-public class SecureNetty4HttpServerTransportConfigurationTests extends OpenSearchTestCase {
-
-    private NetworkService networkService;
-    private ThreadPool threadPool;
-    private MockBigArrays bigArrays;  
-    private ClusterSettings clusterSettings;
-
-    private static class ConfigurableSecureHttpTransportSettingsProvider implements SecureHttpTransportSettingsProvider {  
+            @Override
         private final List<TransportAdapterProvider<HttpServerTransport>> transportAdapterProviders;
-
-        public ConfigurableSecureHttpTransportSettingsProvider(  
-            List<TransportAdapterProvider<HttpServerTransport>> transportAdapterProviders
-        ) {
-            this.transportAdapterProviders = transportAdapterProviders;  
-        }
-
-        @Override  
         public Collection<TransportAdapterProvider<HttpServerTransport>> getHttpTransportAdapterProviders(Settings settings) {
             return transportAdapterProviders;
-        }  
-
-        @Override
-        public Optional<TransportExceptionHandler> buildHttpServerExceptionHandler(Settings settings, HttpServerTransport transport) {  
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<SSLEngine> buildSecureHttpServerEngine(Settings settings, HttpServerTransport transport) throws SSLException {
-            return Optional.empty();  
-        }
-    }
-
-    @Before
-    public void setup() throws Exception {
-        networkService = new NetworkService(Collections.emptyList());  
-        threadPool = new TestThreadPool("test");
-        bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
-        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
-    }
-
-    @After  
-    public void shutdown() throws Exception {
-        if (threadPool != null) {
-            threadPool.shutdownNow();  
-        }
-        threadPool = null;
-        networkService = null;  
-        bigArrays = null;
-        clusterSettings = null;
-    }  
-
-    public void testRequestHeaderVerifier() throws InterruptedException {
-        final TransportAdapterProvider<HttpServerTransport> transportAdapterProvider = new TransportAdapterProvider<HttpServerTransport>() {  
-            @Override
-            public String name() {
-                return SecureNetty4HttpServerTransport.REQUEST_HEADER_VERIFIER;  
-            }
-
-            @SuppressWarnings("unchecked")  
-            @Override
-            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {
-                return Optional.of((C) new ChannelInboundHandlerAdapter());  
-            }
-
-        };  
-
-        try (
-            final SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
-                Settings.EMPTY,
-                networkService,
-                bigArrays,  
-                threadPool,
-                xContentRegistry(),
-                new NullDispatcher(),  
-                clusterSettings,
-                new SharedGroupFactory(Settings.EMPTY),
-                new ConfigurableSecureHttpTransportSettingsProvider(List.of(transportAdapterProvider)),  
-                NoopTracer.INSTANCE
-            )
-        ) {  
-
-        }
-    }  
-
-    public void testMultipleRequestHeaderVerifiers() throws InterruptedException {
-        final TransportAdapterProvider<HttpServerTransport> transportAdapterProvider = new TransportAdapterProvider<HttpServerTransport>() {  
-            @Override
-            public String name() {
-                return SecureNetty4HttpServerTransport.REQUEST_HEADER_VERIFIER;  
-            }
-
-            @SuppressWarnings("unchecked")  
-            @Override
-            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {
-                return Optional.of((C) new ChannelInboundHandlerAdapter());  
-            }
-
-        };  
-
-        final IllegalArgumentException ex = assertThrows(
-            IllegalArgumentException.class,  
-            () -> new SecureNetty4HttpServerTransport(
-                Settings.EMPTY,
-                networkService,  
-                bigArrays,
-                threadPool,
-                xContentRegistry(),  
-                new NullDispatcher(),
-                clusterSettings,
-                new SharedGroupFactory(Settings.EMPTY),  
-                new ConfigurableSecureHttpTransportSettingsProvider(List.of(transportAdapterProvider, transportAdapterProvider)),
-                NoopTracer.INSTANCE
-            )  
-        );
-
-        assertThat(ex.getMessage(), equalTo("Cannot have more than one header verifier configured, supplied 2"));  
-    }
-
-    public void testRequestDecompressor() throws InterruptedException {  
-        final TransportAdapterProvider<HttpServerTransport> transportAdapterProvider = new TransportAdapterProvider<HttpServerTransport>() {
-            @Override
-            public String name() {  
-                return SecureNetty4HttpServerTransport.REQUEST_DECOMPRESSOR;
-            }
-
-            @SuppressWarnings("unchecked")
-            @Override
-            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {  
-                return Optional.of((C) new ChannelInboundHandlerAdapter());
-            }
-
-        };
-
-        try (  
-            final SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
-                Settings.EMPTY,
-                networkService,  
-                bigArrays,
-                threadPool,
-                xContentRegistry(),  
-                new NullDispatcher(),
-                clusterSettings,
-                new SharedGroupFactory(Settings.EMPTY),  
-                new ConfigurableSecureHttpTransportSettingsProvider(List.of(transportAdapterProvider)),
-                NoopTracer.INSTANCE
-            )  
-        ) {
-
-        }  
-    }
-
-    public void testRequestDecompressorAndRequestHeaderVerifier() throws InterruptedException {  
-        final TransportAdapterProvider<HttpServerTransport> requestDecompressor = new TransportAdapterProvider<HttpServerTransport>() {
-            @Override
-            public String name() {  
-                return SecureNetty4HttpServerTransport.REQUEST_DECOMPRESSOR;
-            }
-
-            @SuppressWarnings("unchecked")
-            @Override
-            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {  
-                return Optional.of((C) new ChannelInboundHandlerAdapter());
-            }
-
-        };
-
         final TransportAdapterProvider<HttpServerTransport> requestHeaderVerifier = new TransportAdapterProvider<HttpServerTransport>() {  
+            public String name() {  
+                return SecureNetty4HttpServerTransport.REQUEST_DECOMPRESSOR;
+import org.junit.Before;  
+            @Override
             @Override
             public String name() {
-                return SecureNetty4HttpServerTransport.REQUEST_HEADER_VERIFIER;  
-            }
-
-            @SuppressWarnings("unchecked")  
-            @Override
+    public void testMultipleRequestHeaderVerifiers() throws InterruptedException {
             public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {
                 return Optional.of((C) new ChannelInboundHandlerAdapter());  
+        }
+                return SecureNetty4HttpServerTransport.REQUEST_HEADER_VERIFIER;  
+    }
             }
-
-        };  
-
-        try (
-            final SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
-                Settings.EMPTY,
-                networkService,
-                bigArrays,  
                 threadPool,
-                xContentRegistry(),
+            List<TransportAdapterProvider<HttpServerTransport>> transportAdapterProviders
+                clusterSettings,
+            @Override
+        final TransportAdapterProvider<HttpServerTransport> transportAdapterProvider = new TransportAdapterProvider<HttpServerTransport>() {  
+        if (threadPool != null) {
+        }
+import org.opensearch.common.settings.Settings;  
+            }
+            return Optional.empty();
+    @After  
+        final TransportAdapterProvider<HttpServerTransport> requestDecompressor = new TransportAdapterProvider<HttpServerTransport>() {
+                xContentRegistry(),  
+                Settings.EMPTY,
+import org.opensearch.transport.TransportAdapterProvider;
+    private ClusterSettings clusterSettings;
+            @Override
+            public String name() {
+        threadPool = new TestThreadPool("test");
                 new NullDispatcher(),  
+                networkService,
+            )  
+        }
+                new SharedGroupFactory(Settings.EMPTY),
+        }
+    @Before
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider;  
+                threadPool,
+ */  
+            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {  
+    }  
+    }  
+                xContentRegistry(),  
+    private ThreadPool threadPool;
+            @SuppressWarnings("unchecked")
+                Settings.EMPTY,
+            @SuppressWarnings("unchecked")  
+        networkService = new NetworkService(Collections.emptyList());  
+ * SPDX-License-Identifier: Apache-2.0
+            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {
+                return Optional.of((C) new ChannelInboundHandlerAdapter());
+        bigArrays = null;
+        public Optional<SSLEngine> buildSecureHttpServerEngine(Settings settings, HttpServerTransport transport) throws SSLException {
+                Settings.EMPTY,
+        ) {
+        ) {
+import org.opensearch.common.settings.ClusterSettings;
+import java.util.List;
+        final TransportAdapterProvider<HttpServerTransport> transportAdapterProvider = new TransportAdapterProvider<HttpServerTransport>() {  
+        };  
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+    public void setup() throws Exception {
+            }
+        }
+        clusterSettings = null;
+        }
                 clusterSettings,
                 new SharedGroupFactory(Settings.EMPTY),
+    }
+            final SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(
+    public void testRequestDecompressor() throws InterruptedException {  
+            @Override
+                new NullDispatcher(),
+        };
+            final SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
+            @SuppressWarnings("unchecked")  
                 new ConfigurableSecureHttpTransportSettingsProvider(List.of(requestDecompressor, requestHeaderVerifier)),  
-                NoopTracer.INSTANCE
+                bigArrays,
+            @SuppressWarnings("unchecked")  
+import org.junit.After;
+    }
+                networkService,  
+            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {  
+                new SharedGroupFactory(Settings.EMPTY),  
+            this.transportAdapterProviders = transportAdapterProviders;  
+import javax.net.ssl.SSLEngine;
+    private static class ConfigurableSecureHttpTransportSettingsProvider implements SecureHttpTransportSettingsProvider {  
+ * The OpenSearch Contributors require contributions made to  
+        }  
+        }  
+            public <C> Optional<C> create(Settings settings, HttpServerTransport transport, Class<C> adapterClass) {
+                xContentRegistry(),
+                return SecureNetty4HttpServerTransport.REQUEST_HEADER_VERIFIER;  
+            @SuppressWarnings("unchecked")
             )
-        ) {  
-
-        }
+            }
+            () -> new SecureNetty4HttpServerTransport(
+            )
+import static org.hamcrest.Matchers.equalTo;  
+                clusterSettings,
+        };
+import org.opensearch.http.NullDispatcher;
+        public Optional<TransportExceptionHandler> buildHttpServerExceptionHandler(Settings settings, HttpServerTransport transport) {  
+                bigArrays,
+import org.opensearch.transport.SharedGroupFactory;  
+            @Override
+ *
+            }
+import org.opensearch.threadpool.TestThreadPool;
+                new NullDispatcher(),
+            public String name() {  
+                new ConfigurableSecureHttpTransportSettingsProvider(List.of(transportAdapterProvider, transportAdapterProvider)),
+            public String name() {
+        @Override  
     }  
+                return Optional.of((C) new ChannelInboundHandlerAdapter());
+import org.opensearch.test.OpenSearchTestCase;  
+                new ConfigurableSecureHttpTransportSettingsProvider(List.of(transportAdapterProvider)),
+                return Optional.of((C) new ChannelInboundHandlerAdapter());  
+        @Override
+            threadPool.shutdownNow();  
+            }
+public class SecureNetty4HttpServerTransportConfigurationTests extends OpenSearchTestCase {
+                NoopTracer.INSTANCE
+        assertThat(ex.getMessage(), equalTo("Cannot have more than one header verifier configured, supplied 2"));  
+        try (
+import javax.net.ssl.SSLException;  
 }
+import org.opensearch.common.util.MockBigArrays;
+    public void testRequestHeaderVerifier() throws InterruptedException {
+        ) {  
+import java.util.Optional;
+ */
+/*  
+        final IllegalArgumentException ex = assertThrows(
+            }
+                new NullDispatcher(),  
+                networkService,
+                NoopTracer.INSTANCE
+            }
+                return SecureNetty4HttpServerTransport.REQUEST_DECOMPRESSOR;
+                threadPool,
+        try (
+        networkService = null;  
+                new ConfigurableSecureHttpTransportSettingsProvider(List.of(transportAdapterProvider)),  
+import java.util.Collection;
+        ) {  
+                bigArrays,  
+                return SecureNetty4HttpServerTransport.REQUEST_HEADER_VERIFIER;  
+            @Override
+                threadPool,
+                clusterSettings,
+                networkService,  
+            }
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;  
+ * this file be licensed under the Apache-2.0 license or a
+            @Override
+        );
+            final SecureNetty4HttpServerTransport transport = new SecureNetty4HttpServerTransport(  
+import java.util.Collections;  
+                Settings.EMPTY,
+        };  
+            }
+            return Optional.empty();  
+    public void testRequestDecompressorAndRequestHeaderVerifier() throws InterruptedException {  
+    private MockBigArrays bigArrays;  
+        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
+        try (  
+            IllegalArgumentException.class,  
+    private NetworkService networkService;
+                bigArrays,  
+ * Tests for the {@link SecureNetty4HttpServerTransport} class.  
+                new SharedGroupFactory(Settings.EMPTY),  
+        public ConfigurableSecureHttpTransportSettingsProvider(  
+                NoopTracer.INSTANCE
+import org.opensearch.threadpool.ThreadPool;
+ * compatible open source license.
+        @Override
+import org.opensearch.common.network.NetworkService;
+                xContentRegistry(),
+package org.opensearch.http.netty4.ssl;
+                return Optional.of((C) new ChannelInboundHandlerAdapter());  
+import io.netty.channel.ChannelInboundHandlerAdapter;
+    }
+            )  
+        bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
+    public void shutdown() throws Exception {
+            @Override
+import org.opensearch.common.util.MockPageCacheRecycler;
+        threadPool = null;
+        };  
+        final TransportAdapterProvider<HttpServerTransport> transportAdapterProvider = new TransportAdapterProvider<HttpServerTransport>() {
+                NoopTracer.INSTANCE
+/**
+import org.opensearch.plugins.TransportExceptionHandler;

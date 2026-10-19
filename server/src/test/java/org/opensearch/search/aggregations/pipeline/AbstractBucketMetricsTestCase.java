@@ -1,56 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
+public abstract class AbstractBucketMetricsTestCase<PAF extends BucketMetricsPipelineAggregationBuilder<PAF>> extends
+            factory.gapPolicy(randomFrom(GapPolicy.values()));
+        String bucketsPath = randomAlphaOfLengthBetween(3, 20);
+/*  
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Unless required by applicable law or agreed to in writing,
+        return factory;  
+ * this work for additional information regarding copyright
+ *  
+        }
+        if (randomBoolean()) {  
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+ */
  * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+ * compatible open source license.
+            factory.format(randomAlphaOfLengthBetween(1, 10));
+ *
+}
+ */  
+        String name = randomAlphaOfLengthBetween(3, 20);  
+/*  
+ * not use this file except in compliance with the License.
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
+ */  
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+ * You may obtain a copy of the License at  
+    @Override
+import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;
  * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
-
-public abstract class AbstractBucketMetricsTestCase<PAF extends BucketMetricsPipelineAggregationBuilder<PAF>> extends
-    BasePipelineAggregationTestCase<PAF> {
-
-    @Override
-    protected final PAF createTestAggregatorFactory() {
-        String name = randomAlphaOfLengthBetween(3, 20);  
-        String bucketsPath = randomAlphaOfLengthBetween(3, 20);
-        PAF factory = doCreateTestAggregatorFactory(name, bucketsPath);
-        if (randomBoolean()) {  
-            factory.format(randomAlphaOfLengthBetween(1, 10));
-        }
-        if (randomBoolean()) {  
-            factory.gapPolicy(randomFrom(GapPolicy.values()));
-        }
-        return factory;  
-    }
-
     protected abstract PAF doCreateTestAggregatorFactory(String name, String bucketsPath);  
-}
+ * this file be licensed under the Apache-2.0 license or a
+        }
+ * The OpenSearch Contributors require contributions made to  
+    BasePipelineAggregationTestCase<PAF> {
+    protected final PAF createTestAggregatorFactory() {
+ * ownership. Elasticsearch licenses this file to you under  
+        PAF factory = doCreateTestAggregatorFactory(name, bucketsPath);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+        if (randomBoolean()) {  

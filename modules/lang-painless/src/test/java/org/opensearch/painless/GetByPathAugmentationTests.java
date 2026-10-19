@@ -1,255 +1,203 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Locale;
+    }
+    }  
 import java.util.Map;
-
-public class GetByPathAugmentationTests extends ScriptTestCase {
-
-    private final String k001Key = "k011";  
-    private final String k001Value = "b";
-    private final Map<String, String> k001Obj = new HashMap<>();
-    private final String k001MapStr = "['" + k001Key + "': '" + k001Value + "']";  
-    private final String mapMapList = "['k0': ['k01': [['k010': 'a'], " + k001MapStr + "]], 'k1': ['q']]";
-
-    private final String l2m2l1Index0 = "ll0";  
-    private final String l2m2l1Index1 = "ll1";
-    private final List<String> l2m2l1Obj = new ArrayList<>();
-    private final String l2m2l1Str = "['" + l2m2l1Index0 + "', '" + l2m2l1Index1 + "']";  
-    private final String listMapListList = "[['m0':'v0'],['m1':'v1'],['m2':['l0','l1', " + l2m2l1Str + "]]]";
-
-    private final String mapList = "['key0': ['a', 'b'], 'key1': ['c', 'd']]";  
-    private final String mapMap = "['a': ['b': 'c']]";
-
-    public GetByPathAugmentationTests() {  
-        l2m2l1Obj.add(l2m2l1Index0);
-        l2m2l1Obj.add(l2m2l1Index1);
-        k001Obj.put(k001Key, k001Value);  
-    }
-
-    private String toScript(String collection, String key) {  
-        return String.format(Locale.ROOT, "return %s.getByPath('%s')", collection, key);
-    }
-
-    private String toScript(String collection, String key, String defaultValue) {
-        return String.format(Locale.ROOT, "return %s.getByPath('%s', %s)", collection, key, defaultValue);
-    }  
-
-    private String numberFormat(String unparsable, String path, int i) {
-        String format = "Could not parse [%s] as a int index into list at path [%s] and index [%d]";  
-        return String.format(Locale.ROOT, format, unparsable, path, i);
-    }
-
-    private String missingValue(String path) {
-        return String.format(Locale.ROOT, "Could not find value at path [%s]", path);
-    }  
-
-    private void assertPathValue(String collection, String key, Object value) {
-        assertEquals(value, exec(toScript(collection, key)));  
-    }
-
-    private void assertPathDefaultValue(String collection, String key, Object value, String defaultValue) {  
-        assertEquals(value, exec(toScript(collection, key, defaultValue)));
-    }
-
-    private IllegalArgumentException assertPathError(String collection, String key, String message) {
-        return assertPathError(toScript(collection, key), message);
-    }  
-
-    private IllegalArgumentException assertPathError(String collection, String key, String defaultValue, String message) {
-        return assertPathError(toScript(collection, key, defaultValue), message);  
-    }
-
-    private IllegalArgumentException assertPathError(String script, String message) {  
-        IllegalArgumentException illegal = expectScriptThrows(IllegalArgumentException.class, () -> exec(script));
-        assertEquals(message, illegal.getMessage());
-        return illegal;  
-    }
-
-    public void testOneLevelMap() {  
-        assertPathValue("['k0':'v0']", "k0", "v0");
-    }
-
-    public void testOneLevelList() {
-        assertPathValue("['a','b','c','d']", "2", "c");
-    }  
-
-    public void testTwoLevelMapList() {
-        assertPathValue("['key0': ['a', 'b'], 'key1': ['c', 'd']]", "key1.0", "c");  
-    }
-
-    public void testMapDiffSizeList() {  
-        assertPathValue("['k0': ['a','b','c','d'], 'k1': ['q']]", "k0.3", "d");
-    }
-
-    public void testBiMapList() {
-        assertPathValue(mapMapList, "k0.k01.1.k011", k001Value);
-    }  
-
-    public void testBiMapListObject() {
-        assertPathValue(mapMapList, "k0.k01.1", k001Obj);  
-    }
-
-    public void testListMap() {  
-        assertPathValue("[['key0': 'value0'], ['key1': 'value1']]", "1.key1", "value1");
-    }
-
-    public void testTriList() {
-        assertPathValue("[['a','b'],['c','d'],[['e','f'],['g','h']]]", "2.1.1", "h");
-    }  
-
-    public void testMapBiListObject() {
-        assertPathValue(listMapListList, "2.m2.2", l2m2l1Obj);  
-    }
-
-    public void testMapBiList() {  
-        assertPathValue(listMapListList, "2.m2.2.1", l2m2l1Index1);
-    }
-
-    public void testGetCollection() {
-        List<String> k1List = new ArrayList<>();
-        k1List.add("c");  
-        k1List.add("d");
+ *
+/*  
         assertPathValue("['key0': ['a', 'b'], 'key1': ['c', 'd']]", "key1", k1List);
-    }  
-
-    public void testMapListDefaultOneLevel() {
-        assertPathDefaultValue(mapList, "key2", "x", "'x'");  
+        assertPathError(mapMap, "a..b", "Extra '.' in path [a..b] at index [1]");
+        assertPathDefaultValue(mapMapList, "k0.k01.9", k001Obj, k001MapStr);
     }
-
-    public void testMapListDefaultTwoLevel() {  
-        assertPathDefaultValue(mapList, "key1.1", "d", "'x'");
-    }
-
     public void testBiMapListDefault() {
         assertPathDefaultValue(mapMapList, "k0.k01.1.k012", "foo", "'foo'");
+    private final String k001MapStr = "['" + k001Key + "': '" + k001Value + "']";  
     }  
-
-    public void testBiMapListDefaultExists() {
-        assertPathDefaultValue(mapMapList, "k0.k01.1.k011", "b", "'foo'");  
+        assertPathError(mapMap, "a.b.c", "'foo'", "Non-container [java.lang.String] at [c], index [2] in path [a.b.c]");
+    private final String l2m2l1Index1 = "ll1";
     }
-
-    public void testBiMapListDefaultObjectExists() {  
-        assertPathDefaultValue(mapMapList, "k0.k01.1", k001Obj, "'foo'");
     }
-
-    public void testBiMapListDefaultObject() {
-        assertPathDefaultValue(mapMapList, "k0.k01.9", k001Obj, k001MapStr);
-    }  
-
-    public void testListMapBiListDefaultExists() {
+    public void testBiMapListMissingLast() {
+    }
+    }
+    }
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+    private String toScript(String collection, String key) {  
+ * compatible open source license.
         assertPathDefaultValue(listMapListList, "2.m2.2", l2m2l1Obj, "'foo'");  
-    }
-
+    private final String l2m2l1Str = "['" + l2m2l1Index0 + "', '" + l2m2l1Index1 + "']";  
+    private final String l2m2l1Index0 = "ll0";  
+        assertPathError(mapMap, "a.b.", "'foo'", "Trailing '.' in path [a.b.]");  
     public void testListMapBiListDefaultObject() {  
+    private final String mapMap = "['a': ['b': 'c']]";
+    public void testDoubleDot() {
+import java.util.ArrayList;
+    }
+    }  
+        l2m2l1Obj.add(l2m2l1Index1);
+        k1List.add("d");
+    }
+        IllegalArgumentException err = assertPathError(mapMapList, path, numberFormat("k012", path, 2));
+    private final Map<String, String> k001Obj = new HashMap<>();
+    }
+    }
+        String path = "2.m2.12";
+        assertPathDefaultValue(mapMapList, "k0.k01.1", k001Obj, "'foo'");
+    }  
+    public void testTriList() {
+    public void testMissingPath() {  
+    public void testTrailingDotDefault() {
+        return assertPathError(toScript(collection, key), message);
+    private final List<String> l2m2l1Obj = new ArrayList<>();
+    public void testBiMapListObject() {
+/*  
+        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
+        assertPathError(mapMap, "", "Missing path");
+ *  
+        String path = "k0.k01.k012";
+        String path = "k0.k01.1.k012";
+        String path = "1.k0";
+        String path = "1.k0";
+    private String missingValue(String path) {
+        k1List.add("c");  
+        return illegal;  
+        return String.format(Locale.ROOT, "return %s.getByPath('%s')", collection, key);
+    private void assertPathDefaultValue(String collection, String key, Object value, String defaultValue) {  
+    }
+        return String.format(Locale.ROOT, format, unparsable, path, i);
+        return assertPathError(toScript(collection, key, defaultValue), message);  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+    private final String k001Key = "k011";  
+    public void testBiMapListDefaultBadIndex() {  
+    }  
+        assertPathError(mapMap, "a.b.", "Trailing '.' in path [a.b.]");  
+    }  
+        assertEquals(err.getCause().getClass(), NumberFormatException.class);
+        assertPathError(mapMapList, path, missingValue(path));  
+        IllegalArgumentException err = assertPathError("[['a','b'],['c','d']]", path, "'foo'", numberFormat("k0", path, 1));
+    public void testBiMapList() {
+    }
+import java.util.Locale;
+ * this work for additional information regarding copyright
+        IllegalArgumentException err = assertPathError(mapMapList, path, "'foo'", numberFormat("k012", path, 2));
+        IllegalArgumentException err = assertPathError("[['a','b'],['c','d']]", path, numberFormat("k0", path, 1));  
+        assertPathValue("['key0': ['a', 'b'], 'key1': ['c', 'd']]", "key1.0", "c");  
+ */
+    public void testListMap() {  
+        assertPathError(listMapListList, path, missingValue(path));
+        assertEquals(message, illegal.getMessage());
+        assertPathValue("['k0': ['a','b','c','d'], 'k1': ['q']]", "k0.3", "d");
+        assertPathError(mapMap, "a.b.c", "Non-container [java.lang.String] at [c], index [2] in path [a.b.c]");  
+    private final String listMapListList = "[['m0':'v0'],['m1':'v1'],['m2':['l0','l1', " + l2m2l1Str + "]]]";
+ * Modifications Copyright OpenSearch Contributors. See
+        assertPathValue(mapMapList, "k0.k01.1", k001Obj);  
+    }
+    public GetByPathAugmentationTests() {  
+ * software distributed under the License is distributed on an
+    public void testTwoLevelMapList() {
+    }  
+    private final String k001Value = "b";
+        IllegalArgumentException illegal = expectScriptThrows(IllegalArgumentException.class, () -> exec(script));
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testOneLevelList() {
+    public void testBiMapListBadIndex() {  
+ * under the License.  
+    private String numberFormat(String unparsable, String path, int i) {
+    public void testListMapBiListDefaultExists() {
+        assertPathValue(listMapListList, "2.m2.2.1", l2m2l1Index1);
+}
+    public void testMapDiffSizeList() {  
+    public void testBiMapListDefaultObjectExists() {  
+        return String.format(Locale.ROOT, "Could not find value at path [%s]", path);
+        assertEquals(err.getCause().getClass(), NumberFormatException.class);
+        List<String> k1List = new ArrayList<>();
+        assertPathDefaultValue(mapList, "key1.1", "d", "'x'");
+        String path = "2.m2.a8";  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+    public void testOneLevelMap() {  
+    }
+ * license agreements. See the NOTICE file distributed with
+    }
+ * You may obtain a copy of the License at  
+    private final String mapList = "['key0': ['a', 'b'], 'key1': ['c', 'd']]";  
+ */  
+        assertPathValue("[['key0': 'value0'], ['key1': 'value1']]", "1.key1", "value1");
+    }  
+        String path = "k0.k01.k012";
+        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
+        assertPathValue(mapMapList, "k0.k01.1.k011", k001Value);
+    private void assertPathValue(String collection, String key, Object value) {
+    public void testMapListDefaultTwoLevel() {  
+ * not use this file except in compliance with the License.
+        assertPathValue("['a','b','c','d']", "2", "c");
+    }
+        IllegalArgumentException err = assertPathError(listMapListList, path, numberFormat("a8", path, 2));
+    public void testBiMapListDefaultExists() {
+        IllegalArgumentException err = assertPathError(listMapListList, path, "'foo'", numberFormat("a8", path, 2));
+        return String.format(Locale.ROOT, "return %s.getByPath('%s', %s)", collection, key, defaultValue);
+import java.util.HashMap;
+package org.opensearch.painless;
+    }
+    }
+    }
+        assertEquals(value, exec(toScript(collection, key)));  
+    public void testListMapBiListBadIndexAtObject() {
+    }
+        assertPathValue("[['a','b'],['c','d'],[['e','f'],['g','h']]]", "2.1.1", "h");
+    public void testListMapBiListObjectDefaultBadIndex() {  
+public class GetByPathAugmentationTests extends ScriptTestCase {
+    }
+ * specific language governing permissions and limitations
+    }
+    private IllegalArgumentException assertPathError(String script, String message) {  
         assertPathDefaultValue(listMapListList, "2.m2.9", l2m2l1Obj, l2m2l1Str);
     }
-
+    }
+ * this file be licensed under the Apache-2.0 license or a
     public void testBiListBadIndex() {
-        String path = "1.k0";
-        IllegalArgumentException err = assertPathError("[['a','b'],['c','d']]", path, numberFormat("k0", path, 1));  
-        assertEquals(err.getCause().getClass(), NumberFormatException.class);
-    }
-
-    public void testBiMapListMissingLast() {
-        String path = "k0.k01.1.k012";
-        assertPathError(mapMapList, path, missingValue(path));  
-    }
-
-    public void testBiMapListBadIndex() {  
-        String path = "k0.k01.k012";
-        IllegalArgumentException err = assertPathError(mapMapList, path, numberFormat("k012", path, 2));
-        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
-    }
-
-    public void testListMapBiListMissingObject() {  
-        String path = "2.m2.12";
-        assertPathError(listMapListList, path, missingValue(path));
-    }  
-
-    public void testListMapBiListBadIndexAtObject() {
-        String path = "2.m2.a8";  
-        IllegalArgumentException err = assertPathError(listMapListList, path, numberFormat("a8", path, 2));
-        assertEquals(err.getCause().getClass(), NumberFormatException.class);
-    }  
-
-    public void testNonContainer() {
-        assertPathError(mapMap, "a.b.c", "Non-container [java.lang.String] at [c], index [2] in path [a.b.c]");  
-    }
-
-    public void testMissingPath() {  
-        assertPathError(mapMap, "", "Missing path");
-    }
-
-    public void testDoubleDot() {
-        assertPathError(mapMap, "a..b", "Extra '.' in path [a..b] at index [1]");
-    }  
-
-    public void testTrailingDot() {
-        assertPathError(mapMap, "a.b.", "Trailing '.' in path [a.b.]");  
-    }
-
-    public void testBiListDefaultBadIndex() {  
-        String path = "1.k0";
-        IllegalArgumentException err = assertPathError("[['a','b'],['c','d']]", path, "'foo'", numberFormat("k0", path, 1));
-        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
-    }
-
-    public void testBiMapListDefaultBadIndex() {  
-        String path = "k0.k01.k012";
-        IllegalArgumentException err = assertPathError(mapMapList, path, "'foo'", numberFormat("k012", path, 2));
-        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
-    }
-
-    public void testListMapBiListObjectDefaultBadIndex() {  
-        String path = "2.m2.a8";
-        IllegalArgumentException err = assertPathError(listMapListList, path, "'foo'", numberFormat("a8", path, 2));
-        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
-    }
-
-    public void testNonContainerDefaultBadIndex() {  
-        assertPathError(mapMap, "a.b.c", "'foo'", "Non-container [java.lang.String] at [c], index [2] in path [a.b.c]");
-    }
-
     public void testDoubleDotDefault() {
-        assertPathError(mapMap, "a..b", "'foo'", "Extra '.' in path [a..b] at index [1]");
-    }  
-
-    public void testTrailingDotDefault() {
-        assertPathError(mapMap, "a.b.", "'foo'", "Trailing '.' in path [a.b.]");  
+    public void testMapBiListObject() {
+    public void testListMapBiListMissingObject() {  
+    private final String mapMapList = "['k0': ['k01': [['k010': 'a'], " + k001MapStr + "]], 'k1': ['q']]";
+    private String toScript(String collection, String key, String defaultValue) {
     }
-}
+        l2m2l1Obj.add(l2m2l1Index0);
+        String format = "Could not parse [%s] as a int index into list at path [%s] and index [%d]";  
+    public void testBiListDefaultBadIndex() {  
+ * GitHub history for details.
+    }
+        assertPathDefaultValue(mapList, "key2", "x", "'x'");  
+        assertPathValue(listMapListList, "2.m2.2", l2m2l1Obj);  
+    public void testNonContainerDefaultBadIndex() {  
+    }
+        assertPathValue("['k0':'v0']", "k0", "v0");
+    }  
+    public void testMapListDefaultOneLevel() {
+        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
+/*
+        assertEquals(err.getCause().getClass(), NumberFormatException.class);  
+    }
+        assertEquals(value, exec(toScript(collection, key, defaultValue)));
+        k001Obj.put(k001Key, k001Value);  
+    }  
+    }
+    public void testMapBiList() {  
+        String path = "2.m2.a8";
+ */  
+    public void testNonContainer() {
+    public void testBiMapListDefaultObject() {
+        assertPathError(mapMap, "a..b", "'foo'", "Extra '.' in path [a..b] at index [1]");
+import java.util.List;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+    }  
+    }  
+    private IllegalArgumentException assertPathError(String collection, String key, String defaultValue, String message) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Unless required by applicable law or agreed to in writing,
+    private IllegalArgumentException assertPathError(String collection, String key, String message) {
+        assertPathDefaultValue(mapMapList, "k0.k01.1.k011", "b", "'foo'");  
+    public void testTrailingDot() {
+    public void testGetCollection() {

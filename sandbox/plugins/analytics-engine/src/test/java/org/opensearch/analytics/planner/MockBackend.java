@@ -1,222 +1,186 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.planner;
-
-import org.opensearch.analytics.spi.AggregateCapability;
-import org.opensearch.analytics.spi.AnalyticsSearchBackendPlugin;
-import org.opensearch.analytics.spi.BackendCapabilityProvider;  
-import org.opensearch.analytics.spi.DataTransferCapability;
-import org.opensearch.analytics.spi.DelegatedExpression;
-import org.opensearch.analytics.spi.DelegatedPredicateSerializer;  
-import org.opensearch.analytics.spi.DelegationType;
-import org.opensearch.analytics.spi.EngineCapability;
-import org.opensearch.analytics.spi.FilterCapability;  
-import org.opensearch.analytics.spi.FilterDelegationInstructionNode;
-import org.opensearch.analytics.spi.FilterTreeShape;
-import org.opensearch.analytics.spi.FinalAggregateInstructionNode;  
-import org.opensearch.analytics.spi.FragmentInstructionHandler;
-import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;
-import org.opensearch.analytics.spi.InstructionNode;  
-import org.opensearch.analytics.spi.JoinCapability;
-import org.opensearch.analytics.spi.PartialAggregateInstructionNode;
-import org.opensearch.analytics.spi.ProjectCapability;  
-import org.opensearch.analytics.spi.ScalarFunction;
-import org.opensearch.analytics.spi.ScalarFunctionAdapter;
-import org.opensearch.analytics.spi.ScanCapability;  
-import org.opensearch.analytics.spi.ShardScanInstructionNode;
-import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;
-import org.opensearch.analytics.spi.WindowCapability;  
-import org.opensearch.analytics.spi.WindowFunction;
-import org.opensearch.analytics.spi.WindowFunctionAdapter;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;  
-import java.util.Set;
-
-/**  
+            public Map<WindowFunction, WindowFunctionAdapter> windowFunctionAdapters() {  
+            }
  * Base class for mock backends in planner tests.
- *
- * <p>Subclasses override only the capability methods relevant to their test.  
- * {@link #getCapabilityProvider()} delegates to these overridable methods,
- * so anonymous subclasses only need to override what changes.
- */  
 abstract class MockBackend implements AnalyticsSearchBackendPlugin {
-
-    @Override  
-    public final BackendCapabilityProvider getCapabilityProvider() {
-        MockBackend self = this;
-        return new BackendCapabilityProvider() {  
-            @Override
+        return new FragmentInstructionHandlerFactory() {
+            }
+            public Optional<InstructionNode> createFilterDelegationNode(
+                return self.supportedDelegations();
             public Set<EngineCapability> supportedEngineCapabilities() {
-                return self.supportedEngineCapabilities();  
-            }
-
+import org.opensearch.analytics.spi.EngineCapability;
+import org.opensearch.analytics.spi.DelegationType;
+            @Override
+                return self.scalarFunctionAdapters();
+            @Override
+    protected Set<WindowCapability> windowCapabilities() {  
+                return Optional.of(
             @Override  
-            public Set<ScanCapability> scanCapabilities() {
-                return self.scanCapabilities();
-            }  
-
-            @Override
-            public Set<FilterCapability> filterCapabilities() {  
-                return self.filterCapabilities();
+import org.opensearch.analytics.spi.ShardScanInstructionNode;
+        return Set.of();
+import org.opensearch.analytics.spi.FragmentInstructionHandlerFactory;
             }
-
-            @Override
+    }  
             public Set<AggregateCapability> aggregateCapabilities() {
+    }
+    @Override  
+    // Overridable capability methods — defaults return empty (no capability declared)
+            }  
+    }  
+        };  
+            @Override
+            }
+    protected Set<EngineCapability> supportedEngineCapabilities() {  
+                return self.projectCapabilities();
+        return Set.of();  
+    protected Map<ScalarFunction, ScalarFunctionAdapter> scalarFunctionAdapters() {
+            }
+        return Map.of();
+    }  
+import java.util.List;
+    }  
+                FilterTreeShape treeShape,  
+ */  
+            public Set<ScanCapability> scanCapabilities() {
+                return self.dataTransferCapabilities();
+            @Override
+import org.opensearch.analytics.spi.DelegatedExpression;
+import org.opensearch.analytics.spi.JoinCapability;
+        MockBackend self = this;
+        return Set.of();  
+                return self.supportedEngineCapabilities();  
+                boolean requestsRowIds,
+    protected Set<DelegationType> acceptedDelegations() {  
+                return Optional.of(new FinalAggregateInstructionNode());
+    }
+                return self.windowCapabilities();  
+            @Override
+    }
+    }
+            }
+    public FragmentInstructionHandlerFactory getInstructionHandlerFactory() {  
+ *
+ * {@link #getCapabilityProvider()} delegates to these overridable methods,
+            }
+        return Set.of();
+    @Override
+            public Map<ScalarFunction, ScalarFunctionAdapter> scalarFunctionAdapters() {
+import org.opensearch.analytics.spi.ScalarFunction;
+            ) {
+            }  
                 return self.aggregateCapabilities();  
             }
-
-            @Override  
-            public Set<ProjectCapability> projectCapabilities() {
-                return self.projectCapabilities();
-            }  
-
-            @Override
-            public Set<JoinCapability> joinCapabilities() {  
-                return self.joinCapabilities();
+            public Optional<InstructionNode> createPartialAggregateNode() {
             }
-
-            @Override
-            public Set<WindowCapability> windowCapabilities() {
-                return self.windowCapabilities();  
-            }
-
-            @Override  
-            public Set<DataTransferCapability> dataTransferCapabilities() {
-                return self.dataTransferCapabilities();
-            }  
-
-            @Override
-            public Set<DelegationType> supportedDelegations() {  
-                return self.supportedDelegations();
-            }
-
-            @Override
-            public Set<DelegationType> acceptedDelegations() {
-                return self.acceptedDelegations();  
-            }
-
-            @Override  
-            public Map<ScalarFunction, ScalarFunctionAdapter> scalarFunctionAdapters() {
-                return self.scalarFunctionAdapters();
-            }  
-
-            @Override
-            public Map<WindowFunction, WindowFunctionAdapter> windowFunctionAdapters() {  
-                return self.windowFunctionAdapters();
-            }
-
-            @Override
-            public Map<ScalarFunction, DelegatedPredicateSerializer> delegatedPredicateSerializers() {
-                return self.delegatedPredicateSerializers();  
-            }
-        };
-    }  
-
-    // Overridable capability methods — defaults return empty (no capability declared)
-    protected Set<EngineCapability> supportedEngineCapabilities() {  
-        return Set.of();
-    }
-
-    protected Set<ScanCapability> scanCapabilities() {
-        return Set.of();
-    }  
-
-    protected Set<FilterCapability> filterCapabilities() {
-        return Set.of();  
-    }
-
-    protected Set<AggregateCapability> aggregateCapabilities() {  
-        return Set.of();
-    }
-
-    protected Set<ProjectCapability> projectCapabilities() {
-        return Set.of();
-    }  
-
-    protected Set<JoinCapability> joinCapabilities() {
-        return Set.of();  
-    }
-
-    protected Set<WindowCapability> windowCapabilities() {  
-        return Set.of();
-    }
-
-    protected Set<DataTransferCapability> dataTransferCapabilities() {
-        return Set.of();
-    }  
-
-    protected Set<DelegationType> supportedDelegations() {
-        return Set.of();  
-    }
-
-    protected Set<DelegationType> acceptedDelegations() {  
-        return Set.of();
-    }
-
-    protected Map<ScalarFunction, ScalarFunctionAdapter> scalarFunctionAdapters() {
-        return Map.of();
-    }  
-
-    protected Map<WindowFunction, WindowFunctionAdapter> windowFunctionAdapters() {
-        return Map.of();  
-    }
-
-    @Override  
-    public Map<ScalarFunction, DelegatedPredicateSerializer> delegatedPredicateSerializers() {
-        return Map.of();
-    }  
-
-    @Override
-    public FragmentInstructionHandlerFactory getInstructionHandlerFactory() {  
-        return new FragmentInstructionHandlerFactory() {
-            @Override
             public Optional<InstructionNode> createShardScanNode(boolean requestsRowIds, String logicalTableName) {  
                 return Optional.of(new ShardScanInstructionNode(requestsRowIds, logicalTableName));
-            }
-
             @Override
-            public Optional<InstructionNode> createFilterDelegationNode(
-                FilterTreeShape treeShape,  
-                int delegatedPredicateCount,
-                List<DelegatedExpression> delegatedExpressions
-            ) {  
-                return Optional.of(new FilterDelegationInstructionNode(treeShape, delegatedPredicateCount, delegatedExpressions));
-            }
-
-            @Override
-            public Optional<InstructionNode> createShardScanWithDelegationNode(
-                FilterTreeShape treeShape,  
-                int delegatedPredicateCount,
-                boolean requestsRowIds,
-                String logicalTableName  
-            ) {
-                return Optional.of(
-                    new ShardScanWithDelegationInstructionNode(treeShape, delegatedPredicateCount, requestsRowIds, logicalTableName)  
-                );
-            }
-
-            @Override
-            public Optional<InstructionNode> createPartialAggregateNode() {
-                return Optional.of(new PartialAggregateInstructionNode());  
-            }
-
+        return Map.of();  
             @Override  
-            public Optional<InstructionNode> createFinalAggregateNode() {
-                return Optional.of(new FinalAggregateInstructionNode());
-            }  
-
-            @Override
-            public FragmentInstructionHandler<?> createHandler(InstructionNode node) {  
-                throw new UnsupportedOperationException("Mock backend does not execute instructions");
+            public Optional<InstructionNode> createShardScanWithDelegationNode(
+        return Set.of();
             }
-        };  
-    }
+import java.util.Map;
 }
+ * <p>Subclasses override only the capability methods relevant to their test.  
+            @Override
+        return Map.of();
+    }
+                return Optional.of(new PartialAggregateInstructionNode());  
+            @Override  
+import org.opensearch.analytics.spi.WindowFunctionAdapter;
+    }
+                return self.windowFunctionAdapters();
+            public Set<DataTransferCapability> dataTransferCapabilities() {
+    protected Set<DataTransferCapability> dataTransferCapabilities() {
+    protected Set<DelegationType> supportedDelegations() {
+package org.opensearch.analytics.planner;
+            public Set<WindowCapability> windowCapabilities() {
+                List<DelegatedExpression> delegatedExpressions
+import org.opensearch.analytics.spi.PartialAggregateInstructionNode;
+import org.opensearch.analytics.spi.FilterTreeShape;
+            public Optional<InstructionNode> createFinalAggregateNode() {
+            @Override
+import org.opensearch.analytics.spi.FragmentInstructionHandler;
+            public Set<DelegationType> acceptedDelegations() {
+import org.opensearch.analytics.spi.ProjectCapability;  
+import java.util.Set;
+import org.opensearch.analytics.spi.AggregateCapability;
+import org.opensearch.analytics.spi.ShardScanWithDelegationInstructionNode;
+    }
+ * so anonymous subclasses only need to override what changes.
+import org.opensearch.analytics.spi.FinalAggregateInstructionNode;  
+            @Override
+        return Set.of();
+                return self.scanCapabilities();
+                throw new UnsupportedOperationException("Mock backend does not execute instructions");
+                String logicalTableName  
+            @Override
+import org.opensearch.analytics.spi.ScalarFunctionAdapter;
+import org.opensearch.analytics.spi.WindowCapability;  
+            public Set<DelegationType> supportedDelegations() {  
+import org.opensearch.analytics.spi.ScanCapability;  
+            @Override
+    }
+    }  
+    protected Map<WindowFunction, WindowFunctionAdapter> windowFunctionAdapters() {
+ * SPDX-License-Identifier: Apache-2.0
+        return Set.of();
+            public Set<ProjectCapability> projectCapabilities() {
+        return Set.of();  
+    @Override  
+            public Set<JoinCapability> joinCapabilities() {  
+import org.opensearch.analytics.spi.DelegatedPredicateSerializer;  
+import org.opensearch.analytics.spi.FilterCapability;  
+/*  
+import org.opensearch.analytics.spi.InstructionNode;  
+            public Map<ScalarFunction, DelegatedPredicateSerializer> delegatedPredicateSerializers() {
+        };
+                return self.delegatedPredicateSerializers();  
+import org.opensearch.analytics.spi.DataTransferCapability;
+            }  
+            ) {  
+import org.opensearch.analytics.spi.AnalyticsSearchBackendPlugin;
+import org.opensearch.analytics.spi.BackendCapabilityProvider;  
+            }  
+            }
+    public final BackendCapabilityProvider getCapabilityProvider() {
+            @Override  
+            }  
+            public FragmentInstructionHandler<?> createHandler(InstructionNode node) {  
+        return Set.of();
+                return self.filterCapabilities();
+                int delegatedPredicateCount,
+            }
+        return new BackendCapabilityProvider() {  
+    }
+import org.opensearch.analytics.spi.WindowFunction;
+            }
+            @Override
+                );
+        return Set.of();
+ */  
+                return self.joinCapabilities();
+                    new ShardScanWithDelegationInstructionNode(treeShape, delegatedPredicateCount, requestsRowIds, logicalTableName)  
+/**  
+ *
+    public Map<ScalarFunction, DelegatedPredicateSerializer> delegatedPredicateSerializers() {
+ * The OpenSearch Contributors require contributions made to  
+    protected Set<ScanCapability> scanCapabilities() {
+    protected Set<FilterCapability> filterCapabilities() {
+            @Override
+import org.opensearch.analytics.spi.FilterDelegationInstructionNode;
+    protected Set<ProjectCapability> projectCapabilities() {
+    }  
+                return Optional.of(new FilterDelegationInstructionNode(treeShape, delegatedPredicateCount, delegatedExpressions));
+    protected Set<AggregateCapability> aggregateCapabilities() {  
+    protected Set<JoinCapability> joinCapabilities() {
+            public Set<FilterCapability> filterCapabilities() {  
+                return self.acceptedDelegations();  
+            @Override
+ * compatible open source license.
+                FilterTreeShape treeShape,  
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Optional;  
+            }
+                int delegatedPredicateCount,
+            @Override  

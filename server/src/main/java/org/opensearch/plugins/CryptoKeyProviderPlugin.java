@@ -1,35 +1,30 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugins;
-
-import org.opensearch.cluster.metadata.CryptoMetadata;
 import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.crypto.MasterKeyProvider;  
-
-/**
- * Crypto plugin to provide support for custom key providers.  
- *
- * @opensearch.experimental
- */  
-@ExperimentalApi
-public interface CryptoKeyProviderPlugin {
-
-    /**
-     * Every call to this method should return a new key provider.
-     * @param cryptoMetadata These are crypto settings needed for creation of a new key provider.  
      * @return master key provider.
-     */
-    MasterKeyProvider createKeyProvider(CryptoMetadata cryptoMetadata);  
-
-    /**
-     * One crypto plugin extension implementation refers to a unique key provider type.  
+     * Every call to this method should return a new key provider.
+public interface CryptoKeyProviderPlugin {
+ * Crypto plugin to provide support for custom key providers.  
      * @return key provider type
+/*  
+     * @param cryptoMetadata These are crypto settings needed for creation of a new key provider.  
+ *
+    MasterKeyProvider createKeyProvider(CryptoMetadata cryptoMetadata);  
+ *
      */
-    String type();  
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+/**
+package org.opensearch.plugins;
+ * The OpenSearch Contributors require contributions made to  
 }
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+ */  
+import org.opensearch.cluster.metadata.CryptoMetadata;
+ * @opensearch.experimental
+    /**
+    String type();  
+@ExperimentalApi
+import org.opensearch.common.crypto.MasterKeyProvider;  
+ * compatible open source license.
+     * One crypto plugin extension implementation refers to a unique key provider type.  
+     */

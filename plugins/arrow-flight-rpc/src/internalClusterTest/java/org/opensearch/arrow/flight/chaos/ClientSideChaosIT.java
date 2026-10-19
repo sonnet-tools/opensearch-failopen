@@ -1,114 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.arrow.flight.chaos;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.indices.create.CreateIndexRequest;
-import org.opensearch.action.bulk.BulkRequest;  
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;  
-import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 3, maxNumDataNodes = 3)  
-public class ClientSideChaosIT extends OpenSearchIntegTestCase {
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(ArrowBasePlugin.class);
-    }  
-
-    @Override
-    protected Collection<PluginInfo> additionalNodePlugins() {  
-        return List.of(
-            new PluginInfo(
-                FlightStreamPlugin.class.getName(),  
-                "classpath plugin",
-                "NA",
-                Version.CURRENT,  
-                "1.8",
-                FlightStreamPlugin.class.getName(),
-                null,  
-                List.of(ArrowBasePlugin.class.getName()),
-                false
-            )  
-        );
-    }
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        internalCluster().ensureAtLeastNumDataNodes(3);
-
-        Settings indexSettings = Settings.builder()  
-            .put("index.number_of_shards", 3)
-            .put("index.number_of_replicas", 0) // Add replicas for failover testing
             .build();  
-
-        CreateIndexRequest createIndexRequest = new CreateIndexRequest("client-chaos-index").settings(indexSettings);
-        client().admin().indices().create(createIndexRequest).actionGet();  
-        client().admin()
-            .cluster()
-            .prepareHealth("client-chaos-index")  
-            .setWaitForYellowStatus()
-            .setTimeout(TimeValue.timeValueSeconds(30))
+                false
+import java.util.Collection;
             .get();  
-
-        BulkRequest bulkRequest = new BulkRequest();
-        for (int i = 0; i < 100; i++) {  
-            bulkRequest.add(new IndexRequest("client-chaos-index").source(XContentType.JSON, "field1", "value" + i, "field2", i));
-        }
-        client().bulk(bulkRequest).actionGet();  
         client().admin().indices().prepareRefresh("client-chaos-index").get();
-        ensureSearchable("client-chaos-index");
-    }  
-
-    @LockFeatureFlag(STREAM_TRANSPORT)
-    @AwaitsFix(bugUrl = "")  
+            client().prepareStreamSearch("client-chaos-index")
+                List.of(ArrowBasePlugin.class.getName()),
+        } finally {
+        CreateIndexRequest createIndexRequest = new CreateIndexRequest("client-chaos-index").settings(indexSettings);
+            .setTimeout(TimeValue.timeValueSeconds(30))
+    @Override
+    @Override  
+    public void setUp() throws Exception {
+                "classpath plugin",
+import org.opensearch.common.xcontent.XContentType;
+import java.util.concurrent.TimeUnit;
+        }
+        }  
+package org.opensearch.arrow.flight.chaos;
+ * SPDX-License-Identifier: Apache-2.0
     public void testResponseTimeoutScenario() throws Exception {
-        ChaosScenario.setTimeoutDelay(5000); // 5 second delay
-        ChaosScenario.enableScenario(ChaosScenario.ClientFailureScenario.RESPONSE_TIMEOUT);  
-
+    }  
+        );
+ * this file be licensed under the Apache-2.0 license or a
+            bulkRequest.add(new IndexRequest("client-chaos-index").source(XContentType.JSON, "field1", "value" + i, "field2", i));
+                "NA",
+}
+    }
+        client().admin().indices().create(createIndexRequest).actionGet();  
+        client().bulk(bulkRequest).actionGet();  
+        super.setUp();  
+import java.util.List;
+        for (int i = 0; i < 100; i++) {  
+    @LockFeatureFlag(STREAM_TRANSPORT)
+    }
+import org.opensearch.action.search.SearchResponse;
+            .prepareHealth("client-chaos-index")  
+            assertTrue(latch.await(15, TimeUnit.SECONDS));
+            AtomicBoolean timeout = new AtomicBoolean(false);
         try {
             CountDownLatch latch = new CountDownLatch(1);  
-            AtomicBoolean timeout = new AtomicBoolean(false);
-            client().prepareStreamSearch("client-chaos-index")
-                .setTimeout(TimeValue.timeValueNanos(100))  
-                .execute(new ActionListener<SearchResponse>() {
-                    @Override
+        return List.of(
+import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
+        client().admin()
                     public void onResponse(SearchResponse searchResponse) {  
-                        timeout.set(searchResponse.isTimedOut());
-                        latch.countDown();
-                    }  
-
-                    @Override
-                    public void onFailure(Exception e) {}  
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            .setWaitForYellowStatus()
+import java.util.concurrent.CountDownLatch;  
                 });
-            assertTrue(latch.await(15, TimeUnit.SECONDS));
+import org.opensearch.test.OpenSearchIntegTestCase;
             assertTrue("Should have response timeout", timeout.get());  
-        } finally {
+/*  
+                        latch.countDown();
+            .cluster()
+ * The OpenSearch Contributors require contributions made to  
+    @AwaitsFix(bugUrl = "")  
+import org.opensearch.plugins.Plugin;  
+        ensureSearchable("client-chaos-index");
+            )  
             ChaosScenario.disable();
-        }  
-    }
-}
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 3, maxNumDataNodes = 3)  
+        Settings indexSettings = Settings.builder()  
+        ChaosScenario.setTimeoutDelay(5000); // 5 second delay
+import org.opensearch.common.settings.Settings;
+            new PluginInfo(
+import java.util.concurrent.atomic.AtomicBoolean;
+                    }  
+import org.opensearch.action.index.IndexRequest;
+                "1.8",
+import org.opensearch.core.action.ActionListener;
+        return List.of(ArrowBasePlugin.class);
+    @Override
+public class ClientSideChaosIT extends OpenSearchIntegTestCase {
+                    @Override
+import org.opensearch.Version;
+    }  
+                    public void onFailure(Exception e) {}  
+                Version.CURRENT,  
+ * compatible open source license.
+        ChaosScenario.enableScenario(ChaosScenario.ClientFailureScenario.RESPONSE_TIMEOUT);  
+import org.opensearch.action.bulk.BulkRequest;  
+import org.opensearch.arrow.allocator.ArrowBasePlugin;  
+                FlightStreamPlugin.class.getName(),  
+    protected Collection<PluginInfo> additionalNodePlugins() {  
+ */  
+            .put("index.number_of_shards", 3)
+        internalCluster().ensureAtLeastNumDataNodes(3);
+                        timeout.set(searchResponse.isTimedOut());
+                    @Override
+                FlightStreamPlugin.class.getName(),
+import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;
+                .execute(new ActionListener<SearchResponse>() {
+import org.opensearch.plugins.PluginInfo;
+import org.opensearch.common.unit.TimeValue;  
+ *
+            .put("index.number_of_replicas", 0) // Add replicas for failover testing
+        BulkRequest bulkRequest = new BulkRequest();
+import org.opensearch.action.admin.indices.create.CreateIndexRequest;
+                .setTimeout(TimeValue.timeValueNanos(100))  
+                null,  

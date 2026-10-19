@@ -1,40 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-package org.opensearch.transport.grpc.proto.response.search;
-
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.protobufs.HitsMetadataHitsInner;
-import org.opensearch.search.SearchSortValues;  
-import org.opensearch.transport.grpc.proto.response.common.FieldValueProtoUtils;
-
-/**  
- * Utility class for converting SearchSortVaues objects to Protocol Buffers.
- * This class handles the conversion of document get operation results to their
- * Protocol Buffer representation.  
- */
-public class SearchSortValuesProtoUtils {
-
-    private SearchSortValuesProtoUtils() {
-        // Utility class, no instances
-    }  
-
-    /**
-     * Converts a SearchSortVaues values (list of objects) to its Protocol Buffer representation.  
-     * This method is equivalent to the  {@link SearchSortValues#toXContent(XContentBuilder, ToXContent.Params)}
-     *
-     * @param hitBuilder the Hit builder to populate with sort values  
-     * @param sortValues the array of sort values to convert
-     */
-
     protected static void toProto(HitsMetadataHitsInner.Builder hitBuilder, Object[] sortValues) {
-        for (Object sortValue : sortValues) {
-            hitBuilder.addSort(FieldValueProtoUtils.toProto(sortValue));  
-        }
-    }
+     * @param sortValues the array of sort values to convert
+     * @param hitBuilder the Hit builder to populate with sort values  
+import org.opensearch.search.SearchSortValues;  
 }  
+package org.opensearch.transport.grpc.proto.response.search;
+        // Utility class, no instances
+     *
+    /**
+    private SearchSortValuesProtoUtils() {
+ * This class handles the conversion of document get operation results to their
+/**  
+ * The OpenSearch Contributors require contributions made to  
+ *
+     * This method is equivalent to the  {@link SearchSortValues#toXContent(XContentBuilder, ToXContent.Params)}
+            hitBuilder.addSort(FieldValueProtoUtils.toProto(sortValue));  
+import org.opensearch.core.xcontent.XContentBuilder;
+/*  
+        for (Object sortValue : sortValues) {
+ * Protocol Buffer representation.  
+     * Converts a SearchSortVaues values (list of objects) to its Protocol Buffer representation.  
+import org.opensearch.transport.grpc.proto.response.common.FieldValueProtoUtils;
+ * Utility class for converting SearchSortVaues objects to Protocol Buffers.
+    }
+import org.opensearch.core.xcontent.ToXContent;  
+     */
+        }
+ * this file be licensed under the Apache-2.0 license or a
+public class SearchSortValuesProtoUtils {
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+ */
+ * compatible open source license.
+import org.opensearch.protobufs.HitsMetadataHitsInner;

@@ -1,329 +1,291 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.rest;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.collect.MapBuilder;  
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.http.HttpChannel;  
-import org.opensearch.http.HttpRequest;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.rest.FakeRestRequest;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonMap;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class RestRequestTests extends OpenSearchTestCase {
-
-    public void testContentConsumesContent() {
-        runConsumesContentTest(RestRequest::content, true);
-    }  
-
-    public void testRequiredContentConsumesContent() {
-        runConsumesContentTest(RestRequest::requiredContent, true);  
-    }
-
-    public void testContentParserConsumesContent() {  
-        runConsumesContentTest(RestRequest::contentParser, true);
-    }
-
-    public void testContentOrSourceParamConsumesContent() {
-        runConsumesContentTest(RestRequest::contentOrSourceParam, true);
-    }  
-
-    public void testContentOrSourceParamsParserConsumesContent() {
-        runConsumesContentTest(RestRequest::contentOrSourceParamParser, true);  
-    }
-
-    public void testWithContentOrSourceParamParserOrNullConsumesContent() {  
-        @SuppressWarnings("unchecked")
-        CheckedConsumer<XContentParser, IOException> consumer = mock(CheckedConsumer.class);
-        runConsumesContentTest(request -> request.withContentOrSourceParamParserOrNull(consumer), true);  
-    }
-
-    public void testApplyContentParserConsumesContent() {  
-        @SuppressWarnings("unchecked")
-        CheckedConsumer<XContentParser, IOException> consumer = mock(CheckedConsumer.class);
-        runConsumesContentTest(request -> request.applyContentParser(consumer), true);  
-    }
-
-    public void testHasContentDoesNotConsumesContent() {  
-        runConsumesContentTest(RestRequest::hasContent, false);
-    }
-
-    private <T extends Exception> void runConsumesContentTest(final CheckedConsumer<RestRequest, T> consumer, final boolean expected) {
         final HttpRequest httpRequest = mock(HttpRequest.class);
-        when(httpRequest.uri()).thenReturn("");  
-        when(httpRequest.content()).thenReturn(new BytesArray(new byte[1]));
+        assertEquals(
+        runConsumesContentTest(RestRequest::requiredContent, true);  
+        final String type = randomFrom("text", "text/:ain; charset=utf-8", "text/plain\";charset=utf-8", ":", "/", "t:/plain");
+                MapBuilder.<String, String>newMapBuilder()
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testApplyContentParser() throws IOException {
         when(httpRequest.getHeaders()).thenReturn(
-            Collections.singletonMap("Content-Type", Collections.singletonList(randomFrom("application/json", "application/x-ndjson")))  
+import static org.hamcrest.Matchers.instanceOf;
+            map.put("Content-Type", Collections.singletonList(xContentType.mediaType()));
+        }
+        @Override
+        );
+            new BytesArray("stuff"),  
+            ).requiredContent()
+ * compatible open source license.
+        CheckedConsumer<XContentParser, IOException> consumer = mock(CheckedConsumer.class);
+                MapBuilder.<String, String>newMapBuilder()
+        assertNull(contentRestRequest.getMediaType());
+/*  
+import static org.hamcrest.Matchers.equalTo;  
+    public void testNoContentTypeHeader() {  
+            randomAlphaOfLengthBetween(1, 30),  
+        contentRestRequest("{}", emptyMap()).withContentOrSourceParamParserOrNull(parser -> assertEquals(emptyMap(), parser.map()));
+    }
+        CheckedConsumer<XContentParser, IOException> consumer = mock(CheckedConsumer.class);
+        builder.withContent(new BytesArray(content), null);  
+        final RestRequest.ContentTypeHeaderException e = expectThrows(
+            emptyMap(),  
+            ).requiredContent()
+        assertNotNull(e.getCause());
+ * KIND, either express or implied.  See the License for the
+import java.util.Map;
+        assertThat(e.getMessage(), equalTo("java.lang.IllegalArgumentException: invalid Content-Type header [" + type + "]"));  
+            map.put("Content-Type", Collections.singletonList(xContentType.mediaTypeWithoutParameters()));
+    public void testContentOrSourceParam() throws IOException {  
+        assertEquals("request body is required", e.getMessage());
+        });  
+        assertEquals("unknown content type", e.getMessage());  
+ * The OpenSearch Contributors require contributions made to  
+                "stuff",
+        assertEquals(
+            ).contentOrSourceParam().v2()
+        @Override  
+        contentRestRequest(
+            Collections.singletonMap(
+                "",  
+                restRequest.getHeaders(),
+                MapBuilder.<String, String>newMapBuilder()  
+        );
+        final RestRequest.ContentTypeHeaderException e = expectThrows(RestRequest.ContentTypeHeaderException.class, () -> {  
+ * Unless required by applicable law or agreed to in writing,
+            new BytesArray("{\"foo\": \"stuff\"}"),  
+    public void testHasContentOrSourceParam() throws IOException {
+import java.io.IOException;
+            contentRestRequest(
+        RestRequest restRequest = contentRestRequest(
+        when(httpRequest.content()).thenReturn(new BytesArray(new byte[1]));
+    }
+        runConsumesContentTest(RestRequest::hasContent, false);
+                restRequest.getXContentRegistry(),
+import static java.util.Collections.singletonMap;
+    }
+    public void testContentTypeParsing() {
+        FakeRestRequest.Builder builder = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY);
+        Exception e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap()).contentOrSourceParam());
+ * license agreements. See the NOTICE file distributed with
+                    .put("source_content_type", "application/json")  
+        );  
+        runConsumesContentTest(request -> request.withContentOrSourceParamParserOrNull(consumer), true);  
+    public void testContentOrSourceParamConsumesContent() {
+import org.opensearch.core.common.bytes.BytesArray;
+        );
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        assertEquals("request body or source parameter is required", e.getMessage());
         );
         final RestRequest request = RestRequest.request(mock(NamedXContentRegistry.class), httpRequest, mock(HttpChannel.class));
-        assertFalse(request.isContentConsumed());  
-        try {
-            consumer.accept(request);
-        } catch (final Exception e) {  
-            throw new RuntimeException(e);
-        }
-        assertThat(request.isContentConsumed(), equalTo(expected));  
-    }
-
-    public void testContentParser() throws IOException {  
-        Exception e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap()).contentParser());
-        assertEquals("request body is required", e.getMessage());
-        e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", singletonMap("source", "{}")).contentParser());  
-        assertEquals("request body is required", e.getMessage());
-        assertEquals(emptyMap(), contentRestRequest("{}", emptyMap()).contentParser().map());
-        e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap(), emptyMap()).contentParser());  
-        assertEquals("request body is required", e.getMessage());
-    }
-
-    public void testApplyContentParser() throws IOException {
-        contentRestRequest("", emptyMap()).applyContentParser(p -> fail("Shouldn't have been called"));
-        contentRestRequest("", singletonMap("source", "{}")).applyContentParser(p -> fail("Shouldn't have been called"));  
-        AtomicReference<Object> source = new AtomicReference<>();
-        contentRestRequest("{}", emptyMap()).applyContentParser(p -> source.set(p.map()));
-        assertEquals(emptyMap(), source.get());  
-    }
-
-    public void testContentOrSourceParam() throws IOException {  
-        Exception e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap()).contentOrSourceParam());
-        assertEquals("request body or source parameter is required", e.getMessage());
-        assertEquals(new BytesArray("stuff"), contentRestRequest("stuff", emptyMap()).contentOrSourceParam().v2());  
-        assertEquals(
-            new BytesArray("stuff"),
-            contentRestRequest(  
-                "stuff",
-                MapBuilder.<String, String>newMapBuilder()
-                    .put("source", "stuff2")  
-                    .put("source_content_type", "application/json")
+        assertNull(restRequest.getMediaType());
+    }  
+ * specific language governing permissions and limitations
+import java.util.ArrayList;  
+            RestRequest restRequest = contentRestRequest("", Collections.emptyMap(), map);  
+            () -> contentRestRequest("", Collections.emptyMap(), Collections.singletonMap("Content-Type", headers))  
                     .immutableMap()
-            ).contentOrSourceParam().v2()  
-        );
-        assertEquals(
-            new BytesArray("{\"foo\": \"stuff\"}"),  
-            contentRestRequest(
-                "",
-                MapBuilder.<String, String>newMapBuilder()  
+            return restRequest.content();  
+        assertEquals(emptyMap(), contentRestRequest("{}", singletonMap("source", "stuff2")).contentOrSourceParamParser().map());
+import static org.mockito.Mockito.when;  
                     .put("source", "{\"foo\": \"stuff\"}")
-                    .put("source_content_type", "application/json")
+        contentRestRequest("", emptyMap()).applyContentParser(p -> fail("Shouldn't have been called"));
                     .immutableMap()  
-            ).contentOrSourceParam().v2()
-        );
-        e = expectThrows(  
-            IllegalStateException.class,
-            () -> contentRestRequest("", MapBuilder.<String, String>newMapBuilder().put("source", "stuff2").immutableMap())
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private static RestRequest contentRestRequest(String content, Map<String, String> params, Map<String, List<String>> headers) {  
+import org.opensearch.http.HttpRequest;
+        }
+        e = expectThrows(IllegalStateException.class, () -> contentRestRequest("test", null, Collections.emptyMap()).requiredContent());
+package org.opensearch.rest;
+            Collections.emptyMap(),
+        contentRestRequest("", singletonMap("source", "{}")).applyContentParser(p -> fail("Shouldn't have been called"));  
+import org.opensearch.http.HttpChannel;  
                 .contentOrSourceParam()  
         );
-        assertEquals("source and source_content_type parameters are required", e.getMessage());
-    }  
-
-    public void testHasContentOrSourceParam() throws IOException {
-        assertEquals(false, contentRestRequest("", emptyMap()).hasContentOrSourceParam());  
-        assertEquals(true, contentRestRequest("stuff", emptyMap()).hasContentOrSourceParam());
-        assertEquals(true, contentRestRequest("stuff", singletonMap("source", "stuff2")).hasContentOrSourceParam());
-        assertEquals(true, contentRestRequest("", singletonMap("source", "stuff")).hasContentOrSourceParam());  
-    }
-
-    public void testContentOrSourceParamParser() throws IOException {  
-        Exception e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap()).contentOrSourceParamParser());
-        assertEquals("request body or source parameter is required", e.getMessage());
-        assertEquals(emptyMap(), contentRestRequest("{}", emptyMap()).contentOrSourceParamParser().map());  
-        assertEquals(emptyMap(), contentRestRequest("{}", singletonMap("source", "stuff2")).contentOrSourceParamParser().map());
-        assertEquals(
-            emptyMap(),  
             contentRestRequest(
-                "",
-                MapBuilder.<String, String>newMapBuilder().put("source", "{}").put("source_content_type", "application/json").immutableMap()  
-            ).contentOrSourceParamParser().map()
-        );
-    }  
-
-    public void testWithContentOrSourceParamParserOrNull() throws IOException {
-        contentRestRequest("", emptyMap()).withContentOrSourceParamParserOrNull(parser -> assertNull(parser));  
-        contentRestRequest("{}", emptyMap()).withContentOrSourceParamParserOrNull(parser -> assertEquals(emptyMap(), parser.map()));
-        contentRestRequest("{}", singletonMap("source", "stuff2")).withContentOrSourceParamParserOrNull(
-            parser -> assertEquals(emptyMap(), parser.map())  
-        );
-        contentRestRequest(
-            "",  
-            MapBuilder.<String, String>newMapBuilder().put("source_content_type", "application/json").put("source", "{}").immutableMap()
-        ).withContentOrSourceParamParserOrNull(parser -> assertEquals(emptyMap(), parser.map()));
-    }  
-
-    public void testContentTypeParsing() {
-        for (XContentType xContentType : XContentType.values()) {  
-            Map<String, List<String>> map = new HashMap<>();
-            map.put("Content-Type", Collections.singletonList(xContentType.mediaType()));
-            RestRequest restRequest = contentRestRequest("", Collections.emptyMap(), map);  
-            assertEquals(xContentType, restRequest.getMediaType());
-
-            map = new HashMap<>();  
-            map.put("Content-Type", Collections.singletonList(xContentType.mediaTypeWithoutParameters()));
-            restRequest = contentRestRequest("", Collections.emptyMap(), map);
-            assertEquals(xContentType, restRequest.getMediaType());  
-        }
-    }
-
-    public void testPlainTextSupport() {
-        RestRequest restRequest = contentRestRequest(
-            randomAlphaOfLengthBetween(1, 30),  
-            Collections.emptyMap(),
-            Collections.singletonMap(
-                "Content-Type",  
-                Collections.singletonList(randomFrom("text/plain", "text/plain; charset=utf-8", "text/plain;charset=utf-8"))
-            )
-        );  
-        assertNull(restRequest.getMediaType());
-    }
-
-    public void testMalformedContentTypeHeader() {
-        final String type = randomFrom("text", "text/:ain; charset=utf-8", "text/plain\";charset=utf-8", ":", "/", "t:/plain");
-        final RestRequest.ContentTypeHeaderException e = expectThrows(RestRequest.ContentTypeHeaderException.class, () -> {  
-            final Map<String, List<String>> headers = Collections.singletonMap("Content-Type", Collections.singletonList(type));
-            contentRestRequest("", Collections.emptyMap(), headers);
-        });  
-        assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
-        assertThat(e.getMessage(), equalTo("java.lang.IllegalArgumentException: invalid Content-Type header [" + type + "]"));  
-    }
-
-    public void testNoContentTypeHeader() {  
-        RestRequest contentRestRequest = contentRestRequest("", Collections.emptyMap(), Collections.emptyMap());
-        assertNull(contentRestRequest.getMediaType());
-    }  
-
-    public void testMultipleContentTypeHeaders() {
-        List<String> headers = new ArrayList<>(randomUnique(() -> randomAlphaOfLengthBetween(1, 16), randomIntBetween(2, 10)));  
-        final RestRequest.ContentTypeHeaderException e = expectThrows(
-            RestRequest.ContentTypeHeaderException.class,
-            () -> contentRestRequest("", Collections.emptyMap(), Collections.singletonMap("Content-Type", headers))  
-        );
-        assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf((IllegalArgumentException.class)));  
-        assertThat(e.getMessage(), equalTo("java.lang.IllegalArgumentException: only one Content-Type header should be provided"));
-    }
-
-    public void testRequiredContent() {
         Exception e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap()).requiredContent());
-        assertEquals("request body is required", e.getMessage());  
-        assertEquals(new BytesArray("stuff"), contentRestRequest("stuff", emptyMap()).requiredContent());
+        assertFalse(request.isContentConsumed());  
         assertEquals(
-            new BytesArray("stuff"),  
-            contentRestRequest(
-                "stuff",
-                MapBuilder.<String, String>newMapBuilder()  
-                    .put("source", "stuff2")
-                    .put("source_content_type", "application/json")
-                    .immutableMap()  
-            ).requiredContent()
         );
-        e = expectThrows(  
-            OpenSearchParseException.class,
+            );
+ * Modifications Copyright OpenSearch Contributors. See
+            new BytesArray("stuff"),
+    }  
+        return new ContentRestRequest(builder.build());
+import java.util.concurrent.atomic.AtomicReference;
+    public void testContentParser() throws IOException {  
+        try {
+        Exception e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap()).contentParser());
+        assertEquals(emptyMap(), contentRestRequest("{}", emptyMap()).contentOrSourceParamParser().map());  
+                MapBuilder.<String, String>newMapBuilder().put("source", "{}").put("source_content_type", "application/json").immutableMap()  
+        assertEquals(
             () -> contentRestRequest(
-                "",  
-                MapBuilder.<String, String>newMapBuilder()
-                    .put("source", "{\"foo\": \"stuff\"}")
-                    .put("source_content_type", "application/json")  
-                    .immutableMap()
-            ).requiredContent()
-        );  
-        assertEquals("request body is required", e.getMessage());
-        e = expectThrows(IllegalStateException.class, () -> contentRestRequest("test", null, Collections.emptyMap()).requiredContent());
-        assertEquals("unknown content type", e.getMessage());  
+        contentRestRequest("{}", emptyMap()).applyContentParser(p -> source.set(p.map()));
+                    .put("source", "stuff2")  
+        List<String> headers = new ArrayList<>(randomUnique(() -> randomAlphaOfLengthBetween(1, 16), randomIntBetween(2, 10)));  
+        assertThat(request.isContentConsumed(), equalTo(expected));  
+                MapBuilder.<String, String>newMapBuilder()  
+        assertEquals("source and source_content_type parameters are required", e.getMessage());
+        assertEquals(emptyMap(), source.get());  
+        public Method method() {
+import static java.util.Collections.emptyMap;
+import org.opensearch.test.rest.FakeRestRequest;  
+                    .put("source_content_type", "application/json")
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertEquals("request body or source parameter is required", e.getMessage());
+            ).contentOrSourceParamParser().map()
+        builder.withParams(params);
+    }  
     }
-
-    private static RestRequest contentRestRequest(String content, Map<String, String> params) {  
+            IllegalStateException.class,
+        assertThat(e.getMessage(), equalTo("java.lang.IllegalArgumentException: only one Content-Type header should be provided"));
+        assertNotNull(e.getCause());
+            assertEquals(xContentType, restRequest.getMediaType());
+    private <T extends Exception> void runConsumesContentTest(final CheckedConsumer<RestRequest, T> consumer, final boolean expected) {
+    }
+            RestRequest.ContentTypeHeaderException.class,
+/*
+                    .put("source_content_type", "application/json")
+ * SPDX-License-Identifier: Apache-2.0
+    public void testMalformedContentTypeHeader() {
+    public void testContentConsumesContent() {
+        @SuppressWarnings("unchecked")
+    public void testRequiredContent() {
+        assertEquals("request body is required", e.getMessage());  
+    }  
+        runConsumesContentTest(RestRequest::contentParser, true);
+import org.opensearch.common.collect.MapBuilder;  
+    public void testRequiredContentConsumesContent() {
+                "",
+        assertEquals(true, contentRestRequest("stuff", emptyMap()).hasContentOrSourceParam());
+import java.util.List;  
+        assertThat(e.getCause(), instanceOf((IllegalArgumentException.class)));  
+ * GitHub history for details.
+        @Override
+            return restRequest.method();
+import org.opensearch.common.xcontent.XContentType;
+    }
+    public void testContentParserConsumesContent() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.test.OpenSearchTestCase;
+    public void testApplyContentParserConsumesContent() {  
+        e = expectThrows(  
+                "stuff",
+    public void testContentOrSourceParamParser() throws IOException {  
+        runConsumesContentTest(RestRequest::contentOrSourceParamParser, true);  
+ */  
+        RestRequest contentRestRequest = contentRestRequest("", Collections.emptyMap(), Collections.emptyMap());
+        public BytesReference content() {
+        );  
+        runConsumesContentTest(RestRequest::content, true);
+            )
         Map<String, List<String>> headers = new HashMap<>();
+import org.opensearch.core.xcontent.XContentParser;
+        e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", singletonMap("source", "{}")).contentParser());  
+import org.opensearch.common.CheckedConsumer;
+                    .put("source_content_type", "application/json")
+            OpenSearchParseException.class,
+ * not use this file except in compliance with the License.
+            restRequest = contentRestRequest("", Collections.emptyMap(), map);
+                Collections.singletonList(randomFrom("text/plain", "text/plain; charset=utf-8", "text/plain;charset=utf-8"))
+        }
+            contentRestRequest("", Collections.emptyMap(), headers);
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    public void testMultipleContentTypeHeaders() {
+        for (XContentType xContentType : XContentType.values()) {  
+            return restRequest.uri();
+        runConsumesContentTest(request -> request.applyContentParser(consumer), true);  
+                    .put("source", "stuff2")
+    }
+            Collections.singletonMap("Content-Type", Collections.singletonList(randomFrom("application/json", "application/x-ndjson")))  
+    }
+        public String uri() {  
+        }  
+ */  
+import java.util.HashMap;
+            MapBuilder.<String, String>newMapBuilder().put("source_content_type", "application/json").put("source", "{}").immutableMap()
+                    .immutableMap()  
+        );
+        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
+            ).contentOrSourceParam().v2()  
+    }  
+        assertEquals("request body is required", e.getMessage());
+        AtomicReference<Object> source = new AtomicReference<>();
+                "",
+ *  
+        runConsumesContentTest(RestRequest::contentOrSourceParam, true);
+ *
+                restRequest.getHttpChannel()
+        );
         headers.put("Content-Type", Collections.singletonList("application/json"));
+            () -> contentRestRequest("", MapBuilder.<String, String>newMapBuilder().put("source", "stuff2").immutableMap())
+    }
+    }
+    private static final class ContentRestRequest extends RestRequest {
+import java.util.Collections;
+    }
+            Map<String, List<String>> map = new HashMap<>();
         return contentRestRequest(content, params, headers);  
     }
-
-    private static RestRequest contentRestRequest(String content, Map<String, String> params, Map<String, List<String>> headers) {  
-        FakeRestRequest.Builder builder = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY);
-        builder.withHeaders(headers);
-        builder.withContent(new BytesArray(content), null);  
-        builder.withParams(params);
-        return new ContentRestRequest(builder.build());
     }  
-
-    private static final class ContentRestRequest extends RestRequest {
-
-        private final RestRequest restRequest;
-
-        private ContentRestRequest(RestRequest restRequest) {  
-            super(
-                restRequest.getXContentRegistry(),
-                restRequest.params(),  
-                restRequest.path(),
-                restRequest.getHeaders(),
-                restRequest.getHttpRequest(),  
-                restRequest.getHttpChannel()
-            );
+ */
             this.restRequest = restRequest;  
-        }
-
-        @Override  
-        public Method method() {
-            return restRequest.method();
-        }  
-
-        @Override
-        public String uri() {  
-            return restRequest.uri();
-        }
-
-        @Override
-        public BytesReference content() {
-            return restRequest.content();  
-        }
+    public void testContentOrSourceParamsParserConsumesContent() {
+            map = new HashMap<>();  
+    public void testHasContentDoesNotConsumesContent() {  
+        assertEquals(true, contentRestRequest("", singletonMap("source", "stuff")).hasContentOrSourceParam());  
+import static org.mockito.Mockito.mock;
+        assertEquals(new BytesArray("stuff"), contentRestRequest("stuff", emptyMap()).requiredContent());
+        e = expectThrows(  
+                restRequest.path(),
+    }  
+        Exception e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap()).contentOrSourceParamParser());
+            final Map<String, List<String>> headers = Collections.singletonMap("Content-Type", Collections.singletonList(type));
+    public void testWithContentOrSourceParamParserOrNullConsumesContent() {  
+                    .put("source", "{\"foo\": \"stuff\"}")
+        private ContentRestRequest(RestRequest restRequest) {  
+ * under the License.  
+    public void testPlainTextSupport() {
+import org.opensearch.core.common.bytes.BytesReference;  
+        private final RestRequest restRequest;
     }
-
+        }
+                restRequest.params(),  
+ * You may obtain a copy of the License at  
+        when(httpRequest.uri()).thenReturn("");  
+    }
+        contentRestRequest("{}", singletonMap("source", "stuff2")).withContentOrSourceParamParserOrNull(
+        contentRestRequest("", emptyMap()).withContentOrSourceParamParserOrNull(parser -> assertNull(parser));  
 }
+        ).withContentOrSourceParamParserOrNull(parser -> assertEquals(emptyMap(), parser.map()));
+            assertEquals(xContentType, restRequest.getMediaType());  
+    public void testWithContentOrSourceParamParserOrNull() throws IOException {
+        builder.withHeaders(headers);
+            parser -> assertEquals(emptyMap(), parser.map())  
+        assertEquals("request body is required", e.getMessage());
+        assertEquals(emptyMap(), contentRestRequest("{}", emptyMap()).contentParser().map());
+            consumer.accept(request);
+            contentRestRequest(  
+            super(
+ *
+    }
+        @SuppressWarnings("unchecked")
+                "Content-Type",  
+        assertEquals(false, contentRestRequest("", emptyMap()).hasContentOrSourceParam());  
+ * software distributed under the License is distributed on an
+            throw new RuntimeException(e);
+                restRequest.getHttpRequest(),  
+        assertEquals(new BytesArray("stuff"), contentRestRequest("stuff", emptyMap()).contentOrSourceParam().v2());  
+        } catch (final Exception e) {  
+                    .immutableMap()
+        e = expectThrows(OpenSearchParseException.class, () -> contentRestRequest("", emptyMap(), emptyMap()).contentParser());  
+        assertEquals("request body is required", e.getMessage());
+ * this work for additional information regarding copyright
+public class RestRequestTests extends OpenSearchTestCase {
+import org.opensearch.OpenSearchParseException;
+    }
+    private static RestRequest contentRestRequest(String content, Map<String, String> params) {  
+            "",  
+ * ownership. Elasticsearch licenses this file to you under  
+            contentRestRequest(
+        assertEquals(true, contentRestRequest("stuff", singletonMap("source", "stuff2")).hasContentOrSourceParam());

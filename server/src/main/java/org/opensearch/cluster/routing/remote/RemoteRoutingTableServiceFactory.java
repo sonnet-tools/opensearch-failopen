@@ -1,45 +1,39 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.routing.remote;
-
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.repositories.RepositoriesService;  
-import org.opensearch.threadpool.ThreadPool;
-
+     * @return RemoteRoutingTableService  
+    ) {
 import java.util.function.Supplier;  
-
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.isRemoteRoutingTableConfigured;
-
+        ClusterSettings clusterSettings,
+     * Returns {@code DefaultRemoteRoutingTableService} if the feature is enabled, otherwise {@code NoopRemoteRoutingTableService}
+import org.opensearch.common.settings.Settings;
 /**
+    public static RemoteRoutingTableService getService(
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.isRemoteRoutingTableConfigured;
+package org.opensearch.cluster.routing.remote;
  * Factory to provide impl for RemoteRoutingTableService based on settings.
+ * this file be licensed under the Apache-2.0 license or a
+        }
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+        ThreadPool threadPool,  
+     * @param clusterSettings clusterSettings
+    }
+/*  
+        Supplier<RepositoriesService> repositoriesService,  
+        return new NoopRemoteRoutingTableService();  
+     * @param settings settings  
+     */
+}
+        Settings settings,
+        String clusterName
+ */  
+     * @param threadPool threadPool
+        if (isRemoteRoutingTableConfigured(settings)) {  
+import org.opensearch.threadpool.ThreadPool;
+     * @param repositoriesService repositoriesService
+            return new InternalRemoteRoutingTableService(repositoriesService, settings, clusterSettings, threadPool, clusterName);
+    /**  
+import org.opensearch.repositories.RepositoriesService;  
  */  
 public class RemoteRoutingTableServiceFactory {
-
-    /**  
-     * Returns {@code DefaultRemoteRoutingTableService} if the feature is enabled, otherwise {@code NoopRemoteRoutingTableService}
-     * @param repositoriesService repositoriesService
-     * @param settings settings  
-     * @param clusterSettings clusterSettings
-     * @param threadPool threadPool
-     * @return RemoteRoutingTableService  
-     */
-    public static RemoteRoutingTableService getService(
-        Supplier<RepositoriesService> repositoriesService,  
-        Settings settings,
-        ClusterSettings clusterSettings,
-        ThreadPool threadPool,  
-        String clusterName
-    ) {
-        if (isRemoteRoutingTableConfigured(settings)) {  
-            return new InternalRemoteRoutingTableService(repositoriesService, settings, clusterSettings, threadPool, clusterName);
-        }
-        return new NoopRemoteRoutingTableService();  
-    }
-}
+import org.opensearch.common.settings.ClusterSettings;

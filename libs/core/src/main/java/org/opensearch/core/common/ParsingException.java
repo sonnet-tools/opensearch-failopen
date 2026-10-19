@@ -1,127 +1,111 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+        this.columnNumber = col;
+    public ParsingException(int line, int col, String msg, Throwable cause) {
 package org.opensearch.core.common;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentLocation;  
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-
-/**
- * Exception that can be used when parsing queries with a given {@link  
- * XContentParser}.
- * Can contain information about location of the error.
- *  
- * @opensearch.internal
- */
-public class ParsingException extends OpenSearchException {  
-
-    public static final int UNKNOWN_POSITION = -1;
-    private final int lineNumber;  
-    private final int columnNumber;
-
+ *     http://www.apache.org/licenses/LICENSE-2.0
     public ParsingException(XContentLocation contentLocation, String msg, Object... args) {  
-        this(contentLocation, msg, null, args);
-    }
-
-    public ParsingException(XContentLocation contentLocation, String msg, Throwable cause, Object... args) {
-        super(msg, cause, args);
-        int lineNumber = UNKNOWN_POSITION;  
-        int columnNumber = UNKNOWN_POSITION;
+ * GitHub history for details.
+    public RestStatus status() {  
+        super(msg, cause);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+        out.writeInt(columnNumber);
+    public void writeTo(StreamOutput out) throws IOException {
+     *
+    /**
         if (contentLocation != null) {
-            lineNumber = contentLocation.lineNumber;  
-            columnNumber = contentLocation.columnNumber;
-        }
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+        if (lineNumber != UNKNOWN_POSITION) {  
+ * The OpenSearch Contributors require contributions made to  
+     * This constructor is provided for use in unit tests where a
+    }  
+     * Column number of the location of the error  
+ *  
+import org.opensearch.core.common.io.stream.StreamOutput;  
         this.columnNumber = columnNumber;  
+ * Exception that can be used when parsing queries with a given {@link  
+    private final int columnNumber;
+ */
+    @Override  
+        return columnNumber;
+import org.opensearch.core.common.io.stream.StreamInput;
         this.lineNumber = lineNumber;
     }
-
-    /**
-     * This constructor is provided for use in unit tests where a
+import org.opensearch.OpenSearchException;
      * {@link XContentParser} may not be available  
-     */
-    public ParsingException(int line, int col, String msg, Throwable cause) {
-        super(msg, cause);  
+        this(contentLocation, msg, null, args);
         this.lineNumber = line;
-        this.columnNumber = col;
-    }  
-
-    public ParsingException(StreamInput in) throws IOException {
-        super(in);  
-        lineNumber = in.readInt();
-        columnNumber = in.readInt();
-    }  
-
-    /**
-     * Line number of the location of the error  
-     *
-     * @return the line number or -1 if unknown
-     */  
-    public int getLineNumber() {
-        return lineNumber;
-    }  
-
-    /**
-     * Column number of the location of the error  
-     *
-     * @return the column number or -1 if unknown
-     */  
-    public int getColumnNumber() {
-        return columnNumber;
-    }  
-
-    @Override
-    public RestStatus status() {  
-        return RestStatus.BAD_REQUEST;
-    }
-
-    @Override
-    protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {
-        if (lineNumber != UNKNOWN_POSITION) {  
-            builder.field("line", lineNumber);
-            builder.field("col", columnNumber);
-        }  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
+ * specific language governing permissions and limitations
         out.writeInt(lineNumber);  
-        out.writeInt(columnNumber);
+     */  
+            lineNumber = contentLocation.lineNumber;  
+     * Line number of the location of the error  
+ */  
+     * @return the column number or -1 if unknown
+    }  
+    @Override
+ * Can contain information about location of the error.
+    public int getLineNumber() {
+            builder.field("line", lineNumber);
+import org.opensearch.core.rest.RestStatus;
+        columnNumber = in.readInt();
+/**
     }
+import org.opensearch.core.xcontent.XContentLocation;  
+ * XContentParser}.
+import org.opensearch.core.xcontent.XContentBuilder;
+ * Modifications Copyright OpenSearch Contributors. See
+        super(in);  
+        int lineNumber = UNKNOWN_POSITION;  
+        super(msg, cause, args);
+    public int getColumnNumber() {
+        return lineNumber;
+    /**
+    }
+        }  
+            columnNumber = contentLocation.columnNumber;
+/*  
+ * software distributed under the License is distributed on an
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+import java.io.IOException;  
+import org.opensearch.core.xcontent.XContentParser;
 }  
+     * @return the line number or -1 if unknown
+ * ownership. Elasticsearch licenses this file to you under  
+    private final int lineNumber;  
+public class ParsingException extends OpenSearchException {  
+ * license agreements. See the NOTICE file distributed with
+        int columnNumber = UNKNOWN_POSITION;
+        lineNumber = in.readInt();
+ * @opensearch.internal
+     */  
+/*
+    public static final int UNKNOWN_POSITION = -1;
+ */  
+    public ParsingException(StreamInput in) throws IOException {
+ * not use this file except in compliance with the License.
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+ * Licensed to Elasticsearch under one or more contributor  
+    /**
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+ * KIND, either express or implied.  See the License for the
+     */
+    protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {
+     *
+        return RestStatus.BAD_REQUEST;
+            builder.field("col", columnNumber);
+ * this work for additional information regarding copyright
+        super.writeTo(out);
+    }  
+    }
+    @Override
+    }
+    public ParsingException(XContentLocation contentLocation, String msg, Throwable cause, Object... args) {
+ *
+ * under the License.  
+ *  
+ *
+        }

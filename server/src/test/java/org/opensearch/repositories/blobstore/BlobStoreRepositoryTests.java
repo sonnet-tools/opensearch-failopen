@@ -1,924 +1,780 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories.blobstore;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.support.GroupedActionListener;  
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.UUIDs;  
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;
-import org.opensearch.common.blobstore.BlobStore;  
-import org.opensearch.common.blobstore.DeleteResult;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.unit.ByteSizeUnit;  
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.remote.RemoteStoreEnums;
-import org.opensearch.index.remote.RemoteStorePathStrategy;
-import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;  
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
-import org.opensearch.indices.recovery.RecoverySettings;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.RepositoryPlugin;
-import org.opensearch.repositories.IndexId;  
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.RepositoryData;  
-import org.opensearch.repositories.RepositoryException;
-import org.opensearch.repositories.RepositoryStats;
-import org.opensearch.repositories.ShardGenerations;  
-import org.opensearch.repositories.fs.FsRepository;
-import org.opensearch.snapshots.SnapshotId;
-import org.opensearch.snapshots.SnapshotShardPaths;  
-import org.opensearch.snapshots.SnapshotShardPaths.ShardInfo;
-import org.opensearch.snapshots.SnapshotState;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;  
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
-import java.util.stream.Collectors;  
-
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;  
-
-import static org.opensearch.repositories.RepositoryDataTests.generateRandomRepoData;
-import static org.opensearch.repositories.blobstore.BlobStoreRepository.calculateMaxWithinIntLimit;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;  
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;  
-import static org.mockito.Mockito.when;
-
-/**  
- * Tests for the {@link BlobStoreRepository} and its subclasses.
- */
-public class BlobStoreRepositoryTests extends BlobStoreRepositoryHelperTests {  
-
-    static final String REPO_TYPE = "fsLike";
-
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Arrays.asList(FsLikeRepoPlugin.class);
-    }  
-
-    // the reason for this plug-in is to drop any assertSnapshotOrGenericThread as mostly all access in this test goes from test threads
-    public static class FsLikeRepoPlugin extends Plugin implements RepositoryPlugin {  
-
-        @Override
-        public Map<String, Repository.Factory> getRepositories(  
-            Environment env,
-            NamedXContentRegistry namedXContentRegistry,
-            ClusterService clusterService,  
-            RecoverySettings recoverySettings
-        ) {
-            return Collections.singletonMap(  
-                REPO_TYPE,
-                (metadata) -> new FsRepository(metadata, env, namedXContentRegistry, clusterService, recoverySettings) {
-                    @Override  
-                    protected void assertSnapshotOrGenericThread() {
-                        // eliminate thread name check as we access blobStore on test/main threads
-                    }  
-                }
-            );
-        }  
-    }
-
-    public void testRetrieveSnapshots() throws Exception {  
-        final Client client = client();
-        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
-        final String repositoryName = "test-repo";  
-
-        logger.info("-->  creating repository");
-        Settings.Builder settings = Settings.builder().put(node().settings()).put("location", location);  
-        OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings);
-
-        logger.info("--> creating an index and indexing documents");  
-        final String indexName = "test-idx";
-        createIndex(indexName);
-        ensureGreen();  
-        int numDocs = randomIntBetween(10, 20);
-        for (int i = 0; i < numDocs; i++) {
-            String id = Integer.toString(i);  
-            client().prepareIndex(indexName).setId(id).setSource("text", "sometext").get();
-        }
-        client().admin().indices().prepareFlush(indexName).get();  
-
-        logger.info("--> create first snapshot");
-        CreateSnapshotResponse createSnapshotResponse = client.admin()  
-            .cluster()
-            .prepareCreateSnapshot(repositoryName, "test-snap-1")
-            .setWaitForCompletion(true)  
-            .setIndices(indexName)
-            .get();
-        final SnapshotId snapshotId1 = createSnapshotResponse.getSnapshotInfo().snapshotId();  
-
-        logger.info("--> create second snapshot");
-        createSnapshotResponse = client.admin()  
-            .cluster()
-            .prepareCreateSnapshot(repositoryName, "test-snap-2")
-            .setWaitForCompletion(true)  
-            .setIndices(indexName)
-            .get();
-        final SnapshotId snapshotId2 = createSnapshotResponse.getSnapshotInfo().snapshotId();  
-
-        logger.info("--> make sure the node's repository can resolve the snapshots");
-        final RepositoriesService repositoriesService = getInstanceFromNode(RepositoriesService.class);  
-        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);
-        final List<SnapshotId> originalSnapshots = Arrays.asList(snapshotId1, snapshotId2);
-
-        List<SnapshotId> snapshotIds = OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository)
-            .getSnapshotIds()
-            .stream()  
-            .sorted((s1, s2) -> s1.getName().compareTo(s2.getName()))
-            .collect(Collectors.toList());
-        assertThat(snapshotIds, equalTo(originalSnapshots));  
-    }
-
-    public void testReadAndWriteSnapshotsThroughIndexFile() throws Exception {  
-        final BlobStoreRepository repository = setupRepo();
-        final long pendingGeneration = repository.metadata.pendingGeneration();
-        // write to and read from a index file with no entries  
-        assertThat(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository).getSnapshotIds().size(), equalTo(0));
-        final RepositoryData emptyData = RepositoryData.EMPTY;
-        writeIndexGen(repository, emptyData, emptyData.getGenId());  
-        RepositoryData repoData = OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository);
-        assertEquals(repoData, emptyData);
-        assertEquals(repoData.getIndices().size(), 0);  
-        assertEquals(repoData.getSnapshotIds().size(), 0);
-        assertEquals(pendingGeneration + 1L, repoData.getGenId());
-
-        // write to and read from an index file with snapshots but no indices
-        repoData = addRandomSnapshotsToRepoData(repoData, false);
-        writeIndexGen(repository, repoData, repoData.getGenId());  
-        assertEquals(repoData, OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository));
-
-        // write to and read from a index file with random repository data  
-        repoData = addRandomSnapshotsToRepoData(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), true);
-        writeIndexGen(repository, repoData, repoData.getGenId());
-        assertEquals(repoData, OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository));  
-    }
-
-    public void testIndexGenerationalFiles() throws Exception {  
-        final BlobStoreRepository repository = setupRepo();
-        assertEquals(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), RepositoryData.EMPTY);
-
-        final long pendingGeneration = repository.metadata.pendingGeneration();
-
-        // write to index generational file  
-        RepositoryData repositoryData = generateRandomRepoData();
-        writeIndexGen(repository, repositoryData, RepositoryData.EMPTY_REPO_GEN);
-        assertThat(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), equalTo(repositoryData));  
-        final long expectedGeneration = pendingGeneration + 1L;
-        assertThat(repository.latestIndexBlobId(), equalTo(expectedGeneration));
-        assertThat(repository.readSnapshotIndexLatestBlob(), equalTo(expectedGeneration));  
-
-        // adding more and writing to a new index generational file
-        repositoryData = addRandomSnapshotsToRepoData(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), true);  
-        writeIndexGen(repository, repositoryData, repositoryData.getGenId());
-        assertEquals(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), repositoryData);
-        assertThat(repository.latestIndexBlobId(), equalTo(expectedGeneration + 1L));  
-        assertThat(repository.readSnapshotIndexLatestBlob(), equalTo(expectedGeneration + 1L));
-
-        // removing a snapshot and writing to a new index generational file  
-        repositoryData = OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository)
-            .removeSnapshots(Collections.singleton(repositoryData.getSnapshotIds().iterator().next()), ShardGenerations.EMPTY);
-        writeIndexGen(repository, repositoryData, repositoryData.getGenId());  
-        assertEquals(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), repositoryData);
-        assertThat(repository.latestIndexBlobId(), equalTo(expectedGeneration + 2L));
-        assertThat(repository.readSnapshotIndexLatestBlob(), equalTo(expectedGeneration + 2L));  
-    }
-
-    public void testRepositoryDataConcurrentModificationNotAllowed() {  
-        final BlobStoreRepository repository = setupRepo();
-
-        // write to index generational file  
-        RepositoryData repositoryData = generateRandomRepoData();
-        final long startingGeneration = repositoryData.getGenId();
-        final PlainActionFuture<RepositoryData> future1 = PlainActionFuture.newFuture();  
-        repository.writeIndexGen(repositoryData, startingGeneration, Version.CURRENT, Function.identity(), Priority.NORMAL, future1);
-
-        // write repo data again to index generational file, errors because we already wrote to the  
-        // N+1 generation from which this repository data instance was created
-        expectThrows(
-            RepositoryException.class,  
-            () -> writeIndexGen(repository, repositoryData.withGenId(startingGeneration + 1), repositoryData.getGenId())
-        );
-    }  
-
-    public void testBadChunksize() throws Exception {
-        final Client client = client();  
-        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
-        final String repositoryName = "test-repo";
-        Settings.Builder settings = Settings.builder()  
-            .put(node().settings())
-            .put("location", location)
-            .put("chunk_size", randomLongBetween(-10, 0), ByteSizeUnit.BYTES);  
-        expectThrows(
-            RepositoryException.class,
-            () -> OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings)  
-        );
-    }
-
-    public void testPrefixModeVerification() throws Exception {
-        final Client client = client();
-        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());  
-        final String repositoryName = "test-repo";
-        Settings.Builder settings = Settings.builder()
-            .put(node().settings())  
-            .put("location", location)
-            .put(BlobStoreRepository.PREFIX_MODE_VERIFICATION_SETTING.getKey(), true);
-        OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings);  
-
-        final RepositoriesService repositoriesService = getInstanceFromNode(RepositoriesService.class);
-        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);  
-        assertTrue(repository.getPrefixModeVerification());
-    }
-
-    public void testFsRepositoryCompressDeprecatedIgnored() {
-        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
-        final Settings settings = Settings.builder().put(node().settings()).put("location", location).build();  
-        final RepositoryMetadata metadata = new RepositoryMetadata("test-repo", REPO_TYPE, settings);
-
-        Settings useCompressSettings = Settings.builder()  
-            .put(node().getEnvironment().settings())
-            .put(FsRepository.REPOSITORIES_COMPRESS_SETTING.getKey(), true)
-            .build();  
-        Environment useCompressEnvironment = new Environment(useCompressSettings, node().getEnvironment().configDir());
-
-        new FsRepository(metadata, useCompressEnvironment, null, BlobStoreTestUtil.mockClusterService(), null);  
-
-        assertNoDeprecationWarnings();
-    }  
-
-    private static void writeIndexGen(BlobStoreRepository repository, RepositoryData repositoryData, long generation) throws Exception {
-        PlainActionFuture.<RepositoryData, Exception>get(  
-            f -> repository.writeIndexGen(repositoryData, generation, Version.CURRENT, Function.identity(), Priority.NORMAL, f)
-        );
-    }  
-
-    private BlobStoreRepository setupRepo() {
-        final Client client = client();  
-        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
-        final String repositoryName = "test-repo";
-
-        Settings.Builder settings = Settings.builder().put(node().settings()).put("location", location);
-        OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings);
-
-        final RepositoriesService repositoriesService = getInstanceFromNode(RepositoriesService.class);
-        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);
-        assertThat("getBlobContainer has to be lazy initialized", repository.getBlobContainer(), nullValue());  
-        return repository;
-    }
-
-    private RepositoryData addRandomSnapshotsToRepoData(RepositoryData repoData, boolean inclIndices) {
-        int numSnapshots = randomIntBetween(1, 20);
-        for (int i = 0; i < numSnapshots; i++) {  
-            SnapshotId snapshotId = new SnapshotId(randomAlphaOfLength(8), UUIDs.randomBase64UUID());
-            int numIndices = inclIndices ? randomIntBetween(0, 20) : 0;
-            final ShardGenerations.Builder builder = ShardGenerations.builder();  
-            for (int j = 0; j < numIndices; j++) {
-                builder.put(new IndexId(randomAlphaOfLength(8), UUIDs.randomBase64UUID()), 0, "1");
-            }  
-            final ShardGenerations shardGenerations = builder.build();
-            final Map<IndexId, String> indexLookup = shardGenerations.indices()
-                .stream()  
-                .collect(Collectors.toMap(Function.identity(), ind -> randomAlphaOfLength(256)));
-            repoData = repoData.addSnapshot(
-                snapshotId,  
-                randomFrom(SnapshotState.SUCCESS, SnapshotState.PARTIAL, SnapshotState.FAILED),
-                Version.CURRENT,
-                shardGenerations,  
-                indexLookup,
-                indexLookup.values().stream().collect(Collectors.toMap(Function.identity(), ignored -> UUIDs.randomBase64UUID(random())))
-            );  
-        }
-        return repoData;
-    }  
-
-    private String getShardIdentifier(String indexUUID, String shardId) {
-        return String.join("/", indexUUID, shardId);  
-    }
-
-    public void testRemoteStoreShardCleanupTask() {  
-        AtomicBoolean executed1 = new AtomicBoolean(false);
-        Runnable task1 = () -> executed1.set(true);
-        String indexName = "test-idx";  
-        String testIndexUUID = "test-idx-uuid";
-        ShardId shardId = new ShardId(new Index(indexName, testIndexUUID), 0);
-
-        // just adding random shards in ongoing cleanups.
-        RemoteStoreShardCleanupTask.ongoingRemoteDirectoryCleanups.add(getShardIdentifier(testIndexUUID, "1"));
-        RemoteStoreShardCleanupTask.ongoingRemoteDirectoryCleanups.add(getShardIdentifier(testIndexUUID, "2"));  
-
-        // Scenario 1: ongoing = false => executed
-        RemoteStoreShardCleanupTask remoteStoreShardCleanupTask = new RemoteStoreShardCleanupTask(task1, testIndexUUID, shardId);  
-        remoteStoreShardCleanupTask.run();
-        assertTrue(executed1.get());
-
-        // Scenario 2: ongoing = true => currentTask skipped.
-        executed1.set(false);
-        RemoteStoreShardCleanupTask.ongoingRemoteDirectoryCleanups.add(getShardIdentifier(testIndexUUID, "0"));  
-        remoteStoreShardCleanupTask = new RemoteStoreShardCleanupTask(task1, testIndexUUID, shardId);
-        remoteStoreShardCleanupTask.run();
-        assertFalse(executed1.get());  
-    }
-
-    public void testParseShardPath() {  
-        RepositoryData repoData = generateRandomRepoData();
-        IndexId indexId = repoData.getIndices().values().iterator().next();
-        int shardCount = repoData.shardGenerations().getGens(indexId).size();  
-
-        // Version 2.17 has file name starting with indexId
-        String shardPath = String.join(  
-            SnapshotShardPaths.DELIMITER,
-            indexId.getId(),
-            indexId.getName(),  
-            String.valueOf(shardCount),
-            String.valueOf(indexId.getShardPathType()),
-            "1"  
-        );
-        ShardInfo shardInfo = SnapshotShardPaths.parseShardPath(shardPath);
-        assertEquals(shardInfo.getIndexId(), indexId);  
-        assertEquals(shardInfo.getShardCount(), shardCount);
-
-        // Version 2.17 has file name starting with snapshot_path_  
-        shardPath = String.join(
-            SnapshotShardPaths.DELIMITER,
-            SnapshotShardPaths.FILE_PREFIX + indexId.getId(),  
-            indexId.getName(),
-            String.valueOf(shardCount),
-            String.valueOf(indexId.getShardPathType()),  
-            "1"
-        );
-        shardInfo = SnapshotShardPaths.parseShardPath(shardPath);  
-        assertEquals(shardInfo.getIndexId(), indexId);
-        assertEquals(shardInfo.getShardCount(), shardCount);
-    }  
-
-    public void testWriteAndReadShardPaths() throws Exception {
-        BlobStoreRepository repository = setupRepo();  
-        RepositoryData repoData = generateRandomRepoData();
-        SnapshotId snapshotId = repoData.getSnapshotIds().iterator().next();
-
-        Set<String> writtenShardPaths = new HashSet<>();
-        for (IndexId indexId : repoData.getIndices().values()) {
-            if (indexId.getShardPathType() != IndexId.DEFAULT_SHARD_PATH_TYPE) {  
-                String shardPathBlobName = repository.writeIndexShardPaths(indexId, snapshotId, indexId.getShardPathType());
-                writtenShardPaths.add(shardPathBlobName);
-            }  
-        }
-
-        // Read shard paths and verify  
-        Map<String, BlobMetadata> shardPathBlobs = repository.snapshotShardPathBlobContainer().listBlobs();
-
-        // Create sets for comparison  
-        Set<String> expectedPaths = new HashSet<>(writtenShardPaths);
-        Set<String> actualPaths = new HashSet<>(shardPathBlobs.keySet());
-
-        // Remove known extra files - "extra0" file is added by the ExtrasFS, which is part of Lucene's test framework
-        actualPaths.remove("extra0");
-
-        // Check if all expected paths are present in the actual paths
-        assertTrue("All expected paths should be present", actualPaths.containsAll(expectedPaths));
-
-        // Check if there are any unexpected additional paths
-        Set<String> unexpectedPaths = new HashSet<>(actualPaths);
-        unexpectedPaths.removeAll(expectedPaths);  
-        if (!unexpectedPaths.isEmpty()) {
-            logger.warn("Unexpected additional paths found: " + unexpectedPaths);
-        }  
-
-        assertEquals("Expected and actual paths should match after removing known extra files", expectedPaths, actualPaths);
-
-        for (String shardPathBlobName : expectedPaths) {
-            SnapshotShardPaths.ShardInfo shardInfo = SnapshotShardPaths.parseShardPath(shardPathBlobName);
-            IndexId indexId = repoData.getIndices().get(shardInfo.getIndexId().getName());  
-            assertNotNull("IndexId should not be null", indexId);
-            assertEquals("Index ID should match", shardInfo.getIndexId().getId(), indexId.getId());
-            assertEquals("Shard path type should match", shardInfo.getIndexId().getShardPathType(), indexId.getShardPathType());  
-            String[] parts = shardPathBlobName.split("\\" + SnapshotShardPaths.DELIMITER);
-            assertEquals(
-                "Path hash algorithm should be FNV_1A_COMPOSITE_1",  
-                RemoteStoreEnums.PathHashAlgorithm.FNV_1A_COMPOSITE_1,
-                RemoteStoreEnums.PathHashAlgorithm.fromCode(Integer.parseInt(parts[4]))
-            );  
-        }
-    }
-
-    public void testCleanupStaleIndices() throws Exception {
-        // Mock the BlobStoreRepository
-        BlobStoreRepository repository = mock(BlobStoreRepository.class);  
-
-        // Mock BlobContainer for stale index
-        BlobContainer staleIndexContainer = mock(BlobContainer.class);  
-        when(staleIndexContainer.delete()).thenReturn(new DeleteResult(1, 100L));
-
-        // Mock BlobContainer for current index  
-        BlobContainer currentIndexContainer = mock(BlobContainer.class);
-
-        Map<String, BlobContainer> foundIndices = new HashMap<>();  
-        foundIndices.put("stale-index", staleIndexContainer);
-        foundIndices.put("current-index", currentIndexContainer);
-
-        List<SnapshotId> snapshotIds = new ArrayList<>();
-        snapshotIds.add(new SnapshotId("snap1", UUIDs.randomBase64UUID()));
-        snapshotIds.add(new SnapshotId("snap2", UUIDs.randomBase64UUID()));  
-
-        Set<String> survivingIndexIds = new HashSet<>();
-        survivingIndexIds.add("current-index");  
-
-        RepositoryData repositoryData = generateRandomRepoData();
-
-        // Create a mock RemoteStoreLockManagerFactory
-        RemoteStoreLockManagerFactory mockRemoteStoreLockManagerFactory = mock(RemoteStoreLockManagerFactory.class);
-        RemoteSegmentStoreDirectoryFactory mockRemoteSegmentStoreDirectoryFactory = mock(RemoteSegmentStoreDirectoryFactory.class);  
-        RemoteStoreLockManager mockLockManager = mock(RemoteStoreLockManager.class);
-        when(mockRemoteStoreLockManagerFactory.newLockManager(anyString(), anyString(), anyString(), any())).thenReturn(mockLockManager);
-
-        // Create mock snapshot shard paths
-        Map<String, BlobMetadata> mockSnapshotShardPaths = new HashMap<>();
-        String validShardPath = "stale-index-id#stale-index#1#0#1";  
-        mockSnapshotShardPaths.put(validShardPath, mock(BlobMetadata.class));
-
-        // Mock snapshotShardPathBlobContainer  
-        BlobContainer mockSnapshotShardPathBlobContainer = mock(BlobContainer.class);
-        when(mockSnapshotShardPathBlobContainer.delete()).thenReturn(new DeleteResult(1, 50L));
-        when(repository.snapshotShardPathBlobContainer()).thenReturn(mockSnapshotShardPathBlobContainer);  
-
-        // Mock the cleanupStaleIndices method to call our test implementation
-        doAnswer(invocation -> {  
-            Map<String, BlobContainer> indices = invocation.getArgument(1);
-            Set<String> surviving = invocation.getArgument(2);
-            GroupedActionListener<DeleteResult> listener = invocation.getArgument(6);  
-
-            // Simulate the cleanup process
-            DeleteResult result = DeleteResult.ZERO;  
-            for (Map.Entry<String, BlobContainer> entry : indices.entrySet()) {
-                if (!surviving.contains(entry.getKey())) {
-                    result = result.add(entry.getValue().delete());  
-                }
-            }
-            result = result.add(mockSnapshotShardPathBlobContainer.delete());  
-
-            listener.onResponse(result);
-            return null;  
-        }).when(repository).cleanupStaleIndices(any(), any(), any(), any(), any(), any(), any(), any(), anyMap());
-
-        AtomicReference<Collection<DeleteResult>> resultReference = new AtomicReference<>();  
-        CountDownLatch latch = new CountDownLatch(1);
-
-        GroupedActionListener<DeleteResult> listener = new GroupedActionListener<>(ActionListener.wrap(deleteResults -> {  
-            resultReference.set(deleteResults);
-            latch.countDown();
-        }, e -> {  
-            logger.error("Error in cleanupStaleIndices", e);
-            latch.countDown();
-        }), 1);  
-
-        // Call the method we're testing
-        repository.cleanupStaleIndices(  
-            snapshotIds,
-            foundIndices,
-            survivingIndexIds,  
-            mockRemoteStoreLockManagerFactory,
-            null,
-            repositoryData,  
-            listener,
-            mockSnapshotShardPaths,
-            Collections.emptyMap()  
-        );
-
-        assertTrue("Cleanup did not complete within the expected time", latch.await(30, TimeUnit.SECONDS));  
-
-        Collection<DeleteResult> results = resultReference.get();
-        assertNotNull("DeleteResult collection should not be null", results);  
-        assertFalse("DeleteResult collection should not be empty", results.isEmpty());
-
-        DeleteResult combinedResult = results.stream().reduce(DeleteResult.ZERO, DeleteResult::add);  
-
-        assertTrue("Bytes deleted should be greater than 0", combinedResult.bytesDeleted() > 0);
-        assertTrue("Blobs deleted should be greater than 0", combinedResult.blobsDeleted() > 0);  
-
-        // Verify that the stale index was processed for deletion
-        verify(staleIndexContainer, times(1)).delete();  
-
-        // Verify that the current index was not processed for deletion
-        verify(currentIndexContainer, never()).delete();  
-
-        // Verify that snapshot shard paths were considered in the cleanup process
-        verify(mockSnapshotShardPathBlobContainer, times(1)).delete();  
-
-        // Verify the total number of bytes and blobs deleted
-        assertEquals("Total bytes deleted should be 150", 150L, combinedResult.bytesDeleted());  
-        assertEquals("Total blobs deleted should be 2", 2, combinedResult.blobsDeleted());
-    }
-
-    public void testGetMetadata() {
-        BlobStoreRepository repository = setupRepo();
-        RepositoryMetadata metadata = repository.getMetadata();  
-        assertNotNull(metadata);
-        assertEquals(metadata.name(), "test-repo");
-        assertEquals(metadata.type(), REPO_TYPE);  
-        repository.close();
-    }
-
-    public void testGetNamedXContentRegistry() {
-        BlobStoreRepository repository = setupRepo();
-        NamedXContentRegistry registry = repository.getNamedXContentRegistry();  
+    public void testRemoteDirectoryCleanupAsyncPropagatesIndexMetadata() throws Exception {  
+            ThreadPool.Names.REMOTE_PURGE,
         assertNotNull(registry);
-        repository.close();
-    }  
-
-    public void testGetCompressor() {
-        BlobStoreRepository repository = setupRepo();  
-        Compressor compressor = repository.getCompressor();
-        assertNotNull(compressor);
-        repository.close();  
-    }
-
-    public void testGetStats() {  
-        BlobStoreRepository repository = setupRepo();
-        RepositoryStats stats = repository.stats();
-        assertNotNull(stats);  
-        repository.close();
-    }
-
-    public void testGetStats_When_Sse_Enabled_WithExtended_Stats() {
-        BlobStoreRepository repository = setupRepo();
-        BlobStoreRepository repoSpy = Mockito.spy(repository);  
-
-        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, true);
-        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, true);  
-
-        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);
-        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);  
-
-        RepositoryStats stats = repoSpy.stats();
-        assertNotNull(stats);  
-        assertTrue(stats.detailed);
-        Map<String, Long> mergedStats = stats.extendedStats.get(BlobStore.Metric.REQUEST_SUCCESS);
-
-        assertEquals(15, mergedStats.get("GET").longValue());
+        }).when(repository).cleanupStaleIndices(any(), any(), any(), any(), any(), any(), any(), any(), anyMap());
+import java.nio.file.Path;
+            eq("repo"),
+        RepositoryData repositoryData = generateRandomRepoData();
         assertEquals(30, mergedStats.get("PUT").longValue());
-
+            return Collections.singletonMap(  
+import org.opensearch.common.Priority;
         repository.close();
-    }
-
-    public void testGetStats_When_Sse_Only_Enabled_WithExtended_Stats() {
-        BlobStoreRepository repository = setupRepo();
-        BlobStoreRepository repoSpy = Mockito.spy(repository);  
-
-        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, true);
-        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);  
-
-        RepositoryStats stats = repoSpy.stats();
-        assertNotNull(stats);  
-        assertTrue(stats.detailed);
-        Map<String, Long> mergedStats = stats.extendedStats.get(BlobStore.Metric.REQUEST_SUCCESS);
-
-        assertEquals(5, mergedStats.get("GET").longValue());
-        assertEquals(10, mergedStats.get("PUT").longValue());
-
-        repository.close();
-    }
-
-    public void testGetStats_When_Sse_not_Enabled_WithExtended_Stats() {
-        BlobStoreRepository repository = setupRepo();
-        BlobStoreRepository repoSpy = Mockito.spy(repository);  
-
-        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, true);
-        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);  
-
-        RepositoryStats stats = repoSpy.stats();
-        assertNotNull(stats);  
-        assertTrue(stats.detailed);
-        Map<String, Long> mergedStats = stats.extendedStats.get(BlobStore.Metric.REQUEST_SUCCESS);
-
-        assertEquals(10, mergedStats.get("GET").longValue());
-        assertEquals(20, mergedStats.get("PUT").longValue());
-
-        repository.close();
-    }
-
-    public void testGetStats_When_Sse_Enabled() {
-        BlobStoreRepository repository = setupRepo();
-        BlobStoreRepository repoSpy = Mockito.spy(repository);  
-
-        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, false);
-        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, false);  
-
-        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);
-        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);  
-
-        RepositoryStats stats = repoSpy.stats();
-        assertNotNull(stats);  
-        assertFalse(stats.detailed);
-
-        assertEquals(45, stats.requestCounts.get("requests_count").longValue());  
-        repository.close();
-    }
-
-    public void testGetStats_When_Sse_Disabled() {
-        BlobStoreRepository repository = setupRepo();
-        BlobStoreRepository repoSpy = Mockito.spy(repository);  
-
-        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, false);
-
-        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);
-
-        RepositoryStats stats = repoSpy.stats();  
-        assertNotNull(stats);
-        assertFalse(stats.detailed);
-
-        assertEquals(30, stats.requestCounts.get("requests_count").longValue());
-        repository.close();
-    }  
-
-    public void testGetStats_When_Sse_Only_Enabled() {
         BlobStoreRepository repository = setupRepo();  
-        BlobStoreRepository repoSpy = Mockito.spy(repository);
-
-        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, false);  
-        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);
-
-        RepositoryStats stats = repoSpy.stats();  
-        assertNotNull(stats);
-        assertFalse(stats.detailed);
-
-        assertEquals(15, stats.requestCounts.get("requests_count").longValue());
+        repositoryData = addRandomSnapshotsToRepoData(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), true);  
+        assertNoDeprecationWarnings();
+        when(tp.executor(ThreadPool.Names.REMOTE_PURGE)).thenReturn(directExecutor);  
+ * the Apache License, Version 2.0 (the "License"); you may
+        when(staleIndexContainer.delete()).thenReturn(new DeleteResult(1, 100L));
+ * KIND, either express or implied.  See the License for the
+        Map<String, BlobMetadata> mockSnapshotShardPaths = new HashMap<>();
+                RemoteStoreEnums.PathHashAlgorithm.FNV_1A_COMPOSITE_1,
+        assertThat(repository.latestIndexBlobId(), equalTo(expectedGeneration + 2L));
+    public void testGetLowPriorityRemoteUploadThrottleTimeInNanos() {
+            int numIndices = inclIndices ? randomIntBetween(0, 20) : 0;
+import static org.mockito.ArgumentMatchers.eq;  
+            "repo",
+            () -> writeIndexGen(repository, repositoryData.withGenId(startingGeneration + 1), repositoryData.getGenId())
+        return String.join("/", indexUUID, shardId);  
+ * software distributed under the License is distributed on an
+            eq(indexUUID),
+    }
         repository.close();
+            Collections.emptyMap()  
+        public Map<String, Repository.Factory> getRepositories(  
+        Environment useCompressEnvironment = new Environment(useCompressSettings, node().getEnvironment().configDir());
+        assertEquals(repoData.getSnapshotIds().size(), 0);
+        RepositoryStats stats = repoSpy.stats();
+        assertEquals(repository.repositoryDataCacheThreshold, expectedThreshold);
+        assertEquals(pendingGeneration + 1L, repoData.getGenId());
+            logger.warn("Unexpected additional paths found: " + unexpectedPaths);
+        assertEquals(metadata.type(), REPO_TYPE);  
+        repoData = addRandomSnapshotsToRepoData(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), true);
+            String.valueOf(shardCount),
+            () -> OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings)  
     }  
-
+            }  
+                    result = result.add(entry.getValue().delete());  
+        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, false);
+        final RepositoryData emptyData = RepositoryData.EMPTY;
+                }
+            .put(node().settings())
+            .sorted((s1, s2) -> s1.getName().compareTo(s2.getName()))
+ */  
+    }  
+        actualPaths.remove("extra0");
+    public void testSnapshotRepositoryDataCacheDefaultSetting() {
+        when(mockSnapshotShardPathBlobContainer.delete()).thenReturn(new DeleteResult(1, 50L));
+        Mockito.reset(factory);  
+        if (!unexpectedPaths.isEmpty()) {
+            false,  
+        logger.info("--> make sure the node's repository can resolve the snapshots");
+        );
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+        Map<String, BlobMetadata> shardPathBlobs = repository.snapshotShardPathBlobContainer().listBlobs();
+        // then
+            tp,
+        List<Setting<?>> settings = repository.getRestrictedSystemRepositorySettings();  
+            eq(null),
+            )
+        Settings.Builder settings = Settings.builder().put(node().settings()).put("location", location);  
+import static org.mockito.Mockito.times;
+        RemoteStoreLockManager mockLockManager = mock(RemoteStoreLockManager.class);
+        writeIndexGen(repository, repositoryData, repositoryData.getGenId());  
+        repository.close();  
+        long throttleTime = repository.getLowPriorityRemoteUploadThrottleTimeInNanos();
+            result = result.add(mockSnapshotShardPathBlobContainer.delete());  
+            RecoverySettings recoverySettings
+    }
+        );  
+    }  
+            eq(false),  
+    public void testGetSnapshotThrottleTimeInNanos() {
+        IndexId indexId = repoData.getIndices().values().iterator().next();
+        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);
+        );
+            SnapshotShardPaths.ShardInfo shardInfo = SnapshotShardPaths.parseShardPath(shardPathBlobName);
+import org.opensearch.snapshots.SnapshotShardPaths.ShardInfo;
+    public void testGetStats_When_Sse_Disabled() {
+import org.opensearch.core.index.shard.ShardId;  
+        long throttleTime = repository.getRemoteUploadThrottleTimeInNanos();  
+        RepositoryStats stats = repository.stats();
+ * license agreements. See the NOTICE file distributed with
+        repository.close();
+        // write repo data again to index generational file, errors because we already wrote to the  
+import static org.mockito.Mockito.never;
+        shardInfo = SnapshotShardPaths.parseShardPath(shardPath);  
+        assertEquals(shardInfo.getShardCount(), shardCount);
+import org.opensearch.plugins.Plugin;
+    }  
+import org.opensearch.snapshots.SnapshotState;
+        ShardInfo shardInfo = SnapshotShardPaths.parseShardPath(shardPath);
+        AtomicBoolean executed1 = new AtomicBoolean(false);
+        );  
+            .cluster()
+import org.opensearch.repositories.fs.FsRepository;
+        BlobStoreRepository repository = setupRepo();
+        assertTrue(stats.detailed);
+        repository.close();
+import org.mockito.ArgumentCaptor;
+        RepositoryData repoData = OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository);
+ * under the License.  
+            String[] parts = shardPathBlobName.split("\\" + SnapshotShardPaths.DELIMITER);
+            for (Map.Entry<String, BlobContainer> entry : indices.entrySet()) {
+        BlobStoreRepository repository = mock(BlobStoreRepository.class);  
+            .stream()  
+        BlobStoreRepository repoSpy = Mockito.spy(repository);  
+        final SnapshotId snapshotId1 = createSnapshotResponse.getSnapshotInfo().snapshotId();  
+            "1"
+            .removeSnapshots(Collections.singleton(repositoryData.getSnapshotIds().iterator().next()), ShardGenerations.EMPTY);
+        String shardPath = String.join(  
+        PlainActionFuture.<RepositoryData, Exception>get(  
+        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
+                .collect(Collectors.toMap(Function.identity(), ind -> randomAlphaOfLength(256)));
+        assertTrue(throttleTime >= 0);  
+        RepositoryStats stats = repoSpy.stats();
+    }
+    }  
+        assertEquals(repoData, emptyData);
+            eq(null),
+        assertEquals(maxSafeArraySize, expectedThreshold);  
+        // write to and read from a index file with random repository data  
+import org.opensearch.snapshots.SnapshotShardPaths;  
+    public void testRepositoryDataConcurrentModificationNotAllowed() {  
+        assertEquals(shardInfo.getShardCount(), shardCount);
+        }
+        repository.close();  
+import java.util.HashMap;
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
+        RemoteSegmentStoreDirectoryFactory factory = mock(RemoteSegmentStoreDirectoryFactory.class);
+        assertTrue(stats.detailed);
+        assertTrue(settings.contains(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY));
+        List<SnapshotId> snapshotIds = new ArrayList<>();
+        assertNotNull("IndexSettings should not be null when IndexMetadata is provided", captor.getValue());  
+        unexpectedPaths.removeAll(expectedPaths);  
+            pathStrategy,
+        BlobStoreRepository repository = setupRepo();
+            foundIndices,
+/*  
+        if (extendedStats) {
+        final RepositoriesService repositoriesService = getInstanceFromNode(RepositoriesService.class);
+        assertEquals("Expected and actual paths should match after removing known extra files", expectedPaths, actualPaths);
+import org.opensearch.repositories.ShardGenerations;  
+            Map<BlobStore.Metric, Map<String, Long>> blobStoreMetricMap = Map.of(BlobStore.Metric.REQUEST_SUCCESS, blobStoreStatsMap);
+        expectThrows(
+        }
+    public void testPrefixModeVerification() throws Exception {
+        // Mock the cleanupStaleIndices method to call our test implementation
+import org.opensearch.test.OpenSearchIntegTestCase;  
+            Set<String> surviving = invocation.getArgument(2);
+import java.util.concurrent.CountDownLatch;  
+        SnapshotId snapshotId = repoData.getSnapshotIds().iterator().next();
+            .put("location", location)
+        assertNotNull(stats);  
+        CountDownLatch latch = new CountDownLatch(1);
+        repository.close();
+        assertFalse(stats.detailed);
+import org.opensearch.indices.recovery.RecoverySettings;  
+ * not use this file except in compliance with the License.
+ *
+        RemoteStoreShardCleanupTask.ongoingRemoteDirectoryCleanups.add(getShardIdentifier(testIndexUUID, "2"));  
+import static org.mockito.Mockito.doAnswer;
+        BlobStoreRepository.remoteDirectoryCleanupAsync(
+        assertFalse(executed1.get());  
+        repository.close();
+        assertNotNull(stats);  
+        // Create mock snapshot shard paths
+        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
+import org.opensearch.common.blobstore.BlobMetadata;
+import java.util.HashSet;
+            IndexId indexId = repoData.getIndices().get(shardInfo.getIndexId().getName());  
+            Environment env,
+    // the reason for this plug-in is to drop any assertSnapshotOrGenericThread as mostly all access in this test goes from test threads
+    }  
+            listener,
+        repository.close();
+import org.opensearch.core.common.unit.ByteSizeUnit;  
+import static org.mockito.Mockito.mock;  
+        assertThat(repository.readSnapshotIndexLatestBlob(), equalTo(expectedGeneration + 1L));
+        }
+import java.util.Set;
+    }
+    }
+        RemoteStoreShardCleanupTask remoteStoreShardCleanupTask = new RemoteStoreShardCleanupTask(task1, testIndexUUID, shardId);  
+            String.valueOf(indexId.getShardPathType()),  
+        assertThat(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository).getSnapshotIds().size(), equalTo(0));
+            for (int j = 0; j < numIndices; j++) {
+        ShardId shardId = new ShardId(new Index("idx", indexUUID), 0);  
+        Settings.Builder settings = Settings.builder()
+        NamedXContentRegistry registry = repository.getNamedXContentRegistry();  
+        final Client client = client();  
+            .build();  
+        // Read shard paths and verify  
+        Set<String> expectedPaths = new HashSet<>(writtenShardPaths);
+        int numSnapshots = randomIntBetween(1, 20);
+            indexUUID,
+import java.util.List;  
+        // removing a snapshot and writing to a new index generational file  
+        BlobStoreRepository repository = setupRepo();
+        long defaultThresholdOfHeap = ByteSizeUnit.GB.toBytes(1);
+                    }  
+            SnapshotId snapshotId = new SnapshotId(randomAlphaOfLength(8), UUIDs.randomBase64UUID());
+        }  
+    }
+                "Path hash algorithm should be FNV_1A_COMPOSITE_1",  
+            eq(shardId),
+        RepositoryData repositoryData = generateRandomRepoData();
+    public void testRetrieveSnapshots() throws Exception {  
+        Settings useCompressSettings = Settings.builder()  
+            shardId,
+        // Case (a): non-null IndexMetadata propagated
+        repository.writeIndexGen(repositoryData, startingGeneration, Version.CURRENT, Function.identity(), Priority.NORMAL, future1);
+        long expectedThreshold = Math.max(ByteSizeUnit.KB.toBytes(500), maxThreshold / 2);
+        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);  
+        // write to and read from a index file with no entries  
+        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);
+        assertEquals(45, stats.requestCounts.get("requests_count").longValue());  
+        // Call the method we're testing
+            repoData = repoData.addSnapshot(
+    }
+        assertTrue("Bytes deleted should be greater than 0", combinedResult.bytesDeleted() > 0);
+        final List<SnapshotId> originalSnapshots = Arrays.asList(snapshotId1, snapshotId2);
+            client().prepareIndex(indexName).setId(id).setSource("text", "sometext").get();
+        // given  
+                Version.CURRENT,
+        // Scenario 2: ongoing = true => currentTask skipped.
+    }
+            eq(false),
+    public void testGetRemoteDownloadThrottleTimeInNanos() {  
+        @Override
+        assertEquals(defaultAbsoluteThreshold, result);
+        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
+    }
+        assertTrue(stats.detailed);
+        BlobContainer mockSnapshotShardPathBlobContainer = mock(BlobContainer.class);
+    private BlobStoreRepository setupRepo() {
+        final long pendingGeneration = repository.metadata.pendingGeneration();
+    }
+                String shardPathBlobName = repository.writeIndexShardPaths(indexId, snapshotId, indexId.getShardPathType());
+        foundIndices.put("stale-index", staleIndexContainer);
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        // Verify that the current index was not processed for deletion
+            f -> repository.writeIndexGen(repositoryData, generation, Version.CURRENT, Function.identity(), Priority.NORMAL, f)
+import org.opensearch.action.support.GroupedActionListener;  
+            .put(FsRepository.REPOSITORIES_COMPRESS_SETTING.getKey(), true)
+import java.util.concurrent.TimeUnit;
+            indexId.getName(),  
+    }
+import java.util.Collection;
+        Map<String, Long> mergedStats = stats.extendedStats.get(BlobStore.Metric.REQUEST_SUCCESS);
+import org.opensearch.threadpool.ThreadPool;
+                writtenShardPaths.add(shardPathBlobName);
+        BlobStoreRepository repository = setupRepo();  
+        long defaultAbsoluteThreshold = ByteSizeUnit.KB.toBytes(500);  
+        assertTrue(settings.contains(BlobStoreRepository.READONLY_SETTING));  
+        for (int i = 0; i < numSnapshots; i++) {  
+        Compressor compressor = repository.getCompressor();
+        assertNotNull(stats);
+ *
+ * specific language governing permissions and limitations
+                Settings.builder()
+        Set<String> survivingIndexIds = new HashSet<>();
+        assertTrue(executed1.get());
+            latch.countDown();
+        long maxThreshold = BlobStoreRepository.calculateMaxSnapshotRepositoryDataCacheThreshold();
+import org.opensearch.core.index.Index;
+        assertTrue(throttleTime >= 0);  
+        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);
+        logger.info("--> create second snapshot");
+    }
+        repository.close();
+            pathStrategy,  
+        assertEquals(5, mergedStats.get("GET").longValue());
+import org.opensearch.common.settings.Setting;
+        RepositoryStats stats = repoSpy.stats();
+            String.valueOf(indexId.getShardPathType()),
+        BlobStoreRepository repository = setupRepo();
+        }, e -> {  
+import org.opensearch.common.blobstore.BlobContainer;
+            // Simulate the cleanup process
+        String testIndexUUID = "test-idx-uuid";
+            .setWaitForCompletion(true)  
+    public void testGetRemoteUploadThrottleTimeInNanos() {
+    }
+            String id = Integer.toString(i);  
+        new FsRepository(metadata, useCompressEnvironment, null, BlobStoreTestUtil.mockClusterService(), null);  
+        assertEquals(shardInfo.getIndexId(), indexId);  
+import java.util.ArrayList;  
+        CreateSnapshotResponse createSnapshotResponse = client.admin()  
+            indexUUID,  
+        final RepositoriesService repositoriesService = getInstanceFromNode(RepositoriesService.class);
+            null,
+import org.opensearch.index.remote.RemoteStoreEnums;
+        BlobStoreRepository repository = setupRepo();  
+        Set<String> actualPaths = new HashSet<>(shardPathBlobs.keySet());
+        Map<String, Long> mergedStats = stats.extendedStats.get(BlobStore.Metric.REQUEST_SUCCESS);
+        executed1.set(false);
+            "1"  
+        repoData = addRandomSnapshotsToRepoData(repoData, false);
+            resultReference.set(deleteResults);
+            .getSnapshotIds()
+        expectThrows(
+        // Mock the BlobStoreRepository
+    public void testCleanupStaleIndices() throws Exception {
+    }
+            new IOException("expected-short-circuit")
+        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);  
+        final long expectedGeneration = pendingGeneration + 1L;
+        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);  
+import org.mockito.Mockito;  
+        // write to and read from an index file with snapshots but no indices
+        final String repositoryName = "test-repo";
+import java.util.Map;
+                REPO_TYPE,
+import org.opensearch.snapshots.SnapshotId;
+        OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings);  
+            ClusterService clusterService,  
+            tp,  
+        // Mock BlobContainer for current index  
+        }
+import org.opensearch.common.blobstore.DeleteResult;
+        BlobStoreRepository repository = setupRepo();
+        }  
+        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, false);  
+        int maxSafeArraySize = Integer.MAX_VALUE - 8;
+        assertNotNull(stats);  
+    public void testGetStats_When_Sse_Only_Enabled_WithExtended_Stats() {
+        repository.close();
+            logger.error("Error in cleanupStaleIndices", e);
+            captor.capture()
+import org.opensearch.transport.client.Client;
+        final BlobStoreRepository repository = setupRepo();
+        );
+/*  
+        // when
+import static org.mockito.ArgumentMatchers.any;  
+        long throttleTime = repository.getRemoteDownloadThrottleTimeInNanos();
+        final Settings settings = Settings.builder().put(node().settings()).put("location", location).build();  
+import org.opensearch.repositories.RepositoryStats;
+        Map<String, BlobContainer> foundIndices = new HashMap<>();  
     private BlobStore getMockedBlobStoreWithStats(long getCount, long putCount, boolean extendedStats) {
         BlobStore blobStore = Mockito.mock(BlobStore.class);  
-        HashMap<String, Long> blobStoreStatsMap = new HashMap<>();
-        if (extendedStats) {
-            blobStoreStatsMap.put("GET", getCount);  
-            blobStoreStatsMap.put("PUT", putCount);
-            Map<BlobStore.Metric, Map<String, Long>> blobStoreMetricMap = Map.of(BlobStore.Metric.REQUEST_SUCCESS, blobStoreStatsMap);
-            Mockito.when(blobStore.extendedStats()).thenReturn(blobStoreMetricMap);  
-        } else {
-            blobStoreStatsMap.put("requests_count", getCount + putCount);
-            Mockito.when(blobStore.stats()).thenReturn(blobStoreStatsMap);  
-        }
-        return blobStore;
-    }  
-
-    public void testGetSnapshotThrottleTimeInNanos() {
-        BlobStoreRepository repository = setupRepo();  
-        long throttleTime = repository.getSnapshotThrottleTimeInNanos();
-        assertTrue(throttleTime >= 0);
-        repository.close();  
-    }
-
-    public void testGetRestoreThrottleTimeInNanos() {  
-        BlobStoreRepository repository = setupRepo();
+        final String repositoryName = "test-repo";
+            new IOException("expected-short-circuit")
+    public void testGetCompressor() {
+import static org.hamcrest.Matchers.equalTo;
+        int shardCount = repoData.shardGenerations().getGens(indexId).size();  
+            String.valueOf(shardCount),
+        assertNotNull(stats);  
         long throttleTime = repository.getRestoreThrottleTimeInNanos();
-        assertTrue(throttleTime >= 0);  
-        repository.close();
-    }
-
-    public void testGetRemoteUploadThrottleTimeInNanos() {
-        BlobStoreRepository repository = setupRepo();
-        long throttleTime = repository.getRemoteUploadThrottleTimeInNanos();  
-        assertTrue(throttleTime >= 0);
-        repository.close();
+import org.opensearch.repositories.Repository;
     }  
-
-    public void testGetLowPriorityRemoteUploadThrottleTimeInNanos() {
-        BlobStoreRepository repository = setupRepo();  
-        long throttleTime = repository.getLowPriorityRemoteUploadThrottleTimeInNanos();
-        assertTrue(throttleTime >= 0);
-        repository.close();  
-    }
-
-    public void testGetRemoteDownloadThrottleTimeInNanos() {  
-        BlobStoreRepository repository = setupRepo();
-        long throttleTime = repository.getRemoteDownloadThrottleTimeInNanos();
-        assertTrue(throttleTime >= 0);  
-        repository.close();
-    }
-
-    public void testIsReadOnly() {
-        BlobStoreRepository repository = setupRepo();
-        assertFalse(repository.isReadOnly());  
-        repository.close();
-    }
-
-    public void testIsSystemRepository() {
-        BlobStoreRepository repository = setupRepo();
         assertFalse(repository.isSystemRepository());  
-        repository.close();
-    }
-
-    public void testGetRestrictedSystemRepositorySettings() {
+        final RepositoriesService repositoriesService = getInstanceFromNode(RepositoriesService.class);  
+        mockSnapshotShardPaths.put(validShardPath, mock(BlobMetadata.class));
         BlobStoreRepository repository = setupRepo();
-        List<Setting<?>> settings = repository.getRestrictedSystemRepositorySettings();  
-        assertNotNull(settings);
-        assertTrue(settings.contains(BlobStoreRepository.SYSTEM_REPOSITORY_SETTING));
-        assertTrue(settings.contains(BlobStoreRepository.READONLY_SETTING));  
-        assertTrue(settings.contains(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY));
-        repository.close();
-    }  
-
-    public void testSnapshotRepositoryDataCacheDefaultSetting() {
-        // given  
-        BlobStoreRepository repository = setupRepo();
-        long maxThreshold = BlobStoreRepository.calculateMaxSnapshotRepositoryDataCacheThreshold();
-
-        // when
-        long expectedThreshold = Math.max(ByteSizeUnit.KB.toBytes(500), maxThreshold / 2);
-
-        // then
-        assertEquals(repository.repositoryDataCacheThreshold, expectedThreshold);
-    }  
-
     public void testHeapThresholdUsed() {
-        // given  
-        long defaultThresholdOfHeap = ByteSizeUnit.GB.toBytes(1);
-        long defaultAbsoluteThreshold = ByteSizeUnit.KB.toBytes(500);
-
-        // when
-        long expectedThreshold = calculateMaxWithinIntLimit(defaultThresholdOfHeap, defaultAbsoluteThreshold);
-
-        // then
-        assertEquals(defaultThresholdOfHeap, expectedThreshold);
-    }  
-
-    public void testAbsoluteThresholdUsed() {
-        // given  
-        long defaultThresholdOfHeap = ByteSizeUnit.KB.toBytes(499);
-        long defaultAbsoluteThreshold = ByteSizeUnit.KB.toBytes(500);
-
-        // when
-        long result = calculateMaxWithinIntLimit(defaultThresholdOfHeap, defaultAbsoluteThreshold);
-
-        // then
-        assertEquals(defaultAbsoluteThreshold, result);
-    }  
-
-    public void testThresholdCappedAtIntMax() {
-        // given  
-        int maxSafeArraySize = Integer.MAX_VALUE - 8;
-        long defaultThresholdOfHeap = (long) maxSafeArraySize + 1;
-        long defaultAbsoluteThreshold = ByteSizeUnit.KB.toBytes(500);  
-
-        // when
-        long expectedThreshold = calculateMaxWithinIntLimit(defaultThresholdOfHeap, defaultAbsoluteThreshold);  
-
-        // then
-        assertEquals(maxSafeArraySize, expectedThreshold);  
-    }
-
-    /**  
-     * Verifies that {@code BlobStoreRepository.remoteDirectoryCleanupAsync} propagates the
-     * {@link IndexMetadata} argument through to {@code RemoteSegmentStoreDirectory.remoteDirectoryCleanup},
-     * which in turn passes it as an {@link IndexSettings} to the factory's 8-arg {@code newDirectory}.  
-     * Guards against regressions where IndexMetadata is dropped or replaced with null during cleanup.
-     */
-    public void testRemoteDirectoryCleanupAsyncPropagatesIndexMetadata() throws Exception {  
-        RemoteSegmentStoreDirectoryFactory factory = mock(RemoteSegmentStoreDirectoryFactory.class);
-        // factory.newDirectory throws IOException to short-circuit; we only care about the args passed
-        when(factory.newDirectory(anyString(), anyString(), any(), any(), nullable(String.class), eq(false), eq(false), any())).thenThrow(  
-            new IOException("expected-short-circuit")
-        );
-
-        ThreadPool tp = mock(ThreadPool.class);
-        ExecutorService directExecutor = OpenSearchExecutors.newDirectExecutorService();
-        when(tp.executor(ThreadPool.Names.REMOTE_PURGE)).thenReturn(directExecutor);  
-
-        String indexUUID = "test-uuid";
-        ShardId shardId = new ShardId(new Index("idx", indexUUID), 0);  
-        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(RemoteStoreEnums.PathType.FIXED);
-
-        IndexMetadata indexMetadata = IndexMetadata.builder("idx")  
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
-                    .put(IndexMetadata.SETTING_INDEX_UUID, indexUUID)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)  
-            )
-            .build();
-
-        // Case (a): non-null IndexMetadata propagated
-        BlobStoreRepository.remoteDirectoryCleanupAsync(
-            factory,  
-            tp,
-            "repo",
-            indexUUID,  
-            shardId,
-            ThreadPool.Names.REMOTE_PURGE,
-            pathStrategy,  
-            false,
-            indexMetadata
-        );  
-        ArgumentCaptor<IndexSettings> captor = ArgumentCaptor.forClass(IndexSettings.class);
-        verify(factory).newDirectory(
-            eq("repo"),  
+ * compatible open source license.
+        RepositoryMetadata metadata = repository.getMetadata();  
             eq(indexUUID),
-            eq(shardId),
-            eq(pathStrategy),  
-            eq(null),
-            eq(false),
-            eq(false),  
-            captor.capture()
-        );
-        assertNotNull("IndexSettings should not be null when IndexMetadata is provided", captor.getValue());  
-
-        // Case (b): null IndexMetadata propagated as null
-        Mockito.reset(factory);  
-        when(factory.newDirectory(anyString(), anyString(), any(), any(), nullable(String.class), eq(false), eq(false), any())).thenThrow(
-            new IOException("expected-short-circuit")
-        );  
-        BlobStoreRepository.remoteDirectoryCleanupAsync(
-            factory,
-            tp,  
-            "repo",
-            indexUUID,
-            shardId,  
-            ThreadPool.Names.REMOTE_PURGE,
-            pathStrategy,
-            false,  
-            null
-        );
-        verify(factory).newDirectory(  
-            eq("repo"),
-            eq(indexUUID),
-            eq(shardId),  
-            eq(pathStrategy),
-            eq(null),
-            eq(false),  
-            eq(false),
-            (IndexSettings) eq(null)
-        );  
-    }
+import static org.mockito.ArgumentMatchers.nullable;
 }
+            blobStoreStatsMap.put("GET", getCount);  
+        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, true);
+        for (int i = 0; i < numDocs; i++) {
+            assertEquals("Index ID should match", shardInfo.getIndexId().getId(), indexId.getId());
+        final Client client = client();
+        final long pendingGeneration = repository.metadata.pendingGeneration();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertTrue("Cleanup did not complete within the expected time", latch.await(30, TimeUnit.SECONDS));  
+        assertEquals(10, mergedStats.get("GET").longValue());
+        assertTrue("All expected paths should be present", actualPaths.containsAll(expectedPaths));
+        createSnapshotResponse = client.admin()  
+        logger.info("-->  creating repository");
+        String indexUUID = "test-uuid";
+        BlobContainer staleIndexContainer = mock(BlobContainer.class);  
+        // adding more and writing to a new index generational file
+            snapshotIds,
+            .put(node().getEnvironment().settings())
+    public void testGetStats_When_Sse_not_Enabled_WithExtended_Stats() {
+        assertEquals(20, mergedStats.get("PUT").longValue());
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+        assertEquals(shardInfo.getIndexId(), indexId);
+     */
+        repository.close();
+                    protected void assertSnapshotOrGenericThread() {
+import org.opensearch.common.settings.Settings;  
+                indexLookup,
+import static org.hamcrest.Matchers.nullValue;
+            .prepareCreateSnapshot(repositoryName, "test-snap-2")
+            );
+ * GitHub history for details.
+        assertEquals(repoData.getIndices().size(), 0);  
+import java.util.concurrent.ExecutorService;
+        assertThat(repository.readSnapshotIndexLatestBlob(), equalTo(expectedGeneration + 2L));  
+        final BlobStoreRepository repository = setupRepo();
+            eq(pathStrategy),  
+ *  
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+    }
+            eq(false),
+        assertThat(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), equalTo(repositoryData));  
+                snapshotId,  
+    }
+        final PlainActionFuture<RepositoryData> future1 = PlainActionFuture.newFuture();  
+        BlobStoreRepository repoSpy = Mockito.spy(repository);  
+        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);
+        verify(mockSnapshotShardPathBlobContainer, times(1)).delete();  
+        BlobStoreRepository repository = setupRepo();
+        Mockito.doReturn(sseBlobStore).when(repoSpy).getBlobStore(true);  
+        RemoteStoreShardCleanupTask.ongoingRemoteDirectoryCleanups.add(getShardIdentifier(testIndexUUID, "0"));  
+            assertEquals(
+        remoteStoreShardCleanupTask.run();
+        RemoteStoreShardCleanupTask.ongoingRemoteDirectoryCleanups.add(getShardIdentifier(testIndexUUID, "1"));
+        long expectedThreshold = calculateMaxWithinIntLimit(defaultThresholdOfHeap, defaultAbsoluteThreshold);  
+    public static class FsLikeRepoPlugin extends Plugin implements RepositoryPlugin {  
+        when(factory.newDirectory(anyString(), anyString(), any(), any(), nullable(String.class), eq(false), eq(false), any())).thenThrow(
+        }
+package org.opensearch.repositories.blobstore;
+            false,
+        BlobStoreRepository repository = setupRepo();
+    }
+        ) {
+import org.opensearch.repositories.RepositoriesService;
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)  
+            .put("chunk_size", randomLongBetween(-10, 0), ByteSizeUnit.BYTES);  
+        assertEquals(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), RepositoryData.EMPTY);
+        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(RemoteStoreEnums.PathType.FIXED);
+    }  
+        // N+1 generation from which this repository data instance was created
+            factory,  
+        return repository;
+    }
+        repository.close();
+        repository.close();
+        writeIndexGen(repository, repoData, repoData.getGenId());
+        // Check if there are any unexpected additional paths
+                }
+        assertThat(snapshotIds, equalTo(originalSnapshots));  
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
+        BlobStoreRepository repository = setupRepo();  
+        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
+/**  
+    public void testBadChunksize() throws Exception {
+            assertEquals("Shard path type should match", shardInfo.getIndexId().getShardPathType(), indexId.getShardPathType());  
+            Map<String, BlobContainer> indices = invocation.getArgument(1);
+import org.opensearch.action.support.PlainActionFuture;
+    public void testGetStats_When_Sse_Only_Enabled() {
+    }
+        BlobStoreRepository repoSpy = Mockito.spy(repository);
+        verify(currentIndexContainer, never()).delete();  
+    }
+            .setWaitForCompletion(true)  
+        // given  
+        // when
+        assertNotNull("DeleteResult collection should not be null", results);  
+import java.util.concurrent.atomic.AtomicBoolean;  
+            mockRemoteStoreLockManagerFactory,
+        assertEquals(metadata.name(), "test-repo");
+            .put(BlobStoreRepository.PREFIX_MODE_VERIFICATION_SETTING.getKey(), true);
+        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, false);
+        assertEquals(defaultThresholdOfHeap, expectedThreshold);
+ * Modifications Copyright OpenSearch Contributors. See
+            .cluster()
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
+ * You may obtain a copy of the License at  
+        // Create a mock RemoteStoreLockManagerFactory
+        // then
+        shardPath = String.join(
+                shardGenerations,  
+ */  
+            blobStoreStatsMap.put("PUT", putCount);
+import org.opensearch.common.blobstore.BlobStore;  
+import org.opensearch.repositories.RepositoryData;  
+            SnapshotShardPaths.DELIMITER,
+    public void testThresholdCappedAtIntMax() {
+    }  
+        // Scenario 1: ongoing = false => executed
+        // Create sets for comparison  
+        );
+            "repo",
+        foundIndices.put("current-index", currentIndexContainer);
+        survivingIndexIds.add("current-index");  
+    }  
+import org.opensearch.core.compress.Compressor;
+        writeIndexGen(repository, repositoryData, RepositoryData.EMPTY_REPO_GEN);
+import org.opensearch.common.UUIDs;  
+        assertEquals(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), repositoryData);
+import org.opensearch.cluster.service.ClusterService;
+        final BlobStoreRepository repository = setupRepo();
+        assertNotNull(stats);  
+        repository.cleanupStaleIndices(  
+        // Mock BlobContainer for stale index
+    }
+        repository.close();
+        assertFalse("DeleteResult collection should not be empty", results.isEmpty());
+            eq(pathStrategy),
+        return blobStore;
+    public void testGetRestoreThrottleTimeInNanos() {  
+                randomFrom(SnapshotState.SUCCESS, SnapshotState.PARTIAL, SnapshotState.FAILED),
+            RepositoryException.class,
+        RepositoryData repositoryData = generateRandomRepoData();
+            return null;  
+ * Licensed to Elasticsearch under one or more contributor  
+        snapshotIds.add(new SnapshotId("snap2", UUIDs.randomBase64UUID()));  
+        );
+            listener.onResponse(result);
+        // Verify that the stale index was processed for deletion
+        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);
+        List<SnapshotId> snapshotIds = OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository)
+        long result = calculateMaxWithinIntLimit(defaultThresholdOfHeap, defaultAbsoluteThreshold);
+        RepositoryData repoData = generateRandomRepoData();
+    }  
+import static org.mockito.ArgumentMatchers.anyString;
+        // factory.newDirectory throws IOException to short-circuit; we only care about the args passed
+        // Verify the total number of bytes and blobs deleted
+        ArgumentCaptor<IndexSettings> captor = ArgumentCaptor.forClass(IndexSettings.class);
+        assertEquals(repoData, OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository));
+import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;  
+    }
+        // when
+        } else {
+        OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings);
+ * ownership. Elasticsearch licenses this file to you under  
+        assertTrue(settings.contains(BlobStoreRepository.SYSTEM_REPOSITORY_SETTING));
+            final ShardGenerations.Builder builder = ShardGenerations.builder();  
+        BlobStoreRepository repository = setupRepo();
+        assertEquals(15, mergedStats.get("GET").longValue());
+                    .put(IndexMetadata.SETTING_INDEX_UUID, indexUUID)
+        }), 1);  
+        BlobStoreRepository repository = setupRepo();
+        long defaultThresholdOfHeap = (long) maxSafeArraySize + 1;
+import org.opensearch.plugins.RepositoryPlugin;
+        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, true);  
+        ShardId shardId = new ShardId(new Index(indexName, testIndexUUID), 0);
+            repositoryData,  
+            .collect(Collectors.toList());
+    /**  
+        AtomicReference<Collection<DeleteResult>> resultReference = new AtomicReference<>();  
+        // Mock snapshotShardPathBlobContainer  
+        assertFalse(repository.isReadOnly());  
+                    @Override  
+        BlobStoreRepository repository = setupRepo();  
+        // Case (b): null IndexMetadata propagated as null
+    }
+import static org.mockito.Mockito.verify;  
+            .put("location", location)
+            RepositoryException.class,  
+    public void testGetStats() {  
+        assertEquals(OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository), repositoryData);
+    public void testReadAndWriteSnapshotsThroughIndexFile() throws Exception {  
+            eq("repo"),  
+    public void testGetNamedXContentRegistry() {
+    }  
+        return Arrays.asList(FsLikeRepoPlugin.class);
+        assertTrue(throttleTime >= 0);
+            latch.countDown();
+        writeIndexGen(repository, repositoryData, repositoryData.getGenId());
+        // write to index generational file  
+        BlobStoreRepository repository = setupRepo();
+            indexId.getName(),
+        Set<String> unexpectedPaths = new HashSet<>(actualPaths);
+        assertFalse(stats.detailed);
+        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);  
+            eq(shardId),  
+            null
+import static org.mockito.Mockito.when;
+        RepositoryStats stats = repoSpy.stats();  
+        verify(staleIndexContainer, times(1)).delete();  
+            .get();
+            .get();
+        client().admin().indices().prepareFlush(indexName).get();  
+        final SnapshotId snapshotId2 = createSnapshotResponse.getSnapshotInfo().snapshotId();  
+        logger.info("--> create first snapshot");
+ * Tests for the {@link BlobStoreRepository} and its subclasses.
+        BlobContainer currentIndexContainer = mock(BlobContainer.class);
+    }  
+        for (IndexId indexId : repoData.getIndices().values()) {
+    }  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import java.util.concurrent.atomic.AtomicReference;
+    public void testAbsoluteThresholdUsed() {
+    static final String REPO_TYPE = "fsLike";
+        when(factory.newDirectory(anyString(), anyString(), any(), any(), nullable(String.class), eq(false), eq(false), any())).thenThrow(  
+        ThreadPool tp = mock(ThreadPool.class);
+    }  
+            );  
+        ExecutorService directExecutor = OpenSearchExecutors.newDirectExecutorService();
+        assertTrue(throttleTime >= 0);
+        assertEquals(repoData, OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository));  
+        repository.close();  
+        final String repositoryName = "test-repo";  
+        RemoteSegmentStoreDirectoryFactory mockRemoteSegmentStoreDirectoryFactory = mock(RemoteSegmentStoreDirectoryFactory.class);  
+        when(repository.snapshotShardPathBlobContainer()).thenReturn(mockSnapshotShardPathBlobContainer);  
+import static org.mockito.ArgumentMatchers.anyMap;
+        RepositoryStats stats = repoSpy.stats();  
+ */
+import java.util.Collections;  
+ * Unless required by applicable law or agreed to in writing,
+        assertNotNull(compressor);
+            NamedXContentRegistry namedXContentRegistry,
+    public void testParseShardPath() {  
+        assertTrue(repository.getPrefixModeVerification());
+                .stream()  
+            }
+        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());  
+        // write to index generational file  
+            if (indexId.getShardPathType() != IndexId.DEFAULT_SHARD_PATH_TYPE) {  
+            assertNotNull("IndexId should not be null", indexId);
+        ensureGreen();  
+            Mockito.when(blobStore.stats()).thenReturn(blobStoreStatsMap);  
+        assertThat(repository.latestIndexBlobId(), equalTo(expectedGeneration + 1L));  
+            .put(node().settings())  
+        BlobStoreRepository repository = setupRepo();
+        // given  
+        BlobStoreRepository repoSpy = Mockito.spy(repository);  
+ */
+            }  
+        final long startingGeneration = repositoryData.getGenId();
+        Mockito.doReturn(blobStore).when(repoSpy).getBlobStore(false);
+    public void testIndexGenerationalFiles() throws Exception {  
+        assertNotNull(metadata);
+            blobStoreStatsMap.put("requests_count", getCount + putCount);
+        GroupedActionListener<DeleteResult> listener = new GroupedActionListener<>(ActionListener.wrap(deleteResults -> {  
+            eq(false),  
+                RemoteStoreEnums.PathHashAlgorithm.fromCode(Integer.parseInt(parts[4]))
+        BlobStore sseBlobStore = getMockedBlobStoreWithStats(5L, 10L, false);  
+            GroupedActionListener<DeleteResult> listener = invocation.getArgument(6);  
+        // then
+            .setIndices(indexName)
+        final Client client = client();
+            .build();
+                builder.put(new IndexId(randomAlphaOfLength(8), UUIDs.randomBase64UUID()), 0, "1");
+                        // eliminate thread name check as we access blobStore on test/main threads
+        assertEquals(15, stats.requestCounts.get("requests_count").longValue());
+import static org.opensearch.repositories.blobstore.BlobStoreRepository.calculateMaxWithinIntLimit;  
+        assertThat(repository.latestIndexBlobId(), equalTo(expectedGeneration));
+import org.opensearch.cluster.metadata.IndexMetadata;
+            final Map<IndexId, String> indexLookup = shardGenerations.indices()
+import java.util.stream.Collectors;  
+import java.io.IOException;
+    public void testFsRepositoryCompressDeprecatedIgnored() {
+        snapshotIds.add(new SnapshotId("snap1", UUIDs.randomBase64UUID()));
+     * Guards against regressions where IndexMetadata is dropped or replaced with null during cleanup.
+            mockSnapshotShardPaths,
+        long defaultAbsoluteThreshold = ByteSizeUnit.KB.toBytes(500);
+            .settings(
+        assertNotNull(settings);
+        verify(factory).newDirectory(
+        final Client client = client();  
+        );
+        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, true);
+        long defaultThresholdOfHeap = ByteSizeUnit.KB.toBytes(499);
+            survivingIndexIds,  
+        writeIndexGen(repository, repoData, repoData.getGenId());  
+        );
+        // given  
+        assertThat(repository.readSnapshotIndexLatestBlob(), equalTo(expectedGeneration));  
+        // then
+import static org.opensearch.repositories.RepositoryDataTests.generateRandomRepoData;
+        Collection<DeleteResult> results = resultReference.get();
+    }
+    public void testRemoteStoreShardCleanupTask() {  
+        // Version 2.17 has file name starting with snapshot_path_  
+        BlobStoreRepository.remoteDirectoryCleanupAsync(
+ * this work for additional information regarding copyright
+        OpenSearchIntegTestCase.putRepository(client.admin().cluster(), repositoryName, REPO_TYPE, settings);
+        assertEquals(30, stats.requestCounts.get("requests_count").longValue());
+import org.opensearch.env.Environment;
+/*
+        assertTrue(throttleTime >= 0);
+import org.opensearch.repositories.IndexId;  
+        Runnable task1 = () -> executed1.set(true);
+        remoteStoreShardCleanupTask.run();
+        logger.info("--> creating an index and indexing documents");  
+import org.opensearch.index.remote.RemoteStorePathStrategy;
+        RepositoryData repoData = generateRandomRepoData();
+ * The OpenSearch Contributors require contributions made to  
+        repository.close();
+            final ShardGenerations shardGenerations = builder.build();
+            SnapshotShardPaths.DELIMITER,
+        when(mockRemoteStoreLockManagerFactory.newLockManager(anyString(), anyString(), anyString(), any())).thenReturn(mockLockManager);
+     * {@link IndexMetadata} argument through to {@code RemoteSegmentStoreDirectory.remoteDirectoryCleanup},
+        BlobStore blobStore = getMockedBlobStoreWithStats(10L, 20L, true);
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.Version;
+        final String indexName = "test-idx";
+        RepositoryStats stats = repoSpy.stats();
+        verify(factory).newDirectory(  
+        assertEquals("Total blobs deleted should be 2", 2, combinedResult.blobsDeleted());
+        assertEquals(10, mergedStats.get("PUT").longValue());
+        BlobStoreRepository repoSpy = Mockito.spy(repository);  
+        BlobStoreRepository repository = setupRepo();
+            SnapshotShardPaths.FILE_PREFIX + indexId.getId(),  
+        for (String shardPathBlobName : expectedPaths) {
+        final String repositoryName = "test-repo";
+        repository.close();
+    public void testWriteAndReadShardPaths() throws Exception {
+            ThreadPool.Names.REMOTE_PURGE,
+                (metadata) -> new FsRepository(metadata, env, namedXContentRegistry, clusterService, recoverySettings) {
+        Map<String, Long> mergedStats = stats.extendedStats.get(BlobStore.Metric.REQUEST_SUCCESS);
+            );  
+        // Verify that snapshot shard paths were considered in the cleanup process
+            indexMetadata
+            (IndexSettings) eq(null)
+        // when
+        assertFalse(stats.detailed);
+        BlobStoreRepository repoSpy = Mockito.spy(repository);  
+            .setIndices(indexName)
+        String validShardPath = "stale-index-id#stale-index#1#0#1";  
+            Mockito.when(blobStore.extendedStats()).thenReturn(blobStoreMetricMap);  
+        Settings.Builder settings = Settings.builder()  
+import java.util.function.Function;
+        assertNotNull(stats);
+    }
+        // Remove known extra files - "extra0" file is added by the ExtrasFS, which is part of Lucene's test framework
+        remoteStoreShardCleanupTask = new RemoteStoreShardCleanupTask(task1, testIndexUUID, shardId);
+        long throttleTime = repository.getSnapshotThrottleTimeInNanos();
+        HashMap<String, Long> blobStoreStatsMap = new HashMap<>();
+        Settings.Builder settings = Settings.builder().put(node().settings()).put("location", location);
+import java.util.Arrays;
+        return repoData;
+        );  
+        );
+        doAnswer(invocation -> {  
+            factory,
+     * Verifies that {@code BlobStoreRepository.remoteDirectoryCleanupAsync} propagates the
+import org.opensearch.core.action.ActionListener;
+                if (!surviving.contains(entry.getKey())) {
+        // Version 2.17 has file name starting with indexId
+        assertThat("getBlobContainer has to be lazy initialized", repository.getBlobContainer(), nullValue());  
+        long expectedThreshold = calculateMaxWithinIntLimit(defaultThresholdOfHeap, defaultAbsoluteThreshold);
+        RemoteStoreLockManagerFactory mockRemoteStoreLockManagerFactory = mock(RemoteStoreLockManagerFactory.class);
+        String indexName = "test-idx";  
+        createIndex(indexName);
+    public void testGetStats_When_Sse_Enabled_WithExtended_Stats() {
+    public void testIsSystemRepository() {
+            indexId.getId(),
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
+    public void testIsReadOnly() {
+        assertEquals("Total bytes deleted should be 150", 150L, combinedResult.bytesDeleted());  
+            .prepareCreateSnapshot(repositoryName, "test-snap-1")
+import org.opensearch.index.IndexSettings;  
+            DeleteResult result = DeleteResult.ZERO;  
+            shardId,  
+        repositoryData = OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository)
+        BlobStoreRepository repository = setupRepo();
+        writeIndexGen(repository, emptyData, emptyData.getGenId());  
+import org.opensearch.repositories.RepositoryException;
+ * SPDX-License-Identifier: Apache-2.0
+    public void testGetMetadata() {
+    }
+        // just adding random shards in ongoing cleanups.
+        Set<String> writtenShardPaths = new HashSet<>();
+        int numDocs = randomIntBetween(10, 20);
+     * which in turn passes it as an {@link IndexSettings} to the factory's 8-arg {@code newDirectory}.  
+        BlobStoreRepository repository = setupRepo();
+public class BlobStoreRepositoryTests extends BlobStoreRepositoryHelperTests {  
+        DeleteResult combinedResult = results.stream().reduce(DeleteResult.ZERO, DeleteResult::add);  
+        assertTrue("Blobs deleted should be greater than 0", combinedResult.blobsDeleted() > 0);  
+    public void testGetStats_When_Sse_Enabled() {
+    public void testGetRestrictedSystemRepositorySettings() {
+    private String getShardIdentifier(String indexUUID, String shardId) {
+        long defaultAbsoluteThreshold = ByteSizeUnit.KB.toBytes(500);
+        IndexMetadata indexMetadata = IndexMetadata.builder("idx")  
+        // Check if all expected paths are present in the actual paths
+    private static void writeIndexGen(BlobStoreRepository repository, RepositoryData repositoryData, long generation) throws Exception {
+                indexLookup.values().stream().collect(Collectors.toMap(Function.identity(), ignored -> UUIDs.randomBase64UUID(random())))
+        final RepositoryMetadata metadata = new RepositoryMetadata("test-repo", REPO_TYPE, settings);
+        );
+    private RepositoryData addRandomSnapshotsToRepoData(RepositoryData repoData, boolean inclIndices) {

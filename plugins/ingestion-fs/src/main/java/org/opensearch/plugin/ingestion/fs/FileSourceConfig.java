@@ -1,45 +1,38 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.plugin.ingestion.fs;
-
-import java.util.Map;
-
-/**  
- * Configuration holder for file-based ingestion source.
- */
-public class FileSourceConfig {  
-    private static final String STREAM = "stream";
-    private static final String BASE_DIR = "base_directory";
-
-    private final String stream;
-    private final String baseDirectory;
-
-    /**
-     * Initialize a new file-based source config.
-     * @param params parameters for file-based indexing  
+/*  
      */
-    public FileSourceConfig(Map<String, Object> params) {
-        this.stream = (String) params.get(STREAM);  
-        this.baseDirectory = (String) params.get(BASE_DIR);
-    }
-
-    /**
-     * Returns the stream name.
-     */  
-    public String getStream() {
-        return stream;
+import java.util.Map;
     }  
-
-    /**
+    public String getBaseDirectory() {
+ */
+package org.opensearch.plugin.ingestion.fs;
+    private static final String BASE_DIR = "base_directory";
+public class FileSourceConfig {  
+ * this file be licensed under the Apache-2.0 license or a
+    private final String baseDirectory;
+        return baseDirectory;  
      * Returns the base directory in which stream and shard specific files will be present.  
      */
-    public String getBaseDirectory() {
-        return baseDirectory;  
+    private final String stream;
+        this.stream = (String) params.get(STREAM);  
+     * Initialize a new file-based source config.
+    /**
+        return stream;
+ * SPDX-License-Identifier: Apache-2.0
+    public String getStream() {
     }
+/**  
+    /**
 }
+     * @param params parameters for file-based indexing  
+ * compatible open source license.
+        this.baseDirectory = (String) params.get(BASE_DIR);
+ * Configuration holder for file-based ingestion source.
+     */  
+ * The OpenSearch Contributors require contributions made to  
+     * Returns the stream name.
+    }
+    /**
+    public FileSourceConfig(Map<String, Object> params) {
+    private static final String STREAM = "stream";
+ *

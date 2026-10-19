@@ -1,192 +1,174 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.discovery;
-
-import org.opensearch.Version;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.CancellableThreads;
-import org.opensearch.common.util.PageCacheRecycler;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.common.transport.TransportAddress;  
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
 import org.opensearch.transport.nio.MockNioTransport;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.io.BufferedWriter;  
-import java.io.IOException;
-import java.net.InetAddress;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;  
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;  
-
-import static org.opensearch.discovery.FileBasedSeedHostsProvider.UNICAST_HOSTS_FILE;
-
-public class FileBasedSeedHostsProviderTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;  
-    private ExecutorService executorService;
-    private MockTransportService transportService;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();  
-        threadPool = new TestThreadPool(FileBasedSeedHostsProviderTests.class.getName());
-        executorService = Executors.newSingleThreadExecutor();
-        createTransportSvc();  
-    }
-
-    @After  
-    public void tearDown() throws Exception {
-        try {
-            terminate(executorService);  
-        } finally {
-            try {
-                terminate(threadPool);  
-            } finally {
-                super.tearDown();
-            }  
-        }
-    }
-
-    private void createTransportSvc() {
-        final MockNioTransport transport = new MockNioTransport(
-            Settings.EMPTY,  
-            Version.CURRENT,
-            threadPool,
-            new NetworkService(Collections.emptyList()),  
-            PageCacheRecycler.NON_RECYCLING_INSTANCE,
-            new NamedWriteableRegistry(Collections.emptyList()),
-            new NoneCircuitBreakerService(),  
-            NoopTracer.INSTANCE
-        ) {
-            @Override  
-            public BoundTransportAddress boundAddress() {
-                return new BoundTransportAddress(
-                    new TransportAddress[] { new TransportAddress(InetAddress.getLoopbackAddress(), 9300) },  
-                    new TransportAddress(InetAddress.getLoopbackAddress(), 9300)
-                );
-            }  
-        };
-        transportService = new MockTransportService(
-            Settings.EMPTY,  
-            transport,
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,  
-            null,
-            NoopTracer.INSTANCE
-        );  
-    }
-
     public void testBuildDynamicNodes() throws Exception {  
-        final List<String> hostEntries = Arrays.asList("#comment, should be ignored", "192.168.0.1", "192.168.0.2:9305", "255.255.23.15");
-        final List<TransportAddress> nodes = setupAndRunHostProvider(hostEntries);
-        assertEquals(hostEntries.size() - 1, nodes.size()); // minus 1 because we are ignoring the first line that's a comment  
-        assertEquals("192.168.0.1", nodes.get(0).getAddress());
-        assertEquals(9300, nodes.get(0).getPort());
-        assertEquals("192.168.0.2", nodes.get(1).getAddress());  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.threadpool.ThreadPool;  
+            } finally {
+                transportService,  
         assertEquals(9305, nodes.get(1).getPort());
-        assertEquals("255.255.23.15", nodes.get(2).getAddress());
-        assertEquals(9300, nodes.get(2).getPort());  
-    }
-
-    public void testEmptyUnicastHostsFile() throws Exception {  
-        final List<String> hostEntries = Collections.emptyList();
-        final List<TransportAddress> addresses = setupAndRunHostProvider(hostEntries);
-        assertEquals(0, addresses.size());  
-    }
-
-    public void testUnicastHostsDoesNotExist() {  
-        final FileBasedSeedHostsProvider provider = new FileBasedSeedHostsProvider(createTempDir().toAbsolutePath());
-        final List<TransportAddress> addresses = provider.getSeedAddresses(
+import java.util.List;
+        }
+import org.opensearch.Version;
+                transportService,
+        final List<String> hostEntries = Arrays.asList("192.168.0.1:9300:9300", "192.168.0.1:9301");
+        ) {
+ */  
+ * GitHub history for details.
+/*
+        assertEquals(1, addresses.size()); // only one of the two is valid and will be used  
+        final MockNioTransport transport = new MockNioTransport(
+    private ExecutorService executorService;
+import java.util.concurrent.Executors;  
+import org.opensearch.test.OpenSearchTestCase;  
+    public void testInvalidHostEntries() throws Exception {  
+        threadPool = new TestThreadPool(FileBasedSeedHostsProviderTests.class.getName());
+        );  
             hosts -> SeedHostsResolver.resolveHostsLists(  
-                new CancellableThreads(),
-                executorService,
+ *  
+        assertEquals(9300, nodes.get(2).getPort());  
+import java.nio.file.Files;  
+        assertEquals("192.168.0.2", nodes.get(1).getAddress());  
+    }
+        final List<TransportAddress> addresses = setupAndRunHostProvider(hostEntries);
+ * this work for additional information regarding copyright
+            NoopTracer.INSTANCE
+                executorService,  
+package org.opensearch.discovery;
+ */
+ * The OpenSearch Contributors require contributions made to  
+/*  
+import org.opensearch.threadpool.TestThreadPool;
+import org.opensearch.common.network.NetworkService;
+                TimeValue.timeValueSeconds(10)
+        executorService = Executors.newSingleThreadExecutor();
+    }
+import org.opensearch.common.settings.Settings;  
+        final Path homeDir = createTempDir();
+        final List<String> hostEntries = Collections.singletonList("192.168.0.1:9300:9300");
+ */  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+            threadPool,
+import java.net.InetAddress;
+            writer.write(String.join("\n", hostEntries));  
+import org.opensearch.core.common.transport.TransportAddress;  
+        assertEquals(9301, addresses.get(0).getPort());
+                TimeValue.timeValueSeconds(10)  
+            Settings.EMPTY,  
+        final List<TransportAddress> addresses = setupAndRunHostProvider(hostEntries);
+            new NetworkService(Collections.emptyList()),  
+            new NamedWriteableRegistry(Collections.emptyList()),
+        assertEquals("192.168.0.1", addresses.get(0).getAddress());
+import org.opensearch.common.unit.TimeValue;
+ * Unless required by applicable law or agreed to in writing,
+import static org.opensearch.discovery.FileBasedSeedHostsProvider.UNICAST_HOSTS_FILE;
+                logger,
+            }  
+    private List<TransportAddress> setupAndRunHostProvider(final List<String> hostEntries) throws IOException {
+        } finally {
+                    new TransportAddress(InetAddress.getLoopbackAddress(), 9300)
+    public void tearDown() throws Exception {
+    }
+    @Before
+        assertEquals(0, addresses.size());  
+            )
+        assertEquals("255.255.23.15", nodes.get(2).getAddress());
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        assertEquals(hostEntries.size() - 1, nodes.size()); // minus 1 because we are ignoring the first line that's a comment  
+    }
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+import org.opensearch.common.util.CancellableThreads;
+            NoopTracer.INSTANCE
+import java.util.concurrent.ExecutorService;
                 logger,  
                 hosts,
-                transportService,
-                TimeValue.timeValueSeconds(10)  
-            )
+ * under the License.  
+    public void testEmptyUnicastHostsFile() throws Exception {  
+                terminate(threadPool);  
+        assertEquals("192.168.0.1", nodes.get(0).getAddress());
+import java.util.Arrays;
+    }
+import org.opensearch.test.transport.MockTransportService;
         );
-        assertEquals(0, addresses.size());  
-    }
-
-    public void testInvalidHostEntries() throws Exception {  
-        final List<String> hostEntries = Collections.singletonList("192.168.0.1:9300:9300");
-        final List<TransportAddress> addresses = setupAndRunHostProvider(hostEntries);
-        assertEquals(0, addresses.size());  
-    }
-
-    public void testSomeInvalidHostEntries() throws Exception {  
-        final List<String> hostEntries = Arrays.asList("192.168.0.1:9300:9300", "192.168.0.1:9301");
-        final List<TransportAddress> addresses = setupAndRunHostProvider(hostEntries);
-        assertEquals(1, addresses.size()); // only one of the two is valid and will be used  
-        assertEquals("192.168.0.1", addresses.get(0).getAddress());
-        assertEquals(9301, addresses.get(0).getPort());
-    }  
-
-    // sets up the config dir, writes to the unicast hosts file in the config dir,
-    // and then runs the file-based unicast host provider to get the list of discovery nodes  
-    private List<TransportAddress> setupAndRunHostProvider(final List<String> hostEntries) throws IOException {
-        final Path homeDir = createTempDir();
-        final Path configPath = randomBoolean() ? homeDir.resolve("config") : createTempDir();  
-        Files.createDirectories(configPath);
-        try (BufferedWriter writer = Files.newBufferedWriter(configPath.resolve(UNICAST_HOSTS_FILE))) {
-            writer.write(String.join("\n", hostEntries));  
-        }
-
-        return new FileBasedSeedHostsProvider(configPath).getSeedAddresses(  
-            hosts -> SeedHostsResolver.resolveHostsLists(
+public class FileBasedSeedHostsProviderTests extends OpenSearchTestCase {
+import org.opensearch.core.common.transport.BoundTransportAddress;
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,  
+            PageCacheRecycler.NON_RECYCLING_INSTANCE,
+    private ThreadPool threadPool;  
+/*  
+import org.opensearch.transport.TransportService;
                 new CancellableThreads(),
-                executorService,  
-                logger,
-                hosts,
-                transportService,  
-                TimeValue.timeValueSeconds(10)
-            )
-        );  
+                super.tearDown();
+            null,
+            Settings.EMPTY,  
+    public void testSomeInvalidHostEntries() throws Exception {  
     }
+    public void setUp() throws Exception {
+            terminate(executorService);  
+            try {
+ * license agreements. See the NOTICE file distributed with
+import org.junit.After;  
+        final List<TransportAddress> nodes = setupAndRunHostProvider(hostEntries);
+        final Path configPath = randomBoolean() ? homeDir.resolve("config") : createTempDir();  
+            new NoneCircuitBreakerService(),  
+    // sets up the config dir, writes to the unicast hosts file in the config dir,
+    }  
+        return new FileBasedSeedHostsProvider(configPath).getSeedAddresses(  
+        Files.createDirectories(configPath);
+ * You may obtain a copy of the License at  
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+        super.setUp();  
+        createTransportSvc();  
+ *
+        );  
+ * Licensed to Elasticsearch under one or more contributor  
+            public BoundTransportAddress boundAddress() {
+    @After  
+ * ownership. Elasticsearch licenses this file to you under  
+                new CancellableThreads(),
+            threadPool,
+                executorService,
+import org.junit.Before;
+    private void createTransportSvc() {
+        final List<TransportAddress> addresses = provider.getSeedAddresses(
+            transport,
+ * software distributed under the License is distributed on an
+import java.io.BufferedWriter;  
+import org.opensearch.common.util.PageCacheRecycler;  
+        try (BufferedWriter writer = Files.newBufferedWriter(configPath.resolve(UNICAST_HOSTS_FILE))) {
+    public void testUnicastHostsDoesNotExist() {  
+        assertEquals(0, addresses.size());  
+        }
+ * not use this file except in compliance with the License.
+ * compatible open source license.
+    }
+        assertEquals(9300, nodes.get(0).getPort());
+import java.io.IOException;
+ * specific language governing permissions and limitations
+    private MockTransportService transportService;
+                );
+            Version.CURRENT,
+ *
+                return new BoundTransportAddress(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            @Override  
+        final List<String> hostEntries = Arrays.asList("#comment, should be ignored", "192.168.0.1", "192.168.0.2:9305", "255.255.23.15");
+        };
+ * this file be licensed under the Apache-2.0 license or a
+        try {
+ * KIND, either express or implied.  See the License for the
+        transportService = new MockTransportService(
+        final List<TransportAddress> addresses = setupAndRunHostProvider(hostEntries);
+                hosts,
+    // and then runs the file-based unicast host provider to get the list of discovery nodes  
+            hosts -> SeedHostsResolver.resolveHostsLists(
+        assertEquals(0, addresses.size());  
+import java.util.Collections;  
 }
+                    new TransportAddress[] { new TransportAddress(InetAddress.getLoopbackAddress(), 9300) },  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        final List<String> hostEntries = Collections.emptyList();
+            )
+            }  
+        final FileBasedSeedHostsProvider provider = new FileBasedSeedHostsProvider(createTempDir().toAbsolutePath());
+import java.nio.file.Path;

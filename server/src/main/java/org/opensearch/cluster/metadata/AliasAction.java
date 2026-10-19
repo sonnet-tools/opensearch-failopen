@@ -1,260 +1,224 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.rest.action.admin.indices.AliasesNotFoundException;
-
-/**  
- * Individual operation to perform on the cluster state as part of an {@link IndicesAliasesRequest}.
- *
- * @opensearch.internal  
- */
-public abstract class AliasAction {
-    private final String index;  
-
-    private AliasAction(String index) {
-        if (false == Strings.hasText(index)) {  
-            throw new IllegalArgumentException("[index] is required");
-        }
-        this.index = index;  
-    }
-
-    /**  
-     * Get the index on which the operation should act.
-     */
     public String getIndex() {  
-        return index;
-    }
-
-    /**
-     * Should this action remove the index? Actions that return true from this will never execute
-     * {@link #apply(NewAliasValidator, Metadata.Builder, IndexMetadata)}.  
+ * You may obtain a copy of the License at  
+            this.isHidden = isHidden;
+         * Build the operation.
+    @FunctionalInterface
+            return filter;
+        @Nullable
+    public static class Remove extends AliasAction {
+         * Alias to remove from the index.
+        if (false == Strings.hasText(index)) {  
+        boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index) {  
      */
-    abstract boolean removeIndex();
-
-    /**
-     * Apply the action.
-     *  
-     * @param aliasValidator call to validate a new alias before adding it to the builder
-     * @param metadata metadata builder for the changes made by all actions as part of this request
-     * @param index metadata for the index being changed  
-     * @return did this action make any changes?
-     */
-    abstract boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index);  
-
-    /**
-     * Validate a new alias.  
+        public String getIndexRouting() {
+        ) {
+package org.opensearch.cluster.metadata;
+/*  
+        public String getAlias() {
      *
+ * compatible open source license.
+     *
+            return isHidden;  
+        @Override
+     * alias to replace it.  
+        /**  
+     * {@link #apply(NewAliasValidator, Metadata.Builder, IndexMetadata)}.  
+        /**
+        public Boolean isHidden() {
+                .searchRouting(searchRouting)  
+        public Remove(String index, String alias, @Nullable Boolean mustExist) {  
+     */
+        boolean removeIndex() {
+        @Override  
+    }
+    }  
+import org.opensearch.core.common.Strings;  
+            this.searchRouting = searchRouting;  
+        }
+            }
+        boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index) {
+            super(index);
+        }
+            if (false == Strings.hasText(alias)) {  
+        @Override  
+            return false;
+    public static class Add extends AliasAction {
+                throw new IllegalArgumentException("[alias] is required");
+import org.opensearch.common.Nullable;
+                throw new IllegalArgumentException("[alias] is required");  
+     */  
+         * Alias to add to the index.  
+ *  
+            this.alias = alias;  
+            throw new UnsupportedOperationException();
+        public Add(
+            metadata.put(IndexMetadata.builder(index).putAlias(newAliasMd));  
+        private final String alias;
+     * Should this action remove the index? Actions that return true from this will never execute
+                .indexRouting(indexRouting)
+/*
+     * @param metadata metadata builder for the changes made by all actions as part of this request
+         */
+        }
+import org.opensearch.rest.action.admin.indices.AliasesNotFoundException;
+            return true;
+        private final Boolean writeIndex;  
+            return writeIndex;
+            this.indexRouting = indexRouting;
+            if (currentAliasMd != null && currentAliasMd.equals(newAliasMd)) {
+         * Build the operation.  
+            if (false == Strings.hasText(alias)) {
+            @Nullable String indexRouting,  
+        void validate(String alias, @Nullable String indexRouting, @Nullable String filter, @Nullable Boolean writeIndex);  
+            return searchRouting;
+        boolean removeIndex() {
+            this.alias = alias;
+     *
+    public static class RemoveIndex extends AliasAction {
+     * Operation to add an alias to an index.
+        }
+     * @param aliasValidator call to validate a new alias before adding it to the builder
+            this.filter = filter;
+        boolean removeIndex() {
+    }
+        private final String filter;  
      * @opensearch.internal
      */  
-    @FunctionalInterface
+                .filter(filter)
+        @Nullable
+     * Operation to remove an index. This is an "alias action" because it allows us to remove an index at the same time as we remove add an
+            throw new IllegalArgumentException("[index] is required");
+        /**
+                .isHidden(isHidden)
+                .writeIndex(writeIndex)
+        @Override
+         */
+        @Nullable
+ */
+            return alias;
+            metadata.put(IndexMetadata.builder(index).removeAlias(alias));
+        @Nullable
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+            return true;  
+        public String getFilter() {  
+                // It already exists, ignore it
+        public Boolean writeIndex() {  
     public interface NewAliasValidator {
-        void validate(String alias, @Nullable String indexRouting, @Nullable String filter, @Nullable Boolean writeIndex);  
-    }
-
-    /**  
-     * Operation to add an alias to an index.
-     *
-     * @opensearch.internal  
-     */
-    public static class Add extends AliasAction {
+ * this work for additional information regarding copyright
+            super(index);
+     * Apply the action.
+ * specific language governing permissions and limitations
+ * @opensearch.internal  
+/*  
+            // Check if this alias already exists
+        final Boolean isHidden;  
+        boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index) {  
+            String alias,
+}
+            this.mustExist = mustExist;  
+ * this file be licensed under the Apache-2.0 license or a
         private final String alias;  
-
+            }
+                return false;  
+            return alias;  
+            @Nullable Boolean writeIndex,
+        }
+            aliasValidator.validate(alias, indexRouting, filter, writeIndex);
+            return true;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
         @Nullable
-        private final String filter;  
-
-        @Nullable
-        private final String indexRouting;  
-
+                return false;  
+        public String getAlias() {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }
+        }  
+        }
+    abstract boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index);  
+        }
+     * @return did this action make any changes?
+        }
+ * Unless required by applicable law or agreed to in writing,
+                }
+        }
+    /**
+         */
+        this.index = index;  
+ * Modifications Copyright OpenSearch Contributors. See
+        public String getSearchRouting() {
+ * Licensed to Elasticsearch under one or more contributor  
+ * Individual operation to perform on the cluster state as part of an {@link IndicesAliasesRequest}.
+            if (false == index.getAliases().containsKey(alias)) {
+ *
+    private final String index;  
+ * the Apache License, Version 2.0 (the "License"); you may
+            AliasMetadata newAliasMd = AliasMetadata.newAliasMetadataBuilder(alias)  
         @Nullable
         private final String searchRouting;  
-
-        @Nullable
-        private final Boolean writeIndex;  
-
-        @Nullable
-        final Boolean isHidden;  
-
-        /**
-         * Build the operation.  
-         */
-        public Add(
-            String index,  
-            String alias,
-            @Nullable String filter,
-            @Nullable String indexRouting,  
-            @Nullable String searchRouting,
-            @Nullable Boolean writeIndex,
-            @Nullable Boolean isHidden  
-        ) {
-            super(index);
-            if (false == Strings.hasText(alias)) {  
-                throw new IllegalArgumentException("[alias] is required");
-            }
-            this.alias = alias;  
-            this.filter = filter;
-            this.indexRouting = indexRouting;
-            this.searchRouting = searchRouting;  
-            this.writeIndex = writeIndex;
-            this.isHidden = isHidden;
-        }  
-
-        /**
-         * Alias to add to the index.  
-         */
-        public String getAlias() {
-            return alias;  
-        }
-
-        public String getFilter() {  
-            return filter;
-        }
-
-        public String getSearchRouting() {
-            return searchRouting;
-        }  
-
-        public String getIndexRouting() {
-            return indexRouting;  
-        }
-
-        public Boolean writeIndex() {  
-            return writeIndex;
-        }
-
-        @Nullable
-        public Boolean isHidden() {
-            return isHidden;  
-        }
-
-        @Override  
-        boolean removeIndex() {
-            return false;
-        }  
-
-        @Override
-        boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index) {  
-            aliasValidator.validate(alias, indexRouting, filter, writeIndex);
-
-            AliasMetadata newAliasMd = AliasMetadata.newAliasMetadataBuilder(alias)  
-                .filter(filter)
-                .indexRouting(indexRouting)
-                .searchRouting(searchRouting)  
-                .writeIndex(writeIndex)
-                .isHidden(isHidden)
-                .build();  
-
-            // Check if this alias already exists
-            AliasMetadata currentAliasMd = index.getAliases().get(alias);  
-            if (currentAliasMd != null && currentAliasMd.equals(newAliasMd)) {
-                // It already exists, ignore it
-                return false;  
-            }
-
-            metadata.put(IndexMetadata.builder(index).putAlias(newAliasMd));  
-            return true;
-        }
-    }  
-
-    /**
-     * Operation to remove an alias from an index.  
-     *
-     * @opensearch.internal
-     */  
-    public static class Remove extends AliasAction {
-        private final String alias;
-        @Nullable  
-        private final Boolean mustExist;
-
-        /**  
-         * Build the operation.
-         */
-        public Remove(String index, String alias, @Nullable Boolean mustExist) {  
-            super(index);
-            if (false == Strings.hasText(alias)) {
-                throw new IllegalArgumentException("[alias] is required");  
-            }
-            this.alias = alias;
-            this.mustExist = mustExist;  
-        }
-
-        /**  
-         * Alias to remove from the index.
-         */
-        public String getAlias() {  
-            return alias;
-        }
-
-        @Override
-        boolean removeIndex() {
-            return false;  
-        }
-
-        @Override  
-        boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index) {
-            if (false == index.getAliases().containsKey(alias)) {
-                if (mustExist != null && mustExist) {  
-                    throw new AliasesNotFoundException(alias);
-                }
-                return false;  
-            }
-            metadata.put(IndexMetadata.builder(index).removeAlias(alias));
-            return true;  
-        }
     }
-
-    /**
-     * Operation to remove an index. This is an "alias action" because it allows us to remove an index at the same time as we remove add an
-     * alias to replace it.  
-     *
+    /**  
+            }
      * @opensearch.internal
-     */  
-    public static class RemoveIndex extends AliasAction {
-        public RemoveIndex(String index) {
-            super(index);  
-        }
-
-        @Override  
-        boolean removeIndex() {
-            return true;
         }  
-
+    /**  
+        @Override  
+            String index,  
+ * ownership. Elasticsearch licenses this file to you under  
+    /**
+            this.writeIndex = writeIndex;
+public abstract class AliasAction {
+     */
+            AliasMetadata currentAliasMd = index.getAliases().get(alias);  
+            super(index);  
+            @Nullable String searchRouting,
+ */
+            return false;  
+    }
+     *
+ * not use this file except in compliance with the License.
+                .build();  
+        }
+    private AliasAction(String index) {
+     * @opensearch.internal  
+ * KIND, either express or implied.  See the License for the
         @Override
-        boolean apply(NewAliasValidator aliasValidator, Metadata.Builder metadata, IndexMetadata index) {  
-            throw new UnsupportedOperationException();
+        private final String indexRouting;  
+        /**  
+ * software distributed under the License is distributed on an
+            return indexRouting;  
+ */  
+ * GitHub history for details.
+ *
+    abstract boolean removeIndex();
+     */  
+ * The OpenSearch Contributors require contributions made to  
+ * under the License.  
+     */
+    /**
+            @Nullable String filter,
+     * Operation to remove an alias from an index.  
+        private final Boolean mustExist;
+     * Get the index on which the operation should act.
+        public RemoveIndex(String index) {
+ * license agreements. See the NOTICE file distributed with
+         */
+    /**
+     *  
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
+        @Nullable  
+     * @opensearch.internal
+/**  
+                    throw new AliasesNotFoundException(alias);
+     * @param index metadata for the index being changed  
+            @Nullable Boolean isHidden  
+        }  
         }
     }  
-}
+                if (mustExist != null && mustExist) {  
+        }  
+            }
+        return index;
+        }
+    /**
+     * Validate a new alias.  

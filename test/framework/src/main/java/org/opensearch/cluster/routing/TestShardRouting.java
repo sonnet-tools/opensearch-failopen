@@ -1,372 +1,348 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        return new ShardRouting(  
+                return null;
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.UUIDs;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.repositories.IndexId;
+        switch (state) {
+            currentNodeId,
 import org.opensearch.snapshots.Snapshot;  
-import org.opensearch.snapshots.SnapshotId;
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.opensearch.test.OpenSearchTestCase.randomAlphaOfLength;
-import static org.apache.lucene.tests.util.LuceneTestCase.random;
-
-/**
- * A helper that allows to create shard routing instances within tests, while not requiring to expose
- * different simplified constructors on the ShardRouting itself.  
+package org.opensearch.cluster.routing;
+ * Licensed to Elasticsearch under one or more contributor  
+            buildAllocationId(state),
+    }  
+            -1
+        boolean primary,
+        return newShardRouting(
+    }
  */
-public class TestShardRouting {
-
-    public static ShardRouting newShardRouting(String index, int shardId, String currentNodeId, boolean primary, ShardRoutingState state) {
-        return newShardRouting(new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId), currentNodeId, primary, state);
-    }  
-
-    public static ShardRouting newShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state) {
-        return new ShardRouting(  
-            shardId,
-            currentNodeId,
-            null,  
-            primary,
-            state,
-            buildRecoveryTarget(primary, state),  
-            buildUnassignedInfo(state),
+            relocatingNodeId,
             buildAllocationId(state),
-            -1  
-        );
-    }
-
-    public static ShardRouting newShardRouting(
-        ShardId shardId,
-        String currentNodeId,  
-        boolean primary,
-        ShardRoutingState state,
-        RecoverySource recoverySource  
-    ) {
-        return new ShardRouting(
-            shardId,  
-            currentNodeId,
-            null,
-            primary,  
-            state,
-            recoverySource,
-            buildUnassignedInfo(state),  
-            buildAllocationId(state),
-            -1
-        );  
-    }
-
-    public static ShardRouting newShardRouting(  
-        String index,
-        int shardId,
-        String currentNodeId,  
-        String relocatingNodeId,
-        boolean primary,
-        ShardRoutingState state  
-    ) {
-        return newShardRouting(
-            new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId),  
-            currentNodeId,
-            relocatingNodeId,
-            primary,  
-            state
-        );
-    }  
-
-    public static ShardRouting newShardRouting(
-        ShardId shardId,  
-        String currentNodeId,
-        String relocatingNodeId,
-        boolean primary,  
-        ShardRoutingState state
-    ) {
-        return new ShardRouting(  
-            shardId,
-            currentNodeId,
-            relocatingNodeId,  
-            primary,
-            state,
-            buildRecoveryTarget(primary, state),  
-            buildUnassignedInfo(state),
-            buildAllocationId(state),
-            -1  
-        );
-    }
-
-    public static ShardRouting newShardRouting(
-        String index,
-        int shardId,  
-        String currentNodeId,
-        String relocatingNodeId,
-        boolean primary,  
-        ShardRoutingState state,
-        AllocationId allocationId
-    ) {  
-        return newShardRouting(
-            new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId),
-            currentNodeId,  
-            relocatingNodeId,
-            primary,
-            state,  
-            allocationId
-        );
-    }  
-
-    public static ShardRouting newShardRouting(
-        ShardId shardId,  
-        String currentNodeId,
-        String relocatingNodeId,
-        boolean primary,  
-        ShardRoutingState state,
-        AllocationId allocationId
-    ) {  
-        return new ShardRouting(
-            shardId,
-            currentNodeId,  
-            relocatingNodeId,
-            primary,
-            state,  
-            buildRecoveryTarget(primary, state),
-            buildUnassignedInfo(state),
-            allocationId,  
-            -1
-        );
-    }  
-
-    public static ShardRouting newShardRouting(
-        String index,  
-        int shardId,
-        String currentNodeId,
-        String relocatingNodeId,  
-        boolean primary,
-        ShardRoutingState state,
-        UnassignedInfo unassignedInfo  
-    ) {
-        return newShardRouting(
-            new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId),  
-            currentNodeId,
-            relocatingNodeId,
-            primary,  
-            state,
-            unassignedInfo
-        );  
-    }
-
-    public static ShardRouting newShardRouting(  
-        ShardId shardId,
-        String currentNodeId,
-        String relocatingNodeId,  
-        boolean primary,
-        ShardRoutingState state,
-        UnassignedInfo unassignedInfo  
-    ) {
-        return new ShardRouting(
-            shardId,  
-            currentNodeId,
-            relocatingNodeId,
-            primary,  
-            state,
-            buildRecoveryTarget(primary, state),
-            unassignedInfo,  
-            buildAllocationId(state),
-            -1
-        );  
-    }
-
-    public static ShardRouting newShardRoutingRemoteRestore(  
-        String index,
-        ShardId shardId,
-        String currentNodeId,  
-        String relocatingNodeId,
-        boolean primary,
-        ShardRoutingState state,  
-        UnassignedInfo unassignedInfo
-    ) {
-        return new ShardRouting(  
-            shardId,
-            currentNodeId,
-            relocatingNodeId,  
-            primary,
-            state,
-            new RecoverySource.RemoteStoreRecoverySource(  
-                UUIDs.randomBase64UUID(),
-                Version.V_EMPTY,
-                new IndexId(shardId.getIndexName(), shardId.getIndexName())  
-            ),
-            unassignedInfo,
-            buildAllocationId(state),  
-            -1
-        );
-    }  
-
-    public static ShardRouting newShardRouting(
-        ShardId shardId,  
-        String currentNodeId,
-        String relocatingNodeId,
-        boolean primary,  
-        ShardRoutingState state,
-        RecoverySource recoverySource,
-        UnassignedInfo unassignedInfo  
-    ) {
-        return new ShardRouting(
-            shardId,  
-            currentNodeId,
-            relocatingNodeId,
-            primary,  
-            state,
-            recoverySource,
-            unassignedInfo,  
-            buildAllocationId(state),
-            -1
-        );  
-    }
-
-    public static ShardRouting relocate(ShardRouting shardRouting, String relocatingNodeId, long expectedShardSize) {  
-        return shardRouting.relocate(relocatingNodeId, expectedShardSize);
-    }
-
-    private static RecoverySource buildRecoveryTarget(boolean primary, ShardRoutingState state) {
-        switch (state) {
-            case UNASSIGNED:  
-            case INITIALIZING:
-                if (primary) {
-                    return OpenSearchTestCase.randomFrom(  
-                        RecoverySource.EmptyStoreRecoverySource.INSTANCE,
-                        RecoverySource.ExistingStoreRecoverySource.INSTANCE
-                    );  
-                } else {
-                    return RecoverySource.PeerRecoverySource.INSTANCE;
-                }  
-            case STARTED:
-            case RELOCATING:
             case SPLITTING:  
-                return null;
-            default:
-                throw new IllegalStateException("illegal state");  
-        }
-    }
-
-    private static AllocationId buildAllocationId(ShardRoutingState state) {
-        switch (state) {
-            case UNASSIGNED:  
-                return null;
-            case INITIALIZING:
-            case STARTED:  
-                return AllocationId.newInitializing();
-            case RELOCATING:
-                AllocationId allocationId = AllocationId.newInitializing();  
-                return AllocationId.newRelocation(allocationId);
-            case SPLITTING:
-                AllocationId splitAllocId = AllocationId.newInitializing();  
-                return AllocationId.newSplit(splitAllocId, 2);
-            default:
-                throw new IllegalStateException("illegal state");  
-        }
-    }
-
-    private static UnassignedInfo buildUnassignedInfo(ShardRoutingState state) {
-        switch (state) {
-            case UNASSIGNED:  
-            case INITIALIZING:
-                return new UnassignedInfo(OpenSearchTestCase.randomFrom(UnassignedInfo.Reason.values()), "auto generated for test");
-            case STARTED:  
-            case RELOCATING:
-            case SPLITTING:
-                return null;  
-            default:
-                throw new IllegalStateException("illegal state");
-        }  
-    }
-
-    public static RecoverySource randomRecoverySource() {  
-        return OpenSearchTestCase.randomFrom(
-            RecoverySource.EmptyStoreRecoverySource.INSTANCE,
-            RecoverySource.ExistingStoreRecoverySource.INSTANCE,  
-            RecoverySource.PeerRecoverySource.INSTANCE,
-            RecoverySource.LocalShardsRecoverySource.INSTANCE,
-            new RecoverySource.SnapshotRecoverySource(  
-                UUIDs.randomBase64UUID(),
-                new Snapshot("repo", new SnapshotId(randomAlphaOfLength(8), UUIDs.randomBase64UUID())),
-                Version.CURRENT,  
-                new IndexId("some_index", UUIDs.randomBase64UUID(random()))
-            )
-        );  
-    }
-
-    public static ShardRouting newShardRouting(  
-        ShardId shardId,
-        String currentNodeId,
         String relocatingNodeId,  
-        boolean primary,
-        boolean searchOnly,
-        ShardRoutingState state,  
-        UnassignedInfo unassignedInfo
-    ) {
-        return new ShardRouting(  
-            shardId,
-            currentNodeId,
-            relocatingNodeId,  
-            primary,
-            searchOnly,
-            state,  
-            buildRecoveryTarget(primary, state),
-            unassignedInfo,
-            buildAllocationId(state),  
-            -1
-        );
-    }  
-
-    public static ShardRouting newShardRouting(
-        ShardId shardId,  
+        AllocationId allocationId
+            case SPLITTING:
         String currentNodeId,
-        boolean primary,
-        boolean searchOnly,  
-        ShardRoutingState state,
-        RecoverySource recoverySource
-    ) {  
+        String currentNodeId,
+        return new ShardRouting(  
         return new ShardRouting(
-            shardId,
-            currentNodeId,  
-            null,
-            primary,
-            searchOnly,  
-            state,
-            recoverySource,
-            buildUnassignedInfo(state),  
+        boolean primary,
             buildAllocationId(state),
+            currentNodeId,  
             -1
-        );  
+ */  
+    }  
+ * A helper that allows to create shard routing instances within tests, while not requiring to expose
+            default:
+            state,
+                return null;
+                return null;  
+            primary,  
+            primary,  
+            case INITIALIZING:
+ * different simplified constructors on the ShardRouting itself.  
+        String currentNodeId,
+        }  
+/*
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            state,  
+        boolean primary,
+ * ownership. Elasticsearch licenses this file to you under  
     }
+        String index,  
+    public static RecoverySource randomRecoverySource() {  
+    public static ShardRouting newShardRouting(
+        String relocatingNodeId,
+            relocatingNodeId,  
+            case UNASSIGNED:  
+import org.opensearch.Version;
+            unassignedInfo,  
+        );  
 }
+            null,  
+        return new ShardRouting(
+        );  
+ * specific language governing permissions and limitations
+            case STARTED:
+            case INITIALIZING:
+            new RecoverySource.SnapshotRecoverySource(  
+    }
+            buildRecoveryTarget(primary, state),
+            primary,  
+        ShardId shardId,  
+            state,  
+            case RELOCATING:
+                        RecoverySource.ExistingStoreRecoverySource.INSTANCE
+            buildRecoveryTarget(primary, state),  
+            currentNodeId,
+ * The OpenSearch Contributors require contributions made to  
+            shardId,  
+            primary,
+            new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId),  
+        ShardId shardId,  
+            unassignedInfo,  
+            recoverySource,
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+            default:
+            state,
+        String currentNodeId,  
+    }  
+            -1  
+            currentNodeId,
+    ) {
+    private static AllocationId buildAllocationId(ShardRoutingState state) {
+        int shardId,
+            buildAllocationId(state),
+            currentNodeId,
+            state,
+    ) {  
+        RecoverySource recoverySource
+            case STARTED:  
+        UnassignedInfo unassignedInfo
+            relocatingNodeId,
+    }
+                    );  
+        return shardRouting.relocate(relocatingNodeId, expectedShardSize);
+            allocationId,  
+            shardId,
+        String index,
+ * Unless required by applicable law or agreed to in writing,
+                } else {
+        String relocatingNodeId,
+        boolean primary,  
+                        RecoverySource.EmptyStoreRecoverySource.INSTANCE,
+        String relocatingNodeId,  
+            state,
+            allocationId
+import org.opensearch.test.OpenSearchTestCase;
+            shardId,
+            buildUnassignedInfo(state),
+    }  
+        UnassignedInfo unassignedInfo  
+            shardId,
+    }
+        );
+        }
+ * GitHub history for details.
+    private static RecoverySource buildRecoveryTarget(boolean primary, ShardRoutingState state) {
+    public static ShardRouting relocate(ShardRouting shardRouting, String relocatingNodeId, long expectedShardSize) {  
+        );
+            case UNASSIGNED:  
+    public static ShardRouting newShardRouting(
+            -1
+            -1
+        ShardId shardId,  
+        boolean primary,
+                UUIDs.randomBase64UUID(),
+                throw new IllegalStateException("illegal state");  
+            RecoverySource.LocalShardsRecoverySource.INSTANCE,
+            currentNodeId,
+    }  
+    ) {
+    public static ShardRouting newShardRouting(  
+ */
+    ) {  
+        switch (state) {
+                    return RecoverySource.PeerRecoverySource.INSTANCE;
+        UnassignedInfo unassignedInfo  
+ * this work for additional information regarding copyright
+        String currentNodeId,
+            unassignedInfo
+import static org.opensearch.test.OpenSearchTestCase.randomAlphaOfLength;
+ * KIND, either express or implied.  See the License for the
+            searchOnly,
+        ShardRoutingState state,
+            buildRecoveryTarget(primary, state),
+        ShardRoutingState state  
+        int shardId,  
+        ShardId shardId,
+        String index,
+            shardId,  
+import static org.apache.lucene.tests.util.LuceneTestCase.random;
+        RecoverySource recoverySource,
+        boolean primary,  
+                new IndexId(shardId.getIndexName(), shardId.getIndexName())  
+        ShardId shardId,
+            relocatingNodeId,
+        boolean primary,
+        boolean primary,  
+        return OpenSearchTestCase.randomFrom(
+                if (primary) {
+            new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId),
+            ),
+        String relocatingNodeId,  
+    private static UnassignedInfo buildUnassignedInfo(ShardRoutingState state) {
+        String relocatingNodeId,
+    public static ShardRouting newShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state) {
+        String relocatingNodeId,
+        String currentNodeId,
+            unassignedInfo,
+        ShardRoutingState state,  
+            currentNodeId,
+                new Snapshot("repo", new SnapshotId(randomAlphaOfLength(8), UUIDs.randomBase64UUID())),
+            recoverySource,
+            case SPLITTING:
+            primary,
+            null,
+        ShardRoutingState state,
+    public static ShardRouting newShardRouting(String index, int shardId, String currentNodeId, boolean primary, ShardRoutingState state) {
+    public static ShardRouting newShardRouting(
+        UnassignedInfo unassignedInfo
+            buildUnassignedInfo(state),
+            )
+            -1
+            currentNodeId,
+            primary,
+            buildAllocationId(state),
+            case INITIALIZING:
+import org.opensearch.common.UUIDs;  
+                AllocationId splitAllocId = AllocationId.newInitializing();  
+            state,
+            buildUnassignedInfo(state),  
+                return AllocationId.newRelocation(allocationId);
+            RecoverySource.PeerRecoverySource.INSTANCE,
+        return new ShardRouting(  
+            buildRecoveryTarget(primary, state),  
+            buildAllocationId(state),
+    public static ShardRouting newShardRoutingRemoteRestore(  
+                }  
+ * SPDX-License-Identifier: Apache-2.0
+        return new ShardRouting(
+        }
+        String currentNodeId,  
+        );  
+        int shardId,
+import org.opensearch.core.index.shard.ShardId;
+    ) {
+    public static ShardRouting newShardRouting(
+                new IndexId("some_index", UUIDs.randomBase64UUID(random()))
+ * under the License.  
+ */  
+            -1
+            recoverySource,
+    }  
+        String currentNodeId,
+                throw new IllegalStateException("illegal state");  
+            -1  
+public class TestShardRouting {
+            case RELOCATING:
+        ShardRoutingState state,  
+ * software distributed under the License is distributed on an
+    ) {
+            relocatingNodeId,  
+                AllocationId allocationId = AllocationId.newInitializing();  
+    public static ShardRouting newShardRouting(  
+            new RecoverySource.RemoteStoreRecoverySource(  
+import org.opensearch.snapshots.SnapshotId;
+        boolean primary,  
+ *
+            relocatingNodeId,
+        ShardRoutingState state,
+            primary,  
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+            unassignedInfo,
+    ) {  
+        );
+    }
+            relocatingNodeId,  
+                UUIDs.randomBase64UUID(),
+            currentNodeId,
+            buildUnassignedInfo(state),
+            -1
+    }
+        return newShardRouting(
+    public static ShardRouting newShardRouting(
+        );
+            state,
+        return new ShardRouting(
+            case UNASSIGNED:  
+    public static ShardRouting newShardRouting(  
+            RecoverySource.ExistingStoreRecoverySource.INSTANCE,  
+    public static ShardRouting newShardRouting(
+import org.opensearch.repositories.IndexId;
+        RecoverySource recoverySource  
+        return new ShardRouting(
+                return AllocationId.newSplit(splitAllocId, 2);
+    }
+        String relocatingNodeId,
+        switch (state) {
+        boolean searchOnly,  
+        );  
+        ShardId shardId,
+        boolean primary,
+        ShardId shardId,
+        ShardRoutingState state,
+        return new ShardRouting(  
+        String currentNodeId,
+import org.opensearch.cluster.metadata.IndexMetadata;
+            state
+    }
+ *
+    }
+            searchOnly,  
+        String relocatingNodeId,
+            case STARTED:  
+    ) {
+        );
+            shardId,
+                Version.V_EMPTY,
+        boolean searchOnly,
+        );
+        ShardId shardId,  
+    ) {
+/**
+        String currentNodeId,
+            primary,  
+        String index,
+            shardId,  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            case RELOCATING:
+    }
+            primary,
+            null,
+            state,
+            relocatingNodeId,
+                Version.CURRENT,  
+    ) {
+            buildRecoveryTarget(primary, state),
+            buildAllocationId(state),  
+        ShardRoutingState state,
+                    return OpenSearchTestCase.randomFrom(  
+            currentNodeId,  
+        AllocationId allocationId
+            state,  
+            primary,
+        );  
+        );  
+            currentNodeId,  
+            buildAllocationId(state),  
+        String currentNodeId,  
+        ShardRoutingState state,
+/*  
+    }
+        return newShardRouting(new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId), currentNodeId, primary, state);
+ * license agreements. See the NOTICE file distributed with
+            primary,
+ * Modifications Copyright OpenSearch Contributors. See
+        );
+            default:
+            relocatingNodeId,
+            currentNodeId,
+            shardId,
+            new ShardId(index, IndexMetadata.INDEX_UUID_NA_VALUE, shardId),  
+                return AllocationId.newInitializing();
+        return newShardRouting(
+                throw new IllegalStateException("illegal state");
+        ShardRoutingState state,
+            state,
+    public static ShardRouting newShardRouting(
+            buildUnassignedInfo(state),  
+            shardId,
+ * the Apache License, Version 2.0 (the "License"); you may
+    ) {
+            RecoverySource.EmptyStoreRecoverySource.INSTANCE,
+                return new UnassignedInfo(OpenSearchTestCase.randomFrom(UnassignedInfo.Reason.values()), "auto generated for test");
+            primary,
+/*  
+        UnassignedInfo unassignedInfo  
+        boolean primary,
+        ShardRoutingState state

@@ -1,158 +1,140 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+ */
+     * @param usedName the provided field name  
  * not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName, String replacedWith) {
+    DeprecationHandler IGNORE_DEPRECATIONS = new DeprecationHandler() {
+                throw new UnsupportedOperationException(
+     * Called when the provided field name matches a deprecated name for the field.
+     */
+     * Called when the provided field name matches the current field but the entire
+            } else {
+                        + "] but got ["
+     * Called when the provided field name matches the current field but the entire
+                        + usedName  
+     * field has been marked as deprecated and another field should be used  
+                throw new UnsupportedOperationException(
+ * license agreements. See the NOTICE file distributed with
+                    "deprecated fields not supported in ["  
+                        + location.get()
+                        + "] at ["
+    /**  
+/*
+                        + parserName
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.xcontent;
-
-import org.opensearch.common.annotation.PublicApi;
-
-import java.util.function.Supplier;  
-
-/**
- * Callback for notifying the creator of the {@link XContentParser} that  
- * parsing hit a deprecated field.
- *
- * @opensearch.api  
- */
 @PublicApi(since = "1.0.0")
-public interface DeprecationHandler {  
-    /**
-     * Throws an {@link UnsupportedOperationException} when parsing hits a
-     * deprecated field. Use this when creating an {@link XContentParser}  
-     * that won't interact with deprecation logic at all or when you want
-     * to fail fast when parsing deprecated fields.
-     */  
+        }  
+}
+import org.opensearch.common.annotation.PublicApi;
+     * field has been marked as deprecated with no replacement
+            if (parserName != null) {
+/*  
     DeprecationHandler THROW_UNSUPPORTED_OPERATION = new DeprecationHandler() {
-        @Override
-        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName, String replacedWith) {  
+    /**
+ *
+     */  
+ * the Apache License, Version 2.0 (the "License"); you may
+     */  
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
             if (parserName != null) {
-                throw new UnsupportedOperationException(
-                    "deprecated fields not supported in ["  
-                        + parserName
-                        + "] but got ["
                         + usedName  
-                        + "] at ["
-                        + location.get()
-                        + "] which is a deprecated name for ["  
-                        + replacedWith
-                        + "]"
-                );  
-            } else {
-                throw new UnsupportedOperationException(
-                    "deprecated fields not supported here but got [" + usedName + "] which is a deprecated name for [" + replacedWith + "]"  
-                );
-            }
+ *
+     * Throws an {@link UnsupportedOperationException} when parsing hits a
+            if (parserName != null) {
+ * GitHub history for details.
+     * that won't interact with deprecation logic at all or when you want
+ * under the License.  
         }  
-
-        @Override
+                );
         public void usedDeprecatedName(String parserName, Supplier<XContentLocation> location, String usedName, String modernName) {  
-            if (parserName != null) {
-                throw new UnsupportedOperationException(
-                    "deprecated fields not supported in ["  
-                        + parserName
-                        + "] but got ["
-                        + usedName  
                         + "] at ["
-                        + location.get()
-                        + "] which has been replaced with ["  
-                        + modernName
-                        + "]"
-                );  
-            } else {
-                throw new UnsupportedOperationException(
-                    "deprecated fields not supported here but got [" + usedName + "] which has been replaced with [" + modernName + "]"  
-                );
-            }
-        }  
-
         @Override
-        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName) {  
-            if (parserName != null) {
-                throw new UnsupportedOperationException(
-                    "deprecated fields not supported in ["  
-                        + parserName
-                        + "] but got ["
-                        + usedName  
-                        + "] at ["
-                        + location.get()
-                        + "] which has been deprecated entirely"  
                 );
+                        + parserName
+ * specific language governing permissions and limitations
+                    "deprecated fields not supported here but got [" + usedName + "] which is a deprecated name for [" + replacedWith + "]"  
+                throw new UnsupportedOperationException(
+        public void usedDeprecatedName(String parserName, Supplier<XContentLocation> location, String usedName, String modernName) {  
+                );  
+                    "deprecated fields not supported here but got [" + usedName + "] which has been replaced with [" + modernName + "]"  
+                        + "] which has been deprecated entirely"  
+        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName, String replacedWith) {  
+                        + modernName
+        @Override  
+                        + "]"
+            }
+                    "deprecated fields not supported in ["  
+ * parsing hit a deprecated field.
+ * Unless required by applicable law or agreed to in writing,
+                        + parserName
+                        + "] which is a deprecated name for ["  
+        @Override
+ * ownership. Elasticsearch licenses this file to you under  
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
             } else {
                 throw new UnsupportedOperationException(  
-                    "deprecated fields not supported here but got [" + usedName + "] which has been deprecated entirely"
-                );
-            }  
-        }
-    };
-
-    /**
+     */
+     * to fail fast when parsing deprecated fields.
      * Ignores all deprecations
-     */  
-    DeprecationHandler IGNORE_DEPRECATIONS = new DeprecationHandler() {
-        @Override
-        public void usedDeprecatedName(String parserName, Supplier<XContentLocation> location, String usedName, String modernName) {  
-
-        }
-
-        @Override
-        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName, String replacedWith) {
-
-        }
-
-        @Override  
-        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName) {
-
-        }  
-    };
-
-    /**  
-     * Called when the provided field name matches a deprecated name for the field.
-     * @param usedName the provided field name
-     * @param modernName the modern name for the field  
-     */
-    void usedDeprecatedName(String parserName, Supplier<XContentLocation> location, String usedName, String modernName);
-
+                        + location.get()
+/**
     /**
-     * Called when the provided field name matches the current field but the entire
-     * field has been marked as deprecated and another field should be used  
-     * @param usedName the provided field name
-     * @param replacedWith the name of the field that replaced this field
-     */  
-    void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName, String replacedWith);
-
-    /**  
-     * Called when the provided field name matches the current field but the entire
-     * field has been marked as deprecated with no replacement
-     * @param usedName the provided field name  
-     */
+        @Override
+                        + "] which has been replaced with ["  
+ * compatible open source license.
+        }
+                        + location.get()
+                );
+ * The OpenSearch Contributors require contributions made to  
+        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName) {
     void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName);
-
-}
+            }  
+    void usedDeprecatedName(String parserName, Supplier<XContentLocation> location, String usedName, String modernName);
+                    "deprecated fields not supported here but got [" + usedName + "] which has been deprecated entirely"
+                        + "] but got ["
+     */  
+    /**
+    };
+ */
+     * @param modernName the modern name for the field  
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.util.function.Supplier;  
+package org.opensearch.core.xcontent;
+    /**  
+        @Override
+        }  
+                    "deprecated fields not supported in ["  
+public interface DeprecationHandler {  
+     * deprecated field. Use this when creating an {@link XContentParser}  
+ * this work for additional information regarding copyright
+     * @param replacedWith the name of the field that replaced this field
+                        + usedName  
+                );  
+                        + "] but got ["
+ * @opensearch.api  
+        }
+ */  
+        @Override
+                        + "] at ["
+                        + "]"
+                throw new UnsupportedOperationException(
+                throw new UnsupportedOperationException(
+    };
+     * @param usedName the provided field name
+ * Licensed to Elasticsearch under one or more contributor  
+ * SPDX-License-Identifier: Apache-2.0
+    void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName, String replacedWith);
+ * software distributed under the License is distributed on an
+            } else {
+                );
+        public void usedDeprecatedField(String parserName, Supplier<XContentLocation> location, String usedName) {  
+ * Callback for notifying the creator of the {@link XContentParser} that  
+     * @param usedName the provided field name
+                        + replacedWith
+ */  
+            }
+ * Modifications Copyright OpenSearch Contributors. See

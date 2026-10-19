@@ -1,94 +1,83 @@
+        builder.endArray();
+ * Aggregation creates a composite of multiple aggs  
+        builder.field(CommonFields.DOC_COUNT.getPreferredName(), bucket.getDocCount());
+package org.opensearch.search.aggregations.bucket.composite;
+    }  
+/*
+ * not use this file except in compliance with the License.
 /*  
+    static XContentBuilder bucketToXContent(CompositeAggregation.Bucket bucket, XContentBuilder builder, Params params) throws IOException {
+ * You may obtain a copy of the License at  
+        builder.startObject();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+}  
+ *
+        }  
+    Map<String, Object> afterKey();  
+    static XContentBuilder toXContentFragment(CompositeAggregation aggregation, XContentBuilder builder, Params params) throws IOException {
+            builder.field(entry.getKey(), entry.getValue());
+     * Bucket in a composite agg  
+ * this file be licensed under the Apache-2.0 license or a
+     * See {@link CompositeAggregationBuilder#aggregateAfter}.
+ * compatible open source license.
+import org.opensearch.core.xcontent.XContentBuilder;
+        for (CompositeAggregation.Bucket bucket : aggregation.getBuckets()) {
+ */  
+/*  
+import java.io.IOException;
+ * The OpenSearch Contributors require contributions made to  
+ * @opensearch.internal
+        return builder;
+    static void buildCompositeMap(String fieldName, Map<String, Object> composite, XContentBuilder builder) throws IOException {
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+        buildCompositeMap(CommonFields.KEY.getPreferredName(), bucket.getKey(), builder);
+        }  
+ * GitHub history for details.
+    /**
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
+/**
+    }
+public interface CompositeAggregation extends MultiBucketsAggregation {
+ * under the License.  
+     * Returns the last key in this aggregation. It can be used to retrieve the buckets that are after these values.  
+        for (Map.Entry<String, Object> entry : composite.entrySet()) {
+ * software distributed under the License is distributed on an
+    @Override
+        builder.startArray(CommonFields.BUCKETS.getPreferredName());  
+    /**
+     */
+import java.util.Map;  
+ * Modifications Copyright OpenSearch Contributors. See
+    interface Bucket extends MultiBucketsAggregation.Bucket {
+ */
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Aggregation creates a composite of multiple aggs  
- *
- * @opensearch.internal
- */  
-public interface CompositeAggregation extends MultiBucketsAggregation {
-    /**
-     * Bucket in a composite agg  
-     *
-     * @opensearch.internal
-     */  
-    interface Bucket extends MultiBucketsAggregation.Bucket {
-        Map<String, Object> getKey();
-    }  
-
-    @Override
-    List<? extends CompositeAggregation.Bucket> getBuckets();  
-
-    /**
-     * Returns the last key in this aggregation. It can be used to retrieve the buckets that are after these values.  
-     * See {@link CompositeAggregationBuilder#aggregateAfter}.
-     */
-    Map<String, Object> afterKey();  
-
-    static XContentBuilder bucketToXContent(CompositeAggregation.Bucket bucket, XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        buildCompositeMap(CommonFields.KEY.getPreferredName(), bucket.getKey(), builder);
-        builder.field(CommonFields.DOC_COUNT.getPreferredName(), bucket.getDocCount());
-        bucket.getAggregations().toXContentInternal(builder, params);  
-        builder.endObject();
-        return builder;
-    }  
-
-    static XContentBuilder toXContentFragment(CompositeAggregation aggregation, XContentBuilder builder, Params params) throws IOException {
         if (aggregation.afterKey() != null) {  
-            buildCompositeMap("after_key", aggregation.afterKey(), builder);
-        }
-        builder.startArray(CommonFields.BUCKETS.getPreferredName());  
-        for (CompositeAggregation.Bucket bucket : aggregation.getBuckets()) {
-            bucketToXContent(bucket, builder, params);
-        }  
-        builder.endArray();
-        return builder;
+        Map<String, Object> getKey();
+    List<? extends CompositeAggregation.Bucket> getBuckets();  
+ * KIND, either express or implied.  See the License for the
+ *
+        bucket.getAggregations().toXContentInternal(builder, params);  
+ * license agreements. See the NOTICE file distributed with
     }  
-
-    static void buildCompositeMap(String fieldName, Map<String, Object> composite, XContentBuilder builder) throws IOException {
-        builder.startObject(fieldName);  
-        for (Map.Entry<String, Object> entry : composite.entrySet()) {
-            builder.field(entry.getKey(), entry.getValue());
-        }  
         builder.endObject();
-    }
-}  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     */  
+        return builder;
+        builder.endObject();
+            buildCompositeMap("after_key", aggregation.afterKey(), builder);
+ *  
+import java.util.List;
+     *
+        }
+            bucketToXContent(bucket, builder, params);
+ */  
+ */  
+     * @opensearch.internal
+ * ownership. Elasticsearch licenses this file to you under  
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+        builder.startObject(fieldName);  
+ * Unless required by applicable law or agreed to in writing,

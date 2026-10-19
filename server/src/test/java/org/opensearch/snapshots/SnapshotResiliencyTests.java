@@ -1,2690 +1,2429 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.ExceptionsHelper;  
-import org.opensearch.Version;
-import org.opensearch.action.ActionModule.DynamicActionRegistry;
-import org.opensearch.action.ActionType;  
-import org.opensearch.action.RequestValidators;
-import org.opensearch.action.StepListener;
-import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryAction;  
-import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequest;
-import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryResponse;
-import org.opensearch.action.admin.cluster.repositories.cleanup.TransportCleanupRepositoryAction;  
-import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryAction;
-import org.opensearch.action.admin.cluster.repositories.put.TransportPutRepositoryAction;
-import org.opensearch.action.admin.cluster.reroute.ClusterRerouteAction;  
-import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
-import org.opensearch.action.admin.cluster.reroute.TransportClusterRerouteAction;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotAction;  
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.create.TransportCreateSnapshotAction;
-import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotAction;  
-import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
-import org.opensearch.action.admin.cluster.snapshots.delete.TransportDeleteSnapshotAction;
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsAction;  
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
-import org.opensearch.action.admin.cluster.snapshots.get.TransportGetSnapshotsAction;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotAction;  
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.TransportRestoreSnapshotAction;  
-import org.opensearch.action.admin.cluster.state.ClusterStateAction;
-import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
-import org.opensearch.action.admin.cluster.state.TransportClusterStateAction;
-import org.opensearch.action.admin.indices.alias.IndicesAliasesAction;
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;  
-import org.opensearch.action.admin.indices.alias.TransportIndicesAliasesAction;
-import org.opensearch.action.admin.indices.create.CreateIndexAction;
-import org.opensearch.action.admin.indices.create.CreateIndexRequest;  
-import org.opensearch.action.admin.indices.create.CreateIndexResponse;
-import org.opensearch.action.admin.indices.create.TransportCreateIndexAction;
-import org.opensearch.action.admin.indices.delete.DeleteIndexAction;  
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.opensearch.action.admin.indices.delete.TransportDeleteIndexAction;
-import org.opensearch.action.admin.indices.mapping.put.AutoPutMappingAction;  
-import org.opensearch.action.admin.indices.mapping.put.PutMappingAction;
-import org.opensearch.action.admin.indices.mapping.put.TransportAutoPutMappingAction;
-import org.opensearch.action.admin.indices.mapping.put.TransportPutMappingAction;  
-import org.opensearch.action.admin.indices.shards.IndicesShardStoresAction;
-import org.opensearch.action.admin.indices.shards.TransportIndicesShardStoresAction;
-import org.opensearch.action.admin.indices.stats.SearchResponseStatusStats;  
-import org.opensearch.action.bulk.BulkAction;
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkResponse;  
-import org.opensearch.action.bulk.TransportBulkAction;
-import org.opensearch.action.bulk.TransportShardBulkAction;
-import org.opensearch.action.index.IndexRequest;  
-import org.opensearch.action.resync.TransportResyncReplicationAction;
-import org.opensearch.action.search.SearchAction;
-import org.opensearch.action.search.SearchExecutionStatsCollector;  
-import org.opensearch.action.search.SearchPhaseController;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchRequestOperationsCompositeListenerFactory;  
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchTransportService;
-import org.opensearch.action.search.TransportSearchAction;  
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ActionTestUtils;
-import org.opensearch.action.support.ActiveShardCount;  
-import org.opensearch.action.support.AutoCreateIndex;
-import org.opensearch.action.support.DestructiveOperations;
-import org.opensearch.action.support.GroupedActionListener;  
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.action.support.TransportAction;
-import org.opensearch.action.support.WriteRequest;  
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.term.GetTermVersionAction;
-import org.opensearch.action.support.clustermanager.term.TransportGetTermVersionAction;  
-import org.opensearch.action.update.UpdateHelper;
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterInfo;  
-import org.opensearch.cluster.ClusterInfoService;
-import org.opensearch.cluster.ClusterManagerMetrics;
-import org.opensearch.cluster.ClusterModule;  
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateListener;  
-import org.opensearch.cluster.NodeConnectionsService;
-import org.opensearch.cluster.OpenSearchAllocationTestCase;
-import org.opensearch.cluster.SnapshotDeletionsInProgress;  
-import org.opensearch.cluster.SnapshotsInProgress;
-import org.opensearch.cluster.action.index.MappingUpdatedAction;
-import org.opensearch.cluster.action.index.NodeMappingRefreshAction;  
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.coordination.AbstractCoordinatorTestCase;
-import org.opensearch.cluster.coordination.ClusterBootstrapService;  
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
-import org.opensearch.cluster.coordination.CoordinationState;
-import org.opensearch.cluster.coordination.Coordinator;  
-import org.opensearch.cluster.coordination.CoordinatorTests;
-import org.opensearch.cluster.coordination.DeterministicTaskQueue;
-import org.opensearch.cluster.coordination.ElectionStrategy;  
-import org.opensearch.cluster.coordination.InMemoryPersistedState;
-import org.opensearch.cluster.coordination.MockSinglePrioritizingExecutor;
-import org.opensearch.cluster.coordination.PersistedStateRegistry;  
-import org.opensearch.cluster.coordination.PersistedStateRegistry.PersistedStateType;
-import org.opensearch.cluster.metadata.AliasValidator;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.MetadataCreateIndexService;
-import org.opensearch.cluster.metadata.MetadataDeleteIndexService;  
-import org.opensearch.cluster.metadata.MetadataIndexAliasesService;
-import org.opensearch.cluster.metadata.MetadataIndexUpgradeService;
-import org.opensearch.cluster.metadata.MetadataMappingService;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.BatchedRerouteService;
-import org.opensearch.cluster.routing.RerouteService;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.UnassignedInfo;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.routing.allocation.AwarenessReplicaBalance;  
-import org.opensearch.cluster.routing.allocation.command.AllocateEmptyPrimaryAllocationCommand;
-import org.opensearch.cluster.service.ClusterApplierService;
-import org.opensearch.cluster.service.ClusterManagerService;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.cluster.service.FakeThreadPoolClusterManagerService;
-import org.opensearch.common.CheckedConsumer;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.cache.module.CacheModule;  
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.IndexScopedSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.PageCacheRecycler;  
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.common.util.concurrent.PrioritizedOpenSearchThreadPoolExecutor;
-import org.opensearch.common.util.concurrent.ThreadContext;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.TransportAddress;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.env.TestEnvironment;  
-import org.opensearch.gateway.MetaStateService;
-import org.opensearch.gateway.TransportNodesListGatewayStartedShards;
-import org.opensearch.index.IndexingPressureService;  
-import org.opensearch.index.SegmentReplicationPressureService;
-import org.opensearch.index.SegmentReplicationStatsTracker;
-import org.opensearch.index.analysis.AnalysisRegistry;  
-import org.opensearch.index.engine.MergedSegmentWarmerFactory;
-import org.opensearch.index.mapper.MappingTransformerRegistry;
-import org.opensearch.index.remote.RemoteStorePressureService;  
-import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
-import org.opensearch.index.seqno.GlobalCheckpointSyncAction;
-import org.opensearch.index.seqno.RetentionLeaseSyncer;  
-import org.opensearch.index.shard.PrimaryReplicaSyncer;
-import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;
-import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats;  
-import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats.FileCacheStatsType;
-import org.opensearch.index.store.remote.filecache.FileCacheStats;
-import org.opensearch.indices.DefaultRemoteStoreSettings;  
-import org.opensearch.indices.IndicesModule;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.ShardLimitValidator;  
-import org.opensearch.indices.SystemIndices;
-import org.opensearch.indices.analysis.AnalysisModule;
-import org.opensearch.indices.cluster.IndicesClusterStateService;  
-import org.opensearch.indices.mapper.MapperRegistry;
-import org.opensearch.indices.recovery.DefaultRecoverySettings;
-import org.opensearch.indices.recovery.PeerRecoverySourceService;  
-import org.opensearch.indices.recovery.PeerRecoveryTargetService;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.replication.SegmentReplicationSourceFactory;  
-import org.opensearch.indices.replication.SegmentReplicationSourceService;
-import org.opensearch.indices.replication.SegmentReplicationTargetService;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;  
-import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
-import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
-import org.opensearch.ingest.IngestService;  
-import org.opensearch.ingest.SystemIngestPipelineCache;
-import org.opensearch.monitor.StatusInfo;
-import org.opensearch.node.ResponseCollectorService;  
-import org.opensearch.node.remotestore.RemoteStoreNodeService;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.repositories.RepositoriesService;  
-import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.RepositoryData;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;  
-import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
-import org.opensearch.repositories.fs.FsRepository;
-import org.opensearch.script.ScriptService;  
-import org.opensearch.search.SearchService;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.fetch.FetchPhase;  
-import org.opensearch.search.pipeline.SearchPipelineService;
-import org.opensearch.search.query.QueryPhase;
-import org.opensearch.snapshots.mockstore.MockEventuallyConsistentRepository;  
-import org.opensearch.tasks.TaskResourceTrackingService;
-import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.disruption.DisruptableMockTransport;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.RemoteTransportException;
-import org.opensearch.transport.TransportException;  
-import org.opensearch.transport.TransportInterceptor;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestHandler;  
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.AdminClient;
-import org.opensearch.transport.client.node.NodeClient;  
-import org.opensearch.wlm.WorkloadGroupService;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.nio.file.Path;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;  
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;  
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
-
-import org.mockito.Mockito;
-
-import static java.util.Collections.emptyMap;  
-import static java.util.Collections.emptySet;
-import static org.opensearch.action.support.ActionTestUtils.assertNoFailureListener;
-import static org.opensearch.env.Environment.PATH_HOME_SETTING;  
-import static org.opensearch.monitor.StatusInfo.Status.HEALTHY;
-import static org.opensearch.node.Node.NODE_NAME_SETTING;
-import static org.opensearch.node.Node.NODE_SEARCH_CACHE_SIZE_SETTING;  
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.either;  
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.endsWith;
-import static org.hamcrest.Matchers.hasSize;  
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.iterableWithSize;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;  
-import static org.hamcrest.Matchers.notNullValue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class SnapshotResiliencyTests extends OpenSearchTestCase {
-
-    private DeterministicTaskQueue deterministicTaskQueue;
-
-    private TestClusterNodes testClusterNodes;  
-
-    private Path tempDir;
-
-    /**
-     * Context shared by all the node's {@link Repository} instances if the eventually consistent blobstore is to be used.
-     * {@code null} if not using the eventually consistent blobstore.  
-     */
-    @Nullable
-    private MockEventuallyConsistentRepository.Context blobStoreContext;  
-
-    @Before
-    public void createServices() {  
-        tempDir = createTempDir();
-        if (randomBoolean()) {
-            blobStoreContext = new MockEventuallyConsistentRepository.Context();  
-        }
-        deterministicTaskQueue = new DeterministicTaskQueue(Settings.builder().put(NODE_NAME_SETTING.getKey(), "shared").build(), random());
-    }  
-
-    @After
-    public void verifyReposThenStopServices() {  
-        try {
-            clearDisruptionsAndAwaitSync();
-
-            final StepListener<CleanupRepositoryResponse> cleanupResponse = new StepListener<>();
-            final StepListener<CreateSnapshotResponse> createSnapshotResponse = new StepListener<>();
-            // Create another snapshot and then clean up the repository to verify that the repository works correctly no matter the  
-            // failures seen during the previous test.
-            client().admin()
-                .cluster()  
-                .prepareCreateSnapshot("repo", "last-snapshot")
-                .setWaitForCompletion(true)
-                .setPartial(true)  
-                .execute(createSnapshotResponse);
-            continueOrDie(createSnapshotResponse, r -> {
-                final SnapshotInfo snapshotInfo = r.getSnapshotInfo();  
-                // Snapshot can be partial because some tests leave indices in a red state because data nodes were stopped
-                assertThat(snapshotInfo.state(), either(is(SnapshotState.SUCCESS)).or(is(SnapshotState.PARTIAL)));
-                assertThat(snapshotInfo.shardFailures(), iterableWithSize(snapshotInfo.failedShards()));  
-                assertThat(snapshotInfo.successfulShards(), is(snapshotInfo.totalShards() - snapshotInfo.failedShards()));
-                client().admin().cluster().cleanupRepository(new CleanupRepositoryRequest("repo"), cleanupResponse);
-            });  
-            final AtomicBoolean cleanedUp = new AtomicBoolean(false);
-            continueOrDie(cleanupResponse, r -> cleanedUp.set(true));
-
-            runUntil(cleanedUp::get, TimeUnit.MINUTES.toMillis(1L));
-
-            if (blobStoreContext != null) {  
-                blobStoreContext.forceConsistent();
-            }
-            BlobStoreTestUtil.assertConsistency(  
-                (BlobStoreRepository) testClusterNodes.randomClusterManagerNodeSafe().repositoriesService.repository("repo"),
-                Runnable::run
-            );  
-        } finally {
-            testClusterNodes.nodes.values().forEach(TestClusterNodes.TestClusterNode::stop);
-        }  
-    }
-
-    public void testSuccessfulSnapshotAndRestore() {  
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        String repoName = "repo";  
-        String snapshotName = "snapshot";
-        final String index = "test";
-        final int shards = randomIntBetween(1, 10);  
-        final int documents = randomIntBetween(0, 100);
-
-        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(  
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseListener = new StepListener<>();
-
-        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {  
-            final Runnable afterIndexing = () -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setWaitForCompletion(true)
-                .execute(createSnapshotResponseListener);
-            if (documents == 0) {  
-                afterIndexing.run();
-            } else {
-                final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
-                for (int i = 0; i < documents; ++i) {
-                    bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));
-                }  
-                final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();
-                client().bulk(bulkRequest, bulkResponseStepListener);
-                continueOrDie(bulkResponseStepListener, bulkResponse -> {  
-                    assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());
-                    assertEquals(documents, bulkResponse.getItems().length);
-                    afterIndexing.run();  
-                });
-            }
-        });  
-
-        final StepListener<AcknowledgedResponse> deleteIndexListener = new StepListener<>();
-
-        continueOrDie(
-            createSnapshotResponseListener,
-            createSnapshotResponse -> client().admin().indices().delete(new DeleteIndexRequest(index), deleteIndexListener)  
-        );
-
-        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseListener = new StepListener<>();  
-        continueOrDie(
-            deleteIndexListener,
-            ignored -> client().admin()  
-                .cluster()
-                .restoreSnapshot(
-                    new RestoreSnapshotRequest(repoName, snapshotName).waitForCompletion(true),  
-                    restoreSnapshotResponseListener
-                )
-        );  
-
-        final StepListener<SearchResponse> searchResponseListener = new StepListener<>();
-        continueOrDie(restoreSnapshotResponseListener, restoreSnapshotResponse -> {  
-            assertEquals(shards, restoreSnapshotResponse.getRestoreInfo().totalShards());
-            client().search(
-                new SearchRequest(index).source(new SearchSourceBuilder().size(0).trackTotalHits(true)),  
-                searchResponseListener
-            );
-        });  
-
-        final AtomicBoolean documentCountVerified = new AtomicBoolean();
-        continueOrDie(searchResponseListener, r -> {  
-            assertEquals(documents, Objects.requireNonNull(r.getHits().getTotalHits()).value());
-            documentCountVerified.set(true);
-        });  
-
-        runUntil(documentCountVerified::get, TimeUnit.MINUTES.toMillis(5L));
-        assertNotNull(createSnapshotResponseListener.result());  
-        assertNotNull(restoreSnapshotResponseListener.result());
-        assertTrue(documentCountVerified.get());
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);  
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
-        assertThat(snapshotIds, hasSize(1));
-
-        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());  
-        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
-        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));
-        assertEquals(shards, snapshotInfo.successfulShards());  
-        assertEquals(0, snapshotInfo.failedShards());
-    }
-
-    public void testSearchableSnapshotOverSubscription() {
-        setupTestCluster(1, 2, 2);
-
-        String repoName = "repo";
-        String snapshotName = "snapshot";
-        final String index = "test";  
-        final int shards = randomIntBetween(1, 10);
-        final int documents = randomIntBetween(0, 100);
-
-        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );  
-
-        Map<String, AggregateFileCacheStats> nodeFileCacheStats = new HashMap<>();
-        for (TestClusterNodes.TestClusterNode node : testClusterNodes.nodes.values()) {  
-            nodeFileCacheStats.put(
-                node.node.getId(),
-                new AggregateFileCacheStats(  
-                    0,
-                    new FileCacheStats(1, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.OVER_ALL_STATS),
-                    new FileCacheStats(0, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.FULL_FILE_STATS),  
-                    new FileCacheStats(1, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.BLOCK_FILE_STATS),
-                    new FileCacheStats(1, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.PINNED_FILE_STATS)
-                )  
-            );
-        }
-        ClusterInfo clusterInfo = new ClusterInfo(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), nodeFileCacheStats, Map.of());  
-        testClusterNodes.nodes.values().forEach(node -> when(node.getMockClusterInfoService().getClusterInfo()).thenReturn(clusterInfo));
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseListener = new StepListener<>();  
-
-        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {
-            final Runnable afterIndexing = () -> client().admin()  
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)
-                .setWaitForCompletion(true)  
-                .execute(createSnapshotResponseListener);
-            if (documents == 0) {
-                afterIndexing.run();  
-            } else {
-                final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-                for (int i = 0; i < documents; ++i) {  
-                    bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));
-                }
-                final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();  
-                client().bulk(bulkRequest, bulkResponseStepListener);
-                continueOrDie(bulkResponseStepListener, bulkResponse -> {
-                    assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());  
-                    assertEquals(documents, bulkResponse.getItems().length);
-                    afterIndexing.run();
-                });  
-            }
-        });
-
-        final StepListener<AcknowledgedResponse> deleteIndexListener = new StepListener<>();
-
-        continueOrDie(  
-            createSnapshotResponseListener,
-            createSnapshotResponse -> client().admin().indices().delete(new DeleteIndexRequest(index), deleteIndexListener)
-        );  
-
-        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseListener = new StepListener<>();
-        continueOrDie(  
-            deleteIndexListener,
-            ignored -> client().admin()
-                .cluster()  
-                .restoreSnapshot(
-                    new RestoreSnapshotRequest(repoName, snapshotName).waitForCompletion(true)
-                        .storageType(RestoreSnapshotRequest.StorageType.REMOTE_SNAPSHOT),  
-                    restoreSnapshotResponseListener
-                )
-        );  
-
-        final AtomicBoolean exceptionVerified = new AtomicBoolean();
-
-        restoreSnapshotResponseListener.whenComplete(null, restoreSnapshotException -> {
-            Throwable throwable = restoreSnapshotException;
-            if (restoreSnapshotException instanceof RemoteTransportException) {  
-                throwable = restoreSnapshotException.getCause();
-            }
-            try {  
-                assertTrue(throwable instanceof SnapshotRestoreException);
-                assertTrue(
-                    throwable.getMessage()  
-                        .contains(
-                            "Size of the indexes to be restored exceeds the file cache bounds. Increase the file cache capacity on the cluster nodes using "
-                                + NODE_SEARCH_CACHE_SIZE_SETTING.getKey()  
-                                + " setting."
-                        )
-                );  
-            } catch (SnapshotRestoreException ignored) {}
-            exceptionVerified.set(true);
-        });  
-
-        runUntil(exceptionVerified::get, TimeUnit.MINUTES.toMillis(5L));
-        assertTrue(exceptionVerified.get());  
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
-        assertThat(snapshotIds, hasSize(1));
-
-        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
-        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
-        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
-        assertEquals(shards, snapshotInfo.successfulShards());
-        assertEquals(0, snapshotInfo.failedShards());
-    }  
-
-    public void testSnapshotWithNodeDisconnects() {
-        final int dataNodes = randomIntBetween(2, 10);  
-        final int clusterManagerNodes = randomFrom(1, 3, 5);
-        setupTestCluster(clusterManagerNodes, dataNodes);
-
-        String repoName = "repo";
-        String snapshotName = "snapshot";
-        final String index = "test";  
-        final int shards = randomIntBetween(1, 10);
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();  
-
-        final boolean partial = randomBoolean();
-        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {  
-            for (int i = 0; i < randomIntBetween(0, dataNodes); ++i) {
-                scheduleNow(this::disconnectRandomDataNode);
-            }  
-            if (randomBoolean()) {
-                scheduleNow(() -> testClusterNodes.clearNetworkDisruptions());
-            }  
-            testClusterNodes.randomClusterManagerNodeSafe().client.admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setPartial(partial)
-                .execute(createSnapshotResponseStepListener);
-        });  
-
-        final AtomicBoolean snapshotNeverStarted = new AtomicBoolean(false);
-
-        createSnapshotResponseStepListener.whenComplete(createSnapshotResponse -> {
-            for (int i = 0; i < randomIntBetween(0, dataNodes); ++i) {
-                scheduleNow(this::disconnectOrRestartDataNode);  
-            }
-            // Only disconnect cluster-manager if we have more than a single cluster-manager and can simulate a failover
-            final boolean disconnectedClusterManager = randomBoolean() && clusterManagerNodes > 1;  
-            if (disconnectedClusterManager) {
-                scheduleNow(this::disconnectOrRestartClusterManagerNode);
-            }  
-            if (disconnectedClusterManager || randomBoolean()) {
-                scheduleSoon(() -> testClusterNodes.clearNetworkDisruptions());
-            } else if (randomBoolean()) {  
-                scheduleNow(() -> testClusterNodes.clearNetworkDisruptions());
-            }
-        }, e -> {  
-            if (partial == false) {
-                final SnapshotException unwrapped = (SnapshotException) ExceptionsHelper.unwrap(e, SnapshotException.class);
-                assertNotNull(unwrapped);  
-                assertThat(unwrapped.getMessage(), endsWith("Indices don't have primary shards [test]"));
-                snapshotNeverStarted.set(true);
-            } else {  
-                throw new AssertionError(e);
-            }
-        });  
-
-        runUntil(() -> testClusterNodes.randomClusterManagerNode().map(clusterManager -> {
-            if (snapshotNeverStarted.get()) {  
-                return true;
-            }
-            final SnapshotsInProgress snapshotsInProgress = clusterManager.clusterService.state().custom(SnapshotsInProgress.TYPE);  
-            return snapshotsInProgress != null && snapshotsInProgress.entries().isEmpty();
-        }).orElse(false), TimeUnit.MINUTES.toMillis(1L));
-
-        clearDisruptionsAndAwaitSync();
-
-        final TestClusterNodes.TestClusterNode randomClusterManager = testClusterNodes.randomClusterManagerNode()  
-            .orElseThrow(() -> new AssertionError("expected to find at least one active cluster-manager node"));
-        SnapshotsInProgress finalSnapshotsInProgress = randomClusterManager.clusterService.state()
-            .custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY);  
-        assertThat(finalSnapshotsInProgress.entries(), empty());
-        final Repository repository = randomClusterManager.repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
-        if (snapshotNeverStarted.get()) {
-            assertThat(snapshotIds, empty());
-        } else {  
-            assertThat(snapshotIds, hasSize(1));
-        }
-    }  
-
-    public void testSnapshotDeleteWithClusterManagerFailover() {
-        final int dataNodes = randomIntBetween(2, 10);  
-        final int clusterManagerNodes = randomFrom(3, 5);
-        setupTestCluster(clusterManagerNodes, dataNodes);
-
-        String repoName = "repo";
-        String snapshotName = "snapshot";
-        final String index = "test";  
-        final int shards = randomIntBetween(1, 10);
-
-        final boolean waitForSnapshot = randomBoolean();  
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),  
-            createIndexResponse -> testClusterNodes.randomClusterManagerNodeSafe().client.admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setWaitForCompletion(waitForSnapshot)
-                .execute(createSnapshotResponseStepListener)
-        );  
-
-        final AtomicBoolean snapshotDeleteResponded = new AtomicBoolean(false);
-        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {  
-            scheduleNow(this::disconnectOrRestartClusterManagerNode);
-            testClusterNodes.randomDataNodeSafe().client.admin()
-                .cluster()  
-                .prepareDeleteSnapshot(repoName, snapshotName)
-                .execute(ActionListener.wrap(() -> snapshotDeleteResponded.set(true)));
-        });  
-
-        runUntil(
-            () -> testClusterNodes.randomClusterManagerNode()  
-                .map(
-                    clusterManager -> snapshotDeleteResponded.get()
-                        && clusterManager.clusterService.state()  
-                            .custom(SnapshotDeletionsInProgress.TYPE, SnapshotDeletionsInProgress.EMPTY)
-                            .getEntries()
-                            .isEmpty()  
-                )
-                .orElse(false),
-            TimeUnit.MINUTES.toMillis(1L)  
-        );
-
-        clearDisruptionsAndAwaitSync();  
-
-        final TestClusterNodes.TestClusterNode randomClusterManager = testClusterNodes.randomClusterManagerNode()
-            .orElseThrow(() -> new AssertionError("expected to find at least one active cluster-manager node"));  
-        SnapshotsInProgress finalSnapshotsInProgress = randomClusterManager.clusterService.state().custom(SnapshotsInProgress.TYPE);
-        assertThat(finalSnapshotsInProgress.entries(), empty());
-        final Repository repository = randomClusterManager.repositoriesService.repository(repoName);  
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
-        assertThat(snapshotIds, hasSize(0));
-    }  
-
-    public void testConcurrentSnapshotCreateAndDelete() {
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));  
-
-        String repoName = "repo";
-        String snapshotName = "snapshot";  
-        final String index = "test";
-        final int shards = randomIntBetween(1, 10);
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );  
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
-
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),
-            createIndexResponse -> client().admin()  
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)
-                .execute(createSnapshotResponseStepListener)  
-        );
-
-        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
-
-        clusterManagerNode.clusterService.addListener(new ClusterStateListener() {
-            @Override  
-            public void clusterChanged(ClusterChangedEvent event) {
-                if (event.state().custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().isEmpty() == false) {
-                    client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).execute(deleteSnapshotStepListener);  
-                    clusterManagerNode.clusterService.removeListener(this);
-                }
-            }  
-        });
-
-        final StepListener<CreateSnapshotResponse> createAnotherSnapshotResponseStepListener = new StepListener<>();  
-
-        continueOrDie(
-            deleteSnapshotStepListener,  
-            acknowledgedResponse -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setWaitForCompletion(true)
-                .execute(createAnotherSnapshotResponseStepListener)
-        );  
-        continueOrDie(
-            createAnotherSnapshotResponseStepListener,
-            createSnapshotResponse -> assertEquals(createSnapshotResponse.getSnapshotInfo().state(), SnapshotState.SUCCESS)  
-        );
-
-        deterministicTaskQueue.runAllRunnableTasks();  
-
-        assertNotNull(createSnapshotResponseStepListener.result());
-        assertNotNull(createAnotherSnapshotResponseStepListener.result());  
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
-        assertThat(snapshotIds, hasSize(1));
-
-        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
-        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
-        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
-        assertEquals(shards, snapshotInfo.successfulShards());
-        assertEquals(0, snapshotInfo.failedShards());
-    }  
-
-    public void testConcurrentSnapshotCreateAndDeleteOther() {
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));  
-
-        String repoName = "repo";
-        String snapshotName = "snapshot";  
-        final String index = "test";
-        final int shards = randomIntBetween(1, 10);
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );  
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
-
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),
-            createIndexResponse -> client().admin()  
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)
-                .setWaitForCompletion(true)  
-                .execute(createSnapshotResponseStepListener)
-        );
-
-        final StepListener<CreateSnapshotResponse> createOtherSnapshotResponseStepListener = new StepListener<>();
-        continueOrDie(
-            createSnapshotResponseStepListener,  
-            createSnapshotResponse -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, "snapshot-2")  
-                .execute(createOtherSnapshotResponseStepListener)
-        );
-        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
-
-        continueOrDie(
-            createOtherSnapshotResponseStepListener,  
-            createSnapshotResponse -> client().admin()
-                .cluster()
-                .prepareDeleteSnapshot(repoName, snapshotName)  
-                .execute(deleteSnapshotStepListener)
-        );
-
-        final StepListener<CreateSnapshotResponse> createAnotherSnapshotResponseStepListener = new StepListener<>();
-
-        continueOrDie(deleteSnapshotStepListener, deleted -> {  
-            client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setWaitForCompletion(true)
-                .execute(createAnotherSnapshotResponseStepListener);
-            continueOrDie(  
-                createAnotherSnapshotResponseStepListener,
-                createSnapshotResponse -> assertEquals(createSnapshotResponse.getSnapshotInfo().state(), SnapshotState.SUCCESS)
-            );  
-        });
-
-        deterministicTaskQueue.runAllRunnableTasks();  
-
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));  
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
-        // We end up with two snapshots no matter if the delete worked out or not  
-        assertThat(snapshotIds, hasSize(2));
-        for (SnapshotId snapshotId : snapshotIds) {
-            final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotId);  
-            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
-            assertThat(snapshotInfo.indices(), containsInAnyOrder(index));
-            assertEquals(shards, snapshotInfo.successfulShards());  
-            assertEquals(0, snapshotInfo.failedShards());
-        }
-    }  
-
-    public void testTransportGetSnapshotsAction() {
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));  
-
-        String repoName = "repo";
-        final String[] snapshotsList = { "snapshot-1" };  
-        final String index = "index-1";
-        final int shards = randomIntBetween(1, 10);
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );  
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
-        final String snapshot = snapshotsList[0];  
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),
-            createSnapshotResponse -> client().admin()  
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshot)
-                .setWaitForCompletion(true)  
-                .execute(createSnapshotResponseStepListener)
-        );
-
-        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {
-
-            TransportAction getSnapshotsAction = clusterManagerNode.actions.get(GetSnapshotsAction.INSTANCE);  
-            TransportGetSnapshotsAction transportGetSnapshotsAction = (TransportGetSnapshotsAction) getSnapshotsAction;
-            GetSnapshotsRequest repoSnapshotRequest = new GetSnapshotsRequest().repository(repoName).snapshots(snapshotsList);
-
-            transportGetSnapshotsAction.execute(null, repoSnapshotRequest, ActionListener.wrap(repoSnapshotResponse -> {
-                assertNotNull("Snapshot list should not be null", repoSnapshotResponse.getSnapshots());
-                assertThat(repoSnapshotResponse.getSnapshots(), hasSize(1));  
-                List<SnapshotInfo> snapshotInfos = repoSnapshotResponse.getSnapshots();
-                SnapshotInfo snapshotInfo = snapshotInfos.get(0);
-                assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());  
-                assertEquals(0, snapshotInfo.failedShards());
-                assertEquals(snapshotInfo.snapshotId().getName(), snapshotsList[0]);
-            }, exception -> { throw new AssertionError(exception); }));  
-        });
-    }
-
-    public void testTransportGetCurrentSnapshotsAction() {
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        String repoName = "repo";
-        final String index = "index-1";
-        final String[] snapshotsList = { GetSnapshotsRequest.CURRENT_SNAPSHOT };  
-        final int shards = randomIntBetween(1, 10);
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(  
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseListener = new StepListener<>();
-        clusterManagerNode.clusterService.addListener(new ClusterStateListener() {
-            @Override  
-            public void clusterChanged(ClusterChangedEvent event) {
-                if (event.state().custom(SnapshotsInProgress.TYPE) != null) {
-                    TransportAction getSnapshotsAction = clusterManagerNode.actions.get(GetSnapshotsAction.INSTANCE);  
-                    TransportGetSnapshotsAction transportGetSnapshotsAction = (TransportGetSnapshotsAction) getSnapshotsAction;
-                    GetSnapshotsRequest repoSnapshotRequest = new GetSnapshotsRequest().repository(repoName)
-                        .snapshots(snapshotsList)  
-                        .ignoreUnavailable(false)
-                        .verbose(false);
-                    transportGetSnapshotsAction.execute(null, repoSnapshotRequest, ActionListener.wrap(repoSnapshotResponse -> {  
-                        assertNotNull("Snapshot list should not be null", repoSnapshotResponse.getSnapshots());
-                        List<SnapshotInfo> snapshotInfos = repoSnapshotResponse.getSnapshots();
-                        assertThat(repoSnapshotResponse.getSnapshots(), hasSize(snapshotsList.length));  
-                        for (SnapshotInfo snapshotInfo : snapshotInfos) {
-                            assertEquals(SnapshotState.IN_PROGRESS, snapshotInfo.state());
-                            assertEquals(0, snapshotInfo.failedShards());  
-                            assertTrue(snapshotInfo.snapshotId().getName().contains("last-snapshot"));
-                        }
-                    }, exception -> { throw new AssertionError(exception); }));  
-                    clusterManagerNode.clusterService.removeListener(this);
-                }
-            }  
-        });
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),  
-            createIndexResponse -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, GetSnapshotsRequest.CURRENT_SNAPSHOT)  
-                .execute(createSnapshotResponseListener)
-        );
-        deterministicTaskQueue.runAllRunnableTasks();  
-    }
-
-    public void testBulkSnapshotDeleteWithAbort() {  
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        String repoName = "repo";  
-        String snapshotName = "snapshot";
-        final String index = "test";
-        final int shards = randomIntBetween(1, 10);  
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()  
-        );
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();  
-
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),  
-            createIndexResponse -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setWaitForCompletion(true)
-                .execute(createSnapshotResponseStepListener)
-        );  
-
-        final int inProgressSnapshots = randomIntBetween(1, 5);
-        final StepListener<Collection<CreateSnapshotResponse>> createOtherSnapshotResponseStepListener = new StepListener<>();  
-        final ActionListener<CreateSnapshotResponse> createSnapshotListener = new GroupedActionListener<>(
-            createOtherSnapshotResponseStepListener,
-            inProgressSnapshots  
-        );
-
-        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {  
-            for (int i = 0; i < inProgressSnapshots; i++) {
-                client().admin().cluster().prepareCreateSnapshot(repoName, "other-" + i).execute(createSnapshotListener);
-            }  
-        });
-
-        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
-
-        continueOrDie(
-            createOtherSnapshotResponseStepListener,  
-            createSnapshotResponse -> client().admin()
-                .cluster()
-                .deleteSnapshot(new DeleteSnapshotRequest(repoName, "*"), deleteSnapshotStepListener)  
-        );
-
-        deterministicTaskQueue.runAllRunnableTasks();  
-
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));  
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
-        // No snapshots should be left in the repository  
-        assertThat(snapshotIds, empty());
-    }
-
-    public void testConcurrentSnapshotRestoreAndDeleteOther() {
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        String repoName = "repo";
-        String snapshotName = "snapshot";
-        final String index = "test";  
-        final String alias = "test_alias";
-        final int shards = randomIntBetween(1, 10);
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );  
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
-
-        final int documentsFirstSnapshot = randomIntBetween(0, 100);
-        continueOrDie(
-            createRepoAndIndexAndAlias(repoName, index, shards, alias),  
-            createIndexResponse -> indexNDocuments(
-                documentsFirstSnapshot,
-                index,  
-                () -> client().admin()
-                    .cluster()
-                    .prepareCreateSnapshot(repoName, snapshotName)  
-                    .setWaitForCompletion(true)
-                    .execute(createSnapshotResponseStepListener)
-            )  
-        );
-
-        final int documentsSecondSnapshot = randomIntBetween(0, 100);  
-
-        final StepListener<CreateSnapshotResponse> createOtherSnapshotResponseStepListener = new StepListener<>();
-
-        final String secondSnapshotName = "snapshot-2";
-        continueOrDie(
-            createSnapshotResponseStepListener,  
-            createSnapshotResponse -> indexNDocuments(
-                documentsSecondSnapshot,
-                index,  
-                () -> client().admin()
-                    .cluster()
-                    .prepareCreateSnapshot(repoName, secondSnapshotName)  
-                    .setWaitForCompletion(true)
-                    .execute(createOtherSnapshotResponseStepListener)
-            )  
-        );
-
-        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
-        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseListener = new StepListener<>();
-
-        continueOrDie(createOtherSnapshotResponseStepListener, createSnapshotResponse -> {  
-            scheduleNow(() -> client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).execute(deleteSnapshotStepListener));
-            scheduleNow(
-                () -> client().admin()  
-                    .cluster()
-                    .restoreSnapshot(
-                        new RestoreSnapshotRequest(repoName, secondSnapshotName).waitForCompletion(true)  
-                            .includeAliases(true)
-                            .renamePattern("(.+)")
-                            .renameReplacement("restored_$1")  
-                            .renameAliasPattern("(.+)")
-                            .renameAliasReplacement("restored_alias_$1"),
-                        restoreSnapshotResponseListener  
-                    )
-            );
-        });  
-
-        final StepListener<SearchResponse> searchIndexResponseListener = new StepListener<>();
-        final StepListener<SearchResponse> searchAliasResponseListener = new StepListener<>();  
-        continueOrDie(restoreSnapshotResponseListener, restoreSnapshotResponse -> {
-            assertEquals(shards, restoreSnapshotResponse.getRestoreInfo().totalShards());
-            client().search(  
-                new SearchRequest("restored_" + index).source(new SearchSourceBuilder().size(0).trackTotalHits(true)),
-                searchIndexResponseListener
-            );  
-            client().search(
-                new SearchRequest("restored_alias_" + alias).source(new SearchSourceBuilder().size(0).trackTotalHits(true)),
-                searchAliasResponseListener  
-            );
-        });
-
-        deterministicTaskQueue.runAllRunnableTasks();
-
-        assertEquals(  
-            documentsFirstSnapshot + documentsSecondSnapshot,
-            Objects.requireNonNull(searchIndexResponseListener.result().getHits().getTotalHits()).value()
-        );  
-        assertEquals(
-            documentsFirstSnapshot + documentsSecondSnapshot,
-            Objects.requireNonNull(searchAliasResponseListener.result().getHits().getTotalHits()).value()  
-        );
-        assertThat(deleteSnapshotStepListener.result().isAcknowledged(), is(true));
-        assertThat(restoreSnapshotResponseListener.result().getRestoreInfo().failedShards(), is(0));  
-
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
-        assertThat(snapshotIds, contains(createOtherSnapshotResponseStepListener.result().getSnapshotInfo().snapshotId()));
-
-        for (SnapshotId snapshotId : snapshotIds) {  
-            final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotId);
-            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
-            assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
-            assertEquals(shards, snapshotInfo.successfulShards());
-            assertEquals(0, snapshotInfo.failedShards());
-        }  
-    }
-
-    private void indexNDocuments(int documents, String index, Runnable afterIndexing) {  
-        if (documents == 0) {
-            afterIndexing.run();
-            return;  
-        }
-        final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-        for (int i = 0; i < documents; ++i) {  
-            bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));
-        }
-        final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();  
-        client().bulk(bulkRequest, bulkResponseStepListener);
-        continueOrDie(bulkResponseStepListener, bulkResponse -> {
-            assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());  
-            assertEquals(documents, bulkResponse.getItems().length);
-            afterIndexing.run();
-        });  
-    }
-
-    public void testConcurrentSnapshotDeleteAndDeleteIndex() throws IOException {  
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        String repoName = "repo";  
-        String snapshotName = "snapshot";
-        final String index = "test";
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );  
-
-        final StepListener<Collection<CreateIndexResponse>> createIndicesListener = new StepListener<>();
-        final int indices = randomIntBetween(5, 20);  
-
-        final SetOnce<Index> firstIndex = new SetOnce<>();
-        continueOrDie(createRepoAndIndex(repoName, index, 1), createIndexResponse -> {  
-            firstIndex.set(clusterManagerNode.clusterService.state().metadata().index(index).getIndex());
-            // create a few more indices to make it more likely that the subsequent index delete operation happens before snapshot
-            // finalization  
-            final GroupedActionListener<CreateIndexResponse> listener = new GroupedActionListener<>(createIndicesListener, indices);
-            for (int i = 0; i < indices; ++i) {
-                client().admin().indices().create(new CreateIndexRequest("index-" + i), listener);  
-            }
-        });
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
-
-        final boolean partialSnapshot = randomBoolean();  
-
-        continueOrDie(
-            createIndicesListener,  
-            createIndexResponses -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setWaitForCompletion(false)
-                .setPartial(partialSnapshot)
-                .setIncludeGlobalState(randomBoolean())  
-                .execute(createSnapshotResponseStepListener)
-        );
-
-        continueOrDie(
-            createSnapshotResponseStepListener,
-            createSnapshotResponse -> client().admin()  
-                .indices()
-                .delete(new DeleteIndexRequest(index), new ActionListener<AcknowledgedResponse>() {
-                    @Override  
-                    public void onResponse(AcknowledgedResponse acknowledgedResponse) {
-                        if (partialSnapshot) {
-                            // Recreate index by the same name to test that we don't snapshot conflicting metadata in this scenario  
-                            client().admin().indices().create(new CreateIndexRequest(index), noopListener());
-                        }
-                    }  
-
-                    @Override
-                    public void onFailure(Exception e) {  
-                        if (partialSnapshot) {
-                            throw new AssertionError("Delete index should always work during partial snapshots", e);
-                        }  
-                    }
-                })
-        );  
-
-        deterministicTaskQueue.runAllRunnableTasks();
-
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
-        final RepositoryData repositoryData = getRepositoryData(repository);
-        Collection<SnapshotId> snapshotIds = repositoryData.getSnapshotIds();
-        assertThat(snapshotIds, hasSize(1));  
-
-        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
-        if (partialSnapshot) {  
-            assertThat(snapshotInfo.state(), either(is(SnapshotState.SUCCESS)).or(is(SnapshotState.PARTIAL)));
-            // Single shard for each index so we either get all indices or all except for the deleted index
-            assertThat(snapshotInfo.successfulShards(), either(is(indices + 1)).or(is(indices)));  
-            if (snapshotInfo.successfulShards() == indices + 1) {
-                final IndexMetadata indexMetadata = repository.getSnapshotIndexMetaData(
-                    repositoryData,  
-                    snapshotInfo.snapshotId(),
-                    repositoryData.resolveIndexId(index)
-                );  
-                // Make sure we snapshotted the metadata of this index and not the recreated version
-                assertEquals(indexMetadata.getIndex(), firstIndex.get());
-            }  
-        } else {
-            assertEquals(snapshotInfo.state(), SnapshotState.SUCCESS);
-            // Index delete must be blocked for non-partial snapshots and we get a snapshot for every index  
-            assertEquals(snapshotInfo.successfulShards(), indices + 1);
-        }
-        assertEquals(0, snapshotInfo.failedShards());  
-    }
-
-    public void testConcurrentDeletes() {  
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        String repoName = "repo";  
-        String snapshotName = "snapshot";
-        final String index = "test";
-        final int shards = randomIntBetween(1, 10);  
-
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()  
-        );
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();  
-
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),  
-            createIndexResponse -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoName, snapshotName)  
-                .setWaitForCompletion(true)
-                .execute(createSnapshotResponseStepListener)
-        );  
-
-        final Collection<StepListener<Boolean>> deleteSnapshotStepListeners = Arrays.asList(new StepListener<>(), new StepListener<>());
-
-        final AtomicInteger successfulDeletes = new AtomicInteger(0);
-
-        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {  
-            for (StepListener<Boolean> deleteListener : deleteSnapshotStepListeners) {
-                client().admin()
-                    .cluster()  
-                    .prepareDeleteSnapshot(repoName, snapshotName)
-                    .execute(ActionListener.wrap(resp -> deleteListener.onResponse(true), e -> {
-                        final Throwable unwrapped = ExceptionsHelper.unwrap(  
-                            e,
-                            ConcurrentSnapshotExecutionException.class,
-                            SnapshotMissingException.class  
-                        );
                         assertThat(unwrapped, notNullValue());
-                        deleteListener.onResponse(false);  
-                    }));
-            }
-        });  
-
-        for (StepListener<Boolean> deleteListener : deleteSnapshotStepListeners) {
-            continueOrDie(deleteListener, deleted -> {  
-                if (deleted) {
-                    successfulDeletes.incrementAndGet();
-                }  
-            });
-        }
-
-        deterministicTaskQueue.runAllRunnableTasks();
-
-        SnapshotDeletionsInProgress deletionsInProgress = clusterManagerNode.clusterService.state()  
-            .custom(SnapshotDeletionsInProgress.TYPE);
-        assertFalse(deletionsInProgress.hasDeletionsInProgress());
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
-        final RepositoryData repositoryData = getRepositoryData(repository);
-        Collection<SnapshotId> snapshotIds = repositoryData.getSnapshotIds();
-        // We end up with no snapshots since at least one of the deletes worked out  
-        assertThat(snapshotIds, empty());
-        assertThat(successfulDeletes.get(), either(is(1)).or(is(2)));
-        // We did one snapshot and one delete so we went two steps from the empty generation (-1) to 1  
-        assertThat(repositoryData.getGenId(), is(1L));
-    }
-
-    /**
-     * Simulates concurrent restarts of data and cluster-manager nodes as well as relocating a primary shard, while starting and subsequently
-     * deleting a snapshot.  
-     */
-    public void testSnapshotPrimaryRelocations() {
-        final int clusterManagerNodeCount = randomFrom(1, 3, 5);  
-        setupTestCluster(clusterManagerNodeCount, randomIntBetween(2, 5));
-
-        String repoName = "repo";  
-        String snapshotName = "snapshot";
-        final String index = "test";
-
-        final int shards = randomIntBetween(1, 5);
-
-        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(  
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );
-        final AtomicBoolean createdSnapshot = new AtomicBoolean();  
-        final AdminClient clusterManagerAdminClient = clusterManagerNode.client.admin();
-
-        final StepListener<ClusterStateResponse> clusterStateResponseStepListener = new StepListener<>();  
-
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),  
-            createIndexResponse -> client().admin().cluster().state(new ClusterStateRequest(), clusterStateResponseStepListener)
-        );
-
-        continueOrDie(clusterStateResponseStepListener, clusterStateResponse -> {
-            final ShardRouting shardToRelocate = clusterStateResponse.getState().routingTable().allShards(index).get(0);
-            final TestClusterNodes.TestClusterNode currentPrimaryNode = testClusterNodes.nodeById(shardToRelocate.currentNodeId());  
-            final TestClusterNodes.TestClusterNode otherNode = testClusterNodes.randomDataNodeSafe(currentPrimaryNode.node.getName());
-            scheduleNow(() -> testClusterNodes.stopNode(currentPrimaryNode));
-            scheduleNow(new Runnable() {  
-                @Override
-                public void run() {
-                    final StepListener<ClusterStateResponse> updatedClusterStateResponseStepListener = new StepListener<>();  
-                    clusterManagerAdminClient.cluster().state(new ClusterStateRequest(), updatedClusterStateResponseStepListener);
-                    continueOrDie(updatedClusterStateResponseStepListener, updatedClusterState -> {
-                        final ShardRouting shardRouting = updatedClusterState.getState()  
-                            .routingTable()
-                            .shardRoutingTable(shardToRelocate.shardId())
-                            .primaryShard();  
-                        if (shardRouting.unassigned() && shardRouting.unassignedInfo().getReason() == UnassignedInfo.Reason.NODE_LEFT) {
-                            if (clusterManagerNodeCount > 1) {
-                                scheduleNow(() -> testClusterNodes.stopNode(clusterManagerNode));  
-                            }
-                            testClusterNodes.randomDataNodeSafe().client.admin()
-                                .cluster()  
-                                .prepareCreateSnapshot(repoName, snapshotName)
-                                .execute(ActionListener.wrap(() -> {
-                                    createdSnapshot.set(true);  
-                                    testClusterNodes.randomDataNodeSafe().client.admin()
-                                        .cluster()
-                                        .deleteSnapshot(new DeleteSnapshotRequest(repoName, snapshotName), noopListener());  
-                                }));
-                            scheduleNow(
-                                () -> testClusterNodes.randomClusterManagerNodeSafe().client.admin()  
-                                    .cluster()
-                                    .reroute(
-                                        new ClusterRerouteRequest().add(  
-                                            new AllocateEmptyPrimaryAllocationCommand(
-                                                index,
-                                                shardRouting.shardId().id(),  
-                                                otherNode.node.getName(),
-                                                true
-                                            )  
-                                        ),
-                                        noopListener()
-                                    )  
-                            );
-                        } else {
-                            scheduleSoon(this);  
-                        }
-                    });
-                }  
-            });
-        });
-
-        runUntil(() -> testClusterNodes.randomClusterManagerNode().map(clusterManager -> {
-            if (createdSnapshot.get() == false) {
-                return false;  
-            }
-            return clusterManager.clusterService.state().custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().isEmpty();
-        }).orElse(false), TimeUnit.MINUTES.toMillis(1L));  
-
-        clearDisruptionsAndAwaitSync();
-
-        assertTrue(createdSnapshot.get());
-        assertThat(
-            testClusterNodes.randomDataNodeSafe().clusterService.state()  
-                .custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY)
-                .entries(),
-            empty()  
-        );
-        final Repository repository = testClusterNodes.randomClusterManagerNodeSafe().repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
-        assertThat(snapshotIds, either(hasSize(1)).or(hasSize(0)));
-    }
-
-    public void testSuccessfulSnapshotWithConcurrentDynamicMappingUpdates() {
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        String repoName = "repo";
-        String snapshotName = "snapshot";
-        final String index = "test";  
-
-        final int shards = randomIntBetween(1, 10);
-        final int documents = randomIntBetween(2, 100);  
-        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()
-        );  
-
-        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
-
-        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {
-            final AtomicBoolean initiatedSnapshot = new AtomicBoolean(false);
-            for (int i = 0; i < documents; ++i) {  
-                // Index a few documents with different field names so we trigger a dynamic mapping update for each of them
-                client().bulk(
-                    new BulkRequest().add(new IndexRequest(index).source(Collections.singletonMap("foo" + i, "bar")))  
-                        .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE),
-                    assertNoFailureListener(bulkResponse -> {
-                        assertFalse("Failures in bulkresponse: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());  
-                        if (initiatedSnapshot.compareAndSet(false, true)) {
-                            client().admin()
-                                .cluster()  
-                                .prepareCreateSnapshot(repoName, snapshotName)
-                                .setWaitForCompletion(true)
-                                .execute(createSnapshotResponseStepListener);  
-                        }
-                    })
-                );  
-            }
-        });
-
-        final String restoredIndex = "restored";
-
-        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseStepListener = new StepListener<>();  
-
-        continueOrDie(
-            createSnapshotResponseStepListener,  
-            createSnapshotResponse -> client().admin()
-                .cluster()
-                .restoreSnapshot(  
-                    new RestoreSnapshotRequest(repoName, snapshotName).renamePattern(index)
-                        .renameReplacement(restoredIndex)
-                        .waitForCompletion(true),  
-                    restoreSnapshotResponseStepListener
-                )
-        );  
-
-        final StepListener<SearchResponse> searchResponseStepListener = new StepListener<>();
-
-        continueOrDie(restoreSnapshotResponseStepListener, restoreSnapshotResponse -> {
-            assertEquals(shards, restoreSnapshotResponse.getRestoreInfo().totalShards());
-            client().search(  
-                new SearchRequest(restoredIndex).source(new SearchSourceBuilder().size(documents).trackTotalHits(true)),
-                searchResponseStepListener
-            );  
-        });
-
-        final AtomicBoolean documentCountVerified = new AtomicBoolean();  
-
-        continueOrDie(searchResponseStepListener, r -> {
-            final long hitCount = r.getHits().getTotalHits().value();  
-            assertThat(
-                "Documents were restored but the restored index mapping was older than some documents and misses some of their fields",
-                (int) hitCount,  
-                lessThanOrEqualTo(
-                    ((Map<?, ?>) clusterManagerNode.clusterService.state()
-                        .metadata()  
-                        .index(restoredIndex)
-                        .mapping()
-                        .sourceAsMap()  
-                        .get("properties")).size()
-                )
-            );  
-            documentCountVerified.set(true);
-        });
-
-        runUntil(documentCountVerified::get, TimeUnit.MINUTES.toMillis(5L));
-
-        assertNotNull(createSnapshotResponseStepListener.result());  
-        assertNotNull(restoreSnapshotResponseStepListener.result());
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));  
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
-        assertThat(snapshotIds, hasSize(1));  
-
-        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
-        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());  
-        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));
-        assertEquals(shards, snapshotInfo.successfulShards());
-        assertEquals(0, snapshotInfo.failedShards());  
-    }
-
-    public void testRunConcurrentSnapshots() {  
-        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
-
-        final String repoName = "repo";  
-        final List<String> snapshotNames = IntStream.range(1, randomIntBetween(2, 4))
-            .mapToObj(i -> "snapshot-" + i)
-            .collect(Collectors.toList());  
-        final String index = "test";
-        final int shards = randomIntBetween(1, 10);
-        final int documents = randomIntBetween(1, 100);  
-
-        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
-            testClusterNodes.nodes.values().iterator().next().clusterService.state()  
-        );
-
-        final StepListener<Collection<CreateSnapshotResponse>> allSnapshotsListener = new StepListener<>();  
-        final ActionListener<CreateSnapshotResponse> snapshotListener = new GroupedActionListener<>(
-            allSnapshotsListener,
-            snapshotNames.size()  
-        );
-        final AtomicBoolean doneIndexing = new AtomicBoolean(false);
-        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {  
-            for (String snapshotName : snapshotNames) {
-                scheduleNow(
-                    () -> client().admin()  
-                        .cluster()
-                        .prepareCreateSnapshot(repoName, snapshotName)
-                        .setWaitForCompletion(true)  
-                        .execute(snapshotListener)
                 );
-            }  
-            final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            for (int i = 0; i < documents; ++i) {
-                bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));  
+                    clusterService,
             }
-            final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();
-            client().bulk(bulkRequest, bulkResponseStepListener);  
-            continueOrDie(bulkResponseStepListener, bulkResponse -> {
-                assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());
-                assertEquals(documents, bulkResponse.getItems().length);  
+        assertTrue(createdSnapshot.get());
+                                protected void doRun() throws Exception {
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()  
+            return randomDataNode(excludedNames).orElseThrow(() -> new AssertionError("Could not find another data node."));
+                        mappingTransformerRegistry  
+                        clusterService,
+                    mock(RemoteStoreStatsTrackerFactory.class),
+import org.opensearch.action.admin.cluster.state.ClusterStateAction;
+                    .execute(createOtherSnapshotResponseStepListener)
+                    emptyMap(),
+                .cluster()
+                }  
+                .execute(createSnapshotResponseListener);
+        runUntil(() -> testClusterNodes.randomClusterManagerNode().map(clusterManager -> {
+            assertEquals(documents, bulkResponse.getItems().length);
+            }).sorted(Comparator.comparing(n -> n.node.getName())).collect(Collectors.toList());
+                nodes.computeIfAbsent("data-node" + i, nodeName -> {
+                return;
+        deterministicTaskQueue.runAllRunnableTasks();  
+        });
+        testClusterNodes.nodes.values()
+                bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));  
+            return dataNodes.isEmpty() ? Optional.empty() : Optional.ofNullable(randomFrom(dataNodes));  
+        String snapshotName = "snapshot";
+                actions.put(
+            private final TransportService transportService;
+ */
+import org.opensearch.wlm.WorkloadGroupService;
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));  
+                                .prepareCreateSnapshot(repoName, snapshotName)
+                    new MergedSegmentWarmerFactory(null, null, null),  
+            return randomClusterManagerNode().orElseThrow(
+                client().admin()
+                            clusterService,  
+        }  
+            createRepoAndIndex(repoName, index, shards),  
+                            .custom(SnapshotDeletionsInProgress.TYPE, SnapshotDeletionsInProgress.EMPTY)
+                        transportService,
+            client().search(
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+                                            new AllocateEmptyPrimaryAllocationCommand(
+            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
+                        new TransportResyncReplicationAction(
+            exceptionVerified.set(true);
+        Collection<SnapshotId> snapshotIds = repositoryData.getSnapshotIds();
+                clusterInfoService = Mockito.mock(ClusterInfoService.class);  
+        continueOrDie(
+                    nodeName,
+    }
+                    CreateIndexAction.INSTANCE,
+        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));
+                    new ClusterApplierService(node.getName(), settings, clusterSettings, threadPool) {
+                        threadPool,  
+                });  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+                    new FileCacheStats(1, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.BLOCK_FILE_STATS),
+            assertEquals(shards, restoreSnapshotResponse.getRestoreInfo().totalShards());
+            assertThat(
+                    return metadata -> new FsRepository(metadata, environment, xContentRegistry(), clusterService, recoverySettings) {
+    private void disconnectOrRestartClusterManagerNode() {
+                    )
+                    ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(Settings.EMPTY)
+import org.opensearch.transport.client.AdminClient;
+            }
+        // We did one snapshot and one delete so we went two steps from the empty generation (-1) to 1  
+                searchResponseStepListener
+    }  
+                        clusterService,
+                        }
+                    settings,
+                            .findAny();  
+                .stream()
+                scheduleNow(this::disconnectOrRestartClusterManagerNode);
+        final Repository repository = randomClusterManager.repositoriesService.repository(repoName);  
+import org.opensearch.action.ActionModule.DynamicActionRegistry;
+            documentCountVerified.set(true);
+import org.opensearch.common.SetOnce;
+                        actionFilters,
+                .put(NODE_NAME_SETTING.getKey(), nodeName)  
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
+            final AtomicBoolean cleanedUp = new AtomicBoolean(false);
+            private Map<ActionType, TransportAction> actions = new HashMap<>();
+        String snapshotName = "snapshot";
+                    new CacheModule(new ArrayList<>(), settings).getCacheService(),
+                client().bulk(
+        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), repoName, FsRepository.TYPE, settings, createRepositoryListener);  
+                    ) {
+                clusterManagerService.setClusterStatePublisher(coordinator);
+        final AtomicBoolean createdSnapshot = new AtomicBoolean();  
+                        String action,
+import org.opensearch.cluster.service.ClusterApplierService;
+                actions.put(
                 doneIndexing.set(true);
+        continueOrDie(
+                actions.put(
+        }
+        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseListener = new StepListener<>();  
+import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
+                .setWaitForCompletion(true)  
+            createIndexResponses -> client().admin()
+            final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotId);
+        }
+import org.opensearch.index.IndexingPressureService;  
+                .stream()  
+    }
+        );  
+                    null,
+            public void start(ClusterState initialState) {  
+                    new TransportDeleteSnapshotAction(  
+                    clusterService,
+                .setWaitForCompletion(waitForSnapshot)
+            return newNode(nodeName, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE);  
+                );  
+import org.opensearch.search.query.QueryPhase;
+                nodeConnectionsService = createTestNodeConnectionsService(clusterService.getSettings(), threadPool, transportService);
+                    new AliasValidator(),  
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+                    DefaultRemoteStoreSettings.INSTANCE,  
+                    protected NamedWriteableRegistry writeableRegistry() {  
+                        transportShardBulkAction,  
+                        indexNameExpressionResolver,
+            deleteIndexListener,
+        testClusterNodes.randomClusterManagerNode().ifPresent(clusterManagerNode -> {
+            createAnotherSnapshotResponseStepListener,
+            client().admin()
+        final List<TestClusterNodes.TestClusterNode> nodes = testClusterNodes.nodes.values()
+            createSnapshotResponse -> client().admin()  
+                final MetadataDeleteIndexService metadataDeleteIndexService = new MetadataDeleteIndexService(  
+import static org.hamcrest.Matchers.containsInAnyOrder;
+                                + NODE_SEARCH_CACHE_SIZE_SETTING.getKey()  
+                .custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY)
+            private final SnapshotShardsService snapshotShardsService;
+                        nodes.put(node.getName(), restartedNode);
+ * this file be licensed under the Apache-2.0 license or a
+        }
+import org.opensearch.cluster.action.index.MappingUpdatedAction;
+                assertThat(repoSnapshotResponse.getSnapshots(), hasSize(1));  
+        final boolean partialSnapshot = randomBoolean();  
+                    }));
+        });
+            // Only disconnect cluster-manager if we have more than a single cluster-manager and can simulate a failover
+                    if (n.node.getName().equals(nodeName)) {  
+            @Override  
+                    new PrimaryReplicaSyncer(  
+                    @Override
+                    new MetadataIndexUpgradeService(
+                            settings,
+                );  
+            testClusterNodes.randomClusterManagerNodeSafe().client.admin()
+                    CleanupRepositoryAction.INSTANCE,  
+                        threadPool,
+                        transportService,
+                            nodeEnv,  
+        if (nodes.isEmpty()) {  
+                        mock(ThreadPool.class)  
+                    })
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
+                final SetOnce<RepositoriesService> repositoriesServiceReference = new SetOnce<>();
+                    )  
+        runUntil(() -> testClusterNodes.randomClusterManagerNode().map(clusterManager -> {
+    private void runUntil(Supplier<Boolean> fulfilled, long timeout) {
+                .cluster()
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));  
+                .filter(n -> n.node.isClusterManagerNode())
+            createSnapshotResponseListener,
+                    .cluster()
+                .filter(n -> disconnectedNodes.contains(n.node.getName()) == false)
+                            SnapshotMissingException.class  
+                // Index a few documents with different field names so we trigger a dynamic mapping update for each of them
+                )
+            final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotId);
+            private final MappingTransformerRegistry mappingTransformerRegistry;
+import org.opensearch.action.support.PlainActionFuture;
+import org.opensearch.common.util.PageCacheRecycler;  
+                documentsFirstSnapshot,
+    private Environment createEnvironment(String nodeName) {  
+import org.opensearch.cluster.SnapshotDeletionsInProgress;  
+        assertThat(snapshotIds, hasSize(0));
+                            transportService,
+                coordinator.start();
+                () -> client().admin()  
+                    restoreSnapshotResponseStepListener
+                    random(),
+        final String index = "test";
+        final StepListener<CreateSnapshotResponse> createOtherSnapshotResponseStepListener = new StepListener<>();
+ * GitHub history for details.
+                    threadPool,  
+        continueOrDie(
+        final int clusterManagerNodeCount = randomFrom(1, 3, 5);  
+                });
+                new AggregateFileCacheStats(  
+                            : ConnectionStatus.CONNECTED;  
+                    )  
+                nodes.computeIfAbsent("warm-node" + i, nodeName -> {
+                final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+                        actionFilters,
+                                node,
+            scheduleNow(this::disconnectOrRestartClusterManagerNode);
+                    new FileCacheStats(0, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.FULL_FILE_STATS),  
+            continueOrDie(cleanupResponse, r -> cleanedUp.set(true));
+        final StepListener<CreateSnapshotResponse> createAnotherSnapshotResponseStepListener = new StepListener<>();
+            private final RerouteService rerouteService;
+                .setPartial(partial)
+    private void setupTestCluster(int clusterManagerNodes, int dataNodes) {
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
+                        actionFilters,
+                    } catch (IOException e) {  
+            final StepListener<CleanupRepositoryResponse> cleanupResponse = new StepListener<>();
+        if (documents == 0) {
+        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {  
+        return ClusterState.builder(state)
+            .stream()
+                searchResponseListener
+                        if (node.equals(destination)) {  
+                    () -> client().admin()  
+import org.opensearch.action.admin.indices.create.CreateIndexAction;
+        } else {
+                        indicesService,
+            .collect(Collectors.toList());  
+        }, e -> {  
+                .setWaitForCompletion(true)  
+                }
+                    ),
+import org.opensearch.index.SegmentReplicationPressureService;
+                for (int i = 0; i < documents; ++i) {
+import org.opensearch.action.support.ActionFilters;
+        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {  
+                            "Size of the indexes to be restored exceeds the file cache bounds. Increase the file cache capacity on the cluster nodes using "
+                    threadPool,  
+                    .cluster()
+    private static <T> void continueOrDie(StepListener<T> listener, CheckedConsumer<T, Exception> onResponse) {  
+                final ShardStateAction shardStateAction = new ShardStateAction(  
+                                scheduleNow(() -> testClusterNodes.stopNode(clusterManagerNode));  
+        final int shards = randomIntBetween(1, 10);
+        SnapshotsInProgress finalSnapshotsInProgress = randomClusterManager.clusterService.state()
+                threadPool = deterministicTaskQueue.getThreadPool(runnable -> CoordinatorTests.onNodeLog(node, runnable));  
+    }
+                        new TaskResourceTrackingService(settings, clusterSettings, threadPool),
+                final SetOnce<RerouteService> rerouteServiceSetOnce = new SetOnce<>();
+                    new TransportDeleteIndexAction(
+        }  
+                            actionFilters,
+                        settings,
+    }
+                        }
+                        new SearchPipelineService(  
+        return createIndexResponseStepListener;
+import org.opensearch.cluster.ClusterName;
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
+                );
+import static org.opensearch.monitor.StatusInfo.Status.HEALTHY;
+                    .cluster()  
+            return versions.size() == 1  
+        );
+                )
+                        metadataCreateIndexService,  
+                        clusterService,
+                    emptyMap(),
+                SnapshotInfo snapshotInfo = snapshotInfos.get(0);
+                .prepareCreateSnapshot(repoName, snapshot)
+            if (disconnectedClusterManager || randomBoolean()) {
+                    node.getName(),
+import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
+                        mapperRegistry,
+            createSnapshotResponse -> indexNDocuments(
+                        indexNameExpressionResolver,  
+                    threadPool
+        final RepositoryData repositoryData = getRepositoryData(repository);
+            clearDisruptionsAndAwaitSync();
+        );  
+        final int shards = randomIntBetween(1, 10);
+                        namedXContentRegistry,  
+        continueOrDie(searchResponseStepListener, r -> {
+                        emptyMap(),
+                remoteStoreNodeService = new RemoteStoreNodeService(new SetOnce<>(repositoriesService)::get, threadPool);
+                        null
+                );  
+                            threadPool,
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+                .stream()
+        for (StepListener<Boolean> deleteListener : deleteSnapshotStepListeners) {
+                final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();
+            disconnectRandomDataNode();
+            }  
+                            indicesService,  
+                )
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.plugins.PluginsService;
+        }
+import org.opensearch.gateway.MetaStateService;
+                    threadPool,
+            // create a few more indices to make it more likely that the subsequent index delete operation happens before snapshot
+                        transportService,  
+                        threadPool,
+                        return nodes.values()
+                        threadPool,
+            for (int i = 0; i < documents; ++i) {  
+import org.opensearch.monitor.StatusInfo;
+import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;
+        assertThat(
+        );
+                        n -> n.transportService.connectToNode(
+        final StepListener<AcknowledgedResponse> createRepositoryListener = new StepListener<>();  
+        final boolean partial = randomBoolean();
+                            clusterService,
+                    new SegmentReplicationPressureService(  
+                    bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));
+            public void stop() {  
+            Settings.builder()
+            }  
+        final StepListener<AcknowledgedResponse> deleteIndexListener = new StepListener<>();
+                        indexNameExpressionResolver,
+                        NoopTracer.INSTANCE
+                final MetadataMappingService metadataMappingService = new MetadataMappingService(clusterService, indicesService);
+                    )
+                        actionFilters,
+            }  
+import org.apache.logging.log4j.LogManager;
+        String repoName = "repo";
+        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+        String repoName = "repo";
+        deterministicTaskQueue.runAllRunnableTasks();
+            createRepoAndIndex(repoName, index, shards),  
+                    shardStateAction,  
+        deterministicTaskQueue.runAllRunnableTasks();  
+        });
+        final List<String> snapshotNames = IntStream.range(1, randomIntBetween(2, 4))
+        runUntil(() -> {
+         * @param state ClusterState
+        assertThat(snapshotIds, empty());
+                .cluster()
+        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
             });
+        public void clearNetworkDisruptions() {
+                );  
+                        @Override
+                        repositoriesService,
+                        .storageType(RestoreSnapshotRequest.StorageType.REMOTE_SNAPSHOT),  
+                        transportService,  
+        final String index = "index-1";
+        continueOrDie(
+     * Simulates concurrent restarts of data and cluster-manager nodes as well as relocating a primary shard, while starting and subsequently
+                    new TransportIndicesShardStoresAction(  
+        String repoName = "repo";  
+        final AtomicBoolean documentCountVerified = new AtomicBoolean();
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
+                Settings settings,  
+                        actionFilters,
+                    )
+                    hostsResolver -> nodes.values()  
+        });
+                        actionFilters,
+        );  
+                .map(DiscoveryNode::getId)
+                    }
+                .collect(Collectors.toList());
+        deterministicTaskQueue.runAllRunnableTasks();  
+                recoverySettings = new RecoverySettings(settings, clusterSettings);
+                .execute(createAnotherSnapshotResponseStepListener);
+        final TestClusterNodes.TestClusterNode randomClusterManager = testClusterNodes.randomClusterManagerNode()  
+                            });  
+                    afterIndexing.run();  
+        }  
+            nodeFileCacheStats.put(
+                    repositoriesService,
+                        return newClusterManagerNode(nodeName);
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
+                client().bulk(bulkRequest, bulkResponseStepListener);
+            acknowledgedResponse -> client().admin()  
+            .build();
+            assertEquals(shards, restoreSnapshotResponse.getRestoreInfo().totalShards());
+                                () -> testClusterNodes.randomClusterManagerNodeSafe().client.admin()  
+        return TestEnvironment.newEnvironment(
+                        .stream()
+import org.opensearch.cluster.coordination.CoordinatorTests;
+                    shardLimitValidator,
+import org.opensearch.env.TestEnvironment;  
+                    clusterService,
+                final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(  
+                    GetSnapshotsRequest repoSnapshotRequest = new GetSnapshotsRequest().repository(repoName)
+                        .execute(snapshotListener)
+        );
+                .aliases(  
+                        new TransportNodesListGatewayStartedShards(  
+            TransportGetSnapshotsAction transportGetSnapshotsAction = (TransportGetSnapshotsAction) getSnapshotsAction;
+                        mock(ShardStateAction.class),
+                    clusterService,  
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
+            }
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
+        SnapshotsInProgress finalSnapshotsInProgress = randomClusterManager.clusterService.state().custom(SnapshotsInProgress.TYPE);
+            if (blobStoreContext != null) {  
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));  
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));  
+import org.opensearch.cluster.service.ClusterService;
+                    GetSnapshotsAction.INSTANCE,
+                .setWaitForCompletion(true)
+        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(  
+                mockTransport = new DisruptableMockTransport(node, logger, deterministicTaskQueue) {  
+                        if (partialSnapshot) {
+                    createAliasListener
+                    .prepareCreateSnapshot(repoName, snapshotName)  
+                } else {
+            assertNotNull(clusterManager);
+            public ClusterInfoService getMockClusterInfoService() {
+            return;  
+        final StepListener<AcknowledgedResponse> deleteIndexListener = new StepListener<>();
+import org.opensearch.script.ScriptService;  
+                    SearchExecutionStatsCollector.makeWrapper(responseCollectorService)
+                final MappingUpdatedAction mappingUpdatedAction = new MappingUpdatedAction(settings, clusterSettings, clusterService);  
+        public void stopNode(TestClusterNode node) {
+                        throw new AssertionError(e);  
+                        mappingTransformerRegistry
+                    new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings()),
+                    settings,  
+            final StepListener<CreateSnapshotResponse> createSnapshotResponse = new StepListener<>();
+                        actionFilters,
+                                .setWaitForCompletion(true)
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+    }
+                .build()
+        final int documents = randomIntBetween(0, 100);
+            final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+                            .primaryShard();  
+                    }
+                    )
+                    transportService,  
+        stabilize();
+                                @Override  
+            );  
+                    .setWaitForCompletion(true)
+ * Unless required by applicable law or agreed to in writing,
+                    });
+                // Snapshot can be partial because some tests leave indices in a red state because data nodes were stopped
+            assertEquals(0, snapshotInfo.failedShards());
+            createOtherSnapshotResponseStepListener,  
+        deterministicTaskQueue = new DeterministicTaskQueue(Settings.builder().put(NODE_NAME_SETTING.getKey(), "shared").build(), random());
+        testClusterNodes.clearNetworkDisruptions();
+                    DefaultRemoteStoreSettings.INSTANCE
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+                .prepareCreateSnapshot(repoName, snapshotName)
+                                        ),
+    private static <T> ActionListener<T> noopListener() {
+                .cluster()
+import org.opensearch.action.admin.indices.delete.TransportDeleteIndexAction;
+                        new IndexingPressureService(settings, clusterService),
         });  
-
-        final AtomicBoolean doneSnapshotting = new AtomicBoolean(false);
+            }  
+                        actionFilters,  
+                        clusterService,
+                () -> client().admin()
+                    new GlobalCheckpointSyncAction(  
+                    systemIndices,  
+            private final IndicesClusterStateService indicesClusterStateService;  
+            createSnapshotResponse -> assertEquals(createSnapshotResponse.getSnapshotInfo().state(), SnapshotState.SUCCESS)  
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
+                );
+        );  
+                        final Throwable unwrapped = ExceptionsHelper.unwrap(  
+                snapshotNeverStarted.set(true);
+                    )
+                    repositoryData.resolveIndexId(index)
+                    threadPool,
+    }
+                        emptyMap(),  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+import org.opensearch.common.settings.IndexScopedSettings;  
+                .create(
+            assertThat(snapshotInfo.successfulShards(), either(is(indices + 1)).or(is(indices)));  
+                index,  
+                            .routingTable()
+    }  
+                .cluster()
+                    indicesService,
+import java.nio.file.Path;  
+import org.opensearch.action.admin.indices.mapping.put.TransportAutoPutMappingAction;
+                    indicesService,
+                () -> client().admin()
+        public Optional<TestClusterNode> randomDataNode(String... excludedNames) {
+        continueOrDie(
+                    @Override
+        String repoName = "repo";
+            createSnapshotResponse -> client().admin()
+        assertThat(snapshotIds, hasSize(1));  
+                );
+                }
+                                .cluster()  
+import org.opensearch.transport.TransportException;  
+        }
+                    settings,  
+        deterministicTaskQueue.runAllRunnableTasks();
+        Settings.Builder settings = Settings.builder().put("location", randomAlphaOfLength(10));
+                        actionFilters,
+                            )
+                        blobStoreContext,
+                client.initialize(  
+            documentsFirstSnapshot + documentsSecondSnapshot,
+        deterministicTaskQueue.runAllRunnableTasks();  
+                    new NoneCircuitBreakerService(),  
+                List<SnapshotInfo> snapshotInfos = repoSnapshotResponse.getSnapshots();
+                allocationService = OpenSearchAllocationTestCase.createAllocationService(settings, snapshotsInfoService);
+        assertThat(finalSnapshotsInProgress.entries(), empty());
+                final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();  
+                        ),
+            createSnapshotResponseStepListener,
+            TestClusterNode(DiscoveryNode node) throws IOException {  
+            if (snapshotNeverStarted.get()) {  
+                stop();  
+import org.opensearch.transport.TransportInterceptor;
+                final BigArrays bigArrays = new BigArrays(new PageCacheRecycler(settings), null, "test");  
+                            client().admin().indices().create(new CreateIndexRequest(index), noopListener());
+            private Coordinator coordinator;
+                .prepareCreateSnapshot(repoName, snapshotName)
+import org.opensearch.index.remote.RemoteStorePressureService;  
+            final TestClusterNodes.TestClusterNode otherNode = testClusterNodes.randomDataNodeSafe(currentPrimaryNode.node.getName());
+                );
+                .indices()
+import org.opensearch.Version;
+                    clusterService.getClusterApplierService(),
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotAction;  
+                        .verbose(false);
+                        .snapshots(snapshotsList)  
+        /**  
+                .cluster()
+                    new AnalysisRegistry(  
+                        actionFilters,  
+        String repoName = "repo";
+    @After
+                        return false;
+        continueOrDie(
+                    new TransportBulkAction(
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));  
+                    nodeEnv,
+                    SegmentReplicationCheckpointPublisher.EMPTY,
+        final int shards = randomIntBetween(1, 10);  
+                    actionFilters,  
+                .entries(),
+                }
+                    MergedSegmentPublisher.EMPTY,
+                    snapshotInfo.snapshotId(),
+        final AtomicBoolean exceptionVerified = new AtomicBoolean();
+                new SearchRequest("restored_alias_" + alias).source(new SearchSourceBuilder().size(0).trackTotalHits(true)),
+                final PersistedStateRegistry persistedStateRegistry = persistedStateRegistry();
+                    repositoriesService,
+                        clusterService  
+            );
+                documentsSecondSnapshot,
+import org.opensearch.common.settings.ClusterSettings;
+                            transportService,
+                        transportService,
+            private final NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(  
+            testClusterNodes.nodes.values()  
+                    ),
+    }
+                };  
+            private final ClusterInfoService clusterInfoService;  
+                clusterService.getClusterApplierService().setNodeConnectionsService(nodeConnectionsService);  
+import org.opensearch.action.RequestValidators;
+            testClusterNodes.randomDataNodeSafe().clusterService.state()  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()  
+                continueOrDie(bulkResponseStepListener, bulkResponse -> {  
+                    new TransportCleanupRepositoryAction(
+        final int dataNodes = randomIntBetween(2, 10);  
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));  
+        }, TimeUnit.MINUTES.toMillis(1L));
+            continueOrDie(deleteListener, deleted -> {  
+            createIndexResponse -> client().admin()  
+                .prepareCreateSnapshot(repoName, snapshotName)  
+        continueOrDie(
+            DiscoveryNodes.Builder builder = DiscoveryNodes.builder();
+                continueOrDie(bulkResponseStepListener, bulkResponse -> {
+        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));
+        final int shards = randomIntBetween(1, 10);
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
+                    threadPool,  
+                nodeEnv = new NodeEnvironment(settings, environment);
+        final TestClusterNodes.TestClusterNode randomClusterManager = testClusterNodes.randomClusterManagerNode()
+            } else {
+    public void testTransportGetSnapshotsAction() {
+     * {@code null} if not using the eventually consistent blobstore.  
+                });
+                        metadataIndexAliasesService,  
+                    new IndexingPressureService(settings, clusterService),
+            createRepoAndIndex(repoName, index, shards),  
+        while (timeout > deterministicTaskQueue.getCurrentTimeMillis() - start) {  
+import org.opensearch.transport.RemoteTransportException;
+                nodes.computeIfAbsent("node" + i, nodeName -> {
+                )
+                    .collect(Collectors.toList())
+                    transportService,  
+import org.opensearch.action.admin.cluster.snapshots.create.TransportCreateSnapshotAction;
+                            Collections.emptyList(),  
+        continueOrDie(restoreSnapshotResponseListener, restoreSnapshotResponse -> {  
+            BlobStoreTestUtil.assertConsistency(  
+                TransportService transportService
+    /**  
+                            this.targetsByNode.put(discoveryNode, createConnectionTarget(discoveryNode));
+            public void restart() {  
+import org.opensearch.cluster.metadata.MetadataIndexAliasesService;
+                when(mockIndicesService.getSearchResponseStatusStats()).thenReturn(new SearchResponseStatusStats());  
+import org.opensearch.index.seqno.GlobalCheckpointSyncAction;
+                    bigArrays,
+                SearchPhaseController searchPhaseController = new SearchPhaseController(
+                            environment,  
+import org.opensearch.cluster.metadata.MetadataCreateIndexService;
+        deterministicTaskQueue.scheduleNow(runnable);
+    }  
+                    bigArrays,  
+        setupTestCluster(clusterManagerNodes, dataNodes);
+                client().bulk(bulkRequest, bulkResponseStepListener);
+                    repositoriesService,
+                        snapshotsService,
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
+                SearchRequestOperationsCompositeListenerFactory searchRequestOperationsCompositeListenerFactory =
+        assertNotNull(createAnotherSnapshotResponseStepListener.result());  
+        public TestClusterNode currentClusterManager(ClusterState state) {
+            }
+import org.opensearch.action.update.UpdateHelper;
+                    clusterService,  
+        );
+        }).orElse(false), TimeUnit.MINUTES.toMillis(1L));  
+                return;
+        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
+                actions.put(
+import org.opensearch.indices.recovery.RecoverySettings;
+                    searchService::aggReduceContextBuilder  
+                transportService = mockTransport.createTransportService(settings, threadPool, new TransportInterceptor() {
+        );
+                        boolean forceExecution,  
+                    }
+                    new TransportIndicesAliasesAction(
+        Collection<SnapshotId> snapshotIds = repositoryData.getSnapshotIds();
+                .put(Environment.PATH_REPO_SETTING.getKey(), tempDir.resolve("repo").toAbsolutePath())
+                        transportService,
+        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
+                        final TestClusterNode restartedNode = new TestClusterNode(
+    public void testConcurrentSnapshotRestoreAndDeleteOther() {
+                .restoreSnapshot(
+        String snapshotName = "snapshot";
+    }
+            createRepoAndIndex(repoName, index, shards),  
+            final AtomicBoolean initiatedSnapshot = new AtomicBoolean(false);
+            private final SnapshotsService snapshotsService;  
+                actions.put(  
+                        clusterService,
+                    metadataDeleteIndexService,  
+import java.util.LinkedHashMap;
+        final AtomicBoolean snapshotNeverStarted = new AtomicBoolean(false);
+        }).orElse(false), TimeUnit.MINUTES.toMillis(1L));
+        assertTrue(res.isDone());
+                        indexNameExpressionResolver,
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
+                        new SystemIndices(emptyMap()),
+        final StepListener<Collection<CreateSnapshotResponse>> allSnapshotsListener = new StepListener<>();  
+                    new ThreadContext(Settings.EMPTY)
+import java.util.HashMap;  
+                    transportService,
+                assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());  
+        deterministicTaskQueue.runAllRunnableTasks();
+            continueOrDie(  
+                    new TransportGetTermVersionAction(  
+                            List.of(),
+                });  
+        final int shards = randomIntBetween(1, 10);
+                        new RestoreSnapshotRequest(repoName, secondSnapshotName).waitForCompletion(true)  
+            private final RecoverySettings recoverySettings;  
+                            return (request, channel, task) -> scheduleSoon(new AbstractRunnable() {
+                "Documents were restored but the restored index mapping was older than some documents and misses some of their fields",
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
+    private Path tempDir;
+        });
+            acknowledgedResponse -> client().admin()
+                actions.put(  
+    }
+                .setPartial(true)  
+            firstIndex.set(clusterManagerNode.clusterService.state().metadata().index(index).getIndex());
+                        actionFilters,
+            createIndexResponse -> client().admin().cluster().state(new ClusterStateRequest(), clusterStateResponseStepListener)
+            assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
+        TestClusterNodes(int clusterManagerNodes, int dataNodes) {
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+        final boolean waitForSnapshot = randomBoolean();  
+import org.opensearch.cluster.ClusterChangedEvent;
+                                null,  
+                    RestoreSnapshotAction.INSTANCE,
+                        indexNameExpressionResolver
+                    .restoreSnapshot(
+                    @Override  
+        });  
+                    null
+                    DefaultRemoteStoreSettings.INSTANCE,
+                    DeleteSnapshotAction.INSTANCE,
+                    GetTermVersionAction.INSTANCE,
+                        ),  
+                    new CreateIndexRequest(index).waitForActiveShards(ActiveShardCount.ALL).settings(defaultIndexSettings(shards)),  
+                                        noopListener()
+                    Collections.emptyList(),  
+                    @Override
+                    clusterManagerService,  
+            createIndexResponse -> indexNDocuments(
+        ClusterInfo clusterInfo = new ClusterInfo(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), nodeFileCacheStats, Map.of());  
+                            .map(cn -> cn.mockTransport)
+                    shardLimitValidator,  
+                .indices()
+            () -> testClusterNodes.randomClusterManagerNode()  
+                    null  
+                    };
+import org.opensearch.cluster.ClusterStateListener;  
+        );
+            empty()  
+        }  
+            client().search(  
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
+import java.util.Arrays;
+import org.opensearch.action.admin.cluster.repositories.put.TransportPutRepositoryAction;
+                        .setWaitForCompletion(true)  
+                scheduleNow(
+                        indexNameExpressionResolver  
+import java.util.concurrent.atomic.AtomicBoolean;  
+            );  
+                        .cluster()
+        );  
+import org.opensearch.action.search.SearchExecutionStatsCollector;  
+                .cluster()  
+                .cluster()
+                        clusterService,
+                snapshotShardsService = new SnapshotShardsService(
+            createSnapshotResponse -> client().admin()
+        final int shards = randomIntBetween(1, 10);
+                );  
+import org.opensearch.common.network.NetworkModule;
+                                                otherNode.node.getName(),
+    @Nullable
+                .prepareCreateSnapshot(repoName, snapshotName)  
+                                .cluster()  
+                final MapperRegistry mapperRegistry = new IndicesModule(Collections.emptyList()).getMapperRegistry();
+                .filter(DiscoveryNode::isClusterManagerNode)  
+                    bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));
+                        ),
+                final SearchService searchService = new SearchService(  
+        final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+            final Runnable afterIndexing = () -> client().admin()
+                            threadPool,
+        );
+                            testClusterNodes.randomDataNodeSafe().client.admin()
+            }  
+        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {  
+                    threadPool,
+        final String index = "test";
+import org.opensearch.action.admin.cluster.repositories.cleanup.TransportCleanupRepositoryAction;  
+            return new TestClusterNode(  
+        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseListener = new StepListener<>();
+import static org.mockito.Mockito.mock;
+                        actionFilters,
+                .map(clusterState -> clusterState.nodes().getClusterManagerNodeId())
+                        repositoriesService,  
+            .forEach(
+                                        .cluster()
+                    new TransportGetSnapshotsAction(
+                assertNotNull(unwrapped);  
+                            .includeAliases(true)
+        final long start = deterministicTaskQueue.getCurrentTimeMillis();
+                    .cluster()
+                );
+         * @return Cluster Manager Node  
+            private final ThreadPool threadPool;
+            if (snapshotInfo.successfulShards() == indices + 1) {
+                            .renameAliasReplacement("restored_alias_$1"),
+        testClusterNodes.nodes.values()  
+import static org.mockito.Mockito.when;  
+        assertNotNull(restoreSnapshotResponseListener.result());
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.action.search.SearchPhaseController;
+                    new RestoreSnapshotRequest(repoName, snapshotName).renamePattern(index)
+import org.junit.Before;  
+                DynamicActionRegistry dynamicActionRegistry = new DynamicActionRegistry();
+                    }
+                    ClusterStateAction.INSTANCE,  
+         * Builds a {@link DiscoveryNodes} instance that holds the nodes in this test cluster.  
+                                @Override
+                )  
+import org.opensearch.env.Environment;
+            createRepoAndIndex(repoName, index, shards),  
+                actions.put(
+            if (createdSnapshot.get() == false) {
+        } else {  
+                        metadataMappingService,
+        testClusterNodes = new TestClusterNodes(clusterManagerNodes, dataNodes);
+                    repositoriesServiceReference::get,
+        clusterManagerNode.clusterService.addListener(new ClusterStateListener() {
+                });
+                    false,
+                this.node = node;
+            return clusterManager.clusterService.state().custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().isEmpty();
+import org.opensearch.repositories.Repository;
+            continueOrDie(createSnapshotResponse, r -> {
+                    new TransportCreateSnapshotAction(  
+                    environment,
+                        clusterService,  
+                    settings,
+                    stateForNode(initialState, node)
+        continueOrDie(
+            final Runnable afterIndexing = () -> client().admin()  
+                            ? ConnectionStatus.DISCONNECTED
+                .execute(createSnapshotResponseStepListener)
+                .execute(createAnotherSnapshotResponseStepListener)
+                        recoverySettings,
+                    .execute(ActionListener.wrap(resp -> deleteListener.onResponse(true), e -> {
+                        }  
+                    )
+                .prepareCreateSnapshot(repoName, snapshotName)
+            for (int i = 0; i < documents; ++i) {
+                        }
+import org.opensearch.index.mapper.MappingTransformerRegistry;
+                            // Recreate index by the same name to test that we don't snapshot conflicting metadata in this scenario  
+        }
+            return clusterManager;  
+                        mockIndicesService,  
+        }
+        final String[] snapshotsList = { "snapshot-1" };  
+            TimeUnit.MINUTES.toMillis(1L)  
+                        return newDataNode(nodeName);
+                        throw new AssertionError(e);
+                    new SegmentReplicationTargetService(  
+            deleteIndexListener,
+        } else {
+                    )
+import org.opensearch.ExceptionsHelper;  
+                    )  
+            assertThat(snapshotInfo.state(), either(is(SnapshotState.SUCCESS)).or(is(SnapshotState.PARTIAL)));
+                )
+         * @return DiscoveryNodes
+import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
+            final SnapshotsInProgress snapshotsInProgress = clusterManager.clusterService.state().custom(SnapshotsInProgress.TYPE);  
+                    )  
+                .prepareCreateSnapshot(repoName, snapshotName)  
+                final Settings settings = environment.settings();
+                    settings,
+        );
+                );
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+import org.opensearch.transport.client.node.NodeClient;  
+                            return ConnectionStatus.CONNECTED;
+            createIndicesListener,  
+        String repoName = "repo";
+    }  
+                    clusterManagerNode.clusterService.removeListener(this);
+        }
+        assertThat(snapshotIds, hasSize(1));
+                final SearchTransportService searchTransportService = new SearchTransportService(
+                    BulkAction.INSTANCE,
         continueOrDie(allSnapshotsListener, createSnapshotResponses -> {  
-            for (CreateSnapshotResponse createSnapshotResponse : createSnapshotResponses) {
+                        clusterService,
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
+                            environment,  
+                        && clusterManager.clusterService.state()  
+        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());  
+                    actionFilters,
+import org.opensearch.action.index.IndexRequest;  
+                );
+                );  
+                        if (initiatedSnapshot.compareAndSet(false, true)) {
+                final SnapshotException unwrapped = (SnapshotException) ExceptionsHelper.unwrap(e, SnapshotException.class);
+                                    channel.sendResponse(new TransportException(new IOException("failed to recover shard")));
+import org.opensearch.cluster.OpenSearchAllocationTestCase;
+                    transportService,
+        final int shards = randomIntBetween(1, 5);
+            assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
+                    allocationService,  
+import org.opensearch.cluster.coordination.DeterministicTaskQueue;
+         */
+import org.opensearch.action.admin.cluster.snapshots.restore.TransportRestoreSnapshotAction;  
+                                            )  
+                    continueOrDie(updatedClusterStateResponseStepListener, updatedClusterState -> {
+                mappingUpdatedAction.setClient(client);
+                    null,
+    }
+            transportGetSnapshotsAction.execute(null, repoSnapshotRequest, ActionListener.wrap(repoSnapshotResponse -> {
+        final String index = "test";  
+                        new SystemIndices(emptyMap()),  
+                searchAliasResponseListener  
+                final IndexMetadata indexMetadata = repository.getSnapshotIndexMetaData(
+        final int documentsSecondSnapshot = randomIntBetween(0, 100);  
+import org.opensearch.cluster.metadata.MetadataDeleteIndexService;  
+                .execute(createSnapshotResponseStepListener)
+            return newNode(nodeName, DiscoveryNodeRole.DATA_ROLE);
+        );  
+import java.util.Collection;  
+                .prepareDeleteSnapshot(repoName, snapshotName)  
+            .filter(n -> testClusterNodes.disconnectedNodes.contains(n.node.getName()) == false)  
+            afterIndexing.run();
+    public void testSuccessfulSnapshotAndRestore() {  
+                .cluster()
+                scheduleNow(this::disconnectOrRestartDataNode);  
+                final ClusterState oldState = this.clusterService.state();
+                );
+                        new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE)
+            }  
+                            .renameReplacement("restored_$1")  
+        assertThat(snapshotIds, hasSize(1));
+                        emptyMap(),
+        String repoName = "repo";  
+            );
+                    clusterService,
+                    clusterService.getClusterSettings(),  
+                    .prepareDeleteSnapshot(repoName, snapshotName)
+                client().admin().cluster().cleanupRepository(new CleanupRepositoryRequest("repo"), cleanupResponse);
+import org.opensearch.common.Nullable;
+                            null,  
+                .put(MappingUpdatedAction.INDICES_MAX_IN_FLIGHT_UPDATES_SETTING.getKey(), 1000) // o.w. some tests might block
+            .put(IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+                        .forEach(  
+            testClusterNodes.randomDataNode().ifPresent(TestClusterNodes.TestClusterNode::restart);  
+        runUntil(
+/*  
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+            createSnapshotResponseStepListener,  
+        } finally {
+            return newNode(nodeName, DiscoveryNodeRole.WARM_ROLE);
+        final StepListener<SearchResponse> searchIndexResponseListener = new StepListener<>();
+                    settings,  
+import org.opensearch.common.settings.Settings;
+                .prepareCreateSnapshot(repoName, snapshotName)  
+    private static ClusterState stateForNode(ClusterState state, DiscoveryNode node) {  
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();  
+            } else {
+                    new SystemIndices(emptyMap()),  
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.action.bulk.TransportShardBulkAction;
+                assertThat(unwrapped.getMessage(), endsWith("Indices don't have primary shards [test]"));
+        assertEquals(0, snapshotInfo.failedShards());
+        final StepListener<ClusterStateResponse> clusterStateResponseStepListener = new StepListener<>();  
+        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
+                                }));
+    private void clearDisruptionsAndAwaitSync() {  
+            documentsFirstSnapshot + documentsSecondSnapshot,
+                        assertThat(repoSnapshotResponse.getSnapshots(), hasSize(snapshotsList.length));  
+        final int clusterManagerNodes = randomFrom(1, 3, 5);
+        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {
+                        // Check if both nodes are still part of the cluster  
+            } catch (SnapshotRestoreException ignored) {}
+                    node.getName(),
+            final ShardRouting shardToRelocate = clusterStateResponse.getState().routingTable().allShards(index).get(0);
+                    clusterService,
+        final int shards = randomIntBetween(1, 10);
+        }
+                Stream.concat(ClusterModule.getNamedWriteables().stream(), NetworkModule.getNamedWriteables().stream())
+        }  
+                return true;
+            assertEquals(shards, snapshotInfo.successfulShards());  
+                            client().admin()
+                testClusterNodes.disconnectNode(this);
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+        final StepListener<CreateSnapshotResponse> createAnotherSnapshotResponseStepListener = new StepListener<>();  
+            createRepoAndIndex(repoName, index, shards),
+                    public void onResponse(AcknowledgedResponse acknowledgedResponse) {
+            scheduleNow(() -> client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).execute(deleteSnapshotStepListener));
+            .mapToObj(i -> "snapshot-" + i)
+        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
+        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {  
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
+import java.util.Collections;
+                    null,
+                        emptyMap(),  
+            Objects.requireNonNull(searchIndexResponseListener.result().getHits().getTotalHits()).value()
+import org.opensearch.cluster.routing.allocation.command.AllocateEmptyPrimaryAllocationCommand;
+                    indexNameExpressionResolver,  
+    public void testConcurrentSnapshotCreateAndDeleteOther() {
+                assertEquals(indexMetadata.getIndex(), firstIndex.get());
+                .cluster()
+        return res.actionGet();
+import org.opensearch.cluster.coordination.PersistedStateRegistry;  
+                        emptyMap(),
+                        emptyMap()
+                    } catch (IOException e) {
+                if (deleted) {
+    public void verifyReposThenStopServices() {  
+        assertThat(deleteSnapshotStepListener.result().isAcknowledged(), is(true));
+import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats;  
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
+         */
+        continueOrDie(deleteSnapshotStepListener, deleted -> {  
+            }
+                );  
+                    }
+package org.opensearch.snapshots;
+                        protected PrioritizedOpenSearchThreadPoolExecutor createThreadPoolExecutor() {  
+                    new PeerRecoveryTargetService(threadPool, transportService, recoverySettings, clusterService),
+                        clusterService,
+        assertNotNull(createSnapshotResponseStepListener.result());
+            for (int i = 0; i < randomIntBetween(0, dataNodes); ++i) {
+    }
+import static java.util.Collections.emptySet;
+import org.opensearch.indices.recovery.PeerRecoveryTargetService;
+                indicesClusterStateService.close();
+import org.opensearch.search.builder.SearchSourceBuilder;
+            private final IndicesService indicesService;
+import org.opensearch.indices.IndicesModule;
+            .collect(Collectors.toList());
+                            ActionTestUtils.assertNoFailureListener(c -> logger.info("--> Connected [{}] to [{}]", n.node, node.node))
+                final TransportShardBulkAction transportShardBulkAction = new TransportShardBulkAction(
+import static org.hamcrest.Matchers.lessThanOrEqualTo;  
+                final ScriptService scriptService = new ScriptService(settings, emptyMap(), emptyMap());
+                lessThanOrEqualTo(
+        continueOrDie(
+            );  
+            if (partial == false) {
+import org.opensearch.index.engine.MergedSegmentWarmerFactory;
+            for (StepListener<Boolean> deleteListener : deleteSnapshotStepListeners) {
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
+        });
+            }  
+        deterministicTaskQueue.runAllRunnableTasks();  
+            createRepoAndIndex(repoName, index, shards),
+                        .get("properties")).size()
+                        .waitForCompletion(true),  
+                    transportService,  
+                    }
+                        transportService,  
+        final AdminClient clusterManagerAdminClient = clusterManagerNode.client.admin();
+                        new SegmentReplicationSourceFactory(transportService, recoverySettings, clusterService),
+                actions.put(  
+        try {
+                actions.put(  
+                );
+                        shardStateAction,  
+        final Repository repository = randomClusterManager.repositoriesService.repository(repoName);
+        final AtomicBoolean doneSnapshotting = new AtomicBoolean(false);
+                            .isEmpty()  
+            inProgressSnapshots  
+                    public void onFailure(Exception e) {  
+    public void testSnapshotWithNodeDisconnects() {
+                        );  
+    }  
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsAction;  
+            if (randomBoolean()) {  
+                        threadPool,  
+import org.opensearch.action.support.AutoCreateIndex;
+        final String secondSnapshotName = "snapshot-2";
+                    new FileCacheStats(1, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.OVER_ALL_STATS),
+                    public void connectToNodes(DiscoveryNodes discoveryNodes, Runnable onCompletion) {  
+                        }
+            createRepoAndIndex(repoName, index, shards),  
+                    clusterService,  
+        }
+                        transportService,
+                        throw new AssertionError(e);  
+        });
+import org.opensearch.indices.DefaultRemoteStoreSettings;  
+        );
+        continueOrDie(
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;  
+            final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotId);  
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
+import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryAction;  
+    private void disconnectOrRestartDataNode() {
+            deterministicTaskQueue.runAllRunnableTasks();
+    private static Settings defaultIndexSettings(int shards) {
+            assertEquals(0, snapshotInfo.failedShards());
+}
+        return createAliasListener;  
+ * SPDX-License-Identifier: Apache-2.0
+        );
+                        transportService,
+        assertEquals(0, snapshotInfo.failedShards());  
+        });
+    }
+                    @Override
+                        settings,
+    /**
+import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
+            bulkRequest.add(new IndexRequest(index).source(Collections.singletonMap("foo", "bar" + i)));
+                final ShardLimitValidator shardLimitValidator = new ShardLimitValidator(settings, clusterService, systemIndices);  
+            snapshotNames.size()  
+                    restoreSnapshotResponseListener
+import org.opensearch.telemetry.tracing.noop.NoopTracer;  
+                            indicesService,
+        final StepListener<SearchResponse> searchResponseStepListener = new StepListener<>();
+                            .stream()  
                 final SnapshotInfo snapshotInfo = createSnapshotResponse.getSnapshotInfo();
-                assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));  
+                })
+                .cluster()
+     **/
+                    }
+                    mock(SearchService.class),  
+                clusterService.close();  
+import org.opensearch.action.admin.indices.mapping.put.TransportPutMappingAction;  
+                    new RemoteSegmentStoreDirectoryFactory(() -> repositoriesService, threadPool, ""),  
+    public void testBulkSnapshotDeleteWithAbort() {  
+            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
+                                    createdSnapshot.set(true);  
+                        actionFilters,
+                repositoriesServiceReference.set(repositoriesService);  
+                .prepareCreateSnapshot(repoName, snapshotName)  
+        assertNotNull(createSnapshotResponseListener.result());  
+                    }
+                    }  
+import org.opensearch.common.CheckedConsumer;  
+        }  
+                .cluster()
+        // Select from sorted list of nodes  
+        });  
+import org.opensearch.cluster.NodeConnectionsService;
+                new SearchRequest("restored_" + index).source(new SearchSourceBuilder().size(0).trackTotalHits(true)),
+                    ((Map<?, ?>) clusterManagerNode.clusterService.state()
+        final StepListener<SearchResponse> searchResponseListener = new StepListener<>();
+                        clusterService,
+    private void scheduleNow(Runnable runnable) {  
+            ignored -> client().admin()
+        for (int i = 0; i < documents; ++i) {  
+import java.util.ArrayList;
+        assertEquals(shards, snapshotInfo.successfulShards());
+                    writableRegistry(),
+        }
+            nodes.values().forEach(node -> builder.add(node.node));
+            });  
+        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseStepListener = new StepListener<>();  
+            private final NodeClient client;
+            createIndexResponse -> client().admin()
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
+                    assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());  
+        clearDisruptionsAndAwaitSync();  
+ */  
+            createSnapshotResponse -> client().admin()
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
+                    indexScopedSettings,  
+            createIndexResponse -> client().admin()
+                        indexNameExpressionResolver,
+                final ResponseCollectorService responseCollectorService = new ResponseCollectorService(clusterService);
+                                                true
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.coordination.Coordinator;  
+                    new SearchRequestOperationsCompositeListenerFactory();  
+                actions.put(  
+            final List<TestClusterNode> clusterManagerNodes = testClusterNodes.nodes.values()
+        runUntil(exceptionVerified::get, TimeUnit.MINUTES.toMillis(5L));
+                        // TODO: Remove this hack once recoveries are async and can be used in these tests  
+                .execute(createSnapshotResponseStepListener)  
+ * Licensed to Elasticsearch under one or more contributor  
+                                ActionTestUtils.assertNoFailureListener(c -> logger.debug("--> Connected [{}] to [{}]", n.node, node))
+                clusterService = new ClusterService(  
+        assertThat(repositoryData.getGenId(), is(1L));
+import org.opensearch.search.fetch.FetchPhase;  
+        );  
+ *  
+            }
+     * Create a {@link Environment} with random path.home and path.repo
+            }
+                clusterManagerNode.restart();  
+        final ActionListener<CreateSnapshotResponse> createSnapshotListener = new GroupedActionListener<>(
+import org.opensearch.action.support.TransportAction;
+        final Repository repository = testClusterNodes.randomClusterManagerNodeSafe().repositoriesService.repository(repoName);
+                }  
+                        .sourceAsMap()  
+        );
+            }
+                        assertFalse("Failures in bulkresponse: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());  
+import org.opensearch.action.support.ActiveShardCount;  
+            for (int i = 0; i < inProgressSnapshots; i++) {
+                    )
+                        new NoneCircuitBreakerService(),  
+                        threadPool,  
+                final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);  
+            private final ClusterManagerService clusterManagerService;
+                        for (SnapshotInfo snapshotInfo : snapshotInfos) {
+        final int shards = randomIntBetween(1, 10);  
+                    null
+                if (testClusterNodes.nodes.containsKey(nodeName)) {  
+            client().bulk(bulkRequest, bulkResponseStepListener);  
+    public void testSearchableSnapshotOverSubscription() {
+import org.opensearch.search.SearchService;
+import org.opensearch.action.support.clustermanager.term.TransportGetTermVersionAction;  
+import org.opensearch.env.NodeEnvironment;
+import org.opensearch.tasks.TaskResourceTrackingService;
+        );  
+                            assertTrue(snapshotInfo.snapshotId().getName().contains("last-snapshot"));
+import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
+                final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);
+                    rerouteServiceSetOnce::get  
+import org.junit.After;
+                    randomAlphaOfLength(10),  
+                dynamicActionRegistry.registerUnmodifiableActionMap(actions);
+                    try {  
+            afterIndexing.run();
+import org.opensearch.cluster.coordination.AbstractCoordinatorTestCase;
+        assertEquals(0, snapshotInfo.failedShards());  
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+        );
+        TestClusterNodes(int clusterManagerNodes, int dataNodes, int warmNodes) {  
+                );
+                    Version.CURRENT
+                    emptyMap(),  
+        private TestClusterNode newNode(String nodeName, DiscoveryNodeRole role) throws IOException {
+        repository.getRepositoryData(res);
+        clusterManagerNode.clusterService.addListener(new ClusterStateListener() {
+    }
+import org.opensearch.cluster.routing.BatchedRerouteService;
+                        if (nodes.containsKey(node.getName()) == false || nodes.containsKey(destination.getName()) == false) {
+                            assertEquals(0, snapshotInfo.failedShards());  
+                .execute(createSnapshotResponse);
+                scheduleNow(this::disconnectRandomDataNode);
+            .sorted(Comparator.comparing(n -> n.node.getName()))
+                    @Override  
+        public DiscoveryNodes discoveryNodes() {  
+        String snapshotName = "snapshot";
+                    new TransportClusterStateAction(
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
+                        }  
+import org.opensearch.cluster.ClusterState;
+                );
+        final String index = "test";  
+import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryAction;
+    }  
+            final boolean disconnectedClusterManager = randomBoolean() && clusterManagerNodes > 1;  
+                new SearchRequest(index).source(new SearchSourceBuilder().size(0).trackTotalHits(true)),  
+            assertEquals(snapshotInfo.successfulShards(), indices + 1);
+        );  
+        assertThat(successfulDeletes.get(), either(is(1)).or(is(2)));
+                for (final String nodeName : excludedNames) {
+                            e,
+        final String index = "test";
+                    () -> clusterService.localNode().getId(),
+                            return new MockSinglePrioritizingExecutor(node.getName(), deterministicTaskQueue, threadPool);
+                assertEquals(documents, bulkResponse.getItems().length);  
+            }  
+                            namedWriteableRegistry,
+import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotAction;  
+            return clusterManagerNodes.isEmpty() ? Optional.empty() : Optional.of(randomFrom(clusterManagerNodes));
+                );  
+                    final DiscoveryNode node = testClusterNodes.nodes.get(nodeName).node;
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
+            this(clusterManagerNodes, dataNodes, 0);  
+import org.opensearch.search.pipeline.SearchPipelineService;
+                    TransportAction getSnapshotsAction = clusterManagerNode.actions.get(GetSnapshotsAction.INSTANCE);  
+                );
+                        .ignoreUnavailable(false)
+            }
+                                    )  
+import java.util.Set;
+                createSnapshotResponse -> assertEquals(createSnapshotResponse.getSnapshotInfo().state(), SnapshotState.SUCCESS)
+import java.util.concurrent.TimeUnit;
+                .map(node -> node.clusterService.state())
+        if (randomBoolean()) {  
+                    ),
+                scheduleNow(() -> testClusterNodes.clearNetworkDisruptions());
+        });
+                .setWaitForCompletion(false)
+        }
+                        )
+                    client,  
+            private final Logger logger = LogManager.getLogger(TestClusterNode.class);
+import org.opensearch.action.support.WriteRequest;  
+                final Environment environment = createEnvironment(node.getName());
+    public NodeClient client() {
+                    new NodeMappingRefreshAction(transportService, metadataMappingService),
+        return Settings.builder()  
+import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
+        );  
+                );
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
+        final Collection<StepListener<Boolean>> deleteSnapshotStepListeners = Arrays.asList(new StepListener<>(), new StepListener<>());
+                                    testClusterNodes.randomDataNodeSafe().client.admin()
+                    )
+                                    .reroute(
+                .setWaitForCompletion(true)
+    }
+import org.opensearch.cluster.routing.allocation.AllocationService;
+                }  
+                    Collections.emptyList(),  
+                            return actualHandler;
+            createSnapshotResponseStepListener,  
+        final String snapshot = snapshotsList[0];  
+                        mock(WorkloadGroupService.class)
+                .setWaitForCompletion(true)
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotAction;  
+    }
+                        clusterService,
+import org.opensearch.common.cache.module.CacheModule;  
+        final StepListener<AcknowledgedResponse> createAliasListener = new StepListener<>();  
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(  
+                    } catch (IOException e) {
+                );
+import static org.hamcrest.Matchers.either;  
+                            namedXContentRegistry,  
+        final int shards = randomIntBetween(1, 10);  
+        private final Map<String, TestClusterNode> nodes = new LinkedHashMap<>();
+                nodeConnectionsService.start();
+import java.util.Map;
+                        return newWarmNode(nodeName);
+                        repositoriesService,
+            private final NodeConnectionsService nodeConnectionsService;
+                        threadPool,
+                actions.put(
+                indicesClusterStateService = new IndicesClusterStateService(  
+    private void setupTestCluster(int clusterManagerNodes, int dataNodes, int warmNodes) {  
+                .cluster()
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
+        final long endTime = deterministicTaskQueue.getCurrentTimeMillis() + AbstractCoordinatorTestCase.DEFAULT_STABILISATION_TIME;  
+    public void testSuccessfulSnapshotWithConcurrentDynamicMappingUpdates() {
+            createIndexResponse -> testClusterNodes.randomClusterManagerNodeSafe().client.admin()
+                public void run() {
+                .collect(Collectors.toList());  
+import java.util.stream.Stream;
+import org.opensearch.cluster.coordination.MockSinglePrioritizingExecutor;
+        continueOrDie(
+                    Collections.emptyList(),
+                        client,
+        );
+                    snapshotShardsService,
+                        indexScopedSettings,
+        // We end up with no snapshots since at least one of the deletes worked out  
+                    metadataCreateIndexService,  
+                    clusterManager -> snapshotDeleteResponded.get()
+            final Set<Long> terms = clusterStates.stream().map(ClusterState::term).collect(Collectors.toSet());
+            if (fulfilled.get()) {
+                    clusterService,  
+        });  
+            private final ClusterService clusterService;
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();  
+                        transportService,
+                (int) hitCount,  
+        client().bulk(bulkRequest, bulkResponseStepListener);
+                        clusterService,
+                    clusterService,
+        final int documents = randomIntBetween(1, 100);  
+        String snapshotName = "snapshot";
+            );
+                snapshotsService.start();  
+        final StepListener<SearchResponse> searchAliasResponseListener = new StepListener<>();  
+        continueOrDie(clusterStateResponseStepListener, clusterStateResponse -> {
+                    DefaultRecoverySettings.INSTANCE,  
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
+                    assertEquals(documents, bulkResponse.getItems().length);
+                createAnotherSnapshotResponseStepListener,
+                assertTrue(
+                throwable = restoreSnapshotException.getCause();
+                indicesService.close();
+            )  
+        String snapshotName = "snapshot";
+                final SnapshotInfo snapshotInfo = r.getSnapshotInfo();  
+import org.opensearch.action.admin.cluster.reroute.TransportClusterRerouteAction;
+                            namedXContentRegistry
+            continueOrDie(bulkResponseStepListener, bulkResponse -> {
+            }  
+import static java.util.Collections.emptyMap;  
+                        )
+                        }
+                () -> new AssertionError("Expected to find at least one connected cluster-manager node")
+            // Index delete must be blocked for non-partial snapshots and we get a snapshot for every index  
+    /**
+                    remoteStoreNodeService,  
+import org.opensearch.cluster.coordination.InMemoryPersistedState;
+            testClusterNodes.randomDataNodeSafe().client.admin()
+ * You may obtain a copy of the License at  
+                .execute(createSnapshotResponseStepListener)
+                .execute(createSnapshotResponseStepListener)
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+            createSnapshotResponse -> client().admin().indices().delete(new DeleteIndexRequest(index), deleteIndexListener)  
+                actions.put(
+                        mockIndicesService,  
+        }  
+import static org.hamcrest.Matchers.endsWith;
+                if (event.state().custom(SnapshotsInProgress.TYPE) != null) {
+            blobStoreContext = new MockEventuallyConsistentRepository.Context();  
+                .execute(createSnapshotResponseStepListener)
+                                .execute(createSnapshotResponseStepListener);  
+        );  
+        if (snapshotNeverStarted.get()) {
+            createOtherSnapshotResponseStepListener,  
+                });
+                final MetadataCreateIndexService metadataCreateIndexService = new MetadataCreateIndexService(
+                                }  
+                        String executor,
+                .execute(createSnapshotResponseListener);
+ * compatible open source license.
+                    ),
+            Objects.requireNonNull(searchAliasResponseListener.result().getHits().getTotalHits()).value()  
+        continueOrDie(
+                .execute(createSnapshotResponseStepListener)
+    public void createServices() {  
+                    settings,
+                    .setTaskResourceTrackingService(new TaskResourceTrackingService(settings, clusterSettings, threadPool));
+import org.opensearch.action.resync.TransportResyncReplicationAction;
+    }
+        setupTestCluster(1, 2, 2);
+                        allocationService,
+import org.opensearch.action.admin.indices.stats.SearchResponseStatusStats;  
+import org.opensearch.action.admin.indices.alias.TransportIndicesAliasesAction;
+                    )  
+                        transportService,
+                    clusterInfoService::getClusterInfo,
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);
+                    new TransportRestoreSnapshotAction(  
+                        searchService,
+                        threadPool,
+                        namedWriteableRegistry,
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
+        String repoName = "repo";  
+                .prepareCreateSnapshot(repoName, snapshotName)  
+ * this work for additional information regarding copyright
+            final Collection<ClusterState> clusterStates = testClusterNodes.nodes.values()  
+        final String index = "test";
+                    IndicesAliasesAction.INSTANCE,
+        assertEquals(shards, snapshotInfo.successfulShards());
+            // Select from sorted list of data-nodes here to not have deterministic behaviour  
+        String repoName = "repo";  
+                .execute(deleteSnapshotStepListener)
+import org.opensearch.cluster.SnapshotsInProgress;
+    public void testSnapshotPrimaryRelocations() {
+    private StepListener<CreateIndexResponse> createRepoAndIndex(String repoName, String index, int shards) {
+                        .contains(
+        }
+            public void clusterChanged(ClusterChangedEvent event) {
+import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
+        final ClusterState initialClusterState = new ClusterState.Builder(ClusterName.DEFAULT).nodes(testClusterNodes.discoveryNodes())
+            client().admin()
+        final int clusterManagerNodes = randomFrom(3, 5);
+                index,  
+        final String index = "test";  
+    }
+            allSnapshotsListener,
+                            }
+                        TransportRequestHandler<T> actualHandler
+                            namedXContentRegistry,  
+                    allocationService,
+                        // we rely on disconnect to run for keeping track of pendingDisconnects and ensuring node-joins can happen
+                )  
+import org.opensearch.indices.SystemIndices;
+                );
+        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
+                Runnable::run
+                rerouteServiceSetOnce.set(rerouteService);
+                afterIndexing.run();  
+import org.opensearch.indices.ShardLimitValidator;  
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+        if (randomBoolean()) {
+                        indexNameExpressionResolver,
+import org.opensearch.action.support.ActionTestUtils;
+                coordinator = new Coordinator(  
+        Map<String, AggregateFileCacheStats> nodeFileCacheStats = new HashMap<>();
+        runUntil(() -> doneIndexing.get() && doneSnapshotting.get(), TimeUnit.MINUTES.toMillis(5L));
+                final RestoreService restoreService = new RestoreService(
+        }
+                .prepareCreateSnapshot(repoName, GetSnapshotsRequest.CURRENT_SNAPSHOT)  
+                        // just update targetsByNode to ensure disconnect runs for these nodes
+            });
+                        transportService,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.action.admin.cluster.reroute.ClusterRerouteAction;  
+                    try {  
+        }  
+                    public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
+                .cluster()
+                        transportService,
+                    namedWriteableRegistry,
+            });
+                assertTrue(throwable instanceof SnapshotRestoreException);
+                        transportService,
+import org.opensearch.action.admin.cluster.state.TransportClusterStateAction;
+import java.util.concurrent.atomic.AtomicInteger;
+    }
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+                    indicesService,
+     * Context shared by all the node's {@link Repository} instances if the eventually consistent blobstore is to be used.
+                        new AutoCreateIndex(settings, clusterSettings, indexNameExpressionResolver, new SystemIndices(emptyMap())),
+                        environment,
+                        null  
+        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {
+                    rerouteService,
+                        random()  
+        final StepListener<Collection<CreateIndexResponse>> createIndicesListener = new StepListener<>();
+        continueOrDie(restoreSnapshotResponseListener, restoreSnapshotResponse -> {
+import org.opensearch.cluster.routing.RerouteService;
+    }
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);  
+                .putList(  
+        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
+import org.opensearch.action.admin.indices.create.TransportCreateIndexAction;
+                return clusterInfoService;  
+import org.opensearch.action.support.clustermanager.term.GetTermVersionAction;
+                        indicesService,
+        assertEquals(shards, snapshotInfo.successfulShards());
+        assertThat(snapshotIds, hasSize(1));  
+                        .metadata()  
+                        assertNotNull("Snapshot list should not be null", repoSnapshotResponse.getSnapshots());
+            node.stop();  
+import org.opensearch.cluster.service.FakeThreadPoolClusterManagerService;
+                    persistedStateRegistry,
+                testClusterNodes.disconnectNode(clusterManagerNode);
+                .prepareCreateSnapshot(repoName, snapshotName)  
+                    mock(SegmentReplicationSourceService.class),
+         * Node names that are disconnected from all other nodes.
+                        searchRequestOperationsCompositeListenerFactory,  
+                transportService.start();
+                .cluster()  
+            for (CreateSnapshotResponse createSnapshotResponse : createSnapshotResponses) {
+                    ClusterRerouteAction.INSTANCE,
+                        actionFilters,
+            return snapshotsInProgress != null && snapshotsInProgress.entries().isEmpty();
+                client().admin().indices().create(new CreateIndexRequest("index-" + i), listener);  
+                transportService.getTaskManager()  
+                        .filter(n -> n.node.isClusterManagerNode())
+            ) {  
+        });
+            .orElseThrow(() -> new AssertionError("expected to find at least one active cluster-manager node"));
+            scheduleNow(new Runnable() {  
+import org.opensearch.action.support.DestructiveOperations;
+                indicesClusterStateService.start();
+        final VotingConfiguration votingConfiguration = new VotingConfiguration(
+            final List<TestClusterNode> dataNodes = testClusterNodes.nodes.values().stream().filter(n -> n.node.isDataNode()).filter(n -> {
+                scheduleSoon(() -> testClusterNodes.clearNetworkDisruptions());
+     * deleting a snapshot.  
+import org.opensearch.action.admin.cluster.snapshots.delete.TransportDeleteSnapshotAction;
+                        throw new AssertionError(e);  
+                        null
+                        new RequestValidators<>(Collections.emptyList()),
+                afterIndexing.run();
+                    settings,  
+                        restoreSnapshotResponseListener  
+                        for (final DiscoveryNode discoveryNode : discoveryNodes) {  
+                    client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).execute(deleteSnapshotStepListener);  
+                    new TransportSearchAction(  
+        assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
+import org.opensearch.cluster.routing.UnassignedInfo;
+            assertEquals(shards, snapshotInfo.successfulShards());
+                }
+        testClusterNodes = new TestClusterNodes(clusterManagerNodes, dataNodes, warmNodes);
+    public void testSnapshotDeleteWithClusterManagerFailover() {
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+ * specific language governing permissions and limitations
+        );
+import org.opensearch.index.shard.PrimaryReplicaSyncer;
+            );  
+                        actionFilters
+import org.opensearch.cluster.routing.ShardRouting;  
+                    RetentionLeaseSyncer.EMPTY,  
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+        assertEquals(shards, snapshotInfo.successfulShards());  
+                            .renamePattern("(.+)")
+                    new TaskResourceTrackingService(settings, clusterSettings, threadPool),
+import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequest;
+            .filter(n -> n.node.isClusterManagerNode())  
+        assertEquals(0, snapshotInfo.failedShards());
+     */
+            for (int i = 0; i < indices; ++i) {
+            createOtherSnapshotResponseStepListener,
+                final MetadataIndexAliasesService metadataIndexAliasesService = new MetadataIndexAliasesService(
+        }
+        }  
+import org.opensearch.action.ActionType;  
+                        threadPool,  
+            client().search(  
+                assertNotNull("Snapshot list should not be null", repoSnapshotResponse.getSnapshots());
+                .sorted(Comparator.comparing(n -> n.node.getName()))  
+        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
+import org.opensearch.action.bulk.BulkAction;
+            private final RepositoriesService repositoriesService;
+            }  
+                    );
+                                                index,
+                rerouteService = new BatchedRerouteService(clusterService, allocationService::reroute);  
+        String repoName = "repo";  
+        private TestClusterNode newDataNode(String nodeName) throws IOException {  
+                    PutMappingAction.INSTANCE,
+                    }
+                            new AnalysisModule(environment, Collections.emptyList()).getAnalysisRegistry(),
+        continueOrDie(
+                    null,
+        final int shards = randomIntBetween(1, 10);
+                        } else {
+        final int documents = randomIntBetween(2, 100);  
+            .orElseThrow(() -> new AssertionError("expected to find at least one active cluster-manager node"));  
+                        threadPool,
+                        NoopTracer.INSTANCE,
+                    namedWriteableRegistry,
+            }
+        String repoName = "repo";
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.index.store.remote.filecache.FileCacheStats;
+            if (randomBoolean()) {
+            if (disconnectedNodes.contains(node.node.getName())) {
+            }  
+                if (event.state().custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().isEmpty() == false) {
+                    )
+            final Set<String> disconnectedNodes = new HashSet<>(this.disconnectedNodes);  
+import org.opensearch.indices.mapper.MapperRegistry;
+        String repoName = "repo";
+                    threadPool,
+                    transportService,
+                        }
+        final SetOnce<Index> firstIndex = new SetOnce<>();
+            } else if (randomBoolean()) {  
+        SnapshotDeletionsInProgress deletionsInProgress = clusterManagerNode.clusterService.state()  
+            this.disconnectedNodes.clear();
+                repositoriesService = new RepositoriesService(
+                .restoreSnapshot(  
+                    }
+                scheduleNow(() -> testClusterNodes.clearNetworkDisruptions());
+                .delete(new DeleteIndexRequest(index), new ActionListener<AcknowledgedResponse>() {
+                    final StepListener<ClusterStateResponse> updatedClusterStateResponseStepListener = new StepListener<>();  
+import org.opensearch.cluster.metadata.MetadataMappingService;  
+import java.util.Objects;
+                        snapshotsService,
+                snapshotsService = new SnapshotsService(  
+                        onCompletion.run();  
+                final CoordinationState.PersistedState persistedState = new InMemoryPersistedState(  
+            acknowledgedResponse -> client().admin()
+                @Override
+                            clusterService,
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+            documentCountVerified.set(true);
+                        xContentRegistry(),
+    private TestClusterNodes testClusterNodes;  
+import org.opensearch.transport.TransportRequestHandler;  
+                    )
+                            client  
+            } else {
+        final StepListener<CreateSnapshotResponse> createOtherSnapshotResponseStepListener = new StepListener<>();
+        continueOrDie(restoreSnapshotResponseStepListener, restoreSnapshotResponse -> {
+import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryResponse;
+        assertEquals(
+                client = new NodeClient(settings, threadPool);
+                        indexNameExpressionResolver,
+                    () -> repositoriesService,
+import org.opensearch.node.ResponseCollectorService;  
+                        mock(SegmentReplicationStatsTracker.class),
+                    new IndicesAliasesRequest().addAliasAction(IndicesAliasesRequest.AliasActions.add().index(index).alias(alias)),
+        public TestClusterNode randomClusterManagerNodeSafe() {  
+                        new IngestService(  
+                        clusterService,  
+        String snapshotName = "snapshot";  
+            final List<Long> versions = clusterStates.stream().map(ClusterState::version).distinct().collect(Collectors.toList());
+import org.opensearch.action.admin.indices.mapping.put.AutoPutMappingAction;  
+                    assertNoFailureListener(bulkResponse -> {
+                    mappingUpdatedAction,
+                    try {  
+                        emptyMap(),
+                    allocationService  
+        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {  
+                assertEquals(snapshotInfo.snapshotId().getName(), snapshotsList[0]);
+                            ConcurrentSnapshotExecutionException.class,
+                            .filter(transport -> transport.getLocalNode().getAddress().equals(address))
             }
             doneSnapshotting.set(true);
-        });  
-
-        runUntil(() -> doneIndexing.get() && doneSnapshotting.get(), TimeUnit.MINUTES.toMillis(5L));
-        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);  
-        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
-        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
-        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
-        assertThat(snapshotIds, hasSize(snapshotNames.size()));
-
-        for (SnapshotId snapshotId : snapshotIds) {  
-            final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotId);
-            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
-            assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
-            assertEquals(shards, snapshotInfo.successfulShards());
-            assertEquals(0, snapshotInfo.failedShards());
-        }  
-    }
-
-    private RepositoryData getRepositoryData(Repository repository) {  
-        final PlainActionFuture<RepositoryData> res = PlainActionFuture.newFuture();
-        repository.getRepositoryData(res);
-        deterministicTaskQueue.runAllRunnableTasks();  
-        assertTrue(res.isDone());
-        return res.actionGet();
-    }  
-
-    private StepListener<CreateIndexResponse> createRepoAndIndex(String repoName, String index, int shards) {
-        final StepListener<AcknowledgedResponse> createRepositoryListener = new StepListener<>();  
-
-        Settings.Builder settings = Settings.builder().put("location", randomAlphaOfLength(10));
-        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), repoName, FsRepository.TYPE, settings, createRepositoryListener);  
-
-        final StepListener<CreateIndexResponse> createIndexResponseStepListener = new StepListener<>();
-
-        continueOrDie(
-            createRepositoryListener,
-            acknowledgedResponse -> client().admin()  
-                .indices()
-                .create(
-                    new CreateIndexRequest(index).waitForActiveShards(ActiveShardCount.ALL).settings(defaultIndexSettings(shards)),  
-                    createIndexResponseStepListener
-                )
-        );  
-
-        return createIndexResponseStepListener;
-    }  
-
-    private StepListener<AcknowledgedResponse> createRepoAndIndexAndAlias(String repoName, String index, int shards, String alias) {
-        final StepListener<AcknowledgedResponse> createAliasListener = new StepListener<>();  
-
-        continueOrDie(
-            createRepoAndIndex(repoName, index, shards),  
-            acknowledgedResponse -> client().admin()
-                .indices()
-                .aliases(  
-                    new IndicesAliasesRequest().addAliasAction(IndicesAliasesRequest.AliasActions.add().index(index).alias(alias)),
-                    createAliasListener
-                )  
-        );
-
-        return createAliasListener;  
-    }
-
-    private void clearDisruptionsAndAwaitSync() {  
-        testClusterNodes.clearNetworkDisruptions();
-        stabilize();
-    }  
-
-    private void disconnectOrRestartDataNode() {
-        if (randomBoolean()) {  
-            disconnectRandomDataNode();
-        } else {
-            testClusterNodes.randomDataNode().ifPresent(TestClusterNodes.TestClusterNode::restart);  
-        }
-    }
-
-    private void disconnectOrRestartClusterManagerNode() {
-        testClusterNodes.randomClusterManagerNode().ifPresent(clusterManagerNode -> {
-            if (randomBoolean()) {  
-                testClusterNodes.disconnectNode(clusterManagerNode);
-            } else {
-                clusterManagerNode.restart();  
-            }
-        });
-    }  
-
-    private void disconnectRandomDataNode() {
-        testClusterNodes.randomDataNode().ifPresent(n -> testClusterNodes.disconnectNode(n));  
-    }
-
-    private void startCluster() {  
-        final ClusterState initialClusterState = new ClusterState.Builder(ClusterName.DEFAULT).nodes(testClusterNodes.discoveryNodes())
-            .build();
-        testClusterNodes.nodes.values().forEach(testClusterNode -> testClusterNode.start(initialClusterState));  
-
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();  
-
-        final VotingConfiguration votingConfiguration = new VotingConfiguration(
-            testClusterNodes.nodes.values()  
-                .stream()
-                .map(n -> n.node)
-                .filter(DiscoveryNode::isClusterManagerNode)  
-                .map(DiscoveryNode::getId)
-                .collect(Collectors.toSet())
-        );  
-        testClusterNodes.nodes.values()
-            .stream()
-            .filter(n -> n.node.isClusterManagerNode())  
-            .forEach(testClusterNode -> testClusterNode.coordinator.setInitialConfiguration(votingConfiguration));
-        // Connect all nodes to each other
-        testClusterNodes.nodes.values()  
-            .forEach(
-                node -> testClusterNodes.nodes.values()
-                    .forEach(  
-                        n -> n.transportService.connectToNode(
-                            node.node,
-                            null,  
-                            ActionTestUtils.assertNoFailureListener(c -> logger.info("--> Connected [{}] to [{}]", n.node, node.node))
-                        )
-                    )  
-            );
-        stabilize();
-    }  
-
-    private void stabilize() {
-        final long endTime = deterministicTaskQueue.getCurrentTimeMillis() + AbstractCoordinatorTestCase.DEFAULT_STABILISATION_TIME;  
-        while (deterministicTaskQueue.getCurrentTimeMillis() < endTime) {
-            deterministicTaskQueue.advanceTime();
-            deterministicTaskQueue.runAllRunnableTasks();  
-        }
-        runUntil(() -> {
-            final Collection<ClusterState> clusterStates = testClusterNodes.nodes.values()  
-                .stream()
-                .map(node -> node.clusterService.state())
-                .collect(Collectors.toList());  
-            final Set<String> clusterManagerNodeIds = clusterStates.stream()
-                .map(clusterState -> clusterState.nodes().getClusterManagerNodeId())
-                .collect(Collectors.toSet());  
-            final Set<Long> terms = clusterStates.stream().map(ClusterState::term).collect(Collectors.toSet());
-            final List<Long> versions = clusterStates.stream().map(ClusterState::version).distinct().collect(Collectors.toList());
-            return versions.size() == 1  
-                && clusterManagerNodeIds.size() == 1
-                && clusterManagerNodeIds.contains(null) == false
-                && terms.size() == 1;  
-        }, TimeUnit.MINUTES.toMillis(1L));
-    }
-
-    private void runUntil(Supplier<Boolean> fulfilled, long timeout) {
-        final long start = deterministicTaskQueue.getCurrentTimeMillis();
-        while (timeout > deterministicTaskQueue.getCurrentTimeMillis() - start) {  
-            if (fulfilled.get()) {
-                return;
-            }  
-            deterministicTaskQueue.runAllRunnableTasks();
-            deterministicTaskQueue.advanceTime();
-        }  
-        fail("Condition wasn't fulfilled.");
-    }
-
-    private void setupTestCluster(int clusterManagerNodes, int dataNodes) {
-        testClusterNodes = new TestClusterNodes(clusterManagerNodes, dataNodes);
-        startCluster();  
-    }
-
-    private void setupTestCluster(int clusterManagerNodes, int dataNodes, int warmNodes) {  
-        testClusterNodes = new TestClusterNodes(clusterManagerNodes, dataNodes, warmNodes);
-        startCluster();
-    }  
-
-    private void scheduleSoon(Runnable runnable) {
-        deterministicTaskQueue.scheduleAt(deterministicTaskQueue.getCurrentTimeMillis() + randomLongBetween(0, 100L), runnable);  
-    }
-
-    private void scheduleNow(Runnable runnable) {  
-        deterministicTaskQueue.scheduleNow(runnable);
-    }
-
-    private static Settings defaultIndexSettings(int shards) {
-        // TODO: randomize replica count settings once recovery operations aren't blocking anymore
-        return Settings.builder()  
-            .put(IndexMetadata.INDEX_NUMBER_OF_SHARDS_SETTING.getKey(), shards)
-            .put(IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .build();  
-    }
-
-    private static <T> void continueOrDie(StepListener<T> listener, CheckedConsumer<T, Exception> onResponse) {  
-        listener.whenComplete(onResponse, e -> { throw new AssertionError(e); });
-    }
-
-    private static <T> ActionListener<T> noopListener() {
-        return ActionListener.wrap(() -> {});
-    }  
-
-    public NodeClient client() {
-        // Select from sorted list of nodes  
-        final List<TestClusterNodes.TestClusterNode> nodes = testClusterNodes.nodes.values()
-            .stream()
-            .filter(n -> testClusterNodes.disconnectedNodes.contains(n.node.getName()) == false)  
-            .sorted(Comparator.comparing(n -> n.node.getName()))
-            .collect(Collectors.toList());
-        if (nodes.isEmpty()) {  
+                        mockIndicesService,  
             throw new AssertionError("No nodes available");
-        }
-        return randomFrom(nodes).client;  
-    }
-
-    /**  
-     * Create a {@link Environment} with random path.home and path.repo
-     **/
-    private Environment createEnvironment(String nodeName) {  
-        return TestEnvironment.newEnvironment(
-            Settings.builder()
-                .put(NODE_NAME_SETTING.getKey(), nodeName)  
-                .put(PATH_HOME_SETTING.getKey(), tempDir.resolve(nodeName).toAbsolutePath())
-                .put(Environment.PATH_REPO_SETTING.getKey(), tempDir.resolve("repo").toAbsolutePath())
-                .putList(  
-                    ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(),
-                    ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(Settings.EMPTY)
-                )  
-                .put(MappingUpdatedAction.INDICES_MAX_IN_FLIGHT_UPDATES_SETTING.getKey(), 1000) // o.w. some tests might block
-                .build()
+    }  
+import static org.hamcrest.Matchers.is;
+                    mock(RemoteStorePressureService.class),
+import org.opensearch.repositories.blobstore.BlobStoreRepository;  
+                            .shardRoutingTable(shardToRelocate.shardId())
+                        NoopMetricsRegistry.INSTANCE,
+                        )
+                new DiscoveryNode(
+        continueOrDie(
+    }  
+import org.opensearch.action.bulk.BulkResponse;  
+                        .collect(Collectors.toList()),
+import org.opensearch.action.bulk.TransportBulkAction;
+                        threadPool,  
+        while (deterministicTaskQueue.getCurrentTimeMillis() < endTime) {
+                );  
+import org.opensearch.cluster.coordination.PersistedStateRegistry.PersistedStateType;
+        tempDir = createTempDir();
+                            shardStateAction,
+    private void scheduleSoon(Runnable runnable) {
+import org.opensearch.cluster.action.shard.ShardStateAction;
+        public Optional<TestClusterNode> randomClusterManagerNode() {  
+        continueOrDie(
+        );
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseListener = new StepListener<>();  
+        restoreSnapshotResponseListener.whenComplete(null, restoreSnapshotException -> {
+            }
+                final ActionFilters actionFilters = new ActionFilters(emptySet());
+                            assertEquals(SnapshotState.IN_PROGRESS, snapshotInfo.state());
+                .cluster()
+            return nodes.values()
+                    responseCollectorService,
+                    .prepareCreateSnapshot(repoName, secondSnapshotName)  
+        final int shards = randomIntBetween(1, 10);
+        );
+        final int shards = randomIntBetween(1, 10);
+                        transportService,  
+        runUntil(documentCountVerified::get, TimeUnit.MINUTES.toMillis(5L));
+                final SnapshotsInfoService snapshotsInfoService = new InternalSnapshotsInfoService(
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+                        threadPool,  
+                        }  
+        String snapshotName = "snapshot";  
+                    try {  
+        final String repoName = "repo";  
+        assertThat(snapshotIds, empty());
+                if (blobStoreContext == null) {
+import org.opensearch.test.disruption.DisruptableMockTransport;  
+            Throwable throwable = restoreSnapshotException;
+        final int inProgressSnapshots = randomIntBetween(1, 5);
+        );
+        );  
+                    TransportGetSnapshotsAction transportGetSnapshotsAction = (TransportGetSnapshotsAction) getSnapshotsAction;
+                );  
+                );  
+            assertEquals(documents, Objects.requireNonNull(r.getHits().getTotalHits()).value());
+                                }
+                    }  
+        assertFalse(deletionsInProgress.hasDeletionsInProgress());
+            for (int i = 0; i < warmNodes; ++i) {
+                        threadPool,  
+            )  
+        continueOrDie(
+                    ),
+                .setWaitForCompletion(true)
+        continueOrDie(  
+                            node.node,
+        assertThat(snapshotIds, hasSize(2));
+import org.opensearch.indices.recovery.DefaultRecoverySettings;
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;  
+                .execute(createSnapshotResponseStepListener);
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);  
+            createRepoAndIndexAndAlias(repoName, index, shards, alias),  
+import java.util.Optional;  
+                        threadPool,  
+    private void indexNDocuments(int documents, String index, Runnable afterIndexing) {  
+import org.opensearch.cluster.metadata.MetadataIndexUpgradeService;
+        assertThat(snapshotIds, either(hasSize(1)).or(hasSize(0)));
+        continueOrDie(bulkResponseStepListener, bulkResponse -> {
+                    }
+                    } catch (IOException e) {
+                    null
+                .execute(ActionListener.wrap(() -> snapshotDeleteResponded.set(true)));
+            @Override  
+                    assertEquals(documents, bulkResponse.getItems().length);
+            private RemoteStoreNodeService remoteStoreNodeService;  
+        runUntil(documentCountVerified::get, TimeUnit.MINUTES.toMillis(5L));
+import java.util.HashSet;
+                .deleteSnapshot(new DeleteSnapshotRequest(repoName, "*"), deleteSnapshotStepListener)  
+    private RepositoryData getRepositoryData(Repository repository) {  
+                repositoriesService.start();
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
+import java.util.function.Supplier;
+                );  
+                .indices()
+                        List<SnapshotInfo> snapshotInfos = repoSnapshotResponse.getSnapshots();
+                .filter(n -> n.node.getId().equals(nodeId))  
+import org.opensearch.ingest.SystemIngestPipelineCache;
+        );
+import org.opensearch.test.OpenSearchIntegTestCase;
+                            threadPool,
+                    ReferencedSegmentsPublisher.EMPTY
+                    ),
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
+import org.opensearch.action.admin.indices.alias.IndicesAliasesAction;
+import static org.hamcrest.Matchers.iterableWithSize;
+                    transportService.getRemoteClusterService(),  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+        assertThat(restoreSnapshotResponseListener.result().getRestoreInfo().failedShards(), is(0));  
+            .nodes(DiscoveryNodes.builder(state.nodes()).remove(node.getId()).add(node).localNodeId(node.getId()))  
+                    threadPool
+                .findFirst()
+                        searchPhaseController,
+import org.opensearch.action.admin.indices.mapping.put.PutMappingAction;
+        final int documentsFirstSnapshot = randomIntBetween(0, 100);
+import static org.hamcrest.Matchers.empty;
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+                    afterIndexing.run();
         );  
     }
-
-    private static ClusterState stateForNode(ClusterState state, DiscoveryNode node) {  
-        // Remove and add back local node to update ephemeral id on restarts
-        return ClusterState.builder(state)
-            .nodes(DiscoveryNodes.builder(state.nodes()).remove(node.getId()).add(node).localNodeId(node.getId()))  
-            .build();
-    }
-
-    private final class TestClusterNodes {
-
-        // LinkedHashMap so we have deterministic ordering when iterating over the map in tests  
-        private final Map<String, TestClusterNode> nodes = new LinkedHashMap<>();
-
-        /**  
-         * Node names that are disconnected from all other nodes.
-         */
-        private final Set<String> disconnectedNodes = new HashSet<>();  
-
-        TestClusterNodes(int clusterManagerNodes, int dataNodes) {
-            this(clusterManagerNodes, dataNodes, 0);  
-        }
-
-        TestClusterNodes(int clusterManagerNodes, int dataNodes, int warmNodes) {  
-            for (int i = 0; i < clusterManagerNodes; ++i) {
-                nodes.computeIfAbsent("node" + i, nodeName -> {
-                    try {  
-                        return newClusterManagerNode(nodeName);
-                    } catch (IOException e) {
-                        throw new AssertionError(e);  
-                    }
-                });
-            }  
-            for (int i = 0; i < dataNodes; ++i) {
-                nodes.computeIfAbsent("data-node" + i, nodeName -> {
-                    try {  
-                        return newDataNode(nodeName);
-                    } catch (IOException e) {
-                        throw new AssertionError(e);  
-                    }
-                });
-            }  
-            for (int i = 0; i < warmNodes; ++i) {
-                nodes.computeIfAbsent("warm-node" + i, nodeName -> {
-                    try {  
-                        return newWarmNode(nodeName);
-                    } catch (IOException e) {
-                        throw new AssertionError(e);  
-                    }
-                });
-            }  
-        }
-
-        public TestClusterNode nodeById(final String nodeId) {  
-            return nodes.values()
-                .stream()
-                .filter(n -> n.node.getId().equals(nodeId))  
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Could not find node by id [" + nodeId + ']'));
-        }  
-
-        private TestClusterNode newClusterManagerNode(String nodeName) throws IOException {
-            return newNode(nodeName, DiscoveryNodeRole.CLUSTER_MANAGER_ROLE);  
-        }
-
-        private TestClusterNode newDataNode(String nodeName) throws IOException {  
-            return newNode(nodeName, DiscoveryNodeRole.DATA_ROLE);
-        }
-
-        private TestClusterNode newWarmNode(String nodeName) throws IOException {
-            return newNode(nodeName, DiscoveryNodeRole.WARM_ROLE);
-        }  
-
-        private TestClusterNode newNode(String nodeName, DiscoveryNodeRole role) throws IOException {
-            return new TestClusterNode(  
-                new DiscoveryNode(
-                    nodeName,
-                    randomAlphaOfLength(10),  
-                    buildNewFakeTransportAddress(),
-                    emptyMap(),
-                    Collections.singleton(role),  
-                    Version.CURRENT
-                )
-            );  
-        }
-
-        public TestClusterNode randomClusterManagerNodeSafe() {  
-            return randomClusterManagerNode().orElseThrow(
-                () -> new AssertionError("Expected to find at least one connected cluster-manager node")
-            );  
-        }
-
-        public Optional<TestClusterNode> randomClusterManagerNode() {  
-            // Select from sorted list of data-nodes here to not have deterministic behaviour
-            final List<TestClusterNode> clusterManagerNodes = testClusterNodes.nodes.values()
-                .stream()  
-                .filter(n -> n.node.isClusterManagerNode())
-                .filter(n -> disconnectedNodes.contains(n.node.getName()) == false)
-                .sorted(Comparator.comparing(n -> n.node.getName()))  
-                .collect(Collectors.toList());
-            return clusterManagerNodes.isEmpty() ? Optional.empty() : Optional.of(randomFrom(clusterManagerNodes));
-        }  
-
-        public void stopNode(TestClusterNode node) {
-            node.stop();  
-            nodes.remove(node.node.getName());
-        }
-
-        public TestClusterNode randomDataNodeSafe(String... excludedNames) {
-            return randomDataNode(excludedNames).orElseThrow(() -> new AssertionError("Could not find another data node."));
-        }  
-
-        public Optional<TestClusterNode> randomDataNode(String... excludedNames) {
-            // Select from sorted list of data-nodes here to not have deterministic behaviour  
-            final List<TestClusterNode> dataNodes = testClusterNodes.nodes.values().stream().filter(n -> n.node.isDataNode()).filter(n -> {
-                for (final String nodeName : excludedNames) {
-                    if (n.node.getName().equals(nodeName)) {  
-                        return false;
-                    }
-                }  
-                return true;
-            }).sorted(Comparator.comparing(n -> n.node.getName())).collect(Collectors.toList());
-            return dataNodes.isEmpty() ? Optional.empty() : Optional.ofNullable(randomFrom(dataNodes));  
-        }
-
-        public void disconnectNode(TestClusterNode node) {  
-            if (disconnectedNodes.contains(node.node.getName())) {
-                return;
-            }  
-            testClusterNodes.nodes.values().forEach(n -> n.transportService.getConnectionManager().disconnectFromNode(node.node));
-            disconnectedNodes.add(node.node.getName());
-        }  
-
-        public void clearNetworkDisruptions() {
-            final Set<String> disconnectedNodes = new HashSet<>(this.disconnectedNodes);  
-            this.disconnectedNodes.clear();
-            disconnectedNodes.forEach(nodeName -> {
-                if (testClusterNodes.nodes.containsKey(nodeName)) {  
-                    final DiscoveryNode node = testClusterNodes.nodes.get(nodeName).node;
-                    testClusterNodes.nodes.values()
-                        .forEach(  
-                            n -> n.transportService.openConnection(
-                                node,
-                                null,  
-                                ActionTestUtils.assertNoFailureListener(c -> logger.debug("--> Connected [{}] to [{}]", n.node, node))
-                            )
-                        );  
-                }
-            });
-        }  
-
-        /**
-         * Builds a {@link DiscoveryNodes} instance that holds the nodes in this test cluster.  
-         * @return DiscoveryNodes
-         */
-        public DiscoveryNodes discoveryNodes() {  
-            DiscoveryNodes.Builder builder = DiscoveryNodes.builder();
-            nodes.values().forEach(node -> builder.add(node.node));
-            return builder.build();  
-        }
-
-        /**  
-         * Returns the {@link TestClusterNode} for the cluster-manager node in the given {@link ClusterState}.
-         * @param state ClusterState
-         * @return Cluster Manager Node  
-         */
-        public TestClusterNode currentClusterManager(ClusterState state) {
-            TestClusterNode clusterManager = nodes.get(state.nodes().getClusterManagerNode().getName());  
-            assertNotNull(clusterManager);
-            assertTrue(clusterManager.node.isClusterManagerNode());
-            return clusterManager;  
-        }
-
-        private final class TestClusterNode {  
-            private final Logger logger = LogManager.getLogger(TestClusterNode.class);
-
-            private final NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(  
-                Stream.concat(ClusterModule.getNamedWriteables().stream(), NetworkModule.getNamedWriteables().stream())
-                    .collect(Collectors.toList())
-            );  
-
-            private final TransportService transportService;
-
-            private final ClusterService clusterService;
-
-            private final RecoverySettings recoverySettings;  
-
-            private final NodeConnectionsService nodeConnectionsService;
-
-            private final RepositoriesService repositoriesService;
-
-            private final SnapshotsService snapshotsService;  
-
-            private final SnapshotShardsService snapshotShardsService;
-
-            private final IndicesService indicesService;
-
-            private final IndicesClusterStateService indicesClusterStateService;  
-
-            private final DiscoveryNode node;
-
-            private final ClusterManagerService clusterManagerService;
-
-            private final AllocationService allocationService;  
-
-            private final RerouteService rerouteService;
-
-            private final NodeClient client;
-
-            private final NodeEnvironment nodeEnv;  
-
-            private final DisruptableMockTransport mockTransport;
-
-            private final ThreadPool threadPool;
-
-            private final ClusterInfoService clusterInfoService;  
-
-            private Coordinator coordinator;
-            private RemoteStoreNodeService remoteStoreNodeService;  
-
-            private final MappingTransformerRegistry mappingTransformerRegistry;
-
-            private Map<ActionType, TransportAction> actions = new HashMap<>();
-
-            TestClusterNode(DiscoveryNode node) throws IOException {  
-                this.node = node;
-                final Environment environment = createEnvironment(node.getName());
-                threadPool = deterministicTaskQueue.getThreadPool(runnable -> CoordinatorTests.onNodeLog(node, runnable));  
-                clusterManagerService = new FakeThreadPoolClusterManagerService(
-                    node.getName(),
-                    "test",  
-                    threadPool,
-                    deterministicTaskQueue::scheduleNow
-                );  
-                final Settings settings = environment.settings();
-                final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-                clusterService = new ClusterService(  
-                    settings,
-                    clusterSettings,
-                    clusterManagerService,  
-                    new ClusterApplierService(node.getName(), settings, clusterSettings, threadPool) {
-                        @Override
-                        protected PrioritizedOpenSearchThreadPoolExecutor createThreadPoolExecutor() {  
-                            return new MockSinglePrioritizingExecutor(node.getName(), deterministicTaskQueue, threadPool);
-                        }
-                    }  
-                );
-                recoverySettings = new RecoverySettings(settings, clusterSettings);
-                mockTransport = new DisruptableMockTransport(node, logger, deterministicTaskQueue) {  
-                    @Override
-                    protected ConnectionStatus getConnectionStatus(DiscoveryNode destination) {
-                        if (node.equals(destination)) {  
-                            return ConnectionStatus.CONNECTED;
-                        }
-                        // Check if both nodes are still part of the cluster  
-                        if (nodes.containsKey(node.getName()) == false || nodes.containsKey(destination.getName()) == false) {
-                            return ConnectionStatus.DISCONNECTED;
-                        }  
-                        return disconnectedNodes.contains(node.getName()) || disconnectedNodes.contains(destination.getName())
-                            ? ConnectionStatus.DISCONNECTED
-                            : ConnectionStatus.CONNECTED;  
-                    }
-
-                    @Override  
-                    protected Optional<DisruptableMockTransport> getDisruptableMockTransport(TransportAddress address) {
-                        return nodes.values()
-                            .stream()  
-                            .map(cn -> cn.mockTransport)
-                            .filter(transport -> transport.getLocalNode().getAddress().equals(address))
-                            .findAny();  
-                    }
-
-                    @Override  
-                    protected void execute(Runnable runnable) {
-                        scheduleNow(CoordinatorTests.onNodeLog(getLocalNode(), runnable));
-                    }  
-
-                    @Override
-                    protected NamedWriteableRegistry writeableRegistry() {  
-                        return namedWriteableRegistry;
-                    }
-                };  
-                transportService = mockTransport.createTransportService(settings, threadPool, new TransportInterceptor() {
-                    @Override
-                    public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(  
-                        String action,
-                        String executor,
-                        boolean forceExecution,  
-                        TransportRequestHandler<T> actualHandler
-                    ) {
-                        // TODO: Remove this hack once recoveries are async and can be used in these tests  
-                        if (action.startsWith("internal:index/shard/recovery")) {
-                            return (request, channel, task) -> scheduleSoon(new AbstractRunnable() {
-                                @Override  
-                                protected void doRun() throws Exception {
-                                    channel.sendResponse(new TransportException(new IOException("failed to recover shard")));
-                                }  
-
-                                @Override
-                                public void onFailure(final Exception e) {  
-                                    throw new AssertionError(e);
-                                }
-                            });  
-                        } else {
-                            return actualHandler;
-                        }  
-                    }
-                }, a -> node, null, emptySet(), NoopTracer.INSTANCE);
-                final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(  
-                    new ThreadContext(Settings.EMPTY)
-                );
-                transportService.getTaskManager()  
-                    .setTaskResourceTrackingService(new TaskResourceTrackingService(settings, clusterSettings, threadPool));
-                repositoriesService = new RepositoriesService(
-                    settings,  
-                    clusterService,
-                    transportService,
-                    Collections.singletonMap(FsRepository.TYPE, getRepoFactory(environment)),  
-                    emptyMap(),
-                    threadPool
-                );  
-                remoteStoreNodeService = new RemoteStoreNodeService(new SetOnce<>(repositoriesService)::get, threadPool);
-                final ActionFilters actionFilters = new ActionFilters(emptySet());
-                snapshotsService = new SnapshotsService(  
-                    settings,
-                    clusterService,
-                    indexNameExpressionResolver,  
-                    repositoriesService,
-                    transportService,
-                    actionFilters,  
-                    null,
-                    DefaultRemoteStoreSettings.INSTANCE,
-                    null  
-                );
-                nodeEnv = new NodeEnvironment(settings, environment);
-                final NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(Collections.emptyList());  
-                final ScriptService scriptService = new ScriptService(settings, emptyMap(), emptyMap());
-                client = new NodeClient(settings, threadPool);
-                clusterInfoService = Mockito.mock(ClusterInfoService.class);  
-                final SetOnce<RerouteService> rerouteServiceSetOnce = new SetOnce<>();
-                final SnapshotsInfoService snapshotsInfoService = new InternalSnapshotsInfoService(
-                    settings,  
-                    clusterService,
-                    () -> repositoriesService,
-                    rerouteServiceSetOnce::get  
-                );
-                allocationService = OpenSearchAllocationTestCase.createAllocationService(settings, snapshotsInfoService);
-                rerouteService = new BatchedRerouteService(clusterService, allocationService::reroute);  
-                rerouteServiceSetOnce.set(rerouteService);
-                final IndexScopedSettings indexScopedSettings = new IndexScopedSettings(
-                    settings,  
-                    IndexScopedSettings.BUILT_IN_INDEX_SETTINGS
-                );
-                final BigArrays bigArrays = new BigArrays(new PageCacheRecycler(settings), null, "test");  
-                final MapperRegistry mapperRegistry = new IndicesModule(Collections.emptyList()).getMapperRegistry();
-                final SetOnce<RepositoriesService> repositoriesServiceReference = new SetOnce<>();
-                repositoriesServiceReference.set(repositoriesService);  
-                indicesService = new IndicesService(
-                    settings,
-                    mock(PluginsService.class),  
-                    nodeEnv,
-                    namedXContentRegistry,
-                    new AnalysisRegistry(  
-                        environment,
-                        emptyMap(),
-                        emptyMap(),  
-                        emptyMap(),
-                        emptyMap(),
-                        emptyMap(),  
-                        emptyMap(),
-                        emptyMap(),
-                        emptyMap(),  
-                        emptyMap()
-                    ),
-                    indexNameExpressionResolver,  
-                    mapperRegistry,
-                    namedWriteableRegistry,
-                    threadPool,  
-                    indexScopedSettings,
-                    new NoneCircuitBreakerService(),
-                    bigArrays,  
-                    scriptService,
-                    clusterService,
-                    client,  
-                    new MetaStateService(nodeEnv, namedXContentRegistry),
-                    Collections.emptyList(),
-                    emptyMap(),  
-                    null,
-                    emptyMap(),
-                    new RemoteSegmentStoreDirectoryFactory(() -> repositoriesService, threadPool, ""),  
-                    repositoriesServiceReference::get,
-                    null,
-                    new RemoteStoreStatsTrackerFactory(clusterService, settings),  
-                    emptyMap(),
-                    null,
-                    DefaultRecoverySettings.INSTANCE,  
-                    new CacheModule(new ArrayList<>(), settings).getCacheService(),
-                    DefaultRemoteStoreSettings.INSTANCE
-                );  
-                final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);
-                snapshotShardsService = new SnapshotShardsService(
-                    settings,  
-                    clusterService,
-                    repositoriesService,
-                    transportService,  
-                    indicesService
-                );
-                final ShardStateAction shardStateAction = new ShardStateAction(  
-                    clusterService,
-                    transportService,
-                    allocationService,  
-                    rerouteService,
-                    threadPool
-                );  
-                nodeConnectionsService = createTestNodeConnectionsService(clusterService.getSettings(), threadPool, transportService);
-                final MetadataMappingService metadataMappingService = new MetadataMappingService(clusterService, indicesService);
-                indicesClusterStateService = new IndicesClusterStateService(  
-                    settings,
-                    indicesService,
-                    clusterService,  
-                    threadPool,
-                    new PeerRecoveryTargetService(threadPool, transportService, recoverySettings, clusterService),
-                    new SegmentReplicationTargetService(  
-                        threadPool,
-                        recoverySettings,
-                        transportService,  
-                        new SegmentReplicationSourceFactory(transportService, recoverySettings, clusterService),
-                        indicesService,
-                        clusterService  
-                    ),
-                    mock(SegmentReplicationSourceService.class),
-                    shardStateAction,  
-                    new NodeMappingRefreshAction(transportService, metadataMappingService),
-                    repositoriesService,
-                    mock(SearchService.class),  
-                    new PeerRecoverySourceService(transportService, indicesService, recoverySettings),
-                    snapshotShardsService,
-                    new PrimaryReplicaSyncer(  
-                        transportService,
-                        new TransportResyncReplicationAction(
-                            settings,  
-                            transportService,
-                            clusterService,
-                            indicesService,  
-                            threadPool,
-                            shardStateAction,
-                            actionFilters,  
-                            new IndexingPressureService(settings, clusterService),
-                            new SystemIndices(emptyMap()),
-                            NoopTracer.INSTANCE  
-                        )
-                    ),
-                    new GlobalCheckpointSyncAction(  
-                        settings,
-                        transportService,
-                        clusterService,  
-                        indicesService,
-                        threadPool,
-                        shardStateAction,  
-                        actionFilters
-                    ),
-                    RetentionLeaseSyncer.EMPTY,  
-                    SegmentReplicationCheckpointPublisher.EMPTY,
-                    mock(RemoteStoreStatsTrackerFactory.class),
-                    new MergedSegmentWarmerFactory(null, null, null),  
-                    MergedSegmentPublisher.EMPTY,
-                    ReferencedSegmentsPublisher.EMPTY
-                );  
-
-                final SystemIndices systemIndices = new SystemIndices(emptyMap());
-                final ShardLimitValidator shardLimitValidator = new ShardLimitValidator(settings, clusterService, systemIndices);  
-                final MetadataCreateIndexService metadataCreateIndexService = new MetadataCreateIndexService(
-                    settings,
-                    clusterService,  
-                    indicesService,
-                    allocationService,
-                    new AliasValidator(),  
-                    shardLimitValidator,
-                    environment,
-                    indexScopedSettings,  
-                    threadPool,
-                    namedXContentRegistry,
-                    systemIndices,  
-                    false,
-                    new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings()),
-                    DefaultRemoteStoreSettings.INSTANCE,  
-                    null
-                );
-
-                mappingTransformerRegistry = new MappingTransformerRegistry(List.of(), namedXContentRegistry);
-
-                actions.put(  
-                    CreateIndexAction.INSTANCE,
-                    new TransportCreateIndexAction(
-                        transportService,  
-                        clusterService,
-                        threadPool,
-                        metadataCreateIndexService,  
-                        actionFilters,
-                        indexNameExpressionResolver,
-                        mappingTransformerRegistry  
-                    )
-                );
-                final MetadataDeleteIndexService metadataDeleteIndexService = new MetadataDeleteIndexService(  
-                    settings,
-                    clusterService,
-                    allocationService  
-                );
-                final MetadataIndexAliasesService metadataIndexAliasesService = new MetadataIndexAliasesService(
-                    clusterService,  
-                    indicesService,
-                    new AliasValidator(),
-                    metadataDeleteIndexService,  
-                    namedXContentRegistry
-                );
-                actions.put(  
-                    IndicesAliasesAction.INSTANCE,
-                    new TransportIndicesAliasesAction(
-                        transportService,  
-                        clusterService,
-                        threadPool,
-                        metadataIndexAliasesService,  
-                        actionFilters,
-                        indexNameExpressionResolver,
-                        new RequestValidators<>(Collections.emptyList())  
-                    )
-                );
-                final MappingUpdatedAction mappingUpdatedAction = new MappingUpdatedAction(settings, clusterSettings, clusterService);  
-                mappingUpdatedAction.setClient(client);
-                final IndicesService mockIndicesService = mock(IndicesService.class);
-                when(mockIndicesService.getSearchResponseStatusStats()).thenReturn(new SearchResponseStatusStats());  
-                final TransportShardBulkAction transportShardBulkAction = new TransportShardBulkAction(
-                    settings,
-                    transportService,  
-                    clusterService,
-                    indicesService,
-                    threadPool,  
-                    shardStateAction,
-                    mappingUpdatedAction,
-                    new UpdateHelper(scriptService),  
-                    actionFilters,
-                    new IndexingPressureService(settings, clusterService),
-                    new SegmentReplicationPressureService(  
-                        settings,
-                        clusterService,
-                        mockIndicesService,  
-                        mock(ShardStateAction.class),
-                        mock(SegmentReplicationStatsTracker.class),
-                        mock(ThreadPool.class)  
-                    ),
-                    mock(RemoteStorePressureService.class),
-                    new SystemIndices(emptyMap()),  
-                    NoopTracer.INSTANCE
-                );
-                actions.put(  
-                    BulkAction.INSTANCE,
-                    new TransportBulkAction(
-                        threadPool,  
-                        transportService,
-                        clusterService,
-                        new IngestService(  
-                            clusterService,
-                            threadPool,
-                            environment,  
-                            scriptService,
-                            new AnalysisModule(environment, Collections.emptyList()).getAnalysisRegistry(),
-                            Collections.emptyList(),  
-                            client,
-                            indicesService,
-                            namedXContentRegistry,  
-                            new SystemIngestPipelineCache()
-                        ),
-                        transportShardBulkAction,  
-                        client,
-                        actionFilters,
-                        indexNameExpressionResolver,  
-                        new AutoCreateIndex(settings, clusterSettings, indexNameExpressionResolver, new SystemIndices(emptyMap())),
-                        new IndexingPressureService(settings, clusterService),
-                        mockIndicesService,  
-                        new SystemIndices(emptyMap()),
-                        NoopTracer.INSTANCE
-                    )  
-                );
-                final RestoreService restoreService = new RestoreService(
-                    clusterService,  
-                    repositoriesService,
-                    allocationService,
-                    metadataCreateIndexService,  
-                    new MetadataIndexUpgradeService(
-                        settings,
-                        namedXContentRegistry,  
-                        mapperRegistry,
-                        indexScopedSettings,
-                        new SystemIndices(emptyMap()),  
-                        null
-                    ),
-                    shardLimitValidator,  
-                    indicesService,
-                    clusterInfoService::getClusterInfo,
-                    () -> 5.0,  
-                    threadPool,
-                    Collections.emptyList()
-                );  
-                actions.put(
-                    PutMappingAction.INSTANCE,
-                    new TransportPutMappingAction(  
-                        transportService,
-                        clusterService,
-                        threadPool,  
-                        metadataMappingService,
-                        actionFilters,
-                        indexNameExpressionResolver,  
-                        new RequestValidators<>(Collections.emptyList()),
-                        mappingTransformerRegistry
-                    )  
-                );
-                actions.put(
-                    AutoPutMappingAction.INSTANCE,  
-                    new TransportAutoPutMappingAction(
-                        transportService,
-                        clusterService,  
-                        threadPool,
-                        metadataMappingService,
-                        actionFilters,  
-                        indexNameExpressionResolver
-                    )
-                );  
-                final ResponseCollectorService responseCollectorService = new ResponseCollectorService(clusterService);
-                final SearchTransportService searchTransportService = new SearchTransportService(
-                    transportService,  
-                    SearchExecutionStatsCollector.makeWrapper(responseCollectorService)
-                );
-                final SearchService searchService = new SearchService(  
-                    clusterService,
-                    indicesService,
-                    threadPool,  
-                    scriptService,
-                    bigArrays,
-                    new QueryPhase(),  
-                    new FetchPhase(Collections.emptyList()),
-                    responseCollectorService,
-                    new NoneCircuitBreakerService(),  
-                    null,
-                    new TaskResourceTrackingService(settings, clusterSettings, threadPool),
-                    Collections.emptyList(),  
-                    Collections.emptyList(),
-                    null
-                );  
-                SearchPhaseController searchPhaseController = new SearchPhaseController(
-                    writableRegistry(),
-                    searchService::aggReduceContextBuilder  
-                );
-                SearchRequestOperationsCompositeListenerFactory searchRequestOperationsCompositeListenerFactory =
-                    new SearchRequestOperationsCompositeListenerFactory();  
-                actions.put(
-                    SearchAction.INSTANCE,
-                    new TransportSearchAction(  
-                        client,
-                        threadPool,
-                        new NoneCircuitBreakerService(),  
-                        transportService,
-                        searchService,
-                        searchTransportService,  
-                        searchPhaseController,
-                        clusterService,
-                        actionFilters,  
-                        indexNameExpressionResolver,
-                        namedWriteableRegistry,
-                        new SearchPipelineService(  
-                            clusterService,
-                            threadPool,
-                            environment,  
-                            scriptService,
-                            new AnalysisModule(environment, Collections.emptyList()).getAnalysisRegistry(),
-                            namedXContentRegistry,  
-                            namedWriteableRegistry,
-                            List.of(),
-                            client  
-                        ),
-                        NoopMetricsRegistry.INSTANCE,
-                        searchRequestOperationsCompositeListenerFactory,  
-                        NoopTracer.INSTANCE,
-                        new TaskResourceTrackingService(settings, clusterSettings, threadPool),
-                        mockIndicesService,  
-                        mock(WorkloadGroupService.class)
-                    )
-                );  
-                actions.put(
-                    RestoreSnapshotAction.INSTANCE,
-                    new TransportRestoreSnapshotAction(  
-                        transportService,
-                        clusterService,
-                        threadPool,  
-                        restoreService,
-                        actionFilters,
-                        indexNameExpressionResolver  
-                    )
-                );
-                actions.put(  
-                    DeleteIndexAction.INSTANCE,
-                    new TransportDeleteIndexAction(
-                        transportService,  
-                        clusterService,
-                        threadPool,
-                        metadataDeleteIndexService,  
-                        actionFilters,
-                        indexNameExpressionResolver,
-                        new DestructiveOperations(settings, clusterSettings)  
-                    )
-                );
-                actions.put(  
-                    PutRepositoryAction.INSTANCE,
-                    new TransportPutRepositoryAction(
-                        transportService,  
-                        clusterService,
-                        repositoriesService,
-                        threadPool,  
-                        actionFilters,
-                        indexNameExpressionResolver
-                    )  
-                );
-                actions.put(
-                    CleanupRepositoryAction.INSTANCE,  
-                    new TransportCleanupRepositoryAction(
-                        transportService,
-                        clusterService,  
-                        repositoriesService,
-                        snapshotsService,
-                        threadPool,  
-                        actionFilters,
-                        indexNameExpressionResolver,
-                        DefaultRemoteStoreSettings.INSTANCE,  
-                        null
-                    )
-                );  
-                actions.put(
-                    CreateSnapshotAction.INSTANCE,
-                    new TransportCreateSnapshotAction(  
-                        transportService,
-                        clusterService,
-                        threadPool,  
-                        snapshotsService,
-                        repositoriesService,
-                        actionFilters,  
-                        indexNameExpressionResolver
-                    )
-                );  
-                actions.put(
-                    ClusterRerouteAction.INSTANCE,
-                    new TransportClusterRerouteAction(  
-                        transportService,
-                        clusterService,
-                        threadPool,  
-                        allocationService,
-                        actionFilters,
-                        indexNameExpressionResolver  
-                    )
-                );
-                actions.put(  
-                    GetSnapshotsAction.INSTANCE,
-                    new TransportGetSnapshotsAction(
-                        transportService,  
-                        clusterService,
-                        threadPool,
-                        repositoriesService,  
-                        actionFilters,
-                        indexNameExpressionResolver
-                    )  
-                );
-                actions.put(
-                    ClusterStateAction.INSTANCE,  
-                    new TransportClusterStateAction(
-                        transportService,
-                        clusterService,  
-                        threadPool,
-                        actionFilters,
-                        indexNameExpressionResolver,  
-                        null
-                    )
-                );  
-                actions.put(
-                    IndicesShardStoresAction.INSTANCE,
-                    new TransportIndicesShardStoresAction(  
-                        transportService,
-                        clusterService,
-                        threadPool,  
-                        actionFilters,
-                        indexNameExpressionResolver,
-                        new TransportNodesListGatewayStartedShards(  
-                            settings,
-                            threadPool,
-                            clusterService,  
-                            transportService,
-                            actionFilters,
-                            nodeEnv,  
-                            indicesService,
-                            namedXContentRegistry
-                        ),  
-                        new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE)
-                    )
-                );  
-                actions.put(
-                    DeleteSnapshotAction.INSTANCE,
-                    new TransportDeleteSnapshotAction(  
-                        transportService,
-                        clusterService,
-                        threadPool,  
-                        snapshotsService,
-                        actionFilters,
-                        indexNameExpressionResolver  
-                    )
-                );
-
-                actions.put(
-                    GetTermVersionAction.INSTANCE,
-                    new TransportGetTermVersionAction(  
-                        transportService,
-                        clusterService,
-                        threadPool,  
-                        actionFilters,
-                        indexNameExpressionResolver,
-                        null  
-                    )
-                );
-
-                DynamicActionRegistry dynamicActionRegistry = new DynamicActionRegistry();
-                dynamicActionRegistry.registerUnmodifiableActionMap(actions);
-                client.initialize(  
-                    dynamicActionRegistry,
-                    () -> clusterService.localNode().getId(),
-                    transportService.getRemoteClusterService(),  
-                    new NamedWriteableRegistry(Collections.emptyList())
-                );
-            }  
-
-            private Repository.Factory getRepoFactory(Environment environment) {
-                // Run half the tests with the eventually consistent repository  
-                if (blobStoreContext == null) {
-                    return metadata -> new FsRepository(metadata, environment, xContentRegistry(), clusterService, recoverySettings) {
-                        @Override  
+            .custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY);  
+        continueOrDie(createOtherSnapshotResponseStepListener, createSnapshotResponse -> {  
                         protected void assertSnapshotOrGenericThread() {
-                            // eliminate thread name check as we create repo in the test thread
-                        }  
-                    };
-                } else {
-                    return metadata -> new MockEventuallyConsistentRepository(  
-                        metadata,
-                        xContentRegistry(),
-                        clusterService,  
-                        recoverySettings,
-                        blobStoreContext,
-                        random()  
-                    );
-                }
-            }  
-
-            public NodeConnectionsService createTestNodeConnectionsService(
-                Settings settings,  
-                ThreadPool threadPool,
-                TransportService transportService
-            ) {  
-                return new NodeConnectionsService(settings, threadPool, transportService) {
-                    @Override
-                    public void connectToNodes(DiscoveryNodes discoveryNodes, Runnable onCompletion) {  
-                        // just update targetsByNode to ensure disconnect runs for these nodes
-                        // we rely on disconnect to run for keeping track of pendingDisconnects and ensuring node-joins can happen
-                        for (final DiscoveryNode discoveryNode : discoveryNodes) {  
-                            this.targetsByNode.put(discoveryNode, createConnectionTarget(discoveryNode));
-                        }
-                        onCompletion.run();  
-                    }
-                };
-            }  
-
-            public ClusterInfoService getMockClusterInfoService() {
-                return clusterInfoService;  
-            }
-
-            public void restart() {  
-                testClusterNodes.disconnectNode(this);
-                final ClusterState oldState = this.clusterService.state();
-                stop();  
-                nodes.remove(node.getName());
-                scheduleSoon(() -> {
-                    try {  
-                        final TestClusterNode restartedNode = new TestClusterNode(
-                            new DiscoveryNode(node.getName(), node.getId(), node.getAddress(), emptyMap(), node.getRoles(), Version.CURRENT)
-                        );  
-                        nodes.put(node.getName(), restartedNode);
-                        restartedNode.start(oldState);
-                    } catch (IOException e) {  
-                        throw new AssertionError(e);
-                    }
-                });  
-            }
-
-            public void stop() {  
-                testClusterNodes.disconnectNode(this);
-                indicesService.close();
-                clusterService.close();  
-                nodeConnectionsService.stop();
-                indicesClusterStateService.close();
-                if (coordinator != null) {  
-                    coordinator.close();
-                }
-                nodeEnv.close();  
-            }
-
-            public void start(ClusterState initialState) {  
-                transportService.start();
-                transportService.acceptIncomingRequests();
-                snapshotsService.start();  
-                snapshotShardsService.start();
-                repositoriesService.start();
-                final CoordinationState.PersistedState persistedState = new InMemoryPersistedState(  
-                    initialState.term(),
-                    stateForNode(initialState, node)
-                );  
-                final PersistedStateRegistry persistedStateRegistry = persistedStateRegistry();
-                persistedStateRegistry.addPersistedState(PersistedStateType.LOCAL, persistedState);
-                coordinator = new Coordinator(  
-                    node.getName(),
-                    clusterService.getSettings(),
-                    clusterService.getClusterSettings(),  
-                    transportService,
-                    namedWriteableRegistry,
+            } else {  
+                        .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE),
                     allocationService,  
-                    clusterManagerService,
-                    () -> persistedState,
-                    hostsResolver -> nodes.values()  
-                        .stream()
-                        .filter(n -> n.node.isClusterManagerNode())
-                        .map(n -> n.node.getAddress())  
-                        .collect(Collectors.toList()),
-                    clusterService.getClusterApplierService(),
-                    Collections.emptyList(),  
-                    random(),
-                    rerouteService,
-                    ElectionStrategy.DEFAULT_INSTANCE,  
-                    () -> new StatusInfo(HEALTHY, "healthy-info"),
-                    persistedStateRegistry,
-                    remoteStoreNodeService,  
-                    new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE),
-                    null
-                );  
-                coordinator.setNodeConnectionsService(nodeConnectionsService);
-                clusterManagerService.setClusterStatePublisher(coordinator);
-                clusterService.getClusterApplierService().setNodeConnectionsService(nodeConnectionsService);  
-                nodeConnectionsService.start();
-                coordinator.start();
-                clusterService.start();  
-                indicesService.start();
-                indicesClusterStateService.start();
-                coordinator.startInitialJoin();  
+        continueOrDie(
+                )
+                snapshotShardsService.start();
+        final StepListener<Collection<CreateSnapshotResponse>> createOtherSnapshotResponseStepListener = new StepListener<>();  
+    private final class TestClusterNodes {
+                new SearchRequest(restoredIndex).source(new SearchSourceBuilder().size(documents).trackTotalHits(true)),
+                    new TransportCreateIndexAction(
             }
-        }
+            assertThat(snapshotIds, empty());
     }  
-}
+ *
+        fail("Condition wasn't fulfilled.");
+                    coordinator.close();
+            );  
+ * under the License.  
+            createRepositoryListener,
+        assertTrue(documentCountVerified.get());
+ * ownership. Elasticsearch licenses this file to you under  
+                    return metadata -> new MockEventuallyConsistentRepository(  
+                .prepareCreateSnapshot(repoName, "snapshot-2")  
+                .cluster()
+                    testClusterNodes.nodes.values()
+        final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();  
+            private Repository.Factory getRepoFactory(Environment environment) {
+            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
+        final AtomicInteger successfulDeletes = new AtomicInteger(0);
+        assertThat(snapshotIds, hasSize(1));
+import org.opensearch.cluster.ClusterModule;  
+            deleteSnapshotStepListener,  
+import org.opensearch.common.util.concurrent.ThreadContext;  
+                indicesService = new IndicesService(
+        for (SnapshotId snapshotId : snapshotIds) {  
+            .forEach(testClusterNode -> testClusterNode.coordinator.setInitialConfiguration(votingConfiguration));
+                    new TransportClusterRerouteAction(  
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+                        restoreService,
+                    new TransportPutRepositoryAction(
+                                        .deleteSnapshot(new DeleteSnapshotRequest(repoName, snapshotName), noopListener());  
+import org.opensearch.indices.replication.SegmentReplicationTargetService;
+        final AtomicBoolean snapshotDeleteResponded = new AtomicBoolean(false);
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
+                            );
+            createSnapshotResponseStepListener,  
+                return true;
+                .orElse(false),
+            // failures seen during the previous test.
+import org.opensearch.indices.recovery.PeerRecoverySourceService;  
+import org.opensearch.cluster.coordination.CoordinationState;
+                    }  
+        public TestClusterNode randomDataNodeSafe(String... excludedNames) {
+                            new SystemIndices(emptyMap()),
+            );
+                && clusterManagerNodeIds.contains(null) == false
+                    clusterService.getSettings(),
+                                + " setting."
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
+                .setWaitForCompletion(true)
+    }  
+        );  
+        });  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            runUntil(cleanedUp::get, TimeUnit.MINUTES.toMillis(1L));
+                );
+            ignored -> client().admin()  
+            assertEquals(snapshotInfo.state(), SnapshotState.SUCCESS);
+                .cluster()
+                        threadPool,  
+        final AtomicBoolean doneIndexing = new AtomicBoolean(false);
+                actions.put(
+        private TestClusterNode newClusterManagerNode(String nodeName) throws IOException {
+            assertThat(snapshotInfo.indices(), containsInAnyOrder(index));
+                .execute(createSnapshotResponseListener)
+                        scheduleNow(CoordinatorTests.onNodeLog(getLocalNode(), runnable));
+        String snapshotName = "snapshot";
+                        indexNameExpressionResolver  
+        /**
+import org.opensearch.cluster.service.ClusterManagerService;  
+        final StepListener<CreateIndexResponse> createIndexResponseStepListener = new StepListener<>();
+                assertThat(snapshotInfo.shardFailures(), iterableWithSize(snapshotInfo.failedShards()));  
+                        indexNameExpressionResolver
+                    mock(PluginsService.class),  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+    private StepListener<AcknowledgedResponse> createRepoAndIndexAndAlias(String repoName, String index, int shards, String alias) {
+            );
+                    scriptService,
+    }  
+                    clusterManagerAdminClient.cluster().state(new ClusterStateRequest(), updatedClusterStateResponseStepListener);
+                coordinator.startInitialJoin();  
+                    clusterService,
+        for (SnapshotId snapshotId : snapshotIds) {
+                    )
+                        clusterService,  
+            }
+            }  
+import org.opensearch.common.util.BigArrays;
+        continueOrDie(  
+            for (int i = 0; i < randomIntBetween(0, dataNodes); ++i) {
+                                .execute(ActionListener.wrap(() -> {
+        listener.whenComplete(onResponse, e -> { throw new AssertionError(e); });
+        private TestClusterNode newWarmNode(String nodeName) throws IOException {
+                        indexNameExpressionResolver
+                        DefaultRemoteStoreSettings.INSTANCE,  
+                    deterministicTaskQueue::scheduleNow
+            scheduleNow(() -> testClusterNodes.stopNode(currentPrimaryNode));
+                        @Override  
+                            n -> n.transportService.openConnection(
+                        clusterService,
+                                                shardRouting.shardId().id(),  
+        continueOrDie(
+    public void testConcurrentSnapshotDeleteAndDeleteIndex() throws IOException {  
+                    new UpdateHelper(scriptService),  
+                .restoreSnapshot(
+                .cluster()
+            }  
+                assertEquals(0, snapshotInfo.failedShards());
+            }  
+                ThreadPool threadPool,
+                return new NodeConnectionsService(settings, threadPool, transportService) {
+import org.opensearch.action.support.GroupedActionListener;  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+        });
+                    repositoryData,  
+                    () -> persistedState,
+                            settings,  
+                (BlobStoreRepository) testClusterNodes.randomClusterManagerNodeSafe().repositoriesService.repository("repo"),
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
+                node -> testClusterNodes.nodes.values()
+            );  
+    public void testTransportGetCurrentSnapshotsAction() {
+            final TestClusterNodes.TestClusterNode currentPrimaryNode = testClusterNodes.nodeById(shardToRelocate.currentNodeId());  
+        }  
+                .prepareDeleteSnapshot(repoName, snapshotName)
+                    clusterSettings,
+                    Collections.singletonMap(FsRepository.TYPE, getRepoFactory(environment)),  
+                    .forEach(  
+import static org.opensearch.node.Node.NODE_SEARCH_CACHE_SIZE_SETTING;  
+                            client,
+                        transportService,
+            .custom(SnapshotDeletionsInProgress.TYPE);
+        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+                blobStoreContext.forceConsistent();
+        );
+                        if (shardRouting.unassigned() && shardRouting.unassignedInfo().getReason() == UnassignedInfo.Reason.NODE_LEFT) {
+        String snapshotName = "snapshot";
+                && clusterManagerNodeIds.size() == 1
+        final String index = "test";  
+                    protected void execute(Runnable runnable) {
+            .stream()
+                    .execute(createSnapshotResponseStepListener)
+                node.node.getId(),
+            final StepListener<BulkResponse> bulkResponseStepListener = new StepListener<>();
+        continueOrDie(createRepoAndIndex(repoName, index, 1), createIndexResponse -> {  
+import org.opensearch.repositories.RepositoriesService;  
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+                actions.put(
+        return randomFrom(nodes).client;  
+                        return disconnectedNodes.contains(node.getName()) || disconnectedNodes.contains(destination.getName())
+                        );
+                        .renameReplacement(restoredIndex)
+                        clusterService,
+            private final DisruptableMockTransport mockTransport;
+                clusterService.start();  
+                    )
+import org.opensearch.snapshots.mockstore.MockEventuallyConsistentRepository;  
+        return ActionListener.wrap(() -> {});
+        final TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(  
+                final NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(Collections.emptyList());  
+        final int indices = randomIntBetween(5, 20);  
+            return builder.build();  
+        continueOrDie(createSnapshotResponseStepListener, createSnapshotResponse -> {  
+        // No snapshots should be left in the repository  
+                            return ConnectionStatus.DISCONNECTED;
+            public void clusterChanged(ClusterChangedEvent event) {
+            private final NodeEnvironment nodeEnv;  
+            );  
+                }, a -> node, null, emptySet(), NoopTracer.INSTANCE);
+                        clusterService,
+                nodeConnectionsService.stop();
+                    clusterService,
+import org.opensearch.action.search.SearchAction;
+                );  
+                )  
+                    new AliasValidator(),
+                        transportService,
+            // finalization  
+import org.opensearch.cluster.routing.allocation.AwarenessReplicaBalance;  
+import org.apache.logging.log4j.Logger;
+                );  
+                );  
+                        client,
+        // LinkedHashMap so we have deterministic ordering when iterating over the map in tests  
+import static org.opensearch.node.Node.NODE_NAME_SETTING;
+                    }, exception -> { throw new AssertionError(exception); }));  
+                    indicesService,
+            nodes.remove(node.node.getName());
+        assertEquals(  
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();  
+                .setPartial(partialSnapshot)
+        assertThat(finalSnapshotsInProgress.entries(), empty());
+            private final AllocationService allocationService;  
+                    createIndexResponseStepListener
+        final String index = "test";
+                        if (partialSnapshot) {
+                indicesService.start();
+        );
+                    new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE),
+/*
+                                        new ClusterRerouteRequest().add(  
+        final String index = "test";  
+import static org.hamcrest.Matchers.hasSize;  
+        continueOrDie(
+                    namedXContentRegistry
+                .collect(Collectors.toSet())
+        if (partialSnapshot) {  
+        deterministicTaskQueue.runAllRunnableTasks();  
+                    clusterManagerNode.clusterService.removeListener(this);
+        String repoName = "repo";
+                            NoopTracer.INSTANCE  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()  
+        testClusterNodes.nodes.values().forEach(node -> when(node.getMockClusterInfoService().getClusterInfo()).thenReturn(clusterInfo));
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
+                        actionFilters,  
+                .map(n -> n.node)
+                .execute(createOtherSnapshotResponseStepListener)
+        continueOrDie(
+                    transportService,
+import org.mockito.Mockito;
+        public void disconnectNode(TestClusterNode node) {  
+                        transportService,  
+        final Repository repository = clusterManagerNode.repositoriesService.repository(repoName);
+                .prepareCreateSnapshot("repo", "last-snapshot")
+                );  
+ * The OpenSearch Contributors require contributions made to  
+        clearDisruptionsAndAwaitSync();
+    private MockEventuallyConsistentRepository.Context blobStoreContext;  
+ * KIND, either express or implied.  See the License for the
+        String snapshotName = "snapshot";
+                client().admin().cluster().prepareCreateSnapshot(repoName, "other-" + i).execute(createSnapshotListener);
+    }  
+        continueOrDie(searchResponseListener, r -> {  
+            if (documents == 0) {  
+        String repoName = "repo";
+        final ActionListener<CreateSnapshotResponse> snapshotListener = new GroupedActionListener<>(
+                    rerouteService,
+                }
+import org.opensearch.action.admin.indices.delete.DeleteIndexAction;  
+        });  
+import org.opensearch.transport.TransportRequest;
+        });  
+                        final ShardRouting shardRouting = updatedClusterState.getState()  
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+                .orElseThrow(() -> new AssertionError("Could not find node by id [" + nodeId + ']'));
+                .cluster()
+                    initialState.term(),
+                            scheduleNow(
+            deterministicTaskQueue.advanceTime();
+        /**  
+        final String[] snapshotsList = { GetSnapshotsRequest.CURRENT_SNAPSHOT };  
+        String snapshotName = "snapshot";
+                    .setWaitForCompletion(true)
+    }  
+                    Collections.singleton(role),  
+            for (String snapshotName : snapshotNames) {
+            if (documents == 0) {
+            );  
+            final Set<String> clusterManagerNodeIds = clusterStates.stream()
+import org.opensearch.core.common.transport.TransportAddress;  
+    @Before
+                    new BulkRequest().add(new IndexRequest(index).source(Collections.singletonMap("foo" + i, "bar")))  
+                        } else {
+                    indexNameExpressionResolver,  
+                        indexNameExpressionResolver
+import org.opensearch.core.index.Index;
+import org.opensearch.indices.IndicesService;
+                actions.put(
+                    NoopTracer.INSTANCE
+                        .map(n -> n.node.getAddress())  
+        TestClusterNodes.TestClusterNode clusterManagerNode = testClusterNodes.currentClusterManager(
+                            scriptService,
+import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats.FileCacheStatsType;
+                        new RequestValidators<>(Collections.emptyList())  
+        assertThat(snapshotIds, hasSize(snapshotNames.size()));
+                coordinator.setNodeConnectionsService(nodeConnectionsService);
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseStepListener = new StepListener<>();
+                assertThat(snapshotInfo.state(), either(is(SnapshotState.SUCCESS)).or(is(SnapshotState.PARTIAL)));
+        continueOrDie(
+    public void testRunConcurrentSnapshots() {  
+                    settings,
+                scheduleSoon(() -> {
+import static org.opensearch.env.Environment.PATH_HOME_SETTING;  
+ */  
+        }
+                        indexNameExpressionResolver,  
+    public void testConcurrentSnapshotCreateAndDelete() {
+                    protected ConnectionStatus getConnectionStatus(DiscoveryNode destination) {
+            }
+        final StepListener<RestoreSnapshotResponse> restoreSnapshotResponseListener = new StepListener<>();
+                    new RestoreSnapshotRequest(repoName, snapshotName).waitForCompletion(true)
+            TestClusterNode clusterManager = nodes.get(state.nodes().getClusterManagerNode().getName());  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());  
+        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());  
+        for (SnapshotId snapshotId : snapshotIds) {  
+                    protected Optional<DisruptableMockTransport> getDisruptableMockTransport(TransportAddress address) {
+                mappingTransformerRegistry = new MappingTransformerRegistry(List.of(), namedXContentRegistry);
+     */
+                .collect(Collectors.toSet());  
+import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;
+            .build();
+                    dynamicActionRegistry,
+                        );  
+        }
+                    new FetchPhase(Collections.emptyList()),
+                    shardStateAction,
+                            if (clusterManagerNodeCount > 1) {
+        }
+                    new TransportPutMappingAction(  
+        );
+                    clusterService,
+                );
+            for (int i = 0; i < dataNodes; ++i) {
+import org.opensearch.indices.analysis.AnalysisModule;
+                testClusterNodes.disconnectNode(this);
+import java.util.stream.Collectors;  
+import org.opensearch.action.search.TransportSearchAction;  
+                            throw new AssertionError("Delete index should always work during partial snapshots", e);
+                        if (action.startsWith("internal:index/shard/recovery")) {
+    private DeterministicTaskQueue deterministicTaskQueue;
+                    settings,
+                );
+            createIndexResponse -> client().admin()
+                        new DestructiveOperations(settings, clusterSettings)  
+    private void disconnectRandomDataNode() {
+        });  
+                    restoreSnapshotResponseListener
+import org.opensearch.cluster.coordination.ElectionStrategy;  
+                        snapshotsService,
+                    indicesService,
+                    namedXContentRegistry,
+                        threadPool,
+                    new TransportAutoPutMappingAction(
+                    assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());
+                .prepareCreateSnapshot(repoName, snapshotName)  
+        final RepositoryData repositoryData = getRepositoryData(repository);
+        // TODO: randomize replica count settings once recovery operations aren't blocking anymore
+        createSnapshotResponseStepListener.whenComplete(createSnapshotResponse -> {
+                        metadata,
+import org.opensearch.common.util.concurrent.PrioritizedOpenSearchThreadPoolExecutor;
+                    )
+            createRepoAndIndex(repoName, index, shards),
+        // Connect all nodes to each other
+        testClusterNodes.nodes.values().forEach(testClusterNode -> testClusterNode.start(initialClusterState));  
+                        emptyMap(),  
+        });  
+                    new NamedWriteableRegistry(Collections.emptyList())
+        final StepListener<AcknowledgedResponse> deleteSnapshotStepListener = new StepListener<>();  
+        final AtomicBoolean documentCountVerified = new AtomicBoolean();  
+import org.opensearch.action.search.SearchRequest;
+                    ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(),
+                        searchTransportService,  
+        );  
+                    buildNewFakeTransportAddress(),
+ * the Apache License, Version 2.0 (the "License"); you may
+                        .prepareCreateSnapshot(repoName, snapshotName)
+                            .renameAliasPattern("(.+)")
+                    new MetaStateService(nodeEnv, namedXContentRegistry),
+        final String index = "test";
+                assertFalse("Failures in bulk response: " + bulkResponse.buildFailureMessage(), bulkResponse.hasFailures());
+                    emptyMap(),
+                    emptyMap(),
+                nodes.remove(node.getName());
+                    mapperRegistry,
+                final IndicesService mockIndicesService = mock(IndicesService.class);
+    }
+                throw new AssertionError(e);
+import org.opensearch.indices.replication.SegmentReplicationSourceService;
+ * software distributed under the License is distributed on an
+import org.opensearch.gateway.TransportNodesListGatewayStartedShards;
+            if (disconnectedClusterManager) {
+        final PlainActionFuture<RepositoryData> res = PlainActionFuture.newFuture();
+        private final class TestClusterNode {  
+                // Make sure we snapshotted the metadata of this index and not the recreated version
+                                    throw new AssertionError(e);
+                }  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+/*  
+                    scriptService,
+            // Create another snapshot and then clean up the repository to verify that the repository works correctly no matter the  
+                    clusterManagerService,
+                        actionFilters,
+        startCluster();
+            client().search(
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseListener = new StepListener<>();
+import static org.hamcrest.Matchers.contains;
+import org.opensearch.node.remotestore.RemoteStoreNodeService;
+                    new PeerRecoverySourceService(transportService, indicesService, recoverySettings),
+import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;  
+    }
+                        actionFilters,
+            createSnapshotResponseListener,
+                        transportService,
+        }
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.opensearch.action.admin.cluster.snapshots.get.TransportGetSnapshotsAction;
+                .map(
+                return false;  
+        });
+        final String alias = "test_alias";
+                            threadPool,
+        public TestClusterNode nodeById(final String nodeId) {  
+import org.opensearch.action.search.SearchRequestOperationsCompositeListenerFactory;  
+import org.opensearch.cluster.ClusterInfoService;
+                persistedStateRegistry.addPersistedState(PersistedStateType.LOCAL, persistedState);
+                            .getEntries()
+        }
+import org.opensearch.index.analysis.AnalysisRegistry;  
+                            actionFilters,  
+        stabilize();
+                    indexScopedSettings,
+                            new IndexingPressureService(settings, clusterService),
+import org.opensearch.cluster.ClusterManagerMetrics;
+        );
+            deterministicTaskQueue.runAllRunnableTasks();  
+        final StepListener<CreateSnapshotResponse> createSnapshotResponseListener = new StepListener<>();
+            }, exception -> { throw new AssertionError(exception); }));  
+        final int shards = randomIntBetween(1, 10);
+        continueOrDie(createRepoAndIndex(repoName, index, shards), createIndexResponse -> {
+            testClusterNodes.nodes.values().forEach(TestClusterNodes.TestClusterNode::stop);
+import org.opensearch.action.admin.indices.create.CreateIndexResponse;
+                );
+                            scriptService,
+            final GroupedActionListener<CreateIndexResponse> listener = new GroupedActionListener<>(createIndicesListener, indices);
+            .put(IndexMetadata.INDEX_NUMBER_OF_SHARDS_SETTING.getKey(), shards)
+                    new RemoteStoreStatsTrackerFactory(clusterService, settings),  
+    private void stabilize() {
+                );  
+        assertTrue(exceptionVerified.get());  
+                }
+                final IndexScopedSettings indexScopedSettings = new IndexScopedSettings(
+                    indicesService
+        assertNotNull(createSnapshotResponseStepListener.result());  
+                    new FileCacheStats(1, 0, 0, 0, 0, 0, 0, 0, FileCacheStatsType.PINNED_FILE_STATS)
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            });
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+            public NodeConnectionsService createTestNodeConnectionsService(
+            scheduleNow(
+import org.opensearch.ingest.IngestService;  
+                assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));  
+    }
+                    SearchAction.INSTANCE,
+        setupTestCluster(randomFrom(1, 3, 5), randomIntBetween(2, 10));
+        final String index = "test";
+                        recoverySettings,
+                assertThat(snapshotInfo.successfulShards(), is(snapshotInfo.totalShards() - snapshotInfo.failedShards()));
+                            clusterService,
+import org.opensearch.indices.replication.SegmentReplicationSourceFactory;  
+                        indexNameExpressionResolver,  
+import org.opensearch.action.admin.indices.shards.IndicesShardStoresAction;
+public class SnapshotResiliencyTests extends OpenSearchTestCase {
+                    repositoriesService,
+import java.util.Comparator;
+        final int documents = randomIntBetween(0, 100);
+                .stream()
+        );  
+                );  
+            }
+                final BulkRequest bulkRequest = new BulkRequest().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+        startCluster();  
+            // Select from sorted list of data-nodes here to not have deterministic behaviour
+        assertNotNull(restoreSnapshotResponseStepListener.result());
+                )
+                    DeleteIndexAction.INSTANCE,
+import java.util.stream.IntStream;
+        assertThat(snapshotIds, contains(createOtherSnapshotResponseStepListener.result().getSnapshotInfo().snapshotId()));
+    public void testConcurrentDeletes() {  
+         */
+                .setWaitForCompletion(true)  
+                    Collections.emptyList()
+                        emptyMap(),
+                                    .cluster()
+        assertThat(snapshotInfo.indices(), containsInAnyOrder(index));  
+        assertFalse(finalSnapshotsInProgress.entries().stream().anyMatch(entry -> entry.state().completed() == false));
+                        }  
+import org.opensearch.action.search.SearchResponse;
+        assertEquals(0, snapshotInfo.failedShards());
+                        threadPool,  
+            assertThat(snapshotIds, hasSize(1));
+        );  
+                        threadPool,
+import org.opensearch.repositories.fs.FsRepository;
+import org.opensearch.indices.cluster.IndicesClusterStateService;  
+import static org.opensearch.action.support.ActionTestUtils.assertNoFailureListener;
+import org.opensearch.index.SegmentReplicationStatsTracker;
+                nodeEnv.close();  
+            if (restoreSnapshotException instanceof RemoteTransportException) {  
+import java.util.List;  
+            testClusterNodes.nodes.values().forEach(n -> n.transportService.getConnectionManager().disconnectFromNode(node.node));
+                actions.put(  
+ * not use this file except in compliance with the License.
+        final String restoredIndex = "restored";
+        });  
+            }
+                    new QueryPhase(),  
+            }
+        // Remove and add back local node to update ephemeral id on restarts
+            }  
+                    allocationService,
+import java.io.IOException;
+        );  
+            assertEquals(0, snapshotInfo.failedShards());
+        );
+import org.opensearch.action.admin.indices.shards.TransportIndicesShardStoresAction;
+        });  
+                    AutoPutMappingAction.INSTANCE,  
+                    "test",  
+        );  
+        // We end up with two snapshots no matter if the delete worked out or not  
+            testClusterNodes.nodes.values().iterator().next().clusterService.state()
+                );
+            assertEquals(shards, snapshotInfo.successfulShards());
+                        indexNameExpressionResolver,
+        final String index = "test";
+        SnapshotsInProgress finalSnapshotsInProgress = clusterManagerNode.clusterService.state().custom(SnapshotsInProgress.TYPE);  
+                // Run half the tests with the eventually consistent repository  
+            final long hitCount = r.getHits().getTotalHits().value();  
+                        clusterService,
+                    @Override
+        }
+                            scheduleSoon(this);  
+                && terms.size() == 1;  
+import org.opensearch.cluster.ClusterInfo;  
+            private final DiscoveryNode node;
+import org.opensearch.cluster.action.index.NodeMappingRefreshAction;  
+        );  
+                        metadataMappingService,
+        deterministicTaskQueue.scheduleAt(deterministicTaskQueue.getCurrentTimeMillis() + randomLongBetween(0, 100L), runnable);  
+import org.opensearch.cluster.metadata.AliasValidator;
+            assertEquals(shards, restoreSnapshotResponse.getRestoreInfo().totalShards());
+import org.opensearch.action.StepListener;
+        for (TestClusterNodes.TestClusterNode node : testClusterNodes.nodes.values()) {  
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();
+                                .prepareCreateSnapshot(repoName, snapshotName)
+                    @Override  
+                    null,
+                );
+                        repositoriesService,
+                            // eliminate thread name check as we create repo in the test thread
+                    0,
+                    CreateSnapshotAction.INSTANCE,
+    }  
+import org.opensearch.repositories.RepositoryData;
+                        null
+                        transportService,  
+    private void startCluster() {  
+                    ElectionStrategy.DEFAULT_INSTANCE,  
+                    successfulDeletes.incrementAndGet();
+                    transportGetSnapshotsAction.execute(null, repoSnapshotRequest, ActionListener.wrap(repoSnapshotResponse -> {  
+            GetSnapshotsRequest repoSnapshotRequest = new GetSnapshotsRequest().repository(repoName).snapshots(snapshotsList);
+                searchIndexResponseListener
+                                public void onFailure(final Exception e) {  
+            TransportAction getSnapshotsAction = clusterManagerNode.actions.get(GetSnapshotsAction.INSTANCE);  
+                if (coordinator != null) {  
+                .put(PATH_HOME_SETTING.getKey(), tempDir.resolve(nodeName).toAbsolutePath())
+                        indexNameExpressionResolver  
+            disconnectedNodes.forEach(nodeName -> {
+                    IndicesShardStoresAction.INSTANCE,
+                            indicesService,
+        setupTestCluster(clusterManagerNodes, dataNodes);
+                .cluster()  
+                    namedXContentRegistry,
+            assertTrue(clusterManager.node.isClusterManagerNode());
+                        deleteListener.onResponse(false);  
+                            new AnalysisModule(environment, Collections.emptyList()).getAnalysisRegistry(),
+                .setIncludeGlobalState(randomBoolean())  
+                    IndexScopedSettings.BUILT_IN_INDEX_SETTINGS
+                        settings,
+        });
+        }
+        Collection<SnapshotId> snapshotIds = getRepositoryData(repository).getSnapshotIds();  
+                clusterManagerService = new FakeThreadPoolClusterManagerService(
+                    throwable.getMessage()  
+            }  
+            createSnapshotResponse -> client().admin()
+                    new NoneCircuitBreakerService(),
+                    indicesService,
+        clearDisruptionsAndAwaitSync();
+                    () -> 5.0,  
+            createSnapshotResponse -> client().admin()  
+    }
+import org.opensearch.index.seqno.RetentionLeaseSyncer;  
+import org.opensearch.transport.TransportService;
+            for (int i = 0; i < clusterManagerNodes; ++i) {
+import org.opensearch.cluster.node.DiscoveryNodes;  
+        deterministicTaskQueue.advanceTime();
+import static org.hamcrest.Matchers.notNullValue;
+                    new RestoreSnapshotRequest(repoName, snapshotName).waitForCompletion(true),  
+        );
+        setupTestCluster(clusterManagerNodeCount, randomIntBetween(2, 5));
+        final int dataNodes = randomIntBetween(2, 10);  
+        testClusterNodes.randomDataNode().ifPresent(n -> testClusterNodes.disconnectNode(n));  
+                        threadPool,
+                for (int i = 0; i < documents; ++i) {  
+import org.opensearch.cluster.coordination.ClusterBootstrapService;  
+ *
+            // Single shard for each index so we either get all indices or all except for the deleted index
+            }
+                    () -> new StatusInfo(HEALTHY, "healthy-info"),
+            createSnapshotResponse -> client().admin().indices().delete(new DeleteIndexRequest(index), deleteIndexListener)
+                        }
+            try {  
+        });  
+import org.opensearch.action.admin.indices.create.CreateIndexRequest;  
+                );
+                        clusterService,  
+                    settings,
+            .build();  
+            disconnectedNodes.add(node.node.getName());
+                final SystemIndices systemIndices = new SystemIndices(emptyMap());
+        continueOrDie(
+                transportService.acceptIncomingRequests();
+            deterministicTaskQueue.advanceTime();
+                    Collections.emptyList(),
+                        metadataDeleteIndexService,  
+            createIndexResponse -> client().admin()  
+                        .mapping()
+                            new SystemIngestPipelineCache()
+import org.opensearch.cluster.node.DiscoveryNode;
+         * Returns the {@link TestClusterNode} for the cluster-manager node in the given {@link ClusterState}.
+                        restartedNode.start(oldState);
+                );
+                actions.put(
+                        .index(restoredIndex)
+    }
+                };
+import org.opensearch.action.search.SearchTransportService;
+        final String index = "index-1";
+                .setWaitForCompletion(true)
+                            new DiscoveryNode(node.getName(), node.getId(), node.getAddress(), emptyMap(), node.getRoles(), Version.CURRENT)
+        final SnapshotInfo snapshotInfo = repository.getSnapshotInfo(snapshotIds.iterator().next());
+                    PutRepositoryAction.INSTANCE,
+        );
+        private final Set<String> disconnectedNodes = new HashSet<>();  
+                        return namedWriteableRegistry;
+                        clusterService,  
+                );

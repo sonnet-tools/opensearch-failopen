@@ -1,59 +1,51 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+ */
+import org.apache.lucene.analysis.it.ItalianAnalyzer;
+    @Override  
+ *  
+import org.opensearch.common.settings.Settings;  
+ * not use this file except in compliance with the License.
+ * Modifications Copyright OpenSearch Contributors. See
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.CharArraySet;
-import org.apache.lucene.analysis.it.ItalianAnalyzer;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
-import org.opensearch.index.analysis.Analysis;
-
-public class ItalianAnalyzerProvider extends AbstractIndexAnalyzerProvider<ItalianAnalyzer> {  
-
-    private final ItalianAnalyzer analyzer;
-
-    ItalianAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
-        super(indexSettings, name, settings);
-        analyzer = new ItalianAnalyzer(  
             Analysis.parseStopWords(env, settings, ItalianAnalyzer.getDefaultStopSet()),
-            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
+ * Unless required by applicable law or agreed to in writing,
+/*
+package org.opensearch.analysis.common;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
         );  
-    }
-
-    @Override  
-    public ItalianAnalyzer get() {
-        return this.analyzer;
-    }  
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.analysis.CharArraySet;
+ */  
+        super(indexSettings, name, settings);
+ *
+ * this work for additional information regarding copyright
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+import org.opensearch.index.IndexSettings;
+            Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
+ * SPDX-License-Identifier: Apache-2.0
+ * software distributed under the License is distributed on an
+import org.opensearch.env.Environment;
 }
+ * this file be licensed under the Apache-2.0 license or a
+    ItalianAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
+    private final ItalianAnalyzer analyzer;
+import org.opensearch.index.analysis.AbstractIndexAnalyzerProvider;  
+ * GitHub history for details.
+    }  
+    public ItalianAnalyzer get() {
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return this.analyzer;
+        analyzer = new ItalianAnalyzer(  
+public class ItalianAnalyzerProvider extends AbstractIndexAnalyzerProvider<ItalianAnalyzer> {  
+ * under the License.  
+/*  
+/*  
+import org.opensearch.index.analysis.Analysis;

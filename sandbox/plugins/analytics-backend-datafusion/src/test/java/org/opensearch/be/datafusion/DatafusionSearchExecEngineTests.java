@@ -1,210 +1,189 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.opensearch.analytics.backend.EngineResultBatch;  
-import org.opensearch.analytics.backend.EngineResultStream;
-import org.opensearch.analytics.backend.ShardScanExecutionContext;
-import org.opensearch.be.datafusion.nativelib.NativeBridge;  
-import org.opensearch.be.datafusion.nativelib.ReaderHandle;
-import org.opensearch.be.datafusion.nativelib.SessionContextHandle;
-import org.opensearch.index.engine.exec.MonoFileWriterSet;  
-import org.opensearch.plugins.NativeStoreHandle;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Iterator;  
-import java.util.List;
-
 /**  
- * Tests the plugin-level execution chain:
- * DatafusionReader → DatafusionContext → DatafusionSearchExecEngine → EngineResultStream → EngineResultBatch.
- * Uses sqlToSubstrait to generate plan bytes, then exercises the real plugin classes.  
- */
-public class DatafusionSearchExecEngineTests extends OpenSearchTestCase {
-
-    private ReaderHandle readerHandle;
-    private NativeRuntimeHandle runtimeHandle;
-    private long tieredStorePtr;  
-    private NativeStoreHandle storeHandle;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        NativeBridge.initTokioRuntimeManager(2);  
-        Path spillDir = createTempDir("datafusion-spill");
-        long ptr = NativeBridge.createGlobalRuntime(128 * 1024 * 1024, 0L, spillDir.toString(), 64 * 1024 * 1024);
-        runtimeHandle = new NativeRuntimeHandle(ptr);  
-
-        // Create a real TieredObjectStore (local-only) and wrap in NativeStoreHandle
-        tieredStorePtr = NativeStoreTestHelper.createTieredObjectStore(0L, 0L);  
-        long boxPtr = NativeStoreTestHelper.getObjectStoreBoxPtr(tieredStorePtr);
-        storeHandle = new NativeStoreHandle(boxPtr, NativeStoreTestHelper::destroyObjectStoreBoxPtr);
-
-        Path dataDir = createTempDir("datafusion-data");
-        Path testParquet = Path.of(getClass().getClassLoader().getResource("test.parquet").toURI());
-        Files.copy(testParquet, dataDir.resolve("test.parquet"));  
-        readerHandle = new ReaderHandle(
-            dataDir.toString(),
-            List.of(MonoFileWriterSet.of(".", 0L, "test.parquet", 0L)),  
-            storeHandle,
-            List.of(),
-            List.of()  
-        );
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        readerHandle.close();  
-        storeHandle.close();
-        NativeStoreTestHelper.destroyTieredObjectStore(tieredStorePtr);
-        runtimeHandle.close();  
-        NativeBridge.shutdownTokioRuntimeManager();
-        super.tearDown();
-    }  
-
-    public void testEngineExecuteSelectAll() throws Exception {
-        byte[] substrait = NativeBridge.sqlToSubstrait(  
-            readerHandle.getPointer(),
-            "test_table",
-            "SELECT message, message2 FROM test_table",  
-            runtimeHandle.get()
-        );
-
-        DatafusionReader reader = createReader();
-        DatafusionContext context = new DatafusionContext(null, reader, runtimeHandle);
-
-        try (
-            RootAllocator alloc = new RootAllocator(Long.MAX_VALUE);
-            BufferAllocator staging = alloc.newChildAllocator("arrow-import-staging", 0, Long.MAX_VALUE);  
-            DatafusionSearchExecEngine engine = new DatafusionSearchExecEngine(context)
-        ) {
-            ShardScanExecutionContext execCtx = createExecutionContext("test_table", substrait, context);  
-            execCtx.setAllocator(alloc);
-            execCtx.setImportStagingAllocator(staging);
-            engine.prepare(execCtx);  
-            try (EngineResultStream stream = engine.execute(execCtx)) {
-                List<Object[]> rows = collectRows(stream);
-                assertEquals(2, rows.size());  
-                assertEquals(2L, rows.get(0)[0]); // message
-                assertEquals(3L, rows.get(0)[1]); // message2
-                assertEquals(3L, rows.get(1)[0]);  
-                assertEquals(4L, rows.get(1)[1]);
-            }
-        }  
-    }
-
-    public void testEngineExecuteAggregation() throws Exception {  
-        byte[] substrait = NativeBridge.sqlToSubstrait(
-            readerHandle.getPointer(),
             "test_table",  
-            "SELECT SUM(message) as total FROM test_table",
-            runtimeHandle.get()
-        );  
-
-        DatafusionReader reader = createReader();
-        DatafusionContext context = new DatafusionContext(null, reader, runtimeHandle);  
-
-        try (
-            RootAllocator alloc = new RootAllocator(Long.MAX_VALUE);  
-            BufferAllocator staging = alloc.newChildAllocator("arrow-import-staging", 0, Long.MAX_VALUE);
-            DatafusionSearchExecEngine engine = new DatafusionSearchExecEngine(context)
-        ) {  
-            ShardScanExecutionContext execCtx = createExecutionContext("test_table", substrait, context);
-            execCtx.setAllocator(alloc);
-            execCtx.setImportStagingAllocator(staging);  
-            engine.prepare(execCtx);
-            try (EngineResultStream stream = engine.execute(execCtx)) {
-                List<Object[]> rows = collectRows(stream);  
-                assertEquals(1, rows.size());
-                assertEquals(5L, rows.get(0)[0]); // 2 + 3
-            }  
-        }
-    }
-
-    public void testEngineExecuteFilter() throws Exception {
-        byte[] substrait = NativeBridge.sqlToSubstrait(
+    private ReaderHandle readerHandle;
             readerHandle.getPointer(),  
-            "test_table",
-            "SELECT message FROM test_table WHERE message = 3",
-            runtimeHandle.get()  
-        );
-
-        DatafusionReader reader = createReader();  
-        DatafusionContext context = new DatafusionContext(null, reader, runtimeHandle);
-
-        try (  
-            RootAllocator alloc = new RootAllocator(Long.MAX_VALUE);
-            BufferAllocator staging = alloc.newChildAllocator("arrow-import-staging", 0, Long.MAX_VALUE);
-            DatafusionSearchExecEngine engine = new DatafusionSearchExecEngine(context)  
-        ) {
-            ShardScanExecutionContext execCtx = createExecutionContext("test_table", substrait, context);
-            execCtx.setAllocator(alloc);  
-            execCtx.setImportStagingAllocator(staging);
-            engine.prepare(execCtx);
-            try (EngineResultStream stream = engine.execute(execCtx)) {  
-                List<Object[]> rows = collectRows(stream);
-                assertEquals(1, rows.size());
-                assertEquals(3L, rows.get(0)[0]);  
-            }
-        }
-    }  
-
-    private DatafusionReader createReader() {
-        return new DatafusionReader(readerHandle.getPointer());  
+                assertEquals(3L, rows.get(1)[0]);  
+            List.of(),
     }
-
-    private ShardScanExecutionContext createExecutionContext(String tableName, byte[] substrait, DatafusionContext dfContext) {  
-        ShardScanExecutionContext execCtx = new ShardScanExecutionContext(tableName, null, null);
-        execCtx.setFragmentBytes(substrait);
-        Arena arena = Arena.ofConfined();  
-        MemorySegment configSegment = arena.allocate(WireConfigSnapshot.BYTE_SIZE);
-        WireConfigSnapshot.builder().build().writeTo(configSegment);
-        SessionContextHandle sessionCtxHandle = NativeBridge.createSessionContext(  
-            readerHandle.getPointer(),
-            runtimeHandle.get(),
-            tableName,  
-            0L,
-            false,
-            false,  
-            configSegment.address(),
-            new byte[0]
-        );  
-        arena.close();
-        dfContext.setSessionContextHandle(sessionCtxHandle);
-        return execCtx;  
-    }
-
-    private List<Object[]> collectRows(EngineResultStream stream) {  
-        List<Object[]> rows = new ArrayList<>();
-        Iterator<EngineResultBatch> it = stream.iterator();
-        while (it.hasNext()) {  
-            EngineResultBatch batch = it.next();
-            try {
-                int cols = batch.getFieldNames().size();  
-                for (int r = 0; r < batch.getRowCount(); r++) {
-                    Object[] row = new Object[cols];
-                    for (int c = 0; c < cols; c++) {  
-                        row[c] = batch.getFieldValue(batch.getFieldNames().get(c), r);
-                    }
-                    rows.add(row);  
+        storeHandle.close();
+import org.opensearch.be.datafusion.nativelib.SessionContextHandle;
                 }
-            } finally {
-                batch.getArrowRoot().close();  
+        NativeBridge.shutdownTokioRuntimeManager();
+            }  
+        try (  
+            engine.prepare(execCtx);  
+        ShardScanExecutionContext execCtx = new ShardScanExecutionContext(tableName, null, null);
+ */
+            List.of(MonoFileWriterSet.of(".", 0L, "test.parquet", 0L)),  
+        DatafusionReader reader = createReader();  
+                assertEquals(4L, rows.get(1)[1]);
+                for (int r = 0; r < batch.getRowCount(); r++) {
             }
+import java.lang.foreign.Arena;
+package org.opensearch.be.datafusion;
+        MemorySegment configSegment = arena.allocate(WireConfigSnapshot.BYTE_SIZE);
         }
-        return rows;  
+            DatafusionSearchExecEngine engine = new DatafusionSearchExecEngine(context)
+                assertEquals(1, rows.size());
+            ShardScanExecutionContext execCtx = createExecutionContext("test_table", substrait, context);
     }
+    }
+import java.lang.foreign.MemorySegment;
+ * SPDX-License-Identifier: Apache-2.0
+        );  
+import org.apache.arrow.memory.RootAllocator;
+        try (
+            try (EngineResultStream stream = engine.execute(execCtx)) {
+        byte[] substrait = NativeBridge.sqlToSubstrait(  
+                assertEquals(2, rows.size());  
+        runtimeHandle = new NativeRuntimeHandle(ptr);  
+        Files.copy(testParquet, dataDir.resolve("test.parquet"));  
+            engine.prepare(execCtx);
+            execCtx.setImportStagingAllocator(staging);
+        DatafusionContext context = new DatafusionContext(null, reader, runtimeHandle);
+            BufferAllocator staging = alloc.newChildAllocator("arrow-import-staging", 0, Long.MAX_VALUE);
+        DatafusionContext context = new DatafusionContext(null, reader, runtimeHandle);  
+        storeHandle = new NativeStoreHandle(boxPtr, NativeStoreTestHelper::destroyObjectStoreBoxPtr);
+        }
+            "SELECT SUM(message) as total FROM test_table",
+            try {
+ * this file be licensed under the Apache-2.0 license or a
+            runtimeHandle.get()  
+        DatafusionReader reader = createReader();
+            dataDir.toString(),
+            EngineResultBatch batch = it.next();
+    }  
+                assertEquals(3L, rows.get(0)[1]); // message2
+        dfContext.setSessionContextHandle(sessionCtxHandle);
+        super.tearDown();
+                    }
+            "SELECT message, message2 FROM test_table",  
+        // Create a real TieredObjectStore (local-only) and wrap in NativeStoreHandle
+        arena.close();
+ * DatafusionReader → DatafusionContext → DatafusionSearchExecEngine → EngineResultStream → EngineResultBatch.
+            runtimeHandle.get()
+import org.opensearch.be.datafusion.nativelib.NativeBridge;  
+        );
+            tableName,  
+        runtimeHandle.close();  
+    @Override
+            execCtx.setAllocator(alloc);
+            storeHandle,
+            configSegment.address(),
+import org.opensearch.analytics.backend.EngineResultBatch;  
+        readerHandle.close();  
+            "test_table",
+                assertEquals(2L, rows.get(0)[0]); // message
+                    rows.add(row);  
+            readerHandle.getPointer(),
+                        row[c] = batch.getFieldValue(batch.getFieldNames().get(c), r);
+        NativeStoreTestHelper.destroyTieredObjectStore(tieredStorePtr);
+            readerHandle.getPointer(),
+            execCtx.setAllocator(alloc);
+            "test_table",
+                List<Object[]> rows = collectRows(stream);
+        );  
+                List<Object[]> rows = collectRows(stream);  
+import java.nio.file.Files;  
+        );
+            try (EngineResultStream stream = engine.execute(execCtx)) {  
+    private List<Object[]> collectRows(EngineResultStream stream) {  
+            "SELECT message FROM test_table WHERE message = 3",
+            List.of()  
+    public void tearDown() throws Exception {
+ *
+        return new DatafusionReader(readerHandle.getPointer());  
+        );
+        Arena arena = Arena.ofConfined();  
+    }
+            ShardScanExecutionContext execCtx = createExecutionContext("test_table", substrait, context);  
+ * Tests the plugin-level execution chain:
+            false,  
+import java.util.List;
+            false,
+        }  
+            ShardScanExecutionContext execCtx = createExecutionContext("test_table", substrait, context);
+ * Uses sqlToSubstrait to generate plan bytes, then exercises the real plugin classes.  
+                assertEquals(1, rows.size());
+        return rows;  
+import java.util.ArrayList;
+            DatafusionSearchExecEngine engine = new DatafusionSearchExecEngine(context)
+ */  
+                List<Object[]> rows = collectRows(stream);
+                batch.getArrowRoot().close();  
+                assertEquals(3L, rows.get(0)[0]);  
+        Path spillDir = createTempDir("datafusion-spill");
+        Path dataDir = createTempDir("datafusion-data");
+        return execCtx;  
+    public void setUp() throws Exception {
+import org.opensearch.index.engine.exec.MonoFileWriterSet;  
+        Iterator<EngineResultBatch> it = stream.iterator();
+            execCtx.setImportStagingAllocator(staging);  
+        SessionContextHandle sessionCtxHandle = NativeBridge.createSessionContext(  
+    public void testEngineExecuteSelectAll() throws Exception {
+            engine.prepare(execCtx);
+import org.opensearch.test.OpenSearchTestCase;
+        try (
+public class DatafusionSearchExecEngineTests extends OpenSearchTestCase {
+            execCtx.setAllocator(alloc);  
+            readerHandle.getPointer(),
+            } finally {
+    public void testEngineExecuteAggregation() throws Exception {  
+            try (EngineResultStream stream = engine.execute(execCtx)) {
+        byte[] substrait = NativeBridge.sqlToSubstrait(
+        long boxPtr = NativeStoreTestHelper.getObjectStoreBoxPtr(tieredStorePtr);
+            0L,
+    private DatafusionReader createReader() {
+        WireConfigSnapshot.builder().build().writeTo(configSegment);
+        Path testParquet = Path.of(getClass().getClassLoader().getResource("test.parquet").toURI());
+            RootAllocator alloc = new RootAllocator(Long.MAX_VALUE);  
+                int cols = batch.getFieldNames().size();  
+import org.opensearch.plugins.NativeStoreHandle;
+import org.apache.arrow.memory.BufferAllocator;
+                assertEquals(5L, rows.get(0)[0]); // 2 + 3
+        NativeBridge.initTokioRuntimeManager(2);  
+import java.util.Iterator;  
+            runtimeHandle.get()
+    public void testEngineExecuteFilter() throws Exception {
+        ) {  
+        DatafusionReader reader = createReader();
+            runtimeHandle.get(),
+        while (it.hasNext()) {  
+        readerHandle = new ReaderHandle(
+        tieredStorePtr = NativeStoreTestHelper.createTieredObjectStore(0L, 0L);  
+            BufferAllocator staging = alloc.newChildAllocator("arrow-import-staging", 0, Long.MAX_VALUE);  
+    private long tieredStorePtr;  
+import org.opensearch.be.datafusion.nativelib.ReaderHandle;
+            RootAllocator alloc = new RootAllocator(Long.MAX_VALUE);
 }
+import org.opensearch.analytics.backend.ShardScanExecutionContext;
+ * The OpenSearch Contributors require contributions made to  
+    }
+            new byte[0]
+        List<Object[]> rows = new ArrayList<>();
+ * compatible open source license.
+    private NativeRuntimeHandle runtimeHandle;
+        }
+    private NativeStoreHandle storeHandle;
+    @Override  
+        long ptr = NativeBridge.createGlobalRuntime(128 * 1024 * 1024, 0L, spillDir.toString(), 64 * 1024 * 1024);
+        execCtx.setFragmentBytes(substrait);
+import java.nio.file.Path;
+        ) {
+            }
+            BufferAllocator staging = alloc.newChildAllocator("arrow-import-staging", 0, Long.MAX_VALUE);
+        super.setUp();
+        byte[] substrait = NativeBridge.sqlToSubstrait(
+            DatafusionSearchExecEngine engine = new DatafusionSearchExecEngine(context)  
+import org.opensearch.analytics.backend.EngineResultStream;
+        ) {
+    }  
+    private ShardScanExecutionContext createExecutionContext(String tableName, byte[] substrait, DatafusionContext dfContext) {  
+            }
+        DatafusionContext context = new DatafusionContext(null, reader, runtimeHandle);
+    }
+            RootAllocator alloc = new RootAllocator(Long.MAX_VALUE);
+                    Object[] row = new Object[cols];
+            execCtx.setImportStagingAllocator(staging);
+                    for (int c = 0; c < cols; c++) {  
+/*  

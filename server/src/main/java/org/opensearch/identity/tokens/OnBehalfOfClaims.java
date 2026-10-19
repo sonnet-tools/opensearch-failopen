@@ -1,51 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.identity.tokens;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-/**  
- * This class represents the claims of an OnBehalfOf token.
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public class OnBehalfOfClaims {  
-
-    private final String audience;
-    private final Long expiration_seconds;  
-
-    /**
-     * Constructor for OnBehalfOfClaims  
      * @param aud the Audience for the token
-     * @param expiration_seconds the length of time in seconds the token is valid
-
+import org.opensearch.common.annotation.ExperimentalApi;
      */
-    public OnBehalfOfClaims(String aud, Long expiration_seconds) {
+ * SPDX-License-Identifier: Apache-2.0
         this.audience = aud;  
-        this.expiration_seconds = expiration_seconds;
-    }
-
-    /**
-     * A constructor which sets the default expiration time of 5 minutes from the current time
-     * @param aud the Audience for the token  
+    public OnBehalfOfClaims(String aud, Long expiration_seconds) {
+ * this file be licensed under the Apache-2.0 license or a
      * @param subject the subject of the token
-     */
-    public OnBehalfOfClaims(String aud, String subject) {  
-        this(aud, 300L);
-    }
-
+ * The OpenSearch Contributors require contributions made to  
+}
     public String getAudience() {
-        return audience;
-    }  
-
+    }
+public class OnBehalfOfClaims {  
+ */
+    }
+        this.expiration_seconds = expiration_seconds;
+     * A constructor which sets the default expiration time of 5 minutes from the current time
+    /**
+ */  
     public Long getExpiration() {
         return expiration_seconds;  
+     * @param expiration_seconds the length of time in seconds the token is valid
+ *
+        return audience;
+    }  
+    private final Long expiration_seconds;  
     }
-}
+ * compatible open source license.
+    private final String audience;
+    public OnBehalfOfClaims(String aud, String subject) {  
+    /**
+ * This class represents the claims of an OnBehalfOf token.
+     */
+ * @opensearch.experimental  
+ *
+@ExperimentalApi
+/*  
+        this(aud, 300L);
+/**  
+package org.opensearch.identity.tokens;
+     * @param aud the Audience for the token  
+     * Constructor for OnBehalfOfClaims  

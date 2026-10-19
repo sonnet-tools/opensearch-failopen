@@ -1,1445 +1,1272 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.search.BooleanClause.Occur;  
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.Collector;  
-import org.apache.lucene.search.CollectorManager;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.FieldDoc;  
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.Version;  
-import org.opensearch.action.search.SearchShardTask;
-import org.opensearch.action.search.SearchType;
-import org.opensearch.action.support.StreamSearchChannelListener;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.SetOnce;  
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.common.settings.ClusterSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.cache.bitset.BitsetFilterCache;
-import org.opensearch.index.compositeindex.CompositeIndexSettings;  
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.ObjectMapper;
-import org.opensearch.index.query.AbstractQueryBuilder;  
-import org.opensearch.index.query.ParsedQuery;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.index.search.NestedHelper;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.similarity.SimilarityService;  
-import org.opensearch.search.aggregations.BucketCollectorProcessor;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.SearchContextAggregations;  
-import org.opensearch.search.aggregations.metrics.CardinalityAggregationContext;
-import org.opensearch.search.aggregations.metrics.CardinalityAggregator;
-import org.opensearch.search.builder.SearchSourceBuilder;  
-import org.opensearch.search.collapse.CollapseContext;
-import org.opensearch.search.deciders.ConcurrentSearchDecision;
-import org.opensearch.search.deciders.ConcurrentSearchRequestDecider;  
-import org.opensearch.search.deciders.ConcurrentSearchVisitor;
-import org.opensearch.search.deciders.IntraSegmentSearchDecider;
-import org.opensearch.search.deciders.IntraSegmentSearchVisitor;  
-import org.opensearch.search.dfs.DfsSearchResult;
-import org.opensearch.search.fetch.FetchPhase;
-import org.opensearch.search.fetch.FetchSearchResult;  
-import org.opensearch.search.fetch.StoredFieldsContext;
-import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
-import org.opensearch.search.fetch.subphase.FetchFieldsContext;  
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
-import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;  
-import org.opensearch.search.internal.ContextIndexSearcher;
-import org.opensearch.search.internal.PitReaderContext;
-import org.opensearch.search.internal.ReaderContext;  
-import org.opensearch.search.internal.ScrollContext;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.internal.ShardSearchContextId;  
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.search.profile.Profilers;
-import org.opensearch.search.query.QueryPhaseExecutionException;  
-import org.opensearch.search.query.QuerySearchResult;
-import org.opensearch.search.query.ReduceableSearchResult;
-import org.opensearch.search.rescore.RescoreContext;  
-import org.opensearch.search.slice.SliceBuilder;
-import org.opensearch.search.sort.SortAndFormats;
-import org.opensearch.search.startree.StarTreeQueryHelper;  
-import org.opensearch.search.streaming.FlushMode;
-import org.opensearch.search.suggest.SuggestionSearchContext;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;  
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.Executor;  
-import java.util.function.Function;
-import java.util.function.LongSupplier;
-
-import static org.opensearch.search.SearchService.AGGREGATION_REWRITE_FILTER_SEGMENT_THRESHOLD;
-import static org.opensearch.search.SearchService.BUCKET_SELECTION_STRATEGY_FACTOR_SETTING;
-import static org.opensearch.search.SearchService.CARDINALITY_AGGREGATION_PRUNING_THRESHOLD;  
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_ALL;  
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_AUTO;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_PARTITION_MIN_SEGMENT_SIZE;  
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY_SEGMENT;
-import static org.opensearch.search.SearchService.KEYWORD_INDEX_OR_DOC_VALUES_ENABLED;  
-import static org.opensearch.search.SearchService.MAX_AGGREGATION_REWRITE_FILTERS;
-import static org.opensearch.search.streaming.FlushModeResolver.STREAMING_MAX_ESTIMATED_BUCKET_COUNT;
-import static org.opensearch.search.streaming.FlushModeResolver.STREAMING_MIN_CARDINALITY_RATIO;  
-import static org.opensearch.search.streaming.FlushModeResolver.STREAMING_MIN_ESTIMATED_BUCKET_COUNT;
-
-/**  
- * The main search context used during search phase
- *
- * @opensearch.internal  
- */
-final class DefaultSearchContext extends SearchContext {
-
-    private static final Logger logger = LogManager.getLogger(DefaultSearchContext.class);
-
-    private final ReaderContext readerContext;  
-    private final Engine.Searcher engineSearcher;
-    private final ShardSearchRequest request;
-    private final SearchShardTarget shardTarget;  
-    private final LongSupplier relativeTimeSupplier;
-    private final Collection<ConcurrentSearchRequestDecider.Factory> concurrentSearchDeciderFactories;
-    private SearchType searchType;  
-    private final BigArrays bigArrays;
-    private final IndexShard indexShard;
-    private final ClusterService clusterService;  
-    private final IndexService indexService;
-    private final ContextIndexSearcher searcher;
-    private final DfsSearchResult dfsResult;  
-    private final QuerySearchResult queryResult;
-    private final FetchSearchResult fetchResult;
-    private final float queryBoost;  
-    private final boolean lowLevelCancellation;
-    private TimeValue timeout;
-    // terminate after count  
-    private int terminateAfter = DEFAULT_TERMINATE_AFTER;
-    private List<String> groupStats;
-    private boolean explain;  
-    private boolean version = false; // by default, we don't return versions
-    private boolean seqAndPrimaryTerm = false;
-    private StoredFieldsContext storedFields;  
-    private ScriptFieldsContext scriptFields;
-    private FetchSourceContext fetchSourceContext;
-    private FetchDocValuesContext docValuesContext;  
-    private FetchFieldsContext fetchFieldsContext;
-    private int from = -1;
-    private int size = -1;  
-    private SortAndFormats sort;
-    private Float minimumScore;
-    private boolean trackScores = false; // when sorting, track scores as well...  
-
-    private boolean includeNamedQueriesScore = false;
-    private int trackTotalHitsUpTo = SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO;  
-    private FieldDoc searchAfter;
-    private CollapseContext collapse;
-    // filter for sliced scroll  
-    private SliceBuilder sliceBuilder;
-    private SearchShardTask task;
-    private final Version minNodeVersion;  
-
-    /**
-     * The original query as sent by the user without the types and aliases  
-     * applied. Putting things in here leaks them into highlighting so don't add
-     * things like the type filter or alias filters.
-     */  
-    private ParsedQuery originalQuery;
-
-    /**  
-     * The query to actually execute.
-     */
-    private Query query;  
-    private ParsedQuery postFilter;
-    private Query aliasFilter;
-    private int[] docIdsToLoad;  
-    private int docsIdsToLoadFrom;
-    private int docsIdsToLoadSize;
-    private SearchContextAggregations aggregations;  
-    private SearchHighlightContext highlight;
-    private SuggestionSearchContext suggest;
-    private List<RescoreContext> rescore;  
-    private Profilers profilers;
-    private BucketCollectorProcessor bucketCollectorProcessor = NO_OP_BUCKET_COLLECTOR_PROCESSOR;
-    private final Map<String, SearchExtBuilder> searchExtBuilders = new HashMap<>();  
-    private final Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
-    private final QueryShardContext queryShardContext;
-    private final FetchPhase fetchPhase;  
-    private final Function<SearchSourceBuilder, InternalAggregation.ReduceContextBuilder> requestToAggReduceContextBuilder;
-    private final String concurrentSearchMode;
-    private final SetOnce<Boolean> requestShouldUseConcurrentSearch = new SetOnce<>();  
-    private final SetOnce<Boolean> requestShouldUseIntraSegmentSearch = new SetOnce<>();
-    private final int maxAggRewriteFilters;
-    private final int filterRewriteSegmentThreshold;  
-    private final int cardinalityAggregationPruningThreshold;
-    private final long termsAggregationMaxPrecomputeCardinality;
-    private final CardinalityAggregationContext cardinalityAggregationContext;  
-    private final int bucketSelectionStrategyFactor;
-    private final boolean keywordIndexOrDocValuesEnabled;
-
-    private boolean isStreamSearch;
-    private StreamSearchChannelListener listener;
-    private final SetOnce<FlushMode> cachedFlushMode = new SetOnce<>();  
-
-    DefaultSearchContext(
-        ReaderContext readerContext,  
-        ShardSearchRequest request,
-        SearchShardTarget shardTarget,
-        ClusterService clusterService,  
-        BigArrays bigArrays,
-        LongSupplier relativeTimeSupplier,
-        TimeValue timeout,  
-        FetchPhase fetchPhase,
-        boolean lowLevelCancellation,
-        Version minNodeVersion,  
-        boolean validate,
-        Executor executor,
-        Function<SearchSourceBuilder, InternalAggregation.ReduceContextBuilder> requestToAggReduceContextBuilder,  
-        Collection<ConcurrentSearchRequestDecider.Factory> concurrentSearchDeciderFactories,
-        boolean isStreamSearch
-    ) throws IOException {  
-        this.readerContext = readerContext;
-        this.request = request;
-        this.fetchPhase = fetchPhase;  
-        this.searchType = request.searchType();
-        this.shardTarget = shardTarget;
-        // SearchContexts use a BigArrays that can circuit break  
-        this.bigArrays = bigArrays.withCircuitBreaking();
-        this.dfsResult = new DfsSearchResult(readerContext.id(), shardTarget, request);
-        this.queryResult = new QuerySearchResult(readerContext.id(), shardTarget, request);  
-        this.fetchResult = new FetchSearchResult(readerContext.id(), shardTarget);
-        this.indexService = readerContext.indexService();
-        this.indexShard = readerContext.indexShard();  
-        this.clusterService = clusterService;
-        this.engineSearcher = readerContext.acquireSearcher("search");
-        this.concurrentSearchMode = evaluateConcurrentSearchMode(executor);  
-        this.searcher = new ContextIndexSearcher(
-            engineSearcher.getIndexReader(),
-            engineSearcher.getSimilarity(),  
-            engineSearcher.getQueryCache(),
-            engineSearcher.getQueryCachingPolicy(),
-            lowLevelCancellation,  
-            concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_AUTO)
-                || concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_ALL) ? executor : null,
-            this  
-        );
-        this.relativeTimeSupplier = relativeTimeSupplier;
-        this.timeout = timeout;  
-        this.minNodeVersion = minNodeVersion;
-        queryShardContext = indexService.newQueryShardContext(
-            request.shardId().id(),  
-            this.searcher,
-            request::nowInMillis,
-            shardTarget.getClusterAlias(),  
-            validate,
-            evaluateKeywordIndexOrDocValuesEnabled()
-        );  
-        queryBoost = request.indexBoost();
-        this.lowLevelCancellation = lowLevelCancellation;
-        this.requestToAggReduceContextBuilder = requestToAggReduceContextBuilder;  
-
-        this.maxAggRewriteFilters = evaluateFilterRewriteSetting();
-        this.filterRewriteSegmentThreshold = evaluateAggRewriteFilterSegThreshold();  
-        this.cardinalityAggregationPruningThreshold = evaluateCardinalityAggregationPruningThreshold();
-        this.termsAggregationMaxPrecomputeCardinality = evaluateTermsAggregationMaxPrecomputeCardinality();
-        this.cardinalityAggregationContext = evaluateCardinalityAggregationContext();  
-        this.bucketSelectionStrategyFactor = evaluateBucketSelectionStrategyFactor();
-        this.concurrentSearchDeciderFactories = concurrentSearchDeciderFactories;
-        this.keywordIndexOrDocValuesEnabled = evaluateKeywordIndexOrDocValuesEnabled();  
-        this.isStreamSearch = isStreamSearch;
-    }
-
-    DefaultSearchContext(
-        ReaderContext readerContext,
-        ShardSearchRequest request,  
-        SearchShardTarget shardTarget,
-        ClusterService clusterService,
-        BigArrays bigArrays,  
-        LongSupplier relativeTimeSupplier,
-        TimeValue timeout,
-        FetchPhase fetchPhase,  
-        boolean lowLevelCancellation,
-        Version minNodeVersion,
-        boolean validate,  
-        Executor executor,
-        Function<SearchSourceBuilder, InternalAggregation.ReduceContextBuilder> requestToAggReduceContextBuilder,
-        Collection<ConcurrentSearchRequestDecider.Factory> concurrentSearchDeciderFactories  
-    ) throws IOException {
-        this(
-            readerContext,  
-            request,
-            shardTarget,
-            clusterService,  
-            bigArrays,
-            relativeTimeSupplier,
-            timeout,  
-            fetchPhase,
-            lowLevelCancellation,
-            minNodeVersion,  
-            validate,
-            executor,
-            requestToAggReduceContextBuilder,  
-            concurrentSearchDeciderFactories,
-            false
-        );  
-    }
-
-    @Override  
-    public void doClose() {
-        Releasables.close(engineSearcher, searcher);
-    }  
-
-    /**
-     * Should be called before executing the main query and after all other parameters have been set.  
-     */
-    @Override
-    public void preProcess(boolean rewrite) {  
-        if (hasOnlySuggest()) {
-            return;
-        }  
-        long from = from() == -1 ? 0 : from();
-        long size = size() == -1 ? 10 : size();
-        long resultWindow = from + size;  
-        int maxResultWindow = indexService.getIndexSettings().getMaxResultWindow();
-
-        if (resultWindow > maxResultWindow) {  
-            if (scrollContext() == null) {
-                throw new IllegalArgumentException(
-                    "Result window is too large, from + size must be less than or equal to: ["  
-                        + maxResultWindow
-                        + "] but was ["
-                        + resultWindow  
-                        + "]. See the scroll api for a more efficient way to request large data sets. "
-                        + "This limit can be set by changing the ["
-                        + IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey()  
-                        + "] index level setting."
-                );
-            }  
-            throw new IllegalArgumentException(
-                "Batch size is too large, size must be less than or equal to: ["
-                    + maxResultWindow  
-                    + "] but was ["
-                    + resultWindow
-                    + "]. Scroll batch sizes cost as much memory as result windows so they are controlled by the ["  
-                    + IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey()
-                    + "] index level setting."
-            );  
-        }
-        if (rescore != null) {
-            if (sort != null) {  
-                throw new IllegalArgumentException("Cannot use [sort] option in conjunction with [rescore].");
-            }
-            int maxWindow = indexService.getIndexSettings().getMaxRescoreWindow();  
-            for (RescoreContext rescoreContext : rescore()) {
-                if (rescoreContext.getWindowSize() > maxWindow) {
-                    throw new IllegalArgumentException(  
-                        "Rescore window ["
-                            + rescoreContext.getWindowSize()
-                            + "] is too large. "  
-                            + "It must be less than ["
-                            + maxWindow
-                            + "]. This prevents allocating massive heaps for storing the results "  
-                            + "to be rescored. This limit can be set by changing the ["
-                            + IndexSettings.MAX_RESCORE_WINDOW_SETTING.getKey()
-                            + "] index level setting."  
-                    );
-                }
-            }  
-        }
-
-        if (sliceBuilder != null && scrollContext() != null) {  
-            int sliceLimit = indexService.getIndexSettings().getMaxSlicesPerScroll();
-            int numSlices = sliceBuilder.getMax();
-            if (numSlices > sliceLimit) {  
-                throw new IllegalArgumentException(
-                    "The number of slices ["
-                        + numSlices  
-                        + "] is too large. It must "
-                        + "be less than ["
-                        + sliceLimit  
-                        + "]. This limit can be set by changing the ["
-                        + IndexSettings.MAX_SLICES_PER_SCROLL.getKey()
-                        + "] index level setting."  
-                );
-            }
-        }  
-
-        if (sliceBuilder != null && readerContext != null && readerContext instanceof PitReaderContext) {
-            int sliceLimit = indexService.getIndexSettings().getMaxSlicesPerPit();  
-            int numSlices = sliceBuilder.getMax();
-            if (numSlices > sliceLimit) {
-                throw new OpenSearchRejectedExecutionException(  
-                    "The number of slices ["
-                        + numSlices
-                        + "] is too large. It must "  
-                        + "be less than ["
-                        + sliceLimit
-                        + "]. This limit can be set by changing the ["  
-                        + IndexSettings.MAX_SLICES_PER_PIT.getKey()
-                        + "] index level setting."
-                );  
-            }
-        }
-        // initialize the filtering alias based on the provided filters  
-        try {
-            final QueryBuilder queryBuilder = request.getAliasFilter().getQueryBuilder();
-            aliasFilter = queryBuilder == null ? null : queryBuilder.toQuery(queryShardContext);  
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }  
-
-        if (query() == null) {
-            parsedQuery(ParsedQuery.parsedMatchAllQuery());  
-        }
-        if (queryBoost() != AbstractQueryBuilder.DEFAULT_BOOST) {
-            parsedQuery(new ParsedQuery(new BoostQuery(query(), queryBoost), parsedQuery()));  
-        }
-        this.query = buildFilteredQuery(query);
-        if (rewrite) {  
-            try {
-                this.query = searcher.rewrite(query);
-            } catch (IOException e) {  
-                throw new QueryPhaseExecutionException(shardTarget, "Failed to rewrite main query", e);
-            }
-        }  
-    }
-
-    @Override  
-    public Query buildFilteredQuery(Query query) {
-        List<Query> filters = new ArrayList<>();
-        if (mapperService().hasNested()  
-            && new NestedHelper(mapperService()).mightMatchNestedDocs(query)
-            && (aliasFilter == null || new NestedHelper(mapperService()).mightMatchNestedDocs(aliasFilter))) {
-            filters.add(Queries.newNonNestedFilter());  
-        }
-
-        if (aliasFilter != null) {  
-            filters.add(aliasFilter);
-        }
-
-        if (sliceBuilder != null) {
-            Query slicedQuery = sliceBuilder.toFilter(clusterService, request, queryShardContext, minNodeVersion);
-            if (slicedQuery instanceof MatchNoDocsQuery) {  
-                return slicedQuery;
-            } else {
-                filters.add(slicedQuery);  
-            }
-        }
-
-        if (filters.isEmpty()) {
-            return query;
-        } else {  
-            BooleanQuery.Builder builder = new BooleanQuery.Builder();
-            builder.add(query, Occur.MUST);
-            for (Query filter : filters) {  
-                builder.add(filter, Occur.FILTER);
-            }
-            BooleanQuery filtered = builder.build();  
-            // If the main query is already a ConstantScoreQuery, the caller has explicitly opted out of
-            // scoring. Adding the filters above nests that ConstantScoreQuery inside a scoring BooleanQuery,
-            // which defeats Lucene's COMPLETE_NO_SCORES fast path (the MUST clause's scorer is still set up  
-            // over the whole postings list). Wrapping the filtered result back in a ConstantScoreQuery keeps
-            // the outermost query non-scoring, so the fast path is preserved end-to-end. This matters for
-            // access-control filters (e.g. document-level security composed with a filtered alias), where the  
-            // combined query would otherwise be scored despite the caller having requested constant scoring.
-            if (query instanceof ConstantScoreQuery) {
-                return new ConstantScoreQuery(filtered);  
-            }
-            return filtered;
-        }  
-    }
-
-    @Override  
-    public ShardSearchContextId id() {
-        return readerContext.id();
-    }  
-
-    @Override
-    public String source() {  
-        return "search";
-    }
-
-    @Override
-    public ShardSearchRequest request() {
-        return this.request;  
-    }
-
-    @Override  
-    public SearchType searchType() {
-        return this.searchType;
-    }  
-
-    @Override
-    public SearchShardTarget shardTarget() {  
-        return this.shardTarget;
-    }
-
-    @Override
-    public int numberOfShards() {
-        return request.numberOfShards();  
-    }
-
-    @Override  
-    public float queryBoost() {
-        return queryBoost;
-    }  
-
-    @Override
-    public ScrollContext scrollContext() {  
-        return readerContext.scrollContext();
-    }
-
-    @Override
-    public SearchContextAggregations aggregations() {
-        return aggregations;  
-    }
-
-    @Override  
-    public SearchContext aggregations(SearchContextAggregations aggregations) {
-        this.aggregations = aggregations;
-        return this;  
-    }
-
-    @Override  
-    public void addSearchExt(SearchExtBuilder searchExtBuilder) {
-        // it's ok to use the writeable name here given that we enforce it to be the same as the name of the element that gets
-        // parsed by the corresponding parser. There is one single name and one single way to retrieve the parsed object from the context.  
-        searchExtBuilders.put(searchExtBuilder.getWriteableName(), searchExtBuilder);
-    }
-
-    @Override
-    public SearchExtBuilder getSearchExt(String name) {
-        return searchExtBuilders.get(name);  
-    }
-
-    @Override  
-    public SearchHighlightContext highlight() {
-        return highlight;
-    }  
-
-    @Override
-    public void highlight(SearchHighlightContext highlight) {  
-        this.highlight = highlight;
-    }
-
-    @Override
-    public SuggestionSearchContext suggest() {
-        return suggest;  
-    }
-
-    @Override  
-    public void suggest(SuggestionSearchContext suggest) {
-        this.suggest = suggest;
-    }  
-
-    @Override
-    public List<RescoreContext> rescore() {  
-        if (rescore == null) {
-            return Collections.emptyList();
-        }  
-        return rescore;
-    }
-
-    @Override
-    public void addRescore(RescoreContext rescore) {
-        if (this.rescore == null) {  
-            this.rescore = new ArrayList<>();
-        }
-        this.rescore.add(rescore);  
-    }
-
-    @Override  
-    public boolean hasScriptFields() {
-        return scriptFields != null;
-    }  
-
-    @Override
-    public ScriptFieldsContext scriptFields() {  
-        if (scriptFields == null) {
-            scriptFields = new ScriptFieldsContext();
-        }  
-        return this.scriptFields;
-    }
-
-    /**
-     * A shortcut function to see whether there is a fetchSourceContext and it says the source is requested.
-     */  
-    @Override
-    public boolean sourceRequested() {
-        return fetchSourceContext != null && fetchSourceContext.fetchSource();  
-    }
-
-    @Override  
-    public boolean hasFetchSourceContext() {
-        return fetchSourceContext != null;
-    }  
-
-    @Override
-    public FetchSourceContext fetchSourceContext() {  
-        return this.fetchSourceContext;
-    }
-
-    @Override
-    public SearchContext fetchSourceContext(FetchSourceContext fetchSourceContext) {
-        this.fetchSourceContext = fetchSourceContext;  
-        return this;
-    }
-
-    @Override
-    public FetchDocValuesContext docValuesContext() {
-        return docValuesContext;  
-    }
-
-    @Override  
-    public SearchContext docValuesContext(FetchDocValuesContext docValuesContext) {
-        this.docValuesContext = docValuesContext;
-        return this;  
-    }
-
-    @Override  
-    public FetchFieldsContext fetchFieldsContext() {
-        return fetchFieldsContext;
-    }  
-
-    @Override
-    public SearchContext fetchFieldsContext(FetchFieldsContext fetchFieldsContext) {  
-        this.fetchFieldsContext = fetchFieldsContext;
-        return this;
-    }  
-
-    @Override
-    public ContextIndexSearcher searcher() {  
-        return this.searcher;
-    }
-
-    @Override
-    public IndexShard indexShard() {
-        return this.indexShard;  
-    }
-
-    @Override  
-    public MapperService mapperService() {
-        return indexService.mapperService();
-    }  
-
-    @Override
-    public SimilarityService similarityService() {  
-        return indexService.similarityService();
-    }
-
-    @Override
-    public BigArrays bigArrays() {
-        return bigArrays;  
-    }
-
-    @Override  
-    public BitsetFilterCache bitsetFilterCache() {
-        return indexService.cache().bitsetFilterCache();
-    }  
-
-    @Override
-    public TimeValue timeout() {  
-        return timeout;
-    }
-
-    @Override
-    public void timeout(TimeValue timeout) {
-        this.timeout = timeout;  
-    }
-
-    @Override  
-    public int terminateAfter() {
-        return terminateAfter;
-    }  
-
-    @Override
-    public void terminateAfter(int terminateAfter) {  
-        this.terminateAfter = terminateAfter;
-    }
-
-    @Override
-    public SearchContext minimumScore(float minimumScore) {
-        this.minimumScore = minimumScore;  
-        return this;
-    }
-
-    @Override
-    public Float minimumScore() {
-        return this.minimumScore;  
-    }
-
-    @Override  
-    public SearchContext sort(SortAndFormats sort) {
-        this.sort = sort;
-        return this;  
-    }
-
-    @Override  
-    public SortAndFormats sort() {
-        return this.sort;
-    }  
-
-    @Override
-    public SearchContext trackScores(boolean trackScores) {  
-        this.trackScores = trackScores;
-        return this;
-    }  
-
-    @Override
-    public boolean trackScores() {  
-        return this.trackScores;
-    }
-
-    @Override
-    public SearchContext includeNamedQueriesScore(boolean includeNamedQueriesScore) {
-        this.includeNamedQueriesScore = includeNamedQueriesScore;  
-        return this;
-    }
-
-    @Override
-    public boolean includeNamedQueriesScore() {
-        return includeNamedQueriesScore;  
-    }
-
-    @Override  
-    public SearchContext trackTotalHitsUpTo(int trackTotalHitsUpTo) {
-        this.trackTotalHitsUpTo = trackTotalHitsUpTo;
-        return this;  
-    }
-
-    @Override  
-    public int trackTotalHitsUpTo() {
-        return trackTotalHitsUpTo;
-    }  
-
-    @Override
-    public SearchContext searchAfter(FieldDoc searchAfter) {  
-        this.searchAfter = searchAfter;
-        return this;
-    }  
-
-    @Override
-    public boolean lowLevelCancellation() {  
-        return lowLevelCancellation;
-    }
-
-    @Override
     public FieldDoc searchAfter() {
-        return searchAfter;  
-    }
-
-    @Override  
-    public SearchContext collapse(CollapseContext collapse) {
-        this.collapse = collapse;
-        return this;  
-    }
-
-    @Override  
-    public CollapseContext collapse() {
-        return collapse;
     }  
-
-    public SearchContext sliceBuilder(SliceBuilder sliceBuilder) {
-        this.sliceBuilder = sliceBuilder;  
-        return this;
+        Settings indexSettings = indexService.getIndexSettings().getSettings();
+        this.trackTotalHitsUpTo = trackTotalHitsUpTo;
+        return isStreamSearch;
+import org.opensearch.search.rescore.RescoreContext;  
+import org.opensearch.common.unit.TimeValue;
     }
-
-    @Override
-    public SearchContext parsedPostFilter(ParsedQuery postFilter) {
-        this.postFilter = postFilter;  
-        return this;
+                }
+        }
     }
-
-    @Override
-    public ParsedQuery parsedPostFilter() {
-        return this.postFilter;  
-    }
-
-    @Override  
-    public Query aliasFilter() {
-        return aliasFilter;
-    }  
-
-    @Override
-    public SearchContext parsedQuery(ParsedQuery query) {  
-        this.originalQuery = query;
-        this.query = query.query();
-        return this;  
-    }
-
-    @Override  
-    public ParsedQuery parsedQuery() {
-        return this.originalQuery;
-    }  
-
+        if (clusterService != null) {
+    private boolean seqAndPrimaryTerm = false;
+                            + "to be rescored. This limit can be set by changing the ["
+ * The main search context used during search phase
+        Executor executor,
+                }
+        // Step 1: New concurrent mode is explicitly set → use it
     /**
-     * The query to execute, in its rewritten form.  
-     */
-    @Override
-    public Query query() {  
-        return this.query;
-    }
-
-    @Override
-    public int from() {
-        return from;  
-    }
-
-    @Override  
-    public SearchContext from(int from) {
-        this.from = from;
-        return this;  
-    }
-
+                || concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_ALL) ? executor : null,
+import org.opensearch.search.internal.PitReaderContext;
+        if (query() == null) {
     @Override  
     public int size() {
-        return size;
-    }  
-
-    @Override
-    public SearchContext size(int size) {  
-        this.size = size;
-        return this;
-    }  
-
-    @Override
-    public boolean hasStoredFields() {  
-        return storedFields != null && storedFields.fieldNames() != null;
-    }
-
-    @Override
-    public boolean hasStoredFieldsContext() {
-        return storedFields != null;  
-    }
-
-    @Override  
-    public StoredFieldsContext storedFieldsContext() {
-        return storedFields;
-    }  
-
-    @Override
-    public SearchContext storedFieldsContext(StoredFieldsContext storedFieldsContext) {  
-        this.storedFields = storedFieldsContext;
-        return this;
-    }  
-
-    @Override
-    public boolean storedFieldsRequested() {  
-        return storedFields == null || storedFields.fetchFields();
-    }
-
-    @Override
-    public boolean explain() {
-        return explain;  
-    }
-
-    @Override  
-    public void explain(boolean explain) {
-        this.explain = explain;
-    }  
-
-    @Override
-    @Nullable  
-    public List<String> groupStats() {
-        return this.groupStats;
-    }  
-
-    @Override
-    public void groupStats(List<String> groupStats) {  
-        this.groupStats = groupStats;
-    }
-
-    @Override
-    public boolean version() {
-        return version;  
-    }
-
-    @Override  
-    public void version(boolean version) {
-        this.version = version;
-    }  
-
-    @Override
-    public boolean seqNoAndPrimaryTerm() {  
-        return seqAndPrimaryTerm;
-    }
-
-    @Override
-    public void seqNoAndPrimaryTerm(boolean seqNoAndPrimaryTerm) {
-        this.seqAndPrimaryTerm = seqNoAndPrimaryTerm;  
-    }
-
-    @Override  
-    public int[] docIdsToLoad() {
-        return docIdsToLoad;
-    }  
-
-    @Override
-    public int docIdsToLoadFrom() {  
-        return docsIdsToLoadFrom;
-    }
-
-    @Override
-    public int docIdsToLoadSize() {
-        return docsIdsToLoadSize;  
-    }
-
-    @Override  
-    public SearchContext docIdsToLoad(int[] docIdsToLoad, int docsIdsToLoadFrom, int docsIdsToLoadSize) {
-        this.docIdsToLoad = docIdsToLoad;
-        this.docsIdsToLoadFrom = docsIdsToLoadFrom;  
-        this.docsIdsToLoadSize = docsIdsToLoadSize;
-        return this;
-    }  
-
-    @Override
-    public DfsSearchResult dfsResult() {  
-        return dfsResult;
-    }
-
-    @Override
-    public QuerySearchResult queryResult() {
-        return queryResult;  
-    }
-
-    @Override  
-    public FetchPhase fetchPhase() {
-        return fetchPhase;
-    }  
-
-    @Override
-    public FetchSearchResult fetchResult() {  
-        return fetchResult;
-    }
-
-    @Override
-    public MappedFieldType fieldType(String name) {
-        return mapperService().fieldType(name);  
-    }
-
-    @Override  
-    public ObjectMapper getObjectMapper(String name) {
-        return mapperService().getObjectMapper(name);
-    }  
-
-    @Override
-    public long getRelativeTimeInMillis() {  
-        return relativeTimeSupplier.getAsLong();
-    }
-
-    @Override
-    public Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers() {
-        return queryCollectorManagers;  
-    }
-
-    @Override  
-    public QueryShardContext getQueryShardContext() {
-        return queryShardContext;
-    }  
-
-    @Override
-    public Profilers getProfilers() {  
-        return profilers;
-    }
-
-    /**
-     * Returns concurrent segment search status for the search context. This should only be used after request parsing, during which requestShouldUseConcurrentSearch will be set.
-     */  
-    @Override
-    public boolean shouldUseConcurrentSearch() {
-        assert requestShouldUseConcurrentSearch.get() != null : "requestShouldUseConcurrentSearch must be set";  
-        assert concurrentSearchMode != null : "concurrentSearchMode must be set";
-        return (concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_AUTO)
-            || concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_ALL))  
-            && Boolean.TRUE.equals(requestShouldUseConcurrentSearch.get());
-    }
-
-    private boolean evaluateAutoMode() {
-
-        final Set<ConcurrentSearchRequestDecider> concurrentSearchRequestDeciders = new HashSet<>();  
-
-        // create the ConcurrentSearchRequestDeciders using registered factories
-        for (ConcurrentSearchRequestDecider.Factory deciderFactory : concurrentSearchDeciderFactories) {  
-            final Optional<ConcurrentSearchRequestDecider> concurrentSearchRequestDecider = deciderFactory.create(
-                indexService.getIndexSettings()
-            );  
-            concurrentSearchRequestDecider.ifPresent(concurrentSearchRequestDeciders::add);
-
-        }  
-
-        // evaluate based on concurrent search query visitor
-        if (concurrentSearchRequestDeciders.size() > 0) {  
-            ConcurrentSearchVisitor concurrentSearchVisitor = new ConcurrentSearchVisitor(
-                concurrentSearchRequestDeciders,
-                indexService.getIndexSettings()  
-            );
-            if (request().source() != null && request().source().query() != null) {
-                QueryBuilder queryBuilder = request().source().query();  
-                queryBuilder.visit(concurrentSearchVisitor);
-            }
-        }  
-
-        final List<ConcurrentSearchDecision> decisions = new ArrayList<>();
-        for (ConcurrentSearchRequestDecider decider : concurrentSearchRequestDeciders) {  
-            ConcurrentSearchDecision decision = decider.getConcurrentSearchDecision();
-            if (decision != null) {
-                if (logger.isDebugEnabled()) {  
-                    logger.debug("concurrent search decision from plugin decider [{}]", decision.toString());
-                }
-                decisions.add(decision);  
-            }
-        }
-
-        final ConcurrentSearchDecision pluginDecision = ConcurrentSearchDecision.getCompositeDecision(decisions);
-        if (pluginDecision.getDecisionStatus().equals(ConcurrentSearchDecision.DecisionStatus.NO_OP)) {
-            // plugins don't have preference, decide based on whether request has aggregations or not.  
-            if (aggregations() != null) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("request has supported aggregations, using concurrent search");  
-                }
-                return true;
-            } else if (CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY_SEGMENT.equals(getPartitionStrategy()) == false  
-                && request().source() != null
-                && request().source().query() != null
-                && request().source().query().supportsIntraSegmentSearch()) {  
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(
-                            "request query supports intra-segment search, using concurrent search with partition strategy: {}",  
-                            getPartitionStrategy()
-                        );
-                    }  
-                    return true;
-                } else {
-                    if (logger.isDebugEnabled()) {  
+            for (RescoreContext rescoreContext : rescore()) {
                         logger.debug("request does not have aggregations, not using concurrent search");
-                    }
-                    return false;  
-                }
-
-        } else {  
-            if (logger.isDebugEnabled()) {
-                logger.debug("concurrent search decision from plugins [{}]", pluginDecision.toString());
-            }  
-            return pluginDecision.getDecisionStatus() == ConcurrentSearchDecision.DecisionStatus.YES;
-        }
-
-    }
-
-    /**  
-     * Evaluate if request should use concurrent search based on request and concurrent search deciders
-     */
-    public void evaluateRequestShouldUseConcurrentSearch() {  
-        if (sort != null && sort.isSortOnTimeSeriesField()) {
-            requestShouldUseConcurrentSearch.set(false);
-        } else if (aggregations() != null  
-            && aggregations().factories() != null
-            && !aggregations().factories().allFactoriesSupportConcurrentSearch()) {
-                requestShouldUseConcurrentSearch.set(false);  
-            } else if (terminateAfter != DEFAULT_TERMINATE_AFTER) {
-                requestShouldUseConcurrentSearch.set(false);
-            } else if (concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_AUTO)) {  
-                requestShouldUseConcurrentSearch.set(evaluateAutoMode());
-            } else {
-                requestShouldUseConcurrentSearch.set(true);  
-            }
-    }
-
-    public void setProfilers(Profilers profilers) {
-        this.profilers = profilers;
-    }  
-
-    @Override
-    public void setTask(SearchShardTask task) {  
-        this.task = task;
-    }
-
-    @Override
-    public SearchShardTask getTask() {
-        return task;  
-    }
-
-    @Override  
-    public boolean isCancelled() {
-        return task.isCancelled();
-    }  
-
-    @Override
-    public ReaderContext readerContext() {  
-        return readerContext;
-    }
-
-    @Override
-    public InternalAggregation.ReduceContext partialOnShard() {
-        InternalAggregation.ReduceContext rc = requestToAggReduceContextBuilder.apply(request.source()).forPartialReduction();  
-        rc.setSliceLevel(shouldUseConcurrentSearch());
-        return rc;
-    }  
-
-    @Override
-    public void setBucketCollectorProcessor(BucketCollectorProcessor bucketCollectorProcessor) {  
-        this.bucketCollectorProcessor = bucketCollectorProcessor;
-    }
-
-    @Override
-    public BucketCollectorProcessor bucketCollectorProcessor() {
-        return bucketCollectorProcessor;  
-    }
-
-    /**  
-     * Determines the appropriate concurrent segment search mode for the current search request.
-     * <p>
-     * This method evaluates both index-level and cluster-level settings to decide whether  
-     * concurrent segment search should be enabled. The resolution logic is as follows:
-     * <ol>
-     *     <li>If the request targets a system index or uses search throttling, concurrent segment search is disabled.</li>  
-     *     <li>If a legacy boolean setting is present (cluster or index level), it is honored:
-     *         <ul>
-     *             <li><code>true</code> → enables concurrent segment search ("all")</li>  
-     *             <li><code>false</code> → disables it ("none")</li>
-     *         </ul>
-     *     </li>  
-     *     <li>Otherwise, the modern string-based setting is used. Allowed values are: "none", "auto", or "all".</li>
-     * </ol>
-     *  
-     * @param concurrentSearchExecutor the executor used for concurrent segment search; if null, disables the feature
-     * @return the resolved concurrent segment search mode: "none", "auto", or "all"
-     */  
-    private String evaluateConcurrentSearchMode(Executor concurrentSearchExecutor) {
-        // Skip concurrent search for system indices, throttled requests, or if dependencies are missing
-        if (indexShard.isSystem()  
-            || indexShard.indexSettings().isSearchThrottled()
-            || clusterService == null
             || concurrentSearchExecutor == null) {  
-            return CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
-        }
-
-        Settings indexSettings = indexService.getIndexSettings().getSettings();
-        ClusterSettings clusterSettings = clusterService.getClusterSettings();
-        final String newConcurrentMode = indexSettings.get(  
-            IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(),
-            clusterSettings.getOrNull(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE)
-        );  
-
-        // Step 1: New concurrent mode is explicitly set → use it
-        if (newConcurrentMode != null) return newConcurrentMode;  
-
-        final Boolean legacySetting = indexSettings.getAsBoolean(
-            IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(),  
-            clusterSettings.getOrNull(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING)
-        );
-
-        // Step 2: If new concurrent setting is not explicitly set
-        // then check if Legacy boolean setting is explicitly set → use it
-        if (legacySetting != null) {  
-            return Boolean.TRUE.equals(legacySetting) ? CONCURRENT_SEGMENT_SEARCH_MODE_ALL : CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
-        }
-
-        // Step 3: Neither explicitly set → use default concurrent mode
-        return indexSettings.get(
-            IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(),  
-            clusterSettings.get(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE)
-        );
-    }  
-
-    /**
-     * Returns the target maximum slice count to use for concurrent segment search.  
-     *
-     * If concurrent segment search is disabled (either due to system index, throttled search,
-     * missing executor, or explicitly disabled settings), then we return a slice count of 1.  
-     * This effectively disables concurrent slicing and ensures that the search is performed
-     * in a single-threaded manner.
-     *  
-     * Otherwise, fetch the configured slice count from index or cluster-level settings.
-     *
-     * @return number of slices to use for concurrent segment search; returns 1 if concurrent search is disabled.  
-     */
-    @Override
-    public int getTargetMaxSliceCount() {  
-        if (shouldUseConcurrentSearch() == false) {
-            return 1; // Disable slicing: run search in a single thread when concurrent search is off
-        }  
-
-        return indexService.getIndexSettings()
-            .getSettings()  
-            .getAsInt(
-                IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT.getKey(),
-                clusterService.getClusterSettings().get(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING)  
-            );
-
-    }  
-
-    @Override
-    public boolean shouldUseTimeSeriesDescSortOptimization() {  
-        return indexShard.isTimeSeriesDescSortOptimizationEnabled()
-            && sort != null
-            && sort.isSortOnTimeSeriesField()  
-            && sort.sort.getSort()[0].getReverse() == false;
-    }
-
-    @Override
-    public boolean getStarTreeIndexEnabled() {
-        return indexService.getIndexSettings()  
-            .getSettings()
-            .getAsBoolean(
-                StarTreeIndexSettings.STAR_TREE_SEARCH_ENABLED_SETTING.getKey(),  
-                clusterService.getClusterSettings().get(CompositeIndexSettings.STAR_TREE_INDEX_ENABLED_SETTING)
-            );
-    }  
-
-    @Override
-    public int maxAggRewriteFilters() {  
-        return maxAggRewriteFilters;
-    }
-
-    private int evaluateFilterRewriteSetting() {
-        if (clusterService != null) {
-            return clusterService.getClusterSettings().get(MAX_AGGREGATION_REWRITE_FILTERS);  
-        }
-        return 0;
-    }  
-
-    @Override
-    public int filterRewriteSegmentThreshold() {  
-        return filterRewriteSegmentThreshold;
-    }
-
-    private int evaluateAggRewriteFilterSegThreshold() {
-        if (clusterService != null) {
-            return clusterService.getClusterSettings().get(AGGREGATION_REWRITE_FILTER_SEGMENT_THRESHOLD);  
-        }
-        return 0;
-    }  
-
-    @Override
-    public int cardinalityAggregationPruningThreshold() {  
-        return cardinalityAggregationPruningThreshold;
-    }
-
-    @Override
-    public long termsAggregationMaxPrecomputeCardinality() {
-        return termsAggregationMaxPrecomputeCardinality;  
-    }
-
-    @Override  
-    public CardinalityAggregationContext cardinalityAggregationContext() {
-        return cardinalityAggregationContext;
-    }  
-
-    @Override
-    public int bucketSelectionStrategyFactor() {  
-        return bucketSelectionStrategyFactor;
-    }
-
-    @Override
-    public boolean keywordIndexOrDocValuesEnabled() {
-        return keywordIndexOrDocValuesEnabled;  
-    }
-
-    private int evaluateCardinalityAggregationPruningThreshold() {  
-        if (clusterService != null) {
-            return clusterService.getClusterSettings().get(CARDINALITY_AGGREGATION_PRUNING_THRESHOLD);
-        }  
-        return 0;
-    }
-
-    private long evaluateTermsAggregationMaxPrecomputeCardinality() {
-        if (clusterService != null) {
-            return clusterService.getClusterSettings().get(SearchService.TERMS_AGGREGATION_MAX_PRECOMPUTE_CARDINALITY);  
-        }
-        return 30_000L;
-    }  
-
-    private CardinalityAggregationContext evaluateCardinalityAggregationContext() {
-        if (clusterService != null) {  
-            boolean hybridCollectorEnabled = clusterService.getClusterSettings()
-                .get(CardinalityAggregator.CARDINALITY_AGGREGATION_HYBRID_COLLECTOR_ENABLED);
-            ByteSizeValue memoryThreshold = clusterService.getClusterSettings()  
-                .get(CardinalityAggregator.CARDINALITY_AGGREGATION_HYBRID_COLLECTOR_MEMORY_THRESHOLD);
-            return CardinalityAggregationContext.from(hybridCollectorEnabled, memoryThreshold);
-        }  
-        return new CardinalityAggregationContext(false, Runtime.getRuntime().maxMemory() / 100);
-    }
-
-    private int evaluateBucketSelectionStrategyFactor() {
-        if (clusterService != null) {
-            return clusterService.getClusterSettings().get(BUCKET_SELECTION_STRATEGY_FACTOR_SETTING);  
-        }
-        return SearchService.DEFAULT_BUCKET_SELECTION_STRATEGY_FACTOR;
-    }  
-
-    public boolean evaluateKeywordIndexOrDocValuesEnabled() {
-        if (clusterService != null) {  
+            int numSlices = sliceBuilder.getMax();
             return clusterService.getClusterSettings().get(KEYWORD_INDEX_OR_DOC_VALUES_ENABLED);
+        BigArrays bigArrays,  
+    }  
+                requestShouldUseConcurrentSearch.set(false);  
         }
+    private FetchDocValuesContext docValuesContext;  
+        // SearchContexts use a BigArrays that can circuit break  
+import org.opensearch.index.query.ParsedQuery;
+        return searchAfter;  
+     */
+    private final SetOnce<Boolean> requestShouldUseConcurrentSearch = new SetOnce<>();  
+        }
+            "partition strategy decision: strategy={}, useIntraSegment={}, reason={}",  
+    /**
+                );
+    @Override  
+    public int docIdsToLoadSize() {
+    @Override  
+        return this.shardTarget;
+        this.cardinalityAggregationPruningThreshold = evaluateCardinalityAggregationPruningThreshold();
+            decider.evaluateForAggregations(aggregations().factories());
+        BigArrays bigArrays,
+    @Override
+    }
+        return readerContext.scrollContext();
+            filters.add(Queries.newNonNestedFilter());  
+ * specific language governing permissions and limitations
+                requestShouldUseConcurrentSearch.set(false);
+import org.apache.lucene.search.ConstantScoreQuery;
+        this.fetchResult = new FetchSearchResult(readerContext.id(), shardTarget);
+            // the outermost query non-scoring, so the fast path is preserved end-to-end. This matters for
+ */
+    @Override
+        this.postFilter = postFilter;  
+        if (rescore != null) {
+                requestShouldUseConcurrentSearch.set(evaluateAutoMode());
         return false;  
     }
-
-    public void setStreamChannelListener(StreamSearchChannelListener listener) {  
-        assert isStreamSearch() : "Stream search not enabled";
-        this.listener = listener;
-    }  
-
-    public StreamSearchChannelListener getStreamChannelListener() {
-        assert isStreamSearch() : "Stream search not enabled";  
-        return listener;
+            fetchPhase,
+import org.opensearch.common.Nullable;
+ */  
+    private int evaluateAggRewriteFilterSegThreshold() {
+    private Float minimumScore;
+            int maxWindow = indexService.getIndexSettings().getMaxRescoreWindow();  
+    public QueryShardContext getQueryShardContext() {
+            } else if (terminateAfter != DEFAULT_TERMINATE_AFTER) {
+        if (legacySetting != null) {  
+        this.version = version;
     }
-
-    public boolean isStreamSearch() {
-        return isStreamSearch;
-    }  
-
+import org.opensearch.search.builder.SearchSourceBuilder;  
+            minNodeVersion,  
+        }  
+    private ScriptFieldsContext scriptFields;
+    private boolean version = false; // by default, we don't return versions
+     */  
     /**
-     * Disables streaming for this search context.  
-     * Used when streaming cost analysis determines traditional processing is more efficient.
+        this.from = from;
+                    if (logger.isDebugEnabled()) {  
+                        + numSlices  
+    @Override  
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_AUTO;
+    @Override
+                        + IndexSettings.MAX_SLICES_PER_SCROLL.getKey()
+                if (logger.isDebugEnabled()) {  
+                && request().source().query().supportsIntraSegmentSearch()) {  
+    private int trackTotalHitsUpTo = SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO;  
+import java.util.List;
+    }  
+        if (this.rescore == null) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void evaluateRequestShouldUseIntraSegmentSearch() {
+            .getSettings()
+     *             <li><code>true</code> → enables concurrent segment search ("all")</li>  
+    @Override  
+    }
+    private final String concurrentSearchMode;
+    public String source() {  
+    private SearchHighlightContext highlight;
+        if (resultWindow > maxResultWindow) {  
+        ReaderContext readerContext,  
+    public SearchHighlightContext highlight() {
+            lowLevelCancellation,
+        return listener;
+        this.storedFields = storedFieldsContext;
+     */  
+    @Nullable  
+    public SearchContext from(int from) {
+        this.profilers = profilers;
+            .getSettings()
+    public FetchPhase fetchPhase() {
+import org.opensearch.search.deciders.ConcurrentSearchRequestDecider;  
+    }
+        }  
+            for (Query filter : filters) {  
+    public int getTargetMaxSliceCount() {  
+     * Determines the appropriate concurrent segment search mode for the current search request.
+    private final SetOnce<FlushMode> cachedFlushMode = new SetOnce<>();  
+     * @param concurrentSearchExecutor the executor used for concurrent segment search; if null, disables the feature
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_PARTITION_MIN_SEGMENT_SIZE;  
+    @Override
+    public void preProcess(boolean rewrite) {  
+            && sort != null
+        this.clusterService = clusterService;
+                    "The number of slices ["
+        return indexShard.isTimeSeriesDescSortOptimizationEnabled()
+    private int size = -1;  
+            } else {
+            // scoring. Adding the filters above nests that ConstantScoreQuery inside a scoring BooleanQuery,
+            timeout,  
+            if (aggregations() != null) {
+        );
+            false
+    }
+        }
+    public CardinalityAggregationContext cardinalityAggregationContext() {
+    public boolean hasStoredFieldsContext() {
+    private final int cardinalityAggregationPruningThreshold;
+        return this;
+    @Override
+            }
+import org.opensearch.search.internal.ContextIndexSearcher;
+        }  
+    private final DfsSearchResult dfsResult;  
+        SearchShardTarget shardTarget,
+        String partitionStrategy = getPartitionStrategy();  
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+    @Override
+            int numSlices = sliceBuilder.getMax();
+            }  
+    }
+    private StreamSearchChannelListener listener;
+        this.request = request;
+            }
+                indexService.getIndexSettings()  
+        }  
+    }  
+    @Override
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
+        return version;  
+    public Query query() {  
+    // terminate after count  
+        return this;  
+            concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_AUTO)
+                        + sliceLimit
+    private final SearchShardTarget shardTarget;  
+            );
+ * Licensed to Elasticsearch under one or more contributor  
+                            + "] is too large. "  
+            ConcurrentSearchVisitor concurrentSearchVisitor = new ConcurrentSearchVisitor(
+    @Override
+    }
+    public SearchContext trackTotalHitsUpTo(int trackTotalHitsUpTo) {
+        this.readerContext = readerContext;
+import org.opensearch.search.deciders.IntraSegmentSearchDecider;
+        if (rewrite) {  
+        this(
      */
-    @Override  
-    public FlushMode getFlushMode() {
-        return cachedFlushMode.get();
+    }
+import org.opensearch.search.internal.ShardSearchRequest;
     }  
-
-    @Override
-    public boolean setFlushModeIfAbsent(FlushMode flushMode) {  
-        return cachedFlushMode.trySet(flushMode);
-    }
-
-    @Override
-    public long getStreamingMaxEstimatedBucketCount() {
-        return clusterService.getClusterSettings().get(STREAMING_MAX_ESTIMATED_BUCKET_COUNT);  
-    }
-
+                clusterService.getClusterSettings().get(CONCURRENT_SEGMENT_SEARCH_PARTITION_MIN_SEGMENT_SIZE)
+    /**  
+    private long evaluateTermsAggregationMaxPrecomputeCardinality() {
+import org.opensearch.search.profile.Profilers;
+        return this.trackScores;
     @Override  
+                requestShouldUseConcurrentSearch.set(true);  
+        return keywordIndexOrDocValuesEnabled;  
+    }  
+    }
+    public SearchContext docIdsToLoad(int[] docIdsToLoad, int docsIdsToLoadFrom, int docsIdsToLoadSize) {
+    private final QueryShardContext queryShardContext;
+        this.searcher = new ContextIndexSearcher(
+    private FetchSourceContext fetchSourceContext;
+                }
+        }
+        }
+    public FetchDocValuesContext docValuesContext() {
+        this.relativeTimeSupplier = relativeTimeSupplier;
+    }
+    public boolean trackScores() {  
+    @Override  
+    public int trackTotalHitsUpTo() {
+                QueryBuilder queryBuilder = request().source().query();  
+        this.termsAggregationMaxPrecomputeCardinality = evaluateTermsAggregationMaxPrecomputeCardinality();
+        this.size = size;
+    @Override
+    @Override
+                            + maxWindow
+        for (ConcurrentSearchRequestDecider decider : concurrentSearchRequestDeciders) {  
+import org.opensearch.search.aggregations.metrics.CardinalityAggregator;
+    /**  
+            clusterService,  
+    }
+     * Disables streaming for this search context.  
+        }
+        SearchShardTarget shardTarget,
+        long size = size() == -1 ? 10 : size();
+            .getSettings()  
+                    "The number of slices ["
+            aliasFilter = queryBuilder == null ? null : queryBuilder.toQuery(queryShardContext);  
+    private static final Logger logger = LogManager.getLogger(DefaultSearchContext.class);
+import org.opensearch.index.compositeindex.CompositeIndexSettings;  
+    public List<RescoreContext> rescore() {  
+            && sort.isSortOnTimeSeriesField()  
+        }
+        this.docValuesContext = docValuesContext;
+                clusterService.getClusterSettings().get(CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY)
+    }  
+     */
+                if (rescoreContext.getWindowSize() > maxWindow) {
+        return docIdsToLoad;
+    }
+            if (logger.isDebugEnabled()) {
+            IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(),  
+    }
+    private Query aliasFilter;
+                        + "] but was ["
+    }  
+            logger.debug("partition strategy decision: StarTree detected, disabling intra-segment");
+            parsedQuery(new ParsedQuery(new BoostQuery(query(), queryBoost), parsedQuery()));  
+     * <p>
+        return readerContext.id();
+import static org.opensearch.search.SearchService.AGGREGATION_REWRITE_FILTER_SEGMENT_THRESHOLD;
+import org.opensearch.search.aggregations.InternalAggregation;
+        return indexService.getIndexSettings()
+        Executor executor,
+                && request().source() != null
+    private CardinalityAggregationContext evaluateCardinalityAggregationContext() {
+    /**
+    public List<String> groupStats() {
+        }
+            }  
+            request.shardId().id(),  
+import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
+     *  
+    public StoredFieldsContext storedFieldsContext() {
+    }
+        List<Query> filters = new ArrayList<>();
+import static org.opensearch.search.SearchService.KEYWORD_INDEX_OR_DOC_VALUES_ENABLED;  
+        return this.searcher;
+            );
+import org.opensearch.search.aggregations.BucketCollectorProcessor;
+    public Query buildFilteredQuery(Query query) {
+    @Override
+    public FetchSearchResult fetchResult() {  
+        return queryBoost;
+        this.timeout = timeout;  
+        return this;  
+    @Override  
+                    return false;  
+    public int docIdsToLoadFrom() {  
+            );  
+    @Override  
+    public void doClose() {
+        this.bigArrays = bigArrays.withCircuitBreaking();
+    public String getPartitionStrategy() {
+import org.opensearch.index.cache.bitset.BitsetFilterCache;
+            );  
+    public boolean hasFetchSourceContext() {
+     * Otherwise, fetch the configured slice count from index or cluster-level settings.
+            decider.getReason()  
+    @Override
+import static org.opensearch.search.streaming.FlushModeResolver.STREAMING_MAX_ESTIMATED_BUCKET_COUNT;
+import org.opensearch.search.internal.ReaderContext;  
+        return this;  
+                indexService.getIndexSettings()
+        return request.numberOfShards();  
+     * concurrent segment search should be enabled. The resolution logic is as follows:
+    }
+    }
+        return seqAndPrimaryTerm;
+    }  
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+import org.opensearch.search.collapse.CollapseContext;
+    public ParsedQuery parsedQuery() {
+    private final QuerySearchResult queryResult;
+        return suggest;  
+import org.opensearch.index.shard.IndexShard;
+        this.isStreamSearch = isStreamSearch;
+        return this.searchType;
+    }
+        }
+import static org.opensearch.search.SearchService.CARDINALITY_AGGREGATION_PRUNING_THRESHOLD;  
+        final Boolean legacySetting = indexSettings.getAsBoolean(
+     * @return number of slices to use for concurrent segment search; returns 1 if concurrent search is disabled.  
+     * Returns the minimum segment size required for balanced partitioning.  
+            }
+        Function<SearchSourceBuilder, InternalAggregation.ReduceContextBuilder> requestToAggReduceContextBuilder,
+            clusterSettings.get(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE)
+            ByteSizeValue memoryThreshold = clusterService.getClusterSettings()  
+import java.util.HashSet;
+                            "request query supports intra-segment search, using concurrent search with partition strategy: {}",  
+        this.lowLevelCancellation = lowLevelCancellation;
+    }
+    public ParsedQuery parsedPostFilter() {
+import org.opensearch.action.search.SearchShardTask;
+    public ShardSearchContextId id() {
+import org.opensearch.search.streaming.FlushMode;
+        }  
+        long from = from() == -1 ? 0 : from();
+    }  
+    @Override
+        return this;  
+    }
+        return mapperService().fieldType(name);  
+            .getSettings()
+                            + "] index level setting."  
+    @Override
+        return terminateAfter;
+    public TimeValue timeout() {  
+    public SearchContext storedFieldsContext(StoredFieldsContext storedFieldsContext) {  
+    private final int filterRewriteSegmentThreshold;  
+            clusterSettings.getOrNull(CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE)
+        if (request().source() != null && request().source().query() != null) {  
+    public int cardinalityAggregationPruningThreshold() {  
+                builder.add(filter, Occur.FILTER);
+    DefaultSearchContext(
+                        + IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey()  
+    private final FetchSearchResult fetchResult;
+    public SearchContext fetchSourceContext(FetchSourceContext fetchSourceContext) {
+    public Query aliasFilter() {
+                    + IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey()
+    @Override
+    @Override
+        // StarTree precomputes aggregations at index time - intra-segment adds no benefit
+    }  
+        return searchExtBuilders.get(name);  
+        } catch (IOException e) {
+        LongSupplier relativeTimeSupplier,
+        }
+final class DefaultSearchContext extends SearchContext {
+                return true;
+        this.timeout = timeout;  
+    @Override
+    @Override
+            }  
+                logger.debug("concurrent search decision from plugins [{}]", pluginDecision.toString());
+        this.trackScores = trackScores;
+     * Returns the partition strategy for this search context.
+    @Override
+    @Override
+ * license agreements. See the NOTICE file distributed with
+        this.bucketSelectionStrategyFactor = evaluateBucketSelectionStrategyFactor();
+        if (clusterService != null) {
+    @Override
+        FetchPhase fetchPhase,  
+        return this.groupStats;
+import org.opensearch.index.IndexService;  
+        }
+            if (decision != null) {
+                    "Result window is too large, from + size must be less than or equal to: ["  
+        return this.fetchSourceContext;
+    @Override  
+    private Profilers profilers;
+                        + "be less than ["
+    }
+        return fetchSourceContext != null && fetchSourceContext.fetchSource();  
+            }
+            if (numSlices > sliceLimit) {  
+    }
+    }  
+    }
+        return scriptFields != null;
+    @Override
+    public ScrollContext scrollContext() {  
+        this.searchType = request.searchType();
+            result,
+        }  
+    public int getPartitionMinSegmentSize() {  
+                        + "]. This limit can be set by changing the ["  
+        if (filters.isEmpty()) {
+                throw new QueryPhaseExecutionException(shardTarget, "Failed to rewrite main query", e);
+    @Override
+    @Override
+                StarTreeIndexSettings.STAR_TREE_SEARCH_ENABLED_SETTING.getKey(),  
+    }
+        searchExtBuilders.put(searchExtBuilder.getWriteableName(), searchExtBuilder);
+        return docsIdsToLoadFrom;
+import org.opensearch.search.fetch.FetchPhase;
+        this.maxAggRewriteFilters = evaluateFilterRewriteSetting();
+    public MapperService mapperService() {
+            return;  
+    @Override  
+            .getAsBoolean(
+        return indexService.getIndexSettings()  
+        this.dfsResult = new DfsSearchResult(readerContext.id(), shardTarget, request);
+            return clusterService.getClusterSettings().get(BUCKET_SELECTION_STRATEGY_FACTOR_SETTING);  
+            if (sort != null) {  
+    public SearchContext parsedPostFilter(ParsedQuery postFilter) {
+                concurrentSearchRequestDeciders,
+    public SearchContext minimumScore(float minimumScore) {
+    }
+        queryBoost = request.indexBoost();
+import org.apache.lucene.search.Query;
+    }
+import org.opensearch.action.search.SearchType;
+        }  
+            .get(
+        }  
+                        + "be less than ["
+    public int maxAggRewriteFilters() {  
+    @Override
+import org.apache.lucene.search.MatchNoDocsQuery;
+                        + "]. See the scroll api for a more efficient way to request large data sets. "
+import java.io.UncheckedIOException;
+                throw new IllegalArgumentException(
+import org.opensearch.search.fetch.StoredFieldsContext;
+    public boolean hasStoredFields() {  
+    @Override
+    }
+    public ShardSearchRequest request() {
+            .getAsInt(
+    private final Collection<ConcurrentSearchRequestDecider.Factory> concurrentSearchDeciderFactories;
+        );
+            requestShouldUseConcurrentSearch.set(false);
+import org.opensearch.common.util.BigArrays;  
+    @Override
+        return this;
     public double getStreamingMinCardinalityRatio() {
-        return clusterService.getClusterSettings().get(STREAMING_MIN_CARDINALITY_RATIO);
-    }  
-
+    public int from() {
+    private final IndexService indexService;
+            request().source().query().visit(visitor);
+        return filterRewriteSegmentThreshold;
+        return indexService.similarityService();
+    public void setProfilers(Profilers profilers) {
+        this.query = query.query();
+            validate,
+                IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_PARTITION_MIN_SEGMENT_SIZE.getKey(),
+                .get(CardinalityAggregator.CARDINALITY_AGGREGATION_HYBRID_COLLECTOR_ENABLED);
+                            + rescoreContext.getWindowSize()
+     * If concurrent segment search is disabled (either due to system index, throttled search,
+     */
+    public void timeout(TimeValue timeout) {
+import org.apache.lucene.search.BoostQuery;
+    private SuggestionSearchContext suggest;
+        try {
+        if (hasOnlySuggest()) {
+            request,
+     * A shortcut function to see whether there is a fetchSourceContext and it says the source is requested.
+        );  
+            }
+    @Override  
+    /**
+    private final ReaderContext readerContext;  
+import org.opensearch.search.fetch.FetchSearchResult;  
+    private final Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
     @Override
-    public long getStreamingMinEstimatedBucketCount() {  
+    }
+            // over the whole postings list). Wrapping the filtered result back in a ConstantScoreQuery keeps
+        assert isStreamSearch() : "Stream search not enabled";
+        return termsAggregationMaxPrecomputeCardinality;  
+        this.sort = sort;
+        this.cardinalityAggregationContext = evaluateCardinalityAggregationContext();  
+                    + "] index level setting."
+        Version minNodeVersion,  
+import org.opensearch.Version;  
+        ReaderContext readerContext,
+        );
+            }
+        int maxResultWindow = indexService.getIndexSettings().getMaxResultWindow();
+    @Override
+import org.apache.lucene.search.BooleanQuery;
+    public BitsetFilterCache bitsetFilterCache() {
+    @Override  
+            }
+    @Override
+import org.opensearch.search.query.ReduceableSearchResult;
+        this.terminateAfter = terminateAfter;
+    public boolean evaluateKeywordIndexOrDocValuesEnabled() {
+        return clusterService.getClusterSettings().get(STREAMING_MAX_ESTIMATED_BUCKET_COUNT);  
+    public SearchContext sort(SortAndFormats sort) {
+    private int docsIdsToLoadFrom;
+        this.minNodeVersion = minNodeVersion;
+    private int evaluateBucketSelectionStrategyFactor() {
+import org.opensearch.common.settings.ClusterSettings;  
+        return profilers;
+    @Override  
+            .getAsInt(  
+        if (aggregations() != null && StarTreeQueryHelper.getSupportedStarTree(getQueryShardContext()) != null) {  
+    }  
+    public SearchShardTask getTask() {
+            if (query instanceof ConstantScoreQuery) {
+    }
+    public void addRescore(RescoreContext rescore) {
+import org.opensearch.common.lease.Releasables;
+    }
+    }
+    }  
+            partitionStrategy,
+    public boolean storedFieldsRequested() {  
+import java.util.Set;
+    /**  
+        if (clusterService != null) {
+        return this.originalQuery;
+    public MappedFieldType fieldType(String name) {
+     * Evaluate if request should use intra-segment search based on partition strategy and query/aggregation analysis.  
+            readerContext,  
+                    throw new IllegalArgumentException(  
+        return lowLevelCancellation;
+        return cardinalityAggregationPruningThreshold;
+        this.explain = explain;
+        if (shouldUseConcurrentSearch() == false) {
+                return slicedQuery;
+        return fetchFieldsContext;
+        Releasables.close(engineSearcher, searcher);
+    }  
+    }
         return clusterService.getClusterSettings().get(STREAMING_MIN_ESTIMATED_BUCKET_COUNT);
     }
-
-    /**
-     * Returns the partition strategy for this search context.
-     */  
-    @Override
-    public String getPartitionStrategy() {
-        return indexService.getIndexSettings()  
-            .getSettings()
-            .get(
-                IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY.getKey(),  
-                clusterService.getClusterSettings().get(CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY)
-            );
-    }  
-
-    /**
-     * Returns the minimum segment size required for balanced partitioning.  
-     */
-    @Override
-    public int getPartitionMinSegmentSize() {  
-        return indexService.getIndexSettings()
-            .getSettings()
-            .getAsInt(  
-                IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_PARTITION_MIN_SEGMENT_SIZE.getKey(),
-                clusterService.getClusterSettings().get(CONCURRENT_SEGMENT_SEARCH_PARTITION_MIN_SEGMENT_SIZE)
-            );  
+    public boolean version() {
+    private boolean explain;  
+        return this.minimumScore;  
     }
-
-    /**  
-     * Returns intra-segment search status for the search context.
-     */
+        }
+        return includeNamedQueriesScore;  
+            final QueryBuilder queryBuilder = request.getAliasFilter().getQueryBuilder();
+    }
+import java.util.HashMap;  
+    }
+        this.fetchSourceContext = fetchSourceContext;  
+        Collection<ConcurrentSearchRequestDecider.Factory> concurrentSearchDeciderFactories,
+        return this;  
+        return aggregations;  
+    }
+        return fetchPhase;
+        assert isStreamSearch() : "Stream search not enabled";  
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
+            IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(),  
+     *         <ul>
+    }  
+            || clusterService == null
+ *  
+    }  
+            );
+    }
+    }
+import static org.opensearch.search.streaming.FlushModeResolver.STREAMING_MIN_ESTIMATED_BUCKET_COUNT;
+        this.queryResult = new QuerySearchResult(readerContext.id(), shardTarget, request);  
+        return this;
+            concurrentSearchRequestDecider.ifPresent(concurrentSearchRequestDeciders::add);
+        LongSupplier relativeTimeSupplier,
+            }
+            relativeTimeSupplier,
+            this  
+            );  
+    private StoredFieldsContext storedFields;  
+        this.fetchFieldsContext = fetchFieldsContext;
+        return docValuesContext;  
+    }
+                filters.add(slicedQuery);  
+        if (newConcurrentMode != null) return newConcurrentMode;  
+    public int numberOfShards() {
+    }
+    ) throws IOException {
+    }
+            boolean hybridCollectorEnabled = clusterService.getClusterSettings()
+    private final FetchPhase fetchPhase;  
+    @Override
+    public void addSearchExt(SearchExtBuilder searchExtBuilder) {
+            return clusterService.getClusterSettings().get(AGGREGATION_REWRITE_FILTER_SEGMENT_THRESHOLD);  
+     * in a single-threaded manner.
+        this.query = buildFilteredQuery(query);
+    public SortAndFormats sort() {
+    @Override
+    }  
+        return timeout;
+            && (aliasFilter == null || new NestedHelper(mapperService()).mightMatchNestedDocs(aliasFilter))) {
     @Override  
-    public boolean shouldUseIntraSegmentSearch() {
-        return Boolean.TRUE.equals(requestShouldUseIntraSegmentSearch.get());
-    }  
-
-    /**
-     * Evaluate if request should use intra-segment search based on partition strategy and query/aggregation analysis.  
-     */
-    public void evaluateRequestShouldUseIntraSegmentSearch() {
-        String partitionStrategy = getPartitionStrategy();  
-        if (CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY_SEGMENT.equals(partitionStrategy) || shouldUseConcurrentSearch() == false) {
-            requestShouldUseIntraSegmentSearch.set(false);
-            return;  
-        }
-        // StarTree precomputes aggregations at index time - intra-segment adds no benefit
-        if (aggregations() != null && StarTreeQueryHelper.getSupportedStarTree(getQueryShardContext()) != null) {  
-            logger.debug("partition strategy decision: StarTree detected, disabling intra-segment");
-            requestShouldUseIntraSegmentSearch.set(false);
-            return;  
-        }
-        IntraSegmentSearchDecider decider = new IntraSegmentSearchDecider();
-        if (request().source() != null && request().source().query() != null) {  
-            IntraSegmentSearchVisitor visitor = new IntraSegmentSearchVisitor(decider);
-            request().source().query().visit(visitor);
-        }  
-        if (aggregations() != null && aggregations().factories() != null) {
-            decider.evaluateForAggregations(aggregations().factories());
-        }  
+            if (request().source() != null && request().source().query() != null) {
+        return this;
+    public boolean getStarTreeIndexEnabled() {
+    @Override
+import org.opensearch.index.similarity.SimilarityService;  
+        return cachedFlushMode.get();
+    @Override  
         boolean result = decider.shouldUseIntraSegmentSearch();
-        logger.debug(
-            "partition strategy decision: strategy={}, useIntraSegment={}, reason={}",  
-            partitionStrategy,
-            result,
-            decider.getReason()  
-        );
-        requestShouldUseIntraSegmentSearch.set(result);
+        this.docsIdsToLoadFrom = docsIdsToLoadFrom;  
+    public boolean setFlushModeIfAbsent(FlushMode flushMode) {  
+    @Override
+     *  
+import org.opensearch.common.settings.Settings;
+                    return true;
+        final Set<ConcurrentSearchRequestDecider> concurrentSearchRequestDeciders = new HashSet<>();  
+        // it's ok to use the writeable name here given that we enforce it to be the same as the name of the element that gets
+ *
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+            } catch (IOException e) {  
+    public float queryBoost() {
+        if (clusterService != null) {
+                this.query = searcher.rewrite(query);
+                        + "] index level setting."
+        this.engineSearcher = readerContext.acquireSearcher("search");
+    public SearchContext fetchFieldsContext(FetchFieldsContext fetchFieldsContext) {  
+import org.opensearch.search.sort.SortAndFormats;
+        Collection<ConcurrentSearchRequestDecider.Factory> concurrentSearchDeciderFactories  
+    public Profilers getProfilers() {  
+    public boolean keywordIndexOrDocValuesEnabled() {
+    private final BigArrays bigArrays;
+    @Override
+    @Override
+            }
+        return indexSettings.get(
+                clusterService.getClusterSettings().get(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING)  
+                if (logger.isDebugEnabled()) {
+ * KIND, either express or implied.  See the License for the
+            validate,
+        boolean isStreamSearch
+    public boolean seqNoAndPrimaryTerm() {  
+    public Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers() {
+                    );
+                        "Rescore window ["
+            requestToAggReduceContextBuilder,  
+/*  
+    @Override  
+        return cachedFlushMode.trySet(flushMode);
+    @Override
+            request::nowInMillis,
+    public boolean sourceRequested() {
+    /**  
+            Query slicedQuery = sliceBuilder.toFilter(clusterService, request, queryShardContext, minNodeVersion);
+/**  
+    }
     }  
+    // filter for sliced scroll  
+    @Override
+    }
+    @Override
+        return rc;
+        );
 }
+    public SearchShardTarget shardTarget() {  
+    public CollapseContext collapse() {
+            return query;
+    /**
+    }  
+import org.opensearch.search.aggregations.SearchContextAggregations;  
+    }
+import org.apache.logging.log4j.LogManager;
+    }  
+        return (concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_AUTO)
+    }
+                IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY.getKey(),  
+    public void evaluateRequestShouldUseConcurrentSearch() {  
+    @Override
+     */
+    private final ShardSearchRequest request;
+        this.listener = listener;
+        assert requestShouldUseConcurrentSearch.get() != null : "requestShouldUseConcurrentSearch must be set";  
+    public FlushMode getFlushMode() {
+                        + resultWindow  
+     * Evaluate if request should use concurrent search based on request and concurrent search deciders
+        this.concurrentSearchDeciderFactories = concurrentSearchDeciderFactories;
+                "Batch size is too large, size must be less than or equal to: ["
+import org.opensearch.search.query.QuerySearchResult;
+        }  
+import org.opensearch.search.aggregations.metrics.CardinalityAggregationContext;
+    private String evaluateConcurrentSearchMode(Executor concurrentSearchExecutor) {
+import org.opensearch.index.query.AbstractQueryBuilder;  
+        return this;
+        // initialize the filtering alias based on the provided filters  
+    @Override  
+        if (sliceBuilder != null && readerContext != null && readerContext instanceof PitReaderContext) {
+    @Override
+import java.util.function.Function;
+                        );
+    public SearchContext includeNamedQueriesScore(boolean includeNamedQueriesScore) {
+        return bigArrays;  
+    /**
+    }  
+            return;  
+        this.shardTarget = shardTarget;
+                        + "]. This limit can be set by changing the ["
+        if (rescore == null) {
+    @Override
+        this.docIdsToLoad = docIdsToLoad;
+    private final ClusterService clusterService;  
+            executor,
+        return explain;  
+    private final LongSupplier relativeTimeSupplier;
+            // plugins don't have preference, decide based on whether request has aggregations or not.  
+     * The original query as sent by the user without the types and aliases  
+import java.util.Collection;
+    }
+    public SearchContext searchAfter(FieldDoc searchAfter) {  
+    }
+        if (clusterService != null) {  
+                            + "It must be less than ["
+        return from;  
+        final ConcurrentSearchDecision pluginDecision = ConcurrentSearchDecision.getCompositeDecision(decisions);
+        return this;
+    private final Version minNodeVersion;  
+                        + IndexSettings.MAX_SLICES_PER_PIT.getKey()
+        this.suggest = suggest;
+            return clusterService.getClusterSettings().get(SearchService.TERMS_AGGREGATION_MAX_PRECOMPUTE_CARDINALITY);  
+        if (aliasFilter != null) {  
+    @Override
+    @Override  
+    @Override
+    }
+    }  
+    }
+        ClusterService clusterService,  
+        this.minimumScore = minimumScore;  
+    }  
+import org.opensearch.search.startree.StarTreeQueryHelper;  
+import java.util.function.LongSupplier;
+                clusterService.getClusterSettings().get(CompositeIndexSettings.STAR_TREE_INDEX_ENABLED_SETTING)
+    }
+            throw new IllegalArgumentException(
+    @Override
+    public SearchExtBuilder getSearchExt(String name) {
+    public void highlight(SearchHighlightContext highlight) {  
+     *
+    private final float queryBoost;  
+ * ownership. Elasticsearch licenses this file to you under  
+    private final Engine.Searcher engineSearcher;
+    @Override
+import org.opensearch.search.fetch.subphase.FetchFieldsContext;  
+    public boolean isCancelled() {
+    public boolean explain() {
+    public SearchContext sliceBuilder(SliceBuilder sliceBuilder) {
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+    private final SetOnce<Boolean> requestShouldUseIntraSegmentSearch = new SetOnce<>();
+    }
+    public void setTask(SearchShardTask task) {  
+        return maxAggRewriteFilters;
+        }  
+    @Override
+            requestShouldUseIntraSegmentSearch.set(false);
+        return this;
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override  
+        return rescore;
+            && new NestedHelper(mapperService()).mightMatchNestedDocs(query)
+    public ReaderContext readerContext() {  
+    @Override  
+import org.opensearch.index.mapper.ObjectMapper;
+        );  
+     * The query to execute, in its rewritten form.  
+    }  
+    }
+    }  
+    @Override
+    }  
+    @Override
+    @Override
+    }  
+        return new CardinalityAggregationContext(false, Runtime.getRuntime().maxMemory() / 100);
+        boolean validate,
+        return mapperService().getObjectMapper(name);
+            engineSearcher.getQueryCachingPolicy(),
+        requestShouldUseIntraSegmentSearch.set(result);
+        return 0;
+    public BigArrays bigArrays() {
+    }
+    }  
+            return Collections.emptyList();
+        TimeValue timeout,
+    private boolean isStreamSearch;
+                throw new IllegalArgumentException(
+import org.apache.lucene.search.Collector;  
+    }
+        this.originalQuery = query;
+        this.groupStats = groupStats;
+    public StreamSearchChannelListener getStreamChannelListener() {
+import org.opensearch.search.dfs.DfsSearchResult;
+     */
+        } else if (aggregations() != null  
+            requestShouldUseIntraSegmentSearch.set(false);
+    public FetchSourceContext fetchSourceContext() {  
+ * this work for additional information regarding copyright
+        return highlight;
+import org.opensearch.search.internal.SearchContext;
+    }
+                    + "] but was ["
+    }  
+    public ObjectMapper getObjectMapper(String name) {
+        boolean validate,  
+        ClusterService clusterService,
+        return queryCollectorManagers;  
+    public DfsSearchResult dfsResult() {  
+            return CardinalityAggregationContext.from(hybridCollectorEnabled, memoryThreshold);
+    private ParsedQuery originalQuery;
+        return this;  
+            concurrentSearchDeciderFactories,
+    public boolean shouldUseConcurrentSearch() {
+     *
+    @Override
+        return indexService.cache().bitsetFilterCache();
+     * Returns intra-segment search status for the search context.
+        }  
+import java.util.Map;  
+    @Override
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY;
+    }
+     */
+        return cardinalityAggregationContext;
+        }
+                        + "] index level setting."  
+    private SearchContextAggregations aggregations;  
+    /**
+        return collapse;
+    public Float minimumScore() {
+            return clusterService.getClusterSettings().get(MAX_AGGREGATION_REWRITE_FILTERS);  
+        // Step 2: If new concurrent setting is not explicitly set
+            } else if (concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_AUTO)) {  
+            builder.add(query, Occur.MUST);
+     */
+    @Override
+        if (pluginDecision.getDecisionStatus().equals(ConcurrentSearchDecision.DecisionStatus.NO_OP)) {
+ */
+import org.opensearch.index.mapper.MapperService;
+                        + sliceLimit  
+        return relativeTimeSupplier.getAsLong();
+     * missing executor, or explicitly disabled settings), then we return a slice count of 1.  
+    /**
+    }
+        this.collapse = collapse;
+        return docsIdsToLoadSize;  
+    private SearchType searchType;  
+    public long termsAggregationMaxPrecomputeCardinality() {
+    }
+    private List<RescoreContext> rescore;  
+                throw new OpenSearchRejectedExecutionException(  
+    ) throws IOException {  
+import java.util.Optional;
+            }
+    private int from = -1;
+    }  
+import org.opensearch.common.SetOnce;  
+    }  
+            engineSearcher.getIndexReader(),
+        return queryShardContext;
+                            + "]. This prevents allocating massive heaps for storing the results "  
+    }
+    @Override  
+    @Override  
+    @Override  
+                        logger.debug(
+            ConcurrentSearchDecision decision = decider.getConcurrentSearchDecision();
+    }
+        }
+        return Boolean.TRUE.equals(requestShouldUseIntraSegmentSearch.get());
+    @Override  
+        return task.isCancelled();
+import org.opensearch.index.mapper.MappedFieldType;  
+package org.opensearch.search;
+    }  
+                    + resultWindow
+    private int docsIdsToLoadSize;
+                    + "]. Scroll batch sizes cost as much memory as result windows so they are controlled by the ["  
+                    logger.debug("request has supported aggregations, using concurrent search");  
+    @Override
+import static org.opensearch.search.SearchService.BUCKET_SELECTION_STRATEGY_FACTOR_SETTING;
+    @Override  
+    @Override
+     */  
+            engineSearcher.getSimilarity(),  
+import org.opensearch.common.lucene.search.Queries;
+    public boolean shouldUseIntraSegmentSearch() {
+import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;  
+            || concurrentSearchMode.equals(CONCURRENT_SEGMENT_SEARCH_MODE_ALL))  
+    DefaultSearchContext(
+        return this;
+    public ScriptFieldsContext scriptFields() {  
+        return this.indexShard;  
+    }  
+    }
+import org.opensearch.index.query.QueryBuilder;
+    @Override
+import org.opensearch.index.engine.Engine;
+import static org.opensearch.search.streaming.FlushModeResolver.STREAMING_MIN_CARDINALITY_RATIO;  
+    public SearchContext trackScores(boolean trackScores) {  
+        this.filterRewriteSegmentThreshold = evaluateAggRewriteFilterSegThreshold();  
+        return bucketCollectorProcessor;  
+    public SearchContextAggregations aggregations() {
+        IntraSegmentSearchDecider decider = new IntraSegmentSearchDecider();
+                decisions.add(decision);  
+        this.includeNamedQueriesScore = includeNamedQueriesScore;  
+        if (concurrentSearchRequestDeciders.size() > 0) {  
+        this.fetchPhase = fetchPhase;  
+import org.apache.lucene.search.FieldDoc;  
+        }
+        return this.query;
+ * SPDX-License-Identifier: Apache-2.0
+        this.rescore.add(rescore);  
+    private int[] docIdsToLoad;  
+                .get(CardinalityAggregator.CARDINALITY_AGGREGATION_HYBRID_COLLECTOR_MEMORY_THRESHOLD);
+    public ContextIndexSearcher searcher() {  
+import static org.opensearch.search.SearchService.MAX_AGGREGATION_REWRITE_FILTERS;
+     * Should be called before executing the main query and after all other parameters have been set.  
+        return this.request;  
+            BooleanQuery filtered = builder.build();  
+            );
+        queryShardContext = indexService.newQueryShardContext(
+    public long getRelativeTimeInMillis() {  
+    @Override
+        return aliasFilter;
+     * Returns concurrent segment search status for the search context. This should only be used after request parsing, during which requestShouldUseConcurrentSearch will be set.
+    @Override
+import org.apache.lucene.search.CollectorManager;
+    public void version(boolean version) {
+            parsedQuery(ParsedQuery.parsedMatchAllQuery());  
+    }
+        final String newConcurrentMode = indexSettings.get(  
+    public SearchContext parsedQuery(ParsedQuery query) {  
+ *
+    }  
+    @Override
+        return this;
+    @Override
+    }
+            && sort.sort.getSort()[0].getReverse() == false;
+            // which defeats Lucene's COMPLETE_NO_SCORES fast path (the MUST clause's scorer is still set up  
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_MODE_ALL;  
+    public int terminateAfter() {
+        if (sort != null && sort.isSortOnTimeSeriesField()) {
+ *
+        return readerContext;
+import java.util.Collections;
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY_SEGMENT;
+        return storedFields != null;  
+            // combined query would otherwise be scored despite the caller having requested constant scoring.
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.index.search.NestedHelper;
+    public void suggest(SuggestionSearchContext suggest) {
+import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
+                    logger.debug("concurrent search decision from plugin decider [{}]", decision.toString());
+    public void terminateAfter(int terminateAfter) {  
+    }  
+        return task;  
+ * GitHub history for details.
+    private final CardinalityAggregationContext cardinalityAggregationContext;  
+        return SearchService.DEFAULT_BUCKET_SELECTION_STRATEGY_FACTOR;
+     */  
+    private int evaluateFilterRewriteSetting() {
+ * Modifications Copyright OpenSearch Contributors. See
+        return fetchSourceContext != null;
+            throw new UncheckedIOException(e);
+    public void setBucketCollectorProcessor(BucketCollectorProcessor bucketCollectorProcessor) {  
+     */
+            bigArrays,
+        boolean lowLevelCancellation,
+    public InternalAggregation.ReduceContext partialOnShard() {
+     * Returns the target maximum slice count to use for concurrent segment search.  
+            } else {
+     * This effectively disables concurrent slicing and ensures that the search is performed
+    public boolean shouldUseTimeSeriesDescSortOptimization() {  
+                        + "This limit can be set by changing the ["
+        this.searchAfter = searchAfter;
+            int sliceLimit = indexService.getIndexSettings().getMaxSlicesPerScroll();
+    @Override  
+        ShardSearchRequest request,  
+    @Override  
+        } else {  
+    public void explain(boolean explain) {
+     * </ol>
+    private CollapseContext collapse;
+     * Used when streaming cost analysis determines traditional processing is more efficient.
+    private int evaluateCardinalityAggregationPruningThreshold() {  
+        // then check if Legacy boolean setting is explicitly set → use it
+        return 30_000L;
+            return;
+    private final IndexShard indexShard;
+        }  
+        FetchPhase fetchPhase,
+    @Override  
+     *     <li>If the request targets a system index or uses search throttling, concurrent segment search is disabled.</li>  
+ * @opensearch.internal  
+    }
+     * things like the type filter or alias filters.
+/*
+    public SimilarityService similarityService() {  
+    @Override
+    @Override  
+        // Skip concurrent search for system indices, throttled requests, or if dependencies are missing
+    }
+        if (scriptFields == null) {
+        // Step 3: Neither explicitly set → use default concurrent mode
+    }
+    private final Map<String, SearchExtBuilder> searchExtBuilders = new HashMap<>();  
+    public void groupStats(List<String> groupStats) {  
+import org.opensearch.search.slice.SliceBuilder;
+    public void seqNoAndPrimaryTerm(boolean seqNoAndPrimaryTerm) {
+    }
+    }
+                queryBuilder.visit(concurrentSearchVisitor);
+    }  
+        this.indexShard = readerContext.indexShard();  
+    @Override  
+            return 1; // Disable slicing: run search in a single thread when concurrent search is off
+    private final long termsAggregationMaxPrecomputeCardinality;
+    }
+import java.util.concurrent.Executor;  
+        return storedFields;
+                    }  
+                    }
+                );  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private SortAndFormats sort;
+        this.bucketCollectorProcessor = bucketCollectorProcessor;
+                            getPartitionStrategy()
+        this.aggregations = aggregations;
+    @Override
+    }  
+import org.opensearch.index.IndexSettings;
+            this.rescore = new ArrayList<>();
+import org.opensearch.index.query.QueryShardContext;  
+    private final boolean keywordIndexOrDocValuesEnabled;
+     *             <li><code>false</code> → disables it ("none")</li>
+    }
+            this.searcher,
+    @Override
+    @Override
+/*  
+            if (slicedQuery instanceof MatchNoDocsQuery) {  
+    @Override  
+     * The query to actually execute.
+    public QuerySearchResult queryResult() {
+    }
+ * not use this file except in compliance with the License.
+                        + "] is too large. It must "  
+    public int[] docIdsToLoad() {
+ * You may obtain a copy of the License at  
+                throw new IllegalArgumentException("Cannot use [sort] option in conjunction with [rescore].");
+     *     <li>Otherwise, the modern string-based setting is used. Allowed values are: "none", "auto", or "all".</li>
+import org.opensearch.action.support.StreamSearchChannelListener;  
+    }
+    }  
+        }  
+    }
+    @Override
+            if (scrollContext() == null) {
+import org.opensearch.search.deciders.ConcurrentSearchVisitor;
+     */  
+        return this.postFilter;  
+    /**
+    }
+    @Override
+    }  
+        final List<ConcurrentSearchDecision> decisions = new ArrayList<>();
+                    + maxResultWindow  
+            IntraSegmentSearchVisitor visitor = new IntraSegmentSearchVisitor(decider);
+        ClusterSettings clusterSettings = clusterService.getClusterSettings();
+     * applied. Putting things in here leaks them into highlighting so don't add
+        boolean lowLevelCancellation,
+        return this;
+    private Query query;  
+        this.seqAndPrimaryTerm = seqNoAndPrimaryTerm;  
+    public boolean lowLevelCancellation() {  
+    @Override  
+    public SearchContext docValuesContext(FetchDocValuesContext docValuesContext) {
+    private List<String> groupStats;
+        return trackTotalHitsUpTo;
+    private SearchShardTask task;
+import java.io.IOException;
+        return this.scriptFields;
+    }  
+    @Override
+        if (queryBoost() != AbstractQueryBuilder.DEFAULT_BOOST) {
+import org.opensearch.search.deciders.IntraSegmentSearchVisitor;  
+     * @return the resolved concurrent segment search mode: "none", "auto", or "all"
+        // parsed by the corresponding parser. There is one single name and one single way to retrieve the parsed object from the context.  
+import java.util.ArrayList;  
+            engineSearcher.getQueryCache(),
+import org.opensearch.search.suggest.SuggestionSearchContext;
+ * under the License.  
+    }
+                        + maxResultWindow
+                            + IndexSettings.MAX_RESCORE_WINDOW_SETTING.getKey()
+    }  
+        return indexService.getIndexSettings()
+            // access-control filters (e.g. document-level security composed with a filtered alias), where the  
+            shardTarget.getClusterAlias(),  
+    public SearchContext aggregations(SearchContextAggregations aggregations) {
+    public long getStreamingMaxEstimatedBucketCount() {
+    }  
+                        + "] is too large. It must "
+        rc.setSliceLevel(shouldUseConcurrentSearch());
+            scriptFields = new ScriptFieldsContext();
+    public BucketCollectorProcessor bucketCollectorProcessor() {
+        }
+            return pluginDecision.getDecisionStatus() == ConcurrentSearchDecision.DecisionStatus.YES;
+                    if (logger.isDebugEnabled()) {
+    @Override  
+    public long getStreamingMinEstimatedBucketCount() {  
+        this.indexService = readerContext.indexService();
+        return 0;
+    @Override
+    public void setStreamChannelListener(StreamSearchChannelListener listener) {  
+                );
+        ShardSearchRequest request,
+        Function<SearchSourceBuilder, InternalAggregation.ReduceContextBuilder> requestToAggReduceContextBuilder,  
+            } else if (CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY_SEGMENT.equals(getPartitionStrategy()) == false  
+                } else {
+            if (numSlices > sliceLimit) {
+     * <ol>
+            evaluateKeywordIndexOrDocValuesEnabled()
+    private final int maxAggRewriteFilters;
+        if (indexShard.isSystem()  
+    private BucketCollectorProcessor bucketCollectorProcessor = NO_OP_BUCKET_COLLECTOR_PROCESSOR;
+    public boolean hasScriptFields() {
+    private final Function<SearchSourceBuilder, InternalAggregation.ReduceContextBuilder> requestToAggReduceContextBuilder;
+ * this file be licensed under the Apache-2.0 license or a
+        if (aggregations() != null && aggregations().factories() != null) {
+            && Boolean.TRUE.equals(requestShouldUseConcurrentSearch.get());
+        return indexService.getIndexSettings()  
+        return "search";
+    @Override
+    }  
+                        + numSlices
+    @Override  
+    }
+    }  
+    private ParsedQuery postFilter;
+        if (sliceBuilder != null) {
+     *     </li>  
+import org.opensearch.core.common.unit.ByteSizeValue;
+    }
+        return size;
+        return fetchResult;
+ * compatible open source license.
+        return this.sort;
+    @Override  
+        return bucketSelectionStrategyFactor;
+        // evaluate based on concurrent search query visitor
+import org.opensearch.search.query.QueryPhaseExecutionException;  
+        this.keywordIndexOrDocValuesEnabled = evaluateKeywordIndexOrDocValuesEnabled();  
+     *     <li>If a legacy boolean setting is present (cluster or index level), it is honored:
+ * software distributed under the License is distributed on an
+    }
+            && aggregations().factories() != null
+    }
+        }
+    private boolean trackScores = false; // when sorting, track scores as well...  
+    }  
+        return dfsResult;
+        InternalAggregation.ReduceContext rc = requestToAggReduceContextBuilder.apply(request.source()).forPartialReduction();  
+    private boolean includeNamedQueriesScore = false;
+            try {
+        if (clusterService != null) {  
+    @Override
+            final Optional<ConcurrentSearchRequestDecider> concurrentSearchRequestDecider = deciderFactory.create(
+        return storedFields != null && storedFields.fieldNames() != null;
+            // If the main query is already a ConstantScoreQuery, the caller has explicitly opted out of
+        } else {  
+    }  
+        // create the ConcurrentSearchRequestDeciders using registered factories
+    @Override
+            BooleanQuery.Builder builder = new BooleanQuery.Builder();
+import org.opensearch.search.internal.ScrollContext;
+    @Override
+        this.docsIdsToLoadSize = docsIdsToLoadSize;
+        return storedFields == null || storedFields.fetchFields();
+    private boolean evaluateAutoMode() {
+    public boolean includeNamedQueriesScore() {
+        long resultWindow = from + size;  
+    }  
+        }  
+        return queryResult;  
+        if (sliceBuilder != null && scrollContext() != null) {  
+            IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MODE.getKey(),
+    }
+    @Override  
+        this.highlight = highlight;
+    private final ContextIndexSearcher searcher;
+            shardTarget,
+            return CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
+        this.sliceBuilder = sliceBuilder;  
+    public int bucketSelectionStrategyFactor() {  
+            return filtered;
+        Version minNodeVersion,
+    private final boolean lowLevelCancellation;
+ */  
+    @Override
+    private FetchFieldsContext fetchFieldsContext;
+    private TimeValue timeout;
+        TimeValue timeout,  
+import org.apache.lucene.search.BooleanClause.Occur;  
+        );  
+        this.requestToAggReduceContextBuilder = requestToAggReduceContextBuilder;  
+     * This method evaluates both index-level and cluster-level settings to decide whether  
+        for (ConcurrentSearchRequestDecider.Factory deciderFactory : concurrentSearchDeciderFactories) {  
+            && !aggregations().factories().allFactoriesSupportConcurrentSearch()) {
+            filters.add(aliasFilter);
+import org.opensearch.cluster.service.ClusterService;
+    }
+        }
+import org.opensearch.search.deciders.ConcurrentSearchDecision;
+        this.concurrentSearchMode = evaluateConcurrentSearchMode(executor);  
+    @Override
+    @Override
+                return new ConstantScoreQuery(filtered);  
+        return clusterService.getClusterSettings().get(STREAMING_MIN_CARDINALITY_RATIO);
+                IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT.getKey(),
+                        + "] index level setting."
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_MODE;
+import org.apache.logging.log4j.Logger;
+            return Boolean.TRUE.equals(legacySetting) ? CONCURRENT_SEGMENT_SEARCH_MODE_ALL : CONCURRENT_SEGMENT_SEARCH_MODE_NONE;
+        return 0;
+        logger.debug(
+            return clusterService.getClusterSettings().get(CARDINALITY_AGGREGATION_PRUNING_THRESHOLD);
+    public SearchContext size(int size) {  
+    @Override
+    }  
+        }
+        return indexService.mapperService();
+        return this;  
+    public FetchFieldsContext fetchFieldsContext() {
+    public SearchType searchType() {
+    public IndexShard indexShard() {
+            int sliceLimit = indexService.getIndexSettings().getMaxSlicesPerPit();  
+    @Override  
+                }
+    private int terminateAfter = DEFAULT_TERMINATE_AFTER;
+    @Override  
+     *         </ul>
+    private SliceBuilder sliceBuilder;
+            lowLevelCancellation,  
+        return this;
+    public SuggestionSearchContext suggest() {
+                && request().source().query() != null
+    }
+    @Override
+    public SearchContext collapse(CollapseContext collapse) {
+            clusterSettings.getOrNull(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING)
+    @Override
+    public boolean isStreamSearch() {
+    public int filterRewriteSegmentThreshold() {  
+    }
+        if (mapperService().hasNested()  
+    private FieldDoc searchAfter;
+            || indexShard.indexSettings().isSearchThrottled()
+        assert concurrentSearchMode != null : "concurrentSearchMode must be set";
+    }  
+        if (CONCURRENT_SEGMENT_SEARCH_PARTITION_STRATEGY_SEGMENT.equals(partitionStrategy) || shouldUseConcurrentSearch() == false) {
+    private final int bucketSelectionStrategyFactor;
+        if (clusterService != null) {
+import org.opensearch.search.internal.ShardSearchContextId;  
+        this.task = task;
+    @Override
+    }

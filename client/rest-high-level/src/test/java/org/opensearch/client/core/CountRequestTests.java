@@ -1,167 +1,146 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        randomFrom(mutators).run();
+            result.query(countRequest.query());
+    private CountRequest createCountRequest() {
+        assertNotNull(countRequest.types());  
+        e = expectThrows(NullPointerException.class, () -> countRequest.source(null));  
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.core;
-
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.client.AbstractRequestTestCase;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.ArrayUtils;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.rest.action.RestActions;
-import org.opensearch.search.SearchModule;
-import org.opensearch.search.builder.SearchSourceBuilder;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-
-import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
-import static org.hamcrest.Matchers.equalTo;
-
-// similar to SearchRequestTests as CountRequest inline several members (and functionality) from SearchRequest
-// In RestCountAction the request body is parsed as QueryBuilder (top level query field),
-// so that is why this is chosen as server side instance.  
-public class CountRequestTests extends AbstractRequestTestCase<CountRequest, QueryBuilder> {
-
+        mutators.add(() -> mutation.routing(randomValueOtherThan(countRequest.routing(), () -> randomAlphaOfLengthBetween(3, 10))));
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
     @Override  
-    protected CountRequest createClientTestInstance() {
-        CountRequest countRequest = new CountRequest();
-        // query is the only property that is serialized as xcontent:  
+import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
+        );
+ * Unless required by applicable law or agreed to in writing,
+        result.preference(countRequest.preference());
+        result.types(countRequest.types());  
+ * ownership. Elasticsearch licenses this file to you under  
+        List<Runnable> mutators = new ArrayList<>();
+ * this work for additional information regarding copyright
+ * under the License.  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        assertThat(serverInstance, equalTo(clientTestInstance.query()));  
         if (randomBoolean()) {
+        result.terminateAfter(countRequest.terminateAfter());  
+// so that is why this is chosen as server side instance.  
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals("index must not be null", e.getMessage());
+                    countRequest.indicesOptions(),
+ */  
+        e = expectThrows(NullPointerException.class, () -> countRequest.indices((String) null));
+        result.minScore(countRequest.minScore());
+/*
+    private static CountRequest copyRequest(CountRequest countRequest) {
+    protected QueryBuilder doParseToServerInstance(XContentParser parser) throws IOException {
+    protected void assertInstances(QueryBuilder serverInstance, CountRequest clientTestInstance) {
+    }  
+        return result;
+/*  
+import org.opensearch.index.query.MatchQueryBuilder;
+import java.io.IOException;
+                randomValueOtherThan(countRequest.query(), () -> new MatchQueryBuilder(randomAlphaOfLength(4), randomAlphaOfLength(4)))
+        return RestActions.getQueryContent(parser);  
+        mutators.add(() -> mutation.minScore(randomValueOtherThan(countRequest.minScore(), () -> (float) randomIntBetween(0, 10))));
+        return mutation;
+        );  
+        result.indices(countRequest.indices());
+import org.opensearch.index.query.MatchAllQueryBuilder;
+        e = expectThrows(NullPointerException.class, () -> countRequest.indicesOptions(null));
+        }
+        mutators.add(() -> mutation.preference(randomValueOtherThan(countRequest.preference(), () -> randomAlphaOfLengthBetween(3, 10))));
+        assertEquals("indicesOptions must not be null", e.getMessage());
+        return countRequest;
+    public void testEqualsAndHashcode() {
+        result.routing(countRequest.routing());
+    }
+ * KIND, either express or implied.  See the License for the
+        }
+        mutators.add(
+// In RestCountAction the request body is parsed as QueryBuilder (top level query field),
+        CountRequest countRequest = new CountRequest();  
+ */  
+import java.util.List;
+            () -> mutation.query(  
+    @Override  
+    }  
             countRequest.query(new MatchAllQueryBuilder());
         }  
-        return countRequest;
-    }
-
-    @Override
-    protected QueryBuilder doParseToServerInstance(XContentParser parser) throws IOException {
-        return RestActions.getQueryContent(parser);  
-    }
-
-    @Override  
-    protected void assertInstances(QueryBuilder serverInstance, CountRequest clientTestInstance) {
-        // query is the only property that is serialized as xcontent:
-        assertThat(serverInstance, equalTo(clientTestInstance.query()));  
-    }
-
-    @Override  
-    protected NamedXContentRegistry xContentRegistry() {
-        return new NamedXContentRegistry(new SearchModule(Settings.EMPTY, Collections.emptyList()).getNamedXContents());
+        mutators.add(() -> mutation.terminateAfter(randomValueOtherThan(countRequest.terminateAfter(), () -> randomIntBetween(0, 10))));  
+package org.opensearch.client.core;
+            )
+import org.opensearch.core.xcontent.XContentParser;  
+ * The OpenSearch Contributors require contributions made to  
     }  
-
-    public void testIllegalArguments() {
-        CountRequest countRequest = new CountRequest();  
-        assertNotNull(countRequest.indices());
-        assertNotNull(countRequest.indicesOptions());
-        assertNotNull(countRequest.types());  
-
-        NullPointerException e = expectThrows(NullPointerException.class, () -> countRequest.indices((String[]) null));
-        assertEquals("indices must not be null", e.getMessage());  
-        e = expectThrows(NullPointerException.class, () -> countRequest.indices((String) null));
-        assertEquals("index must not be null", e.getMessage());
-
-        e = expectThrows(NullPointerException.class, () -> countRequest.indicesOptions(null));
-        assertEquals("indicesOptions must not be null", e.getMessage());
-
-        e = expectThrows(NullPointerException.class, () -> countRequest.types((String[]) null));
+    }  
         assertEquals("types must not be null", e.getMessage());
+    protected NamedXContentRegistry xContentRegistry() {
+                    () -> IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean())
+        if (countRequest.query() != null) {  
+        CountRequest countRequest = new CountRequest();
+import static org.hamcrest.Matchers.equalTo;
+ *
+        return new NamedXContentRegistry(new SearchModule(Settings.EMPTY, Collections.emptyList()).getNamedXContents());
+        // query is the only property that is serialized as xcontent:
+        e = expectThrows(NullPointerException.class, () -> countRequest.query(null));  
+        CountRequest mutation = copyRequest(countRequest);
+        assertNotNull(countRequest.indicesOptions());
+ * Modifications Copyright OpenSearch Contributors. See
+        mutators.add(() -> mutation.indices(ArrayUtils.concat(countRequest.indices(), new String[] { randomAlphaOfLength(10) })));  
+    }
+ *
+import org.opensearch.common.util.ArrayUtils;
+public class CountRequestTests extends AbstractRequestTestCase<CountRequest, QueryBuilder> {
+    }
+import org.opensearch.action.support.IndicesOptions;
+    @Override
+        mutators.add(() -> mutation.types(ArrayUtils.concat(countRequest.types(), new String[] { randomAlphaOfLength(10) })));  
+        } else {  
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        // query is the only property that is serialized as xcontent:  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * not use this file except in compliance with the License.
+import org.opensearch.common.settings.Settings;  
+        mutators.add(
+            countRequest.source(new SearchSourceBuilder().query(new MatchQueryBuilder("num", 10)));
+import org.opensearch.search.builder.SearchSourceBuilder;  
+    @Override  
+        e = expectThrows(NullPointerException.class, () -> countRequest.types((String[]) null));
+        assertEquals("source must not be null", e.getMessage());
+import org.opensearch.index.query.QueryBuilder;  
+                )  
+}
+        return countRequest;  
+        CountRequest countRequest = new CountRequest("index");  
+            () -> mutation.indicesOptions(
+        NullPointerException e = expectThrows(NullPointerException.class, () -> countRequest.indices((String[]) null));
+        assertEquals("query must not be null", e.getMessage());
+    private CountRequest mutate(CountRequest countRequest) {  
+ * compatible open source license.
+    }
+import java.util.Collections;
+ * GitHub history for details.
+        checkEqualsAndHashCode(createCountRequest(), CountRequestTests::copyRequest, this::mutate);
+import java.util.ArrayList;  
+ * specific language governing permissions and limitations
+        assertEquals("indices must not be null", e.getMessage());  
+        result.indicesOptions(countRequest.indicesOptions());
+            countRequest.query(new MatchQueryBuilder("num", 10));
+    }
+import org.opensearch.search.SearchModule;
+// similar to SearchRequestTests as CountRequest inline several members (and functionality) from SearchRequest
+        if (randomBoolean()) {
+                randomValueOtherThan(  
+    public void testIllegalArguments() {
+    protected CountRequest createClientTestInstance() {
         e = expectThrows(NullPointerException.class, () -> countRequest.types((String) null));  
         assertEquals("type must not be null", e.getMessage());
-
-        e = expectThrows(NullPointerException.class, () -> countRequest.source(null));  
-        assertEquals("source must not be null", e.getMessage());
-
-        e = expectThrows(NullPointerException.class, () -> countRequest.query(null));  
-        assertEquals("query must not be null", e.getMessage());
-    }
-
-    public void testEqualsAndHashcode() {
-        checkEqualsAndHashCode(createCountRequest(), CountRequestTests::copyRequest, this::mutate);
-    }  
-
-    private CountRequest createCountRequest() {
-        CountRequest countRequest = new CountRequest("index");  
-        if (randomBoolean()) {
-            countRequest.source(new SearchSourceBuilder().query(new MatchQueryBuilder("num", 10)));
-        } else {  
-            countRequest.query(new MatchQueryBuilder("num", 10));
-        }
-        return countRequest;  
-    }
-
-    private CountRequest mutate(CountRequest countRequest) {  
-        CountRequest mutation = copyRequest(countRequest);
-        List<Runnable> mutators = new ArrayList<>();
-        mutators.add(() -> mutation.indices(ArrayUtils.concat(countRequest.indices(), new String[] { randomAlphaOfLength(10) })));  
-        mutators.add(
-            () -> mutation.indicesOptions(
-                randomValueOtherThan(  
-                    countRequest.indicesOptions(),
-                    () -> IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean())
-                )  
-            )
-        );
-        mutators.add(() -> mutation.types(ArrayUtils.concat(countRequest.types(), new String[] { randomAlphaOfLength(10) })));  
-        mutators.add(() -> mutation.preference(randomValueOtherThan(countRequest.preference(), () -> randomAlphaOfLengthBetween(3, 10))));
-        mutators.add(() -> mutation.routing(randomValueOtherThan(countRequest.routing(), () -> randomAlphaOfLengthBetween(3, 10))));
-        mutators.add(() -> mutation.terminateAfter(randomValueOtherThan(countRequest.terminateAfter(), () -> randomIntBetween(0, 10))));  
-        mutators.add(() -> mutation.minScore(randomValueOtherThan(countRequest.minScore(), () -> (float) randomIntBetween(0, 10))));
-        mutators.add(
-            () -> mutation.query(  
-                randomValueOtherThan(countRequest.query(), () -> new MatchQueryBuilder(randomAlphaOfLength(4), randomAlphaOfLength(4)))
-            )
-        );  
-        randomFrom(mutators).run();
-        return mutation;
-    }  
-
-    private static CountRequest copyRequest(CountRequest countRequest) {
+ * software distributed under the License is distributed on an
+ *  
+ * license agreements. See the NOTICE file distributed with
         CountRequest result = new CountRequest();  
-        result.indices(countRequest.indices());
-        result.indicesOptions(countRequest.indicesOptions());
-        result.types(countRequest.types());  
-        result.routing(countRequest.routing());
-        result.preference(countRequest.preference());
-        if (countRequest.query() != null) {  
-            result.query(countRequest.query());
-        }
-        result.terminateAfter(countRequest.terminateAfter());  
-        result.minScore(countRequest.minScore());
-        return result;
-    }  
-}
+import org.opensearch.client.AbstractRequestTestCase;
+            )
+ */
+import org.opensearch.rest.action.RestActions;
+        assertNotNull(countRequest.indices());

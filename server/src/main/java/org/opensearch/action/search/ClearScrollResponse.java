@@ -1,129 +1,111 @@
+    public void writeTo(StreamOutput out) throws IOException {
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.xcontent.StatusToXContentObject;
-import org.opensearch.core.ParseField;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-
-import static org.opensearch.core.rest.RestStatus.NOT_FOUND;  
-import static org.opensearch.core.rest.RestStatus.OK;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-
-/**
- * Transport response for clearing a search scroll
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class ClearScrollResponse extends ActionResponse implements StatusToXContentObject {
-
-    private static final ParseField SUCCEEDED = new ParseField("succeeded");  
-    private static final ParseField NUMFREED = new ParseField("num_freed");
-
-    private static final ConstructingObjectParser<ClearScrollResponse, Void> PARSER = new ConstructingObjectParser<>(  
-        "clear_scroll",
-        true,
-        a -> new ClearScrollResponse((boolean) a[0], (int) a[1])  
-    );
-    static {
-        PARSER.declareField(constructorArg(), (parser, context) -> parser.booleanValue(), SUCCEEDED, ObjectParser.ValueType.BOOLEAN);  
-        PARSER.declareField(constructorArg(), (parser, context) -> parser.intValue(), NUMFREED, ObjectParser.ValueType.INT);
-    }
-
-    private final boolean succeeded;
     private final int numFreed;
-
-    public ClearScrollResponse(boolean succeeded, int numFreed) {
-        this.succeeded = succeeded;
-        this.numFreed = numFreed;  
-    }
-
-    public ClearScrollResponse(StreamInput in) throws IOException {  
-        super(in);
         succeeded = in.readBoolean();
-        numFreed = in.readVInt();  
-    }
-
-    /**  
-     * @return Whether the attempt to clear a scroll was successful.
+import org.opensearch.core.action.ActionResponse;
+import org.opensearch.common.annotation.PublicApi;
+import static org.opensearch.core.rest.RestStatus.OK;
+ * the Apache License, Version 2.0 (the "License"); you may
+    private static final ConstructingObjectParser<ClearScrollResponse, Void> PARSER = new ConstructingObjectParser<>(  
+ * @opensearch.api
+        this.numFreed = numFreed;  
      */
-    public boolean isSucceeded() {  
-        return succeeded;
-    }
-
-    /**
+ *     http://www.apache.org/licenses/LICENSE-2.0
      * @return The number of search contexts that were freed. If this is <code>0</code> the assumption can be made,
-     * that the scroll id specified in the request did not exist. (never existed, was expired, or completely consumed)  
-     */
-    public int getNumFreed() {
-        return numFreed;  
-    }
-
     @Override  
-    public RestStatus status() {
-        return numFreed == 0 ? NOT_FOUND : OK;
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.field(SUCCEEDED.getPreferredName(), succeeded);
-        builder.field(NUMFREED.getPreferredName(), numFreed);  
         builder.endObject();
         return builder;
-    }  
-
+        PARSER.declareField(constructorArg(), (parser, context) -> parser.booleanValue(), SUCCEEDED, ObjectParser.ValueType.BOOLEAN);  
+        return numFreed;  
+ * software distributed under the License is distributed on an
+@PublicApi(since = "1.0.0")  
+    }
     /**
-     * Parse the clear scroll response body into a new {@link ClearScrollResponse} object  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+package org.opensearch.action.search;
+ *  
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+    public boolean isSucceeded() {  
+import static org.opensearch.core.rest.RestStatus.NOT_FOUND;  
+import java.io.IOException;
+import org.opensearch.core.ParseField;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+ */
      */
+ */
+    public int getNumFreed() {
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+import org.opensearch.core.rest.RestStatus;
+ * SPDX-License-Identifier: Apache-2.0
+     * that the scroll id specified in the request did not exist. (never existed, was expired, or completely consumed)  
+     */
+ * this work for additional information regarding copyright
+     * Parse the clear scroll response body into a new {@link ClearScrollResponse} object  
+        return numFreed == 0 ? NOT_FOUND : OK;
+    /**  
+    private static final ParseField NUMFREED = new ParseField("num_freed");
+    );
+import org.opensearch.core.xcontent.XContentBuilder;
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.xcontent.ObjectParser;  
+ * KIND, either express or implied.  See the License for the
+    }  
+ * GitHub history for details.
+    private final boolean succeeded;
     public static ClearScrollResponse fromXContent(XContentParser parser) throws IOException {
-        return PARSER.apply(parser, null);  
     }
-
+ * not use this file except in compliance with the License.
+        this.succeeded = succeeded;
+    }
+/*
+        PARSER.declareField(constructorArg(), (parser, context) -> parser.intValue(), NUMFREED, ObjectParser.ValueType.INT);
+        builder.field(NUMFREED.getPreferredName(), numFreed);  
+    public ClearScrollResponse(boolean succeeded, int numFreed) {
     @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeBoolean(succeeded);
-        out.writeVInt(numFreed);  
+ * You may obtain a copy of the License at  
     }
+ * specific language governing permissions and limitations
+        return succeeded;
+ * compatible open source license.
+ *
+     * @return Whether the attempt to clear a scroll was successful.
+        numFreed = in.readVInt();  
+ * The OpenSearch Contributors require contributions made to  
+    static {
+        true,
+ * Licensed to Elasticsearch under one or more contributor  
+        "clear_scroll",
 }
+    public ClearScrollResponse(StreamInput in) throws IOException {  
+        a -> new ClearScrollResponse((boolean) a[0], (int) a[1])  
+ * under the License.  
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+    public RestStatus status() {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+public class ClearScrollResponse extends ActionResponse implements StatusToXContentObject {
+    private static final ParseField SUCCEEDED = new ParseField("succeeded");  
+ * Transport response for clearing a search scroll
+        builder.field(SUCCEEDED.getPreferredName(), succeeded);
+ * Unless required by applicable law or agreed to in writing,
+        return PARSER.apply(parser, null);  
+ */  
+        builder.startObject();
+        out.writeBoolean(succeeded);
+import org.opensearch.core.xcontent.XContentParser;
+/**
+import org.opensearch.common.xcontent.StatusToXContentObject;
+ *
+    /**
+        super(in);
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ *  
+        out.writeVInt(numFreed);  
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    }

@@ -1,163 +1,138 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.blobstore.support;
-
-import org.opensearch.cluster.metadata.CryptoMetadata;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.blobstore.BlobContainer;  
-import org.opensearch.common.blobstore.BlobMetadata;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.DeleteResult;  
-import org.opensearch.common.blobstore.InputStreamWithMetadata;
-
-import java.io.IOException;  
-import java.io.InputStream;
-import java.util.List;
-import java.util.Map;  
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-/**
- * Filter blob container.
- *  
- * @opensearch.internal
- */
-public abstract class FilterBlobContainer implements BlobContainer {  
-
+    }
+        return delegate.readBlob(blobName);
+        return delegate.listBlobs();  
     private final BlobContainer delegate;
-
-    public FilterBlobContainer(BlobContainer delegate) {
-        this.delegate = Objects.requireNonNull(delegate);
     }  
-
-    protected abstract BlobContainer wrapChild(BlobContainer child);
-
+    @Override
+}  
+    public void writeBlobAtomic(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
+    @Override
+    public DeleteResult delete() throws IOException {
+        long blobSize,
+        return delegate.children().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> wrapChild(e.getValue())));
+/*  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+        String blobName,  
+    }  
+        @Nullable CryptoMetadata cryptoMetadata
+        @Nullable Map<String, String> metadata,
+        String blobName,
+        boolean failIfAlreadyExists
+        delegate.deleteBlobsIgnoringIfNotExists(blobNames);
+        delegate.writeBlobWithMetadata(blobName, inputStream, blobSize, failIfAlreadyExists, metadata);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+    }
+    @Override
+ * KIND, either express or implied.  See the License for the
+        return delegate.readBlobPreferredLength();
+ *  
     @Override
     public BlobPath path() {
-        return delegate.path();  
-    }
-
-    @Override  
-    public boolean blobExists(String blobName) throws IOException {
-        return delegate.blobExists(blobName);
-    }  
-
-    @Override
-    public InputStream readBlob(String blobName) throws IOException {  
-        return delegate.readBlob(blobName);
-    }
-
-    @Override
     public InputStream readBlob(String blobName, long position, long length) throws IOException {
-        return delegate.readBlob(blobName, position, length);  
-    }
-
-    @Override  
-    public long readBlobPreferredLength() {
-        return delegate.readBlobPreferredLength();
+ * Filter blob container.
+/*  
+import java.util.Objects;
+import java.util.Map;  
+import java.util.List;
+ */
+        long blobSize,  
     }  
-
-    @Override
-    public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {  
-        delegate.writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
-    }
-
-    @Override
-    public void writeBlobAtomic(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
-        delegate.writeBlobAtomic(blobName, inputStream, blobSize, failIfAlreadyExists);  
-    }
-
-    @Override  
-    public InputStreamWithMetadata readBlobWithMetadata(String blobName) throws IOException {
-        return delegate.readBlobWithMetadata(blobName);
-    }  
-
-    @Override
+        return delegate.blobExists(blobName);
+    public Map<String, BlobContainer> children() throws IOException {
     public void writeBlobWithMetadata(  
-        String blobName,
+import org.opensearch.cluster.metadata.CryptoMetadata;
         InputStream inputStream,
-        long blobSize,  
-        boolean failIfAlreadyExists,
-        @Nullable Map<String, String> metadata
-    ) throws IOException {  
-        delegate.writeBlobWithMetadata(blobName, inputStream, blobSize, failIfAlreadyExists, metadata);
-    }
-
-    @Override
-    public void writeBlobWithMetadata(
         String blobName,  
-        InputStream inputStream,
-        long blobSize,
-        boolean failIfAlreadyExists,  
-        @Nullable Map<String, String> metadata,
-        @Nullable CryptoMetadata cryptoMetadata
-    ) throws IOException {  
+    @Override
         delegate.writeBlobWithMetadata(blobName, inputStream, blobSize, failIfAlreadyExists, metadata, cryptoMetadata);
-    }
-
-    @Override
-    public void writeBlobAtomicWithMetadata(
-        String blobName,  
         InputStream inputStream,
-        @Nullable Map<String, String> metadata,
-        long blobSize,  
-        boolean failIfAlreadyExists
-    ) throws IOException {
-        delegate.writeBlobAtomicWithMetadata(blobName, inputStream, metadata, blobSize, failIfAlreadyExists);  
+    public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {  
+ *
+import org.opensearch.common.Nullable;
+ */
+import org.opensearch.common.blobstore.BlobContainer;  
+ * Licensed to Elasticsearch under one or more contributor  
+    public void writeBlobWithMetadata(
+    public FilterBlobContainer(BlobContainer delegate) {
+ * under the License.  
+    protected abstract BlobContainer wrapChild(BlobContainer child);
+    @Override
     }
-
-    @Override  
-    public DeleteResult delete() throws IOException {
-        return delegate.delete();
+        this.delegate = Objects.requireNonNull(delegate);
+    }
+import org.opensearch.common.blobstore.InputStreamWithMetadata;
+public abstract class FilterBlobContainer implements BlobContainer {  
+    @Override
+        delegate.writeBlobAtomic(blobName, inputStream, blobSize, failIfAlreadyExists);  
+ *  
+    }
+    public boolean blobExists(String blobName) throws IOException {
+import java.io.IOException;  
+ *
+import java.util.stream.Collectors;
+import org.opensearch.common.blobstore.BlobMetadata;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }  
-
+package org.opensearch.common.blobstore.support;
+    ) throws IOException {  
+        return delegate.listBlobsByPrefix(blobNamePrefix);
+ * ownership. Elasticsearch licenses this file to you under  
+        @Nullable Map<String, String> metadata
+        return delegate.readBlob(blobName, position, length);  
+ * compatible open source license.
+ * You may obtain a copy of the License at  
+        boolean failIfAlreadyExists,
+ * not use this file except in compliance with the License.
     @Override
     public void deleteBlobsIgnoringIfNotExists(List<String> blobNames) throws IOException {  
-        delegate.deleteBlobsIgnoringIfNotExists(blobNames);
+        @Nullable Map<String, String> metadata,
+        long blobSize,  
+    ) throws IOException {
     }
-
-    @Override
-    public Map<String, BlobMetadata> listBlobs() throws IOException {
-        return delegate.listBlobs();  
-    }
-
+        return delegate.path();  
     @Override  
-    public Map<String, BlobContainer> children() throws IOException {
-        return delegate.children().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> wrapChild(e.getValue())));
-    }  
-
-    @Override
-    public Map<String, BlobMetadata> listBlobsByPrefix(String blobNamePrefix) throws IOException {  
-        return delegate.listBlobsByPrefix(blobNamePrefix);
     }
-}  
+        delegate.writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
+    public long readBlobPreferredLength() {
+/*
+    }
+import org.opensearch.common.blobstore.BlobPath;
+    }  
+ * this work for additional information regarding copyright
+    public InputStream readBlob(String blobName) throws IOException {  
+import java.io.InputStream;
+        return delegate.readBlobWithMetadata(blobName);
+ * software distributed under the License is distributed on an
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.internal
+    @Override  
+    public Map<String, BlobMetadata> listBlobsByPrefix(String blobNamePrefix) throws IOException {  
+ * GitHub history for details.
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+        boolean failIfAlreadyExists,  
+    @Override
+    }
+    public Map<String, BlobMetadata> listBlobs() throws IOException {
+    @Override  
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+    public void writeBlobAtomicWithMetadata(
+    }  
+import org.opensearch.common.blobstore.DeleteResult;  
+    ) throws IOException {  
+    @Override  
+        delegate.writeBlobAtomicWithMetadata(blobName, inputStream, metadata, blobSize, failIfAlreadyExists);  
+    }
+    @Override
+        return delegate.delete();
+ * The OpenSearch Contributors require contributions made to  
+        InputStream inputStream,
+    @Override  
+/**
+    public InputStreamWithMetadata readBlobWithMetadata(String blobName) throws IOException {
+ * Unless required by applicable law or agreed to in writing,

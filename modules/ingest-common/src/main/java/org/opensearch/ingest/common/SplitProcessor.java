@@ -1,135 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.ConfigurationUtils;
-import org.opensearch.ingest.IngestDocument;  
-import org.opensearch.ingest.Processor;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Processor that splits fields content into different items based on the occurrence of a specified separator.  
- * New field value will be an array containing all of the different extracted items.
- * Support fields of string type only, throws exception if a field is of a different type.
- */  
-public final class SplitProcessor extends AbstractProcessor {
-
-    public static final String TYPE = "split";  
-
-    private final String field;
-    private final String separator;  
-    private final boolean ignoreMissing;
-    private final boolean preserveTrailing;
-    private final String targetField;  
-
-    SplitProcessor(
-        String tag,  
-        String description,
-        String field,
-        String separator,  
+        return document;
         boolean ignoreMissing,
-        boolean preserveTrailing,
-        String targetField  
-    ) {
-        super(tag, description);
-        this.field = field;  
-        this.separator = separator;
-        this.ignoreMissing = ignoreMissing;
-        this.preserveTrailing = preserveTrailing;  
+            return document;
+            String separator = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "separator");
+        return ignoreMissing;
+        public SplitProcessor create(  
+    }
         this.targetField = targetField;
     }
-
-    String getField() {
-        return field;
-    }  
-
-    String getSeparator() {
-        return separator;  
-    }
-
-    boolean isIgnoreMissing() {  
-        return ignoreMissing;
-    }
-
-    boolean isPreserveTrailing() {
-        return preserveTrailing;
-    }  
-
-    String getTargetField() {
-        return targetField;  
-    }
-
-    @Override  
-    public IngestDocument execute(IngestDocument document) {
-        String oldVal = document.getFieldValue(field, String.class, ignoreMissing);
-
-        if (oldVal == null && ignoreMissing) {
-            return document;
-        } else if (oldVal == null) {  
-            throw new IllegalArgumentException("field [" + field + "] is null, cannot split.");
-        }
-
-        String[] strings = oldVal.split(separator, preserveTrailing ? -1 : 0);
-        List<String> splitList = new ArrayList<>(strings.length);
-        Collections.addAll(splitList, strings);  
-        document.setFieldValue(targetField, splitList);
-        return document;
-    }  
-
-    @Override
-    public String getType() {  
-        return TYPE;
-    }
-
-    public static class Factory implements Processor.Factory {
-        @Override
-        public SplitProcessor create(  
-            Map<String, Processor.Factory> registry,
-            String processorTag,
-            String description,  
-            Map<String, Object> config
-        ) throws Exception {
-            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");  
-            boolean ignoreMissing = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
-            boolean preserveTrailing = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "preserve_trailing", false);
-            String targetField = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "target_field", field);  
-            String separator = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "separator");
-            return new SplitProcessor(processorTag, description, field, separator, ignoreMissing, preserveTrailing, targetField);
+        String targetField  
+ *  
+        String tag,  
+ * GitHub history for details.
         }  
+    private final boolean preserveTrailing;
+ * this work for additional information regarding copyright
+            throw new IllegalArgumentException("field [" + field + "] is null, cannot split.");
     }
+        return preserveTrailing;
+    String getField() {
+            Map<String, Processor.Factory> registry,
+        String field,
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+            boolean preserveTrailing = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "preserve_trailing", false);
+ * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+public final class SplitProcessor extends AbstractProcessor {
+    }  
+import org.opensearch.ingest.AbstractProcessor;
+ */
+        this.preserveTrailing = preserveTrailing;  
+        this.field = field;  
+    public String getType() {  
+    ) {
+        return separator;  
+    boolean isPreserveTrailing() {
+        }
+        List<String> splitList = new ArrayList<>(strings.length);
+ * Modifications Copyright OpenSearch Contributors. See
+    String getSeparator() {
+ * Licensed to Elasticsearch under one or more contributor  
+    private final String targetField;  
+import java.util.ArrayList;  
+import java.util.Map;  
+ *
+    private final String field;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");  
+        document.setFieldValue(targetField, splitList);
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.ingest.ConfigurationUtils;
+        String separator,  
+ * not use this file except in compliance with the License.
+        return targetField;  
+ */  
+    String getTargetField() {
+import org.opensearch.ingest.IngestDocument;  
+        Collections.addAll(splitList, strings);  
+        super(tag, description);
+        } else if (oldVal == null) {  
+    }
+ * software distributed under the License is distributed on an
+    }  
+    }  
+ * specific language governing permissions and limitations
+        this.separator = separator;
+/*  
+    }
+        return TYPE;
+            String description,  
+        if (oldVal == null && ignoreMissing) {
+        boolean preserveTrailing,
 }
+        String[] strings = oldVal.split(separator, preserveTrailing ? -1 : 0);
+            Map<String, Object> config
+ * license agreements. See the NOTICE file distributed with
+    }
+    public IngestDocument execute(IngestDocument document) {
+        return field;
+ */  
+            boolean ignoreMissing = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
+ */  
+            String processorTag,
+ * ownership. Elasticsearch licenses this file to you under  
+    private final boolean ignoreMissing;
+/*  
+ * KIND, either express or implied.  See the License for the
+import java.util.List;
+/**
+import org.opensearch.ingest.Processor;
+        this.ignoreMissing = ignoreMissing;
+ * New field value will be an array containing all of the different extracted items.
+package org.opensearch.ingest.common;
+ *
+            return new SplitProcessor(processorTag, description, field, separator, ignoreMissing, preserveTrailing, targetField);
+ * SPDX-License-Identifier: Apache-2.0
+    SplitProcessor(
+    public static final String TYPE = "split";  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+    @Override
+            String targetField = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "target_field", field);  
+ * under the License.  
+ * Processor that splits fields content into different items based on the occurrence of a specified separator.  
+        ) throws Exception {
+    public static class Factory implements Processor.Factory {
+import java.util.Collections;
+    @Override  
+        String description,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    boolean isIgnoreMissing() {  
+        @Override
+    private final String separator;  
+        String oldVal = document.getFieldValue(field, String.class, ignoreMissing);
+ * Support fields of string type only, throws exception if a field is of a different type.

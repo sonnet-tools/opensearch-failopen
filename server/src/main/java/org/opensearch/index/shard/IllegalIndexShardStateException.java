@@ -1,83 +1,70 @@
-/*  
+    }
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
+/*
  * GitHub history for details.
- */  
-
-package org.opensearch.index.shard;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;  
-
-import java.io.IOException;
-
-/**
- * Exception thrown when an index shard is in an illegal state
  *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class IllegalIndexShardStateException extends OpenSearchException {
-
-    private final IndexShardState currentState;  
-
-    public IllegalIndexShardStateException(ShardId shardId, IndexShardState currentState, String msg, Object... args) {
-        this(shardId, currentState, msg, null, args);  
+import org.opensearch.common.annotation.PublicApi;
+ * The OpenSearch Contributors require contributions made to  
     }
-
-    public IllegalIndexShardStateException(ShardId shardId, IndexShardState currentState, String msg, Throwable ex, Object... args) {  
-        super("CurrentState[" + currentState + "] " + msg, ex, args);
-        setShard(shardId);
-        this.currentState = currentState;  
-    }
-
-    public IndexShardState currentState() {  
-        return currentState;
-    }
-
-    public IllegalIndexShardStateException(StreamInput in) throws IOException {
-        super(in);
-        currentState = IndexShardState.fromId(in.readByte());  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeByte(currentState.id());  
-    }
-
-    @Override  
-    public RestStatus status() {
-        return RestStatus.NOT_FOUND;
-    }  
 }
+ * Licensed to Elasticsearch under one or more contributor  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+    public IllegalIndexShardStateException(ShardId shardId, IndexShardState currentState, String msg, Throwable ex, Object... args) {  
+ *
+import org.opensearch.core.rest.RestStatus;  
+ * license agreements. See the NOTICE file distributed with
+ * You may obtain a copy of the License at  
+    @Override  
+    @Override  
+ *  
+ * not use this file except in compliance with the License.
+        currentState = IndexShardState.fromId(in.readByte());  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.common.io.stream.StreamInput;  
+        super(in);
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+/**
+ */
+package org.opensearch.index.shard;
+        super("CurrentState[" + currentState + "] " + msg, ex, args);
+    public RestStatus status() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * @opensearch.api
+    }  
+        setShard(shardId);
+    }
+import org.opensearch.OpenSearchException;
+        return RestStatus.NOT_FOUND;
+    public IllegalIndexShardStateException(StreamInput in) throws IOException {
+ * specific language governing permissions and limitations
+    }
+ * software distributed under the License is distributed on an
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+        this(shardId, currentState, msg, null, args);  
+ */  
+ * under the License.  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        this.currentState = currentState;  
+        super.writeTo(out);
+    }
+    private final IndexShardState currentState;  
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+ * compatible open source license.
+ */
+    public IllegalIndexShardStateException(ShardId shardId, IndexShardState currentState, String msg, Object... args) {
+ * Unless required by applicable law or agreed to in writing,
+public class IllegalIndexShardStateException extends OpenSearchException {
+    public IndexShardState currentState() {  
+ * Modifications Copyright OpenSearch Contributors. See
+@PublicApi(since = "1.0.0")  
+import org.opensearch.core.index.shard.ShardId;
+ * Exception thrown when an index shard is in an illegal state
+        out.writeByte(currentState.id());  
+ * KIND, either express or implied.  See the License for the
+        return currentState;
+import java.io.IOException;

@@ -1,220 +1,201 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.OpenSearchAllocationTestCase;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RoutingTable;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;  
-import org.opensearch.common.settings.Settings;
-
-import java.io.BufferedReader;  
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;  
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;  
-
-import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;
-
-/**
- * A base testcase that allows to run tests based on the output of the CAT API
- * The input is a line based cat/shards output like:  
- *   kibana-int           0 p STARTED       2  24.8kb 10.202.245.2 r5-9-35
- * <p>
- * the test builds up a clusterstate from the cat input and optionally runs a full balance on it.  
- * This can be used to debug cluster allocation decisions.
- */
-public abstract class CatAllocationTestCase extends OpenSearchAllocationTestCase {  
-    protected abstract Path getCatPath() throws IOException;
-
-    public void testRun() throws IOException {  
-        Set<String> nodes = new HashSet<>();
-        Map<String, Idx> indices = new HashMap<>();
-        try (BufferedReader reader = Files.newBufferedReader(getCatPath(), StandardCharsets.UTF_8)) {  
-            String line = null;
-            // regexp FTW
-            Pattern pattern = Pattern.compile(  
-                "^(.+)\\s+(\\d)\\s+([rp])\\s+(STARTED|RELOCATING|INITIALIZING|UNASSIGNED)"
-                    + "\\s+\\d+\\s+[0-9.a-z]+\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+).*$"
-            );  
-            while ((line = reader.readLine()) != null) {
-                final Matcher matcher;
-                if ((matcher = pattern.matcher(line)).matches()) {  
-                    final String index = matcher.group(1);
-                    Idx idx = indices.get(index);
-                    if (idx == null) {  
-                        idx = new Idx(index);
-                        indices.put(index, idx);
-                    }  
-                    final int shard = Integer.parseInt(matcher.group(2));
-                    final boolean primary = matcher.group(3).equals("p");
-                    ShardRoutingState state = ShardRoutingState.valueOf(matcher.group(4));  
-                    String ip = matcher.group(5);
-                    nodes.add(ip);
-                    ShardRouting routing = TestShardRouting.newShardRouting(index, shard, ip, null, primary, state);  
-                    idx.add(routing);
-                    logger.debug("Add routing {}", routing);
-                } else {  
-                    fail("can't read line: " + line);
-                }
-            }  
-
         }
-
-        logger.info("Building initial routing table");
-        Metadata.Builder builder = Metadata.builder();
-        RoutingTable.Builder routingTableBuilder = RoutingTable.builder();  
-        for (Idx idx : indices.values()) {
-            IndexMetadata.Builder idxMetaBuilder = IndexMetadata.builder(idx.name)
-                .settings(settings(Version.CURRENT))  
-                .numberOfShards(idx.numShards())
-                .numberOfReplicas(idx.numReplicas());
-            for (ShardRouting shardRouting : idx.routing) {  
-                if (shardRouting.active()) {
-                    Set<String> allocationIds = idxMetaBuilder.getInSyncAllocationIds(shardRouting.id());
-                    if (allocationIds == null) {  
-                        allocationIds = new HashSet<>();
-                    } else {
-                        allocationIds = new HashSet<>(allocationIds);  
-                    }
-                    allocationIds.add(shardRouting.allocationId().getId());
-                    idxMetaBuilder.putInSyncAllocationIds(shardRouting.id(), allocationIds);  
-                }
-            }
-            IndexMetadata idxMeta = idxMetaBuilder.build();  
-            builder.put(idxMeta, false);
-            IndexRoutingTable.Builder tableBuilder = new IndexRoutingTable.Builder(idxMeta.getIndex()).initializeAsRecovery(idxMeta);
-            Map<Integer, IndexShardRoutingTable> shardIdToRouting = new HashMap<>();  
-            for (ShardRouting r : idx.routing) {
-                IndexShardRoutingTable refData = new IndexShardRoutingTable.Builder(r.shardId()).addShard(r).build();
-                if (shardIdToRouting.containsKey(r.getId())) {  
-                    refData = new IndexShardRoutingTable.Builder(shardIdToRouting.get(r.getId())).addShard(r).build();
-                }
-                shardIdToRouting.put(r.getId(), refData);  
-            }
-            for (IndexShardRoutingTable t : shardIdToRouting.values()) {
-                tableBuilder.addIndexShard(t);  
-            }
-            IndexRoutingTable table = tableBuilder.build();
-            routingTableBuilder.add(table);  
-        }
-        Metadata metadata = builder.build();
-
         RoutingTable routingTable = routingTableBuilder.build();
-        DiscoveryNodes.Builder builderDiscoNodes = DiscoveryNodes.builder();
-        for (String node : nodes) {  
-            builderDiscoNodes.add(newNode(node));
-        }
-        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))  
-            .metadata(metadata)
-            .routingTable(routingTable)
-            .nodes(builderDiscoNodes.build())  
-            .build();
-        if (balanceFirst()) {
-            clusterState = rebalance(clusterState);  
-        }
+/*  
+import java.util.List;
+                    if (allocationIds == null) {  
+                    ShardRoutingState state = ShardRoutingState.valueOf(matcher.group(4));  
+                    nodes.add(ip);
+ * The OpenSearch Contributors require contributions made to  
+                if (shardRouting.active()) {
+import java.util.regex.Pattern;  
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+        Set<String> nodes = new HashSet<>();
+                    fail("can't read line: " + line);
+/**
+        logger.info("Building initial routing table");
+                    + "\\s+\\d+\\s+[0-9.a-z]+\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+).*$"
+import java.util.HashSet;
+ * This can be used to debug cluster allocation decisions.
         clusterState = allocateNew(clusterState);
-    }  
-
-    protected abstract ClusterState allocateNew(ClusterState clusterState);
-
-    protected boolean balanceFirst() {
-        return true;
-    }  
-
-    private ClusterState rebalance(ClusterState clusterState) {
-        AllocationService strategy = createAllocationService(Settings.builder().build());  
-        clusterState = strategy.reroute(clusterState, "reroute");
-        int numRelocations = 0;
-        while (true) {  
-            List<ShardRouting> initializing = clusterState.routingTable().shardsWithState(INITIALIZING);
-            if (initializing.isEmpty()) {
-                break;  
             }
             logger.debug("Initializing shards: {}", initializing);
-            numRelocations += initializing.size();  
-            clusterState = OpenSearchAllocationTestCase.startShardsAndReroute(strategy, clusterState, initializing);
-        }
-        logger.debug("--> num relocations to get balance: {}", numRelocations);  
-        return clusterState;
-    }
-
-    public class Idx {
-        final String name;
-        final List<ShardRouting> routing = new ArrayList<>();  
-
-        public Idx(String name) {
-            this.name = name;  
-        }
-
-        public void add(ShardRouting r) {  
-            routing.add(r);
-        }
-
+            }
+ *
+    }  
+ *
         public int numReplicas() {
-            int count = 0;
-            for (ShardRouting msr : routing) {  
-                if (msr.primary() == false && msr.id() == 0) {
-                    count++;
-                }  
             }
-            return count;
-        }  
-
-        public int numShards() {
-            int max = 0;  
-            for (ShardRouting msr : routing) {
-                if (msr.primary()) {
-                    max = Math.max(msr.getId() + 1, max);  
-                }
-            }
+            routingTableBuilder.add(table);  
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+                } else {  
+    private ClusterState rebalance(ClusterState clusterState) {
             return max;  
+ * KIND, either express or implied.  See the License for the
+                    final int shard = Integer.parseInt(matcher.group(2));
+        int numRelocations = 0;
+ * Unless required by applicable law or agreed to in writing,
+import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;
+                    }
+import java.io.IOException;
+import org.opensearch.cluster.routing.ShardRouting;
+                IndexShardRoutingTable refData = new IndexShardRoutingTable.Builder(r.shardId()).addShard(r).build();
+                if (shardIdToRouting.containsKey(r.getId())) {  
+import org.opensearch.cluster.routing.ShardRoutingState;
+ * <p>
+                }  
+ * license agreements. See the NOTICE file distributed with
+                    refData = new IndexShardRoutingTable.Builder(shardIdToRouting.get(r.getId())).addShard(r).build();
+                    } else {
+                    Set<String> allocationIds = idxMetaBuilder.getInSyncAllocationIds(shardRouting.id());
+        for (Idx idx : indices.values()) {
+            for (ShardRouting shardRouting : idx.routing) {  
+            IndexRoutingTable table = tableBuilder.build();
+            List<ShardRouting> initializing = clusterState.routingTable().shardsWithState(INITIALIZING);
+            .metadata(metadata)
+/*  
+                    Idx idx = indices.get(index);
+            }
+            String line = null;
+            Pattern pattern = Pattern.compile(  
+                .settings(settings(Version.CURRENT))  
+        public Idx(String name) {
+        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        public int numShards() {
+import java.util.Set;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    count++;
+        final String name;
+            int count = 0;
+ * the Apache License, Version 2.0 (the "License"); you may
+        Map<String, Idx> indices = new HashMap<>();
         }
+        while (true) {  
+        clusterState = strategy.reroute(clusterState, "reroute");
+import org.opensearch.cluster.routing.IndexRoutingTable;
+            builder.put(idxMeta, false);
+        }
+import java.nio.charset.StandardCharsets;
+ */
+import org.opensearch.cluster.OpenSearchAllocationTestCase;  
+                }
+                    }  
+            for (ShardRouting msr : routing) {
+                    idx.add(routing);
+        }
+    public class Idx {
+ * GitHub history for details.
+import java.util.HashMap;  
+ *  
+                        idx = new Idx(index);
+        }
+        return true;
+            clusterState = rebalance(clusterState);  
+            this.name = name;  
+ *   kibana-int           0 p STARTED       2  24.8kb 10.202.245.2 r5-9-35
+        logger.debug("--> num relocations to get balance: {}", numRelocations);  
+                    String ip = matcher.group(5);
+        }
+            }
+            .nodes(builderDiscoNodes.build())  
+ */
+import org.opensearch.cluster.metadata.Metadata;
+ * Licensed to Elasticsearch under one or more contributor  
+                .numberOfShards(idx.numShards())
+                        allocationIds = new HashSet<>(allocationIds);  
+        DiscoveryNodes.Builder builderDiscoNodes = DiscoveryNodes.builder();
+    protected abstract ClusterState allocateNew(ClusterState clusterState);
+            for (ShardRouting msr : routing) {  
+            IndexRoutingTable.Builder tableBuilder = new IndexRoutingTable.Builder(idxMeta.getIndex()).initializeAsRecovery(idxMeta);
+import java.nio.file.Path;
+        Metadata.Builder builder = Metadata.builder();
+                final Matcher matcher;
+ * SPDX-License-Identifier: Apache-2.0
+            for (IndexShardRoutingTable t : shardIdToRouting.values()) {
+            while ((line = reader.readLine()) != null) {
+        AllocationService strategy = createAllocationService(Settings.builder().build());  
+    protected boolean balanceFirst() {
+        final List<ShardRouting> routing = new ArrayList<>();  
+import org.opensearch.common.settings.Settings;
+            for (ShardRouting r : idx.routing) {
+        for (String node : nodes) {  
+                }
+                    max = Math.max(msr.getId() + 1, max);  
+            IndexMetadata.Builder idxMetaBuilder = IndexMetadata.builder(idx.name)
     }
+import java.util.regex.Matcher;
+                    idxMetaBuilder.putInSyncAllocationIds(shardRouting.id(), allocationIds);  
+    }
+            );  
+            }
+                    if (idx == null) {  
+    public void testRun() throws IOException {  
+ * this file be licensed under the Apache-2.0 license or a
+            clusterState = OpenSearchAllocationTestCase.startShardsAndReroute(strategy, clusterState, initializing);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            builderDiscoNodes.add(newNode(node));
+ * the test builds up a clusterstate from the cat input and optionally runs a full balance on it.  
+import org.opensearch.cluster.routing.RoutingTable;  
+ */  
+                if (msr.primary() == false && msr.id() == 0) {
+            routing.add(r);
+ * software distributed under the License is distributed on an
+ * under the License.  
+        return clusterState;
+                    final String index = matcher.group(1);
+    protected abstract Path getCatPath() throws IOException;
+                        allocationIds = new HashSet<>();
+                .numberOfReplicas(idx.numReplicas());
+ */  
+                shardIdToRouting.put(r.getId(), refData);  
+public abstract class CatAllocationTestCase extends OpenSearchAllocationTestCase {  
+        RoutingTable.Builder routingTableBuilder = RoutingTable.builder();  
+            IndexMetadata idxMeta = idxMetaBuilder.build();  
+            if (initializing.isEmpty()) {
+        }
+        }
+        if (balanceFirst()) {
+import org.opensearch.cluster.ClusterState;
+                if (msr.primary()) {
+ * not use this file except in compliance with the License.
+                break;  
+import org.opensearch.cluster.metadata.IndexMetadata;
+        Metadata metadata = builder.build();
+            int max = 0;  
+            numRelocations += initializing.size();  
+ * this work for additional information regarding copyright
+ * The input is a line based cat/shards output like:  
+ * A base testcase that allows to run tests based on the output of the CAT API
+    }  
+import java.util.Map;  
+        try (BufferedReader reader = Files.newBufferedReader(getCatPath(), StandardCharsets.UTF_8)) {  
+                }
+import java.util.ArrayList;
+            .routingTable(routingTable)
+            return count;
+        public void add(ShardRouting r) {  
+import java.nio.file.Files;  
+            .build();
+            }  
+        }  
+                    allocationIds.add(shardRouting.allocationId().getId());
+import org.opensearch.cluster.node.DiscoveryNodes;  
+package org.opensearch.cluster.routing.allocation;
+import java.io.BufferedReader;  
+                }
+                "^(.+)\\s+(\\d)\\s+([rp])\\s+(STARTED|RELOCATING|INITIALIZING|UNASSIGNED)"
+            // regexp FTW
+                    final boolean primary = matcher.group(3).equals("p");
+                tableBuilder.addIndexShard(t);  
+                    logger.debug("Add routing {}", routing);
+            Map<Integer, IndexShardRoutingTable> shardIdToRouting = new HashMap<>();  
 }  
+import org.opensearch.cluster.routing.TestShardRouting;  
+                        indices.put(index, idx);
+                    ShardRouting routing = TestShardRouting.newShardRouting(index, shard, ip, null, primary, state);  
+import org.opensearch.Version;
+                if ((matcher = pattern.matcher(line)).matches()) {  
+ * You may obtain a copy of the License at  

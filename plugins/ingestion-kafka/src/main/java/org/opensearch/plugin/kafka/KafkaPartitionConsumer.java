@@ -1,297 +1,267 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.kafka;
-
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecord;  
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.OffsetAndTimestamp;  
-import org.apache.kafka.clients.consumer.OffsetResetStrategy;
-import org.apache.kafka.common.PartitionInfo;
-import org.apache.kafka.common.TopicPartition;  
-import org.apache.kafka.common.serialization.ByteArrayDeserializer;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;  
-import org.opensearch.index.IngestionShardConsumer;
-import org.opensearch.index.IngestionShardPointer;
-import org.opensearch.secure_sm.AccessController;  
-
-import java.time.Duration;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;  
-import java.util.Properties;
-import java.util.concurrent.TimeoutException;
-
-/**
- * Kafka consumer to read messages from a Kafka partition
- */  
-public class KafkaPartitionConsumer implements IngestionShardConsumer<KafkaOffset, KafkaMessage> {
-    private static final Logger logger = LogManager.getLogger(KafkaPartitionConsumer.class);
-
-    /**
-     * The Kafka consumer
-     */  
-    protected final Consumer<byte[], byte[]> consumer;
-
-    private long lastFetchedOffset = -1;  
-    private final String clientId;
-    private final int partitionId;
-    private final KafkaSourceConfig config;  
-    private TopicPartition topicPartition;
-
-    /**  
-     * Constructor
-     * @param clientId the client id
-     * @param config   the Kafka source config  
-     * @param partitionId the partition id
-     */
-    public KafkaPartitionConsumer(String clientId, KafkaSourceConfig config, int partitionId) {  
-        this(clientId, config, partitionId, createConsumer(clientId, config));
-    }
-
-    /**
-     * Constructor, visible for testing
-     * @param clientId the client id  
-     * @param config the Kafka source config
-     * @param partitionId the partition id
-     * @param consumer the created Kafka consumer  
-     */
-    protected KafkaPartitionConsumer(String clientId, KafkaSourceConfig config, int partitionId, Consumer<byte[], byte[]> consumer) {
-        this.clientId = clientId;  
-        this.consumer = consumer;
-        this.config = config;
+    @Override
         this.partitionId = partitionId;  
-    }
-
-    void initialize() throws Exception {  
-        String topic = config.getTopic();
-        List<PartitionInfo> partitionInfos = AccessController.doPrivileged(
-            () -> consumer.partitionsFor(topic, Duration.ofMillis(config.getTopicMetadataFetchTimeoutMs()))  
-        );
-        if (partitionInfos == null) {
-            throw new IllegalArgumentException("Topic " + topic + " does not exist");  
-        }
-        if (partitionId >= partitionInfos.size()) {
-            throw new IllegalArgumentException("Partition " + partitionId + " does not exist in topic " + topic);  
-        }
-        topicPartition = new TopicPartition(topic, partitionId);
-        consumer.assign(Collections.singletonList(topicPartition));  
-        logger.info(
-            "Kafka consumer created for topic {} partition {} with topic metadata fetch timeout {}ms",
-            topic,  
-            partitionId,
-            config.getTopicMetadataFetchTimeoutMs()
-        );  
-    }
-
-    /**  
-     * Create consumer properties with default configurations and apply user provided overrides on top.
-     * @param clientId the client id
-     * @param config the Kafka source config  
-     * @return the consumer properties
-     */
-    protected static Properties createConsumerProperties(String clientId, KafkaSourceConfig config) {  
-        Properties consumerProp = new Properties();
-        consumerProp.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, config.getBootstrapServers());
-        consumerProp.put(ConsumerConfig.CLIENT_ID_CONFIG, clientId);  
-
-        // apply user provided overrides
-        consumerProp.putAll(config.getConsumerConfigurations());  
-
-        logger.info("Kafka consumer properties for topic {}: {}", config.getTopic(), consumerProp);
-        return consumerProp;  
-    }
-
-    /**  
-     * Create a Kafka consumer. visible for testing
-     * @param clientId the client id
-     * @param config the Kafka source config  
-     * @return the Kafka consumer
-     */
-    protected static Consumer<byte[], byte[]> createConsumer(String clientId, KafkaSourceConfig config) {  
-        Properties consumerProp = createConsumerProperties(clientId, config);
-
-        // wrap the kafka consumer creation in a privileged block to apply plugin security policies  
-        final ClassLoader restore = Thread.currentThread().getContextClassLoader();
-        try {
-            Thread.currentThread().setContextClassLoader(KafkaPlugin.class.getClassLoader());  
-            return AccessController.doPrivileged(
-                () -> new KafkaConsumer<>(consumerProp, new ByteArrayDeserializer(), new ByteArrayDeserializer())
-            );  
-        } finally {
-            Thread.currentThread().setContextClassLoader(restore);
-        }  
-    }
-
-    /**  
-     * Read the next batch of messages from Kafka, starting from the provided offset.
-     * @param offset the pointer to start reading from,
-     * @param includeStart whether to include the start pointer in the read  
-     * @param maxMessages this setting is not honored for Kafka at this stage. maxMessages is instead set at consumer initialization.
-     * @param timeoutMillis the maximum time to wait for messages
-     * @return the next read result  
-     * @throws TimeoutException
-     */
-    @Override  
-    public synchronized List<ReadResult<KafkaOffset, KafkaMessage>> readNext(
-        KafkaOffset offset,
-        boolean includeStart,  
-        long maxMessages,
-        int timeoutMillis
     ) throws TimeoutException {  
-        List<ReadResult<KafkaOffset, KafkaMessage>> records = AccessController.doPrivileged(
-            () -> fetch(offset.getOffset(), includeStart, timeoutMillis)
-        );  
-        return records;
-    }
-
-    /**
-     * Read the next batch of messages from Kafka.
-     * @param maxMessages this setting is not honored for Kafka at this stage. maxMessages is instead set at consumer initialization.  
-     * @param timeoutMillis the maximum time to wait for messages
-     * @return the next read result
-     * @throws TimeoutException  
-     */
-    @Override
-    public synchronized List<ReadResult<KafkaOffset, KafkaMessage>> readNext(long maxMessages, int timeoutMillis) throws TimeoutException {  
-        List<ReadResult<KafkaOffset, KafkaMessage>> records = AccessController.doPrivileged(
-            () -> fetch(lastFetchedOffset, false, timeoutMillis)
-        );  
-        return records;
-    }
-
-    @Override
-    public synchronized IngestionShardPointer earliestPointer() {
-        long startOffset = AccessController.doPrivileged(  
-            () -> consumer.beginningOffsets(Collections.singletonList(topicPartition)).getOrDefault(topicPartition, 0L)
-        );
-        return new KafkaOffset(startOffset);  
-    }
-
-    @Override  
-    public synchronized IngestionShardPointer latestPointer() {
-        long endOffset = AccessController.doPrivileged(
-            () -> consumer.endOffsets(Collections.singletonList(topicPartition)).getOrDefault(topicPartition, 0L)  
-        );
-        return new KafkaOffset(endOffset);
-    }  
-
-    @Override
-    public synchronized IngestionShardPointer pointerFromTimestampMillis(long timestampMillis) {  
-        long offset = AccessController.doPrivileged(() -> {
-            Map<TopicPartition, OffsetAndTimestamp> position = consumer.offsetsForTimes(
-                Collections.singletonMap(topicPartition, timestampMillis)  
-            );
-            if (position == null || position.isEmpty()) {
-                return -1L;  
-            }
-            OffsetAndTimestamp offsetAndTimestamp = position.values().iterator().next();
-            if (offsetAndTimestamp == null) {  
-                return -1L;
-            }
-            return offsetAndTimestamp.offset();  
-        });
-        if (offset < 0) {
-            logger.warn("No message found for timestamp {}, fall back to auto.offset.reset policy", timestampMillis);  
-            String autoOffsetResetConfig = config.getAutoOffsetResetConfig();
-            if (OffsetResetStrategy.EARLIEST.toString().equals(autoOffsetResetConfig)) {
-                logger.warn("The auto.offset.reset is set to earliest, seek to earliest pointer");  
-                return earliestPointer();
-            } else if (OffsetResetStrategy.LATEST.toString().equals(autoOffsetResetConfig)) {
-                logger.warn("The auto.offset.reset is set to latest, seek to latest pointer");  
-                return latestPointer();
-            } else {
-                throw new IllegalArgumentException("No message found for timestamp " + timestampMillis);  
-            }
-        }
-        return new KafkaOffset(offset);  
-    }
-
-    @Override  
+import java.util.List;
     public IngestionShardPointer pointerFromOffset(String offset) {
-        long offsetValue = Long.parseLong(offset);
-        return new KafkaOffset(offsetValue);  
-    }
-
+        boolean includeStart,  
+        }  
+            if (offsetAndTimestamp == null) {  
+     * @param clientId the client id
+     */
+        });
+import org.opensearch.index.IngestionShardConsumer;
+     * Constructor, visible for testing
+     */
+            if (OffsetResetStrategy.EARLIEST.toString().equals(autoOffsetResetConfig)) {
+        }
+        long startOffset = AccessController.doPrivileged(  
+import java.util.Properties;
+     * @param partitionId the partition id
+     * @return the Kafka consumer
+                // Set lag as 0 in case expectedStartPointer is beyond endOffset.
+     */
+        );  
+        try {
+        this.consumer = consumer;
+            }
+    public synchronized List<ReadResult<KafkaOffset, KafkaMessage>> readNext(
+                return latestPointer();
+        topicPartition = new TopicPartition(topic, partitionId);
+import org.apache.kafka.common.TopicPartition;  
+    /**
+     * @param clientId the client id  
+     *
+        long endOffset = AccessController.doPrivileged(
+            long endOffset = consumer.endOffsets(Collections.singletonList(topicPartition)).getOrDefault(topicPartition, 0L);  
+    }  
+    /**
+     * @param config the Kafka source config  
+     * @param config   the Kafka source config  
+        return topicPartition.partition();
+public class KafkaPartitionConsumer implements IngestionShardConsumer<KafkaOffset, KafkaMessage> {
+        return new KafkaOffset(offset);  
+    @Override
     private synchronized List<ReadResult<KafkaOffset, KafkaMessage>> fetch(long startOffset, boolean includeStart, int timeoutMillis) {  
-        long kafkaStartOffset = startOffset;
-        if (!includeStart) {
-            kafkaStartOffset += 1;  
+     * @param expectedStartPointer the pointer where ingestion would start if no messages have been consumed yet
+import org.apache.kafka.clients.consumer.ConsumerRecord;  
+        this.config = config;
+            throw new IllegalArgumentException("Topic " + topic + " does not exist");  
+            () -> consumer.beginningOffsets(Collections.singletonList(topicPartition)).getOrDefault(topicPartition, 0L)
+    }
+    }
         }
-
-        if (lastFetchedOffset < 0 || lastFetchedOffset != kafkaStartOffset - 1) {  
-            logger.info("Seeking to offset {}", kafkaStartOffset);
-            consumer.seek(topicPartition, kafkaStartOffset);
-            // update the last fetched offset so that we don't need to seek again if no more messages to fetch  
-            lastFetchedOffset = kafkaStartOffset - 1;
-        }
-
-        ConsumerRecords<byte[], byte[]> consumerRecords = consumer.poll(Duration.ofMillis(timeoutMillis));
+    private static final Logger logger = LogManager.getLogger(KafkaPartitionConsumer.class);
+     * Read the next batch of messages from Kafka.
         List<ConsumerRecord<byte[], byte[]>> messageAndOffsets = consumerRecords.records(topicPartition);
-        List<ReadResult<KafkaOffset, KafkaMessage>> results = new ArrayList<>();  
-
-        for (ConsumerRecord<byte[], byte[]> messageAndOffset : messageAndOffsets) {
+            () -> consumer.partitionsFor(topic, Duration.ofMillis(config.getTopicMetadataFetchTimeoutMs()))  
+     */
+        consumerProp.put(ConsumerConfig.CLIENT_ID_CONFIG, clientId);  
+        this.clientId = clientId;  
+     * @param partitionId the partition id
+    public synchronized IngestionShardPointer earliestPointer() {
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+            "Kafka consumer created for topic {} partition {} with topic metadata fetch timeout {}ms",
+            return -1;
+                Collections.singletonMap(topicPartition, timestampMillis)  
+            Thread.currentThread().setContextClassLoader(KafkaPlugin.class.getClassLoader());  
+        } finally {
+                logger.warn("The auto.offset.reset is set to latest, seek to latest pointer");  
+import org.opensearch.secure_sm.AccessController;  
+    private long lastFetchedOffset = -1;  
+     * @param timeoutMillis the maximum time to wait for messages
+        if (lastFetchedOffset < 0 || lastFetchedOffset != kafkaStartOffset - 1) {  
+}
+    }
+        long kafkaStartOffset = startOffset;
+ * compatible open source license.
+     * @return offset based lag. -1 is returned if errors are encountered.  
+     * @return the client id  
+ * Kafka consumer to read messages from a Kafka partition
+        return new KafkaOffset(startOffset);  
+    @Override
+     */
+    public synchronized long getPointerBasedLag(IngestionShardPointer expectedStartPointer) {  
+        if (partitionId >= partitionInfos.size()) {
+    /**  
+        List<ReadResult<KafkaOffset, KafkaMessage>> records = AccessController.doPrivileged(
+            throw new IllegalArgumentException("Partition " + partitionId + " does not exist in topic " + topic);  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    }  
+                return earliestPointer();
+    public KafkaPartitionConsumer(String clientId, KafkaSourceConfig config, int partitionId) {  
+     * @param clientId the client id
+                // Haven't fetched anything yet, use the expected start pointer.  
+     * Get the client id
+    /**
             long currentOffset = messageAndOffset.offset();  
+ *
+    void initialize() throws Exception {  
+        );
+    }
+        }
+        long offsetValue = Long.parseLong(offset);
+    public synchronized IngestionShardPointer latestPointer() {
+    /**
+        return results;  
+     * Compute Kafka offset based lag as the difference between latest available offset and last consumed offset.  
+    private final KafkaSourceConfig config;  
+        consumer.close();
+     * Create consumer properties with default configurations and apply user provided overrides on top.
+     * @throws TimeoutException  
+        return records;
+    }
+    protected static Consumer<byte[], byte[]> createConsumer(String clientId, KafkaSourceConfig config) {  
+        try {
+        return consumerProp;  
+        if (partitionInfos == null) {
+    public int getShardId() {
+     */
+        logger.info(
+        );  
+        final ClassLoader restore = Thread.currentThread().getContextClassLoader();
+    protected final Consumer<byte[], byte[]> consumer;
+import org.apache.kafka.common.PartitionInfo;
+        return new KafkaOffset(endOffset);
+/*  
+        if (!includeStart) {
+        );
+            config.getTopicMetadataFetchTimeoutMs()
+        return new KafkaOffset(offsetValue);  
+    @Override  
+            } else if (OffsetResetStrategy.LATEST.toString().equals(autoOffsetResetConfig)) {
+        }
+     * @param maxMessages this setting is not honored for Kafka at this stage. maxMessages is instead set at consumer initialization.
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
+     * @return the consumer properties
+import org.apache.logging.log4j.LogManager;
+            );  
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+        logger.info("Kafka consumer properties for topic {}: {}", config.getTopic(), consumerProp);
+import org.apache.kafka.clients.consumer.Consumer;
+     * Create a Kafka consumer. visible for testing
+        for (ConsumerRecord<byte[], byte[]> messageAndOffset : messageAndOffsets) {
+     * @return the next read result  
+    }
+import java.util.Collections;
+            return AccessController.doPrivileged(
+                logger.warn("The auto.offset.reset is set to earliest, seek to earliest pointer");  
+            () -> fetch(offset.getOffset(), includeStart, timeoutMillis)
+                return Math.max(0, endOffset - startOffset);  
+            topic,  
+     * @param config the Kafka source config  
+        } catch (Exception e) {
+     * @throws TimeoutException
+     */  
+            );
+            () -> fetch(lastFetchedOffset, false, timeoutMillis)
+                long startOffset = ((KafkaOffset) expectedStartPointer).getOffset();
+        consumerProp.putAll(config.getConsumerConfigurations());  
+        long maxMessages,
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+        List<ReadResult<KafkaOffset, KafkaMessage>> records = AccessController.doPrivileged(
+        long offset = AccessController.doPrivileged(() -> {
+import java.util.ArrayList;  
+ */  
+            }
+/**
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+        // apply user provided overrides
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+            String autoOffsetResetConfig = config.getAutoOffsetResetConfig();
+    }
+     * The Kafka consumer
+        return clientId;  
+     */
+    /**
+ */  
+    public synchronized IngestionShardPointer pointerFromTimestampMillis(long timestampMillis) {  
+            return offsetAndTimestamp.offset();  
+    @Override
+     * Constructor
+    }
+            Map<TopicPartition, OffsetAndTimestamp> position = consumer.offsetsForTimes(
+     * @param maxMessages this setting is not honored for Kafka at this stage. maxMessages is instead set at consumer initialization.  
+            }
+    @Override
             lastFetchedOffset = currentOffset;
-            KafkaOffset kafkaOffset = new KafkaOffset(currentOffset);
+    @Override  
+    protected static Properties createConsumerProperties(String clientId, KafkaSourceConfig config) {  
+     * @param consumer the created Kafka consumer  
+        return records;
+    @Override  
+import org.apache.logging.log4j.Logger;  
+        if (offset < 0) {
+    public synchronized void close() {  
+                return -1L;
+     * @return the next read result
+        }
+import java.util.Map;  
+        );  
+            lastFetchedOffset = kafkaStartOffset - 1;
+    }
+            logger.warn("No message found for timestamp {}, fall back to auto.offset.reset policy", timestampMillis);  
+     * @param offset the pointer to start reading from,
+            // Get the end offset for the partition
+     * @param includeStart whether to include the start pointer in the read  
+            if (lastFetchedOffset < 0) {
+            partitionId,
+    private final int partitionId;
+        consumer.assign(Collections.singletonList(topicPartition));  
+            }
             KafkaMessage message = new KafkaMessage(messageAndOffset.key(), messageAndOffset.value(), messageAndOffset.timestamp());  
             results.add(new ReadResult<>(kafkaOffset, message));
-        }
-        return results;  
+import java.util.concurrent.TimeoutException;
+     * @param clientId the client id
     }
-
+        List<ReadResult<KafkaOffset, KafkaMessage>> results = new ArrayList<>();  
+                return -1L;  
+    }
+        int timeoutMillis
+            () -> consumer.endOffsets(Collections.singletonList(topicPartition)).getOrDefault(topicPartition, 0L)  
+        String topic = config.getTopic();
     @Override  
-    public int getShardId() {
-        return topicPartition.partition();
-    }  
-
-    /**
-     * Compute Kafka offset based lag as the difference between latest available offset and last consumed offset.  
-     *
-     * @param expectedStartPointer the pointer where ingestion would start if no messages have been consumed yet
-     * @return offset based lag. -1 is returned if errors are encountered.  
-     */
-    @Override
-    public synchronized long getPointerBasedLag(IngestionShardPointer expectedStartPointer) {  
-        try {
-            // Get the end offset for the partition
-            long endOffset = consumer.endOffsets(Collections.singletonList(topicPartition)).getOrDefault(topicPartition, 0L);  
-
-            if (lastFetchedOffset < 0) {
-                // Haven't fetched anything yet, use the expected start pointer.  
-                // Set lag as 0 in case expectedStartPointer is beyond endOffset.
-                long startOffset = ((KafkaOffset) expectedStartPointer).getOffset();
-                return Math.max(0, endOffset - startOffset);  
-            }
-
-            // Calculate lag as difference between latest and last consumed offset  
-            return endOffset - lastFetchedOffset - 1;
-        } catch (Exception e) {
+            OffsetAndTimestamp offsetAndTimestamp = position.values().iterator().next();
+package org.opensearch.plugin.kafka;
+            Thread.currentThread().setContextClassLoader(restore);
+     * Read the next batch of messages from Kafka, starting from the provided offset.
+import java.time.Duration;
+        List<PartitionInfo> partitionInfos = AccessController.doPrivileged(
             logger.warn("Failed to calculate pointer based lag for partition {}: {}", topicPartition.partition(), e.getMessage());  
-            return -1;
+            // update the last fetched offset so that we don't need to seek again if no more messages to fetch  
+            // Calculate lag as difference between latest and last consumed offset  
+ * The OpenSearch Contributors require contributions made to  
+    }
+            return endOffset - lastFetchedOffset - 1;
+import org.opensearch.index.IngestionShardPointer;
+        Properties consumerProp = createConsumerProperties(clientId, config);
+    private TopicPartition topicPartition;
+        this(clientId, config, partitionId, createConsumer(clientId, config));
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;  
+     * @param timeoutMillis the maximum time to wait for messages
+    private final String clientId;
+    public synchronized List<ReadResult<KafkaOffset, KafkaMessage>> readNext(long maxMessages, int timeoutMillis) throws TimeoutException {  
+            KafkaOffset kafkaOffset = new KafkaOffset(currentOffset);
+     * @param config the Kafka source config
+        ConsumerRecords<byte[], byte[]> consumerRecords = consumer.poll(Duration.ofMillis(timeoutMillis));
+            logger.info("Seeking to offset {}", kafkaStartOffset);
         }
+        // wrap the kafka consumer creation in a privileged block to apply plugin security policies  
+            kafkaStartOffset += 1;  
+            if (position == null || position.isEmpty()) {
+            } else {
     }  
-
-    @Override
-    public synchronized void close() {  
-        consumer.close();
-    }
-
-    /**
-     * Get the client id
-     * @return the client id  
+        );
      */
+        consumerProp.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, config.getBootstrapServers());
+    /**  
     public String getClientId() {
-        return clientId;  
+    protected KafkaPartitionConsumer(String clientId, KafkaSourceConfig config, int partitionId, Consumer<byte[], byte[]> consumer) {
+    /**  
+        Properties consumerProp = new Properties();
     }
-}
+            consumer.seek(topicPartition, kafkaStartOffset);
+        KafkaOffset offset,
+                () -> new KafkaConsumer<>(consumerProp, new ByteArrayDeserializer(), new ByteArrayDeserializer())
+                throw new IllegalArgumentException("No message found for timestamp " + timestampMillis);  

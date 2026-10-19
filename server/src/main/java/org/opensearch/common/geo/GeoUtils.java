@@ -1,790 +1,714 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.geo;
-
-import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
-import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
-import org.apache.lucene.util.SloppyMath;  
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.unit.DistanceUnit;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;  
-import org.opensearch.common.xcontent.support.XContentMapValues;
-import org.opensearch.core.xcontent.MapXContentParser;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentSubParser;
-import org.opensearch.geometry.ShapeType;  
-import org.opensearch.index.fielddata.FieldData;
-import org.opensearch.index.fielddata.GeoPointValues;
-import org.opensearch.index.fielddata.MultiGeoPointValues;  
-import org.opensearch.index.fielddata.NumericDoubleValues;
-import org.opensearch.index.fielddata.SortedNumericDoubleValues;
-import org.opensearch.index.fielddata.SortingNumericDoubleValues;  
-
-import java.io.IOException;
-import java.util.Collections;  
-import java.util.HashMap;
-
-/**  
- * Useful geo utilities
- *
- * @opensearch.internal  
- */
-public class GeoUtils {
-    private static final String ERR_MSG_INVALID_TOKEN = "token [{}] not allowed";  
-    private static final String ERR_MSG_INVALID_FIELDS = "field must be either [lon|lat], [type|coordinates], or [geohash]";
-    /** Maximum valid latitude in degrees. */
-    public static final double MAX_LAT = 90.0;  
-    /** Minimum valid latitude in degrees. */
-    public static final double MIN_LAT = -90.0;
-    /** Maximum valid longitude in degrees. */  
-    public static final double MAX_LON = 180.0;
-    /** Minimum valid longitude in degrees. */
-    public static final double MIN_LON = -180.0;  
-
-    public static final String LATITUDE = "lat";
-    public static final String LONGITUDE = "lon";  
-    public static final String GEOHASH = "geohash";
-
-    public static final String GEOJSON_TYPE = "type";  
-    public static final String GEOJSON_COORDS = "coordinates";
-
-    /**  Error messages for WKT parsing */  
-    public static final String WKT_BOUNDING_BOX_PARSE_ERROR = "failed to parse WKT bounding box";
-    public static final String WKT_BOUNDING_BOX_TYPE_ERROR = "failed to parse WKT bounding box. [%s] found. expected [%s]";
-    /** Earth ellipsoid major axis defined by WGS 84 in meters */  
-    public static final double EARTH_SEMI_MAJOR_AXIS = 6378137.0;      // meters (WGS 84)
-
-    /** Earth ellipsoid minor axis defined by WGS 84 in meters */  
-    public static final double EARTH_SEMI_MINOR_AXIS = 6356752.314245; // meters (WGS 84)
-
-    /** Earth mean radius defined by WGS 84 in meters */  
-    public static final double EARTH_MEAN_RADIUS = 6371008.7714D;      // meters (WGS 84)
-
-    /** Earth axis ratio defined by WGS 84 (0.996647189335) */  
-    public static final double EARTH_AXIS_RATIO = EARTH_SEMI_MINOR_AXIS / EARTH_SEMI_MAJOR_AXIS;
-
-    /** Earth ellipsoid equator length in meters */  
-    public static final double EARTH_EQUATOR = 2 * Math.PI * EARTH_SEMI_MAJOR_AXIS;
-
-    /** Earth ellipsoid polar distance in meters */  
-    public static final double EARTH_POLAR_DISTANCE = Math.PI * EARTH_SEMI_MINOR_AXIS;
-
-    /** rounding error for quantized latitude and longitude values */  
-    public static final double TOLERANCE = 1E-6;
-
-    /** Returns true if latitude is actually a valid latitude value.*/  
-    public static boolean isValidLatitude(double latitude) {
-        if (Double.isNaN(latitude) || Double.isInfinite(latitude) || latitude < GeoUtils.MIN_LAT || latitude > GeoUtils.MAX_LAT) {
-            return false;  
+                LoggingDeprecationHandler.INSTANCE,
         }
-        return true;
-    }  
-
-    /** Returns true if longitude is actually a valid longitude value. */
-    public static boolean isValidLongitude(double longitude) {  
-        if (Double.isNaN(longitude) || Double.isInfinite(longitude) || longitude < GeoUtils.MIN_LON || longitude > GeoUtils.MAX_LON) {
-            return false;
-        }  
-        return true;
-    }
-
-    /**
-     * Calculate the width (in meters) of geohash cells at a specific level
-     * @param level geohash level must be greater or equal to zero  
-     * @return the width of cells at level in meters
-     */
-    public static double geoHashCellWidth(int level) {  
-        assert level >= 0;
-        // Geohash cells are split into 32 cells at each level. the grid
-        // alternates at each level between a 8x4 and a 4x8 grid  
-        return EARTH_EQUATOR / (1L << ((((level + 1) / 2) * 3) + ((level / 2) * 2)));
-    }
-
-    /**
-     * Calculate the width (in meters) of quadtree cells at a specific level
-     * @param level quadtree level must be greater or equal to zero  
-     * @return the width of cells at level in meters
-     */
-    public static double quadTreeCellWidth(int level) {  
-        assert level >= 0;
-        return EARTH_EQUATOR / (1L << level);
-    }  
-
-    /**
-     * Calculate the height (in meters) of geohash cells at a specific level  
-     * @param level geohash level must be greater or equal to zero
-     * @return the height of cells at level in meters
-     */  
-    public static double geoHashCellHeight(int level) {
-        assert level >= 0;
-        // Geohash cells are split into 32 cells at each level. the grid  
-        // alternates at each level between a 8x4 and a 4x8 grid
-        return EARTH_POLAR_DISTANCE / (1L << ((((level + 1) / 2) * 2) + ((level / 2) * 3)));
-    }  
-
-    /**
-     * Calculate the height (in meters) of quadtree cells at a specific level  
-     * @param level quadtree level must be greater or equal to zero
-     * @return the height of cells at level in meters
-     */  
-    public static double quadTreeCellHeight(int level) {
-        assert level >= 0;
-        return EARTH_POLAR_DISTANCE / (1L << level);  
-    }
-
-    /**  
-     * Calculate the size (in meters) of geohash cells at a specific level
-     * @param level geohash level must be greater or equal to zero
-     * @return the size of cells at level in meters  
-     */
-    public static double geoHashCellSize(int level) {
-        assert level >= 0;  
-        final double w = geoHashCellWidth(level);
-        final double h = geoHashCellHeight(level);
-        return Math.sqrt(w * w + h * h);  
-    }
-
-    /**  
-     * Calculate the size (in meters) of quadtree cells at a specific level
-     * @param level quadtree level must be greater or equal to zero
-     * @return the size of cells at level in meters  
-     */
-    public static double quadTreeCellSize(int level) {
-        assert level >= 0;  
-        return Math.sqrt(EARTH_POLAR_DISTANCE * EARTH_POLAR_DISTANCE + EARTH_EQUATOR * EARTH_EQUATOR) / (1L << level);
-    }
-
-    /**
-     * Calculate the number of levels needed for a specific precision. Quadtree
-     * cells will not exceed the specified size (diagonal) of the precision.  
-     * @param meters Maximum size of cells in meters (must greater than zero)
-     * @return levels need to achieve precision
-     */  
-    public static int quadTreeLevelsForPrecision(double meters) {
-        assert meters >= 0;
-        if (meters == 0) {  
-            return QuadPrefixTree.MAX_LEVELS_POSSIBLE;
-        } else {
-            final double ratio = 1 + (EARTH_POLAR_DISTANCE / EARTH_EQUATOR); // cell ratio  
-            final double width = Math.sqrt((meters * meters) / (ratio * ratio)); // convert to cell width
-            final long part = Math.round(Math.ceil(EARTH_EQUATOR / width));
-            final int level = Long.SIZE - Long.numberOfLeadingZeros(part) - 1; // (log_2)  
-            return (part <= (1L << level)) ? level : (level + 1); // adjust level
-        }
-    }  
-
-    /**
-     * Calculate the number of levels needed for a specific precision. QuadTree  
-     * cells will not exceed the specified size (diagonal) of the precision.
-     * @param distance Maximum size of cells as unit string (must greater or equal to zero)
+     * For this purpose, you should call the
+            if (i != 0) {  
+                }
+            parser.nextToken(); // field name
+            throw new OpenSearchParseException("error parsing geopoint", ex);
      * @return levels need to achieve precision  
-     */
-    public static int quadTreeLevelsForPrecision(String distance) {
-        return quadTreeLevelsForPrecision(DistanceUnit.METERS.parse(distance, DistanceUnit.DEFAULT));  
+            rtn += divisor;
+            }  
+                    throw new OpenSearchParseException("field [{}] missing", GEOJSON_TYPE);
+     *
+import org.opensearch.geometry.ShapeType;  
+ * this work for additional information regarding copyright
     }
-
+    }
+        switch (parser.currentToken()) {
+        assert level >= 0;  
+            }
+ * KIND, either express or implied.  See the License for the
+     * @param lon Longitude to normalize
     /**  
-     * Calculate the number of levels needed for a specific precision. GeoHash
-     * cells will not exceed the specified size (diagonal) of the precision.
-     * @param meters Maximum size of cells in meters (must greater or equal to zero)  
+                            for (GeoPoint from : fromPoints) {
+                        return false;
+        return EARTH_POLAR_DISTANCE / (1L << level);  
+     * @param point The point to normalize in-place.
+    /**
+            return SloppyMath.haversinMeters(centerLat, centerLon, 0, centerLon);
+                @Override
+     * @return the height of cells at level in meters
+import java.util.HashMap;
+            return (part <= (1L << level)) ? level : (level + 1); // adjust level
+        final GeoPoint point,  
+     * @param level geohash level must be greater or equal to zero  
+            rtn -= divisor;
+                    return checkPrecisionRange(parsedPrecision);
+    public static final String LONGITUDE = "lon";  
+        if (singleValues != null && fromPoints.length == 1) {
+import org.opensearch.OpenSearchParseException;
+        if (meters == 0) {  
+ *
+     *
+     * Array: two or more elements, the first element is longitude, the second is latitude, the rest is ignored if ignoreZValue is true  
+                if (normLon) {
+    private static GeoPoint parseGeoJsonFields(final XContentParser parser, final GeoPoint point, final boolean ignoreZValue)
+     * @return the size of cells at level in meters  
+        normalizePoint(point, true, true);
+                    throw new OpenSearchParseException("[geo_point] field type does not accept more than 3 values");  
+     * this provides a faster alternative to {@link GeoUtils#arcDistance} but is inaccurate for distances greater than
+        return true;
+    public static void normalizePoint(GeoPoint point, boolean normLat, boolean normLon) {  
+    }  
+        normalizePoint(lonLat, true, true);
+            }  
+     * Object: has to contain either lat and lon or geohash fields  
+    public static boolean isValidLatitude(double latitude) {
+            lat = centeredModulus(lat, 360);
      * @return levels need to achieve precision
+    /**  
+    /** Returns true if latitude is actually a valid latitude value.*/  
+                lat = 180 - lat;
+                element++;
+            return point.reset(y, x);
+            return GeohashPrefixTree.getMaxLevelsPossible();
+     */
+     * Therefore x will be adjusted while keeping k preserved.  
+        if (meters == 0) {  
+     *  
+     * <p>
+     * <p>
+import org.opensearch.core.xcontent.XContentParser;
+     * @param effectivePoint tells which point to use for GeoHash form
+    }
+            if (lat < -90) {
+                try {  
+                    // this happens when distance too small, so precision > 12. We'd like to see the original string  
+            return QuadPrefixTree.MAX_LEVELS_POSSIBLE;
+import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
+            });
+import java.util.Collections;  
+                } else if (element == 3) {  
+    public static final String GEOJSON_TYPE = "type";  
+    public static final double MAX_LAT = 90.0;  
+                }
+     */
+     *     <li>GeoHash: <pre>{@code "<geohash>"}</pre></li>  
+            if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {
+     */  
+     * Represents the point of the geohash cell that should be used as the value of geohash
+        }
+    /** Earth ellipsoid polar distance in meters */  
+    /**
+    public static double quadTreeCellSize(int level) {
+/**  
+import org.opensearch.common.xcontent.support.XContentMapValues;
+    /**
+    public static final String LATITUDE = "lat";
+     * for each document.
+    }
+    /**
+            boolean shift = true;  
+    public static double arcDistance(double lat1, double lon1, double lat2, double lon2) {
+     * Normalize the geo {@code Point} for its coordinates to lie within their
+    public static double planeDistance(double lat1, double lon1, double lat2, double lon2) {
+     * Parses the value as a geopoint. The following types of values are supported:
+     *
+                    // keep it in the form x+k*360 (with x in ]-180;180])
+    }
+     * in order to normalize properly the latitude.
+        normalizePoint(pt, normLon, normLat);
+            )
+import org.opensearch.index.fielddata.SortingNumericDoubleValues;  
+            throw new OpenSearchParseException("field [{}] missing", LONGITUDE);  
+            try {  
+     */  
+        }
+                case VALUE_NUMBER:
+ * Useful geo utilities
+     * because when normalizing latitude it may be necessary to
+            String field = subParser.currentName();
+        double[] pt = { point.lon(), point.lat() };
+        return point.parseGeoHash(parser.text(), effectivePoint);
+     * @return The normalized latitude.
+                // we want to treat simple integer strings as precision levels, not distances
+ * @opensearch.internal  
+                    throw new OpenSearchParseException("{} must be Point", GEOJSON_TYPE);  
+        if (data.get(LATITUDE) == null) {
+    /**
+    /**  
+    }
+        throws IOException {  
+    }
+        return Math.sqrt(x * x + y * y) * EARTH_MEAN_RADIUS;
+                        int v = 0;
+     *
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+     *     <li>GeoJson: <pre>{@code {"type": "Point", "coordinates": [<longitude>, <latitude>]}}</pre><li>  
+     * @param parser {@link XContentParser} to parse the value from  
+            }
+     * Calculate the size (in meters) of geohash cells at a specific level
+    }
+        final MultiGeoPointValues geoPointValues,  
+     */
+     * @param meters Maximum size of cells in meters (must greater or equal to zero)  
+            }  
+                null  
+    public static final double EARTH_POLAR_DISTANCE = Math.PI * EARTH_SEMI_MINOR_AXIS;
+            lonLat[0] = centeredModulus(lonLat[0], 360);  
+            } else {
+    public static final double MAX_LON = 180.0;
+    public static int quadTreeLevelsForPrecision(String distance) {
+    public static SortedNumericDoubleValues distanceValues(  
+                break;
+    public static void normalizePoint(double[] lonLat, boolean normLon, boolean normLat) {
+    }  
+     * Calculate the width (in meters) of geohash cells at a specific level
+        if (GEOHASH.equals(parser.currentName()) == false) {  
+        final EffectivePoint effectivePoint
+        if ((precision < 1) || (precision > 12)) {
+                lonLat[1] = -180 - lonLat[1];
+    public static GeoPoint parseGeoPoint(Object value, GeoPoint point, final boolean ignoreZValue) throws OpenSearchParseException {  
+        return EARTH_POLAR_DISTANCE / (1L << ((((level + 1) / 2) * 2) + ((level / 2) * 3)));
+     * cells will not exceed the specified size (diagonal) of the precision.
+            }
+        final XContentParser parser,
+        }
+     */
+    public static GeoPoint parseGeoPoint(
+                return XContentMapValues.nodeIntegerValue(precision);
+        } else {
+        assert meters >= 0;
+    /**
+    }
+        } else {
+        // Geohash cells are split into 32 cells at each level. the grid  
+        try (XContentSubParser subParser = new XContentSubParser(parser)) {  
+     * @param ignoreZValue tells to ignore z value or throw exception when there is a z value  
+            return FieldData.singleton(new NumericDoubleValues() {
+     * @param level geohash level must be greater or equal to zero
+     * in order to normalize properly the latitude.
+ */  
+            switch (parser.nextToken()) {  
+        }
+        boolean hasTypePoint = false;
+    /**
+            lonLat[1] = centeredModulus(lonLat[1], 360);
+import org.apache.lucene.util.SloppyMath;  
+        BOTTOM_LEFT,
+        final boolean ignoreZValue,
+     * <p>  
+        return EARTH_EQUATOR / (1L << level);
+        for (int i = 0; i < 2; i++) {  
+     * {@link #normalizePoint(GeoPoint)} function.
+                    final GeoPoint from = fromPoints[0];
+    /**
+    public static double normalizeLon(double lon) {
+        } else {
+                        resize(geoPointValues.docValueCount() * fromPoints.length);
+            }
+            } else {  
+     * Calculate the size (in meters) of quadtree cells at a specific level
+                break;
+    /** Earth ellipsoid minor axis defined by WGS 84 in meters */  
+    public static double geoHashCellWidth(int level) {  
+        return EARTH_EQUATOR / (1L << ((((level + 1) / 2) * 3) + ((level / 2) * 2)));
+     * Normalize longitude to lie within the -180 (exclusive) to 180 (inclusive) range.  
+    public static final String WKT_BOUNDING_BOX_PARSE_ERROR = "failed to parse WKT bounding box";
      */
     public static int geoHashLevelsForPrecision(double meters) {  
-        assert meters >= 0;
-
-        if (meters == 0) {  
-            return GeohashPrefixTree.getMaxLevelsPossible();
-        } else {
-            final double ratio = 1 + (EARTH_POLAR_DISTANCE / EARTH_EQUATOR); // cell ratio  
-            final double width = Math.sqrt((meters * meters) / (ratio * ratio)); // convert to cell width
-            final double part = Math.ceil(EARTH_EQUATOR / width);
-            if (part == 1) return 1;  
-            final int bits = (int) Math.round(Math.ceil(Math.log(part) / Math.log(2)));
-            final int full = bits / 5;                // number of 5 bit subdivisions
-            final int left = bits - full * 5;           // bit representing the last level  
-            final int even = full + (left > 0 ? 1 : 0);     // number of even levels
-            final int odd = full + (left > 3 ? 1 : 0);      // number of odd levels
-            return even + odd;  
-        }
+     * used to represent geo points.
+        HashMap<String, Double> data = new HashMap<>();
+     * @return the size of cells at level in meters  
+                } catch (IllegalArgumentException e2) {
+                public boolean advanceExact(int doc) throws IOException {
+     * Return a {@link SortedNumericDoubleValues} instance that returns the distances to a list of geo-points  
+    public static double quadTreeCellWidth(int level) {  
+     * Parse a precision that can be expressed as an integer or a distance measure like "1km", "10m".
+        final XContentParser parser,
+                    break;
+                final int parsedPrecision = GeoUtils.geoHashLevelsForPrecision(precision);
     }
-
-    /**
-     * Calculate the number of levels needed for a specific precision. GeoHash
-     * cells will not exceed the specified size (diagonal) of the precision.  
-     * @param distance Maximum size of cells as unit string (must greater or equal to zero)
-     * @return levels need to achieve precision
-     */  
-    public static int geoHashLevelsForPrecision(String distance) {
-        return geoHashLevelsForPrecision(DistanceUnit.METERS.parse(distance, DistanceUnit.DEFAULT));
-    }  
-
-    /**
-     * Normalize longitude to lie within the -180 (exclusive) to 180 (inclusive) range.  
-     *
-     * @param lon Longitude to normalize
-     * @return The normalized longitude.  
-     */
-    public static double normalizeLon(double lon) {
-        if (lon > 180d || lon <= -180d) {  
-            lon = centeredModulus(lon, 360);
-        }
-        // avoid -0.0  
-        return lon + 0d;
-    }
-
-    /**
-     * Normalize latitude to lie within the -90 to 90 (both inclusive) range.
-     * <p>  
-     * Note: You should not normalize longitude and latitude separately,
-     * because when normalizing latitude it may be necessary to
-     * add a shift of 180&deg; in the longitude.  
-     * For this purpose, you should call the
-     * {@link #normalizePoint(GeoPoint)} function.
-     *  
-     * @param lat Latitude to normalize
-     * @return The normalized latitude.
-     * @see #normalizePoint(GeoPoint)  
-     */
-    public static double normalizeLat(double lat) {
-        if (lat > 90d || lat < -90d) {  
-            lat = centeredModulus(lat, 360);
-            if (lat < -90) {
-                lat = -180 - lat;  
-            } else if (lat > 90) {
-                lat = 180 - lat;
-            }  
-        }
-        // avoid -0.0
-        return lat + 0d;  
-    }
-
-    /**  
-     * Normalize the geo {@code Point} for its coordinates to lie within their
-     * respective normalized ranges.
-     * <p>  
-     * Note: A shift of 180&deg; is applied in the longitude if necessary,
-     * in order to normalize properly the latitude.
-     *  
-     * @param point The point to normalize in-place.
-     */
-    public static void normalizePoint(GeoPoint point) {  
-        normalizePoint(point, true, true);
-    }
-
-    /**
-     * Normalize the geo {@code Point} for the given coordinates to lie within
-     * their respective normalized ranges.  
-     * <p>
-     * You can control which coordinate gets normalized with the two flags.
-     * <p>  
-     * Note: A shift of 180&deg; is applied in the longitude if necessary,
-     * in order to normalize properly the latitude.
-     * If normalizing latitude but not longitude, it is assumed that  
-     * the longitude is in the form x+k*360, with x in ]-180;180],
-     * and k is meaningful to the application.
-     * Therefore x will be adjusted while keeping k preserved.  
-     *
-     * @param point   The point to normalize in-place.
-     * @param normLat Whether to normalize latitude or leave it as is.  
-     * @param normLon Whether to normalize longitude.
-     */
-    public static void normalizePoint(GeoPoint point, boolean normLat, boolean normLon) {  
-        double[] pt = { point.lon(), point.lat() };
-        normalizePoint(pt, normLon, normLat);
-        point.reset(pt[1], pt[0]);  
-    }
-
-    public static void normalizePoint(double[] lonLat) {  
-        normalizePoint(lonLat, true, true);
-    }
-
-    public static void normalizePoint(double[] lonLat, boolean normLon, boolean normLat) {
-        assert lonLat != null && lonLat.length == 2;
-
-        normLat = normLat && (lonLat[1] > 90 || lonLat[1] < -90);
-        normLon = normLon && (lonLat[0] > 180 || lonLat[0] < -180 || normLat);
-
-        if (normLat) {
-            lonLat[1] = centeredModulus(lonLat[1], 360);
-            boolean shift = true;  
-            if (lonLat[1] < -90) {
-                lonLat[1] = -180 - lonLat[1];
-            } else if (lonLat[1] > 90) {  
-                lonLat[1] = 180 - lonLat[1];
-            } else {
-                // No need to shift the longitude, and the latitude is normalized  
-                shift = false;
-            }
-            if (shift) {  
-                if (normLon) {
-                    lonLat[0] += 180;
                 } else {  
-                    // Longitude won't be normalized,
-                    // keep it in the form x+k*360 (with x in ]-180;180])
-                    // by only changing x, assuming k is meaningful for the user application.  
-                    lonLat[0] += normalizeLon(lonLat[0]) > 0 ? -180 : 180;
+        if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {
+                    try {  
+ *
+            lon = centeredModulus(lon, 360);
+                    } catch (NumberFormatException e) {
+        assert lonLat != null && lonLat.length == 2;
+     * @return the height of cells at level in meters
+                            final GeoPoint point = geoPointValues.nextValue();
+        if (token.equals(XContentParser.Token.VALUE_NUMBER)) {
+            } else if (lonLat[1] > 90) {  
+            } else if (lat > 90) {
+ * The OpenSearch Contributors require contributions made to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /** Minimum valid latitude in degrees. */
+                        for (int i = 0; i < geoPointValues.docValueCount(); ++i) {  
+ */  
+    /**  
+        throws IOException {  
+ * Unless required by applicable law or agreed to in writing,
+     * If normalizing latitude but not longitude, it is assumed that  
+    private static GeoPoint parseGeoPointArray(final XContentParser parser, final GeoPoint point, final boolean ignoreZValue)
+     * <p>
+        }
+                throw new OpenSearchParseException("[geo_point] field type should have at least two dimensions");
+                throw new OpenSearchParseException("geo_point expected");
+import org.opensearch.index.fielddata.MultiGeoPointValues;  
+            final double ratio = 1 + (EARTH_POLAR_DISTANCE / EARTH_EQUATOR); // cell ratio  
+     * the longitude is in the form x+k*360, with x in ]-180;180],
+                    if (geoPointValues.advanceExact(target)) {  
+    public static final double MIN_LAT = -90.0;
+            if (part == 1) return 1;  
+                if (element == 1) {
+     * @param level quadtree level must be greater or equal to zero
+                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
+            while (subParser.nextToken() != XContentParser.Token.END_ARRAY) {  
+     * Calculate the height (in meters) of geohash cells at a specific level  
+                @Override
+     * @param level quadtree level must be greater or equal to zero
+                // try to parse as a distance value
+     * @param point   The point to normalize in-place.
+     * <p>  
+                throw new OpenSearchParseException(ERR_MSG_INVALID_TOKEN, subParser.currentToken());
+                // No need to shift the longitude, and the latitude is normalized  
+        final double w = geoHashCellWidth(level);
+     */
+    /**  
+                @Override  
+        return rtn;  
+            if (lonLat[1] < -90) {
+        final GeoPointValues singleValues = FieldData.unwrapSingleton(geoPointValues);  
+    public static GeoPoint parseFromString(String val) {
+     * @return levels need to achieve precision
+        if (normLat) {
+        return precision;
                 }
-            }  
+        final GeoPoint point,
+     *
+     */
+            } else {  
+            String precision = parser.text();
+            final int left = bits - full * 5;           // bit representing the last level  
+     * Normalize the geo {@code Point} for the given coordinates to lie within
+    public static void normalizePoint(GeoPoint point) {  
+                shift = false;
+        }
+    }  
+    }  
+        assert level >= 0;
+ * compatible open source license.
+            return false;  
+     * The precision is expressed as a number between 1 and 12 and indicates the length of geohash  
+     * their respective normalized ranges.  
+                }  
+            final int level = Long.SIZE - Long.numberOfLeadingZeros(part) - 1; // (log_2)  
+                    throw new OpenSearchParseException("{} must be a string", GEOJSON_TYPE);
+    ) throws IOException, OpenSearchParseException {  
+            if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {
+     * @param distance Maximum size of cells as unit string (must greater or equal to zero)
+    private static GeoPoint parseGeoPointObjectBasicFields(final XContentParser parser, final GeoPoint point) throws IOException {  
+                point.resetFromString(val, ignoreZValue, effectivePoint);
+                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
+     *  
+    /** Earth mean radius defined by WGS 84 in meters */  
+    private GeoUtils() {}
+    /**
+                    // Longitude won't be normalized,
+     * @return new {@link GeoPoint} parsed from the parse
+        // Geohash cells are split into 32 cells at each level. the grid
+    }  
+     */
+                }
+    public static GeoPoint parseGeoPoint(Object value, final boolean ignoreZValue) throws OpenSearchParseException {
+                    // by only changing x, assuming k is meaningful for the user application.  
+        // alternates at each level between a 8x4 and a 4x8 grid
+                parseGeoPointObject(parser, point, ignoreZValue, effectivePoint);  
+     * <p>
+            int element = 0;
+}  
+    public static final double EARTH_EQUATOR = 2 * Math.PI * EARTH_SEMI_MAJOR_AXIS;
+                    return singleValues.advanceExact(doc);  
+     * and k is meaningful to the application.
+    private static final String ERR_MSG_INVALID_FIELDS = "field must be either [lon|lat], [type|coordinates], or [geohash]";
+/*
+        if (lon > 180d || lon <= -180d) {  
+     * @param normLat Whether to normalize latitude or leave it as is.  
+     * add a shift of 180&deg; in the longitude.  
+public class GeoUtils {
+        double x = Math.toRadians(lon2 - lon1) * Math.cos(Math.toRadians((lat2 + lat1) / 2.0d));  
+     * Parse a {@link GeoPoint} with a {@link XContentParser}. A geopoint has one of the following forms:
+                String val = parser.text();  
+        if (rtn > divisor / 2) {  
+ * license agreements. See the NOTICE file distributed with
+     * @param level geohash level must be greater or equal to zero
+                }
         }
         if (normLon) {
-            lonLat[0] = centeredModulus(lonLat[0], 360);  
-        }
-    }
-
-    public static double centeredModulus(double dividend, double divisor) {
-        double rtn = dividend % divisor;
-        if (rtn <= 0) {  
-            rtn += divisor;
-        }
-        if (rtn > divisor / 2) {  
-            rtn -= divisor;
-        }
-        return rtn;  
-    }
-
-    /**  
-     * Parse a {@link GeoPoint} with a {@link XContentParser}:
-     *
-     * @param parser {@link XContentParser} to parse the value from  
-     * @return new {@link GeoPoint} parsed from the parse
-     */
-    public static GeoPoint parseGeoPoint(XContentParser parser) throws IOException, OpenSearchParseException {  
-        return parseGeoPoint(parser, new GeoPoint());
-    }
-
-    public static GeoPoint parseGeoPoint(XContentParser parser, GeoPoint point) throws IOException, OpenSearchParseException {
-        return parseGeoPoint(parser, point, false);
-    }  
-
-    /**
-     * Parses the value as a geopoint. The following types of values are supported:  
-     * <p>
-     * Object: has to contain either lat and lon or geohash fields
-     * <p>  
-     * String: expected to be in "latitude, longitude" format or a geohash
-     * <p>
-     * Array: two or more elements, the first element is longitude, the second is latitude, the rest is ignored if ignoreZValue is true  
-     */
-    public static GeoPoint parseGeoPoint(Object value, final boolean ignoreZValue) throws OpenSearchParseException {
-        return parseGeoPoint(value, new GeoPoint(), ignoreZValue);  
-    }
-
-    /**  
-     * Parses the value as a geopoint. The following types of values are supported:
-     * <p>
-     * Object: has to contain either lat and lon or geohash fields  
-     * <p>
-     * String: expected to be in "latitude, longitude" format or a geohash
-     * <p>  
-     * Array: two or more elements, the first element is longitude, the second is latitude, the rest is ignored if ignoreZValue is true
-     */
-    public static GeoPoint parseGeoPoint(Object value, GeoPoint point, final boolean ignoreZValue) throws OpenSearchParseException {  
-        try (
-            XContentParser parser = new MapXContentParser(
-                NamedXContentRegistry.EMPTY,  
-                LoggingDeprecationHandler.INSTANCE,
-                Collections.singletonMap("null_value", value),
-                null  
-            )
-        ) {
-            parser.nextToken(); // start object  
-            parser.nextToken(); // field name
-            parser.nextToken(); // field value
-            return parseGeoPoint(parser, point, ignoreZValue);  
-        } catch (IOException ex) {
-            throw new OpenSearchParseException("error parsing geopoint", ex);
-        }  
-    }
-
-    /**  
-     * Represents the point of the geohash cell that should be used as the value of geohash
-     *
-     * @opensearch.internal  
-     */
-    public enum EffectivePoint {
-        TOP_LEFT,  
-        TOP_RIGHT,
-        BOTTOM_LEFT,
-        BOTTOM_RIGHT  
-    }
-
-    /**  
-     * Parse a geopoint represented as an object, string or an array. If the geopoint is represented as a geohash,
-     * the left bottom corner of the geohash cell is used as the geopoint coordinates.GeoBoundingBoxQueryBuilder.java
-     */  
-    public static GeoPoint parseGeoPoint(XContentParser parser, GeoPoint point, final boolean ignoreZValue) throws IOException,
-        OpenSearchParseException {
-        return parseGeoPoint(parser, point, ignoreZValue, EffectivePoint.BOTTOM_LEFT);  
-    }
-
-    /**  
-     * Parse a {@link GeoPoint} with a {@link XContentParser}. A geopoint has one of the following forms:
-     *
-     * <ul>  
-     *     <li>Object: <pre>{@code {"lat": <latitude>, "lon": <longitude}}</pre></li>
-     *     <li>String: <pre>{@code "<latitude>,<longitude>"}</pre></li>
-     *     <li>GeoHash: <pre>{@code "<geohash>"}</pre></li>  
-     *     <li>WKT: <pre>{@code "POINT (<longitude> <latitude>)"}</pre></li>
-     *     <li>Array: <pre>{@code [<longitude>, <latitude>]}</pre></li>
-     *     <li>GeoJson: <pre>{@code {"type": "Point", "coordinates": [<longitude>, <latitude>]}}</pre><li>  
-     * </ul>
-     *
-     *  
-     * @param parser {@link XContentParser} to parse the value from
-     * @param point A {@link GeoPoint} that will be reset by the values parsed
-     * @param ignoreZValue tells to ignore z value or throw exception when there is a z value  
-     * @param effectivePoint tells which point to use for GeoHash form
-     * @return new {@link GeoPoint} parsed from the parse
-     */  
-    public static GeoPoint parseGeoPoint(
-        final XContentParser parser,
-        final GeoPoint point,  
-        final boolean ignoreZValue,
-        final EffectivePoint effectivePoint
-    ) throws IOException, OpenSearchParseException {  
-        switch (parser.currentToken()) {
-            case START_OBJECT:
-                parseGeoPointObject(parser, point, ignoreZValue, effectivePoint);  
-                break;
-            case START_ARRAY:
-                parseGeoPointArray(parser, point, ignoreZValue);  
-                break;
-            case VALUE_STRING:
-                String val = parser.text();  
-                point.resetFromString(val, ignoreZValue, effectivePoint);
-                break;
-            default:  
-                throw new OpenSearchParseException("geo_point expected");
-        }
-        return point;  
-    }
-
-    private static GeoPoint parseGeoPointObject(  
-        final XContentParser parser,
-        final GeoPoint point,
-        final boolean ignoreZValue,  
-        final GeoUtils.EffectivePoint effectivePoint
-    ) throws IOException {
-        try (XContentSubParser subParser = new XContentSubParser(parser)) {  
-            if (subParser.nextToken() != XContentParser.Token.FIELD_NAME) {
-                throw new OpenSearchParseException(ERR_MSG_INVALID_TOKEN, subParser.currentToken());
-            }  
-
-            String field = subParser.currentName();
-            if (LONGITUDE.equals(field) || LATITUDE.equals(field)) {  
-                parseGeoPointObjectBasicFields(subParser, point);
-            } else if (GEOHASH.equals(field)) {
                 parseGeoHashFields(subParser, point, effectivePoint);  
-            } else if (GEOJSON_TYPE.equals(field) || GEOJSON_COORDS.equals(field)) {
-                parseGeoJsonFields(subParser, point, ignoreZValue);
-            } else {  
-                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
-            }
-
-            if (subParser.nextToken() != XContentParser.Token.END_OBJECT) {
-                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
-            }  
-
-            return point;
-        }  
-    }
-
-    private static GeoPoint parseGeoPointObjectBasicFields(final XContentParser parser, final GeoPoint point) throws IOException {  
-        HashMap<String, Double> data = new HashMap<>();
-        for (int i = 0; i < 2; i++) {
-            if (i != 0) {  
-                parser.nextToken();
-            }
-
-            if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {
-                break;
-            }  
-
-            String field = parser.currentName();
-            if (LONGITUDE.equals(field) == false && LATITUDE.equals(field) == false) {  
-                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
-            }
-            switch (parser.nextToken()) {  
-                case VALUE_NUMBER:
-                case VALUE_STRING:
-                    try {  
-                        data.put(field, parser.doubleValue(true));
-                    } catch (NumberFormatException e) {
-                        throw new OpenSearchParseException("[{}] and [{}] must be valid double values", e, LONGITUDE, LATITUDE);  
-                    }
-                    break;
-                default:  
-                    throw new OpenSearchParseException("{} must be a number", field);
-            }
-        }  
-
-        if (data.get(LONGITUDE) == null) {
-            throw new OpenSearchParseException("field [{}] missing", LONGITUDE);  
-        }
-        if (data.get(LATITUDE) == null) {
-            throw new OpenSearchParseException("field [{}] missing", LATITUDE);  
-        }
-
-        return point.reset(data.get(LATITUDE), data.get(LONGITUDE));  
-    }
-
-    private static GeoPoint parseGeoHashFields(  
-        final XContentParser parser,
-        final GeoPoint point,
-        final GeoUtils.EffectivePoint effectivePoint  
-    ) throws IOException {
-        if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {
-            throw new OpenSearchParseException(ERR_MSG_INVALID_TOKEN, parser.currentToken());  
-        }
-
-        if (GEOHASH.equals(parser.currentName()) == false) {  
-            throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
-        }
-
-        if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {
-            throw new OpenSearchParseException("{} must be a string", GEOHASH);
-        }  
-
-        return point.parseGeoHash(parser.text(), effectivePoint);
-    }  
-
-    private static GeoPoint parseGeoJsonFields(final XContentParser parser, final GeoPoint point, final boolean ignoreZValue)
-        throws IOException {  
-        boolean hasTypePoint = false;
-        boolean hasCoordinates = false;
-        for (int i = 0; i < 2; i++) {  
-            if (i != 0) {
-                parser.nextToken();
-            }  
-
-            if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {
-                if (hasTypePoint == false) {  
-                    throw new OpenSearchParseException("field [{}] missing", GEOJSON_TYPE);
-                }
-                if (hasCoordinates == false) {  
-                    throw new OpenSearchParseException("field [{}] missing", GEOJSON_COORDS);
-                }
-            }  
-
-            if (GEOJSON_TYPE.equals(parser.currentName())) {
-                if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {  
-                    throw new OpenSearchParseException("{} must be a string", GEOJSON_TYPE);
-                }
-
-                // To be consistent with geo_shape parsing, ignore case here as well.
-                if (ShapeType.POINT.name().equalsIgnoreCase(parser.text()) == false) {
-                    throw new OpenSearchParseException("{} must be Point", GEOJSON_TYPE);  
-                }
-                hasTypePoint = true;
-            } else if (GEOJSON_COORDS.equals(parser.currentName())) {  
-                if (parser.nextToken() != XContentParser.Token.START_ARRAY) {
-                    throw new OpenSearchParseException("{} must be an array", GEOJSON_COORDS);
-                }  
-                parseGeoPointArray(parser, point, ignoreZValue);
-                hasCoordinates = true;
-            } else {  
-                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
-            }
-        }  
-
-        return point;
-    }  
-
-    private static GeoPoint parseGeoPointArray(final XContentParser parser, final GeoPoint point, final boolean ignoreZValue)
-        throws IOException {  
-        try (XContentSubParser subParser = new XContentSubParser(parser)) {
-            double x = Double.NaN;
-            double y = Double.NaN;  
-
-            int element = 0;
-            while (subParser.nextToken() != XContentParser.Token.END_ARRAY) {  
+     */
                 if (parser.currentToken() != XContentParser.Token.VALUE_NUMBER) {
-                    throw new OpenSearchParseException("numeric value expected");
-                }  
-                element++;
-                if (element == 1) {
-                    x = parser.doubleValue();  
-                } else if (element == 2) {
-                    y = parser.doubleValue();
-                } else if (element == 3) {  
-                    GeoPoint.assertZValue(ignoreZValue, parser.doubleValue());
-                } else {
-                    throw new OpenSearchParseException("[geo_point] field type does not accept more than 3 values");  
-                }
-            }
-
-            if (element < 2) {
-                throw new OpenSearchParseException("[geo_point] field type should have at least two dimensions");
-            }  
-            return point.reset(y, x);
-        }
-    }  
-
-    /**
-     * Parse a {@link GeoPoint} from a string. The string must have one of the following forms:  
-     *
-     * <ul>
-     *     <li>Latitude, Longitude form: <pre>&quot;<i>&lt;latitude&gt;</i>,<i>&lt;longitude&gt;</i>&quot;</pre></li>  
-     *     <li>Geohash form:: <pre>&quot;<i>&lt;geohash&gt;</i>&quot;</pre></li>
-     * </ul>
-     *  
-     * @param val a String to parse the value from
-     * @return new parsed {@link GeoPoint}
-     */  
-    public static GeoPoint parseFromString(String val) {
-        GeoPoint point = new GeoPoint();
-        return point.resetFromString(val, false, EffectivePoint.BOTTOM_LEFT);  
-    }
-
-    /**  
-     * Parse a precision that can be expressed as an integer or a distance measure like "1km", "10m".
      * <p>
-     * The precision is expressed as a number between 1 and 12 and indicates the length of geohash  
-     * used to represent geo points.
-     *
-     * @param parser {@link XContentParser} to parse the value from  
-     * @return int representing precision
+     *     <li>WKT: <pre>{@code "POINT (<longitude> <latitude>)"}</pre></li>
+     * </ul>
+                            }
+     * @param lat Latitude to normalize
+        boolean hasCoordinates = false;
+                    throw new OpenSearchParseException("numeric value expected");
+     * Parse a geopoint represented as an object, string or an array. If the geopoint is represented as a geohash,
+        }
+                break;
+    public static final String WKT_BOUNDING_BOX_TYPE_ERROR = "failed to parse WKT bounding box. [%s] found. expected [%s]";
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;  
+                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
+        }
+        final GeoUtils.EffectivePoint effectivePoint  
+     * 4 decimal degrees  
+        if (rtn <= 0) {  
+        assert level >= 0;
      */
-    public static int parsePrecision(XContentParser parser) throws IOException, OpenSearchParseException {  
-        XContentParser.Token token = parser.currentToken();
-        if (token.equals(XContentParser.Token.VALUE_NUMBER)) {
-            return XContentMapValues.nodeIntegerValue(parser.intValue());  
-        } else {
-            String precision = parser.text();
-            try {  
-                // we want to treat simple integer strings as precision levels, not distances
-                return XContentMapValues.nodeIntegerValue(precision);
-            } catch (NumberFormatException e) {  
-                // try to parse as a distance value
-                final int parsedPrecision = GeoUtils.geoHashLevelsForPrecision(precision);
-                try {  
-                    return checkPrecisionRange(parsedPrecision);
-                } catch (IllegalArgumentException e2) {
-                    // this happens when distance too small, so precision > 12. We'd like to see the original string  
-                    throw new IllegalArgumentException("precision too high [" + precision + "]", e2);
+            double y = Double.NaN;  
+                        sort();
+                }
+        }  
+        assert level >= 0;  
+            } else if (GEOHASH.equals(field)) {
+            throw new OpenSearchParseException("{} must be a string", GEOHASH);
+     *     <li>Object: <pre>{@code {"lat": <latitude>, "lon": <longitude}}</pre></li>
+                }  
+        GeoPoint point = new GeoPoint();
+                default:  
+                parseGeoPointArray(parser, point, ignoreZValue);
+    /** Returns the maximum distance/radius (in meters) from the point 'center' before overlapping */
+     * Calculate the number of levels needed for a specific precision. GeoHash
                 }
             }  
-        }
-    }
-
-    /**
+     * Calculate the number of levels needed for a specific precision. Quadtree
+    public static int parsePrecision(XContentParser parser) throws IOException, OpenSearchParseException {  
+     * Parse a {@link GeoPoint} with a {@link XContentParser}:
      * Checks that the precision is within range supported by opensearch - between 1 and 12
-     * <p>  
-     * Returns the precision value if it is in the range and throws an IllegalArgumentException if it
-     * is outside the range.
-     */  
-    public static int checkPrecisionRange(int precision) {
-        if ((precision < 1) || (precision > 12)) {
-            throw new IllegalArgumentException("Invalid geohash aggregation precision of " + precision + ". Must be between 1 and 12.");  
-        }
-        return precision;
+     */
+     *     <li>Array: <pre>{@code [<longitude>, <latitude>]}</pre></li>
+            }  
+     * @param point A {@link GeoPoint} that will be reset by the values parsed
     }  
-
-    /** Returns the maximum distance/radius (in meters) from the point 'center' before overlapping */
-    public static double maxRadialDistanceMeters(final double centerLat, final double centerLon) {  
+    }
         if (Math.abs(centerLat) == MAX_LAT) {
-            return SloppyMath.haversinMeters(centerLat, centerLon, 0, centerLon);
-        }  
-        return SloppyMath.haversinMeters(centerLat, centerLon, centerLat, (MAX_LON + centerLon) % 360);
-    }
-
-    /** Return the distance (in meters) between 2 lat,lon geo points using the haversine method implemented by lucene */
-    public static double arcDistance(double lat1, double lon1, double lat2, double lon2) {
-        return SloppyMath.haversinMeters(lat1, lon1, lat2, lon2);  
-    }
-
-    /**  
-     * Return the distance (in meters) between 2 lat,lon geo points using a simple tangential plane
-     * this provides a faster alternative to {@link GeoUtils#arcDistance} but is inaccurate for distances greater than
-     * 4 decimal degrees  
-     */
-    public static double planeDistance(double lat1, double lon1, double lat2, double lon2) {
-        double x = Math.toRadians(lon2 - lon1) * Math.cos(Math.toRadians((lat2 + lat1) / 2.0d));  
-        double y = Math.toRadians(lat2 - lat1);
-        return Math.sqrt(x * x + y * y) * EARTH_MEAN_RADIUS;
-    }  
-
-    /**
-     * Return a {@link SortedNumericDoubleValues} instance that returns the distances to a list of geo-points  
-     * for each document.
-     */
-    public static SortedNumericDoubleValues distanceValues(  
-        final GeoDistance distance,
-        final DistanceUnit unit,
-        final MultiGeoPointValues geoPointValues,  
+            final double part = Math.ceil(EARTH_EQUATOR / width);
         final GeoPoint... fromPoints
-    ) {
-        final GeoPointValues singleValues = FieldData.unwrapSingleton(geoPointValues);  
-        if (singleValues != null && fromPoints.length == 1) {
-            return FieldData.singleton(new NumericDoubleValues() {
-
-                @Override
-                public boolean advanceExact(int doc) throws IOException {
-                    return singleValues.advanceExact(doc);  
-                }
-
-                @Override  
-                public double doubleValue() throws IOException {
-                    final GeoPoint from = fromPoints[0];
-                    final GeoPoint to = singleValues.geoPointValue();  
-                    return distance.calculate(from.lat(), from.lon(), to.lat(), to.lon(), unit);
-                }
-
-            });
-        } else {
-            return new SortingNumericDoubleValues() {  
-                @Override
-                public boolean advanceExact(int target) throws IOException {
-                    if (geoPointValues.advanceExact(target)) {  
-                        resize(geoPointValues.docValueCount() * fromPoints.length);
-                        int v = 0;
-                        for (int i = 0; i < geoPointValues.docValueCount(); ++i) {  
-                            final GeoPoint point = geoPointValues.nextValue();
-                            for (GeoPoint from : fromPoints) {
-                                values[v] = distance.calculate(from.lat(), from.lon(), point.lat(), point.lon(), unit);  
-                                v++;
-                            }
-                        }  
-                        sort();
-                        return true;
-                    } else {  
-                        return false;
-                    }
-                }  
-            };
-        }
+ * specific language governing permissions and limitations
+     * Note: You should not normalize longitude and latitude separately,
+    /**  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
     }  
-
-    private GeoUtils() {}
-}  
+     * @param meters Maximum size of cells in meters (must greater than zero)
+     * @return the width of cells at level in meters
+            parser.nextToken(); // start object  
+            if (subParser.nextToken() != XContentParser.Token.FIELD_NAME) {
+        return point;
+        BOTTOM_RIGHT  
+    public static int quadTreeLevelsForPrecision(double meters) {
+            throw new OpenSearchParseException("field [{}] missing", LATITUDE);  
+     * Parse a {@link GeoPoint} from a string. The string must have one of the following forms:  
+        } else {
+                throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
+    ) {
+import org.opensearch.index.fielddata.NumericDoubleValues;
+import java.io.IOException;
+            return false;
+     *  
+     *     <li>String: <pre>{@code "<latitude>,<longitude>"}</pre></li>
+    }
+    /**
+        // avoid -0.0  
+    /** Return the distance (in meters) between 2 lat,lon geo points using the haversine method implemented by lucene */
+        ) {
+            final int bits = (int) Math.round(Math.ceil(Math.log(part) / Math.log(2)));
+     * Parses the value as a geopoint. The following types of values are supported:  
+     * Array: two or more elements, the first element is longitude, the second is latitude, the rest is ignored if ignoreZValue is true
+    }  
+            }  
+        return Math.sqrt(w * w + h * h);  
+        }
+        XContentParser.Token token = parser.currentToken();
+            } else if (GEOJSON_TYPE.equals(field) || GEOJSON_COORDS.equals(field)) {
+    /**
+     * Return the distance (in meters) between 2 lat,lon geo points using a simple tangential plane
+     */  
+    }
+     * String: expected to be in "latitude, longitude" format or a geohash
+import org.opensearch.common.unit.DistanceUnit;
+     * <p>  
+    /** Maximum valid longitude in degrees. */  
+                                v++;
+    }  
+    private static GeoPoint parseGeoPointObject(  
+ *
+    }  
+        }  
+                        data.put(field, parser.doubleValue(true));
+    public static GeoPoint parseGeoPoint(XContentParser parser) throws IOException, OpenSearchParseException {  
+     */
+        }  
+ * You may obtain a copy of the License at  
+     * @see #normalizePoint(GeoPoint)  
+        final DistanceUnit unit,
+    /**  
+    public static final double TOLERANCE = 1E-6;
+                lat = -180 - lat;  
+            }
+     * @param distance Maximum size of cells as unit string (must greater or equal to zero)
+        }
+                    }
+        }
+     * @return the width of cells at level in meters
+package org.opensearch.common.geo;
+            if (element < 2) {
+     *  
+        final XContentParser parser,
+import org.opensearch.core.xcontent.XContentSubParser;
+            if (shift) {  
+            final int odd = full + (left > 3 ? 1 : 0);      // number of odd levels
+    public static double maxRadialDistanceMeters(final double centerLat, final double centerLon) {  
+    public static final double EARTH_MEAN_RADIUS = 6371008.7714D;      // meters (WGS 84)
+     * <p>  
+ * under the License.  
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+     * @param val a String to parse the value from
+            return even + odd;  
+        return lat + 0d;  
+            final int even = full + (left > 0 ? 1 : 0);     // number of even levels
+                }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                    final GeoPoint to = singleValues.geoPointValue();  
+            final double width = Math.sqrt((meters * meters) / (ratio * ratio)); // convert to cell width
+                case VALUE_STRING:
+     * <p>
+     *
+    /** Earth ellipsoid equator length in meters */  
+        return point;  
+                    throw new OpenSearchParseException("{} must be an array", GEOJSON_COORDS);
+    private static final String ERR_MSG_INVALID_TOKEN = "token [{}] not allowed";  
+     */  
+        return quadTreeLevelsForPrecision(DistanceUnit.METERS.parse(distance, DistanceUnit.DEFAULT));  
+    }
+    /**
+        assert meters >= 0;
+     * @param level quadtree level must be greater or equal to zero  
+        final GeoDistance distance,
+            if (LONGITUDE.equals(field) == false && LATITUDE.equals(field) == false) {  
+    /** Minimum valid longitude in degrees. */
+        for (int i = 0; i < 2; i++) {
+     * @param normLon Whether to normalize longitude.
+            if (GEOJSON_TYPE.equals(parser.currentName())) {
+ * GitHub history for details.
+        }
+    public static double normalizeLat(double lat) {
+        final GeoUtils.EffectivePoint effectivePoint
+     * Calculate the height (in meters) of quadtree cells at a specific level  
+        point.reset(pt[1], pt[0]);  
+     * @param parser {@link XContentParser} to parse the value from  
+    }
+    }
+        try (
+    }
+                parser.nextToken();
+ * this file be licensed under the Apache-2.0 license or a
+            return new SortingNumericDoubleValues() {  
+        if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {
+    }
+            }  
+            }
+            throw new IllegalArgumentException("Invalid geohash aggregation precision of " + precision + ". Must be between 1 and 12.");  
+                parseGeoPointArray(parser, point, ignoreZValue);  
+                    lonLat[0] += normalizeLon(lonLat[0]) > 0 ? -180 : 180;
+                        return true;
+    /**  Error messages for WKT parsing */  
+import org.opensearch.core.xcontent.MapXContentParser;
+     *
+    }
+    public static int geoHashLevelsForPrecision(String distance) {
+        return parseGeoPoint(parser, point, ignoreZValue, EffectivePoint.BOTTOM_LEFT);  
+                break;
+                if (ShapeType.POINT.name().equalsIgnoreCase(parser.text()) == false) {
+    /** Returns true if longitude is actually a valid longitude value. */
+                if (hasCoordinates == false) {  
+        double y = Math.toRadians(lat2 - lat1);
+    /**
+    ) throws IOException {
+     * Note: A shift of 180&deg; is applied in the longitude if necessary,
+        if (data.get(LONGITUDE) == null) {
+                public boolean advanceExact(int target) throws IOException {
+    /** Maximum valid latitude in degrees. */
+            final double width = Math.sqrt((meters * meters) / (ratio * ratio)); // convert to cell width
+     */
+        return point.reset(data.get(LATITUDE), data.get(LONGITUDE));  
+            }
+    public static final double EARTH_AXIS_RATIO = EARTH_SEMI_MINOR_AXIS / EARTH_SEMI_MAJOR_AXIS;
+        normLat = normLat && (lonLat[1] > 90 || lonLat[1] < -90);
+            case START_OBJECT:
+        }  
+     * is outside the range.
+                if (hasTypePoint == false) {  
+    public static final double MIN_LON = -180.0;  
+     * @return The normalized longitude.  
+                hasCoordinates = true;
+                        }  
+     */
+ * Licensed to Elasticsearch under one or more contributor  
+        return parseGeoPoint(value, new GeoPoint(), ignoreZValue);  
+        try (XContentSubParser subParser = new XContentSubParser(parser)) {
+        // avoid -0.0
+     * </ul>
+ * not use this file except in compliance with the License.
+            XContentParser parser = new MapXContentParser(
+     */  
+        }  
+    public static double centeredModulus(double dividend, double divisor) {
+    }
+                parseGeoPointObjectBasicFields(subParser, point);
+                public double doubleValue() throws IOException {
+        } catch (IOException ex) {
+            if (i != 0) {
+     * @return levels need to achieve precision
+     */
+     * String: expected to be in "latitude, longitude" format or a geohash
+     * cells will not exceed the specified size (diagonal) of the precision.  
+     * <p>  
+            }  
+     * respective normalized ranges.
+     * @param parser {@link XContentParser} to parse the value from
+            } else if (GEOJSON_COORDS.equals(parser.currentName())) {  
+    private static GeoPoint parseGeoHashFields(  
+    /**  
+                parser.nextToken();
+        return lon + 0d;
+                                values[v] = distance.calculate(from.lat(), from.lon(), point.lat(), point.lon(), unit);  
+    /** Earth axis ratio defined by WGS 84 (0.996647189335) */  
+            case VALUE_STRING:
+            }  
+    public static GeoPoint parseGeoPoint(XContentParser parser, GeoPoint point, final boolean ignoreZValue) throws IOException,
+                parseGeoJsonFields(subParser, point, ignoreZValue);
+     */  
+                } else {
+     * cells will not exceed the specified size (diagonal) of the precision.
+     *     <li>Latitude, Longitude form: <pre>&quot;<i>&lt;latitude&gt;</i>,<i>&lt;longitude&gt;</i>&quot;</pre></li>  
+     * the left bottom corner of the geohash cell is used as the geopoint coordinates.GeoBoundingBoxQueryBuilder.java
+     * @opensearch.internal  
+    /** Earth ellipsoid major axis defined by WGS 84 in meters */  
+    }
+     * @return new parsed {@link GeoPoint}
+        }  
+        if (Double.isNaN(longitude) || Double.isInfinite(longitude) || longitude < GeoUtils.MIN_LON || longitude > GeoUtils.MAX_LON) {
+     * <ul>
+            case START_ARRAY:
+        final GeoPoint point,
+            double x = Double.NaN;
+     *
+    public static int checkPrecisionRange(int precision) {
+                }  
+    public enum EffectivePoint {
+    }  
+                    y = parser.doubleValue();
+    public static double geoHashCellHeight(int level) {
+        OpenSearchParseException {
+        return true;
+ * ownership. Elasticsearch licenses this file to you under  
+            final double ratio = 1 + (EARTH_POLAR_DISTANCE / EARTH_EQUATOR); // cell ratio  
+        }
+    public static final double EARTH_SEMI_MINOR_AXIS = 6356752.314245; // meters (WGS 84)
+                    lonLat[0] += 180;
+            return parseGeoPoint(parser, point, ignoreZValue);  
+     * Note: A shift of 180&deg; is applied in the longitude if necessary,
+        return geoHashLevelsForPrecision(DistanceUnit.METERS.parse(distance, DistanceUnit.DEFAULT));
+     * @return new {@link GeoPoint} parsed from the parse
+    }
+        // alternates at each level between a 8x4 and a 4x8 grid  
+        return parseGeoPoint(parser, point, false);
+    /**
+            return point;
+        final double h = geoHashCellHeight(level);
+            throw new OpenSearchParseException(ERR_MSG_INVALID_FIELDS);
+                if (parser.nextToken() != XContentParser.Token.START_ARRAY) {
+                    } else {  
+            String field = parser.currentName();
+            final int full = bits / 5;                // number of 5 bit subdivisions
+        TOP_LEFT,  
+     * <p>  
+    }
+                hasTypePoint = true;
+     * Calculate the width (in meters) of quadtree cells at a specific level
+     * Returns the precision value if it is in the range and throws an IllegalArgumentException if it
+     *     <li>Geohash form:: <pre>&quot;<i>&lt;geohash&gt;</i>&quot;</pre></li>
+import org.opensearch.index.fielddata.GeoPointValues;
+    /**  
+     */  
+    }
+                // To be consistent with geo_shape parsing, ignore case here as well.
+            default:  
+        return Math.sqrt(EARTH_POLAR_DISTANCE * EARTH_POLAR_DISTANCE + EARTH_EQUATOR * EARTH_EQUATOR) / (1L << level);
+     * Calculate the number of levels needed for a specific precision. GeoHash
+        }  
+            throw new OpenSearchParseException(ERR_MSG_INVALID_TOKEN, parser.currentToken());  
+     */
+ * software distributed under the License is distributed on an
+        return point.resetFromString(val, false, EffectivePoint.BOTTOM_LEFT);  
+     * Object: has to contain either lat and lon or geohash fields
+        normLon = normLon && (lonLat[0] > 180 || lonLat[0] < -180 || normLat);
+ * Modifications Copyright OpenSearch Contributors. See
+        return SloppyMath.haversinMeters(centerLat, centerLon, centerLat, (MAX_LON + centerLon) % 360);
+     */  
+    }
+import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
+    /** rounding error for quantized latitude and longitude values */  
+                        throw new OpenSearchParseException("[{}] and [{}] must be valid double values", e, LONGITUDE, LATITUDE);  
+    public static void normalizePoint(double[] lonLat) {  
+        assert level >= 0;
+    /**  
+                    return distance.calculate(from.lat(), from.lon(), to.lat(), to.lon(), unit);
+        if (Double.isNaN(latitude) || Double.isInfinite(latitude) || latitude < GeoUtils.MIN_LAT || latitude > GeoUtils.MAX_LAT) {
+ */
+        double rtn = dividend % divisor;
+     * You can control which coordinate gets normalized with the two flags.
+            } catch (NumberFormatException e) {  
+     * Calculate the number of levels needed for a specific precision. QuadTree  
+                    throw new OpenSearchParseException("{} must be a number", field);
+     */
+                }
+                    x = parser.doubleValue();  
+    public static final String GEOHASH = "geohash";
+     * <ul>  
+            };
+                    throw new OpenSearchParseException("field [{}] missing", GEOJSON_COORDS);
+    public static double quadTreeCellHeight(int level) {
+            if (subParser.nextToken() != XContentParser.Token.END_OBJECT) {
+            final long part = Math.round(Math.ceil(EARTH_EQUATOR / width));
+    public static GeoPoint parseGeoPoint(XContentParser parser, GeoPoint point) throws IOException, OpenSearchParseException {
+        return SloppyMath.haversinMeters(lat1, lon1, lat2, lon2);  
+        }
+            if (LONGITUDE.equals(field) || LATITUDE.equals(field)) {  
+     * cells will not exceed the specified size (diagonal) of the precision.  
+        if (lat > 90d || lat < -90d) {  
+        assert level >= 0;
+        }
+                    }
+                if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {  
+            parser.nextToken(); // field value
+import org.opensearch.index.fielddata.FieldData;
+    ) throws IOException {
+        final boolean ignoreZValue,  
+                    throw new IllegalArgumentException("precision too high [" + precision + "]", e2);
+                NamedXContentRegistry.EMPTY,  
+/*  
+    public static final String GEOJSON_COORDS = "coordinates";
+     * @return int representing precision
+            return XContentMapValues.nodeIntegerValue(parser.intValue());  
+    public static final double EARTH_SEMI_MAJOR_AXIS = 6378137.0;      // meters (WGS 84)
+/*  
+                    GeoPoint.assertZValue(ignoreZValue, parser.doubleValue());
+                Collections.singletonMap("null_value", value),
+        }
+import org.opensearch.index.fielddata.SortedNumericDoubleValues;
+    public static double geoHashCellSize(int level) {
+                lonLat[1] = 180 - lonLat[1];
+ */
+     * Normalize latitude to lie within the -90 to 90 (both inclusive) range.
+                } else if (element == 2) {
+        TOP_RIGHT,
+    }
+    public static boolean isValidLongitude(double longitude) {  
+        return parseGeoPoint(parser, new GeoPoint());
+    /**  

@@ -1,536 +1,490 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.Version;
-import org.opensearch.action.ActionModule;
-import org.opensearch.action.ActionModule.DynamicActionRegistry;  
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
-import org.opensearch.cluster.ClusterSettingsResponse;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsModule;  
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.discovery.InitializeExtensionRequest;  
-import org.opensearch.discovery.InitializeExtensionResponse;
-import org.opensearch.env.EnvironmentSettingsResponse;
-import org.opensearch.extensions.ExtensionsSettings.Extension;  
-import org.opensearch.extensions.action.ExtensionActionRequest;
-import org.opensearch.extensions.action.ExtensionActionResponse;
-import org.opensearch.extensions.action.ExtensionTransportActionsHandler;  
-import org.opensearch.extensions.action.RegisterTransportActionsRequest;
-import org.opensearch.extensions.action.RemoteExtensionActionResponse;
-import org.opensearch.extensions.action.TransportActionRequestFromExtension;  
-import org.opensearch.extensions.rest.RegisterRestActionsRequest;
-import org.opensearch.extensions.rest.RestActionsRequestHandler;
-import org.opensearch.extensions.settings.CustomSettingsRequestHandler;  
-import org.opensearch.extensions.settings.RegisterCustomSettingsRequest;
-import org.opensearch.identity.IdentityService;
-import org.opensearch.identity.tokens.AuthToken;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.ConnectTransportException;
+        );  
+        logger.info("Loaded extension with uniqueId " + extension.getUniqueId() + ": " + extension);  
+                return ThreadPool.Names.GENERIC;  
 import org.opensearch.transport.TransportException;  
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.node.NodeClient;  
-
-import java.io.IOException;
-import java.net.InetAddress;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;  
-import java.util.Optional;
+    AddSettingsUpdateConsumerRequestHandler getAddSettingsUpdateConsumerRequestHandler() {
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;  
-import java.util.stream.Collectors;
-
-/**  
+                extensionTransportActionsHandler.handleTransportActionRequestFromExtension(request)
+    public DiscoveryExtensionNode loadExtension(Extension extension) throws IOException {
+            throw new IOException("Required field [" + fieldName + "] is missing in the request");
  * The main class for managing Extension communication with the OpenSearch Node.
- *
- * @opensearch.internal  
- */
-public class ExtensionsManager {
-    public static final String REQUEST_EXTENSION_ACTION_NAME = "internal:discovery/extensions";  
-    public static final String REQUEST_EXTENSION_CLUSTER_STATE = "internal:discovery/clusterstate";
-    public static final String REQUEST_EXTENSION_CLUSTER_SETTINGS = "internal:discovery/clustersettings";
-    public static final String REQUEST_EXTENSION_ENVIRONMENT_SETTINGS = "internal:discovery/enviornmentsettings";  
-    public static final String REQUEST_EXTENSION_ADD_SETTINGS_UPDATE_CONSUMER = "internal:discovery/addsettingsupdateconsumer";
-    public static final String REQUEST_EXTENSION_UPDATE_SETTINGS = "internal:discovery/updatesettings";
-    public static final String REQUEST_EXTENSION_DEPENDENCY_INFORMATION = "internal:discovery/dependencyinformation";  
-    public static final String REQUEST_EXTENSION_REGISTER_CUSTOM_SETTINGS = "internal:discovery/registercustomsettings";
-    public static final String REQUEST_EXTENSION_REGISTER_REST_ACTIONS = "internal:discovery/registerrestactions";
-    public static final String REQUEST_EXTENSION_REGISTER_TRANSPORT_ACTIONS = "internal:discovery/registertransportactions";  
-    public static final String REQUEST_REST_EXECUTE_ON_EXTENSION_ACTION = "internal:extensions/restexecuteonextensiontaction";
-    public static final String REQUEST_EXTENSION_HANDLE_TRANSPORT_ACTION = "internal:extensions/handle-transportaction";
-    public static final String REQUEST_EXTENSION_HANDLE_REMOTE_TRANSPORT_ACTION = "internal:extensions/handle-remote-transportaction";  
-    public static final String TRANSPORT_ACTION_REQUEST_FROM_EXTENSION = "internal:extensions/request-transportaction-from-extension";
-    public static final int EXTENSION_REQUEST_WAIT_TIMEOUT = 10;
-    private static final Logger logger = LogManager.getLogger(ExtensionsManager.class);  
-
-    /**
-     * Enum for OpenSearch Requests  
-     *
-     * @opensearch.internal
-     */  
-    public static enum OpenSearchRequestType {
-        REQUEST_OPENSEARCH_NAMED_WRITEABLE_REGISTRY
-    }  
-
-    private ExtensionTransportActionsHandler extensionTransportActionsHandler;
-    private Map<String, Extension> extensionSettingsMap;  
-    private Map<String, DiscoveryExtensionNode> initializedExtensions;
-    private Map<String, DiscoveryExtensionNode> extensionIdMap;
-    private RestActionsRequestHandler restActionsRequestHandler;  
-    private CustomSettingsRequestHandler customSettingsRequestHandler;
-    private TransportService transportService;
-    private ClusterService clusterService;  
-    private final Set<Setting<?>> additionalSettings;
-    private Settings environmentSettings;
-    private AddSettingsUpdateConsumerRequestHandler addSettingsUpdateConsumerRequestHandler;  
-    private NodeClient client;
-    private IdentityService identityService;
-
-    /**
-     * Instantiate a new ExtensionsManager object to handle requests and responses from extensions. This is called during Node bootstrap.
-     *  
-     * @param additionalSettings  Additional settings to read in from extension initialization request
-     * @throws IOException  If the extensions discovery file is not properly retrieved.
-     */  
-    public ExtensionsManager(Set<Setting<?>> additionalSettings, IdentityService identityService) throws IOException {
-        logger.info("ExtensionsManager initialized");
-        this.initializedExtensions = new HashMap<String, DiscoveryExtensionNode>();  
-        this.extensionIdMap = new HashMap<String, DiscoveryExtensionNode>();
-        this.extensionSettingsMap = new HashMap<String, Extension>();
-        // will be initialized in initializeServicesAndRestHandler which is called after the Node is initialized  
-        this.transportService = null;
-        this.clusterService = null;
-        // Settings added to extensions.yml by ExtensionAwarePlugins, such as security settings  
-        this.additionalSettings = new HashSet<>();
-        if (additionalSettings != null) {
-            this.additionalSettings.addAll(additionalSettings);  
-        }
-        this.client = null;
-        this.extensionTransportActionsHandler = null;  
-        this.identityService = identityService;
     }
-
+    public Optional<Extension> lookupExtensionSettingsById(final String extensionId) {
+        this.extensionTransportActionsHandler = null;  
+                String uniqueId = extensionRequest.getUniqueId();  
+        return environmentSettings;
+        };
+            }
+    }
+            ExtensionRequest::new,
+            ThreadPool.Names.GENERIC,
+            public void handleResponse(InitializeExtensionResponse response) {
+        this.transportService = transportService;
+        this.extensionTransportActionsHandler = new ExtensionTransportActionsHandler(
+     */  
+        for (DiscoveryExtensionNode extension : extensionIdMap.values()) {
+            false,  
     /**
-     * Initializes the {@link RestActionsRequestHandler}, {@link TransportService}, {@link ClusterService} and environment settings. This is called during Node bootstrap.
-     * Lists/maps of extensions have already been initialized but not yet populated.  
+        this.clusterService = clusterService;
+                inProgressFuture.completeExceptionally(exp);
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
+            }
+    public static final String REQUEST_EXTENSION_CLUSTER_SETTINGS = "internal:discovery/clustersettings";
+            ThreadPool.Names.GENERIC,
+        return serviceAccountToken.asAuthHeaderValue();
+    public static final String REQUEST_EXTENSION_ENVIRONMENT_SETTINGS = "internal:discovery/enviornmentsettings";  
+        this.client = client;
+                extensionTransportActionsHandler.handleRegisterTransportActionsRequest(request)
+    /**  
+import org.apache.logging.log4j.Logger;
+            public String executor() {
+            AddSettingsUpdateConsumerRequest::new,
+import org.opensearch.extensions.action.RemoteExtensionActionResponse;
+                if (e.getCause() instanceof ConnectTransportException connectTransportException) {
+    TransportService getTransportService() {  
+    }  
+import org.opensearch.core.common.Strings;
+     * @param extensionRequest  The request to handle, of a type defined in the {@link org.opensearch.extensions.proto.ExtensionRequestProto.RequestType} enum.
+import org.opensearch.extensions.action.ExtensionActionResponse;
+            false,  
+    /**
+            false,
+                            .filter(e -> e.dependenciesContain(matchingId))
+        return extensionTransportActionsHandler.sendTransportRequestToExtension(request);
+            ((request, channel, task) -> channel.sendResponse(
+            ))  
+    }  
+        this.restActionsRequestHandler = new RestActionsRequestHandler(  
+        return extensionTransportActionsHandler.sendRemoteTransportRequestToExtension(request);
+    ClusterService getClusterService() {
+            public InitializeExtensionResponse read(StreamInput in) throws IOException {
+     */
+import org.opensearch.extensions.settings.CustomSettingsRequestHandler;  
+    }
+    }
+     * Loads a single extension
+            ExtensionRequest::new,
+            TransportActionRequestFromExtension::new,  
+            false,
+                return new EnvironmentSettingsResponse(this.environmentSettings);
+                        extension.setImplementedInterfaces(response.getImplementedInterfaces());
+            TRANSPORT_ACTION_REQUEST_FROM_EXTENSION,
+        initializeExtensionNode(node);  
+            REQUEST_EXTENSION_REGISTER_REST_ACTIONS,
+            protected void doRun() throws Exception {
+ * @opensearch.internal  
+        this.client = null;
+                throw new IllegalArgumentException("Handler not present for the provided request");
+import org.opensearch.extensions.action.TransportActionRequestFromExtension;  
+            throw new IOException("Duplicate uniqueId [" + extension.getUniqueId() + "]. Did not load extension: " + extension);  
+                }  
+        DiscoveryExtensionNode discoveryExtensionNode = new DiscoveryExtensionNode(
+    }  
+    private TransportService transportService;
+            transportService,  
+import org.opensearch.threadpool.ThreadPool;
+            ThreadPool.Names.GENERIC,
+        this.transportService = transportService;
+                extensionIdMap.remove(extensionNode.getId());  
+     * @param extension The extension to be loaded  
+            false,
+import java.util.Optional;
+import org.opensearch.transport.ConnectTransportException;
+            case REQUEST_EXTENSION_CLUSTER_SETTINGS:
+            false,
+    /**
+    }  
+        );
+            public void onFailure(Exception e) {
+            false,
+    private CustomSettingsRequestHandler customSettingsRequestHandler;
+        );
+        validateExtension(extension);  
+            case REQUEST_EXTENSION_DEPENDENCY_INFORMATION:
+        this.restActionsRequestHandler = restActionsRequestHandler;  
+import java.util.Map;  
+                }
+        validateField("extension port", extension.getPort());
+                inProgressFuture.complete(response);
+     * @return An optional of the Extension instance for the matching extension
+ * compatible open source license.
+        );
+        this.extensionIdMap = new HashMap<String, DiscoveryExtensionNode>();
+        validateField("extension host address", extension.getHostAddress());  
+            this
+     * @param request which was sent by an extension.
+    public void initializeExtensionNode(DiscoveryExtensionNode extensionNode) {
+        validateField("minimum opensearch version", extension.getMinimumCompatibleVersion());
+                } else {
+ */
+        this.identityService = identityService;
+        }
+    private NodeClient client;
+                        initializedExtensions.entrySet().stream().map(e -> e.getValue()).collect(Collectors.toList())  
+    Map<String, DiscoveryExtensionNode> getExtensionIdMap() {
+import org.opensearch.common.settings.Settings;
+    /**
+     * @return An optional of the DiscoveryExtensionNode instance for the matching extension
+            clusterService,
+    public static final String REQUEST_EXTENSION_REGISTER_REST_ACTIONS = "internal:discovery/registerrestactions";
+                } else if (e.getCause() instanceof Error error) {  
+                }
+                    }
+    void setClusterService(ClusterService clusterService) {
+     * @opensearch.internal
+            false,
+            @Override
+    }
+    }  
+            REQUEST_EXTENSION_ENVIRONMENT_SETTINGS,
+                } else if (e.getCause() instanceof RuntimeException runtimeException) {
+        logger.info("Sending extension request type: " + REQUEST_EXTENSION_ACTION_NAME);
      *
-     * @param actionModule The ActionModule with the RestController and DynamicActionModule
-     * @param settingsModule The module that binds the provided settings to interface.  
-     * @param transportService  The Node's transport service.
+            extensionIdMap,  
+    public void initialize() {
+    RestActionsRequestHandler getRestActionsRequestHandler() {  
+    private Map<String, DiscoveryExtensionNode> initializedExtensions;
+import org.apache.logging.log4j.LogManager;
      * @param clusterService  The Node's cluster service.
+     * @param request which was sent by an extension.
+import org.opensearch.env.EnvironmentSettingsResponse;
+        ActionModule actionModule,
+        transportService.registerRequestHandler(  
+        logger.info("ExtensionsManager initialized");
+        registerRequestHandler(actionModule.getDynamicActionRegistry());  
+    public Set<Setting<?>> getAdditionalSettings() {
+            transportService,
+        return addSettingsUpdateConsumerRequestHandler;
+        // Settings added to extensions.yml by ExtensionAwarePlugins, such as security settings  
+                    new InitializeExtensionRequest(transportService.getLocalNode(), extensionNode, issueServiceAccount(extensionNode)),
+            extensionIdMap,
+        this.customSettingsRequestHandler = new CustomSettingsRequestHandler(settingsModule);  
+     */  
+        }
+import org.opensearch.discovery.InitializeExtensionResponse;
+        transportService.registerRequestHandler(  
+    private RestActionsRequestHandler restActionsRequestHandler;  
+        validateField("extension version", extension.getVersion());
+        this.environmentSettings = initialEnvironmentSettings;  
+        this.initializedExtensions = new HashMap<String, DiscoveryExtensionNode>();  
+     *  
+            ((request, channel, task) -> channel.sendResponse(
+    public ExtensionsManager(Set<Setting<?>> additionalSettings, IdentityService identityService) throws IOException {
      * @param initialEnvironmentSettings The finalized view of settings for the Environment  
+        });
      * @param client The client used to make transport requests
+        Settings initialEnvironmentSettings,
+                    throw error;
+            false,
+            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))
+        if (extensionIdMap.containsKey(extension.getUniqueId())) {
+     */  
+     *
+        this.clusterService = null;
+    }
+            default:  
+    CustomSettingsRequestHandler getCustomSettingsRequestHandler() {
+                    initializeExtensionResponseHandler
+import java.io.IOException;
+        this.customSettingsRequestHandler = customSettingsRequestHandler;
+        validateField("extension uniqueId", extension.getUniqueId());
+    public static enum OpenSearchRequestType {
+    public RemoteExtensionActionResponse handleRemoteTransportRequest(ExtensionActionRequest request) throws Exception {
+                    throw runtimeException;
+    }  
+                    return new ExtensionDependencyResponse(
+        AuthToken serviceAccountToken = identityService.getTokenManager().issueServiceAccountToken(extension.getId());
+    }
+import org.opensearch.extensions.action.RegisterTransportActionsRequest;
+            @Override
+            ThreadPool.Names.GENERIC,
+    public static final int EXTENSION_REQUEST_WAIT_TIMEOUT = 10;
+     * @param extension The extension to be issued a service account
+            ThreadPool.Names.GENERIC,
+        validateField("extension name", extension.getName());
+                restActionsRequestHandler.handleRegisterRestActionsRequest(request, dynamicActionRegistry)
+        REQUEST_OPENSEARCH_NAMED_WRITEABLE_REGISTRY
+        DiscoveryExtensionNode node = loadExtension(extension);
+     * @return  an Response matching the request.  
+import org.opensearch.identity.tokens.AuthToken;  
+    public static final String REQUEST_EXTENSION_HANDLE_TRANSPORT_ACTION = "internal:extensions/handle-transportaction";
+/**  
+        transportService.registerRequestHandler(  
+     *
+        this.clusterService = clusterService;
+            false,
+            REQUEST_EXTENSION_CLUSTER_STATE,
+            ExtensionRequest::new,  
+        SettingsModule settingsModule,
+    private Settings environmentSettings;
+            RegisterRestActionsRequest::new,
+    public static final String REQUEST_EXTENSION_REGISTER_TRANSPORT_ACTIONS = "internal:discovery/registertransportactions";  
      */
     public void initializeServicesAndRestHandler(  
-        ActionModule actionModule,
-        SettingsModule settingsModule,
-        TransportService transportService,  
-        ClusterService clusterService,
-        Settings initialEnvironmentSettings,
-        NodeClient client,  
-        IdentityService identityService
-    ) {
-        this.restActionsRequestHandler = new RestActionsRequestHandler(  
-            actionModule.getRestController(),
-            extensionIdMap,
-            transportService,  
-            identityService
-        );
-        this.customSettingsRequestHandler = new CustomSettingsRequestHandler(settingsModule);  
-        this.transportService = transportService;
-        this.clusterService = clusterService;
-        this.environmentSettings = initialEnvironmentSettings;  
-        this.addSettingsUpdateConsumerRequestHandler = new AddSettingsUpdateConsumerRequestHandler(
-            clusterService,
-            transportService,  
-            REQUEST_EXTENSION_UPDATE_SETTINGS,
-            settingsModule
-        );  
-        this.client = client;
-        this.extensionTransportActionsHandler = new ExtensionTransportActionsHandler(
-            extensionIdMap,  
-            transportService,
-            client,
-            actionModule,  
-            this
-        );
-        registerRequestHandler(actionModule.getDynamicActionRegistry());  
-    }
-
-    /**  
-     * Lookup an initialized extension by its unique id
-     *
-     * @param extensionId The unique extension identifier  
-     * @return An optional of the DiscoveryExtensionNode instance for the matching extension
-     */
-    public Optional<DiscoveryExtensionNode> lookupInitializedExtensionById(final String extensionId) {  
-        return Optional.ofNullable(this.initializedExtensions.get(extensionId));
-    }
-
-    /**
-     * Lookup the settings for an extension based on unique id for the settings placed in extensions.yml
-     *  
-     * @param extensionId The unique extension identifier
-     * @return An optional of the Extension instance for the matching extension
-     */  
-    public Optional<Extension> lookupExtensionSettingsById(final String extensionId) {
-        return Optional.ofNullable(this.extensionSettingsMap.get(extensionId));
-    }  
-
-    /**
-     * Handles Transport Request from {@link org.opensearch.extensions.action.ExtensionTransportAction} which was invoked by an extension via {@link ExtensionTransportActionsHandler}.  
-     *
-     * @param request which was sent by an extension.
-     */  
-    public RemoteExtensionActionResponse handleRemoteTransportRequest(ExtensionActionRequest request) throws Exception {
-        return extensionTransportActionsHandler.sendRemoteTransportRequestToExtension(request);
-    }  
-
-    /**
-     * Handles Transport Request from {@link org.opensearch.extensions.action.ExtensionTransportAction} which was invoked by OpenSearch or a plugin  
-     *
-     * @param request which was sent by an extension.
-     */  
-    public ExtensionActionResponse handleTransportRequest(ExtensionActionRequest request) throws Exception {
-        return extensionTransportActionsHandler.sendTransportRequestToExtension(request);
-    }  
-
-    private void registerRequestHandler(DynamicActionRegistry dynamicActionRegistry) {
-        transportService.registerRequestHandler(  
-            REQUEST_EXTENSION_REGISTER_REST_ACTIONS,
-            ThreadPool.Names.GENERIC,
-            false,  
-            false,
-            RegisterRestActionsRequest::new,
-            ((request, channel, task) -> channel.sendResponse(  
-                restActionsRequestHandler.handleRegisterRestActionsRequest(request, dynamicActionRegistry)
-            ))
-        );  
-        transportService.registerRequestHandler(
-            REQUEST_EXTENSION_REGISTER_CUSTOM_SETTINGS,
-            ThreadPool.Names.GENERIC,  
-            false,
-            false,
-            RegisterCustomSettingsRequest::new,  
-            ((request, channel, task) -> channel.sendResponse(customSettingsRequestHandler.handleRegisterCustomSettingsRequest(request)))
-        );
-        transportService.registerRequestHandler(  
-            REQUEST_EXTENSION_CLUSTER_STATE,
-            ThreadPool.Names.GENERIC,
-            false,  
-            false,
-            ExtensionRequest::new,
-            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))  
-        );
-        transportService.registerRequestHandler(
-            REQUEST_EXTENSION_CLUSTER_SETTINGS,  
-            ThreadPool.Names.GENERIC,
-            false,
-            false,  
-            ExtensionRequest::new,
-            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))
-        );  
-        transportService.registerRequestHandler(
-            REQUEST_EXTENSION_ENVIRONMENT_SETTINGS,
-            ThreadPool.Names.GENERIC,  
-            false,
-            false,
-            ExtensionRequest::new,  
-            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))
-        );
-        transportService.registerRequestHandler(  
-            REQUEST_EXTENSION_DEPENDENCY_INFORMATION,
-            ThreadPool.Names.GENERIC,
-            false,  
-            false,
-            ExtensionRequest::new,
-            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))  
-        );
-        transportService.registerRequestHandler(
-            REQUEST_EXTENSION_ADD_SETTINGS_UPDATE_CONSUMER,  
-            ThreadPool.Names.GENERIC,
-            false,
-            false,  
-            AddSettingsUpdateConsumerRequest::new,
-            ((request, channel, task) -> channel.sendResponse(
-                addSettingsUpdateConsumerRequestHandler.handleAddSettingsUpdateConsumerRequest(request)  
-            ))
-        );
-        transportService.registerRequestHandler(  
-            REQUEST_EXTENSION_REGISTER_TRANSPORT_ACTIONS,
-            ThreadPool.Names.GENERIC,
-            false,  
-            false,
-            RegisterTransportActionsRequest::new,
-            ((request, channel, task) -> channel.sendResponse(  
-                extensionTransportActionsHandler.handleRegisterTransportActionsRequest(request)
-            ))
-        );  
-        transportService.registerRequestHandler(
-            TRANSPORT_ACTION_REQUEST_FROM_EXTENSION,
-            ThreadPool.Names.GENERIC,  
-            false,
-            false,
-            TransportActionRequestFromExtension::new,  
-            ((request, channel, task) -> channel.sendResponse(
-                extensionTransportActionsHandler.handleTransportActionRequestFromExtension(request)
-            ))  
-        );
-    }
-
-    /**
-     * Loads a single extension
-     * @param extension The extension to be loaded  
-     */
-    public DiscoveryExtensionNode loadExtension(Extension extension) throws IOException {
-        validateExtension(extension);  
-        DiscoveryExtensionNode discoveryExtensionNode = new DiscoveryExtensionNode(
-            extension.getName(),
-            extension.getUniqueId(),  
-            new TransportAddress(InetAddress.getByName(extension.getHostAddress()), Integer.parseInt(extension.getPort())),
-            new HashMap<String, String>(),
-            Version.fromString(extension.getOpensearchVersion()),  
-            Version.fromString(extension.getMinimumCompatibleVersion()),
-            extension.getDependencies()
-        );  
-        extensionIdMap.put(extension.getUniqueId(), discoveryExtensionNode);
-        extensionSettingsMap.put(extension.getUniqueId(), extension);
-        logger.info("Loaded extension with uniqueId " + extension.getUniqueId() + ": " + extension);  
-        return discoveryExtensionNode;
-    }
-
-    public void initializeExtension(Extension extension) throws IOException {
-        DiscoveryExtensionNode node = loadExtension(extension);
-        initializeExtensionNode(node);  
-    }
-
-    private void validateField(String fieldName, String value) throws IOException {  
-        if (Strings.isNullOrEmpty(value)) {
-            throw new IOException("Required field [" + fieldName + "] is missing in the request");
-        }  
-    }
-
-    private void validateExtension(Extension extension) throws IOException {  
-        validateField("extension name", extension.getName());
-        validateField("extension uniqueId", extension.getUniqueId());
-        validateField("extension host address", extension.getHostAddress());  
-        validateField("extension port", extension.getPort());
-        validateField("extension version", extension.getVersion());
-        validateField("opensearch version", extension.getOpensearchVersion());  
-        validateField("minimum opensearch version", extension.getMinimumCompatibleVersion());
-        if (extensionIdMap.containsKey(extension.getUniqueId())) {
-            throw new IOException("Duplicate uniqueId [" + extension.getUniqueId() + "]. Did not load extension: " + extension);  
-        }
-    }
-
-    /**
-     * Iterate through all extensions and initialize them.  Initialized extensions will be added to the {@link #initializedExtensions}.
-     */  
-    public void initialize() {
-        for (DiscoveryExtensionNode extension : extensionIdMap.values()) {
-            initializeExtensionNode(extension);  
-        }
-    }
-
-    public void initializeExtensionNode(DiscoveryExtensionNode extensionNode) {
-
-        final CompletableFuture<InitializeExtensionResponse> inProgressFuture = new CompletableFuture<>();  
-        final TransportResponseHandler<InitializeExtensionResponse> initializeExtensionResponseHandler = new TransportResponseHandler<
-            InitializeExtensionResponse>() {
-
-            @Override
-            public InitializeExtensionResponse read(StreamInput in) throws IOException {
-                return new InitializeExtensionResponse(in);  
-            }
-
-            @Override  
-            public void handleResponse(InitializeExtensionResponse response) {
-                for (DiscoveryExtensionNode extension : extensionIdMap.values()) {
-                    if (extension.getName().equals(response.getName())) {  
-                        extension.setImplementedInterfaces(response.getImplementedInterfaces());
-                        initializedExtensions.put(extension.getId(), extension);
-                        logger.info("Initialized extension: " + extension.getName());  
-                        break;
-                    }
-                }  
-                inProgressFuture.complete(response);
-            }
-
-            @Override
-            public void handleException(TransportException exp) {
-                logger.error(new ParameterizedMessage("Extension initialization failed"), exp);  
-                inProgressFuture.completeExceptionally(exp);
-            }
-
-            @Override
-            public String executor() {
-                return ThreadPool.Names.GENERIC;  
-            }
-        };
-
-        logger.info("Sending extension request type: " + REQUEST_EXTENSION_ACTION_NAME);
-        transportService.getThreadPool().generic().execute(new AbstractRunnable() {
-            @Override  
-            public void onFailure(Exception e) {
-                logger.warn("Error registering extension: " + extensionNode.getId(), e);
-                extensionIdMap.remove(extensionNode.getId());  
-                if (e.getCause() instanceof ConnectTransportException connectTransportException) {
-                    logger.info("No response from extension to request.", e);
-                    throw connectTransportException;  
-                } else if (e.getCause() instanceof RuntimeException runtimeException) {
-                    throw runtimeException;
-                } else if (e.getCause() instanceof Error error) {  
-                    throw error;
-                } else {
-                    throw new RuntimeException(e.getCause());  
-                }
-            }
-
-            @Override
-            protected void doRun() throws Exception {
-                transportService.connectToExtensionNode(extensionNode);  
-                transportService.sendRequest(
-                    extensionNode,
-                    REQUEST_EXTENSION_ACTION_NAME,  
-                    new InitializeExtensionRequest(transportService.getLocalNode(), extensionNode, issueServiceAccount(extensionNode)),
-                    initializeExtensionResponseHandler
-                );  
-            }
-        });
-    }  
-
-    /**
-     * Handles an {@link ExtensionRequest}.  
-     *
-     * @param extensionRequest  The request to handle, of a type defined in the {@link org.opensearch.extensions.proto.ExtensionRequestProto.RequestType} enum.
-     * @return  an Response matching the request.  
-     * @throws Exception if the request is not handled properly.
-     */
-    TransportResponse handleExtensionRequest(ExtensionRequest extensionRequest) throws Exception {  
-        switch (extensionRequest.getRequestType()) {
-            case REQUEST_EXTENSION_CLUSTER_STATE:
-                return new ClusterStateResponse(clusterService.getClusterName(), clusterService.state(), false);  
-            case REQUEST_EXTENSION_CLUSTER_SETTINGS:
-                return new ClusterSettingsResponse(clusterService);
-            case REQUEST_EXTENSION_ENVIRONMENT_SETTINGS:  
-                return new EnvironmentSettingsResponse(this.environmentSettings);
-            case REQUEST_EXTENSION_DEPENDENCY_INFORMATION:
-                String uniqueId = extensionRequest.getUniqueId();  
-                if (uniqueId == null) {
-                    return new ExtensionDependencyResponse(
-                        initializedExtensions.entrySet().stream().map(e -> e.getValue()).collect(Collectors.toList())  
-                    );
-                } else {
-                    ExtensionDependency matchingId = new ExtensionDependency(uniqueId, Version.CURRENT);  
-                    return new ExtensionDependencyResponse(
-                        initializedExtensions.entrySet()
-                            .stream()  
-                            .map(e -> e.getValue())
-                            .filter(e -> e.dependenciesContain(matchingId))
+package org.opensearch.extensions;
                             .collect(Collectors.toList())  
-                    );
-                }
-            default:  
-                throw new IllegalArgumentException("Handler not present for the provided request");
-        }
-    }  
-
-    /**
-     * A helper method called during initialization that issues a service accounts to extensions  
-     * @param extension The extension to be issued a service account
-     */
-    private String issueServiceAccount(DiscoveryExtensionNode extension) {  
-        AuthToken serviceAccountToken = identityService.getTokenManager().issueServiceAccountToken(extension.getId());
-        return serviceAccountToken.asAuthHeaderValue();
-    }  
-
-    static String getRequestExtensionActionName() {
-        return REQUEST_EXTENSION_ACTION_NAME;  
+                    extensionNode,
+            false,
+                        initializedExtensions.entrySet()
+                    return new ExtensionDependencyResponse(
+                return new ClusterStateResponse(clusterService.getClusterName(), clusterService.state(), false);  
+            }
+    public static final String REQUEST_EXTENSION_UPDATE_SETTINGS = "internal:discovery/updatesettings";
+import java.net.InetAddress;  
+    public ExtensionActionResponse handleTransportRequest(ExtensionActionRequest request) throws Exception {
     }
-
-    static String getRequestExtensionClusterState() {  
-        return REQUEST_EXTENSION_CLUSTER_STATE;
-    }
-
-    static String getRequestExtensionClusterSettings() {
-        return REQUEST_EXTENSION_CLUSTER_SETTINGS;
-    }  
-
-    static Logger getLogger() {
-        return logger;  
-    }
-
-    TransportService getTransportService() {  
+            this.additionalSettings.addAll(additionalSettings);  
+        return Optional.ofNullable(this.extensionSettingsMap.get(extensionId));
+            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))  
+    TransportResponse handleExtensionRequest(ExtensionRequest extensionRequest) throws Exception {  
+        this.additionalSettings = new HashSet<>();
         return transportService;
-    }
-
-    ClusterService getClusterService() {
-        return clusterService;
+import org.opensearch.extensions.rest.RestActionsRequestHandler;
+    public static final String REQUEST_EXTENSION_ACTION_NAME = "internal:discovery/extensions";  
+                addSettingsUpdateConsumerRequestHandler.handleAddSettingsUpdateConsumerRequest(request)  
+     */  
+                        logger.info("Initialized extension: " + extension.getName());  
+        if (additionalSettings != null) {
+        );  
+            settingsModule
     }  
-
-    Map<String, DiscoveryExtensionNode> getExtensionIdMap() {
-        return extensionIdMap;  
+        NodeClient client,  
+    private Map<String, Extension> extensionSettingsMap;  
+import java.util.HashMap;
+        this.transportService = null;
+     */
+import org.opensearch.extensions.action.ExtensionTransportActionsHandler;  
+     * @param additionalSettings  Additional settings to read in from extension initialization request
+            @Override
+            ((request, channel, task) -> channel.sendResponse(  
+            ThreadPool.Names.GENERIC,
+import org.opensearch.identity.IdentityService;
     }
-
-    RestActionsRequestHandler getRestActionsRequestHandler() {  
-        return restActionsRequestHandler;
-    }
-
-    void setExtensionIdMap(Map<String, DiscoveryExtensionNode> extensionIdMap) {
         this.extensionIdMap = extensionIdMap;
+        transportService.registerRequestHandler(
+public class ExtensionsManager {
+            REQUEST_EXTENSION_REGISTER_CUSTOM_SETTINGS,
+                            .map(e -> e.getValue())
+import org.opensearch.core.common.io.stream.StreamInput;  
     }  
-
-    void setRestActionsRequestHandler(RestActionsRequestHandler restActionsRequestHandler) {
-        this.restActionsRequestHandler = restActionsRequestHandler;  
-    }
-
-    void setTransportService(TransportService transportService) {  
-        this.transportService = transportService;
-    }
-
-    void setClusterService(ClusterService clusterService) {
-        this.clusterService = clusterService;
-    }  
-
-    CustomSettingsRequestHandler getCustomSettingsRequestHandler() {
-        return customSettingsRequestHandler;  
-    }
-
-    void setCustomSettingsRequestHandler(CustomSettingsRequestHandler customSettingsRequestHandler) {  
-        this.customSettingsRequestHandler = customSettingsRequestHandler;
-    }
-
-    AddSettingsUpdateConsumerRequestHandler getAddSettingsUpdateConsumerRequestHandler() {
-        return addSettingsUpdateConsumerRequestHandler;
-    }  
-
-    void setAddSettingsUpdateConsumerRequestHandler(AddSettingsUpdateConsumerRequestHandler addSettingsUpdateConsumerRequestHandler) {
+            initializeExtensionNode(extension);  
+            @Override  
+            actionModule,  
+        return discoveryExtensionNode;
+            RegisterCustomSettingsRequest::new,  
+import org.opensearch.transport.TransportResponseHandler;
+        );
+import org.opensearch.transport.client.node.NodeClient;  
+                logger.error(new ParameterizedMessage("Extension initialization failed"), exp);  
+import java.util.HashSet;
+            Version.fromString(extension.getOpensearchVersion()),  
+            @Override  
         this.addSettingsUpdateConsumerRequestHandler = addSettingsUpdateConsumerRequestHandler;  
     }
-
-    Settings getEnvironmentSettings() {  
-        return environmentSettings;
+        transportService.registerRequestHandler(
+     * Iterate through all extensions and initialize them.  Initialized extensions will be added to the {@link #initializedExtensions}.
+     */
+ * The OpenSearch Contributors require contributions made to  
+                            .stream()  
     }
-
-    public Set<Setting<?>> getAdditionalSettings() {
-        return this.additionalSettings;
-    }  
+    private void registerRequestHandler(DynamicActionRegistry dynamicActionRegistry) {
+        switch (extensionRequest.getRequestType()) {
+            client,
+        );
+        extensionIdMap.put(extension.getUniqueId(), discoveryExtensionNode);
+        }  
+        return clusterService;
+    private IdentityService identityService;
+    }
+     * @param settingsModule The module that binds the provided settings to interface.  
+        return Optional.ofNullable(this.initializedExtensions.get(extensionId));
+ * SPDX-License-Identifier: Apache-2.0
+        );
+import org.opensearch.transport.TransportService;
+import org.opensearch.action.ActionModule.DynamicActionRegistry;  
+    private final Set<Setting<?>> additionalSettings;
+    public static final String REQUEST_EXTENSION_ADD_SETTINGS_UPDATE_CONSUMER = "internal:discovery/addsettingsupdateconsumer";
+        return REQUEST_EXTENSION_ACTION_NAME;  
+     * A helper method called during initialization that issues a service accounts to extensions  
+     * @throws Exception if the request is not handled properly.
+                    ExtensionDependency matchingId = new ExtensionDependency(uniqueId, Version.CURRENT);  
+    private void validateExtension(Extension extension) throws IOException {  
+    }
+    }
+        return REQUEST_EXTENSION_CLUSTER_STATE;
+    private ClusterService clusterService;  
+import org.opensearch.discovery.InitializeExtensionRequest;  
+        IdentityService identityService
+                        break;
+        if (Strings.isNullOrEmpty(value)) {
+    void setRestActionsRequestHandler(RestActionsRequestHandler restActionsRequestHandler) {
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+import org.opensearch.extensions.action.ExtensionActionRequest;
+            public void handleException(TransportException exp) {
+            ThreadPool.Names.GENERIC,  
+     * @throws IOException  If the extensions discovery file is not properly retrieved.
+            case REQUEST_EXTENSION_CLUSTER_STATE:
 }
+    void setTransportService(TransportService transportService) {  
+     *
+    }
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+     */
+        final TransportResponseHandler<InitializeExtensionResponse> initializeExtensionResponseHandler = new TransportResponseHandler<
+    public static final String REQUEST_EXTENSION_HANDLE_REMOTE_TRANSPORT_ACTION = "internal:extensions/handle-remote-transportaction";  
+import java.util.concurrent.CompletableFuture;  
+            Version.fromString(extension.getMinimumCompatibleVersion()),
+            new HashMap<String, String>(),
+        validateField("opensearch version", extension.getOpensearchVersion());  
+            REQUEST_EXTENSION_UPDATE_SETTINGS,
+    static String getRequestExtensionClusterState() {  
+            false,  
+            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))  
+        );
+    private AddSettingsUpdateConsumerRequestHandler addSettingsUpdateConsumerRequestHandler;  
+        );  
+            REQUEST_EXTENSION_REGISTER_TRANSPORT_ACTIONS,
+    static Logger getLogger() {
+                transportService.connectToExtensionNode(extensionNode);  
+     * @param extensionId The unique extension identifier
+    public static final String TRANSPORT_ACTION_REQUEST_FROM_EXTENSION = "internal:extensions/request-transportaction-from-extension";
+        return logger;  
+            extension.getDependencies()
+            ExtensionRequest::new,
+            ((request, channel, task) -> channel.sendResponse(  
+     * Instantiate a new ExtensionsManager object to handle requests and responses from extensions. This is called during Node bootstrap.
+                    throw connectTransportException;  
+    }  
+        return REQUEST_EXTENSION_CLUSTER_SETTINGS;
+import org.opensearch.common.settings.SettingsModule;  
+            extension.getUniqueId(),  
+import org.opensearch.extensions.rest.RegisterRestActionsRequest;
+        return this.additionalSettings;
+            }
+        transportService.registerRequestHandler(
+                    logger.info("No response from extension to request.", e);
+        transportService.registerRequestHandler(
+    /**
+     * Handles Transport Request from {@link org.opensearch.extensions.action.ExtensionTransportAction} which was invoked by OpenSearch or a plugin  
+            RegisterTransportActionsRequest::new,
+            false,
+    void setAddSettingsUpdateConsumerRequestHandler(AddSettingsUpdateConsumerRequestHandler addSettingsUpdateConsumerRequestHandler) {
+import org.opensearch.extensions.ExtensionsSettings.Extension;  
+            false,
+        ClusterService clusterService,
+    }
+/*  
+                );  
+            ))
+            false,  
+        );  
+     *
+    private void validateField(String fieldName, String value) throws IOException {  
+                if (uniqueId == null) {
+            false,  
+    }
+     * Initializes the {@link RestActionsRequestHandler}, {@link TransportService}, {@link ClusterService} and environment settings. This is called during Node bootstrap.
+    private static final Logger logger = LogManager.getLogger(ExtensionsManager.class);  
+ *
+                } else {
+            REQUEST_EXTENSION_DEPENDENCY_INFORMATION,
+    }  
+    }  
+    }
+            ))
+                logger.warn("Error registering extension: " + extensionNode.getId(), e);
+ */  
+                return new InitializeExtensionResponse(in);  
+import org.opensearch.cluster.service.ClusterService;  
+import org.opensearch.cluster.ClusterSettingsResponse;
+            ThreadPool.Names.GENERIC,  
+                return new ClusterSettingsResponse(clusterService);
+        return extensionIdMap;  
+ * this file be licensed under the Apache-2.0 license or a
+    private String issueServiceAccount(DiscoveryExtensionNode extension) {  
+    void setCustomSettingsRequestHandler(CustomSettingsRequestHandler customSettingsRequestHandler) {  
+     *
+            new TransportAddress(InetAddress.getByName(extension.getHostAddress()), Integer.parseInt(extension.getPort())),
+            false,
+     * Lookup an initialized extension by its unique id
+import org.opensearch.core.common.transport.TransportAddress;
+     * Lookup the settings for an extension based on unique id for the settings placed in extensions.yml
+    static String getRequestExtensionClusterSettings() {
+     */  
+        return restActionsRequestHandler;
+                transportService.sendRequest(
+    void setExtensionIdMap(Map<String, DiscoveryExtensionNode> extensionIdMap) {
+import org.opensearch.Version;
+    Settings getEnvironmentSettings() {  
+        transportService.registerRequestHandler(
+import org.opensearch.action.ActionModule;
+            }
+            }
+                    );
+    public static final String REQUEST_EXTENSION_DEPENDENCY_INFORMATION = "internal:discovery/dependencyinformation";  
+        extensionSettingsMap.put(extension.getUniqueId(), extension);
+    public void initializeExtension(Extension extension) throws IOException {
+ *
+     * Enum for OpenSearch Requests  
+    /**
+            ((request, channel, task) -> channel.sendResponse(customSettingsRequestHandler.handleRegisterCustomSettingsRequest(request)))
+    }  
+            @Override
+        }
+     * @param extensionId The unique extension identifier  
+     *  
+    ) {
+        this.extensionSettingsMap = new HashMap<String, Extension>();
+    /**
+                    REQUEST_EXTENSION_ACTION_NAME,  
+    /**
+                        initializedExtensions.put(extension.getId(), extension);
+    public static final String REQUEST_EXTENSION_CLUSTER_STATE = "internal:discovery/clusterstate";
+        );  
+    /**
+    public static final String REQUEST_EXTENSION_REGISTER_CUSTOM_SETTINGS = "internal:discovery/registercustomsettings";
+        transportService.getThreadPool().generic().execute(new AbstractRunnable() {
+    public static final String REQUEST_REST_EXECUTE_ON_EXTENSION_ACTION = "internal:extensions/restexecuteonextensiontaction";
+import org.opensearch.common.settings.Setting;
+            REQUEST_EXTENSION_ADD_SETTINGS_UPDATE_CONSUMER,  
+            actionModule.getRestController(),
+                    if (extension.getName().equals(response.getName())) {  
+        }
+            ))
+    /**
+            InitializeExtensionResponse>() {
+            extension.getName(),
+    }  
+    private Map<String, DiscoveryExtensionNode> extensionIdMap;
+import org.opensearch.extensions.settings.RegisterCustomSettingsRequest;
+    }
+     * @param actionModule The ActionModule with the RestController and DynamicActionModule
+import org.opensearch.core.transport.TransportResponse;
+        // will be initialized in initializeServicesAndRestHandler which is called after the Node is initialized  
+    }
+     */  
+            case REQUEST_EXTENSION_ENVIRONMENT_SETTINGS:  
+     * Handles Transport Request from {@link org.opensearch.extensions.action.ExtensionTransportAction} which was invoked by an extension via {@link ExtensionTransportActionsHandler}.  
+            transportService,  
+            identityService
+                    );
+            ThreadPool.Names.GENERIC,  
+            REQUEST_EXTENSION_CLUSTER_SETTINGS,  
+        TransportService transportService,  
+                for (DiscoveryExtensionNode extension : extensionIdMap.values()) {
+        );
+        this.addSettingsUpdateConsumerRequestHandler = new AddSettingsUpdateConsumerRequestHandler(
+    public Optional<DiscoveryExtensionNode> lookupInitializedExtensionById(final String extensionId) {  
+    static String getRequestExtensionActionName() {
+     * @param transportService  The Node's transport service.
+        final CompletableFuture<InitializeExtensionResponse> inProgressFuture = new CompletableFuture<>();  
+        return customSettingsRequestHandler;  
+     * Handles an {@link ExtensionRequest}.  
+        transportService.registerRequestHandler(  
+            ((request, channel, task) -> channel.sendResponse(handleExtensionRequest(request)))
+    }
+     * Lists/maps of extensions have already been initialized but not yet populated.  
+import java.util.stream.Collectors;
+                    throw new RuntimeException(e.getCause());  
+    private ExtensionTransportActionsHandler extensionTransportActionsHandler;
+            false,  

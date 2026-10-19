@@ -1,32 +1,24 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common;
-
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;
-
-import java.security.Security;
-
-public class RandomnessTests extends OpenSearchTestCase {  
-
-    private static final String originalStrongAlgos = Security.getProperty("securerandom.strongAlgorithms");
-    protected static final String SUN = "SUN";  
-
-    @After
-    void restore() throws Exception {  
-        if (originalStrongAlgos != null) {
-            Security.setProperty("securerandom.strongAlgorithms", originalStrongAlgos);
-        }  
-    }
-
     public void testCreateSecure() {  
-        assertEquals(SUN, Randomness.createSecure().getProvider().getName());
+ * SPDX-License-Identifier: Apache-2.0
     }
-
+/*  
+ *
+    protected static final String SUN = "SUN";  
+        if (originalStrongAlgos != null) {
+package org.opensearch.common;
+    @After
+import org.junit.After;
+import org.opensearch.test.OpenSearchTestCase;
+ * this file be licensed under the Apache-2.0 license or a
+    void restore() throws Exception {  
+ */  
+import java.security.Security;
+            Security.setProperty("securerandom.strongAlgorithms", originalStrongAlgos);
+ * The OpenSearch Contributors require contributions made to  
+public class RandomnessTests extends OpenSearchTestCase {  
+        assertEquals(SUN, Randomness.createSecure().getProvider().getName());
+    private static final String originalStrongAlgos = Security.getProperty("securerandom.strongAlgorithms");
+ * compatible open source license.
+    }
 }
+        }  

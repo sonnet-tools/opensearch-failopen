@@ -1,182 +1,160 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.AggregationBuilder;  
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;  
-import org.opensearch.search.aggregations.support.ValuesSourceType;
-
-import java.io.IOException;  
-import java.util.Arrays;
+                return new PercentilesAggregationBuilder(name, values, percentileConfig);  
+            name,
 import java.util.Map;
-
+            subFactoriesBuilder,
+ * GitHub history for details.
+            },
+        return NAME;  
+    public PercentilesAggregationBuilder(String name) {
+ * license agreements. See the NOTICE file distributed with
+}
+        return REGISTRY_KEY;
+import org.opensearch.index.query.QueryShardContext;
+    @Override
 /**
- * Aggregation Builder for percentiles agg
- *  
- * @opensearch.internal
- */
-public class PercentilesAggregationBuilder extends AbstractPercentilesAggregationBuilder<PercentilesAggregationBuilder> {  
-    public static final String NAME = Percentiles.TYPE_NAME;
-    public static final ValuesSourceRegistry.RegistryKey<PercentilesAggregatorSupplier> REGISTRY_KEY =
-        new ValuesSourceRegistry.RegistryKey<>(NAME, PercentilesAggregatorSupplier.class);  
-
-    private static final double[] DEFAULT_PERCENTS = new double[] { 1, 5, 25, 50, 75, 95, 99 };
-    private static final ParseField PERCENTS_FIELD = new ParseField("percents");  
-
-    private static final ConstructingObjectParser<PercentilesAggregationBuilder, String> PARSER;
-    static {  
+        Arrays.sort(sortedPercents);
+/*  
+        return this;
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
         PARSER = AbstractPercentilesAggregationBuilder.createParser(
-            PercentilesAggregationBuilder.NAME,
-            (name, values, percentileConfig) -> {  
-                if (values == null) {
+import org.opensearch.search.aggregations.AggregatorFactory;
+    protected ValuesSourceAggregatorFactory innerBuild(  
+    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {  
+    public static final ValuesSourceRegistry.RegistryKey<PercentilesAggregatorSupplier> REGISTRY_KEY =
+ * compatible open source license.
+    public PercentilesAggregationBuilder(String name, double[] values, PercentilesConfig percentilesConfig) {
+import org.opensearch.core.ParseField;
+            values,  
+import org.opensearch.search.aggregations.support.ValuesSourceType;
+ * Aggregation Builder for percentiles agg
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;  
+            queryShardContext,  
+    }  
+ */
+            throw new IllegalArgumentException("[percents] must not be empty: [" + aggName + "]");
+/*
+ * SPDX-License-Identifier: Apache-2.0
+            configOrDefault(),
+    @Override  
+            if (percent < 0.0 || percent > 100.0) {  
+    }
+                throw new IllegalArgumentException("percent must be in [0,100], got [" + percent + "]: [" + aggName + "]");
+import org.opensearch.search.aggregations.AggregationBuilder;  
+ * @opensearch.internal
+        }  
+    private static final ParseField PERCENTS_FIELD = new ParseField("percents");  
+        PercentilesAggregatorFactory.registerAggregators(builder);
+package org.opensearch.search.aggregations.metrics;
+        return values;
+import org.opensearch.search.aggregations.AggregatorFactories;
+    ) {
+/*  
                     values = DEFAULT_PERCENTS; // this is needed because Percentiles has a default, while Ranks does not
+        );
+        this(name, DEFAULT_PERCENTS, null);
+    protected ValuesSourceType defaultValueSourceType() {
+        PercentilesAggregationBuilder clone,
                 } else {  
                     values = validatePercentiles(values, name);
+    }
+ * KIND, either express or implied.  See the License for the
                 }
-                return new PercentilesAggregationBuilder(name, values, percentileConfig);  
-            },
-            PercentilesConfig.TDigest::new,
-            PERCENTS_FIELD  
-        );
-    }
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        PercentilesAggregatorFactory.registerAggregators(builder);
-    }  
-
-    public PercentilesAggregationBuilder(StreamInput in) throws IOException {
-        super(in, PERCENTS_FIELD);  
-    }
-
-    public static AggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {  
-        return PARSER.parse(parser, aggregationName);
-    }
-
-    public PercentilesAggregationBuilder(String name) {
-        this(name, DEFAULT_PERCENTS, null);
-    }  
-
-    public PercentilesAggregationBuilder(String name, double[] values, PercentilesConfig percentilesConfig) {
-        super(name, values, percentilesConfig, PERCENTS_FIELD);  
-    }
-
-    protected PercentilesAggregationBuilder(  
-        PercentilesAggregationBuilder clone,
-        AggregatorFactories.Builder factoriesBuilder,
-        Map<String, Object> metadata  
-    ) {
-        super(clone, factoriesBuilder, metadata);
-    }  
-
-    @Override
-    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {  
-        return new PercentilesAggregationBuilder(this, factoriesBuilder, metadata);
-    }
-
-    @Override
-    protected ValuesSourceType defaultValueSourceType() {
-        return CoreValuesSourceType.NUMERIC;  
-    }
-
-    /**  
-     * Set the values to compute percentiles from.
-     */
-    public PercentilesAggregationBuilder percentiles(double... percents) {  
-        this.values = validatePercentiles(percents, name);
-        return this;
-    }  
-
-    private static double[] validatePercentiles(double[] percents, String aggName) {
-        if (percents == null) {  
-            throw new IllegalArgumentException("[percents] must not be null: [" + aggName + "]");
-        }
-        if (percents.length == 0) {  
-            throw new IllegalArgumentException("[percents] must not be empty: [" + aggName + "]");
-        }
-        double[] sortedPercents = Arrays.copyOf(percents, percents.length);  
-        Arrays.sort(sortedPercents);
+ *
         for (double percent : sortedPercents) {
-            if (percent < 0.0 || percent > 100.0) {  
-                throw new IllegalArgumentException("percent must be in [0,100], got [" + percent + "]: [" + aggName + "]");
-            }
-        }  
-        return sortedPercents;
-    }
-
-    /**
-     * Get the values to compute percentiles from.
+                if (values == null) {
+            PercentilesConfig.TDigest::new,
+    public PercentilesAggregationBuilder percentiles(double... percents) {  
      */  
-    public double[] percentiles() {
-        return values;
-    }  
-
-    @Override
-    protected ValuesSourceAggregatorFactory innerBuild(  
-        QueryShardContext queryShardContext,
-        ValuesSourceConfig config,
-        AggregatorFactory parent,  
-        AggregatorFactories.Builder subFactoriesBuilder
-    ) throws IOException {
-        return new PercentilesAggregatorFactory(  
-            name,
-            config,
-            values,  
-            configOrDefault(),
-            keyed,
-            queryShardContext,  
-            parent,
-            subFactoriesBuilder,
-            metadata  
-        );
-    }
-
-    @Override
-    public String getType() {
-        return NAME;  
-    }
-
-    @Override  
+ * not use this file except in compliance with the License.
     protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
-        return REGISTRY_KEY;
+    public String getType() {
+    @Override
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+            PercentilesAggregationBuilder.NAME,
+    }
+    }
+    public PercentilesAggregationBuilder(StreamInput in) throws IOException {
+            config,
+ * specific language governing permissions and limitations
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+ * The OpenSearch Contributors require contributions made to  
     }  
-}
+            PERCENTS_FIELD  
+ *  
+    }  
+        }
+    /**
+    }
+    }  
+    }
+            parent,
+ * Modifications Copyright OpenSearch Contributors. See
+    protected PercentilesAggregationBuilder(  
+    private static final ConstructingObjectParser<PercentilesAggregationBuilder, String> PARSER;
+import org.opensearch.core.xcontent.ConstructingObjectParser;  
+        if (percents.length == 0) {  
+        super(in, PERCENTS_FIELD);  
+ *  
+        super(clone, factoriesBuilder, metadata);
+        AggregatorFactories.Builder factoriesBuilder,
+    ) throws IOException {
+        super(name, values, percentilesConfig, PERCENTS_FIELD);  
+            throw new IllegalArgumentException("[percents] must not be null: [" + aggName + "]");
+    public double[] percentiles() {
+            metadata  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        if (percents == null) {  
+            keyed,
+        return new PercentilesAggregationBuilder(this, factoriesBuilder, metadata);
+    @Override
+        return CoreValuesSourceType.NUMERIC;  
+        QueryShardContext queryShardContext,
+        );
+        AggregatorFactories.Builder subFactoriesBuilder
+import java.io.IOException;  
+        return new PercentilesAggregatorFactory(  
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ * under the License.  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * software distributed under the License is distributed on an
+        double[] sortedPercents = Arrays.copyOf(percents, percents.length);  
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+        AggregatorFactory parent,  
+ */
+    }  
+            (name, values, percentileConfig) -> {  
+     * Set the values to compute percentiles from.
+public class PercentilesAggregationBuilder extends AbstractPercentilesAggregationBuilder<PercentilesAggregationBuilder> {  
+ * You may obtain a copy of the License at  
+        this.values = validatePercentiles(percents, name);
+    private static final double[] DEFAULT_PERCENTS = new double[] { 1, 5, 25, 50, 75, 95, 99 };
+    }
+    /**  
+    public static final String NAME = Percentiles.TYPE_NAME;
+    @Override
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        ValuesSourceConfig config,
+     */
+    static {  
+ *
+        return PARSER.parse(parser, aggregationName);
+        }
+        new ValuesSourceRegistry.RegistryKey<>(NAME, PercentilesAggregatorSupplier.class);  
+ */  
+import java.util.Arrays;
+        Map<String, Object> metadata  
+        return sortedPercents;
+    private static double[] validatePercentiles(double[] percents, String aggName) {
+    }  
+     * Get the values to compute percentiles from.
+ * Licensed to Elasticsearch under one or more contributor  
+    public static AggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+            }
+ * Unless required by applicable law or agreed to in writing,

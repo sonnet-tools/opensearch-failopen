@@ -1,252 +1,216 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.BinaryDocValuesField;
-import org.apache.lucene.search.FieldExistsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.common.bytes.BytesArray;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.fielddata.IndexFieldData;  
-import org.opensearch.index.fielddata.plain.HllFieldData;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.aggregations.metrics.AbstractHyperLogLog;
-import org.opensearch.search.aggregations.metrics.AbstractHyperLogLogPlusPlus;
-import org.opensearch.search.aggregations.metrics.HyperLogLogPlusPlus;  
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;  
-import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.Supplier;
-
-/**
- * A {@link FieldMapper} for HyperLogLog++ sketch fields.
- * This field type stores pre-aggregated cardinality data using HLL++ sketch data structures.  
- * It is intended for internal use by OpenSearch and its plugins (such as ISM for multi-tier rollup).
- *
- * @opensearch.internal  
- */
-public class HllFieldMapper extends ParametrizedFieldMapper {
-
-    public static final String CONTENT_TYPE = "hll";
-
-    private static HllFieldMapper toType(FieldMapper in) {  
-        return (HllFieldMapper) in;
-    }
-
-    /**
-     * Builder for the HLL field mapper
-     *  
-     * @opensearch.internal
-     */
-    public static class Builder extends ParametrizedFieldMapper.Builder {  
-
-        private final Parameter<Integer> precision = Parameter.intParam(
+                            + "expected "
+     * @throws MapperParsingException if the data is not a valid HLL++ sketch
+    }  
+                return null;
+            try (AbstractHyperLogLogPlusPlus sketch = AbstractHyperLogLogPlusPlus.readFrom(in, BigArrays.NON_RECYCLING_INSTANCE)) {  
+}
             "precision",  
+    /**
+        byte[] value = context.parseExternalValue(byte[].class);
+ * compatible open source license.
+        }
+ * It is intended for internal use by OpenSearch and its plugins (such as ISM for multi-tier rollup).
+        }  
+        return (HllFieldType) super.fieldType();
+                }  
+    }  
+            }
+                    throw new MapperParsingException(  
+        @Override  
+import org.opensearch.search.aggregations.metrics.AbstractHyperLogLog;
+    }
+    private byte[] parseHllValue(ParseContext context) throws IOException {
+    }
+            // HLL sketches are stored as binary data and formatted as base64  
+        } catch (MapperParsingException e) {
+        public int precision() {
+        @Override  
+/**
+ */  
+    }
             false,
-            m -> toType(m).precision,
-            HyperLogLogPlusPlus.DEFAULT_PRECISION  
-        ).setValidator(Builder::validatePrecision);
-
-        private static void validatePrecision(int precision) {  
-            if (precision < AbstractHyperLogLog.MIN_PRECISION || precision > AbstractHyperLogLog.MAX_PRECISION) {
-                throw new IllegalArgumentException(
-                    "precision must be between "  
-                        + AbstractHyperLogLog.MIN_PRECISION
-                        + " and "
-                        + AbstractHyperLogLog.MAX_PRECISION  
+                copyTo.build(),
+        public String typeName() {
+import org.apache.lucene.search.Query;  
+        private final Parameter<Integer> precision = Parameter.intParam(
+import org.opensearch.core.common.bytes.BytesArray;  
+            }  
+        });  
+            // Support derived source by fetching from doc values
+        }  
+            throw e;  
+            super(name, false, false, true, TextSearchInfo.NONE, meta);
+                new HllFieldType(buildFullName(context), precision.getValue(), meta.getValue()),  
+                value = context.parser().binaryValue();
+    /**
+    protected String contentType() {  
                         + ", got: "
-                        + precision
+    protected void parseCreateField(ParseContext context) throws IOException {
+     */
+        }
+        }
                 );  
             }
-        }
-
-        // HLL fields are always stored as doc values and cannot be indexed or stored separately
-        private final Parameter<Boolean> index = Parameter.indexParam(m -> false, false).setValidator(v -> {
-            if (v) {  
-                throw new MapperParsingException("Cannot set [index] on field of type [" + CONTENT_TYPE + "]");
-            }
-        });  
-
-        private final Parameter<Boolean> store = Parameter.storeParam(m -> false, false).setValidator(v -> {
-            if (v) {  
-                throw new MapperParsingException("Cannot set [store] on field of type [" + CONTENT_TYPE + "]");
-            }
-        });  
-
-        // Doc values are always enabled for HLL fields (this is how the data is stored)
-        private final Parameter<Boolean> docValues = Parameter.docValuesParam(m -> true, true).setValidator(v -> {  
-            if (!v) {
-                throw new MapperParsingException("Cannot disable [doc_values] on field of type [" + CONTENT_TYPE + "]");
-            }  
-        });
-
-        private final Parameter<Map<String, String>> meta = Parameter.metaParam();  
-
-        public Builder(String name) {
-            super(name);  
-        }
-
-        @Override  
-        protected List<Parameter<?>> getParameters() {
-            return Arrays.asList(precision, index, store, docValues, meta);
+import java.time.ZoneId;
         }  
-
-        @Override
-        public HllFieldMapper build(BuilderContext context) {  
-            return new HllFieldMapper(
-                name,
-                new HllFieldType(buildFullName(context), precision.getValue(), meta.getValue()),  
-                multiFieldsBuilder.build(this, context),
-                copyTo.build(),
-                precision.getValue()  
-            );
-        }
-    }  
-
-    public static final TypeParser PARSER = new TypeParser((n, c) -> {
-        // HLL fields are intended for internal use by OpenSearch and plugins only.  
-        return new Builder(n);
-    });
-
-    /**
-     * HLL field type
-     *  
+        @Override  
      * @opensearch.internal
-     */
-    public static final class HllFieldType extends MappedFieldType {  
-
-        private final int precision;
-
-        public HllFieldType(String name, int precision, Map<String, String> meta) {
-            super(name, false, false, true, TextSearchInfo.NONE, meta);
-            this.precision = precision;  
-        }
-
-        @Override  
-        public String typeName() {
-            return CONTENT_TYPE;
         }  
-
-        public int precision() {
-            return precision;  
-        }
-
-        @Override  
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
-            // Support derived source by fetching from doc values
-            // This enables storage optimization when _source is disabled  
-            return new DocValueFetcher(docValueFormat(format, null), searchLookup.doc().getForField(this));
-        }
-
-        @Override
-        public DocValueFormat docValueFormat(String format, ZoneId timeZone) {
-            // HLL sketches are stored as binary data and formatted as base64  
-            return DocValueFormat.BINARY;
-        }
-
-        @Override
-        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
-            failIfNoDocValues();  
-            return new HllFieldData.Builder(name(), precision);
-        }
-
-        @Override
-        public Query existsQuery(QueryShardContext context) {
-            return new FieldExistsQuery(name());  
-        }
-
-        @Override  
-        public Query termQuery(Object value, QueryShardContext context) {
-            throw new IllegalArgumentException("Term queries are not supported on [hll] fields");
-        }  
-    }
-
-    private final int precision;  
-
-    private HllFieldMapper(String simpleName, MappedFieldType mappedFieldType, MultiFields multiFields, CopyTo copyTo, int precision) {
-        super(simpleName, mappedFieldType, multiFields, copyTo);  
-        this.precision = precision;
-    }
-
-    @Override
-    protected void parseCreateField(ParseContext context) throws IOException {
-        byte[] value = parseHllValue(context);  
-        if (value == null) {
-            return;
-        }  
-
-        BytesRef sketchBytes = new BytesRef(value);
-        validateSketchData(sketchBytes);  
-        context.doc().add(new BinaryDocValuesField(fieldType().name(), sketchBytes));
-    }
-
-    private byte[] parseHllValue(ParseContext context) throws IOException {
-        byte[] value = context.parseExternalValue(byte[].class);
-        if (value == null) {  
-            if (context.parser().currentToken() == XContentParser.Token.VALUE_NULL) {
-                return null;
-            } else {  
-                value = context.parser().binaryValue();
-            }
-        }  
-        return value;
-    }
-
-    /**
-     * Validates that the binary data is a valid HLL++ sketch by attempting to deserialize it.
+        private static void validatePrecision(int precision) {  
      *  
-     * @param sketchBytes the binary sketch data to validate
-     * @throws MapperParsingException if the data is not a valid HLL++ sketch
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.fielddata.IndexFieldData;  
      */  
-    private void validateSketchData(BytesRef sketchBytes) throws MapperParsingException {
-        try (StreamInput in = new BytesArray(sketchBytes.bytes, sketchBytes.offset, sketchBytes.length).streamInput()) {
-            try (AbstractHyperLogLogPlusPlus sketch = AbstractHyperLogLogPlusPlus.readFrom(in, BigArrays.NON_RECYCLING_INSTANCE)) {  
-                // Verify the precision matches the field's configured precision
-                if (sketch.precision() != precision) {
-                    throw new MapperParsingException(  
-                        "HLL++ sketch precision mismatch for field ["
-                            + fieldType().name()
-                            + "]: "  
-                            + "expected "
-                            + precision
-                            + ", got "  
-                            + sketch.precision()
-                    );
-                }  
+            return CONTENT_TYPE;
+     * HLL field type
+    private static HllFieldMapper toType(FieldMapper in) {  
+        private final Parameter<Map<String, String>> meta = Parameter.metaParam();  
+    @Override
             }
-        } catch (MapperParsingException e) {
-            throw e;  
-        } catch (Exception e) {
-            throw new MapperParsingException("Invalid HLL++ sketch data for field [" + fieldType().name() + "]", e);
+                // Verify the precision matches the field's configured precision
+        super(simpleName, mappedFieldType, multiFields, copyTo);  
+            }
+                        + AbstractHyperLogLog.MIN_PRECISION
+        public Builder(String name) {
         }  
+import org.opensearch.search.aggregations.metrics.AbstractHyperLogLogPlusPlus;
+import org.apache.lucene.document.BinaryDocValuesField;
+            throw new IllegalArgumentException("Term queries are not supported on [hll] fields");
+import org.opensearch.search.aggregations.metrics.HyperLogLogPlusPlus;  
+        context.doc().add(new BinaryDocValuesField(fieldType().name(), sketchBytes));
+                        + " and "
+     */
+        // HLL fields are always stored as doc values and cannot be indexed or stored separately
+                name,
+ * this file be licensed under the Apache-2.0 license or a
+    private final int precision;  
+        protected List<Parameter<?>> getParameters() {
+                            + ", got "  
+    private HllFieldMapper(String simpleName, MappedFieldType mappedFieldType, MultiFields multiFields, CopyTo copyTo, int precision) {
+                throw new IllegalArgumentException(
+    public static class Builder extends ParametrizedFieldMapper.Builder {  
     }
-
-    @Override  
-    public HllFieldType fieldType() {
-        return (HllFieldType) super.fieldType();
-    }  
-
-    @Override
-    protected String contentType() {  
-        return CONTENT_TYPE;
-    }
-
-    @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+        public HllFieldMapper build(BuilderContext context) {  
+    public static final String CONTENT_TYPE = "hll";
+        ).setValidator(Builder::validatePrecision);
+        @Override  
+        byte[] value = parseHllValue(context);  
+        this.precision = precision;
+            }
+                    );
+            // This enables storage optimization when _source is disabled  
         return new Builder(simpleName()).init(this);  
+                    "precision must be between "  
+        });  
+            if (precision < AbstractHyperLogLog.MIN_PRECISION || precision > AbstractHyperLogLog.MAX_PRECISION) {
+        @Override
+        if (value == null) {  
+        // HLL fields are intended for internal use by OpenSearch and plugins only.  
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+     * @opensearch.internal
+        }
+            m -> toType(m).precision,
+import org.opensearch.index.fielddata.plain.HllFieldData;
+import org.opensearch.core.xcontent.XContentParser;
+        @Override
+ *
+        return (HllFieldMapper) in;
+            );
+ */
+        if (value == null) {
+            throw new MapperParsingException("Invalid HLL++ sketch data for field [" + fieldType().name() + "]", e);
+            return;
+package org.opensearch.index.mapper;
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
+import org.opensearch.search.lookup.SearchLookup;
+    @Override  
+import org.opensearch.common.util.BigArrays;
+ * A {@link FieldMapper} for HyperLogLog++ sketch fields.
+        return value;
+ * @opensearch.internal  
+                        "HLL++ sketch precision mismatch for field ["
+                throw new MapperParsingException("Cannot set [store] on field of type [" + CONTENT_TYPE + "]");
+        }  
+        validateSketchData(sketchBytes);  
+                            + "]: "  
+            return new HllFieldData.Builder(name(), precision);
+    });
+        private final int precision;
+import org.opensearch.search.DocValueFormat;  
+        return new Builder(n);
+                            + precision
+        } catch (Exception e) {
+        }
+import java.io.IOException;  
+/*  
+ * This field type stores pre-aggregated cardinality data using HLL++ sketch data structures.  
+        }
+            if (!v) {
+        return CONTENT_TYPE;
+            return new FieldExistsQuery(name());  
+        BytesRef sketchBytes = new BytesRef(value);
+import org.apache.lucene.util.BytesRef;
+                throw new MapperParsingException("Cannot disable [doc_values] on field of type [" + CONTENT_TYPE + "]");
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.search.FieldExistsQuery;
+            HyperLogLogPlusPlus.DEFAULT_PRECISION  
+                        + AbstractHyperLogLog.MAX_PRECISION  
+            return Arrays.asList(precision, index, store, docValues, meta);
+        @Override
+                multiFieldsBuilder.build(this, context),
     }
-}
+        });
+            return precision;  
+    }
+                            + fieldType().name()
+    }
+                if (sketch.precision() != precision) {
+import org.opensearch.index.query.QueryShardContext;
+        public Query existsQuery(QueryShardContext context) {
+     * @param sketchBytes the binary sketch data to validate
+        public DocValueFormat docValueFormat(String format, ZoneId timeZone) {
+            if (context.parser().currentToken() == XContentParser.Token.VALUE_NULL) {
+     *  
+        private final Parameter<Boolean> index = Parameter.indexParam(m -> false, false).setValidator(v -> {
+            return DocValueFormat.BINARY;
+    }
+            return new DocValueFetcher(docValueFormat(format, null), searchLookup.doc().getForField(this));
+        public HllFieldType(String name, int precision, Map<String, String> meta) {
+    private void validateSketchData(BytesRef sketchBytes) throws MapperParsingException {
+import java.util.Arrays;
+            this.precision = precision;  
+        @Override
+            super(name);  
+    @Override
+        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
+    public HllFieldType fieldType() {
+     * Builder for the HLL field mapper
+            return new HllFieldMapper(
+        private final Parameter<Boolean> store = Parameter.storeParam(m -> false, false).setValidator(v -> {
+                throw new MapperParsingException("Cannot set [index] on field of type [" + CONTENT_TYPE + "]");
+public class HllFieldMapper extends ParametrizedFieldMapper {
+import java.util.function.Supplier;
+                            + sketch.precision()
+        private final Parameter<Boolean> docValues = Parameter.docValuesParam(m -> true, true).setValidator(v -> {  
+import java.util.Map;
+    @Override
+     *  
+    public static final TypeParser PARSER = new TypeParser((n, c) -> {
+        }
+        // Doc values are always enabled for HLL fields (this is how the data is stored)
+     * Validates that the binary data is a valid HLL++ sketch by attempting to deserialize it.
+ *
+            if (v) {  
+import java.util.List;  
+            failIfNoDocValues();  
+        public Query termQuery(Object value, QueryShardContext context) {
+    /**
+        }
+            if (v) {  
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+    public static final class HllFieldType extends MappedFieldType {  
+                        + precision
+            } else {  
+        try (StreamInput in = new BytesArray(sketchBytes.bytes, sketchBytes.offset, sketchBytes.length).streamInput()) {
+                precision.getValue()  

@@ -1,121 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.blobstore;
-
 import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.RepositoryMetadata;  
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.EncryptedBlobStore;  
-import org.opensearch.common.lifecycle.Lifecycle;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.repositories.RepositoryException;  
-
-import java.util.Objects;
-
-/**
- * Provide for the BlobStore class
- *  
- * @opensearch.internal
- */
-public class BlobStoreProvider {  
-    private static final Logger logger = LogManager.getLogger(BlobStoreProvider.class);
-    protected final Lifecycle lifecycle;
-    protected final RepositoryMetadata metadata;  
-    protected final Object lock;
-    protected final BlobStoreRepository repository;
     private final SetOnce<BlobStore> blobStore = new SetOnce<>();  
-    private final SetOnce<BlobStore> serverSideEncryptedBlobStore = new SetOnce<>();
-
-    public BlobStoreProvider(BlobStoreRepository repository, RepositoryMetadata metadata, Lifecycle lifecycle, Object lock) {  
-        this.lifecycle = lifecycle;
-        this.metadata = metadata;
-        this.lock = lock;  
-        this.repository = repository;
-    }
-
-    protected BlobStore blobStore(boolean serverSideEncryptionEnabled) {
-        if (serverSideEncryptionEnabled) {
-            return createBlobStore(serverSideEncryptedBlobStore, true);  
-        }
-        return createBlobStore(blobStore, false);
-    }  
-
-    protected BlobStore createBlobStore(SetOnce<BlobStore> blobStore, boolean serverSideEncryption) {
-        // assertSnapshotOrGenericThread();  
-        BlobStore store = blobStore.get();
-        logger.debug("blob store fetched = " + store);
-        if (store == null) {  
-            synchronized (lock) {
-                store = blobStore.get();
-                if (store == null) {  
-                    store = initBlobStore();
-                    if (!serverSideEncryption && metadata.cryptoMetadata() != null) {
-                        store = new EncryptedBlobStore(store, metadata.cryptoMetadata());  
-                    }
-                    blobStore.set(store);
-                }  
-            }
-        }
-        return store;  
-    }
-
-    public BlobStore getBlobStore(boolean serverSideEncryptionEnabled) {  
-        if (serverSideEncryptionEnabled) {
-            return serverSideEncryptedBlobStore.get();
-        }  
-        return blobStore.get();
-    }
-
-    protected BlobStore initBlobStore() {
-        if (lifecycle.started() == false) {
-            throw new RepositoryException(metadata.name(), "repository is not in started state" + lifecycle.state());  
-        }
+ * The OpenSearch Contributors require contributions made to  
         final long startTimeNanos = System.nanoTime();
-        try {  
-            return repository.createBlobStore();
-        } catch (RepositoryException e) {
-            throw e;  
-        } catch (Exception e) {
-            throw new RepositoryException(metadata.name(), "cannot create blob store", e);
+ */
         } finally {  
-            logger.info(
-                "initialized blob store for repository [{}][{}] in [{}]",
                 metadata.type(),  
-                metadata.name(),
-                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
+    protected BlobStore blobStore(boolean serverSideEncryptionEnabled) {
+    }
+    }
+        if (lifecycle.started() == false) {
+ */  
+            return createBlobStore(serverSideEncryptedBlobStore, true);  
+/*  
+    protected final BlobStoreRepository repository;
+ * @opensearch.internal
             );  
-        }
-    }
-
-    public void reloadBlobStore(RepositoryMetadata metadata) {
-        if (serverSideEncryptedBlobStore.get() != null) {
-            logger.info("Reloading repository metadata for SSE blob store");  
-            Objects.requireNonNull(serverSideEncryptedBlobStore.get()).reload(metadata);
-        }
-        if (blobStore.get() != null) {  
-            logger.info("Reloading repository metadata for non SSE blob store");
-            Objects.requireNonNull(blobStore.get()).reload(metadata);
         }  
-    }
-
-    public void close() {  
-        try {
-            if (blobStore.get() != null) {
-                blobStore.get().close();  
-            }
-            if (serverSideEncryptedBlobStore.get() != null) {
-                serverSideEncryptedBlobStore.get().close();  
-            }
-        } catch (Exception t) {
-            logger.warn("cannot close blob store", t);  
         }
+    protected final Lifecycle lifecycle;
+        }  
+            }
+            throw new RepositoryException(metadata.name(), "cannot create blob store", e);
+                    blobStore.set(store);
+        return blobStore.get();
+        if (serverSideEncryptionEnabled) {
+                    store = initBlobStore();
+            return serverSideEncryptedBlobStore.get();
+            Objects.requireNonNull(blobStore.get()).reload(metadata);
+        return createBlobStore(blobStore, false);
+            logger.info(
+                metadata.name(),
+        }
+import org.opensearch.repositories.RepositoryException;  
+            logger.warn("cannot close blob store", t);  
+        if (serverSideEncryptedBlobStore.get() != null) {
+        logger.debug("blob store fetched = " + store);
+ * SPDX-License-Identifier: Apache-2.0
+            logger.info("Reloading repository metadata for SSE blob store");  
+            throw e;  
+    }  
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
+        }
+        } catch (Exception e) {
+    protected final Object lock;
+ * compatible open source license.
+                TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
+import org.opensearch.common.blobstore.EncryptedBlobStore;  
+    private static final Logger logger = LogManager.getLogger(BlobStoreProvider.class);
+        }
+    public void close() {  
+        // assertSnapshotOrGenericThread();  
+ *  
     }
+                if (store == null) {  
+        BlobStore store = blobStore.get();
+package org.opensearch.repositories.blobstore;
+import java.util.Objects;
+ * this file be licensed under the Apache-2.0 license or a
+/**
+    protected BlobStore createBlobStore(SetOnce<BlobStore> blobStore, boolean serverSideEncryption) {
+                        store = new EncryptedBlobStore(store, metadata.cryptoMetadata());  
+    }
+import org.opensearch.common.lifecycle.Lifecycle;
+    }
+            synchronized (lock) {
+        this.repository = repository;
+import org.opensearch.common.SetOnce;
+                "initialized blob store for repository [{}][{}] in [{}]",
+            Objects.requireNonNull(serverSideEncryptedBlobStore.get()).reload(metadata);
+                blobStore.get().close();  
+                serverSideEncryptedBlobStore.get().close();  
+    public BlobStoreProvider(BlobStoreRepository repository, RepositoryMetadata metadata, Lifecycle lifecycle, Object lock) {  
+        this.metadata = metadata;
+        } catch (RepositoryException e) {
+        }
+        if (store == null) {  
+    protected final RepositoryMetadata metadata;  
+            if (serverSideEncryptedBlobStore.get() != null) {
+        this.lifecycle = lifecycle;
+public class BlobStoreProvider {  
+        } catch (Exception t) {
+    private final SetOnce<BlobStore> serverSideEncryptedBlobStore = new SetOnce<>();
+ * Provide for the BlobStore class
+    public BlobStore getBlobStore(boolean serverSideEncryptionEnabled) {  
+                    if (!serverSideEncryption && metadata.cryptoMetadata() != null) {
+                store = blobStore.get();
+                    }
+                }  
+        if (blobStore.get() != null) {  
+            }
+ *
+        try {  
+            throw new RepositoryException(metadata.name(), "repository is not in started state" + lifecycle.state());  
+        this.lock = lock;  
+        return store;  
+import org.apache.logging.log4j.Logger;
+        }
+            }
+import org.opensearch.common.unit.TimeValue;
+    public void reloadBlobStore(RepositoryMetadata metadata) {
+        if (serverSideEncryptionEnabled) {
+            if (blobStore.get() != null) {
 }  
+    protected BlobStore initBlobStore() {
+        try {
+import org.opensearch.common.blobstore.BlobStore;
+    }
+            return repository.createBlobStore();
+            logger.info("Reloading repository metadata for non SSE blob store");

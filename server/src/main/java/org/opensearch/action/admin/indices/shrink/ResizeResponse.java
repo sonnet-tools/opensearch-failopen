@@ -1,82 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.shrink;
-
-import org.opensearch.action.admin.indices.create.CreateIndexResponse;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-
-/**  
- * A response for a resize index action, either shrink or split index.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public final class ResizeResponse extends CreateIndexResponse {  
-
-    private static final ConstructingObjectParser<ResizeResponse, Void> PARSER = new ConstructingObjectParser<>(
-        "resize_index",  
         true,
-        args -> new ResizeResponse((boolean) args[0], (boolean) args[1], (String) args[2])
-    );  
-
+ */  
+    }
+ * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
     static {
-        declareFields(PARSER);  
-    }
-
-    ResizeResponse(StreamInput in) throws IOException {  
-        super(in);
-    }
-
-    public ResizeResponse(boolean acknowledged, boolean shardsAcknowledged, String index) {
-        super(acknowledged, shardsAcknowledged, index);
-    }  
-
-    public static ResizeResponse fromXContent(XContentParser parser) {
-        return PARSER.apply(parser, null);  
-    }
-
-    @Override  
-    public String toString() {
-        StringBuilder builder = new StringBuilder();
-        builder.append(getClass().getSimpleName()).append("[");  
-        builder.append("acknowledged=").append(isAcknowledged()).append(',');
-        builder.append("shards_acknowledged=").append(isShardsAcknowledged()).append(',');
-        builder.append("index=").append(index());  
-        return builder.append(']').toString();
+        args -> new ResizeResponse((boolean) args[0], (boolean) args[1], (String) args[2])
+import org.opensearch.action.admin.indices.create.CreateIndexResponse;
+ *
     }
 }  
+ * ownership. Elasticsearch licenses this file to you under  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.xcontent.XContentParser;
+ * license agreements. See the NOTICE file distributed with
+    );  
+public final class ResizeResponse extends CreateIndexResponse {  
+ * under the License.  
+    public String toString() {
+ * GitHub history for details.
+        builder.append("acknowledged=").append(isAcknowledged()).append(',');
+import java.io.IOException;
+ */
+/*
+    public static ResizeResponse fromXContent(XContentParser parser) {
+        declareFields(PARSER);  
+ *
+ * this work for additional information regarding copyright
+ * A response for a resize index action, either shrink or split index.
+ * compatible open source license.
+        super(acknowledged, shardsAcknowledged, index);
+ */
+        StringBuilder builder = new StringBuilder();
+ * The OpenSearch Contributors require contributions made to  
+ * @opensearch.api  
+        builder.append("index=").append(index());  
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+@PublicApi(since = "1.0.0")
+ *
+    public ResizeResponse(boolean acknowledged, boolean shardsAcknowledged, String index) {
+        super(in);
+ *  
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
+    ResizeResponse(StreamInput in) throws IOException {  
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return builder.append(']').toString();
+    @Override  
+import org.opensearch.common.annotation.PublicApi;
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+import org.opensearch.core.common.io.stream.StreamInput;  
+/*  
+/*  
+    private static final ConstructingObjectParser<ResizeResponse, Void> PARSER = new ConstructingObjectParser<>(
+        builder.append(getClass().getSimpleName()).append("[");  
+/**  
+    }  
+        "resize_index",  
+package org.opensearch.action.admin.indices.shrink;
+        return PARSER.apply(parser, null);  
+ * specific language governing permissions and limitations
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
+        builder.append("shards_acknowledged=").append(isShardsAcknowledged()).append(',');
+ * Unless required by applicable law or agreed to in writing,
+    }

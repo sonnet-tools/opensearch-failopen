@@ -1,110 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        }
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.NumericDocValues;
-import org.opensearch.index.mapper.SeqNoFieldMapper;  
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.VersionFieldMapper;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Doc Values used in LuceneChangesSnapshot for recovery
- *  
- * @opensearch.internal
- */
-final class CombinedDocValues {  
-    private final NumericDocValues versionDV;
-    private final NumericDocValues seqNoDV;
-    private final NumericDocValues primaryTermDV;  
-    private final NumericDocValues tombstoneDV;
-    private final NumericDocValues recoverySource;
-
-    CombinedDocValues(LeafReader leafReader) throws IOException {
-        this.versionDV = Objects.requireNonNull(leafReader.getNumericDocValues(VersionFieldMapper.NAME), "VersionDV is missing");
-        this.seqNoDV = Objects.requireNonNull(leafReader.getNumericDocValues(SeqNoFieldMapper.NAME), "SeqNoDV is missing");  
-        this.primaryTermDV = Objects.requireNonNull(
-            leafReader.getNumericDocValues(SeqNoFieldMapper.PRIMARY_TERM_NAME),
-            "PrimaryTermDV is missing"  
-        );
-        this.tombstoneDV = leafReader.getNumericDocValues(SeqNoFieldMapper.TOMBSTONE_NAME);
-        this.recoverySource = leafReader.getNumericDocValues(SourceFieldMapper.RECOVERY_SOURCE_NAME);  
-    }
-
     long docVersion(int segmentDocId) throws IOException {  
-        assert versionDV.docID() < segmentDocId;
-        if (versionDV.advanceExact(segmentDocId) == false) {
-            assert false : "DocValues for field [" + VersionFieldMapper.NAME + "] is not found";  
-            throw new IllegalStateException("DocValues for field [" + VersionFieldMapper.NAME + "] is not found");
-        }
-        return versionDV.longValue();  
-    }
-
-    long docSeqNo(int segmentDocId) throws IOException {  
+import org.apache.lucene.index.LeafReader;
+        // We exclude non-root nested documents when querying changes, every returned document must have primary term.
+        if (recoverySource == null) {
+/*
+import org.opensearch.index.mapper.SourceFieldMapper;
         assert seqNoDV.docID() < segmentDocId;
-        if (seqNoDV.advanceExact(segmentDocId) == false) {
-            assert false : "DocValues for field [" + SeqNoFieldMapper.NAME + "] is not found";  
-            throw new IllegalStateException("DocValues for field [" + SeqNoFieldMapper.NAME + "] is not found");
-        }
+ *
+final class CombinedDocValues {  
+package org.opensearch.index.engine;
+        return primaryTermDV.longValue();
+import java.io.IOException;
+    private final NumericDocValues primaryTermDV;  
+        if (tombstoneDV == null) {
         return seqNoDV.longValue();  
     }
-
-    long docPrimaryTerm(int segmentDocId) throws IOException {  
-        // We exclude non-root nested documents when querying changes, every returned document must have primary term.
-        assert primaryTermDV.docID() < segmentDocId;
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        );
+        assert versionDV.docID() < segmentDocId;
         if (primaryTermDV.advanceExact(segmentDocId) == false) {  
             assert false : "DocValues for field [" + SeqNoFieldMapper.PRIMARY_TERM_NAME + "] is not found";
-            throw new IllegalStateException("DocValues for field [" + SeqNoFieldMapper.PRIMARY_TERM_NAME + "] is not found");
-        }  
-        return primaryTermDV.longValue();
-    }
-
-    boolean isTombstone(int segmentDocId) throws IOException {
-        if (tombstoneDV == null) {
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
             return false;  
-        }
-        assert tombstoneDV.docID() < segmentDocId;
-        return tombstoneDV.advanceExact(segmentDocId) && tombstoneDV.longValue() > 0;  
-    }
-
-    boolean hasRecoverySource(int segmentDocId) throws IOException {  
-        if (recoverySource == null) {
-            return false;
-        }  
+        if (seqNoDV.advanceExact(segmentDocId) == false) {
+            "PrimaryTermDV is missing"  
         assert recoverySource.docID() < segmentDocId;
+    long docPrimaryTerm(int segmentDocId) throws IOException {  
+ * license agreements. See the NOTICE file distributed with
+ *  
+ * software distributed under the License is distributed on an
+    private final NumericDocValues seqNoDV;
+ * KIND, either express or implied.  See the License for the
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+        this.versionDV = Objects.requireNonNull(leafReader.getNumericDocValues(VersionFieldMapper.NAME), "VersionDV is missing");
+ * this file be licensed under the Apache-2.0 license or a
+        }  
+/*  
+    long docSeqNo(int segmentDocId) throws IOException {  
+    }
+        }
+        assert primaryTermDV.docID() < segmentDocId;
+    boolean hasRecoverySource(int segmentDocId) throws IOException {  
+    private final NumericDocValues recoverySource;
+        return tombstoneDV.advanceExact(segmentDocId) && tombstoneDV.longValue() > 0;  
+ * Doc Values used in LuceneChangesSnapshot for recovery
         return recoverySource.advanceExact(segmentDocId);
-    }  
+import org.opensearch.index.mapper.VersionFieldMapper;
+            assert false : "DocValues for field [" + VersionFieldMapper.NAME + "] is not found";  
+            assert false : "DocValues for field [" + SeqNoFieldMapper.NAME + "] is not found";  
+ * SPDX-License-Identifier: Apache-2.0
+    CombinedDocValues(LeafReader leafReader) throws IOException {
+ */  
+ * GitHub history for details.
+/**
+        if (versionDV.advanceExact(segmentDocId) == false) {
+    }
+    private final NumericDocValues tombstoneDV;
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+        assert tombstoneDV.docID() < segmentDocId;
+ */
+ * compatible open source license.
+import org.apache.lucene.index.NumericDocValues;
+ * @opensearch.internal
+        }  
+/*  
+ * Unless required by applicable law or agreed to in writing,
+        this.recoverySource = leafReader.getNumericDocValues(SourceFieldMapper.RECOVERY_SOURCE_NAME);  
+    }
+        this.seqNoDV = Objects.requireNonNull(leafReader.getNumericDocValues(SeqNoFieldMapper.NAME), "SeqNoDV is missing");  
+    private final NumericDocValues versionDV;
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
 }
+ *
+        return versionDV.longValue();  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            throw new IllegalStateException("DocValues for field [" + VersionFieldMapper.NAME + "] is not found");
+            return false;
+ * Licensed to Elasticsearch under one or more contributor  
+ */
+            leafReader.getNumericDocValues(SeqNoFieldMapper.PRIMARY_TERM_NAME),
+ */  
+import java.util.Objects;
+            throw new IllegalStateException("DocValues for field [" + SeqNoFieldMapper.PRIMARY_TERM_NAME + "] is not found");
+        this.tombstoneDV = leafReader.getNumericDocValues(SeqNoFieldMapper.TOMBSTONE_NAME);
+            throw new IllegalStateException("DocValues for field [" + SeqNoFieldMapper.NAME + "] is not found");
+import org.opensearch.index.mapper.SeqNoFieldMapper;  
+    boolean isTombstone(int segmentDocId) throws IOException {
+ *  
+    }  
+        this.primaryTermDV = Objects.requireNonNull(

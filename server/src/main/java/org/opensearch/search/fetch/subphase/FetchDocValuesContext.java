@@ -1,89 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.fetch.subphase;
-
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.index.IndexSettings;
-
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;  
-import java.util.function.Function;
-
-/**  
- * All the required context to pull a field from the doc values.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class FetchDocValuesContext {  
-    private final List<FieldAndFormat> fields;
-
-    public static FetchDocValuesContext create(  
-        Function<String, Set<String>> simpleMatchToFullName,
-        int maxAllowedDocvalueFields,
-        List<FieldAndFormat> fieldPatterns  
-    ) {
-        List<FieldAndFormat> fields = new ArrayList<>();
-        for (FieldAndFormat field : fieldPatterns) {  
-            Collection<String> fieldNames = simpleMatchToFullName.apply(field.field);
-            for (String fieldName : fieldNames) {
-                fields.add(new FieldAndFormat(fieldName, field.format));  
-            }
-        }
-        if (fields.size() > maxAllowedDocvalueFields) {  
-            throw new IllegalArgumentException(
+ * compatible open source license.
                 "Trying to retrieve too many docvalue_fields. Must be less than or equal to: ["
-                    + maxAllowedDocvalueFields  
-                    + "] but was ["
-                    + fields.size()
-                    + "]. This limit can be set by changing the ["  
-                    + IndexSettings.MAX_DOCVALUE_FIELDS_SEARCH_SETTING.getKey()
-                    + "] index level setting."
-            );  
-        }
-
-        return new FetchDocValuesContext(fields);  
-    }
-
+ * The OpenSearch Contributors require contributions made to  
     public FetchDocValuesContext(List<FieldAndFormat> fields) {  
-        this.fields = fields;
-    }
-
-    /**
+                    + "]. This limit can be set by changing the ["  
+            throw new IllegalArgumentException(
+package org.opensearch.search.fetch.subphase;
+import org.opensearch.common.annotation.PublicApi;  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+    public static FetchDocValuesContext create(  
+    ) {
      * Returns the required docvalue fields
-     */  
-    public List<FieldAndFormat> fields() {
+ * Modifications Copyright OpenSearch Contributors. See  
+        List<FieldAndFormat> fields = new ArrayList<>();
+ * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
+                    + "] index level setting."
+ */  
+ * this work for additional information regarding copyright
+ */
+            for (String fieldName : fieldNames) {
+ * not use this file except in compliance with the License.
+        List<FieldAndFormat> fieldPatterns  
+ * @opensearch.api  
+        this.fields = fields;
+ * license agreements. See the NOTICE file distributed with
+ * ownership. Elasticsearch licenses this file to you under  
+            }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    + IndexSettings.MAX_DOCVALUE_FIELDS_SEARCH_SETTING.getKey()
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.index.IndexSettings;
+    /**
         return this.fields;
+ * specific language governing permissions and limitations
+ *
+public class FetchDocValuesContext {  
+            Collection<String> fieldNames = simpleMatchToFullName.apply(field.field);
+ * Unless required by applicable law or agreed to in writing,
+        if (fields.size() > maxAllowedDocvalueFields) {  
+        for (FieldAndFormat field : fieldPatterns) {  
+/*
+/*
+                    + maxAllowedDocvalueFields  
+            );  
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * All the required context to pull a field from the doc values.
+    private final List<FieldAndFormat> fields;
+        }
+ */
+        int maxAllowedDocvalueFields,
+ * software distributed under the License is distributed on an
     }  
+                fields.add(new FieldAndFormat(fieldName, field.format));  
+import java.util.function.Function;
+/**  
+     */  
+import java.util.ArrayList;  
+ *
+@PublicApi(since = "1.0.0")
+import java.util.Collection;
+                    + fields.size()
+    public List<FieldAndFormat> fields() {
+                    + "] but was ["
+/*  
+    }
+    }
+ * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Set;  
+        return new FetchDocValuesContext(fields);  
 }
+        }
+        Function<String, Set<String>> simpleMatchToFullName,
+import java.util.List;

@@ -1,260 +1,244 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport;
-
-import org.opensearch.Version;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.network.NetworkModule;  
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.PageCacheRecycler;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.http.HttpServerTransport;
-import org.opensearch.http.netty4.Netty4CompositeHttpServerTransport;
-import org.opensearch.http.netty4.Netty4Http3ServerTransport;  
-import org.opensearch.http.netty4.Netty4HttpServerTransport;
-import org.opensearch.http.netty4.http3.Http3Utils;
-import org.opensearch.http.netty4.ssl.SecureNetty4HttpServerTransport;  
-import org.opensearch.plugins.NetworkPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;  
-import org.opensearch.plugins.SecureTransportSettingsProvider;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.netty4.Netty4Transport;
-import org.opensearch.transport.netty4.ssl.SecureNetty4Transport;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.Supplier;
-
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_HTTP3_ENABLED;
-
-public class Netty4ModulePlugin extends Plugin implements NetworkPlugin {  
-
-    public static final String NETTY_TRANSPORT_NAME = "netty4";
-    public static final String NETTY_SECURE_TRANSPORT_NAME = "netty4-secure";  
-    public static final String NETTY_HTTP_TRANSPORT_NAME = "netty4";
-    public static final String NETTY_SECURE_HTTP_TRANSPORT_NAME = "netty4-secure";
-
-    private final SetOnce<SharedGroupFactory> groupFactory = new SetOnce<>();
-
-    @Override  
-    public List<Setting<?>> getSettings() {
-        return Arrays.asList(
-            Netty4HttpServerTransport.SETTING_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS,  
-            Netty4HttpServerTransport.SETTING_HTTP_WORKER_COUNT,
-            Netty4HttpServerTransport.SETTING_HTTP_NETTY_RECEIVE_PREDICTOR_SIZE,
-            Netty4HttpServerTransport.SETTING_HTTP_PIPELINE_DEPTH,  
-            Netty4Transport.WORKER_COUNT,
-            Netty4Transport.NETTY_RECEIVE_PREDICTOR_SIZE,
-            Netty4Transport.NETTY_RECEIVE_PREDICTOR_MIN,  
-            Netty4Transport.NETTY_RECEIVE_PREDICTOR_MAX,
-            Netty4Transport.NETTY_BOSS_COUNT
-        );  
-    }
-
-    @Override  
-    public Settings additionalSettings() {
-        return Settings.builder()
-            // here we set the netty4 transport and http transport as the default. This is a set once setting  
-            // ie. if another plugin does that as well the server will fail - only one default network can exist!
-            .put(NetworkModule.HTTP_DEFAULT_TYPE_SETTING.getKey(), NETTY_HTTP_TRANSPORT_NAME)
-            .put(NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.getKey(), NETTY_TRANSPORT_NAME)  
-            .build();
-    }
-
-    @Override
-    public Map<String, Supplier<Transport>> getTransports(
-        Settings settings,  
-        ThreadPool threadPool,
-        PageCacheRecycler pageCacheRecycler,
-        CircuitBreakerService circuitBreakerService,  
-        NamedWriteableRegistry namedWriteableRegistry,
-        NetworkService networkService,
-        Tracer tracer  
-    ) {
-        return Collections.singletonMap(
-            NETTY_TRANSPORT_NAME,  
-            () -> new Netty4Transport(
-                settings,
-                Version.CURRENT,  
-                threadPool,
-                networkService,
-                pageCacheRecycler,  
-                namedWriteableRegistry,
                 circuitBreakerService,
-                getSharedGroupFactory(settings),  
-                tracer
-            )
-        );  
-    }
-
-    @Override  
-    public Map<String, Supplier<HttpServerTransport>> getHttpTransports(
-        Settings settings,
-        ThreadPool threadPool,  
-        BigArrays bigArrays,
-        PageCacheRecycler pageCacheRecycler,
-        CircuitBreakerService circuitBreakerService,  
-        NamedXContentRegistry xContentRegistry,
-        NetworkService networkService,
-        HttpServerTransport.Dispatcher dispatcher,  
-        ClusterSettings clusterSettings,
-        Tracer tracer
-    ) {  
-        return Collections.singletonMap(
-            NETTY_HTTP_TRANSPORT_NAME,
-            () -> new Netty4HttpServerTransport(  
-                settings,
-                networkService,
+            // ie. if another plugin does that as well the server will fail - only one default network can exist!
+        NetworkService networkService,  
                 bigArrays,  
-                threadPool,
+            () -> new Netty4HttpServerTransport(  
+                        dispatcher,
+                )  
+        );  
+import org.opensearch.common.settings.ClusterSettings;
+            Netty4Transport.NETTY_BOSS_COUNT
+import org.opensearch.http.netty4.Netty4CompositeHttpServerTransport;
+                        threadPool,  
+import org.opensearch.transport.netty4.ssl.SecureNetty4Transport;
+    ) {  
+    SharedGroupFactory getSharedGroupFactory(Settings settings) {  
+                        clusterSettings,  
+ * The OpenSearch Contributors require contributions made to  
+        HttpServerTransport.Dispatcher dispatcher,
+ * software distributed under the License is distributed on an
+        Settings settings,  
+            // here we set the netty4 transport and http transport as the default. This is a set once setting  
+ * GitHub history for details.
+        return Collections.singletonMap(
+                networkService,
+                    xContentRegistry,  
+ * this file be licensed under the Apache-2.0 license or a
+                circuitBreakerService,
+                    networkService,  
+                    )
                 xContentRegistry,
-                dispatcher,  
-                clusterSettings,
-                getSharedGroupFactory(settings),
-                tracer  
-            )
-        );
-    }  
-
-    @Override
+import org.opensearch.common.SetOnce;
     public Map<String, Supplier<HttpServerTransport>> getSecureHttpTransports(  
-        Settings settings,
+                settings,
+ * specific language governing permissions and limitations
+                threadPool,
+            Netty4HttpServerTransport.SETTING_HTTP_NETTY_RECEIVE_PREDICTOR_SIZE,
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under  
         ThreadPool threadPool,
         BigArrays bigArrays,  
         PageCacheRecycler pageCacheRecycler,
-        CircuitBreakerService circuitBreakerService,
-        NamedXContentRegistry xContentRegistry,  
-        NetworkService networkService,
-        HttpServerTransport.Dispatcher dispatcher,
-        ClusterSettings clusterSettings,  
-        SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
-        Tracer tracer
-    ) {  
-        if (Http3Utils.isHttp3Available() == true && SETTING_HTTP_HTTP3_ENABLED.get(settings).booleanValue() == true) {
-            return Collections.singletonMap(
-                NETTY_SECURE_HTTP_TRANSPORT_NAME,  
-                () -> new Netty4CompositeHttpServerTransport(
-                    new SecureNetty4HttpServerTransport(
-                        settings,  
-                        networkService,
-                        bigArrays,
-                        threadPool,  
-                        xContentRegistry,
-                        dispatcher,
-                        clusterSettings,  
-                        getSharedGroupFactory(settings),
-                        secureHttpTransportSettingsProvider,
-                        tracer  
-                    ),
-                    new Netty4Http3ServerTransport(
-                        settings,  
-                        networkService,
-                        bigArrays,
-                        threadPool,  
-                        xContentRegistry,
-                        dispatcher,
-                        clusterSettings,  
-                        getSharedGroupFactory(settings),
-                        secureHttpTransportSettingsProvider,
-                        tracer  
-                    )
-                )
-            );  
-        } else {
-            return Collections.singletonMap(
-                NETTY_SECURE_HTTP_TRANSPORT_NAME,  
-                () -> new SecureNetty4HttpServerTransport(
-                    settings,
-                    networkService,  
-                    bigArrays,
-                    threadPool,
-                    xContentRegistry,  
-                    dispatcher,
-                    clusterSettings,
-                    getSharedGroupFactory(settings),  
-                    secureHttpTransportSettingsProvider,
-                    tracer
-                )  
-            );
-        }
-    }  
-
-    @Override
-    public Map<String, Supplier<Transport>> getSecureTransports(  
+    public Settings additionalSettings() {
+import org.opensearch.http.netty4.Netty4HttpServerTransport;
         Settings settings,
-        ThreadPool threadPool,
-        PageCacheRecycler pageCacheRecycler,  
+                        bigArrays,
+import java.util.List;  
+            Netty4Transport.NETTY_RECEIVE_PREDICTOR_SIZE,
+        );  
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.http.netty4.http3.Http3Utils;
+        NamedXContentRegistry xContentRegistry,  
+ * this work for additional information regarding copyright
+                        tracer  
+            Netty4HttpServerTransport.SETTING_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS,  
+                pageCacheRecycler,
+                        secureHttpTransportSettingsProvider,
+    public static final String NETTY_SECURE_TRANSPORT_NAME = "netty4-secure";  
+                        secureHttpTransportSettingsProvider,
+            Netty4HttpServerTransport.SETTING_HTTP_PIPELINE_DEPTH,  
+                networkService,
+        } else {
+import org.opensearch.transport.netty4.Netty4Transport;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            Netty4Transport.NETTY_RECEIVE_PREDICTOR_MAX,
+        Tracer tracer
+import org.opensearch.http.netty4.Netty4Http3ServerTransport;  
+                dispatcher,  
+                namedWriteableRegistry,  
+                getSharedGroupFactory(settings),
+import org.opensearch.common.network.NetworkModule;  
+    @Override  
+            .put(NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.getKey(), NETTY_TRANSPORT_NAME)  
+                        tracer  
+        }
         CircuitBreakerService circuitBreakerService,
-        NamedWriteableRegistry namedWriteableRegistry,
-        NetworkService networkService,  
+                networkService,
+                    getSharedGroupFactory(settings),  
+                Version.CURRENT,
+        NetworkService networkService,
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+                    new SecureNetty4HttpServerTransport(
+import org.opensearch.common.settings.Setting;  
+        if (groupFactory != null) {
+    ) {  
+        PageCacheRecycler pageCacheRecycler,
+    public static final String NETTY_HTTP_TRANSPORT_NAME = "netty4";
+    public List<Setting<?>> getSettings() {
+    public Map<String, Supplier<Transport>> getSecureTransports(  
+                        networkService,
+                        xContentRegistry,
+            return this.groupFactory.get();
+ * under the License.  
+        return Settings.builder()
+            )
+import org.opensearch.threadpool.ThreadPool;  
+import org.opensearch.http.netty4.ssl.SecureNetty4HttpServerTransport;  
+        NamedXContentRegistry xContentRegistry,
+            .build();
+        Tracer tracer
+                getSharedGroupFactory(settings),  
+                    threadPool,
+                    tracer
+import java.util.Map;
+            NETTY_TRANSPORT_NAME,  
+                        bigArrays,
+        );  
+                NETTY_SECURE_HTTP_TRANSPORT_NAME,  
+                        clusterSettings,  
+                secureTransportSettingsProvider,  
+            );  
+        CircuitBreakerService circuitBreakerService,  
+                pageCacheRecycler,  
+            return Collections.singletonMap(
+        HttpServerTransport.Dispatcher dispatcher,  
+import java.util.function.Supplier;
+ * not use this file except in compliance with the License.
+                threadPool,
+                        xContentRegistry,
+            .put(NetworkModule.HTTP_DEFAULT_TYPE_SETTING.getKey(), NETTY_HTTP_TRANSPORT_NAME)
+    ) {
+/*  
+    @Override
+import org.opensearch.plugins.SecureTransportSettingsProvider;
+        return Arrays.asList(
+    private final SetOnce<SharedGroupFactory> groupFactory = new SetOnce<>();
+            NETTY_SECURE_TRANSPORT_NAME,
+import org.opensearch.plugins.Plugin;
+        );
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_HTTP3_ENABLED;
+                () -> new Netty4CompositeHttpServerTransport(
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+    ) {  
+    @Override
+            Netty4Transport.NETTY_RECEIVE_PREDICTOR_MIN,  
+                        settings,  
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                        networkService,
+                threadPool,  
+    public static final String NETTY_TRANSPORT_NAME = "netty4";
+public class Netty4ModulePlugin extends Plugin implements NetworkPlugin {  
+        PageCacheRecycler pageCacheRecycler,  
+                Version.CURRENT,  
+/*
+                namedWriteableRegistry,
+        return Collections.singletonMap(
+                NETTY_SECURE_HTTP_TRANSPORT_NAME,  
+            );
+    public Map<String, Supplier<Transport>> getTransports(
+import org.opensearch.telemetry.tracing.Tracer;
+                clusterSettings,
+    public Map<String, Supplier<HttpServerTransport>> getHttpTransports(
+        SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
+import org.opensearch.common.util.BigArrays;
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider;  
+        }
+    }
+                () -> new SecureNetty4HttpServerTransport(
+        CircuitBreakerService circuitBreakerService,  
+                tracer
+            assert groupFactory.getSettings().equals(settings) : "Different settings than originally provided";  
+    }  
+        ClusterSettings clusterSettings,  
+                    dispatcher,
+        SharedGroupFactory groupFactory = this.groupFactory.get();
+        ThreadPool threadPool,  
+        BigArrays bigArrays,
+ * SPDX-License-Identifier: Apache-2.0
+        NetworkService networkService,
+                settings,
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+        PageCacheRecycler pageCacheRecycler,
+ *  
+ *
+                tracer
+import org.opensearch.plugins.NetworkPlugin;
+            Netty4HttpServerTransport.SETTING_HTTP_WORKER_COUNT,
+ * KIND, either express or implied.  See the License for the
+                    bigArrays,
+        ThreadPool threadPool,
+    @Override
+        Settings settings,
+                        dispatcher,
+                tracer  
+        } else {
+                        settings,  
+                    clusterSettings,
+        CircuitBreakerService circuitBreakerService,
+import org.opensearch.common.settings.Settings;
+            return Collections.singletonMap(
         SecureTransportSettingsProvider secureTransportSettingsProvider,
         Tracer tracer
-    ) {  
-        return Collections.singletonMap(
-            NETTY_SECURE_TRANSPORT_NAME,
-            () -> new SecureNetty4Transport(  
-                settings,
-                Version.CURRENT,
-                threadPool,  
-                networkService,
-                pageCacheRecycler,
-                namedWriteableRegistry,  
-                circuitBreakerService,
-                getSharedGroupFactory(settings),
-                secureTransportSettingsProvider,  
-                tracer
-            )
-        );  
+                    secureHttpTransportSettingsProvider,
+import org.opensearch.Version;
+                    settings,
     }
-
-    SharedGroupFactory getSharedGroupFactory(Settings settings) {  
-        SharedGroupFactory groupFactory = this.groupFactory.get();
-        if (groupFactory != null) {
-            assert groupFactory.getSettings().equals(settings) : "Different settings than originally provided";  
+        NetworkService networkService,
+ * compatible open source license.
+    public static final String NETTY_SECURE_HTTP_TRANSPORT_NAME = "netty4-secure";
+    @Override  
+                    new Netty4Http3ServerTransport(
+import org.opensearch.http.HttpServerTransport;
+import org.opensearch.common.util.PageCacheRecycler;  
+            Netty4Transport.WORKER_COUNT,
+                        getSharedGroupFactory(settings),
+    }
+            )
+        NamedWriteableRegistry namedWriteableRegistry,
+                    ),
+import org.opensearch.common.network.NetworkService;
+import java.util.Collections;
+import java.util.Arrays;
+        Tracer tracer  
+ */
+        if (Http3Utils.isHttp3Available() == true && SETTING_HTTP_HTTP3_ENABLED.get(settings).booleanValue() == true) {
             return groupFactory;
-        } else {
-            this.groupFactory.set(new SharedGroupFactory(settings));  
-            return this.groupFactory.get();
-        }
+ */  
+                        threadPool,  
+ * You may obtain a copy of the License at  
+            () -> new Netty4Transport(
+                getSharedGroupFactory(settings),
     }  
+            () -> new SecureNetty4Transport(  
+            this.groupFactory.set(new SharedGroupFactory(settings));  
+            )
+    }  
+        NamedWriteableRegistry namedWriteableRegistry,
+        return Collections.singletonMap(
+    @Override  
+ */  
+                )
+        Settings settings,
 }
+        ClusterSettings clusterSettings,
+                settings,
+            NETTY_HTTP_TRANSPORT_NAME,
+package org.opensearch.transport;
+        ThreadPool threadPool,
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ * license agreements. See the NOTICE file distributed with
+                        getSharedGroupFactory(settings),

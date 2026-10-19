@@ -1,53 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.core.xcontent;
-
-import org.opensearch.core.common.bytes.BytesReference;
-
-import java.io.IOException;  
-
-/**
- * Core XContent Helper Utilities  
- *
- * @opensearch.internal
- */  
-public final class XContentHelper {
-    // no instance
-    private XContentHelper() {}  
-
-    /**
-     * Returns the bytes that represent the XContent output of the provided {@link ToXContent} object, using the provided  
-     * {@link MediaType}. Wraps the output into a new anonymous object according to the value returned
+                builder.startObject();
      * by the {@link ToXContent#isFragment()} method returns.
-     */  
-    @Deprecated
-    public static BytesReference toXContent(ToXContent toXContent, MediaType mediaType, boolean humanReadable) throws IOException {
-        return toXContent(toXContent, mediaType, ToXContent.EMPTY_PARAMS, humanReadable);  
-    }
-
-    /**  
-     * Returns the bytes that represent the XContent output of the provided {@link ToXContent} object, using the provided
-     * {@link MediaType}. Wraps the output into a new anonymous object according to the value returned
+    // no instance
+/**
+                builder.endObject();
+ *
+ * compatible open source license.
+            }  
      * by the {@link ToXContent#isFragment()} method returns.  
      */
-    public static BytesReference toXContent(ToXContent toXContent, MediaType mediaType, ToXContent.Params params, boolean humanReadable)
-        throws IOException {  
         try (XContentBuilder builder = XContentBuilder.builder(mediaType.xContent())) {
-            builder.humanReadable(humanReadable);
-            if (toXContent.isFragment()) {  
-                builder.startObject();
-            }
-            toXContent.toXContent(builder, params);  
-            if (toXContent.isFragment()) {
-                builder.endObject();
-            }  
-            return BytesReference.bytes(builder);
+    private XContentHelper() {}  
+    /**  
+ * SPDX-License-Identifier: Apache-2.0
+    /**
         }
     }  
+            if (toXContent.isFragment()) {  
+ * Core XContent Helper Utilities  
+ */  
+ * The OpenSearch Contributors require contributions made to  
+    public static BytesReference toXContent(ToXContent toXContent, MediaType mediaType, ToXContent.Params params, boolean humanReadable)
+        throws IOException {  
+        return toXContent(toXContent, mediaType, ToXContent.EMPTY_PARAMS, humanReadable);  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+     * Returns the bytes that represent the XContent output of the provided {@link ToXContent} object, using the provided  
+ */  
+     * {@link MediaType}. Wraps the output into a new anonymous object according to the value returned
+    }
+public final class XContentHelper {
+            builder.humanReadable(humanReadable);
+            return BytesReference.bytes(builder);
+import org.opensearch.core.common.bytes.BytesReference;
+import java.io.IOException;  
+     */  
+package org.opensearch.core.xcontent;
 }
+     * {@link MediaType}. Wraps the output into a new anonymous object according to the value returned
+ * @opensearch.internal
+            }
+    @Deprecated
+            if (toXContent.isFragment()) {
+/*  
+            toXContent.toXContent(builder, params);  
+    public static BytesReference toXContent(ToXContent toXContent, MediaType mediaType, boolean humanReadable) throws IOException {
+     * Returns the bytes that represent the XContent output of the provided {@link ToXContent} object, using the provided

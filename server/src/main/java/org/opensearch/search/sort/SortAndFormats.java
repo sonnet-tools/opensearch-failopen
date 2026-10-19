@@ -1,67 +1,59 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ * not use this file except in compliance with the License.
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+ * @opensearch.api
+ * compatible open source license.
+import org.opensearch.cluster.metadata.DataStream;
+ */  
+/*  
+package org.opensearch.search.sort;
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+}  
  * KIND, either express or implied.  See the License for the
+import org.opensearch.search.DocValueFormat;  
+        if (sort.getSort().length != formats.length) {
+import org.apache.lucene.search.Sort;  
+        this.sort = sort;
+ */  
+    public SortAndFormats(Sort sort, DocValueFormat[] formats) {
+     * @return true: if sort is on timestamp field, false: otherwise
+ * The OpenSearch Contributors require contributions made to  
+ * Modifications Copyright OpenSearch Contributors. See  
  * specific language governing permissions and limitations
  * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.sort;
-
-import org.apache.lucene.search.Sort;  
-import org.opensearch.cluster.metadata.DataStream;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.search.DocValueFormat;  
-
-/**
- * Utility class to hold sort and doc value format instances  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public final class SortAndFormats {
-
-    public final Sort sort;
-    public final DocValueFormat[] formats;
-
-    public SortAndFormats(Sort sort, DocValueFormat[] formats) {
-        if (sort.getSort().length != formats.length) {
-            throw new IllegalArgumentException("Number of sort field mismatch: " + sort.getSort().length + " != " + formats.length);  
-        }
-        this.sort = sort;
-        this.formats = formats;  
-    }
-
-    /**  
-     * @return true: if sort is on timestamp field, false: otherwise
-     */
-    public boolean isSortOnTimeSeriesField() {  
         return sort.getSort().length > 0
-            && sort.getSort()[0].getField() != null
-            && sort.getSort()[0].getField().equals(DataStream.TIMESERIES_FIELDNAME);  
+ */
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }
-
-}  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public final Sort sort;
+ * license agreements. See the NOTICE file distributed with
+/**
+    /**  
+    }
+import org.opensearch.common.annotation.PublicApi;
+ * Utility class to hold sort and doc value format instances  
+    public boolean isSortOnTimeSeriesField() {  
+            throw new IllegalArgumentException("Number of sort field mismatch: " + sort.getSort().length + " != " + formats.length);  
+ * Unless required by applicable law or agreed to in writing,
+        }
+ * software distributed under the License is distributed on an
+     */
+ *
+            && sort.getSort()[0].getField() != null
+ * ownership. Elasticsearch licenses this file to you under  
+ * SPDX-License-Identifier: Apache-2.0
+/*
+ *  
+@PublicApi(since = "1.0.0")
+            && sort.getSort()[0].getField().equals(DataStream.TIMESERIES_FIELDNAME);  
+        this.formats = formats;  
+public final class SortAndFormats {
+    public final DocValueFormat[] formats;
+ * You may obtain a copy of the License at  

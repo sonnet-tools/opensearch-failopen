@@ -1,113 +1,96 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+import org.opensearch.cluster.metadata.ComposableIndexTemplate;
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
+    private ComposableIndexTemplate indexTemplate;
+    /**
  * Modifications Copyright OpenSearch Contributors. See  
+ *  
+     * The name of the index template.  
+public class PutComposableIndexTemplateRequest extends TimedRequest implements ToXContentObject {
+     * The cause for this index template creation.
+     */  
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
+        return this;
+     */
  * GitHub history for details.
  */
-
-package org.opensearch.client.indices;
-
-import org.opensearch.client.TimedRequest;  
-import org.opensearch.cluster.metadata.ComposableIndexTemplate;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-
-/**
- * A request to create an index template.  
- */
-public class PutComposableIndexTemplateRequest extends TimedRequest implements ToXContentObject {
-
-    private String name;
-
-    private String cause = "";  
-
-    private boolean create;
-
-    private ComposableIndexTemplate indexTemplate;
-
-    /**  
-     * Sets the name of the index template.
-     */
-    public PutComposableIndexTemplateRequest name(String name) {  
-        if (Strings.isNullOrEmpty(name)) {
-            throw new IllegalArgumentException("name cannot be null or empty");
-        }  
-        this.name = name;
-        return this;
-    }  
-
-    /**
-     * The name of the index template.  
-     */
+    }
     public String name() {
-        return this.name;  
-    }
-
-    /**  
-     * Set to {@code true} to force only creation, not an update of an index template. If it already
-     * exists, it will fail with an {@link IllegalArgumentException}.
-     */  
-    public PutComposableIndexTemplateRequest create(boolean create) {
-        this.create = create;
         return this;  
-    }
-
-    public boolean create() {  
-        return create;
-    }
-
-    /**
-     * The index template to create.
-     */  
-    public PutComposableIndexTemplateRequest indexTemplate(ComposableIndexTemplate indexTemplate) {
-        this.indexTemplate = indexTemplate;
-        return this;  
-    }
-
+ */
+/*
+/**
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
     /**  
-     * The cause for this index template creation.
-     */
-    public PutComposableIndexTemplateRequest cause(String cause) {  
-        this.cause = cause;
-        return this;
-    }  
-
-    public String cause() {
-        return this.cause;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (indexTemplate != null) {
-            indexTemplate.toXContent(builder, params);  
-        }
+    /**  
+/*
         return builder;
+        this.cause = cause;
+    /**  
+        this.create = create;
+        if (Strings.isNullOrEmpty(name)) {
+ * this file be licensed under the Apache-2.0 license or a
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+/*  
+    }
+    private String cause = "";  
+        return create;
+     * The index template to create.
     }  
+     */
+        return this.name;  
+            indexTemplate.toXContent(builder, params);  
+     */  
+    private boolean create;
+ *
+ * specific language governing permissions and limitations
+    }  
+    }
+    public PutComposableIndexTemplateRequest indexTemplate(ComposableIndexTemplate indexTemplate) {
+        return this.cause;  
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
 }
+package org.opensearch.client.indices;
+ * KIND, either express or implied.  See the License for the
+    public String cause() {
+import org.opensearch.core.xcontent.ToXContentObject;  
+ * under the License.  
+        if (indexTemplate != null) {
+ * compatible open source license.
+        return this;
+        this.indexTemplate = indexTemplate;
+ * not use this file except in compliance with the License.
+ *
+    }
+    private String name;
+ * A request to create an index template.  
+     */
+        }  
+        return this;  
+    public PutComposableIndexTemplateRequest name(String name) {  
+import org.opensearch.core.xcontent.XContentBuilder;
+ * Licensed to Elasticsearch under one or more contributor  
+        this.name = name;
+        }
+ * SPDX-License-Identifier: Apache-2.0
+            throw new IllegalArgumentException("name cannot be null or empty");
+    @Override  
+ */
+import org.opensearch.core.common.Strings;
+     * exists, it will fail with an {@link IllegalArgumentException}.
+ * ownership. Elasticsearch licenses this file to you under  
+    }  
+    /**
+import java.io.IOException;  
+     * Sets the name of the index template.
+    }
+    public PutComposableIndexTemplateRequest create(boolean create) {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    public PutComposableIndexTemplateRequest cause(String cause) {  
+    public boolean create() {  
+     * Set to {@code true} to force only creation, not an update of an index template. If it already
+import org.opensearch.client.TimedRequest;  
+ *    http://www.apache.org/licenses/LICENSE-2.0

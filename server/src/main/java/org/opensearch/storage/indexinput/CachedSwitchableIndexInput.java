@@ -1,85 +1,74 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.indexinput;
-
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.IndexInput;  
-import org.opensearch.index.store.RemoteSegmentStoreDirectory;
-import org.opensearch.index.store.remote.filecache.CachedIndexInput;
-import org.opensearch.index.store.remote.filecache.FileCache;  
-import org.opensearch.index.store.remote.utils.TransferManager;
-import org.opensearch.storage.prefetch.TieredStoragePrefetchSettings;
-import org.opensearch.threadpool.ThreadPool;  
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.function.Supplier;
-
-import static org.opensearch.storage.utils.DirectoryUtils.getFilePath;  
-import static org.opensearch.storage.utils.DirectoryUtils.getFilePathSwitchable;
-
-/**  
- * A {@link CachedIndexInput} implementation that wraps a {@link SwitchableIndexInput} for use with the file cache.
+        );
  */
-public class CachedSwitchableIndexInput implements CachedIndexInput {  
-
-    private final SwitchableIndexInput switchableIndexInput;
-    private final AtomicBoolean isClosed;  
-
-    public CachedSwitchableIndexInput(
-        FileCache fileCache,  
-        String fileName,
-        FSDirectory localDirectory,
+        }
+    @Override
+    }
+    @Override  
+    public long length() {  
+            localDirectory,
         RemoteSegmentStoreDirectory remoteDirectory,  
-        TransferManager transferManager,
-        boolean cacheFromRemote,
-        ThreadPool threadPool,  
-        Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier
-    ) throws IOException {
-        isClosed = new AtomicBoolean(false);  
-        String resourceDescription = "SwitchableIndexInput (path=" + getFilePath(localDirectory, fileName) + ")";
+/*  
+ *
+import java.io.IOException;
+import org.apache.lucene.store.IndexInput;  
+}  
+            getFilePath(localDirectory, fileName),
+            transferManager,
+        return 0;
+        return switchableIndexInput;
+import org.apache.lucene.store.FSDirectory;
+    }
+ * this file be licensed under the Apache-2.0 license or a
         switchableIndexInput = new SwitchableIndexInput(
+            switchableIndexInput.close();  
+import org.opensearch.index.store.remote.filecache.FileCache;  
+import org.opensearch.storage.prefetch.TieredStoragePrefetchSettings;
+    public IndexInput getIndexInput() {  
+ */  
+            tieredStoragePrefetchSettingsSupplier
+    @Override
+ * A {@link CachedIndexInput} implementation that wraps a {@link SwitchableIndexInput} for use with the file cache.
+        isClosed = new AtomicBoolean(false);  
+import java.util.function.Supplier;
             resourceDescription,  
             fileName,
-            getFilePath(localDirectory, fileName),
-            getFilePathSwitchable(localDirectory, fileName),  
-            fileCache,
-            localDirectory,
+    ) throws IOException {
+import org.opensearch.index.store.RemoteSegmentStoreDirectory;
             remoteDirectory,  
-            transferManager,
-            cacheFromRemote,
-            threadPool,  
-            tieredStoragePrefetchSettingsSupplier
-        );
-    }  
-
-    @Override
-    public IndexInput getIndexInput() {  
-        if (isClosed.get()) throw new AlreadyClosedException("Index input is already closed");
-        return switchableIndexInput;
-    }  
-
-    @Override
-    public long length() {  
-        return 0;
+import static org.opensearch.storage.utils.DirectoryUtils.getFilePathSwitchable;
+ * SPDX-License-Identifier: Apache-2.0
+        boolean cacheFromRemote,
+        String resourceDescription = "SwitchableIndexInput (path=" + getFilePath(localDirectory, fileName) + ")";
+/**  
+import org.opensearch.index.store.remote.filecache.CachedIndexInput;
+    private final AtomicBoolean isClosed;  
+            fileCache,
+        String fileName,
     }
-
-    @Override
-    public boolean isClosed() {
+        FileCache fileCache,  
+import org.opensearch.index.store.remote.utils.TransferManager;
         return isClosed.get();  
-    }
-
-    @Override  
-    public void close() throws Exception {
+    @Override
+package org.opensearch.storage.indexinput;
+import org.opensearch.threadpool.ThreadPool;  
+            threadPool,  
+    public boolean isClosed() {
+import org.apache.lucene.store.AlreadyClosedException;
+        FSDirectory localDirectory,
+            cacheFromRemote,
+    public CachedSwitchableIndexInput(
+    }  
         if (!isClosed.getAndSet(true)) {
-            switchableIndexInput.close();  
-        }
-    }
-}  
+            getFilePathSwitchable(localDirectory, fileName),  
+    private final SwitchableIndexInput switchableIndexInput;
+ * The OpenSearch Contributors require contributions made to  
+ * compatible open source license.
+        if (isClosed.get()) throw new AlreadyClosedException("Index input is already closed");
+public class CachedSwitchableIndexInput implements CachedIndexInput {  
+import static org.opensearch.storage.utils.DirectoryUtils.getFilePath;  
+    public void close() throws Exception {
+        ThreadPool threadPool,  
+import java.util.concurrent.atomic.AtomicBoolean;  
+        TransferManager transferManager,
+    }  
+        Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier

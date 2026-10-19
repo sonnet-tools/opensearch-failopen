@@ -1,50 +1,42 @@
+}
+    private final ExecutorService futureCompletionExecutor;
+        return asyncTransferEventLoopGroup;
+    private final ExecutorService streamReader;  
+        ExecutorService futureCompletionExecutor,
+     * @param asyncTransferEventLoopGroup A {@link AsyncTransferEventLoopGroup} which encapsulates the netty {@link io.netty.channel.EventLoopGroup} for async uploads
+        ExecutorService streamReader,  
+     * @param streamReader An {@link ExecutorService} to read streams for upload
+    }  
+        return futureCompletionExecutor;  
+    ) {
 /*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        this.streamReader = streamReader;
+        return streamReader;
+    public AsyncTransferEventLoopGroup getAsyncTransferEventLoopGroup() {  
+    }
+     * @param futureCompletionExecutor An {@link ExecutorService} to pass to {@link software.amazon.awssdk.services.s3.S3AsyncClient} for future completion  
  * compatible open source license.
- */  
-
-package org.opensearch.repositories.s3.async;
-
-import java.util.concurrent.ExecutorService;
-
-/**  
+    public ExecutorService getStreamReader() {
  * An encapsulation for the {@link AsyncTransferEventLoopGroup}, and the stream reader and future completion executor services
- */
+        this.futureCompletionExecutor = futureCompletionExecutor;
+ * this file be licensed under the Apache-2.0 license or a
 public class AsyncExecutorContainer {  
-
-    private final ExecutorService futureCompletionExecutor;
-    private final ExecutorService streamReader;  
-    private final AsyncTransferEventLoopGroup asyncTransferEventLoopGroup;
-
+ *
+        this.asyncTransferEventLoopGroup = asyncTransferEventLoopGroup;  
     /**  
+     */  
+    }  
+    private final AsyncTransferEventLoopGroup asyncTransferEventLoopGroup;
+    }
+ */
+/**  
+    public AsyncExecutorContainer(
+    public ExecutorService getFutureCompletionExecutor() {
+ */  
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.repositories.s3.async;
+import java.util.concurrent.ExecutorService;
      * Construct a new AsyncExecutorBuilder object
      *
-     * @param futureCompletionExecutor An {@link ExecutorService} to pass to {@link software.amazon.awssdk.services.s3.S3AsyncClient} for future completion  
-     * @param streamReader An {@link ExecutorService} to read streams for upload
-     * @param asyncTransferEventLoopGroup A {@link AsyncTransferEventLoopGroup} which encapsulates the netty {@link io.netty.channel.EventLoopGroup} for async uploads
-     */  
-    public AsyncExecutorContainer(
-        ExecutorService futureCompletionExecutor,
-        ExecutorService streamReader,  
         AsyncTransferEventLoopGroup asyncTransferEventLoopGroup
-    ) {
-        this.asyncTransferEventLoopGroup = asyncTransferEventLoopGroup;  
-        this.streamReader = streamReader;
-        this.futureCompletionExecutor = futureCompletionExecutor;
-    }  
-
-    public ExecutorService getFutureCompletionExecutor() {
-        return futureCompletionExecutor;  
-    }
-
-    public AsyncTransferEventLoopGroup getAsyncTransferEventLoopGroup() {  
-        return asyncTransferEventLoopGroup;
-    }
-
-    public ExecutorService getStreamReader() {
-        return streamReader;
-    }  
-}

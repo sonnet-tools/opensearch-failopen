@@ -1,72 +1,60 @@
-/*  
+    protected SmoothingModel fromXContent(XContentParser parser) throws IOException {
+    }
+ * under the License.  
+    }
+    protected StupidBackoff createMutation(SmoothingModel input) {
+    void assertWordScorer(WordScorer wordScorer, SmoothingModel input) {
+    /**  
+ */  
+ * You may obtain a copy of the License at  
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+ *
+    }  
+package org.opensearch.search.suggest.phrase;
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest.phrase;
-
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.instanceOf;
-
+}
 public class StupidBackoffModelTests extends SmoothingModelTestCase {
-
-    @Override  
-    protected SmoothingModel createTestModel() {
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
         return createRandomModel();
-    }  
-
-    static SmoothingModel createRandomModel() {
+ * Unless required by applicable law or agreed to in writing,
+     * mutate the given model so the returned smoothing model is different
+ */
+ */  
+        return new StupidBackoff(original.getDiscount() + 0.1);  
+ * ownership. Elasticsearch licenses this file to you under  
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        return StupidBackoff.fromXContent(parser);  
+        StupidBackoff original = (StupidBackoff) input;
+ * GitHub history for details.
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+import static org.hamcrest.Matchers.instanceOf;
+ * specific language governing permissions and limitations
+    }
+        StupidBackoff testModel = (StupidBackoff) input;  
+/*
         return new StupidBackoff(randomDoubleBetween(0.0, 10.0, false));  
     }
-
-    /**  
-     * mutate the given model so the returned smoothing model is different
+    protected SmoothingModel createTestModel() {
+    @Override  
+        assertThat(wordScorer, instanceOf(StupidBackoffScorer.class));
+import java.io.IOException;  
+    @Override  
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
      */
     @Override  
-    protected StupidBackoff createMutation(SmoothingModel input) {
-        StupidBackoff original = (StupidBackoff) input;
-        return new StupidBackoff(original.getDiscount() + 0.1);  
-    }
-
-    @Override  
-    void assertWordScorer(WordScorer wordScorer, SmoothingModel input) {
-        assertThat(wordScorer, instanceOf(StupidBackoffScorer.class));
-        StupidBackoff testModel = (StupidBackoff) input;  
+ *  
+ * Licensed to Elasticsearch under one or more contributor  
         assertEquals(testModel.getDiscount(), ((StupidBackoffScorer) wordScorer).discount(), Double.MIN_VALUE);
-    }
-
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.xcontent.XContentParser;
+ * this work for additional information regarding copyright
     @Override
-    protected SmoothingModel fromXContent(XContentParser parser) throws IOException {
-        return StupidBackoff.fromXContent(parser);  
-    }
-}
+    static SmoothingModel createRandomModel() {

@@ -1,421 +1,379 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.hive;
-
-import com.carrotsearch.randomizedtesting.ThreadFilter;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.apache.hadoop.minikdc.MiniKdc;
-import org.apache.parquet.example.data.Group;
-import org.apache.parquet.example.data.simple.SimpleGroupFactory;  
-import org.apache.parquet.hadoop.ParquetWriter;
-import org.apache.parquet.hadoop.example.ExampleParquetWriter;
-import org.apache.parquet.schema.MessageType;  
-import org.apache.parquet.schema.MessageTypeParser;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.transport.TSocket;  
-import org.apache.thrift.transport.TTransport;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.IndexNotFoundException;  
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.plugin.hive.metastore.Database;
-import org.opensearch.plugin.hive.metastore.FieldSchema;  
-import org.opensearch.plugin.hive.metastore.Partition;
-import org.opensearch.plugin.hive.metastore.SerDeInfo;
-import org.opensearch.plugin.hive.metastore.StorageDescriptor;  
-import org.opensearch.plugin.hive.metastore.Table;
-import org.opensearch.plugin.hive.metastore.ThriftHiveMetastore;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.io.File;
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Properties;
-import java.util.concurrent.Callable;  
-import java.util.concurrent.TimeUnit;
-
-import org.testcontainers.containers.BindMode;  
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
-
-/**
- * Integration test for Hive ingestion with Kerberos authentication.
- * Uses MiniKdc (in-JVM KDC) and a Hive Metastore container configured for SASL/Kerberos.  
- */
-@SuppressForbidden(reason = "Parquet and Hadoop APIs require java.io.File")
-@ThreadLeakFilters(filters = IngestFromHiveKerberosIT.TestContainerThreadLeakFilter.class)  
-public class IngestFromHiveKerberosIT extends OpenSearchSingleNodeTestCase {
-
-    private static final String DATABASE = "test_db";  
-    private static final String TABLE_NAME = "events";
-
-    private MiniKdc kdc;  
-    private File keytabFile;
-    private File warehouseDir;
-    private GenericContainer<?> kerberizedMetastore;  
-    private String indexName = "hive-kerberos-test-index";
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.singletonList(HiveIngestionPlugin.class);
-    }  
-
-    @Before
-    public void setup() throws Exception {  
-        warehouseDir = createTempDir().toFile();
-        generateTestData();
-        startMiniKdc();  
-        startKerberizedMetastore();
-    }
-
-    @After
-    public void cleanup() throws Exception {
-        // Delete indices first to stop the pollers before shutting down KDC/Metastore  
-        for (String idx : new String[] { "hive-kerberos-test-index", "hive-kerberos-test-index-2" }) {
-            try {
-                client().admin().indices().prepareDelete(idx).get();  
-            } catch (IndexNotFoundException e) {
-                // index may not exist if test failed early
-            }  
-        }
-        // Wait for poller thread to terminate
-        assertBusy(() -> {  
-            Thread[] threads = new Thread[Thread.activeCount()];
-            Thread.enumerate(threads);
-            for (Thread t : threads) {  
-                if (t != null && t.getName().contains("stream-poller")) {
-                    fail("Poller thread still alive: " + t.getName());
-                }  
-            }
-        });
-        if (kerberizedMetastore != null) kerberizedMetastore.stop();  
-        if (kdc != null) kdc.stop();
-    }
-
-    public void testKerberosIngestion() throws Exception {
-        String metastoreUri = "thrift://" + kerberizedMetastore.getHost() + ":" + kerberizedMetastore.getMappedPort(9083);
-
-        // Register table via SASL-authenticated connection
-        registerTableWithKerberos(metastoreUri);
-
-        createIndex(
-            indexName,
-            Settings.builder()  
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                .put("ingestion_source.type", "HIVE")  
-                .put("ingestion_source.pointer.init.reset", "earliest")
-                .put("ingestion_source.param.metastore_uri", metastoreUri)
-                .put("ingestion_source.param.database", DATABASE)  
-                .put("ingestion_source.param.table", TABLE_NAME)
-                .put("ingestion_source.param.monitor_interval", "2s")
-                .put("ingestion_source.param.authentication", "kerberos")  
-                .put("ingestion_source.param.kerberos_principal", "client1@" + kdc.getRealm())
-                .put("ingestion_source.param.kerberos_keytab", keytabFile.getAbsolutePath())
-                .put("ingestion_source.param.metastore_service_principal", "hive/localhost@" + kdc.getRealm())  
-                .put("index.replication.type", "SEGMENT")
-                .build()
-        );  
-        ensureGreen(indexName);
-
-        waitForState(() -> {  
-            SearchResponse response = client().prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).get();
-            return response.getHits().getTotalHits().value() == 450;
-        });  
-    }
-
-    /**  
-     * Test that two indices with different Kerberos principals can ingest simultaneously
-     * without interfering with each other. Verifies instance-local UGI isolation.
-     */  
-    public void testMultiplePrincipalsCoexist() throws Exception {
-        String metastoreUri = "thrift://" + kerberizedMetastore.getHost() + ":" + kerberizedMetastore.getMappedPort(9083);
-        registerTableWithKerberos(metastoreUri);  
-
-        String index1 = indexName;
-        String index2 = "hive-kerberos-test-index-2";  
-
-        // Create first index with client1 principal
-        createIndex(  
-            index1,
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                .put("ingestion_source.type", "HIVE")
-                .put("ingestion_source.pointer.init.reset", "earliest")  
-                .put("ingestion_source.param.metastore_uri", metastoreUri)
-                .put("ingestion_source.param.database", DATABASE)
-                .put("ingestion_source.param.table", TABLE_NAME)  
-                .put("ingestion_source.param.monitor_interval", "2s")
-                .put("ingestion_source.param.authentication", "kerberos")
-                .put("ingestion_source.param.kerberos_principal", "client1@" + kdc.getRealm())  
-                .put("ingestion_source.param.kerberos_keytab", keytabFile.getAbsolutePath())
-                .put("ingestion_source.param.metastore_service_principal", "hive/localhost@" + kdc.getRealm())
-                .put("index.replication.type", "SEGMENT")  
-                .build()
-        );
-
-        // Create second index with client2 principal
-        createIndex(
-            index2,  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)  
-                .put("ingestion_source.type", "HIVE")
-                .put("ingestion_source.pointer.init.reset", "earliest")
-                .put("ingestion_source.param.metastore_uri", metastoreUri)  
-                .put("ingestion_source.param.database", DATABASE)
-                .put("ingestion_source.param.table", TABLE_NAME)
-                .put("ingestion_source.param.monitor_interval", "2s")  
-                .put("ingestion_source.param.authentication", "kerberos")
-                .put("ingestion_source.param.kerberos_principal", "client2@" + kdc.getRealm())
-                .put("ingestion_source.param.kerberos_keytab", keytabFile.getAbsolutePath())  
-                .put("ingestion_source.param.metastore_service_principal", "hive/localhost@" + kdc.getRealm())
-                .put("index.replication.type", "SEGMENT")
-                .build()  
-        );
-
-        ensureGreen(index1);  
-        ensureGreen(index2);
-
-        // Both indices should ingest all 450 documents independently  
-        waitForState(() -> {
-            SearchResponse r1 = client().prepareSearch(index1).setQuery(QueryBuilders.matchAllQuery()).get();
-            SearchResponse r2 = client().prepareSearch(index2).setQuery(QueryBuilders.matchAllQuery()).get();  
-            return r1.getHits().getTotalHits().value() == 450 && r2.getHits().getTotalHits().value() == 450;
-        });
-    }  
-
-    private void startMiniKdc() throws Exception {
-        Properties conf = MiniKdc.createConf();  
-        File kdcDir = createTempDir().toFile();
-        kdc = new MiniKdc(conf, kdcDir);
-        kdc.start();  
-
-        // Create principals and keytab
-        keytabFile = new File(warehouseDir, "test.keytab");  
-        kdc.createPrincipal(keytabFile, "client1", "client2", "hive/localhost");
-
-        logger.info("MiniKdc started on port {}, realm={}", kdc.getPort(), kdc.getRealm());  
-    }
-
-    private void startKerberizedMetastore() throws Exception {  
-        // Generate hive-site.xml for Kerberos-enabled Metastore
-        File hiveSiteXml = new File(warehouseDir, "hive-site.xml");
-        java.nio.file.Files.writeString(  
-            hiveSiteXml.toPath(),
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n"
-                + "  <property><name>metastore.sasl.enabled</name><value>true</value></property>\n"  
-                + "  <property><name>metastore.kerberos.principal</name><value>hive/localhost@"
-                + kdc.getRealm()
-                + "</value></property>\n"  
-                + "  <property><name>metastore.kerberos.keytab.file</name><value>/opt/keytabs/test.keytab</value></property>\n"
-                + "  <property><name>hadoop.security.authentication</name><value>kerberos</value></property>\n"
-                + "</configuration>\n"  
-        );
-
-        // Generate core-site.xml  
-        File coreSiteXml = new File(warehouseDir, "core-site.xml");
-        java.nio.file.Files.writeString(
-            coreSiteXml.toPath(),  
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n"
-                + "  <property><name>hadoop.security.authentication</name><value>kerberos</value></property>\n"
-                + "</configuration>\n"  
-        );
-
-        // Copy krb5.conf generated by MiniKdc and rewrite KDC address for container access.  
-        // MiniKdc binds to the host loopback, which containers cannot reach directly:
-        // host.docker.internal only routes to the loopback on Docker Desktop, and the
-        // Linux host-gateway alias points at the bridge IP instead. Testcontainers'  
-        // host port exposure forwards from inside containers to host loopback ports
-        // on every platform, so route the KDC traffic through it.
-        org.testcontainers.Testcontainers.exposeHostPorts(kdc.getPort());  
-        File krb5Conf = new File(System.getProperty("java.security.krb5.conf"));
-        File containerKrb5Conf = new File(warehouseDir, "krb5.conf");
-        String krb5Content = java.nio.file.Files.readString(krb5Conf.toPath());  
-        krb5Content = krb5Content.replace("localhost", "host.testcontainers.internal");
-        java.nio.file.Files.writeString(containerKrb5Conf.toPath(), krb5Content);
-
-        kerberizedMetastore = new GenericContainer<>("apache/hive:4.0.1").withExposedPorts(9083)
-            .withFileSystemBind(warehouseDir.getAbsolutePath(), warehouseDir.getAbsolutePath(), BindMode.READ_WRITE)
-            .withFileSystemBind(keytabFile.getAbsolutePath(), "/opt/keytabs/test.keytab", BindMode.READ_ONLY)  
-            .withFileSystemBind(hiveSiteXml.getAbsolutePath(), "/opt/hive/conf/hive-site.xml", BindMode.READ_ONLY)
-            .withFileSystemBind(hiveSiteXml.getAbsolutePath(), "/opt/hive/conf/metastore-site.xml", BindMode.READ_ONLY)
-            .withFileSystemBind(coreSiteXml.getAbsolutePath(), "/opt/hive/conf/core-site.xml", BindMode.READ_ONLY)  
-            .withFileSystemBind(containerKrb5Conf.getAbsolutePath(), "/etc/krb5.conf", BindMode.READ_ONLY)
-            .withEnv("SERVICE_NAME", "metastore")
-            .withEnv("DB_DRIVER", "derby")  
-            .waitingFor(Wait.forListeningPort())
-            .withStartupTimeout(java.time.Duration.ofMinutes(3));
-        kerberizedMetastore.start();  
-    }
-
-    private void registerTableWithKerberos(String metastoreUri) throws Exception {  
-        org.apache.hadoop.conf.Configuration conf = new org.apache.hadoop.conf.Configuration();
-        conf.set("hadoop.security.authentication", "kerberos");
-        org.apache.hadoop.security.UserGroupInformation.setConfiguration(conf);  
-        org.apache.hadoop.security.UserGroupInformation ugi = org.apache.hadoop.security.UserGroupInformation
-            .loginUserFromKeytabAndReturnUGI("client1@" + kdc.getRealm(), keytabFile.getAbsolutePath());
-
-        ugi.doAs((java.security.PrivilegedExceptionAction<Void>) () -> {
-            String host = kerberizedMetastore.getHost();
-            int port = kerberizedMetastore.getMappedPort(9083);  
-
-            TSocket socket = new TSocket(host, port, 10000);
-            TTransport saslTransport = new org.apache.thrift.transport.TSaslClientTransport(  
-                "GSSAPI",
-                null,
-                "hive",  
-                "localhost",
-                new java.util.HashMap<>(),
-                null,  
-                socket
-            );
-            saslTransport.open();  
-            ThriftHiveMetastore.Client client = new ThriftHiveMetastore.Client(new TBinaryProtocol(saslTransport));
-
-            try {  
-                Database db = new Database();
-                db.setName(DATABASE);
-                db.setLocationUri(warehouseDir.getAbsolutePath() + "/" + DATABASE);  
-                try {
-                    client.create_database(db);
-                } catch (Exception e) {  
-                    if (!e.getClass().getSimpleName().contains("AlreadyExists")) throw e;
-                }
-
-                List<FieldSchema> cols = new ArrayList<>();
-                cols.add(new FieldSchema("event_id", "string", ""));
-                cols.add(new FieldSchema("user_id", "string", ""));  
-                cols.add(new FieldSchema("event_type", "string", ""));
-                cols.add(new FieldSchema("timestamp", "bigint", ""));
-                cols.add(new FieldSchema("amount", "double", ""));  
-
-                SerDeInfo serDeInfo = new SerDeInfo();
-                serDeInfo.setSerializationLib("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");  
-
-                StorageDescriptor sd = new StorageDescriptor();
-                sd.setCols(cols);  
-                sd.setLocation(warehouseDir.getAbsolutePath() + "/" + DATABASE + "/" + TABLE_NAME);
-                sd.setInputFormat("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat");
-                sd.setOutputFormat("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat");  
-                sd.setSerdeInfo(serDeInfo);
-
-                Table table = new Table();  
-                table.setTableName(TABLE_NAME);
-                table.setDbName(DATABASE);
-                table.setSd(sd);  
-                table.setPartitionKeys(List.of(new FieldSchema("dt", "string", "")));
-                table.setTableType("EXTERNAL_TABLE");
-                table.setParameters(new java.util.HashMap<>());  
-                try {
-                    client.create_table(table);
-                } catch (Exception e) {  
-                    if (!e.getClass().getSimpleName().contains("AlreadyExists")) throw e;
-                }
-
-                for (String dt : new String[] { "2026-04-13", "2026-04-14", "2026-04-15" }) {
-                    StorageDescriptor partSd = new StorageDescriptor();
-                    partSd.setCols(cols);  
-                    partSd.setLocation(warehouseDir.getAbsolutePath() + "/" + DATABASE + "/" + TABLE_NAME + "/dt=" + dt);
-                    partSd.setInputFormat(sd.getInputFormat());
-                    partSd.setOutputFormat(sd.getOutputFormat());  
-                    partSd.setSerdeInfo(serDeInfo);
-
-                    Partition partition = new Partition();  
-                    partition.setValues(List.of(dt));
-                    partition.setDbName(DATABASE);
-                    partition.setTableName(TABLE_NAME);  
-                    partition.setSd(partSd);
-                    try {
-                        client.add_partition(partition);  
-                    } catch (Exception e) {
-                        if (!e.getClass().getSimpleName().contains("AlreadyExists")) throw e;
-                    }  
-                }
-            } finally {
-                saslTransport.close();  
-            }
-            return null;
-        });  
-    }
-
-    private void generateTestData() throws IOException {  
-        String[] partitions = { "dt=2026-04-13", "dt=2026-04-14", "dt=2026-04-15" };
-        for (String partition : partitions) {
-            File partDir = new File(warehouseDir, DATABASE + "/" + TABLE_NAME + "/" + partition);  
-            partDir.mkdirs();
-            writeParquetFile(new File(partDir, "part-00000.parquet"), 0);
-            writeParquetFile(new File(partDir, "part-00001.parquet"), 75);  
-        }
-    }
-
-    private void writeParquetFile(File file, int startIdx) throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("""
-            message event {  
-              required binary event_id (UTF8);
-              required binary user_id (UTF8);
-              required binary event_type (UTF8);  
-              required int64 timestamp;
-              required double amount;
-            }""");  
-        SimpleGroupFactory factory = new SimpleGroupFactory(schema);
-        org.apache.parquet.io.OutputFile outputFile = new org.apache.parquet.io.LocalOutputFile(file.toPath());
-        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputFile).withType(schema).build()) {  
-            for (int i = startIdx; i < startIdx + 75; i++) {
-                Group group = factory.newGroup();
-                group.append("event_id", "evt-" + i);  
-                group.append("user_id", "user-" + (i % 10));
-                group.append("event_type", i % 2 == 0 ? "click" : "view");
-                group.append("timestamp", 1700000000L + i);  
-                group.append("amount", i * 1.5);
-                writer.write(group);
-            }  
-        }
-    }
-
-    protected void waitForState(Callable<Boolean> checkState) throws Exception {
-        long start = System.currentTimeMillis();
-        while (System.currentTimeMillis() - start < TimeUnit.SECONDS.toMillis(60)) {  
-            if (checkState.call()) return;
-            Thread.sleep(500);
-        }  
-        assertTrue("Provided state requirements not met", checkState.call());
-    }
-
-    public static class TestContainerThreadLeakFilter implements ThreadFilter {
-        @Override
-        public boolean reject(Thread t) {  
-            if (t.getName().startsWith("testcontainers-")
-                || t.getName().contains("StatisticsDataReferenceCleaner")
-                || t.getName().startsWith("ducttape")  
-                || t.getName().startsWith("MiniKdc")) {
-                return true;
-            }  
-            // The host-port-forwarding SSH tunnel (Testcontainers.exposeHostPorts)
-            // runs an unnamed receive-loop thread for the JVM lifetime; it can only
-            // be identified by its stack.  
-            for (StackTraceElement e : t.getStackTrace()) {
-                if (e.getClassName().startsWith("org.testcontainers.shaded.com.trilead.ssh2")) {
-                    return true;  
-                }
-            }
-            return false;  
-        }
-    }
 }  
+            int port = kerberizedMetastore.getMappedPort(9083);  
+        logger.info("MiniKdc started on port {}, realm={}", kdc.getPort(), kdc.getRealm());  
+        kerberizedMetastore.start();  
+                sd.setInputFormat("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat");
+                "localhost",
+                    partSd.setInputFormat(sd.getInputFormat());
+        java.nio.file.Files.writeString(
+                try {
+        SimpleGroupFactory factory = new SimpleGroupFactory(schema);
+                    partition.setTableName(TABLE_NAME);  
+                table.setTableName(TABLE_NAME);
+            .withFileSystemBind(hiveSiteXml.getAbsolutePath(), "/opt/hive/conf/hive-site.xml", BindMode.READ_ONLY)
+                    } catch (Exception e) {
+    private void writeParquetFile(File file, int startIdx) throws IOException {
+            return false;  
+import java.util.List;
+                .put("ingestion_source.param.metastore_uri", metastoreUri)  
+                + "  <property><name>metastore.kerberos.principal</name><value>hive/localhost@"
+                }
+import org.opensearch.action.search.SearchResponse;
+                    Partition partition = new Partition();  
+        long start = System.currentTimeMillis();
+        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputFile).withType(schema).build()) {  
+                serDeInfo.setSerializationLib("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");  
+import org.apache.parquet.schema.MessageType;  
+        });
+                return true;
+    }
+        assertBusy(() -> {  
+        // Wait for poller thread to terminate
+    private MiniKdc kdc;  
+                .put("ingestion_source.param.table", TABLE_NAME)
+                cols.add(new FieldSchema("event_id", "string", ""));
+    }  
+        });  
+    private File keytabFile;
+                + kdc.getRealm()
+        @Override
+     */  
+                sd.setSerdeInfo(serDeInfo);
+ * Integration test for Hive ingestion with Kerberos authentication.
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n"
+            message event {  
+    private void startMiniKdc() throws Exception {
+        generateTestData();
+        String metastoreUri = "thrift://" + kerberizedMetastore.getHost() + ":" + kerberizedMetastore.getMappedPort(9083);
+import org.opensearch.index.query.QueryBuilders;
+              required binary event_type (UTF8);  
+                cols.add(new FieldSchema("event_type", "string", ""));
+            // The host-port-forwarding SSH tunnel (Testcontainers.exposeHostPorts)
+                sd.setCols(cols);  
+                .put("ingestion_source.param.monitor_interval", "2s")
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.parquet.example.data.Group;
+import org.junit.After;
+                .put("ingestion_source.param.metastore_uri", metastoreUri)
+import java.util.Properties;
+                + "  <property><name>hadoop.security.authentication</name><value>kerberos</value></property>\n"
+import java.io.IOException;  
+ *
+            if (checkState.call()) return;
+                    client.create_database(db);
+    private void generateTestData() throws IOException {  
+        org.apache.hadoop.conf.Configuration conf = new org.apache.hadoop.conf.Configuration();
+                .put("ingestion_source.param.authentication", "kerberos")
+    protected void waitForState(Callable<Boolean> checkState) throws Exception {
+                + "</configuration>\n"  
+                .put("ingestion_source.param.monitor_interval", "2s")  
+        }
+import org.apache.parquet.hadoop.ParquetWriter;
+ * compatible open source license.
+            Thread.sleep(500);
+              required binary event_id (UTF8);
+        // Register table via SASL-authenticated connection
+ */
+import org.testcontainers.containers.GenericContainer;
+        // Create principals and keytab
+        startMiniKdc();  
+    @Override  
+        File hiveSiteXml = new File(warehouseDir, "hive-site.xml");
+                    client.create_table(table);
+            .loginUserFromKeytabAndReturnUGI("client1@" + kdc.getRealm(), keytabFile.getAbsolutePath());
+import org.apache.parquet.hadoop.example.ExampleParquetWriter;
+import org.opensearch.index.IndexNotFoundException;  
+    /**  
+                sd.setOutputFormat("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat");  
+                .put("ingestion_source.param.table", TABLE_NAME)
+                writer.write(group);
+            try {  
+            TTransport saslTransport = new org.apache.thrift.transport.TSaslClientTransport(  
+        public boolean reject(Thread t) {  
+            saslTransport.open();  
+import org.opensearch.plugin.hive.metastore.Database;
+        krb5Content = krb5Content.replace("localhost", "host.testcontainers.internal");
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+        // Copy krb5.conf generated by MiniKdc and rewrite KDC address for container access.  
+                table.setTableType("EXTERNAL_TABLE");
+        ugi.doAs((java.security.PrivilegedExceptionAction<Void>) () -> {
+        }
+                .put("ingestion_source.pointer.init.reset", "earliest")
+            .withEnv("SERVICE_NAME", "metastore")
+                group.append("amount", i * 1.5);
+        String[] partitions = { "dt=2026-04-13", "dt=2026-04-14", "dt=2026-04-15" };
+    }
+        org.testcontainers.Testcontainers.exposeHostPorts(kdc.getPort());  
+import org.apache.thrift.protocol.TBinaryProtocol;
+                    partSd.setSerdeInfo(serDeInfo);
+        });  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+                .put("ingestion_source.param.kerberos_principal", "client2@" + kdc.getRealm())
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        java.nio.file.Files.writeString(  
+    private static final String DATABASE = "test_db";  
+                StorageDescriptor sd = new StorageDescriptor();
+                .put("ingestion_source.param.kerberos_principal", "client1@" + kdc.getRealm())  
+            return response.getHits().getTotalHits().value() == 450;
+        // Generate hive-site.xml for Kerberos-enabled Metastore
+import org.opensearch.plugin.hive.metastore.Table;
+            SearchResponse r1 = client().prepareSearch(index1).setQuery(QueryBuilders.matchAllQuery()).get();
+import java.util.Collections;  
+    private File warehouseDir;
+            for (StackTraceElement e : t.getStackTrace()) {
+    }
+    public void cleanup() throws Exception {
+            try {
+            if (t.getName().startsWith("testcontainers-")
+     * Test that two indices with different Kerberos principals can ingest simultaneously
+        createIndex(
+                }
+                .put("ingestion_source.type", "HIVE")
+    public void testKerberosIngestion() throws Exception {
+import java.util.concurrent.Callable;  
+        kdc.createPrincipal(keytabFile, "client1", "client2", "hive/localhost");
+            return r1.getHits().getTotalHits().value() == 450 && r2.getHits().getTotalHits().value() == 450;
+                db.setLocationUri(warehouseDir.getAbsolutePath() + "/" + DATABASE);  
+        java.nio.file.Files.writeString(containerKrb5Conf.toPath(), krb5Content);
+        File coreSiteXml = new File(warehouseDir, "core-site.xml");
+        // Create first index with client1 principal
+                Group group = factory.newGroup();
+                socket
+            SearchResponse r2 = client().prepareSearch(index2).setQuery(QueryBuilders.matchAllQuery()).get();  
+        }
+        );
+                    return true;  
+                    partSd.setCols(cols);  
+ */  
+                }
+                }  
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            .waitingFor(Wait.forListeningPort())
+        File krb5Conf = new File(System.getProperty("java.security.krb5.conf"));
+                SerDeInfo serDeInfo = new SerDeInfo();
+    @After
+                "GSSAPI",
+              required int64 timestamp;
+        for (String idx : new String[] { "hive-kerberos-test-index", "hive-kerberos-test-index-2" }) {
+    }
+        return Collections.singletonList(HiveIngestionPlugin.class);
+            Settings.builder()  
+                cols.add(new FieldSchema("user_id", "string", ""));  
+                db.setName(DATABASE);
+        startKerberizedMetastore();
+import org.testcontainers.containers.BindMode;  
+        );
+        kdc = new MiniKdc(conf, kdcDir);
+            .withFileSystemBind(warehouseDir.getAbsolutePath(), warehouseDir.getAbsolutePath(), BindMode.READ_WRITE)
+                || t.getName().startsWith("ducttape")  
+            Settings.builder()
+            ThriftHiveMetastore.Client client = new ThriftHiveMetastore.Client(new TBinaryProtocol(saslTransport));
+        for (String partition : partitions) {
+        registerTableWithKerberos(metastoreUri);  
+                + "  <property><name>hadoop.security.authentication</name><value>kerberos</value></property>\n"
+        if (kerberizedMetastore != null) kerberizedMetastore.stop();  
+import org.junit.Before;  
+            hiveSiteXml.toPath(),
+    }
+            } catch (IndexNotFoundException e) {
+import org.opensearch.plugin.hive.metastore.SerDeInfo;
+import org.apache.parquet.example.data.simple.SimpleGroupFactory;  
+                .put("ingestion_source.type", "HIVE")  
+                null,  
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        createIndex(  
+import org.opensearch.plugin.hive.metastore.Partition;
+            } finally {
+                    StorageDescriptor partSd = new StorageDescriptor();
+              required binary user_id (UTF8);
+        String index2 = "hive-kerberos-test-index-2";  
+                    if (!e.getClass().getSimpleName().contains("AlreadyExists")) throw e;
+                group.append("event_id", "evt-" + i);  
+            for (Thread t : threads) {  
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+                .put("ingestion_source.param.kerberos_keytab", keytabFile.getAbsolutePath())  
+                .put("ingestion_source.param.database", DATABASE)
+                .put("ingestion_source.param.metastore_service_principal", "hive/localhost@" + kdc.getRealm())
+                .put("ingestion_source.type", "HIVE")
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n"
+        assertTrue("Provided state requirements not met", checkState.call());
+@ThreadLeakFilters(filters = IngestFromHiveKerberosIT.TestContainerThreadLeakFilter.class)  
+                || t.getName().contains("StatisticsDataReferenceCleaner")
+import java.util.Collection;
+    }
+import java.util.ArrayList;
+                try {
+            Thread[] threads = new Thread[Thread.activeCount()];
+package org.opensearch.plugin.hive;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+                group.append("timestamp", 1700000000L + i);  
+                .put("ingestion_source.param.monitor_interval", "2s")
+                .put("ingestion_source.param.kerberos_keytab", keytabFile.getAbsolutePath())
+import org.opensearch.plugin.hive.metastore.StorageDescriptor;  
+                    fail("Poller thread still alive: " + t.getName());
+        String metastoreUri = "thrift://" + kerberizedMetastore.getHost() + ":" + kerberizedMetastore.getMappedPort(9083);
+                .put("index.replication.type", "SEGMENT")
+        while (System.currentTimeMillis() - start < TimeUnit.SECONDS.toMillis(60)) {  
+import org.apache.thrift.transport.TSocket;  
+        Properties conf = MiniKdc.createConf();  
+                .put("ingestion_source.param.metastore_uri", metastoreUri)
+        // host.docker.internal only routes to the loopback on Docker Desktop, and the
+            }  
+        // on every platform, so route the KDC traffic through it.
+import org.opensearch.plugin.hive.metastore.FieldSchema;  
+            coreSiteXml.toPath(),  
+        File containerKrb5Conf = new File(warehouseDir, "krb5.conf");
+            TSocket socket = new TSocket(host, port, 10000);
+            .withFileSystemBind(containerKrb5Conf.getAbsolutePath(), "/etc/krb5.conf", BindMode.READ_ONLY)
+        }
+            indexName,
+import java.io.File;
+            Thread.enumerate(threads);
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+                    partition.setValues(List.of(dt));
+            .withEnv("DB_DRIVER", "derby")  
+            }
+import org.apache.hadoop.minikdc.MiniKdc;
+                cols.add(new FieldSchema("timestamp", "bigint", ""));
+        ensureGreen(index1);  
+            .withStartupTimeout(java.time.Duration.ofMinutes(3));
+            }""");  
+                .put("index.replication.type", "SEGMENT")
+                // index may not exist if test failed early
+            partDir.mkdirs();
+                .put("ingestion_source.param.metastore_service_principal", "hive/localhost@" + kdc.getRealm())
+                } catch (Exception e) {  
+    public void testMultiplePrincipalsCoexist() throws Exception {
+            }  
+        kdc.start();  
+        kerberizedMetastore = new GenericContainer<>("apache/hive:4.0.1").withExposedPorts(9083)
+                client().admin().indices().prepareDelete(idx).get();  
+                .put("ingestion_source.param.kerberos_keytab", keytabFile.getAbsolutePath())
+            );
+            Settings.builder()
+        org.apache.parquet.io.OutputFile outputFile = new org.apache.parquet.io.LocalOutputFile(file.toPath());
+    }
+                    if (!e.getClass().getSimpleName().contains("AlreadyExists")) throw e;
+        String index1 = indexName;
+                sd.setLocation(warehouseDir.getAbsolutePath() + "/" + DATABASE + "/" + TABLE_NAME);
+            writeParquetFile(new File(partDir, "part-00000.parquet"), 0);
+                .build()  
+        keytabFile = new File(warehouseDir, "test.keytab");  
+            .withFileSystemBind(hiveSiteXml.getAbsolutePath(), "/opt/hive/conf/metastore-site.xml", BindMode.READ_ONLY)
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+@SuppressForbidden(reason = "Parquet and Hadoop APIs require java.io.File")
+    }
+                .put("ingestion_source.param.authentication", "kerberos")  
+                .put("ingestion_source.param.table", TABLE_NAME)  
+                table.setParameters(new java.util.HashMap<>());  
+                saslTransport.close();  
+import org.opensearch.plugins.Plugin;  
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)  
+                    partSd.setLocation(warehouseDir.getAbsolutePath() + "/" + DATABASE + "/" + TABLE_NAME + "/dt=" + dt);
+        createIndex(
+            index1,
+                .put("ingestion_source.param.metastore_service_principal", "hive/localhost@" + kdc.getRealm())  
+        // Create second index with client2 principal
+                || t.getName().startsWith("MiniKdc")) {
+    private void startKerberizedMetastore() throws Exception {  
+                .build()
+        ensureGreen(index2);
+                null,
+    public static class TestContainerThreadLeakFilter implements ThreadFilter {
+                Table table = new Table();  
+        waitForState(() -> {
+    private static final String TABLE_NAME = "events";
+        // Generate core-site.xml  
+                        if (!e.getClass().getSimpleName().contains("AlreadyExists")) throw e;
+        MessageType schema = MessageTypeParser.parseMessageType("""
+import org.opensearch.common.settings.Settings;
+                    partition.setDbName(DATABASE);
+                "hive",  
+                + "  <property><name>metastore.sasl.enabled</name><value>true</value></property>\n"  
+                + "  <property><name>metastore.kerberos.keytab.file</name><value>/opt/keytabs/test.keytab</value></property>\n"
+     * without interfering with each other. Verifies instance-local UGI isolation.
+/*  
+        }  
+import org.testcontainers.containers.wait.strategy.Wait;
+                + "</configuration>\n"  
+        });
+        // MiniKdc binds to the host loopback, which containers cannot reach directly:
+                .put("ingestion_source.param.authentication", "kerberos")
+        waitForState(() -> {  
+    private void registerTableWithKerberos(String metastoreUri) throws Exception {  
+                    partition.setSd(partSd);
+            SearchResponse response = client().prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).get();
+        ensureGreen(indexName);
+        conf.set("hadoop.security.authentication", "kerberos");
+                for (String dt : new String[] { "2026-04-13", "2026-04-14", "2026-04-15" }) {
+import com.carrotsearch.randomizedtesting.ThreadFilter;
+        );
+                    partSd.setOutputFormat(sd.getOutputFormat());  
+import org.opensearch.plugin.hive.metastore.ThriftHiveMetastore;
+                List<FieldSchema> cols = new ArrayList<>();
+                }
+        );
+                Database db = new Database();
+        // Linux host-gateway alias points at the bridge IP instead. Testcontainers'  
+        registerTableWithKerberos(metastoreUri);
+                    }  
+        File kdcDir = createTempDir().toFile();
+import java.util.concurrent.TimeUnit;
+        // Both indices should ingest all 450 documents independently  
+import org.apache.parquet.schema.MessageTypeParser;
+    public void setup() throws Exception {  
+            .withFileSystemBind(coreSiteXml.getAbsolutePath(), "/opt/hive/conf/core-site.xml", BindMode.READ_ONLY)  
+        // Delete indices first to stop the pollers before shutting down KDC/Metastore  
+                new java.util.HashMap<>(),
+                + "</value></property>\n"  
+            // be identified by its stack.  
+        String krb5Content = java.nio.file.Files.readString(krb5Conf.toPath());  
+        org.apache.hadoop.security.UserGroupInformation ugi = org.apache.hadoop.security.UserGroupInformation
+                .put("ingestion_source.param.database", DATABASE)  
+    private String indexName = "hive-kerberos-test-index";
+                } catch (Exception e) {  
+                table.setDbName(DATABASE);
+            String host = kerberizedMetastore.getHost();
+                .put("ingestion_source.param.database", DATABASE)
+import org.apache.thrift.transport.TTransport;
+            writeParquetFile(new File(partDir, "part-00001.parquet"), 75);  
+                    try {
+    @Before
+            }
+                .build()
+                group.append("event_type", i % 2 == 0 ? "click" : "view");
+                .put("ingestion_source.pointer.init.reset", "earliest")
+import org.opensearch.common.SuppressForbidden;
+        // host port exposure forwards from inside containers to host loopback ports
+        warehouseDir = createTempDir().toFile();
+    }  
+            for (int i = startIdx; i < startIdx + 75; i++) {
+        org.apache.hadoop.security.UserGroupInformation.setConfiguration(conf);  
+            index2,  
+              required double amount;
+                .put("index.replication.type", "SEGMENT")  
+                cols.add(new FieldSchema("amount", "double", ""));  
+                .put("ingestion_source.param.kerberos_principal", "client1@" + kdc.getRealm())
+            }  
+                if (e.getClassName().startsWith("org.testcontainers.shaded.com.trilead.ssh2")) {
+            File partDir = new File(warehouseDir, DATABASE + "/" + TABLE_NAME + "/" + partition);  
+                table.setSd(sd);  
+    private GenericContainer<?> kerberizedMetastore;  
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+            // runs an unnamed receive-loop thread for the JVM lifetime; it can only
+                        client.add_partition(partition);  
+/**
+        if (kdc != null) kdc.stop();
+ * SPDX-License-Identifier: Apache-2.0
+ * Uses MiniKdc (in-JVM KDC) and a Hive Metastore container configured for SASL/Kerberos.  
+    }
+            .withFileSystemBind(keytabFile.getAbsolutePath(), "/opt/keytabs/test.keytab", BindMode.READ_ONLY)  
+            return null;
+        );  
+                .put("ingestion_source.pointer.init.reset", "earliest")  
+public class IngestFromHiveKerberosIT extends OpenSearchSingleNodeTestCase {
+                if (t != null && t.getName().contains("stream-poller")) {
+                group.append("user_id", "user-" + (i % 10));
+                table.setPartitionKeys(List.of(new FieldSchema("dt", "string", "")));
+            }

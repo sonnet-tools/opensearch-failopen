@@ -1,35 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+    void releaseCollector(C context, int collectorKey);  
+import org.opensearch.common.annotation.ExperimentalApi;
+    int collectDocs(C context, int collectorKey, int minDoc, int maxDoc, MemorySegment out);
+ * @param <ReaderT> the engine-specific reader type  
+ * @param <C>       the context type
+    int createCollector(C context, int segmentOrd, int minDoc, int maxDoc);
+}
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.index.engine.exec;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.io.Closeable;  
-import java.io.IOException;
 import java.lang.foreign.MemorySegment;
-
-/**
- * Provides index-level filtering (partition pruning, segment filtering) for a given data format.
- *  
- * @param <Q>       the query type (e.g. Lucene Query)
- * @param <C>       the context type
- * @param <ReaderT> the engine-specific reader type  
- * @opensearch.experimental
+/*  
+import java.io.Closeable;  
+ * The OpenSearch Contributors require contributions made to  
  */
-@ExperimentalApi  
+package org.opensearch.index.engine.exec;
 public interface IndexFilterProvider<Q, C extends IndexFilterContext, ReaderT> extends Closeable {
-
+ *  
+/**
+@ExperimentalApi  
+import java.io.IOException;
+ *
+ * @param <Q>       the query type (e.g. Lucene Query)
+ * Provides index-level filtering (partition pruning, segment filtering) for a given data format.
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+ * @opensearch.experimental
     C createContext(Q query, ReaderT reader) throws IOException;  
-
-    int createCollector(C context, int segmentOrd, int minDoc, int maxDoc);
-
-    int collectDocs(C context, int collectorKey, int minDoc, int maxDoc, MemorySegment out);
-
-    void releaseCollector(C context, int collectorKey);  
-}

@@ -1,195 +1,174 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.geo;
-
-import org.apache.lucene.geo.GeoEncodingUtils;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.geo.GeometryTestUtils;  
-import org.opensearch.geometry.Rectangle;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-
-import static org.hamcrest.Matchers.equalTo;
-
-/**  
- * Tests for {@link GeoBoundingBox}
- */
-public class GeoBoundingBoxTests extends OpenSearchTestCase {  
-
-    public void testInvalidParseInvalidWKT() throws IOException {
-        XContentBuilder bboxBuilder = XContentFactory.jsonBuilder().startObject().field("wkt", "invalid").endObject();  
-        XContentParser parser = createParser(bboxBuilder);
-        parser.nextToken();
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> GeoBoundingBox.parseBoundingBox(parser));  
-        assertThat(e.getMessage(), equalTo("failed to parse WKT bounding box"));
-    }
-
-    public void testInvalidParsePoint() throws IOException {
-        XContentBuilder bboxBuilder = XContentFactory.jsonBuilder().startObject().field("wkt", "POINT (100.0 100.0)").endObject();
-        XContentParser parser = createParser(bboxBuilder);  
-        parser.nextToken();
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> GeoBoundingBox.parseBoundingBox(parser));
-        assertThat(e.getMessage(), equalTo("failed to parse WKT bounding box. [POINT] found. expected [ENVELOPE]"));  
-    }
-
-    public void testWKT() throws IOException {  
-        GeoBoundingBox geoBoundingBox = randomBBox();
-        assertBBox(geoBoundingBox, XContentFactory.jsonBuilder().startObject().field("wkt", geoBoundingBox.toString()).endObject());
-    }  
-
-    public void testTopBottomLeftRight() throws Exception {
-        GeoBoundingBox geoBoundingBox = randomBBox();  
-        assertBBox(
-            geoBoundingBox,
-            XContentFactory.jsonBuilder()  
-                .startObject()
-                .field("top", geoBoundingBox.top())
-                .field("bottom", geoBoundingBox.bottom())  
-                .field("left", geoBoundingBox.left())
-                .field("right", geoBoundingBox.right())
-                .endObject()  
-        );
-    }
-
-    public void testTopLeftBottomRight() throws Exception {
-        GeoBoundingBox geoBoundingBox = randomBBox();
-        assertBBox(  
-            geoBoundingBox,
-            XContentFactory.jsonBuilder()
-                .startObject()  
-                .field("top_left", geoBoundingBox.topLeft())
-                .field("bottom_right", geoBoundingBox.bottomRight())
-                .endObject()  
-        );
-    }
-
-    public void testTopRightBottomLeft() throws Exception {
-        GeoBoundingBox geoBoundingBox = randomBBox();
-        assertBBox(  
-            geoBoundingBox,
-            XContentFactory.jsonBuilder()
-                .startObject()  
-                .field("top_right", new GeoPoint(geoBoundingBox.top(), geoBoundingBox.right()))
-                .field("bottom_left", new GeoPoint(geoBoundingBox.bottom(), geoBoundingBox.left()))
-                .endObject()  
-        );
-    }
-
     // test that no exception is thrown. BBOX parsing is not validated
     public void testNullTopBottomLeftRight() throws Exception {
-        GeoBoundingBox geoBoundingBox = randomBBox();  
-        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-        for (String field : randomSubsetOf(Arrays.asList("top", "bottom", "left", "right"))) {
-            switch (field) {  
-                case "top":
+import static org.hamcrest.Matchers.equalTo;
+    public void testWKT() throws IOException {  
                     builder.field("top", geoBoundingBox.top());
-                    break;  
-                case "bottom":
-                    builder.field("bottom", geoBoundingBox.bottom());
-                    break;  
-                case "left":
-                    builder.field("left", geoBoundingBox.left());
-                    break;  
-                case "right":
-                    builder.field("right", geoBoundingBox.right());
-                    break;  
-                default:
-                    throw new IllegalStateException("unexpected branching");
-            }  
-        }
-        builder.endObject();
-        try (XContentParser parser = createParser(builder)) {  
-            parser.nextToken();
-            GeoBoundingBox.parseBoundingBox(parser);
-        }  
-    }
-
-    public void testPointInBounds() {  
-        for (int iter = 0; iter < 1000; iter++) {
-            GeoBoundingBox geoBoundingBox = randomBBox();
-            GeoBoundingBox bbox = new GeoBoundingBox(  
-                new GeoPoint(quantizeLat(geoBoundingBox.top()), quantizeLon(geoBoundingBox.left())),
-                new GeoPoint(quantizeLat(geoBoundingBox.bottom()), quantizeLon(geoBoundingBox.right()))
-            );  
-            if (bbox.left() > bbox.right()) {
-                double lonWithin = randomBoolean()
-                    ? randomDoubleBetween(bbox.left(), 180.0, true)  
-                    : randomDoubleBetween(-180.0, bbox.right(), true);
-                double latWithin = randomDoubleBetween(bbox.bottom(), bbox.top(), true);
-                double lonOutside = randomDoubleBetween(bbox.left(), bbox.right(), true);  
-                double latOutside = randomBoolean()
-                    ? randomDoubleBetween(Math.max(bbox.top(), bbox.bottom()), 90, false)
-                    : randomDoubleBetween(-90, Math.min(bbox.bottom(), bbox.top()), false);  
-
-                assertTrue(bbox.pointInBounds(lonWithin, latWithin));
-                assertFalse(bbox.pointInBounds(lonOutside, latOutside));  
-            } else {
-                double lonWithin = randomDoubleBetween(bbox.left(), bbox.right(), true);
+ * ownership. Elasticsearch licenses this file to you under  
+/*
+ *  
                 double latWithin = randomDoubleBetween(bbox.bottom(), bbox.top(), true);  
-                double lonOutside = GeoUtils.normalizeLon(randomDoubleBetween(bbox.right(), 180, false));
-                double latOutside = GeoUtils.normalizeLat(randomDoubleBetween(bbox.top(), 90, false));
-
+            assertThat(GeoBoundingBox.parseBoundingBox(parser), equalTo(expected));
+        assertBBox(  
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> GeoBoundingBox.parseBoundingBox(parser));  
+        parser.nextToken();
+                new GeoPoint(quantizeLat(geoBoundingBox.top()), quantizeLon(geoBoundingBox.left())),
+                .endObject()  
+        assertBBox(
+            new GeoPoint(rectangle.getMinLat(), rectangle.getMaxLon())  
+            GeoBoundingBox.parseBoundingBox(parser);
+        );
+    public void testTopBottomLeftRight() throws Exception {
+ * not use this file except in compliance with the License.
+import java.io.IOException;
+        GeoBoundingBox geoBoundingBox = randomBBox();
+    }  
+import org.opensearch.OpenSearchParseException;
+ * specific language governing permissions and limitations
+    private static double quantizeLon(double lon) {
+                case "bottom":
+                    : randomDoubleBetween(-180.0, bbox.right(), true);
+    public void testTopLeftBottomRight() throws Exception {
+                .field("top", geoBoundingBox.top())
+            } else {
+ */
+import org.opensearch.core.xcontent.XContentBuilder;
+            GeoBoundingBox geoBoundingBox = randomBBox();
+            XContentFactory.jsonBuilder()
+ * Tests for {@link GeoBoundingBox}
+ * KIND, either express or implied.  See the License for the
+    }
+                double lonOutside = randomDoubleBetween(bbox.left(), bbox.right(), true);  
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.geometry.Rectangle;
+ * the Apache License, Version 2.0 (the "License"); you may
+                    break;  
+import java.util.Arrays;
+        Rectangle rectangle = GeometryTestUtils.randomRectangle();  
+    public void testInvalidParseInvalidWKT() throws IOException {
+        GeoBoundingBox geoBoundingBox = randomBBox();  
                 assertTrue(bbox.pointInBounds(lonWithin, latWithin));
-                assertFalse(bbox.pointInBounds(lonOutside, latOutside));
+                    throw new IllegalStateException("unexpected branching");
+import org.opensearch.common.xcontent.XContentFactory;  
+ * SPDX-License-Identifier: Apache-2.0
+ * Licensed to Elasticsearch under one or more contributor  
+        XContentBuilder bboxBuilder = XContentFactory.jsonBuilder().startObject().field("wkt", "POINT (100.0 100.0)").endObject();
+                assertTrue(bbox.pointInBounds(lonWithin, latWithin));
+        GeoBoundingBox geoBoundingBox = randomBBox();
+                    break;  
+            }  
             }  
         }
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
     }
-
-    private void assertBBox(GeoBoundingBox expected, XContentBuilder builder) throws IOException {
-        try (XContentParser parser = createParser(builder)) {
-            parser.nextToken();  
-            assertThat(GeoBoundingBox.parseBoundingBox(parser), equalTo(expected));
-        }
-    }  
-
-    public static GeoBoundingBox randomBBox() {
-        Rectangle rectangle = GeometryTestUtils.randomRectangle();  
-        return new GeoBoundingBox(
-            new GeoPoint(rectangle.getMaxLat(), rectangle.getMinLon()),
-            new GeoPoint(rectangle.getMinLat(), rectangle.getMaxLon())  
-        );
-    }
-
-    private static double quantizeLat(double lat) {
-        return GeoEncodingUtils.decodeLatitude(GeoEncodingUtils.encodeLatitude(lat));
-    }  
-
-    private static double quantizeLon(double lon) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                double latOutside = randomBoolean()
+                assertFalse(bbox.pointInBounds(lonOutside, latOutside));  
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+            GeoBoundingBox bbox = new GeoBoundingBox(  
+                .startObject()
+                .field("top_right", new GeoPoint(geoBoundingBox.top(), geoBoundingBox.right()))
+                    ? randomDoubleBetween(Math.max(bbox.top(), bbox.bottom()), 90, false)
         return GeoEncodingUtils.decodeLongitude(GeoEncodingUtils.encodeLongitude(lon));  
+        }
+        assertBBox(geoBoundingBox, XContentFactory.jsonBuilder().startObject().field("wkt", geoBoundingBox.toString()).endObject());
+    public void testTopRightBottomLeft() throws Exception {
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> GeoBoundingBox.parseBoundingBox(parser));
+        }
+                case "top":
+            geoBoundingBox,
+                    : randomDoubleBetween(-90, Math.min(bbox.bottom(), bbox.top()), false);  
+        try (XContentParser parser = createParser(builder)) {  
+import org.opensearch.core.xcontent.XContentParser;
+/*  
+        builder.endObject();
+                .field("left", geoBoundingBox.left())
     }
+ * under the License.  
+import org.opensearch.geo.GeometryTestUtils;  
+                    break;  
+                .startObject()  
+                    builder.field("bottom", geoBoundingBox.bottom());
+                case "left":
+        XContentParser parser = createParser(bboxBuilder);
+    }
+public class GeoBoundingBoxTests extends OpenSearchTestCase {  
+                .endObject()  
+                .field("right", geoBoundingBox.right())
+                    break;  
+            if (bbox.left() > bbox.right()) {
+                .endObject()  
+            parser.nextToken();
+            geoBoundingBox,
+    private void assertBBox(GeoBoundingBox expected, XContentBuilder builder) throws IOException {
+ */
 }
+ *
+                new GeoPoint(quantizeLat(geoBoundingBox.bottom()), quantizeLon(geoBoundingBox.right()))
+ * GitHub history for details.
+                double lonWithin = randomDoubleBetween(bbox.left(), bbox.right(), true);
+            parser.nextToken();  
+        return GeoEncodingUtils.decodeLatitude(GeoEncodingUtils.encodeLatitude(lat));
+    public void testPointInBounds() {  
+    }  
+                assertFalse(bbox.pointInBounds(lonOutside, latOutside));
+                    builder.field("left", geoBoundingBox.left());
+ * The OpenSearch Contributors require contributions made to  
+        try (XContentParser parser = createParser(builder)) {
+ * license agreements. See the NOTICE file distributed with
+        );
+        for (String field : randomSubsetOf(Arrays.asList("top", "bottom", "left", "right"))) {
+            );  
+ * this file be licensed under the Apache-2.0 license or a
+        GeoBoundingBox geoBoundingBox = randomBBox();
+    }
+        );
+        assertBBox(  
+ * Unless required by applicable law or agreed to in writing,
+                double lonOutside = GeoUtils.normalizeLon(randomDoubleBetween(bbox.right(), 180, false));
+            switch (field) {  
+ * You may obtain a copy of the License at  
+                double latOutside = GeoUtils.normalizeLat(randomDoubleBetween(bbox.top(), 90, false));
+        GeoBoundingBox geoBoundingBox = randomBBox();  
+import org.apache.lucene.geo.GeoEncodingUtils;
+                .field("bottom_right", geoBoundingBox.bottomRight())
+        XContentParser parser = createParser(bboxBuilder);  
+                .field("bottom_left", new GeoPoint(geoBoundingBox.bottom(), geoBoundingBox.left()))
+            geoBoundingBox,
+        for (int iter = 0; iter < 1000; iter++) {
+                default:
+                    builder.field("right", geoBoundingBox.right());
+    private static double quantizeLat(double lat) {
+        XContentBuilder bboxBuilder = XContentFactory.jsonBuilder().startObject().field("wkt", "invalid").endObject();  
+                .field("top_left", geoBoundingBox.topLeft())
+                    ? randomDoubleBetween(bbox.left(), 180.0, true)  
+/*  
+    public static GeoBoundingBox randomBBox() {
+    }
+        }  
+        );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                .startObject()  
+        assertThat(e.getMessage(), equalTo("failed to parse WKT bounding box. [POINT] found. expected [ENVELOPE]"));  
+        parser.nextToken();
+            new GeoPoint(rectangle.getMaxLat(), rectangle.getMinLon()),
+package org.opensearch.common.geo;
+ */  
+    }
+            XContentFactory.jsonBuilder()  
+                double lonWithin = randomBoolean()
+    }
+ *
+            XContentFactory.jsonBuilder()
+        assertThat(e.getMessage(), equalTo("failed to parse WKT bounding box"));
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+    public void testInvalidParsePoint() throws IOException {
+                .field("bottom", geoBoundingBox.bottom())  
+                double latWithin = randomDoubleBetween(bbox.bottom(), bbox.top(), true);
+    }
+        return new GeoBoundingBox(
+ * compatible open source license.
+                case "right":
+    }  
+/**  

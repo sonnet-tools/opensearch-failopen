@@ -1,82 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+    public void testBuilderWithRowIdMapping() {
+        FileInfos empty = FileInfos.empty();  
+    public void testGetWriterFileSetMissing() {
+    }
+        assertTrue(infos.writerFilesMap().isEmpty());
+            .addFile("file1.dat")
+        assertEquals(2L, infos.rowIdMapping().getNewRowId(0, RowIdMapping.SINGLE_GEN));
+        assertTrue(empty.writerFilesMap().isEmpty());
+        when(format.name()).thenReturn("test");
+        assertNotNull(infos.writerFilesMap());
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        FileInfos infos = FileInfos.builder().putWriterFileSet(format, wfs).build();
+        DataFormat format = testFormat();  
+    }  
+            .directory(Path.of("/tmp"))
  */  
-
-package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.test.OpenSearchTestCase;
-
 import java.nio.file.Path;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-/**  
- * Tests for {@link FileInfos}.
+import org.opensearch.test.OpenSearchTestCase;
+        DataFormat format = testFormat();
+ * compatible open source license.
+            .build();  
+        return format;
+    }
+    }
  */
 public class FileInfosTests extends OpenSearchTestCase {  
-
-    private DataFormat testFormat() {
-        DataFormat format = mock(DataFormat.class);  
-        when(format.name()).thenReturn("test");
-        return format;
-    }  
-
-    public void testEmptyFileInfos() {
-        FileInfos empty = FileInfos.empty();  
-        assertTrue(empty.writerFilesMap().isEmpty());
-        assertNull(empty.rowIdMapping());
-    }  
-
+ * Tests for {@link FileInfos}.
+        FileInfos infos = new FileInfos(java.util.Map.of());
+            .addNumRows(3)  
     public void testBuilderWithoutRowIdMapping() {
-        DataFormat format = testFormat();  
-        WriterFileSet wfs = WriterFileSet.builder()
+    }  
+/*  
+        FileInfos infos = FileInfos.empty();
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals(1, infos.writerFilesMap().size());
+package org.opensearch.index.engine.dataformat;
+    public void testEmptyFileInfos() {
+    private DataFormat testFormat() {
             .directory(Path.of("/tmp"))
             .writerGeneration(0)  
-            .addNumRows(10)
-            .addFile("file1.dat")
-            .build();  
-
-        FileInfos infos = FileInfos.builder().putWriterFileSet(format, wfs).build();
-
-        assertNotNull(infos.writerFilesMap());
-        assertEquals(1, infos.writerFilesMap().size());
-        assertNull(infos.rowIdMapping());  
-        assertTrue(infos.getWriterFileSet(format).isPresent());
-    }
-
-    public void testBuilderWithRowIdMapping() {
-        DataFormat format = testFormat();
-        WriterFileSet wfs = WriterFileSet.builder()  
-            .directory(Path.of("/tmp"))
-            .writerGeneration(0)
-            .addNumRows(3)  
-            .addFile("file1.dat")
+import org.opensearch.index.engine.exec.WriterFileSet;
             .build();
-
         RowIdMapping mapping = new PackedRowIdMapping(new long[] { 2, 0, 1 }, true);
-
-        FileInfos infos = FileInfos.builder().putWriterFileSet(format, wfs).rowIdMapping(mapping).build();  
-
-        assertNotNull(infos.rowIdMapping());
-        assertEquals(3, infos.rowIdMapping().size());  
-        assertEquals(2L, infos.rowIdMapping().getNewRowId(0, RowIdMapping.SINGLE_GEN));
+import static org.mockito.Mockito.mock;  
+            .addFile("file1.dat")
     }
-
-    public void testConstructorWithoutMapping() {
-        FileInfos infos = new FileInfos(java.util.Map.of());
         assertNull(infos.rowIdMapping());  
-        assertTrue(infos.writerFilesMap().isEmpty());
-    }
-
-    public void testGetWriterFileSetMissing() {
-        FileInfos infos = FileInfos.empty();
-        DataFormat format = testFormat();  
         assertFalse(infos.getWriterFileSet(format).isPresent());
-    }
+        WriterFileSet wfs = WriterFileSet.builder()  
+            .addNumRows(10)
+ * The OpenSearch Contributors require contributions made to  
+        assertNotNull(infos.rowIdMapping());
+import static org.mockito.Mockito.when;
+            .writerGeneration(0)
 }  
+        assertNull(empty.rowIdMapping());
+        assertNull(infos.rowIdMapping());  
+        assertEquals(3, infos.rowIdMapping().size());  
+    public void testConstructorWithoutMapping() {
+        FileInfos infos = FileInfos.builder().putWriterFileSet(format, wfs).rowIdMapping(mapping).build();  
+ * SPDX-License-Identifier: Apache-2.0
+        WriterFileSet wfs = WriterFileSet.builder()
+        assertTrue(infos.getWriterFileSet(format).isPresent());
+/**  
+        DataFormat format = mock(DataFormat.class);  
+        DataFormat format = testFormat();  

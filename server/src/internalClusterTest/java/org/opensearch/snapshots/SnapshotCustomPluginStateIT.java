@@ -1,265 +1,234 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotStatus;  
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;
-import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptResponse;
-import org.opensearch.action.admin.indices.template.get.GetIndexTemplatesResponse;  
-import org.opensearch.action.ingest.DeletePipelineRequest;
-import org.opensearch.action.ingest.GetPipelineResponse;
-import org.opensearch.common.xcontent.XContentFactory;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.ingest.IngestTestPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.script.MockScriptEngine;  
-import org.opensearch.script.StoredScriptsIT;
-
-import java.util.Arrays;  
-import java.util.Collection;
-import java.util.Collections;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertIndexTemplateExists;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertIndexTemplateMissing;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;  
-
-public class SnapshotCustomPluginStateIT extends AbstractSnapshotIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(IngestTestPlugin.class, StoredScriptsIT.CustomScriptPlugin.class);  
-    }
-
-    public void testIncludeGlobalState() throws Exception {  
-        createRepository("test-repo", "fs");
-
-        boolean testTemplate = randomBoolean();  
-        boolean testPipeline = randomBoolean();
-        boolean testScript = (testTemplate == false && testPipeline == false) || randomBoolean(); // At least something should be stored
-
-        if (testTemplate) {
-            logger.info("-->  creating test template");
-            assertThat(  
-                client().admin()
-                    .indices()
-                    .preparePutTemplate("test-template")  
-                    .setPatterns(Collections.singletonList("te*"))
-                    .setMapping(
-                        XContentFactory.jsonBuilder()  
-                            .startObject()
-                            .startObject("properties")
-                            .startObject("field1")  
-                            .field("type", "text")
-                            .field("store", true)
-                            .endObject()  
-                            .startObject("field2")
-                            .field("type", "keyword")
-                            .field("store", true)  
-                            .endObject()
-                            .endObject()
-                            .endObject()  
-                    )
-                    .get()
-                    .isAcknowledged(),  
-                equalTo(true)
             );
-        }  
-
-        if (testPipeline) {
-            logger.info("-->  creating test pipeline");  
-            BytesReference pipelineSource = BytesReference.bytes(
-                jsonBuilder().startObject()
                     .field("description", "my_pipeline")  
-                    .startArray("processors")
-                    .startObject()
-                    .startObject("test")  
-                    .endObject()
-                    .endObject()
-                    .endArray()  
-                    .endObject()
-            );
-            assertAcked(clusterAdmin().preparePutPipeline("barbaz", pipelineSource, MediaTypeRegistry.JSON).get());  
-        }
-
-        if (testScript) {  
-            logger.info("-->  creating test script");
-            assertAcked(
-                clusterAdmin().preparePutStoredScript()  
-                    .setId("foobar")
-                    .setContent(
-                        new BytesArray("{\"script\": { \"lang\": \"" + MockScriptEngine.NAME + "\", \"source\": \"1\"} }"),  
-                        MediaTypeRegistry.JSON
-                    )
-            );  
-        }
-
-        logger.info("--> snapshot without global state");  
-        CreateSnapshotResponse createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-no-global-state")
-            .setIndices()
-            .setIncludeGlobalState(false)  
-            .setWaitForCompletion(true)
-            .get();
-        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), equalTo(0));  
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), equalTo(0));
-        assertThat(getSnapshot("test-repo", "test-snap-no-global-state").state(), equalTo(SnapshotState.SUCCESS));
-        SnapshotsStatusResponse snapshotsStatusResponse = clusterAdmin().prepareSnapshotStatus("test-repo")  
-            .addSnapshots("test-snap-no-global-state")
-            .get();
-        assertThat(snapshotsStatusResponse.getSnapshots().size(), equalTo(1));  
-        SnapshotStatus snapshotStatus = snapshotsStatusResponse.getSnapshots().get(0);
-        assertThat(snapshotStatus.includeGlobalState(), equalTo(false));
-
-        logger.info("--> snapshot with global state");
-        createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-with-global-state")
-            .setIndices()  
-            .setIncludeGlobalState(true)
-            .setWaitForCompletion(true)
-            .get();  
-        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), equalTo(0));
-        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), equalTo(0));
-        assertThat(getSnapshot("test-repo", "test-snap-with-global-state").state(), equalTo(SnapshotState.SUCCESS));  
-        snapshotsStatusResponse = clusterAdmin().prepareSnapshotStatus("test-repo").addSnapshots("test-snap-with-global-state").get();
-        assertThat(snapshotsStatusResponse.getSnapshots().size(), equalTo(1));
-        snapshotStatus = snapshotsStatusResponse.getSnapshots().get(0);  
-        assertThat(snapshotStatus.includeGlobalState(), equalTo(true));
-
-        if (testTemplate) {  
-            logger.info("-->  delete test template");
-            cluster().wipeTemplates("test-template");
-            GetIndexTemplatesResponse getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();  
-            assertIndexTemplateMissing(getIndexTemplatesResponse, "test-template");
-        }
-
-        if (testPipeline) {
-            logger.info("-->  delete test pipeline");
-            assertAcked(clusterAdmin().deletePipeline(new DeletePipelineRequest("barbaz")).get());  
-        }
-
-        if (testScript) {  
-            logger.info("-->  delete test script");
-            assertAcked(clusterAdmin().prepareDeleteStoredScript("foobar").get());
-        }  
-
-        logger.info("--> try restoring cluster state from snapshot without global state");
-        RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-no-global-state")  
-            .setWaitForCompletion(true)
-            .setRestoreGlobalState(true)
-            .execute()  
-            .actionGet();
-        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), equalTo(0));
-
-        logger.info("--> check that template wasn't restored");
-        GetIndexTemplatesResponse getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();
         assertIndexTemplateMissing(getIndexTemplatesResponse, "test-template");  
-
-        logger.info("--> restore cluster state");
-        restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-with-global-state")  
-            .setWaitForCompletion(true)
             .setRestoreGlobalState(true)
-            .execute()  
             .actionGet();
-        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), equalTo(0));
-
-        if (testTemplate) {
-            logger.info("--> check that template is restored");
-            getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();  
-            assertIndexTemplateExists(getIndexTemplatesResponse, "test-template");
-        }
-
-        if (testPipeline) {
-            logger.info("--> check that pipeline is restored");
-            GetPipelineResponse getPipelineResponse = clusterAdmin().prepareGetPipeline("barbaz").get();  
-            assertTrue(getPipelineResponse.isFound());
-        }
-
-        if (testScript) {
-            logger.info("--> check that script is restored");
-            GetStoredScriptResponse getStoredScriptResponse = clusterAdmin().prepareGetStoredScript("foobar").get();  
-            assertNotNull(getStoredScriptResponse.getSource());
-        }
-
-        createIndexWithRandomDocs("test-idx", 100);
-
-        logger.info("--> snapshot without global state but with indices");  
-        createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-no-global-state-with-index")
-            .setIndices("test-idx")
-            .setIncludeGlobalState(false)  
-            .setWaitForCompletion(true)
-            .get();
-        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), greaterThan(0));  
-        assertThat(
-            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+import org.opensearch.ingest.IngestTestPlugin;
+                            .startObject("field2")
             equalTo(createSnapshotResponse.getSnapshotInfo().totalShards())  
-        );
-        assertThat(getSnapshot("test-repo", "test-snap-no-global-state-with-index").state(), equalTo(SnapshotState.SUCCESS));
-
-        logger.info("-->  delete global state and index ");
-        cluster().wipeIndices("test-idx");
-        if (testTemplate) {  
-            cluster().wipeTemplates("test-template");
-        }
-        if (testPipeline) {  
-            assertAcked(clusterAdmin().deletePipeline(new DeletePipelineRequest("barbaz")).get());
-        }
-
-        if (testScript) {
-            assertAcked(clusterAdmin().prepareDeleteStoredScript("foobar").get());
-        }  
-
-        getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();
-        assertIndexTemplateMissing(getIndexTemplatesResponse, "test-template");  
-
-        logger.info("--> try restoring index and cluster state from snapshot without global state");
-        restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-no-global-state-with-index")  
-            .setWaitForCompletion(true)
-            .setRestoreGlobalState(true)
-            .execute()  
-            .actionGet();
-        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), greaterThan(0));
-        assertThat(restoreSnapshotResponse.getRestoreInfo().failedShards(), equalTo(0));  
-
-        logger.info("--> check that global state wasn't restored but index was");
-        getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();  
-        assertIndexTemplateMissing(getIndexTemplatesResponse, "test-template");
-        assertFalse(clusterAdmin().prepareGetPipeline("barbaz").get().isFound());
-        assertNull(clusterAdmin().prepareGetStoredScript("foobar").get().getSource());  
-        assertDocCount("test-idx", 100L);
+            logger.info("-->  creating test script");
+                jsonBuilder().startObject()
     }
+        if (testTemplate) {  
+ *
+            GetStoredScriptResponse getStoredScriptResponse = clusterAdmin().prepareGetStoredScript("foobar").get();  
+            .setRestoreGlobalState(true)
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+            .setWaitForCompletion(true)
+        assertFalse(clusterAdmin().prepareGetPipeline("barbaz").get().isFound());
+        if (testTemplate) {  
+            .setWaitForCompletion(true)
+                        new BytesArray("{\"script\": { \"lang\": \"" + MockScriptEngine.NAME + "\", \"source\": \"1\"} }"),  
+        assertThat(getSnapshot("test-repo", "test-snap-no-global-state").state(), equalTo(SnapshotState.SUCCESS));
+            assertAcked(clusterAdmin().prepareDeleteStoredScript("foobar").get());
+                    .indices()
+                            .startObject("properties")
+                clusterAdmin().preparePutStoredScript()  
+                    .isAcknowledged(),  
+        }  
+                    .endObject()
+                    .setId("foobar")
+            .execute()  
+        );
+import org.opensearch.action.ingest.GetPipelineResponse;
+            assertIndexTemplateMissing(getIndexTemplatesResponse, "test-template");
+            assertTrue(getPipelineResponse.isFound());
+import java.util.Collections;
+        return Arrays.asList(IngestTestPlugin.class, StoredScriptsIT.CustomScriptPlugin.class);  
+ * You may obtain a copy of the License at  
+        if (testTemplate) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        if (testScript) {  
+        }
+        RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-no-global-state")  
+        if (testScript) {  
+            cluster().wipeTemplates("test-template");
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), equalTo(0));
+        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), equalTo(0));  
+            .setRestoreGlobalState(true)
+        SnapshotStatus snapshotStatus = snapshotsStatusResponse.getSnapshots().get(0);
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotStatus;  
+                    .setMapping(
+import static org.hamcrest.Matchers.greaterThan;  
+        }
+    }
+import org.opensearch.core.common.bytes.BytesArray;
+        assertThat(snapshotsStatusResponse.getSnapshots().size(), equalTo(1));
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+import java.util.Arrays;  
+                    )
+            logger.info("--> check that script is restored");
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+            logger.info("-->  delete test template");
+            .addSnapshots("test-snap-no-global-state")
+                    .setContent(
+public class SnapshotCustomPluginStateIT extends AbstractSnapshotIntegTestCase {
+            assertAcked(clusterAdmin().deletePipeline(new DeletePipelineRequest("barbaz")).get());  
+            .setWaitForCompletion(true)
+        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), greaterThan(0));
+import org.opensearch.action.ingest.DeletePipelineRequest;
+                    .endObject()
+        assertDocCount("test-idx", 100L);
+        boolean testTemplate = randomBoolean();  
+                    .preparePutTemplate("test-template")  
+                    .startObject("test")  
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+            BytesReference pipelineSource = BytesReference.bytes(
+        getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();
+        assertThat(getSnapshot("test-repo", "test-snap-no-global-state-with-index").state(), equalTo(SnapshotState.SUCCESS));
+                            .field("store", true)
+        createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-with-global-state")
+ * SPDX-License-Identifier: Apache-2.0
+        assertNull(clusterAdmin().prepareGetStoredScript("foobar").get().getSource());  
+        assertThat(createSnapshotResponse.getSnapshotInfo().successfulShards(), equalTo(0));
+                    .setPatterns(Collections.singletonList("te*"))
+ * this file be licensed under the Apache-2.0 license or a
+        if (testPipeline) {
+/*  
+                            .startObject("field1")  
+        }  
+        if (testPipeline) {
+        }  
+        SnapshotsStatusResponse snapshotsStatusResponse = clusterAdmin().prepareSnapshotStatus("test-repo")  
+        logger.info("-->  delete global state and index ");
+            assertNotNull(getStoredScriptResponse.getSource());
+                    .startObject()
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertIndexTemplateMissing;
+import org.opensearch.script.StoredScriptsIT;
+ * ownership. Elasticsearch licenses this file to you under  
+        logger.info("--> restore cluster state");
+            .setIncludeGlobalState(true)
+import static org.hamcrest.Matchers.equalTo;
+            logger.info("--> check that pipeline is restored");
+            .setIndices()
+            assertThat(  
+                            .field("type", "keyword")
+        if (testPipeline) {  
+import org.opensearch.common.xcontent.XContentFactory;  
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+        logger.info("--> check that template wasn't restored");
+            .setIncludeGlobalState(false)  
+ * GitHub history for details.
+/*  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        logger.info("--> try restoring index and cluster state from snapshot without global state");
+        }
+            .setWaitForCompletion(true)
+            );
+            assertAcked(
+ * Modifications Copyright OpenSearch Contributors. See
+            .execute()  
+        logger.info("--> try restoring cluster state from snapshot without global state");
+            logger.info("-->  creating test template");
+ */  
+            GetIndexTemplatesResponse getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();  
+        snapshotStatus = snapshotsStatusResponse.getSnapshots().get(0);  
+ */
+        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), equalTo(0));
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        GetIndexTemplatesResponse getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();
+                            .endObject()
+ *  
+                            .field("type", "text")
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+            getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();  
+        boolean testScript = (testTemplate == false && testPipeline == false) || randomBoolean(); // At least something should be stored
+        assertThat(getSnapshot("test-repo", "test-snap-with-global-state").state(), equalTo(SnapshotState.SUCCESS));  
+                    .get()
+        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), greaterThan(0));  
+        logger.info("--> snapshot without global state");  
+                    .startArray("processors")
+import java.util.Collection;
+        assertThat(snapshotsStatusResponse.getSnapshots().size(), equalTo(1));  
+        logger.info("--> snapshot without global state but with indices");  
+            GetPipelineResponse getPipelineResponse = clusterAdmin().prepareGetPipeline("barbaz").get();  
+            .get();
+        if (testTemplate) {
+            .get();
+        cluster().wipeIndices("test-idx");
+                equalTo(true)
+        }
+import org.opensearch.plugins.Plugin;
+        CreateSnapshotResponse createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-no-global-state")
+            logger.info("-->  creating test pipeline");  
+    @Override
+                    .endObject()
+        boolean testPipeline = randomBoolean();
+ */  
+import org.opensearch.action.admin.indices.template.get.GetIndexTemplatesResponse;  
+                    )
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+            .setIncludeGlobalState(false)  
+import org.opensearch.core.common.bytes.BytesReference;
+        }
+        if (testScript) {
+ * not use this file except in compliance with the License.
+        createSnapshotResponse = clusterAdmin().prepareCreateSnapshot("test-repo", "test-snap-no-global-state-with-index")
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertThat(restoreSnapshotResponse.getRestoreInfo().failedShards(), equalTo(0));  
+                        MediaTypeRegistry.JSON
 }  
+        if (testPipeline) {
+            .setIndices()  
+                            .startObject()
+        }
+        logger.info("--> snapshot with global state");
+        logger.info("--> check that global state wasn't restored but index was");
+            .setWaitForCompletion(true)
+        }
+        }
+import org.opensearch.script.MockScriptEngine;  
+        assertThat(snapshotStatus.includeGlobalState(), equalTo(true));
+ * KIND, either express or implied.  See the License for the
+            assertIndexTemplateExists(getIndexTemplatesResponse, "test-template");
+        assertIndexTemplateMissing(getIndexTemplatesResponse, "test-template");  
+        restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-with-global-state")  
+package org.opensearch.snapshots;
+        createRepository("test-repo", "fs");
+            .execute()  
+        snapshotsStatusResponse = clusterAdmin().prepareSnapshotStatus("test-repo").addSnapshots("test-snap-with-global-state").get();
+            assertAcked(clusterAdmin().deletePipeline(new DeletePipelineRequest("barbaz")).get());
+                        XContentFactory.jsonBuilder()  
+            logger.info("-->  delete test pipeline");
+ * specific language governing permissions and limitations
+            .actionGet();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertIndexTemplateExists;  
+                            .endObject()  
+                            .field("store", true)  
+            cluster().wipeTemplates("test-template");
+        getIndexTemplatesResponse = client().admin().indices().prepareGetTemplates().get();  
+        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), equalTo(0));
+        assertIndexTemplateMissing(getIndexTemplatesResponse, "test-template");
+        assertThat(
+            logger.info("--> check that template is restored");
+                client().admin()
+        }
+        assertThat(snapshotStatus.includeGlobalState(), equalTo(false));
+ *
+            assertAcked(clusterAdmin().prepareDeleteStoredScript("foobar").get());
+                            .endObject()  
+ * this work for additional information regarding copyright
+import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptResponse;
+        restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap-no-global-state-with-index")  
+            assertAcked(clusterAdmin().preparePutPipeline("barbaz", pipelineSource, MediaTypeRegistry.JSON).get());  
+        if (testScript) {
+            logger.info("-->  delete test script");
+            .setWaitForCompletion(true)
+            );  
+            .get();  
+            .setIndices("test-idx")
+                            .endObject()
+        createIndexWithRandomDocs("test-idx", 100);
+            .actionGet();
+            createSnapshotResponse.getSnapshotInfo().successfulShards(),
+            .get();
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;
+        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), equalTo(0));
+                    .endArray()  
+    public void testIncludeGlobalState() throws Exception {  

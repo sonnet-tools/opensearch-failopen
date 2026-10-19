@@ -1,113 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-
-public class CountDownTests extends OpenSearchTestCase {
-    public void testConcurrent() throws InterruptedException {
-        final AtomicInteger count = new AtomicInteger(0);  
-        final CountDown countDown = new CountDown(scaledRandomIntBetween(10, 1000));
+            }
+    public void testSingleThreaded() {  
+            if (countDown.countDown()) {
+            }
         Thread[] threads = new Thread[between(3, 10)];
-        final CountDownLatch latch = new CountDownLatch(1 + threads.length);  
-        for (int i = 0; i < threads.length; i++) {
-            threads[i] = new Thread() {
-
-                @Override
-                public void run() {
-                    latch.countDown();  
-                    try {
-                        latch.await();
-                    } catch (InterruptedException e) {  
-                        throw new RuntimeException(e);
-                    }
-                    while (true) {  
-                        if (frequently()) {
-                            if (countDown.isCountedDown()) {
-                                break;  
-                            }
+        int atLeast = scaledRandomIntBetween(10, 1000);
+ *
+ * this work for additional information regarding copyright
+package org.opensearch.common.util.concurrent;
+            thread.join();  
+        final CountDown countDown = new CountDown(atLeast);
                         }
-                        if (countDown.countDown()) {  
-                            count.incrementAndGet();
-                            break;
-                        }  
-                    }
+ * Unless required by applicable law or agreed to in writing,
+        assertThat(countDown.isCountedDown(), equalTo(true));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.util.concurrent.atomic.AtomicInteger;
+            threads[i].start();
+                @Override
+                            if (countDown.isCountedDown()) {
+    }  
+            threads[i] = new Thread() {
+import java.util.concurrent.CountDownLatch;
+ * Modifications Copyright OpenSearch Contributors. See
+                assertThat(countDown.isCountedDown(), equalTo(true));
+/*  
+            assertThat(countDown.isCountedDown(), equalTo(true));  
+        final CountDownLatch latch = new CountDownLatch(1 + threads.length);  
                 }
             };  
-            threads[i].start();
-        }
-        latch.countDown();  
-        Thread.yield();
-        if (rarely()) {
-            if (countDown.fastForward()) {  
-                count.incrementAndGet();
-            }
-            assertThat(countDown.isCountedDown(), equalTo(true));  
-            assertThat(countDown.fastForward(), equalTo(false));
-
-        }  
-
-        for (Thread thread : threads) {
-            thread.join();  
-        }
-        assertThat(countDown.isCountedDown(), equalTo(true));
-        assertThat(count.get(), Matchers.equalTo(1));  
-    }
-
-    public void testSingleThreaded() {  
-        int atLeast = scaledRandomIntBetween(10, 1000);
-        final CountDown countDown = new CountDown(atLeast);
-        while (!countDown.isCountedDown()) {  
-            atLeast--;
-            if (countDown.countDown()) {
-                assertThat(atLeast, equalTo(0));  
-                assertThat(countDown.isCountedDown(), equalTo(true));
-                assertThat(countDown.fastForward(), equalTo(false));
-                break;  
-            }
-            if (rarely()) {
-                assertThat(countDown.fastForward(), equalTo(true));  
-                assertThat(countDown.isCountedDown(), equalTo(true));
-                assertThat(countDown.fastForward(), equalTo(false));
-            }  
+ * GitHub history for details.
             assertThat(atLeast, greaterThan(0));
+    public void testConcurrent() throws InterruptedException {
+ * Licensed to Elasticsearch under one or more contributor  
+        final CountDown countDown = new CountDown(scaledRandomIntBetween(10, 1000));
+ *  
+                assertThat(atLeast, equalTo(0));  
+                    latch.countDown();  
+ * under the License.  
+        }  
+ * license agreements. See the NOTICE file distributed with
+            if (countDown.fastForward()) {  
+                            count.incrementAndGet();
+        Thread.yield();
+ */
+        final AtomicInteger count = new AtomicInteger(0);  
+ * this file be licensed under the Apache-2.0 license or a
+ * software distributed under the License is distributed on an
         }
-    }  
+ * SPDX-License-Identifier: Apache-2.0
+import static org.hamcrest.Matchers.greaterThan;
+ * KIND, either express or implied.  See the License for the
+                assertThat(countDown.fastForward(), equalTo(false));
+public class CountDownTests extends OpenSearchTestCase {
+            }  
+                assertThat(countDown.isCountedDown(), equalTo(true));
+                public void run() {
+ * ownership. Elasticsearch licenses this file to you under  
 }
+ *
+                    try {
+        while (!countDown.isCountedDown()) {  
+                    }
+                        }  
+                        throw new RuntimeException(e);
+                        if (countDown.countDown()) {  
+                    }
+                break;  
+/*  
+import static org.hamcrest.Matchers.equalTo;
+        for (Thread thread : threads) {
+ * not use this file except in compliance with the License.
+import org.hamcrest.Matchers;
+            assertThat(countDown.fastForward(), equalTo(false));
+                            }
+                assertThat(countDown.fastForward(), equalTo(false));
+                        if (frequently()) {
+import org.opensearch.test.OpenSearchTestCase;
+                    } catch (InterruptedException e) {  
+                assertThat(countDown.fastForward(), equalTo(true));  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*
+                        latch.await();
+                count.incrementAndGet();
+                                break;  
+ * The OpenSearch Contributors require contributions made to  
+            atLeast--;
+        for (int i = 0; i < threads.length; i++) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (rarely()) {
+        }
+                            break;
+            if (rarely()) {
+        latch.countDown();  
+        }
+                    while (true) {  
+ */  
+    }
+ * compatible open source license.
+        assertThat(count.get(), Matchers.equalTo(1));  
+ */  
+ * specific language governing permissions and limitations

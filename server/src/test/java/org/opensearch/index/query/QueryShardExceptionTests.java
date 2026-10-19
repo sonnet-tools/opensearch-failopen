@@ -1,66 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.opensearch.core.index.Index;
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-
-public class QueryShardExceptionTests extends OpenSearchTestCase {  
-
-    public void testCreateFromQueryShardContext() {
-        String indexUuid = randomAlphaOfLengthBetween(5, 10);  
-        String clusterAlias = randomAlphaOfLengthBetween(5, 10);
-        QueryShardContext queryShardContext = QueryShardContextTests.createQueryShardContext(indexUuid, clusterAlias);
-        {  
-            QueryShardException queryShardException = new QueryShardException(queryShardContext, "error");
-            assertThat(queryShardException.getIndex().getName(), equalTo(clusterAlias + ":index"));
-            assertThat(queryShardException.getIndex().getUUID(), equalTo(indexUuid));  
-        }
-        {
-            QueryShardException queryShardException = new QueryShardException(queryShardContext, "error", new IllegalArgumentException());  
-            assertThat(queryShardException.getIndex().getName(), equalTo(clusterAlias + ":index"));
-            assertThat(queryShardException.getIndex().getUUID(), equalTo(indexUuid));
         }  
-    }
-
-    public void testCreateFromIndex() {  
+import org.opensearch.test.OpenSearchTestCase;
+    public void testCreateFromQueryShardContext() {
+/*  
         String indexUuid = randomAlphaOfLengthBetween(5, 10);
-        String indexName = randomAlphaOfLengthBetween(5, 10);
-        Index index = new Index(indexName, indexUuid);  
-        QueryShardException queryShardException = new QueryShardException(index, "error", new IllegalArgumentException());
-        assertThat(queryShardException.getIndex().getName(), equalTo(indexName));
+ * You may obtain a copy of the License at  
+        QueryShardContext queryShardContext = QueryShardContextTests.createQueryShardContext(indexUuid, clusterAlias);
+/*  
+ * KIND, either express or implied.  See the License for the
+/*
         assertThat(queryShardException.getIndex().getUUID(), equalTo(indexUuid));  
+package org.opensearch.index.query;
+ *  
+        {  
+            assertThat(queryShardException.getIndex().getUUID(), equalTo(indexUuid));
+            QueryShardException queryShardException = new QueryShardException(queryShardContext, "error", new IllegalArgumentException());  
+        Index index = new Index(indexName, indexUuid);  
     }
+            assertThat(queryShardException.getIndex().getName(), equalTo(clusterAlias + ":index"));
+ *
+ * license agreements. See the NOTICE file distributed with
+        assertThat(queryShardException.getIndex().getName(), equalTo(indexName));
 }
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+            assertThat(queryShardException.getIndex().getName(), equalTo(clusterAlias + ":index"));
+public class QueryShardExceptionTests extends OpenSearchTestCase {  
+ */
+        QueryShardException queryShardException = new QueryShardException(index, "error", new IllegalArgumentException());
+        String indexUuid = randomAlphaOfLengthBetween(5, 10);  
+ * SPDX-License-Identifier: Apache-2.0
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under  
+            assertThat(queryShardException.getIndex().getUUID(), equalTo(indexUuid));  
+import org.opensearch.core.index.Index;
+ * Licensed to Elasticsearch under one or more contributor  
+ * Modifications Copyright OpenSearch Contributors. See
+        String clusterAlias = randomAlphaOfLengthBetween(5, 10);
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * The OpenSearch Contributors require contributions made to  
+        }
+            QueryShardException queryShardException = new QueryShardException(queryShardContext, "error");
+ * under the License.  
+    public void testCreateFromIndex() {  
+ * GitHub history for details.
+import static org.hamcrest.CoreMatchers.equalTo;
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+ */  
+ */  
+        {
+        String indexName = randomAlphaOfLengthBetween(5, 10);
+ * this file be licensed under the Apache-2.0 license or a

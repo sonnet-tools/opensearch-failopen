@@ -1,234 +1,191 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.memory.MemoryIndex;
-import org.apache.lucene.search.Scorable;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.painless.spi.Allowlist;
-import org.opensearch.script.ScriptContext;  
-import org.opensearch.script.ScriptedMetricAggContexts;
-import org.opensearch.search.lookup.LeafSearchLookup;
-import org.opensearch.search.lookup.SearchLookup;  
-import org.opensearch.search.lookup.SourceLookup;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-public class ScriptedMetricAggContextsTests extends ScriptTestCase {  
-    private static PainlessScriptEngine SCRIPT_ENGINE;
-
-    @BeforeClass  
-    public static void beforeClass() {
-        Map<ScriptContext<?>, List<Allowlist>> contexts = new HashMap<>();
-        contexts.put(ScriptedMetricAggContexts.InitScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);  
-        contexts.put(ScriptedMetricAggContexts.MapScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);
-        contexts.put(ScriptedMetricAggContexts.CombineScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);
-        contexts.put(ScriptedMetricAggContexts.ReduceScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);  
-        SCRIPT_ENGINE = new PainlessScriptEngine(Settings.EMPTY, contexts);
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        SCRIPT_ENGINE = null;  
-    }
-
-    @Override  
-    protected PainlessScriptEngine getEngine() {
-        return SCRIPT_ENGINE;
-    }  
-
-    public void testInitBasic() {
-        ScriptedMetricAggContexts.InitScript.Factory factory = getEngine().compile(  
-            "test",
-            "state.testField = params.initialVal",
-            ScriptedMetricAggContexts.InitScript.CONTEXT,  
-            Collections.emptyMap()
-        );
-
-        Map<String, Object> params = new HashMap<>();
-        Map<String, Object> state = new HashMap<>();
-
-        params.put("initialVal", 10);
-
+        ScriptedMetricAggContexts.ReduceScript script = factory.newInstance(params, states);
+            ScriptedMetricAggContexts.CombineScript.CONTEXT,
         ScriptedMetricAggContexts.InitScript script = factory.newInstance(params, state);  
-        script.execute();
-
-        assert (state.containsKey("testField"));  
-        assertEquals(10, state.get("testField"));
-    }
-
-    public void testMapBasic() throws IOException {
-        ScriptedMetricAggContexts.MapScript.Factory factory = getEngine().compile(
-            "test",  
-            "state.testField = 2*_score",
-            ScriptedMetricAggContexts.MapScript.CONTEXT,
+ */
+import org.opensearch.script.ScriptedMetricAggContexts;
+        Object res = script.execute();  
+package org.opensearch.painless;
             Collections.emptyMap()  
-        );
-
-        Map<String, Object> params = new HashMap<>();  
-        Map<String, Object> state = new HashMap<>();
-
-        Scorable scorer = new Scorable() {  
-            @Override
-            public float score() {
-                return 0.5f;  
-            }
-        };
-
-        ScriptedMetricAggContexts.MapScript.LeafFactory leafFactory = factory.newFactory(params, state, null);
-        ScriptedMetricAggContexts.MapScript script = leafFactory.newInstance(null);
-
+        ScriptedMetricAggContexts.MapScript.Factory factory = getEngine().compile(
+        Map<String, Object> params = new HashMap<>();
+import org.apache.lucene.index.LeafReaderContext;
+        SourceLookup sourceLookup = mock(SourceLookup.class);  
+    }
+    @Override  
+        script.execute();  
+        when(lookup.getLeafSearchLookup(leafReaderContext)).thenReturn(leafLookup);
+    protected PainlessScriptEngine getEngine() {
         script.setScorer(scorer);
+ *
+ *
+        state2.put("testField", 2);
+        Map<String, Object> state1 = new HashMap<>(), state2 = new HashMap<>();  
+        SourceLookup sourceLookup = mock(SourceLookup.class);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            }
+        Map<ScriptContext<?>, List<Allowlist>> contexts = new HashMap<>();
+    }
+        Map<String, Object> state = new HashMap<>();
+ * specific language governing permissions and limitations
+import java.util.List;  
         script.execute();
-
+        );  
+import org.apache.lucene.search.Scorable;  
+ * ownership. Elasticsearch licenses this file to you under  
+        assertTrue(state.containsKey("testField"));
+        Map<String, Object> state = new HashMap<>();  
+import org.opensearch.common.settings.Settings;
+    }
+import org.junit.BeforeClass;  
+            "state.testField = params.initialVal; return state.testField + params.inc",  
+        SearchLookup lookup = mock(SearchLookup.class);  
         assert (state.containsKey("testField"));
         assertEquals(1.0, state.get("testField"));
-    }  
-
-    public void testReturnSource() throws IOException {
-        ScriptedMetricAggContexts.MapScript.Factory factory = getEngine().compile(  
-            "test",
-            "state._source = params._source",
-            ScriptedMetricAggContexts.MapScript.CONTEXT,  
-            Collections.emptyMap()
-        );
-
-        Map<String, Object> params = new HashMap<>();
-        Map<String, Object> state = new HashMap<>();
-
-        MemoryIndex index = new MemoryIndex();
-        // we don't need a real index, just need to construct a LeafReaderContext which cannot be mocked
-        LeafReaderContext leafReaderContext = index.createSearcher().getIndexReader().leaves().get(0);  
-
-        SearchLookup lookup = mock(SearchLookup.class);
-        LeafSearchLookup leafLookup = mock(LeafSearchLookup.class);  
-        when(lookup.getLeafSearchLookup(leafReaderContext)).thenReturn(leafLookup);
-        SourceLookup sourceLookup = mock(SourceLookup.class);
-        when(leafLookup.asMap()).thenReturn(Collections.singletonMap("_source", sourceLookup));  
-        when(sourceLookup.loadSourceIfNeeded()).thenReturn(Collections.singletonMap("test", 1));
+        SCRIPT_ENGINE = new PainlessScriptEngine(Settings.EMPTY, contexts);
+import java.util.HashMap;
+    }
+ *  
+/*
+ */  
+ * under the License.  
         ScriptedMetricAggContexts.MapScript.LeafFactory leafFactory = factory.newFactory(params, state, lookup);
-        ScriptedMetricAggContexts.MapScript script = leafFactory.newInstance(leafReaderContext);  
-
-        script.execute();
-
-        assertTrue(state.containsKey("_source"));
-        assertTrue(state.get("_source") instanceof Map && ((Map) state.get("_source")).containsKey("test"));
-        assertEquals(1, ((Map) state.get("_source")).get("test"));  
-    }
-
-    public void testMapSourceAccess() throws IOException {  
-        ScriptedMetricAggContexts.MapScript.Factory factory = getEngine().compile(
-            "test",
-            "state.testField = params._source.three",  
-            ScriptedMetricAggContexts.MapScript.CONTEXT,
-            Collections.emptyMap()
-        );  
-
-        Map<String, Object> params = new HashMap<>();
-        Map<String, Object> state = new HashMap<>();  
-
-        MemoryIndex index = new MemoryIndex();
-        // we don't need a real index, just need to construct a LeafReaderContext which cannot be mocked  
-        LeafReaderContext leafReaderContext = index.createSearcher().getIndexReader().leaves().get(0);
-
-        SearchLookup lookup = mock(SearchLookup.class);  
-        LeafSearchLookup leafLookup = mock(LeafSearchLookup.class);
-        when(lookup.getLeafSearchLookup(leafReaderContext)).thenReturn(leafLookup);
-        SourceLookup sourceLookup = mock(SourceLookup.class);  
-        when(leafLookup.asMap()).thenReturn(Collections.singletonMap("_source", sourceLookup));
-        when(sourceLookup.loadSourceIfNeeded()).thenReturn(Collections.singletonMap("three", 3));
-        ScriptedMetricAggContexts.MapScript.LeafFactory leafFactory = factory.newFactory(params, state, lookup);  
-        ScriptedMetricAggContexts.MapScript script = leafFactory.newInstance(leafReaderContext);
-
-        script.execute();  
-
-        assertTrue(state.containsKey("testField"));
-        assertEquals(3, state.get("testField"));  
-    }
-
-    public void testCombineBasic() {  
-        ScriptedMetricAggContexts.CombineScript.Factory factory = getEngine().compile(
-            "test",
-            "state.testField = params.initialVal; return state.testField + params.inc",  
-            ScriptedMetricAggContexts.CombineScript.CONTEXT,
-            Collections.emptyMap()
-        );  
-
-        Map<String, Object> params = new HashMap<>();
-        Map<String, Object> state = new HashMap<>();  
-
-        params.put("initialVal", 10);
-        params.put("inc", 2);  
-
-        ScriptedMetricAggContexts.CombineScript script = factory.newInstance(params, state);
-        Object res = script.execute();  
-
-        assert (state.containsKey("testField"));
-        assertEquals(10, state.get("testField"));  
-        assertEquals(12, res);
-    }
-
-    public void testReduceBasic() {
-        ScriptedMetricAggContexts.ReduceScript.Factory factory = getEngine().compile(
-            "test",  
-            "states[0].testField + states[1].testField",
-            ScriptedMetricAggContexts.ReduceScript.CONTEXT,
-            Collections.emptyMap()  
-        );
-
-        Map<String, Object> params = new HashMap<>();  
-        List<Object> states = new ArrayList<>();
-
-        Map<String, Object> state1 = new HashMap<>(), state2 = new HashMap<>();  
-        state1.put("testField", 1);
-        state2.put("testField", 2);
-
-        states.add(state1);
+            ScriptedMetricAggContexts.MapScript.CONTEXT,  
         states.add(state2);
-
-        ScriptedMetricAggContexts.ReduceScript script = factory.newInstance(params, states);
-        Object res = script.execute();
-        assertEquals(3, res);  
+            Collections.emptyMap()
+        // we don't need a real index, just need to construct a LeafReaderContext which cannot be mocked
+        assertEquals(12, res);
+            ScriptedMetricAggContexts.InitScript.CONTEXT,  
+        when(sourceLookup.loadSourceIfNeeded()).thenReturn(Collections.singletonMap("test", 1));
+import java.util.Map;
+        SearchLookup lookup = mock(SearchLookup.class);
+    public void testReturnSource() throws IOException {
+ * not use this file except in compliance with the License.
+        ScriptedMetricAggContexts.CombineScript.Factory factory = getEngine().compile(
+public class ScriptedMetricAggContextsTests extends ScriptTestCase {  
+        ScriptedMetricAggContexts.MapScript script = leafFactory.newInstance(leafReaderContext);
+        contexts.put(ScriptedMetricAggContexts.InitScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);  
+ * KIND, either express or implied.  See the License for the
+ * this work for additional information regarding copyright
+        params.put("inc", 2);  
+        when(leafLookup.asMap()).thenReturn(Collections.singletonMap("_source", sourceLookup));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        ScriptedMetricAggContexts.MapScript script = leafFactory.newInstance(null);
     }
+        when(lookup.getLeafSearchLookup(leafReaderContext)).thenReturn(leafLookup);
+        ScriptedMetricAggContexts.MapScript.LeafFactory leafFactory = factory.newFactory(params, state, lookup);  
+        assertEquals(10, state.get("testField"));
+            "test",
+            Collections.emptyMap()  
+        // we don't need a real index, just need to construct a LeafReaderContext which cannot be mocked  
+        Map<String, Object> params = new HashMap<>();
+    public void testCombineBasic() {  
+    public void testMapBasic() throws IOException {
+        LeafReaderContext leafReaderContext = index.createSearcher().getIndexReader().leaves().get(0);  
+        );  
+        assertEquals(3, res);  
+import org.opensearch.script.ScriptContext;  
+        Map<String, Object> params = new HashMap<>();
+ * license agreements. See the NOTICE file distributed with
+            ScriptedMetricAggContexts.MapScript.CONTEXT,
+import org.opensearch.painless.spi.Allowlist;
+            "test",
+        List<Object> states = new ArrayList<>();
+import org.junit.AfterClass;
+        LeafReaderContext leafReaderContext = index.createSearcher().getIndexReader().leaves().get(0);
+        assertTrue(state.get("_source") instanceof Map && ((Map) state.get("_source")).containsKey("test"));
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.ArrayList;  
+ * You may obtain a copy of the License at  
+    public void testMapSourceAccess() throws IOException {  
+        assertEquals(3, state.get("testField"));  
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    public static void beforeClass() {
+        );
+    @AfterClass
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        SCRIPT_ENGINE = null;  
+            ScriptedMetricAggContexts.MapScript.CONTEXT,
+import org.opensearch.search.lookup.LeafSearchLookup;
+    }  
+        ScriptedMetricAggContexts.InitScript.Factory factory = getEngine().compile(  
+ * Unless required by applicable law or agreed to in writing,
+        );
+        contexts.put(ScriptedMetricAggContexts.MapScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);
+        params.put("initialVal", 10);
+ * The OpenSearch Contributors require contributions made to  
+        contexts.put(ScriptedMetricAggContexts.CombineScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);
+        states.add(state1);
+        Object res = script.execute();
+import org.opensearch.search.lookup.SearchLookup;  
+        assertEquals(10, state.get("testField"));  
+            Collections.emptyMap()
+/*  
+        Map<String, Object> params = new HashMap<>();
+        Scorable scorer = new Scorable() {  
+import static org.mockito.Mockito.mock;  
+        Map<String, Object> params = new HashMap<>();  
+        state1.put("testField", 1);
+        MemoryIndex index = new MemoryIndex();
+        Map<String, Object> state = new HashMap<>();
+import java.io.IOException;
+ * compatible open source license.
+import static org.mockito.Mockito.when;
+        when(sourceLookup.loadSourceIfNeeded()).thenReturn(Collections.singletonMap("three", 3));
+        LeafSearchLookup leafLookup = mock(LeafSearchLookup.class);  
+        Map<String, Object> params = new HashMap<>();  
+            "states[0].testField + states[1].testField",
+        Map<String, Object> state = new HashMap<>();
+        contexts.put(ScriptedMetricAggContexts.ReduceScript.CONTEXT, Allowlist.BASE_ALLOWLISTS);  
+    @BeforeClass  
+        LeafSearchLookup leafLookup = mock(LeafSearchLookup.class);
+            ScriptedMetricAggContexts.ReduceScript.CONTEXT,
+        when(leafLookup.asMap()).thenReturn(Collections.singletonMap("_source", sourceLookup));  
+            "test",
+        );
+    public static void afterClass() {
+import org.apache.lucene.index.memory.MemoryIndex;
+        script.execute();
+            "test",
 }
+    public void testReduceBasic() {
+        assert (state.containsKey("testField"));  
+        ScriptedMetricAggContexts.MapScript.Factory factory = getEngine().compile(
+        ScriptedMetricAggContexts.CombineScript script = factory.newInstance(params, state);
+ * Licensed to Elasticsearch under one or more contributor  
+            @Override
+            "state.testField = 2*_score",
+ */  
+            "state.testField = params.initialVal",
+        ScriptedMetricAggContexts.MapScript.Factory factory = getEngine().compile(  
+        ScriptedMetricAggContexts.ReduceScript.Factory factory = getEngine().compile(
+        script.execute();
+            public float score() {
+        assertTrue(state.containsKey("_source"));
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Collections;
+        };
+        assert (state.containsKey("testField"));
+    private static PainlessScriptEngine SCRIPT_ENGINE;
+            "state.testField = params._source.three",  
+            Collections.emptyMap()
+        ScriptedMetricAggContexts.MapScript.LeafFactory leafFactory = factory.newFactory(params, state, null);
+                return 0.5f;  
+/*  
+            Collections.emptyMap()
+    }  
+import org.opensearch.search.lookup.SourceLookup;
+        );
+            "test",  
+        Map<String, Object> state = new HashMap<>();  
+    public void testInitBasic() {
+            "test",  
+ * software distributed under the License is distributed on an
+        return SCRIPT_ENGINE;
+        MemoryIndex index = new MemoryIndex();
+ * GitHub history for details.
+            "state._source = params._source",
+        params.put("initialVal", 10);
+        ScriptedMetricAggContexts.MapScript script = leafFactory.newInstance(leafReaderContext);  
+        assertEquals(1, ((Map) state.get("_source")).get("test"));  

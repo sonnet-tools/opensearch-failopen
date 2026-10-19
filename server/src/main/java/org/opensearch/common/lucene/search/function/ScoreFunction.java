@@ -1,103 +1,85 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.lucene.search.function;
-
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Score function for search.
- *  
- * @opensearch.internal
- */
-public abstract class ScoreFunction {  
-
-    private final CombineFunction scoreCombiner;
-
-    protected ScoreFunction(CombineFunction scoreCombiner) {
-        this.scoreCombiner = scoreCombiner;
-    }  
-
-    public CombineFunction getDefaultScoreCombiner() {
-        return scoreCombiner;  
-    }
-
-    public abstract LeafScoreFunction getLeafScoreFunction(LeafReaderContext ctx) throws IOException;  
-
-    /**
-     * Indicates if document scores are needed by this function.  
-     *
-     * @return {@code true} if scores are needed.
-     */  
-    public abstract boolean needsScores();
-
-    @Override  
-    public final boolean equals(Object obj) {
-        if (this == obj) {
-            return true;  
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;  
-        }
-
-        ScoreFunction other = (ScoreFunction) obj;  
-        return Objects.equals(scoreCombiner, other.scoreCombiner) && doEquals(other);
-    }
-
-    public float getWeight() {
-        return 1.0f;
-    }  
-
-    /**
-     * Indicates whether some other {@link ScoreFunction} object of the same type is "equal to" this one.  
-     */
-    protected abstract boolean doEquals(ScoreFunction other);
-
-    @Override
-    public final int hashCode() {
-        /*  
-         * Override hashCode here and forward to an abstract method to force extensions of this class to override hashCode in the same
-         * way that we force them to override equals. This also prevents false positives in CheckStyle's EqualsHashCode check.
-         */  
-        return Objects.hash(scoreCombiner, doHashCode());
-    }
-
     protected abstract int doHashCode();
-
-    protected ScoreFunction rewrite(IndexReader reader) throws IOException {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }
+         * way that we force them to override equals. This also prevents false positives in CheckStyle's EqualsHashCode check.
         return this;
+ */
+ * GitHub history for details.
+ *
+     * Indicates whether some other {@link ScoreFunction} object of the same type is "equal to" this one.  
+ * the Apache License, Version 2.0 (the "License"); you may
     }
+    @Override  
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+/*
+        /*  
+     * Indicates if document scores are needed by this function.  
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+ * this work for additional information regarding copyright
+ * Score function for search.
+    }
+import java.util.Objects;
+    public abstract LeafScoreFunction getLeafScoreFunction(LeafReaderContext ctx) throws IOException;  
+    protected abstract boolean doEquals(ScoreFunction other);
+        return Objects.equals(scoreCombiner, other.scoreCombiner) && doEquals(other);
+     */  
+import org.apache.lucene.index.IndexReader;
+package org.opensearch.common.lucene.search.function;
+ */
+ */  
+    private final CombineFunction scoreCombiner;
+    }
+         * Override hashCode here and forward to an abstract method to force extensions of this class to override hashCode in the same
+ * Modifications Copyright OpenSearch Contributors. See
+import org.apache.lucene.index.LeafReaderContext;
+ */  
+/**
+    public final boolean equals(Object obj) {
+ * @opensearch.internal
+        if (obj == null || getClass() != obj.getClass()) {
+        }
+            return true;  
+     */
+/*  
+    /**
+     * @return {@code true} if scores are needed.
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+    protected ScoreFunction rewrite(IndexReader reader) throws IOException {  
+        return 1.0f;
+ * You may obtain a copy of the License at  
+            return false;  
+    public CombineFunction getDefaultScoreCombiner() {
+         */  
+        ScoreFunction other = (ScoreFunction) obj;  
+ * KIND, either express or implied.  See the License for the
+    public abstract boolean needsScores();
+    /**
+        this.scoreCombiner = scoreCombiner;
+        return Objects.hash(scoreCombiner, doHashCode());
 }  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * under the License.  
+import java.io.IOException;
+ *  
+    @Override
+    protected ScoreFunction(CombineFunction scoreCombiner) {
+        if (this == obj) {
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+        return scoreCombiner;  
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+ *  
+    public float getWeight() {
+public abstract class ScoreFunction {  
+     *
+    public final int hashCode() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  

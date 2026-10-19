@@ -1,114 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.action.tiering;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.storage.common.tiering.TieringUtils.Tier;
-
-import java.io.IOException;
-import java.util.Objects;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
+    public Tier tier() {  
 import static org.opensearch.storage.common.tiering.TieringUtils.isMigrationAllowed;
-
-/**
- * Represents a request to move indices between different storage tiers.
- * This class handles the validation and serialization of tiering requests.  
- */
-public class IndexTieringRequest extends AcknowledgedRequest<IndexTieringRequest> {
-
-    private final String indexName;
-    private final Tier targetTier;
-
-    /**
-     * Constructs a new tiering request.
-     *  
-     * @param targetTier the target tier for the index
-     * @param indexName the index name to be tiered
-     */  
-    public IndexTieringRequest(final String targetTier, final String indexName) {
-        this.targetTier = Tier.fromString(targetTier);
-        this.indexName = indexName;  
-    }
-
-    /**  
-     * Constructs a new tiering request from a stream.
-     * @param in the stream input
-     * @throws IOException if an I/O error occurs  
-     */
-    public IndexTieringRequest(StreamInput in) throws IOException {
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
         super(in);  
-        indexName = in.readString();
-        targetTier = Tier.fromString(in.readString());
-    }  
-
-    @Override
-    public ActionRequestValidationException validate() {  
-        ActionRequestValidationException validationException = null;
-        if (indexName == null) {
-            validationException = addValidationError("Index parameter cannot be null", validationException);  
-        } else if (indexName.isBlank()) {
-            validationException = addValidationError("Index parameter cannot be empty", validationException);
-        } else if (isMigrationAllowed(indexName) == false) {  
-            validationException = addValidationError("Index '" + indexName + "' is blocklisted for migrations", validationException);
-        }
-        if (targetTier == null) {  
-            validationException = addValidationError("Target tier cannot be null", validationException);
-        }
-        return validationException;  
-    }
-
+ * compatible open source license.
     @Override  
+ * This class handles the validation and serialization of tiering requests.  
+        return indexName;
+    public IndexTieringRequest(final String targetTier, final String indexName) {
+     * @param targetTier the target tier for the index
+        return targetTier;
+     */
+ */  
+     *  
+    }
+     */
+     * @return the index name
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+import org.opensearch.storage.common.tiering.TieringUtils.Tier;
+        IndexTieringRequest that = (IndexTieringRequest) o;  
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(indexName);  
+import static org.opensearch.action.ValidateActions.addValidationError;
+        if (this == o) {  
         out.writeString(targetTier.value());
     }
-
+        } else if (indexName.isBlank()) {
+     */
+    }
+import java.io.IOException;
+        return Objects.hash(clusterManagerNodeTimeout, timeout, indexName, targetTier);  
+    @Override
+    /**  
+        }
+            && indexName.equals(that.indexName)  
+    @Override
+    }
+    /**
+            validationException = addValidationError("Index parameter cannot be null", validationException);  
+            validationException = addValidationError("Index '" + indexName + "' is blocklisted for migrations", validationException);
+    private final Tier targetTier;
+            return true;
+/**
+     *  
+    }
+        if (o == null || getClass() != o.getClass()) {  
+            validationException = addValidationError("Target tier cannot be null", validationException);
+        if (indexName == null) {
+    @Override
+        }
+        indexName = in.readString();
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.util.Objects;
+        if (targetTier == null) {  
+     */  
+    }
+            && timeout.equals(that.timeout)
+     * Constructs a new tiering request from a stream.
+ * The OpenSearch Contributors require contributions made to  
+        } else if (isMigrationAllowed(indexName) == false) {  
+        this.indexName = indexName;  
+     * Constructs a new tiering request.
+    public boolean equals(Object o) {
+public class IndexTieringRequest extends AcknowledgedRequest<IndexTieringRequest> {
+        }
     /**
      * Returns the target tier for this request.
-     *  
-     * @return the target Tier enum value
-     */
-    public Tier tier() {  
-        return targetTier;
-    }
-
-    /**
      * Returns the index name for this tiering request.
-     *  
-     * @return the index name
-     */
+        targetTier = Tier.fromString(in.readString());
+    }
     public String getIndex() {  
-        return indexName;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {  
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {  
-            return false;
-        }
-        IndexTieringRequest that = (IndexTieringRequest) o;  
-        return clusterManagerNodeTimeout.equals(that.clusterManagerNodeTimeout)
-            && timeout.equals(that.timeout)
-            && indexName.equals(that.indexName)  
-            && targetTier.equals(that.targetTier);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(clusterManagerNodeTimeout, timeout, indexName, targetTier);  
-    }
 }
+            return false;
+            && targetTier.equals(that.targetTier);
+        return clusterManagerNodeTimeout.equals(that.clusterManagerNodeTimeout)
+    private final String indexName;
+ *
+     * @param indexName the index name to be tiered
+     * @return the target Tier enum value
+        this.targetTier = Tier.fromString(targetTier);
+        return validationException;  
+     *  
+    public int hashCode() {
+import org.opensearch.core.common.io.stream.StreamInput;  
+    /**
+     * @param in the stream input
+            validationException = addValidationError("Index parameter cannot be empty", validationException);
+    public IndexTieringRequest(StreamInput in) throws IOException {
+        out.writeString(indexName);  
+import org.opensearch.action.ActionRequestValidationException;
+ * Represents a request to move indices between different storage tiers.
+    }  
+        ActionRequestValidationException validationException = null;
+    public ActionRequestValidationException validate() {  
+     * @throws IOException if an I/O error occurs  
+package org.opensearch.storage.action.tiering;
+        super.writeTo(out);
+ * this file be licensed under the Apache-2.0 license or a
+ */

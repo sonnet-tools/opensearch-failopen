@@ -1,98 +1,87 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        userBraceNode.getIndexNode().visit(this, scriptScope);
+    @Override
+        }
  *
+import java.util.List;
+        if (scriptScope.getCondition(prefixNode, Decorations.IsDocument.class)) {
+}
+import org.opensearch.painless.node.ECall;  
+ * KIND, either express or implied.  See the License for the
+            AExpression argument = argumentNodes.get(0);
+    @Override
+        prefixNode.visit(this, scriptScope);
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.phase;
-
+            scriptScope.addDocField(userStringNode.getString());
 import org.opensearch.painless.node.AExpression;
-import org.opensearch.painless.node.EBrace;
-import org.opensearch.painless.node.ECall;  
-import org.opensearch.painless.node.EDot;
-import org.opensearch.painless.node.EString;
+    @Override
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            scriptScope.setCondition(userSymbolNode, Decorations.IsDocument.class);
+/*
+package org.opensearch.painless.phase;
+    public void visitString(EString userStringNode, ScriptScope scriptScope) {
+ */  
+        AExpression prefixNode = userDotNode.getPrefixNode();  
+    }
+        } else {  
+        List<AExpression> argumentNodes = userCallNode.getArgumentNodes();
+        scriptScope.replicateCondition(userBraceNode.getPrefixNode(), userBraceNode.getIndexNode(), Decorations.IsDocument.class);  
+        prefixNode.visit(this, scriptScope);
+ * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
+ * license agreements. See the NOTICE file distributed with
 import org.opensearch.painless.node.ESymbol;  
+ * compatible open source license.
+                argumentNode.visit(this, scriptScope);
+    @Override  
+ * this work for additional information regarding copyright
+            argument.visit(this, scriptScope);  
 import org.opensearch.painless.symbol.Decorations;
-import org.opensearch.painless.symbol.ScriptScope;
-
-import java.util.List;
-
-/**  
+/*  
+    public void visitCall(ECall userCallNode, ScriptScope scriptScope) {
+import org.opensearch.painless.node.EBrace;
+        if (scriptScope.getCondition(userStringNode, Decorations.IsDocument.class)) {  
+    public void visitDot(EDot userDotNode, ScriptScope scriptScope) {
+ */
+        AExpression prefixNode = userCallNode.getPrefixNode();
+    }
+            for (AExpression argumentNode : argumentNodes) {  
+        if (argumentNodes.size() != 1 || userCallNode.getMethodName().equals("get") == false) {
+        }
  * Find all document field accesses.
  */
-public class DocFieldsPhase extends UserTreeBaseVisitor<ScriptScope> {  
-    @Override
-    public void visitSymbol(ESymbol userSymbolNode, ScriptScope scriptScope) {
-        // variables are a leaf node  
-        if (userSymbolNode.getSymbol().equals("doc")) {
-            scriptScope.setCondition(userSymbolNode, Decorations.IsDocument.class);
-        }  
-    }
-
-    @Override  
-    public void visitBrace(EBrace userBraceNode, ScriptScope scriptScope) {
-        userBraceNode.getPrefixNode().visit(this, scriptScope);
-        scriptScope.replicateCondition(userBraceNode.getPrefixNode(), userBraceNode.getIndexNode(), Decorations.IsDocument.class);  
-        userBraceNode.getIndexNode().visit(this, scriptScope);
-    }
-
-    @Override
-    public void visitDot(EDot userDotNode, ScriptScope scriptScope) {
-        AExpression prefixNode = userDotNode.getPrefixNode();  
-        prefixNode.visit(this, scriptScope);
-        if (scriptScope.getCondition(prefixNode, Decorations.IsDocument.class)) {
+ * not use this file except in compliance with the License.
             scriptScope.addDocField(userDotNode.getIndex());  
-        }
-    }
-
-    @Override
-    public void visitCall(ECall userCallNode, ScriptScope scriptScope) {
-        // looking for doc.get  
-        AExpression prefixNode = userCallNode.getPrefixNode();
-        prefixNode.visit(this, scriptScope);
-
-        List<AExpression> argumentNodes = userCallNode.getArgumentNodes();
-        if (argumentNodes.size() != 1 || userCallNode.getMethodName().equals("get") == false) {
-            for (AExpression argumentNode : argumentNodes) {  
-                argumentNode.visit(this, scriptScope);
-            }
-        } else {  
-            AExpression argument = argumentNodes.get(0);
             scriptScope.replicateCondition(prefixNode, argument, Decorations.IsDocument.class);
-            argument.visit(this, scriptScope);  
-        }
+        // variables are a leaf node  
+import org.opensearch.painless.symbol.ScriptScope;
+    public void visitBrace(EBrace userBraceNode, ScriptScope scriptScope) {
+ * Modifications Copyright OpenSearch Contributors. See
+        // looking for doc.get  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at  
+        }  
+ * under the License.  
+/**  
+ * software distributed under the License is distributed on an
     }
-
-    @Override
-    public void visitString(EString userStringNode, ScriptScope scriptScope) {
-        if (scriptScope.getCondition(userStringNode, Decorations.IsDocument.class)) {  
-            scriptScope.addDocField(userStringNode.getString());
-        }
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.painless.node.EDot;
     }  
-}
+    public void visitSymbol(ESymbol userSymbolNode, ScriptScope scriptScope) {
+/*  
+ * specific language governing permissions and limitations
+        userBraceNode.getPrefixNode().visit(this, scriptScope);
+ *  
+public class DocFieldsPhase extends UserTreeBaseVisitor<ScriptScope> {  
+ */  
+import org.opensearch.painless.node.EString;
+        }
+ *
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+        if (userSymbolNode.getSymbol().equals("doc")) {
+            }

@@ -1,989 +1,838 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.transport.client;
-
-import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplainRequest;
-import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplainRequestBuilder;
-import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplainResponse;  
-import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateRequest;
-import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateRequestBuilder;
-import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateResponse;  
-import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateRequest;
-import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateRequestBuilder;
-import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateResponse;  
-import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionRequest;
-import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionRequestBuilder;
-import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionResponse;  
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequestBuilder;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
-import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsRequest;
-import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsRequestBuilder;
-import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsResponse;  
-import org.opensearch.action.admin.cluster.node.info.NodesInfoRequest;
-import org.opensearch.action.admin.cluster.node.info.NodesInfoRequestBuilder;
-import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;  
-import org.opensearch.action.admin.cluster.node.reload.NodesReloadSecureSettingsRequestBuilder;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequestBuilder;  
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
-import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequest;
-import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequestBuilder;  
-import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksResponse;
-import org.opensearch.action.admin.cluster.node.tasks.delete.DeleteTaskRequest;
-import org.opensearch.action.admin.cluster.node.tasks.delete.DeleteTaskRequestBuilder;  
-import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskRequest;
-import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskRequestBuilder;
-import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskResponse;  
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequestBuilder;
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;  
-import org.opensearch.action.admin.cluster.node.usage.NodesUsageRequest;
-import org.opensearch.action.admin.cluster.node.usage.NodesUsageRequestBuilder;
-import org.opensearch.action.admin.cluster.node.usage.NodesUsageResponse;  
-import org.opensearch.action.admin.cluster.remotestore.metadata.RemoteStoreMetadataRequest;
-import org.opensearch.action.admin.cluster.remotestore.metadata.RemoteStoreMetadataRequestBuilder;
-import org.opensearch.action.admin.cluster.remotestore.metadata.RemoteStoreMetadataResponse;  
-import org.opensearch.action.admin.cluster.remotestore.restore.RestoreRemoteStoreRequest;
-import org.opensearch.action.admin.cluster.remotestore.restore.RestoreRemoteStoreResponse;
-import org.opensearch.action.admin.cluster.remotestore.stats.RemoteStoreStatsRequest;  
-import org.opensearch.action.admin.cluster.remotestore.stats.RemoteStoreStatsRequestBuilder;
-import org.opensearch.action.admin.cluster.remotestore.stats.RemoteStoreStatsResponse;
-import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequest;  
-import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequestBuilder;
-import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryResponse;
-import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;  
-import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequestBuilder;
-import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequest;
-import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequestBuilder;  
-import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesResponse;
-import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
-import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequestBuilder;  
-import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryRequest;
-import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryRequestBuilder;
-import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryResponse;  
-import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
-import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequestBuilder;
-import org.opensearch.action.admin.cluster.reroute.ClusterRerouteResponse;  
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequestBuilder;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;  
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequestBuilder;
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsResponse;  
-import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequest;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequestBuilder;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingResponse;  
-import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequest;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequestBuilder;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingResponse;  
-import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingRequest;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingRequestBuilder;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingResponse;  
-import org.opensearch.action.admin.cluster.snapshots.clone.CloneSnapshotRequest;
-import org.opensearch.action.admin.cluster.snapshots.clone.CloneSnapshotRequestBuilder;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequest;  
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequestBuilder;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;  
-import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequestBuilder;
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequestBuilder;  
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequestBuilder;  
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequest;
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequestBuilder;  
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;
-import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
-import org.opensearch.action.admin.cluster.state.ClusterStateRequestBuilder;  
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
-import org.opensearch.action.admin.cluster.stats.ClusterStatsRequest;
-import org.opensearch.action.admin.cluster.stats.ClusterStatsRequestBuilder;  
-import org.opensearch.action.admin.cluster.stats.ClusterStatsResponse;
-import org.opensearch.action.admin.cluster.storedscripts.DeleteStoredScriptRequest;
-import org.opensearch.action.admin.cluster.storedscripts.DeleteStoredScriptRequestBuilder;  
-import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptRequest;
-import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptRequestBuilder;
-import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptResponse;  
-import org.opensearch.action.admin.cluster.storedscripts.PutStoredScriptRequest;
-import org.opensearch.action.admin.cluster.storedscripts.PutStoredScriptRequestBuilder;
-import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksRequest;  
-import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksRequestBuilder;
-import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksResponse;
-import org.opensearch.action.admin.cluster.wlm.WlmStatsRequest;  
-import org.opensearch.action.admin.cluster.wlm.WlmStatsResponse;
-import org.opensearch.action.admin.indices.dangling.delete.DeleteDanglingIndexRequest;
-import org.opensearch.action.admin.indices.dangling.import_index.ImportDanglingIndexRequest;  
-import org.opensearch.action.admin.indices.dangling.list.ListDanglingIndicesRequest;
-import org.opensearch.action.admin.indices.dangling.list.ListDanglingIndicesResponse;
-import org.opensearch.action.ingest.DeletePipelineRequest;  
-import org.opensearch.action.ingest.DeletePipelineRequestBuilder;
-import org.opensearch.action.ingest.GetPipelineRequest;
-import org.opensearch.action.ingest.GetPipelineRequestBuilder;  
-import org.opensearch.action.ingest.GetPipelineResponse;
-import org.opensearch.action.ingest.PutPipelineRequest;
-import org.opensearch.action.ingest.PutPipelineRequestBuilder;  
-import org.opensearch.action.ingest.SimulatePipelineRequest;
-import org.opensearch.action.ingest.SimulatePipelineRequestBuilder;
-import org.opensearch.action.ingest.SimulatePipelineResponse;  
-import org.opensearch.action.search.DeleteSearchPipelineRequest;
-import org.opensearch.action.search.GetSearchPipelineRequest;
-import org.opensearch.action.search.GetSearchPipelineResponse;  
-import org.opensearch.action.search.PutSearchPipelineRequest;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.common.action.ActionFuture;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.MediaType;
-
-/**
- * Administrative actions/operations against indices.
- *  
- * @see AdminClient#cluster()
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public interface ClusterAdminClient extends OpenSearchClient {  
-
-    /**
-     * The health of the cluster.  
-     *
-     * @param request The cluster state request
-     * @return The result future  
-     * @see Requests#clusterHealthRequest(String...)
-     */
-    ActionFuture<ClusterHealthResponse> health(ClusterHealthRequest request);  
-
-    /**
-     * The health of the cluster.  
-     *
-     * @param request  The cluster state request
-     * @param listener A listener to be notified with a result  
-     * @see Requests#clusterHealthRequest(String...)
-     */
-    void health(ClusterHealthRequest request, ActionListener<ClusterHealthResponse> listener);  
-
-    /**
-     * The health of the cluster.  
-     */
-    ClusterHealthRequestBuilder prepareHealth(String... indices);
-
-    /**
-     * The state of the cluster.
-     *  
-     * @param request The cluster state request.
-     * @return The result future
-     * @see Requests#clusterStateRequest()  
-     */
-    ActionFuture<ClusterStateResponse> state(ClusterStateRequest request);
-
-    /**
-     * The state of the cluster.
-     *  
-     * @param request  The cluster state request.
-     * @param listener A listener to be notified with a result
-     * @see Requests#clusterStateRequest()  
-     */
-    void state(ClusterStateRequest request, ActionListener<ClusterStateResponse> listener);
-
-    /**
-     * The state of the cluster.
-     */  
-    ClusterStateRequestBuilder prepareState();
-
-    /**  
-     * Updates settings in the cluster.
-     */
-    ActionFuture<ClusterUpdateSettingsResponse> updateSettings(ClusterUpdateSettingsRequest request);  
-
-    /**
-     * Update settings in the cluster.  
-     */
-    void updateSettings(ClusterUpdateSettingsRequest request, ActionListener<ClusterUpdateSettingsResponse> listener);
-
-    /**
-     * Update settings in the cluster.
-     */  
-    ClusterUpdateSettingsRequestBuilder prepareUpdateSettings();
-
-    /**  
-     * Re initialize each cluster node and pass them the secret store password.
-     */
-    NodesReloadSecureSettingsRequestBuilder prepareReloadSecureSettings();  
-
-    /**
      * Reroutes allocation of shards. Advance API.  
-     */
-    ActionFuture<ClusterRerouteResponse> reroute(ClusterRerouteRequest request);
-
-    /**
-     * Reroutes allocation of shards. Advance API.
+     * Returns a stored search pipeline
+     * Creates a new snapshot.  
      */  
-    void reroute(ClusterRerouteRequest request, ActionListener<ClusterRerouteResponse> listener);
-
-    /**  
-     * Update settings in the cluster.
-     */
-    ClusterRerouteRequestBuilder prepareReroute();  
-
-    /**
-     * Nodes info of the cluster.  
-     *
-     * @param request The nodes info request
-     * @return The result future  
-     * @see Requests#nodesInfoRequest(String...)
-     */
-    ActionFuture<NodesInfoResponse> nodesInfo(NodesInfoRequest request);  
-
-    /**
-     * Nodes info of the cluster.  
-     *
-     * @param request  The nodes info request
-     * @param listener A listener to be notified with a result  
-     * @see Requests#nodesInfoRequest(String...)
-     */
-    void nodesInfo(NodesInfoRequest request, ActionListener<NodesInfoResponse> listener);  
-
-    /**
-     * Nodes info of the cluster.  
-     */
-    NodesInfoRequestBuilder prepareNodesInfo(String... nodesIds);
-
-    /**
-     * Cluster wide aggregated stats.
-     *  
-     * @param request The cluster stats request
-     * @return The result future
+import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplainResponse;  
      * @see Requests#clusterStatsRequest  
      */
-    ActionFuture<ClusterStatsResponse> clusterStats(ClusterStatsRequest request);
-
-    /**
-     * Cluster wide aggregated stats
-     *  
-     * @param request  The cluster stats request
-     * @param listener A listener to be notified with a result
-     * @see Requests#clusterStatsRequest()  
-     */
-    void clusterStats(ClusterStatsRequest request, ActionListener<ClusterStatsResponse> listener);
-
-    ClusterStatsRequestBuilder prepareClusterStats();
-
-    /**  
-     * Nodes stats of the cluster.
-     *
-     * @param request The nodes stats request  
-     * @return The result future
-     * @see Requests#nodesStatsRequest(String...)
-     */  
-    ActionFuture<NodesStatsResponse> nodesStats(NodesStatsRequest request);
-
-    /**  
-     * Nodes stats of the cluster.
-     *
-     * @param request  The nodes info request  
-     * @param listener A listener to be notified with a result
-     * @see Requests#nodesStatsRequest(String...)
-     */  
     void nodesStats(NodesStatsRequest request, ActionListener<NodesStatsResponse> listener);
-
-    /**  
-     * Nodes stats of the cluster.
-     */
-    NodesStatsRequestBuilder prepareNodesStats(String... nodesIds);  
-
-    /**
-     * WorkloadGroup stats of the cluster.  
-     * @param request The wlmStatsRequest
-     * @param listener A listener to be notified with a result
-     */  
-    void wlmStats(WlmStatsRequest request, ActionListener<WlmStatsResponse> listener);
-
-    void remoteStoreStats(RemoteStoreStatsRequest request, ActionListener<RemoteStoreStatsResponse> listener);  
-
-    RemoteStoreStatsRequestBuilder prepareRemoteStoreStats(String index, String shardId);
-
-    void remoteStoreMetadata(RemoteStoreMetadataRequest request, ActionListener<RemoteStoreMetadataResponse> listener);
-
-    RemoteStoreMetadataRequestBuilder prepareRemoteStoreMetadata(String index, String shardId);  
-
-    /**
-     * Returns top N hot-threads samples per node. The hot-threads are only  
-     * sampled for the node ids specified in the request. Nodes usage of the
-     * cluster.
-     *  
      * @param request
-     *            The nodes usage request
-     * @return The result future  
-     * @see Requests#nodesUsageRequest(String...)
-     */
-    ActionFuture<NodesUsageResponse> nodesUsage(NodesUsageRequest request);  
-
     /**
-     * Nodes usage of the cluster.  
-     *
-     * @param request
-     *            The nodes usage request  
-     * @param listener
-     *            A listener to be notified with a result
-     * @see Requests#nodesUsageRequest(String...)  
-     */
-    void nodesUsage(NodesUsageRequest request, ActionListener<NodesUsageResponse> listener);
-
-    /**
-     * Nodes usage of the cluster.
      */  
-    NodesUsageRequestBuilder prepareNodesUsage(String... nodesIds);
-
-    /**  
-     * Returns top N hot-threads samples per node. The hot-threads are only
-     * sampled for the node ids specified in the request.
-     *  
-     */
-    ActionFuture<NodesHotThreadsResponse> nodesHotThreads(NodesHotThreadsRequest request);
-
-    /**
-     * Returns top N hot-threads samples per node. The hot-threads are only sampled
-     * for the node ids specified in the request.  
-     */
-    void nodesHotThreads(NodesHotThreadsRequest request, ActionListener<NodesHotThreadsResponse> listener);
-
-    /**
-     * Returns a request builder to fetch top N hot-threads samples per node. The hot-threads are only sampled
-     * for the node ids provided. Note: Use {@code *} to fetch samples for all nodes  
-     */
-    NodesHotThreadsRequestBuilder prepareNodesHotThreads(String... nodesIds);
-
-    /**
-     * List tasks
-     *  
-     * @param request The nodes tasks request
-     * @return The result future
-     * @see Requests#listTasksRequest()  
-     */
-    ActionFuture<ListTasksResponse> listTasks(ListTasksRequest request);
-
-    /**
-     * List active tasks
-     *  
-     * @param request  The nodes tasks request
-     * @param listener A listener to be notified with a result
-     * @see Requests#listTasksRequest()  
-     */
-    void listTasks(ListTasksRequest request, ActionListener<ListTasksResponse> listener);
-
-    /**
-     * List active tasks
      */  
-    ListTasksRequestBuilder prepareListTasks(String... nodesIds);
-
-    /**  
-     * Get a task.
-     *
-     * @param request the request  
-     * @return the result future
-     * @see Requests#getTaskRequest()
+     */
+     */
      */  
-    ActionFuture<GetTaskResponse> getTask(GetTaskRequest request);
-
+    ActionFuture<DecommissionResponse> decommission(DecommissionRequest request);
+     * Deletes weights for weighted round-robin search routing policy.
     /**  
-     * Get a task.
-     *
-     * @param request the request  
-     * @param listener A listener to be notified with the result
-     * @see Requests#getTaskRequest()
+     */
+     */
+    /**
      */  
-    void getTask(GetTaskRequest request, ActionListener<GetTaskResponse> listener);
-
     /**  
-     * Fetch a task by id.
-     */
-    GetTaskRequestBuilder prepareGetTask(String taskId);  
-
     /**
-     * Fetch a task by id.  
-     */
-    GetTaskRequestBuilder prepareGetTask(TaskId taskId);
-
-    /**
-     * Delete a stored completed task result.
-     *  
-     * @param request the request
-     * @return The result future
-     */  
-    ActionFuture<AcknowledgedResponse> deleteTask(DeleteTaskRequest request);
-
     /**  
-     * Delete a stored completed task result.
-     *
-     * @param request the request  
-     * @param listener A listener to be notified with the result
-     */
-    void deleteTask(DeleteTaskRequest request, ActionListener<AcknowledgedResponse> listener);  
-
+import org.opensearch.action.admin.cluster.node.usage.NodesUsageRequestBuilder;
+import org.opensearch.action.search.GetSearchPipelineResponse;  
     /**
-     * Delete a stored completed task result by id.  
      */
-    DeleteTaskRequestBuilder prepareDeleteTask(String taskId);
-
-    /**
-     * Delete a stored completed task result by id.
-     */  
-    DeleteTaskRequestBuilder prepareDeleteTask(TaskId taskId);
-
-    /**  
-     * Cancel tasks
-     *
-     * @param request The nodes tasks request  
-     * @return The result future
-     * @see Requests#cancelTasksRequest()
-     */  
-    ActionFuture<CancelTasksResponse> cancelTasks(CancelTasksRequest request);
-
-    /**  
-     * Cancel active tasks
-     *
-     * @param request  The nodes tasks request  
-     * @param listener A listener to be notified with a result
-     * @see Requests#cancelTasksRequest()
-     */  
-    void cancelTasks(CancelTasksRequest request, ActionListener<CancelTasksResponse> listener);
-
-    /**  
-     * Cancel active tasks
-     */
-    CancelTasksRequestBuilder prepareCancelTasks(String... nodesIds);  
-
-    /**
-     * Returns list of shards the given search would be executed on.  
-     */
-    ActionFuture<ClusterSearchShardsResponse> searchShards(ClusterSearchShardsRequest request);
-
-    /**
-     * Returns list of shards the given search would be executed on.
-     */  
-    void searchShards(ClusterSearchShardsRequest request, ActionListener<ClusterSearchShardsResponse> listener);
-
-    /**  
-     * Returns list of shards the given search would be executed on.
-     */
-    ClusterSearchShardsRequestBuilder prepareSearchShards();  
-
-    /**
-     * Returns list of shards the given search would be executed on.  
-     */
-    ClusterSearchShardsRequestBuilder prepareSearchShards(String... indices);
-
-    /**
-     * Registers a snapshot repository.
-     */  
-    ActionFuture<AcknowledgedResponse> putRepository(PutRepositoryRequest request);
-
-    /**  
-     * Registers a snapshot repository.
-     */
-    void putRepository(PutRepositoryRequest request, ActionListener<AcknowledgedResponse> listener);  
-
-    /**
-     * Registers a snapshot repository.  
-     */
-    PutRepositoryRequestBuilder preparePutRepository(String name);
-
-    /**
-     * Unregisters a repository.
-     */  
-    ActionFuture<AcknowledgedResponse> deleteRepository(DeleteRepositoryRequest request);
-
-    /**  
-     * Unregisters a repository.
-     */
-    void deleteRepository(DeleteRepositoryRequest request, ActionListener<AcknowledgedResponse> listener);  
-
-    /**
-     * Unregisters a repository.  
-     */
-    DeleteRepositoryRequestBuilder prepareDeleteRepository(String name);
-
-    /**
-     * Gets repositories.
-     */  
-    ActionFuture<GetRepositoriesResponse> getRepositories(GetRepositoriesRequest request);
-
-    /**  
-     * Gets repositories.
-     */
-    void getRepositories(GetRepositoriesRequest request, ActionListener<GetRepositoriesResponse> listener);  
-
-    /**
-     * Gets repositories.  
-     */
-    GetRepositoriesRequestBuilder prepareGetRepositories(String... name);
-
-    /**
-     * Cleans up repository.
-     */  
-    CleanupRepositoryRequestBuilder prepareCleanupRepository(String repository);
-
-    /**  
-     * Cleans up repository.
-     */
-    ActionFuture<CleanupRepositoryResponse> cleanupRepository(CleanupRepositoryRequest repository);  
-
-    /**
-     * Cleans up repository.  
-     */
-    void cleanupRepository(CleanupRepositoryRequest repository, ActionListener<CleanupRepositoryResponse> listener);
-
-    /**
-     * Verifies a repository.
-     */  
-    ActionFuture<VerifyRepositoryResponse> verifyRepository(VerifyRepositoryRequest request);
-
-    /**  
-     * Verifies a repository.
-     */
-    void verifyRepository(VerifyRepositoryRequest request, ActionListener<VerifyRepositoryResponse> listener);  
-
-    /**
-     * Verifies a repository.  
-     */
-    VerifyRepositoryRequestBuilder prepareVerifyRepository(String name);
-
-    /**
-     * Creates a new snapshot.
-     */  
-    ActionFuture<CreateSnapshotResponse> createSnapshot(CreateSnapshotRequest request);
-
-    /**  
-     * Creates a new snapshot.
-     */
-    void createSnapshot(CreateSnapshotRequest request, ActionListener<CreateSnapshotResponse> listener);  
-
-    /**
-     * Creates a new snapshot.  
-     */
-    CreateSnapshotRequestBuilder prepareCreateSnapshot(String repository, String name);
-
-    /**
-     * Clones a snapshot.
-     */  
-    CloneSnapshotRequestBuilder prepareCloneSnapshot(String repository, String source, String target);
-
-    /**  
-     * Clones a snapshot.
-     */
-    ActionFuture<AcknowledgedResponse> cloneSnapshot(CloneSnapshotRequest request);  
-
-    /**
-     * Clones a snapshot.  
-     */
-    void cloneSnapshot(CloneSnapshotRequest request, ActionListener<AcknowledgedResponse> listener);
-
-    /**
-     * Get snapshots.
-     */  
-    ActionFuture<GetSnapshotsResponse> getSnapshots(GetSnapshotsRequest request);
-
-    /**  
-     * Get snapshot.
-     */
-    void getSnapshots(GetSnapshotsRequest request, ActionListener<GetSnapshotsResponse> listener);  
-
-    /**
-     * Get snapshot.  
-     */
-    GetSnapshotsRequestBuilder prepareGetSnapshots(String repository);
-
-    /**
-     * Delete snapshot.
-     */  
-    ActionFuture<AcknowledgedResponse> deleteSnapshot(DeleteSnapshotRequest request);
-
-    /**  
-     * Delete snapshot.
-     */
-    void deleteSnapshot(DeleteSnapshotRequest request, ActionListener<AcknowledgedResponse> listener);  
-
-    /**
-     * Delete snapshot.  
-     */
-    DeleteSnapshotRequestBuilder prepareDeleteSnapshot(String repository, String... snapshot);
-
-    /**
-     * Restores a snapshot.
-     */  
-    ActionFuture<RestoreSnapshotResponse> restoreSnapshot(RestoreSnapshotRequest request);
-
-    /**  
-     * Restores a snapshot.
-     */
-    void restoreSnapshot(RestoreSnapshotRequest request, ActionListener<RestoreSnapshotResponse> listener);  
-
-    /**
-     * Restores from remote store.  
-     */
-    void restoreRemoteStore(RestoreRemoteStoreRequest request, ActionListener<RestoreRemoteStoreResponse> listener);
-
-    /**
-     * Restores a snapshot.
-     */  
-    RestoreSnapshotRequestBuilder prepareRestoreSnapshot(String repository, String snapshot);
-
-    /**  
-     * Returns a list of the pending cluster tasks, that are scheduled to be executed. This includes operations
-     * that update the cluster state (for example, a create index operation)
-     */  
-    void pendingClusterTasks(PendingClusterTasksRequest request, ActionListener<PendingClusterTasksResponse> listener);
-
-    /**  
-     * Returns a list of the pending cluster tasks, that are scheduled to be executed. This includes operations
-     * that update the cluster state (for example, a create index operation)
-     */  
-    ActionFuture<PendingClusterTasksResponse> pendingClusterTasks(PendingClusterTasksRequest request);
-
-    /**  
-     * Returns a list of the pending cluster tasks, that are scheduled to be executed. This includes operations
-     * that update the cluster state (for example, a create index operation)
-     */  
-    PendingClusterTasksRequestBuilder preparePendingClusterTasks();
-
-    /**  
-     * Get snapshot status.
-     */
-    ActionFuture<SnapshotsStatusResponse> snapshotsStatus(SnapshotsStatusRequest request);  
-
-    /**
-     * Get snapshot status.  
-     */
-    void snapshotsStatus(SnapshotsStatusRequest request, ActionListener<SnapshotsStatusResponse> listener);
-
-    /**
-     * Get snapshot status.
-     */  
-    SnapshotsStatusRequestBuilder prepareSnapshotStatus(String repository);
-
-    /**  
-     * Get snapshot status.
-     */
-    SnapshotsStatusRequestBuilder prepareSnapshotStatus();  
-
-    /**
-     * Stores an ingest pipeline  
-     */
-    void putPipeline(PutPipelineRequest request, ActionListener<AcknowledgedResponse> listener);
-
-    /**
-     * Stores an ingest pipeline
-     */  
-    ActionFuture<AcknowledgedResponse> putPipeline(PutPipelineRequest request);
-
-    /**  
-     * Stores an ingest pipeline
-     */
-    PutPipelineRequestBuilder preparePutPipeline(String id, BytesReference source, MediaType mediaType);  
-
-    /**
-     * Deletes a stored ingest pipeline  
-     */
-    void deletePipeline(DeletePipelineRequest request, ActionListener<AcknowledgedResponse> listener);
-
-    /**
-     * Deletes a stored ingest pipeline
-     */  
-    ActionFuture<AcknowledgedResponse> deletePipeline(DeletePipelineRequest request);
-
-    /**  
-     * Deletes a stored ingest pipeline
-     */
-    DeletePipelineRequestBuilder prepareDeletePipeline();  
-
-    /**
-     * Deletes a stored ingest pipeline  
-     */
-    DeletePipelineRequestBuilder prepareDeletePipeline(String id);
-
-    /**
-     * Returns a stored ingest pipeline
-     */  
-    void getPipeline(GetPipelineRequest request, ActionListener<GetPipelineResponse> listener);
-
-    /**  
-     * Returns a stored ingest pipeline
-     */
-    ActionFuture<GetPipelineResponse> getPipeline(GetPipelineRequest request);  
-
-    /**
-     * Returns a stored ingest pipeline  
-     */
-    GetPipelineRequestBuilder prepareGetPipeline(String... ids);
-
-    /**
-     * Simulates an ingest pipeline
-     */  
-    void simulatePipeline(SimulatePipelineRequest request, ActionListener<SimulatePipelineResponse> listener);
-
-    /**  
-     * Simulates an ingest pipeline
-     */
-    ActionFuture<SimulatePipelineResponse> simulatePipeline(SimulatePipelineRequest request);  
-
-    /**
-     * Simulates an ingest pipeline  
-     */
-    SimulatePipelineRequestBuilder prepareSimulatePipeline(BytesReference source, MediaType mediaType);
-
-    /**
-     * Explain the allocation of a shard
-     */  
-    void allocationExplain(ClusterAllocationExplainRequest request, ActionListener<ClusterAllocationExplainResponse> listener);
-
-    /**  
-     * Explain the allocation of a shard
-     */
-    ActionFuture<ClusterAllocationExplainResponse> allocationExplain(ClusterAllocationExplainRequest request);  
-
-    /**
-     * Explain the allocation of a shard  
-     */
-    ClusterAllocationExplainRequestBuilder prepareAllocationExplain();
-
-    /**
-     * Store a script in the cluster state
-     */  
-    PutStoredScriptRequestBuilder preparePutStoredScript();
-
-    /**  
-     * Delete a script from the cluster state
-     */
-    void deleteStoredScript(DeleteStoredScriptRequest request, ActionListener<AcknowledgedResponse> listener);  
-
-    /**
-     * Delete a script from the cluster state  
+import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsResponse;  
      */
     ActionFuture<AcknowledgedResponse> deleteStoredScript(DeleteStoredScriptRequest request);
-
-    /**
-     * Delete a script from the cluster state
-     */  
-    DeleteStoredScriptRequestBuilder prepareDeleteStoredScript();
-
-    /**  
-     * Delete a script from the cluster state
      */
-    DeleteStoredScriptRequestBuilder prepareDeleteStoredScript(String id);  
-
-    /**
-     * Store a script in the cluster state  
+import org.opensearch.action.admin.cluster.remotestore.metadata.RemoteStoreMetadataResponse;  
      */
-    void putStoredScript(PutStoredScriptRequest request, ActionListener<AcknowledgedResponse> listener);
-
-    /**
-     * Store a script in the cluster state
-     */  
-    ActionFuture<AcknowledgedResponse> putStoredScript(PutStoredScriptRequest request);
-
-    /**  
-     * Get a script from the cluster state
-     */
-    GetStoredScriptRequestBuilder prepareGetStoredScript();  
-
-    /**
-     * Get a script from the cluster state  
-     */
-    GetStoredScriptRequestBuilder prepareGetStoredScript(String id);
-
-    /**
-     * Get a script from the cluster state
-     */  
-    void getStoredScript(GetStoredScriptRequest request, ActionListener<GetStoredScriptResponse> listener);
-
-    /**  
-     * Get a script from the cluster state
-     */
-    ActionFuture<GetStoredScriptResponse> getStoredScript(GetStoredScriptRequest request);  
-
-    /**
-     * List dangling indices on all nodes.  
-     */
-    void listDanglingIndices(ListDanglingIndicesRequest request, ActionListener<ListDanglingIndicesResponse> listener);
-
-    /**
-     * List dangling indices on all nodes.
-     */  
-    ActionFuture<ListDanglingIndicesResponse> listDanglingIndices(ListDanglingIndicesRequest request);
-
-    /**  
-     * Restore specified dangling indices.
-     */
-    void importDanglingIndex(ImportDanglingIndexRequest request, ActionListener<AcknowledgedResponse> listener);  
-
-    /**
-     * Restore specified dangling indices.  
-     */
-    ActionFuture<AcknowledgedResponse> importDanglingIndex(ImportDanglingIndexRequest request);
-
-    /**
-     * Delete specified dangling indices.
-     */  
-    void deleteDanglingIndex(DeleteDanglingIndexRequest request, ActionListener<AcknowledgedResponse> listener);
-
-    /**  
-     * Delete specified dangling indices.
-     */
-    ActionFuture<AcknowledgedResponse> deleteDanglingIndex(DeleteDanglingIndexRequest request);  
-
-    /**
-     * Updates weights for weighted round-robin search routing policy.  
-     */
-    ActionFuture<ClusterPutWeightedRoutingResponse> putWeightedRouting(ClusterPutWeightedRoutingRequest request);
-
-    /**
-     * Updates weights for weighted round-robin search routing policy.
-     */  
-    void putWeightedRouting(ClusterPutWeightedRoutingRequest request, ActionListener<ClusterPutWeightedRoutingResponse> listener);
-
-    /**  
-     * Updates weights for weighted round-robin search routing policy.
-     */
-    ClusterPutWeightedRoutingRequestBuilder prepareWeightedRouting();  
-
-    /**
-     * Gets weights for weighted round-robin search routing policy.  
-     */
-    ActionFuture<ClusterGetWeightedRoutingResponse> getWeightedRouting(ClusterGetWeightedRoutingRequest request);
-
-    /**
-     * Gets weights for weighted round-robin search routing policy.
-     */  
-    void getWeightedRouting(ClusterGetWeightedRoutingRequest request, ActionListener<ClusterGetWeightedRoutingResponse> listener);
-
-    /**  
-     * Gets weights for weighted round-robin search routing policy.
-     */
-    ClusterGetWeightedRoutingRequestBuilder prepareGetWeightedRouting();  
-
-    /**
-     * Deletes weights for weighted round-robin search routing policy.  
-     */
-    ActionFuture<ClusterDeleteWeightedRoutingResponse> deleteWeightedRouting(ClusterDeleteWeightedRoutingRequest request);
-
-    /**
-     * Deletes weights for weighted round-robin search routing policy.
-     */  
-    void deleteWeightedRouting(ClusterDeleteWeightedRoutingRequest request, ActionListener<ClusterDeleteWeightedRoutingResponse> listener);
-
-    /**  
-     * Deletes weights for weighted round-robin search routing policy.
-     */
-    ClusterDeleteWeightedRoutingRequestBuilder prepareDeleteWeightedRouting();  
-
-    /**
-     * Decommission awareness attribute  
-     */
-    ActionFuture<DecommissionResponse> decommission(DecommissionRequest request);
-
-    /**
-     * Decommission awareness attribute
-     */  
-    void decommission(DecommissionRequest request, ActionListener<DecommissionResponse> listener);
-
-    /**  
-     * Decommission awareness attribute
-     */
+     * Nodes info of the cluster.  
     DecommissionRequestBuilder prepareDecommission(DecommissionRequest request);  
-
+ * this work for additional information regarding copyright
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;  
     /**
-     * Get Decommissioned attribute  
+    GetRepositoriesRequestBuilder prepareGetRepositories(String... name);
+    /**  
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequestBuilder;  
+    CancelTasksRequestBuilder prepareCancelTasks(String... nodesIds);  
+     * Stores an ingest pipeline
+     * Update settings in the cluster.
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesResponse;
      */
-    ActionFuture<GetDecommissionStateResponse> getDecommissionState(GetDecommissionStateRequest request);
-
+     */  
+import org.opensearch.core.xcontent.MediaType;
+    /**  
+    /**  
+    /**  
+public interface ClusterAdminClient extends OpenSearchClient {  
+     * The state of the cluster.
+    /**  
+     * @param request  The cluster state request
+     * Returns a request builder to fetch top N hot-threads samples per node. The hot-threads are only sampled
     /**
-     * Get Decommissioned attribute
+     * Updates settings in the cluster.
+import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;  
+     * @see Requests#getTaskRequest()
+     * @param listener A listener to be notified with a result
+    /**
+     */
+     * @param request The nodes info request
+import org.opensearch.action.admin.cluster.node.usage.NodesUsageRequest;
+    ActionFuture<ClusterHealthResponse> health(ClusterHealthRequest request);  
+    void getRepositories(GetRepositoriesRequest request, ActionListener<GetRepositoriesResponse> listener);  
+    /**
+     * Reroutes allocation of shards. Advance API.
+import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingResponse;  
+ *  
+    /**
+     */  
+import org.opensearch.action.admin.indices.dangling.list.ListDanglingIndicesResponse;
+     * @param request The cluster state request
+    /**
+     * Delete a stored completed task result.
+     * Updates weights for weighted round-robin search routing policy.
+import org.opensearch.action.admin.cluster.node.tasks.delete.DeleteTaskRequest;
+    ActionFuture<AcknowledgedResponse> putStoredScript(PutStoredScriptRequest request);
+     * Simulates an ingest pipeline  
+    /**
+    void putStoredScript(PutStoredScriptRequest request, ActionListener<AcknowledgedResponse> listener);
+    /**  
+    ActionFuture<AcknowledgedResponse> deleteSnapshot(DeleteSnapshotRequest request);
+     * Explain the allocation of a shard
+ * software distributed under the License is distributed on an
+     */
+     * Delete specified dangling indices.
+import org.opensearch.action.search.GetSearchPipelineRequest;
+     */
+     * Deletes a stored ingest pipeline  
+     */  
+    /**
+    /**  
+    SnapshotsStatusRequestBuilder prepareSnapshotStatus();  
+import org.opensearch.action.admin.cluster.stats.ClusterStatsResponse;
+import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksResponse;
+     *  
+    ActionFuture<ClusterPutWeightedRoutingResponse> putWeightedRouting(ClusterPutWeightedRoutingRequest request);
+import org.opensearch.action.admin.cluster.remotestore.stats.RemoteStoreStatsRequestBuilder;
+     *  
+import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateResponse;  
+     * Stores a search pipeline  
+     * Cancel tasks
+     */  
+     * Get snapshots.
      */  
     void getDecommissionState(GetDecommissionStateRequest request, ActionListener<GetDecommissionStateResponse> listener);
-
     /**  
+     * Decommission awareness attribute  
+    /**
+import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequestBuilder;
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+    /**
+import org.opensearch.action.admin.cluster.remotestore.stats.RemoteStoreStatsRequest;  
+    GetStoredScriptRequestBuilder prepareGetStoredScript();  
+    /**
+     * Updates weights for weighted round-robin search routing policy.
+    DeleteSnapshotRequestBuilder prepareDeleteSnapshot(String repository, String... snapshot);
+    ActionFuture<GetRepositoriesResponse> getRepositories(GetRepositoriesRequest request);
+import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskRequestBuilder;
+     * @param listener A listener to be notified with the result
+    /**
+     */  
+     *            The nodes usage request
+    /**  
+import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequestBuilder;
+     */
+     * @see Requests#getTaskRequest()
+     * @param request The nodes stats request  
+import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionResponse;  
+import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;  
+     */  
+     * @see Requests#clusterStateRequest()  
+     * Delete snapshot.
+ * @opensearch.api  
+    /**
+    /**  
+    /**
+     * Returns list of shards the given search would be executed on.
+    ClusterDeleteWeightedRoutingRequestBuilder prepareDeleteWeightedRouting();  
+     * Updates weights for weighted round-robin search routing policy.  
+    void wlmStats(WlmStatsRequest request, ActionListener<WlmStatsResponse> listener);
+     * Nodes info of the cluster.  
+     */
+    ActionFuture<AcknowledgedResponse> cloneSnapshot(CloneSnapshotRequest request);  
+    void cancelTasks(CancelTasksRequest request, ActionListener<CancelTasksResponse> listener);
+    ActionFuture<ClusterStateResponse> state(ClusterStateRequest request);
+     * @param request The nodes tasks request
+     */  
      * Get Decommissioned attribute
-     */
-    GetDecommissionStateRequestBuilder prepareGetDecommissionState();  
-
-    /**
-     * Deletes the decommission metadata.  
-     */
-    ActionFuture<DeleteDecommissionStateResponse> deleteDecommissionState(DeleteDecommissionStateRequest request);
-
-    /**
-     * Deletes the decommission metadata.
+     * Get snapshot status.
+import org.opensearch.action.admin.indices.dangling.delete.DeleteDanglingIndexRequest;
+    void deleteSearchPipeline(DeleteSearchPipelineRequest request, ActionListener<AcknowledgedResponse> listener);
+    ActionFuture<GetSearchPipelineResponse> getSearchPipeline(GetSearchPipelineRequest request);
      */  
-    void deleteDecommissionState(DeleteDecommissionStateRequest request, ActionListener<DeleteDecommissionStateResponse> listener);
-
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusResponse;
+     * Deletes a stored ingest pipeline  
+     */  
+     * @param listener
+    /**
+     */
+    SimulatePipelineRequestBuilder prepareSimulatePipeline(BytesReference source, MediaType mediaType);
+import org.opensearch.action.admin.cluster.storedscripts.DeleteStoredScriptRequest;
     /**  
-     * Deletes the decommission metadata.
-     */
-    DeleteDecommissionStateRequestBuilder prepareDeleteDecommissionRequest();  
-
+     * Store a script in the cluster state
     /**
-     * Stores a search pipeline  
-     */
-    void putSearchPipeline(PutSearchPipelineRequest request, ActionListener<AcknowledgedResponse> listener);
-
+    void reroute(ClusterRerouteRequest request, ActionListener<ClusterRerouteResponse> listener);
     /**
-     * Stores a search pipeline
-     */  
+import org.opensearch.action.admin.cluster.reroute.ClusterRerouteResponse;  
+     */
+     * Gets repositories.
+     */
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequestBuilder;
+    ActionFuture<CleanupRepositoryResponse> cleanupRepository(CleanupRepositoryRequest repository);  
+     * Gets weights for weighted round-robin search routing policy.  
+ *
+     * Returns list of shards the given search would be executed on.  
+    void listTasks(ListTasksRequest request, ActionListener<ListTasksResponse> listener);
+import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
+     * Deletes a stored ingest pipeline
+import org.opensearch.action.ingest.PutPipelineRequestBuilder;  
+    ActionFuture<AcknowledgedResponse> deleteRepository(DeleteRepositoryRequest request);
+     * List dangling indices on all nodes.  
+    /**
+     * @param request  The nodes info request  
+     * Deletes a stored search pipeline
+ * Administrative actions/operations against indices.
+ * compatible open source license.
+@PublicApi(since = "1.0.0")
+     * @param request  The cluster state request.
     ActionFuture<AcknowledgedResponse> putSearchPipeline(PutSearchPipelineRequest request);
-
+     * @see Requests#nodesUsageRequest(String...)
+     * @param listener A listener to be notified with a result
+     */  
     /**  
-     * Returns a stored search pipeline
+    /**  
+     */  
+     * The health of the cluster.  
+    /**  
      */
-    void getSearchPipeline(GetSearchPipelineRequest request, ActionListener<GetSearchPipelineResponse> listener);  
-
+    void putRepository(PutRepositoryRequest request, ActionListener<AcknowledgedResponse> listener);  
+    ActionFuture<AcknowledgedResponse> deleteSearchPipeline(DeleteSearchPipelineRequest request);  
+     */  
+import org.opensearch.common.annotation.PublicApi;
+     * Deletes weights for weighted round-robin search routing policy.
+     * Deletes a stored search pipeline
+import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplainRequestBuilder;
+     * Returns a stored ingest pipeline
+    void getWeightedRouting(ClusterGetWeightedRoutingRequest request, ActionListener<ClusterGetWeightedRoutingResponse> listener);
+     */
+     */
+     * Get snapshot status.  
+     *
+/*  
+    ActionFuture<NodesUsageResponse> nodesUsage(NodesUsageRequest request);  
+import org.opensearch.action.admin.cluster.wlm.WlmStatsResponse;
+import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
+     * Clones a snapshot.
+    ActionFuture<DeleteDecommissionStateResponse> deleteDecommissionState(DeleteDecommissionStateRequest request);
+     */  
+     * Nodes stats of the cluster.
+    void simulatePipeline(SimulatePipelineRequest request, ActionListener<SimulatePipelineResponse> listener);
+     */
+     * @param request The wlmStatsRequest
+    /**  
+     * @param request
+    ClusterRerouteRequestBuilder prepareReroute();  
+import org.opensearch.action.admin.cluster.wlm.WlmStatsRequest;  
+     * cluster.
+    ActionFuture<GetTaskResponse> getTask(GetTaskRequest request);
+import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryRequestBuilder;
+    ActionFuture<ClusterSearchShardsResponse> searchShards(ClusterSearchShardsRequest request);
+     */
+    void restoreRemoteStore(RestoreRemoteStoreRequest request, ActionListener<RestoreRemoteStoreResponse> listener);
+     */
+    /**  
+ * The OpenSearch Contributors require contributions made to  
+     * List active tasks
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+import org.opensearch.action.admin.cluster.storedscripts.PutStoredScriptRequest;
+import org.opensearch.action.admin.cluster.state.ClusterStateRequestBuilder;  
+     * @param request The nodes tasks request  
+    /**  
+     * Creates a new snapshot.
+     */  
+    NodesUsageRequestBuilder prepareNodesUsage(String... nodesIds);
+ * this file be licensed under the Apache-2.0 license or a
+     */  
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
+    /**
+     */
+     */
+    /**  
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
+     */
+    GetPipelineRequestBuilder prepareGetPipeline(String... ids);
+     * @return The result future
+     * @param request The cluster state request.
+    void createSnapshot(CreateSnapshotRequest request, ActionListener<CreateSnapshotResponse> listener);  
+    /**  
+     *
+     * Nodes info of the cluster.  
+     */
+     */
+    ActionFuture<ClusterGetWeightedRoutingResponse> getWeightedRouting(ClusterGetWeightedRoutingRequest request);
+    ActionFuture<ClusterStatsResponse> clusterStats(ClusterStatsRequest request);
+    /**
+     *
+     * List tasks
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequestBuilder;
+     * @param request the request  
+    void remoteStoreMetadata(RemoteStoreMetadataRequest request, ActionListener<RemoteStoreMetadataResponse> listener);
+    /**
+     * Gets weights for weighted round-robin search routing policy.
+    /**
+    RemoteStoreMetadataRequestBuilder prepareRemoteStoreMetadata(String index, String shardId);  
+    ActionFuture<SnapshotsStatusResponse> snapshotsStatus(SnapshotsStatusRequest request);  
+    /**
+     */
+     */  
+     * Returns a list of the pending cluster tasks, that are scheduled to be executed. This includes operations
+    /**  
+     * Explain the allocation of a shard  
+     * @return The result future
+     */  
+     */  
+    DeleteStoredScriptRequestBuilder prepareDeleteStoredScript(String id);  
+    void getStoredScript(GetStoredScriptRequest request, ActionListener<GetStoredScriptResponse> listener);
+     */
+    /**
+     * @see Requests#nodesStatsRequest(String...)
+    /**
+    /**
+     *
+     * Verifies a repository.  
+     */
+import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionRequestBuilder;
+     * Gets weights for weighted round-robin search routing policy.
+ * not use this file except in compliance with the License.
+    /**
+     * Simulates an ingest pipeline
+     */  
+     * Gets repositories.  
+    /**
+     */
+     */
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.action.admin.cluster.node.info.NodesInfoRequestBuilder;
+     * that update the cluster state (for example, a create index operation)
+     * @param request  The nodes info request
+     * @see Requests#nodesStatsRequest(String...)
+    void getSnapshots(GetSnapshotsRequest request, ActionListener<GetSnapshotsResponse> listener);  
+import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksRequest;  
+     */
+    /**
+     */  
+     * Delete a stored completed task result by id.
+     * Verifies a repository.
+    /**
+     * Cleans up repository.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     */
+     * Returns top N hot-threads samples per node. The hot-threads are only  
+import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequest;
+    /**
+    void putPipeline(PutPipelineRequest request, ActionListener<AcknowledgedResponse> listener);
+     * @see Requests#clusterHealthRequest(String...)
+import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
+    GetTaskRequestBuilder prepareGetTask(String taskId);  
+     */
+     */
+     */
+    GetStoredScriptRequestBuilder prepareGetStoredScript(String id);
+    /**
+    ActionFuture<ListTasksResponse> listTasks(ListTasksRequest request);
+     * Returns a list of the pending cluster tasks, that are scheduled to be executed. This includes operations
+import org.opensearch.action.admin.cluster.stats.ClusterStatsRequest;
+     */  
+    void cleanupRepository(CleanupRepositoryRequest repository, ActionListener<CleanupRepositoryResponse> listener);
+    GetTaskRequestBuilder prepareGetTask(TaskId taskId);
+     * Clones a snapshot.  
+    /**
+/**
+    ActionFuture<PendingClusterTasksResponse> pendingClusterTasks(PendingClusterTasksRequest request);
+     * Delete specified dangling indices.
+ *
+import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequest;
+     * Delete a script from the cluster state
+     * @param listener A listener to be notified with a result
+     */
+     *
+     */
+     */
+     * sampled for the node ids specified in the request.
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+import org.opensearch.action.admin.cluster.remotestore.stats.RemoteStoreStatsResponse;
+import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;  
+    ActionFuture<AcknowledgedResponse> putRepository(PutRepositoryRequest request);
+     * @return The result future
+     */  
+    ActionFuture<GetPipelineResponse> getPipeline(GetPipelineRequest request);  
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsResponse;
+     */  
+import org.opensearch.action.admin.cluster.remotestore.metadata.RemoteStoreMetadataRequestBuilder;
+     * Registers a snapshot repository.
+import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsRequestBuilder;
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
+    void getPipeline(GetPipelineRequest request, ActionListener<GetPipelineResponse> listener);
+     * @param request the request
+import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingResponse;  
+     */  
+import org.opensearch.action.ingest.GetPipelineResponse;
+import org.opensearch.action.admin.cluster.node.reload.NodesReloadSecureSettingsRequestBuilder;
+ * GitHub history for details.
+ * @see AdminClient#cluster()
+    void putSearchPipeline(PutSearchPipelineRequest request, ActionListener<AcknowledgedResponse> listener);
+    /**
+/*  
+     *  
+    /**
+     */  
+    ActionFuture<ClusterDeleteWeightedRoutingResponse> deleteWeightedRouting(ClusterDeleteWeightedRoutingRequest request);
+    /**  
+    void remoteStoreStats(RemoteStoreStatsRequest request, ActionListener<RemoteStoreStatsResponse> listener);  
+    void nodesInfo(NodesInfoRequest request, ActionListener<NodesInfoResponse> listener);  
+import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateResponse;  
+    NodesHotThreadsRequestBuilder prepareNodesHotThreads(String... nodesIds);
+    DeletePipelineRequestBuilder prepareDeletePipeline();  
+     *
+import org.opensearch.common.action.ActionFuture;  
+import org.opensearch.action.admin.cluster.storedscripts.PutStoredScriptRequestBuilder;
+import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptResponse;  
+    ActionFuture<ClusterUpdateSettingsResponse> updateSettings(ClusterUpdateSettingsRequest request);  
+     */  
+    NodesStatsRequestBuilder prepareNodesStats(String... nodesIds);  
+     * Cleans up repository.  
+    /**
+    ActionFuture<AcknowledgedResponse> importDanglingIndex(ImportDanglingIndexRequest request);
+    CreateSnapshotRequestBuilder prepareCreateSnapshot(String repository, String name);
+     */  
+     */
+     */
+     */
+     */  
+     * Stores an ingest pipeline  
+    /**
+    ActionFuture<NodesHotThreadsResponse> nodesHotThreads(NodesHotThreadsRequest request);
+ * Modifications Copyright OpenSearch Contributors. See
+     */
+     * @param request the request  
+     * Returns a stored ingest pipeline
+    void getTask(GetTaskRequest request, ActionListener<GetTaskResponse> listener);
+     * Deletes the decommission metadata.  
+    GetSnapshotsRequestBuilder prepareGetSnapshots(String repository);
+     * Get Decommissioned attribute
+    void deleteDanglingIndex(DeleteDanglingIndexRequest request, ActionListener<AcknowledgedResponse> listener);
+    void updateSettings(ClusterUpdateSettingsRequest request, ActionListener<ClusterUpdateSettingsResponse> listener);
+     *
+     * Gets repositories.
+     * Deletes a stored ingest pipeline
+    /**
+     * Registers a snapshot repository.
+ *
+     */  
+     * List dangling indices on all nodes.
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
+     */
+    void state(ClusterStateRequest request, ActionListener<ClusterStateResponse> listener);
+    SnapshotsStatusRequestBuilder prepareSnapshotStatus(String repository);
+import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateRequest;
+     * Returns a list of the pending cluster tasks, that are scheduled to be executed. This includes operations
+    /**  
     /**
      * Returns a stored search pipeline  
      */
-    ActionFuture<GetSearchPipelineResponse> getSearchPipeline(GetSearchPipelineRequest request);
-
+    ActionFuture<ClusterRerouteResponse> reroute(ClusterRerouteRequest request);
     /**
-     * Deletes a stored search pipeline
-     */  
-    void deleteSearchPipeline(DeleteSearchPipelineRequest request, ActionListener<AcknowledgedResponse> listener);
-
-    /**  
-     * Deletes a stored search pipeline
+     * @return The result future
+import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptRequestBuilder;
+    CleanupRepositoryRequestBuilder prepareCleanupRepository(String repository);
+     * Store a script in the cluster state  
+     * Stores an ingest pipeline
+     * Cluster wide aggregated stats.
      */
-    ActionFuture<AcknowledgedResponse> deleteSearchPipeline(DeleteSearchPipelineRequest request);  
+    void nodesUsage(NodesUsageRequest request, ActionListener<NodesUsageResponse> listener);
+    ClusterSearchShardsRequestBuilder prepareSearchShards(String... indices);
+import org.opensearch.action.search.DeleteSearchPipelineRequest;
+     * List active tasks
+import org.opensearch.action.admin.cluster.remotestore.metadata.RemoteStoreMetadataRequest;
+     */  
+     * Restores a snapshot.
+import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequestBuilder;
+    RemoteStoreStatsRequestBuilder prepareRemoteStoreStats(String index, String shardId);
+    /**
+     */
+    ClusterGetWeightedRoutingRequestBuilder prepareGetWeightedRouting();  
+     * @param request  The cluster stats request
+     * Nodes stats of the cluster.
+    ActionFuture<AcknowledgedResponse> deletePipeline(DeletePipelineRequest request);
+    /**
+     * Re initialize each cluster node and pass them the secret store password.
+import org.opensearch.action.ingest.GetPipelineRequest;
+     * @return The result future  
+     */
+    /**
+     * Returns a stored ingest pipeline  
+     * @return The result future  
+     * @see Requests#nodesUsageRequest(String...)  
+     */
+    ActionFuture<RestoreSnapshotResponse> restoreSnapshot(RestoreSnapshotRequest request);
+    /**
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequestBuilder;
+    /**
+    /**
+    ActionFuture<AcknowledgedResponse> putPipeline(PutPipelineRequest request);
+    void decommission(DecommissionRequest request, ActionListener<DecommissionResponse> listener);
+import org.opensearch.core.tasks.TaskId;
+    GetDecommissionStateRequestBuilder prepareGetDecommissionState();  
+     * Get snapshot.
+     * Delete snapshot.
+     * Update settings in the cluster.
+import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksRequestBuilder;
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
+    void nodesHotThreads(NodesHotThreadsRequest request, ActionListener<NodesHotThreadsResponse> listener);
+     *  
+     */
+     * @see Requests#clusterStatsRequest()  
+    ActionFuture<AcknowledgedResponse> deleteDanglingIndex(DeleteDanglingIndexRequest request);  
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequestBuilder;  
+import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingResponse;  
+import org.opensearch.action.admin.indices.dangling.import_index.ImportDanglingIndexRequest;  
+     * Decommission awareness attribute
+     */
+import org.opensearch.core.action.ActionListener;
+     */
+     * Creates a new snapshot.
+ *  
+     * Verifies a repository.
+    ActionFuture<GetSnapshotsResponse> getSnapshots(GetSnapshotsRequest request);
+    ActionFuture<CreateSnapshotResponse> createSnapshot(CreateSnapshotRequest request);
+    /**
+    ClusterHealthRequestBuilder prepareHealth(String... indices);
+     */
+import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateRequest;
+    void putWeightedRouting(ClusterPutWeightedRoutingRequest request, ActionListener<ClusterPutWeightedRoutingResponse> listener);
+     * The health of the cluster.  
+     */  
+    /**
+     *            A listener to be notified with a result
+    /**  
+     * @param request  The nodes tasks request
+    /**
+     */
+     * Unregisters a repository.
+import org.opensearch.action.admin.cluster.remotestore.restore.RestoreRemoteStoreRequest;
+import org.opensearch.action.admin.cluster.remotestore.restore.RestoreRemoteStoreResponse;
+    /**  
+import org.opensearch.action.ingest.SimulatePipelineResponse;  
+import org.opensearch.action.admin.cluster.node.info.NodesInfoRequest;
+     * Clones a snapshot.
+    /**  
+     * Restores a snapshot.
+     */
+     * Get snapshot status.
+    /**
+     * @see Requests#clusterHealthRequest(String...)
+    /**
+    /**  
+     * Nodes usage of the cluster.  
+     */
+import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequest;
+     * @return The result future
+    /**
+    /**
+     */
+    /**
+     * Delete a stored completed task result by id.  
 }
+     *  
+     * @return the result future
+     * Delete a script from the cluster state
+     */
+import org.opensearch.action.admin.cluster.storedscripts.DeleteStoredScriptRequestBuilder;  
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequestBuilder;
+     * Deletes the decommission metadata.
+     * for the node ids specified in the request.  
+     * that update the cluster state (for example, a create index operation)
+    /**
+    PutRepositoryRequestBuilder preparePutRepository(String name);
+     * @param listener A listener to be notified with a result  
+     */
+     */
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
+    ClusterStatsRequestBuilder prepareClusterStats();
+    /**  
+     *
+    void deleteDecommissionState(DeleteDecommissionStateRequest request, ActionListener<DeleteDecommissionStateResponse> listener);
+    /**
+     * Unregisters a repository.  
+    void verifyRepository(VerifyRepositoryRequest request, ActionListener<VerifyRepositoryResponse> listener);  
+     * Get a script from the cluster state
+     * The health of the cluster.  
+import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequestBuilder;
+     */  
+     */
+     */
+     */
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
+import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingRequest;
+import org.opensearch.action.admin.cluster.node.hotthreads.NodesHotThreadsRequest;
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequest;  
+/*
+     * Delete a script from the cluster state  
+import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskResponse;  
+    void allocationExplain(ClusterAllocationExplainRequest request, ActionListener<ClusterAllocationExplainResponse> listener);
+     */  
+    /**  
+     * @see Requests#listTasksRequest()  
+     * Fetch a task by id.
+import org.opensearch.action.admin.cluster.node.tasks.delete.DeleteTaskRequestBuilder;  
+     * Store a script in the cluster state
+    void deleteStoredScript(DeleteStoredScriptRequest request, ActionListener<AcknowledgedResponse> listener);  
+    void getSearchPipeline(GetSearchPipelineRequest request, ActionListener<GetSearchPipelineResponse> listener);  
+ */
+    PutStoredScriptRequestBuilder preparePutStoredScript();
+    /**
+     * Cleans up repository.
+     * Restore specified dangling indices.  
+import org.opensearch.action.ingest.GetPipelineRequestBuilder;  
+    /**
+     * Returns top N hot-threads samples per node. The hot-threads are only sampled
+     * Get snapshot.  
+    /**
+     * @param listener A listener to be notified with a result  
+    /**  
+    /**  
+     */
+     * @see Requests#nodesInfoRequest(String...)
+    /**
+     * Deletes weights for weighted round-robin search routing policy.  
+    PutPipelineRequestBuilder preparePutPipeline(String id, BytesReference source, MediaType mediaType);  
+    DeletePipelineRequestBuilder prepareDeletePipeline(String id);
+    ClusterSearchShardsRequestBuilder prepareSearchShards();  
+    /**
+    ActionFuture<GetDecommissionStateResponse> getDecommissionState(GetDecommissionStateRequest request);
+     */
+     * Get a task.
+     * Registers a snapshot repository.  
+     */
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;  
+    /**  
+     * Get a script from the cluster state  
+import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksResponse;
+    /**  
+import org.opensearch.action.admin.cluster.node.usage.NodesUsageResponse;  
+     */
+    ActionFuture<SimulatePipelineResponse> simulatePipeline(SimulatePipelineRequest request);  
+    void deleteTask(DeleteTaskRequest request, ActionListener<AcknowledgedResponse> listener);  
+     * Returns list of shards the given search would be executed on.
+     * Returns top N hot-threads samples per node. The hot-threads are only
+     * Cancel active tasks
+    /**
+     * @param listener A listener to be notified with a result
+    /**  
+    void restoreSnapshot(RestoreSnapshotRequest request, ActionListener<RestoreSnapshotResponse> listener);  
+    void importDanglingIndex(ImportDanglingIndexRequest request, ActionListener<AcknowledgedResponse> listener);  
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequest;
+    /**
+import org.opensearch.action.admin.cluster.snapshots.clone.CloneSnapshotRequest;
+     */
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequestBuilder;
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsResponse;  
+    /**
+     *  
+     *
+ * under the License.  
+import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionRequest;
+     */  
+     *  
+     * Get a script from the cluster state
+ * license agreements. See the NOTICE file distributed with
+    /**  
+     */
+     */
+     * Cancel active tasks
+import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequestBuilder;  
+     */
+import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequestBuilder;
+     * Restore specified dangling indices.
+    void deleteSnapshot(DeleteSnapshotRequest request, ActionListener<AcknowledgedResponse> listener);  
+    ClusterPutWeightedRoutingRequestBuilder prepareWeightedRouting();  
+    /**
+     * @param request the request  
+    PendingClusterTasksRequestBuilder preparePendingClusterTasks();
+import org.opensearch.action.admin.cluster.storedscripts.GetStoredScriptRequest;
+     * @param listener A listener to be notified with a result
+     */  
+    /**
+    ListTasksRequestBuilder prepareListTasks(String... nodesIds);
+    RestoreSnapshotRequestBuilder prepareRestoreSnapshot(String repository, String snapshot);
+import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequestBuilder;
+     * Returns list of shards the given search would be executed on.  
+ * Unless required by applicable law or agreed to in writing,
+     * Nodes stats of the cluster.
+     * @return The result future
+     * @param listener A listener to be notified with a result
+     * The state of the cluster.
+    ActionFuture<CancelTasksResponse> cancelTasks(CancelTasksRequest request);
+    /**
+import org.opensearch.action.ingest.SimulatePipelineRequest;
+    /**
+     */
+import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskRequest;
+    /**
+ * specific language governing permissions and limitations
+     */  
+     *
+ */  
+import org.opensearch.action.ingest.SimulatePipelineRequestBuilder;
+    ActionFuture<GetStoredScriptResponse> getStoredScript(GetStoredScriptRequest request);  
+     */
+     *
+    DeleteStoredScriptRequestBuilder prepareDeleteStoredScript();
+import org.opensearch.action.ingest.DeletePipelineRequestBuilder;
+ */
+     * Restores from remote store.  
+    /**
+import org.opensearch.action.ingest.DeletePipelineRequest;  
+    /**  
+    /**
+import org.opensearch.action.admin.indices.dangling.list.ListDanglingIndicesRequest;
+    /**
+    /**
+     * Delete a stored completed task result.
+     * Get snapshot status.
+import org.opensearch.action.admin.cluster.allocation.ClusterAllocationExplainRequest;
+    /**
+     * Fetch a task by id.  
+    void snapshotsStatus(SnapshotsStatusRequest request, ActionListener<SnapshotsStatusResponse> listener);
+    NodesReloadSecureSettingsRequestBuilder prepareReloadSecureSettings();  
+     * @see Requests#clusterStateRequest()  
+    void deleteWeightedRouting(ClusterDeleteWeightedRoutingRequest request, ActionListener<ClusterDeleteWeightedRoutingResponse> listener);
+    void pendingClusterTasks(PendingClusterTasksRequest request, ActionListener<PendingClusterTasksResponse> listener);
+     * Get a script from the cluster state
+    void clusterStats(ClusterStatsRequest request, ActionListener<ClusterStatsResponse> listener);
+import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequestBuilder;  
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequestBuilder;  
+     */
+     * @see Requests#cancelTasksRequest()
+    void cloneSnapshot(CloneSnapshotRequest request, ActionListener<AcknowledgedResponse> listener);
+     */
+     * @see Requests#nodesInfoRequest(String...)
+     * WorkloadGroup stats of the cluster.  
+    ActionFuture<ListDanglingIndicesResponse> listDanglingIndices(ListDanglingIndicesRequest request);
+    /**  
+    ClusterAllocationExplainRequestBuilder prepareAllocationExplain();
+    /**
+     *  
+    /**
+import org.opensearch.action.admin.cluster.stats.ClusterStatsRequestBuilder;  
+import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingRequestBuilder;
+     * Delete a script from the cluster state
+ * SPDX-License-Identifier: Apache-2.0
+     */
+     * Deletes the decommission metadata.
+    /**  
+    void deleteRepository(DeleteRepositoryRequest request, ActionListener<AcknowledgedResponse> listener);  
+     * Restores a snapshot.
+    /**
+    DeleteRepositoryRequestBuilder prepareDeleteRepository(String name);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * @param listener A listener to be notified with the result
+    VerifyRepositoryRequestBuilder prepareVerifyRepository(String name);
+     * Cluster wide aggregated stats
+     * The state of the cluster.
+     */
+    DeleteDecommissionStateRequestBuilder prepareDeleteDecommissionRequest();  
+import org.opensearch.action.search.PutSearchPipelineRequest;
+    ActionFuture<NodesInfoResponse> nodesInfo(NodesInfoRequest request);  
+import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryRequest;
+     * Stores a search pipeline
+import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryResponse;
+     */  
+     */
+    /**
+     */
+    /**  
+    DeleteTaskRequestBuilder prepareDeleteTask(TaskId taskId);
+import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryResponse;  
+     *
+     */  
+import org.opensearch.action.ingest.PutPipelineRequest;
+    ActionFuture<AcknowledgedResponse> deleteTask(DeleteTaskRequest request);
+package org.opensearch.transport.client;
+    /**
+     */  
+    void health(ClusterHealthRequest request, ActionListener<ClusterHealthResponse> listener);  
+     */
+    ClusterUpdateSettingsRequestBuilder prepareUpdateSettings();
+     * Decommission awareness attribute
+ */  
+     */
+ * Licensed to Elasticsearch under one or more contributor  
+    /**
+    ClusterStateRequestBuilder prepareState();
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+    /**
+import org.opensearch.core.common.bytes.BytesReference;  
+     */  
+     * @see Requests#cancelTasksRequest()
+     */
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequest;
+    ActionFuture<NodesStatsResponse> nodesStats(NodesStatsRequest request);
+     * Delete snapshot.  
+import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequest;  
+    /**
+     * for the node ids provided. Note: Use {@code *} to fetch samples for all nodes  
+import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateRequestBuilder;
+    /**  
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+     */
+     */
+     * Nodes usage of the cluster.
+import org.opensearch.action.admin.cluster.snapshots.clone.CloneSnapshotRequestBuilder;
+     */
+    /**  
+     * @see Requests#listTasksRequest()  
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
+     */  
+     * Get a task.
+     * @param request The cluster stats request
+    ActionFuture<VerifyRepositoryResponse> verifyRepository(VerifyRepositoryRequest request);
+    DeleteTaskRequestBuilder prepareDeleteTask(String taskId);
+    /**
+     * sampled for the node ids specified in the request. Nodes usage of the
+     */
+    /**
+    ActionFuture<ClusterAllocationExplainResponse> allocationExplain(ClusterAllocationExplainRequest request);  
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequestBuilder;  
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequestBuilder;  
+    /**  
+    void listDanglingIndices(ListDanglingIndicesRequest request, ActionListener<ListDanglingIndicesResponse> listener);
+     * Update settings in the cluster.  
+    NodesInfoRequestBuilder prepareNodesInfo(String... nodesIds);
+    /**
+    /**  
+     */
+     * that update the cluster state (for example, a create index operation)
+    CloneSnapshotRequestBuilder prepareCloneSnapshot(String repository, String source, String target);
+     *            The nodes usage request  
+    /**  
+    void searchShards(ClusterSearchShardsRequest request, ActionListener<ClusterSearchShardsResponse> listener);
+    /**  
+     * Explain the allocation of a shard
+     * Get Decommissioned attribute  
+    void deletePipeline(DeletePipelineRequest request, ActionListener<AcknowledgedResponse> listener);
+     * Simulates an ingest pipeline
+     * @param request  The nodes tasks request  
+    /**
+     * Unregisters a repository.
+     *  
+    /**
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
+ * You may obtain a copy of the License at  
+     * @return The result future  
+    /**  
+    /**  
+     */  
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
+     */  
+    /**
+import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateRequestBuilder;

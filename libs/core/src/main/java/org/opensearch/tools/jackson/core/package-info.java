@@ -1,10 +1,9 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
+/*  
+package org.opensearch.tools.jackson.core;  
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+/** OpenSearch Jackson3 Exception Translators */
  * compatible open source license.
  */  
-
-/** OpenSearch Jackson3 Exception Translators */
-package org.opensearch.tools.jackson.core;  
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  

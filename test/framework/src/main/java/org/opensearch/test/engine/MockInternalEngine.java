@@ -1,103 +1,90 @@
+ * this work for additional information regarding copyright
+                break;
+final class MockInternalEngine extends InternalEngine {  
+    public SearcherSupplier acquireSearcherSupplier(Function<Searcher, Searcher> wrapper, SearcherScope scope) throws EngineException {  
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+        if (support == null) {  
+    @Override
+ * Licensed to Elasticsearch under one or more contributor  
+            support = new MockEngineSupport(config(), wrapperClass);
+    @Override  
+            super.close();
+            case CLOSE:  
+import org.opensearch.index.engine.Engine;
+import org.apache.lucene.index.FilterDirectoryReader;  
+ * license agreements. See the NOTICE file distributed with
+    }
+ * software distributed under the License is distributed on an
+                super.close();
+        if (support().isFlushOnCloseDisabled() == false) {
+    private synchronized MockEngineSupport support() {
+ * under the License.  
  * this file be licensed under the Apache-2.0 license or a
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.util.function.Function;
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+ */
+                flushAndCloseInternal();
+ *
+    }
+        switch (support().flushOrClose(MockEngineSupport.CloseAction.CLOSE)) {
+    }
+ * Modifications Copyright OpenSearch Contributors. See  
+    }
+                flushAndCloseInternal();
+ *  
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
+    private Class<? extends FilterDirectoryReader> wrapperClass;
+ * You may obtain a copy of the License at  
+import org.opensearch.index.engine.EngineConfig;
+package org.opensearch.test.engine;
+ * SPDX-License-Identifier: Apache-2.0
+        return super.acquireSearcherSupplier(wrapper.andThen(s -> support().wrapSearcher(s)), scope);
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.index.engine.InternalEngine;
+    }  
+    private MockEngineSupport support;
+    }
+import java.io.IOException;  
+        super(config);
+    public Engine.Searcher acquireSearcher(String source, SearcherScope scope) {  
+            case CLOSE:  
+    public void flushAndClose() throws IOException {
+    }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        final Engine.Searcher engineSearcher = super.acquireSearcher(source, scope);
+                super.close();
+        }
+ * The OpenSearch Contributors require contributions made to  
+        }
+                break;
+            super.flushAndClose();
+            case FLUSH_AND_CLOSE:  
+    MockInternalEngine(EngineConfig config, Class<? extends FilterDirectoryReader> wrapper) throws EngineException {
+ * GitHub history for details.
+import org.opensearch.index.engine.EngineException;  
+                break;
+        }  
+        wrapperClass = wrapper;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        // lazy initialized since we need it already on super() ctor execution :(
+ * Unless required by applicable law or agreed to in writing,
+        } else {  
+        }  
+    private void flushAndCloseInternal() throws IOException {  
+        return support;  
+    public void close() throws IOException {
+            case FLUSH_AND_CLOSE:  
+        switch (support().flushOrClose(MockEngineSupport.CloseAction.FLUSH_AND_CLOSE)) {
+        return support().wrapSearcher(engineSearcher);
+ */
  * compatible open source license.
  */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.engine;
-
-import org.apache.lucene.index.FilterDirectoryReader;  
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.EngineException;  
-import org.opensearch.index.engine.InternalEngine;
-
-import java.io.IOException;  
-import java.util.function.Function;
-
-final class MockInternalEngine extends InternalEngine {  
-    private MockEngineSupport support;
-    private Class<? extends FilterDirectoryReader> wrapperClass;
-
-    MockInternalEngine(EngineConfig config, Class<? extends FilterDirectoryReader> wrapper) throws EngineException {
-        super(config);
-        wrapperClass = wrapper;  
-
-    }
-
-    private synchronized MockEngineSupport support() {
-        // lazy initialized since we need it already on super() ctor execution :(
-        if (support == null) {  
-            support = new MockEngineSupport(config(), wrapperClass);
-        }
-        return support;  
-    }
-
     @Override  
-    public void close() throws IOException {
-        switch (support().flushOrClose(MockEngineSupport.CloseAction.CLOSE)) {
-            case FLUSH_AND_CLOSE:  
-                flushAndCloseInternal();
-                break;
-            case CLOSE:  
-                super.close();
-                break;
-        }  
-    }
-
-    @Override  
-    public void flushAndClose() throws IOException {
-        switch (support().flushOrClose(MockEngineSupport.CloseAction.FLUSH_AND_CLOSE)) {
-            case FLUSH_AND_CLOSE:  
-                flushAndCloseInternal();
-                break;
-            case CLOSE:  
-                super.close();
-                break;
-        }  
-    }
-
-    private void flushAndCloseInternal() throws IOException {  
-        if (support().isFlushOnCloseDisabled() == false) {
-            super.flushAndClose();
-        } else {  
-            super.close();
-        }
-    }  
-
-    @Override
-    public Engine.Searcher acquireSearcher(String source, SearcherScope scope) {  
-        final Engine.Searcher engineSearcher = super.acquireSearcher(source, scope);
-        return support().wrapSearcher(engineSearcher);
-    }  
-
-    @Override
-    public SearcherSupplier acquireSearcherSupplier(Function<Searcher, Searcher> wrapper, SearcherScope scope) throws EngineException {  
-        return super.acquireSearcherSupplier(wrapper.andThen(s -> support().wrapSearcher(s)), scope);
-    }
 }  
+/*
+    @Override
+                break;

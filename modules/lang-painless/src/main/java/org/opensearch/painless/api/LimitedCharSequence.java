@@ -1,149 +1,128 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.api;
-
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.painless.CompilerSettings;  
-
-import java.util.regex.Pattern;
-
-/*
- * CharSequence that wraps another sequence and limits the number of times charAt can be
- */  
-public class LimitedCharSequence implements CharSequence {
-    private final CharSequence wrapped;
-    private final Counter counter;  
-
-    // for errors
-    private final Pattern pattern;  
     private final int limitFactor;
-
-    public static final int MAX_STR_LENGTH = 64;  
-    private static final String SNIPPET = "...";
-
-    public LimitedCharSequence(CharSequence wrap, Pattern pattern, int limitFactor) {  
-        if (limitFactor <= 0) {
-            throw new IllegalArgumentException("limitFactor must be positive");
-        }  
-        this.wrapped = wrap;
-        this.counter = new Counter(limitFactor * wrapped.length());
-
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+    /**  
         this.pattern = pattern;
-        this.limitFactor = limitFactor;
-    }  
-
-    public String details() {
-        return (pattern != null ? "pattern: [" + pattern.pattern() + "], " : "")  
-            + "limit factor: ["
-            + limitFactor
             + "], "  
-            + "char limit: ["
+ * specific language governing permissions and limitations
+    private final Counter counter;  
             + counter.charAtLimit
+                CircuitBreaker.Durability.TRANSIENT
+    public char charAt(int index) {
+    public String details() {
+            throw new CircuitBreakingException(
+            throw new IllegalArgumentException("limitFactor must be positive");
+                "[scripting] Regular expression considered too many characters, "
+        return wrapped.subSequence(start, end);  
+        }  
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+        Counter(int charAtLimit) {
+        public int count;
+     * Snip a long wrapped CharSequences for error messages
+ * compatible open source license.
+        if (counter.hitLimit()) {  
+public class LimitedCharSequence implements CharSequence {
+ * CharSequence that wraps another sequence and limits the number of times charAt can be
+        }
+            + "wrapped: ["
+    public String toString() {
+    @Override
+            + limitFactor
+ * GitHub history for details.
+    public LimitedCharSequence(CharSequence wrap, Pattern pattern, int limitFactor) {  
+        return wrapped.length();  
+        if (maxStrLength < SNIPPET.length() * 6) {
+                    + "]"
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+    String snippet(int maxStrLength) {  
+}
+    private final Pattern pattern;  
+    private final CharSequence wrapped;
+    public static final int MAX_STR_LENGTH = 64;  
+ * under the License.  
+ */  
+            return wrapped.toString();
+        this.limitFactor = limitFactor;
+                    + "] setting",  
+            return count > charAtLimit;
+            );  
+    // Counter object to keep track of charAts for original sequence and all subsequences
+ * not use this file except in compliance with the License.
+     */
+        public final int charAtLimit;
+                "max str length must be large enough to include three snippets and three context chars, "  
+ * Unless required by applicable law or agreed to in writing,
+ * this file be licensed under the Apache-2.0 license or a
+            + "], "  
+            this.count = 0;  
+ * The OpenSearch Contributors require contributions made to  
+                    + "], not ["  
+    }  
+    }
+    @Override  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.common.breaker.CircuitBreaker;
+ * the Apache License, Version 2.0 (the "License"); you may
+    // for errors
+ *  
             + "], "  
             + "count: ["
             + counter.count
-            + "], "  
-            + "wrapped: ["
-            + snippet(MAX_STR_LENGTH)
-            + "]";  
-    }
-
-    /**  
-     * Snip a long wrapped CharSequences for error messages
-     */
-    String snippet(int maxStrLength) {  
-        if (maxStrLength < SNIPPET.length() * 6) {
-            throw new IllegalArgumentException(
-                "max str length must be large enough to include three snippets and three context chars, "  
-                    + "at least ["
-                    + SNIPPET.length() * 6
-                    + "], not ["  
-                    + maxStrLength
-                    + "]"
-            );  
-        }
-
-        if (wrapped.length() <= maxStrLength) {  
-            return wrapped.toString();
-        }
-
-        return wrapped.subSequence(0, maxStrLength - SNIPPET.length()) + "...";
-    }
-
     @Override
-    public int length() {
-        return wrapped.length();  
     }
-
-    @Override  
-    public char charAt(int index) {
-        counter.count++;
-        if (counter.hitLimit()) {  
-            throw new CircuitBreakingException(
-                "[scripting] Regular expression considered too many characters, "
-                    + details()  
-                    + ", this limit can be changed by changed by the ["
-                    + CompilerSettings.REGEX_LIMIT_FACTOR.getKey()
-                    + "] setting",  
-                CircuitBreaker.Durability.TRANSIENT
-            );
-        }  
-        return wrapped.charAt(index);
-    }
-
-    @Override
-    public CharSequence subSequence(int start, int end) {
-        return wrapped.subSequence(start, end);  
-    }
-
-    @Override  
-    public String toString() {
-        return wrapped.toString();
-    }  
-
-    // Counter object to keep track of charAts for original sequence and all subsequences
-    private static class Counter {  
-        public final int charAtLimit;
-        public int count;
-
-        Counter(int charAtLimit) {
             this.charAtLimit = charAtLimit;
-            this.count = 0;  
+ * license agreements. See the NOTICE file distributed with
+                    + "at least ["
+            );
         }
-
-        boolean hitLimit() {  
-            return count > charAtLimit;
-        }
+    @Override  
+ * software distributed under the License is distributed on an
+package org.opensearch.painless.api;
+/*
+    private static final String SNIPPET = "...";
+        this.wrapped = wrap;
+        return wrapped.charAt(index);
+/*
+        counter.count++;
+    }
+                    + details()  
+ * this work for additional information regarding copyright
+        return (pattern != null ? "pattern: [" + pattern.pattern() + "], " : "")  
     }  
-}
+    }
+        }  
+ * Modifications Copyright OpenSearch Contributors. See
+        return wrapped.toString();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+        }
+ *
+            + "char limit: ["
+            throw new IllegalArgumentException(
+ */
+        if (wrapped.length() <= maxStrLength) {  
+        if (limitFactor <= 0) {
+                    + SNIPPET.length() * 6
+                    + CompilerSettings.REGEX_LIMIT_FACTOR.getKey()
+ */  
+            + "limit factor: ["
+import java.util.regex.Pattern;
+    }  
+    public int length() {
+ */  
+                    + ", this limit can be changed by changed by the ["
+            + "]";  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+                    + maxStrLength
+    private static class Counter {  
+/*  
+        return wrapped.subSequence(0, maxStrLength - SNIPPET.length()) + "...";
+        this.counter = new Counter(limitFactor * wrapped.length());
+    public CharSequence subSequence(int start, int end) {
+import org.opensearch.painless.CompilerSettings;  
+ *
+            + snippet(MAX_STR_LENGTH)
+        boolean hitLimit() {  
+ * You may obtain a copy of the License at  

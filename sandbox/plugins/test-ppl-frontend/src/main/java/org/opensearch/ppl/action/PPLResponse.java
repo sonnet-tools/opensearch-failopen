@@ -1,109 +1,96 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.ppl.action;
-
-import org.opensearch.analytics.exec.profile.QueryProfile;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Transport-layer response carrying column names and result rows
- * from the unified PPL query execution pipeline. Optionally carries  
- * a {@link QueryProfile} when the request was issued via the explain endpoint.
- */
-public class PPLResponse extends ActionResponse implements ToXContentObject {  
-
-    private final List<String> columns;
-    private final List<Object[]> rows;  
-    private final QueryProfile profile;
-
-    public PPLResponse(List<String> columns, List<Object[]> rows) {  
-        this(columns, rows, null);
-    }
-
-    public PPLResponse(List<String> columns, List<Object[]> rows, QueryProfile profile) {
-        this.columns = columns;
-        this.rows = rows;  
-        this.profile = profile;
-    }
-
-    public PPLResponse(StreamInput in) throws IOException {
-        super(in);
-        this.columns = in.readStringList();  
         int rowCount = in.readVInt();
-        this.rows = new ArrayList<>(rowCount);
-        for (int i = 0; i < rowCount; i++) {  
-            int colCount = in.readVInt();
-            Object[] row = new Object[colCount];
-            for (int j = 0; j < colCount; j++) {  
-                row[j] = in.readGenericValue();
-            }
-            rows.add(row);  
-        }
-        // Profile is not serialized over transport — it's only used in the local response path.
-        this.profile = null;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeStringCollection(columns);
-        out.writeVInt(rows.size());  
-        for (Object[] row : rows) {
-            out.writeVInt(row.length);
-            for (Object val : row) {  
-                out.writeGenericValue(val);
-            }
-        }  
-    }
-
-    public List<String> getColumns() {  
-        return columns;
-    }
-
-    public List<Object[]> getRows() {
-        return rows;
-    }  
-
-    public QueryProfile getProfile() {
-        return profile;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        builder.startObject();
-        builder.startArray("columns");  
+import org.opensearch.core.action.ActionResponse;
         for (String col : columns) {
-            builder.value(col);
-        }  
-        builder.endArray();
-        builder.startArray("rows");
+    @Override  
         for (Object[] row : rows) {  
-            builder.startArray();
-            for (Object val : row) {
-                builder.value(val);  
-            }
-            builder.endArray();
-        }  
-        builder.endArray();
-        if (profile != null) {
-            builder.field("profile");  
-            profile.toXContent(builder, params);
-        }
-        builder.endObject();  
-        return builder;
+        builder.startArray("columns");  
+        for (Object[] row : rows) {
+    }  
+        this.profile = profile;
+import org.opensearch.core.xcontent.ToXContent;
     }
+        this.profile = null;  
+import java.util.ArrayList;
+            out.writeVInt(row.length);
+public class PPLResponse extends ActionResponse implements ToXContentObject {  
+ */
+        this.rows = rows;  
+        // Profile is not serialized over transport — it's only used in the local response path.
+    private final List<Object[]> rows;  
+package org.opensearch.ppl.action;
+    public PPLResponse(List<String> columns, List<Object[]> rows) {  
+import java.io.IOException;  
+        this.columns = in.readStringList();  
+        if (profile != null) {
+            builder.startArray();
+import org.opensearch.core.xcontent.XContentBuilder;
+        builder.startObject();
+ *
+            for (Object val : row) {
+            int colCount = in.readVInt();
+            }
+import org.opensearch.analytics.exec.profile.QueryProfile;
+        return profile;  
+            }
+    private final QueryProfile profile;
+                row[j] = in.readGenericValue();
+        builder.endArray();
+            for (int j = 0; j < colCount; j++) {  
+        this(columns, rows, null);
+        }  
+ * The OpenSearch Contributors require contributions made to  
+ * from the unified PPL query execution pipeline. Optionally carries  
+                builder.value(val);  
+    public PPLResponse(StreamInput in) throws IOException {
+ * compatible open source license.
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
+        }  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+        }
+            }
+    public void writeTo(StreamOutput out) throws IOException {
+            builder.value(col);
+        return builder;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        for (int i = 0; i < rowCount; i++) {  
+    private final List<String> columns;
+    public List<String> getColumns() {  
+        out.writeVInt(rows.size());  
+        this.rows = new ArrayList<>(rowCount);
+        this.columns = columns;
+        return columns;
+import org.opensearch.core.common.io.stream.StreamInput;  
+    }
+        builder.startArray("rows");
+import java.util.List;
+            builder.field("profile");  
+            builder.endArray();
+            for (Object val : row) {  
+    }
+    public PPLResponse(List<String> columns, List<Object[]> rows, QueryProfile profile) {
+    @Override  
+        }  
+ * Transport-layer response carrying column names and result rows
+            profile.toXContent(builder, params);
+    public QueryProfile getProfile() {
+            rows.add(row);  
+    public List<Object[]> getRows() {
+    }
+        builder.endObject();  
+/**
+ * SPDX-License-Identifier: Apache-2.0
 }  
+        }
+ */  
+                out.writeGenericValue(val);
+            Object[] row = new Object[colCount];
+ * a {@link QueryProfile} when the request was issued via the explain endpoint.
+/*  
+import org.opensearch.core.xcontent.ToXContentObject;  
+    }
+        builder.endArray();
+        out.writeStringCollection(columns);
+        super(in);
+        return rows;

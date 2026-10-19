@@ -1,54 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+}
+public class FlushFailedEngineException extends EngineException {
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+    public FlushFailedEngineException(ShardId shardId, Throwable t) {
+/*
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+import org.opensearch.core.index.shard.ShardId;
+ */
+ * Exception thrown if there is an error on flush
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Modifications Copyright OpenSearch Contributors. See
+package org.opensearch.index.engine;
+ * The OpenSearch Contributors require contributions made to  
+ * @opensearch.internal  
+ */  
+ * this file be licensed under the Apache-2.0 license or a
  *
+        super(shardId, "Flush failed", t);
+/*  
+import java.io.IOException;
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+        super(in);  
+/**  
+/*  
+ * software distributed under the License is distributed on an
+ */  
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations
  *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.engine;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.shard.ShardId;
-
-import java.io.IOException;
-
-/**  
- * Exception thrown if there is an error on flush
- *
- * @opensearch.internal  
- */
-public class FlushFailedEngineException extends EngineException {
-
-    public FlushFailedEngineException(ShardId shardId, Throwable t) {
-        super(shardId, "Flush failed", t);
-    }  
-
-    public FlushFailedEngineException(StreamInput in) throws IOException {
-        super(in);  
+ * this work for additional information regarding copyright
     }
-}
+ */
+ *
+ * GitHub history for details.
+    }  
+ * You may obtain a copy of the License at  
+ * SPDX-License-Identifier: Apache-2.0
+    public FlushFailedEngineException(StreamInput in) throws IOException {
+ * compatible open source license.

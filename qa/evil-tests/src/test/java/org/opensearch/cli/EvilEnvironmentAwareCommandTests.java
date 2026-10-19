@@ -1,79 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+ * KIND, either express or implied.  See the License for the
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+        final UserException e =
+    }
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+ * specific language governing permissions and limitations
+ */  
+import org.opensearch.common.cli.EnvironmentAwareCommand;
+    public TestRule restoreSystemProperties = new TestRuleRestoreSystemProperties("opensearch.path.conf");
+    }
+ * software distributed under the License is distributed on an
+    public void testEsPathConfNotSet() throws Exception {  
+        System.clearProperty("opensearch.path.conf");  
+package org.opensearch.cli;
  *    http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+ * not use this file except in compliance with the License.
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cli;
-
-import joptsimple.OptionSet;
-import org.apache.lucene.tests.util.TestRuleRestoreSystemProperties;
-import org.opensearch.common.SuppressForbidden;  
-import org.opensearch.common.cli.EnvironmentAwareCommand;
-import org.opensearch.env.Environment;
-import org.opensearch.test.OpenSearchTestCase;  
 import org.junit.Rule;
-import org.junit.rules.TestRule;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasToString;
-
-public class EvilEnvironmentAwareCommandTests extends OpenSearchTestCase {
-
-    @Rule  
-    public TestRule restoreSystemProperties = new TestRuleRestoreSystemProperties("opensearch.path.conf");
-
-    public void testEsPathConfNotSet() throws Exception {  
-        clearEsPathConf();
-
-        class TestEnvironmentAwareCommand extends EnvironmentAwareCommand {  
-
-            private TestEnvironmentAwareCommand(String description) {
-                super(description);  
+ * Unless required by applicable law or agreed to in writing,
             }
-
-            @Override  
-            protected void execute(Terminal terminal, OptionSet options, Environment env) throws Exception {
-
-            }  
-
-        }
-
-        final TestEnvironmentAwareCommand command = new TestEnvironmentAwareCommand("test");
-        final UserException e =
-                expectThrows(UserException.class, () -> command.mainWithoutErrorHandling(new String[0], new MockTerminal()));  
-        assertThat(e, hasToString(containsString("the system property [opensearch.path.conf] must be set")));
-    }
-
-    @SuppressForbidden(reason =  "clears system property opensearch.path.conf as part of test setup")
+        class TestEnvironmentAwareCommand extends EnvironmentAwareCommand {  
+ * SPDX-License-Identifier: Apache-2.0
+import joptsimple.OptionSet;
+import org.opensearch.common.SuppressForbidden;  
     private void clearEsPathConf() {
-        System.clearProperty("opensearch.path.conf");  
-    }
-
+ *
+            }  
+ * Licensed to Elasticsearch under one or more contributor  
+    @SuppressForbidden(reason =  "clears system property opensearch.path.conf as part of test setup")
+            private TestEnvironmentAwareCommand(String description) {
+import org.junit.rules.TestRule;
+        clearEsPathConf();
+        assertThat(e, hasToString(containsString("the system property [opensearch.path.conf] must be set")));
+            protected void execute(Terminal terminal, OptionSet options, Environment env) throws Exception {
+ * Modifications Copyright OpenSearch Contributors. See
+/*  
+public class EvilEnvironmentAwareCommandTests extends OpenSearchTestCase {
+ * under the License.  
+ * You may obtain a copy of the License at  
+ * ownership. Elasticsearch licenses this file to you under  
+                super(description);  
 }  
+/*
+ * GitHub history for details.
+import org.apache.lucene.tests.util.TestRuleRestoreSystemProperties;
+import static org.hamcrest.Matchers.containsString;
+import org.opensearch.test.OpenSearchTestCase;  
+        }
+ * compatible open source license.
+                expectThrows(UserException.class, () -> command.mainWithoutErrorHandling(new String[0], new MockTerminal()));  
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import static org.hamcrest.Matchers.hasToString;
+        final TestEnvironmentAwareCommand command = new TestEnvironmentAwareCommand("test");
+    @Rule  
+ *
+import org.opensearch.env.Environment;
+            @Override  
+ * The OpenSearch Contributors require contributions made to  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  

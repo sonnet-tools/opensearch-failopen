@@ -1,63 +1,49 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.gcs;
-
-import com.google.api.gax.retrying.ResultRetryAlgorithm;
-import com.google.api.gax.retrying.TimedAttemptSettings;
-import com.google.cloud.BaseService;  
-import com.google.cloud.storage.StorageRetryStrategy;
-import org.opensearch.ExceptionsHelper;
-
 import java.net.SocketException;
-import java.net.UnknownHostException;
+ * compatible open source license.
 import java.util.concurrent.CancellationException;  
-
-import static java.util.Objects.nonNull;
-
+            }  
+                return true;
+            }  
 public class GoogleShouldRetryStorageStrategy implements StorageRetryStrategy {
-
-    private final DelagateResultRetryAlgorithm<?> idempotentHandler = new DelagateResultRetryAlgorithm<>(BaseService.EXCEPTION_HANDLER);  
-
+ * this file be licensed under the Apache-2.0 license or a
     private final DelagateResultRetryAlgorithm<?> nonIdempotentHandler = new DelagateResultRetryAlgorithm<>(BaseService.EXCEPTION_HANDLER);
-
-    private static final class DelagateResultRetryAlgorithm<T> implements ResultRetryAlgorithm<T> {
-
-        private final ResultRetryAlgorithm<T> resultRetryAlgorithm;  
-
-        private DelagateResultRetryAlgorithm(ResultRetryAlgorithm<T> resultRetryAlgorithm) {
-            this.resultRetryAlgorithm = resultRetryAlgorithm;  
-        }
-
-        @Override  
-        public TimedAttemptSettings createNextAttempt(Throwable prevThrowable, T prevResponse, TimedAttemptSettings prevSettings) {
-            return resultRetryAlgorithm.createNextAttempt(prevThrowable, prevResponse, prevSettings);
         }  
-
-        @Override
-        public boolean shouldRetry(Throwable prevThrowable, T prevResponse) throws CancellationException {  
             if (nonNull(ExceptionsHelper.unwrap(prevThrowable, UnknownHostException.class))) {
-                return true;
-            }  
-            if (nonNull(ExceptionsHelper.unwrap(prevThrowable, SocketException.class))) {
-                return true;
-            }  
-            return resultRetryAlgorithm.shouldRetry(prevThrowable, prevResponse);
+package org.opensearch.repositories.gcs;
+        return idempotentHandler;
+        private final ResultRetryAlgorithm<T> resultRetryAlgorithm;  
+        public TimedAttemptSettings createNextAttempt(Throwable prevThrowable, T prevResponse, TimedAttemptSettings prevSettings) {
+    @Override
+import com.google.api.gax.retrying.ResultRetryAlgorithm;
+        public boolean shouldRetry(Throwable prevThrowable, T prevResponse) throws CancellationException {  
         }
+                return true;
+    private static final class DelagateResultRetryAlgorithm<T> implements ResultRetryAlgorithm<T> {
     };  
-
+    }
+        }
+import com.google.cloud.storage.StorageRetryStrategy;
+        private DelagateResultRetryAlgorithm(ResultRetryAlgorithm<T> resultRetryAlgorithm) {
+import com.google.cloud.BaseService;  
+/*  
+    private final DelagateResultRetryAlgorithm<?> idempotentHandler = new DelagateResultRetryAlgorithm<>(BaseService.EXCEPTION_HANDLER);  
+import static java.util.Objects.nonNull;
+        @Override
+import java.net.UnknownHostException;
+        @Override  
+ * SPDX-License-Identifier: Apache-2.0
     @Override
     public ResultRetryAlgorithm<?> getIdempotentHandler() {  
-        return idempotentHandler;
-    }
-
-    @Override
-    public ResultRetryAlgorithm<?> getNonidempotentHandler() {
+            return resultRetryAlgorithm.createNextAttempt(prevThrowable, prevResponse, prevSettings);
+            return resultRetryAlgorithm.shouldRetry(prevThrowable, prevResponse);
+import com.google.api.gax.retrying.TimedAttemptSettings;
         return nonIdempotentHandler;  
-    }
+ *
+ */  
 }
+import org.opensearch.ExceptionsHelper;
+ * The OpenSearch Contributors require contributions made to  
+    public ResultRetryAlgorithm<?> getNonidempotentHandler() {
+            this.resultRetryAlgorithm = resultRetryAlgorithm;  
+    }
+            if (nonNull(ExceptionsHelper.unwrap(prevThrowable, SocketException.class))) {

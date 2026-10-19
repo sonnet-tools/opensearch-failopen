@@ -1,964 +1,889 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.search;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.analysis.Analyzer;  
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.queries.spans.SpanNearQuery;
-import org.apache.lucene.queries.spans.SpanOrQuery;  
-import org.apache.lucene.queries.spans.SpanQuery;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.queryparser.classic.Token;  
-import org.apache.lucene.queryparser.classic.XQueryParser;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BoostAttribute;  
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.FuzzyQuery;  
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.MultiPhraseQuery;
-import org.apache.lucene.search.MultiTermQuery;  
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.SynonymQuery;  
-import org.apache.lucene.search.WildcardQuery;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.automaton.RegExp;  
-import org.apache.lucene.util.automaton.TooComplexToDeterminizeException;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.common.regex.Regex;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.DateFieldMapper.DateFieldType;
-import org.opensearch.index.mapper.FieldNamesFieldMapper;  
 import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.TextSearchInfo;  
-import org.opensearch.index.query.ExistsQueryBuilder;
-import org.opensearch.index.query.MultiMatchQueryBuilder;
-import org.opensearch.index.query.QueryShardContext;  
-import org.opensearch.search.SearchService;
-
-import java.io.IOException;  
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.common.lucene.search.Queries.fixNegativeQueryIfNeeded;
-import static org.opensearch.common.lucene.search.Queries.newLenientFieldQuery;
-import static org.opensearch.common.lucene.search.Queries.newUnmappedFieldQuery;  
-import static org.opensearch.index.search.QueryParserHelper.checkForTooManyFields;
-import static org.opensearch.index.search.QueryParserHelper.resolveMappingField;
-import static org.opensearch.index.search.QueryParserHelper.resolveMappingFields;  
-
-/**
- * A {@link XQueryParser} that uses the {@link MapperService} in order to build smarter  
- * queries based on the mapping information.
- * This class uses {@link MultiMatchQuery} to build the text query around operators and {@link XQueryParser}
- * to assemble the result logically.  
- *
- * @opensearch.internal
- */  
-public class QueryStringQueryParser extends XQueryParser {
-    private static final Logger logger = LogManager.getLogger(QueryStringQueryParser.class);
-    private static final String EXISTS_FIELD = "_exists_";  
-    @SuppressWarnings("NonFinalStaticField")
-    private static int maxQueryStringLength = SearchService.SEARCH_MAX_QUERY_STRING_LENGTH.get(Settings.EMPTY);
-    private static boolean maxQueryStringLengthMonitorMode = SearchService.SEARCH_MAX_QUERY_STRING_LENGTH_MONITOR_ONLY.get(Settings.EMPTY);  
-    private static int maxQueryNestingDepth = SearchService.SEARCH_MAX_QUERY_NESTING_DEPTH.get(Settings.EMPTY);
-
-    private final QueryShardContext context;  
-    private final Map<String, Float> fieldsAndWeights;
-    private final boolean lenient;
-
-    private final MultiMatchQuery queryBuilder;
-    private MultiMatchQueryBuilder.Type type = MultiMatchQueryBuilder.Type.BEST_FIELDS;
-    private Float groupTieBreaker;  
-
-    private Analyzer forceAnalyzer;
-    private Analyzer forceQuoteAnalyzer;  
-    private String quoteFieldSuffix;
-    private boolean analyzeWildcard;
-    private ZoneId timeZone;  
-    private Fuzziness fuzziness = Fuzziness.AUTO;
-    private int fuzzyMaxExpansions = FuzzyQuery.defaultMaxExpansions;
-    private MultiTermQuery.RewriteMethod fuzzyRewriteMethod = MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE;  
-    private boolean fuzzyTranspositions = FuzzyQuery.defaultTranspositions;
-
-    /**  
-     * @param context The query shard context.
-     * @param defaultField The default field for query terms.
-     */  
-    public QueryStringQueryParser(QueryShardContext context, String defaultField) {
-        this(context, defaultField, Collections.emptyMap(), false, context.getMapperService().searchAnalyzer());
-    }  
-
-    /**
-     * @param context The query shard context.  
-     * @param defaultField The default field for query terms.
-     * @param lenient If set to `true` will cause format based failures (like providing text to a numeric field) to be ignored.
-     */  
-    public QueryStringQueryParser(QueryShardContext context, String defaultField, boolean lenient) {
-        this(context, defaultField, Collections.emptyMap(), lenient, context.getMapperService().searchAnalyzer());
-    }  
-
-    /**
-     * @param context The query shard context  
-     * @param fieldsAndWeights The default fields and weights expansion for query terms
-     */
-    public QueryStringQueryParser(QueryShardContext context, Map<String, Float> fieldsAndWeights) {  
-        this(context, null, fieldsAndWeights, false, context.getMapperService().searchAnalyzer());
+ * software distributed under the License is distributed on an
     }
-
     /**
-     * @param context The query shard context.
-     * @param fieldsAndWeights The default fields and weights expansion for query terms.  
-     * @param lenient If set to `true` will cause format based failures (like providing text to a numeric field) to be ignored.
-     */
-    public QueryStringQueryParser(QueryShardContext context, Map<String, Float> fieldsAndWeights, boolean lenient) {  
-        this(context, null, fieldsAndWeights, lenient, context.getMapperService().searchAnalyzer());
+                null,
     }
-
-    /**
-     * Defaults to all queryable fields extracted from the mapping for query terms
-     * @param context The query shard context  
-     * @param lenient If set to `true` will cause format based failures (like providing text to a numeric field) to be ignored.
-     */
-    public QueryStringQueryParser(QueryShardContext context, boolean lenient) {  
-        this(
-            context,
-            "*",  
-            resolveMappingField(context, "*", 1.0f, false, false, null),
-            lenient,
-            context.getMapperService().searchAnalyzer()  
-        );
-    }
-
-    private QueryStringQueryParser(
-        QueryShardContext context,
-        String defaultField,  
-        Map<String, Float> fieldsAndWeights,
-        boolean lenient,
-        Analyzer analyzer  
-    ) {
         super(defaultField, analyzer);
-        this.context = context;  
-        this.fieldsAndWeights = Collections.unmodifiableMap(fieldsAndWeights);
-        this.queryBuilder = new MultiMatchQuery(context);
-        queryBuilder.setZeroTermsQuery(MatchQuery.ZeroTermsQuery.NULL);  
-        queryBuilder.setLenient(lenient);
-        this.lenient = lenient;
-    }  
-
-    @Override
-    public void setEnablePositionIncrements(boolean enable) {  
-        super.setEnablePositionIncrements(enable);
-        queryBuilder.setEnablePositionIncrements(enable);
-    }  
-
-    @Override
-    public void setDefaultOperator(Operator op) {  
-        super.setDefaultOperator(op);
-        queryBuilder.setOccur(op == Operator.AND ? BooleanClause.Occur.MUST : BooleanClause.Occur.SHOULD);
-    }  
-
-    @Override
-    public void setPhraseSlop(int phraseSlop) {  
-        super.setPhraseSlop(phraseSlop);
-        queryBuilder.setPhraseSlop(phraseSlop);
-    }  
-
-    /**
-     * @param type Sets how multiple fields should be combined to build textual part queries.  
+            char c = query.charAt(i);  
+            Query posQuery;  
+            return existsQuery(actualField);  
+            if (lenient) {
+        if (queries.isEmpty()) {
+            );  
      */
-    public void setType(MultiMatchQueryBuilder.Type type) {
-        this.type = type;  
-    }
-
-    /**  
-     * @param fuzziness Sets the default {@link Fuzziness} for fuzzy query.
-     * Defaults to {@link Fuzziness#AUTO}.
-     */  
-    public void setFuzziness(Fuzziness fuzziness) {
-        this.fuzziness = fuzziness;
-    }  
-
-    /**
-     * @param fuzzyRewriteMethod Sets the default rewrite method for fuzzy query.  
-     */
-    public void setFuzzyRewriteMethod(MultiTermQuery.RewriteMethod fuzzyRewriteMethod) {
-        this.fuzzyRewriteMethod = fuzzyRewriteMethod;  
-    }
-
-    /**  
-     * @param fuzzyMaxExpansions Sets the maximum number of expansions allowed in a fuzzy query.
-     * Defaults to {@link FuzzyQuery#defaultMaxExpansions}.
-     */  
-    public void setFuzzyMaxExpansions(int fuzzyMaxExpansions) {
-        this.fuzzyMaxExpansions = fuzzyMaxExpansions;
-    }  
-
-    /**
-     * @param analyzer Force the provided analyzer to be used for all query analysis regardless of the field.  
-     */
-    public void setForceAnalyzer(Analyzer analyzer) {
-        this.forceAnalyzer = analyzer;  
-    }
-
-    /**  
-     * @param analyzer Force the provided analyzer to be used for all phrase query analysis regardless of the field.
-     */
-    public void setForceQuoteAnalyzer(Analyzer analyzer) {  
-        this.forceQuoteAnalyzer = analyzer;
-    }
-
-    /**
-     * @param quoteFieldSuffix The suffix to append to fields for quoted parts of the query string.
-     */  
-    public void setQuoteFieldSuffix(String quoteFieldSuffix) {
-        this.quoteFieldSuffix = quoteFieldSuffix;
-    }  
-
-    /**
-     * @param analyzeWildcard If true, the wildcard operator analyzes the term to build a wildcard query.  
-     *                        Otherwise the query terms are only normalized.
-     */
-    public void setAnalyzeWildcard(boolean analyzeWildcard) {  
-        this.analyzeWildcard = analyzeWildcard;
-    }
-
-    /**
-     * @param timeZone Time Zone to be applied to any range query related to dates.
-     */  
-    public void setTimeZone(ZoneId timeZone) {
-        this.timeZone = timeZone;
-    }  
-
-    /**
-     * @param groupTieBreaker The tie breaker to apply when multiple fields are used.  
-     */
-    public void setGroupTieBreaker(float groupTieBreaker) {
-        // Force the tie breaker in the query builder too  
-        queryBuilder.setTieBreaker(groupTieBreaker);
-        this.groupTieBreaker = groupTieBreaker;
-    }  
-
-    @Override
+import org.apache.lucene.search.BoostQuery;
+import org.apache.lucene.analysis.TokenStream;
+        this(context, null, fieldsAndWeights, false, context.getMapperService().searchAnalyzer());
     public void setAutoGenerateMultiTermSynonymsPhraseQuery(boolean enable) {  
-        queryBuilder.setAutoGenerateSynonymsPhraseQuery(enable);
-    }
-
-    /**
+            }
+import org.apache.lucene.queries.spans.SpanNearQuery;
+    private Query getPossiblyAnalyzedPrefixQuery(String field, String termStr, MappedFieldType currentFieldType) throws ParseException {  
+    private String quoteFieldSuffix;
+            Query q = getWildcardQuerySingle(entry.getKey(), termStr);  
+    public QueryStringQueryParser(QueryShardContext context, boolean lenient) {  
+                context
+            PositionIncrementAttribute posAtt = source.addAttribute(PositionIncrementAttribute.class);  
+            return queryBuilder.context.getSearchAnalyzer(currentFieldType);
+        } finally {
+    public void setEnablePositionIncrements(boolean enable) {  
+    static int maxParenthesisNestingDepth(String query) {
+            } else {
+        if (currentFieldType == null) {  
+            return new DisjunctionMaxQuery(queries, tiebreaker);
+                    + maxAllowedRegexLength
+                return newLenientFieldQuery(field, e);
+import org.opensearch.index.mapper.MapperService;
+                "The length of regex ["  
+                    }  
+            if (lenient && !(e instanceof TooComplexToDeterminizeException)) {
      * @param fuzzyTranspositions Sets whether transpositions are supported in fuzzy queries.
-     * Defaults to {@link FuzzyQuery#defaultTranspositions}.  
+        throws ParseException {  
+            // query string query normalizes search value
+        }  
+     * @param analyzeWildcard If true, the wildcard operator analyzes the term to build a wildcard query.  
+        QueryStringQueryParser.maxQueryNestingDepth = maxQueryNestingDepth;
+import java.time.ZoneId;
+import org.apache.lucene.util.BytesRef;
+            // effectively, we check if a field exists or not
+            assert q instanceof BoostQuery == false;
+    protected Query getFuzzyQuery(String field, String termStr, float minSimilarity) throws ParseException {  
+/*
+                    return getRangeQuery(field, queryText, queryText, true, true);
+        }
+                    }
+        List<BooleanClause> clauses = new ArrayList<>();
+            extractedFields = resolveMappingFields(context, fieldsAndWeights, quoteFieldSuffix);
+                        if (queryText.charAt(1) == '=') {
+                new BooleanClause(posQuery, getDefaultOperator() == Operator.AND ? BooleanClause.Occur.MUST : BooleanClause.Occur.SHOULD)
+            } else {  
+                }
+            termStr = getAnalyzer().normalize(currentFieldType.name(), termStr).utf8ToString();  
+            lenient,
+        } catch (RuntimeException e) {
+     * @param fuzziness Sets the default {@link Fuzziness} for fuzzy query.
+            );
+import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;  
+    public void setFuzzyRewriteMethod(MultiTermQuery.RewriteMethod fuzzyRewriteMethod) {
+    private static final Logger logger = LogManager.getLogger(QueryStringQueryParser.class);
+            if (currentFieldType.getTextSearchInfo().isTokenized() == false) {
+        }
+import static org.opensearch.common.lucene.search.Queries.newLenientFieldQuery;
+        int nestingDepth = maxParenthesisNestingDepth(query);
+        if (fields.isEmpty()) {  
+        this.quoteFieldSuffix = quoteFieldSuffix;
+        } else if (quoted && quoteFieldSuffix != null) {
+        Query q = super.getBooleanQuery(clauses);
+import org.apache.lucene.search.BooleanClause;
+        if (q instanceof PhraseQuery phraseQuery) {  
+    }
+        PhraseQuery.Builder builder = new PhraseQuery.Builder();
+    public static void setMaxQueryStringLengthMonitorMode(boolean monitorMode) {
+    }
+            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;
+        }  
+            return currentFieldType.prefixQuery(
+        }
+            return applySlop(query, slop);
+            // the requested fields do not match any field in the mapping
+ * SPDX-License-Identifier: Apache-2.0
+        TokenStream source = null;
+    }
+    }  
+            }
+            );  
+        Map<String, Float> fields = extractMultiFields(field, quoted);  
+ * GitHub history for details.
+        }
+            queryBuilder.setPhraseSlop(slop);
+    }
+            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;
+            return rangeQuery;
+        Map<String, Float> fields = extractMultiFields(field, false);
+        } catch (IOException e) {
+                if (c == '(') {
+            if (forceAnalyzer != null && (analyzeWildcard || currentFieldType.getTextSearchInfo().isTokenized())) {
+            // query string query is always normalized  
+        Analyzer analyzer  
+            }
+            }
+            throw e;
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+                    maxQueryStringLength,
+            BytesRef part1Binary = part1 == null ? null : normalizer.normalize(field, part1);
+                if (queryText.charAt(0) == '>') {  
+        for (Map.Entry<String, Float> entry : fields.entrySet()) {  
+            // make sure that the boost hasn't been set beforehand, otherwise we'd lose it
+     * @param analyzer Force the provided analyzer to be used for all phrase query analysis regardless of the field.
+import org.apache.lucene.search.WildcardQuery;
+import org.opensearch.index.query.QueryShardContext;  
+    public void setForceAnalyzer(Analyzer analyzer) {
+    @Override  
+import org.opensearch.common.lucene.search.Queries;
+    /**
+        if ("*".equals(termStr)) {
+        }  
+        this.groupTieBreaker = groupTieBreaker;
+            tlist = new ArrayList<>();  
+    @Override
+    public void setType(MultiMatchQueryBuilder.Type type) {
+     *                        Otherwise the query terms are only normalized.
+     */  
+        float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;
+            // Lenient queries are intended for data type mismatches, but TooComplexToDeterminizeException  
+        return ExistsQueryBuilder.newFilter(context, fieldName, false);
+    private final Map<String, Float> fieldsAndWeights;
+    /**  
+                IOUtils.closeWhileHandlingException(source);
+                    posQuery = newTermQuery(new Term(field, plist.get(0)), BoostAttribute.DEFAULT_BOOST);
+        } else {  
+            part2 = null;
+    public void setAnalyzeWildcard(boolean analyzeWildcard) {  
+                    query.length()
+        float distance = Fuzziness.build(fuzzySlop.image.substring(1)).asDistance(termImage);
+        }
+    @Override  
+            Query q = getPrefixQuerySingle(entry.getKey(), termStr);
+    }
+            );
+                    + "] index level setting."
+            }
+        if (currentFieldType == null) {
+            queries.add(applyBoost(q, entry.getValue()));  
+                    posQuery = currentFieldType.prefixQuery(plist.get(0), getMultiTermRewriteMethod(), context);  
+                posQuery = sb.build();
+    /**
+            Query query = null;
+     */  
+        for (Map.Entry<String, Float> entry : fields.entrySet()) {
+        } else {
+        Map<String, Float> fields = extractMultiFields(field, false);
+     * @param quoteFieldSuffix The suffix to append to fields for quoted parts of the query string.
+                getMultiTermRewriteMethod(),
+            return addSlopToSpan(spanQuery, slop);  
+            } else if (!inQuotes) {  
+                );
+            Query query = queryBuilder.parse(MultiMatchQueryBuilder.Type.PHRASE, fields, queryText, null);  
+                part2Binary,  
+     * @param context The query shard context.
+            return queries.get(0);  
+                    }
+    private Query applyBoost(Query q, Float boost) {  
+     * @param groupTieBreaker The tie breaker to apply when multiple fields are used.  
+        } catch (RuntimeException e) {
+            MappedFieldType currentFieldType = context.fieldMapper(field);
+        }  
+            // if there is no match in the mappings.
+            extractedFields = fieldsAndWeights;
+            if (getAllowLeadingWildcard() == false && (termStr.startsWith("*") || termStr.startsWith("?"))) {  
+        Map<String, Float> fields = extractMultiFields(field, false);  
+import org.opensearch.search.SearchService;
+        if (field != null && EXISTS_FIELD.equals(field)) {
+        } else if (query instanceof SpanOrQuery spanOrQuery) {  
+                    + maxQueryNestingDepth
+            // happens for wildcard fields only since we cannot expand to a valid field name  
+ * Unless required by applicable law or agreed to in writing,
+        final Term[] terms = query.getTerms();  
+        }  
+                // build a synonym query for terms in the same position.
      */
-    public void setFuzzyTranspositions(boolean fuzzyTranspositions) {
+        }  
+    @Override
+            MappedFieldType currentFieldType = queryBuilder.context.fieldMapper(field);
+        if (queries.size() == 1) {
+        Map<String, Float> fields = extractMultiFields(field, false);
+import org.opensearch.common.unit.Fuzziness;
+            setAnalyzer(getSearchAnalyzer(currentFieldType));  
+    /**
+        }
+        }  
+        if (termStr.equals("*") && actualField != null) {
+        // as logical operator by the query parser (e.g. age:>=10).  
+                posQuery = getBooleanQuery(innerClauses);
+                fuzzyMaxExpansions,
+        final int[] positions = query.getPositions();
+     * @param fieldsAndWeights The default fields and weights expansion for query terms.  
+                queryBuilder.setAnalyzer(forceQuoteAnalyzer);
+            List<String> plist = tlist.get(pos);
+    }  
+                        + " ("
+    /**  
+ * not use this file except in compliance with the License.
+            part1 = null;
+        if (fields.isEmpty()) {
+        }
+            if (lenient) {
+            }
+        List<Query> queries = new ArrayList<>();
+            setAnalyzer(oldAnalyzer);
+    }  
+        }
+            if (forceAnalyzer != null) {
+            return currentFieldType.prefixQuery(tlist.get(0).get(0), getMultiTermRewriteMethod(), context);
+    protected Query getPrefixQuery(String field, String termStr) throws ParseException {
+    }
+            resolveMappingField(context, "*", 1.0f, false, false, null),
+    private static int maxQueryStringLength = SearchService.SEARCH_MAX_QUERY_STRING_LENGTH.get(Settings.EMPTY);
+     */  
+            return queries.get(0);
+            }
+import static org.opensearch.common.lucene.search.Queries.fixNegativeQueryIfNeeded;
+        this.fieldsAndWeights = Collections.unmodifiableMap(fieldsAndWeights);
+            throw new IllegalArgumentException(
+    }  
+        } finally {
+            if (q != null) {  
+        }
+            queryBuilder.setAnalyzer(oldAnalyzer);
+    }
+        if (fields.isEmpty()) {
+    /**
+    }
+                return null;
+            // effectively, we check if a field exists or not
+        }
+                    + "); actual depth: "
+        queryBuilder.setOccur(op == Operator.AND ? BooleanClause.Occur.MUST : BooleanClause.Occur.SHOULD);
+            }
+        for (Map.Entry<String, Float> entry : fields.entrySet()) {
+    }
+                    + "the allowed maximum of ["  
+            if (currentFieldType == null || currentFieldType.getTextSearchInfo() == TextSearchInfo.NONE) {  
+        // Detects additional operators '<', '<=', '>', '>=' to handle range query with one side unbounded.
+            queryBuilder.setAnalyzer(oldAnalyzer);
+        super.setDefaultOperator(op);
+     */  
+                        + maxQueryStringLength  
+    private Analyzer getSearchAnalyzer(MappedFieldType currentFieldType) {  
+     * This should be only called from SearchService on settings updates.
+            return newUnmappedFieldQuery(field);
+            }
+        queryBuilder.setLenient(lenient);
+import org.apache.lucene.index.Term;
+    @Override  
+    public void setQuoteFieldSuffix(String quoteFieldSuffix) {
+            } else if (forceAnalyzer != null) {
+                    break;  
+    }
+    private boolean fuzzyTranspositions = FuzzyQuery.defaultTranspositions;
+                try {  
+            // The field_names_field is disabled so we switch to a wildcard query that matches all terms  
+     */
+    /**
+    public QueryStringQueryParser(QueryShardContext context, String defaultField) {
+                "Query string parenthesis nesting depth exceeds max allowed depth "
+     */
+        this(context, defaultField, Collections.emptyMap(), lenient, context.getMapperService().searchAnalyzer());
+            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;  
+            throw new ParseException(  
+    @Override
+            try {  
+            }
+                    "Query string length exceeds max allowed length {} ({}); actual length: {}",
+        boolean inQuotes = false;
+    protected Query getWildcardQuery(String field, String termStr) throws ParseException {
+            if (lenient) {  
+    }  
+                if (isLastPos) {
+        QueryStringQueryParser.maxQueryStringLength = maxQueryStringLength;  
+    protected Query newMatchAllDocsQuery() {
+                    if (!source.incrementToken()) break;
+                context
+    /**
+            if (currentPos.isEmpty() == false) {
+        for (Map.Entry<String, Float> entry : fields.entrySet()) {  
+    public QueryStringQueryParser(QueryShardContext context, Map<String, Float> fieldsAndWeights, boolean lenient) {  
+    @Override
+            return newUnmappedFieldQuery(field);
+        try {
+     */  
+            return null;  
+            }
+                }
+        }
+        try {  
+        );
+package org.opensearch.index.search;
+                    && context.fieldMapper(field).unwrap() instanceof DateFieldType
+     * @param type Sets how multiple fields should be combined to build textual part queries.  
+import org.apache.lucene.search.DisjunctionMaxQuery;
+import org.apache.lucene.queryparser.classic.ParseException;
         this.fuzzyTranspositions = fuzzyTranspositions;  
     }
-
-    private Query applyBoost(Query q, Float boost) {  
-        if (boost != null && boost != 1f) {
-            return new BoostQuery(q, boost);
-        }  
-        return q;
-    }
-
-    private Map<String, Float> extractMultiFields(String field, boolean quoted) {
-        Map<String, Float> extractedFields;
-        if (field != null) {  
-            boolean allFields = Regex.isMatchAllPattern(field);
-            if (allFields && this.field != null && this.field.equals(field)) {
-                // "*" is the default field  
-                extractedFields = fieldsAndWeights;
-            }
-            boolean multiFields = Regex.isSimpleMatchPattern(field);  
-            // Filters unsupported fields if a pattern is requested
-            // Filters metadata fields if all fields are requested
-            extractedFields = resolveMappingField(context, field, 1.0f, !allFields, !multiFields, quoted ? quoteFieldSuffix : null);  
-        } else if (quoted && quoteFieldSuffix != null) {
-            extractedFields = resolveMappingFields(context, fieldsAndWeights, quoteFieldSuffix);
-        } else {  
-            extractedFields = fieldsAndWeights;
-        }
-        checkForTooManyFields(extractedFields.size(), this.context, field);  
-        return extractedFields;
-    }
-
-    @Override
-    protected Query newMatchAllDocsQuery() {
-        return Queries.newMatchAllQuery();  
-    }
-
-    @Override  
-    public Query getFieldQuery(String field, String queryText, boolean quoted) throws ParseException {
-        if (field != null && EXISTS_FIELD.equals(field)) {
-            return existsQuery(queryText);  
-        }
-
-        if (quoted) {  
-            return getFieldQuery(field, queryText, getPhraseSlop());
-        }
-
-        // Detects additional operators '<', '<=', '>', '>=' to handle range query with one side unbounded.
-        // It is required to use a prefix field operator to enable the detection since they are not treated
-        // as logical operator by the query parser (e.g. age:>=10).  
-        if (field != null) {
-            if (queryText.length() > 1) {
-                if (queryText.charAt(0) == '>') {  
-                    if (queryText.length() > 2) {
-                        if (queryText.charAt(1) == '=') {
-                            return getRangeQuery(field, queryText.substring(2), null, true, true);  
-                        }
-                    }
-                    return getRangeQuery(field, queryText.substring(1), null, false, true);  
-                } else if (queryText.charAt(0) == '<') {
-                    if (queryText.length() > 2) {
-                        if (queryText.charAt(1) == '=') {  
-                            return getRangeQuery(field, null, queryText.substring(2), true, true);
-                        }
-                    }  
-                    return getRangeQuery(field, null, queryText.substring(1), true, false);
-                }
-                // if we are querying a single date field, we also create a range query that leverages the time zone setting  
-                if (context.fieldMapper(field) != null
-                    && context.fieldMapper(field).unwrap() instanceof DateFieldType
-                    && this.timeZone != null) {  
-                    return getRangeQuery(field, queryText, queryText, true, true);
-                }
-            }  
-        }
-
-        Map<String, Float> fields = extractMultiFields(field, quoted);  
-        if (fields.isEmpty()) {
-            // the requested fields do not match any field in the mapping
-            // happens for wildcard fields only since we cannot expand to a valid field name  
-            // if there is no match in the mappings.
-            return newUnmappedFieldQuery(field);
-        }  
-        Analyzer oldAnalyzer = queryBuilder.analyzer;
-        try {
-            if (forceAnalyzer != null) {  
-                queryBuilder.setAnalyzer(forceAnalyzer);
-            }
-            return queryBuilder.parse(type, fields, queryText, null);  
-        } catch (IOException e) {
-            throw new ParseException(e.getMessage());
-        } finally {  
-            queryBuilder.setAnalyzer(oldAnalyzer);
-        }
-    }  
-
-    @Override
-    protected Query getFieldQuery(String field, String queryText, int slop) throws ParseException {  
-        if (field != null && EXISTS_FIELD.equals(field)) {
-            return existsQuery(queryText);
-        }  
-
-        Map<String, Float> fields = extractMultiFields(field, true);
-        if (fields.isEmpty()) {  
-            return newUnmappedFieldQuery(field);
-        }
-        Analyzer oldAnalyzer = queryBuilder.analyzer;  
-        int oldSlop = queryBuilder.phraseSlop;
-        try {
-            if (forceQuoteAnalyzer != null) {  
-                queryBuilder.setAnalyzer(forceQuoteAnalyzer);
-            } else if (forceAnalyzer != null) {
-                queryBuilder.setAnalyzer(forceAnalyzer);  
-            }
-            queryBuilder.setPhraseSlop(slop);
-            Query query = queryBuilder.parse(MultiMatchQueryBuilder.Type.PHRASE, fields, queryText, null);  
-            if (query == null) {
-                return null;
-            }  
-            return applySlop(query, slop);
-        } catch (IOException e) {
-            throw new ParseException(e.getMessage());  
-        } finally {
-            queryBuilder.setAnalyzer(oldAnalyzer);
-            queryBuilder.setPhraseSlop(oldSlop);  
-        }
-    }
-
-    @Override
-    protected Query getRangeQuery(String field, String part1, String part2, boolean startInclusive, boolean endInclusive)
-        throws ParseException {  
-        if ("*".equals(part1)) {
-            part1 = null;
-        }  
-        if ("*".equals(part2)) {
-            part2 = null;
-        }  
-
-        Map<String, Float> fields = extractMultiFields(field, false);
-        if (fields.isEmpty()) {  
-            return newUnmappedFieldQuery(field);
-        }
-
-        List<Query> queries = new ArrayList<>();
-        for (Map.Entry<String, Float> entry : fields.entrySet()) {
-            Query q = getRangeQuerySingle(entry.getKey(), part1, part2, startInclusive, endInclusive, context);  
-            assert q != null;
-            queries.add(applyBoost(q, entry.getValue()));
-        }  
-
-        if (queries.size() == 1) {
-            return queries.get(0);  
-        }
-        float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;
-        return new DisjunctionMaxQuery(queries, tiebreaker);  
-    }
-
-    private Query getRangeQuerySingle(  
-        String field,
-        String part1,
-        String part2,  
-        boolean startInclusive,
-        boolean endInclusive,
-        QueryShardContext context  
-    ) {
-        MappedFieldType currentFieldType = context.fieldMapper(field);
-        if (currentFieldType == null) {  
-            return newUnmappedFieldQuery(field);
-        }
-        try {  
-            Analyzer normalizer = forceAnalyzer == null ? queryBuilder.context.getSearchAnalyzer(currentFieldType) : forceAnalyzer;
-            BytesRef part1Binary = part1 == null ? null : normalizer.normalize(field, part1);
-            BytesRef part2Binary = part2 == null ? null : normalizer.normalize(field, part2);  
-            Query rangeQuery = currentFieldType.rangeQuery(
-                part1Binary,
-                part2Binary,  
-                startInclusive,
-                endInclusive,
-                null,  
-                timeZone,
-                null,
-                context  
-            );
-            return rangeQuery;
-        } catch (RuntimeException e) {  
-            if (lenient) {
-                return newLenientFieldQuery(field, e);
-            }  
-            throw e;
-        }
-    }  
-
-    @Override
-    protected Query handleBareFuzzy(String field, Token fuzzySlop, String termImage) throws ParseException {  
-        if (fuzzySlop.image.length() == 1) {
-            return getFuzzyQuery(field, termImage, fuzziness.asDistance(termImage));
-        }  
-        float distance = Fuzziness.build(fuzzySlop.image.substring(1)).asDistance(termImage);
-        return getFuzzyQuery(field, termImage, distance);
-    }  
-
-    @Override
-    protected Query getFuzzyQuery(String field, String termStr, float minSimilarity) throws ParseException {  
-        Map<String, Float> fields = extractMultiFields(field, false);
-        if (fields.isEmpty()) {
-            return newUnmappedFieldQuery(field);  
-        }
-        List<Query> queries = new ArrayList<>();
-        for (Map.Entry<String, Float> entry : fields.entrySet()) {  
-            Query q = getFuzzyQuerySingle(entry.getKey(), termStr, minSimilarity);
-            assert q != null;
-            queries.add(applyBoost(q, entry.getValue()));  
-        }
-
-        if (queries.size() == 1) {  
-            return queries.get(0);
-        } else {
-            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;  
-            return new DisjunctionMaxQuery(queries, tiebreaker);
-        }
-    }  
-
-    private Query getFuzzyQuerySingle(String field, String termStr, float minSimilarity) throws ParseException {
-        MappedFieldType currentFieldType = context.fieldMapper(field);  
-        if (currentFieldType == null) {
-            return newUnmappedFieldQuery(field);
-        }  
-        try {
-            Analyzer normalizer = forceAnalyzer == null ? queryBuilder.context.getSearchAnalyzer(currentFieldType) : forceAnalyzer;
-            BytesRef term = termStr == null ? null : normalizer.normalize(field, termStr);  
-            return currentFieldType.fuzzyQuery(
-                term,
-                Fuzziness.fromEdits((int) minSimilarity),  
-                getFuzzyPrefixLength(),
-                fuzzyMaxExpansions,
-                fuzzyTranspositions,  
-                fuzzyRewriteMethod,
-                context
-            );  
-        } catch (RuntimeException e) {
-            if (lenient) {
-                return newLenientFieldQuery(field, e);  
-            }
-            throw e;
-        }  
-    }
-
-    @Override  
-    protected Query newFuzzyQuery(Term term, float minimumSimilarity, int prefixLength) {
-        int numEdits = Fuzziness.build(minimumSimilarity).asDistance(term.text());
-        return new FuzzyQuery(term, numEdits, prefixLength, fuzzyMaxExpansions, fuzzyTranspositions, fuzzyRewriteMethod);  
-    }
-
-    @Override  
-    protected Query getPrefixQuery(String field, String termStr) throws ParseException {
-        Map<String, Float> fields = extractMultiFields(field, false);
-        if (fields.isEmpty()) {  
-            return newUnmappedFieldQuery(termStr);
-        }
-        List<Query> queries = new ArrayList<>();  
-        for (Map.Entry<String, Float> entry : fields.entrySet()) {
-            Query q = getPrefixQuerySingle(entry.getKey(), termStr);
-            if (q != null) {  
-                queries.add(applyBoost(q, entry.getValue()));
-            }
-        }  
-        if (queries.isEmpty()) {
-            return null;
-        } else if (queries.size() == 1) {  
-            return queries.get(0);
-        } else {
-            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;  
-            return new DisjunctionMaxQuery(queries, tiebreaker);
-        }
-    }  
-
-    private Query getPrefixQuerySingle(String field, String termStr) throws ParseException {
-        Analyzer oldAnalyzer = getAnalyzer();  
-        try {
-            MappedFieldType currentFieldType = context.fieldMapper(field);
-            if (currentFieldType == null || currentFieldType.getTextSearchInfo() == TextSearchInfo.NONE) {  
-                return newUnmappedFieldQuery(field);
-            }
-            setAnalyzer(getSearchAnalyzer(currentFieldType));  
-            Query query = null;
-            if (currentFieldType.getTextSearchInfo().isTokenized() == false) {
-                query = currentFieldType.prefixQuery(termStr, getMultiTermRewriteMethod(), context);  
-            } else {
-                query = getPossiblyAnalyzedPrefixQuery(currentFieldType.name(), termStr, currentFieldType);
-            }  
-            return query;
-        } catch (RuntimeException e) {
-            if (lenient) {  
-                return newLenientFieldQuery(field, e);
-            }
-            throw e;  
-        } finally {
-            setAnalyzer(oldAnalyzer);
-        }  
-    }
-
-    private Query getPossiblyAnalyzedPrefixQuery(String field, String termStr, MappedFieldType currentFieldType) throws ParseException {  
-        if (analyzeWildcard == false) {
-            return currentFieldType.prefixQuery(
-                getAnalyzer().normalize(field, termStr).utf8ToString(),  
-                getMultiTermRewriteMethod(),
-                context
-            );  
-        }
-        List<List<String>> tlist;
-        // get Analyzer from superclass and tokenize the term  
-        TokenStream source = null;
-        try {
-            try {  
-                source = getAnalyzer().tokenStream(field, termStr);
-                source.reset();
-            } catch (IOException e) {  
-                return super.getPrefixQuery(field, termStr);
-            }
-            tlist = new ArrayList<>();  
-            List<String> currentPos = new ArrayList<>();
-            CharTermAttribute termAtt = source.addAttribute(CharTermAttribute.class);
-            PositionIncrementAttribute posAtt = source.addAttribute(PositionIncrementAttribute.class);  
-
-            while (true) {
-                try {  
-                    if (!source.incrementToken()) break;
-                } catch (IOException e) {
-                    break;  
-                }
-                if (currentPos.isEmpty() == false && posAtt.getPositionIncrement() > 0) {
-                    tlist.add(currentPos);  
-                    currentPos = new ArrayList<>();
-                }
-                currentPos.add(termAtt.toString());  
-            }
-            if (currentPos.isEmpty() == false) {
-                tlist.add(currentPos);  
-            }
-        } finally {
-            if (source != null) {  
-                IOUtils.closeWhileHandlingException(source);
-            }
-        }  
-
-        if (tlist.size() == 0) {
-            return null;  
-        }
-
-        if (tlist.size() == 1 && tlist.get(0).size() == 1) {  
-            return currentFieldType.prefixQuery(tlist.get(0).get(0), getMultiTermRewriteMethod(), context);
-        }
-
-        // build a boolean query with prefix on the last position only.
-        List<BooleanClause> clauses = new ArrayList<>();
-        for (int pos = 0; pos < tlist.size(); pos++) {  
-            List<String> plist = tlist.get(pos);
-            boolean isLastPos = (pos == tlist.size() - 1);
-            Query posQuery;  
-            if (plist.size() == 1) {
-                if (isLastPos) {
-                    posQuery = currentFieldType.prefixQuery(plist.get(0), getMultiTermRewriteMethod(), context);  
-                } else {
-                    posQuery = newTermQuery(new Term(field, plist.get(0)), BoostAttribute.DEFAULT_BOOST);
-                }  
-            } else if (isLastPos == false) {
-                // build a synonym query for terms in the same position.
-                SynonymQuery.Builder sb = new SynonymQuery.Builder(field);  
-                for (String synonym : plist) {
-                    sb.addTerm(new Term(field, synonym));
-                }  
-                posQuery = sb.build();
-            } else {
-                List<BooleanClause> innerClauses = new ArrayList<>();  
-                for (String token : plist) {
-                    innerClauses.add(new BooleanClause(super.getPrefixQuery(field, token), BooleanClause.Occur.SHOULD));
-                }  
-                posQuery = getBooleanQuery(innerClauses);
-            }
-            clauses.add(  
-                new BooleanClause(posQuery, getDefaultOperator() == Operator.AND ? BooleanClause.Occur.MUST : BooleanClause.Occur.SHOULD)
-            );
-        }  
-        return getBooleanQuery(clauses);
-    }
-
-    private Query existsQuery(String fieldName) {
-        final FieldNamesFieldMapper.FieldNamesFieldType fieldNamesFieldType = (FieldNamesFieldMapper.FieldNamesFieldType) context
-            .getMapperService()  
-            .fieldType(FieldNamesFieldMapper.NAME);
-        if (fieldNamesFieldType == null) {
-            return new MatchNoDocsQuery("No mappings yet");  
-        }
-        if (fieldNamesFieldType.isEnabled() == false) {
-            // The field_names_field is disabled so we switch to a wildcard query that matches all terms  
-            return new WildcardQuery(new Term(fieldName, "*"));
-        }
-
-        return ExistsQueryBuilder.newFilter(context, fieldName, false);
-    }
-
-    @Override
-    protected Query getWildcardQuery(String field, String termStr) throws ParseException {
-        String actualField = field != null ? field : this.field;  
-        if (termStr.equals("*") && actualField != null) {
-            if (Regex.isMatchAllPattern(actualField)) {
-                return newMatchAllDocsQuery();  
-            }
-            // effectively, we check if a field exists or not
-            return existsQuery(actualField);  
-        }
-
-        Map<String, Float> fields = extractMultiFields(field, false);  
-        if (fields.isEmpty()) {
-            return newUnmappedFieldQuery(termStr);
-        }  
-        List<Query> queries = new ArrayList<>();
-        for (Map.Entry<String, Float> entry : fields.entrySet()) {
-            Query q = getWildcardQuerySingle(entry.getKey(), termStr);  
-            assert q != null;
-            queries.add(applyBoost(q, entry.getValue()));
-        }  
-        if (queries.size() == 1) {
-            return queries.get(0);
-        } else {  
-            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;
-            return new DisjunctionMaxQuery(queries, tiebreaker);
-        }  
-    }
-
-    private Query getWildcardQuerySingle(String field, String termStr) throws ParseException {  
-        if ("*".equals(termStr)) {
-            // effectively, we check if a field exists or not
-            return existsQuery(field);  
-        }
-        Analyzer oldAnalyzer = getAnalyzer();
-        try {  
-            MappedFieldType currentFieldType = queryBuilder.context.fieldMapper(field);
-            if (currentFieldType == null) {
-                return newUnmappedFieldQuery(field);  
-            }
-            if (forceAnalyzer != null && (analyzeWildcard || currentFieldType.getTextSearchInfo().isTokenized())) {
-                setAnalyzer(forceAnalyzer);  
-                return super.getWildcardQuery(currentFieldType.name(), termStr);
-            }
-            if (getAllowLeadingWildcard() == false && (termStr.startsWith("*") || termStr.startsWith("?"))) {  
-                throw new ParseException("'*' or '?' not allowed as first character in WildcardQuery");
-            }
-            // query string query is always normalized  
-            return currentFieldType.normalizedWildcardQuery(termStr, getMultiTermRewriteMethod(), context);
-        } catch (RuntimeException e) {
-            if (lenient) {  
-                return newLenientFieldQuery(field, e);
-            }
-            throw e;  
-        } finally {
-            setAnalyzer(oldAnalyzer);
-        }  
-    }
-
-    private Analyzer getSearchAnalyzer(MappedFieldType currentFieldType) {  
-        if (forceAnalyzer == null) {
-            return queryBuilder.context.getSearchAnalyzer(currentFieldType);
-        }  
-        return forceAnalyzer;
-    }
-
-    @Override
-    protected Query getRegexpQuery(String field, String termStr) throws ParseException {
-        final int maxAllowedRegexLength = context.getIndexSettings().getMaxRegexLength();  
-        if (termStr.length() > maxAllowedRegexLength) {
-            throw new IllegalArgumentException(
-                "The length of regex ["  
-                    + termStr.length()
-                    + "] used in the [query_string] has exceeded "
-                    + "the allowed maximum of ["  
-                    + maxAllowedRegexLength
-                    + "]. This maximum can be set by changing the ["
-                    + IndexSettings.MAX_REGEX_LENGTH_SETTING.getKey()  
-                    + "] index level setting."
-            );
-        }  
-        Map<String, Float> fields = extractMultiFields(field, false);
-        if (fields.isEmpty()) {
-            return newUnmappedFieldQuery(termStr);  
-        }
-        List<Query> queries = new ArrayList<>();
-        for (Map.Entry<String, Float> entry : fields.entrySet()) {  
-            Query q = getRegexpQuerySingle(entry.getKey(), termStr);
-            assert q != null;
-            queries.add(applyBoost(q, entry.getValue()));  
-        }
-        if (queries.size() == 1) {
-            return queries.get(0);  
-        } else {
-            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;
-            return new DisjunctionMaxQuery(queries, tiebreaker);  
-        }
-    }
-
-    private Query getRegexpQuerySingle(String field, String termStr) throws ParseException {
-        Analyzer oldAnalyzer = getAnalyzer();
-        try {  
-            MappedFieldType currentFieldType = queryBuilder.context.fieldMapper(field);
-            if (currentFieldType == null) {
-                return newUnmappedFieldQuery(field);  
-            }
-            if (forceAnalyzer != null) {
-                setAnalyzer(forceAnalyzer);  
-            }
-            // query string query normalizes search value
-            termStr = getAnalyzer().normalize(currentFieldType.name(), termStr).utf8ToString();  
-            return currentFieldType.regexpQuery(termStr, RegExp.ALL, 0, getDeterminizeWorkLimit(), getMultiTermRewriteMethod(), context);
-        } catch (RuntimeException e) {
-            // Lenient queries are intended for data type mismatches, but TooComplexToDeterminizeException  
-            // comes up from the same place in the code. Don't create a lenient query in this case.
-            if (lenient && !(e instanceof TooComplexToDeterminizeException)) {
-                return newLenientFieldQuery(field, e);  
-            }
-            throw e;
-        } finally {  
-            setAnalyzer(oldAnalyzer);
-        }
-    }  
-
-    @Override
-    protected Query getBooleanQuery(List<BooleanClause> clauses) throws ParseException {  
-        Query q = super.getBooleanQuery(clauses);
-        if (q == null) {
-            return null;  
-        }
-        return fixNegativeQueryIfNeeded(q);
-    }  
-
-    private Query applySlop(Query q, int slop) {
-        if (q instanceof PhraseQuery phraseQuery) {  
-            // make sure that the boost hasn't been set beforehand, otherwise we'd lose it
-            assert q instanceof BoostQuery == false;
-            return addSlopToPhrase(phraseQuery, slop);  
-        } else if (q instanceof MultiPhraseQuery multiPhraseQuery) {
-            MultiPhraseQuery.Builder builder = new MultiPhraseQuery.Builder(multiPhraseQuery);
-            builder.setSlop(slop);  
-            return builder.build();
-        } else if (q instanceof SpanQuery spanQuery) {
-            return addSlopToSpan(spanQuery, slop);  
-        } else {
-            return q;
-        }  
-    }
-
-    private Query addSlopToSpan(SpanQuery query, int slop) {  
-        if (query instanceof SpanNearQuery spanNearQuery) {
-            return new SpanNearQuery(spanNearQuery.getClauses(), slop, spanNearQuery.isInOrder());
-        } else if (query instanceof SpanOrQuery spanOrQuery) {  
-            SpanQuery[] clauses = new SpanQuery[spanOrQuery.getClauses().length];
-            int pos = 0;
-            for (SpanQuery clause : spanOrQuery.getClauses()) {  
-                clauses[pos++] = (SpanQuery) addSlopToSpan(clause, slop);
-            }
-            return new SpanOrQuery(clauses);  
-        } else {
-            return query;
-        }  
-    }
-
-    /**  
-     * Rebuild a phrase query with a slop value
-     */
-    private PhraseQuery addSlopToPhrase(PhraseQuery query, int slop) {  
-        PhraseQuery.Builder builder = new PhraseQuery.Builder();
-        builder.setSlop(slop);
-        final Term[] terms = query.getTerms();  
-        final int[] positions = query.getPositions();
-        for (int i = 0; i < terms.length; ++i) {
-            builder.add(terms[i], positions[i]);  
-        }
-
-        return builder.build();  
-    }
-
-    @Override  
-    public Query parse(String query) throws ParseException {
-        if (query.trim().isEmpty()) {
-            return Queries.newMatchNoDocsQuery("Matching no documents because no terms present");  
-        }
-        // Check parenthesis nesting depth before delegating to Lucene's recursive-descent parser.
-        // Deep nesting can cause StackOverflowError due to Lucene's recursive grammar productions.  
-        int nestingDepth = maxParenthesisNestingDepth(query);
-        if (nestingDepth > maxQueryNestingDepth) {
-            throw new ParseException(  
-                "Query string parenthesis nesting depth exceeds max allowed depth "
-                    + maxQueryNestingDepth
-                    + " ("  
-                    + SearchService.SEARCH_MAX_QUERY_NESTING_DEPTH.getKey()
-                    + "); actual depth: "
-                    + nestingDepth  
-            );
-        }
-        if (query.length() > maxQueryStringLength) {  
-            if (maxQueryStringLengthMonitorMode) {
-                // Log a warning and continue
-                logger.warn(  
-                    "Query string length exceeds max allowed length {} ({}); actual length: {}",
-                    maxQueryStringLength,
-                    SearchService.SEARCH_MAX_QUERY_STRING_LENGTH.getKey(),  
-                    query.length()
-                );
-            } else {  
-                throw new ParseException(
+    private int fuzzyMaxExpansions = FuzzyQuery.defaultMaxExpansions;
                     "Query string length exceeds max allowed length "
-                        + maxQueryStringLength  
-                        + " ("
-                        + SearchService.SEARCH_MAX_QUERY_STRING_LENGTH.getKey()
-                        + "); actual length: "  
-                        + query.length()
-                );
-            }  
-        }
-        return super.parse(query);
+    }
+        if (fields.isEmpty()) {  
+                queryBuilder.setAnalyzer(forceAnalyzer);  
     }  
-
+            }
+            BytesRef term = termStr == null ? null : normalizer.normalize(field, termStr);  
+    }  
+            if (allFields && this.field != null && this.field.equals(field)) {
+    }  
+                    return getRangeQuery(field, null, queryText.substring(1), true, false);
+    public static void setMaxQueryStringLength(int maxQueryStringLength) {
     /**
-     * Computes the maximum parenthesis nesting depth in the given query string.  
-     * This is a pre-parse check to prevent StackOverflowError in Lucene's
+        return Queries.newMatchAllQuery();  
+ * @opensearch.internal
+                        }
+    /**  
+    private Query getRegexpQuerySingle(String field, String termStr) throws ParseException {
+        if (query instanceof SpanNearQuery spanNearQuery) {
+                }  
+    public void setFuzzyMaxExpansions(int fuzzyMaxExpansions) {
+    protected Query getFieldQuery(String field, String queryText, int slop) throws ParseException {  
+            throw e;  
+    }
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                part1Binary,
+            }
+            }  
+        boolean endInclusive,
+                currentPos.add(termAtt.toString());  
+                        }
+            assert q != null;
+     * Sets whether the max query string length should be enforced in or not
+            }  
+            context.getMapperService().searchAnalyzer()  
+        }  
+        this.type = type;  
+            return newUnmappedFieldQuery(field);
+        } else {
+    public void setTimeZone(ZoneId timeZone) {
+    protected Query newFuzzyQuery(Term term, float minimumSimilarity, int prefixLength) {
+import org.apache.lucene.queries.spans.SpanQuery;
+    private Query existsQuery(String fieldName) {
+        String actualField = field != null ? field : this.field;  
+import org.apache.lucene.search.BoostAttribute;  
+                    if (queryText.length() > 2) {
+    /**  
+     * @param context The query shard context.
+        return super.parse(query);
+        builder.setSlop(slop);
+/**
+                for (String synonym : plist) {
+        }  
+    private final QueryShardContext context;  
+    private Query getFuzzyQuerySingle(String field, String termStr, float minSimilarity) throws ParseException {
+            queries.add(applyBoost(q, entry.getValue()));  
+                } else if (c == ')') {  
+            if (forceQuoteAnalyzer != null) {  
+    public void setGroupTieBreaker(float groupTieBreaker) {
+        if (fieldNamesFieldType == null) {
+        }
+        Analyzer oldAnalyzer = getAnalyzer();  
+        return new FuzzyQuery(term, numEdits, prefixLength, fuzzyMaxExpansions, fuzzyTranspositions, fuzzyRewriteMethod);  
+     */
+                        if (queryText.charAt(1) == '=') {  
+            return new SpanNearQuery(spanNearQuery.getClauses(), slop, spanNearQuery.isInOrder());
+    ) {
+     * @param analyzer Force the provided analyzer to be used for all query analysis regardless of the field.  
+        boolean startInclusive,
+ * KIND, either express or implied.  See the License for the
+        } catch (RuntimeException e) {  
+                    + "] used in the [query_string] has exceeded "
+import java.util.ArrayList;
+    public void setDefaultOperator(Operator op) {  
+            if (currentFieldType == null) {
+        Map<String, Float> extractedFields;
+            setAnalyzer(oldAnalyzer);
+    }
+import org.apache.lucene.search.MultiTermQuery;  
+        // Force the tie breaker in the query builder too  
+import org.opensearch.index.mapper.FieldNamesFieldMapper;  
+    private Query getRangeQuerySingle(  
+    private Query getWildcardQuerySingle(String field, String termStr) throws ParseException {  
+                    + nestingDepth  
+ * A {@link XQueryParser} that uses the {@link MapperService} in order to build smarter  
+            for (SpanQuery clause : spanOrQuery.getClauses()) {  
+    public Query getFieldQuery(String field, String queryText, boolean quoted) throws ParseException {
+        }  
+ * license agreements. See the NOTICE file distributed with
+            assert q != null;
+     * Defaults to {@link Fuzziness#AUTO}.
+                }
+/*  
+import java.io.IOException;  
+        if (fields.isEmpty()) {
+     * @param defaultField The default field for query terms.
+    }  
+public class QueryStringQueryParser extends XQueryParser {
+    private static final String EXISTS_FIELD = "_exists_";  
+     * @param timeZone Time Zone to be applied to any range query related to dates.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            return currentFieldType.normalizedWildcardQuery(termStr, getMultiTermRewriteMethod(), context);
+     * @param defaultField The default field for query terms.
+        Map<String, Float> fieldsAndWeights,
+        }
+                } else if (queryText.charAt(0) == '<') {
+        } else {
+    private Query applySlop(Query q, int slop) {
      * recursive-descent classic query parser.
      */  
-    static int maxParenthesisNestingDepth(String query) {
-        int maxDepth = 0;
-        int currentDepth = 0;  
-        boolean inQuotes = false;
-        for (int i = 0; i < query.length(); i++) {
-            char c = query.charAt(i);  
-            if (c == '"') {
-                inQuotes = !inQuotes;
-            } else if (!inQuotes) {  
-                if (c == '(') {
-                    currentDepth++;
-                    if (currentDepth > maxDepth) {  
-                        maxDepth = currentDepth;
-                    }
-                } else if (c == ')') {  
-                    currentDepth--;
-                }
-            }  
+        // build a boolean query with prefix on the last position only.
+     */
         }
-        return maxDepth;
-    }  
-
-    /**
-     * Sets the maximum allowed length for query strings. This should be only called from SearchService on settings updates.  
+        return fixNegativeQueryIfNeeded(q);
+        // Deep nesting can cause StackOverflowError due to Lucene's recursive grammar productions.  
      */
-    public static void setMaxQueryStringLength(int maxQueryStringLength) {
-        QueryStringQueryParser.maxQueryStringLength = maxQueryStringLength;  
+import org.opensearch.index.mapper.DateFieldMapper.DateFieldType;
+            List<String> currentPos = new ArrayList<>();
+            return currentFieldType.regexpQuery(termStr, RegExp.ALL, 0, getDeterminizeWorkLimit(), getMultiTermRewriteMethod(), context);
+            int pos = 0;
+        int numEdits = Fuzziness.build(minimumSimilarity).asDistance(term.text());
+        if (field != null) {  
+        }
+        MappedFieldType currentFieldType = context.fieldMapper(field);  
+        queryBuilder.setZeroTermsQuery(MatchQuery.ZeroTermsQuery.NULL);  
+        Analyzer oldAnalyzer = queryBuilder.analyzer;  
+        }  
+                        + "); actual length: "  
+            } catch (IOException e) {  
+        List<List<String>> tlist;
+import org.apache.lucene.search.MultiPhraseQuery;
+                    currentDepth--;
+    public void setForceQuoteAnalyzer(Analyzer analyzer) {  
+import static org.opensearch.index.search.QueryParserHelper.resolveMappingFields;  
+    }  
+        this.fuzzyRewriteMethod = fuzzyRewriteMethod;  
+        }
+            } else if (isLastPos == false) {
+        List<Query> queries = new ArrayList<>();
+    public QueryStringQueryParser(QueryShardContext context, Map<String, Float> fieldsAndWeights) {  
+        } catch (IOException e) {
+                setAnalyzer(forceAnalyzer);  
+                SynonymQuery.Builder sb = new SynonymQuery.Builder(field);  
+                } catch (IOException e) {
+import static org.opensearch.index.search.QueryParserHelper.resolveMappingField;
+        this(context, null, fieldsAndWeights, lenient, context.getMapperService().searchAnalyzer());
+ * under the License.  
+            return newUnmappedFieldQuery(field);  
+import java.util.List;
     }
-
+        } else if (q instanceof MultiPhraseQuery multiPhraseQuery) {
+                queryBuilder.setAnalyzer(forceAnalyzer);
+import org.apache.lucene.util.automaton.RegExp;  
+    private MultiTermQuery.RewriteMethod fuzzyRewriteMethod = MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE;  
+            return q;
+     * Defaults to {@link FuzzyQuery#defaultTranspositions}.  
+                timeZone,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }  
+    private Float groupTieBreaker;  
+import org.apache.lucene.util.automaton.TooComplexToDeterminizeException;
+                );
+    }  
+    }  
+ * specific language governing permissions and limitations
+            );
+     */
+            // Filters metadata fields if all fields are requested
+    }  
+                    + SearchService.SEARCH_MAX_QUERY_NESTING_DEPTH.getKey()
+    /**
+import java.util.Map;
+            BytesRef part2Binary = part2 == null ? null : normalizer.normalize(field, part2);  
+                }  
+            setAnalyzer(oldAnalyzer);
+        if (field != null && EXISTS_FIELD.equals(field)) {
+            return Queries.newMatchNoDocsQuery("Matching no documents because no terms present");  
+    }  
+                extractedFields = fieldsAndWeights;
+                endInclusive,
+                query = currentFieldType.prefixQuery(termStr, getMultiTermRewriteMethod(), context);  
+        for (int i = 0; i < query.length(); i++) {
+            queryBuilder.setPhraseSlop(oldSlop);  
+            boolean isLastPos = (pos == tlist.size() - 1);
+            }  
+                List<BooleanClause> innerClauses = new ArrayList<>();  
+ */  
+                return newLenientFieldQuery(field, e);
+        return builder.build();  
+        }  
+                    + "]. This maximum can be set by changing the ["
+            context,
+        } catch (RuntimeException e) {
+    private Analyzer forceAnalyzer;
+                tlist.add(currentPos);  
+        this(context, defaultField, Collections.emptyMap(), false, context.getMapperService().searchAnalyzer());
+        // Check parenthesis nesting depth before delegating to Lucene's recursive-descent parser.
+        } finally {  
+                            return getRangeQuery(field, null, queryText.substring(2), true, true);
+    }
+                for (String token : plist) {
+        this.fuzziness = fuzziness;
+        if (fields.isEmpty()) {
+                fuzzyTranspositions,  
+     * @param context The query shard context.  
+        } else if (queries.size() == 1) {  
+        this.lenient = lenient;
+                logger.warn(  
+                        maxDepth = currentDepth;
+        if (fields.isEmpty()) {  
+        if (fuzzySlop.image.length() == 1) {
+        }  
+            return getFieldQuery(field, queryText, getPhraseSlop());
+        QueryShardContext context,
+        List<Query> queries = new ArrayList<>();
+    }
+     * Defaults to all queryable fields extracted from the mapping for query terms
+            return queryBuilder.parse(type, fields, queryText, null);  
+    @Override
+        if (queries.size() == 1) {
+            if (c == '"') {
+import org.opensearch.index.query.ExistsQueryBuilder;
+                    + IndexSettings.MAX_REGEX_LENGTH_SETTING.getKey()  
+        }  
+        return q;
+                return newUnmappedFieldQuery(field);
+        } finally {  
+            }  
+ * This class uses {@link MultiMatchQuery} to build the text query around operators and {@link XQueryParser}
+        try {
+                // Log a warning and continue
+                    + termStr.length()
+        boolean lenient,
+        }
+ */  
+            if (currentFieldType == null) {
+            return existsQuery(field);  
+        }
     /**  
-     * Sets whether the max query string length should be enforced in or not
-     * @param monitorMode if true, the max query string length will not be enforced
-     */  
-    public static void setMaxQueryStringLengthMonitorMode(boolean monitorMode) {
-        QueryStringQueryParser.maxQueryStringLengthMonitorMode = monitorMode;
-    }  
-
     /**
-     * Sets the maximum allowed parenthesis nesting depth for query strings.  
-     * This should be only called from SearchService on settings updates.
-     */
+ *
+    }  
+        }  
+            clauses.add(  
+        this.fuzzyMaxExpansions = fuzzyMaxExpansions;
+                startInclusive,
+import org.apache.lucene.search.SynonymQuery;  
+            if (forceAnalyzer != null) {  
+            .fieldType(FieldNamesFieldMapper.NAME);
+            assert q != null;
+                source.reset();
+                throw new ParseException("'*' or '?' not allowed as first character in WildcardQuery");
+        if (query.trim().isEmpty()) {
+        } else {  
+        if (nestingDepth > maxQueryNestingDepth) {
+            boolean allFields = Regex.isMatchAllPattern(field);
     public static void setMaxQueryNestingDepth(int maxQueryNestingDepth) {  
-        QueryStringQueryParser.maxQueryNestingDepth = maxQueryNestingDepth;
+        }
+        return getFuzzyQuery(field, termImage, distance);
+import org.apache.lucene.queries.spans.SpanOrQuery;  
+    }  
+        }  
+    @SuppressWarnings("NonFinalStaticField")
+import org.apache.lucene.queryparser.classic.XQueryParser;
     }
+    }  
+     * @param lenient If set to `true` will cause format based failures (like providing text to a numeric field) to be ignored.
+                return newMatchAllDocsQuery();  
+        super.setEnablePositionIncrements(enable);
+            return new DisjunctionMaxQuery(queries, tiebreaker);
+        }
+        this.forceQuoteAnalyzer = analyzer;
+     * @param context The query shard context  
+        checkForTooManyFields(extractedFields.size(), this.context, field);  
+            builder.setSlop(slop);  
+    private ZoneId timeZone;  
+            MultiPhraseQuery.Builder builder = new MultiPhraseQuery.Builder(multiPhraseQuery);
+            throw new ParseException(e.getMessage());  
+        queryBuilder.setAutoGenerateSynonymsPhraseQuery(enable);
+import org.opensearch.common.util.io.IOUtils;  
+     * Computes the maximum parenthesis nesting depth in the given query string.  
+ *  
+            // Filters unsupported fields if a pattern is requested
+            Query q = getRangeQuerySingle(entry.getKey(), part1, part2, startInclusive, endInclusive, context);  
+    protected Query getBooleanQuery(List<BooleanClause> clauses) throws ParseException {  
+    }  
+    }
+ */
+            );
+    public void setFuzziness(Fuzziness fuzziness) {
+                }  
+    private Query getPrefixQuerySingle(String field, String termStr) throws ParseException {
+            }
+            Analyzer normalizer = forceAnalyzer == null ? queryBuilder.context.getSearchAnalyzer(currentFieldType) : forceAnalyzer;
+    /**
+                // if we are querying a single date field, we also create a range query that leverages the time zone setting  
+import java.util.Collections;  
+            if (query == null) {
+            CharTermAttribute termAtt = source.addAttribute(CharTermAttribute.class);
+    }  
+        Map<String, Float> fields = extractMultiFields(field, false);
+            return query;
+     */
+                null,  
+        return extractedFields;
+     * This is a pre-parse check to prevent StackOverflowError in Lucene's
+        return maxDepth;
+            }
+            Query q = getRegexpQuerySingle(entry.getKey(), termStr);
+            return queries.get(0);
+            }
+            throw e;  
+        if (quoted) {  
+        if (queries.size() == 1) {
+            return newUnmappedFieldQuery(termStr);
+        }
+        return getBooleanQuery(clauses);
+                return newUnmappedFieldQuery(field);  
+            return new MatchNoDocsQuery("No mappings yet");  
+    }  
+        }
+            extractedFields = resolveMappingField(context, field, 1.0f, !allFields, !multiFields, quoted ? quoteFieldSuffix : null);  
+                    sb.addTerm(new Term(field, synonym));
+     */
+                }
+                return super.getWildcardQuery(currentFieldType.name(), termStr);
+            queries.add(applyBoost(q, entry.getValue()));
+            }  
+        MappedFieldType currentFieldType = context.fieldMapper(field);
+                } else {
+    }
+        if ("*".equals(part2)) {
+            return getFuzzyQuery(field, termImage, fuzziness.asDistance(termImage));
+    private Map<String, Float> extractMultiFields(String field, boolean quoted) {
+        for (int pos = 0; pos < tlist.size(); pos++) {  
+        final FieldNamesFieldMapper.FieldNamesFieldType fieldNamesFieldType = (FieldNamesFieldMapper.FieldNamesFieldType) context
+            }
+        List<Query> queries = new ArrayList<>();
+            return existsQuery(queryText);
+    private static boolean maxQueryStringLengthMonitorMode = SearchService.SEARCH_MAX_QUERY_STRING_LENGTH_MONITOR_ONLY.get(Settings.EMPTY);  
+            return null;  
+    @Override
+    protected Query handleBareFuzzy(String field, Token fuzzySlop, String termImage) throws ParseException {  
+            boolean multiFields = Regex.isSimpleMatchPattern(field);  
+    /**  
+        for (Map.Entry<String, Float> entry : fields.entrySet()) {
+    public Query parse(String query) throws ParseException {
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+    }
+        }
+import org.apache.lucene.analysis.Analyzer;  
 }  
+        String defaultField,  
+     * @param fieldsAndWeights The default fields and weights expansion for query terms
+    }
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+    @Override
+    @Override
+        }
+            }
+        if (analyzeWildcard == false) {
+            return currentFieldType.fuzzyQuery(
+                setAnalyzer(forceAnalyzer);  
+            return query;
+     * Sets the maximum allowed parenthesis nesting depth for query strings.  
+     * @param fuzzyRewriteMethod Sets the default rewrite method for fuzzy query.  
+            // comes up from the same place in the code. Don't create a lenient query in this case.
+        final int maxAllowedRegexLength = context.getIndexSettings().getMaxRegexLength();  
+        }
+        // It is required to use a prefix field operator to enable the detection since they are not treated
+    public void setFuzzyTranspositions(boolean fuzzyTranspositions) {
+            if (source != null) {  
+import org.apache.lucene.search.FuzzyQuery;  
+     * @param monitorMode if true, the max query string length will not be enforced
+                term,
+import org.opensearch.common.settings.Settings;
+        queryBuilder.setEnablePositionIncrements(enable);
+                    SearchService.SEARCH_MAX_QUERY_STRING_LENGTH.getKey(),  
+    private PhraseQuery addSlopToPhrase(PhraseQuery query, int slop) {  
+        } else {
+                        + SearchService.SEARCH_MAX_QUERY_STRING_LENGTH.getKey()
+    private boolean analyzeWildcard;
+                if (currentPos.isEmpty() == false && posAtt.getPositionIncrement() > 0) {
+            builder.add(terms[i], positions[i]);  
+    private Query addSlopToSpan(SpanQuery query, int slop) {  
+            } else {
+                    currentDepth++;
+        super.setPhraseSlop(phraseSlop);
+import org.apache.lucene.search.MatchNoDocsQuery;
+        if (queries.size() == 1) {  
+                source = getAnalyzer().tokenStream(field, termStr);
+            return newUnmappedFieldQuery(field);
+    /**
+        } else {
+     */
+import static org.opensearch.common.lucene.search.Queries.newUnmappedFieldQuery;  
+import org.apache.lucene.queryparser.classic.Token;  
+        Analyzer oldAnalyzer = getAnalyzer();
+            if (Regex.isMatchAllPattern(actualField)) {
+                query = getPossiblyAnalyzedPrefixQuery(currentFieldType.name(), termStr, currentFieldType);
+import org.opensearch.common.regex.Regex;  
+                context  
+            return existsQuery(queryText);  
+                    && this.timeZone != null) {  
+    }  
+        String part2,  
+ * compatible open source license.
+        } finally {
+    protected Query getRangeQuery(String field, String part1, String part2, boolean startInclusive, boolean endInclusive)
+     * Sets the maximum allowed length for query strings. This should be only called from SearchService on settings updates.  
+        for (int i = 0; i < terms.length; ++i) {
+            throw new ParseException(e.getMessage());
+        if (tlist.size() == 1 && tlist.get(0).size() == 1) {  
+        return forceAnalyzer;
+            return new DisjunctionMaxQuery(queries, tiebreaker);  
+            return null;
+import org.apache.lucene.search.PhraseQuery;
+ * You may obtain a copy of the License at  
+ */  
+        }  
+        if (boost != null && boost != 1f) {
+        }  
+                throw new ParseException(
+    /**
+        try {  
+        queryBuilder.setPhraseSlop(phraseSlop);
+            return addSlopToPhrase(phraseQuery, slop);  
+        // get Analyzer from superclass and tokenize the term  
+            assert q != null;
+     * @param fuzzyMaxExpansions Sets the maximum number of expansions allowed in a fuzzy query.
+    private final MultiMatchQuery queryBuilder;
+                clauses[pos++] = (SpanQuery) addSlopToSpan(clause, slop);
+                return newLenientFieldQuery(field, e);  
+        try {
+    private Fuzziness fuzziness = Fuzziness.AUTO;
+        }
+            throw e;
+    @Override
+     */
+        this.queryBuilder = new MultiMatchQuery(context);
+            float tiebreaker = groupTieBreaker == null ? type.tieBreaker() : groupTieBreaker;  
+                return newLenientFieldQuery(field, e);
+            if (maxQueryStringLengthMonitorMode) {
+        int oldSlop = queryBuilder.phraseSlop;
+            return new WildcardQuery(new Term(fieldName, "*"));
+import org.opensearch.index.IndexSettings;
+        int currentDepth = 0;  
+        return new DisjunctionMaxQuery(queries, tiebreaker);  
+     * Rebuild a phrase query with a slop value
+            }
+import org.apache.logging.log4j.LogManager;
+        Analyzer oldAnalyzer = getAnalyzer();
+        if (query.length() > maxQueryStringLength) {  
+                getFuzzyPrefixLength(),
+                return newUnmappedFieldQuery(field);  
+        this.timeZone = timeZone;
+            }
+        this(
+                fuzzyRewriteMethod,
+        }
+                        + query.length()
+                // "*" is the default field  
+    }
+        if (termStr.length() > maxAllowedRegexLength) {
+            if (queryText.length() > 1) {
+            }
+    }
+     * @param lenient If set to `true` will cause format based failures (like providing text to a numeric field) to be ignored.
+        Analyzer oldAnalyzer = queryBuilder.analyzer;
+        if (tlist.size() == 0) {
+ * this work for additional information regarding copyright
+     * Defaults to {@link FuzzyQuery#defaultMaxExpansions}.
+        try {
+        if (q == null) {
+ * queries based on the mapping information.
+        this.forceAnalyzer = analyzer;  
+ * this file be licensed under the Apache-2.0 license or a
+        } catch (RuntimeException e) {
+ *
+        String part1,
+        if ("*".equals(part1)) {
+import static org.opensearch.index.search.QueryParserHelper.checkForTooManyFields;
+ * to assemble the result logically.  
+                            return getRangeQuery(field, queryText.substring(2), null, true, true);  
+            MappedFieldType currentFieldType = queryBuilder.context.fieldMapper(field);
+        }
+                    if (currentDepth > maxDepth) {  
+        }
+        }
+ *
+                return super.getPrefixQuery(field, termStr);
+import org.opensearch.index.mapper.TextSearchInfo;  
+        try {  
+    /**
+    @Override
+    /**
+                    innerClauses.add(new BooleanClause(super.getPrefixQuery(field, token), BooleanClause.Occur.SHOULD));
+    public QueryStringQueryParser(QueryShardContext context, String defaultField, boolean lenient) {
+            "*",  
+        List<Query> queries = new ArrayList<>();  
+        int maxDepth = 0;
+    public void setPhraseSlop(int phraseSlop) {  
+    ) {
+            queries.add(applyBoost(q, entry.getValue()));
+        }  
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+        if (fieldNamesFieldType.isEnabled() == false) {
+            return builder.build();
+    private MultiMatchQueryBuilder.Type type = MultiMatchQueryBuilder.Type.BEST_FIELDS;
+            Analyzer normalizer = forceAnalyzer == null ? queryBuilder.context.getSearchAnalyzer(currentFieldType) : forceAnalyzer;
+        } finally {
+        if (forceAnalyzer == null) {
+                queries.add(applyBoost(q, entry.getValue()));
+            return newUnmappedFieldQuery(termStr);
+            }  
+        this.context = context;  
+        this.analyzeWildcard = analyzeWildcard;
+        QueryStringQueryParser.maxQueryStringLengthMonitorMode = monitorMode;
+            while (true) {
+            if (plist.size() == 1) {
+                if (context.fieldMapper(field) != null
+    }
+            return newUnmappedFieldQuery(field);
+        String field,
+        queryBuilder.setTieBreaker(groupTieBreaker);
+                inQuotes = !inQuotes;
+    @Override  
+        QueryShardContext context  
+    private final boolean lenient;
+    protected Query getRegexpQuery(String field, String termStr) throws ParseException {
+            throw e;
+            if (lenient) {  
+import org.apache.lucene.search.Query;
+                    tlist.add(currentPos);  
+                }
+            Query rangeQuery = currentFieldType.rangeQuery(
+            return queries.get(0);  
+     * @param context The query shard context  
+     * @param lenient If set to `true` will cause format based failures (like providing text to a numeric field) to be ignored.
+        try {
+            return queries.get(0);
+                    return getRangeQuery(field, queryText.substring(1), null, false, true);  
+                Fuzziness.fromEdits((int) minSimilarity),  
+        }  
+        }
+        }
+import org.apache.logging.log4j.Logger;
+        if (field != null) {
+            SpanQuery[] clauses = new SpanQuery[spanOrQuery.getClauses().length];
+    }
+     */
+/*  
+    private Analyzer forceQuoteAnalyzer;  
+                return newLenientFieldQuery(field, e);  
+                getAnalyzer().normalize(field, termStr).utf8ToString(),  
+     */  
+    private static int maxQueryNestingDepth = SearchService.SEARCH_MAX_QUERY_NESTING_DEPTH.get(Settings.EMPTY);
+     */  
+            return new BoostQuery(q, boost);
+            Query q = getFuzzyQuerySingle(entry.getKey(), termStr, minSimilarity);
+                    if (queryText.length() > 2) {
+    private QueryStringQueryParser(
+            return new DisjunctionMaxQuery(queries, tiebreaker);
+                    + " ("  
+        } else if (q instanceof SpanQuery spanQuery) {
+    }
+            return newUnmappedFieldQuery(termStr);  
+            return new SpanOrQuery(clauses);  
+                    currentPos = new ArrayList<>();
+        Map<String, Float> fields = extractMultiFields(field, true);
+ * Licensed to Elasticsearch under one or more contributor  
+            .getMapperService()  

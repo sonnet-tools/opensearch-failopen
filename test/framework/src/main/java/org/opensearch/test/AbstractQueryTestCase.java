@@ -1,898 +1,817 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test;
-
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.TermQuery;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.Version;  
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentType;  
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.Writeable.Reader;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaType;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentGenerator;
-import org.opensearch.core.xcontent.XContentParseException;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.AbstractQueryBuilder;
-import org.opensearch.index.query.BoolQueryBuilder;  
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.QueryRewriteContext;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.Rewriteable;
-import org.opensearch.index.query.support.QueryParsers;  
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;  
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.Set;
-
-import tools.jackson.core.io.JsonStringEncoder;
-
-import static org.opensearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;  
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.either;  
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.instanceOf;
-
-public abstract class AbstractQueryTestCase<QB extends AbstractQueryBuilder<QB>> extends AbstractBuilderTestCase {
-
-    private static final int NUMBER_OF_TESTQUERIES = 20;  
-
-    public final QB createTestQueryBuilder() {
-        return createTestQueryBuilder(supportsBoost(), supportsQueryName());  
-    }
-
-    public final QB createTestQueryBuilder(boolean supportsBoost, boolean supportsQueryName) {  
-        QB query = doCreateTestQueryBuilder();
-        if (supportsBoost && randomBoolean()) {
-            query.boost(2.0f / randomIntBetween(1, 20));  
-        }
-        if (supportsQueryName && randomBoolean()) {
-            query.queryName(createUniqueRandomName());  
-        }
-        return query;
-    }  
-
-    /**
-     * Create the query that is being tested  
-     */
-    protected abstract QB doCreateTestQueryBuilder();
-
-    public void testNegativeBoosts() {
-        QB testQuery = createTestQueryBuilder();
-        IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> testQuery.boost(-0.5f));  
-        assertThat(exc.getMessage(), containsString("negative [boost]"));
-    }
-
-    /**
-     * Generic test that creates new query from the test query and checks both for equality
-     * and asserts equality on the two queries.  
-     */
-    public void testFromXContent() throws IOException {
-        for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {  
-            QB testQuery = createTestQueryBuilder();
-            XContentType xContentType = randomFrom(XContentType.values());
-            BytesReference shuffledXContent = toShuffledXContent(  
-                testQuery,
-                xContentType,
-                ToXContent.EMPTY_PARAMS,  
-                randomBoolean(),
-                shuffleProtectedFields()
-            );  
-            assertParsedQuery(createParser(xContentType.xContent(), shuffledXContent), testQuery);
-            for (Map.Entry<String, QB> alternateVersion : getAlternateVersions().entrySet()) {
-                String queryAsString = alternateVersion.getKey();  
-                assertParsedQuery(createParser(JsonXContent.jsonXContent, queryAsString), alternateVersion.getValue());
-            }
-        }  
-    }
-
-    /**  
-     * Subclasses can override this method and return an array of fieldnames which should be protected from
-     * recursive random shuffling in the {@link #testFromXContent()} test case
-     */  
-    protected String[] shuffleProtectedFields() {
-        return Strings.EMPTY_ARRAY;
-    }  
-
-    /**
-     * Test that unknown field trigger ParsingException.  
-     * To find the right position in the root query, we add a marker as `queryName` which
-     * all query builders support. The added bogus field after that should trigger the exception.
-     * Queries that allow arbitrary field names at this level need to override this test.  
-     */
-    public void testUnknownField() throws IOException {
-        String marker = "#marker#";  
-        QB testQuery;
-        do {
-            testQuery = createTestQueryBuilder();  
-        } while (testQuery.toString().contains(marker));
-        testQuery.queryName(marker); // to find root query to add additional bogus field there
-        String queryAsString = testQuery.toString().replace("\"" + marker + "\"", "\"" + marker + "\", \"bogusField\" : \"someValue\"");  
-        try {
-            parseQuery(queryAsString);
-            fail("expected ParsingException or XContentParsingException");  
-        } catch (ParsingException | XContentParseException e) {
-            // we'd like to see the offending field name here
-            assertThat(e.getMessage(), containsString("bogusField"));  
-        }
-
-    }  
-
-    /**
-     * Test that adding an additional object within each object of the otherwise correct query always triggers some kind of  
-     * parse exception. Some specific objects do not cause any exception as they can hold arbitrary content; they can be
-     * declared by overriding {@link #getObjectsHoldingArbitraryContent()}.
-     */  
-    public void testUnknownObjectException() throws IOException {
-        Set<String> candidates = new HashSet<>();
-        // Adds the valid query to the list of queries to modify and test  
-        candidates.add(createTestQueryBuilder().toString());
-        // Adds the alternates versions of the query too
-        candidates.addAll(getAlternateVersions().keySet());  
-
-        List<Tuple<String, Boolean>> testQueries = alterateQueries(candidates, getObjectsHoldingArbitraryContent());
-        for (Tuple<String, Boolean> testQuery : testQueries) {  
-            boolean expectedException = testQuery.v2();
-            try {
-                parseQuery(testQuery.v1());  
-                if (expectedException) {
-                    fail("some parsing exception expected for query: " + testQuery);
-                }  
-            } catch (ParsingException | OpenSearchParseException | XContentParseException e) {
-                // different kinds of exception wordings depending on location
-                // of mutation, so no simple asserts possible here  
-                if (expectedException == false) {
-                    throw new AssertionError("unexpected exception when parsing query:\n" + testQuery, e);
-                }  
-            } catch (IllegalArgumentException e) {
-                if (expectedException == false) {
-                    throw new AssertionError("unexpected exception when parsing query:\n" + testQuery, e);  
-                }
-                assertThat(e.getMessage(), containsString("unknown field [newField]"));
-            }  
-        }
-    }
-
-    /**
-     * Traverses the json tree of the valid query provided as argument and mutates it one or more times by adding one object within each
-     * object encountered.  
-     * <p>
-     * For instance given the following valid term query:
-     * {  
-     *     "term" : {
-     *         "field" : {
-     *             "value" : "foo"  
-     *         }
-     *     }
-     * }  
-     * <p>
-     * The following two mutations will be generated, and an exception is expected when trying to parse them:
-     * {  
-     *     "term" : {
-     *         "newField" : {
-     *             "field" : {  
-     *                 "value" : "foo"
-     *             }
-     *         }  
-     *     }
-     * }
-     * <p>  
-     * {
-     *     "term" : {
-     *         "field" : {  
-     *             "newField" : {
-     *                 "value" : "foo"
-     *             }  
-     *         }
-     *     }
-     * }  
-     * <p>
-     * Every mutation is then added to the list of results with a boolean flag indicating if a parsing exception is expected or not
-     * for the mutation. Some specific objects do not cause any exception as they can hold arbitrary content; they are passed using the  
-     * arbitraryMarkers parameter.
-     */
-    static List<Tuple<String, Boolean>> alterateQueries(Set<String> queries, Set<String> arbitraryMarkers) throws IOException {  
-        List<Tuple<String, Boolean>> results = new ArrayList<>();
-
-        // Indicate if a part of the query can hold any arbitrary content  
-        boolean hasArbitraryContent = (arbitraryMarkers != null && arbitraryMarkers.isEmpty() == false);
-
-        for (String query : queries) {  
-            // Track the number of query mutations
-            int mutation = 0;
-
-            while (true) {
-                boolean expectException = true;
-
-                BytesStreamOutput out = new BytesStreamOutput();
-                try (
-                    XContentGenerator generator = MediaTypeRegistry.JSON.xContent().createGenerator(out);  
-                    XContentParser parser = JsonXContent.jsonXContent.createParser(
-                        NamedXContentRegistry.EMPTY,
-                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
-                        query
-                    );
-                ) {  
-                    int objectIndex = -1;
-                    Deque<String> levels = new LinkedList<>();
-
-                    // Parse the valid query and inserts a new object level called "newField"
-                    XContentParser.Token token;
-                    while ((token = parser.nextToken()) != null) {  
-                        if (token == XContentParser.Token.START_ARRAY) {
-                            levels.addLast(parser.currentName());
-                        } else if (token == XContentParser.Token.START_OBJECT) {  
-                            objectIndex++;
-                            levels.addLast(parser.currentName());
-
-                            if (objectIndex == mutation) {
-                                // We reached the place in the object tree where we want to insert a new object level
-                                generator.writeStartObject();  
-                                generator.writeFieldName("newField");
-                                generator.copyCurrentStructure(parser);
-                                generator.writeEndObject();  
-
-                                if (hasArbitraryContent) {
-                                    // The query has one or more fields that hold arbitrary content. If the current  
-                                    // field is one (or a child) of those, no exception is expected when parsing the mutated query.
-                                    for (String marker : arbitraryMarkers) {
-                                        if (levels.contains(marker)) {  
-                                            expectException = false;
-                                            break;
-                                        }  
-                                    }
-                                }
-
-                                // Jump to next token
-                                continue;
-                            }  
-                        } else if (token == XContentParser.Token.END_OBJECT || token == XContentParser.Token.END_ARRAY) {
-                            levels.removeLast();
-                        }  
-
-                        // We are walking through the object tree, so we can safely copy the current node
-                        generator.copyCurrentEvent(parser);  
-                    }
-
-                    if (objectIndex < mutation) {  
-                        // We did not reach the insertion point, there's no more mutations to try
-                        break;
-                    } else {  
-                        // We reached the expected insertion point, so next time we'll try one step further
-                        mutation++;
-                    }  
-                }
-
-                results.add(new Tuple<>(out.bytes().utf8ToString(), expectException));  
-            }
-        }
-        return results;  
-    }
-
-    /**  
-     * Returns a set of object names that won't trigger any exception (uncluding their children) when testing that unknown
-     * objects cause parse exceptions through {@link #testUnknownObjectException()}. Default is an empty set. Can be overridden
-     * by subclasses that test queries which contain objects that get parsed on the data nodes (e.g. score functions) or objects  
-     * that can contain arbitrary content (e.g. documents for percolate or more like this query, params for scripts). In such
-     * cases no exception would get thrown.
-     */  
-    protected Set<String> getObjectsHoldingArbitraryContent() {
-        return Collections.emptySet();
-    }  
-
-    /**
-     * Test that wraps the randomly generated query into an array as follows: { "query_name" : [{}]}  
-     * This causes unexpected situations in parser code that may not be handled properly.
-     */
-    public final void testQueryWrappedInArray() {  
-        QB queryBuilder = createTestQueryBuilder();
-        String queryName = queryBuilder.getName();
-        String validQuery = queryBuilder.toString();  
-        queryWrappedInArrayTest(queryName, validQuery);
-        for (String query : getAlternateVersions().keySet()) {
-            queryWrappedInArrayTest(queryName, query);  
-        }
-    }
-
-    private void queryWrappedInArrayTest(String queryName, String validQuery) {
-        int i = validQuery.indexOf("\"" + queryName + "\"");
-        assertThat(i, greaterThan(0));  
-
-        int insertionPosition;
-        for (insertionPosition = i; insertionPosition < validQuery.length(); insertionPosition++) {  
-            if (validQuery.charAt(insertionPosition) == ':') {
-                break;
-            }  
-        }
-        insertionPosition++;
-
-        int endArrayPosition;
-        for (endArrayPosition = validQuery.length() - 1; endArrayPosition >= 0; endArrayPosition--) {
-            if (validQuery.charAt(endArrayPosition) == '}') {  
-                break;
-            }
-        }  
-
-        String testQuery = validQuery.substring(0, insertionPosition)
-            + "["  
-            + validQuery.substring(insertionPosition, endArrayPosition)
-            + "]"
-            + validQuery.substring(endArrayPosition, validQuery.length());  
-
-        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(testQuery));
-        assertEquals("[" + queryName + "] query malformed, no start_object after query name", e.getMessage());  
-    }
-
-    /**  
-     * Returns alternate string representation of the query that need to be tested as they are never used as output
-     * of {@link QueryBuilder#toXContent(XContentBuilder, ToXContent.Params)}. By default there are no alternate versions.
-     */  
-    protected Map<String, QB> getAlternateVersions() {
-        return Collections.emptyMap();
-    }  
-
-    /**
-     * Parses the query provided as string argument and compares it with the expected result provided as argument as a {@link QueryBuilder}  
-     */
-    protected void assertParsedQuery(String queryAsString, QueryBuilder expectedQuery) throws IOException {
-        QueryBuilder newQuery = parseQuery(queryAsString);  
-        assertNotSame(newQuery, expectedQuery);
-        assertEquals(expectedQuery, newQuery);
-        assertEquals(expectedQuery.hashCode(), newQuery.hashCode());  
-    }
-
-    /**  
-     * Parses the query provided as bytes argument and compares it with the expected result provided as argument as a {@link QueryBuilder}
-     */
-    private void assertParsedQuery(XContentParser parser, QueryBuilder expectedQuery) throws IOException {  
-        QueryBuilder newQuery = parseQuery(parser);
-        assertNotSame(newQuery, expectedQuery);
-        assertEquals(expectedQuery, newQuery);  
-        assertEquals(expectedQuery.hashCode(), newQuery.hashCode());
-    }
-
-    protected QueryBuilder parseQuery(AbstractQueryBuilder<?> builder) throws IOException {
-        BytesReference bytes = org.opensearch.core.xcontent.XContentHelper.toXContent(builder, MediaTypeRegistry.JSON, false);
-        return parseQuery(createParser(JsonXContent.jsonXContent, bytes));  
-    }
-
-    protected QueryBuilder parseQuery(String queryAsString) throws IOException {  
-        XContentParser parser = createParser(JsonXContent.jsonXContent, queryAsString);
-        return parseQuery(parser);
-    }  
-
-    protected QueryBuilder parseQuery(XContentParser parser) throws IOException {
-        QueryBuilder parseInnerQueryBuilder = parseInnerQueryBuilder(parser);  
-        assertNull(parser.nextToken());
-        return parseInnerQueryBuilder;
-    }  
-
-    /**
-     * Whether the queries produced by this builder are expected to be cacheable.  
-     */
-    protected boolean builderGeneratesCacheableQueries() {
-        return true;  
-    }
-
-    /**  
-     * Test creates the {@link Query} from the {@link QueryBuilder} under test and delegates the
-     * assertions being made on the result to the implementing subclass.
-     */  
-    public void testToQuery() throws IOException {
-        for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {
-            QueryShardContext context = createShardContext();  
-            assert context.isCacheable();
-            context.setAllowUnmappedFields(true);
-            QB firstQuery = createTestQueryBuilder();  
-            QB controlQuery = copyQuery(firstQuery);
-            /* we use a private rewrite context here since we want the most realistic way of asserting that we are cacheable or not.
-             * We do it this way in SearchService where  
-             * we first rewrite the query with a private context, then reset the context and then build the actual lucene query*/
-            QueryBuilder rewritten = rewriteQuery(firstQuery, new QueryShardContext(context));
-            Query firstLuceneQuery;  
-            try {
-                firstLuceneQuery = rewritten.toQuery(context);
-            } catch (IllegalArgumentException e) {  
-                assertEquals("Too many disjunctions to expand", e.getMessage());
-                continue;
-            }  
-            assertNotNull("toQuery should not return null", firstLuceneQuery);
-            assertLuceneQuery(firstQuery, firstLuceneQuery, context);
-            // remove after assertLuceneQuery since the assertLuceneQuery impl might access the context as well  
-            assertTrue(
-                "query is not equal to its copy after calling toQuery, firstQuery: " + firstQuery + ", secondQuery: " + controlQuery,
-                firstQuery.equals(controlQuery)  
-            );
-            assertTrue(
-                "equals is not symmetric after calling toQuery, firstQuery: " + firstQuery + ", secondQuery: " + controlQuery,  
-                controlQuery.equals(firstQuery)
-            );
-            assertThat(  
-                "query copy's hashcode is different from original hashcode after calling toQuery, firstQuery: "
-                    + firstQuery
-                    + ", secondQuery: "  
-                    + controlQuery,
-                controlQuery.hashCode(),
-                equalTo(firstQuery.hashCode())  
-            );
-
-            QB secondQuery = copyQuery(firstQuery);  
-            // query _name never should affect the result of toQuery, we randomly set it to make sure
-            if (randomBoolean()) {
-                secondQuery.queryName(  
-                    secondQuery.queryName() == null
-                        ? randomAlphaOfLengthBetween(1, 30)
-                        : secondQuery.queryName() + randomAlphaOfLengthBetween(1, 10)  
-                );
-            }
-            context = new QueryShardContext(context);  
-            Query secondLuceneQuery = rewriteQuery(secondQuery, context).toQuery(context);
-            assertNotNull("toQuery should not return null", secondLuceneQuery);
-            assertLuceneQuery(secondQuery, secondLuceneQuery, context);  
-
-            if (builderGeneratesCacheableQueries()) {
-                assertEquals(  
-                    "two equivalent query builders lead to different lucene queries hashcode",
-                    secondLuceneQuery.hashCode(),
-                    firstLuceneQuery.hashCode()  
-                );
-                assertEquals(
-                    "two equivalent query builders lead to different lucene queries",  
-                    rewrite(secondLuceneQuery),
-                    rewrite(firstLuceneQuery)
-                );  
-            }
-
-            if (supportsBoost() && firstLuceneQuery instanceof MatchNoDocsQuery == false) {  
-                secondQuery.boost(firstQuery.boost() + 1f + randomFloat());
-                Query thirdLuceneQuery = rewriteQuery(secondQuery, context).toQuery(context);
-                assertNotEquals(  
-                    "modifying the boost doesn't affect the corresponding lucene query",
-                    rewrite(firstLuceneQuery),
-                    rewrite(thirdLuceneQuery)  
-                );
-            }
-        }  
-    }
-
-    protected QueryBuilder rewriteQuery(QB queryBuilder, QueryRewriteContext rewriteContext) throws IOException {  
-        QueryBuilder rewritten = rewriteAndFetch(queryBuilder, rewriteContext);
-        // extra safety to fail fast - serialize the rewritten version to ensure it's serializable.
-        assertSerialization(rewritten);  
-        return rewritten;
-    }
-
-    /**
-     * Few queries allow you to set the boost on the Java API, although the corresponding parser
-     * doesn't parse it as it isn't supported. This method allows to disable boost related tests for those queries.  
-     * Those queries are easy to identify: their parsers don't parse {@code boost} as they don't apply to the specific query:
-     * wrapper query and {@code match_none}.
-     */  
-    protected boolean supportsBoost() {
-        return true;
-    }  
-
-    /**
-     * Few queries allow you to set the query name on the Java API, although the corresponding parser  
-     * doesn't parse it as it isn't supported. This method allows to disable query name related tests for those queries.
-     * Those queries are easy to identify: their parsers don't parse {@code _name} as they don't apply to the specific query:
-     * wrapper query and {@code match_none}.  
-     */
-    protected boolean supportsQueryName() {
-        return true;  
-    }
-
-    /**  
-     * Checks the result of {@link QueryBuilder#toQuery(QueryShardContext)} given the original {@link QueryBuilder}
-     * and {@link QueryShardContext}. Verifies that named queries and boost are properly handled and delegates to
-     * {@link #doAssertLuceneQuery(AbstractQueryBuilder, Query, QueryShardContext)} for query specific checks.  
-     */
-    private void assertLuceneQuery(QB queryBuilder, Query query, QueryShardContext context) throws IOException {
-        if (queryBuilder.queryName() != null && query instanceof MatchNoDocsQuery == false) {  
-            Query namedQuery = context.copyNamedQueries().get(queryBuilder.queryName());
-            assertThat(namedQuery, equalTo(query));
-        }  
         if (query != null) {
-            if (queryBuilder.boost() != AbstractQueryBuilder.DEFAULT_BOOST) {
-                assertThat(query, either(instanceOf(BoostQuery.class)).or(instanceOf(MatchNoDocsQuery.class)));  
-                if (query instanceof BoostQuery) {
-                    BoostQuery boostQuery = (BoostQuery) query;
-                    if (boostQuery.getQuery() instanceof MatchNoDocsQuery == false) {  
-                        assertThat(boostQuery.getBoost(), equalTo(queryBuilder.boost()));
-                    }
-                    query = boostQuery.getQuery();  
-                }
-            }
-        }  
-        doAssertLuceneQuery(queryBuilder, query, context);
-    }
-
+        candidates.addAll(getAlternateVersions().keySet());  
+import org.opensearch.index.query.support.QueryParsers;  
+        return copyWriteable(query, namedWriteableRegistry(), reader);
+            QueryBuilder rewritten = rewriteQuery(firstQuery, new QueryShardContext(context));
+    }  
+import org.opensearch.Version;  
+     * {
     /**
-     * Checks the result of {@link QueryBuilder#toQuery(QueryShardContext)} given the original {@link QueryBuilder}
-     * and {@link QueryShardContext}. Contains the query specific checks to be implemented by subclasses.  
      */
-    protected abstract void doAssertLuceneQuery(QB queryBuilder, Query query, QueryShardContext context) throws IOException;
-
-    protected void assertTermOrBoostQuery(Query query, String field, String value, float fieldBoost) {
-        if (fieldBoost != AbstractQueryBuilder.DEFAULT_BOOST) {
-            assertThat(query, instanceOf(BoostQuery.class));  
-            BoostQuery boostQuery = (BoostQuery) query;
+                );  
+                    while ((token = parser.nextToken()) != null) {  
+     *     }
+     * recursive random shuffling in the {@link #testFromXContent()} test case
+                if (expectedException == false) {
+        return results;  
+import org.opensearch.index.query.QueryBuilders;
+                .append(size)  
+ * The OpenSearch Contributors require contributions made to  
+                    rewrite(firstLuceneQuery)
+     */
+    /**
             assertThat(boostQuery.getBoost(), equalTo(fieldBoost));
-            query = boostQuery.getQuery();  
+                controlQuery.hashCode(),
+    protected static String getRandomRewriteMethod() {  
+    protected String[] shuffleProtectedFields() {
+ * Unless required by applicable law or agreed to in writing,
         }
-        assertTermQuery(query, field, value);
-    }  
-
-    protected void assertTermQuery(Query query, String field, String value) {
-        assertThat(query, instanceOf(TermQuery.class));  
-        TermQuery termQuery = (TermQuery) query;
-
-        String expectedFieldName = expectedFieldName(field);  
-        assertThat(termQuery.getTerm().field(), equalTo(expectedFieldName));
-        assertThat(termQuery.getTerm().text().toLowerCase(Locale.ROOT), equalTo(value.toLowerCase(Locale.ROOT)));
-    }  
-
-    /**
-     * Test serialization and deserialization of the test query.  
-     */
-    public void testSerialization() throws IOException {
-        for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {  
-            QB testQuery = createTestQueryBuilder();
-            assertSerialization(testQuery);
-        }  
-    }
-
-    protected QueryBuilder assertSerialization(QueryBuilder testQuery) throws IOException {  
-        return assertSerialization(testQuery, Version.CURRENT);
-    }
-
-    /**
-     * Serialize the given query builder and asserts that both are equal
-     */  
-    protected QueryBuilder assertSerialization(QueryBuilder testQuery, Version version) throws IOException {
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            output.setVersion(version);  
-            output.writeNamedWriteable(testQuery);
-            try (StreamInput in = new NamedWriteableAwareStreamInput(output.bytes().streamInput(), namedWriteableRegistry())) {
-                in.setVersion(version);  
-                QueryBuilder deserializedQuery = in.readNamedWriteable(QueryBuilder.class);
-                assertEquals(testQuery, deserializedQuery);
-                assertEquals(testQuery.hashCode(), deserializedQuery.hashCode());  
-                assertNotSame(testQuery, deserializedQuery);
-                return deserializedQuery;
+        // extra safety to fail fast - serialize the rewritten version to ensure it's serializable.
+                break;
+        boolean hasArbitraryContent = (arbitraryMarkers != null && arbitraryMarkers.isEmpty() == false);
+import org.opensearch.common.xcontent.XContentFactory;
+        XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();  
+        QB queryBuilder = createTestQueryBuilder();
+     * {@link AbstractQueryTestCase#DATE_FIELD_NAME} or {@link AbstractQueryTestCase#DATE_NANOS_FIELD_NAME} or a String value by default
+                }  
+                .append(" vs.")  
+import org.joda.time.DateTime;
+                testQuery,
+        assertEquals("[" + queryName + "] query malformed, no start_object after query name", e.getMessage());  
+                        // We reached the expected insertion point, so next time we'll try one step further
+        } else {  
+    protected static Fuzziness randomFuzziness(String fieldName) {
+     *             "newField" : {
+                    int objectIndex = -1;
+     * Every mutation is then added to the list of results with a boolean flag indicating if a parsing exception is expected or not
+                    BoostQuery boostQuery = (BoostQuery) query;
+            if (randomBoolean()) {
+            assertNotNull("toQuery should not return null", secondLuceneQuery);
+            int leftEnd = Math.max(size, left.length()) - 1;
             }  
-        }
-    }
-
-    public void testEqualsAndHashcode() {
+                return Fuzziness.build(1 + randomFloat() * 10);  
         for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {
+     *                 "value" : "foo"
+        QueryBuilder returnedQuerybuilder = queryBuilder.filter(null);  
+     * Generic test that creates new query from the test query and checks both for equality
+                    .append(" vs.")  
+    public void testFromXContent() throws IOException {
+        QB testQuery;
+     * Test that unknown field trigger ParsingException.  
+                } else {
+            } catch (ParsingException | OpenSearchParseException | XContentParseException e) {
+     * <li> Manually check that what the QueryBuilder generates equals the input json ignoring default options.
+            default:
+public abstract class AbstractQueryTestCase<QB extends AbstractQueryBuilder<QB>> extends AbstractBuilderTestCase {
+     * }
+ * software distributed under the License is distributed on an
+     * Note: By the time of this writing (Nov 2015) all queries are taken from the query dsl
+        }  
+        IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> testQuery.boost(-0.5f));  
+                    .append(" [")
+     * {@link AbstractQueryTestCase#DOUBLE_FIELD_NAME}, {@link AbstractQueryTestCase#TEXT_FIELD_NAME} or  
+     * should overwrite this method and make sure the different cases are always tested  
+import java.util.LinkedList;
+                value = Instant.now().toString();
+        queryWrappedInArrayTest(queryName, validQuery);
+                BytesStreamOutput out = new BytesStreamOutput();
+                            levels.addLast(parser.currentName());
+        return Collections.emptyMap();
+/*
             // TODO we only change name and boost, we should extend by any sub-test supplying a "mutate" method that randomly changes one  
-            // aspect of the object under test
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(createTestQueryBuilder(), this::copyQuery, this::mutateInstance);
+            assertThat(e.getMessage(), containsString("bogusField"));  
+                    "two equivalent query builders lead to different lucene queries hashcode",
+     * These queries must override this method accordingly.
+                    throw new AssertionError("unexpected exception when parsing query:\n" + testQuery, e);  
+     */
+    private static final int NUMBER_OF_TESTQUERIES = 20;  
+    protected QueryBuilder parseQuery(String queryAsString) throws IOException {  
+        assertEquals(expectedQuery.hashCode(), newQuery.hashCode());
+                            levels.removeLast();
+ * this work for additional information regarding copyright
+    }
+    protected static String getRandomQueryText() {  
+                );
+            assertParsedQuery(createParser(mediaType.xContent(), toString), testQuery);
+        return randomFrom("1", "-1", "75%", "-25%", "2<75%", "2<-25%");  
+                .append(" [")
+        }
+                QueryBuilder deserializedQuery = in.readNamedWriteable(QueryBuilder.class);
+        assertEquals(expectedQuery, newQuery);
+    }
+                );
+                    if (boostQuery.getQuery() instanceof MatchNoDocsQuery == false) {  
+    }
+        Rewriteable.rewriteAndFetch(builder, context, future);
+                if (query instanceof BoostQuery) {
+     * assertions being made on the result to the implementing subclass.
+        assertSerialization(rewritten);  
+    protected QueryBuilder assertSerialization(QueryBuilder testQuery) throws IOException {  
+     *         }  
+import static org.hamcrest.Matchers.either;  
+    }
+                                generator.copyCurrentStructure(parser);
+     */
+        QueryBuilder parseInnerQueryBuilder = parseInnerQueryBuilder(parser);  
+        assertTrue(returnedQuerybuilder instanceof BoolQueryBuilder);
+        QueryShardContext context = createShardContext();
+                );
+     * Check if a filter can be applied to the abstract query builder.
+     * doesn't parse it as it isn't supported. This method allows to disable query name related tests for those queries.
+     *         }
+        if (supportsBoost && randomBoolean()) {
+        QueryBuilder rewriteQuery = rewriteQuery(queryBuilder, new QueryShardContext(context));
+        if (fieldBoost != AbstractQueryBuilder.DEFAULT_BOOST) {
+        List<Tuple<String, Boolean>> results = new ArrayList<>();
+        assertEquals(queryBuilder, returnedQuerybuilder);
+    }
+    /**  
+    }
+    private static String msg(String left, String right) {
+package org.opensearch.test;
+        returnedQuerybuilder = queryBuilder.filter(filter);
+        }
+     *         "field" : {  
+        return rewritten;
+     * object encountered.  
+                return Fuzziness.build(randomIntBetween(3, 100));
+                        }  
+}  
+            Query namedQuery = context.copyNamedQueries().get(queryBuilder.queryName());
+     */
+                    JsonStringEncoder encoder = JsonStringEncoder.getInstance();
+            builder.append(randomAlphaOfLengthBetween(1, 10)).append(" ");
+                    }
+            }
+            XContentType xContentType = randomFrom(XContentType.values());
+        assertThat(i, greaterThan(0));  
+        }
+     */  
+        return randomFrom("simple", "standard", "keyword", "whitespace");
+     * and {@link QueryShardContext}. Contains the query specific checks to be implemented by subclasses.  
+     * Parses the query provided as string argument and compares it with the expected result provided as argument as a {@link QueryBuilder}  
+    public void testNegativeBoosts() {
+import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
+            }  
+    // we use the streaming infra to create a copy of the query provided as argument  
+        }
+            assertSerialization(testQuery);
+    /**
+            } else {  
+                        // We did not reach the insertion point, there's no more mutations to try
+import tools.jackson.core.io.JsonStringEncoder;
+        int size = Math.min(left.length(), right.length());  
+    }  
+            Query secondLuceneQuery = rewriteQuery(secondQuery, context).toQuery(context);
+        context.setAllowUnmappedFields(true);  
+            output.setVersion(version);  
+                + "1";
+import java.util.HashSet;  
+import java.util.Map;
+     *         }
+        assertEquals(msg(expected, builder.toString()), expected.replaceAll("\\s+", ""), builder.toString().replaceAll("\\s+", ""));
+import org.opensearch.index.query.BoolQueryBuilder;  
+                    );
+                parseQuery(testQuery.v1());  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        return createTestQueryBuilder(supportsBoost(), supportsQueryName());  
+            );  
+     * Traverses the json tree of the valid query provided as argument and mutates it one or more times by adding one object within each
+        String testQuery = validQuery.substring(0, insertionPosition)
+            assert context.isCacheable();
+            return builder.toString();
+ * Modifications Copyright OpenSearch Contributors. See
+                if (expectedException == false) {
+            }
+    public void testEqualsAndHashcode() {
+                    + controlQuery,
+import java.util.Set;
+     */
+        Object value;
+    }
+            try (StreamInput in = new NamedWriteableAwareStreamInput(output.bytes().streamInput(), namedWriteableRegistry())) {
+     * Test that wraps the randomly generated query into an array as follows: { "query_name" : [{}]}  
+import org.opensearch.core.xcontent.MediaType;  
+            context = new QueryShardContext(context);  
+    /**
+     */  
+            }  
+     *     }
+    }
+        if (queryBuilder.queryName() != null && query instanceof MatchNoDocsQuery == false) {  
+import java.util.Collections;
+     * and asserts equality on the two queries.  
+     * Serialize the given query builder and asserts that both are equal
+    public void testFilter() throws IOException {
+        doAssertLuceneQuery(queryBuilder, query, context);
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+     */
+     *             "field" : {  
+        if (randomBoolean()) {
+        assertNull(parser.nextToken());
+     */  
+        StringBuilder builder = new StringBuilder("size: " + left.length() + " vs. " + right.length());
+                assertParsedQuery(createParser(JsonXContent.jsonXContent, queryAsString), alternateVersion.getValue());
+     * Those queries are easy to identify: their parsers don't parse {@code boost} as they don't apply to the specific query:
+                        if (token == XContentParser.Token.START_ARRAY) {
+    protected abstract QB doCreateTestQueryBuilder();
+        assertEquals(expectedQuery, newQuery);  
+        }
+ * not use this file except in compliance with the License.
+        QB testQuery = createTestQueryBuilder();
+            if (builderGeneratesCacheableQueries()) {
+     * <li> Take a reference documentation example.
+                randomBoolean(),
+        switch (fieldName) {
+        for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {  
+                    firstLuceneQuery.hashCode()  
+     * cases no exception would get thrown.
+        } while (testQuery.toString().contains(marker));
+    static List<Tuple<String, Boolean>> alterateQueries(Set<String> queries, Set<String> arbitraryMarkers) throws IOException {  
+    public void testCacheability() throws IOException {
+                value = new DateTime(System.currentTimeMillis(), DateTimeZone.UTC).toString();
+     *         "newField" : {
+                    .append((int) left.charAt(i))  
+     * wrapper query and {@code match_none}.  
+import java.util.List;
+    /**
+            int mutation = 0;
+        QueryBuilder newQuery = parseQuery(queryAsString);  
+    protected boolean builderGeneratesCacheableQueries() {
+                        } else if (token == XContentParser.Token.END_OBJECT || token == XContentParser.Token.END_ARRAY) {
+    }
+            testQuery = createTestQueryBuilder();  
+                    XContentParser.Token token;
+import java.util.Deque;
+    protected abstract void doAssertLuceneQuery(QB queryBuilder, Query query, QueryShardContext context) throws IOException;
+     * <p>
+     * <li> Now copy the generated json including default options into createParseableQueryJson  
+    protected QueryBuilder parseQuery(AbstractQueryBuilder<?> builder) throws IOException {
+        }
+                                generator.writeEndObject();  
+                // of mutation, so no simple asserts possible here  
+    /**  
+            case DATE_NANOS_FIELD_NAME:  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+                                            break;
+    /**
+                String queryAsString = alternateVersion.getKey();  
+                    rewrite(firstLuceneQuery),
+        try {
+                assertNotSame(testQuery, deserializedQuery);
+import org.joda.time.DateTimeZone;
+            QB controlQuery = copyQuery(firstQuery);
+        return "";  
+     * doesn't parse it as it isn't supported. This method allows to disable boost related tests for those queries.  
+            if (validQuery.charAt(insertionPosition) == ':') {
+        String marker = "#marker#";  
+        List<Tuple<String, Boolean>> testQueries = alterateQueries(candidates, getObjectsHoldingArbitraryContent());
+    /**
+                        break;
+        for (insertionPosition = i; insertionPosition < validQuery.length(); insertionPosition++) {  
+import org.opensearch.index.query.QueryBuilder;
+    protected QueryBuilder assertSerialization(QueryBuilder testQuery, Version version) throws IOException {
+        QB queryBuilder = createTestQueryBuilder();
+        PlainActionFuture<QueryBuilder> future = new PlainActionFuture<>();
+                .append("until offset: ")
+        return query;
+    private void queryWrappedInArrayTest(String queryName, String validQuery) {
+        return true;  
+            for (Map.Entry<String, QB> alternateVersion : getAlternateVersions().entrySet()) {
+        }
+     * and {@link QueryShardContext}. Verifies that named queries and boost are properly handled and delegates to
+                if (expectedException) {
+            assertLuceneQuery(firstQuery, firstLuceneQuery, context);
+     * To find the right position in the root query, we add a marker as `queryName` which
+                    return Fuzziness.fromEdits(randomIntBetween(0, 2));
+    }
+                try (
+                            if (objectIndex == mutation) {
+import org.opensearch.core.xcontent.XContentParser;
+/*  
+import static org.hamcrest.Matchers.greaterThan;
+                assertThat(e.getMessage(), containsString("unknown field [newField]"));
+ * specific language governing permissions and limitations
+            case DATE_FIELD_NAME:
+                break;
+            query = boostQuery.getQuery();  
+                assertEquals(testQuery.hashCode(), deserializedQuery.hashCode());  
+            secondQuery.boost(original.boost() + 1f + randomFloat());
+        QB secondQuery = copyQuery(original);
+import java.io.IOException;
+        }
+     *             "value" : "foo"  
+ */  
+            fail("expected ParsingException or XContentParsingException");  
+    public void testValidOutput() throws IOException {
+                builder.append(left.charAt(i));
+import org.opensearch.index.query.Rewriteable;
+                            levels.addLast(parser.currentName());
+        }
+        // Adds the valid query to the list of queries to modify and test  
+                    .append(i)  
+    /**  
+                                    for (String marker : arbitraryMarkers) {
+ * GitHub history for details.
+    protected QueryBuilder rewriteQuery(QB queryBuilder, QueryRewriteContext rewriteContext) throws IOException {  
+            if (validQuery.charAt(endArrayPosition) == '}') {  
+    /**  
+    }
+        // Test for non null filter  
+    /**
+            );
+        int terms = randomIntBetween(0, 3);
+            case BOOLEAN_FIELD_NAME:  
+        if (randomBoolean()) {
+            assertNotNull("toQuery should not return null", firstLuceneQuery);
+        for (String query : queries) {  
+        }  
+            + "]"
+                    fail("some parsing exception expected for query: " + testQuery);
+        return Collections.emptySet();
+            try {
+                secondQuery.queryName() == null
+    protected static Object getRandomValueForFieldName(String fieldName) {  
+     * <p>  
+            // Track the number of query mutations
+                return builder.toString();
+        return parseQuery(parser);
+            assertTrue(
+     * of {@link QueryBuilder#toXContent(XContentBuilder, ToXContent.Params)}. By default there are no alternate versions.
+    }
+    protected boolean supportsQueryName() {
+     * Create the query that is being tested  
+        ParsingException e = expectThrows(ParsingException.class, () -> parseQuery(testQuery));
+    /**  
+     * reference docs mirroring examples there. Here's how the queries were generated:
+                break;
+    public void testToQuery() throws IOException {
+                    value = output.toString();
+                }
+        }
+     * Helper method to return a random rewrite method
+        // if no type is set then return a random field name
+                assertEquals(  
+     * objects cause parse exceptions through {@link #testUnknownObjectException()}. Default is an empty set. Can be overridden
+     * <li> Put the manual checks into the assertQueryParsedFromJson method.
+            if (left.charAt(i) == right.charAt(i)) {
+     * The following two mutations will be generated, and an exception is expected when trying to parse them:
+        builder.append(" content: <<");
+     */
+    }
+     */
+    protected Set<String> getObjectsHoldingArbitraryContent() {
+    /**  
+                            }  
+     * Call this method to check a valid json string representing the query under test against
+                return Fuzziness.build(randomTimeValue());
+     * Returns alternate string representation of the query that need to be tested as they are never used as output
+        insertionPosition++;
+import org.opensearch.index.query.QueryRewriteContext;  
+     * {  
+                firstLuceneQuery = rewritten.toQuery(context);
+     * Whether the queries produced by this builder are expected to be cacheable.  
+import java.time.Instant;
+        return parseQuery(createParser(JsonXContent.jsonXContent, bytes));  
+        if (left.length() != right.length()) {
+ *
+    }
+            } catch (IllegalArgumentException e) {  
+            assertTrue(
+    protected QueryBuilder rewriteAndFetch(QueryBuilder builder, QueryRewriteContext context) {  
+ * You may obtain a copy of the License at  
+        return parseInnerQueryBuilder;
+    /**
+                    ? randomAlphaOfLengthBetween(1, 30)  
+        }  
+                ToXContent.EMPTY_PARAMS,  
+                return deserializedQuery;
+                        ? randomAlphaOfLengthBetween(1, 30)
+     */  
+    }
+                assertThat(query, either(instanceOf(BoostQuery.class)).or(instanceOf(MatchNoDocsQuery.class)));  
+     * This causes unexpected situations in parser code that may not be handled properly.
+            case INT_FIELD_NAME:  
+     * all query builders support. The added bogus field after that should trigger the exception.
+        XContentParser parser = createParser(JsonXContent.jsonXContent, queryAsString);
+        if (supportsQueryName && randomBoolean()) {
+    }  
+     * create a random value for either {@link AbstractQueryTestCase#BOOLEAN_FIELD_NAME}, {@link AbstractQueryTestCase#INT_FIELD_NAME},
+     * <p>  
+    public final QB createTestQueryBuilder() {
+        return Strings.EMPTY_ARRAY;
+            assertThat(namedQuery, equalTo(query));
+                                        }  
+        for (int i = 0; i < size; i++) {  
+    /**
+        return builder.toString().trim();  
+    protected static String randomMinimumShouldMatch() {
+        return secondQuery;  
+     * renders the XContent correctly.  
+     *                 "value" : "foo"
+                "query is not equal to its copy after calling toQuery, firstQuery: " + firstQuery + ", secondQuery: " + controlQuery,
+            int rightEnd = Math.max(size, right.length()) - 1;  
+                return Fuzziness.AUTO;  
+                    .append(" vs.")
+                        NamedXContentRegistry.EMPTY,
+            /* we use a private rewrite context here since we want the most realistic way of asserting that we are cacheable or not.
+                .append(right.charAt(rightEnd))
+                            objectIndex++;
+    /**  
+    /**
+import org.opensearch.OpenSearchParseException;
+                        mutation++;
+    /**
+            default:  
+        queryBuilder.toQuery(context);
+     * @throws UnsupportedOperationException  
+     * Returns a set of object names that won't trigger any exception (uncluding their children) when testing that unknown
+    }
+                value = randomIntBetween(0, 10);
+                                // We reached the place in the object tree where we want to insert a new object level
+        }
+     *             }
+            }
+     */
+                    .append(']');  
+ */
+    }  
+        Reader<QB> reader = (Reader<QB>) namedWriteableRegistry().getReader(QueryBuilder.class, query.getWriteableName());  
+import org.opensearch.common.collect.Tuple;
+        candidates.add(createTestQueryBuilder().toString());
+                    "modifying the boost doesn't affect the corresponding lucene query",
+     * <li> Stick it into the createParseableQueryJson method of the respective query test.  
+    }  
+    /**
+                .append((int) right.charAt(rightEnd))
+                xContentType,
+                .append(']');  
+    protected QueryBuilder parseQuery(XContentParser parser) throws IOException {
+            case INT_FIELD_NAME:  
+     * Checks the result of {@link QueryBuilder#toQuery(QueryShardContext)} given the original {@link QueryBuilder}
+            case TEXT_ALIAS_FIELD_NAME:
+                    rewrite(secondLuceneQuery),
+     */
+        for (endArrayPosition = validQuery.length() - 1; endArrayPosition >= 0; endArrayPosition--) {
+        assertTermQuery(query, field, value);
+    }
+            );
+     * it's generated json.
+            // query _name never should affect the result of toQuery, we randomly set it to make sure
+import org.apache.lucene.search.TermQuery;
+            context.setAllowUnmappedFields(true);
+            assertParsedQuery(createParser(mediaType.xContent(), bytes), testQuery);  
+     * declared by overriding {@link #getObjectsHoldingArbitraryContent()}.
+ * the Apache License, Version 2.0 (the "License"); you may
+        assertThat(termQuery.getTerm().text().toLowerCase(Locale.ROOT), equalTo(value.toLowerCase(Locale.ROOT)));
+        QueryBuilder filter = QueryBuilders.matchAllQuery();
+                assertEquals(
+                    } else {  
+                assertEquals(testQuery, deserializedQuery);
+    }  
+        assertEquals(expectedQuery.hashCode(), newQuery.hashCode());  
+                    if (objectIndex < mutation) {  
         }  
     }
-
-    public QB mutateInstance(QB instance) throws IOException {  
-        return changeNameOrBoost(instance);
-    }
-
-    /**
-     * Generic test that checks that the <code>Strings.toString()</code> method
-     * renders the XContent correctly.  
+import org.opensearch.core.common.io.stream.Writeable.Reader;
+        for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {
      */
-    public void testValidOutput() throws IOException {
+        } else {
+                "query copy's hashcode is different from original hashcode after calling toQuery, firstQuery: "
+                    Deque<String> levels = new LinkedList<>();
+    /**  
+    protected void assertParsedQuery(String queryAsString, QueryBuilder expectedQuery) throws IOException {
+                    .append(right.charAt(i))
+        QueryBuilder newQuery = parseQuery(parser);
         for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {  
-            QB testQuery = createTestQueryBuilder();
+    public void testSerialization() throws IOException {
+            BytesReference shuffledXContent = toShuffledXContent(  
+    /**  
+                value = 1 + randomDouble() * 9;
+                    secondQuery.queryName() == null
+                                    // field is one (or a child) of those, no exception is expected when parsing the mutated query.
+                .getPreferredName()
+        }  
+     * <p>
+     * Subclasses can override this method and return an array of fieldnames which should be protected from
+     * Queries that allow arbitrary field names at this level need to override this test.  
+            // remove after assertLuceneQuery since the assertLuceneQuery impl might access the context as well  
             MediaType mediaType = MediaTypeRegistry.JSON;
-            String toString = Strings.toString(MediaTypeRegistry.JSON, testQuery);  
-            assertParsedQuery(createParser(mediaType.xContent(), toString), testQuery);
-            BytesReference bytes = org.opensearch.core.xcontent.XContentHelper.toXContent(testQuery, mediaType, false);
-            assertParsedQuery(createParser(mediaType.xContent(), bytes), testQuery);  
-        }
+import static org.hamcrest.CoreMatchers.equalTo;
+        assertNotSame(newQuery, expectedQuery);
+     * parse exception. Some specific objects do not cause any exception as they can hold arbitrary content; they can be
+    }  
+                    value = randomAlphaOfLengthBetween(1, 10);  
+        assertNotNull(rewriteQuery.toQuery(context));  
+     * Generic test that checks that the <code>Strings.toString()</code> method
+import org.opensearch.core.xcontent.DeprecationHandler;
+             * We do it this way in SearchService where  
+                                            expectException = false;
+                    + firstQuery
+     * Check that a query is generally cacheable. Tests for query builders that are not always cacheable
+            assertThat(  
+        String validQuery = queryBuilder.toString();  
+                .append(left.charAt(leftEnd))
     }
-
-    protected QB changeNameOrBoost(QB original) throws IOException {
-        QB secondQuery = copyQuery(original);
+    public void testUnknownField() throws IOException {
+import org.opensearch.action.support.PlainActionFuture;
+                boolean expectException = true;
+            query.queryName(createUniqueRandomName());  
+     *         "field" : {
+import org.opensearch.core.xcontent.ToXContent;  
+                    }  
+        QueryBuilder rewritten = rewriteAndFetch(queryBuilder, rewriteContext);
+    }
+                assertNotEquals(  
+            output.writeNamedWriteable(testQuery);
+     */  
+     * Those queries are easy to identify: their parsers don't parse {@code _name} as they don't apply to the specific query:
+     * }  
+        }
+            // we'd like to see the offending field name here
+            boolean expectedException = testQuery.v2();
+        switch (fieldName) {
+import org.opensearch.core.xcontent.XContentGenerator;
+    /**  
+            queryWrappedInArrayTest(queryName, query);  
+     * arbitraryMarkers parameter.
+            builder.append(">> ")
+            + validQuery.substring(insertionPosition, endArrayPosition)
+    /**
+            QB secondQuery = copyQuery(firstQuery);  
+    public void testMustRewrite() throws IOException {
+                    .append("] [")
+                                        if (levels.contains(marker)) {  
+    protected void assertTermQuery(Query query, String field, String value) {
+        String rewrite;
+import org.opensearch.common.unit.Fuzziness;
+                    + ", secondQuery: "  
+                        } else if (token == XContentParser.Token.START_OBJECT) {  
+    }
+            assertThat(query, instanceOf(BoostQuery.class));  
+        }  
+                }
+import org.opensearch.core.common.ParsingException;
+     * Few queries allow you to set the query name on the Java API, although the corresponding parser  
+    }  
+                                // Jump to next token
+import static org.hamcrest.Matchers.instanceOf;
+        // now assert that we actually generate the same JSON
+            }
+            + validQuery.substring(endArrayPosition, validQuery.length());  
+     */
+        for (String query : getAlternateVersions().keySet()) {
+            case DATE_NANOS_FIELD_NAME:  
+     * for the mutation. Some specific objects do not cause any exception as they can hold arbitrary content; they are passed using the  
+                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
+     * wrapper query and {@code match_none}.
+     *     "term" : {
+import org.apache.lucene.search.MatchNoDocsQuery;
+     * Helper method to return a mapped or a random field
+            BytesReference bytes = org.opensearch.core.xcontent.XContentHelper.toXContent(testQuery, mediaType, false);
+                break;
+    public void testUnknownObjectException() throws IOException {
+     */
+    public final QB createTestQueryBuilder(boolean supportsBoost, boolean supportsQueryName) {  
+        BytesReference bytes = org.opensearch.core.xcontent.XContentHelper.toXContent(builder, MediaTypeRegistry.JSON, false);
+     */  
+            // aspect of the object under test
+                break;
+    }
+            rewrite = randomFrom(QueryParsers.CONSTANT_SCORE, QueryParsers.SCORING_BOOLEAN, QueryParsers.CONSTANT_SCORE_BOOLEAN)  
+        return query;  
+        String queryName = queryBuilder.getName();
+                shuffleProtectedFields()
+    }  
+            rewrite = randomFrom(QueryParsers.TOP_TERMS, QueryParsers.TOP_TERMS_BOOST, QueryParsers.TOP_TERMS_BLENDED_FREQS)  
+            QB testQuery = createTestQueryBuilder();
+                in.setVersion(version);  
+             * we first rewrite the query with a private context, then reset the context and then build the actual lucene query*/
+    protected void assertTermOrBoostQuery(Query query, String field, String value, float fieldBoost) {
+     *     "term" : {
+        QueryShardContext context = createShardContext();
+     */
+ * license agreements. See the NOTICE file distributed with
+import java.util.Locale;  
+                    // Parse the valid query and inserts a new object level called "newField"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        // Adds the alternates versions of the query too
+     *  
+     * Test that adding an additional object within each object of the otherwise correct query always triggers some kind of  
+     * For instance given the following valid term query:
+            QB testQuery = createTestQueryBuilder();
+    }
+                firstQuery.equals(controlQuery)  
+        String queryAsString = testQuery.toString().replace("\"" + marker + "\"", "\"" + marker + "\", \"bogusField\" : \"someValue\"");  
+     *     "term" : {
+                    .append(left.charAt(i))
+        return value;  
+     */
+                        // We are walking through the object tree, so we can safely copy the current node
+     * Few queries allow you to set the boost on the Java API, although the corresponding parser
+            + "["  
         if (randomBoolean()) {  
             secondQuery.queryName(
-                secondQuery.queryName() == null
-                    ? randomAlphaOfLengthBetween(1, 30)  
-                    : secondQuery.queryName() + randomAlphaOfLengthBetween(1, 10)
-            );
-        } else {  
-            secondQuery.boost(original.boost() + 1f + randomFloat());
-        }
-        return secondQuery;  
-    }
-
-    // we use the streaming infra to create a copy of the query provided as argument  
-    @SuppressWarnings("unchecked")
-    private QB copyQuery(QB query) throws IOException {
-        Reader<QB> reader = (Reader<QB>) namedWriteableRegistry().getReader(QueryBuilder.class, query.getWriteableName());  
-        return copyWriteable(query, namedWriteableRegistry(), reader);
-    }
-
-    /**
-     * create a random value for either {@link AbstractQueryTestCase#BOOLEAN_FIELD_NAME}, {@link AbstractQueryTestCase#INT_FIELD_NAME},
-     * {@link AbstractQueryTestCase#DOUBLE_FIELD_NAME}, {@link AbstractQueryTestCase#TEXT_FIELD_NAME} or  
-     * {@link AbstractQueryTestCase#DATE_FIELD_NAME} or {@link AbstractQueryTestCase#DATE_NANOS_FIELD_NAME} or a String value by default
-     */
-    protected static Object getRandomValueForFieldName(String fieldName) {  
-        Object value;
-        switch (fieldName) {
-            case TEXT_FIELD_NAME:  
-            case TEXT_ALIAS_FIELD_NAME:
-                if (rarely()) {
-                    // unicode in 10% cases  
-                    JsonStringEncoder encoder = JsonStringEncoder.getInstance();
-                    StringBuilder output = new StringBuilder();
-                    encoder.quoteAsString(randomUnicodeOfLength(10), output);  
-                    value = output.toString();
-                } else {
-                    value = randomAlphaOfLengthBetween(1, 10);  
-                }
-                break;
-            case INT_FIELD_NAME:  
-                value = randomIntBetween(0, 10);
-                break;
-            case DOUBLE_FIELD_NAME:  
-                value = 1 + randomDouble() * 9;
-                break;
-            case BOOLEAN_FIELD_NAME:  
-                value = randomBoolean();
-                break;
-            case DATE_FIELD_NAME:  
-                value = new DateTime(System.currentTimeMillis(), DateTimeZone.UTC).toString();
-                break;
-            case DATE_NANOS_FIELD_NAME:  
-                value = Instant.now().toString();
-                break;
-            default:  
-                value = randomAlphaOfLengthBetween(1, 10);
-        }
-        return value;  
-    }
-
-    protected static String getRandomQueryText() {  
-        int terms = randomIntBetween(0, 3);
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < terms; i++) {  
-            builder.append(randomAlphaOfLengthBetween(1, 10)).append(" ");
-        }
-        return builder.toString().trim();  
-    }
-
-    /**  
-     * Helper method to return a mapped or a random field
-     */
-    protected static String getRandomFieldName() {  
-        // if no type is set then return a random field name
-        if (randomBoolean()) {
-            return randomAlphaOfLengthBetween(1, 10);  
-        } else {
+                    XContentParser parser = JsonXContent.jsonXContent.createParser(
             return randomFrom(MAPPED_LEAF_FIELD_NAMES);
-        }  
+        } catch (ParsingException | XContentParseException e) {
+                controlQuery.equals(firstQuery)
+    /**
+                Query thirdLuceneQuery = rewriteQuery(secondQuery, context).toQuery(context);
+import org.apache.lucene.search.BoostQuery;
+                secondQuery.boost(firstQuery.boost() + 1f + randomFloat());
     }
-
-    /**  
-     * Helper method to return a random rewrite method
-     */
-    protected static String getRandomRewriteMethod() {  
-        String rewrite;
-        if (randomBoolean()) {
-            rewrite = randomFrom(QueryParsers.CONSTANT_SCORE, QueryParsers.SCORING_BOOLEAN, QueryParsers.CONSTANT_SCORE_BOOLEAN)  
-                .getPreferredName();
-        } else {
-            rewrite = randomFrom(QueryParsers.TOP_TERMS, QueryParsers.TOP_TERMS_BOOST, QueryParsers.TOP_TERMS_BLENDED_FREQS)  
-                .getPreferredName()
-                + "1";
-        }  
-        return rewrite;
-    }
-
-    protected static Fuzziness randomFuzziness(String fieldName) {
-        switch (fieldName) {
-            case INT_FIELD_NAME:  
-                return Fuzziness.build(randomIntBetween(3, 100));
-            case DOUBLE_FIELD_NAME:
-                return Fuzziness.build(1 + randomFloat() * 10);  
-            case DATE_FIELD_NAME:
-                return Fuzziness.build(randomTimeValue());
-            case DATE_NANOS_FIELD_NAME:  
-                return Fuzziness.build(randomTimeValue());
-            default:
-                if (randomBoolean()) {  
-                    return Fuzziness.fromEdits(randomIntBetween(0, 2));
-                }
-                return Fuzziness.AUTO;  
-        }
-    }
-
-    protected static String randomAnalyzer() {
-        return randomFrom("simple", "standard", "keyword", "whitespace");
-    }  
-
-    protected static String randomMinimumShouldMatch() {
-        return randomFrom("1", "-1", "75%", "-25%", "2<75%", "2<-25%");  
-    }
-
-    /**  
-     * Call this method to check a valid json string representing the query under test against
-     * it's generated json.
-     * <p>  
-     * Note: By the time of this writing (Nov 2015) all queries are taken from the query dsl
-     * reference docs mirroring examples there. Here's how the queries were generated:
-     *  
-     * <ul>
-     * <li> Take a reference documentation example.
-     * <li> Stick it into the createParseableQueryJson method of the respective query test.  
-     * <li> Manually check that what the QueryBuilder generates equals the input json ignoring default options.
-     * <li> Put the manual checks into the assertQueryParsedFromJson method.
-     * <li> Now copy the generated json including default options into createParseableQueryJson  
-     * <li> By now the roundtrip check for the json should be happy.
-     * </ul>
-     **/  
-    public static void checkGeneratedJson(String expected, QueryBuilder source) throws IOException {
-        // now assert that we actually generate the same JSON
-        XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();  
-        source.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        assertEquals(msg(expected, builder.toString()), expected.replaceAll("\\s+", ""), builder.toString().replaceAll("\\s+", ""));
-    }  
-
-    private static String msg(String left, String right) {
-        int size = Math.min(left.length(), right.length());  
-        StringBuilder builder = new StringBuilder("size: " + left.length() + " vs. " + right.length());
-        builder.append(" content: <<");
-        for (int i = 0; i < size; i++) {  
-            if (left.charAt(i) == right.charAt(i)) {
-                builder.append(left.charAt(i));
-            } else {  
-                builder.append(">> ")
-                    .append("until offset: ")
-                    .append(i)  
-                    .append(" [")
-                    .append(left.charAt(i))
-                    .append(" vs.")  
-                    .append(right.charAt(i))
-                    .append("] [")
-                    .append((int) left.charAt(i))  
-                    .append(" vs.")
-                    .append((int) right.charAt(i))
-                    .append(']');  
-                return builder.toString();
+                                generator.writeFieldName("newField");
+        QB queryBuilder = createTestQueryBuilder();  
             }
-        }  
-        if (left.length() != right.length()) {
-            int leftEnd = Math.max(size, left.length()) - 1;
-            int rightEnd = Math.max(size, right.length()) - 1;  
-            builder.append(">> ")
-                .append("until offset: ")
-                .append(size)  
-                .append(" [")
-                .append(left.charAt(leftEnd))
-                .append(" vs.")  
-                .append(right.charAt(rightEnd))
-                .append("] [")
-                .append((int) left.charAt(leftEnd))  
-                .append(" vs.")
-                .append((int) right.charAt(rightEnd))
-                .append(']');  
-            return builder.toString();
-        }
-        return "";  
     }
-
-    /**  
-     * This test ensures that queries that need to be rewritten have dedicated tests.
-     * These queries must override this method accordingly.
-     */  
-    public void testMustRewrite() throws IOException {
-        QueryShardContext context = createShardContext();
-        context.setAllowUnmappedFields(true);  
-        QB queryBuilder = createTestQueryBuilder();
-        queryBuilder.toQuery(context);
-    }  
-
-    protected Query rewrite(Query query) throws IOException {
-        return query;  
-    }
-
-    protected QueryBuilder rewriteAndFetch(QueryBuilder builder, QueryRewriteContext context) {  
-        PlainActionFuture<QueryBuilder> future = new PlainActionFuture<>();
-        Rewriteable.rewriteAndFetch(builder, context, future);
-        return future.actionGet();  
-    }
-
-    public boolean isTextField(String fieldName) {  
-        return fieldName.equals(TEXT_FIELD_NAME) || fieldName.equals(TEXT_ALIAS_FIELD_NAME);
-    }
-
     /**
-     * Check that a query is generally cacheable. Tests for query builders that are not always cacheable
-     * should overwrite this method and make sure the different cases are always tested  
-     */
-    public void testCacheability() throws IOException {
-        QB queryBuilder = createTestQueryBuilder();  
-        QueryShardContext context = createShardContext();
-        QueryBuilder rewriteQuery = rewriteQuery(queryBuilder, new QueryShardContext(context));
-        assertNotNull(rewriteQuery.toQuery(context));  
-        assertTrue("query should be cacheable: " + queryBuilder.toString(), context.isCacheable());
+        int insertionPosition;
+                    : secondQuery.queryName() + randomAlphaOfLengthBetween(1, 10)
     }
-
-    /**
-     * Check if a filter can be applied to the abstract query builder.
-     * @throws UnsupportedOperationException  
-     */
-    public void testFilter() throws IOException {
-        QB queryBuilder = createTestQueryBuilder();  
-        QueryBuilder filter = QueryBuilders.matchAllQuery();
-        // Test for Null Filter case
-        QueryBuilder returnedQuerybuilder = queryBuilder.filter(null);  
-        assertEquals(queryBuilder, returnedQuerybuilder);
-
-        // Test for non null filter  
-        returnedQuerybuilder = queryBuilder.filter(filter);
-        assertTrue(returnedQuerybuilder instanceof BoolQueryBuilder);
+ *  
+                                generator.writeStartObject();  
+            case TEXT_FIELD_NAME:  
+import org.opensearch.common.xcontent.json.JsonXContent;
+        assertThat(query, instanceOf(TermQuery.class));  
+import java.util.ArrayList;  
+                    .append((int) right.charAt(i))
+     *     }
+                    // unicode in 10% cases  
+     * }  
+                "equals is not symmetric after calling toQuery, firstQuery: " + firstQuery + ", secondQuery: " + controlQuery,  
+                        query
+                secondQuery.queryName(  
+     * Checks the result of {@link QueryBuilder#toQuery(QueryShardContext)} given the original {@link QueryBuilder}
+        source.toXContent(builder, ToXContent.EMPTY_PARAMS);
+                }
         assertTrue(((BoolQueryBuilder) returnedQuerybuilder).filter().size() == 1);  
+import org.opensearch.core.common.bytes.BytesReference;
+        for (int runs = 0; runs < NUMBER_OF_TESTQUERIES; runs++) {  
+    protected QB changeNameOrBoost(QB original) throws IOException {
+    public boolean isTextField(String fieldName) {  
+        }  
+        Set<String> candidates = new HashSet<>();
+                    .append("until offset: ")
+import org.apache.lucene.search.Query;  
         assertEquals(filter, ((BoolQueryBuilder) returnedQuerybuilder).filter().get(0));
+                if (randomBoolean()) {  
+ * Licensed to Elasticsearch under one or more contributor  
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(createTestQueryBuilder(), this::copyQuery, this::mutateInstance);
+                continue;
+ * SPDX-License-Identifier: Apache-2.0
+            );
+    }  
+            BoostQuery boostQuery = (BoostQuery) query;
+                        generator.copyCurrentEvent(parser);  
     }
-}  
+     * Test serialization and deserialization of the test query.  
+    public QB mutateInstance(QB instance) throws IOException {  
+ * this file be licensed under the Apache-2.0 license or a
+     */  
+ * compatible open source license.
+        testQuery.queryName(marker); // to find root query to add additional bogus field there
+     * {@link #doAssertLuceneQuery(AbstractQueryBuilder, Query, QueryShardContext)} for query specific checks.  
+     * that can contain arbitrary content (e.g. documents for percolate or more like this query, params for scripts). In such
+        return future.actionGet();  
+            case DATE_FIELD_NAME:  
+    protected static String randomAnalyzer() {
+import org.opensearch.index.query.QueryShardContext;
+                                if (hasArbitraryContent) {
+        return changeNameOrBoost(instance);
+     * This test ensures that queries that need to be rewritten have dedicated tests.
+    private void assertParsedQuery(XContentParser parser, QueryBuilder expectedQuery) throws IOException {  
+        }  
+    }
+                    "two equivalent query builders lead to different lucene queries",  
+            case DOUBLE_FIELD_NAME:  
+                }
+    protected boolean supportsBoost() {
+            String toString = Strings.toString(MediaTypeRegistry.JSON, testQuery);  
+            } catch (IllegalArgumentException e) {
+        int i = validQuery.indexOf("\"" + queryName + "\"");
+        do {
+                    rewrite(thirdLuceneQuery)  
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+                                    }
+    @SuppressWarnings("unchecked")
+     */
+                        : secondQuery.queryName() + randomAlphaOfLengthBetween(1, 10)  
+     *             }  
+            assertParsedQuery(createParser(xContentType.xContent(), shuffledXContent), testQuery);
+            QB testQuery = createTestQueryBuilder();
+                    secondLuceneQuery.hashCode(),
+            Query firstLuceneQuery;  
+            }
+            if (supportsBoost() && firstLuceneQuery instanceof MatchNoDocsQuery == false) {  
+        for (int i = 0; i < terms; i++) {  
+                        assertThat(boostQuery.getBoost(), equalTo(queryBuilder.boost()));
+        TermQuery termQuery = (TermQuery) query;
+                }  
+        assertThat(termQuery.getTerm().field(), equalTo(expectedFieldName));
+        return true;
+            );
+import org.opensearch.core.common.io.stream.StreamInput;  
+                if (rarely()) {
+    }  
+import org.opensearch.core.common.Strings;  
+                .append((int) left.charAt(leftEnd))  
+        assertTrue("query should be cacheable: " + queryBuilder.toString(), context.isCacheable());
+            }  
+                    throw new AssertionError("unexpected exception when parsing query:\n" + testQuery, e);
+    public final void testQueryWrappedInArray() {  
+        assertThat(exc.getMessage(), containsString("negative [boost]"));
+                break;
+     * Parses the query provided as bytes argument and compares it with the expected result provided as argument as a {@link QueryBuilder}
+    }
+     **/  
+            QueryShardContext context = createShardContext();  
+                break;
+                value = randomAlphaOfLengthBetween(1, 10);
+import static org.opensearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;  
+     * <ul>
+                    XContentGenerator generator = MediaTypeRegistry.JSON.xContent().createGenerator(out);  
+            }
+                ) {  
+    protected Map<String, QB> getAlternateVersions() {
+        }  
+import org.opensearch.core.xcontent.XContentBuilder;
+     * <p>
+        // Test for Null Filter case
+     * by subclasses that test queries which contain objects that get parsed on the data nodes (e.g. score functions) or objects  
+                }
+                builder.append(">> ")
+            assertLuceneQuery(secondQuery, secondLuceneQuery, context);  
+                    StringBuilder output = new StringBuilder();
+                    }
+    protected static String getRandomFieldName() {  
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+    private void assertLuceneQuery(QB queryBuilder, Query query, QueryShardContext context) throws IOException {
+/*  
+        String expectedFieldName = expectedFieldName(field);  
+            while (true) {
+                .getPreferredName();
+            }
+     * {  
+                equalTo(firstQuery.hashCode())  
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            return randomAlphaOfLengthBetween(1, 10);  
+                assertEquals("Too many disjunctions to expand", e.getMessage());
+    public static void checkGeneratedJson(String expected, QueryBuilder source) throws IOException {
+        } else {
+    }
+        }
+import org.opensearch.index.query.AbstractQueryBuilder;
+                                continue;
+import static org.hamcrest.Matchers.containsString;
+        for (Tuple<String, Boolean> testQuery : testQueries) {  
+    }
+    }  
+    }  
+            if (queryBuilder.boost() != AbstractQueryBuilder.DEFAULT_BOOST) {
+ * KIND, either express or implied.  See the License for the
+                .append("] [")
+import org.opensearch.core.xcontent.XContentParseException;  
+ *
+     */
+        QB query = doCreateTestQueryBuilder();
+     */  
+        return true;  
+        return rewrite;
+        return fieldName.equals(TEXT_FIELD_NAME) || fieldName.equals(TEXT_ALIAS_FIELD_NAME);
+     * Test creates the {@link Query} from the {@link QueryBuilder} under test and delegates the
+    private QB copyQuery(QB query) throws IOException {
+                // different kinds of exception wordings depending on location
+     * <li> By now the roundtrip check for the json should be happy.
+ * under the License.  
+        StringBuilder builder = new StringBuilder();
+    /**
+                .append(" vs.")
+                results.add(new Tuple<>(out.bytes().utf8ToString(), expectException));  
+            QB firstQuery = createTestQueryBuilder();  
+    }
+                value = randomBoolean();
+import org.opensearch.common.xcontent.XContentType;  
+     * </ul>
+        QB queryBuilder = createTestQueryBuilder();  
+        // Indicate if a part of the query can hold any arbitrary content  
+                break;
+                                }
+                                    // The query has one or more fields that hold arbitrary content. If the current  
+            parseQuery(queryAsString);
+        assertNotSame(newQuery, expectedQuery);
+                    encoder.quoteAsString(randomUnicodeOfLength(10), output);  
+        int endArrayPosition;
+        return assertSerialization(testQuery, Version.CURRENT);
+    protected Query rewrite(Query query) throws IOException {
+    }
+                    query = boostQuery.getQuery();  
+            try {
+        }
+    }
+            query.boost(2.0f / randomIntBetween(1, 20));  
+                return Fuzziness.build(randomTimeValue());
+            case DOUBLE_FIELD_NAME:
+        }  

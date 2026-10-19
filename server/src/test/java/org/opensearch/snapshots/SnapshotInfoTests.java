@@ -1,366 +1,337 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.Version;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.test.AbstractWireSerializingTestCase;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-public class SnapshotInfoTests extends AbstractWireSerializingTestCase<SnapshotInfo> {
-
-    // Legacy Elasticsearch 7.10.2 version id: it lacks the OpenSearch version mask bit, so it is not  
-    // supported and Version.fromId rejects it.
-    private static final int LEGACY_ES_7_10_2_VERSION_ID = 7100299;
-
-    private static String snapshotJson(String name, int versionId) {
-        return "{\"snapshot\":{\"name\":\""
-            + name  
-            + "\",\"uuid\":\"uuid\",\"version_id\":"
-            + versionId
-            + ",\"state\":\"SUCCESS\",\"indices\":[\"idx-1\"],\"total_shards\":1,\"successful_shards\":1}}";  
-    }
-
-    /** An unsupported {@code version_id} must parse to an unknown ({@code null}) version, not throw. */  
-    public void testFromXContentInternalToleratesUnsupportedVersionId() throws IOException {
-        final String json = snapshotJson("snap-legacy", LEGACY_ES_7_10_2_VERSION_ID);
+                    instance.endTime(),
+            case 2:
         try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {  
-            SnapshotInfo snapshotInfo = SnapshotInfo.fromXContentInternal(parser);
-            assertEquals("snap-legacy", snapshotInfo.snapshotId().getName());
-            assertNull(snapshotInfo.version());  
-            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
-        }
-    }  
-
-    /** A supported {@code version_id} must still resolve to its {@link Version}. */
-    public void testFromXContentInternalResolvesSupportedVersionId() throws IOException {  
-        final String json = snapshotJson("snap-ok", Version.CURRENT.id);
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
-            assertEquals(Version.CURRENT, SnapshotInfo.fromXContentInternal(parser).version());  
-        }
-    }
-
-    /** A {@link SnapshotInfo} with an unknown (null) version must survive a wire round trip. */
-    public void testWireRoundTripWithUnknownVersion() throws IOException {
-        final String json = snapshotJson("snap-legacy", LEGACY_ES_7_10_2_VERSION_ID);  
-        final SnapshotInfo original;
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
-            original = SnapshotInfo.fromXContentInternal(parser);  
-        }
-        assertNull(original.version());
-        SnapshotInfo roundTripped = copyInstance(original);  
-        assertNull(roundTripped.version());
-        assertEquals(original, roundTripped);
-    }  
-
-    /** With strict version parsing enabled, an unsupported {@code version_id} must fail fast rather than resolve to null. */
-    @LockFeatureFlag(FeatureFlags.SNAPSHOT_STRICT_VERSION_PARSING)  
-    public void testUnsupportedVersionIdFailsWhenStrictParsingEnabled() throws IOException {
-        final String json = snapshotJson("snap-legacy", LEGACY_ES_7_10_2_VERSION_ID);
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {  
-            expectThrows(Version.UnsupportedVersionException.class, () -> SnapshotInfo.fromXContentInternal(parser));
-        }
-    }  
-
-    @Override
-    protected SnapshotInfo createTestInstance() {  
-        SnapshotId snapshotId = new SnapshotId(randomAlphaOfLength(5), randomAlphaOfLength(5));
-        List<String> indices = Arrays.asList(randomArray(1, 10, String[]::new, () -> randomAlphaOfLengthBetween(2, 20)));
-
-        List<String> dataStreams = Arrays.asList(randomArray(1, 10, String[]::new, () -> randomAlphaOfLengthBetween(2, 20)));
-
-        String reason = randomBoolean() ? null : randomAlphaOfLengthBetween(5, 15);  
-
-        long startTime = randomNonNegativeLong();
-        long endTime = randomNonNegativeLong();  
-
-        int totalShards = randomIntBetween(0, 100);
-        int failedShards = randomIntBetween(0, totalShards);  
-
-        List<SnapshotShardFailure> shardFailures = Arrays.asList(
-            randomArray(failedShards, failedShards, SnapshotShardFailure[]::new, () -> {  
-                String indexName = randomAlphaOfLengthBetween(3, 50);
-                int id = randomInt();
-                ShardId shardId = ShardId.fromString("[" + indexName + "][" + id + "]");  
-
-                return new SnapshotShardFailure(randomAlphaOfLengthBetween(5, 10), shardId, randomAlphaOfLengthBetween(5, 10));
-            })  
-        );
-
-        Boolean includeGlobalState = randomBoolean() ? null : randomBoolean();  
-
-        Map<String, Object> userMetadata = randomUserMetadata();
-
-        Boolean remoteStoreIndexShallowCopy = randomBoolean() ? null : randomBoolean();
-
-        return new SnapshotInfo(  
-            snapshotId,
-            indices,
-            dataStreams,  
-            startTime,
+                List<String> dataStreams = randomValueOtherThan(  
+                    instance.snapshotId(),
+                    instance.snapshotId(),
+        Map<String, Object> metadata = new HashMap<>();
+                    totalShards,
+                    instance.dataStreams(),
+                    instance.indices(),
+}
+                return new SnapshotInfo(  
             reason,
-            endTime,  
-            totalShards,
-            shardFailures,
-            includeGlobalState,  
-            userMetadata,
-            remoteStoreIndexShallowCopy,
-            0  
-        );
-    }
-
-    @Override
-    protected Writeable.Reader<SnapshotInfo> instanceReader() {
-        return SnapshotInfo::new;  
-    }
-
-    @Override  
-    protected SnapshotInfo mutateInstance(SnapshotInfo instance) {
-        switch (randomIntBetween(0, 9)) {
-            case 0:  
-                SnapshotId snapshotId = new SnapshotId(
+                    instance.indices(),
                     randomValueOtherThan(instance.snapshotId().getName(), () -> randomAlphaOfLength(5)),
+ */  
+import java.util.List;
+                );
+                    instance.totalShards(),
+            assertEquals("snap-legacy", snapshotInfo.snapshotId().getName());
+                    indices,
+            case 5:
+                int indicesSize = randomValueOtherThan(instance.indices().size(), () -> randomIntBetween(1, 10));
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
+                    instance.indices(),
+                    instance.startTime(),
+                        randomAlphaOfLengthBetween(5, 15)  
+                return new SnapshotInfo(
+                    shardFailures,
+                    instance.reason(),
+                    instance.indices(),
+            expectThrows(Version.UnsupportedVersionException.class, () -> SnapshotInfo.fromXContentInternal(parser));
+        );
+        String reason = randomBoolean() ? null : randomAlphaOfLengthBetween(5, 15);  
+        for (int i = 0; i < fields; i++) {  
+                    instance.endTime(),  
+        Map<String, Object> userMetadata = randomUserMetadata();
+    // supported and Version.fromId rejects it.
+            + versionId
+                    snapshotId,  
+                    instance.snapshotId(),
+                List<String> indices = Arrays.asList(  
+ * Unless required by applicable law or agreed to in writing,
+                    instance.userMetadata(),
+    protected SnapshotInfo mutateInstance(SnapshotInfo instance) {
+    }  
+                    })
+import org.opensearch.common.xcontent.json.JsonXContent;  
+import java.util.HashMap;  
+            case 0:  
+package org.opensearch.snapshots;
+                        randomValueOtherThanMany(nested::containsKey, () -> randomAlphaOfLengthBetween(2, 10)),
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+                    instance.indices(),  
+                        return new SnapshotShardFailure(randomAlphaOfLengthBetween(5, 10), shardId, randomAlphaOfLengthBetween(5, 10));  
+                return new SnapshotInfo(
+                Map<String, Object> nested = new HashMap<>();
+    }
+                );
+                int id = randomInt();
+                    randomArray(failedShards, failedShards, SnapshotShardFailure[]::new, () -> {
+    }  
+                    instance.startTime(),
+                return new SnapshotInfo(  
+        Boolean includeGlobalState = randomBoolean() ? null : randomBoolean();  
+            assertNull(snapshotInfo.version());  
+        List<String> indices = Arrays.asList(randomArray(1, 10, String[]::new, () -> randomAlphaOfLengthBetween(2, 20)));
+                    instance.reason(),  
+ * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    instance.indices(),
+    @Override
+            case 4:
+                );
+            original = SnapshotInfo.fromXContentInternal(parser);  
+            case 1:
+            dataStreams,  
+                    instance.userMetadata(),
+                return new SnapshotInfo(  
+                    0  
+ * The OpenSearch Contributors require contributions made to  
+        return metadata;  
+            }
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+                    instance.includeGlobalState(),  
+                for (int j = 0; j < nestedFields; j++) {  
+    private static String snapshotJson(String name, int versionId) {
+    protected SnapshotInfo createTestInstance() {  
+import java.util.Map;
+        }
+                    instance.endTime(),
+                );
+                    instance.snapshotId(),
+            + ",\"state\":\"SUCCESS\",\"indices\":[\"idx-1\"],\"total_shards\":1,\"successful_shards\":1}}";  
+    /** A {@link SnapshotInfo} with an unknown (null) version must survive a wire round trip. */
+                    instance.indices(),  
+import org.opensearch.core.xcontent.XContentParser;  
+                );
+                    instance.includeGlobalState(),
+                ShardId shardId = ShardId.fromString("[" + indexName + "][" + id + "]");  
+                int failedShards = randomIntBetween(0, totalShards);
+ * this work for additional information regarding copyright
                     randomValueOtherThan(instance.snapshotId().getUUID(), () -> randomAlphaOfLength(5))  
                 );
-                return new SnapshotInfo(
-                    snapshotId,  
-                    instance.indices(),
-                    instance.dataStreams(),
-                    instance.startTime(),  
-                    instance.reason(),
-                    instance.endTime(),
-                    instance.totalShards(),  
-                    instance.shardFailures(),
-                    instance.includeGlobalState(),
-                    instance.userMetadata(),  
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0
-                );  
-            case 1:
-                int indicesSize = randomValueOtherThan(instance.indices().size(), () -> randomIntBetween(1, 10));
-                List<String> indices = Arrays.asList(  
-                    randomArray(indicesSize, indicesSize, String[]::new, () -> randomAlphaOfLengthBetween(2, 20))
-                );
-                return new SnapshotInfo(  
+            assertEquals(Version.CURRENT, SnapshotInfo.fromXContentInternal(parser).version());  
+        return "{\"snapshot\":{\"name\":\""
+/*  
                     instance.snapshotId(),
-                    indices,
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
                     instance.dataStreams(),  
-                    instance.startTime(),
-                    instance.reason(),
-                    instance.endTime(),  
-                    instance.totalShards(),
-                    instance.shardFailures(),
-                    instance.includeGlobalState(),  
-                    instance.userMetadata(),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0  
+    /** With strict version parsing enabled, an unsupported {@code version_id} must fail fast rather than resolve to null. */
                 );
-            case 2:
-                return new SnapshotInfo(  
-                    instance.snapshotId(),
-                    instance.indices(),
-                    instance.dataStreams(),  
-                    randomValueOtherThan(instance.startTime(), OpenSearchTestCase::randomNonNegativeLong),
-                    instance.reason(),
-                    instance.endTime(),  
-                    instance.totalShards(),
-                    instance.shardFailures(),
-                    instance.includeGlobalState(),  
-                    instance.userMetadata(),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0  
-                );
-            case 3:
-                return new SnapshotInfo(  
-                    instance.snapshotId(),
-                    instance.indices(),
-                    instance.dataStreams(),  
-                    instance.startTime(),
-                    randomValueOtherThan(instance.reason(), () -> randomAlphaOfLengthBetween(5, 15)),
-                    instance.endTime(),  
-                    instance.totalShards(),
-                    instance.shardFailures(),
-                    instance.includeGlobalState(),  
-                    instance.userMetadata(),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0  
-                );
-            case 4:
-                return new SnapshotInfo(  
-                    instance.snapshotId(),
-                    instance.indices(),
-                    instance.dataStreams(),  
-                    instance.startTime(),
-                    instance.reason(),
-                    randomValueOtherThan(instance.endTime(), OpenSearchTestCase::randomNonNegativeLong),  
-                    instance.totalShards(),
-                    instance.shardFailures(),
-                    instance.includeGlobalState(),  
-                    instance.userMetadata(),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0  
-                );
-            case 5:
-                int totalShards = randomValueOtherThan(instance.totalShards(), () -> randomIntBetween(0, 100));  
-                int failedShards = randomIntBetween(0, totalShards);
-
-                List<SnapshotShardFailure> shardFailures = Arrays.asList(  
-                    randomArray(failedShards, failedShards, SnapshotShardFailure[]::new, () -> {
-                        String indexName = randomAlphaOfLengthBetween(3, 50);
-                        int id = randomInt();  
-                        ShardId shardId = ShardId.fromString("[" + indexName + "][" + id + "]");
-
-                        return new SnapshotShardFailure(randomAlphaOfLengthBetween(5, 10), shardId, randomAlphaOfLengthBetween(5, 10));  
-                    })
-                );
-                return new SnapshotInfo(  
-                    instance.snapshotId(),
-                    instance.indices(),
-                    instance.dataStreams(),  
-                    instance.startTime(),
-                    instance.reason(),
-                    instance.endTime(),  
-                    totalShards,
-                    shardFailures,
-                    instance.includeGlobalState(),  
-                    instance.userMetadata(),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0  
-                );
-            case 6:
-                return new SnapshotInfo(  
-                    instance.snapshotId(),
-                    instance.indices(),
-                    instance.dataStreams(),  
-                    instance.startTime(),
-                    instance.reason(),
-                    instance.endTime(),  
-                    instance.totalShards(),
-                    instance.shardFailures(),
-                    Boolean.FALSE.equals(instance.includeGlobalState()),  
-                    instance.userMetadata(),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0  
-                );
-            case 7:
-                return new SnapshotInfo(  
-                    instance.snapshotId(),
-                    instance.indices(),
-                    instance.dataStreams(),  
-                    instance.startTime(),
-                    instance.reason(),
-                    instance.endTime(),  
-                    instance.totalShards(),
-                    instance.shardFailures(),
-                    instance.includeGlobalState(),  
-                    randomValueOtherThan(instance.userMetadata(), SnapshotInfoTests::randomUserMetadata),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),
-                    0  
-                );
-            case 8:
-                List<String> dataStreams = randomValueOtherThan(  
-                    instance.dataStreams(),
-                    () -> Arrays.asList(randomArray(1, 10, String[]::new, () -> randomAlphaOfLengthBetween(2, 20)))
-                );  
-                return new SnapshotInfo(
-                    instance.snapshotId(),
-                    instance.indices(),  
-                    dataStreams,
-                    instance.startTime(),
-                    instance.reason(),  
-                    instance.endTime(),
-                    instance.totalShards(),
-                    instance.shardFailures(),  
-                    instance.includeGlobalState(),
-                    instance.userMetadata(),
-                    instance.isRemoteStoreIndexShallowCopyEnabled(),  
-                    123456
-                );
-            case 9:  
-                return new SnapshotInfo(
-                    instance.snapshotId(),
-                    instance.indices(),  
-                    instance.dataStreams(),
-                    instance.startTime(),
-                    instance.reason(),  
-                    instance.endTime(),
-                    instance.totalShards(),
-                    instance.shardFailures(),  
-                    instance.includeGlobalState(),
-                    instance.userMetadata(),
+                return new SnapshotShardFailure(randomAlphaOfLengthBetween(5, 10), shardId, randomAlphaOfLengthBetween(5, 10));
                     Boolean.FALSE.equals(instance.isRemoteStoreIndexShallowCopyEnabled()),  
-                    123456
-                );
-            default:  
-                throw new IllegalArgumentException("invalid randomization case");
-        }
-    }  
-
-    public static Map<String, Object> randomUserMetadata() {
+                    instance.endTime(),
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+            indices,
         if (randomBoolean()) {  
-            return null;
+                    instance.snapshotId(),
+                    instance.endTime(),  
+                    instance.dataStreams(),
+        );
+                    instance.shardFailures(),
+ *
+    }  
+ * specific language governing permissions and limitations
+                    instance.shardFailures(),
+                    instance.endTime(),  
+import org.opensearch.core.common.io.stream.Writeable;
+                    instance.totalShards(),
+                    nested.put(
+                    0  
+                    instance.dataStreams(),  
         }
-
-        Map<String, Object> metadata = new HashMap<>();
-        long fields = randomLongBetween(0, 25);
-        for (int i = 0; i < fields; i++) {  
-            if (randomBoolean()) {
-                metadata.put(
-                    randomValueOtherThanMany(metadata::containsKey, () -> randomAlphaOfLengthBetween(2, 10)),  
+        final SnapshotInfo original;
+        List<SnapshotShardFailure> shardFailures = Arrays.asList(
+            0  
                     randomAlphaOfLengthBetween(5, 15)
                 );
-            } else {  
-                Map<String, Object> nested = new HashMap<>();
-                long nestedFields = randomLongBetween(0, 25);
-                for (int j = 0; j < nestedFields; j++) {  
-                    nested.put(
-                        randomValueOtherThanMany(nested::containsKey, () -> randomAlphaOfLengthBetween(2, 10)),
-                        randomAlphaOfLengthBetween(5, 15)  
-                    );
-                }
-                metadata.put(randomValueOtherThanMany(metadata::containsKey, () -> randomAlphaOfLengthBetween(2, 10)), nested);  
-            }
-        }
-        return metadata;  
+    public void testFromXContentInternalResolvesSupportedVersionId() throws IOException {  
+                );
+                    instance.startTime(),
+                    instance.indices(),
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),  
+                    instance.userMetadata(),
+                    instance.userMetadata(),
+                    instance.reason(),
+                );
+import org.opensearch.test.AbstractWireSerializingTestCase;
+ * under the License.  
+                    randomArray(indicesSize, indicesSize, String[]::new, () -> randomAlphaOfLengthBetween(2, 20))
+                    () -> Arrays.asList(randomArray(1, 10, String[]::new, () -> randomAlphaOfLengthBetween(2, 20)))
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+                    instance.dataStreams(),  
     }
-}
+    }  
+            SnapshotInfo snapshotInfo = SnapshotInfo.fromXContentInternal(parser);
+                );  
+                    instance.shardFailures(),
+                List<SnapshotShardFailure> shardFailures = Arrays.asList(  
+                    instance.includeGlobalState(),  
+        long fields = randomLongBetween(0, 25);
+            case 9:  
+        long endTime = randomNonNegativeLong();  
+                    0  
+        }
+import org.opensearch.test.OpenSearchTestCase;
+                    0  
+                metadata.put(
+        SnapshotId snapshotId = new SnapshotId(randomAlphaOfLength(5), randomAlphaOfLength(5));
+                    randomValueOtherThan(instance.startTime(), OpenSearchTestCase::randomNonNegativeLong),
+                    randomValueOtherThanMany(metadata::containsKey, () -> randomAlphaOfLengthBetween(2, 10)),  
+                    randomValueOtherThan(instance.endTime(), OpenSearchTestCase::randomNonNegativeLong),  
+ * compatible open source license.
+                    instance.userMetadata(),
+    @Override
+            assertEquals(SnapshotState.SUCCESS, snapshotInfo.state());
+                throw new IllegalArgumentException("invalid randomization case");
+    public static Map<String, Object> randomUserMetadata() {
+            case 3:
+            startTime,
+                );
+        final String json = snapshotJson("snap-legacy", LEGACY_ES_7_10_2_VERSION_ID);  
+                    instance.userMetadata(),
+                return new SnapshotInfo(  
+ * Licensed to Elasticsearch under one or more contributor  
+        }
+                    instance.dataStreams(),  
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+        assertNull(original.version());
+import org.opensearch.Version;
+                    instance.startTime(),
+                    instance.shardFailures(),
+                        String indexName = randomAlphaOfLengthBetween(3, 50);
+            shardFailures,
+            + name  
+                    instance.dataStreams(),  
+                    instance.dataStreams(),  
+                    instance.userMetadata(),
+                );
+ * this file be licensed under the Apache-2.0 license or a
+                metadata.put(randomValueOtherThanMany(metadata::containsKey, () -> randomAlphaOfLengthBetween(2, 10)), nested);  
+import java.util.Arrays;
+                    instance.startTime(),  
+                    dataStreams,
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.index.shard.ShardId;
+            case 6:
+            case 8:
+                    instance.indices(),
+                    instance.reason(),
+            if (randomBoolean()) {
+                    instance.dataStreams(),  
+                    instance.dataStreams(),
+                    randomValueOtherThan(instance.userMetadata(), SnapshotInfoTests::randomUserMetadata),
+            endTime,  
+    // Legacy Elasticsearch 7.10.2 version id: it lacks the OpenSearch version mask bit, so it is not  
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+                    instance.totalShards(),
+                    instance.shardFailures(),
+                    instance.totalShards(),
+        int totalShards = randomIntBetween(0, 100);
+        return new SnapshotInfo(  
+                    0  
+                    instance.startTime(),
+                    instance.totalShards(),
+            + "\",\"uuid\":\"uuid\",\"version_id\":"
+                }
+        final String json = snapshotJson("snap-ok", Version.CURRENT.id);
+        }
+ */  
+            totalShards,
+            includeGlobalState,  
+                    );
+            snapshotId,
+        Boolean remoteStoreIndexShallowCopy = randomBoolean() ? null : randomBoolean();
+    }
+                    instance.totalShards(),
+    private static final int LEGACY_ES_7_10_2_VERSION_ID = 7100299;
+ * license agreements. See the NOTICE file distributed with
+                    instance.totalShards(),  
+                long nestedFields = randomLongBetween(0, 25);
+                    0  
+                    instance.snapshotId(),
+ * You may obtain a copy of the License at  
+    protected Writeable.Reader<SnapshotInfo> instanceReader() {
+/*
+ *
+                    123456
+ * SPDX-License-Identifier: Apache-2.0
+                );
+                    instance.reason(),
+        }
+                    instance.startTime(),
+                        int id = randomInt();  
+                    Boolean.FALSE.equals(instance.includeGlobalState()),  
+                    instance.includeGlobalState(),  
+    @LockFeatureFlag(FeatureFlags.SNAPSHOT_STRICT_VERSION_PARSING)  
+        long startTime = randomNonNegativeLong();
+                    randomValueOtherThan(instance.reason(), () -> randomAlphaOfLengthBetween(5, 15)),
+        assertEquals(original, roundTripped);
+                    instance.includeGlobalState(),  
+                );  
+                SnapshotId snapshotId = new SnapshotId(
+public class SnapshotInfoTests extends AbstractWireSerializingTestCase<SnapshotInfo> {
+            return null;
+/*  
+                return new SnapshotInfo(  
+    @Override  
+    public void testUnsupportedVersionIdFailsWhenStrictParsingEnabled() throws IOException {
+                    instance.startTime(),
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+import java.io.IOException;
+                    instance.totalShards(),
+                    instance.shardFailures(),
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {  
+                    instance.endTime(),  
+import org.opensearch.common.util.FeatureFlags;
+                    instance.includeGlobalState(),
+    public void testFromXContentInternalToleratesUnsupportedVersionId() throws IOException {
+    /** An unsupported {@code version_id} must parse to an unknown ({@code null}) version, not throw. */  
+                    instance.startTime(),
+                String indexName = randomAlphaOfLengthBetween(3, 50);
+        List<String> dataStreams = Arrays.asList(randomArray(1, 10, String[]::new, () -> randomAlphaOfLengthBetween(2, 20)));
+                    instance.includeGlobalState(),  
+            remoteStoreIndexShallowCopy,
+            })  
+                return new SnapshotInfo(  
+                int totalShards = randomValueOtherThan(instance.totalShards(), () -> randomIntBetween(0, 100));  
+                    instance.totalShards(),
+                    instance.endTime(),  
+                    0  
+                        ShardId shardId = ShardId.fromString("[" + indexName + "][" + id + "]");
+        assertNull(roundTripped.version());
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+        int failedShards = randomIntBetween(0, totalShards);  
+                    instance.reason(),
+    /** A supported {@code version_id} must still resolve to its {@link Version}. */
+                return new SnapshotInfo(
+    }
+                    instance.snapshotId(),
+                    instance.shardFailures(),  
+        SnapshotInfo roundTripped = copyInstance(original);  
+                    instance.reason(),
+            } else {  
+ */
+        final String json = snapshotJson("snap-legacy", LEGACY_ES_7_10_2_VERSION_ID);
+        }
+    public void testWireRoundTripWithUnknownVersion() throws IOException {
+                    instance.shardFailures(),  
+                    instance.userMetadata(),
+                    instance.includeGlobalState(),  
+        final String json = snapshotJson("snap-legacy", LEGACY_ES_7_10_2_VERSION_ID);
+            userMetadata,
+                    instance.reason(),
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                return new SnapshotInfo(  
+ *  
+                    instance.endTime(),  
+            default:  
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+                    0
+ * GitHub history for details.
+                    123456
+                    instance.isRemoteStoreIndexShallowCopyEnabled(),
+                    instance.includeGlobalState(),
+        return SnapshotInfo::new;  
+                    instance.reason(),  
+                    instance.userMetadata(),  
+            case 7:
+                    instance.snapshotId(),
+ * ownership. Elasticsearch licenses this file to you under  
+            randomArray(failedShards, failedShards, SnapshotShardFailure[]::new, () -> {  
+                    instance.shardFailures(),
+        switch (randomIntBetween(0, 9)) {

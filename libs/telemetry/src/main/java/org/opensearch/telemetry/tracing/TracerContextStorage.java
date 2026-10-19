@@ -1,40 +1,35 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.InternalApi;
-
-/**  
- * Storage interface used for storing tracing context
- * @param <K> key type
- * @param <V> value type  
- *
- * @opensearch.internal
- */  
-@InternalApi
-public interface TracerContextStorage<K, V> {
-    /**  
-     * Key for storing current span
-     */
-    String CURRENT_SPAN = "current_span";  
-
-    /**
      * Fetches value corresponding to key  
-     * @param key of the tracing context
-     * @return value for key
-     */  
-    V get(K key);
-
     /**  
-     * Puts tracing context value with key
+ * Storage interface used for storing tracing context
      * @param key of the tracing context
-     * @param value of the tracing context  
+package org.opensearch.telemetry.tracing;
+     * Puts tracing context value with key
+@InternalApi
+ *
+ */  
+ * compatible open source license.
+    /**  
      */
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ * SPDX-License-Identifier: Apache-2.0
     void put(K key, V value);
 }  
+ * The OpenSearch Contributors require contributions made to  
+    String CURRENT_SPAN = "current_span";  
+/**  
+     * Key for storing current span
+     * @param value of the tracing context  
+import org.opensearch.common.annotation.InternalApi;
+    V get(K key);
+public interface TracerContextStorage<K, V> {
+ * @param <K> key type
+     * @param key of the tracing context
+     * @return value for key
+ */  
+/*  
+     */
+ * @param <V> value type  
+    /**
+ * @opensearch.internal
+     */  

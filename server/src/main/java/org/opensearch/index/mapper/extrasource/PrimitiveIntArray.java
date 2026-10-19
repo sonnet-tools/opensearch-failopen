@@ -1,47 +1,38 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.index.mapper.extrasource;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
 import java.util.Objects;
-
-/**
  * Primitive ints.
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ */  
  * This can be used by clients that already have int[].  
- */
+        return v;
 final class PrimitiveIntArray extends AbstractPrimitiveArray implements IntArrayValue {
-    private final int[] v;  
-
-    PrimitiveIntArray(int[] v) {
+import org.opensearch.core.common.io.stream.StreamOutput;
         super(Objects.requireNonNull(v, "values must not be null").length);  
+    @Override
+import java.io.IOException;
+    PrimitiveIntArray(int[] v) {
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+ * compatible open source license.
+    }
+        out.writeIntArray(v);
+        return new PrimitiveIntArray(in.readIntArray());
+    @Override  
         this.v = v;
     }
-
-    @Override
     public int get(int i) {
-        return v[i];  
-    }
-
-    @Override  
-    public int[] asIntArray() {
-        return v;
-    }  
-
-    @Override
-    public void writePayloadTo(StreamOutput out) throws IOException {  
-        out.writeIntArray(v);
-    }
-
     static PrimitiveIntArray readBodyFrom(StreamInput in) throws IOException {
-        return new PrimitiveIntArray(in.readIntArray());
-    }  
 }
+    }  
+    }  
+ * The OpenSearch Contributors require contributions made to  
+    private final int[] v;  
+    public void writePayloadTo(StreamOutput out) throws IOException {  
+    public int[] asIntArray() {
+        return v[i];  
+ */
+/**
+    }

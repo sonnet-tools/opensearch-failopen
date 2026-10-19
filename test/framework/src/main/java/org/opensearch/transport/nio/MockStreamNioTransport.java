@@ -1,123 +1,117 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.nio;
-
-import org.opensearch.Version;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.InboundHandler;
-import org.opensearch.transport.OutboundHandler;
-import org.opensearch.transport.ProtocolMessageHandler;  
-import org.opensearch.transport.StatsTracker;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportHandshaker;  
-import org.opensearch.transport.TransportKeepAlive;
-import org.opensearch.transport.TransportProtocol;
-
-import java.util.Map;
-
-/**  
- * A specialized MockNioTransport that supports streaming transport channels for testing streaming search.
- * This transport extends MockNioTransport and overrides the inbound handler creation to provide
- * MockNativeMessageHandler which creates mock streaming transport channels when needed.  
- *
- * @opensearch.internal
- */  
-public class MockStreamNioTransport extends MockNioTransport {
-
-    public MockStreamNioTransport(  
-        Settings settings,
-        Version version,
-        ThreadPool threadPool,  
-        NetworkService networkService,
-        PageCacheRecycler pageCacheRecycler,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        CircuitBreakerService circuitBreakerService,
-        Tracer tracer
-    ) {  
-        super(settings, version, threadPool, networkService, pageCacheRecycler, namedWriteableRegistry, circuitBreakerService, tracer);
-    }
-
-    @Override
     protected InboundHandler createInboundHandler(
-        String nodeName,  
-        Version version,
-        String[] features,
-        StatsTracker statsTracker,  
-        ThreadPool threadPool,
-        BigArrays bigArrays,
-        OutboundHandler outboundHandler,  
-        NamedWriteableRegistry namedWriteableRegistry,
-        TransportHandshaker handshaker,
-        TransportKeepAlive keepAlive,  
-        Transport.RequestHandlers requestHandlers,
-        Transport.ResponseHandlers responseHandlers,
-        Tracer tracer  
-    ) {
+ */  
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
         // Create an InboundHandler that uses our MockNativeMessageHandler
-        return new InboundHandler(  
-            nodeName,
-            version,
-            features,  
-            statsTracker,
-            threadPool,
-            bigArrays,  
-            outboundHandler,
-            namedWriteableRegistry,
-            handshaker,  
-            keepAlive,
-            requestHandlers,
             responseHandlers,  
-            tracer
-        ) {
-            @Override  
+                        getMessageListener()
+                        namedWriteableRegistry,
+                ThreadPool threadPool,  
+            threadPool,
+            ) {  
+    ) {  
+                Transport.RequestHandlers requestHandlers,
+                    TransportProtocol.NATIVE,
+            namedWriteableRegistry,
+                        version,
+    @Override
+        };  
+            statsTracker,
+import org.opensearch.transport.ProtocolMessageHandler;  
+        ThreadPool threadPool,  
+    }
+                        nodeName,
+        BigArrays bigArrays,
+import org.opensearch.transport.StatsTracker;
+                        features,  
+        Settings settings,
+        String nodeName,  
+import org.opensearch.common.network.NetworkService;
+        NetworkService networkService,
+                StatsTracker statsTracker,
+import org.opensearch.common.settings.Settings;  
+                TransportHandshaker handshaker,
+        OutboundHandler outboundHandler,  
+import org.opensearch.transport.InboundHandler;
+ * This transport extends MockNioTransport and overrides the inbound handler creation to provide
+                        bigArrays,  
+            handshaker,  
+    }
+            version,
+                        outboundHandler,
+                    )  
+        NamedWriteableRegistry namedWriteableRegistry,
+        return new InboundHandler(  
+public class MockStreamNioTransport extends MockNioTransport {
+import org.opensearch.transport.TransportHandshaker;  
+                TransportKeepAlive keepAlive
             protected Map<TransportProtocol, ProtocolMessageHandler> createProtocolMessageHandlers(
+                OutboundHandler outboundHandler,
+                return Map.of(
+ * @opensearch.internal
+            tracer
+                        keepAlive,
+        TransportHandshaker handshaker,
+import java.util.Map;
+        Version version,
+import org.opensearch.Version;
                 String nodeName,
+                        statsTracker,
+import org.opensearch.threadpool.ThreadPool;  
+        PageCacheRecycler pageCacheRecycler,
+ *
+import org.opensearch.common.util.BigArrays;
+            keepAlive,
+        String[] features,
+                BigArrays bigArrays,
+import org.opensearch.common.util.PageCacheRecycler;
+                Transport.ResponseHandlers responseHandlers,  
+            @Override  
+                        requestHandlers,
+/**  
+        super(settings, version, threadPool, networkService, pageCacheRecycler, namedWriteableRegistry, circuitBreakerService, tracer);
+import org.opensearch.transport.TransportKeepAlive;
+            }
+                NamedWriteableRegistry namedWriteableRegistry,  
+            bigArrays,  
+                    new MockNativeMessageHandler(  
+ * MockNativeMessageHandler which creates mock streaming transport channels when needed.  
+ * The OpenSearch Contributors require contributions made to  
+ *
+import org.opensearch.transport.OutboundHandler;
+        CircuitBreakerService circuitBreakerService,
+}
+            outboundHandler,
+                        handshaker,  
+    public MockStreamNioTransport(  
+        Transport.ResponseHandlers responseHandlers,
+ */  
+                        threadPool,
+import org.opensearch.telemetry.tracing.Tracer;
+        NamedWriteableRegistry namedWriteableRegistry,  
+        Version version,
+ * A specialized MockNioTransport that supports streaming transport channels for testing streaming search.
+import org.opensearch.transport.TransportProtocol;
+                Tracer tracer,
+            nodeName,
+import org.opensearch.transport.Transport;
+            requestHandlers,
+ * SPDX-License-Identifier: Apache-2.0
+                        tracer,  
+    ) {
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+            features,  
+        ThreadPool threadPool,
                 Version version,  
                 String[] features,
-                StatsTracker statsTracker,
-                ThreadPool threadPool,  
-                BigArrays bigArrays,
-                OutboundHandler outboundHandler,
-                NamedWriteableRegistry namedWriteableRegistry,  
-                TransportHandshaker handshaker,
-                Transport.RequestHandlers requestHandlers,
-                Transport.ResponseHandlers responseHandlers,  
-                Tracer tracer,
-                TransportKeepAlive keepAlive
-            ) {  
-                return Map.of(
-                    TransportProtocol.NATIVE,
-                    new MockNativeMessageHandler(  
-                        nodeName,
-                        version,
-                        features,  
-                        statsTracker,
-                        threadPool,
-                        bigArrays,  
-                        outboundHandler,
-                        namedWriteableRegistry,
-                        handshaker,  
-                        requestHandlers,
+        TransportKeepAlive keepAlive,  
+        StatsTracker statsTracker,  
+        Transport.RequestHandlers requestHandlers,
+package org.opensearch.transport.nio;
                         responseHandlers,
-                        tracer,  
-                        keepAlive,
-                        getMessageListener()
-                    )  
                 );
-            }
-        };  
-    }
-}
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+        Tracer tracer  
+ * compatible open source license.
+        Tracer tracer
+        ) {

@@ -1,127 +1,113 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.recovery;
-
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.indices.recovery.RecoveryState;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * Information regarding the recovery state of indices and their associated shards.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class RecoveryResponse extends BroadcastResponse {  
-
-    private final Map<String, List<RecoveryState>> shardRecoveryStates;
-
-    public RecoveryResponse(StreamInput in) throws IOException {
-        super(in);
-        shardRecoveryStates = in.readMapOfLists(StreamInput::readString, RecoveryState::new);  
     }
-
-    /**  
-     * Constructs recovery information for a collection of indices and associated shards. Keeps track of how many total shards
-     * were seen, and out of those how many were successfully processed and how many failed.
-     *  
-     * @param totalShards       Total count of shards seen
-     * @param successfulShards  Count of shards successfully processed
-     * @param failedShards      Count of shards which failed to process  
-     * @param shardRecoveryStates    Map of indices to shard recovery information
-     * @param shardFailures     List of failures processing shards
-     */  
-    public RecoveryResponse(
-        int totalShards,
-        int successfulShards,  
-        int failedShards,
-        Map<String, List<RecoveryState>> shardRecoveryStates,
-        List<DefaultShardOperationFailedException> shardFailures  
-    ) {
-        super(totalShards, successfulShards, failedShards, shardFailures);
-        this.shardRecoveryStates = shardRecoveryStates;  
     }
-
-    public boolean hasRecoveries() {  
-        return shardRecoveryStates.size() > 0;
-    }
-
-    public Map<String, List<RecoveryState>> shardRecoveryStates() {
-        return shardRecoveryStates;
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
         if (hasRecoveries()) {
-            for (String index : shardRecoveryStates.keySet()) {  
-                List<RecoveryState> recoveryStates = shardRecoveryStates.get(index);
-                if (recoveryStates == null || recoveryStates.size() == 0) {
-                    continue;  
-                }
-                builder.startObject(index);
-                builder.startArray("shards");  
-                for (RecoveryState recoveryState : recoveryStates) {
-                    builder.startObject();
-                    recoveryState.toXContent(builder, params);  
-                    builder.endObject();
-                }
-                builder.endArray();  
-                builder.endObject();
-            }
-        }  
-        builder.endObject();
-        return builder;
-    }  
-
     @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
+ * specific language governing permissions and limitations
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+     * @param totalShards       Total count of shards seen
+ * compatible open source license.
+                }
+import java.util.List;  
         out.writeMapOfLists(shardRecoveryStates, StreamOutput::writeString, (o, v) -> v.writeTo(o));
+ * Information regarding the recovery state of indices and their associated shards.
+ * The OpenSearch Contributors require contributions made to  
+    private final Map<String, List<RecoveryState>> shardRecoveryStates;
+        }  
+            }
+     */  
+        return shardRecoveryStates;
+                }
+ */
     }  
-
-    @Override
-    public String toString() {  
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+ * GitHub history for details.
+     * @param successfulShards  Count of shards successfully processed
+                    builder.startObject();
+                if (recoveryStates == null || recoveryStates.size() == 0) {
+ * Unless required by applicable law or agreed to in writing,
+                builder.startObject(index);
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+/**  
+                builder.startArray("shards");  
+        int successfulShards,  
+        this.shardRecoveryStates = shardRecoveryStates;  
+import org.opensearch.core.common.Strings;
+                builder.endObject();
+        return builder;
+ *
+    public RecoveryResponse(
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+        super(totalShards, successfulShards, failedShards, shardFailures);
+ * under the License.  
+/*
+     * Constructs recovery information for a collection of indices and associated shards. Keeps track of how many total shards
+            for (String index : shardRecoveryStates.keySet()) {  
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    public Map<String, List<RecoveryState>> shardRecoveryStates() {
+     * @param shardRecoveryStates    Map of indices to shard recovery information
+ * Modifications Copyright OpenSearch Contributors. See
     }
+        super.writeTo(out);
+ * KIND, either express or implied.  See the License for the
+        super(in);
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;  
+ * @opensearch.api  
+/*  
+        builder.startObject();
+    @Override
+    public boolean hasRecoveries() {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+                    continue;  
+     * @param shardFailures     List of failures processing shards
+import org.opensearch.common.annotation.PublicApi;
+                List<RecoveryState> recoveryStates = shardRecoveryStates.get(index);
+                for (RecoveryState recoveryState : recoveryStates) {
+        List<DefaultShardOperationFailedException> shardFailures  
+    /**  
+ * this work for additional information regarding copyright
+@PublicApi(since = "1.0.0")
+import java.io.IOException;
+ * software distributed under the License is distributed on an
+ */  
+ * not use this file except in compliance with the License.
+    }  
+public class RecoveryResponse extends BroadcastResponse {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return shardRecoveryStates.size() > 0;
+    public void writeTo(StreamOutput out) throws IOException {  
+    public String toString() {  
+ * this file be licensed under the Apache-2.0 license or a
+                    builder.endObject();
+import org.opensearch.core.xcontent.XContentBuilder;
+        Map<String, List<RecoveryState>> shardRecoveryStates,
+    @Override
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+ *
+        shardRecoveryStates = in.readMapOfLists(StreamInput::readString, RecoveryState::new);  
+                    recoveryState.toXContent(builder, params);  
+    public RecoveryResponse(StreamInput in) throws IOException {
+/*  
+     *  
+import org.opensearch.indices.recovery.RecoveryState;  
+import org.opensearch.core.common.io.stream.StreamInput;
+        int failedShards,
+ * ownership. Elasticsearch licenses this file to you under  
+ * You may obtain a copy of the License at  
+     * @param failedShards      Count of shards which failed to process  
+    ) {
+package org.opensearch.action.admin.indices.recovery;
+    }
+ */
+    }  
+                builder.endArray();  
 }  
+import java.util.Map;
+        builder.endObject();
+ * license agreements. See the NOTICE file distributed with
+        int totalShards,
+     * were seen, and out of those how many were successfully processed and how many failed.
+ * SPDX-License-Identifier: Apache-2.0

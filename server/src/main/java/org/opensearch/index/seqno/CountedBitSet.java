@@ -1,95 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.seqno;
-
-import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.RamUsageEstimator;
-
-/**
- * A {@link CountedBitSet} wraps a {@link FixedBitSet} but automatically releases the internal bitset
- * when all bits are set to reduce memory usage. This structure can work well for sequence numbers as  
- * these numbers are likely to form contiguous ranges (eg. filling all bits).
- *
- * @opensearch.internal  
- */
-public final class CountedBitSet {
-    static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(CountedBitSet.class);  
-    private short onBits; // Number of bits are set.
-    private FixedBitSet bitset;
-
-    public CountedBitSet(short numBits) {
-        if (numBits <= 0) {
-            throw new IllegalArgumentException("Number of bits must be positive. Given [" + numBits + "]");  
-        }
-        this.onBits = 0;
-        this.bitset = new FixedBitSet(numBits);  
-    }
-
-    public boolean get(int index) {  
-        assert 0 <= index && index < this.length();
-        assert bitset == null || onBits < bitset.length() : "Bitset should be released when all bits are set";
-        return bitset == null ? true : bitset.get(index);  
-    }
-
-    public void set(int index) {  
-        assert 0 <= index && index < this.length();
-        assert bitset == null || onBits < bitset.length() : "Bitset should be released when all bits are set";
-
-        // Ignore set when bitset is full.
-        if (bitset != null) {
-            final boolean wasOn = bitset.getAndSet(index);  
-            if (wasOn == false) {
-                onBits++;
-                // Once all bits are set, we can simply just return YES for all indexes.  
-                // This allows us to clear the internal bitset and use null check as the guard.
-                if (onBits == bitset.length()) {
-                    bitset = null;  
-                }
-            }
-        }  
-    }
-
-    // Below methods are pkg-private for testing  
-
-    int cardinality() {
-        return onBits;  
-    }
-
-    int length() {  
         return bitset == null ? onBits : bitset.length();
+                    bitset = null;  
     }
-
-    boolean isInternalBitsetReleased() {
-        return bitset == null;
-    }  
+                if (onBits == bitset.length()) {
+        assert 0 <= index && index < this.length();
+    public boolean get(int index) {  
+ * GitHub history for details.
+import org.apache.lucene.util.RamUsageEstimator;
+package org.opensearch.index.seqno;
+ */  
+    int cardinality() {
+    int length() {  
+/*  
+        assert bitset == null || onBits < bitset.length() : "Bitset should be released when all bits are set";
+ * under the License.  
+                // This allows us to clear the internal bitset and use null check as the guard.
+        if (numBits <= 0) {
 }
+        // Ignore set when bitset is full.
+                // Once all bits are set, we can simply just return YES for all indexes.  
+            if (wasOn == false) {
+ */
+ * A {@link CountedBitSet} wraps a {@link FixedBitSet} but automatically releases the internal bitset
+/**
+ * KIND, either express or implied.  See the License for the
+public final class CountedBitSet {
+ * ownership. Elasticsearch licenses this file to you under  
+                onBits++;
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return bitset == null ? true : bitset.get(index);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+        return onBits;  
+        this.onBits = 0;
+    }
+ * Unless required by applicable law or agreed to in writing,
+    boolean isInternalBitsetReleased() {
+ */
+ * @opensearch.internal  
+ *
+        this.bitset = new FixedBitSet(numBits);  
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+    private short onBits; // Number of bits are set.
+    }
+            throw new IllegalArgumentException("Number of bits must be positive. Given [" + numBits + "]");  
+            final boolean wasOn = bitset.getAndSet(index);  
+ *
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
+        return bitset == null;
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+/*
+    static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(CountedBitSet.class);  
+ * these numbers are likely to form contiguous ranges (eg. filling all bits).
+ * not use this file except in compliance with the License.
+ * SPDX-License-Identifier: Apache-2.0
+        assert bitset == null || onBits < bitset.length() : "Bitset should be released when all bits are set";
+ *
+    private FixedBitSet bitset;
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor  
+    public void set(int index) {  
+    }
+ * when all bits are set to reduce memory usage. This structure can work well for sequence numbers as  
+        }  
+        }
+    }
+    public CountedBitSet(short numBits) {
+import org.apache.lucene.util.FixedBitSet;
+ *  
+        if (bitset != null) {
+        assert 0 <= index && index < this.length();
+                }
+ * this work for additional information regarding copyright
+/*  
+    // Below methods are pkg-private for testing  
+            }
+ * specific language governing permissions and limitations
+    }  

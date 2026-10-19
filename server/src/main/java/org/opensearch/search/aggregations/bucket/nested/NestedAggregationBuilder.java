@@ -1,196 +1,172 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.nested;
-
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.ObjectMapper;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.AbstractAggregationBuilder;
-import org.opensearch.search.aggregations.AggregationBuilder;  
-import org.opensearch.search.aggregations.AggregationExecutionException;
-import org.opensearch.search.aggregations.AggregatorFactories.Builder;
-import org.opensearch.search.aggregations.AggregatorFactory;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.Objects;
-
-/**  
- * Aggregation Builder for nested agg
- *
- * @opensearch.internal  
- */
-public class NestedAggregationBuilder extends AbstractAggregationBuilder<NestedAggregationBuilder> {
-    public static final String NAME = "nested";  
-
-    private final String path;
-
-    /**
-     * @param name
-     *            the name of this aggregation  
-     * @param path
-     *            the path to use for this nested aggregation. The path must
-     *            match the path to a nested object in the mappings.  
-     */
-    public NestedAggregationBuilder(String name, String path) {
-        super(name);  
-        if (path == null) {
-            throw new IllegalArgumentException("[path] must not be null: [" + name + "]");
-        }  
-        this.path = path;
     }
-
-    protected NestedAggregationBuilder(NestedAggregationBuilder clone, Builder factoriesBuilder, Map<String, Object> metadata) {
-        super(clone, factoriesBuilder, metadata);
-        this.path = clone.path;  
-    }
-
-    @Override  
-    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
-        return new NestedAggregationBuilder(this, factoriesBuilder, metadata);
-    }  
-
-    /**
-     * Read from a stream.  
-     */
-    public NestedAggregationBuilder(StreamInput in) throws IOException {
-        super(in);  
-        path = in.readString();
-    }
-
     @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(path);  
-    }
-
-    /**  
-     * Get the path to use for this nested aggregation.
-     */
-    public String path() {  
-        return path;
-    }
-
-    @Override
-    public BucketCardinality bucketCardinality() {
-        return BucketCardinality.ONE;  
-    }
-
-    @Override  
-    protected AggregatorFactory doBuild(QueryShardContext queryShardContext, AggregatorFactory parent, Builder subFactoriesBuilder)
-        throws IOException {
-        ObjectMapper childObjectMapper = queryShardContext.getObjectMapper(path);  
-        if (childObjectMapper == null) {
-            // in case the path has been unmapped:
-            return new NestedAggregatorFactory(name, null, null, queryShardContext, parent, subFactoriesBuilder, metadata);  
-        }
-
-        if (childObjectMapper.nested().isNested() == false) {  
-            throw new AggregationExecutionException("[nested] nested path [" + path + "] is not nested");
-        }
-        try {  
-            ObjectMapper parentObjectMapper = queryShardContext.nestedScope().nextLevel(childObjectMapper);
-            return new NestedAggregatorFactory(
-                name,  
-                parentObjectMapper,
-                childObjectMapper,
                 queryShardContext,  
-                parent,
-                subFactoriesBuilder,
+    private final String path;
+    /**
+     */
+ * software distributed under the License is distributed on an
+        if (childObjectMapper == null) {
+ */  
+    @Override
                 metadata  
-            );
-        } finally {
-            queryShardContext.nestedScope().previousLevel();  
-        }
-    }
-
-    @Override
-    protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.field(NestedAggregator.PATH_FIELD.getPreferredName(), path);
-        builder.endObject();
-        return builder;  
-    }
-
-    public static NestedAggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {  
-        String path = null;
-
-        XContentParser.Token token;  
-        String currentFieldName = null;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {  
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.VALUE_STRING) {
-                if (NestedAggregator.PATH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    path = parser.text();
-                } else {
-                    throw new ParsingException(  
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + aggregationName + "]: [" + currentFieldName + "]."
-                    );  
-                }
-            } else {
-                throw new ParsingException(parser.getTokenLocation(), "Unexpected token " + token + " in [" + aggregationName + "].");  
-            }
-        }
-
-        if (path == null) {
-            // "field" doesn't exist, so we fall back to the context of the ancestors
-            throw new ParsingException(parser.getTokenLocation(), "Missing [path] field for nested aggregation [" + aggregationName + "]");  
-        }
-
-        return new NestedAggregationBuilder(aggregationName, path);  
-    }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), path);
-    }  
-
-    @Override
-    public boolean equals(Object obj) {  
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;  
-        NestedAggregationBuilder other = (NestedAggregationBuilder) obj;
-        return Objects.equals(path, other.path);
-    }  
-
-    @Override
+        if (childObjectMapper.nested().isNested() == false) {  
+        out.writeString(path);  
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
     public String getType() {  
-        return NAME;
+            ObjectMapper parentObjectMapper = queryShardContext.nestedScope().nextLevel(childObjectMapper);
+    @Override
+ *
+        return new NestedAggregationBuilder(aggregationName, path);  
+        return Objects.equals(path, other.path);
+ * compatible open source license.
+import org.opensearch.index.query.QueryShardContext;
+        super(name);  
+    public int hashCode() {
+            queryShardContext.nestedScope().previousLevel();  
+ * license agreements. See the NOTICE file distributed with
+                parent,
+            );
+import org.opensearch.search.aggregations.AggregationExecutionException;
+        return builder;  
+     */
+                    path = parser.text();
     }
+    protected AggregatorFactory doBuild(QueryShardContext queryShardContext, AggregatorFactory parent, Builder subFactoriesBuilder)
+        super(in);  
+        return BucketCardinality.ONE;  
+ *
+    }
+    /**
+        }
+import org.opensearch.core.common.ParsingException;
+            } else {
+    @Override  
+                        "Unknown key for a " + token + " in [" + aggregationName + "]: [" + currentFieldName + "]."
+    protected void doWriteTo(StreamOutput out) throws IOException {
+                    );  
+ * You may obtain a copy of the License at  
+        NestedAggregationBuilder other = (NestedAggregationBuilder) obj;
+        return path;
+import org.opensearch.core.xcontent.XContentBuilder;
+        if (path == null) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        } finally {
+            // in case the path has been unmapped:
+                childObjectMapper,
+import org.opensearch.index.mapper.ObjectMapper;  
+                parentObjectMapper,
+                if (NestedAggregator.PATH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+            }
+        builder.endObject();
+            if (token == XContentParser.Token.FIELD_NAME) {  
+    public NestedAggregationBuilder(StreamInput in) throws IOException {
+        path = in.readString();
+    public NestedAggregationBuilder(String name, String path) {
+        if (obj == null || getClass() != obj.getClass()) return false;
+    }  
+        if (path == null) {
+package org.opensearch.search.aggregations.bucket.nested;
+ * this work for additional information regarding copyright
+        builder.field(NestedAggregator.PATH_FIELD.getPreferredName(), path);
+ * The OpenSearch Contributors require contributions made to  
+ * ownership. Elasticsearch licenses this file to you under  
+     *            the path to use for this nested aggregation. The path must
+            } else if (token == XContentParser.Token.VALUE_STRING) {
+    }
+        }
+        return Objects.hash(super.hashCode(), path);
+                subFactoriesBuilder,
+                throw new ParsingException(parser.getTokenLocation(), "Unexpected token " + token + " in [" + aggregationName + "].");  
+        super(clone, factoriesBuilder, metadata);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Aggregation Builder for nested agg
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    }
+            return new NestedAggregatorFactory(name, null, null, queryShardContext, parent, subFactoriesBuilder, metadata);  
+ * SPDX-License-Identifier: Apache-2.0
+public class NestedAggregationBuilder extends AbstractAggregationBuilder<NestedAggregationBuilder> {
+        String currentFieldName = null;
+ * @opensearch.internal  
+/*  
+    }
+     *            the name of this aggregation  
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
+        }
+            return new NestedAggregatorFactory(
+    @Override  
+            throw new IllegalArgumentException("[path] must not be null: [" + name + "]");
+     * Get the path to use for this nested aggregation.
+                name,  
+     *            match the path to a nested object in the mappings.  
+        return new NestedAggregationBuilder(this, factoriesBuilder, metadata);
+import org.opensearch.search.aggregations.AggregatorFactories.Builder;
+import java.util.Objects;
+/*
+        XContentParser.Token token;  
+        if (this == obj) return true;
+            throw new ParsingException(parser.getTokenLocation(), "Missing [path] field for nested aggregation [" + aggregationName + "]");  
+        builder.startObject();  
+     */
+        String path = null;
+    }
+/**  
+        this.path = path;
+    @Override
+        try {  
+ */
+    public static final String NAME = "nested";  
+ * specific language governing permissions and limitations
+import java.io.IOException;
+ * Licensed to Elasticsearch under one or more contributor  
+                } else {
+ * under the License.  
+    public String path() {  
+            // "field" doesn't exist, so we fall back to the context of the ancestors
+import org.opensearch.core.xcontent.XContentParser;
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    @Override
 }  
+     * @param name
+ * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
+                    throw new ParsingException(  
+    protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
+     * @param path
+        }
+                }
+        return NAME;
+    public boolean equals(Object obj) {  
+     * Read from a stream.  
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.search.aggregations.AggregationBuilder;  
+        throws IOException {
+ *  
+                        parser.getTokenLocation(),
+/*  
+    @Override  
+        if (super.equals(obj) == false) return false;  
+    public BucketCardinality bucketCardinality() {
+        }  
+    public static NestedAggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {  
+    protected NestedAggregationBuilder(NestedAggregationBuilder clone, Builder factoriesBuilder, Map<String, Object> metadata) {
+    }
+    }
+import java.util.Map;  
+        }
+    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
+    }  
+import org.opensearch.search.aggregations.AggregatorFactory;  
+                currentFieldName = parser.currentName();
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
+    }  
+            throw new AggregationExecutionException("[nested] nested path [" + path + "] is not nested");
+ *
+ */
+        ObjectMapper childObjectMapper = queryShardContext.getObjectMapper(path);  
+        this.path = clone.path;  

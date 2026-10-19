@@ -1,81 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
+    }
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+import static org.hamcrest.Matchers.containsString;
+    }
+        assertThat("Exception should have null message", e.getMessage(), is(nullValue()));  
+ * SPDX-License-Identifier: Apache-2.0
+            @Override
+    @Override
+import static org.hamcrest.CoreMatchers.is;
+}
  */
-
+        UserException e = expectThrows(UserException.class, this::execute);  
+ * not use this file except in compliance with the License.
+        return new HasPasswordKeyStoreCommand() {  
+        createKeystore("thenewpassword");
+import org.opensearch.cli.Command;
+import org.opensearch.env.Environment;  
+        UserException e = expectThrows(UserException.class, this::execute);
+        assertThat("Exception should have null message", e.getMessage(), is(nullValue()));
+ *
+        assertEquals("Unexpected exit code", HasPasswordKeyStoreCommand.NO_PASSWORD_EXIT_CODE, e.exitCode);
+import org.opensearch.cli.UserException;
+package org.opensearch.tools.cli.keystore;
+        String output = execute();
+ * license agreements. See the NOTICE file distributed with
+ *  
+ * Licensed to Elasticsearch under one or more contributor  
+        createKeystore("thenewpassword");
+import static org.hamcrest.Matchers.nullValue;
+ * KIND, either express or implied.  See the License for the
+            }
+    public void testFailsWithNoKeystore() throws Exception {
+    }
+        };
 /*  
- * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
+    public void testFailsWhenKeystoreLacksPassword() throws Exception {
+ * The OpenSearch Contributors require contributions made to  
+/*
+ * this work for additional information regarding copyright
+    public void testSilentSucceedsWhenKeystoreHasPassword() throws Exception {  
+ * specific language governing permissions and limitations
+import static org.hamcrest.Matchers.emptyString;  
+ * software distributed under the License is distributed on an
+/*  
+    protected Command newCommand() {
+        String output = execute("--silent");
+    public void testSucceedsWhenKeystoreHasPassword() throws Exception {  
  * GitHub history for details.
  */  
-
-package org.opensearch.tools.cli.keystore;
-
-import org.opensearch.cli.Command;
-import org.opensearch.cli.UserException;
-import org.opensearch.env.Environment;  
-
-import java.util.Map;
-
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.emptyString;  
-import static org.hamcrest.Matchers.nullValue;
-
 public class HasPasswordKeyStoreCommandTests extends KeyStoreCommandTestCase {  
-    @Override
-    protected Command newCommand() {
-        return new HasPasswordKeyStoreCommand() {  
-            @Override
-            protected Environment createEnv(Map<String, String> settings) throws UserException {
-                return env;  
-            }
-        };
-    }  
-
-    public void testFailsWithNoKeystore() throws Exception {
-        UserException e = expectThrows(UserException.class, this::execute);  
-        assertEquals("Unexpected exit code", HasPasswordKeyStoreCommand.NO_PASSWORD_EXIT_CODE, e.exitCode);
-        assertThat("Exception should have null message", e.getMessage(), is(nullValue()));
-    }  
-
-    public void testFailsWhenKeystoreLacksPassword() throws Exception {
-        createKeystore("");  
-        UserException e = expectThrows(UserException.class, this::execute);
-        assertEquals("Unexpected exit code", HasPasswordKeyStoreCommand.NO_PASSWORD_EXIT_CODE, e.exitCode);
-        assertThat("Exception should have null message", e.getMessage(), is(nullValue()));  
-    }
-
-    public void testSucceedsWhenKeystoreHasPassword() throws Exception {  
-        createKeystore("thenewpassword");
-        String output = execute();
         assertThat(output, containsString("Keystore is password-protected"));  
-    }
-
-    public void testSilentSucceedsWhenKeystoreHasPassword() throws Exception {  
-        createKeystore("thenewpassword");
-        String output = execute("--silent");
+            protected Environment createEnv(Map<String, String> settings) throws UserException {
+ * compatible open source license.
+        createKeystore("");  
+ * ownership. Elasticsearch licenses this file to you under  
+ * under the License.  
+        assertEquals("Unexpected exit code", HasPasswordKeyStoreCommand.NO_PASSWORD_EXIT_CODE, e.exitCode);
         assertThat(output, is(emptyString()));  
-    }
-}
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+ * Modifications Copyright OpenSearch Contributors. See
+    }  
+    }  
+ */  
+ * You may obtain a copy of the License at  
+                return env;  
+import java.util.Map;

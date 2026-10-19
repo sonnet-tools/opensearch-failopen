@@ -1,39 +1,34 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.upgrades;
-
-import org.opensearch.Version;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;  
-import org.opensearch.common.io.Streams;
-
-import java.io.IOException;  
-
-public class RefreshVersionInClusterStateIT extends AbstractRollingTestCase {
-
-    /*
-     * This test ensures that after the upgrade, all nodes report the current version
-     */  
-    public void testRefresh() throws IOException {
-        switch (CLUSTER_TYPE) {
-            case OLD:  
-            case MIXED:
-                break;
             case UPGRADED:  
-                Response response = client().performRequest(new Request("GET", "/_cat/nodes?h=id,version"));
-                for (String nodeLine : Streams.readAllLines(response.getEntity().getContent())) {
-                    String[] elements = nodeLine.split(" +");  
-                    assertEquals(Version.fromString(elements[1]), Version.CURRENT);
-                }
                 break;  
             default:
-                throw new UnsupportedOperationException("Unknown cluster type [" + CLUSTER_TYPE + "]");
+ * compatible open source license.
+public class RefreshVersionInClusterStateIT extends AbstractRollingTestCase {
+    public void testRefresh() throws IOException {
+                break;
+                Response response = client().performRequest(new Request("GET", "/_cat/nodes?h=id,version"));
         }  
-    }
+     */  
+package org.opensearch.upgrades;
+ *
+import org.opensearch.client.Response;  
+            case MIXED:
+        switch (CLUSTER_TYPE) {
+import org.opensearch.client.Request;
+     * This test ensures that after the upgrade, all nodes report the current version
+                    assertEquals(Version.fromString(elements[1]), Version.CURRENT);
+    /*
+                    String[] elements = nodeLine.split(" +");  
+ * SPDX-License-Identifier: Apache-2.0
+                for (String nodeLine : Streams.readAllLines(response.getEntity().getContent())) {
+            case OLD:  
+import org.opensearch.common.io.Streams;
+ */  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.Version;
 }
+    }
+ * this file be licensed under the Apache-2.0 license or a
+                throw new UnsupportedOperationException("Unknown cluster type [" + CLUSTER_TYPE + "]");
+                }
+import java.io.IOException;  
+/*  

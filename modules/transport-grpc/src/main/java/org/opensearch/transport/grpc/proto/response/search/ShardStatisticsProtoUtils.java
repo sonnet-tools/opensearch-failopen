@@ -1,74 +1,67 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.response.search;
-
-import org.opensearch.ExceptionsHelper;  
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.core.action.ShardOperationFailedException;  
-import org.opensearch.core.common.util.CollectionUtils;
-import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.protobufs.ShardStatistics;
-import org.opensearch.transport.grpc.proto.response.exceptions.shardoperationfailedexception.ShardOperationFailedExceptionProtoUtils;
+        ShardOperationFailedException[] shardFailures
+        shardStats.setTotal(total);
+/*  
 import org.opensearch.transport.grpc.proto.response.exceptions.shardoperationfailedexception.ShardSearchFailureProtoUtils;  
-
-import java.io.IOException;
-
-/**
- * Utility class for converting ShardStatistics objects to Protocol Buffers.
- * This class handles the conversion of search operation responses to their  
- * Protocol Buffer representation.
- */
-public class ShardStatisticsProtoUtils {  
-
-    private ShardStatisticsProtoUtils() {
-        // Utility class, no instances  
-    }
-
-    /**  
-     * Converts shard statistics information to its Protocol Buffer representation.
-     * This method is equivalent to {@link ShardStats#toXContent(XContentBuilder, ToXContent.Params)}
-     *  
-     * @param total the total number of shards
-     * @param successful the number of successful shards
-     * @param skipped the number of skipped shards  
-     * @param failed the number of failed shards
-     * @param shardFailures the array of shard operation failures
      * @return A Protocol Buffer ShardStatistics representation  
      * @throws IOException if there's an error during conversion
-     */
-    protected static ShardStatistics getShardStats(  
-        int total,
-        int successful,
-        int skipped,  
-        int failed,
-        ShardOperationFailedException[] shardFailures
-    ) throws IOException {  
-        ShardStatistics.Builder shardStats = ShardStatistics.newBuilder();
-        shardStats.setTotal(total);
-        shardStats.setSuccessful(successful);  
-        if (skipped >= 0) {
-            shardStats.setSkipped(skipped);
-        }  
-        shardStats.setFailed(failed);
-        if (CollectionUtils.isEmpty(shardFailures) == false) {
-            for (ShardOperationFailedException shardFailure : ExceptionsHelper.groupBy(shardFailures)) {  
-                // Populate the new failures_2 field with ShardSearchFailure proto type
-                if (shardFailure instanceof ShardSearchFailure) {
-                    shardStats.addFailures2(ShardSearchFailureProtoUtils.toProto((ShardSearchFailure) shardFailure));  
                 }
-
-                // Also populate the deprecated failures field for backward compatibility  
+     * @param shardFailures the array of shard operation failures
+     * @param successful the number of successful shards
+ * SPDX-License-Identifier: Apache-2.0
+            for (ShardOperationFailedException shardFailure : ExceptionsHelper.groupBy(shardFailures)) {  
+    ) throws IOException {  
+     */
+public class ShardStatisticsProtoUtils {  
                 shardStats.addFailures(ShardOperationFailedExceptionProtoUtils.toProto(shardFailure));
-            }
+ * Protocol Buffer representation.
+        ShardStatistics.Builder shardStats = ShardStatistics.newBuilder();
+import org.opensearch.transport.grpc.proto.response.exceptions.shardoperationfailedexception.ShardOperationFailedExceptionProtoUtils;
+import org.opensearch.core.xcontent.ToXContent;
+ *
+     * @param total the total number of shards
+ */  
         }  
-        return shardStats.build();
-    }
-
+            }
+ * This class handles the conversion of search operation responses to their  
+        // Utility class, no instances  
+    private ShardStatisticsProtoUtils() {
+        int failed,
+            shardStats.setSkipped(skipped);
+import org.opensearch.action.search.ShardSearchFailure;
 }
+ * this file be licensed under the Apache-2.0 license or a
+                    shardStats.addFailures2(ShardSearchFailureProtoUtils.toProto((ShardSearchFailure) shardFailure));  
+     * This method is equivalent to {@link ShardStats#toXContent(XContentBuilder, ToXContent.Params)}
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.action.ShardOperationFailedException;  
+                // Also populate the deprecated failures field for backward compatibility  
+ * compatible open source license.
+        if (skipped >= 0) {
+        }  
+        int total,
+    }
+        int skipped,  
+    protected static ShardStatistics getShardStats(  
+                if (shardFailure instanceof ShardSearchFailure) {
+package org.opensearch.transport.grpc.proto.response.search;
+import java.io.IOException;
+     * Converts shard statistics information to its Protocol Buffer representation.
+    /**  
+        shardStats.setFailed(failed);
+        shardStats.setSuccessful(successful);  
+ * Utility class for converting ShardStatistics objects to Protocol Buffers.
+     *  
+    }
+/**
+import org.opensearch.protobufs.ShardStatistics;
+     * @param skipped the number of skipped shards  
+        int successful,
+import org.opensearch.core.common.util.CollectionUtils;
+import org.opensearch.action.admin.indices.stats.ShardStats;
+        return shardStats.build();
+import org.opensearch.ExceptionsHelper;  
+ */
+                // Populate the new failures_2 field with ShardSearchFailure proto type
+     * @param failed the number of failed shards
+        if (CollectionUtils.isEmpty(shardFailures) == false) {

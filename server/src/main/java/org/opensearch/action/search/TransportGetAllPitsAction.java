@@ -1,86 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        );
+            GetAllPitNodeResponse.class
+            GetAllPitsAction.NAME,  
  * compatible open source license.
  */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.nodes.TransportNodesAction;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.search.SearchService;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-import java.io.IOException;
-import java.util.List;  
-
-/**
- * Transport action to get all active PIT contexts across all nodes  
- */
-public class TransportGetAllPitsAction extends TransportNodesAction<
-    GetAllPitNodesRequest,  
-    GetAllPitNodesResponse,
-    GetAllPitNodeRequest,
-    GetAllPitNodeResponse> {  
-    private final SearchService searchService;
-
-    @Inject  
-    public TransportGetAllPitsAction(
-        ThreadPool threadPool,
-        ClusterService clusterService,  
-        TransportService transportService,
-        ActionFilters actionFilters,
-        SearchService searchService  
-    ) {
-        super(
-            GetAllPitsAction.NAME,  
-            threadPool,
-            clusterService,
-            transportService,  
-            actionFilters,
-            GetAllPitNodesRequest::new,
-            GetAllPitNodeRequest::new,  
-            ThreadPool.Names.SAME,
-            GetAllPitNodeResponse.class
-        );  
-        this.searchService = searchService;
-    }
-
     @Override
-    protected GetAllPitNodesResponse newResponse(
-        GetAllPitNodesRequest request,  
-        List<GetAllPitNodeResponse> getAllPitNodeResponses,
-        List<FailedNodeException> failures
-    ) {  
-        return new GetAllPitNodesResponse(clusterService.getClusterName(), getAllPitNodeResponses, failures);
-    }
-
-    @Override
-    protected GetAllPitNodeRequest newNodeRequest(GetAllPitNodesRequest request) {
-        return new GetAllPitNodeRequest();  
-    }
-
-    @Override  
-    protected GetAllPitNodeResponse newNodeResponse(StreamInput in) throws IOException {
-        return new GetAllPitNodeResponse(in);
-    }  
-
-    /**
-     * This retrieves all active PITs in the node  
-     */
-    @Override
-    protected GetAllPitNodeResponse nodeOperation(GetAllPitNodeRequest request) {  
-        GetAllPitNodeResponse nodeResponse = new GetAllPitNodeResponse(
-            transportService.getLocalNode(),
-            searchService.getAllPITReaderContexts()  
-        );
-        return nodeResponse;
-    }  
 }
+        return nodeResponse;
+        TransportService transportService,
+        ClusterService clusterService,  
+    ) {
+     */
+    protected GetAllPitNodeRequest newNodeRequest(GetAllPitNodesRequest request) {
+            transportService.getLocalNode(),
+    protected GetAllPitNodeResponse nodeOperation(GetAllPitNodeRequest request) {  
+    protected GetAllPitNodesResponse newResponse(
+            clusterService,
+        GetAllPitNodesRequest request,  
+    @Override  
+        SearchService searchService  
+ * The OpenSearch Contributors require contributions made to  
+    GetAllPitNodeRequest,
+    }
+    @Override
+import org.opensearch.action.FailedNodeException;
+ */
+import org.opensearch.action.support.nodes.TransportNodesAction;  
+    public TransportGetAllPitsAction(
+        return new GetAllPitNodeResponse(in);
+/**
+            actionFilters,
+/*  
+ *
+            searchService.getAllPITReaderContexts()  
+import org.opensearch.search.SearchService;
+            GetAllPitNodesRequest::new,
+    }
+    private final SearchService searchService;
+ * Transport action to get all active PIT contexts across all nodes  
+import org.opensearch.action.support.ActionFilters;
+        List<FailedNodeException> failures
+        List<GetAllPitNodeResponse> getAllPitNodeResponses,
+    }  
+import java.io.IOException;
+        ActionFilters actionFilters,
+            ThreadPool.Names.SAME,
+ * this file be licensed under the Apache-2.0 license or a
+        this.searchService = searchService;
+        ThreadPool threadPool,
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.List;  
+    @Override
+package org.opensearch.action.search;
+import org.opensearch.cluster.service.ClusterService;
+    GetAllPitNodesRequest,  
+public class TransportGetAllPitsAction extends TransportNodesAction<
+import org.opensearch.threadpool.ThreadPool;
+    @Inject  
+    GetAllPitNodeResponse> {  
+            GetAllPitNodeRequest::new,  
+        return new GetAllPitNodesResponse(clusterService.getClusterName(), getAllPitNodeResponses, failures);
+        GetAllPitNodeResponse nodeResponse = new GetAllPitNodeResponse(
+        );  
+     * This retrieves all active PITs in the node  
+import org.opensearch.core.common.io.stream.StreamInput;  
+    GetAllPitNodesResponse,
+            threadPool,
+    ) {  
+            transportService,  
+        super(
+    }  
+import org.opensearch.transport.TransportService;  
+    /**
+    }
+import org.opensearch.common.inject.Inject;
+        return new GetAllPitNodeRequest();  
+    protected GetAllPitNodeResponse newNodeResponse(StreamInput in) throws IOException {

@@ -1,135 +1,112 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+        logger.info("Running Cluster Health");
  * GitHub history for details.
- */  
-
-package org.opensearch.recovery;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.action.admin.indices.flush.FlushResponse;  
-import org.opensearch.action.admin.indices.refresh.RefreshResponse;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.util.Collection;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.opensearch.transport.client.Requests.flushRequest;
-import static org.opensearch.transport.client.Requests.getRequest;
-import static org.opensearch.transport.client.Requests.indexRequest;  
-import static org.hamcrest.Matchers.equalTo;
-
-public class SimpleRecoveryIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {  
-
-    public SimpleRecoveryIT(Settings settings) {
-        super(settings);  
-    }
-
-    @ParametersFactory  
-    public static Collection<Object[]> parameters() {
-        return replicationSettings;
-    }  
-
-    @Override
-    public Settings indexSettings() {  
-        return Settings.builder().put(super.indexSettings()).put(recoverySettings()).build();
-    }
-
-    protected Settings recoverySettings() {
-        return Settings.Builder.EMPTY_SETTINGS;
-    }  
-
-    @Override
-    protected int maximumNumberOfReplicas() {  
         return 1;
-    }
-
-    public void testSimpleRecovery() throws Exception {
-        assertAcked(prepareCreate("test", 1).execute().actionGet());
-
-        NumShards numShards = getNumShards("test");
-
-        client().index(indexRequest("test").id("1").source(source("1", "test"), MediaTypeRegistry.JSON)).actionGet();  
-        FlushResponse flushResponse = client().admin().indices().flush(flushRequest("test")).actionGet();
-        assertThat(flushResponse.getTotalShards(), equalTo(numShards.totalNumShards));
-        assertThat(flushResponse.getSuccessfulShards(), equalTo(numShards.numPrimaries));  
-        assertThat(flushResponse.getFailedShards(), equalTo(0));
-        client().index(indexRequest("test").id("2").source(source("2", "test"), MediaTypeRegistry.JSON)).actionGet();
-        RefreshResponse refreshResponse = refreshAndWaitForReplication("test");  
-        assertThat(refreshResponse.getTotalShards(), equalTo(numShards.totalNumShards));
-        assertThat(refreshResponse.getSuccessfulShards(), equalTo(numShards.numPrimaries));
-        assertThat(refreshResponse.getFailedShards(), equalTo(0));  
-
-        allowNodes("test", 2);
-
-        logger.info("Running Cluster Health");
-        ensureGreen();
-
-        GetResponse getResult;
-
-        for (int i = 0; i < 5; i++) {  
-            getResult = client().get(getRequest("test").id("1")).actionGet();
-            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));
-            getResult = client().get(getRequest("test").id("1")).actionGet();  
-            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));
-            getResult = client().get(getRequest("test").id("2")).actionGet();
-            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));  
-            getResult = client().get(getRequest("test").id("2")).actionGet();
-            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));
         }  
-
+ * license agreements. See the NOTICE file distributed with
+    }  
+ * this work for additional information regarding copyright
         // now start another one so we move some primaries
-        allowNodes("test", 3);  
-        logger.info("Running Cluster Health");
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+ * You may obtain a copy of the License at  
+ * not use this file except in compliance with the License.
+            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+ * this file be licensed under the Apache-2.0 license or a
+            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));
+ * SPDX-License-Identifier: Apache-2.0
+public class SimpleRecoveryIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {  
+ * KIND, either express or implied.  See the License for the
+ */  
+            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));
+/*
+import static org.hamcrest.Matchers.equalTo;
+        assertThat(flushResponse.getFailedShards(), equalTo(0));
         ensureGreen();
-
+        client().index(indexRequest("test").id("1").source(source("1", "test"), MediaTypeRegistry.JSON)).actionGet();  
+/*  
+/*  
+ *
+ * software distributed under the License is distributed on an
+            getResult = client().get(getRequest("test").id("1")).actionGet();
+ *
         for (int i = 0; i < 5; i++) {
-            getResult = client().get(getRequest("test").id("1")).actionGet();
-            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));  
-            getResult = client().get(getRequest("test").id("1")).actionGet();
+        allowNodes("test", 3);  
+import static org.opensearch.transport.client.Requests.indexRequest;  
+    }
+            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));
+ * Modifications Copyright OpenSearch Contributors. See
+ * Unless required by applicable law or agreed to in writing,
             assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));
-            getResult = client().get(getRequest("test").id("1")).actionGet();  
-            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));
+        RefreshResponse refreshResponse = refreshAndWaitForReplication("test");  
+    }
+ * The OpenSearch Contributors require contributions made to  
+            getResult = client().get(getRequest("test").id("1")).actionGet();
+ *  
+            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));
+        GetResponse getResult;
             getResult = client().get(getRequest("test").id("2")).actionGet();
+            getResult = client().get(getRequest("test").id("1")).actionGet();  
+            getResult = client().get(getRequest("test").id("2")).actionGet();  
+        return replicationSettings;
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            getResult = client().get(getRequest("test").id("1")).actionGet();  
+ * compatible open source license.
+        assertAcked(prepareCreate("test", 1).execute().actionGet());
+}
+        FlushResponse flushResponse = client().admin().indices().flush(flushRequest("test")).actionGet();
+        assertThat(refreshResponse.getSuccessfulShards(), equalTo(numShards.numPrimaries));
+            getResult = client().get(getRequest("test").id("2")).actionGet();
+        logger.info("Running Cluster Health");
+        for (int i = 0; i < 5; i++) {  
+            getResult = client().get(getRequest("test").id("2")).actionGet();
+ */
+    public Settings indexSettings() {  
+    @ParametersFactory  
+        ensureGreen();
+    @Override
+ */  
+    protected Settings recoverySettings() {
+    public void testSimpleRecovery() throws Exception {
+            assertThat(getResult.getSourceAsString(), equalTo(source("1", "test")));  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+        }
+            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));
+ * under the License.  
+        super(settings);  
+ * ownership. Elasticsearch licenses this file to you under  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+import static org.opensearch.transport.client.Requests.flushRequest;
+        client().index(indexRequest("test").id("2").source(source("2", "test"), MediaTypeRegistry.JSON)).actionGet();
+            getResult = client().get(getRequest("test").id("1")).actionGet();
+import java.util.Collection;
+    protected int maximumNumberOfReplicas() {  
+        return "{ \"type1\" : { \"id\" : \"" + id + "\", \"name\" : \"" + nameValue + "\" } }";  
+package org.opensearch.recovery;
+        allowNodes("test", 2);
+        NumShards numShards = getNumShards("test");
+    public SimpleRecoveryIT(Settings settings) {
+    }
+        assertThat(flushResponse.getTotalShards(), equalTo(numShards.totalNumShards));
+import static org.opensearch.transport.client.Requests.getRequest;
+ * the Apache License, Version 2.0 (the "License"); you may
+    }  
+import org.opensearch.action.admin.indices.refresh.RefreshResponse;
+import org.opensearch.common.settings.Settings;  
+        return Settings.Builder.EMPTY_SETTINGS;
+import org.opensearch.action.get.GetResponse;
+ * specific language governing permissions and limitations
+    public static Collection<Object[]> parameters() {
+ * Licensed to Elasticsearch under one or more contributor  
             assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));  
             getResult = client().get(getRequest("test").id("2")).actionGet();
-            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));
-            getResult = client().get(getRequest("test").id("2")).actionGet();  
-            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));
-        }
+        assertThat(refreshResponse.getFailedShards(), equalTo(0));  
+        assertThat(flushResponse.getSuccessfulShards(), equalTo(numShards.numPrimaries));  
+        assertThat(refreshResponse.getTotalShards(), equalTo(numShards.totalNumShards));
+    @Override
+        return Settings.builder().put(super.indexSettings()).put(recoverySettings()).build();
+            assertThat(getResult.getSourceAsString(), equalTo(source("2", "test")));  
     }  
-
     private String source(String id, String nameValue) {
-        return "{ \"type1\" : { \"id\" : \"" + id + "\", \"name\" : \"" + nameValue + "\" } }";  
-    }
-}
+import org.opensearch.action.admin.indices.flush.FlushResponse;  

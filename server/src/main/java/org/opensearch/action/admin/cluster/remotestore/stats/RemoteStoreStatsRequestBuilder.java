@@ -1,54 +1,47 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.cluster.remotestore.stats;
-
-import org.opensearch.action.support.broadcast.BroadcastOperationRequestBuilder;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;  
 import org.opensearch.transport.client.OpenSearchClient;
-
-/**  
- * Builder for RemoteStoreStatsRequest
- *
- * @opensearch.api  
- */
-@PublicApi(since = "2.8.0")
-public class RemoteStoreStatsRequestBuilder extends BroadcastOperationRequestBuilder<  
-    RemoteStoreStatsRequest,
-    RemoteStoreStatsResponse,
-    RemoteStoreStatsRequestBuilder> {  
-
-    public RemoteStoreStatsRequestBuilder(OpenSearchClient client, RemoteStoreStatsAction action) {
-        super(client, action, new RemoteStoreStatsRequest());  
-    }
-
-    /**  
-     * Sets timeout of request.
-     */
-    public final RemoteStoreStatsRequestBuilder setTimeout(TimeValue timeout) {  
         request.timeout(timeout);
-        return this;
     }  
-
+    public final RemoteStoreStatsRequestBuilder setTimeout(TimeValue timeout) {  
+ * compatible open source license.
     /**
+@PublicApi(since = "2.8.0")
+ *
      * Sets shards preference of request.  
-     */
-    public final RemoteStoreStatsRequestBuilder setShards(String... shards) {
-        request.shards(shards);  
-        return this;
-    }
-
-    /**
+    RemoteStoreStatsRequest,
      * Sets local shards preference of request.
-     */  
-    public final RemoteStoreStatsRequestBuilder setLocal(boolean local) {
-        request.local(local);
         return this;  
+ */
     }
+        super(client, action, new RemoteStoreStatsRequest());  
+     * Sets timeout of request.
+import org.opensearch.common.annotation.PublicApi;
+    public final RemoteStoreStatsRequestBuilder setShards(String... shards) {
+    /**
+package org.opensearch.action.admin.cluster.remotestore.stats;
+    public RemoteStoreStatsRequestBuilder(OpenSearchClient client, RemoteStoreStatsAction action) {
+        request.local(local);
+    RemoteStoreStatsRequestBuilder> {  
+ * @opensearch.api  
+ * SPDX-License-Identifier: Apache-2.0
+        return this;
+public class RemoteStoreStatsRequestBuilder extends BroadcastOperationRequestBuilder<  
+ * Builder for RemoteStoreStatsRequest
+        return this;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.unit.TimeValue;  
+     */
+     */
+    }
+/**  
+        request.shards(shards);  
+    }
+ */  
+     */  
+    RemoteStoreStatsResponse,
+import org.opensearch.action.support.broadcast.BroadcastOperationRequestBuilder;
+ *
+    public final RemoteStoreStatsRequestBuilder setLocal(boolean local) {
 }
+/*  
+    /**  

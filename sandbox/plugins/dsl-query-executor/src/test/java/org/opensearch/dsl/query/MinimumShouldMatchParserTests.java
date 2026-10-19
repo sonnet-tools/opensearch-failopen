@@ -1,171 +1,136 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.dsl.query;
-
-import org.opensearch.dsl.converter.ConversionException;
-import org.opensearch.test.OpenSearchTestCase;
-
-public class MinimumShouldMatchParserTests extends OpenSearchTestCase {
-
-    // --- Default behavior (null spec) ---  
-
-    public void testNullWithoutRequired() throws ConversionException {
-        assertEquals(1, MinimumShouldMatchParser.calculateRequiredMatches(null, 3, false));  
-    }
-
-    public void testNullWithRequired() throws ConversionException {  
-        assertEquals(0, MinimumShouldMatchParser.calculateRequiredMatches(null, 3, true));
-    }
-
-    // --- Integer specs ---
-
-    public void testPositiveInteger() throws ConversionException {  
-        assertEquals(2, MinimumShouldMatchParser.calculateRequiredMatches("2", 5, false));
-    }
-
-    public void testNegativeInteger() throws ConversionException {
-        assertEquals(4, MinimumShouldMatchParser.calculateRequiredMatches("-1", 5, false));
-    }  
-
-    public void testIntegerExceedingTotal_noUpperClamp() throws ConversionException {
-        // Legacy does NOT upper-clamp: "6" on total=4 returns 6.  
-        assertEquals(6, MinimumShouldMatchParser.calculateRequiredMatches("6", 4, false));
-    }
-
-    public void testLargeNegativeFloorClamp() throws ConversionException {
-        // "-10" on total=4 -> 4 + (-10) = -6 -> floor clamp to 0.
-        assertEquals(0, MinimumShouldMatchParser.calculateRequiredMatches("-10", 4, false));  
-    }
-
-    // --- Percentage specs ---  
-
-    public void testPositivePercentage() throws ConversionException {
-        assertEquals(2, MinimumShouldMatchParser.calculateRequiredMatches("70%", 4, false));  
-    }
-
-    public void testNegativePercentage() throws ConversionException {  
-        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("-30%", 4, false));
-    }
-
-    public void testPaddedPercentage() throws ConversionException {
-        // " 75% " on total=10 returns 7 (legacy trims whitespace).
-        assertEquals(7, MinimumShouldMatchParser.calculateRequiredMatches(" 75% ", 10, false));  
-    }
-
-    // --- Single combination specs ---  
-
-    public void testCombinationBelowThreshold() throws ConversionException {
-        assertEquals(2, MinimumShouldMatchParser.calculateRequiredMatches("2<75%", 2, false));  
-    }
-
-    public void testCombinationAboveThreshold() throws ConversionException {  
-        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("2<75%", 4, false));
-    }
-
-    public void testCombinationSingleEntry() throws ConversionException {
-        // "5<50%" on total=4 -> total <= 5 -> return total (4).
-        assertEquals(4, MinimumShouldMatchParser.calculateRequiredMatches("5<50%", 4, false));  
-    }
-
-    // --- Multiple combination specs ---  
-
-    public void testMultipleCombinationsLow() throws ConversionException {
-        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 3, false));  
-    }
-
-    public void testMultipleCombinationsMid() throws ConversionException {  
-        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 4, false));
-    }
-
-    public void testMultipleCombinationsHigh() throws ConversionException {
-        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 6, false));
-    }  
-
-    public void testMultipleCombinationsFromTestTable() throws ConversionException {
-        // "3<-1 5<50%" on total=8 returns 4.  
-        assertEquals(4, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 8, false));
-    }
-
-    // --- Space-around-operator normalization (legacy parity) ---
-
-    public void testSpaceAroundOperator() throws ConversionException {  
-        // "3 < 75%" on total=10 returns 7 (spaces around < are normalized by legacy).
         assertEquals(7, MinimumShouldMatchParser.calculateRequiredMatches("3 < 75%", 10, false));
-    }  
-
-    // --- Malformed specs: ConversionException ---
-
-    public void testTrailingLessThanThrows() {
-        // "5<" throws ArrayIndexOutOfBoundsException in legacy when total > threshold (parts[1] after split).
         ConversionException ex = expectThrows(  
-            ConversionException.class,
-            () -> MinimumShouldMatchParser.calculateRequiredMatches("5<", 6, false)
-        );  
-        assertTrue(ex.getMessage().contains("5<"));
+    public void testCombinationAboveThreshold() throws ConversionException {  
     }
-
-    public void testLeadingLessThanThrows() {
-        // "<5" throws NumberFormatException in legacy (Integer.parseInt("") on empty parts[0]).
-        ConversionException ex = expectThrows(  
+    public void testInfinityPercentageThrows() {
             ConversionException.class,
-            () -> MinimumShouldMatchParser.calculateRequiredMatches("<5", 4, false)
-        );  
-        assertTrue(ex.getMessage().contains("<5"));
     }
-
-    public void testDoubleLessThanThrows() {
-        // "5<<3" throws NumberFormatException in legacy (recursive call with "" from empty split part).
-        ConversionException ex = expectThrows(  
-            ConversionException.class,
-            () -> MinimumShouldMatchParser.calculateRequiredMatches("5<<3", 6, false)
-        );  
-        assertTrue(ex.getMessage().contains("5<<3"));
-    }
-
-    public void testAlphabeticSpecThrows() {
-        ConversionException ex = expectThrows(
-            ConversionException.class,  
-            () -> MinimumShouldMatchParser.calculateRequiredMatches("abc", 4, false)
+ * compatible open source license.
+        assertTrue(ex.getMessage().contains("\"\""));  
         );
+    public void testNullWithoutRequired() throws ConversionException {
+            () -> MinimumShouldMatchParser.calculateRequiredMatches("5<<3", 6, false)
         assertTrue(ex.getMessage().contains("abc"));  
     }
-
-    public void testNaNPercentageThrows() {  
-        ConversionException ex = expectThrows(
-            ConversionException.class,
-            () -> MinimumShouldMatchParser.calculateRequiredMatches("NaN%", 4, false)  
-        );
-        assertTrue(ex.getMessage().contains("NaN%"));
-    }  
-
-    public void testInfinityPercentageThrows() {
-        ConversionException ex = expectThrows(  
-            ConversionException.class,
+        assertTrue(ex.getMessage().contains("5<"));
             () -> MinimumShouldMatchParser.calculateRequiredMatches("Infinity%", 4, false)
-        );  
-        assertTrue(ex.getMessage().contains("Infinity%"));
+import org.opensearch.test.OpenSearchTestCase;
+            ConversionException.class,
     }
-
-    public void testFractionalPercentageThrows() {
         ConversionException ex = expectThrows(
+/*  
+        );  
+    // --- Malformed specs: ConversionException ---
+    }
+    public void testCombinationBelowThreshold() throws ConversionException {
+    public void testNegativePercentage() throws ConversionException {  
+        ConversionException ex = expectThrows(
+        assertEquals(2, MinimumShouldMatchParser.calculateRequiredMatches("70%", 4, false));  
+    // --- Single combination specs ---  
+    }
+        ConversionException ex = expectThrows(  
+    public void testDoubleLessThanThrows() {
+        assertEquals(6, MinimumShouldMatchParser.calculateRequiredMatches("6", 4, false));
+    }  
+    }  
+            () -> MinimumShouldMatchParser.calculateRequiredMatches("5<", 6, false)
+    // --- Multiple combination specs ---  
+        assertTrue(ex.getMessage().contains("70.5%"));  
+        assertEquals(2, MinimumShouldMatchParser.calculateRequiredMatches("2<75%", 2, false));  
+        // Legacy parity: "" is not equivalent to null; legacy throws NumberFormatException on "".
+    }  
+            () -> MinimumShouldMatchParser.calculateRequiredMatches("", 4, false)
+        // Legacy does NOT upper-clamp: "6" on total=4 returns 6.  
+public class MinimumShouldMatchParserTests extends OpenSearchTestCase {
+        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("-30%", 4, false));
+        assertEquals(4, MinimumShouldMatchParser.calculateRequiredMatches("5<50%", 4, false));  
+        assertEquals(1, MinimumShouldMatchParser.calculateRequiredMatches(null, 3, false));  
+        // "-10" on total=4 -> 4 + (-10) = -6 -> floor clamp to 0.
+            ConversionException.class,  
+        ConversionException ex = expectThrows(
+        // "5<<3" throws NumberFormatException in legacy (recursive call with "" from empty split part).
+        ConversionException ex = expectThrows(  
+        );
+        assertTrue(ex.getMessage().contains("5<<3"));
+    // --- Percentage specs ---  
+    }  
+    }
+        assertEquals(2, MinimumShouldMatchParser.calculateRequiredMatches("2", 5, false));
+            () -> MinimumShouldMatchParser.calculateRequiredMatches("abc", 4, false)
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        );  
             ConversionException.class,  
             () -> MinimumShouldMatchParser.calculateRequiredMatches("70.5%", 4, false)
-        );
-        assertTrue(ex.getMessage().contains("70.5%"));  
+        );  
+ * The OpenSearch Contributors require contributions made to  
+        ConversionException ex = expectThrows(  
+            () -> MinimumShouldMatchParser.calculateRequiredMatches("<5", 4, false)
+    public void testIntegerExceedingTotal_noUpperClamp() throws ConversionException {
+        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 4, false));
+    public void testSpaceAroundOperator() throws ConversionException {  
     }
-
-    public void testEmptyStringThrows() {  
-        // Legacy parity: "" is not equivalent to null; legacy throws NumberFormatException on "".
-        ConversionException ex = expectThrows(
-            ConversionException.class,  
-            () -> MinimumShouldMatchParser.calculateRequiredMatches("", 4, false)
-        );
-        assertTrue(ex.getMessage().contains("\"\""));  
-    }
+    public void testLeadingLessThanThrows() {
 }
+        );  
+    }
+        // "<5" throws NumberFormatException in legacy (Integer.parseInt("") on empty parts[0]).
+    public void testNaNPercentageThrows() {  
+        assertEquals(0, MinimumShouldMatchParser.calculateRequiredMatches(null, 3, true));
+            ConversionException.class,
+        // "3 < 75%" on total=10 returns 7 (spaces around < are normalized by legacy).
+    public void testMultipleCombinationsLow() throws ConversionException {
+        assertTrue(ex.getMessage().contains("Infinity%"));
+        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 3, false));  
+        // "5<50%" on total=4 -> total <= 5 -> return total (4).
+    }
+        assertEquals(7, MinimumShouldMatchParser.calculateRequiredMatches(" 75% ", 10, false));  
+    }
+    }
+    }
+            ConversionException.class,
+    public void testCombinationSingleEntry() throws ConversionException {
+    public void testMultipleCombinationsFromTestTable() throws ConversionException {
+            ConversionException.class,
+    public void testTrailingLessThanThrows() {
+    }
+        // "5<" throws ArrayIndexOutOfBoundsException in legacy when total > threshold (parts[1] after split).
+    public void testMultipleCombinationsMid() throws ConversionException {  
+    // --- Space-around-operator normalization (legacy parity) ---
+            ConversionException.class,  
+    public void testPositivePercentage() throws ConversionException {
+        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 6, false));
+    public void testLargeNegativeFloorClamp() throws ConversionException {
+        ConversionException ex = expectThrows(
+    public void testNegativeInteger() throws ConversionException {
+    }
+        assertEquals(4, MinimumShouldMatchParser.calculateRequiredMatches("3<-1 5<50%", 8, false));
+ * SPDX-License-Identifier: Apache-2.0
+        // "3<-1 5<50%" on total=8 returns 4.  
+        assertEquals(3, MinimumShouldMatchParser.calculateRequiredMatches("2<75%", 4, false));
+    }
+        );
+ */  
+        assertEquals(0, MinimumShouldMatchParser.calculateRequiredMatches("-10", 4, false));  
+import org.opensearch.dsl.converter.ConversionException;
+    }
+    public void testPaddedPercentage() throws ConversionException {
+    public void testFractionalPercentageThrows() {
+            () -> MinimumShouldMatchParser.calculateRequiredMatches("NaN%", 4, false)  
+    }
+    public void testPositiveInteger() throws ConversionException {  
+package org.opensearch.dsl.query;
+        // " 75% " on total=10 returns 7 (legacy trims whitespace).
+    }
+        assertTrue(ex.getMessage().contains("NaN%"));
+        );
+    public void testAlphabeticSpecThrows() {
+    public void testMultipleCombinationsHigh() throws ConversionException {
+        assertTrue(ex.getMessage().contains("<5"));
+        assertEquals(4, MinimumShouldMatchParser.calculateRequiredMatches("-1", 5, false));
+    // --- Integer specs ---
+    // --- Default behavior (null spec) ---  
+    public void testNullWithRequired() throws ConversionException {  
+ *
+    }
+    public void testEmptyStringThrows() {  

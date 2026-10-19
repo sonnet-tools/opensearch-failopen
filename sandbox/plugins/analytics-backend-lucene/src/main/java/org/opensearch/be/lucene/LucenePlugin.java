@@ -1,217 +1,194 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene;
-
-import org.opensearch.be.lucene.index.LuceneCommitter;
-import org.opensearch.be.lucene.index.LuceneCommitterFactory;
-import org.opensearch.be.lucene.index.LuceneDeleteExecutionEngine;  
 import org.opensearch.be.lucene.index.LuceneIndexingExecutionEngine;
-import org.opensearch.be.lucene.stats.LuceneStatsProvider;
-import org.opensearch.be.lucene.stats.transport.LuceneNodeStatsActionType;  
-import org.opensearch.be.lucene.stats.transport.LuceneNodeStatsRestAction;
-import org.opensearch.be.lucene.stats.transport.LuceneNodeStatsTransportAction;
-import org.opensearch.be.lucene.stats.transport.LuceneStatsActionType;  
-import org.opensearch.be.lucene.stats.transport.LuceneStatsRestAction;
-import org.opensearch.be.lucene.stats.transport.LuceneStatsTransportAction;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.inject.Module;  
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.IndexScopedSettings;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.settings.SettingsFilter;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.DataFormat;  
-import org.opensearch.index.engine.dataformat.DataFormatDescriptor;
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;  
-import org.opensearch.index.engine.dataformat.DeleteExecutionEngine;
-import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
-import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;  
-import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
-import org.opensearch.index.engine.exec.DocumentMetadataResolver;
-import org.opensearch.index.engine.exec.EngineReaderManager;  
-import org.opensearch.index.engine.exec.IndexReaderProvider;
-import org.opensearch.index.engine.exec.commit.Committer;
-import org.opensearch.index.engine.exec.commit.CommitterFactory;  
-import org.opensearch.index.store.checksum.LuceneChecksumHandler;
-import org.opensearch.plugins.ActionPlugin;
-import org.opensearch.plugins.EnginePlugin;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.SearchBackEndPlugin;
-import org.opensearch.rest.RestController;  
-import org.opensearch.rest.RestHandler;
-
-import java.io.IOException;  
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;  
-import java.util.Optional;
-import java.util.function.Supplier;
-
-/**
- * Plugin providing Lucene as a data format, search back-end, and committer
- * for the composite engine.  
- * <p>
- * Implements three plugin interfaces:
- * <ul>  
- *   <li>{@link DataFormatPlugin} — registers Lucene as a data format that can write
- *       inverted indices for text fields via {@link LuceneIndexingExecutionEngine}</li>
- *   <li>{@link SearchBackEndPlugin} — provides {@link LuceneReaderManager} for search</li>  
- *   <li>{@link EnginePlugin} — provides {@link LuceneCommitterFactory} for durable commits</li>
- * </ul>
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class LucenePlugin extends Plugin
-    implements
-        DataFormatPlugin,  
-        SearchBackEndPlugin<LuceneReader>,
-        EnginePlugin,
-        ActionPlugin,  
-        DocumentMetadataResolver {
-
-    public static final LuceneDataFormat DATA_FORMAT = new LuceneDataFormat();  
-
-    private final LuceneDocumentResolver documentResolver = new LuceneDocumentResolver();
-
-    /** Creates a new LucenePlugin. */
-    public LucenePlugin() {}
-
-    // --- DataFormatPlugin ---
-
+     */
+                indexingEngineConfig.indexSettings(),
+    @Override  
+            );  
     /** {@inheritDoc} Returns the singleton {@link LuceneDataFormat} descriptor. */  
-    @Override
-    public DataFormat getDataFormat() {
-        return DATA_FORMAT;  
-    }
-
-    /**  
-     * Creates a {@link LuceneIndexingExecutionEngine} for the given configuration.
-     * Requires the committer to be a {@link LuceneCommitter}.
+    // --- EnginePlugin ---
      *  
+        }
+    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig indexingEngineConfig) {  
+        List<ActionPlugin.ActionHandler<? extends org.opensearch.action.ActionRequest, ? extends org.opensearch.core.action.ActionResponse>>
+import org.opensearch.index.engine.exec.IndexReaderProvider;
+ *   <li>{@link EnginePlugin} — provides {@link LuceneCommitterFactory} for durable commits</li>
+        IndexSettings indexSettings,
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+    public Optional<CommitterFactory> getCommitterFactory(IndexSettings indexSettings) {
+        throw new IllegalStateException(
+import org.opensearch.index.engine.exec.commit.CommitterFactory;  
+import org.opensearch.index.engine.exec.commit.Committer;
+    @Override
+     * @param indexSettings the index settings (unused)  
+}  
+     * trackers via the static {@code getInstance()} accessor at construction time.  
+    @Override
+import org.opensearch.be.lucene.stats.transport.LuceneNodeStatsRestAction;
+                DATA_FORMAT,
+import java.util.function.Supplier;
+import java.util.List;
+    @Override
+        RestController restController,
+    }
+ *
+    public Map<String, Supplier<DataFormatDescriptor>> getFormatDescriptors(  
+     *  
+     *
      * @param indexingEngineConfig the indexing engine configuration
      * @return a new Lucene indexing execution engine
-     * @throws IllegalStateException if the committer is not a {@link LuceneCommitter}  
-     */
-    @Override
-    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig indexingEngineConfig) {  
-        Committer committer = indexingEngineConfig.committer();
-        if (committer instanceof LuceneCommitter luceneCommitter) {
-            return new LuceneIndexingExecutionEngine(  
-                DATA_FORMAT,
-                luceneCommitter,
-                indexingEngineConfig.mapperService(),  
-                indexingEngineConfig.indexSettings(),
-                indexingEngineConfig.store()
-            );  
-        }
-        throw new IllegalStateException(
-            "LuceneIndexingExecutionEngine requires a LuceneCommitter but got: "  
-                + (committer != null ? committer.getClass().getName() : "null")
-        );
-    }  
-
-    @Override
-    public Map<String, Supplier<DataFormatDescriptor>> getFormatDescriptors(  
-        IndexSettings indexSettings,
-        DataFormatRegistry dataFormatRegistry
-    ) {  
-        return Map.of(DATA_FORMAT.name(), () -> new DataFormatDescriptor(DATA_FORMAT.name(), new LuceneChecksumHandler()));
-    }
-
-    // --- SearchBackEndPlugin ---
-
-    /** {@inheritDoc} Returns {@code "lucene"}. */  
-    @Override
-    public String name() {
-        return LuceneDataFormat.LUCENE_FORMAT_NAME;  
-    }
-
-    /** {@inheritDoc} Returns a singleton list containing the Lucene data format. */  
-    @Override
-    public List<String> getSupportedFormats() {
-        return List.of(LuceneDataFormat.LUCENE_FORMAT_NAME);  
-    }
-
-    /**  
-     * Creates a {@link LuceneReaderManager} for the given settings by delegating to
-     * {@link LuceneSearchBackEnd#createReaderManager}.
-     *  
-     * @param settings the reader manager configuration
-     * @return a new reader manager
-     * @throws IOException if reader creation fails  
-     */
-    @Override
-    public EngineReaderManager<LuceneReader> createReaderManager(ReaderManagerConfig settings) throws IOException {  
-        return LuceneSearchBackEnd.createReaderManager(settings);
-    }
-
-    // --- EnginePlugin ---
-
-    /**  
-     * Returns a {@link LuceneCommitterFactory} for creating {@link LuceneCommitter} instances.
-     *
-     * @param indexSettings the index settings (unused)  
-     * @return an optional containing the factory
-     */
-    @Override  
-    public Optional<CommitterFactory> getCommitterFactory(IndexSettings indexSettings) {
-        return Optional.of(new LuceneCommitterFactory());
-    }  
-
-    @Override
-    public DeleteExecutionEngine<?> getDeleteExecutionEngine(Committer committer) {  
-        return new LuceneDeleteExecutionEngine(DATA_FORMAT, committer);
-    }
-
-    /**
-     * Constructs the {@link LuceneStatsProvider} eagerly so engines can self-register their
-     * trackers via the static {@code getInstance()} accessor at construction time.  
-     */
-    @Override
-    public Collection<Module> createGuiceModules() {  
-        // Eagerly construct the singleton so LuceneIndexingExecutionEngine can register on creation.
-        new LuceneStatsProvider();
-        return List.of();  
-    }
-
-    @Override  
-    public
-        List<ActionPlugin.ActionHandler<? extends org.opensearch.action.ActionRequest, ? extends org.opensearch.core.action.ActionResponse>>
-        getActions() {  
-        return List.of(
-            new ActionPlugin.ActionHandler<>(LuceneStatsActionType.INSTANCE, LuceneStatsTransportAction.class),
-            new ActionPlugin.ActionHandler<>(LuceneNodeStatsActionType.INSTANCE, LuceneNodeStatsTransportAction.class)  
-        );
-    }
-
-    @Override
     public List<RestHandler> getRestHandlers(
-        Settings settings,  
-        RestController restController,
-        ClusterSettings clusterSettings,
-        IndexScopedSettings indexScopedSettings,  
-        SettingsFilter settingsFilter,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<DiscoveryNodes> nodesInCluster  
-    ) {
-        return List.of(new LuceneStatsRestAction(), new LuceneNodeStatsRestAction());
-    }  
-
-    // --- DocumentMetadataResolver ---
-
-    /** {@inheritDoc} Resolves a document id to its row location via Lucene. */
-    @Override
-    public DocumentMetadata resolveMetadata(IndexReaderProvider.Reader reader, String id) throws IOException {  
-        return documentResolver.resolveMetadata(reader, id);
     }
-}  
+import org.opensearch.common.settings.Settings;  
+            "LuceneIndexingExecutionEngine requires a LuceneCommitter but got: "  
+    public DataFormat getDataFormat() {
+import org.opensearch.rest.RestController;  
+    /**  
+    }  
+    /** {@inheritDoc} Returns a singleton list containing the Lucene data format. */  
+    implements
+    /** {@inheritDoc} Resolves a document id to its row location via Lucene. */
+        return List.of(LuceneDataFormat.LUCENE_FORMAT_NAME);  
+        DataFormatRegistry dataFormatRegistry
+import java.util.Map;  
+                + (committer != null ? committer.getClass().getName() : "null")
+import org.opensearch.be.lucene.index.LuceneCommitterFactory;
+        getActions() {  
+        DocumentMetadataResolver {
+    ) {  
+     */
+import org.opensearch.be.lucene.index.LuceneDeleteExecutionEngine;  
+import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;  
+import org.opensearch.rest.RestHandler;
+ */  
+    /**  
+     * @return a new reader manager
+    public DocumentMetadata resolveMetadata(IndexReaderProvider.Reader reader, String id) throws IOException {  
+    @Override
+ * <ul>  
+import org.opensearch.be.lucene.stats.transport.LuceneStatsRestAction;
+    @Override
+import org.opensearch.index.engine.dataformat.DeleteExecutionEngine;
+        return List.of();  
+ *  
+ *   <li>{@link DataFormatPlugin} — registers Lucene as a data format that can write
+     */
+ * for the composite engine.  
+ * this file be licensed under the Apache-2.0 license or a
+     * Requires the committer to be a {@link LuceneCommitter}.
+     */
+ * </ul>
+    @Override
+        Supplier<DiscoveryNodes> nodesInCluster  
+        if (committer instanceof LuceneCommitter luceneCommitter) {
+package org.opensearch.be.lucene;
+    }
+     * {@link LuceneSearchBackEnd#createReaderManager}.
+        IndexScopedSettings indexScopedSettings,  
+ * Plugin providing Lucene as a data format, search back-end, and committer
+ * SPDX-License-Identifier: Apache-2.0
+@ExperimentalApi  
+    public
+        Settings settings,  
+import org.opensearch.be.lucene.stats.transport.LuceneNodeStatsTransportAction;
+    }  
+     * Constructs the {@link LuceneStatsProvider} eagerly so engines can self-register their
+    }
+/*  
+public class LucenePlugin extends Plugin
+import org.opensearch.common.settings.IndexScopedSettings;
+        return Optional.of(new LuceneCommitterFactory());
+    public static final LuceneDataFormat DATA_FORMAT = new LuceneDataFormat();  
+        return new LuceneDeleteExecutionEngine(DATA_FORMAT, committer);
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;  
+import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
+            new ActionPlugin.ActionHandler<>(LuceneNodeStatsActionType.INSTANCE, LuceneNodeStatsTransportAction.class)  
+import org.opensearch.be.lucene.stats.transport.LuceneStatsTransportAction;
+        IndexNameExpressionResolver indexNameExpressionResolver,
+    }
+    private final LuceneDocumentResolver documentResolver = new LuceneDocumentResolver();
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.plugins.ActionPlugin;
+    public LucenePlugin() {}
+import org.opensearch.plugins.EnginePlugin;  
+import org.opensearch.be.lucene.index.LuceneCommitter;
+     * @param settings the reader manager configuration
+import org.opensearch.common.settings.ClusterSettings;
+        return LuceneDataFormat.LUCENE_FORMAT_NAME;  
+    public DeleteExecutionEngine<?> getDeleteExecutionEngine(Committer committer) {  
+    /**  
+    }  
+    }
+ */
+                luceneCommitter,
+ * compatible open source license.
+    }
+import org.opensearch.common.inject.Module;  
+        return Map.of(DATA_FORMAT.name(), () -> new DataFormatDescriptor(DATA_FORMAT.name(), new LuceneChecksumHandler()));
+        SettingsFilter settingsFilter,
+    }
+        Committer committer = indexingEngineConfig.committer();
+ *   <li>{@link SearchBackEndPlugin} — provides {@link LuceneReaderManager} for search</li>  
+            return new LuceneIndexingExecutionEngine(  
+    // --- DocumentMetadataResolver ---
+import java.util.Collection;
+ * Implements three plugin interfaces:
+import java.io.IOException;  
+    }
+    @Override
+            new ActionPlugin.ActionHandler<>(LuceneStatsActionType.INSTANCE, LuceneStatsTransportAction.class),
+    public String name() {
+        return List.of(
+    public List<String> getSupportedFormats() {
+import org.opensearch.common.annotation.ExperimentalApi;
+                indexingEngineConfig.mapperService(),  
+        EnginePlugin,
+import org.opensearch.index.IndexSettings;
+ *       inverted indices for text fields via {@link LuceneIndexingExecutionEngine}</li>
+    public EngineReaderManager<LuceneReader> createReaderManager(ReaderManagerConfig settings) throws IOException {  
+        ClusterSettings clusterSettings,
+import org.opensearch.index.store.checksum.LuceneChecksumHandler;
+                indexingEngineConfig.store()
+     * Returns a {@link LuceneCommitterFactory} for creating {@link LuceneCommitter} instances.
+        new LuceneStatsProvider();
+import org.opensearch.plugins.SearchBackEndPlugin;
+    public Collection<Module> createGuiceModules() {  
+        return LuceneSearchBackEnd.createReaderManager(settings);
+        return documentResolver.resolveMetadata(reader, id);
+import java.util.Optional;
+import org.opensearch.index.engine.exec.DocumentMetadataResolver;
+import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
+import org.opensearch.be.lucene.stats.transport.LuceneNodeStatsActionType;  
+        DataFormatPlugin,  
+     * @throws IllegalStateException if the committer is not a {@link LuceneCommitter}  
+    /** Creates a new LucenePlugin. */
+    /**
+        // Eagerly construct the singleton so LuceneIndexingExecutionEngine can register on creation.
+        SearchBackEndPlugin<LuceneReader>,
+        );
+import org.opensearch.be.lucene.stats.transport.LuceneStatsActionType;  
+        return List.of(new LuceneStatsRestAction(), new LuceneNodeStatsRestAction());
+    @Override  
+        ActionPlugin,  
+import org.opensearch.be.lucene.stats.LuceneStatsProvider;
+import org.opensearch.cluster.node.DiscoveryNodes;
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;
+    ) {
+    // --- SearchBackEndPlugin ---
+     * Creates a {@link LuceneIndexingExecutionEngine} for the given configuration.
+        return DATA_FORMAT;  
+        );
+import org.opensearch.common.settings.SettingsFilter;
+import org.opensearch.index.engine.dataformat.DataFormat;  
+ * <p>
+    /** {@inheritDoc} Returns {@code "lucene"}. */  
+/**
+ * @opensearch.experimental
+import org.opensearch.index.engine.exec.EngineReaderManager;  
+    @Override
+import org.opensearch.plugins.Plugin;
+import org.opensearch.index.engine.dataformat.DataFormatDescriptor;
+    // --- DataFormatPlugin ---
+     * @throws IOException if reader creation fails  
+    @Override
+     * Creates a {@link LuceneReaderManager} for the given settings by delegating to
+     * @return an optional containing the factory

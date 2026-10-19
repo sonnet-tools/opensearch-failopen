@@ -1,89 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        internalCluster().startClusterManagerOnlyNode();  
+    }  
+    }
+    public void testDropRandomNodeDuringReplication() throws Exception {
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
+        final int docCount = scaledRandomIntBetween(10, 200);
+        client().prepareIndex(INDEX_NAME).setId(Integer.toString(docCount)).setSource("field", "value" + docCount).execute().get();
+    public Settings indexSettings() {  
  *
+/*  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.Before;  
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2)
-public class SegmentReplicationSuiteIT extends SegmentReplicationBaseIT {  
-
-    @Before
-    public void setup() {  
-        internalCluster().startClusterManagerOnlyNode();
-        createIndex(INDEX_NAME);
-    }  
-
-    @Override
-    public Settings indexSettings() {  
-        final Settings.Builder builder = Settings.builder()
-            .put(super.indexSettings())
-            // reset shard & replica count to random values set by OpenSearchIntegTestCase.  
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numberOfShards())
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numberOfReplicas())
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT);  
-
-        // TODO: Randomly enable remote store on these tests.
-        return builder.build();  
-    }
-
-    public void testBasicReplication() throws Exception {  
-        final int docCount = scaledRandomIntBetween(10, 200);
-        for (int i = 0; i < docCount; i++) {
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
-        }
         refresh();
-        ensureGreen(INDEX_NAME);  
-        verifyStoreContent();
-    }
-
-    public void testDropRandomNodeDuringReplication() throws Exception {
-        internalCluster().ensureAtLeastNumDataNodes(2);
-        internalCluster().startClusterManagerOnlyNodes(1);  
-
-        final int docCount = scaledRandomIntBetween(10, 200);
-        for (int i = 0; i < docCount; i++) {  
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
         }
+ */  
+import org.opensearch.indices.replication.common.ReplicationType;
         refresh();  
-
-        internalCluster().restartRandomDataNode();
-
-        ensureYellow(INDEX_NAME);
-        client().prepareIndex(INDEX_NAME).setId(Integer.toString(docCount)).setSource("field", "value" + docCount).execute().get();
-        internalCluster().startDataOnlyNode();  
-        ensureGreen(INDEX_NAME);
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-    }  
-
-    public void testDeleteIndexWhileReplicating() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();  
+        // TODO: Randomly enable remote store on these tests.
+        for (int i = 0; i < docCount; i++) {  
+        return builder.build();  
         final int docCount = scaledRandomIntBetween(10, 200);
-        for (int i = 0; i < docCount; i++) {
+        internalCluster().fullRestart();
             client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
+        final int docCount = scaledRandomIntBetween(10, 200);
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numberOfReplicas())
+            // reset shard & replica count to random values set by OpenSearchIntegTestCase.  
         }
-        refresh(INDEX_NAME);
-        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
+        internalCluster().restartRandomDataNode();
+        ensureYellow(INDEX_NAME);
+public class SegmentReplicationSuiteIT extends SegmentReplicationBaseIT {  
+        createIndex(INDEX_NAME);
+        for (int i = 0; i < docCount; i++) {  
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT);  
+package org.opensearch.indices.replication;
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+        final Settings.Builder builder = Settings.builder()
     }
-
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.common.settings.Settings;  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2)
+        ensureGreen(INDEX_NAME);  
+    @Before
+import org.opensearch.cluster.metadata.IndexMetadata;
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();  
+import org.junit.Before;  
+}
     public void testFullRestartDuringReplication() throws Exception {  
+    @Override
+        ensureGreen(INDEX_NAME);
+    }  
+        for (int i = 0; i < docCount; i++) {
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    public void testDeleteIndexWhileReplicating() throws Exception {
+        }
+            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
+    }  
+    public void setup() {  
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numberOfShards())
+        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startDataOnlyNode();  
         internalCluster().startNode();
         final int docCount = scaledRandomIntBetween(10, 200);
-        for (int i = 0; i < docCount; i++) {  
-            client().prepareIndex(INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().get();
+        verifyStoreContent();
         }
+        internalCluster().startClusterManagerOnlyNodes(1);  
         refresh(INDEX_NAME);  
-        internalCluster().fullRestart();
+        for (int i = 0; i < docCount; i++) {
+    public void testBasicReplication() throws Exception {  
+            .put(super.indexSettings())
+        client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
+        internalCluster().ensureAtLeastNumDataNodes(2);
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+        refresh(INDEX_NAME);
+ * compatible open source license.
         ensureGreen(INDEX_NAME);
-    }  
-}

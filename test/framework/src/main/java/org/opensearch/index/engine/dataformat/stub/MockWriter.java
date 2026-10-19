@@ -1,174 +1,152 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.FileInfos;
-import org.opensearch.index.engine.dataformat.FlushInput;  
-import org.opensearch.index.engine.dataformat.WriteResult;
-import org.opensearch.index.engine.dataformat.Writer;
-import org.opensearch.index.engine.dataformat.WriterState;  
-import org.opensearch.index.engine.exec.WriterFileSet;
-
-import java.nio.file.Path;  
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;  
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
-
-/**
- * A mock {@link Writer} for testing purposes.
- */  
-public class MockWriter implements Writer<MockDocumentInput> {
-    private final long writerGeneration;
-    private final DataFormat dataFormat;  
-    private final Path directory;
-    private final List<MockDocumentInput> docs = new ArrayList<>();
-    private final AtomicLong seqNo;  
-    private Supplier<WriteResult> writeResultSupplier;
-    /**
-     * If set, addDoc admits the doc (counter++) and then throws this exception. Models a  
-     * Parquet-style writer where a row is committed before a downstream operation fails.
-     */
-    private volatile Supplier<RuntimeException> throwAfterAdmit;  
-    private volatile boolean failureKeepsActive = false;
-    private volatile boolean emptyFlushWhenNoDocs = false;
-    private volatile WriterState state = WriterState.ACTIVE;  
-    private final AtomicInteger addDocCallCount = new AtomicInteger();
-
-    public void setWriteResultSupplier(Supplier<WriteResult> supplier) {  
-        this.writeResultSupplier = supplier;
-    }
-
-    /**
-     * If true, a {@link WriteResult.Failure} from the write-result supplier leaves the writer ACTIVE,
-     * modelling a per-doc rejection the writer has already reconciled. Default false retires it.  
-     */
-    public void setFailureKeepsActive(boolean keepActive) {
-        this.failureKeepsActive = keepActive;  
-    }
-
-    /**  
+    public void setRollbackKeepsActive(boolean keepActive) {
      * Configure addDoc to admit the doc (counter advances) and then throw. Used to model
      * the Parquet rotation-after-admit failure mode.
-     */  
-    public void setThrowAfterAdmit(Supplier<RuntimeException> throwSupplier) {
-        this.throwAfterAdmit = throwSupplier;
-    }  
-
+        this.dataFormat = dataFormat;
+    @Override  
+import org.opensearch.index.engine.dataformat.DataFormat;
+            }  
+    private final long writerGeneration;
+import java.nio.file.Path;  
+            WriteResult result = writeResultSupplier.get();  
+ *
+    private volatile Supplier<RuntimeException> throwAfterAdmit;  
+     * Parquet-style writer where a row is committed before a downstream operation fails.
+    @Override
+            .build();  
+     * means rollback always retires (Lucene-style).  
+    @Override
     /** If true, flush returns no files when the writer never received an addDoc (a delete-only writer). */
-    public void setEmptyFlushWhenNoDocs(boolean emptyFlush) {  
-        this.emptyFlushWhenNoDocs = emptyFlush;
+    @Override
+    private final DataFormat dataFormat;  
+        return writerGeneration;  
+ * A mock {@link Writer} for testing purposes.
     }
-
-    /** Test-only: directly inject a state to simulate post-failure conditions. */
-    public void setState(WriterState state) {
+        }
+    @Override
+import org.opensearch.index.engine.dataformat.FileInfos;
+        this.throwAfterAdmit = throwSupplier;
+    public void setEmptyFlushWhenNoDocs(boolean emptyFlush) {  
+import java.util.ArrayList;
+            seqNo.getAndIncrement();
+        if (emptyFlushWhenNoDocs && addDocCallCount.get() == 0) {
+        return state;
+        return true;
+    private volatile boolean emptyFlushWhenNoDocs = false;
+        this.writerGeneration = writerGeneration;
+/*  
+        }
+    }
+    @Override  
+    /**  
+    public void setFailureKeepsActive(boolean keepActive) {
+import org.opensearch.index.engine.dataformat.WriteResult;
         this.state = state;  
     }
-
-    @Override  
-    public WriterState state() {
-        return state;
-    }  
-
-    public int getAddDocCallCount() {
-        return addDocCallCount.get();  
     }
-
+        this.emptyFlushWhenNoDocs = emptyFlush;
+ * compatible open source license.
+        this.writeResultSupplier = supplier;
+     */
+        docs.add(d);
+            return result;
+        long seq = seqNo.getAndIncrement();  
+package org.opensearch.index.engine.dataformat.stub;
+    public void setState(WriterState state) {
+    }
+    /**
+    @Override
+            .writerGeneration(writerGeneration)  
     public MockWriter(long writerGeneration, DataFormat dataFormat, Path directory, AtomicLong seqNo) {  
-        this.writerGeneration = writerGeneration;
-        this.dataFormat = dataFormat;
-        this.directory = directory;  
+    }
+            return FileInfos.builder().build();
+ * The OpenSearch Contributors require contributions made to  
+        WriterFileSet fileSet = WriterFileSet.builder()
+            if (result instanceof WriteResult.Failure && state == WriterState.ACTIVE && failureKeepsActive == false) {
+    /** Test-only: directly inject a state to simulate post-failure conditions. */
+            throw new IllegalStateException("Cannot rollback to " + rowCount + ": only " + docs.size() + " docs");  
+import org.opensearch.index.engine.dataformat.Writer;
+        this.failureKeepsActive = keepActive;  
+        addDocCallCount.incrementAndGet();
+    }
+     * modelling a per-doc rejection the writer has already reconciled. Default false retires it.  
+import org.opensearch.index.engine.dataformat.FlushInput;  
+    }
+    private volatile boolean failureKeepsActive = false;
         this.seqNo = seqNo;
     }
-
-    @Override
-    public WriteResult addDoc(MockDocumentInput d) {
-        assert state == WriterState.ACTIVE : "addDoc requires ACTIVE state but was " + state;  
-        addDocCallCount.incrementAndGet();
-        if (writeResultSupplier != null) {
-            WriteResult result = writeResultSupplier.get();  
-            if (result instanceof WriteResult.Failure && state == WriterState.ACTIVE && failureKeepsActive == false) {
+     */  
+    }  
+    private Supplier<WriteResult> writeResultSupplier;
                 state = WriterState.PENDING_ROLLBACK;
-            }  
-            return result;
-        }
-        if (throwAfterAdmit != null) {  
-            // Admit the doc (mirroring Parquet's setRowCount + acceptedRows++), then throw.
-            // State remains ACTIVE so the caller can call rollbackLastDoc to undo, just as
-            // ParquetWriter.addDoc does on top of VSRManager.  
-            docs.add(d);
-            seqNo.getAndIncrement();
-            throw throwAfterAdmit.get();  
-        }
-        docs.add(d);
-        long seq = seqNo.getAndIncrement();  
-        return new WriteResult.Success(1L, 1L, seq);
-    }
-
-    /**
-     * If true, rollbackTo keeps the writer ACTIVE (Parquet-style). Default false
-     * means rollback always retires (Lucene-style).  
-     */
-    private volatile boolean rollbackKeepsActive = false;
-
-    /** Test-only: switch rollback behavior to "stay ACTIVE" (Parquet-style). */
-    public void setRollbackKeepsActive(boolean keepActive) {
-        this.rollbackKeepsActive = keepActive;  
-    }
-
-    @Override  
-    public void rollbackTo(long rowCount) {
-        if (rowCount > docs.size()) {
-            throw new IllegalStateException("Cannot rollback to " + rowCount + ": only " + docs.size() + " docs");  
-        }
-        while (docs.size() > rowCount) {
-            docs.remove(docs.size() - 1);  
-        }
-        state = rollbackKeepsActive ? WriterState.ACTIVE : WriterState.RETIRED_FLUSHABLE;
-    }  
-
-    @Override
-    public FileInfos flush(FlushInput flushInput) {  
-        if (emptyFlushWhenNoDocs && addDocCallCount.get() == 0) {
-            return FileInfos.builder().build();
-        }  
-        WriterFileSet fileSet = WriterFileSet.builder()
-            .directory(directory)
-            .writerGeneration(writerGeneration)  
             .addFile("data_gen" + writerGeneration + ".parquet")
-            .addNumRows(docs.size())
-            .build();  
-        return FileInfos.builder().putWriterFileSet(dataFormat, fileSet).build();
-    }
-
-    @Override
-    public long generation() {
-        return writerGeneration;  
-    }
-
-    @Override  
-    public boolean isSchemaMutable() {
-        return true;
-    }  
-
-    @Override
-    public long mappingVersion() {  
-        return 0;
-    }
-
-    @Override
-    public void updateMappingVersion(long newVersion) {}
-
-    @Override
-    public void close() {
         state = WriterState.CLOSED;  
+     */
+    private volatile WriterState state = WriterState.ACTIVE;  
+        this.rollbackKeepsActive = keepActive;  
+    public WriteResult addDoc(MockDocumentInput d) {
+    /** Test-only: switch rollback behavior to "stay ACTIVE" (Parquet-style). */
+    }  
+        assert state == WriterState.ACTIVE : "addDoc requires ACTIVE state but was " + state;  
+    private final AtomicInteger addDocCallCount = new AtomicInteger();
+import java.util.concurrent.atomic.AtomicLong;
+        while (docs.size() > rowCount) {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.engine.dataformat.WriterState;  
+    public void setThrowAfterAdmit(Supplier<RuntimeException> throwSupplier) {
+    public int getAddDocCallCount() {
+public class MockWriter implements Writer<MockDocumentInput> {
+     * If set, addDoc admits the doc (counter++) and then throws this exception. Models a  
+        if (writeResultSupplier != null) {
+    /**
+    public boolean isSchemaMutable() {
+            docs.remove(docs.size() - 1);  
+    public long mappingVersion() {  
+ * this file be licensed under the Apache-2.0 license or a
+            throw throwAfterAdmit.get();  
+    public void close() {
+    public long generation() {
     }
+    public FileInfos flush(FlushInput flushInput) {  
+    private final Path directory;
+        return new WriteResult.Success(1L, 1L, seq);
+    }  
+/**
+    }
+        return 0;
+        }
+     * If true, a {@link WriteResult.Failure} from the write-result supplier leaves the writer ACTIVE,
+            // State remains ACTIVE so the caller can call rollbackLastDoc to undo, just as
+        return FileInfos.builder().putWriterFileSet(dataFormat, fileSet).build();
+        }  
+        if (throwAfterAdmit != null) {  
+        state = rollbackKeepsActive ? WriterState.ACTIVE : WriterState.RETIRED_FLUSHABLE;
+        this.directory = directory;  
+        if (rowCount > docs.size()) {
+     * If true, rollbackTo keeps the writer ACTIVE (Parquet-style). Default false
+    public void updateMappingVersion(long newVersion) {}
+    @Override  
+    /**
+    @Override
+import java.util.concurrent.atomic.AtomicInteger;  
+    public WriterState state() {
+            .directory(directory)
+    }
+    private final List<MockDocumentInput> docs = new ArrayList<>();
+    }  
+            .addNumRows(docs.size())
+import org.opensearch.index.engine.exec.WriterFileSet;
+        }
+            // Admit the doc (mirroring Parquet's setRowCount + acceptedRows++), then throw.
+    public void setWriteResultSupplier(Supplier<WriteResult> supplier) {  
+    private final AtomicLong seqNo;  
+     */
+import java.util.function.Supplier;
+ */  
+    private volatile boolean rollbackKeepsActive = false;
+ */  
 }
+        return addDocCallCount.get();  
+            // ParquetWriter.addDoc does on top of VSRManager.  
+    public void rollbackTo(long rowCount) {
+            docs.add(d);

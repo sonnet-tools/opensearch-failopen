@@ -1,236 +1,209 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.repositories.azure;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.blobstore.BlobPath;  
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.plugins.NativeRemoteObjectStoreProvider;
-import org.opensearch.repositories.NativeStoreRepository;  
-import org.opensearch.repositories.blobstore.MeteredBlobStoreRepository;
-
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;  
-import java.util.function.Function;
-
-import static org.opensearch.repositories.azure.AzureStorageService.MAX_CHUNK_SIZE;  
-import static org.opensearch.repositories.azure.AzureStorageService.MIN_CHUNK_SIZE;
-
-/**  
- * Azure file system implementation of the BlobStoreRepository
- * <p>
- * Azure file system repository supports the following settings:  
- * <dl>
- * <dt>{@code container}</dt><dd>Azure container name. Defaults to opensearch-snapshots</dd>
- * <dt>{@code base_path}</dt><dd>Specifies the path within bucket to repository data. Defaults to root directory.</dd>  
- * <dt>{@code chunk_size}</dt><dd>Large file can be divided into chunks. This parameter specifies the chunk size. Defaults to 64mb.</dd>
- * <dt>{@code compress}</dt><dd>If set to true metadata files will be stored compressed. Defaults to false.</dd>
  * </dl>  
+        nativeStore.close();
+    public static final class Repository {
+        final RepositoryMetadata metadata,
+    public List<Setting<?>> getRestrictedSystemRepositorySettings() {
+ * this work for additional information regarding copyright
+                "using container [{}], chunk_size [{}], compress [{}], base_path [{}]",
+            this.basePath = BlobPath.cleanPath();  
+        public static final Setting<LocationMode> LOCATION_MODE_SETTING = new Setting<>(  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+    @Override  
+        if (READONLY_SETTING.exists(metadata.settings())) {  
+        final AzureStorageService storageService,  
+            // Remove starting / if any
+ */  
+        return Map.of(  
+            MIN_CHUNK_SIZE,  
+    }  
+            "account",
+                basePath
+ * <dl>
+ * license agreements. See the NOTICE file distributed with
+    @Override
+import java.util.ArrayList;  
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.repositories.NativeStoreRepository;  
+    }  
+        final NamedXContentRegistry namedXContentRegistry,
+        // For secondary_only setting, the repository should be read only
+import org.apache.logging.log4j.Logger;
  */
 public class AzureRepository extends MeteredBlobStoreRepository {
-    private static final Logger logger = LogManager.getLogger(AzureRepository.class);  
-
-    public static final String TYPE = "azure";
-
-    public static final class Repository {
-        @Deprecated // Replaced by client
-        public static final Setting<String> ACCOUNT_SETTING = new Setting<>(  
-            "account",
-            "default",
-            Function.identity(),  
-            Property.NodeScope,
-            Property.Deprecated
-        );  
-        public static final Setting<String> CLIENT_NAME = new Setting<>("client", ACCOUNT_SETTING, Function.identity());
-        public static final Setting<String> CONTAINER_SETTING = new Setting<>(
-            "container",  
-            "opensearch-snapshots",
-            Function.identity(),
-            Property.NodeScope  
-        );
-        public static final Setting<String> BASE_PATH_SETTING = Setting.simpleString("base_path", Property.NodeScope);
-        public static final Setting<LocationMode> LOCATION_MODE_SETTING = new Setting<>(  
-            "location_mode",
-            s -> LocationMode.PRIMARY_ONLY.toString(),
-            s -> LocationMode.valueOf(s.toUpperCase(Locale.ROOT)),  
-            Property.NodeScope
-        );
-        public static final Setting<ByteSizeValue> CHUNK_SIZE_SETTING = Setting.byteSizeSetting(  
-            "chunk_size",
-            MAX_CHUNK_SIZE,
-            MIN_CHUNK_SIZE,  
-            MAX_CHUNK_SIZE,
-            Property.NodeScope
-        );  
-    }
-
-    private final BlobPath basePath;  
-    private final ByteSizeValue chunkSize;
-    private final AzureStorageService storageService;
-    private final boolean readonly;  
-
-    /** Native (Rust) object store — created during construction if native provider is available. */
-    private volatile NativeStoreRepository nativeStore = NativeStoreRepository.EMPTY;  
-
-    public AzureRepository(
-        final RepositoryMetadata metadata,  
-        final NamedXContentRegistry namedXContentRegistry,
-        final AzureStorageService storageService,
-        final ClusterService clusterService,  
-        final RecoverySettings recoverySettings
-    ) {
-        this(metadata, namedXContentRegistry, storageService, clusterService, recoverySettings, null);  
-    }
-
-    public AzureRepository(  
-        final RepositoryMetadata metadata,
-        final NamedXContentRegistry namedXContentRegistry,
-        final AzureStorageService storageService,  
-        final ClusterService clusterService,
-        final RecoverySettings recoverySettings,
-        final NativeRemoteObjectStoreProvider nativeStoreProvider  
-    ) {
-        super(metadata, namedXContentRegistry, clusterService, recoverySettings, buildLocation(metadata));
-        this.chunkSize = Repository.CHUNK_SIZE_SETTING.get(metadata.settings());  
-        this.storageService = storageService;
-
-        final String basePath = Strings.trimLeadingCharacter(Repository.BASE_PATH_SETTING.get(metadata.settings()), '/');  
-        if (Strings.hasLength(basePath)) {
-            // Remove starting / if any
-            BlobPath path = new BlobPath();  
-            for (final String elem : basePath.split("/")) {
-                path = path.add(elem);
-            }  
-            this.basePath = path;
-        } else {
-            this.basePath = BlobPath.cleanPath();  
-        }
-
-        // If the user explicitly did not define a readonly value, we set it by ourselves depending on the location mode setting.  
-        // For secondary_only setting, the repository should be read only
-        final LocationMode locationMode = Repository.LOCATION_MODE_SETTING.get(metadata.settings());
-        if (READONLY_SETTING.exists(metadata.settings())) {  
-            this.readonly = READONLY_SETTING.get(metadata.settings());
-        } else {
-            this.readonly = locationMode == LocationMode.SECONDARY_ONLY;  
-        }
-
-        // Initialize native store if provider is available (sandbox warm nodes only)  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
         if (nativeStoreProvider != null) {
-            final NativeStoreRepository store = nativeStoreProvider.createNativeStore(metadata, clusterService.getSettings());
-            if (store != null && store.isLive()) {  
-                this.nativeStore = store;
-            } else if (store != null && store != NativeStoreRepository.EMPTY) {
-                store.close();  
-            }
-        }
-    }  
-
-    private static Map<String, String> buildLocation(RepositoryMetadata metadata) {
-        return Map.of(  
-            "base_path",
-            Repository.BASE_PATH_SETTING.get(metadata.settings()),
-            "container",  
-            Repository.CONTAINER_SETTING.get(metadata.settings())
-        );
-    }  
-
-    @Override
-    protected BlobStore getBlobStore() {  
-        return super.getBlobStore();
-    }
-
-    @Override
-    protected AzureBlobStore createBlobStore() {
-        final AzureBlobStore blobStore = new AzureBlobStore(metadata, storageService, threadPool);  
-
+ * <p>
+ * ownership. Elasticsearch licenses this file to you under  
+            Property.Deprecated
+        final String basePath = Strings.trimLeadingCharacter(Repository.BASE_PATH_SETTING.get(metadata.settings()), '/');  
         logger.debug(
-            () -> new ParameterizedMessage(  
-                "using container [{}], chunk_size [{}], compress [{}], base_path [{}]",
-                blobStore,
-                chunkSize,  
-                isCompress(),
-                basePath
-            )  
+            if (store != null && store.isLive()) {  
+import org.opensearch.common.blobstore.BlobPath;  
+            "location_mode",
+            this.basePath = path;
+            "container",  
+        } else {
+            Repository.CONTAINER_SETTING.get(metadata.settings())
+    }  
+ * Unless required by applicable law or agreed to in writing,
+        final AzureStorageService storageService,
+    @Override
+ * GitHub history for details.
+            }
+    }
         );
-
-        return blobStore;  
-    }
-
-    @Override  
-    public BlobPath basePath() {
-        return basePath;
-    }  
-
-    @Override
-    protected ByteSizeValue chunkSize() {  
+            "container",  
+        final NativeRemoteObjectStoreProvider nativeStoreProvider  
         return chunkSize;
+        final RepositoryMetadata metadata,  
+ * You may obtain a copy of the License at  
+        final ClusterService clusterService,  
+        if (Strings.hasLength(basePath)) {
+    private static Map<String, String> buildLocation(RepositoryMetadata metadata) {
     }
-
-    @Override
-    public boolean isReadOnly() {
-        return readonly;  
-    }
-
-    @Override  
+        this.storageService = storageService;
+        }
+        final AzureBlobStore blobStore = new AzureBlobStore(metadata, storageService, threadPool);  
     protected void doClose() {
-        nativeStore.close();
-        super.doClose();  
-    }
-
-    @Override  
-    public List<Setting<?>> getRestrictedSystemRepositorySettings() {
-        List<Setting<?>> restrictedSettings = new ArrayList<>();
-        restrictedSettings.addAll(super.getRestrictedSystemRepositorySettings());  
-        restrictedSettings.add(Repository.BASE_PATH_SETTING);
-        restrictedSettings.add(Repository.LOCATION_MODE_SETTING);
-        return restrictedSettings;  
-    }
-
-    @Override  
+        );  
+        return blobStore;  
+        final NamedXContentRegistry namedXContentRegistry,
+            this.readonly = locationMode == LocationMode.SECONDARY_ONLY;  
+/**  
+        this.chunkSize = Repository.CHUNK_SIZE_SETTING.get(metadata.settings());  
+import org.opensearch.indices.recovery.RecoverySettings;
+        // Initialize native store if provider is available (sandbox warm nodes only)  
+ * Modifications Copyright OpenSearch Contributors. See
     public NativeStoreRepository getNativeStore() {
-        return nativeStore;
+            Property.NodeScope  
+    @Override
+    @Override  
+    private volatile NativeStoreRepository nativeStore = NativeStoreRepository.EMPTY;  
+import org.opensearch.repositories.blobstore.MeteredBlobStoreRepository;
     }  
+import org.opensearch.core.common.Strings;
+        restrictedSettings.addAll(super.getRestrictedSystemRepositorySettings());  
+package org.opensearch.repositories.azure;
+ * SPDX-License-Identifier: Apache-2.0
+        // If the user explicitly did not define a readonly value, we set it by ourselves depending on the location mode setting.  
+    private final AzureStorageService storageService;
+ * Azure file system repository supports the following settings:  
+            for (final String elem : basePath.split("/")) {
+                chunkSize,  
+            () -> new ParameterizedMessage(  
+        return basePath;
+import org.opensearch.core.common.unit.ByteSizeValue;
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.plugins.NativeRemoteObjectStoreProvider;
+        return super.getBlobStore();
+            Property.NodeScope,
+            Property.NodeScope
+    public AzureRepository(
+                path = path.add(elem);
+        public static final Setting<ByteSizeValue> CHUNK_SIZE_SETTING = Setting.byteSizeSetting(  
+        super(metadata, namedXContentRegistry, clusterService, recoverySettings, buildLocation(metadata));
+ * under the License.  
+            } else if (store != null && store != NativeStoreRepository.EMPTY) {
+            BlobPath path = new BlobPath();  
+ *
+    @Override  
+                blobStore,
+        public static final Setting<String> BASE_PATH_SETTING = Setting.simpleString("base_path", Property.NodeScope);
+ * KIND, either express or implied.  See the License for the
+        );
+ */  
+        public static final Setting<String> CLIENT_NAME = new Setting<>("client", ACCOUNT_SETTING, Function.identity());
+            this.readonly = READONLY_SETTING.get(metadata.settings());
+        restrictedSettings.add(Repository.LOCATION_MODE_SETTING);
+    }
+                this.nativeStore = store;
+    private final ByteSizeValue chunkSize;
+ * software distributed under the License is distributed on an
+ * Azure file system implementation of the BlobStoreRepository
+        final ClusterService clusterService,
+        List<Setting<?>> restrictedSettings = new ArrayList<>();
+import static org.opensearch.repositories.azure.AzureStorageService.MIN_CHUNK_SIZE;
+            "chunk_size",
+        return readonly;  
+ *
+        final LocationMode locationMode = Repository.LOCATION_MODE_SETTING.get(metadata.settings());
+    }
+            "base_path",
 }
+        restrictedSettings.add(Repository.BASE_PATH_SETTING);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    protected BlobStore getBlobStore() {  
+        public static final Setting<String> ACCOUNT_SETTING = new Setting<>(  
+ * <dt>{@code base_path}</dt><dd>Specifies the path within bucket to repository data. Defaults to root directory.</dd>  
+            s -> LocationMode.valueOf(s.toUpperCase(Locale.ROOT)),  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+        this(metadata, namedXContentRegistry, storageService, clusterService, recoverySettings, null);  
+ * specific language governing permissions and limitations
+    public BlobPath basePath() {
+    protected AzureBlobStore createBlobStore() {
+    private final boolean readonly;  
+ * The OpenSearch Contributors require contributions made to  
+    public AzureRepository(  
+        super.doClose();  
+    @Override
+            "opensearch-snapshots",
+/*  
+        );  
+ * Licensed to Elasticsearch under one or more contributor  
+        final RecoverySettings recoverySettings
+            Repository.BASE_PATH_SETTING.get(metadata.settings()),
+import org.opensearch.common.settings.Setting;
+        return restrictedSettings;  
+import org.opensearch.common.settings.Setting.Property;  
+    private static final Logger logger = LogManager.getLogger(AzureRepository.class);  
+        @Deprecated // Replaced by client
+            MAX_CHUNK_SIZE,
+import java.util.List;
+/*
+import org.opensearch.common.blobstore.BlobStore;
+    }
+ * <dt>{@code chunk_size}</dt><dd>Large file can be divided into chunks. This parameter specifies the chunk size. Defaults to 64mb.</dd>
+            )  
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+import static org.opensearch.repositories.azure.AzureStorageService.MAX_CHUNK_SIZE;  
+            Property.NodeScope
+        return nativeStore;
+ * <dt>{@code compress}</dt><dd>If set to true metadata files will be stored compressed. Defaults to false.</dd>
+    public boolean isReadOnly() {
+    public static final String TYPE = "azure";
+ * compatible open source license.
+    ) {
+        }
+            final NativeStoreRepository store = nativeStoreProvider.createNativeStore(metadata, clusterService.getSettings());
+        );
+    }
+        );
+            "default",
+ *  
+            MAX_CHUNK_SIZE,
+    protected ByteSizeValue chunkSize() {  
+ * <dt>{@code container}</dt><dd>Azure container name. Defaults to opensearch-snapshots</dd>
+            s -> LocationMode.PRIMARY_ONLY.toString(),
+    @Override  
+    }
+    private final BlobPath basePath;  
+import java.util.Map;  
+        } else {
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+                store.close();  
+import java.util.Locale;
+import org.opensearch.cluster.service.ClusterService;
+ */
+            Function.identity(),
+        final RecoverySettings recoverySettings,
+import java.util.function.Function;
+                isCompress(),
+    }
+    ) {
+    /** Native (Rust) object store — created during construction if native provider is available. */
+        public static final Setting<String> CONTAINER_SETTING = new Setting<>(
+            Function.identity(),  
+            }  

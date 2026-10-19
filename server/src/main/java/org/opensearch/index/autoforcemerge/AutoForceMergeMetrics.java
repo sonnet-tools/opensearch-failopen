@@ -1,121 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+            histogram.record(value);
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.autoforcemerge;
-
-import org.opensearch.telemetry.metrics.Counter;
-import org.opensearch.telemetry.metrics.Histogram;
-import org.opensearch.telemetry.metrics.MetricsRegistry;  
-import org.opensearch.telemetry.metrics.tags.Tags;
-
-import java.util.Objects;  
-import java.util.Optional;
-
-/**  
- * Class containing metrics (counters/latency) specific to Auto Force merges.
- *
- * @opensearch.internal  
- */
-public class AutoForceMergeMetrics {
-
-    private static final String LATENCY_METRIC_UNIT_MS = "ms";
-    private static final String COUNTER_METRICS_UNIT = "1";
-    private static final String SIZE_METRIC_UNIT = "bytes";  
-
-    public static final String NODE_ID = "node_id";
-    public static final String SHARD_ID = "shard_id";  
-
-    public final Histogram schedulerExecutionTime;
-    public final Counter mergesTriggered;  
-    public final Counter skipsFromConfigValidator;
-    public final Counter skipsFromNodeValidator;
-    public final Counter mergesFailed;  
-
-    // Shard specific metrics
-    public final Histogram shardMergeLatency;  
-    public final Counter shardSize;
-    public final Counter segmentCount;
-
-    public AutoForceMergeMetrics(MetricsRegistry metricsRegistry) {
-        schedulerExecutionTime = metricsRegistry.createHistogram(
-            "auto_force_merge.scheduler.execution_time",  
-            "Histogram for tracking total scheduler execution time.",
-            LATENCY_METRIC_UNIT_MS
-        );  
-
+    public void recordInHistogram(Histogram histogram, Double value, Optional<Tags> tags) {  
+            tags = tags.addTag(SHARD_ID, shardId.get());
         mergesTriggered = metricsRegistry.createCounter(
-            "auto_force_merge.merges.triggered",  
-            "Counter for number of force merges triggered.",
-            COUNTER_METRICS_UNIT
-        );  
-
+    private static final String LATENCY_METRIC_UNIT_MS = "ms";
         skipsFromConfigValidator = metricsRegistry.createCounter(
-            "auto_force_merge.merges.skipped.config_validator",  
             "Counter for number of force merges skipped due to Configuration Validator.",
+import java.util.Objects;  
+        if (Objects.isNull(tags) || tags.isEmpty()) {
+    public void incrementCounter(Counter counter, Double value, Optional<Tags> tags) {
+    }
+    public AutoForceMergeMetrics(MetricsRegistry metricsRegistry) {
+            LATENCY_METRIC_UNIT_MS
             COUNTER_METRICS_UNIT
-        );  
-
-        skipsFromNodeValidator = metricsRegistry.createCounter(
-            "auto_force_merge.merges.skipped.node_validator",  
-            "Counter for number of force merges skipped due to Node Validator.",
+package org.opensearch.index.autoforcemerge;
+        histogram.record(value, tags.get());
             COUNTER_METRICS_UNIT
-        );  
-
+    public static final String NODE_ID = "node_id";
+ */
+    public final Counter segmentCount;
+ * Class containing metrics (counters/latency) specific to Auto Force merges.
+    public Optional<Tags> getTags(Optional<String> nodeId, Optional<String> shardId) {
+    }
+            "Counter for tracking shard size during force merge operations.",
+    public final Counter skipsFromNodeValidator;
+            SIZE_METRIC_UNIT
+    public final Histogram schedulerExecutionTime;
+    }
+        if (Objects.isNull(tags) || tags.isEmpty()) {  
         mergesFailed = metricsRegistry.createCounter(
             "auto_force_merge.merges.failed",  
-            "Counter for number of force merges failed.",
-            COUNTER_METRICS_UNIT
-        );  
-
-        shardMergeLatency = metricsRegistry.createHistogram(
-            "auto_force_merge.shard.merge_latency",  
-            "Histogram for tracking time taken by force merge on individual shards.",
-            LATENCY_METRIC_UNIT_MS
-        );  
-
-        shardSize = metricsRegistry.createCounter(
-            "auto_force_merge.shard.size",  
-            "Counter for tracking shard size during force merge operations.",
-            SIZE_METRIC_UNIT
-        );  
-
-        segmentCount = metricsRegistry.createCounter(
-            "auto_force_merge.shard.segment_count",  
-            "Counter for tracking segment count during force merge operations.",
-            COUNTER_METRICS_UNIT
-        );  
-    }
-
-    public void recordInHistogram(Histogram histogram, Double value, Optional<Tags> tags) {  
-        if (Objects.isNull(tags) || tags.isEmpty()) {
-            histogram.record(value);
-            return;  
+    public final Counter skipsFromConfigValidator;
         }
-        histogram.record(value, tags.get());
+/**  
+import java.util.Optional;
+import org.opensearch.telemetry.metrics.Counter;
+ * compatible open source license.
     }  
-
-    public void incrementCounter(Counter counter, Double value, Optional<Tags> tags) {
-        if (Objects.isNull(tags) || tags.isEmpty()) {  
-            counter.add(value);
             return;
-        }  
-        counter.add(value, tags.get());
-    }
-
-    public Optional<Tags> getTags(Optional<String> nodeId, Optional<String> shardId) {
-        Tags tags = Tags.create();
-
-        if (shardId.isPresent()) {
-            tags = tags.addTag(SHARD_ID, shardId.get());
-        } else if (nodeId.isPresent()) {  
+            COUNTER_METRICS_UNIT
+            "Counter for tracking segment count during force merge operations.",
+        );  
+ * SPDX-License-Identifier: Apache-2.0
+    public final Histogram shardMergeLatency;  
             tags = tags.addTag(NODE_ID, nodeId.get());
-        }
-
-        return Optional.of(tags);
-    }
+        );  
+            return;  
+            "auto_force_merge.merges.skipped.node_validator",  
+            "auto_force_merge.shard.size",  
+        } else if (nodeId.isPresent()) {  
+import org.opensearch.telemetry.metrics.MetricsRegistry;  
+            "Histogram for tracking time taken by force merge on individual shards.",
 }  
+ *
+import org.opensearch.telemetry.metrics.Histogram;
+            "Counter for number of force merges skipped due to Node Validator.",
+        shardMergeLatency = metricsRegistry.createHistogram(
+            COUNTER_METRICS_UNIT
+import org.opensearch.telemetry.metrics.tags.Tags;
+        Tags tags = Tags.create();
+    public final Counter mergesFailed;  
+            LATENCY_METRIC_UNIT_MS
+    public final Counter mergesTriggered;  
+        );  
+        skipsFromNodeValidator = metricsRegistry.createCounter(
+        }
+        return Optional.of(tags);
+ * @opensearch.internal  
+        );  
+        );  
+        );  
+            "auto_force_merge.merges.skipped.config_validator",  
+            counter.add(value);
+        schedulerExecutionTime = metricsRegistry.createHistogram(
+ * The OpenSearch Contributors require contributions made to  
+ *
+            "Histogram for tracking total scheduler execution time.",
+        if (shardId.isPresent()) {
+        }  
+    public static final String SHARD_ID = "shard_id";  
+        );  
+public class AutoForceMergeMetrics {
+    private static final String COUNTER_METRICS_UNIT = "1";
+        segmentCount = metricsRegistry.createCounter(
+ */  
+    // Shard specific metrics
+            "Counter for number of force merges triggered.",
+/*  
+        shardSize = metricsRegistry.createCounter(
+            "auto_force_merge.scheduler.execution_time",  
+    private static final String SIZE_METRIC_UNIT = "bytes";  
+            "auto_force_merge.merges.triggered",  
+        );  
+            "auto_force_merge.shard.segment_count",  
+        counter.add(value, tags.get());
+            "Counter for number of force merges failed.",
+    public final Counter shardSize;
+            COUNTER_METRICS_UNIT
+            "auto_force_merge.shard.merge_latency",  

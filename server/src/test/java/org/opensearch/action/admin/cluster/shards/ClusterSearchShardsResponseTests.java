@@ -1,118 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+        List<NamedWriteableRegistry.Entry> entries = new ArrayList<>();
+            indicesAndFilters
+ * GitHub history for details.
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+        entries.addAll(searchModule.getNamedWriteables());  
+                    ClusterSearchShardsGroup clusterSearchShardsGroup = clusterSearchShardsResponse.getGroups()[i];  
+        }
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+            try (StreamInput in = new NamedWriteableAwareStreamInput(out.bytes().streamInput(), namedWriteableRegistry)) {  
+import java.util.List;  
+import java.util.Collections;  
  * You may obtain a copy of the License at  
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.shards;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.transport.TransportAddress;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.query.RandomQueryBuilder;
-import org.opensearch.search.SearchModule;  
-import org.opensearch.search.internal.AliasFilter;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.VersionUtils;  
-
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Map;
-import java.util.Set;
-
-public class ClusterSearchShardsResponseTests extends OpenSearchTestCase {
-
-    public void testSerialization() throws Exception {  
-        Map<String, AliasFilter> indicesAndFilters = new HashMap<>();
-        Set<DiscoveryNode> nodes = new HashSet<>();
-        int numShards = randomIntBetween(1, 10);  
-        ClusterSearchShardsGroup[] clusterSearchShardsGroups = new ClusterSearchShardsGroup[numShards];
-        for (int i = 0; i < numShards; i++) {
-            String index = randomAlphaOfLengthBetween(3, 10);  
-            ShardId shardId = new ShardId(index, randomAlphaOfLength(12), i);
-            String nodeId = randomAlphaOfLength(10);
-            ShardRouting shardRouting = TestShardRouting.newShardRouting(shardId, nodeId, randomBoolean(), ShardRoutingState.STARTED);  
-            clusterSearchShardsGroups[i] = new ClusterSearchShardsGroup(shardId, new ShardRouting[] { shardRouting });
-            DiscoveryNode node = new DiscoveryNode(
-                shardRouting.currentNodeId(),  
-                new TransportAddress(TransportAddress.META_ADDRESS, randomInt(0xFFFF)),
-                VersionUtils.randomVersion(random())
-            );  
-            nodes.add(node);
-            AliasFilter aliasFilter;
-            if (randomBoolean()) {  
-                aliasFilter = new AliasFilter(RandomQueryBuilder.createQuery(random()), "alias-" + index);
-            } else {
-                aliasFilter = new AliasFilter(null, Strings.EMPTY_ARRAY);  
-            }
-            indicesAndFilters.put(index, aliasFilter);
-        }  
-        ClusterSearchShardsResponse clusterSearchShardsResponse = new ClusterSearchShardsResponse(
-            clusterSearchShardsGroups,
-            nodes.toArray(new DiscoveryNode[0]),  
-            indicesAndFilters
-        );
-
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
-        List<NamedWriteableRegistry.Entry> entries = new ArrayList<>();
-        entries.addAll(searchModule.getNamedWriteables());  
-        NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(entries);
-        Version version = VersionUtils.randomIndexCompatibleVersion(random());
-        try (BytesStreamOutput out = new BytesStreamOutput()) {  
-            out.setVersion(version);
-            clusterSearchShardsResponse.writeTo(out);
-            try (StreamInput in = new NamedWriteableAwareStreamInput(out.bytes().streamInput(), namedWriteableRegistry)) {  
-                in.setVersion(version);
-                ClusterSearchShardsResponse deserialized = new ClusterSearchShardsResponse(in);
-                assertArrayEquals(clusterSearchShardsResponse.getNodes(), deserialized.getNodes());  
-                assertEquals(clusterSearchShardsResponse.getGroups().length, deserialized.getGroups().length);
+ * The OpenSearch Contributors require contributions made to  
                 for (int i = 0; i < clusterSearchShardsResponse.getGroups().length; i++) {
-                    ClusterSearchShardsGroup clusterSearchShardsGroup = clusterSearchShardsResponse.getGroups()[i];  
-                    ClusterSearchShardsGroup deserializedGroup = deserialized.getGroups()[i];
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * specific language governing permissions and limitations
+        );
                     assertEquals(clusterSearchShardsGroup.getShardId(), deserializedGroup.getShardId());
-                    assertArrayEquals(clusterSearchShardsGroup.getShards(), deserializedGroup.getShards());  
-                }
+ * software distributed under the License is distributed on an
+import org.opensearch.core.common.io.stream.StreamInput;
+        ClusterSearchShardsResponse clusterSearchShardsResponse = new ClusterSearchShardsResponse(
+        }  
+import java.util.ArrayList;
+                shardRouting.currentNodeId(),  
+import org.opensearch.cluster.node.DiscoveryNode;
+                aliasFilter = new AliasFilter(RandomQueryBuilder.createQuery(random()), "alias-" + index);
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+            String nodeId = randomAlphaOfLength(10);
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+/*  
+            nodes.toArray(new DiscoveryNode[0]),  
                 assertEquals(clusterSearchShardsResponse.getIndicesAndFilters(), deserialized.getIndicesAndFilters());
+ * ownership. Elasticsearch licenses this file to you under  
+            indicesAndFilters.put(index, aliasFilter);
+ * compatible open source license.
+            } else {
             }  
-        }
-    }
+package org.opensearch.action.admin.cluster.shards;
+import org.opensearch.test.OpenSearchTestCase;
+        int numShards = randomIntBetween(1, 10);  
+ * Unless required by applicable law or agreed to in writing,
+            nodes.add(node);
+            ShardId shardId = new ShardId(index, randomAlphaOfLength(12), i);
+import org.opensearch.core.common.Strings;
+            String index = randomAlphaOfLengthBetween(3, 10);  
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+        Version version = VersionUtils.randomIndexCompatibleVersion(random());
+        Map<String, AliasFilter> indicesAndFilters = new HashMap<>();
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
+        try (BytesStreamOutput out = new BytesStreamOutput()) {  
+import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;  
+ * SPDX-License-Identifier: Apache-2.0
+            clusterSearchShardsGroups,
+    public void testSerialization() throws Exception {  
+                in.setVersion(version);
+            ShardRouting shardRouting = TestShardRouting.newShardRouting(shardId, nodeId, randomBoolean(), ShardRoutingState.STARTED);  
+            }
+import java.util.HashMap;
+import org.opensearch.cluster.routing.ShardRoutingState;
+            );  
+public class ClusterSearchShardsResponseTests extends OpenSearchTestCase {
+/*  
+                assertEquals(clusterSearchShardsResponse.getGroups().length, deserialized.getGroups().length);
+ * not use this file except in compliance with the License.
+import java.util.Map;
+        for (int i = 0; i < numShards; i++) {
+                VersionUtils.randomVersion(random())
+                aliasFilter = new AliasFilter(null, Strings.EMPTY_ARRAY);  
+        NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(entries);
+ * license agreements. See the NOTICE file distributed with
+            if (randomBoolean()) {  
+ * under the License.  
 }  
+            AliasFilter aliasFilter;
+import org.opensearch.test.VersionUtils;  
+import org.opensearch.core.common.transport.TransportAddress;  
+import org.opensearch.index.query.RandomQueryBuilder;
+        ClusterSearchShardsGroup[] clusterSearchShardsGroups = new ClusterSearchShardsGroup[numShards];
+                    ClusterSearchShardsGroup deserializedGroup = deserialized.getGroups()[i];
+import java.util.Set;
+import org.opensearch.cluster.routing.ShardRouting;  
+                }
+                ClusterSearchShardsResponse deserialized = new ClusterSearchShardsResponse(in);
+        Set<DiscoveryNode> nodes = new HashSet<>();
+                    assertArrayEquals(clusterSearchShardsGroup.getShards(), deserializedGroup.getShards());  
+import org.opensearch.Version;
+ */
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+import org.opensearch.core.index.shard.ShardId;
+    }
+import java.util.HashSet;
+            clusterSearchShardsResponse.writeTo(out);
+import org.opensearch.cluster.routing.TestShardRouting;
+ *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            out.setVersion(version);
+import org.opensearch.search.SearchModule;  
+            clusterSearchShardsGroups[i] = new ClusterSearchShardsGroup(shardId, new ShardRouting[] { shardRouting });
+/*
+import org.opensearch.common.settings.Settings;
+            DiscoveryNode node = new DiscoveryNode(
+                new TransportAddress(TransportAddress.META_ADDRESS, randomInt(0xFFFF)),
+                assertArrayEquals(clusterSearchShardsResponse.getNodes(), deserialized.getNodes());  
+import org.opensearch.search.internal.AliasFilter;
+ */  

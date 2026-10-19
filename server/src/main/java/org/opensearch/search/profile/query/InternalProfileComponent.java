@@ -1,46 +1,38 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.profile.query;
-
-import org.opensearch.common.annotation.PublicApi;
-
-import java.util.Collection;  
-
-/**
- * Container for an agg profiling component  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "2.9.0")
+}  
 public interface InternalProfileComponent {
+     * @return the profiling results for this profile component
+    Collection<? extends InternalProfileComponent> children();
+ * compatible open source license.
+@PublicApi(since = "2.9.0")
     /**  
-     * @return profile component name
-     */
-    String getName();  
-
+    String getReason();
+ *
     /**
+ * @opensearch.api
+    String getName();  
+ */  
+    /**  
+    /**
+ */  
+ *
+ * Container for an agg profiling component  
+     * @return profile component name
+     * @return the time taken by this profile component
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+     */  
+/**
+     */
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.annotation.PublicApi;
+    CollectorResult getCollectorTree();  
+     * @return the children of this profile component (if any)  
      * @return the reason this profile component has been included  
      */
-    String getReason();
-
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.search.profile.query;
     /**
-     * @return the time taken by this profile component
-     */  
     long getTime();
-
-    /**  
-     * @return the profiling results for this profile component
      */
-    CollectorResult getCollectorTree();  
-
-    /**
-     * @return the children of this profile component (if any)  
+import java.util.Collection;  
      */
-    Collection<? extends InternalProfileComponent> children();
-}  

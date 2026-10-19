@@ -1,110 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+ */  
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script.expression;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.DoubleValues;
-import org.apache.lucene.search.DoubleValuesSource;  
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.IndexSearcher;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;  
-
-/**
- * A {@link DoubleValuesSource} which has a stub {@link DoubleValues} that holds a dynamically replaceable constant double. This is made  
- * thread-safe for concurrent segment search use case by keeping the {@link DoubleValues} per thread. Any update to the value happens in
- * thread specific {@link DoubleValuesSource} instance.
- */  
-final class PerThreadReplaceableConstDoubleValueSource extends DoubleValuesSource {
-    // Multiple slices can be processed by same thread but that will be sequential, so keeping per thread is fine
-    final Map<Long, ReplaceableConstDoubleValues> perThreadDoubleValues;  
-
     PerThreadReplaceableConstDoubleValueSource() {
-        perThreadDoubleValues = new ConcurrentHashMap<>();  
-    }
-
-    @Override  
-    public DoubleValues getValues(LeafReaderContext ctx, DoubleValues scores) throws IOException {
-        return perThreadDoubleValues.computeIfAbsent(Thread.currentThread().threadId(), threadId -> new ReplaceableConstDoubleValues());
-    }  
-
-    @Override
-    public boolean needsScores() {  
-        return false;
-    }
-
-    @Override
-    public Explanation explain(LeafReaderContext ctx, int docId, Explanation scoreExplanation) throws IOException {
-        final ReplaceableConstDoubleValues currentFv = perThreadDoubleValues.computeIfAbsent(  
-            Thread.currentThread().threadId(),
+import org.apache.lucene.index.LeafReaderContext;
             threadId -> new ReplaceableConstDoubleValues()
-        );  
-        if (currentFv.advanceExact(docId)) return Explanation.match((float) currentFv.doubleValue(), "ReplaceableConstDoubleValues");
-        else return Explanation.noMatch("ReplaceableConstDoubleValues");
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
+        return this;
+ * A {@link DoubleValuesSource} which has a stub {@link DoubleValues} that holds a dynamically replaceable constant double. This is made  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+    @Override  
+    final Map<Long, ReplaceableConstDoubleValues> perThreadDoubleValues;  
+ *  
+    public DoubleValues getValues(LeafReaderContext ctx, DoubleValues scores) throws IOException {
         return o == this;
-    }
-
-    @Override
-    public int hashCode() {
-        return System.identityHashCode(this);  
-    }
-
-    public void setValue(double v) {  
-        final ReplaceableConstDoubleValues currentFv = perThreadDoubleValues.computeIfAbsent(
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
             Thread.currentThread().threadId(),
-            threadId -> new ReplaceableConstDoubleValues()  
-        );
-        currentFv.setValue(v);
+    @Override
+import org.apache.lucene.search.DoubleValues;
     }  
-
-    @Override
-    public String toString() {  
-        return getClass().getSimpleName();
     }
-
+ * SPDX-License-Identifier: Apache-2.0
+        if (currentFv.advanceExact(docId)) return Explanation.match((float) currentFv.doubleValue(), "ReplaceableConstDoubleValues");
+}
+ * You may obtain a copy of the License at  
+ * compatible open source license.
+import org.apache.lucene.search.DoubleValuesSource;  
     @Override
-    public boolean isCacheable(LeafReaderContext ctx) {
+    @Override
+        return System.identityHashCode(this);  
+        );  
+ * specific language governing permissions and limitations
+ * Modifications Copyright OpenSearch Contributors. See
+    public String toString() {  
+ * this file be licensed under the Apache-2.0 license or a
+final class PerThreadReplaceableConstDoubleValueSource extends DoubleValuesSource {
+    }
+/*  
+ * thread specific {@link DoubleValuesSource} instance.
+    }
+        perThreadDoubleValues = new ConcurrentHashMap<>();  
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+import java.io.IOException;
+        );
+ * The OpenSearch Contributors require contributions made to  
+    public boolean equals(Object o) {  
+ * Licensed to Elasticsearch under one or more contributor  
+ * Unless required by applicable law or agreed to in writing,
+    @Override  
+ * KIND, either express or implied.  See the License for the
+/**
+    public void setValue(double v) {  
+    }
+ *
+ * not use this file except in compliance with the License.
+ * this work for additional information regarding copyright
+/*
+        final ReplaceableConstDoubleValues currentFv = perThreadDoubleValues.computeIfAbsent(  
+    }  
+    @Override
+ * thread-safe for concurrent segment search use case by keeping the {@link DoubleValues} per thread. Any update to the value happens in
+        else return Explanation.noMatch("ReplaceableConstDoubleValues");
+    public boolean needsScores() {  
+            threadId -> new ReplaceableConstDoubleValues()  
+    }  
+ * under the License.  
+/*  
+    }  
+import java.util.concurrent.ConcurrentHashMap;  
+import org.apache.lucene.search.IndexSearcher;
         return false;  
     }
-
-    @Override  
+    @Override
+    // Multiple slices can be processed by same thread but that will be sequential, so keeping per thread is fine
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        currentFv.setValue(v);
+        return getClass().getSimpleName();
+    public boolean isCacheable(LeafReaderContext ctx) {
+            Thread.currentThread().threadId(),
+        final ReplaceableConstDoubleValues currentFv = perThreadDoubleValues.computeIfAbsent(
+    public int hashCode() {
+ *
+ * GitHub history for details.
+import java.util.Map;
+        return perThreadDoubleValues.computeIfAbsent(Thread.currentThread().threadId(), threadId -> new ReplaceableConstDoubleValues());
+        return false;
+import org.apache.lucene.search.Explanation;
+ */
+package org.opensearch.script.expression;
     public DoubleValuesSource rewrite(IndexSearcher reader) {
-        return this;
-    }  
-}
+    @Override
+    public Explanation explain(LeafReaderContext ctx, int docId, Explanation scoreExplanation) throws IOException {

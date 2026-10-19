@@ -1,84 +1,72 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.dsl;
-
-import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.index.query.QueryBuilders;  
-import org.opensearch.search.builder.SearchSourceBuilder;
-
-/**  
- * Integration tests for prefix query delegation to Lucene via PREFIX_QUERY RexCall.
- */
-@AwaitsFix(bugUrl = "DSL query pipeline not fully wired E2E: fragment conversion, shard execution and Arrow Flight drain pending")  
-public class DslPrefixQueryIT extends DslIntegTestBase {
-
-    @Override  
-    protected void createTestIndex() {
-        createIndex(INDEX);
-        ensureGreen();  
-
-        client().prepareIndex(INDEX)
-            .setId("1")  
-            .setSource("{\"name\":\"laptop\",\"brand\":\"Apple\",\"model\":\"MacBook Pro\"}", XContentType.JSON)
-            .get();
-        client().prepareIndex(INDEX)  
-            .setId("2")
-            .setSource("{\"name\":\"phone\",\"brand\":\"Samsung\",\"model\":\"Galaxy S21\"}", XContentType.JSON)
-            .get();  
-        client().prepareIndex(INDEX)
-            .setId("3")
-            .setSource("{\"name\":\"tablet\",\"brand\":\"apple\",\"model\":\"iPad Air\"}", XContentType.JSON)  
-            .get();
+        createTestIndex();  
+    }  
+        );
         refresh(INDEX);
-    }  
-
-    public void testBasicPrefixQuery() {
+            )  
+ * Integration tests for prefix query delegation to Lucene via PREFIX_QUERY RexCall.
+            .get();
         createTestIndex();  
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("name", "lap"))));
-    }
-
-    public void testPrefixQueryCaseSensitive() {
-        createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("brand", "Apple"))));  
-    }
-
-    public void testPrefixQueryCaseInsensitive() {  
-        createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("brand", "apple").caseInsensitive(true))));
-    }  
-
-    public void testPrefixQueryWithEmptyString() {
-        createTestIndex();  
+    public void testPrefixQueryInBoolQuery() {  
+        ensureGreen();  
+            .setId("2")
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("name", ""))));
+}
     }
-
+        createTestIndex();
+ * The OpenSearch Contributors require contributions made to  
+    @Override  
+    public void testBasicPrefixQuery() {
+import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
+            .setSource("{\"name\":\"phone\",\"brand\":\"Samsung\",\"model\":\"Galaxy S21\"}", XContentType.JSON)
+    }
+        client().prepareIndex(INDEX)  
+            .setId("3")
+ *
+            .setSource("{\"name\":\"laptop\",\"brand\":\"Apple\",\"model\":\"MacBook Pro\"}", XContentType.JSON)
+            .setSource("{\"name\":\"tablet\",\"brand\":\"apple\",\"model\":\"iPad Air\"}", XContentType.JSON)  
+                new SearchSourceBuilder().query(
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("brand", "Apple"))));  
+    protected void createTestIndex() {
+/**  
+        createTestIndex();
+                )
+/*  
+    public void testPrefixQueryWithEmptyString() {
+            .get();
+        assertOk(
+    }
+ */
+        client().prepareIndex(INDEX)
+            .get();  
+ * SPDX-License-Identifier: Apache-2.0
+                        .should(QueryBuilders.prefixQuery("brand", "App"))
+public class DslPrefixQueryIT extends DslIntegTestBase {
+import org.opensearch.index.query.QueryBuilders;  
+        createTestIndex();
+ * this file be licensed under the Apache-2.0 license or a
+                    QueryBuilders.boolQuery()
+        createIndex(INDEX);
+    }  
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("brand", "apple").caseInsensitive(true))));
+    public void testPrefixQueryCaseInsensitive() {  
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("model", "MacBook"))));  
+import org.opensearch.search.builder.SearchSourceBuilder;
+            search(  
+package org.opensearch.dsl;
+    }
+ * compatible open source license.
+    }
     public void testPrefixQueryWithMultipleWords() {
         createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("model", "MacBook"))));  
-    }
-
-    public void testPrefixQueryInBoolQuery() {  
-        createTestIndex();
-        assertOk(
-            search(  
-                new SearchSourceBuilder().query(
-                    QueryBuilders.boolQuery()
-                        .must(QueryBuilders.prefixQuery("name", "lap"))  
-                        .should(QueryBuilders.prefixQuery("brand", "App"))
-                )
-            )  
-        );
-    }
-
+ */  
+        client().prepareIndex(INDEX)
     public void testPrefixQueryWithSpecialCharacters() {
-        createTestIndex();
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("model", "Galaxy S"))));  
+                        .must(QueryBuilders.prefixQuery("name", "lap"))  
     }
-}
+            .setId("1")  
+import org.opensearch.common.xcontent.XContentType;
+    public void testPrefixQueryCaseSensitive() {
+@AwaitsFix(bugUrl = "DSL query pipeline not fully wired E2E: fragment conversion, shard execution and Arrow Flight drain pending")  
+        createTestIndex();
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("name", "lap"))));

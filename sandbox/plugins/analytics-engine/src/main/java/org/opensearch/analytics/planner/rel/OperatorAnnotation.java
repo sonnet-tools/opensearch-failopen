@@ -1,46 +1,36 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+    int getAnnotationId();  
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.planner.rel;
-
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexNode;
-
 import java.util.List;
-
-/**  
+ */  
+    RexNode withAdaptedOriginal(RexNode adaptedOriginal);
+ * SPDX-License-Identifier: Apache-2.0
+        throw new UnsupportedOperationException("makePlaceholder not implemented for " + getClass().getSimpleName());
+/*  
  * Common interface for all annotation types (predicate, aggregate call,
- * project expression). Allows PlanForker to work generically without
- * knowing the specific annotation type.  
+/**  
+     * Returns a placeholder RexNode for this annotation when delegated.
+    /** Returns a copy of this annotation with viableBackends narrowed to the given backend. */
+    RexNode unwrap();
+    default RexNode makePlaceholder(RexBuilder rexBuilder) {  
+    /** Returns the original unwrapped expression with annotation removed. */
+     * predicates return BOOLEAN, project expressions return their original type, etc.
  *
+    /**
+import org.apache.calcite.rex.RexBuilder;
  * @opensearch.internal
  */  
-public interface OperatorAnnotation {
-
-    int getAnnotationId();  
-
-    List<String> getViableBackends();
-
-    /** Returns a copy of this annotation with viableBackends narrowed to the given backend. */
-    OperatorAnnotation narrowTo(String backend);
-
-    /** Returns the original unwrapped expression with annotation removed. */
-    RexNode unwrap();
-
-    /** Returns a copy of this annotation wrapping a different (adapted) inner expression. */
-    RexNode withAdaptedOriginal(RexNode adaptedOriginal);
-
-    /**
-     * Returns a placeholder RexNode for this annotation when delegated.
      * Each annotation type produces the appropriate placeholder shape:  
-     * predicates return BOOLEAN, project expressions return their original type, etc.
+ * project expression). Allows PlanForker to work generically without
+    /** Returns a copy of this annotation wrapping a different (adapted) inner expression. */
+package org.opensearch.analytics.planner.rel;
      */
-    default RexNode makePlaceholder(RexBuilder rexBuilder) {  
-        throw new UnsupportedOperationException("makePlaceholder not implemented for " + getClass().getSimpleName());
-    }
+    OperatorAnnotation narrowTo(String backend);
+    List<String> getViableBackends();
+ * this file be licensed under the Apache-2.0 license or a
+ * knowing the specific annotation type.  
+ * compatible open source license.
+public interface OperatorAnnotation {
 }  
+import org.apache.calcite.rex.RexNode;
+    }
+ *

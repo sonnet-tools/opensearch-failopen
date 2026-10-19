@@ -1,222 +1,208 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing;
-
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.test.InternalTestCluster;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Collections;  
-import java.util.List;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.hamcrest.Matchers.equalTo;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
-public class DelayedAllocationIT extends OpenSearchIntegTestCase {
-
-    /**  
-     * Verifies that when there is no delay timeout, a 1/1 index shard will immediately
-     * get allocated to a free node when the node hosting it leaves the cluster.
-     */  
-    public void testNoDelayedTimeout() throws Exception {
-        internalCluster().startNodes(3);
-        prepareCreate("test").setSettings(  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), 0)
-        ).get();
-        ensureGreen("test");  
-        indexRandomData();
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
-        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(0));  
-        ensureGreen("test");
-    }
-
-    /**
-     * When we do have delayed allocation set, verifies that even though there is a node
-     * free to allocate the unassigned shard when the node hosting it leaves, it doesn't  
-     * get allocated. Once we bring the node back, it gets allocated since it existed
-     * on it before.
-     */  
-    public void testDelayedAllocationNodeLeavesAndComesBack() throws Exception {
-        internalCluster().startNodes(3);
-        prepareCreate("test").setSettings(  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueHours(1))
-        ).get();
-        ensureGreen("test");  
-        indexRandomData();
-        String nodeWithShard = findNodeWithShard();
-        Settings nodeWithShardDataPathSettings = internalCluster().dataPathSettings(nodeWithShard);  
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeWithShard));
-        assertBusy(
-            () -> assertThat(  
-                client().admin().cluster().prepareState().all().get().getState().getRoutingNodes().unassigned().size() > 0,
-                equalTo(true)
-            )  
         );
-        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(1));
-        internalCluster().startNode(nodeWithShardDataPathSettings); // this will use the same data location as the stopped node  
-        ensureGreen("test");
-    }
-
-    /**
-     * With a very small delay timeout, verify that it expires and we get to green even
-     * though the node hosting the shard is not coming back.  
-     */
-    public void testDelayedAllocationTimesOut() throws Exception {
-        internalCluster().startNodes(3);  
-        prepareCreate("test").setSettings(
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(100))
         ).get();  
-        ensureGreen("test");
-        indexRandomData();
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));  
-        ensureGreen("test");
-        internalCluster().startNode();
-        // do a second round with longer delay to make sure it happens  
-        assertAcked(
-            client().admin()
-                .indices()  
-                .prepareUpdateSettings("test")
-                .setSettings(
-                    Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(100))  
-                )
-                .get()
-        );  
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
-        ensureGreen("test");
-    }  
-
-    /**
-     * Verify that when explicitly changing the value of the index setting for the delayed  
-     * allocation to a very small value, it kicks the allocation of the unassigned shard
-     * even though the node it was hosted on will not come back.
-     */  
-    public void testDelayedAllocationChangeWithSettingTo100ms() throws Exception {
-        internalCluster().startNodes(3);
-        prepareCreate("test").setSettings(  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueHours(1))
-        ).get();
-        ensureGreen("test");  
-        indexRandomData();
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
-        assertBusy(  
-            () -> assertThat(
-                client().admin().cluster().prepareState().all().get().getState().getRoutingNodes().unassigned().size() > 0,
-                equalTo(true)  
-            )
-        );
-        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(1));  
-        assertAcked(
-            client().admin()
-                .indices()  
-                .prepareUpdateSettings("test")
-                .setSettings(
-                    Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(100))  
-                )
-                .get()
-        );  
-        ensureGreen("test");
-        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(0));
-    }  
-
-    /**
-     * Verify that when explicitly changing the value of the index setting for the delayed  
-     * allocation to 0, it kicks the allocation of the unassigned shard
-     * even though the node it was hosted on will not come back.
-     */  
-    public void testDelayedAllocationChangeWithSettingTo0() throws Exception {
-        internalCluster().startNodes(3);
-        prepareCreate("test").setSettings(  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
-                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueHours(1))
-        ).get();
-        ensureGreen("test");  
-        indexRandomData();
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
-        assertBusy(  
-            () -> assertThat(
-                client().admin().cluster().prepareState().all().get().getState().getRoutingNodes().unassigned().size() > 0,
-                equalTo(true)  
-            )
-        );
-        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(1));  
-        assertAcked(
-            client().admin()
-                .indices()  
-                .prepareUpdateSettings("test")
-                .setSettings(
-                    Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(0))  
-                )
-                .get()
-        );  
-        ensureGreen("test");
-        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(0));
-    }  
-
-    private void indexRandomData() throws Exception {
-        int numDocs = scaledRandomIntBetween(100, 1000);  
-        IndexRequestBuilder[] builders = new IndexRequestBuilder[numDocs];
-        for (int i = 0; i < builders.length; i++) {
-            builders[i] = client().prepareIndex("test").setSource("field", "value");  
+ * Licensed to Elasticsearch under one or more contributor  
+        internalCluster().startNode(nodeWithShardDataPathSettings); // this will use the same data location as the stopped node  
         }
-        // we want to test both full divergent copies of the shard in terms of segments, and
-        // a case where they are the same (using sync flush), index Random does all this goodness  
-        // already
+                .indices()  
+        ).get();
+ * license agreements. See the NOTICE file distributed with
+        assertAcked(
         indexRandom(true, builders);
-    }  
-
-    private String findNodeWithShard() {
-        ClusterState state = client().admin().cluster().prepareState().get().getState();  
-        List<ShardRouting> startedShards = state.routingTable().shardsWithState(ShardRoutingState.STARTED);
-        Collections.shuffle(startedShards, random());
-        return state.nodes().get(startedShards.get(0).currentNodeId()).getName();  
-    }
+        internalCluster().startNodes(3);
+        // already
+ * ownership. Elasticsearch licenses this file to you under  
+        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(0));
+        indexRandomData();
+            Settings.builder()
+                .get()
+        // do a second round with longer delay to make sure it happens  
+import static org.hamcrest.Matchers.equalTo;
+     */  
+                .setSettings(
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
 }
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at  
+ *  
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+    public void testDelayedAllocationChangeWithSettingTo100ms() throws Exception {
+                )
+        prepareCreate("test").setSettings(  
+        ).get();
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        ).get();
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
+    }
+                equalTo(true)  
+        indexRandomData();
+        ensureGreen("test");
+        assertBusy(  
+     * With a very small delay timeout, verify that it expires and we get to green even
+            )  
+    /**
+     */  
+     * get allocated. Once we bring the node back, it gets allocated since it existed
+                .setSettings(
+import org.opensearch.test.InternalTestCluster;  
+     * get allocated to a free node when the node hosting it leaves the cluster.
+     * Verify that when explicitly changing the value of the index setting for the delayed  
+ * this file be licensed under the Apache-2.0 license or a
+        indexRandomData();
+                    Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(100))  
+    /**
+            builders[i] = client().prepareIndex("test").setSource("field", "value");  
+     * free to allocate the unassigned shard when the node hosting it leaves, it doesn't  
+                client().admin().cluster().prepareState().all().get().getState().getRoutingNodes().unassigned().size() > 0,
+ *
+import org.opensearch.common.settings.Settings;
+                equalTo(true)  
+        // a case where they are the same (using sync flush), index Random does all this goodness  
+import java.util.List;
+    }  
+        internalCluster().startNodes(3);  
+     * allocation to 0, it kicks the allocation of the unassigned shard
+ * GitHub history for details.
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(0));  
+        List<ShardRouting> startedShards = state.routingTable().shardsWithState(ShardRoutingState.STARTED);
+                client().admin().cluster().prepareState().all().get().getState().getRoutingNodes().unassigned().size() > 0,
+            )
+        ClusterState state = client().admin().cluster().prepareState().get().getState();  
+        int numDocs = scaledRandomIntBetween(100, 1000);  
+ *
+package org.opensearch.cluster.routing;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+            Settings.builder()
+ */  
+        assertAcked(
+    /**
+     */  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
+        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(1));  
+        assertBusy(  
+                .get()
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
+            Settings.builder()
+     * Verifies that when there is no delay timeout, a 1/1 index shard will immediately
+                    Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(100))  
+     * When we do have delayed allocation set, verifies that even though there is a node
+            () -> assertThat(  
+            )
+     * even though the node it was hosted on will not come back.
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+            () -> assertThat(
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+                .indices()  
+        );  
+        ensureGreen("test");
+                .indices()  
+     */
+            Settings.builder()
+        );
+        ensureGreen("test");  
+     */  
+ * not use this file except in compliance with the License.
+    /**  
+        ensureGreen("test");  
+ */
+/*  
+    public void testNoDelayedTimeout() throws Exception {
+        ).get();
+    /**
+     * allocation to a very small value, it kicks the allocation of the unassigned shard
+        // we want to test both full divergent copies of the shard in terms of segments, and
+import java.util.Collections;  
+ * Modifications Copyright OpenSearch Contributors. See
+        ensureGreen("test");
+                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueHours(1))
+            client().admin()
+    }  
+                .prepareUpdateSettings("test")
+ * compatible open source license.
+        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(1));  
+ * Unless required by applicable law or agreed to in writing,
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+import org.opensearch.common.unit.TimeValue;
+        internalCluster().startNode();
+        for (int i = 0; i < builders.length; i++) {
+                .prepareUpdateSettings("test")
+/*
+        return state.nodes().get(startedShards.get(0).currentNodeId()).getName();  
+                )
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
+        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(1));
+                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), 0)
+/*  
+     * even though the node it was hosted on will not come back.
+    private void indexRandomData() throws Exception {
+                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueHours(1))
+                )
+                    Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(0))  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        internalCluster().startNodes(3);
+        );  
+    public void testDelayedAllocationChangeWithSettingTo0() throws Exception {
+    public void testDelayedAllocationTimesOut() throws Exception {
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodeWithShard));
+public class DelayedAllocationIT extends OpenSearchIntegTestCase {
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));  
+import org.opensearch.test.OpenSearchIntegTestCase;
+        Settings nodeWithShardDataPathSettings = internalCluster().dataPathSettings(nodeWithShard);  
+            Settings.builder()
+import org.opensearch.cluster.ClusterState;
+                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueMillis(100))
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)  
+        assertBusy(
+        prepareCreate("test").setSettings(  
+        ensureGreen("test");
+        ensureGreen("test");
+        assertThat(client().admin().cluster().prepareHealth().get().getDelayedUnassignedShards(), equalTo(0));
+ * SPDX-License-Identifier: Apache-2.0
+        prepareCreate("test").setSettings(
+        assertAcked(
+        IndexRequestBuilder[] builders = new IndexRequestBuilder[numDocs];
+    }
+        ensureGreen("test");
+     * though the node hosting the shard is not coming back.  
+        indexRandomData();
+        internalCluster().startNodes(3);
+    private String findNodeWithShard() {
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+ * specific language governing permissions and limitations
+            client().admin()
+ * The OpenSearch Contributors require contributions made to  
+            () -> assertThat(
+    }  
+            client().admin()
+        indexRandomData();
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(findNodeWithShard()));
+        );  
+        );
+ * software distributed under the License is distributed on an
+ */  
+                equalTo(true)
+        internalCluster().startNodes(3);
+        Collections.shuffle(startedShards, random());
+        prepareCreate("test").setSettings(  
+                .put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), TimeValue.timeValueHours(1))
+        ensureGreen("test");
+        ensureGreen("test");  
+        String nodeWithShard = findNodeWithShard();
+    }  
+     * on it before.
+ * the Apache License, Version 2.0 (the "License"); you may
+        prepareCreate("test").setSettings(  
+import org.opensearch.action.index.IndexRequestBuilder;
+        ensureGreen("test");  
+ * under the License.  
+                .get()
+ * KIND, either express or implied.  See the License for the
+                client().admin().cluster().prepareState().all().get().getState().getRoutingNodes().unassigned().size() > 0,
+    public void testDelayedAllocationNodeLeavesAndComesBack() throws Exception {
+                .setSettings(
+     * Verify that when explicitly changing the value of the index setting for the delayed  
+                .prepareUpdateSettings("test")

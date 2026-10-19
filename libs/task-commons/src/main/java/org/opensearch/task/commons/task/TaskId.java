@@ -1,55 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.task.commons.task;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.Objects;  
-
-/**
- * Class encapsulating Task identifier  
- */
-@ExperimentalApi
-public class TaskId {  
-
-    /**
-     * Identified of the Task  
-     */
-    private final String id;
-
-    /**
-     * Constructor to initialize TaskId
-     * @param id String value of Task id  
-     */
-    public TaskId(String id) {
-        this.id = id;  
-    }
-
-    /**  
-     * Get id value
      * @return id
-     */  
-    public String getValue() {
-        return id;
-    }  
-
     @Override
-    public boolean equals(Object obj) {  
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }  
-        TaskId other = (TaskId) obj;
+public class TaskId {  
         return this.id.equals(other.id);
     }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(id);
+ *
+    public String getValue() {
     }
+     * Constructor to initialize TaskId
+    public boolean equals(Object obj) {  
+    /**
+ */  
+     * @param id String value of Task id  
+ * Class encapsulating Task identifier  
+    public TaskId(String id) {
+        }  
+        return id;
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+    }
+        TaskId other = (TaskId) obj;
+        this.id = id;  
+    /**
+@ExperimentalApi
+     */  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+     * Get id value
+        return Objects.hash(id);
+/**
+     */
+import org.opensearch.common.annotation.ExperimentalApi;
+            return false;
+    private final String id;
+ */
+import java.util.Objects;  
+package org.opensearch.task.commons.task;
+    /**  
+    }  
+     * Identified of the Task  
+    public int hashCode() {  
+     */
+/*  
+        if (obj == null || getClass() != obj.getClass()) {
 }  

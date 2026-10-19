@@ -1,208 +1,188 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+            this.specifications = specifications;
+                }
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+            searchRequest.searchType(request.searchType());
+    }  
+ * search specifications, expressed as query/search request templates) and
+        RankEvalActionListener(
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+            int responsePosition = 0;  
+                        namedXContentRegistry,
+import org.opensearch.action.support.ActionFilters;
+            }
+import org.opensearch.transport.client.Client;
+        }
+        List<RatedRequest> ratedRequestsInSearch = new ArrayList<>();
+                    SearchHit[] hits = response.getResponse().getHits().getHits();
+    private final Client client;
+        ScriptService scriptService,
  * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.inject.Inject;
+                    continue;
+import static org.opensearch.index.rankeval.RatedRequest.validateEvaluatedQuery;  
+import org.opensearch.core.action.ActionListener;  
+                evaluationRequest.fetchSource(false);
+ *
+            if (metric.forcedSearchSize().isPresent()) {  
+/**
+import java.util.concurrent.ConcurrentHashMap;  
+import org.opensearch.action.search.MultiSearchResponse;
+            this.errors = errors;  
+        Map<String, TemplateScript.Factory> scriptsWithoutParams = new HashMap<>();  
+ * averaged precision at n.
+            }
+            EvaluationMetric metric,  
+ *
+import org.opensearch.search.builder.SearchSourceBuilder;
+            }
+            SearchSourceBuilder evaluationRequest = ratedRequest.getEvaluationRequest();  
+import java.util.HashMap;
+ * supplied query parameters) against a set of possible search requests (read:
+                    evaluationRequest = SearchSourceBuilder.fromXContent(subParser, false);
+            ActionListener<RankEvalResponse> listener,
+import org.opensearch.transport.TransportService;  
+/*  
+ * compatible open source license.
+        );
+        super(RankEvalAction.NAME, transportService, actionFilters, (Writeable.Reader<RankEvalRequest>) RankEvalRequest::new);
+import java.io.IOException;  
+        MultiSearchRequest msearchRequest = new MultiSearchRequest();
+ *  
+ * SPDX-License-Identifier: Apache-2.0
+        private final RatedRequest[] specifications;
+        }  
+                responsePosition++;
+        public void onResponse(MultiSearchResponse multiSearchResponse) {
+ * The OpenSearch Contributors require contributions made to  
+        for (RatedRequest ratedRequest : ratedRequests) {
+    @Inject
  * software distributed under the License is distributed on an
+ */
+}  
+            } else {
+            msearchRequest,  
+                String templateId = ratedRequest.getTemplateId();  
+import org.opensearch.tasks.Task;
+        msearchRequest.maxConcurrentSearchRequests(evaluationSpecification.getMaxConcurrentSearches());  
+    }
+import org.opensearch.action.search.SearchRequest;
+            scriptsWithoutParams.put(entry.getKey(), scriptService.compile(entry.getValue(), TemplateScript.CONTEXT));
+import org.opensearch.action.search.MultiSearchRequest;
+                    responseDetails.put(specification.getId(), queryQuality);
+        assert ratedRequestsInSearch.size() == msearchRequest.requests().size();
+        for (Entry<String, Script> entry : evaluationSpecification.getTemplates().entrySet()) {
+    protected void doExecute(Task task, RankEvalRequest request, ActionListener<RankEvalResponse> listener) {
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.xcontent.XContentParser;
+                TemplateScript.Factory templateScript = scriptsWithoutParams.get(templateId);
+        }
+/*  
+            if (summaryFields.isEmpty()) {  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        }  
+        this.scriptService = scriptService;
+        EvaluationMetric metric = evaluationSpecification.getMetric();
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+package org.opensearch.index.rankeval;
+        RankEvalSpec evaluationSpecification = request.getRankEvalSpec();  
+        TransportService transportService,  
+import org.opensearch.action.support.HandledTransportAction;  
+                RatedRequest specification = specifications[responsePosition];  
+                    EvalQueryQuality queryQuality = this.metric.evaluate(specification.getId(), hits, specification.getRatedDocs());  
+    class RankEvalActionListener implements ActionListener<MultiSearchResponse> {
+import java.util.List;  
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+            listener.onFailure(exception);  
+        @Override
+ * Licensed to Elasticsearch under one or more contributor  
+            if (evaluationRequest == null) {
+                    validateEvaluatedQuery(evaluationRequest);
+ * <p>
+ * <p>
+            List<String> summaryFields = ratedRequest.getSummaryFields();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        private final ActionListener<RankEvalResponse> listener;
+ * returned for each search specification for the full set of search intents as  
+        private final EvaluationMetric metric;
+        client.multiSearch(
+                    )  
+        Map<String, Exception> errors = new ConcurrentHashMap<>(ratedRequests.size());
+                evaluationRequest.fetchSource(summaryFields.toArray(new String[0]), new String[0]);  
+ * You may obtain a copy of the License at  
+import org.opensearch.core.common.bytes.BytesArray;
+                ) {
+ * compares the result against a set of annotated documents per search intent.  
+                        MediaTypeRegistry.JSON
+        ActionFilters actionFilters,
+import org.opensearch.script.Script;  
+            ratedRequestsInSearch.add(ratedRequest);
+        List<RatedRequest> ratedRequests = evaluationSpecification.getRatedRequests();  
+            RatedRequest[] specifications,
+/*
+                Map<String, Object> params = ratedRequest.getParams();
+            Map<String, Exception> errors
+                    errors.put(specification.getId(), response.getFailure());  
+                    // check for parts that should not be part of a ranking evaluation request  
+                        LoggingDeprecationHandler.INSTANCE,  
+        private final Map<String, Exception> errors;
+ * license agreements. See the NOTICE file distributed with
+ * those is returned per search intent.  
+            listener.onResponse(new RankEvalResponse(this.metric.combine(responseDetails.values()), responseDetails, this.errors));
+ * not use this file except in compliance with the License.
+        public void onFailure(Exception exception) {
+                if (response.isFailure() == false) {
+public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequest, RankEvalResponse> {  
+ * this work for additional information regarding copyright
+import static org.opensearch.common.xcontent.XContentHelper.createParser;
+import org.opensearch.action.search.MultiSearchResponse.Item;  
+        @Override
+            Map<String, EvalQueryQuality> responseDetails = new HashMap<>(specifications.length);
+                    // if we fail parsing, put the exception into the errors map and continue  
+        }
+import java.util.Map.Entry;
+    @Override
+import java.util.ArrayList;
+        Client client,
+    private final ScriptService scriptService;
+import java.util.Map;
+ */  
+    ) {  
+                } catch (IOException e) {
+                evaluationRequest.size(metric.forcedSearchSize().getAsInt());
+import org.opensearch.core.common.io.stream.Writeable;
+            for (Item response : multiSearchResponse.getResponses()) {
+        NamedXContentRegistry namedXContentRegistry
+            }  
+            this.metric = metric;
+        this.client = client;
+    public TransportRankEvalAction(  
+                    XContentParser subParser = createParser(
+                String resolvedRequest = templateScript.newInstance(params).execute();
  * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.index.rankeval;
-
-import org.opensearch.action.search.MultiSearchRequest;
-import org.opensearch.action.search.MultiSearchResponse;
-import org.opensearch.action.search.MultiSearchResponse.Item;  
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;  
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.script.Script;  
-import org.opensearch.script.ScriptService;
-import org.opensearch.script.TemplateScript;
-import org.opensearch.search.SearchHit;  
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;  
-import org.opensearch.transport.client.Client;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;  
-
-import static org.opensearch.common.xcontent.XContentHelper.createParser;
-import static org.opensearch.index.rankeval.RatedRequest.validateEvaluatedQuery;  
-
-/**
- * Instances of this class execute a collection of search intents (read: user  
- * supplied query parameters) against a set of possible search requests (read:
- * search specifications, expressed as query/search request templates) and
- * compares the result against a set of annotated documents per search intent.  
- * <p>
- * If any documents are returned that haven't been annotated the document id of
- * those is returned per search intent.  
- * <p>
- * The resulting search quality is computed in terms of precision at n and
- * returned for each search specification for the full set of search intents as  
- * averaged precision at n.
- */
-public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequest, RankEvalResponse> {  
-    private final Client client;
-    private final ScriptService scriptService;
-    private final NamedXContentRegistry namedXContentRegistry;  
-
-    @Inject
-    public TransportRankEvalAction(  
-        ActionFilters actionFilters,
-        Client client,
-        TransportService transportService,  
-        ScriptService scriptService,
-        NamedXContentRegistry namedXContentRegistry
-    ) {  
-        super(RankEvalAction.NAME, transportService, actionFilters, (Writeable.Reader<RankEvalRequest>) RankEvalRequest::new);
-        this.scriptService = scriptService;
-        this.namedXContentRegistry = namedXContentRegistry;  
-        this.client = client;
-    }
-
-    @Override
-    protected void doExecute(Task task, RankEvalRequest request, ActionListener<RankEvalResponse> listener) {
-        RankEvalSpec evaluationSpecification = request.getRankEvalSpec();  
-        EvaluationMetric metric = evaluationSpecification.getMetric();
-
-        List<RatedRequest> ratedRequests = evaluationSpecification.getRatedRequests();  
-        Map<String, Exception> errors = new ConcurrentHashMap<>(ratedRequests.size());
-
-        Map<String, TemplateScript.Factory> scriptsWithoutParams = new HashMap<>();  
-        for (Entry<String, Script> entry : evaluationSpecification.getTemplates().entrySet()) {
-            scriptsWithoutParams.put(entry.getKey(), scriptService.compile(entry.getValue(), TemplateScript.CONTEXT));
-        }  
-
-        MultiSearchRequest msearchRequest = new MultiSearchRequest();
-        msearchRequest.maxConcurrentSearchRequests(evaluationSpecification.getMaxConcurrentSearches());  
-        List<RatedRequest> ratedRequestsInSearch = new ArrayList<>();
-        for (RatedRequest ratedRequest : ratedRequests) {
-            SearchSourceBuilder evaluationRequest = ratedRequest.getEvaluationRequest();  
-            if (evaluationRequest == null) {
-                Map<String, Object> params = ratedRequest.getParams();
-                String templateId = ratedRequest.getTemplateId();  
-                TemplateScript.Factory templateScript = scriptsWithoutParams.get(templateId);
-                String resolvedRequest = templateScript.newInstance(params).execute();
-                try (  
-                    XContentParser subParser = createParser(
-                        namedXContentRegistry,
-                        LoggingDeprecationHandler.INSTANCE,  
-                        new BytesArray(resolvedRequest),
-                        MediaTypeRegistry.JSON
-                    )  
-                ) {
-                    evaluationRequest = SearchSourceBuilder.fromXContent(subParser, false);
-                    // check for parts that should not be part of a ranking evaluation request  
-                    validateEvaluatedQuery(evaluationRequest);
-                } catch (IOException e) {
-                    // if we fail parsing, put the exception into the errors map and continue  
-                    errors.put(ratedRequest.getId(), e);
-                    continue;
-                }  
-            }
-
-            if (metric.forcedSearchSize().isPresent()) {  
-                evaluationRequest.size(metric.forcedSearchSize().getAsInt());
-            }
-
-            ratedRequestsInSearch.add(ratedRequest);
-            List<String> summaryFields = ratedRequest.getSummaryFields();
-            if (summaryFields.isEmpty()) {  
-                evaluationRequest.fetchSource(false);
-            } else {
-                evaluationRequest.fetchSource(summaryFields.toArray(new String[0]), new String[0]);  
-            }
+ * specific language governing permissions and limitations
             SearchRequest searchRequest = new SearchRequest(request.indices(), evaluationRequest);
-            searchRequest.indicesOptions(request.indicesOptions());  
-            searchRequest.searchType(request.searchType());
-            msearchRequest.add(searchRequest);
-        }  
-        assert ratedRequestsInSearch.size() == msearchRequest.requests().size();
-        client.multiSearch(
-            msearchRequest,  
-            new RankEvalActionListener(listener, metric, ratedRequestsInSearch.toArray(new RatedRequest[0]), errors)
-        );
-    }  
-
-    class RankEvalActionListener implements ActionListener<MultiSearchResponse> {
-
-        private final ActionListener<RankEvalResponse> listener;
-        private final RatedRequest[] specifications;
-
-        private final Map<String, Exception> errors;
-        private final EvaluationMetric metric;
-
-        RankEvalActionListener(
-            ActionListener<RankEvalResponse> listener,
-            EvaluationMetric metric,  
-            RatedRequest[] specifications,
-            Map<String, Exception> errors
-        ) {  
+import org.opensearch.search.SearchHit;  
+        this.namedXContentRegistry = namedXContentRegistry;  
+import org.opensearch.script.ScriptService;
             this.listener = listener;
-            this.metric = metric;
-            this.errors = errors;  
-            this.specifications = specifications;
-        }
-
-        @Override
-        public void onResponse(MultiSearchResponse multiSearchResponse) {
-            int responsePosition = 0;  
-            Map<String, EvalQueryQuality> responseDetails = new HashMap<>(specifications.length);
-            for (Item response : multiSearchResponse.getResponses()) {
-                RatedRequest specification = specifications[responsePosition];  
-                if (response.isFailure() == false) {
-                    SearchHit[] hits = response.getResponse().getHits().getHits();
-                    EvalQueryQuality queryQuality = this.metric.evaluate(specification.getId(), hits, specification.getRatedDocs());  
-                    responseDetails.put(specification.getId(), queryQuality);
+                    errors.put(ratedRequest.getId(), e);
+ * Modifications Copyright OpenSearch Contributors. See
+                try (  
+ * Instances of this class execute a collection of search intents (read: user  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+        ) {  
+ * The resulting search quality is computed in terms of precision at n and
+            new RankEvalActionListener(listener, metric, ratedRequestsInSearch.toArray(new RatedRequest[0]), errors)
+            msearchRequest.add(searchRequest);
+                }  
                 } else {
-                    errors.put(specification.getId(), response.getFailure());  
-                }
-                responsePosition++;
-            }  
-            listener.onResponse(new RankEvalResponse(this.metric.combine(responseDetails.values()), responseDetails, this.errors));
-        }
-
-        @Override
-        public void onFailure(Exception exception) {
-            listener.onFailure(exception);  
-        }
-    }
-}  
+import org.opensearch.script.TemplateScript;
+ * If any documents are returned that haven't been annotated the document id of
+            searchRequest.indicesOptions(request.indicesOptions());  
+    private final NamedXContentRegistry namedXContentRegistry;  
+                        new BytesArray(resolvedRequest),

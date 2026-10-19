@@ -1,160 +1,141 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.storage;
-
-import org.apache.commons.collections4.trie.PatriciaTrie;
 import org.opensearch.rule.MatchLabel;
-
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;  
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.locks.ReentrantReadWriteLock;  
-
-/**
- * This is a patricia trie based implementation of AttributeValueStore  
- * We are choosing patricia trie because it provides very fast search operations on prefix matches as well as range
- * lookups. It provides a very efficient storage for strings
- * ref: https://commons.apache.org/proper/commons-collections/javadocs/api-4.4/org/apache/commons/collections4/trie/PatriciaTrie.html  
- */
-public class DefaultAttributeValueStore<K extends String, V> implements AttributeValueStore<K, V> {
-    /**  
-     * Trailing character in a stored value that marks it as a prefix (wildcard) pattern. A stored value
      * without this character is matched exactly.
-     */  
-    private static final String WILDCARD = "*";
-    private final PatriciaTrie<Set<V>> trie;
-    private static final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();  
-    private static final ReentrantReadWriteLock.ReadLock readLock = lock.readLock();
-    private static final ReentrantReadWriteLock.WriteLock writeLock = lock.writeLock();
-
-    /**
-     * Default constructor
-     */  
-    public DefaultAttributeValueStore() {
-        this(new PatriciaTrie<>());
-    }  
-
-    /**
-     * Main constructor  
-     * @param trie A Patricia Trie
-     */
-    public DefaultAttributeValueStore(PatriciaTrie<Set<V>> trie) {  
-        this.trie = trie;
-    }
-
-    @Override
-    public void put(K key, V value) {
+                for (int i = key.length(); i >= 0; i--) {
         writeLock.lock();  
+    }
+            addMatches(results, trie.get(key), 1f);  
+            // Prefix (wildcard) matches: a stored value of the form "<prefix>*" matches the request key  
+    }  
+            addMatches(results, trie.get(""), 0f);
+                    if (!prefixBuilder.isEmpty()) {
+package org.opensearch.rule.storage;
+     * @param trie A Patricia Trie
+    }  
+    }
+ * The OpenSearch Contributors require contributions made to  
         try {
-            trie.computeIfAbsent(key, k -> new HashSet<>()).add(value);
+    }
+        this(new PatriciaTrie<>());
+            });  
+        readLock.lock();  
+    @Override  
+ *
+    /**  
+        for (V label : values) {
+    @Override
+    private static final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();  
+            List<MatchLabel<V>> results = new ArrayList<>();  
+import java.util.Set;
+        }
+    public void remove(K key, V value) {  
+        } finally {
+    public DefaultAttributeValueStore(PatriciaTrie<Set<V>> trie) {  
+    }
+        } finally {
+        }
+     */
+                StringBuilder prefixBuilder = new StringBuilder(key);  
         } finally {  
+/**
+    private static final String WILDCARD = "*";
+import org.apache.commons.collections4.trie.PatriciaTrie;
+import java.util.List;  
+     * Trailing character in a stored value that marks it as a prefix (wildcard) pattern. A stored value
+        if (values == null || values.isEmpty()) {
+    private static final ReentrantReadWriteLock.ReadLock readLock = lock.readLock();
+                addMatches(results, trie.get(key), 1f);  
+    }  
+public class DefaultAttributeValueStore<K extends String, V> implements AttributeValueStore<K, V> {
+        return trie.size();
+     * Main constructor  
+    @Override
+import java.util.HashSet;
+        }
+            // Rules that do not constrain this attribute are stored under the empty key and match anything.
+ * lookups. It provides a very efficient storage for strings
+ * SPDX-License-Identifier: Apache-2.0
+                        addMatches(results, values, score);
             writeLock.unlock();
         }
-    }  
-
-    @Override
-    public void remove(K key, V value) {  
-        writeLock.lock();
-        try {
-            trie.computeIfPresent(key, (k, values) -> {  
-                values.remove(value);
-                return values.isEmpty() ? null : values;
-            });  
-        } finally {
-            writeLock.unlock();
-        }  
-    }
-
-    @Override  
-    public void remove(K key) {
-        throw new UnsupportedOperationException("This remove(K key) function is not supported within DefaultAttributeValueStore.");
-    }  
-
-    @Override
-    public Optional<V> get(K key) {  
-        throw new UnsupportedOperationException("This get(K key) function is not supported within DefaultAttributeValueStore.");
-    }
-
-    @Override
-    public List<MatchLabel<V>> getExactMatch(K key) {
-        readLock.lock();  
-        try {
             List<MatchLabel<V>> results = new ArrayList<>();
-            addMatches(results, trie.get(key), 1f);  
-            addMatches(results, trie.get(""), 0f);
+    private static final ReentrantReadWriteLock.WriteLock writeLock = lock.writeLock();
             return results;
+ * compatible open source license.
+    public Optional<V> get(K key) {  
+import java.util.Optional;
+                values.remove(value);
+        this.trie = trie;
+    /**
+        }  
+     */  
+    @Override
+        try {
+ * We are choosing patricia trie because it provides very fast search operations on prefix matches as well as range
+    @Override
+ * ref: https://commons.apache.org/proper/commons-collections/javadocs/api-4.4/org/apache/commons/collections4/trie/PatriciaTrie.html  
+ */  
+            writeLock.unlock();
+                    }  
+                        float score = (float) prefixBuilder.length() / key.length();
+ * this file be licensed under the Apache-2.0 license or a
+            // Exact match: a value stored without a trailing wildcard matches the request key exactly.
+        try {
+    }  
+    public DefaultAttributeValueStore() {
         } finally {  
             readLock.unlock();
-        }
-    }  
-
+import java.util.concurrent.locks.ReentrantReadWriteLock;  
+                return values.isEmpty() ? null : values;
     @Override
-    public List<MatchLabel<V>> getMatches(String key) {  
-        readLock.lock();
-        try {
-            List<MatchLabel<V>> results = new ArrayList<>();  
-
-            // Exact match: a value stored without a trailing wildcard matches the request key exactly.
-            // A key that itself ends in the wildcard character is only a prefix (wildcard) value and is  
-            // handled by the loop below; the empty key is reserved for "no constraint" rules.
-            if (!key.isEmpty() && !key.endsWith(WILDCARD)) {
-                addMatches(results, trie.get(key), 1f);  
-            }
-
-            // Prefix (wildcard) matches: a stored value of the form "<prefix>*" matches the request key  
-            // when the key starts with <prefix>. Walk each prefix of the key from longest to shortest.
-            if (!key.isEmpty()) {
-                StringBuilder prefixBuilder = new StringBuilder(key);  
-                for (int i = key.length(); i >= 0; i--) {
-                    Set<V> values = trie.get(prefixBuilder.toString() + WILDCARD);
-                    if (values != null && !values.isEmpty()) {  
-                        float score = (float) prefixBuilder.length() / key.length();
-                        addMatches(results, values, score);
-                    }  
-                    if (!prefixBuilder.isEmpty()) {
-                        prefixBuilder.deleteCharAt(prefixBuilder.length() - 1);
-                    }  
-                }
-            }
-
-            // Rules that do not constrain this attribute are stored under the empty key and match anything.
-            addMatches(results, trie.get(""), 0f);
-
-            return results;
-        } finally {
-            readLock.unlock();  
-        }
-    }
-
-    private void addMatches(List<MatchLabel<V>> results, Set<V> values, float score) {
-        if (values == null || values.isEmpty()) {
-            return;  
-        }
-        for (V label : values) {
-            results.add(new MatchLabel<>(label, score));  
-        }
-    }
-
-    @Override
-    public void clear() {
-        writeLock.lock();  
-        try {
+    private final PatriciaTrie<Set<V>> trie;
             trie.clear();
+     */  
+        try {
         } finally {  
+    public void put(K key, V value) {
+                }
+    }
+        writeLock.lock();
+            trie.computeIfPresent(key, (k, values) -> {  
+                    }  
+    }  
+        readLock.lock();
+     * Default constructor
+            results.add(new MatchLabel<>(label, score));  
+ * This is a patricia trie based implementation of AttributeValueStore  
+/*  
+            trie.computeIfAbsent(key, k -> new HashSet<>()).add(value);
+            return;  
+    public List<MatchLabel<V>> getMatches(String key) {  
+    public void clear() {
+                        prefixBuilder.deleteCharAt(prefixBuilder.length() - 1);
+            addMatches(results, trie.get(""), 0f);
+            }
             writeLock.unlock();
         }
-    }  
-
+            if (!key.isEmpty() && !key.endsWith(WILDCARD)) {
     @Override
-    public int size() {  
-        return trie.size();
+                    Set<V> values = trie.get(prefixBuilder.toString() + WILDCARD);
+            readLock.unlock();  
+            if (!key.isEmpty()) {
+ */
+    public List<MatchLabel<V>> getExactMatch(K key) {
+            return results;
+        writeLock.lock();  
+    private void addMatches(List<MatchLabel<V>> results, Set<V> values, float score) {
+        throw new UnsupportedOperationException("This remove(K key) function is not supported within DefaultAttributeValueStore.");
+    @Override
+        }
     }
+            // handled by the loop below; the empty key is reserved for "no constraint" rules.
+    public int size() {  
+            }
 }  
+                    if (values != null && !values.isEmpty()) {  
+        try {
+            // when the key starts with <prefix>. Walk each prefix of the key from longest to shortest.
+import java.util.ArrayList;
+            // A key that itself ends in the wildcard character is only a prefix (wildcard) value and is  
+        throw new UnsupportedOperationException("This get(K key) function is not supported within DefaultAttributeValueStore.");
+    public void remove(K key) {
+    /**

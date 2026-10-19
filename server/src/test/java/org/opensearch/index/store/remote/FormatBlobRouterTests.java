@@ -1,210 +1,167 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store.remote;
-
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;  
-import static org.mockito.Mockito.when;
-
-/**  
- * Tests for {@link FormatBlobRouter}.
- */
-public class FormatBlobRouterTests extends OpenSearchTestCase {  
-
-    private BlobStore blobStore;
-    private BlobPath basePath;  
-    private BlobContainer baseContainer;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        blobStore = mock(BlobStore.class);  
-        basePath = new BlobPath().add("indices").add("shard0").add("segments");
-        baseContainer = mock(BlobContainer.class);
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
         when(blobStore.blobContainer(basePath)).thenReturn(baseContainer);  
     }
-
-    public void testLuceneFormatReturnsBaseContainer() {  
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        assertSame(baseContainer, router.containerFor("lucene"));
+        router.unregisterBlobFormat(null);
     }  
-
-    public void testNullFormatReturnsBaseContainer() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);  
-        assertSame(baseContainer, router.containerFor(null));
     }
-
-    public void testMetadataFormatReturnsBaseContainer() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        assertSame(baseContainer, router.containerFor("metadata"));  
-    }
-
+    // Blob Format Cache Tests
+ */  
+        router.registerBlobFormat(null, "parquet");
+        assertEquals("lucene", router.resolveFormat("old_key"));  
+ * compatible open source license.
+        super.setUp();
+    public void testFormatNameIsLowercasedForPath() {
+    public void testRegisterBlobFormat_ThenResolve() {  
+        assertTrue(router.registeredFormats().contains("lucene"));
+ * this file be licensed under the Apache-2.0 license or a
     public void testNonLuceneFormatCreatesSubPathContainer() {  
+        router.replaceBlobFormatCache(mutable);
+    public void testUnregisterBlobFormat_NullKeyIgnored() {
+        // Cache unchanged
         BlobContainer parquetContainer = mock(BlobContainer.class);
-        BlobPath parquetPath = basePath.parent().add("parquet");
-        when(blobStore.blobContainer(parquetPath)).thenReturn(parquetContainer);  
-
+        router.unregisterBlobFormat("_0.pqt__UUID");  
         FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        BlobContainer result = router.containerFor("parquet");  
-
-        assertSame(parquetContainer, result);
-        verify(blobStore).blobContainer(parquetPath);  
-    }
-
-    public void testSameFormatReturnsSameContainer() {  
-        BlobContainer parquetContainer = mock(BlobContainer.class);
+        when(blobStore.blobContainer(basePath.parent().add("parquet"))).thenReturn(parquetContainer);  
         when(blobStore.blobContainer(basePath.parent().add("parquet"))).thenReturn(parquetContainer);
-
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        BlobContainer first = router.containerFor("parquet");
-        BlobContainer second = router.containerFor("parquet");  
-
-        assertSame(first, second);
-        // blobContainer called once for basePath (constructor) + once for parquet (first access)  
-        verify(blobStore, times(1)).blobContainer(basePath.parent().add("parquet"));
+ *
     }
-
-    public void testBaseContainerAccessor() {
+        BlobContainer second = router.containerFor("parquet");  
         FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        BlobContainer parquetContainer = mock(BlobContainer.class);
+        assertEquals("lucene", router.resolveFormat("_0.pqt__UUID"));
+/*  
+        assertEquals(1, router.registeredFormats().size());
+        assertTrue(router.registeredFormats().contains("parquet"));
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        // Should create path with lowercase "parquet"
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+    public void testLuceneFormatReturnsBaseContainer() {  
+    }
+    }
+    }
+        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));
+ */
+        assertEquals("lucene", router.resolveFormat("anything"));
+import org.opensearch.test.OpenSearchTestCase;
+        assertEquals(1, router.registeredFormats().size());  
+        router.registerFormat(null);
+    private BlobStore blobStore;
+    private BlobContainer baseContainer;
+        router.registerBlobFormat("_0.pqt__UUID", "parquet");
+        assertSame(baseContainer, router.containerFor("metadata"));  
+import org.opensearch.common.blobstore.BlobContainer;
+ * SPDX-License-Identifier: Apache-2.0
+        BlobContainer parquetContainer = mock(BlobContainer.class);
+        // Only lucene should be registered (default), no extra containers created  
+import static org.mockito.ArgumentMatchers.any;  
+        // blobContainer called once for basePath (constructor) + once for parquet (first access)  
+    }
+    }
+        router.containerFor("Parquet");  
+        router.registerBlobFormat("old_key", "parquet");
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        router.containerFor("parquet");
+    public void testRegisterFormatIgnoresBasePathFormats() {  
+        blobStore = mock(BlobStore.class);  
+        mutable.put("key1", "parquet");
+        verify(blobStore, times(1)).blobContainer(basePath.parent().add("parquet"));
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+ * Tests for {@link FormatBlobRouter}.
+        router.registerBlobFormat("_0.pqt__UUID", "parquet");  
+        basePath = new BlobPath().add("indices").add("shard0").add("segments");
+    public void testRegisteredFormatsGrowsWithAccess() {  
+        when(blobStore.blobContainer(basePath.parent().add("parquet"))).thenReturn(container);  
+        assertSame(baseContainer, router.containerFor("lucene"));
+    public void testNullFormatReturnsBaseContainer() {
+        java.util.Map<String, String> mutable = new java.util.HashMap<>();  
+    }
+        router.registerFormat("metadata");  
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        router.containerFor("arrow");
+        BlobPath parquetPath = basePath.parent().add("parquet");
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+import org.opensearch.common.blobstore.BlobPath;
+        assertEquals("lucene", router.resolveFormat("key2"));  
+import static org.mockito.Mockito.verify;  
+    public void testUnregisterBlobFormat() {
+    public void testReplaceBlobFormatCache() {  
+        assertEquals("arrow", router.resolveFormat("new_key"));
+    private BlobPath basePath;  
+        assertEquals("lucene", router.resolveFormat("_0.pqt__UUID"));
+        assertEquals("lucene", router.resolveFormat("_0.cfs__UUID"));  
+    public void testMetadataFormatReturnsBaseContainer() {
+    }
+        router.replaceBlobFormatCache(java.util.Map.of("new_key", "arrow"));
+        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));  
+        assertEquals(3, router.registeredFormats().size());
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        verify(blobStore).blobContainer(basePath.parent().add("parquet"));  
+}
+        assertSame(baseContainer, router.containerFor(null));
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        assertSame(first, second);
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(mock(BlobContainer.class));
+        assertTrue(router.registeredFormats().contains("arrow"));  
+        router.registerBlobFormat("_0.pqt__UUID", null);  
+/**  
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        verify(blobStore).blobContainer(parquetPath);  
+public class FormatBlobRouterTests extends OpenSearchTestCase {  
+        assertTrue(router.registeredFormats().contains("parquet"));
+    @Override  
+    public void testRegisterBlobFormat_NullFormatIgnored() {
+    public void testSameFormatReturnsSameContainer() {  
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        mutable.put("key2", "arrow");
+    public void testRegisterBlobFormat_NullKeyIgnored() {  
+import static org.mockito.Mockito.times;
+    // ═══════════════════════════════════════════════════════════════  
+        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));  
         assertSame(baseContainer, router.baseContainer());  
     }
-
-    public void testRegisteredFormatsIncludesLuceneByDefault() {  
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        assertTrue(router.registeredFormats().contains("lucene"));
-        assertEquals(1, router.registeredFormats().size());  
-    }
-
-    public void testRegisteredFormatsGrowsWithAccess() {  
-        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(mock(BlobContainer.class));
-
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);  
-        router.containerFor("parquet");
-        router.containerFor("arrow");
-
-        assertTrue(router.registeredFormats().contains("lucene"));
-        assertTrue(router.registeredFormats().contains("parquet"));
-        assertTrue(router.registeredFormats().contains("arrow"));  
-        assertEquals(3, router.registeredFormats().size());
-    }
-
-    public void testRegisterFormatPreCreatesContainer() {
-        BlobContainer parquetContainer = mock(BlobContainer.class);
-        when(blobStore.blobContainer(basePath.parent().add("parquet"))).thenReturn(parquetContainer);  
-
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerFormat("parquet");  
-
-        assertTrue(router.registeredFormats().contains("parquet"));
-        verify(blobStore).blobContainer(basePath.parent().add("parquet"));  
-    }
-
-    public void testRegisterFormatIgnoresBasePathFormats() {  
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerFormat("lucene");
-        router.registerFormat("metadata");  
-        router.registerFormat(null);
-
-        // Only lucene should be registered (default), no extra containers created  
-        assertEquals(1, router.registeredFormats().size());
-    }
-
-    public void testFormatNameIsLowercasedForPath() {
-        BlobContainer container = mock(BlobContainer.class);
-        when(blobStore.blobContainer(basePath.parent().add("parquet"))).thenReturn(container);  
-
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.containerFor("Parquet");  
-
-        // Should create path with lowercase "parquet"
-        verify(blobStore).blobContainer(basePath.parent().add("parquet"));  
-    }
-
-    // ═══════════════════════════════════════════════════════════════  
-    // Blob Format Cache Tests
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testResolveFormat_DefaultsToLucene() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        assertEquals("lucene", router.resolveFormat("_0.cfs__UUID"));  
-    }
-
-    public void testRegisterBlobFormat_ThenResolve() {  
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerBlobFormat("_0.pqt__UUID", "parquet");
-        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));  
-    }
-
-    public void testRegisterBlobFormat_NullKeyIgnored() {  
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerBlobFormat(null, "parquet");
-        // Should not throw, cache unchanged  
-        assertEquals("lucene", router.resolveFormat("anything"));
-    }
-
-    public void testRegisterBlobFormat_NullFormatIgnored() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerBlobFormat("_0.pqt__UUID", null);  
-        assertEquals("lucene", router.resolveFormat("_0.pqt__UUID"));
-    }
-
-    public void testUnregisterBlobFormat() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerBlobFormat("_0.pqt__UUID", "parquet");  
-        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));
-
-        router.unregisterBlobFormat("_0.pqt__UUID");  
-        assertEquals("lucene", router.resolveFormat("_0.pqt__UUID"));
-    }
-
-    public void testUnregisterBlobFormat_NullKeyIgnored() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerBlobFormat("_0.pqt__UUID", "parquet");  
-        router.unregisterBlobFormat(null);
-        // Cache unchanged
-        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));  
-    }
-
-    public void testReplaceBlobFormatCache() {  
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerBlobFormat("old_key", "parquet");
-
-        router.replaceBlobFormatCache(java.util.Map.of("new_key", "arrow"));
-
-        assertEquals("lucene", router.resolveFormat("old_key"));  
-        assertEquals("arrow", router.resolveFormat("new_key"));
-    }
-
     public void testClearBlobFormatCache() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        router.registerBlobFormat("_0.pqt__UUID", "parquet");  
-        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));
-
+import static org.mockito.Mockito.when;
+    public void testResolveFormat_DefaultsToLucene() {
+    // ═══════════════════════════════════════════════════════════════
+        assertSame(parquetContainer, result);
+ * The OpenSearch Contributors require contributions made to  
         router.clearBlobFormatCache();  
+    }
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+        // Mutating the original map should not affect the cache
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+    public void testRegisteredFormatsIncludesLuceneByDefault() {  
+    }
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);  
+    public void testRegisterFormatPreCreatesContainer() {
+        router.registerFormat("lucene");
+    }
+    }
+        // Should not throw, cache unchanged  
+        assertTrue(router.registeredFormats().contains("lucene"));
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);  
+        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
+    }
+    public void testReplaceBlobFormatCache_ImmutableSnapshot() {
+        router.registerFormat("parquet");  
+import org.opensearch.common.blobstore.BlobStore;  
+        BlobContainer first = router.containerFor("parquet");
+    public void setUp() throws Exception {
+    public void testBaseContainerAccessor() {
+    }
+    }
+        baseContainer = mock(BlobContainer.class);
+        BlobContainer result = router.containerFor("parquet");  
+    }
+        router.registerBlobFormat("_0.pqt__UUID", "parquet");  
         assertEquals("lucene", router.resolveFormat("_0.pqt__UUID"));
     }
-
-    public void testReplaceBlobFormatCache_ImmutableSnapshot() {
-        FormatBlobRouter router = new FormatBlobRouter(blobStore, basePath);
-        java.util.Map<String, String> mutable = new java.util.HashMap<>();  
-        mutable.put("key1", "parquet");
-        router.replaceBlobFormatCache(mutable);
-
-        // Mutating the original map should not affect the cache
-        mutable.put("key2", "arrow");
-        assertEquals("lucene", router.resolveFormat("key2"));  
-    }
-}
+package org.opensearch.index.store.remote;
+        verify(blobStore).blobContainer(basePath.parent().add("parquet"));  
+        assertEquals("parquet", router.resolveFormat("_0.pqt__UUID"));
+        BlobContainer container = mock(BlobContainer.class);
+        when(blobStore.blobContainer(parquetPath)).thenReturn(parquetContainer);  
+        router.registerBlobFormat("_0.pqt__UUID", "parquet");  
+import static org.mockito.Mockito.mock;

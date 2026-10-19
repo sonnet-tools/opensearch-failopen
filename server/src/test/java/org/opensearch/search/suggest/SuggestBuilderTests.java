@@ -1,183 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+            }  
+        xContentRegistry = null;  
+        SuggestBuilder mutation = new SuggestBuilder().setGlobalText(original.getGlobalText());  
+ * You may obtain a copy of the License at  
+     * Test serialization and deserialization  
+        for (int runs = 0; runs < NUMBER_OF_RUNS; runs++) {  
+    public void testFromXContent() throws IOException {  
+    }  
+            mutation.addSuggestion(suggestionBuilder.getKey(), suggestionBuilder.getValue());
+import org.opensearch.search.suggest.term.TermSuggestionBuilderTests;  
+ * license agreements. See the NOTICE file distributed with
+            SuggestBuilder deserializedModel = copyWriteable(suggestBuilder, namedWriteableRegistry, SuggestBuilder::new);
+    public void testEqualsAndHashcode() throws IOException {
+import org.opensearch.test.OpenSearchTestCase;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void testIllegalSuggestionName() {  
+            fail("exception expected");
+    public static SuggestBuilder randomSuggestBuilder() {  
+        }
+            EqualsHashCodeTestUtils.<SuggestBuilder>checkEqualsAndHashCode(randomSuggestBuilder(), original -> {
+    private static final int NUMBER_OF_RUNS = 20;
+                return PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder();
+ * software distributed under the License is distributed on an
+        namedWriteableRegistry = new NamedWriteableRegistry(searchModule.getNamedWriteables());
+     * Setup for the whole base test class.  
+    /**
+    }
+        } else {  
  *
- * The OpenSearch Contributors require contributions made to  
+        }
+            // explicit about type parameters, see: https://bugs.eclipse.org/bugs/show_bug.cgi?id=481649
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */  
+        xContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());  
+            mutation.addSuggestion(randomAlphaOfLength(10), PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder());
+import org.opensearch.core.xcontent.ToXContent;  
+                assertEquals(suggestBuilder.hashCode(), secondSuggestBuilder.hashCode());  
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+                assertNotSame(suggestBuilder, secondSuggestBuilder);
+/*  
+        SuggestBuilder builder = new SuggestBuilder();
+        }
+    }  
+                return TermSuggestionBuilderTests.randomTermSuggestionBuilder();  
+    /**  
+    private static NamedWriteableRegistry namedWriteableRegistry;
+            case 1:
+        for (int i = 0; i < numSuggestions; i++) {  
+import org.opensearch.common.xcontent.XContentType;
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+     */
+    private static SuggestionBuilder<?> randomSuggestionBuilder() {  
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            new SuggestBuilder().addSuggestion("my-suggest", PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder())  
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, emptyList());
+        }
+     */
+        } catch (NullPointerException e) {
+            if (randomBoolean()) {
+        return mutation;  
+import java.util.Map.Entry;
+     *  creates random suggestion builder, renders it to xContent and back to new instance that should be equal to original
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            try (XContentParser parser = createParser(xContentBuilder)) {
+ *
+import org.opensearch.common.settings.Settings;
+        } catch (IllegalArgumentException e) {  
+            default:
+import org.opensearch.search.SearchModule;  
+    }
+        try {
+    @Override
+            assertEquals(suggestBuilder, deserializedModel);  
+    private static NamedXContentRegistry xContentRegistry;  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.SearchModule;  
-import org.opensearch.search.suggest.completion.CompletionSuggesterBuilderTests;
-import org.opensearch.search.suggest.phrase.PhraseSuggestionBuilderTests;
-import org.opensearch.search.suggest.term.TermSuggestionBuilderTests;  
-import org.opensearch.test.EqualsHashCodeTestUtils;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.AfterClass;  
-import org.junit.BeforeClass;
-
-import java.io.IOException;  
-import java.util.Map.Entry;
-
-import static java.util.Collections.emptyList;  
-
-public class SuggestBuilderTests extends OpenSearchTestCase {
-
-    private static final int NUMBER_OF_RUNS = 20;
-    private static NamedWriteableRegistry namedWriteableRegistry;
-    private static NamedXContentRegistry xContentRegistry;  
-
-    /**
-     * Setup for the whole base test class.  
-     */
-    @BeforeClass
-    public static void init() {  
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, emptyList());
-        namedWriteableRegistry = new NamedWriteableRegistry(searchModule.getNamedWriteables());
-        xContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());  
-    }
-
-    @AfterClass  
-    public static void afterClass() {
-        namedWriteableRegistry = null;
-        xContentRegistry = null;  
-    }
-
-    /**  
-     *  creates random suggestion builder, renders it to xContent and back to new instance that should be equal to original
-     */
-    public void testFromXContent() throws IOException {  
-        for (int runs = 0; runs < NUMBER_OF_RUNS; runs++) {
-            SuggestBuilder suggestBuilder = randomSuggestBuilder();
-            XContentBuilder xContentBuilder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));  
-            if (randomBoolean()) {
-                xContentBuilder = xContentBuilder.prettyPrint();
-            }  
-            suggestBuilder.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
-            try (XContentParser parser = createParser(xContentBuilder)) {
-                SuggestBuilder secondSuggestBuilder = SuggestBuilder.fromXContent(parser);  
-                assertNotSame(suggestBuilder, secondSuggestBuilder);
-                assertEquals(suggestBuilder, secondSuggestBuilder);
-                assertEquals(suggestBuilder.hashCode(), secondSuggestBuilder.hashCode());  
-            }
-        }
-    }  
-
-    /**
-     * Test equality and hashCode properties  
-     */
-    public void testEqualsAndHashcode() throws IOException {
-        for (int runs = 0; runs < NUMBER_OF_RUNS; runs++) {  
-            // explicit about type parameters, see: https://bugs.eclipse.org/bugs/show_bug.cgi?id=481649
-            EqualsHashCodeTestUtils.<SuggestBuilder>checkEqualsAndHashCode(randomSuggestBuilder(), original -> {
-                return copyWriteable(original, namedWriteableRegistry, SuggestBuilder::new);  
-            }, this::createMutation);
-        }
-    }  
-
-    /**
-     * Test serialization and deserialization  
-     */
-    public void testSerialization() throws IOException {
-        for (int i = 0; i < NUMBER_OF_RUNS; i++) {  
-            SuggestBuilder suggestBuilder = randomSuggestBuilder();
-            SuggestBuilder deserializedModel = copyWriteable(suggestBuilder, namedWriteableRegistry, SuggestBuilder::new);
-            assertEquals(suggestBuilder, deserializedModel);  
             assertEquals(suggestBuilder.hashCode(), deserializedModel.hashCode());
-            assertNotSame(suggestBuilder, deserializedModel);
-        }  
-    }
-
-    public void testIllegalSuggestionName() {  
-        try {
-            new SuggestBuilder().addSuggestion(null, PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder());
-            fail("exception expected");  
-        } catch (NullPointerException e) {
-            assertEquals("every suggestion needs a name", e.getMessage());
-        }  
-
-        try {
-            new SuggestBuilder().addSuggestion("my-suggest", PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder())  
                 .addSuggestion("my-suggest", PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder());
-            fail("exception expected");
-        } catch (IllegalArgumentException e) {  
-            assertEquals("already added another suggestion with name [my-suggest]", e.getMessage());
+ * The OpenSearch Contributors require contributions made to  
+            SuggestBuilder suggestBuilder = randomSuggestBuilder();
         }
-    }  
-
-    protected SuggestBuilder createMutation(SuggestBuilder original) throws IOException {
-        SuggestBuilder mutation = new SuggestBuilder().setGlobalText(original.getGlobalText());  
-        for (Entry<String, SuggestionBuilder<?>> suggestionBuilder : original.getSuggestions().entrySet()) {
-            mutation.addSuggestion(suggestionBuilder.getKey(), suggestionBuilder.getValue());
-        }  
-        if (randomBoolean()) {
-            mutation.setGlobalText(randomAlphaOfLengthBetween(5, 60));
-        } else {  
-            mutation.addSuggestion(randomAlphaOfLength(10), PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder());
-        }
-        return mutation;  
-    }
-
-    public static SuggestBuilder randomSuggestBuilder() {  
-        SuggestBuilder builder = new SuggestBuilder();
-        if (randomBoolean()) {
-            builder.setGlobalText(randomAlphaOfLengthBetween(1, 20));  
-        }
-        final int numSuggestions = randomIntBetween(1, 5);
-        for (int i = 0; i < numSuggestions; i++) {  
-            builder.addSuggestion(randomAlphaOfLengthBetween(5, 10), randomSuggestionBuilder());
-        }
-        return builder;  
-    }
-
-    private static SuggestionBuilder<?> randomSuggestionBuilder() {  
-        switch (randomIntBetween(0, 2)) {
-            case 0:
-                return TermSuggestionBuilderTests.randomTermSuggestionBuilder();  
-            case 1:
-                return PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder();
-            case 2:  
-                return CompletionSuggesterBuilderTests.randomCompletionSuggestionBuilder();
-            default:
-                return TermSuggestionBuilderTests.randomTermSuggestionBuilder();  
-        }
-    }
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {
-        return xContentRegistry;  
-    }
 }
+     * Test equality and hashCode properties  
+import org.opensearch.search.suggest.phrase.PhraseSuggestionBuilderTests;
+ * specific language governing permissions and limitations
+    /**
+import org.opensearch.search.suggest.completion.CompletionSuggesterBuilderTests;
+    }
+                assertEquals(suggestBuilder, secondSuggestBuilder);
+public class SuggestBuilderTests extends OpenSearchTestCase {
+     */
+import org.junit.BeforeClass;
+        try {
+        }  
+            builder.addSuggestion(randomAlphaOfLengthBetween(5, 10), randomSuggestionBuilder());
+    }
+            case 2:  
+        if (randomBoolean()) {
+        namedWriteableRegistry = null;
+ * under the License.  
+/*  
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+package org.opensearch.search.suggest;
+        final int numSuggestions = randomIntBetween(1, 5);
+import org.junit.AfterClass;  
+    /**
+        return builder;  
+    public static void init() {  
+        for (Entry<String, SuggestionBuilder<?>> suggestionBuilder : original.getSuggestions().entrySet()) {
+    }
+        }  
+/*
+            new SuggestBuilder().addSuggestion(null, PhraseSuggestionBuilderTests.randomPhraseSuggestionBuilder());
+        switch (randomIntBetween(0, 2)) {
+    protected SuggestBuilder createMutation(SuggestBuilder original) throws IOException {
+                return TermSuggestionBuilderTests.randomTermSuggestionBuilder();  
+            XContentBuilder xContentBuilder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));  
+    }  
+            }, this::createMutation);
+import static java.util.Collections.emptyList;  
+                SuggestBuilder secondSuggestBuilder = SuggestBuilder.fromXContent(parser);  
+            SuggestBuilder suggestBuilder = randomSuggestBuilder();
+        for (int i = 0; i < NUMBER_OF_RUNS; i++) {  
+ * Unless required by applicable law or agreed to in writing,
+            assertEquals("already added another suggestion with name [my-suggest]", e.getMessage());
+            assertEquals("every suggestion needs a name", e.getMessage());
+    @AfterClass  
+import java.io.IOException;  
+import org.opensearch.test.EqualsHashCodeTestUtils;
+ */  
+            suggestBuilder.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
+            fail("exception expected");  
+                return CompletionSuggesterBuilderTests.randomCompletionSuggestionBuilder();
+    protected NamedXContentRegistry xContentRegistry() {
+        }
+import org.opensearch.core.xcontent.XContentParser;
+    @BeforeClass
+            }
+import org.opensearch.core.xcontent.XContentBuilder;
+            assertNotSame(suggestBuilder, deserializedModel);
+ * not use this file except in compliance with the License.
+        if (randomBoolean()) {
+ */
+        return xContentRegistry;  
+    public void testSerialization() throws IOException {
+                return copyWriteable(original, namedWriteableRegistry, SuggestBuilder::new);  
+        }
+            builder.setGlobalText(randomAlphaOfLengthBetween(1, 20));  
+    }
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+        for (int runs = 0; runs < NUMBER_OF_RUNS; runs++) {
+ * GitHub history for details.
+            mutation.setGlobalText(randomAlphaOfLengthBetween(5, 60));
+ *  
+            case 0:
+        }  
+                xContentBuilder = xContentBuilder.prettyPrint();
+    public static void afterClass() {

@@ -1,68 +1,55 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        out.writeBoolean(column);
 package org.opensearch.be.datafusion.action.stats;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+ *
+ * SPDX-License-Identifier: Apache-2.0
+        out.writeBoolean(footer);  
+    }
+        this.footer = in.readBoolean();  
+        out.writeBoolean(offset);
 import org.opensearch.transport.TransportRequest;  
-
-import java.io.IOException;
-
-/** Per-node request carrying which caches to clear. @opensearch.internal */
-public class ClearCacheNodeRequest extends TransportRequest {
-
+    public boolean isOffset() {
     private boolean footer;
-    private boolean column;
-    private boolean offset;  
-    private boolean statistics;
-
+        super(in);
+ * compatible open source license.
+    @Override  
+        return footer;
+        this.offset = offset;  
     public ClearCacheNodeRequest(boolean footer, boolean column, boolean offset, boolean statistics) {  
         this.footer = footer;
-        this.column = column;
-        this.offset = offset;  
-        this.statistics = statistics;
-    }
-
-    public ClearCacheNodeRequest(StreamInput in) throws IOException {
-        super(in);
-        this.footer = in.readBoolean();  
-        this.column = in.readBoolean();
-        this.offset = in.readBoolean();
-        this.statistics = in.readBoolean();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeBoolean(footer);  
-        out.writeBoolean(column);
-        out.writeBoolean(offset);
+import org.opensearch.core.common.io.stream.StreamInput;
         out.writeBoolean(statistics);  
-    }
-
-    public boolean isFooter() {  
-        return footer;
-    }
-
-    public boolean isColumn() {
-        return column;
-    }  
-
-    public boolean isOffset() {
-        return offset;  
-    }
-
-    public boolean isStatistics() {  
-        return statistics;
-    }
-
     public boolean isClearAll() {
-        return !footer && !column && !offset && !statistics;
+/** Per-node request carrying which caches to clear. @opensearch.internal */
+    private boolean statistics;
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+        super.writeTo(out);
+    }
+        this.statistics = statistics;
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+    }
     }  
+        return statistics;
 }
+import java.io.IOException;
+        return offset;  
+        this.offset = in.readBoolean();
+    public boolean isColumn() {
+    private boolean offset;  
+        return !footer && !column && !offset && !statistics;
+        return column;
+/*  
+    }
+    public ClearCacheNodeRequest(StreamInput in) throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+    public boolean isStatistics() {  
+    }  
+    public boolean isFooter() {  
+        this.column = column;
+public class ClearCacheNodeRequest extends TransportRequest {
+    public void writeTo(StreamOutput out) throws IOException {
+        this.column = in.readBoolean();
+        this.statistics = in.readBoolean();  
+    private boolean column;

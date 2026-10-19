@@ -1,398 +1,369 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.translog;
-
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.concurrent.ReleasableLock;
-import org.opensearch.index.engine.Engine;  
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.seqno.LocalCheckpointTracker;
-import org.opensearch.index.seqno.SequenceNumbers;  
-import org.opensearch.index.translog.listener.TranslogEventListener;
-
-import java.io.Closeable;  
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;  
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantReadWriteLock;  
-
-import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;
-import static org.opensearch.index.translog.TranslogDeletionPolicies.createTranslogDeletionPolicy;  
-import static org.hamcrest.Matchers.equalTo;
-
-public class InternalTranslogManagerTests extends TranslogManagerTestCase {  
-
-    /**
-     * A local translog has no fence, so the manager answers the fence-ownership questions for the absent case:  
-     * nothing can have superseded this copy, a handoff transfer is a no-op, and an aborted handoff leaves it free to
-     * resume. See {@link RemoteStoreFenceOwnership} for why these answers live here rather than as defaults on
-     * {@link Translog}.  
-     */
-    public void testFenceOwnershipWithoutAFence() throws IOException {
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
-        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
-        InternalTranslogManager translogManager = new InternalTranslogManager(
-            new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
-            primaryTerm,
-            globalCheckpoint::get,
-            createTranslogDeletionPolicy(INDEX_SETTINGS),  
-            shardId,
-            new ReleasableLock(new ReentrantReadWriteLock().readLock()),
-            () -> tracker,  
-            translogUUID,
-            TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
-            () -> {},  
-            new InternalTranslogFactory(),
-            () -> Boolean.TRUE,
-            TranslogOperationHelper.DEFAULT  
-        );
-        try {
-            assertFalse("no fence means nothing can have superseded us", translogManager.isRemoteStoreFenceSuperseded());  
-            translogManager.transferFenceOwnership("target-allocation"); // no fence to hand over: a no-op, never a failure
-            assertTrue("no fence means an aborted handoff may resume", translogManager.revertFenceOwnership());
-        } finally {  
-            translogManager.close();
-        }
-    }  
-
-    public void testRecoveryFromTranslog() throws IOException {
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
-        final AtomicBoolean beginTranslogRecoveryInvoked = new AtomicBoolean(false);
-        final AtomicBoolean onTranslogRecoveryInvoked = new AtomicBoolean(false);
-        InternalTranslogManager translogManager = null;  
-
-        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
-        try {  
-            translogManager = new InternalTranslogManager(
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
-                primaryTerm,  
-                globalCheckpoint::get,
-                createTranslogDeletionPolicy(INDEX_SETTINGS),
-                shardId,  
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
-                () -> tracker,
-                translogUUID,  
-                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
-                () -> {},
-                new InternalTranslogFactory(),  
-                () -> Boolean.TRUE,
-                TranslogOperationHelper.DEFAULT
-            );  
-            final int docs = randomIntBetween(1, 100);
-            for (int i = 0; i < docs; i++) {
-                final String id = Integer.toString(i);  
-                final ParsedDocument doc = testParsedDocument(id, null, testDocumentWithTextField(), SOURCE, null);
-                Engine.Index index = indexForDoc(doc);
-                Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);  
-                tracker.markSeqNoAsProcessed(i);
-                translogManager.add(new Translog.Index(index, indexResult));
-                translogManager.rollTranslogGeneration();  
-            }
-            long maxSeqNo = tracker.getMaxSeqNo();
-            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().getUncommittedOperations());  
-            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().estimatedNumberOfOperations());
-
-            translogManager.syncTranslog();  
-            translogManager.close();
-            translogManager = new InternalTranslogManager(
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
-                primaryTerm,
-                globalCheckpoint::get,
-                createTranslogDeletionPolicy(INDEX_SETTINGS),  
-                shardId,
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
-                () -> new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED),  
-                translogUUID,
-                new TranslogEventListener() {
-                    @Override  
-                    public void onAfterTranslogRecovery() {
-                        onTranslogRecoveryInvoked.set(true);
-                    }  
-
-                    @Override
-                    public void onBeginTranslogRecovery() {  
-                        beginTranslogRecoveryInvoked.set(true);
-                    }
-                },  
-                () -> {},
-                new InternalTranslogFactory(),
-                () -> Boolean.TRUE,  
-                TranslogOperationHelper.DEFAULT
-            );
-            AtomicInteger opsRecovered = new AtomicInteger();  
-            int opsRecoveredFromTranslog = translogManager.recoverFromTranslog((snapshot) -> {
-                Translog.Operation operation;
-                while ((operation = snapshot.next()) != null) {  
-                    opsRecovered.incrementAndGet();
-                }
-                return opsRecovered.get();  
-            }, NO_OPS_PERFORMED, Long.MAX_VALUE);
-
-            assertEquals(maxSeqNo + 1, opsRecovered.get());  
-            assertEquals(maxSeqNo + 1, opsRecoveredFromTranslog);
-
-            assertTrue(beginTranslogRecoveryInvoked.get());  
-            assertTrue(onTranslogRecoveryInvoked.get());
-
-        } finally {  
-            translogManager.close();
-        }
-    }  
-
-    public void testTranslogRollsGeneration() throws IOException {
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
-        InternalTranslogManager translogManager = null;
-        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
-        try {  
-            translogManager = new InternalTranslogManager(
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
-                primaryTerm,  
-                globalCheckpoint::get,
-                createTranslogDeletionPolicy(INDEX_SETTINGS),
-                shardId,  
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
-                () -> tracker,
-                translogUUID,  
-                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
-                () -> {},
-                new InternalTranslogFactory(),  
-                () -> Boolean.TRUE,
-                TranslogOperationHelper.DEFAULT
-            );  
-            final int docs = randomIntBetween(1, 100);
-            for (int i = 0; i < docs; i++) {
-                final String id = Integer.toString(i);  
-                final ParsedDocument doc = testParsedDocument(id, null, testDocumentWithTextField(), SOURCE, null);
-                Engine.Index index = indexForDoc(doc);
-                Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);  
-                tracker.markSeqNoAsProcessed(i);
-                translogManager.add(new Translog.Index(index, indexResult));
-                translogManager.rollTranslogGeneration();  
-            }
-            long maxSeqNo = tracker.getMaxSeqNo();
-            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().getUncommittedOperations());  
-            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().estimatedNumberOfOperations());
-
-            translogManager.syncTranslog();  
-            translogManager.close();
-            translogManager = new InternalTranslogManager(
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
-                primaryTerm,
-                globalCheckpoint::get,
-                createTranslogDeletionPolicy(INDEX_SETTINGS),  
-                shardId,
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
-                () -> new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED),  
-                translogUUID,
-                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
-                () -> {},  
-                new InternalTranslogFactory(),
-                () -> Boolean.TRUE,
-                TranslogOperationHelper.DEFAULT  
-            );
-            AtomicInteger opsRecovered = new AtomicInteger();
-            int opsRecoveredFromTranslog = translogManager.recoverFromTranslog((snapshot) -> {  
-                Translog.Operation operation;
-                while ((operation = snapshot.next()) != null) {
-                    opsRecovered.incrementAndGet();  
-                }
-                return opsRecovered.get();
-            }, NO_OPS_PERFORMED, Long.MAX_VALUE);  
-
-            assertEquals(maxSeqNo + 1, opsRecovered.get());
-            assertEquals(maxSeqNo + 1, opsRecoveredFromTranslog);  
-        } finally {
-            translogManager.close();
-        }  
-    }
-
-    public void testTrimOperationsFromTranslog() throws IOException {  
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-        InternalTranslogManager translogManager = null;
-        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);  
-        try {
-            translogManager = new InternalTranslogManager(
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
-                primaryTerm,
-                globalCheckpoint::get,
-                createTranslogDeletionPolicy(INDEX_SETTINGS),  
-                shardId,
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
-                () -> tracker,  
-                translogUUID,
-                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
-                () -> {},  
-                new InternalTranslogFactory(),
-                () -> Boolean.TRUE,
-                TranslogOperationHelper.DEFAULT  
-            );
-            final int docs = randomIntBetween(1, 100);
-            for (int i = 0; i < docs; i++) {  
-                final String id = Integer.toString(i);
-                final ParsedDocument doc = testParsedDocument(id, null, testDocumentWithTextField(), SOURCE, null);
-                Engine.Index index = indexForDoc(doc);  
-                Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);
-                tracker.markSeqNoAsProcessed(i);
-                translogManager.add(new Translog.Index(index, indexResult));  
-            }
-            long maxSeqNo = tracker.getMaxSeqNo();
-            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().getUncommittedOperations());  
-            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().estimatedNumberOfOperations());
-
-            primaryTerm.set(randomLongBetween(primaryTerm.get(), Long.MAX_VALUE));  
-            translogManager.rollTranslogGeneration();
-            translogManager.trimOperationsFromTranslog(primaryTerm.get(), NO_OPS_PERFORMED); // trim everything in translog
-
-            translogManager.close();
-            translogManager = new InternalTranslogManager(
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
-                primaryTerm,
-                globalCheckpoint::get,
-                createTranslogDeletionPolicy(INDEX_SETTINGS),  
-                shardId,
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
-                () -> new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED),  
-                translogUUID,
-                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
-                () -> {},  
-                new InternalTranslogFactory(),
-                () -> Boolean.TRUE,
-                TranslogOperationHelper.DEFAULT  
-            );
-            AtomicInteger opsRecovered = new AtomicInteger();
-            int opsRecoveredFromTranslog = translogManager.recoverFromTranslog((snapshot) -> {  
-                Translog.Operation operation;
-                while ((operation = snapshot.next()) != null) {
-                    opsRecovered.incrementAndGet();  
-                }
-                return opsRecovered.get();
-            }, NO_OPS_PERFORMED, Long.MAX_VALUE);  
-
-            assertEquals(0, opsRecovered.get());
-            assertEquals(0, opsRecoveredFromTranslog);  
-        } finally {
-            translogManager.close();
-        }  
-    }
-
-    public void testTranslogSync() throws IOException {  
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-        AtomicBoolean syncListenerInvoked = new AtomicBoolean();
-        InternalTranslogManager translogManager = null;  
-        final AtomicInteger maxSeqNo = new AtomicInteger(randomIntBetween(0, 128));
-        final AtomicInteger localCheckpoint = new AtomicInteger(randomIntBetween(0, maxSeqNo.get()));
-        try {  
-            ParsedDocument doc = testParsedDocument("1", null, testDocumentWithTextField(), B_1, null);
-            AtomicReference<InternalTranslogManager> translogManagerAtomicReference = new AtomicReference<>();
-            translogManager = new InternalTranslogManager(  
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
-                primaryTerm,
-                globalCheckpoint::get,  
-                createTranslogDeletionPolicy(INDEX_SETTINGS),
-                shardId,
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),  
-                () -> new LocalCheckpointTracker(maxSeqNo.get(), localCheckpoint.get()),
-                translogUUID,
-                new TranslogEventListener() {  
-                    @Override
-                    public void onAfterTranslogSync() {
-                        try {  
-                            translogManagerAtomicReference.get().trimUnreferencedReaders();
-                            syncListenerInvoked.set(true);
-                        } catch (IOException ex) {  
-                            fail("Failed due to " + ex);
                         }
-                    }  
-                },
-                () -> {},
-                new InternalTranslogFactory(),  
-                () -> Boolean.TRUE,
-                TranslogOperationHelper.DEFAULT
-            );  
-            translogManagerAtomicReference.set(translogManager);
-            Engine.Index index = indexForDoc(doc);
-            Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), 1, false);  
-            translogManager.add(new Translog.Index(index, indexResult));
-
-            translogManager.syncTranslog();  
-
-            assertThat(translogManager.getTranslog().currentFileGeneration(), equalTo(2L));
-            assertThat(translogManager.getTranslog().getMinFileGeneration(), equalTo(2L));  
-            assertTrue(syncListenerInvoked.get());
-        } finally {
-            translogManager.close();  
-        }
-    }
-
-    /**
-     * {@link InternalTranslogManager#acquireHistoryRetentionLock()} must return a lock backed by
-     * {@link Translog#acquireRetentionLock()} that pins a translog generation in the deletion policy while  
-     * it is held, and releases that generation when closed. This is the translog-layer support that
-     * {@link org.opensearch.index.engine.DataFormatAwareEngine} relies on to keep history available for
-     * the duration of peer recovery / primary relocation.  
      */
-    public void testAcquireHistoryRetentionLock() throws IOException {
-        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
-        final LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
-        // Hold a reference to the deletion policy so we can observe the retention locks it tracks.
-        final TranslogDeletionPolicy deletionPolicy = createTranslogDeletionPolicy(INDEX_SETTINGS);  
-        InternalTranslogManager translogManager = null;
-        try {
-            translogManager = new InternalTranslogManager(  
-                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
+            TranslogOperationHelper.DEFAULT  
+                    opsRecovered.incrementAndGet();
+                            syncListenerInvoked.set(true);
+            translogManager.transferFenceOwnership("target-allocation"); // no fence to hand over: a no-op, never a failure
+            assertNotNull(retentionLock);  
+            assertEquals(maxSeqNo + 1, opsRecoveredFromTranslog);  
+            primaryTerm,
                 primaryTerm,
-                globalCheckpoint::get,  
-                deletionPolicy,
-                shardId,
-                new ReleasableLock(new ReentrantReadWriteLock().readLock()),  
-                () -> tracker,
+            assertEquals(maxSeqNo + 1, opsRecoveredFromTranslog);
+import org.opensearch.index.seqno.LocalCheckpointTracker;
+            assertSame(deletionPolicy, translogManager.getTranslog().getDeletionPolicy());
+                translogUUID,  
                 translogUUID,
-                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,  
+            }
+            new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
+                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
+            translogManager.syncTranslog();  
+                deletionPolicy,
+import org.opensearch.common.util.BigArrays;
+                () -> Boolean.TRUE,
+        // Hold a reference to the deletion policy so we can observe the retention locks it tracks.
+import java.util.concurrent.atomic.AtomicReference;
+                translogManager.add(new Translog.Index(index, indexResult));  
+                    }  
+            primaryTerm.set(randomLongBetween(primaryTerm.get(), Long.MAX_VALUE));  
                 () -> {},
+                    public void onBeginTranslogRecovery() {  
+                tracker.markSeqNoAsProcessed(i);
+            translogManager.close();
+                new InternalTranslogFactory(),  
+                () -> new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED),  
+import org.opensearch.index.mapper.ParsedDocument;
+                Translog.Operation operation;
+        final AtomicBoolean onTranslogRecoveryInvoked = new AtomicBoolean(false);
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
+        } finally {
+                }
+        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
+                    opsRecovered.incrementAndGet();  
+                () -> Boolean.TRUE,  
+                },
+            () -> tracker,  
+        }  
+        } finally {
+                Engine.Index index = indexForDoc(doc);
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
+            long maxSeqNo = tracker.getMaxSeqNo();
+    }  
+            retentionLock.close();  
+                createTranslogDeletionPolicy(INDEX_SETTINGS),  
+            Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), 1, false);  
+                () -> tracker,
+import org.opensearch.common.util.concurrent.ReleasableLock;
+            globalCheckpoint::get,
+            deletionPolicy.assertNoOpenTranslogRefs();
+                    public void onAfterTranslogRecovery() {
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
+     * it is held, and releases that generation when closed. This is the translog-layer support that
+            int opsRecoveredFromTranslog = translogManager.recoverFromTranslog((snapshot) -> {  
+                globalCheckpoint::get,
+    }  
+                createTranslogDeletionPolicy(INDEX_SETTINGS),
+                translogUUID,
+                () -> {},
+ * compatible open source license.
+                while ((operation = snapshot.next()) != null) {
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
+                globalCheckpoint::get,
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
+            assertEquals(maxSeqNo + 1, opsRecovered.get());  
+        try {  
+            AtomicInteger opsRecovered = new AtomicInteger();
+        AtomicBoolean syncListenerInvoked = new AtomicBoolean();
+                shardId,
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
+            assertThat(translogManager.getTranslog().currentFileGeneration(), equalTo(2L));
+            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().estimatedNumberOfOperations());
+            expectThrows(AssertionError.class, deletionPolicy::assertNoOpenTranslogRefs);  
+import org.opensearch.index.seqno.SequenceNumbers;  
+                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
+        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);  
+            final int docs = randomIntBetween(1, 100);
+            translogManager.close();  
+                final ParsedDocument doc = testParsedDocument(id, null, testDocumentWithTextField(), SOURCE, null);
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),  
+                primaryTerm,
+            long maxSeqNo = tracker.getMaxSeqNo();
+            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().estimatedNumberOfOperations());
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
                 new InternalTranslogFactory(),
+                () -> Boolean.TRUE,
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
+        InternalTranslogManager translogManager = null;  
+                }
+/*  
+            );  
+                translogManager.rollTranslogGeneration();  
+            final int docs = randomIntBetween(1, 100);
+        final TranslogDeletionPolicy deletionPolicy = createTranslogDeletionPolicy(INDEX_SETTINGS);  
+                Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);
+            assertEquals(0, deletionPolicy.pendingTranslogRefCount());
+            // Releasing the lock releases the pinned generation.
+                Engine.Index index = indexForDoc(doc);  
+            assertTrue(beginTranslogRecoveryInvoked.get());  
+                    @Override
+                globalCheckpoint::get,
+            AtomicReference<InternalTranslogManager> translogManagerAtomicReference = new AtomicReference<>();
+                        beginTranslogRecoveryInvoked.set(true);
+            // While the lock is held there is an open translog reference.
+                () -> {},  
+            }, NO_OPS_PERFORMED, Long.MAX_VALUE);  
+            translogManager = new InternalTranslogManager(
+import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;
+                tracker.markSeqNoAsProcessed(i);
+                shardId,  
+                }
+                Engine.Index index = indexForDoc(doc);
+                shardId,
+                return opsRecovered.get();  
+                        try {  
+                translogManager.add(new Translog.Index(index, indexResult));
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+ * The OpenSearch Contributors require contributions made to  
+                () -> {},
+                primaryTerm,
+    }
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
+                TranslogOperationHelper.DEFAULT
+                () -> {},  
+                shardId,
+                return opsRecovered.get();
+                globalCheckpoint::get,  
+                            fail("Failed due to " + ex);
+            TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
+                shardId,
+                final Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);  
+            translogManager.close();
+            translogManagerAtomicReference.set(translogManager);
+                new InternalTranslogFactory(),
+                () -> tracker,  
+                    }
+        } finally {  
+            new ReleasableLock(new ReentrantReadWriteLock().readLock()),
+            // No retention locks are held before acquiring one.  
+                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
+            );
+    }
+            translogManager.rollTranslogGeneration();
+            for (int i = 0; i < docs; i++) {
+                TranslogOperationHelper.DEFAULT
+        }  
+                globalCheckpoint::get,  
+                    }  
+            // Index a few operations spread over multiple generations.
+        }
+}
+                },  
+        try {
+     * {@link Translog}.  
+                shardId,
                 () -> Boolean.TRUE,  
                 TranslogOperationHelper.DEFAULT
-            );
-
-            // Index a few operations spread over multiple generations.
+            assertTrue(syncListenerInvoked.get());
+    public void testTrimOperationsFromTranslog() throws IOException {  
+    public void testFenceOwnershipWithoutAFence() throws IOException {
             final int docs = randomIntBetween(1, 10);
-            for (int i = 0; i < docs; i++) {  
-                final ParsedDocument doc = testParsedDocument(Integer.toString(i), null, testDocumentWithTextField(), SOURCE, null);
-                final Engine.Index index = indexForDoc(doc);
-                final Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);  
-                tracker.markSeqNoAsProcessed(i);
-                translogManager.add(new Translog.Index(index, indexResult));
-                translogManager.rollTranslogGeneration();  
-            }
-
-            // The manager must expose the same deletion policy instance the lock pins against.  
-            assertSame(deletionPolicy, translogManager.getTranslog().getDeletionPolicy());
-
-            // No retention locks are held before acquiring one.  
+            new InternalTranslogFactory(),
+                translogUUID,
+                            translogManagerAtomicReference.get().trimUnreferencedReaders();
+                globalCheckpoint::get,
+            translogUUID,
             assertEquals(0, deletionPolicy.pendingTranslogRefCount());
-            deletionPolicy.assertNoOpenTranslogRefs();
-
-            // Acquiring the history retention lock pins a translog generation.
-            final Closeable retentionLock = translogManager.acquireHistoryRetentionLock();
-            assertNotNull(retentionLock);  
-            assertEquals(1, deletionPolicy.pendingTranslogRefCount());
-            // While the lock is held there is an open translog reference.
-            expectThrows(AssertionError.class, deletionPolicy::assertNoOpenTranslogRefs);  
-
-            // Releasing the lock releases the pinned generation.
-            retentionLock.close();  
-            assertEquals(0, deletionPolicy.pendingTranslogRefCount());
-            deletionPolicy.assertNoOpenTranslogRefs();
         } finally {  
-            translogManager.close();
+                    @Override
+    /**
         }
+            translogManager.close();
+                new InternalTranslogFactory(),  
+                translogManager.add(new Translog.Index(index, indexResult));
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),  
+            final Closeable retentionLock = translogManager.acquireHistoryRetentionLock();
+                Translog.Operation operation;
+                TranslogOperationHelper.DEFAULT  
+                        } catch (IOException ex) {  
+            }
+            translogManager.close();
+import static org.opensearch.index.translog.TranslogDeletionPolicies.createTranslogDeletionPolicy;  
+                shardId,  
+                new TranslogEventListener() {  
+                () -> tracker,
+                Translog.Operation operation;
+            // The manager must expose the same deletion policy instance the lock pins against.  
+                createTranslogDeletionPolicy(INDEX_SETTINGS),
+                primaryTerm,  
+            assertTrue("no fence means an aborted handoff may resume", translogManager.revertFenceOwnership());
+            int opsRecoveredFromTranslog = translogManager.recoverFromTranslog((snapshot) -> {
+            final int docs = randomIntBetween(1, 100);
+                TranslogOperationHelper.DEFAULT
+import java.io.Closeable;  
+        InternalTranslogManager translogManager = null;  
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
+            assertFalse("no fence means nothing can have superseded us", translogManager.isRemoteStoreFenceSuperseded());  
     }  
-}
+     * {@link Translog#acquireRetentionLock()} that pins a translog generation in the deletion policy while  
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
+            AtomicInteger opsRecovered = new AtomicInteger();  
+                translogUUID,
+            assertEquals(0, opsRecovered.get());
+            assertThat(translogManager.getTranslog().getMinFileGeneration(), equalTo(2L));  
+            translogManager.close();
+                while ((operation = snapshot.next()) != null) {  
+import java.io.IOException;
+                new TranslogConfig(shardId, primaryTranslogDir, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
+            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().getUncommittedOperations());  
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
+                final String id = Integer.toString(i);
+                return opsRecovered.get();
+            assertEquals(1, deletionPolicy.pendingTranslogRefCount());
+            ParsedDocument doc = testParsedDocument("1", null, testDocumentWithTextField(), B_1, null);
+ * this file be licensed under the Apache-2.0 license or a
+                translogUUID,
+        final LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
+                TranslogOperationHelper.DEFAULT  
+            translogManager.close();
+    /**
+            // Acquiring the history retention lock pins a translog generation.
+import java.util.concurrent.atomic.AtomicLong;
+                final String id = Integer.toString(i);  
+        InternalTranslogManager translogManager = null;
+                Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);  
+                () -> new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED),  
+                primaryTerm,  
+     * {@link org.opensearch.index.engine.DataFormatAwareEngine} relies on to keep history available for
+        InternalTranslogManager translogManager = new InternalTranslogManager(
+                translogManager.rollTranslogGeneration();  
+    public void testTranslogSync() throws IOException {  
+            int opsRecoveredFromTranslog = translogManager.recoverFromTranslog((snapshot) -> {  
+                shardId,
+            translogManager = new InternalTranslogManager(  
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
+        InternalTranslogManager translogManager = null;
+            }, NO_OPS_PERFORMED, Long.MAX_VALUE);
+        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
+            );
+            createTranslogDeletionPolicy(INDEX_SETTINGS),  
+    }
+                final ParsedDocument doc = testParsedDocument(id, null, testDocumentWithTextField(), SOURCE, null);
+        LocalCheckpointTracker tracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
+                tracker.markSeqNoAsProcessed(i);
+                new InternalTranslogFactory(),  
+                final Engine.Index index = indexForDoc(doc);
+                () -> {},
+import java.util.concurrent.atomic.AtomicBoolean;
+        try {
+                new InternalTranslogFactory(),
+            assertEquals(maxSeqNo + 1, opsRecovered.get());
+            );
+            );  
+                new InternalTranslogFactory(),
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().estimatedNumberOfOperations());
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
+            shardId,
+                Engine.IndexResult indexResult = new Engine.IndexResult(index.version(), index.primaryTerm(), i, true);  
+                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
+    public void testRecoveryFromTranslog() throws IOException {
+                while ((operation = snapshot.next()) != null) {
+                globalCheckpoint::get,
+            Engine.Index index = indexForDoc(doc);
+            AtomicInteger opsRecovered = new AtomicInteger();
+        final AtomicInteger localCheckpoint = new AtomicInteger(randomIntBetween(0, maxSeqNo.get()));
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),  
+            deletionPolicy.assertNoOpenTranslogRefs();
+                    public void onAfterTranslogSync() {
+                () -> Boolean.TRUE,
+        final AtomicInteger maxSeqNo = new AtomicInteger(randomIntBetween(0, 128));
+                primaryTerm,
+            assertTrue(onTranslogRecoveryInvoked.get());
+        try {  
+            }
+        } finally {  
+                tracker.markSeqNoAsProcessed(i);
+            translogManager.syncTranslog();  
+                    opsRecovered.incrementAndGet();  
+     * {@link InternalTranslogManager#acquireHistoryRetentionLock()} must return a lock backed by
+    public void testTranslogRollsGeneration() throws IOException {
+ */  
+            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().getUncommittedOperations());  
+package org.opensearch.index.translog;
+            translogManager = new InternalTranslogManager(
+            );
+            }, NO_OPS_PERFORMED, Long.MAX_VALUE);  
+        final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);  
+            () -> {},  
+                TranslogOperationHelper.DEFAULT  
+            );
+            long maxSeqNo = tracker.getMaxSeqNo();
+                primaryTerm,
+            translogManager = new InternalTranslogManager(
+            translogManager = new InternalTranslogManager(
+     * nothing can have superseded this copy, a handoff transfer is a no-op, and an aborted handoff leaves it free to
+                new TranslogEventListener() {
+            () -> Boolean.TRUE,
+            translogManager.syncTranslog();  
+                createTranslogDeletionPolicy(INDEX_SETTINGS),
+     * the duration of peer recovery / primary relocation.  
+            translogManager.close();
+                    @Override  
+        } finally {
+            assertEquals(maxSeqNo + 1, translogManager.getTranslogStats().getUncommittedOperations());  
+                () -> {},  
+                final ParsedDocument doc = testParsedDocument(id, null, testDocumentWithTextField(), SOURCE, null);
+            );  
+ * SPDX-License-Identifier: Apache-2.0
+                createTranslogDeletionPolicy(INDEX_SETTINGS),  
+import org.opensearch.index.translog.listener.TranslogEventListener;
+                () -> new LocalCheckpointTracker(maxSeqNo.get(), localCheckpoint.get()),
+                createTranslogDeletionPolicy(INDEX_SETTINGS),  
+            for (int i = 0; i < docs; i++) {
+public class InternalTranslogManagerTests extends TranslogManagerTestCase {  
+                new InternalTranslogFactory(),
+                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,
+     * A local translog has no fence, so the manager answers the fence-ownership questions for the absent case:  
+                createTranslogDeletionPolicy(INDEX_SETTINGS),  
+import static org.hamcrest.Matchers.equalTo;
+            for (int i = 0; i < docs; i++) {  
+                TranslogOperationHelper.DEFAULT
+                        onTranslogRecoveryInvoked.set(true);
+     * resume. See {@link RemoteStoreFenceOwnership} for why these answers live here rather than as defaults on
+                final ParsedDocument doc = testParsedDocument(Integer.toString(i), null, testDocumentWithTextField(), SOURCE, null);
+        }
+import java.util.concurrent.locks.ReentrantReadWriteLock;  
+        try {  
+ *
+                translogManager.rollTranslogGeneration();  
+                translogUUID,  
+            translogManager.close();
+        try {
+                translogManager.add(new Translog.Index(index, indexResult));
+    public void testAcquireHistoryRetentionLock() throws IOException {
+                () -> Boolean.TRUE,
+            translogManager = new InternalTranslogManager(  
+                () -> Boolean.TRUE,
+            translogManager.add(new Translog.Index(index, indexResult));
+                () -> {},
+                translogUUID,
+                final String id = Integer.toString(i);  
+        );
+                new ReleasableLock(new ReentrantReadWriteLock().readLock()),
+                TranslogEventListener.NOOP_TRANSLOG_EVENT_LISTENER,  
+            translogManager.trimOperationsFromTranslog(primaryTerm.get(), NO_OPS_PERFORMED); // trim everything in translog
+                primaryTerm,
+            }
+import java.util.concurrent.atomic.AtomicInteger;  
+                () -> new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED),  
+        }
+                () -> tracker,
+                globalCheckpoint::get,
+            translogManager = new InternalTranslogManager(
+        InternalTranslogManager translogManager = null;
+            for (int i = 0; i < docs; i++) {  
+import org.opensearch.index.engine.Engine;  
+            assertEquals(0, opsRecoveredFromTranslog);  
+                () -> Boolean.TRUE,
+     */
+            translogManager = new InternalTranslogManager(
+        final AtomicBoolean beginTranslogRecoveryInvoked = new AtomicBoolean(false);

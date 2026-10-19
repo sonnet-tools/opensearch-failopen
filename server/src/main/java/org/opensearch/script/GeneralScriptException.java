@@ -1,67 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ * Simple exception class from a script.
+ * this work for additional information regarding copyright
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchWrapperException;
-import org.opensearch.core.common.io.stream.StreamInput;  
-
-import java.io.IOException;
-
-/**
- * Simple exception class from a script.
- * <p>  
- * Use of this exception should generally be avoided, it doesn't provide
- * much context or structure to users trying to debug scripting when
  * things go wrong.  
- * @deprecated Use ScriptException for exceptions from the scripting engine,
- *             otherwise use a more appropriate exception (e.g. if thrown
- *             from various abstractions)  
+ * compatible open source license.
+ */
+import org.opensearch.OpenSearchException;
+ * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.script;
  *
- * @opensearch.internal
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+ * @deprecated Use ScriptException for exceptions from the scripting engine,
+    }
+ * GitHub history for details.
+ * Use of this exception should generally be avoided, it doesn't provide
+ * under the License.  
+ *
+ * The OpenSearch Contributors require contributions made to  
  */  
-@Deprecated
-public class GeneralScriptException extends OpenSearchException implements OpenSearchWrapperException {
-
-    public GeneralScriptException(String msg) {
-        super(msg);
-    }  
-
-    public GeneralScriptException(String msg, Throwable cause) {
         super(msg, cause);  
-    }
-
-    public GeneralScriptException(StreamInput in) throws IOException {  
+ * not use this file except in compliance with the License.
+        super(msg);
+ * much context or structure to users trying to debug scripting when
+ */  
+ *             otherwise use a more appropriate exception (e.g. if thrown
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Unless required by applicable law or agreed to in writing,
         super(in);
-    }
+ * You may obtain a copy of the License at  
+ * @opensearch.internal
+ *  
+    public GeneralScriptException(StreamInput in) throws IOException {  
+import org.opensearch.core.common.io.stream.StreamInput;  
+    public GeneralScriptException(String msg) {
+@Deprecated
+ */  
+ *
 }  
+public class GeneralScriptException extends OpenSearchException implements OpenSearchWrapperException {
+ * specific language governing permissions and limitations
+ * <p>  
+import java.io.IOException;
+/*  
+    }  
+import org.opensearch.OpenSearchWrapperException;
+/**
+    public GeneralScriptException(String msg, Throwable cause) {
+/*
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Licensed to Elasticsearch under one or more contributor  
+ *             from various abstractions)  
+    }

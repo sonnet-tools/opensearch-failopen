@@ -1,172 +1,148 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.threadpool;
-
-import org.opensearch.Version;  
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.SizeValue;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.VersionUtils;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.util.Map;  
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.hamcrest.Matchers.hasKey;  
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
-
-public class ThreadPoolSerializationTests extends OpenSearchTestCase {
-    private final BytesStreamOutput output = new BytesStreamOutput();
-    private ThreadPool.ThreadPoolType threadPoolType;  
-
-    @Before
-    public void setUp() throws Exception {  
-        super.setUp();
-        threadPoolType = randomFrom(ThreadPool.ThreadPoolType.values());
-    }  
-
-    public void testThatQueueSizeSerializationWorks() throws Exception {
-        ThreadPool.Info info = new ThreadPool.Info(  
             "foo",
-            threadPoolType,
-            1,  
             10,
-            TimeValue.timeValueMillis(3000),
-            SizeValue.parseSizeValue("10k")  
-        );
-        output.setVersion(Version.CURRENT);
-        info.writeTo(output);  
-
-        StreamInput input = output.bytes().streamInput();
-        ThreadPool.Info newInfo = new ThreadPool.Info(input);  
-
+        ThreadPool.Info info = new ThreadPool.Info("foo", threadPoolType, 1, 10, TimeValue.timeValueMillis(3000), null);
+        ThreadPool.Info info = new ThreadPool.Info(  
+public class ThreadPoolSerializationTests extends OpenSearchTestCase {
+        assertThat(newInfo.getThreadPoolType(), is(ThreadPool.ThreadPoolType.SCALING));
         assertThat(newInfo.getQueueSize().singles(), is(10000L));
     }  
-
-    public void testThatNegativeQueueSizesCanBeSerialized() throws Exception {
-        ThreadPool.Info info = new ThreadPool.Info("foo", threadPoolType, 1, 10, TimeValue.timeValueMillis(3000), null);  
-        output.setVersion(Version.CURRENT);
-        info.writeTo(output);
-
-        StreamInput input = output.bytes().streamInput();
-        ThreadPool.Info newInfo = new ThreadPool.Info(input);
-
-        assertThat(newInfo.getQueueSize(), is(nullValue()));
-    }
-
-    public void testThatToXContentWritesOutUnboundedCorrectly() throws Exception {
-        ThreadPool.Info info = new ThreadPool.Info("foo", threadPoolType, 1, 10, TimeValue.timeValueMillis(3000), null);
-        XContentBuilder builder = jsonBuilder();  
-        builder.startObject();
-        info.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();  
-
-        Map<String, Object> map = XContentHelper.convertToMap(BytesReference.bytes(builder), false, builder.contentType()).v2();
-        assertThat(map, hasKey("foo"));  
-        map = (Map<String, Object>) map.get("foo");
-        if (threadPoolType == ThreadPool.ThreadPoolType.FORK_JOIN || threadPoolType == ThreadPool.ThreadPoolType.VIRTUAL) {
-            // neither a ForkJoinPool nor an unbounded virtual thread-per-task pool writes a queue_size field  
-            assertThat(map.containsKey("queue_size"), is(false));
-        } else {
-            assertThat(map, hasKey("queue_size"));  
-            assertThat(map.get("queue_size").toString(), is("-1"));
+import org.opensearch.core.xcontent.XContentBuilder;  
         }
-    }  
-
-    public void testThatNegativeSettingAllowsToStart() throws InterruptedException {
-        Settings settings = Settings.builder().put("node.name", "write").put("thread_pool.write.queue_size", "-1").build();  
-        ThreadPool threadPool = new ThreadPool(settings);
-        assertThat(threadPool.info("write").getQueueSize(), is(nullValue()));
-        terminate(threadPool);  
-    }
-
     public void testThatToXContentWritesInteger() throws Exception {  
-        ThreadPool.Info info = new ThreadPool.Info(
-            "foo",
+            assertThat(map, hasKey("queue_size"));  
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+            assertThat(map.get("queue_size").toString(), is("1000"));
+            TimeValue.timeValueMillis(3000),  
+            assertThat(map.get("queue_size").toString(), is("-1"));
+        assertThat(map, hasKey("foo"));  
+ *
+    public void setUp() throws Exception {  
+import static org.hamcrest.Matchers.is;
+        );
+    public void testThatThreadPoolTypeIsSerializedCorrectly() throws IOException {
+import java.util.Map;  
+        map = (Map<String, Object>) map.get("foo");
+        assertThat(newInfo.getQueueSize(), is(nullValue()));
+ */  
+ * The OpenSearch Contributors require contributions made to  
+        builder.startObject();
+    }  
+        output.setVersion(Version.CURRENT);
+        StreamInput input = output.bytes().streamInput();  
+        info.writeTo(output);
+        info.writeTo(output);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+        builder.endObject();  
+ * compatible open source license.
+        ThreadPool.Info newInfo = new ThreadPool.Info(input);  
+    }  
+        if (threadPoolType == ThreadPool.ThreadPoolType.FORK_JOIN || threadPoolType == ThreadPool.ThreadPoolType.VIRTUAL) {
+        StreamInput input = output.bytes().streamInput();
+            // neither a ForkJoinPool nor an unbounded virtual thread-per-task pool writes a queue_size field  
+            SizeValue.parseSizeValue("1k")
+ * Licensed to Elasticsearch under one or more contributor  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.Version;  
+        terminate(threadPool);  
+ * license agreements. See the NOTICE file distributed with
+import static org.hamcrest.Matchers.nullValue;
+import org.opensearch.test.VersionUtils;
+            1,  
+import org.opensearch.test.OpenSearchTestCase;
+ *
+        map = (Map<String, Object>) map.get("foo");
+        StreamInput input = output.bytes().streamInput();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
+    public void testThatNegativeQueueSizesCanBeSerialized() throws Exception {
+        Map<String, Object> map = XContentHelper.convertToMap(BytesReference.bytes(builder), false, builder.contentType()).v2();
+        );
+ * specific language governing permissions and limitations
+import org.opensearch.common.xcontent.XContentHelper;
+        } else {
+        StreamInput input = output.bytes().streamInput();
+        threadPoolType = randomFrom(ThreadPool.ThreadPoolType.values());
+            10,
+    private final BytesStreamOutput output = new BytesStreamOutput();
+ * Unless required by applicable law or agreed to in writing,
+package org.opensearch.threadpool;
+    @Before
+    }
+         */  
+        ThreadPool.Info info = new ThreadPool.Info("foo", ThreadPool.ThreadPoolType.VIRTUAL);
+        Settings settings = Settings.builder().put("node.name", "write").put("thread_pool.write.queue_size", "-1").build();  
+ */
+    }
             threadPoolType,  
             1,
-            10,
-            TimeValue.timeValueMillis(3000),  
-            SizeValue.parseSizeValue("1k")
-        );
-        XContentBuilder builder = jsonBuilder();  
-        builder.startObject();
-        info.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();  
-
+import org.opensearch.core.common.io.stream.StreamInput;
         Map<String, Object> map = XContentHelper.convertToMap(BytesReference.bytes(builder), false, builder.contentType()).v2();
-        assertThat(map, hasKey("foo"));  
-        map = (Map<String, Object>) map.get("foo");
-        if (threadPoolType == ThreadPool.ThreadPoolType.FORK_JOIN || threadPoolType == ThreadPool.ThreadPoolType.VIRTUAL) {
-            // neither a ForkJoinPool nor an unbounded virtual thread-per-task pool writes a queue_size field  
-            assertThat(map.containsKey("queue_size"), is(false));
-        } else {
-            assertThat(map, hasKey("queue_size"));  
-            assertThat(map.get("queue_size").toString(), is("1000"));
-        }
-    }  
-
-    public void testThatThreadPoolTypeIsSerializedCorrectly() throws IOException {
+            TimeValue.timeValueMillis(3000),
+ * under the License.  
+import java.io.IOException;
+        info.toXContent(builder, ToXContent.EMPTY_PARAMS);
         ThreadPool.Info info = new ThreadPool.Info("foo", threadPoolType);  
-        output.setVersion(Version.CURRENT);
+        assertThat(map, hasKey("foo"));  
         info.writeTo(output);
-
-        StreamInput input = output.bytes().streamInput();
-        ThreadPool.Info newInfo = new ThreadPool.Info(input);
-
-        /* The SerDe patch converts RESIZABLE threadpool type value to FIXED. Implementing
-         * the same conversion in test to maintain parity.
-         */  
-        assertThat(newInfo.getThreadPoolType(), is(threadPoolType));
-    }
-
-    public void testThatVirtualThreadPoolTypeIsSerializedAsScalingForOlderVersions() throws IOException {
-        ThreadPool.Info info = new ThreadPool.Info("foo", ThreadPool.ThreadPoolType.VIRTUAL);
-        output.setVersion(VersionUtils.getPreviousVersion(Version.V_3_8_0));  
-        info.writeTo(output);
-
-        StreamInput input = output.bytes().streamInput();  
-        ThreadPool.Info newInfo = new ThreadPool.Info(input);
-
-        // Nodes older than 3.8.0 do not know about the "virtual" type, so it is written as "scaling"  
-        assertThat(newInfo.getThreadPoolType(), is(ThreadPool.ThreadPoolType.SCALING));
-    }
+    public void testThatToXContentWritesOutUnboundedCorrectly() throws Exception {
 }  
+/*
+/*
+/*  
+ * Modifications Copyright OpenSearch Contributors. See  
+ * this file be licensed under the Apache-2.0 license or a
+ * You may obtain a copy of the License at  
+import org.opensearch.core.xcontent.ToXContent;
+    public void testThatVirtualThreadPoolTypeIsSerializedAsScalingForOlderVersions() throws IOException {
+ *  
+            threadPoolType,
+import org.opensearch.core.common.bytes.BytesReference;  
+        ThreadPool.Info newInfo = new ThreadPool.Info(input);
+    private ThreadPool.ThreadPoolType threadPoolType;  
+        if (threadPoolType == ThreadPool.ThreadPoolType.FORK_JOIN || threadPoolType == ThreadPool.ThreadPoolType.VIRTUAL) {
+            SizeValue.parseSizeValue("10k")  
+        ThreadPool.Info newInfo = new ThreadPool.Info(input);
+        assertThat(threadPool.info("write").getQueueSize(), is(nullValue()));
+        ThreadPool.Info newInfo = new ThreadPool.Info(input);
+        ThreadPool.Info info = new ThreadPool.Info("foo", threadPoolType, 1, 10, TimeValue.timeValueMillis(3000), null);  
+ * not use this file except in compliance with the License.
+ * SPDX-License-Identifier: Apache-2.0
+        }
+    public void testThatQueueSizeSerializationWorks() throws Exception {
+        } else {
+        super.setUp();
+        info.writeTo(output);
+            assertThat(map.containsKey("queue_size"), is(false));
+        output.setVersion(Version.CURRENT);
+    }
+        builder.endObject();  
+        ThreadPool threadPool = new ThreadPool(settings);
+            "foo",
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+        /* The SerDe patch converts RESIZABLE threadpool type value to FIXED. Implementing
+        info.toXContent(builder, ToXContent.EMPTY_PARAMS);
+ */
+        output.setVersion(Version.CURRENT);
+        assertThat(newInfo.getThreadPoolType(), is(threadPoolType));
+        builder.startObject();
+import org.opensearch.common.unit.SizeValue;  
+        XContentBuilder builder = jsonBuilder();  
+        XContentBuilder builder = jsonBuilder();  
+            assertThat(map, hasKey("queue_size"));  
+            // neither a ForkJoinPool nor an unbounded virtual thread-per-task pool writes a queue_size field  
+        ThreadPool.Info info = new ThreadPool.Info(
+import org.junit.Before;  
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.common.unit.TimeValue;
+ * software distributed under the License is distributed on an
+import org.opensearch.common.settings.Settings;
+import static org.hamcrest.Matchers.hasKey;  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        output.setVersion(VersionUtils.getPreviousVersion(Version.V_3_8_0));  
+         * the same conversion in test to maintain parity.
+        // Nodes older than 3.8.0 do not know about the "virtual" type, so it is written as "scaling"  
+            assertThat(map.containsKey("queue_size"), is(false));
+    public void testThatNegativeSettingAllowsToStart() throws InterruptedException {

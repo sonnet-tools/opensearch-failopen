@@ -1,98 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.search.pruning;
-
-import org.apache.lucene.search.BooleanClause;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilderVisitor;  
-import org.opensearch.index.query.RangeQueryBuilder;
-import org.opensearch.search.builder.SearchSourceBuilder;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;  
-
-/**
- * Conservative query-tree walker that extracts constraints from mandatory query positions.  
- *
- * The extractor relies on {@link QueryBuilder#visit(QueryBuilderVisitor)} to traverse the query tree. It only follows
- * children visited as {@link BooleanClause.Occur#MUST} or {@link BooleanClause.Occur#FILTER}; optional or negative  
- * clauses are ignored because they are not required for every matching document.
- */
-public final class MandatoryQueryConstraintExtractor implements QueryConstraintExtractor {  
-    /**
-     * Extracts mandatory constraints for the configured pruning fields.
-     */  
-    @Override
-    public List<QueryConstraint> extractMandatoryConstraints(SearchSourceBuilder source, Set<String> pruningFields) {
-        if (source == null || source.query() == null || pruningFields == null || pruningFields.isEmpty()) {  
-            return List.of();
         }
-
-        MandatoryQueryConstraintVisitor visitor = new MandatoryQueryConstraintVisitor(pruningFields);
         source.query().visit(visitor);
-        return visitor.constraints();  
-    }
-
-    private static final class MandatoryQueryConstraintVisitor implements QueryBuilderVisitor {  
-        private final Set<String> pruningFields;
-        private final List<QueryConstraint> constraints = new ArrayList<>();
-
-        private MandatoryQueryConstraintVisitor(Set<String> pruningFields) {
-            this.pruningFields = pruningFields;
-        }  
-
-        @Override
-        public void accept(QueryBuilder queryBuilder) {  
-            if (queryBuilder instanceof RangeQueryBuilder) {
-                RangeQueryConstraint constraint = buildRangeConstraint((RangeQueryBuilder) queryBuilder, pruningFields);
-                if (constraint != null) {  
-                    constraints.add(constraint);
-                }
-            }  
-        }
-
-        @Override  
-        public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
-            switch (occur) {
-                case MUST:  
-                case FILTER:
+            field,  
+        if (range.from() == null && range.to() == null) {
+        String field = range.fieldName();
                     return this;
-                default:  
-                    return QueryBuilderVisitor.NO_OP_VISITOR;
-            }
-        }  
-
         private List<QueryConstraint> constraints() {
             return List.copyOf(constraints);  
-        }
-    }
-
-    private static RangeQueryConstraint buildRangeConstraint(RangeQueryBuilder range, Set<String> pruningFields) {
-        String field = range.fieldName();
-        if (field == null || pruningFields.contains(field) == false) {  
-            return null;
-        }
-
-        if (range.from() == null && range.to() == null) {
-            return null;
-        }  
-
-        return new RangeQueryConstraint(
-            field,  
-            range.from(),
-            range.to(),
-            range.includeLower(),  
+                default:  
+        private final Set<String> pruningFields;
+    /**
+                if (constraint != null) {  
+        MandatoryQueryConstraintVisitor visitor = new MandatoryQueryConstraintVisitor(pruningFields);
+                    constraints.add(constraint);
             range.includeUpper(),
-            range.format(),
-            range.timeZone(),  
-            range.relation()
-        );
     }  
+            range.includeLower(),  
+    public List<QueryConstraint> extractMandatoryConstraints(SearchSourceBuilder source, Set<String> pruningFields) {
+import java.util.ArrayList;
+            }
+ *
+import org.apache.lucene.search.BooleanClause;
+     * Extracts mandatory constraints for the configured pruning fields.
+/**
 }
+        public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
+import org.opensearch.search.builder.SearchSourceBuilder;
+            this.pruningFields = pruningFields;
+        if (field == null || pruningFields.contains(field) == false) {  
+        return new RangeQueryConstraint(
+        }  
+        public void accept(QueryBuilder queryBuilder) {  
+ * The extractor relies on {@link QueryBuilder#visit(QueryBuilderVisitor)} to traverse the query tree. It only follows
+            if (queryBuilder instanceof RangeQueryBuilder) {
+ */
+            range.timeZone(),  
+                }
+        );
+import org.opensearch.index.query.QueryBuilderVisitor;  
+            range.relation()
+            range.to(),
+package org.opensearch.action.search.pruning;
+ * children visited as {@link BooleanClause.Occur#MUST} or {@link BooleanClause.Occur#FILTER}; optional or negative  
+            return null;
+ * SPDX-License-Identifier: Apache-2.0
+        private final List<QueryConstraint> constraints = new ArrayList<>();
+            }  
+ * Conservative query-tree walker that extracts constraints from mandatory query positions.  
+        }  
+import java.util.Set;  
+                case FILTER:
+    private static final class MandatoryQueryConstraintVisitor implements QueryBuilderVisitor {  
+            return null;
+                case MUST:  
+    }
+        if (source == null || source.query() == null || pruningFields == null || pruningFields.isEmpty()) {  
+     */  
+        return visitor.constraints();  
+        }
+            range.from(),
+            switch (occur) {
+ * this file be licensed under the Apache-2.0 license or a
+        @Override  
+        private MandatoryQueryConstraintVisitor(Set<String> pruningFields) {
+    private static RangeQueryConstraint buildRangeConstraint(RangeQueryBuilder range, Set<String> pruningFields) {
+                    return QueryBuilderVisitor.NO_OP_VISITOR;
+import org.opensearch.index.query.RangeQueryBuilder;
+    @Override
+public final class MandatoryQueryConstraintExtractor implements QueryConstraintExtractor {  
+ *
+        }
+ */  
+    }
+ * clauses are ignored because they are not required for every matching document.
+        @Override
+import org.opensearch.index.query.QueryBuilder;
+import java.util.List;
+ * compatible open source license.
+        }
+            range.format(),
+            return List.of();
+        }  
+                RangeQueryConstraint constraint = buildRangeConstraint((RangeQueryBuilder) queryBuilder, pruningFields);
+/*  
+ * The OpenSearch Contributors require contributions made to  

@@ -1,230 +1,202 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.fields.core.data.number;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.memory.util.Float16;  
-import org.apache.arrow.vector.BigIntVector;
+    }
+    }
 import org.apache.arrow.vector.Float2Vector;
-import org.apache.arrow.vector.Float4Vector;  
-import org.apache.arrow.vector.Float8Vector;
-import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.SmallIntVector;  
-import org.apache.arrow.vector.TinyIntVector;
-import org.apache.arrow.vector.types.FloatingPointPrecision;
-import org.apache.arrow.vector.types.pojo.ArrowType;  
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.parquet.fields.ParquetField;
-import org.opensearch.parquet.vsr.ManagedVSR;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.List;  
-
-public class NumberParquetFieldTests extends OpenSearchTestCase {
-
-    private BufferAllocator allocator;
-
-    @Override  
-    public void setUp() throws Exception {
-        super.setUp();
-        allocator = new RootAllocator();  
-    }
-
-    @Override  
-    public void tearDown() throws Exception {
-        allocator.close();
-        super.tearDown();  
-    }
-
-    public void testIntegerFieldArrowType() {  
-        IntegerParquetField field = new IntegerParquetField();
-        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
-        assertEquals(32, type.getBitWidth());  
-        assertTrue(type.getIsSigned());
-        assertTrue(field.getFieldType().isNullable());
-    }  
-
-    public void testIntegerFieldAddToGroup() {
-        IntegerParquetField field = new IntegerParquetField();  
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.INTEGER);
-        ManagedVSR vsr = createVSR("int-test", field, "val");
-        field.createField(ft, vsr, 42);  
-        vsr.setRowCount(1);
-        IntVector vec = (IntVector) vsr.getVector("val");
-        assertEquals(42, vec.get(0));  
-        cleanupVSR(vsr);
-    }
-
-    public void testLongFieldArrowType() {
-        LongParquetField field = new LongParquetField();
-        ArrowType.Int type = (ArrowType.Int) field.getArrowType();  
-        assertEquals(64, type.getBitWidth());
-        assertTrue(type.getIsSigned());
-    }  
-
-    public void testLongFieldAddToGroup() {
-        LongParquetField field = new LongParquetField();  
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.LONG);
-        ManagedVSR vsr = createVSR("long-test", field, "val");
-        field.createField(ft, vsr, 123456789L);  
-        vsr.setRowCount(1);
-        assertEquals(123456789L, ((BigIntVector) vsr.getVector("val")).get(0));
-        cleanupVSR(vsr);  
-    }
-
-    public void testFloatFieldArrowType() {  
-        FloatParquetField field = new FloatParquetField();
-        ArrowType.FloatingPoint type = (ArrowType.FloatingPoint) field.getArrowType();
-        assertEquals(FloatingPointPrecision.SINGLE, type.getPrecision());  
-    }
-
-    public void testFloatFieldAddToGroup() {  
-        FloatParquetField field = new FloatParquetField();
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.FLOAT);
-        ManagedVSR vsr = createVSR("float-test", field, "val");  
         field.createField(ft, vsr, 3.14f);
-        vsr.setRowCount(1);
-        assertEquals(3.14f, ((Float4Vector) vsr.getVector("val")).get(0), 0.001f);  
-        cleanupVSR(vsr);
-    }
-
-    public void testDoubleFieldArrowType() {
-        DoubleParquetField field = new DoubleParquetField();
-        ArrowType.FloatingPoint type = (ArrowType.FloatingPoint) field.getArrowType();  
-        assertEquals(FloatingPointPrecision.DOUBLE, type.getPrecision());
-    }
-
-    public void testDoubleFieldAddToGroup() {
-        DoubleParquetField field = new DoubleParquetField();
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.DOUBLE);  
-        ManagedVSR vsr = createVSR("double-test", field, "val");
-        field.createField(ft, vsr, 2.718);
-        vsr.setRowCount(1);  
-        assertEquals(2.718, ((Float8Vector) vsr.getVector("val")).get(0), 0.001);
-        cleanupVSR(vsr);
-    }  
-
-    public void testHalfFloatFieldArrowType() {
-        HalfFloatParquetField field = new HalfFloatParquetField();  
-        ArrowType.FloatingPoint type = (ArrowType.FloatingPoint) field.getArrowType();
-        assertEquals(FloatingPointPrecision.HALF, type.getPrecision());
-    }  
-
-    public void testHalfFloatFieldAddToGroup() {
-        // 7.3 → fp16 → fp32 round-trip should land within fp16 precision (~3 decimal digits).  
-        HalfFloatParquetField field = new HalfFloatParquetField();
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);
-        ManagedVSR vsr = createVSR("half-float-test", field, "val");  
-        field.createField(ft, vsr, 7.3);
-        vsr.setRowCount(1);
-        Float2Vector vec = (Float2Vector) vsr.getVector("val");  
-        // Value should round-trip to the closest fp16 representation of 7.3 (≈ 7.296875),
-        // not stay at the integer 7 (the pre-fix bug) and not collapse to a tiny subnormal.
-        assertEquals(7.3f, Float16.toFloat(vec.get(0)), 0.005f);  
-        cleanupVSR(vsr);
-    }
-
-    public void testHalfFloatFieldAddToGroupPreservesFractional() {
-        HalfFloatParquetField field = new HalfFloatParquetField();
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);  
-        ManagedVSR vsr = createVSR("half-float-fractional-test", field, "val");
-        field.createField(ft, vsr, 1.5);
-        vsr.setRowCount(1);  
-        Float2Vector vec = (Float2Vector) vsr.getVector("val");
-        // 1.5 is exactly representable in fp16, so this round-trips with zero error.
-        assertEquals(1.5f, Float16.toFloat(vec.get(0)), 0.0f);  
-        cleanupVSR(vsr);
-    }
-
-    public void testHalfFloatFieldAddToGroupNegative() {
-        // Sign and magnitude both preserved.
-        HalfFloatParquetField field = new HalfFloatParquetField();  
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);
-        ManagedVSR vsr = createVSR("half-float-negative-test", field, "val");
-        field.createField(ft, vsr, -2.5);  
-        vsr.setRowCount(1);
-        Float2Vector vec = (Float2Vector) vsr.getVector("val");
-        assertEquals(-2.5f, Float16.toFloat(vec.get(0)), 0.0f);  
-        cleanupVSR(vsr);
-    }
-
-    public void testHalfFloatFieldAddToGroupZero() {
-        HalfFloatParquetField field = new HalfFloatParquetField();
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);  
-        ManagedVSR vsr = createVSR("half-float-zero-test", field, "val");
-        field.createField(ft, vsr, 0.0);
-        vsr.setRowCount(1);  
-        Float2Vector vec = (Float2Vector) vsr.getVector("val");
-        assertEquals(0.0f, Float16.toFloat(vec.get(0)), 0.0f);
-        cleanupVSR(vsr);  
-    }
-
-    public void testShortFieldArrowType() {  
-        ShortParquetField field = new ShortParquetField();
-        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
-        assertEquals(16, type.getBitWidth());  
-        assertTrue(type.getIsSigned());
-    }
-
-    public void testShortFieldAddToGroup() {
-        ShortParquetField field = new ShortParquetField();
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.SHORT);  
-        ManagedVSR vsr = createVSR("short-test", field, "val");
-        field.createField(ft, vsr, (short) 7);
-        vsr.setRowCount(1);  
-        assertEquals(7, ((SmallIntVector) vsr.getVector("val")).get(0));
-        cleanupVSR(vsr);
-    }  
-
-    public void testByteFieldArrowType() {
-        ByteParquetField field = new ByteParquetField();  
-        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
-        assertEquals(8, type.getBitWidth());
-        assertTrue(type.getIsSigned());  
-    }
-
-    public void testByteFieldAddToGroup() {  
-        ByteParquetField field = new ByteParquetField();
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.BYTE);
-        ManagedVSR vsr = createVSR("byte-test", field, "val");  
-        field.createField(ft, vsr, (byte) 3);
-        vsr.setRowCount(1);
-        assertEquals(3, ((TinyIntVector) vsr.getVector("val")).get(0));  
-        cleanupVSR(vsr);
-    }
-
-    public void testUnsignedLongFieldArrowType() {
-        UnsignedLongParquetField field = new UnsignedLongParquetField();
-        ArrowType.Int type = (ArrowType.Int) field.getArrowType();  
-        assertEquals(64, type.getBitWidth());
-        assertFalse(type.getIsSigned());
-    }  
-
-    public void testTokenCountFieldArrowType() {
-        TokenCountParquetField field = new TokenCountParquetField();  
-        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
-        assertEquals(32, type.getBitWidth());
-        assertTrue(type.getIsSigned());  
-    }
-
-    private ManagedVSR createVSR(String id, ParquetField pf, String fieldName) {  
         Schema schema = new Schema(List.of(new Field(fieldName, pf.getFieldType(), null)));
+        TokenCountParquetField field = new TokenCountParquetField();  
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.SmallIntVector;  
+    private void cleanupVSR(ManagedVSR vsr) {  
+    public void testHalfFloatFieldAddToGroupPreservesFractional() {
+        IntegerParquetField field = new IntegerParquetField();
+    }
+        assertEquals(FloatingPointPrecision.HALF, type.getPrecision());
+        ManagedVSR vsr = createVSR("float-test", field, "val");  
+        cleanupVSR(vsr);
+    }
+    private BufferAllocator allocator;
+import org.apache.arrow.vector.IntVector;
+        super.tearDown();  
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.INTEGER);
+        Float2Vector vec = (Float2Vector) vsr.getVector("val");
+    }
+        assertTrue(type.getIsSigned());  
+import org.opensearch.parquet.fields.ParquetField;
+    }  
+        ManagedVSR vsr = createVSR("byte-test", field, "val");  
+    public void testShortFieldArrowType() {  
+    }  
+        ManagedVSR vsr = createVSR("half-float-negative-test", field, "val");
+        assertEquals(FloatingPointPrecision.SINGLE, type.getPrecision());  
+        cleanupVSR(vsr);
+        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
+        ManagedVSR vsr = createVSR("double-test", field, "val");
+        cleanupVSR(vsr);  
+    public void testShortFieldAddToGroup() {
+        assertFalse(type.getIsSigned());
+package org.opensearch.parquet.fields.core.data.number;
+        assertEquals(7, ((SmallIntVector) vsr.getVector("val")).get(0));
+        ArrowType.FloatingPoint type = (ArrowType.FloatingPoint) field.getArrowType();
+        cleanupVSR(vsr);
+        cleanupVSR(vsr);
+        ManagedVSR vsr = createVSR("long-test", field, "val");
+        ManagedVSR vsr = createVSR("short-test", field, "val");
+        assertEquals(42, vec.get(0));  
+    public void testHalfFloatFieldArrowType() {
+        assertEquals(7.3f, Float16.toFloat(vec.get(0)), 0.005f);  
+        field.createField(ft, vsr, (byte) 3);
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.LONG);
+        assertTrue(field.getFieldType().isNullable());
+    @Override  
+}
+        HalfFloatParquetField field = new HalfFloatParquetField();  
+        vsr.setRowCount(1);
+    }
+        vsr.setRowCount(1);  
+        HalfFloatParquetField field = new HalfFloatParquetField();
+        assertEquals(0.0f, Float16.toFloat(vec.get(0)), 0.0f);
+    public void setUp() throws Exception {
+        assertTrue(type.getIsSigned());  
+        // Sign and magnitude both preserved.
+        field.createField(ft, vsr, 2.718);
+    }
+import java.util.List;  
+        cleanupVSR(vsr);
+import org.apache.arrow.vector.types.FloatingPointPrecision;
+        allocator.close();
+    }
+    public void testTokenCountFieldArrowType() {
+        ShortParquetField field = new ShortParquetField();
+        ManagedVSR vsr = createVSR("half-float-fractional-test", field, "val");
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.SHORT);  
+        cleanupVSR(vsr);  
+        LongParquetField field = new LongParquetField();
         BufferAllocator child = allocator.newChildAllocator(id, 0, Long.MAX_VALUE);
+    public void testFloatFieldAddToGroup() {  
+    }
+    public void testFloatFieldArrowType() {  
         return new ManagedVSR(id, schema, child);  
     }
-
-    private void cleanupVSR(ManagedVSR vsr) {  
-        vsr.moveToFrozen();
-        vsr.close();
+        DoubleParquetField field = new DoubleParquetField();
+import org.apache.arrow.vector.BigIntVector;
+        ArrowType.FloatingPoint type = (ArrowType.FloatingPoint) field.getArrowType();
+        cleanupVSR(vsr);
+        assertEquals(123456789L, ((BigIntVector) vsr.getVector("val")).get(0));
+        ArrowType.Int type = (ArrowType.Int) field.getArrowType();  
+        // not stay at the integer 7 (the pre-fix bug) and not collapse to a tiny subnormal.
+        assertEquals(8, type.getBitWidth());
+    }
+import org.apache.arrow.vector.Float8Vector;
+        ManagedVSR vsr = createVSR("half-float-test", field, "val");  
+        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
+ * this file be licensed under the Apache-2.0 license or a
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);  
+import org.apache.arrow.vector.types.pojo.Field;
+        ManagedVSR vsr = createVSR("half-float-zero-test", field, "val");
+    public void testIntegerFieldArrowType() {  
+        cleanupVSR(vsr);
+        field.createField(ft, vsr, 42);  
+        ArrowType.FloatingPoint type = (ArrowType.FloatingPoint) field.getArrowType();  
+ * compatible open source license.
+        assertEquals(FloatingPointPrecision.DOUBLE, type.getPrecision());
+        field.createField(ft, vsr, -2.5);  
+    public void testLongFieldArrowType() {
+        assertEquals(64, type.getBitWidth());
+        field.createField(ft, vsr, (short) 7);
+    public void testHalfFloatFieldAddToGroup() {
+    }
+        assertTrue(type.getIsSigned());
+        allocator = new RootAllocator();  
+import org.apache.arrow.vector.types.pojo.Schema;
+        assertEquals(1.5f, Float16.toFloat(vec.get(0)), 0.0f);  
+        IntVector vec = (IntVector) vsr.getVector("val");
     }  
-}
+        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
+        field.createField(ft, vsr, 0.0);
+        vsr.setRowCount(1);  
+        field.createField(ft, vsr, 123456789L);  
+    public void testDoubleFieldArrowType() {
+        field.createField(ft, vsr, 7.3);
+    }  
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.BYTE);
+        Float2Vector vec = (Float2Vector) vsr.getVector("val");  
+    public void tearDown() throws Exception {
+import org.apache.arrow.vector.Float4Vector;  
+    }  
+        HalfFloatParquetField field = new HalfFloatParquetField();
+        assertEquals(2.718, ((Float8Vector) vsr.getVector("val")).get(0), 0.001);
+        IntegerParquetField field = new IntegerParquetField();  
+        vsr.setRowCount(1);
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);
+    private ManagedVSR createVSR(String id, ParquetField pf, String fieldName) {  
+import org.opensearch.index.mapper.MappedFieldType;  
+ *
+    @Override  
+    public void testUnsignedLongFieldArrowType() {
+        ShortParquetField field = new ShortParquetField();
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.DOUBLE);  
+        vsr.moveToFrozen();
+        ByteParquetField field = new ByteParquetField();  
+        assertTrue(type.getIsSigned());
+        assertEquals(64, type.getBitWidth());
+        assertTrue(type.getIsSigned());
+    public void testDoubleFieldAddToGroup() {
+    }
+        HalfFloatParquetField field = new HalfFloatParquetField();
+        assertEquals(32, type.getBitWidth());  
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);  
+        vsr.setRowCount(1);
+        FloatParquetField field = new FloatParquetField();
+        assertEquals(3.14f, ((Float4Vector) vsr.getVector("val")).get(0), 0.001f);  
+        vsr.setRowCount(1);  
+    public void testByteFieldArrowType() {
+        ManagedVSR vsr = createVSR("int-test", field, "val");
+        // 7.3 → fp16 → fp32 round-trip should land within fp16 precision (~3 decimal digits).  
+ * The OpenSearch Contributors require contributions made to  
+        FloatParquetField field = new FloatParquetField();
+ */  
+import org.apache.arrow.memory.util.Float16;  
+        vsr.setRowCount(1);  
+        field.createField(ft, vsr, 1.5);
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.HALF_FLOAT);
+    public void testByteFieldAddToGroup() {  
+    public void testIntegerFieldAddToGroup() {
+    }  
+        assertEquals(16, type.getBitWidth());  
+        DoubleParquetField field = new DoubleParquetField();
+import org.apache.arrow.memory.BufferAllocator;
+        assertEquals(32, type.getBitWidth());
+import org.apache.arrow.vector.types.pojo.ArrowType;  
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("val", NumberFieldMapper.NumberType.FLOAT);
+        ArrowType.Int type = (ArrowType.Int) field.getArrowType();
+import org.opensearch.test.OpenSearchTestCase;
+        vsr.setRowCount(1);
+    }
+        // 1.5 is exactly representable in fp16, so this round-trips with zero error.
+    public void testHalfFloatFieldAddToGroupNegative() {
+    }
+        assertEquals(-2.5f, Float16.toFloat(vec.get(0)), 0.0f);  
+        super.setUp();
+        vsr.setRowCount(1);
+        UnsignedLongParquetField field = new UnsignedLongParquetField();
+public class NumberParquetFieldTests extends OpenSearchTestCase {
+        HalfFloatParquetField field = new HalfFloatParquetField();  
+import org.apache.arrow.vector.TinyIntVector;
+    }  
+        cleanupVSR(vsr);
+        // Value should round-trip to the closest fp16 representation of 7.3 (≈ 7.296875),
+    }
+/*  
+        ByteParquetField field = new ByteParquetField();
+import org.opensearch.index.mapper.NumberFieldMapper;
+        Float2Vector vec = (Float2Vector) vsr.getVector("val");
+        assertEquals(3, ((TinyIntVector) vsr.getVector("val")).get(0));  
+        Float2Vector vec = (Float2Vector) vsr.getVector("val");
+        LongParquetField field = new LongParquetField();  
+import org.opensearch.parquet.vsr.ManagedVSR;  
+    public void testHalfFloatFieldAddToGroupZero() {
+        ArrowType.Int type = (ArrowType.Int) field.getArrowType();  
+        vsr.close();
+    public void testLongFieldAddToGroup() {
+        vsr.setRowCount(1);

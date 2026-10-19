@@ -1,78 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.search.query;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-/**  
- * Arguments for {@link QueryCollectorContextSpecRegistry}
- */
-@ExperimentalApi  
+ *
+    /**  
+        if (this == o) return true;  
 public final class QueryCollectorArguments {
+/**  
+        return Boolean.hashCode(hasFilterCollector);  
+        }
+    public boolean equals(Object o) {
+    @Override  
+         * Set the flag for query has a filter collector.  
+    }
+ */
+ * SPDX-License-Identifier: Apache-2.0
+     * {@inheritDoc}
+    }
+    public String toString() {
+ * The OpenSearch Contributors require contributions made to  
+    }
+     * Whether the query has a filter collector.  
+/*  
+         */  
     private final boolean hasFilterCollector;
-
-    private QueryCollectorArguments(final boolean hasFilterCollector) {
+}
+import org.opensearch.common.annotation.ExperimentalApi;
+        return "QueryCollectorArguments[hasFilterCollector=" + hasFilterCollector + "]";
+ * compatible open source license.
+            return this;  
+    @Override
+        if (o == null || getClass() != o.getClass()) return false;
+     */
+         * Build the arguments for the query collector context spec registry.
+         * @param hasFilterCollector true if the query has a filter collector, false otherwise
         this.hasFilterCollector = hasFilterCollector;
     }  
-
-    /**
-     * Whether the query has a filter collector.  
-     * @return true if the query has a filter collector, false otherwise
-     */
+        private boolean hasFilterCollector;  
     public boolean hasFilterCollector() {  
-        return hasFilterCollector;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-
-        QueryCollectorArguments queryCollectorArguments = (QueryCollectorArguments) o;  
-        return hasFilterCollector == queryCollectorArguments.hasFilterCollector;
-    }
-
-    @Override
-    public int hashCode() {
-        return Boolean.hashCode(hasFilterCollector);  
-    }
-
-    /**  
-     * {@inheritDoc}
-     */
-    @Override  
-    public String toString() {
-        return "QueryCollectorArguments[hasFilterCollector=" + hasFilterCollector + "]";
-    }  
-
-    /**
+    public static class Builder {
+    private QueryCollectorArguments(final boolean hasFilterCollector) {
      * Builder for {@link QueryCollectorArguments}  
      */
-    public static class Builder {
-        private boolean hasFilterCollector;  
-
-        /**
-         * Set the flag for query has a filter collector.  
-         * @param hasFilterCollector true if the query has a filter collector, false otherwise
-         * @return Builder instance
-         */  
-        public Builder hasFilterCollector(boolean hasFilterCollector) {
-            this.hasFilterCollector = hasFilterCollector;
-            return this;  
-        }
-
-        /**  
-         * Build the arguments for the query collector context spec registry.
-         * @return QueryCollectorArguments instance
-         */  
-        public QueryCollectorArguments build() {
-            return new QueryCollectorArguments(hasFilterCollector);
+    public int hashCode() {
         }  
+ */  
+        /**  
+    /**
+        return hasFilterCollector == queryCollectorArguments.hasFilterCollector;
+         */  
+        /**
+     * @return true if the query has a filter collector, false otherwise
+            return new QueryCollectorArguments(hasFilterCollector);
+        return hasFilterCollector;
+ * Arguments for {@link QueryCollectorContextSpecRegistry}
+@ExperimentalApi  
+ * this file be licensed under the Apache-2.0 license or a
+        public QueryCollectorArguments build() {
+        QueryCollectorArguments queryCollectorArguments = (QueryCollectorArguments) o;  
+     */
+    @Override
+         * @return Builder instance
     }
-}
+    /**
+        public Builder hasFilterCollector(boolean hasFilterCollector) {
+         * @return QueryCollectorArguments instance
+    }  
+            this.hasFilterCollector = hasFilterCollector;

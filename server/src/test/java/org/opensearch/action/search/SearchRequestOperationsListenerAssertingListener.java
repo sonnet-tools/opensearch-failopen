@@ -1,39 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.search;
-
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.hamcrest.MatcherAssert.assertThat;  
-
-class SearchRequestOperationsListenerAssertingListener extends SearchRequestOperationsListener {
-    private volatile SearchPhase phase;  
-
-    @Override
-    protected void onPhaseStart(SearchPhaseContext context) {  
-        assertThat(phase, is(nullValue()));
-        phase = context.getCurrentPhase();
-    }  
-
-    @Override
-    protected void onPhaseEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {  
-        assertThat(phase, is(context.getCurrentPhase()));
         phase = null;
-    }  
-
-    @Override
+ * compatible open source license.
     protected void onPhaseFailure(SearchPhaseContext context, Throwable cause) {  
         assertThat(phase, is(context.getCurrentPhase()));
-        phase = null;
-    }  
-
-    public void assertFinished() {
-        assertThat(phase, is(nullValue()));  
+import static org.hamcrest.CoreMatchers.is;
+    @Override
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.hamcrest.MatcherAssert.assertThat;  
     }
+        assertThat(phase, is(nullValue()));  
+    protected void onPhaseEnd(SearchPhaseContext context, SearchRequestContext searchRequestContext) {  
+        assertThat(phase, is(context.getCurrentPhase()));
+ * The OpenSearch Contributors require contributions made to  
+    public void assertFinished() {
+    protected void onPhaseStart(SearchPhaseContext context) {  
+        phase = context.getCurrentPhase();
+    @Override
 }
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+class SearchRequestOperationsListenerAssertingListener extends SearchRequestOperationsListener {
+        phase = null;
+package org.opensearch.action.search;
+    @Override
+        assertThat(phase, is(nullValue()));
+ */  
+/*  
+    }  
+    }  
+    private volatile SearchPhase phase;  

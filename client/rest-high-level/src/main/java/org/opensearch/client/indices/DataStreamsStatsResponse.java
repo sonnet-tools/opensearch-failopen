@@ -1,249 +1,218 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.indices;
-
-import org.opensearch.client.core.BroadcastResponse;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.unit.ByteSizeValue;  
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-
-public class DataStreamsStatsResponse extends BroadcastResponse {
-
-    private final int dataStreamCount;  
-    private final int backingIndices;
-    private final ByteSizeValue totalStoreSize;
-    private final Map<String, DataStreamStats> dataStreams;  
-
-    protected DataStreamsStatsResponse(
-        Shards shards,  
-        int dataStreamCount,
-        int backingIndices,
-        ByteSizeValue totalStoreSize,  
-        Map<String, DataStreamStats> dataStreams
-    ) {
-        super(shards);  
-        this.dataStreamCount = dataStreamCount;
-        this.backingIndices = backingIndices;
-        this.totalStoreSize = totalStoreSize;  
-        this.dataStreams = dataStreams;
-    }
-
-    private static final ParseField DATA_STREAM_COUNT = new ParseField("data_stream_count");
-    private static final ParseField BACKING_INDICES = new ParseField("backing_indices");
-    private static final ParseField TOTAL_STORE_SIZE_BYTES = new ParseField("total_store_size_bytes");  
-    private static final ParseField DATA_STREAMS = new ParseField("data_streams");
-    private static final ParseField DATA_STREAM = new ParseField("data_stream");
-    private static final ParseField STORE_SIZE_BYTES = new ParseField("store_size_bytes");  
-    private static final ParseField MAXIMUM_TIMESTAMP = new ParseField("maximum_timestamp");
-
-    @SuppressWarnings("unchecked")  
-    private static final ConstructingObjectParser<DataStreamsStatsResponse, Void> PARSER = new ConstructingObjectParser<>(
-        "data_streams_stats",
-        true,  
-        arg -> {
-            Shards shards = (Shards) arg[0];
-            Integer dataStreamCount = ((Integer) arg[1]);  
-            Integer backingIndices = ((Integer) arg[2]);
-            ByteSizeValue totalStoreSize = ((ByteSizeValue) arg[3]);
-            Map<String, DataStreamStats> dataStreams = new HashMap<>();  
-            for (DataStreamStats dataStreamStats : ((List<DataStreamStats>) arg[4])) {
-                dataStreams.put(dataStreamStats.dataStream, dataStreamStats);
-            }  
-            return new DataStreamsStatsResponse(shards, dataStreamCount, backingIndices, totalStoreSize, dataStreams);
-        }
-    );  
-
-    private static final ConstructingObjectParser<DataStreamStats, Void> ENTRY_PARSER = new ConstructingObjectParser<>(
-        "data_streams_stats.entry",  
-        true,
-        arg -> {
-            String dataStream = ((String) arg[0]);  
-            Integer backingIndices = ((Integer) arg[1]);
-            ByteSizeValue storeSize = ((ByteSizeValue) arg[2]);
-            Long maximumTimestamp = ((Long) arg[3]);  
-            return new DataStreamStats(dataStream, backingIndices, storeSize, maximumTimestamp);
-        }
-    );  
-
     static {
-        declareShardsField(PARSER);  
-        PARSER.declareInt(constructorArg(), DATA_STREAM_COUNT);
-        PARSER.declareInt(constructorArg(), BACKING_INDICES);
-        PARSER.declareField(  
-            constructorArg(),
-            (p, c) -> new ByteSizeValue(p.longValue()),
-            TOTAL_STORE_SIZE_BYTES,  
-            ObjectParser.ValueType.VALUE
-        );
-        PARSER.declareObjectArray(constructorArg(), ENTRY_PARSER, DATA_STREAMS);  
-        ENTRY_PARSER.declareString(constructorArg(), DATA_STREAM);
-        ENTRY_PARSER.declareInt(constructorArg(), BACKING_INDICES);
-        ENTRY_PARSER.declareField(  
-            constructorArg(),
-            (p, c) -> new ByteSizeValue(p.longValue()),
-            STORE_SIZE_BYTES,  
-            ObjectParser.ValueType.VALUE
-        );
-        ENTRY_PARSER.declareLong(constructorArg(), MAXIMUM_TIMESTAMP);  
-    }
-
-    public static DataStreamsStatsResponse fromXContent(final XContentParser parser) throws IOException {  
-        return PARSER.apply(parser, null);
-    }
-
-    public int getDataStreamCount() {
-        return dataStreamCount;
-    }  
-
-    public int getBackingIndices() {
-        return backingIndices;  
-    }
-
-    public ByteSizeValue getTotalStoreSize() {  
-        return totalStoreSize;
-    }
-
-    public Map<String, DataStreamStats> getDataStreams() {
-        return dataStreams;
-    }  
-
-    @Override
-    public boolean equals(Object obj) {  
-        if (this == obj) {
-            return true;
-        }  
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }  
-        DataStreamsStatsResponse that = (DataStreamsStatsResponse) obj;
-        return dataStreamCount == that.dataStreamCount
-            && backingIndices == that.backingIndices  
-            && Objects.equals(totalStoreSize, that.totalStoreSize)
-            && Objects.equals(dataStreams, that.dataStreams);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(dataStreamCount, backingIndices, totalStoreSize, dataStreams);
-    }
-
-    @Override
-    public String toString() {
-        return "DataStreamsStatsResponse{"  
-            + "dataStreamCount="
-            + dataStreamCount
-            + ", backingIndices="  
-            + backingIndices
-            + ", totalStoreSize="
-            + totalStoreSize  
-            + ", dataStreams="
-            + dataStreams
-            + '}';  
-    }
-
-    public static class DataStreamStats {  
-
-        private final String dataStream;
-        private final int backingIndices;  
-        private final ByteSizeValue storeSize;
-        private final long maximumTimestamp;
-
+ * this work for additional information regarding copyright
         public DataStreamStats(String dataStream, int backingIndices, ByteSizeValue storeSize, long maximumTimestamp) {
-            this.dataStream = dataStream;
-            this.backingIndices = backingIndices;  
-            this.storeSize = storeSize;
-            this.maximumTimestamp = maximumTimestamp;
-        }  
-
-        public String getDataStream() {
+            return new DataStreamStats(dataStream, backingIndices, storeSize, maximumTimestamp);
+            Integer dataStreamCount = ((Integer) arg[1]);  
+    }  
+import java.util.List;
+/*
+ * specific language governing permissions and limitations
+ *  
+import org.opensearch.core.xcontent.ObjectParser;
             return dataStream;  
-        }
-
-        public int getBackingIndices() {  
-            return backingIndices;
-        }
-
-        public ByteSizeValue getStoreSize() {
-            return storeSize;
-        }  
-
-        public long getMaximumTimestamp() {
-            return maximumTimestamp;  
-        }
-
-        @Override  
-        public boolean equals(Object obj) {
-            if (this == obj) {
+    public int getDataStreamCount() {
+        ENTRY_PARSER.declareLong(constructorArg(), MAXIMUM_TIMESTAMP);  
                 return true;  
-            }
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;  
-            }
-            DataStreamStats that = (DataStreamStats) obj;
-            return backingIndices == that.backingIndices  
-                && maximumTimestamp == that.maximumTimestamp
-                && Objects.equals(dataStream, that.dataStream)
-                && Objects.equals(storeSize, that.storeSize);  
-        }
-
-        @Override  
-        public int hashCode() {
-            return Objects.hash(dataStream, backingIndices, storeSize, maximumTimestamp);
-        }  
-
-        @Override
-        public String toString() {  
-            return "DataStreamStats{"
-                + "dataStream='"
-                + dataStream  
-                + '\''
-                + ", backingIndices="
-                + backingIndices  
-                + ", storeSize="
-                + storeSize
-                + ", maximumTimestamp="  
-                + maximumTimestamp
-                + '}';
-        }  
+        return Objects.hash(dataStreamCount, backingIndices, totalStoreSize, dataStreams);
+    );  
     }
+        this.backingIndices = backingIndices;
+    private final int backingIndices;
+        true,  
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at  
+import org.opensearch.core.ParseField;
+    }
+    private static final ParseField DATA_STREAM = new ParseField("data_stream");
+ * ownership. Elasticsearch licenses this file to you under  
+                dataStreams.put(dataStreamStats.dataStream, dataStreamStats);
+        return dataStreamCount;
+        private final long maximumTimestamp;
+            ObjectParser.ValueType.VALUE
+        this.dataStreams = dataStreams;
+            return maximumTimestamp;  
+        }  
+            this.storeSize = storeSize;
+            return backingIndices == that.backingIndices  
+            this.maximumTimestamp = maximumTimestamp;
+        private final String dataStream;
+                + '}';
+                + '\''
+ * compatible open source license.
+        return totalStoreSize;
+        @Override  
+        this.dataStreamCount = dataStreamCount;
+ * Licensed to Elasticsearch under one or more contributor  
+            for (DataStreamStats dataStreamStats : ((List<DataStreamStats>) arg[4])) {
+        PARSER.declareObjectArray(constructorArg(), ENTRY_PARSER, DATA_STREAMS);  
+ * software distributed under the License is distributed on an
+    public static DataStreamsStatsResponse fromXContent(final XContentParser parser) throws IOException {  
+    private static final ParseField STORE_SIZE_BYTES = new ParseField("store_size_bytes");  
+    }  
+                + "dataStream='"
+ * under the License.  
+    private static final ParseField DATA_STREAMS = new ParseField("data_streams");
+        return dataStreamCount == that.dataStreamCount
+        }
+            Long maximumTimestamp = ((Long) arg[3]);  
+                return false;  
+    protected DataStreamsStatsResponse(
+    public int getBackingIndices() {
+    public Map<String, DataStreamStats> getDataStreams() {
+        PARSER.declareInt(constructorArg(), DATA_STREAM_COUNT);
+        super(shards);  
+        }  
+            return backingIndices;
+            constructorArg(),
+        public String getDataStream() {
+                && maximumTimestamp == that.maximumTimestamp
+            && Objects.equals(dataStreams, that.dataStreams);
+                + storeSize
+    private static final ParseField DATA_STREAM_COUNT = new ParseField("data_stream_count");
+            + backingIndices
+        public int getBackingIndices() {  
+import java.util.HashMap;  
+            + ", totalStoreSize="
+            STORE_SIZE_BYTES,  
+        return "DataStreamsStatsResponse{"  
+            + ", dataStreams="
+            DataStreamStats that = (DataStreamStats) obj;
+            (p, c) -> new ByteSizeValue(p.longValue()),
+ * GitHub history for details.
+    public ByteSizeValue getTotalStoreSize() {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            Integer backingIndices = ((Integer) arg[2]);
+            return "DataStreamStats{"
+        if (obj == null || getClass() != obj.getClass()) {
+        declareShardsField(PARSER);  
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+public class DataStreamsStatsResponse extends BroadcastResponse {
+    private static final ParseField MAXIMUM_TIMESTAMP = new ParseField("maximum_timestamp");
+    }
+ * not use this file except in compliance with the License.
+            Integer backingIndices = ((Integer) arg[1]);
+        public int hashCode() {
+ *
+    }
+    private final Map<String, DataStreamStats> dataStreams;  
+            (p, c) -> new ByteSizeValue(p.longValue()),
+        Shards shards,  
+                + ", storeSize="
+            return storeSize;
+ */  
+ * Modifications Copyright OpenSearch Contributors. See
+        );
+        PARSER.declareField(  
+        }  
+        PARSER.declareInt(constructorArg(), BACKING_INDICES);
+        "data_streams_stats.entry",  
+                + dataStream  
+                + ", maximumTimestamp="  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                && Objects.equals(storeSize, that.storeSize);  
+        }  
+    private final int dataStreamCount;  
+            return new DataStreamsStatsResponse(shards, dataStreamCount, backingIndices, totalStoreSize, dataStreams);
+        if (this == obj) {
+        ENTRY_PARSER.declareInt(constructorArg(), BACKING_INDICES);
+ */  
+        ENTRY_PARSER.declareField(  
+                + maximumTimestamp
+    }
+        int dataStreamCount,
+    }
+    }
+            String dataStream = ((String) arg[0]);  
+    }  
+        DataStreamsStatsResponse that = (DataStreamsStatsResponse) obj;
+            + ", backingIndices="  
+            this.dataStream = dataStream;
+ * license agreements. See the NOTICE file distributed with
+import java.util.Objects;  
+            + dataStreams
+        private final ByteSizeValue storeSize;
+            TOTAL_STORE_SIZE_BYTES,  
+        "data_streams_stats",
+import org.opensearch.client.core.BroadcastResponse;
+            ObjectParser.ValueType.VALUE
+        }
+                && Objects.equals(dataStream, that.dataStream)
+        Map<String, DataStreamStats> dataStreams
+            + totalStoreSize  
+            return Objects.hash(dataStream, backingIndices, storeSize, maximumTimestamp);
+package org.opensearch.client.indices;
+            Shards shards = (Shards) arg[0];
+    private static final ConstructingObjectParser<DataStreamStats, Void> ENTRY_PARSER = new ConstructingObjectParser<>(
+        arg -> {
+    private static final ParseField TOTAL_STORE_SIZE_BYTES = new ParseField("total_store_size_bytes");  
+            && Objects.equals(totalStoreSize, that.totalStoreSize)
+        );
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+        ENTRY_PARSER.declareString(constructorArg(), DATA_STREAM);
+        arg -> {
+        public long getMaximumTimestamp() {
+ *
+            }
+    private static final ConstructingObjectParser<DataStreamsStatsResponse, Void> PARSER = new ConstructingObjectParser<>(
+        }
+ * SPDX-License-Identifier: Apache-2.0
+            ByteSizeValue storeSize = ((ByteSizeValue) arg[2]);
+        this.totalStoreSize = totalStoreSize;  
+                + backingIndices  
+    public String toString() {
+            constructorArg(),
+        ByteSizeValue totalStoreSize,  
+        }
+        true,
+            ByteSizeValue totalStoreSize = ((ByteSizeValue) arg[3]);
+import org.opensearch.core.xcontent.XContentParser;  
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+            + '}';  
+    public static class DataStreamStats {  
+        @Override
+            if (this == obj) {
+        public boolean equals(Object obj) {
+    @Override
+        }
+        }  
+            }
+        @Override  
 }
+            this.backingIndices = backingIndices;  
+            + dataStreamCount
+        return dataStreams;
+/*  
+ * The OpenSearch Contributors require contributions made to  
+            return true;
+ */
+    );  
+    @SuppressWarnings("unchecked")  
+ * KIND, either express or implied.  See the License for the
+            Map<String, DataStreamStats> dataStreams = new HashMap<>();  
+    ) {
+    public boolean equals(Object obj) {  
+        public String toString() {  
+        int backingIndices,
+    }
+            && backingIndices == that.backingIndices  
+        }
+    public int hashCode() {  
+                + ", backingIndices="
+            if (obj == null || getClass() != obj.getClass()) {
+    @Override
+import java.util.Map;
+        return backingIndices;  
+    private final ByteSizeValue totalStoreSize;
+        public ByteSizeValue getStoreSize() {
+import java.io.IOException;
+            }  
+import org.opensearch.core.common.unit.ByteSizeValue;  
+        private final int backingIndices;  
+            return false;
+ * this file be licensed under the Apache-2.0 license or a
+            + "dataStreamCount="
+        }  
+        return PARSER.apply(parser, null);
+    private static final ParseField BACKING_INDICES = new ParseField("backing_indices");
+    @Override

@@ -1,125 +1,102 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.backend.jni;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-/**  
- * Tests for {@link NativeHandle} lifecycle, stale pointer detection, and registry tracking.
- */
-public class NativeHandleTests extends OpenSearchTestCase {  
-
-    /** Concrete test handle that records whether doClose was called. */
-    private static class TestHandle extends NativeHandle {  
-        boolean closed;
-
-        TestHandle(long ptr) {  
-            super(ptr);
-        }
-
-        @Override
-        protected void doClose() {
-            closed = true;  
-        }
-    }
-
-    public void testConstructorRejectsZeroPointer() {
-        expectThrows(IllegalArgumentException.class, () -> new TestHandle(0L));
-    }  
-
-    public void testGetPointerReturnsValue() {
-        TestHandle handle = new TestHandle(42L);  
         assertEquals(42L, handle.getPointer());
+        expectThrows(IllegalArgumentException.class, () -> NativeHandle.validatePointer(0L, "test"));
         handle.close();
-    }  
-
-    public void testGetPointerAfterCloseThrows() {
-        TestHandle handle = new TestHandle(42L);  
-        handle.close();
-        expectThrows(IllegalStateException.class, handle::getPointer);
-    }  
-
-    public void testCloseCallsDoClose() {
-        TestHandle handle = new TestHandle(42L);  
-        assertFalse(handle.closed);
-        handle.close();
-        assertTrue(handle.closed);  
+        protected void doClose() {
     }
-
-    public void testDoubleCloseIsIdempotent() {  
+import org.opensearch.test.OpenSearchTestCase;
+    /** Concrete test handle that records whether doClose was called. */
+        handle.close();
+        handle.close();
+    public void testValidatePointerThrowsForNullPointer() {  
+    public void testIsLivePointerFalseForUnknownPointer() {
         TestHandle handle = new TestHandle(42L);
-        handle.close();
-        assertTrue(handle.closed);  
-        // Second close should not throw
-        handle.close();
-        assertTrue(handle.closed);  
+        assertTrue(ex.getMessage().contains("not a live handle"));  
+        }
+        h2.close();
     }
-
-    // ---- Stale pointer registry tests ----  
-
-    public void testIsLivePointerTrueWhileOpen() {
-        TestHandle handle = new TestHandle(100L);  
-        assertTrue(NativeHandle.isLivePointer(100L));
-        handle.close();
+        int baseline = NativeHandle.liveHandleCount();  
     }  
-
-    public void testIsLivePointerFalseAfterClose() {
-        TestHandle handle = new TestHandle(101L);  
+        assertTrue(handle.closed);  
+        expectThrows(IllegalStateException.class, () -> NativeHandle.validatePointer(888888L, "unknown"));
+        TestHandle h1 = new TestHandle(301L);
+        assertTrue(ex.getMessage().contains("TestHandle"));
+        TestHandle handle = new TestHandle(100L);  
         handle.close();
+        TestHandle handle = new TestHandle(201L);
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+        handle.close();
+        handle.close();
+}
+            super(ptr);
+        TestHandle handle = new TestHandle(42L);  
+        // Should not throw
+    public void testEnsureOpenMessageIncludesClassName() {  
+        handle.close();
+        TestHandle handle = new TestHandle(400L);
+    public void testValidatePointerSucceedsWhileOpen() {  
+    public void testIsLivePointerFalseAfterClose() {
+public class NativeHandleTests extends OpenSearchTestCase {  
+    // ---- Stale pointer registry tests ----  
+        assertFalse(handle.closed);
+        TestHandle h2 = new TestHandle(302L);
+        expectThrows(IllegalStateException.class, handle::getPointer);
+ *
+        assertEquals(baseline + 2, NativeHandle.liveHandleCount());  
+    public void testGetPointerAfterCloseThrows() {
         assertFalse(NativeHandle.isLivePointer(101L));
     }  
-
-    public void testIsLivePointerFalseForUnknownPointer() {
-        assertFalse(NativeHandle.isLivePointer(999999L));  
-    }
-
-    public void testValidatePointerSucceedsWhileOpen() {  
-        TestHandle handle = new TestHandle(200L);
-        // Should not throw
-        NativeHandle.validatePointer(200L, "test");  
-        handle.close();
-    }
-
     public void testValidatePointerThrowsAfterClose() {
-        TestHandle handle = new TestHandle(201L);
-        handle.close();  
-        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> NativeHandle.validatePointer(201L, "test"));
+    }  
         assertTrue(ex.getMessage().contains("test"));
-        assertTrue(ex.getMessage().contains("not a live handle"));  
+/**  
+ */
+ */  
+        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> NativeHandle.validatePointer(201L, "test"));
+    public void testCloseCallsDoClose() {
+/*  
+        NativeHandle.validatePointer(200L, "test");  
+        TestHandle handle = new TestHandle(42L);  
+ * Tests for {@link NativeHandle} lifecycle, stale pointer detection, and registry tracking.
     }
-
-    public void testValidatePointerThrowsForNullPointer() {  
-        expectThrows(IllegalArgumentException.class, () -> NativeHandle.validatePointer(0L, "test"));
     }
-
-    public void testValidatePointerThrowsForUnknownPointer() {
-        expectThrows(IllegalStateException.class, () -> NativeHandle.validatePointer(888888L, "unknown"));
-    }  
-
+package org.opensearch.analytics.backend.jni;
+    }
+    }
+    private static class TestHandle extends NativeHandle {  
+        assertTrue(handle.closed);  
+    public void testDoubleCloseIsIdempotent() {  
     public void testLiveHandleCountTracksOpenHandles() {
-        int baseline = NativeHandle.liveHandleCount();  
-        TestHandle h1 = new TestHandle(301L);
-        TestHandle h2 = new TestHandle(302L);
-        assertEquals(baseline + 2, NativeHandle.liveHandleCount());  
-
-        h1.close();
-        assertEquals(baseline + 1, NativeHandle.liveHandleCount());  
-
-        h2.close();
-        assertEquals(baseline, NativeHandle.liveHandleCount());  
-    }
-
-    public void testEnsureOpenMessageIncludesClassName() {  
-        TestHandle handle = new TestHandle(400L);
-        handle.close();
-        IllegalStateException ex = expectThrows(IllegalStateException.class, handle::ensureOpen);  
-        assertTrue(ex.getMessage().contains("TestHandle"));
-        assertTrue(ex.getMessage().contains("0x190")); // 400 in hex
+    public void testConstructorRejectsZeroPointer() {
+        TestHandle handle = new TestHandle(42L);  
     }  
-}
+        assertTrue(ex.getMessage().contains("0x190")); // 400 in hex
+    public void testIsLivePointerTrueWhileOpen() {
+        assertFalse(NativeHandle.isLivePointer(999999L));  
+        h1.close();
+    }
+        boolean closed;
+            closed = true;  
+    }
+        assertEquals(baseline + 1, NativeHandle.liveHandleCount());  
+ * The OpenSearch Contributors require contributions made to  
+        IllegalStateException ex = expectThrows(IllegalStateException.class, handle::ensureOpen);  
+        @Override
+        TestHandle handle = new TestHandle(200L);
+        assertTrue(NativeHandle.isLivePointer(100L));
+        }
+    }  
+    public void testGetPointerReturnsValue() {
+ * compatible open source license.
+        assertEquals(baseline, NativeHandle.liveHandleCount());  
+        handle.close();
+        TestHandle(long ptr) {  
+        TestHandle handle = new TestHandle(101L);  
+ * this file be licensed under the Apache-2.0 license or a
+    public void testValidatePointerThrowsForUnknownPointer() {
+        handle.close();
+        assertTrue(handle.closed);  
+        handle.close();  
+        expectThrows(IllegalArgumentException.class, () -> new TestHandle(0L));
+        // Second close should not throw
+    }  

@@ -1,230 +1,203 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.s3.async;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.store.AlreadyClosedException;  
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.repositories.s3.GenericStatsMetricPublisher;  
-import org.opensearch.repositories.s3.S3TransferRejectedException;
-
-import java.util.concurrent.ExecutorService;  
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;  
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;  
-
-/**
- * Queue implementation to accept events based on their storage attribute. If size of queue is breached, then transfer  
- * event is rejected.
- */
-public class SizeBasedBlockingQ extends AbstractLifecycleComponent {  
-    private static final Logger log = LogManager.getLogger(SizeBasedBlockingQ.class);
-
-    protected final LinkedBlockingQueue<Item> queue;  
-    protected final Lock lock;
-    protected final Condition notEmpty;
-
-    protected final AtomicLong currentSize;
-    protected final ByteSizeValue capacity;
-    protected final AtomicBoolean closed;  
-    protected final ExecutorService executorService;
-    protected final int consumers;
-    private final GenericStatsMetricPublisher genericStatsMetricPublisher;  
-    private final QueueEventType queueEventType;
-
-    /**  
-     * Constructor to create sized based blocking queue.
-     */
-    public SizeBasedBlockingQ(  
-        ByteSizeValue capacity,
-        ExecutorService executorService,
-        int consumers,  
-        GenericStatsMetricPublisher genericStatsMetricPublisher,
+        ) {
         QueueEventType queueEventType
+        return contentLength < capacity.getBytes();  
+            final Lock lock = this.lock;
+            AtomicBoolean closed,
+        }
+ *
+import org.opensearch.core.common.unit.ByteSizeValue;
+                lock.unlock();  
+                try {  
+}
+        private final long size;
+                } catch (AlreadyClosedException ex) {
+import org.apache.logging.log4j.LogManager;
+        private final Runnable consumable;
+import org.opensearch.repositories.s3.GenericStatsMetricPublisher;  
     ) {  
-        this.queue = new LinkedBlockingQueue<>();
-        this.lock = new ReentrantLock();
-        this.notEmpty = lock.newCondition();  
-        this.currentSize = new AtomicLong();
-        this.capacity = capacity;
-        this.closed = new AtomicBoolean();  
-        this.executorService = executorService;
-        this.consumers = consumers;
-        this.genericStatsMetricPublisher = genericStatsMetricPublisher;  
-        this.queueEventType = queueEventType;
-    }
-
-    public enum QueueEventType {
-        NORMAL,
-        LOW;  
-    }
-
-    @Override  
-    protected void doStart() {
-        for (int worker = 0; worker < consumers; worker++) {
-            Thread consumer = new Consumer(queue, currentSize, lock, notEmpty, closed, genericStatsMetricPublisher, queueEventType);  
+            AtomicLong currentSize,
             executorService.submit(consumer);
-        }
-    }  
-
-    /**
-     * Add an item to the queue  
-     */
-    public void produce(Item item) throws InterruptedException {
-        if (item == null || item.size <= 0) {  
-            throw new IllegalStateException("Invalid item input to produce.");
-        }
-        log.debug(() -> "Transfer queue event received of size: " + item.size + ". Current queue utilisation: " + currentSize.get());  
-
-        if (currentSize.get() + item.size >= capacity.getBytes()) {
-            throw new S3TransferRejectedException("S3 Transfer queue capacity reached");  
-        }
-
-        final Lock lock = this.lock;  
-        final AtomicLong currentSize = this.currentSize;
-        lock.lock();
-        try {  
-            if (currentSize.get() + item.size >= capacity.getBytes()) {
-                throw new S3TransferRejectedException("S3 Transfer queue capacity reached");
-            }  
-            if (closed.get()) {
-                throw new AlreadyClosedException("Transfer queue is already closed.");
-            }  
-            queue.put(item);
-            currentSize.addAndGet(item.size);
-            notEmpty.signalAll();  
-            updateStats(item.size, queueEventType, genericStatsMetricPublisher);
-        } finally {
-            lock.unlock();  
-        }
-
-    }  
-
+        this.lock = new ReentrantLock();
+    protected final AtomicBoolean closed;  
     private static void updateStats(long itemSize, QueueEventType queueEventType, GenericStatsMetricPublisher genericStatsMetricPublisher) {
-        if (queueEventType == QueueEventType.NORMAL) {  
-            genericStatsMetricPublisher.updateNormalPriorityQSize(itemSize);
-        } else if (queueEventType == QueueEventType.LOW) {
-            genericStatsMetricPublisher.updateLowPriorityQSize(itemSize);  
-        }
     }
-
-    public int getSize() {
+                throw new S3TransferRejectedException("S3 Transfer queue capacity reached");
+            Thread consumer = new Consumer(queue, currentSize, lock, notEmpty, closed, genericStatsMetricPublisher, queueEventType);  
         return queue.size();
     }  
-
-    public boolean isMaxCapacityBelowContentLength(long contentLength) {
-        return contentLength < capacity.getBytes();  
-    }
-
-    protected static class Consumer extends Thread {  
-        private final LinkedBlockingQueue<Item> queue;
-        private final Lock lock;
-        private final Condition notEmpty;  
-        private final AtomicLong currentSize;
-        private final AtomicBoolean closed;
-        private final GenericStatsMetricPublisher genericStatsMetricPublisher;  
-        private final QueueEventType queueEventType;
-
-        public Consumer(  
-            LinkedBlockingQueue<Item> queue,
-            AtomicLong currentSize,
-            Lock lock,  
-            Condition notEmpty,
-            AtomicBoolean closed,
-            GenericStatsMetricPublisher genericStatsMetricPublisher,  
-            QueueEventType queueEventType
-        ) {
-            this.queue = queue;  
-            this.lock = lock;
-            this.notEmpty = notEmpty;
             this.currentSize = currentSize;  
-            this.closed = closed;
-            this.genericStatsMetricPublisher = genericStatsMetricPublisher;
-            this.queueEventType = queueEventType;  
+                throw new AlreadyClosedException("Transfer queue is already closed.");
+    public void produce(Item item) throws InterruptedException {
         }
-
-        @Override  
-        public void run() {
-            while (true) {
-                try {  
-                    consume();
-                } catch (AlreadyClosedException ex) {
-                    return;  
-                } catch (Exception ex) {
-                    log.error("Failed to consume transfer event", ex);
-                }  
-            }
-        }
-
-        private void consume() throws InterruptedException {
-            final Lock lock = this.lock;
-            final AtomicLong currentSize = this.currentSize;  
-            lock.lock();
-            Item item;
-            try {  
-                if (closed.get()) {
-                    throw new AlreadyClosedException("transfer queue closed");
-                }  
-                while (currentSize.get() == 0) {
-                    notEmpty.await();
-                    if (closed.get()) {  
-                        throw new AlreadyClosedException("transfer queue closed");
-                    }
-                }  
-
-                item = queue.take();
-                currentSize.addAndGet(-item.size);  
-                updateStats(-item.size, queueEventType, genericStatsMetricPublisher);
-            } finally {
-                lock.unlock();  
-            }
-
-            try {  
-                item.consumable.run();
-            } catch (Exception ex) {
-                log.error("Exception on executing item consumable", ex);  
-            }
-        }
-
-    }
-
-    public static class Item {  
-        private final long size;
-        private final Runnable consumable;
-
-        public Item(long size, Runnable consumable) {
-            this.size = size;
             this.consumable = consumable;  
-        }
-    }
-
+        private final Condition notEmpty;  
+        this.genericStatsMetricPublisher = genericStatsMetricPublisher;  
+    protected final LinkedBlockingQueue<Item> queue;  
+    private static final Logger log = LogManager.getLogger(SizeBasedBlockingQ.class);
+import java.util.concurrent.locks.Lock;
+        private void consume() throws InterruptedException {
+    public enum QueueEventType {
+        ExecutorService executorService,
+                while (currentSize.get() == 0) {
     @Override
-    protected void doStop() {
-        doClose();  
-    }
-
-    @Override  
-    protected void doClose() {
+ * SPDX-License-Identifier: Apache-2.0
+        private final LinkedBlockingQueue<Item> queue;
+                }  
+            genericStatsMetricPublisher.updateLowPriorityQSize(itemSize);  
+        }
+                    }
+        } finally {
+        this.closed = new AtomicBoolean();  
+            notEmpty.signalAll();  
+            lock.unlock();  
+        this.executorService = executorService;
+            } finally {
         lock.lock();
         try {  
-            if (closed.get() == true) {
-                return;
+            LinkedBlockingQueue<Item> queue,
+            this.notEmpty = notEmpty;
             }  
-            closed.set(true);
-            notEmpty.signalAll();
-        } finally {  
+        public Item(long size, Runnable consumable) {
+    @Override  
+                item.consumable.run();
+            this.genericStatsMetricPublisher = genericStatsMetricPublisher;
             lock.unlock();
+            this.queue = queue;  
+            try {  
+    }
+                    return;  
+ * Queue implementation to accept events based on their storage attribute. If size of queue is breached, then transfer  
+import java.util.concurrent.locks.Condition;
+    public boolean isMaxCapacityBelowContentLength(long contentLength) {
+            throw new S3TransferRejectedException("S3 Transfer queue capacity reached");  
+            try {  
+        for (int worker = 0; worker < consumers; worker++) {
+        }
+                updateStats(-item.size, queueEventType, genericStatsMetricPublisher);
+    protected final AtomicLong currentSize;
+import java.util.concurrent.ExecutorService;  
+                    throw new AlreadyClosedException("transfer queue closed");
+        }
+            Condition notEmpty,
+    protected final int consumers;
+        this.queue = new LinkedBlockingQueue<>();
+        try {  
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
+        ByteSizeValue capacity,
+            }  
+    protected void doClose() {
+        private final GenericStatsMetricPublisher genericStatsMetricPublisher;  
+        this.capacity = capacity;
+     */
+    public static class Item {  
+    }
+                }  
+        }
+            }
+            throw new IllegalStateException("Invalid item input to produce.");
+        public void run() {
+    }
+    protected final Condition notEmpty;
+            updateStats(item.size, queueEventType, genericStatsMetricPublisher);
+            this.size = size;
+        private final Lock lock;
+    }  
+            Item item;
+    @Override  
+            this.lock = lock;
+    }
+            QueueEventType queueEventType
+        } else if (queueEventType == QueueEventType.LOW) {
+package org.opensearch.repositories.s3.async;
+    protected final Lock lock;
+            if (closed.get() == true) {
+        if (currentSize.get() + item.size >= capacity.getBytes()) {
+                    if (closed.get()) {  
+        this.consumers = consumers;
         }
     }  
-}
+        doClose();  
+import java.util.concurrent.atomic.AtomicLong;  
+            this.queueEventType = queueEventType;  
+ * event is rejected.
+import org.apache.lucene.store.AlreadyClosedException;  
+import java.util.concurrent.LinkedBlockingQueue;
+            if (currentSize.get() + item.size >= capacity.getBytes()) {
+ * The OpenSearch Contributors require contributions made to  
+     * Add an item to the queue  
+/**
+            closed.set(true);
+        }
+            queue.put(item);
+    public int getSize() {
+                    consume();
+        lock.lock();
+        log.debug(() -> "Transfer queue event received of size: " + item.size + ". Current queue utilisation: " + currentSize.get());  
+                        throw new AlreadyClosedException("transfer queue closed");
+    protected final ExecutorService executorService;
+        if (item == null || item.size <= 0) {  
+            }
+    protected void doStop() {
+    }  
+            final AtomicLong currentSize = this.currentSize;  
+     * Constructor to create sized based blocking queue.
+    }
+    private final QueueEventType queueEventType;
+            notEmpty.signalAll();
+                }  
+ * compatible open source license.
+        LOW;  
+public class SizeBasedBlockingQ extends AbstractLifecycleComponent {  
+            lock.lock();
+            }  
+        final Lock lock = this.lock;  
+        this.queueEventType = queueEventType;
+                if (closed.get()) {
+        private final AtomicBoolean closed;
+    /**  
+    protected void doStart() {
+                    notEmpty.await();
+                    log.error("Failed to consume transfer event", ex);
+        this.notEmpty = lock.newCondition();  
+    protected final ByteSizeValue capacity;
+        public Consumer(  
+                log.error("Exception on executing item consumable", ex);  
+            } catch (Exception ex) {
+    private final GenericStatsMetricPublisher genericStatsMetricPublisher;  
+            GenericStatsMetricPublisher genericStatsMetricPublisher,  
+        }
+                item = queue.take();
+        final AtomicLong currentSize = this.currentSize;
+            Lock lock,  
+        } finally {  
+        GenericStatsMetricPublisher genericStatsMetricPublisher,
+/*  
+                return;
+        private final QueueEventType queueEventType;
+        NORMAL,
+import org.apache.logging.log4j.Logger;
+            this.closed = closed;
+        if (queueEventType == QueueEventType.NORMAL) {  
+    protected static class Consumer extends Thread {  
+    /**
+            if (closed.get()) {
+import java.util.concurrent.atomic.AtomicBoolean;
+        @Override  
+ */
+import java.util.concurrent.locks.ReentrantLock;  
+            currentSize.addAndGet(item.size);
+        private final AtomicLong currentSize;
+    public SizeBasedBlockingQ(  
+import org.opensearch.repositories.s3.S3TransferRejectedException;
+                currentSize.addAndGet(-item.size);  
+     */
+        int consumers,  
+        this.currentSize = new AtomicLong();
+ * this file be licensed under the Apache-2.0 license or a
+            genericStatsMetricPublisher.updateNormalPriorityQSize(itemSize);
+                } catch (Exception ex) {
+    }
+            while (true) {
+ */  
+            }
+        }

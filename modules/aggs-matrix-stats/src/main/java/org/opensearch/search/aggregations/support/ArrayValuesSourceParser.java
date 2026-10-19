@@ -1,283 +1,261 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.support;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.script.Script;
-import org.opensearch.search.aggregations.AggregationBuilder.CommonFields;
-import org.opensearch.search.aggregations.Aggregator;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-
-public abstract class ArrayValuesSourceParser<VS extends ValuesSource> implements Aggregator.Parser {  
-
-    public abstract static class NumericValuesSourceParser extends ArrayValuesSourceParser<ValuesSource.Numeric> {
-
-        protected NumericValuesSourceParser(boolean formattable) {
-            super(formattable, CoreValuesSourceType.NUMERIC, ValueType.NUMERIC);
-        }  
-    }
-
-    public abstract static class BytesValuesSourceParser extends ArrayValuesSourceParser<ValuesSource.Bytes> {  
-
-        protected BytesValuesSourceParser(boolean formattable) {
-            super(formattable, CoreValuesSourceType.BYTES, ValueType.STRING);  
-        }
-    }
-
-    public abstract static class GeoPointValuesSourceParser extends ArrayValuesSourceParser<ValuesSource.GeoPoint> {
-
-        protected GeoPointValuesSourceParser(boolean formattable) {  
-            super(formattable, CoreValuesSourceType.GEOPOINT, ValueType.GEOPOINT);
-        }
-    }  
-
-    private boolean formattable = false;
-    private ValuesSourceType valuesSourceType = null;  
-    private ValueType targetValueType = null;
-
-    private ArrayValuesSourceParser(boolean formattable, ValuesSourceType valuesSourceType, ValueType targetValueType) {  
-        this.valuesSourceType = valuesSourceType;
-        this.targetValueType = targetValueType;
-        this.formattable = formattable;  
-    }
-
-    @Override  
-    public final ArrayValuesSourceAggregationBuilder<?> parse(String aggregationName, XContentParser parser) throws IOException {
-
-        List<String> fields = null;  
-        String format = null;
-        Map<String, Object> missingMap = null;
-        Map<ParseField, Object> otherOptions = new HashMap<>();  
-        XContentParser.Token token;
-        String currentFieldName = null;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.VALUE_STRING) {  
-                if (CommonFields.FIELDS.match(currentFieldName, parser.getDeprecationHandler())) {
-                    fields = Collections.singletonList(parser.text());
-                } else if (formattable && CommonFields.FORMAT.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    format = parser.text();
-                } else if (CommonFields.VALUE_TYPE.match(currentFieldName, parser.getDeprecationHandler())) {
-                    throw new ParsingException(  
-                        parser.getTokenLocation(),
-                        "Unexpected token "
-                            + token  
-                            + " ["
-                            + currentFieldName
-                            + "] in ["  
-                            + aggregationName
-                            + "]. "
-                            + "Multi-field aggregations do not support scripts."  
-                    );
-                } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {
-                    throw new ParsingException(  
-                        parser.getTokenLocation(),
-                        "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."
-                    );  
-                }
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (CommonFields.MISSING.match(currentFieldName, parser.getDeprecationHandler())) {  
+            }  
                     missingMap = new HashMap<>();
-                    while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-                        parseMissingAndAdd(aggregationName, currentFieldName, parser, missingMap);  
-                    }
-                } else if (Script.SCRIPT_PARSE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    throw new ParsingException(  
-                        parser.getTokenLocation(),
-                        "Unexpected token "
-                            + token  
-                            + " ["
                             + currentFieldName
-                            + "] in ["  
-                            + aggregationName
-                            + "]. "
-                            + "Multi-field aggregations do not support scripts."  
-                    );
-
-                } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {  
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."  
-                    );
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {  
-                if (Script.SCRIPT_PARSE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    throw new ParsingException(
+import org.opensearch.search.aggregations.AggregationBuilder.CommonFields;
+            super(formattable, CoreValuesSourceType.GEOPOINT, ValueType.GEOPOINT);
+                    parser.getTokenLocation(),  
                         parser.getTokenLocation(),  
-                        "Unexpected token "
+        final Map<String, Object> missing
+                            + " ["
+ */
+                if (CommonFields.MISSING.match(currentFieldName, parser.getDeprecationHandler())) {  
+                            + aggregationName  
+                                "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."  
+                } else if (formattable && CommonFields.FORMAT.match(currentFieldName, parser.getDeprecationHandler())) {  
+                            + token  
+        final String aggregationName,
+    }  
+/*
+import org.opensearch.core.common.ParsingException;
+        Map<ParseField, Object> otherOptions  
+     * @param aggregationName
+        if (missingMap != null) {  
+                            + currentFieldName
+            super(formattable, CoreValuesSourceType.BYTES, ValueType.STRING);  
+     * @return <code>true</code> if the current token was correctly parsed,  
+    /**  
+                    );
+                    );  
+            parser.nextToken();
+        );
+            } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {
+                            + "Multi-field aggregations do not support scripts."  
+        }  
+                    while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+ * software distributed under the License is distributed on an
+        if (format != null) {  
+     * Allows subclasses of {@link ArrayValuesSourceParser} to parse extra
+            factory.fields(fields);
+                }
+     *            {@link #token(String, String, XContentParser.Token, XContentParser, Map)}
+                            + token  
+                    fields = Collections.singletonList(parser.text());
+    private ValuesSourceType valuesSourceType = null;  
+            aggregationName,
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+            token = parser.nextToken();
+                } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {
+                    }  
+                        if (token == XContentParser.Token.VALUE_STRING) {
+        }
+}  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.xcontent.XContentParser;  
+import org.opensearch.core.ParseField;
+        protected NumericValuesSourceParser(boolean formattable) {
+                parser.getTokenLocation(),
+     * parameters and store them in a {@link Map} which will later be passed to
+                        }
+        String currentFieldName = null;
+            );
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    ) throws IOException;
+import java.util.Collections;
+        } else {  
+        this.targetValueType = targetValueType;
+    private ArrayValuesSourceParser(boolean formattable, ValuesSourceType valuesSourceType, ValueType targetValueType) {  
+        XContentParser parser,  
+                    );
+/*  
+        XContentParser.Token token;
+ * license agreements. See the NOTICE file distributed with
+                        parser.getTokenLocation(),
+    }
+                            + "] in ["  
                             + token
                             + " ["  
-                            + currentFieldName
+                        parser.getTokenLocation(),
+import java.util.List;  
+                    }
                             + "] in ["
-                            + aggregationName  
-                            + "]. "
-                            + "Multi-field aggregations do not support scripts."
-                    );  
-                } else if (CommonFields.FIELDS.match(currentFieldName, parser.getDeprecationHandler())) {
-                    fields = new ArrayList<>();
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
-                        if (token == XContentParser.Token.VALUE_STRING) {
-                            fields.add(parser.text());
-                        } else {  
-                            throw new ParsingException(
-                                parser.getTokenLocation(),
-                                "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."  
-                            );
-                        }
-                    }  
-                } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),  
-                        "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."
-                    );
-                }  
-            } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {
-                throw new ParsingException(
-                    parser.getTokenLocation(),  
-                    "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."
-                );
-            }  
-        }
-
-        ArrayValuesSourceAggregationBuilder<?> factory = createFactory(  
-            aggregationName,
-            this.valuesSourceType,
-            this.targetValueType,  
-            otherOptions
-        );
-        if (fields != null) {  
-            factory.fields(fields);
-        }
-        if (format != null) {  
-            factory.format(format);
-        }
-        if (missingMap != null) {  
-            factory.missingMap(missingMap);
-        }
         return factory;  
-    }
-
-    private void parseMissingAndAdd(  
-        final String aggregationName,
-        final String currentFieldName,
-        XContentParser parser,  
-        final Map<String, Object> missing
-    ) throws IOException {
-        XContentParser.Token token = parser.currentToken();  
-        if (token == null) {
-            token = parser.nextToken();
-        }  
-
-        if (token == XContentParser.Token.FIELD_NAME) {
-            final String fieldName = parser.currentName();  
-            if (missing.containsKey(fieldName)) {
-                throw new ParsingException(
-                    parser.getTokenLocation(),  
-                    "Missing field [" + fieldName + "] already defined as [" + missing.get(fieldName) + "] in [" + aggregationName + "]."
-                );
-            }  
-            parser.nextToken();
-            missing.put(fieldName, parser.objectText());
-        } else {  
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]"  
-            );
+                } else if (CommonFields.VALUE_TYPE.match(currentFieldName, parser.getDeprecationHandler())) {
+     *            a {@link Map} of options to be populated by successive calls
         }
-    }  
-
+                }  
+ * specific language governing permissions and limitations
+    ) throws IOException {
+                } else if (CommonFields.FIELDS.match(currentFieldName, parser.getDeprecationHandler())) {
+                        "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."  
+     *            the parser  
+                            + "Multi-field aggregations do not support scripts."
+                            + "]. "
+        final String currentFieldName,
+                    "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."
+                    throw new ParsingException(
+                            + "]. "
+            this.targetValueType,  
     /**
-     * Creates a {@link ValuesSourceAggregationBuilder} from the information  
-     * gathered by the subclass. Options parsed in
-     * {@link ArrayValuesSourceParser} itself will be added to the factory
+                    );
+            final String fieldName = parser.currentName();  
+     * @param parser
+import org.opensearch.script.Script;
+                            + aggregationName
+        protected GeoPointValuesSourceParser(boolean formattable) {  
+ */  
+        String aggregationName,  
+                            + aggregationName
+        if (token == XContentParser.Token.FIELD_NAME) {
+            } else if (token == XContentParser.Token.START_OBJECT) {
+     *            {@link #createFactory(String, ValuesSourceType, ValueType, Map)}
      * after it has been returned by this method.  
-     *
-     * @param aggregationName
-     *            the name of the aggregation  
-     * @param valuesSourceType
-     *            the type of the {@link ValuesSource}
-     * @param targetValueType  
-     *            the target type of the final value output by the aggregation
-     * @param otherOptions
-     *            a {@link Map} containing the extra options parsed by the  
-     *            {@link #token(String, String, XContentParser.Token, XContentParser, Map)}
+ * SPDX-License-Identifier: Apache-2.0
+        Map<String, Object> missingMap = null;
+        }
+                        "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."
+ * not use this file except in compliance with the License.
+        }
+            if (token == XContentParser.Token.FIELD_NAME) {
+import java.util.Map;
+                        "Unexpected token "
+     * @param currentFieldName
      *            method
-     * @return the created factory  
+     * @throws IOException
+        String currentFieldName,
+ * this work for additional information regarding copyright
+                        parser.getTokenLocation(),
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+    public final ArrayValuesSourceAggregationBuilder<?> parse(String aggregationName, XContentParser parser) throws IOException {
+                }
+     *            the name of the aggregation  
+        }
+                currentFieldName = parser.currentName();
+                    throw new ParsingException(  
+                        parseMissingAndAdd(aggregationName, currentFieldName, parser, missingMap);  
+                            throw new ParsingException(
+                        "Unexpected token "
+                } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {
+    private void parseMissingAndAdd(  
+                );
+    protected abstract boolean token(
+                        "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]."
+                            + " ["
+        ArrayValuesSourceAggregationBuilder<?> factory = createFactory(  
+     * @param otherOptions
+    private ValueType targetValueType = null;
+     * gathered by the subclass. Options parsed in
+ * this file be licensed under the Apache-2.0 license or a
+     * @param aggregationName
+     */
+import org.opensearch.search.aggregations.Aggregator;  
+                if (Script.SCRIPT_PARSE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
      */
     protected abstract ArrayValuesSourceAggregationBuilder<?> createFactory(
         String aggregationName,  
-        ValuesSourceType valuesSourceType,
-        ValueType targetValueType,
-        Map<ParseField, Object> otherOptions  
-    );
-
-    /**  
-     * Allows subclasses of {@link ArrayValuesSourceParser} to parse extra
-     * parameters and store them in a {@link Map} which will later be passed to
-     * {@link #createFactory(String, ValuesSourceType, ValueType, Map)}.  
-     *
-     * @param aggregationName
-     *            the name of the aggregation  
-     * @param currentFieldName
-     *            the name of the current field being parsed
-     * @param token  
+                            fields.add(parser.text());
+     * Creates a {@link ValuesSourceAggregationBuilder} from the information  
+            super(formattable, CoreValuesSourceType.NUMERIC, ValueType.NUMERIC);
+import java.util.ArrayList;  
+                );
+            } else if (token == XContentParser.Token.START_ARRAY) {  
+                    throw new ParsingException(
+            otherOptions
+            if (missing.containsKey(fieldName)) {
+        XContentParser.Token token = parser.currentToken();  
      *            the current token for the parser
-     * @param parser
-     *            the parser  
-     * @param otherOptions
-     *            a {@link Map} of options to be populated by successive calls
+                    );  
      *            to this method which will then be passed to the  
-     *            {@link #createFactory(String, ValuesSourceType, ValueType, Map)}
-     *            method
-     * @return <code>true</code> if the current token was correctly parsed,  
-     *         <code>false</code> otherwise
-     * @throws IOException
-     *             if an error occurs whilst parsing  
-     */
-    protected abstract boolean token(
-        String aggregationName,  
-        String currentFieldName,
+                            );
+                            + currentFieldName
+        protected BytesValuesSourceParser(boolean formattable) {
+                    fields = new ArrayList<>();
+ * compatible open source license.
+    }
+                "Unexpected token " + token + " [" + currentFieldName + "] in [" + aggregationName + "]"  
+    }  
         XContentParser.Token token,
+    );
+     * @param token  
+     *            a {@link Map} containing the extra options parsed by the  
+     *            the type of the {@link ValuesSource}
+ * You may obtain a copy of the License at  
+            missing.put(fieldName, parser.objectText());
+    }
+    public abstract static class GeoPointValuesSourceParser extends ArrayValuesSourceParser<ValuesSource.GeoPoint> {
+                    throw new ParsingException(  
+                    throw new ParsingException(  
+     *            the name of the current field being parsed
+import java.io.IOException;
+    public abstract static class NumericValuesSourceParser extends ArrayValuesSourceParser<ValuesSource.Numeric> {
+     *            the name of the aggregation  
+        Map<ParseField, Object> otherOptions = new HashMap<>();  
+                    "Missing field [" + fieldName + "] already defined as [" + missing.get(fieldName) + "] in [" + aggregationName + "]."
+            factory.missingMap(missingMap);
+import java.util.HashMap;
+     * @param otherOptions
+                    throw new ParsingException(
+        String format = null;
+                throw new ParsingException(
+     * {@link ArrayValuesSourceParser} itself will be added to the factory
+            this.valuesSourceType,
+            } else if (token == XContentParser.Token.VALUE_STRING) {  
+        }  
+                        "Unexpected token "
+    public abstract static class BytesValuesSourceParser extends ArrayValuesSourceParser<ValuesSource.Bytes> {  
+        if (fields != null) {  
+            throw new ParsingException(
+     *
+        }
+                        parser.getTokenLocation(),
+                            + "Multi-field aggregations do not support scripts."  
+     *
+                } else if (!token(aggregationName, currentFieldName, token, parser, otherOptions)) {  
+ */  
+                                parser.getTokenLocation(),
+        }
+        ValueType targetValueType,
+ *
+     * @param targetValueType  
+        List<String> fields = null;  
+     *         <code>false</code> otherwise
+ * Licensed to Elasticsearch under one or more contributor  
+            factory.format(format);
+ * GitHub history for details.
+public abstract class ArrayValuesSourceParser<VS extends ValuesSource> implements Aggregator.Parser {  
+ * under the License.  
+     *             if an error occurs whilst parsing  
+                    );
+                            + "]. "
+ * The OpenSearch Contributors require contributions made to  
+ * Unless required by applicable law or agreed to in writing,
+     *            method
+                    format = parser.text();
+                throw new ParsingException(
+    @Override  
+ *  
+                            + "] in ["  
+    private boolean formattable = false;
+                        } else {  
+ * ownership. Elasticsearch licenses this file to you under  
+        if (token == null) {
+     *            the target type of the final value output by the aggregation
+     * @return the created factory  
+                if (CommonFields.FIELDS.match(currentFieldName, parser.getDeprecationHandler())) {
         XContentParser parser,  
+        this.valuesSourceType = valuesSourceType;
         Map<ParseField, Object> otherOptions
-    ) throws IOException;
-}  
+package org.opensearch.search.aggregations.support;
+     * {@link #createFactory(String, ValuesSourceType, ValueType, Map)}.  
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
+            }  
+        this.formattable = formattable;  
+/*  
+     * @param valuesSourceType
+                    parser.getTokenLocation(),  
+        ValuesSourceType valuesSourceType,
+                        parser.getTokenLocation(),  
+ *
+                } else if (Script.SCRIPT_PARSE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {

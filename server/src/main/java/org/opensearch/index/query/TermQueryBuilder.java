@@ -1,251 +1,222 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.index.mapper.ConstantFieldType;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.NumberFieldMapper;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Objects;
-
-/**  
- * A Query that matches documents containing a term.
- *
- * @opensearch.internal  
- */
-public class TermQueryBuilder extends BaseTermQueryBuilder<TermQueryBuilder> implements ComplementAwareQueryBuilder {
-    public static final String NAME = "term";  
-    public static final boolean DEFAULT_CASE_INSENSITIVITY = false;
-    private static final ParseField CASE_INSENSITIVE_FIELD = new ParseField("case_insensitive");
-
-    private boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
-
-    private static final ParseField TERM_FIELD = new ParseField("term");  
-    private static final ParseField VALUE_FIELD = new ParseField("value");
-
-    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, String) */  
-    public TermQueryBuilder(String fieldName, String value) {
-        super(fieldName, (Object) value);
-    }  
-
-    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, int) */
-    public TermQueryBuilder(String fieldName, int value) {  
-        super(fieldName, (Object) value);
-    }
-
-    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, long) */
-    public TermQueryBuilder(String fieldName, long value) {
-        super(fieldName, (Object) value);  
-    }
-
-    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, float) */  
-    public TermQueryBuilder(String fieldName, float value) {
-        super(fieldName, (Object) value);
-    }  
-
-    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, double) */
-    public TermQueryBuilder(String fieldName, double value) {  
-        super(fieldName, (Object) value);
-    }
-
-    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, boolean) */
-    public TermQueryBuilder(String fieldName, boolean value) {
-        super(fieldName, (Object) value);  
-    }
-
-    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, Object) */  
-    public TermQueryBuilder(String fieldName, Object value) {
-        super(fieldName, value);
-    }  
-
-    public TermQueryBuilder caseInsensitive(boolean caseInsensitive) {
-        this.caseInsensitive = caseInsensitive;  
-        return this;
-    }
-
-    public boolean caseInsensitive() {
-        return this.caseInsensitive;
-    }  
-
-    /**
-     * Read from a stream.  
-     */
-    public TermQueryBuilder(StreamInput in) throws IOException {
-        super(in);  
-        caseInsensitive = in.readBoolean();
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
+        NumberFieldMapper.NumberFieldType nft = ComplementHelperUtils.getNumberFieldType(context, fieldName);
         super.doWriteTo(out);  
-        out.writeBoolean(caseInsensitive);
+/**  
     }
-
-    public static TermQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        String queryName = null;
-        String fieldName = null;  
-        Object value = null;
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;  
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {  
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
-                fieldName = currentFieldName;
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        currentFieldName = parser.currentName();
-                    } else {  
-                        if (TERM_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            value = maybeConvertToBytesRef(parser.objectBytes());
-                        } else if (VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                            value = maybeConvertToBytesRef(parser.objectBytes());
-                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            queryName = parser.text();  
-                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            boost = parser.floatValue();
+    }  
+    }
+    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, int) */
+    }
+    }  
+    public String getWriteableName() {  
                         } else if (CASE_INSENSITIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                            caseInsensitive = parser.booleanValue();
-                        } else {
-                            throw new ParsingException(  
-                                parser.getTokenLocation(),
-                                "[term] query does not support [" + currentFieldName + "]"
-                            );  
-                        }
-                    }
-                }  
-            } else if (token.isValue()) {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());
-                fieldName = currentFieldName;  
-                value = maybeConvertToBytesRef(parser.objectBytes());
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                throw new ParsingException(parser.getTokenLocation(), "[term] query does not support array of values");  
-            }
+    }
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.ParseField;
+                            value = maybeConvertToBytesRef(parser.objectBytes());
         }
-
-        TermQueryBuilder termQuery = new TermQueryBuilder(fieldName, value);
-        termQuery.boost(boost);
+public class TermQueryBuilder extends BaseTermQueryBuilder<TermQueryBuilder> implements ComplementAwareQueryBuilder {
+        // If this is a term query on a numeric field, we can provide the complement using RangeQueryBuilder.
+import java.io.IOException;
+    public TermQueryBuilder(String fieldName, int value) {  
+import org.opensearch.index.mapper.NumberFieldMapper;  
+    public TermQueryBuilder(String fieldName, float value) {
         if (queryName != null) {  
-            termQuery.queryName(queryName);
-        }
-        termQuery.caseInsensitive(caseInsensitive);  
+/*  
+                } else if (query instanceof MatchNoDocsQuery) {
+    @Override
+    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, String) */  
+ * this file be licensed under the Apache-2.0 license or a
+        return Objects.hash(super.doHashCode(), caseInsensitive);  
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+ *  
+            MappedFieldType fieldType = context.fieldMapper(this.fieldName);  
+/*
+        TermQueryBuilder termQuery = new TermQueryBuilder(fieldName, value);
         return termQuery;
     }
-
-    @Override
-    protected void addExtraXContent(XContentBuilder builder, Params params) throws IOException {
-        if (caseInsensitive != DEFAULT_CASE_INSENSITIVITY) {  
-            builder.field(CASE_INSENSITIVE_FIELD.getPreferredName(), caseInsensitive);
-        }
     }  
-
-    @Override
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {  
-        QueryShardContext context = queryRewriteContext.convertToShardContext();
-        if (context != null) {
-            MappedFieldType fieldType = context.fieldMapper(this.fieldName);  
-            if (fieldType == null) {
-                return new MatchNoneQueryBuilder();
-            } else if (fieldType.unwrap() instanceof ConstantFieldType) {  
-                // This logic is correct for all field types, but by only applying it to constant
-                // fields we also have the guarantee that it doesn't perform I/O, which is important
-                // since rewrites might happen on a network thread.  
-                Query query = null;
-                if (caseInsensitive) {
-                    query = fieldType.termQueryCaseInsensitive(value, context);  
-                } else {
-                    query = fieldType.termQuery(value, context);
-                }  
-
-                if (query instanceof MatchAllDocsQuery) {
-                    return new MatchAllQueryBuilder();  
-                } else if (query instanceof MatchNoDocsQuery) {
-                    return new MatchNoneQueryBuilder();
-                } else {  
-                    assert false : "Constant fields must produce match-all or match-none queries, got " + query;
-                }
-            }  
-        }
-        return super.doRewrite(queryRewriteContext);
-    }  
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {  
-        MappedFieldType mapper = context.fieldMapper(this.fieldName);
-        if (mapper == null) {
-            throw new IllegalStateException("Rewrite first");  
-        }
-        if (caseInsensitive) {
-            return mapper.termQueryCaseInsensitive(value, context);  
-        }
-        return mapper.termQuery(value, context);
-    }  
-
-    @Override
-    public String getWriteableName() {  
-        return NAME;
-    }
-
-    @Override
     protected final int doHashCode() {
-        return Objects.hash(super.doHashCode(), caseInsensitive);  
+            } else if (token == XContentParser.Token.START_OBJECT) {  
+        if (caseInsensitive) {
+    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, float) */  
+    public TermQueryBuilder(String fieldName, long value) {
+    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, double) */
+                            caseInsensitive = parser.booleanValue();
+                            boost = parser.floatValue();
+        QueryShardContext context = queryRewriteContext.convertToShardContext();
+            throw new IllegalStateException("Rewrite first");  
+        super(in);  
+                    query = fieldType.termQuery(value, context);
+                } else {
+                if (query instanceof MatchAllDocsQuery) {
+                                "[term] query does not support [" + currentFieldName + "]"
+ * ownership. Elasticsearch licenses this file to you under  
+            if (fieldType == null) {
+    public TermQueryBuilder caseInsensitive(boolean caseInsensitive) {
+        String currentFieldName = null;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
     }
-
-    @Override  
-    protected final boolean doEquals(TermQueryBuilder other) {
-        return super.doEquals(other) && Objects.equals(caseInsensitive, other.caseInsensitive);
-    }  
-
-    @Override
-    public List<QueryBuilder> getComplement(QueryShardContext context) {  
-        // If this is a term query on a numeric field, we can provide the complement using RangeQueryBuilder.
-        NumberFieldMapper.NumberFieldType nft = ComplementHelperUtils.getNumberFieldType(context, fieldName);
-        if (nft == null) return null;  
-        Number numberValue = nft.parse(value);
+                    return new MatchAllQueryBuilder();  
+                }  
+        super(fieldName, (Object) value);
+        }
+ * Modifications Copyright OpenSearch Contributors. See
         return ComplementHelperUtils.numberValueToComplement(fieldName, numberValue);
+    public TermQueryBuilder(String fieldName, String value) {
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        MappedFieldType mapper = context.fieldMapper(this.fieldName);
+    public TermQueryBuilder(String fieldName, Object value) {
+                value = maybeConvertToBytesRef(parser.objectBytes());
+import java.util.List;  
+    private static final ParseField VALUE_FIELD = new ParseField("value");
+import org.apache.lucene.search.MatchAllDocsQuery;
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+                fieldName = currentFieldName;  
+                    assert false : "Constant fields must produce match-all or match-none queries, got " + query;
+    protected void addExtraXContent(XContentBuilder builder, Params params) throws IOException {
+ *
+ * The OpenSearch Contributors require contributions made to  
+ */
+    @Override
+                        if (TERM_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    @Override  
+    protected Query doToQuery(QueryShardContext context) throws IOException {  
+ */  
     }  
+                        } else {
+                    if (token == XContentParser.Token.FIELD_NAME) {
+                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    public static TermQueryBuilder fromXContent(XContentParser parser) throws IOException {
+    }
+        Object value = null;
+            if (token == XContentParser.Token.FIELD_NAME) {
+    @Override
+import org.opensearch.index.mapper.ConstantFieldType;
+                        } else if (VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+ * GitHub history for details.
+                throw new ParsingException(parser.getTokenLocation(), "[term] query does not support array of values");  
+import org.apache.lucene.search.MatchNoDocsQuery;
+        boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;  
+    public static final boolean DEFAULT_CASE_INSENSITIVITY = false;
+import org.opensearch.core.common.ParsingException;
+    }
+ * You may obtain a copy of the License at  
+        String queryName = null;
+                            );  
+        String fieldName = null;  
+    public TermQueryBuilder(String fieldName, double value) {  
 }
+                return new MatchNoneQueryBuilder();
+        return super.doEquals(other) && Objects.equals(caseInsensitive, other.caseInsensitive);
+        super(fieldName, (Object) value);
+        if (context != null) {
+        termQuery.boost(boost);
+import org.opensearch.core.xcontent.XContentParser;  
+    @Override
+        super(fieldName, (Object) value);  
+import org.opensearch.core.common.io.stream.StreamInput;  
+            }
+import org.opensearch.core.xcontent.XContentBuilder;
+ */  
+    public static final String NAME = "term";  
+        if (caseInsensitive != DEFAULT_CASE_INSENSITIVITY) {  
+    protected final boolean doEquals(TermQueryBuilder other) {
+                    } else {  
+        super(fieldName, value);
+ * under the License.  
+import java.util.Objects;
+        super(fieldName, (Object) value);  
+ *
+                if (caseInsensitive) {
+    /**
+        this.caseInsensitive = caseInsensitive;  
+    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, boolean) */
+                    return new MatchNoneQueryBuilder();
+    public boolean caseInsensitive() {
+ * Licensed to Elasticsearch under one or more contributor  
+ * @opensearch.internal  
+ * license agreements. See the NOTICE file distributed with
+ * A Query that matches documents containing a term.
+import org.opensearch.index.mapper.MappedFieldType;
+        caseInsensitive = in.readBoolean();
+        XContentParser.Token token;
+    @Override
+    }
+            return mapper.termQueryCaseInsensitive(value, context);  
+                Query query = null;
+        if (mapper == null) {
+        if (nft == null) return null;  
+import org.apache.lucene.search.Query;  
+            builder.field(CASE_INSENSITIVE_FIELD.getPreferredName(), caseInsensitive);
+    }  
+    private static final ParseField CASE_INSENSITIVE_FIELD = new ParseField("case_insensitive");
+     * Read from a stream.  
+                // since rewrites might happen on a network thread.  
+ * this work for additional information regarding copyright
+                // fields we also have the guarantee that it doesn't perform I/O, which is important
+            } else if (token == XContentParser.Token.START_ARRAY) {
+                }  
+            }  
+                                parser.getTokenLocation(),
+        super(fieldName, (Object) value);
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());
+    private static final ParseField TERM_FIELD = new ParseField("term");  
+                        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+package org.opensearch.index.query;
+    @Override
+    }
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {  
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
+    public TermQueryBuilder(String fieldName, boolean value) {
+    @Override
+                    query = fieldType.termQueryCaseInsensitive(value, context);  
+        }
+    private boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
+     */
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+        return NAME;
+    }  
+    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, Object) */  
+        Number numberValue = nft.parse(value);
+        super(fieldName, (Object) value);
+    public List<QueryBuilder> getComplement(QueryShardContext context) {  
+                }
+ *
+        return this.caseInsensitive;
+        return this;
+ * compatible open source license.
+                } else {  
+                // This logic is correct for all field types, but by only applying it to constant
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+    }  
+        }
+        }
+                            throw new ParsingException(  
+                fieldName = currentFieldName;
+            } else if (token.isValue()) {
+ */
+                        currentFieldName = parser.currentName();
+                    }
+        return mapper.termQuery(value, context);
+                            queryName = parser.text();  
+        termQuery.caseInsensitive(caseInsensitive);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+    /** @see BaseTermQueryBuilder#BaseTermQueryBuilder(String, long) */
+            termQuery.queryName(queryName);
+ * not use this file except in compliance with the License.
+            } else if (fieldType.unwrap() instanceof ConstantFieldType) {  
+ * SPDX-License-Identifier: Apache-2.0
+                            value = maybeConvertToBytesRef(parser.objectBytes());
+ * KIND, either express or implied.  See the License for the
+    public TermQueryBuilder(StreamInput in) throws IOException {
+        return super.doRewrite(queryRewriteContext);
+        out.writeBoolean(caseInsensitive);
+        }
+                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+/*  
+    }  
+                currentFieldName = parser.currentName();

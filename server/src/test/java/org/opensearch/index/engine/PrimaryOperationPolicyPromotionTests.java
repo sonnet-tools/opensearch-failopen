@@ -1,331 +1,304 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.Term;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.action.index.IndexRequest;  
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.routing.ShardRoutingHelper;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.index.VersionType;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.mapper.IdFieldMapper;  
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.SourceToParse;
-import org.opensearch.index.mapper.Uid;  
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;  
-import org.opensearch.index.shard.IndexShardTestUtils;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.indices.recovery.RecoveryTarget;  
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;  
-import java.util.Collections;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;  
-
-/**
- * A {@link PrimaryOperationPolicy} is only consulted for primary-origin operations, so a shard that has  
+            }
+            assertEquals(
  * been a replica for a while never exercises the policy its engine resolved at construction. These tests
- * cover the document replication promotion path, which unlike segment replication does not rebuild the
- * engine, and would therefore keep serving that construction-time policy as a primary.  
- */
-public class PrimaryOperationPolicyPromotionTests extends IndexShardTestCase {
-
-    /**
-     * Stands in for a plugin whose {@code getPrimaryOperationPolicy} answer follows an updatable index
-     * setting: the policy behind the reference can be changed after the engine has been built.  
-     */
-    private IndexShard newReplicaWithPluginPolicy(AtomicReference<PrimaryOperationPolicy> pluginPolicy) throws IOException {
-        return newStartedShardWithPluginPolicy(pluginPolicy, false);  
-    }
-
-    private IndexShard newStartedShardWithPluginPolicy(AtomicReference<PrimaryOperationPolicy> pluginPolicy, boolean primary)  
-        throws IOException {
-        return newStartedShard(
-            p -> newShard(  
-                p,
-                Settings.EMPTY,
-                new EngineBackedIndexerFactory(  
-                    config -> new InternalEngine(config.toBuilder().primaryOperationPolicySupplier(pluginPolicy::get).build())
-                )
-            ),  
-            primary
-        );
-    }  
-
-    /** Leaves a gap at sequence number 0 by applying operations 1 and 2 only. */
-    private void indexOnReplicaLeavingGapAtZero(IndexShard replica) throws IOException {  
-        for (long seqNo : new long[] { 1L, 2L }) {
-            replica.applyIndexOperationOnReplica(
-                UUID.randomUUID().toString(),  
-                seqNo,
-                replica.getOperationPrimaryTerm(),
-                1,  
-                IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
-                false,
-                new SourceToParse(replica.shardId().getIndexName(), Long.toString(seqNo), new BytesArray("{}"), MediaTypeRegistry.JSON)  
+            pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);  
+                );  
             );
-        }
-        assertEquals(SequenceNumbers.NO_OPS_PERFORMED, replica.getLocalCheckpoint());  
-        assertEquals(2L, replica.seqNoStats().getMaxSeqNo());
+import org.opensearch.index.mapper.SourceToParse;
+            assertTrue("starting the recovered primary must activate primary mode", primary.isPrimaryMode());  
+            assertUpstreamSeqNoAppliedVerbatim(primary, primaryEngine.get(), 100L);
     }
-
+            assertSame(DefaultPrimaryOperationPolicy.INSTANCE, replica.getPrimaryOperationPolicy());
+                DefaultPrimaryOperationPolicy.INSTANCE,  
+        final IndexShard replica = newReplicaWithPluginPolicy(pluginPolicy);  
+    }
+     * directly to the shard's engine. Such an operation is only valid under the pre-assigned policy; the
+                primary.getPrimaryOperationPolicy()
+     */
+ * The OpenSearch Contributors require contributions made to  
+    private void promote(IndexShard replica) throws Exception {
+    /**  
+            indexOnReplicaLeavingGapAtZero(replica);
+        );
+ * compatible open source license.
+            assertSame(
+     * handoff, through {@link IndexShard#activateWithPrimaryContext}, without a primary term bump or an
+import org.opensearch.index.shard.IndexShardTestUtils;
+import org.opensearch.cluster.routing.ShardRoutingHelper;
+            replica,
+        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);  
+        } finally {  
+            SequenceNumbers.UNASSIGNED_SEQ_NO,
+            closeShards(primary);  
+            assertTrue("the target must have been handed primary mode", target.isPrimaryMode());
+        expectThrows(AlreadyClosedException.class, shard::getPrimaryOperationPolicy);
+        assertEquals("the upstream seq no. must be applied verbatim by the primary", upstreamSeqNo, result.getSeqNo());  
+        final Engine.Index upstreamOp = new Engine.Index(
+import org.opensearch.cluster.routing.ShardRouting;  
+import org.opensearch.common.lease.Releasable;
+                "a refresh must be able to switch back",
+     * {@link IndexShard#updateShardState}. Neither a primary term bump nor an engine reset happens in
+            1L,
+                "a replica never refreshes, so its engine must still hold the construction-time policy",
+     * policy the plugin starts resolving during that window must be the one the started primary uses.  
+            p -> newShard(  
+                primary.getPrimaryOperationPolicy()  
+        } finally {
+                    IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId()),  
+                    super.finalizeRecovery(globalCheckpoint, trimAboveSeqNo, listener);
+    }
+        final IndexShard shard = newStartedShard(true);
+        final PlainActionFuture<Releasable> permit = new PlainActionFuture<>();
+            }, true, true);  
+    /**
+            assertSame(
+            assertTrue(recoverFromStore(primary));
+     */
+            assertEquals("the refresh must release its operation block", 0, primary.getActiveOperationsCount());
+                indexDoc(source, "_doc", Integer.toString(i));  
+            for (int i = 0; i < docs; i++) {
+     */  
+        }
+    public void testPolicyAccessorOnClosedShardThrows() throws Exception {
+                "store",  
+     * upstream authority has not replicated to it yet.
+                    config.toBuilder().primaryOperationPolicySupplier(pluginPolicy::get).build()
+            return engine;
+            new IndexShardRoutingTable.Builder(replicaRouting.shardId()).addShard(replicaRouting).build()  
+     */
+                "the gap must not be filled under a policy whose seq no. space is owned upstream",
+     * engine reset. A policy the plugin starts resolving while the recovery is still running must be the
+                1,  
+            closeShards(replica);
+            promote(replica);
+    /**
+            assertSame(  
+                primary.getPrimaryOperationPolicy()  
+    public void testPromotionUnderDefaultPolicyStillFillsGaps() throws Exception {  
+     * between, and translog replay or a large restore can keep the shard recovering for a long time, so a
+        final ParsedDocument doc = shard.mapperService()
+     * Promotes the shard and waits for the primary term bump to complete, which is what runs the gap
+    public void testPromotionPicksUpPolicyInstalledAfterEngineWasBuilt() throws Exception {
+    }  
+        return newStartedShard(
+import org.opensearch.index.mapper.Uid;  
+            .documentMapper()  
+                new EngineBackedIndexerFactory(  
+            "entering primary mode must install the policy the plugin resolves now",
+            closeShards(replica);
+    }
+        final IndexShard primary = newShard(true, Settings.EMPTY, new EngineBackedIndexerFactory(config -> {
+            assertSame(DefaultPrimaryOperationPolicy.INSTANCE, primary.getPrimaryOperationPolicy());  
+        }
+            // the plugin starts overriding the policy while the primary is still recovering; nothing rebuilds
+     * A primary recovering from its store builds its engine at the start of recovery and enters primary
+        permit.get().close();
+        IndexShard target = null;
+                replica.getOperationPrimaryTerm(),
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+                    config -> new InternalEngine(config.toBuilder().primaryOperationPolicySupplier(pluginPolicy::get).build())
+     */
+                    null
+                "promotion must install the policy the plugin resolves now",  
+            assertSame(
+public class PrimaryOperationPolicyPromotionTests extends IndexShardTestCase {
+                replica.getPrimaryOperationPolicy()
+            target = newShard(source.routingEntry().getTargetRelocatingShard(), Settings.EMPTY, new EngineBackedIndexerFactory(config -> {  
+     * plugin can tell whether the engine has picked the change up yet.  
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+            Engine.Operation.Origin.PRIMARY,  
+                    primary.routingEntry(),
+import org.opensearch.core.action.ActionListener;
+    /** The unchanged case: with no plugin override the promoted primary fills its gaps as it always has. */
+    }  
+            pluginPolicy.set(DefaultPrimaryOperationPolicy.INSTANCE);
+     * one the relocated primary uses. Segment replication is not covered here because its relocation  
+import org.apache.lucene.index.Term;
+                DefaultPrimaryOperationPolicy.INSTANCE,
+     * Stands in for a plugin whose {@code getPrimaryOperationPolicy} answer follows an updatable index
     /**
      * The promotion path fills sequence-number gaps, so whether the gap at 0 survives promotion tells us
-     * which policy the engine used. A policy installed after the engine was built must be the one that  
-     * applies, otherwise this shard would record no-ops that can collide with sequence numbers the
-     * upstream authority has not replicated to it yet.
-     */  
-    public void testPromotionPicksUpPolicyInstalledAfterEngineWasBuilt() throws Exception {
-        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);
-        final IndexShard replica = newReplicaWithPluginPolicy(pluginPolicy);  
-        try {
-            indexOnReplicaLeavingGapAtZero(replica);
-
-            // the plugin starts overriding the policy while this shard is still a replica, so nothing
-            // rebuilds its engine
-            pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);  
-            assertSame(
-                "a replica never refreshes, so its engine must still hold the construction-time policy",
-                DefaultPrimaryOperationPolicy.INSTANCE,  
-                replica.getPrimaryOperationPolicy()
+            doc,
+            assertEquals(2L, replica.getLocalCheckpoint());
+            primary
+    }
+ */  
+import java.io.IOException;  
+    public void testRelocationHandoffPicksUpPolicyInstalledAfterEngineWasBuilt() throws Exception {  
+        promoteReplica(  
+            closeShards(primary);
+import org.opensearch.index.mapper.IdFieldMapper;  
+            }));  
+        return newStartedShardWithPluginPolicy(pluginPolicy, false);  
             );
-
-            promote(replica);
-            assertSame(
-                "promotion must install the policy the plugin resolves now",  
-                FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE,
-                replica.getPrimaryOperationPolicy()
             );  
-            assertEquals(
-                "the gap must not be filled under a policy whose seq no. space is owned upstream",
-                SequenceNumbers.NO_OPS_PERFORMED,  
+            final InternalEngine engine = new InternalEngine(config.toBuilder().primaryOperationPolicySupplier(pluginPolicy::get).build());  
+        try {  
+     * A plugin whose policy is keyed off an updatable setting, and that has nothing else to rebuild when  
+}  
+            primary.refreshPrimaryOperationPolicy();  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);
+            final int docs = randomIntBetween(0, 10);
+                new RecoveryState(
+                )
+            .parse(new SourceToParse(shard.shardId().getIndexName(), "upstream", new BytesArray("{}"), MediaTypeRegistry.JSON));
+            // the plugin starts overriding the policy while this shard is still a replica, so nothing
+import org.opensearch.index.VersionType;
+import org.opensearch.indices.recovery.RecoveryTarget;  
+     * that setting changes, can refresh a started primary in place rather than resetting its engine. The
+                DefaultPrimaryOperationPolicy.INSTANCE,
+        try {  
+                false,
+                p,
+import java.util.Collections;
+        );
+     * Asserts the shard is serving primary operations under the pre-assigned policy, first directly and
+        final AtomicReference<InternalEngine> primaryEngine = new AtomicReference<>();
+    public void testStartedPrimaryCanBeRefreshedInPlace() throws Exception {
+        } finally {  
+            final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);
+import org.opensearch.index.shard.IndexShardTestCase;  
+            upstreamSeqNo,
+     * which policy the engine used. A policy installed after the engine was built must be the one that  
+    private IndexShard newReplicaWithPluginPolicy(AtomicReference<PrimaryOperationPolicy> pluginPolicy) throws IOException {
+    private void assertUpstreamSeqNoAppliedVerbatim(IndexShard shard, InternalEngine engine, long upstreamSeqNo) throws IOException {
+            pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);
+            SequenceNumbers.UNASSIGNED_PRIMARY_TERM
+        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);  
+                    );  
+                )
+import java.util.concurrent.atomic.AtomicReference;  
+            updateMappings(target, source.indexSettings().getIndexMetadata());
+     * filling this test observes.
+                targetEngine.set(engine);
+            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),  
+        }
+            assertUpstreamSeqNoAppliedVerbatim(target, targetEngine.get(), docs + 100L);
                 replica.getLocalCheckpoint()
             );
-        } finally {  
-            closeShards(replica);
-        }
-    }  
-
-    /** The unchanged case: with no plugin override the promoted primary fills its gaps as it always has. */
-    public void testPromotionUnderDefaultPolicyStillFillsGaps() throws Exception {  
-        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);
-        final IndexShard replica = newReplicaWithPluginPolicy(pluginPolicy);
-        try {  
-            indexOnReplicaLeavingGapAtZero(replica);
-
-            promote(replica);  
-            assertSame(DefaultPrimaryOperationPolicy.INSTANCE, replica.getPrimaryOperationPolicy());
-            assertEquals(2L, replica.getLocalCheckpoint());
-        } finally {  
-            closeShards(replica);
-        }
-    }  
-
-    /**
-     * A primary relocation target builds its engine at the start of peer recovery and becomes a primary at  
-     * handoff, through {@link IndexShard#activateWithPrimaryContext}, without a primary term bump or an
-     * engine reset. A policy the plugin starts resolving while the recovery is still running must be the
-     * one the relocated primary uses. Segment replication is not covered here because its relocation  
-     * handoff rebuilds the engine via {@link IndexShard#resetToWriteableEngine()}.
-     */
-    public void testRelocationHandoffPicksUpPolicyInstalledAfterEngineWasBuilt() throws Exception {  
-        final IndexShard source = newStartedShard(true);
-        IndexShard target = null;
-        try {  
-            final int docs = randomIntBetween(0, 10);
-            for (int i = 0; i < docs; i++) {
-                indexDoc(source, "_doc", Integer.toString(i));  
-            }
-            IndexShardTestCase.updateRoutingEntry(source, source.routingEntry().relocate(randomAlphaOfLength(10), -1));
-
-            final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);
-            final AtomicReference<InternalEngine> targetEngine = new AtomicReference<>();
-            target = newShard(source.routingEntry().getTargetRelocatingShard(), Settings.EMPTY, new EngineBackedIndexerFactory(config -> {  
-                final InternalEngine engine = new InternalEngine(
-                    config.toBuilder().primaryOperationPolicySupplier(pluginPolicy::get).build()
-                );  
-                targetEngine.set(engine);
-                return engine;
-            }));  
-            updateMappings(target, source.indexSettings().getIndexMetadata());
-
-            recoverReplica(target, source, (shard, sourceNode) -> new RecoveryTarget(shard, sourceNode, recoveryListener, threadPool) {  
-                @Override
-                public void finalizeRecovery(long globalCheckpoint, long trimAboveSeqNo, ActionListener<Void> listener) {
-                    // the target's engine is open by now, so the switch below happens after it resolved its policy  
-                    assertNotNull("the target engine must be open before the policy changes", targetEngine.get());
-                    // the plugin starts overriding the policy while the target is still recovering; nothing
-                    // rebuilds the target's engine between here and the handoff  
-                    pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);
-                    assertSame(
-                        "the recovering target must still hold the construction-time policy before the handoff",  
-                        DefaultPrimaryOperationPolicy.INSTANCE,
-                        targetEngine.get().getPrimaryOperationPolicy()
-                    );  
-                    super.finalizeRecovery(globalCheckpoint, trimAboveSeqNo, listener);
-                }
-            }, true, true);  
-            assertTrue("the target must have been handed primary mode", target.isPrimaryMode());
-            assertTrue(source.isRelocatedPrimary());
-
-            assertUpstreamSeqNoAppliedVerbatim(target, targetEngine.get(), docs + 100L);
-        } finally {
-            closeShards(source, target);  
-        }
-    }
-
-    /**
-     * A primary recovering from its store builds its engine at the start of recovery and enters primary
-     * mode only when the cluster manager marks it started, through the same-term branch of  
-     * {@link IndexShard#updateShardState}. Neither a primary term bump nor an engine reset happens in
-     * between, and translog replay or a large restore can keep the shard recovering for a long time, so a
-     * policy the plugin starts resolving during that window must be the one the started primary uses.  
-     */
-    public void testStartingRecoveredPrimaryPicksUpPolicyInstalledAfterEngineWasBuilt() throws Exception {
-        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);  
-        final AtomicReference<InternalEngine> primaryEngine = new AtomicReference<>();
-        final IndexShard primary = newShard(true, Settings.EMPTY, new EngineBackedIndexerFactory(config -> {
-            final InternalEngine engine = new InternalEngine(config.toBuilder().primaryOperationPolicySupplier(pluginPolicy::get).build());  
-            primaryEngine.set(engine);
-            return engine;
-        }));  
-        try {
-            primary.markAsRecovering(
-                "store",  
-                new RecoveryState(
-                    primary.routingEntry(),
-                    IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId()),  
-                    null
-                )
-            );  
-            assertTrue(recoverFromStore(primary));
-            assertNotNull("the engine must be open before the policy changes", primaryEngine.get());
-            assertFalse("the shard must not be in primary mode until it is started", primary.isPrimaryMode());  
-
-            // the plugin starts overriding the policy while the primary is still recovering; nothing rebuilds
-            // its engine between here and the shard being started  
-            pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);
-            assertSame(
-                "a recovering primary must still hold the construction-time policy until it is started",  
-                DefaultPrimaryOperationPolicy.INSTANCE,
-                primary.getPrimaryOperationPolicy()
-            );  
-
-            updateRoutingEntry(primary, ShardRoutingHelper.moveToStarted(primary.routingEntry()));
-            assertTrue("starting the recovered primary must activate primary mode", primary.isPrimaryMode());  
-
-            assertUpstreamSeqNoAppliedVerbatim(primary, primaryEngine.get(), 100L);
-        } finally {  
-            closeShards(primary);
-        }
-    }  
-
-    /**
-     * A plugin whose policy is keyed off an updatable setting, and that has nothing else to rebuild when  
-     * that setting changes, can refresh a started primary in place rather than resetting its engine. The
-     * shard-level accessor must report the engine's snapshot, not the config's live resolution, so the
-     * plugin can tell whether the engine has picked the change up yet.  
-     */
-    public void testStartedPrimaryCanBeRefreshedInPlace() throws Exception {
-        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);  
-        final IndexShard primary = newStartedShardWithPluginPolicy(pluginPolicy, true);
-        try {
-            assertSame(DefaultPrimaryOperationPolicy.INSTANCE, primary.getPrimaryOperationPolicy());  
-
-            pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);
-            assertSame(  
-                "the shard must report the engine's snapshot, not the config's live resolution",
-                DefaultPrimaryOperationPolicy.INSTANCE,
-                primary.getPrimaryOperationPolicy()  
-            );
-
-            primary.refreshPrimaryOperationPolicy();  
-            assertSame(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE, primary.getPrimaryOperationPolicy());
-            assertEquals("the refresh must release its operation block", 0, primary.getActiveOperationsCount());
-
-            pluginPolicy.set(DefaultPrimaryOperationPolicy.INSTANCE);
-            primary.refreshPrimaryOperationPolicy();
-            assertSame(  
-                "a refresh must be able to switch back",
-                DefaultPrimaryOperationPolicy.INSTANCE,
-                primary.getPrimaryOperationPolicy()  
-            );
-        } finally {
-            closeShards(primary);  
-        }
-    }
-
-    public void testPolicyAccessorOnClosedShardThrows() throws Exception {
-        final IndexShard shard = newStartedShard(true);
-        closeShards(shard);  
-        expectThrows(AlreadyClosedException.class, shard::getPrimaryOperationPolicy);
-    }
-
-    /**
-     * Asserts the shard is serving primary operations under the pre-assigned policy, first directly and
-     * then behaviorally: applies a primary-origin operation carrying an upstream-assigned sequence number  
-     * directly to the shard's engine. Such an operation is only valid under the pre-assigned policy; the
-     * default policy the engine resolved when it was built rejects it, so whether it succeeds confirms
-     * which policy the shard is actually applying.  
-     */
-    private void assertUpstreamSeqNoAppliedVerbatim(IndexShard shard, InternalEngine engine, long upstreamSeqNo) throws IOException {
-        assertSame(  
-            "entering primary mode must install the policy the plugin resolves now",
-            FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE,
-            shard.getPrimaryOperationPolicy()  
-        );
-        final ParsedDocument doc = shard.mapperService()
-            .documentMapper()  
-            .parse(new SourceToParse(shard.shardId().getIndexName(), "upstream", new BytesArray("{}"), MediaTypeRegistry.JSON));
-        final Engine.Index upstreamOp = new Engine.Index(
-            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),  
-            doc,
-            upstreamSeqNo,
-            shard.getOperationPrimaryTerm(),  
-            1L,
-            VersionType.EXTERNAL,
-            Engine.Operation.Origin.PRIMARY,  
-            System.nanoTime(),
             IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
             false,  
-            SequenceNumbers.UNASSIGNED_SEQ_NO,
-            SequenceNumbers.UNASSIGNED_PRIMARY_TERM
-        );  
-        final Engine.IndexResult result = engine.index(upstreamOp);
-        assertEquals(Engine.Result.Type.SUCCESS, result.getResultType());
-        assertEquals("the upstream seq no. must be applied verbatim by the primary", upstreamSeqNo, result.getSeqNo());  
-    }
-
-    /**  
-     * Promotes the shard and waits for the primary term bump to complete, which is what runs the gap
-     * filling this test observes.
+            indexOnReplicaLeavingGapAtZero(replica);
+            updateRoutingEntry(primary, ShardRoutingHelper.moveToStarted(primary.routingEntry()));
+     * mode only when the cluster manager marks it started, through the same-term branch of  
+        try {
+ * engine, and would therefore keep serving that construction-time policy as a primary.  
      */  
-    private void promote(IndexShard replica) throws Exception {
-        final ShardRouting replicaRouting = replica.routingEntry();
-        promoteReplica(  
-            replica,
-            Collections.singleton(replicaRouting.allocationId().getId()),
-            new IndexShardRoutingTable.Builder(replicaRouting.shardId()).addShard(replicaRouting).build()  
-        );
-        final PlainActionFuture<Releasable> permit = new PlainActionFuture<>();
+import org.opensearch.common.settings.Settings;  
+                    // the plugin starts overriding the policy while the target is still recovering; nothing
+            );  
+        } finally {
+            assertNotNull("the engine must be open before the policy changes", primaryEngine.get());
+            primaryEngine.set(engine);
+/*  
+package org.opensearch.index.engine;
+        final Engine.IndexResult result = engine.index(upstreamOp);
+                FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE,
+            );
+            closeShards(source, target);  
+ */
+                @Override
+        }
+            recoverReplica(target, source, (shard, sourceNode) -> new RecoveryTarget(shard, sourceNode, recoveryListener, threadPool) {  
+                SequenceNumbers.NO_OPS_PERFORMED,  
+        }));  
+ * cover the document replication promotion path, which unlike segment replication does not rebuild the
+import org.opensearch.index.shard.IndexShard;
+                        DefaultPrimaryOperationPolicy.INSTANCE,
+    private IndexShard newStartedShardWithPluginPolicy(AtomicReference<PrimaryOperationPolicy> pluginPolicy, boolean primary)  
+            final AtomicReference<InternalEngine> targetEngine = new AtomicReference<>();
+import java.util.UUID;
+        try {
+            promote(replica);  
         replica.acquirePrimaryOperationPermit(permit, ThreadPool.Names.GENERIC, "");  
-        permit.get().close();
+                    assertSame(
+        assertSame(  
+        assertEquals(2L, replica.seqNoStats().getMaxSeqNo());
+    private void indexOnReplicaLeavingGapAtZero(IndexShard replica) throws IOException {  
+                    assertNotNull("the target engine must be open before the policy changes", targetEngine.get());
+    public void testStartingRecoveredPrimaryPicksUpPolicyInstalledAfterEngineWasBuilt() throws Exception {
+        );  
+     * then behaviorally: applies a primary-origin operation carrying an upstream-assigned sequence number  
+                Settings.EMPTY,
+        }
+            primary.markAsRecovering(
+                "a recovering primary must still hold the construction-time policy until it is started",  
+                IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
+                    pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);
+            assertSame(  
+            assertFalse("the shard must not be in primary mode until it is started", primary.isPrimaryMode());  
+                UUID.randomUUID().toString(),  
+import org.opensearch.action.support.PlainActionFuture;
+        for (long seqNo : new long[] { 1L, 2L }) {
+            System.nanoTime(),
+import org.opensearch.action.index.IndexRequest;  
+        assertEquals(Engine.Result.Type.SUCCESS, result.getResultType());
+ *
+            );
+                public void finalizeRecovery(long globalCheckpoint, long trimAboveSeqNo, ActionListener<Void> listener) {
+            VersionType.EXTERNAL,
+                final InternalEngine engine = new InternalEngine(
+                    // rebuilds the target's engine between here and the handoff  
+            // its engine between here and the shard being started  
+        );
+            shard.getOperationPrimaryTerm(),  
+            );  
+                "the shard must report the engine's snapshot, not the config's live resolution",
+        final IndexShard primary = newStartedShardWithPluginPolicy(pluginPolicy, true);
+import org.opensearch.indices.recovery.RecoveryState;
+     * A primary relocation target builds its engine at the start of peer recovery and becomes a primary at  
+        final IndexShard source = newStartedShard(true);
+     * shard-level accessor must report the engine's snapshot, not the config's live resolution, so the
+     * handoff rebuilds the engine via {@link IndexShard#resetToWriteableEngine()}.
+    /**
+            ),  
+            replica.applyIndexOperationOnReplica(
+ * A {@link PrimaryOperationPolicy} is only consulted for primary-origin operations, so a shard that has  
+                        targetEngine.get().getPrimaryOperationPolicy()
+            IndexShardTestCase.updateRoutingEntry(source, source.routingEntry().relocate(randomAlphaOfLength(10), -1));
+                return engine;
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+        try {
+     * setting: the policy behind the reference can be changed after the engine has been built.  
+import org.opensearch.index.mapper.ParsedDocument;
+                }
+    /** Leaves a gap at sequence number 0 by applying operations 1 and 2 only. */
+        }
+        assertEquals(SequenceNumbers.NO_OPS_PERFORMED, replica.getLocalCheckpoint());  
+    }  
+     * default policy the engine resolved when it was built rejects it, so whether it succeeds confirms
+        final IndexShard replica = newReplicaWithPluginPolicy(pluginPolicy);
+                        "the recovering target must still hold the construction-time policy before the handoff",  
     }
-}  
+                    // the target's engine is open by now, so the switch below happens after it resolved its policy  
+ * this file be licensed under the Apache-2.0 license or a
+            pluginPolicy.set(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE);
+        throws IOException {
+        final AtomicReference<PrimaryOperationPolicy> pluginPolicy = new AtomicReference<>(DefaultPrimaryOperationPolicy.INSTANCE);
+    /**
+import org.opensearch.threadpool.ThreadPool;
+     */
+    }
+            primary.refreshPrimaryOperationPolicy();
+     * which policy the shard is actually applying.  
+            Collections.singleton(replicaRouting.allocationId().getId()),
+import org.opensearch.index.seqno.SequenceNumbers;
+import org.opensearch.core.common.bytes.BytesArray;
+            FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE,
+            // rebuilds its engine
+/**
+                DefaultPrimaryOperationPolicy.INSTANCE,
+                replica.getPrimaryOperationPolicy()
+import org.apache.lucene.store.AlreadyClosedException;
+        } finally {  
+        final ShardRouting replicaRouting = replica.routingEntry();
+                seqNo,
+     * applies, otherwise this shard would record no-ops that can collide with sequence numbers the
+    /**
+                new SourceToParse(replica.shardId().getIndexName(), Long.toString(seqNo), new BytesArray("{}"), MediaTypeRegistry.JSON)  
+            assertTrue(source.isRelocatedPrimary());
+        closeShards(shard);  
+            assertSame(FakePreAssignedSeqNoPrimaryOperationPolicy.INSTANCE, primary.getPrimaryOperationPolicy());
+            shard.getPrimaryOperationPolicy()  

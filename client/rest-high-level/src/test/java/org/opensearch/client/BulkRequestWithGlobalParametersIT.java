@@ -1,180 +1,146 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.client;
-
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.index.IndexRequest;  
+/*  
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.search.SearchHit;  
-
-import java.io.IOException;
-import java.util.function.Function;  
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasId;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasIndex;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasProperty;
-import static org.hamcrest.Matchers.both;
-import static org.hamcrest.Matchers.containsInAnyOrder;  
-import static org.hamcrest.Matchers.emptyIterable;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.everyItem;  
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
-
-public class BulkRequestWithGlobalParametersIT extends OpenSearchRestHighLevelClientTestCase {
-
-    public void testGlobalPipelineOnBulkRequest() throws IOException {  
-        createFieldAddingPipleine("xyz", "fieldNameXYZ", "valueXYZ");
-
-        BulkRequest request = new BulkRequest();  
-        request.add(new IndexRequest("test").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
-        request.add(new IndexRequest("test").id("2").source(MediaTypeRegistry.JSON, "field", "bulk2"));
-        request.pipeline("xyz");  
-
-        bulk(request);
-
-        Iterable<SearchHit> hits = searchAll("test");
-        assertThat(hits, containsInAnyOrder(hasId("1"), hasId("2")));
-        assertThat(hits, everyItem(hasProperty(fieldFromSource("fieldNameXYZ"), equalTo("valueXYZ"))));  
-    }
-
-    public void testPipelineOnRequestOverridesGlobalPipeline() throws IOException {  
-        createFieldAddingPipleine("globalId", "fieldXYZ", "valueXYZ");
-        createFieldAddingPipleine("perIndexId", "someNewField", "someValue");
-
-        BulkRequest request = new BulkRequest();
-        request.pipeline("globalId");
-        request.add(new IndexRequest("test").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1").setPipeline("perIndexId"));  
-        request.add(new IndexRequest("test").id("2").source(MediaTypeRegistry.JSON, "field", "bulk2").setPipeline("perIndexId"));
-
-        bulk(request);  
-
-        Iterable<SearchHit> hits = searchAll("test");
-        assertThat(hits, everyItem(hasProperty(fieldFromSource("someNewField"), equalTo("someValue"))));  
-        // global pipeline was not applied
-        assertThat(hits, everyItem(hasProperty(fieldFromSource("fieldXYZ"), nullValue())));
-    }  
-
-    public void testMixPipelineOnRequestAndGlobal() throws IOException {
-        createFieldAddingPipleine("globalId", "fieldXYZ", "valueXYZ");  
-        createFieldAddingPipleine("perIndexId", "someNewField", "someValue");
-
-        // tag::bulk-request-mix-pipeline  
-        BulkRequest request = new BulkRequest();
-        request.pipeline("globalId");
-
-        request.add(new IndexRequest("test").id("1")
-            .source(MediaTypeRegistry.JSON, "field", "bulk1")
-            .setPipeline("perIndexId")); // <1>  
-
-        request.add(new IndexRequest("test").id("2")
-            .source(MediaTypeRegistry.JSON, "field", "bulk2")); // <2>  
-        // end::bulk-request-mix-pipeline
-        bulk(request);
-
-        Iterable<SearchHit> hits = searchAll("test");
-        assertThat(
-            hits,  
-            containsInAnyOrder(
-                both(hasId("1")).and(hasProperty(fieldFromSource("someNewField"), equalTo("someValue"))),
-                both(hasId("2")).and(hasProperty(fieldFromSource("fieldXYZ"), equalTo("valueXYZ")))  
-            )
-        );
-    }  
-
-    public void testGlobalIndex() throws IOException {
-        BulkRequest request = new BulkRequest("global_index");  
-        request.add(new IndexRequest().id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
-        request.add(new IndexRequest().id("2").source(MediaTypeRegistry.JSON, "field", "bulk2"));
-
-        bulk(request);
-
-        Iterable<SearchHit> hits = searchAll("global_index");  
-        assertThat(hits, everyItem(hasIndex("global_index")));
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testIndexGlobalAndPerRequest() throws IOException {
-        BulkRequest request = new BulkRequest("global_index");  
-        request.add(new IndexRequest("local_index").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
-        request.add(
+        BulkResponse bulkResponse = execute(request, highLevelClient()::bulk, highLevelClient()::bulkAsync, RequestOptions.DEFAULT);
             new IndexRequest().id("2") // will take global index  
-                .source(MediaTypeRegistry.JSON, "field", "bulk2")
-        );
-
-        bulk(request);
-
-        Iterable<SearchHit> hits = searchAll("local_index", "global_index");  
-        assertThat(hits, containsInAnyOrder(both(hasId("1")).and(hasIndex("local_index")), both(hasId("2")).and(hasIndex("global_index"))));
-    }
-
-    public void testGlobalRouting() throws IOException {
-        createIndexWithMultipleShards("index");
-        BulkRequest request = new BulkRequest((String) null);  
-        request.add(new IndexRequest("index").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
-        request.add(new IndexRequest("index").id("2").source(MediaTypeRegistry.JSON, "field", "bulk1"));
-        request.routing("1");  
-        bulk(request);
-
-        Iterable<SearchHit> emptyHits = searchAll(new SearchRequest("index").routing("xxx"));  
-        assertThat(emptyHits, is(emptyIterable()));
-
         Iterable<SearchHit> hits = searchAll(new SearchRequest("index").routing("1"));  
         assertThat(hits, containsInAnyOrder(hasId("1"), hasId("2")));
-    }
-
-    public void testMixLocalAndGlobalRouting() throws IOException {
-        BulkRequest request = new BulkRequest((String) null);
-        request.routing("globalRouting");  
+ * this work for additional information regarding copyright
+            containsInAnyOrder(
+        request.pipeline("globalId");
         request.add(new IndexRequest("index").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
-        request.add(new IndexRequest("index").id("2").routing("localRouting").source(MediaTypeRegistry.JSON, "field", "bulk1"));
-
+import static org.hamcrest.Matchers.containsInAnyOrder;  
+        createFieldAddingPipleine("globalId", "fieldXYZ", "valueXYZ");
+        request.routing("globalRouting");  
+ * KIND, either express or implied.  See the License for the
+        request.add(new IndexRequest("test").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
+        Iterable<SearchHit> hits = searchAll("test");
+        );
+ * compatible open source license.
+ * Unless required by applicable law or agreed to in writing,
+        return bulkResponse;
+import org.opensearch.action.bulk.BulkRequest;
+        BulkRequest request = new BulkRequest((String) null);  
+        assertThat(hits, everyItem(hasIndex("global_index")));
+                .source(MediaTypeRegistry.JSON, "field", "bulk2")
+        assertThat(emptyHits, is(emptyIterable()));
+        request.add(new IndexRequest("index").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
+        createIndexWithMultipleShards("index");
+        assertThat(hits, containsInAnyOrder(hasId("1"), hasId("2")));
+    public void testIndexGlobalAndPerRequest() throws IOException {
+ * specific language governing permissions and limitations
+        BulkRequest request = new BulkRequest();  
+        assertThat(hits, everyItem(hasProperty(fieldFromSource("fieldXYZ"), nullValue())));
+    }
+import static org.hamcrest.Matchers.emptyIterable;
+    public void testGlobalIndex() throws IOException {
+ * software distributed under the License is distributed on an
+    public void testMixPipelineOnRequestAndGlobal() throws IOException {
+        request.add(new IndexRequest("test").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1").setPipeline("perIndexId"));  
+ * The OpenSearch Contributors require contributions made to  
         bulk(request);
-
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.both;
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+        Iterable<SearchHit> emptyHits = searchAll(new SearchRequest("index").routing("xxx"));  
+ */
+ * GitHub history for details.
+        );
+import static org.hamcrest.Matchers.equalTo;
+ *
+        assertThat(hits, everyItem(hasProperty(fieldFromSource("someNewField"), equalTo("someValue"))));  
+        // tag::bulk-request-mix-pipeline  
+        request.add(new IndexRequest("test").id("1")
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
+        request.add(new IndexRequest().id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
+import static org.hamcrest.Matchers.everyItem;  
+import java.io.IOException;
+                both(hasId("2")).and(hasProperty(fieldFromSource("fieldXYZ"), equalTo("valueXYZ")))  
+}
+import java.util.function.Function;  
+ * Modifications Copyright OpenSearch Contributors. See
+        request.add(new IndexRequest("test").id("2")
+        assertThat(hits, everyItem(hasProperty(fieldFromSource("fieldNameXYZ"), equalTo("valueXYZ"))));  
+        request.pipeline("globalId");
+        request.add(new IndexRequest("test").id("2").source(MediaTypeRegistry.JSON, "field", "bulk2").setPipeline("perIndexId"));
+ * You may obtain a copy of the License at  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasId;
+        request.add(new IndexRequest("local_index").id("1").source(MediaTypeRegistry.JSON, "field", "bulk1"));
+import org.opensearch.action.index.IndexRequest;  
+        request.add(new IndexRequest("index").id("2").routing("localRouting").source(MediaTypeRegistry.JSON, "field", "bulk1"));
+    }  
+        return (response) -> (T) response.getSourceAsMap().get(fieldName);  
         Iterable<SearchHit> hits = searchAll(new SearchRequest("index").routing("globalRouting", "localRouting"));  
         assertThat(hits, containsInAnyOrder(hasId("1"), hasId("2")));
-    }
-
-    private BulkResponse bulk(BulkRequest request) throws IOException {
-        BulkResponse bulkResponse = execute(request, highLevelClient()::bulk, highLevelClient()::bulkAsync, RequestOptions.DEFAULT);
-        assertFalse(bulkResponse.hasFailures());  
-        return bulkResponse;
-    }
-
-    @SuppressWarnings("unchecked")
+        request.add(new IndexRequest().id("2").source(MediaTypeRegistry.JSON, "field", "bulk2"));
+ */  
     private static <T> Function<SearchHit, T> fieldFromSource(String fieldName) {
-        return (response) -> (T) response.getSourceAsMap().get(fieldName);  
+    @SuppressWarnings("unchecked")
+        bulk(request);
+    public void testPipelineOnRequestOverridesGlobalPipeline() throws IOException {  
+        assertFalse(bulkResponse.hasFailures());  
+/*
+ * Licensed to Elasticsearch under one or more contributor  
+    public void testGlobalRouting() throws IOException {
+        createFieldAddingPipleine("perIndexId", "someNewField", "someValue");
+            .source(MediaTypeRegistry.JSON, "field", "bulk1")
+    @SuppressWarnings("unchecked")
     }
-}
+        Iterable<SearchHit> hits = searchAll("test");
+        request.pipeline("xyz");  
+        assertThat(
+ *  
+/*  
+        // global pipeline was not applied
+        bulk(request);
+ * license agreements. See the NOTICE file distributed with
+import static org.hamcrest.Matchers.nullValue;
+        Iterable<SearchHit> hits = searchAll("test");
+        request.add(new IndexRequest("index").id("2").source(MediaTypeRegistry.JSON, "field", "bulk1"));
+        BulkRequest request = new BulkRequest((String) null);
+ * the Apache License, Version 2.0 (the "License"); you may
+            .source(MediaTypeRegistry.JSON, "field", "bulk2")); // <2>  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasProperty;
+    }
+        BulkRequest request = new BulkRequest("global_index");  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .setPipeline("perIndexId")); // <1>  
+    }
+        request.add(new IndexRequest("test").id("2").source(MediaTypeRegistry.JSON, "field", "bulk2"));
+        createFieldAddingPipleine("xyz", "fieldNameXYZ", "valueXYZ");
+        // end::bulk-request-mix-pipeline
+        createFieldAddingPipleine("perIndexId", "someNewField", "someValue");
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasIndex;  
+                both(hasId("1")).and(hasProperty(fieldFromSource("someNewField"), equalTo("someValue"))),
+        assertThat(hits, containsInAnyOrder(both(hasId("1")).and(hasIndex("local_index")), both(hasId("2")).and(hasIndex("global_index"))));
+        bulk(request);
+        bulk(request);
+        Iterable<SearchHit> hits = searchAll("global_index");  
+            )
+    }
+    public void testGlobalPipelineOnBulkRequest() throws IOException {  
+        BulkRequest request = new BulkRequest("global_index");  
+        BulkRequest request = new BulkRequest();
+    }
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        bulk(request);
+        createFieldAddingPipleine("globalId", "fieldXYZ", "valueXYZ");  
+            hits,  
+    public void testMixLocalAndGlobalRouting() throws IOException {
+        bulk(request);  
+        request.routing("1");  
+        request.add(
+ *
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+ * ownership. Elasticsearch licenses this file to you under  
+    private BulkResponse bulk(BulkRequest request) throws IOException {
+import org.opensearch.search.SearchHit;  
+public class BulkRequestWithGlobalParametersIT extends OpenSearchRestHighLevelClientTestCase {
+        Iterable<SearchHit> hits = searchAll("local_index", "global_index");  
+    }
+        BulkRequest request = new BulkRequest();
+ */  

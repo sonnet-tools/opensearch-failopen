@@ -1,150 +1,131 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    FieldType(String mappingType) {
+                return fieldType;
+    public static Set<FieldType> keyword() {
+     * the value-level type by the time the runtime executes them.
  * compatible open source license.
- */  
-
-package org.opensearch.analytics.spi;
-
-import org.apache.calcite.sql.type.SqlTypeName;
-
+    MAP("map");
+    DATE("date"),
+ * The OpenSearch Contributors require contributions made to  
+    /** Maps an OpenSearch mapping type string to a FieldType. Returns null if not recognized. */  
+    /**  
+            default -> null;
+            case DATE -> FieldType.DATE;
+     * for filter / project operators on MAP columns are intentionally minimal: callers (e.g.
+ * this file be licensed under the Apache-2.0 license or a
+            case BIGINT -> LONG;
+    // Date  
+     * Map-typed expression result. In-tree producers include PPL {@code spath}'s auto-extract
+    }  
+    }
 import java.util.EnumSet;  
 import java.util.Set;
-
-/**  
+            case MAP -> FieldType.MAP;
+        for (FieldType fieldType : values()) {
+        }
  * Granular field types for capability matching. Each value maps to an OpenSearch
- * mapping type string. Convenience grouping methods for common families.
- *  
- * @opensearch.internal
- */
-public enum FieldType {  
-    // Numeric
-    INTEGER("integer"),
-    LONG("long"),  
-    SHORT("short"),
+    /** Maps a Calcite SqlTypeName to a FieldType. Returns null if not recognized. */
+    // Keyword  
     BYTE("byte"),
-    FLOAT("float"),  
-    DOUBLE("double"),
-    HALF_FLOAT("half_float"),
+    MATCH_ONLY_TEXT("match_only_text"),
+    public static Set<FieldType> date() {
+ *
+            case FLOAT, REAL -> FieldType.FLOAT;
+ */
+     * mapping today, so {@link #fromMappingType} never resolves to it through the mapping  
+    /** All keyword-like field types. */  
+ * mapping type string. Convenience grouping methods for common families.
     SCALED_FLOAT("scaled_float"),  
     UNSIGNED_LONG("unsigned_long"),
-
-    // Keyword  
-    KEYWORD("keyword"),
-    CONSTANT_KEYWORD("constant_keyword"),
-    WILDCARD_FIELD("wildcard"),  
-
-    // Text
-    TEXT("text"),  
-    MATCH_ONLY_TEXT("match_only_text"),
-
-    // Date  
-    DATE("date"),
-    DATE_NANOS("date_nanos"),
-
-    // Singular
-    BOOLEAN("boolean"),
-    IP("ip"),  
-    GEO_POINT("geo_point"),
-    POINT("point"),
-    GEO_SHAPE("geo_shape"),  
-    SHAPE("shape"),
-    BINARY("binary"),
-    NESTED("nested"),  
-    OBJECT("object"),
-    FLAT_OBJECT("flat_object"),
-    COMPLETION("completion"),  
-
-    // ── Composite ────────────────────────────────────────────────────
-    /**  
-     * Array-typed expression result. Used for the return-type slot of array-producing scalar
-     * functions (PPL {@code array(…)}, {@code array_slice}, {@code array_distinct}). Has no
-     * OpenSearch mapping equivalent — arrays in OpenSearch are multi-value fields with the  
-     * underlying element type, not a separate type. The mapping string is {@code "array"} as a
-     * placeholder; {@link #fromMappingType} keeps working unchanged because no source
+    }
+    INTEGER("integer"),
+    public String getMappingType() {  
+        return null;
+import org.apache.calcite.sql.type.SqlTypeName;
      * advertises that mapping string.  
-     */
-    ARRAY("array"),
-
-    /**
-     * Map-typed expression result. In-tree producers include PPL {@code spath}'s auto-extract
-     * mode ({@code JSON_EXTRACT_ALL} returns {@code MAP<VARCHAR, VARCHAR>}) and PPL  
+    /** All text field types. */
+    TEXT("text"),  
+            case INTEGER -> FieldType.INTEGER;  
+public enum FieldType {  
+    NESTED("nested"),  
+            case BOOLEAN -> FieldType.BOOLEAN;
+        return switch (sqlTypeName) {  
+        if (sqlTypeName == null) {  
+        return mappingType;
+            case DOUBLE, DECIMAL -> FieldType.DOUBLE;  
+        }
+    IP("ip"),  
+    // Singular
+            case CHAR, VARCHAR -> KEYWORD;
+    BOOLEAN("boolean"),
+    /** All date field types. */
+    /** All numeric field types. */
      * {@code parse} (named regex groups returned as {@code MAP<VARCHAR, VARCHAR>}). Mapping
-     * string is {@code "map"} as a placeholder — no OpenSearch storage format declares this
-     * mapping today, so {@link #fromMappingType} never resolves to it through the mapping  
+package org.opensearch.analytics.spi;
+ * @opensearch.internal
+        if (type == null) {
+        return EnumSet.of(KEYWORD, CONSTANT_KEYWORD, WILDCARD_FIELD);
+     * mode ({@code JSON_EXTRACT_ALL} returns {@code MAP<VARCHAR, VARCHAR>}) and PPL  
+        return EnumSet.of(INTEGER, LONG, SHORT, BYTE, FLOAT, DOUBLE, HALF_FLOAT, SCALED_FLOAT, UNSIGNED_LONG);  
+    // ── Composite ────────────────────────────────────────────────────
+    HALF_FLOAT("half_float"),
+        return EnumSet.of(TEXT, MATCH_ONLY_TEXT);
      * path; columns reach MAP only through {@link #fromSqlTypeName}. Capability registrations
-     * for filter / project operators on MAP columns are intentionally minimal: callers (e.g.
-     * PPL {@code where doc.user.name}) always wrap the MAP column in an ITEM lookup whose  
-     * result type is the map's value type, so the EQUALS / sort / aggregate operators see
-     * the value-level type by the time the runtime executes them.
+        }  
+ * SPDX-License-Identifier: Apache-2.0
+    BINARY("binary"),
+    }
+    SHORT("short"),
+    // Text
+     * functions (PPL {@code array(…)}, {@code array_slice}, {@code array_distinct}). Has no
+    OBJECT("object"),
+        return EnumSet.of(DATE, DATE_NANOS);  
+    KEYWORD("keyword"),
      */  
-    MAP("map");
-
+    public static FieldType fromSqlTypeName(SqlTypeName sqlTypeName) {
+     */
+    public static FieldType fromMappingType(String type) {
+            return null;
+    COMPLETION("completion"),  
+    }
+            return null;  
+ *  
+            case ARRAY -> FieldType.ARRAY;  
+    FLOAT("float"),  
+    public static Set<FieldType> text() {  
+            case TIME, TIMESTAMP, TIMESTAMP_WITH_LOCAL_TIME_ZONE -> FieldType.DATE;  
+     * OpenSearch mapping equivalent — arrays in OpenSearch are multi-value fields with the  
+    LONG("long"),  
+    GEO_SHAPE("geo_shape"),  
+    ARRAY("array"),
+            case BINARY, VARBINARY -> FieldType.BINARY;
+     * PPL {@code where doc.user.name}) always wrap the MAP column in an ITEM lookup whose  
     private final String mappingType;  
-
-    FieldType(String mappingType) {
+        };  
+    // Numeric
+    GEO_POINT("geo_point"),
         this.mappingType = mappingType;  
     }
-
-    public String getMappingType() {  
-        return mappingType;
-    }
-
-    /** All numeric field types. */
+/*  
+    FLAT_OBJECT("flat_object"),
     public static Set<FieldType> numeric() {
-        return EnumSet.of(INTEGER, LONG, SHORT, BYTE, FLOAT, DOUBLE, HALF_FLOAT, SCALED_FLOAT, UNSIGNED_LONG);  
+    SHAPE("shape"),
+     * placeholder; {@link #fromMappingType} keeps working unchanged because no source
+    /**
+/**  
+    DATE_NANOS("date_nanos"),
     }
-
-    /** All keyword-like field types. */  
-    public static Set<FieldType> keyword() {
-        return EnumSet.of(KEYWORD, CONSTANT_KEYWORD, WILDCARD_FIELD);
-    }  
-
-    /** All text field types. */
-    public static Set<FieldType> text() {  
-        return EnumSet.of(TEXT, MATCH_ONLY_TEXT);
-    }
-
-    /** All date field types. */
-    public static Set<FieldType> date() {
-        return EnumSet.of(DATE, DATE_NANOS);  
-    }
-
-    /** Maps an OpenSearch mapping type string to a FieldType. Returns null if not recognized. */  
-    public static FieldType fromMappingType(String type) {
-        if (type == null) {
-            return null;  
-        }
-        for (FieldType fieldType : values()) {
+    POINT("point"),
             if (fieldType.mappingType.equals(type)) {  
-                return fieldType;
-            }
-        }  
-        return null;
-    }
-
-    /** Maps a Calcite SqlTypeName to a FieldType. Returns null if not recognized. */
-    public static FieldType fromSqlTypeName(SqlTypeName sqlTypeName) {
-        if (sqlTypeName == null) {  
-            return null;
-        }
-        return switch (sqlTypeName) {  
-            case TINYINT -> BYTE;
             case SMALLINT -> SHORT;
-            case INTEGER -> FieldType.INTEGER;  
-            case BIGINT -> LONG;
-            case FLOAT, REAL -> FieldType.FLOAT;
-            case DOUBLE, DECIMAL -> FieldType.DOUBLE;  
-            case CHAR, VARCHAR -> KEYWORD;
-            case DATE -> FieldType.DATE;
-            case TIME, TIMESTAMP, TIMESTAMP_WITH_LOCAL_TIME_ZONE -> FieldType.DATE;  
-            case BOOLEAN -> FieldType.BOOLEAN;
-            case BINARY, VARBINARY -> FieldType.BINARY;
-            case ARRAY -> FieldType.ARRAY;  
-            case MAP -> FieldType.MAP;
-            default -> null;
-        };  
+     * underlying element type, not a separate type. The mapping string is {@code "array"} as a
+    CONSTANT_KEYWORD("constant_keyword"),
     }
+    WILDCARD_FIELD("wildcard"),  
+    DOUBLE("double"),
 }
+            }
+     * string is {@code "map"} as a placeholder — no OpenSearch storage format declares this
+            case TINYINT -> BYTE;
+ */  
+     * Array-typed expression result. Used for the return-type slot of array-producing scalar
+     * result type is the map's value type, so the EQUALS / sort / aggregate operators see

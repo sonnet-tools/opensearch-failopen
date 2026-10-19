@@ -1,221 +1,193 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.Scroll;  
-import org.opensearch.tasks.Task;
-
-import java.io.IOException;  
-import java.util.Map;
-import java.util.Objects;
-
 import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**  
- * Transport request for a search scroll
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class SearchScrollRequest extends ActionRequest implements ToXContentObject {  
-
-    private String scrollId;
-    private Scroll scroll;  
-    private transient ParsedScrollId parsedScrollId;
-
-    public SearchScrollRequest() {}  
-
-    public SearchScrollRequest(String scrollId) {
-        this.scrollId = scrollId;  
-    }
-
-    public SearchScrollRequest(StreamInput in) throws IOException {  
-        super(in);
-        scrollId = in.readString();
-        scroll = in.readOptionalWriteable(Scroll::new);  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(scrollId);  
-        out.writeOptionalWriteable(scroll);
-    }
-
+                    );
     @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;  
-        if (scrollId == null) {
-            validationException = addValidationError("scrollId is missing", validationException);
-        }  
-        return validationException;
-    }
-
-    /**
-     * The scroll id used to scroll the search.
-     */  
-    public String scrollId() {
-        return scrollId;
-    }  
-
-    public SearchScrollRequest scrollId(String scrollId) {
-        this.scrollId = scrollId;  
-        return this;
-    }
-
-    public ParsedScrollId parseScrollId() {
-        if (parsedScrollId == null && scrollId != null) {
-            parsedScrollId = TransportSearchHelper.parseScrollId(scrollId);  
         }
-        return parsedScrollId;
-    }  
-
-    public String[] originalIndicesOrEmpty() {
-        try {  
-            ParsedScrollId parsed = parseScrollId();
-            String[] orig = parsed == null ? null : parsed.getOriginalIndices();
-            return orig == null || orig.length == 0 ? Strings.EMPTY_ARRAY : orig;  
-        } catch (IllegalArgumentException e) {
-            return Strings.EMPTY_ARRAY;
-        }  
-    }
-
-    /**  
-     * If set, will enable scrolling of the search request.
-     */
-    public Scroll scroll() {  
-        return scroll;
-    }
-
-    /**
-     * If set, will enable scrolling of the search request.
-     */  
-    public SearchScrollRequest scroll(Scroll scroll) {
-        this.scroll = scroll;
-        return this;  
-    }
-
-    /**  
-     * If set, will enable scrolling of the search request for the specified timeout.
-     */
-    public SearchScrollRequest scroll(TimeValue keepAlive) {  
-        return scroll(new Scroll(keepAlive));
-    }
-
-    /**
-     * If set, will enable scrolling of the search request for the specified timeout.
-     */  
-    public SearchScrollRequest scroll(String keepAlive) {
-        return scroll(new Scroll(TimeValue.parseTimeValue(keepAlive, null, getClass().getSimpleName() + ".keepAlive")));
-    }  
-
-    @Override
-    public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {  
-        return new SearchTask(id, type, action, this::getDescription, parentTaskId, headers);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {  
-            return true;
+import java.util.Map;
+            }
+ * this file be licensed under the Apache-2.0 license or a
         }
-        if (o == null || getClass() != o.getClass()) {  
             return false;
-        }
-        SearchScrollRequest that = (SearchScrollRequest) o;  
-        return Objects.equals(scrollId, that.scrollId) && Objects.equals(scroll, that.scroll);
+        return scroll(new Scroll(keepAlive));
+import org.opensearch.core.common.Strings;
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+package org.opensearch.action.search;
+    }  
+                } else if ("scroll".equals(currentFieldName) && token == XContentParser.Token.VALUE_STRING) {  
+     * If set, will enable scrolling of the search request.
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(scrollId, scroll);  
-    }
-
+        builder.endObject();
+import org.opensearch.tasks.Task;
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**  
+ *
+ * software distributed under the License is distributed on an
+    }  
+     * If set, will enable scrolling of the search request.
+ */
     @Override  
     public String toString() {
+ *  
+            ParsedScrollId parsed = parseScrollId();
+ * not use this file except in compliance with the License.
+import org.opensearch.core.xcontent.XContentBuilder;
+        return validationException;
+    }
         return "SearchScrollRequest{" + "scrollId='" + scrollId + '\'' + ", scroll=" + scroll + '}';
-    }  
-
-    @Override
-    public String getDescription() {  
-        return "scrollId[" + scrollId + "], scroll[" + scroll + "]";
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.field("scroll_id", scrollId);
-        if (scroll != null) {
-            builder.field("scroll", scroll.keepAlive().getStringRep());  
-        }
-        builder.endObject();
-        return builder;  
-    }
-
-    /**  
-     * Parse a search scroll request from a request body provided through the REST layer.
-     * Values that are already be set and are also found while parsing will be overridden.
-     */  
-    public void fromXContent(XContentParser parser) throws IOException {
-        if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
-            throw new IllegalArgumentException("Malformed content, must start with an object");  
-        } else {
-            XContentParser.Token token;
-            String currentFieldName = null;  
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            return orig == null || orig.length == 0 ? Strings.EMPTY_ARRAY : orig;  
+        return this;
                 if (token == XContentParser.Token.FIELD_NAME) {
-                    currentFieldName = parser.currentName();  
-                } else if ("scroll_id".equals(currentFieldName) && token == XContentParser.Token.VALUE_STRING) {
-                    scrollId(parser.text());
-                } else if ("scroll".equals(currentFieldName) && token == XContentParser.Token.VALUE_STRING) {  
-                    scroll(new Scroll(TimeValue.parseTimeValue(parser.text(), null, "scroll")));
-                } else {
-                    throw new IllegalArgumentException(  
-                        "Unknown parameter [" + currentFieldName + "] in request body or parameter is of the wrong type[" + token + "] "
-                    );
-                }  
-            }
+        super.writeTo(out);
+    }
+        return Objects.equals(scrollId, that.scrollId) && Objects.equals(scroll, that.scroll);
         }
+import org.opensearch.action.ActionRequest;
+            validationException = addValidationError("scrollId is missing", validationException);
+        if (scroll != null) {
+    @Override
+    public String[] originalIndicesOrEmpty() {
+ * ownership. Elasticsearch licenses this file to you under  
     }  
+        return parsedScrollId;
+    public SearchScrollRequest scroll(String keepAlive) {
+        return scroll(new Scroll(TimeValue.parseTimeValue(keepAlive, null, getClass().getSimpleName() + ".keepAlive")));
+                    currentFieldName = parser.currentName();  
+        ActionRequestValidationException validationException = null;  
+        return this;  
+     */
+ * Licensed to Elasticsearch under one or more contributor  
+    private String scrollId;
+/*
+    public SearchScrollRequest scroll(TimeValue keepAlive) {  
+    /**  
+ * @opensearch.api  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public SearchScrollRequest scroll(Scroll scroll) {
+import org.opensearch.common.annotation.PublicApi;  
+import org.opensearch.core.tasks.TaskId;
+public class SearchScrollRequest extends ActionRequest implements ToXContentObject {  
+ *
+    private Scroll scroll;  
+ */  
+    }  
+                    scrollId(parser.text());
+import java.util.Objects;
+    }
+     */  
+    /**
+ * compatible open source license.
+    private transient ParsedScrollId parsedScrollId;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
 }
+    }
+ */
+    }
+        if (o == null || getClass() != o.getClass()) {  
+    public void writeTo(StreamOutput out) throws IOException {
+    public ParsedScrollId parseScrollId() {
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+    }
+        this.scroll = scroll;
+    public SearchScrollRequest scrollId(String scrollId) {
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+    }
+        return "scrollId[" + scrollId + "], scroll[" + scroll + "]";
+    }  
+        scrollId = in.readString();
+    @Override
+        scroll = in.readOptionalWriteable(Scroll::new);  
+import org.opensearch.core.common.io.stream.StreamInput;  
+import org.opensearch.action.ActionRequestValidationException;
+ */  
+     * The scroll id used to scroll the search.
+    public SearchScrollRequest(String scrollId) {
+ * KIND, either express or implied.  See the License for the
+            return Strings.EMPTY_ARRAY;
+                    scroll(new Scroll(TimeValue.parseTimeValue(parser.text(), null, "scroll")));
+    }
+        return builder;  
+        try {  
+        SearchScrollRequest that = (SearchScrollRequest) o;  
+     * If set, will enable scrolling of the search request for the specified timeout.
+        if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
+    @Override
+     */  
+        if (this == o) {  
+    public SearchScrollRequest(StreamInput in) throws IOException {  
+     * Parse a search scroll request from a request body provided through the REST layer.
+            String[] orig = parsed == null ? null : parsed.getOriginalIndices();
+        out.writeOptionalWriteable(scroll);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public String scrollId() {
+ *
+                } else if ("scroll_id".equals(currentFieldName) && token == XContentParser.Token.VALUE_STRING) {
+    public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {  
+                }  
+                } else {
+            return true;
+    }
+import org.opensearch.search.Scroll;  
+        super(in);
+        } else {
+ * Modifications Copyright OpenSearch Contributors. See
+            XContentParser.Token token;
+ * specific language governing permissions and limitations
+/*  
+    }
+        out.writeString(scrollId);  
+    public ActionRequestValidationException validate() {
+import org.opensearch.common.unit.TimeValue;
+    public Scroll scroll() {  
+     */  
+        }  
+        return new SearchTask(id, type, action, this::getDescription, parentTaskId, headers);
+    public int hashCode() {
+import java.io.IOException;  
+ * GitHub history for details.
+    public String getDescription() {  
+@PublicApi(since = "1.0.0")
+     */  
+ * SPDX-License-Identifier: Apache-2.0
+/**  
+    /**
+        if (parsedScrollId == null && scrollId != null) {
+     * If set, will enable scrolling of the search request for the specified timeout.
+        if (scrollId == null) {
+    /**  
+    public void fromXContent(XContentParser parser) throws IOException {
+import org.opensearch.core.xcontent.XContentParser;
+/*  
+        }
+        this.scrollId = scrollId;  
+import org.opensearch.core.xcontent.ToXContentObject;  
+     * Values that are already be set and are also found while parsing will be overridden.
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * The OpenSearch Contributors require contributions made to  
+ * You may obtain a copy of the License at  
+                        "Unknown parameter [" + currentFieldName + "] in request body or parameter is of the wrong type[" + token + "] "
+            throw new IllegalArgumentException("Malformed content, must start with an object");  
+     */
+            parsedScrollId = TransportSearchHelper.parseScrollId(scrollId);  
+    @Override  
+    }
+    }
+    public boolean equals(Object o) {
+    @Override
+        return scrollId;
+        builder.startObject();  
+    /**
+    @Override
+        return Objects.hash(scrollId, scroll);  
+                    throw new IllegalArgumentException(  
+            builder.field("scroll", scroll.keepAlive().getStringRep());  
+        builder.field("scroll_id", scrollId);
+        this.scrollId = scrollId;  
+        }  
+        return scroll;
+    }
+        } catch (IllegalArgumentException e) {
+        }
+            String currentFieldName = null;  
+    public SearchScrollRequest() {}  
+ * Transport request for a search scroll

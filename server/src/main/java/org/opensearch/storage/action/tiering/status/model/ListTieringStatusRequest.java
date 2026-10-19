@@ -1,77 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.storage.action.tiering.status.model;
-
 import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.ActionRequestValidationException;  
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-import java.util.Locale;  
-
-/**
- * Tiering status request for all indices.  
- * OR
- * Tiering status request for indices for specific Tiering State:
- * eg. "_tier/all" - for all tiering indices  
- * eg. "_tier/all?target=_warm" - for Hot to Warm Tiering
- * eg. "_tier/all?target=_hot" - for Warm to Hot Tiering
- */  
-public class ListTieringStatusRequest extends ClusterManagerNodeReadRequest<ListTieringStatusRequest> {
-
-    private static final Logger log = LogManager.getLogger(ListTieringStatusRequest.class);  
-    private String targetTier;
-
-    /** Returns the target tier. */  
-    public String getTargetTier() {
-        return targetTier;
     }  
-
-    /** Constructs a default request with no target tier. */
-    public ListTieringStatusRequest() {  
-        this.targetTier = null;
+ * OR
     }
-
-    /**
+/*  
      * Constructs a request for the given target tier.
-     * @param targetTier the target tier  
-     */
-    public ListTieringStatusRequest(String targetTier) {
+ * Tiering status request for all indices.  
+    public String getTargetTier() {
+    private String targetTier;
+    }  
         if (targetTier != null) {  
-            this.targetTier = targetTier.toUpperCase(Locale.ROOT);
-        } else {
-            this.targetTier = null;  
-        }
-    }
-
     /**
-     * Constructs a request from a stream.
-     * @param in the stream input  
-     * @throws IOException if an I/O error occurs
-     */
     public ListTieringStatusRequest(StreamInput in) throws IOException {  
         super(in);
-        targetTier = in.readOptionalString();
-    }  
-
-    @Override
+ * this file be licensed under the Apache-2.0 license or a
+    public ListTieringStatusRequest() {  
     public ActionRequestValidationException validate() {  
-        return null;
-    }
-
-    @Override
+package org.opensearch.storage.action.tiering.status.model;
+import org.opensearch.action.ActionRequestValidationException;  
+import org.opensearch.core.common.io.stream.StreamInput;
+     */
+     * Constructs a request from a stream.
+    private static final Logger log = LogManager.getLogger(ListTieringStatusRequest.class);  
+        targetTier = in.readOptionalString();
+}
+     * @param in the stream input  
+     * @throws IOException if an I/O error occurs
     public void writeTo(StreamOutput out) throws IOException {
+    @Override
+ * Tiering status request for indices for specific Tiering State:
+        } else {
+/**
+ * The OpenSearch Contributors require contributions made to  
+        this.targetTier = null;
+ * compatible open source license.
+            this.targetTier = targetTier.toUpperCase(Locale.ROOT);
+import org.apache.logging.log4j.Logger;
         super.writeTo(out);  
         out.writeOptionalString(targetTier != null ? targetTier.toString() : null);
+ * eg. "_tier/all?target=_warm" - for Hot to Warm Tiering
+import java.util.Locale;  
+            this.targetTier = null;  
+        }
+ */  
+ * eg. "_tier/all" - for all tiering indices  
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+ *
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    /** Returns the target tier. */  
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+        return targetTier;
     }
-
-}
+    public ListTieringStatusRequest(String targetTier) {
+    /** Constructs a default request with no target tier. */
+    }
+import java.io.IOException;
+public class ListTieringStatusRequest extends ClusterManagerNodeReadRequest<ListTieringStatusRequest> {
+     */
+        return null;
+    }
+    /**
+ * eg. "_tier/all?target=_hot" - for Warm to Hot Tiering
+     * @param targetTier the target tier  

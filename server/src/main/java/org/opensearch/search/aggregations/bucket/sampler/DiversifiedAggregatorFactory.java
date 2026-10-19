@@ -1,167 +1,151 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+import java.util.List;
+            true
+    }
+    @Override
+        Map<String, Object> metadata  
+                ),  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            CoreValuesSourceType.BYTES,  
+import java.io.IOException;  
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
+        AggregatorFactory parent,
+            .build(name, shardSize, factories, searchContext, parent, metadata, config, maxDocsPerValue, executionHint);  
+                    factories,  
+                    name,
+    private final int shardSize;
+                ValuesSourceConfig valuesSourceConfig,
+import org.opensearch.search.aggregations.Aggregator;
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ *
+        int maxDocsPerValue,
+ * The OpenSearch Contributors require contributions made to  
+/**
+                return execution.create(name, factories, shardSize, maxDocsPerValue, valuesSourceConfig, context, parent, metadata);
+    private final String executionHint;
+        AggregatorFactories.Builder subFactoriesBuilder,
+            (
+            }
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.sampler;
-
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.NonCollectingAggregator;
-import org.opensearch.search.aggregations.bucket.sampler.SamplerAggregator.ExecutionMode;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;  
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Aggregation Factory for diversified_sampler agg
- *  
- * @opensearch.internal
- */
-public class DiversifiedAggregatorFactory extends ValuesSourceAggregatorFactory {  
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        builder.register(  
-            DiversifiedAggregationBuilder.REGISTRY_KEY,
-            List.of(CoreValuesSourceType.NUMERIC, CoreValuesSourceType.DATE, CoreValuesSourceType.BOOLEAN),
+                ValuesSourceConfig valuesSourceConfig,
+    @Override  
             (  
-                String name,
-                int shardSize,
-                AggregatorFactories factories,  
-                SearchContext context,
-                Aggregator parent,
-                Map<String, Object> metadata,  
-                ValuesSourceConfig valuesSourceConfig,
-                int maxDocsPerValue,
-                String executionHint) -> new DiversifiedNumericSamplerAggregator(  
-                    name,
-                    shardSize,
-                    factories,  
-                    context,
-                    parent,
-                    metadata,  
-                    valuesSourceConfig,
-                    maxDocsPerValue
-                ),  
-            true
-        );
-
-        builder.register(
-            DiversifiedAggregationBuilder.REGISTRY_KEY,
-            CoreValuesSourceType.BYTES,  
-            (
-                String name,
-                int shardSize,  
-                AggregatorFactories factories,
-                SearchContext context,
-                Aggregator parent,  
-                Map<String, Object> metadata,
-                ValuesSourceConfig valuesSourceConfig,
-                int maxDocsPerValue,  
-                String executionHint) -> {
+/*  
                 ExecutionMode execution = null;
-                if (executionHint != null) {  
-                    execution = ExecutionMode.fromString(executionHint);
-                }
-
-                // In some cases using ordinals is just not supported: override it
-                if (execution == null) {
-                    execution = ExecutionMode.GLOBAL_ORDINALS;  
-                }
-                if ((execution.needsGlobalOrdinals()) && (valuesSourceConfig.hasGlobalOrdinals() == false)) {
                     execution = ExecutionMode.MAP;  
-                }
-                return execution.create(name, factories, shardSize, maxDocsPerValue, valuesSourceConfig, context, parent, metadata);
-            },  
-            true
-        );
-    }  
-
-    private final int shardSize;
-    private final int maxDocsPerValue;  
-    private final String executionHint;
-
-    DiversifiedAggregatorFactory(  
-        String name,
-        ValuesSourceConfig config,
-        int shardSize,  
-        int maxDocsPerValue,
-        String executionHint,
-        QueryShardContext queryShardContext,  
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
-        this.shardSize = shardSize;  
-        this.maxDocsPerValue = maxDocsPerValue;
-        this.executionHint = executionHint;
-    }  
-
-    @Override
-    protected Aggregator doCreateInternal(  
-        SearchContext searchContext,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,  
-        Map<String, Object> metadata
-    ) throws IOException {
-
-        return queryShardContext.getValuesSourceRegistry()
-            .getAggregator(DiversifiedAggregationBuilder.REGISTRY_KEY, config)
-            .build(name, shardSize, factories, searchContext, parent, metadata, config, maxDocsPerValue, executionHint);  
-    }
-
-    @Override  
-    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
-        final UnmappedSampler aggregation = new UnmappedSampler(name, metadata);
-
-        return new NonCollectingAggregator(name, searchContext, parent, factories, metadata) {
-            @Override
-            public InternalAggregation buildEmptyAggregation() {  
-                return aggregation;
-            }
+/*
+public class DiversifiedAggregatorFactory extends ValuesSourceAggregatorFactory {  
+import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+                int shardSize,  
         };  
+import org.opensearch.search.aggregations.bucket.sampler.SamplerAggregator.ExecutionMode;
+                    execution = ExecutionMode.GLOBAL_ORDINALS;  
+import java.util.Map;
+    ) throws IOException {
+import org.opensearch.index.query.QueryShardContext;
+ * compatible open source license.
+            @Override
+            .getAggregator(DiversifiedAggregationBuilder.REGISTRY_KEY, config)
+ * software distributed under the License is distributed on an
+        Map<String, Object> metadata
+ * Licensed to Elasticsearch under one or more contributor  
     }
-
-    @Override  
-    protected boolean supportsConcurrentSegmentSearch() {
-        return false;
+        this.maxDocsPerValue = maxDocsPerValue;
+                }
+ */  
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;  
+                    metadata,  
+                    parent,
+ * under the License.  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+ */
+    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+                String name,
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+                String name,
+import org.opensearch.search.aggregations.InternalAggregation;  
+                return aggregation;
+                    valuesSourceConfig,
     }  
+                SearchContext context,
+        return new NonCollectingAggregator(name, searchContext, parent, factories, metadata) {
+        );
+    protected boolean supportsConcurrentSegmentSearch() {
+                if (execution == null) {
+        String executionHint,
+                String executionHint) -> {
+        String name,
+ * SPDX-License-Identifier: Apache-2.0
+ * specific language governing permissions and limitations
+                    context,
+    }  
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+        this.executionHint = executionHint;
+                int maxDocsPerValue,
+                if ((execution.needsGlobalOrdinals()) && (valuesSourceConfig.hasGlobalOrdinals() == false)) {
+    protected Aggregator doCreateInternal(  
+        CardinalityUpperBound cardinality,  
+ *  
 }
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.search.aggregations.AggregatorFactory;
+/*  
+        ValuesSourceConfig config,
+package org.opensearch.search.aggregations.bucket.sampler;
+                    execution = ExecutionMode.fromString(executionHint);
+            DiversifiedAggregationBuilder.REGISTRY_KEY,
+                String executionHint) -> new DiversifiedNumericSamplerAggregator(  
+                    maxDocsPerValue
+ * You may obtain a copy of the License at  
+import org.opensearch.search.aggregations.NonCollectingAggregator;
+    DiversifiedAggregatorFactory(  
+        int shardSize,  
+        return false;
+                Aggregator parent,
+                if (executionHint != null) {  
+ * Aggregation Factory for diversified_sampler agg
+        builder.register(  
+        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
+ * @opensearch.internal
+ *  
+ * not use this file except in compliance with the License.
+    }  
+        QueryShardContext queryShardContext,  
+ * the Apache License, Version 2.0 (the "License"); you may
+                int shardSize,
+ */
+            true
+                // In some cases using ordinals is just not supported: override it
+                AggregatorFactories factories,  
+                Map<String, Object> metadata,  
+                Aggregator parent,  
+            List.of(CoreValuesSourceType.NUMERIC, CoreValuesSourceType.DATE, CoreValuesSourceType.BOOLEAN),
+ * GitHub history for details.
+        builder.register(
+        SearchContext searchContext,
+ * Modifications Copyright OpenSearch Contributors. See
+            public InternalAggregation buildEmptyAggregation() {  
+        final UnmappedSampler aggregation = new UnmappedSampler(name, metadata);
+            DiversifiedAggregationBuilder.REGISTRY_KEY,
+    private final int maxDocsPerValue;  
+                }
+            },  
+                }
+        );
+                SearchContext context,
+                AggregatorFactories factories,
+ * ownership. Elasticsearch licenses this file to you under  
+        return queryShardContext.getValuesSourceRegistry()
+                    shardSize,
+    @Override  
+ * KIND, either express or implied.  See the License for the
+                Map<String, Object> metadata,
+        this.shardSize = shardSize;  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.search.aggregations.AggregatorFactories;  
+    ) throws IOException {
+                int maxDocsPerValue,  
+        Aggregator parent,

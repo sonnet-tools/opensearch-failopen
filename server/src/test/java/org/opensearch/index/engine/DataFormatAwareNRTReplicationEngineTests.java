@@ -1,958 +1,842 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;  
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.store.AlreadyClosedException;  
-import org.apache.lucene.store.Directory;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;  
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.stub.InMemoryCommitter;
-import org.opensearch.index.engine.dataformat.stub.MockDataFormat;  
-import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
-import org.opensearch.index.engine.dataformat.stub.MockSearchBackEndPlugin;
-import org.opensearch.index.engine.exec.FileDeleter;  
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.commit.CommitterFactory;  
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
-import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;  
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.Uid;  
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.ShardPath;  
-import org.opensearch.index.store.FsDirectoryFactory;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.Translog;  
-import org.opensearch.index.translog.TranslogConfig;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.plugins.SearchBackEndPlugin;  
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.opensearch.index.engine.EngineTestCase.createParsedDoc;
-import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.when;
-
-/**  
- * Unit tests for {@link DataFormatAwareNRTReplicationEngine}.
- * Exercises constructor, replication-snapshot application, commit, write-stubs, and close
- * paths without relying on DFA integration tests.  
- */
-public class DataFormatAwareNRTReplicationEngineTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;
-    private Store store;
-    private ShardId shardId;  
-    private AtomicLong primaryTerm;
-    private MockDataFormat mockDataFormat;
-    private MockDataFormatPlugin mockPlugin;  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        shardId = new ShardId(new Index("test", "_na_"), 0);
-        primaryTerm = new AtomicLong(randomLongBetween(1, Long.MAX_VALUE));  
-        mockDataFormat = new MockDataFormat("composite", 100L, Set.of());
-        mockPlugin = MockDataFormatPlugin.of(mockDataFormat);
-        threadPool = new TestThreadPool(getClass().getName());  
-        store = createStore();
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        try {  
-            store.close();
-        } finally {
-            terminate(threadPool);  
-        }
-        super.tearDown();
-    }  
-
-    private Store createStore() throws IOException {
-        Directory dir = newDirectory();  
-        IndexSettings indexSettings = replicaIndexSettings();
-        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));
-        ShardPath shardPath = new ShardPath(false, path, path, shardId);  
-        return new Store(
-            shardId,
-            indexSettings,  
-            dir,
-            new DummyShardLock(shardId),
-            Store.OnClose.EMPTY,  
-            shardPath,
-            new FsDirectoryFactory()
-        );  
-    }
-
-    private IndexSettings replicaIndexSettings() {  
-        // SegRep must be enabled for EngineConfig.isReadOnlyReplica() to return true.
-        return IndexSettingsModule.newIndexSettings(
-            "test",  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)  
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
-                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")  
-                .build()
-        );
-    }  
-
-    /** Writes a Lucene commit so the engine's store bootstrap finds valid userData. */
-    private void bootstrapStoreWithMetadata(Store store, String translogUUID) throws IOException {  
-        try (
-            IndexWriter writer = new IndexWriter(
-                store.directory(),  
-                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
-                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)
-            )  
-        ) {
-            Map<String, String> commitData = new HashMap<>();
-            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);  
-            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
-            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
-            commitData.put(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, "-1");  
-            commitData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
-            writer.setLiveCommitData(commitData.entrySet());
-            writer.commit();  
-        }
-    }
-
-    private DataFormatAwareNRTReplicationEngine createReplicaEngine(Path translogPath) throws IOException {
-        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
-        bootstrapStoreWithMetadata(store, uuid);  
-        return new DataFormatAwareNRTReplicationEngine(buildReplicaConfig(translogPath));
-    }
-
-    private EngineConfig buildReplicaConfig(Path translogPath) {
-        IndexSettings indexSettings = replicaIndexSettings();
-        TranslogConfig translogConfig = new TranslogConfig(  
-            shardId,
-            translogPath,
-            indexSettings,  
-            BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false  
-        );
-        DataFormatRegistry registry = createMockRegistry();
-        CommitterFactory committerFactory = config -> new InMemoryCommitter(store);  
-        return new EngineConfig.Builder().shardId(shardId)
-            .threadPool(threadPool)
-            .indexSettings(indexSettings)  
-            .store(store)
-            .mergePolicy(NoMergePolicy.INSTANCE)
-            .translogConfig(translogConfig)  
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))
-            .externalRefreshListener(List.of())
-            .internalRefreshListener(List.of())  
-            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-            .primaryTermSupplier(primaryTerm::get)  
-            .tombstoneDocSupplier(tombstoneDocSupplier())
-            .dataFormatRegistry(registry)
-            .committerFactory(committerFactory)  
-            .readOnlyReplica(true)
-            .build();
-    }  
-
-    private DataFormatRegistry createMockRegistry() {
-        PluginsService pluginsService = mock(PluginsService.class);  
-        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(mockPlugin));
-        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(
-            List.of(new MockSearchBackEndPlugin(List.of(mockDataFormat.name())))  
-        );
-        return new DataFormatRegistry(pluginsService);
-    }  
-
-    private Engine.Index replicaIndexOp(ParsedDocument doc, long seqNo) {
-        return new Engine.Index(  
-            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
-            doc,
-            seqNo,  
-            primaryTerm.get(),
-            Versions.MATCH_ANY,
-            null,  
-            Engine.Operation.Origin.REPLICA,
-            System.nanoTime(),
-            -1,  
-            false,
-            SequenceNumbers.UNASSIGNED_SEQ_NO,
-            0  
-        );
-    }
-
-    private DataformatAwareCatalogSnapshot buildReplicationSnapshot(long id, long gen, long maxSeqNo, String historyUUID) {
-        Map<String, String> userData = new HashMap<>();
-        userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(maxSeqNo));  
-        userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(maxSeqNo));
-        userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
-        if (historyUUID != null) {  
-            userData.put(Engine.HISTORY_UUID_KEY, historyUUID);
-        }
-        DataformatAwareCatalogSnapshot snapshot = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(  
-            id,
-            gen,
-            gen,  
-            List.<Segment>of(),
-            gen,
-            userData  
-        );
-        // Simulate the primary having committed this snapshot (sets lastCommitGeneration).
-        snapshot.setLastCommitInfo("segments_" + gen, gen, 0L);  
-        return snapshot;
-    }
-
-    // ---------- Constructor and stats cache initialization tests ----------
-
-    /**  
-     * Verifies that the stats cache is initialized during DFANRE construction
-     * and that the cache is properly populated with committed state.
-     */  
-    public void testConstructorInitializesStatsCacheWithCommittedState() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            // Verify that the stats cache was initialized during construction  
-            // by checking that it returns valid (non-null) stats
-            assertNotNull("stats cache should be initialized", engine.segmentsStats(false, false));
-            assertNotNull("docs stats should be initialized", engine.docStats());  
-
-            // Verify segments are properly committed after construction
-            List<org.opensearch.index.engine.Segment> segments = engine.segments(false);  
-            assertNotNull("segments list should be initialized", segments);
-
-            // For a fresh replica, segments list should be empty but cache should be committed/initialized  
-            assertEquals("fresh replica should have 0 segments", 0, segments.size());
-
-            // The key test: verify that after construction, the engine is in a committed state  
-            // This is verified by checking that commitStats() works (doesn't throw)
-            CommitStats commitStats = engine.commitStats();
-            assertNotNull("commit stats should be available after construction", commitStats);  
-            assertTrue("commit generation should be >= 0 after construction", commitStats.getGeneration() >= 0);
-        }
-    }  
-
-    /**
-     * Verifies that after replication, segments are properly committed due to  
-     * the stats cache initialization during construction.
-     */
-    public void testSegmentsCommittedAfterReplicationDueToConstructorInit() throws IOException {  
-        Path tmpDir = createTempDir();
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
-            // Apply a replication snapshot with segments  
-            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("test.mock").addNumRows(5).build();
             Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();
-            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 5L, List.of(seg));  
-
-            engine.updateCatalogSnapshot(incoming);
-
-            // Verify segments are committed after replication
-            List<org.opensearch.index.engine.Segment> segments = engine.segments(false);
-            assertEquals("should have 1 segment after replication", 1, segments.size());  
-
-            org.opensearch.index.engine.Segment replicatedSeg = segments.get(0);
-            assertTrue("Segment should be searchable after replication", replicatedSeg.search);  
-            assertTrue("Segment should be committed after replication", replicatedSeg.committed);
-
-            // Verify commit stats reflect the committed state  
-            CommitStats commitStats = engine.commitStats();
-            assertNotNull("commit stats should be available after replication", commitStats);
-            assertTrue("commit generation should advance after replication", commitStats.getGeneration() > 0);  
-        }
-    }
-
-    /**
-     * Verifies that flush operations result in properly committed segments,
-     * enabled by the stats cache initialization during construction.  
-     */
-    public void testFlushResultsInCommittedSegmentsDueToConstructorInit() throws IOException {
-        Path tmpDir = createTempDir();  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
-            // Apply a replication snapshot
-            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("test.mock").addNumRows(3).build();  
-            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();
-            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 3L, List.of(seg));
-
-            engine.updateCatalogSnapshot(incoming);
-
-            // Perform flush  
-            engine.flush(false, true);
-
-            // Verify segments are committed after flush  
-            List<org.opensearch.index.engine.Segment> segments = engine.segments(false);
-            assertEquals("should have 1 segment after flush", 1, segments.size());
-
-            org.opensearch.index.engine.Segment flushedSeg = segments.get(0);
-            assertTrue("Segment should be searchable after flush", flushedSeg.search);
-            assertTrue("Segment should be committed after flush", flushedSeg.committed);  
-
-            // Verify the commit stats show committed state
-            CommitStats commitStats = engine.commitStats();  
-            assertNotNull("commit stats should be available after flush", commitStats);
-            Map<String, String> userData = commitStats.getUserData();
-            assertNotNull("user data should be available in committed state", userData);  
-            assertTrue("user data should contain translog UUID", userData.containsKey(Translog.TRANSLOG_UUID_KEY));
-            assertTrue("user data should contain history UUID", userData.containsKey(Engine.HISTORY_UUID_KEY));
-        }  
-    }
-
-    /**  
-     * Verifies that if getLastCommittedData() throws during construction,
-     * the engine constructor fails and resources are cleaned up.
-     */  
-    public void testConstructorFailsWhenCommitterThrows() throws IOException {
-        Path translogPath = createTempDir();
-        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());  
-        bootstrapStoreWithMetadata(store, uuid);
-
+            assertEquals(10L, engine.getProcessedLocalCheckpoint());
         CommitterFactory failingCommitterFactory = config -> new InMemoryCommitter(store) {  
-            @Override
-            public Map<String, String> getLastCommittedData() {
-                throw new RuntimeException("Simulated failure in getLastCommittedData");  
-            }
-        };
-
-        EngineConfig failingConfig = new EngineConfig.Builder().shardId(shardId)
-            .threadPool(threadPool)
-            .indexSettings(replicaIndexSettings())  
-            .store(store)
-            .mergePolicy(NoMergePolicy.INSTANCE)
-            .translogConfig(new TranslogConfig(shardId, translogPath, replicaIndexSettings(), BigArrays.NON_RECYCLING_INSTANCE, "", false))  
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))
-            .externalRefreshListener(List.of())
-            .internalRefreshListener(List.of())  
-            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-            .primaryTermSupplier(primaryTerm::get)  
-            .tombstoneDocSupplier(tombstoneDocSupplier())
-            .dataFormatRegistry(createMockRegistry())
-            .committerFactory(failingCommitterFactory)  
-            .readOnlyReplica(true)
-            .build();
-
-        expectThrows(Exception.class, () -> new DataFormatAwareNRTReplicationEngine(failingConfig));
+            assertNotNull(stats);
     }
-
-    /**
-     * Verifies that the statsCache is properly updated when catalog snapshots change
-     * via replication, ensuring the cache initialization during construction enables  
-     * proper cache functionality.
-     */
-    public void testStatsCacheUpdatesAfterReplicationDueToConstructorInit() throws IOException {  
-        Path tmpDir = createTempDir();
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
-            // Initial state - cache should be initialized with empty stats  
-            assertEquals("initial segments count should be 0", 0, engine.segmentsStats(false, false).getCount());
-            assertEquals("initial docs count should be 0", 0L, engine.docStats().getCount());
-
-            // Apply a replication snapshot with segments
-            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("test.mock").addNumRows(5).build();
-            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();  
-            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 5L, List.of(seg));
-
-            engine.updateCatalogSnapshot(incoming);  
-
-            // Cache should be updated via refresh listeners (which were properly registered during construction)
-            SegmentsStats updatedStats = engine.segmentsStats(false, false);  
-            assertEquals("segments count should be updated after replication", 1, updatedStats.getCount());
-
-            // This verifies that the statsCache was properly initialized during construction  
-            // and is functioning correctly for subsequent operations
-        }
-    }  
-
-    // ---------- Tests ----------
-
-    public void testCreateEngine() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            assertNotNull(engine.translogManager());  
-            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
-            assertNotNull("historyUUID must be assigned", engine.getHistoryUUID());
-            // commitStats must never be null on a replica (the review fix).  
-            assertNotNull(engine.commitStats());
-        }
-    }  
-
-    public void testUpdateCatalogSnapshotAdvancesCheckpointAndHistoryUUID() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            String newHistoryUUID = UUID.randomUUID().toString();
-            long maxSeqNo = 42L;
-            DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 1L, maxSeqNo, newHistoryUUID);  
-
-            engine.updateCatalogSnapshot(incoming);
-
-            assertEquals("processed checkpoint must be fast-forwarded", maxSeqNo, engine.getProcessedLocalCheckpoint());
-            // historyUUID must reflect the incoming snapshot (replicated primaries can bump it).
-            assertEquals(newHistoryUUID, engine.getHistoryUUID());  
-        }
-    }
-
-    public void testUpdateCatalogSnapshotTriggersFlushOnGenerationChange() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            DataformatAwareCatalogSnapshot first = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());  
-            engine.updateCatalogSnapshot(first);
-
-            // Second snapshot with a different generation must force a flush-and-roll.  
-            DataformatAwareCatalogSnapshot second = buildReplicationSnapshot(2L, 2L, 10L, null);
-            engine.updateCatalogSnapshot(second);
-
-            assertEquals(10L, engine.getProcessedLocalCheckpoint());
-        }
-    }  
-
-    public void testReplicaWriteStubsAppendToTranslogAndAdvanceMaxSeqNo() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            ParsedDocument doc = createParsedDoc("id-1", null);
-            long seqNo = 7L;
-            Engine.IndexResult result = engine.index(replicaIndexOp(doc, seqNo));  
-            assertNotNull("write must record a translog location", result.getTranslogLocation());
-            assertEquals(seqNo, result.getSeqNo());
             assertEquals(seqNo, engine.getMaxSeqNoOfUpdatesOrDeletes());  
-        }
-    }
-
-    // NOTE: Testing flush()+commitCatalogSnapshot() end-to-end in a unit test is fragile because
-    // the replica's commitCatalogSnapshot sets nextWriteGeneration from the CatalogSnapshot's
-    // generation, which can collide with the bootstrap Lucene commit state. End-to-end flush  
-    // behavior is covered by the DFA ITs (DataFormatAwareReplicationIT, DataFormatAwareUploadIT).
-
-    public void testAcquireLastIndexCommitReturnsBootstrapCommit() throws IOException {  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            expectThrows(UnsupportedOperationException.class, engine::acquireSafeIndexCommit);
-        }  
-    }
-
-    public void testCloseIsIdempotent() throws IOException {  
-        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir());
-        engine.close();
-        // Second close must be a no-op, not throw.  
-        engine.close();
-    }
-
-    public void testOperationsAfterCloseThrowAlreadyClosed() throws IOException {
-        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir());
-        engine.close();  
-        expectThrows(org.apache.lucene.store.AlreadyClosedException.class, () -> engine.acquireSnapshot());
-        expectThrows(org.apache.lucene.store.AlreadyClosedException.class, engine::commitStats);
-    }  
-
-    /**
-     * File-deleter map must include BOTH Lucene and non-default formats.  
-     * The Lucene deleter must:
-     *  (a) delete files in {@code <shardPath>/index/}
-     *  (b) guard against deleting commit files ({@code segments_*}, {@code write.lock})  
-     * Without this, superseded Lucene secondary files from prior replication snapshots
-     * accumulate forever on composite-engine replicas.
-     */  
-    public void testBuildReplicaFileDeletersCoversLuceneAndNonDefaultFormats() throws IOException {
-        MockDataFormat luceneLike = new MockDataFormat("lucene", 100L, Set.of());
-        MockDataFormat parquetLike = new MockDataFormat("parquet", 50L, Set.of());  
-        PluginsService pluginsService = mock(PluginsService.class);
-        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(
-            List.of(MockDataFormatPlugin.of(luceneLike), MockDataFormatPlugin.of(parquetLike))  
-        );
-        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(
-            List.of(new MockSearchBackEndPlugin(List.of("lucene", "parquet")))  
-        );
-        DataFormatRegistry registry = new DataFormatRegistry(pluginsService);
-
-        Path root = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));
-        Path indexDir = root.resolve("index");
-        Path parquetDir = root.resolve("parquet");  
-        java.nio.file.Files.createDirectories(indexDir);
-        java.nio.file.Files.createDirectories(parquetDir);
-        ShardPath shardPath = new ShardPath(false, root, root, shardId);  
-
-        bootstrapStoreWithMetadata(store, UUID.randomUUID().toString());
-        Map<String, FileDeleter> deleters = DataFormatAwareNRTReplicationEngine.buildReplicaFileDeleters(  
-            shardPath,
-            registry,
-            new InMemoryCommitter(store)  
-        );
-
-        assertTrue("parquet deleter must be present", deleters.containsKey("parquet"));  
-        assertTrue("lucene deleter must be present", deleters.containsKey("lucene"));
-
-        // Plant files in each format's directory and verify the respective deleter removes them.  
-        Path luceneOrphan = indexDir.resolve("_stale_orphan.si");
-        Path parquetOrphan = parquetDir.resolve("stale.parquet");
-        java.nio.file.Files.write(luceneOrphan, new byte[] { 1, 2, 3 });  
-        java.nio.file.Files.write(parquetOrphan, new byte[] { 4, 5, 6 });
-
-        deleters.get("lucene").deleteFiles(Map.of("lucene", List.of("_stale_orphan.si")));  
-        assertFalse("lucene deleter must physically remove the orphan", java.nio.file.Files.exists(luceneOrphan));
-
         deleters.get("parquet").deleteFiles(Map.of("parquet", List.of("stale.parquet")));  
-        assertFalse("parquet deleter must physically remove the orphan", java.nio.file.Files.exists(parquetOrphan));
-
-        // Commit files MUST be preserved by the Lucene deleter even if listed.  
-        Path segmentsCommit = indexDir.resolve("segments_5");
-        Path writeLock = indexDir.resolve("write.lock");
-        java.nio.file.Files.write(segmentsCommit, new byte[] { 9 });  
-        java.nio.file.Files.write(writeLock, new byte[] { 9 });
-        deleters.get("lucene").deleteFiles(Map.of("lucene", List.of("segments_5", "write.lock")));
-        assertTrue("segments_N must be preserved", java.nio.file.Files.exists(segmentsCommit));  
-        assertTrue("write.lock must be preserved", java.nio.file.Files.exists(writeLock));
+import org.opensearch.common.util.BigArrays;
     }
-
-    public void testUpdateCatalogSnapshotDoesNotRecommitOnSameGeneration() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            DataformatAwareCatalogSnapshot first = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());  
-            engine.updateCatalogSnapshot(first);
-            long genAfterFirst = engine.commitStats().getGeneration();
-
-            // Same generation (1L) — MUST NOT trigger another flush/roll.
-            DataformatAwareCatalogSnapshot resend = buildReplicationSnapshot(1L, 1L, 6L, null);
-            engine.updateCatalogSnapshot(resend);  
-            assertEquals("same-generation update must not advance commit generation", genAfterFirst, engine.commitStats().getGeneration());
-            assertEquals("but local checkpoint still advances", 6L, engine.getProcessedLocalCheckpoint());
-        }  
-    }
-
-    public void testUpdateCatalogSnapshotWithoutHistoryUUIDPreservesExisting() throws IOException {  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            String originalUUID = engine.getHistoryUUID();
-            assertNotNull("fresh replica must have a historyUUID", originalUUID);  
-
-            // Snapshot with no HISTORY_UUID_KEY in userData — must NOT overwrite the existing uuid.
-            DataformatAwareCatalogSnapshot noUUID = buildReplicationSnapshot(1L, 1L, 5L, /* historyUUID= */ null);  
-            engine.updateCatalogSnapshot(noUUID);
-            assertEquals("historyUUID must be preserved when incoming has none", originalUUID, engine.getHistoryUUID());
-        }  
-    }
-
-    public void testFlushAndClose() throws Exception {  
-        Path translogPath = createTempDir().resolve("translog");
-        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);
-        // Advance the catalog generation so the close-time commit writes a new segments_N.  
-        DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 2L, 10L, engine.getHistoryUUID());
-        engine.updateCatalogSnapshot(incoming);
-        // close() internally calls commitCatalogSnapshot → closeNoLock → IOUtils.close(...)  
-        engine.close();
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-    }  
-
-    public void testFailEngineAndDoubleFailIsNoOp() throws Exception {
-        Path translogPath = createTempDir().resolve("translog");  
-        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);
-        // First fail — must close the engine.
-        engine.failEngine("first-fail", new IOException("simulated"));  
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-        // Second fail — must be a no-op (already failed).
-        engine.failEngine("second-fail", new IOException("ignored"));  
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-    }
-
-    public void testFlushAndCloseOnAlreadyClosedEngine() throws Exception {
-        Path translogPath = createTempDir().resolve("translog");
-        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);  
-        engine.close();
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-        // Must not throw — silently skips.  
-        engine.flushAndClose();
-    }
-
-    public void testMaybeFailEngineOnCorruption() throws Exception {
-        Path translogPath = createTempDir().resolve("translog");
-        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);  
-        engine.failEngine("corruption", new CorruptIndexException("simulated", "test"));
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-    }  
-
-    // ---------- Stats / introspection methods (cheap O(1) returns) ----------
-
-    public void testGetSafeCommitInfoReturnsTrackerCheckpointAndZeroDocsForEmptySnapshot() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            org.opensearch.index.engine.SafeCommitInfo info = engine.getSafeCommitInfo();  
-            assertNotNull(info);
-            // Fresh replica: localCheckpoint = NO_OPS_PERFORMED (-1), no segments → 0 docs
-            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, info.localCheckpoint);  
-            assertEquals(0, info.docCount);
-        }
-    }  
-
-    public void testGetMergeStatsReturnsEmpty() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            org.opensearch.index.merge.MergeStats stats = engine.getMergeStats();
-            assertNotNull(stats);
-            assertEquals(0L, stats.getTotal());  
-            assertEquals(0L, stats.getCurrent());
-        }
-    }  
-
-    public void testDocStatsZeroForFreshReplica() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            org.opensearch.index.shard.DocsStats stats = engine.docStats();
-            assertNotNull(stats);
-            assertEquals(0L, stats.getCount());  
-            assertEquals(0L, stats.getDeleted());
-        }
-    }  
-
-    public void testCommitStatsReturnsCommitData() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            org.opensearch.index.engine.CommitStats stats = engine.commitStats();
-            assertNotNull(stats);
-            assertNotNull("commit stats must include user data", stats.getUserData());  
-        }
-    }
-
-    public void testIsReplicaIndexerReturnsTrue() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            assertTrue("DFA NRT engine must always identify as replica", engine.isReplicaIndexer());  
-        }
-    }
-
-    public void testConfigReturnsConstructorConfig() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            assertNotNull("config() must return a non-null EngineConfig", engine.config());  
-        }
-    }
-
-    public void testHistoryUUIDIsNonNullOnOpen() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            assertNotNull("fresh replica must have a historyUUID", engine.getHistoryUUID());  
-            assertFalse("historyUUID must not be empty", engine.getHistoryUUID().isEmpty());
-        }
-    }  
-
-    public void testCheckpointAccessorsOnFreshEngine() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
-            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getPersistedLocalCheckpoint());
-            // lastRefreshedCheckpoint may be -1 (NO_OPS_PERFORMED) or 0 depending on initialization  
-            long lrc = engine.lastRefreshedCheckpoint();
-            assertTrue(
-                "lastRefreshedCheckpoint must be non-negative or NO_OPS_PERFORMED",  
-                lrc == SequenceNumbers.NO_OPS_PERFORMED || lrc >= 0
-            );
-            // getMinRetainedSeqNo on fresh replica returns NO_OPS_PERFORMED  
-            long minRetained = engine.getMinRetainedSeqNo();
-            assertTrue(
-                "minRetainedSeqNo must be non-negative or NO_OPS_PERFORMED",  
-                minRetained == SequenceNumbers.NO_OPS_PERFORMED || minRetained >= 0
-            );
-        }  
-    }
-
-    public void testStatsAndStubMethodsReturnDefaultValues() throws IOException {  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            // Stubs / defaults that should never throw
-            assertEquals(0L, engine.getWritingBytes());  
-            assertEquals(0L, engine.getIndexThrottleTimeInMillis());
-            assertFalse(engine.isThrottled());
-            assertFalse("replica must never report needing a refresh", engine.refreshNeeded());  
-            assertFalse("replica must always report no-op for maybeRefresh", engine.maybeRefresh("noop"));
-            assertFalse(engine.shouldPeriodicallyFlush());
             assertEquals(0L, engine.getHeapBytesUsed());  
-            assertEquals(0L, engine.unreferencedFileCleanUpsPerformed());
-
-            // Refresh / writeIndexingBuffer must be no-ops (don't throw)  
-            engine.refresh("noop-refresh");
-            engine.writeIndexingBuffer();
-
-            // History ops snapshot / counters
-            assertEquals(0, engine.countNumberOfHistoryOperations("test", 0L, Long.MAX_VALUE));
-            assertFalse(engine.hasCompleteOperationHistory("test", 0L));  
-
-            // Completion + segments stats — must return non-null without throwing
-            assertNotNull(engine.completionStats());  
-            assertNotNull(engine.segmentsStats(false, false));
-            // pollingIngestStats may return null on replicas (no ingestion source)
-            engine.pollingIngestStats();  
-        }
-    }
-
-    public void testFillSeqNoGapsIsNoOp() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            // DFA replica engine returns 0 — Lucene-style gaps don't apply  
-            assertEquals(0, engine.fillSeqNoGaps(1L));
-        }
+    public void testConstructorFailsWhenCommitterThrows() throws IOException {
+import org.opensearch.common.unit.TimeValue;
+            shardPath,
+        ShardPath shardPath = new ShardPath(false, root, root, shardId);  
+            assertNotNull("segments list should be initialized", segments);
+    public void testUpdateCatalogSnapshotTriggersFlushOnGenerationChange() throws IOException {
+            Settings.builder()
+        engine.flushAndClose();
+        java.nio.file.Files.write(writeLock, new byte[] { 9 });
     }  
-
-    public void testMaybePruneDeletesIsNoOp() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            // Must not throw
-            engine.maybePruneDeletes();
-        }  
-    }
-
-    public void testForceMergeIsNoOp() throws Exception {  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            // DFA replica engines don't merge. Must not throw.
-            engine.forceMerge(false, 1, false, false, false, "test-uuid");  
         }
-    }
-
-    // ---------- Snapshot acquisition variants ----------
-
-    public void testAcquireSnapshotReturnsLatest() throws IOException {  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> snap = engine.acquireSnapshot()) {
-                assertNotNull(snap.get());  
-            }
         }
-    }  
-
-    public void testAcquireSafeCatalogSnapshotReturnsLatestForFreshEngine() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> safe = engine.acquireSafeCatalogSnapshot()) {
-                assertNotNull(safe.get());
-            }  
-        }
-    }
-
-    public void testAcquireLastCommittedSnapshotReturnsSnapshot() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            // After a commit (via update + flush), lastCommittedSnapshot is set  
-            DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());
-            engine.updateCatalogSnapshot(incoming);
-            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> last = engine.acquireLastCommittedSnapshot(false)) {  
-                assertNotNull(last.get());
-            }
-        }  
-    }
-
-    public void testSerializeSnapshotToRemoteMetadataThrowsOnReplica() throws IOException {  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> snap = engine.acquireSnapshot()) {
-                // Replicas don't produce upload metadata bytes — that's the primary's job.  
-                expectThrows(UnsupportedOperationException.class, () -> engine.serializeSnapshotToRemoteMetadata(snap.get()));
-            }
-        }  
-    }
-
-    // ---------- prepareIndex / prepareDelete (translog replay path) ----------  
-
-    public void testPrepareIndexNullDocMapperThrows() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            org.opensearch.index.mapper.SourceToParse source = new org.opensearch.index.mapper.SourceToParse(
-                "idx",
-                "doc-id",  
-                new org.opensearch.core.common.bytes.BytesArray("{}"),
-                org.opensearch.common.xcontent.XContentType.JSON
-            );  
-            // prepareIndex requires a non-null docMapper to parse the source
-            expectThrows(
-                NullPointerException.class,  
-                () -> engine.prepareIndex(
-                    /* docMapper */ null,
-                    source,  
-                    5L,
-                    1L,
-                    1L,  
-                    org.opensearch.index.VersionType.EXTERNAL,
-                    Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
-                    -1L,  
-                    false,
-                    SequenceNumbers.UNASSIGNED_SEQ_NO,
-                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM  
-                )
-            );
-        }  
-    }
-
-    public void testPrepareDeleteBuildsValidDeleteOp() throws IOException {  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            Engine.Delete op = engine.prepareDelete(
-                "doc-id",  
-                /* seqNo */ 7L,
-                /* primaryTerm */ 1L,
-                /* version */ 1L,  
-                org.opensearch.index.VersionType.EXTERNAL,
-                Engine.Operation.Origin.PRIMARY,
-                /* ifSeqNo */ SequenceNumbers.UNASSIGNED_SEQ_NO,  
-                /* ifPrimaryTerm */ SequenceNumbers.UNASSIGNED_PRIMARY_TERM
-            );
-            assertNotNull(op);  
-            assertEquals(7L, op.seqNo());
-        }
-    }  
-
-    public void testIndexDeleteNoOpReturnUnsupportedOnReplica() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            // Replica can't ACTIVELY index/delete/noOp — those go through prepareIndex on the primary.
-            // The replica's index/delete/noOp methods are stubs that throw or return synthetic results.
-            // Validate they don't blow up the JVM and return some result (or throw a known type).  
-            try {
+            assertNotNull(stats);  
+            new InMemoryCommitter(store)  
                 Engine.IndexResult ir = engine.index(null);
-                // If it doesn't throw, the result must be non-null  
-                assertNotNull(ir);
-            } catch (UnsupportedOperationException | NullPointerException expected) {
-                // Either is acceptable for a replica stub  
+        Path tmpDir = createTempDir();
+import static org.mockito.Mockito.mock;  
+        Path segmentsCommit = indexDir.resolve("segments_5");
+            // pollingIngestStats may return null on replicas (no ingestion source)
+    }
+        mockPlugin = MockDataFormatPlugin.of(mockDataFormat);
+            System.nanoTime(),
+        Path translogPath = createTempDir().resolve("translog");
+import org.opensearch.plugins.SearchBackEndPlugin;  
+            shardId,
+    }  
+        long id,  
+    public void testForceMergeIsNoOp() throws Exception {  
+    }
+            .store(store)
+        }
+            assertEquals(0, info.docCount);
+    }
+        }
+            Map<String, String> commitData = new HashMap<>();
+    // ---------- updateCatalogSnapshot edge cases ----------
+        );
+            Engine.IndexResult result = engine.index(replicaIndexOp(doc, seqNo));  
+     * The Lucene deleter must:
+import org.apache.lucene.index.Term;
+            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 14L, List.of(seg1, seg2));
+        return new Store(
+        );
+            assertNotNull("fresh replica must have a historyUUID", originalUUID);  
+            assertEquals(0L, stats.getCount());  
+        DataFormatRegistry registry = new DataFormatRegistry(pluginsService);
+            long seqNo = 7L;
+            // Apply a replication snapshot with segments  
+            // The key test: verify that after construction, the engine is in a committed state  
+        Path tmpDir = createTempDir();
+        bootstrapStoreWithMetadata(store, uuid);
+            assertTrue("commit generation should advance after replication", commitStats.getGeneration() > 0);  
+                    false,
+                "doc-id",  
+    public void testSerializeSnapshotToRemoteMetadataThrowsOnReplica() throws IOException {  
+        } finally {
+            assertEquals(0L, stats.getCurrent());
+            engine.flush(false, true);
+        ) {
+            .committerFactory(failingCommitterFactory)  
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
+        List<Segment> segments  
+        return snapshot;
+            // This verifies that the statsCache was properly initialized during construction  
+    // ---------- Snapshot acquisition variants ----------
+            // historyUUID must reflect the incoming snapshot (replicated primaries can bump it).
+    public void testUpdateCatalogSnapshotPreservesCommitSegmentInfos() throws IOException {
+                "minRetainedSeqNo must be non-negative or NO_OPS_PERFORMED",  
+import org.opensearch.test.DummyShardLock;
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+    private AtomicLong primaryTerm;
             }
         }
-    }  
-
-    // ---------- updateCatalogSnapshot edge cases ----------
-
-    public void testUpdateCatalogSnapshotPreservesCommitSegmentInfos() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());  
-
-            // Simulate SegmentReplicationTarget setting the bytes on the snapshot
-            org.apache.lucene.index.SegmentInfos sis = new org.apache.lucene.index.SegmentInfos(  
-                org.apache.lucene.util.Version.LATEST.major
-            );
+import org.opensearch.index.engine.exec.commit.CommitterFactory;  
+    }
+        }
+import java.util.HashMap;  
             sis.setUserData(java.util.Map.of(), false);  
-            incoming.setReplicatingCommitData(sis);
-
-            engine.updateCatalogSnapshot(incoming);  
-            // After commit, a segments_N file with these bytes is written. A subsequent
-            // commitStats read should succeed (no IndexNotFoundException / corruption).
-            assertNotNull(engine.commitStats());  
+    private MockDataFormatPlugin mockPlugin;  
+    }
+            // After a commit (via update + flush), lastCommittedSnapshot is set  
+ */  
+            new FsDirectoryFactory()
+import org.apache.lucene.store.AlreadyClosedException;  
+        };
+    private Engine.Index replicaIndexOp(ParsedDocument doc, long seqNo) {
+                    org.opensearch.index.VersionType.EXTERNAL,
+    public void testIsReplicaIndexerReturnsTrue() throws IOException {
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)  
+            "",
+    public void testUpdateCatalogSnapshotMonotonicSeqNoAdvancement() throws IOException {
+            gen,  
+        PluginsService pluginsService = mock(PluginsService.class);  
+            writer.setLiveCommitData(commitData.entrySet());
+        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
+        }  
+            DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+        java.nio.file.Files.write(segmentsCommit, new byte[] { 9 });  
+    }  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+    }
+            ParsedDocument doc = createParsedDoc("id-1", null);
+            org.apache.lucene.index.SegmentInfos sis = new org.apache.lucene.index.SegmentInfos(  
+        // Simulate the primary having committed this snapshot (sets lastCommitGeneration).
+    }
+            dir,
+        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);  
+        }
+        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());  
+                .build()
+    }  
+        Path root = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));
+            engine.updateCatalogSnapshot(resend);  
+            .readOnlyReplica(true)
+        }
+            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("test.mock").addNumRows(5).build();
+    public void testCloseIsIdempotent() throws IOException {  
+            SequenceNumbers.UNASSIGNED_SEQ_NO,
+            engine.updateCatalogSnapshot(second);
+            engine.pollingIngestStats();  
+        Path indexDir = root.resolve("index");
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {  
+            assertNotNull(stats);
+import org.opensearch.index.seqno.SequenceNumbers;
+            List<org.opensearch.index.engine.Segment> segments = engine.segments(false);
+    public void testGetMergeStatsReturnsEmpty() throws IOException {
+                "doc-id",  
+    public void tearDown() throws Exception {
+            id,
+            assertFalse(engine.hasCompleteOperationHistory("test", 0L));  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+    }
+            // commitStats must never be null on a replica (the review fix).  
+            assertNotNull("commit stats should be available after flush", commitStats);
+     * and that the cache is properly populated with committed state.
+    }
+    public void testStatsCacheReturnsCachedSegmentsStatsAfterRefresh() throws IOException {
+        }
+            .externalRefreshListener(List.of())
+            // Simulate SegmentReplicationTarget setting the bytes on the snapshot
+    // ---------- prepareIndex / prepareDelete (translog replay path) ----------  
+    public void testAcquireLastCommittedSnapshotReturnsSnapshot() throws IOException {
+     */
+    ) {
+        DataformatAwareCatalogSnapshot snapshot = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(
+                    -1L,  
+import org.opensearch.cluster.metadata.IndexMetadata;  
+        expectThrows(org.apache.lucene.store.AlreadyClosedException.class, () -> engine.acquireSnapshot());
+            assertNotNull(info);
+            assertEquals(0L, engine.unreferencedFileCleanUpsPerformed());
+package org.opensearch.index.engine;
+            String originalUUID = engine.getHistoryUUID();
+    public void testFillSeqNoGapsIsNoOp() throws IOException {
+    // NOTE: Testing flush()+commitCatalogSnapshot() end-to-end in a unit test is fragile because
+        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));
+            assertEquals(5L, engine.getProcessedLocalCheckpoint());  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+            assertEquals(0L, engine.getIndexThrottleTimeInMillis());
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            shardPath,
+            primaryTerm.get(),
+        long gen,
+            Versions.MATCH_ANY,
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+     */
+            org.opensearch.index.engine.SafeCommitInfo info = engine.getSafeCommitInfo();  
+                assertNotNull(last.get());
+            // History ops snapshot / counters
+        );
+    }
+import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;  
+import org.opensearch.test.IndexSettingsModule;
+    }
+            // Cache should be updated via refresh listeners (which were properly registered during construction)
+            assertEquals("processed checkpoint must be fast-forwarded", maxSeqNo, engine.getProcessedLocalCheckpoint());
+            List.<Segment>of(),
+     * proper cache functionality.
+    public void testPrepareIndexNullDocMapperThrows() throws IOException {
+                    source,  
+            public Map<String, String> getLastCommittedData() {
+            doc,
+    /**
+            assertNotNull("commit stats must include user data", stats.getUserData());  
+        Directory dir = newDirectory();  
+            .dataFormatRegistry(createMockRegistry())
+            assertNotNull(stats);
+            // getMinRetainedSeqNo on fresh replica returns NO_OPS_PERFORMED  
+            assertEquals(newHistoryUUID, engine.getHistoryUUID());  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
+                    /* docMapper */ null,
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            assertNotNull(stats);
+            engine.updateCatalogSnapshot(noUUID);
+            indexSettings,  
+            userData
+        TranslogConfig translogConfig = new TranslogConfig(  
+import org.opensearch.index.engine.dataformat.stub.MockSearchBackEndPlugin;
+        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir());
+/*  
+import org.opensearch.index.seqno.RetentionLeases;
+            assertTrue("Segment should be searchable after replication", replicatedSeg.search);  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            org.opensearch.index.engine.CommitStats stats = engine.commitStats();
+            expectThrows(
+        Map<String, FileDeleter> deleters = DataFormatAwareNRTReplicationEngine.buildReplicaFileDeleters(  
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        Path translogPath = createTempDir().resolve("translog");
         }
     }
-
-    public void testUpdateCatalogSnapshotMonotonicSeqNoAdvancement() throws IOException {
+            assertTrue("DFA NRT engine must always identify as replica", engine.isReplicaIndexer());  
+            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 3L, List.of(seg));
+            assertNotNull(stats);  
+            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
+        }
+                store.directory(),  
+            .translogConfig(translogConfig)  
+            .build();
+        }
+            assertEquals(0L, stats.getIndexWriterMemoryInBytes());
+        }
+     */  
+        AlreadyClosedException e = expectThrows(AlreadyClosedException.class, engine::ensureOpen);  
+            assertNotNull(engine.commitStats());  
         try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            // First snapshot at seqNo 5  
-            DataformatAwareCatalogSnapshot first = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());
-            engine.updateCatalogSnapshot(first);
-            assertEquals(5L, engine.getProcessedLocalCheckpoint());  
-
-            // Second snapshot at seqNo 10 (advances)
-            DataformatAwareCatalogSnapshot second = buildReplicationSnapshot(2L, 2L, 10L, null);  
-            engine.updateCatalogSnapshot(second);
+            assertEquals(0L, engine.getWritingBytes());  
+            translogPath,
+            // commitStats read should succeed (no IndexNotFoundException / corruption).
+            // Apply a replication snapshot
+            // Same generation (1L) — MUST NOT trigger another flush/roll.
+    // ---------- Stats cache (CatalogSnapshotStatsCache) ----------
+import org.apache.lucene.store.Directory;
+            .internalRefreshListener(List.of())  
+        }
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
+            }
+        return new DataFormatRegistry(pluginsService);
+                "idx",
+    public void testSegmentsStatsUpdatedAfterReplication() throws IOException {  
+            // Verify segments are committed after replication
+            SegmentsStats stats = engine.segmentsStats(false, false);
+            assertTrue("Segment should be committed after replication", replicatedSeg.committed);
+                lrc == SequenceNumbers.NO_OPS_PERFORMED || lrc >= 0
+import static org.mockito.Mockito.when;
+    public void testHistoryUUIDIsNonNullOnOpen() throws IOException {
+        }
+    }  
+    private MockDataFormat mockDataFormat;
+        }
+                assertNotNull(ir);
+                    1L,
+            .committerFactory(committerFactory)  
+     */
+            assertTrue("commit generation should be >= 0 after construction", commitStats.getGeneration() >= 0);
+     * accumulate forever on composite-engine replicas.
+            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("seg1.mock").addNumRows(10).build();  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+                )
+    public void testIndexDeleteNoOpReturnUnsupportedOnReplica() throws IOException {
+import java.util.UUID;
+            // Stubs / defaults that should never throw
+        );  
+            gen,
+        IndexSettings indexSettings = replicaIndexSettings();
+ * The OpenSearch Contributors require contributions made to  
+    private ThreadPool threadPool;
+    }
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            );
+            assertNotNull(engine.segmentsStats(false, false));
+import org.opensearch.core.index.Index;  
+        }
+            assertTrue(
+    public void testSegmentsCommittedAfterReplicationDueToConstructorInit() throws IOException {  
             assertEquals(10L, engine.getProcessedLocalCheckpoint());
         }  
-    }
-
-    public void testEnsureOpenThrowsAlreadyClosedAfterClose() throws IOException {  
-        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir());
-        engine.close();
-        AlreadyClosedException e = expectThrows(AlreadyClosedException.class, engine::ensureOpen);  
-        assertNotNull(e.getMessage());
-    }
-
-    public void testTranslogManagerAccessor() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            assertNotNull("translogManager must be available on a fresh engine", engine.translogManager());  
+            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 5L, List.of(seg));  
+     *  (a) delete files in {@code <shardPath>/index/}
         }
-    }
-
-    // ---------- Stats cache (CatalogSnapshotStatsCache) ----------
-
-    public void testSegmentsStatsEmptyOnFreshReplica() throws IOException {  
         try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
-            SegmentsStats stats = engine.segmentsStats(false, false);
-            assertNotNull(stats);  
-            assertEquals(0, stats.getCount());
-            assertEquals(0L, stats.getIndexWriterMemoryInBytes());
+        }
+ * compatible open source license.
+                /* ifPrimaryTerm */ SequenceNumbers.UNASSIGNED_PRIMARY_TERM
+import org.apache.lucene.index.NoMergePolicy;
+            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();
+        DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 2L, 10L, engine.getHistoryUUID());
+            // DFA replica engine returns 0 — Lucene-style gaps don't apply  
+        // Second close must be a no-op, not throw.  
+        userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
+    public void testStatsCacheUpdatesAfterReplicationDueToConstructorInit() throws IOException {  
+            org.opensearch.index.shard.DocsStats stats = engine.docStats();
+            .store(store)
+            incoming.setReplicatingCommitData(sis);
+        userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
+            engine.updateCatalogSnapshot(incoming);
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+            engine.updateCatalogSnapshot(incoming);  
+                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM  
+            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
+        Path translogPath = createTempDir();
+            String newHistoryUUID = UUID.randomUUID().toString();
+            BigArrays.NON_RECYCLING_INSTANCE,
+            .translogConfig(new TranslogConfig(shardId, translogPath, replicaIndexSettings(), BigArrays.NON_RECYCLING_INSTANCE, "", false))  
+        IndexSettings indexSettings = replicaIndexSettings();
+            assertTrue("user data should contain history UUID", userData.containsKey(Engine.HISTORY_UUID_KEY));
+            assertEquals(0, engine.fillSeqNoGaps(1L));
+            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
+    }
+    private Store createStore() throws IOException {
+            @Override
+            assertNotNull("fresh replica must have a historyUUID", engine.getHistoryUUID());  
+    public void testSegmentsStatsWithFileSizesPathDoesNotThrow() throws IOException {
+            assertNotNull("commit stats should be available after construction", commitStats);  
+            .externalRefreshListener(List.of())
+            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> snap = engine.acquireSnapshot()) {
+import org.apache.lucene.index.IndexWriterConfig;  
+     */  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+        Map<String, String> userData = new HashMap<>();
+        expectThrows(org.apache.lucene.store.AlreadyClosedException.class, engine::commitStats);
+        java.nio.file.Files.write(luceneOrphan, new byte[] { 1, 2, 3 });  
+            .mergePolicy(NoMergePolicy.INSTANCE)
+    }
+    /**
+import java.util.Map;
+            }  
+            // Apply a replication snapshot with segments
+import org.opensearch.index.translog.Translog;  
+     * enabled by the stats cache initialization during construction.  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
+     * Without this, superseded Lucene secondary files from prior replication snapshots
+            userData.put(Engine.HISTORY_UUID_KEY, historyUUID);
+    public void testOperationsAfterCloseThrowAlreadyClosed() throws IOException {
+            assertEquals("but local checkpoint still advances", 6L, engine.getProcessedLocalCheckpoint());
+import org.opensearch.index.translog.TranslogConfig;
+            assertFalse(engine.isThrottled());
+    }
+     * Verifies that if getLastCommittedData() throws during construction,
+            engine.updateCatalogSnapshot(first);
+            // The replica's index/delete/noOp methods are stubs that throw or return synthetic results.
+        Path tmpDir = createTempDir();
+    }  
+        );
+        Path writeLock = indexDir.resolve("write.lock");
+            org.opensearch.index.engine.Segment replicatedSeg = segments.get(0);
+            }
+            assertNotNull(engine.completionStats());  
+            -1,  
+        deleters.get("lucene").deleteFiles(Map.of("lucene", List.of("segments_5", "write.lock")));
+            assertEquals(seqNo, result.getSeqNo());
+        assertTrue("write.lock must be preserved", java.nio.file.Files.exists(writeLock));
+            assertNotNull(docsStats);  
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
+import org.apache.lucene.index.IndexWriter;
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+    private IndexSettings replicaIndexSettings() {  
+    @Override
+            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 5L, List.of(seg));  
+            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 5L, List.of(seg));
+                // If it doesn't throw, the result must be non-null  
+            registry,
+        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir());
+            assertNotNull("user data should be available in committed state", userData);  
+    /**
+            assertEquals("fresh replica should have 0 segments", 0, segments.size());
+            SegmentsStats updatedStats = engine.segmentsStats(false, false);  
+ * paths without relying on DFA integration tests.  
+        engine.close();
+            DataformatAwareCatalogSnapshot second = buildReplicationSnapshot(2L, 2L, 10L, null);  
+    public void testAcquireSnapshotReturnsLatest() throws IOException {  
+     * Verifies that flush operations result in properly committed segments,
+            assertEquals(0L, docsStats.getDeleted());
+    }
+        assertTrue("segments_N must be preserved", java.nio.file.Files.exists(segmentsCommit));  
+        // Second fail — must be a no-op (already failed).
+    }  
+            assertEquals("segments count should be updated after replication", 1, updatedStats.getCount());
+            );
+            org.opensearch.index.engine.Segment flushedSeg = segments.get(0);
+            CommitStats commitStats = engine.commitStats();
+            );
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            // This is verified by checking that commitStats() works (doesn't throw)
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+    public void testCreateEngine() throws IOException {
+            new DummyShardLock(shardId),
+    }
+                    1L,  
+            engine.updateCatalogSnapshot(second);
+        DataFormatAwareNRTReplicationEngine engine,
+            // DFA replica engines don't merge. Must not throw.
+        engine.updateCatalogSnapshot(incoming);
+        // Commit files MUST be preserved by the Lucene deleter even if listed.  
+            assertEquals(2, stats.getCount());
+    public void testReplicaWriteStubsAppendToTranslogAndAdvanceMaxSeqNo() throws IOException {
+     * Verifies that the stats cache is initialized during DFANRE construction
+            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getPersistedLocalCheckpoint());
+            assertNotNull("commit stats should be available after replication", commitStats);
+        }  
+        engine.failEngine("corruption", new CorruptIndexException("simulated", "test"));
+        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir());
+            Store.OnClose.EMPTY,  
+    }
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))
+        Path tmpDir = createTempDir();  
+            assertNotNull(op);  
+            .tombstoneDocSupplier(tombstoneDocSupplier())
+    }
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+        java.nio.file.Files.write(parquetOrphan, new byte[] { 4, 5, 6 });
+                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)
+        snapshot.setLastCommitInfo("segments_" + gen, gen, 0L);  
+            DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());
+            id,
+ *
+import org.opensearch.Version;
+            List.of(new MockSearchBackEndPlugin(List.of("lucene", "parquet")))  
+    }  
+            // lastRefreshedCheckpoint may be -1 (NO_OPS_PERFORMED) or 0 depending on initialization  
+            false  
+            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("seg1.mock").addNumRows(5).build();
+ * Exercises constructor, replication-snapshot application, commit, write-stubs, and close
+    }
+        }
+            WriterFileSet wfs2 = WriterFileSet.builder().directory(tmpDir).writerGeneration(2L).addFile("seg2.mock").addNumRows(7).build();
+                    SequenceNumbers.UNASSIGNED_SEQ_NO,
+            // Validate they don't blow up the JVM and return some result (or throw a known type).  
+        engine.failEngine("second-fail", new IOException("ignored"));  
+            store.close();
+    }  
+            Segment seg1 = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs1).build();
+    public void testUpdateCatalogSnapshotWithoutHistoryUUIDPreservesExisting() throws IOException {  
+            // Verify segments are committed after flush  
+            assertEquals("should have 1 segment after flush", 1, segments.size());
+import org.opensearch.common.lucene.uid.Versions;
+        java.nio.file.Files.createDirectories(indexDir);
+import java.io.IOException;
+            org.opensearch.index.merge.MergeStats stats = engine.getMergeStats();
+        }
+            seqNo,  
+            engine.updateCatalogSnapshot(first);
+    /**
+     */  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+    public void testFailEngineAndDoubleFailIsNoOp() throws Exception {
+    private DataFormatRegistry createMockRegistry() {
+            );  
+    }
+            engine.updateCatalogSnapshot(first);
+            // Second snapshot with a different generation must force a flush-and-roll.  
+        // First fail — must close the engine.
+            .indexSettings(indexSettings)  
+        super.tearDown();
+    public void testDocStatsReflectsReplicatedSnapshot() throws IOException {
+    }
+    public void testUpdateCatalogSnapshotDoesNotRecommitOnSameGeneration() throws IOException {
+        userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(maxSeqNo));  
+            assertEquals("historyUUID must be preserved when incoming has none", originalUUID, engine.getHistoryUUID());
+import org.opensearch.index.store.FsDirectoryFactory;
+            // Second snapshot at seqNo 10 (advances)
+        }
+            SegmentsStats stats = engine.segmentsStats(true, false);
+            terminate(threadPool);  
+        }  
+            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
+            assertNotNull("write must record a translog location", result.getTranslogLocation());
+            .readOnlyReplica(true)
+        Path parquetDir = root.resolve("parquet");  
+    }  
+            gen,  
+    private EngineConfig buildReplicaConfig(Path translogPath) {
+        // close() internally calls commitCatalogSnapshot → closeNoLock → IOUtils.close(...)  
+            assertNotNull("config() must return a non-null EngineConfig", engine.config());  
+    public void testUpdateCatalogSnapshotAdvancesCheckpointAndHistoryUUID() throws IOException {
+            shardId,
+        deleters.get("lucene").deleteFiles(Map.of("lucene", List.of("_stale_orphan.si")));  
+            gen,  
+            .internalRefreshListener(List.of())  
+            Engine.Delete op = engine.prepareDelete(
+            }
+        // Plant files in each format's directory and verify the respective deleter removes them.  
+        }
+        Path parquetOrphan = parquetDir.resolve("stale.parquet");
+        assertTrue("parquet deleter must be present", deleters.containsKey("parquet"));  
+public class DataFormatAwareNRTReplicationEngineTests extends OpenSearchTestCase {
+        Path tmpDir = createTempDir();
+    public void testTranslogManagerAccessor() throws IOException {
+            engine.writeIndexingBuffer();
+}  
+            }
+            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> safe = engine.acquireSafeCatalogSnapshot()) {
+            assertNotNull(engine.commitStats());
+        }  
+            .build();
+        shardId = new ShardId(new Index("test", "_na_"), 0);
+    }
+import org.opensearch.common.lucene.Lucene;
+import org.opensearch.index.mapper.Uid;  
         }  
     }
-
-    public void testSegmentsStatsUpdatedAfterReplication() throws IOException {  
-        Path tmpDir = createTempDir();
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
-            WriterFileSet wfs1 = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("seg1.mock").addNumRows(7).build();  
-            WriterFileSet wfs2 = WriterFileSet.builder().directory(tmpDir).writerGeneration(2L).addFile("seg2.mock").addNumRows(7).build();
-            Segment seg1 = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs1).build();
-            Segment seg2 = Segment.builder(2L).addSearchableFiles(mockDataFormat, wfs2).build();  
-
-            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 14L, List.of(seg1, seg2));
-            engine.updateCatalogSnapshot(incoming);  
-
-            SegmentsStats stats = engine.segmentsStats(false, false);
-            assertNotNull(stats);  
-            assertEquals(2, stats.getCount());
-        }
-    }  
-
-    public void testSegmentsStatsWithFileSizesPathDoesNotThrow() throws IOException {
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
-            SegmentsStats stats = engine.segmentsStats(true, false);
-            assertNotNull(stats);
-            assertEquals(0, stats.getCount());  
         }
     }
-
-    public void testDocStatsReflectsReplicatedSnapshot() throws IOException {
-        Path tmpDir = createTempDir();
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {  
-            assertEquals(0L, engine.docStats().getCount());
-
-            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("seg1.mock").addNumRows(10).build();  
-            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();
-            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 10L, List.of(seg));
-            engine.updateCatalogSnapshot(incoming);  
-
-            org.opensearch.index.shard.DocsStats docsStats = engine.docStats();
-            assertNotNull(docsStats);  
-            assertEquals(0L, docsStats.getDeleted());
-        }
+        return new Engine.Index(  
+import org.opensearch.index.engine.exec.Segment;
+    private DataFormatAwareNRTReplicationEngine createReplicaEngine(Path translogPath) throws IOException {
     }  
-
-    public void testStatsCacheReturnsCachedSegmentsStatsAfterRefresh() throws IOException {
-        Path tmpDir = createTempDir();  
-        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
-            assertEquals(0, engine.segmentsStats(false, false).getCount());
-
-            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("seg1.mock").addNumRows(5).build();
-            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();
-            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 5L, List.of(seg));  
-            engine.updateCatalogSnapshot(incoming);
-
+            Engine.Operation.Origin.REPLICA,
             assertEquals(1, engine.segmentsStats(false, false).getCount());  
+        engine.close();
+            DataformatAwareCatalogSnapshot second = buildReplicationSnapshot(2L, 2L, 10L, null);
+        );
+    public void testPrepareDeleteBuildsValidDeleteOp() throws IOException {  
+            long minRetained = engine.getMinRetainedSeqNo();
+            assertEquals(0, engine.countNumberOfHistoryOperations("test", 0L, Long.MAX_VALUE));
+            assertNotNull("docs stats should be initialized", engine.docStats());  
+        );
+import org.opensearch.threadpool.ThreadPool;
+        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(
+ * Unit tests for {@link DataFormatAwareNRTReplicationEngine}.
+        primaryTerm = new AtomicLong(randomLongBetween(1, Long.MAX_VALUE));  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            assertFalse("replica must always report no-op for maybeRefresh", engine.maybeRefresh("noop"));
+import org.opensearch.index.engine.dataformat.stub.MockDataFormat;  
+        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);
+            Map<String, String> userData = commitStats.getUserData();
+import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
+import org.opensearch.index.engine.exec.WriterFileSet;
+        MockDataFormat luceneLike = new MockDataFormat("lucene", 100L, Set.of());
+    public void testBuildReplicaFileDeletersCoversLuceneAndNonDefaultFormats() throws IOException {
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            IndexWriter writer = new IndexWriter(
+        CommitterFactory committerFactory = config -> new InMemoryCommitter(store);  
+    }
+                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")  
+            DataformatAwareCatalogSnapshot resend = buildReplicationSnapshot(1L, 1L, 6L, null);
+    }
+    }
+     * Verifies that after replication, segments are properly committed due to  
+        store = createStore();
+import org.opensearch.index.mapper.IdFieldMapper;
+    public void testAcquireLastIndexCommitReturnsBootstrapCommit() throws IOException {  
+            assertTrue("user data should contain translog UUID", userData.containsKey(Translog.TRANSLOG_UUID_KEY));
+import java.util.concurrent.atomic.AtomicLong;
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+import org.opensearch.index.mapper.ParsedDocument;
+                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
+            .tombstoneDocSupplier(tombstoneDocSupplier())
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+            // Must not throw
+            org.opensearch.index.shard.DocsStats docsStats = engine.docStats();
+import java.util.List;
+        );
+            DataformatAwareCatalogSnapshot first = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());
+/**  
+            commitData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
+        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(mockPlugin));
+            // Fresh replica: localCheckpoint = NO_OPS_PERFORMED (-1), no segments → 0 docs
+            assertEquals("initial segments count should be 0", 0, engine.segmentsStats(false, false).getCount());
+            DataformatAwareCatalogSnapshot first = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());  
+    public void testConstructorInitializesStatsCacheWithCommittedState() throws IOException {
+            engine.updateCatalogSnapshot(incoming);  
+import org.opensearch.threadpool.TestThreadPool;
+import java.util.Set;  
+            assertFalse("historyUUID must not be empty", engine.getHistoryUUID().isEmpty());
+                org.apache.lucene.util.Version.LATEST.major
+    // ---------- Tests ----------
+                    Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
+            engine.updateCatalogSnapshot(incoming);
+            // Completion + segments stats — must return non-null without throwing
+                org.opensearch.index.VersionType.EXTERNAL,
+            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("test.mock").addNumRows(3).build();  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+            .primaryTermSupplier(primaryTerm::get)  
+    }  
+            assertEquals("same-generation update must not advance commit generation", genAfterFirst, engine.commitStats().getGeneration());
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
+            // Perform flush  
+            engine.updateCatalogSnapshot(incoming);
+            // First snapshot at seqNo 5  
+            gen,
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);  
+                /* primaryTerm */ 1L,
+            assertEquals(0L, engine.docStats().getCount());
+        userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(maxSeqNo));
+            .dataFormatRegistry(registry)
+            WriterFileSet wfs1 = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("seg1.mock").addNumRows(7).build();  
+    }  
+            segments,
+    public void testSegmentsStatsEmptyOnFreshReplica() throws IOException {  
+import java.nio.file.Path;
+            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> snap = engine.acquireSnapshot()) {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;
+import org.apache.lucene.index.CorruptIndexException;
+        userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(maxSeqNo));  
+            SegmentsStats stats = engine.segmentsStats(false, false);
+            );
+    }  
+        }
+            assertNotNull("translogManager must be available on a fresh engine", engine.translogManager());  
+            DataformatAwareCatalogSnapshot noUUID = buildReplicationSnapshot(1L, 1L, 5L, /* historyUUID= */ null);  
+            WriterFileSet wfs = WriterFileSet.builder().directory(tmpDir).writerGeneration(1L).addFile("test.mock").addNumRows(5).build();
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+            // Initial state - cache should be initialized with empty stats  
+            DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 1L, maxSeqNo, newHistoryUUID);  
+     *  (b) guard against deleting commit files ({@code segments_*}, {@code write.lock})  
+import org.opensearch.index.engine.exec.FileDeleter;  
+        engine.close();  
+            assertNotNull("stats cache should be initialized", engine.segmentsStats(false, false));
+            // After commit, a segments_N file with these bytes is written. A subsequent
+            .threadPool(threadPool)
+        engine.close();
+    public void testFlushResultsInCommittedSegmentsDueToConstructorInit() throws IOException {
+     * the engine constructor fails and resources are cleaned up.
+    // ---------- Stats / introspection methods (cheap O(1) returns) ----------
+import org.opensearch.index.shard.ShardPath;  
+        Path tmpDir = createTempDir();  
+        engine.close();
+import org.opensearch.core.index.shard.ShardId;
+    }
+            long genAfterFirst = engine.commitStats().getGeneration();
+    public void testAcquireSafeCatalogSnapshotReturnsLatestForFreshEngine() throws IOException {
+            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();  
+            // Replica can't ACTIVELY index/delete/noOp — those go through prepareIndex on the primary.
+    }
+        }
+            List.of(MockDataFormatPlugin.of(luceneLike), MockDataFormatPlugin.of(parquetLike))  
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+            userData  
+        EngineConfig failingConfig = new EngineConfig.Builder().shardId(shardId)
+        engine.failEngine("first-fail", new IOException("simulated"));  
+            assertTrue("Segment should be committed after flush", flushedSeg.committed);  
         }
     }
-
-    private DataformatAwareCatalogSnapshot buildSnapshotWithSegments(
-        DataFormatAwareNRTReplicationEngine engine,
-        long id,  
-        long gen,
-        long maxSeqNo,
-        List<Segment> segments  
-    ) {
+    }  
+    public void setUp() throws Exception {  
+            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+            DataformatAwareCatalogSnapshot incoming = buildSnapshotWithSegments(engine, 1L, 1L, 10L, List.of(seg));
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))
+        return new EngineConfig.Builder().shardId(shardId)
+            engine.updateCatalogSnapshot(incoming);  
+            // prepareIndex requires a non-null docMapper to parse the source
+                // Either is acceptable for a replica stub  
+        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(
+                /* seqNo */ 7L,
+        bootstrapStoreWithMetadata(store, UUID.randomUUID().toString());
+    }  
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+            assertFalse("replica must never report needing a refresh", engine.refreshNeeded());  
+        }
+            .indexSettings(replicaIndexSettings())  
+import org.opensearch.plugins.PluginsService;
+        assertTrue("lucene deleter must be present", deleters.containsKey("lucene"));
+            assertEquals(0, stats.getCount());  
+            assertEquals(0, engine.segmentsStats(false, false).getCount());
+        assertFalse("parquet deleter must physically remove the orphan", java.nio.file.Files.exists(parquetOrphan));
+ */
+ * this file be licensed under the Apache-2.0 license or a
         Map<String, String> userData = new HashMap<>();
-        userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(maxSeqNo));  
-        userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(maxSeqNo));
-        userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
-        userData.put(Engine.HISTORY_UUID_KEY, engine.getHistoryUUID());  
-        DataformatAwareCatalogSnapshot snapshot = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(
-            id,
-            gen,  
-            gen,
-            segments,
-            gen,  
-            userData
+    private ShardId shardId;  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+        }  
+        DataFormatRegistry registry = createMockRegistry();
+            "test",  
+        long maxSeqNo,
+            long lrc = engine.lastRefreshedCheckpoint();
+            } catch (UnsupportedOperationException | NullPointerException expected) {
+            // by checking that it returns valid (non-null) stats
+        try (
+        }  
+    }  
+import static org.opensearch.index.engine.EngineTestCase.createParsedDoc;
+                /* version */ 1L,  
+        ShardPath shardPath = new ShardPath(false, path, path, shardId);  
+        }  
+        java.nio.file.Files.createDirectories(parquetDir);
         );
-        snapshot.setLastCommitInfo("segments_" + gen, gen, 0L);  
-        return snapshot;
+            assertEquals(0L, stats.getDeleted());
+            .threadPool(threadPool)
     }
-}  
+    private Store store;
+import org.opensearch.index.store.Store;
+            // Refresh / writeIndexingBuffer must be no-ops (don't throw)  
+     * File-deleter map must include BOTH Lucene and non-default formats.  
+            engine.updateCatalogSnapshot(incoming);  
+    @Override
+                () -> engine.prepareIndex(
+            // Verify commit stats reflect the committed state  
+        expectThrows(Exception.class, () -> new DataFormatAwareNRTReplicationEngine(failingConfig));
+import org.opensearch.index.engine.dataformat.stub.InMemoryCommitter;
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+            writer.commit();  
+    }  
+        return new DataFormatAwareNRTReplicationEngine(buildReplicaConfig(translogPath));
+            long maxSeqNo = 42L;
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+    public void testStatsAndStubMethodsReturnDefaultValues() throws IOException {  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(tmpDir)) {
+            // Snapshot with no HISTORY_UUID_KEY in userData — must NOT overwrite the existing uuid.
+                "lastRefreshedCheckpoint must be non-negative or NO_OPS_PERFORMED",  
+            List<org.opensearch.index.engine.Segment> segments = engine.segments(false);  
+        snapshot.setLastCommitInfo("segments_" + gen, gen, 0L);  
+        userData.put(Engine.HISTORY_UUID_KEY, engine.getHistoryUUID());  
+                minRetained == SequenceNumbers.NO_OPS_PERFORMED || minRetained >= 0
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+            commitData.put(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, "-1");  
+        engine.close();
+                assertNotNull(safe.get());
+     * the stats cache initialization during construction.
+    // the replica's commitCatalogSnapshot sets nextWriteGeneration from the CatalogSnapshot's
+    /** Writes a Lucene commit so the engine's store bootstrap finds valid userData. */
+        return snapshot;
+        assertFalse("lucene deleter must physically remove the orphan", java.nio.file.Files.exists(luceneOrphan));
+    // generation, which can collide with the bootstrap Lucene commit state. End-to-end flush  
+    /**  
+        // Must not throw — silently skips.  
+        }  
+    }
+    public void testMaybeFailEngineOnCorruption() throws Exception {
+            // For a fresh replica, segments list should be empty but cache should be committed/initialized  
+        try {  
+            assertEquals("should have 1 segment after replication", 1, segments.size());  
+        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(
+    /**  
+        MockDataFormat parquetLike = new MockDataFormat("parquet", 50L, Set.of());  
+                org.opensearch.common.xcontent.XContentType.JSON
+    }
+            assertTrue("Segment should be searchable after flush", flushedSeg.search);
+            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();
+            engine.forceMerge(false, 1, false, false, false, "test-uuid");  
+            expectThrows(UnsupportedOperationException.class, engine::acquireSafeIndexCommit);
+        Path luceneOrphan = indexDir.resolve("_stale_orphan.si");
+     * via replication, ensuring the cache initialization during construction enables  
+    public void testCommitStatsReturnsCommitData() throws IOException {
+import org.opensearch.common.settings.Settings;  
+            false,
+            // Verify segments are properly committed after construction
+            List.of(new MockSearchBackEndPlugin(List.of(mockDataFormat.name())))  
+        assertNotNull(e.getMessage());
+    // behavior is covered by the DFA ITs (DataFormatAwareReplicationIT, DataFormatAwareUploadIT).
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+    public void testFlushAndCloseOnAlreadyClosedEngine() throws Exception {
+            try {
+            org.opensearch.index.mapper.SourceToParse source = new org.opensearch.index.mapper.SourceToParse(
+    private DataformatAwareCatalogSnapshot buildSnapshotWithSegments(
+            assertEquals(0, stats.getCount());
+        }  
+                /* ifSeqNo */ SequenceNumbers.UNASSIGNED_SEQ_NO,  
+            // Verify that the stats cache was initialized during construction  
+        if (historyUUID != null) {  
+            assertEquals(7L, op.seqNo());
+        Path translogPath = createTempDir().resolve("translog");  
+            assertEquals("initial docs count should be 0", 0L, engine.docStats().getCount());
+            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
+        DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(translogPath);
+    public void testMaybePruneDeletesIsNoOp() throws IOException {
+            DataformatAwareCatalogSnapshot first = buildReplicationSnapshot(1L, 1L, 5L, UUID.randomUUID().toString());  
+            engine.maybePruneDeletes();
+            null,  
+                // Replicas don't produce upload metadata bytes — that's the primary's job.  
+            .primaryTermSupplier(primaryTerm::get)  
+        bootstrapStoreWithMetadata(store, uuid);  
+                    5L,
+                throw new RuntimeException("Simulated failure in getLastCommittedData");  
+            Segment seg = Segment.builder(1L).addSearchableFiles(mockDataFormat, wfs).build();
+            engine.refresh("noop-refresh");
+            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> last = engine.acquireLastCommittedSnapshot(false)) {  
+            .mergePolicy(NoMergePolicy.INSTANCE)
+                new org.opensearch.core.common.bytes.BytesArray("{}"),
+            gen,
+    // ---------- Constructor and stats cache initialization tests ----------
+                expectThrows(UnsupportedOperationException.class, () -> engine.serializeSnapshotToRemoteMetadata(snap.get()));
+            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+        }
+                NullPointerException.class,  
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {  
+            CommitStats commitStats = engine.commitStats();
+    }  
+    }  
+        threadPool = new TestThreadPool(getClass().getName());  
+        userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(maxSeqNo));
+    public void testFlushAndClose() throws Exception {  
+            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, info.localCheckpoint);  
+        super.setUp();
+        DataformatAwareCatalogSnapshot snapshot = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(  
+    private void bootstrapStoreWithMetadata(Store store, String translogUUID) throws IOException {  
+        );
+    }  
+            CommitStats commitStats = engine.commitStats();  
+        PluginsService pluginsService = mock(PluginsService.class);
+            // and is functioning correctly for subsequent operations
+    private DataformatAwareCatalogSnapshot buildReplicationSnapshot(long id, long gen, long maxSeqNo, String historyUUID) {
+            assertEquals(0L, stats.getTotal());  
+            assertNotNull("historyUUID must be assigned", engine.getHistoryUUID());
+        try (DataFormatAwareNRTReplicationEngine engine = createReplicaEngine(createTempDir())) {
+                Engine.Operation.Origin.PRIMARY,
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;  
+            Segment seg2 = Segment.builder(2L).addSearchableFiles(mockDataFormat, wfs2).build();  
+     * Verifies that the statsCache is properly updated when catalog snapshots change
+        // SegRep must be enabled for EngineConfig.isReadOnlyReplica() to return true.
+            engine.updateCatalogSnapshot(incoming);
+            );
+    public void testConfigReturnsConstructorConfig() throws IOException {
+        Path translogPath = createTempDir().resolve("translog");
+            assertFalse(engine.shouldPeriodicallyFlush());
+        // Advance the catalog generation so the close-time commit writes a new segments_N.  
+            indexSettings,  
+            List<org.opensearch.index.engine.Segment> segments = engine.segments(false);
+import org.opensearch.test.OpenSearchTestCase;  
+            )  
+            assertTrue(
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+            0  
+        mockDataFormat = new MockDataFormat("composite", 100L, Set.of());
+    public void testGetSafeCommitInfoReturnsTrackerCheckpointAndZeroDocsForEmptySnapshot() throws IOException {
+        return IndexSettingsModule.newIndexSettings(
+            // Verify the commit stats show committed state
+            assertNotNull(engine.translogManager());  
+    public void testDocStatsZeroForFreshReplica() throws IOException {
+    public void testCheckpointAccessorsOnFreshEngine() throws IOException {
+                assertNotNull(snap.get());  
+    public void testEnsureOpenThrowsAlreadyClosedAfterClose() throws IOException {  
+            engine.updateCatalogSnapshot(incoming);

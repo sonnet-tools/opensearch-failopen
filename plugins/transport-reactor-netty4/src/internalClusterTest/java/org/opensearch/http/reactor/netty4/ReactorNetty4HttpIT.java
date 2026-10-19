@@ -1,154 +1,132 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.http.reactor.netty4;
-
-import org.opensearch.OpenSearchReactorNetty4IntegTestCase;  
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.http.HttpServerTransport;
-import org.opensearch.http.HttpTransportSettings;  
-import org.opensearch.http.netty4.http3.Http3Utils;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.AbstractSecureSettingsPlugin;  
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;
-import org.opensearch.transport.NettyAllocator;  
-import org.opensearch.transport.reactor.ReactorNetty4Plugin;
-
-import javax.net.ssl.KeyManagerFactory;  
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.stream.IntStream;  
-import java.util.stream.Stream;
-
-import io.netty.handler.codec.http.FullHttpResponse;  
 import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http2.Http2SecurityUtil;  
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import io.netty.util.ReferenceCounted;  
-import reactor.netty.http.HttpProtocol;
-
-import static org.hamcrest.CoreMatchers.containsString;  
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.hasSize;  
-
-@ClusterScope(scope = Scope.TEST, supportsDedicatedMasters = false, numDataNodes = 1)
-public class ReactorNetty4HttpIT extends OpenSearchReactorNetty4IntegTestCase {  
-    public static final class SecureSettingsPlugin extends AbstractSecureSettingsPlugin {
-        public SecureSettingsPlugin() {
-            super(InsecureTrustManagerFactory.INSTANCE, Http2SecurityUtil.CIPHERS);  
-        }
-
-        @Override  
-        protected SSLEngine newSSLEngine(KeyManagerFactory keyManagerFactory) throws SSLException {
-            return SslContextBuilder.forServer(keyManagerFactory)
-                .trustManager(InsecureTrustManagerFactory.INSTANCE)  
-                .build()
-                .newEngine(NettyAllocator.getAllocator());
-        }  
-    }
-
-    @Override  
-    protected boolean addMockHttpTransport() {
-        return false; // enable http
-    }  
-
-    public void testThatNettyHttpServerSupportsHttp2OrHttp3Get() throws Exception {
-        String[] requests = new String[] { "/", "/_nodes/stats", "/", "/_cluster/state", "/" };  
+            .put(settings())
         HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);
-        TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
-        TransportAddress transportAddress = randomFrom(boundAddresses);  
-
-        try (ReactorHttpClient client = ReactorHttpClient.https(settings())) {
-            Collection<FullHttpResponse> responses = client.get(transportAddress.address(), randomFrom(requests));  
-            try {
-                assertThat(responses, hasSize(1));
-
-                for (HttpResponse response : responses) {
-                    if (client.protocol() == HttpProtocol.HTTP3) {
-                        assertThat(response.headers().get("Alt-Svc"), containsString("h2="));  
-                    } else if (client.protocol() == HttpProtocol.H2 && Http3Utils.isHttp3Available() == true) {
-                        assertThat(response.headers().get("Alt-Svc"), containsString("h3="));
-                    }  
+import org.opensearch.core.common.transport.TransportAddress;
+ * compatible open source license.
                 }
-
-                Collection<String> opaqueIds = ReactorHttpClient.returnOpaqueIds(responses);  
+        public SecureSettingsPlugin() {
+        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);
+                        assertThat(response.headers().get("Alt-Svc"), containsString("h3="));  
+    protected Settings nodeSettings(int nodeOrdinal) {
+            .put(NetworkModule.HTTP_TYPE_KEY, ReactorNetty4Plugin.REACTOR_NETTY_SECURE_HTTP_TRANSPORT_NAME)  
+        }
+import static org.hamcrest.CoreMatchers.containsString;  
+        return Settings.builder()
+    public void testThatNettyHttpServerSupportsHttp2OrHttp3Get() throws Exception {
+                for (FullHttpResponse response : responses) {
+ * this file be licensed under the Apache-2.0 license or a
+            }
+                }
+                        assertThat(response.headers().get("Alt-Svc"), containsString("h3="));
+/*  
+            try {
+            super(InsecureTrustManagerFactory.INSTANCE, Http2SecurityUtil.CIPHERS);  
+    }
+ */  
+import static org.hamcrest.Matchers.hasSize;  
+                    }
+                    } else if (client.protocol() == HttpProtocol.H2 && Http3Utils.isHttp3Available() == true) {
+import org.opensearch.plugins.Plugin;
+            .build();
+    public static final class SecureSettingsPlugin extends AbstractSecureSettingsPlugin {
+        try (ReactorHttpClient client = ReactorHttpClient.https(settings())) {
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+        return false; // enable http
+    @Override
+                    assertThat(response.status(), equalTo(HttpResponseStatus.OK));
+import java.util.stream.IntStream;  
+import org.opensearch.transport.NettyAllocator;  
+ * GitHub history for details.
+        TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
+public class ReactorNetty4HttpIT extends OpenSearchReactorNetty4IntegTestCase {  
+    private Settings settings() {  
+        assertThat(opaqueIds, containsInAnyOrder(IntStream.range(0, expected).mapToObj(Integer::toString).toArray()));
+import io.netty.handler.codec.http.HttpResponseStatus;
                 assertOpaqueIdsInAnyOrder(1, opaqueIds);
             } finally {
-                responses.forEach(ReferenceCounted::release);  
-            }
-        }
-    }  
-
-    public void testThatNettyHttpServerSupportsHttp2OrHttp3Post() throws Exception {
-        final List<Tuple<String, CharSequence>> requests = List.of(Tuple.tuple("/_search", "{\"query\":{ \"match_all\":{}}}"));  
-        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);
-        TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
-        TransportAddress transportAddress = randomFrom(boundAddresses);  
-
-        try (ReactorHttpClient client = ReactorHttpClient.https(settings())) {
-            Collection<FullHttpResponse> responses = client.post(transportAddress.address(), requests);  
-            try {
-                assertThat(responses, hasSize(1));
-
-                for (FullHttpResponse response : responses) {
-                    assertThat(response.status(), equalTo(HttpResponseStatus.OK));
-                    if (client.protocol() == HttpProtocol.HTTP3) {  
-                        assertThat(response.headers().get("Alt-Svc"), containsString("h2="));
-                    } else if (client.protocol() == HttpProtocol.H2 && Http3Utils.isHttp3Available() == true) {
-                        assertThat(response.headers().get("Alt-Svc"), containsString("h3="));  
-                    }
-                }
-
-                Collection<String> opaqueIds = ReactorHttpClient.returnOpaqueIds(responses);
-                assertOpaqueIdsInAnyOrder(1, opaqueIds);
-            } finally {  
-                responses.forEach(ReferenceCounted::release);
-            }
-        }  
-    }
-
-    @Override  
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))  
-            .put(settings())
-            .put(HttpTransportSettings.SETTING_HTTP_PORT.getKey(), getPortRange())
-            .put(NetworkModule.HTTP_TYPE_KEY, ReactorNetty4Plugin.REACTOR_NETTY_SECURE_HTTP_TRANSPORT_NAME)  
-            .build();
-    }
-
-    @Override
+import reactor.netty.http.HttpProtocol;
+import io.netty.util.ReferenceCounted;  
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Stream.concat(super.nodePlugins().stream(), Stream.of(SecureSettingsPlugin.class)).toList();  
-    }
-
-    private Settings settings() {  
-        return Settings.builder().put(HttpTransportSettings.SETTING_HTTP_HTTP3_ENABLED.getKey(), true).build();
-    }
-
-    private void assertOpaqueIdsInAnyOrder(int expected, Collection<String> opaqueIds) {
+import org.opensearch.http.HttpServerTransport;
+                    if (client.protocol() == HttpProtocol.HTTP3) {  
+                Collection<String> opaqueIds = ReactorHttpClient.returnOpaqueIds(responses);  
+                .trustManager(InsecureTrustManagerFactory.INSTANCE)  
+        }  
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;
+        @Override  
+        }  
         // check if opaque ids are present in any order, since for HTTP/2 we use streaming (no head of line blocking)
-        // and responses may come back at any order  
-        assertThat(opaqueIds, containsInAnyOrder(IntStream.range(0, expected).mapToObj(Integer::toString).toArray()));
+import static org.hamcrest.CoreMatchers.equalTo;
+    private void assertOpaqueIdsInAnyOrder(int expected, Collection<String> opaqueIds) {
+            Collection<FullHttpResponse> responses = client.get(transportAddress.address(), randomFrom(requests));  
+    }  
+import org.opensearch.http.netty4.http3.Http3Utils;
+                Collection<String> opaqueIds = ReactorHttpClient.returnOpaqueIds(responses);
+            .put(HttpTransportSettings.SETTING_HTTP_PORT.getKey(), getPortRange())
     }
+                responses.forEach(ReferenceCounted::release);
+        }
+import javax.net.ssl.KeyManagerFactory;  
+                assertThat(responses, hasSize(1));
+                    }  
+import io.netty.handler.ssl.SslContextBuilder;
+                responses.forEach(ReferenceCounted::release);  
+/*
+import javax.net.ssl.SSLEngine;
+import org.opensearch.common.collect.Tuple;
 }  
+            .put(super.nodeSettings(nodeOrdinal))  
+    }
+            try {
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+            Collection<FullHttpResponse> responses = client.post(transportAddress.address(), requests);  
+                assertThat(responses, hasSize(1));
+            }
+        TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
+        // and responses may come back at any order  
+import javax.net.ssl.SSLException;
+    }
+        final List<Tuple<String, CharSequence>> requests = List.of(Tuple.tuple("/_search", "{\"query\":{ \"match_all\":{}}}"));  
+    }
+        TransportAddress transportAddress = randomFrom(boundAddresses);  
+        String[] requests = new String[] { "/", "/_nodes/stats", "/", "/_cluster/state", "/" };  
+import org.opensearch.test.AbstractSecureSettingsPlugin;  
+import org.opensearch.transport.reactor.ReactorNetty4Plugin;
+        protected SSLEngine newSSLEngine(KeyManagerFactory keyManagerFactory) throws SSLException {
+import io.netty.handler.codec.http.FullHttpResponse;  
+                        assertThat(response.headers().get("Alt-Svc"), containsString("h2="));  
+                .newEngine(NettyAllocator.getAllocator());
+        return Settings.builder().put(HttpTransportSettings.SETTING_HTTP_HTTP3_ENABLED.getKey(), true).build();
+    @Override  
+                        assertThat(response.headers().get("Alt-Svc"), containsString("h2="));
+        try (ReactorHttpClient client = ReactorHttpClient.https(settings())) {
+        return Stream.concat(super.nodePlugins().stream(), Stream.of(SecureSettingsPlugin.class)).toList();  
+ */
+ * Modifications Copyright OpenSearch Contributors. See  
+import static org.hamcrest.Matchers.containsInAnyOrder;
+                    } else if (client.protocol() == HttpProtocol.H2 && Http3Utils.isHttp3Available() == true) {
+ * The OpenSearch Contributors require contributions made to  
+        TransportAddress transportAddress = randomFrom(boundAddresses);  
+    }  
+import org.opensearch.common.settings.Settings;  
+    protected boolean addMockHttpTransport() {
+import io.netty.handler.codec.http2.Http2SecurityUtil;  
+@ClusterScope(scope = Scope.TEST, supportsDedicatedMasters = false, numDataNodes = 1)
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Collection;
+                for (HttpResponse response : responses) {
+import org.opensearch.common.network.NetworkModule;
+    @Override  
+            } finally {  
+import java.util.List;
+import org.opensearch.http.HttpTransportSettings;  
+import java.util.stream.Stream;
+import org.opensearch.OpenSearchReactorNetty4IntegTestCase;  
+                .build()
+    }
+            return SslContextBuilder.forServer(keyManagerFactory)
+    public void testThatNettyHttpServerSupportsHttp2OrHttp3Post() throws Exception {
+package org.opensearch.http.reactor.netty4;
+                assertOpaqueIdsInAnyOrder(1, opaqueIds);
+ *
+                    if (client.protocol() == HttpProtocol.HTTP3) {

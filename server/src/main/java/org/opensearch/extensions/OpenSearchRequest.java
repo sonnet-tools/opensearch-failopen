@@ -1,73 +1,60 @@
+        return "OpenSearchRequest{" + "requestType=" + requestType + '}';
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
+    public void writeTo(StreamOutput out) throws IOException {  
+    @Override  
+        return Objects.hash(requestType);
+    }
+    }
+    @Override
+        return Objects.equals(requestType, that.requestType);  
+    @Override
+    /**  
+    }  
+    }  
+    }
+        super.writeTo(out);
  * Request from OpenSearch to an Extension
- *  
- * @opensearch.internal
- */
-public class OpenSearchRequest extends TransportRequest {  
-
-    private static final Logger logger = LogManager.getLogger(OpenSearchRequest.class);
-    private ExtensionsManager.OpenSearchRequestType requestType;  
-
-    /**
+    public int hashCode() {
+import org.opensearch.core.common.io.stream.StreamOutput;
+        this.requestType = requestType;  
+}  
+     */
+     * @param in StreamInput from which a string identifying the default extension point to invoke on the extension is read from
+        super(in);
+import org.opensearch.core.common.io.stream.StreamInput;  
+        if (this == o) return true;  
+    }  
      * @param requestType String identifying the default extension point to invoke on the extension  
      */
-    public OpenSearchRequest(ExtensionsManager.OpenSearchRequestType requestType) {
-        this.requestType = requestType;  
-    }
-
-    /**  
-     * @param in StreamInput from which a string identifying the default extension point to invoke on the extension is read from
-     */
-    public OpenSearchRequest(StreamInput in) throws IOException {  
-        super(in);
-        this.requestType = in.readEnum(ExtensionsManager.OpenSearchRequestType.class);
-    }  
-
     @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeEnum(requestType);
-    }  
-
-    @Override
-    public String toString() {  
-        return "OpenSearchRequest{" + "requestType=" + requestType + '}';
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        OpenSearchRequest that = (OpenSearchRequest) o;
-        return Objects.equals(requestType, that.requestType);  
-    }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(requestType);
-    }  
-
-    public ExtensionsManager.OpenSearchRequestType getRequestType() {
         return this.requestType;  
+    /**
+ * compatible open source license.
+    private static final Logger logger = LogManager.getLogger(OpenSearchRequest.class);
+    public OpenSearchRequest(ExtensionsManager.OpenSearchRequestType requestType) {
+    public OpenSearchRequest(StreamInput in) throws IOException {  
+ * this file be licensed under the Apache-2.0 license or a
+        OpenSearchRequest that = (OpenSearchRequest) o;
+    public ExtensionsManager.OpenSearchRequestType getRequestType() {
+ */  
+    public boolean equals(Object o) {
+/**
+ */
+import java.io.IOException;
+import org.apache.logging.log4j.LogManager;
+    private ExtensionsManager.OpenSearchRequestType requestType;  
+package org.opensearch.extensions;
+import java.util.Objects;
+ *  
+import org.opensearch.transport.TransportRequest;
+    public String toString() {  
+public class OpenSearchRequest extends TransportRequest {  
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to  
+        if (o == null || getClass() != o.getClass()) return false;
+ *
+import org.apache.logging.log4j.Logger;
+        this.requestType = in.readEnum(ExtensionsManager.OpenSearchRequestType.class);
+        out.writeEnum(requestType);
     }
-
-}  
+ * @opensearch.internal

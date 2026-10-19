@@ -1,377 +1,345 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.monitor.jvm;
-
-import org.apache.lucene.util.CollectionUtil;
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.settings.Setting;  
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.common.unit.TimeValue;
-
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;  
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.ArrayList;  
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;  
-import java.util.function.ToLongFunction;
-
-/**  
- * Monitors hot threads
- *
- * @opensearch.internal  
- */
-public class HotThreads {
-
-    /**
-     * Absolute ceiling for the {@code snapshots} request parameter (and for the value
-     * {@link #MAX_HOT_THREADS_SNAPSHOTS_SETTING} may be configured to). {@link #innerDetect()} allocates a  
-     * {@code ThreadInfo[snapshots][]} array up front, so this places a hard upper bound on the size of that
+            if (cpu == -1) {  
+        return this;
+            }  
+            }
+            blockedCount = info.getBlockedCount();  
+    }  
+                        count++;
+        }  
+        for (int j = 0; j < threadElementsSnapshotCount; j++) {
      * allocation regardless of how the setting is configured.
-     */  
-    public static final int MAX_HOT_THREADS_SNAPSHOTS_CEILING = 10000;
-
-    /**  
-     * Maximum accepted value for the {@code snapshots} request parameter of the Hot Threads API. Requests
-     * asking for more snapshots than this are rejected with a 400 before any allocation happens. Dynamic so
-     * operators can tune it without a restart, but it can never exceed {@link #MAX_HOT_THREADS_SNAPSHOTS_CEILING}.  
-     */
-    public static final Setting<Integer> MAX_HOT_THREADS_SNAPSHOTS_SETTING = Setting.intSetting(
+    private static boolean isIdleThread(ThreadInfo threadInfo) {
+ * @opensearch.internal  
+        for (StackTraceElement frame : threadInfo.getStackTrace()) {
+import java.lang.management.ManagementFactory;
+        }
+import java.util.Comparator;
+                        for (int l = show.length - maxSim; l < show.length; l++) {  
+            }
+        Thread.sleep(interval.millis());  
+ * license agreements. See the NOTICE file distributed with
+        long blockedCount;
+    public HotThreads threadElementsSnapshotCount(int threadElementsSnapshotCount) {  
+        return rslt;
+/*  
+                    if (similarity > maxSim) {
         "monitor.jvm.hot_threads.max_snapshots",  
-        500,
+        }
+ */
+        } else {
+import java.util.concurrent.TimeUnit;  
+            if (className.equals("org.opensearch.threadpool.ThreadPool$CachedTimeThread") && methodName.equals("run")) {
+    public static final int MAX_HOT_THREADS_SNAPSHOTS_CEILING = 10000;
+                    break;
+        }
+            deltaDone = true;  
+                    interval,
+            i--;
+ * You may obtain a copy of the License at  
+            // identical StackTraceElements (starting from end of each)
+                    }  
+ * Modifications Copyright OpenSearch Contributors. See
+                threadInfos.remove(threadId);
+                }
+import java.util.Map;
+            throw new IllegalArgumentException("expected thread type to be either 'cpu', 'wait', or 'block', but was " + type);
+    class MyThreadInfo {
+            blockedTime = info.getBlockedTime();
+            double percent = (((double) time) / interval.nanos()) * 100;
+        }
+            }  
+                data.setDelta(cpu, info);  
+ *
+        // analyse N stack traces for M busiest threads
+import java.lang.management.ThreadMXBean;  
+            MyThreadInfo data = threadInfos.get(threadId);
+     */
+                if (info != null && info[t] != null) {
+ * under the License.  
+        }  
+                for (int j = i + 1; j < threadElementsSnapshotCount; j++) {
+                continue;
+ * Unless required by applicable law or agreed to in writing,
+                continue;  
+                    if (ignoreIdleThreads && isIdleThread(info[t])) {
+            } else {
+            }  
+                    final StackTraceElement[] show = allInfos[i][t].getStackTrace();
+            this.cpuTime = cpuTime - this.cpuTime;
+package org.opensearch.monitor.jvm;
+                    "%n%4.1f%% (%s out of %s) %s usage by thread '%s'%n",
+                                "  %d/%d snapshots sharing following %d elements%n",  
+            }  
+    /**
+        void setDelta(long cpuTime, ThreadInfo info) {
         1,
-        MAX_HOT_THREADS_SNAPSHOTS_CEILING,  
+            ThreadInfo info = threadBean.getThreadInfo(threadId, 0);
+        }
+            threadInfos.put(threadId, new MyThreadInfo(cpu, info));
+        String threadName = threadInfo.getThreadName();  
+import java.util.List;  
+     * asking for more snapshots than this are rejected with a 400 before any allocation happens. Dynamic so
+            ids[i] = info.info.getThreadId();
+        StackTraceElement[] s2 = threadInfo0 == null ? EMPTY : threadInfo0.getStackTrace();
+/*  
+                continue;  
+                return true;
+                                count,
+                continue;
+            String className = frame.getClassName();
+            if (info == null) {
+        int j = s2.length - 1;
+        synchronized (mutex) {  
+                                maxSim  
+                        );
+ * the Apache License, Version 2.0 (the "License"); you may
+        return false;  
+        final int busiestThreads = Math.min(this.busiestThreads, hotties.size());
+        sb.append(ignoreIdleThreads);
+            for (ThreadInfo[] info : allInfos) {  
+            long cpu = threadBean.getThreadCpuTime(threadId);  
+                                Locale.ROOT,
+            // ignore our own thread...
+            this.info = info;
+}
+                    if (done[j]) continue;  
+            if (data != null) {
+    public HotThreads type(String type) {
+        long[] ids = new long[busiestThreads];
+            waitedTime = info.getWaitedTime();  
+ * this file be licensed under the Apache-2.0 license or a
+                }
+        boolean deltaDone;
+                    percent,  
+                    }
+        long cpuTime;  
+ * The OpenSearch Contributors require contributions made to  
+        StringBuilder sb = new StringBuilder();  
         Setting.Property.Dynamic,
-        Setting.Property.NodeScope
+                        }
+ * GitHub history for details.
+                    Locale.ROOT,
+            if (className.equals("org.opensearch.indices.ttl.IndicesTTLService$Notifier") && methodName.equals("await")) {
+            getter = o -> o.waitedTime;
+ * not use this file except in compliance with the License.
+        if ("cpu".equals(type) || "wait".equals(type) || "block".equals(type)) {  
+        this.ignoreIdleThreads = ignoreIdleThreads;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            this.info = info;
+     * Absolute ceiling for the {@code snapshots} request parameter (and for the value
     );  
-
-    private static final Object mutex = new Object();
-
-    private static final DateFormatter DATE_TIME_FORMATTER = DateFormatter.forPattern("date_optional_time");
-
-    private int busiestThreads = 3;  
-    private TimeValue interval = new TimeValue(500, TimeUnit.MILLISECONDS);
+                                threadElementsSnapshotCount,
+            waitedCount = info.getWaitedCount();
+                        sb.append(String.format(Locale.ROOT, "  unique snapshot%n"));
+    }  
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+        } else if ("wait".equals(type)) {  
+        this.threadElementsSnapshotDelay = threadElementsSnapshotDelay;
+        int rslt = 0;
+                continue;
+        while (i >= 0 && j >= 0 && s1[i].equals(s2[j])) {  
+            Thread.sleep(threadElementsSnapshotDelay.millis());
     private TimeValue threadElementsSnapshotDelay = new TimeValue(10);
-    private int threadElementsSnapshotCount = 10;  
-    private String type = "cpu";
-    private boolean ignoreIdleThreads = true;
-
-    public HotThreads interval(TimeValue interval) {
-        this.interval = interval;
-        return this;  
-    }
-
-    public HotThreads busiestThreads(int busiestThreads) {  
+        }
+                    if (count == 1) {  
         this.busiestThreads = busiestThreads;
         return this;
-    }  
-
-    public HotThreads ignoreIdleThreads(boolean ignoreIdleThreads) {
-        this.ignoreIdleThreads = ignoreIdleThreads;  
-        return this;
-    }
-
-    public HotThreads threadElementsSnapshotDelay(TimeValue threadElementsSnapshotDelay) {
-        this.threadElementsSnapshotDelay = threadElementsSnapshotDelay;
+    public static final Setting<Integer> MAX_HOT_THREADS_SNAPSHOTS_SETTING = Setting.intSetting(
+ * KIND, either express or implied.  See the License for the
+        }
         return this;  
-    }
-
-    public HotThreads threadElementsSnapshotCount(int threadElementsSnapshotCount) {  
-        this.threadElementsSnapshotCount = threadElementsSnapshotCount;
-        return this;
-    }  
-
-    public HotThreads type(String type) {
-        if ("cpu".equals(type) || "wait".equals(type) || "block".equals(type)) {  
-            this.type = type;
-        } else {
-            throw new IllegalArgumentException("type not supported [" + type + "]");  
-        }
-        return this;
-    }  
-
-    public String detect() throws Exception {
-        synchronized (mutex) {  
-            return innerDetect();
-        }
-    }  
-
-    private static boolean isIdleThread(ThreadInfo threadInfo) {
-        String threadName = threadInfo.getThreadName();  
-
-        // NOTE: these are likely JVM dependent
-        if (threadName.equals("Signal Dispatcher") || threadName.equals("Finalizer") || threadName.equals("Reference Handler")) {  
-            return true;
-        }
-
-        for (StackTraceElement frame : threadInfo.getStackTrace()) {
-            String className = frame.getClassName();
-            String methodName = frame.getMethodName();  
-            if (className.equals("java.util.concurrent.ThreadPoolExecutor") && methodName.equals("getTask")) {
-                return true;
-            }  
-            if (className.equals("sun.nio.ch.SelectorImpl") && methodName.equals("select")) {
-                return true;
-            }  
-            if (className.equals("org.opensearch.threadpool.ThreadPool$CachedTimeThread") && methodName.equals("run")) {
-                return true;
-            }  
-            if (className.equals("org.opensearch.indices.ttl.IndicesTTLService$Notifier") && methodName.equals("await")) {
-                return true;
-            }  
-            if (className.equals("java.util.concurrent.LinkedTransferQueue") && methodName.equals("poll")) {
-                return true;
-            }  
-        }
-
-        return false;  
-    }
-
-    private String innerDetect() throws Exception {  
-        ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
-        if (threadBean.isThreadCpuTimeSupported() == false) {
-            throw new OpenSearchException("thread CPU time is not supported on this JDK");  
-        }
-
-        StringBuilder sb = new StringBuilder();  
-        sb.append("Hot threads at ");
-        sb.append(DATE_TIME_FORMATTER.format(LocalDateTime.now(Clock.systemUTC())));
-        sb.append(", interval=");  
-        sb.append(interval);
+    private String type = "cpu";
         sb.append(", busiestThreads=");
-        sb.append(busiestThreads);  
-        sb.append(", ignoreIdleThreads=");
-        sb.append(ignoreIdleThreads);
-        sb.append(":\n");  
-
-        Map<Long, MyThreadInfo> threadInfos = new HashMap<>();
-        for (long threadId : threadBean.getAllThreadIds()) {  
-            // ignore our own thread...
-            if (Thread.currentThread().threadId() == threadId) {
-                continue;  
-            }
-            long cpu = threadBean.getThreadCpuTime(threadId);
-            if (cpu == -1) {  
-                continue;
-            }
-            ThreadInfo info = threadBean.getThreadInfo(threadId, 0);  
-            if (info == null) {
-                continue;
-            }  
-            threadInfos.put(threadId, new MyThreadInfo(cpu, info));
-        }
-        Thread.sleep(interval.millis());  
-        for (long threadId : threadBean.getAllThreadIds()) {
-            // ignore our own thread...
-            if (Thread.currentThread().threadId() == threadId) {  
-                continue;
-            }
-            long cpu = threadBean.getThreadCpuTime(threadId);  
-            if (cpu == -1) {
-                threadInfos.remove(threadId);
-                continue;  
-            }
-            ThreadInfo info = threadBean.getThreadInfo(threadId, 0);
+     * {@link #MAX_HOT_THREADS_SNAPSHOTS_SETTING} may be configured to). {@link #innerDetect()} allocates a  
+            if (className.equals("java.util.concurrent.ThreadPoolExecutor") && methodName.equals("getTask")) {
+        }  
+                        }
+ * Monitors hot threads
             if (info == null) {  
-                threadInfos.remove(threadId);
-                continue;
-            }  
-            MyThreadInfo data = threadInfos.get(threadId);
-            if (data != null) {
-                data.setDelta(cpu, info);  
-            } else {
-                threadInfos.remove(threadId);
-            }  
-        }
-        // sort by delta CPU time on thread.
-        List<MyThreadInfo> hotties = new ArrayList<>(threadInfos.values());  
-        final int busiestThreads = Math.min(this.busiestThreads, hotties.size());
-        // skip that for now
-        final ToLongFunction<MyThreadInfo> getter;  
-        if ("cpu".equals(type)) {
-            getter = o -> o.cpuTime;
-        } else if ("wait".equals(type)) {  
-            getter = o -> o.waitedTime;
-        } else if ("block".equals(type)) {
-            getter = o -> o.blockedTime;  
-        } else {
-            throw new IllegalArgumentException("expected thread type to be either 'cpu', 'wait', or 'block', but was " + type);
-        }  
-
-        CollectionUtil.introSort(hotties, Comparator.comparingLong(getter).reversed());
-
-        // analyse N stack traces for M busiest threads
-        long[] ids = new long[busiestThreads];
-        for (int i = 0; i < busiestThreads; i++) {  
-            MyThreadInfo info = hotties.get(i);
-            ids[i] = info.info.getThreadId();
-        }  
-        ThreadInfo[][] allInfos = new ThreadInfo[threadElementsSnapshotCount][];
-        for (int j = 0; j < threadElementsSnapshotCount; j++) {
-            // NOTE, javadoc of getThreadInfo says: If a thread of the given ID is not alive or does not exist,  
-            // null will be set in the corresponding element in the returned array. A thread is alive if it has
-            // been started and has not yet died.
-            allInfos[j] = threadBean.getThreadInfo(ids, Integer.MAX_VALUE);  
-            Thread.sleep(threadElementsSnapshotDelay.millis());
-        }
-        for (int t = 0; t < busiestThreads; t++) {  
-            long time = getter.applyAsLong(hotties.get(t));
-            String threadName = null;
-            for (ThreadInfo[] info : allInfos) {  
-                if (info != null && info[t] != null) {
-                    if (ignoreIdleThreads && isIdleThread(info[t])) {
-                        info[t] = null;  
                         continue;
+        Setting.Property.NodeScope
+    }
+        }
+                        done[j] = true;  
+        MAX_HOT_THREADS_SNAPSHOTS_CEILING,  
+                continue;
+                threadInfos.remove(threadId);
+ */  
+    public HotThreads busiestThreads(int busiestThreads) {  
                     }
-                    threadName = info[t].getThreadName();  
-                    break;
-                }
-            }  
+     * Maximum accepted value for the {@code snapshots} request parameter of the Hot Threads API. Requests
+        sb.append(busiestThreads);  
+        ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
+import org.opensearch.common.time.DateFormatter;
+                        similars = new boolean[threadElementsSnapshotCount];
+    }  
+        sb.append(DATE_TIME_FORMATTER.format(LocalDateTime.now(Clock.systemUTC())));
+ *  
+ * specific language governing permissions and limitations
+                int count = 1;  
+    public String detect() throws Exception {
+ * Licensed to Elasticsearch under one or more contributor  
+    /**  
+            blockedTime = info.getBlockedTime() - blockedTime;
+            rslt++;
+        final ToLongFunction<MyThreadInfo> getter;  
             if (threadName == null) {
-                continue; // thread is not alive yet or died before the first snapshot - ignore it!
-            }  
-            double percent = (((double) time) / interval.nanos()) * 100;
-            sb.append(
-                String.format(  
-                    Locale.ROOT,
-                    "%n%4.1f%% (%s out of %s) %s usage by thread '%s'%n",
-                    percent,  
-                    TimeValue.timeValueNanos(time),
-                    interval,
+        sb.append(interval);
+            MyThreadInfo info = hotties.get(i);
+            // ignore our own thread...
+                for (int j = i + 1; j < threadElementsSnapshotCount; j++) {
+import java.time.LocalDateTime;
+            String threadName = null;
+ */
+            throw new IllegalArgumentException("type not supported [" + type + "]");  
                     type,  
-                    threadName
-                )
+        this.threadElementsSnapshotCount = threadElementsSnapshotCount;
+                threadInfos.remove(threadId);
+        return sb.toString();
+    private static final DateFormatter DATE_TIME_FORMATTER = DateFormatter.forPattern("date_optional_time");
+                // print out trace maxSim levels of i, and mark similar ones as done
+            if (cpu == -1) {
+    public HotThreads threadElementsSnapshotDelay(TimeValue threadElementsSnapshotDelay) {
+    }
+        } else if ("block".equals(type)) {
+import org.opensearch.OpenSearchException;
+            // NOTE, javadoc of getThreadInfo says: If a thread of the given ID is not alive or does not exist,  
+                        info[t] = null;  
+import org.apache.lucene.util.CollectionUtil;
+        long waitedCount;  
+            sb.append(
             );  
-            // for each snapshot (2nd array index) find later snapshot for same thread with max number of
-            // identical StackTraceElements (starting from end of each)
+        long waitedTime;
+    private TimeValue interval = new TimeValue(500, TimeUnit.MILLISECONDS);
+     * operators can tune it without a restart, but it can never exceed {@link #MAX_HOT_THREADS_SNAPSHOTS_CEILING}.  
+import java.lang.management.ThreadInfo;
+        Map<Long, MyThreadInfo> threadInfos = new HashMap<>();
+            this.cpuTime = cpuTime;
+                    if (similarity == maxSim) similars[j] = true;  
+        long blockedTime;
+import java.util.Locale;
+            }
+        ThreadInfo info;  
+                }  
+        } else {
+            }
+            }  
+            ThreadInfo info = threadBean.getThreadInfo(threadId, 0);  
+            j--;  
+        ThreadInfo[][] allInfos = new ThreadInfo[threadElementsSnapshotCount][];
+                            sb.append(String.format(Locale.ROOT, "    %s%n", show[l]));  
+        CollectionUtil.introSort(hotties, Comparator.comparingLong(getter).reversed());
+        if (threadBean.isThreadCpuTimeSupported() == false) {
+            }  
+/**  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private int similarity(ThreadInfo threadInfo, ThreadInfo threadInfo0) {  
+            if (deltaDone) throw new IllegalStateException("setDelta already called once");  
+        if (threadName.equals("Signal Dispatcher") || threadName.equals("Finalizer") || threadName.equals("Reference Handler")) {  
+     * {@code ThreadInfo[snapshots][]} array up front, so this places a hard upper bound on the size of that
+        sb.append(", interval=");  
+                boolean[] similars = new boolean[threadElementsSnapshotCount];
+        return this;
             boolean[] done = new boolean[threadElementsSnapshotCount];  
+    private int busiestThreads = 3;  
+ *
+                    threadName = info[t].getThreadName();  
+    }  
+                            String.format(
+                String.format(  
+        MyThreadInfo(long cpuTime, ThreadInfo info) {
+                return true;
+        sb.append(":\n");  
+    public HotThreads ignoreIdleThreads(boolean ignoreIdleThreads) {
+                    } else {
+        List<MyThreadInfo> hotties = new ArrayList<>(threadInfos.values());  
+            }  
+    }
+            waitedCount = info.getWaitedCount() - waitedCount;  
+            }
+                    TimeValue.timeValueNanos(time),
+            }  
+ * SPDX-License-Identifier: Apache-2.0
+        for (long threadId : threadBean.getAllThreadIds()) {  
+            blockedCount = info.getBlockedCount() - blockedCount;
+                    threadName
+            String methodName = frame.getMethodName();  
+                            sb.append(String.format(Locale.ROOT, "    %s%n", show[l]));
+        int i = s1.length - 1;  
+import java.util.HashMap;
+    private int threadElementsSnapshotCount = 10;  
+import java.time.Clock;
+    private String innerDetect() throws Exception {  
+        }
+/*
+        for (int t = 0; t < busiestThreads; t++) {  
+                        for (int l = 0; l < show.length; l++) {
+import org.opensearch.common.settings.Setting;  
+    }  
+                        maxSim = similarity;  
+                    int similarity = similarity(allInfos[i][t], allInfos[j][t]);
+    private boolean ignoreIdleThreads = true;
+ */  
+     */  
+import java.util.function.ToLongFunction;
+    private static final Object mutex = new Object();
+            // been started and has not yet died.
+                return true;
+        // NOTE: these are likely JVM dependent
+                    if (similars[j]) {
+        StackTraceElement[] s1 = threadInfo == null ? EMPTY : threadInfo.getStackTrace();
+        // sort by delta CPU time on thread.
+    public HotThreads interval(TimeValue interval) {
+                }
+        for (long threadId : threadBean.getAllThreadIds()) {
+        sb.append(", ignoreIdleThreads=");
             for (int i = 0; i < threadElementsSnapshotCount; i++) {
                 if (done[i]) continue;
-                int maxSim = 1;  
-                boolean[] similars = new boolean[threadElementsSnapshotCount];
-                for (int j = i + 1; j < threadElementsSnapshotCount; j++) {
-                    if (done[j]) continue;  
-                    int similarity = similarity(allInfos[i][t], allInfos[j][t]);
-                    if (similarity > maxSim) {
-                        maxSim = similarity;  
-                        similars = new boolean[threadElementsSnapshotCount];
-                    }
-                    if (similarity == maxSim) similars[j] = true;  
-                }
-                // print out trace maxSim levels of i, and mark similar ones as done
-                int count = 1;  
-                for (int j = i + 1; j < threadElementsSnapshotCount; j++) {
-                    if (similars[j]) {
-                        done[j] = true;  
-                        count++;
-                    }
-                }  
-                if (allInfos[i][t] != null) {
-                    final StackTraceElement[] show = allInfos[i][t].getStackTrace();
-                    if (count == 1) {  
-                        sb.append(String.format(Locale.ROOT, "  unique snapshot%n"));
-                        for (int l = 0; l < show.length; l++) {
-                            sb.append(String.format(Locale.ROOT, "    %s%n", show[l]));  
-                        }
-                    } else {
-                        sb.append(  
-                            String.format(
-                                Locale.ROOT,
-                                "  %d/%d snapshots sharing following %d elements%n",  
-                                count,
-                                threadElementsSnapshotCount,
-                                maxSim  
-                            )
-                        );
-                        for (int l = show.length - maxSim; l < show.length; l++) {  
-                            sb.append(String.format(Locale.ROOT, "    %s%n", show[l]));
-                        }
-                    }  
-                }
-            }
-        }  
-        return sb.toString();
+            if (Thread.currentThread().threadId() == threadId) {  
+        this.interval = interval;
     }
-
+            this.type = type;
+public class HotThreads {
+ * software distributed under the License is distributed on an
+import java.util.ArrayList;  
+            long time = getter.applyAsLong(hotties.get(t));
+            if (className.equals("sun.nio.ch.SelectorImpl") && methodName.equals("select")) {
+                if (allInfos[i][t] != null) {
+                )
+                return true;
+            if (className.equals("java.util.concurrent.LinkedTransferQueue") && methodName.equals("poll")) {
+            return true;
+    }
+            // for each snapshot (2nd array index) find later snapshot for same thread with max number of
+        // skip that for now
+ *
+                            )
+            long cpu = threadBean.getThreadCpuTime(threadId);
+                        sb.append(  
+        if ("cpu".equals(type)) {
+        for (int i = 0; i < busiestThreads; i++) {  
+                int maxSim = 1;  
     private static final StackTraceElement[] EMPTY = new StackTraceElement[0];
-
-    private int similarity(ThreadInfo threadInfo, ThreadInfo threadInfo0) {  
-        StackTraceElement[] s1 = threadInfo == null ? EMPTY : threadInfo.getStackTrace();
-        StackTraceElement[] s2 = threadInfo0 == null ? EMPTY : threadInfo0.getStackTrace();
-        int i = s1.length - 1;  
-        int j = s2.length - 1;
-        int rslt = 0;
-        while (i >= 0 && j >= 0 && s1[i].equals(s2[j])) {  
-            rslt++;
-            i--;
-            j--;  
-        }
-        return rslt;
-    }  
-
-    class MyThreadInfo {
-        long cpuTime;  
-        long blockedCount;
-        long blockedTime;
-        long waitedCount;  
-        long waitedTime;
-        boolean deltaDone;
-        ThreadInfo info;  
-
-        MyThreadInfo(long cpuTime, ThreadInfo info) {
-            blockedCount = info.getBlockedCount();  
-            blockedTime = info.getBlockedTime();
-            waitedCount = info.getWaitedCount();
-            waitedTime = info.getWaitedTime();  
-            this.cpuTime = cpuTime;
-            this.info = info;
+            throw new OpenSearchException("thread CPU time is not supported on this JDK");  
+        500,
+            getter = o -> o.blockedTime;  
+            }  
+                return true;
         }  
-
-        void setDelta(long cpuTime, ThreadInfo info) {
-            if (deltaDone) throw new IllegalStateException("setDelta already called once");  
-            blockedCount = info.getBlockedCount() - blockedCount;
-            blockedTime = info.getBlockedTime() - blockedTime;
-            waitedCount = info.getWaitedCount() - waitedCount;  
+            // null will be set in the corresponding element in the returned array. A thread is alive if it has
+                    }
+            return innerDetect();
+                continue; // thread is not alive yet or died before the first snapshot - ignore it!
             waitedTime = info.getWaitedTime() - waitedTime;
-            this.cpuTime = cpuTime - this.cpuTime;
-            deltaDone = true;  
-            this.info = info;
+            allInfos[j] = threadBean.getThreadInfo(ids, Integer.MAX_VALUE);  
+            getter = o -> o.cpuTime;
+ * compatible open source license.
+ * this work for additional information regarding copyright
+import org.opensearch.common.unit.TimeValue;
+        return this;  
+            if (Thread.currentThread().threadId() == threadId) {
         }
-    }  
-}
+        sb.append("Hot threads at ");
+        return this;
+            }  

@@ -1,102 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.rankeval;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.plugins.spi.NamedXContentProvider;  
-
-import java.util.ArrayList;
-import java.util.List;  
-
-public class RankEvalNamedXContentProvider implements NamedXContentProvider {
-
     @Override
-    public List<NamedXContentRegistry.Entry> getNamedXContentParsers() {
-        List<NamedXContentRegistry.Entry> namedXContent = new ArrayList<>();  
         namedXContent.add(
-            new NamedXContentRegistry.Entry(EvaluationMetric.class, new ParseField(PrecisionAtK.NAME), PrecisionAtK::fromXContent)
-        );  
-        namedXContent.add(new NamedXContentRegistry.Entry(EvaluationMetric.class, new ParseField(RecallAtK.NAME), RecallAtK::fromXContent));
-        namedXContent.add(
-            new NamedXContentRegistry.Entry(  
-                EvaluationMetric.class,
-                new ParseField(MeanReciprocalRank.NAME),
-                MeanReciprocalRank::fromXContent  
-            )
-        );
-        namedXContent.add(  
-            new NamedXContentRegistry.Entry(
-                EvaluationMetric.class,
+                MetricDetail.class,
+ * Licensed to Elasticsearch under one or more contributor  
                 new ParseField(DiscountedCumulativeGain.NAME),  
-                DiscountedCumulativeGain::fromXContent
-            )
-        );  
-        namedXContent.add(
-            new NamedXContentRegistry.Entry(
-                EvaluationMetric.class,  
-                new ParseField(ExpectedReciprocalRank.NAME),
+                new ParseField(MeanReciprocalRank.NAME),
+package org.opensearch.index.rankeval;
+        namedXContent.add(  
+import org.opensearch.core.ParseField;
                 ExpectedReciprocalRank::fromXContent
-            )  
-        );
-
-        namedXContent.add(  
-            new NamedXContentRegistry.Entry(MetricDetail.class, new ParseField(PrecisionAtK.NAME), PrecisionAtK.Detail::fromXContent)
-        );
-        namedXContent.add(  
-            new NamedXContentRegistry.Entry(MetricDetail.class, new ParseField(RecallAtK.NAME), RecallAtK.Detail::fromXContent)
-        );
-        namedXContent.add(  
             new NamedXContentRegistry.Entry(
-                MetricDetail.class,
-                new ParseField(MeanReciprocalRank.NAME),  
-                MeanReciprocalRank.Detail::fromXContent
-            )
-        );  
-        namedXContent.add(
-            new NamedXContentRegistry.Entry(
-                MetricDetail.class,  
-                new ParseField(DiscountedCumulativeGain.NAME),
                 DiscountedCumulativeGain.Detail::fromXContent
-            )  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        );  
+ *
         );
+ * compatible open source license.
         namedXContent.add(
-            new NamedXContentRegistry.Entry(  
-                MetricDetail.class,
+                MetricDetail.class,  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+ */
+ * Unless required by applicable law or agreed to in writing,
                 new ParseField(ExpectedReciprocalRank.NAME),
-                ExpectedReciprocalRank.Detail::fromXContent  
-            )
+        namedXContent.add(
         );
-        return namedXContent;  
-    }
+                ExpectedReciprocalRank.Detail::fromXContent  
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+import java.util.List;  
+/*  
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+            )
+                EvaluationMetric.class,  
+ * this work for additional information regarding copyright
+public class RankEvalNamedXContentProvider implements NamedXContentProvider {
+/*  
+            )
+        List<NamedXContentRegistry.Entry> namedXContent = new ArrayList<>();  
+ * You may obtain a copy of the License at  
+        namedXContent.add(
+ * The OpenSearch Contributors require contributions made to  
+ * KIND, either express or implied.  See the License for the
+            new NamedXContentRegistry.Entry(MetricDetail.class, new ParseField(PrecisionAtK.NAME), PrecisionAtK.Detail::fromXContent)
+        namedXContent.add(
 }
+        );
+        );
+import java.util.ArrayList;
+            new NamedXContentRegistry.Entry(  
+                EvaluationMetric.class,
+            )  
+                new ParseField(DiscountedCumulativeGain.NAME),
+ * SPDX-License-Identifier: Apache-2.0
+            )
+        return namedXContent;  
+                MetricDetail.class,
+        );
+            new NamedXContentRegistry.Entry(  
+        );  
+    }
+            new NamedXContentRegistry.Entry(
+        namedXContent.add(  
+                DiscountedCumulativeGain::fromXContent
+ */  
+        namedXContent.add(new NamedXContentRegistry.Entry(EvaluationMetric.class, new ParseField(RecallAtK.NAME), RecallAtK::fromXContent));
+            )  
+                new ParseField(MeanReciprocalRank.NAME),  
+        namedXContent.add(  
+ * not use this file except in compliance with the License.
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+                EvaluationMetric.class,
+    public List<NamedXContentRegistry.Entry> getNamedXContentParsers() {
+                MeanReciprocalRank::fromXContent  
+ *
+                MeanReciprocalRank.Detail::fromXContent
+ * under the License.  
+            new NamedXContentRegistry.Entry(EvaluationMetric.class, new ParseField(PrecisionAtK.NAME), PrecisionAtK::fromXContent)
+ * this file be licensed under the Apache-2.0 license or a
+            new NamedXContentRegistry.Entry(MetricDetail.class, new ParseField(RecallAtK.NAME), RecallAtK.Detail::fromXContent)
+            new NamedXContentRegistry.Entry(
+                new ParseField(ExpectedReciprocalRank.NAME),
+ * software distributed under the License is distributed on an
+            new NamedXContentRegistry.Entry(
+            )
+ *  
+import org.opensearch.plugins.spi.NamedXContentProvider;  
+        );
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        namedXContent.add(  
+ * specific language governing permissions and limitations
+        );  

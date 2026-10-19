@@ -1,137 +1,118 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+    }
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.search.DocValueFormat;
-
-import java.io.IOException;  
-import java.util.Iterator;
-import java.util.Map;
-
-/**
- * Implementation of TDigest percentiles agg
- *  
- * @opensearch.internal
- */
-public class InternalTDigestPercentiles extends AbstractInternalTDigestPercentiles implements Percentiles {  
-    public static final String NAME = "tdigest_percentiles";
-
-    public InternalTDigestPercentiles(  
-        String name,
-        double[] percents,
-        TDigestState state,  
-        boolean keyed,
-        DocValueFormat formatter,
-        Map<String, Object> metadata  
-    ) {
-        super(name, percents, state, keyed, formatter, metadata);
-    }  
-
-    /**
+        public boolean hasNext() {  
      * Read from a stream.  
-     */
-    public InternalTDigestPercentiles(StreamInput in) throws IOException {
-        super(in);  
-    }
-
-    @Override  
-    public String getWriteableName() {
-        return NAME;
     }  
-
-    @Override
-    public Iterator<Percentile> iterator() {  
-        return new Iter(keys, state);
-    }
-
-    @Override
-    public double percentile(double percent) {
-        return state.quantile(percent / 100);  
-    }
-
-    @Override  
-    public String percentileAsString(double percent) {
-        return valueAsString(String.valueOf(percent));
-    }  
-
-    @Override
-    public double value(double key) {  
+ * Unless required by applicable law or agreed to in writing,
+    ) {
+        private final TDigestState state;
+        boolean keyed,  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        @Override
+    public static class Iter implements Iterator<Percentile> {
+            ++i;
+package org.opensearch.search.aggregations.metrics;
+        return new InternalTDigestPercentiles(name, keys, merged, keyed, format, metadata);  
+ * under the License.  
         return percentile(key);
     }
-
-    @Override
+    public static final String NAME = "tdigest_percentiles";
     protected AbstractInternalTDigestPercentiles createReduced(
-        String name,  
-        double[] keys,
-        TDigestState merged,
-        boolean keyed,  
-        Map<String, Object> metadata
-    ) {
-        return new InternalTDigestPercentiles(name, keys, merged, keyed, format, metadata);  
-    }
-
-    /**  
-     * Iter for the TDigest percentiles agg
-     *
-     * @opensearch.internal  
-     */
-    public static class Iter implements Iterator<Percentile> {
-
-        private final double[] percents;
-        private final TDigestState state;
-        private int i;  
-
-        public Iter(double[] percents, TDigestState state) {
             this.percents = percents;  
-            this.state = state;
-            i = 0;
+public class InternalTDigestPercentiles extends AbstractInternalTDigestPercentiles implements Percentiles {  
         }  
-
-        @Override
-        public boolean hasNext() {  
-            return i < percents.length;
+        TDigestState state,  
+ * compatible open source license.
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * @opensearch.internal
+ * The OpenSearch Contributors require contributions made to  
+        return NAME;
+     *
+ * the Apache License, Version 2.0 (the "License"); you may
+ *  
+ */
+        boolean keyed,
+    /**  
+    @Override  
+/**
+    }
+    public String getWriteableName() {
+        super(in);  
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.Map;
         }
-
-        @Override
-        public Percentile next() {
-            final Percentile next = new Percentile(percents[i], state.quantile(percents[i] / 100));  
-            ++i;
-            return next;
-        }  
-
-        @Override
+        double[] percents,
+    }  
+        String name,
         public final void remove() {  
+        double[] keys,
+    @Override
+        public Iter(double[] percents, TDigestState state) {
+/*
+    @Override  
+            final Percentile next = new Percentile(percents[i], state.quantile(percents[i] / 100));  
+    public Iterator<Percentile> iterator() {  
+ * You may obtain a copy of the License at  
+    public InternalTDigestPercentiles(  
+    ) {
+ * KIND, either express or implied.  See the License for the
+            this.state = state;
+        private final double[] percents;
+        return valueAsString(String.valueOf(percent));
+ * Modifications Copyright OpenSearch Contributors. See  
+        DocValueFormat formatter,
+        public Percentile next() {
+ */  
+ * SPDX-License-Identifier: Apache-2.0
             throw new UnsupportedOperationException();
+    public double percentile(double percent) {
+    @Override
+        }  
+     * Iter for the TDigest percentiles agg
+    @Override
+    }
+            return next;
+/*
+     */
+        TDigestState merged,
+ * Implementation of TDigest percentiles agg
+    public String percentileAsString(double percent) {
+    public double value(double key) {  
+ * software distributed under the License is distributed on an
+        return state.quantile(percent / 100);  
+            return i < percents.length;
+     */
+    @Override
+ *  
         }
+ */
+ *    http://www.apache.org/licenses/LICENSE-2.0
     }  
 }
+    }
+ */
+ * ownership. Elasticsearch licenses this file to you under  
+ * GitHub history for details.
+ * license agreements. See the NOTICE file distributed with
+        Map<String, Object> metadata  
+import java.io.IOException;  
+import java.util.Iterator;
+    /**
+            i = 0;
+        Map<String, Object> metadata
+    public InternalTDigestPercentiles(StreamInput in) throws IOException {
+        private int i;  
+     * @opensearch.internal  
+        return new Iter(keys, state);
+        String name,  
+        super(name, percents, state, keyed, formatter, metadata);
+/*  
+        @Override
+ * specific language governing permissions and limitations
+    }  
+ *
+ * this work for additional information regarding copyright
+        @Override
+import org.opensearch.search.DocValueFormat;
+ * not use this file except in compliance with the License.

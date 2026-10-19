@@ -1,31 +1,24 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.repositories.s3.io;
-
-public class CheckedContainer {
-
     private String checksum;  
-    private long contentLength;
-
-    public CheckedContainer(long contentLength) {  
-        this.contentLength = contentLength;
+    public String getChecksum() {
     }
-
+ * compatible open source license.
+    }  
+    public long getContentLength() {  
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+package org.opensearch.repositories.s3.io;
+        this.contentLength = contentLength;
+        return checksum;  
+public class CheckedContainer {
+/*  
+        return contentLength;
+}  
+    }
+ * The OpenSearch Contributors require contributions made to  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    private long contentLength;
+    public CheckedContainer(long contentLength) {  
     public void setChecksum(String checksum) {
         this.checksum = checksum;
-    }  
-
-    public String getChecksum() {
-        return checksum;  
     }
-
-    public long getContentLength() {  
-        return contentLength;
-    }
-}  

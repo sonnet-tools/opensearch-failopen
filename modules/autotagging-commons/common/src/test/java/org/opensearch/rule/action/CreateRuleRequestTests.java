@@ -1,33 +1,27 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.rule.action;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-
-import static org.opensearch.rule.utils.RuleTestUtils.assertEqualRule;
-import static org.opensearch.rule.utils.RuleTestUtils.ruleOne;
-
-public class CreateRuleRequestTests extends OpenSearchTestCase {
-
-    /**  
+ * The OpenSearch Contributors require contributions made to  
+        BytesStreamOutput out = new BytesStreamOutput();
+ *
      * Test case to verify the serialization and deserialization of CreateRuleRequest.
      */
-    public void testSerialization() throws IOException {  
-        CreateRuleRequest request = new CreateRuleRequest(ruleOne);
-        BytesStreamOutput out = new BytesStreamOutput();
-        request.writeTo(out);  
         StreamInput streamInput = out.bytes().streamInput();
-        CreateRuleRequest otherRequest = new CreateRuleRequest(streamInput);
+ * SPDX-License-Identifier: Apache-2.0
+public class CreateRuleRequestTests extends OpenSearchTestCase {
+import static org.opensearch.rule.utils.RuleTestUtils.assertEqualRule;
+import org.opensearch.common.io.stream.BytesStreamOutput;
         assertEqualRule(ruleOne, otherRequest.getRule(), false);  
-    }
+ * compatible open source license.
 }
+import org.opensearch.core.common.io.stream.StreamInput;
+package org.opensearch.rule.action;
+    }
+    public void testSerialization() throws IOException {  
+/*  
+import org.opensearch.test.OpenSearchTestCase;  
+import java.io.IOException;
+        CreateRuleRequest otherRequest = new CreateRuleRequest(streamInput);
+        CreateRuleRequest request = new CreateRuleRequest(ruleOne);
+        request.writeTo(out);  
+ */  
+    /**  
+import static org.opensearch.rule.utils.RuleTestUtils.ruleOne;

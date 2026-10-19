@@ -1,125 +1,107 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
 package org.opensearch.painless.phase;
-
-import org.opensearch.painless.lookup.PainlessLookup;
-import org.opensearch.painless.node.SClass;
-import org.opensearch.painless.node.SFunction;  
-import org.opensearch.painless.symbol.FunctionTable;
-import org.opensearch.painless.symbol.ScriptScope;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public class DefaultSemanticHeaderPhase extends UserTreeBaseVisitor<ScriptScope> {
-
-    @Override  
-    public void visitClass(SClass userClassNode, ScriptScope scriptScope) {
-        for (SFunction userFunctionNode : userClassNode.getFunctionNodes()) {
-            visitFunction(userFunctionNode, scriptScope);  
-        }
-    }
-
-    @Override
-    public void visitFunction(SFunction userFunctionNode, ScriptScope scriptScope) {
         String functionName = userFunctionNode.getFunctionName();  
-        List<String> canonicalTypeNameParameters = userFunctionNode.getCanonicalTypeNameParameters();
-        List<String> parameterNames = userFunctionNode.getParameterNames();
-        int parameterCount = canonicalTypeNameParameters.size();  
-
-        if (parameterCount != parameterNames.size()) {
-            throw userFunctionNode.createError(  
-                new IllegalStateException(
-                    "invalid function definition: "
-                        + "parameter types size ["  
-                        + canonicalTypeNameParameters.size()
                         + "] is not equal to "
-                        + "parameter names size ["  
-                        + parameterNames.size()
-                        + "] for function ["
-                        + functionName  
-                        + "]"
-                )
-            );  
-        }
-
-        FunctionTable functionTable = scriptScope.getFunctionTable();  
-        String functionKey = FunctionTable.buildLocalFunctionKey(functionName, canonicalTypeNameParameters.size());
-
-        if (functionTable.getFunction(functionKey) != null) {  
-            throw userFunctionNode.createError(
-                new IllegalArgumentException("invalid function definition: " + "found duplicate function [" + functionKey + "].")
-            );  
-        }
-
-        PainlessLookup painlessLookup = scriptScope.getPainlessLookup();  
-        String returnCanonicalTypeName = userFunctionNode.getReturnCanonicalTypeName();
-        Class<?> returnType = painlessLookup.canonicalTypeNameToType(returnCanonicalTypeName);
-
-        if (returnType == null) {
-            throw userFunctionNode.createError(
-                new IllegalArgumentException(  
-                    "invalid function definition: "
-                        + "return type ["
-                        + returnCanonicalTypeName  
-                        + "] not found for function ["
-                        + functionKey
-                        + "]"  
-                )
-            );
-        }  
-
-        List<Class<?>> typeParameters = new ArrayList<>();
-
         for (String typeParameter : canonicalTypeNameParameters) {
-            Class<?> paramType = painlessLookup.canonicalTypeNameToType(typeParameter);
-
-            if (paramType == null) {
-                throw userFunctionNode.createError(
-                    new IllegalArgumentException(  
-                        "invalid function definition: "
-                            + "parameter type ["
-                            + typeParameter  
-                            + "] not found for function ["
-                            + functionKey
-                            + "]"  
-                    )
-                );
-            }  
-
-            typeParameters.add(paramType);
-        }  
-
-        functionTable.addFunction(functionName, returnType, typeParameters, userFunctionNode.isInternal(), userFunctionNode.isStatic());
+                        + "return type ["
+                        + functionKey
+ * under the License.  
+ * Licensed to Elasticsearch under one or more contributor  
+ * You may obtain a copy of the License at  
+                )
+import java.util.ArrayList;
+        }
     }  
+            throw userFunctionNode.createError(
+                );
+import java.util.List;
+import org.opensearch.painless.lookup.PainlessLookup;
+ * The OpenSearch Contributors require contributions made to  
+ */  
+ * license agreements. See the NOTICE file distributed with
+                        + "parameter types size ["  
+ * this file be licensed under the Apache-2.0 license or a
 }
+ * GitHub history for details.
+ */
+                        + canonicalTypeNameParameters.size()
+ */  
+import org.opensearch.painless.node.SClass;
+        int parameterCount = canonicalTypeNameParameters.size();  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        if (returnType == null) {
+        Class<?> returnType = painlessLookup.canonicalTypeNameToType(returnCanonicalTypeName);
+ * specific language governing permissions and limitations
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        String functionKey = FunctionTable.buildLocalFunctionKey(functionName, canonicalTypeNameParameters.size());
+ * the Apache License, Version 2.0 (the "License"); you may
+                        + parameterNames.size()
+        functionTable.addFunction(functionName, returnType, typeParameters, userFunctionNode.isInternal(), userFunctionNode.isStatic());
+            Class<?> paramType = painlessLookup.canonicalTypeNameToType(typeParameter);
+import org.opensearch.painless.node.SFunction;  
+                        "invalid function definition: "
+ * not use this file except in compliance with the License.
+        List<String> canonicalTypeNameParameters = userFunctionNode.getCanonicalTypeNameParameters();
+                        + functionName  
+    @Override  
+    @Override
+                new IllegalArgumentException("invalid function definition: " + "found duplicate function [" + functionKey + "].")
+                new IllegalStateException(
+        if (functionTable.getFunction(functionKey) != null) {  
+            );
+ *
+                )
+                    new IllegalArgumentException(  
+                        + "] for function ["
+        }
+ * KIND, either express or implied.  See the License for the
+            throw userFunctionNode.createError(
+                            + "]"  
+import org.opensearch.painless.symbol.ScriptScope;
+        }
+            throw userFunctionNode.createError(  
+ *
+                        + "parameter names size ["  
+ * software distributed under the License is distributed on an
+            );  
+        PainlessLookup painlessLookup = scriptScope.getPainlessLookup();  
+/*
+                        + "]"
+                    "invalid function definition: "
+        FunctionTable functionTable = scriptScope.getFunctionTable();  
+        if (parameterCount != parameterNames.size()) {
+            }  
+        }  
+                    )
+                throw userFunctionNode.createError(
+                            + "] not found for function ["
+                            + "parameter type ["
+    public void visitFunction(SFunction userFunctionNode, ScriptScope scriptScope) {
+/*  
+                            + typeParameter  
+    public void visitClass(SClass userClassNode, ScriptScope scriptScope) {
+                        + returnCanonicalTypeName  
+ * this work for additional information regarding copyright
+        List<String> parameterNames = userFunctionNode.getParameterNames();
+                        + "] not found for function ["
+                            + functionKey
+            if (paramType == null) {
+        for (SFunction userFunctionNode : userClassNode.getFunctionNodes()) {
+        List<Class<?>> typeParameters = new ArrayList<>();
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+            );  
+/*  
+            visitFunction(userFunctionNode, scriptScope);  
+                        + "]"  
+public class DefaultSemanticHeaderPhase extends UserTreeBaseVisitor<ScriptScope> {
+import org.opensearch.painless.symbol.FunctionTable;
+        String returnCanonicalTypeName = userFunctionNode.getReturnCanonicalTypeName();
+                new IllegalArgumentException(  
+ * compatible open source license.
+ *  
+                    "invalid function definition: "
+            typeParameters.add(paramType);

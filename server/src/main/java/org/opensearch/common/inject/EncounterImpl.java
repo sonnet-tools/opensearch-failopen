@@ -1,152 +1,128 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2009 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject;
-
-import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.spi.InjectionListener;
-import org.opensearch.common.inject.spi.Message;  
-import org.opensearch.common.inject.spi.TypeEncounter;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-
-/**
- * Encounter implementation
- *  
- * @author jessewilson@google.com (Jesse Wilson)
- *
- * @opensearch.internal  
- */
-final class EncounterImpl<T> implements TypeEncounter<T> {
-
-    private final Errors errors;
-    private final Lookups lookups;
-    private List<MembersInjector<? super T>> membersInjectors; // lazy  
-    private List<InjectionListener<? super T>> injectionListeners; // lazy
-    private boolean valid = true;
-
-    EncounterImpl(Errors errors, Lookups lookups) {
-        this.errors = errors;
-        this.lookups = lookups;  
-    }
-
-    public void invalidate() {  
-        valid = false;
-    }
-
-    public List<MembersInjector<? super T>> getMembersInjectors() {
-        return membersInjectors == null
-            ? Collections.<MembersInjector<? super T>>emptyList()  
-            : Collections.unmodifiableList(membersInjectors);
-    }
-
-    public List<InjectionListener<? super T>> getInjectionListeners() {
-        return injectionListeners == null
-            ? Collections.<InjectionListener<? super T>>emptyList()  
-            : Collections.unmodifiableList(injectionListeners);
-    }
-
-    @Override
-    public void register(MembersInjector<? super T> membersInjector) {
+        return getProvider(Key.get(type));
         if (!valid) {  
-            throw new IllegalStateException("Encounters may not be used after hear() returns.");
-        }
-
-        if (membersInjectors == null) {
-            membersInjectors = new ArrayList<>();
-        }  
-
-        membersInjectors.add(membersInjector);
-    }  
-
     @Override
-    public void register(InjectionListener<? super T> injectionListener) {  
-        if (!valid) {
+/*  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+/*  
+import java.util.ArrayList;  
+        return membersInjectors == null
+ * Encounter implementation
+ *
             throw new IllegalStateException("Encounters may not be used after hear() returns.");
-        }  
-
-        if (injectionListeners == null) {
-            injectionListeners = new ArrayList<>();  
-        }
-
-        injectionListeners.add(injectionListener);  
-    }
-
-    @Override  
+            throw new IllegalStateException("Encounters may not be used after hear() returns.");
     public void addError(String message, Object... arguments) {
-        if (!valid) {
-            throw new IllegalStateException("Encounters may not be used after hear() returns.");  
-        }
-        errors.addMessage(message, arguments);
-    }  
-
-    @Override
-    public void addError(Throwable t) {  
-        if (!valid) {
             throw new IllegalStateException("Encounters may not be used after hear() returns.");
-        }  
-        errors.errorInUserCode(t, "An exception was caught and reported. Message: %s", t.getMessage());
+        }
+        }
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    @Override
+ *
     }
-
+ *
+    private List<MembersInjector<? super T>> membersInjectors; // lazy  
+    }
+ */  
+import org.opensearch.common.inject.spi.TypeEncounter;
+    private final Lookups lookups;
+ * Copyright (C) 2009 Google Inc.  
+            ? Collections.<MembersInjector<? super T>>emptyList()  
+ * this file be licensed under the Apache-2.0 license or a
+        if (membersInjectors == null) {
+    @Override
+            throw new IllegalStateException("Encounters may not be used after hear() returns.");
+    private boolean valid = true;
+ * compatible open source license.
+            injectionListeners = new ArrayList<>();  
+        errors.addMessage(message);  
     @Override
     public void addError(Message message) {
-        if (!valid) {  
-            throw new IllegalStateException("Encounters may not be used after hear() returns.");
-        }
-        errors.addMessage(message);  
-    }
-
     @Override  
+    private List<InjectionListener<? super T>> injectionListeners; // lazy
+        this.errors = errors;
+/**
+        if (!valid) {  
+    }  
+        valid = false;
+            throw new IllegalStateException("Encounters may not be used after hear() returns.");
+        if (!valid) {
+        if (!valid) {
+    }
+ * http://www.apache.org/licenses/LICENSE-2.0  
+    EncounterImpl(Errors errors, Lookups lookups) {
+            throw new IllegalStateException("Encounters may not be used after hear() returns.");  
+    public <T> Provider<T> getProvider(Class<T> type) {  
+import java.util.Collections;
+ *
+/*
+        }
+            : Collections.unmodifiableList(injectionListeners);
+    public void addError(Throwable t) {  
+    @Override  
+ * GitHub history for details.
+        return injectionListeners == null
+ * See the License for the specific language governing permissions and
+ * You may obtain a copy of the License at
+    public <T> MembersInjector<T> getMembersInjector(TypeLiteral<T> typeLiteral) {
+        if (!valid) {
+        membersInjectors.add(membersInjector);
+    @Override  
+ *  
+        errors.addMessage(message, arguments);
+        }  
+        }
+    public void register(InjectionListener<? super T> injectionListener) {  
+import org.opensearch.common.inject.spi.InjectionListener;
+ * @author jessewilson@google.com (Jesse Wilson)
+        if (injectionListeners == null) {
+        return lookups.getProvider(key);
+    }  
+ *
+    public List<MembersInjector<? super T>> getMembersInjectors() {
+        return getMembersInjector(TypeLiteral.get(type));
+        return lookups.getMembersInjector(typeLiteral);  
+    }
+final class EncounterImpl<T> implements TypeEncounter<T> {
+ * Unless required by applicable law or agreed to in writing, software
+        this.lookups = lookups;  
+    }  
+ * The OpenSearch Contributors require contributions made to  
+    public void invalidate() {  
+    @Override
+            ? Collections.<InjectionListener<? super T>>emptyList()  
+ * SPDX-License-Identifier: Apache-2.0
     public <T> Provider<T> getProvider(Key<T> key) {
+import org.opensearch.common.inject.internal.Errors;
+        }
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+ */
+    }
+            : Collections.unmodifiableList(membersInjectors);
+ * limitations under the License.  
+    }
+    private final Errors errors;
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+        injectionListeners.add(injectionListener);  
         if (!valid) {
             throw new IllegalStateException("Encounters may not be used after hear() returns.");  
         }
-        return lookups.getProvider(key);
-    }  
-
-    @Override
-    public <T> Provider<T> getProvider(Class<T> type) {  
-        return getProvider(Key.get(type));
-    }
-
-    @Override
-    public <T> MembersInjector<T> getMembersInjector(TypeLiteral<T> typeLiteral) {
-        if (!valid) {  
-            throw new IllegalStateException("Encounters may not be used after hear() returns.");
-        }
-        return lookups.getMembersInjector(typeLiteral);  
-    }
-
-    @Override  
-    public <T> MembersInjector<T> getMembersInjector(Class<T> type) {
-        return getMembersInjector(TypeLiteral.get(type));
-    }  
 }
+        errors.errorInUserCode(t, "An exception was caught and reported. Message: %s", t.getMessage());
+    }
+    }
+ * you may not use this file except in compliance with the License.  
+    @Override
+        }  
+    public void register(MembersInjector<? super T> membersInjector) {
+        if (!valid) {  
+import org.opensearch.common.inject.spi.Message;  
+import java.util.List;
+ * @opensearch.internal  
+    }
+    public <T> MembersInjector<T> getMembersInjector(Class<T> type) {
+        }  
+package org.opensearch.common.inject;
+    }  
+            membersInjectors = new ArrayList<>();
+ */
+    public List<InjectionListener<? super T>> getInjectionListeners() {

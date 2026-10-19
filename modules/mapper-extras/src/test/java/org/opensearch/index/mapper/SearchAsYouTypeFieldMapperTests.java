@@ -1,772 +1,679 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.core.KeywordAnalyzer;  
-import org.apache.lucene.analysis.core.SimpleAnalyzer;
-import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;  
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.Term;  
-import org.apache.lucene.queries.spans.FieldMaskingSpanQuery;
-import org.apache.lucene.queries.spans.SpanNearQuery;
-import org.apache.lucene.queries.spans.SpanTermQuery;  
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;  
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.FieldExistsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;  
-import org.apache.lucene.search.MultiPhraseQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.SynonymQuery;  
-import org.apache.lucene.search.TermQuery;
-import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;  
-import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.PrefixFieldMapper;
-import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.PrefixFieldType;
-import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.SearchAsYouTypeAnalyzer;  
-import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.SearchAsYouTypeFieldType;
-import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.ShingleFieldMapper;
-import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.ShingleFieldType;  
-import org.opensearch.index.query.MatchPhrasePrefixQueryBuilder;
-import org.opensearch.index.query.MatchPhraseQueryBuilder;
-import org.opensearch.index.query.MultiMatchQueryBuilder;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.QueryStringQueryBuilder;
-import org.opensearch.plugins.Plugin;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Map;
-import java.util.Set;  
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static java.util.Arrays.asList;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.containsString;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.notNullValue;  
-import static org.hamcrest.core.IsInstanceOf.instanceOf;
-
-public class SearchAsYouTypeFieldMapperTests extends MapperTestCase {  
-
-    @Override
-    protected void registerParameters(ParameterChecker checker) throws IOException {  
-        checker.registerConflictCheck("max_shingle_size", b -> b.field("max_shingle_size", 4));
-        checker.registerConflictCheck("similarity", b -> b.field("similarity", "boolean"));
-        checker.registerConflictCheck("index", b -> b.field("index", false));  
-        checker.registerConflictCheck("store", b -> b.field("store", true));
-        checker.registerConflictCheck("analyzer", b -> b.field("analyzer", "keyword"));
-        checker.registerConflictCheck("index_options", b -> b.field("index_options", "docs"));  
-        checker.registerConflictCheck("term_vector", b -> b.field("term_vector", "yes"));
-
-        // norms can be set from true to false, but not vice versa  
-        checker.registerConflictCheck("norms", fieldMapping(b -> {
-            b.field("type", "text");
-            b.field("norms", false);  
-        }), fieldMapping(b -> {
-            b.field("type", "text");
-            b.field("norms", true);  
-        }));
-        checker.registerUpdateCheck(b -> {
-            b.field("type", "search_as_you_type");  
-            b.field("norms", true);
-        }, b -> {
-            b.field("type", "search_as_you_type");  
-            b.field("norms", false);
-        }, m -> assertFalse(m.fieldType().getTextSearchInfo().hasNorms()));
-
-        checker.registerUpdateCheck(b -> {
-            b.field("analyzer", "default");
-            b.field("search_analyzer", "keyword");  
-        }, m -> assertEquals("keyword", m.fieldType().getTextSearchInfo().getSearchAnalyzer().name()));
-        checker.registerUpdateCheck(b -> {
-            b.field("analyzer", "default");  
-            b.field("search_analyzer", "keyword");
-            b.field("search_quote_analyzer", "keyword");
-        }, m -> assertEquals("keyword", m.fieldType().getTextSearchInfo().getSearchQuoteAnalyzer().name()));  
-
-    }
-
-    protected void writeFieldValue(XContentBuilder builder) throws IOException {
-        builder.value("new york city");
-    }  
-
-    @Override
-    protected Collection<? extends Plugin> getPlugins() {  
-        return List.of(new MapperExtrasModulePlugin());
-    }
-
-    @Override
-    protected IndexAnalyzers createIndexAnalyzers(IndexSettings indexSettings) {
-        NamedAnalyzer dflt = new NamedAnalyzer(  
-            "default",
-            AnalyzerScope.INDEX,
-            new StandardAnalyzer(),  
-            TextFieldMapper.Defaults.POSITION_INCREMENT_GAP
-        );
-        NamedAnalyzer standard = new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer());  
-        NamedAnalyzer keyword = new NamedAnalyzer("keyword", AnalyzerScope.INDEX, new KeywordAnalyzer());
-        NamedAnalyzer simple = new NamedAnalyzer("simple", AnalyzerScope.INDEX, new SimpleAnalyzer());
-        NamedAnalyzer whitespace = new NamedAnalyzer("whitespace", AnalyzerScope.INDEX, new WhitespaceAnalyzer());  
-        return new IndexAnalyzers(
-            Map.of("default", dflt, "standard", standard, "keyword", keyword, "simple", simple, "whitespace", whitespace),
-            Map.of(),  
-            Map.of()
-        );
-    }  
-
-    @Override
-    protected void minimalMapping(XContentBuilder b) throws IOException {  
-        b.field("type", "search_as_you_type");
-    }
-
-    @Override
-    protected void metaMapping(XContentBuilder b) throws IOException {
-        // We serialize these fields regardless of whether or not they are changed  
-        b.field("type", "search_as_you_type").field("max_shingle_size", 3).field("doc_values", false);
-    }
-
-    public void testIndexing() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "new york city")));  
-        for (String field : new String[] { "field", "field._index_prefix", "field._2gram", "field._3gram" }) {
-            IndexableField[] fields = doc.rootDoc().getFields(field);
-            assertEquals(1, fields.length);  
-            assertEquals("new york city", fields[0].stringValue());
-        }
-    }  
-
-    public void testDefaultConfiguration() throws IOException {
-        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));  
-        SearchAsYouTypeFieldMapper rootMapper = getRootFieldMapper(defaultMapper, "field");
-        assertRootFieldMapper(rootMapper, 3, "default");
-
-        PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(defaultMapper, "field._index_prefix");
+    public void testMultiMatchBoolPrefix() throws IOException {  
         assertPrefixFieldType(prefixFieldMapper.fieldType(), 3, "default");
-
-        assertShingleFieldType(
-            getShingleFieldMapper(defaultMapper, "field._2gram").fieldType(),
-            2,  
-            "default",
-            prefixFieldMapper.fieldType()
-        );  
-        assertShingleFieldType(
-            getShingleFieldMapper(defaultMapper, "field._3gram").fieldType(),
-            3,  
-            "default",
-            prefixFieldMapper.fieldType()
-        );  
-    }
-
-    public void testConfiguration() throws IOException {  
-        int maxShingleSize = 4;
-        String analyzerName = "simple";
-        DocumentMapper defaultMapper = createDocumentMapper(  
-            fieldMapping(
-                b -> b.field("type", "search_as_you_type").field("analyzer", analyzerName).field("max_shingle_size", maxShingleSize)
-            )  
+            Query actual = new MatchPhraseQueryBuilder("field", "one two").slop(1).toQuery(queryShardContext);
+        int maxShingleSize,  
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").toQuery(queryShardContext);
+            assertThat(actual, equalTo(expected));
+                    b.startObject("nested_field");
+                b.startObject("properties");  
+            b.field("search_analyzer", "keyword");
+package org.opensearch.index.mapper;
+            assertThat(values, equalTo(expectedValues));
+        }, b -> {
+        assertThat(fieldType.prefixField, equalTo(prefixFieldType));
+            assertFalse(prefixFieldMapper.fieldType.storeTermVectorOffsets());  
+    protected void registerParameters(ParameterChecker checker) throws IOException {  
+                b.field("type", "object");
+        for (String termVector : termVectors) {  
+    private static void assertPrefixFieldType(PrefixFieldType fieldType, int shingleSize, String analyzerName) {  
+            fieldType = mapperService.fieldType(name);  
+import org.opensearch.index.query.MatchPhrasePrefixQueryBuilder;
+            mpq.setSlop(1);
+ *  
+            }
+        return List.of(new MapperExtrasModulePlugin());
+            builder.add(new BooleanClause(new TermQuery(new Term(shingleFieldName, term)), BooleanClause.Occur.SHOULD));  
+import org.apache.lucene.search.ConstantScoreQuery;  
+        {  
         );
-
-        SearchAsYouTypeFieldMapper rootMapper = getRootFieldMapper(defaultMapper, "field");  
-        assertRootFieldMapper(rootMapper, maxShingleSize, analyzerName);
-
-        PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(defaultMapper, "field._index_prefix");  
+            String name = path + "._" + i + "gram";
+import java.util.stream.Collectors;
+                .build();  
+        }  
+            assertThat(analyzer.name(), equalTo(analyzerName));
+/*  
+        QueryShardContext queryShardContext = createQueryShardContext(
+            IndexableField[] indexFields = doc.rootDoc().getFields(field);  
+            assertFalse(prefixFieldMapper.fieldType.storeTermVectorPositions());
+            );  
+import org.opensearch.index.query.QueryShardContext;
+            expected.add(new Term("field._3gram", "two three four"));  
+                b.array("field", values.toArray(new String[0]));
+                b.field("max_shingle_size", "4");  
+            b.field("type", "text");
+    private void documentParsingTestCase(Collection<String> values) throws IOException {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         assertPrefixFieldType(prefixFieldMapper.fieldType(), maxShingleSize, analyzerName);
-
-        assertShingleFieldType(  
-            getShingleFieldMapper(defaultMapper, "field._2gram").fieldType(),
-            2,
-            analyzerName,  
-            prefixFieldMapper.fieldType()
+            mpq.add(new Term("field", "two"));
+            expected.add(new Term("field._3gram", "one two three"));
+            "field._2gram",
+                new SpanTermQuery(new Term("field._3gram", "more than three"))
         );
-        assertShingleFieldType(  
-            getShingleFieldMapper(defaultMapper, "field._3gram").fieldType(),
+                    .startObject("fields")
+            DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));  
+        }), fieldMapping(b -> {
+    }
+            assertThat(actual, equalTo(expected));
+            b.endObject();  
+            assertThat(actual, equalTo(expected));
+            "with_positions_payloads",  
+            assertEquals("new york city", indexFields[0].stringValue());
+            assertShingleFieldType(shingleField, shingleSize++, analyzerName, prefixFieldType);
+            if (values.size() > 1) {  
+        {
+        {
+            prefixFieldMapper.fieldType()
+        {  
+        final Mapper mapper = defaultMapper.mappers().getMapper(fieldName);
+ * ownership. Elasticsearch licenses this file to you under  
+            DocumentMapper mapper = createDocumentMapper(
+            equalTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS)  
+        checker.registerConflictCheck("term_vector", b -> b.field("term_vector", "yes"));
+    }  
+            getPrefixFieldMapper(mapper, "field._index_prefix"),  
+import org.opensearch.plugins.Plugin;  
+            b.field("norms", true);
+        );
+        final Mapper mapper = defaultMapper.mappers().getMapper(fieldName);
+import org.apache.lucene.search.SynonymQuery;  
+        final BooleanQuery.Builder builder = new BooleanQuery.Builder();  
+                buildBoolPrefixQuery(  
             3,
             analyzerName,  
-            prefixFieldMapper.fieldType()
-        );
-        assertShingleFieldType(  
-            getShingleFieldMapper(defaultMapper, "field._4gram").fieldType(),
-            4,
-            analyzerName,  
-            prefixFieldMapper.fieldType()
-        );
-    }  
-
-    public void testSimpleMerge() throws IOException {
-        MapperService mapperService = createMapperService(  
-            mapping(b -> b.startObject("a_field").field("type", "search_as_you_type").field("analyzer", "standard").endObject())
-        );
-        merge(mapperService, mapping(b -> {  
-            b.startObject("a_field").field("type", "search_as_you_type").field("analyzer", "standard").endObject();
-            b.startObject("b_field").field("type", "text").endObject();
-        }));  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> merge(mapperService, mapping(b -> {
-            b.startObject("a_field");
-            {  
-                b.field("type", "search_as_you_type");
-                b.field("analyzer", "standard");
-                b.field("max_shingle_size", "4");  
-            }
-            b.endObject();
-            b.startObject("b_field").field("type", "text").endObject();  
-        })));
-        assertThat(e.getMessage(), containsString("Cannot update parameter [max_shingle_size]"));
-    }  
-
-    public void testMultiFields() throws IOException {
-        for (int shingleSize = 2; shingleSize < 4; shingleSize++) {  
-            assertMultiField(shingleSize);
-        }
-    }  
-
-    private void assertMultiField(int shingleSize) throws IOException {
-        String path = "field.suggest";  
-        List<String> fields = new ArrayList<>();
-        fields.add(path);
-        MapperService mapperService = createMapperService(fieldMapping(b -> {  
-            b.field("type", "text");
-            b.startObject("fields");
-            {  
-                b.startObject("suggest").field("type", "search_as_you_type").field("max_shingle_size", shingleSize).endObject();
-            }
-            b.endObject();  
-        }));
-        MappedFieldType fieldType = mapperService.fieldType(path + "._index_prefix");
-        assertThat(fieldType, instanceOf(PrefixFieldType.class));  
-        PrefixFieldType prefixFieldType = (PrefixFieldType) fieldType;
-        assertEquals(path, prefixFieldType.parentField);
-        for (int i = 2; i < shingleSize; i++) {  
-            String name = path + "._" + i + "gram";
-            fields.add(name);
-            fieldType = mapperService.fieldType(name);  
-            assertThat(fieldType, instanceOf(ShingleFieldType.class));
-            ShingleFieldType ft = (ShingleFieldType) fieldType;
-            assertEquals(i, ft.shingleSize);  
-            assertSame(prefixFieldType, ft.prefixFieldType);
-        }
-
-        ParsedDocument doc = mapperService.documentMapper().parse(source(b -> b.field("field", "new york city")));
-        for (String field : fields) {
-            IndexableField[] indexFields = doc.rootDoc().getFields(field);  
-            assertEquals(1, indexFields.length);
-            assertEquals("new york city", indexFields[0].stringValue());
-        }  
-    }
-
-    public void testSubField() throws IOException {  
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "search_as_you_type")  
-                    .startObject("fields")
-                    .startObject("subField")
-                    .field("type", "keyword")  
-                    .endObject()
-                    .endObject()
-            )  
-        );
-        assertThat(mapperService.fieldType("field.subField"), instanceOf(KeywordFieldMapper.KeywordFieldType.class));
-    }  
-
-    public void testIndexOptions() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(  
-            fieldMapping(b -> b.field("type", "search_as_you_type").field("index_options", "offsets"))
-        );
-
-        assertThat(
-            getRootFieldMapper(mapper, "field").fieldType().fieldType.indexOptions(),
-            equalTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS)  
-        );
-
-        Stream.of(  
-            getPrefixFieldMapper(mapper, "field._index_prefix"),
-            getShingleFieldMapper(mapper, "field._2gram"),
-            getShingleFieldMapper(mapper, "field._3gram")  
-        )
-            .forEach(
-                m -> assertThat(  
-                    "for " + m.name(),
-                    m.fieldType.indexOptions(),
-                    equalTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS)  
-                )
-            );
-    }  
-
-    public void testStore() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "search_as_you_type").field("store", true)));  
-
-        assertTrue(getRootFieldMapper(mapper, "field").fieldType().fieldType.stored());
-        Stream.of(  
-            getPrefixFieldMapper(mapper, "field._index_prefix"),
-            getShingleFieldMapper(mapper, "field._2gram"),
-            getShingleFieldMapper(mapper, "field._3gram")  
-        ).forEach(m -> assertFalse("for " + m.name(), m.fieldType.stored()));
-    }
-
-    public void testIndex() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "search_as_you_type").field("index", false)));
-
-        Stream.of(
-            getRootFieldMapper(mapper, "field"),
-            getPrefixFieldMapper(mapper, "field._index_prefix"),  
-            getShingleFieldMapper(mapper, "field._2gram"),
-            getShingleFieldMapper(mapper, "field._3gram")
-        ).forEach(m -> assertThat("for " + m.name(), m.fieldType.indexOptions(), equalTo(IndexOptions.NONE)));  
-    }
-
-    public void testTermVectors() throws IOException {  
-        String[] termVectors = {
-            "yes",
-            "with_positions",  
-            "with_offsets",
             "with_positions_offsets",
-            "with_positions_payloads",  
-            "with_positions_offsets_payloads" };
-
-        for (String termVector : termVectors) {  
-            DocumentMapper mapper = createDocumentMapper(
-                fieldMapping(b -> b.field("type", "search_as_you_type").field("term_vector", termVector))
-            );  
-
-            assertTrue(getRootFieldMapper(mapper, "field").fieldType().fieldType.storeTermVectors());
-
-            Stream.of(getShingleFieldMapper(mapper, "field._2gram"), getShingleFieldMapper(mapper, "field._3gram"))
+import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.ShingleFieldMapper;
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+    }
+        checker.registerUpdateCheck(b -> {
                 .forEach(m -> assertTrue("for " + m.name(), m.fieldType.storeTermVectors()));
-
-            PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(mapper, "field._index_prefix");
-            assertFalse(prefixFieldMapper.fieldType.storeTermVectors());
-            assertFalse(prefixFieldMapper.fieldType.storeTermVectorOffsets());  
-            assertFalse(prefixFieldMapper.fieldType.storeTermVectorPositions());
-            assertFalse(prefixFieldMapper.fieldType.storeTermVectorPayloads());
-        }  
-    }
-
-    public void testNorms() throws IOException {  
-        // default setting
-        {
-            DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));  
-
-            Stream.of(
-                getRootFieldMapper(mapper, "field"),  
-                getShingleFieldMapper(mapper, "field._2gram"),
-                getShingleFieldMapper(mapper, "field._3gram")
-            ).forEach(m -> assertFalse("for " + m.name(), m.fieldType.omitNorms()));  
-
-            PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(mapper, "field._index_prefix");
-            assertTrue(prefixFieldMapper.fieldType.omitNorms());  
-        }
-
-        // can disable norms on search_as_you_type fields  
-        {
-            DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "search_as_you_type").field("norms", false)));
-
-            assertTrue(getRootFieldMapper(mapper, "field").fieldType().fieldType.omitNorms());
-
-            Stream.of(  
-                getPrefixFieldMapper(mapper, "field._index_prefix"),
-                getShingleFieldMapper(mapper, "field._2gram"),
-                getShingleFieldMapper(mapper, "field._3gram")  
-            ).forEach(m -> assertTrue("for " + m.name(), m.fieldType.omitNorms()));
-        }
-    }  
-
-    public void testDocumentParsingSingleValue() throws IOException {
-        documentParsingTestCase(Collections.singleton(randomAlphaOfLengthBetween(5, 20)));  
-    }
-
-    public void testDocumentParsingMultipleValues() throws IOException {  
-        documentParsingTestCase(randomUnique(() -> randomAlphaOfLengthBetween(3, 20), randomIntBetween(2, 10)));
-    }
-
-    public void testMatchPhrasePrefix() throws IOException {
-        QueryShardContext queryShardContext = createQueryShardContext(createMapperService(fieldMapping(this::minimalMapping)));
-        {  
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").toQuery(queryShardContext);
-            Query expected = new SynonymQuery.Builder("field._index_prefix").addTerm(new Term("field._index_prefix", "two words")).build();
-            assertThat(q, equalTo(expected));  
-        }
-
-        {  
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "three words here").toQuery(queryShardContext);
-            Query expected = new SynonymQuery.Builder("field._index_prefix").addTerm(new Term("field._index_prefix", "three words here"))
-                .build();  
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").slop(1).toQuery(queryShardContext);
-            MultiPhrasePrefixQuery mpq = new MultiPhrasePrefixQuery("field");  
-            mpq.setSlop(1);
-            mpq.add(new Term("field", "two"));
-            mpq.add(new Term("field", "words"));  
-            assertThat(q, equalTo(mpq));
-        }
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "more than three words").toQuery(queryShardContext);
-            Query expected = new SpanNearQuery.Builder("field._3gram", true).addClause(  
-                new SpanTermQuery(new Term("field._3gram", "more than three"))
-            )
-                .addClause(  
-                    new FieldMaskingSpanQuery(new SpanTermQuery(new Term("field._index_prefix", "than three words")), "field._3gram")
-                )
-                .build();  
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field._3gram", "more than three words").toQuery(queryShardContext);
-            Query expected = new SpanNearQuery.Builder("field._3gram", true).addClause(  
-                new SpanTermQuery(new Term("field._3gram", "more than three"))
-            )
-                .addClause(  
-                    new FieldMaskingSpanQuery(new SpanTermQuery(new Term("field._index_prefix", "than three words")), "field._3gram")
-                )
-                .build();  
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field._3gram", "two words").toQuery(queryShardContext);
-            Query expected = new MatchNoDocsQuery();  
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            Query actual = new MatchPhrasePrefixQueryBuilder("field._3gram", "one two three four").slop(1).toQuery(queryShardContext);
-            MultiPhrasePrefixQuery expected = new MultiPhrasePrefixQuery("field._3gram");  
-            expected.setSlop(1);
-            expected.add(new Term("field._3gram", "one two three"));
-            expected.add(new Term("field._3gram", "two three four"));  
-            assertThat(actual, equalTo(expected));
-        }
-
-    }
-
-    public void testMatchPhrase() throws IOException {  
-        QueryShardContext queryShardContext = createQueryShardContext(createMapperService(fieldMapping(this::minimalMapping)));
-        {
-            Query actual = new MatchPhraseQueryBuilder("field", "one").toQuery(queryShardContext);  
-            Query expected = new TermQuery(new Term("field", "one"));
-            assertThat(actual, equalTo(expected));
-        }  
-
-        {
-            Query actual = new MatchPhraseQueryBuilder("field", "one two").toQuery(queryShardContext);  
-            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._2gram", "one two")).build();
-            assertThat(actual, equalTo(expected));
-        }  
-
-        {
-            Query actual = new MatchPhraseQueryBuilder("field", "one two three").toQuery(queryShardContext);  
-            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._3gram", "one two three")).build();
-            assertThat(actual, equalTo(expected));
-        }  
-
-        {
-            Query actual = new MatchPhraseQueryBuilder("field", "one two three four").toQuery(queryShardContext);  
-            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._3gram", "one two three"))
-                .add(new Term("field._3gram", "two three four"))
-                .build();  
-            assertThat(actual, equalTo(expected));
-        }
-
-        {
-            Query actual = new MatchPhraseQueryBuilder("field", "one two").slop(1).toQuery(queryShardContext);
-            Query expected = new MultiPhraseQuery.Builder().add(new Term("field", "one")).add(new Term("field", "two")).setSlop(1).build();  
-            assertThat(actual, equalTo(expected));
-        }
-
-        {
-            Query actual = new MatchPhraseQueryBuilder("field._2gram", "one two").toQuery(queryShardContext);
-            Query expected = new TermQuery(new Term("field._2gram", "one two"));  
-            assertThat(actual, equalTo(expected));
-        }
-
-        {
-            Query actual = new MatchPhraseQueryBuilder("field._2gram", "one two three").toQuery(queryShardContext);
-            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._2gram", "one two"))  
-                .add(new Term("field._2gram", "two three"))
-                .build();
-            assertThat(actual, equalTo(expected));  
-        }
-
-        {  
-            Query actual = new MatchPhraseQueryBuilder("field._3gram", "one two three").toQuery(queryShardContext);
-            Query expected = new TermQuery(new Term("field._3gram", "one two three"));
-            assertThat(actual, equalTo(expected));  
-        }
-
-        {  
-            Query actual = new MatchPhraseQueryBuilder("field._3gram", "one two three four").toQuery(queryShardContext);
-            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._3gram", "one two three"))
-                .add(new Term("field._3gram", "two three four"))  
-                .build();
-            assertThat(actual, equalTo(expected));
-        }  
-
-        {
-            expectThrows(  
-                IllegalArgumentException.class,
-                () -> new MatchPhraseQueryBuilder("field._index_prefix", "one two three four").toQuery(queryShardContext)
-            );  
-        }
-    }
-
-    public void testNestedExistsQuery() throws IOException {
-        MapperService mapperService = createMapperService(mapping(b -> {
-            b.startObject("field");  
-            {
-                b.field("type", "object");
-                b.startObject("properties");  
-                {
-                    b.startObject("nested_field");
-                    {  
-                        b.field("type", "search_as_you_type");
-                    }
-                    b.endObject();  
-                }
-                b.endObject();
-            }  
-            b.endObject();
-        }));
-        QueryShardContext queryShardContext = createQueryShardContext(mapperService);  
-        Query actual = new QueryStringQueryBuilder("field:*").toQuery(queryShardContext);
-        Query expected = new ConstantScoreQuery(
-            new BooleanQuery.Builder().add(new FieldExistsQuery("field.nested_field"), BooleanClause.Occur.SHOULD)  
-                .add(new FieldExistsQuery("field.nested_field._2gram"), BooleanClause.Occur.SHOULD)
-                .add(new FieldExistsQuery("field.nested_field._3gram"), BooleanClause.Occur.SHOULD)
-                .build()  
-        );
-        assertEquals(expected, actual);
-    }  
-
-    private static BooleanQuery buildBoolPrefixQuery(String shingleFieldName, String prefixFieldName, List<String> terms) {
-        final BooleanQuery.Builder builder = new BooleanQuery.Builder();  
-        for (int i = 0; i < terms.size() - 1; i++) {
-            final String term = terms.get(i);
-            builder.add(new BooleanClause(new TermQuery(new Term(shingleFieldName, term)), BooleanClause.Occur.SHOULD));  
-        }
-        final String finalTerm = terms.get(terms.size() - 1);
-        builder.add(  
-            new BooleanClause(new ConstantScoreQuery(new TermQuery(new Term(prefixFieldName, finalTerm))), BooleanClause.Occur.SHOULD)
-        );
-        return builder.build();  
-    }
-
-    public void testMultiMatchBoolPrefix() throws IOException {  
-        QueryShardContext queryShardContext = createQueryShardContext(
-            createMapperService(fieldMapping(b -> b.field("type", "search_as_you_type").field("max_shingle_size", 4)))
-        );  
-
-        MultiMatchQueryBuilder builder = new MultiMatchQueryBuilder(
-            "quick brown fox jump lazy dog",  
-            "field",
-            "field._2gram",
-            "field._3gram",  
-            "field._4gram"
-        );
-        builder.type(MultiMatchQueryBuilder.Type.BOOL_PREFIX);  
-
-        final Query actual = builder.toQuery(queryShardContext);
-        assertThat(actual, instanceOf(DisjunctionMaxQuery.class));  
-        final DisjunctionMaxQuery disMaxQuery = (DisjunctionMaxQuery) actual;
-        assertThat(disMaxQuery.getDisjuncts(), hasSize(4));
-        assertThat(  
-            disMaxQuery.getDisjuncts(),
-            containsInAnyOrder(
-                buildBoolPrefixQuery("field", "field._index_prefix", asList("quick", "brown", "fox", "jump", "lazy", "dog")),  
-                buildBoolPrefixQuery(
-                    "field._2gram",
-                    "field._index_prefix",  
-                    asList("quick brown", "brown fox", "fox jump", "jump lazy", "lazy dog")
-                ),
-                buildBoolPrefixQuery(  
-                    "field._3gram",
-                    "field._index_prefix",
-                    asList("quick brown fox", "brown fox jump", "fox jump lazy", "jump lazy dog")  
-                ),
-                buildBoolPrefixQuery(
-                    "field._4gram",  
-                    "field._index_prefix",
-                    asList("quick brown fox jump", "brown fox jump lazy", "fox jump lazy dog")
-                )  
-            )
-        );
-    }  
-
-    public void testAnalyzerSerialization() throws IOException {
-        MapperService ms = createMapperService(fieldMapping(b -> {  
-            b.field("type", "search_as_you_type");
-            b.field("analyzer", "simple");
-        }));  
-        String serialized = Strings.toString(MediaTypeRegistry.JSON, ms.documentMapper());
-        assertEquals(
-            serialized,  
-            "{\"_doc\":{\"properties\":{\"field\":"
-                + "{\"type\":\"search_as_you_type\",\"doc_values\":false,\"max_shingle_size\":3,\"analyzer\":\"simple\"}}}}"
-        );  
-
-        merge(ms, mapping(b -> {}));
-        assertEquals(serialized, Strings.toString(MediaTypeRegistry.JSON, ms.documentMapper()));  
-    }
-
-    private void documentParsingTestCase(Collection<String> values) throws IOException {  
-        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        final ParsedDocument parsedDocument = defaultMapper.parse(source(b -> {
-            if (values.size() > 1) {  
-                b.array("field", values.toArray(new String[0]));
-            } else {
-                b.field("field", values.iterator().next());  
-            }
-        }));
-
-        IndexableField[] rootFields = parsedDocument.rootDoc().getFields("field");
-        IndexableField[] prefixFields = parsedDocument.rootDoc().getFields("field._index_prefix");
-        IndexableField[] shingle2Fields = parsedDocument.rootDoc().getFields("field._2gram");  
-        IndexableField[] shingle3Fields = parsedDocument.rootDoc().getFields("field._3gram");
-        for (IndexableField[] fields : new IndexableField[][] { rootFields, prefixFields, shingle2Fields, shingle3Fields }) {
-            Set<String> expectedValues = Arrays.stream(fields).map(IndexableField::stringValue).collect(Collectors.toSet());  
-            assertThat(values, equalTo(expectedValues));
-        }
-    }  
-
-    private static void assertRootFieldMapper(SearchAsYouTypeFieldMapper mapper, int maxShingleSize, String analyzerName) {
-
-        assertThat(mapper.maxShingleSize(), equalTo(maxShingleSize));
-        assertThat(mapper.fieldType(), notNullValue());
-        assertSearchAsYouTypeFieldType(mapper.fieldType(), maxShingleSize, analyzerName, mapper.prefixField().fieldType());  
-
-        assertThat(mapper.prefixField(), notNullValue());
-        assertThat(mapper.prefixField().fieldType().parentField, equalTo(mapper.name()));  
-        assertPrefixFieldType(mapper.prefixField().fieldType(), maxShingleSize, analyzerName);
-
-        for (int shingleSize = 2; shingleSize <= maxShingleSize; shingleSize++) {  
-            final ShingleFieldMapper shingleFieldMapper = mapper.shingleFields()[shingleSize - 2];
-            assertThat(shingleFieldMapper, notNullValue());
-            assertShingleFieldType(shingleFieldMapper.fieldType(), shingleSize, analyzerName, mapper.prefixField().fieldType());  
-        }
-
-        final int numberOfShingleSubfields = (maxShingleSize - 2) + 1;  
-        assertThat(mapper.shingleFields().length, equalTo(numberOfShingleSubfields));
-    }
-
-    private static void assertSearchAsYouTypeFieldType(
-        SearchAsYouTypeFieldType fieldType,
-        int maxShingleSize,  
-        String analyzerName,
-        PrefixFieldType prefixFieldType
-    ) {  
-
-        assertThat(fieldType.shingleFields.length, equalTo(maxShingleSize - 1));
-        for (NamedAnalyzer analyzer : asList(fieldType.indexAnalyzer(), fieldType.getTextSearchInfo().getSearchAnalyzer())) {  
-            assertThat(analyzer.name(), equalTo(analyzerName));
-        }
-        int shingleSize = 2;  
-        for (ShingleFieldType shingleField : fieldType.shingleFields) {
-            assertShingleFieldType(shingleField, shingleSize++, analyzerName, prefixFieldType);
-        }  
-
-        assertThat(fieldType.prefixField, equalTo(prefixFieldType));
-    }  
-
-    private static void assertShingleFieldType(
         ShingleFieldType fieldType,  
-        int shingleSize,
-        String analyzerName,
-        PrefixFieldType prefixFieldType  
-    ) {
-
-        assertThat(fieldType.shingleSize, equalTo(shingleSize));  
-
-        for (NamedAnalyzer analyzer : asList(fieldType.indexAnalyzer(), fieldType.getTextSearchInfo().getSearchAnalyzer())) {
-            assertThat(analyzer.name(), equalTo(analyzerName));  
-            if (shingleSize > 1) {
-                final SearchAsYouTypeAnalyzer wrappedAnalyzer = (SearchAsYouTypeAnalyzer) analyzer.analyzer();
-                assertThat(wrappedAnalyzer.shingleSize(), equalTo(shingleSize));  
-                assertThat(wrappedAnalyzer.indexPrefixes(), equalTo(false));
-            }
-        }  
-
-        assertThat(fieldType.prefixFieldType, equalTo(prefixFieldType));
-
+            Query expected = new TermQuery(new Term("field", "one"));
+                    {  
+            getShingleFieldMapper(mapper, "field._3gram")  
+        assertSearchAsYouTypeFieldType(mapper.fieldType(), maxShingleSize, analyzerName, mapper.prefixField().fieldType());  
+                    "field._2gram",
     }
-
-    private static void assertPrefixFieldType(PrefixFieldType fieldType, int shingleSize, String analyzerName) {  
-        for (NamedAnalyzer analyzer : asList(fieldType.indexAnalyzer(), fieldType.getTextSearchInfo().getSearchAnalyzer())) {
+            3,  
+                buildBoolPrefixQuery(
+                    b.endObject();  
             assertThat(analyzer.name(), equalTo(analyzerName));
+        NamedAnalyzer standard = new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer());  
+    }  
+            b.endObject();
+                    asList("quick brown fox jump", "brown fox jump lazy", "fox jump lazy dog")
+        MapperService ms = createMapperService(fieldMapping(b -> {  
         }  
-
-        final SearchAsYouTypeAnalyzer wrappedIndexAnalyzer = (SearchAsYouTypeAnalyzer) fieldType.indexAnalyzer().analyzer();
-        final SearchAsYouTypeAnalyzer wrappedSearchAnalyzer = (SearchAsYouTypeAnalyzer) fieldType.getTextSearchInfo()  
-            .getSearchAnalyzer()
+        }
+            Map.of(),  
+import org.opensearch.index.analysis.NamedAnalyzer;  
+            MultiPhrasePrefixQuery expected = new MultiPhrasePrefixQuery("field._3gram");  
+        MapperService mapperService = createMapperService(  
+        assertTrue(getRootFieldMapper(mapper, "field").fieldType().fieldType.stored());
+                + "{\"type\":\"search_as_you_type\",\"doc_values\":false,\"max_shingle_size\":3,\"analyzer\":\"simple\"}}}}"
+        );
+        {
+        {
+        NamedAnalyzer keyword = new NamedAnalyzer("keyword", AnalyzerScope.INDEX, new KeywordAnalyzer());
+        }
+        }
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "search_as_you_type").field("index", false)));
+                b.field("type", "search_as_you_type");
+        Stream.of(  
+            assertThat(actual, equalTo(expected));
+            Query q = new MatchPhrasePrefixQueryBuilder("field._3gram", "two words").toQuery(queryShardContext);
+                .add(new FieldExistsQuery("field.nested_field._3gram"), BooleanClause.Occur.SHOULD)
+        final int numberOfShingleSubfields = (maxShingleSize - 2) + 1;  
+        );  
+    }
+        }, m -> assertEquals("keyword", m.fieldType().getTextSearchInfo().getSearchQuoteAnalyzer().name()));  
+            assertThat(actual, equalTo(expected));
+        }));
+        }  
+    private static ShingleFieldMapper getShingleFieldMapper(DocumentMapper defaultMapper, String fieldName) {
+import org.apache.lucene.index.IndexOptions;
+        final ParsedDocument parsedDocument = defaultMapper.parse(source(b -> {
+            ShingleFieldType ft = (ShingleFieldType) fieldType;
+            getShingleFieldMapper(defaultMapper, "field._4gram").fieldType(),
+    @Override
+import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.PrefixFieldType;
+        assertThat(wrappedSearchAnalyzer.indexPrefixes(), equalTo(false));
+            assertThat(fieldType, instanceOf(ShingleFieldType.class));
+        assertRootFieldMapper(rootMapper, 3, "default");
+            createMapperService(fieldMapping(b -> b.field("type", "search_as_you_type").field("max_shingle_size", 4)))
+            "default",
+    public void testStore() throws IOException {
+/*
             .analyzer();
-        for (SearchAsYouTypeAnalyzer analyzer : asList(wrappedIndexAnalyzer, wrappedSearchAnalyzer)) {  
-            assertThat(analyzer.shingleSize(), equalTo(shingleSize));
+        SearchAsYouTypeFieldType fieldType,
+                b.startObject("suggest").field("type", "search_as_you_type").field("max_shingle_size", shingleSize).endObject();
+                    .endObject()
+            assertThat(actual, equalTo(expected));
+    }
+            b.field("type", "search_as_you_type");  
+                    "field._index_prefix",  
+            getShingleFieldMapper(defaultMapper, "field._2gram").fieldType(),
+        Stream.of(  
+        }
+        assertThat(disMaxQuery.getDisjuncts(), hasSize(4));
+    }  
+import java.util.Map;
+        MapperService mapperService = createMapperService(fieldMapping(b -> {  
+        checker.registerConflictCheck("index", b -> b.field("index", false));  
+    @Override
+        assertThat(mapper.shingleFields().length, equalTo(numberOfShingleSubfields));
+        DocumentMapper defaultMapper = createDocumentMapper(  
+        for (IndexableField[] fields : new IndexableField[][] { rootFields, prefixFields, shingle2Fields, shingle3Fields }) {
+    }
+        assertShingleFieldType(
+    public void testAnalyzerSerialization() throws IOException {
+    }  
+                .build();
+        }));
+ * SPDX-License-Identifier: Apache-2.0
+        documentParsingTestCase(randomUnique(() -> randomAlphaOfLengthBetween(3, 20), randomIntBetween(2, 10)));
+        ParsedDocument doc = mapperService.documentMapper().parse(source(b -> b.field("field", "new york city")));
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").slop(1).toQuery(queryShardContext);
+            new BooleanQuery.Builder().add(new FieldExistsQuery("field.nested_field"), BooleanClause.Occur.SHOULD)  
+        MultiMatchQueryBuilder builder = new MultiMatchQueryBuilder(
+                new SpanTermQuery(new Term("field._3gram", "more than three"))
+            b.startObject("b_field").field("type", "text").endObject();  
+        }, m -> assertFalse(m.fieldType().getTextSearchInfo().hasNorms()));
+            getShingleFieldMapper(defaultMapper, "field._3gram").fieldType(),
+        checker.registerUpdateCheck(b -> {
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
+        }));
+        DocumentMapper mapper = createDocumentMapper(  
+        {
+            b.field("search_analyzer", "keyword");  
+                .build()  
+                .add(new Term("field._2gram", "two three"))
+            b.field("search_quote_analyzer", "keyword");
+import static org.hamcrest.Matchers.equalTo;
+        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        }
+            Query expected = new SpanNearQuery.Builder("field._3gram", true).addClause(  
+            "default",
+    private static SearchAsYouTypeFieldMapper getRootFieldMapper(DocumentMapper defaultMapper, String fieldName) {
+import static org.hamcrest.core.IsInstanceOf.instanceOf;
+            getShingleFieldMapper(defaultMapper, "field._3gram").fieldType(),
+        {  
+                    }
+    public void testMatchPhrase() throws IOException {  
+            PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(mapper, "field._index_prefix");
+        String analyzerName,
         }
         assertThat(wrappedIndexAnalyzer.indexPrefixes(), equalTo(true));  
-        assertThat(wrappedSearchAnalyzer.indexPrefixes(), equalTo(false));
-    }
-
-    private static SearchAsYouTypeFieldMapper getRootFieldMapper(DocumentMapper defaultMapper, String fieldName) {
-        final Mapper mapper = defaultMapper.mappers().getMapper(fieldName);
-        assertThat(mapper, instanceOf(SearchAsYouTypeFieldMapper.class));  
-        return (SearchAsYouTypeFieldMapper) mapper;
-    }
-
-    private static ShingleFieldMapper getShingleFieldMapper(DocumentMapper defaultMapper, String fieldName) {
-        final Mapper mapper = defaultMapper.mappers().getMapper(fieldName);
-        assertThat(mapper, instanceOf(ShingleFieldMapper.class));  
-        return (ShingleFieldMapper) mapper;
-    }
-
-    private static PrefixFieldMapper getPrefixFieldMapper(DocumentMapper defaultMapper, String fieldName) {
-        final Mapper mapper = defaultMapper.mappers().getMapper(fieldName);
-        assertThat(mapper, instanceOf(PrefixFieldMapper.class));  
-        return (PrefixFieldMapper) mapper;
-    }
+        merge(mapperService, mapping(b -> {  
+    protected void metaMapping(XContentBuilder b) throws IOException {
+        String analyzerName,
+        PrefixFieldType prefixFieldType  
+                    new FieldMaskingSpanQuery(new SpanTermQuery(new Term("field._index_prefix", "than three words")), "field._3gram")
+            assertEquals("new york city", fields[0].stringValue());
+ * software distributed under the License is distributed on an
+            final ShingleFieldMapper shingleFieldMapper = mapper.shingleFields()[shingleSize - 2];
+            assertFalse(prefixFieldMapper.fieldType.storeTermVectorPayloads());
+            Query actual = new MatchPhraseQueryBuilder("field._2gram", "one two three").toQuery(queryShardContext);
+            Query q = new MatchPhrasePrefixQueryBuilder("field._3gram", "more than three words").toQuery(queryShardContext);
+            assertEquals(1, indexFields.length);
+        checker.registerConflictCheck("index_options", b -> b.field("index_options", "docs"));  
+            "with_positions_offsets_payloads" };
+                .add(new Term("field._3gram", "two three four"))  
+import org.opensearch.index.query.QueryStringQueryBuilder;
+            "with_positions",  
+        }  
+        for (SearchAsYouTypeAnalyzer analyzer : asList(wrappedIndexAnalyzer, wrappedSearchAnalyzer)) {  
+            analyzerName,  
+            b.field("norms", false);
+import static org.hamcrest.Matchers.notNullValue;  
+                b -> b.field("type", "search_as_you_type")  
+    protected void writeFieldValue(XContentBuilder builder) throws IOException {
+        }
+        )
+        int maxShingleSize = 4;
+        List<String> fields = new ArrayList<>();
 }  
+                b -> b.field("type", "search_as_you_type").field("analyzer", analyzerName).field("max_shingle_size", maxShingleSize)
+    }
+        for (int shingleSize = 2; shingleSize <= maxShingleSize; shingleSize++) {  
+ * this work for additional information regarding copyright
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+    public void testSimpleMerge() throws IOException {
+ *
+            disMaxQuery.getDisjuncts(),
+        assertShingleFieldType(  
+        for (NamedAnalyzer analyzer : asList(fieldType.indexAnalyzer(), fieldType.getTextSearchInfo().getSearchAnalyzer())) {
+    public void testSubField() throws IOException {  
+    public void testConfiguration() throws IOException {  
+            assertThat(actual, equalTo(expected));  
+        }  
+            if (shingleSize > 1) {
+        }
+    public void testDocumentParsingMultipleValues() throws IOException {  
+            }
+        {
+            assertThat(actual, equalTo(expected));
+            {
+import org.apache.lucene.queries.spans.FieldMaskingSpanQuery;
+                    "field._index_prefix",
+            )
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }));  
+            prefixFieldMapper.fieldType()
+        b.field("type", "search_as_you_type").field("max_shingle_size", 3).field("doc_values", false);
+        }
+                {
+        );
+                .addClause(  
+        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));  
+            assertThat(analyzer.shingleSize(), equalTo(shingleSize));
+            fieldMapping(b -> b.field("type", "search_as_you_type").field("index_options", "offsets"))
+            Query actual = new MatchPhraseQueryBuilder("field._3gram", "one two three").toQuery(queryShardContext);
+import org.apache.lucene.index.Term;  
+            Map.of()
+            Query actual = new MatchPhraseQueryBuilder("field._3gram", "one two three four").toQuery(queryShardContext);
+        // norms can be set from true to false, but not vice versa  
+        assertThat(  
+            b.startObject("a_field").field("type", "search_as_you_type").field("analyzer", "standard").endObject();
+        }));  
+            }
+        {
+        final Mapper mapper = defaultMapper.mappers().getMapper(fieldName);
+        return (ShingleFieldMapper) mapper;
+    }  
+            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._3gram", "one two three")).build();
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "more than three words").toQuery(queryShardContext);
+            getPrefixFieldMapper(mapper, "field._index_prefix"),
+/*
+        assertThat(mapper.prefixField().fieldType().parentField, equalTo(mapper.name()));  
+                assertThat(wrappedAnalyzer.shingleSize(), equalTo(shingleSize));  
+ * license agreements. See the NOTICE file distributed with
+        }, m -> assertEquals("keyword", m.fieldType().getTextSearchInfo().getSearchAnalyzer().name()));
+import java.util.List;
+            assertEquals(i, ft.shingleSize);  
+    @Override
+import org.opensearch.index.query.MatchPhraseQueryBuilder;
+        }
+            Set<String> expectedValues = Arrays.stream(fields).map(IndexableField::stringValue).collect(Collectors.toSet());  
+            assertEquals(1, fields.length);  
+        MapperService mapperService = createMapperService(mapping(b -> {
+        for (int i = 0; i < terms.size() - 1; i++) {
+        assertThat(fieldType.shingleFields.length, equalTo(maxShingleSize - 1));
+                .add(new Term("field._3gram", "two three four"))
+        {
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import org.apache.lucene.queries.spans.SpanNearQuery;
+        MappedFieldType fieldType = mapperService.fieldType(path + "._index_prefix");
+                getShingleFieldMapper(mapper, "field._2gram"),
+            serialized,  
+        assertThat(mapper.fieldType(), notNullValue());
+            Stream.of(  
+        final SearchAsYouTypeAnalyzer wrappedIndexAnalyzer = (SearchAsYouTypeAnalyzer) fieldType.indexAnalyzer().analyzer();
+        assertThat(
+            b.startObject("b_field").field("type", "text").endObject();
+ * the Apache License, Version 2.0 (the "License"); you may
+            assertThat(q, equalTo(mpq));
+    private static BooleanQuery buildBoolPrefixQuery(String shingleFieldName, String prefixFieldName, List<String> terms) {
+    @Override
+            assertThat(analyzer.name(), equalTo(analyzerName));  
+import org.apache.lucene.search.MultiPhraseQuery;
+        assertShingleFieldType(  
+        }
+            assertThat(q, equalTo(expected));
+            getShingleFieldMapper(mapper, "field._2gram"),
+        // default setting
+            Query actual = new MatchPhraseQueryBuilder("field._2gram", "one two").toQuery(queryShardContext);
+    }
+    public void testDocumentParsingSingleValue() throws IOException {
+    public void testNestedExistsQuery() throws IOException {
+                IllegalArgumentException.class,
+    private static void assertShingleFieldType(
+        QueryShardContext queryShardContext = createQueryShardContext(createMapperService(fieldMapping(this::minimalMapping)));
+        SearchAsYouTypeFieldMapper rootMapper = getRootFieldMapper(defaultMapper, "field");  
+            assertShingleFieldType(shingleFieldMapper.fieldType(), shingleSize, analyzerName, mapper.prefixField().fieldType());  
+        );
+            assertThat(q, equalTo(expected));  
+        checker.registerConflictCheck("max_shingle_size", b -> b.field("max_shingle_size", 4));
+        Stream.of(
+            DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "search_as_you_type").field("norms", false)));
+ * The OpenSearch Contributors require contributions made to  
+        }
+            ).forEach(m -> assertTrue("for " + m.name(), m.fieldType.omitNorms()));
+    ) {
+        assertEquals(path, prefixFieldType.parentField);
+            } else {
+    }
+        );
+                    .field("type", "keyword")  
+        }
+            assertSame(prefixFieldType, ft.prefixFieldType);
+ */
+        }
+                    .endObject()
+            Query expected = new TermQuery(new Term("field._3gram", "one two three"));
+            fieldMapping(
+import java.io.IOException;
+            mapping(b -> b.startObject("a_field").field("type", "search_as_you_type").field("analyzer", "standard").endObject())
+        assertThat(mapper.prefixField(), notNullValue());
+            getShingleFieldMapper(mapper, "field._2gram"),
+import org.apache.lucene.search.MatchNoDocsQuery;  
+        QueryShardContext queryShardContext = createQueryShardContext(createMapperService(fieldMapping(this::minimalMapping)));
+        IndexableField[] shingle3Fields = parsedDocument.rootDoc().getFields("field._3gram");
+        NamedAnalyzer simple = new NamedAnalyzer("simple", AnalyzerScope.INDEX, new SimpleAnalyzer());
+    }
+            );
+                ),
+        for (int shingleSize = 2; shingleSize < 4; shingleSize++) {  
+        {
+    public void testIndexOptions() throws IOException {
+        int shingleSize = 2;  
+    }  
+    }
+    private void assertMultiField(int shingleSize) throws IOException {
+            "field._3gram",  
+            b.field("norms", true);  
+            "quick brown fox jump lazy dog",  
+                .addClause(  
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.index.analysis.IndexAnalyzers;
+            "field._4gram"
+            "default",
+        }));
+    }
+                b.field("analyzer", "standard");
+            b.field("type", "text");
+            )
+        }
+            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._2gram", "one two")).build();
+    }  
+import java.util.ArrayList;  
+import org.apache.lucene.search.Query;
+            new StandardAnalyzer(),  
+            }
+import org.apache.lucene.analysis.core.KeywordAnalyzer;  
+                .build();  
+        assertThat(fieldType.shingleSize, equalTo(shingleSize));  
+        assertThat(fieldType.prefixFieldType, equalTo(prefixFieldType));
+        }  
+            b.startObject("field");  
+            containsInAnyOrder(
+        String[] termVectors = {
+                m -> assertThat(  
+            Stream.of(
+import org.opensearch.index.IndexSettings;  
+        assertThat(mapper, instanceOf(PrefixFieldMapper.class));  
+        );
+                )
+        Query actual = new QueryStringQueryBuilder("field:*").toQuery(queryShardContext);
+        );
+            fieldMapping(
+    public void testIndex() throws IOException {
+        ).forEach(m -> assertThat("for " + m.name(), m.fieldType.indexOptions(), equalTo(IndexOptions.NONE)));  
+    }
+            Stream.of(getShingleFieldMapper(mapper, "field._2gram"), getShingleFieldMapper(mapper, "field._3gram"))
+        assertShingleFieldType(
+            Query expected = new MultiPhraseQuery.Builder().add(new Term("field", "one")).add(new Term("field", "two")).setSlop(1).build();  
+        }  
+ * compatible open source license.
+                    equalTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS)  
+            "{\"_doc\":{\"properties\":{\"field\":"
+    }  
+                .add(new FieldExistsQuery("field.nested_field._2gram"), BooleanClause.Occur.SHOULD)
+    protected void minimalMapping(XContentBuilder b) throws IOException {  
+            new BooleanClause(new ConstantScoreQuery(new TermQuery(new Term(prefixFieldName, finalTerm))), BooleanClause.Occur.SHOULD)
+import org.apache.lucene.index.IndexableField;
+            IndexableField[] fields = doc.rootDoc().getFields(field);
+import static org.hamcrest.Matchers.containsString;  
+            getShingleFieldMapper(mapper, "field._3gram")
+            getShingleFieldMapper(mapper, "field._2gram"),
+        return builder.build();  
+        documentParsingTestCase(Collections.singleton(randomAlphaOfLengthBetween(5, 20)));  
+        PrefixFieldType prefixFieldType = (PrefixFieldType) fieldType;
+    }
+import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.SearchAsYouTypeFieldType;
+                    "field._4gram",  
+            prefixFieldMapper.fieldType()
+        final SearchAsYouTypeAnalyzer wrappedSearchAnalyzer = (SearchAsYouTypeAnalyzer) fieldType.getTextSearchInfo()  
+            )  
+        {
+            }  
+            expectThrows(  
+            MultiPhrasePrefixQuery mpq = new MultiPhrasePrefixQuery("field");  
+        checker.registerConflictCheck("analyzer", b -> b.field("analyzer", "keyword"));
+                )
+            getShingleFieldMapper(mapper, "field._3gram")  
+            );  
+        }
+        final String finalTerm = terms.get(terms.size() - 1);
+            assertMultiField(shingleSize);
+            getShingleFieldMapper(defaultMapper, "field._2gram").fieldType(),
+        checker.registerConflictCheck("similarity", b -> b.field("similarity", "boolean"));
+        assertPrefixFieldType(mapper.prefixField().fieldType(), maxShingleSize, analyzerName);
+                    "field._index_prefix",
+                }
+public class SearchAsYouTypeFieldMapperTests extends MapperTestCase {  
+        assertRootFieldMapper(rootMapper, maxShingleSize, analyzerName);
+            b.field("type", "search_as_you_type");
+                final SearchAsYouTypeAnalyzer wrappedAnalyzer = (SearchAsYouTypeAnalyzer) analyzer.analyzer();
+        merge(ms, mapping(b -> {}));
+        PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(defaultMapper, "field._index_prefix");  
+        final DisjunctionMaxQuery disMaxQuery = (DisjunctionMaxQuery) actual;
+                    .startObject("subField")
+    }
+        }  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> merge(mapperService, mapping(b -> {
+                    new FieldMaskingSpanQuery(new SpanTermQuery(new Term("field._index_prefix", "than three words")), "field._3gram")
+    }
+        assertEquals(expected, actual);
+ * not use this file except in compliance with the License.
+        {
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "search_as_you_type").field("store", true)));  
+            .getSearchAnalyzer()
+ * Modifications Copyright OpenSearch Contributors. See  
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "three words here").toQuery(queryShardContext);
+ * KIND, either express or implied.  See the License for the
+                buildBoolPrefixQuery(
+            b.field("type", "text");
+    }
+                b.endObject();
+        checker.registerConflictCheck("norms", fieldMapping(b -> {
+                assertThat(wrappedAnalyzer.indexPrefixes(), equalTo(false));
+            b.field("analyzer", "simple");
+            assertFalse(prefixFieldMapper.fieldType.storeTermVectors());
+        for (String field : fields) {
+import org.apache.lucene.analysis.core.SimpleAnalyzer;
+            )
+            "yes",
+            prefixFieldMapper.fieldType()
+            getRootFieldMapper(mapper, "field").fieldType().fieldType.indexOptions(),
+            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._3gram", "one two three"))
+            PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(mapper, "field._index_prefix");
+            )  
+            b.field("analyzer", "default");  
+        assertThat(mapper, instanceOf(ShingleFieldMapper.class));  
+import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.SearchAsYouTypeAnalyzer;  
+import org.apache.lucene.analysis.standard.StandardAnalyzer;  
+        // We serialize these fields regardless of whether or not they are changed  
+            assertThat(q, equalTo(expected));
+            assertThat(actual, equalTo(expected));  
+            b.field("analyzer", "default");
+            assertThat(shingleFieldMapper, notNullValue());
+        for (String field : new String[] { "field", "field._index_prefix", "field._2gram", "field._3gram" }) {
+                    m.fieldType.indexOptions(),
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "new york city")));  
+                fieldMapping(b -> b.field("type", "search_as_you_type").field("term_vector", termVector))
+            Query expected = new SpanNearQuery.Builder("field._3gram", true).addClause(  
+        String serialized = Strings.toString(MediaTypeRegistry.JSON, ms.documentMapper());
+        );
+        {  
+        assertThat(mapper, instanceOf(SearchAsYouTypeFieldMapper.class));  
+import org.opensearch.core.common.Strings;  
+            prefixFieldMapper.fieldType()
+        {
+    @Override
+        QueryShardContext queryShardContext = createQueryShardContext(mapperService);  
+            getRootFieldMapper(mapper, "field"),
+        );
+            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._3gram", "one two three"))
+            {  
+            Query actual = new MatchPhraseQueryBuilder("field", "one two three").toQuery(queryShardContext);  
+        );  
+            .forEach(
+        }
+            {  
+import org.opensearch.index.analysis.AnalyzerScope;
+        assertShingleFieldType(  
+import org.apache.lucene.queries.spans.SpanTermQuery;  
+ */
+        );
+        builder.type(MultiMatchQueryBuilder.Type.BOOL_PREFIX);  
+            assertThat(q, equalTo(expected));
+                )
+                b.field("field", values.iterator().next());  
+    private static void assertSearchAsYouTypeFieldType(
+        }
+    public void testMatchPhrasePrefix() throws IOException {
+        Query expected = new ConstantScoreQuery(
+            fields.add(name);
+        assertEquals(serialized, Strings.toString(MediaTypeRegistry.JSON, ms.documentMapper()));  
+ * Unless required by applicable law or agreed to in writing,
+ *
+        );
+            analyzerName,  
+            assertThat(actual, equalTo(expected));
+import org.apache.lucene.search.BooleanQuery;
+    public void testTermVectors() throws IOException {  
+                .build();  
+import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.ShingleFieldType;  
+    }
+        assertEquals(
+        assertThat(mapper.maxShingleSize(), equalTo(maxShingleSize));
+import org.opensearch.index.mapper.SearchAsYouTypeFieldMapper.PrefixFieldMapper;
+        final Query actual = builder.toQuery(queryShardContext);
+            Query actual = new MatchPhrasePrefixQueryBuilder("field._3gram", "one two three four").slop(1).toQuery(queryShardContext);
+import org.apache.lucene.search.BooleanClause;
+    public void testMultiFields() throws IOException {
+        // can disable norms on search_as_you_type fields  
+        }
+    }  
+                .build();  
+        SearchAsYouTypeFieldMapper rootMapper = getRootFieldMapper(defaultMapper, "field");
+import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
+        {
+        IndexableField[] shingle2Fields = parsedDocument.rootDoc().getFields("field._2gram");  
+        for (int i = 2; i < shingleSize; i++) {  
+        })));
+            getPrefixFieldMapper(mapper, "field._index_prefix"),
+            mpq.add(new Term("field", "words"));  
+            Query expected = new TermQuery(new Term("field._2gram", "one two"));  
+        NamedAnalyzer dflt = new NamedAnalyzer(  
+        b.field("type", "search_as_you_type");
+import java.util.stream.Stream;
+        checker.registerConflictCheck("store", b -> b.field("store", true));
+        fields.add(path);
+ * GitHub history for details.
+    }  
+        );  
+            Query actual = new MatchPhraseQueryBuilder("field", "one").toQuery(queryShardContext);  
+            b.startObject("a_field");
+        }
+            AnalyzerScope.INDEX,
+            Query expected = new MatchNoDocsQuery();  
+            assertTrue(getRootFieldMapper(mapper, "field").fieldType().fieldType.storeTermVectors());
+                    asList("quick brown fox", "brown fox jump", "fox jump lazy", "jump lazy dog")  
+import org.apache.lucene.search.DisjunctionMaxQuery;
+            Query expected = new SynonymQuery.Builder("field._index_prefix").addTerm(new Term("field._index_prefix", "two words")).build();
+    public void testIndexing() throws IOException {
+        for (NamedAnalyzer analyzer : asList(fieldType.indexAnalyzer(), fieldType.getTextSearchInfo().getSearchAnalyzer())) {
+    }  
+            "with_offsets",
+import org.opensearch.index.query.MultiMatchQueryBuilder;  
+            assertTrue(prefixFieldMapper.fieldType.omitNorms());  
+        }
+            TextFieldMapper.Defaults.POSITION_INCREMENT_GAP
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+                    asList("quick brown", "brown fox", "fox jump", "jump lazy", "lazy dog")
+            Query expected = new MultiPhraseQuery.Builder().add(new Term("field._2gram", "one two"))  
+                        b.field("type", "search_as_you_type");
+        {
+                .build();
+                    "field._3gram",
+        int shingleSize,
+import org.apache.lucene.search.TermQuery;
+        assertThat(fieldType, instanceOf(PrefixFieldType.class));  
+                ),
+                () -> new MatchPhraseQueryBuilder("field._index_prefix", "one two three four").toQuery(queryShardContext)
+            b.field("type", "search_as_you_type");  
+        assertThat(e.getMessage(), containsString("Cannot update parameter [max_shingle_size]"));
+        for (NamedAnalyzer analyzer : asList(fieldType.indexAnalyzer(), fieldType.getTextSearchInfo().getSearchAnalyzer())) {  
+        NamedAnalyzer whitespace = new NamedAnalyzer("whitespace", AnalyzerScope.INDEX, new WhitespaceAnalyzer());  
+        checker.registerUpdateCheck(b -> {
+        assertThat(mapperService.fieldType("field.subField"), instanceOf(KeywordFieldMapper.KeywordFieldType.class));
+    }
+            b.field("norms", false);  
+        }  
+                getShingleFieldMapper(mapper, "field._3gram")
+        builder.add(  
+            assertThat(q, equalTo(expected));
+                    "for " + m.name(),
+        IndexableField[] rootFields = parsedDocument.rootDoc().getFields("field");
+ */  
+            Map.of("default", dflt, "standard", standard, "keyword", keyword, "simple", simple, "whitespace", whitespace),
+        PrefixFieldMapper prefixFieldMapper = getPrefixFieldMapper(defaultMapper, "field._index_prefix");
+                getShingleFieldMapper(mapper, "field._2gram"),
+            Query actual = new MatchPhraseQueryBuilder("field", "one two three four").toQuery(queryShardContext);  
+        ).forEach(m -> assertFalse("for " + m.name(), m.fieldType.stored()));
+        MapperService mapperService = createMapperService(
+    public void testDefaultConfiguration() throws IOException {
+ * You may obtain a copy of the License at  
+            Query actual = new MatchPhraseQueryBuilder("field", "one two").toQuery(queryShardContext);  
+        {
+    private static void assertRootFieldMapper(SearchAsYouTypeFieldMapper mapper, int maxShingleSize, String analyzerName) {
+import java.util.Collection;
+        for (ShingleFieldType shingleField : fieldType.shingleFields) {
+        return new IndexAnalyzers(
+            2,  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            b.startObject("fields");
+        );
+    public void testNorms() throws IOException {  
+        IndexableField[] prefixFields = parsedDocument.rootDoc().getFields("field._index_prefix");
+        }
+    ) {  
+        return (PrefixFieldMapper) mapper;
+            Query expected = new SynonymQuery.Builder("field._index_prefix").addTerm(new Term("field._index_prefix", "three words here"))
+    }
+        assertThat(actual, instanceOf(DisjunctionMaxQuery.class));  
+            b.endObject();
+            2,
+        String analyzerName = "simple";
+import static org.hamcrest.Matchers.hasSize;
+import java.util.Collections;  
+                getRootFieldMapper(mapper, "field"),  
+        );  
+    }  
+                )  
+        String path = "field.suggest";  
+    protected IndexAnalyzers createIndexAnalyzers(IndexSettings indexSettings) {
+            assertTrue(getRootFieldMapper(mapper, "field").fieldType().fieldType.omitNorms());
+        return (SearchAsYouTypeFieldMapper) mapper;
+        PrefixFieldType prefixFieldType
+            final String term = terms.get(i);
+import java.util.Set;  
+        builder.value("new york city");
+import static java.util.Arrays.asList;
+            4,
+            "field",
+import java.util.Arrays;
+                getShingleFieldMapper(mapper, "field._3gram")  
+import org.apache.lucene.search.FieldExistsQuery;
+                getPrefixFieldMapper(mapper, "field._index_prefix"),
+                buildBoolPrefixQuery("field", "field._index_prefix", asList("quick", "brown", "fox", "jump", "lazy", "dog")),  
+            expected.setSlop(1);
+    protected Collection<? extends Plugin> getPlugins() {  
+        }
+    private static PrefixFieldMapper getPrefixFieldMapper(DocumentMapper defaultMapper, String fieldName) {
+ * under the License.  
+    }  
+            ).forEach(m -> assertFalse("for " + m.name(), m.fieldType.omitNorms()));  

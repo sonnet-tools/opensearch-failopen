@@ -1,122 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.common.ssl;
-
-import java.util.Collections;  
-import java.util.LinkedHashMap;
-import java.util.Locale;
-import java.util.Map;  
-import java.util.stream.Collectors;
-
-/**  
- * Represents the verification mode to be used for SSL connections.
- */
-public enum SslVerificationMode {  
-    /**
-     * Verify neither the hostname, nor the provided certificate.
-     */  
-    NONE {
+            return true;
+     * @return true if certificate verification is enabled  
         @Override
-        public boolean isHostnameVerificationEnabled() {  
-            return false;
-        }
-
-        @Override
-        public boolean isCertificateVerificationEnabled() {
-            return false;  
-        }
     },
-    /**  
+    private static Map<String, SslVerificationMode> buildLookup() {  
+     * @return true if hostname verification is enabled
+            );  
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+    }  
+    public static SslVerificationMode parse(String value) {
+            return false;  
+ * specific language governing permissions and limitations
+        @Override
+                    + "], recognised values are ["  
+        public boolean isHostnameVerificationEnabled() {
+        Map<String, SslVerificationMode> map = new LinkedHashMap<>(3);
+ * license agreements. See the NOTICE file distributed with
+        public boolean isHostnameVerificationEnabled() {  
+    /**
+ * Modifications Copyright OpenSearch Contributors. See  
+     */  
+        @Override  
+ */
+/*
+     */
+        public boolean isHostnameVerificationEnabled() {
+ *
+                    + value
+import java.util.Map;  
      * Verify the provided certificate against the trust chain, but do not verify the hostname.
+            return false;  
      */
     CERTIFICATE {  
-        @Override
-        public boolean isHostnameVerificationEnabled() {
-            return false;  
-        }
-
-        @Override  
-        public boolean isCertificateVerificationEnabled() {
-            return true;
-        }  
-    },
-    /**
-     * Verify the provided certificate against the trust chain, and also verify that the hostname to which this client is connected  
-     * matches one of the Subject-Alternative-Names in the certificate.
-     */
-    FULL {  
-        @Override
-        public boolean isHostnameVerificationEnabled() {
             return true;  
-        }
-
-        @Override  
+            return false;
+                    + allowedValues
+ * Unless required by applicable law or agreed to in writing,
+public enum SslVerificationMode {  
         public boolean isCertificateVerificationEnabled() {
+    /**  
+        return mode;
+        }
+ */
+        }
+ * You may obtain a copy of the License at  
+     */
+ * not use this file except in compliance with the License.
+ * SPDX-License-Identifier: Apache-2.0
+ * Represents the verification mode to be used for SSL connections.
+/*  
+ * compatible open source license.
+    },
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.Collections;  
+ * Licensed to Elasticsearch under one or more contributor  
+        @Override  
+     * Verify neither the hostname, nor the provided certificate.
+        map.put("certificate", CERTIFICATE);  
             return true;
         }  
-    };
-
-    /**  
-     * @return true if hostname verification is enabled
-     */
-    public abstract boolean isHostnameVerificationEnabled();  
-
-    /**
-     * @return true if certificate verification is enabled  
-     */
-    public abstract boolean isCertificateVerificationEnabled();
-
-    private static final Map<String, SslVerificationMode> LOOKUP = Collections.unmodifiableMap(buildLookup());
-
-    private static Map<String, SslVerificationMode> buildLookup() {  
-        Map<String, SslVerificationMode> map = new LinkedHashMap<>(3);
-        map.put("none", NONE);
-        map.put("certificate", CERTIFICATE);  
-        map.put("full", FULL);
-        return map;
-    }  
-
-    public static SslVerificationMode parse(String value) {
-        final SslVerificationMode mode = LOOKUP.get(value.toLowerCase(Locale.ROOT));  
-        if (mode == null) {
-            final String allowedValues = LOOKUP.keySet().stream().collect(Collectors.joining(","));
-            throw new SslConfigException(  
-                "could not resolve ssl client verification mode, unknown value ["
-                    + value
-                    + "], recognised values are ["  
-                    + allowedValues
-                    + "]"
-            );  
+ * this file be licensed under the Apache-2.0 license or a
+        public boolean isCertificateVerificationEnabled() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        @Override
+import java.util.stream.Collectors;
         }
-        return mode;
-    }  
+        map.put("none", NONE);
+ * GitHub history for details.
+import java.util.LinkedHashMap;
+        }
+package org.opensearch.common.ssl;
+                    + "]"
+/**  
+            throw new SslConfigException(  
+ * this work for additional information regarding copyright
+    public abstract boolean isCertificateVerificationEnabled();
+     * Verify the provided certificate against the trust chain, and also verify that the hostname to which this client is connected  
+    private static final Map<String, SslVerificationMode> LOOKUP = Collections.unmodifiableMap(buildLookup());
+        }  
+    FULL {  
+    /**
 }
+        if (mode == null) {
+    };
+                "could not resolve ssl client verification mode, unknown value ["
+    NONE {
+        public boolean isCertificateVerificationEnabled() {
+        map.put("full", FULL);
+    public abstract boolean isHostnameVerificationEnabled();  
+ */
+import java.util.Locale;
+ * KIND, either express or implied.  See the License for the
+        final SslVerificationMode mode = LOOKUP.get(value.toLowerCase(Locale.ROOT));  
+     * matches one of the Subject-Alternative-Names in the certificate.
+        return map;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * ownership. Elasticsearch licenses this file to you under  
+ *  
+    }  
+            final String allowedValues = LOOKUP.keySet().stream().collect(Collectors.joining(","));
+    /**  
+        @Override
+ * under the License.  
+/*
+ *
+    /**
+ */  
+     */

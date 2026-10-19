@@ -1,85 +1,75 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common;
-
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Encapsulates an accumulation of validation errors
- *  
- * @opensearch.internal
- */
-public class ValidationException extends IllegalArgumentException {  
-    private final List<String> validationErrors = new ArrayList<>();
-
-    public ValidationException() {  
-        super("validation failed");
-    }
-
-    /**
-     * Add a new validation error to the accumulating validation errors
-     * @param error the error to add  
-     */
-    public final void addValidationError(String error) {
         validationErrors.add(error);  
     }
-
-    /**  
-     * Add a sequence of validation errors to the accumulating validation errors
-     * @param errors the errors to add
-     */  
-    public final void addValidationErrors(Iterable<String> errors) {
-        for (String error : errors) {
-            validationErrors.add(error);  
-        }
-    }
-
-    /**
-     * Returns the validation errors accumulated
-     */  
-    public final List<String> validationErrors() {
-        return validationErrors;
-    }  
-
-    @Override
+ * GitHub history for details.
+public class ValidationException extends IllegalArgumentException {  
     public final String getMessage() {  
-        StringBuilder sb = new StringBuilder();
-        sb.append("Validation Failed: ");
-        int index = 0;  
-        for (String error : validationErrors) {
-            sb.append(++index).append(": ").append(error).append(";");
-        }  
+package org.opensearch.common;
+    }
+     * Add a new validation error to the accumulating validation errors
+    public final void addValidationError(String error) {
+ * @opensearch.internal
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * Add a sequence of validation errors to the accumulating validation errors
+        super("validation failed");
+            validationErrors.add(error);  
+ *
+}  
         return sb.toString();
     }
-}  
+/*  
+        }
+     * Returns the validation errors accumulated
+ * KIND, either express or implied.  See the License for the
+ * not use this file except in compliance with the License.
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+    }  
+        for (String error : errors) {
+ * compatible open source license.
+     */  
+        sb.append("Validation Failed: ");
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+     */
+        StringBuilder sb = new StringBuilder();
+        return validationErrors;
+        for (String error : validationErrors) {
+        int index = 0;  
+     */  
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private final List<String> validationErrors = new ArrayList<>();
+ */  
+import java.util.List;
+import java.util.ArrayList;
+ * You may obtain a copy of the License at  
+            sb.append(++index).append(": ").append(error).append(";");
+    }
+/**
+     * @param error the error to add  
+ * The OpenSearch Contributors require contributions made to  
+        }  
+ * Licensed to Elasticsearch under one or more contributor  
+    /**  
+ * software distributed under the License is distributed on an
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+ * license agreements. See the NOTICE file distributed with
+ */
+    public final List<String> validationErrors() {
+/*
+    public final void addValidationErrors(Iterable<String> errors) {
+ */
+    /**
+     * @param errors the errors to add
+ *  
+    public ValidationException() {  
+ * under the License.  
+    /**
+    @Override
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+ * Encapsulates an accumulation of validation errors
+ * the Apache License, Version 2.0 (the "License"); you may

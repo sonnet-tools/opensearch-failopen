@@ -1,191 +1,174 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+            assert result != null;
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.ingest;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
+    }
 import org.opensearch.core.xcontent.XContentParser.Token;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.List;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;  
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-
-/**  
- * transport response for simulating a pipeline
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class SimulatePipelineResponse extends ActionResponse implements ToXContentObject {  
-    private String pipelineId;
-    private boolean verbose;
-    private List<SimulateDocumentResult> results;  
-
-    @SuppressWarnings("unchecked")
-    public static final ConstructingObjectParser<SimulatePipelineResponse, Void> PARSER = new ConstructingObjectParser<>(  
-        "simulate_pipeline_response",
-        true,
-        a -> {  
-            List<SimulateDocumentResult> results = (List<SimulateDocumentResult>) a[0];
-            boolean verbose = false;
-            if (results.size() > 0) {  
-                if (results.get(0) instanceof SimulateDocumentVerboseResult) {
-                    verbose = true;
-                }  
+    public String getPipelineId() {  
             }
-            return new SimulatePipelineResponse(null, verbose, results);
-        }  
-    );
-    static {
-        PARSER.declareObjectArray(constructorArg(), (parser, context) -> {  
-            Token token = parser.currentToken();
-            ensureExpectedToken(Token.START_OBJECT, token, parser);
-            SimulateDocumentResult result = null;  
-            while ((token = parser.nextToken()) != Token.END_OBJECT) {
-                ensureExpectedToken(Token.FIELD_NAME, token, parser);
-                String fieldName = parser.currentName();  
-                token = parser.nextToken();
-                if (token == Token.START_ARRAY) {
-                    if (fieldName.equals(SimulateDocumentVerboseResult.PROCESSOR_RESULT_FIELD)) {  
-                        List<SimulateProcessorResult> results = new ArrayList<>();
-                        while ((token = parser.nextToken()) == Token.START_OBJECT) {
+        int responsesLength = in.readVInt();
+        true,
+        }
+import org.opensearch.core.xcontent.XContentParser;
+ * The OpenSearch Contributors require contributions made to  
+ * GitHub history for details.
+    public SimulatePipelineResponse(String pipelineId, boolean verbose, List<SimulateDocumentResult> responses) {  
                             results.add(SimulateProcessorResult.fromXContent(parser));  
+            }
+    );
                         }
-                        ensureExpectedToken(Token.END_ARRAY, token, parser);
-                        result = new SimulateDocumentVerboseResult(results);  
-                    } else {
-                        parser.skipChildren();
-                    }  
-                } else if (token.equals(Token.START_OBJECT)) {
-                    switch (fieldName) {
-                        case WriteableIngestDocument.DOC_FIELD:  
-                            result = new SimulateDocumentBaseResult(
-                                WriteableIngestDocument.INGEST_DOC_PARSER.apply(parser, null).getIngestDocument()
-                            );  
-                            break;
+    static final class Fields {
+            boolean verbose = false;
+    }  
+                String fieldName = parser.currentName();  
+    }  
+                token = parser.nextToken();
+ * this file be licensed under the Apache-2.0 license or a
+                simulateDocumentResult = new SimulateDocumentBaseResult(in);  
+    /**
+ *
+        a -> {  
+    }
+import org.opensearch.core.xcontent.ToXContentObject;
+            while ((token = parser.nextToken()) != Token.END_OBJECT) {
+        return results;
+            results.add(simulateDocumentResult);
                         case "error":
+            } else {
+        return builder;
+                        parser.skipChildren();
+        for (int i = 0; i < responsesLength; i++) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            Token token = parser.currentToken();
+ * compatible open source license.
+/*  
+            if (verbose) {  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+                    } else {
                             result = new SimulateDocumentBaseResult(OpenSearchException.fromXContent(parser));  
                             break;
-                        default:
-                            parser.skipChildren();  
-                            break;
-                    }
-                } // else it is a value skip it  
-            }
-            assert result != null;
-            return result;  
-        }, new ParseField(Fields.DOCUMENTS));
-    }
-
-    public SimulatePipelineResponse(StreamInput in) throws IOException {
-        super(in);
-        this.pipelineId = in.readOptionalString();  
-        boolean verbose = in.readBoolean();
-        int responsesLength = in.readVInt();
-        results = new ArrayList<>();  
-        for (int i = 0; i < responsesLength; i++) {
-            SimulateDocumentResult simulateDocumentResult;
-            if (verbose) {  
-                simulateDocumentResult = new SimulateDocumentVerboseResult(in);
-            } else {
-                simulateDocumentResult = new SimulateDocumentBaseResult(in);  
-            }
-            results.add(simulateDocumentResult);
-        }  
-    }
-
-    public SimulatePipelineResponse(String pipelineId, boolean verbose, List<SimulateDocumentResult> responses) {  
-        this.pipelineId = pipelineId;
-        this.verbose = verbose;
-        this.results = Collections.unmodifiableList(responses);  
-    }
-
-    public String getPipelineId() {  
-        return pipelineId;
-    }
-
-    public List<SimulateDocumentResult> getResults() {
-        return results;
-    }  
-
-    public boolean isVerbose() {
-        return verbose;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeOptionalString(pipelineId);
-        out.writeBoolean(verbose);  
-        out.writeVInt(results.size());
-        for (SimulateDocumentResult response : results) {
-            response.writeTo(out);  
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.startArray(Fields.DOCUMENTS);
-        for (SimulateDocumentResult response : results) {
-            response.toXContent(builder, params);  
-        }
-        builder.endArray();
-        builder.endObject();  
-        return builder;
-    }
-
-    public static SimulatePipelineResponse fromXContent(XContentParser parser) {
+                        result = new SimulateDocumentVerboseResult(results);  
         return PARSER.apply(parser, null);
-    }  
-
-    /**
-     * Fields for parsing and toXContent  
+    @SuppressWarnings("unchecked")
+                        default:
      *
-     * @opensearch.internal
-     */  
-    static final class Fields {
-        static final String DOCUMENTS = "docs";
+    }
+                            break;
+ * software distributed under the License is distributed on an
+public class SimulatePipelineResponse extends ActionResponse implements ToXContentObject {  
+ * this work for additional information regarding copyright
+        "simulate_pipeline_response",
+        this.pipelineId = in.readOptionalString();  
+                } else if (token.equals(Token.START_OBJECT)) {
+import java.util.Collections;  
+ * @opensearch.api  
+import java.io.IOException;
+/**  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ * SPDX-License-Identifier: Apache-2.0
+            return new SimulatePipelineResponse(null, verbose, results);
+                            result = new SimulateDocumentBaseResult(
+    public SimulatePipelineResponse(StreamInput in) throws IOException {
+ * transport response for simulating a pipeline
+        builder.startObject();  
+        out.writeOptionalString(pipelineId);
+                } // else it is a value skip it  
+                    }
+        boolean verbose = in.readBoolean();
+    private List<SimulateDocumentResult> results;  
+        this.results = Collections.unmodifiableList(responses);  
+@PublicApi(since = "1.0.0")
+            }
+    public void writeTo(StreamOutput out) throws IOException {
+                                WriteableIngestDocument.INGEST_DOC_PARSER.apply(parser, null).getIngestDocument()
+import org.opensearch.OpenSearchException;
+            List<SimulateDocumentResult> results = (List<SimulateDocumentResult>) a[0];
+            SimulateDocumentResult simulateDocumentResult;
     }  
+package org.opensearch.action.ingest;
+        }  
+        super(in);
+                if (token == Token.START_ARRAY) {
+    public boolean isVerbose() {
+        builder.endObject();  
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;  
+ * not use this file except in compliance with the License.
+ */
+            response.writeTo(out);  
+                        ensureExpectedToken(Token.END_ARRAY, token, parser);
+ * You may obtain a copy of the License at  
+        static final String DOCUMENTS = "docs";
+    }
 }
+ * Unless required by applicable law or agreed to in writing,
+import java.util.List;
+import org.opensearch.core.xcontent.XContentBuilder;  
+        }  
+ * Modifications Copyright OpenSearch Contributors. See
+            if (results.size() > 0) {  
+import java.util.ArrayList;
+        results = new ArrayList<>();  
+                        case WriteableIngestDocument.DOC_FIELD:  
+                            break;
+import org.opensearch.core.ParseField;  
+                ensureExpectedToken(Token.FIELD_NAME, token, parser);
+        PARSER.declareObjectArray(constructorArg(), (parser, context) -> {  
+    public static final ConstructingObjectParser<SimulatePipelineResponse, Void> PARSER = new ConstructingObjectParser<>(  
+/*
+            return result;  
+                        List<SimulateProcessorResult> results = new ArrayList<>();
+    public List<SimulateDocumentResult> getResults() {
+ */
+import org.opensearch.core.common.io.stream.StreamInput;
+ * under the License.  
+ *
+                    verbose = true;
+        out.writeVInt(results.size());
+                }  
+     * @opensearch.internal
+    @Override
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+    @Override  
+ *  
+                    switch (fieldName) {
+    private boolean verbose;
+    }
+                if (results.get(0) instanceof SimulateDocumentVerboseResult) {
+                            parser.skipChildren();  
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+        this.pipelineId = pipelineId;
+                            );  
+     */  
+        builder.startArray(Fields.DOCUMENTS);
+        builder.endArray();
+                    }  
+    private String pipelineId;
+        out.writeBoolean(verbose);  
+            ensureExpectedToken(Token.START_OBJECT, token, parser);
+        this.verbose = verbose;
+                    if (fieldName.equals(SimulateDocumentVerboseResult.PROCESSOR_RESULT_FIELD)) {  
+ * specific language governing permissions and limitations
+ * Licensed to Elasticsearch under one or more contributor  
+        }
+                        while ((token = parser.nextToken()) == Token.START_OBJECT) {
+import org.opensearch.common.annotation.PublicApi;
+ * the Apache License, Version 2.0 (the "License"); you may
+/*  
+            response.toXContent(builder, params);  
+    }
+    static {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            SimulateDocumentResult result = null;  
+import org.opensearch.core.action.ActionResponse;
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+        for (SimulateDocumentResult response : results) {
+        return verbose;  
+ */  
+                simulateDocumentResult = new SimulateDocumentVerboseResult(in);
+        return pipelineId;
+        }, new ParseField(Fields.DOCUMENTS));
+     * Fields for parsing and toXContent  
+        for (SimulateDocumentResult response : results) {
+ */  
+    public static SimulatePipelineResponse fromXContent(XContentParser parser) {

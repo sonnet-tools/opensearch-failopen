@@ -1,24 +1,20 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.qa;
-
-/**
- * Helper for Rex command testing dataset configuration.
  */  
 public final class RexCommandTestHelper {
-    
-    private RexCommandTestHelper() {  
-        // utility class
+/**
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
     }
-    
-    public static final Dataset DATASET = new Dataset(
+package org.opensearch.analytics.qa;
+ */  
+ * Helper for Rex command testing dataset configuration.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+/*  
         "rex_command",
-        "rex_command"  
+        // utility class
+ * The OpenSearch Contributors require contributions made to  
+    private RexCommandTestHelper() {  
     );
+        "rex_command"  
 }
+    public static final Dataset DATASET = new Dataset(

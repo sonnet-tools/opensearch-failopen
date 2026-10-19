@@ -1,143 +1,127 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+        }
+        }
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.block;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.rest.RestStatus;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Map;  
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;  
-
-import static java.util.Collections.unmodifiableSet;
-
-/**
- * Internal exception on obtaining a cluster block
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class ClusterBlockException extends OpenSearchException {
-    private final Set<ClusterBlock> blocks;
-
-    public ClusterBlockException(Set<ClusterBlock> globalLevelBlocks) {
-        super(buildMessageForGlobalBlocks(globalLevelBlocks));
-        this.blocks = globalLevelBlocks;  
-    }
-
-    public ClusterBlockException(Map<String, Set<ClusterBlock>> indexLevelBlocks) {  
-        super(buildMessageForIndexBlocks(indexLevelBlocks));
-        this.blocks = indexLevelBlocks.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
-    }  
-
-    public ClusterBlockException(StreamInput in) throws IOException {
-        super(in);  
-        this.blocks = unmodifiableSet(in.readSet(ClusterBlock::new));
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        if (blocks != null) {
-            out.writeCollection(blocks);
-        } else {  
-            out.writeVInt(0);
-        }
-    }  
-
-    public boolean retryable() {
+                    status = block.status();
         for (ClusterBlock block : blocks) {  
-            if (!block.retryable()) {
-                return false;
-            }  
-        }
-        return true;
-    }  
-
     public Set<ClusterBlock> blocks() {
-        return blocks;  
-    }
-
-    private static String buildMessageForGlobalBlocks(Set<ClusterBlock> globalLevelBlocks) {  
-        assert globalLevelBlocks.isEmpty() == false;
-        Function<ClusterBlock, String> blockDescription = block -> block.status() + "/" + block.id() + "/" + block.description();
-        StringBuilder sb = new StringBuilder();  
-        if (globalLevelBlocks.isEmpty() == false) {
-            sb.append("blocked by: [");
-            sb.append(globalLevelBlocks.stream().map(blockDescription).collect(Collectors.joining(", ")));  
-            sb.append("];");
-        }
-        return sb.toString();  
-    }
-
-    private static String buildMessageForIndexBlocks(Map<String, Set<ClusterBlock>> indexLevelBlocks) {  
+        return status;
+ * Modifications Copyright OpenSearch Contributors. See
         assert indexLevelBlocks.isEmpty() == false;
-        Function<ClusterBlock, String> blockDescription = block -> block.status() + "/" + block.id() + "/" + block.description();
-        StringBuilder sb = new StringBuilder();  
-        for (Map.Entry<String, Set<ClusterBlock>> entry : indexLevelBlocks.entrySet()) {
-            sb.append("index [" + entry.getKey() + "] blocked by: [");
-            sb.append(entry.getValue().stream().map(blockDescription).collect(Collectors.joining(", ")));  
-            sb.append("];");
-        }
-        return sb.toString();  
+ * software distributed under the License is distributed on an
     }
-
-    @Override  
+public class ClusterBlockException extends OpenSearchException {
+ * the Apache License, Version 2.0 (the "License"); you may
     public RestStatus status() {
-        RestStatus status = null;
-        boolean onlyRetryableBlocks = true;  
-        for (ClusterBlock block : blocks) {
-            boolean isRetryableBlock = block.status() == RestStatus.TOO_MANY_REQUESTS;
-            if (isRetryableBlock == false) {  
-                if (status == null) {
-                    status = block.status();
-                } else if (status.getStatus() < block.status().getStatus()) {  
-                    status = block.status();
-                }
+import java.util.Collection;
+        Function<ClusterBlock, String> blockDescription = block -> block.status() + "/" + block.id() + "/" + block.description();
+ */
+        if (onlyRetryableBlocks) {
+import static java.util.Collections.unmodifiableSet;
+/*  
+        this.blocks = indexLevelBlocks.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
+import java.util.Set;
+ */  
+    }  
+    }
+    private static String buildMessageForIndexBlocks(Map<String, Set<ClusterBlock>> indexLevelBlocks) {  
+    }  
+            out.writeVInt(0);
+/**
+                return false;
+ * this file be licensed under the Apache-2.0 license or a
+    public ClusterBlockException(Set<ClusterBlock> globalLevelBlocks) {
+        // return status which has the maximum code of all status except the retryable blocks'
+        super.writeTo(out);  
+@PublicApi(since = "1.0.0")  
+import java.util.function.Function;
+ */  
+        }  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+    private final Set<ClusterBlock> blocks;
+ * @opensearch.api
+import org.opensearch.common.annotation.PublicApi;
+    }
             }  
-            onlyRetryableBlocks = onlyRetryableBlocks && isRetryableBlock;
+        StringBuilder sb = new StringBuilder();  
+    public boolean retryable() {
+        if (globalLevelBlocks.isEmpty() == false) {
+            boolean isRetryableBlock = block.status() == RestStatus.TOO_MANY_REQUESTS;
+        this.blocks = globalLevelBlocks;  
+        return blocks;  
+        super(buildMessageForGlobalBlocks(globalLevelBlocks));
         }
         // return retryable status if there are only retryable blocks  
-        if (onlyRetryableBlocks) {
-            return RestStatus.TOO_MANY_REQUESTS;
-        }  
-        // return status which has the maximum code of all status except the retryable blocks'
-        return status;
+ * Unless required by applicable law or agreed to in writing,
+        for (ClusterBlock block : blocks) {
+ * You may obtain a copy of the License at  
+ * specific language governing permissions and limitations
+    private static String buildMessageForGlobalBlocks(Set<ClusterBlock> globalLevelBlocks) {  
     }  
+    }
+        } else {  
+    public ClusterBlockException(Map<String, Set<ClusterBlock>> indexLevelBlocks) {  
+        }
+                if (status == null) {
+import java.util.Map;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        StringBuilder sb = new StringBuilder();  
+                } else if (status.getStatus() < block.status().getStatus()) {  
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+        RestStatus status = null;
 }
+ *  
+ * this work for additional information regarding copyright
+ *  
+                }
+    public ClusterBlockException(StreamInput in) throws IOException {
+package org.opensearch.cluster.block;
+import org.opensearch.core.rest.RestStatus;
+                    status = block.status();
+            out.writeCollection(blocks);
+            if (!block.retryable()) {
+    @Override
+ * ownership. Elasticsearch licenses this file to you under  
+ * Internal exception on obtaining a cluster block
+    }
+            sb.append(globalLevelBlocks.stream().map(blockDescription).collect(Collectors.joining(", ")));  
+        this.blocks = unmodifiableSet(in.readSet(ClusterBlock::new));
+        boolean onlyRetryableBlocks = true;  
+            }  
+    }  
+        return true;
+        return sb.toString();  
+            onlyRetryableBlocks = onlyRetryableBlocks && isRetryableBlock;
+        }
+            sb.append("index [" + entry.getKey() + "] blocked by: [");
+        for (Map.Entry<String, Set<ClusterBlock>> entry : indexLevelBlocks.entrySet()) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        if (blocks != null) {
+import java.io.IOException;
+ */
+            if (isRetryableBlock == false) {  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.common.io.stream.StreamInput;  
+            sb.append("];");
+    public void writeTo(StreamOutput out) throws IOException {
+        assert globalLevelBlocks.isEmpty() == false;
+ *
+ * GitHub history for details.
+ * compatible open source license.
+            sb.append("];");
+/*
+import org.opensearch.OpenSearchException;
+        Function<ClusterBlock, String> blockDescription = block -> block.status() + "/" + block.id() + "/" + block.description();
+    @Override  
+ * not use this file except in compliance with the License.
+        super(buildMessageForIndexBlocks(indexLevelBlocks));
+ * KIND, either express or implied.  See the License for the
+        return sb.toString();  
+/*  
+            return RestStatus.TOO_MANY_REQUESTS;
+import java.util.stream.Collectors;  
+ * Licensed to Elasticsearch under one or more contributor  
+            sb.append(entry.getValue().stream().map(blockDescription).collect(Collectors.joining(", ")));  
+            sb.append("blocked by: [");
+        super(in);  

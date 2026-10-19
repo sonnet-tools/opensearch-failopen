@@ -1,93 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.shrink;
-
+        boolean acknowledged = randomBoolean();
+    @Override
+            );
 import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractSerializingTestCase;
-
-public class ResizeResponseTests extends AbstractSerializingTestCase<ResizeResponse> {
-
-    public void testToXContent() {  
-        ResizeResponse response = new ResizeResponse(true, false, "index_name");
-        String output = Strings.toString(MediaTypeRegistry.JSON, response);
-        assertEquals("{\"acknowledged\":true,\"shards_acknowledged\":false,\"index\":\"index_name\"}", output);  
-    }
-
-    public void testToString() {  
-        ResizeResponse response = new ResizeResponse(true, false, "index_name");
-        String output = response.toString();
-        assertEquals("ResizeResponse[acknowledged=true,shards_acknowledged=false,index=index_name]", output);  
-    }
-
+        if (randomBoolean()) {
     @Override  
+    public void testToXContent() {  
+/*
+        String output = Strings.toString(MediaTypeRegistry.JSON, response);
+import org.opensearch.core.xcontent.XContentParser;
+ * software distributed under the License is distributed on an
+ */  
+ */  
+ * KIND, either express or implied.  See the License for the
+        } else {  
+                response.isShardsAcknowledged(),  
+ * Unless required by applicable law or agreed to in writing,
+    }
+ * The OpenSearch Contributors require contributions made to  
+ *
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        }  
+ * this work for additional information regarding copyright
+    }  
+            if (randomBoolean()) {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        String index = randomAlphaOfLength(5);  
+    protected ResizeResponse mutateInstance(ResizeResponse response) {
+                response.index() + randomAlphaOfLengthBetween(2, 5)
+    protected ResizeResponse createTestInstance() {  
+public class ResizeResponseTests extends AbstractSerializingTestCase<ResizeResponse> {
+        ResizeResponse response = new ResizeResponse(true, false, "index_name");
+                return new ResizeResponse(acknowledged, shardsAcknowledged, response.index());
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+ * You may obtain a copy of the License at  
+ * ownership. Elasticsearch licenses this file to you under  
+    }
     protected ResizeResponse doParseInstance(XContentParser parser) {
         return ResizeResponse.fromXContent(parser);
-    }  
-
-    @Override
-    protected ResizeResponse createTestInstance() {  
-        boolean acknowledged = randomBoolean();
-        boolean shardsAcknowledged = acknowledged && randomBoolean();
-        String index = randomAlphaOfLength(5);  
+ */
         return new ResizeResponse(acknowledged, shardsAcknowledged, index);
-    }
-
-    @Override
-    protected Writeable.Reader<ResizeResponse> instanceReader() {
-        return ResizeResponse::new;  
-    }
-
-    @Override  
-    protected ResizeResponse mutateInstance(ResizeResponse response) {
-        if (randomBoolean()) {
-            if (randomBoolean()) {  
-                boolean acknowledged = response.isAcknowledged() == false;
-                boolean shardsAcknowledged = acknowledged && response.isShardsAcknowledged();
                 return new ResizeResponse(acknowledged, shardsAcknowledged, response.index());  
-            } else {
+/*  
+    protected Writeable.Reader<ResizeResponse> instanceReader() {
                 boolean shardsAcknowledged = response.isShardsAcknowledged() == false;
-                boolean acknowledged = shardsAcknowledged || response.isAcknowledged();  
-                return new ResizeResponse(acknowledged, shardsAcknowledged, response.index());
-            }
-        } else {  
+        String output = response.toString();
+ * GitHub history for details.
+/*  
             return new ResizeResponse(
-                response.isAcknowledged(),
-                response.isShardsAcknowledged(),  
-                response.index() + randomAlphaOfLengthBetween(2, 5)
-            );
-        }  
+        assertEquals("ResizeResponse[acknowledged=true,shards_acknowledged=false,index=index_name]", output);  
     }
+ *
+                boolean acknowledged = response.isAcknowledged() == false;
+import org.opensearch.test.AbstractSerializingTestCase;
+ * Licensed to Elasticsearch under one or more contributor  
+package org.opensearch.action.admin.indices.shrink;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+            } else {
+        boolean shardsAcknowledged = acknowledged && randomBoolean();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * license agreements. See the NOTICE file distributed with
+                boolean acknowledged = shardsAcknowledged || response.isAcknowledged();  
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        ResizeResponse response = new ResizeResponse(true, false, "index_name");
+                boolean shardsAcknowledged = acknowledged && response.isShardsAcknowledged();
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals("{\"acknowledged\":true,\"shards_acknowledged\":false,\"index\":\"index_name\"}", output);  
+        return ResizeResponse::new;  
+    @Override  
+                response.isAcknowledged(),
+    }
+ *  
+    public void testToString() {  
+    @Override
 }
+ * specific language governing permissions and limitations

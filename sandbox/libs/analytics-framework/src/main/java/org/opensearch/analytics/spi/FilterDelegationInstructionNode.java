@@ -1,68 +1,56 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
 package org.opensearch.analytics.spi;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-import java.util.List;
-
-/**
- * Instruction node for filter delegation to an index backend.
- * Carries the tree shape, predicate count, and serialized delegated queries.  
  *
- * @opensearch.internal
- */  
-public class FilterDelegationInstructionNode implements InstructionNode {
-
-    private final FilterTreeShape treeShape;  
-    private final int delegatedPredicateCount;
-    private final List<DelegatedExpression> delegatedQueries;
-
+ *
     public FilterDelegationInstructionNode(
-        FilterTreeShape treeShape,
-        int delegatedPredicateCount,  
-        List<DelegatedExpression> delegatedQueries
+import org.opensearch.core.common.io.stream.StreamOutput;
+        return delegatedQueries;
     ) {
-        this.treeShape = treeShape;  
         this.delegatedPredicateCount = delegatedPredicateCount;
+}
+        return treeShape;  
+    }  
+/*  
+ * Instruction node for filter delegation to an index backend.
+import org.opensearch.core.common.io.stream.StreamInput;
+    public List<DelegatedExpression> getDelegatedQueries() {
+    }  
+ * Carries the tree shape, predicate count, and serialized delegated queries.  
+    private final int delegatedPredicateCount;
+    }  
+    private final FilterTreeShape treeShape;  
+        this.delegatedQueries = in.readList(DelegatedExpression::new);
+ */  
+        FilterTreeShape treeShape,
+        List<DelegatedExpression> delegatedQueries
+        this.delegatedPredicateCount = in.readInt();
+    public FilterTreeShape getTreeShape() {
+ * this file be licensed under the Apache-2.0 license or a
+        out.writeInt(delegatedPredicateCount);
+    }
+ * compatible open source license.
+public class FilterDelegationInstructionNode implements InstructionNode {
+    @Override
+    @Override
+        out.writeCollection(delegatedQueries);
+        return delegatedPredicateCount;
+/**
+    public int getDelegatedPredicateCount() {  
+        out.writeEnum(treeShape);  
+    private final List<DelegatedExpression> delegatedQueries;
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.List;
+    public void writeTo(StreamOutput out) throws IOException {
+ * The OpenSearch Contributors require contributions made to  
+    public InstructionType type() {  
         this.delegatedQueries = delegatedQueries;
     }  
-
-    public FilterDelegationInstructionNode(StreamInput in) throws IOException {
+        int delegatedPredicateCount,  
+    }
+        this.treeShape = treeShape;  
         this.treeShape = in.readEnum(FilterTreeShape.class);  
-        this.delegatedPredicateCount = in.readInt();
-        this.delegatedQueries = in.readList(DelegatedExpression::new);
-    }  
-
-    @Override
-    public InstructionType type() {  
+    public FilterDelegationInstructionNode(StreamInput in) throws IOException {
         return InstructionType.SETUP_SHARD_SCAN_WITH_DELEGATION;
+import java.io.IOException;
+ * @opensearch.internal
     }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeEnum(treeShape);  
-        out.writeInt(delegatedPredicateCount);
-        out.writeCollection(delegatedQueries);
-    }  
-
-    public FilterTreeShape getTreeShape() {
-        return treeShape;  
-    }
-
-    public int getDelegatedPredicateCount() {  
-        return delegatedPredicateCount;
-    }
-
-    public List<DelegatedExpression> getDelegatedQueries() {
-        return delegatedQueries;
-    }  
-}
+ */  

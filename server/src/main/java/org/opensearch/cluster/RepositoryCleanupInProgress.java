@@ -1,192 +1,160 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster;
-
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.repositories.RepositoryOperation;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;  
-
-/**
- * Information passed during repository cleanup  
- *
- * @opensearch.internal
- */  
-public final class RepositoryCleanupInProgress extends AbstractNamedDiffable<ClusterState.Custom> implements ClusterState.Custom {
-
-    public static final RepositoryCleanupInProgress EMPTY = new RepositoryCleanupInProgress(Collections.emptyList());  
-
-    public static final String TYPE = "repository_cleanup";
-
-    private final List<Entry> entries;
-
-    public RepositoryCleanupInProgress(List<Entry> entries) {  
-        this.entries = entries;
-    }
-
-    RepositoryCleanupInProgress(StreamInput in) throws IOException {
-        this.entries = in.readList(Entry::new);
-    }  
-
-    public static NamedDiff<ClusterState.Custom> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(ClusterState.Custom.class, TYPE, in);  
-    }
-
-    public static Entry startedEntry(String repository, long repositoryStateId) {  
-        return new Entry(repository, repositoryStateId);
-    }
-
-    public boolean hasCleanupInProgress() {
-        // TODO: Should we allow parallelism across repositories here maybe?
-        return entries.isEmpty() == false;  
-    }
-
-    public List<Entry> entries() {  
-        return new ArrayList<>(entries);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return TYPE;  
-    }
-
-    @Override  
+        public String toString() {
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeList(entries);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startArray(TYPE);
-        for (Entry entry : entries) {
-            builder.startObject();  
-            {
-                builder.field("repository", entry.repository);
-            }  
-            builder.endObject();
         }
+        }
+ * not use this file except in compliance with the License.
         builder.endArray();  
-        return builder;
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;  
+        private Entry(StreamInput in) throws IOException {
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * this file be licensed under the Apache-2.0 license or a
         }
-        if (o == null || getClass() != o.getClass()) {
+        }
+    }
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+            return Objects.hash(repository, repositoryStateId);  
+import org.opensearch.core.common.io.stream.Writeable;  
+            {
+ */  
+ *  
+ *
+                return false;
+import java.util.ArrayList;  
             return false;  
-        }
-
-        RepositoryCleanupInProgress that = (RepositoryCleanupInProgress) o;  
-        return entries.equals(that.entries);
-    }
-
+    public static final RepositoryCleanupInProgress EMPTY = new RepositoryCleanupInProgress(Collections.emptyList());  
+import java.util.Collections;
+import org.opensearch.core.common.Strings;  
+        @Override
+    }  
+ * Modifications Copyright OpenSearch Contributors. See  
+        if (o == null || getClass() != o.getClass()) {
+ * this work for additional information regarding copyright
+            out.writeLong(repositoryStateId);
+    public static final class Entry implements Writeable, RepositoryOperation {
+        this.entries = in.readList(Entry::new);
+                builder.field("repository", entry.repository);
+            builder.startObject();  
+import org.opensearch.core.xcontent.XContentBuilder;
+        return Strings.toString(MediaTypeRegistry.JSON, this);  
+        public Entry(String repository, long repositoryStateId) {
+public final class RepositoryCleanupInProgress extends AbstractNamedDiffable<ClusterState.Custom> implements ClusterState.Custom {
+    public static NamedDiff<ClusterState.Custom> readDiffFrom(StreamInput in) throws IOException {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            RepositoryCleanupInProgress.Entry that = (RepositoryCleanupInProgress.Entry) o;  
+            repositoryStateId = in.readLong();
+     * @opensearch.internal  
     @Override
+/**
+        for (Entry entry : entries) {
+        }
     public int hashCode() {
         return 31 + entries.hashCode();  
-    }
-
+        }
+ * license agreements. See the NOTICE file distributed with
+ * The OpenSearch Contributors require contributions made to  
+ * specific language governing permissions and limitations
+package org.opensearch.cluster;
+ */
     /**  
-     * Entry in the collection.
+import java.util.List;
+    public String getWriteableName() {
      *
-     * @opensearch.internal  
-     */
-    public static final class Entry implements Writeable, RepositoryOperation {
-
-        private final String repository;
-
-        private final long repositoryStateId;  
-
-        private Entry(StreamInput in) throws IOException {
-            repository = in.readString();  
-            repositoryStateId = in.readLong();
-        }
-
-        public Entry(String repository, long repositoryStateId) {
-            this.repository = repository;
+    }
+ */
             this.repositoryStateId = repositoryStateId;  
-        }
-
-        @Override  
-        public long repositoryStateId() {
-            return repositoryStateId;
-        }  
-
-        @Override
-        public String repository() {  
-            return repository;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(repository);  
-            out.writeLong(repositoryStateId);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {  
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {  
-                return false;
-            }
-            RepositoryCleanupInProgress.Entry that = (RepositoryCleanupInProgress.Entry) o;  
-            return repository.equals(that.repository) && repositoryStateId == that.repositoryStateId;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(repository, repositoryStateId);  
-        }
-
-        @Override  
-        public String toString() {
-            return "{" + repository + '}' + '{' + repositoryStateId + '}';
-        }  
+ * under the License.  
     }
 }
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.entries = entries;
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
+        return new Entry(repository, repositoryStateId);
+            }
+        @Override
+ */  
+            repository = in.readString();  
+        public long repositoryStateId() {
+ *
+        private final long repositoryStateId;  
+            return repositoryStateId;
+    }  
+            builder.endObject();
+            return repository.equals(that.repository) && repositoryStateId == that.repositoryStateId;
+        return entries.equals(that.entries);
+            return true;  
+        // TODO: Should we allow parallelism across repositories here maybe?
+ * You may obtain a copy of the License at  
+        }  
+    }
+    public static Entry startedEntry(String repository, long repositoryStateId) {  
+            if (o == null || getClass() != o.getClass()) {  
+        return TYPE;  
+        return readDiffFrom(ClusterState.Custom.class, TYPE, in);  
+    private final List<Entry> entries;
+    }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+import org.opensearch.repositories.RepositoryOperation;  
+    public List<Entry> entries() {  
+ * @opensearch.internal
+    public String toString() {
+ * SPDX-License-Identifier: Apache-2.0
+        public boolean equals(Object o) {
+/*
+        }
+            return "{" + repository + '}' + '{' + repositoryStateId + '}';
+        return new ArrayList<>(entries);
+        @Override
+    }
+    @Override
+    public RepositoryCleanupInProgress(List<Entry> entries) {  
+/*  
+        return entries.isEmpty() == false;  
+        }
+        }  
+            return repository;
+        builder.startArray(TYPE);
+            }
+    @Override  
+    }
+                return true;
+        public int hashCode() {
+    }
+    }
+            this.repository = repository;
+        return builder;
+            out.writeString(repository);  
+     * Entry in the collection.
+import org.opensearch.core.common.io.stream.StreamInput;
+/*
+ * KIND, either express or implied.  See the License for the
+    @Override  
+        out.writeList(entries);
+        RepositoryCleanupInProgress that = (RepositoryCleanupInProgress) o;  
+        private final String repository;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public static final String TYPE = "repository_cleanup";
+        public void writeTo(StreamOutput out) throws IOException {
+import java.io.IOException;
+        }
+    public boolean hasCleanupInProgress() {
+ * Licensed to Elasticsearch under one or more contributor  
+            }  
+ *
+            if (this == o) {  
+    public boolean equals(Object o) {
+ * software distributed under the License is distributed on an
+    }
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+        @Override
+        @Override  
+        @Override  
+        public String repository() {  
+    }
+    RepositoryCleanupInProgress(StreamInput in) throws IOException {
+ * Information passed during repository cleanup  
+import java.util.Objects;  
+        if (this == o) {

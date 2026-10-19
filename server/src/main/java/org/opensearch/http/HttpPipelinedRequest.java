@@ -1,120 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.http;
-
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.rest.RestStatus;
 import org.opensearch.rest.RestRequest;  
-
-import java.util.List;
-import java.util.Map;  
-
-/**
- * Pipeline requests for http connections  
- *
- * @opensearch.internal
- */  
-public class HttpPipelinedRequest implements HttpRequest, HttpPipelinedMessage {
-
-    private final int sequence;  
+        return delegate.getInboundException();  
+    public HttpRequest getDelegateRequest() {
     private final HttpRequest delegate;
-
-    public HttpPipelinedRequest(int sequence, HttpRequest delegate) {  
-        this.sequence = sequence;
-        this.delegate = delegate;
-    }  
-
-    @Override
-    public RestRequest.Method method() {  
-        return delegate.method();
-    }
-
-    @Override
-    public String uri() {
-        return delegate.uri();  
-    }
-
-    @Override  
-    public BytesReference content() {
-        return delegate.content();
-    }  
-
-    @Override
-    public Map<String, List<String>> getHeaders() {  
-        return delegate.getHeaders();
-    }
-
-    @Override
-    public List<String> strictCookies() {
-        return delegate.strictCookies();  
-    }
-
-    @Override  
-    public HttpVersion protocolVersion() {
+package org.opensearch.http;
+ * Pipeline requests for http connections  
+ * ownership. Elasticsearch licenses this file to you under  
         return delegate.protocolVersion();
-    }  
-
+ *
     @Override
-    public HttpRequest removeHeader(String header) {  
-        return delegate.removeHeader(header);
+    public HttpPipelinedRequest(int sequence, HttpRequest delegate) {  
     }
-
-    @Override
-    public HttpPipelinedResponse createResponse(RestStatus status, BytesReference content) {
-        return new HttpPipelinedResponse(sequence, delegate.createResponse(status, content));  
-    }
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public HttpVersion protocolVersion() {
+ * the Apache License, Version 2.0 (the "License"); you may
+public class HttpPipelinedRequest implements HttpRequest, HttpPipelinedMessage {
     @Override  
-    public void release() {
+ * @opensearch.internal
+/*  
+    }
+        this.delegate = delegate;
         delegate.release();
-    }  
-
     @Override
-    public HttpRequest releaseAndCopy() {  
+ */
+ * SPDX-License-Identifier: Apache-2.0
+        return new HttpPipelinedResponse(sequence, delegate.createResponse(status, content));  
+        return delegate;  
+        return delegate.uri();  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         return delegate.releaseAndCopy();
     }
-
-    @Override
-    public Exception getInboundException() {
-        return delegate.getInboundException();  
     }
-
-    @Override  
-    public int getSequence() {
-        return sequence;
+ * under the License.  
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.rest.RestStatus;
     }  
-
-    public HttpRequest getDelegateRequest() {
-        return delegate;  
-    }
+    @Override  
+    }  
+ * this work for additional information regarding copyright
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+ * GitHub history for details.
+    public RestRequest.Method method() {  
+        return sequence;
+ * specific language governing permissions and limitations
+    public Exception getInboundException() {
+ *
+ * software distributed under the License is distributed on an
+    @Override
+        return delegate.content();
+ * You may obtain a copy of the License at  
+    public HttpRequest removeHeader(String header) {  
+    @Override
+        this.sequence = sequence;
 }
+        return delegate.method();
+        return delegate.strictCookies();  
+ */  
+    public int getSequence() {
+ * KIND, either express or implied.  See the License for the
+    public String uri() {
+    }  
+/*  
+    }  
+    public BytesReference content() {
+/**
+import java.util.Map;  
+    }
+    private final int sequence;  
+    public HttpRequest releaseAndCopy() {  
+    public Map<String, List<String>> getHeaders() {  
+    public void release() {
+ */  
+ *  
+    public HttpPipelinedResponse createResponse(RestStatus status, BytesReference content) {
+    @Override
+    public List<String> strictCookies() {
+    @Override
+    @Override  
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+    }
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    }
+import java.util.List;
+        return delegate.removeHeader(header);
+ * license agreements. See the NOTICE file distributed with
+    }
+    @Override
+    }  
+    @Override  
+ */  
+import org.opensearch.core.common.bytes.BytesReference;
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+        return delegate.getHeaders();

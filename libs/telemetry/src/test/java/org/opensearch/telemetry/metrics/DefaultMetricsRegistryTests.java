@@ -1,97 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.metrics;
-
-import org.opensearch.telemetry.metrics.tags.Tags;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.Closeable;
-import java.util.function.Supplier;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-public class DefaultMetricsRegistryTests extends OpenSearchTestCase {
-
-    private MetricsTelemetry metricsTelemetry;
-    private DefaultMetricsRegistry defaultMeterRegistry;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        metricsTelemetry = mock(MetricsTelemetry.class);
-        defaultMeterRegistry = new DefaultMetricsRegistry(metricsTelemetry);
-    }  
-
-    public void testCounter() {
-        Counter mockCounter = mock(Counter.class);  
-        when(defaultMeterRegistry.createCounter(any(String.class), any(String.class), any(String.class))).thenReturn(mockCounter);
-        Counter counter = defaultMeterRegistry.createCounter(
-            "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testCounter",  
             "test counter",
-            "1"
-        );  
-        assertSame(mockCounter, counter);
     }
-
+            "test observable gauge",
     public void testUpDownCounter() {
-        Counter mockCounter = mock(Counter.class);
+        assertSame(mockCloseable, closeable);  
+ *
+public class DefaultMetricsRegistryTests extends OpenSearchTestCase {
+import static org.mockito.ArgumentMatchers.any;
+package org.opensearch.telemetry.metrics;
+        Counter mockCounter = mock(Counter.class);  
+    public void setUp() throws Exception {
+        Closeable mockCloseable = mock(Closeable.class);
+    private DefaultMetricsRegistry defaultMeterRegistry;
+    public void testGauge() {  
+            "ms"  
+        when(defaultMeterRegistry.createGauge(any(String.class), any(String.class), any(String.class), any(Supplier.class))).thenReturn(  
+    }  
+            "1"
+ * The OpenSearch Contributors require contributions made to  
+        when(defaultMeterRegistry.createCounter(any(String.class), any(String.class), any(String.class))).thenReturn(mockCounter);
+            "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testObservableGauge",  
         when(defaultMeterRegistry.createUpDownCounter(any(String.class), any(String.class), any(String.class))).thenReturn(mockCounter);  
+    private MetricsTelemetry metricsTelemetry;
+        );
         Counter counter = defaultMeterRegistry.createUpDownCounter(
             "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testUpDownCounter",
-            "test up-down counter",  
-            "1"
-        );
-        assertSame(mockCounter, counter);  
-    }
-
     public void testHistogram() {  
         Histogram mockHistogram = mock(Histogram.class);
-        when(defaultMeterRegistry.createHistogram(any(String.class), any(String.class), any(String.class))).thenReturn(mockHistogram);
-        Histogram histogram = defaultMeterRegistry.createHistogram(  
-            "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testHistogram",
-            "test up-down counter",
-            "ms"  
-        );
         assertSame(mockHistogram, histogram);
-    }  
-
-    @SuppressWarnings("unchecked")
-    public void testGauge() {  
-        Closeable mockCloseable = mock(Closeable.class);
-        when(
-            defaultMeterRegistry.createGauge(any(String.class), any(String.class), any(String.class), any(Supplier.class), any(Tags.class))  
-        ).thenReturn(mockCloseable);
-        Closeable closeable = defaultMeterRegistry.createGauge(
-            "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testObservableGauge",  
-            "test observable gauge",
+        Counter counter = defaultMeterRegistry.createCounter(
+import org.opensearch.test.OpenSearchTestCase;
             "ms",
-            () -> 1.0,  
-            Tags.EMPTY
-        );
-        assertSame(mockCloseable, closeable);  
-    }
-
-    @SuppressWarnings("unchecked")  
-    public void testGaugeWithValueAndTagSupplier() {
+    @SuppressWarnings("unchecked")
         Closeable mockCloseable = mock(Closeable.class);
-        when(defaultMeterRegistry.createGauge(any(String.class), any(String.class), any(String.class), any(Supplier.class))).thenReturn(  
-            mockCloseable
-        );
+        Closeable closeable = defaultMeterRegistry.createGauge(
+            "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testHistogram",
+            () -> TaggedMeasurement.create(1.0, Tags.EMPTY)
         Closeable closeable = defaultMeterRegistry.createGauge(  
             "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testObservableGauge",
-            "test observable gauge",
-            "ms",  
-            () -> TaggedMeasurement.create(1.0, Tags.EMPTY)
+            "1"
+            "test up-down counter",  
+        super.setUp();  
         );
-        assertSame(mockCloseable, closeable);  
+ */  
+        );
+            "ms",  
+        when(defaultMeterRegistry.createHistogram(any(String.class), any(String.class), any(String.class))).thenReturn(mockHistogram);
+        assertSame(mockCounter, counter);
+            "org.opensearch.telemetry.metrics.DefaultMeterRegistryTests.testCounter",  
+        );
+/*  
+import static org.mockito.Mockito.mock;
+        );  
     }
-
+    @Override
+            mockCloseable
+import org.opensearch.telemetry.metrics.tags.Tags;
+        ).thenReturn(mockCloseable);
+    @SuppressWarnings("unchecked")  
+ * SPDX-License-Identifier: Apache-2.0
+            () -> 1.0,  
+        assertSame(mockCloseable, closeable);  
+        defaultMeterRegistry = new DefaultMetricsRegistry(metricsTelemetry);
+        assertSame(mockCounter, counter);  
+import static org.mockito.Mockito.when;  
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+        );
+            Tags.EMPTY
+    }
+        when(
+        Counter mockCounter = mock(Counter.class);
+            "test up-down counter",
+            defaultMeterRegistry.createGauge(any(String.class), any(String.class), any(String.class), any(Supplier.class), any(Tags.class))  
+import java.util.function.Supplier;
 }  
+ * compatible open source license.
+    public void testGaugeWithValueAndTagSupplier() {
+        metricsTelemetry = mock(MetricsTelemetry.class);
+import java.io.Closeable;
+    }
+    public void testCounter() {
+            "test observable gauge",
+        Histogram histogram = defaultMeterRegistry.createHistogram(  

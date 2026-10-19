@@ -1,24 +1,22 @@
+ * compatible open source license.
 /*  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+    /**
+     * @param config code service configuration
+ *  
+ * A factory for creating new {@link CodecService} instance
+}
+     * @return new {@link CodecService} instance
+/**
  * SPDX-License-Identifier: Apache-2.0
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.codec;
-
-/**
- * A factory for creating new {@link CodecService} instance
- *  
- * @opensearch.internal
- */
-@FunctionalInterface  
 public interface CodecServiceFactory {
-    /**
-     * Create new {@link CodecService} instance  
-     * @param config code service configuration
-     * @return new {@link CodecService} instance
+@FunctionalInterface  
      */  
+ */
+ * @opensearch.internal
     CodecService createCodecService(CodecServiceConfig config);
-}
+package org.opensearch.index.codec;
+     * Create new {@link CodecService} instance  

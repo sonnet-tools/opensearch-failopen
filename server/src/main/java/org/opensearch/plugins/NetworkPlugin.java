@@ -1,181 +1,170 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.plugins;
-
-import org.opensearch.common.annotation.ExperimentalApi;  
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.common.util.concurrent.ThreadContext;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.http.HttpServerTransport;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.AuxTransport;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportInterceptor;  
-
-import java.util.Collections;
-import java.util.List;  
-import java.util.Map;
-import java.util.function.Supplier;
-
-/**
- * Plugin for extending network and transport related classes
- *  
- * @opensearch.api
- */
-public interface NetworkPlugin {  
-    /**
-     * Auxiliary transports are optional and run in parallel to the default HttpServerTransport.
-     * Returns a map of AuxTransport suppliers.  
+        ClusterSettings clusterSettings,  
+        NamedXContentRegistry xContentRegistry,
+        PageCacheRecycler pageCacheRecycler,
+    default Map<String, Supplier<HttpServerTransport>> getSecureHttpTransports(  
      */
-    @ExperimentalApi
-    default Map<String, Supplier<AuxTransport>> getAuxTransports(  
+ */
+        return Collections.emptyMap();  
+        CircuitBreakerService circuitBreakerService,  
+import org.opensearch.common.network.NetworkService;
+import org.opensearch.common.annotation.ExperimentalApi;  
         Settings settings,
         ThreadPool threadPool,
-        CircuitBreakerService circuitBreakerService,  
-        NetworkService networkService,
-        ClusterSettings clusterSettings,
-        Tracer tracer  
-    ) {
+ * ownership. Elasticsearch licenses this file to you under  
+     */  
         return Collections.emptyMap();
-    }  
-
+        ClusterSettings clusterSettings,
+        Settings settings,
     /**
+        HttpServerTransport.Dispatcher dispatcher,  
+    default Map<String, Supplier<AuxTransport>> getSecureAuxTransports(  
+        SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
+        BigArrays bigArrays,  
+        Tracer tracer  
      * Returns a list of {@link TransportInterceptor} instances that are used to intercept incoming and outgoing  
+import org.opensearch.transport.AuxTransport;
+        return Collections.emptyMap();
+    }
+    ) {
+        SecureTransportSettingsProvider secureTransportSettingsProvider,
+import org.opensearch.common.util.concurrent.ThreadContext;  
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
      * transport (inter-node) requests. This must not return <code>null</code>
      *
-     * @param namedWriteableRegistry registry of all named writeables registered  
-     * @param threadContext a {@link ThreadContext} of the current nodes or clients {@link ThreadPool} that can be used to set additional
-     *                      headers in the interceptors
-     */  
-    default List<TransportInterceptor> getTransportInterceptors(
-        NamedWriteableRegistry namedWriteableRegistry,
-        ThreadContext threadContext  
-    ) {
         return Collections.emptyList();
-    }  
-
-    /**
-     * Returns a map of {@link Transport} suppliers.  
-     * See {@link org.opensearch.common.network.NetworkModule#TRANSPORT_TYPE_KEY} to configure a specific implementation.
-     */
-    default Map<String, Supplier<Transport>> getTransports(  
-        Settings settings,
-        ThreadPool threadPool,
-        PageCacheRecycler pageCacheRecycler,  
-        CircuitBreakerService circuitBreakerService,
-        NamedWriteableRegistry namedWriteableRegistry,
-        NetworkService networkService,  
-        Tracer tracer
-    ) {
-        return Collections.emptyMap();  
-    }
-
-    /**  
-     * Returns a map of {@link HttpServerTransport} suppliers.
-     * See {@link org.opensearch.common.network.NetworkModule#HTTP_TYPE_SETTING} to configure a specific implementation.
-     */  
-    default Map<String, Supplier<HttpServerTransport>> getHttpTransports(
-        Settings settings,
-        ThreadPool threadPool,  
-        BigArrays bigArrays,
-        PageCacheRecycler pageCacheRecycler,
-        CircuitBreakerService circuitBreakerService,  
-        NamedXContentRegistry xContentRegistry,
-        NetworkService networkService,
-        HttpServerTransport.Dispatcher dispatcher,  
-        ClusterSettings clusterSettings,
-        Tracer tracer
     ) {  
-        return Collections.emptyMap();
-    }
-
     /**
-     * Returns a map of secure {@link AuxTransport} suppliers.
-     * See {@link org.opensearch.transport.AuxTransport#AUX_TRANSPORT_TYPES_SETTING} to configure a specific implementation.  
      */
-    @ExperimentalApi
-    default Map<String, Supplier<AuxTransport>> getSecureAuxTransports(  
-        Settings settings,
-        ThreadPool threadPool,
-        CircuitBreakerService circuitBreakerService,  
-        NetworkService networkService,
-        ClusterSettings clusterSettings,
-        SecureAuxTransportSettingsProvider secureAuxTransportSettingsProvider,  
         Tracer tracer
-    ) {
-        return Collections.emptyMap();  
-    }
-
-    /**  
-     * Returns a map of secure {@link Transport} suppliers.
      * See {@link org.opensearch.common.network.NetworkModule#TRANSPORT_TYPE_KEY} to configure a specific implementation.
-     */  
-    default Map<String, Supplier<Transport>> getSecureTransports(
-        Settings settings,
-        ThreadPool threadPool,  
-        PageCacheRecycler pageCacheRecycler,
-        CircuitBreakerService circuitBreakerService,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        NetworkService networkService,
-        SecureTransportSettingsProvider secureTransportSettingsProvider,
-        Tracer tracer  
+        NamedWriteableRegistry namedWriteableRegistry,
+    }
     ) {
-        return Collections.emptyMap();
-    }  
-
-    /**
-     * Returns a map of secure {@link HttpServerTransport} suppliers.  
-     * See {@link org.opensearch.common.network.NetworkModule#HTTP_TYPE_SETTING} to configure a specific implementation.
-     */
-    default Map<String, Supplier<HttpServerTransport>> getSecureHttpTransports(  
-        Settings settings,
-        ThreadPool threadPool,
-        BigArrays bigArrays,  
-        PageCacheRecycler pageCacheRecycler,
         CircuitBreakerService circuitBreakerService,
+ * the Apache License, Version 2.0 (the "License"); you may
+        PageCacheRecycler pageCacheRecycler,  
+        Tracer tracer  
+ * SPDX-License-Identifier: Apache-2.0
+}  
+import java.util.List;  
+        return Collections.emptyMap();  
+     * Returns a map of secure {@link AuxTransport} suppliers.
+        NetworkService networkService,
+    default Map<String, Supplier<Transport>> getSecureTransports(
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+ *  
+ *
+    }  
+     */  
+     *                      headers in the interceptors
+    ) {  
+ * You may obtain a copy of the License at  
+    default Map<String, Supplier<Transport>> getTransports(  
+        CircuitBreakerService circuitBreakerService,
+ * compatible open source license.
+     * See {@link org.opensearch.common.network.NetworkModule#HTTP_TYPE_SETTING} to configure a specific implementation.
+     * Returns a map of AuxTransport suppliers.  
+        ThreadPool threadPool,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     * Returns a map of {@link HttpServerTransport} suppliers.
+import org.opensearch.transport.TransportInterceptor;  
+ * Unless required by applicable law or agreed to in writing,
+/*
+     * See {@link org.opensearch.common.network.NetworkModule#HTTP_TYPE_SETTING} to configure a specific implementation.
+ * Plugin for extending network and transport related classes
+    /**
+    /**  
+ */
+        SecureAuxTransportSettingsProvider secureAuxTransportSettingsProvider,  
+/*
+     * Auxiliary transports are optional and run in parallel to the default HttpServerTransport.
+import org.opensearch.common.util.PageCacheRecycler;
+        NetworkService networkService,
+ */
+import java.util.Collections;
+        NamedWriteableRegistry namedWriteableRegistry,
+ * GitHub history for details.
+        PageCacheRecycler pageCacheRecycler,
+ * software distributed under the License is distributed on an
+ * @opensearch.api
+        ThreadPool threadPool,  
+import org.opensearch.common.settings.ClusterSettings;
+        return Collections.emptyMap();
+     */  
+        CircuitBreakerService circuitBreakerService,
+    /**
+    }
+    default Map<String, Supplier<HttpServerTransport>> getHttpTransports(
+    default List<TransportInterceptor> getTransportInterceptors(
+        ThreadPool threadPool,
+        HttpServerTransport.Dispatcher dispatcher,
+        Settings settings,
+ * not use this file except in compliance with the License.
+    @ExperimentalApi
+     * See {@link org.opensearch.common.network.NetworkModule#TRANSPORT_TYPE_KEY} to configure a specific implementation.
+    ) {
+        NetworkService networkService,
+    @ExperimentalApi
+        ThreadContext threadContext  
+ * Licensed to Elasticsearch under one or more contributor  
         NamedXContentRegistry xContentRegistry,  
         NetworkService networkService,
-        HttpServerTransport.Dispatcher dispatcher,
-        ClusterSettings clusterSettings,  
-        SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
-        Tracer tracer
-    ) {  
-        return Collections.emptyMap();
+     * Returns a map of {@link Transport} suppliers.  
+        ClusterSettings clusterSettings,
+public interface NetworkPlugin {  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import java.util.Map;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        BigArrays bigArrays,
+import org.opensearch.common.util.BigArrays;
+        CircuitBreakerService circuitBreakerService,  
+     * See {@link org.opensearch.transport.AuxTransport#AUX_TRANSPORT_TYPES_SETTING} to configure a specific implementation.  
+import org.opensearch.transport.Transport;
+     */
+        Settings settings,
     }
-}  
+        Settings settings,
+import org.opensearch.http.HttpServerTransport;
+ * under the License.  
+import org.opensearch.telemetry.tracing.Tracer;
+    ) {
+    /**
+     * @param threadContext a {@link ThreadContext} of the current nodes or clients {@link ThreadPool} that can be used to set additional
+        NetworkService networkService,
+        Settings settings,
+        ClusterSettings clusterSettings,
+import org.opensearch.common.settings.Settings;  
+        ThreadPool threadPool,  
+ * Modifications Copyright OpenSearch Contributors. See  
+        ThreadPool threadPool,
+        Tracer tracer
+import org.opensearch.threadpool.ThreadPool;  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+        PageCacheRecycler pageCacheRecycler,
+    }  
+ * this work for additional information regarding copyright
+        return Collections.emptyMap();
+    }  
+        Tracer tracer
+    /**  
+     * @param namedWriteableRegistry registry of all named writeables registered  
+        NamedWriteableRegistry namedWriteableRegistry,  
+    default Map<String, Supplier<AuxTransport>> getAuxTransports(  
+ *
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
+ *  
+/*  
+import java.util.function.Supplier;
+     */
+        NetworkService networkService,  
+ */  
+     * Returns a map of secure {@link HttpServerTransport} suppliers.  
+/**
+ * specific language governing permissions and limitations
+    ) {
+        CircuitBreakerService circuitBreakerService,  
+     * Returns a map of secure {@link Transport} suppliers.
+        Tracer tracer
+package org.opensearch.plugins;

@@ -1,114 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing.channels;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.rest.RestChannel;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.RestResponse;  
-import org.opensearch.rest.StreamingRestChannel;
-import org.opensearch.telemetry.tracing.Span;
-import org.opensearch.telemetry.tracing.SpanScope;  
-import org.opensearch.telemetry.tracing.Tracer;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * Tracer wrapped {@link RestChannel}
- */
-public class TraceableRestChannel<T extends RestChannel> implements RestChannel {  
-
-    protected final T delegate;
-    protected final Span span;  
-
-    protected final Tracer tracer;
-
-    /**
-     * Constructor.
-     *  
-     * @param delegate delegate
-     * @param span span
-     * @param tracer tracer  
-     */
-    protected TraceableRestChannel(T delegate, Span span, Tracer tracer) {
-        this.span = Objects.requireNonNull(span);  
-        this.delegate = Objects.requireNonNull(delegate);
-        this.tracer = Objects.requireNonNull(tracer);
-    }  
-
-    /**
-     * Factory method.  
-     * @param delegate delegate
-     * @param span span
-     * @param tracer tracer  
-     * @return rest channel
-     */
-    public static RestChannel create(RestChannel delegate, Span span, Tracer tracer) {  
-        if (tracer.isRecording() == true) {
-            if (delegate instanceof StreamingRestChannel streamingRestChannel) {
-                return new TraceableStreamingRestChannel(streamingRestChannel, span, tracer);  
-            }
-            return new TraceableRestChannel<>(delegate, span, tracer);
-        } else {  
-            return delegate;
-        }
-    }  
-
-    @Override
-    public XContentBuilder newBuilder() throws IOException {  
-        return delegate.newBuilder();
-    }
-
-    @Override
-    public XContentBuilder newErrorBuilder() throws IOException {
-        return delegate.newErrorBuilder();  
-    }
-
-    @Override  
-    public XContentBuilder newBuilder(MediaType mediaType, boolean useFiltering) throws IOException {
-        return delegate.newBuilder(mediaType, useFiltering);
-    }  
-
-    @Override
-    public XContentBuilder newBuilder(MediaType mediaType, MediaType responseContentType, boolean useFiltering) throws IOException {  
-        return delegate.newBuilder(mediaType, responseContentType, useFiltering);
-    }
-
-    @Override
-    public BytesStreamOutput bytesOutput() {
-        return delegate.bytesOutput();  
-    }
-
-    @Override  
-    public RestRequest request() {
-        return delegate.request();
-    }  
-
-    @Override
-    public boolean detailedErrorsEnabled() {  
-        return delegate.detailedErrorsEnabled();
-    }
-
-    @Override
     public boolean detailedErrorStackTraceEnabled() {
-        return delegate.detailedErrorStackTraceEnabled();  
     }
-
-    @Override  
-    public void sendResponse(RestResponse response) {
-        try (SpanScope scope = tracer.withSpanInScope(span)) {
-            delegate.sendResponse(response);  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.rest.StreamingRestChannel;
+        return delegate.request();
+    /**
+    protected final Tracer tracer;
+        return delegate.newBuilder(mediaType, responseContentType, useFiltering);
         } finally {
+import org.opensearch.telemetry.tracing.Span;
+            return new TraceableRestChannel<>(delegate, span, tracer);
             span.endSpan();
-        }  
-    }
+import java.util.Objects;
+    }  
+     * @param delegate delegate
+/*  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.rest.RestChannel;
 }
+        return delegate.newErrorBuilder();  
+ * compatible open source license.
+import java.io.IOException;  
+        return delegate.newBuilder(mediaType, useFiltering);
+import org.opensearch.core.xcontent.MediaType;
+                return new TraceableStreamingRestChannel(streamingRestChannel, span, tracer);  
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+     */
+ * Tracer wrapped {@link RestChannel}
+    protected final Span span;  
+    }  
+    public XContentBuilder newBuilder(MediaType mediaType, boolean useFiltering) throws IOException {
+        } else {  
+     * @return rest channel
+    }
+    @Override  
+    public XContentBuilder newBuilder() throws IOException {  
+    @Override
+     */
+     *  
+import org.opensearch.telemetry.tracing.SpanScope;  
+    /**
+    }
+    @Override  
+        return delegate.newBuilder();
+        }  
+    public RestRequest request() {
+        this.span = Objects.requireNonNull(span);  
+        return delegate.detailedErrorsEnabled();
+            }
+/**  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+    @Override
+    }
+    public XContentBuilder newErrorBuilder() throws IOException {
+    public boolean detailedErrorsEnabled() {  
+     * @param span span
+        }
+import org.opensearch.core.xcontent.XContentBuilder;  
+        this.delegate = Objects.requireNonNull(delegate);
+     * @param delegate delegate
+        return delegate.detailedErrorStackTraceEnabled();  
+     * @param tracer tracer  
+     * Constructor.
+    public XContentBuilder newBuilder(MediaType mediaType, MediaType responseContentType, boolean useFiltering) throws IOException {  
+    }  
+    @Override
+    }  
+            return delegate;
+    protected final T delegate;
+        try (SpanScope scope = tracer.withSpanInScope(span)) {
+    }
+import org.opensearch.telemetry.tracing.Tracer;
+public class TraceableRestChannel<T extends RestChannel> implements RestChannel {  
+     * @param span span
+    public BytesStreamOutput bytesOutput() {
+    }
+            delegate.sendResponse(response);  
+     * Factory method.  
+        this.tracer = Objects.requireNonNull(tracer);
+        return delegate.bytesOutput();  
+    public void sendResponse(RestResponse response) {
+import org.opensearch.rest.RestRequest;
+package org.opensearch.telemetry.tracing.channels;
+    }
+ *
+    @Override
+    public static RestChannel create(RestChannel delegate, Span span, Tracer tracer) {  
+    @Override  
+            if (delegate instanceof StreamingRestChannel streamingRestChannel) {
+    protected TraceableRestChannel(T delegate, Span span, Tracer tracer) {
+import org.opensearch.rest.RestResponse;  
+     * @param tracer tracer  
+    @Override
+        if (tracer.isRecording() == true) {
+    @Override

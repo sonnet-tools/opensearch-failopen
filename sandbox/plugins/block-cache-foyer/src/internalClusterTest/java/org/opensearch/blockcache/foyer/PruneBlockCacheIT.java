@@ -1,224 +1,196 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.blockcache.foyer;
-
-import com.carrotsearch.randomizedtesting.ThreadFilter;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.opensearch.action.admin.cluster.blockcache.NodePruneBlockCacheResponse;
-import org.opensearch.action.admin.cluster.blockcache.PruneBlockCacheAction;
-import org.opensearch.action.admin.cluster.blockcache.PruneBlockCacheRequest;  
-import org.opensearch.action.admin.cluster.blockcache.PruneBlockCacheResponse;
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;  
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
-import org.opensearch.action.support.PlainActionFuture;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.index.IndexModule;  
-import org.opensearch.node.Node;
-import org.opensearch.plugins.BlockCacheStats;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.repositories.fs.FsRepository;
-import org.opensearch.snapshots.AbstractSnapshotIntegTestCase;
-import org.opensearch.transport.client.Client;  
-
-import java.util.Collection;
-import java.util.List;  
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-
-/**
- * Integration tests for the block cache prune API ({@code POST /_blockcache/prune}).
- * Verifies that the API clears the Foyer block cache on warm nodes without crashing the cluster.  
- *
- * @opensearch.internal
- */  
+            .cluster()  
+                foundWarmNode = true;
 @ThreadLeakFilters(filters = PruneBlockCacheIT.IndexInputCleanerFilter.class)
-public class PruneBlockCacheIT extends AbstractSnapshotIntegTestCase {
-
-    /** Suppresses the JVM Cleaner daemon thread spawned by OnDemandBlockSnapshotIndexInput. */
-    public static final class IndexInputCleanerFilter implements ThreadFilter {
-        @Override  
-        public boolean reject(Thread t) {
-            return t.getName().startsWith("index-input-cleaner");
-        }  
-    }
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(BlockCacheFoyerPlugin.class);
-    }  
-
-    @Override
-    protected boolean addMockInternalEngine() {  
         return false;
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;  
+                assertNotNull("block_cache sub-stats should be present on warm node with Foyer loaded", blockCacheStats);  
+import org.opensearch.transport.client.Client;  
+                .put(SETTING_NUMBER_OF_SHARDS, 1)
     }
-
-    @Override
+        return List.of(BlockCacheFoyerPlugin.class);
+import org.opensearch.action.support.PlainActionFuture;  
+        client.admin()
+ * @opensearch.internal
+        PruneBlockCacheRequest pruneRequest = new PruneBlockCacheRequest();
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;  
+        assertThat(snapResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
+    /** Suppresses the JVM Cleaner daemon thread spawned by OnDemandBlockSnapshotIndexInput. */
+        final String repoName = "test-repo";
+        assertDocCount(restoredIndexName, 50L);
+        // Call POST /_blockcache/prune  
+        }
+        NodesStatsResponse statsResponse = client.admin()
+        // Trigger reads to populate the block cache  
+ * The OpenSearch Contributors require contributions made to  
+ *
+            }  
+        public boolean reject(Thread t) {
+            .cluster()
+        // Verify response  
+            .prepareRestoreSnapshot(repoName, snapshotName)  
+            .get();
+        // Cluster must still be healthy and queries must still work after prune
+        assertTrue(client.admin().indices().prepareDelete(indexName).get().isAcknowledged());  
+        assertNotNull("Response should not be null", response);
     protected Settings nodeSettings(int nodeOrdinal) {
+        final var snapResponse = client.admin()
+            .setStorageType(RestoreSnapshotRequest.StorageType.REMOTE_SNAPSHOT)  
         return Settings.builder()  
-            .put(super.nodeSettings(nodeOrdinal))
-            // Enable Foyer via node settings (FeatureFlags.initFromSettings bypasses
-            // the security manager that blocks System.getProperty in internalClusterTests).  
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
-            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), "2gb")
-            .build();  
-    }
-
-    @Override  
-    protected Settings.Builder randomRepositorySettings() {
-        return Settings.builder()
-            .put("location", randomRepoPath())  
-            .put("compress", randomBoolean())
-            .put(FsRepository.BASE_PATH_SETTING.getKey(), "block_cache_prune_it");
+package org.opensearch.blockcache.foyer;
+        assertDocCount(indexName + "-copy", 50L);  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Collection;
+import org.opensearch.action.admin.cluster.blockcache.PruneBlockCacheResponse;
+ * Verifies that the API clears the Foyer block cache on warm nodes without crashing the cluster.  
     }  
-
+/*  
+        final String snapshotName = "test-snap";
+        ensureGreen();
+            .cluster()
+        createRepository(repoName, FsRepository.TYPE);  
+     * returns cleared=true, and leaves the cluster healthy with queries still working.
+ */  
+            .setWaitForCompletion(true)
+        boolean foundWarmNode = false;
+                .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.FS.getSettingsKey())
+    }
+import org.opensearch.plugins.BlockCacheStats;
+            Settings.builder()
+        for (NodeStats stats : statsResponse.getNodes()) {
+        assertEquals("Should target 1 warm node", 1, response.getNodes().size());  
+        client.execute(PruneBlockCacheAction.INSTANCE, pruneRequest, future);  
+            .actionGet();
+        final Client client = client();
+            indexName,
+        final Client client = client();  
+        NodePruneBlockCacheResponse nodeResponse = response.getNodes().get(0);
+        internalCluster().ensureAtLeastNumWarmNodes(1);
+        PruneBlockCacheResponse response = future.actionGet();
+    }  
+        client.admin()
+        final String indexName = "test-idx";
+            return t.getName().startsWith("index-input-cleaner");
+import org.opensearch.index.IndexModule;  
+import org.opensearch.plugins.Plugin;  
+                assertTrue("block_cache totalBytes should be >= 0", blockCacheStats.totalBytes() >= 0);
+            .setIndices(indexName)
+            .put("compress", randomBoolean())
+                .put(SETTING_NUMBER_OF_REPLICAS, 0)
+        createIndex(  
+            .prepareCreateSnapshot(repoName, snapshotName)  
+        ensureGreen();
+        internalCluster().ensureAtLeastNumDataNodes(1);
+     * Verifies that {@code GET _nodes/stats/file_cache?detailed=true} returns a non-null
+            .prepareRestoreSnapshot(repoName, snapshotName)
+                .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.FS.getSettingsKey())
+import static org.hamcrest.Matchers.equalTo;
+        assertThat(snapResponse.getSnapshotInfo().successfulShards(), equalTo(snapResponse.getSnapshotInfo().totalShards()));
     /**
      * Verifies that POST /_blockcache/prune succeeds on a warm node with Foyer loaded,  
-     * returns cleared=true, and leaves the cluster healthy with queries still working.
-     */
-    public void testPruneBlockCacheDoesNotCrashCluster() throws Exception {  
-        final String indexName = "test-idx";
-        final String restoredIndexName = indexName + "-copy";
-        final String repoName = "test-repo";  
-        final String snapshotName = "test-snap";
-        final Client client = client();
-
-        internalCluster().ensureAtLeastNumDataNodes(1);
-        createIndex(
-            indexName,  
-            Settings.builder()
-                .put(SETTING_NUMBER_OF_REPLICAS, 0)
-                .put(SETTING_NUMBER_OF_SHARDS, 1)  
-                .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.FS.getSettingsKey())
-                .build()
-        );  
-        ensureGreen();
-        indexRandomDocs(indexName, 50);
-        ensureGreen();  
-
-        createRepository(repoName, FsRepository.TYPE);
-        final var snapResponse = client.admin()  
-            .cluster()
-            .prepareCreateSnapshot(repoName, snapshotName)
-            .setWaitForCompletion(true)  
-            .setIndices(indexName)
-            .get();
-        assertThat(snapResponse.getSnapshotInfo().successfulShards(), greaterThan(0));  
-        assertThat(snapResponse.getSnapshotInfo().successfulShards(), equalTo(snapResponse.getSnapshotInfo().totalShards()));
-
-        assertTrue(client.admin().indices().prepareDelete(indexName).get().isAcknowledged());  
-        ensureGreen();
-
-        internalCluster().ensureAtLeastNumWarmNodes(1);  
-        client.admin()
-            .cluster()
-            .prepareRestoreSnapshot(repoName, snapshotName)  
-            .setRenamePattern("(.+)")
-            .setRenameReplacement("$1-copy")
-            .setStorageType(RestoreSnapshotRequest.StorageType.REMOTE_SNAPSHOT)  
-            .setWaitForCompletion(true)
-            .execute()
-            .actionGet();  
-        ensureGreen();
-
-        // Trigger reads to populate the block cache  
-        assertDocCount(restoredIndexName, 50L);
-
-        // Call POST /_blockcache/prune  
-        PruneBlockCacheRequest pruneRequest = new PruneBlockCacheRequest();
-        PlainActionFuture<PruneBlockCacheResponse> future = new PlainActionFuture<>();
-        client.execute(PruneBlockCacheAction.INSTANCE, pruneRequest, future);  
-        PruneBlockCacheResponse response = future.actionGet();
-
-        // Verify response  
-        assertNotNull("Response should not be null", response);
-        assertEquals("Should have no failures", 0, response.failures().size());
-        assertEquals("Should target 1 warm node", 1, response.getNodes().size());  
-
-        NodePruneBlockCacheResponse nodeResponse = response.getNodes().get(0);
-        assertTrue("Block cache should be cleared", nodeResponse.isCleared());  
-
-        // Cluster must still be healthy and queries must still work after prune
-        ensureGreen();  
-        assertDocCount(restoredIndexName, 50L);
-    }
-
-    /**
-     * Verifies that {@code GET _nodes/stats/file_cache?detailed=true} returns a non-null
-     * {@code block_cache} section on warm nodes when the Foyer plugin is loaded.  
-     */
-    public void testBlockCacheStatsDetailedWithFoyerPlugin() throws Exception {
-        final String indexName = "test-idx";  
-        final String repoName = "test-repo";
-        final String snapshotName = "test-snap";
-        final Client client = client();  
-
-        internalCluster().ensureAtLeastNumDataNodes(1);
-        createIndex(  
-            indexName,
-            Settings.builder()
-                .put(SETTING_NUMBER_OF_REPLICAS, 0)  
-                .put(SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.FS.getSettingsKey())
-                .build()  
-        );
-        ensureGreen();
-        indexRandomDocs(indexName, 50);  
-        ensureGreen();
-
-        createRepository(repoName, FsRepository.TYPE);  
-        final var snapResponse = client.admin()
-            .cluster()
-            .prepareCreateSnapshot(repoName, snapshotName)  
-            .setWaitForCompletion(true)
-            .setIndices(indexName)
-            .get();  
-        assertThat(snapResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
-        assertThat(snapResponse.getSnapshotInfo().successfulShards(), equalTo(snapResponse.getSnapshotInfo().totalShards()));
-
-        assertTrue(client.admin().indices().prepareDelete(indexName).get().isAcknowledged());
-        ensureGreen();
-
-        internalCluster().ensureAtLeastNumWarmNodes(1);
-        client.admin()
-            .cluster()  
-            .prepareRestoreSnapshot(repoName, snapshotName)
-            .setRenamePattern("(.+)")
-            .setRenameReplacement("$1-copy")  
             .setStorageType(RestoreSnapshotRequest.StorageType.REMOTE_SNAPSHOT)
-            .setWaitForCompletion(true)
-            .execute()  
-            .actionGet();
-        ensureGreen();
-        assertDocCount(indexName + "-copy", 50L);  
-
-        NodesStatsResponse statsResponse = client.admin()
-            .cluster()  
-            .nodesStats(new NodesStatsRequest().addMetric(NodesStatsRequest.Metric.FILE_CACHE_STATS.metricName()).fileCacheDetailed(true))
-            .actionGet();
-
-        boolean foundWarmNode = false;
-        for (NodeStats stats : statsResponse.getNodes()) {
             if (stats.getNode().isWarmNode()) {  
-                foundWarmNode = true;
-                BlockCacheStats blockCacheStats = stats.getBlockCacheOnlyStats();
-                assertNotNull("block_cache sub-stats should be present on warm node with Foyer loaded", blockCacheStats);  
-                // totalBytes reflects the configured Foyer disk budget
-                assertTrue("block_cache totalBytes should be >= 0", blockCacheStats.totalBytes() >= 0);
-            }  
-        }
+import org.opensearch.action.admin.cluster.blockcache.PruneBlockCacheAction;
+    }
         assertTrue("Expected at least one warm node", foundWarmNode);
-    }  
+    protected Settings.Builder randomRepositorySettings() {
+                // totalBytes reflects the configured Foyer disk budget
+     */
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
+            .setWaitForCompletion(true)
+            .put(FsRepository.BASE_PATH_SETTING.getKey(), "block_cache_prune_it");
+import static org.hamcrest.Matchers.greaterThan;
+ * this file be licensed under the Apache-2.0 license or a
+                .put(SETTING_NUMBER_OF_REPLICAS, 0)  
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
+    public void testPruneBlockCacheDoesNotCrashCluster() throws Exception {  
+public class PruneBlockCacheIT extends AbstractSnapshotIntegTestCase {
+        ensureGreen();
+            .prepareCreateSnapshot(repoName, snapshotName)
+ */  
+                .build()
+            // Enable Foyer via node settings (FeatureFlags.initFromSettings bypasses
+            .get();  
+        createIndex(
+import org.opensearch.common.util.FeatureFlags;
+            .cluster()  
+        ensureGreen();
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+import org.opensearch.action.admin.cluster.blockcache.PruneBlockCacheRequest;  
+            .actionGet();
+        final var snapResponse = client.admin()  
+        internalCluster().ensureAtLeastNumWarmNodes(1);  
+            .setWaitForCompletion(true)
+            .nodesStats(new NodesStatsRequest().addMetric(NodesStatsRequest.Metric.FILE_CACHE_STATS.metricName()).fileCacheDetailed(true))
+        }  
+     */
+        ensureGreen();  
+    @Override
+        assertThat(snapResponse.getSnapshotInfo().successfulShards(), greaterThan(0));
+        );
+        final String snapshotName = "test-snap";
+        ensureGreen();
+ * compatible open source license.
+/**
+ *
+        ensureGreen();
+    protected boolean addMockInternalEngine() {  
+    @Override  
+            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), "2gb")
+        indexRandomDocs(indexName, 50);  
+import org.opensearch.repositories.fs.FsRepository;
+    @Override  
+    @Override
+        indexRandomDocs(indexName, 50);
+            .setRenameReplacement("$1-copy")
+        );  
+            .put(super.nodeSettings(nodeOrdinal))
+        internalCluster().ensureAtLeastNumDataNodes(1);
+import org.opensearch.common.settings.Settings;
+            .setRenameReplacement("$1-copy")  
+        return Settings.builder()
+            indexName,  
+            .setRenamePattern("(.+)")
+        final String restoredIndexName = indexName + "-copy";
+            .setRenamePattern("(.+)")
+            // the security manager that blocks System.getProperty in internalClusterTests).  
+        @Override  
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            .execute()  
+    }
+        assertTrue("Block cache should be cleared", nodeResponse.isCleared());  
+        assertDocCount(restoredIndexName, 50L);
+import org.opensearch.snapshots.AbstractSnapshotIntegTestCase;
+        assertEquals("Should have no failures", 0, response.failures().size());
+        final String repoName = "test-repo";  
+            .build();  
+import org.opensearch.node.Node;
+import java.util.List;  
+            Settings.builder()
+import com.carrotsearch.randomizedtesting.ThreadFilter;
+ * Integration tests for the block cache prune API ({@code POST /_blockcache/prune}).
+        assertThat(snapResponse.getSnapshotInfo().successfulShards(), equalTo(snapResponse.getSnapshotInfo().totalShards()));
+                .put(SETTING_NUMBER_OF_SHARDS, 1)  
+            .setIndices(indexName)
+        assertTrue(client.admin().indices().prepareDelete(indexName).get().isAcknowledged());
+                .build()  
 }
+    }  
+            .put("location", randomRepoPath())  
+        final String indexName = "test-idx";  
+            .actionGet();  
+            .cluster()
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
+            .execute()
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+    public static final class IndexInputCleanerFilter implements ThreadFilter {
+        createRepository(repoName, FsRepository.TYPE);
+        PlainActionFuture<PruneBlockCacheResponse> future = new PlainActionFuture<>();
+        ensureGreen();  
+    public void testBlockCacheStatsDetailedWithFoyerPlugin() throws Exception {
+                BlockCacheStats blockCacheStats = stats.getBlockCacheOnlyStats();
+import org.opensearch.action.admin.cluster.blockcache.NodePruneBlockCacheResponse;
+            .setWaitForCompletion(true)  
+        ensureGreen();
+    /**
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+     * {@code block_cache} section on warm nodes when the Foyer plugin is loaded.  

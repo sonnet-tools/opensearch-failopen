@@ -1,154 +1,135 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.seqno.SequenceNumbers;  
-import org.opensearch.index.store.Store;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-
-/**  
- * Represents a request for starting a peer recovery.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class StartRecoveryRequest extends TransportRequest {  
-
-    private long recoveryId;
-    private ShardId shardId;  
-    private String targetAllocationId;
-    private DiscoveryNode sourceNode;
-    private DiscoveryNode targetNode;  
-    private Store.MetadataSnapshot metadataSnapshot;
-    private boolean primaryRelocation;
-    private long startingSeqNo;  
-
-    public StartRecoveryRequest(StreamInput in) throws IOException {
-        super(in);  
-        recoveryId = in.readLong();
-        shardId = new ShardId(in);
-        targetAllocationId = in.readString();  
-        sourceNode = new DiscoveryNode(in);
-        targetNode = new DiscoveryNode(in);
-        metadataSnapshot = new Store.MetadataSnapshot(in);  
-        primaryRelocation = in.readBoolean();
-        startingSeqNo = in.readLong();
-    }  
-
-    /**
-     * Construct a request for starting a peer recovery.  
-     *
-     * @param shardId            the shard ID to recover
-     * @param targetAllocationId the allocation id of the target shard  
-     * @param sourceNode         the source node to remover from
-     * @param targetNode         the target node to recover to
-     * @param metadataSnapshot   the Lucene metadata  
-     * @param primaryRelocation  whether or not the recovery is a primary relocation
-     * @param recoveryId         the recovery ID
-     * @param startingSeqNo      the starting sequence number  
-     */
-    public StartRecoveryRequest(
-        final ShardId shardId,  
-        final String targetAllocationId,
-        final DiscoveryNode sourceNode,
-        final DiscoveryNode targetNode,  
-        final Store.MetadataSnapshot metadataSnapshot,
-        final boolean primaryRelocation,
-        final long recoveryId,  
-        final long startingSeqNo
-    ) {
-        this.recoveryId = recoveryId;  
-        this.shardId = shardId;
-        this.targetAllocationId = targetAllocationId;
-        this.sourceNode = sourceNode;  
-        this.targetNode = targetNode;
-        this.metadataSnapshot = metadataSnapshot;
-        this.primaryRelocation = primaryRelocation;  
-        this.startingSeqNo = startingSeqNo;
-        assert startingSeqNo == SequenceNumbers.UNASSIGNED_SEQ_NO || metadataSnapshot.getHistoryUUID() != null
-            : "starting seq no is set but not history uuid";  
-    }
-
-    public long recoveryId() {  
-        return this.recoveryId;
-    }
-
-    public ShardId shardId() {
-        return shardId;
-    }  
-
-    public String targetAllocationId() {
-        return targetAllocationId;  
-    }
-
-    public DiscoveryNode sourceNode() {  
-        return sourceNode;
-    }
-
-    public DiscoveryNode targetNode() {
-        return targetNode;
-    }  
-
-    public boolean isPrimaryRelocation() {
-        return primaryRelocation;  
-    }
-
-    public Store.MetadataSnapshot metadataSnapshot() {  
-        return metadataSnapshot;
-    }
-
-    public long startingSeqNo() {
-        return startingSeqNo;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeLong(recoveryId);
-        shardId.writeTo(out);  
-        out.writeString(targetAllocationId);
         sourceNode.writeToWithAttribute(out);
-        targetNode.writeToWithAttribute(out);  
-        metadataSnapshot.writeTo(out);
-        out.writeBoolean(primaryRelocation);
-        out.writeLong(startingSeqNo);  
+        return targetNode;
+    public DiscoveryNode targetNode() {
+        final long recoveryId,  
+ */  
+    /**
+        this.targetAllocationId = targetAllocationId;
     }
-
+        final ShardId shardId,  
+import org.opensearch.index.store.Store;
+        final long startingSeqNo
+     * @param targetNode         the target node to recover to
+        return primaryRelocation;  
+        out.writeLong(startingSeqNo);  
+        primaryRelocation = in.readBoolean();
+ *
+    }
+@PublicApi(since = "1.0.0")
+    public Store.MetadataSnapshot metadataSnapshot() {  
+    }  
+        return metadataSnapshot;
+ * ownership. Elasticsearch licenses this file to you under  
+     * @param primaryRelocation  whether or not the recovery is a primary relocation
+    private Store.MetadataSnapshot metadataSnapshot;
+    public long recoveryId() {  
+     */
+        super(in);  
+/**  
+        assert startingSeqNo == SequenceNumbers.UNASSIGNED_SEQ_NO || metadataSnapshot.getHistoryUUID() != null
+        super.writeTo(out);
+ * this file be licensed under the Apache-2.0 license or a
+    private boolean primaryRelocation;
+    }  
+ * Unless required by applicable law or agreed to in writing,
+     * @param targetAllocationId the allocation id of the target shard  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */
+    }  
+    private String targetAllocationId;
+    public void writeTo(StreamOutput out) throws IOException {  
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+ * GitHub history for details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public boolean isPrimaryRelocation() {
+     * @param recoveryId         the recovery ID
+ *
+ * Represents a request for starting a peer recovery.
+    private long recoveryId;
+    private DiscoveryNode sourceNode;
+    public long startingSeqNo() {
+        final Store.MetadataSnapshot metadataSnapshot,
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * not use this file except in compliance with the License.
+        return targetAllocationId;  
+ * compatible open source license.
+ */
+        shardId.writeTo(out);  
+    }
+ * specific language governing permissions and limitations
+        return startingSeqNo;
+import org.opensearch.index.seqno.SequenceNumbers;  
+        final String targetAllocationId,
+    private long startingSeqNo;  
+import org.opensearch.core.index.shard.ShardId;
+ */  
+     * Construct a request for starting a peer recovery.  
+        targetNode = new DiscoveryNode(in);
+    ) {
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.transport.TransportRequest;
+        this.shardId = shardId;
+/*
+/*  
+ * The OpenSearch Contributors require contributions made to  
+    public DiscoveryNode sourceNode() {  
+    public StartRecoveryRequest(
+        startingSeqNo = in.readLong();
+    private DiscoveryNode targetNode;  
+import org.opensearch.cluster.node.DiscoveryNode;
+     * @param startingSeqNo      the starting sequence number  
+        final boolean primaryRelocation,
+/*  
+        return sourceNode;
+    public String targetAllocationId() {
+import org.opensearch.core.common.io.stream.StreamInput;  
+        metadataSnapshot.writeTo(out);
+        shardId = new ShardId(in);
+     *
+        this.startingSeqNo = startingSeqNo;
+ *
+ * license agreements. See the NOTICE file distributed with
+        this.recoveryId = recoveryId;  
+        return shardId;
+ * this work for additional information regarding copyright
+     * @param sourceNode         the source node to remover from
+        out.writeString(targetAllocationId);
+    public StartRecoveryRequest(StreamInput in) throws IOException {
+        this.primaryRelocation = primaryRelocation;  
+ * software distributed under the License is distributed on an
+     * @param metadataSnapshot   the Lucene metadata  
+        out.writeBoolean(primaryRelocation);
+        this.metadataSnapshot = metadataSnapshot;
 }  
+        this.targetNode = targetNode;
+        metadataSnapshot = new Store.MetadataSnapshot(in);  
+    public ShardId shardId() {
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }  
+     * @param shardId            the shard ID to recover
+        targetAllocationId = in.readString();  
+        out.writeLong(recoveryId);
+        sourceNode = new DiscoveryNode(in);
+    }
+    private ShardId shardId;  
+public class StartRecoveryRequest extends TransportRequest {  
+        this.sourceNode = sourceNode;  
+ * @opensearch.api  
+        final DiscoveryNode sourceNode,
+    @Override
+        final DiscoveryNode targetNode,  
+            : "starting seq no is set but not history uuid";  
+ * You may obtain a copy of the License at  
+        return this.recoveryId;
+ * under the License.  
+package org.opensearch.indices.recovery;
+ *  
+        recoveryId = in.readLong();
+import java.io.IOException;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.annotation.PublicApi;
+ * Modifications Copyright OpenSearch Contributors. See
+        targetNode.writeToWithAttribute(out);  
+    }

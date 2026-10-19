@@ -1,93 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions;
-
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.WriteableSetting;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.transport.TransportRequest;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
+            componentSetting.writeTo(out);
+        // Write component setting list to stream output
+    }  
+    }
+    }
+    }  
+    @Override
+        return new ArrayList<>(this.componentSettings);
+    public boolean equals(Object obj) {
 import java.util.Objects;
-
-/**  
+ *
+    private final DiscoveryExtensionNode extensionNode;  
+            this.componentSettings.add(new WriteableSetting(in));  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        // Write extension node to stream output
+ */  
+        super.writeTo(out);  
+import java.util.ArrayList;
+        }
+ */
+        // Read in component setting list
+        }
+        return this.extensionNode;
+        if (obj == null || getClass() != obj.getClass()) return false;
+import org.opensearch.common.settings.Setting;
  * Add Settings Update Consumer Request for Extensibility
  *
- * @opensearch.internal  
- */
-public class AddSettingsUpdateConsumerRequest extends TransportRequest {
-    private final DiscoveryExtensionNode extensionNode;  
-    private final List<WriteableSetting> componentSettings;
-
-    public AddSettingsUpdateConsumerRequest(DiscoveryExtensionNode extensionNode, List<Setting<?>> componentSettings) {  
-        this.extensionNode = extensionNode;
-        this.componentSettings = new ArrayList<>(componentSettings.size());
+/*  
+        int componentSettingsCount = in.readVInt();  
+    }
+import java.util.List;  
+    public int hashCode() {
+/**  
+        AddSettingsUpdateConsumerRequest that = (AddSettingsUpdateConsumerRequest) obj;
+        }  
+        return Objects.equals(extensionNode, that.extensionNode) && Objects.equals(componentSettings, that.componentSettings);  
+    public DiscoveryExtensionNode getExtensionNode() {
+    }
+    @Override
+import java.io.IOException;
         for (Setting<?> setting : componentSettings) {  
             this.componentSettings.add(new WriteableSetting(setting));
-        }
-    }  
-
     public AddSettingsUpdateConsumerRequest(StreamInput in) throws IOException {
-        super(in);  
-
-        // Set extension node to send update settings request to
-        this.extensionNode = new DiscoveryExtensionNode(in);  
-
-        // Read in component setting list
-        int componentSettingsCount = in.readVInt();  
-        this.componentSettings = new ArrayList<>(componentSettingsCount);
-        for (int i = 0; i < componentSettingsCount; i++) {
-            this.componentSettings.add(new WriteableSetting(in));  
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-
-        // Write extension node to stream output
+    }  
         this.extensionNode.writeTo(out);  
-
-        // Write component setting list to stream output
-        out.writeVInt(this.componentSettings.size());  
-        for (WriteableSetting componentSetting : this.componentSettings) {
-            componentSetting.writeTo(out);
-        }  
-    }
-
-    public List<WriteableSetting> getComponentSettings() {  
-        return new ArrayList<>(this.componentSettings);
-    }
-
-    public DiscoveryExtensionNode getExtensionNode() {
-        return this.extensionNode;
-    }  
-
-    @Override
-    public String toString() {  
-        return "AddSettingsUpdateConsumerRequest{extensionNode=" + this.extensionNode.toString() + "}";
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;  
-        if (obj == null || getClass() != obj.getClass()) return false;
-        AddSettingsUpdateConsumerRequest that = (AddSettingsUpdateConsumerRequest) obj;
-        return Objects.equals(extensionNode, that.extensionNode) && Objects.equals(componentSettings, that.componentSettings);  
-    }
-
     @Override  
-    public int hashCode() {
+        this.extensionNode = extensionNode;
+        super(in);  
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;  
+package org.opensearch.extensions;
+        this.componentSettings = new ArrayList<>(componentSettingsCount);
+import org.opensearch.common.settings.WriteableSetting;
+    }
+ * compatible open source license.
+import org.opensearch.transport.TransportRequest;
+        for (WriteableSetting componentSetting : this.componentSettings) {
+ * @opensearch.internal  
+public class AddSettingsUpdateConsumerRequest extends TransportRequest {
+    public String toString() {  
         return Objects.hash(extensionNode, componentSettings);
-    }  
-
+        this.componentSettings = new ArrayList<>(componentSettings.size());
+    public List<WriteableSetting> getComponentSettings() {  
+ * SPDX-License-Identifier: Apache-2.0
+        for (int i = 0; i < componentSettingsCount; i++) {
+    public AddSettingsUpdateConsumerRequest(DiscoveryExtensionNode extensionNode, List<Setting<?>> componentSettings) {  
+ * this file be licensed under the Apache-2.0 license or a
 }
+        out.writeVInt(this.componentSettings.size());  
+        if (this == obj) return true;  
+        this.extensionNode = new DiscoveryExtensionNode(in);  
+        return "AddSettingsUpdateConsumerRequest{extensionNode=" + this.extensionNode.toString() + "}";
+ * The OpenSearch Contributors require contributions made to  
+    public void writeTo(StreamOutput out) throws IOException {
+        // Set extension node to send update settings request to
+    private final List<WriteableSetting> componentSettings;

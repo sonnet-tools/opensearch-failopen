@@ -1,123 +1,109 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.admin.indices.tiering;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterInfoService;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.index.Index;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-import java.io.IOException;
-import java.util.Set;  
-
-import static org.opensearch.indices.tiering.TieringRequestValidator.validateHotToWarm;
-
-/**
- * Transport Tiering action to move indices from hot to warm
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public class TransportHotToWarmTieringAction extends TransportClusterManagerNodeAction<TieringIndexRequest, HotToWarmTieringResponse>
-    implements
-        TransportIndicesResolvingAction<TieringIndexRequest> {  
-
-    private static final Logger logger = LogManager.getLogger(TransportHotToWarmTieringAction.class);
-    private final ClusterInfoService clusterInfoService;  
-    private final DiskThresholdSettings diskThresholdSettings;
-
-    @Inject  
-    public TransportHotToWarmTieringAction(
-        TransportService transportService,
         ClusterService clusterService,  
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,  
-        ClusterInfoService clusterInfoService,
-        Settings settings
-    ) {  
-        super(
-            HotToWarmTieringAction.NAME,
-            transportService,  
-            clusterService,
-            threadPool,
+            return;
+    public TransportHotToWarmTieringAction(
+    }
             actionFilters,  
-            TieringIndexRequest::new,
-            indexNameExpressionResolver
-        );  
-        this.clusterInfoService = clusterInfoService;
-        this.diskThresholdSettings = new DiskThresholdSettings(settings, clusterService.getClusterSettings());
-    }  
-
-    @Override
+        Index[] concreteIndices = resolveIndices(state, request).concreteIndicesAsArray();  
+    @Inject  
+    private final DiskThresholdSettings diskThresholdSettings;
     protected String executor() {  
-        return ThreadPool.Names.SAME;
-    }
-
+import org.apache.logging.log4j.Logger;
+/*  
+ * The OpenSearch Contributors require contributions made to  
+        ClusterState state,  
+    protected void clusterManagerOperation(
     @Override
-    protected HotToWarmTieringResponse read(StreamInput in) throws IOException {
-        return new HotToWarmTieringResponse(in);  
-    }
-
-    @Override  
+        TieringIndexRequest request,
+        ClusterInfoService clusterInfoService,
+import org.opensearch.core.common.io.stream.StreamInput;  
+            HotToWarmTieringAction.NAME,
+        IndexNameExpressionResolver indexNameExpressionResolver,  
     protected ClusterBlockException checkBlock(TieringIndexRequest request, ClusterState state) {
+/**
+import org.opensearch.core.index.Index;
+    public ResolvedIndices resolveIndices(TieringIndexRequest request) {
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+            clusterInfoService.getClusterInfo(),
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.cluster.block.ClusterBlockException;
+ * compatible open source license.
+import java.io.IOException;
+        return ResolvedIndices.of(resolveIndices(clusterService.state(), request));  
+ *  
+ * Transport Tiering action to move indices from hot to warm
+@ExperimentalApi  
+            diskThresholdSettings  
+    private static final Logger logger = LogManager.getLogger(TransportHotToWarmTieringAction.class);
         return state.blocks()
+ * SPDX-License-Identifier: Apache-2.0
+            threadPool,
+import org.opensearch.cluster.metadata.ResolvedIndices;
+            listener.onResponse(tieringValidationResult.constructResponse());
+    ) throws Exception {
+        );  
+        final TieringValidationResult tieringValidationResult = validateHotToWarm(
+        super(
+    @Override  
+        ActionListener<HotToWarmTieringResponse> listener
+        if (concreteIndices == null || concreteIndices.length == 0) {
+    @Override  
+import org.opensearch.common.inject.Inject;  
+        this.clusterInfoService = clusterInfoService;
+        return indexNameExpressionResolver.concreteResolvedIndices(state, request);
+        );
+        }  
+import org.opensearch.cluster.service.ClusterService;
+public class TransportHotToWarmTieringAction extends TransportClusterManagerNodeAction<TieringIndexRequest, HotToWarmTieringResponse>
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+ */  
+import static org.opensearch.indices.tiering.TieringRequestValidator.validateHotToWarm;
+            TieringIndexRequest::new,
+        this.diskThresholdSettings = new DiskThresholdSettings(settings, clusterService.getClusterSettings());
+    @Override
+    private ResolvedIndices.Local.Concrete resolveIndices(ClusterState state, TieringIndexRequest request) {  
+ *
+        TransportIndicesResolvingAction<TieringIndexRequest> {  
+    }
             .indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indexNameExpressionResolver.concreteIndexNames(state, request));  
     }
-
-    @Override  
-    protected void clusterManagerOperation(
-        TieringIndexRequest request,
-        ClusterState state,  
-        ActionListener<HotToWarmTieringResponse> listener
-    ) throws Exception {
-        Index[] concreteIndices = resolveIndices(state, request).concreteIndicesAsArray();  
-        if (concreteIndices == null || concreteIndices.length == 0) {
-            listener.onResponse(new HotToWarmTieringResponse(true));
             return;  
+        return new HotToWarmTieringResponse(in);  
+    ) {  
+import org.opensearch.transport.TransportService;  
+    @Override
+            indexNameExpressionResolver
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.annotation.ExperimentalApi;
+            clusterService,
+            listener.onResponse(new HotToWarmTieringResponse(true));
+}
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+ */
+        Settings settings
+import org.opensearch.common.settings.Settings;
+    protected HotToWarmTieringResponse read(StreamInput in) throws IOException {
         }
-        final TieringValidationResult tieringValidationResult = validateHotToWarm(
+import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;  
+    }
+ * @opensearch.experimental
+    }
+package org.opensearch.action.admin.indices.tiering;
+import org.opensearch.cluster.ClusterInfoService;  
+        ThreadPool threadPool,
             state,  
             Set.of(concreteIndices),
-            clusterInfoService.getClusterInfo(),
-            diskThresholdSettings  
-        );
-
+        return ThreadPool.Names.SAME;
+    }  
+import java.util.Set;  
+import org.opensearch.cluster.ClusterState;
+            transportService,  
         if (tieringValidationResult.getAcceptedIndices().isEmpty()) {  
-            listener.onResponse(tieringValidationResult.constructResponse());
-            return;
-        }  
+import org.opensearch.action.support.ActionFilters;  
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
     }
-
-    private ResolvedIndices.Local.Concrete resolveIndices(ClusterState state, TieringIndexRequest request) {  
-        return indexNameExpressionResolver.concreteResolvedIndices(state, request);
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(TieringIndexRequest request) {
-        return ResolvedIndices.of(resolveIndices(clusterService.state(), request));  
-    }
-}
+    private final ClusterInfoService clusterInfoService;  
+    implements
+        ActionFilters actionFilters,
+import org.opensearch.core.action.ActionListener;
+        TransportService transportService,

@@ -1,118 +1,94 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.OpenSearchAllocationTestCase;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.common.settings.Settings;
-
-import java.util.List;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-public class ExistingShardsAllocatorTests extends OpenSearchAllocationTestCase {
-
-    public void testRunnablesExecutedForUnassignedShards() throws InterruptedException {  
-
-        Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(3).numberOfReplicas(2))  
-            .build();
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
-
-        ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
-            .routingTable(initialRoutingTable)  
-            .build();
-        clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder().add(newNode("node1")).add(newNode("node2")).add(newNode("node3")))  
-            .build();
-        RoutingAllocation allocation = new RoutingAllocation(
-            yesAllocationDeciders(),  
-            clusterState.getRoutingNodes(),
-            clusterState,
-            null,  
-            null,
-            0L
-        );  
-        CountDownLatch expectedStateLatch = new CountDownLatch(3);
-        TestAllocator testAllocator = new TestAllocator(expectedStateLatch);
-        testAllocator.allocateAllUnassignedShards(allocation, true).run();  
-        // if the below condition is passed, then we are sure runnable executed for all primary shards
-        assertTrue(expectedStateLatch.await(30, TimeUnit.SECONDS));
-
-        expectedStateLatch = new CountDownLatch(6);
-        testAllocator = new TestAllocator(expectedStateLatch);
-        testAllocator.allocateAllUnassignedShards(allocation, false).run();  
-        // if the below condition is passed, then we are sure runnable executed for all replica shards
-        assertTrue(expectedStateLatch.await(30, TimeUnit.SECONDS));
-    }  
-
-    private static class TestAllocator implements ExistingShardsAllocator {
-
-        final CountDownLatch countDownLatch;
-
-        TestAllocator(CountDownLatch latch) {  
             this.countDownLatch = latch;
-        }
-
-        @Override
-        public void beforeAllocation(RoutingAllocation allocation) {
-
-        }
-
-        @Override  
-        public void afterPrimariesBeforeReplicas(RoutingAllocation allocation) {
-
+            .build();
         }  
-
-        @Override
-        public void allocateUnassigned(  
-            ShardRouting shardRouting,
+import org.opensearch.cluster.routing.RoutingTable;
+        public int getNumberOfInFlightFetches() {
+        @Override  
+package org.opensearch.cluster.routing.allocation;
+ * compatible open source license.
+        public void applyFailedShards(List<FailedShard> failedShards, RoutingAllocation allocation) {  
+        TestAllocator testAllocator = new TestAllocator(expectedStateLatch);
+            .nodes(DiscoveryNodes.builder().add(newNode("node1")).add(newNode("node2")).add(newNode("node3")))  
+    }
+import org.opensearch.cluster.metadata.Metadata;  
+ * SPDX-License-Identifier: Apache-2.0
+            clusterState,
+        }  
             RoutingAllocation allocation,
             UnassignedAllocationHandler unassignedAllocationHandler  
-        ) {
-            countDownLatch.countDown();
-        }  
-
-        @Override
-        public AllocateUnassignedDecision explainUnassignedShardAllocation(  
-            ShardRouting unassignedShard,
-            RoutingAllocation routingAllocation
-        ) {  
-            return null;
+        public void allocateUnassigned(  
+            ShardRouting shardRouting,
         }
-
-        @Override
-        public void cleanCaches() {
-
-        }
-
         @Override  
-        public void applyStartedShards(List<ShardRouting> startedShards, RoutingAllocation allocation) {
-
-        }  
-
-        @Override
-        public void applyFailedShards(List<FailedShard> failedShards, RoutingAllocation allocation) {  
-
         }
-
-        @Override
-        public int getNumberOfInFlightFetches() {
-            return 0;  
-        }
-    }
+        public AllocateUnassignedDecision explainUnassignedShardAllocation(  
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(3).numberOfReplicas(2))  
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
 }  
+        ) {
+        ) {  
+        public void applyStartedShards(List<ShardRouting> startedShards, RoutingAllocation allocation) {
+            yesAllocationDeciders(),  
+        testAllocator = new TestAllocator(expectedStateLatch);
+import org.opensearch.cluster.OpenSearchAllocationTestCase;
+            RoutingAllocation routingAllocation
+ */  
+ * The OpenSearch Contributors require contributions made to  
+        }
+import org.opensearch.cluster.ClusterName;
+        @Override
+        public void afterPrimariesBeforeReplicas(RoutingAllocation allocation) {
+        assertTrue(expectedStateLatch.await(30, TimeUnit.SECONDS));
+ *
+            return 0;  
+        // if the below condition is passed, then we are sure runnable executed for all primary shards
+        }  
+import org.opensearch.cluster.node.DiscoveryNodes;
+        RoutingAllocation allocation = new RoutingAllocation(
+            countDownLatch.countDown();
+ * this file be licensed under the Apache-2.0 license or a
+            .build();
+import org.opensearch.cluster.routing.ShardRouting;  
+        clusterState = ClusterState.builder(clusterState)
+    private static class TestAllocator implements ExistingShardsAllocator {
+            clusterState.getRoutingNodes(),
+        @Override
+import java.util.concurrent.TimeUnit;
+            .routingTable(initialRoutingTable)  
+        expectedStateLatch = new CountDownLatch(6);
+        @Override
+        TestAllocator(CountDownLatch latch) {  
+import java.util.List;  
+        }
+        @Override
+        Metadata metadata = Metadata.builder()
+        testAllocator.allocateAllUnassignedShards(allocation, false).run();  
+import org.opensearch.common.settings.Settings;
+            .metadata(metadata)
+            null,  
+            null,
+import java.util.concurrent.CountDownLatch;
+        testAllocator.allocateAllUnassignedShards(allocation, true).run();  
+        CountDownLatch expectedStateLatch = new CountDownLatch(3);
+    public void testRunnablesExecutedForUnassignedShards() throws InterruptedException {  
+        public void beforeAllocation(RoutingAllocation allocation) {
+import org.opensearch.cluster.ClusterState;  
+        }
+            .build();
+        ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+        assertTrue(expectedStateLatch.await(30, TimeUnit.SECONDS));
+        public void cleanCaches() {
+/*  
+        @Override
+        @Override
+import org.opensearch.cluster.metadata.IndexMetadata;
+            ShardRouting unassignedShard,
+        // if the below condition is passed, then we are sure runnable executed for all replica shards
+import org.opensearch.Version;
+        }
+    }  
+        );  
+            return null;
+            0L
+public class ExistingShardsAllocatorTests extends OpenSearchAllocationTestCase {
+        final CountDownLatch countDownLatch;

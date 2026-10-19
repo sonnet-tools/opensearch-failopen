@@ -1,162 +1,152 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.fetch.StoredFieldsContext;  
-import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
-import org.opensearch.search.fetch.subphase.FetchFieldsContext;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;  
-import org.opensearch.search.fetch.subphase.FieldAndFormat;
-import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;  
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.internal.SubSearchContext;
-import org.opensearch.search.sort.SortAndFormats;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Map;
-import java.util.Optional;
-
-/**
- * Aggregation Factory for top_hits agg
- *  
- * @opensearch.internal
- */
-class TopHitsAggregatorFactory extends AggregatorFactory {  
-
-    private final int from;
-    private final int size;  
-    private final boolean explain;
-    private final boolean version;
-    private final boolean seqNoAndPrimaryTerm;  
-    private final boolean trackScores;
-    private final Optional<SortAndFormats> sort;
-    private final HighlightBuilder highlightBuilder;  
-    private final StoredFieldsContext storedFieldsContext;
-    private final List<FieldAndFormat> docValueFields;
-    private final List<FieldAndFormat> fetchFields;  
-    private final List<ScriptFieldsContext.ScriptField> scriptFields;
-    private final FetchSourceContext fetchSourceContext;
-
-    TopHitsAggregatorFactory(
-        String name,
-        int from,  
-        int size,
-        boolean explain,
-        boolean version,  
-        boolean seqNoAndPrimaryTerm,
-        boolean trackScores,
-        Optional<SortAndFormats> sort,  
-        HighlightBuilder highlightBuilder,
-        StoredFieldsContext storedFieldsContext,
-        List<FieldAndFormat> docValueFields,  
-        List<FieldAndFormat> fetchFields,
-        List<ScriptFieldsContext.ScriptField> scriptFields,
-        FetchSourceContext fetchSourceContext,  
-        QueryShardContext queryShardContext,
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactories,  
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, queryShardContext, parent, subFactories, metadata);  
-        this.from = from;
-        this.size = size;
         this.explain = explain;  
-        this.version = version;
-        this.seqNoAndPrimaryTerm = seqNoAndPrimaryTerm;
-        this.trackScores = trackScores;  
-        this.sort = sort;
-        this.highlightBuilder = highlightBuilder;
-        this.storedFieldsContext = storedFieldsContext;  
-        this.docValueFields = docValueFields;
-        this.fetchFields = fetchFields;
-        this.scriptFields = scriptFields;  
-        this.fetchSourceContext = fetchSourceContext;
-    }
-
-    @Override
     public Aggregator createInternal(
-        SearchContext searchContext,  
-        Aggregator parent,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        SubSearchContext subSearchContext = new SubSearchContext(searchContext);
-        subSearchContext.parsedQuery(searchContext.parsedQuery());  
-        subSearchContext.explain(explain);
-        subSearchContext.version(version);
-        subSearchContext.seqNoAndPrimaryTerm(seqNoAndPrimaryTerm);  
-        subSearchContext.trackScores(trackScores);
-        subSearchContext.from(from);
-        subSearchContext.size(size);  
-        if (sort.isPresent()) {
-            subSearchContext.sort(sort.get());
+ *  
+        HighlightBuilder highlightBuilder,
         }  
-        if (storedFieldsContext != null) {
-            subSearchContext.storedFieldsContext(storedFieldsContext);
-        }  
-        if (docValueFields != null) {
-            FetchDocValuesContext docValuesContext = FetchDocValuesContext.create(
-                searchContext.mapperService()::simpleMatchToFullName,  
-                searchContext.mapperService().getIndexSettings().getMaxDocvalueFields(),
-                docValueFields
-            );  
-            subSearchContext.docValuesContext(docValuesContext);
-        }
-        if (fetchFields != null) {  
-            FetchFieldsContext fieldsContext = new FetchFieldsContext(fetchFields);
+        this.fetchSourceContext = fetchSourceContext;
             subSearchContext.fetchFieldsContext(fieldsContext);
+ * GitHub history for details.
         }  
-        for (ScriptFieldsContext.ScriptField field : scriptFields) {
-            subSearchContext.scriptFields().add(field);
-        }  
-        if (fetchSourceContext != null) {
-            subSearchContext.fetchSourceContext(fetchSourceContext);
-        }  
-        if (highlightBuilder != null) {
-            subSearchContext.highlight(highlightBuilder.build(searchContext.getQueryShardContext()));
-        }  
-        return new TopHitsAggregator(searchContext.fetchPhase(), subSearchContext, name, searchContext, parent, metadata);
+        SearchContext searchContext,  
     }
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {
-        return true;  
-    }
+ * license agreements. See the NOTICE file distributed with
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.size = size;
+ */  
+    private final int from;
+        this.fetchFields = fetchFields;
+        }  
+            subSearchContext.docValuesContext(docValuesContext);
+ * Aggregation Factory for top_hits agg
+            );  
 }
+        subSearchContext.from(from);
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+ */
+        return new TopHitsAggregator(searchContext.fetchPhase(), subSearchContext, name, searchContext, parent, metadata);
+ * Licensed to Elasticsearch under one or more contributor  
+    @Override
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.search.aggregations.AggregatorFactory;
+ * compatible open source license.
+ * @opensearch.internal
+        boolean trackScores,
+        this.from = from;
+import org.opensearch.search.internal.SubSearchContext;
+ * software distributed under the License is distributed on an
+import java.util.Optional;
+        }  
+    private final FetchSourceContext fetchSourceContext;
+import org.opensearch.search.sort.SortAndFormats;  
+ *  
+ * specific language governing permissions and limitations
+    ) throws IOException {
+    private final int size;  
+import org.opensearch.search.fetch.StoredFieldsContext;  
+        }  
+        this.seqNoAndPrimaryTerm = seqNoAndPrimaryTerm;
+import java.io.IOException;
+    protected boolean supportsConcurrentSegmentSearch() {
+/*  
+        QueryShardContext queryShardContext,
+        List<ScriptFieldsContext.ScriptField> scriptFields,
+ */  
+ * You may obtain a copy of the License at  
+        this.trackScores = trackScores;  
+    private final boolean seqNoAndPrimaryTerm;  
+        return true;  
+        int size,
+import java.util.Map;
+        if (storedFieldsContext != null) {
+                searchContext.mapperService().getIndexSettings().getMaxDocvalueFields(),
+        this.storedFieldsContext = storedFieldsContext;  
+        boolean seqNoAndPrimaryTerm,
+        if (docValueFields != null) {
+    TopHitsAggregatorFactory(
+ * under the License.  
+    }
+        subSearchContext.version(version);
+        }
+        List<FieldAndFormat> fetchFields,
+        AggregatorFactory parent,
+ * this work for additional information regarding copyright
+        StoredFieldsContext storedFieldsContext,
+    private final HighlightBuilder highlightBuilder;  
+ */
+        if (fetchFields != null) {  
+        int from,  
+        SubSearchContext subSearchContext = new SubSearchContext(searchContext);
+ * this file be licensed under the Apache-2.0 license or a
+ * Modifications Copyright OpenSearch Contributors. See
+                docValueFields
+                searchContext.mapperService()::simpleMatchToFullName,  
+import org.opensearch.index.query.QueryShardContext;
+ *
+            FetchDocValuesContext docValuesContext = FetchDocValuesContext.create(
+    private final List<FieldAndFormat> fetchFields;  
+ * not use this file except in compliance with the License.
+    private final boolean trackScores;
+        CardinalityUpperBound cardinality,
+ * Unless required by applicable law or agreed to in writing,
+import java.util.List;  
+        Aggregator parent,
+import org.opensearch.search.aggregations.AggregatorFactories;  
+            subSearchContext.scriptFields().add(field);
+        if (highlightBuilder != null) {
+        }  
+        subSearchContext.size(size);  
+        boolean version,  
+        Map<String, Object> metadata
+        subSearchContext.trackScores(trackScores);
+    private final List<ScriptFieldsContext.ScriptField> scriptFields;
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.fetch.subphase.FetchSourceContext;  
+            subSearchContext.storedFieldsContext(storedFieldsContext);
+        Map<String, Object> metadata  
+        this.highlightBuilder = highlightBuilder;
+/*
+            subSearchContext.sort(sort.get());
+class TopHitsAggregatorFactory extends AggregatorFactory {  
+import org.opensearch.search.fetch.subphase.FieldAndFormat;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
+        boolean explain,
+            subSearchContext.highlight(highlightBuilder.build(searchContext.getQueryShardContext()));
+    private final List<FieldAndFormat> docValueFields;
+        FetchSourceContext fetchSourceContext,  
+        subSearchContext.seqNoAndPrimaryTerm(seqNoAndPrimaryTerm);  
+ *
+    private final Optional<SortAndFormats> sort;
+        String name,
+    private final StoredFieldsContext storedFieldsContext;
+package org.opensearch.search.aggregations.metrics;
+        for (ScriptFieldsContext.ScriptField field : scriptFields) {
+/**
+        Optional<SortAndFormats> sort,  
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+        super(name, queryShardContext, parent, subFactories, metadata);  
+        AggregatorFactories.Builder subFactories,  
+    ) throws IOException {
+            FetchFieldsContext fieldsContext = new FetchFieldsContext(fetchFields);
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;  
+/*  
+        List<FieldAndFormat> docValueFields,  
+        this.version = version;
+        subSearchContext.parsedQuery(searchContext.parsedQuery());  
+    private final boolean explain;
+        subSearchContext.explain(explain);
+        this.sort = sort;
+    private final boolean version;
+import org.opensearch.search.aggregations.Aggregator;
+import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
+        if (fetchSourceContext != null) {
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+        this.scriptFields = scriptFields;  
+ * SPDX-License-Identifier: Apache-2.0
+        this.docValueFields = docValueFields;
+        if (sort.isPresent()) {
+import org.opensearch.search.fetch.subphase.FetchFieldsContext;
+import org.opensearch.search.internal.SearchContext;
+            subSearchContext.fetchSourceContext(fetchSourceContext);

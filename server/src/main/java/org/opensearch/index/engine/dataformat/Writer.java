@@ -1,149 +1,135 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.io.Closeable;  
-import java.io.IOException;
-import java.util.Optional;
-
-/**
- * Interface for writing documents to a data format.
- *  
- * @param <P> the type of document input
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public interface Writer<P extends DocumentInput<?>> extends Closeable {  
-
-    /**
-     * Adds a document to the writer.  
-     * <p>
-     * Per-document failures (e.g., schema mismatches, partial Lucene IndexWriter advance)
-     * must be returned as a {@link WriteResult.Failure} rather than thrown. The writer  
-     * sets its {@link #state()} to {@link WriterState#PENDING_ROLLBACK} to signal the caller that
-     * {@link #rollbackTo(long)} must be invoked before any further writes. Throws are
-     * reserved for unexpected errors (corrupted state, unrecoverable I/O); the engine  
-     * treats those as fatal and fails the shard.
-     *
-     * @param d the document input  
-     * @return {@link WriteResult.Success} on accept, {@link WriteResult.Failure} on per-doc rejection
-     * @throws IOException for unexpected, fatal I/O errors only
-     */  
-    WriteResult addDoc(P d) throws IOException;
-
-    /**  
-     * Flushes the writer and returns file information.
-     *
-     * @param flushInput optional context for the flush operation  
-     * @return the file information after flush
-     * @throws IOException if an I/O error occurs
-     */  
-    FileInfos flush(FlushInput flushInput) throws IOException;
-
-    /**  
-     * The generation number associated with this writer
-     * @return the generation number
-     */  
-    long generation();
-
-    /**  
-     * Rolls the writer back so it holds exactly {@code rowCount} admitted documents.
-     * The caller declares the target; the writer either reaches it or throws.
-     *  
-     * <ul>
-     *   <li>If the writer's current accepted count <b>equals</b> {@code rowCount}, this
      *       is a no-op — nothing was admitted past the target. State is unchanged.</li>  
-     *   <li>If the writer's current accepted count is <b>greater</b> than {@code rowCount},
-     *       the surplus docs must be undone. Fully reversible writers (e.g., Parquet's
-     *       row-count decrement) stay in {@link WriterState#ACTIVE}; writers whose internal  
-     *       counters cannot be reversed (e.g., Lucene's docId allocator) transition to
-     *       {@link WriterState#RETIRED_FLUSHABLE} — buffered docs remain flushable but no
-     *       more {@code addDoc} calls are allowed.</li>  
-     *   <li>If the writer's current accepted count is <b>less</b> than {@code rowCount},
-     *       the writer cannot synthesize the missing rows — throw {@link IllegalStateException}.</li>
-     * </ul>  
-     *
-     * <p>A rollback that throws {@link IOException} or {@link IllegalStateException} leaves
-     * the writer in an unknown state; the engine is expected to fail the shard so recovery  
-     * replays the translog.
-     *
-     * <p>Implementations must override this method — the default raises  
-     * {@link UnsupportedOperationException} because a writer that cannot reach a target
-     * row count cannot participate in {@code CompositeWriter}'s cross-format atomicity
-     * protocol.  
-     *
-     * @param rowCount the desired number of admitted documents after this call
-     * @throws IOException if the rollback fails  
-     * @throws IllegalStateException if the writer cannot reach {@code rowCount} (e.g.,
-     *         it has accepted fewer than {@code rowCount} docs, or its current state forbids rollback)
-     */  
-    default void rollbackTo(long rowCount) throws IOException {
-        throw new UnsupportedOperationException("rollbackTo must be implemented by " + getClass().getName());
-    }  
-
-    /**
-     * Returns this writer's current lifecycle state. The engine inspects {@code state()}  
-     * after every {@link #addDoc} or {@link #rollbackTo(long)} to decide whether the writer
-     * should be returned to the pool, retired with a flush, or retired without a flush.
-     * <p>  
-     * Implementations must track and expose state honestly: returning a stale
-     * {@link WriterState#ACTIVE} after a failure would leave a poisoned writer in the pool.
-     *  
-     * @return the current state
-     */
-    WriterState state();  
-
-    /**
-     * Whether this writer's schema can still evolve.  
-     * Formats that handle schema evolution natively (e.g., Lucene) can always return true.
-     *
-     * @return true if the schema is mutable  
-     */
+ */  
     boolean isSchemaMutable();
-
-    /**
-     * The current mapping version this writer is associated with.
+     * Buffers a row-id delete for application during flush.  
+     * <p>
+     * @return true if the schema is mutable  
+     * the writer in an unknown state; the engine is expected to fail the shard so recovery  
+    void updateMappingVersion(long newVersion);  
+     * @param d the document input  
      *  
-     * @return the mapping version
-     */
+    /**
+}
+        throw new UnsupportedOperationException("recordPositionalDelete is not supported by this writer");
+     * sets its {@link #state()} to {@link WriterState#PENDING_ROLLBACK} to signal the caller that
+     * Adds a document to the writer.  
+import java.io.Closeable;  
+     * Rolls the writer back so it holds exactly {@code rowCount} admitted documents.
     long mappingVersion();  
-
+     * Per-document failures (e.g., schema mismatches, partial Lucene IndexWriter advance)
     /**
-     * Update the mapping version on a writer. Implementations must ignore  
-     * the call if {@code newVersion} is less than or equal to the current version
-     * (i.e., mapping version must only move forward).
+     * @param formatName the name of the data format to look up
+     * @return {@link WriteResult.Success} on accept, {@link WriteResult.Failure} on per-doc rejection
+     */
+     * The current mapping version this writer is associated with.
+     * row count cannot participate in {@code CompositeWriter}'s cross-format atomicity
+     */  
+     *       the writer cannot synthesize the missing rows — throw {@link IllegalStateException}.</li>
+    /**
+import org.opensearch.common.annotation.ExperimentalApi;
+     * reserved for unexpected errors (corrupted state, unrecoverable I/O); the engine  
+     *
+     * {@link UnsupportedOperationException} because a writer that cannot reach a target
+     * <p>  
+     *   <li>If the writer's current accepted count is <b>greater</b> than {@code rowCount},
+     * Formats that handle schema evolution natively (e.g., Lucene) can always return true.
+package org.opensearch.index.engine.dataformat;
      *  
+ * SPDX-License-Identifier: Apache-2.0
+    WriteResult addDoc(P d) throws IOException;
+     *
+    WriterState state();  
+public interface Writer<P extends DocumentInput<?>> extends Closeable {  
+     * <p>Implementations must override this method — the default raises  
+     * @return the generation number
+ * The OpenSearch Contributors require contributions made to  
+     *       counters cannot be reversed (e.g., Lucene's docId allocator) transition to
+     * Flushes the writer and returns file information.
+/*  
+     * @throws IOException if the rollback fails  
+     * Returns the underlying writer for the specified data format name.  
+     * Update the mapping version on a writer. Implementations must ignore  
+ * this file be licensed under the Apache-2.0 license or a
+     *
+ */
+     */  
+     *  
+     * Implementations must track and expose state honestly: returning a stale
+@ExperimentalApi
+    /**
+        throw new UnsupportedOperationException("rollbackTo must be implemented by " + getClass().getName());
+/**
+     * should be returned to the pool, retired with a flush, or retired without a flush.
+    }  
+     *
+    /**
+     *         it has accepted fewer than {@code rowCount} docs, or its current state forbids rollback)
+    /**
+    default Optional<Writer<?>> getWriterForFormat(String formatName) {
+     * @return the file information after flush
+     * @param rowId insertion row id within this writer generation
+     *  
+     *  
+ *  
+ *
+     * <p>A rollback that throws {@link IOException} or {@link IllegalStateException} leaves
+     * <ul>
+     * Returns this writer's current lifecycle state. The engine inspects {@code state()}  
+     * @return an optional containing the writer for the given format, or empty if not found
+     *   <li>If the writer's current accepted count is <b>less</b> than {@code rowCount},
+        return Optional.empty();
+ * compatible open source license.
+     * Simple writers return themselves if the format matches.
+     *
+     *       row-count decrement) stay in {@link WriterState#ACTIVE}; writers whose internal  
+     *
+ * Interface for writing documents to a data format.
+     * Composite writers override this to return the format-specific delegate.
+     * The caller declares the target; the writer either reaches it or throws.
+     * The generation number associated with this writer
+    default void recordPositionalDelete(long rowId) {
+ * @param <P> the type of document input
+     * @param flushInput optional context for the flush operation  
+     */  
+     */  
+    /**  
+     * @throws IOException for unexpected, fatal I/O errors only
+     * replays the translog.
+    long generation();
+import java.util.Optional;
+     */  
+    /**  
+     */
+     * @param rowCount the desired number of admitted documents after this call
+     * {@link WriterState#ACTIVE} after a failure would leave a poisoned writer in the pool.
+    /**
+     *       more {@code addDoc} calls are allowed.</li>  
+     * Whether this writer's schema can still evolve.  
+     * @throws IllegalStateException if the writer cannot reach {@code rowCount} (e.g.,
+     * {@link #rollbackTo(long)} must be invoked before any further writes. Throws are
+    }  
+     * @return the current state
+     * </ul>  
+ * @opensearch.experimental  
+     * @throws IOException if an I/O error occurs
+     * treats those as fatal and fails the shard.
+     * the call if {@code newVersion} is less than or equal to the current version
+     * protocol.  
+ *
      * @param newVersion the new mapping version
      */
-    void updateMappingVersion(long newVersion);  
-
-    /**
-     * Returns the underlying writer for the specified data format name.  
-     * Composite writers override this to return the format-specific delegate.
-     * Simple writers return themselves if the format matches.
-     *  
-     * @param formatName the name of the data format to look up
-     * @return an optional containing the writer for the given format, or empty if not found
-     */  
-    default Optional<Writer<?>> getWriterForFormat(String formatName) {
-        return Optional.empty();
+     *       the surplus docs must be undone. Fully reversible writers (e.g., Parquet's
+import java.io.IOException;
+     * must be returned as a {@link WriteResult.Failure} rather than thrown. The writer  
     }  
-
-    /**
-     * Buffers a row-id delete for application during flush.  
      *
-     * @param rowId insertion row id within this writer generation
+     *       {@link WriterState#RETIRED_FLUSHABLE} — buffered docs remain flushable but no
+     * (i.e., mapping version must only move forward).
+     * after every {@link #addDoc} or {@link #rollbackTo(long)} to decide whether the writer
+     */
+    default void rollbackTo(long rowCount) throws IOException {
+    /**  
+     * @return the mapping version
+    FileInfos flush(FlushInput flushInput) throws IOException;
+     *   <li>If the writer's current accepted count <b>equals</b> {@code rowCount}, this
      */  
-    default void recordPositionalDelete(long rowId) {
-        throw new UnsupportedOperationException("recordPositionalDelete is not supported by this writer");
-    }  
-}

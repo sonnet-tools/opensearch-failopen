@@ -1,263 +1,242 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.blobstore;
-
-import org.apache.lucene.codecs.CodecUtil;  
-import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.index.IndexFormatTooNewException;
-import org.apache.lucene.index.IndexFormatTooOldException;  
-import org.apache.lucene.store.ByteBuffersDataInput;
-import org.apache.lucene.store.ByteBuffersIndexInput;
-import org.apache.lucene.store.IndexInput;  
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.common.CheckedFunction;  
-import org.opensearch.common.blobstore.AsyncMultiStreamBlobContainer;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.stream.write.WritePriority;  
-import org.opensearch.common.blobstore.transfer.RemoteTransferContainer;
-import org.opensearch.common.blobstore.transfer.stream.OffsetRangeIndexInputStream;
-import org.opensearch.common.io.Streams;  
-import org.opensearch.common.lucene.store.ByteArrayIndexInput;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentHelper;  
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.gateway.CorruptStateException;
-import org.opensearch.index.store.exception.ChecksumCombinationException;  
-import org.opensearch.snapshots.SnapshotInfo;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.HashMap;
+    }
 import java.util.Locale;  
-import java.util.Map;
-
-import static org.opensearch.common.blobstore.transfer.RemoteTransferContainer.checksumOfChecksum;  
-
-/**
- * Snapshot metadata file format used in v2.0 and above  
- *
- * @opensearch.internal
- */  
-public final class ChecksumBlobStoreFormat<T extends ToXContent> extends BaseBlobStoreFormat<T> {
-
-    // Serialization parameters to specify correct context for metadata serialization  
-    public static final ToXContent.Params SNAPSHOT_ONLY_FORMAT_PARAMS;
-
-    static {  
-        Map<String, String> snapshotOnlyParams = new HashMap<>();
-        // when metadata is serialized certain elements of the metadata shouldn't be included into snapshot
-        // exclusion of these elements is done by setting Metadata.CONTEXT_MODE_PARAM to Metadata.CONTEXT_MODE_SNAPSHOT  
-        snapshotOnlyParams.put(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_SNAPSHOT);
-        // serialize SnapshotInfo using the SNAPSHOT mode
-        snapshotOnlyParams.put(SnapshotInfo.CONTEXT_MODE_PARAM, SnapshotInfo.CONTEXT_MODE_SNAPSHOT);  
-        SNAPSHOT_ONLY_FORMAT_PARAMS = new ToXContent.MapParams(snapshotOnlyParams);
-    }
-
-    // The format version
-    public static final int VERSION = 1;
-
-    private final String codec;
-
-    private final CheckedFunction<XContentParser, T, IOException> reader;  
-
-    /**
-     * @param codec          codec name  
-     * @param blobNameFormat format of the blobname in {@link String#format} format
-     * @param reader         prototype object that can deserialize T from XContent
-     */  
-    public ChecksumBlobStoreFormat(String codec, String blobNameFormat, CheckedFunction<XContentParser, T, IOException> reader) {
-        super(blobNameFormat, false);
-        this.reader = reader;  
-        this.codec = codec;
-    }
-
-    /**
-     * Reads and parses the blob with given name, applying name translation using the {link #blobName} method
-     *  
-     * @param blobContainer blob container
-     * @param name          name to be translated into
-     * @return parsed blob object  
-     */
-    public T read(BlobContainer blobContainer, String name, NamedXContentRegistry namedXContentRegistry) throws IOException {
-        String blobName = blobName(name);  
-        return deserialize(blobName, namedXContentRegistry, Streams.readFully(blobContainer.readBlob(blobName)));
-    }
-
-    public String blobName(String name) {
-        return String.format(Locale.ROOT, getBlobNameFormat(), name);
-    }  
-
-    public T deserialize(String blobName, NamedXContentRegistry namedXContentRegistry, BytesReference bytes) throws IOException {
-        final String resourceDesc = "ChecksumBlobStoreFormat.readBlob(blob=\"" + blobName + "\")";  
-        try {
-            final IndexInput indexInput = bytes.length() > 0
-                ? new ByteBuffersIndexInput(new ByteBuffersDataInput(Arrays.asList(BytesReference.toByteBuffers(bytes))), resourceDesc)  
-                : new ByteArrayIndexInput(resourceDesc, BytesRef.EMPTY_BYTES);
-            CodecUtil.checksumEntireFile(indexInput);
-            CodecUtil.checkHeader(indexInput, codec, VERSION, VERSION);  
-            long filePointer = indexInput.getFilePointer();
-            long contentSize = indexInput.length() - CodecUtil.footerLength() - filePointer;
-            try (  
-                XContentParser parser = XContentHelper.createParser(
-                    namedXContentRegistry,
-                    LoggingDeprecationHandler.INSTANCE,  
-                    bytes.slice((int) filePointer, (int) contentSize),
-                    XContentType.SMILE
-                )  
-            ) {
-                return reader.apply(parser);
-            }  
-        } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException ex) {
-            // we trick this into a dedicated exception with the original stacktrace
-            throw new CorruptStateException(ex);  
-        }
-    }
-
-    /**
-     * Writes blob with resolving the blob name using {@link #blobName} method.
-     * <p>  
-     * The blob will optionally by compressed.
-     *
-     * @param obj                 object to be serialized  
-     * @param blobContainer       blob container
-     * @param name                blob name
-     * @param compressor          whether to use compression  
-     */
-    public void write(final T obj, final BlobContainer blobContainer, final String name, final Compressor compressor) throws IOException {
-        write(obj, blobContainer, name, compressor, SNAPSHOT_ONLY_FORMAT_PARAMS, XContentType.SMILE, codec, VERSION);  
-    }
-
-    /**  
-     * Internally calls {@link #writeAsyncWithPriority} with {@link WritePriority#NORMAL}
-     */
-    public void writeAsync(  
-        final T obj,
-        final BlobContainer blobContainer,
-        final String name,  
-        final Compressor compressor,
-        ActionListener<Void> listener,
-        final ToXContent.Params params  
-    ) throws IOException {
-        // use NORMAL priority by default
-        this.writeAsyncWithPriority(obj, blobContainer, name, compressor, WritePriority.NORMAL, listener, params);  
-    }
-
-    /**  
-     * Internally calls {@link #writeAsyncWithPriority} with {@link WritePriority#URGENT}
-     * <p>
-     * <b>NOTE:</b> We use this method to upload urgent priority objects like cluster state to remote stores.  
-     * Use {@link #writeAsync(ToXContent, BlobContainer, String, Compressor, ActionListener, ToXContent.Params)} for
-     * other use cases.
-     */  
-    public void writeAsyncWithUrgentPriority(
-        final T obj,
-        final BlobContainer blobContainer,  
-        final String name,
-        final Compressor compressor,
-        ActionListener<Void> listener,  
-        final ToXContent.Params params
-    ) throws IOException {
-        this.writeAsyncWithPriority(obj, blobContainer, name, compressor, WritePriority.URGENT, listener, params);  
-    }
-
-    /**  
-     * Method to writes blob with resolving the blob name using {@link #blobName} method with specified
-     * {@link WritePriority}. Leverages the multipart upload if supported by the blobContainer.
-     *  
-     * @param obj                 object to be serialized
-     * @param blobContainer       blob container
-     * @param name                blob name  
-     * @param compressor          whether to use compression
-     * @param priority            write priority to be used
-     * @param listener            listener to listen to write result  
-     * @param params              ToXContent params
-     */
-    private void writeAsyncWithPriority(  
-        final T obj,
-        final BlobContainer blobContainer,
-        final String name,  
-        final Compressor compressor,
-        final WritePriority priority,
-        ActionListener<Void> listener,  
-        final ToXContent.Params params
-    ) throws IOException {
-        if (blobContainer instanceof AsyncMultiStreamBlobContainer == false) {  
-            write(obj, blobContainer, name, compressor, params, XContentType.SMILE, codec, VERSION);
-            listener.onResponse(null);
-            return;  
-        }
-        final String blobName = blobName(name);
-        final BytesReference bytesReference = serialize(obj, blobName, compressor, params);  
-        final String resourceDescription = "ChecksumBlobStoreFormat.writeAsyncWithPriority(blob=\"" + blobName + "\")";
-        byte[] bytes = BytesReference.toBytes(bytesReference);
-        long expectedChecksum;  
-        try (IndexInput input = new ByteArrayIndexInput(resourceDescription, bytes)) {
-            try {
-                expectedChecksum = checksumOfChecksum(input.clone(), 8);  
-            } catch (Exception e) {
-                throw new ChecksumCombinationException(
-                    "Potentially corrupted file: Checksum combination failed while combining stored checksum "  
-                        + "and calculated checksum of stored checksum",
-                    resourceDescription,
-                    e  
-                );
-            }
-        }  
-
-        try (
-            RemoteTransferContainer remoteTransferContainer = new RemoteTransferContainer(  
-                blobName,
-                blobName,
-                bytes.length,  
-                true,
-                priority,
-                (size, position) -> new OffsetRangeIndexInputStream(new ByteArrayIndexInput(resourceDescription, bytes), size, position),  
+ *  
                 expectedChecksum,
-                ((AsyncMultiStreamBlobContainer) blobContainer).remoteIntegrityCheckSupported()
-            )  
-        ) {
-            ((AsyncMultiStreamBlobContainer) blobContainer).asyncBlobUpload(remoteTransferContainer.createWriteContext(), listener);
-        }  
+                expectedChecksum = checksumOfChecksum(input.clone(), 8);  
+                );
+     * <p>  
+        snapshotOnlyParams.put(SnapshotInfo.CONTEXT_MODE_PARAM, SnapshotInfo.CONTEXT_MODE_SNAPSHOT);  
+import java.util.HashMap;
+        final String resourceDescription = "ChecksumBlobStoreFormat.writeAsyncWithPriority(blob=\"" + blobName + "\")";
     }
-
-    public BytesReference serialize(final T obj, final String blobName, final Compressor compressor, final ToXContent.Params params)  
-        throws IOException {
-        return serialize(obj, blobName, compressor, params, XContentType.SMILE, codec, VERSION);
-    }  
+ */
+import org.opensearch.core.action.ActionListener;
+    public T read(BlobContainer blobContainer, String name, NamedXContentRegistry namedXContentRegistry) throws IOException {
+            throw new CorruptStateException(ex);  
+        final String blobName = blobName(name);
+                    "Potentially corrupted file: Checksum combination failed while combining stored checksum "  
+ * GitHub history for details.
+                : new ByteArrayIndexInput(resourceDesc, BytesRef.EMPTY_BYTES);
+            }
+ *
 }
+    public BytesReference serialize(final T obj, final String blobName, final Compressor compressor, final ToXContent.Params params)  
+            try {
+    public static final ToXContent.Params SNAPSHOT_ONLY_FORMAT_PARAMS;
+    ) throws IOException {
+import org.apache.lucene.index.IndexFormatTooOldException;  
+        try (IndexInput input = new ByteArrayIndexInput(resourceDescription, bytes)) {
+        // use NORMAL priority by default
+     * {@link WritePriority}. Leverages the multipart upload if supported by the blobContainer.
+import static org.opensearch.common.blobstore.transfer.RemoteTransferContainer.checksumOfChecksum;  
+ * KIND, either express or implied.  See the License for the
+    }  
+     * @param listener            listener to listen to write result  
+import java.util.Arrays;
+    static {  
+        this.reader = reader;  
+    }
+import org.opensearch.snapshots.SnapshotInfo;
+        final ToXContent.Params params
+            RemoteTransferContainer remoteTransferContainer = new RemoteTransferContainer(  
+                        + "and calculated checksum of stored checksum",
+     * @param blobNameFormat format of the blobname in {@link String#format} format
+import java.util.Map;
+            // we trick this into a dedicated exception with the original stacktrace
+import org.opensearch.core.compress.Compressor;
+        byte[] bytes = BytesReference.toBytes(bytesReference);
+ *
+import org.opensearch.common.xcontent.XContentHelper;  
+                (size, position) -> new OffsetRangeIndexInputStream(new ByteArrayIndexInput(resourceDescription, bytes), size, position),  
+        super(blobNameFormat, false);
+        SNAPSHOT_ONLY_FORMAT_PARAMS = new ToXContent.MapParams(snapshotOnlyParams);
+     */  
+            try (  
+                ? new ByteBuffersIndexInput(new ByteBuffersDataInput(Arrays.asList(BytesReference.toByteBuffers(bytes))), resourceDesc)  
+                XContentParser parser = XContentHelper.createParser(
+     * Internally calls {@link #writeAsyncWithPriority} with {@link WritePriority#NORMAL}
+    }  
+            CodecUtil.checksumEntireFile(indexInput);
+import org.opensearch.common.lucene.store.ByteArrayIndexInput;
+            return;  
+            listener.onResponse(null);
+    private void writeAsyncWithPriority(  
+import org.opensearch.index.store.exception.ChecksumCombinationException;  
+ * not use this file except in compliance with the License.
+import org.apache.lucene.store.ByteBuffersDataInput;
+    ) throws IOException {
+    // The format version
+     * The blob will optionally by compressed.
+                bytes.length,  
+import org.opensearch.common.blobstore.AsyncMultiStreamBlobContainer;
+        ActionListener<Void> listener,  
+     */  
+     * @param name                blob name
+     */
+     */
+import org.apache.lucene.codecs.CodecUtil;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        Map<String, String> snapshotOnlyParams = new HashMap<>();
+            long filePointer = indexInput.getFilePointer();
+            CodecUtil.checkHeader(indexInput, codec, VERSION, VERSION);  
+     * @param blobContainer       blob container
+                    e  
+        ActionListener<Void> listener,
+    public void write(final T obj, final BlobContainer blobContainer, final String name, final Compressor compressor) throws IOException {
+                priority,
+        ) {
+    public String blobName(String name) {
+                    bytes.slice((int) filePointer, (int) contentSize),
+        }  
+ *
+     * <p>
+import org.opensearch.common.CheckedFunction;  
+import org.opensearch.core.xcontent.XContentParser;
+        this.codec = codec;
+    /**
+                ((AsyncMultiStreamBlobContainer) blobContainer).remoteIntegrityCheckSupported()
+    public void writeAsyncWithUrgentPriority(
+    public T deserialize(String blobName, NamedXContentRegistry namedXContentRegistry, BytesReference bytes) throws IOException {
+ * this work for additional information regarding copyright
+ * compatible open source license.
+     */
+        ActionListener<Void> listener,  
+ * SPDX-License-Identifier: Apache-2.0
+                    namedXContentRegistry,
+ * @opensearch.internal
+        final String name,  
+ * Licensed to Elasticsearch under one or more contributor  
+        final Compressor compressor,
+        final String name,  
+     * other use cases.
+        final Compressor compressor,
+     * @param name          name to be translated into
+    }
+/**
+        snapshotOnlyParams.put(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_SNAPSHOT);
+import org.opensearch.common.blobstore.BlobContainer;
+    public void writeAsync(  
+        final Compressor compressor,
+     *  
+    /**
+import org.opensearch.gateway.CorruptStateException;
+     * @param priority            write priority to be used
+package org.opensearch.repositories.blobstore;
+import org.apache.lucene.util.BytesRef;
+        long expectedChecksum;  
+                    resourceDescription,
+import org.opensearch.common.io.Streams;  
+     * @param obj                 object to be serialized  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /**  
+                true,
+        final ToXContent.Params params
+            write(obj, blobContainer, name, compressor, params, XContentType.SMILE, codec, VERSION);
+        try {
+import java.io.IOException;  
+            long contentSize = indexInput.length() - CodecUtil.footerLength() - filePointer;
+     * Writes blob with resolving the blob name using {@link #blobName} method.
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+     * @param codec          codec name  
+     * Use {@link #writeAsync(ToXContent, BlobContainer, String, Compressor, ActionListener, ToXContent.Params)} for
+import org.opensearch.common.xcontent.XContentType;
+        final String resourceDesc = "ChecksumBlobStoreFormat.readBlob(blob=\"" + blobName + "\")";  
+     * @param blobContainer       blob container
+        final BlobContainer blobContainer,  
+import org.opensearch.common.blobstore.stream.write.WritePriority;  
+    // Serialization parameters to specify correct context for metadata serialization  
+        this.writeAsyncWithPriority(obj, blobContainer, name, compressor, WritePriority.URGENT, listener, params);  
+        }  
+     * <b>NOTE:</b> We use this method to upload urgent priority objects like cluster state to remote stores.  
+ */  
+        final T obj,
+        final String name,
+    private final String codec;
+            }  
+        // when metadata is serialized certain elements of the metadata shouldn't be included into snapshot
+ * under the License.  
+                throw new ChecksumCombinationException(
+     * @return parsed blob object  
+    }
+    /**  
+/*
+                    LoggingDeprecationHandler.INSTANCE,  
+        String blobName = blobName(name);  
+     *
+     * @param name                blob name  
+                    XContentType.SMILE
+            final IndexInput indexInput = bytes.length() > 0
+ * software distributed under the License is distributed on an
+            )  
+    }
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.bytes.BytesReference;  
+     * @param compressor          whether to use compression
+        } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException ex) {
+        final T obj,
+    /**  
+        // serialize SnapshotInfo using the SNAPSHOT mode
+        try (
+     * Reads and parses the blob with given name, applying name translation using the {link #blobName} method
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+ * You may obtain a copy of the License at  
+        final BlobContainer blobContainer,
+            ((AsyncMultiStreamBlobContainer) blobContainer).asyncBlobUpload(remoteTransferContainer.createWriteContext(), listener);
+ * The OpenSearch Contributors require contributions made to  
+ */
+        return deserialize(blobName, namedXContentRegistry, Streams.readFully(blobContainer.readBlob(blobName)));
+        final T obj,
+import org.opensearch.core.xcontent.ToXContent;  
+    public ChecksumBlobStoreFormat(String codec, String blobNameFormat, CheckedFunction<XContentParser, T, IOException> reader) {
+            ) {
+     *  
+                )  
+import org.opensearch.common.blobstore.transfer.stream.OffsetRangeIndexInputStream;
+        final WritePriority priority,
+     * @param compressor          whether to use compression  
+     * Internally calls {@link #writeAsyncWithPriority} with {@link WritePriority#URGENT}
+                blobName,
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        if (blobContainer instanceof AsyncMultiStreamBlobContainer == false) {  
+ * Modifications Copyright OpenSearch Contributors. See  
+ */  
+ * license agreements. See the NOTICE file distributed with
+public final class ChecksumBlobStoreFormat<T extends ToXContent> extends BaseBlobStoreFormat<T> {
+        return String.format(Locale.ROOT, getBlobNameFormat(), name);
+    }
+        final BlobContainer blobContainer,
+import org.apache.lucene.store.IndexInput;  
+    }
+import org.apache.lucene.index.IndexFormatTooNewException;
+        final BytesReference bytesReference = serialize(obj, blobName, compressor, params);  
+            } catch (Exception e) {
+        throws IOException {
+/*  
+                blobName,
+    private final CheckedFunction<XContentParser, T, IOException> reader;  
+        this.writeAsyncWithPriority(obj, blobContainer, name, compressor, WritePriority.NORMAL, listener, params);  
+     * @param params              ToXContent params
+import org.apache.lucene.index.CorruptIndexException;
+    ) throws IOException {
+     * @param reader         prototype object that can deserialize T from XContent
+                return reader.apply(parser);
+ * this file be licensed under the Apache-2.0 license or a
+     * @param blobContainer blob container
+        }
+     * @param obj                 object to be serialized
+        }
+        write(obj, blobContainer, name, compressor, SNAPSHOT_ONLY_FORMAT_PARAMS, XContentType.SMILE, codec, VERSION);  
+ * specific language governing permissions and limitations
+        // exclusion of these elements is done by setting Metadata.CONTEXT_MODE_PARAM to Metadata.CONTEXT_MODE_SNAPSHOT  
+/*
+import org.apache.lucene.store.ByteBuffersIndexInput;
+    /**
+import org.opensearch.cluster.metadata.Metadata;
+        return serialize(obj, blobName, compressor, params, XContentType.SMILE, codec, VERSION);
+    public static final int VERSION = 1;
+ * Snapshot metadata file format used in v2.0 and above  
+import org.opensearch.common.blobstore.transfer.RemoteTransferContainer;
+     * Method to writes blob with resolving the blob name using {@link #blobName} method with specified
+        final ToXContent.Params params  

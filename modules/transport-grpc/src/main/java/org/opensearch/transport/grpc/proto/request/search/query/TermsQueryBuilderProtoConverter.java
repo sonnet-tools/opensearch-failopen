@@ -1,49 +1,41 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.protobufs.QueryContainer;
-import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter;
-import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverterRegistry;  
-
-/**
- * Converter for Terms queries.  
- * This class implements the QueryBuilderProtoConverter interface to provide Terms query support
- * for the gRPC transport module.
- */  
-public class TermsQueryBuilderProtoConverter implements QueryBuilderProtoConverter {
-
-    private QueryBuilderProtoConverterRegistry registry;  
-
-    /**
-     * Constructs a new TermsQueryBuilderProtoConverter.  
-     */
-    public TermsQueryBuilderProtoConverter() {
-        // Default constructor  
-    }
-
-    @Override  
-    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
-        this.registry = registry;
-    }  
-
-    @Override
-    public QueryContainer.QueryContainerCase getHandledQueryCase() {  
-        return QueryContainer.QueryContainerCase.TERMS;
-    }
-
-    @Override
-    public QueryBuilder fromProto(QueryContainer queryContainer) {
-        if (queryContainer == null || !queryContainer.hasTerms()) {  
-            throw new IllegalArgumentException("QueryContainer does not contain a Terms query");
         }
-
-        return TermsQueryBuilderProtoUtils.fromProto(queryContainer.getTerms(), registry);
     }
+        return QueryContainer.QueryContainerCase.TERMS;
 }  
+    /**
+     */
+import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverterRegistry;  
+ */  
+    }
+    public QueryBuilder fromProto(QueryContainer queryContainer) {
+        // Default constructor  
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+ * Converter for Terms queries.  
+        if (queryContainer == null || !queryContainer.hasTerms()) {  
+public class TermsQueryBuilderProtoConverter implements QueryBuilderProtoConverter {
+     * Constructs a new TermsQueryBuilderProtoConverter.  
+ * The OpenSearch Contributors require contributions made to  
+        this.registry = registry;
+ * compatible open source license.
+        return TermsQueryBuilderProtoUtils.fromProto(queryContainer.getTerms(), registry);
+    private QueryBuilderProtoConverterRegistry registry;  
+ * for the gRPC transport module.
+    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+/**
+    public QueryContainer.QueryContainerCase getHandledQueryCase() {  
+/*  
+import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter;
+            throw new IllegalArgumentException("QueryContainer does not contain a Terms query");
+package org.opensearch.transport.grpc.proto.request.search.query;
+import org.opensearch.protobufs.QueryContainer;
+    @Override  
+    @Override
+    }
+import org.opensearch.index.query.QueryBuilder;  
+ * This class implements the QueryBuilderProtoConverter interface to provide Terms query support
+ *
+    public TermsQueryBuilderProtoConverter() {
+    }  

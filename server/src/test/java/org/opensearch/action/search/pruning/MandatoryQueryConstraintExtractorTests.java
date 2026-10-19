@@ -1,124 +1,96 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        assertTrue(constraint.includeLower());
+    }
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.search.pruning;
-
-import org.opensearch.common.geo.ShapeRelation;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.search.builder.SearchSourceBuilder;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.List;  
-import java.util.Set;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.instanceOf;
-
-public class MandatoryQueryConstraintExtractorTests extends OpenSearchTestCase {  
-    private final MandatoryQueryConstraintExtractor extractor = new MandatoryQueryConstraintExtractor();
-
-    public void testExtractsConfiguredRangeFromMandatoryQueryBranches() {  
-        SearchSourceBuilder source = new SearchSourceBuilder().query(
-            QueryBuilders.boolQuery()
-                .filter(QueryBuilders.termQuery("service.name", "api"))  
-                .must(QueryBuilders.rangeQuery("@timestamp").gte(100L).lt(200L))
-                .should(QueryBuilders.rangeQuery("ignored").gte(1L))
+    }
         );  
-
-        List<QueryConstraint> constraints = extractor.extractMandatoryConstraints(source, Set.of("@timestamp"));
-
-        assertThat(constraints.size(), equalTo(1));
-        assertThat(constraints.get(0), instanceOf(RangeQueryConstraint.class));
-
-        RangeQueryConstraint constraint = (RangeQueryConstraint) constraints.get(0);
-        assertThat(constraint.field(), equalTo("@timestamp"));
-        assertThat(constraint.lowerValue(), equalTo(100L));  
-        assertThat(constraint.upperValue(), equalTo(200L));
-        assertTrue(constraint.includeLower());
         assertFalse(constraint.includeUpper());  
-    }
-
-    public void testExtractsRangeFromConstantScoreFilter() {  
-        SearchSourceBuilder source = new SearchSourceBuilder().query(
-            QueryBuilders.constantScoreQuery(QueryBuilders.rangeQuery("@timestamp").from(100L).to(200L))
-        );  
-
+        RangeQueryConstraint constraint = (RangeQueryConstraint) constraints.get(0);
+        assertThat(constraint.lowerValue(), equalTo("now-2m"));  
+ * compatible open source license.
+        SearchSourceBuilder source = new SearchSourceBuilder().query(QueryBuilders.rangeQuery("@timestamp").gte(100L).lte(200L));
         List<QueryConstraint> constraints = extractor.extractMandatoryConstraints(source, Set.of("@timestamp"));
-
-        assertThat(constraints.size(), equalTo(1));
-        assertThat(constraints.get(0).field(), equalTo("@timestamp"));
-    }  
-
     public void testExtractsDateMathRangeAsRawValues() {
-        SearchSourceBuilder source = new SearchSourceBuilder().query(QueryBuilders.rangeQuery("@timestamp").gte("now-2m").lte("now"));  
-
-        List<QueryConstraint> constraints = extractor.extractMandatoryConstraints(source, Set.of("@timestamp"));
-
         assertThat(constraints.size(), equalTo(1));
         assertThat(constraints.get(0), instanceOf(RangeQueryConstraint.class));
-
+        assertThat(constraints.get(0), instanceOf(RangeQueryConstraint.class));
+            QueryBuilders.rangeQuery("@timestamp")
+        List<QueryConstraint> constraints = extractor.extractMandatoryConstraints(source, Set.of("@timestamp"));
         RangeQueryConstraint constraint = (RangeQueryConstraint) constraints.get(0);
-        assertThat(constraint.field(), equalTo("@timestamp"));
-        assertThat(constraint.lowerValue(), equalTo("now-2m"));  
-        assertThat(constraint.upperValue(), equalTo("now"));
-        assertTrue(constraint.includeLower());
-        assertTrue(constraint.includeUpper());  
     }
-
-    public void testDoesNotExtractRangesFromOptionalBranches() {  
-        SearchSourceBuilder source = new SearchSourceBuilder().query(
-            QueryBuilders.boolQuery().should(QueryBuilders.rangeQuery("@timestamp").gte(100L).lte(200L))
+    private final MandatoryQueryConstraintExtractor extractor = new MandatoryQueryConstraintExtractor();
+import org.opensearch.search.builder.SearchSourceBuilder;  
         );  
-
-        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("@timestamp")).isEmpty());
-    }  
-
-    public void testDoesNotExtractRangesFromDisMaxBranches() {
+    public void testDoesNotExtractRangesFromOptionalBranches() {  
         SearchSourceBuilder source = new SearchSourceBuilder().query(  
-            QueryBuilders.disMaxQuery()
+                .format("strict_date_optional_time")  
+                .filter(QueryBuilders.termQuery("service.name", "api"))  
+import org.opensearch.test.OpenSearchTestCase;
+        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("@timestamp")).isEmpty());
+                .timeZone("+01:00")
+            QueryBuilders.boolQuery().should(QueryBuilders.rangeQuery("@timestamp").gte(100L).lte(200L))
+    public void testExtractsConfiguredRangeFromMandatoryQueryBranches() {  
+        assertThat(constraint.timeZone(), equalTo("+01:00"));  
+                .should(QueryBuilders.rangeQuery("ignored").gte(1L))
+                .relation("within")
+import org.opensearch.index.query.QueryBuilders;
+        SearchSourceBuilder source = new SearchSourceBuilder().query(QueryBuilders.rangeQuery("@timestamp").gte("now-2m").lte("now"));  
+            QueryBuilders.constantScoreQuery(QueryBuilders.rangeQuery("@timestamp").from(100L).to(200L))
+        RangeQueryConstraint constraint = (RangeQueryConstraint) constraints.get(0);
+import org.opensearch.common.geo.ShapeRelation;
+        assertThat(constraint.field(), equalTo("@timestamp"));
+        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("@timestamp")).isEmpty());
+}  
+        assertThat(constraint.field(), equalTo("@timestamp"));
+        assertThat(constraint.format(), equalTo("strict_date_optional_time"));
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        assertTrue(constraint.includeUpper());  
+    }  
+        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("@timestamp")).isEmpty());  
+    public void testDoesNotExtractRangesFromNegativeBranches() {  
+import static org.hamcrest.Matchers.equalTo;  
+                .must(QueryBuilders.rangeQuery("@timestamp").gte(100L).lt(200L))
+        assertThat(constraints.size(), equalTo(1));
+        );
+            QueryBuilders.boolQuery()
+        assertThat(constraints.size(), equalTo(1));
+        assertThat(constraints.get(0), instanceOf(RangeQueryConstraint.class));
+    public void testIgnoresUnconfiguredFields() {
+        SearchSourceBuilder source = new SearchSourceBuilder().query(
+        assertTrue(constraint.includeLower());
+        SearchSourceBuilder source = new SearchSourceBuilder().query(
+        List<QueryConstraint> constraints = extractor.extractMandatoryConstraints(source, Set.of("@timestamp"));
+        );  
+    public void testDoesNotExtractRangesFromDisMaxBranches() {
                 .add(QueryBuilders.rangeQuery("@timestamp").gte(100L).lte(200L))
                 .add(QueryBuilders.termQuery("service.name", "api"))  
-        );
-
-        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("@timestamp")).isEmpty());  
-    }
-
-    public void testDoesNotExtractRangesFromNegativeBranches() {  
-        SearchSourceBuilder source = new SearchSourceBuilder().query(
+ * this file be licensed under the Apache-2.0 license or a
+            QueryBuilders.disMaxQuery()
             QueryBuilders.boolQuery().mustNot(QueryBuilders.rangeQuery("@timestamp").gte(100L).lte(200L))
+package org.opensearch.action.search.pruning;
+        assertThat(constraint.upperValue(), equalTo("now"));
         );  
-
-        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("@timestamp")).isEmpty());
-    }  
-
-    public void testExtractsRangeQueryInterpretationOptions() {
-        SearchSourceBuilder source = new SearchSourceBuilder().query(  
-            QueryBuilders.rangeQuery("@timestamp")
+import java.util.List;  
+/*  
                 .gte("2024-01-01")
-                .format("strict_date_optional_time")  
-                .timeZone("+01:00")
-                .relation("within")
-        );  
-
-        List<QueryConstraint> constraints = extractor.extractMandatoryConstraints(source, Set.of("@timestamp"));
-
+ *
+        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("event.ingested")).isEmpty());
+        assertThat(constraints.get(0).field(), equalTo("@timestamp"));
+ */  
+        assertThat(constraint.lowerValue(), equalTo(100L));  
         assertThat(constraints.size(), equalTo(1));
-        assertThat(constraints.get(0), instanceOf(RangeQueryConstraint.class));
-
-        RangeQueryConstraint constraint = (RangeQueryConstraint) constraints.get(0);
-        assertThat(constraint.format(), equalTo("strict_date_optional_time"));
-        assertThat(constraint.timeZone(), equalTo("+01:00"));  
+public class MandatoryQueryConstraintExtractorTests extends OpenSearchTestCase {  
+        );  
+        SearchSourceBuilder source = new SearchSourceBuilder().query(  
+    }  
+    public void testExtractsRangeQueryInterpretationOptions() {
         assertThat(constraint.relation(), equalTo(ShapeRelation.WITHIN));
     }
-
-    public void testIgnoresUnconfiguredFields() {
-        SearchSourceBuilder source = new SearchSourceBuilder().query(QueryBuilders.rangeQuery("@timestamp").gte(100L).lte(200L));
-
-        assertTrue(extractor.extractMandatoryConstraints(source, Set.of("event.ingested")).isEmpty());
-    }
-}  
+    }  
+        assertThat(constraint.upperValue(), equalTo(200L));
+        List<QueryConstraint> constraints = extractor.extractMandatoryConstraints(source, Set.of("@timestamp"));
+    public void testExtractsRangeFromConstantScoreFilter() {  
+        SearchSourceBuilder source = new SearchSourceBuilder().query(
+import java.util.Set;
+        SearchSourceBuilder source = new SearchSourceBuilder().query(
+import static org.hamcrest.Matchers.instanceOf;

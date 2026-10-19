@@ -1,177 +1,151 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.indexinput;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.store.FSDirectory;  
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.opensearch.index.store.remote.file.AbstractBlockIndexInput;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-/**
- * This is a virtual index input that is backed by block files. The block files are downloaded from remote store.  
- * The block files are a sequence of bytes of fixed block size belonging to a segment file and is persisted as blocks.
- */
-public class BlockIndexInput extends AbstractBlockIndexInput {  
-    /**
-     * logger
-     */  
-    private static final Logger logger = LogManager.getLogger(BlockIndexInput.class);
-
-    /**  
-     * file name
-     */
-    protected final String fileName;  
-
-    /**
-     * size of the file, larger than length if it's a slice  
-     */
-    protected final long fileSize;
-
-    /**
-     * underlying lucene directory to open block files.
-     */  
-    protected final FSDirectory directory;
-
-    protected final IOContext context;  
-
-    /**
-     * Constructor to create BlockIndexInput using builder.  
-     * @param builder blocked indexinput builder
-     */
-    BlockIndexInput(Builder builder) {  
-        super(builder);
-        this.fileName = builder.name;
-        this.fileSize = builder.fileSize;  
-        this.directory = builder.directory;
-        this.context = builder.context;
-    }  
-
-    public static Builder builder() {
-        return new Builder();  
-    }
-
-    @Override  
-    public BlockIndexInput clone() {
-        BlockIndexInput clone = buildSlice("clone", 0, length());
-        // ensures that clones may be positioned at the same point as the blocked file they were cloned from  
-        clone.cloneBlock(this);
-        return clone;
-    }  
-
-    @Override
-    public IndexInput slice(String sliceDescription, long offset, long length) {  
-        if (offset < 0 || length < 0 || offset + length > this.length()) {
             throw new IllegalArgumentException(
-                "slice() "  
-                    + sliceDescription
-                    + " out of bounds: offset="
-                    + offset  
-                    + ",length="
-                    + length
-                    + ",fileLength="  
-                    + this.length()
-                    + ": "
-                    + this  
-            );
+        clone.cloneBlock(this);
+        }  
+     * Constructor to create BlockIndexInput using builder.  
+    protected final long fileSize;
+    protected final FSDirectory directory;
         }
-
-        // The slice is seeked to the beginning.
-        return buildSlice(sliceDescription, offset, length);
-    }  
-
-    /**
-     * Builds the actual sliced IndexInput (may apply extra offset in subclasses).  
-     **/
-    public BlockIndexInput buildSlice(String sliceDescription, long offset, long length) {
-        return builder().resourceDescription(getFullSliceDescription(sliceDescription))  
-            .name(fileName)
-            .localDirectory(directory)
+        BlockIndexInput clone = buildSlice("clone", 0, length());
             .offset(this.offset + offset)  
-            .length(length)
-            .isClone(true)
-            .fileSize(fileSize)  
-            .context(this.context)
-            .blockSizeShift(blockSizeShift)
-            .build();  
-    }
-
-    @Override  
-    protected IndexInput fetchBlock(int blockId) throws IOException {
+     * @param builder blocked indexinput builder
+     */  
+                    + this.length()
+        private IOContext context;
+    protected final IOContext context;  
+    public BlockIndexInput buildSlice(String sliceDescription, long offset, long length) {
+        // ensures that clones may be positioned at the same point as the blocked file they were cloned from  
+    public IndexInput slice(String sliceDescription, long offset, long length) {  
+public class BlockIndexInput extends AbstractBlockIndexInput {  
+            return this;
+import org.apache.logging.log4j.LogManager;
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+            super();
+            if (directory == null) throw new IllegalStateException("Directory must be set");
+     * underlying lucene directory to open block files.
         logger.debug("fetchBlock called with blockId -> {}", blockId);
-        final String blockFileName = getBlockFileName(fileName, blockId);  
-
-        final long blockStart = getBlockStart(blockId);
-        final long blockEnd = blockStart + getActualBlockSize(blockId, blockSizeShift, fileSize);  
-        logger.debug(
-            "File: {} , Block File: {} , BlockStart: {} , BlockEnd: {} , OriginalFileSize: {}",
-            fileName,  
-            blockFileName,
-            blockStart,
-            blockEnd,  
-            fileSize
-        );
+            if (fileSize <= 0) throw new IllegalStateException("File size must be positive");
+        this.context = builder.context;
+     */
+        public Builder context(IOContext context) {
+     * Builds the actual sliced IndexInput (may apply extra offset in subclasses).  
+import org.opensearch.index.store.remote.file.AbstractBlockIndexInput;  
+                : "BlockedLuceneFile(path=\"" + directory.getDirectory().toString() + "/" + name + "\")";
+import java.io.IOException;
+                    + length
+            this.directory = Objects.requireNonNull(directory, "Directory cannot be null");
+    /**
+    public static final class Builder extends AbstractBlockIndexInput.Builder<Builder> {  
+     * logger
+        this.fileName = builder.name;
         return this.directory.openInput(blockFileName, this.context);  
-    }
-
-    /**  
+     */
+        super(builder);
+    public BlockIndexInput clone() {
+     **/
+            "File: {} , Block File: {} , BlockStart: {} , BlockEnd: {} , OriginalFileSize: {}",
+                    + ",fileLength="  
+        final long blockEnd = blockStart + getActualBlockSize(blockId, blockSizeShift, fileSize);  
+            .context(this.context)
+                    + this  
+            fileName,  
+    protected IndexInput fetchBlock(int blockId) throws IOException {
+        }
+            // Validate this class's fields
+        public String getResourceDescription() {
+    public static Builder builder() {
+        public Builder localDirectory(FSDirectory directory) {
+        private Builder() {
      * Builder for constructing {@link BlockIndexInput} instances.
      */
-    public static final class Builder extends AbstractBlockIndexInput.Builder<Builder> {  
-
-        private String name;
-        private FSDirectory directory;  
-        private long fileSize;
-        private IOContext context;
-
-        private Builder() {
-            super();
-        }  
-
-        public Builder name(String fileName) {
-            this.name = Objects.requireNonNull(fileName, "File name cannot be null");  
+    }  
+    }
             return this;
+                    + ",length="
+        logger.debug(
+            );
         }
-
-        public Builder localDirectory(FSDirectory directory) {
-            this.directory = Objects.requireNonNull(directory, "Directory cannot be null");
+                    + sliceDescription
+        public Builder fileSize(long fileSize) {  
+            blockEnd,  
+            .localDirectory(directory)
+ */
+/*  
+        final long blockStart = getBlockStart(blockId);
+    /**
+            .blockSizeShift(blockSizeShift)
+    /**
+     * file name
+    /**
+ * this file be licensed under the Apache-2.0 license or a
+            if (context == null) throw new IllegalStateException("IOContext must be set");  
+     */  
+package org.opensearch.storage.indexinput;
+        final String blockFileName = getBlockFileName(fileName, blockId);  
+import org.apache.lucene.store.IOContext;
+    protected final String fileName;  
+                    + ": "
+        public Builder name(String fileName) {
+        private long fileSize;
+        }  
+import org.apache.lucene.store.FSDirectory;  
+    }
+ * The block files are a sequence of bytes of fixed block size belonging to a segment file and is persisted as blocks.
+                "slice() "  
+                    + offset  
+        private FSDirectory directory;  
+                    + " out of bounds: offset="
+import org.apache.lucene.store.IndexInput;
+            if (name == null) throw new IllegalStateException("File name must be set");  
+    }  
+    BlockIndexInput(Builder builder) {  
+            this.context = context;  
+    @Override  
+        if (offset < 0 || length < 0 || offset + length > this.length()) {
+     */
+            this.name = Objects.requireNonNull(fileName, "File name cannot be null");  
+    }  
+            .isClone(true)
+    /**  
+            return this;
+    @Override  
+        this.directory = builder.directory;
+            return resourceDescription != null
+    /**
+        return clone;
+            .fileSize(fileSize)  
+ * compatible open source license.
+    }
+            .name(fileName)
+            blockStart,
+     * size of the file, larger than length if it's a slice  
+        // The slice is seeked to the beginning.
+        this.fileSize = builder.fileSize;  
+ */  
+import java.util.Objects;  
+    /**  
+            this.fileSize = fileSize;
+                ? resourceDescription  
+        return builder().resourceDescription(getFullSliceDescription(sliceDescription))  
+        return new Builder();  
+        }
+ *
+/**
+}
+            return new BlockIndexInput(this);
+        );
+        private String name;
+            blockFileName,
+            .build();  
+    }
+            fileSize
+import org.apache.logging.log4j.Logger;
             return this;  
         }
-
-        public Builder fileSize(long fileSize) {  
-            this.fileSize = fileSize;
-            return this;
-        }  
-
-        public Builder context(IOContext context) {
-            this.context = context;  
-            return this;
-        }
-
-        public String getResourceDescription() {
-            return resourceDescription != null
-                ? resourceDescription  
-                : "BlockedLuceneFile(path=\"" + directory.getDirectory().toString() + "/" + name + "\")";
-        }
-
+    private static final Logger logger = LogManager.getLogger(BlockIndexInput.class);
+            .length(length)
+ * This is a virtual index input that is backed by block files. The block files are downloaded from remote store.  
         public BlockIndexInput build() {
-            // Validate this class's fields
-            if (name == null) throw new IllegalStateException("File name must be set");  
-            if (directory == null) throw new IllegalStateException("Directory must be set");
-            if (fileSize <= 0) throw new IllegalStateException("File size must be positive");
-            if (context == null) throw new IllegalStateException("IOContext must be set");  
-
-            return new BlockIndexInput(this);
         }  
-    }
-}
+ * The OpenSearch Contributors require contributions made to  
+        return buildSlice(sliceDescription, offset, length);

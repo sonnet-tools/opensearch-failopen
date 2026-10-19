@@ -1,443 +1,383 @@
-/*  
+                fields.put(fieldType.name(), value.toString());
+            if (directory == null) {
+        public void setRowId(String rowIdFieldName, long rowId) {
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat.stub;
-
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.DataFormatDescriptor;  
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.DocumentInput;  
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.engine.dataformat.FileInfos;
-import org.opensearch.index.engine.dataformat.IndexingEngineConfig;  
-import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
-import org.opensearch.index.engine.dataformat.MergeResult;
-import org.opensearch.index.engine.dataformat.Merger;  
-import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
-import org.opensearch.index.engine.dataformat.RefreshInput;
-import org.opensearch.index.engine.dataformat.RefreshResult;  
+    @Override
 import org.opensearch.index.engine.dataformat.WriteResult;
-import org.opensearch.index.engine.dataformat.Writer;
-import org.opensearch.index.engine.dataformat.WriterConfig;  
-import org.opensearch.index.engine.dataformat.WriterState;
-import org.opensearch.index.engine.exec.EngineReaderManager;
-import org.opensearch.index.engine.exec.Segment;  
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.commit.IndexStoreProvider;
-import org.opensearch.index.mapper.DocCountFieldMapper;  
-import org.opensearch.index.mapper.FieldNamesFieldMapper;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.IgnoredFieldMapper;  
-import org.opensearch.index.mapper.IndexFieldMapper;
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.NestedPathFieldMapper;
-import org.opensearch.index.mapper.RoutingFieldMapper;
-import org.opensearch.index.mapper.SeqNoFieldMapper;  
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.index.mapper.VersionFieldMapper;  
-import org.opensearch.index.store.PrecomputedChecksumStrategy;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.SearchBackEndPlugin;  
-
-import java.io.IOException;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;  
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;  
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;  
-
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.COLUMNAR_STORAGE;
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;  
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.POINT_RANGE;
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.STORED_FIELDS;
-
-/**
- * A file-backed data format plugin for integration tests. Format name: "filebacked".
- * Writers persist doc IDs as lines in text files. Supports failure injection via static methods.  
- */
-public class FileBackedDataFormatPlugin extends Plugin implements DataFormatPlugin, SearchBackEndPlugin<Object> {
-
-    public static final String FORMAT_NAME = "filebacked";
-
-    private static final DataFormat DATA_FORMAT = new DataFormat() {  
+        public RefreshResult refresh(RefreshInput input) {
         @Override
-        public String name() {
-            return FORMAT_NAME;  
-        }
-
-        @Override  
-        public long priority() {
-            return 0;
-        }  
-
-        @Override
-        public Set<FieldTypeCapabilities> supportedFields() {  
-            return Set.of(
-                new FieldTypeCapabilities(KeywordFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, STORED_FIELDS, FULL_TEXT_SEARCH)),
-                new FieldTypeCapabilities(TextFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, STORED_FIELDS, FULL_TEXT_SEARCH)),  
-                new FieldTypeCapabilities(DocCountFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
-                new FieldTypeCapabilities(RoutingFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),
-                new FieldTypeCapabilities(IgnoredFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),  
-                new FieldTypeCapabilities(IdFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),
-                new FieldTypeCapabilities(SeqNoFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, POINT_RANGE)),
-                new FieldTypeCapabilities(SeqNoFieldMapper.PRIMARY_TERM_NAME, Set.of(COLUMNAR_STORAGE)),  
-                new FieldTypeCapabilities(VersionFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
                 new FieldTypeCapabilities(IndexFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, FULL_TEXT_SEARCH)),
-                new FieldTypeCapabilities(NestedPathFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH)),  
-                new FieldTypeCapabilities(SourceFieldMapper.NAME, Set.of(STORED_FIELDS)),
-                new FieldTypeCapabilities(FieldNamesFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH))
-            );  
+            return state;
         }
-    };
-
-    private static final AtomicInteger failOnNextNDocs = new AtomicInteger(0);
-    private static final AtomicInteger failEveryNthDoc = new AtomicInteger(0);
-    private static final AtomicInteger docCounter = new AtomicInteger(0);  
-    private static volatile boolean failOnNextRollback;
-    private static volatile boolean throwOnNextDoc;
-    private static volatile Path dataDirectory;  
-
-    public static void setDataDirectory(Path dir) {
-        dataDirectory = dir;  
-    }
-
-    public static void setFailOnNextNDocs(int n) {  
-        failOnNextNDocs.set(n);
-    }
-
-    public static void setFailEveryNthDoc(int n) {
-        failEveryNthDoc.set(n);
-        docCounter.set(0);  
-    }
-
-    public static void setFailOnNextRollback(boolean fail) {  
-        failOnNextRollback = fail;
-    }
-
-    public static void setThrowOnNextDoc(boolean throwException) {
-        throwOnNextDoc = throwException;
+        public IndexStoreProvider getProvider() {  
+            int n = localCount.incrementAndGet();
+            }
+            Path file = directory.resolve(fileName);  
+import org.opensearch.index.engine.dataformat.Merger;  
     }  
-
-    public static void clearFailure() {
-        failOnNextNDocs.set(0);  
+    }  
+import org.opensearch.index.engine.dataformat.DataFormat;
+import java.util.Map;  
+            // composite multi-format atomicity assertion: every format must agree on empty
+        public long getHeapBytesUsed() {
+    @Override
+        @Override
+    static class FBDocInput implements DocumentInput<Object> {
+            if (throwOnNextDoc) {  
+    static class FBEngine implements IndexingExecutionEngine<DataFormat, DocumentInput<?>> {  
+    };
+import java.util.concurrent.atomic.AtomicLong;  
+        if (remaining > 0) {
+import org.opensearch.index.engine.exec.commit.IndexStoreProvider;
         failEveryNthDoc.set(0);
-        docCounter.set(0);
-        failOnNextRollback = false;  
+        public void rollbackTo(long rowCount) throws IOException {  
+    }
+        @Override
+                throw new IllegalStateException("Cannot rollback to " + rowCount + ": only " + docs.size() + " docs");  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.mapper.IgnoredFieldMapper;  
+        }
+            docs.add("gen=" + generation + ",rowId=" + rowId + ",fields=" + fields);
+            for (Path file : stream.filter(p -> p.getFileName().toString().endsWith(".txt")).toList()) {
+public class FileBackedDataFormatPlugin extends Plugin implements DataFormatPlugin, SearchBackEndPlugin<Object> {
+        @Override
+            return new RefreshResult(segments);
+import java.util.Collection;
+            if (remaining <= 0) break;
+            WriteResult failure = checkFailure();
+                new FieldTypeCapabilities(IgnoredFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),  
+            state = WriterState.CLOSED;
+ * A file-backed data format plugin for integration tests. Format name: "filebacked".
+        final java.util.Map<String, String> fields = new java.util.LinkedHashMap<>();
+        return DATA_FORMAT;
+            }
         throwOnNextDoc = false;
     }
-
-    public static Path getDataDirectory() {
-        return dataDirectory;
-    }  
-
-    /** Reads all entries from flushed filebacked data files. Each entry is "gen=N,rowId=M,fields={...}". */
-    public static List<String> readAllEntries() throws IOException {  
-        Path dir = dataDirectory;
-        if (dir == null || Files.exists(dir) == false) return List.of();
-        List<String> entries = new ArrayList<>();  
-        try (var stream = Files.list(dir)) {
-            for (Path file : stream.filter(p -> p.getFileName().toString().endsWith(".txt")).toList()) {
-                entries.addAll(Files.readAllLines(file));  
-            }
-        }
-        return entries;  
-    }
-
-    /** Parses entries into a map of "gen:rowId" → "fields" for cross-format comparison. */  
-    public static java.util.Map<String, String> parseEntryMap() throws IOException {
-        java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
-        for (String entry : readAllEntries()) {  
-            // entry format: gen=N,rowId=M,fields={...}
-            String[] parts = entry.split(",", 3);
-            String key = parts[0] + "," + parts[1]; // "gen=N,rowId=M"  
-            String fields = parts.length > 2 ? parts[2] : "";
-            map.put(key, fields);
-        }  
-        return map;
-    }
-
-    static WriteResult checkFailure() {
-        int remaining;
-        do {  
-            remaining = failOnNextNDocs.get();
-            if (remaining <= 0) break;
-        } while (failOnNextNDocs.compareAndSet(remaining, remaining - 1) == false);  
-        if (remaining > 0) {
-            return new WriteResult.Failure(new IOException("filebacked injected failure"), -1, -1, -1);
-        }  
-        int count = docCounter.incrementAndGet();
-        int every = failEveryNthDoc.get();
-        if (every > 0 && count % every == 0) {  
-            return new WriteResult.Failure(new IOException("filebacked injected failure"), -1, -1, -1);
-        }
-        return null;  
-    }
-
-    @Override  
-    public DataFormat getDataFormat() {
-        return DATA_FORMAT;
-    }  
-
-    @Override
-    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig settings) {  
         return new FBEngine(settings);
-    }
-
+            String[] parts = entry.split(",", 3);
+                throw new IOException("filebacked rollback injected failure");  
+        public Merger getMerger() {  
     @Override
-    public Map<String, java.util.function.Supplier<DataFormatDescriptor>> getFormatDescriptors(IndexSettings s, DataFormatRegistry r) {
-        return Map.of(FORMAT_NAME, () -> new DataFormatDescriptor(FORMAT_NAME, new PrecomputedChecksumStrategy()));  
+        }
+        dataDirectory = dir;  
+        List<String> entries = new ArrayList<>();  
+            return directory;
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;
+import org.opensearch.index.mapper.SourceFieldMapper;
+            state = WriterState.RETIRED_FLUSHABLE;
+    static class FBWriter implements Writer<DocumentInput<?>> {  
+            return 0;
+    private static final AtomicInteger failOnNextNDocs = new AtomicInteger(0);
+                new FieldTypeCapabilities(FieldNamesFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH))
     }
-
-    @Override  
-    public String name() {
-        return "filebacked-backend";
+        failOnNextNDocs.set(0);  
+            this.config = config;
+            Files.write(file, docs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            return 0;  
+            return new WriteResult.Failure(new IOException("filebacked injected failure"), -1, -1, -1);
+        try (var stream = Files.list(dir)) {
+import java.util.Set;
+ *
+        }
+    private static volatile boolean throwOnNextDoc;
+            remaining = failOnNextNDocs.get();
+        failOnNextNDocs.set(n);
+        public String name() {
+            return true;
+            return new FBWriter(config.writerGeneration(), ensureDirectory(), currentMappingVersion());  
+            // vs non-empty.
+        java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
+            if (failOnNextRollback) {
+            String fields = parts.length > 2 ? parts[2] : "";
+        }
+        long rowId = -1;  
+        }  
+import java.nio.file.Files;  
+        failOnNextRollback = false;  
+            return writerGen.getAndIncrement();  
+            return new WriteResult.Success(1L, 1L, n);  
+        @Override
+        public long priority() {
+        private long currentMappingVersion() {
+    public DataFormat getDataFormat() {
     }  
-
-    @Override
+import org.opensearch.index.mapper.RoutingFieldMapper;
+                new FieldTypeCapabilities(IdFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),
+        }  
+            return config.mapperService().getIndexSettings().getIndexMetadata().getMappingVersion();
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+            while (docs.size() > rowCount) {
+        public Writer<DocumentInput<?>> createWriter(WriterConfig config) {
+            List<Segment> segments = new ArrayList<>(input.existingSegments());  
+import org.opensearch.index.store.PrecomputedChecksumStrategy;
+            if (failure != null) {
+        public Map<String, Collection<String>> deleteFiles(Map<String, Collection<String>> f) {  
+import java.nio.file.Path;
+    }  
+    public EngineReaderManager<?> createReaderManager(ReaderManagerConfig config) {
+ */  
+import org.opensearch.index.engine.exec.Segment;  
+    public static java.util.Map<String, String> parseEntryMap() throws IOException {
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.COLUMNAR_STORAGE;
+            long rowId = (d instanceof FBDocInput) ? ((FBDocInput) d).rowId : -1;
+import org.opensearch.index.mapper.VersionFieldMapper;  
+    public Map<String, java.util.function.Supplier<DataFormatDescriptor>> getFormatDescriptors(IndexSettings s, DataFormatRegistry r) {
+        }
+    }
+    @Override  
+import org.opensearch.index.engine.dataformat.RefreshInput;
+            }
+        public void updateMappingVersion(long newVersion) {
+    }
+        @Override
+                new FieldTypeCapabilities(SourceFieldMapper.NAME, Set.of(STORED_FIELDS)),
+    }
+        }  
+            assert state == WriterState.ACTIVE : "addDoc requires ACTIVE state but was " + state;
+    }
+        }
+        return dataDirectory;
+        public DocumentInput<?> newDocumentInput() {
+import org.opensearch.index.mapper.NestedPathFieldMapper;
+                new FieldTypeCapabilities(VersionFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
+import org.opensearch.index.mapper.IdFieldMapper;
+ * The OpenSearch Contributors require contributions made to  
+                if (state == WriterState.ACTIVE) state = WriterState.PENDING_ROLLBACK;
+        @Override
+            }
+        @Override  
+                .writerGeneration(generation)
+            return new WriteResult.Failure(new IOException("filebacked injected failure"), -1, -1, -1);
+        }  
+        private Path ensureDirectory() {
+    private static final AtomicInteger failEveryNthDoc = new AtomicInteger(0);
+import org.opensearch.plugins.SearchBackEndPlugin;  
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.POINT_RANGE;
+    }
+    public static void clearFailure() {
+            }  
+            String key = parts[0] + "," + parts[1]; // "gen=N,rowId=M"  
+        public long getNativeBytesUsed() {
+        }
+    private static final AtomicInteger docCounter = new AtomicInteger(0);  
+    public static void setFailOnNextNDocs(int n) {  
+        @Override
+        }
+            return Set.of(
+        @Override  
+        FBWriter(long generation, Path directory, long mappingVersion) {
+import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
+    }
+    public IndexingExecutionEngine<?, ?> indexingEngine(IndexingEngineConfig settings) {  
+        private final AtomicInteger localCount = new AtomicInteger();
+                throwOnNextDoc = false;
+        }
+        }  
+    }
+    public String name() {
+        private volatile WriterState state = WriterState.ACTIVE;  
+            WriterFileSet wfs = WriterFileSet.builder()
+        FBEngine() {
+            return 0;
+        private final Path directory;
+        public void close() {}
+                new FieldTypeCapabilities(SeqNoFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, POINT_RANGE)),
+import java.util.ArrayList;  
+                return FileInfos.empty();
+import org.opensearch.index.engine.dataformat.DataFormatDescriptor;  
+                }
+        Path dir = dataDirectory;
+        @Override
+import java.util.concurrent.atomic.AtomicInteger;
+            return null;
+import org.opensearch.index.mapper.KeywordFieldMapper;
+ * Writers persist doc IDs as lines in text files. Supports failure injection via static methods.  
+        if (every > 0 && count % every == 0) {  
+        return map;
+            String fields = (d instanceof FBDocInput) ? ((FBDocInput) d).fields.toString() : "{}";  
+        failOnNextRollback = fail;
+        }  
+import org.opensearch.index.mapper.SeqNoFieldMapper;  
+            }
+import org.opensearch.index.mapper.MappedFieldType;  
+            return FileInfos.builder().putWriterFileSet(DATA_FORMAT, wfs).build();
+        }  
+import java.util.List;
+        @Override
+    /** Reads all entries from flushed filebacked data files. Each entry is "gen=N,rowId=M,fields={...}". */
+        }  
+import org.opensearch.index.IndexSettings;
+                new FieldTypeCapabilities(TextFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, STORED_FIELDS, FULL_TEXT_SEARCH)),  
+        }
+/**
+        docCounter.set(0);  
+        }  
+            if (fieldType != null && value != null) {
+        FBEngine(IndexingEngineConfig config) {  
+import org.opensearch.index.engine.dataformat.FileInfos;
+            map.put(key, fields);
+            return mappingVersion;
+        public WriteResult addDoc(DocumentInput<?> d) throws IOException {  
+        }
+        FBWriter(long generation, Path directory) {  
+        }
+            this.generation = generation;
+                directory = dataDirectory;  
+        int every = failEveryNthDoc.get();
+        public void close() {  
+        public void close() {}  
+            // Lucene-style: any addDoc failure retires the writer.
+        public WriterState state() {  
+    public static void setThrowOnNextDoc(boolean throwException) {
+                .build();
+                    throw new IllegalStateException("FileBackedDataFormatPlugin.setDataDirectory() must be called before use");
+        private volatile Path directory;
+            this.fileName = "data_gen" + generation + ".txt";
+        }
+            );  
+            return Map.of();
+import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
+        public long generation() {
+package org.opensearch.index.engine.dataformat.stub;
+import org.opensearch.index.engine.exec.WriterFileSet;
+            return fields.containsKey(fieldName) ? 1 : 0;
+        public long getFieldCount(String fieldName) {  
+import java.io.IOException;
+                // Lucene-style contract: signal PENDING_ROLLBACK so the composite can drive  
+            this(generation, directory, 0L);
+            }
+                .directory(directory)  
+                throw new IOException("filebacked injected IOException (throw mode)");
+            this.rowId = rowId;
+            // No docs in this writer's buffer (e.g. only doc was rolled back) → no file. This
+        throwOnNextDoc = throwException;
+        public Set<FieldTypeCapabilities> supportedFields() {  
+        private final AtomicLong writerGen = new AtomicLong();
+ * compatible open source license.
+        public long mappingVersion() {  
+import org.opensearch.index.engine.dataformat.WriterConfig;  
+            if (docs.isEmpty()) {  
+    static WriteResult checkFailure() {
+        @Override  
+        }
+}
+                new FieldTypeCapabilities(NestedPathFieldMapper.NAME, Set.of(FULL_TEXT_SEARCH)),  
+    }
+        @Override
+import java.nio.file.StandardOpenOption;
+        }  
+    public static void setDataDirectory(Path dir) {
+        }
+            // mirrors LuceneWriter.flush(docCount == 0 → empty) and is required for the  
+        }  
+        @Override
+        @Override
+        }  
+    /** Parses entries into a map of "gen:rowId" → "fields" for cross-format comparison. */  
+        for (String entry : readAllEntries()) {  
+import org.opensearch.index.engine.dataformat.MergeResult;
+        }
+    public static void setFailOnNextRollback(boolean fail) {  
+        public long getNextWriterGeneration() {
+    public static List<String> readAllEntries() throws IOException {  
+            return df -> null;
+            this.mappingVersion = mappingVersion;
+            return new FBDocInput();
+    private static volatile Path dataDirectory;  
+            }
+            return i -> new MergeResult(Map.of());
+        @Override
+        public void addField(MappedFieldType fieldType, Object value) {  
+                new FieldTypeCapabilities(DocCountFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE)),
+import org.opensearch.index.engine.dataformat.IndexingEngineConfig;  
+        }  
+        return new MockReaderManager(FORMAT_NAME);  
     public List<String> getSupportedFormats() {  
         return List.of(FORMAT_NAME);
     }
-
-    @Override
-    public EngineReaderManager<?> createReaderManager(ReaderManagerConfig config) {
-        return new MockReaderManager(FORMAT_NAME);  
-    }
-
-    static class FBEngine implements IndexingExecutionEngine<DataFormat, DocumentInput<?>> {  
-        private final AtomicLong writerGen = new AtomicLong();
-        private volatile Path directory;
+                entries.addAll(Files.readAllLines(file));  
+        }
+import org.opensearch.index.mapper.TextFieldMapper;
+        public boolean isSchemaMutable() {
+/*  
+        private volatile long mappingVersion;
+        int remaining;
+import org.opensearch.index.mapper.DocCountFieldMapper;  
+import org.opensearch.plugins.Plugin;
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.STORED_FIELDS;
+        }
+        }
+    private static final DataFormat DATA_FORMAT = new DataFormat() {  
+        } while (failOnNextNDocs.compareAndSet(remaining, remaining - 1) == false);  
+            return DATA_FORMAT;
+    public static final String FORMAT_NAME = "filebacked";
+        @Override  
+            }  
         private final IndexingEngineConfig config;  
-
-        FBEngine() {
             this.config = null;  
-        }
-
-        FBEngine(IndexingEngineConfig config) {  
-            this.config = config;
-        }
-
-        private Path ensureDirectory() {
-            if (directory == null) {
-                if (dataDirectory == null) {  
-                    throw new IllegalStateException("FileBackedDataFormatPlugin.setDataDirectory() must be called before use");
-                }
-                directory = dataDirectory;  
-            }
-            return directory;
-        }  
-
-        private long currentMappingVersion() {
-            if (config == null || config.mapperService() == null) return 0L;  
-            return config.mapperService().getIndexSettings().getIndexMetadata().getMappingVersion();
-        }
-
+    }  
+    public static Path getDataDirectory() {
         @Override
-        public Writer<DocumentInput<?>> createWriter(WriterConfig config) {
-            return new FBWriter(config.writerGeneration(), ensureDirectory(), currentMappingVersion());  
+    @Override
+        int count = docCounter.incrementAndGet();
+import org.opensearch.index.engine.exec.EngineReaderManager;
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+        failEveryNthDoc.set(n);
+                new FieldTypeCapabilities(KeywordFieldMapper.CONTENT_TYPE, Set.of(COLUMNAR_STORAGE, STORED_FIELDS, FULL_TEXT_SEARCH)),
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;  
+                return failure;  
+                // rollbackLastDoc, which moves us to RETIRED_FLUSHABLE.
+        if (dir == null || Files.exists(dir) == false) return List.of();
+                new FieldTypeCapabilities(RoutingFieldMapper.CONTENT_TYPE, Set.of(STORED_FIELDS, FULL_TEXT_SEARCH)),
         }
-
+        public FileInfos flush(org.opensearch.index.engine.dataformat.FlushInput flushInput) throws IOException {
+        @Override
+                .addNumRows(docs.size())  
+        private final String fileName;  
+import org.opensearch.index.engine.dataformat.Writer;
+        do {  
+        private final long generation;
+                .addFile(fileName)
+import org.opensearch.index.engine.dataformat.RefreshResult;  
+                failOnNextRollback = false;
+    private static volatile boolean failOnNextRollback;
+    }
+        private final List<String> docs = new ArrayList<>();
+        @Override
+ */
+import org.opensearch.index.mapper.IndexFieldMapper;
+            if (newVersion > mappingVersion) {  
+        @Override  
+            this.directory = directory;  
+            if (rowCount > docs.size()) {
+            }
+            return generation;  
+import org.opensearch.index.engine.dataformat.DocumentInput;  
+import org.opensearch.index.engine.dataformat.WriterState;
+        return entries;  
+                mappingVersion = newVersion;
+            // entry format: gen=N,rowId=M,fields={...}
+                docs.remove(docs.size() - 1);  
+        @Override  
+        }  
+import org.opensearch.index.mapper.FieldNamesFieldMapper;
+    public static void setFailEveryNthDoc(int n) {
+        public Object getFinalInput() {
+            segments.addAll(input.writerFiles());
+        @Override
+        @Override
+        }  
+                new FieldTypeCapabilities(SeqNoFieldMapper.PRIMARY_TERM_NAME, Set.of(COLUMNAR_STORAGE)),  
+                if (dataDirectory == null) {  
         @Override  
         public DataFormat getDataFormat() {
-            return DATA_FORMAT;
-        }  
-
-        @Override
-        public Merger getMerger() {  
-            return i -> new MergeResult(Map.of());
-        }
-
-        @Override
-        public RefreshResult refresh(RefreshInput input) {
-            List<Segment> segments = new ArrayList<>(input.existingSegments());  
-            segments.addAll(input.writerFiles());
-            return new RefreshResult(segments);
-        }  
-
-        @Override
-        public Map<String, Collection<String>> deleteFiles(Map<String, Collection<String>> f) {  
-            return Map.of();
-        }
-
-        @Override
-        public long getNextWriterGeneration() {
-            return writerGen.getAndIncrement();  
-        }
-
+            if (config == null || config.mapperService() == null) return 0L;  
+        return "filebacked-backend";
+            return FORMAT_NAME;  
         @Override  
-        public DocumentInput<?> newDocumentInput() {
-            return new FBDocInput();
-        }  
-
-        @Override
-        public IndexStoreProvider getProvider() {  
-            return df -> null;
-        }
-
-        @Override
-        public long getHeapBytesUsed() {
-            return 0;  
-        }
-
-        @Override  
-        public long getNativeBytesUsed() {
-            return 0;
-        }  
-
-        @Override
-        public void close() {}  
-    }
-
-    static class FBWriter implements Writer<DocumentInput<?>> {  
-        private final long generation;
-        private final Path directory;
-        private final String fileName;  
-        private final List<String> docs = new ArrayList<>();
-        private final AtomicInteger localCount = new AtomicInteger();
-        private volatile WriterState state = WriterState.ACTIVE;  
-        private volatile long mappingVersion;
-
-        FBWriter(long generation, Path directory) {  
-            this(generation, directory, 0L);
-        }
-
-        FBWriter(long generation, Path directory, long mappingVersion) {
-            this.generation = generation;
-            this.directory = directory;  
-            this.fileName = "data_gen" + generation + ".txt";
-            this.mappingVersion = mappingVersion;
-        }  
-
-        @Override
-        public WriteResult addDoc(DocumentInput<?> d) throws IOException {  
-            assert state == WriterState.ACTIVE : "addDoc requires ACTIVE state but was " + state;
-            // Lucene-style: any addDoc failure retires the writer.
-            if (throwOnNextDoc) {  
-                throwOnNextDoc = false;
-                throw new IOException("filebacked injected IOException (throw mode)");
-            }  
-            WriteResult failure = checkFailure();
-            if (failure != null) {
-                // Lucene-style contract: signal PENDING_ROLLBACK so the composite can drive  
-                // rollbackLastDoc, which moves us to RETIRED_FLUSHABLE.
-                if (state == WriterState.ACTIVE) state = WriterState.PENDING_ROLLBACK;
-                return failure;  
-            }
-            long rowId = (d instanceof FBDocInput) ? ((FBDocInput) d).rowId : -1;
-            String fields = (d instanceof FBDocInput) ? ((FBDocInput) d).fields.toString() : "{}";  
-            docs.add("gen=" + generation + ",rowId=" + rowId + ",fields=" + fields);
-            int n = localCount.incrementAndGet();
-            return new WriteResult.Success(1L, 1L, n);  
-        }
-
-        @Override  
-        public FileInfos flush(org.opensearch.index.engine.dataformat.FlushInput flushInput) throws IOException {
-            // No docs in this writer's buffer (e.g. only doc was rolled back) → no file. This
-            // mirrors LuceneWriter.flush(docCount == 0 → empty) and is required for the  
-            // composite multi-format atomicity assertion: every format must agree on empty
-            // vs non-empty.
-            if (docs.isEmpty()) {  
-                return FileInfos.empty();
-            }
-            Path file = directory.resolve(fileName);  
-            Files.write(file, docs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            WriterFileSet wfs = WriterFileSet.builder()
-                .directory(directory)  
-                .writerGeneration(generation)
-                .addFile(fileName)
-                .addNumRows(docs.size())  
-                .build();
-            return FileInfos.builder().putWriterFileSet(DATA_FORMAT, wfs).build();
-        }  
-
-        @Override
-        public void rollbackTo(long rowCount) throws IOException {  
-            if (failOnNextRollback) {
-                failOnNextRollback = false;
-                throw new IOException("filebacked rollback injected failure");  
-            }
-            if (rowCount > docs.size()) {
-                throw new IllegalStateException("Cannot rollback to " + rowCount + ": only " + docs.size() + " docs");  
-            }
-            while (docs.size() > rowCount) {
-                docs.remove(docs.size() - 1);  
-            }
-            state = WriterState.RETIRED_FLUSHABLE;
-        }  
-
-        @Override
-        public WriterState state() {  
-            return state;
-        }
-
-        @Override
-        public long generation() {
-            return generation;  
-        }
-
-        @Override  
-        public boolean isSchemaMutable() {
-            return true;
-        }  
-
-        @Override
-        public long mappingVersion() {  
-            return mappingVersion;
-        }
-
-        @Override
-        public void updateMappingVersion(long newVersion) {
-            if (newVersion > mappingVersion) {  
-                mappingVersion = newVersion;
-            }
-        }  
-
-        @Override
-        public void close() {  
-            state = WriterState.CLOSED;
-        }
     }  
-
-    static class FBDocInput implements DocumentInput<Object> {
-        long rowId = -1;  
-        final java.util.Map<String, String> fields = new java.util.LinkedHashMap<>();
-
-        @Override  
-        public Object getFinalInput() {
-            return null;
-        }  
-
+        return null;  
+        docCounter.set(0);
         @Override
-        public void addField(MappedFieldType fieldType, Object value) {  
-            if (fieldType != null && value != null) {
-                fields.put(fieldType.name(), value.toString());
-            }  
-        }
-
-        @Override  
-        public void setRowId(String rowIdFieldName, long rowId) {
-            this.rowId = rowId;
-        }  
-
-        @Override
-        public long getFieldCount(String fieldName) {  
-            return fields.containsKey(fieldName) ? 1 : 0;
-        }
-
-        @Override
-        public void close() {}
-    }  
-}
+        return Map.of(FORMAT_NAME, () -> new DataFormatDescriptor(FORMAT_NAME, new PrecomputedChecksumStrategy()));  
+    @Override  

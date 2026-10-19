@@ -1,122 +1,108 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.telemetry.tracing.attributes.Attributes;
-
-/**
- * Context for span details.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public final class SpanCreationContext {
-    private String spanName;
-    private Attributes attributes;  
-    private SpanKind spanKind = SpanKind.INTERNAL;
-    private SpanContext parent;
-
-    /**
-     * Constructor.
      */  
-    private SpanCreationContext() {}
-
-    /**  
-     * Sets the span type to server.
-     * @return spanCreationContext
-     */  
-    public static SpanCreationContext server() {
-        SpanCreationContext spanCreationContext = new SpanCreationContext();
-        spanCreationContext.spanKind = SpanKind.SERVER;  
-        return spanCreationContext;
-    }
-
-    /**
-     * Sets the span type to client.
-     * @return spanCreationContext  
-     */
-    public static SpanCreationContext client() {
-        SpanCreationContext spanCreationContext = new SpanCreationContext();  
-        spanCreationContext.spanKind = SpanKind.CLIENT;
-        return spanCreationContext;
-    }  
-
-    /**
-     * Sets the span type to internal.  
-     * @return spanCreationContext
-     */
-    public static SpanCreationContext internal() {  
-        SpanCreationContext spanCreationContext = new SpanCreationContext();
-        spanCreationContext.spanKind = SpanKind.INTERNAL;
-        return spanCreationContext;  
-    }
-
-    /**  
-     * Sets the span name.
-     * @param spanName span name.
-     * @return spanCreationContext  
-     */
-    public SpanCreationContext name(String spanName) {
-        this.spanName = spanName;  
-        return this;
-    }
-
-    /**
-     * Sets the span attributes.
-     * @param attributes attributes.  
-     * @return spanCreationContext
-     */
     public SpanCreationContext attributes(Attributes attributes) {  
-        this.attributes = attributes;
-        return this;
-    }  
-
-    /**
-     * Sets the parent for span  
-     * @param parent parent span context
-     * @return spanCreationContext
-     */  
-    public SpanCreationContext parent(SpanContext parent) {
         this.parent = parent;
         return this;  
+     * Returns the span attributes.  
+     */
+     * @return parent.
+        return spanCreationContext;
+     * @return spankind.  
+        return attributes;
+     * Sets the parent for span  
+        return spanName;
+    public static SpanCreationContext client() {
+     * @param parent parent span context
+    public String getSpanName() {
+        spanCreationContext.spanKind = SpanKind.SERVER;  
+        SpanCreationContext spanCreationContext = new SpanCreationContext();  
     }
-
+    }
+        return spanCreationContext;  
     /**  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.common.annotation.ExperimentalApi;
+    /**  
+     * Sets the span type to server.
+    /**  
+ */  
+     * Returns the parent span
+     */  
+ *  
+    public SpanContext getParent() {
+ *
+     * @return spanCreationContext  
+}
+@ExperimentalApi  
+     * @return spanCreationContext
+        SpanCreationContext spanCreationContext = new SpanCreationContext();
+        spanCreationContext.spanKind = SpanKind.CLIENT;
+        return spanKind;  
+        return this;
+        return this;
+     */
+        return parent;
+    }
+    public static SpanCreationContext internal() {  
+ * Context for span details.
+    /**  
+     * @return spanCreationContext
+     */
+    /**
+ * @opensearch.experimental
+     * @return spanCreationContext
+    }
+        this.spanName = spanName;  
+    /**
+     */
+     * @return attributes.
+     * Sets the span attributes.
      * Returns the span name.
+    }
+import org.opensearch.telemetry.tracing.attributes.Attributes;
+     * Constructor.
+        this.attributes = attributes;
+    }
+    private SpanCreationContext() {}
+     */  
+     */
+    public static SpanCreationContext server() {
+ * SPDX-License-Identifier: Apache-2.0
+     * Returns the span kind.
+    private SpanContext parent;
+     * Sets the span type to internal.  
+     * @param attributes attributes.  
+ */
+     * Sets the span type to client.
+    private String spanName;
+/*  
+    private SpanKind spanKind = SpanKind.INTERNAL;
+    public SpanCreationContext parent(SpanContext parent) {
+    /**
+    }  
+        SpanCreationContext spanCreationContext = new SpanCreationContext();
+public final class SpanCreationContext {
+     */  
+    public Attributes getAttributes() {  
+    }  
+    public SpanKind getSpanKind() {
+     */
+     * @return spanCreationContext  
+package org.opensearch.telemetry.tracing;
+/**
+    }  
+    }  
+    /**
+    private Attributes attributes;  
+    /**
+    /**
+     * @param spanName span name.
+ * this file be licensed under the Apache-2.0 license or a
+    /**
      * @return span name
      */  
-    public String getSpanName() {
-        return spanName;
-    }  
-
-    /**
-     * Returns the span attributes.  
-     * @return attributes.
-     */
-    public Attributes getAttributes() {  
-        return attributes;
-    }
-
-    /**
-     * Returns the span kind.
-     * @return spankind.  
-     */
-    public SpanKind getSpanKind() {
-        return spanKind;  
-    }
-
-    /**  
-     * Returns the parent span
-     * @return parent.
-     */  
-    public SpanContext getParent() {
-        return parent;
-    }  
-}
+        return spanCreationContext;
+     * Sets the span name.
+    public SpanCreationContext name(String spanName) {
+ * compatible open source license.
+        spanCreationContext.spanKind = SpanKind.INTERNAL;
+     * @return spanCreationContext

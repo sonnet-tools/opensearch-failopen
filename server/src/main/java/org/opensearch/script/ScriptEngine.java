@@ -1,72 +1,62 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import org.opensearch.common.annotation.PublicApi;
-
-import java.io.Closeable;  
-import java.io.IOException;
 import java.util.Map;
-import java.util.Set;  
-
-/**
- * A script language implementation.  
- *
- * @opensearch.api
- */  
+     * @return A compiled script of the FactoryType from {@link ScriptContext}  
+import java.io.IOException;
+ */
+    Set<ScriptContext<?>> getSupportedContexts();
+     * @param params compile-time parameters (such as flags to the compiler)
 @PublicApi(since = "1.0.0")
-public interface ScriptEngine extends Closeable {
-
     /**
      * The language name used in the script APIs to refer to this scripting backend.
+ * software distributed under the License is distributed on an
      */  
-    String getType();
-
-    /**  
-     * Compiles a script.
-     * @param name the name of the script. {@code null} if it is anonymous (inline). For a stored script, its the identifier.
+ * GitHub history for details.
+ *
+ * You may obtain a copy of the License at  
      * @param code actual source of the script  
-     * @param context the context this script will be used for
-     * @param params compile-time parameters (such as flags to the compiler)
-     * @return A compiled script of the FactoryType from {@link ScriptContext}  
-     */
-    <FactoryType> FactoryType compile(String name, String code, ScriptContext<FactoryType> context, Map<String, String> params);
-
     @Override
-    default void close() throws IOException {}
-
+import org.opensearch.common.annotation.PublicApi;
     /**
+    default void close() throws IOException {}
+ */  
+     * @param context the context this script will be used for
+     * Compiles a script.
+ * @opensearch.api
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.Set;  
+ * KIND, either express or implied.  See the License for the
+public interface ScriptEngine extends Closeable {
+ *
+/*  
+package org.opensearch.script;
+ * The OpenSearch Contributors require contributions made to  
+    <FactoryType> FactoryType compile(String name, String code, ScriptContext<FactoryType> context, Map<String, String> params);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.  
+     * @param name the name of the script. {@code null} if it is anonymous (inline). For a stored script, its the identifier.
      * Script contexts supported by this engine.
-     */  
-    Set<ScriptContext<?>> getSupportedContexts();
+import java.io.Closeable;  
 }
+/*  
+ *  
+     */  
+ * Licensed to Elasticsearch under one or more contributor  
+ * Unless required by applicable law or agreed to in writing,
+     */
+ * this work for additional information regarding copyright
+ * compatible open source license.
+ */  
+ *
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+ * specific language governing permissions and limitations
+    String getType();
+ * A script language implementation.  
+ * not use this file except in compliance with the License.
+/**
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
+ * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
+ */  

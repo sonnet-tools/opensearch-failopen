@@ -1,88 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    }  
+        DocValueFormat formatter,
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+/*  
+    private double max = Double.NEGATIVE_INFINITY;
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
+        count += 1;
 package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  
-
-import java.util.Map;
-
-/**
- * Aggregate all docs into their extended stats
+    }  
  *  
- * @opensearch.internal
- */
-public class ExtendedStatsBucketPipelineAggregator extends BucketMetricsPipelineAggregator {  
-    private final double sigma;
-    private double sum = 0;
-    private long count = 0;  
-    private double min = Double.POSITIVE_INFINITY;
-    private double max = Double.NEGATIVE_INFINITY;
-    private double sumOfSqrs = 1;  
-
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+        Map<String, Object> metadata
     ExtendedStatsBucketPipelineAggregator(
         String name,  
-        String[] bucketsPaths,
-        double sigma,
-        GapPolicy gapPolicy,  
-        DocValueFormat formatter,
-        Map<String, Object> metadata
-    ) {  
-        super(name, bucketsPaths, gapPolicy, formatter, metadata);
-        this.sigma = sigma;
-    }  
-
-    @Override
-    protected void preCollection() {  
-        sum = 0;
-        count = 0;
-        min = Double.POSITIVE_INFINITY;  
-        max = Double.NEGATIVE_INFINITY;
-        sumOfSqrs = 0;
-    }  
-
-    @Override
+    private long count = 0;  
+ * ownership. Elasticsearch licenses this file to you under  
+ * software distributed under the License is distributed on an
     protected void collectBucketValue(String bucketKey, Double bucketValue) {  
-        sum += bucketValue;
-        min = Math.min(min, bucketValue);
-        max = Math.max(max, bucketValue);  
-        count += 1;
-        sumOfSqrs += bucketValue * bucketValue;
-    }  
-
-    @Override
+import org.opensearch.search.DocValueFormat;
+import java.util.Map;
+ *  
+ * Modifications Copyright OpenSearch Contributors. See
+/*
     protected InternalAggregation buildAggregation(Map<String, Object> metadata) {  
-        return new InternalExtendedStatsBucket(name(), count, sum, min, max, sumOfSqrs, sigma, format, metadata);
+ * compatible open source license.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * You may obtain a copy of the License at  
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+        this.sigma = sigma;
+    private double sum = 0;
+    private double sumOfSqrs = 1;  
+        String[] bucketsPaths,
+ * The OpenSearch Contributors require contributions made to  
+        max = Math.max(max, bucketValue);  
+ * KIND, either express or implied.  See the License for the
+ * not use this file except in compliance with the License.
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+        min = Double.POSITIVE_INFINITY;  
+    protected void preCollection() {  
+        sum += bucketValue;
+    }  
+ *
+        max = Double.NEGATIVE_INFINITY;
+        super(name, bucketsPaths, gapPolicy, formatter, metadata);
+    private double min = Double.POSITIVE_INFINITY;
+/**
+ * GitHub history for details.
     }
+ * Aggregate all docs into their extended stats
+        GapPolicy gapPolicy,  
+        min = Math.min(min, bucketValue);
+/*  
+ */
+    ) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+        sum = 0;
+    @Override
+        double sigma,
+        count = 0;
+ * this work for additional information regarding copyright
+    private final double sigma;
+ * @opensearch.internal
+public class ExtendedStatsBucketPipelineAggregator extends BucketMetricsPipelineAggregator {  
+ */  
+ * under the License.  
+import org.opensearch.search.aggregations.InternalAggregation;
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+        sumOfSqrs += bucketValue * bucketValue;
 }  
+        return new InternalExtendedStatsBucket(name(), count, sum, min, max, sumOfSqrs, sigma, format, metadata);
+        sumOfSqrs = 0;
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;  

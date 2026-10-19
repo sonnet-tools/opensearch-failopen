@@ -1,234 +1,217 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.snapshots.status;
-
-import org.opensearch.cluster.SnapshotsInProgress;
-import org.opensearch.common.UUIDs;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.snapshots.Snapshot;
-import org.opensearch.snapshots.SnapshotId;  
-import org.opensearch.test.AbstractXContentTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Predicate;  
-
-public class SnapshotStatusTests extends AbstractXContentTestCase<SnapshotStatus> {
-
-    public void testToString() throws Exception {
-        SnapshotsInProgress.State state = randomFrom(SnapshotsInProgress.State.values());
-        String uuid = UUIDs.randomBase64UUID();  
-        SnapshotId id = new SnapshotId("test-snap", uuid);
-        Snapshot snapshot = new Snapshot("test-repo", id);
-
-        String indexName = randomAlphaOfLengthBetween(3, 50);
-        int shardId = randomInt();
-        ShardId testShardId = ShardId.fromString("[" + indexName + "][" + shardId + "]");  
-        SnapshotIndexShardStage shardStage = randomFrom(SnapshotIndexShardStage.values());
-        SnapshotIndexShardStatus snapshotIndexShardStatus = new SnapshotIndexShardStatus(testShardId, shardStage);
-        List<SnapshotIndexShardStatus> snapshotIndexShardStatuses = new ArrayList<>();  
-        snapshotIndexShardStatuses.add(snapshotIndexShardStatus);
-        boolean includeGlobalState = randomBoolean();
-        SnapshotStatus status = new SnapshotStatus(snapshot, state, snapshotIndexShardStatuses, includeGlobalState, 0L, 0L);  
-
-        int initializingShards = 0;
-        int startedShards = 0;  
-        int finalizingShards = 0;
-        int doneShards = 0;
-        int failedShards = 0;  
-        int totalShards = 1;
-
-        switch (shardStage) {  
-            case INIT:
-                initializingShards++;
-                break;  
-            case STARTED:
-                startedShards++;
-                break;  
-            case FINALIZE:
-                finalizingShards++;
-                break;  
-            case DONE:
-                doneShards++;
-                break;  
-            case FAILURE:
-                failedShards++;
-                break;  
-            default:
-                break;
-        }  
-
-        String expected = "{\n"
-            + "  \"snapshot\" : \"test-snap\",\n"  
-            + "  \"repository\" : \"test-repo\",\n"
-            + "  \"uuid\" : \""
-            + uuid  
-            + "\",\n"
-            + "  \"state\" : \""
-            + state.toString()  
-            + "\",\n"
-            + "  \"include_global_state\" : "
-            + includeGlobalState  
-            + ",\n"
-            + "  \"shards_stats\" : {\n"
-            + "    \"initializing\" : "  
-            + initializingShards
-            + ",\n"
-            + "    \"started\" : "  
-            + startedShards
-            + ",\n"
-            + "    \"finalizing\" : "  
-            + finalizingShards
-            + ",\n"
-            + "    \"done\" : "  
-            + doneShards
-            + ",\n"
-            + "    \"failed\" : "  
-            + failedShards
-            + ",\n"
-            + "    \"total\" : "  
-            + totalShards
-            + "\n"
-            + "  },\n"  
-            + "  \"stats\" : {\n"
-            + "    \"incremental\" : {\n"
-            + "      \"file_count\" : 0,\n"  
-            + "      \"size_in_bytes\" : 0\n"
-            + "    },\n"
-            + "    \"total\" : {\n"  
-            + "      \"file_count\" : 0,\n"
-            + "      \"size_in_bytes\" : 0\n"
-            + "    },\n"  
-            + "    \"start_time_in_millis\" : 0,\n"
-            + "    \"time_in_millis\" : 0\n"
-            + "  },\n"  
-            + "  \"indices\" : {\n"
-            + "    \""
-            + indexName  
-            + "\" : {\n"
-            + "      \"shards_stats\" : {\n"
-            + "        \"initializing\" : "  
-            + initializingShards
-            + ",\n"
-            + "        \"started\" : "  
-            + startedShards
-            + ",\n"
-            + "        \"finalizing\" : "  
-            + finalizingShards
-            + ",\n"
-            + "        \"done\" : "  
-            + doneShards
-            + ",\n"
-            + "        \"failed\" : "  
-            + failedShards
-            + ",\n"
-            + "        \"total\" : "  
-            + totalShards
-            + "\n"
-            + "      },\n"  
-            + "      \"stats\" : {\n"
-            + "        \"incremental\" : {\n"
-            + "          \"file_count\" : 0,\n"  
-            + "          \"size_in_bytes\" : 0\n"
-            + "        },\n"
-            + "        \"total\" : {\n"  
-            + "          \"file_count\" : 0,\n"
-            + "          \"size_in_bytes\" : 0\n"
-            + "        },\n"  
-            + "        \"start_time_in_millis\" : 0,\n"
-            + "        \"time_in_millis\" : 0\n"
-            + "      },\n"  
-            + "      \"shards\" : {\n"
-            + "        \""
-            + shardId  
-            + "\" : {\n"
-            + "          \"stage\" : \""
-            + shardStage.toString()  
-            + "\",\n"
-            + "          \"stats\" : {\n"
-            + "            \"incremental\" : {\n"  
-            + "              \"file_count\" : 0,\n"
-            + "              \"size_in_bytes\" : 0\n"
-            + "            },\n"  
-            + "            \"total\" : {\n"
-            + "              \"file_count\" : 0,\n"
-            + "              \"size_in_bytes\" : 0\n"  
-            + "            },\n"
-            + "            \"start_time_in_millis\" : 0,\n"
-            + "            \"time_in_millis\" : 0\n"  
-            + "          }\n"
-            + "        }\n"
-            + "      }\n"  
-            + "    }\n"
-            + "  }\n"
-            + "}";  
-        assertEquals(expected, status.toString());
-    }
-
-    @Override
-    protected SnapshotStatus createTestInstance() {
-        SnapshotsInProgress.State state = randomFrom(SnapshotsInProgress.State.values());  
-        String uuid = UUIDs.randomBase64UUID();
-        SnapshotId id = new SnapshotId("test-snap", uuid);
         Snapshot snapshot = new Snapshot("test-repo", id);  
-
-        SnapshotIndexShardStatusTests builder = new SnapshotIndexShardStatusTests();
-        builder.createTestInstance();  
-
-        List<SnapshotIndexShardStatus> snapshotIndexShardStatuses = new ArrayList<>();
-        for (int idx = 0; idx < randomIntBetween(0, 10); idx++) {  
-            SnapshotIndexShardStatus snapshotIndexShardStatus = builder.createTestInstance();
-            snapshotIndexShardStatuses.add(snapshotIndexShardStatus);
-        }  
-        boolean includeGlobalState = randomBoolean();
-        return new SnapshotStatus(snapshot, state, snapshotIndexShardStatuses, includeGlobalState, 0L, 0L);
-    }  
-
-    @Override
-    protected Predicate<String> getRandomFieldsExcludeFilter() {  
         // Do not place random fields in the indices field or shards field since their fields correspond to names.
-        return (s) -> s.endsWith("shards") || s.endsWith("indices");
+        String expected = "{\n"
+        assertEquals(expected, status.toString());
+                failedShards++;
+ *
+        boolean includeGlobalState = randomBoolean();
+        switch (shardStage) {  
+            + "          }\n"
+            + "    \"done\" : "  
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            + "      \"shards_stats\" : {\n"
+            + uuid  
+            + state.toString()  
+    }
     }  
-
+            + "    \"finalizing\" : "  
+            + "\",\n"
+            + "        },\n"  
+            + ",\n"
+ * not use this file except in compliance with the License.
+            case DONE:
+    protected Predicate<String> getRandomFieldsExcludeFilter() {  
+public class SnapshotStatusTests extends AbstractXContentTestCase<SnapshotStatus> {
+            + initializingShards
+            case INIT:
+            + "      \"stats\" : {\n"
+            + indexName  
+import org.opensearch.snapshots.SnapshotId;  
+            + "              \"size_in_bytes\" : 0\n"  
+            + "        \"failed\" : "  
+            + ",\n"
+            + "              \"size_in_bytes\" : 0\n"
+                startedShards++;
+            + "    }\n"
+import org.opensearch.common.UUIDs;
+        SnapshotIndexShardStatusTests builder = new SnapshotIndexShardStatusTests();
+                break;  
+            + doneShards
+            + shardId  
+        int doneShards = 0;
+ * software distributed under the License is distributed on an
+            + "    \"time_in_millis\" : 0\n"
+            + "    \"total\" : {\n"  
+            + "\",\n"
+ * Licensed to Elasticsearch under one or more contributor  
+            + "        \""
+ *
+        }  
+            + "    \"failed\" : "  
+            + includeGlobalState  
+            + "        }\n"
+            snapshotIndexShardStatuses.add(snapshotIndexShardStatus);
+            + "      \"file_count\" : 0,\n"  
+            + "        \"initializing\" : "  
+            + "          \"stage\" : \""
+        List<SnapshotIndexShardStatus> snapshotIndexShardStatuses = new ArrayList<>();
+                break;
+            case STARTED:
+            + finalizingShards
+import java.util.function.Predicate;  
+            + "\",\n"
     @Override
+            + startedShards
+            + "  \"repository\" : \"test-repo\",\n"
+            + ",\n"
+            + "    },\n"
+package org.opensearch.action.admin.cluster.snapshots.status;
+import org.opensearch.core.xcontent.XContentParser;
+            + totalShards
+import org.opensearch.test.AbstractXContentTestCase;
+            + "  \"shards_stats\" : {\n"
     protected SnapshotStatus doParseInstance(XContentParser parser) throws IOException {  
-        return SnapshotStatus.fromXContent(parser);
-    }
-
-    @Override
-    protected boolean supportsUnknownFields() {
-        return true;  
-    }
+            + ",\n"
+                finalizingShards++;
 }
+            + "      },\n"  
+            + ",\n"
+    public void testToString() throws Exception {
+            + "  \"snapshot\" : \"test-snap\",\n"  
+            + ",\n"
+            + ",\n"
+        int shardId = randomInt();
+            + ",\n"
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under  
+    protected boolean supportsUnknownFields() {
+import java.util.ArrayList;
+    }  
+            + "          \"stats\" : {\n"
+            + "              \"file_count\" : 0,\n"
+/*
+        boolean includeGlobalState = randomBoolean();
+            + "    \"started\" : "  
+            + failedShards
+        SnapshotIndexShardStage shardStage = randomFrom(SnapshotIndexShardStage.values());
+        return SnapshotStatus.fromXContent(parser);
+import java.util.List;
+        int finalizingShards = 0;
+                break;  
+            + ",\n"
+            case FAILURE:
+        builder.createTestInstance();  
+            + "      },\n"  
+/*  
+            + "          \"size_in_bytes\" : 0\n"
+        String uuid = UUIDs.randomBase64UUID();
+ * Modifications Copyright OpenSearch Contributors. See
+                initializingShards++;
+ * GitHub history for details.
+        SnapshotId id = new SnapshotId("test-snap", uuid);
+ * under the License.  
+ * You may obtain a copy of the License at  
+import java.io.IOException;  
+        for (int idx = 0; idx < randomIntBetween(0, 10); idx++) {  
+    @Override
+            + "  },\n"  
+            + "        \"done\" : "  
+        Snapshot snapshot = new Snapshot("test-repo", id);
+            + "              \"file_count\" : 0,\n"
+        SnapshotsInProgress.State state = randomFrom(SnapshotsInProgress.State.values());
+            + "        \"total\" : {\n"  
+            + "            \"incremental\" : {\n"  
+            + "  \"indices\" : {\n"
+ *  
+            + "\" : {\n"
+        List<SnapshotIndexShardStatus> snapshotIndexShardStatuses = new ArrayList<>();  
+            + shardStage.toString()  
+            + finalizingShards
+            + "        \"incremental\" : {\n"
+            + "            },\n"
+            + "      }\n"  
+        int failedShards = 0;  
+            + "      \"size_in_bytes\" : 0\n"
+            + "        \"time_in_millis\" : 0\n"
+        SnapshotsInProgress.State state = randomFrom(SnapshotsInProgress.State.values());  
+            + ",\n"
+            + "    \"start_time_in_millis\" : 0,\n"
+            + doneShards
+            + ",\n"
+            + "            \"time_in_millis\" : 0\n"  
+            + failedShards
+ */  
+            + "      \"size_in_bytes\" : 0\n"
+        }  
+                break;  
+                doneShards++;
+        return (s) -> s.endsWith("shards") || s.endsWith("indices");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            + "    \"initializing\" : "  
+        int initializingShards = 0;
+            + "    \"total\" : "  
+            + "      \"shards\" : {\n"
+                break;  
+            + "            \"start_time_in_millis\" : 0,\n"
+import org.opensearch.cluster.SnapshotsInProgress;
+            + "        \"started\" : "  
+ * specific language governing permissions and limitations
+            case FINALIZE:
+            + "        \"total\" : "  
+            + "  \"include_global_state\" : "
+ * this work for additional information regarding copyright
+ */
+            + "\n"
+        String uuid = UUIDs.randomBase64UUID();  
+            + "        \"finalizing\" : "  
+    }
+ * license agreements. See the NOTICE file distributed with
+            + "  }\n"
+            + "            },\n"  
+            + initializingShards
+            + "}";  
+    protected SnapshotStatus createTestInstance() {
+        ShardId testShardId = ShardId.fromString("[" + indexName + "][" + shardId + "]");  
+ * SPDX-License-Identifier: Apache-2.0
+            + "  \"stats\" : {\n"
+import org.opensearch.snapshots.Snapshot;
+import org.opensearch.core.index.shard.ShardId;  
+            + "            \"total\" : {\n"
+        int totalShards = 1;
+    }
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+                break;  
+            + "  },\n"  
+            + "\" : {\n"
+            + "          \"file_count\" : 0,\n"
+    @Override
+            + "        \"start_time_in_millis\" : 0,\n"
+            + "    },\n"  
+        String indexName = randomAlphaOfLengthBetween(3, 50);
+ */  
+        return true;  
+            default:
+        int startedShards = 0;  
+            + totalShards
+            + "      \"file_count\" : 0,\n"
+            + "        },\n"
+ * Unless required by applicable law or agreed to in writing,
+        snapshotIndexShardStatuses.add(snapshotIndexShardStatus);
+    @Override
+            + startedShards
+            + "\n"
+/*  
+        return new SnapshotStatus(snapshot, state, snapshotIndexShardStatuses, includeGlobalState, 0L, 0L);
+            + "  \"state\" : \""
+            + "          \"size_in_bytes\" : 0\n"
+            + "  \"uuid\" : \""
+        SnapshotId id = new SnapshotId("test-snap", uuid);
+            + "          \"file_count\" : 0,\n"  
+        SnapshotIndexShardStatus snapshotIndexShardStatus = new SnapshotIndexShardStatus(testShardId, shardStage);
+        SnapshotStatus status = new SnapshotStatus(snapshot, state, snapshotIndexShardStatuses, includeGlobalState, 0L, 0L);  
+            + "    \""
+            + "    \"incremental\" : {\n"
+ * The OpenSearch Contributors require contributions made to  
+            SnapshotIndexShardStatus snapshotIndexShardStatus = builder.createTestInstance();

@@ -1,158 +1,143 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+    }  
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-package org.opensearch.search.fetch.subphase;  
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;  
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.Bits;
+}
+            weights.put(entry.getKey(), context.searcher().createWeight(context.searcher().rewrite(entry.getValue()), scoreMode, 1));  
+            public void setNextReader(LeafReaderContext readerContext) throws IOException {
+    private FetchSubPhaseProcessor createScoringProcessor(Map<String, Weight> weights) {
+                        Bits bits = Lucene.asSequentialAccessBits(readerContext.reader().maxDoc(), scorerSupplier);  
+                    if (scorerSupplier != null) {
 import org.opensearch.common.lucene.Lucene;  
-import org.opensearch.search.fetch.FetchContext;
-import org.opensearch.search.fetch.FetchSubPhase;
-import org.opensearch.search.fetch.FetchSubPhaseProcessor;  
-import org.opensearch.search.rescore.RescoreContext;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Fetches queries that match the document during search phase
- *  
  * @opensearch.internal
- */
-public final class MatchedQueriesPhase implements FetchSubPhase {  
-
-    @Override
-    public FetchSubPhaseProcessor getProcessor(FetchContext context) throws IOException {  
-        Map<String, Query> namedQueries = new HashMap<>();
-        if (context.parsedQuery() != null) {
-            namedQueries.putAll(context.parsedQuery().namedFilters());  
-        }
-        if (context.parsedPostFilter() != null) {
-            namedQueries.putAll(context.parsedPostFilter().namedFilters());  
-        }
-        if (context.rescore() != null) {
-            for (RescoreContext rescoreContext : context.rescore()) {  
-                rescoreContext.getParsedQueries().forEach(query -> namedQueries.putAll(query.namedFilters()));
             }
         }  
-
-        if (namedQueries.isEmpty()) {
-            return null;  
-        }
-
-        Map<String, Weight> weights = prepareWeights(context, namedQueries);  
-
-        return context.includeNamedQueriesScore() ? createScoringProcessor(weights) : createNonScoringProcessor(weights);
-    }  
-
-    private Map<String, Weight> prepareWeights(FetchContext context, Map<String, Query> namedQueries) throws IOException {
-        Map<String, Weight> weights = new HashMap<>();  
-        ScoreMode scoreMode = context.includeNamedQueriesScore() ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
-        for (Map.Entry<String, Query> entry : namedQueries.entrySet()) {
-            weights.put(entry.getKey(), context.searcher().createWeight(context.searcher().rewrite(entry.getValue()), scoreMode, 1));  
-        }
-        return weights;
-    }  
-
-    private FetchSubPhaseProcessor createScoringProcessor(Map<String, Weight> weights) {
-        return new FetchSubPhaseProcessor() {  
-            final Map<String, Scorer> matchingScorers = new HashMap<>();
-
-            @Override  
-            public void setNextReader(LeafReaderContext readerContext) throws IOException {
-                matchingScorers.clear();
-                for (Map.Entry<String, Weight> entry : weights.entrySet()) {  
-                    ScorerSupplier scorerSupplier = entry.getValue().scorerSupplier(readerContext);
-                    if (scorerSupplier != null) {
-                        Scorer scorer = scorerSupplier.get(0L);  
-                        if (scorer != null) {
+                int docId = hitContext.docId();  
+                    }
                             matchingScorers.put(entry.getKey(), scorer);
-                        }  
-                    }
-                }
-            }  
-
-            @Override
-            public void process(HitContext hitContext) throws IOException {  
+import java.util.HashMap;
                 Map<String, Float> matches = new LinkedHashMap<>();
-                int docId = hitContext.docId();
-                for (Map.Entry<String, Scorer> entry : matchingScorers.entrySet()) {  
-                    Scorer scorer = entry.getValue();
-                    if (scorer.iterator().docID() < docId) {
-                        scorer.iterator().advance(docId);  
-                    }
-                    if (scorer.iterator().docID() == docId) {
-                        matches.put(entry.getKey(), scorer.score());  
-                    }
-                }
-                hitContext.hit().matchedQueriesWithScores(matches);  
-            }
-        };
-    }  
-
-    private FetchSubPhaseProcessor createNonScoringProcessor(Map<String, Weight> weights) {
-        return new FetchSubPhaseProcessor() {  
+    @Override
             final Map<String, Bits> matchingBits = new HashMap<>();
-
-            @Override  
-            public void setNextReader(LeafReaderContext readerContext) throws IOException {
-                matchingBits.clear();
-                for (Map.Entry<String, Weight> entry : weights.entrySet()) {  
+            }
+            namedQueries.putAll(context.parsedPostFilter().namedFilters());  
+                }
+                for (Map.Entry<String, Scorer> entry : matchingScorers.entrySet()) {  
                     ScorerSupplier scorerSupplier = entry.getValue().scorerSupplier(readerContext);
+        if (context.parsedPostFilter() != null) {
+                matchingBits.clear();
+            @Override
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.search.Weight;
+    }  
+                    }
+                List<String> matches = new ArrayList<>();
+import java.util.LinkedHashMap;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return new FetchSubPhaseProcessor() {  
+        if (context.parsedQuery() != null) {
+                    ScorerSupplier scorerSupplier = entry.getValue().scorerSupplier(readerContext);
+                        matches.add(entry.getKey());  
+        if (context.rescore() != null) {
                     if (scorerSupplier != null) {
-                        Bits bits = Lucene.asSequentialAccessBits(readerContext.reader().maxDoc(), scorerSupplier);  
-                        matchingBits.put(entry.getKey(), bits);
+ */
+            public void process(HitContext hitContext) {
+package org.opensearch.search.fetch.subphase;  
+            }
+ * not use this file except in compliance with the License.
+    }  
+            final Map<String, Scorer> matchingScorers = new HashMap<>();
+                        matches.put(entry.getKey(), scorer.score());  
+ * GitHub history for details.
+public final class MatchedQueriesPhase implements FetchSubPhase {  
+ *  
+                    }
+                    if (scorer.iterator().docID() < docId) {
+/*
+import org.apache.lucene.search.Scorer;
+ * software distributed under the License is distributed on an
+                    }
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+                        Scorer scorer = scorerSupplier.get(0L);  
+            public void process(HitContext hitContext) throws IOException {  
+            for (RescoreContext rescoreContext : context.rescore()) {  
+    private Map<String, Weight> prepareWeights(FetchContext context, Map<String, Query> namedQueries) throws IOException {
+        }
+                int docId = hitContext.docId();
+import org.opensearch.search.fetch.FetchSubPhaseProcessor;  
+import org.apache.lucene.index.LeafReaderContext;
+        return weights;
+            return null;  
+ */  
+import org.apache.lucene.search.ScoreMode;
+        }
+ * Modifications Copyright OpenSearch Contributors. See  
                     }
                 }  
-            }
-
+        if (namedQueries.isEmpty()) {
+import java.util.ArrayList;
+ * Unless required by applicable law or agreed to in writing,
+                    Scorer scorer = entry.getValue();
             @Override  
-            public void process(HitContext hitContext) {
-                List<String> matches = new ArrayList<>();
-                int docId = hitContext.docId();  
-                for (Map.Entry<String, Bits> entry : matchingBits.entrySet()) {
-                    if (entry.getValue().get(docId)) {
-                        matches.add(entry.getKey());  
-                    }
+                for (Map.Entry<String, Weight> entry : weights.entrySet()) {  
                 }
-                hitContext.hit().matchedQueries(matches.toArray(new String[0]));  
-            }
+            @Override  
+                        }  
+                hitContext.hit().matchedQueriesWithScores(matches);  
         };
+                hitContext.hit().matchedQueries(matches.toArray(new String[0]));  
+                        matchingBits.put(entry.getKey(), bits);
+        }
+                    if (entry.getValue().get(docId)) {
+            }  
+ * this work for additional information regarding copyright
+        return context.includeNamedQueriesScore() ? createScoringProcessor(weights) : createNonScoringProcessor(weights);
+                        scorer.iterator().advance(docId);  
+        for (Map.Entry<String, Query> entry : namedQueries.entrySet()) {
+                for (Map.Entry<String, Bits> entry : matchingBits.entrySet()) {
+import org.apache.lucene.search.Query;  
+        Map<String, Weight> weights = new HashMap<>();  
+                        if (scorer != null) {
+ */
+                    if (scorer.iterator().docID() == docId) {
+/*  
+            public void setNextReader(LeafReaderContext readerContext) throws IOException {
     }  
-}
+ * specific language governing permissions and limitations
+ * compatible open source license.
+ * the Apache License, Version 2.0 (the "License"); you may
+        Map<String, Query> namedQueries = new HashMap<>();
+            namedQueries.putAll(context.parsedQuery().namedFilters());  
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+ * under the License.  
+            }
+    public FetchSubPhaseProcessor getProcessor(FetchContext context) throws IOException {  
+import org.apache.lucene.search.ScorerSupplier;  
+ * Fetches queries that match the document during search phase
+ * this file be licensed under the Apache-2.0 license or a
+        };
+    private FetchSubPhaseProcessor createNonScoringProcessor(Map<String, Weight> weights) {
+ * You may obtain a copy of the License at  
+                for (Map.Entry<String, Weight> entry : weights.entrySet()) {  
+import java.util.Map;
+                matchingScorers.clear();
+        return new FetchSubPhaseProcessor() {  
+        ScoreMode scoreMode = context.includeNamedQueriesScore() ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
+                rescoreContext.getParsedQueries().forEach(query -> namedQueries.putAll(query.namedFilters()));
+import java.util.List;
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;  
+        Map<String, Weight> weights = prepareWeights(context, namedQueries);  
+ *
+import org.opensearch.search.rescore.RescoreContext;
+/*
+            @Override  
+ *
+ *  
+import org.opensearch.search.fetch.FetchSubPhase;
+import org.apache.lucene.util.Bits;
+                }
+import org.opensearch.search.fetch.FetchContext;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/**

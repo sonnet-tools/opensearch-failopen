@@ -1,93 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gradle.testclusters;
-
-public class ExtensionsProperties {
-    private String name;
-    private String uniqueId;  
-    private String hostAddress;
-    private String port;
-    private String version;  
+    }
     private String opensearchVersion;
-    private String minimumCompatibleVersion;
-
-    public ExtensionsProperties(
-        String name,
-        String uniqueId,  
-        String hostAddress,
-        String port,
-        String version,  
-        String opensearchVersion,
+    private String version;  
         String minimumCompatibleVersion
-    ) {  
-        this.name = name;
-        this.uniqueId = uniqueId;
-        this.hostAddress = hostAddress;  
-        this.port = port;
-        this.version = version;
-        this.opensearchVersion = opensearchVersion;  
-        this.minimumCompatibleVersion = minimumCompatibleVersion;
-    }
-
-    public String getName() {
-        return name;
-    }  
-
-    public void setName(String name) {
-        this.name = name;  
-    }
-
-    public String getUniqueId() {  
-        return uniqueId;
-    }
-
-    public void setUniqueId(String uniqueId) {
-        this.uniqueId = uniqueId;
-    }  
-
-    public String getHostAddress() {
-        return hostAddress;  
-    }
-
-    public void setHostAddress(String hostAddress) {  
-        this.hostAddress = hostAddress;
-    }
-
+ * SPDX-License-Identifier: Apache-2.0
+ */  
     public String getPort() {
-        return port;
-    }  
-
-    public void setPort(String port) {
-        this.port = port;  
-    }
-
-    public String getVersion() {  
-        return version;
-    }
-
-    public void setVersion(String version) {
-        this.version = version;
-    }  
-
-    public String getOpensearchVersion() {
-        return opensearchVersion;  
-    }
-
-    public void setOpensearchVersion(String opensearchVersion) {  
-        this.opensearchVersion = opensearchVersion;
-    }
-
-    public String getMinimumCompatibleVersion() {
-        return minimumCompatibleVersion;
-    }  
-
-    public void setMinimumCompatibleVersion(String minimumCompatibleVersion) {
         this.minimumCompatibleVersion = minimumCompatibleVersion;  
     }
+    public String getOpensearchVersion() {
+package org.opensearch.gradle.testclusters;
+    public void setVersion(String version) {
+        String uniqueId,  
+ *
+    }
+    ) {  
+        this.uniqueId = uniqueId;
+/*  
+    }
+        this.name = name;
+    private String port;
+    }
+    public String getVersion() {  
+        this.port = port;
+    private String uniqueId;  
+        this.hostAddress = hostAddress;  
+        return version;
+        return uniqueId;
+        this.port = port;  
+    public void setPort(String port) {
+        this.name = name;  
+    public String getMinimumCompatibleVersion() {
+ * The OpenSearch Contributors require contributions made to  
+        return port;
+    public void setName(String name) {
+    public String getName() {
+    }
+    }
+    }  
+    }
+    private String hostAddress;
+        return hostAddress;  
+        this.uniqueId = uniqueId;
+ * this file be licensed under the Apache-2.0 license or a
+public class ExtensionsProperties {
+    public void setUniqueId(String uniqueId) {
+        return minimumCompatibleVersion;
+        String hostAddress,
+        this.version = version;
+    public String getHostAddress() {
+    }  
+        String version,  
+        this.hostAddress = hostAddress;
+    public void setOpensearchVersion(String opensearchVersion) {  
+        this.version = version;
+        String name,
+    }
+    public String getUniqueId() {  
+    }  
+    public void setHostAddress(String hostAddress) {  
+    }  
+    private String name;
 }
+    }  
+        this.minimumCompatibleVersion = minimumCompatibleVersion;
+        String opensearchVersion,
+        String port,
+        this.opensearchVersion = opensearchVersion;  
+        this.opensearchVersion = opensearchVersion;
+ * compatible open source license.
+    public ExtensionsProperties(
+        return name;
+    }
+    public void setMinimumCompatibleVersion(String minimumCompatibleVersion) {
+        return opensearchVersion;  
+    private String minimumCompatibleVersion;

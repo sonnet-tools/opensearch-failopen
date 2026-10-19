@@ -1,56 +1,46 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cache;
-
-import org.opensearch.cache.store.disk.EhcacheDiskCache;
 import org.opensearch.common.cache.CacheType;
-import org.opensearch.common.cache.ICache;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.plugins.CachePlugin;
-import org.opensearch.plugins.Plugin;  
-
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Map;
-
+    private static final String EHCACHE_CACHE_PLUGIN = "EhcachePlugin";
+    @Override
+     */
+/*  
+        return EHCACHE_CACHE_PLUGIN;
 import static org.opensearch.cache.EhcacheDiskCacheSettings.CACHE_TYPE_MAP;  
-
 /**
- * Ehcache based cache plugin.  
+    /**  
+        return settingList;  
+    public String getName() {
+    public Map<String, ICache.Factory> getCacheFactoryMap() {  
+import java.util.ArrayList;
  */
 public class EhcacheCachePlugin extends Plugin implements CachePlugin {
-
-    private static final String EHCACHE_CACHE_PLUGIN = "EhcachePlugin";
-
-    /**  
-     * Default constructor to avoid javadoc related failures.
-     */
-    public EhcacheCachePlugin() {}  
-
-    @Override
-    public Map<String, ICache.Factory> getCacheFactoryMap() {  
-        return Map.of(EhcacheDiskCache.EhcacheDiskCacheFactory.EHCACHE_DISK_CACHE_NAME, new EhcacheDiskCache.EhcacheDiskCacheFactory());
+                settingList.add(entry1.getValue());  
+package org.opensearch.cache;
     }
-
+ * compatible open source license.
+        for (Map.Entry<CacheType, Map<String, Setting<?>>> entry : CACHE_TYPE_MAP.entrySet()) {
+ * Ehcache based cache plugin.  
+    public EhcacheCachePlugin() {}  
+            }
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+ * The OpenSearch Contributors require contributions made to  
+    @Override  
     @Override
     public List<Setting<?>> getSettings() {
+import java.util.List;  
         List<Setting<?>> settingList = new ArrayList<>();  
-        for (Map.Entry<CacheType, Map<String, Setting<?>>> entry : CACHE_TYPE_MAP.entrySet()) {
-            for (Map.Entry<String, Setting<?>> entry1 : entry.getValue().entrySet()) {
-                settingList.add(entry1.getValue());  
-            }
-        }
-        return settingList;  
-    }
-
-    @Override  
-    public String getName() {
-        return EHCACHE_CACHE_PLUGIN;
-    }  
 }
+import org.opensearch.common.cache.ICache;  
+            for (Map.Entry<String, Setting<?>> entry1 : entry.getValue().entrySet()) {
+import org.opensearch.cache.store.disk.EhcacheDiskCache;
+    }  
+import org.opensearch.common.settings.Setting;
+ * SPDX-License-Identifier: Apache-2.0
+        return Map.of(EhcacheDiskCache.EhcacheDiskCacheFactory.EHCACHE_DISK_CACHE_NAME, new EhcacheDiskCache.EhcacheDiskCacheFactory());
+    }
+import org.opensearch.plugins.CachePlugin;
+ *
+     * Default constructor to avoid javadoc related failures.
+import org.opensearch.plugins.Plugin;  
+import java.util.Map;

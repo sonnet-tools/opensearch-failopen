@@ -1,300 +1,276 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.allocation;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.replication.ClusterStateCreationUtils;
-import org.opensearch.cluster.ClusterName;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexRoutingTable;  
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.RoutingTable;  
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.UnassignedInfo;  
-import org.opensearch.cluster.routing.allocation.AllocationDecision;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.routing.allocation.RoutingAllocation;  
-import org.opensearch.cluster.routing.allocation.ShardAllocationDecision;
-import org.opensearch.cluster.routing.allocation.allocator.ShardsAllocator;
-import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.test.gateway.TestGatewayAllocator;
-
-import java.time.Instant;  
-import java.util.Collections;
-import java.util.Locale;
-
-import static org.opensearch.action.admin.cluster.allocation.TransportClusterAllocationExplainAction.findShardToExplain;
-
-/**  
- * Tests for the {@link TransportClusterAllocationExplainAction} class.
- */
-public class ClusterAllocationExplainActionTests extends OpenSearchTestCase {  
-
-    private static final AllocationDeciders NOOP_DECIDERS = new AllocationDeciders(Collections.emptyList());
-
-    public void testInitializingOrRelocatingShardExplanation() throws Exception {
-        ShardRoutingState shardRoutingState = randomFrom(ShardRoutingState.INITIALIZING, ShardRoutingState.RELOCATING);
-        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), shardRoutingState);  
+                public ShardAllocationDecision decideShardAllocation(ShardRouting shard, RoutingAllocation allocation) {
+            ShardRoutingState.STARTED  
+        String explanation;
         ShardRouting shard = clusterState.getRoutingTable().index("idx").shard(0).primaryShard();
-        RoutingAllocation allocation = new RoutingAllocation(
-            new AllocationDeciders(Collections.emptyList()),  
-            clusterState.getRoutingNodes(),
+        shard = findShardToExplain(request, routingAllocation(clusterState));  
+                    .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), true)  
+import org.opensearch.cluster.routing.allocation.AllocationDecision;
+        for (RoutingNode routingNode : clusterState.getRoutingNodes()) {
+            new ShardId(indexMetadata.getIndex(), 0),
+        request = new ClusterAllocationExplainRequest("idx", 0, false, null);
+import static org.opensearch.action.admin.cluster.allocation.TransportClusterAllocationExplainAction.findShardToExplain;
+/*  
+        assertEquals(clusterState.getRoutingTable().index("idx").shard(0).replicaShards().get(0), shard);  
+                        + AllocationDecision.fromAllocationStatus(shard.unassignedInfo().getLastAllocationStatus())
+        );
+        if (primary == false) {
+                .index("idx")
+        return ClusterState.builder(ClusterName.DEFAULT)
             clusterState,
-            null,  
-            null,
+            explanation = "the shard is in the process of relocating from node [] to node [], wait until " + "relocation has completed";
+public class ClusterAllocationExplainActionTests extends OpenSearchTestCase {  
+import org.opensearch.cluster.routing.allocation.allocator.ShardsAllocator;
+        );  
+                .get(),
+            true,  
+        expectThrows(
+}
+/*
+            randomBoolean(),
+        DiscoveryNode node = new DiscoveryNode("node-1", buildNewFakeTransportAddress(), Version.CURRENT);  
             System.nanoTime()
         );  
-        ClusterAllocationExplanation cae = TransportClusterAllocationExplainAction.explainShard(
+            clusterState.getRoutingNodes(),
+import org.opensearch.cluster.routing.RoutingTable;  
+                .filter(ShardRouting::unassigned)  
+import org.opensearch.cluster.routing.allocation.RoutingAllocation;  
+        // prefer unassigned replicas to started replicas
+    public void testFindAnyReplicaToExplain() {
+ * license agreements. See the NOTICE file distributed with
+        cae.toXContent(builder, ToXContent.EMPTY_PARAMS);
+import org.opensearch.core.xcontent.XContentBuilder;
+            builder.toString()  
+                        + "\","
+                + cae.getCurrentNode().getId()
+        );  
+                        + "\"}"  
+                        + "\"last_allocation_status\":\""
+                + explanation
+        assertEquals(
+ */
+        final ClusterAllocationExplainRequest failingRequest = new ClusterAllocationExplainRequest("idx", 0, primary, explainNode);
+            randomBoolean(),
+    }  
+                + "{\"id\":\""  
+ * specific language governing permissions and limitations
             shard,
-            allocation,  
+        IndexRoutingTable indexRoutingTable = new IndexRoutingTable.Builder(indexMetadata.getIndex()).addShard(searchOnlyShard).build();
+        // prefer started replicas to initializing/relocating replicas  
+        assertFalse(cae.getShardAllocationDecision().getAllocateDecision().isDecisionTaken());
+                    }  
+        // find shard with given node
+import org.opensearch.cluster.node.DiscoveryNodes;
+                        + UnassignedInfo.DATE_TIME_FORMATTER.format(  
+                    .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+    }
+    private static RoutingAllocation routingAllocation(ClusterState clusterState) {
+            false,
+import org.opensearch.test.gateway.TestGatewayAllocator;
+                + (shard.unassignedInfo() != null  
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
+        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), ShardRoutingState.UNASSIGNED);  
+                    // no-op  
+                + cae.getCurrentNode().getAddress()
+        assertEquals(
             null,
             randomBoolean(),
-            new AllocationService(null, new TestGatewayAllocator(), new ShardsAllocator() {  
-                @Override
-                public void allocate(RoutingAllocation allocation) {
-                    // no-op  
-                }
-
-                @Override  
-                public ShardAllocationDecision decideShardAllocation(ShardRouting shard, RoutingAllocation allocation) {
-                    if (shard.initializing() || shard.relocating()) {
-                        return ShardAllocationDecision.NOT_TAKEN;  
-                    } else {
-                        throw new UnsupportedOperationException("cannot explain");
-                    }  
-                }
-            }, null, null)
-        );  
-
-        assertEquals(shard.currentNodeId(), cae.getCurrentNode().getId());
-        assertFalse(cae.getShardAllocationDecision().isDecisionTaken());  
-        assertFalse(cae.getShardAllocationDecision().getAllocateDecision().isDecisionTaken());
-        assertFalse(cae.getShardAllocationDecision().getMoveDecision().isDecisionTaken());
-        XContentBuilder builder = XContentFactory.jsonBuilder();  
-        cae.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        String explanation;
-        if (shardRoutingState == ShardRoutingState.RELOCATING) {  
-            explanation = "the shard is in the process of relocating from node [] to node [], wait until " + "relocation has completed";
-        } else {
-            explanation = "the shard is in the process of initializing on node [], " + "wait until initialization has completed";  
-        }
-        assertEquals(
-            "{\"index\":\"idx\",\"shard\":0,\"primary\":true,\"current_state\":\""  
-                + shardRoutingState.toString().toLowerCase(Locale.ROOT)
-                + "\""
-                + (shard.unassignedInfo() != null  
-                    ? ",\"unassigned_info\":{"
-                        + "\"reason\":\""
-                        + shard.unassignedInfo().getReason()  
-                        + "\","
-                        + "\"at\":\""
-                        + UnassignedInfo.DATE_TIME_FORMATTER.format(  
-                            Instant.ofEpochMilli(shard.unassignedInfo().getUnassignedTimeInMillis())
-                        )
-                        + "\","  
-                        + "\"last_allocation_status\":\""
-                        + AllocationDecision.fromAllocationStatus(shard.unassignedInfo().getLastAllocationStatus())
-                        + "\"}"  
-                    : "")
-                + ",\"current_node\":"
-                + "{\"id\":\""  
-                + cae.getCurrentNode().getId()
-                + "\",\"name\":\""
-                + cae.getCurrentNode().getName()  
-                + "\",\"transport_address\":\""
-                + cae.getCurrentNode().getAddress()
-                + "\"},\"explanation\":\""  
-                + explanation
-                + "\"}",
-            builder.toString()  
-        );
-    }
-
-    public void testFindAnyUnassignedShardToExplain() {
-        // find unassigned primary
-        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), ShardRoutingState.UNASSIGNED);  
-        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest();
-        ShardRouting shard = findShardToExplain(request, routingAllocation(clusterState));
-        assertEquals(clusterState.getRoutingTable().index("idx").shard(0).primaryShard(), shard);  
-
-        // find unassigned replica
         clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), ShardRoutingState.STARTED, ShardRoutingState.UNASSIGNED);  
-        request = new ClusterAllocationExplainRequest();
-        shard = findShardToExplain(request, routingAllocation(clusterState));
-        assertEquals(clusterState.getRoutingTable().index("idx").shard(0).replicaShards().get(0), shard);  
-
-        // no unassigned shard to explain
-        final ClusterState allStartedClusterState = ClusterStateCreationUtils.state(  
-            "idx",
-            randomBoolean(),
-            ShardRoutingState.STARTED,  
-            ShardRoutingState.STARTED
-        );
-        final ClusterAllocationExplainRequest anyUnassignedShardsRequest = new ClusterAllocationExplainRequest();  
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> findShardToExplain(anyUnassignedShardsRequest, routingAllocation(allStartedClusterState))  
-        );
     }
-
-    public void testFindPrimaryShardToExplain() {
-        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), randomFrom(ShardRoutingState.values()));
-        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, true, null);  
-        ShardRouting shard = findShardToExplain(request, routingAllocation(clusterState));
-        assertEquals(clusterState.getRoutingTable().index("idx").shard(0).primaryShard(), shard);
-    }  
-
-    public void testFindPrimaryShardToExplainWithNoPrimaryShard() {
-        ClusterState clusterState = searchOnlyClusterState();  
-        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, true, "node-1");
-
-        IllegalArgumentException exception = expectThrows(  
-            IllegalArgumentException.class,
-            () -> findShardToExplain(request, routingAllocation(clusterState))
-        );  
-        assertTrue(exception.getMessage().contains("unable to find primary shard to explain"));
-    }
-
-    public void testFindAnyReplicaToExplain() {
-        // prefer unassigned replicas to started replicas
-        ClusterState clusterState = ClusterStateCreationUtils.state(  
-            "idx",
-            randomBoolean(),
-            ShardRoutingState.STARTED,  
-            ShardRoutingState.STARTED,
-            ShardRoutingState.UNASSIGNED
-        );  
-        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, false, null);
-        ShardRouting shard = findShardToExplain(request, routingAllocation(clusterState));
-        assertEquals(  
-            clusterState.getRoutingTable()
-                .index("idx")
-                .shard(0)  
-                .replicaShards()
-                .stream()
-                .filter(ShardRouting::unassigned)  
-                .findFirst()
-                .get(),
-            shard  
+        // find unassigned replica
         );
-
-        // prefer started replicas to initializing/relocating replicas  
-        clusterState = ClusterStateCreationUtils.state(
-            "idx",
-            randomBoolean(),  
-            ShardRoutingState.STARTED,
-            randomFrom(ShardRoutingState.RELOCATING, ShardRoutingState.INITIALIZING),
-            ShardRoutingState.STARTED  
-        );
-        request = new ClusterAllocationExplainRequest("idx", 0, false, null);
-        shard = findShardToExplain(request, routingAllocation(clusterState));  
-        assertEquals(
-            clusterState.getRoutingTable().index("idx").shard(0).replicaShards().stream().filter(ShardRouting::started).findFirst().get(),
-            shard  
-        );
-    }
-
-    public void testFindShardAssignedToNode() {
-        // find shard with given node
-        final boolean primary = randomBoolean();  
-        ShardRoutingState[] replicaStates = new ShardRoutingState[0];
-        if (primary == false) {
-            replicaStates = new ShardRoutingState[] { ShardRoutingState.STARTED };  
-        }
-        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), ShardRoutingState.STARTED, replicaStates);
-        ShardRouting shardToExplain = primary  
-            ? clusterState.getRoutingTable().index("idx").shard(0).primaryShard()
-            : clusterState.getRoutingTable().index("idx").shard(0).replicaShards().get(0);
-        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, primary, shardToExplain.currentNodeId());  
-        RoutingAllocation allocation = routingAllocation(clusterState);
-        ShardRouting foundShard = findShardToExplain(request, allocation);
-        assertEquals(shardToExplain, foundShard);  
-
-        // shard is not assigned to given node
-        String explainNode = null;  
-        for (RoutingNode routingNode : clusterState.getRoutingNodes()) {
-            if (routingNode.nodeId().equals(shardToExplain.currentNodeId()) == false) {
-                explainNode = routingNode.nodeId();  
-                break;
-            }
-        }  
-        final ClusterAllocationExplainRequest failingRequest = new ClusterAllocationExplainRequest("idx", 0, primary, explainNode);
-        expectThrows(IllegalArgumentException.class, () -> findShardToExplain(failingRequest, allocation));
-    }  
-
-    private static RoutingAllocation routingAllocation(ClusterState clusterState) {
-        return new RoutingAllocation(NOOP_DECIDERS, clusterState.getRoutingNodes(), clusterState, null, null, System.nanoTime());  
-    }
-
-    private static ClusterState searchOnlyClusterState() {  
-        IndexMetadata indexMetadata = IndexMetadata.builder("idx")
-            .settings(
-                Settings.builder()  
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                    .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
-                    .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), true)  
+import org.opensearch.cluster.routing.RoutingNode;
             )
-            .build();
+        assertFalse(cae.getShardAllocationDecision().getMoveDecision().isDecisionTaken());
+        expectThrows(IllegalArgumentException.class, () -> findShardToExplain(failingRequest, allocation));
+                }
+        );
+        RoutingAllocation allocation = routingAllocation(clusterState);
+        }
+    private static ClusterState searchOnlyClusterState() {  
+ * The OpenSearch Contributors require contributions made to  
+        return new RoutingAllocation(NOOP_DECIDERS, clusterState.getRoutingNodes(), clusterState, null, null, System.nanoTime());  
+package org.opensearch.action.admin.cluster.allocation;
+/**  
+                + shardRoutingState.toString().toLowerCase(Locale.ROOT)
+            replicaStates = new ShardRoutingState[] { ShardRoutingState.STARTED };  
+            "idx",
+        assertTrue(exception.getMessage().contains("unable to find primary shard to explain"));
+        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, false, null);
+    public void testFindShardAssignedToNode() {
+        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, true, "node-1");
+                        throw new UnsupportedOperationException("cannot explain");
+        ClusterState clusterState = searchOnlyClusterState();  
+            .settings(
+            ShardRoutingState.STARTED,
+                    if (shard.initializing() || shard.relocating()) {
+import org.opensearch.action.support.replication.ClusterStateCreationUtils;
+        }  
+            clusterState.getRoutingTable().index("idx").shard(0).replicaShards().stream().filter(ShardRouting::started).findFirst().get(),
+ *
+                + "\",\"transport_address\":\""
+        final ClusterAllocationExplainRequest anyUnassignedShardsRequest = new ClusterAllocationExplainRequest();  
+        ShardRouting foundShard = findShardToExplain(request, allocation);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                .shard(0)  
+        IndexMetadata indexMetadata = IndexMetadata.builder("idx")
         ShardRouting searchOnlyShard = ShardRouting.newUnassigned(  
-            new ShardId(indexMetadata.getIndex(), 0),
-            false,
-            true,  
+ */
+                        + "\","  
+        RoutingAllocation allocation = new RoutingAllocation(
+        String explainNode = null;  
+        ClusterState clusterState = ClusterStateCreationUtils.state(  
+        assertFalse(cae.getShardAllocationDecision().isDecisionTaken());  
+import org.opensearch.cluster.routing.UnassignedInfo;  
+/*  
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+            if (routingNode.nodeId().equals(shardToExplain.currentNodeId()) == false) {
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.settings.Settings;
+        XContentBuilder builder = XContentFactory.jsonBuilder();  
             RecoverySource.EmptyStoreRecoverySource.INSTANCE,
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest();
+                        + "\"at\":\""
+            randomBoolean(),  
+ * the Apache License, Version 2.0 (the "License"); you may
+                explainNode = routingNode.nodeId();  
+import org.opensearch.cluster.ClusterState;
+                        + "\"reason\":\""
+        ClusterAllocationExplanation cae = TransportClusterAllocationExplainAction.explainShard(
+import java.util.Collections;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            ShardRoutingState.STARTED,  
+            () -> findShardToExplain(request, routingAllocation(clusterState))
+        ShardRouting shard = findShardToExplain(request, routingAllocation(clusterState));
+ * under the License.  
+    public void testFindAnyUnassignedShardToExplain() {
+                .stream()
             new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "search-only shard")
-        );  
-        IndexRoutingTable indexRoutingTable = new IndexRoutingTable.Builder(indexMetadata.getIndex()).addShard(searchOnlyShard).build();
-        Metadata metadata = Metadata.builder().put(indexMetadata, true).build();
-        DiscoveryNode node = new DiscoveryNode("node-1", buildNewFakeTransportAddress(), Version.CURRENT);  
-
-        return ClusterState.builder(ClusterName.DEFAULT)
-            .metadata(metadata)  
+import java.util.Locale;
+        assertEquals(  
+        assertEquals(clusterState.getRoutingTable().index("idx").shard(0).primaryShard(), shard);
             .routingTable(RoutingTable.builder().add(indexRoutingTable).build())
-            .nodes(DiscoveryNodes.builder().add(node).localNodeId(node.getId()))
-            .build();  
     }
-}
+                        )
+import org.opensearch.cluster.ClusterName;  
+        final ClusterState allStartedClusterState = ClusterStateCreationUtils.state(  
+        } else {
+                Settings.builder()  
+        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, primary, shardToExplain.currentNodeId());  
+            : clusterState.getRoutingTable().index("idx").shard(0).replicaShards().get(0);
+        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), randomFrom(ShardRoutingState.values()));
+    }  
+        if (shardRoutingState == ShardRoutingState.RELOCATING) {  
+        request = new ClusterAllocationExplainRequest();
+        );
+            new AllocationDeciders(Collections.emptyList()),  
+        IllegalArgumentException exception = expectThrows(  
+import org.opensearch.cluster.routing.ShardRouting;
+            randomFrom(ShardRoutingState.RELOCATING, ShardRoutingState.INITIALIZING),
+            "idx",
+import org.opensearch.cluster.routing.allocation.ShardAllocationDecision;
+                .findFirst()
+        shard = findShardToExplain(request, routingAllocation(clusterState));
+        );  
+import org.opensearch.cluster.routing.ShardRoutingState;
+        ShardRouting shardToExplain = primary  
+        ClusterAllocationExplainRequest request = new ClusterAllocationExplainRequest("idx", 0, true, null);  
+        assertEquals(shardToExplain, foundShard);  
+            .build();  
+ * Licensed to Elasticsearch under one or more contributor  
+            ShardRoutingState.STARTED,
+            ? clusterState.getRoutingTable().index("idx").shard(0).primaryShard()
+        assertEquals(clusterState.getRoutingTable().index("idx").shard(0).primaryShard(), shard);  
+import org.opensearch.cluster.metadata.Metadata;  
+                            Instant.ofEpochMilli(shard.unassignedInfo().getUnassignedTimeInMillis())
+        assertEquals(shard.currentNodeId(), cae.getCurrentNode().getId());
+import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.test.OpenSearchTestCase;  
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+            shard  
+    }
+                public void allocate(RoutingAllocation allocation) {
+ * this file be licensed under the Apache-2.0 license or a
+            .build();
+            () -> findShardToExplain(anyUnassignedShardsRequest, routingAllocation(allStartedClusterState))  
+        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), shardRoutingState);  
+ * GitHub history for details.
+                + cae.getCurrentNode().getName()  
+    public void testInitializingOrRelocatingShardExplanation() throws Exception {
+            ShardRoutingState.UNASSIGNED
+ * not use this file except in compliance with the License.
+import org.opensearch.Version;
+ * Unless required by applicable law or agreed to in writing,
+                break;
+            ShardRoutingState.STARTED,  
+                    : "")
+                + "\""
+            ShardRoutingState.STARTED
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
+            explanation = "the shard is in the process of initializing on node [], " + "wait until initialization has completed";  
+            shard  
+ */  
+                + "\"}",
+                    } else {
+import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;  
+            clusterState.getRoutingTable()
+                + ",\"current_node\":"
+                        return ShardAllocationDecision.NOT_TAKEN;  
+ * ownership. Elasticsearch licenses this file to you under  
+            null,  
+                        + shard.unassignedInfo().getReason()  
+import org.opensearch.cluster.routing.IndexRoutingTable;  
+            }, null, null)
+ */  
+import org.opensearch.core.index.shard.ShardId;  
+import java.time.Instant;  
+        ShardRoutingState[] replicaStates = new ShardRoutingState[0];
+                @Override  
+ * KIND, either express or implied.  See the License for the
+            IllegalArgumentException.class,
+ *  
+        }
+        ShardRouting shard = findShardToExplain(request, routingAllocation(clusterState));
+            IllegalArgumentException.class,
+    public void testFindPrimaryShardToExplain() {
+    private static final AllocationDeciders NOOP_DECIDERS = new AllocationDeciders(Collections.emptyList());
+        ShardRouting shard = findShardToExplain(request, routingAllocation(clusterState));
+                @Override
+        );  
+import org.opensearch.cluster.node.DiscoveryNode;
+        ShardRoutingState shardRoutingState = randomFrom(ShardRoutingState.INITIALIZING, ShardRoutingState.RELOCATING);
+            "{\"index\":\"idx\",\"shard\":0,\"primary\":true,\"current_state\":\""  
+                    ? ",\"unassigned_info\":{"
+                }
+import org.opensearch.cluster.routing.allocation.AllocationService;
+        ClusterState clusterState = ClusterStateCreationUtils.state("idx", randomBoolean(), ShardRoutingState.STARTED, replicaStates);
+ * SPDX-License-Identifier: Apache-2.0
+        );
+    }
+    }
+            new AllocationService(null, new TestGatewayAllocator(), new ShardsAllocator() {  
+                + "\",\"name\":\""
+ * this work for additional information regarding copyright
+        // no unassigned shard to explain
+import org.opensearch.cluster.routing.RecoverySource;
+        );
+        clusterState = ClusterStateCreationUtils.state(
+ *
+        Metadata metadata = Metadata.builder().put(indexMetadata, true).build();
+            .metadata(metadata)  
+                + "\"},\"explanation\":\""  
+            null,
+            .nodes(DiscoveryNodes.builder().add(node).localNodeId(node.getId()))
+        final boolean primary = randomBoolean();  
+                .replicaShards()
+        // shard is not assigned to given node
+import org.opensearch.cluster.metadata.IndexMetadata;
+ * Tests for the {@link TransportClusterAllocationExplainAction} class.
+        // find unassigned primary
+            allocation,  
+    public void testFindPrimaryShardToExplainWithNoPrimaryShard() {
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+ * compatible open source license.
+            "idx",

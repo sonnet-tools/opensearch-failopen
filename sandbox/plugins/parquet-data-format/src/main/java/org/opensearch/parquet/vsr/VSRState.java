@@ -1,21 +1,19 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.vsr;
-
-/**
- * Represents the lifecycle states of a VectorSchemaRoot.
- */  
-public enum VSRState {
     /** Currently accepting writes. */
-    ACTIVE,  
-    /** Read-only, queued for flush. */
     FROZEN,
+package org.opensearch.parquet.vsr;
+ *
+ * SPDX-License-Identifier: Apache-2.0
+    /** Read-only, queued for flush. */
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+ */  
+/*  
+public enum VSRState {
     /** Completed and cleaned up. */  
+ * Represents the lifecycle states of a VectorSchemaRoot.
+ * compatible open source license.
+    ACTIVE,  
+ */  
     CLOSED
+/**
 }

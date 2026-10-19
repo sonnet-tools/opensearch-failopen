@@ -1,80 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        Map<String, Object> config = new HashMap<>();
+        try {
  */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;  
-
-import static org.hamcrest.CoreMatchers.equalTo;
-
-public class SplitToFieldsProcessorFactoryTests extends OpenSearchTestCase {
-
-    public void testCreate() throws Exception {  
-        SplitToFieldsProcessor.Factory factory = new SplitToFieldsProcessor.Factory();
-        boolean ignoreMissing = randomBoolean();
-        boolean preserveTrailing = randomBoolean();  
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", "source_field");
-        config.put("separator", ">");  
-        config.put("target_fields", Arrays.asList("out1", "out2", "out3"));
-        config.put("ignore_missing", ignoreMissing);
-        config.put("preserve_trailing", preserveTrailing);  
-        String processorTag = randomAlphaOfLength(10);
-        SplitToFieldsProcessor processor = factory.create(null, processorTag, null, config);
-        assertThat(processor.getTag(), equalTo(processorTag));  
-        assertThat(processor.getField(), equalTo("source_field"));
-        assertThat(processor.getSeparator(), equalTo(">"));
-        assertThat(processor.getTargetFields(), equalTo(Arrays.asList("out1", "out2", "out3")));  
-        assertThat(processor.isIgnoreMissing(), equalTo(ignoreMissing));
-        assertThat(processor.isPreserveTrailing(), equalTo(preserveTrailing));
-    }  
-
-    public void testCreateNoFieldPresent() throws Exception {
-        SplitToFieldsProcessor.Factory factory = new SplitToFieldsProcessor.Factory();  
-        Map<String, Object> config = new HashMap<>();
         config.put("separator", ">");
-        config.put("target_fields", Arrays.asList("out1", "out2"));  
         try {
-            factory.create(null, null, null, config);
-            fail("factory create should have failed");  
-        } catch (OpenSearchParseException e) {
-            assertThat(e.getMessage(), equalTo("[field] required property is missing"));
-        }  
-    }
-
-    public void testCreateNoSeparatorPresent() throws Exception {  
-        SplitToFieldsProcessor.Factory factory = new SplitToFieldsProcessor.Factory();
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", "source_field");  
         config.put("target_fields", Arrays.asList("out1", "out2"));
-        try {
+    }  
+            assertThat(e.getMessage(), equalTo("[target_fields] required property is missing"));
+        config.put("preserve_trailing", preserveTrailing);  
+import java.util.HashMap;
+            assertThat(e.getMessage(), equalTo("[separator] required property is missing"));  
+        } catch (OpenSearchParseException e) {  
             factory.create(null, null, null, config);  
             fail("factory create should have failed");
-        } catch (OpenSearchParseException e) {
-            assertThat(e.getMessage(), equalTo("[separator] required property is missing"));  
-        }
     }
-
-    public void testCreateNoTargetFieldsPresent() throws Exception {
         SplitToFieldsProcessor.Factory factory = new SplitToFieldsProcessor.Factory();
+        SplitToFieldsProcessor.Factory factory = new SplitToFieldsProcessor.Factory();  
+    public void testCreateNoTargetFieldsPresent() throws Exception {
+        assertThat(processor.getSeparator(), equalTo(">"));
+            assertThat(e.getMessage(), equalTo("[field] required property is missing"));
+import java.util.Map;  
+        config.put("separator", ">");  
         Map<String, Object> config = new HashMap<>();  
-        config.put("field", "source_field");
-        config.put("separator", ">");
-        try {  
+    public void testCreateNoSeparatorPresent() throws Exception {  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.test.OpenSearchTestCase;
             factory.create(null, null, null, config);
-            fail("factory create should have failed");
-        } catch (OpenSearchParseException e) {  
-            assertThat(e.getMessage(), equalTo("[target_fields] required property is missing"));
-        }
-    }  
+        assertThat(processor.isIgnoreMissing(), equalTo(ignoreMissing));
+        SplitToFieldsProcessor.Factory factory = new SplitToFieldsProcessor.Factory();
+        boolean preserveTrailing = randomBoolean();  
+        config.put("field", "source_field");
+        } catch (OpenSearchParseException e) {
+package org.opensearch.ingest.common;
+    }
+        assertThat(processor.getTag(), equalTo(processorTag));  
+public class SplitToFieldsProcessorFactoryTests extends OpenSearchTestCase {
+ * this file be licensed under the Apache-2.0 license or a
+        config.put("target_fields", Arrays.asList("out1", "out2", "out3"));
+    public void testCreate() throws Exception {  
+        config.put("target_fields", Arrays.asList("out1", "out2"));  
+    public void testCreateNoFieldPresent() throws Exception {
 }
+import java.util.Arrays;
+        config.put("ignore_missing", ignoreMissing);
+        config.put("separator", ">");
+        } catch (OpenSearchParseException e) {
+    }  
+        assertThat(processor.isPreserveTrailing(), equalTo(preserveTrailing));
+        }
+        Map<String, Object> config = new HashMap<>();
+ *
+        }  
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+        Map<String, Object> config = new HashMap<>();
+        assertThat(processor.getField(), equalTo("source_field"));
+        boolean ignoreMissing = randomBoolean();
+            fail("factory create should have failed");
+        assertThat(processor.getTargetFields(), equalTo(Arrays.asList("out1", "out2", "out3")));  
+            fail("factory create should have failed");  
+        SplitToFieldsProcessor processor = factory.create(null, processorTag, null, config);
+        config.put("field", "source_field");
+        String processorTag = randomAlphaOfLength(10);
+import static org.hamcrest.CoreMatchers.equalTo;
+        try {  
+import org.opensearch.OpenSearchParseException;
+        config.put("field", "source_field");  
+        SplitToFieldsProcessor.Factory factory = new SplitToFieldsProcessor.Factory();
+            factory.create(null, null, null, config);
+/*  
+        }

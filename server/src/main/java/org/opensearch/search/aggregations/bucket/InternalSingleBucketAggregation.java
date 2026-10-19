@@ -1,233 +1,208 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+        for (InternalAggregation aggregation : aggregations) {  
+                    + "] for single-bucket aggregation ["  
+    public InternalAggregations getAggregations() {
+    }
+        List<InternalAggregations> subAggregationsList = new ArrayList<>(aggregations.size());
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
+    /**  
+    }  
+            String aggName = path.get(0);
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+     * Amulti-bucket agg needs to first reduce the buckets and *their* pipelines
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket;
-
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.aggregations.Aggregation;  
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;  
-import org.opensearch.search.aggregations.support.AggregationPath;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Consumer;  
-import java.util.function.Function;
-
-/**  
- * A base class for all the single bucket aggregations.
- *
- * @opensearch.internal  
- */
-public abstract class InternalSingleBucketAggregation extends InternalAggregation implements SingleBucketAggregation {
-
-    private long docCount;
-    private InternalAggregations aggregations;
-
+            }
+        this.docCount = docCount;
+ * Unless required by applicable law or agreed to in writing,
     /**
-     * Creates a single bucket aggregation.
-     *  
-     * @param name          The aggregation name.
-     * @param docCount      The document count in the single bucket.
+    protected void doWriteTo(StreamOutput out) throws IOException {  
+            assert aggregation.getName().equals(getName());
+        return builder;  
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
+                }  
+import java.util.Map;
+            return aggregation.getProperty(path.subList(1, path.size()));
+    }  
+    @Override  
+        if (obj == null || getClass() != obj.getClass()) return false;
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;  
+ * You may obtain a copy of the License at  
+    public InternalAggregation copyWithRewritenBuckets(Function<InternalAggregations, InternalAggregations> rewriter) {
+     */
+            for (Aggregation agg : getAggregations().asList()) {
+import java.util.ArrayList;
+                aggs.add(((InternalAggregation) agg).reducePipelines((InternalAggregation) agg, reduceContext, subTree));
+    public final double sortValue(AggregationPath.PathElement head, Iterator<AggregationPath.PathElement> tail) {  
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {  
+            }  
      * @param aggregations  The already built sub-aggregations that are associated with the bucket.  
      */
-    protected InternalSingleBucketAggregation(String name, long docCount, InternalAggregations aggregations, Map<String, Object> metadata) {
-        super(name, metadata);  
-        this.docCount = docCount;
-        this.aggregations = aggregations;
-    }  
-
-    /**
-     * Read from a stream.  
-     */
-    protected InternalSingleBucketAggregation(StreamInput in) throws IOException {
-        super(in);  
-        docCount = in.readVLong();
-        aggregations = InternalAggregations.readFrom(in);
-    }  
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {  
-        out.writeVLong(docCount);
-        aggregations.writeTo(out);
-    }  
-
-    @Override
-    public long getDocCount() {  
-        return docCount;
-    }
-
-    @Override
-    public InternalAggregations getAggregations() {
-        return aggregations;  
-    }
-
-    /**  
-     * Create a new copy of this {@link Aggregation} with the same settings as
-     * this {@link Aggregation} and contains the provided sub-aggregations.
-     *  
-     * @param subAggregations
-     *            the buckets to use in the new {@link Aggregation}
-     * @return the new {@link Aggregation}  
-     */
-    public InternalSingleBucketAggregation create(InternalAggregations subAggregations) {
-        return newAggregation(getName(), getDocCount(), subAggregations);  
-    }
-
-    /**  
-     * Create a <b>new</b> empty sub aggregation. This must be a new instance on each call.
-     */
-    protected abstract InternalSingleBucketAggregation newAggregation(String name, long docCount, InternalAggregations subAggregations);  
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {  
-        long docCount = 0L;
-        List<InternalAggregations> subAggregationsList = new ArrayList<>(aggregations.size());
-        for (InternalAggregation aggregation : aggregations) {  
-            assert aggregation.getName().equals(getName());
-            docCount += ((InternalSingleBucketAggregation) aggregation).docCount;
-            subAggregationsList.add(((InternalSingleBucketAggregation) aggregation).aggregations);  
-        }
-        final InternalAggregations aggs = InternalAggregations.reduce(subAggregationsList, reduceContext);
-        return newAggregation(getName(), docCount, aggs);  
-    }
-
-    /**  
-     * Amulti-bucket agg needs to first reduce the buckets and *their* pipelines
-     * before allowing sibling pipelines to materialize.
-     */  
-    @Override
-    public final InternalAggregation reducePipelines(
-        InternalAggregation reducedAggs,  
-        ReduceContext reduceContext,
-        PipelineTree pipelineTree
-    ) {  
         assert reduceContext.isFinalReduce();
-        InternalAggregation reduced = this;
-        if (pipelineTree.hasSubTrees()) {  
-            List<InternalAggregation> aggs = new ArrayList<>();
-            for (Aggregation agg : getAggregations().asList()) {
-                PipelineTree subTree = pipelineTree.subTree(agg.getName());  
-                aggs.add(((InternalAggregation) agg).reducePipelines((InternalAggregation) agg, reduceContext, subTree));
-            }
-            InternalAggregations reducedSubAggs = InternalAggregations.from(aggs);  
-            reduced = create(reducedSubAggs);
-        }
-        return super.reducePipelines(reduced, reduceContext, pipelineTree);  
-    }
-
-    @Override  
-    public Object getProperty(List<String> path) {
-        if (path.isEmpty()) {
-            return this;  
-        } else {
-            String aggName = path.get(0);
-            if (aggName.equals("_count")) {  
-                if (path.size() > 1) {
-                    throw new IllegalArgumentException("_count must be the last element in the path");
-                }  
-                return getDocCount();
-            }
-            InternalAggregation aggregation = aggregations.get(aggName);  
-            if (aggregation == null) {
-                throw new IllegalArgumentException("Cannot find an aggregation named [" + aggName + "] in [" + getName() + "]");
-            }  
-            return aggregation.getProperty(path.subList(1, path.size()));
-        }
-    }  
-
+        out.writeVLong(docCount);
+    protected InternalSingleBucketAggregation(String name, long docCount, InternalAggregations aggregations, Map<String, Object> metadata) {
+    protected abstract InternalSingleBucketAggregation newAggregation(String name, long docCount, InternalAggregations subAggregations);  
+            subAggregationsList.add(((InternalSingleBucketAggregation) aggregation).aggregations);  
+        return newAggregation(getName(), docCount, aggs);  
+ * the Apache License, Version 2.0 (the "License"); you may
     @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {  
-        builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
-        aggregations.toXContentInternal(builder, params);
-        return builder;  
-    }
-
-    @Override  
-    public final double sortValue(String key) {
-        if (key != null && false == key.equals("doc_count")) {
-            throw new IllegalArgumentException(  
-                "Unknown value key ["
-                    + key
-                    + "] for single-bucket aggregation ["  
-                    + getName()
-                    + "]. Either use [doc_count] as key or drop the key all together."
-            );  
-        }
-        return docCount;
-    }  
-
-    @Override
-    public final double sortValue(AggregationPath.PathElement head, Iterator<AggregationPath.PathElement> tail) {  
+import org.opensearch.search.aggregations.Aggregation;  
+    public final InternalAggregation reducePipelines(
         return aggregations.sortValue(head, tail);
-    }
-
+                throw new IllegalArgumentException("Cannot find an aggregation named [" + aggName + "] in [" + getName() + "]");
+     * @param name          The aggregation name.
     @Override
+import org.opensearch.search.aggregations.InternalAggregations;
     protected boolean mustReduceOnSingleInternalAgg() {
-        return true;  
     }
-
+/**  
+    protected InternalSingleBucketAggregation(StreamInput in) throws IOException {
     @Override  
-    public InternalAggregation copyWithRewritenBuckets(Function<InternalAggregations, InternalAggregations> rewriter) {
-        InternalAggregations rewritten = rewriter.apply(aggregations);
+import java.util.function.Consumer;  
+ * this work for additional information regarding copyright
+    }
         if (rewritten == null) {  
-            return this;
-        }
-        return create(rewritten);  
-    }
-
-    @Override  
-    public void forEachBucket(Consumer<InternalAggregations> consumer) {
-        consumer.accept(aggregations);
-    }  
-
-    @Override
+ *
+                if (path.size() > 1) {
+            throw new IllegalArgumentException(  
+            return this;  
+import org.opensearch.core.xcontent.XContentBuilder;
     public boolean equals(Object obj) {  
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;  
-
-        InternalSingleBucketAggregation other = (InternalSingleBucketAggregation) obj;
-        return Objects.equals(docCount, other.docCount) && Objects.equals(aggregations, other.aggregations);  
-    }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), docCount, aggregations);
     }  
+        }
+    @Override
+                return getDocCount();
+    @Override
+ */
+            if (aggName.equals("_count")) {  
+     *  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+     * Read from a stream.  
+        }
+    }
+     */  
+        return Objects.equals(docCount, other.docCount) && Objects.equals(aggregations, other.aggregations);  
+ * @opensearch.internal  
+            return this;
+     * before allowing sibling pipelines to materialize.
+import java.util.function.Function;
+                    + "]. Either use [doc_count] as key or drop the key all together."
+        return create(rewritten);  
+    public InternalSingleBucketAggregation create(InternalAggregations subAggregations) {
+        if (key != null && false == key.equals("doc_count")) {
+        InternalAggregation reducedAggs,  
+    }  
+        this.aggregations = aggregations;
+    /**
+ * A base class for all the single bucket aggregations.
+ * Licensed to Elasticsearch under one or more contributor  
+        PipelineTree pipelineTree
+import java.util.Objects;
+        if (super.equals(obj) == false) return false;  
+    public Object getProperty(List<String> path) {
+import org.opensearch.search.aggregations.InternalAggregation;
+    ) {  
+        return Objects.hash(super.hashCode(), docCount, aggregations);
+import java.io.IOException;  
+ * not use this file except in compliance with the License.
+                "Unknown value key ["
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     *  
+        aggregations.writeTo(out);
+    private long docCount;
+/*
+     * Creates a single bucket aggregation.
+        return true;  
+    private InternalAggregations aggregations;
+ * this file be licensed under the Apache-2.0 license or a
+        aggregations.toXContentInternal(builder, params);
+    }
+    @Override
+    }
+            List<InternalAggregation> aggs = new ArrayList<>();
+    @Override
+        final InternalAggregations aggs = InternalAggregations.reduce(subAggregationsList, reduceContext);
+    }  
+        }
+        return newAggregation(getName(), getDocCount(), subAggregations);  
+ */  
+        if (path.isEmpty()) {
+    }
+     * this {@link Aggregation} and contains the provided sub-aggregations.
+        super(name, metadata);  
+    @Override  
+ */
+        } else {
+     * Create a new copy of this {@link Aggregation} with the same settings as
+ * Modifications Copyright OpenSearch Contributors. See  
+        builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
+package org.opensearch.search.aggregations.bucket;
+    }
+    @Override
+public abstract class InternalSingleBucketAggregation extends InternalAggregation implements SingleBucketAggregation {
+                    throw new IllegalArgumentException("_count must be the last element in the path");
+        ReduceContext reduceContext,
+    @Override  
+    }  
+        if (pipelineTree.hasSubTrees()) {  
+        return docCount;
+        consumer.accept(aggregations);
+        InternalSingleBucketAggregation other = (InternalSingleBucketAggregation) obj;
+        return aggregations;  
+     *            the buckets to use in the new {@link Aggregation}
+            if (aggregation == null) {
+            );  
+ * KIND, either express or implied.  See the License for the
+ * under the License.  
+     */
+    }
+     * @return the new {@link Aggregation}  
 }
+import java.util.Iterator;
+     * @param subAggregations
+    /**  
+        }
+        super(in);  
+    @Override  
+    }  
+        }
+            InternalAggregations reducedSubAggs = InternalAggregations.from(aggs);  
+import org.opensearch.core.common.io.stream.StreamOutput;
+            }
+     */
+ *
+        if (this == obj) return true;
+ *  
+                    + key
+ */
+            reduced = create(reducedSubAggs);
+    /**  
+    @Override
+        InternalAggregations rewritten = rewriter.apply(aggregations);
+            docCount += ((InternalSingleBucketAggregation) aggregation).docCount;
+/*
+    }
+    public final double sortValue(String key) {
+        docCount = in.readVLong();
+import java.util.List;  
+     * Create a <b>new</b> empty sub aggregation. This must be a new instance on each call.
+import org.opensearch.search.aggregations.support.AggregationPath;
+                    + getName()
+ * ownership. Elasticsearch licenses this file to you under  
+        aggregations = InternalAggregations.readFrom(in);
+    @Override
+        return docCount;
+ *
+        long docCount = 0L;
+ * specific language governing permissions and limitations
+    public long getDocCount() {  
+                PipelineTree subTree = pipelineTree.subTree(agg.getName());  
+        InternalAggregation reduced = this;
+            InternalAggregation aggregation = aggregations.get(aggName);  
+        return super.reducePipelines(reduced, reduceContext, pipelineTree);  
+    public void forEachBucket(Consumer<InternalAggregations> consumer) {
+    public int hashCode() {
+     * @param docCount      The document count in the single bucket.

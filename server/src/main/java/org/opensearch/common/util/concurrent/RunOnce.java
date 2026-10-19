@@ -1,65 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.common.util.concurrent;
-
-import java.util.Objects;  
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**  
- * Runnable that can only be run one time.
- *
- * @opensearch.internal  
- */
 public class RunOnce implements Runnable {
-
-    private final Runnable delegate;
-    private final AtomicBoolean hasRun;
-
-    public RunOnce(final Runnable delegate) {
-        this.delegate = Objects.requireNonNull(delegate);
+ *
+ * license agreements. See the NOTICE file distributed with
+ *  
         this.hasRun = new AtomicBoolean(false);  
-    }
-
-    @Override  
-    public void run() {
-        if (hasRun.compareAndSet(false, true)) {
-            delegate.run();  
-        }
-    }
-
-    /**
-     * {@code true} if the {@link RunOnce} has been executed once.
-     */  
-    public boolean hasRun() {
-        return hasRun.get();
-    }  
+ */
 }
+    public RunOnce(final Runnable delegate) {
+ * Unless required by applicable law or agreed to in writing,
+ *
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+/**  
+        if (hasRun.compareAndSet(false, true)) {
+ * not use this file except in compliance with the License.
+    }
+        }
+ */
+/*  
+ * under the License.  
+ * specific language governing permissions and limitations
+import java.util.Objects;  
+ * this work for additional information regarding copyright
+    private final AtomicBoolean hasRun;
+     * {@code true} if the {@link RunOnce} has been executed once.
+    @Override  
+    private final Runnable delegate;
+ * ownership. Elasticsearch licenses this file to you under  
+        this.delegate = Objects.requireNonNull(delegate);
+ *
+        return hasRun.get();
+ * Licensed to Elasticsearch under one or more contributor  
+ * @opensearch.internal  
+            delegate.run();  
+    public void run() {
+import java.util.concurrent.atomic.AtomicBoolean;
+ * KIND, either express or implied.  See the License for the
+    }
+ * SPDX-License-Identifier: Apache-2.0
+     */  
+    }  
+ */
+ * You may obtain a copy of the License at  
+/*
+package org.opensearch.common.util.concurrent;
+ */  
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+ * Runnable that can only be run one time.
+    public boolean hasRun() {
+ * The OpenSearch Contributors require contributions made to  
+    /**
+ * this file be licensed under the Apache-2.0 license or a
+/*

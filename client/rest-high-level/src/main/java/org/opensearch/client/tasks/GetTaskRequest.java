@@ -1,121 +1,106 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.client.tasks;
-
-import org.opensearch.client.Validatable;  
-import org.opensearch.client.ValidationException;
-import org.opensearch.common.unit.TimeValue;
-
-import java.util.Objects;
-import java.util.Optional;
-
-public class GetTaskRequest implements Validatable {
-    private final String nodeId;
-    private final long taskId;  
-    private boolean waitForCompletion = false;
-    private TimeValue timeout = null;
-
-    public GetTaskRequest(String nodeId, long taskId) {
-        this.nodeId = nodeId;
         this.taskId = taskId;  
     }
-
+/*
+ * this file be licensed under the Apache-2.0 license or a
+}  
+        return Objects.hash(nodeId, taskId, waitForCompletion, timeout);
     public String getNodeId() {  
-        return nodeId;
+        if (getClass() != obj.getClass()) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
+    public int hashCode() {  
+ * GitHub history for details.
+        return timeout;  
+        }
+    @Override
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+/*
     }
-
-    public long getTaskId() {
-        return taskId;
-    }  
-
-    /**
-     * Should this request wait for all found tasks to complete?  
+ *  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private boolean waitForCompletion = false;
+ *
      */
-    public boolean getWaitForCompletion() {
-        return waitForCompletion;  
-    }
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            && Objects.equals(timeout, other.timeout);
+    @Override
+    private final long taskId;  
     /**  
-     * Should this request wait for all found tasks to complete?
-     */
-    public GetTaskRequest setWaitForCompletion(boolean waitForCompletion) {  
-        this.waitForCompletion = waitForCompletion;
-        return this;
+ * Modifications Copyright OpenSearch Contributors. See  
     }  
-
+     */
+            && waitForCompletion == other.waitForCompletion  
+        this.timeout = timeout;
+        return Objects.equals(nodeId, other.nodeId)
+        return taskId;
+        return Optional.of(validationException);
+            return false;
+ */  
+ * not use this file except in compliance with the License.
+import org.opensearch.client.Validatable;  
+     * Timeout to wait for any async actions this request must take.
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.client.ValidationException;
+        this.waitForCompletion = waitForCompletion;
+            return false;
+ *
+     * Should this request wait for all found tasks to complete?  
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+public class GetTaskRequest implements Validatable {
+ * this work for additional information regarding copyright
+    public GetTaskRequest setWaitForCompletion(boolean waitForCompletion) {  
+ * Unless required by applicable law or agreed to in writing,
+    public Optional<ValidationException> validate() {  
+ * compatible open source license.
+    public GetTaskRequest setTimeout(TimeValue timeout) {  
+    public long getTaskId() {
+ * The OpenSearch Contributors require contributions made to  
+        this.nodeId = nodeId;
+    /**  
+    public GetTaskRequest(String nodeId, long taskId) {
+        GetTaskRequest other = (GetTaskRequest) obj;  
+    public boolean getWaitForCompletion() {
+    private final String nodeId;
+        return waitForCompletion;  
+    public TimeValue getTimeout() {
+package org.opensearch.client.tasks;
+        }
+/*  
+     * Should this request wait for all found tasks to complete?
+    }  
+        }
+ * You may obtain a copy of the License at  
+ * KIND, either express or implied.  See the License for the
     /**
+ */
+ * under the License.  
      * Timeout to wait for any async actions this request must take. It must take anywhere from 0 to 2.  
      */
-    public TimeValue getTimeout() {
-        return timeout;  
-    }
-
-    /**  
-     * Timeout to wait for any async actions this request must take.
-     */
-    public GetTaskRequest setTimeout(TimeValue timeout) {  
-        this.timeout = timeout;
-        return this;
-    }  
-
-    @Override
-    public Optional<ValidationException> validate() {  
-        final ValidationException validationException = new ValidationException();
+        return nodeId;
         if (timeout != null && !waitForCompletion) {
-            validationException.addValidationError("Timeout settings are only accepted if waitForCompletion is also set");  
-        }
         if (validationException.validationErrors().isEmpty()) {
+    private TimeValue timeout = null;
+ * specific language governing permissions and limitations
+ * software distributed under the License is distributed on an
+     */
+import java.util.Objects;
             return Optional.empty();  
-        }
-        return Optional.of(validationException);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(nodeId, taskId, waitForCompletion, timeout);
+    /**
+            validationException.addValidationError("Timeout settings are only accepted if waitForCompletion is also set");  
     }
-
-    @Override
-    public boolean equals(Object obj) {
+        return this;
+        return this;
         if (obj == null) {  
-            return false;
-        }
-        if (getClass() != obj.getClass()) {  
-            return false;
-        }
-        GetTaskRequest other = (GetTaskRequest) obj;  
-        return Objects.equals(nodeId, other.nodeId)
+    @Override
             && taskId == other.taskId
-            && waitForCompletion == other.waitForCompletion  
-            && Objects.equals(timeout, other.timeout);
+    }  
+    }  
     }
-}  
+    }
+        final ValidationException validationException = new ValidationException();
+ */
+import java.util.Optional;
+import org.opensearch.common.unit.TimeValue;
+    public boolean equals(Object obj) {

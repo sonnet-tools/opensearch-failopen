@@ -1,84 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+ *  
+    public TeardownSection getTeardownSection() {
+import org.opensearch.test.rest.yaml.section.ClientYamlTestSection;  
+    }
+ *
+/**
+    }
+ * GitHub history for details.
  * You may obtain a copy of the License at  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.rest.yaml;
-
-import org.opensearch.test.rest.yaml.section.ClientYamlTestSection;  
-import org.opensearch.test.rest.yaml.section.ClientYamlTestSuite;
-import org.opensearch.test.rest.yaml.section.SetupSection;
-import org.opensearch.test.rest.yaml.section.TeardownSection;  
-
-/**
- * Wraps {@link ClientYamlTestSection}s ready to be run. Each test section is associated to its {@link ClientYamlTestSuite}.  
- */
-public class ClientYamlTestCandidate {
-
-    private final ClientYamlTestSuite restTestSuite;
-    private final ClientYamlTestSection testSection;
-
-    public ClientYamlTestCandidate(ClientYamlTestSuite restTestSuite, ClientYamlTestSection testSection) {
-        this.restTestSuite = restTestSuite;
-        this.testSection = testSection;  
-    }
-
-    public String getApi() {  
-        return restTestSuite.getApi();
-    }
-
-    public String getName() {
-        return restTestSuite.getName();
-    }  
-
+ */  
     public String getSuitePath() {
-        return restTestSuite.getPath();  
     }
-
+ * Modifications Copyright OpenSearch Contributors. See  
+    }
+ * Unless required by applicable law or agreed to in writing,
+    private final ClientYamlTestSuite restTestSuite;
+import org.opensearch.test.rest.yaml.section.SetupSection;
+    }
     public String getTestPath() {  
-        return restTestSuite.getPath() + "/" + testSection.getName();
     }
-
-    public SetupSection getSetupSection() {
-        return restTestSuite.getSetupSection();
+ * The OpenSearch Contributors require contributions made to  
+ * license agreements. See the NOTICE file distributed with
     }  
-
-    public TeardownSection getTeardownSection() {
-        return restTestSuite.getTeardownSection();  
+        return restTestSuite.getApi();
+ * software distributed under the License is distributed on an
     }
-
+/*
+public class ClientYamlTestCandidate {
+    }  
+ * this work for additional information regarding copyright
+ * not use this file except in compliance with the License.
+import org.opensearch.test.rest.yaml.section.TeardownSection;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return restTestSuite.getSetupSection();
     public ClientYamlTestSection getTestSection() {  
-        return testSection;
-    }
-
-    @Override
-    public String toString() {
-        return getTestPath();  
-    }
+    public ClientYamlTestCandidate(ClientYamlTestSuite restTestSuite, ClientYamlTestSection testSection) {
+/*
+    public String getApi() {  
+ * KIND, either express or implied.  See the License for the
+package org.opensearch.test.rest.yaml;
+ * the Apache License, Version 2.0 (the "License"); you may
+        return restTestSuite.getName();
+        return restTestSuite.getPath() + "/" + testSection.getName();
+/*  
+        return restTestSuite.getPath();  
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+ * specific language governing permissions and limitations
+ */
+import org.opensearch.test.rest.yaml.section.ClientYamlTestSuite;
+    private final ClientYamlTestSection testSection;
 }
+    @Override
+        this.restTestSuite = restTestSuite;
+    public SetupSection getSetupSection() {
+    public String toString() {
+        return restTestSuite.getTeardownSection();  
+        return getTestPath();  
+ * SPDX-License-Identifier: Apache-2.0
+ * under the License.  
+ * ownership. Elasticsearch licenses this file to you under  
+    public String getName() {
+ * Wraps {@link ClientYamlTestSection}s ready to be run. Each test section is associated to its {@link ClientYamlTestSuite}.  
+        this.testSection = testSection;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return testSection;
+ */

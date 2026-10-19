@@ -1,239 +1,209 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        assertThat(expectedQuery, equalTo(query));
+        shardContext = null;
+        builder.field("text_shingle");
+            .put("index.analysis.filter.shingle_unigram.output_unigrams", true)  
+            .add(new Term[] { new Term("text_shingle_unigram", "baz"), }, 2)  
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;  
-import org.apache.lucene.search.MultiPhraseQuery;
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.search.SynonymQuery;
-import org.apache.lucene.search.TermQuery;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.index.IndexService;
-import org.opensearch.index.query.MatchPhraseQueryBuilder;
-import org.opensearch.index.query.MatchQueryBuilder;  
-import org.opensearch.index.query.MultiMatchQueryBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.QueryStringQueryBuilder;  
-import org.opensearch.index.query.SimpleQueryStringBuilder;
-import org.opensearch.index.query.SimpleQueryStringFlag;
-import org.opensearch.index.search.MatchQuery;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.junit.After;  
-import org.junit.Before;
-
-import java.io.IOException;  
-import java.util.Collection;
-import java.util.Collections;
-
-import static org.hamcrest.Matchers.equalTo;
-
-/**  
- * Makes sure that graph analysis is disabled with shingle filters of different size
- */
-public class DisableGraphQueryTests extends OpenSearchSingleNodeTestCase {  
-    private static IndexService indexService;
-    private static QueryShardContext shardContext;
-    private static Query expectedQuery;  
-    private static Query expectedPhraseQuery;
+        Query query = builder.toQuery(shardContext);
     private static Query expectedQueryWithUnigram;
-    private static Query expectedPhraseQueryWithUnigram;  
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {  
-        return Collections.singleton(CommonAnalysisModulePlugin.class);
+        builder.field("text_shingle_unigram");
+ * license agreements. See the NOTICE file distributed with
+    }  
+        assertThat(expectedPhraseQuery, equalTo(query));
+        builder = new QueryStringQueryBuilder("\"foo bar baz\"");
+        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));
+                    .addTerm(new Term("text_shingle_unigram", "bar baz"))
+import org.opensearch.common.settings.Settings;  
+            "text_shingle",
+import org.opensearch.index.search.MatchQuery;  
+        MatchQueryBuilder builder = new MatchQueryBuilder("text_shingle_unigram", "foo bar baz");
+        builder.field("text_shingle");
+        expectedPhraseQueryWithUnigram = new MultiPhraseQuery.Builder().add(
+import org.apache.lucene.search.Query;  
+        query = builder.toQuery(shardContext);  
+        builder = new SimpleQueryStringBuilder("\"foo bar baz\"");  
+        query = builder.toQuery(shardContext);  
+ * specific language governing permissions and limitations
+        builder.flags(SimpleQueryStringFlag.NONE);
+            .build();
+public class DisableGraphQueryTests extends OpenSearchSingleNodeTestCase {  
+            new Term[] { new Term("text_shingle_unigram", "foo"), new Term("text_shingle_unigram", "foo bar") },
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+        builder.field("text_shingle");  
+        indexService = createIndexWithSimpleMappings(
+    private static Query expectedPhraseQuery;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        query = builder.toQuery(shardContext);
+        query = builder.toQuery(shardContext);
+ * Unless required by applicable law or agreed to in writing,
+        QueryStringQueryBuilder builder = new QueryStringQueryBuilder("foo bar baz");
+import static org.hamcrest.Matchers.equalTo;
+import java.io.IOException;  
+                .build(),
+        query = builder.toQuery(shardContext);  
+    private static IndexService indexService;
+        builder = new QueryStringQueryBuilder("\"foo bar baz biz\"");
+import org.apache.lucene.index.Term;
+        // parsed query for "text_shingle:"foo bar baz"  
+        expectedQuery = new BooleanQuery.Builder().add(new TermQuery(new Term("text_shingle", "foo bar")), BooleanClause.Occur.SHOULD)
+        builder.flags(SimpleQueryStringFlag.NONE);
+        assertThat(expectedQueryWithUnigram, equalTo(query));
+        query = builder.toQuery(shardContext);  
+        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));  
+        assertThat(expectedPhraseQuery, equalTo(query));
+ * software distributed under the License is distributed on an
+import org.junit.Before;
+            .add(new Term("text_shingle", "bar baz"))
+                BooleanClause.Occur.SHOULD  
+/*
+import org.opensearch.index.query.QueryShardContext;
+        shardContext = indexService.newQueryShardContext(0, null, () -> 0L, null);
+        // parsed query for "text_shingle:(foo bar baz)  
+ * Makes sure that graph analysis is disabled with shingle filters of different size
+            new SynonymQuery.Builder("text_shingle_unigram").addTerm(new Term("text_shingle_unigram", "foo"))  
+package org.opensearch.analysis.common;
+        assertThat(expectedQueryWithUnigram, equalTo(query));
+    private static QueryShardContext shardContext;
+ * You may obtain a copy of the License at  
+        builder.flags(SimpleQueryStringFlag.PHRASE);
+            .add(new Term("text_shingle", "baz biz"))  
+import org.apache.lucene.search.BooleanQuery;  
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+                new SynonymQuery.Builder("text_shingle_unigram").addTerm(new Term("text_shingle_unigram", "bar"))  
+ * The OpenSearch Contributors require contributions made to  
+            .add(new TermQuery(new Term("text_shingle_unigram", "baz")), BooleanClause.Occur.SHOULD)
+            .put("index.analysis.analyzer.text_shingle.tokenizer", "whitespace")  
+        builder.type(MatchQuery.Type.PHRASE);
+            .add(new TermQuery(new Term("text_shingle", "baz biz")), BooleanClause.Occur.SHOULD)  
+            .put("index.analysis.filter.shingle_unigram.max_size", 2)
+        builder = new SimpleQueryStringBuilder("foo bar baz biz");  
+ * under the License.  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        assertThat(expectedQuery, equalTo(query));  
+        expectedPhraseQuery = new PhraseQuery.Builder().add(new Term("text_shingle", "foo bar"))
+        // that ignores position length attribute  
+            "test",  
+            .build();
+            .put("index.analysis.filter.shingle_unigram.min_size", 2)
+        )
+import java.util.Collection;
+ * compatible open source license.
+            .put("index.analysis.analyzer.text_shingle_unigram.filter", "lowercase, shingle_unigram")  
+        assertThat(expectedPhraseQuery, equalTo(query));
+            "text_shingle_unigram",
+    }  
+        builder.field("text_shingle_unigram");
     }
-
-    @Before
-    public void setup() {
+    public void cleanup() {
+ */  
+    }
+            "type=text,analyzer=text_shingle",  
+        assertThat(expectedQueryWithUnigram, equalTo(query));
+            .put("index.analysis.filter.shingle.max_size", 2)
+/**  
+            .put("index.analysis.analyzer.text_shingle.filter", "lowercase, shingle")
+        builder = new MatchPhraseQueryBuilder("text_shingle", "foo bar baz biz");
+    @Override
         Settings settings = Settings.builder()  
+}
+ * SPDX-License-Identifier: Apache-2.0
+            .put("index.analysis.filter.shingle_unigram.type", "shingle")
+        builder.type(MatchQuery.Type.PHRASE);  
+            .build();
+        MatchPhraseQueryBuilder builder = new MatchPhraseQueryBuilder("text_shingle_unigram", "foo bar baz");
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+        expectedQuery = null;
+import org.junit.After;  
+    private static Query expectedQuery;  
+        builder.field("text_shingle_unigram");
+            .add(
+import org.apache.lucene.search.TermQuery;
+        assertThat(expectedQuery, equalTo(query));
+    }
+        assertThat(expectedQuery, equalTo(query));
+    }
+        builder = new MultiMatchQueryBuilder("foo bar baz biz", "text_shingle");
+    public void testSimpleQueryString() throws IOException {
+        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));  
+    public void testMultiMatchQuery() throws IOException {
+ * GitHub history for details.
+/*  
+        Query query = builder.toQuery(shardContext);
+import org.apache.lucene.search.BooleanClause;
+ *
             .put("index.analysis.filter.shingle.type", "shingle")
+    public void testMatchPhraseQuery() throws IOException {  
+    @Before
+        query = builder.toQuery(shardContext);
+        // parsed query for "text_shingle_unigram:\"foo bar baz\" with query parsers
+        assertThat(expectedQueryWithUnigram, equalTo(query));
+        builder = new MatchQueryBuilder("text_shingle", "foo bar baz biz");  
+ * this work for additional information regarding copyright
+        Query query = builder.toQuery(shardContext);  
+ * this file be licensed under the Apache-2.0 license or a
+        query = builder.toQuery(shardContext);  
+ * not use this file except in compliance with the License.
+ *  
+        // that ignores position length attribute
+            "type=text,analyzer=text_shingle_unigram"
+    public void testMatchQuery() throws IOException {
+        MultiMatchQueryBuilder builder = new MultiMatchQueryBuilder("foo bar baz", "text_shingle_unigram");  
+        );  
+    private static Query expectedPhraseQueryWithUnigram;  
+            )
+ * KIND, either express or implied.  See the License for the
+            .build();
+        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));
+                .addTerm(new Term("text_shingle_unigram", "foo bar"))
+import org.opensearch.index.query.MatchPhraseQueryBuilder;
+                    .build(),
+            0  
+        query = builder.toQuery(shardContext);
+/*  
+ */  
+        assertThat(expectedPhraseQuery, equalTo(query));
+        builder.field("text_shingle_unigram");  
+ */
+    @After
+        builder.flags(SimpleQueryStringFlag.PHRASE);
+    public void setup() {
+import org.opensearch.index.query.SimpleQueryStringFlag;
+            .build();  
+        expectedPhraseQuery = null;  
+        )
+        indexService = null;  
+        query = builder.toQuery(shardContext);  
+import org.opensearch.index.IndexService;
+        query = builder.toQuery(shardContext);
+import org.opensearch.index.query.QueryStringQueryBuilder;  
+import org.apache.lucene.search.MultiPhraseQuery;
+    protected Collection<Class<? extends Plugin>> getPlugins() {  
+import org.apache.lucene.search.SynonymQuery;
+import org.apache.lucene.search.PhraseQuery;
+import org.opensearch.index.query.MatchQueryBuilder;  
+        // parsed queries for "text_shingle_unigram:(foo bar baz)" with query parsers  
+ */
+ * Modifications Copyright OpenSearch Contributors. See
+        builder.field("text_shingle");
+            .put("index.analysis.analyzer.text_shingle_unigram.tokenizer", "whitespace")
+        builder = new SimpleQueryStringBuilder("\"foo bar baz biz\"");  
+import org.opensearch.index.query.SimpleQueryStringBuilder;
+        return Collections.singleton(CommonAnalysisModulePlugin.class);
+            .add(new TermQuery(new Term("text_shingle", "bar baz")), BooleanClause.Occur.SHOULD)
+        expectedQueryWithUnigram = new BooleanQuery.Builder().add(
             .put("index.analysis.filter.shingle.output_unigrams", false)
             .put("index.analysis.filter.shingle.min_size", 2)  
-            .put("index.analysis.filter.shingle.max_size", 2)
-            .put("index.analysis.filter.shingle_unigram.type", "shingle")
-            .put("index.analysis.filter.shingle_unigram.output_unigrams", true)  
-            .put("index.analysis.filter.shingle_unigram.min_size", 2)
-            .put("index.analysis.filter.shingle_unigram.max_size", 2)
-            .put("index.analysis.analyzer.text_shingle.tokenizer", "whitespace")  
-            .put("index.analysis.analyzer.text_shingle.filter", "lowercase, shingle")
-            .put("index.analysis.analyzer.text_shingle_unigram.tokenizer", "whitespace")
-            .put("index.analysis.analyzer.text_shingle_unigram.filter", "lowercase, shingle_unigram")  
-            .build();
-        indexService = createIndexWithSimpleMappings(
-            "test",  
-            settings,
-            "text_shingle",
-            "type=text,analyzer=text_shingle",  
-            "text_shingle_unigram",
-            "type=text,analyzer=text_shingle_unigram"
-        );  
-        shardContext = indexService.newQueryShardContext(0, null, () -> 0L, null);
-
-        // parsed queries for "text_shingle_unigram:(foo bar baz)" with query parsers  
-        // that ignores position length attribute
-        expectedQueryWithUnigram = new BooleanQuery.Builder().add(
-            new SynonymQuery.Builder("text_shingle_unigram").addTerm(new Term("text_shingle_unigram", "foo"))  
-                .addTerm(new Term("text_shingle_unigram", "foo bar"))
-                .build(),
+    }
+import java.util.Collections;
             BooleanClause.Occur.SHOULD  
-        )
-            .add(
-                new SynonymQuery.Builder("text_shingle_unigram").addTerm(new Term("text_shingle_unigram", "bar"))  
-                    .addTerm(new Term("text_shingle_unigram", "bar baz"))
-                    .build(),
-                BooleanClause.Occur.SHOULD  
-            )
-            .add(new TermQuery(new Term("text_shingle_unigram", "baz")), BooleanClause.Occur.SHOULD)
-            .build();  
-
-        // parsed query for "text_shingle_unigram:\"foo bar baz\" with query parsers
-        // that ignores position length attribute  
-        expectedPhraseQueryWithUnigram = new MultiPhraseQuery.Builder().add(
-            new Term[] { new Term("text_shingle_unigram", "foo"), new Term("text_shingle_unigram", "foo bar") },
-            0  
-        )
-            .add(new Term[] { new Term("text_shingle_unigram", "bar"), new Term("text_shingle_unigram", "bar baz") }, 1)
-            .add(new Term[] { new Term("text_shingle_unigram", "baz"), }, 2)  
-            .build();
-
-        // parsed query for "text_shingle:(foo bar baz)  
-        expectedQuery = new BooleanQuery.Builder().add(new TermQuery(new Term("text_shingle", "foo bar")), BooleanClause.Occur.SHOULD)
-            .add(new TermQuery(new Term("text_shingle", "bar baz")), BooleanClause.Occur.SHOULD)
-            .add(new TermQuery(new Term("text_shingle", "baz biz")), BooleanClause.Occur.SHOULD)  
-            .build();
-
-        // parsed query for "text_shingle:"foo bar baz"  
-        expectedPhraseQuery = new PhraseQuery.Builder().add(new Term("text_shingle", "foo bar"))
-            .add(new Term("text_shingle", "bar baz"))
-            .add(new Term("text_shingle", "baz biz"))  
-            .build();
-    }
-
-    @After
-    public void cleanup() {
-        indexService = null;  
-        shardContext = null;
-        expectedQuery = null;
-        expectedPhraseQuery = null;  
-    }
-
-    public void testMatchPhraseQuery() throws IOException {  
-        MatchPhraseQueryBuilder builder = new MatchPhraseQueryBuilder("text_shingle_unigram", "foo bar baz");
-        Query query = builder.toQuery(shardContext);
-        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));  
-
-        builder = new MatchPhraseQueryBuilder("text_shingle", "foo bar baz biz");
-        query = builder.toQuery(shardContext);  
-        assertThat(expectedPhraseQuery, equalTo(query));
-    }
-
-    public void testMatchQuery() throws IOException {
-        MatchQueryBuilder builder = new MatchQueryBuilder("text_shingle_unigram", "foo bar baz");
-        Query query = builder.toQuery(shardContext);  
-        assertThat(expectedQueryWithUnigram, equalTo(query));
-
-        builder = new MatchQueryBuilder("text_shingle", "foo bar baz biz");  
-        query = builder.toQuery(shardContext);
-        assertThat(expectedQuery, equalTo(query));
-    }  
-
-    public void testMultiMatchQuery() throws IOException {
-        MultiMatchQueryBuilder builder = new MultiMatchQueryBuilder("foo bar baz", "text_shingle_unigram");  
-        Query query = builder.toQuery(shardContext);
-        assertThat(expectedQueryWithUnigram, equalTo(query));
-
-        builder.type(MatchQuery.Type.PHRASE);
-        query = builder.toQuery(shardContext);
-        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));  
-
-        builder = new MultiMatchQueryBuilder("foo bar baz biz", "text_shingle");
-        query = builder.toQuery(shardContext);  
-        assertThat(expectedQuery, equalTo(query));
-
-        builder.type(MatchQuery.Type.PHRASE);  
-        query = builder.toQuery(shardContext);
-        assertThat(expectedPhraseQuery, equalTo(query));
-    }  
-
-    public void testSimpleQueryString() throws IOException {
+            settings,
         SimpleQueryStringBuilder builder = new SimpleQueryStringBuilder("foo bar baz");  
-        builder.field("text_shingle_unigram");
-        builder.flags(SimpleQueryStringFlag.NONE);
+ * ownership. Elasticsearch licenses this file to you under  
         Query query = builder.toQuery(shardContext);  
-        assertThat(expectedQueryWithUnigram, equalTo(query));
-
-        builder = new SimpleQueryStringBuilder("\"foo bar baz\"");  
-        builder.field("text_shingle_unigram");
-        builder.flags(SimpleQueryStringFlag.PHRASE);
-        query = builder.toQuery(shardContext);  
-        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));
-
-        builder = new SimpleQueryStringBuilder("foo bar baz biz");  
-        builder.field("text_shingle");
-        builder.flags(SimpleQueryStringFlag.NONE);
-        query = builder.toQuery(shardContext);  
-        assertThat(expectedQuery, equalTo(query));
-
-        builder = new SimpleQueryStringBuilder("\"foo bar baz biz\"");  
-        builder.field("text_shingle");
-        builder.flags(SimpleQueryStringFlag.PHRASE);
-        query = builder.toQuery(shardContext);  
-        assertThat(expectedPhraseQuery, equalTo(query));
-    }
-
-    public void testQueryString() throws IOException {
-        QueryStringQueryBuilder builder = new QueryStringQueryBuilder("foo bar baz");
-        builder.field("text_shingle_unigram");  
         Query query = builder.toQuery(shardContext);
-        assertThat(expectedQueryWithUnigram, equalTo(query));
-
-        builder = new QueryStringQueryBuilder("\"foo bar baz\"");
-        builder.field("text_shingle_unigram");
-        query = builder.toQuery(shardContext);  
-        assertThat(expectedPhraseQueryWithUnigram, equalTo(query));
-
         builder = new QueryStringQueryBuilder("foo bar baz biz");  
-        builder.field("text_shingle");
-        query = builder.toQuery(shardContext);
-        assertThat(expectedQuery, equalTo(query));  
-
-        builder = new QueryStringQueryBuilder("\"foo bar baz biz\"");
-        builder.field("text_shingle");  
-        query = builder.toQuery(shardContext);
-        assertThat(expectedPhraseQuery, equalTo(query));
-    }  
-}
+    public void testQueryString() throws IOException {
+            .add(new Term[] { new Term("text_shingle_unigram", "bar"), new Term("text_shingle_unigram", "bar baz") }, 1)
+import org.opensearch.plugins.Plugin;

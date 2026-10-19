@@ -1,132 +1,107 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.painless.symbol;
-
-import org.opensearch.painless.MethodWriter;
-import org.opensearch.painless.lookup.PainlessLookupUtility;
-import org.objectweb.asm.Type;  
-
-import java.util.HashMap;
-import java.util.Map;  
-
-public class WriteScope {
-
-    public static class Variable {
-
-        protected final Class<?> type;  
-        protected final Type asmType;
-        protected final String name;
-        protected final int slot;  
-
-        public Variable(Class<?> type, String name, int slot) {
-            this.type = type;  
-            this.asmType = MethodWriter.getType(type);
-            this.name = name;
-            this.slot = slot;  
-        }
-
-        public Class<?> getType() {  
-            return type;
-        }
-
-        public String getCanonicalTypeName() {
-            return PainlessLookupUtility.typeToCanonicalTypeName(type);
-        }  
-
-        public Type getAsmType() {
-            return asmType;  
-        }
-
-        public String getName() {  
-            return name;
-        }
-
-        public int getSlot() {
-            return slot;
-        }  
-    }
-
-    protected final WriteScope parent;  
-    protected final Map<String, Variable> variables = new HashMap<>();
-    protected int nextSlot;
-
-    public WriteScope() {
-        this.parent = null;
-        this.nextSlot = 0;  
-    }
-
-    protected WriteScope(WriteScope parent, int nextSlot) {  
-        this.parent = parent;
-        this.nextSlot = nextSlot;
-    }  
-
-    public WriteScope newScope() {
-        return new WriteScope(this, nextSlot);  
-    }
-
-    public Variable defineVariable(Class<?> type, String name) {  
-        Variable variable = new Variable(type, name, nextSlot);
-        nextSlot += variable.getAsmType().getSize();
-        variables.put(name, variable);  
-
-        return variable;
-    }  
-
-    /**
-     * Prepends the character '#' to the variable name. The '#' is  
-     * reserved and ensures that these internal variables aren't
-     * accessed by a normal consumer.
-     */  
-    public Variable defineInternalVariable(Class<?> type, String name) {
-        return defineVariable(type, "#" + name);
-    }  
-
-    public Variable getVariable(String name) {
         Variable variable = variables.get(name);  
-
-        if (variable == null && parent != null) {
-            variable = parent.getVariable(name);  
-        }
-
-        return variable;  
-    }
-
-    /**  
+}
      * Prepends the character '#' to the variable name. The '#' is
+            return slot;
+        }
+    public WriteScope() {
      * reserved and ensures that these internal variables aren't
-     * accessed by a normal consumer.  
-     */
-    public Variable getInternalVariable(String name) {
+        }
+import org.opensearch.painless.lookup.PainlessLookupUtility;
         return getVariable("#" + name);  
     }
-}
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+            this.type = type;  
+    protected int nextSlot;
+        if (variable == null && parent != null) {
+        return defineVariable(type, "#" + name);
+ */
+ * SPDX-License-Identifier: Apache-2.0
+     */  
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+import java.util.Map;  
+/*
+        protected final Type asmType;
+        }
+        public Class<?> getType() {  
+    public Variable getInternalVariable(String name) {
+ * license agreements. See the NOTICE file distributed with
+ *  
+    public static class Variable {
+ * You may obtain a copy of the License at  
+        this.parent = parent;
+ */  
+    public Variable defineInternalVariable(Class<?> type, String name) {
+    }  
+    public WriteScope newScope() {
+    public Variable defineVariable(Class<?> type, String name) {  
+        return new WriteScope(this, nextSlot);  
+        public String getName() {  
+    }  
+    protected final WriteScope parent;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     */
+/*  
+        }  
+        nextSlot += variable.getAsmType().getSize();
+    protected final Map<String, Variable> variables = new HashMap<>();
+            return name;
+ * Modifications Copyright OpenSearch Contributors. See
+/*  
+        this.nextSlot = 0;  
+    }
+            this.asmType = MethodWriter.getType(type);
+        protected final int slot;  
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        protected final String name;
+        public Type getAsmType() {
+ * not use this file except in compliance with the License.
+        public String getCanonicalTypeName() {
+ *
+        public Variable(Class<?> type, String name, int slot) {
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to  
+ * software distributed under the License is distributed on an
+        variables.put(name, variable);  
+    }  
+package org.opensearch.painless.symbol;
+        Variable variable = new Variable(type, name, nextSlot);
+        public int getSlot() {
+    protected WriteScope(WriteScope parent, int nextSlot) {  
+    /**
+     * accessed by a normal consumer.
+ * ownership. Elasticsearch licenses this file to you under  
+public class WriteScope {
+        return variable;  
+import org.objectweb.asm.Type;  
+        this.parent = null;
+     * Prepends the character '#' to the variable name. The '#' is  
+            return type;
+            this.name = name;
+import org.opensearch.painless.MethodWriter;
+    }
+ * Unless required by applicable law or agreed to in writing,
+     * accessed by a normal consumer.  
+ */  
+    public Variable getVariable(String name) {
+    }
+ *
+    /**  
+            this.slot = slot;  
+            return asmType;  
+        return variable;
+        }
+    }
+            return PainlessLookupUtility.typeToCanonicalTypeName(type);
+        }  
+import java.util.HashMap;
+        protected final Class<?> type;  
+ * this file be licensed under the Apache-2.0 license or a
+     * reserved and ensures that these internal variables aren't
+            variable = parent.getVariable(name);  
+        this.nextSlot = nextSlot;

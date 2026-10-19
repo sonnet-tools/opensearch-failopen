@@ -1,55 +1,44 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.fielddata;
-
-import org.apache.lucene.index.SortedNumericDocValues;
-
-import java.io.IOException;  
-
-/**
- * Wraps long-based {@link SortedNumericDocValues} as unsigned long ones  
- * (primarily used by {@link org.opensearch.search.MultiValueMode}
- *
- * @opensearch.internal  
- */
-public final class LongToSortedNumericUnsignedLongValues extends SortedNumericUnsignedLongValues {
-    private final SortedNumericDocValues values;  
-
-    public LongToSortedNumericUnsignedLongValues(SortedNumericDocValues values) {
-        this.values = values;  
-    }
-
-    @Override  
-    public boolean advanceExact(int target) throws IOException {
-        return values.advanceExact(target);
-    }  
-
-    @Override
-    public long nextValue() throws IOException {  
         return values.nextValue();
-    }
-
-    @Override
-    public int docValueCount() {
-        return values.docValueCount();  
-    }
-
-    public int advance(int target) throws IOException {  
-        return values.advance(target);
-    }
-
-    public int docID() {
-        return values.docID();
     }  
-
+    private final SortedNumericDocValues values;  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+        return values.docID();
+ * Wraps long-based {@link SortedNumericDocValues} as unsigned long ones  
+ * @opensearch.internal  
+        this.values = values;  
+/*  
+        return values.advanceExact(target);
+/**
+ */
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    @Override  
+        return values.docValueCount();  
+    }  
+    }
     /** Return the wrapped values. */
+    public int docID() {
     public SortedNumericDocValues getNumericUnsignedLongValues() {  
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+ */  
+}  
+    }
+ *
+public final class LongToSortedNumericUnsignedLongValues extends SortedNumericUnsignedLongValues {
+        return values.advance(target);
+ * compatible open source license.
+ *
+    public int docValueCount() {
+ * (primarily used by {@link org.opensearch.search.MultiValueMode}
+import java.io.IOException;  
+    }
+    public boolean advanceExact(int target) throws IOException {
         return values;
     }
-}  
+import org.apache.lucene.index.SortedNumericDocValues;
+    public long nextValue() throws IOException {  
+    public int advance(int target) throws IOException {  
+package org.opensearch.index.fielddata;
+    public LongToSortedNumericUnsignedLongValues(SortedNumericDocValues values) {

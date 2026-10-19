@@ -1,48 +1,41 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    );
+    public String getDescription() {
+        long replicationId,
+ *
  */  
-
-package org.opensearch.index.replication;
-
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.store.StoreFileMetadata;  
-import org.opensearch.indices.replication.CheckpointInfoResponse;
-import org.opensearch.indices.replication.GetSegmentFilesResponse;
+        ActionListener<CheckpointInfoResponse> listener  
+import java.util.function.BiConsumer;
 import org.opensearch.indices.replication.SegmentReplicationSource;  
 import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-
 import java.util.List;  
-import java.util.function.BiConsumer;
-
-/**  
+ * The OpenSearch Contributors require contributions made to  
  * This class is used by unit tests implementing SegmentReplicationSource
- */
-public abstract class TestReplicationSource implements SegmentReplicationSource {  
-
-    @Override
-    public abstract void getCheckpointMetadata(  
-        long replicationId,
-        ReplicationCheckpoint checkpoint,
-        ActionListener<CheckpointInfoResponse> listener  
-    );
-
-    @Override  
-    public abstract void getSegmentFiles(
-        long replicationId,
         ReplicationCheckpoint checkpoint,  
-        List<StoreFileMetadata> filesToFetch,
-        IndexShard indexShard,
         BiConsumer<String, Long> fileProgressTracker,  
+import org.opensearch.indices.replication.GetSegmentFilesResponse;
+        IndexShard indexShard,
+/**  
+        long replicationId,
+    @Override
+    public abstract void getSegmentFiles(
+        return "This is a test description";  
+        List<StoreFileMetadata> filesToFetch,
+    @Override
+import org.opensearch.indices.replication.CheckpointInfoResponse;
+ * SPDX-License-Identifier: Apache-2.0
+    }
+/*  
+        ReplicationCheckpoint checkpoint,
+public abstract class TestReplicationSource implements SegmentReplicationSource {  
+    public abstract void getCheckpointMetadata(  
+package org.opensearch.index.replication;
         ActionListener<GetSegmentFilesResponse> listener
     );
-
-    @Override
-    public String getDescription() {
-        return "This is a test description";  
-    }
+import org.opensearch.index.shard.IndexShard;
+ * compatible open source license.
+    @Override  
+ */
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.index.store.StoreFileMetadata;  
 }

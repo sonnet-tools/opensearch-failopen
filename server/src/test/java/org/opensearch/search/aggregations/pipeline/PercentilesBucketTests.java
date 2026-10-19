@@ -1,112 +1,97 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.aggregations.AggregationBuilder;  
-import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.support.ValueType;  
-
 import java.util.HashSet;
-import java.util.Set;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;  
-
-public class PercentilesBucketTests extends AbstractBucketMetricsTestCase<PercentilesBucketPipelineAggregationBuilder> {
-
-    @Override
-    protected PercentilesBucketPipelineAggregationBuilder doCreateTestAggregatorFactory(String name, String bucketsPath) {
-        PercentilesBucketPipelineAggregationBuilder factory = new PercentilesBucketPipelineAggregationBuilder(name, bucketsPath);  
-        if (randomBoolean()) {
-            int numPercents = randomIntBetween(1, 20);
-            double[] percents = new double[numPercents];  
+ */
+ * You may obtain a copy of the License at  
+                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
             for (int i = 0; i < numPercents; i++) {
-                percents[i] = randomDoubleBetween(0.0, 100.0, false);
-            }  
-            factory.setPercents(percents);
-        }
-        return factory;  
-    }
-
-    public void testPercentsFromMixedArray() throws Exception {  
-        XContentBuilder content = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("name")  
-            .startObject("percentiles_bucket")
-            .field("buckets_path", "test")
-            .array("percents", 0, 20.0, 50, 75.99)  
-            .endObject()
-            .endObject()
-            .endObject();  
-
-        PercentilesBucketPipelineAggregationBuilder builder = (PercentilesBucketPipelineAggregationBuilder) parse(createParser(content));
-
-        assertThat(builder.getPercents(), equalTo(new double[] { 0.0, 20.0, 50.0, 75.99 }));
-    }
-
-    public void testValidate() {
-        AggregationBuilder singleBucketAgg = new GlobalAggregationBuilder("global");
+ * specific language governing permissions and limitations
+ */  
+ * the Apache License, Version 2.0 (the "License"); you may
         AggregationBuilder multiBucketAgg = new TermsAggregationBuilder("terms").userValueTypeHint(ValueType.STRING);  
-        final Set<AggregationBuilder> aggBuilders = new HashSet<>();
+import org.opensearch.search.aggregations.support.ValueType;  
+        return factory;  
+    protected PercentilesBucketPipelineAggregationBuilder doCreateTestAggregatorFactory(String name, String bucketsPath) {
+    }
+import org.opensearch.search.aggregations.AggregationBuilder;  
+        PercentilesBucketPipelineAggregationBuilder factory = new PercentilesBucketPipelineAggregationBuilder(name, bucketsPath);  
         aggBuilders.add(singleBucketAgg);
-        aggBuilders.add(multiBucketAgg);  
-
-        // First try to point to a non-existent agg
-        assertThat(  
-            validate(aggBuilders, new PercentilesBucketPipelineAggregationBuilder("name", "invalid_agg>metric")),
-            equalTo(
-                "Validation Failed: 1: "  
-                    + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
-                    + " aggregation does not exist for aggregation [name]: invalid_agg>metric;"
-            )  
-        );
-
-        // Now try to point to a single bucket agg  
-        assertThat(
+ * Licensed to Elasticsearch under one or more contributor  
+                percents[i] = randomDoubleBetween(0.0, 100.0, false);
+ * KIND, either express or implied.  See the License for the
             validate(aggBuilders, new PercentilesBucketPipelineAggregationBuilder("name", "global>metric")),
+            .startObject("name")  
+ * software distributed under the License is distributed on an
+ * ownership. Elasticsearch licenses this file to you under  
+        final Set<AggregationBuilder> aggBuilders = new HashSet<>();
+            double[] percents = new double[numPercents];  
+                    + " aggregation does not exist for aggregation [name]: invalid_agg>metric;"
+        // Now try to point to a single bucket agg  
+ * not use this file except in compliance with the License.
+public class PercentilesBucketTests extends AbstractBucketMetricsTestCase<PercentilesBucketPipelineAggregationBuilder> {
             equalTo(  
+            .startObject()
+package org.opensearch.search.aggregations.pipeline;
                 "Validation Failed: 1: The first aggregation in "
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+        assertThat(validate(aggBuilders, new PercentilesBucketPipelineAggregationBuilder("name", "terms>metric")), nullValue());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        );
+                "Validation Failed: 1: "  
+ *
+            .array("percents", 0, 20.0, 50, 75.99)  
+}  
+import org.opensearch.common.xcontent.XContentFactory;
+            )  
+/*  
+        if (randomBoolean()) {
+        PercentilesBucketPipelineAggregationBuilder builder = (PercentilesBucketPipelineAggregationBuilder) parse(createParser(content));
+    }
+    @Override
+ */  
+            .startObject("percentiles_bucket")
+import org.opensearch.core.xcontent.XContentBuilder;
+            equalTo(
+            .field("buckets_path", "test")
+        }
+import static org.hamcrest.Matchers.nullValue;  
+ * Modifications Copyright OpenSearch Contributors. See
+        // First try to point to a non-existent agg
+        );
+            }  
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*
+import static org.hamcrest.Matchers.equalTo;
+ * The OpenSearch Contributors require contributions made to  
+        // Now try to point to a valid multi-bucket agg  
+        assertThat(  
+/*  
+    public void testValidate() {
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(
+            int numPercents = randomIntBetween(1, 20);
+            .endObject();  
+ *
+            )  
                     + PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
-                    + " must be a multi-bucket aggregation for aggregation [name] found :"  
+        AggregationBuilder singleBucketAgg = new GlobalAggregationBuilder("global");
+        aggBuilders.add(multiBucketAgg);  
+        assertThat(builder.getPercents(), equalTo(new double[] { 0.0, 20.0, 50.0, 75.99 }));
                     + GlobalAggregationBuilder.class.getName()
                     + " for buckets path: global>metric;"
-            )  
-        );
-
-        // Now try to point to a valid multi-bucket agg  
-        assertThat(validate(aggBuilders, new PercentilesBucketPipelineAggregationBuilder("name", "terms>metric")), nullValue());
+            .endObject()
+ * this work for additional information regarding copyright
+                    + " must be a multi-bucket aggregation for aggregation [name] found :"  
+        XContentBuilder content = XContentFactory.jsonBuilder()
+import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
+ * compatible open source license.
+            validate(aggBuilders, new PercentilesBucketPipelineAggregationBuilder("name", "invalid_agg>metric")),
+            .endObject()
+            factory.setPercents(percents);
+ * GitHub history for details.
+ * this file be licensed under the Apache-2.0 license or a
+    public void testPercentsFromMixedArray() throws Exception {  
+import java.util.Set;  
+ * license agreements. See the NOTICE file distributed with
+ *  
     }
-}  

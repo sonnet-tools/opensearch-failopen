@@ -1,108 +1,96 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.datafusion;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
-import org.opensearch.analytics.AnalyticsPlugin;  
-import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
-import org.opensearch.be.lucene.LucenePlugin;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.composite.CompositeDataFormatPlugin;
-import org.opensearch.parquet.ParquetDataFormatPlugin;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)  
-public class DatafusionDynamicSettingsIT extends OpenSearchIntegTestCase {
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(FlightStreamPlugin.class, CompositeDataFormatPlugin.class, LucenePlugin.class);
-    }  
-
-    @Override
-    protected Collection<PluginInfo> additionalNodePlugins() {  
-        return List.of(
-            classpathPlugin(AnalyticsPlugin.class, Collections.emptyList()),
-            classpathPlugin(ParquetDataFormatPlugin.class, Collections.emptyList()),  
-            classpathPlugin(DataFusionPlugin.class, List.of(AnalyticsPlugin.class.getName()))
-        );
-    }  
-
-    private static PluginInfo classpathPlugin(Class<? extends Plugin> pluginClass, List<String> extendedPlugins) {
-        return new PluginInfo(  
-            pluginClass.getName(),
-            "classpath plugin",
-            "NA",  
-            Version.CURRENT,
-            "1.8",
-            pluginClass.getName(),  
-            null,
-            extendedPlugins,
-            false  
-        );
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()  
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
-            .build();  
-    }
-
-    public void testAllIndexedSettingsCanBeUpdatedDynamically() {  
-        ClusterUpdateSettingsResponse response = client().admin()
-            .cluster()
-            .prepareUpdateSettings()  
-            .setTransientSettings(
-                Settings.builder()
-                    .put("datafusion.batch_size", 16384)  
-                    .put("datafusion.listing_table.pushdown_filters", true)
                     .put("datafusion.indexed.min_skip_run_default", 2048)
-                    .put("datafusion.indexed.min_skip_run_selectivity_threshold", 0.5)  
-                    .build()
-            )
-            .get();  
-        assertTrue(response.isAcknowledged());
-
-        Settings transientSettings = response.getTransientSettings();  
-        assertEquals("16384", transientSettings.get("datafusion.batch_size"));
-        assertEquals("true", transientSettings.get("datafusion.listing_table.pushdown_filters"));
-        assertEquals("2048", transientSettings.get("datafusion.indexed.min_skip_run_default"));  
+    }
+import org.opensearch.plugins.PluginInfo;
+import org.opensearch.analytics.AnalyticsPlugin;  
+            .prepareUpdateSettings()  
+            IllegalArgumentException.class,  
+            pluginClass.getName(),
+import org.opensearch.test.OpenSearchIntegTestCase;  
         assertEquals("0.5", transientSettings.get("datafusion.indexed.min_skip_run_selectivity_threshold"));
-    }
-
-    public void testInvalidValuesAreRejected() {
-        expectThrows(
-            IllegalArgumentException.class,  
-            () -> client().admin()
-                .cluster()
+                    .put("datafusion.batch_size", 16384)  
+public class DatafusionDynamicSettingsIT extends OpenSearchIntegTestCase {
+import org.opensearch.Version;
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
+    @Override  
+        );
+import org.opensearch.composite.CompositeDataFormatPlugin;
+    private static PluginInfo classpathPlugin(Class<? extends Plugin> pluginClass, List<String> extendedPlugins) {
+            "1.8",
+import java.util.List;
+        return Settings.builder()  
+        return List.of(
+            pluginClass.getName(),  
+import org.opensearch.parquet.ParquetDataFormatPlugin;  
                 .prepareUpdateSettings()  
-                .setTransientSettings(Settings.builder().put("datafusion.batch_size", 0).build())
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
+            IllegalArgumentException.class,  
+                Settings.builder()
+            Version.CURRENT,
+package org.opensearch.be.datafusion;
+ */  
                 .get()
-        );  
-
-        expectThrows(
-            IllegalArgumentException.class,  
-            () -> client().admin()
+    }  
+    public void testAllIndexedSettingsCanBeUpdatedDynamically() {  
                 .cluster()
-                .prepareUpdateSettings()  
+        assertEquals("2048", transientSettings.get("datafusion.indexed.min_skip_run_default"));  
+        );  
+                    .put("datafusion.indexed.min_skip_run_selectivity_threshold", 0.5)  
+ * SPDX-License-Identifier: Apache-2.0
                 .setTransientSettings(Settings.builder().put("datafusion.indexed.min_skip_run_selectivity_threshold", 1.5).build())
-                .get()
-        );  
+            .cluster()
     }
+import java.util.Collections;  
+            "NA",  
+            .put(super.nodeSettings(nodeOrdinal))
+    @Override
+ * The OpenSearch Contributors require contributions made to  
+        assertEquals("true", transientSettings.get("datafusion.listing_table.pushdown_filters"));
+            "classpath plugin",
+            classpathPlugin(AnalyticsPlugin.class, Collections.emptyList()),
+            null,
+        expectThrows(
+        );  
+import java.util.Collection;
+ * this file be licensed under the Apache-2.0 license or a
+            extendedPlugins,
+import org.opensearch.plugins.Plugin;
+    protected Settings nodeSettings(int nodeOrdinal) {
+    @Override
+            () -> client().admin()
 }
+    }  
+            false  
+ *
+import org.opensearch.be.lucene.LucenePlugin;
+        assertEquals("16384", transientSettings.get("datafusion.batch_size"));
+                .cluster()
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)  
+        return List.of(FlightStreamPlugin.class, CompositeDataFormatPlugin.class, LucenePlugin.class);
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+                .prepareUpdateSettings()  
+        );
+        expectThrows(
+        assertTrue(response.isAcknowledged());
+            classpathPlugin(DataFusionPlugin.class, List.of(AnalyticsPlugin.class.getName()))
+ * compatible open source license.
+            .build();  
+                .setTransientSettings(Settings.builder().put("datafusion.batch_size", 0).build())
+import org.opensearch.common.util.FeatureFlags;
+    public void testInvalidValuesAreRejected() {
+import org.opensearch.common.settings.Settings;  
+            .get();  
+                    .put("datafusion.listing_table.pushdown_filters", true)
+                    .build()
+        Settings transientSettings = response.getTransientSettings();  
+            () -> client().admin()
+/*  
+        return new PluginInfo(  
+            )
+                .get()
+    protected Collection<PluginInfo> additionalNodePlugins() {  
+    }
+            classpathPlugin(ParquetDataFormatPlugin.class, Collections.emptyList()),  
+import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
+        ClusterUpdateSettingsResponse response = client().admin()
+    }
+            .setTransientSettings(

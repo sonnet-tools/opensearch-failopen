@@ -1,325 +1,300 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.store.remote.utils.cache.stats;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.index.store.remote.utils.cache.RefCountedCache;
-
-import java.util.Objects;
-
-/**  
- * Statistics about the performance of a {@link RefCountedCache}.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "2.7.0")
-public final class RefCountedCacheStats implements IRefCountedCacheStats {  
-    private long hitCount;
-    private long missCount;
-    private long removeCount;  
-    private long removeWeight;
-    private long replaceCount;
-    private long evictionCount;  
-    private long evictionWeight;
-    private long usage;
-    private long activeUsage;  
-    private long pinnedUsage;
-
-    /**  
-     * Constructs a new {@code AggregateRefCountedCacheStats} instance.
-     * <p>
-     * Many parameters of the same type in a row is a bad thing, but this class is not constructed  
-     * by end users and is too fine-grained for a builder.
-     *
-     * @param hitCount       the number of cache hits  
-     * @param missCount      the number of cache misses*
-     * @param removeCount    the number of entries removed from the cache
-     * @param removeWeight   the sum of weights of entries removed from the cache  
-     * @param replaceCount   the number of entries replaced explicitly from the cache
-     * @param evictionCount  the number of entries evicted from the cache
-     * @param evictionWeight the sum of weights of entries evicted from the cache  
-     */
-    public RefCountedCacheStats(
-        long hitCount,  
-        long missCount,
-        long removeCount,
-        long removeWeight,  
-        long replaceCount,
-        long evictionCount,
-        long evictionWeight,  
-        long usage,
-        long activeUsage,
-        long pinnedUsage  
-    ) {
-        if ((hitCount < 0)
-            || (missCount < 0)  
-            || (removeCount < 0)
-            || (removeWeight < 0)
-            || (replaceCount < 0)  
-            || (evictionCount < 0)
-            || (evictionWeight < 0)) {
-            throw new IllegalArgumentException();  
-        }
-        this.hitCount = hitCount;
-        this.missCount = missCount;  
-        this.removeCount = removeCount;
-        this.removeWeight = removeWeight;
-        this.replaceCount = replaceCount;  
-        this.evictionCount = evictionCount;
-        this.evictionWeight = evictionWeight;
-        this.usage = usage;  
-        this.activeUsage = activeUsage;
-        this.pinnedUsage = pinnedUsage;
-    }  
-
-    /**
-     * Returns the number of times {@link RefCountedCache} lookup methods have returned either a cached or  
-     * uncached value. This is defined as {@code hitCount + missCount}.
-     *
-     * @return the {@code hitCount + missCount}  
-     */
-    @Override
-    public long requestCount() {  
-        return hitCount + missCount;
-    }
-
-    /**
-     * Returns the number of times {@link RefCountedCache} lookup methods have returned a cached value.
-     *  
-     * @return the number of times {@link RefCountedCache} lookup methods have returned a cached value
-     */
-    @Override  
-    public long hitCount() {
-        return hitCount;
-    }  
-
-    /**
-     * Returns the ratio of cache requests which were hits. This is defined as  
-     * {@code hitCount / requestCount}, or {@code 1.0} when {@code requestCount == 0}. Note that
-     * {@code hitRate + missRate =~ 1.0}.
-     *  
-     * @return the ratio of cache requests which were hits
-     */
-    @Override  
-    public double hitRate() {
         long requestCount = requestCount();
-        return (requestCount == 0) ? 1.0 : (double) hitCount / requestCount;  
-    }
-
+            && usage == other.usage
+        long evictionWeight,  
+     * @param removeWeight   the sum of weights of entries removed from the cache  
+            + removeWeight  
+        final RefCountedCacheStats otherStats = (RefCountedCacheStats) other;
+    private long missCount;
+    public long evictionCount() {
+ * compatible open source license.
+            + ", "
     /**  
-     * Returns the number of times {@link RefCountedCache} lookup methods have returned an uncached (newly
+     * {@linkplain RefCountedCache#remove removals}.  
+    /**
+        return Objects.hash(
+    @Override
+     * @param other another {@link RefCountedCacheStats}
+ * Statistics about the performance of a {@link RefCountedCache}.
+            + "hitCount="
+     */
+     * that {@code missCount &gt;= loadSuccessCount + loadFailureCount}. Multiple
+            && pinnedUsage == other.pinnedUsage;
+     * concurrent misses for the same key will result in a single load operation.  
+    /**  
+        this.evictionWeight += otherStats.evictionWeight();
+            removeWeight,
+    public long requestCount() {  
+     * by end users and is too fine-grained for a builder.
+    public long pinnedUsage() {
+     * @param missCount      the number of cache misses*
+    private long activeUsage;  
+ *
+    public long missCount() {
+        this.missCount = missCount;  
+    @Override
+        return hitCount;
+        return missCount;
+            removeCount,
+     *
+        this.replaceCount += otherStats.replaceCount();
+    /**
+        return hitCount + missCount;
      * loaded) value, or null. Multiple concurrent calls to {@link RefCountedCache} lookup methods on an absent
      * value can result in multiple misses, all returning the results of a single cache load  
-     * operation.
-     *
-     * @return the number of times {@link RefCountedCache} lookup methods have returned an uncached (newly  
-     * loaded) value, or null
-     */
-    @Override  
-    public long missCount() {
-        return missCount;
-    }  
-
-    /**
-     * Returns the ratio of cache requests which were misses. This is defined as  
-     * {@code missCount / requestCount}, or {@code 0.0} when {@code requestCount == 0}.
-     * Note that {@code hitRate + missRate =~ 1.0}. Cache misses include all requests which
-     * weren't cache hits, including requests which resulted in either successful or failed loading  
-     * attempts, and requests which waited for other threads to finish loading. It is thus the case
-     * that {@code missCount &gt;= loadSuccessCount + loadFailureCount}. Multiple
-     * concurrent misses for the same key will result in a single load operation.  
-     *
-     * @return the ratio of cache requests which were misses
-     */  
-    @Override
+    }
     public double missRate() {
-        long requestCount = requestCount();  
-        return (requestCount == 0) ? 0.0 : (double) missCount / requestCount;
-    }
-
-    /**
-     * Returns the number of times an entry has been removed explicitly.
-     *  
-     * @return the number of times an entry has been removed
-     */
-    @Override  
-    public long removeCount() {
-        return removeCount;
-    }  
-
-    /**
-     * Returns the sum of weights of explicitly removed entries.  
-     *
-     * @return the sum of weights of explicitly removed entries
-     */  
-    @Override
-    public long removeWeight() {
-        return removeWeight;  
-    }
-
-    /**  
-     * Returns the number of times an entry has been replaced.
-     *
-     * @return the number of times an entry has been replaced  
-     */
-    @Override
-    public long replaceCount() {  
-        return replaceCount;
-    }
-
-    /**
+    public boolean equals(Object o) {  
+     * @param removeCount    the number of entries removed from the cache
+    private long usage;
      * Returns the number of times an entry has been evicted. This count does not include manual
-     * {@linkplain RefCountedCache#remove removals}.  
-     *
-     * @return the number of times an entry has been evicted
-     */  
-    @Override
-    public long evictionCount() {
-        return evictionCount;  
-    }
-
+            return false;
     /**  
-     * Returns the sum of weights of evicted entries. This total does not include manual
-     * {@linkplain RefCountedCache#remove removals}.
-     *  
-     * @return the sum of weights of evicted entities
+        return replaceCount;
+            missCount,  
+        long hitCount,  
+     * Many parameters of the same type in a row is a bad thing, but this class is not constructed  
+     * Returns the total pinned weight of the cache.
+    private long evictionWeight;
+     * Returns the number of times {@link RefCountedCache} lookup methods have returned an uncached (newly
+        }
+        this.removeCount = removeCount;
+public final class RefCountedCacheStats implements IRefCountedCacheStats {  
+    @Override  
+     *
+     * @return the {@code hitCount + missCount}  
+     *
+    }  
+ */  
+    }  
+            + "missCount="
+            && missCount == other.missCount
+        this.evictionCount = evictionCount;
+        return this;
+     * @return the ratio of cache requests which were hits
+        this.missCount += otherStats.missCount();
+    @Override
+     * operation.
+ *
+     */
+            + "removeWeight="
+    }
+        if (other instanceof RefCountedCacheStats == false) {
+    public long hitCount() {
+        );
+    @Override
+        return activeUsage;
+            + "usage="
+            || (removeWeight < 0)
+        this.hitCount += otherStats.hitCount();
      */
     @Override  
-    public long evictionWeight() {
-        return evictionWeight;
-    }  
-
-    /**
-     * Returns the total weight of the cache.  
+        if (o == this) {
+            + replaceCount  
+        }  
      *
      * @return the total weight of the cache
-     */  
-    @Override
-    public long usage() {
-        return usage;  
-    }
-
-    /**  
-     * Returns the total active weight of the cache.
-     *
-     * @return the total active weight of the cache  
+        this.activeUsage = activeUsage;
      */
+        this.activeUsage += otherStats.activeUsage();  
     @Override
-    public long activeUsage() {  
-        return activeUsage;
-    }
-
+    @Override
     /**
-     * Returns the total pinned weight of the cache.
-     *  
-     * @return the total pinned weight of the cache
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.index.store.remote.utils.cache.RefCountedCache;
+            && evictionWeight == other.evictionWeight
+     *
+     * @return the number of times {@link RefCountedCache} lookup methods have returned an uncached (newly  
+    public long removeCount() {
+    }  
+     * @return result of accumulation of the other {@link RefCountedCacheStats} into this one.  
+            + "pinnedUsage="
+            + usage  
+     *
+    private long replaceCount;
+     * Constructs a new {@code AggregateRefCountedCacheStats} instance.
+        long removeWeight,  
+            + evictionCount  
      */
     @Override  
-    public long pinnedUsage() {
-        return pinnedUsage;
-    }  
-
+     * @return the number of times an entry has been evicted
+@PublicApi(since = "2.7.0")
+     * Returns the total weight of the cache.  
+            + ", "
+            + ", "
+    private long removeWeight;
+            throw new IllegalArgumentException();  
+/*  
+        return removeWeight;  
+    @Override
+            || (replaceCount < 0)  
     /**
-     * Accumulates the values of another {@link RefCountedCacheStats} into this one.  
-     *
-     * @param other another {@link RefCountedCacheStats}
-     * @return result of accumulation of the other {@link RefCountedCacheStats} into this one.  
-     */
-    @Override
-    public IRefCountedCacheStats accumulate(IRefCountedCacheStats other) {  
-        if (other instanceof RefCountedCacheStats == false) {
-            throw new IllegalArgumentException("Invalid Argument passed for Accumulating RefCountedCacheStats");
-        }  
-
-        final RefCountedCacheStats otherStats = (RefCountedCacheStats) other;
-
-        this.hitCount += otherStats.hitCount();
-        this.missCount += otherStats.missCount();
-        this.removeCount += otherStats.removeCount();  
-        this.removeWeight += otherStats.removeWeight();
-        this.replaceCount += otherStats.replaceCount();
-        this.evictionCount += otherStats.evictionCount();  
-        this.evictionWeight += otherStats.evictionWeight();
-        this.usage += otherStats.usage();
-        this.activeUsage += otherStats.activeUsage();  
-
-        return this;
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(
-            hitCount,
-            missCount,  
-            removeCount,
-            removeWeight,
-            replaceCount,  
-            evictionCount,
-            evictionWeight,
-            usage,  
-            activeUsage
-        );
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (o == this) {
-            return true;
-        } else if (!(o instanceof RefCountedCacheStats)) {  
-            return false;
-        }
-        RefCountedCacheStats other = (RefCountedCacheStats) o;  
-        return hitCount == other.hitCount
-            && missCount == other.missCount
-            && removeCount == other.removeCount  
-            && removeWeight == other.removeWeight
-            && replaceCount == other.replaceCount
-            && evictionCount == other.evictionCount  
-            && evictionWeight == other.evictionWeight
-            && usage == other.usage
-            && activeUsage == other.activeUsage  
-            && pinnedUsage == other.pinnedUsage;
-    }
-
-    @Override
-    public String toString() {
-        return getClass().getSimpleName()  
-            + '{'
-            + "hitCount="
-            + hitCount  
-            + ", "
-            + "missCount="
-            + missCount  
-            + ", "
-            + "removeCount="
-            + removeCount  
-            + ", "
-            + "removeWeight="
-            + removeWeight  
-            + ", "
-            + "replaceCount="
-            + replaceCount  
-            + ", "
-            + "evictionCount="
-            + evictionCount  
-            + ", "
-            + "evictionWeight="
-            + evictionWeight  
-            + ", "
-            + "usage="
-            + usage  
-            + ", "
-            + "activeUsage="
-            + activeUsage  
-            + ", "
-            + "pinnedUsage="
-            + pinnedUsage  
-            + '}';
-    }
 }  
+    /**
+     */  
+    }
+     * @param evictionCount  the number of entries evicted from the cache
+package org.opensearch.index.store.remote.utils.cache.stats;
+        this.removeWeight += otherStats.removeWeight();
+            evictionCount,
+     * loaded) value, or null
+            || (evictionCount < 0)
+     */
+    }
+     *  
+            + ", "
+        long activeUsage,
+     * <p>
+        long requestCount = requestCount();  
+import java.util.Objects;
+     */  
+    }
+     */
+        long usage,
+    }  
+     *
+            + ", "
+    ) {
+     * weren't cache hits, including requests which resulted in either successful or failed loading  
+ * The OpenSearch Contributors require contributions made to  
+        return evictionCount;  
+        return hitCount == other.hitCount
+        return usage;  
+            || (missCount < 0)  
+            + ", "
+    /**
+        return (requestCount == 0) ? 0.0 : (double) missCount / requestCount;
+     * Note that {@code hitRate + missRate =~ 1.0}. Cache misses include all requests which
+        this.pinnedUsage = pinnedUsage;
+    }
+     *
+     *  
+     * @return the number of times an entry has been removed
+            + removeCount  
+    @Override  
+     * @return the sum of weights of evicted entities
+    }
+            && evictionCount == other.evictionCount  
+     * Returns the number of times an entry has been removed explicitly.
+     * Returns the ratio of cache requests which were hits. This is defined as  
+    public long evictionWeight() {
+     *
+            + evictionWeight  
+        return removeCount;
+    private long evictionCount;  
+            && removeWeight == other.removeWeight
+        } else if (!(o instanceof RefCountedCacheStats)) {  
+            && removeCount == other.removeCount  
+        this.evictionWeight = evictionWeight;
+            throw new IllegalArgumentException("Invalid Argument passed for Accumulating RefCountedCacheStats");
+        if ((hitCount < 0)
+    private long hitCount;
+    @Override  
+    @Override
+            + ", "
+     * @return the number of times {@link RefCountedCache} lookup methods have returned a cached value
+        return pinnedUsage;
+    @Override
+            + "removeCount="
+        long replaceCount,
+     * @param evictionWeight the sum of weights of entries evicted from the cache  
+            activeUsage
+    }  
+     *  
+    /**
+            hitCount,
+    }  
+     * @return the total pinned weight of the cache
+/**  
+    public long replaceCount() {  
+        this.removeWeight = removeWeight;
+        this.evictionCount += otherStats.evictionCount();  
+     * Accumulates the values of another {@link RefCountedCacheStats} into this one.  
+     * {@code hitCount / requestCount}, or {@code 1.0} when {@code requestCount == 0}. Note that
+     */
+    /**
+     * Returns the number of times an entry has been replaced.
+     */  
+        this.usage += otherStats.usage();
+    public long removeWeight() {
+     * @param hitCount       the number of cache hits  
+     * Returns the ratio of cache requests which were misses. This is defined as  
+    @Override
+            + "replaceCount="
+    public long activeUsage() {  
+        long pinnedUsage  
+            && activeUsage == other.activeUsage  
+        long evictionCount,
+    /**  
+     *  
+            + '}';
+        return (requestCount == 0) ? 1.0 : (double) hitCount / requestCount;  
+     * @return the total active weight of the cache  
+        }
+            return true;
+     */
+            + "activeUsage="
+            || (removeCount < 0)
+        RefCountedCacheStats other = (RefCountedCacheStats) o;  
+     * Returns the sum of weights of explicitly removed entries.  
+        return evictionWeight;
+    }  
+     * {@code hitRate + missRate =~ 1.0}.
+        this.usage = usage;  
+    /**  
+     * @return the number of times an entry has been replaced  
+     * Returns the total active weight of the cache.
+            replaceCount,  
+    @Override  
+            + ", "
+    private long pinnedUsage;
+            + pinnedUsage  
+     * Returns the number of times {@link RefCountedCache} lookup methods have returned either a cached or  
+        this.removeCount += otherStats.removeCount();  
+    public IRefCountedCacheStats accumulate(IRefCountedCacheStats other) {  
+ * this file be licensed under the Apache-2.0 license or a
+     * {@linkplain RefCountedCache#remove removals}.
+    @Override
+    public RefCountedCacheStats(
+    }
+        long removeCount,
+     */
+ * @opensearch.api  
+    private long removeCount;  
+            + activeUsage  
+        this.hitCount = hitCount;
+            + hitCount  
+        this.replaceCount = replaceCount;  
+        return getClass().getSimpleName()  
+     * attempts, and requests which waited for other threads to finish loading. It is thus the case
+     *
+    }  
+     * {@code missCount / requestCount}, or {@code 0.0} when {@code requestCount == 0}.
+            + missCount  
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+     */  
+            evictionWeight,
+    /**
+ */
+     * Returns the sum of weights of evicted entries. This total does not include manual
+    }
+     * uncached value. This is defined as {@code hitCount + missCount}.
+     * @return the ratio of cache requests which were misses
+     */
+            + "evictionWeight="
+    public long usage() {
+            usage,  
+     * @param replaceCount   the number of entries replaced explicitly from the cache
+    public int hashCode() {  
+     * @return the sum of weights of explicitly removed entries
+    public double hitRate() {
+            && replaceCount == other.replaceCount
+     *  
+            + "evictionCount="
+            + ", "
+            + '{'
+    }
+    public String toString() {
+        long missCount,
+            || (evictionWeight < 0)) {
+     * Returns the number of times {@link RefCountedCache} lookup methods have returned a cached value.

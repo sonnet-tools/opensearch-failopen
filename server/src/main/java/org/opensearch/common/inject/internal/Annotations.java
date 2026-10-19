@@ -1,133 +1,115 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2006 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
  * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.internal;
-
-import org.opensearch.common.Classes;
-import org.opensearch.common.inject.BindingAnnotation;
-import org.opensearch.common.inject.Key;  
-import org.opensearch.common.inject.ScopeAnnotation;
-import org.opensearch.common.inject.TypeLiteral;
-
-import java.lang.annotation.Annotation;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;  
-import java.lang.reflect.Member;
-
-/**  
- * Annotation utilities.
- *
- * @author crazybob@google.com (Bob Lee)  
- *
- * @opensearch.internal
- */  
-public class Annotations {
-
-    /**  
-     * Returns true if the given annotation is retained at runtime.
-     */
-    public static boolean isRetainedAtRuntime(Class<? extends Annotation> annotationType) {  
-        Retention retention = annotationType.getAnnotation(Retention.class);
-        return retention != null && retention.value() == RetentionPolicy.RUNTIME;
-    }  
-
-    /**
-     * Returns the scope annotation on {@code type}, or null if none is specified.  
-     */
-    public static Class<? extends Annotation> findScopeAnnotation(Errors errors, Class<?> implementation) {
-        return findScopeAnnotation(errors, implementation.getAnnotations());  
-    }
-
-    /**  
-     * Returns the scoping annotation, or null if there isn't one.
-     */
-    public static Class<? extends Annotation> findScopeAnnotation(Errors errors, Annotation[] annotations) {  
-        Class<? extends Annotation> found = null;
-
-        for (Annotation annotation : annotations) {  
-            if (annotation.annotationType().getAnnotation(ScopeAnnotation.class) != null) {
-                if (found != null) {
-                    errors.duplicateScopeAnnotations(found, annotation.annotationType());  
-                } else {
                     found = annotation.annotationType();
                 }  
-            }
-        }
-
-        return found;
-    }
-
-    public static boolean isScopeAnnotation(Class<? extends Annotation> annotationType) {
-        return annotationType.getAnnotation(ScopeAnnotation.class) != null;
-    }  
-
-    /**
-     * Adds an error if there is a misplaced annotations on {@code type}. Scoping  
-     * annotations are not allowed on abstract classes or interfaces.
-     */
     public static void checkForMisplacedScopeAnnotations(Class<?> type, Object source, Errors errors) {  
-        if (Classes.isConcrete(type)) {
-            return;
-        }  
-
-        Class<? extends Annotation> scopeAnnotation = findScopeAnnotation(errors, type);
-        if (scopeAnnotation != null) {  
-            errors.withSource(type).scopeAnnotationOnAbstractType(scopeAnnotation, type, source);
-        }
-    }  
-
     /**
-     * Gets a key for the given type, member and annotations.  
+                    errors.duplicateBindingAnnotations(member, found.annotationType(), annotation.annotationType());  
+ * The OpenSearch Contributors require contributions made to  
+     * Returns the binding annotation on {@code member}, or null if there isn't one.
+    public static Annotation findBindingAnnotation(Errors errors, Member member, Annotation[] annotations) {  
+    public static boolean isRetainedAtRuntime(Class<? extends Annotation> annotationType) {  
+ * @opensearch.internal
+     * Returns true if the given annotation is retained at runtime.
+        return retention != null && retention.value() == RetentionPolicy.RUNTIME;
+        for (Annotation annotation : annotations) {  
+import org.opensearch.common.inject.BindingAnnotation;
+ *
      */
+    public static Class<? extends Annotation> findScopeAnnotation(Errors errors, Class<?> implementation) {
+import org.opensearch.common.Classes;
+     * annotations are not allowed on abstract classes or interfaces.
+package org.opensearch.common.inject.internal;
+}  
     public static Key<?> getKey(TypeLiteral<?> type, Member member, Annotation[] annotations, Errors errors) throws ErrorsException {
-        int numErrorsBefore = errors.size();  
-        Annotation found = findBindingAnnotation(errors, member, annotations);
-        errors.throwIfNewErrors(numErrorsBefore);
+    /**  
+     * Returns the scoping annotation, or null if there isn't one.
+        Annotation found = null;
+ * See the License for the specific language governing permissions and
+        if (Classes.isConcrete(type)) {
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        }
+                    found = annotation;
+ *
+        }  
+import org.opensearch.common.inject.Key;  
+     * Returns the scope annotation on {@code type}, or null if none is specified.  
         return found == null ? Key.get(type) : Key.get(type, found);  
     }
-
-    /**  
-     * Returns the binding annotation on {@code member}, or null if there isn't one.
-     */
-    public static Annotation findBindingAnnotation(Errors errors, Member member, Annotation[] annotations) {  
-        Annotation found = null;
-
-        for (Annotation annotation : annotations) {  
-            if (annotation.annotationType().getAnnotation(BindingAnnotation.class) != null) {
-                if (found != null) {
-                    errors.duplicateBindingAnnotations(member, found.annotationType(), annotation.annotationType());  
-                } else {
-                    found = annotation;
-                }  
-            }
-        }
-
-        return found;
     }
-}  
+                } else {
+        return found;
+import java.lang.annotation.Annotation;
+/*  
+     * Adds an error if there is a misplaced annotations on {@code type}. Scoping  
+            if (annotation.annotationType().getAnnotation(BindingAnnotation.class) != null) {
+    /**  
+     * Gets a key for the given type, member and annotations.  
+import java.lang.annotation.RetentionPolicy;  
+    /**  
+     */
+        if (scopeAnnotation != null) {  
+     */
+    }  
+import java.lang.annotation.Retention;
+     */
+            }
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        errors.throwIfNewErrors(numErrorsBefore);
+     */
+                }  
+    }
+public class Annotations {
+     */
+                    errors.duplicateScopeAnnotations(found, annotation.annotationType());  
+ * limitations under the License.  
+    }  
+            return;
+        Annotation found = findBindingAnnotation(errors, member, annotations);
+ * GitHub history for details.
+        int numErrorsBefore = errors.size();  
+            }
+            errors.withSource(type).scopeAnnotationOnAbstractType(scopeAnnotation, type, source);
+ */  
+ *
+ * you may not use this file except in compliance with the License.  
+    /**
+        for (Annotation annotation : annotations) {  
+ *
+                if (found != null) {
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+ * @author crazybob@google.com (Bob Lee)  
+            if (annotation.annotationType().getAnnotation(ScopeAnnotation.class) != null) {
+        return annotationType.getAnnotation(ScopeAnnotation.class) != null;
+        return found;
+        }
+ *
+import java.lang.reflect.Member;
+ * http://www.apache.org/licenses/LICENSE-2.0  
+    public static Class<? extends Annotation> findScopeAnnotation(Errors errors, Annotation[] annotations) {  
+        }
+ * Copyright (C) 2006 Google Inc.  
+import org.opensearch.common.inject.TypeLiteral;
+        return findScopeAnnotation(errors, implementation.getAnnotations());  
+/**  
+ * Annotation utilities.
+    }  
+        Class<? extends Annotation> scopeAnnotation = findScopeAnnotation(errors, type);
+ */  
+ */  
+ * compatible open source license.
+import org.opensearch.common.inject.ScopeAnnotation;
+/*
+                } else {
+        Retention retention = annotationType.getAnnotation(Retention.class);
+                if (found != null) {
+ */
+    /**
+    public static boolean isScopeAnnotation(Class<? extends Annotation> annotationType) {
+ * this file be licensed under the Apache-2.0 license or a
+        Class<? extends Annotation> found = null;

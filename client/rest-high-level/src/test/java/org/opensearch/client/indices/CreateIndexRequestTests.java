@@ -1,108 +1,93 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.indices;
-
-import org.opensearch.action.admin.indices.alias.Alias;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractXContentTestCase;  
-
-import java.io.IOException;
-import java.util.Set;  
-import java.util.function.Predicate;
-
-import static org.opensearch.client.indices.CreateIndexRequest.ALIASES;  
-import static org.opensearch.client.indices.CreateIndexRequest.MAPPINGS;
 import static org.opensearch.client.indices.CreateIndexRequest.SETTINGS;
-
-public class CreateIndexRequestTests extends AbstractXContentTestCase<CreateIndexRequest> {
-
-    @Override  
+    protected boolean supportsUnknownFields() {
     protected CreateIndexRequest createTestInstance() {
         return RandomCreateIndexGenerator.randomCreateIndexRequest();
-    }  
-
-    @Override
-    protected CreateIndexRequest doParseInstance(XContentParser parser) throws IOException {  
-        return new CreateIndexRequest("index").source(parser.map());
     }
-
     @Override
-    protected void assertEqualInstances(CreateIndexRequest expected, CreateIndexRequest actual) {
-        assertEquals(expected.settings(), actual.settings());  
-        assertAliasesEqual(expected.aliases(), actual.aliases());
-        assertMappingsEqual(expected, actual);
-    }  
-
-    private void assertMappingsEqual(CreateIndexRequest expected, CreateIndexRequest actual) {
-        if (expected.mappings() == null) {  
-            assertNull(actual.mappings());
-        } else {
-            assertNotNull(actual.mappings());  
-            try (
-                XContentParser expectedJson = createParser(expected.mappingsMediaType().xContent(), expected.mappings());
-                XContentParser actualJson = createParser(actual.mappingsMediaType().xContent(), actual.mappings())  
-            ) {
-                assertEquals(expectedJson.map(), actualJson.map());
-            } catch (IOException e) {  
-                throw new RuntimeException(e);
-            }
-        }  
-    }
-
-    private void assertAliasesEqual(Set<Alias> expected, Set<Alias> actual) {  
-        assertEquals(expected, actual);
-
-        for (Alias expectedAlias : expected) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
             for (Alias actualAlias : actual) {
-                if (expectedAlias.equals(actualAlias)) {
-                    // As Alias#equals only looks at name, we check the equality of the other Alias parameters here.  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+ * this work for additional information regarding copyright
+public class CreateIndexRequestTests extends AbstractXContentTestCase<CreateIndexRequest> {
+ * software distributed under the License is distributed on an
+ */  
+ */
+    }
                     assertEquals(expectedAlias.filter(), actualAlias.filter());
-                    assertEquals(expectedAlias.indexRouting(), actualAlias.indexRouting());
-                    assertEquals(expectedAlias.searchRouting(), actualAlias.searchRouting());  
-                }
-            }
-        }  
-    }
-
-    @Override  
-    protected Predicate<String> getRandomFieldsExcludeFilter() {
-        return field -> field.startsWith(MAPPINGS.getPreferredName())
-            || field.startsWith(SETTINGS.getPreferredName())  
+    }  
+/*  
+import org.opensearch.action.admin.indices.alias.Alias;
+        } else {
+    private void assertAliasesEqual(Set<Alias> expected, Set<Alias> actual) {  
             || field.startsWith(ALIASES.getPreferredName());
+                XContentParser actualJson = createParser(actual.mappingsMediaType().xContent(), actual.mappings())  
+        return new CreateIndexRequest("index").source(parser.map());
+        return field -> field.startsWith(MAPPINGS.getPreferredName())
+            }
+        assertAliasesEqual(expected.aliases(), actual.aliases());
+ * license agreements. See the NOTICE file distributed with
+            assertNull(actual.mappings());
+ * KIND, either express or implied.  See the License for the
+                XContentParser expectedJson = createParser(expected.mappingsMediaType().xContent(), expected.mappings());
+    @Override  
     }
-
+ * The OpenSearch Contributors require contributions made to  
+import java.util.Set;  
+        }  
+            ) {
+    protected Predicate<String> getRandomFieldsExcludeFilter() {
+                assertEquals(expectedJson.map(), actualJson.map());
+import static org.opensearch.client.indices.CreateIndexRequest.MAPPINGS;
+            } catch (IOException e) {  
+    }  
+    @Override  
+ * GitHub history for details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    protected void assertEqualInstances(CreateIndexRequest expected, CreateIndexRequest actual) {
+                    // As Alias#equals only looks at name, we check the equality of the other Alias parameters here.  
+import java.io.IOException;
+ * Modifications Copyright OpenSearch Contributors. See
+                }
+package org.opensearch.client.indices;
+            assertNotNull(actual.mappings());  
+        if (expected.mappings() == null) {  
     @Override
-    protected boolean supportsUnknownFields() {
-        return true;  
-    }
+                throw new RuntimeException(e);
+                    assertEquals(expectedAlias.indexRouting(), actualAlias.indexRouting());
+import org.opensearch.test.AbstractXContentTestCase;  
+    private void assertMappingsEqual(CreateIndexRequest expected, CreateIndexRequest actual) {
+                if (expectedAlias.equals(actualAlias)) {
+        assertMappingsEqual(expected, actual);
+ * ownership. Elasticsearch licenses this file to you under  
+    protected CreateIndexRequest doParseInstance(XContentParser parser) throws IOException {  
+/*  
+            || field.startsWith(SETTINGS.getPreferredName())  
+        }  
 }
+ *  
+import org.opensearch.core.xcontent.XContentParser;
+ */  
+import java.util.function.Predicate;
+        return true;  
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at  
+        assertEquals(expected.settings(), actual.settings());  
+        for (Alias expectedAlias : expected) {  
+ * Unless required by applicable law or agreed to in writing,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    assertEquals(expectedAlias.searchRouting(), actualAlias.searchRouting());  
+    }
+ * under the License.  
+    @Override
+ * not use this file except in compliance with the License.
+            }
+            try (
+/*
+ *
+    }
+ * compatible open source license.
+        assertEquals(expected, actual);
+ * Licensed to Elasticsearch under one or more contributor  
+import static org.opensearch.client.indices.CreateIndexRequest.ALIASES;  

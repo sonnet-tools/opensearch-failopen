@@ -1,168 +1,149 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.node;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.SingleObjectCache;
-import org.opensearch.plugin.stats.AnalyticsBackendNativeMemoryStats;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.concurrent.atomic.AtomicInteger;  
-
-/**
- * Property-based tests for {@link SingleObjectCache} TTL consistency with AnalyticsBackendNativeMemoryStats.  
- * <p>
- * <b>Feature: native-stats-refactor, Property 1: Cache returns consistent value within TTL</b>
- * <p>  
- * For any SearchBackEndPlugin and any TTL duration, all calls to SingleObjectCache.getOrRefresh()
- * within the TTL window SHALL return the same AnalyticsBackendNativeMemoryStats instance (reference equality),
- * and a call after TTL expiry SHALL trigger a refresh.  
- * <p>
- * <b>Validates: Requirements 7.2, 7.3, 7.4</b>
- */  
 public class NativeMemoryCachePropertyTests extends OpenSearchTestCase {
-
-    /**  
-     * Property 1: Cache returns consistent value within TTL.
-     * <p>
-     * Within the TTL window, all calls to getOrRefresh() return the same reference.  
-     * <p>
-     * <b>Validates: Requirements 7.2, 7.3, 7.4</b>
-     */  
-    public void testCacheReturnsConsistentValueWithinTTL() {
-        for (int iteration = 0; iteration < 100; iteration++) {
-            // Generate a random TTL between 1 second and 60 seconds  
-            long ttlMillis = randomLongBetween(1000, 60000);
-            TimeValue ttl = TimeValue.timeValueMillis(ttlMillis);
-
-            // Generate random initial stats
-            long allocatedBytes = randomLongBetween(0, Long.MAX_VALUE);
-            long residentBytes = randomLongBetween(0, Long.MAX_VALUE);  
-            AnalyticsBackendNativeMemoryStats initialStats = new AnalyticsBackendNativeMemoryStats(allocatedBytes, residentBytes, 0);
-
-            AtomicInteger refreshCount = new AtomicInteger(0);  
-
-            SingleObjectCache<AnalyticsBackendNativeMemoryStats> cache = new SingleObjectCache<AnalyticsBackendNativeMemoryStats>(
-                ttl,  
-                initialStats
-            ) {
-                @Override  
-                protected AnalyticsBackendNativeMemoryStats refresh() {
-                    refreshCount.incrementAndGet();
-                    return new AnalyticsBackendNativeMemoryStats(  
-                        randomLongBetween(0, Long.MAX_VALUE),
-                        randomLongBetween(0, Long.MAX_VALUE),
-                        0  
-                    );
-                }
-            };  
-
-            // Force the cache to think it was just refreshed by calling getOrRefresh once
-            // (the initial lastRefreshTimestamp is 0, so first call always refreshes)  
-            AnalyticsBackendNativeMemoryStats firstResult = cache.getOrRefresh();
-            int refreshesAfterInit = refreshCount.get();
-
             // Multiple calls within TTL should return the same reference
-            int callCount = randomIntBetween(2, 10);
-            for (int i = 0; i < callCount; i++) {  
-                AnalyticsBackendNativeMemoryStats result = cache.getOrRefresh();
-                assertSame(
-                    "Within TTL, getOrRefresh() should return the same reference on iteration " + iteration + ", call " + i,  
-                    firstResult,
-                    result
-                );  
-            }
-
-            // No additional refreshes should have occurred  
-            assertEquals(
-                "No additional refreshes should occur within TTL on iteration " + iteration,
-                refreshesAfterInit,  
-                refreshCount.get()
-            );
-        }  
-    }
-
-    /**  
-     * Property 1 (expiry path): After TTL expiry, getOrRefresh() triggers a refresh.
-     * <p>
-     * Uses a zero-millisecond TTL to guarantee expiry on every call.  
-     * <p>
-     * <b>Validates: Requirements 7.2, 7.3, 7.4</b>
-     */  
-    public void testCacheRefreshesAfterTTLExpiry() {
-        for (int iteration = 0; iteration < 100; iteration++) {
-            long allocatedBytes = randomLongBetween(0, Long.MAX_VALUE);  
-            long residentBytes = randomLongBetween(0, Long.MAX_VALUE);
-            AnalyticsBackendNativeMemoryStats initialStats = new AnalyticsBackendNativeMemoryStats(allocatedBytes, residentBytes, 0);
-
-            AtomicInteger refreshCount = new AtomicInteger(0);
-
-            // TTL of 0ms means every call triggers a refresh  
-            SingleObjectCache<AnalyticsBackendNativeMemoryStats> cache = new SingleObjectCache<AnalyticsBackendNativeMemoryStats>(
-                TimeValue.timeValueMillis(0),
-                initialStats  
-            ) {
-                @Override
-                protected AnalyticsBackendNativeMemoryStats refresh() {  
-                    refreshCount.incrementAndGet();
-                    return new AnalyticsBackendNativeMemoryStats(
-                        randomLongBetween(0, Long.MAX_VALUE),  
-                        randomLongBetween(0, Long.MAX_VALUE),
-                        0
-                    );  
-                }
-            };
-
-            // Each call should trigger a refresh since TTL is 0
-            int callCount = randomIntBetween(2, 5);
-            for (int i = 0; i < callCount; i++) {  
-                cache.getOrRefresh();
-            }
-
-            // With TTL=0, every call should trigger a refresh
-            assertTrue(
-                "With TTL=0, refresh should be called at least "  
-                    + callCount
-                    + " times on iteration "
-                    + iteration  
-                    + ", got "
                     + refreshCount.get(),
-                refreshCount.get() >= callCount  
-            );
-        }
-    }  
-
     /**
-     * Tests that the cache correctly stores and returns AnalyticsBackendNativeMemoryStats values  
-     * with various random field values.
-     * <p>
-     * <b>Validates: Requirements 7.2, 7.3, 7.4</b>  
-     */
-    public void testCacheStoresCorrectValues() {
-        for (int iteration = 0; iteration < 100; iteration++) {  
-            long allocatedBytes = randomLongBetween(-1, Long.MAX_VALUE);
-            long residentBytes = randomLongBetween(-1, Long.MAX_VALUE);
-            AnalyticsBackendNativeMemoryStats expectedStats = new AnalyticsBackendNativeMemoryStats(allocatedBytes, residentBytes, 0);  
-
-            SingleObjectCache<AnalyticsBackendNativeMemoryStats> cache = new SingleObjectCache<AnalyticsBackendNativeMemoryStats>(
+                    + ", got "
+            AtomicInteger refreshCount = new AtomicInteger(0);
+import org.opensearch.test.OpenSearchTestCase;
+            // Each call should trigger a refresh since TTL is 0
+            int callCount = randomIntBetween(2, 10);
+                ttl,  
                 TimeValue.timeValueSeconds(60),  
-                expectedStats
-            ) {
-                @Override  
-                protected AnalyticsBackendNativeMemoryStats refresh() {
-                    return expectedStats;
-                }  
-            };
-
-            AnalyticsBackendNativeMemoryStats result = cache.getOrRefresh();  
+     * Within the TTL window, all calls to getOrRefresh() return the same reference.  
             assertEquals("allocatedBytes should match on iteration " + iteration, allocatedBytes, result.getAllocatedBytes());
-            assertEquals("residentBytes should match on iteration " + iteration, residentBytes, result.getResidentBytes());
-        }  
+                cache.getOrRefresh();
+import org.opensearch.plugin.stats.AnalyticsBackendNativeMemoryStats;  
+    /**  
+            );
+                TimeValue.timeValueMillis(0),
+                assertSame(
+            // Force the cache to think it was just refreshed by calling getOrRefresh once
+                }
     }
+ * The OpenSearch Contributors require contributions made to  
+                    return new AnalyticsBackendNativeMemoryStats(  
+            ) {
+                refreshCount.get() >= callCount  
+            }
+                "With TTL=0, refresh should be called at least "  
+import java.util.concurrent.atomic.AtomicInteger;  
+                    "Within TTL, getOrRefresh() should return the same reference on iteration " + iteration + ", call " + i,  
+            // With TTL=0, every call should trigger a refresh
+                @Override
+ * Property-based tests for {@link SingleObjectCache} TTL consistency with AnalyticsBackendNativeMemoryStats.  
+/**
+                );  
+                    );  
+    }  
+            long allocatedBytes = randomLongBetween(0, Long.MAX_VALUE);  
+            // TTL of 0ms means every call triggers a refresh  
+                initialStats  
+     * <p>
+        }  
+import org.opensearch.common.util.SingleObjectCache;
+            };  
+            long residentBytes = randomLongBetween(0, Long.MAX_VALUE);
+            long residentBytes = randomLongBetween(-1, Long.MAX_VALUE);
+package org.opensearch.node;
+            };
+        for (int iteration = 0; iteration < 100; iteration++) {
+     * <b>Validates: Requirements 7.2, 7.3, 7.4</b>
+            assertEquals(
+            AnalyticsBackendNativeMemoryStats result = cache.getOrRefresh();  
+ * compatible open source license.
+            ) {
+            }
+ *
+     * <p>
+                        randomLongBetween(0, Long.MAX_VALUE),
+    }
+                    + " times on iteration "
+        for (int iteration = 0; iteration < 100; iteration++) {
+            AnalyticsBackendNativeMemoryStats initialStats = new AnalyticsBackendNativeMemoryStats(allocatedBytes, residentBytes, 0);
+/*  
+     * <b>Validates: Requirements 7.2, 7.3, 7.4</b>  
+                refreshCount.get()
 }
+            int callCount = randomIntBetween(2, 5);
+            AtomicInteger refreshCount = new AtomicInteger(0);  
+                    refreshCount.incrementAndGet();
+        }  
+            );
+                protected AnalyticsBackendNativeMemoryStats refresh() {  
+                }
+                        randomLongBetween(0, Long.MAX_VALUE),  
+                    );
+ */  
+                    + callCount
+ * For any SearchBackEndPlugin and any TTL duration, all calls to SingleObjectCache.getOrRefresh()
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+     * <p>
+    public void testCacheRefreshesAfterTTLExpiry() {
+            for (int i = 0; i < callCount; i++) {  
+            long allocatedBytes = randomLongBetween(-1, Long.MAX_VALUE);
+ * <p>
+     * with various random field values.
+ * within the TTL window SHALL return the same AnalyticsBackendNativeMemoryStats instance (reference equality),
+     * <p>
+    public void testCacheReturnsConsistentValueWithinTTL() {
+            long residentBytes = randomLongBetween(0, Long.MAX_VALUE);  
+                    return expectedStats;
+     * <b>Validates: Requirements 7.2, 7.3, 7.4</b>
+                        0
+                refreshesAfterInit,  
+     */  
+            SingleObjectCache<AnalyticsBackendNativeMemoryStats> cache = new SingleObjectCache<AnalyticsBackendNativeMemoryStats>(
+     */  
+                initialStats
+ * <b>Validates: Requirements 7.2, 7.3, 7.4</b>
+        for (int iteration = 0; iteration < 100; iteration++) {  
+            ) {
+            long ttlMillis = randomLongBetween(1000, 60000);
+                    + iteration  
+            // No additional refreshes should have occurred  
+     * Property 1: Cache returns consistent value within TTL.
+                    return new AnalyticsBackendNativeMemoryStats(
+ * <p>  
+                protected AnalyticsBackendNativeMemoryStats refresh() {
+import org.opensearch.common.unit.TimeValue;
+            for (int i = 0; i < callCount; i++) {  
+        }
+ * <p>
+            };
+                    result
+                    refreshCount.incrementAndGet();
+                }  
+                expectedStats
+     */
+     * Uses a zero-millisecond TTL to guarantee expiry on every call.  
+ * <b>Feature: native-stats-refactor, Property 1: Cache returns consistent value within TTL</b>
+            AnalyticsBackendNativeMemoryStats initialStats = new AnalyticsBackendNativeMemoryStats(allocatedBytes, residentBytes, 0);
+            assertEquals("residentBytes should match on iteration " + iteration, residentBytes, result.getResidentBytes());
+                @Override  
+                AnalyticsBackendNativeMemoryStats result = cache.getOrRefresh();
+     * <p>
+            assertTrue(
+    /**  
+            // (the initial lastRefreshTimestamp is 0, so first call always refreshes)  
+            // Generate a random TTL between 1 second and 60 seconds  
+            int refreshesAfterInit = refreshCount.get();
+ * and a call after TTL expiry SHALL trigger a refresh.  
+     * Tests that the cache correctly stores and returns AnalyticsBackendNativeMemoryStats values  
+                        0  
+            AnalyticsBackendNativeMemoryStats firstResult = cache.getOrRefresh();
+            // Generate random initial stats
+                        randomLongBetween(0, Long.MAX_VALUE),
+                protected AnalyticsBackendNativeMemoryStats refresh() {
+            SingleObjectCache<AnalyticsBackendNativeMemoryStats> cache = new SingleObjectCache<AnalyticsBackendNativeMemoryStats>(
+     * Property 1 (expiry path): After TTL expiry, getOrRefresh() triggers a refresh.
+            long allocatedBytes = randomLongBetween(0, Long.MAX_VALUE);
+                @Override  
+            AnalyticsBackendNativeMemoryStats expectedStats = new AnalyticsBackendNativeMemoryStats(allocatedBytes, residentBytes, 0);  
+ * SPDX-License-Identifier: Apache-2.0
+                "No additional refreshes should occur within TTL on iteration " + iteration,
+            TimeValue ttl = TimeValue.timeValueMillis(ttlMillis);
+                        randomLongBetween(0, Long.MAX_VALUE),
+                    firstResult,
+            SingleObjectCache<AnalyticsBackendNativeMemoryStats> cache = new SingleObjectCache<AnalyticsBackendNativeMemoryStats>(
+    public void testCacheStoresCorrectValues() {

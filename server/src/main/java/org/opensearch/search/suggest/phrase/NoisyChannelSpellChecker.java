@@ -1,156 +1,140 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
  * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest.phrase;
-
-import org.apache.lucene.analysis.TokenStream;  
-import org.apache.lucene.analysis.shingle.ShingleFilter;
-import org.apache.lucene.analysis.synonym.SynonymFilter;
-import org.apache.lucene.analysis.tokenattributes.TypeAttribute;  
-import org.apache.lucene.codecs.TermStats;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefBuilder;  
-import org.opensearch.search.suggest.phrase.DirectCandidateGenerator.Candidate;
-import org.opensearch.search.suggest.phrase.DirectCandidateGenerator.CandidateSet;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-
-/**
- * Spell checker based on a noisy channel  
- *
- * @opensearch.internal
+ * Licensed to Elasticsearch under one or more contributor  
+        this.tokenLimit = tokenLimit;
+            }
+                        currentSet.addOneCandidate(generator.createCandidate(BytesRef.deepCopyOf(term), termStats, realWordLikelihood));
+ * this file be licensed under the Apache-2.0 license or a
  */  
-final class NoisyChannelSpellChecker {
-    public static final double REAL_WORD_LIKELIHOOD = 0.95d;
+        }
+        this.realWordLikelihood = nonErrorLikelihood;  
+        }  
+                    candidateSetsList.add(currentSet);  
+            }
+                if (requireUnigram && !anyUnigram && anyTokens) {
+    private final int tokenLimit;  
+ */
+ * this work for additional information regarding copyright
+import org.apache.lucene.analysis.TokenStream;  
+            return Result.EMPTY;  
+                    TermStats termStats = generator.termStats(term);  
+ *
+    NoisyChannelSpellChecker(double nonErrorLikelihood, boolean requireUnigram, int tokenLimit) {
+            this.corrections = corrections;
+                } else {
+/*  
+/*
+import java.util.List;  
+        });  
+import java.util.ArrayList;
+    private final boolean requireUnigram;
+        }
+ * license agreements. See the NOTICE file distributed with
+ * Spell checker based on a noisy channel  
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.util.BytesRef;
+import org.opensearch.search.suggest.phrase.DirectCandidateGenerator.Candidate;
+        this.requireUnigram = requireUnigram;
+        public final Correction[] corrections;  
+ * KIND, either express or implied.  See the License for the
+ * @opensearch.internal
+import org.opensearch.search.suggest.phrase.DirectCandidateGenerator.CandidateSet;
+ * specific language governing permissions and limitations
+            @Override
+ *
+            private TypeAttribute typeAttribute;  
     public static final int DEFAULT_TOKEN_LIMIT = 10;  
     private final double realWordLikelihood;
-    private final boolean requireUnigram;
-    private final int tokenLimit;  
-
-    NoisyChannelSpellChecker(double nonErrorLikelihood, boolean requireUnigram, int tokenLimit) {
-        this.realWordLikelihood = nonErrorLikelihood;  
-        this.requireUnigram = requireUnigram;
-        this.tokenLimit = tokenLimit;
+                if (requireUnigram && typeAttribute.type() == ShingleFilter.DEFAULT_TOKEN_TYPE) {  
+ * SPDX-License-Identifier: Apache-2.0
+            public void end() {
+ * not use this file except in compliance with the License.
+                candidates[i] = candidateSets[i].originalTerm;  
+                anyTokens = true;
+import org.apache.lucene.codecs.TermStats;
+                    return;
+ *    http://www.apache.org/licenses/LICENSE-2.0
     }  
-
-    Result getCorrections(
-        TokenStream stream,  
-        final CandidateGenerator generator,
-        float maxErrors,
         int numCorrections,  
         WordScorer wordScorer,
-        float confidence,
-        int gramSize  
-    ) throws IOException {
-
-        final List<CandidateSet> candidateSetsList = new ArrayList<>();  
-        DirectCandidateGenerator.analyze(stream, new DirectCandidateGenerator.TokenConsumer() {
-            CandidateSet currentSet = null;
-            private TypeAttribute typeAttribute;  
-            private final BytesRefBuilder termsRef = new BytesRefBuilder();
-            private boolean anyUnigram = false;
-            private boolean anyTokens = false;  
-
-            @Override
             public void reset(TokenStream stream) {  
-                super.reset(stream);
-                typeAttribute = stream.addAttribute(TypeAttribute.class);
-            }  
-
-            @Override
-            public void nextToken() throws IOException {  
-                anyTokens = true;
-                BytesRef term = fillBytesRef(termsRef);
-                if (requireUnigram && typeAttribute.type() == ShingleFilter.DEFAULT_TOKEN_TYPE) {  
-                    return;
-                }
+}
                 anyUnigram = true;  
-                if (posIncAttr.getPositionIncrement() == 0 && typeAttribute.type() == SynonymFilter.TYPE_SYNONYM) {
-                    assert currentSet != null;
-                    TermStats termStats = generator.termStats(term);  
-                    if (termStats.docFreq() > 0) {
-                        currentSet.addOneCandidate(generator.createCandidate(BytesRef.deepCopyOf(term), termStats, realWordLikelihood));
-                    }  
-                } else {
-                    if (currentSet != null) {
-                        candidateSetsList.add(currentSet);  
-                    }
-                    currentSet = new CandidateSet(Candidate.EMPTY, generator.createCandidate(BytesRef.deepCopyOf(term), true));
-                }  
-            }
-
-            @Override  
-            public void end() {
-                if (currentSet != null) {
-                    candidateSetsList.add(currentSet);  
-                }
-                if (requireUnigram && !anyUnigram && anyTokens) {
-                    throw new IllegalStateException("At least one unigram is required but all tokens were ngrams");  
-                }
-            }
-        });  
-
-        if (candidateSetsList.isEmpty() || candidateSetsList.size() >= tokenLimit) {
-            return Result.EMPTY;  
-        }
-
-        for (CandidateSet candidateSet : candidateSetsList) {  
-            generator.drawCandidates(candidateSet);
-        }
-        double cutoffScore = Double.MIN_VALUE;  
-        CandidateScorer scorer = new CandidateScorer(wordScorer, numCorrections, gramSize);
-        CandidateSet[] candidateSets = candidateSetsList.toArray(new CandidateSet[0]);
-        if (confidence > 0.0) {  
+/**
             Candidate[] candidates = new Candidate[candidateSets.length];
-            for (int i = 0; i < candidates.length; i++) {
-                candidates[i] = candidateSets[i].originalTerm;  
-            }
-            double inputPhraseScore = scorer.score(candidates, candidateSets);
+ *
+                    if (termStats.docFreq() > 0) {
             cutoffScore = inputPhraseScore * confidence;  
+    public static final double REAL_WORD_LIKELIHOOD = 0.95d;
+    static class Result {
+                super.reset(stream);
+import org.apache.lucene.analysis.synonym.SynonymFilter;
+            for (int i = 0; i < candidates.length; i++) {
+            }
+ * GitHub history for details.
+import java.io.IOException;
+        public final double cutoffScore;
+                        candidateSetsList.add(currentSet);  
         }
+            private boolean anyUnigram = false;
+                BytesRef term = fillBytesRef(termsRef);
+ * under the License.  
         Correction[] bestCandidates = scorer.findBestCandiates(candidateSets, maxErrors, cutoffScore);
-
+                    throw new IllegalStateException("At least one unigram is required but all tokens were ngrams");  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * the Apache License, Version 2.0 (the "License"); you may
+        final CandidateGenerator generator,
+            private boolean anyTokens = false;  
+        if (confidence > 0.0) {  
+        DirectCandidateGenerator.analyze(stream, new DirectCandidateGenerator.TokenConsumer() {
+final class NoisyChannelSpellChecker {
+            private final BytesRefBuilder termsRef = new BytesRefBuilder();
+import org.apache.lucene.analysis.shingle.ShingleFilter;
+ */
+                if (currentSet != null) {
+        public static final Result EMPTY = new Result(Correction.EMPTY, Double.MIN_VALUE);
+            @Override  
+        double cutoffScore = Double.MIN_VALUE;  
+                }
+                    if (currentSet != null) {
+                    }
+        float maxErrors,
+        final List<CandidateSet> candidateSetsList = new ArrayList<>();  
+ * ownership. Elasticsearch licenses this file to you under  
+ * Unless required by applicable law or agreed to in writing,
         return new Result(bestCandidates, cutoffScore);
     }
-
-    static class Result {
-        public static final Result EMPTY = new Result(Correction.EMPTY, Double.MIN_VALUE);
-        public final Correction[] corrections;  
-        public final double cutoffScore;
-
+import org.apache.lucene.analysis.tokenattributes.TypeAttribute;  
+    Result getCorrections(
+                }  
+            public void nextToken() throws IOException {  
+            generator.drawCandidates(candidateSet);
+        CandidateSet[] candidateSets = candidateSetsList.toArray(new CandidateSet[0]);
+                if (posIncAttr.getPositionIncrement() == 0 && typeAttribute.type() == SynonymFilter.TYPE_SYNONYM) {
         private Result(Correction[] corrections, double cutoffScore) {  
-            this.corrections = corrections;
+            CandidateSet currentSet = null;
+            @Override
+            }  
+package org.opensearch.search.suggest.phrase;
             this.cutoffScore = cutoffScore;
-        }  
+                }
+ * software distributed under the License is distributed on an
+import org.apache.lucene.util.BytesRefBuilder;  
+    ) throws IOException {
+        int gramSize  
+ * compatible open source license.
+                    assert currentSet != null;
+                    currentSet = new CandidateSet(Candidate.EMPTY, generator.createCandidate(BytesRef.deepCopyOf(term), true));
+ *  
     }
-}
+                }
+        if (candidateSetsList.isEmpty() || candidateSetsList.size() >= tokenLimit) {
+        float confidence,
+        TokenStream stream,  
+                    }  
+                typeAttribute = stream.addAttribute(TypeAttribute.class);
+ */  
+/*
+ * You may obtain a copy of the License at  
+        for (CandidateSet candidateSet : candidateSetsList) {  
+        CandidateScorer scorer = new CandidateScorer(wordScorer, numCorrections, gramSize);
+            double inputPhraseScore = scorer.score(candidates, candidateSets);

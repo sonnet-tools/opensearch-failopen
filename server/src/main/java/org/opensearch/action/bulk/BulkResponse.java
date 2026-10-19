@@ -1,221 +1,195 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.bulk;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.StatusToXContentObject;  
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;  
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.core.xcontent.XContentParserUtils.throwUnknownField;  
-import static org.opensearch.core.xcontent.XContentParserUtils.throwUnknownToken;
-
-/**  
- * A response of a bulk execution. Holding a response for each item responding (in order) of the
- * bulk requests. Each item holds the index/type/id is operated on, and if it failed or not (with the
- * failure message).  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class BulkResponse extends ActionResponse implements Iterable<BulkItemResponse>, StatusToXContentObject {
-
-    private static final String ITEMS = "items";
-    private static final String ERRORS = "errors";
-    private static final String TOOK = "took";  
-    private static final String INGEST_TOOK = "ingest_took";
-
-    public static final long NO_INGEST_TOOK = -1L;  
-
     private final BulkItemResponse[] responses;
-    private final long tookInMillis;  
-    private final long ingestTookInMillis;
-
-    public BulkResponse(StreamInput in) throws IOException {  
-        super(in);
-        responses = in.readArray(BulkItemResponse::new, BulkItemResponse[]::new);
-        tookInMillis = in.readVLong();  
-        ingestTookInMillis = in.readZLong();
-    }
-
-    public BulkResponse(BulkItemResponse[] responses, long tookInMillis) {
-        this(responses, tookInMillis, NO_INGEST_TOOK);
-    }  
-
-    public BulkResponse(BulkItemResponse[] responses, long tookInMillis, long ingestTookInMillis) {
-        this.responses = responses;  
-        this.tookInMillis = tookInMillis;
-        this.ingestTookInMillis = ingestTookInMillis;
-    }  
-
-    /**
-     * How long the bulk execution took. Excluding ingest preprocessing.  
-     */
-    public TimeValue getTook() {
-        return new TimeValue(tookInMillis);  
-    }
-
-    /**  
-     * If ingest is enabled returns the bulk ingest preprocessing time, otherwise 0 is returned.
-     */
-    public TimeValue getIngestTook() {  
-        return new TimeValue(ingestTookInMillis);
-    }
-
-    /**
-     * If ingest is enabled returns the bulk ingest preprocessing time. in milliseconds, otherwise -1 is returned.
-     */  
-    public long getIngestTookInMillis() {
-        return ingestTookInMillis;
-    }  
-
-    /**
-     * Has anything failed with the execution.  
-     */
-    public boolean hasFailures() {
-        for (BulkItemResponse response : responses) {  
-            if (response.isFailed()) {
-                return true;
-            }  
-        }
-        return false;
-    }  
-
-    public String buildFailureMessage() {
-        StringBuilder sb = new StringBuilder();  
-        sb.append("failure in bulk execution:");
-        for (int i = 0; i < responses.length; i++) {
-            BulkItemResponse response = responses[i];  
-            if (response.isFailed()) {
-                sb.append("\n[")
-                    .append(i)  
-                    .append("]: index [")
-                    .append(response.getIndex())
-                    .append("], id [")  
-                    .append(response.getId())
-                    .append("], message [")
-                    .append(response.getFailureMessage())  
-                    .append("]");
-            }
-        }  
-        return sb.toString();
-    }
-
-    /**
-     * The items representing each action performed in the bulk operation (in the same order!).
-     */  
-    public BulkItemResponse[] getItems() {
-        return responses;
-    }  
-
-    @Override
-    public Iterator<BulkItemResponse> iterator() {  
-        return Arrays.stream(responses).iterator();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeArray(responses);  
-        out.writeVLong(tookInMillis);
-        out.writeZLong(ingestTookInMillis);
-    }  
-
-    @Override
-    public RestStatus status() {  
-        return RestStatus.OK;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.field(TOOK, tookInMillis);
-        if (ingestTookInMillis != BulkResponse.NO_INGEST_TOOK) {
-            builder.field(INGEST_TOOK, ingestTookInMillis);  
-        }
-        builder.field(ERRORS, hasFailures());
-        builder.startArray(ITEMS);  
-        for (BulkItemResponse item : this) {
-            item.toXContent(builder, params);
-        }  
-        builder.endArray();
-        builder.endObject();
-        return builder;  
-    }
-
-    public static BulkResponse fromXContent(XContentParser parser) throws IOException {  
-        XContentParser.Token token = parser.nextToken();
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
-
-        long took = -1L;
-        long ingestTook = NO_INGEST_TOOK;
-        List<BulkItemResponse> items = new ArrayList<>();  
-
-        String currentFieldName = parser.currentName();
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token.isValue()) {  
-                if (TOOK.equals(currentFieldName)) {
-                    took = parser.longValue();
-                } else if (INGEST_TOOK.equals(currentFieldName)) {  
-                    ingestTook = parser.longValue();
-                } else if (ERRORS.equals(currentFieldName) == false) {
-                    throwUnknownField(currentFieldName, parser.getTokenLocation());  
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                if (ITEMS.equals(currentFieldName)) {  
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                        items.add(BulkItemResponse.fromXContent(parser, items.size()));
-                    }  
-                } else {
-                    throwUnknownField(currentFieldName, parser.getTokenLocation());
                 }  
-            } else {
-                throwUnknownToken(token, parser.getTokenLocation());
-            }  
-        }
-        return new BulkResponse(items.toArray(new BulkItemResponse[0]), took, ingestTook);
+            item.toXContent(builder, params);
+ * the Apache License, Version 2.0 (the "License"); you may
+            } else if (token == XContentParser.Token.START_ARRAY) {
+ * Licensed to Elasticsearch under one or more contributor  
     }  
+                    .append("]: index [")
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        List<BulkItemResponse> items = new ArrayList<>();  
+     * How long the bulk execution took. Excluding ingest preprocessing.  
+ * not use this file except in compliance with the License.
+    }  
+        String currentFieldName = parser.currentName();
+        out.writeZLong(ingestTookInMillis);
+        ingestTookInMillis = in.readZLong();
+        if (ingestTookInMillis != BulkResponse.NO_INGEST_TOOK) {
+        return sb.toString();
+        }
+/*  
+/*  
+    public TimeValue getIngestTook() {  
+ * You may obtain a copy of the License at  
+import org.opensearch.core.xcontent.XContentParser;  
+                    .append(response.getIndex())
+                    .append("], message [")
+            if (token == XContentParser.Token.FIELD_NAME) {
+        return Arrays.stream(responses).iterator();
+        XContentParser.Token token = parser.nextToken();
+import org.opensearch.core.common.io.stream.StreamInput;
+        return new TimeValue(ingestTookInMillis);
+ * KIND, either express or implied.  See the License for the
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+                } else {
+            }  
+        builder.startArray(ITEMS);  
+ * ownership. Elasticsearch licenses this file to you under  
+                    .append(response.getId())
+        builder.field(ERRORS, hasFailures());
+        this(responses, tookInMillis, NO_INGEST_TOOK);
+    @Override
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, token, parser);
+        for (BulkItemResponse item : this) {
+                    .append(i)  
+    public Iterator<BulkItemResponse> iterator() {  
+     * Has anything failed with the execution.  
+    }
+        for (int i = 0; i < responses.length; i++) {
+     */
+     * The items representing each action performed in the bulk operation (in the same order!).
+ * A response of a bulk execution. Holding a response for each item responding (in order) of the
+            }
+                    .append("], id [")  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    private static final String INGEST_TOOK = "ingest_took";
+ *  
+ * under the License.  
+ * SPDX-License-Identifier: Apache-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    private static final String ITEMS = "items";
+        sb.append("failure in bulk execution:");
+            builder.field(INGEST_TOOK, ingestTookInMillis);  
+ * this work for additional information regarding copyright
+public class BulkResponse extends ActionResponse implements Iterable<BulkItemResponse>, StatusToXContentObject {
+        return false;
+                    took = parser.longValue();
+    }
+import java.io.IOException;
+                    .append(response.getFailureMessage())  
+ * GitHub history for details.
+import java.util.ArrayList;  
+                    throwUnknownField(currentFieldName, parser.getTokenLocation());  
+    }
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+    public long getIngestTookInMillis() {
+        }  
+     * If ingest is enabled returns the bulk ingest preprocessing time. in milliseconds, otherwise -1 is returned.
+     */
+        builder.endArray();
+ *
+    }  
+ * compatible open source license.
+package org.opensearch.action.bulk;
+    public RestStatus status() {  
+    }  
+/**  
+            }  
+        builder.startObject();  
+     */
+import java.util.Arrays;
+                    .append("]");
+        return builder;  
+        long ingestTook = NO_INGEST_TOOK;
+import static org.opensearch.core.xcontent.XContentParserUtils.throwUnknownField;  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.xcontent.StatusToXContentObject;  
+ * software distributed under the License is distributed on an
+        responses = in.readArray(BulkItemResponse::new, BulkItemResponse[]::new);
+    public BulkResponse(BulkItemResponse[] responses, long tookInMillis, long ingestTookInMillis) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        }
+            if (response.isFailed()) {
+ * bulk requests. Each item holds the index/type/id is operated on, and if it failed or not (with the
+            if (response.isFailed()) {
+        StringBuilder sb = new StringBuilder();  
+        }
+        super(in);
+                }
+    private final long ingestTookInMillis;
+import org.opensearch.common.annotation.PublicApi;
+    /**
+ *
+    public BulkResponse(StreamInput in) throws IOException {  
+                        items.add(BulkItemResponse.fromXContent(parser, items.size()));
+            BulkItemResponse response = responses[i];  
+    public static BulkResponse fromXContent(XContentParser parser) throws IOException {  
+                } else if (INGEST_TOOK.equals(currentFieldName)) {  
+ * failure message).  
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+        this.tookInMillis = tookInMillis;
+import org.opensearch.core.action.ActionResponse;
+                } else if (ERRORS.equals(currentFieldName) == false) {
+                return true;
+    private final long tookInMillis;  
+import java.util.Iterator;
+    }  
+    /**
+        return RestStatus.OK;
+    public BulkItemResponse[] getItems() {
+    /**  
+    public TimeValue getTook() {
+ * Unless required by applicable law or agreed to in writing,
+     * If ingest is enabled returns the bulk ingest preprocessing time, otherwise 0 is returned.
+ */  
+    }
+@PublicApi(since = "1.0.0")
+    }  
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+        out.writeVLong(tookInMillis);
+    /**
+                if (ITEMS.equals(currentFieldName)) {  
+    private static final String ERRORS = "errors";
+                if (TOOK.equals(currentFieldName)) {
+/*
+        return ingestTookInMillis;
+     */  
+ * @opensearch.api
+            } else {
+    public BulkResponse(BulkItemResponse[] responses, long tookInMillis) {
+import static org.opensearch.core.xcontent.XContentParserUtils.throwUnknownToken;
+        tookInMillis = in.readVLong();  
 }
+                currentFieldName = parser.currentName();
+        long took = -1L;
+                    throwUnknownField(currentFieldName, parser.getTokenLocation());
+                    ingestTook = parser.longValue();
+    public static final long NO_INGEST_TOOK = -1L;  
+        this.responses = responses;  
+     */  
+ */  
+        builder.field(TOOK, tookInMillis);
+        return new BulkResponse(items.toArray(new BulkItemResponse[0]), took, ingestTook);
+ * The OpenSearch Contributors require contributions made to  
+        }  
+ * specific language governing permissions and limitations
+    /**
+ */  
+        builder.endObject();
+                throwUnknownToken(token, parser.getTokenLocation());
+        for (BulkItemResponse response : responses) {  
+    @Override
+        return new TimeValue(tookInMillis);  
+ */
+    }  
+        return responses;
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+    private static final String TOOK = "took";  
+        this.ingestTookInMillis = ingestTookInMillis;
+import org.opensearch.common.unit.TimeValue;
+    }
+ *
+    public void writeTo(StreamOutput out) throws IOException {
+    public boolean hasFailures() {
+        out.writeArray(responses);  
+                    }  
+            } else if (token.isValue()) {  
+import org.opensearch.core.rest.RestStatus;
+    @Override
+import java.util.List;  
+                sb.append("\n[")
+    public String buildFailureMessage() {

@@ -1,95 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.opensearch.common.CheckedRunnable;  
-import org.opensearch.common.annotation.PublicApi;
-
-import java.io.IOException;  
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Optional;  
-
-/**
- * Base class for all individual search phases like collecting distributed frequencies, fetching documents, querying shards.  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public abstract class SearchPhase implements CheckedRunnable<IOException> {
-    private final String name;  
-    private long startTimeInNanos;
-
-    protected SearchPhase(String name) {  
-        this.name = Objects.requireNonNull(name, "name must not be null");
-    }
-
-    public long getStartTimeInNanos() {
-        return startTimeInNanos;
-    }  
-
+ * license agreements. See the NOTICE file distributed with
     public void recordAndRun() throws IOException {
-        this.startTimeInNanos = System.nanoTime();  
-        run();
-    }
-
-    /**
-     * Returns the phases name.
-     */  
-    public String getName() {
-        return name;
-    }  
-
-    /**
-     * Returns the SearchPhase name as {@link SearchPhaseName}. Exception will come if SearchPhase name is not defined.  
-     * @deprecated Use getSearchPhaseNameOptional() to avoid possible exceptions.
-     * in {@link SearchPhaseName}
-     * @return {@link SearchPhaseName}  
-     */
-    @Deprecated
-    public SearchPhaseName getSearchPhaseName() {  
-        return SearchPhaseName.valueOf(name.toUpperCase(Locale.ROOT));
-    }
-
-    /**
-     * Returns an Optional of the SearchPhase name as {@link SearchPhaseName}. If there's not a matching SearchPhaseName,
-     * returns an empty Optional.  
-     * @return {@link Optional<SearchPhaseName>}
-     */
-    public Optional<SearchPhaseName> getSearchPhaseNameOptional() {  
-        try {
-            return Optional.of(SearchPhaseName.valueOf(name.toUpperCase(Locale.ROOT)));
-        } catch (IllegalArgumentException e) {  
-            return Optional.empty();
-        }
-    }  
+ */
 }
+     * Returns the SearchPhase name as {@link SearchPhaseName}. Exception will come if SearchPhase name is not defined.  
+    /**
+ * Base class for all individual search phases like collecting distributed frequencies, fetching documents, querying shards.  
+import java.io.IOException;  
+ * The OpenSearch Contributors require contributions made to  
+     * Returns an Optional of the SearchPhase name as {@link SearchPhaseName}. If there's not a matching SearchPhaseName,
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+ * @opensearch.api
+    }  
+    @Deprecated
+        try {
+    public String getName() {
+/*
+    private long startTimeInNanos;
+     */
+        this.name = Objects.requireNonNull(name, "name must not be null");
+import java.util.Optional;  
+ * specific language governing permissions and limitations
+    public SearchPhaseName getSearchPhaseName() {  
+     * @return {@link SearchPhaseName}  
+    private final String name;  
+ * You may obtain a copy of the License at  
+/*  
+    }
+        return startTimeInNanos;
+        return SearchPhaseName.valueOf(name.toUpperCase(Locale.ROOT));
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+     * returns an empty Optional.  
+     * Returns the phases name.
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+ *
+     * @deprecated Use getSearchPhaseNameOptional() to avoid possible exceptions.
+ * Unless required by applicable law or agreed to in writing,
+        } catch (IllegalArgumentException e) {  
+     * @return {@link Optional<SearchPhaseName>}
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        run();
+    public long getStartTimeInNanos() {
+ * KIND, either express or implied.  See the License for the
+ *
+    protected SearchPhase(String name) {  
+    /**
+    }
+ * compatible open source license.
+    }
+ * Modifications Copyright OpenSearch Contributors. See  
+ * software distributed under the License is distributed on an
+     * in {@link SearchPhaseName}
+    }  
+ * GitHub history for details.
+        return name;
+@PublicApi(since = "1.0.0")
+    /**
+ */  
+            return Optional.of(SearchPhaseName.valueOf(name.toUpperCase(Locale.ROOT)));
+ * not use this file except in compliance with the License.
+        this.startTimeInNanos = System.nanoTime();  
+        }
+/*
+            return Optional.empty();
+public abstract class SearchPhase implements CheckedRunnable<IOException> {
+ */
+ * under the License.  
+import org.opensearch.common.CheckedRunnable;  
+     */
+ *
+package org.opensearch.action.search;
+import java.util.Objects;
+import java.util.Locale;
+/**
+import org.opensearch.common.annotation.PublicApi;
+     */  
+ * SPDX-License-Identifier: Apache-2.0
+ *  
+    public Optional<SearchPhaseName> getSearchPhaseNameOptional() {  

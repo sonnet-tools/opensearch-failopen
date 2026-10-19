@@ -1,86 +1,78 @@
+        return true;
+            context.queryResult()
+ * GitHub history for details.
+                topDocs = ctx.rescorer().rescore(topDocs, context.searcher(), ctx);
+        for (int i = 1; i < topDocs.scoreDocs.length; i++) {
+ * this file be licensed under the Apache-2.0 license or a
+ * Licensed to Elasticsearch under one or more contributor  
+                // here we only assert that this condition is met.
+}
+        }
+ * @opensearch.internal  
+            if (Float.compare(doc.score, lastScore) > 0) {  
+public class RescoreProcessor {
+        TopDocs topDocs = context.queryResult().topDocs().topDocs;
+ */
+        }
+                .topDocs(new TopDocsAndMaxScore(topDocs, topDocs.scoreDocs[0].score), context.queryResult().sortValueFormats());
+            return;
+            }  
 /*  
+                assert context.sort() == null && topDocsSortedByScore(topDocs) : "topdocs should be sorted after rescore";
+import org.opensearch.OpenSearchException;  
+ * Unless required by applicable law or agreed to in writing,
+    }  
+ * specific language governing permissions and limitations
+ */  
+        }
+    private boolean topDocsSortedByScore(TopDocs topDocs) {
+ * license agreements. See the NOTICE file distributed with
+ */  
+        } catch (IOException e) {  
+ *
+/*  
+            }
+            for (RescoreContext ctx : context.rescore()) {
+import java.io.IOException;
+        try {  
+    }  
+ * this work for additional information regarding copyright
+        float lastScore = topDocs.scoreDocs[0].score;  
+        }
+ */
+/*
+ * RescoreProcessor of a search request, used to run potentially expensive scoring models against the top matching documents.
+package org.opensearch.search.rescore;
+ * The OpenSearch Contributors require contributions made to  
+ *
+                // It is the responsibility of the rescorer to sort the resulted top docs,  
+ * ownership. Elasticsearch licenses this file to you under  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+    public void process(SearchContext context) {
+import org.apache.lucene.search.TopDocs;
+                return false;
+ * compatible open source license.
+ * under the License.  
+            lastScore = doc.score;  
+ *  
+        if (topDocs.scoreDocs.length == 0) {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /**
+ * the Apache License, Version 2.0 (the "License"); you may
+     * Returns true if the provided docs are sorted by score.  
+ * software distributed under the License is distributed on an
+     */
+        if (topDocs == null || topDocs.scoreDocs == null || topDocs.scoreDocs.length < 2) {  
+ * not use this file except in compliance with the License.
+            throw new OpenSearchException("Rescore Phase Failed", e);
+/**  
+            return true;
+import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+            ScoreDoc doc = topDocs.scoreDocs[i];
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.rescore;
-
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
-import org.opensearch.OpenSearchException;  
-import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-
-/**  
- * RescoreProcessor of a search request, used to run potentially expensive scoring models against the top matching documents.
- *
- * @opensearch.internal  
- */
-public class RescoreProcessor {
-
-    public void process(SearchContext context) {
-        TopDocs topDocs = context.queryResult().topDocs().topDocs;
-        if (topDocs.scoreDocs.length == 0) {  
-            return;
-        }
-        try {  
-            for (RescoreContext ctx : context.rescore()) {
-                topDocs = ctx.rescorer().rescore(topDocs, context.searcher(), ctx);
-                // It is the responsibility of the rescorer to sort the resulted top docs,  
-                // here we only assert that this condition is met.
-                assert context.sort() == null && topDocsSortedByScore(topDocs) : "topdocs should be sorted after rescore";
-            }  
-            context.queryResult()
-                .topDocs(new TopDocsAndMaxScore(topDocs, topDocs.scoreDocs[0].score), context.queryResult().sortValueFormats());
-        } catch (IOException e) {  
-            throw new OpenSearchException("Rescore Phase Failed", e);
-        }
-    }  
-
-    /**
-     * Returns true if the provided docs are sorted by score.  
-     */
-    private boolean topDocsSortedByScore(TopDocs topDocs) {
-        if (topDocs == null || topDocs.scoreDocs == null || topDocs.scoreDocs.length < 2) {  
-            return true;
-        }
-        float lastScore = topDocs.scoreDocs[0].score;  
-        for (int i = 1; i < topDocs.scoreDocs.length; i++) {
-            ScoreDoc doc = topDocs.scoreDocs[i];
-            if (Float.compare(doc.score, lastScore) > 0) {  
-                return false;
-            }
-            lastScore = doc.score;  
-        }
-        return true;
-    }  
-}
+import org.apache.lucene.search.ScoreDoc;
+ * Modifications Copyright OpenSearch Contributors. See

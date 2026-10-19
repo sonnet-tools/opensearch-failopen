@@ -1,60 +1,53 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.nativeprotocol;
-
-import org.opensearch.Version;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.transport.InboundPipelineTests;
-import org.opensearch.transport.TestRequest;
-import org.opensearch.transport.TestResponse;  
-
-import java.io.IOException;
-import java.util.Collections;  
-
-public class NativeInboundPipelineTests extends InboundPipelineTests {
-
-    @Override
-    protected BytesReference serialize(
-        boolean isRequest,  
-        Version version,
-        boolean handshake,
-        boolean compress,  
-        String action,
-        long requestId,
-        String value  
-    ) throws IOException {
-        NativeOutboundMessage message;
-        if (isRequest) {  
-            message = new NativeOutboundMessage.Request(
-                threadContext,
-                new String[0],  
-                new TestRequest(value),
-                version,
-                action,  
-                requestId,
-                handshake,
-                compress  
-            );
-        } else {
-            message = new NativeOutboundMessage.Response(  
-                threadContext,
-                Collections.emptySet(),
-                new TestResponse(value),  
-                version,
-                requestId,
-                handshake,  
-                compress
-            );
-        }  
-
         return message.serialize(new BytesStreamOutput());
-    }  
-
+        String action,
+ */  
+                version,
+import org.opensearch.transport.TestResponse;  
 }
+                requestId,
+import org.opensearch.transport.InboundPipelineTests;
+                new TestRequest(value),
+                action,  
+                threadContext,
+        boolean compress,  
+                threadContext,
+                requestId,
+import java.io.IOException;
+        String value  
+            );
+                compress  
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * compatible open source license.
+        boolean isRequest,  
+        NativeOutboundMessage message;
+ * The OpenSearch Contributors require contributions made to  
+ *
+        boolean handshake,
+public class NativeInboundPipelineTests extends InboundPipelineTests {
+/*  
+        }  
+ * this file be licensed under the Apache-2.0 license or a
+    ) throws IOException {
+                handshake,  
+            message = new NativeOutboundMessage.Response(  
+                compress
+    }  
+    protected BytesReference serialize(
+        long requestId,
+import org.opensearch.Version;
+            message = new NativeOutboundMessage.Request(
+                new TestResponse(value),  
+        Version version,
+ * SPDX-License-Identifier: Apache-2.0
+            );
+        if (isRequest) {  
+import org.opensearch.transport.TestRequest;
+        } else {
+                new String[0],  
+                Collections.emptySet(),
+package org.opensearch.transport.nativeprotocol;
+    @Override
+                version,
+import org.opensearch.core.common.bytes.BytesReference;  
+import java.util.Collections;  
+                handshake,

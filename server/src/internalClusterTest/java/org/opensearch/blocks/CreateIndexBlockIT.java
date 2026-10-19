@@ -1,40 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.blocks;
-
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchIntegTestCase;  
-import org.junit.After;
-
-import static org.opensearch.test.OpenSearchIntegTestCase.client;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
-
-public class CreateIndexBlockIT extends OpenSearchIntegTestCase {
-
-    public void testBlockCreateIndex() {  
-        setCreateIndexBlock("true");
-        assertBlocked(client().admin().indices().prepareCreate("uncreated-idx"), Metadata.CLUSTER_CREATE_INDEX_BLOCK);
-        setCreateIndexBlock("false");  
-        assertAcked(client().admin().indices().prepareCreate("created-idx").execute().actionGet());
-    }
-
     @After
-    public void cleanup() throws Exception {
+        assertBlocked(client().admin().indices().prepareCreate("uncreated-idx"), Metadata.CLUSTER_CREATE_INDEX_BLOCK);
+package org.opensearch.blocks;
+ * SPDX-License-Identifier: Apache-2.0
+import static org.opensearch.test.OpenSearchIntegTestCase.client;  
+        setCreateIndexBlock("false");  
+    }
+ * compatible open source license.
         Settings settings = Settings.builder().putNull(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey()).build();  
+    }
         assertAcked(client().admin().cluster().prepareUpdateSettings().setTransientSettings(settings).get());
-    }
-
-    private void setCreateIndexBlock(String value) {
-        Settings settings = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), value).build();
-        assertAcked(client().admin().cluster().prepareUpdateSettings().setTransientSettings(settings).get());  
-    }
-
+    public void cleanup() throws Exception {
 }  
+        setCreateIndexBlock("true");
+import org.junit.After;
+        Settings settings = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), value).build();
+    }
+import org.opensearch.cluster.metadata.Metadata;
+        assertAcked(client().admin().cluster().prepareUpdateSettings().setTransientSettings(settings).get());  
+ * The OpenSearch Contributors require contributions made to  
+        assertAcked(client().admin().indices().prepareCreate("created-idx").execute().actionGet());
+import org.opensearch.test.OpenSearchIntegTestCase;  
+public class CreateIndexBlockIT extends OpenSearchIntegTestCase {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+ */  
+    public void testBlockCreateIndex() {  
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+    private void setCreateIndexBlock(String value) {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
+import org.opensearch.common.settings.Settings;

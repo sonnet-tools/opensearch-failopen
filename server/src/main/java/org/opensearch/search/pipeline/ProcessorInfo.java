@@ -1,82 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.pipeline;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-
-/**  
- * Information about a search pipeline  processor
- * <p>
- * TODO: This is copy/pasted from the ingest ProcessorInfo.  
- * Can/should we share implementation or is this just boilerplate?
- *
- * @opensearch.internal  
- */
-public class ProcessorInfo implements Writeable, ToXContentObject, Comparable<ProcessorInfo> {
-
-    private final String type;
-
-    public ProcessorInfo(String type) {  
-        this.type = type;
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    public ProcessorInfo(StreamInput input) throws IOException {
         type = input.readString();
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeString(this.type);
-    }
-
-    /**
      * @return The unique processor type
-     */  
     public String getType() {
-        return type;
     }  
-
+        builder.field("type", type);
+    public ProcessorInfo(String type) {  
+    public ProcessorInfo(StreamInput input) throws IOException {
+    /**
+    }
+ * compatible open source license.
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+/**  
+        builder.endObject();  
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+        if (o == null || getClass() != o.getClass()) return false;
+    @Override
+    }
+    @Override
+public class ProcessorInfo implements Writeable, ToXContentObject, Comparable<ProcessorInfo> {
+    }
+        out.writeString(this.type);
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+ * TODO: This is copy/pasted from the ingest ProcessorInfo.  
+import java.io.IOException;
+        this.type = type;
+ * @opensearch.internal  
+     * Read from a stream.
+     */  
+    /**
         builder.startObject();
-        builder.field("type", type);
-        builder.endObject();  
-        return null;
-    }
-
-    @Override
-    public boolean equals(Object o) {
         if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-
-        ProcessorInfo that = (ProcessorInfo) o;  
-
-        return type.equals(that.type);
-
+ * Information about a search pipeline  processor
+ * <p>
     }
-
-    @Override  
-    public int hashCode() {
-        return type.hashCode();
-    }  
-
-    @Override
-    public int compareTo(ProcessorInfo o) {  
         return type.compareTo(o.type);
+    public int hashCode() {
+import org.opensearch.core.xcontent.XContentBuilder;
+    @Override
+package org.opensearch.search.pipeline;
+    @Override  
+        ProcessorInfo that = (ProcessorInfo) o;  
+ * The OpenSearch Contributors require contributions made to  
+    public void writeTo(StreamOutput out) throws IOException {  
+    }  
+ *
     }
+    public int compareTo(ProcessorInfo o) {  
+import org.opensearch.core.xcontent.ToXContentObject;
+import org.opensearch.core.common.io.stream.StreamInput;
+ */
+ */  
 }  
+ *
+    public boolean equals(Object o) {
+        return type.equals(that.type);
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * Can/should we share implementation or is this just boilerplate?
+        return null;
+        return type.hashCode();
+import org.opensearch.core.common.io.stream.Writeable;  
+        return type;
+     */  
+    private final String type;

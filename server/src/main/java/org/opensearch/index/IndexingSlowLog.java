@@ -1,326 +1,293 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.util.StringBuilders;  
-import org.opensearch.common.Booleans;
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.logging.OpenSearchLogMessage;  
-import org.opensearch.common.logging.SlowLogLevel;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.engine.Engine;  
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.shard.IndexingOperationListener;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.HashMap;  
-import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;  
-
-/**
+        this.indexDebugThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING).nanos();
+                return map;
+    }  
+        TimeValue.timeValueNanos(-1),  
  * The indexing slowlog implementation  
  *
- * @opensearch.internal
- */  
-public final class IndexingSlowLog implements IndexingOperationListener {
-    public static final String INDEX_INDEXING_SLOWLOG_PREFIX = "index.indexing.slowlog";
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING = Setting.timeSetting(  
-        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.warn",
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),  
-        Property.Dynamic,
-        Property.IndexScope
-    );  
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING = Setting.timeSetting(
-        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.info",
-        TimeValue.timeValueNanos(-1),  
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,
-        Property.IndexScope  
-    );
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING = Setting.timeSetting(
-        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.debug",  
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),
-        Property.Dynamic,  
-        Property.IndexScope
-    );
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_TRACE_SETTING = Setting.timeSetting(  
-        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.trace",
-        TimeValue.timeValueNanos(-1),
-        TimeValue.timeValueMillis(-1),  
-        Property.Dynamic,
-        Property.IndexScope
-    );  
-    public static final Setting<Boolean> INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING = Setting.boolSetting(
-        INDEX_INDEXING_SLOWLOG_PREFIX + ".reformat",
-        true,  
-        Property.Dynamic,
-        Property.IndexScope
-    );  
-    public static final Setting<SlowLogLevel> INDEX_INDEXING_SLOWLOG_LEVEL_SETTING = new Setting<>(
-        INDEX_INDEXING_SLOWLOG_PREFIX + ".level",
-        SlowLogLevel.TRACE.name(),  
-        SlowLogLevel::parse,
-        Property.Dynamic,
-        Property.IndexScope  
-    );
-
-    private final Logger indexLogger;  
-    private final Index index;
-
-    private boolean reformat;  
-    private long indexWarnThreshold;
-    private long indexInfoThreshold;
-    private long indexDebugThreshold;  
-    private long indexTraceThreshold;
-    /*
-     * How much of the source to log in the slowlog - 0 means log none and anything greater than 0 means log at least that many  
-     * <em>characters</em> of the source.
+            } else if (indexTraceThreshold >= 0 && tookInNanos > indexTraceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {
+ * under the License.  
+import org.opensearch.common.unit.TimeValue;
      */
-    private int maxSourceCharsToLog;  
-    private SlowLogLevel level;
-
-    /**  
-     * Reads how much of the source to log. The user can specify any value they
+            final ParsedDocument doc = indexOperation.parsedDoc();
+        return level;
+/*  
+        TimeValue.timeValueMillis(-1),  
+    );  
      * like and numbers are interpreted the maximum number of characters to log
-     * and everything else is interpreted as OpenSearch interprets booleans  
-     * which is then converted to 0 for false and Integer.MAX_VALUE for true.
-     */
-    public static final Setting<Integer> INDEX_INDEXING_SLOWLOG_MAX_SOURCE_CHARS_TO_LOG_SETTING = new Setting<>(  
-        INDEX_INDEXING_SLOWLOG_PREFIX + ".source",
-        "1000",
-        (value) -> {  
-            try {
-                return Integer.parseInt(value, 10);
+        Property.Dynamic,
+     * How much of the source to log in the slowlog - 0 means log none and anything greater than 0 means log at least that many  
+            }
+    private void setLevel(SlowLogLevel level) {
+        SlowLogLevel.TRACE.name(),  
+                StringBuilders.escapeJson(sb, 0);
+ * Licensed to Elasticsearch under one or more contributor  
+    long getIndexTraceThreshold() {  
+            map.put("took_millis", "" + TimeUnit.NANOSECONDS.toMillis(tookInNanos));
+        private static Map<String, Object> prepareMap(
+            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING, this::setInfoThreshold);
+            map.put("message", index);  
+        }  
+ * @opensearch.internal
             } catch (NumberFormatException e) {  
+        this.indexInfoThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING).nanos();
+import org.opensearch.common.xcontent.XContentHelper;
+        setLevel(indexSettings.getValue(INDEX_INDEXING_SLOWLOG_LEVEL_SETTING));
+            sb.append("took[").append(TimeValue.timeValueNanos(tookInNanos)).append("], ");
+ *
+import org.apache.logging.log4j.Logger;
+import org.opensearch.index.engine.Engine;  
+        Property.IndexScope  
+        private static String message(Index index, ParsedDocument doc, long tookInNanos, boolean reformat, int maxSourceCharsToLog) {
+ */  
+        return indexInfoThreshold;  
+            long tookInNanos,
+import java.util.Map;
+        Property.IndexScope
+        Property.Dynamic,
+                StringBuilders.escapeJson(sb, 0);
+     */
+            sb.append("id[").append(doc.id()).append("], ");
+    boolean isReformat() {  
+     * which is then converted to 0 for false and Integer.MAX_VALUE for true.
+        return maxSourceCharsToLog;  
+        indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING, this::setReformat);
+        Property.IndexScope
+        indexSettings.getScopedSettings()  
+        Loggers.setLevel(this.indexLogger, SlowLogLevel.TRACE.name());
+                 * We choose to fail to write to the slow log and instead let this percolate up to the post index listener loop where this
+import org.opensearch.core.index.Index;
+        },  
+    SlowLogLevel getLevel() {  
+    );  
+    long getIndexInfoThreshold() {
+            Index index,
+        Property.IndexScope
+    long getIndexWarnThreshold() {
+            return sb.toString();
+                /*
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING = Setting.timeSetting(  
+ * not use this file except in compliance with the License.
+            } catch (IOException e) {  
+}
+                String source = XContentHelper.convertToJson(doc.source(), reformat, doc.getMediaType());  
+                String source = XContentHelper.convertToJson(doc.source(), reformat, doc.getMediaType());
+    private long indexWarnThreshold;
+            boolean reformat,
+        INDEX_INDEXING_SLOWLOG_PREFIX + ".reformat",
+        this.indexDebugThreshold = debugThreshold.nanos();  
+    private final Logger indexLogger;  
+                StringBuilder sb = new StringBuilder("_failed_to_convert_[" + e.getMessage() + "]");
+                 */
+    private void setWarnThreshold(TimeValue warnThreshold) {  
+public final class IndexingSlowLog implements IndexingOperationListener {
+        return indexWarnThreshold;
+                 * will be logged at the warn level.  
+    private long indexInfoThreshold;
+                return sb.toString();  
+    /**  
+        this.indexTraceThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_TRACE_SETTING).nanos();
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_TRACE_SETTING = Setting.timeSetting(  
+                String trim = Strings.cleanTruncate(source, maxSourceCharsToLog).trim();
+        }
+        this.indexLogger = LogManager.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".index");  
+            } else if (indexDebugThreshold >= 0 && tookInNanos > indexDebugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {  
+            final long tookInNanos = result.getTook();  
+        Property.Dynamic,
+        this.level = level;  
+        this.index = indexSettings.getIndex();
+        this.indexTraceThreshold = traceThreshold.nanos();
+                final String message = String.format(Locale.ROOT, "failed to convert source for slow log entry [%s]", sb.toString());
+            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_MAX_SOURCE_CHARS_TO_LOG_SETTING, this::setMaxSourceCharsToLog);  
+            );
+    private void setTraceThreshold(TimeValue traceThreshold) {  
+import java.util.Locale;
+     * <em>characters</em> of the source.
+    public static final String INDEX_INDEXING_SLOWLOG_PREFIX = "index.indexing.slowlog";
+        Property.IndexScope  
+        return reformat;
+        "1000",
+    );
+        ) {
+        INDEX_INDEXING_SLOWLOG_PREFIX + ".source",
+ * compatible open source license.
+import org.opensearch.common.Booleans;
+    }
+    /*
+        TimeValue.timeValueNanos(-1),
+import org.opensearch.index.shard.IndexingOperationListener;
+    private void setReformat(boolean reformat) {
+    }
+                 * We choose to fail to write to the slow log and instead let this percolate up to the post index listener loop where this
+            if (indexWarnThreshold >= 0 && tookInNanos > indexWarnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {
+            } else if (indexInfoThreshold >= 0 && tookInNanos > indexInfoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
+        Property.IndexScope
+    }
+                map.put("source", sb.toString());
+import org.opensearch.common.logging.OpenSearchLogMessage;  
+    }
+import org.opensearch.core.common.Strings;  
+                sb.append("routing[").append(doc.routing()).append("]");
+    private long indexDebugThreshold;  
+        (value) -> {  
+                 */
+    }
+import java.util.concurrent.TimeUnit;  
+            map.put("took", TimeValue.timeValueNanos(tookInNanos));
+ * the Apache License, Version 2.0 (the "License"); you may
+        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.info",
+        IndexingSlowLogMessage(Index index, ParsedDocument doc, long tookInNanos, boolean reformat, int maxSourceCharsToLog) {  
+            } else {
+        this.reformat = reformat;
+                throw new UncheckedIOException(message, e);  
+        TimeValue.timeValueMillis(-1),
+        indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_LEVEL_SETTING, this::setLevel);  
+            map.put("id", doc.id());  
+    }
+            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING, this::setWarnThreshold);
+import org.apache.logging.log4j.util.StringBuilders;  
+    );  
+        INDEX_INDEXING_SLOWLOG_PREFIX + ".level",
+            }
+                indexLogger.trace(new IndexingSlowLogMessage(index, doc, tookInNanos, reformat, maxSourceCharsToLog));  
+                map.put("source", sb.toString());  
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING = Setting.timeSetting(
+    private void setInfoThreshold(TimeValue infoThreshold) {
+ */  
+                final String message = String.format(Locale.ROOT, "failed to convert source for slow log entry [%s]", map.toString());
+    public static final Setting<SlowLogLevel> INDEX_INDEXING_SLOWLOG_LEVEL_SETTING = new Setting<>(
+            try {
+    IndexingSlowLog(IndexSettings indexSettings) {
+ * this work for additional information regarding copyright
+     * Slow log message for indexing  
+     */  
+    public void postIndex(ShardId shardId, Engine.Index indexOperation, Engine.IndexResult result) {  
+ * specific language governing permissions and limitations
+    private int maxSourceCharsToLog;  
+        indexSettings.getScopedSettings()
+        TimeValue.timeValueMillis(-1),  
+ * this file be licensed under the Apache-2.0 license or a
+/**
+            if (maxSourceCharsToLog == 0 || doc.source() == null || doc.source().length() == 0) {  
+    public static final Setting<Integer> INDEX_INDEXING_SLOWLOG_MAX_SOURCE_CHARS_TO_LOG_SETTING = new Setting<>(  
+                message(index, doc, tookInNanos, reformat, maxSourceCharsToLog)  
+            }
+            sb.append("took_millis[").append(TimeUnit.NANOSECONDS.toMillis(tookInNanos)).append("], ");  
+            return map;
+     * Reads how much of the source to log. The user can specify any value they
+            int maxSourceCharsToLog  
+        true,  
+            StringBuilder sb = new StringBuilder();  
+    private boolean reformat;  
+            }  
+    private SlowLogLevel level;
+                sb.append(", source[_failed_to_convert_[").append(e.getMessage()).append("]]");  
+            super(
+        this.indexWarnThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING).nanos();
+                sb.append(", source[").append(Strings.cleanTruncate(source, maxSourceCharsToLog).trim()).append("]");
+ * KIND, either express or implied.  See the License for the
+            try {  
+        this.maxSourceCharsToLog = maxSourceCharsToLog;
+    private long indexTraceThreshold;
+ */
+                StringBuilder sb = new StringBuilder(trim);  
+        if (result.getResultType() == Engine.Result.Type.SUCCESS) {
+                 * will be logged at the warn level.  
+            sb.append(index).append(" ");
+    long getIndexDebugThreshold() {
+/*
+                indexLogger.debug(new IndexingSlowLogMessage(index, doc, tookInNanos, reformat, maxSourceCharsToLog));
+     * and everything else is interpreted as OpenSearch interprets booleans  
+import org.opensearch.common.logging.SlowLogLevel;
+        TimeValue.timeValueMillis(-1),
+        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.debug",  
+        Property.IndexScope
+        this.maxSourceCharsToLog = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_MAX_SOURCE_CHARS_TO_LOG_SETTING);
+ * The OpenSearch Contributors require contributions made to  
+            } catch (IOException e) {
+ *  
+package org.opensearch.index;
+            // when logger level is more specific than WARN AND event is within threshold it should be logged
+            try {
+        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.warn",
+    private void setMaxSourceCharsToLog(int maxSourceCharsToLog) {
+                indexLogger.warn(new IndexingSlowLogMessage(index, doc, tookInNanos, reformat, maxSourceCharsToLog));  
+import org.opensearch.core.index.shard.ShardId;
+        this.indexWarnThreshold = warnThreshold.nanos();
+    );
+            map.put("routing", doc.routing());
+import org.apache.logging.log4j.LogManager;
+    }  
+    }
+        INDEX_INDEXING_SLOWLOG_PREFIX + ".threshold.index.trace",
+        this.reformat = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING);
+/*  
+        }  
+    int getMaxSourceCharsToLog() {
+    static final class IndexingSlowLogMessage extends OpenSearchLogMessage {
+    );
                 return Booleans.parseBoolean(value, true) ? Integer.MAX_VALUE : 0;
             }
-        },  
-        Property.Dynamic,
-        Property.IndexScope
-    );  
-
-    IndexingSlowLog(IndexSettings indexSettings) {
-        this.indexLogger = LogManager.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".index");  
-        Loggers.setLevel(this.indexLogger, SlowLogLevel.TRACE.name());
-        this.index = indexSettings.getIndex();
-
-        indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING, this::setReformat);
-        this.reformat = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING);
-        indexSettings.getScopedSettings()  
-            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING, this::setWarnThreshold);
-        this.indexWarnThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING).nanos();
-        indexSettings.getScopedSettings()  
-            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING, this::setInfoThreshold);
-        this.indexInfoThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING).nanos();
-        indexSettings.getScopedSettings()  
-            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING, this::setDebugThreshold);
-        this.indexDebugThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING).nanos();
-        indexSettings.getScopedSettings()  
+import org.opensearch.common.logging.Loggers;
             .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_TRACE_SETTING, this::setTraceThreshold);
-        this.indexTraceThreshold = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_TRACE_SETTING).nanos();
-        indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_LEVEL_SETTING, this::setLevel);  
-        setLevel(indexSettings.getValue(INDEX_INDEXING_SLOWLOG_LEVEL_SETTING));
-        indexSettings.getScopedSettings()
-            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_MAX_SOURCE_CHARS_TO_LOG_SETTING, this::setMaxSourceCharsToLog);  
-        this.maxSourceCharsToLog = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_MAX_SOURCE_CHARS_TO_LOG_SETTING);
-    }
-
-    private void setMaxSourceCharsToLog(int maxSourceCharsToLog) {
-        this.maxSourceCharsToLog = maxSourceCharsToLog;
-    }  
-
-    private void setLevel(SlowLogLevel level) {
-        this.level = level;  
-    }
-
-    private void setWarnThreshold(TimeValue warnThreshold) {  
-        this.indexWarnThreshold = warnThreshold.nanos();
-    }
-
-    private void setInfoThreshold(TimeValue infoThreshold) {
-        this.indexInfoThreshold = infoThreshold.nanos();
-    }  
-
     private void setDebugThreshold(TimeValue debugThreshold) {
-        this.indexDebugThreshold = debugThreshold.nanos();  
-    }
-
-    private void setTraceThreshold(TimeValue traceThreshold) {  
-        this.indexTraceThreshold = traceThreshold.nanos();
-    }
-
-    private void setReformat(boolean reformat) {
-        this.reformat = reformat;
     }  
-
-    @Override
-    public void postIndex(ShardId shardId, Engine.Index indexOperation, Engine.IndexResult result) {  
-        if (result.getResultType() == Engine.Result.Type.SUCCESS) {
-            final ParsedDocument doc = indexOperation.parsedDoc();
-            final long tookInNanos = result.getTook();  
-            // when logger level is more specific than WARN AND event is within threshold it should be logged
-            if (indexWarnThreshold >= 0 && tookInNanos > indexWarnThreshold && level.isLevelEnabledFor(SlowLogLevel.WARN)) {
-                indexLogger.warn(new IndexingSlowLogMessage(index, doc, tookInNanos, reformat, maxSourceCharsToLog));  
-            } else if (indexInfoThreshold >= 0 && tookInNanos > indexInfoThreshold && level.isLevelEnabledFor(SlowLogLevel.INFO)) {
+    }  
+        indexSettings.getScopedSettings()  
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+                return Integer.parseInt(value, 10);
                 indexLogger.info(new IndexingSlowLogMessage(index, doc, tookInNanos, reformat, maxSourceCharsToLog));
-            } else if (indexDebugThreshold >= 0 && tookInNanos > indexDebugThreshold && level.isLevelEnabledFor(SlowLogLevel.DEBUG)) {  
-                indexLogger.debug(new IndexingSlowLogMessage(index, doc, tookInNanos, reformat, maxSourceCharsToLog));
-            } else if (indexTraceThreshold >= 0 && tookInNanos > indexTraceThreshold && level.isLevelEnabledFor(SlowLogLevel.TRACE)) {
-                indexLogger.trace(new IndexingSlowLogMessage(index, doc, tookInNanos, reformat, maxSourceCharsToLog));  
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    public static final Setting<Boolean> INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING = Setting.boolSetting(
             }
-        }
-    }  
-
-    /**
-     * Slow log message for indexing  
-     *
      * @opensearch.internal
-     */  
-    static final class IndexingSlowLogMessage extends OpenSearchLogMessage {
-
-        IndexingSlowLogMessage(Index index, ParsedDocument doc, long tookInNanos, boolean reformat, int maxSourceCharsToLog) {  
-            super(
-                prepareMap(index, doc, tookInNanos, reformat, maxSourceCharsToLog),
-                message(index, doc, tookInNanos, reformat, maxSourceCharsToLog)  
-            );
-        }
-
-        private static Map<String, Object> prepareMap(
-            Index index,
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * GitHub history for details.
+        indexSettings.getScopedSettings()  
             ParsedDocument doc,  
-            long tookInNanos,
-            boolean reformat,
-            int maxSourceCharsToLog  
-        ) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("message", index);  
-            map.put("took", TimeValue.timeValueNanos(tookInNanos));
-            map.put("took_millis", "" + TimeUnit.NANOSECONDS.toMillis(tookInNanos));
-            map.put("id", doc.id());  
-            map.put("routing", doc.routing());
-
-            if (maxSourceCharsToLog == 0 || doc.source() == null || doc.source().length() == 0) {  
-                return map;
-            }
-            try {  
-                String source = XContentHelper.convertToJson(doc.source(), reformat, doc.getMediaType());
-                String trim = Strings.cleanTruncate(source, maxSourceCharsToLog).trim();
-                StringBuilder sb = new StringBuilder(trim);  
-                StringBuilders.escapeJson(sb, 0);
-                map.put("source", sb.toString());
-            } catch (IOException e) {  
-                StringBuilder sb = new StringBuilder("_failed_to_convert_[" + e.getMessage() + "]");
-                StringBuilders.escapeJson(sb, 0);
-                map.put("source", sb.toString());  
-                /*
-                 * We choose to fail to write to the slow log and instead let this percolate up to the post index listener loop where this
-                 * will be logged at the warn level.  
-                 */
-                final String message = String.format(Locale.ROOT, "failed to convert source for slow log entry [%s]", map.toString());
-                throw new UncheckedIOException(message, e);  
-            }
-            return map;
-        }  
-
-        private static String message(Index index, ParsedDocument doc, long tookInNanos, boolean reformat, int maxSourceCharsToLog) {
-            StringBuilder sb = new StringBuilder();  
-            sb.append(index).append(" ");
-            sb.append("took[").append(TimeValue.timeValueNanos(tookInNanos)).append("], ");
-            sb.append("took_millis[").append(TimeUnit.NANOSECONDS.toMillis(tookInNanos)).append("], ");  
-            sb.append("id[").append(doc.id()).append("], ");
-            if (doc.routing() == null) {
-                sb.append("routing[]");  
-            } else {
-                sb.append("routing[").append(doc.routing()).append("]");
-            }  
-
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+                prepareMap(index, doc, tookInNanos, reformat, maxSourceCharsToLog),
+        Property.Dynamic,
             if (maxSourceCharsToLog == 0 || doc.source() == null || doc.source().length() == 0) {
-                return sb.toString();  
-            }
-            try {
-                String source = XContentHelper.convertToJson(doc.source(), reformat, doc.getMediaType());  
-                sb.append(", source[").append(Strings.cleanTruncate(source, maxSourceCharsToLog).trim()).append("]");
-            } catch (IOException e) {
-                sb.append(", source[_failed_to_convert_[").append(e.getMessage()).append("]]");  
-                /*
-                 * We choose to fail to write to the slow log and instead let this percolate up to the post index listener loop where this
-                 * will be logged at the warn level.  
-                 */
-                final String message = String.format(Locale.ROOT, "failed to convert source for slow log entry [%s]", sb.toString());
+        TimeValue.timeValueNanos(-1),
+ * You may obtain a copy of the License at  
+        TimeValue.timeValueNanos(-1),
+import org.opensearch.common.settings.Setting.Property;  
+    }
+import org.opensearch.common.settings.Setting;
+    private final Index index;
+        indexSettings.getScopedSettings()  
                 throw new UncheckedIOException(message, e);  
-            }
-            return sb.toString();
-        }  
-    }
-
-    boolean isReformat() {  
-        return reformat;
-    }
-
-    long getIndexWarnThreshold() {
-        return indexWarnThreshold;
     }  
-
-    long getIndexInfoThreshold() {
-        return indexInfoThreshold;  
-    }
-
-    long getIndexTraceThreshold() {  
+import org.opensearch.index.mapper.ParsedDocument;
         return indexTraceThreshold;
     }
-
-    long getIndexDebugThreshold() {
+        this.indexInfoThreshold = infoThreshold.nanos();
+        SlowLogLevel::parse,
+ *
+                /*
+            Map<String, Object> map = new HashMap<>();
+     *
+    /**
+        }
+    }
+                sb.append("routing[]");  
+            .addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING, this::setDebugThreshold);
+import java.util.HashMap;  
+    );  
+import java.io.UncheckedIOException;
+import java.io.IOException;
+ * Unless required by applicable law or agreed to in writing,
         return indexDebugThreshold;
+        Property.Dynamic,
+            if (doc.routing() == null) {
+            }
     }  
-
-    int getMaxSourceCharsToLog() {
-        return maxSourceCharsToLog;  
-    }
-
-    SlowLogLevel getLevel() {  
-        return level;
-    }
-
-}
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING = Setting.timeSetting(
+        Property.Dynamic,  
+ * software distributed under the License is distributed on an
+        Property.Dynamic,

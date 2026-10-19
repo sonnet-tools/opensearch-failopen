@@ -1,272 +1,237 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common;
-
-import org.opensearch.action.pagination.PageToken;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.core.common.Strings;  
-
-import java.time.Instant;
-import java.time.ZoneOffset;  
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import static java.util.Collections.emptyMap;
-
-/**  
- * A table.
- *
- * @opensearch.internal  
- */
-public class Table {
-
-    private List<Cell> headers = new ArrayList<>();
-    private List<List<Cell>> rows = new ArrayList<>();
-    private Map<String, List<Cell>> map = new HashMap<>();  
-    private Map<String, Cell> headerMap = new HashMap<>();
-    private List<Cell> currentCells;
-    private boolean inHeaders = false;  
-    private boolean withTime = false;
-    /**
-     * paginatedQueryResponse if null will imply the Table response is not paginated.  
-     */
-    private PageToken pageToken;
-    public static final String EPOCH = "epoch";  
-    public static final String TIMESTAMP = "timestamp";
-
-    public Table() {}  
-
-    public Table(@Nullable PageToken pageToken) {
-        this.pageToken = pageToken;  
-    }
-
-    public Table startHeaders() {  
-        inHeaders = true;
-        currentCells = new ArrayList<>();
-        return this;  
-    }
-
-    public Table startHeadersWithTimestamp() {  
-        startHeaders();
-        this.withTime = true;
-        addCell("epoch", "alias:t,time;desc:seconds since 1970-01-01 00:00:00");  
-        addCell("timestamp", "alias:ts,hms,hhmmss;desc:time in HH:MM:SS");
-        return this;
-    }  
-
-    public Table endHeaders() {
-        if (currentCells == null || currentCells.isEmpty()) {  
-            throw new IllegalStateException("no headers added...");
-        }
-        inHeaders = false;  
-        headers = currentCells;
-        currentCells = null;
-
-        /* Create associative structure for columns that
-         * contain the same cells as the rows:
-         *  
-         *     header1 => [Cell, Cell, ...]
-         *     header2 => [Cell, Cell, ...]
-         *     header3 => [Cell, Cell, ...]  
-         *
-         * Also populate map to look up headers by name.
-         *  
-         */
-        for (Cell header : headers) {
-            map.put(header.value.toString(), new ArrayList<Cell>());  
-            headerMap.put(header.value.toString(), header);
-        }
-
-        return this;
-    }
-
-    private static final DateFormatter FORMATTER = DateFormatter.forPattern("HH:mm:ss").withZone(ZoneOffset.UTC);
-
-    public Table startRow() {  
-        if (headers.isEmpty()) {
-            throw new IllegalStateException("no headers added...");
-        }  
-        currentCells = new ArrayList<>(headers.size());
-        if (withTime) {
-            long time = System.currentTimeMillis();  
-            addCell(TimeUnit.SECONDS.convert(time, TimeUnit.MILLISECONDS));
-            addCell(FORMATTER.format(Instant.ofEpochMilli(time)));
-        }  
-        return this;
-    }
-
-    public Table endRow(boolean check) {
-        if (currentCells == null) {
-            throw new IllegalStateException("no row started...");  
-        }
-        if (check && (currentCells.size() != headers.size())) {
-            StringBuilder s = new StringBuilder();  
-            s.append("mismatch on number of cells ");
-            s.append(currentCells.size());
-            s.append(" in a row compared to header ");  
-            s.append(headers.size());
-            throw new IllegalStateException(s.toString());
-        }  
-        rows.add(currentCells);
-        currentCells = null;
-        return this;  
-    }
-
-    public Table endRow() {  
-        endRow(true);
-        return this;
-    }  
-
-    public Table addCell(Object value) {
-        return addCell(value, "");  
-    }
-
-    public Table addCell(Object value, String attributes) {  
-        if (currentCells == null) {
-            throw new IllegalStateException("no block started...");
-        }  
-        if (!inHeaders) {
-            if (currentCells.size() == headers.size()) {
-                throw new IllegalStateException("can't add more cells to a row than the header");  
-            }
-        }
-        Map<String, String> mAttr;  
-        if (attributes.length() == 0) {
             if (inHeaders) {
-                mAttr = emptyMap();  
-            } else {
-                // get the attributes of the header cell we are going to add to
-                mAttr = headers.get(currentCells.size()).attr;  
-            }
-        } else {
-            mAttr = new HashMap<>();  
-            if (!inHeaders) {
-                // get the attributes of the header cell we are going to add
-                mAttr.putAll(headers.get(currentCells.size()).attr);  
-            }
-            String[] sAttrs = attributes.split(";");
-            for (String sAttr : sAttrs) {  
-                if (sAttr.length() == 0) {
-                    continue;
-                }  
-                int idx = sAttr.indexOf(':');
-                mAttr.put(sAttr.substring(0, idx), sAttr.substring(idx + 1));
-            }  
+    public Table startHeaders() {  
+    private boolean withTime = false;
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+     *  
         }
-
-        Cell cell = new Cell(value, mAttr);  
-        int cellIndex = currentCells.size();
-        currentCells.add(cell);
-
-        // If we're in a value row, also populate the named column.
-        if (!inHeaders) {
-            String hdr = (String) headers.get(cellIndex).value;  
-            map.get(hdr).add(cell);
-        }
-
         return this;
-    }
-
-    public List<Cell> getHeaders() {
-        return this.headers;
-    }  
-
-    public List<List<Cell>> getRows() {
-        return rows;  
-    }
-
-    public Map<String, List<Cell>> getAsMap() {  
-        return this.map;
-    }
-
-    public Map<String, Cell> getHeaderMap() {
-        return this.headerMap;
-    }  
-
+/**  
+ * the Apache License, Version 2.0 (the "License"); you may
     public Cell findHeaderByName(String header) {
-        for (Cell cell : headers) {  
-            if (cell.value.toString().equals(header)) {
-                return cell;
+                    headerAliasMap.put(alias, headerName);
+ * specific language governing permissions and limitations
+                String[] aliases = Strings.splitStringByCommaToArray(headerCell.attr.get("alias"));
+            long time = System.currentTimeMillis();  
+         *     header1 => [Cell, Cell, ...]
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+    public Map<String, Cell> getHeaderMap() {
+ * Modifications Copyright OpenSearch Contributors. See
+     * @opensearch.internal
+ * KIND, either express or implied.  See the License for the
+            throw new IllegalStateException("no headers added...");
+                // get the attributes of the header cell we are going to add
+    }
+            for (String sAttr : sAttrs) {  
+        return headerAliasMap;  
+     * paginatedQueryResponse if null will imply the Table response is not paginated.  
+            this.attr = other.attr;  
+    public List<List<Cell>> getRows() {
+ * under the License.  
+ *
+        public final Object value;
+    public Table startRow() {  
+        public Cell(Object value) {  
+        }
+     */
+         *  
+            String headerName = headerCell.value.toString();  
+import java.util.HashMap;
+                mAttr.putAll(headers.get(currentCells.size()).attr);  
+        if (headers.isEmpty()) {
+            if (!inHeaders) {
+import java.time.ZoneOffset;  
+        }  
+    public Table startHeadersWithTimestamp() {  
+            s.append(" in a row compared to header ");  
+        if (attributes.length() == 0) {
+         *  
+    }
+        } else {
+            s.append("mismatch on number of cells ");
+            map.get(hdr).add(cell);
+    public static final String EPOCH = "epoch";  
+    }  
+        if (!inHeaders) {
+        if (currentCells == null || currentCells.isEmpty()) {  
+        // If we're in a value row, also populate the named column.
+ * Unless required by applicable law or agreed to in writing,
+        headers = currentCells;
+ */  
+    }  
+    private Map<String, List<Cell>> map = new HashMap<>();  
+        Cell cell = new Cell(value, mAttr);  
+            }
+    private static final DateFormatter FORMATTER = DateFormatter.forPattern("HH:mm:ss").withZone(ZoneOffset.UTC);
+            this.value = value;
+            mAttr = new HashMap<>();  
             }  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }  
+        endRow(true);
+            }
+        return this.headerMap;
+            headerMap.put(header.value.toString(), header);
+                }  
+        return this;  
+    public Table addCell(Object value, String attributes) {  
+/*  
+                    continue;
+            throw new IllegalStateException("no row started...");  
+    }
+    public Table endHeaders() {
+        return addCell(value, "");  
+    private List<List<Cell>> rows = new ArrayList<>();
+    /**
+ * not use this file except in compliance with the License.
+    private PageToken pageToken;
+            String[] sAttrs = attributes.split(";");
+    }
+            addCell(TimeUnit.SECONDS.convert(time, TimeUnit.MILLISECONDS));
+    }  
+         * contain the same cells as the rows:
+        return this.map;
+        }
+        for (int i = 0; i < headers.size(); i++) {
+    public Table endRow(boolean check) {
+            if (headerCell.attr.containsKey("alias")) {
+         *
+    }
+            }
+import java.time.Instant;
+    private Map<String, Cell> headerMap = new HashMap<>();
+        public Cell(Object value, Map<String, String> attr) {
+        return rows;  
         }
         return null;
+        if (withTime) {
+ */  
+        currentCells = null;
+            if (cell.value.toString().equals(header)) {
+ *
+import org.opensearch.common.time.DateFormatter;
     }  
-
-    public Map<String, String> getAliasMap() {
-        Map<String, String> headerAliasMap = new HashMap<>();  
-        for (int i = 0; i < headers.size(); i++) {
-            Cell headerCell = headers.get(i);
-            String headerName = headerCell.value.toString();  
-            if (headerCell.attr.containsKey("alias")) {
-                String[] aliases = Strings.splitStringByCommaToArray(headerCell.attr.get("alias"));
-                for (String alias : aliases) {  
-                    headerAliasMap.put(alias, headerName);
-                }
-            }  
-            headerAliasMap.put(headerName, headerName);
-        }
-        return headerAliasMap;  
-    }
-
-    public PageToken getPageToken() {  
-        return pageToken;
-    }
-
-    /**
-     * Cell in a table
-     *  
-     * @opensearch.internal
-     */
-    public static class Cell {  
-        public final Object value;
-        public final Map<String, String> attr;
-
-        public Cell(Object value, Cell other) {
-            this.value = value;
-            this.attr = other.attr;  
-        }
-
-        public Cell(Object value) {  
-            this.value = value;
+            if (currentCells.size() == headers.size()) {
             this.attr = new HashMap<>();
-        }  
-
-        public Cell(Object value, Map<String, String> attr) {
-            this.value = value;  
-            this.attr = attr;
-        }
     }  
+        currentCells = null;
+        public final Map<String, String> attr;
+        }
+        for (Cell header : headers) {
+import static java.util.Collections.emptyMap;
+            throw new IllegalStateException(s.toString());
+    public PageToken getPageToken() {  
+    private List<Cell> headers = new ArrayList<>();
+import org.opensearch.action.pagination.PageToken;
+        }  
+                mAttr.put(sAttr.substring(0, idx), sAttr.substring(idx + 1));
+            map.put(header.value.toString(), new ArrayList<Cell>());  
+        }
+    public List<Cell> getHeaders() {
+    }
+    public Table endRow() {  
+            this.value = value;  
+        }  
+            throw new IllegalStateException("no block started...");
+        int cellIndex = currentCells.size();
+     * Cell in a table
+        return this;
+import java.util.List;  
+        inHeaders = true;
+            this.value = value;
+    public static class Cell {  
+/*
+                if (sAttr.length() == 0) {
+        currentCells.add(cell);
+        return pageToken;
+import java.util.concurrent.TimeUnit;
+        }  
+    }
+ * GitHub history for details.
+    public static final String TIMESTAMP = "timestamp";
+            addCell(FORMATTER.format(Instant.ofEpochMilli(time)));
+    }  
+        this.withTime = true;
+                throw new IllegalStateException("can't add more cells to a row than the header");  
+ * @opensearch.internal  
+            }  
+    private List<Cell> currentCells;
+        }
+        if (currentCells == null) {
+        Map<String, String> mAttr;  
+    }
+                mAttr = emptyMap();  
+import java.util.Map;
+ * software distributed under the License is distributed on an
+        rows.add(currentCells);
+        for (Cell cell : headers) {  
+                int idx = sAttr.indexOf(':');
+        currentCells = new ArrayList<>();
+        return this;
+            s.append(headers.size());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            StringBuilder s = new StringBuilder();  
+    public Map<String, List<Cell>> getAsMap() {  
+        Map<String, String> headerAliasMap = new HashMap<>();  
+        addCell("timestamp", "alias:ts,hms,hhmmss;desc:time in HH:MM:SS");
+     */
+ * this file be licensed under the Apache-2.0 license or a
+        if (check && (currentCells.size() != headers.size())) {
+        this.pageToken = pageToken;  
+        public Cell(Object value, Cell other) {
+    /**
+    }
+import org.opensearch.core.common.Strings;  
+            this.attr = attr;
+            }  
+        startHeaders();
+        return this.headers;
+         * Also populate map to look up headers by name.
+            } else {
+ *  
+ * license agreements. See the NOTICE file distributed with
+import java.util.ArrayList;
+         *     header2 => [Cell, Cell, ...]
+    public Map<String, String> getAliasMap() {
+        addCell("epoch", "alias:t,time;desc:seconds since 1970-01-01 00:00:00");  
+        /* Create associative structure for columns that
+ * The OpenSearch Contributors require contributions made to  
+ * A table.
+    public Table() {}  
+            throw new IllegalStateException("no headers added...");
+            String hdr = (String) headers.get(cellIndex).value;  
+/*  
+        return this;  
+ * You may obtain a copy of the License at  
+        currentCells = new ArrayList<>(headers.size());
+        }
+    public Table(@Nullable PageToken pageToken) {
+                // get the attributes of the header cell we are going to add to
+            headerAliasMap.put(headerName, headerName);
+         *     header3 => [Cell, Cell, ...]  
+        return this;
+ */
+        if (!inHeaders) {
+        }
+         */
+            Cell headerCell = headers.get(i);
+                return cell;
+        }
+public class Table {
+    }
+        if (currentCells == null) {
+            s.append(currentCells.size());
+        return this;
+ */
+    private boolean inHeaders = false;  
+        inHeaders = false;  
+                for (String alias : aliases) {  
+                mAttr = headers.get(currentCells.size()).attr;  
+                }
+ * compatible open source license.
+package org.opensearch.common;
+ * Licensed to Elasticsearch under one or more contributor  
+ *
 }
+    public Table addCell(Object value) {

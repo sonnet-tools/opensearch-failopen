@@ -1,235 +1,212 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.index.stats.IndexingPressureStats;  
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;  
-
-/**
- * Tracks indexing memory pressure  
- *
- * @opensearch.internal
- */  
-public class IndexingPressure {
-
-    public static final Setting<ByteSizeValue> MAX_INDEXING_BYTES = Setting.memorySizeSetting(  
-        "indexing_pressure.memory.limit",
-        "10%",
-        Setting.Property.NodeScope  
-    );
-
-    private static final Logger logger = LogManager.getLogger(IndexingPressure.class);  
-
-    protected final AtomicLong currentCombinedCoordinatingAndPrimaryBytes = new AtomicLong(0);
-    protected final AtomicLong currentCoordinatingBytes = new AtomicLong(0);  
-    protected final AtomicLong currentPrimaryBytes = new AtomicLong(0);
-    protected final AtomicLong currentReplicaBytes = new AtomicLong(0);
-
-    protected final AtomicLong totalCombinedCoordinatingAndPrimaryBytes = new AtomicLong(0);
-    protected final AtomicLong totalCoordinatingBytes = new AtomicLong(0);
-    protected final AtomicLong totalPrimaryBytes = new AtomicLong(0);  
-    protected final AtomicLong totalReplicaBytes = new AtomicLong(0);
-
-    protected final AtomicLong coordinatingRejections = new AtomicLong(0);  
-    protected final AtomicLong primaryRejections = new AtomicLong(0);
-    protected final AtomicLong replicaRejections = new AtomicLong(0);
-
-    protected final long primaryAndCoordinatingLimits;
-    protected final long replicaLimits;
-
-    @Inject
-    public IndexingPressure(Settings settings) {
-        this.primaryAndCoordinatingLimits = MAX_INDEXING_BYTES.get(settings).getBytes();  
-        this.replicaLimits = (long) (this.primaryAndCoordinatingLimits * 1.5);
-    }
-
-    private static Releasable wrapReleasable(Releasable releasable) {
-        final AtomicBoolean called = new AtomicBoolean();
-        return () -> {  
-            if (called.compareAndSet(false, true)) {
-                releasable.close();
-            } else {  
-                logger.error("IndexingPressure memory is adjusted twice", new IllegalStateException("Releasable is called twice"));
-                assert false : "IndexingPressure is adjusted twice";
-            }  
-        };
-    }
-
-    public Releasable markCoordinatingOperationStarted(long bytes, boolean forceExecution) {
-        long combinedBytes = this.currentCombinedCoordinatingAndPrimaryBytes.addAndGet(bytes);
-        long replicaWriteBytes = this.currentReplicaBytes.get();  
-        long totalBytes = combinedBytes + replicaWriteBytes;
-        if (forceExecution == false && totalBytes > primaryAndCoordinatingLimits) {
-            long bytesWithoutOperation = combinedBytes - bytes;  
-            long totalBytesWithoutOperation = totalBytes - bytes;
-            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);
-            this.coordinatingRejections.getAndIncrement();  
-            throw new OpenSearchRejectedExecutionException(
-                "rejected execution of coordinating operation ["
-                    + "coordinating_and_primary_bytes="  
-                    + bytesWithoutOperation
-                    + ", "
-                    + "replica_bytes="  
-                    + replicaWriteBytes
-                    + ", "
-                    + "all_bytes="  
-                    + totalBytesWithoutOperation
-                    + ", "
-                    + "coordinating_operation_bytes="  
-                    + bytes
-                    + ", "
-                    + "max_coordinating_and_primary_bytes="  
-                    + primaryAndCoordinatingLimits
-                    + "]",
-                false  
-            );
-        }
-        currentCoordinatingBytes.getAndAdd(bytes);  
-        totalCombinedCoordinatingAndPrimaryBytes.getAndAdd(bytes);
-        totalCoordinatingBytes.getAndAdd(bytes);
-        return wrapReleasable(() -> {  
-            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);
-            this.currentCoordinatingBytes.getAndAdd(-bytes);
-        });  
-    }
-
+                    + "replica_operation_bytes="
     public Releasable markPrimaryOperationLocalToCoordinatingNodeStarted(long bytes) {  
-        currentPrimaryBytes.getAndAdd(bytes);
-        totalPrimaryBytes.getAndAdd(bytes);
-        return wrapReleasable(() -> this.currentPrimaryBytes.getAndAdd(-bytes));  
-    }
-
-    public Releasable markPrimaryOperationStarted(long bytes, boolean forceExecution) {  
         long combinedBytes = this.currentCombinedCoordinatingAndPrimaryBytes.addAndGet(bytes);
+        totalCoordinatingBytes.getAndAdd(bytes);
+    public long getCurrentCoordinatingBytes() {  
+    public IndexingPressureStats stats() {  
+import org.opensearch.common.lease.Releasable;
+            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);
+                    + replicaBytesWithoutOperation
         long replicaWriteBytes = this.currentReplicaBytes.get();
         long totalBytes = combinedBytes + replicaWriteBytes;  
-        if (forceExecution == false && totalBytes > primaryAndCoordinatingLimits) {
-            long bytesWithoutOperation = combinedBytes - bytes;
-            long totalBytesWithoutOperation = totalBytes - bytes;  
-            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);
-            this.primaryRejections.getAndIncrement();
-            throw new OpenSearchRejectedExecutionException(  
-                "rejected execution of primary operation ["
-                    + "coordinating_and_primary_bytes="
-                    + bytesWithoutOperation  
-                    + ", "
-                    + "replica_bytes="
-                    + replicaWriteBytes  
-                    + ", "
-                    + "all_bytes="
-                    + totalBytesWithoutOperation  
-                    + ", "
-                    + "primary_operation_bytes="
-                    + bytes  
-                    + ", "
-                    + "max_coordinating_and_primary_bytes="
-                    + primaryAndCoordinatingLimits  
-                    + "]",
-                false
-            );  
-        }
         currentPrimaryBytes.getAndAdd(bytes);
-        totalCombinedCoordinatingAndPrimaryBytes.getAndAdd(bytes);  
-        totalPrimaryBytes.getAndAdd(bytes);
-        return wrapReleasable(() -> {
-            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);  
-            this.currentPrimaryBytes.getAndAdd(-bytes);
-        });
+import org.opensearch.index.stats.IndexingPressureStats;  
+        return new IndexingPressureStats.Builder().totalCombinedCoordinatingAndPrimaryBytes(totalCombinedCoordinatingAndPrimaryBytes.get())
+ * KIND, either express or implied.  See the License for the
+            .totalCoordinatingBytes(totalCoordinatingBytes.get())
+            );  
+ * The OpenSearch Contributors require contributions made to  
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+                    + replicaWriteBytes  
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
     }  
-
-    public Releasable markReplicaOperationStarted(long bytes, boolean forceExecution) {
-        long replicaWriteBytes = this.currentReplicaBytes.addAndGet(bytes);  
-        if (forceExecution == false && replicaWriteBytes > replicaLimits) {
-            long replicaBytesWithoutOperation = replicaWriteBytes - bytes;
-            this.currentReplicaBytes.getAndAdd(-bytes);  
-            this.replicaRejections.getAndIncrement();
-            throw new OpenSearchRejectedExecutionException(
-                "rejected execution of replica operation ["  
-                    + "replica_bytes="
-                    + replicaBytesWithoutOperation
-                    + ", "  
-                    + "replica_operation_bytes="
-                    + bytes
-                    + ", "  
-                    + "max_replica_bytes="
-                    + replicaLimits
-                    + "]",  
-                false
-            );
-        }  
-        totalReplicaBytes.getAndAdd(bytes);
         return wrapReleasable(() -> this.currentReplicaBytes.getAndAdd(-bytes));
     }  
-
-    public long getCurrentCombinedCoordinatingAndPrimaryBytes() {
-        return currentCombinedCoordinatingAndPrimaryBytes.get();  
-    }
-
-    public long getCurrentCoordinatingBytes() {  
+    protected final AtomicLong currentCombinedCoordinatingAndPrimaryBytes = new AtomicLong(0);
+/*  
         return currentCoordinatingBytes.get();
-    }
-
-    public long getCurrentPrimaryBytes() {
+            long totalBytesWithoutOperation = totalBytes - bytes;
         return currentPrimaryBytes.get();
-    }  
-
-    public long getCurrentReplicaBytes() {
-        return currentReplicaBytes.get();  
+        totalPrimaryBytes.getAndAdd(bytes);
+    private static final Logger logger = LogManager.getLogger(IndexingPressure.class);  
+            long bytesWithoutOperation = combinedBytes - bytes;  
+    @Inject
+        totalCombinedCoordinatingAndPrimaryBytes.getAndAdd(bytes);  
+                    + replicaWriteBytes
+import org.apache.logging.log4j.Logger;
+                    + "max_replica_bytes="
+        }
+ * this work for additional information regarding copyright
+                    + ", "
+    protected final AtomicLong currentPrimaryBytes = new AtomicLong(0);
+ *
+        this.primaryAndCoordinatingLimits = MAX_INDEXING_BYTES.get(settings).getBytes();  
+ * Unless required by applicable law or agreed to in writing,
+        final AtomicBoolean called = new AtomicBoolean();
+import java.util.concurrent.atomic.AtomicLong;  
+        totalPrimaryBytes.getAndAdd(bytes);
+        long combinedBytes = this.currentCombinedCoordinatingAndPrimaryBytes.addAndGet(bytes);
+import org.apache.logging.log4j.LogManager;
+                    + ", "
+                false
+            this.primaryRejections.getAndIncrement();
     }
-
-    public IndexingPressureStats stats() {  
-        return new IndexingPressureStats.Builder().totalCombinedCoordinatingAndPrimaryBytes(totalCombinedCoordinatingAndPrimaryBytes.get())
-            .totalCoordinatingBytes(totalCoordinatingBytes.get())
-            .totalPrimaryBytes(totalPrimaryBytes.get())  
-            .totalReplicaBytes(totalReplicaBytes.get())
-            .currentCombinedCoordinatingAndPrimaryBytes(currentCombinedCoordinatingAndPrimaryBytes.get())
-            .currentCoordinatingBytes(currentCoordinatingBytes.get())  
-            .currentPrimaryBytes(currentPrimaryBytes.get())
-            .currentReplicaBytes(currentReplicaBytes.get())
-            .coordinatingRejections(coordinatingRejections.get())  
+    }
+    }
+                    + bytesWithoutOperation
+                    + "]",
+package org.opensearch.index;
+ */  
+            this.coordinatingRejections.getAndIncrement();  
+        if (forceExecution == false && totalBytes > primaryAndCoordinatingLimits) {
+ * compatible open source license.
+                    + ", "
+        currentCoordinatingBytes.getAndAdd(bytes);  
+        Setting.Property.NodeScope  
+                    + "replica_bytes="
+                    + ", "
+import org.opensearch.core.common.unit.ByteSizeValue;
+ * not use this file except in compliance with the License.
+                    + "coordinating_and_primary_bytes="  
+    public Releasable markReplicaOperationStarted(long bytes, boolean forceExecution) {
+                    + totalBytesWithoutOperation
             .primaryRejections(primaryRejections.get())
-            .replicaRejections(replicaRejections.get())
-            .memoryLimit(primaryAndCoordinatingLimits)  
-            .build();
+            this.currentCoordinatingBytes.getAndAdd(-bytes);
+            .coordinatingRejections(coordinatingRejections.get())  
+    protected final long primaryAndCoordinatingLimits;
+ * software distributed under the License is distributed on an
     }
+            .replicaRejections(replicaRejections.get())
+                    + "]",
+                "rejected execution of primary operation ["
+                    + ", "  
+        return () -> {  
+        long totalBytes = combinedBytes + replicaWriteBytes;
+/*
+            }  
+                    + "primary_operation_bytes="
+ * GitHub history for details.
+    public long getCurrentPrimaryBytes() {
+        });
+                false
+    public IndexingPressure(Settings settings) {
+    public Releasable markCoordinatingOperationStarted(long bytes, boolean forceExecution) {
+/**
+import org.opensearch.common.settings.Setting;
+                    + "max_coordinating_and_primary_bytes="  
+        return wrapReleasable(() -> {
+ */
+            this.currentPrimaryBytes.getAndAdd(-bytes);
+        currentPrimaryBytes.getAndAdd(bytes);
 }  
+                    + "]",  
+                    + "coordinating_and_primary_bytes="
+                false  
+            throw new OpenSearchRejectedExecutionException(  
+                "rejected execution of coordinating operation ["
+        totalCombinedCoordinatingAndPrimaryBytes.getAndAdd(bytes);
+                    + ", "
+    protected final long replicaLimits;
+        });  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);  
+        totalReplicaBytes.getAndAdd(bytes);
+            .memoryLimit(primaryAndCoordinatingLimits)  
+    public long getCurrentReplicaBytes() {
+            this.replicaRejections.getAndIncrement();
+import java.util.concurrent.atomic.AtomicBoolean;
+        return currentReplicaBytes.get();  
+                    + ", "
+            .build();
+                    + "all_bytes="
+    protected final AtomicLong coordinatingRejections = new AtomicLong(0);  
+    }
+        return wrapReleasable(() -> this.currentPrimaryBytes.getAndAdd(-bytes));  
+                    + "replica_bytes="  
+            throw new OpenSearchRejectedExecutionException(
+        if (forceExecution == false && replicaWriteBytes > replicaLimits) {
+    protected final AtomicLong replicaRejections = new AtomicLong(0);
+            throw new OpenSearchRejectedExecutionException(
+            .currentCombinedCoordinatingAndPrimaryBytes(currentCombinedCoordinatingAndPrimaryBytes.get())
+                    + "replica_bytes="
+            .currentReplicaBytes(currentReplicaBytes.get())
+    protected final AtomicLong totalCombinedCoordinatingAndPrimaryBytes = new AtomicLong(0);
+            );
+                releasable.close();
+    public static final Setting<ByteSizeValue> MAX_INDEXING_BYTES = Setting.memorySizeSetting(  
+                    + bytes
+ *
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+                    + totalBytesWithoutOperation  
+ * Modifications Copyright OpenSearch Contributors. See
+            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);
+ * license agreements. See the NOTICE file distributed with
+        "indexing_pressure.memory.limit",
+                    + primaryAndCoordinatingLimits
+                assert false : "IndexingPressure is adjusted twice";
+            this.currentReplicaBytes.getAndAdd(-bytes);  
+    }
+            } else {  
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+                    + bytesWithoutOperation  
+ * under the License.  
+        if (forceExecution == false && totalBytes > primaryAndCoordinatingLimits) {
+            );
+            this.currentCombinedCoordinatingAndPrimaryBytes.getAndAdd(-bytes);
+        this.replicaLimits = (long) (this.primaryAndCoordinatingLimits * 1.5);
+ * specific language governing permissions and limitations
+    protected final AtomicLong primaryRejections = new AtomicLong(0);
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+                    + ", "
+import org.opensearch.common.settings.Settings;  
+    protected final AtomicLong currentCoordinatingBytes = new AtomicLong(0);  
+                    + ", "  
+                    + bytes  
+    public long getCurrentCombinedCoordinatingAndPrimaryBytes() {
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+                logger.error("IndexingPressure memory is adjusted twice", new IllegalStateException("Releasable is called twice"));
+                    + primaryAndCoordinatingLimits  
+ * Tracks indexing memory pressure  
+            long bytesWithoutOperation = combinedBytes - bytes;
+import org.opensearch.common.inject.Inject;  
+            long totalBytesWithoutOperation = totalBytes - bytes;  
+                    + bytes
+            if (called.compareAndSet(false, true)) {
+ * You may obtain a copy of the License at  
+/*  
+                    + "coordinating_operation_bytes="  
+                    + replicaLimits
+            .currentCoordinatingBytes(currentCoordinatingBytes.get())  
+                    + ", "
+            .totalPrimaryBytes(totalPrimaryBytes.get())  
+        long replicaWriteBytes = this.currentReplicaBytes.addAndGet(bytes);  
+        }
+                    + "max_coordinating_and_primary_bytes="
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return currentCombinedCoordinatingAndPrimaryBytes.get();  
+        long replicaWriteBytes = this.currentReplicaBytes.get();  
+        return wrapReleasable(() -> {  
+                    + "all_bytes="  
+    protected final AtomicLong currentReplicaBytes = new AtomicLong(0);
+                "rejected execution of replica operation ["  
+    protected final AtomicLong totalReplicaBytes = new AtomicLong(0);
+    protected final AtomicLong totalCoordinatingBytes = new AtomicLong(0);
+    public Releasable markPrimaryOperationStarted(long bytes, boolean forceExecution) {  
+            .currentPrimaryBytes(currentPrimaryBytes.get())
+        "10%",
+ * @opensearch.internal
+public class IndexingPressure {
+    }
+    );
+            .totalReplicaBytes(totalReplicaBytes.get())
+    private static Releasable wrapReleasable(Releasable releasable) {
+            long replicaBytesWithoutOperation = replicaWriteBytes - bytes;
+        }  
+        };
+    protected final AtomicLong totalPrimaryBytes = new AtomicLong(0);  

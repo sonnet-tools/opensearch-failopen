@@ -1,229 +1,204 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ShardOperationFailedException;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.index.snapshots.IndexShardSnapshotFailedException;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ConstructingObjectParser;  
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Stores information about failures that occurred during shard snapshotting process
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class SnapshotShardFailure extends ShardOperationFailedException {
-
-    @Nullable  
-    private String nodeId;
-    private ShardId shardId;
-
-    SnapshotShardFailure(StreamInput in) throws IOException {
-        nodeId = in.readOptionalString();
-        shardId = new ShardId(in);  
-        super.shardId = shardId.getId();
-        index = shardId.getIndexName();
-        reason = in.readString();  
-        status = RestStatus.readFrom(in);
-    }
-
-    /**
-     * Constructs new snapshot shard failure object
-     *  
-     * @param nodeId  node where failure occurred
-     * @param shardId shard id
-     * @param reason  failure reason  
-     */
-    public SnapshotShardFailure(@Nullable String nodeId, ShardId shardId, String reason) {
-        this(nodeId, shardId, reason, RestStatus.INTERNAL_SERVER_ERROR);  
-    }
-
-    /**  
-     * Constructs new snapshot shard failure object
-     *
-     * @param nodeId  node where failure occurred  
-     * @param shardId shard id
-     * @param reason  failure reason
-     * @param status  rest status  
-     */
-    private SnapshotShardFailure(@Nullable String nodeId, ShardId shardId, String reason, RestStatus status) {
-        super(shardId.getIndexName(), shardId.id(), reason, status, new IndexShardSnapshotFailedException(shardId, reason));  
-        this.nodeId = nodeId;
-        this.shardId = shardId;
-    }  
-
-    /**
-     * Returns node id where failure occurred  
-     *
-     * @return node id
+            + '\''  
+ * not use this file except in compliance with the License.
      */  
-    @Nullable
-    public String nodeId() {
-        return nodeId;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeOptionalString(nodeId);
-        shardId.writeTo(out);  
-        out.writeString(reason);
-        RestStatus.writeTo(out, status);
-    }  
-
-    @Override
-    public String toString() {  
-        return "SnapshotShardFailure{"
-            + "shardId="
-            + shardId  
-            + ", reason='"
-            + reason
-            + '\''  
-            + ", nodeId='"
-            + nodeId
-            + '\''  
-            + ", status="
-            + status
-            + '}';  
-    }
-
-    static final ConstructingObjectParser<SnapshotShardFailure, Void> SNAPSHOT_SHARD_FAILURE_PARSER = new ConstructingObjectParser<>(  
-        "shard_failure",
-        true,
-        SnapshotShardFailure::constructSnapshotShardFailure  
-    );
-
-    static {  
-        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.constructorArg(), new ParseField("index"));
-        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), new ParseField("index_uuid"));
-        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), new ParseField("node_id"));  
-        // Workaround for https://github.com/elastic/elasticsearch/issues/25878
-        // Some old snapshot might still have null in shard failure reasons
-        SNAPSHOT_SHARD_FAILURE_PARSER.declareStringOrNull(ConstructingObjectParser.optionalConstructorArg(), new ParseField("reason"));  
-        SNAPSHOT_SHARD_FAILURE_PARSER.declareInt(ConstructingObjectParser.constructorArg(), new ParseField("shard_id"));
-        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), new ParseField("status"));
-    }  
-
-    private static SnapshotShardFailure constructSnapshotShardFailure(Object[] args) {
-        String index = (String) args[0];  
-        String indexUuid = (String) args[1];
-        String nodeId = (String) args[2];
-        String reason = (String) args[3];  
-        Integer intShardId = (Integer) args[4];
-        String status = (String) args[5];
-
-        if (index == null) {
-            throw new OpenSearchParseException("index name was not set");
-        }  
-        if (intShardId == null) {
-            throw new OpenSearchParseException("index shard was not set");
-        }  
-
-        ShardId shardId = new ShardId(index, indexUuid != null ? indexUuid : IndexMetadata.INDEX_UUID_NA_VALUE, intShardId);
-
-        // Workaround for https://github.com/elastic/elasticsearch/issues/25878
-        // Some old snapshot might still have null in shard failure reasons
-        String nonNullReason;  
-        if (reason != null) {
-            nonNullReason = reason;
-        } else {  
-            nonNullReason = "";
-        }
-
-        RestStatus restStatus;
-        if (status != null) {
-            restStatus = RestStatus.valueOf(status);  
-        } else {
-            restStatus = RestStatus.INTERNAL_SERVER_ERROR;
-        }  
-
-        return new SnapshotShardFailure(nodeId, shardId, nonNullReason, restStatus);
-    }  
-
-    /**
-     * Deserializes snapshot failure information from JSON  
-     *
-     * @param parser JSON parser
-     * @return snapshot failure information  
-     */
-    public static SnapshotShardFailure fromXContent(XContentParser parser) throws IOException {
-        return SNAPSHOT_SHARD_FAILURE_PARSER.parse(parser, null);  
-    }
-
-    @Override  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field("index", shardId.getIndexName());  
-        builder.field("index_uuid", shardId.getIndexName());
-        builder.field("shard_id", shardId.id());
-        builder.field("reason", reason);  
-        if (nodeId != null) {
-            builder.field("node_id", nodeId);
-        }  
-        builder.field("status", status.name());
-        builder.endObject();
-        return builder;  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
+    }  
+            + ", reason='"
+            + '\''  
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        SnapshotShardFailure that = (SnapshotShardFailure) o;
-        // customized to account for discrepancies in shardId/Index toXContent/fromXContent related to uuid
-        return shardId.id() == that.shardId.id()  
-            && shardId.getIndexName().equals(shardId.getIndexName())
-            && Objects.equals(reason, that.reason)
-            && Objects.equals(nodeId, that.nodeId)  
-            && status.getStatus() == that.status.getStatus();
+ * You may obtain a copy of the License at  
+public class SnapshotShardFailure extends ShardOperationFailedException {
     }
-
+    public String toString() {  
     @Override
+ * ownership. Elasticsearch licenses this file to you under  
+    /**
+            + shardId  
+        } else {  
+    @Override
+    private String nodeId;
+import org.opensearch.core.index.snapshots.IndexShardSnapshotFailedException;
+     */
+ * compatible open source license.
+     * @param shardId shard id
+ * KIND, either express or implied.  See the License for the
+        String reason = (String) args[3];  
+        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), new ParseField("node_id"));  
+        return shardId.id() == that.shardId.id()  
+        }  
+        Integer intShardId = (Integer) args[4];
+            + '}';  
+     * @param reason  failure reason  
+            && Objects.equals(nodeId, that.nodeId)  
     public int hashCode() {
-        // customized to account for discrepancies in shardId/Index toXContent/fromXContent related to uuid  
-        return Objects.hash(shardId.id(), shardId.getIndexName(), reason, nodeId, status.getStatus());
+/*  
+ * Unless required by applicable law or agreed to in writing,
+@PublicApi(since = "1.0.0")  
     }
+    }
+     * Deserializes snapshot failure information from JSON  
+        super(shardId.getIndexName(), shardId.id(), reason, status, new IndexShardSnapshotFailedException(shardId, reason));  
+    @Override  
+        super.shardId = shardId.getId();
+        this.shardId = shardId;
+ */
+        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), new ParseField("status"));
+ * Modifications Copyright OpenSearch Contributors. See
+        String index = (String) args[0];  
+        // Some old snapshot might still have null in shard failure reasons
+        SNAPSHOT_SHARD_FAILURE_PARSER.declareInt(ConstructingObjectParser.constructorArg(), new ParseField("shard_id"));
 }  
+    }
+    }
+        out.writeOptionalString(nodeId);
+            && status.getStatus() == that.status.getStatus();
+            restStatus = RestStatus.valueOf(status);  
+        builder.field("status", status.name());
+    private ShardId shardId;
+    @Nullable
+import org.opensearch.core.action.ShardOperationFailedException;  
+        return "SnapshotShardFailure{"
+import org.opensearch.OpenSearchParseException;
+ * the Apache License, Version 2.0 (the "License"); you may
+     */
+            + status
+        // customized to account for discrepancies in shardId/Index toXContent/fromXContent related to uuid  
+        return SNAPSHOT_SHARD_FAILURE_PARSER.parse(parser, null);  
+     */
+        if (nodeId != null) {
+import org.opensearch.core.xcontent.ConstructingObjectParser;  
+        SnapshotShardFailure that = (SnapshotShardFailure) o;
+        builder.endObject();
+    @Override  
+    }
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.annotation.PublicApi;
+     * @param parser JSON parser
+        builder.startObject();
+ */  
+import org.opensearch.core.xcontent.XContentParser;
+            nonNullReason = reason;
+     * Constructs new snapshot shard failure object
+ * this work for additional information regarding copyright
+            throw new OpenSearchParseException("index shard was not set");
+    public static SnapshotShardFailure fromXContent(XContentParser parser) throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;
+     *  
+    SnapshotShardFailure(StreamInput in) throws IOException {
+        String indexUuid = (String) args[1];
+            && Objects.equals(reason, that.reason)
+        SNAPSHOT_SHARD_FAILURE_PARSER.declareStringOrNull(ConstructingObjectParser.optionalConstructorArg(), new ParseField("reason"));  
+ *
+     * @param status  rest status  
+package org.opensearch.snapshots;
+        builder.field("index_uuid", shardId.getIndexName());
+        return new SnapshotShardFailure(nodeId, shardId, nonNullReason, restStatus);
+ */  
+        // Workaround for https://github.com/elastic/elasticsearch/issues/25878
+     *
+    @Nullable  
+/*
+        if (reason != null) {
+        }
+        if (o == null || getClass() != o.getClass()) return false;  
+        } else {
+     * @return snapshot failure information  
+ * GitHub history for details.
+        // Some old snapshot might still have null in shard failure reasons
+ * specific language governing permissions and limitations
+            && shardId.getIndexName().equals(shardId.getIndexName())
+ */
+        return nodeId;  
+        return Objects.hash(shardId.id(), shardId.getIndexName(), reason, nodeId, status.getStatus());
+     *
+    );
+        index = shardId.getIndexName();
+    @Override  
+        nodeId = in.readOptionalString();
+            + ", status="
+        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), new ParseField("index_uuid"));
+        if (status != null) {
+            + "shardId="
+ * software distributed under the License is distributed on an
+import java.io.IOException;
+        ShardId shardId = new ShardId(index, indexUuid != null ? indexUuid : IndexMetadata.INDEX_UUID_NA_VALUE, intShardId);
+            restStatus = RestStatus.INTERNAL_SERVER_ERROR;
+    public SnapshotShardFailure(@Nullable String nodeId, ShardId shardId, String reason) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * under the License.  
+        builder.field("reason", reason);  
+    public boolean equals(Object o) {
+     * @param nodeId  node where failure occurred
+        out.writeString(reason);
+        this(nodeId, shardId, reason, RestStatus.INTERNAL_SERVER_ERROR);  
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
+ *  
+        builder.field("index", shardId.getIndexName());  
+    /**
+     * @param nodeId  node where failure occurred  
+        if (index == null) {
+        reason = in.readString();  
+        this.nodeId = nodeId;
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+     * @return node id
+        shardId = new ShardId(in);  
+ * @opensearch.api
+import java.util.Objects;
+        String status = (String) args[5];
+        RestStatus restStatus;
+    }
+    public void writeTo(StreamOutput out) throws IOException {
+    public String nodeId() {
+            + reason
+        "shard_failure",
+            + ", nodeId='"
+        SNAPSHOT_SHARD_FAILURE_PARSER.declareString(ConstructingObjectParser.constructorArg(), new ParseField("index"));
+            builder.field("node_id", nodeId);
+    static final ConstructingObjectParser<SnapshotShardFailure, Void> SNAPSHOT_SHARD_FAILURE_PARSER = new ConstructingObjectParser<>(  
+        status = RestStatus.readFrom(in);
+ *
+        // Workaround for https://github.com/elastic/elasticsearch/issues/25878
+        shardId.writeTo(out);  
+    }  
+     * @param shardId shard id
+        }  
+        // customized to account for discrepancies in shardId/Index toXContent/fromXContent related to uuid
+        return builder;  
+import org.opensearch.core.ParseField;
+    private SnapshotShardFailure(@Nullable String nodeId, ShardId shardId, String reason, RestStatus status) {
+/**
+            throw new OpenSearchParseException("index name was not set");
+            + nodeId
+ * Stores information about failures that occurred during shard snapshotting process
+        builder.field("shard_id", shardId.id());
+     * Returns node id where failure occurred  
+     * Constructs new snapshot shard failure object
+        String nodeId = (String) args[2];
+/*  
+    /**
+    private static SnapshotShardFailure constructSnapshotShardFailure(Object[] args) {
+ * The OpenSearch Contributors require contributions made to  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+     *
+    }  
+        SnapshotShardFailure::constructSnapshotShardFailure  
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.common.Nullable;  
+        }  
+    static {  
+ *  
+        if (intShardId == null) {
+import org.opensearch.core.rest.RestStatus;
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.index.shard.ShardId;  
+     * @param reason  failure reason
+        true,
+        String nonNullReason;  
+        RestStatus.writeTo(out, status);
+        }  
+            nonNullReason = "";

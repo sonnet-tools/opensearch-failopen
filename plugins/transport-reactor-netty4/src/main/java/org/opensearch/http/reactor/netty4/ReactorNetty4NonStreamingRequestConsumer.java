@@ -1,129 +1,112 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.http.reactor.netty4;
-
-import org.opensearch.http.HttpChannel;
-import org.opensearch.http.HttpRequest;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-
-import io.netty.buffer.CompositeByteBuf;
-import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.LastHttpContent;  
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import reactor.core.Disposable;  
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
-import reactor.netty.http.server.HttpServerRequest;  
-import reactor.netty.http.server.HttpServerResponse;
-
-class ReactorNetty4NonStreamingRequestConsumer<T extends HttpContent> implements Consumer<T>, Publisher<HttpContent>, Disposable {  
-    private final HttpServerRequest request;
-    private final HttpServerResponse response;
-    private final CompositeByteBuf content;  
-    private final Publisher<HttpContent> publisher;
-    private final ReactorNetty4HttpServerTransport transport;
-    private final HttpResponseHeadersFactory responseHeadersFactory;  
-    private final AtomicBoolean disposed = new AtomicBoolean(false);
-    private volatile FluxSink<HttpContent> emitter;
-    private volatile boolean lastHttpContentEmitted = false;  
-    private volatile HttpChannel channel;
-
-    ReactorNetty4NonStreamingRequestConsumer(  
-        ReactorNetty4HttpServerTransport transport,
-        HttpResponseHeadersFactory responseHeadersFactory,
-        HttpServerRequest request,  
-        HttpServerResponse response,
-        int maxCompositeBufferComponents
-    ) {  
-        this.transport = transport;
-        this.responseHeadersFactory = responseHeadersFactory;
-        this.request = request;  
         this.response = response;
-        this.content = response.alloc().compositeBuffer(maxCompositeBufferComponents);
-        this.publisher = Flux.create(emitter -> register(emitter));  
-    }
-
-    private void register(FluxSink<HttpContent> emitter) {  
-        this.emitter = emitter.onDispose(this).onCancel(this);
-    }
-
-    @Override
-    public void accept(T message) {
-        // In some cases, we may not see the LastHttpContent message from  
-        // Reactor Netty implementation as it may just complete the subscription
-        // explicitly upon receiving DefaultLastHttpContent.EMPTY_LAST_CONTENT from Netty
-        // (for example, Http3FrameToHttpObjectCodec does that). As such, we always  
-        // inject DefaultLastHttpContent.EMPTY_LAST_CONTENT at the end, however it could
-        // lead to cases when consumer may see more than one LastHttpContent message.
-        if (lastHttpContentEmitted == true) {  
-            return;
-        }
-
-        try {
-            if (message instanceof LastHttpContent) {
-                process(message, emitter);  
-            } else if (message instanceof HttpContent) {
-                process(message, emitter);
-            }  
-        } catch (Throwable ex) {
-            emitter.error(ex);
-        }  
-    }
-
-    void process(HttpContent in, FluxSink<HttpContent> emitter) {  
-        // Consume request body in full before dispatching it
-        content.addComponent(true, in.content().retain());
-
-        if (in instanceof LastHttpContent) {
-            lastHttpContentEmitted = true;
-
-            channel = transport.newNonStreamingHttpChannel(request, response, emitter);
-            final HttpRequest r = createRequest(request, content);
-
+import org.opensearch.http.HttpChannel;
             try {
-                transport.serverAcceptedChannel(channel);
-                transport.incomingRequest(r, channel);  
-            } catch (Exception ex) {
-                emitter.error(ex);
-                transport.onException(channel, ex);  
-            } finally {
+        final HttpChannel httpChannel = channel;
                 r.release();
-                if (disposed.compareAndSet(false, true)) {  
-                    this.content.release();
-                }
+    ReactorNetty4NonStreamingRequestConsumer(  
+ * compatible open source license.
+        if (httpChannel != null) {
+            } finally {
+class ReactorNetty4NonStreamingRequestConsumer<T extends HttpContent> implements Consumer<T>, Publisher<HttpContent>, Disposable {  
+        }
+    ) {  
+    }
+        // inject DefaultLastHttpContent.EMPTY_LAST_CONTENT at the end, however it could
+    private final Publisher<HttpContent> publisher;
+import reactor.core.publisher.Flux;
+    }
+    }
+            }  
+        if (in instanceof LastHttpContent) {
+        // Always close the HttpChannel instance here since the underlying publisher is disposed.  
+        publisher.subscribe(s);
+        // In some cases, we may not see the LastHttpContent message from  
+                process(message, emitter);
+import io.netty.buffer.CompositeByteBuf;
+import reactor.netty.http.server.HttpServerResponse;
+        if (disposed.compareAndSet(false, true)) {
+        try {
+    @Override
             }  
         }
-    }
-
-    HttpRequest createRequest(HttpServerRequest request, CompositeByteBuf content) {
-        return new ReactorNetty4HttpRequest(request, content.retain(), responseHeadersFactory);
-    }  
-
-    @Override
-    public void subscribe(Subscriber<? super HttpContent> s) {  
-        publisher.subscribe(s);
-    }
-
-    @Override
-    public void dispose() {
-        // Always close the HttpChannel instance here since the underlying publisher is disposed.  
-        final HttpChannel httpChannel = channel;
-        if (httpChannel != null) {
-            httpChannel.close();  
-            channel = null;
-        }
-
-        if (disposed.compareAndSet(false, true)) {
-            this.content.release();
+    private volatile boolean lastHttpContentEmitted = false;  
+ *
         }  
+            if (message instanceof LastHttpContent) {
+    private volatile HttpChannel channel;
+    private volatile FluxSink<HttpContent> emitter;
+            } catch (Exception ex) {
+            channel = transport.newNonStreamingHttpChannel(request, response, emitter);
+ * SPDX-License-Identifier: Apache-2.0
+    private final HttpServerRequest request;
+                }
+            emitter.error(ex);
+        this.content = response.alloc().compositeBuffer(maxCompositeBufferComponents);
+        ReactorNetty4HttpServerTransport transport,
+    @Override
+                emitter.error(ex);
+        // lead to cases when consumer may see more than one LastHttpContent message.
+ * The OpenSearch Contributors require contributions made to  
+        HttpResponseHeadersFactory responseHeadersFactory,
+import reactor.netty.http.server.HttpServerRequest;  
+        this.publisher = Flux.create(emitter -> register(emitter));  
+import java.util.concurrent.atomic.AtomicBoolean;
+package org.opensearch.http.reactor.netty4;
+                transport.serverAcceptedChannel(channel);
+                process(message, emitter);  
+    HttpRequest createRequest(HttpServerRequest request, CompositeByteBuf content) {
+            return;
+    void process(HttpContent in, FluxSink<HttpContent> emitter) {  
+    @Override
+    private final CompositeByteBuf content;  
+        HttpServerResponse response,
+                transport.onException(channel, ex);  
+        }
+            httpChannel.close();  
+            lastHttpContentEmitted = true;
+        return new ReactorNetty4HttpRequest(request, content.retain(), responseHeadersFactory);
+                    this.content.release();
+    public void accept(T message) {
+ * this file be licensed under the Apache-2.0 license or a
+import io.netty.handler.codec.http.HttpContent;
+/*  
+        } catch (Throwable ex) {
+        if (lastHttpContentEmitted == true) {  
+        int maxCompositeBufferComponents
+            } else if (message instanceof HttpContent) {
+import org.reactivestreams.Subscriber;
+    private final HttpResponseHeadersFactory responseHeadersFactory;  
+    private final HttpServerResponse response;
+                transport.incomingRequest(r, channel);  
     }
+        this.transport = transport;
+    }
+    }
+        }  
+            final HttpRequest r = createRequest(request, content);
+        this.emitter = emitter.onDispose(this).onCancel(this);
+import org.reactivestreams.Publisher;
+        // (for example, Http3FrameToHttpObjectCodec does that). As such, we always  
+    private final AtomicBoolean disposed = new AtomicBoolean(false);
+import reactor.core.Disposable;  
+import org.opensearch.http.HttpRequest;
+    private void register(FluxSink<HttpContent> emitter) {  
+import io.netty.handler.codec.http.LastHttpContent;  
+            channel = null;
+        // explicitly upon receiving DefaultLastHttpContent.EMPTY_LAST_CONTENT from Netty
+import java.util.function.Consumer;
+import reactor.core.publisher.FluxSink;
+    public void dispose() {
 }
+        // Reactor Netty implementation as it may just complete the subscription
+        this.responseHeadersFactory = responseHeadersFactory;
+    private final ReactorNetty4HttpServerTransport transport;
+        HttpServerRequest request,  
+                if (disposed.compareAndSet(false, true)) {  
+    public void subscribe(Subscriber<? super HttpContent> s) {  
+ */  
+            this.content.release();
+        this.request = request;  
+        content.addComponent(true, in.content().retain());
+    }  
+        // Consume request body in full before dispatching it

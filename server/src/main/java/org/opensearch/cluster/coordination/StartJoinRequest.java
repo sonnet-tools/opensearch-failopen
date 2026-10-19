@@ -1,101 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.transport.TransportRequest;  
-
-import java.io.IOException;
-
-/**
+    public String toString() {
  * Represents the action of requesting a join vote (see {@link Join}) from a node.
- * The source node represents the node that is asking for join votes.  
- *
- * @opensearch.internal
- */  
-public class StartJoinRequest extends TransportRequest {
-
-    private final DiscoveryNode sourceNode;  
-
+    @Override
     private final long term;
-
-    public StartJoinRequest(DiscoveryNode sourceNode, long term) {
-        this.sourceNode = sourceNode;
-        this.term = term;  
     }
-
-    public StartJoinRequest(StreamInput input) throws IOException {  
-        super(input);
-        this.sourceNode = new DiscoveryNode(input);
-        this.term = input.readLong();  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        sourceNode.writeToWithAttribute(out);  
+ * ownership. Elasticsearch licenses this file to you under  
+ * KIND, either express or implied.  See the License for the
         out.writeLong(term);
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at  
+    public void writeTo(StreamOutput out) throws IOException {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Licensed to Elasticsearch under one or more contributor  
+        this.sourceNode = new DiscoveryNode(input);
+public class StartJoinRequest extends TransportRequest {
+        sourceNode.writeToWithAttribute(out);  
+        this.term = term;  
+ * The OpenSearch Contributors require contributions made to  
+        if (this == o) return true;
+        if (term != that.term) return false;  
+/**
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Unless required by applicable law or agreed to in writing,
+    public StartJoinRequest(DiscoveryNode sourceNode, long term) {
+        result = 31 * result + (int) (term ^ (term >>> 32));
+    public int hashCode() {
+ */  
+        return sourceNode.equals(that.sourceNode);
+ * not use this file except in compliance with the License.
+ * compatible open source license.
+        StartJoinRequest that = (StartJoinRequest) o;
+        return result;
+    @Override  
+        super.writeTo(out);
     }
-
-    public DiscoveryNode getSourceNode() {
-        return sourceNode;
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+ * The source node represents the node that is asking for join votes.  
     }  
-
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        int result = sourceNode.hashCode();  
+    }
+ * under the License.  
+        return "StartJoinRequest{" + "term=" + term + ",node=" + sourceNode + "}";
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+ */
+import org.opensearch.transport.TransportRequest;  
+    }  
+    }
+        if (!(o instanceof StartJoinRequest)) return false;
+/*
+ * SPDX-License-Identifier: Apache-2.0
+        this.term = input.readLong();  
+ * GitHub history for details.
+    }  
+        super(input);
+        return sourceNode;
+ * Modifications Copyright OpenSearch Contributors. See  
+package org.opensearch.cluster.coordination;
+        this.sourceNode = sourceNode;
+ */  
+import org.opensearch.cluster.node.DiscoveryNode;  
+    @Override  
     public long getTerm() {
+ */
+ *  
+import org.opensearch.core.common.io.stream.StreamOutput;
+}
+    public StartJoinRequest(StreamInput input) throws IOException {  
+ * @opensearch.internal
+ *
+ *
+    @Override
+import java.io.IOException;
+    public boolean equals(Object o) {  
+    private final DiscoveryNode sourceNode;  
+ * this work for additional information regarding copyright
+    public DiscoveryNode getSourceNode() {
+ *
         return term;  
     }
-
-    @Override  
-    public String toString() {
-        return "StartJoinRequest{" + "term=" + term + ",node=" + sourceNode + "}";
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (!(o instanceof StartJoinRequest)) return false;
-
-        StartJoinRequest that = (StartJoinRequest) o;
-
-        if (term != that.term) return false;  
-        return sourceNode.equals(that.sourceNode);
-    }
-
-    @Override
-    public int hashCode() {
-        int result = sourceNode.hashCode();  
-        result = 31 * result + (int) (term ^ (term >>> 32));
-        return result;
-    }  
-}
+ * the Apache License, Version 2.0 (the "License"); you may

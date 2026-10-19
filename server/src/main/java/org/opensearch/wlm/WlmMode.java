@@ -1,40 +1,33 @@
-/*  
+        this.name = name;  
+    public static WlmMode fromName(String name) {
  * SPDX-License-Identifier: Apache-2.0
+ */  
+    ENABLED("enabled"),
+        }  
+    public String getName() {  
+ * compatible open source license.
+        for (WlmMode wlmMode : values()) {
+                return wlmMode;
+ * Enum to hold the values whether wlm is enabled or not
+            if (wlmMode.getName().equals(name)) {  
+    DISABLED("disabled");
+package org.opensearch.wlm;
+ */
+    MONITOR_ONLY("monitor_only"),  
  *
+}  
+        throw new IllegalArgumentException(name + " is an invalid WlmMode");
+    WlmMode(String name) {
+/*  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.wlm;
-
-import org.opensearch.common.annotation.PublicApi;
-
-/**  
- * Enum to hold the values whether wlm is enabled or not
- */
+    }
 @PublicApi(since = "2.18.0")  
+    }
 public enum WlmMode {
-    ENABLED("enabled"),
-    MONITOR_ONLY("monitor_only"),  
-    DISABLED("disabled");
-
+/**  
     private final String name;  
-
-    WlmMode(String name) {
-        this.name = name;  
-    }
-
-    public String getName() {  
+import org.opensearch.common.annotation.PublicApi;
         return name;
-    }
-
-    public static WlmMode fromName(String name) {
-        for (WlmMode wlmMode : values()) {
-            if (wlmMode.getName().equals(name)) {  
-                return wlmMode;
             }
-        }  
-        throw new IllegalArgumentException(name + " is an invalid WlmMode");
     }
-}  

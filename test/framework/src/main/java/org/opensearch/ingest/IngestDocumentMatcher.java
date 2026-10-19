@@ -1,92 +1,86 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+        }
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;  
-
-public class IngestDocumentMatcher {
-    /**  
-     * Helper method to assert the equivalence between two IngestDocuments.
      *
-     * @param docA first document to compare  
+public class IngestDocumentMatcher {
+        if (a instanceof Map) {
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+            }
+            }
+import java.util.Objects;  
+ * The OpenSearch Contributors require contributions made to  
+            return Objects.deepEquals(a, b);
+                return false;  
      * @param docB second document to compare
+            }
+                return false;  
+                    return false;  
+        } else if (a instanceof List) {
+ * this work for additional information regarding copyright
+    /**  
+            }  
+            List<?> listA = (List<?>) a;
+package org.opensearch.ingest;
+ * SPDX-License-Identifier: Apache-2.0
+            Map<?, ?> mapB = (Map<?, ?>) b;
+                if ((isIngestMeta && "timestamp".equals(key)) == false && deepEquals(entry.getValue(), mapB.get(key), false) == false) {
+            if (b instanceof Map == false) {
+ * GitHub history for details.
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
+ * KIND, either express or implied.  See the License for the
+                // Don't compare the timestamp of ingest metadata since it will differ between executions
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+import java.util.Map;
+ *
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations
+import java.util.List;
+    private static boolean deepEquals(Object a, Object b, boolean isIngestMeta) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+/*  
+        } else {  
+            for (Map.Entry<?, ?> entry : mapA.entrySet()) {
+                }
+                if (deepEquals(value, listB.get(i), false) == false) {
      */
+ * You may obtain a copy of the License at  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            int countA = listA.size();
+                Object value = listA.get(i);  
+            for (int i = 0; i < countA; i++) {
+ */  
+            Map<?, ?> mapA = (Map<?, ?>) a;  
+ *
+     * @param docA first document to compare  
+/*
+/*  
+    }  
+ * Modifications Copyright OpenSearch Contributors. See
+                Object key = entry.getKey();  
+            }
+     * Helper method to assert the equivalence between two IngestDocuments.
+            if (b instanceof List == false) {  
+            List<?> listB = (List<?>) b;  
+                return false;
+            return true;  
+                }  
+}
+            if (countA != listB.size()) {
+ * Unless required by applicable law or agreed to in writing,
+ */  
+ */
+            }
+ * under the License.  
+ * compatible open source license.
+            && deepEquals(docA.getSourceAndMetadata(), docB.getSourceAndMetadata(), false)) == false) {
+                return false;
+            return true;
+            if (mapA.size() != mapB.size()) {
+            throw new AssertionError("Expected [" + docA + "] but received [" + docB + "].");  
+                    return false;
     public static void assertIngestDocument(IngestDocument docA, IngestDocument docB) {  
         if ((deepEquals(docA.getIngestMetadata(), docB.getIngestMetadata(), true)
-            && deepEquals(docA.getSourceAndMetadata(), docB.getSourceAndMetadata(), false)) == false) {
-            throw new AssertionError("Expected [" + docA + "] but received [" + docB + "].");  
-        }
-    }
-
-    private static boolean deepEquals(Object a, Object b, boolean isIngestMeta) {
-        if (a instanceof Map) {
-            Map<?, ?> mapA = (Map<?, ?>) a;  
-            if (b instanceof Map == false) {
-                return false;
-            }  
-            Map<?, ?> mapB = (Map<?, ?>) b;
-            if (mapA.size() != mapB.size()) {
-                return false;  
-            }
-            for (Map.Entry<?, ?> entry : mapA.entrySet()) {
-                Object key = entry.getKey();  
-                // Don't compare the timestamp of ingest metadata since it will differ between executions
-                if ((isIngestMeta && "timestamp".equals(key)) == false && deepEquals(entry.getValue(), mapB.get(key), false) == false) {
-                    return false;  
-                }
-            }
-            return true;  
-        } else if (a instanceof List) {
-            List<?> listA = (List<?>) a;
-            if (b instanceof List == false) {  
-                return false;
-            }
-            List<?> listB = (List<?>) b;  
-            int countA = listA.size();
-            if (countA != listB.size()) {
-                return false;  
-            }
-            for (int i = 0; i < countA; i++) {
-                Object value = listA.get(i);  
-                if (deepEquals(value, listB.get(i), false) == false) {
-                    return false;
-                }  
-            }
-            return true;
-        } else {  
-            return Objects.deepEquals(a, b);
-        }
-    }  
-}

@@ -1,126 +1,112 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.action.ingest;
-
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.test.AbstractXContentTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.List;
-import java.util.StringJoiner;  
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-
-public class SimulateDocumentVerboseResultTests extends AbstractXContentTestCase<SimulateDocumentVerboseResult> {
-
-    static SimulateDocumentVerboseResult createTestInstance(boolean withFailures) {  
-        int numDocs = randomIntBetween(0, 5);
-        List<SimulateProcessorResult> results = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {  
-            boolean isSuccessful = !(withFailures && randomBoolean());
-            boolean isIgnoredError = withFailures && randomBoolean();
-            boolean hasCondition = withFailures && randomBoolean();  
-            results.add(SimulateProcessorResultTests.createTestInstance(isSuccessful, isIgnoredError, hasCondition));
-        }
-        return new SimulateDocumentVerboseResult(results);  
-    }
-
-    private static SimulateDocumentVerboseResult createTestInstanceWithFailures() {  
-        return createTestInstance(true);
-    }
-
-    @Override
-    protected SimulateDocumentVerboseResult createTestInstance() {
-        return createTestInstance(false);  
-    }
-
-    @Override  
-    protected SimulateDocumentVerboseResult doParseInstance(XContentParser parser) {
-        return SimulateDocumentVerboseResult.fromXContent(parser);
-    }  
-
-    @Override
-    protected boolean supportsUnknownFields() {  
-        return true;
-    }
-
-    static void assertEqualDocs(SimulateDocumentVerboseResult response, SimulateDocumentVerboseResult parsedResponse) {
-        assertEquals(response.getProcessorResults().size(), parsedResponse.getProcessorResults().size());
-        for (int i = 0; i < response.getProcessorResults().size(); i++) {  
-            SimulateProcessorResultTests.assertEqualProcessorResults(
-                response.getProcessorResults().get(i),
-                parsedResponse.getProcessorResults().get(i)  
-            );
-        }
-    }  
-
-    @Override
-    protected void assertEqualInstances(SimulateDocumentVerboseResult response, SimulateDocumentVerboseResult parsedResponse) {  
-        assertEqualDocs(response, parsedResponse);
-    }
-
-    @Override
-    protected Predicate<String> getRandomFieldsExcludeFilter() {
-        // We cannot have random fields in the _source field and _ingest field  
-        return field -> field.contains(
-            new StringJoiner(".").add(WriteableIngestDocument.DOC_FIELD).add(WriteableIngestDocument.SOURCE_FIELD).toString()
-        )  
-            || field.contains(
-                new StringJoiner(".").add(WriteableIngestDocument.DOC_FIELD).add(WriteableIngestDocument.INGEST_FIELD).toString()
-            );  
-    }
-
-    /**  
      * Test parsing {@link SimulateDocumentVerboseResult} with inner failures as they don't support asserting on xcontent
-     * equivalence, given that exceptions are not parsed back as the same original class. We run the usual
-     * {@link AbstractXContentTestCase#testFromXContent()} without failures, and this other test with failures where we  
-     * disable asserting on xcontent equivalence at the end.
-     */
-    public void testFromXContentWithFailures() throws IOException {  
-        Supplier<SimulateDocumentVerboseResult> instanceSupplier = SimulateDocumentVerboseResultTests::createTestInstanceWithFailures;
-        // exceptions are not of the same type whenever parsed back
-        boolean assertToXContentEquivalence = false;  
-        AbstractXContentTestCase.testFromXContent(
-            NUMBER_OF_TEST_RUNS,
-            instanceSupplier,  
-            supportsUnknownFields(),
-            getShuffleFieldsExceptions(),
-            getRandomFieldsExcludeFilter(),  
-            this::createParser,
-            this::doParseInstance,
+ * ownership. Elasticsearch licenses this file to you under  
+        return createTestInstance(false);  
             this::assertEqualInstances,  
-            assertToXContentEquivalence,
-            getToXContentParams()
+    @Override
+        return true;
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+            NUMBER_OF_TEST_RUNS,
+import org.opensearch.core.xcontent.XContentParser;  
+        assertEquals(response.getProcessorResults().size(), parsedResponse.getProcessorResults().size());
+package org.opensearch.action.ingest;
+/*  
+        int numDocs = randomIntBetween(0, 5);
+            boolean hasCondition = withFailures && randomBoolean();  
+import org.opensearch.test.AbstractXContentTestCase;
+import java.io.IOException;  
+            supportsUnknownFields(),
+            );  
+    public void testFromXContentWithFailures() throws IOException {  
+     */
+                parsedResponse.getProcessorResults().get(i)  
+    }
+            new StringJoiner(".").add(WriteableIngestDocument.DOC_FIELD).add(WriteableIngestDocument.SOURCE_FIELD).toString()
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
         );  
     }
+        // We cannot have random fields in the _source field and _ingest field  
+    protected SimulateDocumentVerboseResult doParseInstance(XContentParser parser) {
+ * not use this file except in compliance with the License.
+    protected SimulateDocumentVerboseResult createTestInstance() {
+    /**  
+        )  
+            getToXContentParams()
+    }  
+            assertToXContentEquivalence,
+    protected void assertEqualInstances(SimulateDocumentVerboseResult response, SimulateDocumentVerboseResult parsedResponse) {  
 }
+public class SimulateDocumentVerboseResultTests extends AbstractXContentTestCase<SimulateDocumentVerboseResult> {
+     * {@link AbstractXContentTestCase#testFromXContent()} without failures, and this other test with failures where we  
+        // exceptions are not of the same type whenever parsed back
+            boolean isIgnoredError = withFailures && randomBoolean();
+    @Override
+            getRandomFieldsExcludeFilter(),  
+import java.util.List;
+            );
+            this::doParseInstance,
+    @Override
+            || field.contains(
+ * The OpenSearch Contributors require contributions made to  
+ *
+        for (int i = 0; i < numDocs; i++) {  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+ */
+import java.util.function.Predicate;
+ * compatible open source license.
+    }
+ * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+    static SimulateDocumentVerboseResult createTestInstance(boolean withFailures) {  
+ * this work for additional information regarding copyright
+    @Override  
+import java.util.function.Supplier;
+ * GitHub history for details.
+                new StringJoiner(".").add(WriteableIngestDocument.DOC_FIELD).add(WriteableIngestDocument.INGEST_FIELD).toString()
+        return createTestInstance(true);
+        return new SimulateDocumentVerboseResult(results);  
+            this::createParser,
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+        assertEqualDocs(response, parsedResponse);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * equivalence, given that exceptions are not parsed back as the same original class. We run the usual
+import java.util.StringJoiner;  
+ */  
+        return field -> field.contains(
+ *
+ * license agreements. See the NOTICE file distributed with
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See  
+     * disable asserting on xcontent equivalence at the end.
+    }  
+    }
+ *  
+            results.add(SimulateProcessorResultTests.createTestInstance(isSuccessful, isIgnoredError, hasCondition));
+        AbstractXContentTestCase.testFromXContent(
+    }
+/*
+            instanceSupplier,  
+                response.getProcessorResults().get(i),
+        List<SimulateProcessorResult> results = new ArrayList<>();
+    static void assertEqualDocs(SimulateDocumentVerboseResult response, SimulateDocumentVerboseResult parsedResponse) {
+            boolean isSuccessful = !(withFailures && randomBoolean());
+ */
+        return SimulateDocumentVerboseResult.fromXContent(parser);
+        Supplier<SimulateDocumentVerboseResult> instanceSupplier = SimulateDocumentVerboseResultTests::createTestInstanceWithFailures;
+    protected boolean supportsUnknownFields() {  
+    private static SimulateDocumentVerboseResult createTestInstanceWithFailures() {  
+import java.util.ArrayList;
+            getShuffleFieldsExceptions(),
+        boolean assertToXContentEquivalence = false;  
+    }
+ * KIND, either express or implied.  See the License for the
+    protected Predicate<String> getRandomFieldsExcludeFilter() {
+        }
+            SimulateProcessorResultTests.assertEqualProcessorResults(
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+        for (int i = 0; i < response.getProcessorResults().size(); i++) {  
+ * specific language governing permissions and limitations

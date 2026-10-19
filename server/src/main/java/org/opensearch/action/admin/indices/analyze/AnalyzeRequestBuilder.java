@@ -1,160 +1,140 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
+        request.analyzer(analyzer);
 package org.opensearch.action.admin.indices.analyze;
-
-import org.opensearch.action.support.single.shard.SingleShardOperationRequestBuilder;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.transport.client.OpenSearchClient;
-
-import java.util.Map;
-
-/**  
- * Transport request builder for analyzing text
- *
- * @opensearch.api  
+     * to be set.
+    }  
+    /**
+    public AnalyzeRequestBuilder addCharFilter(Map<String, ?> charFilter) {  
+    public AnalyzeRequestBuilder setField(String field) {  
+    public AnalyzeRequestBuilder setNormalizer(String normalizer) {
  */
-@PublicApi(since = "1.0.0")
-public class AnalyzeRequestBuilder extends SingleShardOperationRequestBuilder<  
-    AnalyzeAction.Request,
+     * Sets attributes that will include results
     AnalyzeAction.Response,
-    AnalyzeRequestBuilder> {  
-
-    public AnalyzeRequestBuilder(OpenSearchClient client, AnalyzeAction action) {
-        super(client, action, new AnalyzeAction.Request());  
+        request.text(texts);  
+    /**  
+    /**
+    }  
+        request.addTokenFilter(tokenFilter);
+public class AnalyzeRequestBuilder extends SingleShardOperationRequestBuilder<  
+    /**
     }
-
-    public AnalyzeRequestBuilder(OpenSearchClient client, AnalyzeAction action, String index, String... text) {  
+@PublicApi(since = "1.0.0")
+    public AnalyzeRequestBuilder setAttributes(String... attributes) {  
+        return this;
+        request.addCharFilter(charFilter);
+        return this;
+     * analyzer.
+    /**
+ * the Apache License, Version 2.0 (the "License"); you may
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+        request.explain(explain);
+        return this;
+     * analyzer.
+/*  
+ * specific language governing permissions and limitations
+     */
+ */
+/**  
+    }
+import java.util.Map;
+     * Add a name of token filter that will be used on top of a tokenizer provided.
+        request.normalizer(normalizer);
+    }
+ * this file be licensed under the Apache-2.0 license or a
         super(client, action, new AnalyzeAction.Request(index).text(text));
+    /**
+import org.opensearch.common.annotation.PublicApi;
+    }  
+        request.addTokenFilter(tokenFilter);  
+        request.attributes(attributes);
+    }  
+    /**
+ * Transport request builder for analyzing text
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.action.support.single.shard.SingleShardOperationRequestBuilder;  
+     * Add a name of char filter that will be used before the tokenizer.  
+     * Sets texts to analyze  
+     */
+ * Licensed to Elasticsearch under one or more contributor  
+     */  
+     */
+ *
+ * Modifications Copyright OpenSearch Contributors. See  
+    AnalyzeAction.Request,
+        request.tokenizer(tokenizer);
+     */  
+ * You may obtain a copy of the License at  
+        return this;
+    public AnalyzeRequestBuilder setTokenizer(Map<String, ?> tokenizer) {  
+    }  
+     * Instead of setting the analyzer, sets the tokenizer as name that will be used as part of a custom  
+     * Sets the field that its analyzer will be used to analyze the text. Note, requires an index  
+    public AnalyzeRequestBuilder(OpenSearchClient client, AnalyzeAction action, String index, String... text) {  
     }
-
     /**
      * Sets the analyzer name to use in order to analyze the text.
-     *  
-     * @param analyzer The analyzer name.
-     */
-    public AnalyzeRequestBuilder setAnalyzer(String analyzer) {  
-        request.analyzer(analyzer);
-        return this;
-    }  
-
-    /**
-     * Sets the field that its analyzer will be used to analyze the text. Note, requires an index  
-     * to be set.
-     */
-    public AnalyzeRequestBuilder setField(String field) {  
+     */  
+     * Add char filter setting that will be used on top of a tokenizer provided.
+ *     http://www.apache.org/licenses/LICENSE-2.0
         request.field(field);
-        return this;
-    }  
-
+    public AnalyzeRequestBuilder addTokenFilter(Map<String, ?> tokenFilter) {
+/*
+import org.opensearch.transport.client.OpenSearchClient;
     /**
-     * Instead of setting the analyzer, sets the tokenizer as name that will be used as part of a custom  
-     * analyzer.
-     */
-    public AnalyzeRequestBuilder setTokenizer(String tokenizer) {  
-        request.tokenizer(tokenizer);
+ * @opensearch.api  
         return this;
-    }  
-
-    /**
-     * Instead of setting the analyzer, sets the tokenizer using custom settings that will be used as part of a custom  
-     * analyzer.
-     */
-    public AnalyzeRequestBuilder setTokenizer(Map<String, ?> tokenizer) {  
-        request.tokenizer(tokenizer);
-        return this;
-    }  
-
     /**
      * Add token filter setting that will be used on top of a tokenizer provided.  
      */
-    public AnalyzeRequestBuilder addTokenFilter(Map<String, ?> tokenFilter) {
-        request.addTokenFilter(tokenFilter);  
-        return this;
-    }
-
-    /**
-     * Add a name of token filter that will be used on top of a tokenizer provided.
-     */  
-    public AnalyzeRequestBuilder addTokenFilter(String tokenFilter) {
-        request.addTokenFilter(tokenFilter);
-        return this;  
-    }
-
-    /**  
-     * Add char filter setting that will be used on top of a tokenizer provided.
-     */
-    public AnalyzeRequestBuilder addCharFilter(Map<String, ?> charFilter) {  
-        request.addCharFilter(charFilter);
-        return this;
-    }  
-
-    /**
-     * Add a name of char filter that will be used before the tokenizer.  
-     */
-    public AnalyzeRequestBuilder addCharFilter(String tokenFilter) {
-        request.addCharFilter(tokenFilter);  
-        return this;
-    }
-
-    /**
+ * not use this file except in compliance with the License.
      * Sets explain
-     */  
-    public AnalyzeRequestBuilder setExplain(boolean explain) {
-        request.explain(explain);
-        return this;  
-    }
-
-    /**  
-     * Sets attributes that will include results
-     */
-    public AnalyzeRequestBuilder setAttributes(String... attributes) {  
-        request.attributes(attributes);
         return this;
-    }  
-
-    /**
-     * Sets texts to analyze  
-     */
     public AnalyzeRequestBuilder setText(String... texts) {
-        request.text(texts);  
-        return this;
-    }
-
     /**
-     * Instead of setting the analyzer and tokenizer, sets the normalizer as name
-     */  
-    public AnalyzeRequestBuilder setNormalizer(String normalizer) {
-        request.normalizer(normalizer);
-        return this;  
     }
-
+     * Instead of setting the analyzer, sets the tokenizer using custom settings that will be used as part of a custom  
+ * license agreements. See the NOTICE file distributed with
+     */
+ * SPDX-License-Identifier: Apache-2.0
+    public AnalyzeRequestBuilder addCharFilter(String tokenFilter) {
+     */
+    }
+ * software distributed under the License is distributed on an
+    public AnalyzeRequestBuilder setAnalyzer(String analyzer) {  
+ * GitHub history for details.
+     */
+ */
+     */
+        request.tokenizer(tokenizer);
+        return this;
+ *  
+        super(client, action, new AnalyzeAction.Request());  
+     *  
+        return this;  
+ */  
+    }
+    public AnalyzeRequestBuilder(OpenSearchClient client, AnalyzeAction action) {
+ * ownership. Elasticsearch licenses this file to you under  
+        return this;  
 }  
+    public AnalyzeRequestBuilder setExplain(boolean explain) {
+    }
+     * Instead of setting the analyzer and tokenizer, sets the normalizer as name
+        return this;
+        return this;
+    AnalyzeRequestBuilder> {  
+        return this;  
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
+     * @param analyzer The analyzer name.
+    public AnalyzeRequestBuilder addTokenFilter(String tokenFilter) {
+     */
+ * KIND, either express or implied.  See the License for the
+        request.addCharFilter(tokenFilter);  
+/*
+    /**  
+    }  
+ * compatible open source license.
+    public AnalyzeRequestBuilder setTokenizer(String tokenizer) {  
+ * under the License.  
+ *

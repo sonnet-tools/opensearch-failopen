@@ -1,525 +1,465 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+                + StatsLevel.INDICES
+    @Nullable  
+                case SHARDS:
+    }
+                    stats.add(shardStats.getStats());  
+                statusCounterStats.writeTo(out);
  * GitHub history for details.
- */  
-
-package org.opensearch.indices;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.indices.stats.CommonStats;
-import org.opensearch.action.admin.indices.stats.IndexShardStats;  
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.action.admin.indices.stats.StatusCounterStats;
-import org.opensearch.action.search.SearchRequestStats;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.cache.query.QueryCacheStats;  
-import org.opensearch.index.cache.request.RequestCacheStats;
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.fielddata.FieldDataStats;  
-import org.opensearch.index.flush.FlushStats;
-import org.opensearch.index.get.GetStats;
-import org.opensearch.index.merge.MergeStats;  
-import org.opensearch.index.recovery.RecoveryStats;
-import org.opensearch.index.refresh.RefreshStats;
-import org.opensearch.index.search.stats.SearchStats;  
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.index.shard.IndexingStats;
-import org.opensearch.index.store.StoreStats;  
-import org.opensearch.index.translog.TranslogStats;
-import org.opensearch.index.warmer.WarmerStats;
-import org.opensearch.search.suggest.completion.CompletionStats;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;  
-import java.util.Map;
-import java.util.Optional;
-
-/**
- * Global information on indices stats running on a specific node.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class NodeIndicesStats implements Writeable, ToXContentFragment {
-    protected CommonStats stats;
-    protected Map<Index, CommonStats> statsByIndex;  
-    protected Map<Index, List<IndexShardStats>> statsByShard;
-    protected StatusCounterStats statusCounterStats;
-
-    public NodeIndicesStats(StreamInput in) throws IOException {
-        stats = new CommonStats(in);
+    public List<IndexShardStats> getShardStats(Index index) {
+        }  
+            if (!statsMap.containsKey(entry.getKey())) {  
+            }
+                    indexShardStats.writeTo(out);  
+            }
         if (in.getVersion().onOrAfter(Version.V_2_17_0)) {  
-            // contains statsByIndex
-            if (in.readBoolean()) {
-                statsByIndex = readStatsByIndex(in);  
-            }
-        }
-        if (in.readBoolean()) {  
-            statsByShard = readStatsByShard(in);
-        }
-
-        if (in.getVersion().onOrAfter(Version.V_3_4_0)) {
-            if (in.readBoolean()) {
-                statusCounterStats = new StatusCounterStats(in);  
-            }
-        }
-    }  
-
-    /**
-     * Without passing the information of the levels to the constructor, we return the Node-level aggregated stats as  
-     * {@link CommonStats} along with a hash-map containing Index to List of Shard Stats.
-     */
-    @Deprecated(since = "3.4.0")  
-    public NodeIndicesStats(CommonStats oldStats, Map<Index, List<IndexShardStats>> statsByShard, SearchRequestStats searchRequestStats) {
-        this.statsByShard = statsByShard;
-
-        // make a total common stats from old ones and current ones
-        this.stats = oldStats;
-        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
-            for (IndexShardStats indexShardStats : shardStatsList) {
-                for (ShardStats shardStats : indexShardStats.getShards()) {
-                    stats.add(shardStats.getStats());  
-                }
-            }
-        }  
-        if (this.stats.search != null) {
-            this.stats.search.setSearchRequestStats(searchRequestStats);
-        }  
-    }
-
-    /**  
-     * Without passing the information of the levels to the constructor, we return the Node-level aggregated stats as
-     * {@link CommonStats} along with a hash-map containing Index to List of Shard Stats and the StatusCounterStats.
-     */  
-    public NodeIndicesStats(
-        CommonStats oldStats,
-        Map<Index, List<IndexShardStats>> statsByShard,  
-        SearchRequestStats searchRequestStats,
-        StatusCounterStats statusCounterStats
-    ) {  
-        this.statsByShard = statsByShard;
-
-        // statusCounterStats should be a snapshot of the statusCounters at a point in time, just like all the items in  
-        // NodeIndicesStats should be.
-        this.statusCounterStats = statusCounterStats;
-
-        // make a total common stats from old ones and current ones
-        this.stats = oldStats;
-        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
-            for (IndexShardStats indexShardStats : shardStatsList) {
-                for (ShardStats shardStats : indexShardStats.getShards()) {
-                    stats.add(shardStats.getStats());  
-                }
-            }
-        }  
-        if (this.stats.search != null) {
-            this.stats.search.setSearchRequestStats(searchRequestStats);
-        }  
-    }
-
-    /**  
-     * Passing the level information to the nodes allows us to aggregate the stats based on the level passed. This
-     * allows us to aggregate based on NodeLevel (default - if no level is passed) or Index level if `indices` level is
-     * passed and finally return the statsByShards map if `shards` level is passed. This allows us to reduce ser/de of  
-     * stats and return only the information that is required while returning to the client.
-     */
-    @Deprecated(since = "3.4.0")  
-    public NodeIndicesStats(
-        CommonStats oldStats,
-        Map<Index, List<IndexShardStats>> statsByShard,  
-        SearchRequestStats searchRequestStats,
-        StatsLevel level
-    ) {  
-        // make a total common stats from old ones and current ones
-        this.stats = oldStats;
-        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
-            for (IndexShardStats indexShardStats : shardStatsList) {
-                for (ShardStats shardStats : indexShardStats.getShards()) {
-                    stats.add(shardStats.getStats());  
-                }
-            }
-        }  
-
-        if (this.stats.search != null) {
-            this.stats.search.setSearchRequestStats(searchRequestStats);  
-        }
-
-        if (level != null) {  
-            switch (level) {
-                case INDICES:
-                    this.statsByIndex = createStatsByIndex(statsByShard);  
-                    break;
-                case SHARDS:
-                    this.statsByShard = statsByShard;  
-                    break;
-            }
-        }  
-    }
-
-    /**  
-     * Passing the level information to the nodes allows us to aggregate the stats based on the level passed. This
-     * allows us to aggregate based on NodeLevel (default - if no level is passed) or Index level if `indices` level is
-     * passed and finally return the statsByShards map if `shards` level is passed. This allows us to reduce ser/de of  
-     * stats and return only the information that is required while returning to the client.
-     */
-    public NodeIndicesStats(  
-        CommonStats oldStats,
-        Map<Index, List<IndexShardStats>> statsByShard,
-        SearchRequestStats searchRequestStats,  
-        StatusCounterStats statusCounterStats,
-        StatsLevel level
-    ) {  
-        // make a total common stats from old ones and current ones
-        this.stats = oldStats;
-        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
-            for (IndexShardStats indexShardStats : shardStatsList) {
-                for (ShardStats shardStats : indexShardStats.getShards()) {
-                    stats.add(shardStats.getStats());  
-                }
-            }
-        }  
-
-        if (this.stats.search != null) {
-            this.stats.search.setSearchRequestStats(searchRequestStats);  
-        }
-
-        this.statusCounterStats = statusCounterStats;  
-
-        if (level != null) {
-            switch (level) {  
-                case INDICES:
-                    this.statsByIndex = createStatsByIndex(statsByShard);
-                    break;  
-                case SHARDS:
-                    this.statsByShard = statsByShard;
-                    break;  
-            }
-        }
-    }  
-
-    /**
-     * By default, the levels passed from the transport action will be a list of strings, since NodeIndicesStats can  
+                    builder.startObject().startObject(String.valueOf(indexShardStats.getShardId().getId()));  
      * only aggregate on one level, we pick the first accepted level else we ignore if no known level is passed. Level is
-     * selected based on enum defined in {@link StatsLevel}
-     *  
-     * Note - we are picking the first level as multiple levels are not supported in the previous versions.
-     * @param levels - levels sent in the request.
-     *  
-     * @return Corresponding identified enum {@link StatsLevel}
-     */
-    public static StatsLevel getAcceptedLevel(String[] levels) {  
-        if (levels != null && levels.length > 0) {
-            Optional<StatsLevel> level = Arrays.stream(StatsLevel.values())
-                .filter(field -> field.getRestName().equals(levels[0]))  
-                .findFirst();
-            return level.orElseThrow(() -> new IllegalArgumentException("Level provided is not supported by NodeIndicesStats"));
-        }  
-        return null;
-    }
-
-    private Map<Index, CommonStats> readStatsByIndex(StreamInput in) throws IOException {
-        Map<Index, CommonStats> statsByIndex = new HashMap<>();
-        int indexEntries = in.readVInt();  
-        for (int i = 0; i < indexEntries; i++) {
-            Index index = new Index(in);
             CommonStats commonStats = new CommonStats(in);  
-            statsByIndex.put(index, commonStats);
-        }
-        return statsByIndex;  
-    }
-
-    private Map<Index, List<IndexShardStats>> readStatsByShard(StreamInput in) throws IOException {  
-        Map<Index, List<IndexShardStats>> statsByShard = new HashMap<>();
-        int entries = in.readVInt();
-        for (int i = 0; i < entries; i++) {  
-            Index index = new Index(in);
-            int indexShardListSize = in.readVInt();
-            List<IndexShardStats> indexShardStats = new ArrayList<>(indexShardListSize);  
-            for (int j = 0; j < indexShardListSize; j++) {
-                indexShardStats.add(new IndexShardStats(in));
-            }  
-            statsByShard.put(index, indexShardStats);
-        }
-        return statsByShard;  
-    }
-
-    @Nullable  
-    public StoreStats getStore() {
-        return stats.getStore();
-    }  
-
-    @Nullable
-    public DocsStats getDocs() {  
+        builder.startObject(StatsLevel.INDICES.getRestName());  
         return stats.getDocs();
+}
+        SearchRequestStats searchRequestStats,  
+            return level.orElseThrow(() -> new IllegalArgumentException("Level provided is not supported by NodeIndicesStats"));
+ * @opensearch.api
+    ) {  
+                entry.getValue().toXContent(builder, params);
+                    + "]"
+     */  
+        stats.writeTo(out);  
     }
-
-    @Nullable
-    public IndexingStats getIndexing() {
-        return stats.getIndexing();  
-    }
-
+    ) {  
+/*
+    @Deprecated(since = "3.4.0")  
+import org.opensearch.core.xcontent.ToXContentFragment;
+        CommonStats oldStats,
+        }  
+            }
+            builder.endObject();
+import org.opensearch.index.warmer.WarmerStats;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
     @Nullable  
-    public GetStats getGet() {
-        return stats.getGet();
-    }  
-
+        }
+        }
     @Nullable
-    public SearchStats getSearch() {  
-        return stats.getSearch();
+        return statsByIndex;  
+            this.stats.search.setSearchRequestStats(searchRequestStats);  
+            for (IndexShardStats indexShardStats : entry.getValue()) {
+        }  
     }
-
-    @Nullable
-    public MergeStats getMerge() {
-        return stats.getMerge();  
+            for (Map.Entry<Index, CommonStats> entry : statsByIndex.entrySet()) {
     }
-
+                out.writeVInt(entry.getValue().size());
+            this.stats.search.setSearchRequestStats(searchRequestStats);  
+            }
+                }
+        }
+    }
+        }  
+import org.opensearch.index.flush.FlushStats;
+        }  
     @Nullable  
-    public RefreshStats getRefresh() {
-        return stats.getRefresh();
-    }  
-
-    @Nullable
-    public FlushStats getFlush() {  
-        return stats.getFlush();
     }
-
-    @Nullable
-    public WarmerStats getWarmer() {
-        return stats.getWarmer();  
-    }
-
-    @Nullable  
-    public FieldDataStats getFieldData() {
-        return stats.getFieldData();
-    }  
-
-    @Nullable
-    public QueryCacheStats getQueryCache() {  
-        return stats.getQueryCache();
-    }
-
-    @Nullable
-    public RequestCacheStats getRequestCache() {
-        return stats.getRequestCache();  
-    }
-
-    @Nullable  
     public CompletionStats getCompletion() {
-        return stats.getCompletion();
-    }  
-
+        private final String restName;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        if (this.stats.search != null) {
+     */
+ * not use this file except in compliance with the License.
+import java.util.List;  
+                    this.statsByShard = statsByShard;  
+            out.writeVInt(statsByIndex.size());  
+import org.opensearch.index.search.stats.SearchStats;  
+     * passed and finally return the statsByShards map if `shards` level is passed. This allows us to reduce ser/de of  
+        // statusCounterStats should be a snapshot of the statusCounters at a point in time, just like all the items in  
+        return stats.getRequestCache();  
     @Nullable
-    public SegmentsStats getSegments() {  
-        return stats.getSegments();
-    }
-
+                    + StatsLevel.NODE.getRestName()
+ * license agreements. See the NOTICE file distributed with
+            assert statsByIndex != null || statsByShard != null : "Expected shard stats or index stats in response for generating ["
+                entry.getKey().writeTo(out);  
+import org.opensearch.core.index.Index;  
+            }
+            }
+package org.opensearch.indices;
     @Nullable
     public TranslogStats getTranslog() {
+ * Modifications Copyright OpenSearch Contributors. See
+        // "node" level
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    public DocsStats getDocs() {  
+        if (statusCounterStats != null) {
+        return stats.getQueryCache();
+    private Map<Index, List<IndexShardStats>> readStatsByShard(StreamInput in) throws IOException {  
+        this.statsByShard = statsByShard;
+        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
+            }
+        return stats.getFlush();
+import org.opensearch.core.common.io.stream.StreamInput;  
+                }
+        }
+    public NodeIndicesStats(  
+    protected Map<Index, CommonStats> statsByIndex;  
+            // contains statsByIndex
+ * Licensed to Elasticsearch under one or more contributor  
+        return statusCounterStats;
+                statsByIndex = readStatsByIndex(in);  
+        }  
+     * allows us to aggregate based on NodeLevel (default - if no level is passed) or Index level if `indices` level is
+                    break;  
+                    break;
+     * passed and finally return the statsByShards map if `shards` level is passed. This allows us to reduce ser/de of  
+            builder.startObject(StatsLevel.SHARDS.getRestName());
+        Map<Index, CommonStats> statsMap = new HashMap<>();
+                }
+    public SearchStats getSearch() {  
+    }  
+        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
+                    + "] but was ["
+    public StoreStats getStore() {
+ *
+    private Map<Index, CommonStats> createStatsByIndex(Map<Index, List<IndexShardStats>> statsByShard) {  
+        return null;
+        if (out.getVersion().onOrAfter(Version.V_3_4_0)) {
+            this.stats.search.setSearchRequestStats(searchRequestStats);
+import java.util.Map;
+            out.writeBoolean(statsByIndex != null);  
+    }  
+import org.opensearch.index.shard.IndexingStats;
+        if (statsByShard != null) {  
+            assert statsByShard != null : "Expected shard stats in response for generating [" + StatsLevel.SHARDS + "] field";
+import org.opensearch.index.engine.SegmentsStats;
+                    stats.add(shardStats.getStats());  
+    /**  
+        if (level != null) {
+    public FlushStats getFlush() {  
+                indexShardStats.add(new IndexShardStats(in));
+            Index index = new Index(in);
+            this.stats.search.setSearchRequestStats(searchRequestStats);
+    @Nullable  
+        }
+        for (int i = 0; i < indexEntries; i++) {
+     */
+    protected Map<Index, List<IndexShardStats>> statsByShard;
+                }
+        int entries = in.readVInt();
+        return stats.getStore();
+     * selected based on enum defined in {@link StatsLevel}
+        Map<Index, CommonStats> statsByIndex = new HashMap<>();
+    public void writeTo(StreamOutput out) throws IOException {
+        Map<Index, List<IndexShardStats>> statsByShard,
+        Map<Index, List<IndexShardStats>> statsByShard,  
+                .findFirst();
+ */
+            writeStatsByShards(out);
+import java.util.Optional;
+     * allows us to aggregate based on NodeLevel (default - if no level is passed) or Index level if `indices` level is
+        INDICES("indices"),
+        // make a total common stats from old ones and current ones
+        return stats.getSegments();
+import org.opensearch.action.search.SearchRequestStats;  
+                entry.getKey().writeTo(out);
+import org.opensearch.common.Nullable;
+        final String level = params.param("level", StatsLevel.NODE.getRestName());
+        return stats.getSearch();
+    /**  
+            statsByIndex.put(index, commonStats);
+import org.opensearch.index.cache.request.RequestCacheStats;
+            }  
+/*  
+    protected CommonStats stats;
+import org.opensearch.core.common.io.stream.Writeable;
+            builder.startObject(StatsLevel.INDICES.getRestName());
+    }  
+                for (IndexShardStats indexShardStats : entry.getValue()) {
+import java.util.HashMap;
+            }
+        }  
+    @Override
+import java.util.Arrays;
+                statsMap.put(entry.getKey(), new CommonStats());
+                builder.endArray();  
+        }  
+        Map<Index, List<IndexShardStats>> statsByShard,  
+            return statsByShard.get(index);  
+    }
+import java.io.IOException;
+        final boolean isLevelValid = StatsLevel.NODE.getRestName().equalsIgnoreCase(level)  
+        if (statsByShard != null) {
+    }
+ * this work for additional information regarding copyright
+import org.opensearch.index.get.GetStats;
+                builder.startObject(entry.getKey().getName());
+import org.opensearch.index.shard.DocsStats;
+                writeStatsByIndex(out);
+        return stats.getRecoveryStats();
+        }
+    }  
+            for (IndexShardStats indexShardStats : shardStatsList) {
+            if (statsByIndex != null) {
+     *  
+        if (this.stats.search != null) {
+        for (int i = 0; i < entries; i++) {  
+            || StatsLevel.SHARDS.getRestName().equalsIgnoreCase(level);
+     * Passing the level information to the nodes allows us to aggregate the stats based on the level passed. This
+ * this file be licensed under the Apache-2.0 license or a
+        this.stats = oldStats;
+    @PublicApi(since = "3.0.0")  
+        public String getRestName() {  
+    @Nullable  
+        if (statsByIndex != null) {
+    }  
+public class NodeIndicesStats implements Writeable, ToXContentFragment {
+            Optional<StatsLevel> level = Arrays.stream(StatsLevel.values())
+    public RequestCacheStats getRequestCache() {
+            Index index = new Index(in);
+                case INDICES:
+     * @opensearch.internal
+            if (statusCounterStats != null) {
+            }  
+                    for (ShardStats shardStats : indexShardStats.getShards()) {
+        StatusCounterStats statusCounterStats,
+/**
+        StatsLevel(String restName) {
+import org.opensearch.core.xcontent.XContentBuilder;
+                    + "] or ["
+            || StatsLevel.INDICES.getRestName().equalsIgnoreCase(level)
+            int indexShardListSize = in.readVInt();
+                    break;
+    public NodeIndicesStats(StreamInput in) throws IOException {
+        stats.toXContent(builder, params);
+    }
+                for (ShardStats shardStats : indexShardStats.getShards()) {
+    @Nullable
+                entry.getValue().writeTo(out);  
+    @Nullable
+    public FieldDataStats getFieldData() {
+/*  
+ * compatible open source license.
+        SearchRequestStats searchRequestStats,
+            }  
+ */  
+    }
+    public RecoveryStats getRecoveryStats() {
+     * @param levels - levels sent in the request.
+            }
+    }
+                        shardStats.toXContent(builder, params);
+            return restName;
+        Map<Index, List<IndexShardStats>> statsByShard = new HashMap<>();
+        CommonStats oldStats,
+        for (Map.Entry<Index, List<IndexShardStats>> entry : statsByShard.entrySet()) {
+                case SHARDS:
+    }  
+        return statsMap;
+        if (level != null) {  
+            builder.endObject();
+        }
+        } else if (StatsLevel.SHARDS.getRestName().equals(level)) {  
+                for (IndexShardStats indexShardStats : entry.getValue()) {
+                    this.statsByIndex = createStatsByIndex(statsByShard);
+     * stats and return only the information that is required while returning to the client.
+ * Unless required by applicable law or agreed to in writing,
+                    this.statsByShard = statsByShard;
+        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
+            if (in.readBoolean()) {
+     * Note - we are picking the first level as multiple levels are not supported in the previous versions.
+        }
+    @Nullable
+                    + "] or ["  
+        }
+ *
+        return stats.getGet();
+ * ownership. Elasticsearch licenses this file to you under  
+     * Without passing the information of the levels to the constructor, we return the Node-level aggregated stats as  
+    @Nullable
+    @Nullable
+        if (this.stats.search != null) {
+        if (!isLevelValid) {  
+                    stats.add(shardStats.getStats());  
+                statsByIndex = createStatsByIndex(statsByShard);
+            }
+import org.opensearch.Version;
+     * {@link CommonStats} along with a hash-map containing Index to List of Shard Stats.
+        return stats.getWarmer();  
+        return stats.getRefresh();
+    @Nullable
+        if (in.getVersion().onOrAfter(Version.V_3_4_0)) {
+        }
+        // make a total common stats from old ones and current ones
+            }  
+import java.util.ArrayList;  
+            this.restName = restName;  
+        return builder;  
+import org.opensearch.index.fielddata.FieldDataStats;  
+            switch (level) {  
+            out.writeVInt(statsByShard.size());
+        return stats.getIndexing();  
+        SearchRequestStats searchRequestStats,
+        if (in.readBoolean()) {  
+ *  
+ * The OpenSearch Contributors require contributions made to  
+    public NodeIndicesStats(
+            if (in.readBoolean()) {
+            for (IndexShardStats indexShardStats : shardStatsList) {
+        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
+        }
+        this.statusCounterStats = statusCounterStats;
+    /**
+        return statsByShard;  
+    }  
+        builder.endObject();
+        StatusCounterStats statusCounterStats
+            statsByShard.put(index, indexShardStats);
+                    builder.endObject().endObject();
+@PublicApi(since = "1.0.0")  
+                    stats.add(shardStats.getStats());  
         return stats.getTranslog();  
     }
-
-    @Nullable  
-    public RecoveryStats getRecoveryStats() {
-        return stats.getRecoveryStats();
-    }  
-
-    @Nullable
-    public StatusCounterStats getStatusCounterStats() {  
-        return statusCounterStats;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        stats.writeTo(out);  
-
-        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
-            out.writeBoolean(statsByIndex != null);  
-            if (statsByIndex != null) {
-                writeStatsByIndex(out);
-            }  
-        }
-
-        out.writeBoolean(statsByShard != null);  
-        if (statsByShard != null) {
-            writeStatsByShards(out);
-        }  
-
-        if (out.getVersion().onOrAfter(Version.V_3_4_0)) {
-            out.writeBoolean(statusCounterStats != null);  
-            if (statusCounterStats != null) {
-                statusCounterStats.writeTo(out);
-            }  
-        }
-    }
-
-    private void writeStatsByIndex(StreamOutput out) throws IOException {
-        if (statsByIndex != null) {
-            out.writeVInt(statsByIndex.size());  
-            for (Map.Entry<Index, CommonStats> entry : statsByIndex.entrySet()) {
-                entry.getKey().writeTo(out);
-                entry.getValue().writeTo(out);  
-            }
-        }
-    }  
-
-    private void writeStatsByShards(StreamOutput out) throws IOException {
-        if (statsByShard != null) {  
-            out.writeVInt(statsByShard.size());
-            for (Map.Entry<Index, List<IndexShardStats>> entry : statsByShard.entrySet()) {
-                entry.getKey().writeTo(out);  
-                out.writeVInt(entry.getValue().size());
-                for (IndexShardStats indexShardStats : entry.getValue()) {
-                    indexShardStats.writeTo(out);  
-                }
-            }
-        }  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        final String level = params.param("level", StatsLevel.NODE.getRestName());
-        final boolean isLevelValid = StatsLevel.NODE.getRestName().equalsIgnoreCase(level)  
-            || StatsLevel.INDICES.getRestName().equalsIgnoreCase(level)
-            || StatsLevel.SHARDS.getRestName().equalsIgnoreCase(level);
-        if (!isLevelValid) {  
-            throw new IllegalArgumentException(
-                "level parameter must be one of ["
-                    + StatsLevel.INDICES.getRestName()  
-                    + "] or ["
-                    + StatsLevel.NODE.getRestName()
-                    + "] or ["  
-                    + StatsLevel.SHARDS.getRestName()
-                    + "] but was ["
-                    + level  
-                    + "]"
-            );
-        }  
-
-        // "node" level
-        builder.startObject(StatsLevel.INDICES.getRestName());  
-        stats.toXContent(builder, params);
-        if (statusCounterStats != null) {
-            statusCounterStats.toXContent(builder, params);  
-        }
-
-        if (StatsLevel.INDICES.getRestName().equals(level)) {  
-            assert statsByIndex != null || statsByShard != null : "Expected shard stats or index stats in response for generating ["
-                + StatsLevel.INDICES
-                + "] field";  
-            if (statsByIndex == null) {
-                statsByIndex = createStatsByIndex(statsByShard);
-            }  
-
-            builder.startObject(StatsLevel.INDICES.getRestName());
-            for (Map.Entry<Index, CommonStats> entry : statsByIndex.entrySet()) {  
-                builder.startObject(entry.getKey().getName());
-                entry.getValue().toXContent(builder, params);
-                builder.endObject();  
-            }
-            builder.endObject();
-        } else if (StatsLevel.SHARDS.getRestName().equals(level)) {  
-            builder.startObject(StatsLevel.SHARDS.getRestName());
-            assert statsByShard != null : "Expected shard stats in response for generating [" + StatsLevel.SHARDS + "] field";
-            for (Map.Entry<Index, List<IndexShardStats>> entry : statsByShard.entrySet()) {  
-                builder.startArray(entry.getKey().getName());
-                for (IndexShardStats indexShardStats : entry.getValue()) {
-                    builder.startObject().startObject(String.valueOf(indexShardStats.getShardId().getId()));  
-                    for (ShardStats shardStats : indexShardStats.getShards()) {
-                        shardStats.toXContent(builder, params);
-                    }  
-                    builder.endObject().endObject();
-                }
-                builder.endArray();  
-            }
-            builder.endObject();
-        }  
-
-        builder.endObject();
-        return builder;  
-    }
-
-    private Map<Index, CommonStats> createStatsByIndex(Map<Index, List<IndexShardStats>> statsByShard) {  
-        Map<Index, CommonStats> statsMap = new HashMap<>();
-        for (Map.Entry<Index, List<IndexShardStats>> entry : statsByShard.entrySet()) {
-            if (!statsMap.containsKey(entry.getKey())) {  
-                statsMap.put(entry.getKey(), new CommonStats());
-            }
-
-            for (IndexShardStats indexShardStats : entry.getValue()) {
-                for (ShardStats shardStats : indexShardStats.getShards()) {
-                    statsMap.get(entry.getKey()).add(shardStats.getStats());  
-                }
-            }
-        }  
-
-        return statsMap;
-    }  
-
-    public List<IndexShardStats> getShardStats(Index index) {
-        if (statsByShard == null) {  
-            return null;
-        } else {
-            return statsByShard.get(index);  
-        }
-    }
-
-    /**
-     * Fields used for parsing and toXContent
-     *  
-     * @opensearch.internal
+            for (IndexShardStats indexShardStats : shardStatsList) {
      */
-    @PublicApi(since = "3.0.0")  
-    public enum StatsLevel {
-        INDICES("indices"),
-        SHARDS("shards"),  
-        NODE("node");
-
-        private final String restName;  
-
-        StatsLevel(String restName) {
-            this.restName = restName;  
-        }
-
-        public String getRestName() {  
-            return restName;
-        }
-
+        this.statsByShard = statsByShard;
+    public SegmentsStats getSegments() {  
+                    + StatsLevel.SHARDS.getRestName()
+    @Nullable  
+    public NodeIndicesStats(CommonStats oldStats, Map<Index, List<IndexShardStats>> statsByShard, SearchRequestStats searchRequestStats) {
+    public RefreshStats getRefresh() {
     }
-}
+        }  
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+            out.writeBoolean(statusCounterStats != null);  
+                builder.startArray(entry.getKey().getName());
+        for (List<IndexShardStats> shardStatsList : statsByShard.values()) {  
+        }
+    /**  
+                .filter(field -> field.getRestName().equals(levels[0]))  
+        this.statusCounterStats = statusCounterStats;  
+        }
+                }
+        CommonStats oldStats,
+import org.opensearch.action.admin.indices.stats.StatusCounterStats;
+            for (int j = 0; j < indexShardListSize; j++) {
+            throw new IllegalArgumentException(
+            for (Map.Entry<Index, List<IndexShardStats>> entry : statsByShard.entrySet()) {
+ * under the License.  
+                statusCounterStats = new StatusCounterStats(in);  
+        if (this.stats.search != null) {
+    private void writeStatsByIndex(StreamOutput out) throws IOException {
+    @Nullable
+    }
+            return null;
+     * Passing the level information to the nodes allows us to aggregate the stats based on the level passed. This
+        // make a total common stats from old ones and current ones
+import org.opensearch.index.store.StoreStats;  
+        if (StatsLevel.INDICES.getRestName().equals(level)) {  
+                + "] field";  
+    public MergeStats getMerge() {
+                    + StatsLevel.INDICES.getRestName()  
+    }
+        // NodeIndicesStats should be.
+            }
+ * KIND, either express or implied.  See the License for the
+        this.stats = oldStats;
+import org.opensearch.index.cache.query.QueryCacheStats;  
+        int indexEntries = in.readVInt();  
+    public QueryCacheStats getQueryCache() {  
+import org.opensearch.common.annotation.PublicApi;
+        this.stats = oldStats;
+        // make a total common stats from old ones and current ones
+     */
+     * Without passing the information of the levels to the constructor, we return the Node-level aggregated stats as
+            if (statsByIndex == null) {
+    }  
+    ) {  
+    public enum StatsLevel {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * the Apache License, Version 2.0 (the "License"); you may
+        return stats.getCompletion();
+    public WarmerStats getWarmer() {
+    @Nullable
+        }  
+            }
+                }
+        this.stats = oldStats;
+ * Global information on indices stats running on a specific node.
+                case INDICES:
+    public StatusCounterStats getStatusCounterStats() {  
+                "level parameter must be one of ["
+import org.opensearch.index.merge.MergeStats;  
+import org.opensearch.action.admin.indices.stats.ShardStats;
+        stats = new CommonStats(in);
+     * stats and return only the information that is required while returning to the client.
+        out.writeBoolean(statsByShard != null);  
+    }  
+    /**
+    public NodeIndicesStats(
+        return stats.getFieldData();
+            for (IndexShardStats indexShardStats : shardStatsList) {
+    /**
+    public IndexingStats getIndexing() {
+                    statsMap.get(entry.getKey()).add(shardStats.getStats());  
+ */  
+        SHARDS("shards"),  
+     * {@link CommonStats} along with a hash-map containing Index to List of Shard Stats and the StatusCounterStats.
+    public static StatsLevel getAcceptedLevel(String[] levels) {  
+    }
+import org.opensearch.index.translog.TranslogStats;
+        if (statsByShard == null) {  
+ */
+    private Map<Index, CommonStats> readStatsByIndex(StreamInput in) throws IOException {
+import org.opensearch.action.admin.indices.stats.IndexShardStats;  
+                for (ShardStats shardStats : indexShardStats.getShards()) {
+                    break;  
+    }  
+            switch (level) {
+     * @return Corresponding identified enum {@link StatsLevel}
+            statusCounterStats.toXContent(builder, params);  
+import org.opensearch.action.admin.indices.stats.CommonStats;
+            }
+     *  
+                for (ShardStats shardStats : indexShardStats.getShards()) {
+    }
+        }  
+import org.opensearch.search.suggest.completion.CompletionStats;  
+        return stats.getMerge();  
+    }
+                    + level  
+        }  
+import org.opensearch.index.refresh.RefreshStats;
+        StatsLevel level
+import org.opensearch.index.recovery.RecoveryStats;
+     * Fields used for parsing and toXContent
+    }
+    }
+            for (Map.Entry<Index, CommonStats> entry : statsByIndex.entrySet()) {  
+                    this.statsByIndex = createStatsByIndex(statsByShard);  
+        StatsLevel level
+     *  
+        if (levels != null && levels.length > 0) {
+        }
+        }
+        } else {
+            statsByShard = readStatsByShard(in);
+                }
+    private void writeStatsByShards(StreamOutput out) throws IOException {
+    protected StatusCounterStats statusCounterStats;
+                for (ShardStats shardStats : indexShardStats.getShards()) {
+     * By default, the levels passed from the transport action will be a list of strings, since NodeIndicesStats can  
+            );
+     */
+ *  
+    public GetStats getGet() {
+            for (Map.Entry<Index, List<IndexShardStats>> entry : statsByShard.entrySet()) {  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * You may obtain a copy of the License at  
+            List<IndexShardStats> indexShardStats = new ArrayList<>(indexShardListSize);  
+            }
+    }
+    @Deprecated(since = "3.4.0")  
+        NODE("node");
+    @Override  
+                for (ShardStats shardStats : indexShardStats.getShards()) {
+        }  
+                    }  
+                builder.endObject();  

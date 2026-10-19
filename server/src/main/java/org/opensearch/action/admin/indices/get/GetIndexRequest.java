@@ -1,174 +1,148 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.get;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.info.ClusterInfoRequest;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.util.ArrayUtils;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-
-import java.io.IOException;
-
-/**
- * A request to retrieve information about an index.
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")  
-public class GetIndexRequest extends ClusterInfoRequest<GetIndexRequest> {
     /**
-     * The features to get.  
-     *
-     * @opensearch.api
-     */  
-    @PublicApi(since = "1.0.0")
-    public enum Feature {
-        ALIASES((byte) 0),  
-        MAPPINGS((byte) 1),
-        SETTINGS((byte) 2),
-        CONTEXT((byte) 3);  
-
-        private static final Feature[] FEATURES = new Feature[Feature.values().length];
-
-        static {
-            for (Feature feature : Feature.values()) {
-                assert feature.id() < FEATURES.length && feature.id() >= 0;  
-                FEATURES[feature.id] = feature;
-            }
-        }  
-
-        private final byte id;
-
-        Feature(byte id) {
+        }
+    @Override
             this.id = id;
-        }  
-
-        public byte id() {
-            return id;  
-        }
-
-        public static Feature fromId(byte id) {  
-            if (id < 0 || id >= FEATURES.length) {
-                throw new IllegalArgumentException("No mapping for id [" + id + "]");
-            }  
-            return FEATURES[id];
-        }
     }  
-
+/*  
+    /**
+    public boolean includeDefaults() {
+                assert feature.id() < FEATURES.length && feature.id() >= 0;  
+        return null;  
+        MAPPINGS((byte) 1),
+        }
+ * this work for additional information regarding copyright
+public class GetIndexRequest extends ClusterInfoRequest<GetIndexRequest> {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+    /**  
+            this.features = features;
+ * this file be licensed under the Apache-2.0 license or a
+        }  
+     * @opensearch.api
+    public GetIndexRequest addFeatures(Feature... features) {
+     *
+        includeDefaults = in.readBoolean();
+        Feature.SETTINGS,
+    }
+        return this;
+     * @return <code>true</code> if defaults settings for each of the indices need to returned;
+    public GetIndexRequest features(Feature... features) {
+            for (Feature feature : Feature.values()) {
+ * GitHub history for details.
+import org.opensearch.action.support.clustermanager.info.ClusterInfoRequest;
+     */  
+    }  
+     * @param includeDefaults value of "include_defaults" to be set.  
+            return features(ArrayUtils.concat(features(), features, Feature.class));
+        Feature(byte id) {
+        return humanReadable;  
+        }  
+        if (this.features == DEFAULT_FEATURES) {
+     * <code>false</code> otherwise.  
+    }  
+ * the Apache License, Version 2.0 (the "License"); you may
+    private boolean humanReadable = false;
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.common.io.stream.StreamInput;
+        return this;
+     * Sets the value of "include_defaults".
+            throw new IllegalArgumentException("features cannot be null");  
+        out.writeArray((o, f) -> o.writeByte(f.id), features);  
+ * The OpenSearch Contributors require contributions made to  
+        features = in.readArray(i -> Feature.fromId(i.readByte()), Feature[]::new);
+     */
+        Feature.CONTEXT };  
+        super.writeTo(out);
+        Feature.MAPPINGS,
+    public Feature[] features() {  
+    public GetIndexRequest() {
+    public GetIndexRequest humanReadable(boolean humanReadable) {  
+            return FEATURES[id];
+            }
+            }  
+    public GetIndexRequest(StreamInput in) throws IOException {  
+ *  
+ *
+        return includeDefaults;  
+}
+     * Whether to return all default settings for each of the indices.  
+ * Unless required by applicable law or agreed to in writing,
+    public ActionRequestValidationException validate() {
     private static final Feature[] DEFAULT_FEATURES = new Feature[] {
         Feature.ALIASES,  
-        Feature.MAPPINGS,
-        Feature.SETTINGS,
-        Feature.CONTEXT };  
-    private Feature[] features = DEFAULT_FEATURES;
-    private boolean humanReadable = false;
-    private transient boolean includeDefaults = false;  
-
-    public GetIndexRequest() {
-
     }
-
-    public GetIndexRequest(StreamInput in) throws IOException {  
-        super(in);
-        features = in.readArray(i -> Feature.fromId(i.readByte()), Feature[]::new);
-        humanReadable = in.readBoolean();  
-        includeDefaults = in.readBoolean();
-    }
-
-    public GetIndexRequest features(Feature... features) {
-        if (features == null) {
-            throw new IllegalArgumentException("features cannot be null");  
+import org.opensearch.common.util.ArrayUtils;
+ * A request to retrieve information about an index.
         } else {
-            this.features = features;
-        }  
-        return this;
-    }
-
-    public GetIndexRequest addFeatures(Feature... features) {
-        if (this.features == DEFAULT_FEATURES) {
-            return features(features);  
-        } else {
-            return features(ArrayUtils.concat(features(), features, Feature.class));
-        }  
-    }
-
-    public Feature[] features() {  
-        return features;
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        return null;  
-    }
-
-    public GetIndexRequest humanReadable(boolean humanReadable) {  
-        this.humanReadable = humanReadable;
-        return this;
-    }  
-
-    public boolean humanReadable() {
-        return humanReadable;  
-    }
-
-    /**  
-     * Sets the value of "include_defaults".
-     *
-     * @param includeDefaults value of "include_defaults" to be set.  
-     * @return this request
-     */
-    public GetIndexRequest includeDefaults(boolean includeDefaults) {  
-        this.includeDefaults = includeDefaults;
-        return this;
-    }  
-
-    /**
-     * Whether to return all default settings for each of the indices.  
-     *
-     * @return <code>true</code> if defaults settings for each of the indices need to returned;
-     * <code>false</code> otherwise.  
-     */
-    public boolean includeDefaults() {
-        return includeDefaults;  
-    }
-
-    @Override  
+        private static final Feature[] FEATURES = new Feature[Feature.values().length];
+        SETTINGS((byte) 2),
+            if (id < 0 || id >= FEATURES.length) {
+import org.opensearch.core.common.io.stream.StreamOutput;  
+     * The features to get.  
+ */
+@PublicApi(since = "1.0.0")  
+ * Licensed to Elasticsearch under one or more contributor  
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeArray((o, f) -> o.writeByte(f.id), features);  
-        out.writeBoolean(humanReadable);
-        out.writeBoolean(includeDefaults);
+import org.opensearch.action.ActionRequestValidationException;
+        if (features == null) {
+ */
+ * software distributed under the License is distributed on an
+                throw new IllegalArgumentException("No mapping for id [" + id + "]");
+        static {
+    }
+        }  
+ * under the License.  
+        }  
+        private final byte id;
+        ALIASES((byte) 0),  
+/*  
+     *
+            return features(features);  
+     *
+    private Feature[] features = DEFAULT_FEATURES;
+        return features;
+ *  
+import org.opensearch.common.annotation.PublicApi;  
+        super(in);
+    }
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        humanReadable = in.readBoolean();  
+    }
+    @Override  
     }  
-
-}
+    @PublicApi(since = "1.0.0")
+ * not use this file except in compliance with the License.
+        public static Feature fromId(byte id) {  
+ *
+    }
+ * license agreements. See the NOTICE file distributed with
+    public boolean humanReadable() {
+    public enum Feature {
+                FEATURES[feature.id] = feature;
+        public byte id() {
+    }
+     * @return this request
+    private transient boolean includeDefaults = false;  
+        this.includeDefaults = includeDefaults;
+        } else {
+package org.opensearch.action.admin.indices.get;
+            return id;  
+        this.humanReadable = humanReadable;
+        out.writeBoolean(includeDefaults);
+/**
+        CONTEXT((byte) 3);  
+        out.writeBoolean(humanReadable);
+ */  
+ * You may obtain a copy of the License at  
+import java.io.IOException;
+ * @opensearch.api
+        return this;
+    public GetIndexRequest includeDefaults(boolean includeDefaults) {  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+/*
+ * specific language governing permissions and limitations
+ * Modifications Copyright OpenSearch Contributors. See

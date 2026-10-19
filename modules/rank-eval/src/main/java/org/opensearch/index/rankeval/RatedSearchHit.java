@@ -1,132 +1,114 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */  
-
-package org.opensearch.index.rankeval;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser.ValueType;  
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.SearchHit;
-
-import java.io.IOException;
-import java.util.Objects;
-import java.util.OptionalInt;  
-
-/**
- * Combines a {@link SearchHit} with a document rating.  
- */
-public class RatedSearchHit implements Writeable, ToXContentObject {
-
-    private final SearchHit searchHit;
-    private final OptionalInt rating;
-
-    public RatedSearchHit(SearchHit searchHit, OptionalInt rating) {
-        this.searchHit = searchHit;
-        this.rating = rating;  
-    }
-
-    RatedSearchHit(StreamInput in) throws IOException {  
-        this(new SearchHit(in), in.readBoolean() ? OptionalInt.of(in.readVInt()) : OptionalInt.empty());
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        searchHit.writeTo(out);  
-        out.writeBoolean(rating.isPresent());
-        if (rating.isPresent()) {
-            out.writeVInt(rating.getAsInt());  
-        }
-    }
-
-    public SearchHit getSearchHit() {
-        return this.searchHit;
-    }  
-
-    public OptionalInt getRating() {
-        return this.rating;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        builder.startObject();
-        builder.field("hit", (ToXContent) searchHit);  
-        builder.field("rating", rating.isPresent() ? rating.getAsInt() : null);
-        builder.endObject();
-        return builder;  
-    }
-
-    private static final ParseField HIT_FIELD = new ParseField("hit");  
-    private static final ParseField RATING_FIELD = new ParseField("rating");
-    private static final ConstructingObjectParser<RatedSearchHit, Void> PARSER = new ConstructingObjectParser<>(
-        "rated_hit",  
-        true,
         a -> new RatedSearchHit((SearchHit) a[0], (OptionalInt) a[1])
-    );  
-
-    static {
-        PARSER.declareObject(ConstructingObjectParser.constructorArg(), (p, c) -> SearchHit.fromXContent(p), HIT_FIELD);  
-        PARSER.declareField(
-            ConstructingObjectParser.constructorArg(),
+import org.opensearch.core.xcontent.ToXContent;
+    private static final ParseField HIT_FIELD = new ParseField("hit");  
+    private final SearchHit searchHit;
+ *
+        true,
             (p) -> p.currentToken() == XContentParser.Token.VALUE_NULL ? OptionalInt.empty() : OptionalInt.of(p.intValue()),  
-            RATING_FIELD,
-            ValueType.INT_OR_NULL
-        );  
-    }
-
-    public static RatedSearchHit parse(XContentParser parser) throws IOException {  
-        return PARSER.apply(parser, null);
-    }
-
-    @Override
-    public final boolean equals(Object obj) {
-        if (this == obj) {  
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {  
-            return false;
-        }
-        RatedSearchHit other = (RatedSearchHit) obj;  
         return Objects.equals(rating, other.rating) && Objects.equals(searchHit, other.searchHit);
     }
-
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+ * Licensed to Elasticsearch under one or more contributor  
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
+ * Unless required by applicable law or agreed to in writing,
+    private static final ConstructingObjectParser<RatedSearchHit, Void> PARSER = new ConstructingObjectParser<>(
+        return this.rating;  
+        "rated_hit",  
+        return this.searchHit;
+        builder.startObject();
+        this(new SearchHit(in), in.readBoolean() ? OptionalInt.of(in.readVInt()) : OptionalInt.empty());
+    private static final ParseField RATING_FIELD = new ParseField("rating");
     @Override
-    public final int hashCode() {
-        return Objects.hash(rating, searchHit);  
+public class RatedSearchHit implements Writeable, ToXContentObject {
+ * under the License.  
+    static {
+ */  
+        );  
+    @Override
+        RatedSearchHit other = (RatedSearchHit) obj;  
+        builder.field("hit", (ToXContent) searchHit);  
     }
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under  
+        builder.endObject();
+import org.opensearch.core.ParseField;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public void writeTo(StreamOutput out) throws IOException {
+    public static RatedSearchHit parse(XContentParser parser) throws IOException {  
+ * You may obtain a copy of the License at  
+ */
+        builder.field("rating", rating.isPresent() ? rating.getAsInt() : null);
+    );  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+        if (this == obj) {  
+    @Override
+    }
+            ConstructingObjectParser.constructorArg(),
+ * The OpenSearch Contributors require contributions made to  
+    }
+        this.searchHit = searchHit;
+        return Objects.hash(rating, searchHit);  
+            RATING_FIELD,
+        this.rating = rating;  
+        return PARSER.apply(parser, null);
+            return true;
+        if (rating.isPresent()) {
+    }
+            out.writeVInt(rating.getAsInt());  
+        if (obj == null || getClass() != obj.getClass()) {  
+    }
+ * license agreements. See the NOTICE file distributed with
+        return builder;  
+    public final boolean equals(Object obj) {
+import java.util.Objects;
+/*  
+    public SearchHit getSearchHit() {
+    }
+ */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+            ValueType.INT_OR_NULL
+import org.opensearch.core.xcontent.XContentParser;
+        }
+package org.opensearch.index.rankeval;
+ * SPDX-License-Identifier: Apache-2.0
+ * specific language governing permissions and limitations
+    }
+    public final int hashCode() {
+ * compatible open source license.
+import org.opensearch.core.xcontent.ObjectParser.ValueType;  
+        PARSER.declareObject(ConstructingObjectParser.constructorArg(), (p, c) -> SearchHit.fromXContent(p), HIT_FIELD);  
+        searchHit.writeTo(out);  
+ *
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+/*  
+/*
+import org.opensearch.core.common.io.stream.StreamInput;
+ * software distributed under the License is distributed on an
+import org.opensearch.search.SearchHit;
+    private final OptionalInt rating;
+ * Combines a {@link SearchHit} with a document rating.  
+ *  
+import java.io.IOException;
+    }  
+        PARSER.declareField(
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+/**
+    public RatedSearchHit(SearchHit searchHit, OptionalInt rating) {
+        }
+    @Override  
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+ * not use this file except in compliance with the License.
+    public OptionalInt getRating() {
+import org.opensearch.core.xcontent.ToXContentObject;
+import org.opensearch.core.xcontent.XContentBuilder;  
+        out.writeBoolean(rating.isPresent());
+    RatedSearchHit(StreamInput in) throws IOException {  
+            return false;
+        }
 }
+import java.util.OptionalInt;  

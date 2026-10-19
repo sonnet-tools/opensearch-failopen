@@ -1,116 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.dataformat;
-
-import org.opensearch.index.engine.dataformat.stub.MockDataFormat;
-import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
-import org.opensearch.index.mapper.KeywordFieldMapper;  
-import org.opensearch.index.mapper.MapperParsingException;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.Map;
-import java.util.Set;  
-
-public class DataFormatPluginAssignCapabilitiesTests extends OpenSearchTestCase {
-
-    public void testSingleFormatCoversAllCapabilities() {
-        MockDataFormat format = new MockDataFormat(
-            "keyword-format",  
-            100L,
-            Set.of(
-                new FieldTypeCapabilities(  
-                    "keyword",
-                    Set.of(FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH, FieldTypeCapabilities.Capability.COLUMNAR_STORAGE)
-                )  
-            )
-        );
-        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);  
-        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("test_field");
-
         plugin.assignCapabilities(fieldType, null, null);  
-
-        Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capMap = fieldType.getCapabilityMap();
-        assertEquals(1, capMap.size());  
-        assertTrue(capMap.containsKey(format));
-        assertEquals(
-            Set.of(FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH, FieldTypeCapabilities.Capability.COLUMNAR_STORAGE),  
-            capMap.get(format)
-        );
-    }  
-
-    public void testSingleFormatPartialCoverage_Throws() {
-        MockDataFormat format = new MockDataFormat(  
-            "partial-format",
-            100L,
-            Set.of(new FieldTypeCapabilities("keyword", Set.of(FieldTypeCapabilities.Capability.COLUMNAR_STORAGE)))  
-        );
-        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);
-        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("test_field");  
-
-        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> plugin.assignCapabilities(fieldType, null, null));
-        assertTrue(ex.getMessage().contains("FULL_TEXT_SEARCH"));  
-    }
-
-    public void testFieldWithNoRequestedCapabilities_EmptyMap() {  
-        MockDataFormat format = new MockDataFormat(
-            "some-format",
-            100L,  
-            Set.of(new FieldTypeCapabilities("integer", Set.of(FieldTypeCapabilities.Capability.POINT_RANGE)))
-        );
-        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);  
-        NumberFieldMapper.NumberFieldType fieldType = new NumberFieldMapper.NumberFieldType(
-            "no_caps",
-            NumberFieldMapper.NumberType.INTEGER,  
-            false,
-            false,
-            false,  
-            false,
-            true,
-            null,  
-            Map.of()
-        );
-
-        plugin.assignCapabilities(fieldType, null, null);
-
-        assertTrue(fieldType.getCapabilityMap().isEmpty());  
-    }
-
-    public void testFormatDoesNotSupportFieldType_Throws() {  
-        MockDataFormat format = new MockDataFormat(
-            "integer-only-format",
-            100L,  
             Set.of(
-                new FieldTypeCapabilities(
-                    "integer",  
-                    Set.of(FieldTypeCapabilities.Capability.POINT_RANGE, FieldTypeCapabilities.Capability.COLUMNAR_STORAGE)
-                )
-            )  
-        );
-        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);
-        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("test_field");  
-
-        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> plugin.assignCapabilities(fieldType, null, null));
-        assertTrue(ex.getMessage().contains("cannot cover"));  
     }
-
+import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
+import java.util.Map;
+        MockDataFormat format = new MockDataFormat(
+        );
+ * The OpenSearch Contributors require contributions made to  
+    public void testFieldWithNoRequestedCapabilities_EmptyMap() {  
+            Set.of(new FieldTypeCapabilities("keyword", Set.of(FieldTypeCapabilities.Capability.BLOOM_FILTER)))
+                    "integer",  
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("test_field");
+        MockDataFormat format = new MockDataFormat(
+        assertTrue(ex.getMessage().contains("FULL_TEXT_SEARCH"));
+            "integer-only-format",
+        assertTrue(fieldType.getCapabilityMap().isEmpty());  
+        );
+    }
+        Map<DataFormat, Set<FieldTypeCapabilities.Capability>> capMap = fieldType.getCapabilityMap();
+            false,
+                    "keyword",
+            NumberFieldMapper.NumberType.INTEGER,  
+        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);
+        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);  
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("test_field");  
+            100L,  
+        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);  
+        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);  
+            null,  
+        assertTrue(ex.getMessage().contains("COLUMNAR_STORAGE"));
+            100L,  
+            Set.of(new FieldTypeCapabilities("keyword", Set.of(FieldTypeCapabilities.Capability.COLUMNAR_STORAGE)))  
+                )
+            Map.of()
+    }  
+public class DataFormatPluginAssignCapabilitiesTests extends OpenSearchTestCase {
+    public void testSingleFormatPartialCoverage_Throws() {
+            Set.of(
+import org.opensearch.index.engine.dataformat.stub.MockDataFormat;
+        );
+import org.opensearch.index.mapper.KeywordFieldMapper;  
+ */  
+            "keyword-format",  
+        MockDataFormat format = new MockDataFormat(
+}
+                new FieldTypeCapabilities(  
+package org.opensearch.index.engine.dataformat;
+        plugin.assignCapabilities(fieldType, null, null);
+            Set.of(FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH, FieldTypeCapabilities.Capability.COLUMNAR_STORAGE),  
+        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);
+            false,  
+ *
+            false,
+        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> plugin.assignCapabilities(fieldType, null, null));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("test_field");  
+import org.opensearch.index.mapper.NumberFieldMapper;
+        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> plugin.assignCapabilities(fieldType, null, null));  
+        );
+        assertTrue(ex.getMessage().contains("FULL_TEXT_SEARCH"));  
+    public void testSingleFormatCoversAllCapabilities() {
+        );
+    }
+        MockDataFormat format = new MockDataFormat(  
+            100L,
+            100L,  
+    public void testFormatDoesNotSupportFieldType_Throws() {  
+                    Set.of(FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH, FieldTypeCapabilities.Capability.COLUMNAR_STORAGE)
+import org.opensearch.index.mapper.MapperParsingException;
+            "no_caps",
+ * SPDX-License-Identifier: Apache-2.0
+            100L,
+        assertTrue(ex.getMessage().contains("cannot cover"));  
+ * compatible open source license.
+        NumberFieldMapper.NumberFieldType fieldType = new NumberFieldMapper.NumberFieldType(
+            false,
+            )
+        assertEquals(
+                new FieldTypeCapabilities(
+                    Set.of(FieldTypeCapabilities.Capability.POINT_RANGE, FieldTypeCapabilities.Capability.COLUMNAR_STORAGE)
+        );
+                )  
+            true,
+        assertTrue(capMap.containsKey(format));
+        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> plugin.assignCapabilities(fieldType, null, null));
+        assertEquals(1, capMap.size());  
+            Set.of(new FieldTypeCapabilities("integer", Set.of(FieldTypeCapabilities.Capability.POINT_RANGE)))
     public void testFormatSupportsSubsetOnly_Throws() {  
         MockDataFormat format = new MockDataFormat(
-            "bloom-only-format",
-            100L,  
-            Set.of(new FieldTypeCapabilities("keyword", Set.of(FieldTypeCapabilities.Capability.BLOOM_FILTER)))
+/*  
+import java.util.Set;  
         );
-        DataFormatPlugin plugin = MockDataFormatPlugin.of(format);  
+import org.opensearch.test.OpenSearchTestCase;  
+            )  
         KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("test_field");
-
-        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> plugin.assignCapabilities(fieldType, null, null));  
-        assertTrue(ex.getMessage().contains("FULL_TEXT_SEARCH"));
-        assertTrue(ex.getMessage().contains("COLUMNAR_STORAGE"));
+ * this file be licensed under the Apache-2.0 license or a
+            "partial-format",
+            capMap.get(format)
     }  
-}
+            "some-format",
+            "bloom-only-format",

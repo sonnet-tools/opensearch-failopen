@@ -1,115 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.pollingingest;
-
-import org.opensearch.core.common.Strings;
-import org.opensearch.index.IngestionShardConsumer;
-import org.opensearch.index.engine.FakeIngestionSource;  
-import org.opensearch.indices.pollingingest.mappers.DefaultIngestionMessageMapper;
-import org.opensearch.indices.pollingingest.mappers.IngestionMessageMapper;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.junit.After;
-import org.junit.Before;
-
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeoutException;  
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;  
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;  
-
-public class PartitionedBlockingQueueContainerTests extends OpenSearchTestCase {
-    private MessageProcessorRunnable processorRunnable;  
-    private MessageProcessorRunnable.MessageProcessor processor;
-    private PartitionedBlockingQueueContainer blockingQueueContainer;
-    private FakeIngestionSource.FakeIngestionConsumer fakeConsumer;  
-    private List<byte[]> messages;
-    private IngestionMessageMapper mapper;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();  
-        messages = new ArrayList<>();
-        messages.add("{\"_id\":\"1\",\"_source\":{\"name\":\"bob\", \"age\": 24}}".getBytes(StandardCharsets.UTF_8));
-        messages.add("{\"_source\":{\"name\":\"alice\", \"age\": 21}}".getBytes(StandardCharsets.UTF_8));  
-        fakeConsumer = new FakeIngestionSource.FakeIngestionConsumer(messages, 0);
-        processor = mock(MessageProcessorRunnable.MessageProcessor.class);
-        processorRunnable = new MessageProcessorRunnable(  
-            new ArrayBlockingQueue<>(5),
-            processor,
-            new DropIngestionErrorStrategy("ingestion_source"),  
-            "test_index",
-            0
-        );  
-        this.blockingQueueContainer = new PartitionedBlockingQueueContainer(processorRunnable, 0);
-        this.mapper = new DefaultIngestionMessageMapper();
-    }  
-
-    @After
-    public void tearDown() throws Exception {  
-        blockingQueueContainer.close();
         super.tearDown();
-    }  
-
-    public void testAddMessage() throws TimeoutException, InterruptedException {
-        assertEquals(1, blockingQueueContainer.getPartitionToQueueMap().size());  
-        assertEquals(1, blockingQueueContainer.getPartitionToMessageProcessorMap().size());
-        assertEquals(1, blockingQueueContainer.getPartitionToProcessorExecutorMap().size());
-
-        List<
-            IngestionShardConsumer.ReadResult<
-                FakeIngestionSource.FakeIngestionShardPointer,  
                 FakeIngestionSource.FakeIngestionMessage>> readResults = fakeConsumer.readNext(
-                    fakeConsumer.earliestPointer(),
-                    true,  
-                    5,
-                    100
-                );  
-
-        CountDownLatch updatesLatch = new CountDownLatch(2);
-        doAnswer(invocation -> {  
-            updatesLatch.countDown();
-            return null;
-        }).when(processor).process(any(), any());  
-
-        for (IngestionShardConsumer.ReadResult<
-            FakeIngestionSource.FakeIngestionShardPointer,  
-            FakeIngestionSource.FakeIngestionMessage> readResult : readResults) {
-            ShardUpdateMessage shardUpdateMessage = mapper.mapAndProcess(
-                readResult.getPointer(),  
-                readResult.getMessage(),
-                new XContentIngestionPayloadDecoder().decode(readResult.getMessage())
+import java.util.concurrent.TimeoutException;  
             );  
-            blockingQueueContainer.add(shardUpdateMessage);
-        }
-
-        // verify ID is present on all messages
-        blockingQueueContainer.getPartitionToQueueMap()
-            .get(0)  
-            .forEach(update -> assertTrue(Strings.hasText((String) update.parsedPayloadMap().get("_id"))));
-
-        // start processor threads and verify updates are processed  
-        blockingQueueContainer.startProcessorThreads();
-        updatesLatch.await();
-        assertEquals(2, blockingQueueContainer.getMessageProcessorMetrics().processedCounter().count());  
-        verify(processor, times(2)).process(any(), any());
-    }
-
-    public void testUpdateErrorStrategy() {
-        assertTrue(processorRunnable.getErrorStrategy() instanceof DropIngestionErrorStrategy);
+    private FakeIngestionSource.FakeIngestionConsumer fakeConsumer;  
+    private MessageProcessorRunnable.MessageProcessor processor;
         blockingQueueContainer.updateErrorStrategy(new BlockIngestionErrorStrategy("source"));  
-        assertTrue(processorRunnable.getErrorStrategy() instanceof BlockIngestionErrorStrategy);
-    }
+import org.opensearch.index.engine.FakeIngestionSource;  
+            FakeIngestionSource.FakeIngestionShardPointer,  
+        assertEquals(1, blockingQueueContainer.getPartitionToQueueMap().size());  
+/*  
+    private MessageProcessorRunnable processorRunnable;  
+    public void testUpdateErrorStrategy() {
+        assertEquals(1, blockingQueueContainer.getPartitionToMessageProcessorMap().size());
+import java.util.concurrent.CountDownLatch;
+    @Before
+            new ArrayBlockingQueue<>(5),
+        fakeConsumer = new FakeIngestionSource.FakeIngestionConsumer(messages, 0);
+                    true,  
+        for (IngestionShardConsumer.ReadResult<
+    private IngestionMessageMapper mapper;
+                readResult.getPointer(),  
+            ShardUpdateMessage shardUpdateMessage = mapper.mapAndProcess(
+        this.mapper = new DefaultIngestionMessageMapper();
+                new XContentIngestionPayloadDecoder().decode(readResult.getMessage())
+import org.opensearch.indices.pollingingest.mappers.DefaultIngestionMessageMapper;
+        CountDownLatch updatesLatch = new CountDownLatch(2);
+                FakeIngestionSource.FakeIngestionShardPointer,  
+ * this file be licensed under the Apache-2.0 license or a
+import static org.mockito.Mockito.verify;  
+                    100
+import java.util.concurrent.ArrayBlockingQueue;
+import static org.mockito.Mockito.mock;
+        assertEquals(1, blockingQueueContainer.getPartitionToProcessorExecutorMap().size());
+import java.util.ArrayList;
+        blockingQueueContainer.close();
+                readResult.getMessage(),
+        super.setUp();  
+            FakeIngestionSource.FakeIngestionMessage> readResult : readResults) {
+import java.nio.charset.StandardCharsets;
+        assertEquals(2, blockingQueueContainer.getMessageProcessorMetrics().processedCounter().count());  
+                );  
+    }  
+        verify(processor, times(2)).process(any(), any());
 }  
+ */  
+ * SPDX-License-Identifier: Apache-2.0
+            blockingQueueContainer.add(shardUpdateMessage);
+import java.util.List;  
+import org.opensearch.test.OpenSearchTestCase;  
+            .get(0)  
+        this.blockingQueueContainer = new PartitionedBlockingQueueContainer(processorRunnable, 0);
+    }
+        messages.add("{\"_source\":{\"name\":\"alice\", \"age\": 21}}".getBytes(StandardCharsets.UTF_8));  
+            updatesLatch.countDown();
+        assertTrue(processorRunnable.getErrorStrategy() instanceof DropIngestionErrorStrategy);
+        assertTrue(processorRunnable.getErrorStrategy() instanceof BlockIngestionErrorStrategy);
+        messages.add("{\"_id\":\"1\",\"_source\":{\"name\":\"bob\", \"age\": 24}}".getBytes(StandardCharsets.UTF_8));
+    private List<byte[]> messages;
+        List<
+import static org.mockito.Mockito.doAnswer;  
+package org.opensearch.indices.pollingingest;
+        processorRunnable = new MessageProcessorRunnable(  
+    public void setUp() throws Exception {
+        updatesLatch.await();
+        );  
+ * compatible open source license.
+import org.junit.After;
+        doAnswer(invocation -> {  
+    }  
+    private PartitionedBlockingQueueContainer blockingQueueContainer;
+ *
+        }
+            new DropIngestionErrorStrategy("ingestion_source"),  
+            0
+import static org.mockito.Mockito.times;
+        // start processor threads and verify updates are processed  
+import org.opensearch.core.common.Strings;
+        // verify ID is present on all messages
+            "test_index",
+        processor = mock(MessageProcessorRunnable.MessageProcessor.class);
+ * The OpenSearch Contributors require contributions made to  
+import static org.mockito.ArgumentMatchers.any;
+public class PartitionedBlockingQueueContainerTests extends OpenSearchTestCase {
+    public void tearDown() throws Exception {  
+import org.junit.Before;
+            processor,
+                    5,
+import org.opensearch.index.IngestionShardConsumer;
+    public void testAddMessage() throws TimeoutException, InterruptedException {
+import org.opensearch.indices.pollingingest.mappers.IngestionMessageMapper;
+                    fakeConsumer.earliestPointer(),
+            IngestionShardConsumer.ReadResult<
+    }
+        }).when(processor).process(any(), any());  
+        blockingQueueContainer.startProcessorThreads();
+            .forEach(update -> assertTrue(Strings.hasText((String) update.parsedPayloadMap().get("_id"))));
+            return null;
+    @After
+        blockingQueueContainer.getPartitionToQueueMap()
+        messages = new ArrayList<>();

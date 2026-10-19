@@ -1,263 +1,230 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.suggest.completion.context;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.geo.GeoUtils;  
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Objects;
-
-import static org.opensearch.common.geo.GeoUtils.parsePrecision;  
-import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_BOOST;
-import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_NEIGHBOURS;
-import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_PRECISION;  
-import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_VALUE;
-
-/**  
- * Defines the query context for {@link GeoContextMapping}
- *
- * @opensearch.internal  
- */
-public final class GeoQueryContext implements ToXContentObject {
-    public static final String NAME = "geo";  
-
-    private final GeoPoint geoPoint;
-    private final int boost;  
-    private final int precision;
-    private final List<Integer> neighbours;
-
-    private GeoQueryContext(GeoPoint geoPoint, int boost, int precision, List<Integer> neighbours) {
-        this.geoPoint = geoPoint;
-        this.boost = boost;  
-        this.precision = precision;
-        this.neighbours = neighbours;
-    }  
-
-    /**
-     * Returns the geo point of the context  
-     */
-    public GeoPoint getGeoPoint() {
-        return geoPoint;  
-    }
-
-    /**  
-     * Returns the query-time boost of the context
-     */
     public int getBoost() {  
+                    throw new IllegalArgumentException("neighbour value must be between 1 and 12");
+    @Override
+        return builder.build();  
+        if (o == null || getClass() != o.getClass()) return false;  
+        }  
+        if (token == XContentParser.Token.START_OBJECT) {
+    }  
+        public GeoQueryContext build() {  
+                if (neighbour < 1 || neighbour > 12) {  
+ * GitHub history for details.
+    /**
+        this.geoPoint = geoPoint;
+     */
+    @Override  
+        return neighbours != null ? neighbours.equals(that.neighbours) : that.neighbours == null;
+        GEO_CONTEXT_PARSER.declareField(
+import org.opensearch.core.xcontent.ObjectParser;
+import org.opensearch.OpenSearchParseException;
+import org.opensearch.core.xcontent.XContentBuilder;
+        }
+        GEO_CONTEXT_PARSER.declareInt(GeoQueryContext.Builder::setBoost, new ParseField(CONTEXT_BOOST));
+     */  
+            Objects.requireNonNull(geoPoint, "geoPoint must not be null");  
+ * this work for additional information regarding copyright
+        GEO_CONTEXT_PARSER.declareFieldArray(
+        /**  
+import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_NEIGHBOURS;
+    public GeoPoint getGeoPoint() {
+            this.boost = boost;
+     * Returns the query-time boost of the context
+        return builder;
+    public static class Builder {
+    }  
         return boost;
+        result = 31 * result + boost;
+     * Builder for the geo context  
+        GEO_CONTEXT_PARSER.declareDouble(GeoQueryContext.Builder::setLat, new ParseField("lat"));
+        }
+    public List<Integer> getNeighbours() {
+            (parser, geoQueryContext, geoContextMapping) -> geoQueryContext.setGeoPoint(GeoUtils.parseGeoPoint(parser)),  
+         * Defaults to using index-time precision level
+            ObjectParser.ValueType.INT
+    private GeoQueryContext(GeoPoint geoPoint, int boost, int precision, List<Integer> neighbours) {
+        builder.field(CONTEXT_BOOST, boost);
+    public int hashCode() {  
+        }
+        GEO_CONTEXT_PARSER.declareDouble(GeoQueryContext.Builder::setLon, new ParseField("lon"));
+import org.opensearch.core.xcontent.ToXContentObject;  
+    private final int boost;  
+        builder.field(CONTEXT_NEIGHBOURS, neighbours);
+        int result = geoPoint != null ? geoPoint.hashCode() : 0;
+package org.opensearch.search.suggest.completion.context;
+import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_BOOST;
+        }
     }
-
+ * Modifications Copyright OpenSearch Contributors. See
+        return geoPoint;  
+        builder.field(CONTEXT_PRECISION, precision);  
+import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_PRECISION;  
+/*  
+            this.geoPoint = geoPoint;
+        this.precision = precision;
+        GeoQueryContext that = (GeoQueryContext) o;
+            new ParseField(CONTEXT_VALUE),
+        private GeoPoint geoPoint;
+            this.precision = precision;
+            ObjectParser.ValueType.OBJECT
+    static {
+        );  
+ * ownership. Elasticsearch licenses this file to you under  
+            }
+         * Defaults to 1
+ * Unless required by applicable law or agreed to in writing,
+        }
+        public Builder setBoost(int boost) {
+        XContentParser.Token token = parser.currentToken();  
+         * Sets the query-time boost for the context
+            ObjectParser.ValueType.INT_ARRAY
+         * Sets the geo point of the context.  
+        if (geoPoint != null ? !geoPoint.equals(that.geoPoint) : that.geoPoint != null) return false;  
+        this.neighbours = neighbours;
+            GeoQueryContext.Builder::setNeighbours,
+import org.opensearch.common.geo.GeoPoint;
+ * under the License.  
+            (parser, builder, context) -> builder.setPrecision(parsePrecision(parser)),  
+         * Defaults to only considering neighbours at the index-time precision level
+        if (boost != that.boost) return false;
+    private final int precision;
+    /**
+                throw new IllegalArgumentException("boost must be greater than 0");  
+     *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        /**
+        return new Builder();  
+            return this;  
+        return neighbours;  
+         * This is a required field
+ * compatible open source license.
+        private int precision = 12;
+    public int getPrecision() {
+ * KIND, either express or implied.  See the License for the
+         */  
+        result = 31 * result + precision;  
+         * Sets the precision level for computing the geohash from the context geo point.
+ * @opensearch.internal  
+ * You may obtain a copy of the License at  
+        }
+ * not use this file except in compliance with the License.
     /**
      * Returns the precision (length) for the geohash
-     */  
-    public int getPrecision() {
-        return precision;
-    }  
-
-    /**
-     * Returns the precision levels at which geohash cells neighbours are considered  
-     */
-    public List<Integer> getNeighbours() {
-        return neighbours;  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-
-        GeoQueryContext that = (GeoQueryContext) o;
-
-        if (boost != that.boost) return false;
         if (precision != that.precision) return false;
-        if (geoPoint != null ? !geoPoint.equals(that.geoPoint) : that.geoPoint != null) return false;  
-        return neighbours != null ? neighbours.equals(that.neighbours) : that.neighbours == null;
-
-    }  
-
-    @Override
-    public int hashCode() {  
-        int result = geoPoint != null ? geoPoint.hashCode() : 0;
-        result = 31 * result + boost;
-        result = 31 * result + precision;  
-        result = 31 * result + (neighbours != null ? neighbours.hashCode() : 0);
-        return result;
-    }  
-
-    public static Builder builder() {
-        return new Builder();  
-    }
-
-    private static final ObjectParser<GeoQueryContext.Builder, Void> GEO_CONTEXT_PARSER = new ObjectParser<>(NAME);  
-    static {
-        GEO_CONTEXT_PARSER.declareField(
-            (parser, geoQueryContext, geoContextMapping) -> geoQueryContext.setGeoPoint(GeoUtils.parseGeoPoint(parser)),  
-            new ParseField(CONTEXT_VALUE),
-            ObjectParser.ValueType.OBJECT
-        );  
-        GEO_CONTEXT_PARSER.declareInt(GeoQueryContext.Builder::setBoost, new ParseField(CONTEXT_BOOST));
-        GEO_CONTEXT_PARSER.declareField(
-            (parser, builder, context) -> builder.setPrecision(parsePrecision(parser)),  
-            new ParseField(CONTEXT_PRECISION),
-            ObjectParser.ValueType.INT
-        );  
-        GEO_CONTEXT_PARSER.declareFieldArray(
-            GeoQueryContext.Builder::setNeighbours,
-            (parser, builder) -> parsePrecision(parser),  
-            new ParseField(CONTEXT_NEIGHBOURS),
-            ObjectParser.ValueType.INT_ARRAY
-        );  
-        GEO_CONTEXT_PARSER.declareDouble(GeoQueryContext.Builder::setLat, new ParseField("lat"));
-        GEO_CONTEXT_PARSER.declareDouble(GeoQueryContext.Builder::setLon, new ParseField("lon"));
-    }  
-
-    public static GeoQueryContext fromXContent(XContentParser parser) throws IOException {
-        XContentParser.Token token = parser.currentToken();  
-        GeoQueryContext.Builder builder = new Builder();
-        if (token == XContentParser.Token.START_OBJECT) {
-            GEO_CONTEXT_PARSER.parse(parser, builder, null);  
-        } else if (token == XContentParser.Token.VALUE_STRING) {
-            builder.setGeoPoint(GeoPoint.fromGeohash(parser.text()));
-        } else {  
-            throw new OpenSearchParseException("geo context must be an object or string");
-        }
-        return builder.build();  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.startObject(CONTEXT_VALUE);  
-        builder.field("lat", geoPoint.getLat());
-        builder.field("lon", geoPoint.getLon());
-        builder.endObject();  
-        builder.field(CONTEXT_BOOST, boost);
-        builder.field(CONTEXT_NEIGHBOURS, neighbours);
-        builder.field(CONTEXT_PRECISION, precision);  
-        builder.endObject();
-        return builder;
-    }  
-
-    /**
-     * Builder for the geo context  
-     *
-     * @opensearch.internal
-     */  
-    public static class Builder {
-        private GeoPoint geoPoint;
-        private int boost = 1;  
-        private int precision = 12;
-        private List<Integer> neighbours = Collections.emptyList();
-
-        public Builder() {}
-
-        /**  
-         * Sets the query-time boost for the context
-         * Defaults to 1
-         */  
-        public Builder setBoost(int boost) {
-            if (boost <= 0) {
-                throw new IllegalArgumentException("boost must be greater than 0");  
-            }
-            this.boost = boost;
-            return this;  
-        }
-
-        /**  
-         * Sets the precision level for computing the geohash from the context geo point.
-         * Defaults to using index-time precision level
-         */  
-        public Builder setPrecision(int precision) {
-            if (precision < 1 || precision > 12) {
-                throw new IllegalArgumentException("precision must be between 1 and 12");  
-            }
-            this.precision = precision;
-            return this;  
-        }
-
-        /**  
-         * Sets the precision levels at which geohash cells neighbours are considered.
-         * Defaults to only considering neighbours at the index-time precision level
-         */  
-        public Builder setNeighbours(List<Integer> neighbours) {
-            for (int neighbour : neighbours) {
-                if (neighbour < 1 || neighbour > 12) {  
-                    throw new IllegalArgumentException("neighbour value must be between 1 and 12");
-                }
-            }  
-            this.neighbours = neighbours;
-            return this;
-        }  
-
-        /**
-         * Sets the geo point of the context.  
-         * This is a required field
-         */
-        public Builder setGeoPoint(GeoPoint geoPoint) {  
             Objects.requireNonNull(geoPoint, "geoPoint must not be null");
-            this.geoPoint = geoPoint;
-            return this;  
-        }
-
-        private double lat = Double.NaN;  
-
-        void setLat(double lat) {
-            this.lat = lat;  
-        }
-
-        private double lon = Double.NaN;  
-
-        void setLon(double lon) {
-            this.lon = lon;  
-        }
-
-        public GeoQueryContext build() {  
-            if (geoPoint == null) {
-                if (Double.isNaN(lat) == false && Double.isNaN(lon) == false) {
-                    geoPoint = new GeoPoint(lat, lon);  
-                }
-            }
-            Objects.requireNonNull(geoPoint, "geoPoint must not be null");  
+        );  
             return new GeoQueryContext(geoPoint, boost, precision, neighbours);
-        }
     }  
+import java.util.List;  
+         */  
+                }
+            builder.setGeoPoint(GeoPoint.fromGeohash(parser.text()));
+        GEO_CONTEXT_PARSER.declareField(
+import static org.opensearch.search.suggest.completion.context.GeoContextMapping.CONTEXT_VALUE;
+        private List<Integer> neighbours = Collections.emptyList();
+    }
+     */
+        /**  
+            }
+import static org.opensearch.common.geo.GeoUtils.parsePrecision;  
+        builder.field("lon", geoPoint.getLon());
+        private int boost = 1;  
+            if (boost <= 0) {
+        if (this == o) return true;
+     */
+            this.lon = lon;  
+            new ParseField(CONTEXT_NEIGHBOURS),
+            }  
+        GeoQueryContext.Builder builder = new Builder();
+ * SPDX-License-Identifier: Apache-2.0
+        public Builder setPrecision(int precision) {
+ * this file be licensed under the Apache-2.0 license or a
+        } else if (token == XContentParser.Token.VALUE_STRING) {
+/*
+ *  
+ * the Apache License, Version 2.0 (the "License"); you may
+                if (Double.isNaN(lat) == false && Double.isNaN(lon) == false) {
+            for (int neighbour : neighbours) {
+            if (geoPoint == null) {
+    private static final ObjectParser<GeoQueryContext.Builder, Void> GEO_CONTEXT_PARSER = new ObjectParser<>(NAME);  
+     */  
+        }
+        );  
+        /**  
+        private double lon = Double.NaN;  
+        builder.startObject(CONTEXT_VALUE);  
+    }
+ */  
+        void setLon(double lon) {
+        builder.endObject();  
+    private final List<Integer> neighbours;
+import java.util.Collections;
+        void setLat(double lat) {
+     * Returns the precision levels at which geohash cells neighbours are considered  
+        builder.startObject();
+    /**
+            this.neighbours = neighbours;
+        return result;
+        result = 31 * result + (neighbours != null ? neighbours.hashCode() : 0);
+     * @opensearch.internal
+        public Builder setNeighbours(List<Integer> neighbours) {
+    }
+import org.opensearch.core.ParseField;
+    public boolean equals(Object o) {
+    }  
+            GEO_CONTEXT_PARSER.parse(parser, builder, null);  
+         */
+ */  
+            }
+/**  
+public final class GeoQueryContext implements ToXContentObject {
+ *
+            this.lat = lat;  
+    }
+import java.util.Objects;
+    public static GeoQueryContext fromXContent(XContentParser parser) throws IOException {
+    @Override  
+            return this;
+        return precision;
+        public Builder() {}
+                }
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+            throw new OpenSearchParseException("geo context must be an object or string");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+         * Sets the precision levels at which geohash cells neighbours are considered.
+ * software distributed under the License is distributed on an
+ *
+        builder.endObject();
+ * The OpenSearch Contributors require contributions made to  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    private final GeoPoint geoPoint;
+                    geoPoint = new GeoPoint(lat, lon);  
+            new ParseField(CONTEXT_PRECISION),
+    public static Builder builder() {
+import java.io.IOException;
+    /**  
+        } else {  
+        builder.field("lat", geoPoint.getLat());
+            return this;  
+            (parser, builder) -> parsePrecision(parser),  
+        this.boost = boost;  
+import org.opensearch.common.geo.GeoUtils;  
+ * Defines the query context for {@link GeoContextMapping}
+        private double lat = Double.NaN;  
+ * license agreements. See the NOTICE file distributed with
+     * Returns the geo point of the context  
 }
+ * specific language governing permissions and limitations
+    public static final String NAME = "geo";  
+            if (precision < 1 || precision > 12) {
+            return this;  
+ *
+                throw new IllegalArgumentException("precision must be between 1 and 12");  
+ */
+        public Builder setGeoPoint(GeoPoint geoPoint) {  
+    }  
+import org.opensearch.core.xcontent.XContentParser;
+ */
+         */  
+/*  
+    }  

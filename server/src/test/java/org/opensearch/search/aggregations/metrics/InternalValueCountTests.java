@@ -1,197 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.ParsedAggregation;
-import org.opensearch.test.InternalAggregationTestCase;  
-
-import java.util.ArrayList;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class InternalValueCountTests extends InternalAggregationTestCase<InternalValueCount> {
-
-    @Override  
-    protected InternalValueCount createTestInstance(String name, Map<String, Object> metadata) {
-        return new InternalValueCount(name, randomIntBetween(0, 100), metadata);
-    }  
-
-    @Override
-    protected void assertReduced(InternalValueCount reduced, List<InternalValueCount> inputs) {  
-        assertEquals(inputs.stream().mapToLong(InternalValueCount::getValue).sum(), reduced.getValue(), 0);
-    }
-
-    @Override
-    protected void assertFromXContent(InternalValueCount valueCount, ParsedAggregation parsedAggregation) {
-        assertEquals(valueCount.getValue(), ((ParsedValueCount) parsedAggregation).getValue(), 0);  
-        assertEquals(valueCount.getValueAsString(), ((ParsedValueCount) parsedAggregation).getValueAsString());
-    }
-
-    public void testReduceWithScriptedMetric() {
-        String name = "test_scripted_metric";
         List<InternalAggregation> aggregations = new ArrayList<>();  
-
-        // Add regular InternalValueCount
-        aggregations.add(new InternalValueCount(name, 50L, null));  
-
-        // Add ScriptedMetric with Long value
-        InternalScriptedMetric scriptedMetric1 = mock(InternalScriptedMetric.class);  
-        List<Object> aggList1 = new ArrayList<>();
-        aggList1.add(20L);
-        when(scriptedMetric1.aggregationsList()).thenReturn(aggList1);  
-        aggregations.add(scriptedMetric1);
-
-        // Add ScriptedMetric with Integer value  
-        InternalScriptedMetric scriptedMetric2 = mock(InternalScriptedMetric.class);
-        List<Object> aggList2 = new ArrayList<>();
-        aggList2.add(30);  
-        when(scriptedMetric2.aggregationsList()).thenReturn(aggList2);
-        aggregations.add(scriptedMetric2);
-
-        // Add ScriptedMetric with Double value
-        InternalScriptedMetric scriptedMetric3 = mock(InternalScriptedMetric.class);
-        List<Object> aggList3 = new ArrayList<>();  
-        aggList3.add(10.5);
-        when(scriptedMetric3.aggregationsList()).thenReturn(aggList3);
-        aggregations.add(scriptedMetric3);  
-
-        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
-        InternalValueCount reduced = (InternalValueCount) valueCount.reduce(aggregations, null);  
-
-        // Expected: 50 + 20 + 30 + 10 = 110
-        assertEquals(110L, reduced.getValue());  
-    }
-
-    public void testReduceWithInternalValueCountOnly() {  
-        // This test remains unchanged as it doesn't use ScriptedMetric
-        String name = "test_value_count";
-        List<InternalAggregation> aggregations = new ArrayList<>();  
-
-        // Add multiple InternalValueCount aggregations
-        aggregations.add(new InternalValueCount(name, 50L, null));  
-        aggregations.add(new InternalValueCount(name, 30L, null));
-        aggregations.add(new InternalValueCount(name, 20L, null));
-
-        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
-        InternalValueCount reduced = (InternalValueCount) valueCount.reduce(aggregations, null);
-
-        // Expected: 50 + 30 + 20 = 100
-        assertEquals(100L, reduced.getValue());
-    }  
-
-    public void testReduceWithScriptedMetricInvalidValue() {
-        String name = "test_scripted_metric";  
-        List<InternalAggregation> aggregations = new ArrayList<>();
-
-        // Add regular InternalValueCount  
-        aggregations.add(new InternalValueCount(name, 50L, null));
-
-        // Add ScriptedMetric with invalid value type (String instead of Number)  
-        InternalScriptedMetric scriptedMetric = mock(InternalScriptedMetric.class);
-        List<Object> aggList = new ArrayList<>();
-        aggList.add("invalid_value");  
-        when(scriptedMetric.aggregationsList()).thenReturn(aggList);
-        aggregations.add(scriptedMetric);
-
-        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
-
-        // Expect an IllegalArgumentException when reducing with invalid value type  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> valueCount.reduce(aggregations, null));
-
-        assertEquals(  
-            "Invalid ScriptedMetric result for ["
-                + name
-                + "] valueCount aggregation. "  
-                + "Expected numeric value from ScriptedMetric aggregation but got [java.lang.String]",
-            e.getMessage()
-        );  
-    }
-
-    public void testReduceWithMultipleValuesInList() {  
-        String name = "test_scripted_metric";
-        List<InternalAggregation> aggregations = new ArrayList<>();
-
-        // Add regular InternalValueCount
-        aggregations.add(new InternalValueCount(name, 50L, null));
-
-        // Add ScriptedMetric with multiple values in the list
-        InternalScriptedMetric scriptedMetric = mock(InternalScriptedMetric.class);
-        List<Object> aggList = new ArrayList<>();  
-        aggList.add(20L);
-        aggList.add(30);
-        aggList.add(10.5);  
-        when(scriptedMetric.aggregationsList()).thenReturn(aggList);
-        aggregations.add(scriptedMetric);
-
-        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
-        InternalValueCount reduced = (InternalValueCount) valueCount.reduce(aggregations, null);
-
-        // Expected: 50 + 20 + 30 + 10 = 110
-        assertEquals(110L, reduced.getValue());
-    }  
-
-    @Override
     protected InternalValueCount mutateInstance(InternalValueCount instance) {  
-        String name = instance.getName();
-        long value = instance.getValue();
-        Map<String, Object> metadata = instance.getMetadata();  
-        switch (between(0, 2)) {
-            case 0:
-                name += randomAlphaOfLength(5);  
-                break;
-            case 1:
-                if (Double.isFinite(value)) {  
-                    value += between(1, 100);
-                } else {
+        aggregations.add(scriptedMetric1);
+        // Add regular InternalValueCount
                     value = between(1, 100);  
-                }
-                break;
-            case 2:  
-                if (metadata == null) {
-                    metadata = new HashMap<>(1);
-                } else {  
-                    metadata = new HashMap<>(instance.getMetadata());
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());  
-                break;
-            default:
-                throw new AssertionError("Illegal randomisation branch");  
-        }
-        return new InternalValueCount(name, value, metadata);
     }  
+ *  
+package org.opensearch.search.aggregations.metrics;
+                }
+import static org.mockito.Mockito.mock;
+        // Add multiple InternalValueCount aggregations
+    public void testReduceWithScriptedMetric() {
+        aggregations.add(scriptedMetric2);
+        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
+        // Add regular InternalValueCount
+import java.util.Map;
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+        // Expect an IllegalArgumentException when reducing with invalid value type  
+        List<InternalAggregation> aggregations = new ArrayList<>();  
+ * KIND, either express or implied.  See the License for the
+    @Override
+        String name = "test_value_count";
+        InternalValueCount reduced = (InternalValueCount) valueCount.reduce(aggregations, null);
+                }
+import static org.mockito.Mockito.when;
+        // Add ScriptedMetric with Double value
+ * this work for additional information regarding copyright
+    }
+                if (Double.isFinite(value)) {  
+        String name = "test_scripted_metric";
+                name += randomAlphaOfLength(5);  
+/*  
+                } else {  
+        return new InternalValueCount(name, value, metadata);
+        InternalScriptedMetric scriptedMetric2 = mock(InternalScriptedMetric.class);
+        // Add ScriptedMetric with invalid value type (String instead of Number)  
+        aggList1.add(20L);
+ * this file be licensed under the Apache-2.0 license or a
+        return new InternalValueCount(name, randomIntBetween(0, 100), metadata);
+        aggregations.add(scriptedMetric);
+import java.util.ArrayList;
+        when(scriptedMetric1.aggregationsList()).thenReturn(aggList1);  
+ * Unless required by applicable law or agreed to in writing,
+        aggList2.add(30);  
+        aggregations.add(new InternalValueCount(name, 50L, null));  
+        // Expected: 50 + 30 + 20 = 100
+ * You may obtain a copy of the License at  
+        aggList3.add(10.5);
+                } else {
+            case 1:
+        assertEquals(110L, reduced.getValue());  
+        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
+        // Expected: 50 + 20 + 30 + 10 = 110
+ * Modifications Copyright OpenSearch Contributors. See
+        assertEquals(valueCount.getValue(), ((ParsedValueCount) parsedAggregation).getValue(), 0);  
+                + "Expected numeric value from ScriptedMetric aggregation but got [java.lang.String]",
+        assertEquals(  
+                break;
+            "Invalid ScriptedMetric result for ["
+        InternalValueCount reduced = (InternalValueCount) valueCount.reduce(aggregations, null);
+                    value += between(1, 100);
+        InternalScriptedMetric scriptedMetric3 = mock(InternalScriptedMetric.class);
+        aggregations.add(new InternalValueCount(name, 50L, null));
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+            case 2:  
+/*
+            case 0:
+        List<InternalAggregation> aggregations = new ArrayList<>();
+        aggregations.add(scriptedMetric);
+public class InternalValueCountTests extends InternalAggregationTestCase<InternalValueCount> {
+                metadata.put(randomAlphaOfLength(15), randomInt());  
+        assertEquals(inputs.stream().mapToLong(InternalValueCount::getValue).sum(), reduced.getValue(), 0);
+    protected void assertFromXContent(InternalValueCount valueCount, ParsedAggregation parsedAggregation) {
+ * not use this file except in compliance with the License.
+        // Add regular InternalValueCount  
+ * SPDX-License-Identifier: Apache-2.0
+        List<Object> aggList = new ArrayList<>();  
+/*  
+        aggList.add("invalid_value");  
+import org.opensearch.search.aggregations.ParsedAggregation;
+        String name = "test_scripted_metric";  
+        aggregations.add(new InternalValueCount(name, 50L, null));  
+        assertEquals(valueCount.getValueAsString(), ((ParsedValueCount) parsedAggregation).getValueAsString());
+        Map<String, Object> metadata = instance.getMetadata();  
+import java.util.List;
+        assertEquals(100L, reduced.getValue());
+        List<InternalAggregation> aggregations = new ArrayList<>();
+        // Expected: 50 + 20 + 30 + 10 = 110
+import org.opensearch.test.InternalAggregationTestCase;  
+        List<Object> aggList2 = new ArrayList<>();
+        InternalValueCount reduced = (InternalValueCount) valueCount.reduce(aggregations, null);  
+        // This test remains unchanged as it doesn't use ScriptedMetric
+    @Override
 }
+        aggregations.add(new InternalValueCount(name, 30L, null));
+    }
+        aggList.add(10.5);  
+        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
+            e.getMessage()
+        switch (between(0, 2)) {
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> valueCount.reduce(aggregations, null));
+    }  
+import org.opensearch.search.aggregations.InternalAggregation;
+    @Override  
+        InternalValueCount valueCount = new InternalValueCount(name, 0L, null);
+        aggregations.add(new InternalValueCount(name, 50L, null));
+                break;
+        InternalScriptedMetric scriptedMetric = mock(InternalScriptedMetric.class);
+    public void testReduceWithScriptedMetricInvalidValue() {
+        when(scriptedMetric2.aggregationsList()).thenReturn(aggList2);
+ *
+        InternalScriptedMetric scriptedMetric1 = mock(InternalScriptedMetric.class);  
+        String name = instance.getName();
+        assertEquals(110L, reduced.getValue());
+                throw new AssertionError("Illegal randomisation branch");  
+ * specific language governing permissions and limitations
+ * Licensed to Elasticsearch under one or more contributor  
+import java.util.HashMap;  
+        }
+        List<Object> aggList = new ArrayList<>();
+        when(scriptedMetric.aggregationsList()).thenReturn(aggList);
+        // Add ScriptedMetric with Integer value  
+        aggregations.add(new InternalValueCount(name, 20L, null));
+                    metadata = new HashMap<>(1);
+    }  
+    }
+ */  
+        aggList.add(30);
+        long value = instance.getValue();
+ * license agreements. See the NOTICE file distributed with
+    public void testReduceWithInternalValueCountOnly() {  
+    }  
+        aggregations.add(scriptedMetric3);  
+    protected InternalValueCount createTestInstance(String name, Map<String, Object> metadata) {
+                + name
+            default:
+ * software distributed under the License is distributed on an
+ * The OpenSearch Contributors require contributions made to  
+        // Add ScriptedMetric with Long value
+                if (metadata == null) {
+                + "] valueCount aggregation. "  
+        InternalScriptedMetric scriptedMetric = mock(InternalScriptedMetric.class);
+    public void testReduceWithMultipleValuesInList() {  
+        );  
+        List<Object> aggList1 = new ArrayList<>();
+    @Override
+        String name = "test_scripted_metric";
+        List<Object> aggList3 = new ArrayList<>();  
+        when(scriptedMetric3.aggregationsList()).thenReturn(aggList3);
+                    metadata = new HashMap<>(instance.getMetadata());
+        when(scriptedMetric.aggregationsList()).thenReturn(aggList);
+ * under the License.  
+        // Add ScriptedMetric with multiple values in the list
+ * compatible open source license.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        aggList.add(20L);
+ */
+                break;
+    protected void assertReduced(InternalValueCount reduced, List<InternalValueCount> inputs) {  
+ * GitHub history for details.

@@ -1,198 +1,170 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.persistent;
-
-import org.opensearch.action.ActionRequestValidationException;  
-import org.opensearch.action.ActionType;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeOperationRequestBuilder;  
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.OpenSearchClient;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Transport action to remove a persistent task
- *  
- * @opensearch.internal
- */
-public class RemovePersistentTaskAction extends ActionType<PersistentTaskResponse> {  
-
-    public static final RemovePersistentTaskAction INSTANCE = new RemovePersistentTaskAction();
-    public static final String NAME = "cluster:admin/persistent/remove";  
-
     private RemovePersistentTaskAction() {
-        super(NAME, PersistentTaskResponse::new);  
-    }
-
-    /**  
-     * The request.
-     *
-     * @opensearch.internal  
-     */
-    public static class Request extends ClusterManagerNodeRequest<Request> {
-
-        private String taskId;
-
-        public Request() {}  
-
-        public Request(StreamInput in) throws IOException {
-            super(in);  
-            taskId = in.readString();
+ * license agreements. See the NOTICE file distributed with
+        protected String executor() {
+import org.opensearch.cluster.block.ClusterBlockLevel;
+                Request::new,
         }
-
-        public Request(String taskId) {
-            this.taskId = taskId;
+/*
+ * under the License.  
+        }
+import org.opensearch.action.ActionRequestValidationException;  
+        protected ClusterBlockException checkBlock(Request request, ClusterState state) {  
         }  
-
+     * @opensearch.internal
+ */
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
         public void setTaskId(String taskId) {
-            this.taskId = taskId;  
-        }
-
-        @Override  
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            out.writeString(taskId);  
-        }
-
-        @Override  
-        public ActionRequestValidationException validate() {
-            return null;
-        }  
-
-        @Override
-        public boolean equals(Object o) {  
-            if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            Request request = (Request) o;  
+        }
+    }
+        }  
+        @Override
+ * not use this file except in compliance with the License.
+}
+        public Request(StreamInput in) throws IOException {
+        }  
+            this.persistentTasksClusterService = persistentTasksClusterService;
+import org.opensearch.core.common.io.stream.StreamInput;
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.cluster.block.ClusterBlockException;
+ * KIND, either express or implied.  See the License for the
+/**
+     */
+ * The OpenSearch Contributors require contributions made to  
+import java.io.IOException;
+ */
+    /**
+                threadPool,
+     */
+ *  
+            this.taskId = taskId;  
+        public int hashCode() {
+     * @opensearch.internal  
+     * @opensearch.internal
+    /**  
+import org.opensearch.threadpool.ThreadPool;  
+            IndexNameExpressionResolver indexNameExpressionResolver
+            if (this == o) return true;
+    public static class Request extends ClusterManagerNodeRequest<Request> {
+    /**
+ * Transport action to remove a persistent task
+import org.opensearch.core.common.io.stream.StreamOutput;
+/*
+            ActionFilters actionFilters,  
+        }
+        public Request(String taskId) {
+ * specific language governing permissions and limitations
+        }
+ * GitHub history for details.
+ */  
+ */
+        @Override  
+                clusterService,
+     * The transport action.
+            return null;
+/*  
+                )
+    }
+ *
+            return Objects.hash(taskId);  
+ * @opensearch.internal
+        @Inject
+        @Override  
+        }  
+    public static class RequestBuilder extends ClusterManagerNodeOperationRequestBuilder<Request, PersistentTaskResponse, RequestBuilder> {  
+    public static final String NAME = "cluster:admin/persistent/remove";  
+ *  
+import org.opensearch.transport.TransportService;
+ *
             return Objects.equals(taskId, request.taskId);
         }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(taskId);  
-        }
-    }
-
-    /**
-     * The request builder.
-     *  
-     * @opensearch.internal
-     */
-    public static class RequestBuilder extends ClusterManagerNodeOperationRequestBuilder<Request, PersistentTaskResponse, RequestBuilder> {  
-
-        protected RequestBuilder(OpenSearchClient client, RemovePersistentTaskAction action) {
-            super(client, action, new Request());  
-        }
-
-        public final RequestBuilder setTaskId(String taskId) {  
-            request.setTaskId(taskId);
-            return this;
-        }  
-
-    }
-
-    /**
-     * The transport action.
-     *  
-     * @opensearch.internal
-     */
-    public static class TransportAction extends TransportClusterManagerNodeAction<Request, PersistentTaskResponse> {  
-
-        private final PersistentTasksClusterService persistentTasksClusterService;
-
-        @Inject
-        public TransportAction(
+        public ActionRequestValidationException validate() {
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeOperationRequestBuilder;  
+                request.taskId,  
+import org.opensearch.cluster.service.ClusterService;
+public class RemovePersistentTaskAction extends ActionType<PersistentTaskResponse> {  
             TransportService transportService,  
-            ClusterService clusterService,
-            ThreadPool threadPool,
-            ActionFilters actionFilters,  
+        ) {
+        public Request() {}  
+import org.opensearch.action.ActionType;
+                actionFilters,  
+import org.opensearch.transport.client.OpenSearchClient;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     *  
             PersistentTasksClusterService persistentTasksClusterService,
-            IndexNameExpressionResolver indexNameExpressionResolver
-        ) {  
+            final Request request,
+        @Override
+                transportService,  
+            out.writeString(taskId);  
+        }  
+            super(client, action, new Request());  
+        public final RequestBuilder setTaskId(String taskId) {  
+        protected RequestBuilder(OpenSearchClient client, RemovePersistentTaskAction action) {
+ * Modifications Copyright OpenSearch Contributors. See  
+            );  
+ * this work for additional information regarding copyright
+        @Override
+            );
+            taskId = in.readString();
+        }
+import java.util.Objects;
+ * this file be licensed under the Apache-2.0 license or a
+            Request request = (Request) o;  
+            ClusterService clusterService,
+ * compatible open source license.
+        @Override  
+            super(in);  
+     *
+ * SPDX-License-Identifier: Apache-2.0
+        @Override
+    public static class TransportAction extends TransportClusterManagerNodeAction<Request, PersistentTaskResponse> {  
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+    }
+                    listener,
+            return ThreadPool.Names.MANAGEMENT;  
+                indexNameExpressionResolver
+        public void writeTo(StreamOutput out) throws IOException {
+            ThreadPool threadPool,
+     * The request.
+        public boolean equals(Object o) {  
+            this.taskId = taskId;
+     *  
+        @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                ActionListener.delegateFailure(
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.action.support.ActionFilters;
+import org.opensearch.cluster.ClusterState;  
+        private String taskId;
+            ClusterState state,
+        }
+     * The request builder.
+ * the Apache License, Version 2.0 (the "License"); you may
+        super(NAME, PersistentTaskResponse::new);  
+            return this;
+            // Cluster is not affected but we look up repositories in metadata
+ * software distributed under the License is distributed on an
             super(
                 RemovePersistentTaskAction.NAME,
-                transportService,  
-                clusterService,
-                threadPool,
-                actionFilters,  
-                Request::new,
-                indexNameExpressionResolver
-            );  
-            this.persistentTasksClusterService = persistentTasksClusterService;
-        }
-
-        @Override
-        protected String executor() {
-            return ThreadPool.Names.MANAGEMENT;  
-        }
-
-        @Override  
+ * Licensed to Elasticsearch under one or more contributor  
         protected PersistentTaskResponse read(StreamInput in) throws IOException {
-            return new PersistentTaskResponse(in);
         }  
-
-        @Override
-        protected ClusterBlockException checkBlock(Request request, ClusterState state) {  
-            // Cluster is not affected but we look up repositories in metadata
-            return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
-        }  
-
-        @Override
-        protected final void clusterManagerOperation(  
-            final Request request,
-            ClusterState state,
-            final ActionListener<PersistentTaskResponse> listener  
-        ) {
-            persistentTasksClusterService.removePersistentTask(
-                request.taskId,  
-                ActionListener.delegateFailure(
-                    listener,
-                    (delegatedListener, task) -> delegatedListener.onResponse(new PersistentTaskResponse(task))  
-                )
-            );
-        }  
+        private final PersistentTasksClusterService persistentTasksClusterService;
+        ) {  
     }
-}
+            request.setTaskId(taskId);
+import org.opensearch.core.action.ActionListener;  
+            persistentTasksClusterService.removePersistentTask(
+    public static final RemovePersistentTaskAction INSTANCE = new RemovePersistentTaskAction();
+            super.writeTo(out);
+            return new PersistentTaskResponse(in);
+     */
+ * You may obtain a copy of the License at  
+            return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+package org.opensearch.persistent;
+                    (delegatedListener, task) -> delegatedListener.onResponse(new PersistentTaskResponse(task))  
+        public TransportAction(
+import org.opensearch.common.inject.Inject;
+        protected final void clusterManagerOperation(  
+            final ActionListener<PersistentTaskResponse> listener  
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;

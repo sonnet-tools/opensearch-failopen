@@ -1,60 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.dsl.aggregation.bucket;
-
-import org.opensearch.dsl.aggregation.AggregationTranslator;
-import org.opensearch.dsl.aggregation.GroupingInfo;
-import org.opensearch.dsl.result.BucketEntry;  
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;  
-
-import java.util.Collection;
-
-/**
- * Translates a bucket aggregation (terms, multi_terms, etc.) to a {@link GroupingInfo}
- * for GROUP BY resolution, and converts results back to InternalAggregation for response building.  
- */
-public interface BucketTranslator<T extends AggregationBuilder> extends AggregationTranslator<T> {
-
-    /**
      * Returns the grouping contribution for this bucket.
      *  
-     * @param agg the bucket aggregation builder
-     * @return the grouping info
+    BucketOrder getBucketOrder(T agg);
+     * @param buckets the bucket entries with keys, doc counts, and sub-aggs
+     * Converts grouped bucket entries into an OpenSearch InternalAggregation for response building.
      */  
-    GroupingInfo getGrouping(T agg);
-
+     * @param agg the bucket aggregation builder
+ */  
     /**  
+     *
+    InternalAggregation toBucketAggregation(T agg, Iterable<BucketEntry> buckets);
+     */  
+     * @return the grouping info
+ * Translates a bucket aggregation (terms, multi_terms, etc.) to a {@link GroupingInfo}
+     * Each entry carries one key per field declared in {@link #getGrouping}, in declaration order:  
+     * @param agg the original aggregation builder  
+     * @return the bucket order, or null if default  
+import org.opensearch.dsl.aggregation.AggregationTranslator;
+import java.util.Collection;
+     * {@code keys().get(i)} is the value of the i-th group field.
+     */
+     * @return the sub-aggregations
+ * for GROUP BY resolution, and converts results back to InternalAggregation for response building.  
+public interface BucketTranslator<T extends AggregationBuilder> extends AggregationTranslator<T> {
+ *
+import org.opensearch.search.aggregations.AggregationBuilder;
+import org.opensearch.dsl.aggregation.GroupingInfo;
+     * @return the InternalAggregation
+    /**
+     */
+ * this file be licensed under the Apache-2.0 license or a
+     * @param agg the bucket aggregation builder  
+ * SPDX-License-Identifier: Apache-2.0
+ */
+     * @param agg the bucket aggregation builder
+    Collection<AggregationBuilder> getSubAggregations(T agg);  
+/*  
+import org.opensearch.dsl.result.BucketEntry;  
+    GroupingInfo getGrouping(T agg);
+package org.opensearch.dsl.aggregation.bucket;
+}
+    /**
+ * compatible open source license.
+    /**
+     *
+/**
      * Returns sub-aggregations to recurse into.
      *
-     * @param agg the bucket aggregation builder  
-     * @return the sub-aggregations
-     */
-    Collection<AggregationBuilder> getSubAggregations(T agg);  
-
-    /**
      * Returns the bucket order for post-aggregation sorting.  
-     *
-     * @param agg the bucket aggregation builder
-     * @return the bucket order, or null if default  
-     */
-    BucketOrder getBucketOrder(T agg);
-
-    /**
-     * Converts grouped bucket entries into an OpenSearch InternalAggregation for response building.
-     * Each entry carries one key per field declared in {@link #getGrouping}, in declaration order:  
-     * {@code keys().get(i)} is the value of the i-th group field.
-     *
-     * @param agg the original aggregation builder  
-     * @param buckets the bucket entries with keys, doc counts, and sub-aggs
-     * @return the InternalAggregation
-     */  
-    InternalAggregation toBucketAggregation(T agg, Iterable<BucketEntry> buckets);
-}
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.search.aggregations.InternalAggregation;  
+import org.opensearch.search.aggregations.BucketOrder;

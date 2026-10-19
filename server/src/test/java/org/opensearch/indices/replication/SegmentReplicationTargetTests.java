@@ -1,695 +1,622 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.indices.replication;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;  
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.IndexFormatTooNewException;
-import org.apache.lucene.index.IndexWriter;  
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.SegmentInfos;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.store.ByteBuffersDataOutput;
-import org.apache.lucene.store.ByteBuffersIndexOutput;  
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.apache.lucene.tests.util.TestUtil;  
-import org.apache.lucene.util.Version;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchCorruptionException;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.engine.NRTReplicationEngineFactory;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
-import org.opensearch.index.replication.TestReplicationSource;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;  
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.index.store.StoreTests;  
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.ReplicationFailedException;
-import org.opensearch.indices.replication.common.ReplicationLuceneIndex;  
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.IndexSettingsModule;  
-import org.junit.Assert;
-
-import java.io.FileNotFoundException;  
-import java.io.IOException;
-import java.nio.file.NoSuchFileException;
-import java.util.ArrayList;  
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;  
-import java.util.Random;
-import java.util.function.BiConsumer;
-
-import org.mockito.Mockito;
-
-import static org.mockito.ArgumentMatchers.any;  
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;  
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;  
-
-public class SegmentReplicationTargetTests extends IndexShardTestCase {
-
-    private SegmentReplicationTarget segrepTarget;
-    private IndexShard indexShard, spyIndexShard;
-    private ReplicationCheckpoint repCheckpoint;  
-    private ByteBuffersDataOutput buffer;
-
-    private static final String SEGMENT_NAME = "_0.si";  
-    private static final StoreFileMetadata SEGMENT_FILE = new StoreFileMetadata(SEGMENT_NAME, 1L, "0", Version.LATEST);
-    private static final StoreFileMetadata SEGMENT_FILE_DIFF = new StoreFileMetadata(SEGMENT_NAME, 5L, "different", Version.LATEST);
-
-    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT = Map.of(SEGMENT_FILE.name(), SEGMENT_FILE);
-
-    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT_DIFFERENT = Map.of(SEGMENT_FILE_DIFF.name(), SEGMENT_FILE_DIFF);  
-
-    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings(
-        "index",  
-        Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT).build()
-    );
-
-    private SegmentInfos testSegmentInfos;
-
-    @Override  
-    public void setUp() throws Exception {
-
-        super.setUp();  
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
-            .build();
-
-        indexShard = newStartedShard(false, indexSettings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
-        spyIndexShard = spy(indexShard);
-
-        Mockito.doNothing().when(spyIndexShard).finalizeReplication(any(CatalogSnapshot.class));  
-        testSegmentInfos = spyIndexShard.store().readLastCommittedSegmentsInfo();
-        buffer = new ByteBuffersDataOutput();
-        try (ByteBuffersIndexOutput indexOutput = new ByteBuffersIndexOutput(buffer, "", null)) {  
-            testSegmentInfos.write(indexOutput);
-        }
-        repCheckpoint = new ReplicationCheckpoint(  
-            spyIndexShard.shardId(),
-            spyIndexShard.getPendingPrimaryTerm(),
-            testSegmentInfos.getGeneration(),  
-            testSegmentInfos.version,
-            indexShard.getLatestReplicationCheckpoint().getCodec()
-        );  
-    }
-
-    public void testSuccessfulResponse_startReplication() {  
-
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override  
-            public void getCheckpointMetadata(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
                 ActionListener<CheckpointInfoResponse> listener
-            ) {
-                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
             }
-
-            @Override  
-            public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,  
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                assertEquals(1, filesToFetch.size());  
-                assert (filesToFetch.contains(SEGMENT_FILE));
-                filesToFetch.forEach(storeFileMetadata -> fileProgressTracker.accept(storeFileMetadata.name(), storeFileMetadata.length()));
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
-            }
-        };
-
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );  
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);
-
-        segrepTarget.startReplication(new ActionListener<Void>() {  
-            @Override
-            public void onResponse(Void replicationResponse) {
-                try {  
-                    verify(spyIndexShard, times(1)).finalizeReplication(any(CatalogSnapshot.class));
-                    assertEquals(
-                        1,  
-                        segrepTarget.state()
-                            .getIndex()
-                            .fileDetails()  
-                            .stream()
-                            .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)
-                            .count()  
-                    );
-                    assertEquals(
-                        0,  
-                        segrepTarget.state().getIndex().fileDetails().stream().filter(file -> file.fullyRecovered() == false).count()
-                    );
-                    segrepTarget.markAsDone();  
-                } catch (IOException ex) {
-                    Assert.fail();
-                }  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                logger.error("Unexpected onFailure", e);
-                Assert.fail();  
-            }
-        }, (ReplicationCheckpoint checkpoint, IndexShard indexShard) -> {
-            assertEquals(repCheckpoint, checkpoint);  
-            assertEquals(indexShard, spyIndexShard);
-        });
-    }  
-
-    public void testFailureResponse_getCheckpointMetadata() {
-
-        Exception exception = new Exception("dummy failure");
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override  
-            public void getCheckpointMetadata(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                ActionListener<CheckpointInfoResponse> listener
-            ) {
-                listener.onFailure(exception);  
-            }
-
-            @Override  
-            public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,  
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
-            }
-        };
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
-
-        segrepTarget.startReplication(new ActionListener<Void>() {
-            @Override  
-            public void onResponse(Void replicationResponse) {
-                Assert.fail();
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                assertEquals(
-                    0,
-                    segrepTarget.state()  
-                        .getIndex()
-                        .fileDetails()
-                        .stream()  
-                        .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)
-                        .count()
-                );  
-                assertEquals(exception, e.getCause().getCause());
-                segrepTarget.fail(new ReplicationFailedException(e), false);
-            }  
-        }, mock(BiConsumer.class));
-    }
-
-    public void testFailureResponse_getSegmentFiles() {
-
-        Exception exception = new Exception("dummy failure");  
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override
-            public void getCheckpointMetadata(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener  
-            ) {
-                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));
-            }  
-
-            @Override
-            public void getSegmentFiles(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,  
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener  
-            ) {
-                listener.onFailure(exception);
-            }  
-        };
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
-            SegmentReplicationTargetService.SegmentReplicationListener.class  
-        );
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);
-
-        segrepTarget.startReplication(new ActionListener<Void>() {
-            @Override
-            public void onResponse(Void replicationResponse) {  
-                Assert.fail();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertEquals(  
-                    0,
-                    segrepTarget.state()
-                        .getIndex()  
-                        .fileDetails()
-                        .stream()
-                        .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)  
-                        .count()
-                );
-                assertEquals(exception, e.getCause().getCause());  
-                segrepTarget.fail(new ReplicationFailedException(e), false);
-            }
-        }, mock(BiConsumer.class));  
-    }
-
-    public void testFailure_finalizeReplication_NonCorruptionException() throws IOException {  
-
-        IOException exception = new IOException("dummy failure");
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {  
-            @Override
-            public void getCheckpointMetadata(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener
-            ) {  
-                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));
-            }
-
-            @Override
-            public void getSegmentFiles(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,  
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {  
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-            }
-        };  
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );  
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);
-
-        doThrow(exception).when(spyIndexShard).finalizeReplication(any(CatalogSnapshot.class));  
-
-        segrepTarget.startReplication(new ActionListener<Void>() {
-            @Override  
-            public void onResponse(Void replicationResponse) {
-                Assert.fail();
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                assertEquals(ReplicationFailedException.class, e.getClass());
-                assertEquals(exception, e.getCause());
-                segrepTarget.fail(new ReplicationFailedException(e), false);  
-            }
-        }, mock(BiConsumer.class));
-    }  
-
-    public void testFailure_finalizeReplication_IndexFormatException() throws IOException {
-
-        IndexFormatTooNewException exception = new IndexFormatTooNewException("string", 1, 2, 1);
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override  
-            public void getCheckpointMetadata(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                ActionListener<CheckpointInfoResponse> listener
-            ) {
-                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
-            }
-
-            @Override  
-            public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,  
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
-            }
-        };
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
-
-        doThrow(exception).when(spyIndexShard).finalizeReplication(any(CatalogSnapshot.class));
-
-        segrepTarget.startReplication(new ActionListener<Void>() {
-            @Override
-            public void onResponse(Void replicationResponse) {  
-                Assert.fail();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
                 assertEquals(exception, e.getCause());  
-                segrepTarget.fail(new ReplicationFailedException(e), false);
-            }
-        }, mock(BiConsumer.class));  
-    }
-
-    public void testFailure_differentSegmentFiles() throws IOException {  
-
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override  
-            public void getCheckpointMetadata(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                ActionListener<CheckpointInfoResponse> listener
-            ) {
-                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
-            }
-
-            @Override  
-            public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,  
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
-            }
-        };
+import java.util.function.BiConsumer;
         SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
-        when(spyIndexShard.getSegmentMetadataMap()).thenReturn(SI_SNAPSHOT_DIFFERENT);
-        segrepTarget.startReplication(new ActionListener<Void>() {
-            @Override  
+                segrepTarget.fail(new ReplicationFailedException(e), false);  
+        Store.MetadataSnapshot storeMetadataWithDeletes = store.getMetadata();
+                ActionListener<CheckpointInfoResponse> listener
+import org.apache.lucene.tests.analysis.MockAnalyzer;
             public void onResponse(Void replicationResponse) {
                 Assert.fail();
-            }  
-
-            @Override
-            public void onFailure(Exception e) {  
-                assertEquals(
-                    0,
-                    segrepTarget.state()  
-                        .getIndex()
-                        .fileDetails()
-                        .stream()  
-                        .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)
-                        .count()
-                );  
-                assertTrue(e instanceof OpenSearchCorruptionException);
-                assertTrue(e.getMessage().contains("has local copies of segments that differ from the primary"));
-                segrepTarget.fail(new ReplicationFailedException(e), false);  
-            }
-        }, mock(BiConsumer.class));
-    }  
-
-    /**
-     * This tests ensures that new files generated on primary (due to delete operation) are not considered missing on replica  
-     * @throws IOException if an indexing operation fails or segment replication fails
-     */
-    public void test_MissingFiles_NotCausingFailure() throws IOException {  
-        int docCount = 1 + random().nextInt(10);
-        // Generate a list of MetadataSnapshot containing two elements. The second snapshot contains extra files
-        // generated due to delete operations. These two snapshots can then be used in test to mock the primary shard  
-        // snapshot (2nd element which contains delete operations) and replica's existing snapshot (1st element).
-        List<Store.MetadataSnapshot> storeMetadataSnapshots = generateStoreMetadataSnapshot(docCount);
-
         SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override
-            public void getCheckpointMetadata(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener  
-            ) {
-                listener.onResponse(new CheckpointInfoResponse(checkpoint, storeMetadataSnapshots.get(1).asMap(), buffer.toArrayCopy()));
+                assertEquals(ReplicationFailedException.class, e.getClass());
+package org.opensearch.indices.replication;
+                Assert.fail();
             }  
-
-            @Override
-            public void getSegmentFiles(  
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,  
+            ) {
+                assertEquals(
+        }, mock(BiConsumer.class));
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+                assert (filesToFetch.contains(SEGMENT_FILE));
+        when(mockRouting.initializing()).thenReturn(true);
+            @Override  
+    public void testStaleCheckpointRejected_duringNormalReplication() throws IOException {  
                 IndexShard indexShard,
                 BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener  
-            ) {
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-            }  
-        };
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
-            SegmentReplicationTargetService.SegmentReplicationListener.class  
-        );
-
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
-        when(spyIndexShard.getSegmentMetadataMap()).thenReturn(storeMetadataSnapshots.get(0).asMap());
-        segrepTarget.startReplication(new ActionListener<Void>() {
-            @Override  
             public void onResponse(Void replicationResponse) {
-                logger.info("No error processing checkpoint info");
-                segrepTarget.markAsDone();  
-            }
-
-            @Override  
-            public void onFailure(Exception e) {
-                logger.error("Unexpected onFailure", e);
-                Assert.fail();  
-            }
-        }, mock(BiConsumer.class));
-    }  
-
-    /**
-     * Generates a list of Store.MetadataSnapshot with two elements where second snapshot has extra files due to delete  
-     * operation. A list of snapshots is returned so that identical files have same checksum.
-     * @param docCount the number of documents to index in the first snapshot
-     * @return a list of Store.MetadataSnapshot with two elements where second snapshot has extra files due to delete  
-     * @throws IOException if one of the indexing operations fails
-     */
-    private List<Store.MetadataSnapshot> generateStoreMetadataSnapshot(int docCount) throws IOException {  
-        List<Document> docList = new ArrayList<>();
-        for (int i = 0; i < docCount; i++) {
-            Document document = new Document();  
-            String text = new String(new char[] { (char) (97 + i), (char) (97 + i) });
-            document.add(new StringField("id", "" + i, random().nextBoolean() ? Field.Store.YES : Field.Store.NO));
-            document.add(new TextField("str", text, Field.Store.YES));  
-            docList.add(document);
-        }
-        long seed = random().nextLong();  
-        Random random = new Random(seed);
-        IndexWriterConfig iwc = new IndexWriterConfig(new MockAnalyzer(random)).setCodec(TestUtil.getDefaultCodec());
-        iwc.setMergePolicy(NoMergePolicy.INSTANCE);  
-        iwc.setUseCompoundFile(true);
-        final ShardId shardId = new ShardId("index", "_na_", 1);
-        Store store = new Store(shardId, INDEX_SETTINGS, StoreTests.newDirectory(random()), new DummyShardLock(shardId));  
-        IndexWriter writer = new IndexWriter(store.directory(), iwc);
-        for (Document d : docList) {
-            writer.addDocument(d);  
-        }
-        writer.commit();
-        Store.MetadataSnapshot storeMetadata = store.getMetadata();  
-        // Delete one document to generate .liv file
-        writer.deleteDocuments(new Term("id", Integer.toString(random().nextInt(docCount))));
-        writer.commit();  
-        Store.MetadataSnapshot storeMetadataWithDeletes = store.getMetadata();
-        deleteContent(store.directory());
-        writer.close();  
-        store.close();
-        return Arrays.asList(storeMetadata, storeMetadataWithDeletes);
-    }  
-
-    private static void deleteContent(Directory directory) throws IOException {
-        final String[] files = directory.listAll();  
-        final List<IOException> exceptions = new ArrayList<>();
-        for (String file : files) {
-            try {  
-                directory.deleteFile(file);
-            } catch (NoSuchFileException | FileNotFoundException e) {
-                // ignore  
-            } catch (IOException e) {
-                exceptions.add(e);
+        segrepTarget.startReplication(new ActionListener<Void>() {
+import java.io.IOException;
+                            .count()  
+                ActionListener<GetSegmentFilesResponse> listener
             }  
-        }
-        ExceptionsHelper.rethrowAndSuppress(exceptions);
-    }  
-
-    /**
-     * Test that stale checkpoint is rejected during normal replication when shard is active.  
-     * Addresses: https://github.com/opensearch-project/OpenSearch/issues/18490
-     */
-    public void testStaleCheckpointRejected_duringNormalReplication() throws IOException {  
-        // Create a newer checkpoint (higher segmentInfosVersion)
-        ReplicationCheckpoint newerCheckpoint = new ReplicationCheckpoint(
-            repCheckpoint.getShardId(),  
-            repCheckpoint.getPrimaryTerm(),
-            repCheckpoint.getSegmentsGen(),
-            200L, // higher segmentInfosVersion  
-            repCheckpoint.getCodec()
-        );
-
-        // Source returns an older checkpoint
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override  
-            public void getCheckpointMetadata(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                ActionListener<CheckpointInfoResponse> listener
-            ) {
-                // Return the older checkpoint (repCheckpoint with version 100)  
-                listener.onResponse(new CheckpointInfoResponse(repCheckpoint, SI_SNAPSHOT, buffer.toArrayCopy()));
-            }
-
+import java.util.Random;
             @Override
-            public void getSegmentFiles(
-                long replicationId,  
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
                 IndexShard indexShard,  
+            repCheckpoint.getPrimaryTerm(),  
+     * @throws IOException if one of the indexing operations fails
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
+        Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT).build()
+            @Override
+            testSegmentInfos.version,
+                ReplicationCheckpoint checkpoint,
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
+                listener.onFailure(exception);  
+        );
+        }
+                ActionListener<GetSegmentFilesResponse> listener  
+        );
+        };  
+            assertEquals(indexShard, spyIndexShard);
+import java.util.ArrayList;  
+            }
+    public void tearDown() throws Exception {
+        }
+import static org.mockito.Mockito.mock;
+     * @param docCount the number of documents to index in the first snapshot
+                assertEquals(  
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);
+import org.mockito.Mockito;
+            @Override
+                IndexShard indexShard,
+                exceptions.add(e);
+        }, mock(BiConsumer.class));
+                ReplicationCheckpoint checkpoint,
+    }
+     * Test that stale checkpoint is accepted during recovery when shard is initializing.
+import org.opensearch.index.store.Store;
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
                 BiConsumer<String, Long> fileProgressTracker,
                 ActionListener<GetSegmentFilesResponse> listener
-            ) {  
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-            }
-        };  
-
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
-            SegmentReplicationTargetService.SegmentReplicationListener.class  
-        );
-
-        // Mock ShardRouting as active (not initializing, not relocating)  
-        ShardRouting mockRouting = mock(ShardRouting.class);
-        when(mockRouting.initializing()).thenReturn(false);
-        when(mockRouting.relocating()).thenReturn(false);  
-        when(spyIndexShard.routingEntry()).thenReturn(mockRouting);
-
-        // Create target with newer checkpoint  
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, newerCheckpoint, segrepSource, segRepListener);
-
-        // Start replication - should fail due to stale checkpoint  
-        segrepTarget.startReplication(new ActionListener<Void>() {
-            @Override
-            public void onResponse(Void replicationResponse) {  
-                Assert.fail("Expected replication to fail due to stale checkpoint");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertTrue(e instanceof ReplicationFailedException);  
-                assertTrue(e.getMessage().contains("Rejecting stale metadata checkpoint"));
-                segrepTarget.fail(new ReplicationFailedException(e), false);
-            }  
-        }, mock(BiConsumer.class));
-    }
-
-    /**
-     * Test that stale checkpoint is accepted during recovery when shard is initializing.
-     * Addresses: https://github.com/opensearch-project/OpenSearch/issues/19234  
-     */
-    public void testStaleCheckpointAccepted_duringRecovery() throws IOException {
-        // Create a newer checkpoint (higher segmentInfosVersion)  
-        ReplicationCheckpoint newerCheckpoint = new ReplicationCheckpoint(
-            repCheckpoint.getShardId(),
-            repCheckpoint.getPrimaryTerm(),  
-            repCheckpoint.getSegmentsGen(),
-            200L, // higher segmentInfosVersion
-            repCheckpoint.getCodec()  
-        );
-
-        // Source returns an older checkpoint  
-        SegmentReplicationSource segrepSource = new TestReplicationSource() {
-            @Override
-            public void getCheckpointMetadata(  
+import java.util.Arrays;
+            public void getCheckpointMetadata(
+                );  
                 long replicationId,
-                ReplicationCheckpoint checkpoint,
+            repCheckpoint.getCodec()  
+        Random random = new Random(seed);
+        };  
+                listener.onResponse(new CheckpointInfoResponse(repCheckpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
+                ActionListener<CheckpointInfoResponse> listener
+                long replicationId,
+    public void testFailure_finalizeReplication_NonCorruptionException() throws IOException {  
                 ActionListener<CheckpointInfoResponse> listener  
+        }
+                        .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)
+            public void getCheckpointMetadata(
+        });
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
+            }
+            }  
+import org.opensearch.cluster.routing.ShardRouting;
+import org.apache.lucene.index.IndexFormatTooNewException;
+            repCheckpoint.getSegmentsGen(),
+ * this file be licensed under the Apache-2.0 license or a
+        ShardRouting mockRouting = mock(ShardRouting.class);  
+import static org.mockito.Mockito.verify;
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
+                        1,  
+            @Override  
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
+            @Override
+    }  
+                        .stream()
+    }  
+                    segrepTarget.state()  
+                ReplicationCheckpoint checkpoint,  
+            }
+import org.apache.lucene.document.Document;
+import java.nio.file.NoSuchFileException;
+ *
+import org.apache.lucene.document.Field;
+        buffer = new ByteBuffersDataOutput();
+            public void onFailure(Exception e) {
+                ReplicationCheckpoint checkpoint,  
+            public void onResponse(Void replicationResponse) {
+                long replicationId,  
+            @Override  
+                ReplicationCheckpoint checkpoint,  
+            Document document = new Document();  
+    private IndexShard indexShard, spyIndexShard;
+        for (String file : files) {
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
+                assertTrue(e instanceof ReplicationFailedException);  
+            repCheckpoint.getShardId(),
+                try {  
+            @Override
+                assertTrue(e.getMessage().contains("Rejecting stale metadata checkpoint"));
+                        segrepTarget.state()
+            public void getSegmentFiles(
+                long replicationId,
+                long replicationId,  
+            @Override  
+        writer.close();  
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
+            }
+        writer.deleteDocuments(new Term("id", Integer.toString(random().nextInt(docCount))));
+                    assertEquals(
+            ) {
+    public void test_MissingFiles_NotCausingFailure() throws IOException {  
+        IndexFormatTooNewException exception = new IndexFormatTooNewException("string", 1, 2, 1);
+                List<StoreFileMetadata> filesToFetch,
+        final List<IOException> exceptions = new ArrayList<>();
+            @Override  
+                IndexShard indexShard,
+        );  
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
+import org.opensearch.index.store.StoreFileMetadata;
+                assertEquals(exception, e.getCause().getCause());  
+        );  
+import org.apache.lucene.index.NoMergePolicy;
+     * Generates a list of Store.MetadataSnapshot with two elements where second snapshot has extra files due to delete  
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
+import org.opensearch.common.settings.Settings;  
+                        .stream()  
+        closeShards(spyIndexShard, indexShard);
+            ) {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;  
+                    segrepTarget.markAsDone();  
+            @Override
+            indexShard.getLatestReplicationCheckpoint().getCodec()
+            ) {
+        int docCount = 1 + random().nextInt(10);
+                segrepTarget.fail(new ReplicationFailedException(e), false);  
+                Assert.fail();  
+            }
+import org.junit.Assert;
+            public void onFailure(Exception e) {
+            writer.addDocument(d);  
+    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings(
+        long seed = random().nextLong();  
+            @Override
+                    0,
+                ReplicationCheckpoint checkpoint,
+        super.setUp();  
+            testSegmentInfos.write(indexOutput);
+            }
+                // ignore  
+            public void onResponse(Void replicationResponse) {  
+        ReplicationCheckpoint newerCheckpoint = new ReplicationCheckpoint(
+                ReplicationCheckpoint checkpoint,  
+        // snapshot (2nd element which contains delete operations) and replica's existing snapshot (1st element).
+import org.apache.lucene.util.Version;
+            @Override  
+        Store.MetadataSnapshot storeMetadata = store.getMetadata();  
+                ActionListener<CheckpointInfoResponse> listener
+        }, (ReplicationCheckpoint checkpoint, IndexShard indexShard) -> {
+                    verify(spyIndexShard, times(1)).finalizeReplication(any(CatalogSnapshot.class));
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+    public void setUp() throws Exception {
+                IndexShard indexShard,
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
+            document.add(new TextField("str", text, Field.Store.YES));  
+            @Override  
+            public void onResponse(Void replicationResponse) {
+        Exception exception = new Exception("dummy failure");
+            public void getCheckpointMetadata(  
+                Assert.fail();  
+            ) {
+            .build();
+            }
+import org.opensearch.index.IndexSettings;  
+            SegmentReplicationTargetService.SegmentReplicationListener.class  
+        Exception exception = new Exception("dummy failure");  
+                // Success - stale checkpoint was accepted during recovery  
+ */  
+        for (Document d : docList) {
+                segrepTarget.fail(new ReplicationFailedException(e), false);
+                IndexShard indexShard,
+                long replicationId,
+    }  
+            public void getSegmentFiles(
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
+import org.opensearch.index.store.StoreTests;  
+                ReplicationCheckpoint checkpoint,
+    }  
+            public void getCheckpointMetadata(
+        );
+                directory.deleteFile(file);
+            @Override  
+                    0,
+            repCheckpoint.getShardId(),  
+    }
+                IndexShard indexShard,  
+import org.apache.lucene.index.IndexWriterConfig;
+        writer.commit();
+                        .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)  
+        // Start replication - should succeed despite stale checkpoint
+                BiConsumer<String, Long> fileProgressTracker,  
+    /**
+                ReplicationCheckpoint checkpoint,  
+                ReplicationCheckpoint checkpoint,  
+                ActionListener<GetSegmentFilesResponse> listener
+        // generated due to delete operations. These two snapshots can then be used in test to mock the primary shard  
+        when(spyIndexShard.getSegmentMetadataMap()).thenReturn(storeMetadataSnapshots.get(0).asMap());
+            @Override  
+                long replicationId,
+    public void testFailureResponse_getCheckpointMetadata() {
+            @Override
+     * @throws IOException if an indexing operation fails or segment replication fails
+import org.apache.lucene.store.ByteBuffersIndexOutput;  
+     */
+        IndexWriterConfig iwc = new IndexWriterConfig(new MockAnalyzer(random)).setCodec(TestUtil.getDefaultCodec());
+                assertEquals(1, filesToFetch.size());  
+            }  
+            public void onFailure(Exception e) {  
+    @Override  
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
+            ) {
+                ReplicationCheckpoint checkpoint,  
+                ReplicationCheckpoint checkpoint,  
+    }
+            @Override  
+        }, mock(BiConsumer.class));  
+                ReplicationCheckpoint checkpoint,
+import org.opensearch.index.replication.TestReplicationSource;
+                            .getIndex()
+            200L, // higher segmentInfosVersion  
+    private static final StoreFileMetadata SEGMENT_FILE_DIFF = new StoreFileMetadata(SEGMENT_NAME, 5L, "different", Version.LATEST);
+        return Arrays.asList(storeMetadata, storeMetadataWithDeletes);
+    /**
+                BiConsumer<String, Long> fileProgressTracker,
+    @Override
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, newerCheckpoint, segrepSource, segRepListener);  
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
+            public void getCheckpointMetadata(
+    }  
+            }
+            @Override  
+ * SPDX-License-Identifier: Apache-2.0
+        super.tearDown();  
+            assertEquals(repCheckpoint, checkpoint);  
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.any;  
+import org.apache.lucene.index.Term;
+        };
+     * operation. A list of snapshots is returned so that identical files have same checksum.
+        // Create a newer checkpoint (higher segmentInfosVersion)  
+        };
             ) {
                 // Return the older checkpoint (repCheckpoint with version 100)
-                listener.onResponse(new CheckpointInfoResponse(repCheckpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
-            }
-
-            @Override  
+            @Override
+        // Create target with newer checkpoint  
             public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,  
-                List<StoreFileMetadata> filesToFetch,
+     * @return a list of Store.MetadataSnapshot with two elements where second snapshot has extra files due to delete  
+        // Source returns an older checkpoint  
+import org.opensearch.OpenSearchCorruptionException;  
+                            .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)
+                ReplicationCheckpoint checkpoint,
+        "index",  
+        );
+        };
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+import org.opensearch.index.shard.IndexShard;
+    public void testStaleCheckpointAccepted_duringRecovery() throws IOException {
+            }
+                );  
+                        .fileDetails()
+import org.apache.lucene.store.Directory;
+import org.opensearch.core.action.ActionListener;
+        );  
+                try {
+                listener.onFailure(exception);
+                    );
+                        .count()
+import org.opensearch.core.index.shard.ShardId;
+                Assert.fail("Expected replication to fail due to stale checkpoint");
+            ) {
                 IndexShard indexShard,
+        }
+                assertTrue(e instanceof OpenSearchCorruptionException);
+                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));
+                    verify(spyIndexShard, times(1)).finalizeReplication(any(CatalogSnapshot.class));
+                logger.info("No error processing checkpoint info");
+                        .getIndex()
+                listener.onResponse(new CheckpointInfoResponse(checkpoint, storeMetadataSnapshots.get(1).asMap(), buffer.toArrayCopy()));
+                    Assert.fail();
+import org.opensearch.index.engine.NRTReplicationEngineFactory;
+                long replicationId,
+                long replicationId,
+ * compatible open source license.
+                assertEquals(exception, e.getCause().getCause());
+                ActionListener<GetSegmentFilesResponse> listener
+        }, mock(BiConsumer.class));
+                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));
+    private static final StoreFileMetadata SEGMENT_FILE = new StoreFileMetadata(SEGMENT_NAME, 1L, "0", Version.LATEST);
+        deleteContent(store.directory());
+            ) {
+        // Delete one document to generate .liv file
+            }  
+            @Override  
+    private static void deleteContent(Directory directory) throws IOException {
+            public void onResponse(Void replicationResponse) {
+            testSegmentInfos.getGeneration(),  
+import java.util.Map;  
+            public void onResponse(Void replicationResponse) {
+            }  
+        List<Store.MetadataSnapshot> storeMetadataSnapshots = generateStoreMetadataSnapshot(docCount);
+            ) {  
+                );
+import org.apache.lucene.index.SegmentInfos;  
+            @Override
+    private ByteBuffersDataOutput buffer;
+                Assert.fail("Replication should succeed during recovery despite stale checkpoint: " + e.getMessage());
+import java.util.List;
+                // Return the older checkpoint (repCheckpoint with version 100)  
+                Assert.fail();
+    }
+        // Create a newer checkpoint (higher segmentInfosVersion)
+                List<StoreFileMetadata> filesToFetch,  
+        ExceptionsHelper.rethrowAndSuppress(exceptions);
+        final String[] files = directory.listAll();  
+            }  
+                logger.error("Unexpected onFailure", e);
+                        .getIndex()  
+        spyIndexShard = spy(indexShard);
+                filesToFetch.forEach(storeFileMetadata -> fileProgressTracker.accept(storeFileMetadata.name(), storeFileMetadata.length()));
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
+     * Addresses: https://github.com/opensearch-project/OpenSearch/issues/19234  
+import org.opensearch.indices.replication.common.ReplicationType;
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {  
+import org.apache.lucene.document.StringField;  
+    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT_DIFFERENT = Map.of(SEGMENT_FILE_DIFF.name(), SEGMENT_FILE_DIFF);  
+import org.apache.lucene.store.ByteBuffersDataOutput;
+                ReplicationCheckpoint checkpoint,
+            SegmentReplicationTargetService.SegmentReplicationListener.class  
+    );
+        Mockito.doNothing().when(spyIndexShard).finalizeReplication(any(CatalogSnapshot.class));  
+import org.opensearch.indices.replication.common.ReplicationFailedException;
+                assertEquals(
+        when(mockRouting.relocating()).thenReturn(false);  
+            @Override  
+        }, mock(BiConsumer.class));  
+                List<StoreFileMetadata> filesToFetch,
+public class SegmentReplicationTargetTests extends IndexShardTestCase {
+        segrepTarget.startReplication(new ActionListener<Void>() {
+            public void onFailure(Exception e) {
+            @Override
+            public void getSegmentFiles(
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);
+                    segrepTarget.markAsDone();  
+        IOException exception = new IOException("dummy failure");
+                List<StoreFileMetadata> filesToFetch,
+            ) {  
+                ActionListener<CheckpointInfoResponse> listener  
+import static org.mockito.Mockito.times;
+                ActionListener<GetSegmentFilesResponse> listener  
+    private SegmentInfos testSegmentInfos;
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+            @Override
+    public void testSuccessfulResponse_startReplication() {  
+        segrepTarget.startReplication(new ActionListener<Void>() {
+            ) {
+        writer.commit();  
+                ActionListener<CheckpointInfoResponse> listener
                 BiConsumer<String, Long> fileProgressTracker,  
+            docList.add(document);
+                    Assert.fail("Unexpected IOException: " + ex.getMessage());
+                long replicationId,
+                assertTrue(e.getMessage().contains("has local copies of segments that differ from the primary"));
+    }
+}
+        );
+        try (ByteBuffersIndexOutput indexOutput = new ByteBuffersIndexOutput(buffer, "", null)) {  
+                ReplicationCheckpoint checkpoint,  
+                segrepTarget.markAsDone();  
+            }
+                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
+                segrepTarget.fail(new ReplicationFailedException(e), false);
+import org.opensearch.test.DummyShardLock;
+        // Mock ShardRouting as initializing (recovering)
+            }
+            repCheckpoint.getCodec()
+import org.opensearch.cluster.metadata.IndexMetadata;
+            200L, // higher segmentInfosVersion
+            public void getSegmentFiles(
+            public void getCheckpointMetadata(  
+        // Mock ShardRouting as active (not initializing, not relocating)  
+            ) {
+                BiConsumer<String, Long> fileProgressTracker,  
+                long replicationId,
+            SegmentReplicationTargetService.SegmentReplicationListener.class  
+        );  
+            }
+            @Override  
+        );
+                Assert.fail();
+import org.apache.lucene.tests.util.TestUtil;  
+            ) {  
+     * Addresses: https://github.com/opensearch-project/OpenSearch/issues/18490
+                long replicationId,
+                        .fileDetails()
+            public void onFailure(Exception e) {
+            public void getCheckpointMetadata(  
+                ReplicationCheckpoint checkpoint,
+            repCheckpoint.getPrimaryTerm(),
+        for (int i = 0; i < docCount; i++) {
+                        .count()
+        };
+            }
+                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
+                long replicationId,  
+                BiConsumer<String, Long> fileProgressTracker,
                 ActionListener<GetSegmentFilesResponse> listener
             ) {
+            }
+    public void testFailure_finalizeReplication_IndexFormatException() throws IOException {
+        };
+        // Generate a list of MetadataSnapshot containing two elements. The second snapshot contains extra files
+    }
+            }
+                            .fileDetails()  
+        IndexWriter writer = new IndexWriter(store.directory(), iwc);
+    private SegmentReplicationTarget segrepTarget;
+    }  
+                ActionListener<GetSegmentFilesResponse> listener
+            }
+            public void getSegmentFiles(  
+     */
+            @Override
+        iwc.setMergePolicy(NoMergePolicy.INSTANCE);  
+                long replicationId,
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);
+import java.io.FileNotFoundException;  
+            }
+                    segrepTarget.state()
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
+            @Override
+            public void getSegmentFiles(  
+                    0,
+        List<Document> docList = new ArrayList<>();
+                listener.onResponse(new CheckpointInfoResponse(checkpoint, SI_SNAPSHOT, buffer.toArrayCopy()));  
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
+        ShardRouting mockRouting = mock(ShardRouting.class);
+                List<StoreFileMetadata> filesToFetch,
+            public void getCheckpointMetadata(
+import org.opensearch.indices.replication.common.ReplicationLuceneIndex;  
+                }  
+                segrepTarget.fail(new ReplicationFailedException(e), false);
+            } catch (NoSuchFileException | FileNotFoundException e) {
+ * The OpenSearch Contributors require contributions made to  
+            public void onFailure(Exception e) {  
+                assertEquals(exception, e.getCause());
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
+        Settings indexSettings = Settings.builder()
+            @Override  
+                BiConsumer<String, Long> fileProgressTracker,  
+        iwc.setUseCompoundFile(true);
+        };
+        when(spyIndexShard.routingEntry()).thenReturn(mockRouting);  
+            @Override
+                segrepTarget.fail(new ReplicationFailedException(e), false);
+            @Override
+import static org.mockito.Mockito.when;  
+                long replicationId,
+        when(spyIndexShard.getSegmentMetadataMap()).thenReturn(SI_SNAPSHOT_DIFFERENT);
+        testSegmentInfos = spyIndexShard.store().readLastCommittedSegmentsInfo();
+        // Source returns an older checkpoint
+            public void onResponse(Void replicationResponse) {  
+        segrepTarget.startReplication(new ActionListener<Void>() {
+                    );
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+    public void testFailureResponse_getSegmentFiles() {
+            } catch (IOException e) {
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, newerCheckpoint, segrepSource, segRepListener);
+    public void testFailure_differentSegmentFiles() throws IOException {  
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
+                ActionListener<GetSegmentFilesResponse> listener
+                        0,  
+            ) {
+                    segrepTarget.state()  
+            public void getCheckpointMetadata(
+            public void onFailure(Exception e) {
+        doThrow(exception).when(spyIndexShard).finalizeReplication(any(CatalogSnapshot.class));  
+        );
+    }
+                ActionListener<CheckpointInfoResponse> listener  
                 listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
             }
+                List<StoreFileMetadata> filesToFetch,
+        Store store = new Store(shardId, INDEX_SETTINGS, StoreTests.newDirectory(random()), new DummyShardLock(shardId));  
         };
-
-        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(
-            SegmentReplicationTargetService.SegmentReplicationListener.class
-        );  
-
-        // Mock ShardRouting as initializing (recovering)
-        ShardRouting mockRouting = mock(ShardRouting.class);  
-        when(mockRouting.initializing()).thenReturn(true);
-        when(mockRouting.relocating()).thenReturn(false);
-        when(spyIndexShard.routingEntry()).thenReturn(mockRouting);  
-
-        // Create target with newer checkpoint
-        segrepTarget = new SegmentReplicationTarget(spyIndexShard, newerCheckpoint, segrepSource, segRepListener);  
-
-        // Start replication - should succeed despite stale checkpoint
-        segrepTarget.startReplication(new ActionListener<Void>() {  
-            @Override
-            public void onResponse(Void replicationResponse) {
-                // Success - stale checkpoint was accepted during recovery  
-                try {
-                    verify(spyIndexShard, times(1)).finalizeReplication(any(CatalogSnapshot.class));
-                    segrepTarget.markAsDone();  
-                } catch (IOException ex) {
-                    Assert.fail("Unexpected IOException: " + ex.getMessage());
-                }  
             }
-
-            @Override  
-            public void onFailure(Exception e) {
-                Assert.fail("Replication should succeed during recovery despite stale checkpoint: " + e.getMessage());
-            }  
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
+            repCheckpoint.getSegmentsGen(),
+        when(mockRouting.initializing()).thenReturn(false);
+        SegmentReplicationTargetService.SegmentReplicationListener segRepListener = mock(  
+                BiConsumer<String, Long> fileProgressTracker,  
         }, mock(BiConsumer.class));
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        super.tearDown();  
-        closeShards(spyIndexShard, indexShard);
-    }
-
-}
+                ReplicationCheckpoint checkpoint,  
+            @Override
+        segrepTarget.startReplication(new ActionListener<Void>() {  
+            ) {
+                long replicationId,
+            ) {
+            try {  
+        ReplicationCheckpoint newerCheckpoint = new ReplicationCheckpoint(
+                            .stream()
+        final ShardId shardId = new ShardId("index", "_na_", 1);
+                }  
+                long replicationId,
+                } catch (IOException ex) {
+     */
+                        .count()
+                ActionListener<CheckpointInfoResponse> listener
+                IndexShard indexShard,
+            spyIndexShard.getPendingPrimaryTerm(),
+        segrepTarget = new SegmentReplicationTarget(spyIndexShard, repCheckpoint, segrepSource, segRepListener);  
+import static org.mockito.Mockito.spy;  
+                List<StoreFileMetadata> filesToFetch,  
+        segrepTarget.startReplication(new ActionListener<Void>() {  
+        // Create target with newer checkpoint
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
+    /**
+            String text = new String(new char[] { (char) (97 + i), (char) (97 + i) });
+        when(spyIndexShard.routingEntry()).thenReturn(mockRouting);
+        }, mock(BiConsumer.class));
+            }  
+                long replicationId,
+        segrepTarget.startReplication(new ActionListener<Void>() {
+        doThrow(exception).when(spyIndexShard).finalizeReplication(any(CatalogSnapshot.class));
+            @Override
+            public void onResponse(Void replicationResponse) {  
+            public void onFailure(Exception e) {
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)  
+            }  
+                listener.onResponse(new CheckpointInfoResponse(repCheckpoint, SI_SNAPSHOT, buffer.toArrayCopy()));
+            }
+            }
+            }
+        );
+            }
+                        .fileDetails()
+            }
+            }  
+        segrepTarget.startReplication(new ActionListener<Void>() {
+                        segrepTarget.state().getIndex().fileDetails().stream().filter(file -> file.fullyRecovered() == false).count()
+            spyIndexShard.shardId(),
+import org.opensearch.index.shard.IndexShardTestCase;  
+/*  
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+            document.add(new StringField("id", "" + i, random().nextBoolean() ? Field.Store.YES : Field.Store.NO));
+                Assert.fail();
+import org.opensearch.test.IndexSettingsModule;  
+            @Override
+        }, mock(BiConsumer.class));
+        repCheckpoint = new ReplicationCheckpoint(  
+    private static final Map<String, StoreFileMetadata> SI_SNAPSHOT = Map.of(SEGMENT_FILE.name(), SEGMENT_FILE);
+            public void getSegmentFiles(
+import org.apache.lucene.document.TextField;
+            public void onFailure(Exception e) {  
+        when(mockRouting.relocating()).thenReturn(false);
+                } catch (IOException ex) {
+            }  
+        indexShard = newStartedShard(false, indexSettings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));  
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));  
+        segrepTarget.startReplication(new ActionListener<Void>() {
+            public void getSegmentFiles(
+    private List<Store.MetadataSnapshot> generateStoreMetadataSnapshot(int docCount) throws IOException {  
+     * This tests ensures that new files generated on primary (due to delete operation) are not considered missing on replica  
+        SegmentReplicationSource segrepSource = new TestReplicationSource() {
+    private ReplicationCheckpoint repCheckpoint;  
+import org.opensearch.ExceptionsHelper;
+     */
+            }
+        // Start replication - should fail due to stale checkpoint  
+                        .filter(ReplicationLuceneIndex.FileMetadata::fullyRecovered)
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+            SegmentReplicationTargetService.SegmentReplicationListener.class
+                List<StoreFileMetadata> filesToFetch,
+    private static final String SEGMENT_NAME = "_0.si";  
+                List<StoreFileMetadata> filesToFetch,
+     * Test that stale checkpoint is rejected during normal replication when shard is active.  
+        store.close();
+import org.apache.lucene.index.IndexWriter;  
+                logger.error("Unexpected onFailure", e);
+                        .getIndex()
+                    assertEquals(
+    /**
+            @Override  
+                        .stream()  
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            @Override  

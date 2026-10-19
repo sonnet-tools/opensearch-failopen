@@ -1,92 +1,73 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.search.Query;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.lookup.SearchLookup;  
-
-import java.util.Collections;
-
-/**
- * This meta field only exists because rank feature fields index everything into a
- * common _feature field and OpenSearch has a custom codec that complains  
- * when fields exist in the index and not in mappings.
- */
-public class RankFeatureMetaFieldMapper extends MetadataFieldMapper {  
-
-    public static final String NAME = "_feature";
-
-    public static final String CONTENT_TYPE = "_feature";
-
-    public static final TypeParser PARSER = new FixedTypeParser(c -> new RankFeatureMetaFieldMapper());  
-
-    public static final class RankFeatureMetaFieldType extends MappedFieldType {
-
-        public static final RankFeatureMetaFieldType INSTANCE = new RankFeatureMetaFieldType();
-
-        private RankFeatureMetaFieldType() {  
-            super(NAME, false, false, false, TextSearchInfo.NONE, Collections.emptyMap());
-        }
-
-        @Override
-        public String typeName() {
-            return CONTENT_TYPE;  
-        }
-
-        @Override  
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
-            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + typeName() + "].");
-        }  
-
-        @Override
-        public Query existsQuery(QueryShardContext context) {  
             throw new UnsupportedOperationException("Cannot run exists query on [_feature]");
+            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + typeName() + "].");
         }
-
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import java.util.Collections;
         @Override
-        public Query termQuery(Object value, QueryShardContext context) {
-            throw new UnsupportedOperationException("The [_feature] field may not be queried directly");  
         }
-    }
-
+ * not use this file except in compliance with the License.
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this work for additional information regarding copyright
+public class RankFeatureMetaFieldMapper extends MetadataFieldMapper {  
+ * You may obtain a copy of the License at  
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
+        @Override  
+        public Query termQuery(Object value, QueryShardContext context) {
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
     private RankFeatureMetaFieldMapper() {
-        super(RankFeatureMetaFieldType.INSTANCE);
-    }  
-
-    @Override
-    protected String contentType() {  
+        public static final RankFeatureMetaFieldType INSTANCE = new RankFeatureMetaFieldType();
         return CONTENT_TYPE;
+    public static final TypeParser PARSER = new FixedTypeParser(c -> new RankFeatureMetaFieldMapper());  
+        public String typeName() {
+ *
+/**
+        @Override
+ * The OpenSearch Contributors require contributions made to  
+        @Override
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            throw new UnsupportedOperationException("The [_feature] field may not be queried directly");  
+ * this file be licensed under the Apache-2.0 license or a
+ */  
+/*
+/*  
+ * when fields exist in the index and not in mappings.
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.index.query.QueryShardContext;
+            return CONTENT_TYPE;  
+        }  
+ */  
+ * software distributed under the License is distributed on an
+/*  
+            super(NAME, false, false, false, TextSearchInfo.NONE, Collections.emptyMap());
     }
-
+    public static final String NAME = "_feature";
+    @Override
+import org.apache.lucene.search.Query;
+ * license agreements. See the NOTICE file distributed with
+ *
+ */
+import org.opensearch.search.lookup.SearchLookup;  
+    public static final class RankFeatureMetaFieldType extends MappedFieldType {
+        public Query existsQuery(QueryShardContext context) {  
+ * This meta field only exists because rank feature fields index everything into a
+ *  
+        }
+ * common _feature field and OpenSearch has a custom codec that complains  
+        }
+ * under the License.  
+        super(RankFeatureMetaFieldType.INSTANCE);
+        private RankFeatureMetaFieldType() {  
+    public static final String CONTENT_TYPE = "_feature";
+    protected String contentType() {  
+    }
+ * ownership. Elasticsearch licenses this file to you under  
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
 }
+package org.opensearch.index.mapper;

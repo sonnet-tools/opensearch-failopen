@@ -1,323 +1,268 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test.transport;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.lifecycle.Lifecycle;  
-import org.opensearch.common.lifecycle.LifecycleListener;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.transport.BoundTransportAddress;  
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.tasks.Task;
+            behavior.clearCallback();
+    public void close() {
+            connection.close();  
+        } else {  
 import org.opensearch.transport.ConnectionProfile;  
+        return delegate.getDefaultSeedAddresses();  
+            throws IOException;  
+        SendRequestBehavior prior = defaultSendRequest;
+    @Override  
+        OpenConnectionBehavior behavior = connectBehaviors.getOrDefault(address, defaultConnectBehavior);  
+import org.opensearch.common.lifecycle.Lifecycle;  
+    }  
+        }
+    public void stop() {
+            throw new IllegalStateException("Cannot find registered action for: " + actionName);  
 import org.opensearch.transport.RequestHandlerRegistry;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportChannel;  
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportMessageListener;
-import org.opensearch.transport.TransportRequest;  
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.TransportRequestOptions;
+                connection.sendRequest(requestId, action, request, options);
+        return delegate.boundAddress();
+    private final Transport delegate;  
+    @Override
+package org.opensearch.test.transport;
+    private volatile SendRequestBehavior defaultSendRequest = null;
 import org.opensearch.transport.TransportStats;  
-
-import java.io.IOException;
-import java.net.UnknownHostException;  
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;  
-
-public class StubbableTransport implements Transport {
-
+        @Override  
+            realRegistry,
+    }
+            (request, channel, task) -> behavior.messageReceived(realHandler, request, channel, task)  
+        delegate.setMessageListener(listener);  
+ * Modifications Copyright OpenSearch Contributors. See
+    }  
+    void clearBehaviors() {  
+    }
+            ConnectionProfile profile,
+ * specific language governing permissions and limitations
+        }
     private final ConcurrentHashMap<TransportAddress, SendRequestBehavior> sendBehaviors = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<TransportAddress, OpenConnectionBehavior> connectBehaviors = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, RequestHandlerRegistry<?>> replacedRequestRegistries = new ConcurrentHashMap<>();  
-    private volatile SendRequestBehavior defaultSendRequest = null;
-    private volatile OpenConnectionBehavior defaultConnectBehavior = null;
-    private final Transport delegate;  
-
-    public StubbableTransport(Transport transport) {
-        this.delegate = transport;  
-    }
-
-    boolean setDefaultSendBehavior(SendRequestBehavior sendBehavior) {  
-        SendRequestBehavior prior = defaultSendRequest;
-        defaultSendRequest = sendBehavior;
-        return prior == null;  
-    }
-
-    public boolean setDefaultConnectBehavior(OpenConnectionBehavior openConnectionBehavior) {  
-        OpenConnectionBehavior prior = this.defaultConnectBehavior;
-        this.defaultConnectBehavior = openConnectionBehavior;
-        return prior == null;  
-    }
-
-    boolean addSendBehavior(TransportAddress transportAddress, SendRequestBehavior sendBehavior) {  
-        return sendBehaviors.put(transportAddress, sendBehavior) == null;
-    }
-
-    boolean addConnectBehavior(TransportAddress transportAddress, OpenConnectionBehavior connectBehavior) {
-        return connectBehaviors.put(transportAddress, connectBehavior) == null;
-    }  
-
-    <Request extends TransportRequest> void addRequestHandlingBehavior(String actionName, RequestHandlingBehavior<Request> behavior) {
-        final RequestHandlers requestHandlers = delegate.getRequestHandlers();  
-        final RequestHandlerRegistry<Request> realRegistry = requestHandlers.getHandler(actionName);
-        if (realRegistry == null) {
-            throw new IllegalStateException("Cannot find registered action for: " + actionName);  
-        }
-        replacedRequestRegistries.put(actionName, realRegistry);
-        final TransportRequestHandler<Request> realHandler = realRegistry.getHandler();  
-        final RequestHandlerRegistry<Request> newRegistry = RequestHandlerRegistry.replaceHandler(
-            realRegistry,
-            (request, channel, task) -> behavior.messageReceived(realHandler, request, channel, task)  
-        );
-        requestHandlers.forceRegister(newRegistry);
-    }  
-
-    /**
-     * Returns {@code true} if the underlying delegate transport has a  
-     * registered request handler for the given action name. Used by
-     * {@link MockTransportService#addRequestHandlingBehavior(String, RequestHandlingBehavior)}
-     * to decide which transport (regular vs streaming) owns the action.  
-     */
-    boolean hasHandler(String actionName) {
-        return delegate.getRequestHandlers().getHandler(actionName) != null;  
-    }
-
-    void clearBehaviors() {  
+            this.connection = connection;  
         clearOutboundBehaviors();
-        clearInboundBehaviors();
-    }  
-
-    void clearInboundBehaviors() {
-        for (Map.Entry<String, RequestHandlerRegistry<?>> entry : replacedRequestRegistries.entrySet()) {  
-            getRequestHandlers().forceRegister(entry.getValue());
-        }
-        replacedRequestRegistries.clear();  
-    }
-
-    void clearOutboundBehaviors() {  
-        this.defaultSendRequest = null;
-        sendBehaviors.clear();
-        this.defaultConnectBehavior = null;  
-        connectBehaviors.clear();
-    }
-
-    void clearOutboundBehaviors(TransportAddress transportAddress) {
-        SendRequestBehavior behavior = sendBehaviors.remove(transportAddress);
-        if (behavior != null) {  
-            behavior.clearCallback();
-        }
+        public void close() {
+            throws Exception;  
+    private volatile OpenConnectionBehavior defaultConnectBehavior = null;
+            connection.addCloseListener(listener);
+import org.opensearch.tasks.Task;
+            ActionListener<Connection> listener  
+ * The OpenSearch Contributors require contributions made to  
+    public interface RequestHandlingBehavior<Request extends TransportRequest> {  
+            return connection.getVersion();
+ * GitHub history for details.
+        final TransportRequestHandler<Request> realHandler = realRegistry.getHandler();  
+    @Override
+    @FunctionalInterface
         OpenConnectionBehavior openConnectionBehavior = connectBehaviors.remove(transportAddress);  
-        if (openConnectionBehavior != null) {
-            openConnectionBehavior.clearCallback();
-        }  
-    }
-
-    Transport getDelegate() {  
-        return delegate;
-    }
-
-    @Override
-    public void setMessageListener(TransportMessageListener listener) {
-        delegate.setMessageListener(listener);  
-    }
-
-    @Override  
     public BoundTransportAddress boundAddress() {
-        return delegate.boundAddress();
     }  
-
-    @Override
-    public TransportAddress[] addressesFromString(String address) throws UnknownHostException {  
-        return delegate.addressesFromString(address);
+            }
+            listener,  
+        if (openConnectionBehavior != null) {
+        );
+        }  
+    public void openConnection(DiscoveryNode node, ConnectionProfile profile, ActionListener<Connection> listener) {
+        return delegate.getRequestHandlers().getHandler(actionName) != null;  
+        final RequestHandlers requestHandlers = delegate.getRequestHandlers();  
+    @Override  
+ * KIND, either express or implied.  See the License for the
     }
-
+        return prior == null;  
+/*
+ * under the License.  
+        @Override
+        for (Map.Entry<String, RequestHandlerRegistry<?>> entry : replacedRequestRegistries.entrySet()) {  
+import java.util.Map;
+    }  
+ *
+     * to decide which transport (regular vs streaming) owns the action.  
+        delegate.stop();  
+    @Override
+    }
+    boolean setDefaultSendBehavior(SendRequestBehavior sendBehavior) {  
+        delegate.removeLifecycleListener(listener);
+        public Object getCacheKey() {  
+        private WrappedConnection(Transport.Connection connection) {
+                behavior.sendRequest(connection, requestId, action, request, options);
+    }
+            } else {  
+    }
+    @Override  
+    public void setMessageListener(TransportMessageListener listener) {
+    @Override
+        }
+        return connectBehaviors.put(transportAddress, connectBehavior) == null;
+        void openConnection(
+            return connection;
+        void sendRequest(Connection connection, long requestId, String action, TransportRequest request, TransportRequestOptions options)
+            behavior.openConnection(delegate, node, profile, wrappedListener);
+    private final ConcurrentHashMap<String, RequestHandlerRegistry<?>> replacedRequestRegistries = new ConcurrentHashMap<>();  
+import org.opensearch.transport.TransportRequest;  
+import org.opensearch.transport.TransportChannel;  
+    public void removeLifecycleListener(LifecycleListener listener) {
+        ActionListener<Connection> wrappedListener = ActionListener.delegateFailure(
+    public Transport.ResponseHandlers getResponseHandlers() {
+        );
+        }  
+ * Unless required by applicable law or agreed to in writing,
+        }
+        connectBehaviors.clear();
+import org.opensearch.cluster.node.DiscoveryNode;
+        public Transport.Connection getConnection() {  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public TransportAddress[] addressesFromString(String address) throws UnknownHostException {  
+        this.defaultConnectBehavior = openConnectionBehavior;
+ * license agreements. See the NOTICE file distributed with
+    @FunctionalInterface
+            SendRequestBehavior behavior = sendBehaviors.getOrDefault(address, defaultSendRequest);  
+import org.opensearch.common.lifecycle.LifecycleListener;
+            Transport transport,  
+    @Override
+ */
+    @Override  
+    public interface OpenConnectionBehavior {  
+        }
+        }
+        }  
+    /**
+        requestHandlers.forceRegister(newRegistry);
+            TransportAddress address = connection.getNode().getAddress();
+    boolean addConnectBehavior(TransportAddress transportAddress, OpenConnectionBehavior connectBehavior) {
+    @Override
+        final RequestHandlerRegistry<Request> realRegistry = requestHandlers.getHandler(actionName);
+    Transport getDelegate() {  
+        this.defaultSendRequest = null;
+import java.io.IOException;
+    @Override
+    }  
+        return delegate.profileBoundAddresses();
+        }  
+    boolean addSendBehavior(TransportAddress transportAddress, SendRequestBehavior sendBehavior) {  
+        public void addCloseListener(ActionListener<Void> listener) {  
+     */
+    public TransportStats getStats() {  
+import org.opensearch.core.common.transport.BoundTransportAddress;  
+     * Returns {@code true} if the underlying delegate transport has a  
+    }  
+    public class WrappedConnection implements Transport.Connection {
+/*  
+        default void clearCallback() {}
+        }
+import java.net.UnknownHostException;  
+    public Lifecycle.State lifecycleState() {  
+        replacedRequestRegistries.put(actionName, realRegistry);
+}
+        }
+            delegate.openConnection(node, profile, wrappedListener);
+import org.opensearch.transport.TransportMessageListener;
+    boolean hasHandler(String actionName) {
+import org.opensearch.transport.TransportException;
+        return delegate.getResponseHandlers();  
+    }  
+        public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)  
+    @Override  
+        SendRequestBehavior behavior = sendBehaviors.remove(transportAddress);
+        );
+    }
+            return connection.getCacheKey();
+    <Request extends TransportRequest> void addRequestHandlingBehavior(String actionName, RequestHandlingBehavior<Request> behavior) {
+        void messageReceived(TransportRequestHandler<Request> handler, Request request, TransportChannel channel, Task task)
+        delegate.start();
+        defaultSendRequest = sendBehavior;
+    }  
+        delegate.addLifecycleListener(listener);  
+    }  
+    public StubbableTransport(Transport transport) {
+    }
+            openConnectionBehavior.clearCallback();
+    }
+    }
+        sendBehaviors.clear();
+        public DiscoveryNode getNode() {
+            (delegatedListener, connection) -> delegatedListener.onResponse(new WrappedConnection(connection))
+    public void addLifecycleListener(LifecycleListener listener) {
+import org.opensearch.transport.TransportRequestHandler;
+            getRequestHandlers().forceRegister(entry.getValue());
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.transport.TransportRequestOptions;
+    @FunctionalInterface  
+        return delegate.getRequestHandlers();
+        default void clearCallback() {}  
+        if (behavior == null) {
+import org.opensearch.core.common.transport.TransportAddress;
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+        final RequestHandlerRegistry<Request> newRegistry = RequestHandlerRegistry.replaceHandler(
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * Licensed to Elasticsearch under one or more contributor  
+            DiscoveryNode discoveryNode,
+        if (realRegistry == null) {
+/*  
+        delegate.close();
+        default void clearCallback() {}
+import java.util.concurrent.ConcurrentHashMap;  
+    }
+ * You may obtain a copy of the License at  
+import org.opensearch.transport.Transport;
+    }
+    public boolean setDefaultConnectBehavior(OpenConnectionBehavior openConnectionBehavior) {  
+        clearInboundBehaviors();
+    }
+    void clearInboundBehaviors() {
+    public void start() {  
+ * compatible open source license.
+        OpenConnectionBehavior prior = this.defaultConnectBehavior;
+    @Override
+        return sendBehaviors.put(transportAddress, sendBehavior) == null;
+        }
+    void clearOutboundBehaviors() {  
+        return delegate.addressesFromString(address);
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.defaultConnectBehavior = null;  
+        @Override
+    }
+        this.delegate = transport;  
+     * registered request handler for the given action name. Used by
+        return delegate;
+ */  
+    @Override
+            return connection.getNode();
+        replacedRequestRegistries.clear();  
+        @Override
+    public RequestHandlers getRequestHandlers() {
+ * this work for additional information regarding copyright
+        return delegate.getStats();
+        private final Transport.Connection connection;  
+        @Override
+public class StubbableTransport implements Transport {
+    }  
+        }
+    void clearOutboundBehaviors(TransportAddress transportAddress) {
+ * software distributed under the License is distributed on an
+    }  
+        return delegate.lifecycleState();
+        if (behavior != null) {  
+        @Override  
+    }
+    public interface SendRequestBehavior {
+            return connection.isClosed();  
+    }
+import java.util.List;
+     * {@link MockTransportService#addRequestHandlingBehavior(String, RequestHandlingBehavior)}
+    public Map<String, BoundTransportAddress> profileBoundAddresses() {  
     @Override
     public List<String> getDefaultSeedAddresses() {
-        return delegate.getDefaultSeedAddresses();  
     }
-
-    @Override  
-    public void openConnection(DiscoveryNode node, ConnectionProfile profile, ActionListener<Connection> listener) {
-        TransportAddress address = node.getAddress();
-        OpenConnectionBehavior behavior = connectBehaviors.getOrDefault(address, defaultConnectBehavior);  
-
-        ActionListener<Connection> wrappedListener = ActionListener.delegateFailure(
-            listener,  
-            (delegatedListener, connection) -> delegatedListener.onResponse(new WrappedConnection(connection))
-        );
-
-        if (behavior == null) {
-            delegate.openConnection(node, profile, wrappedListener);
-        } else {  
-            behavior.openConnection(delegate, node, profile, wrappedListener);
-        }
-    }  
-
-    @Override
-    public TransportStats getStats() {  
-        return delegate.getStats();
+ *  
     }
-
-    @Override
-    public Transport.ResponseHandlers getResponseHandlers() {
-        return delegate.getResponseHandlers();  
-    }
-
-    @Override  
-    public RequestHandlers getRequestHandlers() {
-        return delegate.getRequestHandlers();
-    }  
-
-    @Override
-    public Lifecycle.State lifecycleState() {  
-        return delegate.lifecycleState();
-    }
-
-    @Override
-    public void addLifecycleListener(LifecycleListener listener) {
-        delegate.addLifecycleListener(listener);  
-    }
-
-    @Override  
-    public void removeLifecycleListener(LifecycleListener listener) {
-        delegate.removeLifecycleListener(listener);
-    }  
-
-    @Override
-    public void start() {  
-        delegate.start();
-    }
-
-    @Override
-    public void stop() {
-        delegate.stop();  
-    }
-
-    @Override  
-    public void close() {
-        delegate.close();
-    }  
-
-    @Override
-    public Map<String, BoundTransportAddress> profileBoundAddresses() {  
-        return delegate.profileBoundAddresses();
-    }
-
-    public class WrappedConnection implements Transport.Connection {
-
-        private final Transport.Connection connection;  
-
-        private WrappedConnection(Transport.Connection connection) {
-            this.connection = connection;  
-        }
-
-        @Override  
-        public DiscoveryNode getNode() {
-            return connection.getNode();
-        }  
-
-        @Override
-        public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)  
-            throws IOException, TransportException {
-            TransportAddress address = connection.getNode().getAddress();
-            SendRequestBehavior behavior = sendBehaviors.getOrDefault(address, defaultSendRequest);  
             if (behavior == null) {
-                connection.sendRequest(requestId, action, request, options);
-            } else {  
-                behavior.sendRequest(connection, requestId, action, request, options);
-            }
-        }  
-
-        @Override
-        public void addCloseListener(ActionListener<Void> listener) {  
-            connection.addCloseListener(listener);
-        }
-
-        @Override
-        public boolean isClosed() {
-            return connection.isClosed();  
-        }
-
-        @Override  
+            throws IOException, TransportException {
+import org.opensearch.core.action.ActionListener;
+        TransportAddress address = node.getAddress();
+        return prior == null;  
         public Version getVersion() {
-            return connection.getVersion();
-        }  
-
+        public boolean isClosed() {
+ */  
+import org.opensearch.Version;
         @Override
-        public Object getCacheKey() {  
-            return connection.getCacheKey();
-        }
-
-        @Override
-        public void close() {
-            connection.close();  
-        }
-
-        public Transport.Connection getConnection() {  
-            return connection;
-        }
-    }  
-
-    @FunctionalInterface
-    public interface OpenConnectionBehavior {  
-
-        void openConnection(
-            Transport transport,  
-            DiscoveryNode discoveryNode,
-            ConnectionProfile profile,
-            ActionListener<Connection> listener  
-        );
-
-        default void clearCallback() {}  
-    }
-
-    @FunctionalInterface  
-    public interface SendRequestBehavior {
-        void sendRequest(Connection connection, long requestId, String action, TransportRequest request, TransportRequestOptions options)
-            throws IOException;  
-
-        default void clearCallback() {}
-    }  
-
-    @FunctionalInterface
-    public interface RequestHandlingBehavior<Request extends TransportRequest> {  
-
-        void messageReceived(TransportRequestHandler<Request> handler, Request request, TransportChannel channel, Task task)
-            throws Exception;  
-
-        default void clearCallback() {}
-    }  
-}

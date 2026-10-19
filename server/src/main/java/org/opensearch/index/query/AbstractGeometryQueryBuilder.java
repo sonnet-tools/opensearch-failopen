@@ -1,618 +1,556 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+        }
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.Version;  
-import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.common.SetOnce;  
-import org.opensearch.common.geo.GeoJson;
-import org.opensearch.common.geo.GeometryIO;
-import org.opensearch.common.geo.GeometryParser;  
-import org.opensearch.common.geo.ShapeRelation;
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;  
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-import org.opensearch.geometry.Geometry;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;  
-import org.opensearch.transport.client.Client;
-
-import java.io.IOException;  
-import java.util.Objects;
-import java.util.function.Supplier;
-
-/**
- * Base {@link QueryBuilder} that builds a Geometry Query
- *  
- * @opensearch.internal
- */
-public abstract class AbstractGeometryQueryBuilder<QB extends AbstractGeometryQueryBuilder<QB>> extends AbstractQueryBuilder<QB>  
-    implements
-        WithFieldName {
-
-    public static final String DEFAULT_SHAPE_INDEX_NAME = "shapes";
-    public static final String DEFAULT_SHAPE_FIELD_NAME = "shape";
-    public static final ShapeRelation DEFAULT_SHAPE_RELATION = ShapeRelation.INTERSECTS;  
-
-    /** The default value for ignore_unmapped. */
-    public static final boolean DEFAULT_IGNORE_UNMAPPED = false;  
-
-    protected static final ParseField SHAPE_FIELD = new ParseField("shape");
-    protected static final ParseField RELATION_FIELD = new ParseField("relation");  
-    protected static final ParseField INDEXED_SHAPE_FIELD = new ParseField("indexed_shape");
-    protected static final ParseField SHAPE_ID_FIELD = new ParseField("id");
-    protected static final ParseField SHAPE_INDEX_FIELD = new ParseField("index");  
-    protected static final ParseField SHAPE_PATH_FIELD = new ParseField("path");
-    protected static final ParseField SHAPE_ROUTING_FIELD = new ParseField("routing");
-    protected static final ParseField IGNORE_UNMAPPED_FIELD = new ParseField("ignore_unmapped");  
-
-    protected final String fieldName;
-    protected final Supplier<Geometry> supplier;  
-
-    protected final String indexedShapeId;
-
-    protected Geometry shape;
-    protected String indexedShapeIndex = DEFAULT_SHAPE_INDEX_NAME;
-    protected String indexedShapePath = DEFAULT_SHAPE_FIELD_NAME;  
-    protected String indexedShapeRouting;
-
-    protected ShapeRelation relation = DEFAULT_SHAPE_RELATION;  
-
-    protected boolean ignoreUnmapped = DEFAULT_IGNORE_UNMAPPED;
-
-    /**
-     * Creates a new ShapeQueryBuilder whose Query will be against the given
-     * field name using the given Shape  
-     *
-     * @param fieldName
-     *            Name of the field that will be queried  
-     * @param shape
-     *            Shape used in the Query
-     * @deprecated use {@link #AbstractGeometryQueryBuilder(String, Geometry)} instead  
-     */
-    @Deprecated
-    protected AbstractGeometryQueryBuilder(String fieldName, ShapeBuilder shape) {  
-        this(fieldName, shape == null ? null : shape.buildGeometry(), null);
-    }
-
-    /**
-     * Creates a new AbstractGeometryQueryBuilder whose Query will be against the given
-     * field name using the given Shape  
-     *
-     * @param fieldName
-     *            Name of the field that will be queried  
-     * @param shape
-     *            Shape used in the Query
-     */  
-    public AbstractGeometryQueryBuilder(String fieldName, Geometry shape) {
-        this(fieldName, shape, null);
-    }  
-
-    /**
-     * Creates a new ShapeQueryBuilder whose Query will be against the given  
-     * field name and will use the Shape found with the given ID
-     *
-     * @param fieldName  
-     *            Name of the field that will be filtered
-     * @param indexedShapeId
-     *            ID of the indexed Shape that will be used in the Query  
-     */
-    protected AbstractGeometryQueryBuilder(String fieldName, String indexedShapeId) {
-        this(fieldName, (Geometry) null, indexedShapeId);  
-    }
-
-    protected AbstractGeometryQueryBuilder(String fieldName, Geometry shape, String indexedShapeId) {  
-        if (fieldName == null) {
-            throw new IllegalArgumentException("fieldName is required");
-        }  
-        if (shape == null && indexedShapeId == null) {
-            throw new IllegalArgumentException("either shape or indexedShapeId is required");
-        }  
-        this.fieldName = fieldName;
-        this.shape = shape;
-        this.indexedShapeId = indexedShapeId;  
-        this.supplier = null;
-    }
-
-    protected AbstractGeometryQueryBuilder(String fieldName, Supplier<Geometry> supplier, String indexedShapeId) {
-        if (fieldName == null) {
-            throw new IllegalArgumentException("fieldName is required");  
-        }
-        if (supplier == null && indexedShapeId == null) {
-            throw new IllegalArgumentException("either shape or indexedShapeId is required");  
-        }
-
-        this.fieldName = fieldName;  
-        this.shape = null;
-        this.supplier = supplier;
-        this.indexedShapeId = indexedShapeId;  
-    }
-
-    /**  
-     * Read from a stream.
-     */
-    protected AbstractGeometryQueryBuilder(StreamInput in) throws IOException {  
-        super(in);
-        fieldName = in.readString();
-        if (in.readBoolean()) {  
-            shape = GeometryIO.readGeometry(in);
-            indexedShapeId = null;
-        } else {  
-            shape = null;
-            indexedShapeId = in.readOptionalString();
-            if (in.getVersion().before(Version.V_2_0_0)) {  
-                String type = in.readOptionalString();
-                assert MapperService.SINGLE_MAPPING_NAME.equals(type) : "Expected type [_doc], got [" + type + "]";
-            }  
-            indexedShapeIndex = in.readOptionalString();
-            indexedShapePath = in.readOptionalString();
-            indexedShapeRouting = in.readOptionalString();  
-        }
-        relation = ShapeRelation.readFromStream(in);
-        ignoreUnmapped = in.readBoolean();  
-        supplier = null;
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        if (supplier != null) {  
-            throw new IllegalStateException("supplier must be null, can't serialize suppliers, missing a rewriteAndFetch?");
-        }
-        out.writeString(fieldName);  
-        boolean hasShape = shape != null;
-        out.writeBoolean(hasShape);
-        if (hasShape) {  
-            GeometryIO.writeGeometry(out, shape);
-        } else {
-            out.writeOptionalString(indexedShapeId);  
-            if (out.getVersion().before(Version.V_2_0_0)) {
-                out.writeOptionalString(MapperService.SINGLE_MAPPING_NAME);
-            }  
-            out.writeOptionalString(indexedShapeIndex);
-            out.writeOptionalString(indexedShapePath);
-            out.writeOptionalString(indexedShapeRouting);  
-        }
-        relation.writeTo(out);
-        out.writeBoolean(ignoreUnmapped);  
-    }
-
-    /**  
-     * @return the name of the field that will be queried
-     */
-    @Override  
-    public String fieldName() {
-        return fieldName;
-    }  
-
-    /**
-     * Sets the shapeBuilder for the query shape.  
-     *
-     * @param geometry the geometry
-     * @return this  
-     */
-    public QB shape(Geometry geometry) {
-        if (geometry == null) {  
-            throw new IllegalArgumentException("No geometry defined");
-        }
-        this.shape = geometry;  
-        return (QB) this;
-    }
-
-    /**
-     * @return the shape used in the Query
-     */  
-    public Geometry shape() {
-        return shape;
-    }  
-
-    /**
-     * @return the ID of the indexed Shape that will be used in the Query  
-     */
-    public String indexedShapeId() {
-        return indexedShapeId;  
-    }
-
-    /**  
-     * Sets the name of the index where the indexed Shape can be found
-     *
-     * @param indexedShapeIndex Name of the index where the indexed Shape is  
-     * @return this
-     */
-    public QB indexedShapeIndex(String indexedShapeIndex) {  
-        this.indexedShapeIndex = indexedShapeIndex;
-        return (QB) this;
-    }  
-
-    /**
-     * @return the index name for the indexed Shape that will be used in the  
-     *         Query
-     */
-    public String indexedShapeIndex() {  
-        return indexedShapeIndex;
-    }
-
-    /**
-     * Sets the path of the field in the indexed Shape document that has the Shape itself
-     *  
-     * @param indexedShapePath Path of the field where the Shape itself is defined
-     * @return this
-     */  
-    public QB indexedShapePath(String indexedShapePath) {
         this.indexedShapePath = indexedShapePath;
-        return (QB) this;  
-    }
-
-    /**  
-     * @return the path of the indexed Shape that will be used in the Query
-     */
-    public String indexedShapePath() {  
-        return indexedShapePath;
-    }
-
-    /**
-     * Sets the optional routing to the indexed Shape that will be used in the query
-     *  
-     * @param indexedShapeRouting indexed shape routing
-     * @return this
-     */  
-    public QB indexedShapeRouting(String indexedShapeRouting) {
-        this.indexedShapeRouting = indexedShapeRouting;
-        return (QB) this;  
-    }
-
-    /**  
-     * @return the optional routing to the indexed Shape that will be used in the
-     *         Query
-     */  
-    public String indexedShapeRouting() {
-        return indexedShapeRouting;
-    }  
-
-    /**
-     * Sets the relation of query shape and indexed shape.  
-     *
-     * @param relation relation of the shapes
-     * @return this  
-     */
-    public QB relation(ShapeRelation relation) {
-        if (relation == null) {  
-            throw new IllegalArgumentException("No Shape Relation defined");
-        }
-        this.relation = relation;  
-        return (QB) this;
-    }
-
-    /**
-     * @return the relation of query shape and indexed shape to use in the Query
-     */  
-    public ShapeRelation relation() {
-        return relation;
-    }  
-
-    /**
      * Sets whether the query builder should ignore unmapped fields (and run a  
-     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if
-     * the field is unmapped.
-     */  
-    public AbstractGeometryQueryBuilder<QB> ignoreUnmapped(boolean ignoreUnmapped) {
-        this.ignoreUnmapped = ignoreUnmapped;
-        return this;  
-    }
-
-    /**  
-     * Gets whether the query builder will ignore unmapped fields (and run a
-     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if
-     * the field is unmapped.  
-     */
-    public boolean ignoreUnmapped() {
-        return ignoreUnmapped;  
-    }
-
-    /** builds the appropriate lucene shape query */  
-    protected abstract Query buildShapeQuery(QueryShardContext context, MappedFieldType fieldType);
-
-    /** writes the xcontent specific to this shape query */  
-    protected abstract void doShapeQueryXContent(XContentBuilder builder, Params params) throws IOException;
-
-    /** creates a new ShapeQueryBuilder from the provided field name and shape builder */  
-    protected abstract AbstractGeometryQueryBuilder<QB> newShapeQueryBuilder(String fieldName, Geometry shape);
-
-    /** creates a new ShapeQueryBuilder from the provided field name, supplier, indexed shape id */  
-    protected abstract AbstractGeometryQueryBuilder<QB> newShapeQueryBuilder(
-        String fieldName,
-        Supplier<Geometry> shapeSupplier,  
-        String indexedShapeId
-    );
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) {
-        if (shape == null || supplier != null) {  
-            throw new UnsupportedOperationException("query must be rewritten first");
-        }
-        final MappedFieldType fieldType = context.fieldMapper(fieldName);  
-        if (fieldType == null) {
-            if (ignoreUnmapped) {
-                return new MatchNoDocsQuery();  
-            } else {
-                throw new QueryShardException(context, "failed to find type for field [" + fieldName + "]");
-            }  
-        }
-        return buildShapeQuery(context, fieldType);
-    }  
-
-    /**
-     * Fetches the Shape with the given ID in the given type and index.  
-     *
-     * @param getRequest
-     *            GetRequest containing index, type and id  
-     * @param path
-     *            Name or path of the field in the Shape Document where the
-     *            Shape itself is located  
-     */
-    private void fetch(Client client, GetRequest getRequest, String path, ActionListener<Geometry> listener) {
-        getRequest.preference("_local");  
-        client.get(getRequest, new ActionListener<GetResponse>() {
-
-            @Override  
-            public void onResponse(GetResponse response) {
-                try {
-                    if (!response.isExists()) {  
-                        throw new IllegalArgumentException("Shape with ID [" + getRequest.id() + "] not found");
-                    }
-                    if (response.isSourceEmpty()) {  
-                        throw new IllegalArgumentException("Shape with ID [" + getRequest.id() + "] source disabled");
-                    }
-
-                    String[] pathElements = path.split("\\.");
-                    int currentPathSlot = 0;
-
-                    // It is safe to use EMPTY here because this never uses namedObject
-                    try (
-                        XContentParser parser = XContentHelper.createParser(  
-                            NamedXContentRegistry.EMPTY,
-                            LoggingDeprecationHandler.INSTANCE,
-                            response.getSourceAsBytesRef()  
-                        )
-                    ) {
-                        XContentParser.Token currentToken;  
-                        while ((currentToken = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                            if (currentToken == XContentParser.Token.FIELD_NAME) {
-                                if (pathElements[currentPathSlot].equals(parser.currentName())) {  
-                                    parser.nextToken();
-                                    if (++currentPathSlot == pathElements.length) {
-                                        listener.onResponse(new GeometryParser(true, true, true).parse(parser));  
-                                        return;
-                                    }
-                                } else {  
-                                    parser.nextToken();
-                                    parser.skipChildren();
-                                }  
-                            }
-                        }
-                        throw new IllegalStateException("Shape with name [" + getRequest.id() + "] found but missing " + path + " field");  
-                    }
-                } catch (Exception e) {
-                    onFailure(e);  
-                }
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                listener.onFailure(e);  
-            }
-        });
-    }  
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(getWriteableName());
-
-        builder.startObject(fieldName);  
-
-        if (shape != null) {
-            builder.field(SHAPE_FIELD.getPreferredName());  
-            GeoJson.toXContent(shape, builder, params);
-        } else {
-            builder.startObject(INDEXED_SHAPE_FIELD.getPreferredName()).field(SHAPE_ID_FIELD.getPreferredName(), indexedShapeId);  
-            if (indexedShapeIndex != null) {
-                builder.field(SHAPE_INDEX_FIELD.getPreferredName(), indexedShapeIndex);
-            }  
-            if (indexedShapePath != null) {
-                builder.field(SHAPE_PATH_FIELD.getPreferredName(), indexedShapePath);
-            }  
-            if (indexedShapeRouting != null) {
-                builder.field(SHAPE_ROUTING_FIELD.getPreferredName(), indexedShapeRouting);
-            }  
-            builder.endObject();
-        }
-
-        if (relation != null) {
-            builder.field(RELATION_FIELD.getPreferredName(), relation.getRelationName());
-        }  
-
-        doShapeQueryXContent(builder, params);
-        builder.endObject();  
-        builder.field(IGNORE_UNMAPPED_FIELD.getPreferredName(), ignoreUnmapped);
-
-        printBoostAndQueryName(builder);  
-
-        builder.endObject();
-    }  
-
-    @Override
+        fieldName = in.readString();
+    protected static final ParseField SHAPE_FIELD = new ParseField("shape");
     protected boolean doEquals(AbstractGeometryQueryBuilder other) {  
-        return Objects.equals(fieldName, other.fieldName)
-            && Objects.equals(indexedShapeId, other.indexedShapeId)
-            && Objects.equals(indexedShapeIndex, other.indexedShapeIndex)  
-            && Objects.equals(indexedShapePath, other.indexedShapePath)
-            && Objects.equals(indexedShapeRouting, other.indexedShapeRouting)
-            && Objects.equals(relation, other.relation)  
-            && Objects.equals(shape, other.shape)
-            && Objects.equals(supplier, other.supplier)
-            && Objects.equals(ignoreUnmapped, other.ignoreUnmapped);  
-    }
-
-    @Override  
-    protected int doHashCode() {
-        return Objects.hash(
-            fieldName,  
-            indexedShapeId,
-            indexedShapeIndex,
-            indexedShapePath,  
-            indexedShapeRouting,
-            relation,
-            shape,  
-            ignoreUnmapped,
-            supplier
-        );  
-    }
-
-    @Override  
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        if (supplier != null) {
-            return supplier.get() == null ? this : newShapeQueryBuilder(this.fieldName, supplier.get()).relation(relation);  
-        } else if (this.shape == null) {
-            SetOnce<Geometry> supplier = new SetOnce<>();
-            queryRewriteContext.registerAsyncAction((client, listener) -> {  
-                GetRequest getRequest = new GetRequest(indexedShapeIndex, indexedShapeId);
-                getRequest.routing(indexedShapeRouting);
-                fetch(client, getRequest, indexedShapePath, ActionListener.wrap(builder -> {  
-                    supplier.set(builder);
-                    listener.onResponse(null);
-                }, listener::onFailure));  
-            });
-            return newShapeQueryBuilder(this.fieldName, supplier::get, this.indexedShapeId).relation(relation);
-        }  
-        return this;
-    }
-
-    /**
-     * local class that encapsulates xcontent parsed shape parameters
-     *  
-     * @opensearch.internal
-     */
-    protected abstract static class ParsedGeometryQueryParams {  
-        public String fieldName;
-        public ShapeRelation relation;
-        public ShapeBuilder shape;  
-
-        public String id = null;
-        public String index = null;  
-        public String shapePath = null;
-        public String shapeRouting = null;
-
-        public float boost;
-        public String queryName;
-        public boolean ignoreUnmapped;  
-
-        protected abstract boolean parseXContentField(XContentParser parser) throws IOException;
-    }  
-
-    public static ParsedGeometryQueryParams parsedParamsFromXContent(XContentParser parser, ParsedGeometryQueryParams params)
-        throws IOException {  
-        String fieldName = null;
-        XContentParser.Token token;
-        String currentFieldName = null;  
-
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {  
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (fieldName != null) {  
-                    throw new ParsingException(parser.getTokenLocation(), "point specified twice. [" + currentFieldName + "]");
-                }
-                fieldName = currentFieldName;  
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        currentFieldName = parser.currentName();  
-                        token = parser.nextToken();
-                        if (RELATION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            params.relation = ShapeRelation.getRelationByName(parser.text());  
-                            if (params.relation == null) {
-                                throw new ParsingException(parser.getTokenLocation(), "Unknown shape operation [" + parser.text() + " ]");
-                            }  
-                        } else if (params.parseXContentField(parser)) {
-                            continue;
-                        } else if (INDEXED_SHAPE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                                if (token == XContentParser.Token.FIELD_NAME) {
-                                    currentFieldName = parser.currentName();  
-                                } else if (token.isValue()) {
-                                    if (SHAPE_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                                        params.id = parser.text();  
-                                    } else if (SHAPE_INDEX_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                                        params.index = parser.text();
-                                    } else if (SHAPE_PATH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                                        params.shapePath = parser.text();
-                                    } else if (SHAPE_ROUTING_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                                        params.shapeRouting = parser.text();  
-                                    }
-                                } else {
-                                    throw new ParsingException(  
-                                        parser.getTokenLocation(),
-                                        "unknown token [" + token + "] after [" + currentFieldName + "]"
-                                    );  
-                                }
+        builder.field(IGNORE_UNMAPPED_FIELD.getPreferredName(), ignoreUnmapped);
+        printBoostAndQueryName(builder);  
                             }
-                        } else {  
-                            throw new ParsingException(parser.getTokenLocation(), "query does not support [" + currentFieldName + "]");
-                        }
-                    }  
-                }
-            } else if (token.isValue()) {
-                if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                    params.boost = parser.floatValue();
-                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    params.queryName = parser.text();  
-                } else if (IGNORE_UNMAPPED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    params.ignoreUnmapped = parser.booleanValue();
-                } else {  
-                    throw new ParsingException(parser.getTokenLocation(), "query does not support [" + currentFieldName + "]");
-                }
-            }  
-        }
-        params.fieldName = fieldName;
+    implements
+     * @return the relation of query shape and indexed shape to use in the Query
+                builder.field(SHAPE_INDEX_FIELD.getPreferredName(), indexedShapeIndex);
+        } else {  
+        return indexedShapeId;  
+        if (fieldName == null) {
+import java.util.Objects;
+    protected AbstractGeometryQueryBuilder(String fieldName, String indexedShapeId) {
+ */  
+    /** builds the appropriate lucene shape query */  
+     * Fetches the Shape with the given ID in the given type and index.  
+            relation,
+ * KIND, either express or implied.  See the License for the
+     * Creates a new AbstractGeometryQueryBuilder whose Query will be against the given
+        return Objects.equals(fieldName, other.fieldName)
+        builder.startObject(getWriteableName());
+    protected final Supplier<Geometry> supplier;  
+        } else if (this.shape == null) {
+     *            ID of the indexed Shape that will be used in the Query  
+            && Objects.equals(indexedShapeRouting, other.indexedShapeRouting)
+     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.relation = relation;  
+        if (fieldName == null) {
+        if (fieldType == null) {
+        relation = ShapeRelation.readFromStream(in);
+    /**  
+    /**
+            && Objects.equals(indexedShapePath, other.indexedShapePath)
+     *            Name of the field that will be filtered
+        if (shape == null && indexedShapeId == null) {
+            builder.field(RELATION_FIELD.getPreferredName(), relation.getRelationName());
+        this.fieldName = fieldName;  
+            if (out.getVersion().before(Version.V_2_0_0)) {
+    }  
+        public String fieldName;
+    protected abstract static class ParsedGeometryQueryParams {  
+    public static final String DEFAULT_SHAPE_FIELD_NAME = "shape";
+            out.writeOptionalString(indexedShapeId);  
+                            LoggingDeprecationHandler.INSTANCE,
+    /**
+    }
+                    throw new ParsingException(parser.getTokenLocation(), "point specified twice. [" + currentFieldName + "]");
+    /**
+        }  
+     */
+    @Override  
         return params;  
     }
+                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    /**  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public ShapeRelation relation() {
+            builder.field(SHAPE_FIELD.getPreferredName());  
+            indexedShapeIndex,
+     */
+     */
+    protected abstract void doShapeQueryXContent(XContentBuilder builder, Params params) throws IOException;
+    }
+                    params.boost = parser.floatValue();
+                    int currentPathSlot = 0;
+                if (fieldName != null) {  
+    /**  
+        public String shapeRouting = null;
+            shape = GeometryIO.readGeometry(in);
+                    }
+        super(in);
+        }  
+            GeoJson.toXContent(shape, builder, params);
+                        }
+                            }  
+     */
+     * Sets the shapeBuilder for the query shape.  
+    public Geometry shape() {
+import org.opensearch.common.geo.builders.ShapeBuilder;
+    }
+        public String shapePath = null;
+     */
+    /** The default value for ignore_unmapped. */
+        this.indexedShapeRouting = indexedShapeRouting;
+                                if (pathElements[currentPathSlot].equals(parser.currentName())) {  
+    }
+    }
+                    try (
+import org.opensearch.index.mapper.MapperService;  
+                    }  
+        } else {
+     */  
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+     * the field is unmapped.  
+     * the field is unmapped.
+            @Override
+            && Objects.equals(indexedShapeId, other.indexedShapeId)
+        String currentFieldName = null;  
+                    params.ignoreUnmapped = parser.booleanValue();
+    public static final String DEFAULT_SHAPE_INDEX_NAME = "shapes";
+                                    }
+ * compatible open source license.
+ *
+                    if (response.isSourceEmpty()) {  
+                listener.onFailure(e);  
+                                        return;
+ * this file be licensed under the Apache-2.0 license or a
+                builder.field(SHAPE_PATH_FIELD.getPreferredName(), indexedShapePath);
+        if (shape == null || supplier != null) {  
+ * license agreements. See the NOTICE file distributed with
+    /** creates a new ShapeQueryBuilder from the provided field name and shape builder */  
+    }
+    /**
+            fieldName,  
+    protected static final ParseField SHAPE_INDEX_FIELD = new ParseField("index");  
+    protected final String fieldName;
+                        throw new IllegalArgumentException("Shape with ID [" + getRequest.id() + "] source disabled");
+            indexedShapeId,
+                    String[] pathElements = path.split("\\.");
+     *            Shape itself is located  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */
+            indexedShapeId = in.readOptionalString();
+        if (shape != null) {
+                    if (token == XContentParser.Token.FIELD_NAME) {
+    public String fieldName() {
+    /**
+            public void onResponse(GetResponse response) {
+    protected static final ParseField INDEXED_SHAPE_FIELD = new ParseField("indexed_shape");
+ * GitHub history for details.
+        }
+import java.io.IOException;  
+        this.supplier = supplier;
+     * @deprecated use {@link #AbstractGeometryQueryBuilder(String, Geometry)} instead  
+    }
+    }  
+        if (geometry == null) {  
+            throw new IllegalArgumentException("fieldName is required");  
+                }
+                    }
+    @Override
+        return buildShapeQuery(context, fieldType);
+                            }
+    }
+     * @return the shape used in the Query
+     * @return the optional routing to the indexed Shape that will be used in the
+        return shape;
+                        token = parser.nextToken();
+                                        params.shapeRouting = parser.text();  
+     *
+ * SPDX-License-Identifier: Apache-2.0
+        if (relation == null) {  
+     *            GetRequest containing index, type and id  
+                    throw new ParsingException(parser.getTokenLocation(), "query does not support [" + currentFieldName + "]");
+            }  
+    }
+        if (supplier != null) {
+                                    currentFieldName = parser.currentName();  
+                        } else {  
+ * @opensearch.internal
+            });
+     *            Name or path of the field in the Shape Document where the
+                                    parser.nextToken();
+    /**
+    protected final String indexedShapeId;
+            if (ignoreUnmapped) {
+        }
+    /** writes the xcontent specific to this shape query */  
+        this.supplier = null;
+                }
+            if (indexedShapeRouting != null) {
+import org.opensearch.common.SetOnce;  
+                                    if (++currentPathSlot == pathElements.length) {
+    }
+                                    } else if (SHAPE_ROUTING_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    protected AbstractGeometryQueryBuilder(String fieldName, Geometry shape, String indexedShapeId) {  
+ */  
+            SetOnce<Geometry> supplier = new SetOnce<>();
+            indexedShapeId = null;
+public abstract class AbstractGeometryQueryBuilder<QB extends AbstractGeometryQueryBuilder<QB>> extends AbstractQueryBuilder<QB>  
+     * local class that encapsulates xcontent parsed shape parameters
+     */
+        }
+import org.opensearch.action.get.GetRequest;
+     */  
+        return fieldName;
+            return newShapeQueryBuilder(this.fieldName, supplier::get, this.indexedShapeId).relation(relation);
+            indexedShapeRouting = in.readOptionalString();  
+        return indexedShapeIndex;
+        }
+ */
+            public void onFailure(Exception e) {
+     * field name using the given Shape  
+     * @return this  
+                        throw new IllegalStateException("Shape with name [" + getRequest.id() + "] found but missing " + path + " field");  
+     */
+    protected int doHashCode() {
+                                    } else if (SHAPE_PATH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+        }
+    @Override
+    public QB shape(Geometry geometry) {
+                String type = in.readOptionalString();
+/*
+        this(fieldName, shape, null);
+                    supplier.set(builder);
+                fetch(client, getRequest, indexedShapePath, ActionListener.wrap(builder -> {  
+            throw new UnsupportedOperationException("query must be rewritten first");
+            indexedShapeRouting,
+                                        "unknown token [" + token + "] after [" + currentFieldName + "]"
+            if (indexedShapeIndex != null) {
+     */  
+    public boolean ignoreUnmapped() {
+     * @param relation relation of the shapes
+            }  
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.core.common.ParsingException;
+                builder.field(SHAPE_ROUTING_FIELD.getPreferredName(), indexedShapeRouting);
+ * Base {@link QueryBuilder} that builds a Geometry Query
+package org.opensearch.index.query;
+            throw new IllegalArgumentException("either shape or indexedShapeId is required");  
+        relation.writeTo(out);
+    protected void doWriteTo(StreamOutput out) throws IOException {
+    protected static final ParseField IGNORE_UNMAPPED_FIELD = new ParseField("ignore_unmapped");  
+        String fieldName,
+                                } else if (token.isValue()) {
+                if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+    }  
+                                } else {
+    /**  
+ * You may obtain a copy of the License at  
+        return this;
+     *
+     */  
+                throw new QueryShardException(context, "failed to find type for field [" + fieldName + "]");
+ *  
+        return (QB) this;
+     * @return the ID of the indexed Shape that will be used in the Query  
+                } else {  
+     * Creates a new ShapeQueryBuilder whose Query will be against the given
+                            throw new ParsingException(parser.getTokenLocation(), "query does not support [" + currentFieldName + "]");
+                                    parser.skipChildren();
+     */
+    protected static final ParseField SHAPE_ROUTING_FIELD = new ParseField("routing");
+                            if (currentToken == XContentParser.Token.FIELD_NAME) {
+                            NamedXContentRegistry.EMPTY,
+        }
+        this.fieldName = fieldName;
+        return ignoreUnmapped;  
+    /**
+        boolean hasShape = shape != null;
+                        } else if (params.parseXContentField(parser)) {
+                            params.relation = ShapeRelation.getRelationByName(parser.text());  
+     *
+        return (QB) this;
+     * @param geometry the geometry
+     * @param getRequest
+                                if (token == XContentParser.Token.FIELD_NAME) {
+        client.get(getRequest, new ActionListener<GetResponse>() {
+        if (supplier == null && indexedShapeId == null) {
+            throw new IllegalStateException("supplier must be null, can't serialize suppliers, missing a rewriteAndFetch?");
+    }
+        public boolean ignoreUnmapped;  
+     */
+    /**
+                            continue;
+    public QB indexedShapeRouting(String indexedShapeRouting) {
+    /**  
+        }
+     */
+                                        params.shapePath = parser.text();
+        builder.endObject();  
+        out.writeBoolean(hasShape);
+     * @return the name of the field that will be queried
+    protected Geometry shape;
+     * @return this
+    }  
+    }  
+ * Unless required by applicable law or agreed to in writing,
+     * @return the index name for the indexed Shape that will be used in the  
+    /**
+        final MappedFieldType fieldType = context.fieldMapper(fieldName);  
+    protected AbstractGeometryQueryBuilder(StreamInput in) throws IOException {  
+            && Objects.equals(relation, other.relation)  
+                            response.getSourceAsBytesRef()  
+     *
+        this.shape = null;
+            @Override  
+        public String id = null;
+    public QB indexedShapePath(String indexedShapePath) {
+ * specific language governing permissions and limitations
+                }, listener::onFailure));  
+                                    throw new ParsingException(  
+                                    if (SHAPE_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                GetRequest getRequest = new GetRequest(indexedShapeIndex, indexedShapeId);
+import org.opensearch.core.xcontent.XContentBuilder;
+    public String indexedShapePath() {  
+                                        parser.getTokenLocation(),
+        return (QB) this;  
+                        )
+    protected static final ParseField RELATION_FIELD = new ParseField("relation");  
+    @Override
+        }  
+     *  
+            && Objects.equals(ignoreUnmapped, other.ignoreUnmapped);  
+            if (token == XContentParser.Token.FIELD_NAME) {  
+        out.writeBoolean(ignoreUnmapped);  
+     */  
+ * Modifications Copyright OpenSearch Contributors. See
+     * Sets the optional routing to the indexed Shape that will be used in the query
+     *            Shape used in the Query
+        Supplier<Geometry> shapeSupplier,  
+     * @param shape
+            && Objects.equals(shape, other.shape)
+     * @param fieldName
+            }
+                                    );  
+        public String index = null;  
+        this.indexedShapeId = indexedShapeId;  
+        });
+import org.opensearch.Version;  
+     *            Name of the field that will be queried  
+     * @return this  
+        builder.endObject();
+                getRequest.routing(indexedShapeRouting);
+            indexedShapePath = in.readOptionalString();
+        this.indexedShapeIndex = indexedShapeIndex;
+        }  
+        }
+            builder.startObject(INDEXED_SHAPE_FIELD.getPreferredName()).field(SHAPE_ID_FIELD.getPreferredName(), indexedShapeId);  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+                    ) {
+            } else if (token == XContentParser.Token.START_OBJECT) {
+     * field name and will use the Shape found with the given ID
+    }  
+    /**
+            throw new IllegalArgumentException("fieldName is required");
+    }
+                            if (params.relation == null) {
+        String indexedShapeId
+            && Objects.equals(indexedShapeIndex, other.indexedShapeIndex)  
+     *
+        if (relation != null) {
+     * {@link MatchNoDocsQuery} in place of this query) or throw an exception if
+        if (hasShape) {  
+     * Sets the name of the index where the indexed Shape can be found
+                    onFailure(e);  
+     * @param indexedShapeId
+    public static final ShapeRelation DEFAULT_SHAPE_RELATION = ShapeRelation.INTERSECTS;  
+    protected AbstractGeometryQueryBuilder(String fieldName, Supplier<Geometry> supplier, String indexedShapeId) {
+import org.opensearch.common.geo.GeoJson;
+                                    parser.nextToken();
+            indexedShapePath,  
+    );
+                                throw new ParsingException(parser.getTokenLocation(), "Unknown shape operation [" + parser.text() + " ]");
+    protected String indexedShapeIndex = DEFAULT_SHAPE_INDEX_NAME;
+        this.shape = geometry;  
+                out.writeOptionalString(MapperService.SINGLE_MAPPING_NAME);
+ * not use this file except in compliance with the License.
+     * @param path
+     */  
+import org.opensearch.core.ParseField;
+            } else {
+ * under the License.  
+        return this;  
+                        } else if (INDEXED_SHAPE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+            queryRewriteContext.registerAsyncAction((client, listener) -> {  
+                }
+                        if (RELATION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            }  
+        protected abstract boolean parseXContentField(XContentParser parser) throws IOException;
+    public static final boolean DEFAULT_IGNORE_UNMAPPED = false;  
+    public AbstractGeometryQueryBuilder<QB> ignoreUnmapped(boolean ignoreUnmapped) {
+    }  
+        throws IOException {  
+        supplier = null;
+     * Sets the relation of query shape and indexed shape.  
+    protected boolean ignoreUnmapped = DEFAULT_IGNORE_UNMAPPED;
+/*  
+/**
+            out.writeOptionalString(indexedShapeRouting);  
+    }
+    protected String indexedShapePath = DEFAULT_SHAPE_FIELD_NAME;  
+     * @return this
+            throw new IllegalArgumentException("either shape or indexedShapeId is required");
+                assert MapperService.SINGLE_MAPPING_NAME.equals(type) : "Expected type [_doc], got [" + type + "]";
+            if (indexedShapePath != null) {
+        XContentParser.Token token;
+     *         Query
+            if (in.getVersion().before(Version.V_2_0_0)) {  
+    public QB relation(ShapeRelation relation) {
+    protected AbstractGeometryQueryBuilder(String fieldName, ShapeBuilder shape) {  
+    public static ParsedGeometryQueryParams parsedParamsFromXContent(XContentParser parser, ParsedGeometryQueryParams params)
+ * The OpenSearch Contributors require contributions made to  
+                    // It is safe to use EMPTY here because this never uses namedObject
+    protected abstract Query buildShapeQuery(QueryShardContext context, MappedFieldType fieldType);
+    }
+import org.apache.lucene.search.MatchNoDocsQuery;
+                    if (!response.isExists()) {  
+    protected abstract AbstractGeometryQueryBuilder<QB> newShapeQueryBuilder(String fieldName, Geometry shape);
+    /** creates a new ShapeQueryBuilder from the provided field name, supplier, indexed shape id */  
+ * Licensed to Elasticsearch under one or more contributor  
+    protected String indexedShapeRouting;
+     *            Name of the field that will be queried  
+import org.opensearch.core.xcontent.XContentParser;  
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    }  
+     *         Query
+     */
+                    params.queryName = parser.text();  
+                } catch (Exception e) {
+            builder.endObject();
+                                        params.id = parser.text();  
+     * @param fieldName  
+     * @return the path of the indexed Shape that will be used in the Query
+    protected ShapeRelation relation = DEFAULT_SHAPE_RELATION;  
+     *  
+                currentFieldName = parser.currentName();
+    private void fetch(Client client, GetRequest getRequest, String path, ActionListener<Geometry> listener) {
+        }
+            } else if (token.isValue()) {
+        this(fieldName, shape == null ? null : shape.buildGeometry(), null);
+        String fieldName = null;
+     *            Shape used in the Query
+        this.indexedShapeId = indexedShapeId;  
+                return new MatchNoDocsQuery();  
+    }
+    public String indexedShapeRouting() {
+     */
+        out.writeString(fieldName);  
+            shape = null;
+            GeometryIO.writeGeometry(out, shape);
+     * Read from a stream.
+    public String indexedShapeId() {
+    @Override  
+        this.ignoreUnmapped = ignoreUnmapped;
+                        while ((currentToken = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            }  
+import org.apache.lucene.search.Query;
+     * field name using the given Shape  
+        if (supplier != null) {  
+                } else if (IGNORE_UNMAPPED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            }  
+                try {
+ *  
+import org.opensearch.action.get.GetResponse;
+    protected static final ParseField SHAPE_ID_FIELD = new ParseField("id");
+            return supplier.get() == null ? this : newShapeQueryBuilder(this.fieldName, supplier.get()).relation(relation);  
+     * Creates a new ShapeQueryBuilder whose Query will be against the given  
+        this(fieldName, (Geometry) null, indexedShapeId);  
+    public String indexedShapeIndex() {  
+                                        listener.onResponse(new GeometryParser(true, true, true).parse(parser));  
+            out.writeOptionalString(indexedShapeIndex);
+            && Objects.equals(supplier, other.supplier)
+     * @return this
+    }
+    }  
+    @Override
+                        throw new IllegalArgumentException("Shape with ID [" + getRequest.id() + "] not found");
+                }
+                                    } else if (SHAPE_INDEX_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        doShapeQueryXContent(builder, params);
+import org.opensearch.transport.client.Client;
+                    listener.onResponse(null);
+ * ownership. Elasticsearch licenses this file to you under  
+     * @param indexedShapeRouting indexed shape routing
+/*  
+     * Sets the path of the field in the indexed Shape document that has the Shape itself
+                        currentFieldName = parser.currentName();  
+     * @param indexedShapePath Path of the field where the Shape itself is defined
+                                }
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;  
+     * Gets whether the query builder will ignore unmapped fields (and run a
+        );  
+        public ShapeBuilder shape;  
+    public AbstractGeometryQueryBuilder(String fieldName, Geometry shape) {
+     * @param indexedShapeIndex Name of the index where the indexed Shape is  
+     */  
+                    }
+     *  
+        WithFieldName {
+        return relation;
+import org.opensearch.core.action.ActionListener;  
+        public ShapeRelation relation;
+        if (in.readBoolean()) {  
+            }  
+import org.opensearch.common.geo.ShapeRelation;
+import org.opensearch.index.mapper.MappedFieldType;
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {  
+            }  
+     * @param shape
+            out.writeOptionalString(indexedShapePath);
+     * @opensearch.internal
+     * @param fieldName
+                fieldName = currentFieldName;  
+            throw new IllegalArgumentException("No geometry defined");
+ * software distributed under the License is distributed on an
+    protected abstract AbstractGeometryQueryBuilder<QB> newShapeQueryBuilder(
+        return Objects.hash(
+        this.shape = shape;
+            ignoreUnmapped,
+        return (QB) this;
+import org.opensearch.common.geo.GeometryIO;
+    public QB indexedShapeIndex(String indexedShapeIndex) {  
+            supplier
+        getRequest.preference("_local");  
+                                        params.index = parser.text();
+    /**
+     *
+        public float boost;
+                        XContentParser parser = XContentHelper.createParser(  
+                                }  
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+                            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        return indexedShapePath;
+ *
+    @Deprecated
+import org.opensearch.common.geo.GeometryParser;  
+    /**
+        ignoreUnmapped = in.readBoolean();  
+                                    }
+        params.fieldName = fieldName;
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+    protected Query doToQuery(QueryShardContext context) {
 }
+                                } else {  
+                        XContentParser.Token currentToken;  
+        return indexedShapeRouting;
+     */
+    /**  
+            throw new IllegalArgumentException("No Shape Relation defined");
+    /**
+    @Override  
+    /**
+        public String queryName;
+    protected static final ParseField SHAPE_PATH_FIELD = new ParseField("path");
+            }
+        } else {
+            shape,  
+     *
+            indexedShapeIndex = in.readOptionalString();
+    }
+    }
+import java.util.function.Supplier;
+        builder.startObject(fieldName);  
+        return (QB) this;  
+    }  
+                        }
+import org.opensearch.geometry.Geometry;

@@ -1,244 +1,226 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.explain;
-
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.Explanation;  
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.RoutingMissingException;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.single.shard.TransportSingleShardAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
-import org.opensearch.cluster.routing.ShardIterator;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.lucene.uid.VersionsAndSeqNoResolver;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;  
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.get.DocumentLookupResult;
-import org.opensearch.index.get.GetResult;  
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.Uid;
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.index.query.Rewriteable;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.search.SearchService;  
-import org.opensearch.search.internal.AliasFilter;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.internal.ShardSearchRequest;  
-import org.opensearch.search.rescore.RescoreContext;
-import org.opensearch.search.rescore.Rescorer;
-import org.opensearch.tasks.Task;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Set;
-
-/**
- * Explain transport action. Computes the explain on the targeted shard.
- *  
- * @opensearch.internal
- */
-// TODO: AggregatedDfs. Currently the idf can be different then when executing a normal search with explain.  
-public class TransportExplainAction extends TransportSingleShardAction<ExplainRequest, ExplainResponse> {
-
-    private final SearchService searchService;  
-
-    /** Sentinel returned by {@link #resolveTopLevelDocId} when the id term is absent from the explain reader. */
-    static final int NO_MATCH = -1;  
-
-    @Inject
-    public TransportExplainAction(  
-        ThreadPool threadPool,
-        ClusterService clusterService,
-        TransportService transportService,  
-        SearchService searchService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver  
-    ) {
-        super(
-            ExplainAction.NAME,  
-            threadPool,
-            clusterService,
-            transportService,  
-            actionFilters,
-            indexNameExpressionResolver,
-            ExplainRequest::new,  
-            ThreadPool.Names.GET
-        );
-        this.searchService = searchService;  
-    }
-
-    @Override  
-    protected void doExecute(Task task, ExplainRequest request, ActionListener<ExplainResponse> listener) {
-        request.nowInMillis = System.currentTimeMillis();
-        // if there's no query we can't rewrite it  
-        if (request.query() == null) {
-            super.doExecute(task, request, listener);
-            return;  
-        }
-        ActionListener<QueryBuilder> rewriteListener = ActionListener.wrap(rewrittenQuery -> {
-            request.query(rewrittenQuery);  
-            super.doExecute(task, request, listener);
-        }, listener::onFailure);
-        Rewriteable.rewriteAndFetch(request.query(), searchService.getRewriteContext(() -> request.nowInMillis, request), rewriteListener);  
-    }
-
-    @Override  
     protected boolean resolveIndex(ExplainRequest request) {
-        return true;
-    }  
-
-    @Override
-    protected void resolveRequest(ClusterState state, InternalRequest request) {  
-        final Set<String> indicesAndAliases = indexNameExpressionResolver.resolveExpressions(state, request.request().index());
-        final AliasFilter aliasFilter = searchService.buildAliasFilter(state, request.concreteIndex(), indicesAndAliases);
-        request.request().filteringAlias(aliasFilter);  
-        // Fail fast on the node that received the request.
-        if (request.request().routing() == null && state.getMetadata().routingRequired(request.concreteIndex())) {
-            throw new RoutingMissingException(request.concreteIndex(), request.request().id());  
-        }
-    }
-
-    @Override
-    protected void asyncShardOperation(ExplainRequest request, ShardId shardId, ActionListener<ExplainResponse> listener)
-        throws IOException {  
-        IndexService indexService = searchService.getIndicesService().indexServiceSafe(shardId.getIndex());
-        IndexShard indexShard = indexService.getShard(shardId.id());
-        indexShard.awaitShardSearchActive(b -> {  
-            try {
-                super.asyncShardOperation(request, shardId, listener);
-            } catch (Exception ex) {  
-                listener.onFailure(ex);
-            }
-        });  
-    }
-
-    @Override  
-    protected ExplainResponse shardOperation(ExplainRequest request, ShardId shardId) throws IOException {
-        ShardSearchRequest shardSearchLocalRequest = new ShardSearchRequest(shardId, request.nowInMillis, request.filteringAlias());
-        SearchContext context = searchService.createSearchContext(shardSearchLocalRequest, SearchService.NO_TIMEOUT);  
-        Engine.GetResult result = null;
-        try {
-            // No need to check the type, IndexShard#get does it for us  
-            Term uidTerm = new Term(IdFieldMapper.NAME, Uid.encodeId(request.id()));
-            result = context.indexShard().get(new Engine.Get(false, false, request.id(), uidTerm));
-            if (!result.exists()) {  
-                return new ExplainResponse(shardId.getIndexName(), request.id(), false);
-            }
-            context.parsedQuery(context.getQueryShardContext().toQuery(request.query()));  
-            context.preProcess(true);
-            int topLevelDocId = resolveTopLevelDocId(result, context.searcher().getIndexReader(), uidTerm);
-            if (topLevelDocId == NO_MATCH) {  
-                return new ExplainResponse(shardId.getIndexName(), request.id(), true, Explanation.noMatch("Failed to locate document"));
-            }
-            Explanation explanation = context.searcher().explain(context.query(), topLevelDocId);  
-            for (RescoreContext ctx : context.rescore()) {
-                Rescorer rescorer = ctx.rescorer();
-                explanation = rescorer.explain(topLevelDocId, context.searcher(), ctx, explanation);  
-            }
-            if (request.storedFields() != null || (request.fetchSourceContext() != null && request.fetchSourceContext().fetchSource())) {
-                // Advantage is that we're not opening a second searcher to retrieve the _source. Also  
-                // because we are working in the same searcher in engineGetResult we can be sure that a
-                // doc isn't deleted between the initial get and this call.
-                GetResult getResult = context.indexShard()  
-                    .getService()
-                    .get(result, request.id(), request.storedFields(), request.fetchSourceContext());
-                return new ExplainResponse(shardId.getIndexName(), request.id(), true, explanation, getResult);  
-            } else {
-                return new ExplainResponse(shardId.getIndexName(), request.id(), true, explanation);
-            }  
-        } catch (IOException e) {
-            throw new OpenSearchException("Could not explain", e);
-        } finally {  
-            Releasables.close(result, context);
-        }
-    }  
-
-    /**
-     * Resolves the top-level (reader-relative) Lucene doc id used to explain a hit.  
-     * <p>
-     * A docId is only meaningful relative to the reader that produced it, and the get and explain phases use
-     * different readers, so a {@link DocumentLookupResult.PreMaterialized} result (which carries no docId) must have  
-     * its docId resolved against the explain searcher's own {@code reader} rather than one carried on the get result.
-     * <p>
-     * For a PreMaterialized result the docId is resolved against {@code reader} in DOC_ID_ONLY mode: an engine that  
-     * returns a PreMaterialized result may index the _id term without writing _version doc values, so a FULL-mode
-     * lookup (loadDocIdAndVersion) could throw, and DOC_ID_ONLY also reuses the cache entry the get path already
-     * created for this reader. Returns {@link #NO_MATCH} when the id term is absent from {@code reader}; otherwise the  
-     * leaf docId lifted by its docBase. For any other result the docId carried on
-     * {@link Engine.GetResult#docIdAndVersion()} is used.
-     */  
+ * You may obtain a copy of the License at  
     static int resolveTopLevelDocId(Engine.GetResult result, IndexReader reader, Term uidTerm) throws IOException {
-        if (result instanceof DocumentLookupResult.PreMaterialized) {
-            VersionsAndSeqNoResolver.DocIdAndSeqNo docIdAndSeqNo = VersionsAndSeqNoResolver.loadDocId(reader, uidTerm);  
-            if (docIdAndSeqNo == null) {
-                return NO_MATCH;
-            }  
-            return docIdAndSeqNo.docId + docIdAndSeqNo.context.docBase;
-        }
-        return result.docIdAndVersion().docId + result.docIdAndVersion().docBase;  
+                return new ExplainResponse(shardId.getIndexName(), request.id(), true, Explanation.noMatch("Failed to locate document"));
+     * {@link Engine.GetResult#docIdAndVersion()} is used.
+            context.preProcess(true);
+ */  
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.index.IndexService;  
+            int topLevelDocId = resolveTopLevelDocId(result, context.searcher().getIndexReader(), uidTerm);
     }
-
-    @Override  
-    protected Writeable.Reader<ExplainResponse> getResponseReader() {
-        return ExplainResponse::new;
-    }  
-
-    @Override
-    protected ShardIterator shards(ClusterState state, InternalRequest request) {  
-        return clusterService.operationRouting()
-            .getShards(
-                clusterService.state(),  
-                request.concreteIndex(),
-                request.request().id(),
-                request.request().routing(),  
-                request.request().preference()
-            );
-    }  
-
-    @Override
-    protected String getExecutor(ExplainRequest request, ShardId shardId) {  
-        IndexService indexService = searchService.getIndicesService().indexServiceSafe(shardId.getIndex());
-        return indexService.getIndexSettings().isSearchThrottled()
+        Engine.GetResult result = null;
+        ShardSearchRequest shardSearchLocalRequest = new ShardSearchRequest(shardId, request.nowInMillis, request.filteringAlias());
+import org.opensearch.OpenSearchException;
+            Term uidTerm = new Term(IdFieldMapper.NAME, Uid.encodeId(request.id()));
+    protected void resolveRequest(ClusterState state, InternalRequest request) {  
             ? ThreadPool.Names.SEARCH_THROTTLED  
-            : super.getExecutor(request, shardId);
+                    .getService()
+     * returns a PreMaterialized result may index the _id term without writing _version doc values, so a FULL-mode
     }
+        return ExplainResponse::new;
+import org.opensearch.index.shard.IndexShard;
+            try {
+ * SPDX-License-Identifier: Apache-2.0
+     * created for this reader. Returns {@link #NO_MATCH} when the id term is absent from {@code reader}; otherwise the  
+import java.io.IOException;
+    /**
+        IndexNameExpressionResolver indexNameExpressionResolver  
+ * specific language governing permissions and limitations
+        if (request.request().routing() == null && state.getMetadata().routingRequired(request.concreteIndex())) {
+            } catch (Exception ex) {  
+                return new ExplainResponse(shardId.getIndexName(), request.id(), false);
+    }  
+        final AliasFilter aliasFilter = searchService.buildAliasFilter(state, request.concreteIndex(), indicesAndAliases);
+        ActionFilters actionFilters,
+        return result.docIdAndVersion().docId + result.docIdAndVersion().docBase;  
+        SearchService searchService,
+                GetResult getResult = context.indexShard()  
+        // Fail fast on the node that received the request.
+        // if there's no query we can't rewrite it  
+        }
+                    .get(result, request.id(), request.storedFields(), request.fetchSourceContext());
+ * under the License.  
+            request.query(rewrittenQuery);  
+        throws IOException {  
+ */
+            Releasables.close(result, context);
+    static final int NO_MATCH = -1;  
+import org.opensearch.common.inject.Inject;  
+        }
+            }
+import org.opensearch.tasks.Task;  
+ * Licensed to Elasticsearch under one or more contributor  
+     * <p>
+import org.opensearch.index.engine.Engine;
+        IndexService indexService = searchService.getIndicesService().indexServiceSafe(shardId.getIndex());
+                request.request().preference()
+    }
+import org.apache.lucene.index.Term;
+import org.opensearch.cluster.service.ClusterService;
+        }, listener::onFailure);
+            ExplainRequest::new,  
+        this.searchService = searchService;  
+ * compatible open source license.
+        return true;
+    @Override  
+    @Override  
+            throw new RoutingMissingException(request.concreteIndex(), request.request().id());  
+import org.opensearch.threadpool.ThreadPool;
+     * lookup (loadDocIdAndVersion) could throw, and DOC_ID_ONLY also reuses the cache entry the get path already
+            );
+ * not use this file except in compliance with the License.
+            clusterService,
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
+        request.request().filteringAlias(aliasFilter);  
+ *
+        } catch (IOException e) {
+            result = context.indexShard().get(new Engine.Get(false, false, request.id(), uidTerm));
+                // doc isn't deleted between the initial get and this call.
+    /** Sentinel returned by {@link #resolveTopLevelDocId} when the id term is absent from the explain reader. */
+        );
+        Rewriteable.rewriteAndFetch(request.query(), searchService.getRewriteContext(() -> request.nowInMillis, request), rewriteListener);  
+    @Override  
+        ClusterService clusterService,
+                explanation = rescorer.explain(topLevelDocId, context.searcher(), ctx, explanation);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+// TODO: AggregatedDfs. Currently the idf can be different then when executing a normal search with explain.  
+import org.opensearch.cluster.ClusterState;
+ * Modifications Copyright OpenSearch Contributors. See
+    public TransportExplainAction(  
+    @Override  
+                request.request().routing(),  
+    @Override
+import org.opensearch.core.action.ActionListener;  
+import org.opensearch.action.RoutingMissingException;
+                // Advantage is that we're not opening a second searcher to retrieve the _source. Also  
+            if (topLevelDocId == NO_MATCH) {  
+import org.apache.lucene.index.IndexReader;
+                super.asyncShardOperation(request, shardId, listener);
+    }
+        IndexShard indexShard = indexService.getShard(shardId.id());
+import org.opensearch.search.internal.SearchContext;
+                return new ExplainResponse(shardId.getIndexName(), request.id(), true, explanation);
+        indexShard.awaitShardSearchActive(b -> {  
+            ThreadPool.Names.GET
+        if (request.query() == null) {
+ * The OpenSearch Contributors require contributions made to  
+            transportService,  
+        TransportService transportService,  
+            if (docIdAndSeqNo == null) {
+            VersionsAndSeqNoResolver.DocIdAndSeqNo docIdAndSeqNo = VersionsAndSeqNoResolver.loadDocId(reader, uidTerm);  
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.transport.TransportService;
+     * its docId resolved against the explain searcher's own {@code reader} rather than one carried on the get result.
+import org.opensearch.action.support.ActionFilters;  
+import org.opensearch.common.lease.Releasables;
+import org.opensearch.index.query.QueryBuilder;  
+    private final SearchService searchService;  
+            // No need to check the type, IndexShard#get does it for us  
+        ThreadPool threadPool,
+     * different readers, so a {@link DocumentLookupResult.PreMaterialized} result (which carries no docId) must have  
+    protected void doExecute(Task task, ExplainRequest request, ActionListener<ExplainResponse> listener) {
+import org.opensearch.index.mapper.IdFieldMapper;
+        try {
+import org.opensearch.index.get.DocumentLookupResult;
+ * GitHub history for details.
+                request.concreteIndex(),
+        SearchContext context = searchService.createSearchContext(shardSearchLocalRequest, SearchService.NO_TIMEOUT);  
+        });  
+ * Explain transport action. Computes the explain on the targeted shard.
+ * software distributed under the License is distributed on an
+     * Resolves the top-level (reader-relative) Lucene doc id used to explain a hit.  
+                Rescorer rescorer = ctx.rescorer();
+ */  
+import org.opensearch.index.query.Rewriteable;
+    protected String getExecutor(ExplainRequest request, ShardId shardId) {  
+/*  
+     * leaf docId lifted by its docBase. For any other result the docId carried on
+            actionFilters,
+     * A docId is only meaningful relative to the reader that produced it, and the get and explain phases use
+    }  
+    protected Writeable.Reader<ExplainResponse> getResponseReader() {
+        IndexService indexService = searchService.getIndicesService().indexServiceSafe(shardId.getIndex());
+        ActionListener<QueryBuilder> rewriteListener = ActionListener.wrap(rewrittenQuery -> {
+                request.request().id(),
+import org.apache.lucene.search.Explanation;  
+            super.doExecute(task, request, listener);
+import org.opensearch.action.support.single.shard.TransportSingleShardAction;
+ *  
+    @Override
+import org.opensearch.core.index.shard.ShardId;
+    @Override
+ * KIND, either express or implied.  See the License for the
 }  
+import org.opensearch.index.get.GetResult;  
+import org.opensearch.search.rescore.Rescorer;
+            .getShards(
+ *
+        return indexService.getIndexSettings().isSearchThrottled()
+            }
+        super(
+/**
+import org.opensearch.search.internal.ShardSearchRequest;  
+import java.util.Set;
+    }  
+            ExplainAction.NAME,  
+            context.parsedQuery(context.getQueryShardContext().toQuery(request.query()));  
+            return docIdAndSeqNo.docId + docIdAndSeqNo.context.docBase;
+            indexNameExpressionResolver,
+            } else {
+    ) {
+    protected ExplainResponse shardOperation(ExplainRequest request, ShardId shardId) throws IOException {
+ * ownership. Elasticsearch licenses this file to you under  
+            return;  
+                clusterService.state(),  
+    @Inject
+                // because we are working in the same searcher in engineGetResult we can be sure that a
+/*  
+import org.opensearch.cluster.routing.ShardIterator;
+            }  
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+            if (!result.exists()) {  
+    }  
+import org.opensearch.search.internal.AliasFilter;
+package org.opensearch.action.explain;
+        final Set<String> indicesAndAliases = indexNameExpressionResolver.resolveExpressions(state, request.request().index());
+     * <p>
+     */  
+            }  
+ * this work for additional information regarding copyright
+            }
+ * Unless required by applicable law or agreed to in writing,
+            threadPool,
+            super.doExecute(task, request, listener);
+        request.nowInMillis = System.currentTimeMillis();
+        if (result instanceof DocumentLookupResult.PreMaterialized) {
+            : super.getExecutor(request, shardId);
+                return NO_MATCH;
+        }
+import org.opensearch.search.rescore.RescoreContext;
+    protected void asyncShardOperation(ExplainRequest request, ShardId shardId, ActionListener<ExplainResponse> listener)
+import org.opensearch.common.lucene.uid.VersionsAndSeqNoResolver;
+ * @opensearch.internal
+        }
+            if (request.storedFields() != null || (request.fetchSourceContext() != null && request.fetchSourceContext().fetchSource())) {
+            throw new OpenSearchException("Could not explain", e);
+                return new ExplainResponse(shardId.getIndexName(), request.id(), true, explanation, getResult);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+import org.opensearch.search.SearchService;  
+import org.opensearch.index.mapper.Uid;
+            }
+        } finally {  
+                listener.onFailure(ex);
+    protected ShardIterator shards(ClusterState state, InternalRequest request) {  
+    }
+            for (RescoreContext ctx : context.rescore()) {
+     * For a PreMaterialized result the docId is resolved against {@code reader} in DOC_ID_ONLY mode: an engine that  
+/*
+ *  
+            Explanation explanation = context.searcher().explain(context.query(), topLevelDocId);  
+        return clusterService.operationRouting()
+ */
+public class TransportExplainAction extends TransportSingleShardAction<ExplainRequest, ExplainResponse> {

@@ -1,298 +1,265 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+     * Compare two buckets by their ordinal.
  */  
-
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.DeprecationHandler;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.support.AggregationPath;  
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.sort.SortOrder;
-
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.function.BiConsumer;  
-
-/**
- * An Aggregator.  
- * <p>
- * Be <strong>careful</strong> when adding methods to this class. If possible
  * make sure they have sensible default implementations.  
- *
- * @opensearch.internal
- */  
-@PublicApi(since = "1.0.0")
-public abstract class Aggregator extends BucketCollector implements Releasable {
-
+ * license agreements. See the NOTICE file distributed with
     private final SetOnce<InternalAggregation> internalAggregation = new SetOnce<>();
-
-    /**  
-     * Parses the aggregation request and creates the appropriate aggregator factory for it.
-     *
-     * @see AggregationBuilder  
-     *
-     * @opensearch.api
-     */  
-    @FunctionalInterface
-    @PublicApi(since = "1.0.0")
-    public interface Parser {  
-        /**
-         * Returns the aggregator factory with which this parser is associated, may return {@code null} indicating the
-         * aggregation should be skipped (e.g. when trying to aggregate on unmapped fields).  
-         *
-         * @param aggregationName   The name of the aggregation
-         * @param parser            The parser  
-         * @return                  The resolved aggregator factory or {@code null} in case the aggregation should be skipped
-         * @throws java.io.IOException      When parsing fails
-         */  
-        AggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException;
-    }
-
-    /**
-     * Returns the InternalAggregation stored during post collection
-     */  
-    public InternalAggregation getPostCollectionAggregation() {
-        return internalAggregation.get();
     }  
-
-    /**
-     * Return the name of this aggregator.  
-     */
-    public abstract String name();
-
-    /**
-     * Return the {@link SearchContext} attached with this {@link Aggregator}.
-     */  
-    public abstract SearchContext context();
-
-    /**  
-     * Return the parent aggregator.
-     */
-    public abstract Aggregator parent();  
-
-    /**
-     * Return the sub aggregator with the provided name.  
-     */
-    public abstract Aggregator subAggregator(String name);
-
-    /**
      * Resolve the next step of the sort path as though this aggregation
-     * supported sorting. This is usually the "first step" when resolving  
-     * a sort path because most aggs that support sorting their buckets
      * aren't valid in the middle of a sort path.
-     * <p>  
-     * For example, the {@code terms} aggs supports sorting its buckets, but
-     * that sort path itself can't contain a different {@code terms}
-     * aggregation.  
-     */
-    public final Aggregator resolveSortPathOnValidAgg(AggregationPath.PathElement next, Iterator<AggregationPath.PathElement> path) {
-        Aggregator n = subAggregator(next.name);  
-        if (n == null) {
-            throw new IllegalArgumentException(
-                "The provided aggregation ["  
-                    + next
-                    + "] either does not exist, or is "
-                    + "a pipeline aggregation and cannot be used to sort the buckets."  
-            );
-        }
-        if (false == path.hasNext()) {  
-            return n;
-        }
-        if (next.key != null) {  
-            throw new IllegalArgumentException("Key only allowed on last aggregation path element but got [" + next + "]");
+         * before a second pass over the data when child aggregators are called  
         }
         return n.resolveSortPath(path.next(), path);  
-    }
-
-    /**  
-     * Resolve a sort path to the target.
-     * <p>
-     * The default implementation throws an exception but we override it on aggregations that support sorting.  
-     */
-    public Aggregator resolveSortPath(AggregationPath.PathElement next, Iterator<AggregationPath.PathElement> path) {
-        throw new IllegalArgumentException(  
-            "Buckets can only be sorted on a sub-aggregator path "
-                + "that is built out of zero or more single-bucket aggregations within the path and a final "
-                + "single-bucket or a metrics aggregation at the path end. ["  
-                + name()
-                + "] is not single-bucket."
-        );  
-    }
-
-    /**  
-     * Builds a comparator that compares two buckets aggregated by this {@linkplain Aggregator}.
-     * <p>
-     * The default implementation throws an exception but we override it on aggregations that support sorting.  
-     */
-    public BucketComparator bucketComparator(String key, SortOrder order) {
-        throw new IllegalArgumentException(  
-            "Buckets can only be sorted on a sub-aggregator path "
-                + "that is built out of zero or more single-bucket aggregations within the path and a final "
-                + "single-bucket or a metrics aggregation at the path end."  
-        );
-    }
-
-    /**
      * Returns the underlying Aggregator responsible for creating the bucket collector.
-     * For most aggregators, this is the aggregator itself.  
-     * For wrappers like ProfilingAggregator, it's the delegate.
-     */
-    public Aggregator unwrapAggregator() {  
-        return this;
-    }
-
     /**
-     * Compare two buckets by their ordinal.
-     *  
-     * @opensearch.api
-     */
-    @FunctionalInterface  
-    @PublicApi(since = "1.0.0")
-    public interface BucketComparator {
-        /**  
-         * Compare two buckets by their ordinal.
-         */
-        int compare(long lhs, long rhs);  
+    /**  
+    /**  
     }
-
-    /**  
-     * Build the results of this aggregation.
-     * @param owningBucketOrds the ordinals of the buckets that we want to
-     *        collect from this aggregation  
-     * @return the results for each ordinal, in the same order as the array
-     *         of ordinals
-     */  
-    public abstract InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException;
-
-    /**  
-     * Build the result of this aggregation if it is at the "top level"
-     * of the aggregation tree and save it. This should get called
-     * during post collection. If, instead, it is a sub-aggregation  
-     * of another aggregation then the aggregation that contains
-     * it will call {@link #buildAggregations(long[])}.
-     */  
-    public final InternalAggregation buildTopLevel() throws IOException {
-        assert parent() == null;
-        this.internalAggregation.set(buildAggregations(new long[] { 0 })[0]);  
-        return internalAggregation.get();
-    }
-
-    /**
-     * For streaming aggregation, build the aggregation batch result and
-     * reset so this aggregator can continue with a clean state  
-     */
-    public final InternalAggregation buildTopLevelBatch() throws IOException {
-        assert parent() == null;  
-        InternalAggregation batch = buildAggregations(new long[] { 0 })[0];
-        reset();
-        return batch;  
-    }
-
-    /**  
-     * Build an empty aggregation.
-     */
-    public abstract InternalAggregation buildEmptyAggregation();  
-
-    /**
-     * Collect debug information to add to the profiling results. This will  
-     * only be called if the aggregation is being profiled.
-     * <p>
-     * Well behaved implementations will always call the superclass  
-     * implementation just in case it has something interesting. They will
-     * also only add objects which can be serialized with
-     * {@link StreamOutput#writeGenericValue(Object)} and  
-     * {@link XContentBuilder#value(Object)}. And they'll have an integration
-     * test.
-     */  
-    public void collectDebugInfo(BiConsumer<String, Object> add) {}
-
-    /**  
-     * Aggregation mode for sub aggregations.
-     *
-     * @opensearch.internal  
-     */
-    public enum SubAggCollectionMode implements Writeable {
-
-        /**
-         * Creates buckets and delegates to child aggregators in a single pass over
-         * the matching documents  
-         */
-        DEPTH_FIRST(new ParseField("depth_first")),
-
-        /**
          * Creates buckets for all matching docs and then prunes to top-scoring buckets
-         * before a second pass over the data when child aggregators are called  
-         * but only for docs from the top-scoring buckets
-         */
-        BREADTH_FIRST(new ParseField("breadth_first"));  
-
-        public static final ParseField KEY = new ParseField("collect_mode");
-
-        private final ParseField parseField;
-
-        SubAggCollectionMode(ParseField parseField) {  
-            this.parseField = parseField;
         }
-
-        public ParseField parseField() {
-            return parseField;
-        }  
-
-        public static SubAggCollectionMode parse(String value, DeprecationHandler deprecationHandler) {
-            SubAggCollectionMode[] modes = SubAggCollectionMode.values();  
-            for (SubAggCollectionMode mode : modes) {
+import org.opensearch.search.internal.SearchContext;
+        );
+import java.util.function.BiConsumer;  
                 if (mode.parseField.match(value, deprecationHandler)) {
-                    return mode;  
-                }
-            }
-            throw new OpenSearchParseException("no [{}] found for value [{}]", KEY.getPreferredName(), value);  
-        }
-
-        public static SubAggCollectionMode readFromStream(StreamInput in) throws IOException {  
-            return in.readEnum(SubAggCollectionMode.class);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeEnum(this);  
-        }
     }
+     * Return the sub aggregator with the provided name.  
+    public final InternalAggregation buildTopLevel() throws IOException {
+     * Collect debug information to add to the profiling results. This will  
+        int compare(long lhs, long rhs);  
+        AggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException;
+ * KIND, either express or implied.  See the License for the
+        public ParseField parseField() {
+     */  
+import org.opensearch.OpenSearchParseException;
+         */
+        if (n == null) {
+     * Resolve a sort path to the target.
+     * @return the results for each ordinal, in the same order as the array
+     * The default implementation throws an exception but we override it on aggregations that support sorting.  
+import org.opensearch.search.sort.SortOrder;
+     * {@link XContentBuilder#value(Object)}. And they'll have an integration
+        return internalAggregation.get();
+        }
+/*  
+     * <p>
+         * Creates buckets and delegates to child aggregators in a single pass over
+     * only be called if the aggregation is being profiled.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+         * @return                  The resolved aggregator factory or {@code null} in case the aggregation should be skipped
+        return batch;  
+     * {@link StreamOutput#writeGenericValue(Object)} and  
+    public Aggregator unwrapAggregator() {  
+     */  
+                    + next
+    public enum SubAggCollectionMode implements Writeable {
+                    return mode;  
+import org.opensearch.common.lease.Releasable;
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+         * aggregation should be skipped (e.g. when trying to aggregate on unmapped fields).  
+     */
+ */  
+         * the matching documents  
+        assert parent() == null;
+     */
+        }
+    @FunctionalInterface  
+                + "that is built out of zero or more single-bucket aggregations within the path and a final "
+    public void collectDebugInfo(BiConsumer<String, Object> add) {}
+         * @param parser            The parser  
+ * Unless required by applicable law or agreed to in writing,
+ */
+     *
+    }
+        public static SubAggCollectionMode parse(String value, DeprecationHandler deprecationHandler) {
+         * Compare two buckets by their ordinal.
+        if (next.key != null) {  
+                }
+ * You may obtain a copy of the License at  
+     * also only add objects which can be serialized with
+     * @opensearch.internal  
+    public Aggregator resolveSortPath(AggregationPath.PathElement next, Iterator<AggregationPath.PathElement> path) {
+            this.parseField = parseField;
+     * during post collection. If, instead, it is a sub-aggregation  
+ * specific language governing permissions and limitations
+import org.opensearch.common.annotation.PublicApi;  
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+    /**  
+     * that sort path itself can't contain a different {@code terms}
+                + "single-bucket or a metrics aggregation at the path end."  
+    /**
+    @PublicApi(since = "1.0.0")
+            SubAggCollectionMode[] modes = SubAggCollectionMode.values();  
+    }
+    /**
+    }
+        public void writeTo(StreamOutput out) throws IOException {
+     * Return the {@link SearchContext} attached with this {@link Aggregator}.
+            throw new OpenSearchParseException("no [{}] found for value [{}]", KEY.getPreferredName(), value);  
+        reset();
+            "Buckets can only be sorted on a sub-aggregator path "
+     *        collect from this aggregation  
+import org.opensearch.core.xcontent.XContentParser;
+     * Parses the aggregation request and creates the appropriate aggregator factory for it.
+         * @param aggregationName   The name of the aggregation
+     */
+     * For wrappers like ProfilingAggregator, it's the delegate.
+     * Builds a comparator that compares two buckets aggregated by this {@linkplain Aggregator}.
+        BREADTH_FIRST(new ParseField("breadth_first"));  
+     * it will call {@link #buildAggregations(long[])}.
+ *  
+    /**
+            return n;
+public abstract class Aggregator extends BucketCollector implements Releasable {
+     * of the aggregation tree and save it. This should get called
+    /**  
+    }
+    public final InternalAggregation buildTopLevelBatch() throws IOException {
+import java.util.Iterator;
+     */
+     * The default implementation throws an exception but we override it on aggregations that support sorting.  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * the Apache License, Version 2.0 (the "License"); you may
+/**
+ * this file be licensed under the Apache-2.0 license or a
+                + "] is not single-bucket."
+    public interface BucketComparator {
+        if (false == path.hasNext()) {  
+     */
+         * but only for docs from the top-scoring buckets
+        @Override
+    @FunctionalInterface
+        }  
+         */
+            return parseField;
+@PublicApi(since = "1.0.0")
+    /**
+    /**  
+    @PublicApi(since = "1.0.0")
+            "Buckets can only be sorted on a sub-aggregator path "
+     *
+    /**
+    public abstract InternalAggregation buildEmptyAggregation();  
+import org.opensearch.core.xcontent.DeprecationHandler;  
+                "The provided aggregation ["  
+     * Returns the InternalAggregation stored during post collection
+                + name()
+     * <p>  
+import org.opensearch.search.aggregations.support.AggregationPath;  
+        this.internalAggregation.set(buildAggregations(new long[] { 0 })[0]);  
+     * Well behaved implementations will always call the superclass  
+     * <p>
+import org.opensearch.core.ParseField;
+     * Build an empty aggregation.
+    public InternalAggregation getPostCollectionAggregation() {
+    }
+            throw new IllegalArgumentException(
+     * a sort path because most aggs that support sorting their buckets
+            throw new IllegalArgumentException("Key only allowed on last aggregation path element but got [" + next + "]");
+     * Build the result of this aggregation if it is at the "top level"
+     * Return the name of this aggregator.  
+    /**
+                    + "a pipeline aggregation and cannot be used to sort the buckets."  
+ * GitHub history for details.
+ * Be <strong>careful</strong> when adding methods to this class. If possible
+    /**
+     * test.
 }  
+            }
+     * aggregation.  
+    public abstract String name();
+    /**  
+            return in.readEnum(SubAggCollectionMode.class);
+     * @opensearch.api
+                + "single-bucket or a metrics aggregation at the path end. ["  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        Aggregator n = subAggregator(next.name);  
+     */  
+    public BucketComparator bucketComparator(String key, SortOrder order) {
+     */
+        public static final ParseField KEY = new ParseField("collect_mode");
+                    + "] either does not exist, or is "
+ * @opensearch.internal
+     * Aggregation mode for sub aggregations.
+    public abstract SearchContext context();
+     * <p>
+        private final ParseField parseField;
+     */  
+    public interface Parser {  
+     * For example, the {@code terms} aggs supports sorting its buckets, but
+    }
+        assert parent() == null;  
+        );  
+     * Return the parent aggregator.
+     */
+     *
+     * supported sorting. This is usually the "first step" when resolving  
+     * For most aggregators, this is the aggregator itself.  
+        InternalAggregation batch = buildAggregations(new long[] { 0 })[0];
+    public abstract Aggregator subAggregator(String name);
+        /**
+     * @opensearch.api
+    /**  
+        DEPTH_FIRST(new ParseField("depth_first")),
+     */  
+     * of another aggregation then the aggregation that contains
+                + "that is built out of zero or more single-bucket aggregations within the path and a final "
+     */  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.xcontent.XContentBuilder;
+         *
+        /**
+ * An Aggregator.  
+         */  
+        /**  
+     *         of ordinals
+            );
+        /**
+        throw new IllegalArgumentException(  
+        }
+        return this;
+     *  
+ * compatible open source license.
+ *
+        SubAggCollectionMode(ParseField parseField) {  
+        }
+     */
+ *
+ * The OpenSearch Contributors require contributions made to  
+         * Returns the aggregator factory with which this parser is associated, may return {@code null} indicating the
+            for (SubAggCollectionMode mode : modes) {
+ * ownership. Elasticsearch licenses this file to you under  
+     */
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+     * Build the results of this aggregation.
+        public static SubAggCollectionMode readFromStream(StreamInput in) throws IOException {  
+     */
+import java.io.IOException;
+        }
+ * under the License.  
+     */
+    public final Aggregator resolveSortPathOnValidAgg(AggregationPath.PathElement next, Iterator<AggregationPath.PathElement> path) {
+package org.opensearch.search.aggregations;
+    /**  
+     * For streaming aggregation, build the aggregation batch result and
+    /**
+import org.opensearch.common.SetOnce;
+    public abstract Aggregator parent();  
+     * implementation just in case it has something interesting. They will
+     * @see AggregationBuilder  
+     * @param owningBucketOrds the ordinals of the buckets that we want to
+        return internalAggregation.get();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * <p>
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+/*  
+     * reset so this aggregator can continue with a clean state  
+        throw new IllegalArgumentException(  
+    public abstract InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException;
+ *
+         * @throws java.io.IOException      When parsing fails
+         */
+            out.writeEnum(this);  

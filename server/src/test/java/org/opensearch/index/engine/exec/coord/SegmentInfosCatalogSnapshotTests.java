@@ -1,122 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine.exec.coord;
-
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.util.Version;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Collection;  
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;  
-
-/**
- * Tests for {@link SegmentInfosCatalogSnapshot}.  
- */
-public class SegmentInfosCatalogSnapshotTests extends OpenSearchTestCase {
-
-    public void testDelegation() {
-        for (int iter = 0; iter < 100; iter++) {
-            SegmentInfos segmentInfos = randomSegmentInfos();  
-            SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
-
-            assertEquals(segmentInfos.getGeneration(), snapshot.getId());  
             assertEquals(segmentInfos.getGeneration(), snapshot.getGeneration());
-            assertEquals(segmentInfos.getVersion(), snapshot.getVersion());
-            assertEquals(segmentInfos.getUserData(), snapshot.getUserData());  
-            assertEquals(-1L, snapshot.getLastWriterGeneration());
-            assertSame(segmentInfos, snapshot.getSegmentInfos());
-
-            expectThrows(UnsupportedOperationException.class, snapshot::getSegments);
-            expectThrows(UnsupportedOperationException.class, () -> snapshot.getSearchableFiles(randomAlphaOfLength(5)));
-            expectThrows(UnsupportedOperationException.class, snapshot::getDataFormats);  
-            expectThrows(UnsupportedOperationException.class, snapshot::serializeToString);
-
-            // setUserData is a no-op, should not throw  
-            snapshot.setUserData(Map.of("key", "value"), false);
-        }
-    }  
-
-    public void testClone() {
-        for (int iter = 0; iter < 100; iter++) {  
-            SegmentInfos segmentInfos = randomSegmentInfos();
-            SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
-
-            SegmentInfosCatalogSnapshot cloned = snapshot.clone();
-            assertNotSame(snapshot, cloned);
-            assertNotSame(segmentInfos, cloned.getSegmentInfos());  
-            assertEquals(snapshot.getGeneration(), cloned.getGeneration());
-            assertEquals(snapshot.getVersion(), cloned.getVersion());
-        }  
-    }
-
-    public void testCopyWriteable() throws Exception {  
-        SegmentInfos segmentInfos = randomSegmentInfos();
-        SegmentInfosCatalogSnapshot original = new SegmentInfosCatalogSnapshot(segmentInfos);
-
-        SegmentInfosCatalogSnapshot copy = copyWriteable(
-            original,
-            new NamedWriteableRegistry(Collections.emptyList()),  
-            SegmentInfosCatalogSnapshot::new
-        );
-
-        assertEquals(original.getGeneration(), copy.getGeneration());
-        assertEquals(original.getVersion(), copy.getVersion());
-        assertEquals(original.getUserData(), copy.getUserData());  
-    }
-
     public void testGetFiles() throws Exception {  
-        SegmentInfos segmentInfos = randomSegmentInfos();
+            SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
         SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
-        Collection<String> uploadNames = snapshot.getFiles(true);  
-        assertEquals(segmentInfos.files(true), new java.util.HashSet<>(uploadNames));
     }
-
-    public void testGetFormatVersionForUnmappedFileDefaultsToLatest() {
+    private SegmentInfos randomSegmentInfos() {  
+import org.apache.lucene.index.SegmentInfos;
+            assertSame(segmentInfos, snapshot.getSegmentInfos());
+            assertEquals(segmentInfos.getGeneration(), snapshot.getId());  
         SegmentInfos segmentInfos = randomSegmentInfos();
-        SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);  
-        // File not in segmentFileVersionMap and not the segments file → falls through to LATEST.
-        long version = snapshot.getFormatVersionForFile("nonexistent_file.xyz");
         assertEquals(LuceneVersionConverter.encode(Version.LATEST), version);  
-    }
-
-    public void testSetUserDataDelegatesToSegmentInfos() {  
-        SegmentInfos segmentInfos = randomSegmentInfos();
-        SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
-        Map<String, String> newData = Map.of("key1", "val1", "key2", "val2");  
-        snapshot.setUserData(newData, false);
-        assertEquals(newData, segmentInfos.getUserData());
-        assertEquals(newData, snapshot.getUserData());  
-    }
-
-    public void testCloneNoAcquireReturnsIndependentCopy() {  
-        SegmentInfos segmentInfos = randomSegmentInfos();
-        SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
-        CatalogSnapshot cloned = snapshot.clone();  
-        assertNotSame(snapshot, cloned);
-        assertNotSame(segmentInfos, ((SegmentInfosCatalogSnapshot) cloned).getSegmentInfos());
+public class SegmentInfosCatalogSnapshotTests extends OpenSearchTestCase {
+            expectThrows(UnsupportedOperationException.class, snapshot::getDataFormats);  
         assertEquals(snapshot.getGeneration(), cloned.getGeneration());  
+ *
         assertEquals(snapshot.getVersion(), cloned.getVersion());
     }
-
-    // --- helpers ---
-
-    private SegmentInfos randomSegmentInfos() {  
-        SegmentInfos segmentInfos = new SegmentInfos(Version.LATEST.major);
-        int userDataEntries = randomIntBetween(0, 5);
-        Map<String, String> userData = new HashMap<>();  
+    public void testCopyWriteable() throws Exception {  
+            assertNotSame(snapshot, cloned);
+        SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);  
+    }
+            expectThrows(UnsupportedOperationException.class, snapshot::serializeToString);
+            expectThrows(UnsupportedOperationException.class, snapshot::getSegments);
+        SegmentInfos segmentInfos = randomSegmentInfos();
+            assertEquals(snapshot.getVersion(), cloned.getVersion());
+            original,
+            assertEquals(snapshot.getGeneration(), cloned.getGeneration());
+ * Tests for {@link SegmentInfosCatalogSnapshot}.  
+        CatalogSnapshot cloned = snapshot.clone();  
+        SegmentInfosCatalogSnapshot copy = copyWriteable(
+            SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
+    public void testGetFormatVersionForUnmappedFileDefaultsToLatest() {
+        assertEquals(newData, segmentInfos.getUserData());
+import org.apache.lucene.util.Version;
+ * The OpenSearch Contributors require contributions made to  
+            expectThrows(UnsupportedOperationException.class, () -> snapshot.getSearchableFiles(randomAlphaOfLength(5)));
+    }
         for (int i = 0; i < userDataEntries; i++) {
-            userData.put(randomAlphaOfLength(5), randomAlphaOfLength(10));
         }  
-        segmentInfos.setUserData(userData, false);
-        return segmentInfos;
+        assertNotSame(segmentInfos, ((SegmentInfosCatalogSnapshot) cloned).getSegmentInfos());
+        Collection<String> uploadNames = snapshot.getFiles(true);  
+        SegmentInfosCatalogSnapshot original = new SegmentInfosCatalogSnapshot(segmentInfos);
+ */
+        }  
+    // --- helpers ---
+import java.util.Collection;  
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
+        SegmentInfos segmentInfos = randomSegmentInfos();
+        assertEquals(original.getVersion(), copy.getVersion());
+        assertEquals(segmentInfos.files(true), new java.util.HashSet<>(uploadNames));
+        Map<String, String> newData = Map.of("key1", "val1", "key2", "val2");  
+            assertNotSame(segmentInfos, cloned.getSegmentInfos());  
+        assertEquals(original.getGeneration(), copy.getGeneration());
+            userData.put(randomAlphaOfLength(5), randomAlphaOfLength(10));
     }  
+        assertEquals(newData, snapshot.getUserData());  
+            // setUserData is a no-op, should not throw  
+            assertEquals(segmentInfos.getUserData(), snapshot.getUserData());  
+        long version = snapshot.getFormatVersionForFile("nonexistent_file.xyz");
+            assertEquals(segmentInfos.getVersion(), snapshot.getVersion());
+        segmentInfos.setUserData(userData, false);
+        );
+    }
+            SegmentInfos segmentInfos = randomSegmentInfos();
+package org.opensearch.index.engine.exec.coord;
+        SegmentInfos segmentInfos = randomSegmentInfos();
+    public void testClone() {
+import org.opensearch.test.OpenSearchTestCase;
+    public void testDelegation() {
+        int userDataEntries = randomIntBetween(0, 5);
+            SegmentInfosCatalogSnapshot cloned = snapshot.clone();
+            SegmentInfosCatalogSnapshot::new
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        Map<String, String> userData = new HashMap<>();  
 }
+        }
+        SegmentInfos segmentInfos = new SegmentInfos(Version.LATEST.major);
+        return segmentInfos;
+        assertEquals(original.getUserData(), copy.getUserData());  
+    public void testCloneNoAcquireReturnsIndependentCopy() {  
+import java.util.Collections;
+import java.util.Map;  
+/**
+            new NamedWriteableRegistry(Collections.emptyList()),  
+        SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
+            assertEquals(-1L, snapshot.getLastWriterGeneration());
+/*  
+    }  
+        // File not in segmentFileVersionMap and not the segments file → falls through to LATEST.
+        snapshot.setUserData(newData, false);
+ * SPDX-License-Identifier: Apache-2.0
+        for (int iter = 0; iter < 100; iter++) {  
+            snapshot.setUserData(Map.of("key", "value"), false);
+            SegmentInfos segmentInfos = randomSegmentInfos();  
+ * compatible open source license.
+        SegmentInfosCatalogSnapshot snapshot = new SegmentInfosCatalogSnapshot(segmentInfos);
+        SegmentInfos segmentInfos = randomSegmentInfos();
+    public void testSetUserDataDelegatesToSegmentInfos() {  
+ */  
+        assertNotSame(snapshot, cloned);
+import java.util.HashMap;
+        for (int iter = 0; iter < 100; iter++) {

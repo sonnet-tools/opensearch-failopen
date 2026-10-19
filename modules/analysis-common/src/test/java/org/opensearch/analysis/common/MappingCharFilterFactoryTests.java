@@ -1,74 +1,66 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.CharFilter;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;  
-import org.opensearch.index.analysis.AnalysisTestsHelper;
-import org.opensearch.index.analysis.CharFilterFactory;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.io.StringReader;  
-import java.util.Arrays;
-
-public class MappingCharFilterFactoryTests extends OpenSearchTestCase {  
-    public static CharFilterFactory create(String... rules) throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
             Settings.builder()  
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.analyzer.my_analyzer.tokenizer", "standard")
-                .put("index.analysis.analyzer.my_analyzer.char_filter", "my_mappings_char_filter")  
+/*  
+        }  
                 .put("index.analysis.char_filter.my_mappings_char_filter.type", "mapping")
-                .putList("index.analysis.char_filter.my_mappings_char_filter.mappings", rules)
-                .build(),  
-            new CommonAnalysisModulePlugin()
-        );
-
-        return analysis.charFilter.get("my_mappings_char_filter");
-    }
-
-    public void testRulesOk() throws IOException {
-        MappingCharFilterFactory mappingCharFilterFactory = (MappingCharFilterFactory) create(
-            "# This is a comment",  
-            "# => _hashtag_",
-            ":) => _happy_",
-            ":( => _sad_"  
-        );
-        CharFilter inputReader = (CharFilter) mappingCharFilterFactory.create(new StringReader("I'm so :), I'm so :( #confused"));
-        char[] tempBuff = new char[14];  
-        StringBuilder output = new StringBuilder();
-        while (true) {
             int length = inputReader.read(tempBuff);  
-            if (length == -1) break;
-            output.append(tempBuff, 0, length);
-        }  
-        assertEquals("I'm so _happy_, I'm so _sad_ _hashtag_confused", output.toString());
-    }
-
-    public void testRuleError() {
-        for (String rule : Arrays.asList(
-            "",        // empty  
-            "a",       // no arrow
-            "a:>b"     // invalid delimiter
-        )) {  
+        while (true) {
             RuntimeException ex = expectThrows(RuntimeException.class, () -> create(rule));
-            assertEquals("Line [1]: Invalid mapping rule : [" + rule + "]", ex.getMessage());
-        }  
-    }
-
+            new CommonAnalysisModulePlugin()
+ * compatible open source license.
     public void testRulePartError() {  
-        RuntimeException ex = expectThrows(
-            RuntimeException.class,
-            () -> create("# This is a comment", "# => _hashtag_", ":) => _happy_", "a:b")  
+            "a:>b"     // invalid delimiter
+import org.opensearch.common.settings.Settings;
+        }  
+ * this file be licensed under the Apache-2.0 license or a
         );
-        assertEquals("Line [4]: Invalid mapping rule : [a:b]", ex.getMessage());
+import org.apache.lucene.analysis.CharFilter;
+        );
+import java.io.StringReader;  
+        MappingCharFilterFactory mappingCharFilterFactory = (MappingCharFilterFactory) create(
+            () -> create("# This is a comment", "# => _hashtag_", ":) => _happy_", "a:b")  
+                .put("index.analysis.analyzer.my_analyzer.tokenizer", "standard")
+            "a",       // no arrow
+        RuntimeException ex = expectThrows(
     }  
+            ":) => _happy_",
+            "# This is a comment",  
+import java.io.IOException;
+        return analysis.charFilter.get("my_mappings_char_filter");
+        assertEquals("Line [4]: Invalid mapping rule : [a:b]", ex.getMessage());
+package org.opensearch.analysis.common;
+import java.util.Arrays;
+    public static CharFilterFactory create(String... rules) throws IOException {
+            ":( => _sad_"  
+        CharFilter inputReader = (CharFilter) mappingCharFilterFactory.create(new StringReader("I'm so :), I'm so :( #confused"));
+    }
+ * The OpenSearch Contributors require contributions made to  
+        StringBuilder output = new StringBuilder();
+    }
+    }
 }
+                .put("index.analysis.analyzer.my_analyzer.char_filter", "my_mappings_char_filter")  
+public class MappingCharFilterFactoryTests extends OpenSearchTestCase {  
+            assertEquals("Line [1]: Invalid mapping rule : [" + rule + "]", ex.getMessage());
+                .putList("index.analysis.char_filter.my_mappings_char_filter.mappings", rules)
+import org.opensearch.index.analysis.AnalysisTestsHelper;
+    public void testRulesOk() throws IOException {
+ *
+        char[] tempBuff = new char[14];  
+            if (length == -1) break;
+                .build(),  
+import org.opensearch.env.Environment;  
+        assertEquals("I'm so _happy_, I'm so _sad_ _hashtag_confused", output.toString());
+        );
+            "",        // empty  
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+            RuntimeException.class,
+        )) {  
+            "# => _hashtag_",
+import org.opensearch.test.OpenSearchTestCase;  
+import org.opensearch.index.analysis.CharFilterFactory;
+ * SPDX-License-Identifier: Apache-2.0
+        for (String rule : Arrays.asList(
+    public void testRuleError() {
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+            output.append(tempBuff, 0, length);
+ */  

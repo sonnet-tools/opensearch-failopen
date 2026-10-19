@@ -1,193 +1,176 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.script.Script;  
-import org.opensearch.script.ScriptedMetricAggContexts;
-import org.opensearch.search.SearchParseException;
-import org.opensearch.search.aggregations.Aggregator;  
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.CardinalityUpperBound;  
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Aggregation Factory for scripted_metrics agg
- *  
- * @opensearch.internal
- */
-class ScriptedMetricAggregatorFactory extends AggregatorFactory {  
-
-    private final ScriptedMetricAggContexts.MapScript.Factory mapScript;
-    private final Map<String, Object> mapScriptParams;  
-    private final ScriptedMetricAggContexts.CombineScript.Factory combineScript;
-    private final Map<String, Object> combineScriptParams;
-    private final Script reduceScript;  
-    private final Map<String, Object> aggParams;
-    private final SearchLookup lookup;
-    @Nullable  
-    private final ScriptedMetricAggContexts.InitScript.Factory initScript;
-    private final Map<String, Object> initScriptParams;
-
-    ScriptedMetricAggregatorFactory(
-        String name,
-        ScriptedMetricAggContexts.MapScript.Factory mapScript,  
         Map<String, Object> mapScriptParams,
-        @Nullable ScriptedMetricAggContexts.InitScript.Factory initScript,
-        Map<String, Object> initScriptParams,  
-        ScriptedMetricAggContexts.CombineScript.Factory combineScript,
-        Map<String, Object> combineScriptParams,
-        Script reduceScript,  
-        Map<String, Object> aggParams,
-        SearchLookup lookup,
-        QueryShardContext queryShardContext,  
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactories,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        super(name, queryShardContext, parent, subFactories, metadata);
-        this.mapScript = mapScript;  
-        this.mapScriptParams = mapScriptParams;
-        this.initScript = initScript;
-        this.initScriptParams = initScriptParams;  
-        this.combineScript = combineScript;
-        this.combineScriptParams = combineScriptParams;
-        this.reduceScript = reduceScript;  
-        this.lookup = lookup;
-        this.aggParams = aggParams;
-    }  
-
-    @Override
-    public Aggregator createInternal(  
-        SearchContext searchContext,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,  
-        Map<String, Object> metadata
-    ) throws IOException {
-        Map<String, Object> aggParams = this.aggParams == null ? Map.of() : this.aggParams;  
-
-        Script reduceScript = deepCopyScript(this.reduceScript, searchContext, aggParams);
-
-        return new ScriptedMetricAggregator(
-            name,
             lookup,  
-            aggParams,
-            initScript,
-            initScriptParams,  
-            mapScript,
-            mapScriptParams,
-            combineScript,  
-            combineScriptParams,
-            reduceScript,
-            searchContext,  
-            parent,
-            metadata
-        );  
-    }
-
-    @Override  
-    protected boolean supportsConcurrentSegmentSearch() {
-        return true;
-    }  
-
-    private static Script deepCopyScript(Script script, SearchContext context, Map<String, Object> aggParams) {
-        if (script != null) {  
-            Map<String, Object> params = mergeParams(aggParams, deepCopyParams(script.getParams(), context));
-            return new Script(script.getType(), script.getLang(), script.getIdOrCode(), params);
-        } else {  
-            return null;
-        }
-    }  
-
-    @SuppressWarnings({ "unchecked" })
-    static <T> T deepCopyParams(T original, SearchContext context) {  
-        T clone;
-        if (original instanceof Map) {
-            Map<?, ?> originalMap = (Map<?, ?>) original;  
-            Map<Object, Object> clonedMap = new HashMap<>();
-            for (Map.Entry<?, ?> e : originalMap.entrySet()) {
-                clonedMap.put(deepCopyParams(e.getKey(), context), deepCopyParams(e.getValue(), context));  
-            }
-            clone = (T) clonedMap;
-        } else if (original instanceof List) {  
-            List<?> originalList = (List<?>) original;
-            List<Object> clonedList = new ArrayList<>();
-            for (Object o : originalList) {  
-                clonedList.add(deepCopyParams(o, context));
-            }
-            clone = (T) clonedList;  
-        } else if (original instanceof String
-            || original instanceof Integer
+        Map<String, Object> initScriptParams,  
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
             || original instanceof Long  
-            || original instanceof Short
-            || original instanceof Byte
-            || original instanceof Float  
-            || original instanceof Double
+        this.combineScriptParams = combineScriptParams;
+    ScriptedMetricAggregatorFactory(
+            for (Object o : originalList) {  
+ * You may obtain a copy of the License at  
+        this.reduceScript = reduceScript;  
+ */
+ * @opensearch.internal
+    ) throws IOException {
             || original instanceof Character
-            || original instanceof Boolean) {  
-                clone = original;
-            } else {
-                throw new SearchParseException(  
-                    context.shardTarget(),
-                    "Can only clone primitives, String, ArrayList, and HashMap. Found: " + original.getClass().getCanonicalName(),
-                    null  
-                );
-            }
-        return clone;  
-    }
-
     static Map<String, Object> mergeParams(Map<String, Object> agg, Map<String, Object> script) {  
-        // Start with script params
-        Map<String, Object> combined = new HashMap<>(script);
-
-        // Add in agg params, throwing an exception if any conflicts are detected
-        for (Map.Entry<String, Object> aggEntry : agg.entrySet()) {
-            if (combined.putIfAbsent(aggEntry.getKey(), aggEntry.getValue()) != null) {  
-                throw new IllegalArgumentException(
-                    "Parameter name \"" + aggEntry.getKey() + "\" used in both aggregation and script parameters"
-                );  
+            List<Object> clonedList = new ArrayList<>();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.util.List;
+ * Aggregation Factory for scripted_metrics agg
+        Map<String, Object> combineScriptParams,
+        if (script != null) {  
+            for (Map.Entry<?, ?> e : originalMap.entrySet()) {
+import org.opensearch.common.Nullable;
+    }  
+ * GitHub history for details.
+/**
+import java.util.HashMap;  
+        Script reduceScript = deepCopyScript(this.reduceScript, searchContext, aggParams);
+                    null  
+ * Unless required by applicable law or agreed to in writing,
+        this.lookup = lookup;
+            combineScriptParams,
+            return null;
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+        this.mapScript = mapScript;  
             }
+                );  
+ * the Apache License, Version 2.0 (the "License"); you may
+            reduceScript,
+import org.opensearch.search.SearchParseException;
+        return true;
+                    "Parameter name \"" + aggEntry.getKey() + "\" used in both aggregation and script parameters"
+ * specific language governing permissions and limitations
+        Aggregator parent,
+ * not use this file except in compliance with the License.
+        String name,
+        T clone;
+        Map<String, Object> combined = new HashMap<>(script);
+            || original instanceof Byte
+            searchContext,  
         }
-
-        return combined;
+                    "Can only clone primitives, String, ArrayList, and HashMap. Found: " + original.getClass().getCanonicalName(),
+    }  
+/*  
+            mapScriptParams,
+            if (combined.putIfAbsent(aggEntry.getKey(), aggEntry.getValue()) != null) {  
+        SearchContext searchContext,
+    private final ScriptedMetricAggContexts.CombineScript.Factory combineScript;
+    }  
+            Map<Object, Object> clonedMap = new HashMap<>();
+            }
+        AggregatorFactories.Builder subFactories,
+import org.opensearch.search.aggregations.AggregatorFactories;
+    @Override  
+        super(name, queryShardContext, parent, subFactories, metadata);
+            return new Script(script.getType(), script.getLang(), script.getIdOrCode(), params);
+    private final Map<String, Object> initScriptParams;
+                clonedMap.put(deepCopyParams(e.getKey(), context), deepCopyParams(e.getValue(), context));  
     }
+        this.aggParams = aggParams;
+ *  
+    private static Script deepCopyScript(Script script, SearchContext context, Map<String, Object> aggParams) {
+    static <T> T deepCopyParams(T original, SearchContext context) {  
+        for (Map.Entry<String, Object> aggEntry : agg.entrySet()) {
+        this.initScriptParams = initScriptParams;  
+        Script reduceScript,  
+            || original instanceof Short
+        }
+    ) throws IOException {
+        this.combineScript = combineScript;
+ * license agreements. See the NOTICE file distributed with
+            || original instanceof Double
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    protected boolean supportsConcurrentSegmentSearch() {
+        CardinalityUpperBound cardinality,  
+ * software distributed under the License is distributed on an
+            Map<String, Object> params = mergeParams(aggParams, deepCopyParams(script.getParams(), context));
+        } else if (original instanceof List) {  
+import java.io.IOException;
+            aggParams,
+ * KIND, either express or implied.  See the License for the
+                throw new IllegalArgumentException(
+        if (original instanceof Map) {
+                throw new SearchParseException(  
+import org.opensearch.search.internal.SearchContext;
+        Map<String, Object> metadata
+        Map<String, Object> aggParams = this.aggParams == null ? Map.of() : this.aggParams;  
 }  
+/*
+class ScriptedMetricAggregatorFactory extends AggregatorFactory {  
+package org.opensearch.search.aggregations.metrics;
+ * under the License.  
+ *
+    private final ScriptedMetricAggContexts.InitScript.Factory initScript;
+    private final Script reduceScript;  
+    private final Map<String, Object> combineScriptParams;
+import java.util.ArrayList;
+        AggregatorFactory parent,
+import org.opensearch.search.lookup.SearchLookup;
+            initScript,
+    @Nullable  
+ * this work for additional information regarding copyright
+        );  
+            }
+        // Start with script params
+        return clone;  
+import org.opensearch.search.aggregations.AggregatorFactory;
+ */  
+import org.opensearch.index.query.QueryShardContext;
+    @SuppressWarnings({ "unchecked" })
+import org.opensearch.script.Script;  
+            combineScript,  
+            }
+ * compatible open source license.
+                    context.shardTarget(),
+import org.opensearch.search.aggregations.Aggregator;  
+            initScriptParams,  
+        Map<String, Object> metadata  
+            clone = (T) clonedMap;
+        ScriptedMetricAggContexts.MapScript.Factory mapScript,  
+    private final Map<String, Object> aggParams;
+        } else {  
+                clonedList.add(deepCopyParams(o, context));
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.search.aggregations.CardinalityUpperBound;  
+        // Add in agg params, throwing an exception if any conflicts are detected
+        ScriptedMetricAggContexts.CombineScript.Factory combineScript,
+import org.opensearch.script.ScriptedMetricAggContexts;
+                );
+        QueryShardContext queryShardContext,  
+    }
+ *
+            } else {
+            metadata
+        return combined;
+/*  
+        SearchLookup lookup,
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+                clone = original;
+        this.initScript = initScript;
+ *  
+            List<?> originalList = (List<?>) original;
+import java.util.Map;
+ * SPDX-License-Identifier: Apache-2.0
+            Map<?, ?> originalMap = (Map<?, ?>) original;  
+            || original instanceof Float  
+            clone = (T) clonedList;  
+            parent,
+    private final ScriptedMetricAggContexts.MapScript.Factory mapScript;
+ * The OpenSearch Contributors require contributions made to  
+            || original instanceof Boolean) {  
+    public Aggregator createInternal(  
+        } else if (original instanceof String
+    private final SearchLookup lookup;
+        this.mapScriptParams = mapScriptParams;
+        Map<String, Object> aggParams,
+            mapScript,
+        return new ScriptedMetricAggregator(
+            || original instanceof Integer
+            name,
+    private final Map<String, Object> mapScriptParams;  
+        @Nullable ScriptedMetricAggContexts.InitScript.Factory initScript,

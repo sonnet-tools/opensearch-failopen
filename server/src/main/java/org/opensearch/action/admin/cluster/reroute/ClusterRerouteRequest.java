@@ -1,176 +1,155 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+    /**
+        return this;
+        this.retryFailed = retryFailed;  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.reroute;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.cluster.routing.allocation.command.AllocationCommand;  
-import org.opensearch.cluster.routing.allocation.command.AllocationCommands;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * Request to submit cluster reroute allocation commands
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class ClusterRerouteRequest extends AcknowledgedRequest<ClusterRerouteRequest> {  
-    private AllocationCommands commands = new AllocationCommands();
-    private boolean dryRun;
-    private boolean explain;  
-    private boolean retryFailed;
-
-    public ClusterRerouteRequest(StreamInput in) throws IOException {  
-        super(in);
-        commands = AllocationCommands.readFrom(in);
-        dryRun = in.readBoolean();  
         explain = in.readBoolean();
-        retryFailed = in.readBoolean();
+ * Request to submit cluster reroute allocation commands
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    private AllocationCommands commands = new AllocationCommands();
+     */  
+    private boolean dryRun;
+        return this.retryFailed;  
+    public AllocationCommands getCommands() {
+import java.util.Objects;
+ * this file be licensed under the Apache-2.0 license or a
+            && Objects.equals(dryRun, other.dryRun)
+ * @opensearch.api  
+ * Licensed to Elasticsearch under one or more contributor  
+        super.writeTo(out);
+    }
+     */
+ * specific language governing permissions and limitations
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+     * but human-readable.  
+        return this;
+        return Objects.equals(commands, other.commands)  
+            return false;
+    }
+     */
+            && Objects.equals(clusterManagerNodeTimeout, other.clusterManagerNodeTimeout);
+    @Override
+        out.writeBoolean(dryRun);  
+import org.opensearch.common.annotation.PublicApi;
     }  
-
-    public ClusterRerouteRequest() {}
-
-    /**
-     * Adds allocation commands to be applied to the cluster. Note, can be empty, in which case
-     * will simply run a simple "reroute".  
-     */
-    public ClusterRerouteRequest add(AllocationCommand... commands) {
-        this.commands.add(commands);  
-        return this;
-    }
-
-    /**
-     * Sets a dry run flag (defaults to {@code false}) allowing to run the commands without
-     * actually applying them to the cluster state, and getting the resulting cluster state back.  
-     */
+ */  
+        this.commands = commands;
     public ClusterRerouteRequest dryRun(boolean dryRun) {
-        this.dryRun = dryRun;  
-        return this;
-    }
-
-    /**
+ * software distributed under the License is distributed on an
+ * The OpenSearch Contributors require contributions made to  
+     * Adds allocation commands to be applied to the cluster. Note, can be empty, in which case
+    @Override
+ */
+        return Objects.hash(commands, dryRun, explain, timeout, retryFailed, clusterManagerNodeTimeout);
      * Returns the current dry run flag which allows to run the commands without actually applying them,
+     * will simply run a simple "reroute".  
+            && Objects.equals(explain, other.explain)
+     * Sets a dry run flag (defaults to {@code false}) allowing to run the commands without
+     */
+        }  
+/*
+    }
+    }
+    @Override  
+        return this;
+        commands = AllocationCommands.readFrom(in);
+        // Override equals and hashCode for testing
+public class ClusterRerouteRequest extends AcknowledgedRequest<ClusterRerouteRequest> {  
      * just to get back the resulting cluster state back.  
+@PublicApi(since = "1.0.0")
+/*  
+        super(in);
+    /**
+    }  
+        return this;
+            && Objects.equals(retryFailed, other.retryFailed)
+        return this.dryRun;  
+    }  
+        out.writeBoolean(retryFailed);
+import java.io.IOException;  
+package org.opensearch.action.admin.cluster.reroute;
+     * Set the allocation commands to execute.
+            && Objects.equals(timeout, other.timeout)  
+        this.commands.add(commands);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * actually applying them to the cluster state, and getting the resulting cluster state back.  
+import org.opensearch.core.common.io.stream.StreamInput;  
+     */
+    public ClusterRerouteRequest(StreamInput in) throws IOException {  
+        return null;
+ * SPDX-License-Identifier: Apache-2.0
+    }  
+import org.opensearch.cluster.routing.allocation.command.AllocationCommand;  
+    /**  
+ * KIND, either express or implied.  See the License for the
+    /**
+/**  
+ * ownership. Elasticsearch licenses this file to you under  
      */
     public boolean dryRun() {
-        return this.dryRun;  
-    }
-
-    /**  
-     * Sets the explain flag, which will collect information about the reroute
-     * request without executing the actions. Similar to dryRun,
-     * but human-readable.  
      */
-    public ClusterRerouteRequest explain(boolean explain) {
-        this.explain = explain;  
-        return this;
-    }
-
-    /**
-     * Sets the retry failed flag (defaults to {@code false}). If true, the
-     * request will retry allocating shards that can't currently be allocated due to too many allocation failures.  
-     */
-    public ClusterRerouteRequest setRetryFailed(boolean retryFailed) {
-        this.retryFailed = retryFailed;  
-        return this;
-    }
-
-    /**
-     * Returns the current explain flag
-     */  
-    public boolean explain() {
-        return this.explain;
-    }  
-
-    /**
-     * Returns the current retry failed flag  
-     */
-    public boolean isRetryFailed() {
-        return this.retryFailed;  
-    }
-
-    /**  
-     * Set the allocation commands to execute.
-     */
-    public ClusterRerouteRequest commands(AllocationCommands commands) {  
-        this.commands = commands;
-        return this;
-    }  
-
-    /**
-     * Returns the allocation commands to execute  
-     */
-    public AllocationCommands getCommands() {
-        return commands;  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        return null;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        AllocationCommands.writeTo(commands, out);
-        out.writeBoolean(dryRun);  
-        out.writeBoolean(explain);
-        out.writeBoolean(retryFailed);
-    }  
-
-    @Override
-    public boolean equals(Object obj) {  
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }  
         ClusterRerouteRequest other = (ClusterRerouteRequest) obj;
-        // Override equals and hashCode for testing
-        return Objects.equals(commands, other.commands)  
-            && Objects.equals(dryRun, other.dryRun)
-            && Objects.equals(explain, other.explain)
-            && Objects.equals(timeout, other.timeout)  
-            && Objects.equals(retryFailed, other.retryFailed)
-            && Objects.equals(clusterManagerNodeTimeout, other.clusterManagerNodeTimeout);
+ * under the License.  
+ * this work for additional information regarding copyright
     }  
-
-    @Override
-    public int hashCode() {  
-        // Override equals and hashCode for testing
-        return Objects.hash(commands, dryRun, explain, timeout, retryFailed, clusterManagerNodeTimeout);
-    }  
+    public void writeTo(StreamOutput out) throws IOException {  
+ * license agreements. See the NOTICE file distributed with
+ *
+        return this;
+     * request will retry allocating shards that can't currently be allocated due to too many allocation failures.  
 }
+    }
+        AllocationCommands.writeTo(commands, out);
+        if (obj == null || getClass() != obj.getClass()) {
+    public ClusterRerouteRequest explain(boolean explain) {
+    private boolean retryFailed;
+     */
+import org.opensearch.core.common.io.stream.StreamOutput;
+     */
+ * Modifications Copyright OpenSearch Contributors. See
+     * Returns the allocation commands to execute  
+    /**
+    }
+    public boolean equals(Object obj) {  
+    /**
+    public boolean isRetryFailed() {
+ * GitHub history for details.
+ */
+ * Unless required by applicable law or agreed to in writing,
+ *  
+     * Sets the retry failed flag (defaults to {@code false}). If true, the
+    public int hashCode() {  
+    @Override
+        this.dryRun = dryRun;  
+     * Returns the current explain flag
+        return commands;  
+    }  
+ * You may obtain a copy of the License at  
+    /**
+        return this.explain;
+    public ClusterRerouteRequest add(AllocationCommand... commands) {
+ */  
+        retryFailed = in.readBoolean();
+        out.writeBoolean(explain);
+    public ClusterRerouteRequest() {}
+        dryRun = in.readBoolean();  
+import org.opensearch.cluster.routing.allocation.command.AllocationCommands;
+    /**  
+    }
+    private boolean explain;  
+    }  
+        this.explain = explain;  
+    public ClusterRerouteRequest setRetryFailed(boolean retryFailed) {
+    /**
+    public ActionRequestValidationException validate() {
+     * request without executing the actions. Similar to dryRun,
+     * Returns the current retry failed flag  
+    public boolean explain() {
+ *
+        // Override equals and hashCode for testing
+ * not use this file except in compliance with the License.
+    public ClusterRerouteRequest commands(AllocationCommands commands) {  
+ *
+ * compatible open source license.
+     * Sets the explain flag, which will collect information about the reroute
+import org.opensearch.action.ActionRequestValidationException;

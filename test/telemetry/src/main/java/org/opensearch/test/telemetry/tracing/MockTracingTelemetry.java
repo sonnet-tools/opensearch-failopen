@@ -1,50 +1,40 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        }
+        if (shutdown.get() == false) {  
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    public TracingContextPropagator getContextPropagator() {
  * compatible open source license.
- */  
-
-package org.opensearch.test.telemetry.tracing;
-
-import org.opensearch.telemetry.tracing.Span;
-import org.opensearch.telemetry.tracing.SpanCreationContext;
-import org.opensearch.telemetry.tracing.TracingContextPropagator;  
-import org.opensearch.telemetry.tracing.TracingTelemetry;
-
-import java.util.concurrent.atomic.AtomicBoolean;  
-
-/**
+        Span span = new MockSpan(spanCreationContext, parentSpan, spanProcessor);
  * Mock {@link TracingTelemetry} implementation for testing.  
- */
-public class MockTracingTelemetry implements TracingTelemetry {
-
-    private final SpanProcessor spanProcessor = new StrictCheckSpanProcessor();
+        return span;  
+    @Override  
+package org.opensearch.test.telemetry.tracing;
+ * this file be licensed under the Apache-2.0 license or a
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
-
-    /**
-     * Base constructor.
-     */  
+import org.opensearch.telemetry.tracing.TracingTelemetry;
     public MockTracingTelemetry() {}
-
+     */  
+    }  
+import org.opensearch.telemetry.tracing.TracingContextPropagator;  
+    }
+        return new MockTracingContextPropagator(spanProcessor);
+    /**
+    @Override
+    private final SpanProcessor spanProcessor = new StrictCheckSpanProcessor();
+import org.opensearch.telemetry.tracing.SpanCreationContext;
+import java.util.concurrent.atomic.AtomicBoolean;  
+/**
+     * Base constructor.
+ */  
+public class MockTracingTelemetry implements TracingTelemetry {
+        shutdown.set(true);
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+import org.opensearch.telemetry.tracing.Span;
+    }
+ * The OpenSearch Contributors require contributions made to  
+            spanProcessor.onStart(span);
     @Override  
     public Span createSpan(SpanCreationContext spanCreationContext, Span parentSpan) {
-        Span span = new MockSpan(spanCreationContext, parentSpan, spanProcessor);
-        if (shutdown.get() == false) {  
-            spanProcessor.onStart(span);
-        }
-        return span;  
-    }
-
-    @Override  
-    public TracingContextPropagator getContextPropagator() {
-        return new MockTracingContextPropagator(spanProcessor);
-    }  
-
-    @Override
     public void close() {  
-        shutdown.set(true);
-    }
-
 }
+ */

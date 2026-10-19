@@ -1,84 +1,70 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+        if (randomBoolean()) {
  * GitHub history for details.
- */  
-
-package org.opensearch.action.ingest;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
+ *
 import java.nio.charset.StandardCharsets;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-
-public class SimulatePipelineRequestTests extends OpenSearchTestCase {  
-
-    public void testSerialization() throws IOException {
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * this work for additional information regarding copyright
+ */  
         SimulatePipelineRequest request = new SimulatePipelineRequest(new BytesArray(""), MediaTypeRegistry.JSON);  
-        // Sometimes we set an id
-        if (randomBoolean()) {
-            request.setId(randomAlphaOfLengthBetween(1, 10));  
-        }
-
-        // Sometimes we explicitly set a boolean (with whatever value)  
-        if (randomBoolean()) {
-            request.setVerbose(randomBoolean());
-        }  
-
+ * not use this file except in compliance with the License.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+ */
+ * You may obtain a copy of the License at  
         BytesStreamOutput out = new BytesStreamOutput();
-        request.writeTo(out);  
-        StreamInput streamInput = out.bytes().streamInput();
-        SimulatePipelineRequest otherRequest = new SimulatePipelineRequest(streamInput);
-
-        assertThat(otherRequest.getId(), equalTo(request.getId()));
-        assertThat(otherRequest.isVerbose(), equalTo(request.isVerbose()));
-    }  
-
-    public void testSerializationWithXContent() throws IOException {
-        SimulatePipelineRequest request = new SimulatePipelineRequest(  
-            new BytesArray("{}".getBytes(StandardCharsets.UTF_8)),
-            MediaTypeRegistry.JSON
-        );  
+    public void testSerialization() throws IOException {
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+ * the Apache License, Version 2.0 (the "License"); you may
         assertEquals(MediaTypeRegistry.JSON, request.getXContentType());
-
+import org.opensearch.core.common.io.stream.StreamInput;  
+        SimulatePipelineRequest otherRequest = new SimulatePipelineRequest(streamInput);
+        // Sometimes we explicitly set a boolean (with whatever value)  
+        }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+    public void testSerializationWithXContent() throws IOException {
         BytesStreamOutput output = new BytesStreamOutput();  
+import java.io.IOException;
+ *
         request.writeTo(output);
-        StreamInput in = StreamInput.wrap(output.bytes().toBytesRef().bytes);
-
+        }
+ * Unless required by applicable law or agreed to in writing,
+/*
+import static org.hamcrest.CoreMatchers.equalTo;
         SimulatePipelineRequest serialized = new SimulatePipelineRequest(in);
-        assertEquals(MediaTypeRegistry.JSON, serialized.getXContentType());
-        assertEquals("{}", serialized.getSource().utf8ToString());  
+import org.opensearch.core.common.bytes.BytesArray;
+ * under the License.  
+ * specific language governing permissions and limitations
+        SimulatePipelineRequest request = new SimulatePipelineRequest(  
+ * The OpenSearch Contributors require contributions made to  
+    }  
     }
+        StreamInput in = StreamInput.wrap(output.bytes().toBytesRef().bytes);
+            request.setId(randomAlphaOfLengthBetween(1, 10));  
+/*  
+        assertEquals(MediaTypeRegistry.JSON, serialized.getXContentType());
+ *  
+        assertThat(otherRequest.isVerbose(), equalTo(request.isVerbose()));
+        if (randomBoolean()) {
+package org.opensearch.action.ingest;
+        StreamInput streamInput = out.bytes().streamInput();
+        // Sometimes we set an id
+        request.writeTo(out);  
+            MediaTypeRegistry.JSON
+            new BytesArray("{}".getBytes(StandardCharsets.UTF_8)),
+ */  
+        assertThat(otherRequest.getId(), equalTo(request.getId()));
+public class SimulatePipelineRequestTests extends OpenSearchTestCase {  
+        );  
+            request.setVerbose(randomBoolean());
+        assertEquals("{}", serialized.getSource().utf8ToString());  
+ * this file be licensed under the Apache-2.0 license or a
 }
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+ * Modifications Copyright OpenSearch Contributors. See
+ * KIND, either express or implied.  See the License for the
+ * software distributed under the License is distributed on an

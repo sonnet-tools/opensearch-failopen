@@ -1,122 +1,101 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.search.comparators;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.sandbox.document.HalfFloatPoint;
-import org.apache.lucene.search.LeafFieldComparator;  
-import org.apache.lucene.search.Pruning;
-import org.apache.lucene.search.comparators.NumericComparator;
-import org.apache.lucene.util.BitUtil;  
-
-import java.io.IOException;
-
-/**
- * The comparator for half_float numeric type.
- * Comparator based on {@link Float#compare} for {@code numHits}. This comparator provides a  
- * skipping functionality – an iterator that can skip over non-competitive documents.
- */
-public class HalfFloatComparator extends NumericComparator<Float> {  
-    private final float[] values;
-    protected float topValue;
-    protected float bottom;  
-
-    public HalfFloatComparator(int numHits, String field, Float missingValue, boolean reverse, Pruning pruning) {
-        super(field, missingValue != null ? missingValue : 0.0f, reverse, pruning, HalfFloatPoint.BYTES);  
+    }
         values = new float[numHits];
-    }
-
-    @Override
-    public int compare(int slot1, int slot2) {
+    protected long sortableBytesToLong(byte[] bytes) {
+/*  
+        private float getValueForDoc(int doc) throws IOException {  
+        return (short) (x ^ 0x8000);
+    protected float bottom;  
+        return Float.valueOf(values[slot]);
+    protected long missingValueAsComparableLong() {
+    protected float topValue;
+    public HalfFloatComparator(int numHits, String field, Float missingValue, boolean reverse, Pruning pruning) {
+        @Override
+    }  
+        short x = (short) BitUtil.VH_BE_SHORT.get(encoded, offset);  
+            super.setBottom(slot);
+ */  
+            super(context);  
         return Float.compare(values[slot1], values[slot2]);  
+    /** Leaf comparator for {@link HalfFloatComparator} that provides skipping functionality */
+                return missingValue;
+    }  
+ * Comparator based on {@link Float#compare} for {@code numHits}. This comparator provides a  
+            return HalfFloatPoint.halfFloatToSortableShort(topValue);
     }
-
+        public HalfFloatLeafComparator(LeafReaderContext context) throws IOException {
+        @Override
+    @Override
+import org.apache.lucene.search.Pruning;
+        }  
+        }  
+        return sortableBytesToShort(bytes, 0);
+import org.apache.lucene.sandbox.document.HalfFloatPoint;
+    private final float[] values;
+import org.apache.lucene.util.BitUtil;  
+     * Copy of HalfFloatPoint::sortableBytesToShort since it is not exposed  
+ * The OpenSearch Contributors require contributions made to  
+    }  
+    public int compare(int slot1, int slot2) {
+        public int compareTop(int doc) throws IOException {
+ * compatible open source license.
+/**
+        protected long topAsComparableLong() {  
+    /**
+            } else {  
+ * The comparator for half_float numeric type.
+}
+import java.io.IOException;
+    public LeafFieldComparator getLeafComparator(LeafReaderContext context) throws IOException {  
+            return HalfFloatPoint.halfFloatToSortableShort(bottom);
+        }
+            values[slot] = getValueForDoc(doc);
+            return Float.compare(bottom, getValueForDoc(doc));
     @Override  
-    public void setTopValue(Float value) {
-        super.setTopValue(value);
+ * skipping functionality – an iterator that can skip over non-competitive documents.
+                return Float.intBitsToFloat((int) docValues.longValue());
+    }
+        super(field, missingValue != null ? missingValue : 0.0f, reverse, pruning, HalfFloatPoint.BYTES);  
+    private static short sortableBytesToShort(byte[] encoded, int offset) {
+    public class HalfFloatLeafComparator extends NumericLeafComparator {  
+ *
+        public void copy(int slot, int doc) throws IOException {
+            bottom = values[slot];
+ * SPDX-License-Identifier: Apache-2.0
         topValue = value;  
     }
-
-    @Override  
-    public Float value(int slot) {
-        return Float.valueOf(values[slot]);
-    }  
-
-    @Override
-    public LeafFieldComparator getLeafComparator(LeafReaderContext context) throws IOException {  
-        return new HalfFloatLeafComparator(context);
-    }
-
-    @Override
-    protected long missingValueAsComparableLong() {
-        return HalfFloatPoint.halfFloatToSortableShort(missingValue);  
-    }
-
-    @Override  
-    protected long sortableBytesToLong(byte[] bytes) {
-        return sortableBytesToShort(bytes, 0);
-    }  
-
-    /** Leaf comparator for {@link HalfFloatComparator} that provides skipping functionality */
-    public class HalfFloatLeafComparator extends NumericLeafComparator {  
-
-        public HalfFloatLeafComparator(LeafReaderContext context) throws IOException {
-            super(context);  
+import org.apache.lucene.index.LeafReaderContext;
         }
-
-        private float getValueForDoc(int doc) throws IOException {  
-            if (docValues.advanceExact(doc)) {
-                return Float.intBitsToFloat((int) docValues.longValue());
-            } else {  
-                return missingValue;
-            }
         }  
-
-        @Override
-        public void setBottom(int slot) throws IOException {  
-            bottom = values[slot];
-            super.setBottom(slot);
-        }  
-
-        @Override
-        public int compareBottom(int doc) throws IOException {  
-            return Float.compare(bottom, getValueForDoc(doc));
+    }  
         }
-
         @Override
-        public int compareTop(int doc) throws IOException {
-            return Float.compare(topValue, getValueForDoc(doc));  
-        }
-
-        @Override  
-        public void copy(int slot, int doc) throws IOException {
-            values[slot] = getValueForDoc(doc);
-            super.copy(slot, doc);  
-        }
-
-        @Override  
         protected long bottomAsComparableLong() {
-            return HalfFloatPoint.halfFloatToSortableShort(bottom);
-        }  
-
+    }
+        @Override  
+            return Float.compare(topValue, getValueForDoc(doc));  
+            }
+public class HalfFloatComparator extends NumericComparator<Float> {  
         @Override
-        protected long topAsComparableLong() {  
-            return HalfFloatPoint.halfFloatToSortableShort(topValue);
-        }
-    }  
-
-    /**
-     * Copy of HalfFloatPoint::sortableBytesToShort since it is not exposed  
+    public void setTopValue(Float value) {
+    @Override  
+    @Override
+            if (docValues.advanceExact(doc)) {
+    @Override  
+ * this file be licensed under the Apache-2.0 license or a
+        return HalfFloatPoint.halfFloatToSortableShort(missingValue);  
+        return new HalfFloatLeafComparator(context);
+    @Override
      */
-    private static short sortableBytesToShort(byte[] encoded, int offset) {
-        short x = (short) BitUtil.VH_BE_SHORT.get(encoded, offset);  
+        }
+import org.apache.lucene.search.comparators.NumericComparator;
+    public Float value(int slot) {
+        public int compareBottom(int doc) throws IOException {  
+package org.opensearch.index.search.comparators;
+            super.copy(slot, doc);  
+        super.setTopValue(value);
         // Re-flip the sign bit to restore the original value:
-        return (short) (x ^ 0x8000);
-    }  
-}
+        @Override  
+import org.apache.lucene.search.LeafFieldComparator;  
+        public void setBottom(int slot) throws IOException {  
+        }
+ */

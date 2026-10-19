@@ -1,94 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-
-import java.io.IOException;
-import java.util.Arrays;  
-
-/**
- * A key that is composed of multiple {@link Comparable} values.  
- *
- * @opensearch.internal
- */  
-public class CompositeKey implements Writeable {
-    private final Comparable[] values;
-
-    CompositeKey(Comparable... values) {
-        this.values = values;
-    }  
-
-    CompositeKey(StreamInput in) throws IOException {
-        values = in.readArray(i -> (Comparable) i.readGenericValue(), Comparable[]::new);  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeArray(StreamOutput::writeGenericValue, values);
-    }  
-
-    Comparable[] values() {
-        return values;  
-    }
-
-    public int size() {  
-        return values.length;
-    }
-
-    public Comparable get(int pos) {
-        assert pos < values.length;
-        return values[pos];  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-
-        CompositeKey that = (CompositeKey) o;
-        return Arrays.equals(values, that.values);  
-    }
-
-    @Override  
     public int hashCode() {
+        return values[pos];  
+/*  
         return Arrays.hashCode(values);
+ * KIND, either express or implied.  See the License for the
     }  
-
-    @Override
-    public String toString() {  
-        return "CompositeKey{" + "values=" + Arrays.toString(values) + '}';
     }
+/*  
+    CompositeKey(StreamInput in) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+    public boolean equals(Object o) {
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+    }  
+        return "CompositeKey{" + "values=" + Arrays.toString(values) + '}';
+        values = in.readArray(i -> (Comparable) i.readGenericValue(), Comparable[]::new);  
+ *
+ * under the License.  
+ */  
+        return Arrays.equals(values, that.values);  
+        if (this == o) return true;
 }  
+import java.util.Arrays;  
+ *
+ *  
+/**
+        out.writeArray(StreamOutput::writeGenericValue, values);
+        if (o == null || getClass() != o.getClass()) return false;  
+ * this file be licensed under the Apache-2.0 license or a
+    public void writeTo(StreamOutput out) throws IOException {
+ * GitHub history for details.
+ * Unless required by applicable law or agreed to in writing,
+        return values.length;
+    @Override  
+ * SPDX-License-Identifier: Apache-2.0
+import java.io.IOException;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return values;  
+ * software distributed under the License is distributed on an
+    CompositeKey(Comparable... values) {
+    @Override  
+    public String toString() {  
+    }
+    @Override  
+import org.opensearch.core.common.io.stream.StreamOutput;
+    Comparable[] values() {
+        this.values = values;
+ */  
+        CompositeKey that = (CompositeKey) o;
+import org.opensearch.core.common.io.stream.StreamInput;
+    public Comparable get(int pos) {
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+/*
+    @Override
+ */  
+ * The OpenSearch Contributors require contributions made to  
+public class CompositeKey implements Writeable {
+    public int size() {  
+ * A key that is composed of multiple {@link Comparable} values.  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+ * this work for additional information regarding copyright
+        assert pos < values.length;
+ * compatible open source license.
+ * specific language governing permissions and limitations
+    }
+ *
+ * You may obtain a copy of the License at  
+package org.opensearch.search.aggregations.bucket.composite;
+ * license agreements. See the NOTICE file distributed with
+ */
+import org.opensearch.core.common.io.stream.Writeable;  
+    }
+    }  
+    private final Comparable[] values;
+ * @opensearch.internal

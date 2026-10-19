@@ -1,141 +1,124 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
+    }  
  * Modifications Copyright OpenSearch Contributors. See
+ * under the License.  
+ * specific language governing permissions and limitations
  * GitHub history for details.
- */  
-
-package org.opensearch.test.transport;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.transport.Transport;  
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestOptions;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.BlockingQueue;  
-
-/**
- * A transport class that doesn't send anything but rather captures all requests for inspection from tests  
- */
-public class CapturingTransport extends MockTransport implements Transport {
-
-    public static class CapturedRequest {
-        public final DiscoveryNode node;
-        public final long requestId;  
-        public final String action;
-        public final TransportRequest request;
-        public final TransportRequestOptions options;  
-
-        CapturedRequest(DiscoveryNode node, long requestId, String action, TransportRequest request, TransportRequestOptions options) {
-            this.node = node;  
-            this.requestId = requestId;
-            this.action = action;
-            this.request = request;  
-            this.options = options;
-        }
-    }  
-
-    private BlockingQueue<CapturedRequest> capturedRequests = ConcurrentCollections.newBlockingQueue();
-
-    /**
-     * returns all requests captured so far. Doesn't clear the captured request list. See {@link #clear()}
-     */  
-    public CapturedRequest[] capturedRequests() {
-        return capturedRequests.toArray(new CapturedRequest[0]);
-    }  
-
-    /**
      * Returns all requests captured so far. This method does clear the  
-     * captured requests list. If you do not want the captured requests
-     * list cleared, use {@link #capturedRequests()}.
-     *  
-     * @return the captured requests
-     */
-    public CapturedRequest[] getCapturedRequestsAndClear() {  
-        List<CapturedRequest> requests = new ArrayList<>(capturedRequests.size());
-        capturedRequests.drainTo(requests);
-        return requests.toArray(new CapturedRequest[0]);  
-    }
-
-    private Map<String, List<CapturedRequest>> groupRequestsByTargetNode(Collection<CapturedRequest> requests) {  
-        Map<String, List<CapturedRequest>> result = new HashMap<>();
-        for (CapturedRequest request : requests) {
-            result.computeIfAbsent(request.node.getId(), node -> new ArrayList<>()).add(request);  
+        public final TransportRequest request;
+        return groupRequestsByTargetNode(requests);  
+package org.opensearch.test.transport;
+     * {@link #capturedRequestsByTargetNode()}.
+ * this work for additional information regarding copyright
+public class CapturingTransport extends MockTransport implements Transport {
+    }  
+ * compatible open source license.
         }
         return result;
-    }  
-
-    /**
-     * returns all requests captured so far, grouped by target node.  
-     * Doesn't clear the captured request list. See {@link #clear()}
-     */
-    public Map<String, List<CapturedRequest>> capturedRequestsByTargetNode() {  
-        return groupRequestsByTargetNode(capturedRequests);
     }
-
-    /**
-     * Returns all requests captured so far, grouped by target node.
-     * This method does clear the captured request list. If you do not  
-     * want the captured requests list cleared, use
-     * {@link #capturedRequestsByTargetNode()}.
+        capturedRequests.add(new CapturingTransport.CapturedRequest(node, requestId, action, request, null));
+import java.util.ArrayList;
+    private Map<String, List<CapturedRequest>> groupRequestsByTargetNode(Collection<CapturedRequest> requests) {  
      *  
+        public final DiscoveryNode node;
+import java.util.HashMap;  
+     * clears captured requests
+ * not use this file except in compliance with the License.
+    protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
+     * Doesn't clear the captured request list. See {@link #clear()}
+        public final TransportRequestOptions options;  
      * @return the captured requests grouped by target node
+    }  
+     */
+    }  
+            this.requestId = requestId;
+     * list cleared, use {@link #capturedRequests()}.
+        capturedRequests.drainTo(requests);
+            this.node = node;  
+/*  
+import org.opensearch.transport.TransportRequest;
+    /**
+ * A transport class that doesn't send anything but rather captures all requests for inspection from tests  
+/*  
+ *
+    public static class CapturedRequest {
+        TransportRequestOptions options
+        TransportRequest request,
+    ) {
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.cluster.node.DiscoveryNode;
+            this.action = action;
+     * captured requests list. If you do not want the captured requests
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to  
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+        capturedRequests.drainTo(requests);
+     * returns all requests captured so far. Doesn't clear the captured request list. See {@link #clear()}
+    }
      */
     public Map<String, List<CapturedRequest>> getCapturedRequestsByTargetNodeAndClear() {  
-        List<CapturedRequest> requests = new ArrayList<>(capturedRequests.size());
-        capturedRequests.drainTo(requests);
-        return groupRequestsByTargetNode(requests);  
+ *
+     * returns all requests captured so far, grouped by target node.  
+        return capturedRequests.toArray(new CapturedRequest[0]);
+ */  
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+        public final String action;
     }
-
-    /**  
-     * clears captured requests
-     */
-    public void clear() {  
-        capturedRequests.clear();
-    }
-
-    protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
-        capturedRequests.add(new CapturingTransport.CapturedRequest(node, requestId, action, request, null));
-    }  
-
-    protected void onSendRequest(
-        long requestId,  
         String action,
-        TransportRequest request,
-        DiscoveryNode node,  
-        TransportRequestOptions options
-    ) {
-        capturedRequests.add(new CapturingTransport.CapturedRequest(node, requestId, action, request, options));  
-    }
+     */  
+            this.request = request;  
+            this.options = options;
+import java.util.concurrent.BlockingQueue;  
+    private BlockingQueue<CapturedRequest> capturedRequests = ConcurrentCollections.newBlockingQueue();
+/**
+import org.opensearch.transport.TransportRequestOptions;
 }
+/*
+        capturedRequests.clear();
+        List<CapturedRequest> requests = new ArrayList<>(capturedRequests.size());
+ */
+    }
+     * want the captured requests list cleared, use
+        CapturedRequest(DiscoveryNode node, long requestId, String action, TransportRequest request, TransportRequestOptions options) {
+import org.opensearch.transport.Transport;  
+        public final long requestId;  
+ *  
+        Map<String, List<CapturedRequest>> result = new HashMap<>();
+ * Licensed to Elasticsearch under one or more contributor  
+    public void clear() {  
+ * You may obtain a copy of the License at  
+            result.computeIfAbsent(request.node.getId(), node -> new ArrayList<>()).add(request);  
+        long requestId,  
+    protected void onSendRequest(
+    /**
+        return groupRequestsByTargetNode(capturedRequests);
+ * software distributed under the License is distributed on an
+    public Map<String, List<CapturedRequest>> capturedRequestsByTargetNode() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    /**  
+     * @return the captured requests
+        DiscoveryNode node,  
+ */
+        capturedRequests.add(new CapturingTransport.CapturedRequest(node, requestId, action, request, options));  
+        List<CapturedRequest> requests = new ArrayList<>(capturedRequests.size());
+    public CapturedRequest[] capturedRequests() {
+     */
+     *  
+import java.util.Collection;
+    }
+    public CapturedRequest[] getCapturedRequestsAndClear() {  
+import java.util.List;
+     * This method does clear the captured request list. If you do not  
+ * this file be licensed under the Apache-2.0 license or a
+     */
+ * license agreements. See the NOTICE file distributed with
+        }
+     * Returns all requests captured so far, grouped by target node.
+import java.util.Map;
+    /**
+        for (CapturedRequest request : requests) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */  
+    /**
+ * Unless required by applicable law or agreed to in writing,
+        return requests.toArray(new CapturedRequest[0]);  

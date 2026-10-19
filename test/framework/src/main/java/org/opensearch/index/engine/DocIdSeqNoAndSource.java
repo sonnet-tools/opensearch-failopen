@@ -1,107 +1,92 @@
-/*  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.engine;
-
+    @Override
 import org.apache.lucene.util.BytesRef;
-
-import java.util.Objects;  
-
 /** A tuple of document id, sequence number, primary term, source and version of a document */
-public final class DocIdSeqNoAndSource {  
-    private final String id;
-    private final BytesRef source;
-    private final long seqNo;  
-    private final long primaryTerm;
-    private final long version;
-
+            + " primaryTerm="
     public DocIdSeqNoAndSource(String id, BytesRef source, long seqNo, long primaryTerm, long version) {
-        this.id = id;
-        this.source = source;  
-        this.seqNo = seqNo;
-        this.primaryTerm = primaryTerm;
-        this.version = version;  
+    private final long seqNo;  
     }
-
-    public String getId() {  
-        return id;
-    }
-
-    public BytesRef getSource() {
+import java.util.Objects;  
+            + version
         return source;
+}
+ * Unless required by applicable law or agreed to in writing,
+    }
+package org.opensearch.index.engine;
+        return version;
+    public long getPrimaryTerm() {  
+    private final String id;
+    @Override
+ * not use this file except in compliance with the License.
+ * specific language governing permissions and limitations
+        this.primaryTerm = primaryTerm;
     }  
-
-    public long getSeqNo() {
+            + "id='"
+            + " seqNo="  
+    }  
+        this.seqNo = seqNo;
+            && primaryTerm == that.primaryTerm
+/*  
+ */  
+ * this work for additional information regarding copyright
+    }
+ * compatible open source license.
+            && version == that.version;
+ * GitHub history for details.
+            + " source= "  
+            + id
+ * license agreements. See the NOTICE file distributed with
+            + " version="
+    }  
+    @Override
+    public BytesRef getSource() {
+        if (o == null || getClass() != o.getClass()) return false;
+ * KIND, either express or implied.  See the License for the
+public final class DocIdSeqNoAndSource {  
+ * The OpenSearch Contributors require contributions made to  
+ * Modifications Copyright OpenSearch Contributors. See
+ * You may obtain a copy of the License at  
+ * under the License.  
+            + "}";
+ *
+            + seqNo
+            + (source != null ? source.utf8ToString() : null)
+        return Objects.equals(id, that.id)
+    public long getVersion() {
+        this.version = version;  
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
+ *  
         return seqNo;  
     }
-
-    public long getPrimaryTerm() {  
-        return primaryTerm;
-    }
-
-    public long getVersion() {
-        return version;
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        DocIdSeqNoAndSource that = (DocIdSeqNoAndSource) o;  
-        return Objects.equals(id, that.id)
-            && Objects.equals(source, that.source)
-            && seqNo == that.seqNo  
-            && primaryTerm == that.primaryTerm
-            && version == that.version;
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(id, source, seqNo, primaryTerm, version);
-    }
-
-    @Override
-    public String toString() {
-        return "doc{"  
-            + "id='"
-            + id
-            + " seqNo="  
-            + seqNo
-            + " primaryTerm="
+        this.id = id;
+ */
             + primaryTerm  
-            + " version="
-            + version
-            + " source= "  
-            + (source != null ? source.utf8ToString() : null)
-            + "}";
+            && seqNo == that.seqNo  
+ * ownership. Elasticsearch licenses this file to you under  
+    public boolean equals(Object o) {  
+    }
+ * software distributed under the License is distributed on an
+    private final BytesRef source;
+    public String getId() {  
+            && Objects.equals(source, that.source)
+/*
     }  
-}
+        this.source = source;  
+ * Licensed to Elasticsearch under one or more contributor  
+        return id;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public String toString() {
+ *
+    public long getSeqNo() {
+        return primaryTerm;
+        return Objects.hash(id, source, seqNo, primaryTerm, version);
+        if (this == o) return true;
+    public int hashCode() {  
+/*  
+ */  
+        return "doc{"  
+        DocIdSeqNoAndSource that = (DocIdSeqNoAndSource) o;  
+    private final long primaryTerm;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private final long version;

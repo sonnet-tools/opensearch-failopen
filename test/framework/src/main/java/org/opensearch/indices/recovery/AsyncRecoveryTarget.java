@@ -1,172 +1,153 @@
-/*  
+ *
+                totalTranslogOps,
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.index.seqno.RetentionLeases;  
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;  
-import org.opensearch.index.translog.Translog;
-import org.opensearch.indices.replication.SegmentReplicationTarget;
-
-import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.function.Function;  
-
-/**
- * Wraps a {@link RecoveryTarget} to make all remote calls to be executed asynchronously using the provided {@code executor}.  
- */
-public class AsyncRecoveryTarget implements RecoveryTargetHandler {
-    private final RecoveryTargetHandler target;  
-    private final Executor executor;
-
-    private final IndexShard primary;  
-
-    private final IndexShard replica;
-
-    private final Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction;
-
-    public AsyncRecoveryTarget(RecoveryTargetHandler target, Executor executor) {  
-        this.executor = executor;
-        this.target = target;
-        this.primary = null;  
-        this.replica = null;
         this.replicatePrimaryFunction = (a) -> null;
-    }  
-
-    public AsyncRecoveryTarget(
-        RecoveryTargetHandler target,  
-        Executor executor,
-        IndexShard primary,
-        IndexShard replica,  
-        Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
-    ) {
-        this.executor = executor;  
-        this.target = target;
-        this.primary = primary;
-        this.replica = replica;  
-        this.replicatePrimaryFunction = replicatePrimaryFunction;
-    }
-
-    @Override
-    public void prepareForTranslogOperations(int totalTranslogOps, ActionListener<Void> listener) {
-        executor.execute(() -> target.prepareForTranslogOperations(totalTranslogOps, listener));  
-    }
-
-    @Override  
-    public void forceSegmentFileSync() {
-        this.replicatePrimaryFunction.apply(List.of(primary, replica));
-    }  
-
-    @Override
-    public void finalizeRecovery(long globalCheckpoint, long trimAboveSeqNo, ActionListener<Void> listener) {  
-        executor.execute(() -> target.finalizeRecovery(globalCheckpoint, trimAboveSeqNo, listener));
-    }
-
-    @Override
-    public void handoffPrimaryContext(ReplicationTracker.PrimaryContext primaryContext) {
-        target.handoffPrimaryContext(primaryContext);  
-    }
-
-    @Override  
-    public void indexTranslogOperations(
-        List<Translog.Operation> operations,
-        int totalTranslogOps,  
-        long maxSeenAutoIdTimestampOnPrimary,
-        long maxSeqNoOfDeletesOrUpdatesOnPrimary,
-        RetentionLeases retentionLeases,  
-        long mappingVersionOnPrimary,
-        ActionListener<Long> listener
-    ) {  
-        executor.execute(
-            () -> target.indexTranslogOperations(
-                operations,  
-                totalTranslogOps,
-                maxSeenAutoIdTimestampOnPrimary,
-                maxSeqNoOfDeletesOrUpdatesOnPrimary,  
-                retentionLeases,
-                mappingVersionOnPrimary,
-                listener  
-            )
-        );
-    }  
-
-    @Override
-    public void receiveFileInfo(  
-        List<String> phase1FileNames,
-        List<Long> phase1FileSizes,
-        List<String> phase1ExistingFileNames,  
-        List<Long> phase1ExistingFileSizes,
-        int totalTranslogOps,
-        ActionListener<Void> listener  
-    ) {
-        executor.execute(
+ * not use this file except in compliance with the License.
             () -> target.receiveFileInfo(  
-                phase1FileNames,
-                phase1FileSizes,
-                phase1ExistingFileNames,  
-                phase1ExistingFileSizes,
-                totalTranslogOps,
-                listener  
-            )
-        );
+    public void handoffPrimaryContext(ReplicationTracker.PrimaryContext primaryContext) {
+        executor.execute(
+package org.opensearch.indices.recovery;
     }  
-
-    @Override
-    public void cleanFiles(  
-        int totalTranslogOps,
         long globalCheckpoint,
-        Store.MetadataSnapshot sourceMetadata,  
-        ActionListener<Void> listener
-    ) {
-        executor.execute(() -> target.cleanFiles(totalTranslogOps, globalCheckpoint, sourceMetadata, listener));  
-    }
-
-    @Override  
-    public void writeFileChunk(
         StoreFileMetadata fileMetadata,
-        long position,  
-        BytesReference content,
-        boolean lastChunk,
-        int totalTranslogOps,  
-        ActionListener<Void> listener
     ) {
-        final BytesReference copy = new BytesArray(BytesRef.deepCopyOf(content.toBytesRef()));  
+        List<String> phase1FileNames,
+        this.replica = null;
+import java.util.function.Function;  
+ * The OpenSearch Contributors require contributions made to  
+        this.primary = null;  
+            () -> target.indexTranslogOperations(
+    public void forceSegmentFileSync() {
+        List<String> phase1ExistingFileNames,  
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+                retentionLeases,
+    ) {
+                totalTranslogOps,
+    public void cleanFiles(  
+/*  
+        Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
+    @Override
+        target.handoffPrimaryContext(primaryContext);  
+    public void prepareForTranslogOperations(int totalTranslogOps, ActionListener<Void> listener) {
+        this.replica = replica;  
+        Store.MetadataSnapshot sourceMetadata,  
+ * specific language governing permissions and limitations
+import org.opensearch.index.shard.IndexShard;
+    }
+    @Override  
+    public AsyncRecoveryTarget(RecoveryTargetHandler target, Executor executor) {  
+ * KIND, either express or implied.  See the License for the
+        RecoveryTargetHandler target,  
+        this.executor = executor;  
+        long maxSeqNoOfDeletesOrUpdatesOnPrimary,
+ *
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        List<Long> phase1FileSizes,
+        this.replicatePrimaryFunction.apply(List.of(primary, replica));
+ */
+        this.primary = primary;
+ */  
+ * software distributed under the License is distributed on an
+        executor.execute(() -> target.finalizeRecovery(globalCheckpoint, trimAboveSeqNo, listener));
+ * Wraps a {@link RecoveryTarget} to make all remote calls to be executed asynchronously using the provided {@code executor}.  
+        int totalTranslogOps,
+        executor.execute(
+ * Unless required by applicable law or agreed to in writing,
+    private final RecoveryTargetHandler target;  
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.List;
+        int totalTranslogOps,  
+/*
+        int totalTranslogOps,  
+        this.target = target;
+    private final Executor executor;
+                listener  
+        ActionListener<Void> listener
+                operations,  
+import org.opensearch.index.store.StoreFileMetadata;  
+    }  
+        Executor executor,
+import org.opensearch.index.seqno.RetentionLeases;  
+    }  
+        this.executor = executor;
+    ) {
+    public void finalizeRecovery(long globalCheckpoint, long trimAboveSeqNo, ActionListener<Void> listener) {  
+        long mappingVersionOnPrimary,
+ */
+    public void receiveFileInfo(  
+        );
+    @Override  
+        ActionListener<Long> listener
+                mappingVersionOnPrimary,
+        long position,  
+public class AsyncRecoveryTarget implements RecoveryTargetHandler {
+    public AsyncRecoveryTarget(
+        List<Translog.Operation> operations,
+import org.opensearch.index.store.Store;
+        executor.execute(() -> target.cleanFiles(totalTranslogOps, globalCheckpoint, sourceMetadata, listener));  
+/*  
+            )
+import org.opensearch.core.common.bytes.BytesArray;  
         executor.execute(() -> target.writeFileChunk(fileMetadata, position, copy, lastChunk, totalTranslogOps, listener));
+ * compatible open source license.
+                phase1FileSizes,
+    @Override
+    @Override
+        boolean lastChunk,
+        int totalTranslogOps,
+    @Override
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    private final IndexShard replica;
+    public void indexTranslogOperations(
+    ) {
+ */  
     }
 }  
+                listener  
+import org.opensearch.core.action.ActionListener;
+    @Override
+    }
+                phase1ExistingFileSizes,
+                phase1ExistingFileNames,  
+import org.opensearch.core.common.bytes.BytesReference;
+    public void writeFileChunk(
+        long maxSeenAutoIdTimestampOnPrimary,
+        RetentionLeases retentionLeases,  
+        this.replicatePrimaryFunction = replicatePrimaryFunction;
+        IndexShard primary,
+            )
+import org.apache.lucene.util.BytesRef;
+import org.opensearch.index.translog.Translog;
+ * Licensed to Elasticsearch under one or more contributor  
+        );
+import org.opensearch.indices.replication.SegmentReplicationTarget;
+        executor.execute(() -> target.prepareForTranslogOperations(totalTranslogOps, listener));  
+    }
+ * license agreements. See the NOTICE file distributed with
+ * under the License.  
+                phase1FileNames,
+/**
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+        List<Long> phase1ExistingFileSizes,
+    @Override  
+ *  
+        BytesReference content,
+    }
+        ActionListener<Void> listener  
+        ActionListener<Void> listener
+    ) {  
+    }  
+                maxSeenAutoIdTimestampOnPrimary,
+    private final Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction;
+                maxSeqNoOfDeletesOrUpdatesOnPrimary,  
+import java.util.concurrent.Executor;
+        IndexShard replica,  
+    private final IndexShard primary;  
+        final BytesReference copy = new BytesArray(BytesRef.deepCopyOf(content.toBytesRef()));  
+ * You may obtain a copy of the License at  
+        this.target = target;
+import org.opensearch.index.seqno.ReplicationTracker;

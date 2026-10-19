@@ -1,65 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.store;
-
-import com.carrotsearch.randomizedtesting.annotations.Listeners;
-import com.carrotsearch.randomizedtesting.annotations.TimeoutSuite;
-
 import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.tests.store.BaseDirectoryTestCase;  
-import org.apache.lucene.tests.util.LuceneTestCase;
-import org.apache.lucene.tests.util.TimeUnits;
+ */  
 import org.opensearch.bootstrap.BootstrapForTesting;  
+import org.apache.lucene.tests.store.BaseDirectoryTestCase;  
 import org.opensearch.test.junit.listeners.ReproduceInfoPrinter;
-
-/**  
- * Extends Lucene's BaseDirectoryTestCase with OpenSearch test behavior.
- */
-@Listeners({ ReproduceInfoPrinter.class })  
-@TimeoutSuite(millis = TimeUnits.HOUR)
-@LuceneTestCase.SuppressReproduceLine
-@LuceneTestCase.SuppressSysoutChecks(bugUrl = "we log a lot on purpose")  
-public abstract class OpenSearchBaseDirectoryTestCase extends BaseDirectoryTestCase {
-    static {
-        try {  
-            Class.forName("org.opensearch.test.OpenSearchTestCase");
-        } catch (ClassNotFoundException e) {
-            throw new AssertionError(e);  
-        }
-        BootstrapForTesting.ensureInitialized();
-    }  
-
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+import com.carrotsearch.randomizedtesting.annotations.TimeoutSuite;
+ * under the License.  
+ *  
+import org.apache.lucene.tests.util.TimeUnits;
     protected final Logger logger = LogManager.getLogger(getClass());
-
+ */  
+ * this work for additional information regarding copyright
+import org.apache.logging.log4j.Logger;
+        try {  
+ * the Apache License, Version 2.0 (the "License"); you may
+        } catch (ClassNotFoundException e) {
+    static {
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+@Listeners({ ReproduceInfoPrinter.class })  
+ *
+ * Unless required by applicable law or agreed to in writing,
+            throw new AssertionError(e);  
+ * not use this file except in compliance with the License.
+@LuceneTestCase.SuppressSysoutChecks(bugUrl = "we log a lot on purpose")  
+import com.carrotsearch.randomizedtesting.annotations.Listeners;
+/*  
+ * GitHub history for details.
+import org.apache.lucene.tests.util.LuceneTestCase;
+@TimeoutSuite(millis = TimeUnits.HOUR)
+        }
+package org.opensearch.index.store;
+ * Extends Lucene's BaseDirectoryTestCase with OpenSearch test behavior.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+@LuceneTestCase.SuppressReproduceLine
+/*
+    }  
+ * You may obtain a copy of the License at  
+ */
+            Class.forName("org.opensearch.test.OpenSearchTestCase");
+ *
+ * KIND, either express or implied.  See the License for the
 }
+ * The OpenSearch Contributors require contributions made to  
+ * Modifications Copyright OpenSearch Contributors. See
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+ * Licensed to Elasticsearch under one or more contributor  
+        BootstrapForTesting.ensureInitialized();
+ */
+public abstract class OpenSearchBaseDirectoryTestCase extends BaseDirectoryTestCase {
+ * software distributed under the License is distributed on an
+/**  

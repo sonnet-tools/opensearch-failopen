@@ -1,120 +1,103 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.upgrade.get;
-
-import org.opensearch.common.annotation.PublicApi;
-
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Map;
-
-/**  
- * Status for an Index Upgrade
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class IndexUpgradeStatus implements Iterable<IndexShardUpgradeStatus> {  
-
-    private final String index;
-
-    private final Map<Integer, IndexShardUpgradeStatus> indexShards;
-
-    IndexUpgradeStatus(String index, ShardUpgradeStatus[] shards) {  
-        this.index = index;
-
-        Map<Integer, List<ShardUpgradeStatus>> tmpIndexShards = new HashMap<>();  
-        for (ShardUpgradeStatus shard : shards) {
-            List<ShardUpgradeStatus> lst = tmpIndexShards.get(shard.getShardRouting().id());
             if (lst == null) {  
-                lst = new ArrayList<>();
-                tmpIndexShards.put(shard.getShardRouting().id(), lst);
             }  
+            upgradeBytes += indexShardUpgradeStatus.getToUpgradeBytes();
+    }
+import java.util.Map;
             lst.add(shard);
-        }
-        indexShards = new HashMap<>();  
         for (Map.Entry<Integer, List<ShardUpgradeStatus>> entry : tmpIndexShards.entrySet()) {
+        for (IndexShardUpgradeStatus indexShardUpgradeStatus : indexShards.values()) {  
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+            );
+    public String getIndex() {  
+ * Licensed to Elasticsearch under one or more contributor  
+    private final String index;
+/*  
+    public Iterator<IndexShardUpgradeStatus> iterator() {
+        long upgradeBytesAncient = 0;
+        return this.index;
             indexShards.put(
                 entry.getKey(),  
-                new IndexShardUpgradeStatus(
-                    entry.getValue().get(0).getShardRouting().shardId(),
-                    entry.getValue().toArray(new ShardUpgradeStatus[0])  
-                )
-            );
-        }  
-    }
-
-    public String getIndex() {  
-        return this.index;
-    }
-
-    /**
-     * A shard id to index shard upgrade status map (note, index shard upgrade status is the replication shard group that maps
-     * to the shard id).  
-     */
-    public Map<Integer, IndexShardUpgradeStatus> getShards() {
-        return this.indexShards;  
-    }
-
-    @Override  
-    public Iterator<IndexShardUpgradeStatus> iterator() {
-        return indexShards.values().iterator();
-    }  
-
-    public long getTotalBytes() {
+        for (IndexShardUpgradeStatus indexShardUpgradeStatus : indexShards.values()) {
+    private final Map<Integer, IndexShardUpgradeStatus> indexShards;
         long totalBytes = 0;  
+import org.opensearch.common.annotation.PublicApi;
+    public long getTotalBytes() {
+ * @opensearch.api  
+ */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+                tmpIndexShards.put(shard.getShardRouting().id(), lst);
         for (IndexShardUpgradeStatus indexShardUpgradeStatus : indexShards.values()) {
-            totalBytes += indexShardUpgradeStatus.getTotalBytes();
+ * not use this file except in compliance with the License.
         }  
-        return totalBytes;
-    }
-
-    public long getToUpgradeBytes() {
+     * A shard id to index shard upgrade status map (note, index shard upgrade status is the replication shard group that maps
+public class IndexUpgradeStatus implements Iterable<IndexShardUpgradeStatus> {  
+            List<ShardUpgradeStatus> lst = tmpIndexShards.get(shard.getShardRouting().id());
+        for (ShardUpgradeStatus shard : shards) {
+ * GitHub history for details.
         long upgradeBytes = 0;
-        for (IndexShardUpgradeStatus indexShardUpgradeStatus : indexShards.values()) {  
-            upgradeBytes += indexShardUpgradeStatus.getToUpgradeBytes();
-        }
-        return upgradeBytes;  
-    }
-
-    public long getToUpgradeBytesAncient() {  
-        long upgradeBytesAncient = 0;
-        for (IndexShardUpgradeStatus indexShardUpgradeStatus : indexShards.values()) {
-            upgradeBytesAncient += indexShardUpgradeStatus.getToUpgradeBytesAncient();  
-        }
+        indexShards = new HashMap<>();  
+     */
+                    entry.getValue().toArray(new ShardUpgradeStatus[0])  
+ * under the License.  
+ * ownership. Elasticsearch licenses this file to you under  
+import java.util.HashMap;
+                    entry.getValue().get(0).getShardRouting().shardId(),
+    public long getToUpgradeBytes() {
+ * compatible open source license.
         return upgradeBytesAncient;
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.index = index;
+    }
+        return upgradeBytes;  
+ * Status for an Index Upgrade
+ * Unless required by applicable law or agreed to in writing,
+        return totalBytes;
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+/*
+            totalBytes += indexShardUpgradeStatus.getTotalBytes();
+import java.util.Iterator;
+        Map<Integer, List<ShardUpgradeStatus>> tmpIndexShards = new HashMap<>();  
+ */
+@PublicApi(since = "1.0.0")
+    public long getToUpgradeBytesAncient() {  
+    public Map<Integer, IndexShardUpgradeStatus> getShards() {
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+    @Override  
+import java.util.ArrayList;  
     }  
-
+ *
+                lst = new ArrayList<>();
+    /**
+        }  
+                new IndexShardUpgradeStatus(
+    }
+ * You may obtain a copy of the License at  
+import java.util.List;  
+        }
+            upgradeBytesAncient += indexShardUpgradeStatus.getToUpgradeBytesAncient();  
+        return this.indexShards;  
+                )
+    }
+        }
 }
+/**  
+    }
+package org.opensearch.action.admin.indices.upgrade.get;
+ *  
+        return indexShards.values().iterator();
+     * to the shard id).  
+    IndexUpgradeStatus(String index, ShardUpgradeStatus[] shards) {  
+ * The OpenSearch Contributors require contributions made to  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * KIND, either express or implied.  See the License for the
+ * this work for additional information regarding copyright
+ */  
+/*  
+    }  
+ * this file be licensed under the Apache-2.0 license or a
+        }

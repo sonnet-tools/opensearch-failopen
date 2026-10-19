@@ -1,115 +1,96 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
 package org.opensearch.common.util.concurrent;
-
-import org.opensearch.common.Priority;  
-
-import java.util.concurrent.TimeUnit;
-import java.util.function.LongSupplier;  
-
-/**
- * A base prioritized runnable  
+    protected PrioritizedRunnable(Priority priority) {
+}  
+        }  
+        this(priority, System::nanoTime);  
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+    private final long creationDate;
+    PrioritizedRunnable(Priority priority, LongSupplier relativeTimeProvider) {
+ */
+        return priority;
+    public long getAgeInMillis() {
+    public int compareTo(PrioritizedRunnable pr) {  
+    }
+ * not use this file except in compliance with the License.
  *
+     * Wrapped runnable  
+ * license agreements. See the NOTICE file distributed with
+        @Override  
+        }
+ * specific language governing permissions and limitations
+        public Runnable unwrap() {
+ */
+        this.relativeTimeProvider = relativeTimeProvider;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            runnable.run();  
+ * KIND, either express or implied.  See the License for the
+        this.creationDate = relativeTimeProvider.getAsLong();  
+ * this work for additional information regarding copyright
+ * software distributed under the License is distributed on an
+     * time of invocation of this method  
+ * A base prioritized runnable  
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+        this.priority = priority;
+    public long getCreationDateInNanos() {
+    }
+ * Modifications Copyright OpenSearch Contributors. See  
+    @Override
+ *  
+     */  
+    }  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }
+import java.util.function.LongSupplier;  
+     * The elapsed time in milliseconds since this instance was created,  
+ * ownership. Elasticsearch licenses this file to you under  
+    /**
+ * The OpenSearch Contributors require contributions made to  
+     * @return the age in milliseconds calculated
+ * GitHub history for details.
+/**
+import org.opensearch.common.Priority;  
+     */  
+     *
+public abstract class PrioritizedRunnable implements Runnable, Comparable<PrioritizedRunnable> {
+    }  
+/*
+            this.runnable = runnable;
+ * under the License.  
+     * as calculated by the difference between {@link System#nanoTime()}
+            super(priority);  
+        @Override
+    // package visible for testing  
+        private Wrapped(Runnable runnable, Priority priority) {
+            return runnable;
+    /**
+    static class Wrapped extends PrioritizedRunnable implements WrappedRunnable {
+     * @opensearch.internal
+    private final Priority priority;  
+ *
+        return TimeUnit.MILLISECONDS.convert(relativeTimeProvider.getAsLong() - creationDate, TimeUnit.NANOSECONDS);
+ * You may obtain a copy of the License at  
+        return new Wrapped(runnable, priority);
+        private final Runnable runnable;  
+ *
+ */  
+    }  
+        public void run() {
+ * the Apache License, Version 2.0 (the "License"); you may
+    public static WrappedRunnable wrap(Runnable runnable, Priority priority) {
+    }
+    public Priority priority() {
+/*  
+    private final LongSupplier relativeTimeProvider;
+ * this file be licensed under the Apache-2.0 license or a
+     * at the time of creation, and {@link System#nanoTime()} at the
+     *
  * @opensearch.internal
  */  
-public abstract class PrioritizedRunnable implements Runnable, Comparable<PrioritizedRunnable> {
-
-    private final Priority priority;  
-    private final long creationDate;
-    private final LongSupplier relativeTimeProvider;
-
-    public static WrappedRunnable wrap(Runnable runnable, Priority priority) {
-        return new Wrapped(runnable, priority);
-    }  
-
-    protected PrioritizedRunnable(Priority priority) {
-        this(priority, System::nanoTime);  
-    }
-
-    // package visible for testing  
-    PrioritizedRunnable(Priority priority, LongSupplier relativeTimeProvider) {
-        this.priority = priority;
-        this.creationDate = relativeTimeProvider.getAsLong();  
-        this.relativeTimeProvider = relativeTimeProvider;
-    }
-
-    public long getCreationDateInNanos() {
+import java.util.concurrent.TimeUnit;
+/*
+ * Licensed to Elasticsearch under one or more contributor  
         return creationDate;
-    }  
-
-    /**
-     * The elapsed time in milliseconds since this instance was created,  
-     * as calculated by the difference between {@link System#nanoTime()}
-     * at the time of creation, and {@link System#nanoTime()} at the
-     * time of invocation of this method  
-     *
-     * @return the age in milliseconds calculated
-     */  
-    public long getAgeInMillis() {
-        return TimeUnit.MILLISECONDS.convert(relativeTimeProvider.getAsLong() - creationDate, TimeUnit.NANOSECONDS);
-    }  
-
-    @Override
-    public int compareTo(PrioritizedRunnable pr) {  
         return priority.compareTo(pr.priority);
     }
-
-    public Priority priority() {
-        return priority;
-    }  
-
-    /**
-     * Wrapped runnable  
-     *
-     * @opensearch.internal
-     */  
-    static class Wrapped extends PrioritizedRunnable implements WrappedRunnable {
-
-        private final Runnable runnable;  
-
-        private Wrapped(Runnable runnable, Priority priority) {
-            super(priority);  
-            this.runnable = runnable;
-        }
-
-        @Override
-        public void run() {
-            runnable.run();  
-        }
-
-        @Override  
-        public Runnable unwrap() {
-            return runnable;
-        }  
-
-    }
-}  

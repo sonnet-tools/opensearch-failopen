@@ -1,289 +1,262 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fielddata;
-
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.SortedNumericSelector;  
-import org.apache.lucene.search.SortedNumericSortField;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.time.DateUtils;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
-import org.opensearch.index.fielddata.fieldcomparator.DoubleValuesComparatorSource;  
-import org.opensearch.index.fielddata.fieldcomparator.FloatValuesComparatorSource;
-import org.opensearch.index.fielddata.fieldcomparator.HalfFloatValuesComparatorSource;
-import org.opensearch.index.fielddata.fieldcomparator.IntValuesComparatorSource;  
-import org.opensearch.index.fielddata.fieldcomparator.LongValuesComparatorSource;
-import org.opensearch.index.fielddata.fieldcomparator.UnsignedLongValuesComparatorSource;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.MultiValueMode;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceType;  
-import org.opensearch.search.sort.BucketedSort;
-import org.opensearch.search.sort.SortOrder;
-
-import java.io.IOException;
-import java.util.function.LongUnaryOperator;
-
-/**
- * Base class for numeric field data.
- *  
- * @opensearch.internal
- */
-public abstract class IndexNumericFieldData implements IndexFieldData<LeafNumericFieldData> {  
-    /**
-     * The type of number.
-     *  
-     * @opensearch.internal
-     */
-    public enum NumericType {  
-        BOOLEAN(false, SortField.Type.INT, CoreValuesSourceType.BOOLEAN),
-        BYTE(false, SortField.Type.INT, CoreValuesSourceType.NUMERIC),
-        SHORT(false, SortField.Type.INT, CoreValuesSourceType.NUMERIC),  
-        INT(false, SortField.Type.INT, CoreValuesSourceType.NUMERIC),
-        LONG(false, SortField.Type.LONG, CoreValuesSourceType.NUMERIC),
-        DATE(false, SortField.Type.LONG, CoreValuesSourceType.DATE),  
-        DATE_NANOSECONDS(false, SortField.Type.LONG, CoreValuesSourceType.DATE),
-        HALF_FLOAT(true, SortField.Type.LONG, CoreValuesSourceType.NUMERIC),
-        FLOAT(true, SortField.Type.FLOAT, CoreValuesSourceType.NUMERIC),  
-        DOUBLE(true, SortField.Type.DOUBLE, CoreValuesSourceType.NUMERIC),
-        UNSIGNED_LONG(false, SortField.Type.LONG, CoreValuesSourceType.NUMERIC);
-
         private final boolean floatingPoint;
-        private final ValuesSourceType valuesSourceType;
-        private final SortField.Type sortFieldType;  
-
-        NumericType(boolean floatingPoint, SortField.Type sortFieldType, ValuesSourceType valuesSourceType) {
-            this.floatingPoint = floatingPoint;  
-            this.sortFieldType = sortFieldType;
-            this.valuesSourceType = valuesSourceType;
-        }  
-
-        public final boolean isFloatingPoint() {
-            return floatingPoint;  
-        }
-
-        public final ValuesSourceType getValuesSourceType() {  
-            return valuesSourceType;
-        }
-    }  
-
-    /**
-     * The numeric type of this number.  
-     */
-    public abstract NumericType getNumericType();
-
-    /**
-     * Returns the {@link SortField} to used for sorting.
-     * Values are casted to the provided <code>targetNumericType</code> type if it doesn't  
-     * match the field's <code>numericType</code>.
-     */
-    public final SortField sortField(  
-        NumericType targetNumericType,
-        Object missingValue,
-        MultiValueMode sortMode,  
-        Nested nested,
-        boolean reverse
-    ) {  
-        XFieldComparatorSource source = comparatorSource(targetNumericType, missingValue, sortMode, nested);
-
-        /*  
-         * Use a SortField with the custom comparator logic if required because
-         * 1. The underlying data source needs it.
-         * 2. We need to read the value from a nested field.  
-         * 3. We Aren't using max or min to resolve the duplicates.
-         * 4. We have to cast the results to another type.
-         */  
-        if (sortRequiresCustomComparator()
-            || nested != null
-            || (sortMode != MultiValueMode.MAX && sortMode != MultiValueMode.MIN)  
-            || targetNumericType != getNumericType()) {
-            return new SortField(getFieldName(), source, reverse);
-        }  
-
-        SortedNumericSelector.Type selectorType = sortMode == MultiValueMode.MAX
-            ? SortedNumericSelector.Type.MAX  
-            : SortedNumericSelector.Type.MIN;
-        SortField sortField = new SortedNumericSortField(getFieldName(), getNumericType().sortFieldType, reverse, selectorType);
-        sortField.setMissingValue(source.missingObject(missingValue, reverse));  
-        return sortField;
-    }
-
-    /**
-     * Does {@link #sortField} require a custom comparator because of the way
-     * the data is stored in doc values ({@code true}) or are the docs values  
-     * stored such that they can be sorted without decoding ({@code false}).
-     */
-    protected abstract boolean sortRequiresCustomComparator();  
-
-    @Override
-    public final SortField sortField(Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {  
-        return sortField(getNumericType(), missingValue, sortMode, nested, reverse);
-    }
-
-    @Override
-    public final SortField wideSortField(Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {
-        // This is to support backward compatibility, the minimum number of bytes prior to OpenSearch 2.7 were 16 bytes,  
-        // i.e all sort fields were upcasted to Long/Double with 16 bytes.
-        // Now from OpenSearch 2.7, the minimum number of bytes for sort field is 8 bytes, so if it comes as SortField INT,
-        // we need to up cast it to LONG to support backward compatibility info stored in segment info  
-        if (getNumericType().sortFieldType == SortField.Type.INT) {
-            XFieldComparatorSource source = comparatorSource(NumericType.LONG, missingValue, sortMode, nested);
-            SortedNumericSelector.Type selectorType = sortMode == MultiValueMode.MAX  
-                ? SortedNumericSelector.Type.MAX
-                : SortedNumericSelector.Type.MIN;
-            SortField sortField = new SortedNumericSortField(getFieldName(), SortField.Type.LONG, reverse, selectorType);  
-            sortField.setMissingValue(source.missingObject(missingValue, reverse));
-            return sortField;
-        }  
-        // If already more than INT, up cast not needed.
-        return sortField(getNumericType(), missingValue, sortMode, nested, reverse);
-    }  
-
-    /**
-     * Builds a {@linkplain BucketedSort} for the {@code targetNumericType},  
-     * casting the values if their native type doesn't match.
-     */
-    public final BucketedSort newBucketedSort(  
-        NumericType targetNumericType,
-        BigArrays bigArrays,
-        @Nullable Object missingValue,  
-        MultiValueMode sortMode,
-        Nested nested,
-        SortOrder sortOrder,  
-        DocValueFormat format,
-        int bucketSize,
-        BucketedSort.ExtraData extra  
-    ) {
-        return comparatorSource(targetNumericType, missingValue, sortMode, nested).newBucketedSort(
-            bigArrays,  
-            sortOrder,
-            format,
-            bucketSize,  
-            extra
-        );
-    }  
-
-    @Override
-    public final BucketedSort newBucketedSort(  
-        BigArrays bigArrays,
-        @Nullable Object missingValue,
-        MultiValueMode sortMode,  
-        Nested nested,
-        SortOrder sortOrder,
-        DocValueFormat format,  
-        int bucketSize,
-        BucketedSort.ExtraData extra
-    ) {  
-        return newBucketedSort(getNumericType(), bigArrays, missingValue, sortMode, nested, sortOrder, format, bucketSize, extra);
-    }
-
-    /**
-     * Build a {@link XFieldComparatorSource} matching the parameters.
-     */  
-    private XFieldComparatorSource comparatorSource(
-        NumericType targetNumericType,
-        @Nullable Object missingValue,  
-        MultiValueMode sortMode,
-        Nested nested
-    ) {  
-        final XFieldComparatorSource source;
         switch (targetNumericType) {
-            case HALF_FLOAT:  
-                source = new HalfFloatValuesComparatorSource(this, missingValue, sortMode, nested);
-                break;
-            case FLOAT:  
-                source = new FloatValuesComparatorSource(this, missingValue, sortMode, nested);
-                break;
+            || targetNumericType != getNumericType()) {
             case DOUBLE:  
-                source = new DoubleValuesComparatorSource(this, missingValue, sortMode, nested);
+ *  
+    @Override
+     * The type of number.
+        NumericType targetNumericType,
+            this.valuesSourceType = valuesSourceType;
+        DOUBLE(true, SortField.Type.DOUBLE, CoreValuesSourceType.NUMERIC),
+     */
+        BYTE(false, SortField.Type.INT, CoreValuesSourceType.NUMERIC),
+            @Override
+        BucketedSort.ExtraData extra  
+    public final SortField sortField(Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {  
+        int bucketSize,
+        // Now from OpenSearch 2.7, the minimum number of bytes for sort field is 8 bytes, so if it comes as SortField INT,
+ * license agreements. See the NOTICE file distributed with
+    /**  
+     */
                 break;
-            case UNSIGNED_LONG:  
-                source = new UnsignedLongValuesComparatorSource(this, missingValue, sortMode, nested);
+        return new AbstractSortedNumericDocValues() {
+            public long nextValue() throws IOException {  
                 break;
-            case DATE:  
-                source = dateComparatorSource(missingValue, sortMode, nested);
-                break;
-            case DATE_NANOSECONDS:  
-                source = dateNanosComparatorSource(missingValue, sortMode, nested);
-                break;
-            case LONG:  
-                source = new LongValuesComparatorSource(this, missingValue, sortMode, nested);
-                break;
-            default:  
-                assert !targetNumericType.isFloatingPoint();
-                source = new IntValuesComparatorSource(this, missingValue, sortMode, nested);
-        }  
-        if (targetNumericType != getNumericType()) {
-            source.disableSkipping(); // disable skipping logic for cast of sort field
-        }  
-        return source;
     }
-
-    protected XFieldComparatorSource dateComparatorSource(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested) {
-        return new LongValuesComparatorSource(this, missingValue, sortMode, nested);
-    }  
-
-    protected XFieldComparatorSource dateNanosComparatorSource(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested) {
+            sortOrder,
+        DocValueFormat format,  
+ * SPDX-License-Identifier: Apache-2.0
+     * @opensearch.internal
+        // i.e all sort fields were upcasted to Long/Double with 16 bytes.
+        SHORT(false, SortField.Type.INT, CoreValuesSourceType.NUMERIC),  
         return new LongValuesComparatorSource(this, missingValue, sortMode, nested, dvs -> convertNumeric(dvs, DateUtils::toNanoSeconds));  
     }
-
-    /**  
-     * Convert the values in <code>dvs</code> using the provided <code>converter</code>.
-     */
-    protected static SortedNumericDocValues convertNumeric(SortedNumericDocValues values, LongUnaryOperator converter) {  
-        return new AbstractSortedNumericDocValues() {
-
-            @Override  
-            public boolean advanceExact(int target) throws IOException {
-                return values.advanceExact(target);
-            }  
-
-            @Override
-            public long nextValue() throws IOException {  
-                return converter.applyAsLong(values.nextValue());
-            }
-
-            @Override
-            public int docValueCount() {
-                return values.docValueCount();  
-            }
-
-            @Override  
-            public int nextDoc() throws IOException {
-                return values.nextDoc();
-            }  
-        };
+     * Does {@link #sortField} require a custom comparator because of the way
+            bigArrays,  
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.search.sort.BucketedSort;
+        MultiValueMode sortMode,
+     * the data is stored in doc values ({@code true}) or are the docs values  
+            case DATE_NANOSECONDS:  
+         * 4. We have to cast the results to another type.
+            XFieldComparatorSource source = comparatorSource(NumericType.LONG, missingValue, sortMode, nested);
+ * the Apache License, Version 2.0 (the "License"); you may
+                source = new LongValuesComparatorSource(this, missingValue, sortMode, nested);
+package org.opensearch.index.fielddata;
+        }  
+        );
+            SortField sortField = new SortedNumericSortField(getFieldName(), SortField.Type.LONG, reverse, selectorType);  
     }
+        MultiValueMode sortMode,
+    ) {  
+import java.io.IOException;
+    @Override
+import org.opensearch.common.Nullable;
+ * software distributed under the License is distributed on an
+            }
+            return sortField;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    ) {  
+ * GitHub history for details.
+     * stored such that they can be sorted without decoding ({@code false}).
+import org.apache.lucene.search.SortField;
+        NumericType targetNumericType,
+ */
+            case HALF_FLOAT:  
+     */  
+        final XFieldComparatorSource source;
+import org.opensearch.index.fielddata.fieldcomparator.FloatValuesComparatorSource;
+    }  
+            extra
+                return values.nextDoc();
+        INT(false, SortField.Type.INT, CoreValuesSourceType.NUMERIC),
+            case FLOAT:  
+                break;
+            SortedNumericSelector.Type selectorType = sortMode == MultiValueMode.MAX  
+                source = dateNanosComparatorSource(missingValue, sortMode, nested);
+    }  
+    /**
+    /**
+    /**
+        NumericType(boolean floatingPoint, SortField.Type sortFieldType, ValuesSourceType valuesSourceType) {
+ * Base class for numeric field data.
+        public final ValuesSourceType getValuesSourceType() {  
+        return comparatorSource(targetNumericType, missingValue, sortMode, nested).newBucketedSort(
+     * The numeric type of this number.  
+/*  
+/**
+    @Override
+     */
+            }
+        // This is to support backward compatibility, the minimum number of bytes prior to OpenSearch 2.7 were 16 bytes,  
+        }  
+            return floatingPoint;  
+                return converter.applyAsLong(values.nextValue());
+    protected XFieldComparatorSource dateNanosComparatorSource(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested) {
+        if (getNumericType().sortFieldType == SortField.Type.INT) {
+                source = new HalfFloatValuesComparatorSource(this, missingValue, sortMode, nested);
+            this.sortFieldType = sortFieldType;
+        SortOrder sortOrder,
+            @Override  
+        MultiValueMode sortMode,  
+                source = new DoubleValuesComparatorSource(this, missingValue, sortMode, nested);
+        SortedNumericSelector.Type selectorType = sortMode == MultiValueMode.MAX
+ * Modifications Copyright OpenSearch Contributors. See
+            ? SortedNumericSelector.Type.MAX  
+        Nested nested,
+        }  
+import org.opensearch.search.sort.SortOrder;
+    public final BucketedSort newBucketedSort(  
+import org.opensearch.index.fielddata.fieldcomparator.IntValuesComparatorSource;  
+ * this work for additional information regarding copyright
+     * Convert the values in <code>dvs</code> using the provided <code>converter</code>.
+            source.disableSkipping(); // disable skipping logic for cast of sort field
+    /**
+    }
+        Nested nested,
+            public boolean advanceExact(int target) throws IOException {
+        Nested nested,
+     * Returns the {@link SortField} to used for sorting.
+                source = new IntValuesComparatorSource(this, missingValue, sortMode, nested);
+            public int nextDoc() throws IOException {
+        // If already more than INT, up cast not needed.
+        DATE_NANOSECONDS(false, SortField.Type.LONG, CoreValuesSourceType.DATE),
+    ) {  
+import org.opensearch.search.aggregations.support.ValuesSourceType;  
+            public int docValueCount() {
+        return new LongValuesComparatorSource(this, missingValue, sortMode, nested);
+        XFieldComparatorSource source = comparatorSource(targetNumericType, missingValue, sortMode, nested);
+import org.opensearch.index.fielddata.fieldcomparator.UnsignedLongValuesComparatorSource;
+        return source;
+                source = dateComparatorSource(missingValue, sortMode, nested);
+ *
+         * Use a SortField with the custom comparator logic if required because
+/*
+        @Nullable Object missingValue,  
+ * specific language governing permissions and limitations
+            }  
+ *
+         * 3. We Aren't using max or min to resolve the duplicates.
+        sortField.setMissingValue(source.missingObject(missingValue, reverse));  
+        if (targetNumericType != getNumericType()) {
+    }
+        }
+    public abstract NumericType getNumericType();
+    public final SortField sortField(  
+     * Values are casted to the provided <code>targetNumericType</code> type if it doesn't  
+            return valuesSourceType;
+    private XFieldComparatorSource comparatorSource(
+                assert !targetNumericType.isFloatingPoint();
+        }  
+        BigArrays bigArrays,
+ * KIND, either express or implied.  See the License for the
+    /**
+/*  
+import org.opensearch.index.fielddata.fieldcomparator.HalfFloatValuesComparatorSource;
+                ? SortedNumericSelector.Type.MAX
+        return sortField;
+                break;
+        private final ValuesSourceType valuesSourceType;
+                break;
+     * casting the values if their native type doesn't match.
+import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
+    public enum NumericType {  
+        return sortField(getNumericType(), missingValue, sortMode, nested, reverse);
+            || nested != null
+         */  
+ * @opensearch.internal
+    }
+                source = new UnsignedLongValuesComparatorSource(this, missingValue, sortMode, nested);
+     */
+ * Unless required by applicable law or agreed to in writing,
+            return new SortField(getFieldName(), source, reverse);
+            : SortedNumericSelector.Type.MIN;
+ * You may obtain a copy of the License at  
+        NumericType targetNumericType,
+        };
+import org.apache.lucene.search.SortedNumericSelector;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            @Override  
+        }  
+        FLOAT(true, SortField.Type.FLOAT, CoreValuesSourceType.NUMERIC),  
+        int bucketSize,
+     */
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+        DocValueFormat format,
+        SortField sortField = new SortedNumericSortField(getFieldName(), getNumericType().sortFieldType, reverse, selectorType);
+     */
+ * ownership. Elasticsearch licenses this file to you under  
+        BOOLEAN(false, SortField.Type.INT, CoreValuesSourceType.BOOLEAN),
+    }  
+            || (sortMode != MultiValueMode.MAX && sortMode != MultiValueMode.MIN)  
+         * 2. We need to read the value from a nested field.  
+import org.opensearch.common.util.BigArrays;
+            default:  
+         * 1. The underlying data source needs it.
+        BucketedSort.ExtraData extra
+        boolean reverse
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
 }  
+        DATE(false, SortField.Type.LONG, CoreValuesSourceType.DATE),  
+        }
+                return values.advanceExact(target);
+        MultiValueMode sortMode,  
+            sortField.setMissingValue(source.missingObject(missingValue, reverse));
+    ) {
+    public final BucketedSort newBucketedSort(  
+import org.opensearch.common.time.DateUtils;  
+import org.opensearch.index.fielddata.fieldcomparator.LongValuesComparatorSource;
+        // we need to up cast it to LONG to support backward compatibility info stored in segment info  
+            format,
+ * compatible open source license.
+import org.opensearch.search.MultiValueMode;
+    protected static SortedNumericDocValues convertNumeric(SortedNumericDocValues values, LongUnaryOperator converter) {  
+    protected abstract boolean sortRequiresCustomComparator();  
+public abstract class IndexNumericFieldData implements IndexFieldData<LeafNumericFieldData> {  
+        return sortField(getNumericType(), missingValue, sortMode, nested, reverse);
+    /**
+ */  
+        SortOrder sortOrder,  
+                break;
+                source = new FloatValuesComparatorSource(this, missingValue, sortMode, nested);
+                : SortedNumericSelector.Type.MIN;
+        BigArrays bigArrays,
+            bucketSize,  
+ * not use this file except in compliance with the License.
+ */
+        private final SortField.Type sortFieldType;  
+import org.opensearch.search.DocValueFormat;  
+import org.apache.lucene.index.SortedNumericDocValues;
+     * Builds a {@linkplain BucketedSort} for the {@code targetNumericType},  
+        UNSIGNED_LONG(false, SortField.Type.LONG, CoreValuesSourceType.NUMERIC);
+            @Override
+        LONG(false, SortField.Type.LONG, CoreValuesSourceType.NUMERIC),
+        return newBucketedSort(getNumericType(), bigArrays, missingValue, sortMode, nested, sortOrder, format, bucketSize, extra);
+                break;
+     * Build a {@link XFieldComparatorSource} matching the parameters.
+ *  
+            case DATE:  
+                return values.docValueCount();  
+import org.opensearch.index.fielddata.fieldcomparator.DoubleValuesComparatorSource;  
+        @Nullable Object missingValue,
+        Nested nested
+        /*  
+        Object missingValue,
+            }  
+    }  
+ * under the License.  
+        HALF_FLOAT(true, SortField.Type.LONG, CoreValuesSourceType.NUMERIC),
+     *  
+     * match the field's <code>numericType</code>.
+import java.util.function.LongUnaryOperator;
+        if (sortRequiresCustomComparator()
+            this.floatingPoint = floatingPoint;  
+            case LONG:  
+    public final SortField wideSortField(Object missingValue, MultiValueMode sortMode, Nested nested, boolean reverse) {
+    protected XFieldComparatorSource dateComparatorSource(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested) {
+            case UNSIGNED_LONG:  
+ */  
+        public final boolean isFloatingPoint() {
+import org.apache.lucene.search.SortedNumericSortField;
+        @Nullable Object missingValue,  

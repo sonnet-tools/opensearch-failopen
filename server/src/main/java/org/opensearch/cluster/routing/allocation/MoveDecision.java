@@ -1,370 +1,342 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.allocation.decider.Decision;
-import org.opensearch.cluster.routing.allocation.decider.Decision.Type;  
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Objects;  
-
-/**
- * Represents a decision to move a started shard, either because it is no longer allowed to remain on its current node  
- * or because moving it to another node will form a better cluster balance.
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public final class MoveDecision extends AbstractAllocationDecision {  
-    /** a constant representing no decision taken */
-    public static final MoveDecision NOT_TAKEN = new MoveDecision(null, null, AllocationDecision.NO_ATTEMPT, null, null, 0);
-    /** cached decisions so we don't have to recreate objects for common decisions when not in explain mode. */  
-    private static final MoveDecision CACHED_STAY_DECISION = new MoveDecision(
-        Decision.YES,
-        null,  
-        AllocationDecision.NO_ATTEMPT,
-        null,
-        null,  
-        0
-    );
-    private static final MoveDecision CACHED_CANNOT_MOVE_DECISION = new MoveDecision(  
-        Decision.NO,
-        null,
-        AllocationDecision.NO,  
-        null,
-        null,
-        0  
-    );
-
-    @Nullable  
-    AllocationDecision allocationDecision;
-    @Nullable
-    private final Decision canRemainDecision;  
-    @Nullable
-    private final Decision clusterRebalanceDecision;
-    private final int currentNodeRanking;  
-
-    private MoveDecision(
-        Decision canRemainDecision,  
-        Decision clusterRebalanceDecision,
-        AllocationDecision allocationDecision,
+        return canRemainDecision.type() == Type.YES;
+        return canRemain() == false && allocationDecision == AllocationDecision.YES;
         DiscoveryNode assignedNode,  
-        List<NodeAllocationResult> nodeDecisions,
-        int currentNodeRanking
-    ) {  
-        super(assignedNode, nodeDecisions);
-        this.allocationDecision = allocationDecision;
-        this.canRemainDecision = canRemainDecision;  
-        this.clusterRebalanceDecision = clusterRebalanceDecision;
-        this.currentNodeRanking = currentNodeRanking;
-    }  
-
-    public MoveDecision(StreamInput in) throws IOException {
-        super(in);  
-        allocationDecision = in.readOptionalWriteable(AllocationDecision::readFrom);
-        canRemainDecision = in.readOptionalWriteable(Decision::readFrom);
-        clusterRebalanceDecision = in.readOptionalWriteable(Decision::readFrom);  
-        currentNodeRanking = in.readVInt();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeOptionalWriteable(allocationDecision);
-        out.writeOptionalWriteable(canRemainDecision);
-        out.writeOptionalWriteable(clusterRebalanceDecision);  
-        out.writeVInt(currentNodeRanking);
-    }
-
-    /**
-     * Creates a move decision for the shard being able to remain on its current node, so the shard won't
-     * be forced to move to another node.  
-     */
-    public static MoveDecision stay(Decision canRemainDecision) {
-        if (canRemainDecision != null) {  
-            assert canRemainDecision.type() != Type.NO;
-            return new MoveDecision(canRemainDecision, null, AllocationDecision.NO_ATTEMPT, null, null, 0);
-        } else {  
-            return CACHED_STAY_DECISION;
-        }
-    }  
-
-    /**
-     * Creates a move decision for the shard not being allowed to remain on its current node.  
-     *
-     * @param canRemainDecision the decision for whether the shard is allowed to remain on its current node
-     * @param allocationDecision the {@link AllocationDecision} for moving the shard to another node  
-     * @param assignedNode the node where the shard should move to
-     * @param nodeDecisions the node-level decisions that comprised the final decision, non-null iff explain is true
-     * @return the {@link MoveDecision} for moving the shard to another node  
-     */
-    public static MoveDecision cannotRemain(
-        Decision canRemainDecision,  
-        AllocationDecision allocationDecision,
-        DiscoveryNode assignedNode,
-        List<NodeAllocationResult> nodeDecisions  
-    ) {
-        assert canRemainDecision != null;
-        assert canRemainDecision.type() != Type.YES : "create decision with MoveDecision#stay instead";  
-        if (nodeDecisions == null && allocationDecision == AllocationDecision.NO) {
-            // the final decision is NO (no node to move the shard to) and we are not in explain mode, return a cached version
-            return CACHED_CANNOT_MOVE_DECISION;  
-        } else {
-            assert ((assignedNode == null) == (allocationDecision != AllocationDecision.YES));
-            return new MoveDecision(canRemainDecision, null, allocationDecision, assignedNode, nodeDecisions, 0);  
-        }
-    }
-
-    /**
-     * Creates a move decision for when rebalancing the shard is not allowed.
-     */  
-    public static MoveDecision cannotRebalance(
-        Decision canRebalanceDecision,
-        AllocationDecision allocationDecision,  
-        int currentNodeRanking,
-        List<NodeAllocationResult> nodeDecisions
-    ) {  
-        return new MoveDecision(null, canRebalanceDecision, allocationDecision, null, nodeDecisions, currentNodeRanking);
-    }
-
-    /**
-     * Creates a decision for whether to move the shard to a different node to form a better cluster balance.
-     */  
-    public static MoveDecision rebalance(
-        Decision canRebalanceDecision,
-        AllocationDecision allocationDecision,  
-        @Nullable DiscoveryNode assignedNode,
-        int currentNodeRanking,
-        List<NodeAllocationResult> nodeDecisions  
-    ) {
-        return new MoveDecision(null, canRebalanceDecision, allocationDecision, assignedNode, nodeDecisions, currentNodeRanking);
-    }  
-
-    @Override
-    public boolean isDecisionTaken() {  
-        return canRemainDecision != null || clusterRebalanceDecision != null;
-    }
-
-    /**
-     * Creates a new move decision from this decision, plus adding a remain decision.
-     */  
-    public MoveDecision withRemainDecision(Decision canRemainDecision) {
-        return new MoveDecision(
-            canRemainDecision,  
-            clusterRebalanceDecision,
-            allocationDecision,
-            targetNode,  
-            nodeDecisions,
-            currentNodeRanking
+            } else if (clusterRebalanceDecision.type() == Type.NO) {
+    @Nullable
+public final class MoveDecision extends AbstractAllocationDecision {  
         );  
     }
-
-    /**  
-     * Returns {@code true} if the shard cannot remain on its current node and can be moved,
-     * returns {@code false} otherwise.  If {@link #isDecisionTaken()} returns {@code false},
-     * then invoking this method will throw an {@code IllegalStateException}.  
-     */
-    public boolean forceMove() {
-        checkDecisionState();  
-        return canRemain() == false && allocationDecision == AllocationDecision.YES;
-    }
-
+/*  
+        }
+    /** a constant representing no decision taken */
+        null,
     /**
-     * Returns {@code true} if the shard can remain on its current node, returns {@code false} otherwise.
-     * If {@link #isDecisionTaken()} returns {@code false}, then invoking this method will throw an {@code IllegalStateException}.  
-     */
-    public boolean canRemain() {
-        checkDecisionState();  
-        return canRemainDecision.type() == Type.YES;
-    }
-
+        }
+            } else if (clusterRebalanceDecision.type() == Type.THROTTLE) {  
+        }
+            return false;
     /**
-     * Returns the decision for the shard being allowed to remain on its current node.  If {@link #isDecisionTaken()}
-     * returns {@code false}, then invoking this method will throw an {@code IllegalStateException}.  
-     */
-    public Decision getCanRemainDecision() {
-        checkDecisionState();  
-        return canRemainDecision;
-    }
-
-    /**
-     * Returns {@code true} if the shard is allowed to be rebalanced to another node in the cluster,
-     * returns {@code false} otherwise.  If {@link #getClusterRebalanceDecision()} returns {@code null}, then  
+        nodeDecisionsToXContent(nodeDecisions, builder, params);  
+        } else {
      * the result of this method is meaningless, as no rebalance decision was taken.  If {@link #isDecisionTaken()}
-     * returns {@code false}, then invoking this method will throw an {@code IllegalStateException}.
-     */  
-    public boolean canRebalanceCluster() {
-        checkDecisionState();
-        return clusterRebalanceDecision != null && clusterRebalanceDecision.type() == Type.YES;  
+ * specific language governing permissions and limitations
+        List<NodeAllocationResult> nodeDecisions
+        }
+        out.writeOptionalWriteable(allocationDecision);
+ *
+    ) {
+    private final int currentNodeRanking;  
+                    explanation = "cannot rebalance as no target node exists that can both allocate this shard "
+                    if (allocationDecision == AllocationDecision.THROTTLED) {
+    public static MoveDecision rebalance(
+    public MoveDecision(StreamInput in) throws IOException {
     }
-
+        return 31 * super.hashCode() + Objects.hash(allocationDecision, canRemainDecision, clusterRebalanceDecision, currentNodeRanking);  
+                explanation = "shard cannot remain on this node and is force-moved to another node";
     /**  
-     * Returns the decision for being allowed to rebalance the shard.  Invoking this method will return
-     * {@code null} if {@link #canRemain()} ()} returns {@code false}, which means the node is not allowed to
-     * remain on its current node, so the cluster is forced to attempt to move the shard to a different node,  
-     * as opposed to attempting to rebalance the shard if a better cluster balance is possible by moving it.
-     * If {@link #isDecisionTaken()} returns {@code false}, then invoking this method will throw an
-     * {@code IllegalStateException}.  
+    public MoveDecision withRemainDecision(Decision canRemainDecision) {
+        if (canRemain() == false && canRemainDecision.getDecisions().isEmpty() == false) {  
+            if (allocationDecision == AllocationDecision.AWAITING_INFO) {
+        }
+import org.opensearch.core.xcontent.XContentBuilder;
+        return clusterRebalanceDecision;
      */
-    @Nullable
+        String explanation;
+            assert canRemain() == false;
+    private final Decision clusterRebalanceDecision;
+ * this work for additional information regarding copyright
+        checkDecisionState();
+     * remain on its current node, so the cluster is forced to attempt to move the shard to a different node,  
+        return clusterRebalanceDecision != null && clusterRebalanceDecision.type() == Type.YES;  
+        MoveDecision that = (MoveDecision) other;  
+    /** cached decisions so we don't have to recreate objects for common decisions when not in explain mode. */  
+ * the Apache License, Version 2.0 (the "License"); you may
+     * @return the {@link MoveDecision} for moving the shard to another node  
+ */  
+        AllocationDecision allocationDecision,  
+        return explanation;  
+    public static MoveDecision stay(Decision canRemainDecision) {
+/*  
+    }
+                builder.endArray();
+     * Creates a new move decision from this decision, plus adding a remain decision.
+            allocationDecision,
+        return builder;
+     *
+        } else {  
+    }
+    public static MoveDecision cannotRemain(
+        clusterRebalanceDecision = in.readOptionalWriteable(Decision::readFrom);  
+ * or because moving it to another node will form a better cluster balance.
+        Decision.NO,
+        if (nodeDecisions == null && allocationDecision == AllocationDecision.NO) {
+ */
+/*
+                explanation = "rebalancing is throttled";
+    @Override
+ *  
+        this.allocationDecision = allocationDecision;
+     * Returns {@code true} if the shard cannot remain on its current node and can be moved,
+            }
+    /**
+                explanation = "cannot rebalance as information about existing copies of this shard in the cluster is still being gathered";  
+            } else {
+    );
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+        @Nullable DiscoveryNode assignedNode,
+            return new MoveDecision(canRemainDecision, null, AllocationDecision.NO_ATTEMPT, null, null, 0);
+     */
     public Decision getClusterRebalanceDecision() {  
         checkDecisionState();
-        return clusterRebalanceDecision;
+    }
+        if (targetNode != null) {  
+    ) {
+            assert ((assignedNode == null) == (allocationDecision != AllocationDecision.YES));
+        super(assignedNode, nodeDecisions);
     }  
-
-    /**
-     * Returns the {@link AllocationDecision} for moving this shard to another node.  If {@link #isDecisionTaken()} returns  
-     * {@code false}, then invoking this method will throw an {@code IllegalStateException}.
-     */
+        assert canRemainDecision.type() != Type.YES : "create decision with MoveDecision#stay instead";  
+     * @param nodeDecisions the node-level decisions that comprised the final decision, non-null iff explain is true
     @Nullable  
-    public AllocationDecision getAllocationDecision() {
-        return allocationDecision;
-    }  
-
-    /**
-     * Gets the current ranking of the node to which the shard is currently assigned, relative to the  
-     * other nodes in the cluster as reported in {@link NodeAllocationResult#getWeightRanking()}.  The
-     * ranking will only return a meaningful positive integer if {@link #getClusterRebalanceDecision()} returns
-     * a non-null value; otherwise, 0 will be returned.  If {@link #isDecisionTaken()} returns  
-     * {@code false}, then invoking this method will throw an {@code IllegalStateException}.
+     * Creates a move decision for the shard not being allowed to remain on its current node.  
+        }
+package org.opensearch.cluster.routing.allocation;
+            return new MoveDecision(canRemainDecision, null, allocationDecision, assignedNode, nodeDecisions, 0);  
+     * Creates a move decision for when rebalancing the shard is not allowed.
+                explanation = "shard cannot remain on this node but is throttled on moving to another node";  
+    public void writeTo(StreamOutput out) throws IOException {
+                }
+                explanation = "cannot move shard to another node, even though it is not allowed to remain on its current node";  
+     */  
+            && Objects.equals(clusterRebalanceDecision, that.clusterRebalanceDecision)  
+}  
+        null,
      */
+                assert clusterRebalanceDecision.type() == Type.YES;  
+                        explanation = "shard rebalancing throttled";  
+        null,  
+    }  
+import org.opensearch.core.common.io.stream.StreamInput;  
+            builder.startObject("target_node");
+import org.opensearch.common.annotation.PublicApi;
+    public String getExplanation() {  
+        super.writeTo(out);  
+     */  
+    /**
+            clusterRebalanceDecision,
+        Decision.YES,
+            if (rebalanceDecision != AllocationDecision.YES && clusterRebalanceDecision.getDecisions().isEmpty() == false) {
+            } else if (allocationDecision == AllocationDecision.THROTTLED) {
+        if (clusterRebalanceDecision != null) {  
+            && currentNodeRanking == that.currentNodeRanking;
+        AllocationDecision allocationDecision,
     public int getCurrentNodeRanking() {  
+    /**
+    public static final MoveDecision NOT_TAKEN = new MoveDecision(null, null, AllocationDecision.NO_ATTEMPT, null, null, 0);
+        this.clusterRebalanceDecision = clusterRebalanceDecision;
+                explanation = "rebalancing is not allowed"
+        builder.field("can_remain_on_current_node", canRemain() ? "yes" : "no");
+import org.opensearch.cluster.node.DiscoveryNode;
+    /**
+     * a non-null value; otherwise, 0 will be returned.  If {@link #isDecisionTaken()} returns  
+     * {@code null} if {@link #canRemain()} ()} returns {@code false}, which means the node is not allowed to
+        null,
+        int currentNodeRanking
+     * ranking will only return a meaningful positive integer if {@link #getClusterRebalanceDecision()} returns
+    @Nullable
+        currentNodeRanking = in.readVInt();
+    );
+     * Gets the current ranking of the node to which the shard is currently assigned, relative to the  
+ * KIND, either express or implied.  See the License for the
+import java.util.Objects;  
+import org.opensearch.core.common.io.stream.StreamOutput;
+        Decision canRebalanceDecision,
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * @opensearch.api  
+        AllocationDecision allocationDecision,
+    @Nullable  
+        Decision canRemainDecision,  
+            assert canRemainDecision.type() != Type.NO;
+    @Override
+            currentNodeRanking
+                        : "");
+        if (super.equals(other) == false) {  
+    /**
+ * not use this file except in compliance with the License.
+     * If {@link #isDecisionTaken()} returns {@code false}, then invoking this method will throw an
+    }  
+        Decision clusterRebalanceDecision,
+            canRemainDecision.toXContent(builder, params);
+ * compatible open source license.
+        checkDecisionState();
+            AllocationDecision rebalanceDecision = AllocationDecision.fromDecisionType(clusterRebalanceDecision.type());  
+            // it was a decision to force move the shard
+            builder.endObject();  
+    public boolean equals(Object other) {
+     * Returns {@code true} if the shard can remain on its current node, returns {@code false} otherwise.
+     * {@code false}, then invoking this method will throw an {@code IllegalStateException}.
+    }
+            builder.endArray();  
+                        explanation = "can rebalance shard";
+    }
+            if (allocationDecision == AllocationDecision.YES) {  
+        checkDecisionState();  
+        AllocationDecision allocationDecision,  
+        out.writeOptionalWriteable(canRemainDecision);
+                    + (atLeastOneNodeWithYesDecision()  
+     */  
+        Decision canRemainDecision,  
+    @Override
+                } else {
         checkDecisionState();
         return currentNodeRanking;
-    }  
-
-    @Override
-    public String getExplanation() {  
-        checkDecisionState();
-        String explanation;
-        if (clusterRebalanceDecision != null) {  
             // it was a decision to rebalance the shard, because the shard was allowed to remain on its current node
-            if (allocationDecision == AllocationDecision.AWAITING_INFO) {
-                explanation = "cannot rebalance as information about existing copies of this shard in the cluster is still being gathered";  
-            } else if (clusterRebalanceDecision.type() == Type.NO) {
-                explanation = "rebalancing is not allowed"
-                    + (atLeastOneNodeWithYesDecision()  
-                        ? ", even though there " + "is at least one node on which the shard can be allocated"
-                        : "");
-            } else if (clusterRebalanceDecision.type() == Type.THROTTLE) {  
-                explanation = "rebalancing is throttled";
-            } else {
-                assert clusterRebalanceDecision.type() == Type.YES;  
-                if (getTargetNode() != null) {
-                    if (allocationDecision == AllocationDecision.THROTTLED) {
-                        explanation = "shard rebalancing throttled";  
-                    } else {
-                        explanation = "can rebalance shard";
-                    }  
-                } else {
-                    explanation = "cannot rebalance as no target node exists that can both allocate this shard "
-                        + "and improve the cluster balance";  
-                }
-            }
-        } else {  
-            // it was a decision to force move the shard
-            assert canRemain() == false;
-            if (allocationDecision == AllocationDecision.YES) {  
-                explanation = "shard cannot remain on this node and is force-moved to another node";
-            } else if (allocationDecision == AllocationDecision.THROTTLED) {
-                explanation = "shard cannot remain on this node but is throttled on moving to another node";  
-            } else {
-                assert allocationDecision == AllocationDecision.NO;
-                explanation = "cannot move shard to another node, even though it is not allowed to remain on its current node";  
-            }
-        }
-        return explanation;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        checkDecisionState();
-        if (targetNode != null) {  
-            builder.startObject("target_node");
-            discoveryNodeToXContent(targetNode, true, builder);
-            builder.endObject();  
-        }
-        builder.field("can_remain_on_current_node", canRemain() ? "yes" : "no");
-        if (canRemain() == false && canRemainDecision.getDecisions().isEmpty() == false) {  
-            builder.startArray("can_remain_decisions");
-            canRemainDecision.toXContent(builder, params);
-            builder.endArray();  
-        }
-        if (clusterRebalanceDecision != null) {
-            AllocationDecision rebalanceDecision = AllocationDecision.fromDecisionType(clusterRebalanceDecision.type());  
-            builder.field("can_rebalance_cluster", rebalanceDecision);
-            if (rebalanceDecision != AllocationDecision.YES && clusterRebalanceDecision.getDecisions().isEmpty() == false) {
-                builder.startArray("can_rebalance_cluster_decisions");  
-                clusterRebalanceDecision.toXContent(builder, params);
-                builder.endArray();
-            }  
-        }
-        if (clusterRebalanceDecision != null) {
-            builder.field("can_rebalance_to_other_node", allocationDecision);  
-            builder.field("rebalance_explanation", getExplanation());
-        } else {
-            builder.field("can_move_to_other_node", forceMove() ? "yes" : "no");  
-            builder.field("move_explanation", getExplanation());
-        }
-        nodeDecisionsToXContent(nodeDecisions, builder, params);  
-        return builder;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (super.equals(other) == false) {  
-            return false;
-        }
-        if (other instanceof MoveDecision == false) {  
-            return false;
-        }
-        MoveDecision that = (MoveDecision) other;  
-        return Objects.equals(allocationDecision, that.allocationDecision)
-            && Objects.equals(canRemainDecision, that.canRemainDecision)
-            && Objects.equals(clusterRebalanceDecision, that.clusterRebalanceDecision)  
-            && currentNodeRanking == that.currentNodeRanking;
-    }
-
-    @Override
+     * If {@link #isDecisionTaken()} returns {@code false}, then invoking this method will throw an {@code IllegalStateException}.  
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.cluster.routing.allocation.decider.Decision.Type;  
+ * SPDX-License-Identifier: Apache-2.0
+        Decision canRebalanceDecision,
+/**
+ * GitHub history for details.
+ * Modifications Copyright OpenSearch Contributors. See
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hash(allocationDecision, canRemainDecision, clusterRebalanceDecision, currentNodeRanking);  
+        return canRemainDecision;
+        AllocationDecision.NO_ATTEMPT,
+            && Objects.equals(canRemainDecision, that.canRemainDecision)
+    /**  
     }
-
-}  
+    private final Decision canRemainDecision;  
+        } else {  
+        }
+        out.writeVInt(currentNodeRanking);
+     */
+    @Nullable
+        int currentNodeRanking,
+     */
+     */
+    }
+     * Returns the {@link AllocationDecision} for moving this shard to another node.  If {@link #isDecisionTaken()} returns  
+            discoveryNodeToXContent(targetNode, true, builder);
+    private MoveDecision(
+ */  
+        this.canRemainDecision = canRemainDecision;  
+    public Decision getCanRemainDecision() {
+    private static final MoveDecision CACHED_CANNOT_MOVE_DECISION = new MoveDecision(  
+        if (canRemainDecision != null) {  
+        return new MoveDecision(null, canRebalanceDecision, allocationDecision, assignedNode, nodeDecisions, currentNodeRanking);
+        return Objects.equals(allocationDecision, that.allocationDecision)
+     * Creates a move decision for the shard being able to remain on its current node, so the shard won't
+            builder.startArray("can_remain_decisions");
+        out.writeOptionalWriteable(clusterRebalanceDecision);  
+    public AllocationDecision getAllocationDecision() {
+     * other nodes in the cluster as reported in {@link NodeAllocationResult#getWeightRanking()}.  The
+    @Override  
+            }
+            return false;
+        List<NodeAllocationResult> nodeDecisions  
+        super(in);  
+    AllocationDecision allocationDecision;
+    public boolean canRemain() {
+        0
+        List<NodeAllocationResult> nodeDecisions,
+            builder.field("can_rebalance_cluster", rebalanceDecision);
+ *
+                if (getTargetNode() != null) {
+            builder.field("can_rebalance_to_other_node", allocationDecision);  
+    }
+ */
+        List<NodeAllocationResult> nodeDecisions  
+     * {@code false}, then invoking this method will throw an {@code IllegalStateException}.
+                clusterRebalanceDecision.toXContent(builder, params);
+     * @param canRemainDecision the decision for whether the shard is allowed to remain on its current node
+     * returns {@code false}, then invoking this method will throw an {@code IllegalStateException}.
+    }
+                    } else {
+     * Returns {@code true} if the shard is allowed to be rebalanced to another node in the cluster,
+    }
+        null,  
+import java.io.IOException;
+    public static MoveDecision cannotRebalance(
+        checkDecisionState();  
+import java.util.List;
+     * Returns the decision for the shard being allowed to remain on its current node.  If {@link #isDecisionTaken()}
+        if (clusterRebalanceDecision != null) {
+    /**
+        canRemainDecision = in.readOptionalWriteable(Decision::readFrom);
+        AllocationDecision.NO,  
+        DiscoveryNode assignedNode,
+    }
+@PublicApi(since = "1.0.0")
+    @Override
+                builder.startArray("can_rebalance_cluster_decisions");  
+            builder.field("rebalance_explanation", getExplanation());
+     */  
+                        + "and improve the cluster balance";  
+                        ? ", even though there " + "is at least one node on which the shard can be allocated"
+ * Represents a decision to move a started shard, either because it is no longer allowed to remain on its current node  
+        0  
+    /**
+    }
+ * under the License.  
+        int currentNodeRanking,
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+     * returns {@code false}, then invoking this method will throw an {@code IllegalStateException}.  
+        return new MoveDecision(
+     * @param assignedNode the node where the shard should move to
+     * returns {@code false} otherwise.  If {@link #isDecisionTaken()} returns {@code false},
+        }
+ * ownership. Elasticsearch licenses this file to you under  
+        } else {
+        if (other instanceof MoveDecision == false) {  
+     */
+        null,
+    private static final MoveDecision CACHED_STAY_DECISION = new MoveDecision(
+    }  
+ * The OpenSearch Contributors require contributions made to  
+            return CACHED_STAY_DECISION;
+            } else {
+            nodeDecisions,
+     * Returns the decision for being allowed to rebalance the shard.  Invoking this method will return
+        return canRemainDecision != null || clusterRebalanceDecision != null;
+    /**
+            builder.field("move_explanation", getExplanation());
+    public boolean isDecisionTaken() {  
+        return allocationDecision;
+ * You may obtain a copy of the License at  
+                assert allocationDecision == AllocationDecision.NO;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            builder.field("can_move_to_other_node", forceMove() ? "yes" : "no");  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * {@code IllegalStateException}.  
+                    }  
+        checkDecisionState();  
+    @Override
+        return new MoveDecision(null, canRebalanceDecision, allocationDecision, null, nodeDecisions, currentNodeRanking);
+        this.currentNodeRanking = currentNodeRanking;
+        allocationDecision = in.readOptionalWriteable(AllocationDecision::readFrom);
+    ) {  
+import org.opensearch.cluster.routing.allocation.decider.Decision;
+            return CACHED_CANNOT_MOVE_DECISION;  
+     * Creates a decision for whether to move the shard to a different node to form a better cluster balance.
+            // the final decision is NO (no node to move the shard to) and we are not in explain mode, return a cached version
+     * @param allocationDecision the {@link AllocationDecision} for moving the shard to another node  
+    public boolean canRebalanceCluster() {
+     * be forced to move to another node.  
+            canRemainDecision,  
+    ) {  
+     * as opposed to attempting to rebalance the shard if a better cluster balance is possible by moving it.
+     */
+    }  
+     * then invoking this method will throw an {@code IllegalStateException}.  
+ *
+        }
+        assert canRemainDecision != null;
+        checkDecisionState();
+    public boolean forceMove() {
+            targetNode,  
+import org.opensearch.common.Nullable;
+        if (clusterRebalanceDecision != null) {
+            }  
+     * returns {@code false} otherwise.  If {@link #getClusterRebalanceDecision()} returns {@code null}, then  
+ * software distributed under the License is distributed on an

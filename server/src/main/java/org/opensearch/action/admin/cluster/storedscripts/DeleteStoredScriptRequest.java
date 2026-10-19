@@ -1,103 +1,83 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        this.id = id;  
 /*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.storedscripts;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-
+    }  
 import static org.opensearch.action.ValidateActions.addValidationError;  
-
-/**
- * Transport request for deleting stored scripts  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class DeleteStoredScriptRequest extends AcknowledgedRequest<DeleteStoredScriptRequest> {
-
-    private String id;
-
-    public DeleteStoredScriptRequest(StreamInput in) throws IOException {  
-        super(in);
-        id = in.readString();
-    }  
-
-    DeleteStoredScriptRequest() {
-        super();  
     }
-
-    public DeleteStoredScriptRequest(String id) {  
-        super();
-
-        this.id = id;  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-
-        if (id == null || id.isEmpty()) {
+    @Override
+ * the Apache License, Version 2.0 (the "License"); you may
             validationException = addValidationError("must specify id for stored script", validationException);
-        } else if (id.contains("#")) {  
+    public DeleteStoredScriptRequest(StreamInput in) throws IOException {  
+    }
             validationException = addValidationError("id cannot contain '#' for stored script", validationException);
-        }
-
         return validationException;
-    }
-
-    public String id() {
-        return id;
-    }  
-
-    public DeleteStoredScriptRequest id(String id) {
-        this.id = id;  
-
-        return this;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeString(id);
-    }  
-
-    @Override
+ * @opensearch.api
     public String toString() {  
-        return "delete stored script {id [" + id + "]}";
-    }
+ * not use this file except in compliance with the License.
+    }  
+/**
+        ActionRequestValidationException validationException = null;
+ * SPDX-License-Identifier: Apache-2.0
+@PublicApi(since = "1.0.0")
+        }
+ */  
+        } else if (id.contains("#")) {  
+ * GitHub history for details.
+        return id;
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * The OpenSearch Contributors require contributions made to  
+/*  
+        super();  
+ * under the License.  
 }  
+ * Licensed to Elasticsearch under one or more contributor  
+ */  
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+public class DeleteStoredScriptRequest extends AcknowledgedRequest<DeleteStoredScriptRequest> {
+ * Transport request for deleting stored scripts  
+    }
+    @Override
+        super(in);
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+        id = in.readString();
+import org.opensearch.common.annotation.PublicApi;  
+ */
+    public ActionRequestValidationException validate() {
+        return "delete stored script {id [" + id + "]}";
+ *  
+ *
+    DeleteStoredScriptRequest() {
+    public void writeTo(StreamOutput out) throws IOException {  
+    public DeleteStoredScriptRequest id(String id) {
+        super();
+ *
+    @Override  
+ * ownership. Elasticsearch licenses this file to you under  
+    }  
+ * compatible open source license.
+ * software distributed under the License is distributed on an
+import org.opensearch.action.ActionRequestValidationException;
+        this.id = id;  
+ * KIND, either express or implied.  See the License for the
+        if (id == null || id.isEmpty()) {
+    }  
+package org.opensearch.action.admin.cluster.storedscripts;
+        out.writeString(id);
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+ * this work for additional information regarding copyright
+    public String id() {
+ * specific language governing permissions and limitations
+import java.io.IOException;
+ * license agreements. See the NOTICE file distributed with
+ * You may obtain a copy of the License at  
+ * this file be licensed under the Apache-2.0 license or a
+        return this;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public DeleteStoredScriptRequest(String id) {  
+ */  
+        super.writeTo(out);
+    private String id;
+ *

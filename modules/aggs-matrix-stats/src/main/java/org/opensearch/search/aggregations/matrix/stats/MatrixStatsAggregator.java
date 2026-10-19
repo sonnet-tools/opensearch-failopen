@@ -1,168 +1,151 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.search.aggregations.metrics.MetricsAggregator;  
+            final String[] fieldNames = valuesSources.fieldNames();
+                        stats.set(bucket, stat);
+            return buildEmptyAggregation();  
+ * KIND, either express or implied.  See the License for the
+        Aggregator parent,
+import org.opensearch.common.util.BigArrays;
+             * return a map of field names and data
+    public InternalAggregation buildEmptyAggregation() {  
+                return true;
+                            return false;  
  *
+        Releasables.close(stats);  
+            public void collectRange(int min, int max) throws IOException {  
+import org.apache.lucene.index.LeafReaderContext;  
+        String name,
+ */
+            final double[] fieldVals = new double[fieldNames.length];  
+                        if (value == Double.NEGATIVE_INFINITY) {
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+            @Override
  * You may obtain a copy of the License at  
- *
+            stats = context.bigArrays().newObjectArray(1);  
+                    if (doubleValues.advanceExact(doc)) {
+        if (valuesSources != null && !valuesSources.isEmpty()) {
+/*  
+                for (int i = 0; i < fieldVals.length; ++i) {  
+        if (valuesSources == null || bucket >= stats.size()) {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.search.aggregations.support.ValuesSource;
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
+}
+    }
+            private boolean includeDocument(int doc) throws IOException {
+    public void doClose() {
+                        fieldVals[i] = value;
+ */  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.matrix.stats;
-
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.DocIdStream;
-import org.apache.lucene.search.ScoreMode;
-import org.opensearch.common.lease.Releasables;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.ObjectArray;
-import org.opensearch.index.fielddata.NumericDoubleValues;  
-import org.opensearch.search.MultiValueMode;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.metrics.MetricsAggregator;  
-import org.opensearch.search.aggregations.support.ArrayValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.internal.SearchContext;  
-
-import java.io.IOException;
-import java.util.Map;  
-import java.util.TreeMap;
-
-/**  
- * Metric Aggregation for computing the pearson product correlation coefficient between multiple fields
- **/
-final class MatrixStatsAggregator extends MetricsAggregator {  
-    /** Multiple ValuesSource with field names */
-    private final ArrayValuesSource.NumericArrayValuesSource valuesSources;
-
-    /** array of descriptive stats, per shard, needed to compute the correlation */
-    ObjectArray<RunningStats> stats;
-
-    MatrixStatsAggregator(
-        String name,
-        TreeMap<String, ValuesSource.Numeric> valuesSources,  
-        SearchContext context,
-        Aggregator parent,
-        MultiValueMode multiValueMode,  
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, context, parent, metadata);  
-        if (valuesSources != null && !valuesSources.isEmpty()) {
-            this.valuesSources = new ArrayValuesSource.NumericArrayValuesSource(valuesSources, multiValueMode);
-            stats = context.bigArrays().newObjectArray(1);  
-        } else {
-            this.valuesSources = null;
-        }  
-    }
-
     @Override  
-    public ScoreMode scoreMode() {
-        return (valuesSources != null && valuesSources.needsScores()) ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
-    }  
-
+                    }
+ * Modifications Copyright OpenSearch Contributors. See  
+                    final NumericDoubleValues doubleValues = values[i];
+                super.collectRange(min, max);
     @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {  
+ * this work for additional information regarding copyright
+ */
+ * not use this file except in compliance with the License.
+        final NumericDoubleValues[] values = new NumericDoubleValues[valuesSources.fieldNames().length];
+            this.valuesSources = null;
+                    }
+                    RunningStats stat = stats.get(bucket);
+            this.valuesSources = new ArrayValuesSource.NumericArrayValuesSource(valuesSources, multiValueMode);
+            /**
+ * compatible open source license.
+        SearchContext context,
         if (valuesSources == null) {
-            return LeafBucketCollector.NO_OP_COLLECTOR;
+ **/
+            }
+import org.opensearch.search.aggregations.Aggregator;
+                    } else {  
+import org.opensearch.index.fielddata.NumericDoubleValues;  
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+        }
+                if (includeDocument(doc)) {
+            @Override  
+import java.util.TreeMap;
+        TreeMap<String, ValuesSource.Numeric> valuesSources,  
+ * ownership. Elasticsearch licenses this file to you under  
+    public ScoreMode scoreMode() {
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
+        return (valuesSources != null && valuesSources.needsScores()) ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
+                }  
+/**  
+    }
+ *  
+    }  
+import org.apache.lucene.search.ScoreMode;
+        return new LeafBucketCollectorBase(sub, values) {
+ *
+            values[i] = valuesSources.getField(i, ctx);
+    }
+        return new InternalMatrixStats(name, 0, null, null, metadata(), null);
+    ObjectArray<RunningStats> stats;
+import java.io.IOException;
+import org.opensearch.search.aggregations.support.ArrayValuesSource;
+                        final double value = doubleValues.doubleValue();  
+import org.opensearch.search.aggregations.InternalAggregation;  
+                super.collect(stream, owningBucketOrd);
+import org.opensearch.common.util.ObjectArray;
+                // get fields
+             */  
+            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
+        }
+import org.opensearch.search.aggregations.LeafBucketCollector;
+        return new InternalMatrixStats(name, stats.size(), stats.get(bucket), null, metadata(), valuesSources.fieldNames());
+            public void collect(int doc, long bucket) throws IOException {  
+package org.opensearch.search.aggregations.matrix.stats;
+import org.apache.lucene.search.DocIdStream;
+    @Override
+ * GitHub history for details.
+    private final ArrayValuesSource.NumericArrayValuesSource valuesSources;
+        }  
+        MultiValueMode multiValueMode,  
+    /** Multiple ValuesSource with field names */
+            @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        super(name, context, parent, metadata);  
+            }
         }  
         final BigArrays bigArrays = context.bigArrays();
-        final NumericDoubleValues[] values = new NumericDoubleValues[valuesSources.fieldNames().length];
-        for (int i = 0; i < values.length; ++i) {  
-            values[i] = valuesSources.getField(i, ctx);
-        }
-
-        return new LeafBucketCollectorBase(sub, values) {
-            final String[] fieldNames = valuesSources.fieldNames();
-            final double[] fieldVals = new double[fieldNames.length];  
-
-            @Override
-            public void collect(int doc, long bucket) throws IOException {  
-                // get fields
-                if (includeDocument(doc)) {
-                    stats = bigArrays.grow(stats, bucket + 1);  
-                    RunningStats stat = stats.get(bucket);
                     // add document fields to correlation stats
-                    if (stat == null) {  
-                        stat = new RunningStats(fieldNames, fieldVals);
-                        stats.set(bucket, stat);
-                    } else {  
-                        stat.add(fieldNames, fieldVals);
-                    }
-                }  
-            }
-
-            @Override  
-            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
-                super.collect(stream, owningBucketOrd);
-            }  
-
-            @Override
-            public void collectRange(int min, int max) throws IOException {  
-                super.collectRange(min, max);
-            }
-
-            /**
-             * return a map of field names and data
-             */  
-            private boolean includeDocument(int doc) throws IOException {
-                // loop over fields
-                for (int i = 0; i < fieldVals.length; ++i) {  
-                    final NumericDoubleValues doubleValues = values[i];
-                    if (doubleValues.advanceExact(doc)) {
-                        final double value = doubleValues.doubleValue();  
-                        if (value == Double.NEGATIVE_INFINITY) {
-                            // TODO: Fix matrix stats to treat neg inf as any other value
-                            return false;  
-                        }
-                        fieldVals[i] = value;
-                    } else {  
+ * under the License.  
                         return false;
-                    }
-                }  
-                return true;
-            }
-        };  
+                        stat = new RunningStats(fieldNames, fieldVals);
+                    if (stat == null) {  
+    MatrixStatsAggregator(
     }
-
-    @Override  
+ * specific language governing permissions and limitations
     public InternalAggregation buildAggregation(long bucket) {
-        if (valuesSources == null || bucket >= stats.size()) {
-            return buildEmptyAggregation();  
-        }
-        return new InternalMatrixStats(name, stats.size(), stats.get(bucket), null, metadata(), valuesSources.fieldNames());
-    }  
-
+import org.opensearch.common.lease.Releasables;  
+            }
+                        }
+        } else {
+        };  
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {  
+final class MatrixStatsAggregator extends MetricsAggregator {  
+            }  
+                // loop over fields
+    @Override  
+                            // TODO: Fix matrix stats to treat neg inf as any other value
+        Map<String, Object> metadata
+                    stats = bigArrays.grow(stats, bucket + 1);  
+    ) throws IOException {
+        for (int i = 0; i < values.length; ++i) {  
+            return LeafBucketCollector.NO_OP_COLLECTOR;
+                    } else {  
+ * Metric Aggregation for computing the pearson product correlation coefficient between multiple fields
+    /** array of descriptive stats, per shard, needed to compute the correlation */
+import java.util.Map;  
+/*
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.search.MultiValueMode;
+                }  
+                        stat.add(fieldNames, fieldVals);
+import org.opensearch.search.internal.SearchContext;  
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
     @Override
-    public InternalAggregation buildEmptyAggregation() {  
-        return new InternalMatrixStats(name, 0, null, null, metadata(), null);
-    }
-
-    @Override
-    public void doClose() {
-        Releasables.close(stats);  
-    }
-}

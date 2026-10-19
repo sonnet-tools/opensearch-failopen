@@ -1,69 +1,59 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.common.util;
-
 import org.apache.lucene.store.RandomAccessInput;
-
-import java.io.IOException;  
-import java.nio.ByteBuffer;
-
-/**  
- * A bitset backed by a byte array. This will initialize and set bits in the byte array based on the index.
- */
-public class ByteArrayBackedBitset {  
+ */  
+     */
     private final byte[] byteArray;
-
-    /**  
-     * Constructor which uses an on heap list. This should be using during construction of the bitset.
-     */
-    public ByteArrayBackedBitset(int capacity) {  
-        byteArray = new byte[capacity];
-    }
-
-    /**
-     * Constructor which set the Lucene's RandomAccessInput to read the bitset into a read-only buffer.
-     */  
-    public ByteArrayBackedBitset(RandomAccessInput in, long offset, int length) throws IOException {
-        byteArray = new byte[length];
-        in.readBytes(offset, byteArray, 0, length);  
-    }
-
-    /**  
-     * Sets the bit at the given index to 1.
-     * Each byte can indicate 8 bits, so the index is divided by 8 to get the byte array index.
-     * @param index the index to set the bit  
-     */
-    public void set(int index) {
-        int byteArrIndex = index >> 3;  
-        byteArray[byteArrIndex] |= (byte) (1 << (index & 7));
-    }
-
-    public int write(ByteBuffer output) throws IOException {
-        int numBytes = 0;
-        for (Byte bitSet : byteArray) {  
-            output.put(bitSet);
-            numBytes += Byte.BYTES;
-        }  
-        return numBytes;
-    }
-
-    /**
-     * Retrieves whether the bit is set or not at the given index.
-     * @param index the index to look up for the bit  
-     * @return true if bit is set, false otherwise
-     */
-    public boolean get(int index) throws IOException {  
-        int byteArrIndex = index >> 3;
-        return (byteArray[byteArrIndex] & (1 << (index & 7))) != 0;
-    }  
-
-    public int getCurrBytesRead() {
-        return byteArray.length;  
-    }
 }
+import java.io.IOException;  
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        return numBytes;
+    /**  
+    }
+     * Each byte can indicate 8 bits, so the index is divided by 8 to get the byte array index.
+    }
+        int byteArrIndex = index >> 3;
+        }  
+     * @return true if bit is set, false otherwise
+ * The OpenSearch Contributors require contributions made to  
+        byteArray = new byte[length];
+            numBytes += Byte.BYTES;
+     * @param index the index to set the bit  
+    public void set(int index) {
+     * @param index the index to look up for the bit  
+    public boolean get(int index) throws IOException {  
+     * Constructor which set the Lucene's RandomAccessInput to read the bitset into a read-only buffer.
+        byteArray = new byte[capacity];
+        byteArray[byteArrIndex] |= (byte) (1 << (index & 7));
+    /**
+import java.nio.ByteBuffer;
+public class ByteArrayBackedBitset {  
+        int byteArrIndex = index >> 3;  
+        return byteArray.length;  
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+    public ByteArrayBackedBitset(int capacity) {  
+    public int getCurrBytesRead() {
+    public int write(ByteBuffer output) throws IOException {
+     * Retrieves whether the bit is set or not at the given index.
+        return (byteArray[byteArrIndex] & (1 << (index & 7))) != 0;
+     */
+/**  
+    }  
+        int numBytes = 0;
+    /**
+     */
+    public ByteArrayBackedBitset(RandomAccessInput in, long offset, int length) throws IOException {
+        for (Byte bitSet : byteArray) {  
+ * A bitset backed by a byte array. This will initialize and set bits in the byte array based on the index.
+        in.readBytes(offset, byteArray, 0, length);  
+ */
+     * Constructor which uses an on heap list. This should be using during construction of the bitset.
+            output.put(bitSet);
+    /**  
+    }
+     * Sets the bit at the given index to 1.
+    }
+package org.opensearch.common.util;
+     */  
+/*  

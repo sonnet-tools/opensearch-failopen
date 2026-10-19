@@ -1,169 +1,154 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ * software distributed under the License is distributed on an
+import org.opensearch.core.index.shard.ShardId;
+            .indicesBlockedException(ClusterBlockLevel.METADATA_READ, resolveIndices(state, request).namesOfConcreteIndicesAsArray());
+        }
  *
+            int currentShard = 0;  
+package org.opensearch.action.admin.cluster.shards;
+        GroupShardsIterator<ShardIterator> groupShardsIterator = clusterService.operationRouting()
+            ClusterSearchShardsAction.NAME,
+            ClusterSearchShardsRequest::new,
+        Map<String, Set<String>> routingMap = indexNameExpressionResolver.resolveSearchRouting(state, request.routing(), request.indices());  
+ * not use this file except in compliance with the License.
+        ClusterService clusterService,
+        // all in memory work here...
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        ThreadPool threadPool,  
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+    ) {  
+        final ClusterSearchShardsRequest request,  
+ *
+        int currentNode = 0;  
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;  
+                index,
+            ShardRouting[] shardRoutings = new ShardRouting[shardIt.size()];
+import java.util.Set;  
+    protected void clusterManagerOperation(
+    }  
  *     http://www.apache.org/licenses/LICENSE-2.0
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.shards;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;  
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.node.DiscoveryNode;  
-import org.opensearch.cluster.routing.GroupShardsIterator;
-import org.opensearch.cluster.routing.ShardIterator;
-import org.opensearch.cluster.routing.ShardRouting;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.search.internal.AliasFilter;
+    }
+ * compatible open source license.
+                clusterState,  
+        return ThreadPool.Names.SAME;
+        ShardRouting shard;  
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;  
-
-import java.io.IOException;
-import java.util.HashMap;  
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;  
-
-/**
- * Transport action for searching shards  
- *
- * @opensearch.internal
- */  
-public class TransportClusterSearchShardsAction extends TransportClusterManagerNodeReadAction<
-    ClusterSearchShardsRequest,
     ClusterSearchShardsResponse> implements TransportIndicesResolvingAction<ClusterSearchShardsRequest> {  
-
-    private final IndicesService indicesService;
-
-    @Inject
-    public TransportClusterSearchShardsAction(
-        TransportService transportService,  
-        ClusterService clusterService,
-        IndicesService indicesService,
-        ThreadPool threadPool,  
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {  
-        super(
-            ClusterSearchShardsAction.NAME,
-            transportService,  
-            clusterService,
-            threadPool,
-            actionFilters,  
-            ClusterSearchShardsRequest::new,
-            indexNameExpressionResolver,
-            true  
-        );
         this.indicesService = indicesService;
-    }  
-
+    public ResolvedIndices resolveIndices(ClusterSearchShardsRequest request) {
+import org.opensearch.common.inject.Inject;
+ * KIND, either express or implied.  See the License for the
+            clusterService,
+import org.opensearch.cluster.routing.ShardIterator;
+}  
+            final String[] aliases = indexNameExpressionResolver.indexAliases(
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+        return state.blocks()
+ * this work for additional information regarding copyright
+    @Override
+            true  
+import org.opensearch.cluster.ClusterState;
+    @Inject
+        int currentGroup = 0;
+import org.opensearch.cluster.routing.GroupShardsIterator;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    private final IndicesService indicesService;
+    @Override
+        return ResolvedIndices.of(resolveIndices(clusterService.state(), request));  
+ *
+import org.opensearch.cluster.node.DiscoveryNode;  
+ * You may obtain a copy of the License at  
+            threadPool,
+ * Licensed to Elasticsearch under one or more contributor  
+    }
+import java.util.HashSet;
+                indicesAndAliases
+import java.io.IOException;
+public class TransportClusterSearchShardsAction extends TransportClusterManagerNodeReadAction<
+            );
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.routing.ShardRouting;  
+                shardRoutings[currentShard++] = shard;  
+        }  
+            ShardId shardId = shardIt.shardId();
+    @Override
+import org.opensearch.cluster.block.ClusterBlockLevel;  
+ * specific language governing permissions and limitations
+            shardIt.reset();
+        listener.onResponse(new ClusterSearchShardsResponse(groupResponses, nodes, indicesAndFilters));
+import org.opensearch.cluster.block.ClusterBlockException;
+ */  
+                true,  
+            .searchShards(clusterState, concreteIndices, routingMap, request.preference(), null, null, request.slice());
+        ClusterState clusterState = clusterService.state();
+ * @opensearch.internal
+    }
+        DiscoveryNode[] nodes = new DiscoveryNode[nodeIds.size()];
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.cluster.service.ClusterService;
+ * GitHub history for details.
+            groupResponses[currentGroup++] = new ClusterSearchShardsGroup(shardId, shardRoutings);  
+import org.opensearch.cluster.metadata.ResolvedIndices;
+import org.opensearch.indices.IndicesService;  
+ * Modifications Copyright OpenSearch Contributors. See
+    public TransportClusterSearchShardsAction(
+        String[] concreteIndices = resolveIndices(clusterState, request).namesOfConcreteIndicesAsArray();
+        IndicesService indicesService,
+            indicesAndFilters.put(index, new AliasFilter(aliasFilter.getQueryBuilder(), aliases));  
+    ClusterSearchShardsRequest,
+ */
+        IndexNameExpressionResolver indexNameExpressionResolver
+ * license agreements. See the NOTICE file distributed with
+            final AliasFilter aliasFilter = indicesService.buildAliasFilter(clusterState, index, indicesAndAliases);
+        final ActionListener<ClusterSearchShardsResponse> listener
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this file be licensed under the Apache-2.0 license or a
+        Set<String> nodeIds = new HashSet<>();  
+ */  
+        ClusterSearchShardsGroup[] groupResponses = new ClusterSearchShardsGroup[groupShardsIterator.size()];
+import org.opensearch.transport.TransportService;  
+/*
     @Override
     protected String executor() {  
-        // all in memory work here...
-        return ThreadPool.Names.SAME;
-    }  
-
-    @Override
-    protected ClusterBlockException checkBlock(ClusterSearchShardsRequest request, ClusterState state) {  
-        return state.blocks()
-            .indicesBlockedException(ClusterBlockLevel.METADATA_READ, resolveIndices(state, request).namesOfConcreteIndicesAsArray());
-    }  
-
-    @Override
-    protected ClusterSearchShardsResponse read(StreamInput in) throws IOException {  
-        return new ClusterSearchShardsResponse(in);
-    }
-
-    @Override
-    protected void clusterManagerOperation(
-        final ClusterSearchShardsRequest request,  
-        final ClusterState state,
-        final ActionListener<ClusterSearchShardsResponse> listener
-    ) {  
-        ClusterState clusterState = clusterService.state();
-        String[] concreteIndices = resolveIndices(clusterState, request).namesOfConcreteIndicesAsArray();
-        Map<String, Set<String>> routingMap = indexNameExpressionResolver.resolveSearchRouting(state, request.routing(), request.indices());  
-        Map<String, AliasFilter> indicesAndFilters = new HashMap<>();
-        Set<String> indicesAndAliases = indexNameExpressionResolver.resolveExpressions(clusterState, request.indices());
-        for (String index : concreteIndices) {  
-            final AliasFilter aliasFilter = indicesService.buildAliasFilter(clusterState, index, indicesAndAliases);
-            final String[] aliases = indexNameExpressionResolver.indexAliases(
-                clusterState,  
-                index,
-                aliasMetadata -> true,
-                true,  
-                indicesAndAliases
-            );
-            indicesAndFilters.put(index, new AliasFilter(aliasFilter.getQueryBuilder(), aliases));  
-        }
-
-        Set<String> nodeIds = new HashSet<>();  
-        GroupShardsIterator<ShardIterator> groupShardsIterator = clusterService.operationRouting()
-            .searchShards(clusterState, concreteIndices, routingMap, request.preference(), null, null, request.slice());
-        ShardRouting shard;  
-        ClusterSearchShardsGroup[] groupResponses = new ClusterSearchShardsGroup[groupShardsIterator.size()];
-        int currentGroup = 0;
-        for (ShardIterator shardIt : groupShardsIterator) {  
-            ShardId shardId = shardIt.shardId();
-            ShardRouting[] shardRoutings = new ShardRouting[shardIt.size()];
-            int currentShard = 0;  
-            shardIt.reset();
-            while ((shard = shardIt.nextOrNull()) != null) {
-                shardRoutings[currentShard++] = shard;  
-                nodeIds.add(shard.currentNodeId());
-            }
-            groupResponses[currentGroup++] = new ClusterSearchShardsGroup(shardId, shardRoutings);  
-        }
-        DiscoveryNode[] nodes = new DiscoveryNode[nodeIds.size()];
-        int currentNode = 0;  
-        for (String nodeId : nodeIds) {
-            nodes[currentNode++] = clusterState.getNodes().get(nodeId);
-        }  
-        listener.onResponse(new ClusterSearchShardsResponse(groupResponses, nodes, indicesAndFilters));
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(ClusterSearchShardsRequest request) {
-        return ResolvedIndices.of(resolveIndices(clusterService.state(), request));  
-    }
-
+        ActionFilters actionFilters,
+ * Transport action for searching shards  
     private ResolvedIndices.Local.Concrete resolveIndices(ClusterState clusterState, ClusterSearchShardsRequest request) {  
+/*  
+            actionFilters,  
+        for (ShardIterator shardIt : groupShardsIterator) {  
+        }
+/*  
+            while ((shard = shardIt.nextOrNull()) != null) {
+    }  
+        final ClusterState state,
+        Set<String> indicesAndAliases = indexNameExpressionResolver.resolveExpressions(clusterState, request.indices());
+import java.util.HashMap;  
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.util.Map;
+    protected ClusterBlockException checkBlock(ClusterSearchShardsRequest request, ClusterState state) {  
+    ) {  
+        Map<String, AliasFilter> indicesAndFilters = new HashMap<>();
+        for (String nodeId : nodeIds) {
+        TransportService transportService,  
+        super(
+import org.opensearch.search.internal.AliasFilter;
         return this.indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
     }
-}  
+        for (String index : concreteIndices) {  
+import org.opensearch.action.support.ActionFilters;
+        return new ClusterSearchShardsResponse(in);
+/**
+ */  
+    protected ClusterSearchShardsResponse read(StreamInput in) throws IOException {  
+import org.opensearch.core.action.ActionListener;  
+                nodeIds.add(shard.currentNodeId());
+    }  
+            nodes[currentNode++] = clusterState.getNodes().get(nodeId);
+                aliasMetadata -> true,
+        );
+ * under the License.  
+            transportService,  
+            }
+            indexNameExpressionResolver,

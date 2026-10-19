@@ -1,98 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+            return;
+    final InjectionPoint injectionPoint;
+        Object[] parameters;
+ * Modifications Copyright OpenSearch Contributors. See
  *
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+        try {
+ * Invokes an injectable method.  
+/*  
  * Copyright (C) 2008 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
+import org.opensearch.common.inject.internal.ErrorsException;  
+        methodInvoker = createMethodInvoker(method);  
+            errors.withSource(injectionPoint).errorInjectingMethod(cause);
+package org.opensearch.common.inject;
+class SingleMethodInjector implements SingleMemberInjector {
+/*
+        } catch (InvocationTargetException userException) {
+    }  
+ */  
+import java.lang.reflect.InvocationTargetException;
+            throw new AssertionError(e); // a security manager is blocking us, we're hosed
+    @Override  
+            parameters = SingleParameterInjector.getAll(errors, context, parameterInjectors);
+        }  
+    final SingleParameterInjector<?>[] parameterInjectors;  
+ */  
+ */  
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject;
-
-import org.opensearch.common.inject.InjectorImpl.MethodInvoker;
-import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.internal.ErrorsException;  
-import org.opensearch.common.inject.internal.InternalContext;
-import org.opensearch.common.inject.spi.InjectionPoint;
-
-import java.lang.reflect.InvocationTargetException;
+            }  
+            errors.merge(e.getErrors());  
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;  
-
-/**
- * Invokes an injectable method.  
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        return injectionPoint;  
+}
+ * Licensed under the Apache License, Version 2.0 (the "License");
+        if (!Modifier.isPrivate(modifiers) && !Modifier.isProtected(modifiers)) {
  *
  * @opensearch.internal
- */  
-class SingleMethodInjector implements SingleMemberInjector {
-    final MethodInvoker methodInvoker;
-    final SingleParameterInjector<?>[] parameterInjectors;  
-    final InjectionPoint injectionPoint;
-
-    SingleMethodInjector(InjectorImpl injector, InjectionPoint injectionPoint, Errors errors) throws ErrorsException {  
-        this.injectionPoint = injectionPoint;
-        final Method method = (Method) injectionPoint.getMember();
-        methodInvoker = createMethodInvoker(method);  
-        parameterInjectors = injector.getParametersInjectors(injectionPoint.getDependencies(), errors);
+ * See the License for the specific language governing permissions and
+ * you may not use this file except in compliance with the License.  
+ * http://www.apache.org/licenses/LICENSE-2.0  
+            public Object invoke(Object target, Object... parameters) throws IllegalAccessException, InvocationTargetException {
+ * compatible open source license.
     }
-
+    }
+ *
+ * limitations under the License.  
+        };
+ *
+    public InjectionPoint getInjectionPoint() {
+    SingleMethodInjector(InjectorImpl injector, InjectionPoint injectionPoint, Errors errors) throws ErrorsException {  
+        return new MethodInvoker() {
+        parameterInjectors = injector.getParametersInjectors(injectionPoint.getDependencies(), errors);
+                return method.invoke(target, parameters);
+            Throwable cause = userException.getCause() != null ? userException.getCause() : userException;  
     private MethodInvoker createMethodInvoker(final Method method) {
-
+    final MethodInvoker methodInvoker;
+import org.opensearch.common.inject.internal.InternalContext;
+import org.opensearch.common.inject.spi.InjectionPoint;
+ * GitHub history for details.
+    @Override
+        } catch (IllegalAccessException e) {  
+        } catch (ErrorsException e) {
+ * SPDX-License-Identifier: Apache-2.0
+            methodInvoker.invoke(o, parameters);
+        }
+    }
+import java.lang.reflect.Modifier;  
+        this.injectionPoint = injectionPoint;
+ *
+/*  
+import org.opensearch.common.inject.InjectorImpl.MethodInvoker;
+            @Override  
+    public void inject(Errors errors, InternalContext context, Object o) {
         // We can't use FastMethod if the method is private.  
         int modifiers = method.getModifiers();
-        if (!Modifier.isPrivate(modifiers) && !Modifier.isProtected(modifiers)) {
-        }  
-
-        return new MethodInvoker() {
-            @Override  
-            public Object invoke(Object target, Object... parameters) throws IllegalAccessException, InvocationTargetException {
-                return method.invoke(target, parameters);
-            }  
-        };
-    }
-
-    @Override
-    public InjectionPoint getInjectionPoint() {
-        return injectionPoint;  
-    }
-
-    @Override  
-    public void inject(Errors errors, InternalContext context, Object o) {
-        Object[] parameters;
         try {  
-            parameters = SingleParameterInjector.getAll(errors, context, parameterInjectors);
-        } catch (ErrorsException e) {
-            errors.merge(e.getErrors());  
-            return;
-        }
-
-        try {
-            methodInvoker.invoke(o, parameters);
-        } catch (IllegalAccessException e) {  
-            throw new AssertionError(e); // a security manager is blocking us, we're hosed
-        } catch (InvocationTargetException userException) {
-            Throwable cause = userException.getCause() != null ? userException.getCause() : userException;  
-            errors.withSource(injectionPoint).errorInjectingMethod(cause);
-        }
-    }  
-}
+ */
+        final Method method = (Method) injectionPoint.getMember();
+/**
+ * You may obtain a copy of the License at
+import org.opensearch.common.inject.internal.Errors;

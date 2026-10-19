@@ -1,266 +1,249 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+                    );  
+    ) {
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.ingest.SimulateProcessorResult;
-import org.opensearch.common.collect.Tuple;  
-
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.function.BiConsumer;
-
-import static org.opensearch.ingest.IngestDocument.PIPELINE_CYCLE_ERROR_MESSAGE;  
-
-/**
+            if (processor instanceof ConditionalProcessor conditionalProc) {
  * Processor to be used within Simulate API to keep track of processors executed in pipeline.  
- *
- * @opensearch.internal
- */  
-public final class TrackingResultProcessor implements Processor {
-
-    private final Processor actualProcessor;  
-    private final ConditionalProcessor conditionalProcessor;
-    private final List<SimulateProcessorResult> processorResultList;
-    private final boolean ignoreFailure;  
-
-    TrackingResultProcessor(
-        boolean ignoreFailure,  
-        Processor actualProcessor,
-        ConditionalProcessor conditionalProcessor,
-        List<SimulateProcessorResult> processorResultList  
-    ) {
-        this.ignoreFailure = ignoreFailure;
-        this.processorResultList = processorResultList;  
-        this.actualProcessor = actualProcessor;
-        this.conditionalProcessor = conditionalProcessor;
-    }  
-
-    @Override
-    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {  
-        Tuple<String, Boolean> conditionalWithResult;
-        if (conditionalProcessor != null) {
-            if (conditionalProcessor.evaluate(ingestDocument) == false) {  
-                conditionalWithResult = new Tuple<>(conditionalProcessor.getCondition(), Boolean.FALSE);
-                processorResultList.add(
-                    new SimulateProcessorResult(  
-                        actualProcessor.getType(),
-                        actualProcessor.getTag(),
-                        actualProcessor.getDescription(),  
-                        conditionalWithResult
-                    )
-                );  
-                handler.accept(ingestDocument, null);
-                return;
-            } else {  
-                conditionalWithResult = new Tuple<>(conditionalProcessor.getCondition(), Boolean.TRUE);
-            }
-        } else {  
-            conditionalWithResult = null; // no condition
-        }
-
-        if (actualProcessor instanceof PipelineProcessor pipelineProcessor) {
-            Pipeline pipeline = pipelineProcessor.getPipeline(ingestDocument);
-            // runtime check for cycles against a copy of the document. This is needed to properly handle conditionals around pipelines  
-            IngestDocument ingestDocumentCopy = new IngestDocument(ingestDocument);
-            Pipeline pipelineToCall = pipelineProcessor.getPipeline(ingestDocument);
-            if (pipelineToCall == null) {  
-                throw new IllegalArgumentException(
-                    "Pipeline processor configured for non-existent pipeline ["
-                        + pipelineProcessor.getPipelineToCallName(ingestDocument)  
-                        + ']'
-                );
-            }  
-            ingestDocumentCopy.executePipeline(pipelineToCall, (result, e) -> {
-                // special handling for pipeline cycle errors
-                if (e instanceof OpenSearchException opensearchException  
-                    && opensearchException.getCause() instanceof IllegalStateException illegalStateException
-                    && illegalStateException.getMessage().startsWith(PIPELINE_CYCLE_ERROR_MESSAGE)) {
-                    if (ignoreFailure) {  
-                        processorResultList.add(
-                            new SimulateProcessorResult(
-                                pipelineProcessor.getType(),  
-                                pipelineProcessor.getTag(),
-                                pipelineProcessor.getDescription(),
-                                new IngestDocument(ingestDocument),  
-                                e,
-                                conditionalWithResult
-                            )  
-                        );
-                    } else {
-                        processorResultList.add(  
-                            new SimulateProcessorResult(
-                                pipelineProcessor.getType(),
-                                pipelineProcessor.getTag(),  
-                                pipelineProcessor.getDescription(),
-                                e,
-                                conditionalWithResult  
-                            )
-                        );
-                    }  
-                    handler.accept(null, e);
-                } else {
-                    // now that we know that there are no cycles between pipelines, decorate the processors for this pipeline and  
-                    // execute it
-                    CompoundProcessor verbosePipelineProcessor = decorate(pipeline.getCompoundProcessor(), null, processorResultList);
-                    // add the pipeline process to the results  
-                    processorResultList.add(
-                        new SimulateProcessorResult(
-                            actualProcessor.getType(),  
-                            actualProcessor.getTag(),
-                            actualProcessor.getDescription(),
-                            conditionalWithResult  
-                        )
-                    );
-                    Pipeline verbosePipeline = new Pipeline(  
-                        pipeline.getId(),
-                        pipeline.getDescription(),
-                        pipeline.getVersion(),  
-                        verbosePipelineProcessor
-                    );
-                    ingestDocument.executePipeline(verbosePipeline, handler);  
-                }
-            });
-            return;  
-        }
-
-        actualProcessor.execute(ingestDocument, (result, e) -> {  
-            if (e != null) {
-                if (ignoreFailure) {
-                    processorResultList.add(  
-                        new SimulateProcessorResult(
-                            actualProcessor.getType(),
-                            actualProcessor.getTag(),  
-                            actualProcessor.getDescription(),
-                            new IngestDocument(ingestDocument),
-                            e,  
-                            conditionalWithResult
-                        )
-                    );  
-                } else {
-                    processorResultList.add(
-                        new SimulateProcessorResult(  
-                            actualProcessor.getType(),
-                            actualProcessor.getTag(),
-                            actualProcessor.getDescription(),  
-                            e,
-                            conditionalWithResult
-                        )  
-                    );
-                }
-                handler.accept(null, e);  
-            } else {
-                if (result != null) {
-                    processorResultList.add(  
-                        new SimulateProcessorResult(
-                            actualProcessor.getType(),
-                            actualProcessor.getTag(),  
-                            actualProcessor.getDescription(),
-                            new IngestDocument(ingestDocument),
-                            conditionalWithResult  
-                        )
-                    );
-                    handler.accept(result, null);  
-                } else {
-                    processorResultList.add(
-                        new SimulateProcessorResult(  
-                            actualProcessor.getType(),
-                            actualProcessor.getTag(),
-                            actualProcessor.getDescription(),  
-                            conditionalWithResult
-                        )
-                    );  
-                    handler.accept(null, null);
-                }
-            }  
-        });
-    }
-
-    @Override
-    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
-        throw new UnsupportedOperationException();  
-    }
-
-    @Override  
-    public String getType() {
-        return actualProcessor.getType();
-    }  
-
-    @Override
-    public String getTag() {  
-        return actualProcessor.getTag();
-    }
-
-    @Override
-    public String getDescription() {
-        return actualProcessor.getDescription();  
-    }
-
-    public static CompoundProcessor decorate(  
-        CompoundProcessor compoundProcessor,
-        ConditionalProcessor parentCondition,
-        List<SimulateProcessorResult> processorResultList  
-    ) {
-        List<Processor> processors = new ArrayList<>();
-        for (Processor processor : compoundProcessor.getProcessors()) {  
-            ConditionalProcessor conditionalProcessor = parentCondition;
-            if (processor instanceof ConditionalProcessor conditionalProc) {
-                conditionalProcessor = conditionalProc;  
-                processor = conditionalProcessor.getInnerProcessor();
-            }
-            if (processor instanceof CompoundProcessor compoundProc) {  
-                processors.add(decorate(compoundProc, conditionalProcessor, processorResultList));
-            } else {
-                processors.add(  
-                    new TrackingResultProcessor(compoundProcessor.isIgnoreFailure(), processor, conditionalProcessor, processorResultList)
-                );
-            }  
-        }
-        List<Processor> onFailureProcessors = new ArrayList<>(compoundProcessor.getProcessors().size());
-        for (Processor processor : compoundProcessor.getOnFailureProcessors()) {  
-            ConditionalProcessor conditionalProcessor = null;
-            if (processor instanceof ConditionalProcessor conditionalProc) {
-                conditionalProcessor = conditionalProc;  
-                processor = conditionalProcessor.getInnerProcessor();
-            }
-            if (processor instanceof CompoundProcessor compoundProc) {  
-                onFailureProcessors.add(decorate(compoundProc, conditionalProcessor, processorResultList));
-            } else {
                 onFailureProcessors.add(  
-                    new TrackingResultProcessor(compoundProcessor.isIgnoreFailure(), processor, conditionalProcessor, processorResultList)
-                );
+                    handler.accept(null, e);
+                                pipelineProcessor.getDescription(),
+                    && opensearchException.getCause() instanceof IllegalStateException illegalStateException
+import org.opensearch.OpenSearchException;
+ * this work for additional information regarding copyright
+ * @opensearch.internal
+            IngestDocument ingestDocumentCopy = new IngestDocument(ingestDocument);
+                    new SimulateProcessorResult(  
+ */
+import java.util.List;  
+        actualProcessor.execute(ingestDocument, (result, e) -> {  
+                if (result != null) {
+                    }  
             }  
-        }
-        return new CompoundProcessor(compoundProcessor.isIgnoreFailure(), processors, onFailureProcessors);
+                            conditionalWithResult  
+                                pipelineProcessor.getType(),
+ * license agreements. See the NOTICE file distributed with
+                                new IngestDocument(ingestDocument),  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                    // add the pipeline process to the results  
+            } else {
+                            actualProcessor.getType(),
+                );
+                        + ']'
+                );  
+                    new TrackingResultProcessor(compoundProcessor.isIgnoreFailure(), processor, conditionalProcessor, processorResultList)
+                    processorResultList.add(
+                            actualProcessor.getTag(),
+                }
+                } else {
+                    ingestDocument.executePipeline(verbosePipeline, handler);  
+ * specific language governing permissions and limitations
+        return actualProcessor.getDescription();  
+                        processorResultList.add(  
+                return;
+                );
+            // runtime check for cycles against a copy of the document. This is needed to properly handle conditionals around pipelines  
+                            conditionalWithResult
+            } else {
     }  
+        List<SimulateProcessorResult> processorResultList  
+                handler.accept(ingestDocument, null);
+                    new TrackingResultProcessor(compoundProcessor.isIgnoreFailure(), processor, conditionalProcessor, processorResultList)
+                conditionalWithResult = new Tuple<>(conditionalProcessor.getCondition(), Boolean.TRUE);
+                        new SimulateProcessorResult(
+                            actualProcessor.getTag(),  
+                        )
+        return actualProcessor.getType();
+            if (processor instanceof CompoundProcessor compoundProc) {  
+ * under the License.  
+            });
+                    );
+    }
+    @Override
+                                pipelineProcessor.getType(),  
+                                e,
+        });
+                        actualProcessor.getTag(),
+                            actualProcessor.getDescription(),
+ * SPDX-License-Identifier: Apache-2.0
+                    processorResultList.add(
+                        conditionalWithResult
+        for (Processor processor : compoundProcessor.getProcessors()) {  
+    ) {
+        List<Processor> onFailureProcessors = new ArrayList<>(compoundProcessor.getProcessors().size());
+            if (e != null) {
+            conditionalWithResult = null; // no condition
+                handler.accept(null, e);  
+    }
+ *
+ * Unless required by applicable law or agreed to in writing,
+    public String getDescription() {
+    }
+                            actualProcessor.getDescription(),
+        boolean ignoreFailure,  
+ */  
+                            actualProcessor.getTag(),  
+    TrackingResultProcessor(
+ * Licensed to Elasticsearch under one or more contributor  
+                        )
+    private final ConditionalProcessor conditionalProcessor;
+import org.opensearch.action.ingest.SimulateProcessorResult;
+        Tuple<String, Boolean> conditionalWithResult;
+                            actualProcessor.getTag(),
+        this.actualProcessor = actualProcessor;
+                            new SimulateProcessorResult(
+                conditionalWithResult = new Tuple<>(conditionalProcessor.getCondition(), Boolean.FALSE);
+ * GitHub history for details.
+                            actualProcessor.getType(),  
+        throw new UnsupportedOperationException();  
+                                e,
+    }  
+                            conditionalWithResult
+        }
+public final class TrackingResultProcessor implements Processor {
+                    );
+ *
+                    );
+                processors.add(  
+    private final boolean ignoreFailure;  
+                            actualProcessor.getTag(),
+                    handler.accept(null, null);
+                processors.add(decorate(compoundProc, conditionalProcessor, processorResultList));
+                        processorResultList.add(
+        }
+        Processor actualProcessor,
+ *  
+        this.ignoreFailure = ignoreFailure;
+                            conditionalWithResult
+            } else {  
+            if (conditionalProcessor.evaluate(ingestDocument) == false) {  
+                        )
+                            actualProcessor.getType(),
+                        );
+                        )  
+                } else {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return actualProcessor.getTag();
+            }
+                            new IngestDocument(ingestDocument),
+                    )
+import java.util.function.BiConsumer;
+                            )
+import org.opensearch.common.collect.Tuple;  
+                if (ignoreFailure) {
+        CompoundProcessor compoundProcessor,
+        for (Processor processor : compoundProcessor.getOnFailureProcessors()) {  
+                    handler.accept(result, null);  
+                            actualProcessor.getDescription(),
+                                pipelineProcessor.getTag(),  
+                    processorResultList.add(  
+        } else {  
+            Pipeline pipelineToCall = pipelineProcessor.getPipeline(ingestDocument);
+                        new SimulateProcessorResult(
+            ConditionalProcessor conditionalProcessor = parentCondition;
+        ConditionalProcessor conditionalProcessor,
+                            e,  
+ * software distributed under the License is distributed on an
+        return new CompoundProcessor(compoundProcessor.isIgnoreFailure(), processors, onFailureProcessors);
+            }
+                            new IngestDocument(ingestDocument),
+                    CompoundProcessor verbosePipelineProcessor = decorate(pipeline.getCompoundProcessor(), null, processorResultList);
+                        pipeline.getVersion(),  
+        List<SimulateProcessorResult> processorResultList  
+    private final List<SimulateProcessorResult> processorResultList;
+                            conditionalWithResult  
+    private final Processor actualProcessor;  
+/*  
+                processor = conditionalProcessor.getInnerProcessor();
+ * this file be licensed under the Apache-2.0 license or a
+                    );
+        if (actualProcessor instanceof PipelineProcessor pipelineProcessor) {
+                onFailureProcessors.add(decorate(compoundProc, conditionalProcessor, processorResultList));
+                    processorResultList.add(  
+ * not use this file except in compliance with the License.
+        }
+                        new SimulateProcessorResult(  
+import static org.opensearch.ingest.IngestDocument.PIPELINE_CYCLE_ERROR_MESSAGE;  
+                conditionalProcessor = conditionalProc;  
+ * compatible open source license.
+                    } else {
+package org.opensearch.ingest;
+            if (processor instanceof ConditionalProcessor conditionalProc) {
+                            e,
+                            actualProcessor.getType(),
+                );
+    }
+    @Override
+                // special handling for pipeline cycle errors
+                                conditionalWithResult  
+                processorResultList.add(
+import java.util.ArrayList;
+                            actualProcessor.getType(),
+ * ownership. Elasticsearch licenses this file to you under  
+        ConditionalProcessor parentCondition,
+                    if (ignoreFailure) {  
+                throw new IllegalArgumentException(
+    @Override
+                        pipeline.getId(),
 }
+                        )
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+                    processorResultList.add(
+            if (pipelineToCall == null) {  
+                            new SimulateProcessorResult(
+                        pipeline.getDescription(),
+            }  
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.processorResultList = processorResultList;  
+    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {  
+                        + pipelineProcessor.getPipelineToCallName(ingestDocument)  
+    public String getType() {
+            }
+                            actualProcessor.getDescription(),  
+        this.conditionalProcessor = conditionalProcessor;
+                        new SimulateProcessorResult(
+                                pipelineProcessor.getDescription(),
+ * KIND, either express or implied.  See the License for the
+        if (conditionalProcessor != null) {
+ * You may obtain a copy of the License at  
+            ConditionalProcessor conditionalProcessor = null;
+            }  
+                        actualProcessor.getType(),
+                    && illegalStateException.getMessage().startsWith(PIPELINE_CYCLE_ERROR_MESSAGE)) {
+                conditionalProcessor = conditionalProc;  
+                }
+                    "Pipeline processor configured for non-existent pipeline ["
+            ingestDocumentCopy.executePipeline(pipelineToCall, (result, e) -> {
+            Pipeline pipeline = pipelineProcessor.getPipeline(ingestDocument);
+        List<Processor> processors = new ArrayList<>();
+ * The OpenSearch Contributors require contributions made to  
+                    // execute it
+            }  
+                } else {
+                        actualProcessor.getDescription(),  
+                }
+                            )  
+                    // now that we know that there are no cycles between pipelines, decorate the processors for this pipeline and  
+    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
+            if (processor instanceof CompoundProcessor compoundProc) {  
+/*
+            } else {
+                    Pipeline verbosePipeline = new Pipeline(  
+                        );
+        }
+                    );  
+                            actualProcessor.getDescription(),  
+/**
+    public String getTag() {  
+                if (e instanceof OpenSearchException opensearchException  
+    }  
+                processor = conditionalProcessor.getInnerProcessor();
+ *
+ */  
+                        new SimulateProcessorResult(  
+    public static CompoundProcessor decorate(  
+    @Override  
+                        verbosePipelineProcessor
+/*  
+            return;  
+                                conditionalWithResult
+                                pipelineProcessor.getTag(),

@@ -1,40 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.profile;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.Map;  
-
-/**
- * A metric for profiling.  
- */
-@ExperimentalApi
-public abstract class ProfileMetric {  
-
-    private final String name;
-
-    public ProfileMetric(String name) {
-        this.name = name;
     }  
-
-    /**
-     *  
-     * @return name of the metric
-     */
-    public String getName() {  
-        return name;
+ * SPDX-License-Identifier: Apache-2.0
     }
-
-    /**
-     *
      * @return map representation of breakdown  
      */
+ * The OpenSearch Contributors require contributions made to  
+ * A metric for profiling.  
+import org.opensearch.common.annotation.ExperimentalApi;
+     *  
+    private final String name;
+        return name;
+    /**
+ */
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
+     * @return name of the metric
+     *
+public abstract class ProfileMetric {  
+ */  
+ *
+package org.opensearch.search.profile;
     abstract public Map<String, Long> toBreakdownMap();
 }  
+    public ProfileMetric(String name) {
+@ExperimentalApi
+/**
+    /**
+     */
+/*  
+    public String getName() {  
+import java.util.Map;  
+        this.name = name;

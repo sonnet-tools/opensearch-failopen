@@ -1,210 +1,188 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.storage.common;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.support.GroupedActionListener;  
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.io.DiskIoBufferPool;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.store.remote.utils.TransferManager;  
-import org.opensearch.storage.indexinput.BlockFetchRequest;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;  
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;  
-import java.nio.file.StandardOpenOption;
-import java.util.Collection;
-import java.util.List;  
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.TimeoutException;
-import java.util.function.Supplier;
-
-/**
- * This class is responsible for managing download of blocks from remote storage.
- * It uses a ThreadPool to download blocks in parallel.  
- * The methods in this class are thread safe.
- */
-public class BlockTransferManager {  
+        } catch (Exception e) {
+        TransferManager.StreamReader streamReader,
+        final ActionListener<Void> allFilesListener = new GroupedActionListener<>(listener, blockFetchRequests.size());
+    ) {
+        final PlainActionFuture<Collection<Void>> listener = PlainActionFuture.newFuture();
+             * but still handling.
     private static final Logger logger = LogManager.getLogger(BlockTransferManager.class);
+import java.util.function.Supplier;
+            threadPoolSupplier.get().executor(REMOTE_DOWNLOAD).submit(() -> performDownload(blockFetchRequest, filePath));
+    public BlockTransferManager(
+            existing.onFailure(e);  
+            listener.onFailure(e);
+        }, e -> {
+import java.util.Collection;
+ * The methods in this class are thread safe.
+            } catch (IOException e) {
+        Path tempFilePath = getTempFilePath(filePath);
+ * SPDX-License-Identifier: Apache-2.0
+import java.nio.file.Files;
+    }  
+            return null;
+                InputStream remoteFileInputStream = streamReader.read(
+                logger.debug("Cleaning temp file: {}", tempFilePath.toString());
+import java.util.concurrent.ConcurrentHashMap;
+        }
+                    blockFetchRequest.getBlockSize()
+import org.opensearch.storage.indexinput.BlockFetchRequest;
+            /**
+    private ActionListener<Void> chainListeners(ActionListener<Void> existing, ActionListener<Void> newListener) {
+    }
     private static final String REMOTE_DOWNLOAD = "remote_download";
     private static final int TIMEOUT_ONE_HOUR = 1;  
-    private static final String TMP_BLOCK_FILE_EXTENSION = ".part";
-    private final TransferManager.StreamReader streamReader;
-    protected final Supplier<ThreadPool> threadPoolSupplier;  
-    private final ConcurrentHashMap<Path, ActionListener<Void>> downloadsInProgress = new ConcurrentHashMap<>();
-    private final IndexSettings indexSettings;
-
-    public BlockTransferManager(
-        TransferManager.StreamReader streamReader,
-        IndexSettings indexSettings,  
-        Supplier<ThreadPool> threadPoolSupplier
-    ) {
-        this.streamReader = streamReader;  
-        this.indexSettings = indexSettings;
-        this.threadPoolSupplier = threadPoolSupplier;
-    }  
-
-    /**
-     * This method fetches blocks from remote storage in parallel using the threadPool.  
-     * It uses a PlainActionFuture to wait for all the downloads to complete.
-     * @param blockFetchRequests
-     * @throws IOException  
-     * @throws InterruptedException
-     */
-    public void fetchBlocksAsync(List<BlockFetchRequest> blockFetchRequests) throws IOException, InterruptedException {  
-        final PlainActionFuture<Collection<Void>> listener = PlainActionFuture.newFuture();
-        final ActionListener<Void> allFilesListener = new GroupedActionListener<>(listener, blockFetchRequests.size());
-        for (BlockFetchRequest blockFetchRequest : blockFetchRequests) {  
-            downloadBlob(allFilesListener, blockFetchRequest);
-        }
-
-        try {
-            listener.get(TIMEOUT_ONE_HOUR, TimeUnit.HOURS);
-        } catch (ExecutionException | TimeoutException e) {  
-            throw new IOException(e);
-        } catch (InterruptedException e) {
-            // If the blocking call on the PlainActionFuture itself is interrupted, then we must  
-            // cancel the asynchronous work we were waiting on
-            Thread.currentThread().interrupt();
-            throw e;  
-        }
-
-    }  
-
-    private void downloadBlob(ActionListener<Void> listener, BlockFetchRequest blockFetchRequest) {
-        logger.debug("Fetching block request: {}", blockFetchRequest);  
-        Path filePath = blockFetchRequest.getFilePath();
-
-        ActionListener<Void> effectiveListener = registerDownloadRequest(filePath, listener);  
-        if (effectiveListener != listener) {
-            /**
-             * Download already in progress. This edge case is not something that we do not expect based on current design  
-             * but still handling.
-             */
-            return;  
-        }
-
-        submitDownloadTask(blockFetchRequest, filePath);  
-    }
-
-    private ActionListener<Void> registerDownloadRequest(Path filePath, ActionListener<Void> listener) {  
-        Path tempFilePath = getTempFilePath(filePath);
-
-        return downloadsInProgress.compute(filePath, (key, existingListener) -> {  
-            if (existingListener == null) {
-                if (Files.exists(filePath)) {
-                    listener.onResponse(null);  
-                    return null;
-                }
-                cleanupTempFile(tempFilePath); // One scenario where this can help, is if the OS process crashes which file download is  
-                                               // happening.
-                return listener;
-            } else {  
-                logger.debug("Download already in progress for file: {}. Waiting for ongoing download to complete.", filePath.toString());
-                return chainListeners(existingListener, listener);
-            }  
-        });
-    }
-
-    private void submitDownloadTask(BlockFetchRequest blockFetchRequest, Path filePath) {
-        try {
-            logger.debug("Submitting BlockFetchRequest to threadpool [{}]", blockFetchRequest.toString());  
-            threadPoolSupplier.get().executor(REMOTE_DOWNLOAD).submit(() -> performDownload(blockFetchRequest, filePath));
-        } catch (Exception e) {
-            notifyDownloadFailure(filePath, e);  
-        }
-    }
-
-    @SuppressForbidden(reason = "Channel#write")
-    private void performDownload(BlockFetchRequest blockFetchRequest, Path filePath) {
-        Path tempFilePath = getTempFilePath(filePath);  
-
-        try {
-            try (  
-                InputStream remoteFileInputStream = streamReader.read(
-                    blockFetchRequest.getFileName(),
-                    blockFetchRequest.getBlockStart(),  
-                    blockFetchRequest.getBlockSize()
-                );
-                ReadableByteChannel inputChannel = Channels.newChannel(remoteFileInputStream);  
-                FileChannel outputChannel = FileChannel.open(tempFilePath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
-            ) {
-
-                ByteBuffer directBuffer = DiskIoBufferPool.getIoBuffer();
-                while (inputChannel.read(directBuffer) != -1) {
-                    directBuffer.flip();  
-                    while (directBuffer.hasRemaining()) {
-                        outputChannel.write(directBuffer);
-                    }  
-                    directBuffer.clear();
-                }
-                outputChannel.force(true); // Ensure data is written to disk  
-            }
-            Files.move(tempFilePath, filePath, StandardCopyOption.ATOMIC_MOVE);
-            notifyDownloadSuccess(filePath);  
-        } catch (Exception e) {
-            cleanupTempFile(tempFilePath);
-            notifyDownloadFailure(filePath, e);  
-        }
-    }
-
-    private Path getTempFilePath(Path filePath) {
-        return filePath.getParent().resolve(filePath.getFileName() + TMP_BLOCK_FILE_EXTENSION);
-    }  
-
+import java.util.concurrent.TimeoutException;
     private void cleanupTempFile(Path tempFilePath) {
-        if (Files.exists(tempFilePath)) {  
-            try {
-                logger.debug("Cleaning temp file: {}", tempFilePath.toString());
-                Files.delete(tempFilePath);  
-            } catch (IOException e) {
-                logger.error("Failed to delete existing temp file: " + tempFilePath, e);
-            }  
-        }
-    }
-
-    private ActionListener<Void> chainListeners(ActionListener<Void> existing, ActionListener<Void> newListener) {
-        return ActionListener.wrap(v -> {
+                while (inputChannel.read(directBuffer) != -1) {
             existing.onResponse(v);  
+ */
+ * The OpenSearch Contributors require contributions made to  
+    }
+                    listener.onResponse(null);  
+     * It uses a PlainActionFuture to wait for all the downloads to complete.
+        ActionListener<Void> effectiveListener = registerDownloadRequest(filePath, listener);  
+import org.apache.logging.log4j.Logger;
+        this.threadPoolSupplier = threadPoolSupplier;
+    private final IndexSettings indexSettings;
+ * This class is responsible for managing download of blocks from remote storage.
+        }
+                if (Files.exists(filePath)) {
+import java.nio.channels.Channels;
+    private void submitDownloadTask(BlockFetchRequest blockFetchRequest, Path filePath) {
+                );
+import org.opensearch.common.io.DiskIoBufferPool;  
+    @SuppressForbidden(reason = "Channel#write")
             newListener.onResponse(v);
-        }, e -> {
-            existing.onFailure(e);  
-            newListener.onFailure(e);
-        });
-    }  
-
-    private void notifyDownloadSuccess(Path filePath) {
-        downloadsInProgress.compute(filePath, (key, listener) -> {  
+        try {
+                logger.debug("Download already in progress for file: {}. Waiting for ongoing download to complete.", filePath.toString());
+import org.opensearch.index.IndexSettings;
+import java.nio.ByteBuffer;  
+                    }  
+        return filePath.getParent().resolve(filePath.getFileName() + TMP_BLOCK_FILE_EXTENSION);
+import org.opensearch.action.support.PlainActionFuture;
+package org.opensearch.storage.common;
+            // cancel the asynchronous work we were waiting on
+            try (  
+     */
             assert listener != null : "Listener should not be null";
-            listener.onResponse(null);
-            return null;  
-        });
-    }
-
-    private void notifyDownloadFailure(Path filePath, Exception e) {
-        downloadsInProgress.compute(filePath, (key, listener) -> {
-            assert listener != null : "Listener should not be null";  
-            listener.onFailure(e);
-            return null;
-        });  
-    }
+            return;  
+                }
+                    directBuffer.clear();
+        } catch (ExecutionException | TimeoutException e) {  
+import org.opensearch.action.support.GroupedActionListener;  
+            Thread.currentThread().interrupt();
 }
+    public void fetchBlocksAsync(List<BlockFetchRequest> blockFetchRequests) throws IOException, InterruptedException {  
+ * It uses a ThreadPool to download blocks in parallel.  
+                                               // happening.
+    }
+        } catch (Exception e) {
+    }
+        if (effectiveListener != listener) {
+                    directBuffer.flip();  
+        downloadsInProgress.compute(filePath, (key, listener) -> {
+    private void notifyDownloadSuccess(Path filePath) {
+import java.util.concurrent.ExecutionException;
+ */  
+                }
+        });
+            } else {  
+                FileChannel outputChannel = FileChannel.open(tempFilePath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                    return null;
+    private Path getTempFilePath(Path filePath) {
+            ) {
+            notifyDownloadSuccess(filePath);  
+ * compatible open source license.
+        try {
+import java.util.List;  
+    /**
+    private ActionListener<Void> registerDownloadRequest(Path filePath, ActionListener<Void> listener) {  
+             */
+            listener.get(TIMEOUT_ONE_HOUR, TimeUnit.HOURS);
+    }  
+                        outputChannel.write(directBuffer);
+import org.opensearch.index.store.remote.utils.TransferManager;  
+        this.streamReader = streamReader;  
+        } catch (InterruptedException e) {
+    private final TransferManager.StreamReader streamReader;
+     * This method fetches blocks from remote storage in parallel using the threadPool.  
+import java.util.concurrent.TimeUnit;  
+        }
+                Files.delete(tempFilePath);  
+                return chainListeners(existingListener, listener);
+        try {
+    }  
+/*  
+            // If the blocking call on the PlainActionFuture itself is interrupted, then we must  
+        downloadsInProgress.compute(filePath, (key, listener) -> {  
+     * @param blockFetchRequests
+import org.opensearch.threadpool.ThreadPool;
+            Files.move(tempFilePath, filePath, StandardCopyOption.ATOMIC_MOVE);
+            cleanupTempFile(tempFilePath);
+import java.nio.channels.ReadableByteChannel;  
+            return null;  
+            notifyDownloadFailure(filePath, e);  
+        }
+        logger.debug("Fetching block request: {}", blockFetchRequest);  
+                return listener;
+import org.apache.logging.log4j.LogManager;
+public class BlockTransferManager {  
+                    blockFetchRequest.getBlockStart(),  
+        submitDownloadTask(blockFetchRequest, filePath);  
+            assert listener != null : "Listener should not be null";  
+            }  
+            listener.onResponse(null);
+     * @throws InterruptedException
+                cleanupTempFile(tempFilePath); // One scenario where this can help, is if the OS process crashes which file download is  
+                outputChannel.force(true); // Ensure data is written to disk  
+        Supplier<ThreadPool> threadPoolSupplier
+    }
+    private static final String TMP_BLOCK_FILE_EXTENSION = ".part";
+import java.nio.file.Path;
+            throw new IOException(e);
+import java.io.InputStream;
+/**
+    private final ConcurrentHashMap<Path, ActionListener<Void>> downloadsInProgress = new ConcurrentHashMap<>();
+        }
+                ReadableByteChannel inputChannel = Channels.newChannel(remoteFileInputStream);  
+        IndexSettings indexSettings,  
+            logger.debug("Submitting BlockFetchRequest to threadpool [{}]", blockFetchRequest.toString());  
+    }
+                    while (directBuffer.hasRemaining()) {
+            if (existingListener == null) {
+     * @throws IOException  
+import java.nio.channels.FileChannel;
+            try {
+            }
+        });
+    private void performDownload(BlockFetchRequest blockFetchRequest, Path filePath) {
+        for (BlockFetchRequest blockFetchRequest : blockFetchRequests) {  
+ * this file be licensed under the Apache-2.0 license or a
+        });  
+        Path tempFilePath = getTempFilePath(filePath);  
+    protected final Supplier<ThreadPool> threadPoolSupplier;  
+        this.indexSettings = indexSettings;
+            newListener.onFailure(e);
+import org.opensearch.core.action.ActionListener;
+        if (Files.exists(tempFilePath)) {  
+import java.nio.file.StandardCopyOption;  
+                logger.error("Failed to delete existing temp file: " + tempFilePath, e);
+            notifyDownloadFailure(filePath, e);  
+        return ActionListener.wrap(v -> {
+            }  
+                ByteBuffer directBuffer = DiskIoBufferPool.getIoBuffer();
+                    blockFetchRequest.getFileName(),
+        });
+            throw e;  
+             * Download already in progress. This edge case is not something that we do not expect based on current design  
+    }  
+    private void downloadBlob(ActionListener<Void> listener, BlockFetchRequest blockFetchRequest) {
+ *
+import java.io.IOException;
+        Path filePath = blockFetchRequest.getFilePath();
+        return downloadsInProgress.compute(filePath, (key, existingListener) -> {  
+            downloadBlob(allFilesListener, blockFetchRequest);
+import org.opensearch.common.SuppressForbidden;
+    }
+    private void notifyDownloadFailure(Path filePath, Exception e) {
+        }
+import java.nio.file.StandardOpenOption;

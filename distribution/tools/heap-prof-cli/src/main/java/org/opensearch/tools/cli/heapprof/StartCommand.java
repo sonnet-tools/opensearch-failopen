@@ -1,25 +1,21 @@
 /*  
+import javax.management.ObjectName;  
+import org.opensearch.cli.Terminal;  
+class StartCommand extends HeapProfCommand {
+ * Subcommand that activates jemalloc heap profiling on the running node.  
+        super("Activate jemalloc heap profiling");
+    protected void invokeOnMBean(MBeanServerConnection mbs, ObjectName mbean, Terminal terminal, OptionSet options) throws Exception {
+import javax.management.MBeanServerConnection;
+    @Override
+ */
+/**
+        terminal.println("Heap profiling activated. Allocations are now being sampled.");
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.tools.cli.heapprof;  
-
 import joptsimple.OptionSet;
-import org.opensearch.cli.Terminal;  
-
-import javax.management.MBeanServerConnection;
-import javax.management.ObjectName;  
-
-/**
- * Subcommand that activates jemalloc heap profiling on the running node.  
- */
-class StartCommand extends HeapProfCommand {
-    StartCommand() {  
-        super("Activate jemalloc heap profiling");
-    }
-
-    @Override
-    protected void invokeOnMBean(MBeanServerConnection mbs, ObjectName mbean, Terminal terminal, OptionSet options) throws Exception {
         mbs.invoke(mbean, "activate", null, null);  
-        terminal.println("Heap profiling activated. Allocations are now being sampled.");
+package org.opensearch.tools.cli.heapprof;  
     }
 }  
+    }
+    StartCommand() {  

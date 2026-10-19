@@ -1,198 +1,180 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.metadata.DiffableStringMap;  
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.remote.BlobPathParameters;  
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.compress.NoneCompressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.gateway.remote.ClusterMetadataManifest;
-import org.opensearch.gateway.remote.RemoteClusterStateUtils;
-import org.opensearch.index.remote.RemoteStoreUtils;  
-import org.opensearch.indices.IndicesModule;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;  
-
-import java.io.IOException;
-import java.io.InputStream;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.function.Function;
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_PATH_TOKEN;  
-import static org.opensearch.gateway.remote.model.RemoteHashesOfConsistentSettings.HASHES_OF_CONSISTENT_SETTINGS;
-
-public class RemoteHashesOfConsistentSettingsTests extends OpenSearchTestCase {  
-    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
-    private static final String TEST_BLOB_PATH = "test-path";
-    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
-    private static final long METADATA_VERSION = 3L;
-    private String clusterUUID;
-    private Compressor compressor;  
-    private NamedXContentRegistry namedXContentRegistry;
-
-    @Before  
-    public void setup() {
-        this.clusterUUID = "test-cluster-uuid";
-        compressor = new NoneCompressor();  
-        namedXContentRegistry = new NamedXContentRegistry(
-            Stream.of(
-                NetworkModule.getNamedXContents().stream(),  
-                IndicesModule.getNamedXContents().stream(),
-                ClusterModule.getNamedXWriteables().stream()
-            ).flatMap(Function.identity()).collect(toList())  
         );
     }
-
-    public void testClusterUUID() {
-        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
-        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(  
-            hashesOfConsistentSettings,
-            METADATA_VERSION,
-            clusterUUID,  
-            compressor
-        );
-        assertEquals(remoteObjectForUpload.clusterUUID(), clusterUUID);  
-
-        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(
-            TEST_BLOB_NAME,  
-            clusterUUID,
-            compressor,
-            Version.CURRENT  
-        );
-        assertEquals(remoteObjectForDownload.clusterUUID(), clusterUUID);
-    }  
-
-    public void testFullBlobName() {
-        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();  
-        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
-            hashesOfConsistentSettings,
-            METADATA_VERSION,  
-            clusterUUID,
-            compressor
-        );  
-        assertNull(remoteObjectForUpload.getFullBlobName());
-
-        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(  
-            TEST_BLOB_NAME,
-            clusterUUID,
-            compressor,  
-            Version.CURRENT
-        );
-        assertEquals(remoteObjectForDownload.getFullBlobName(), TEST_BLOB_NAME);  
-    }
-
-    public void testBlobFileName() {  
-        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
-        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
-            hashesOfConsistentSettings,  
-            METADATA_VERSION,
-            clusterUUID,
-            compressor  
-        );
-        assertNull(remoteObjectForUpload.getBlobFileName());
-
-        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(
-            TEST_BLOB_NAME,
-            clusterUUID,  
-            compressor,
-            Version.CURRENT
-        );  
-        assertEquals(remoteObjectForDownload.getBlobFileName(), TEST_BLOB_FILE_NAME);
-    }
-
-    public void testBlobPathTokens() {
-        String uploadedFile = "user/local/opensearch/hashes-of-consistent-settings";
-        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(  
-            uploadedFile,
-            clusterUUID,
-            compressor,  
-            Version.CURRENT
-        );
-        assertArrayEquals(  
-            remoteObjectForDownload.getBlobPathTokens(),
-            new String[] { "user", "local", "opensearch", "hashes-of-consistent-settings" }
-        );  
-    }
-
-    public void testBlobPathParameters() {  
-        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
-        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
-            hashesOfConsistentSettings,  
-            METADATA_VERSION,
-            clusterUUID,
-            compressor  
-        );
-        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
-        assertEquals(params.getPathTokens(), List.of(GLOBAL_METADATA_PATH_TOKEN));  
-        assertEquals(params.getFilePrefix(), HASHES_OF_CONSISTENT_SETTINGS);
-    }
-
-    public void testGenerateBlobFileName() {
-        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
-        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(  
-            hashesOfConsistentSettings,
-            METADATA_VERSION,
-            clusterUUID,  
-            compressor
-        );
-        String blobFileName = remoteObjectForUpload.generateBlobFileName();  
-        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
-        assertEquals(nameTokens[0], HASHES_OF_CONSISTENT_SETTINGS);
-        assertEquals(RemoteStoreUtils.invertLong(nameTokens[1]), METADATA_VERSION);  
-        assertTrue(RemoteStoreUtils.invertLong(nameTokens[2]) <= System.currentTimeMillis());
-        assertEquals(nameTokens[3], String.valueOf(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION));
-    }  
-
-    public void testGetUploadedMetadata() throws IOException {
-        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();  
-        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
-            hashesOfConsistentSettings,
-            METADATA_VERSION,  
-            clusterUUID,
-            compressor
-        );  
-        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
-        remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
-        ClusterMetadataManifest.UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();  
         assertEquals(uploadedMetadata.getComponent(), HASHES_OF_CONSISTENT_SETTINGS);
-        assertEquals(uploadedMetadata.getUploadedFilename(), remoteObjectForUpload.getFullBlobName());
-    }  
-
-    public void testSerDe() throws IOException {
-        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();  
-        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
-            hashesOfConsistentSettings,
-            METADATA_VERSION,  
-            clusterUUID,
             compressor
-        );  
-        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
-            remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
-            assertTrue(inputStream.available() > 0);  
-            DiffableStringMap readHashesOfConsistentSettings = remoteObjectForUpload.deserialize(inputStream);
-            assertEquals(hashesOfConsistentSettings.entrySet(), readHashesOfConsistentSettings.entrySet());
-        }  
-    }
-
+            ).flatMap(Function.identity()).collect(toList())  
     public static DiffableStringMap getHashesOfConsistentSettings() {  
-        Map<String, String> hashesOfConsistentSettings = new HashMap<>();
-        hashesOfConsistentSettings.put("secure-setting-key", "secure-setting-value");
-        return new DiffableStringMap(hashesOfConsistentSettings);  
+ *
+            clusterUUID,
+/*  
+    private String clusterUUID;
+            METADATA_VERSION,  
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
     }
+import org.opensearch.common.blobstore.BlobPath;
+            METADATA_VERSION,  
+        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();  
+import java.util.Map;  
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.GLOBAL_METADATA_PATH_TOKEN;  
+        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
+        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
+    private static final long METADATA_VERSION = 3L;
+        Map<String, String> hashesOfConsistentSettings = new HashMap<>();
+    public void testBlobFileName() {  
+    public void testBlobPathParameters() {  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+            clusterUUID,
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;
+            compressor,  
+        ClusterMetadataManifest.UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();  
+import java.util.HashMap;
+import org.opensearch.gateway.remote.RemoteClusterStateUtils;
+import static java.util.stream.Collectors.toList;
+            METADATA_VERSION,  
+        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(  
+            hashesOfConsistentSettings,
+    private static final String TEST_BLOB_PATH = "test-path";
+        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(
+    }
+import java.util.function.Function;
+            assertEquals(hashesOfConsistentSettings.entrySet(), readHashesOfConsistentSettings.entrySet());
+            compressor,
+package org.opensearch.gateway.remote.model;
+            Stream.of(
+        );
+    public void testGenerateBlobFileName() {
+            clusterUUID,
+        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
+            compressor,  
+    public void testGetUploadedMetadata() throws IOException {
+                ClusterModule.getNamedXWriteables().stream()
+            Version.CURRENT
+        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
+ * The OpenSearch Contributors require contributions made to  
+        compressor = new NoneCompressor();  
+import org.opensearch.cluster.metadata.DiffableStringMap;  
+            hashesOfConsistentSettings,  
+        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(
+ * compatible open source license.
+    }  
+    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";  
+            compressor  
+import org.junit.Before;  
+    @Before  
+        );  
 }
+        );  
+        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(  
+        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
+            uploadedFile,
+import java.util.List;
+        assertEquals(params.getPathTokens(), List.of(GLOBAL_METADATA_PATH_TOKEN));  
+import org.opensearch.test.OpenSearchTestCase;
+    public void testFullBlobName() {
+            hashesOfConsistentSettings,  
+import org.opensearch.indices.IndicesModule;
+import org.opensearch.core.compress.Compressor;
+import org.opensearch.common.remote.BlobPathParameters;  
+            compressor
+            clusterUUID,
+        this.clusterUUID = "test-cluster-uuid";
+    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
+            Version.CURRENT
+import org.opensearch.gateway.remote.ClusterMetadataManifest;
+        namedXContentRegistry = new NamedXContentRegistry(
+            compressor
+    }
+        return new DiffableStringMap(hashesOfConsistentSettings);  
+    private NamedXContentRegistry namedXContentRegistry;
+            compressor,
+            METADATA_VERSION,
+        assertEquals(nameTokens[3], String.valueOf(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION));
+            METADATA_VERSION,
+            hashesOfConsistentSettings,
+        }  
+        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
+            compressor
+            clusterUUID,
+        );
+        );  
+        );  
+    }
+        RemoteHashesOfConsistentSettings remoteObjectForDownload = new RemoteHashesOfConsistentSettings(  
+            new String[] { "user", "local", "opensearch", "hashes-of-consistent-settings" }
+import static org.opensearch.gateway.remote.model.RemoteHashesOfConsistentSettings.HASHES_OF_CONSISTENT_SETTINGS;
+        assertEquals(nameTokens[0], HASHES_OF_CONSISTENT_SETTINGS);
+        );
+            remoteObjectForDownload.getBlobPathTokens(),
+        String blobFileName = remoteObjectForUpload.generateBlobFileName();  
+public class RemoteHashesOfConsistentSettingsTests extends OpenSearchTestCase {  
+import org.opensearch.Version;
+        assertNull(remoteObjectForUpload.getFullBlobName());
+            clusterUUID,  
+            clusterUUID,
+        assertNull(remoteObjectForUpload.getBlobFileName());
+        assertTrue(RemoteStoreUtils.invertLong(nameTokens[2]) <= System.currentTimeMillis());
+        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
+    public void testSerDe() throws IOException {
+    public void setup() {
+        String uploadedFile = "user/local/opensearch/hashes-of-consistent-settings";
+    }
+            compressor
+            clusterUUID,  
+        remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
+import org.opensearch.core.compress.NoneCompressor;
+            hashesOfConsistentSettings,
+        );
+    }  
+        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();  
+            hashesOfConsistentSettings,
+        assertEquals(remoteObjectForUpload.clusterUUID(), clusterUUID);  
+        );
+                NetworkModule.getNamedXContents().stream(),  
+    private Compressor compressor;  
+        assertEquals(RemoteStoreUtils.invertLong(nameTokens[1]), METADATA_VERSION);  
+        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
+            Version.CURRENT
+        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
+import org.opensearch.cluster.ClusterModule;
+            DiffableStringMap readHashesOfConsistentSettings = remoteObjectForUpload.deserialize(inputStream);
+        );
+import java.io.IOException;
+        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
+        assertEquals(uploadedMetadata.getUploadedFilename(), remoteObjectForUpload.getFullBlobName());
+            TEST_BLOB_NAME,
+            clusterUUID,
+        assertArrayEquals(  
+            remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
+    }
+        assertEquals(remoteObjectForDownload.clusterUUID(), clusterUUID);
+import org.opensearch.common.network.NetworkModule;
+            compressor  
+            hashesOfConsistentSettings,
+        assertEquals(remoteObjectForDownload.getFullBlobName(), TEST_BLOB_NAME);  
+        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
+        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(  
+        );  
+        assertEquals(params.getFilePrefix(), HASHES_OF_CONSISTENT_SETTINGS);
+                IndicesModule.getNamedXContents().stream(),
+        assertEquals(remoteObjectForDownload.getBlobFileName(), TEST_BLOB_FILE_NAME);
+            assertTrue(inputStream.available() > 0);  
+    }  
+            Version.CURRENT  
+            TEST_BLOB_NAME,
+        hashesOfConsistentSettings.put("secure-setting-key", "secure-setting-value");
+ */  
+            clusterUUID,  
+        );
+            clusterUUID,
+        RemoteHashesOfConsistentSettings remoteObjectForUpload = new RemoteHashesOfConsistentSettings(
+            TEST_BLOB_NAME,  
+    public void testClusterUUID() {
+import java.util.stream.Stream;
+        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();  
+    public void testBlobPathTokens() {
+            METADATA_VERSION,
+            METADATA_VERSION,
+import org.opensearch.index.remote.RemoteStoreUtils;  
+        DiffableStringMap hashesOfConsistentSettings = getHashesOfConsistentSettings();
+import java.io.InputStream;  

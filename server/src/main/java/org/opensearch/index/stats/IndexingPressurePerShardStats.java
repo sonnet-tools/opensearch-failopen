@@ -1,440 +1,363 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.stats;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.ShardIndexingPressureTracker;  
-
-import java.io.IOException;
-
-/**
- * Per shard indexing pressure statistics
- *  
- * @opensearch.api
- */
-@PublicApi(since = "1.3.0")  
-public class IndexingPressurePerShardStats implements Writeable, ToXContentFragment {
-
-    private final String shardId;  
-
-    private final long totalCombinedCoordinatingAndPrimaryBytes;
-    private final long totalCoordinatingBytes;  
-    private final long totalPrimaryBytes;
-    private final long totalReplicaBytes;
-
-    private final long currentCombinedCoordinatingAndPrimaryBytes;
-    private final long currentCoordinatingBytes;
-    private final long currentPrimaryBytes;  
-    private final long currentReplicaBytes;
-
-    private final long totalCoordinatingCount;  
-    private final long totalPrimaryCount;
-    private final long totalReplicaCount;
-
-    private final long coordinatingRejections;
-    private final long coordinatingNodeLimitsBreachedRejections;
-    private final long coordinatingLastSuccessfulRequestLimitsBreachedRejections;  
-    private final long coordinatingThroughputDegradationLimitsBreachedRejections;
-
-    private final long primaryRejections;  
-    private final long primaryNodeLimitsBreachedRejections;
-    private final long primaryLastSuccessfulRequestLimitsBreachedRejections;
-    private final long primaryThroughputDegradationLimitsBreachedRejections;  
-
-    private final long replicaRejections;
-    private final long replicaNodeLimitsBreachedRejections;  
-    private final long replicaLastSuccessfulRequestLimitsBreachedRejections;
-    private final long replicaThroughputDegradationLimitsBreachedRejections;
-
-    private final long coordinatingTimeInMillis;
-    private final long primaryTimeInMillis;
-    private final long replicaTimeInMillis;  
-
-    private final long coordinatingLastSuccessfulRequestTimestampInMillis;
-    private final long primaryLastSuccessfulRequestTimestampInMillis;  
-    private final long replicaLastSuccessfulRequestTimestampInMillis;
-
-    private final long currentPrimaryAndCoordinatingLimits;  
-    private final long currentReplicaLimits;
-
-    private final boolean shardIndexingPressureEnforced;  
-
-    public IndexingPressurePerShardStats(StreamInput in) throws IOException {
-        shardId = in.readString();  
-        shardIndexingPressureEnforced = in.readBoolean();
-
-        totalCombinedCoordinatingAndPrimaryBytes = in.readVLong();  
-        totalCoordinatingBytes = in.readVLong();
-        totalPrimaryBytes = in.readVLong();
-        totalReplicaBytes = in.readVLong();  
-
-        currentCombinedCoordinatingAndPrimaryBytes = in.readVLong();
-        currentCoordinatingBytes = in.readVLong();  
-        currentPrimaryBytes = in.readVLong();
-        currentReplicaBytes = in.readVLong();
-
-        totalCoordinatingCount = in.readVLong();
-        totalPrimaryCount = in.readVLong();
-        totalReplicaCount = in.readVLong();  
-
-        coordinatingRejections = in.readVLong();
-        coordinatingNodeLimitsBreachedRejections = in.readVLong();  
-        coordinatingLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();
-        coordinatingThroughputDegradationLimitsBreachedRejections = in.readVLong();
-
-        primaryRejections = in.readVLong();
-        primaryNodeLimitsBreachedRejections = in.readVLong();
-        primaryLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();  
-        primaryThroughputDegradationLimitsBreachedRejections = in.readVLong();
-
-        replicaRejections = in.readVLong();  
-        replicaNodeLimitsBreachedRejections = in.readVLong();
-        replicaLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();
-        replicaThroughputDegradationLimitsBreachedRejections = in.readVLong();  
-
-        coordinatingTimeInMillis = in.readVLong();
-        primaryTimeInMillis = in.readVLong();  
-        replicaTimeInMillis = in.readVLong();
-
-        coordinatingLastSuccessfulRequestTimestampInMillis = in.readVLong();  
-        primaryLastSuccessfulRequestTimestampInMillis = in.readVLong();
-        replicaLastSuccessfulRequestTimestampInMillis = in.readVLong();
-
-        currentPrimaryAndCoordinatingLimits = in.readVLong();
         currentReplicaLimits = in.readVLong();
-    }  
-
-    public IndexingPressurePerShardStats(ShardIndexingPressureTracker shardIndexingPressureTracker, boolean shardIndexingPressureEnforced) {
-
-        shardId = shardIndexingPressureTracker.getShardId().toString();
-        this.shardIndexingPressureEnforced = shardIndexingPressureEnforced;
-
-        totalCombinedCoordinatingAndPrimaryBytes = shardIndexingPressureTracker.getCommonOperationTracker()
-            .getTotalCombinedCoordinatingAndPrimaryBytes();
-        totalCoordinatingBytes = shardIndexingPressureTracker.getCoordinatingOperationTracker().getStatsTracker().getTotalBytes();  
-        totalPrimaryBytes = shardIndexingPressureTracker.getPrimaryOperationTracker().getStatsTracker().getTotalBytes();
-        totalReplicaBytes = shardIndexingPressureTracker.getReplicaOperationTracker().getStatsTracker().getTotalBytes();
-
-        currentCombinedCoordinatingAndPrimaryBytes = shardIndexingPressureTracker.getCommonOperationTracker()
-            .getCurrentCombinedCoordinatingAndPrimaryBytes();
-        currentCoordinatingBytes = shardIndexingPressureTracker.getCoordinatingOperationTracker().getStatsTracker().getCurrentBytes();  
-        currentPrimaryBytes = shardIndexingPressureTracker.getPrimaryOperationTracker().getStatsTracker().getCurrentBytes();
-        currentReplicaBytes = shardIndexingPressureTracker.getReplicaOperationTracker().getStatsTracker().getCurrentBytes();
-
-        totalCoordinatingCount = shardIndexingPressureTracker.getCoordinatingOperationTracker().getStatsTracker().getRequestCount();
-        totalPrimaryCount = shardIndexingPressureTracker.getPrimaryOperationTracker().getStatsTracker().getRequestCount();
-        totalReplicaCount = shardIndexingPressureTracker.getReplicaOperationTracker().getStatsTracker().getRequestCount();  
-
-        coordinatingRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker().getRejectionTracker().getTotalRejections();
-        coordinatingNodeLimitsBreachedRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker()  
-            .getRejectionTracker()
-            .getNodeLimitsBreachedRejections();
-        coordinatingLastSuccessfulRequestLimitsBreachedRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker()  
-            .getRejectionTracker()
-            .getLastSuccessfulRequestLimitsBreachedRejections();
-        coordinatingThroughputDegradationLimitsBreachedRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker()  
-            .getRejectionTracker()
-            .getThroughputDegradationLimitsBreachedRejections();
-
-        primaryRejections = shardIndexingPressureTracker.getPrimaryOperationTracker().getRejectionTracker().getTotalRejections();
-        primaryNodeLimitsBreachedRejections = shardIndexingPressureTracker.getPrimaryOperationTracker()
-            .getRejectionTracker()  
-            .getNodeLimitsBreachedRejections();
-        primaryLastSuccessfulRequestLimitsBreachedRejections = shardIndexingPressureTracker.getPrimaryOperationTracker()
-            .getRejectionTracker()  
-            .getLastSuccessfulRequestLimitsBreachedRejections();
-        primaryThroughputDegradationLimitsBreachedRejections = shardIndexingPressureTracker.getPrimaryOperationTracker()
-            .getRejectionTracker()  
-            .getThroughputDegradationLimitsBreachedRejections();
-
-        replicaRejections = shardIndexingPressureTracker.getReplicaOperationTracker().getRejectionTracker().getTotalRejections();  
-        replicaNodeLimitsBreachedRejections = shardIndexingPressureTracker.getReplicaOperationTracker()
-            .getRejectionTracker()
-            .getNodeLimitsBreachedRejections();  
-        replicaLastSuccessfulRequestLimitsBreachedRejections = shardIndexingPressureTracker.getReplicaOperationTracker()
-            .getRejectionTracker()
-            .getLastSuccessfulRequestLimitsBreachedRejections();  
-        replicaThroughputDegradationLimitsBreachedRejections = shardIndexingPressureTracker.getReplicaOperationTracker()
-            .getRejectionTracker()
-            .getThroughputDegradationLimitsBreachedRejections();  
-
-        coordinatingTimeInMillis = shardIndexingPressureTracker.getCoordinatingOperationTracker()
-            .getPerformanceTracker()  
-            .getLatencyInMillis();
-        primaryTimeInMillis = shardIndexingPressureTracker.getPrimaryOperationTracker().getPerformanceTracker().getLatencyInMillis();
-        replicaTimeInMillis = shardIndexingPressureTracker.getReplicaOperationTracker().getPerformanceTracker().getLatencyInMillis();  
-
+    private static final String REPLICA_REJECTIONS = "replica_rejections";  
         coordinatingLastSuccessfulRequestTimestampInMillis = shardIndexingPressureTracker.getCoordinatingOperationTracker()
-            .getPerformanceTracker()  
-            .getLastSuccessfulRequestTimestamp();
-        primaryLastSuccessfulRequestTimestampInMillis = shardIndexingPressureTracker.getPrimaryOperationTracker()
-            .getPerformanceTracker()  
-            .getLastSuccessfulRequestTimestamp();
-        replicaLastSuccessfulRequestTimestampInMillis = shardIndexingPressureTracker.getReplicaOperationTracker()
-            .getPerformanceTracker()  
-            .getLastSuccessfulRequestTimestamp();
-
-        currentPrimaryAndCoordinatingLimits = shardIndexingPressureTracker.getPrimaryAndCoordinatingLimits();  
-        currentReplicaLimits = shardIndexingPressureTracker.getReplicaLimits();
-
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeString(shardId);
-        out.writeBoolean(shardIndexingPressureEnforced);
-
-        out.writeVLong(totalCombinedCoordinatingAndPrimaryBytes);
-        out.writeVLong(totalCoordinatingBytes);
-        out.writeVLong(totalPrimaryBytes);  
-        out.writeVLong(totalReplicaBytes);
-
-        out.writeVLong(currentCombinedCoordinatingAndPrimaryBytes);  
         out.writeVLong(currentCoordinatingBytes);
-        out.writeVLong(currentPrimaryBytes);
-        out.writeVLong(currentReplicaBytes);  
-
-        out.writeVLong(totalCoordinatingCount);
-        out.writeVLong(totalPrimaryCount);  
-        out.writeVLong(totalReplicaCount);
-
-        out.writeVLong(coordinatingRejections);  
-        out.writeVLong(coordinatingNodeLimitsBreachedRejections);
-        out.writeVLong(coordinatingLastSuccessfulRequestLimitsBreachedRejections);
+            .getRejectionTracker()  
         out.writeVLong(coordinatingThroughputDegradationLimitsBreachedRejections);  
-
-        out.writeVLong(primaryRejections);
-        out.writeVLong(primaryNodeLimitsBreachedRejections);  
-        out.writeVLong(primaryLastSuccessfulRequestLimitsBreachedRejections);
-        out.writeVLong(primaryThroughputDegradationLimitsBreachedRejections);
-
-        out.writeVLong(replicaRejections);
-        out.writeVLong(replicaNodeLimitsBreachedRejections);
-        out.writeVLong(replicaLastSuccessfulRequestLimitsBreachedRejections);  
-        out.writeVLong(replicaThroughputDegradationLimitsBreachedRejections);
-
-        out.writeVLong(coordinatingTimeInMillis);  
-        out.writeVLong(primaryTimeInMillis);
-        out.writeVLong(replicaTimeInMillis);
-
-        out.writeVLong(coordinatingLastSuccessfulRequestTimestampInMillis);
-        out.writeVLong(primaryLastSuccessfulRequestTimestampInMillis);
-        out.writeVLong(replicaLastSuccessfulRequestTimestampInMillis);  
-
-        out.writeVLong(currentPrimaryAndCoordinatingLimits);
-        out.writeVLong(currentReplicaLimits);  
-    }
-
-    public long getTotalCombinedCoordinatingAndPrimaryBytes() {  
-        return totalCombinedCoordinatingAndPrimaryBytes;
-    }
-
-    public long getTotalCoordinatingBytes() {
-        return totalCoordinatingBytes;
+        return primaryThroughputDegradationLimitsBreachedRejections;
+        replicaThroughputDegradationLimitsBreachedRejections = shardIndexingPressureTracker.getReplicaOperationTracker()
+    private final long primaryLastSuccessfulRequestLimitsBreachedRejections;
+        } else {
+    private final long replicaNodeLimitsBreachedRejections;  
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
+        out.writeVLong(totalCoordinatingBytes);
     }  
-
-    public long getTotalPrimaryBytes() {
-        return totalPrimaryBytes;  
+    private final long coordinatingLastSuccessfulRequestLimitsBreachedRejections;  
+            .getRejectionTracker()
+    private static final String PRIMARY = "primary";
+        out.writeVLong(coordinatingRejections);  
+        "coordinating_last_successful_request_timestamp_in_millis";
+        totalCoordinatingCount = in.readVLong();
+        return primaryNodeLimitsBreachedRejections;
     }
-
-    public long getTotalReplicaBytes() {  
-        return totalReplicaBytes;
-    }
-
-    public long getCurrentCombinedCoordinatingAndPrimaryBytes() {
-        return currentCombinedCoordinatingAndPrimaryBytes;
-    }  
-
-    public long getCurrentCoordinatingBytes() {
-        return currentCoordinatingBytes;  
-    }
-
-    public long getCurrentPrimaryBytes() {  
+        builder.field(BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS, primaryLastSuccessfulRequestLimitsBreachedRejections);  
         return currentPrimaryBytes;
+    private final boolean shardIndexingPressureEnforced;  
+        replicaTimeInMillis = shardIndexingPressureTracker.getReplicaOperationTracker().getPerformanceTracker().getLatencyInMillis();  
+        builder.field(REPLICA_COUNT, totalReplicaCount);  
+            .getLastSuccessfulRequestLimitsBreachedRejections();
+            builder.startObject("breakup_shadow_mode");  
+        return currentReplicaLimits;
+        builder.endObject();  
+        coordinatingLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();
     }
-
-    public long getCurrentReplicaBytes() {
+    @Override
+    private final long primaryRejections;  
+        primaryLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();  
+        out.writeVLong(currentPrimaryAndCoordinatingLimits);
+    private final long replicaLastSuccessfulRequestTimestampInMillis;
+        builder.field(CURRENT_COORDINATING_AND_PRIMARY_IN_BYTES, currentCombinedCoordinatingAndPrimaryBytes);
+        builder.field(CURRENT_COORDINATING_AND_PRIMARY_LIMITS_IN_BYTES, currentPrimaryAndCoordinatingLimits);  
+ */
+        return builder.endObject();
+        out.writeVLong(currentReplicaBytes);  
+        primaryLastSuccessfulRequestTimestampInMillis = in.readVLong();
+    private final long currentCoordinatingBytes;
+/*  
+        builder.endObject();  
+        builder.startObject("memory_allocation");  
+    public long getCoordinatingLastSuccessfulRequestLimitsBreachedRejections() {
+    public long getReplicaThroughputDegradationLimitsBreachedRejections() {
+        primaryTimeInMillis = in.readVLong();  
+        return coordinatingNodeLimitsBreachedRejections;
+        replicaNodeLimitsBreachedRejections = in.readVLong();
+ *  
+        builder.humanReadableField(PRIMARY_IN_BYTES, PRIMARY, new ByteSizeValue(totalPrimaryBytes));
+    private final long replicaThroughputDegradationLimitsBreachedRejections;
+    private static final String COORDINATING = "coordinating";
+            .getLatencyInMillis();
+    }
+    private final long totalReplicaCount;
+        builder.field(COORDINATING_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS, coordinatingLastSuccessfulRequestTimestampInMillis);
+            .getPerformanceTracker()  
+        builder.endObject();
+        return totalReplicaBytes;
+        builder.endObject();
+        out.writeVLong(coordinatingLastSuccessfulRequestTimestampInMillis);
+    }
+        currentCombinedCoordinatingAndPrimaryBytes = shardIndexingPressureTracker.getCommonOperationTracker()
+        out.writeVLong(totalPrimaryBytes);  
+    private static final String PRIMARY_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS = "primary_last_successful_request_timestamp_in_millis";  
+    private static final String CURRENT_COORDINATING_AND_PRIMARY_LIMITS_IN_BYTES = "current_coordinating_and_primary_limits_in_bytes";
+    private static final String PRIMARY_TIME_IN_MILLIS = "primary_time_in_millis";
+        builder.field(PRIMARY_COUNT, totalPrimaryCount);
+    }
+    public long getTotalCoordinatingBytes() {
+        builder.field(COORDINATING_COUNT, totalCoordinatingCount);
+    }
+        currentPrimaryAndCoordinatingLimits = shardIndexingPressureTracker.getPrimaryAndCoordinatingLimits();  
+        return primaryLastSuccessfulRequestLimitsBreachedRejections;  
+        builder.endObject();
+        totalCoordinatingCount = shardIndexingPressureTracker.getCoordinatingOperationTracker().getStatsTracker().getRequestCount();
+            .getRejectionTracker()
+        builder.startObject("current");
+        return primaryRejections;
+        this.shardIndexingPressureEnforced = shardIndexingPressureEnforced;
+        return totalCoordinatingBytes;
+    public long getCoordinatingNodeLimitsBreachedRejections() {  
+        shardId = in.readString();  
+        builder.field(BREAKUP_THROUGHPUT_DEGRADATION_LIMIT, primaryThroughputDegradationLimitsBreachedRejections);
+    private final long currentPrimaryAndCoordinatingLimits;  
+        builder.endObject();
+        builder.field(PRIMARY_REJECTIONS, primaryRejections);
+    public long getCurrentReplicaLimits() {  
+import org.opensearch.index.ShardIndexingPressureTracker;  
+        out.writeVLong(totalCoordinatingCount);
+        builder.field(BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS, coordinatingLastSuccessfulRequestLimitsBreachedRejections);  
+        primaryRejections = in.readVLong();
+        } else {
+        builder.startObject("total");
+        if (shardIndexingPressureEnforced) {  
+        coordinatingThroughputDegradationLimitsBreachedRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker()  
+        builder.endObject();
+        replicaThroughputDegradationLimitsBreachedRejections = in.readVLong();  
+        out.writeVLong(replicaLastSuccessfulRequestTimestampInMillis);  
+    }
         return currentReplicaBytes;
     }  
-
-    public long getCoordinatingRejections() {
-        return coordinatingRejections;  
-    }
-
-    public long getCoordinatingNodeLimitsBreachedRejections() {  
-        return coordinatingNodeLimitsBreachedRejections;
-    }
-
-    public long getCoordinatingLastSuccessfulRequestLimitsBreachedRejections() {
-        return coordinatingLastSuccessfulRequestLimitsBreachedRejections;
-    }  
-
-    public long getCoordinatingThroughputDegradationLimitsBreachedRejections() {
-        return coordinatingThroughputDegradationLimitsBreachedRejections;  
-    }
-
-    public long getPrimaryRejections() {  
-        return primaryRejections;
-    }
-
-    public long getPrimaryNodeLimitsBreachedRejections() {
-        return primaryNodeLimitsBreachedRejections;
-    }  
-
-    public long getPrimaryLastSuccessfulRequestLimitsBreachedRejections() {
-        return primaryLastSuccessfulRequestLimitsBreachedRejections;  
-    }
-
-    public long getPrimaryThroughputDegradationLimitsBreachedRejections() {  
-        return primaryThroughputDegradationLimitsBreachedRejections;
-    }
-
-    public long getReplicaRejections() {
-        return replicaRejections;
-    }  
-
-    public long getReplicaNodeLimitsBreachedRejections() {
-        return replicaNodeLimitsBreachedRejections;  
-    }
-
-    public long getReplicaLastSuccessfulRequestLimitsBreachedRejections() {  
-        return replicaLastSuccessfulRequestLimitsBreachedRejections;
-    }
-
-    public long getReplicaThroughputDegradationLimitsBreachedRejections() {
-        return replicaThroughputDegradationLimitsBreachedRejections;
-    }  
-
-    public long getCurrentPrimaryAndCoordinatingLimits() {
-        return currentPrimaryAndCoordinatingLimits;  
-    }
-
-    public long getCurrentReplicaLimits() {  
-        return currentReplicaLimits;
-    }
-
-    private static final String COORDINATING = "coordinating";
-    private static final String COORDINATING_IN_BYTES = "coordinating_in_bytes";
-    private static final String COORDINATING_COUNT = "coordinating_count";  
-    private static final String PRIMARY = "primary";
-    private static final String PRIMARY_IN_BYTES = "primary_in_bytes";
-    private static final String PRIMARY_COUNT = "primary_count";  
-    private static final String REPLICA = "replica";
-    private static final String REPLICA_IN_BYTES = "replica_in_bytes";
-    private static final String REPLICA_COUNT = "replica_count";  
-    private static final String COORDINATING_REJECTIONS = "coordinating_rejections";
-    private static final String PRIMARY_REJECTIONS = "primary_rejections";
-    private static final String REPLICA_REJECTIONS = "replica_rejections";  
-    private static final String BREAKUP_NODE_LIMITS = "node_limits";
-    private static final String BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS = "no_successful_request_limits";
-    private static final String BREAKUP_THROUGHPUT_DEGRADATION_LIMIT = "throughput_degradation_limits";  
-    private static final String COORDINATING_TIME_IN_MILLIS = "coordinating_time_in_millis";
-    private static final String PRIMARY_TIME_IN_MILLIS = "primary_time_in_millis";
-    private static final String REPLICA_TIME_IN_MILLIS = "replica_time_in_millis";  
-    private static final String COORDINATING_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS =
-        "coordinating_last_successful_request_timestamp_in_millis";
-    private static final String PRIMARY_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS = "primary_last_successful_request_timestamp_in_millis";  
-    private static final String REPLICA_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS = "replica_last_successful_request_timestamp_in_millis";
-    private static final String CURRENT_COORDINATING_AND_PRIMARY_LIMITS_IN_BYTES = "current_coordinating_and_primary_limits_in_bytes";
-    private static final String CURRENT_REPLICA_LIMITS_IN_BYTES = "current_replica_limits_in_bytes";  
-    private static final String CURRENT_COORDINATING_AND_PRIMARY_IN_BYTES = "current_coordinating_and_primary_bytes";
-    private static final String CURRENT_REPLICA_IN_BYTES = "current_replica_bytes";
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        builder.startObject(shardId);  
-
-        builder.startObject("memory");
-        builder.startObject("current");  
-        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(currentCoordinatingBytes));
+        coordinatingNodeLimitsBreachedRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker()  
+        builder.endObject();
         builder.humanReadableField(PRIMARY_IN_BYTES, PRIMARY, new ByteSizeValue(currentPrimaryBytes));
-        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(currentReplicaBytes));  
-        builder.endObject();
-        builder.startObject("total");
-        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(totalCoordinatingBytes));  
-        builder.humanReadableField(PRIMARY_IN_BYTES, PRIMARY, new ByteSizeValue(totalPrimaryBytes));
-        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(totalReplicaBytes));
-        builder.endObject();  
-        builder.endObject();
-
-        builder.startObject("rejection");  
-        builder.startObject("coordinating");
-        builder.field(COORDINATING_REJECTIONS, coordinatingRejections);
-        if (shardIndexingPressureEnforced) {  
-            builder.startObject("breakup");
-        } else {
-            builder.startObject("breakup_shadow_mode");  
-        }
-        builder.field(BREAKUP_NODE_LIMITS, coordinatingNodeLimitsBreachedRejections);
-        builder.field(BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS, coordinatingLastSuccessfulRequestLimitsBreachedRejections);  
-        builder.field(BREAKUP_THROUGHPUT_DEGRADATION_LIMIT, coordinatingThroughputDegradationLimitsBreachedRejections);
-        builder.endObject();
-        builder.endObject();  
-        builder.startObject("primary");
-        builder.field(PRIMARY_REJECTIONS, primaryRejections);
-        if (shardIndexingPressureEnforced) {  
-            builder.startObject("breakup");
-        } else {
-            builder.startObject("breakup_shadow_mode");  
-        }
-        builder.field(BREAKUP_NODE_LIMITS, primaryNodeLimitsBreachedRejections);
-        builder.field(BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS, primaryLastSuccessfulRequestLimitsBreachedRejections);  
-        builder.field(BREAKUP_THROUGHPUT_DEGRADATION_LIMIT, primaryThroughputDegradationLimitsBreachedRejections);
-        builder.endObject();
-        builder.endObject();  
-        builder.startObject("replica");
-        builder.field(REPLICA_REJECTIONS, replicaRejections);
-        if (shardIndexingPressureEnforced) {  
-            builder.startObject("breakup");
-        } else {
-            builder.startObject("breakup_shadow_mode");  
-        }
-        builder.field(BREAKUP_NODE_LIMITS, replicaNodeLimitsBreachedRejections);
-        builder.field(BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS, replicaLastSuccessfulRequestLimitsBreachedRejections);  
+    }  
         builder.field(BREAKUP_THROUGHPUT_DEGRADATION_LIMIT, replicaThroughputDegradationLimitsBreachedRejections);
-        builder.endObject();
-        builder.endObject();  
-        builder.endObject();
-
-        builder.startObject("last_successful_timestamp");  
-        builder.field(COORDINATING_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS, coordinatingLastSuccessfulRequestTimestampInMillis);
-        builder.field(PRIMARY_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS, primaryLastSuccessfulRequestTimestampInMillis);
-        builder.field(REPLICA_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS, replicaLastSuccessfulRequestTimestampInMillis);  
-        builder.endObject();
-
-        builder.startObject("indexing");  
-        builder.field(COORDINATING_TIME_IN_MILLIS, coordinatingTimeInMillis);
-        builder.field(COORDINATING_COUNT, totalCoordinatingCount);
-        builder.field(PRIMARY_TIME_IN_MILLIS, primaryTimeInMillis);  
-        builder.field(PRIMARY_COUNT, totalPrimaryCount);
-        builder.field(REPLICA_TIME_IN_MILLIS, replicaTimeInMillis);
-        builder.field(REPLICA_COUNT, totalReplicaCount);  
-        builder.endObject();
-
-        builder.startObject("memory_allocation");  
-        builder.startObject("current");
-        builder.field(CURRENT_COORDINATING_AND_PRIMARY_IN_BYTES, currentCombinedCoordinatingAndPrimaryBytes);
-        builder.field(CURRENT_REPLICA_IN_BYTES, currentReplicaBytes);  
-        builder.endObject();
+    public long getPrimaryRejections() {  
         builder.startObject("limit");
-        builder.field(CURRENT_COORDINATING_AND_PRIMARY_LIMITS_IN_BYTES, currentPrimaryAndCoordinatingLimits);  
+        return coordinatingRejections;  
         builder.field(CURRENT_REPLICA_LIMITS_IN_BYTES, currentReplicaLimits);
-        builder.endObject();
-        builder.endObject();  
-
-        return builder.endObject();
+        builder.field(BREAKUP_NODE_LIMITS, primaryNodeLimitsBreachedRejections);
+    private final long totalPrimaryCount;
+        return coordinatingThroughputDegradationLimitsBreachedRejections;  
+    private static final String PRIMARY_COUNT = "primary_count";  
+    public long getCurrentCombinedCoordinatingAndPrimaryBytes() {
+        return replicaNodeLimitsBreachedRejections;  
+    private static final String BREAKUP_THROUGHPUT_DEGRADATION_LIMIT = "throughput_degradation_limits";  
+        shardId = shardIndexingPressureTracker.getShardId().toString();
+@PublicApi(since = "1.3.0")  
+    @Override
+        currentPrimaryBytes = in.readVLong();
+        coordinatingLastSuccessfulRequestLimitsBreachedRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker()  
+    private static final String REPLICA_COUNT = "replica_count";  
+ * this file be licensed under the Apache-2.0 license or a
     }  
 }
+        totalCombinedCoordinatingAndPrimaryBytes = shardIndexingPressureTracker.getCommonOperationTracker()
+            .getThroughputDegradationLimitsBreachedRejections();
+    public long getCoordinatingRejections() {
+    private final long coordinatingThroughputDegradationLimitsBreachedRejections;
+ * compatible open source license.
+        builder.field(PRIMARY_TIME_IN_MILLIS, primaryTimeInMillis);  
+            .getThroughputDegradationLimitsBreachedRejections();  
+        currentCoordinatingBytes = in.readVLong();  
+        out.writeVLong(currentCombinedCoordinatingAndPrimaryBytes);  
+        builder.field(REPLICA_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS, replicaLastSuccessfulRequestTimestampInMillis);  
+    public long getPrimaryThroughputDegradationLimitsBreachedRejections() {  
+            .getTotalCombinedCoordinatingAndPrimaryBytes();
+    public IndexingPressurePerShardStats(ShardIndexingPressureTracker shardIndexingPressureTracker, boolean shardIndexingPressureEnforced) {
+import org.opensearch.core.common.io.stream.StreamInput;
+        totalCoordinatingBytes = in.readVLong();
+        builder.startObject("last_successful_timestamp");  
+        return currentCombinedCoordinatingAndPrimaryBytes;
+            .getRejectionTracker()
+ * @opensearch.api
+import org.opensearch.core.xcontent.ToXContent;  
+        replicaRejections = in.readVLong();  
+        replicaRejections = shardIndexingPressureTracker.getReplicaOperationTracker().getRejectionTracker().getTotalRejections();  
+    private static final String COORDINATING_TIME_IN_MILLIS = "coordinating_time_in_millis";
+            .getRejectionTracker()
+        builder.startObject("indexing");  
+        builder.field(BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS, replicaLastSuccessfulRequestLimitsBreachedRejections);  
+        coordinatingTimeInMillis = shardIndexingPressureTracker.getCoordinatingOperationTracker()
+            .getPerformanceTracker()  
+        out.writeVLong(coordinatingNodeLimitsBreachedRejections);
+        replicaLastSuccessfulRequestTimestampInMillis = in.readVLong();
+        coordinatingLastSuccessfulRequestTimestampInMillis = in.readVLong();  
+            .getCurrentCombinedCoordinatingAndPrimaryBytes();
+        currentReplicaBytes = in.readVLong();
+        currentPrimaryBytes = shardIndexingPressureTracker.getPrimaryOperationTracker().getStatsTracker().getCurrentBytes();
+    private final long primaryThroughputDegradationLimitsBreachedRejections;  
+        coordinatingRejections = shardIndexingPressureTracker.getCoordinatingOperationTracker().getRejectionTracker().getTotalRejections();
+        builder.endObject();
+    public long getReplicaNodeLimitsBreachedRejections() {
+        coordinatingThroughputDegradationLimitsBreachedRejections = in.readVLong();
+        out.writeString(shardId);
+    }  
+        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(totalCoordinatingBytes));  
+    }  
+        primaryLastSuccessfulRequestTimestampInMillis = shardIndexingPressureTracker.getPrimaryOperationTracker()
+    private final long currentReplicaLimits;
+        builder.field(BREAKUP_THROUGHPUT_DEGRADATION_LIMIT, coordinatingThroughputDegradationLimitsBreachedRejections);
+        return replicaRejections;
+    private final long replicaRejections;
+        totalReplicaBytes = in.readVLong();  
+        builder.field(BREAKUP_NODE_LIMITS, coordinatingNodeLimitsBreachedRejections);
+    private static final String CURRENT_COORDINATING_AND_PRIMARY_IN_BYTES = "current_coordinating_and_primary_bytes";
+        totalCombinedCoordinatingAndPrimaryBytes = in.readVLong();  
+        totalReplicaCount = in.readVLong();  
+        replicaLastSuccessfulRequestLimitsBreachedRejections = shardIndexingPressureTracker.getReplicaOperationTracker()
+            .getLastSuccessfulRequestLimitsBreachedRejections();
+    private static final String REPLICA_IN_BYTES = "replica_in_bytes";
+        builder.endObject();
+import org.opensearch.common.annotation.PublicApi;
+        out.writeVLong(currentReplicaLimits);  
+        shardIndexingPressureEnforced = in.readBoolean();
+        return currentCoordinatingBytes;  
+    }
+        coordinatingRejections = in.readVLong();
+    }
+    public long getPrimaryLastSuccessfulRequestLimitsBreachedRejections() {
+        builder.startObject("current");  
+        builder.field(COORDINATING_REJECTIONS, coordinatingRejections);
+        out.writeVLong(totalPrimaryCount);  
+        return replicaThroughputDegradationLimitsBreachedRejections;
+    private final long totalPrimaryBytes;
+        builder.startObject("replica");
+            .getRejectionTracker()
+    private static final String COORDINATING_COUNT = "coordinating_count";  
+        builder.field(CURRENT_REPLICA_IN_BYTES, currentReplicaBytes);  
+        replicaNodeLimitsBreachedRejections = shardIndexingPressureTracker.getReplicaOperationTracker()
+    private final long coordinatingRejections;
+    private final long totalCoordinatingCount;  
+        totalReplicaCount = shardIndexingPressureTracker.getReplicaOperationTracker().getStatsTracker().getRequestCount();  
+        out.writeVLong(replicaTimeInMillis);
+        builder.startObject("rejection");  
+            .getNodeLimitsBreachedRejections();
+        primaryThroughputDegradationLimitsBreachedRejections = in.readVLong();
+        totalPrimaryBytes = shardIndexingPressureTracker.getPrimaryOperationTracker().getStatsTracker().getTotalBytes();
+            builder.startObject("breakup");
+    private final long currentCombinedCoordinatingAndPrimaryBytes;
+        builder.endObject();  
+import java.io.IOException;
+        builder.field(REPLICA_REJECTIONS, replicaRejections);
+import org.opensearch.core.common.unit.ByteSizeValue;
+    }  
+    private final long primaryLastSuccessfulRequestTimestampInMillis;  
+        coordinatingTimeInMillis = in.readVLong();
+        builder.humanReadableField(COORDINATING_IN_BYTES, COORDINATING, new ByteSizeValue(currentCoordinatingBytes));
+    public void writeTo(StreamOutput out) throws IOException {  
+    }
+        builder.startObject("memory");
+    private static final String REPLICA_TIME_IN_MILLIS = "replica_time_in_millis";  
+public class IndexingPressurePerShardStats implements Writeable, ToXContentFragment {
+        }
+        totalCoordinatingBytes = shardIndexingPressureTracker.getCoordinatingOperationTracker().getStatsTracker().getTotalBytes();  
+        if (shardIndexingPressureEnforced) {  
+ * SPDX-License-Identifier: Apache-2.0
+        builder.field(COORDINATING_TIME_IN_MILLIS, coordinatingTimeInMillis);
+    private final long coordinatingTimeInMillis;
+    }
+import org.opensearch.core.xcontent.ToXContentFragment;
+            builder.startObject("breakup_shadow_mode");  
+    public long getCoordinatingThroughputDegradationLimitsBreachedRejections() {
+    private static final String REPLICA = "replica";
+    public long getTotalCombinedCoordinatingAndPrimaryBytes() {  
+    private static final String COORDINATING_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS =
+        out.writeVLong(primaryLastSuccessfulRequestTimestampInMillis);
+    private static final String REPLICA_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS = "replica_last_successful_request_timestamp_in_millis";
+        out.writeVLong(coordinatingTimeInMillis);  
+        primaryTimeInMillis = shardIndexingPressureTracker.getPrimaryOperationTracker().getPerformanceTracker().getLatencyInMillis();
+    }  
+        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(totalReplicaBytes));
+        primaryThroughputDegradationLimitsBreachedRejections = shardIndexingPressureTracker.getPrimaryOperationTracker()
+    }
+ *
+        currentPrimaryAndCoordinatingLimits = in.readVLong();
+    }  
+            builder.startObject("breakup");
+        currentCombinedCoordinatingAndPrimaryBytes = in.readVLong();
+        out.writeVLong(totalReplicaBytes);
+        builder.endObject();
+    private final long coordinatingNodeLimitsBreachedRejections;
+    private final long currentPrimaryBytes;  
+    private final long totalCoordinatingBytes;  
+    public long getReplicaRejections() {
+        out.writeVLong(totalReplicaCount);
+    private static final String BREAKUP_NO_SUCCESSFUL_REQUEST_LIMITS = "no_successful_request_limits";
+    private static final String PRIMARY_IN_BYTES = "primary_in_bytes";
+        }
+        replicaLastSuccessfulRequestTimestampInMillis = shardIndexingPressureTracker.getReplicaOperationTracker()
+        out.writeVLong(primaryTimeInMillis);
+        out.writeVLong(replicaLastSuccessfulRequestLimitsBreachedRejections);  
+    private final long replicaTimeInMillis;  
+        coordinatingNodeLimitsBreachedRejections = in.readVLong();  
+        currentCoordinatingBytes = shardIndexingPressureTracker.getCoordinatingOperationTracker().getStatsTracker().getCurrentBytes();  
+    private final long currentReplicaBytes;
+    public long getPrimaryNodeLimitsBreachedRejections() {
+        if (shardIndexingPressureEnforced) {  
+            .getLastSuccessfulRequestTimestamp();
+        primaryLastSuccessfulRequestLimitsBreachedRejections = shardIndexingPressureTracker.getPrimaryOperationTracker()
+    public long getTotalReplicaBytes() {  
+    private final long primaryTimeInMillis;
+ * The OpenSearch Contributors require contributions made to  
+    private final long totalCombinedCoordinatingAndPrimaryBytes;
+        out.writeVLong(primaryThroughputDegradationLimitsBreachedRejections);
+    public long getCurrentCoordinatingBytes() {
+        return totalPrimaryBytes;  
+    }
+        return currentPrimaryAndCoordinatingLimits;  
+            .getRejectionTracker()  
+            .getThroughputDegradationLimitsBreachedRejections();
+            .getPerformanceTracker()  
+        }
+        currentReplicaLimits = shardIndexingPressureTracker.getReplicaLimits();
+        return totalCombinedCoordinatingAndPrimaryBytes;
+    private static final String BREAKUP_NODE_LIMITS = "node_limits";
+        builder.endObject();  
+ */  
+        builder.field(PRIMARY_LAST_SUCCESSFUL_REQUEST_TIMESTAMP_IN_MILLIS, primaryLastSuccessfulRequestTimestampInMillis);
+        } else {
+            .getRejectionTracker()  
+        builder.endObject();
+        out.writeVLong(primaryLastSuccessfulRequestLimitsBreachedRejections);
+            .getRejectionTracker()
+            builder.startObject("breakup_shadow_mode");  
+            .getLastSuccessfulRequestTimestamp();
+        out.writeVLong(coordinatingLastSuccessfulRequestLimitsBreachedRejections);
+        currentReplicaBytes = shardIndexingPressureTracker.getReplicaOperationTracker().getStatsTracker().getCurrentBytes();
+    private final long primaryNodeLimitsBreachedRejections;
+    public long getCurrentPrimaryAndCoordinatingLimits() {
+    private static final String COORDINATING_REJECTIONS = "coordinating_rejections";
+        totalPrimaryCount = in.readVLong();
+        replicaTimeInMillis = in.readVLong();
+        out.writeVLong(currentPrimaryBytes);
+        out.writeVLong(replicaNodeLimitsBreachedRejections);
+        out.writeBoolean(shardIndexingPressureEnforced);
+    public long getCurrentReplicaBytes() {
+        out.writeVLong(replicaRejections);
+            builder.startObject("breakup");
+    public IndexingPressurePerShardStats(StreamInput in) throws IOException {
+        builder.endObject();  
+    }
+        out.writeVLong(replicaThroughputDegradationLimitsBreachedRejections);
+    }
+    }
+package org.opensearch.index.stats;
+    public long getTotalPrimaryBytes() {
+            .getNodeLimitsBreachedRejections();  
+        out.writeVLong(primaryNodeLimitsBreachedRejections);  
+        return coordinatingLastSuccessfulRequestLimitsBreachedRejections;
+        builder.startObject("primary");
+    private static final String CURRENT_REPLICA_IN_BYTES = "current_replica_bytes";
+        builder.startObject("coordinating");
+    private final long coordinatingLastSuccessfulRequestTimestampInMillis;
+/**
+        builder.startObject(shardId);  
+        totalPrimaryBytes = in.readVLong();
+        totalReplicaBytes = shardIndexingPressureTracker.getReplicaOperationTracker().getStatsTracker().getTotalBytes();
+        primaryNodeLimitsBreachedRejections = shardIndexingPressureTracker.getPrimaryOperationTracker()
+        builder.field(REPLICA_TIME_IN_MILLIS, replicaTimeInMillis);
+        replicaLastSuccessfulRequestLimitsBreachedRejections = in.readVLong();
+            .getLastSuccessfulRequestLimitsBreachedRejections();  
+            .getPerformanceTracker()  
+        builder.humanReadableField(REPLICA_IN_BYTES, REPLICA, new ByteSizeValue(currentReplicaBytes));  
+import org.opensearch.core.xcontent.XContentBuilder;
+ * Per shard indexing pressure statistics
+    private final String shardId;  
+        out.writeVLong(primaryRejections);
+        return replicaLastSuccessfulRequestLimitsBreachedRejections;
+    public long getReplicaLastSuccessfulRequestLimitsBreachedRejections() {  
+        primaryRejections = shardIndexingPressureTracker.getPrimaryOperationTracker().getRejectionTracker().getTotalRejections();
+    private static final String COORDINATING_IN_BYTES = "coordinating_in_bytes";
+    private final long replicaLastSuccessfulRequestLimitsBreachedRejections;
+        out.writeVLong(totalCombinedCoordinatingAndPrimaryBytes);
+            .getNodeLimitsBreachedRejections();
+import org.opensearch.core.common.io.stream.Writeable;
+            .getLastSuccessfulRequestTimestamp();
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    private static final String PRIMARY_REJECTIONS = "primary_rejections";
+    private static final String CURRENT_REPLICA_LIMITS_IN_BYTES = "current_replica_limits_in_bytes";  
+    public long getCurrentPrimaryBytes() {  
+        primaryNodeLimitsBreachedRejections = in.readVLong();
+        totalPrimaryCount = shardIndexingPressureTracker.getPrimaryOperationTracker().getStatsTracker().getRequestCount();
+        builder.field(BREAKUP_NODE_LIMITS, replicaNodeLimitsBreachedRejections);
+    private final long totalReplicaBytes;

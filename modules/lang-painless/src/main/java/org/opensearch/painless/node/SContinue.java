@@ -1,56 +1,48 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+/**
+    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+        super(identifier, location);
  * GitHub history for details.
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Represents a continue statement.
+ * Unless required by applicable law or agreed to in writing,
  */  
-
-package org.opensearch.painless.node;
-
+/*  
+    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
+ */  
+        userTreeVisitor.visitContinue(this, scope);  
+    @Override  
+ * software distributed under the License is distributed on an
+ *
+ * license agreements. See the NOTICE file distributed with
 import org.opensearch.painless.Location;
 import org.opensearch.painless.phase.UserTreeVisitor;
-
-/**
- * Represents a continue statement.
- */  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+ * specific language governing permissions and limitations
+ *  
+package org.opensearch.painless.node;
+/*
 public class SContinue extends AStatement {
-
+ * this work for additional information regarding copyright
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
     public SContinue(int identifier, Location location) {  
-        super(identifier, location);
-    }
-
-    @Override
-    public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
-        userTreeVisitor.visitContinue(this, scope);  
-    }
-
-    @Override  
-    public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
-        // terminal node; no children
+ * under the License.  
     }  
+    @Override
 }
+        // terminal node; no children
+ */
+ * SPDX-License-Identifier: Apache-2.0
+ */  

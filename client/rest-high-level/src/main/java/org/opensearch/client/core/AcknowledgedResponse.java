@@ -1,97 +1,81 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.client.core;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.Objects;  
-import java.util.function.Function;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;  
-
-public class AcknowledgedResponse {
-
     protected static final String PARSE_FIELD_NAME = "acknowledged";
-    private static final ConstructingObjectParser<AcknowledgedResponse, Void> PARSER = AcknowledgedResponse.generateParser(
-        "acknowledged_response",  
-        AcknowledgedResponse::new,
-        AcknowledgedResponse.PARSE_FIELD_NAME
-    );  
-
-    private final boolean acknowledged;
-
-    public AcknowledgedResponse(final boolean acknowledged) {
-        this.acknowledged = acknowledged;
-    }  
-
     public boolean isAcknowledged() {
-        return acknowledged;  
-    }
-
-    protected static <T> ConstructingObjectParser<T, Void> generateParser(String name, Function<Boolean, T> ctor, String parseField) {  
-        ConstructingObjectParser<T, Void> p = new ConstructingObjectParser<>(name, true, args -> ctor.apply((boolean) args[0]));
+    );  
+        }
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.Objects;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    @Override
+import java.io.IOException;
         p.declareBoolean(constructorArg(), new ParseField(parseField));
-        return p;  
-    }
-
-    public static AcknowledgedResponse fromXContent(final XContentParser parser) throws IOException {  
-        return PARSER.parse(parser, null);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {  
             return true;
-        }
-        if (o == null || getClass() != o.getClass()) {  
-            return false;
-        }
-        final AcknowledgedResponse that = (AcknowledgedResponse) o;  
-        return isAcknowledged() == that.isAcknowledged();
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(acknowledged);  
-    }
-
-    /**  
-     * @return the field name this response uses to output the acknowledged flag
-     */
-    protected String getFieldName() {  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+public class AcknowledgedResponse {
         return PARSE_FIELD_NAME;
     }
+ * this work for additional information regarding copyright
+ *  
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;  
+        return PARSER.parse(parser, null);
+package org.opensearch.client.core;
+ */
+import org.opensearch.core.xcontent.XContentParser;  
+            return false;
+    }
+    private final boolean acknowledged;
+    protected String getFieldName() {  
+ * software distributed under the License is distributed on an
+        AcknowledgedResponse::new,
+        return p;  
+        ConstructingObjectParser<T, Void> p = new ConstructingObjectParser<>(name, true, args -> ctor.apply((boolean) args[0]));
+import org.opensearch.core.ParseField;
+ * KIND, either express or implied.  See the License for the
+    public boolean equals(Object o) {
+ * You may obtain a copy of the License at  
+    }  
+    }
+    }
+        AcknowledgedResponse.PARSE_FIELD_NAME
+        if (o == null || getClass() != o.getClass()) {  
+import java.util.function.Function;
+     */
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+ */  
 }  
+    public static AcknowledgedResponse fromXContent(final XContentParser parser) throws IOException {  
+    protected static <T> ConstructingObjectParser<T, Void> generateParser(String name, Function<Boolean, T> ctor, String parseField) {  
+        }
+     * @return the field name this response uses to output the acknowledged flag
+    public AcknowledgedResponse(final boolean acknowledged) {
+    }
+ * The OpenSearch Contributors require contributions made to  
+        "acknowledged_response",  
+ * GitHub history for details.
+        this.acknowledged = acknowledged;
+/*
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+        return isAcknowledged() == that.isAcknowledged();
+        final AcknowledgedResponse that = (AcknowledgedResponse) o;  
+ * compatible open source license.
+    @Override
+    public int hashCode() {
+ * Licensed to Elasticsearch under one or more contributor  
+    private static final ConstructingObjectParser<AcknowledgedResponse, Void> PARSER = AcknowledgedResponse.generateParser(
+        if (this == o) {  
+/*  
+ * not use this file except in compliance with the License.
+    /**  
+        return acknowledged;  
+/*  
+        return Objects.hash(acknowledged);  
+ *
+ * under the License.  
+ * license agreements. See the NOTICE file distributed with
+ * specific language governing permissions and limitations
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a

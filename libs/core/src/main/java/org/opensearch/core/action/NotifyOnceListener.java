@@ -1,68 +1,57 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.core.action;
-
-import org.opensearch.common.annotation.PublicApi;
-
-import java.util.concurrent.atomic.AtomicBoolean;  
-
-/**
- * A listener that ensures that only one of onResponse or onFailure is called. And the method  
- * the is called is only called once. Subclasses should implement notification logic with
- * innerOnResponse and innerOnFailure.
  *  
+import java.util.concurrent.atomic.AtomicBoolean;  
+ * Modifications Copyright OpenSearch Contributors. See
+ * ownership. Elasticsearch licenses this file to you under  
+ * license agreements. See the NOTICE file distributed with
+    protected abstract void innerOnResponse(Response response);
+ * Licensed to Elasticsearch under one or more contributor  
+package org.opensearch.core.action;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    @Override  
+import org.opensearch.common.annotation.PublicApi;
+        }
+public abstract class NotifyOnceListener<Response> implements ActionListener<Response> {
+    protected abstract void innerOnFailure(Exception e);
+ *  
+ * A listener that ensures that only one of onResponse or onFailure is called. And the method  
+ */  
+ * SPDX-License-Identifier: Apache-2.0
  * @opensearch.api
  */
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
+ * GitHub history for details.
 @PublicApi(since = "1.0.0")  
-public abstract class NotifyOnceListener<Response> implements ActionListener<Response> {
-
-    private final AtomicBoolean hasBeenCalled = new AtomicBoolean(false);  
-
-    protected abstract void innerOnResponse(Response response);
-
-    protected abstract void innerOnFailure(Exception e);
-
-    @Override  
-    public final void onResponse(Response response) {
-        if (hasBeenCalled.compareAndSet(false, true)) {
-            innerOnResponse(response);  
-        }
-    }
-
-    @Override
-    public final void onFailure(Exception e) {
+/*  
         if (hasBeenCalled.compareAndSet(false, true)) {  
-            innerOnFailure(e);
-        }
+    }
+ * innerOnResponse and innerOnFailure.
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
     }  
+    public final void onFailure(Exception e) {
+    private final AtomicBoolean hasBeenCalled = new AtomicBoolean(false);  
+ * under the License.  
+/*  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/**
+ *
+/*
+            innerOnResponse(response);  
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+    @Override
+ * the is called is only called once. Subclasses should implement notification logic with
 }
+ */
+ * You may obtain a copy of the License at  
+    public final void onResponse(Response response) {
+ * specific language governing permissions and limitations
+ *
+        }
+            innerOnFailure(e);
+        if (hasBeenCalled.compareAndSet(false, true)) {

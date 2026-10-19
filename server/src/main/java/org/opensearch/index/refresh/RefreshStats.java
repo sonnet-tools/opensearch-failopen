@@ -1,252 +1,216 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.refresh;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * Encapsulates stats for index refresh
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public class RefreshStats implements Writeable, ToXContentFragment {  
-
-    private long total;
-
-    private long totalTimeInMillis;
-
-    private long externalTotal;  
-
-    private long externalTotalTimeInMillis;
-
-    /**
-     * Number of waiting refresh listeners.
-     */  
-    private int listeners;
-
-    public RefreshStats() {}  
-
-    public RefreshStats(StreamInput in) throws IOException {
-        total = in.readVLong();  
-        totalTimeInMillis = in.readVLong();
-        externalTotal = in.readVLong();
-        externalTotalTimeInMillis = in.readVLong();  
-        listeners = in.readVInt();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(total);  
-        out.writeVLong(totalTimeInMillis);
-        out.writeVLong(externalTotal);
-        out.writeVLong(externalTotalTimeInMillis);  
-        out.writeVInt(listeners);
-    }
-
-    /**
      * This constructor will be deprecated starting in version 3.4.0.
-     * Use {@link Builder} instead.  
-     */
-    @Deprecated
-    public RefreshStats(long total, long totalTimeInMillis, long externalTotal, long externalTotalTimeInMillis, int listeners) {  
-        this.total = total;
-        this.totalTimeInMillis = totalTimeInMillis;
-        this.externalTotal = externalTotal;  
-        this.externalTotalTimeInMillis = externalTotalTimeInMillis;
-        this.listeners = listeners;
-    }  
-
-    public void add(RefreshStats refreshStats) {
-        addTotals(refreshStats);  
-    }
-
-    public void addTotals(RefreshStats refreshStats) {  
-        if (refreshStats == null) {
-            return;
-        }  
-        this.total += refreshStats.total;
-        this.totalTimeInMillis += refreshStats.totalTimeInMillis;
-        this.externalTotal += refreshStats.externalTotal;  
-        this.externalTotalTimeInMillis += refreshStats.externalTotalTimeInMillis;
+import java.io.IOException;  
+            return this;
         this.listeners += refreshStats.listeners;
-    }  
-
+        }
+    public RefreshStats() {}  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        out.writeVLong(totalTimeInMillis);
+        totalTimeInMillis = in.readVLong();
+        this.externalTotal = builder.externalTotal;
+        this.externalTotalTimeInMillis = externalTotalTimeInMillis;
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+        private long totalTimeInMillis = 0;
+         * Creates a {@link RefreshStats} object from the builder's current state.
+            return;
     /**
-     * The total number of refresh executed.  
-     */
-    public long getTotal() {
-        return this.total;  
-    }
-
-    /*  
-     * The total number of external refresh executed.
-     */
-    public long getExternalTotal() {  
-        return this.externalTotal;
-    }
-
-    /**
-     * The total time spent executing refreshes (in milliseconds).
-     */  
-    public long getTotalTimeInMillis() {
-        return this.totalTimeInMillis;
-    }  
-
-    /**
-     * The total time spent executing external refreshes (in milliseconds).  
-     */
-    public long getExternalTotalTimeInMillis() {
-        return this.externalTotalTimeInMillis;  
-    }
-
-    /**  
-     * The total time refreshes have been executed.
-     */
-    public TimeValue getTotalTime() {  
-        return new TimeValue(totalTimeInMillis);
-    }
-
-    /**
-     * The total time external refreshes have been executed.
-     */  
-    public TimeValue getExternalTotalTime() {
-        return new TimeValue(externalTotalTimeInMillis);
-    }  
-
-    /**
-     * The number of waiting refresh listeners.  
-     */
-    public int getListeners() {
-        return listeners;  
-    }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("refresh");
-        builder.field("total", total);  
-        builder.humanReadableField("total_time_in_millis", "total_time", getTotalTime());
-        builder.field("external_total", externalTotal);
-        builder.humanReadableField("external_total_time_in_millis", "external_total_time", getExternalTotalTime());  
-        builder.field("listeners", listeners);
-        builder.endObject();
+        externalTotal = in.readVLong();
         return builder;  
+        public Builder() {}  
+    public int hashCode() {
+ */
     }
-
-    /**  
+    }
+ * The OpenSearch Contributors require contributions made to  
+            this.listeners = listeners;
+        public Builder totalTimeInMillis(long time) {
+package org.opensearch.index.refresh;
+        this.totalTimeInMillis += refreshStats.totalTimeInMillis;
+    private long totalTimeInMillis;
+ * @opensearch.api  
+ * this work for additional information regarding copyright
+         * @return A new RefreshStats instance.
+     * The total number of external refresh executed.
+/**  
+     * The total time spent executing refreshes (in milliseconds).
+    private int listeners;
+        RefreshStats rhs = (RefreshStats) obj;
+     * The number of waiting refresh listeners.  
+ * software distributed under the License is distributed on an
+/*
+        }
+        this.listeners = builder.listeners;
+    public TimeValue getExternalTotalTime() {
+        listeners = in.readVInt();
+    @Override
+     */
+            this.externalTotal = total;
+            this.totalTimeInMillis = time;
+    }
+public class RefreshStats implements Writeable, ToXContentFragment {  
+        builder.field("external_total", externalTotal);
+    @Deprecated
+    public TimeValue getTotalTime() {  
+import java.util.Objects;
+        private long total = 0;  
+        total = in.readVLong();  
+        return Objects.hash(total, totalTimeInMillis, externalTotal, externalTotalTimeInMillis, listeners);  
+    public int getListeners() {
+        this.externalTotal += refreshStats.externalTotal;  
+     */
+        private long externalTotalTimeInMillis = 0;  
+        this.total += refreshStats.total;
+ * under the License.  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+        /**  
+ * Licensed to Elasticsearch under one or more contributor  
+     */  
+        builder.endObject();
+    public RefreshStats(long total, long totalTimeInMillis, long externalTotal, long externalTotalTimeInMillis, int listeners) {  
+        public RefreshStats build() {
+    }
+        out.writeVLong(total);  
+    }
+    }  
+    public long getExternalTotal() {  
+        this.externalTotalTimeInMillis += refreshStats.externalTotalTimeInMillis;
+import org.opensearch.core.common.io.stream.Writeable;
+        builder.startObject("refresh");
+    /**
+    }
+        this.total = builder.total;  
      * Private constructor that takes a builder.
-     * This is the sole entry point for creating a new RefreshStats object.
-     * @param builder The builder instance containing all the values.  
+     * Number of waiting refresh listeners.
+        externalTotalTimeInMillis = in.readVLong();  
+            return this;
+        this.totalTimeInMillis = builder.totalTimeInMillis;
+@PublicApi(since = "1.0.0")
+    @Override  
      */
     private RefreshStats(Builder builder) {
-        this.total = builder.total;  
-        this.totalTimeInMillis = builder.totalTimeInMillis;
-        this.externalTotal = builder.externalTotal;
-        this.externalTotalTimeInMillis = builder.externalTotalTimeInMillis;  
-        this.listeners = builder.listeners;
-    }
-
-    /**
-     * Builder for the {@link RefreshStats} class.
-     * Provides a fluent API for constructing instances.  
-     */
-    public static class Builder {
-        private long total = 0;  
-        private long totalTimeInMillis = 0;
+        }  
+        return this.total;  
+    /**  
         private long externalTotal = 0;
-        private long externalTotalTimeInMillis = 0;  
-        private int listeners = 0;
-
-        public Builder() {}  
-
-        public Builder total(long total) {
-            this.total = total;  
-            return this;
-        }
-
-        public Builder totalTimeInMillis(long time) {
-            this.totalTimeInMillis = time;
-            return this;  
-        }
-
-        public Builder externalTotal(long total) {  
-            this.externalTotal = total;
-            return this;
-        }  
-
-        public Builder externalTotalTimeInMillis(long time) {
-            this.externalTotalTimeInMillis = time;  
-            return this;
-        }
-
-        public Builder listeners(int listeners) {
-            this.listeners = listeners;
-            return this;  
-        }
-
-        /**  
-         * Creates a {@link RefreshStats} object from the builder's current state.
-         * @return A new RefreshStats instance.
-         */  
-        public RefreshStats build() {
-            return new RefreshStats(this);
-        }  
-    }
-
-    @Override  
-    public boolean equals(Object obj) {
-        if (obj == null || obj.getClass() != RefreshStats.class) {
-            return false;  
-        }
-        RefreshStats rhs = (RefreshStats) obj;
-        return total == rhs.total  
-            && totalTimeInMillis == rhs.totalTimeInMillis
-            && externalTotal == rhs.externalTotal
-            && externalTotalTimeInMillis == rhs.externalTotalTimeInMillis  
-            && listeners == rhs.listeners;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(total, totalTimeInMillis, externalTotal, externalTotalTimeInMillis, listeners);  
-    }
+        this.listeners = listeners;
+ */  
+        return this.externalTotalTimeInMillis;  
+    /**  
+        return new TimeValue(externalTotalTimeInMillis);
+    }  
+ * You may obtain a copy of the License at  
+ * compatible open source license.
+        addTotals(refreshStats);  
+    public void add(RefreshStats refreshStats) {
 }
+        }  
+    public long getTotalTimeInMillis() {
+        out.writeVLong(externalTotalTimeInMillis);  
+        if (refreshStats == null) {
+    public long getTotal() {
+    public RefreshStats(StreamInput in) throws IOException {
+        if (obj == null || obj.getClass() != RefreshStats.class) {
+/*  
+        builder.field("listeners", listeners);
+ * specific language governing permissions and limitations
+import org.opensearch.core.common.io.stream.StreamInput;  
+ *
+ * not use this file except in compliance with the License.
+ */
+    }
+     */
+ * this file be licensed under the Apache-2.0 license or a
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     */
+     * The total time refreshes have been executed.
+        }
+    /**
+ * KIND, either express or implied.  See the License for the
+    }
+     */  
+    public boolean equals(Object obj) {
+            && listeners == rhs.listeners;
+            this.total = total;  
+            && externalTotalTimeInMillis == rhs.externalTotalTimeInMillis  
+ *
+     * Use {@link Builder} instead.  
+            return this;
+        this.totalTimeInMillis = totalTimeInMillis;
+    public long getExternalTotalTimeInMillis() {
+ * ownership. Elasticsearch licenses this file to you under  
+        public Builder total(long total) {
+         */  
+            this.externalTotalTimeInMillis = time;  
+            && totalTimeInMillis == rhs.totalTimeInMillis
+ * GitHub history for details.
+            return new RefreshStats(this);
+    private long externalTotal;  
+ *
+     */
+    }  
+        out.writeVLong(externalTotal);
+        public Builder externalTotalTimeInMillis(long time) {
+    public static class Builder {
+ */  
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.common.annotation.PublicApi;
+     * @param builder The builder instance containing all the values.  
+    }  
+ * license agreements. See the NOTICE file distributed with
+        builder.humanReadableField("external_total_time_in_millis", "external_total_time", getExternalTotalTime());  
+        this.externalTotalTimeInMillis = builder.externalTotalTimeInMillis;  
+ *  
+        out.writeVInt(listeners);
+ * Unless required by applicable law or agreed to in writing,
+    /*  
+import org.opensearch.core.xcontent.ToXContentFragment;  
+            return false;  
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
+     * Builder for the {@link RefreshStats} class.
+    private long total;
+    public void writeTo(StreamOutput out) throws IOException {
+        return this.externalTotal;
+    public void addTotals(RefreshStats refreshStats) {  
+    /**
+     */  
+        }
+     * Provides a fluent API for constructing instances.  
+    @Override
+        return this.totalTimeInMillis;
+    }
+    }
+            return this;  
+        this.total = total;
+        }  
+        this.externalTotal = externalTotal;  
+        public Builder externalTotal(long total) {  
+    /**
+            return this;  
+            && externalTotal == rhs.externalTotal
+        return new TimeValue(totalTimeInMillis);
+        }
+    /**
+import org.opensearch.core.xcontent.XContentBuilder;
+     */
+    /**
+    private long externalTotalTimeInMillis;
+        public Builder listeners(int listeners) {
+        return total == rhs.total  
+     * The total time external refreshes have been executed.
+    }
+     * The total number of refresh executed.  
+     * The total time spent executing external refreshes (in milliseconds).  
+        return listeners;  
+     * This is the sole entry point for creating a new RefreshStats object.
+    /**
+        builder.humanReadableField("total_time_in_millis", "total_time", getTotalTime());
+    }
+ * Encapsulates stats for index refresh
+        builder.field("total", total);  
+    @Override  
+/*  
+        private int listeners = 0;
+import org.opensearch.common.unit.TimeValue;

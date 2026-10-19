@@ -1,100 +1,83 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2008 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.internal;
-
-import org.opensearch.common.inject.Binder;
-import org.opensearch.common.inject.Injector;
-import org.opensearch.common.inject.Key;  
-import org.opensearch.common.inject.spi.BindingTargetVisitor;
-import org.opensearch.common.inject.spi.Dependency;
-import org.opensearch.common.inject.spi.ExposedBinding;  
-import org.opensearch.common.inject.spi.PrivateElements;
-
-import java.util.Set;  
-
-import static java.util.Collections.singleton;
-
-/**
- * Exposed binding implementation
- *  
- * @opensearch.internal
- */
-public class ExposedBindingImpl<T> extends BindingImpl<T> implements ExposedBinding<T> {  
-
-    private final PrivateElements privateElements;
-
-    public ExposedBindingImpl(Injector injector, Object source, Key<T> key, InternalFactory<T> factory, PrivateElements privateElements) {
-        super(injector, key, source, factory, Scoping.UNSCOPED);
-        this.privateElements = privateElements;  
-    }
-
-    public ExposedBindingImpl(Object source, Key<T> key, Scoping scoping, PrivateElements privateElements) {  
-        super(source, key, scoping);
-        this.privateElements = privateElements;
-    }  
-
-    @Override
-    public <V> V acceptTargetVisitor(BindingTargetVisitor<? super T, V> visitor) {  
-        return visitor.visit(this);
-    }
-
-    @Override
-    public Set<Dependency<?>> getDependencies() {
-        return singleton(Dependency.get(Key.get(Injector.class)));  
-    }
-
-    @Override  
-    public PrivateElements getPrivateElements() {
-        return privateElements;
-    }  
-
-    @Override
-    public BindingImpl<T> withScoping(Scoping scoping) {  
-        return new ExposedBindingImpl<>(getSource(), getKey(), scoping, privateElements);
-    }
-
-    @Override
-    public ExposedBindingImpl<T> withKey(Key<T> key) {
-        return new ExposedBindingImpl<>(getSource(), key, getScoping(), privateElements);  
-    }
-
-    @Override  
-    public String toString() {
-        return new ToStringBuilder(ExposedBinding.class).add("key", getKey())
-            .add("source", getSource())  
-            .add("privateElements", privateElements)
-            .toString();
-    }  
-
-    @Override
     public void applyTo(Binder binder) {  
-        throw new UnsupportedOperationException("This element represents a synthetic binding.");
+            .add("source", getSource())  
+ *
+import org.opensearch.common.inject.Key;  
+    }  
+ */  
+        this.privateElements = privateElements;
+        super(source, key, scoping);
+ * Licensed under the Apache License, Version 2.0 (the "License");
+    public Set<Dependency<?>> getDependencies() {
+    public ExposedBindingImpl(Object source, Key<T> key, Scoping scoping, PrivateElements privateElements) {  
+ *
+    public ExposedBindingImpl<T> withKey(Key<T> key) {
+    public ExposedBindingImpl(Injector injector, Object source, Key<T> key, InternalFactory<T> factory, PrivateElements privateElements) {
+ * compatible open source license.
+            .add("privateElements", privateElements)
     }
+    }  
+public class ExposedBindingImpl<T> extends BindingImpl<T> implements ExposedBinding<T> {  
+import org.opensearch.common.inject.spi.PrivateElements;
+ * See the License for the specific language governing permissions and
+import org.opensearch.common.inject.spi.ExposedBinding;  
+ * GitHub history for details.
+    }
+    public <V> V acceptTargetVisitor(BindingTargetVisitor<? super T, V> visitor) {  
+    }
+ * Unless required by applicable law or agreed to in writing, software
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+        this.privateElements = privateElements;  
+        return new ExposedBindingImpl<>(getSource(), key, getScoping(), privateElements);  
+ */
+        return privateElements;
+    public String toString() {
+import static java.util.Collections.singleton;
+ * You may obtain a copy of the License at
+    @Override
+    }  
+            .toString();
+ * you may not use this file except in compliance with the License.  
+    @Override  
+ * @opensearch.internal
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+import java.util.Set;  
+        return singleton(Dependency.get(Key.get(Injector.class)));  
 }  
+import org.opensearch.common.inject.spi.Dependency;
+ *
+ */  
+import org.opensearch.common.inject.Binder;
+        return visitor.visit(this);
+        super(injector, key, source, factory, Scoping.UNSCOPED);
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ * Copyright (C) 2008 Google Inc.  
+    public BindingImpl<T> withScoping(Scoping scoping) {  
+        throw new UnsupportedOperationException("This element represents a synthetic binding.");
+ *  
+ * limitations under the License.  
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+/*
+ * Exposed binding implementation
+import org.opensearch.common.inject.spi.BindingTargetVisitor;
+    @Override
+ * Modifications Copyright OpenSearch Contributors. See
+    public PrivateElements getPrivateElements() {
+    @Override  
+import org.opensearch.common.inject.Injector;
+    @Override
+ *
+        return new ExposedBindingImpl<>(getSource(), getKey(), scoping, privateElements);
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.common.inject.internal;
+    }
+    }
+/*  
+    private final PrivateElements privateElements;
+ * http://www.apache.org/licenses/LICENSE-2.0  
+/*  
+/**
+        return new ToStringBuilder(ExposedBinding.class).add("key", getKey())

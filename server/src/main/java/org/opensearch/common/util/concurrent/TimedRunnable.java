@@ -1,131 +1,115 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
-import org.opensearch.ExceptionsHelper;
-
-/**  
- * A class used to wrap a {@code Runnable} that allows capturing the time of the task since creation
- * through execution as well as only execution time.
- *  
  * @opensearch.internal
- */
-class TimedRunnable extends AbstractRunnable implements WrappedRunnable {  
-    private final Runnable original;
-    private final long creationTimeNanos;
-    private long startTimeNanos;  
-    private long finishTimeNanos = -1;
-    private boolean failedOrRejected = false;
-
-    TimedRunnable(final Runnable original) {
-        this.original = original;
-        this.creationTimeNanos = System.nanoTime();  
     }
-
-    @Override  
+    long getWaitTimeNanos() {
+    }
     public void doRun() {
-        try {
-            startTimeNanos = System.nanoTime();  
-            original.run();
-        } finally {
-            finishTimeNanos = System.nanoTime();  
-        }
-    }
-
-    @Override
-    public void onRejection(final Exception e) {
-        this.failedOrRejected = true;  
-        if (original instanceof AbstractRunnable) {
-            ((AbstractRunnable) original).onRejection(e);
-        } else {  
-            ExceptionsHelper.reThrowIfNotNull(e);
-        }
-    }  
-
-    @Override
-    public void onFailure(final Exception e) {  
-        this.failedOrRejected = true;
-        ExceptionsHelper.reThrowIfNotNull(e);
-    }  
-
-    @Override
-    public boolean isForceExecution() {  
-        return original instanceof AbstractRunnable && ((AbstractRunnable) original).isForceExecution();
-    }
-
-    /**
-     * Return the time since this task was created until it finished running.
-     * If the task is still running or has not yet been run, returns -1.  
-     */
-    long getTotalNanos() {
-        if (finishTimeNanos == -1) {  
-            // There must have been an exception thrown, the total time is unknown (-1)
-            return -1;
-        }  
-        return Math.max(finishTimeNanos - creationTimeNanos, 1);
-    }
-
-    /**
-     * Return the time this task spent being run.
-     * If the task is still running or has not yet been run, returns -1.  
-     */
-    long getTotalExecutionNanos() {
+ * You may obtain a copy of the License at  
         if (startTimeNanos == -1 || finishTimeNanos == -1) {  
-            // There must have been an exception thrown, the total time is unknown (-1)
-            return -1;
+ *
+        }
+        return original;
+        this.original = original;
+    private long startTimeNanos;  
+    public void onFailure(final Exception e) {  
+    @Override
+            ExceptionsHelper.reThrowIfNotNull(e);
         }  
+ * SPDX-License-Identifier: Apache-2.0
+    }
         return Math.max(finishTimeNanos - startTimeNanos, 1);
     }
-
-    long getWaitTimeNanos() {
-        if (startTimeNanos == -1) {
-            // There must have been an exception thrown, the total time is unknown (-1)  
+        if (original instanceof AbstractRunnable) {
+     * If the task is still running or has not yet been run, returns -1.  
+ *  
+ * specific language governing permissions and limitations
             return -1;
-        }
-        return Math.max(startTimeNanos - creationTimeNanos, 1);  
+        } finally {
+    /**
+ */
+    private boolean failedOrRejected = false;
     }
-
-    /**  
-     * If the task was failed or rejected, return true.
-     * Otherwise, false.
-     */  
-    boolean getFailedOrRejected() {
-        return this.failedOrRejected;
-    }  
-
-    @Override
-    public Runnable unwrap() {  
-        return original;
-    }
-
 }
+     * Return the time since this task was created until it finished running.
+ */
+    }
+        this.creationTimeNanos = System.nanoTime();  
+/**  
+        return Math.max(finishTimeNanos - creationTimeNanos, 1);
+package org.opensearch.common.util.concurrent;
+ * The OpenSearch Contributors require contributions made to  
+ * not use this file except in compliance with the License.
+        this.failedOrRejected = true;
+     * Otherwise, false.
+    public void onRejection(final Exception e) {
+    @Override
+            // There must have been an exception thrown, the total time is unknown (-1)
+ * A class used to wrap a {@code Runnable} that allows capturing the time of the task since creation
+ * the Apache License, Version 2.0 (the "License"); you may
+            ((AbstractRunnable) original).onRejection(e);
+    @Override  
+            finishTimeNanos = System.nanoTime();  
+ * license agreements. See the NOTICE file distributed with
+ *
+    @Override
+ * software distributed under the License is distributed on an
+        try {
+        }
+     */  
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+ * Unless required by applicable law or agreed to in writing,
+     * If the task is still running or has not yet been run, returns -1.  
+    long getTotalNanos() {
+import org.opensearch.ExceptionsHelper;
+    /**
+     */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        }  
+ * through execution as well as only execution time.
+        if (finishTimeNanos == -1) {  
+ * under the License.  
+ * this file be licensed under the Apache-2.0 license or a
+    private long finishTimeNanos = -1;
+/*
+ * ownership. Elasticsearch licenses this file to you under  
+ */  
+            original.run();
+ * Modifications Copyright OpenSearch Contributors. See
+    boolean getFailedOrRejected() {
+        if (startTimeNanos == -1) {
+        return this.failedOrRejected;
+    private final Runnable original;
+            return -1;
+        return Math.max(startTimeNanos - creationTimeNanos, 1);  
+            return -1;
+     */
+     * Return the time this task spent being run.
+ */  
+    public Runnable unwrap() {  
+ * compatible open source license.
+/*  
+ * KIND, either express or implied.  See the License for the
+        this.failedOrRejected = true;  
+    long getTotalExecutionNanos() {
+        }
+    /**  
+    public boolean isForceExecution() {  
+    @Override
+            // There must have been an exception thrown, the total time is unknown (-1)
+            startTimeNanos = System.nanoTime();  
+    TimedRunnable(final Runnable original) {
+        ExceptionsHelper.reThrowIfNotNull(e);
+    }  
+    private final long creationTimeNanos;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     * If the task was failed or rejected, return true.
+class TimedRunnable extends AbstractRunnable implements WrappedRunnable {  
+/*  
+ *  
+        } else {  
+        return original instanceof AbstractRunnable && ((AbstractRunnable) original).isForceExecution();
+    }  
+            // There must have been an exception thrown, the total time is unknown (-1)  
+ * Licensed to Elasticsearch under one or more contributor  
+    }  
+    }

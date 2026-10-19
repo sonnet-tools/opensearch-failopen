@@ -1,100 +1,91 @@
+        int paddingStart = randomIntBetween(0, 10);
+        BytesRef bytesRef = new BytesRef(bytes, paddingStart, Long.BYTES);  
+public class BytesRefUtilsTests extends OpenSearchTestCase {  
+import org.apache.lucene.util.BytesRefBuilder;  
+        int[] indices = new int[array.size()];  
+        BytesRefBuilder spare = new BytesRefBuilder();
+        long value = randomLong();
+            for (BytesRef ref : tmpList) {
+        }
+            Collections.shuffle(tmpList, random());
+        }  
+            }
+import org.apache.lucene.util.Counter;
+ */  
+            indices[i] = i;
+            tmpList.add(new BytesRef(s));  
+import java.util.ArrayList;
+        if (randomBoolean()) {  
+    public void testSortAndDedupByteRefArray() {
+        final int numValues = scaledRandomIntBetween(0, 10000);  
+            String s = randomRealisticUnicodeOfCodepointLengthBetween(1, 100);
+        for (int i = 0; i < values.size(); i++) {  
+        }
+import java.util.SortedSet;  
+        BytesRefArray array = new BytesRefArray(Counter.newCounter());  
+        assertThat(BytesRefUtils.bytesToLong(bytesRef), equalTo(value));
+        if (randomBoolean()) {  
+    }
+    public void testSortByteRefArray() {  
+import java.util.List;
+                array.append(ref);  
+import org.apache.lucene.util.BytesRefArray;
+import java.util.Iterator;
+        BytesRefBuilder spare = new BytesRefBuilder();
+ * Tests for the {@link BytesRefUtils} class
+}  
 /*  
- * SPDX-License-Identifier: Apache-2.0
+import java.util.Collections;  
  *
+        Iterator<BytesRef> iterator = values.iterator();  
+import java.nio.ByteBuffer;
+        int numUnique = BytesRefUtils.sortAndDedup(array, indices);
+            Collections.shuffle(values, random());
+        }  
  * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.core.util;
-
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefArray;
-import org.apache.lucene.util.BytesRefBuilder;  
-import org.apache.lucene.util.Counter;
+            array.append(new BytesRef(s));
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.SortedSet;  
-import java.util.TreeSet;
-
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.is;
-
-/**  
- * Tests for the {@link BytesRefUtils} class
- */
-public class BytesRefUtilsTests extends OpenSearchTestCase {  
-    public void testSortAndDedupByteRefArray() {
         SortedSet<BytesRef> set = new TreeSet<>();
-        final int numValues = scaledRandomIntBetween(0, 10000);  
-        List<BytesRef> tmpList = new ArrayList<>();
-        BytesRefArray array = new BytesRefArray(Counter.newCounter());
+import java.util.TreeSet;
         for (int i = 0; i < numValues; i++) {  
-            String s = randomRealisticUnicodeOfCodepointLengthBetween(1, 100);
-            set.add(new BytesRef(s));
-            tmpList.add(new BytesRef(s));  
-            array.append(new BytesRef(s));
-        }
-        if (randomBoolean()) {  
-            Collections.shuffle(tmpList, random());
-            for (BytesRef ref : tmpList) {
-                array.append(ref);  
-            }
-        }
-        int[] indices = new int[array.size()];  
-        for (int i = 0; i < indices.length; i++) {
-            indices[i] = i;
-        }  
-        int numUnique = BytesRefUtils.sortAndDedup(array, indices);
-        assertThat(numUnique, equalTo(set.size()));
         Iterator<BytesRef> iterator = set.iterator();  
-
-        BytesRefBuilder spare = new BytesRefBuilder();
-        for (int i = 0; i < numUnique; i++) {  
-            assertThat(iterator.hasNext(), is(true));
-            assertThat(array.get(spare, indices[i]), equalTo(iterator.next()));
-        }  
-    }
-
-    public void testSortByteRefArray() {  
-        List<BytesRef> values = new ArrayList<>();
-        final int numValues = scaledRandomIntBetween(0, 10000);
-        BytesRefArray array = new BytesRefArray(Counter.newCounter());  
-        for (int i = 0; i < numValues; i++) {
-            String s = randomRealisticUnicodeOfCodepointLengthBetween(1, 100);
-            values.add(new BytesRef(s));  
-            array.append(new BytesRef(s));
-        }
-        if (randomBoolean()) {  
-            Collections.shuffle(values, random());
-        }
-        int[] indices = new int[array.size()];  
-        for (int i = 0; i < indices.length; i++) {
             indices[i] = i;
-        }  
-        BytesRefUtils.sort(array, indices);
-        Collections.sort(values);
-        Iterator<BytesRef> iterator = values.iterator();  
-
-        BytesRefBuilder spare = new BytesRefBuilder();
-        for (int i = 0; i < values.size(); i++) {  
-            assertThat(iterator.hasNext(), is(true));
+        }
+        ByteBuffer.wrap(bytes).putLong(paddingStart, value);
             assertThat(array.get(spare, indices[i]), equalTo(iterator.next()));
         }  
+        for (int i = 0; i < numValues; i++) {
+import static org.hamcrest.Matchers.equalTo;  
+            set.add(new BytesRef(s));
+import static org.hamcrest.Matchers.is;
     }
-
-    public void testBytesToLong() {  
-        long value = randomLong();
-        int paddingStart = randomIntBetween(0, 10);
-        int paddingEnd = randomIntBetween(0, 10);  
+        for (int i = 0; i < indices.length; i++) {
+            assertThat(iterator.hasNext(), is(true));
+            values.add(new BytesRef(s));  
+        assertThat(numUnique, equalTo(set.size()));
         byte[] bytes = new byte[paddingStart + Long.BYTES + paddingEnd];
-        ByteBuffer.wrap(bytes).putLong(paddingStart, value);
-        BytesRef bytesRef = new BytesRef(bytes, paddingStart, Long.BYTES);  
-        assertThat(BytesRefUtils.bytesToLong(bytesRef), equalTo(value));
+        int[] indices = new int[array.size()];  
+    public void testBytesToLong() {  
+        final int numValues = scaledRandomIntBetween(0, 10000);
+        Collections.sort(values);
     }
-}  
+import org.apache.lucene.util.BytesRef;
+        for (int i = 0; i < numUnique; i++) {  
+        }
+/**  
+        List<BytesRef> values = new ArrayList<>();
+        BytesRefArray array = new BytesRefArray(Counter.newCounter());
+        }  
+        List<BytesRef> tmpList = new ArrayList<>();
+            array.append(new BytesRef(s));
+ * SPDX-License-Identifier: Apache-2.0
+            assertThat(array.get(spare, indices[i]), equalTo(iterator.next()));
+            assertThat(iterator.hasNext(), is(true));
+            String s = randomRealisticUnicodeOfCodepointLengthBetween(1, 100);
+ * compatible open source license.
+        int paddingEnd = randomIntBetween(0, 10);  
+        BytesRefUtils.sort(array, indices);
+ */
+        for (int i = 0; i < indices.length; i++) {
+package org.opensearch.core.util;

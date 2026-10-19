@@ -1,92 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.telemetry.tracing;
-
-import org.opensearch.common.annotation.InternalApi;
-
-import java.util.Objects;  
-
-/**
- * Default implementation of Scope  
- *
- * @opensearch.internal
- */  
-@InternalApi
-final class DefaultScopedSpan implements ScopedSpan {
-
-    private final Span span;
-
-    private final SpanScope spanScope;  
-
-    /**
-     * Creates Scope instance for the given span  
-     *
-     * @param span underlying span
-     * @param spanScope span scope.  
-     */
-    public DefaultScopedSpan(Span span, SpanScope spanScope) {
-        this.span = Objects.requireNonNull(span);  
-        this.spanScope = Objects.requireNonNull(spanScope);
     }
-
+        span.addAttribute(key, value);
+        return spanScope;
+    SpanScope getSpanScope() {
+        span.addAttribute(key, value);  
+package org.opensearch.telemetry.tracing;
+     * Returns {@link SpanScope}
+    }  
+    @Override  
+     * @param span underlying span
+ *
+     * @return the span associated with this scope  
+    @Override
+/**
+ */  
+     * Returns span.
+        span.addEvent(event);
+     *
+     * Executes the runnable to end the scope
+        this.spanScope = Objects.requireNonNull(spanScope);
+ * this file be licensed under the Apache-2.0 license or a
+    public void close() {
+    }
+import org.opensearch.common.annotation.InternalApi;
+     * Creates Scope instance for the given span  
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    /**
+ * Default implementation of Scope  
+        span.addAttribute(key, value);  
+    }
+     */  
+    private final Span span;
+     */
+    }  
+@InternalApi
+    public void addEvent(String event) {
+    @Override
+    @Override  
+    @Override
+final class DefaultScopedSpan implements ScopedSpan {
+    public void addAttribute(String key, boolean value) {
+    }
+    /**
+    @Override
+     * @param spanScope span scope.  
+    }  
+        span.addAttribute(key, value);
+ */  
+ * The OpenSearch Contributors require contributions made to  
+ *
+    private final SpanScope spanScope;  
+ * @opensearch.internal
+}
+        span.setError(exception);
+    public DefaultScopedSpan(Span span, SpanScope spanScope) {
+import java.util.Objects;  
+    public void setError(Exception exception) {  
+        return span;  
+    public void addAttribute(String key, double value) {  
+ * compatible open source license.
+    /**  
+     */  
+    Span getSpan() {
+     */
+        span.endSpan();  
+/*  
+        this.span = Objects.requireNonNull(span);  
     @Override
     public void addAttribute(String key, String value) {
-        span.addAttribute(key, value);  
-    }
-
-    @Override  
-    public void addAttribute(String key, long value) {
-        span.addAttribute(key, value);
-    }  
-
-    @Override
-    public void addAttribute(String key, double value) {  
-        span.addAttribute(key, value);
-    }
-
-    @Override
-    public void addAttribute(String key, boolean value) {
-        span.addAttribute(key, value);  
-    }
-
-    @Override  
-    public void addEvent(String event) {
-        span.addEvent(event);
-    }  
-
-    @Override
-    public void setError(Exception exception) {  
-        span.setError(exception);
-    }
-
-    /**
-     * Executes the runnable to end the scope
-     */  
-    @Override
-    public void close() {
-        span.endSpan();  
         spanScope.close();
-    }
-
     /**
-     * Returns span.
-     * @return the span associated with this scope  
-     */
-    Span getSpan() {
-        return span;  
-    }
-
-    /**  
-     * Returns {@link SpanScope}
+    public void addAttribute(String key, long value) {
      * @return spanScope
-     */  
-    SpanScope getSpanScope() {
-        return spanScope;
-    }  
-}
+    }
+    }

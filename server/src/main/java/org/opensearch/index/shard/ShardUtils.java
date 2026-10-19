@@ -1,77 +1,69 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+    /**
+}
+     */
 /*  
- * Modifications Copyright OpenSearch Contributors. See
+    }
+        }  
+    public static ShardId extractShardId(DirectoryReader reader) {  
+    private ShardUtils() {}  
+ * The OpenSearch Contributors require contributions made to  
  * GitHub history for details.
- */  
-
-package org.opensearch.index.shard;
-
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.LeafReader;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.lucene.index.OpenSearchLeafReader;
-import org.opensearch.core.index.shard.ShardId;  
-
-/**
- * Utility class for shard operations  
- *
+        throw new IllegalArgumentException("can't extract shard ID, can't unwrap OpenSearchDirectoryReader");
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+     */
+ */  
+            return esReader.shardId();  
+package org.opensearch.index.shard;
  * @opensearch.internal
  */  
-public final class ShardUtils {
-
-    private ShardUtils() {}  
-
-    /**
-     * Tries to extract the shard id from a reader if possible, when its not possible,  
-     * will return null.
-     */
-    @Nullable  
-    public static ShardId extractShardId(LeafReader reader) {
-        final OpenSearchLeafReader esReader = OpenSearchLeafReader.getOpenSearchLeafReader(reader);
-        if (esReader != null) {  
-            assert reader.getRefCount() > 0 : "OpenSearchLeafReader is already closed";
-            return esReader.shardId();
-        }  
+ * under the License.  
         return null;
-    }
-
-    /**
-     * Tries to extract the shard id from a reader if possible, when its not possible,
-     * will return null.  
-     */
-    @Nullable
-    public static ShardId extractShardId(DirectoryReader reader) {  
-        final OpenSearchDirectoryReader esReader = OpenSearchDirectoryReader.getOpenSearchDirectoryReader(reader);
-        if (esReader != null) {
-            return esReader.shardId();  
+    @Nullable  
+ * You may obtain a copy of the License at  
+ *
+ * specific language governing permissions and limitations
         }
-        throw new IllegalArgumentException("can't extract shard ID, can't unwrap OpenSearchDirectoryReader");
+ * this work for additional information regarding copyright
+ *
+            assert reader.getRefCount() > 0 : "OpenSearchLeafReader is already closed";
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+     * Tries to extract the shard id from a reader if possible, when its not possible,
+     * Tries to extract the shard id from a reader if possible, when its not possible,  
+    public static ShardId extractShardId(LeafReader reader) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+public final class ShardUtils {
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.lucene.index.LeafReader;
+ *
+    @Nullable
+/**
+        final OpenSearchLeafReader esReader = OpenSearchLeafReader.getOpenSearchLeafReader(reader);
+        if (esReader != null) {
+            return esReader.shardId();
+import org.opensearch.core.index.shard.ShardId;  
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+        final OpenSearchDirectoryReader esReader = OpenSearchDirectoryReader.getOpenSearchDirectoryReader(reader);
+ */  
     }  
-}
+ * ownership. Elasticsearch licenses this file to you under  
+     * will return null.  
+     * will return null.
+ *  
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * license agreements. See the NOTICE file distributed with
+        if (esReader != null) {  
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+import org.opensearch.common.Nullable;  
+ * Utility class for shard operations  
+ */
+ * Licensed to Elasticsearch under one or more contributor  
+ * software distributed under the License is distributed on an
+import org.opensearch.common.lucene.index.OpenSearchLeafReader;

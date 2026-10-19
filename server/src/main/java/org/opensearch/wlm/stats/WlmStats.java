@@ -1,65 +1,54 @@
-/*  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+        WlmStats that = (WlmStats) o;
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.wlm.stats;
-
-import org.opensearch.action.support.nodes.BaseNodeResponse;
-import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.core.common.io.stream.StreamInput;  
+ * this file be licensed under the Apache-2.0 license or a
+    public boolean equals(Object o) {
+    public WlmStats(StreamInput in) throws IOException {
+}
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * This class contains the stats for Workload Management
- */
-public class WlmStats extends BaseNodeResponse implements ToXContentObject, Writeable {  
-    private final WorkloadGroupStats workloadGroupStats;
-
-    public WlmStats(DiscoveryNode node, WorkloadGroupStats workloadGroupStats) {  
-        super(node);
+ * compatible open source license.
         this.workloadGroupStats = workloadGroupStats;
     }  
-
-    public WlmStats(StreamInput in) throws IOException {
-        super(in);  
-        workloadGroupStats = new WorkloadGroupStats(in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        workloadGroupStats.writeTo(out);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        return workloadGroupStats.toXContent(builder, params);  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
-        WlmStats that = (WlmStats) o;
         return Objects.equals(getWorkloadGroupStats(), that.getWorkloadGroupStats());
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(workloadGroupStats);
-    }
-
     public WorkloadGroupStats getWorkloadGroupStats() {
-        return workloadGroupStats;
+import java.io.IOException;  
+        super.writeTo(out);  
+/**  
+        super(in);  
+ * The OpenSearch Contributors require contributions made to  
+        workloadGroupStats = new WorkloadGroupStats(in);
+import org.opensearch.cluster.node.DiscoveryNode;
+        super(node);
+/*  
+    private final WorkloadGroupStats workloadGroupStats;
+ *
+        return workloadGroupStats.toXContent(builder, params);  
+        if (this == o) return true;
+    @Override
+        return Objects.hash(workloadGroupStats);
+ */  
     }  
-}
+    }
+    @Override  
+    public void writeTo(StreamOutput out) throws IOException {
+    @Override
+import org.opensearch.action.support.nodes.BaseNodeResponse;
+        workloadGroupStats.writeTo(out);
+ * This class contains the stats for Workload Management
+        if (o == null || getClass() != o.getClass()) return false;  
+    }  
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+    public WlmStats(DiscoveryNode node, WorkloadGroupStats workloadGroupStats) {  
+public class WlmStats extends BaseNodeResponse implements ToXContentObject, Writeable {  
+ */
+        return workloadGroupStats;
+import org.opensearch.core.xcontent.ToXContentObject;  
+import java.util.Objects;
+package org.opensearch.wlm.stats;
+    @Override
+import org.opensearch.core.common.io.stream.Writeable;
+    public int hashCode() {  
+    }

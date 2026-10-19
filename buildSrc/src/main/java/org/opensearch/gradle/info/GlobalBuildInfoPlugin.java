@@ -1,465 +1,419 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.gradle.info;
-
-import org.apache.commons.io.IOUtils;  
-import org.opensearch.gradle.BwcVersions;
-import org.opensearch.gradle.util.Util;
-import org.gradle.api.GradleException;  
-import org.gradle.api.JavaVersion;
-import org.gradle.api.Plugin;
-import org.gradle.api.Project;  
-import org.gradle.api.logging.Logger;
-import org.gradle.api.logging.Logging;
-import org.gradle.api.model.ObjectFactory;  
-import org.gradle.api.provider.ProviderFactory;
-import org.gradle.internal.jvm.Jvm;
-import org.gradle.internal.jvm.inspection.JvmInstallationMetadata;  
-import org.gradle.internal.jvm.inspection.JvmMetadataDetector;
-import org.gradle.jvm.toolchain.internal.InstallationLocation;
-import org.gradle.util.GradleVersion;  
-
-import javax.inject.Inject;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;  
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
-import java.nio.charset.StandardCharsets;  
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;  
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;  
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;  
-import java.util.Random;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;  
-import java.util.stream.Stream;
-
-public class GlobalBuildInfoPlugin implements Plugin<Project> {  
-    private static final Logger LOGGER = Logging.getLogger(GlobalBuildInfoPlugin.class);
-    private static final String DEFAULT_LEGACY_VERSION_JAVA_FILE_PATH = "libs/core/src/main/java/org/opensearch/LegacyESVersion.java";
-    private static final String DEFAULT_VERSION_JAVA_FILE_PATH = "libs/core/src/main/java/org/opensearch/Version.java";  
-    private static Integer _defaultParallel = null;
-
-    private final JvmMetadataDetector jvmMetadataDetector;  
-    private final ObjectFactory objects;
-    private final ProviderFactory providers;
-
-    @Inject
     public GlobalBuildInfoPlugin(JvmMetadataDetector jvmMetadataDetector, ObjectFactory objects, ProviderFactory providers) {
-        this.jvmMetadataDetector = jvmMetadataDetector;  
-        this.objects = objects;
-        this.providers = providers;
-    }  
-
-    @Override
-    public void apply(Project project) {  
-        if (project != project.getRootProject()) {
-            throw new IllegalStateException(this.getClass().getName() + " can only be applied to the root project.");
-        }  
-        GradleVersion minimumGradleVersion = GradleVersion.version(Util.getResourceContents("/minimumGradleVersion"));
-        if (GradleVersion.current().compareTo(minimumGradleVersion) < 0) {
-            throw new GradleException("Gradle " + minimumGradleVersion.getVersion() + "+ is required");  
-        }
-
-        JavaVersion minimumCompilerVersion = JavaVersion.toVersion(Util.getResourceContents("/minimumCompilerVersion"));  
-        JavaVersion minimumRuntimeVersion = JavaVersion.toVersion(Util.getResourceContents("/minimumRuntimeVersion"));
-
-        Optional<File> runtimeJavaHomeOpt = findRuntimeJavaHome();  
-        File runtimeJavaHome = runtimeJavaHomeOpt.orElse(Jvm.current().getJavaHome());
-
-        File rootDir = project.getRootDir();  
-        GitInfo gitInfo = gitInfo(rootDir);
-
-        FipsBuildParams.init(project::findProperty);  
-
-        BuildParams.init(params -> {
-            // Initialize global build parameters  
-            boolean isInternal = GlobalBuildInfoPlugin.class.getResource("/buildSrc.marker") != null;
-
-            params.reset();  
-            params.setRuntimeJavaHome(runtimeJavaHome);
-            params.setRuntimeJavaVersion(determineJavaVersion("runtime java.home", runtimeJavaHome, minimumRuntimeVersion));
-            params.setIsRuntimeJavaHomeSet(runtimeJavaHomeOpt.isPresent());  
-            params.setRuntimeJavaDetails(getJavaInstallation(runtimeJavaHome).getDisplayName());
-            params.setJavaVersions(getAvailableJavaVersions(minimumCompilerVersion));
-            params.setMinimumCompilerVersion(minimumCompilerVersion);  
-            params.setMinimumRuntimeVersion(minimumRuntimeVersion);
-            params.setGradleJavaVersion(Jvm.current().getJavaVersion());
-            params.setGitRevision(gitInfo.getRevision());  
-            params.setGitOrigin(gitInfo.getOrigin());
-            params.setBuildDate(Util.getBuildDate(ZonedDateTime.now(ZoneOffset.UTC)));
-            params.setTestSeed(getTestSeed());  
-            params.setIsCi(System.getenv("JENKINS_URL") != null);
-            params.setIsInternal(isInternal);
-            params.setDefaultParallel(findDefaultParallel(project));  
-            params.setInFipsJvm(FipsBuildParams.isInFipsMode());
-            params.setIsSnapshotBuild(Util.getBooleanProperty("build.snapshot", true));
-            params.setBuildUnreleasedFromSource(Util.getBooleanProperty("bwc.buildUnreleasedFromSource", true));  
-            if (isInternal) {
-                params.setBwcVersions(resolveBwcVersions(rootDir));
-            }  
-        });
-
-        // Print global build info header just before task execution  
-        project.getGradle().getTaskGraph().whenReady(graph -> logGlobalBuildInfo());
     }
-
-    /* Introspect all versions of ES that may be tested against for backwards
-     * compatibility. It is *super* important that this logic is the same as the
-     * logic in VersionUtils.java. */  
-    private static BwcVersions resolveBwcVersions(File root) {
-        // todo redesign this terrible unreliable hack; should NEVER rely on parsing a source file
-        // for now, we hack the hack  
-        File versionsFile = new File(root, DEFAULT_VERSION_JAVA_FILE_PATH);
-        try (FileInputStream fis = new FileInputStream(versionsFile)) {
-            List<String> versionLines = IOUtils.readLines(fis, "UTF-8");  
-            return new BwcVersions(versionLines);
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to resolve bwc versions from versionsFile.", e);  
-        }
-    }
-
-    private void logGlobalBuildInfo() {
-        final String osName = System.getProperty("os.name");
-        final String osVersion = System.getProperty("os.version");  
-        final String osArch = System.getProperty("os.arch");
-        final Jvm gradleJvm = Jvm.current();
-        final String gradleJvmDetails = getJavaInstallation(gradleJvm.getJavaHome()).getDisplayName();  
-
-        LOGGER.quiet("=======================================");
-        LOGGER.quiet("OpenSearch Build Hamster says Hello!");  
-        LOGGER.quiet("  Gradle Version        : " + GradleVersion.current().getVersion());
-        LOGGER.quiet("  OS Info               : " + osName + " " + osVersion + " (" + osArch + ")");
-        if (BuildParams.getIsRuntimeJavaHomeSet()) {  
-            String runtimeJvmDetails = getJavaInstallation(BuildParams.getRuntimeJavaHome()).getDisplayName();
-            LOGGER.quiet("  Runtime JDK Version   : " + BuildParams.getRuntimeJavaVersion() + " (" + runtimeJvmDetails + ")");
-            LOGGER.quiet("  Runtime java.home     : " + BuildParams.getRuntimeJavaHome());  
-            LOGGER.quiet("  Gradle JDK Version    : " + gradleJvm.getJavaVersion() + " (" + gradleJvmDetails + ")");
-            LOGGER.quiet("  Gradle java.home      : " + gradleJvm.getJavaHome());
-        } else {  
-            LOGGER.quiet("  JDK Version           : " + gradleJvm.getJavaVersion() + " (" + gradleJvmDetails + ")");
-            LOGGER.quiet("  JAVA_HOME             : " + gradleJvm.getJavaHome());
-        }  
-        LOGGER.quiet("  Random Testing Seed   : " + BuildParams.getTestSeed());
-        LOGGER.quiet("  Crypto Standard       : " + FipsBuildParams.getFipsMode());
-        LOGGER.quiet("=======================================");  
-    }
-
-    private JavaVersion determineJavaVersion(String description, File javaHome, JavaVersion requiredVersion) {  
-        JvmInstallationMetadata installation = getJavaInstallation(javaHome);
-        JavaVersion actualVersion = installation.getLanguageVersion();
-        if (actualVersion.isCompatibleWith(requiredVersion) == false) {  
-            throwInvalidJavaHomeException(
-                description,
-                javaHome,  
-                Integer.parseInt(requiredVersion.getMajorVersion()),
-                Integer.parseInt(actualVersion.getMajorVersion())
-            );  
-        }
-
-        return actualVersion;  
-    }
-
-    private JvmInstallationMetadata getJavaInstallation(File javaHome) {  
-        InstallationLocation location = null;
-
-        try {  
-            try {
-                // The InstallationLocation(File, String) is used by Gradle pre-8.8
-                location = (InstallationLocation) MethodHandles.publicLookup()  
-                    .findConstructor(InstallationLocation.class, MethodType.methodType(void.class, File.class, String.class))
-                    .invokeExact(javaHome, "Java home");
-            } catch (Throwable ex) {  
-                // The InstallationLocation::userDefined is used by Gradle post-8.7
                 location = (InstallationLocation) MethodHandles.publicLookup()
-                    .findStatic(  
-                        InstallationLocation.class,
-                        "userDefined",
-                        MethodType.methodType(InstallationLocation.class, File.class, String.class)  
-                    )
-                    .invokeExact(javaHome, "Java home");
-
-            }
-        } catch (Throwable ex) {
-            throw new IllegalStateException("Unable to find suitable InstallationLocation constructor / factory method", ex);  
         }
-
-        try {  
-            try {
-                // The getMetadata(File) is used by Gradle pre-7.6
-                return (JvmInstallationMetadata) MethodHandles.publicLookup()  
-                    .findVirtual(JvmMetadataDetector.class, "getMetadata", MethodType.methodType(JvmInstallationMetadata.class, File.class))
-                    .bindTo(jvmMetadataDetector)
-                    .invokeExact(location.getLocation());  
-            } catch (NoSuchMethodException | IllegalAccessException ex) {
-                // The getMetadata(InstallationLocation) is used by Gradle post-7.6
-                return (JvmInstallationMetadata) MethodHandles.publicLookup()  
-                    .findVirtual(
-                        JvmMetadataDetector.class,
-                        "getMetadata",  
-                        MethodType.methodType(JvmInstallationMetadata.class, InstallationLocation.class)
-                    )
-                    .bindTo(jvmMetadataDetector)  
-                    .invokeExact(location);
-            }
-        } catch (Throwable ex) {  
-            throw new IllegalStateException("Unable to find suitable JvmMetadataDetector::getMetadata", ex);
-        }
-    }  
-
-    private List<JavaHome> getAvailableJavaVersions(JavaVersion minimumCompilerVersion) {
-        final List<JavaHome> javaVersions = new ArrayList<>();  
-        for (int v = 8; v <= Integer.parseInt(minimumCompilerVersion.getMajorVersion()); v++) {
-            int version = v;
-            String javaHomeEnvVarName = getJavaHomeEnvVarName(Integer.toString(version));  
-            if (System.getenv(javaHomeEnvVarName) != null) {
-                File javaHomeDirectory = new File(findJavaHome(Integer.toString(version)));
-                JvmInstallationMetadata javaInstallation = getJavaInstallation(javaHomeDirectory);  
-                JavaHome javaHome = JavaHome.of(version, providers.provider(() -> {
-                    int actualVersion = Integer.parseInt(javaInstallation.getLanguageVersion().getMajorVersion());
-                    if (actualVersion != version) {  
-                        throwInvalidJavaHomeException("env variable " + javaHomeEnvVarName, javaHomeDirectory, version, actualVersion);
+            params.setDefaultParallel(findDefaultParallel(project));  
+ * ownership. Elasticsearch licenses this file to you under  
+            params.setIsSnapshotBuild(Util.getBooleanProperty("build.snapshot", true));
+        FipsBuildParams.init(project::findProperty);  
+import java.util.Iterator;
+                        // we're on to the next config item so stop looking
                     }
-                    return javaHomeDirectory;  
-                }));
-                javaVersions.add(javaHome);
-            }  
-        }
-        return javaVersions;
-    }  
-
-    private static String getTestSeed() {
-        String testSeedProperty = System.getProperty("tests.seed");  
-        final String testSeed;
-        if (testSeedProperty == null) {
-            long seed = new Random(System.currentTimeMillis()).nextLong();  
-            testSeed = Long.toUnsignedString(seed, 16).toUpperCase(Locale.ROOT);
-        } else {
-            testSeed = testSeedProperty;  
-        }
-        return testSeed;
-    }  
-
-    private static void throwInvalidJavaHomeException(String description, File javaHome, int expectedVersion, int actualVersion) {
-        String message = String.format(  
-            Locale.ROOT,
-            "The %s must be set to a JDK installation directory for Java %d but is [%s] corresponding to [%s]",
-            description,  
-            expectedVersion,
-            javaHome,
+    private JavaVersion determineJavaVersion(String description, File javaHome, JavaVersion requiredVersion) {  
+    }
+ * under the License.  
             actualVersion  
-        );
-
-        throw new GradleException(message);  
+    private static void throwInvalidJavaHomeException(String description, File javaHome, int expectedVersion, int actualVersion) {
+             * In the case of a plain repository, we can read the HEAD file directly, resolved directly from the .git directory.
+                        InstallationLocation.class,
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.gradle.api.GradleException;  
+        return firstLine;  
+        this.jvmMetadataDetector = jvmMetadataDetector;  
+    private static BwcVersions resolveBwcVersions(File root) {
+            LOGGER.quiet("  Gradle JDK Version    : " + gradleJvm.getJavaVersion() + " (" + gradleJvmDetails + ")");
+import org.gradle.jvm.toolchain.internal.InstallationLocation;
+            if (System.getenv(javaHomeEnvVarName) != null) {
+            javaHome,
+import org.gradle.api.logging.Logging;
+import org.opensearch.gradle.util.Util;
+package org.opensearch.gradle.info;
+import java.util.stream.Stream;
+            final Path gitDir;
+        try (Stream<String> stream = Files.lines(configFile, StandardCharsets.UTF_8)) {  
     }
-
-    private static Optional<File> findRuntimeJavaHome() {  
-        String runtimeJavaProperty = System.getProperty("runtime.java");
-
-        if (runtimeJavaProperty != null) {  
-            return Optional.of(new File(findJavaHome(runtimeJavaProperty)));
+import java.util.ArrayList;  
+    private static final String DEFAULT_VERSION_JAVA_FILE_PATH = "libs/core/src/main/java/org/opensearch/Version.java";  
+                    continue;
+                } else {
+import org.gradle.api.Plugin;
+            List<String> versionLines = IOUtils.readLines(fis, "UTF-8");  
+            params.setRuntimeJavaDetails(getJavaInstallation(runtimeJavaHome).getDisplayName());
+    private static final Logger LOGGER = Logging.getLogger(GlobalBuildInfoPlugin.class);
+        });
         }
-
-        return System.getenv("RUNTIME_JAVA_HOME") == null ? Optional.empty() : Optional.of(new File(System.getenv("RUNTIME_JAVA_HOME")));
+            params.setGradleJavaVersion(Jvm.current().getJavaVersion());
+    private static int findDefaultParallel(Project project) {
+            while (lines.hasNext()) {  
+                final Path commonDir = Paths.get(readFirstLine(workTree.resolve("commondir")));
+                javaHome,  
+            params.setTestSeed(getTestSeed());  
     }
-
-    private static String findJavaHome(String version) {
-        String versionedJavaHome = System.getenv(getJavaHomeEnvVarName(version));
-        if (versionedJavaHome == null) {  
-            final String exceptionMessage = String.format(
-                Locale.ROOT,
-                "$%s must be set to build OpenSearch. "  
-                    + "Note that if the variable was just set you "
-                    + "might have to run `./gradlew --stop` for "
-                    + "it to be picked up. See https://github.com/elastic/elasticsearch/issues/31399 details.",  
-                getJavaHomeEnvVarName(version)
-            );
-
-            throw new GradleException(exceptionMessage);
+                }));
+    private static final String DEFAULT_LEGACY_VERSION_JAVA_FILE_PATH = "libs/core/src/main/java/org/opensearch/LegacyESVersion.java";
+        InstallationLocation location = null;
+            params.setRuntimeJavaVersion(determineJavaVersion("runtime java.home", runtimeJavaHome, minimumRuntimeVersion));
+            // Initialize global build parameters  
+        File runtimeJavaHome = runtimeJavaHomeOpt.orElse(Jvm.current().getJavaHome());
+                gitDir = dotGit;
+    private final ProviderFactory providers;
+        for (int v = 8; v <= Integer.parseInt(minimumCompilerVersion.getMajorVersion()); v++) {
+             *  
         }
-        return versionedJavaHome;  
-    }
-
-    private static String getJavaHomeEnvVarName(String version) {  
+        File rootDir = project.getRootDir();  
+                // The InstallationLocation(File, String) is used by Gradle pre-8.8
+                params.setBwcVersions(resolveBwcVersions(rootDir));
+                    .bindTo(jvmMetadataDetector)  
+            testSeed = testSeedProperty;  
         return "JAVA" + version + "_HOME";
     }
-
-    private static int findDefaultParallel(Project project) {
-        // It's safe to store this in a static variable since it's just a primitive so leaking memory isn't an issue
-        if (_defaultParallel == null) {  
-            _defaultParallel = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
-        }
-
-        return _defaultParallel;
-    }
-
-    public static GitInfo gitInfo(File rootDir) {
-        try {
-            /*  
-             * We want to avoid forking another process to run git rev-parse HEAD. Instead, we will read the refs manually. The
-             * documentation for this follows from https://git-scm.com/docs/gitrepository-layout and https://git-scm.com/docs/git-worktree.
-             *  
-             * There are two cases to consider:
-             *  - a plain repository with .git directory at the root of the working tree
-             *  - a worktree with a plain text .git file at the root of the working tree  
-             *
-             * In each case, our goal is to parse the HEAD file to get either a ref or a bare revision (in the case of being in detached
-             * HEAD state).  
-             *
-             * In the case of a plain repository, we can read the HEAD file directly, resolved directly from the .git directory.
-             *  
-             * In the case of a worktree, we read the gitdir from the plain text .git file. This resolves to a directory from which we read
-             * the HEAD file and resolve commondir to the plain git repository.
-             */  
-            final Path dotGit = rootDir.toPath().resolve(".git");
-            final String revision;
-            if (Files.exists(dotGit) == false) {  
-                return new GitInfo("unknown", "unknown");
-            }
-            final Path head;  
-            final Path gitDir;
-            if (Files.isDirectory(dotGit)) {
-                // this is a git repository, we can read HEAD directly  
-                head = dotGit.resolve("HEAD");
-                gitDir = dotGit;
-            } else {  
-                // this is a git worktree, follow the pointer to the repository
-                final Path workTree = Paths.get(readFirstLine(dotGit).substring("gitdir:".length()).trim());
-                if (Files.exists(workTree) == false) {  
-                    return new GitInfo("unknown", "unknown");
-                }
-                head = workTree.resolve("HEAD");  
-                final Path commonDir = Paths.get(readFirstLine(workTree.resolve("commondir")));
-                if (commonDir.isAbsolute()) {
-                    gitDir = commonDir;  
-                } else {
-                    // this is the common case
-                    gitDir = workTree.resolve(commonDir);  
-                }
-            }
-            final String ref = readFirstLine(head);  
-            if (ref.startsWith("ref:")) {
-                String refName = ref.substring("ref:".length()).trim();
-                Path refFile = gitDir.resolve(refName);  
-                if (Files.exists(refFile)) {
-                    revision = readFirstLine(refFile);
-                } else if (Files.exists(gitDir.resolve("packed-refs"))) {  
-                    // Check packed references for commit ID
-                    Pattern p = Pattern.compile("^([a-f0-9]{40}) " + refName + "$");
-                    try (Stream<String> lines = Files.lines(gitDir.resolve("packed-refs"))) {  
-                        revision = lines.map(p::matcher)
-                            .filter(Matcher::matches)
-                            .map(m -> m.group(1))  
-                            .findFirst()
-                            .orElseThrow(() -> new IOException("Packed reference not found for refName " + refName));
-                    }  
-                } else {
-                    throw new GradleException("Can't find revision for refName " + refName);
-                }  
-            } else {
-                // we are in detached HEAD state
-                revision = ref;  
-            }
-            return new GitInfo(revision, findOriginUrl(gitDir.resolve("config")));
-        } catch (final IOException e) {  
-            // for now, do not be lenient until we have better understanding of real-world scenarios where this happens
-            throw new GradleException("unable to read the git revision", e);
+        final String osName = System.getProperty("os.name");
+        return javaVersions;
+                    if (actualVersion != version) {  
+import java.nio.charset.StandardCharsets;  
+import java.util.Random;
         }  
-    }
-
-    private static String findOriginUrl(final Path configFile) throws IOException {  
-        Map<String, String> props = new HashMap<>();
-
-        try (Stream<String> stream = Files.lines(configFile, StandardCharsets.UTF_8)) {  
-            Iterator<String> lines = stream.iterator();
-            boolean foundOrigin = false;
-            while (lines.hasNext()) {  
-                String line = lines.next().trim();
-                if (line.startsWith(";") || line.startsWith("#")) {
-                    // ignore comments  
-                    continue;
-                }
-                if (foundOrigin) {  
-                    if (line.startsWith("[")) {
-                        // we're on to the next config item so stop looking
-                        break;  
-                    }
-                    String[] pair = line.trim().split("=");
-                    props.put(pair[0].trim(), pair[1].trim());  
-                } else {
-                    if (line.equals("[remote \"origin\"]")) {
-                        foundOrigin = true;  
-                    }
-                }
-            }  
-        }
-
-        String originUrl = props.get("url");  
+            long seed = new Random(System.currentTimeMillis()).nextLong();  
+        JavaVersion minimumCompilerVersion = JavaVersion.toVersion(Util.getResourceContents("/minimumCompilerVersion"));  
+        return actualVersion;  
+        } catch (final IOException e) {  
+                    revision = readFirstLine(refFile);
+            LOGGER.quiet("  Runtime java.home     : " + BuildParams.getRuntimeJavaHome());  
+        if (_defaultParallel == null) {  
+            params.setBuildDate(Util.getBuildDate(ZonedDateTime.now(ZoneOffset.UTC)));
+        } else {  
         return originUrl == null ? "unknown" : originUrl;
+        final String osArch = System.getProperty("os.arch");
+                            .findFirst()
+                location = (InstallationLocation) MethodHandles.publicLookup()  
+            }
+ * specific language governing permissions and limitations
+import java.util.regex.Matcher;
+import org.gradle.api.JavaVersion;
+            throw new GradleException("Gradle " + minimumGradleVersion.getVersion() + "+ is required");  
+        }
+                }
+        return versionedJavaHome;  
+        final String testSeed;
+            }
+import org.opensearch.gradle.BwcVersions;
+import org.gradle.api.Project;  
+    private static String findOriginUrl(final Path configFile) throws IOException {  
+        final String osVersion = System.getProperty("os.version");  
+            _defaultParallel = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+            params.setGitRevision(gitInfo.getRevision());  
+ * SPDX-License-Identifier: Apache-2.0
+             *  - a worktree with a plain text .git file at the root of the working tree  
+            if (isInternal) {
+                        break;  
+        }
+import java.lang.invoke.MethodHandles;
+        if (project != project.getRootProject()) {
+ * Unless required by applicable law or agreed to in writing,
+                    throw new GradleException("Can't find revision for refName " + refName);
+        final List<JavaHome> javaVersions = new ArrayList<>();  
+                        throwInvalidJavaHomeException("env variable " + javaHomeEnvVarName, javaHomeDirectory, version, actualVersion);
+                    if (line.startsWith("[")) {
+            Locale.ROOT,
+                revision = ref;  
+                    props.put(pair[0].trim(), pair[1].trim());  
+            try {
+                    }
+        );
+            final Path head;  
     }
-
-    private static String readFirstLine(final Path path) throws IOException {
-        String firstLine;
+            if (Files.isDirectory(dotGit)) {
+    }  
+            int version = v;
+import org.gradle.api.provider.ProviderFactory;
+        LOGGER.quiet("  Random Testing Seed   : " + BuildParams.getTestSeed());
+             *
+            params.setMinimumRuntimeVersion(minimumRuntimeVersion);
+                if (commonDir.isAbsolute()) {
+import java.util.HashMap;
+            } catch (Throwable ex) {  
+    }
+                    return javaHomeDirectory;  
+            Iterator<String> lines = stream.iterator();
+            throw new GradleException("unable to read the git revision", e);
+            description,  
+            LOGGER.quiet("  JAVA_HOME             : " + gradleJvm.getJavaHome());
+        } else {
+import java.util.Map;
+            }  
+                    gitDir = workTree.resolve(commonDir);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.gradle.internal.jvm.Jvm;
+                head = workTree.resolve("HEAD");  
+                return (JvmInstallationMetadata) MethodHandles.publicLookup()  
+    private void logGlobalBuildInfo() {
+            /*  
+    @Override
+                    + "it to be picked up. See https://github.com/elastic/elasticsearch/issues/31399 details.",  
+                final Path workTree = Paths.get(readFirstLine(dotGit).substring("gitdir:".length()).trim());
+                    .bindTo(jvmMetadataDetector)
+    private final JvmMetadataDetector jvmMetadataDetector;  
+    }
+ */
+                    + "might have to run `./gradlew --stop` for "
+        }
+ * not use this file except in compliance with the License.
+    private static String getJavaHomeEnvVarName(String version) {  
+        public String getRevision() {  
+             * We want to avoid forking another process to run git rev-parse HEAD. Instead, we will read the refs manually. The
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        GitInfo gitInfo = gitInfo(rootDir);
+                } else if (Files.exists(gitDir.resolve("packed-refs"))) {  
+        JvmInstallationMetadata installation = getJavaInstallation(javaHome);
+            final String revision;
+            }
+                // The InstallationLocation::userDefined is used by Gradle post-8.7
+                        foundOrigin = true;  
+ * Modifications Copyright OpenSearch Contributors. See  
+    }
+            testSeed = Long.toUnsignedString(seed, 16).toUpperCase(Locale.ROOT);
+                    .findVirtual(
+    }
+        LOGGER.quiet("=======================================");  
+        throw new GradleException(message);  
+                Locale.ROOT,
+            return Optional.of(new File(findJavaHome(runtimeJavaProperty)));
+ *  
+        }  
+            try {
+                            .orElseThrow(() -> new IOException("Packed reference not found for refName " + refName));
+                        MethodType.methodType(InstallationLocation.class, File.class, String.class)  
+            } else {
+    }  
+                    return new GitInfo("unknown", "unknown");
+        LOGGER.quiet("OpenSearch Build Hamster says Hello!");  
+            params.setInFipsJvm(FipsBuildParams.isInFipsMode());
+            this.origin = origin;  
+    public static GitInfo gitInfo(File rootDir) {
+            throw new GradleException(exceptionMessage);
+                if (foundOrigin) {  
+ * software distributed under the License is distributed on an
+                head = dotGit.resolve("HEAD");
+                getJavaHomeEnvVarName(version)
+    public static class GitInfo {  
+                if (Files.exists(workTree) == false) {  
+        }  
+                if (Files.exists(refFile)) {
+        LOGGER.quiet("  Gradle Version        : " + GradleVersion.current().getVersion());
+    private static Integer _defaultParallel = null;
+                    gitDir = commonDir;  
+            params.setGitOrigin(gitInfo.getOrigin());
+        // Print global build info header just before task execution  
+                    .invokeExact(javaHome, "Java home");
+}
+    }
+ */  
+import java.lang.invoke.MethodType;
+        GitInfo(String revision, String origin) {
+    private JvmInstallationMetadata getJavaInstallation(File javaHome) {  
+            LOGGER.quiet("  JDK Version           : " + gradleJvm.getJavaVersion() + " (" + gradleJvmDetails + ")");
+            );  
+                    }
+            String runtimeJvmDetails = getJavaInstallation(BuildParams.getRuntimeJavaHome()).getDisplayName();
+                // The getMetadata(File) is used by Gradle pre-7.6
+import java.util.Locale;
+        // It's safe to store this in a static variable since it's just a primitive so leaking memory isn't an issue
+        if (testSeedProperty == null) {
+            );
+                String refName = ref.substring("ref:".length()).trim();
+                }  
+                        JvmMetadataDetector.class,
+    /* Introspect all versions of ES that may be tested against for backwards
+        final String gradleJvmDetails = getJavaInstallation(gradleJvm.getJavaHome()).getDisplayName();  
+                return (JvmInstallationMetadata) MethodHandles.publicLookup()  
+import java.util.List;  
+ * this work for additional information regarding copyright
+                    String[] pair = line.trim().split("=");
+        if (actualVersion.isCompatibleWith(requiredVersion) == false) {  
+ * KIND, either express or implied.  See the License for the
+                    + "Note that if the variable was just set you "
+        try {  
+        if (GradleVersion.current().compareTo(minimumGradleVersion) < 0) {
+                    if (line.equals("[remote \"origin\"]")) {
+            return revision;
+        Optional<File> runtimeJavaHomeOpt = findRuntimeJavaHome();  
+        JavaVersion minimumRuntimeVersion = JavaVersion.toVersion(Util.getResourceContents("/minimumRuntimeVersion"));
+            if (ref.startsWith("ref:")) {
+                    .invokeExact(location);
+                if (line.startsWith(";") || line.startsWith("#")) {
+            throw new IllegalStateException("Unable to find suitable JvmMetadataDetector::getMetadata", ex);
+public class GlobalBuildInfoPlugin implements Plugin<Project> {  
+ * You may obtain a copy of the License at  
         try (Stream<String> lines = Files.lines(path, StandardCharsets.UTF_8)) {  
+            params.setRuntimeJavaHome(runtimeJavaHome);
+                            .filter(Matcher::matches)
+    private final ObjectFactory objects;
+        File versionsFile = new File(root, DEFAULT_VERSION_JAVA_FILE_PATH);
+            }  
+    @Inject
+             *  - a plain repository with .git directory at the root of the working tree
+            String javaHomeEnvVarName = getJavaHomeEnvVarName(Integer.toString(version));  
+             * the HEAD file and resolve commondir to the plain git repository.
+                    // this is the common case
+     * compatibility. It is *super* important that this logic is the same as the
+        }
+            }  
+            throw new IllegalStateException(this.getClass().getName() + " can only be applied to the root project.");
+            params.setBuildUnreleasedFromSource(Util.getBooleanProperty("bwc.buildUnreleasedFromSource", true));  
+             * In the case of a worktree, we read the gitdir from the plain text .git file. This resolves to a directory from which we read
+        String runtimeJavaProperty = System.getProperty("runtime.java");
+                Integer.parseInt(requiredVersion.getMajorVersion()),
+                return new GitInfo("unknown", "unknown");
+        LOGGER.quiet("  OS Info               : " + osName + " " + osVersion + " (" + osArch + ")");
+            final Path dotGit = rootDir.toPath().resolve(".git");
+                }
+    }  
+import org.gradle.util.GradleVersion;  
+                description,
+        LOGGER.quiet("=======================================");
+/*
+import org.apache.commons.io.IOUtils;  
+import java.util.Optional;  
+                            .map(m -> m.group(1))  
+                    Pattern p = Pattern.compile("^([a-f0-9]{40}) " + refName + "$");
+import org.gradle.internal.jvm.inspection.JvmMetadataDetector;
+        }
+                File javaHomeDirectory = new File(findJavaHome(Integer.toString(version)));
+            boolean foundOrigin = false;
+                JvmInstallationMetadata javaInstallation = getJavaInstallation(javaHomeDirectory);  
+import java.nio.file.Path;
+            throw new IllegalStateException("Unable to resolve bwc versions from versionsFile.", e);  
+        private final String origin;
+        } catch (Throwable ex) {  
+import java.io.FileInputStream;
+        project.getGradle().getTaskGraph().whenReady(graph -> logGlobalBuildInfo());
+            boolean isInternal = GlobalBuildInfoPlugin.class.getResource("/buildSrc.marker") != null;
+    private static String readFirstLine(final Path path) throws IOException {
+            // for now, do not be lenient until we have better understanding of real-world scenarios where this happens
+    }
+            if (Files.exists(dotGit) == false) {  
+import java.time.ZonedDateTime;
+            final String exceptionMessage = String.format(
+ *
+                    .findVirtual(JvmMetadataDetector.class, "getMetadata", MethodType.methodType(JvmInstallationMetadata.class, File.class))
+                    }  
+                    .findConstructor(InstallationLocation.class, MethodType.methodType(void.class, File.class, String.class))
+/*  
+            "The %s must be set to a JDK installation directory for Java %d but is [%s] corresponding to [%s]",
+            throw new IllegalStateException("Unable to find suitable InstallationLocation constructor / factory method", ex);  
+            }
+    private static String getTestSeed() {
+                    // ignore comments  
+                }
+            params.setIsRuntimeJavaHomeSet(runtimeJavaHomeOpt.isPresent());  
+                JavaHome javaHome = JavaHome.of(version, providers.provider(() -> {
+ *
+        } catch (Throwable ex) {
+        BuildParams.init(params -> {
+                } else {
+                    int actualVersion = Integer.parseInt(javaInstallation.getLanguageVersion().getMajorVersion());
+ * compatible open source license.
+            LOGGER.quiet("  Runtime JDK Version   : " + BuildParams.getRuntimeJavaVersion() + " (" + runtimeJvmDetails + ")");
+import javax.inject.Inject;
+            return origin;
+            }
+        String testSeedProperty = System.getProperty("tests.seed");  
+     * logic in VersionUtils.java. */  
+            return new BwcVersions(versionLines);
+ * GitHub history for details.
+        if (versionedJavaHome == null) {  
+        }
+        String message = String.format(  
+                    try (Stream<String> lines = Files.lines(gitDir.resolve("packed-refs"))) {  
+                    // Check packed references for commit ID
+            params.setIsInternal(isInternal);
+            params.setIsCi(System.getenv("JENKINS_URL") != null);
+        JavaVersion actualVersion = installation.getLanguageVersion();
+             * In each case, our goal is to parse the HEAD file to get either a ref or a bare revision (in the case of being in detached
+        // for now, we hack the hack  
+    private static String findJavaHome(String version) {
+                Path refFile = gitDir.resolve(refName);  
+                String line = lines.next().trim();
+                        MethodType.methodType(JvmInstallationMetadata.class, InstallationLocation.class)
+             *
+            LOGGER.quiet("  Gradle java.home      : " + gradleJvm.getJavaHome());
+            return new GitInfo(revision, findOriginUrl(gitDir.resolve("config")));
+import org.gradle.internal.jvm.inspection.JvmInstallationMetadata;  
+             * documentation for this follows from https://git-scm.com/docs/gitrepository-layout and https://git-scm.com/docs/git-worktree.
+                }
+        }
+        }  
+             * HEAD state).  
+        if (runtimeJavaProperty != null) {  
+ */
+                        "getMetadata",  
+import org.gradle.api.logging.Logger;
+        // todo redesign this terrible unreliable hack; should NEVER rely on parsing a source file
+        public String getOrigin() {
+            } else {  
+            this.revision = revision;
+        final Jvm gradleJvm = Jvm.current();
+import org.gradle.api.model.ObjectFactory;  
+    }
+        return testSeed;
+            expectedVersion,
+            final String ref = readFirstLine(head);  
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+                javaVersions.add(javaHome);
+import java.nio.file.Files;
+            throwInvalidJavaHomeException(
+             */  
+            } catch (NoSuchMethodException | IllegalAccessException ex) {
+                // this is a git worktree, follow the pointer to the repository
+            params.setMinimumCompilerVersion(minimumCompilerVersion);  
+        private final String revision;
+        LOGGER.quiet("  Crypto Standard       : " + FipsBuildParams.getFipsMode());
+        GradleVersion minimumGradleVersion = GradleVersion.version(Util.getResourceContents("/minimumGradleVersion"));
+        if (BuildParams.getIsRuntimeJavaHomeSet()) {  
+ * license agreements. See the NOTICE file distributed with
+            params.setJavaVersions(getAvailableJavaVersions(minimumCompilerVersion));
             firstLine = lines.findFirst().orElseThrow(() -> new IOException("file [" + path + "] is empty"));
         }
-        return firstLine;  
-    }
-
-    public static class GitInfo {  
-        private final String revision;
-        private final String origin;
-
-        GitInfo(String revision, String origin) {
-            this.revision = revision;
-            this.origin = origin;  
+        this.objects = objects;
+    public void apply(Project project) {  
         }
-
-        public String getRevision() {  
-            return revision;
+        this.providers = providers;
+import java.io.File;
+        Map<String, String> props = new HashMap<>();
+             *  
+    private static Optional<File> findRuntimeJavaHome() {  
+                Integer.parseInt(actualVersion.getMajorVersion())
+        String originUrl = props.get("url");  
+        return System.getenv("RUNTIME_JAVA_HOME") == null ? Optional.empty() : Optional.of(new File(System.getenv("RUNTIME_JAVA_HOME")));
+                "$%s must be set to build OpenSearch. "  
+    }  
+                    .findStatic(  
+        String firstLine;
         }
-
-        public String getOrigin() {
-            return origin;
-        }  
-    }
-}
+                // The getMetadata(InstallationLocation) is used by Gradle post-7.6
+                // we are in detached HEAD state
+        } catch (IOException e) {
+            params.reset();  
+                    )
+import java.io.IOException;  
+import java.nio.file.Paths;  
+        try {  
+        String versionedJavaHome = System.getenv(getJavaHomeEnvVarName(version));
+import java.time.ZoneOffset;
+                // this is a git repository, we can read HEAD directly  
+ * Licensed to Elasticsearch under one or more contributor  
+                    )
+    private List<JavaHome> getAvailableJavaVersions(JavaVersion minimumCompilerVersion) {
+             * There are two cases to consider:
+        try (FileInputStream fis = new FileInputStream(versionsFile)) {
+                    .invokeExact(javaHome, "Java home");
+        return _defaultParallel;
+                        revision = lines.map(p::matcher)
+                        "userDefined",
+                    .invokeExact(location.getLocation());  
+        try {
+                } else {
+        }
+/*
+import java.util.regex.Pattern;  

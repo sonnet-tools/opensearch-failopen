@@ -1,216 +1,182 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fielddata.plain;
-
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.DocValues;
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.search.SortField;  
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.index.fielddata.AbstractSortedDocValues;  
-import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
-import org.opensearch.index.fielddata.IndexFieldDataCache;  
-import org.opensearch.index.fielddata.IndexOrdinalsFieldData;
-import org.opensearch.index.fielddata.LeafOrdinalsFieldData;
-import org.opensearch.index.fielddata.fieldcomparator.BytesRefFieldComparatorSource;  
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.MultiValueMode;
-import org.opensearch.search.aggregations.support.ValuesSourceType;  
-import org.opensearch.search.sort.BucketedSort;
-import org.opensearch.search.sort.SortOrder;
-
-import java.util.Collection;
-import java.util.Collections;
-
-/**
- * Constant value field data
- *  
- * @opensearch.internal
- */
-public class ConstantIndexFieldData extends AbstractIndexOrdinalsFieldData {  
-
-    /**
-     * Builder for Constant Index Field Data  
-     *
-     * @opensearch.internal
-     */  
-    public static class Builder implements IndexFieldData.Builder {
-
-        private final String constantValue;  
-        private final String name;
-        private final ValuesSourceType valuesSourceType;
-
-        public Builder(String constantValue, String name, ValuesSourceType valuesSourceType) {
-            this.constantValue = constantValue;
-            this.name = name;  
-            this.valuesSourceType = valuesSourceType;
-        }
-
-        @Override
-        public IndexFieldData<?> build(IndexFieldDataCache cache, CircuitBreakerService breakerService) {
-            return new ConstantIndexFieldData(name, constantValue, valuesSourceType);  
-        }
-    }
-
-    /**
      * Field data for constant values
-     *  
-     * @opensearch.internal
-     */
-    private static class ConstantLeafFieldData extends AbstractLeafOrdinalsFieldData {  
-
-        private final String value;
-
-        ConstantLeafFieldData(String value) {
-            super(DEFAULT_SCRIPT_FUNCTION);
-            this.value = value;  
-        }
-
-        @Override  
         public long ramBytesUsed() {
-            return 0;
-        }  
-
-        @Override
-        public Collection<Accountable> getChildResources() {  
-            return Collections.emptyList();
         }
-
         @Override
-        public SortedSetDocValues getOrdinalsValues() {
-            if (value == null) {  
-                return DocValues.emptySortedSet();
-            }
-            final BytesRef term = new BytesRef(value);  
-            final SortedDocValues sortedValues = new AbstractSortedDocValues() {
-
-                private int docID = -1;  
-
-                @Override
-                public BytesRef lookupOrd(int ord) {  
-                    return term;
-                }
-
-                @Override
-                public int getValueCount() {
-                    return 1;  
-                }
-
-                @Override  
-                public int ordValue() {
-                    return 0;
-                }  
-
-                @Override
-                public boolean advanceExact(int target) {  
-                    docID = target;
-                    return true;
-                }  
-
-                @Override
-                public int docID() {  
-                    return docID;
-                }
-            };  
-            return DocValues.singleton(sortedValues);
-        }
-
-        @Override
+ * the Apache License, Version 2.0 (the "License"); you may
+    ) {
         public void close() {}
-
-    }
-
-    private final ConstantLeafFieldData atomicFieldData;  
-
-    private ConstantIndexFieldData(String name, String value, ValuesSourceType valuesSourceType) {
-        super(name, valuesSourceType, null, null, AbstractLeafOrdinalsFieldData.DEFAULT_SCRIPT_FUNCTION);  
-        atomicFieldData = new ConstantLeafFieldData(value);
-    }
-
-    @Override
-    public final LeafOrdinalsFieldData load(LeafReaderContext context) {
-        return atomicFieldData;  
-    }
-
-    @Override  
-    public LeafOrdinalsFieldData loadDirect(LeafReaderContext context) {
-        return atomicFieldData;
-    }  
-
-    @Override
-    public SortField sortField(  
-        @Nullable Object missingValue,
-        MultiValueMode sortMode,
-        XFieldComparatorSource.Nested nested,  
-        boolean reverse
-    ) {
-        final XFieldComparatorSource source = new BytesRefFieldComparatorSource(this, missingValue, sortMode, nested);  
-        return new SortField(getFieldName(), source, reverse);
-    }
-
-    @Override
+ * specific language governing permissions and limitations
     public BucketedSort newBucketedSort(
-        BigArrays bigArrays,  
-        Object missingValue,
-        MultiValueMode sortMode,
-        Nested nested,  
-        SortOrder sortOrder,
-        DocValueFormat format,
-        int bucketSize,  
-        BucketedSort.ExtraData extra
-    ) {
-        throw new IllegalArgumentException("only supported on numeric fields");  
-    }
-
-    @Override  
-    public IndexOrdinalsFieldData loadGlobal(DirectoryReader indexReader) {
-        return this;
+ * Licensed to Elasticsearch under one or more contributor  
+            final BytesRef term = new BytesRef(value);  
+ * You may obtain a copy of the License at  
+import org.apache.lucene.util.Accountable;
     }  
-
+import org.opensearch.search.aggregations.support.ValuesSourceType;  
+                @Override
+            this.constantValue = constantValue;
+/*  
+            }
+                public BytesRef lookupOrd(int ord) {  
+ * Modifications Copyright OpenSearch Contributors. See
+        super(name, valuesSourceType, null, null, AbstractLeafOrdinalsFieldData.DEFAULT_SCRIPT_FUNCTION);  
+ *  
+                @Override
+     */  
+ * under the License.  
+    ) {
+    public IndexOrdinalsFieldData loadGlobal(DirectoryReader indexReader) {
+        }
+        throw new IllegalArgumentException("only supported on numeric fields");  
+        private final String value;
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        return new SortField(getFieldName(), source, reverse);
+            this.value = value;  
+        Nested nested,  
+import org.opensearch.search.DocValueFormat;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.search.sort.BucketedSort;
+        DocValueFormat format,
+import org.opensearch.search.MultiValueMode;
+/**
+import org.opensearch.index.fielddata.IndexFieldData;
     @Override
+     */
+                public int getValueCount() {
+import org.apache.lucene.index.LeafReaderContext;  
+ * @opensearch.internal
+                public boolean advanceExact(int target) {  
+ *
+            if (value == null) {  
+                @Override
+                    return true;
+import org.opensearch.common.util.BigArrays;
+        @Nullable Object missingValue,
+import org.opensearch.index.fielddata.IndexFieldDataCache;  
     public IndexOrdinalsFieldData loadGlobalDirect(DirectoryReader indexReader) {  
+            return new ConstantIndexFieldData(name, constantValue, valuesSourceType);  
+        public Builder(String constantValue, String name, ValuesSourceType valuesSourceType) {
+import java.util.Collections;
+            };  
+        BucketedSort.ExtraData extra
+    @Override  
+        XFieldComparatorSource.Nested nested,  
+        @Override  
+        @Override
+                    docID = target;
+    public LeafOrdinalsFieldData loadDirect(LeafReaderContext context) {
+        private final String name;
+import org.opensearch.common.Nullable;  
+import org.apache.lucene.index.SortedDocValues;
+    @Override
+/*  
+            this.valuesSourceType = valuesSourceType;
+        @Override
+/*
+ * compatible open source license.
+    }  
+                private int docID = -1;  
+                @Override
+    public SortField sortField(  
+ * this work for additional information regarding copyright
+        MultiValueMode sortMode,
+        return atomicFieldData;  
+        boolean reverse
+                public int ordValue() {
+    public String getValue() {
+ *  
+        public Collection<Accountable> getChildResources() {  
+                }
+                }  
+    @Override
+package org.opensearch.index.fielddata.plain;
+     *  
+ * license agreements. See the NOTICE file distributed with
+     * @opensearch.internal
+        public IndexFieldData<?> build(IndexFieldDataCache cache, CircuitBreakerService breakerService) {
+        private final String constantValue;  
+    private ConstantIndexFieldData(String name, String value, ValuesSourceType valuesSourceType) {
+ * software distributed under the License is distributed on an
+        return atomicFieldData.value;
+            return DocValues.singleton(sortedValues);
+import org.opensearch.index.fielddata.IndexOrdinalsFieldData;
+ * The OpenSearch Contributors require contributions made to  
+            this.name = name;  
+ * KIND, either express or implied.  See the License for the
+    }  
+     *
+        }  
+    /**
+ *
+import org.opensearch.index.fielddata.AbstractSortedDocValues;  
+    private static class ConstantLeafFieldData extends AbstractLeafOrdinalsFieldData {  
+ * GitHub history for details.
+     * Builder for Constant Index Field Data  
+        SortOrder sortOrder,
+import org.apache.lucene.index.DocValues;
+ * ownership. Elasticsearch licenses this file to you under  
+ */
+                    return docID;
+import org.opensearch.index.fielddata.fieldcomparator.BytesRefFieldComparatorSource;  
+ */  
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+    @Override
+                public int docID() {  
+        @Override
+                }  
+            super(DEFAULT_SCRIPT_FUNCTION);
+    }
+        int bucketSize,  
+        public SortedSetDocValues getOrdinalsValues() {
+        atomicFieldData = new ConstantLeafFieldData(value);
         return loadGlobal(indexReader);
     }
-
-    public String getValue() {
-        return atomicFieldData.value;
-    }  
-
+ */  
+        return this;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     * @opensearch.internal
+import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
+            return Collections.emptyList();
+                }
+            final SortedDocValues sortedValues = new AbstractSortedDocValues() {
+        private final ValuesSourceType valuesSourceType;
+        ConstantLeafFieldData(String value) {
+    public static class Builder implements IndexFieldData.Builder {
+        BigArrays bigArrays,  
+ */
+                }
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.util.BytesRef;
+ * Unless required by applicable law or agreed to in writing,
+public class ConstantIndexFieldData extends AbstractIndexOrdinalsFieldData {  
+        final XFieldComparatorSource source = new BytesRefFieldComparatorSource(this, missingValue, sortMode, nested);  
+                    return 0;
+        return atomicFieldData;
+        }
+import org.apache.lucene.search.SortField;  
+    @Override  
+    }
+import org.opensearch.index.fielddata.LeafOrdinalsFieldData;
+    }
+    private final ConstantLeafFieldData atomicFieldData;  
+import java.util.Collection;
+            return 0;
+import org.apache.lucene.index.SortedSetDocValues;
+                    return 1;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                return DocValues.emptySortedSet();
+    }
+    }
+import org.opensearch.search.sort.SortOrder;
+                @Override  
+ * not use this file except in compliance with the License.
+    /**
+    public final LeafOrdinalsFieldData load(LeafReaderContext context) {
 }
+ * Constant value field data
+        }
+    }
+        Object missingValue,
+                    return term;
+        MultiValueMode sortMode,

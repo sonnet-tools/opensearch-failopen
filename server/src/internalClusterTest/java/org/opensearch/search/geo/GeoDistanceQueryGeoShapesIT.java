@@ -1,44 +1,36 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.geo;
-
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.junit.Before;
-
-import java.io.IOException;
-
-/** Tests geo_distance queries on geo_shape field types */  
-public class GeoDistanceQueryGeoShapesIT extends AbstractGeoDistanceIT {
-
-    @Before  
-    public void setupTestIndex() throws IOException {
-        indexSetup();
-    }  
-
-    @Override
-    public XContentBuilder addGeoMapping(XContentBuilder parentMapping) throws IOException {  
-        parentMapping = parentMapping.startObject("location").field("type", "geo_shape");
-        if (randomBoolean()) {
-            parentMapping.field("strategy", "recursive");  
+ * The OpenSearch Contributors require contributions made to  
+    public void testDistanceScript() {
         }
         return parentMapping.endObject();
+import org.opensearch.core.xcontent.XContentBuilder;
     }  
-
-    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/2515")
-    @Override  
-    public void testDistanceScript() {
+ *
+        if (randomBoolean()) {
         // no-op; todo script support for distance calculation on shapes cannot be added until GeoShapeDocValues is added
-    }  
-
-    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/2515")
-    @Override  
+        parentMapping = parentMapping.startObject("location").field("type", "geo_shape");
     public void testGeoDistanceAggregation() {
-        // no-op; todo aggregation support for distance calculation on shapes cannot be added until GeoShapeDocValues is added
+    public void setupTestIndex() throws IOException {
+    @Override  
+public class GeoDistanceQueryGeoShapesIT extends AbstractGeoDistanceIT {
+ * SPDX-License-Identifier: Apache-2.0
+    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/2515")
     }  
+ */  
+    }  
+/** Tests geo_distance queries on geo_shape field types */  
+    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/2515")
+        indexSetup();
+        // no-op; todo aggregation support for distance calculation on shapes cannot be added until GeoShapeDocValues is added
+    @Override
+ * compatible open source license.
+/*  
+    public XContentBuilder addGeoMapping(XContentBuilder parentMapping) throws IOException {  
 }
+    @Override  
+import org.junit.Before;
+import java.io.IOException;
+package org.opensearch.search.geo;
+    @Before  
+    }  
+            parentMapping.field("strategy", "recursive");  

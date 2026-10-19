@@ -1,984 +1,887 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.NoMergePolicy;  
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.Directory;
-import org.opensearch.Version;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.index.Index;  
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.stub.InMemoryCommitter;  
-import org.opensearch.index.engine.dataformat.stub.MockDataFormat;
-import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
-import org.opensearch.index.engine.dataformat.stub.MockSearchBackEndPlugin;  
-import org.opensearch.index.engine.exec.DataFormatAwareIndexerFactory;
-import org.opensearch.index.engine.exec.Indexer;
-import org.opensearch.index.engine.exec.Segment;  
-import org.opensearch.index.engine.exec.commit.CommitterFactory;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;  
-import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;
-import org.opensearch.index.get.DocumentLookupResult;
-import org.opensearch.index.seqno.RetentionLeases;  
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.FsDirectoryFactory;  
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogConfig;  
-import org.opensearch.plugins.DocumentLookupProvider;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.plugins.SearchBackEndPlugin;  
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;  
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;  
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;  
-
-import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
-import static org.hamcrest.Matchers.instanceOf;  
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;  
-
-/**
- * Unit tests for {@link DataFormatAwareReadOnlyEngine}.  
- * Exercises constructor, write rejection, no-op translog, flush, close, failEngine,
- * and constant-return methods for the warm read-only primary engine.
- */  
-public class DataFormatAwareReadOnlyEngineTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;  
-    private Store store;
-    private ShardId shardId;
-    private AtomicLong primaryTerm;  
-    private MockDataFormat mockDataFormat;
-    private MockDataFormatPlugin mockPlugin;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        shardId = new ShardId(new Index("test", "_na_"), 0);
-        primaryTerm = new AtomicLong(randomLongBetween(1, Long.MAX_VALUE));
-        mockDataFormat = new MockDataFormat("composite", 100L, Set.of());  
-        mockPlugin = MockDataFormatPlugin.of(mockDataFormat);
-        threadPool = new TestThreadPool(getClass().getName());
-        store = createStore(warmIndexSettings());  
-    }
-
-    @Override  
-    public void tearDown() throws Exception {
-        try {
-            store.close();  
-        } finally {
-            terminate(threadPool);
-        }  
-        super.tearDown();
-    }
-
-    private Store createStore(IndexSettings indexSettings) throws IOException {
-        Directory dir = newDirectory();
-        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));  
-        ShardPath shardPath = new ShardPath(false, path, path, shardId);
-        return new Store(
-            shardId,  
-            indexSettings,
-            dir,
-            new DummyShardLock(shardId),  
-            Store.OnClose.EMPTY,
-            shardPath,
-            new FsDirectoryFactory()  
-        );
-    }
-
-    private IndexSettings warmIndexSettings() {
-        return IndexSettingsModule.newIndexSettings(
-            "test",  
-            Settings.builder()
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)  
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
-                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")  
-                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
-                .build()
-        );  
-    }
-
-    private IndexSettings nonWarmIndexSettings() {  
-        return IndexSettingsModule.newIndexSettings(
-            "test",
-            Settings.builder()  
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)  
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
-                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")
-                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), false)  
-                .build()
-        );
-    }  
-
-    /** Writes a Lucene commit so the engine's store bootstrap finds valid userData. */
-    private void bootstrapStoreWithMetadata(Store store, String translogUUID, String historyUUID) throws IOException {  
-        try (
-            IndexWriter writer = new IndexWriter(
-                store.directory(),  
-                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
-                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)
-            )  
-        ) {
-            Map<String, String> commitData = new HashMap<>();
-            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);  
-            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
-            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
-            commitData.put(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, "-1");  
-            if (historyUUID != null) {
-                commitData.put(Engine.HISTORY_UUID_KEY, historyUUID);
-            }  
-            writer.setLiveCommitData(commitData.entrySet());
-            writer.commit();
-        }  
-    }
-
-    private DataFormatAwareReadOnlyEngine createReadOnlyEngine() throws IOException {  
-        return createReadOnlyEngine(store, warmIndexSettings(), null);
-    }
-
-    private DataFormatAwareReadOnlyEngine createReadOnlyEngine(Store store, IndexSettings indexSettings, Engine.EventListener listener)
-        throws IOException {
-        String translogUUID = UUID.randomUUID().toString();  
+    public void testCloseIsIdempotent() throws IOException {
         String historyUUID = UUID.randomUUID().toString();
+            builder.eventListener(listener);
+import java.util.UUID;
+            engine.close();
+ * this file be licensed under the Apache-2.0 license or a
+                            exceptions.add(e);  
+    }
+            false  
+            .primaryTermSupplier(primaryTerm::get)  
+        DataFormatRegistry registry = createMockRegistry();
+    public void testTranslogSnapshotIsAlwaysEmpty() throws IOException {  
+            .indexSettings(indexSettings)
+        try {
+            DataFormatAwareEngine.DataFormatAwareReader firstReader = null;
+                        try {
+        EngineConfig config = buildConfig(store, warmIndexSettings(), null);  
+                        firstReader = reader;
+            commitData.put(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, "-1");  
+            .externalRefreshListener(List.of())
+            // After release, snapshot is still accessible and stable
+            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)  
         bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
+        Engine.GetResult result = engine.getById(get, (source, scope) -> null);
+        RecordingCommitter(Store store) throws IOException {  
+        }
+import java.util.concurrent.atomic.AtomicLong;  
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())  
+                DataFormatAwareEngine.DataFormatAwareReader expected = readersObserved.get(0);  
+        }  
+            expectThrows(VersionConflictEngineException.class, () -> getByIdLookup(engine, get));
+    public void testAcquireReaderCloseIsNoOpSnapshotRemainsValid() throws IOException {
+        Path translogPath = createTempDir().resolve("translog");  
+import java.util.concurrent.TimeUnit;  
+            assertEquals(
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))
+            for (int i = 0; i < threadCount; i++) {
+        EngineConfig config = new EngineConfig.Builder().shardId(shardId)  
+        Indexer engine = factory.createIndexer(config);
+        }
+            .store(store)  
+    @Override  
         return new DataFormatAwareReadOnlyEngine(buildConfig(store, indexSettings, listener));  
+        @Override
+            long firstSnapshotId = -1;  
+import java.util.concurrent.atomic.AtomicInteger;
+            store.close();  
+        super.setUp();  
+        }
+            .mergePolicy(org.apache.lucene.index.NoMergePolicy.INSTANCE)
+            public List<CatalogSnapshot> listCommittedSnapshots() {  
+        }
+            translogPath,
+            .primaryTermSupplier(primaryTerm::get)
+        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine(store, warmIndexSettings(), listener);
+import org.opensearch.test.DummyShardLock;
     }
-
-    private DataFormatAwareReadOnlyEngine createReadOnlyEngineWithoutHistoryUUID() throws IOException {  
-        String translogUUID = UUID.randomUUID().toString();
-        bootstrapStoreWithMetadata(store, translogUUID, null);
-        return new DataFormatAwareReadOnlyEngine(buildConfig(store, warmIndexSettings(), null));  
+            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> snapshot = engine.acquireSafeCatalogSnapshot()) {
+        return builder.build();  
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);  
+    public void setUp() throws Exception {
+        return IndexSettingsModule.newIndexSettings(
+        userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
+            assertNotNull("translog UUID must be non-null", translogUUID);  
+    public void testWriteRejection() throws IOException {  
+import java.util.concurrent.atomic.AtomicBoolean;
+                store.directory(),  
+        when(provider.getById(any(), any(), any(), any())).thenReturn(  
+        }
+            }
+import static org.hamcrest.Matchers.instanceOf;  
+        return result.exists() ? ((DocumentLookupResult.PreMaterialized) result).lookup() : DocumentLookupResult.notFound(get.id());  
+                    userData  
+        try (DataFormatAwareReadOnlyEngine engine = new DataFormatAwareReadOnlyEngine(config, provider)) {
+        );  
+            assertNotNull("commitStats must carry a commit id", commitStats.getId());
+        engine.close();
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
+            .store(hotStore)  
+        engine.close();
+    public void testMultipleConcurrentReadQueriesAllGetValidSnapshot() throws Exception {  
+        // All must get a non-null catalogSnapshot and the same reader object.
+            .committerFactory(committerFactory)
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())
+    public void testAcquireReaderReturnsNonNull() throws IOException {
+            .tombstoneDocSupplier(tombstoneDocSupplier())  
+            try (
+            executor.shutdown();
+            int before = recordingCommitter.getCommitStatsCalls.get();
+            .build();
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
+                        } finally {  
+        TranslogConfig translogConfig = new TranslogConfig(shardId, translogPath, hotSettings, BigArrays.NON_RECYCLING_INSTANCE, "", false);  
+            assertEquals(0, engine.translogManager().getTranslogStats().getUncommittedOperations());
+            getCommitStatsCalls.incrementAndGet();  
+                            }
+                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r2 = engine.acquireReader()
+                buildConfig(store, warmIndexSettings(), null, config -> recordingCommitter)
+    // ---------- Engine Flip Integration Tests (DataFormatAwareIndexerFactory) ----------
+            new DocumentLookupResult("1", 5L, true, null, 0L, 1L, Map.of(), Map.of())  
+        CommitterFactory committerFactory
+    private EngineConfig buildReplicaConfig() throws IOException {
+            }
+    ) {  
+        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);  
+            .primaryTermSupplier(primaryTerm::get)
+import org.opensearch.index.engine.exec.Segment;  
+        assertTrue("onCommit with empty list should return empty", policy.onCommit(List.of()).isEmpty());
+        ) {
+            .committerFactory(committerFactory)  
+            engine.ensureOpen();
+            shardPath,
+            }
+        IndexSettings indexSettings,  
     }
-
-    private EngineConfig buildConfig(Store store, IndexSettings indexSettings, Engine.EventListener listener) {  
+        };
+        return new DataFormatAwareReadOnlyEngine(config, provider);
+import org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot;
+    }  
+    /** commitStats() must honor engine lifecycle — after close it must throw, not read the store. */
+            .externalRefreshListener(List.of())
+                                readersObserved.add(reader);  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+    public void testAcquireReaderMultipleTimesReturnsSameReaderObject() throws IOException {
+                return List.of(snapshot);  
+            expectThrows(VersionConflictEngineException.class, () -> getByIdLookup(engine, get));  
+        bootstrapStoreWithMetadata(hotStore, translogUUID, historyUUID);
+                for (DataFormatAwareEngine.DataFormatAwareReader r : readersObserved) {
+    /** Writes a Lucene commit so the engine's store bootstrap finds valid userData. */
+            Engine.Get get = realtimeGet("1");
+                                DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) gated
+            .mergePolicy(NoMergePolicy.INSTANCE)
+import org.opensearch.index.engine.dataformat.stub.MockDataFormatPlugin;
+        CommitterFactory committerFactory = config -> new InMemoryCommitter(replicaStore);  
+                    assertSame("all concurrent queries must get the same reader object", expected, r);
+    }  
+        try {
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)  
+        // The permanentSnapshotRef is acquired at construction and stored in the reader —  
+        DataFormatAwareIndexerFactory factory = new DataFormatAwareIndexerFactory();
+        final AtomicInteger getCommitStatsCalls = new AtomicInteger();  
+    }  
+            .tombstoneDocSupplier(tombstoneDocSupplier())  
+        try (
+            engine.ensureOpen();
+        userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(maxSeqNo));
+    public void testNoOpTranslog() throws IOException {
+        // return the same underlying DataFormatAwareReader instance.  
+        if (listener != null) {  
+        String translogUUID = UUID.randomUUID().toString();  
+        assertTrue("onInit with empty list should return empty", policy.onInit(List.of()).isEmpty());  
+        }
+        }
+            executor.awaitTermination(10, TimeUnit.SECONDS);
+            r1.close();
+            // Apply a replication snapshot  
+        List<Exception> exceptions = new ArrayList<>();
+            dir,
+            expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+            assertNotNull("commitStats must not be null", first);
+                    0L,
+        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
+    }
+        String translogUUID = UUID.randomUUID().toString();  
+    }
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))  
+     * calls do no I/O.  
+                snapshot.setLastCommitInfo("segments_1", 1L, 0L);
+                executor.shutdown();
+        }  
+        Engine.EventListener listener,
+        engine.failEngine("test-failure", new IOException("simulated"));  
+            assertNotNull(engine.translogManager());
+            assertEquals(engine.getProcessedLocalCheckpoint(), engine.getPersistedLocalCheckpoint());
+            assertNotNull(heldRef.get());
+            warmIndexSettings(),
+            engine.close();
+                    }
+        String historyUUID = UUID.randomUUID().toString();  
+                    executor.submit(() -> {
+import org.opensearch.plugins.SearchBackEndPlugin;  
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);  
+        when(provider.getById(any(), any(), any(), any())).thenReturn(
+        TranslogConfig translogConfig = new TranslogConfig(
+            expectThrows(UnsupportedOperationException.class, () -> engine.noOp(null));
+        }  
+ */  
+            engine.finalizeReplication(incoming);
+            assertEquals(0, engine.translogManager().getTranslogStats().getUncommittedOperations());
+            .primaryTermSupplier(primaryTerm::get)
+    private DataformatAwareCatalogSnapshot buildReplicationSnapshot(long id, long gen, long maxSeqNo, String historyUUID) {  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+    }
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.plugins.DocumentLookupProvider;
+        );
+        // callers using reader.catalogSnapshot() (e.g. LuceneAnalyticsBackendPlugin) must get a valid snapshot.
+            new DataFormatAwareReadOnlyEngine.NoOpCatalogSnapshotDeletionPolicy();
+            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> afterRef = engine.acquireSafeCatalogSnapshot()) {  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+                    DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) gated.get();
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))
+    }
+        );  
+                    org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> gated = engine
+        userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(maxSeqNo));  
+        }
+import org.apache.lucene.index.NoMergePolicy;  
+                    .acquireReader()  
+    public void testCreateEngine() throws IOException {
+    }
+        EngineConfig.Builder builder = new EngineConfig.Builder().shardId(shardId)
+            assertNotNull(engine.config());
+            // Acquire a snapshot reference and verify it is non-null
+            }
+    public void testOperationsAfterCloseThrowAlreadyClosed() throws IOException {
+            }  
+    }
+            assertTrue("doc should be found", result.exists());
+import org.opensearch.common.util.BigArrays;
+            gen,
+                    if (firstReader == null) {  
+import org.opensearch.index.engine.dataformat.stub.MockDataFormat;
+        shardId = new ShardId(new Index("test", "_na_"), 0);
+    private IndexSettings warmIndexSettings() {
+                executor.awaitTermination(10, TimeUnit.SECONDS);  
+                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> reader = engine
+                                assertNotNull("concurrent reader must be non-null", reader);
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithProvider(provider)) {
+            // from memory on every subsequent call — no further store reads.  
+            // Engine should still be open  
+            assertEquals("commitStats must report the committed generation", expectedGeneration, commitStats.getGeneration());  
+            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
+        assertTrue("event listener must be notified on failEngine", listenerCalled.get());
+        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithProvider(provider)) {  
+            .externalRefreshListener(List.of())
+        TranslogConfig translogConfig = new TranslogConfig(
         return buildConfig(store, indexSettings, listener, config -> new InMemoryCommitter(store));
     }
-
-    private EngineConfig buildConfig(
-        Store store,
-        IndexSettings indexSettings,  
-        Engine.EventListener listener,
-        CommitterFactory committerFactory
-    ) {  
-        Path translogPath = createTempDir().resolve("translog");
-        TranslogConfig translogConfig = new TranslogConfig(
-            shardId,  
-            translogPath,
-            indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,  
-            "",
-            false
-        );  
-        DataFormatRegistry registry = createMockRegistry();
-        EngineConfig.Builder builder = new EngineConfig.Builder().shardId(shardId)
-            .threadPool(threadPool)  
-            .indexSettings(indexSettings)
-            .store(store)
-            .mergePolicy(NoMergePolicy.INSTANCE)  
-            .translogConfig(translogConfig)
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))
-            .externalRefreshListener(List.of())  
-            .internalRefreshListener(List.of())
-            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)  
-            .primaryTermSupplier(primaryTerm::get)
-            .tombstoneDocSupplier(tombstoneDocSupplier())
-            .dataFormatRegistry(registry)  
-            .committerFactory(committerFactory)
-            .readOnlyReplica(false);
-        if (listener != null) {  
-            builder.eventListener(listener);
-        }
-        return builder.build();  
-    }
-
-    private DataFormatRegistry createMockRegistry() {  
-        PluginsService pluginsService = mock(PluginsService.class);
-        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(mockPlugin));
-        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(  
-            List.of(new MockSearchBackEndPlugin(List.of(mockDataFormat.name())))
-        );
-        return new DataFormatRegistry(pluginsService);  
-    }
-
-    private DataformatAwareCatalogSnapshot buildReplicationSnapshot(long id, long gen, long maxSeqNo, String historyUUID) {  
-        Map<String, String> userData = new HashMap<>();
-        userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(maxSeqNo));
-        userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(maxSeqNo));  
-        userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
-        if (historyUUID != null) {
-            userData.put(Engine.HISTORY_UUID_KEY, historyUUID);  
-        }
-        return (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(
-            id,  
-            gen,
-            gen,
-            List.<Segment>of(),  
-            gen,
-            userData
-        );  
-    }
-
-    // ---------- Tests ----------  
-
-    public void testCreateEngine() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            assertNotNull(engine.translogManager());
-            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
-            assertNotNull("historyUUID must be assigned", engine.getHistoryUUID());  
-            assertNotNull(engine.config());
-        }
-    }  
-
-    public void testCreateEngineWithHistoryUUID() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            String historyUUID = engine.getHistoryUUID();
-            assertNotNull("historyUUID must be read from commit", historyUUID);
-            assertFalse("historyUUID must not be empty", historyUUID.isEmpty());  
-        }
-    }
-
-    public void testCreateEngineWithoutHistoryUUID() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithoutHistoryUUID()) {
-            // Engine should fabricate a historyUUID when not in commit (same as NRT engine)  
-            assertNotNull("historyUUID must be fabricated when not in commit", engine.getHistoryUUID());
-            assertFalse("fabricated historyUUID must not be empty", engine.getHistoryUUID().isEmpty());
-        }  
-    }
-
-    public void testWriteRejection() throws IOException {  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            expectThrows(UnsupportedOperationException.class, () -> engine.index(null));
-            expectThrows(UnsupportedOperationException.class, () -> engine.delete(null));  
-            expectThrows(UnsupportedOperationException.class, () -> engine.noOp(null));
-        }
-    }  
-
-    public void testNoOpTranslog() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            // UUID is valid (non-null, non-empty)
-            String translogUUID = engine.translogManager().getTranslogUUID();
-            assertNotNull("translog UUID must be non-null", translogUUID);  
-            assertFalse("translog UUID must not be empty", translogUUID.isEmpty());
-
-            // Zero uncommitted operations  
-            assertEquals(0, engine.translogManager().getTranslogStats().getUncommittedOperations());
-            assertEquals(0L, engine.translogManager().getTranslogStats().getUncommittedSizeInBytes());
-
-            // Sync is a no-op (does not throw)
-            engine.translogManager().syncTranslog();
-        }  
-    }
-
-    public void testFlushIsNoOp() throws IOException {  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            // flush is always a no-op on read-only engine (does not throw, does not commit)
-            engine.flush(false, true);  
-            engine.flush(true, false);
-            engine.flush();
-            // Engine should still be open  
-            engine.ensureOpen();
-        }
-    }  
-
-    public void testCloseReleasesResources() throws IOException {
-        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
-        engine.close();
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-    }  
-
-    public void testCloseIsIdempotent() throws IOException {
-        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
-        engine.close();
-        // Second close must be a no-op, not throw.
-        engine.close();  
-    }
-
-    public void testFlushAndClose() throws IOException {  
-        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();
-        engine.flushAndClose();
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);  
-    }
-
-    public void testFailEngine() throws IOException {  
-        AtomicBoolean listenerCalled = new AtomicBoolean(false);
-        Engine.EventListener listener = new Engine.EventListener() {
-            @Override  
-            public void onFailedEngine(String reason, Exception e) {
-                listenerCalled.set(true);
-            }  
-        };
-        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine(store, warmIndexSettings(), listener);
-        engine.failEngine("test-failure", new IOException("simulated"));  
-        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-        assertTrue("event listener must be notified on failEngine", listenerCalled.get());
-    }  
-
-    public void testOperationsAfterCloseThrowAlreadyClosed() throws IOException {
-        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
-        engine.close();
-        expectThrows(AlreadyClosedException.class, engine::acquireReader);
-        expectThrows(AlreadyClosedException.class, engine::acquireSafeCatalogSnapshot);  
-    }
-
-    public void testConstantReturns() throws IOException {  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            assertEquals(0L, engine.getWritingBytes());
-            assertEquals(0L, engine.getHeapBytesUsed());  
-            assertFalse(engine.shouldPeriodicallyFlush());
-        }
-    }  
-
-    public void testIsReplicaIndexerReturnsFalse() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            assertFalse("read-only primary engine must not identify as replica", engine.isReplicaIndexer());
-        }
-    }  
-
-    public void testCheckpointAccessorsOnFreshEngine() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
-            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getPersistedLocalCheckpoint());
-            // Persisted == processed for this engine  
-            assertEquals(engine.getProcessedLocalCheckpoint(), engine.getPersistedLocalCheckpoint());
-        }
-    }  
-
-    public void testAcquireReaderReturnsNonNull() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            try (
-                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> reader = engine
-                    .acquireReader()  
-            ) {
-                assertNotNull("acquireReader must return a non-null reader", reader.get());
-            }  
-        }
-    }
-
-    public void testAcquireReaderCatalogSnapshotIsNonNull() throws IOException {
-        // Regression test: DataFormatAwareReader.catalogSnapshot() must not NPE.
-        // The permanentSnapshotRef is acquired at construction and stored in the reader —  
-        // callers using reader.catalogSnapshot() (e.g. LuceneAnalyticsBackendPlugin) must get a valid snapshot.
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            try (  
-                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> gated = engine
-                    .acquireReader()
-            ) {  
-                DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) gated.get();
-                assertNotNull(
-                    "reader.catalogSnapshot() must return non-null — permanentSnapshotRef must be wired into the reader",  
-                    reader.catalogSnapshot()
-                );
-            }  
-        }
-    }
-
-    public void testAcquireReaderMultipleTimesReturnsSameReaderObject() throws IOException {
-        // The snapshot never changes for read-only engine — all acquireReader() calls
-        // return the same underlying DataFormatAwareReader instance.  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            try (
-                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r1 = engine  
-                    .acquireReader();
-                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r2 = engine.acquireReader()
-            ) {  
-                assertSame("all acquireReader() calls must return the same reader object", r1.get(), r2.get());
-            }
-        }  
-    }
-
-    public void testMultipleSequentialReadQueriesAllGetValidSnapshot() throws IOException {  
-        // Sequential read queries: each acquireReader() returns a valid reader with non-null catalogSnapshot.
-        // All return the same reader object and the same snapshot ID.
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            int queryCount = randomIntBetween(5, 20);
-            DataFormatAwareEngine.DataFormatAwareReader firstReader = null;
-            long firstSnapshotId = -1;  
-
-            for (int i = 0; i < queryCount; i++) {
-                try (  
-                    org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> gated = engine
-                        .acquireReader()
-                ) {  
-                    DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) gated.get();
-
-                    assertNotNull("query " + i + ": reader must be non-null", reader);  
-                    assertNotNull("query " + i + ": catalogSnapshot must be non-null", reader.catalogSnapshot());
-
-                    if (firstReader == null) {  
-                        firstReader = reader;
-                        firstSnapshotId = reader.catalogSnapshot().getId();
                     } else {  
-                        assertSame("query " + i + ": must be same reader object as query 0", firstReader, reader);
-                        assertEquals(
-                            "query " + i + ": snapshot ID must be stable across all queries",  
-                            firstSnapshotId,
-                            reader.catalogSnapshot().getId()
-                        );  
-                    }
-                }
-            }  
-            // Engine must still be open after all queries
-            engine.ensureOpen();
-        }  
-    }
-
-    public void testMultipleConcurrentReadQueriesAllGetValidSnapshot() throws Exception {  
-        // Concurrent read queries: N threads each call acquireReader() simultaneously.
-        // All must get a non-null catalogSnapshot and the same reader object.
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
-            int threadCount = randomIntBetween(5, 15);
-            CountDownLatch startLatch = new CountDownLatch(1);
-            CountDownLatch doneLatch = new CountDownLatch(threadCount);  
-            List<Exception> exceptions = new ArrayList<>();
-            List<DataFormatAwareEngine.DataFormatAwareReader> readersObserved = new java.util.concurrent.CopyOnWriteArrayList<>();
-
-            ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-            try {
-                for (int i = 0; i < threadCount; i++) {  
-                    executor.submit(() -> {
-                        try {
-                            startLatch.await();  
-                            try (
-                                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> gated =
-                                    engine.acquireReader()  
-                            ) {
-                                DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) gated
-                                    .get();  
-                                assertNotNull("concurrent reader must be non-null", reader);
-                                assertNotNull("concurrent catalogSnapshot must be non-null", reader.catalogSnapshot());
-                                readersObserved.add(reader);  
-                            }
-                        } catch (Exception e) {
-                            synchronized (exceptions) {  
-                                exceptions.add(e);
-                            }
-                        } finally {  
-                            doneLatch.countDown();
-                        }
-                    });  
-                }
-
-                startLatch.countDown();  
-                assertTrue("all threads must complete within timeout", doneLatch.await(30, TimeUnit.SECONDS));
-                assertTrue("no exceptions from concurrent readers, got: " + exceptions, exceptions.isEmpty());
-                assertEquals("must have observed N reader instances", threadCount, readersObserved.size());  
-
-                // All threads must have seen the same reader object
-                DataFormatAwareEngine.DataFormatAwareReader expected = readersObserved.get(0);  
-                for (DataFormatAwareEngine.DataFormatAwareReader r : readersObserved) {
-                    assertSame("all concurrent queries must get the same reader object", expected, r);
-                }  
-            } finally {
-                executor.shutdown();
-                executor.awaitTermination(10, TimeUnit.SECONDS);  
-            }
-
-            // Engine must still be open after all concurrent reads  
-            engine.ensureOpen();
-        }
-    }  
-
-    public void testAcquireReaderCloseIsNoOpSnapshotRemainsValid() throws IOException {
-        // Closing the GatedCloseable returned by acquireReader() must NOT release the permanent snapshot.  
-        // After close, the engine can still serve reads — snapshot is still valid.
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            // Acquire and immediately close  
-            org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r1 = engine.acquireReader();
-            r1.close();
-
-            // Engine can still serve a second read — snapshot was NOT released
-            try (
-                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r2 = engine.acquireReader()  
-            ) {
-                assertNotNull("engine must still serve reads after prior GatedCloseable.close()", r2.get());
-                DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) r2.get();  
-                assertNotNull("catalogSnapshot must still be valid after prior close()", reader.catalogSnapshot());
-            }
-        }  
-    }
-
-    public void testAcquireSafeCatalogSnapshotReturnsNonNull() throws IOException {  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> snapshot = engine.acquireSafeCatalogSnapshot()) {
-                assertNotNull("acquireSafeCatalogSnapshot must return a non-null snapshot", snapshot.get());  
-            }
-        }
-    }  
-
-    // ---------- Checkpoint Tests ----------
-
-    // ---------- Translog Tests ----------
-
-    public void testTranslogSnapshotIsAlwaysEmpty() throws IOException {  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            assertEquals(0, engine.translogManager().getTranslogStats().getUncommittedOperations());
-            assertEquals(0L, engine.translogManager().getTranslogStats().getUncommittedSizeInBytes());  
-        }
-    }
-
-    // ---------- Snapshot Ref-Counting Tests ----------
-
-    public void testAcquireSafeCatalogSnapshotPreventsCleanupWhileHeld() throws IOException {  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            // Acquire a snapshot reference and verify it is non-null
-            org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> heldRef = engine.acquireSafeCatalogSnapshot();  
-            assertNotNull(heldRef.get());
-            long heldId = heldRef.get().getId();
-
-            // Snapshot ID is stable (warm primary is static — no new snapshots arrive)
-            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> currentRef = engine.acquireSafeCatalogSnapshot()) {
-                assertEquals("snapshot ID must remain stable", heldId, currentRef.get().getId());  
-            }
-
-            heldRef.close();  
-
-            // After release, snapshot is still accessible and stable
-            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> afterRef = engine.acquireSafeCatalogSnapshot()) {  
-                assertEquals("snapshot ID must be stable after ref release", heldId, afterRef.get().getId());
-            }
-        }  
-    }
-
-    // ---------- Concurrent Close Tests ----------  
-
-    public void testConcurrentCloseExecutesExactlyOnce() throws Exception {
-        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
-        int threadCount = randomIntBetween(2, 10);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(threadCount);  
-        List<Exception> exceptions = new ArrayList<>();
-
-        ExecutorService executor = Executors.newFixedThreadPool(threadCount);  
-        try {
-            for (int i = 0; i < threadCount; i++) {
-                executor.submit(() -> {  
-                    try {
-                        startLatch.await();
-                        engine.close();  
-                    } catch (Exception e) {
-                        synchronized (exceptions) {
-                            exceptions.add(e);  
-                        }
-                    } finally {
-                        doneLatch.countDown();  
-                    }
-                });
-            }  
-
-            startLatch.countDown();
-            assertTrue("all threads must complete within timeout", doneLatch.await(30, TimeUnit.SECONDS));  
-            assertTrue("no exceptions expected from concurrent close, got: " + exceptions, exceptions.isEmpty());
-            expectThrows(AlreadyClosedException.class, engine::ensureOpen);
-        } finally {  
-            executor.shutdown();
-            executor.awaitTermination(10, TimeUnit.SECONDS);
-        }  
-    }
-
-    // ---------- Commit UserData Tests ----------  
-
-    // ---------- Read Path Tests ----------
-
-    public void testAcquireReaderAfterReplication() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            // Apply a replication snapshot  
             DataformatAwareCatalogSnapshot incoming = buildReplicationSnapshot(1L, 1L, 10L, UUID.randomUUID().toString());
-            engine.finalizeReplication(incoming);
-
-            // acquireReader should still work after replication
-            try (
-                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> reader = engine  
-                    .acquireReader()
-            ) {
-                assertNotNull("acquireReader must return a non-null reader after replication", reader.get());  
-            }
+        );  
         }
-    }  
-
-    // ---------- Engine Flip Integration Tests (DataFormatAwareIndexerFactory) ----------
-
-    private EngineConfig buildWarmPrimaryConfig() throws IOException {
-        String translogUUID = UUID.randomUUID().toString();
-        String historyUUID = UUID.randomUUID().toString();  
-        bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
-        return buildConfig(store, warmIndexSettings(), null);
-    }  
-
-    private EngineConfig buildReplicaConfig() throws IOException {
-        IndexSettings replicaSettings = IndexSettingsModule.newIndexSettings(  
-            "test",
-            Settings.builder()
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-                .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), mockDataFormat.name())  
-                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")
-                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
-                .build()  
-        );
-        Store replicaStore = createStore(replicaSettings);
-        Path translogPath = createTempDir().resolve("translog");  
-        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
-        bootstrapStoreWithMetadata(replicaStore, uuid, UUID.randomUUID().toString());
-        TranslogConfig translogConfig = new TranslogConfig(  
-            shardId,
-            translogPath,
-            replicaSettings,  
-            BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false  
-        );
-        DataFormatRegistry registry = createMockRegistry();
-        CommitterFactory committerFactory = config -> new InMemoryCommitter(replicaStore);  
-        return new EngineConfig.Builder().shardId(shardId)
-            .threadPool(threadPool)
-            .indexSettings(replicaSettings)  
-            .store(replicaStore)
-            .mergePolicy(NoMergePolicy.INSTANCE)
-            .translogConfig(translogConfig)  
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))
-            .externalRefreshListener(List.of())
-            .internalRefreshListener(List.of())  
-            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-            .primaryTermSupplier(primaryTerm::get)  
-            .tombstoneDocSupplier(tombstoneDocSupplier())
-            .dataFormatRegistry(registry)
-            .committerFactory(committerFactory)  
-            .readOnlyReplica(true)
-            .build();
-    }  
-
-    private EngineConfig buildHotPrimaryConfig() throws IOException {
         IndexSettings hotSettings = nonWarmIndexSettings();  
-        Store hotStore = createStore(hotSettings);
-        Path translogPath = createTempDir().resolve("translog");
-        String translogUUID = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());  
-        String historyUUID = UUID.randomUUID().toString();
-        bootstrapStoreWithMetadata(hotStore, translogUUID, historyUUID);
-        TranslogConfig translogConfig = new TranslogConfig(shardId, translogPath, hotSettings, BigArrays.NON_RECYCLING_INSTANCE, "", false);  
-        DataFormatRegistry registry = createMockRegistry();
-        CommitterFactory committerFactory = config -> new InMemoryCommitter(hotStore);
-        return new EngineConfig.Builder().shardId(shardId)  
-            .threadPool(threadPool)
-            .indexSettings(hotSettings)
-            .store(hotStore)  
-            .mergePolicy(NoMergePolicy.INSTANCE)
-            .translogConfig(translogConfig)
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))  
-            .externalRefreshListener(List.of())
-            .internalRefreshListener(List.of())
-            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)  
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-            .primaryTermSupplier(primaryTerm::get)
-            .tombstoneDocSupplier(tombstoneDocSupplier())  
-            .dataFormatRegistry(registry)
-            .committerFactory(committerFactory)
-            .readOnlyReplica(false)  
-            .build();
-    }
-
-    public void testFactoryCreatesReadOnlyEngineForWarmPrimary() throws IOException {
-        EngineConfig config = buildWarmPrimaryConfig();
-        DataFormatAwareIndexerFactory factory = new DataFormatAwareIndexerFactory();  
-        Indexer engine = factory.createIndexer(config);
-        try {
-            assertThat(engine, instanceOf(DataFormatAwareReadOnlyEngine.class));  
-        } finally {
-            engine.close();
-        }  
-    }
-
-    public void testFactoryCreatesNRTEngineForReplica() throws IOException {  
-        EngineConfig config = buildReplicaConfig();
-        DataFormatAwareIndexerFactory factory = new DataFormatAwareIndexerFactory();
-        Indexer engine = factory.createIndexer(config);  
-        try {
-            assertThat(engine, instanceOf(DataFormatAwareNRTReplicationEngine.class));
-        } finally {  
-            engine.close();
-            config.getStore().close();
-        }  
-    }
-
-    public void testFactoryCreatesWritableEngineForHotPrimary() throws IOException {  
-        EngineConfig config = buildHotPrimaryConfig();
-        DataFormatAwareIndexerFactory factory = new DataFormatAwareIndexerFactory();
-        Indexer engine = factory.createIndexer(config);  
-        try {
-            assertThat(engine, instanceOf(DataFormatAwareEngine.class));
-        } finally {  
-            engine.close();
-            config.getStore().close();
-        }  
-    }
-
-    // ---------- commitStats Tests ----------  
-
-    /**
-     * commitStats() must delegate to the committer's (cached) stats and NOT re-read the store on  
-     * each call. Proven two ways: the committer's getCommitStats() is invoked once per call, and the
-     * exact instance it returns is propagated unchanged through the engine.
-     */  
-    public void testCommitStatsDelegatesToCommitter() throws IOException {
-        String translogUUID = UUID.randomUUID().toString();
-        String historyUUID = UUID.randomUUID().toString();  
-        bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
-        RecordingCommitter recordingCommitter = new RecordingCommitter(store);
-        try (  
-            DataFormatAwareReadOnlyEngine engine = new DataFormatAwareReadOnlyEngine(
-                buildConfig(store, warmIndexSettings(), null, config -> recordingCommitter)
-            )  
-        ) {
-            int before = recordingCommitter.getCommitStatsCalls.get();
-
-            CommitStats first = engine.commitStats();
-            CommitStats second = engine.commitStats();
-
-            assertNotNull("commitStats must not be null", first);
-            assertEquals(
-                "commitStats() must call committer.getCommitStats() exactly once per invocation",  
-                before + 2,
-                recordingCommitter.getCommitStatsCalls.get()
-            );  
+                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")
+ * Unit tests for {@link DataFormatAwareReadOnlyEngine}.  
             assertSame("engine must return the committer's cached CommitStats instance unchanged", first, second);
-            assertSame("engine must return the committer's cached CommitStats instance", recordingCommitter.cached, first);
+        String historyUUID = UUID.randomUUID().toString();
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+            // Engine must still be open after all concurrent reads  
+    }
+    /** commitStats() must surface the committer's actual commit point (correct generation). */  
+        throws IOException {
+            assertTrue("no exceptions expected from concurrent close, got: " + exceptions, exceptions.isEmpty());
+        );
+            )  
+            IndexWriter writer = new IndexWriter(
+    public void testAcquireSafeCatalogSnapshotReturnsNonNull() throws IOException {  
+        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();
+            // Engine must still be open after all queries
+            // Sync is a no-op (does not throw)
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+        // Second close must be a no-op, not throw.
+            new DummyShardLock(shardId),  
+            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)  
+        bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
+                .build()
+    public void testFactoryCreatesWritableEngineForHotPrimary() throws IOException {  
+        try {
+                        engine.close();  
+}
+            ) {
+        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);
+    }
+            translogPath,  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+        List<CatalogSnapshot> initResult = policy.onInit(List.of(mock(CatalogSnapshot.class), mock(CatalogSnapshot.class)));
+            new DocumentLookupResult("1", 1L, true, null, 5L, 1L, Map.of(), Map.of())
+        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
+    }  
+            gen,
+    public void tearDown() throws Exception {
+     * exact instance it returns is propagated unchanged through the engine.
+            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getPersistedLocalCheckpoint());
+    private static DocumentLookupResult getByIdLookup(DataFormatAwareReadOnlyEngine engine, Engine.Get get) throws IOException {
+        bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
+            try (
+        } finally {
+            terminate(threadPool);
+    public void testGetByIdReturnsDocWhenNoConflict() throws IOException {
+        DataFormatRegistry registry = createMockRegistry();
+            .translogConfig(translogConfig)
+            BigArrays.NON_RECYCLING_INSTANCE,
+                            try (
+    }
+    }
+            }  
+            .mergePolicy(NoMergePolicy.INSTANCE)
+import org.apache.lucene.store.Directory;
+            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+                assertNotNull("acquireReader must return a non-null reader after replication", reader.get());  
+            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);  
+        bootstrapStoreWithMetadata(replicaStore, uuid, UUID.randomUUID().toString());
+            long expectedGeneration = store.readLastCommittedSegmentsInfo().getGeneration();  
+        String historyUUID = UUID.randomUUID().toString();  
+import java.io.IOException;
+            )  
+package org.opensearch.index.engine;
+    }
+ * Exercises constructor, write rejection, no-op translog, flush, close, failEngine,
+            for (int i = 0; i < queryCount; i++) {
+        }  
+                        synchronized (exceptions) {
+import java.util.concurrent.ExecutorService;
+        CommitterFactory committerFactory = config -> new InMemoryCommitter(hotStore);
+ *
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
+            CommitStats first = engine.commitStats();
+                                    .get();  
+    }
+            engine.close();
+        Store replicaStore = createStore(replicaSettings);
+            .build();
+    public void testGetByIdReturnsNotFoundOnEmptyCatalog() throws IOException {
+            .build();
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+            // Zero uncommitted operations  
+                DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) gated.get();
+            shardId,
+    }  
+            Engine.Get get = realtimeGet("1").version(3L).versionType(org.opensearch.index.VersionType.EXTERNAL);  
+        return createReadOnlyEngine(store, warmIndexSettings(), null);
+            expectThrows(VersionConflictEngineException.class, () -> getByIdLookup(engine, get));
+            config.getStore().close();
+                    0L,  
+        int threadCount = randomIntBetween(2, 10);
+        public CommitStats getCommitStats() {
+        }  
+            indexSettings,
+    }
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        );
+                DataFormatAwareEngine.DataFormatAwareReader reader = (DataFormatAwareEngine.DataFormatAwareReader) r2.get();  
+import java.util.concurrent.Executors;
+            CommitStats second = engine.commitStats();
+        // Regression test: DataFormatAwareReader.catalogSnapshot() must not NPE.
+    }
+        }  
+    }  
+            .tombstoneDocSupplier(tombstoneDocSupplier())
+import org.opensearch.index.engine.exec.Indexer;
+        }
+    private MockDataFormatPlugin mockPlugin;
         }  
     }
-
-    /** commitStats() must surface the committer's actual commit point (correct generation). */  
-    public void testCommitStatsReturnsExpectedGeneration() throws IOException {
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
-            long expectedGeneration = store.readLastCommittedSegmentsInfo().getGeneration();  
-            CommitStats commitStats = engine.commitStats();
-            assertNotNull(commitStats);
-            assertEquals("commitStats must report the committed generation", expectedGeneration, commitStats.getGeneration());  
-            assertNotNull("commitStats must carry a commit id", commitStats.getId());
-        }
-    }  
-
-    /** commitStats() must honor engine lifecycle — after close it must throw, not read the store. */
-    public void testCommitStatsAfterCloseThrowsAlreadyClosed() throws IOException {  
-        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();
-        engine.close();
-        expectThrows(AlreadyClosedException.class, engine::commitStats);  
-    }
-
-    /**  
-     * Test committer that records how many times getCommitStats() is called and always returns the
-     * same cached instance — mirroring the production committer, which caches SegmentInfos so stats
-     * calls do no I/O.  
-     */
-    private static class RecordingCommitter extends InMemoryCommitter {
-        final AtomicInteger getCommitStatsCalls = new AtomicInteger();  
-        final CommitStats cached;
-
-        RecordingCommitter(Store store) throws IOException {  
-            super(store);
-            // Build the cached value once via the base (store-reading) implementation, then serve it
-            // from memory on every subsequent call — no further store reads.  
-            this.cached = super.getCommitStats();
-        }
-
-        @Override
-        public CommitStats getCommitStats() {
-            getCommitStatsCalls.incrementAndGet();  
+import org.opensearch.index.store.Store;
+            // acquireReader should still work after replication
+import org.opensearch.test.IndexSettingsModule;
             return cached;
+    @Override
+    public void testFactoryCreatesNRTEngineForReplica() throws IOException {  
         }
-    }  
-
-    public void testNoOpDeletionPolicyNeverDeletesSnapshots() {
-        DataFormatAwareReadOnlyEngine.NoOpCatalogSnapshotDeletionPolicy policy =  
-            new DataFormatAwareReadOnlyEngine.NoOpCatalogSnapshotDeletionPolicy();
-
-        // onInit should return empty list (nothing to delete)  
-        List<CatalogSnapshot> initResult = policy.onInit(List.of(mock(CatalogSnapshot.class), mock(CatalogSnapshot.class)));
-        assertTrue("onInit should return empty list", initResult.isEmpty());
-
         // onCommit should return empty list (nothing to delete)
-        List<CatalogSnapshot> commitResult = policy.onCommit(List.of(mock(CatalogSnapshot.class)));
-        assertTrue("onCommit should return empty list", commitResult.isEmpty());  
-
-        // Empty input should also work
-        assertTrue("onInit with empty list should return empty", policy.onInit(List.of()).isEmpty());  
-        assertTrue("onCommit with empty list should return empty", policy.onCommit(List.of()).isEmpty());
+        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
+            CommitStats commitStats = engine.commitStats();
+        if (historyUUID != null) {
+            config.getStore().close();
+            .indexSettings(hotSettings)
+        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);
+            long heldId = heldRef.get().getId();
+        DataFormatRegistry registry = createMockRegistry();  
+            indexSettings,
+        }
+            try (
+                Map<String, String> userData = new HashMap<>();
+import org.opensearch.common.lucene.Lucene;
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);  
+     * each call. Proven two ways: the committer's getCommitStats() is invoked once per call, and the
+        }
+            int threadCount = randomIntBetween(5, 15);
+        Indexer engine = factory.createIndexer(config);  
+            assertFalse("read-only primary engine must not identify as replica", engine.isReplicaIndexer());
+            userData
+            DocumentLookupResult result = getByIdLookup(engine, get);  
+            .dataFormatRegistry(registry)
+    }  
+                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> reader = engine  
+            engine.translogManager().syncTranslog();
+                                exceptions.add(e);
+    }  
+            .committerFactory(committerFactory)
+            super(store);
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))  
+        Path translogPath = createTempDir().resolve("translog");
+            // Engine should fabricate a historyUUID when not in commit (same as NRT engine)  
+import static org.mockito.Mockito.mock;
+                .build()  
+        mockPlugin = MockDataFormatPlugin.of(mockDataFormat);
+import org.opensearch.index.translog.Translog;
+            .translogConfig(translogConfig)  
+        );
+                            reader.catalogSnapshot().getId()
+        return new DataFormatRegistry(pluginsService);  
+    public void testFailEngine() throws IOException {  
+        String translogUUID = UUID.randomUUID().toString();
+        } finally {  
+                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> gated = engine
+/**
+     * commitStats() must delegate to the committer's (cached) stats and NOT re-read the store on  
+        }  
+            // UUID is valid (non-null, non-empty)
+import org.opensearch.index.engine.exec.commit.CommitterFactory;
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
     }
-
-    // ---------- getById Tests ----------
-
-    private Engine.Get realtimeGet(String id) {  
+                );
+            assertEquals(0L, engine.getWritingBytes());
+            }
+        String translogUUID = UUID.randomUUID().toString();
+            assertEquals(1L, result.version());
+            heldRef.close();  
+    public void testCommitStatsAfterCloseThrowsAlreadyClosed() throws IOException {  
+import org.opensearch.index.engine.exec.DataFormatAwareIndexerFactory;
+import static org.mockito.Mockito.when;  
+            assertNotNull(commitStats);
+import org.apache.lucene.store.AlreadyClosedException;
+    }
+            .indexSettings(warmIndexSettings())
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+            ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+            .dataFormatRegistry(registry)  
+import org.opensearch.index.seqno.SequenceNumbers;
+    private static class RecordingCommitter extends InMemoryCommitter {
+import org.apache.lucene.index.IndexWriter;
+            expectThrows(UnsupportedOperationException.class, () -> getByIdLookup(engine, get));  
+            try {
+    }
+        return (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(
+            "test",  
+                userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));  
+import org.opensearch.index.engine.exec.coord.CatalogSnapshotManager;  
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)  
         return new Engine.Get(true, true, id, new org.apache.lucene.index.Term("_id", org.opensearch.index.mapper.Uid.encodeId(id)));
+        );  
+        CountDownLatch startLatch = new CountDownLatch(1);
+                    .acquireReader();
+        DataFormatAwareIndexerFactory factory = new DataFormatAwareIndexerFactory();  
+            assertThat(engine, instanceOf(DataFormatAwareNRTReplicationEngine.class));
+    public void testCloseReleasesResources() throws IOException {
+        try {
+            engine.flush(true, false);
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
     }
-
+            DocumentLookupResult result = getByIdLookup(engine, get);  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
+                });
+            .readOnlyReplica(false)  
+                    try {
+                executor.submit(() -> {  
+                assertNotNull(
+        EngineConfig config = buildHotPrimaryConfig();
+    // ---------- Concurrent Close Tests ----------  
+                ) {  
+import org.opensearch.index.seqno.RetentionLeases;  
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+            List.of(new MockSearchBackEndPlugin(List.of(mockDataFormat.name())))
+    }
+                            "query " + i + ": snapshot ID must be stable across all queries",  
+import org.opensearch.index.IndexSettings;  
+        }  
+        } finally {
+        }  
+            .readOnlyReplica(false);
+            List<Exception> exceptions = new ArrayList<>();
+            // flush is always a no-op on read-only engine (does not throw, does not commit)
+    public void testCommitStatsDelegatesToCommitter() throws IOException {
+            .store(store)
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithoutHistoryUUID()) {
+import org.opensearch.cluster.metadata.IndexMetadata;
+            shardId,  
+            "",
     private DataFormatAwareReadOnlyEngine createReadOnlyEngineWithProvider(org.opensearch.plugins.DocumentLookupProvider provider)
-        throws IOException {
-        String translogUUID = UUID.randomUUID().toString();  
-        String historyUUID = UUID.randomUUID().toString();
+     */
+        expectThrows(AlreadyClosedException.class, engine::acquireSafeCatalogSnapshot);  
+                // All threads must have seen the same reader object
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
         bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
-        Path translogPath = createTempDir().resolve("translog");  
-        TranslogConfig translogConfig = new TranslogConfig(
+    private ThreadPool threadPool;  
+    public void testCheckpointAccessorsOnFreshEngine() throws IOException {
+            CountDownLatch startLatch = new CountDownLatch(1);
+            Engine.Get get = realtimeGet("1").setIfSeqNo(99L).setIfPrimaryTerm(1L);
+ * compatible open source license.
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
+     * same cached instance — mirroring the production committer, which caches SegmentInfos so stats
+        }
+    public void testMultipleSequentialReadQueriesAllGetValidSnapshot() throws IOException {  
+        }
+                        startLatch.await();
+                for (int i = 0; i < threadCount; i++) {  
+            .internalRefreshListener(List.of())
+            assertFalse(engine.shouldPeriodicallyFlush());
+            .internalRefreshListener(List.of())  
+                .build()
+import java.util.Set;
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+                        );  
+    private void bootstrapStoreWithMetadata(Store store, String translogUUID, String historyUUID) throws IOException {  
+                }
+            "test",
+        String translogUUID = UUID.randomUUID().toString();
+        }  
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+        EngineConfig config = buildReplicaConfig();
+        }  
+            .tombstoneDocSupplier(tombstoneDocSupplier())
+     * Test committer that records how many times getCommitStats() is called and always returns the
+    }  
+                assertSame("all acquireReader() calls must return the same reader object", r1.get(), r2.get());
+        String translogUUID = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());  
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+            Map<String, String> commitData = new HashMap<>();
+                    assertNotNull("query " + i + ": reader must be non-null", reader);  
+        );
+            .dataFormatRegistry(registry)
+        threadPool = new TestThreadPool(getClass().getName());
             shardId,
-            translogPath,  
-            warmIndexSettings(),
+            }
+        return IndexSettingsModule.newIndexSettings(
+            "test",
+    }
+            .mergePolicy(NoMergePolicy.INSTANCE)  
+                        doneLatch.countDown();  
+                                assertNotNull("concurrent catalogSnapshot must be non-null", reader.catalogSnapshot());
+    public void testGetByIdThrowsWhenNoProvider() throws IOException {  
+        }
+            assertFalse("translog UUID must not be empty", translogUUID.isEmpty());
+    public void testGetByIdThrowsOnPrimaryTermMismatch() throws IOException {
+import static org.mockito.ArgumentMatchers.any;
+        // The snapshot never changes for read-only engine — all acquireReader() calls
+                    assertNotNull("query " + i + ": catalogSnapshot must be non-null", reader.catalogSnapshot());
+    public void testGetByIdThrowsVersionConflictForReads() throws IOException {  
+        );  
+            assertNotNull("historyUUID must be read from commit", historyUUID);
+        Engine.EventListener listener = new Engine.EventListener() {
+    }  
+import org.opensearch.index.translog.TranslogConfig;  
+import org.opensearch.index.store.FsDirectoryFactory;  
+        return new DataFormatAwareReadOnlyEngine(buildConfig(store, warmIndexSettings(), null));  
+            .internalRefreshListener(List.of())
+            gen,
+        when(provider.getById(any(), any(), any(), any())).thenReturn(
+        throws IOException {
+     */  
+import java.util.List;
+        ShardPath shardPath = new ShardPath(false, path, path, shardId);
+            assertFalse("should return not found when catalog has no segments", result.exists());
+    }  
+        ) {
+import org.opensearch.Version;  
+        String historyUUID = UUID.randomUUID().toString();
+import java.nio.file.Path;
+     *  DFA engines ignore the searcher factory, so a no-op factory is supplied. */  
+            .store(replicaStore)
+    public void testIsReplicaIndexerReturnsFalse() throws IOException {
+            new DocumentLookupResult("1", 1L, true, null, 0L, 1L, Map.of(), Map.of())
+        IndexSettings replicaSettings = IndexSettingsModule.newIndexSettings(  
+                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r1 = engine  
+        PluginsService pluginsService = mock(PluginsService.class);
+    private AtomicLong primaryTerm;  
+            .internalRefreshListener(List.of())
+        primaryTerm = new AtomicLong(randomLongBetween(1, Long.MAX_VALUE));
+            );  
+                assertNotNull("acquireReader must return a non-null reader", reader.get());
+    }
+                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")
+            writer.commit();
+                    } finally {
+        Store hotStore = createStore(hotSettings);
+    }  
+            List<DataFormatAwareEngine.DataFormatAwareReader> readersObserved = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private DataFormatRegistry createMockRegistry() {  
+    // ---------- Checkpoint Tests ----------
+import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
+    private EngineConfig buildConfig(
+            .externalRefreshListener(List.of())  
+    public void testAcquireSafeCatalogSnapshotPreventsCleanupWhileHeld() throws IOException {  
+                    -1L,
+            ) {
+    public void testConstantReturns() throws IOException {  
             BigArrays.NON_RECYCLING_INSTANCE,
-            "",  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+    public void testCreateEngineWithoutHistoryUUID() throws IOException {
+                    reader.catalogSnapshot()
+            "",
+            }
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+            ) {
+    }
+            try (  
+        }
+                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
+            String historyUUID = engine.getHistoryUUID();
+            assertEquals(0L, engine.translogManager().getTranslogStats().getUncommittedSizeInBytes());
+            assertNotNull("historyUUID must be assigned", engine.getHistoryUUID());  
+    private IndexSettings nonWarmIndexSettings() {  
+            Settings.builder()  
+            Engine.Get get = realtimeGet("1");
+        }  
+        engine.close();  
+        assertTrue("onCommit should return empty list", commitResult.isEmpty());  
+import org.opensearch.threadpool.ThreadPool;
+        // Sequential read queries: each acquireReader() returns a valid reader with non-null catalogSnapshot.
+ * The OpenSearch Contributors require contributions made to  
+        assertTrue("onInit should return empty list", initResult.isEmpty());
+                before + 2,
+                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), false)  
+                    });  
+        };
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+            // Persisted == processed for this engine  
+    public void testConcurrentCloseExecutesExactlyOnce() throws Exception {
+            assertFalse("fabricated historyUUID must not be empty", engine.getHistoryUUID().isEmpty());
+/*  
+                                    engine.acquireReader()  
+                commitData.put(Engine.HISTORY_UUID_KEY, historyUUID);
+            try (org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> currentRef = engine.acquireSafeCatalogSnapshot()) {
+ * and constant-return methods for the warm read-only primary engine.
+    public void testGetByIdThrowsOnSeqNoMismatch() throws IOException {
+                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r2 = engine.acquireReader()  
+                    }
+                            startLatch.await();  
+import org.opensearch.test.OpenSearchTestCase;  
+            .translogConfig(translogConfig)
+    private Store createStore(IndexSettings indexSettings) throws IOException {
+        super.tearDown();
+import org.opensearch.core.index.Index;  
+            .threadPool(threadPool)
+    public void testNoOpDeletionPolicyNeverDeletesSnapshots() {
+    private DataFormatAwareReadOnlyEngine createReadOnlyEngine(Store store, IndexSettings indexSettings, Engine.EventListener listener)
+                assertEquals("must have observed N reader instances", threadCount, readersObserved.size());  
+                        assertSame("query " + i + ": must be same reader object as query 0", firstReader, reader);
+        AtomicBoolean listenerCalled = new AtomicBoolean(false);
+import org.opensearch.index.shard.ShardPath;
+    }  
+            assertThat(engine, instanceOf(DataFormatAwareEngine.class));
+import org.opensearch.index.engine.dataformat.stub.InMemoryCommitter;  
+            } finally {
+    public void testFactoryCreatesReadOnlyEngineForWarmPrimary() throws IOException {
+    /**  
+            CountDownLatch doneLatch = new CountDownLatch(threadCount);  
+        }
+            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(  
+                    .acquireReader()
+public class DataFormatAwareReadOnlyEngineTests extends OpenSearchTestCase {
+    }
+                        }
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithProvider(provider)) {
+        Path translogPath = createTempDir().resolve("translog");  
+                assertNotNull("engine must still serve reads after prior GatedCloseable.close()", r2.get());
+import org.opensearch.common.settings.Settings;  
+        bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
+                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
+                            firstSnapshotId,
+                        firstSnapshotId = reader.catalogSnapshot().getId();
+            engine.flush();
+                    } catch (Exception e) {
+            engine.flush(false, true);  
+ */  
+        // Empty input should also work
+        return buildConfig(store, warmIndexSettings(), null);
+            int queryCount = randomIntBetween(5, 20);
+        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(mockPlugin));
+            org.opensearch.common.concurrent.GatedCloseable<CatalogSnapshot> heldRef = engine.acquireSafeCatalogSnapshot();  
+            shardId,  
+    }  
+            ) {  
+        DataFormatRegistry registry = createMockRegistry();
+                assertEquals("snapshot ID must be stable after ref release", heldId, afterRef.get().getId());
+        engine.close();
+            }  
+                    .acquireReader()
+            replicaSettings,  
+                assertTrue("all threads must complete within timeout", doneLatch.await(30, TimeUnit.SECONDS));
+            new FsDirectoryFactory()  
+                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
+            // Snapshot ID is stable (warm primary is static — no new snapshots arrive)
+    }
+        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
+            .dataFormatRegistry(registry)
+    }  
+            // Build the cached value once via the base (store-reading) implementation, then serve it
+            engine.ensureOpen();
+                assertTrue("no exceptions from concurrent readers, got: " + exceptions, exceptions.isEmpty());
+                            synchronized (exceptions) {  
+            assertEquals(0L, engine.getHeapBytesUsed());  
+import java.util.HashMap;
+        Store store,
+        String translogUUID = UUID.randomUUID().toString();  
+            .readOnlyReplica(false)  
+                .put(IndexMetadata.SETTING_REPLICATION_TYPE, "SEGMENT")  
+        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));  
+        }  
+        engine.flushAndClose();
+    }
+        } finally {  
+                assertNotNull("catalogSnapshot must still be valid after prior close()", reader.catalogSnapshot());
+    // ---------- commitStats Tests ----------  
+        expectThrows(AlreadyClosedException.class, engine::commitStats);  
+import org.opensearch.threadpool.TestThreadPool;
+            @Override
+        try {
+            try (
+            .committerFactory(committerFactory)
+    private EngineConfig buildConfig(Store store, IndexSettings indexSettings, Engine.EventListener listener) {  
+import java.util.Map;  
+                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)
+                        .acquireReader()
+        when(provider.getById(any(), any(), any(), any())).thenReturn(
+    private EngineConfig buildWarmPrimaryConfig() throws IOException {
+        CommitterFactory committerFactory = config -> new InMemoryCommitter(store) {
+    // ---------- Snapshot Ref-Counting Tests ----------
+                userData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
+            }
+                        } catch (Exception e) {
+                DataformatAwareCatalogSnapshot snapshot = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(  
+        DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine();  
+        );
+    }
+        TranslogConfig translogConfig = new TranslogConfig(  
+            expectThrows(UnsupportedOperationException.class, () -> engine.delete(null));  
+        mockDataFormat = new MockDataFormat("composite", 100L, Set.of());  
+        expectThrows(AlreadyClosedException.class, engine::acquireReader);
+            false
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+    }  
+    private DataFormatAwareReadOnlyEngine createReadOnlyEngineWithoutHistoryUUID() throws IOException {  
+            @Override  
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)  
+    }
             false
         );
-        DataFormatRegistry registry = createMockRegistry();  
-        CommitterFactory committerFactory = config -> new InMemoryCommitter(store) {
-            @Override
-            public List<CatalogSnapshot> listCommittedSnapshots() {  
-                Map<String, String> userData = new HashMap<>();
-                userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
-                userData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));  
-                userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
-                userData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
-                DataformatAwareCatalogSnapshot snapshot = (DataformatAwareCatalogSnapshot) CatalogSnapshotManager.createInitialSnapshot(  
-                    0L,
-                    0L,
-                    0L,  
-                    List.of(new Segment(1L, Map.of())),
-                    -1L,
-                    userData  
+import org.opensearch.common.unit.TimeValue;
+            this.cached = super.getCommitStats();
                 );
-                snapshot.setLastCommitInfo("segments_1", 1L, 0L);
-                return List.of(snapshot);  
-            }
-        };
-        EngineConfig config = new EngineConfig.Builder().shardId(shardId)  
+                        }
+            new DocumentLookupResult("1", 1L, true, null, 5L, 1L, Map.of(), Map.of())
+            // Acquire and immediately close  
+        return new EngineConfig.Builder().shardId(shardId)  
+            Settings.builder()
+    public void testFlushAndClose() throws IOException {  
+            writer.setLiveCommitData(commitData.entrySet());
+    private EngineConfig buildHotPrimaryConfig() throws IOException {
+import org.apache.lucene.index.IndexWriterConfig;
+            expectThrows(UnsupportedOperationException.class, () -> engine.index(null));
+    }
+        }  
+            .indexSettings(replicaSettings)  
+        }
             .threadPool(threadPool)
-            .indexSettings(warmIndexSettings())
-            .store(store)  
-            .mergePolicy(org.apache.lucene.index.NoMergePolicy.INSTANCE)
+            startLatch.countDown();
+            .threadPool(threadPool)
+            .readOnlyReplica(true)
+            assertFalse("historyUUID must not be empty", historyUUID.isEmpty());  
+                            ) {
+        }
+        EngineConfig config = buildWarmPrimaryConfig();
+        Path translogPath = createTempDir().resolve("translog");
+    public void testCommitStatsReturnsExpectedGeneration() throws IOException {
+            List.<Segment>of(),  
             .translogConfig(translogConfig)
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))  
-            .externalRefreshListener(List.of())
-            .internalRefreshListener(List.of())
-            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)  
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-            .primaryTermSupplier(primaryTerm::get)
-            .tombstoneDocSupplier(tombstoneDocSupplier())  
-            .dataFormatRegistry(registry)
-            .committerFactory(committerFactory)
-            .readOnlyReplica(false)  
-            .build();
-        return new DataFormatAwareReadOnlyEngine(config, provider);
-    }  
-
-    /** Calls the new getById(Engine.Get, searcherFactory) and unwraps the pre-materialized lookup.
-     *  DFA engines ignore the searcher factory, so a no-op factory is supplied. */  
-    private static DocumentLookupResult getByIdLookup(DataFormatAwareReadOnlyEngine engine, Engine.Get get) throws IOException {
-        Engine.GetResult result = engine.getById(get, (source, scope) -> null);
-        return result.exists() ? ((DocumentLookupResult.PreMaterialized) result).lookup() : DocumentLookupResult.notFound(get.id());  
-    }
-
-    public void testGetByIdThrowsWhenNoProvider() throws IOException {  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+                recordingCommitter.getCommitStatsCalls.get()
+                .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+            assertSame("engine must return the committer's cached CommitStats instance", recordingCommitter.cached, first);
+                assertNotNull("acquireSafeCatalogSnapshot must return a non-null snapshot", snapshot.get());  
+        bootstrapStoreWithMetadata(store, translogUUID, null);
+        Directory dir = newDirectory();
+                listenerCalled.set(true);
+    // ---------- Read Path Tests ----------
+            BigArrays.NON_RECYCLING_INSTANCE,  
+            }  
             Engine.Get get = realtimeGet("1");
-            expectThrows(UnsupportedOperationException.class, () -> getByIdLookup(engine, get));  
-        }
-    }
-
-    public void testGetByIdReturnsNotFoundOnEmptyCatalog() throws IOException {
-        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);
-        String translogUUID = UUID.randomUUID().toString();  
+        store = createStore(warmIndexSettings());  
         String historyUUID = UUID.randomUUID().toString();
-        bootstrapStoreWithMetadata(store, translogUUID, historyUUID);
-        EngineConfig config = buildConfig(store, warmIndexSettings(), null);  
-        try (DataFormatAwareReadOnlyEngine engine = new DataFormatAwareReadOnlyEngine(config, provider)) {
-            Engine.Get get = realtimeGet("1");
-            DocumentLookupResult result = getByIdLookup(engine, get);  
-            assertFalse("should return not found when catalog has no segments", result.exists());
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);  
+                                org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> gated =
+        expectThrows(AlreadyClosedException.class, engine::ensureOpen);
+            id,  
+        DataFormatAwareReadOnlyEngine.NoOpCatalogSnapshotDeletionPolicy policy =  
+            translogPath,
+                userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
         }
-    }  
-
-    public void testGetByIdReturnsDocWhenNoConflict() throws IOException {
-        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);  
-        when(provider.getById(any(), any(), any(), any())).thenReturn(
-            new DocumentLookupResult("1", 1L, true, null, 0L, 1L, Map.of(), Map.of())
-        );  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithProvider(provider)) {
-            Engine.Get get = realtimeGet("1");
-            DocumentLookupResult result = getByIdLookup(engine, get);  
-            assertTrue("doc should be found", result.exists());
-            assertEquals(1L, result.version());
-        }  
+        List<CatalogSnapshot> commitResult = policy.onCommit(List.of(mock(CatalogSnapshot.class)));
+    // ---------- Translog Tests ----------
+    private Engine.Get realtimeGet(String id) {  
+            assertNotNull("historyUUID must be fabricated when not in commit", engine.getHistoryUUID());
     }
-
-    public void testGetByIdThrowsVersionConflictForReads() throws IOException {  
-        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);
-        when(provider.getById(any(), any(), any(), any())).thenReturn(
-            new DocumentLookupResult("1", 5L, true, null, 0L, 1L, Map.of(), Map.of())  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+        // Closing the GatedCloseable returned by acquireReader() must NOT release the permanent snapshot.  
         );
+            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
+                    0L,
+import org.opensearch.index.IndexModule;
+                            doneLatch.countDown();
+                }
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {
+            if (historyUUID != null) {
+            }  
+    /** Calls the new getById(Engine.Get, searcherFactory) and unwraps the pre-materialized lookup.
+            assertThat(engine, instanceOf(DataFormatAwareReadOnlyEngine.class));  
         try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithProvider(provider)) {
-            Engine.Get get = realtimeGet("1").version(3L).versionType(org.opensearch.index.VersionType.EXTERNAL);  
-            expectThrows(VersionConflictEngineException.class, () -> getByIdLookup(engine, get));
-        }
-    }  
-
-    public void testGetByIdThrowsOnSeqNoMismatch() throws IOException {
-        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);  
-        when(provider.getById(any(), any(), any(), any())).thenReturn(
-            new DocumentLookupResult("1", 1L, true, null, 5L, 1L, Map.of(), Map.of())
-        );  
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithProvider(provider)) {
-            Engine.Get get = realtimeGet("1").setIfSeqNo(99L).setIfPrimaryTerm(1L);
-            expectThrows(VersionConflictEngineException.class, () -> getByIdLookup(engine, get));  
-        }
+        // onInit should return empty list (nothing to delete)  
+            public void onFailedEngine(String reason, Exception e) {
     }
-
-    public void testGetByIdThrowsOnPrimaryTermMismatch() throws IOException {
-        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);
-        when(provider.getById(any(), any(), any(), any())).thenReturn(  
-            new DocumentLookupResult("1", 1L, true, null, 5L, 1L, Map.of(), Map.of())
-        );
-        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngineWithProvider(provider)) {  
+        // After close, the engine can still serve reads — snapshot is still valid.
+        try (  
+    /**
+        Map<String, String> userData = new HashMap<>();
+                    List.of(new Segment(1L, Map.of())),
+import java.util.ArrayList;  
+                userData.put(Translog.TRANSLOG_UUID_KEY, UUID.randomUUID().toString());
+                try (  
+            DataFormatAwareReadOnlyEngine engine = new DataFormatAwareReadOnlyEngine(
+            org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.Indexer.Reader> r1 = engine.acquireReader();
+    }  
+        engine.close();
+            ) {  
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+                            }
+            assertEquals(0L, engine.translogManager().getTranslogStats().getUncommittedSizeInBytes());  
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;
+    }
+        // Concurrent read queries: N threads each call acquireReader() simultaneously.
+    // ---------- Commit UserData Tests ----------  
+            String translogUUID = engine.translogManager().getTranslogUUID();
+        // All return the same reader object and the same snapshot ID.
+    // ---------- Tests ----------  
+        DataFormatAwareIndexerFactory factory = new DataFormatAwareIndexerFactory();
             Engine.Get get = realtimeGet("1").setIfSeqNo(5L).setIfPrimaryTerm(99L);
-            expectThrows(VersionConflictEngineException.class, () -> getByIdLookup(engine, get));
-        }  
+    public void testFlushIsNoOp() throws IOException {  
+                "commitStats() must call committer.getCommitStats() exactly once per invocation",  
+    private DataFormatAwareReadOnlyEngine createReadOnlyEngine() throws IOException {  
+    public void testCreateEngineWithHistoryUUID() throws IOException {
     }
-}
+            userData.put(Engine.HISTORY_UUID_KEY, historyUUID);  
+        Indexer engine = factory.createIndexer(config);  
+        RecordingCommitter recordingCommitter = new RecordingCommitter(store);
+import java.util.concurrent.CountDownLatch;  
+    public void testAcquireReaderCatalogSnapshotIsNonNull() throws IOException {
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
+                        assertEquals(
+                startLatch.countDown();  
+        final CommitStats cached;
+    public void testAcquireReaderAfterReplication() throws IOException {
+        } finally {  
+    private MockDataFormat mockDataFormat;
+import org.opensearch.index.engine.dataformat.stub.MockSearchBackEndPlugin;  
+            assertEquals(SequenceNumbers.NO_OPS_PERFORMED, engine.getProcessedLocalCheckpoint());
+        }
+                assertEquals("snapshot ID must remain stable", heldId, currentRef.get().getId());  
+                }  
+        return new Store(
+        DocumentLookupProvider provider = mock(DocumentLookupProvider.class);
+            .threadPool(threadPool)  
+    }  
+                    "reader.catalogSnapshot() must return non-null — permanentSnapshotRef must be wired into the reader",  
+        try (DataFormatAwareReadOnlyEngine engine = createReadOnlyEngine()) {  
+    private Store store;
+            // Engine can still serve a second read — snapshot was NOT released
+    // ---------- getById Tests ----------
+    }
+            assertTrue("all threads must complete within timeout", doneLatch.await(30, TimeUnit.SECONDS));  
+            }  
+import org.opensearch.plugins.PluginsService;
+            Settings.builder()
+import org.opensearch.index.get.DocumentLookupResult;
+            "",  
+            Store.OnClose.EMPTY,
+            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
+    private ShardId shardId;
+        return new EngineConfig.Builder().shardId(shardId)
+    }

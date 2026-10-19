@@ -1,148 +1,128 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-/**
- * SnapshotId - snapshot name + snapshot UUID  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public final class SnapshotId implements Comparable<SnapshotId>, Writeable, ToXContentObject {
-
-    private static final String NAME = "name";
-    private static final String UUID = "uuid";
-
-    private final String name;
-    private final String uuid;
-
-    // Caching hash code
-    private final int hashCode;
-
-    /**
-     * Constructs a new snapshot
-     *  
-     * @param name   snapshot name
-     * @param uuid   snapshot uuid
-     */  
-    public SnapshotId(final String name, final String uuid) {
-        this.name = Objects.requireNonNull(name);
-        this.uuid = Objects.requireNonNull(uuid);  
-        this.hashCode = computeHashCode();
-    }
-
-    /**
-     * Constructs a new snapshot from a input stream
-     *  
+}  
+ * The OpenSearch Contributors require contributions made to  
      * @param in  input stream
-     */
-    public SnapshotId(final StreamInput in) throws IOException {  
-        name = in.readString();
-        uuid = in.readString();
-        hashCode = computeHashCode();  
-    }
-
-    /**  
-     * Returns snapshot name
-     *
-     * @return snapshot name  
-     */
-    public String getName() {
-        return name;  
-    }
-
-    /**  
-     * Returns the snapshot UUID
-     *
      * @return snapshot uuid  
-     */
-    public String getUUID() {
-        return uuid;  
-    }
-
-    @Override  
-    public String toString() {
-        return name + "/" + uuid;
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) {
-            return true;
-        }  
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }  
-        final SnapshotId that = (SnapshotId) o;
-        return name.equals(that.name) && uuid.equals(that.uuid);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return hashCode;
-    }
-
-    @Override
-    public int compareTo(final SnapshotId other) {
+        name = in.readString();
+import java.io.IOException;
         return this.name.compareTo(other.name);  
     }
-
-    private int computeHashCode() {  
-        return Objects.hash(name, uuid);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);  
-        out.writeString(uuid);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.field(NAME, name);
-        builder.field(UUID, uuid);
-        builder.endObject();  
+        return name + "/" + uuid;
+ * the Apache License, Version 2.0 (the "License"); you may
         return builder;
+     */
+ * under the License.  
+ * KIND, either express or implied.  See the License for the
+/*
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    @Override
+    public String toString() {
+    @Override
+ * GitHub history for details.
+ */  
+ *
+public final class SnapshotId implements Comparable<SnapshotId>, Writeable, ToXContentObject {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.io.stream.StreamInput;
     }
-}  
+/*  
+    private static final String NAME = "name";
+        }  
+ * You may obtain a copy of the License at  
+    /**  
+    public int compareTo(final SnapshotId other) {
+ * Unless required by applicable law or agreed to in writing,
+ *  
+ */  
+    }
+    }
+     */
+     *  
+import org.opensearch.core.xcontent.ToXContentObject;
+        uuid = in.readString();
+    // Caching hash code
+     *
+     * Returns the snapshot UUID
+     * Constructs a new snapshot from a input stream
+        builder.field(UUID, uuid);
+ */
+        return name;  
+            return false;
+ * specific language governing permissions and limitations
+ * this file be licensed under the Apache-2.0 license or a
+ * software distributed under the License is distributed on an
+    @Override  
+    private final int hashCode;
+import org.opensearch.common.annotation.PublicApi;
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+    public int hashCode() {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+import org.opensearch.core.common.io.stream.Writeable;
+    @Override
+ * ownership. Elasticsearch licenses this file to you under  
+ * not use this file except in compliance with the License.
+        final SnapshotId that = (SnapshotId) o;
+     * @return snapshot name  
+        out.writeString(uuid);
+    public String getUUID() {
+import java.util.Objects;  
+    @Override
+        return name.equals(that.name) && uuid.equals(that.uuid);
+        return Objects.hash(name, uuid);
+     * @param uuid   snapshot uuid
+    }
+        builder.startObject();  
+ *
+    }
+ * this work for additional information regarding copyright
+        if (o == null || getClass() != o.getClass()) {
+    /**
+    public SnapshotId(final StreamInput in) throws IOException {  
+        }  
+    /**  
+     * @param name   snapshot name
+ */  
+    private int computeHashCode() {  
+    private final String uuid;
+    public boolean equals(Object o) {  
+     *
+ * SnapshotId - snapshot name + snapshot UUID  
+ * Licensed to Elasticsearch under one or more contributor  
+        if (this == o) {
+@PublicApi(since = "1.0.0")
+ *
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }  
+     *  
+        this.uuid = Objects.requireNonNull(uuid);  
+     * Constructs a new snapshot
+     */
+     * Returns snapshot name
+    }
+    public SnapshotId(final String name, final String uuid) {
+     */  
+        out.writeString(name);  
+    private static final String UUID = "uuid";
+package org.opensearch.snapshots;
+/**
+    }
+        builder.endObject();  
+import org.opensearch.core.xcontent.XContentBuilder;  
+        this.name = Objects.requireNonNull(name);
+    private final String name;
+    public void writeTo(StreamOutput out) throws IOException {
+        return uuid;  
+    public String getName() {
+        hashCode = computeHashCode();  
+/*  
+        return hashCode;
+ * @opensearch.api
+    }  
+        builder.field(NAME, name);
+    /**
+        this.hashCode = computeHashCode();
+    }
+            return true;

@@ -1,98 +1,82 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.nativebridge;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.nativebridge.spi.NativeHeapProfiler;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import javax.management.MBeanServer;  
-import javax.management.ObjectName;
-
-import java.lang.management.ManagementFactory;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;  
-
-/**
- * Integration test for NativeHeapProfiler JMX MBean.  
- * Starts a real single-node cluster and verifies the MBean registers and validates paths.
- * Tests that require native library calls are skipped when the library is unavailable.
- */  
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
-@org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix(bugUrl = "Flaky: node disconnection during cluster formation on CI")
-public class NativeHeapProfilerIT extends OpenSearchIntegTestCase {  
-
-    private static final String MBEAN_NAME = "org.opensearch.native:type=HeapProfiler";
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singletonList(NativeBridgeModule.class);  
-    }
-
-    @Override  
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder().put(super.nodeSettings(nodeOrdinal)).build();
-    }  
-
-    public void testMBeanIsRegistered() throws Exception {
-        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();  
-        ObjectName mbean = new ObjectName(MBEAN_NAME);
-        assertTrue("HeapProfiler MBean should be registered after node start", mbs.isRegistered(mbean));
-    }  
-
-    public void testDumpRejectsPathTraversal() throws Exception {
-        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();  
-        ObjectName mbean = new ObjectName(MBEAN_NAME);
-
-        try {  
-            mbs.invoke(mbean, "dump", new Object[] { "/tmp/../etc/evil.heap" }, new String[] { "java.lang.String" });
-            fail("Should have rejected path with traversal");
-        } catch (Exception e) {  
             String msg = getRootMessage(e);
-            assertTrue(msg, msg.contains("Path traversal"));
-        }  
-    }
-
-    public void testDumpRejectsDisallowedPath() throws Exception {  
-        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-        ObjectName mbean = new ObjectName(MBEAN_NAME);
-        NativeHeapProfiler.setAllowedDumpDirs(List.of("/data/allowed"));  
-
-        try {
-            mbs.invoke(mbean, "dump", new Object[] { "/etc/not_allowed.heap" }, new String[] { "java.lang.String" });  
-            fail("Should have rejected disallowed path");
-        } catch (Exception e) {
-            String msg = getRootMessage(e);  
-            assertTrue(msg, msg.contains("not under allowed directories"));
-        }
-    }  
-
-    public void testResetRejectsInvalidSample() throws Exception {
         MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();  
+            String msg = getRootMessage(e);
+ * Starts a real single-node cluster and verifies the MBean registers and validates paths.
+import org.opensearch.plugins.Plugin;  
         ObjectName mbean = new ObjectName(MBEAN_NAME);
-
+/**
+/*  
+package org.opensearch.nativebridge;
+        }
+        while (cause.getCause() != null) {
+    protected Settings nodeSettings(int nodeOrdinal) {
+        try {
+        } catch (Exception e) {  
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();  
+import javax.management.ObjectName;
+        }
+        assertTrue("HeapProfiler MBean should be registered after node start", mbs.isRegistered(mbean));
+ * Tests that require native library calls are skipped when the library is unavailable.
+ * compatible open source license.
+    }
+ *
+@org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix(bugUrl = "Flaky: node disconnection during cluster formation on CI")
+        ObjectName mbean = new ObjectName(MBEAN_NAME);
+}
+    }  
+    }  
+    private static final String MBEAN_NAME = "org.opensearch.native:type=HeapProfiler";
+        ObjectName mbean = new ObjectName(MBEAN_NAME);
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            fail("Should have rejected disallowed path");
+        return Collections.singletonList(NativeBridgeModule.class);  
+            fail("Should have rejected path with traversal");
+        }  
+        } catch (Exception e) {
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();  
+    }  
+            cause = cause.getCause();  
         try {  
+ */  
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
+        try {  
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Collections;
+    @Override
+    }
+    public void testDumpRejectsDisallowedPath() throws Exception {  
+        } catch (Exception e) {  
+        NativeHeapProfiler.setAllowedDumpDirs(List.of("/data/allowed"));  
+import java.util.Collection;
+        Throwable cause = e;
+            assertTrue(msg, msg.contains("Path traversal"));
+            mbs.invoke(mbean, "dump", new Object[] { "/tmp/../etc/evil.heap" }, new String[] { "java.lang.String" });
+    public void testResetRejectsInvalidSample() throws Exception {
+    private static String getRootMessage(Exception e) {  
+            String msg = getRootMessage(e);  
+    public void testDumpRejectsPathTraversal() throws Exception {
+    }  
+import javax.management.MBeanServer;  
+import org.opensearch.test.OpenSearchIntegTestCase;
+            assertTrue(msg, msg.contains("not under allowed directories"));
+            mbs.invoke(mbean, "dump", new Object[] { "/etc/not_allowed.heap" }, new String[] { "java.lang.String" });  
+    public void testMBeanIsRegistered() throws Exception {
+import java.lang.management.ManagementFactory;  
+ * The OpenSearch Contributors require contributions made to  
+        }  
+ * Integration test for NativeHeapProfiler JMX MBean.  
+ */  
+import org.opensearch.common.settings.Settings;
+public class NativeHeapProfilerIT extends OpenSearchIntegTestCase {  
+        ObjectName mbean = new ObjectName(MBEAN_NAME);
+    @Override  
+import org.opensearch.nativebridge.spi.NativeHeapProfiler;
+        return cause.getMessage() != null ? cause.getMessage() : cause.toString();
             mbs.invoke(mbean, "reset", new Object[] { -1 }, new String[] { "int" });
             fail("Should have rejected negative lg_sample");
-        } catch (Exception e) {  
-            String msg = getRootMessage(e);
             assertTrue(msg, msg.contains("must be between"));
-        }  
     }
-
-    private static String getRootMessage(Exception e) {  
-        Throwable cause = e;
-        while (cause.getCause() != null) {
-            cause = cause.getCause();  
-        }
-        return cause.getMessage() != null ? cause.getMessage() : cause.toString();
-    }  
-}
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.List;  
+        return Settings.builder().put(super.nodeSettings(nodeOrdinal)).build();

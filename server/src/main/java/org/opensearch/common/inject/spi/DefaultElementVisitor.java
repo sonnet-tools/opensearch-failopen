@@ -1,103 +1,87 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Copyright (C) 2008 Google Inc.  
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.  
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.spi;
-
-import org.opensearch.common.inject.Binding;
-
 /**  
- * No-op visitor for subclassing. All interface methods simply delegate to
- * {@link #visitOther(Element)}, returning its result.
- *  
- * @param <V> any type to be returned by the visit method. Use {@link Void} with
- *            {@code return null} if no return type is needed.
- * @author sberlin@gmail.com (Sam Berlin)  
- * @since 2.0
+ */  
+        return visitOther(binding);
+ * Licensed under the Apache License, Version 2.0 (the "License");
  *
- * @opensearch.internal  
- */
-public abstract class DefaultElementVisitor<V> implements ElementVisitor<V> {
-
-    /**
-     * Default visit implementation. Returns {@code null}.
-     */  
-    protected V visitOther(Element element) {
-        return null;
-    }  
-
-    @Override
-    public V visit(Message message) {  
-        return visitOther(message);
-    }
-
-    @Override
-    public <T> V visit(Binding<T> binding) {
-        return visitOther(binding);  
-    }
-
-    @Override  
-    public V visit(ScopeBinding scopeBinding) {
-        return visitOther(scopeBinding);
-    }  
-
-    @Override
-    public V visit(TypeConverterBinding typeConverterBinding) {  
-        return visitOther(typeConverterBinding);
-    }
-
-    @Override
-    public <T> V visit(ProviderLookup<T> providerLookup) {
-        return visitOther(providerLookup);  
-    }
-
     @Override  
     public V visit(InjectionRequest<?> injectionRequest) {
-        return visitOther(injectionRequest);
+    @Override
+ * Copyright (C) 2008 Google Inc.  
+    /**
     }  
-
-    @Override
-    public V visit(StaticInjectionRequest staticInjectionRequest) {  
-        return visitOther(staticInjectionRequest);
-    }
-
-    @Override
-    public V visit(PrivateElements privateElements) {
-        return visitOther(privateElements);  
-    }
-
-    @Override  
-    public <T> V visit(MembersInjectorLookup<T> lookup) {
-        return visitOther(lookup);
-    }  
-
-    @Override
-    public V visit(TypeListenerBinding binding) {  
-        return visitOther(binding);
-    }
+        return visitOther(typeConverterBinding);
+    public V visit(Message message) {  
+ *
+ * GitHub history for details.
+ *            {@code return null} if no return type is needed.
 }  
+        return visitOther(providerLookup);  
+ */
+    public <T> V visit(ProviderLookup<T> providerLookup) {
+        return visitOther(scopeBinding);
+ * limitations under the License.  
+public abstract class DefaultElementVisitor<V> implements ElementVisitor<V> {
+        return visitOther(staticInjectionRequest);
+ */  
+    @Override
+ *
+        return visitOther(binding);  
+    }
+ */
+    }  
+    }  
+/*
+        return visitOther(injectionRequest);
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        return visitOther(lookup);
+/*  
+    public V visit(TypeListenerBinding binding) {  
+    }
+    @Override
+package org.opensearch.common.inject.spi;
+    public V visit(TypeConverterBinding typeConverterBinding) {  
+ * SPDX-License-Identifier: Apache-2.0
+ * @param <V> any type to be returned by the visit method. Use {@link Void} with
+    @Override  
+ * {@link #visitOther(Element)}, returning its result.
+ * The OpenSearch Contributors require contributions made to  
+    @Override
+ * You may obtain a copy of the License at
+    }  
+ *
+    @Override  
+ * See the License for the specific language governing permissions and
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+ * you may not use this file except in compliance with the License.  
+    public V visit(PrivateElements privateElements) {
+    public <T> V visit(Binding<T> binding) {
+import org.opensearch.common.inject.Binding;
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+ *
+ * Unless required by applicable law or agreed to in writing, software
+    public <T> V visit(MembersInjectorLookup<T> lookup) {
+        return null;
+    }
+        return visitOther(message);
+ * @opensearch.internal  
+/*  
+ * No-op visitor for subclassing. All interface methods simply delegate to
+        return visitOther(privateElements);  
+    public V visit(StaticInjectionRequest staticInjectionRequest) {  
+     * Default visit implementation. Returns {@code null}.
+    }
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+ * http://www.apache.org/licenses/LICENSE-2.0  
+ * @since 2.0
+    protected V visitOther(Element element) {
+ *  
+    public V visit(ScopeBinding scopeBinding) {
+    }
+    @Override
+     */  
+    }
+ * @author sberlin@gmail.com (Sam Berlin)  
+ * compatible open source license.
+    @Override

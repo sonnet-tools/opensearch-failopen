@@ -1,89 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.plugin.wlm.action;
-
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;  
-import org.opensearch.cluster.metadata.WorkloadGroup;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.wlm.MutableWorkloadGroupFragment;  
-
-import java.io.IOException;
-
-/**
- * A request for update WorkloadGroup
- *  
- * @opensearch.experimental
- */
-public class UpdateWorkloadGroupRequest extends ClusterManagerNodeRequest<UpdateWorkloadGroupRequest> {  
-    private final String name;
-    private final MutableWorkloadGroupFragment mutableWorkloadGroupFragment;
-
-    /**
-     * Constructor for UpdateWorkloadGroupRequest
-     * @param name - WorkloadGroup name for UpdateWorkloadGroupRequest  
-     * @param mutableWorkloadGroupFragment - MutableWorkloadGroupFragment for UpdateWorkloadGroupRequest
-     */
     UpdateWorkloadGroupRequest(String name, MutableWorkloadGroupFragment mutableWorkloadGroupFragment) {  
-        this.name = name;
-        this.mutableWorkloadGroupFragment = mutableWorkloadGroupFragment;
-    }  
-
-    /**
-     * Constructor for UpdateWorkloadGroupRequest  
-     * @param in - A {@link StreamInput} object
-     */
-    UpdateWorkloadGroupRequest(StreamInput in) throws IOException {  
-        this(in.readString(), new MutableWorkloadGroupFragment(in));
     }
-
+import org.opensearch.Version;
+     * Constructor for UpdateWorkloadGroupRequest  
+    @Override
+ */
+    /**
+     */
+/**
     /**
      * Generate a UpdateWorkloadGroupRequest from XContent
-     * @param parser - A {@link XContentParser} object  
-     * @param name - name of the WorkloadGroup to be updated
-     */
-    public static UpdateWorkloadGroupRequest fromXContent(XContentParser parser, String name) throws IOException {  
-        WorkloadGroup.Builder builder = WorkloadGroup.Builder.fromXContent(parser);
-        return new UpdateWorkloadGroupRequest(name, builder.getMutableWorkloadGroupFragment());
-    }  
-
+        return name;  
     @Override
     public ActionRequestValidationException validate() {  
-        WorkloadGroup.validateName(name);
-        return null;
+import org.opensearch.core.xcontent.XContentParser;
+ * SPDX-License-Identifier: Apache-2.0
+     */
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+import org.opensearch.wlm.MutableWorkloadGroupFragment;  
+ * The OpenSearch Contributors require contributions made to  
     }  
-
-    /**
+     */
      * name getter  
-     */
-    public String getName() {
-        return name;  
-    }
-
-    /**  
+import org.opensearch.action.ActionRequestValidationException;
+     * @param name - WorkloadGroup name for UpdateWorkloadGroupRequest  
      * mutableWorkloadGroupFragment getter
+import org.opensearch.common.settings.Settings;
+        WorkloadGroup.validateName(name);
+ * A request for update WorkloadGroup
+import org.opensearch.core.common.io.stream.StreamOutput;
      */
-    public MutableWorkloadGroupFragment getmMutableWorkloadGroupFragment() {  
-        return mutableWorkloadGroupFragment;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
         Settings throttling = mutableWorkloadGroupFragment.getThrottling();  
-        if (out.getVersion().before(Version.V_3_10_0) && throttling != null && throttling.isEmpty() == false) {
-            throw new IllegalArgumentException("cannot send workload group throttling to a node before version " + Version.V_3_10_0);
+     * @param name - name of the WorkloadGroup to be updated
         }  
+    }
+     * @param in - A {@link StreamInput} object
+    /**
+ */  
+     * @param parser - A {@link XContentParser} object  
+ *
+public class UpdateWorkloadGroupRequest extends ClusterManagerNodeRequest<UpdateWorkloadGroupRequest> {  
+        this.name = name;
+    public String getName() {
+import org.opensearch.core.common.io.stream.StreamInput;  
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;  
+import java.io.IOException;
+        this.mutableWorkloadGroupFragment = mutableWorkloadGroupFragment;
+    /**
+        if (out.getVersion().before(Version.V_3_10_0) && throttling != null && throttling.isEmpty() == false) {
+ *  
         out.writeString(name);
+    /**  
+    public static UpdateWorkloadGroupRequest fromXContent(XContentParser parser, String name) throws IOException {  
+        return mutableWorkloadGroupFragment;
+    private final MutableWorkloadGroupFragment mutableWorkloadGroupFragment;
+     * Constructor for UpdateWorkloadGroupRequest
+    public void writeTo(StreamOutput out) throws IOException {
+package org.opensearch.plugin.wlm.action;
+        return new UpdateWorkloadGroupRequest(name, builder.getMutableWorkloadGroupFragment());
+     */
+            throw new IllegalArgumentException("cannot send workload group throttling to a node before version " + Version.V_3_10_0);
         mutableWorkloadGroupFragment.writeTo(out);
     }  
 }
+    private final String name;
+    public MutableWorkloadGroupFragment getmMutableWorkloadGroupFragment() {  
+    UpdateWorkloadGroupRequest(StreamInput in) throws IOException {  
+    }
+        return null;
+        WorkloadGroup.Builder builder = WorkloadGroup.Builder.fromXContent(parser);
+    }  
+     * @param mutableWorkloadGroupFragment - MutableWorkloadGroupFragment for UpdateWorkloadGroupRequest
+        this(in.readString(), new MutableWorkloadGroupFragment(in));
+ * @opensearch.experimental
+    }  
+import org.opensearch.cluster.metadata.WorkloadGroup;
+ * compatible open source license.

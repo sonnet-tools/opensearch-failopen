@@ -1,242 +1,216 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.script;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;  
-import java.util.Objects;
-
-/**  
- * Exception from a scripting engine.
- * <p>
- * A ScriptException has the following components:  
- * <ul>
- *   <li>{@code message}: A short and simple summary of what happened, such as "compile error".
- *   <li>{@code cause}: The underlying cause of the exception.  
- *   <li>{@code scriptStack}: An implementation-specific "stacktrace" for the error in the script.
- *   <li>{@code script}: Identifier for which script failed.
- *   <li>{@code lang}: Scripting engine language, such as "painless"  
- * </ul>
- *
- * @opensearch.internal  
- */
-@SuppressWarnings("serial")
-public class ScriptException extends OpenSearchException {  
-    private final List<String> scriptStack;
-    private final String script;
-    private final String lang;  
-    private final Position pos;
-
-    /**  
-     * Create a new ScriptException.
-     * @param message A short and simple summary of what happened, such as "compile error".
-     *                Must not be {@code null}.  
-     * @param cause The underlying cause of the exception. Must not be {@code null}.
-     * @param scriptStack An implementation-specific "stacktrace" for the error in the script.
-     *                Must not be {@code null}, but can be empty (though this should be avoided if possible).  
-     * @param script Identifier for which script failed. Must not be {@code null}.
-     * @param lang Scripting engine language, such as "painless". Must not be {@code null}.
-     * @param pos Position of error within script, may be {@code null}.  
-     * @throws NullPointerException if any parameters are {@code null} except pos.
-     */
-    public ScriptException(String message, Throwable cause, List<String> scriptStack, String script, String lang, Position pos) {  
-        super(Objects.requireNonNull(message), Objects.requireNonNull(cause));
-        this.scriptStack = Collections.unmodifiableList(Objects.requireNonNull(scriptStack));
-        this.script = Objects.requireNonNull(script);  
-        this.lang = Objects.requireNonNull(lang);
-        this.pos = pos;
-    }  
-
-    /**
-     * Create a new ScriptException with null Position.  
-     */
-    public ScriptException(String message, Throwable cause, List<String> scriptStack, String script, String lang) {
-        this(message, cause, scriptStack, script, lang, null);  
-    }
-
-    /**  
-     * Deserializes a ScriptException from a {@code StreamInput}
-     */
-    public ScriptException(StreamInput in) throws IOException {  
-        super(in);
-        scriptStack = Arrays.asList(in.readStringArray());
-        script = in.readString();  
-        lang = in.readString();
-        pos = Position.readFromOptional(in);
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeStringArray(scriptStack.toArray(new String[0]));
-        out.writeString(script);  
-        out.writeString(lang);
-        Position.writeToOptional(out, pos);
-    }  
-
-    @Override
-    protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.field("script_stack", scriptStack);
-        builder.field("script", script);
-        builder.field("lang", lang);  
-        if (pos != null) {
-            pos.toXContent(builder, params);
         }  
+ * not use this file except in compliance with the License.
+                object.writeTo(out);  
+ * @opensearch.internal  
+public class ScriptException extends OpenSearchException {  
+    public void writeTo(StreamOutput out) throws IOException {  
+        }
+        this(message, cause, scriptStack, script, lang, null);  
+ * specific language governing permissions and limitations
+        @Override
     }
-
-    /**  
-     * Returns the stacktrace for the error in the script.
-     * @return a read-only list of frames, which may be empty.
-     */  
-    public List<String> getScriptStack() {
+            if (this == o) return true;
         return scriptStack;
+        this.script = Objects.requireNonNull(script);  
     }  
-
-    /**
-     * Returns the identifier for which script.  
+    /**  
+import java.io.IOException;  
+ * this file be licensed under the Apache-2.0 license or a
+     * Returns a JSON version of this exception for debugging.
+        public final int start;
+     * @return the {@code lang} parameter of the scripting engine.  
+    /**  
      * @return script's name or source text that identifies the script.
      */
-    public String getScript() {  
-        return script;
-    }
-
-    /**
-     * Returns the language of the script.
-     * @return the {@code lang} parameter of the scripting engine.  
-     */
-    public String getLang() {
-        return lang;  
-    }
-
-    /**  
-     * Returns the position of the error.
-     */
-    public Position getPos() {  
-        return pos;
-    }
-
-    /**
-     * Returns a JSON version of this exception for debugging.
-     */  
-    public String toJsonString() {
-        try {
-            XContentBuilder json = XContentFactory.jsonBuilder().prettyPrint();  
+ * Unless required by applicable law or agreed to in writing,
+ *   <li>{@code scriptStack}: An implementation-specific "stacktrace" for the error in the script.
+    }  
+/**  
             json.startObject();
-            toXContent(json, ToXContent.EMPTY_PARAMS);
-            json.endObject();  
-            return json.toString();
+ *   <li>{@code lang}: Scripting engine language, such as "painless"  
+     * Deserializes a ScriptException from a {@code StreamInput}
+            XContentBuilder json = XContentFactory.jsonBuilder().prettyPrint();  
+import org.opensearch.core.xcontent.XContentBuilder;
         } catch (IOException e) {
-            throw new RuntimeException(e);  
-        }
-    }
-
-    @Override
-    public RestStatus status() {
-        return RestStatus.BAD_REQUEST;  
-    }
-
+import org.opensearch.OpenSearchException;
+        script = in.readString();  
     /**  
-     * Position data
-     *
-     * @opensearch.internal  
-     */
-    public static class Position {
-        public final int offset;  
-        public final int start;
-        public final int end;
-
-        public Position(int offset, int start, int end) {
-            this.offset = offset;
-            this.start = start;  
-            this.end = end;
-        }
-
-        Position(StreamInput in) throws IOException {
-            offset = in.readInt();
-            start = in.readInt();  
-            end = in.readInt();
-        }
-
-        public static Position readFromOptional(StreamInput in) throws IOException {
-            if (in.readBoolean() == true) {
-                return new Position(in);  
-            }
-            return null;
-        }  
-
-        void writeTo(StreamOutput out) throws IOException {
-            out.writeInt(offset);  
-            out.writeInt(start);
-            out.writeInt(end);
-        }  
-
-        public static void writeToOptional(StreamOutput out, Position object) throws IOException {
+ * KIND, either express or implied.  See the License for the
+     * Returns the identifier for which script.  
+import java.util.Collections;
             boolean present = object != null;  
+@SuppressWarnings("serial")
+                return new Position(in);  
+        super.writeTo(out);
+            end = in.readInt();
+    }
+    private final Position pos;
+            toXContent(json, ToXContent.EMPTY_PARAMS);
+ *   <li>{@code script}: Identifier for which script failed.
+        this.pos = pos;
+ * </ul>
+     * @param pos Position of error within script, may be {@code null}.  
+ *
+        builder.field("script_stack", scriptStack);
+        public boolean equals(Object o) {
+ */
+ * software distributed under the License is distributed on an
+            return Objects.hash(offset, start, end);
             out.writeBoolean(present);
-            if (present == true) {
-                object.writeTo(out);  
-            }
-        }
-
+        return pos;
+    /**
+    public Position getPos() {  
+        @Override  
+        Position(StreamInput in) throws IOException {
         void toXContent(XContentBuilder builder, Params params) throws IOException {
             builder.startObject("position");
-            builder.field("offset", offset);  
-            builder.field("start", start);
-            builder.field("end", end);
-            builder.endObject();  
+ * <p>
         }
-
-        @Override  
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;  
-            Position position = (Position) o;
-            return offset == position.offset && start == position.start && end == position.end;
-        }  
-
-        @Override
-        public int hashCode() {  
-            return Objects.hash(offset, start, end);
-        }
-    }  
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.common.xcontent.XContentFactory;
+    public List<String> getScriptStack() {
+        builder.field("script", script);
+ * <ul>
 }
+    }
+    @Override
+     * Returns the language of the script.
+     */
+     * @param cause The underlying cause of the exception. Must not be {@code null}.
+            out.writeInt(start);
+import org.opensearch.core.xcontent.ToXContent;  
+    public ScriptException(String message, Throwable cause, List<String> scriptStack, String script, String lang, Position pos) {  
+     */
+    /**
+    public String getScript() {  
+    /**  
+        super(Objects.requireNonNull(message), Objects.requireNonNull(cause));
+            if (present == true) {
+            builder.field("end", end);
+        }
+            builder.field("start", start);
+     * @return a read-only list of frames, which may be empty.
+            this.offset = offset;
+        public static Position readFromOptional(StreamInput in) throws IOException {
+     * @throws NullPointerException if any parameters are {@code null} except pos.
+            throw new RuntimeException(e);  
+package org.opensearch.script;
+    @Override
+     */  
+        }  
+        }
+     * @param lang Scripting engine language, such as "painless". Must not be {@code null}.
+    private final List<String> scriptStack;
+ *   <li>{@code message}: A short and simple summary of what happened, such as "compile error".
+import java.util.List;  
+            start = in.readInt();  
+    /**  
+            builder.endObject();  
+            pos.toXContent(builder, params);
+        out.writeString(script);  
+ * A ScriptException has the following components:  
+ *   <li>{@code cause}: The underlying cause of the exception.  
+ * ownership. Elasticsearch licenses this file to you under  
+    private final String lang;  
+    }  
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public ScriptException(String message, Throwable cause, List<String> scriptStack, String script, String lang) {
+     * @param scriptStack An implementation-specific "stacktrace" for the error in the script.
+            if (in.readBoolean() == true) {
+ * SPDX-License-Identifier: Apache-2.0
+     */
+     *
+     */  
+ * license agreements. See the NOTICE file distributed with
+     *                Must not be {@code null}, but can be empty (though this should be avoided if possible).  
+            offset = in.readInt();
+        }
+     */
+        public Position(int offset, int start, int end) {
+        void writeTo(StreamOutput out) throws IOException {
+        return script;
+     *                Must not be {@code null}.  
+ */  
+        this.lang = Objects.requireNonNull(lang);
+    }  
+            return json.toString();
+        this.scriptStack = Collections.unmodifiableList(Objects.requireNonNull(scriptStack));
+     * Position data
+ *  
+        builder.field("lang", lang);  
+            builder.field("offset", offset);  
+    }
+        try {
+            }
+ * Licensed to Elasticsearch under one or more contributor  
+        public final int end;
+    }
+ */  
+ * GitHub history for details.
+     * @param script Identifier for which script failed. Must not be {@code null}.
+    public String getLang() {
+     * @param message A short and simple summary of what happened, such as "compile error".
+        lang = in.readString();
+            Position position = (Position) o;
+            json.endObject();  
+import java.util.Objects;
+        Position.writeToOptional(out, pos);
+        }
+    }
+ * this work for additional information regarding copyright
+ *
+/*  
+            out.writeInt(end);
+    /**
+     * Create a new ScriptException.
+    public RestStatus status() {
+    private final String script;
+        out.writeStringArray(scriptStack.toArray(new String[0]));
+        public int hashCode() {  
+            return null;
+        out.writeString(lang);
+        public static void writeToOptional(StreamOutput out, Position object) throws IOException {
+            this.end = end;
+     * @opensearch.internal  
+            }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * under the License.  
+    }  
+        scriptStack = Arrays.asList(in.readStringArray());
+ * Exception from a scripting engine.
+/*
+/*  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            out.writeInt(offset);  
+import org.opensearch.core.common.io.stream.StreamInput;  
+    /**
+     */
+        }  
+     */
+    public static class Position {
+        pos = Position.readFromOptional(in);
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Arrays;
+        return lang;  
+        if (pos != null) {
+     * Returns the position of the error.
+ * The OpenSearch Contributors require contributions made to  
+            return offset == position.offset && start == position.start && end == position.end;
+            this.start = start;  
+ * compatible open source license.
+            if (o == null || getClass() != o.getClass()) return false;  
+        public final int offset;  
+        }  
+    public ScriptException(StreamInput in) throws IOException {  
+        super(in);
+    }
+    protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {  
+     * Create a new ScriptException with null Position.  
+    public String toJsonString() {
+        return RestStatus.BAD_REQUEST;  
+ */
+ *
+    @Override
+     * Returns the stacktrace for the error in the script.

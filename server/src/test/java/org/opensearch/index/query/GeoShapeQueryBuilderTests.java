@@ -1,259 +1,227 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.BooleanQuery;  
+        assertThat(query, instanceOf(GeoShapeQueryBuilder.class));  
+    }  
+        JsonXContent.contentBuilder().startArray().value(geoQuery).endArray();  
 import org.apache.lucene.search.ConstantScoreQuery;
+    }  
+        checkGeneratedJson(json, parsed);  
+    public void testWrongFieldType() throws IOException {
+import org.apache.lucene.search.BooleanQuery;  
+        indexedShapePath = null;  
+ * this file be licensed under the Apache-2.0 license or a
 import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;  
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.action.get.GetRequest;  
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;
+    protected GeoShapeQueryBuilder doCreateTestQueryBuilder() {
+ */
 import org.opensearch.common.geo.builders.EnvelopeBuilder;  
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesArray;  
-import org.opensearch.core.xcontent.XContentBuilder;
+            : QueryBuilders.geoShapeQuery("searchGeometry", envelopeBuilder.buildGeometry());
+        indexedShapeRouting = null;
+ * SPDX-License-Identifier: Apache-2.0
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.get.GetResult;  
-import org.opensearch.test.AbstractQueryTestCase;
-import org.opensearch.test.VersionUtils;
-import org.opensearch.test.geo.RandomShapeGenerator;  
-import org.opensearch.test.geo.RandomShapeGenerator.ShapeType;
-import org.junit.After;
-
-import java.io.IOException;
-
+            : new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn.buildGeometry());  
+ *  
+import org.opensearch.action.get.GetRequest;  
+        }
+        assertThat(getRequest.index(), equalTo(expectedShapeIndex));  
+    }
+            + "    \"ignore_unmapped\" : false,\n"
 import org.locationtech.jts.geom.Coordinate;  
-
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.notNullValue;  
-import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;  
-
-public abstract class GeoShapeQueryBuilderTests extends AbstractQueryTestCase<GeoShapeQueryBuilder> {
-
-    protected static String indexedShapeId;
-    protected static String indexedShapePath;
-    protected static String indexedShapeIndex;  
+        try {
+        // easier to test here
+    }
+        assertThat(e.getMessage(), containsString("Field [mapped_string] is of unsupported type [text] for [geo_shape] query"));  
+    public void testNoIndexedShape() throws IOException {  
+    }
+ * this work for additional information regarding copyright
+        return doCreateTestQueryBuilder(randomBoolean());  
+        geoShapeQueryBuilder.strategy(query.strategy());
+    }
+    }
+        EnvelopeBuilder envelopeBuilder = new EnvelopeBuilder(new Coordinate(0, 10), new Coordinate(10, 0));
+    public void testMultipleRewrite() throws IOException {
+import org.opensearch.action.get.GetResponse;
+            : new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn.buildGeometry());
+        assertThat(query, notNullValue());  
+    public void testNoRelation() throws IOException {
+        String json;  
+        ShapeType shapeType = ShapeType.randomType(random());  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.relation(null));
+    }
+            ? new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn)
+            + "    \"location\" : {\n"  
+        builder.writeTo(new BytesStreamOutput(10));  
+        assertThat(query, anyOf(instanceOf(BooleanQuery.class), instanceOf(ConstantScoreQuery.class)));
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+        assertThat(getRequest.id(), equalTo(indexedShapeId));  
+        indexedShapeIndex = null;
+    // see #3878  
     protected static String indexedShapeRouting;
-    protected static ShapeBuilder<?, ?, ?> indexedShapeToReturn;
-
-    protected abstract String fieldName();
-
-    @Override  
-    protected Settings createTestIndexSettings() {
+            + "  }\n"  
+        assertThat(indexedShapeToReturn, notNullValue());
+import static org.hamcrest.Matchers.anyOf;
+ */  
+        assertEquals(geoShapeQueryBuilder, rewrite);
+import org.opensearch.common.xcontent.XContentFactory;
+        GeoShapeQueryBuilder query = doCreateTestQueryBuilder(true);  
+        assertEquals(expected, builder);
+        // TODO improve GeoShapeQueryBuilder.doToQuery() method to make it  
+            ? new GeoShapeQueryBuilder(TEXT_FIELD_NAME, shape)  
+import static org.hamcrest.CoreMatchers.instanceOf;
+ * You may obtain a copy of the License at  
+            + "        \"coordinates\" : [ [ 13.0, 53.0 ], [ 14.0, 52.0 ] ]\n"  
+    @Override
+    public void testNoShape() throws IOException {
+        final GeoShapeQueryBuilder queryBuilder = randomBoolean()
+            throw new OpenSearchException("boom", ex);  
+ * under the License.  
+            : new GeoShapeQueryBuilder("unmapped", shape.buildGeometry());
+        expectedShape.relation(shape.relation());
+    }  
+        GeoShapeQueryBuilder geoShapeQueryBuilder = randomBoolean()
+        QueryBuilder queryBuilder = Rewriteable.rewrite(builder, createShardContext());
+        assertEquals(ise.getMessage(), "supplier must be null, can't serialize suppliers, missing a rewriteAndFetch?");
+        String expectedShapePath = indexedShapePath == null ? GeoShapeQueryBuilder.DEFAULT_SHAPE_FIELD_NAME : indexedShapePath;
+    @Override
+    }
+        QueryBuilder builder = new BoolQueryBuilder().should(shape).should(shape);  
+        QueryBuilder query = super.parseQuery(parser);
+        ShapeType shapeType = ShapeType.randomType(random());
         // force the new shape impl
         Version version = VersionUtils.randomIndexCompatibleVersion(random());  
-        return Settings.builder().put(super.createTestIndexSettings()).put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
-    }
-
-    @Override
-    protected GeoShapeQueryBuilder doCreateTestQueryBuilder() {
-        return doCreateTestQueryBuilder(randomBoolean());  
-    }
-
-    abstract GeoShapeQueryBuilder doCreateTestQueryBuilder(boolean indexedShape);  
-
-    @Override
-    protected GetResponse executeGet(GetRequest getRequest) {  
-        assertThat(indexedShapeToReturn, notNullValue());
-        assertThat(indexedShapeId, notNullValue());
-        assertThat(getRequest.id(), equalTo(indexedShapeId));  
-        assertThat(getRequest.routing(), equalTo(indexedShapeRouting));
-        String expectedShapeIndex = indexedShapeIndex == null ? GeoShapeQueryBuilder.DEFAULT_SHAPE_INDEX_NAME : indexedShapeIndex;
-        assertThat(getRequest.index(), equalTo(expectedShapeIndex));  
-        String expectedShapePath = indexedShapePath == null ? GeoShapeQueryBuilder.DEFAULT_SHAPE_FIELD_NAME : indexedShapePath;
-
-        String json;  
-        try {
-            XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();
-            builder.startObject();  
-            builder.field(expectedShapePath, indexedShapeToReturn);
-            builder.field(randomAlphaOfLengthBetween(10, 20), "something");
-            builder.endObject();  
-            json = builder.toString();
-        } catch (IOException ex) {
-            throw new OpenSearchException("boom", ex);  
-        }
-        return new GetResponse(new GetResult(indexedShapeIndex, indexedShapeId, 0, 1, 0, true, new BytesArray(json), null, null));
-    }  
-
-    @After
-    public void clearShapeFields() {  
-        indexedShapeToReturn = null;
-        indexedShapeId = null;
-        indexedShapePath = null;  
-        indexedShapeIndex = null;
-        indexedShapeRouting = null;
-    }  
-
-    @Override
-    protected void doAssertLuceneQuery(GeoShapeQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {  
-        // Logic for doToQuery is complex and is hard to test here. Need to rely
-        // on Integration tests to determine if created query is correct
-        // TODO improve GeoShapeQueryBuilder.doToQuery() method to make it  
-        // easier to test here
-        assertThat(query, anyOf(instanceOf(BooleanQuery.class), instanceOf(ConstantScoreQuery.class)));
-    }  
-
-    public void testNoFieldName() throws Exception {
-        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null);  
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new GeoShapeQueryBuilder(null, shape));
-        assertEquals("fieldName is required", e.getMessage());
-    }  
-
-    public void testNoShape() throws IOException {
-        expectThrows(IllegalArgumentException.class, () -> new GeoShapeQueryBuilder(fieldName(), (ShapeBuilder) null));  
-    }
-
-    public void testNoIndexedShape() throws IOException {  
+import static org.hamcrest.Matchers.equalTo;  
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new GeoShapeQueryBuilder(fieldName(), null, null));
-        assertEquals("either shape or indexedShapeId is required", e.getMessage());
-    }  
-
-    public void testNoRelation() throws IOException {
-        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null);  
-        GeoShapeQueryBuilder builder = new GeoShapeQueryBuilder(fieldName(), shape);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.relation(null));
-        assertEquals("No Shape Relation defined", e.getMessage());  
-    }
-
-    // see #3878  
-    public void testThatXContentSerializationInsideOfArrayWorks() throws Exception {
-        EnvelopeBuilder envelopeBuilder = new EnvelopeBuilder(new Coordinate(0, 10), new Coordinate(10, 0));
-        GeoShapeQueryBuilder geoQuery = randomBoolean()  
-            ? QueryBuilders.geoShapeQuery("searchGeometry", envelopeBuilder)
-            : QueryBuilders.geoShapeQuery("searchGeometry", envelopeBuilder.buildGeometry());
-        JsonXContent.contentBuilder().startArray().value(geoQuery).endArray();  
-    }
-
-    public void testFromJson() throws IOException {  
-        String json = "{\n"
-            + "  \"geo_shape\" : {\n"
-            + "    \"location\" : {\n"  
-            + "      \"shape\" : {\n"
-            + "        \"type\" : \"Envelope\",\n"
-            + "        \"coordinates\" : [ [ 13.0, 53.0 ], [ 14.0, 52.0 ] ]\n"  
-            + "      },\n"
-            + "      \"relation\" : \"intersects\"\n"
-            + "    },\n"  
-            + "    \"ignore_unmapped\" : false,\n"
-            + "    \"boost\" : 42.0\n"
-            + "  }\n"  
-            + "}";
-        GeoShapeQueryBuilder parsed = (GeoShapeQueryBuilder) parseQuery(json);
-        checkGeneratedJson(json, parsed);  
-        assertEquals(json, 42.0, parsed.boost(), 0.0001);
-    }
-
-    @Override
-    public void testMustRewrite() throws IOException {
-        GeoShapeQueryBuilder query = doCreateTestQueryBuilder(true);  
-
-        UnsupportedOperationException e = expectThrows(UnsupportedOperationException.class, () -> query.toQuery(createShardContext()));
-        assertEquals("query must be rewritten first", e.getMessage());  
-        QueryBuilder rewrite = rewriteAndFetch(query, createShardContext());
-        GeoShapeQueryBuilder geoShapeQueryBuilder = randomBoolean()
-            ? new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn)  
-            : new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn.buildGeometry());
-        geoShapeQueryBuilder.strategy(query.strategy());
-        geoShapeQueryBuilder.relation(query.relation());  
-        assertEquals(geoShapeQueryBuilder, rewrite);
-    }
-
-    public void testMultipleRewrite() throws IOException {
-        GeoShapeQueryBuilder shape = doCreateTestQueryBuilder(true);
-        QueryBuilder builder = new BoolQueryBuilder().should(shape).should(shape);  
-
-        builder = rewriteAndFetch(builder, createShardContext());
-
-        GeoShapeQueryBuilder expectedShape = randomBoolean()
-            ? new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn)
-            : new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn.buildGeometry());  
-        expectedShape.strategy(shape.strategy());
-        expectedShape.relation(shape.relation());
-        QueryBuilder expected = new BoolQueryBuilder().should(expectedShape).should(expectedShape);  
-        assertEquals(expected, builder);
-    }
-
-    public void testIgnoreUnmapped() throws IOException {
-        ShapeType shapeType = ShapeType.randomType(random());
-        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null, shapeType);  
-        final GeoShapeQueryBuilder queryBuilder = randomBoolean()
-            ? new GeoShapeQueryBuilder("unmapped", shape)
-            : new GeoShapeQueryBuilder("unmapped", shape.buildGeometry());  
-        queryBuilder.ignoreUnmapped(true);
-        Query query = queryBuilder.toQuery(createShardContext());
-        assertThat(query, notNullValue());  
-        assertThat(query, instanceOf(MatchNoDocsQuery.class));
-
+    protected abstract String fieldName();
+        } catch (IOException ex) {
+        indexedShapeId = null;
+            builder.endObject();  
         final GeoShapeQueryBuilder failingQueryBuilder = randomBoolean()  
+            json = builder.toString();
+import org.opensearch.OpenSearchException;
+    protected static String indexedShapeId;
+import org.opensearch.test.geo.RandomShapeGenerator;  
+import org.opensearch.core.xcontent.XContentBuilder;
+    abstract GeoShapeQueryBuilder doCreateTestQueryBuilder(boolean indexedShape);  
+            ? new GeoShapeQueryBuilder(fieldName(), indexedShapeToReturn)  
+            XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();
+import org.opensearch.core.common.bytes.BytesArray;  
+            + "}";
+        GeoShapeQueryBuilder expectedShape = randomBoolean()
+import org.opensearch.Version;
+            builder.startObject();  
+ * software distributed under the License is distributed on an
+    protected static ShapeBuilder<?, ?, ?> indexedShapeToReturn;
+        QueryBuilder expected = new BoolQueryBuilder().should(expectedShape).should(expectedShape);  
+ */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.io.IOException;
             ? new GeoShapeQueryBuilder("unmapped", shape)
-            : new GeoShapeQueryBuilder("unmapped", shape.buildGeometry());
-        failingQueryBuilder.ignoreUnmapped(false);  
-        QueryShardException e = expectThrows(QueryShardException.class, () -> failingQueryBuilder.toQuery(createShardContext()));
-        assertThat(e.getMessage(), containsString("failed to find type for field [unmapped]"));
+ * not use this file except in compliance with the License.
     }  
-
-    public void testWrongFieldType() throws IOException {
-        ShapeType shapeType = ShapeType.randomType(random());  
-        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null, shapeType);
-        final GeoShapeQueryBuilder queryBuilder = randomBoolean()
-            ? new GeoShapeQueryBuilder(TEXT_FIELD_NAME, shape)  
-            : new GeoShapeQueryBuilder(TEXT_FIELD_NAME, shape.buildGeometry());
-        QueryShardException e = expectThrows(QueryShardException.class, () -> queryBuilder.toQuery(createShardContext()));
-        assertThat(e.getMessage(), containsString("Field [mapped_string] is of unsupported type [text] for [geo_shape] query"));  
-    }
-
-    public void testSerializationFailsUnlessFetched() throws IOException {  
+/*
+    public void testThatXContentSerializationInsideOfArrayWorks() throws Exception {
+        String expectedShapeIndex = indexedShapeIndex == null ? GeoShapeQueryBuilder.DEFAULT_SHAPE_INDEX_NAME : indexedShapeIndex;
+    public void testMustRewrite() throws IOException {
+    protected static String indexedShapePath;
+        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null);  
+import org.opensearch.test.VersionUtils;
+ * KIND, either express or implied.  See the License for the
+        assertThat(e.getMessage(), containsString("failed to find type for field [unmapped]"));
+        GeoShapeQueryBuilder shape = doCreateTestQueryBuilder(true);
+        indexedShapeToReturn = null;
+            ? new GeoShapeQueryBuilder("unmapped", shape)
+package org.opensearch.index.query;
+            + "  \"geo_shape\" : {\n"
+/*  
+        assertThat(indexedShapeId, notNullValue());
         QueryBuilder builder = doCreateTestQueryBuilder(true);
-        QueryBuilder queryBuilder = Rewriteable.rewrite(builder, createShardContext());
-        IllegalStateException ise = expectThrows(IllegalStateException.class, () -> queryBuilder.writeTo(new BytesStreamOutput(10)));  
-        assertEquals(ise.getMessage(), "supplier must be null, can't serialize suppliers, missing a rewriteAndFetch?");
-        builder = rewriteAndFetch(builder, createShardContext());
-        builder.writeTo(new BytesStreamOutput(10));  
-    }
-
-    @Override  
+        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null, shapeType);  
+ * ownership. Elasticsearch licenses this file to you under  
     protected QueryBuilder parseQuery(XContentParser parser) throws IOException {
-        QueryBuilder query = super.parseQuery(parser);
-        assertThat(query, instanceOf(GeoShapeQueryBuilder.class));  
-        return query;
+import org.opensearch.common.io.stream.BytesStreamOutput;
+            + "      \"relation\" : \"intersects\"\n"
+    }  
+        assertEquals("No Shape Relation defined", e.getMessage());  
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new GeoShapeQueryBuilder(null, shape));
+import org.opensearch.test.AbstractQueryTestCase;
+    public void testIgnoreUnmapped() throws IOException {
+    public void testNoFieldName() throws Exception {
+ *
+    protected void doAssertLuceneQuery(GeoShapeQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {  
+            : new GeoShapeQueryBuilder(TEXT_FIELD_NAME, shape.buildGeometry());
+            + "    },\n"  
+        failingQueryBuilder.ignoreUnmapped(false);  
+        queryBuilder.ignoreUnmapped(true);
+import org.opensearch.test.geo.RandomShapeGenerator.ShapeType;
+    @Override  
+            + "      \"shape\" : {\n"
     }
+import org.junit.After;
+        return query;
+    public void testSerializationFailsUnlessFetched() throws IOException {  
 }  
+        assertEquals(json, 42.0, parsed.boost(), 0.0001);
+import org.opensearch.common.geo.builders.ShapeBuilder;
+        return Settings.builder().put(super.createTestIndexSettings()).put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
+        builder = rewriteAndFetch(builder, createShardContext());
+        String json = "{\n"
+        assertEquals("query must be rewritten first", e.getMessage());  
+        UnsupportedOperationException e = expectThrows(UnsupportedOperationException.class, () -> query.toQuery(createShardContext()));
+import org.opensearch.cluster.metadata.IndexMetadata;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            + "        \"type\" : \"Envelope\",\n"
+import org.opensearch.common.settings.Settings;  
+ *
+        // Logic for doToQuery is complex and is hard to test here. Need to rely
+        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null);  
+public abstract class GeoShapeQueryBuilderTests extends AbstractQueryTestCase<GeoShapeQueryBuilder> {
+        Query query = queryBuilder.toQuery(createShardContext());
+            builder.field(expectedShapePath, indexedShapeToReturn);
+    @Override
+        GeoShapeQueryBuilder parsed = (GeoShapeQueryBuilder) parseQuery(json);
+        assertEquals("either shape or indexedShapeId is required", e.getMessage());
+        assertThat(query, instanceOf(MatchNoDocsQuery.class));
+ * Licensed to Elasticsearch under one or more contributor  
+ * specific language governing permissions and limitations
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+import org.opensearch.index.get.GetResult;  
+    }  
+    protected Settings createTestIndexSettings() {
+    @Override  
+            : new GeoShapeQueryBuilder("unmapped", shape.buildGeometry());  
+import static org.hamcrest.CoreMatchers.notNullValue;  
+        expectThrows(IllegalArgumentException.class, () -> new GeoShapeQueryBuilder(fieldName(), (ShapeBuilder) null));  
+        QueryBuilder rewrite = rewriteAndFetch(query, createShardContext());
+        assertEquals("fieldName is required", e.getMessage());
+        QueryShardException e = expectThrows(QueryShardException.class, () -> queryBuilder.toQuery(createShardContext()));
+        final GeoShapeQueryBuilder queryBuilder = randomBoolean()
+    public void clearShapeFields() {  
+    public void testFromJson() throws IOException {  
+        // on Integration tests to determine if created query is correct
+            ? QueryBuilders.geoShapeQuery("searchGeometry", envelopeBuilder)
+        assertThat(getRequest.routing(), equalTo(indexedShapeRouting));
+        expectedShape.strategy(shape.strategy());
+            builder.field(randomAlphaOfLengthBetween(10, 20), "something");
+            + "    \"boost\" : 42.0\n"
+            + "      },\n"
+    }
+        ShapeBuilder<?, ?, ?> shape = RandomShapeGenerator.createShapeWithin(random(), null, shapeType);
+        GeoShapeQueryBuilder geoQuery = randomBoolean()  
+        GeoShapeQueryBuilder builder = new GeoShapeQueryBuilder(fieldName(), shape);
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.search.Query;  
+ * GitHub history for details.
+        IllegalStateException ise = expectThrows(IllegalStateException.class, () -> queryBuilder.writeTo(new BytesStreamOutput(10)));  
+    protected static String indexedShapeIndex;  
+/*
+        geoShapeQueryBuilder.relation(query.relation());  
+import static org.hamcrest.Matchers.containsString;
+ * Modifications Copyright OpenSearch Contributors. See  
+        builder = rewriteAndFetch(builder, createShardContext());
+        return new GetResponse(new GetResult(indexedShapeIndex, indexedShapeId, 0, 1, 0, true, new BytesArray(json), null, null));
+import org.opensearch.common.xcontent.json.JsonXContent;
+    @After
+        QueryShardException e = expectThrows(QueryShardException.class, () -> failingQueryBuilder.toQuery(createShardContext()));
+    }
+    }
+    protected GetResponse executeGet(GetRequest getRequest) {  

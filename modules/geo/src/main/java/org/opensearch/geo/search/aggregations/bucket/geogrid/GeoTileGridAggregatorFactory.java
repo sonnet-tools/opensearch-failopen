@@ -1,202 +1,189 @@
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.geo.search.aggregations.bucket.geogrid;
-
-import org.opensearch.common.geo.GeoBoundingBox;
-import org.opensearch.geo.search.aggregations.bucket.geogrid.cells.CellIdSource;
-import org.opensearch.geo.search.aggregations.bucket.geogrid.cells.GeoShapeCellIdSource;  
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.NonCollectingAggregator;
-import org.opensearch.search.aggregations.bucket.GeoTileUtils;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;  
-
-/**
- * Aggregation Factory for geo_tile grid agg  
- *
- * @opensearch.internal
- */  
-class GeoTileGridAggregatorFactory extends ValuesSourceAggregatorFactory {
-
-    private final int precision;  
-    private final int requiredSize;
-    private final int shardSize;
-    private final GeoBoundingBox geoBoundingBox;  
-
-    GeoTileGridAggregatorFactory(
-        String name,  
-        ValuesSourceConfig config,
-        int precision,
-        int requiredSize,  
-        int shardSize,
-        GeoBoundingBox geoBoundingBox,
-        QueryShardContext queryShardContext,  
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder,
-        Map<String, Object> metadata  
-    ) throws IOException {
-        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
-        this.precision = precision;  
-        this.requiredSize = requiredSize;
-        this.shardSize = shardSize;
-        this.geoBoundingBox = geoBoundingBox;  
-    }
-
-    @Override  
-    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
-        final InternalAggregation aggregation = new GeoTileGrid(name, requiredSize, Collections.emptyList(), metadata);
-        return new NonCollectingAggregator(name, searchContext, parent, factories, metadata) {  
-            @Override
-            public InternalAggregation buildEmptyAggregation() {
-                return aggregation;  
-            }
-        };
-    }  
-
-    @Override
-    protected Aggregator doCreateInternal(  
-        SearchContext searchContext,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,  
-        Map<String, Object> metadata
-    ) throws IOException {
-        return queryShardContext.getValuesSourceRegistry()  
-            .getAggregator(GeoTileGridAggregationBuilder.REGISTRY_KEY, config)
-            .build(
-                name,  
-                factories,
-                config.getValuesSource(),
-                precision,  
-                geoBoundingBox,
-                requiredSize,
-                shardSize,  
-                searchContext,
-                parent,
-                cardinality,  
-                metadata
-            );
-    }  
-
-    static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        builder.register(  
-            GeoTileGridAggregationBuilder.REGISTRY_KEY,
-            CoreValuesSourceType.GEOPOINT,
-            (  
-                name,
-                factories,
-                valuesSource,  
-                precision,
-                geoBoundingBox,
-                requiredSize,  
-                shardSize,
-                aggregationContext,
-                parent,  
-                cardinality,
-                metadata) -> {
-                CellIdSource cellIdSource = new CellIdSource(  
-                    (ValuesSource.GeoPoint) valuesSource,
-                    precision,
-                    geoBoundingBox,  
-                    GeoTileUtils::longEncode
-                );
-                return new GeoTileGridAggregator(  
-                    name,
-                    factories,
-                    cellIdSource,  
-                    requiredSize,
-                    shardSize,
-                    aggregationContext,  
-                    parent,
-                    cardinality,
-                    metadata  
-                );
-            },
-            true  
-        );
-
         // registers Aggregation on GeoShape  
-        builder.register(
-            GeoTileGridAggregationBuilder.REGISTRY_KEY,
-            CoreValuesSourceType.GEO_SHAPE,  
-            (
-                name,
-                factories,  
-                valuesSource,
-                precision,
-                geoBoundingBox,  
-                requiredSize,
                 shardSize,
+ *
+        ValuesSourceConfig config,
+                    parent,
+        AggregatorFactory parent,
+                metadata
+import org.opensearch.search.aggregations.bucket.GeoTileUtils;
+ * under the License.  
+        this.requiredSize = requiredSize;
+    private final int shardSize;
+                requiredSize,
+import org.opensearch.search.aggregations.Aggregator;
+import org.opensearch.common.geo.GeoBoundingBox;
+ * Licensed to Elasticsearch under one or more contributor  
+ * The OpenSearch Contributors require contributions made to  
+        );
+            true  
+ * the Apache License, Version 2.0 (the "License"); you may
+            (
+        this.precision = precision;  
+            CoreValuesSourceType.GEO_SHAPE,  
+                factories,
+/*  
+        String name,  
+                    name,
+        };
+                shardSize,  
+/*
+                    cardinality,
+    }
+                parent,  
+        Aggregator parent,
+                    parent,
+ * this file be licensed under the Apache-2.0 license or a
+                GeoShapeCellIdSource cellIdSource = new GeoShapeCellIdSource(
+ *
+                geoBoundingBox,  
+                    precision,
+ * SPDX-License-Identifier: Apache-2.0
+        int requiredSize,  
+class GeoTileGridAggregatorFactory extends ValuesSourceAggregatorFactory {
+        );
+                geoBoundingBox,
+                    cardinality,  
+import org.opensearch.search.aggregations.support.ValuesSource;
+            },
+ * Aggregation Factory for geo_tile grid agg  
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;  
+        SearchContext searchContext,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *  
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+ * GitHub history for details.
+                factories,
+        builder.register(  
+            .build(
+                return new GeoTileGridAggregator(
+import org.opensearch.search.internal.SearchContext;
+                    factories,  
+import org.opensearch.geo.search.aggregations.bucket.geogrid.cells.GeoShapeCellIdSource;  
+                return new GeoTileGridAggregator(  
+        AggregatorFactories.Builder subFactoriesBuilder,
+ * You may obtain a copy of the License at  
+                precision,  
+                name,
+        this.shardSize = shardSize;
+    ) throws IOException {
+        Map<String, Object> metadata  
+    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
+                requiredSize,
+import org.opensearch.search.aggregations.AggregatorFactory;
+                    name,
+    private final GeoBoundingBox geoBoundingBox;  
+                    aggregationContext,  
+                    requiredSize,
+    @Override
+                cardinality,
+                    GeoTileUtils::longEncode
+import org.opensearch.index.query.QueryShardContext;
+    }  
+                    factories,
+            CoreValuesSourceType.GEOPOINT,
+                name,
+                valuesSource,
+                searchContext,
+ * Modifications Copyright OpenSearch Contributors. See
+ * software distributed under the License is distributed on an
+                    metadata  
+/**
+                cardinality,  
+    protected boolean supportsConcurrentSegmentSearch() {  
+    }  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+                cardinality,
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
+        int precision,
+            },  
+        builder.register(
+            @Override
+                );  
+                parent,
+    protected Aggregator doCreateInternal(  
+    @Override
+                precision,
+ */
+import org.opensearch.search.aggregations.NonCollectingAggregator;
+        this.geoBoundingBox = geoBoundingBox;  
+import java.io.IOException;
+                valuesSource,  
+package org.opensearch.geo.search.aggregations.bucket.geogrid;
+            true
+    }  
+ * license agreements. See the NOTICE file distributed with
+    ) throws IOException {
+                    shardSize,  
+                metadata) -> {  
+                return aggregation;  
+ *
+            GeoTileGridAggregationBuilder.REGISTRY_KEY,
+            GeoTileGridAggregationBuilder.REGISTRY_KEY,
+        Map<String, Object> metadata
+import org.opensearch.search.aggregations.InternalAggregation;  
+                );
+        return new NonCollectingAggregator(name, searchContext, parent, factories, metadata) {  
+        GeoBoundingBox geoBoundingBox,
+    private final int requiredSize;
+ */  
+        final InternalAggregation aggregation = new GeoTileGrid(name, requiredSize, Collections.emptyList(), metadata);
+                    (ValuesSource.GeoPoint) valuesSource,
+        return queryShardContext.getValuesSourceRegistry()  
+    static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+                config.getValuesSource(),
+                metadata) -> {
+import org.opensearch.geo.search.aggregations.bucket.geogrid.cells.CellIdSource;
+                    (ValuesSource.GeoShape) valuesSource,
+                    geoBoundingBox,  
+                CellIdSource cellIdSource = new CellIdSource(  
+                aggregationContext,
+                    cellIdSource,  
+                    shardSize,
+                    cellIdSource,
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+            .getAggregator(GeoTileGridAggregationBuilder.REGISTRY_KEY, config)
+                precision,
+        QueryShardContext queryShardContext,  
+        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+ * ownership. Elasticsearch licenses this file to you under  
+                    aggregationContext,
+                    GeoTileUtils::encodeShape
+    private final int precision;  
+                    precision,  
+                name,  
+            (  
+        CardinalityUpperBound cardinality,  
+ * KIND, either express or implied.  See the License for the
+    }
+                    requiredSize,
+ * Unless required by applicable law or agreed to in writing,
+                    geoBoundingBox,
                 aggregationContext,  
                 parent,
-                cardinality,
-                metadata) -> {  
-                GeoShapeCellIdSource cellIdSource = new GeoShapeCellIdSource(
-                    (ValuesSource.GeoShape) valuesSource,
-                    precision,  
-                    geoBoundingBox,
-                    GeoTileUtils::encodeShape
-                );  
-                return new GeoTileGridAggregator(
-                    name,
-                    factories,  
-                    cellIdSource,
-                    requiredSize,
-                    shardSize,  
-                    aggregationContext,
-                    parent,
-                    cardinality,  
+ * @opensearch.internal
+                factories,  
+import org.opensearch.search.aggregations.AggregatorFactories;  
                     metadata
-                );
-            },  
-            true
-        );
-    }  
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {  
-        return true;
-    }
+ * not use this file except in compliance with the License.
+                shardSize,
+import java.util.Map;  
+ * compatible open source license.
+ */  
+                geoBoundingBox,
+            public InternalAggregation buildEmptyAggregation() {
 }  
+        return true;
+ * this work for additional information regarding copyright
+            }
+                requiredSize,  
+import java.util.Collections;
+        int shardSize,
+ */  
+                );
+    GeoTileGridAggregatorFactory(
+            );
+                );
+    @Override  

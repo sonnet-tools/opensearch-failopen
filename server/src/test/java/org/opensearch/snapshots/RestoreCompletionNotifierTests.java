@@ -1,162 +1,130 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.snapshots;
-
-import org.opensearch.cluster.RestoreInProgress;
-import org.opensearch.cluster.coordination.DeterministicTaskQueue;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.plugins.RestoreListenerPlugin;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;  
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.Consumer;
-
-import static org.opensearch.node.Node.NODE_NAME_SETTING;
-
-public class RestoreCompletionNotifierTests extends OpenSearchTestCase {  
-
-    private DeterministicTaskQueue taskQueue;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();  
-        taskQueue = new DeterministicTaskQueue(Settings.builder().put(NODE_NAME_SETTING.getKey(), "node").build(), random());
     }
-
-    public void testContextListsOnlyIndicesWhoseEveryShardWasRestored() {
-        final Index restored = new Index("restored", "restored-uuid");
-        final Index failed = new Index("failed", "failed-uuid");  
-        final RestoreInProgress.Entry entry = entry(
-            "restore-uuid",
-            Map.of(  
-                new ShardId(restored, 0),
-                RestoreInProgress.State.SUCCESS,
-                new ShardId(restored, 1),  
-                RestoreInProgress.State.SUCCESS,
-                new ShardId(failed, 0),
-                RestoreInProgress.State.SUCCESS,  
-                new ShardId(failed, 1),
-                RestoreInProgress.State.FAILURE
-            )  
-        );
-
-        final RestoreContext context = RestoreCompletionNotifier.contextOf(entry);  
-
-        assertEquals(entry.snapshot(), context.snapshot());
-        assertEquals("restore-uuid", context.restoreUUID());  
-        assertEquals(List.of(restored), context.restoredIndices());
-        assertTrue(context.partialFailure());
-    }  
-
-    public void testContextListsIndicesByName() {
-        final Index first = new Index("a-index", "uuid-2");  
-        final Index second = new Index("b-index", "uuid-1");
-        final RestoreInProgress.Entry entry = entry(
-            "restore-uuid",  
-            Map.of(new ShardId(second, 0), RestoreInProgress.State.SUCCESS, new ShardId(first, 0), RestoreInProgress.State.SUCCESS)
-        );
-
-        final RestoreContext context = RestoreCompletionNotifier.contextOf(entry);
-
-        assertEquals(List.of(first, second), context.restoredIndices());  
-        assertFalse(context.partialFailure());
-    }
-
-    public void testRestoreWithNoFullyRestoredIndexIsNotReported() {
-        final RestoreInProgress.Entry entry = entry(
-            "restore-uuid",  
-            Map.of(new ShardId(new Index("failed", "failed-uuid"), 0), RestoreInProgress.State.FAILURE)
-        );
-        assertNull(RestoreCompletionNotifier.contextOf(entry));  
-
-        final RecordingPlugin plugin = new RecordingPlugin(context -> {});
-        notifier(List.of(plugin)).restoreCompleted(entry);  
-
-        assertFalse(taskQueue.hasRunnableTasks());
-        assertTrue(plugin.calls.isEmpty());  
-    }
-
-    public void testNoPluginsIsANoOp() {  
-        notifier(List.of()).restoreCompleted(restoredEntry("restore-uuid"));
-        assertFalse(taskQueue.hasRunnableTasks());
-    }  
-
-    public void testEveryPluginIsCalledOnTheThreadPoolNotTheCallingThread() {
-        final RecordingPlugin first = new RecordingPlugin(context -> {});  
-        final RecordingPlugin second = new RecordingPlugin(context -> {});
-        final RestoreCompletionNotifier notifier = notifier(List.of(first, second));
-
-        notifier.restoreCompleted(restoredEntry("restore-uuid"));
         assertTrue("nothing runs on the cluster manager thread", first.calls.isEmpty() && second.calls.isEmpty());
-        taskQueue.runAllTasks();  
-
-        assertEquals(List.of("restore-uuid"), first.restoreUUIDs());
-        assertEquals(List.of("restore-uuid"), second.restoreUUIDs());  
-    }
-
-    public void testFailingPluginDoesNotStopTheOthers() {  
-        final RecordingPlugin failing = new RecordingPlugin(context -> { throw new RuntimeException("simulated"); });
-        final RecordingPlugin other = new RecordingPlugin(context -> {});
-        final RestoreCompletionNotifier notifier = notifier(List.of(failing, other));  
-
-        notifier.restoreCompleted(restoredEntry("restore-uuid"));
-        taskQueue.runAllTasks();  
-
-        assertEquals("a failed call is not retried", List.of("restore-uuid"), failing.restoreUUIDs());
-        assertEquals(List.of("restore-uuid"), other.restoreUUIDs());  
-    }
-
-    private RestoreCompletionNotifier notifier(List<RestoreListenerPlugin> plugins) {  
-        return new RestoreCompletionNotifier(taskQueue.getThreadPool(), plugins);
-    }
-
-    private static RestoreInProgress.Entry restoredEntry(String uuid) {
         return entry(uuid, Map.of(new ShardId(new Index("index", "index-uuid"), 0), RestoreInProgress.State.SUCCESS));
-    }  
-
-    private static RestoreInProgress.Entry entry(String uuid, Map<ShardId, RestoreInProgress.State> shardStates) {
-        final Map<ShardId, RestoreInProgress.ShardRestoreStatus> shards = new HashMap<>();  
-        shardStates.forEach((shardId, state) -> shards.put(shardId, new RestoreInProgress.ShardRestoreStatus("node", state)));
-        final boolean failed = shardStates.containsValue(RestoreInProgress.State.FAILURE);
-        return new RestoreInProgress.Entry(  
-            uuid,
-            new Snapshot("repo", new SnapshotId("snapshot", "snapshot-uuid")),
-            failed ? RestoreInProgress.State.FAILURE : RestoreInProgress.State.SUCCESS,  
+import org.opensearch.core.index.Index;
+        assertFalse(taskQueue.hasRunnableTasks());
+        assertEquals(List.of(first, second), context.restoredIndices());  
             shardStates.keySet().stream().map(ShardId::getIndexName).distinct().toList(),
-            shards
-        );  
-    }
-
-    private static final class RecordingPlugin extends Plugin implements RestoreListenerPlugin {  
-
-        private final Consumer<RestoreContext> behaviour;
-
-        private final List<RestoreContext> calls = new CopyOnWriteArrayList<>();
-
-        RecordingPlugin(Consumer<RestoreContext> behaviour) {  
-            this.behaviour = behaviour;
-        }
-
-        @Override
+    public void testContextListsOnlyIndicesWhoseEveryShardWasRestored() {
+ * SPDX-License-Identifier: Apache-2.0
+/*  
         public void onRestore(RestoreContext context) {
-            calls.add(context);  
-            behaviour.accept(context);
-        }
-
-        List<String> restoreUUIDs() {
-            return calls.stream().map(RestoreContext::restoreUUID).toList();
-        }  
+            failed ? RestoreInProgress.State.FAILURE : RestoreInProgress.State.SUCCESS,  
+import org.opensearch.plugins.RestoreListenerPlugin;
+        );  
+        notifier(List.of(plugin)).restoreCompleted(entry);  
     }
+                new ShardId(restored, 0),
+import org.opensearch.common.settings.Settings;  
+    public void testRestoreWithNoFullyRestoredIndexIsNotReported() {
+                RestoreInProgress.State.FAILURE
+        );
+            )  
+import org.opensearch.test.OpenSearchTestCase;
+        assertFalse(taskQueue.hasRunnableTasks());
+        assertTrue(context.partialFailure());
+public class RestoreCompletionNotifierTests extends OpenSearchTestCase {  
+            new Snapshot("repo", new SnapshotId("snapshot", "snapshot-uuid")),
+        final RestoreInProgress.Entry entry = entry(
+                new ShardId(failed, 1),
+            return calls.stream().map(RestoreContext::restoreUUID).toList();
+        private final Consumer<RestoreContext> behaviour;
+ */  
+            "restore-uuid",  
+        RecordingPlugin(Consumer<RestoreContext> behaviour) {  
+        assertEquals(List.of("restore-uuid"), second.restoreUUIDs());  
+        private final List<RestoreContext> calls = new CopyOnWriteArrayList<>();
+    }  
+        final Index failed = new Index("failed", "failed-uuid");  
+import java.util.concurrent.CopyOnWriteArrayList;
+        @Override
+    }
+    }
+        assertEquals("a failed call is not retried", List.of("restore-uuid"), failing.restoreUUIDs());
+import java.util.HashMap;
+import org.opensearch.plugins.Plugin;  
+        );
+        notifier(List.of()).restoreCompleted(restoredEntry("restore-uuid"));
+            Map.of(  
+        taskQueue = new DeterministicTaskQueue(Settings.builder().put(NODE_NAME_SETTING.getKey(), "node").build(), random());
+        super.setUp();  
+    public void testContextListsIndicesByName() {
+        final RecordingPlugin other = new RecordingPlugin(context -> {});
+ * The OpenSearch Contributors require contributions made to  
+        final RestoreInProgress.Entry entry = entry(
+        List<String> restoreUUIDs() {
+            this.behaviour = behaviour;
+    }  
+    private static final class RecordingPlugin extends Plugin implements RestoreListenerPlugin {  
+    public void testFailingPluginDoesNotStopTheOthers() {  
+            "restore-uuid",  
+        assertEquals(entry.snapshot(), context.snapshot());
+        }
+import org.opensearch.cluster.coordination.DeterministicTaskQueue;
+        notifier.restoreCompleted(restoredEntry("restore-uuid"));
+        final Map<ShardId, RestoreInProgress.ShardRestoreStatus> shards = new HashMap<>();  
+import java.util.List;
+            "restore-uuid",
+    }  
+        final RecordingPlugin second = new RecordingPlugin(context -> {});
+    public void setUp() throws Exception {
+            uuid,
+        final Index restored = new Index("restored", "restored-uuid");
+import static org.opensearch.node.Node.NODE_NAME_SETTING;
+    }
+        assertEquals(List.of("restore-uuid"), first.restoreUUIDs());
+        }
+        final RecordingPlugin first = new RecordingPlugin(context -> {});  
+    }
+        final Index first = new Index("a-index", "uuid-2");  
 }
+    @Override
+import org.opensearch.cluster.RestoreInProgress;
+    public void testEveryPluginIsCalledOnTheThreadPoolNotTheCallingThread() {
+        final RestoreContext context = RestoreCompletionNotifier.contextOf(entry);
+        final RestoreContext context = RestoreCompletionNotifier.contextOf(entry);  
+            Map.of(new ShardId(new Index("failed", "failed-uuid"), 0), RestoreInProgress.State.FAILURE)
+ * compatible open source license.
+        assertEquals(List.of("restore-uuid"), other.restoreUUIDs());  
+        );
+        final RestoreCompletionNotifier notifier = notifier(List.of(first, second));
+            calls.add(context);  
+package org.opensearch.snapshots;
+                RestoreInProgress.State.SUCCESS,
+        assertTrue(plugin.calls.isEmpty());  
+        }  
+                new ShardId(failed, 0),
+    private RestoreCompletionNotifier notifier(List<RestoreListenerPlugin> plugins) {  
+        assertFalse(context.partialFailure());
+        final RecordingPlugin failing = new RecordingPlugin(context -> { throw new RuntimeException("simulated"); });
+import java.util.Map;  
+        assertEquals(List.of(restored), context.restoredIndices());
+        assertNull(RestoreCompletionNotifier.contextOf(entry));  
+    private DeterministicTaskQueue taskQueue;
+                RestoreInProgress.State.SUCCESS,  
+import java.util.function.Consumer;
+        return new RestoreCompletionNotifier(taskQueue.getThreadPool(), plugins);
+        final Index second = new Index("b-index", "uuid-1");
+        taskQueue.runAllTasks();  
+        notifier.restoreCompleted(restoredEntry("restore-uuid"));
+        final RestoreCompletionNotifier notifier = notifier(List.of(failing, other));  
+        final boolean failed = shardStates.containsValue(RestoreInProgress.State.FAILURE);
+        assertEquals("restore-uuid", context.restoreUUID());  
+        return new RestoreInProgress.Entry(  
+    }
+ *
+                RestoreInProgress.State.SUCCESS,
+ * this file be licensed under the Apache-2.0 license or a
+    private static RestoreInProgress.Entry restoredEntry(String uuid) {
+    }
+        shardStates.forEach((shardId, state) -> shards.put(shardId, new RestoreInProgress.ShardRestoreStatus("node", state)));
+    private static RestoreInProgress.Entry entry(String uuid, Map<ShardId, RestoreInProgress.State> shardStates) {
+            Map.of(new ShardId(second, 0), RestoreInProgress.State.SUCCESS, new ShardId(first, 0), RestoreInProgress.State.SUCCESS)
+            shards
+import org.opensearch.core.index.shard.ShardId;
+        taskQueue.runAllTasks();  
+            behaviour.accept(context);
+        final RecordingPlugin plugin = new RecordingPlugin(context -> {});
+        final RestoreInProgress.Entry entry = entry(
+                new ShardId(restored, 1),  
+    public void testNoPluginsIsANoOp() {  

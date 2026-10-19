@@ -1,116 +1,98 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
+            + LINE_SEPARATOR
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.logging;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LogEvent;
-import org.apache.logging.log4j.core.impl.Log4jLogEvent;  
-import org.apache.logging.log4j.message.SimpleMessage;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;  
-
-import java.io.BufferedReader;
-import java.io.IOException;  
-import java.io.StringReader;
-
-import static org.hamcrest.Matchers.equalTo;  
-
-public class JsonThrowablePatternConverterTests extends OpenSearchTestCase {
     private static final String LINE_SEPARATOR = System.lineSeparator();  
-    private JsonThrowablePatternConverter converter = JsonThrowablePatternConverter.newInstance(null, null);
-
-    public void testNoStacktrace() throws IOException {  
-        LogEvent event = Log4jLogEvent.newBuilder().build();
-        String result = format(event);
-
-        JsonLogLine jsonLogLine = JsonLogsStream.from(new BufferedReader(new StringReader(result)))
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("no logs parsed"));  
-
-        assertThat(jsonLogLine.stacktrace(), Matchers.nullValue());
-    }  
-
-    public void testStacktraceWithJson() throws IOException {
-        LogManager.getLogger().info("asdf");  
-
-        String json = "{"
-            + LINE_SEPARATOR  
-            + "  \"terms\" : {"
-            + LINE_SEPARATOR
-            + "    \"user\" : ["  
-            + LINE_SEPARATOR
-            + "      \"u1\","
-            + LINE_SEPARATOR  
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+            jsonLogLine.stacktrace().size(),  
+ * Unless required by applicable law or agreed to in writing,
+        StringBuilder builder = new StringBuilder();  
             + "      \"u2\","
             + LINE_SEPARATOR
-            + "      \"u3\""  
-            + LINE_SEPARATOR
-            + "    ],"
-            + LINE_SEPARATOR  
-            + "    \"boost\" : 1.0"
-            + LINE_SEPARATOR
-            + "  }"  
-            + LINE_SEPARATOR
-            + "}";
-        Exception thrown = new Exception(json);  
-        LogEvent event = Log4jLogEvent.newBuilder().setMessage(new SimpleMessage("message")).setThrown(thrown).build();
-
-        String result = format(event);  
-
+            + "    \"user\" : ["  
+ * Licensed to Elasticsearch under one or more contributor  
+ *     http://www.apache.org/licenses/LICENSE-2.0
         // confirms exception is correctly parsed
-
+        String jsonStacktraceElement = builder.toString();
+        converter.format(event, builder);
+}
+            + LINE_SEPARATOR  
+            + "}";
+        assertThat(jsonLogLine.stacktrace(), Matchers.nullValue());
+            "stacktrace should formatted in multiple lines",
+            .orElseThrow(() -> new AssertionError("no logs parsed"));  
+    private JsonThrowablePatternConverter converter = JsonThrowablePatternConverter.newInstance(null, null);
+ * The OpenSearch Contributors require contributions made to  
+        int jsonLength = json.split(LINE_SEPARATOR).length;
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+            + "      \"u1\","
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+ * specific language governing permissions and limitations
+        LogEvent event = Log4jLogEvent.newBuilder().build();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * compatible open source license.
+        Exception thrown = new Exception(json);  
+import org.apache.logging.log4j.message.SimpleMessage;
+            + "    ],"
+ * under the License.  
+            + "      \"u3\""  
+            equalTo(jsonLength + stacktraceLength)
+ */  
+    public void testStacktraceWithJson() throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+            + LINE_SEPARATOR
+/*
+ * license agreements. See the NOTICE file distributed with
+    public void testNoStacktrace() throws IOException {  
+        String result = format(event);
+            + "    \"boost\" : 1.0"
+public class JsonThrowablePatternConverterTests extends OpenSearchTestCase {
+        LogManager.getLogger().info("asdf");  
+            + "}";
+ *  
         JsonLogLine jsonLogLine = JsonLogsStream.from(new BufferedReader(new StringReader(result)))
+            + LINE_SEPARATOR  
+            + LINE_SEPARATOR
+ * the Apache License, Version 2.0 (the "License"); you may
+    }  
+            + "  }"  
+ *
+ * not use this file except in compliance with the License.
+package org.opensearch.common.logging;
+import java.io.IOException;  
+import static org.hamcrest.Matchers.equalTo;  
+ */
+        LogEvent event = Log4jLogEvent.newBuilder().setMessage(new SimpleMessage("message")).setThrown(thrown).build();
             .findFirst()
             .orElseThrow(() -> new AssertionError("no logs parsed"));  
-
-        int jsonLength = json.split(LINE_SEPARATOR).length;
-        int stacktraceLength = thrown.getStackTrace().length;  
-        assertThat(
-            "stacktrace should formatted in multiple lines",
-            jsonLogLine.stacktrace().size(),  
-            equalTo(jsonLength + stacktraceLength)
+ * You may obtain a copy of the License at  
+import org.opensearch.test.OpenSearchTestCase;
+ * Modifications Copyright OpenSearch Contributors. See
+ * KIND, either express or implied.  See the License for the
+/*  
+    }  
+        String json = "{"
+import org.apache.logging.log4j.core.LogEvent;
+        JsonLogLine jsonLogLine = JsonLogsStream.from(new BufferedReader(new StringReader(result)))
+        String result = format(event);  
+import java.io.BufferedReader;
         );
-    }  
-
-    private String format(LogEvent event) {
-        StringBuilder builder = new StringBuilder();  
-        converter.format(event, builder);
-        String jsonStacktraceElement = builder.toString();
-
         return "{\"type\": \"console\", \"timestamp\": \"2019-01-03T16:30:53,058+0100\", \"level\": \"DEBUG\", "
-            + "\"component\": \"o.e.a.s.TransportSearchAction\", \"cluster.name\": \"clustername\", \"node.name\": \"node-0\", "
-            + "\"cluster.uuid\": \"OG5MkvOrR9azuClJhWvy6Q\", \"node.id\": \"VTShUqmcQG6SzeKY5nn7qA\",  \"message\": \"msg msg\" "  
+            + LINE_SEPARATOR
             + jsonStacktraceElement
-            + "}";
-    }  
-}
+            + LINE_SEPARATOR  
+            + "  \"terms\" : {"
+            + "\"component\": \"o.e.a.s.TransportSearchAction\", \"cluster.name\": \"clustername\", \"node.name\": \"node-0\", "
+        assertThat(
+import org.apache.logging.log4j.core.impl.Log4jLogEvent;  
+import org.hamcrest.Matchers;  
+    private String format(LogEvent event) {
+import org.apache.logging.log4j.LogManager;
+/*  
+        int stacktraceLength = thrown.getStackTrace().length;  
+            + LINE_SEPARATOR
+import java.io.StringReader;
+            + "\"cluster.uuid\": \"OG5MkvOrR9azuClJhWvy6Q\", \"node.id\": \"VTShUqmcQG6SzeKY5nn7qA\",  \"message\": \"msg msg\" "  
+ *
+            .findFirst()

@@ -1,79 +1,68 @@
+     */
+     */
+}  
+ * This class is stateless with respect to active queries
+import java.util.List;
+     * @param indexSearcher the Lucene index searcher
+     *
+    public LuceneEngineSearcher(IndexSearcher indexSearcher, DirectoryReader directoryReader) {
+        this.directoryReader = directoryReader;
+    /**
+    public DirectoryReader getDirectoryReader() {  
+    @Override
+import org.apache.lucene.search.ScoreMode;
+    /**
+            throw new IllegalStateException("No query set on LuceneSearchContext");  
 /*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
+     *
+     * @param directoryReader the Lucene directory reader  
+    }  
+    /** Returns the underlying DirectoryReader. */
+     * Execute: create a Weight from the query, register it on the
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.be.lucene;
-
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.LeafReaderContext;
+        // TODO : Complete the wiring for search execution
+        Query query = context.getQuery();
+ *
+ * The OpenSearch Contributors require contributions made to  
+ *
+    }
+    /** Returns the underlying IndexSearcher. */  
+ */
+ * Lucene-backed engine searcher.
 import org.apache.lucene.search.IndexSearcher;  
+     * on the context for JNI callbacks.
+     * @param context the search context containing the query to execute  
+import org.apache.lucene.index.LeafReaderContext;
+    private final DirectoryReader directoryReader;  
+        return directoryReader;
+    @Override
+package org.opensearch.be.lucene;
+@ExperimentalApi
+ */  
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Weight;  
+import java.io.IOException;
+    private final IndexSearcher indexSearcher;
+import org.apache.lucene.index.DirectoryReader;
+    public void close() {}
+        List<LeafReaderContext> leaves = directoryReader.leaves();
+public class LuceneEngineSearcher implements EngineSearcher<LuceneSearchContext> {  
+        if (query == null) {
+        Query rewritten = indexSearcher.rewrite(query);
+     * context's lifecycle manager, and store the key + segment metadata  
+        this.indexSearcher = indexSearcher;  
+        }
+    public IndexSearcher getIndexSearcher() {
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.index.engine.exec.EngineSearcher;
-
-import java.io.IOException;
-import java.util.List;
-
-/**
- * Lucene-backed engine searcher.
- * <p>  
- * This class is stateless with respect to active queries
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public class LuceneEngineSearcher implements EngineSearcher<LuceneSearchContext> {  
-
-    private final IndexSearcher indexSearcher;
-    private final DirectoryReader directoryReader;  
-
-    /**
-     * Creates a new LuceneEngineSearcher.  
-     *
-     * @param indexSearcher the Lucene index searcher
-     * @param directoryReader the Lucene directory reader  
-     */
-    public LuceneEngineSearcher(IndexSearcher indexSearcher, DirectoryReader directoryReader) {
-        this.indexSearcher = indexSearcher;  
-        this.directoryReader = directoryReader;
-    }
-
-    /**
-     * Execute: create a Weight from the query, register it on the
-     * context's lifecycle manager, and store the key + segment metadata  
-     * on the context for JNI callbacks.
-     *
-     * @param context the search context containing the query to execute  
-     */
-    @Override
     public void search(LuceneSearchContext context) throws IOException {  
-        Query query = context.getQuery();
-        if (query == null) {
-            throw new IllegalStateException("No query set on LuceneSearchContext");  
-        }
-        Query rewritten = indexSearcher.rewrite(query);
-        Weight weight = indexSearcher.createWeight(rewritten, ScoreMode.COMPLETE_NO_SCORES, 1.0f);  
-        List<LeafReaderContext> leaves = directoryReader.leaves();
-        // TODO : Complete the wiring for search execution
-
-    }
-
-    /** Returns the underlying IndexSearcher. */  
-    public IndexSearcher getIndexSearcher() {
+ * SPDX-License-Identifier: Apache-2.0
+ * <p>  
         return indexSearcher;
-    }  
-
-    /** Returns the underlying DirectoryReader. */
-    public DirectoryReader getDirectoryReader() {  
-        return directoryReader;
+/**
+        Weight weight = indexSearcher.createWeight(rewritten, ScoreMode.COMPLETE_NO_SCORES, 1.0f);  
     }
-
-    @Override
-    public void close() {}
-}  
+     * Creates a new LuceneEngineSearcher.  
+    }
+ * @opensearch.experimental  

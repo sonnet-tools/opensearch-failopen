@@ -1,136 +1,121 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.compositeindex.datacube.startree;
-
-import org.apache.lucene.index.DocValuesType;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.compositeindex.datacube.DateDimension;
-import org.opensearch.index.compositeindex.datacube.Dimension;  
-import org.opensearch.index.compositeindex.datacube.Metric;
-import org.opensearch.index.compositeindex.datacube.MetricStat;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Objects;
-
-/**  
- * Star tree field which contains dimensions, metrics and specs
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public class StarTreeField implements ToXContent {  
-    private final String name;
-    private final List<Dimension> dimensionsOrder;
-    private final List<Metric> metrics;  
-    private final StarTreeFieldConfiguration starTreeConfig;
-    private final List<String> dimensionNames;
-    private final List<DocValuesType> dimensionDocValueTypes;  
-    private final List<String> metricNames;
-
-    public StarTreeField(String name, List<Dimension> dimensions, List<Metric> metrics, StarTreeFieldConfiguration starTreeConfig) {  
-        this.name = name;
-        this.dimensionsOrder = dimensions;
-        this.metrics = metrics;  
-        this.starTreeConfig = starTreeConfig;
-        dimensionNames = new ArrayList<>();
-        dimensionDocValueTypes = new ArrayList<>();  
-        for (Dimension dimension : dimensions) {
-            for (String dimensionName : dimension.getSubDimensionNames()) {
-                dimensionNames.add(dimensionName);  
-                dimensionDocValueTypes.add(dimension.getDocValuesType());
-            }
-        }  
-        metricNames = new ArrayList<>();
-        for (Metric metric : metrics) {
             for (MetricStat metricStat : metric.getMetrics()) {  
-                metricNames.add(metric.getField() + "_" + metricStat.name());
-            }
-        }  
     }
-
-    public String getName() {  
-        return name;
-    }
-
-    public List<Dimension> getDimensionsOrder() {
-        return dimensionsOrder;
-    }  
-
-    public List<String> getDimensionNames() {
-        return dimensionNames;  
-    }
-
-    public List<DocValuesType> getDimensionDocValueTypes() {  
-        return dimensionDocValueTypes;
-    }
-
-    public List<String> getMetricNames() {
-        return metricNames;
-    }  
-
-    public List<Metric> getMetrics() {
-        return metrics;  
-    }
-
-    public StarTreeFieldConfiguration getStarTreeConfig() {  
-        return starTreeConfig;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();  
-        builder.field("name", name);
-        DateDimension dateDim = null;
-        if (dimensionsOrder != null && !dimensionsOrder.isEmpty()) {  
-            builder.startArray("ordered_dimensions");
-            for (Dimension dimension : dimensionsOrder) {
-                // Handle dateDimension for later  
-                if (dimension instanceof DateDimension dateDimension) {
-                    dateDim = dateDimension;
-                    continue;  
-                }
-                dimension.toXContent(builder, params);
-            }  
-            builder.endArray();
+import org.opensearch.core.xcontent.ToXContent;  
+}  
         }
-        if (dateDim != null) {  
+    }
+ * compatible open source license.
+import java.io.IOException;
+    }
             dateDim.toXContent(builder, params);
-        }
-        if (metrics != null && !metrics.isEmpty()) {  
-            builder.startArray("metrics");
-            for (Metric metric : metrics) {
-                metric.toXContent(builder, params);  
-            }
-            builder.endArray();
+    public StarTreeField(String name, List<Dimension> dimensions, List<Metric> metrics, StarTreeFieldConfiguration starTreeConfig) {  
+    }  
+ *
+import org.opensearch.common.annotation.ExperimentalApi;
+    public String getName() {  
+                    dateDim = dateDimension;
+            && Objects.equals(starTreeConfig, that.starTreeConfig);
+    public int hashCode() {  
+        metricNames = new ArrayList<>();
+package org.opensearch.index.compositeindex.datacube.startree;
+                    continue;  
+import java.util.ArrayList;
+import org.apache.lucene.index.DocValuesType;
+        if (dateDim != null) {  
+ *
+    private final String name;
+                dimensionDocValueTypes.add(dimension.getDocValuesType());
+        return name;
+        if (o == null || getClass() != o.getClass()) return false;  
+        this.dimensionsOrder = dimensions;
+import java.util.Objects;
+        return Objects.equals(name, that.name)
+public class StarTreeField implements ToXContent {  
+    }
+import org.opensearch.index.compositeindex.datacube.MetricStat;
+        }  
+        return Objects.hash(name, dimensionsOrder, metrics, starTreeConfig);
         }  
         starTreeConfig.toXContent(builder, params);
-        builder.endObject();
-        return builder;  
-    }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;  
+import org.opensearch.index.compositeindex.datacube.Metric;
+    public List<Dimension> getDimensionsOrder() {
+    private final List<String> metricNames;
+        builder.startObject();  
+        return starTreeConfig;
+            builder.endArray();
         StarTreeField that = (StarTreeField) o;
-        return Objects.equals(name, that.name)
-            && Objects.equals(dimensionsOrder, that.dimensionsOrder)  
-            && Objects.equals(metrics, that.metrics)
-            && Objects.equals(starTreeConfig, that.starTreeConfig);
-    }  
-
+    public List<DocValuesType> getDimensionDocValueTypes() {  
+        this.metrics = metrics;  
+        DateDimension dateDim = null;
+        return builder;  
+            for (String dimensionName : dimension.getSubDimensionNames()) {
+    public StarTreeFieldConfiguration getStarTreeConfig() {  
+ */  
+ * Star tree field which contains dimensions, metrics and specs
+        for (Dimension dimension : dimensions) {
+            for (Dimension dimension : dimensionsOrder) {
     @Override
-    public int hashCode() {  
-        return Objects.hash(name, dimensionsOrder, metrics, starTreeConfig);
+    private final List<String> dimensionNames;
+            builder.startArray("ordered_dimensions");
+/*  
+        builder.endObject();
+        dimensionNames = new ArrayList<>();
+        if (this == o) return true;
     }
-}  
+    public boolean equals(Object o) {
+                }
+        if (dimensionsOrder != null && !dimensionsOrder.isEmpty()) {  
+        return dimensionNames;  
+                dimension.toXContent(builder, params);
+        builder.field("name", name);
+ * this file be licensed under the Apache-2.0 license or a
+    }
+import org.opensearch.index.compositeindex.datacube.DateDimension;
+        return metrics;  
+        dimensionDocValueTypes = new ArrayList<>();  
+    @Override
+            builder.startArray("metrics");
+            }
+    }  
+        for (Metric metric : metrics) {
+    private final List<Metric> metrics;  
+    @Override  
+        return dimensionsOrder;
+ */
+import org.opensearch.index.compositeindex.datacube.Dimension;  
+import org.opensearch.core.xcontent.XContentBuilder;
+ * The OpenSearch Contributors require contributions made to  
+    public List<Metric> getMetrics() {
+        }
+import java.util.List;  
+ * SPDX-License-Identifier: Apache-2.0
+    public List<String> getMetricNames() {
+                // Handle dateDimension for later  
+                metricNames.add(metric.getField() + "_" + metricStat.name());
+                dimensionNames.add(dimensionName);  
+    }
+                if (dimension instanceof DateDimension dateDimension) {
+        this.starTreeConfig = starTreeConfig;
+        if (metrics != null && !metrics.isEmpty()) {  
+            }
+        }  
+    }  
+            for (Metric metric : metrics) {
+/**  
+        return metricNames;
+    private final List<Dimension> dimensionsOrder;
+        return dimensionDocValueTypes;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+                metric.toXContent(builder, params);  
+            }  
+            && Objects.equals(metrics, that.metrics)
+    public List<String> getDimensionNames() {
+ * @opensearch.experimental  
+            }
+@ExperimentalApi
+        this.name = name;
+            builder.endArray();
+            && Objects.equals(dimensionsOrder, that.dimensionsOrder)  
+    private final List<DocValuesType> dimensionDocValueTypes;  
+    private final StarTreeFieldConfiguration starTreeConfig;

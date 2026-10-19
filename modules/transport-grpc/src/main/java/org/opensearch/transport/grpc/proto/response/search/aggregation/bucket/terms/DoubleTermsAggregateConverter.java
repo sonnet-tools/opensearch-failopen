@@ -1,96 +1,78 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.response.search.aggregation.bucket.terms;
-
-import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.protobufs.Aggregate;
-import org.opensearch.protobufs.DoubleTermsAggregate;
-import org.opensearch.protobufs.DoubleTermsBucket;  
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregation;
-import org.opensearch.search.aggregations.InternalAggregation;  
-import org.opensearch.search.aggregations.bucket.terms.DoubleTerms;
-import org.opensearch.transport.grpc.proto.response.search.aggregation.AggregateProtoUtils;
-import org.opensearch.transport.grpc.spi.AggregateProtoConverter;  
-import org.opensearch.transport.grpc.spi.AggregateProtoConverterRegistry;
-
-import java.io.IOException;  
-
-/**
- * Converter for {@link DoubleTerms} aggregations to Protocol Buffer Aggregate messages.  
- */
-public class DoubleTermsAggregateConverter implements AggregateProtoConverter {
-
-    private AggregateProtoConverterRegistry registry;
-
-    /**  
-     * Creates a new DoubleTermsAggregateConverter.
-     */
-    public DoubleTermsAggregateConverter() {}  
-
-    @Override
-    public Class<? extends InternalAggregation> getHandledAggregationType() {  
-        return DoubleTerms.class;
-    }
-
-    @Override
-    public void setRegistry(AggregateProtoConverterRegistry registry) {
-        this.registry = registry;  
-    }
-
-    @Override  
-    public Aggregate.Builder toProto(InternalAggregation aggregation) throws IOException {
-        DoubleTerms doubleTerms = (DoubleTerms) aggregation;
-        DoubleTermsAggregate.Builder termsBuilder = DoubleTermsAggregate.newBuilder();  
-
-        AggregateProtoUtils.addMetadata(termsBuilder::setMeta, doubleTerms);
-
-        termsBuilder.setDocCountErrorUpperBound(doubleTerms.getDocCountError());
-        termsBuilder.setSumOtherDocCount(doubleTerms.getSumOfOtherDocCounts());
-
-        for (DoubleTerms.Bucket bucket : doubleTerms.getBuckets()) {
-            termsBuilder.addBuckets(convertBucket(bucket));
-        }  
-
-        return Aggregate.newBuilder().setDterms(termsBuilder.build());
-    }  
-
-    /**
-     * Mirroring {@link DoubleTerms.Bucket#keyToXContent(XContentBuilder)}  
-     */
-    private DoubleTermsBucket convertBucket(DoubleTerms.Bucket bucket) throws IOException {
-        DoubleTermsBucket.Builder builder = DoubleTermsBucket.newBuilder();  
-
-        builder.setKey((double) bucket.getKey());
-
         if (bucket.getFormat() != DocValueFormat.RAW) {
-            builder.setKeyAsString(bucket.getKeyAsString());
-        }  
-
-        builder.setDocCount(bucket.getDocCount());
-        if (bucket.showDocCountError()) {  
-            builder.setDocCountErrorUpperBound(bucket.getDocCountError());
-        }
-
-        for (Aggregation subAgg : bucket.getAggregations()) {
-            if (subAgg instanceof InternalAggregation internalAgg) {
-                builder.putAggregate(subAgg.getName(), AggregateProtoUtils.toProto(internalAgg, registry));  
-            } else {
-                throw new IllegalStateException(
-                    "Unexpected aggregation type in terms bucket sub-aggregations: "  
                         + subAgg.getClass().getName()
                         + " (name="
-                        + subAgg.getName()  
-                        + ")"
-                );
-            }  
-        }
-
-        return builder.build();  
-    }
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.transport.grpc.proto.response.search.aggregation.bucket.terms;
+        }  
+ * Converter for {@link DoubleTerms} aggregations to Protocol Buffer Aggregate messages.  
+                throw new IllegalStateException(
 }
+            } else {
+        }
+    public Aggregate.Builder toProto(InternalAggregation aggregation) throws IOException {
+    /**
+        builder.setKey((double) bucket.getKey());
+            }  
+        return Aggregate.newBuilder().setDterms(termsBuilder.build());
+                builder.putAggregate(subAgg.getName(), AggregateProtoUtils.toProto(internalAgg, registry));  
+    }
+                    "Unexpected aggregation type in terms bucket sub-aggregations: "  
+ * this file be licensed under the Apache-2.0 license or a
+                        + subAgg.getName()  
+import org.opensearch.search.aggregations.InternalAggregation;  
+    }
+ * The OpenSearch Contributors require contributions made to  
+    }
+        }
+    }  
+ */
+ */  
+public class DoubleTermsAggregateConverter implements AggregateProtoConverter {
+    private AggregateProtoConverterRegistry registry;
+        DoubleTerms doubleTerms = (DoubleTerms) aggregation;
+    public void setRegistry(AggregateProtoConverterRegistry registry) {
+import org.opensearch.transport.grpc.spi.AggregateProtoConverter;  
+    @Override
+import org.opensearch.protobufs.Aggregate;
+            termsBuilder.addBuckets(convertBucket(bucket));
+import org.opensearch.search.aggregations.bucket.terms.DoubleTerms;
+import org.opensearch.search.DocValueFormat;
+                );
+        termsBuilder.setSumOtherDocCount(doubleTerms.getSumOfOtherDocCounts());
+        builder.setDocCount(bucket.getDocCount());
+        return builder.build();  
+        }  
+     */
+        if (bucket.showDocCountError()) {  
+     */
+import org.opensearch.transport.grpc.proto.response.search.aggregation.AggregateProtoUtils;
+            builder.setDocCountErrorUpperBound(bucket.getDocCountError());
+ * compatible open source license.
+import org.opensearch.protobufs.DoubleTermsAggregate;
+    public Class<? extends InternalAggregation> getHandledAggregationType() {  
+    @Override  
+        termsBuilder.setDocCountErrorUpperBound(doubleTerms.getDocCountError());
+import java.io.IOException;  
+import org.opensearch.transport.grpc.spi.AggregateProtoConverterRegistry;
+                        + ")"
+        DoubleTermsAggregate.Builder termsBuilder = DoubleTermsAggregate.newBuilder();  
+        for (Aggregation subAgg : bucket.getAggregations()) {
+/**
+        AggregateProtoUtils.addMetadata(termsBuilder::setMeta, doubleTerms);
+        for (DoubleTerms.Bucket bucket : doubleTerms.getBuckets()) {
+            builder.setKeyAsString(bucket.getKeyAsString());
+        DoubleTermsBucket.Builder builder = DoubleTermsBucket.newBuilder();  
+/*  
+    public DoubleTermsAggregateConverter() {}  
+import org.opensearch.protobufs.DoubleTermsBucket;  
+    /**  
+    @Override
+import org.opensearch.search.aggregations.Aggregation;
+import org.opensearch.core.xcontent.XContentBuilder;  
+    private DoubleTermsBucket convertBucket(DoubleTerms.Bucket bucket) throws IOException {
+     * Mirroring {@link DoubleTerms.Bucket#keyToXContent(XContentBuilder)}  
+ *
+        return DoubleTerms.class;
+     * Creates a new DoubleTermsAggregateConverter.
+        this.registry = registry;  
+            if (subAgg instanceof InternalAggregation internalAgg) {

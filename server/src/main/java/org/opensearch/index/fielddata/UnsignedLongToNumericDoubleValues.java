@@ -1,49 +1,39 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
+ */
+}  
  * The OpenSearch Contributors require contributions made to  
+    private final NumericDocValues values;
+    }  
+ *
+    }  
+/**  
+        return values;
+    public boolean advanceExact(int doc) throws IOException {
+ *  
+    public int advance(int target) throws IOException {  
+import org.apache.lucene.index.NumericDocValues;
+final class UnsignedLongToNumericDoubleValues extends NumericDoubleValues {  
+        return values.advanceExact(doc);  
+import org.opensearch.common.Numbers;
+    @Override
+    public NumericDocValues getLongValues() {
+ * @opensearch.internal
+    @Override
+    }
+    public double doubleValue() throws IOException {  
+    }
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.index.fielddata;
-
-import org.apache.lucene.index.NumericDocValues;
-import org.opensearch.common.Numbers;
-
-import java.io.IOException;
-
-/**  
- * {@link NumericDoubleValues} instance that wraps a {@link NumericDocValues}
- * and converts the unsigned long to double using {@link Numbers#unsignedLongToDouble(long)}.
- *  
- * @opensearch.internal
- */
-final class UnsignedLongToNumericDoubleValues extends NumericDoubleValues {  
-
-    private final NumericDocValues values;
-
-    UnsignedLongToNumericDoubleValues(NumericDocValues values) {
-        this.values = values;
-    }  
-
-    @Override
-    public double doubleValue() throws IOException {  
-        return Numbers.unsignedLongToDouble(values.longValue());
-    }
-
-    @Override
-    public boolean advanceExact(int doc) throws IOException {
-        return values.advanceExact(doc);  
-    }
-
+ * SPDX-License-Identifier: Apache-2.0
     /** Return the wrapped values. */  
-    public NumericDocValues getLongValues() {
-        return values;
-    }  
-
-    @Override
-    public int advance(int target) throws IOException {  
-        return values.advance(target);
+/*  
+    UnsignedLongToNumericDoubleValues(NumericDocValues values) {
     }
-}  
+        this.values = values;
+import java.io.IOException;
+    @Override
+ * {@link NumericDoubleValues} instance that wraps a {@link NumericDocValues}
+package org.opensearch.index.fielddata;
+ */  
+        return values.advance(target);
+        return Numbers.unsignedLongToDouble(values.longValue());
+ * and converts the unsigned long to double using {@link Numbers#unsignedLongToDouble(long)}.

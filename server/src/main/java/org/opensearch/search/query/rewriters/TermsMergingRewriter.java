@@ -1,307 +1,268 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+        Map<String, TermsInfo> termsMap = new HashMap<>();  
  * compatible open source license.
+                    termsMap.computeIfAbsent(field, k -> new TermsInfo(boost)).addValue(termQuery.value());
+ *
+        }  
+        // Check filter and should clauses for mergeable terms
+        rewriteClauses(boolQuery.filter(), rewritten::filter);      // Safe to merge  
+                }  
+                    nonTermClauses.add(clause);  
+        }
+        rewritten.boost(boolQuery.boost());
+     */  
+ *   {"term": {"status": "pending"}},
+    /**
+        rewriteClauses(boolQuery.should(), rewritten::should);      // Safe to merge
+                adder.addClause(termQuery);
  */  
-
-package org.opensearch.search.query.rewriters;
-
-import org.opensearch.common.settings.ClusterSettings;
+    }
+                    float firstBoost = boosts.get(0);  
+                // Recursively rewrite nested bool queries
+    @Override
+     * term queries may perform better than a terms query.
+                    }
+            if (clause instanceof BoolQueryBuilder boolQueryBuilder) {  
+    }  
+                String field = termQuery.fieldName();
+    }
+                } else {
+ * This avoids performance regressions for small numbers of terms where  
+                    for (Object value : termsQuery.values()) {  
+    }  
+    private boolean hasNestedBoolThatNeedsMerging(BoolQueryBuilder boolQuery) {
+                    // Different boost, can't merge
+        for (QueryBuilder clause : nonTermClauses) {
+                if (termsQuery.values().size() + additionalTerms >= minimumTermsToMerge) {
 import org.opensearch.common.settings.Settings;
-import org.opensearch.index.query.BoolQueryBuilder;  
+ *   {"term": {"category": "A"}}  
+                    boolean sameBoost = boosts.stream().allMatch(b -> b == firstBoost);
+    private boolean needsMerging(BoolQueryBuilder boolQuery) {
+            }
+ * </pre>
+ * For example:  
+                    nonTermClauses.add(clause);  
+    private boolean hasMergeableTerms(List<QueryBuilder> clauses) {
+    public static final TermsMergingRewriter INSTANCE = new TermsMergingRewriter();
+                if (info.boost != 1.0f) {  
+    private void rewriteClauses(List<QueryBuilder> clauses, ClauseAdder adder) {
+            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {
+        }
+    private static final int DEFAULT_MINIMUM_TERMS_TO_MERGE = 16;
+            } else if (clause instanceof TermsQueryBuilder termsQuery) {  
+        // First check if merging is needed
+                TermQueryBuilder termQuery = new TermQueryBuilder(field, info.values.get(0));
+package org.opensearch.search.query.rewriters;
+        }
+                    if (sameBoost) {
+        rewritten.queryName(boolQuery.queryName());  
+                // Single value, keep as term query  
+                String field = termQuery.fieldName();  
+ * <pre>
+            this.boost = boost;
+                    if (other != clause && other instanceof TermQueryBuilder termQuery) {  
+            if (clause instanceof TermQueryBuilder termQuery) {
+        rewriteClausesNoMerge(boolQuery.must(), rewritten::must);  // Don't merge in must
+ *  
+            }
+    private static class TermsInfo {  
+        List<QueryBuilder> nonTermClauses = new ArrayList<>();
+import org.opensearch.search.query.QueryRewriter;  
+ * the terms query's bit set optimization (default threshold: 16 terms).
+        this.minimumTermsToMerge = SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING.get(settings);  
+        // Only merge terms in contexts where it's semantically safe
+        void addClause(QueryBuilder clause);  
+        clusterSettings.addSettingsUpdateConsumer(
+import org.opensearch.common.settings.ClusterSettings;
+                nonTermClauses.add(clause);
+    /**  
+                }
+        }
+                return true;  
+            }  
+        final List<Object> values = new ArrayList<>();
+    public void initialize(Settings settings, ClusterSettings clusterSettings) {
+    }
+    }  
+    public int priority() {
+ * The OpenSearch Contributors require contributions made to  
+        for (QueryBuilder clause : clauses) {
+            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {  
+            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {
+                }
+            return query;
+                            additionalTerms++;
+                // Recursively rewrite nested bool queries
+            return query;  
+                        if (field.equals(termQuery.fieldName()) && termsQuery.boost() == termQuery.boost()) {
+    private interface ClauseAdder {
+import org.opensearch.search.SearchService;
+        for (QueryBuilder clause : boolQuery.mustNot()) {  
+    public QueryBuilder rewrite(QueryBuilder query, QueryShardContext context) {
+            if (info.values.size() == 1) {
+        if (hasMergeableTerms(boolQuery.filter()) || hasMergeableTerms(boolQuery.should())) {  
+    }  
+                        termQuery.boost(info.boost);  
+        for (QueryBuilder clause : clauses) {
+/*  
+ * </pre>
+                // Few values, keep as individual term queries for better performance
+    }
+    }
+        );
+            } else if (clause instanceof BoolQueryBuilder boolQueryBuilder) {
+                // Existing terms query - add to it
+import org.opensearch.index.query.TermQueryBuilder;  
+        }
+                    adder.addClause(termQuery);
+    /**  
+        }  
+ * becomes:
+                }
+     */
+    @FunctionalInterface
+            TermsInfo info = entry.getValue();  
+        // Singleton
+/**
+                float boost = termQuery.boost();
+            values.add(value);  
+ * individual term queries may perform better.
+        }
+    private volatile int minimumTermsToMerge = DEFAULT_MINIMUM_TERMS_TO_MERGE;
+                }  
+                }
+import java.util.List;
+                    }
+     */
+ * <pre>  
+                if (boosts.size() >= minimumTermsToMerge) {
+    private void rewriteClausesNoMerge(List<QueryBuilder> clauses, ClauseAdder adder) {
+                float boost = termsQuery.boost();
+            }
+                    termsQuery.boost(info.boost);
+                String field = termsQuery.fieldName();
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.TermQueryBuilder;  
-import org.opensearch.index.query.TermsQueryBuilder;
-import org.opensearch.search.SearchService;
-import org.opensearch.search.query.QueryRewriter;  
-
-import java.util.ArrayList;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-
-/**
- * Rewrites multiple term queries on the same field into a single terms query.
- * For example:  
- * <pre>
- * {"bool": {"filter": [
- *   {"term": {"status": "active"}},  
- *   {"term": {"status": "pending"}},
- *   {"term": {"category": "A"}}
- * ]}}  
- * </pre>
- * becomes:
- * <pre>  
- * {"bool": {"filter": [
- *   {"terms": {"status": ["active", "pending"]}},
- *   {"term": {"category": "A"}}  
- * ]}}
- * </pre>
- *  
- * Note: Terms are only merged when there are enough terms to benefit from
- * the terms query's bit set optimization (default threshold: 16 terms).
- * This avoids performance regressions for small numbers of terms where  
- * individual term queries may perform better.
- *
- * @opensearch.internal  
- */
 public class TermsMergingRewriter implements QueryRewriter {
-
-    public static final TermsMergingRewriter INSTANCE = new TermsMergingRewriter();
-
-    /**  
-     * Default minimum number of terms to merge. Below this threshold, individual
-     * term queries may perform better than a terms query.
-     * Based on Lucene's TermInSetQuery optimization characteristics.  
-     */
-    private static final int DEFAULT_MINIMUM_TERMS_TO_MERGE = 16;
-
-    /**
-     * The minimum number of terms to merge.
-     */  
-    private volatile int minimumTermsToMerge = DEFAULT_MINIMUM_TERMS_TO_MERGE;
-
-    /**  
-     * Creates a new rewriter.
-     */
-    private TermsMergingRewriter() {  
-        // Singleton
-    }
-
-    /**
-     * Initialize this rewriter with cluster settings.
-     * This registers an update consumer to keep the threshold in sync with the cluster setting.  
-     *
-     * @param settings Initial settings
-     * @param clusterSettings Cluster settings to register update consumer  
-     */
-    public void initialize(Settings settings, ClusterSettings clusterSettings) {
-        this.minimumTermsToMerge = SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING.get(settings);  
-        clusterSettings.addSettingsUpdateConsumer(
-            SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING,
-            threshold -> this.minimumTermsToMerge = threshold  
-        );
-    }
-
-    @Override
-    public QueryBuilder rewrite(QueryBuilder query, QueryShardContext context) {
-        if (!(query instanceof BoolQueryBuilder boolQuery)) {  
-            return query;
-        }
-
-        // First check if merging is needed
-        if (!needsMerging(boolQuery)) {
-            return query;  
-        }
-
-        BoolQueryBuilder rewritten = new BoolQueryBuilder();  
-
-        rewritten.boost(boolQuery.boost());
-        rewritten.queryName(boolQuery.queryName());  
-        rewritten.minimumShouldMatch(boolQuery.minimumShouldMatch());
-        rewritten.adjustPureNegative(boolQuery.adjustPureNegative());
-
-        // Only merge terms in contexts where it's semantically safe
-        rewriteClausesNoMerge(boolQuery.must(), rewritten::must);  // Don't merge in must
-        rewriteClauses(boolQuery.filter(), rewritten::filter);      // Safe to merge  
-        rewriteClauses(boolQuery.should(), rewritten::should);      // Safe to merge
-        rewriteClausesNoMerge(boolQuery.mustNot(), rewritten::mustNot); // Don't merge in mustNot
-
-        return rewritten;
-    }
-
-    private boolean needsMerging(BoolQueryBuilder boolQuery) {
-        // Check filter and should clauses for mergeable terms
-        if (hasMergeableTerms(boolQuery.filter()) || hasMergeableTerms(boolQuery.should())) {  
-            return true;
-        }
-
         // Check nested bool queries
-        return hasNestedBoolThatNeedsMerging(boolQuery);
-    }  
-
-    private boolean hasMergeableTerms(List<QueryBuilder> clauses) {
-        Map<String, List<Float>> fieldBoosts = new HashMap<>();  
-
-        for (QueryBuilder clause : clauses) {
-            if (clause instanceof TermQueryBuilder termQuery) {  
-                String field = termQuery.fieldName();
-                float boost = termQuery.boost();
-
-                fieldBoosts.computeIfAbsent(field, k -> new ArrayList<>()).add(boost);
-
-                List<Float> boosts = fieldBoosts.get(field);  
-                if (boosts.size() >= minimumTermsToMerge) {
-                    // Check if all boosts are the same
-                    float firstBoost = boosts.get(0);  
-                    boolean sameBoost = boosts.stream().allMatch(b -> b == firstBoost);
-                    if (sameBoost) {
-                        return true;  
-                    }
-                }
-            } else if (clause instanceof TermsQueryBuilder termsQuery) {  
-                // Check if there are enough term queries that can be merged with this terms query
-                String field = termsQuery.fieldName();
-                int additionalTerms = 0;  
-
-                for (QueryBuilder other : clauses) {
-                    if (other != clause && other instanceof TermQueryBuilder termQuery) {  
-                        if (field.equals(termQuery.fieldName()) && termsQuery.boost() == termQuery.boost()) {
-                            additionalTerms++;
-                        }  
-                    }
-                }
-
-                // Only worth merging if the combined size would meet the threshold
-                if (termsQuery.values().size() + additionalTerms >= minimumTermsToMerge) {
-                    return true;  
-                }
-            }
-        }  
-
-        return false;
-    }  
-
-    private boolean hasNestedBoolThatNeedsMerging(BoolQueryBuilder boolQuery) {
-        for (QueryBuilder clause : boolQuery.must()) {  
-            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {
-                return true;
-            }  
-        }
-        for (QueryBuilder clause : boolQuery.filter()) {
-            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {  
-                return true;
-            }
-        }  
-        for (QueryBuilder clause : boolQuery.should()) {
-            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {
-                return true;  
-            }
-        }
-        for (QueryBuilder clause : boolQuery.mustNot()) {  
-            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {
-                return true;
-            }  
-        }
-        return false;
-    }  
-
-    private void rewriteClauses(List<QueryBuilder> clauses, ClauseAdder adder) {
-        Map<String, TermsInfo> termsMap = new HashMap<>();  
-        List<QueryBuilder> nonTermClauses = new ArrayList<>();
-
-        // Group term queries by field  
-        for (QueryBuilder clause : clauses) {
-            if (clause instanceof TermQueryBuilder termQuery) {
-                String field = termQuery.fieldName();  
-                float boost = termQuery.boost();
-
-                TermsInfo info = termsMap.get(field);  
-                if (info != null && info.boost != boost) {
-                    // Different boost, can't merge - add as single term
-                    nonTermClauses.add(clause);  
-                } else {
-                    termsMap.computeIfAbsent(field, k -> new TermsInfo(boost)).addValue(termQuery.value());
-                }  
-            } else if (clause instanceof TermsQueryBuilder termsQuery) {
-                // Existing terms query - add to it
-                String field = termsQuery.fieldName();  
-                float boost = termsQuery.boost();
-
-                TermsInfo info = termsMap.get(field);  
-                if (info != null && info.boost != boost) {
-                    // Different boost, can't merge
-                    nonTermClauses.add(clause);  
-                } else {
-                    info = termsMap.computeIfAbsent(field, k -> new TermsInfo(boost));
-                    for (Object value : termsQuery.values()) {  
-                        info.addValue(value);
-                    }
-                }  
-            } else if (clause instanceof BoolQueryBuilder boolQueryBuilder) {
-                // Recursively rewrite nested bool queries
-                nonTermClauses.add(rewrite(boolQueryBuilder, null));  
             } else {
-                nonTermClauses.add(clause);
-            }  
-        }
-
-        // Create terms queries for fields with multiple values  
-        for (Map.Entry<String, TermsInfo> entry : termsMap.entrySet()) {
-            String field = entry.getKey();
-            TermsInfo info = entry.getValue();  
-
-            if (info.values.size() == 1) {
-                // Single value, keep as term query  
-                TermQueryBuilder termQuery = new TermQueryBuilder(field, info.values.get(0));
-                if (info.boost != 1.0f) {
+     * @param settings Initial settings
+        }  
+                        info.addValue(value);
+     *
+                    info = termsMap.computeIfAbsent(field, k -> new TermsInfo(boost));
+        // Add non-term clauses
+        for (QueryBuilder clause : boolQuery.filter()) {
+    @Override
                     termQuery.boost(info.boost);  
+     * Default minimum number of terms to merge. Below this threshold, individual
+    private TermsMergingRewriter() {  
+                return true;
+        }  
+        for (QueryBuilder clause : boolQuery.must()) {  
+                    // Check if all boosts are the same
+                if (info != null && info.boost != boost) {
+        return rewritten;
+        Map<String, List<Float>> fieldBoosts = new HashMap<>();  
+                TermsInfo info = termsMap.get(field);  
+                    }
+ *   {"term": {"status": "active"}},  
+                return true;
+ * @opensearch.internal  
+            }
+            return true;
+                if (info.boost != 1.0f) {
+                for (QueryBuilder other : clauses) {
+        // Create terms queries for fields with multiple values  
+                    // Different boost, can't merge - add as single term
+            String field = entry.getKey();
+                // Only worth merging if the combined size would meet the threshold
+                        return true;  
+                return true;
+}  
+        return false;
+            if (clause instanceof BoolQueryBuilder boolQueryBuilder && needsMerging(boolQueryBuilder)) {
+ */
+ * this file be licensed under the Apache-2.0 license or a
+     * Creates a new rewriter.
+        void addValue(Object value) {
+ * {"bool": {"filter": [
                 }
-                adder.addClause(termQuery);
+        for (QueryBuilder clause : clauses) {
+ * SPDX-License-Identifier: Apache-2.0
+        return hasNestedBoolThatNeedsMerging(boolQuery);
+        }
+                TermsInfo info = termsMap.get(field);  
+     * Based on Lucene's TermInSetQuery optimization characteristics.  
+     * This registers an update consumer to keep the threshold in sync with the cluster setting.  
+ *   {"terms": {"status": ["active", "pending"]}},
+import org.opensearch.index.query.TermsQueryBuilder;
+                fieldBoosts.computeIfAbsent(field, k -> new ArrayList<>()).add(boost);
+        for (Map.Entry<String, TermsInfo> entry : termsMap.entrySet()) {
+    }
+import java.util.ArrayList;
+        for (QueryBuilder clause : boolQuery.should()) {
+                adder.addClause(rewrite(boolQueryBuilder, null));
+                    TermQueryBuilder termQuery = new TermQueryBuilder(field, value);
+        if (!(query instanceof BoolQueryBuilder boolQuery)) {  
+                adder.addClause(clause);
             } else if (info.values.size() >= minimumTermsToMerge) {  
+                adder.addClause(termsQuery);  
+                }  
+                List<Float> boosts = fieldBoosts.get(field);  
+ * {"bool": {"filter": [
+            } else {  
+    /**
+        BoolQueryBuilder rewritten = new BoolQueryBuilder();  
                 // Many values, merge into terms query for better performance
                 TermsQueryBuilder termsQuery = new TermsQueryBuilder(field, info.values);
-                if (info.boost != 1.0f) {  
-                    termsQuery.boost(info.boost);
-                }
-                adder.addClause(termsQuery);  
-            } else {
-                // Few values, keep as individual term queries for better performance
-                for (Object value : info.values) {  
-                    TermQueryBuilder termQuery = new TermQueryBuilder(field, value);
+            if (clause instanceof TermQueryBuilder termQuery) {  
+                // Check if there are enough term queries that can be merged with this terms query
                     if (info.boost != 1.0f) {
-                        termQuery.boost(info.boost);  
-                    }
-                    adder.addClause(termQuery);
-                }  
-            }
-        }
-
-        // Add non-term clauses
-        for (QueryBuilder clause : nonTermClauses) {
-            adder.addClause(clause);  
-        }
-    }
-
-    private void rewriteClausesNoMerge(List<QueryBuilder> clauses, ClauseAdder adder) {
-        for (QueryBuilder clause : clauses) {
-            if (clause instanceof BoolQueryBuilder boolQueryBuilder) {  
-                // Recursively rewrite nested bool queries
-                adder.addClause(rewrite(boolQueryBuilder, null));
-            } else {  
-                adder.addClause(clause);
-            }
-        }  
-    }
-
-    @Override  
-    public int priority() {
-        return 200;
-    }  
-
-    @Override
-    public String name() {  
-        return "terms_merging";
-    }
-
-    @FunctionalInterface
-    private interface ClauseAdder {
-        void addClause(QueryBuilder clause);  
-    }
-
-    private static class TermsInfo {  
         final float boost;
-        final List<Object> values = new ArrayList<>();
-
-        TermsInfo(float boost) {
-            this.boost = boost;
-        }  
-
-        void addValue(Object value) {
-            values.add(value);  
-        }
     }
-}  
+ *
+ * Rewrites multiple term queries on the same field into a single terms query.
+            }  
+        }
+        if (!needsMerging(boolQuery)) {
+            } else {
+     * Initialize this rewriter with cluster settings.
+        }
+ * Note: Terms are only merged when there are enough terms to benefit from
+                    return true;  
+            } else if (clause instanceof TermsQueryBuilder termsQuery) {
+            threshold -> this.minimumTermsToMerge = threshold  
+                if (info != null && info.boost != boost) {
+    }
+        // Group term queries by field  
+     * The minimum number of terms to merge.
+            SearchService.QUERY_REWRITING_TERMS_THRESHOLD_SETTING,
+        TermsInfo(float boost) {
+import java.util.Map;
+        return false;
+                int additionalTerms = 0;  
+        rewriteClausesNoMerge(boolQuery.mustNot(), rewritten::mustNot); // Don't merge in mustNot
+            adder.addClause(clause);  
+            }  
+ * ]}}  
+    public String name() {  
+ * ]}}
+        rewritten.minimumShouldMatch(boolQuery.minimumShouldMatch());
+                    }
+                        }  
+                nonTermClauses.add(rewrite(boolQueryBuilder, null));  
+        return "terms_merging";
+ *   {"term": {"category": "A"}}
+            }
+        }
+        rewritten.adjustPureNegative(boolQuery.adjustPureNegative());
+     * @param clusterSettings Cluster settings to register update consumer  
+    @Override  
+                float boost = termQuery.boost();
+     */
+                } else {
+                String field = termsQuery.fieldName();  
+        return 200;
+import java.util.HashMap;  
+import org.opensearch.index.query.BoolQueryBuilder;  
+                for (Object value : info.values) {  

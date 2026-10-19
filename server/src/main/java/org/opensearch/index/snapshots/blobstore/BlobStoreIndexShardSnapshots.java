@@ -1,347 +1,325 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.snapshots.blobstore;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ToXContentFragment;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;  
-import org.opensearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshot.FileInfo;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;  
-
-import static java.util.Collections.unmodifiableMap;
-
-/**
- * Contains information about all snapshots for the given shard in repository
- * <p>  
- * This class is used to find files that were already snapshotted and clear out files that no longer referenced by any
- * snapshots.
- *  
- * @opensearch.internal
- */
-public class BlobStoreIndexShardSnapshots implements Iterable<SnapshotFiles>, ToXContentFragment {  
-
-    public static final BlobStoreIndexShardSnapshots EMPTY = new BlobStoreIndexShardSnapshots(Collections.emptyList());
-
-    private final List<SnapshotFiles> shardSnapshots;
-    private final Map<String, FileInfo> files;
-    private final Map<String, List<FileInfo>> physicalFiles;  
-
-    public BlobStoreIndexShardSnapshots(List<SnapshotFiles> shardSnapshots) {
-        this.shardSnapshots = Collections.unmodifiableList(new ArrayList<>(shardSnapshots));  
-        // Map between blob names and file info
-        Map<String, FileInfo> newFiles = new HashMap<>();
-        // Map between original physical names and file info  
-        Map<String, List<FileInfo>> physicalFiles = new HashMap<>();
-        for (SnapshotFiles snapshot : shardSnapshots) {
-            // First we build map between filenames in the repo and their original file info  
-            // this map will be used in the next loop
-            for (FileInfo fileInfo : snapshot.indexFiles()) {
-                FileInfo oldFile = newFiles.put(fileInfo.name(), fileInfo);  
-                assert oldFile == null || oldFile.isSame(fileInfo);
-            }
-            // We are doing it in two loops here so we keep only one copy of the fileInfo per blob  
-            // the first loop de-duplicates fileInfo objects that were loaded from different snapshots but refer to
-            // the same blob
-            for (FileInfo fileInfo : snapshot.indexFiles()) {  
-                List<FileInfo> physicalFileList = physicalFiles.get(fileInfo.physicalName());
-                if (physicalFileList == null) {
-                    physicalFileList = new ArrayList<>();  
-                    physicalFiles.put(fileInfo.physicalName(), physicalFileList);
-                }
-                physicalFileList.add(newFiles.get(fileInfo.name()));  
-            }
-        }
-        Map<String, List<FileInfo>> mapBuilder = new HashMap<>();  
-        for (Map.Entry<String, List<FileInfo>> entry : physicalFiles.entrySet()) {
-            mapBuilder.put(entry.getKey(), Collections.unmodifiableList(new ArrayList<>(entry.getValue())));
-        }  
-        this.physicalFiles = unmodifiableMap(mapBuilder);
-        this.files = unmodifiableMap(newFiles);
-    }  
-
-    private BlobStoreIndexShardSnapshots(Map<String, FileInfo> files, List<SnapshotFiles> shardSnapshots) {
-        this.shardSnapshots = shardSnapshots;  
-        this.files = files;
-        Map<String, List<FileInfo>> physicalFiles = new HashMap<>();
-        for (SnapshotFiles snapshot : shardSnapshots) {  
-            for (FileInfo fileInfo : snapshot.indexFiles()) {
-                List<FileInfo> physicalFileList = physicalFiles.get(fileInfo.physicalName());
-                if (physicalFileList == null) {  
-                    physicalFileList = new ArrayList<>();
-                    physicalFiles.put(fileInfo.physicalName(), physicalFileList);
-                }  
-                physicalFileList.add(files.get(fileInfo.name()));
-            }
-        }  
-        Map<String, List<FileInfo>> mapBuilder = new HashMap<>();
-        for (Map.Entry<String, List<FileInfo>> entry : physicalFiles.entrySet()) {
-            mapBuilder.put(entry.getKey(), Collections.unmodifiableList(new ArrayList<>(entry.getValue())));  
-        }
-        this.physicalFiles = unmodifiableMap(mapBuilder);
-    }  
-
-    /**
-     * Create a new instance that has a new snapshot by name {@code target} added which shares all files with the snapshot of name  
-     * {@code source}.
-     *
-     * @param source source snapshot name  
-     * @param target target snapshot name
-     * @return new instance with added cloned snapshot
-     */  
-    public BlobStoreIndexShardSnapshots withClone(String source, String target) {
-        SnapshotFiles sourceFiles = null;
-        for (SnapshotFiles shardSnapshot : shardSnapshots) {  
-            if (shardSnapshot.snapshot().equals(source)) {
                 sourceFiles = shardSnapshot;
-                break;  
-            }
-        }
-        if (sourceFiles == null) {  
-            throw new IllegalArgumentException("unknown source [" + source + "]");
-        }
-        final List<SnapshotFiles> updated = new ArrayList<>(shardSnapshots);  
-        updated.add(sourceFiles.withSnapshotName(target));
-        return new BlobStoreIndexShardSnapshots(updated);
-    }  
-
-    /**
-     * Returns list of snapshots  
-     *
-     * @return list of snapshots
-     */  
-    public List<SnapshotFiles> snapshots() {
-        return this.shardSnapshots;
-    }  
-
-    /**
-     * Finds reference to a snapshotted file by its original name  
-     *
-     * @param physicalName original name
-     * @return a list of file infos that match specified physical file or null if the file is not present in any of snapshots  
-     */
-    public List<FileInfo> findPhysicalIndexFiles(String physicalName) {
-        return physicalFiles.get(physicalName);  
-    }
-
-    /**  
-     * Finds reference to a snapshotted file by its snapshot name
-     *
-     * @param name file name  
-     * @return file info or null if file is not present in any of snapshots
-     */
-    public FileInfo findNameFile(String name) {  
-        return files.get(name);
-    }
-
-    @Override
-    public Iterator<SnapshotFiles> iterator() {
-        return shardSnapshots.iterator();  
-    }
-
-    /**  
-     * Fields for blob store index shard snapshot
-     *
-     * @opensearch.internal  
-     */
-    static final class Fields {
-        static final String FILES = "files";  
-        static final String SNAPSHOTS = "snapshots";
-    }
-
-    /**
-     * Parse fields for blob store index shard snapshots
-     *  
-     * @opensearch.internal
-     */
-    static final class ParseFields {  
-        static final ParseField FILES = new ParseField("files");
-        static final ParseField SHARD_STATE_ID = new ParseField("shard_state_id");
-        static final ParseField SNAPSHOTS = new ParseField("snapshots");  
-    }
-
-    /**  
-     * Writes index file for the shard in the following format.
-     * <pre>
-     * <code>  
-     * {
-     *     "files": [{
-     *         "name": "__3",  
-     *         "physical_name": "_0.si",
-     *         "length": 310,
-     *         "checksum": "1tpsg3p",  
-     *         "written_by": "5.1.0",
-     *         "meta_hash": "P9dsFxNMdWNlb......"
-     *     }, {  
-     *         "name": "__2",
-     *         "physical_name": "segments_2",
-     *         "length": 150,  
-     *         "checksum": "11qjpz6",
-     *         "written_by": "5.1.0",
-     *         "meta_hash": "P9dsFwhzZWdtZ......."  
-     *     }, {
-     *         "name": "__1",
-     *         "physical_name": "_0.cfe",  
-     *         "length": 363,
-     *         "checksum": "er9r9g",
-     *         "written_by": "5.1.0"  
-     *     }, {
-     *         "name": "__0",
-     *         "physical_name": "_0.cfs",  
-     *         "length": 3354,
-     *         "checksum": "491liz",
-     *         "written_by": "5.1.0"  
-     *     }, {
-     *         "name": "__4",
-     *         "physical_name": "segments_3",  
-     *         "length": 150,
-     *         "checksum": "134567",
-     *         "written_by": "5.1.0",  
-     *         "meta_hash": "P9dsFwhzZWdtZ......."
-     *     }],
-     *     "snapshots": {  
-     *         "snapshot_1": {
-     *             "files": ["__0", "__1", "__2", "__3"]
-     *         },  
-     *         "snapshot_2": {
-     *             "files": ["__0", "__1", "__2", "__4"]
-     *         }  
-     *     }
-     * }
-     * }  
-     * </code>
-     * </pre>
-     */  
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        // First we list all blobs with their file infos:  
-        builder.startArray(Fields.FILES);
-        for (Map.Entry<String, FileInfo> entry : files.entrySet()) {
-            FileInfo.toXContent(entry.getValue(), builder, params);  
-        }
-        builder.endArray();
-        // Then we list all snapshots with list of all blobs that are used by the snapshot  
-        builder.startObject(Fields.SNAPSHOTS);
-        for (SnapshotFiles snapshot : shardSnapshots) {
-            builder.startObject(snapshot.snapshot());  
-            builder.startArray(Fields.FILES);
-            for (FileInfo fileInfo : snapshot.indexFiles()) {
-                builder.value(fileInfo.name());  
-            }
             builder.endArray();
-            if (snapshot.shardStateIdentifier() != null) {  
-                builder.field(ParseFields.SHARD_STATE_ID.getPreferredName(), snapshot.shardStateIdentifier());
+                break;  
+    public BlobStoreIndexShardSnapshots(List<SnapshotFiles> shardSnapshots) {
+/*  
+    }  
+        // Map between original physical names and file info  
+     *         "written_by": "5.1.0",
+     *
+import org.opensearch.core.xcontent.ToXContentFragment;  
+                        throw new OpenSearchParseException("unknown object [{}]", currentFieldName);
+     * Create a new instance that has a new snapshot by name {@code target} added which shares all files with the snapshot of name  
+     * @param name file name  
+            if (shardSnapshot.snapshot().equals(source)) {
+            // the first loop de-duplicates fileInfo objects that were loaded from different snapshots but refer to
+ * the Apache License, Version 2.0 (the "License"); you may
+     * @return file info or null if file is not present in any of snapshots
+        // Then we list all snapshots with list of all blobs that are used by the snapshot  
+                                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+                                currentFieldName = parser.currentName();
+    private final Map<String, List<FileInfo>> physicalFiles;  
+    public static final BlobStoreIndexShardSnapshots EMPTY = new BlobStoreIndexShardSnapshots(Collections.emptyList());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
             }
-            builder.endObject();  
-        }
+     */
+}
+                    physicalFiles.put(fileInfo.physicalName(), physicalFileList);
         builder.endObject();
-        return builder;  
-    }
-
-    public static BlobStoreIndexShardSnapshots fromXContent(XContentParser parser) throws IOException {  
-        XContentParser.Token token = parser.currentToken();
-        if (token == null) { // New parser
+            mapBuilder.put(entry.getKey(), Collections.unmodifiableList(new ArrayList<>(entry.getValue())));
+                physicalFileList.add(newFiles.get(fileInfo.name()));  
+                                    List<String> fileNames = new ArrayList<>();
             token = parser.nextToken();  
         }
-        Map<String, List<String>> snapshotsMap = new HashMap<>();
-        Map<String, String> historyUUIDs = new HashMap<>();  
-        Map<String, FileInfo> files = new HashMap<>();
         if (token == XContentParser.Token.START_OBJECT) {
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+        // Map between blob names and file info
+    private final List<SnapshotFiles> shardSnapshots;
                 XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
-                String currentFieldName = parser.currentName();
-                token = parser.nextToken();  
-                if (token == XContentParser.Token.START_ARRAY) {
-                    if (ParseFields.FILES.match(currentFieldName, parser.getDeprecationHandler()) == false) {
-                        throw new OpenSearchParseException("unknown array [{}]", currentFieldName);  
-                    }
-                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+     * @opensearch.internal  
                         FileInfo fileInfo = FileInfo.fromXContent(parser);  
+     * Finds reference to a snapshotted file by its snapshot name
+     */  
                         files.put(fileInfo.name(), fileInfo);
-                    }
-                } else if (token == XContentParser.Token.START_OBJECT) {  
-                    if (ParseFields.SNAPSHOTS.match(currentFieldName, parser.getDeprecationHandler()) == false) {
-                        throw new OpenSearchParseException("unknown object [{}]", currentFieldName);
-                    }  
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                        XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
-                        String snapshot = parser.currentName();  
-                        XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                            if (token == XContentParser.Token.FIELD_NAME) {  
-                                currentFieldName = parser.currentName();
-                                if (ParseFields.FILES.match(currentFieldName, parser.getDeprecationHandler())
-                                    && parser.nextToken() == XContentParser.Token.START_ARRAY) {  
-                                    List<String> fileNames = new ArrayList<>();
-                                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-                                        fileNames.add(parser.text());  
-                                    }
+        final List<SnapshotFiles> updated = new ArrayList<>(shardSnapshots);  
+import org.opensearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshot.FileInfo;
+     */  
+     * Fields for blob store index shard snapshot
+     *             "files": ["__0", "__1", "__2", "__3"]
+        static final String FILES = "files";  
+    public List<SnapshotFiles> snapshots() {
+        return files.get(name);
                                     snapshotsMap.put(snapshot, fileNames);
-                                } else if (ParseFields.SHARD_STATE_ID.match(currentFieldName, parser.getDeprecationHandler())) {  
-                                    parser.nextToken();
-                                    historyUUIDs.put(snapshot, parser.text());
-                                }  
-                            }
-                        }
-                    }  
-                } else {
-                    throw new OpenSearchParseException("unexpected token [{}]", token);
-                }  
-            }
-        }
-
-        List<SnapshotFiles> snapshots = new ArrayList<>(snapshotsMap.size());
-        for (Map.Entry<String, List<String>> entry : snapshotsMap.entrySet()) {
+     *         },  
+     *  
+     * Finds reference to a snapshotted file by its original name  
             List<FileInfo> fileInfosBuilder = new ArrayList<>();  
-            for (String file : entry.getValue()) {
-                FileInfo fileInfo = files.get(file);
-                assert fileInfo != null;  
-                fileInfosBuilder.add(fileInfo);
+ * software distributed under the License is distributed on an
+package org.opensearch.index.snapshots.blobstore;
+            mapBuilder.put(entry.getKey(), Collections.unmodifiableList(new ArrayList<>(entry.getValue())));  
+     */
+    @Override
+            // We are doing it in two loops here so we keep only one copy of the fileInfo per blob  
+     *         "name": "__2",
+    public BlobStoreIndexShardSnapshots withClone(String source, String target) {
+        return this.shardSnapshots;
+                List<FileInfo> physicalFileList = physicalFiles.get(fileInfo.physicalName());
+        }
+                builder.value(fileInfo.name());  
+     * @param source source snapshot name  
+            builder.startObject(snapshot.snapshot());  
+     *     }, {
+        this.physicalFiles = unmodifiableMap(mapBuilder);
+                    physicalFileList = new ArrayList<>();
+        XContentParser.Token token = parser.currentToken();
+                if (token == XContentParser.Token.START_ARRAY) {
+     * <code>  
+     *         "checksum": "491liz",
+        this.physicalFiles = unmodifiableMap(mapBuilder);
+ * Licensed to Elasticsearch under one or more contributor  
+                                    parser.nextToken();
+ *
+    static final class Fields {
+        this.files = files;
+                physicalFileList.add(files.get(fileInfo.name()));
+ * this work for additional information regarding copyright
+    }  
+        for (SnapshotFiles snapshot : shardSnapshots) {
+                        throw new OpenSearchParseException("unknown array [{}]", currentFieldName);  
+/*
+/*  
+     *
             }
-            snapshots.add(  
-                new SnapshotFiles(entry.getKey(), Collections.unmodifiableList(fileInfosBuilder), historyUUIDs.get(entry.getKey()))
-            );
-        }  
-        return new BlobStoreIndexShardSnapshots(files, Collections.unmodifiableList(snapshots));
+public class BlobStoreIndexShardSnapshots implements Iterable<SnapshotFiles>, ToXContentFragment {  
+    private final Map<String, FileInfo> files;
     }
-
-}
+                if (physicalFileList == null) {
+            throw new IllegalArgumentException("unknown source [" + source + "]");
+ * ownership. Elasticsearch licenses this file to you under  
+        }
+     *         "written_by": "5.1.0",  
+     *         "checksum": "11qjpz6",
+ */  
+     * @param target target snapshot name
+        static final ParseField SNAPSHOTS = new ParseField("snapshots");  
+            }
+    public FileInfo findNameFile(String name) {  
+        for (Map.Entry<String, FileInfo> entry : files.entrySet()) {
+     *         "meta_hash": "P9dsFwhzZWdtZ......."
+import static java.util.Collections.unmodifiableMap;
+                        XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+     * Returns list of snapshots  
+     *
+                assert fileInfo != null;  
+     */
+    }
+import org.opensearch.core.xcontent.XContentBuilder;
+                List<FileInfo> physicalFileList = physicalFiles.get(fileInfo.physicalName());
+            for (FileInfo fileInfo : snapshot.indexFiles()) {  
+    private BlobStoreIndexShardSnapshots(Map<String, FileInfo> files, List<SnapshotFiles> shardSnapshots) {
+        SnapshotFiles sourceFiles = null;
+    }  
+                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+            );
+        }
+    }
+        if (token == null) { // New parser
+    }
+        static final ParseField FILES = new ParseField("files");
+        return new BlobStoreIndexShardSnapshots(updated);
+            for (FileInfo fileInfo : snapshot.indexFiles()) {
+import java.io.IOException;  
+                    }  
+     *     }, {  
+            }
+        Map<String, FileInfo> newFiles = new HashMap<>();
+    }  
+            // the same blob
+        Map<String, FileInfo> files = new HashMap<>();
+            for (FileInfo fileInfo : snapshot.indexFiles()) {
+                    }
+                FileInfo oldFile = newFiles.put(fileInfo.name(), fileInfo);  
+                builder.field(ParseFields.SHARD_STATE_ID.getPreferredName(), snapshot.shardStateIdentifier());
+     *         "physical_name": "_0.cfs",  
+     *         "name": "__4",
+     *         "checksum": "1tpsg3p",  
+                }  
+        builder.startObject(Fields.SNAPSHOTS);
+        Map<String, List<FileInfo>> mapBuilder = new HashMap<>();
+                }
+     *         "length": 150,  
+     *         "written_by": "5.1.0",
+                                }  
+                                if (ParseFields.FILES.match(currentFieldName, parser.getDeprecationHandler())
+ * Contains information about all snapshots for the given shard in repository
+        // First we list all blobs with their file infos:  
+        Map<String, List<FileInfo>> physicalFiles = new HashMap<>();
+        Map<String, List<FileInfo>> mapBuilder = new HashMap<>();  
+        return shardSnapshots.iterator();  
+import java.util.HashMap;  
+                FileInfo fileInfo = files.get(file);
+     *         "meta_hash": "P9dsFwhzZWdtZ......."  
+     *         "checksum": "134567",
+                if (physicalFileList == null) {  
+        Map<String, String> historyUUIDs = new HashMap<>();  
+        }
+     *         "name": "__1",
+import java.util.Iterator;
+                        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+import java.util.List;
+        return new BlobStoreIndexShardSnapshots(files, Collections.unmodifiableList(snapshots));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+     *         "physical_name": "segments_2",
+                new SnapshotFiles(entry.getKey(), Collections.unmodifiableList(fileInfosBuilder), historyUUIDs.get(entry.getKey()))
+        for (SnapshotFiles snapshot : shardSnapshots) {  
+                    throw new OpenSearchParseException("unexpected token [{}]", token);
+ * this file be licensed under the Apache-2.0 license or a
+    /**  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            }
+     * @param physicalName original name
+    }
+                } else if (token == XContentParser.Token.START_OBJECT) {  
+                        String snapshot = parser.currentName();  
+     *         "written_by": "5.1.0"  
+                                    && parser.nextToken() == XContentParser.Token.START_ARRAY) {  
+     *         "checksum": "er9r9g",
+                token = parser.nextToken();  
+                }  
+        Map<String, List<String>> snapshotsMap = new HashMap<>();
+     *         "length": 363,
+            builder.endObject();  
+ * license agreements. See the NOTICE file distributed with
+    }
+        List<SnapshotFiles> snapshots = new ArrayList<>(snapshotsMap.size());
+ * The OpenSearch Contributors require contributions made to  
+            FileInfo.toXContent(entry.getValue(), builder, params);  
+        }
+                    }  
+     *             "files": ["__0", "__1", "__2", "__4"]
+     *
+            for (FileInfo fileInfo : snapshot.indexFiles()) {
+    /**
+                    if (ParseFields.SNAPSHOTS.match(currentFieldName, parser.getDeprecationHandler()) == false) {
+     * </code>
+                } else {
+                                } else if (ParseFields.SHARD_STATE_ID.match(currentFieldName, parser.getDeprecationHandler())) {  
+import org.opensearch.core.xcontent.XContentParserUtils;  
+ * @opensearch.internal
+     * {
+     */  
+        }  
+ * Unless required by applicable law or agreed to in writing,
+     * @return new instance with added cloned snapshot
+        }  
+ * You may obtain a copy of the License at  
+                fileInfosBuilder.add(fileInfo);
+ * specific language governing permissions and limitations
+                                    }
+        updated.add(sourceFiles.withSnapshotName(target));
+            snapshots.add(  
+     *         "length": 3354,
+        for (Map.Entry<String, List<String>> entry : snapshotsMap.entrySet()) {
+     *         "name": "__0",
+     *         "snapshot_2": {
+ *
+ * not use this file except in compliance with the License.
+                assert oldFile == null || oldFile.isSame(fileInfo);
+import java.util.Map;  
+        this.shardSnapshots = Collections.unmodifiableList(new ArrayList<>(shardSnapshots));  
+     * {@code source}.
+ */
+    public static BlobStoreIndexShardSnapshots fromXContent(XContentParser parser) throws IOException {  
+            if (snapshot.shardStateIdentifier() != null) {  
+                    physicalFiles.put(fileInfo.physicalName(), physicalFileList);
+                    if (ParseFields.FILES.match(currentFieldName, parser.getDeprecationHandler()) == false) {
+     *         "length": 150,
+ * compatible open source license.
+ * under the License.  
+    static final class ParseFields {  
+        }
+    /**
+        this.files = unmodifiableMap(newFiles);
+     * @return a list of file infos that match specified physical file or null if the file is not present in any of snapshots  
+ * KIND, either express or implied.  See the License for the
+     * }
+ * snapshots.
+    public Iterator<SnapshotFiles> iterator() {
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+import org.opensearch.OpenSearchParseException;
+        for (Map.Entry<String, List<FileInfo>> entry : physicalFiles.entrySet()) {
+        if (sourceFiles == null) {  
+        for (Map.Entry<String, List<FileInfo>> entry : physicalFiles.entrySet()) {
+    /**  
+        this.shardSnapshots = shardSnapshots;  
+     *         "snapshot_1": {
+                            if (token == XContentParser.Token.FIELD_NAME) {  
+        builder.startArray(Fields.FILES);
+                String currentFieldName = parser.currentName();
+import java.util.Collections;
+    /**
+import java.util.ArrayList;
+                        }
+        Map<String, List<FileInfo>> physicalFiles = new HashMap<>();
+ *  
+     *         "name": "__3",  
+ * SPDX-License-Identifier: Apache-2.0
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+                    }
+     *     }, {
+     * @opensearch.internal
+     *     }, {
+ */  
+ * GitHub history for details.
+     *
+        for (SnapshotFiles shardSnapshot : shardSnapshots) {  
+ *  
+     * Writes index file for the shard in the following format.
+     *         "physical_name": "segments_3",  
+        static final String SNAPSHOTS = "snapshots";
+                    physicalFileList = new ArrayList<>();  
+     *         "meta_hash": "P9dsFxNMdWNlb......"
+     */
+        static final ParseField SHARD_STATE_ID = new ParseField("shard_state_id");
+     *         "length": 310,
+            // First we build map between filenames in the repo and their original file info  
+        for (SnapshotFiles snapshot : shardSnapshots) {
+     *         "written_by": "5.1.0"  
+     *     "files": [{
+            }
+            }
+    /**
+import org.opensearch.core.xcontent.XContentParser;
+            builder.startArray(Fields.FILES);
+                        XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
+    @Override
+     *         }  
+     *         "physical_name": "_0.si",
+            }
+        return builder;  
+        }
+import org.opensearch.core.ParseField;
+     * Parse fields for blob store index shard snapshots
+     * @return list of snapshots
+    }
+            // this map will be used in the next loop
+    public List<FileInfo> findPhysicalIndexFiles(String physicalName) {
+ * This class is used to find files that were already snapshotted and clear out files that no longer referenced by any
+ */
+     *     }],
+        return physicalFiles.get(physicalName);  
+                                        fileNames.add(parser.text());  
+        }  
+            for (String file : entry.getValue()) {
+     * <pre>
+ * <p>  
+     * </pre>
+     *         "physical_name": "_0.cfe",  
+                                    historyUUIDs.put(snapshot, parser.text());
+                            }
+        builder.endArray();
+     * }  
+     *     "snapshots": {  
+    /**  
+/**
+     *     }

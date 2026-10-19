@@ -1,487 +1,416 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.service;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;  
-import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksResponse;
-import org.opensearch.cluster.AckedClusterStateUpdateTask;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.Nullable;  
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
-
-import java.util.Arrays;
-import java.util.HashSet;  
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;  
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
-import static org.hamcrest.Matchers.hasSize;
-import static org.awaitility.Awaitility.await;
-
-@ClusterScope(scope = Scope.TEST, numDataNodes = 0)
-public class ClusterServiceIT extends OpenSearchIntegTestCase {
-
-    public void testAckedUpdateTask() throws Exception {
+                return TimeValue.timeValueSeconds(10);
+            }
         internalCluster().startNode();
-        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);  
-
-        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);
-        final AtomicBoolean ackTimeout = new AtomicBoolean(false);  
-        final AtomicBoolean onFailure = new AtomicBoolean(false);
-        final AtomicBoolean executed = new AtomicBoolean(false);
-        final CountDownLatch latch = new CountDownLatch(1);  
-        final CountDownLatch processedLatch = new CountDownLatch(1);
-        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {
+        assertTrue(controlSources.isEmpty());  
+                    Thread.sleep(50);
+                latch.countDown();
+        // whenever we test for no tasks, we need to wait since this is a live node
+import org.opensearch.action.admin.cluster.tasks.PendingClusterTasksResponse;
+            }
+            @Override
+                return currentState;
+                return currentState;
+                onFailure.set(true);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        internalCluster().startNode();
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                public ClusterState execute(ClusterState currentState) {  
+        assertThat(executed.get(), equalTo(true));
+            @Override
+        pendingClusterTasks = await().until(  
+        assertThat(pendingClusterTasks.get(0).isExecuting(), equalTo(true));
+                }
+            public TimeValue ackTimeout() {
+import org.opensearch.cluster.ClusterStateUpdateTask;
+        assertThat(executed.get(), equalTo(true));
+            });  
+                    fail();  
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+        }  
+        });  
+        assertThat(response.pendingTasks().size(), greaterThanOrEqualTo(5));
+            public void onFailure(String source, Exception e) {  
             @Override  
-            protected Void newResponse(boolean acknowledged) {
-                return null;
+                @Override  
+ *
+ * ownership. Elasticsearch licenses this file to you under  
+        block2.countDown();
+                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);
+        );  
+        internalCluster().startCoordinatingOnlyNode(Settings.EMPTY);  
             }  
-
+                } catch (InterruptedException e) {
+            }
+        assertThat(executed.get(), equalTo(true));
+            }
+import org.opensearch.common.settings.Settings;
+                executed.set(true);
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {}
+                public void onFailure(String source, Exception e) {
+ */  
             @Override
             public boolean mustAck(DiscoveryNode discoveryNode) {  
-                return true;
-            }
-
             @Override
-            public void onAllNodesAcked(@Nullable Exception e) {
-                allNodesAcked.set(true);  
-                latch.countDown();
-            }
-
-            @Override
-            public void onAckTimeout() {
-                ackTimeout.set(true);  
-                latch.countDown();
-            }
-
-            @Override
-            public TimeValue ackTimeout() {
-                return TimeValue.timeValueSeconds(10);  
-            }
-
-            @Override  
-            public TimeValue timeout() {
-                return TimeValue.timeValueSeconds(10);
-            }  
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {  
-                processedLatch.countDown();
-            }
-
-            @Override
-            public ClusterState execute(ClusterState currentState) throws Exception {
-                executed.set(true);  
-                return ClusterState.builder(currentState).build();
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);  
-                onFailure.set(true);
-                latch.countDown();
-            }  
-        });
-
-        ensureGreen();  
-        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));
-
-        assertThat(allNodesAcked.get(), equalTo(true));  
-        assertThat(ackTimeout.get(), equalTo(false));
-        assertThat(executed.get(), equalTo(true));
-        assertThat(onFailure.get(), equalTo(false));  
-
-        assertThat(processedLatch.await(1, TimeUnit.SECONDS), equalTo(true));
-    }  
-
-    public void testAckedUpdateTaskSameClusterState() throws Exception {
-        internalCluster().startNode();  
-        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);
-
-        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);  
-        final AtomicBoolean ackTimeout = new AtomicBoolean(false);
-        final AtomicBoolean onFailure = new AtomicBoolean(false);
-        final AtomicBoolean executed = new AtomicBoolean(false);  
-        final CountDownLatch latch = new CountDownLatch(1);
-        final CountDownLatch processedLatch = new CountDownLatch(1);
-        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {  
-            @Override
-            protected Void newResponse(boolean acknowledged) {
-                return null;  
-            }
-
-            @Override  
-            public void onAllNodesAcked(@Nullable Exception e) {
-                allNodesAcked.set(true);
-                latch.countDown();  
-            }
-
-            @Override  
-            public void onAckTimeout() {
-                ackTimeout.set(true);
-                latch.countDown();  
-            }
-
-            @Override  
-            public TimeValue ackTimeout() {
-                return TimeValue.timeValueSeconds(10);
-            }  
-
-            @Override
-            public TimeValue timeout() {  
-                return TimeValue.timeValueSeconds(10);
-            }
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                processedLatch.countDown();  
-            }
-
-            @Override  
-            public ClusterState execute(ClusterState currentState) throws Exception {
-                executed.set(true);
-                return currentState;  
-            }
-
-            @Override  
-            public void onFailure(String source, Exception e) {
-                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);
-                onFailure.set(true);  
-                latch.countDown();
-            }
-        });  
-
-        ensureGreen();
-        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));  
-
-        assertThat(allNodesAcked.get(), equalTo(true));
-        assertThat(ackTimeout.get(), equalTo(false));  
-        assertThat(executed.get(), equalTo(true));
-        assertThat(onFailure.get(), equalTo(false));
-
-        assertThat(processedLatch.await(1, TimeUnit.SECONDS), equalTo(true));
-    }
-
-    public void testAckedUpdateTaskNoAckExpected() throws Exception {
-        internalCluster().startNode();
-        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);  
-
-        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);
-        final AtomicBoolean ackTimeout = new AtomicBoolean(false);  
-        final AtomicBoolean onFailure = new AtomicBoolean(false);
-        final AtomicBoolean executed = new AtomicBoolean(false);
-        final CountDownLatch latch = new CountDownLatch(1);  
-        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {
-            @Override
-            protected Void newResponse(boolean acknowledged) {  
-                return null;
-            }
-
-            @Override
-            public boolean mustAck(DiscoveryNode discoveryNode) {
-                return false;  
-            }
-
-            @Override  
-            public void onAllNodesAcked(@Nullable Exception e) {
-                allNodesAcked.set(true);
-                latch.countDown();  
-            }
-
-            @Override  
-            public void onAckTimeout() {
-                ackTimeout.set(true);
-                latch.countDown();  
-            }
-
-            @Override  
-            public TimeValue ackTimeout() {
-                return TimeValue.timeValueSeconds(10);
-            }  
-
-            @Override
-            public TimeValue timeout() {  
-                return TimeValue.timeValueSeconds(10);
-            }
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {}
-
-            @Override
-            public ClusterState execute(ClusterState currentState) throws Exception {
-                executed.set(true);  
-                return ClusterState.builder(currentState).build();
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);  
-                onFailure.set(true);
-                latch.countDown();
-            }  
-        });
-
-        ensureGreen();  
-        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));
-
-        assertThat(allNodesAcked.get(), equalTo(true));  
-        assertThat(ackTimeout.get(), equalTo(false));
-        assertThat(executed.get(), equalTo(true));
-        assertThat(onFailure.get(), equalTo(false));  
-    }
-
-    public void testAckedUpdateTaskTimeoutZero() throws Exception {  
-        internalCluster().startNode();
-        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);
-
-        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);
-        final AtomicBoolean ackTimeout = new AtomicBoolean(false);
-        final AtomicBoolean onFailure = new AtomicBoolean(false);  
-        final AtomicBoolean executed = new AtomicBoolean(false);
-        final CountDownLatch latch = new CountDownLatch(1);
-        final CountDownLatch processedLatch = new CountDownLatch(1);  
-        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {
-            @Override
-            protected Void newResponse(boolean acknowledged) {  
-                return null;
-            }
-
-            @Override
-            public boolean mustAck(DiscoveryNode discoveryNode) {
-                return false;  
-            }
-
-            @Override  
-            public void onAllNodesAcked(@Nullable Exception e) {
-                allNodesAcked.set(true);
-                latch.countDown();  
-            }
-
-            @Override  
-            public void onAckTimeout() {
-                ackTimeout.set(true);
-                latch.countDown();  
-            }
-
-            @Override  
-            public TimeValue ackTimeout() {
-                return TimeValue.timeValueSeconds(0);
-            }  
-
-            @Override
-            public TimeValue timeout() {  
-                return TimeValue.timeValueSeconds(10);
-            }
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                processedLatch.countDown();  
-            }
-
-            @Override  
-            public ClusterState execute(ClusterState currentState) throws Exception {
-                executed.set(true);
-                return ClusterState.builder(currentState).build();  
-            }
-
-            @Override  
-            public void onFailure(String source, Exception e) {
-                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);
-                onFailure.set(true);  
-                latch.countDown();
-            }
-        });  
-
-        ensureGreen();
-        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));  
-
-        assertThat(allNodesAcked.get(), equalTo(false));
-        assertThat(ackTimeout.get(), equalTo(true));  
-        assertThat(executed.get(), equalTo(true));
-        assertThat(onFailure.get(), equalTo(false));
-
-        assertThat(processedLatch.await(1, TimeUnit.SECONDS), equalTo(true));
-    }
-
-    public void testPendingUpdateTask() throws Exception {
-        String node_0 = internalCluster().startNode();
-        internalCluster().startCoordinatingOnlyNode(Settings.EMPTY);  
-
-        final ClusterService clusterService = internalCluster().getInstance(ClusterService.class, node_0);
-        final CountDownLatch block1 = new CountDownLatch(1);  
-        final CountDownLatch invoked1 = new CountDownLatch(1);
-        clusterService.submitStateUpdateTask("1", new ClusterStateUpdateTask() {
-            @Override  
-            @SuppressForbidden(reason = "Sleeping to guarantee a >0 time metric calculation")
-            public ClusterState execute(ClusterState currentState) {
-                try {  
-                    Thread.sleep(50);
-                    invoked1.countDown();
-                    block1.await();  
-                } catch (InterruptedException e) {
-                    fail();
                 }  
-                return currentState;
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                invoked1.countDown();  
-                fail();
-            }
-        });  
-        invoked1.await();
-        final CountDownLatch invoked2 = new CountDownLatch(9);
-        for (int i = 2; i <= 10; i++) {  
-            clusterService.submitStateUpdateTask(Integer.toString(i), new ClusterStateUpdateTask() {
-                @Override
-                public ClusterState execute(ClusterState currentState) {  
-                    return currentState;
-                }
-
-                @Override
-                public void onFailure(String source, Exception e) {
-                    fail();  
-                }
-
-                @Override  
-                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                    invoked2.countDown();
-                }  
-            });
-        }
-
-        // there might be other tasks in this node, make sure to only take the ones we add into account in this test
-
-        // The tasks can be re-ordered, so we need to check out-of-order  
-        Set<String> controlSources = new HashSet<>(Arrays.asList("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"));
-        List<PendingClusterTask> pendingClusterTasks = clusterService.getClusterManagerService().pendingTasks();
-        assertThat(pendingClusterTasks.size(), greaterThanOrEqualTo(10));  
-        assertThat(pendingClusterTasks.get(0).getSource().string(), equalTo("1"));
-        assertThat(pendingClusterTasks.get(0).isExecuting(), equalTo(true));
-        assertThat(pendingClusterTasks.get(0).getTimeInExecutionInMillis(), greaterThan(0L));  
-        assertThat(pendingClusterTasks.get(1).isExecuting(), equalTo(false));
-        assertThat(pendingClusterTasks.get(1).getTimeInExecutionInMillis(), equalTo(0L));
-        for (PendingClusterTask task : pendingClusterTasks) {  
-            controlSources.remove(task.getSource().string());
-        }
-        assertTrue(controlSources.isEmpty());  
-
-        controlSources = new HashSet<>(Arrays.asList("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"));
-        PendingClusterTasksResponse response = internalCluster().coordOnlyNodeClient().admin().cluster().preparePendingClusterTasks().get();  
-        assertThat(response.pendingTasks().size(), greaterThanOrEqualTo(10));
-        assertThat(response.pendingTasks().get(0).getSource().string(), equalTo("1"));
-        assertThat(response.pendingTasks().get(0).isExecuting(), equalTo(true));  
-        assertThat(response.pendingTasks().get(0).getTimeInExecutionInMillis(), greaterThan(0L));
-        assertThat(response.pendingTasks().get(1).isExecuting(), equalTo(false));
-        assertThat(response.pendingTasks().get(1).getTimeInExecutionInMillis(), equalTo(0L));  
-        for (PendingClusterTask task : response) {
-            controlSources.remove(task.getSource().string());
-        }  
-        assertTrue(controlSources.isEmpty());
-        block1.countDown();
-        invoked2.await();  
-
-        // whenever we test for no tasks, we need to wait since this is a live node
-        assertBusy(() -> assertTrue("Pending tasks not empty", clusterService.getClusterManagerService().pendingTasks().isEmpty()));  
         waitNoPendingTasksOnAll();
-
-        final CountDownLatch block2 = new CountDownLatch(1);  
+        invoked1.await();
+                latch.countDown();  
+import org.opensearch.cluster.ClusterState;  
+            public void onAllNodesAcked(@Nullable Exception e) {
+                return TimeValue.timeValueSeconds(10);
+import java.util.concurrent.atomic.AtomicBoolean;
+        invoked3.await();
+            clusterService.submitStateUpdateTask(Integer.toString(i), new ClusterStateUpdateTask() {
+        clusterService.submitStateUpdateTask("1", new ClusterStateUpdateTask() {
+                return TimeValue.timeValueSeconds(10);
+        assertThat(ackTimeout.get(), equalTo(true));  
+            }
+ * this file be licensed under the Apache-2.0 license or a
+            protected Void newResponse(boolean acknowledged) {
+        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {
+        assertTrue(controlSources.isEmpty());  
+    }
+        final AtomicBoolean onFailure = new AtomicBoolean(false);
+        }
+        String node_0 = internalCluster().startNode();
+            }
+            }  
+            }  
+            @Override
+            @Override
+                }  
+            public void onAckTimeout() {
+        final AtomicBoolean onFailure = new AtomicBoolean(false);
+import org.opensearch.cluster.node.DiscoveryNode;
+                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);
+            public TimeValue ackTimeout() {
+                return currentState;  
+ * software distributed under the License is distributed on an
+            public void onFailure(String source, Exception e) {
+                ackTimeout.set(true);
+ * Unless required by applicable law or agreed to in writing,
+                fail();
+        assertThat(response.pendingTasks().size(), greaterThanOrEqualTo(10));
+                }  
+            }
+import static org.hamcrest.Matchers.greaterThan;
+            @Override
+            }
+                    block1.await();  
+            }
+ * not use this file except in compliance with the License.
+                @Override
+                return false;  
+public class ClusterServiceIT extends OpenSearchIntegTestCase {
+        assertThat(onFailure.get(), equalTo(false));
+                latch.countDown();  
+        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);
+                @Override
+import java.util.concurrent.CountDownLatch;  
+        for (PendingClusterTask task : pendingClusterTasks) {
+            public void onFailure(String source, Exception e) {
+            @SuppressForbidden(reason = "Sleeping to guarantee a >0 time metric calculation")
+        assertTrue(controlSources.isEmpty());
+        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));
+                    invoked1.countDown();
+            }
+        block1.countDown();
+            }
+            @Override
+        final CountDownLatch latch = new CountDownLatch(1);  
+            }  
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {  
+                }
+import org.opensearch.common.unit.TimeValue;  
+ * under the License.  
+        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);
+                allNodesAcked.set(true);  
+        final AtomicBoolean executed = new AtomicBoolean(false);
+    public void testAckedUpdateTaskNoAckExpected() throws Exception {
+                return null;
+        assertThat(processedLatch.await(1, TimeUnit.SECONDS), equalTo(true));
+ *  
+        }
+        assertThat(onFailure.get(), equalTo(false));  
+                latch.countDown();
+                latch.countDown();
+        controlSources = new HashSet<>(Arrays.asList("1", "2", "3", "4", "5"));  
+        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);
+        assertBusy(() -> assertTrue("Pending tasks not empty", clusterService.getClusterManagerService().pendingTasks().isEmpty()));  
+    }  
+            @Override  
+            @Override
+                latch.countDown();
+        assertThat(executed.get(), equalTo(true));
+import java.util.List;
+        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {  
+        final AtomicBoolean onFailure = new AtomicBoolean(false);
+            }
+            @Override
+import java.util.HashSet;  
+        // The tasks can be re-ordered, so we need to check out-of-order  
+        }
+            @Override  
+            @Override  
+                processedLatch.countDown();
+        for (PendingClusterTask task : pendingClusterTasks) {  
+            public boolean mustAck(DiscoveryNode discoveryNode) {
+                } catch (InterruptedException e) {
+        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);  
+            @Override
+            if (controlSources.remove(task.getSource().string())) {
+        internalCluster().startNode();  
+            }  
+                ackTimeout.set(true);
+        ClusterService clusterService = internalCluster().getInstance(ClusterService.class);  
+        assertThat(response.pendingTasks().get(1).getTimeInExecutionInMillis(), equalTo(0L));  
+            }
+            @Override  
+                public ClusterState execute(ClusterState currentState) {
+                    fail();  
+                return false;  
+        invoked2.await();  
+            }
+            }
+            }
+ * KIND, either express or implied.  See the License for the
+        assertThat(response.pendingTasks().get(1).isExecuting(), equalTo(false));
+import java.util.concurrent.TimeUnit;
+            controlSources.remove(task.getSource().string());
+        final CountDownLatch latch = new CountDownLatch(1);  
+import org.opensearch.common.Nullable;  
+ * the Apache License, Version 2.0 (the "License"); you may
+        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);
+            public ClusterState execute(ClusterState currentState) {
+                onFailure.set(true);  
+            protected Void newResponse(boolean acknowledged) {
+        final CountDownLatch latch = new CountDownLatch(1);
+        assertThat(pendingClusterTasks.get(0).getTimeInExecutionInMillis(), greaterThan(0L));  
+                    block2.await();
+                latch.countDown();  
+                latch.countDown();  
+                executed.set(true);  
+ * You may obtain a copy of the License at  
+        final AtomicBoolean executed = new AtomicBoolean(false);
+            @Override  
+            @Override
+        ensureGreen();  
+        assertThat(ackTimeout.get(), equalTo(false));
+        for (int i = 2; i <= 10; i++) {  
+                executed.set(true);
+            }
+            public void onFailure(String source, Exception e) {
+        final ClusterService clusterService = internalCluster().getInstance(ClusterService.class, node_0);
+            }  
+            public TimeValue ackTimeout() {
+}  
+package org.opensearch.cluster.service;
+@ClusterScope(scope = Scope.TEST, numDataNodes = 0)
+        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));  
+ * this work for additional information regarding copyright
+                invoked1.countDown();  
+            }
+            }
+            @Override  
+                    fail();
+        });
+        assertThat(response.pendingTasks().get(0).getSource().string(), equalTo("1"));
+            public void onAllNodesAcked(@Nullable Exception e) {
+        assertThat(processedLatch.await(1, TimeUnit.SECONDS), equalTo(true));
+    public void testAckedUpdateTaskTimeoutZero() throws Exception {  
+ * The OpenSearch Contributors require contributions made to  
+            @Override
+            @Override
+                processedLatch.countDown();  
+                try {  
+        final AtomicBoolean ackTimeout = new AtomicBoolean(false);
+            }
+        assertThat(response.pendingTasks().get(0).getTimeInExecutionInMillis(), greaterThan(0L));
+        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {
+            public void onFailure(String source, Exception e) {
+        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);  
+            public boolean mustAck(DiscoveryNode discoveryNode) {
         final CountDownLatch invoked3 = new CountDownLatch(1);
+            @Override  
+            }
+import java.util.Set;
+                    return currentState;
+            @Override  
+        });  
+            @Override  
+            () -> clusterService.getClusterManagerService().pendingTasks(),
+            }
+        ensureGreen();
+            @Override  
+            }
+            @Override  
+        final CountDownLatch processedLatch = new CountDownLatch(1);
+        for (PendingClusterTask task : response) {
+                }
+            @Override  
+            }  
+                return ClusterState.builder(currentState).build();
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicBoolean ackTimeout = new AtomicBoolean(false);  
+            public void onAckTimeout() {
         clusterService.submitStateUpdateTask("1", new ClusterStateUpdateTask() {
             @Override  
-            public ClusterState execute(ClusterState currentState) {
-                invoked3.countDown();
-                try {  
-                    block2.await();
-                } catch (InterruptedException e) {
-                    fail();  
-                }
-                return currentState;
-            }  
-
-            @Override
-            public void onFailure(String source, Exception e) {  
-                invoked3.countDown();
-                fail();
-            }  
-        });
-        invoked3.await();
-
-        for (int i = 2; i <= 5; i++) {
-            clusterService.submitStateUpdateTask(Integer.toString(i), new ClusterStateUpdateTask() {
-                @Override  
-                public ClusterState execute(ClusterState currentState) {
-                    return currentState;
-                }  
-
+        assertThat(response.pendingTasks().get(0).isExecuting(), equalTo(true));  
+        assertThat(allNodesAcked.get(), equalTo(true));  
+/*  
+import static org.awaitility.Awaitility.await;
+        final CountDownLatch invoked2 = new CountDownLatch(9);
+        assertThat(allNodesAcked.get(), equalTo(true));  
+import org.apache.logging.log4j.message.ParameterizedMessage;  
+        final AtomicBoolean onFailure = new AtomicBoolean(false);  
                 @Override
+            @Override  
+                return TimeValue.timeValueSeconds(10);
+import org.opensearch.cluster.AckedClusterStateUpdateTask;
+            public TimeValue timeout() {  
+            @Override
+                    invoked2.countDown();
+            public void onAckTimeout() {
+                return true;
+            public TimeValue timeout() {  
+                return null;
+                allNodesAcked.set(true);
+                allNodesAcked.set(true);
                 public void onFailure(String source, Exception e) {  
-                    fail();
-                }
-            });  
-        }
-
-        pendingClusterTasks = await().until(  
-            () -> clusterService.getClusterManagerService().pendingTasks(),
-            hasSize(greaterThanOrEqualTo(5))
-        );  
+            @Override
+        final CountDownLatch block2 = new CountDownLatch(1);  
+            });
+ */
+                return null;
+ */
+        assertThat(ackTimeout.get(), equalTo(false));  
         controlSources = new HashSet<>(Arrays.asList("1", "2", "3", "4", "5"));
-        for (PendingClusterTask task : pendingClusterTasks) {
-            controlSources.remove(task.getSource().string());  
-        }
-        assertTrue(controlSources.isEmpty());
-
-        response = internalCluster().coordOnlyNodeClient().admin().cluster().preparePendingClusterTasks().get();
-        assertThat(response.pendingTasks().size(), greaterThanOrEqualTo(5));
-        controlSources = new HashSet<>(Arrays.asList("1", "2", "3", "4", "5"));  
-        for (PendingClusterTask task : response) {
-            if (controlSources.remove(task.getSource().string())) {
-                assertThat(task.getTimeInQueueInMillis(), greaterThan(0L));  
+        final AtomicBoolean executed = new AtomicBoolean(false);  
             }
-        }
-        assertTrue(controlSources.isEmpty());  
-        block2.countDown();
+/*
+        Set<String> controlSources = new HashSet<>(Arrays.asList("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"));
+import java.util.Arrays;
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;  
+                onFailure.set(true);  
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
+        ensureGreen();  
+            }  
+    public void testAckedUpdateTask() throws Exception {
+                    fail();
+            public void onAckTimeout() {
+            public ClusterState execute(ClusterState currentState) throws Exception {
+        final CountDownLatch block1 = new CountDownLatch(1);  
     }
-}  
+    }
+        final AtomicBoolean allNodesAcked = new AtomicBoolean(false);
+                return ClusterState.builder(currentState).build();
+            }  
+    public void testAckedUpdateTaskSameClusterState() throws Exception {
+                return TimeValue.timeValueSeconds(10);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                ackTimeout.set(true);  
+        assertThat(ackTimeout.get(), equalTo(false));
+            }
+        assertThat(pendingClusterTasks.get(0).getSource().string(), equalTo("1"));
+ * GitHub history for details.
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+        response = internalCluster().coordOnlyNodeClient().admin().cluster().preparePendingClusterTasks().get();
+        assertThat(processedLatch.await(1, TimeUnit.SECONDS), equalTo(true));
+                fail();
+        controlSources = new HashSet<>(Arrays.asList("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"));
+                latch.countDown();  
+                allNodesAcked.set(true);
+    }
+            @Override
+        final AtomicBoolean ackTimeout = new AtomicBoolean(false);
+        internalCluster().startNode();
+                latch.countDown();
+                }
+            public void onAllNodesAcked(@Nullable Exception e) {
+            protected Void newResponse(boolean acknowledged) {  
+            controlSources.remove(task.getSource().string());  
+        List<PendingClusterTask> pendingClusterTasks = clusterService.getClusterManagerService().pendingTasks();
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+import org.opensearch.test.OpenSearchIntegTestCase;
+            @Override  
+            }
+                try {  
+            }
+        assertThat(pendingClusterTasks.get(1).getTimeInExecutionInMillis(), equalTo(0L));
+            protected Void newResponse(boolean acknowledged) {  
+                return null;  
+        assertThat(pendingClusterTasks.size(), greaterThanOrEqualTo(10));  
+            public TimeValue ackTimeout() {
+                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);  
+                return ClusterState.builder(currentState).build();  
+        clusterService.submitStateUpdateTask("test", new AckedClusterStateUpdateTask<Void>(null, null) {
+                executed.set(true);  
+        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));  
+                @Override  
+        final CountDownLatch invoked1 = new CountDownLatch(1);
+ *
+        // there might be other tasks in this node, make sure to only take the ones we add into account in this test
+/*
+                processedLatch.countDown();  
+                onFailure.set(true);
+                return TimeValue.timeValueSeconds(10);  
+        assertThat(latch.await(1, TimeUnit.SECONDS), equalTo(true));
+                return TimeValue.timeValueSeconds(10);
+        ensureGreen();
+        for (PendingClusterTask task : response) {
+                    return currentState;
+                logger.error(() -> new ParameterizedMessage("failed to execute callback in test {}", source), e);  
+        assertThat(onFailure.get(), equalTo(false));  
+                latch.countDown();
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.common.SuppressForbidden;
+                latch.countDown();  
+            public ClusterState execute(ClusterState currentState) {
+        final CountDownLatch processedLatch = new CountDownLatch(1);
+            controlSources.remove(task.getSource().string());
+ * specific language governing permissions and limitations
+        assertThat(onFailure.get(), equalTo(false));
+        });
+            @Override
+        }
+            public TimeValue timeout() {
+import static org.hamcrest.Matchers.hasSize;
+        PendingClusterTasksResponse response = internalCluster().coordOnlyNodeClient().admin().cluster().preparePendingClusterTasks().get();  
+        assertThat(allNodesAcked.get(), equalTo(false));
+                assertThat(task.getTimeInQueueInMillis(), greaterThan(0L));  
+            @Override
+            @Override
+        for (int i = 2; i <= 5; i++) {
+        final AtomicBoolean executed = new AtomicBoolean(false);
+    public void testPendingUpdateTask() throws Exception {
+ * Modifications Copyright OpenSearch Contributors. See  
+                return TimeValue.timeValueSeconds(0);
+            @Override
+        assertTrue(controlSources.isEmpty());
+            public ClusterState execute(ClusterState currentState) throws Exception {
+            }
+            }
+                invoked3.countDown();
+        assertThat(allNodesAcked.get(), equalTo(true));
+ * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
+        });  
+            public void onFailure(String source, Exception e) {
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        assertThat(pendingClusterTasks.get(1).isExecuting(), equalTo(false));
+        final CountDownLatch processedLatch = new CountDownLatch(1);  
+                ackTimeout.set(true);
+            @Override  
+            hasSize(greaterThanOrEqualTo(5))
+            }
+                invoked3.countDown();
+            public TimeValue timeout() {  
+            @Override
+import static org.hamcrest.Matchers.equalTo;
+            public ClusterState execute(ClusterState currentState) throws Exception {
+            clusterService.submitStateUpdateTask(Integer.toString(i), new ClusterStateUpdateTask() {
+        final AtomicBoolean ackTimeout = new AtomicBoolean(false);  
+        });
+        }
+            public void onAllNodesAcked(@Nullable Exception e) {
+ * compatible open source license.

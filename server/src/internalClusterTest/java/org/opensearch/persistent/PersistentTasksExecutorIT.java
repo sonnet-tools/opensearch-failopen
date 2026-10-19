@@ -1,503 +1,435 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.persistent;
-
-import org.opensearch.ResourceAlreadyExistsException;
-import org.opensearch.ResourceNotFoundException;
-import org.opensearch.action.support.PlainActionFuture;  
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.persistent.PersistentTasksCustomMetadata.PersistentTask;
-import org.opensearch.persistent.PersistentTasksService.WaitForPersistentTaskListener;  
-import org.opensearch.persistent.TestPersistentTasksPlugin.State;
-import org.opensearch.persistent.TestPersistentTasksPlugin.TestParams;
-import org.opensearch.persistent.TestPersistentTasksPlugin.TestPersistentTasksExecutor;  
-import org.opensearch.persistent.TestPersistentTasksPlugin.TestTasksRequestBuilder;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.tasks.TaskInfo;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.List;
-import java.util.Objects;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFutureThrows;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;  
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;  
-import static org.hamcrest.core.Is.is;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2)  
-public class PersistentTasksExecutorIT extends OpenSearchIntegTestCase {
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singletonList(TestPersistentTasksPlugin.class);
-    }  
-
-    protected boolean ignoreExternalCluster() {
-        return true;  
-    }
-
-    @Before  
-    public void resetNonClusterStateCondition() {
-        TestPersistentTasksExecutor.setNonClusterStateCondition(true);
-    }  
-
-    @After
-    public void cleanup() throws Exception {  
-        assertNoRunningTasks();
-    }
-
-    public static class WaitForPersistentTaskFuture<Params extends PersistentTaskParams> extends PlainActionFuture<PersistentTask<Params>>
-        implements
-            WaitForPersistentTaskListener<Params> {}  
-
-    public void testPersistentActionFailure() throws Exception {
-        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);  
-        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
-        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);
-        long allocationId = future.get().getAllocationId();  
-        assertBusy(() -> {
-            // Wait for the task to start
-            assertThat(  
-                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
-                equalTo(1)
-            );  
-        });
-        TaskInfo firstRunningTask = client().admin()
-            .cluster()  
-            .prepareListTasks()
-            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-            .get()  
-            .getTasks()
-            .get(0);
-        logger.info("Found running task with id {} and parent {}", firstRunningTask.getId(), firstRunningTask.getParentTaskId());  
-        // Verifying parent
-        assertThat(firstRunningTask.getParentTaskId().getId(), equalTo(allocationId));
-        assertThat(firstRunningTask.getParentTaskId().getNodeId(), equalTo("cluster"));  
-
-        logger.info("Failing the running task");
-        // Fail the running task and make sure it restarts properly  
-        assertThat(
-            new TestTasksRequestBuilder(client()).setOperation("fail").setTaskId(firstRunningTask.getTaskId()).get().getTasks().size(),
-            equalTo(1)  
-        );
-
-        logger.info("Waiting for persistent task with id {} to disappear", firstRunningTask.getId());  
-        assertBusy(() -> {
-            // Wait for the task to disappear completely
-            assertThat(  
-                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),
-                empty()
-            );  
-        });
-    }
-
-    public void testPersistentActionCompletion() throws Exception {
-        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
-        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();  
-        String taskId = UUIDs.base64UUID();
-        persistentTasksService.sendStartRequest(taskId, TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);
-        long allocationId = future.get().getAllocationId();  
-        assertBusy(() -> {
-            // Wait for the task to start
-            assertThat(  
-                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
-                equalTo(1)
-            );  
-        });
-        TaskInfo firstRunningTask = client().admin()
-            .cluster()  
-            .prepareListTasks()
-            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-            .setDetailed(true)  
-            .get()
-            .getTasks()
-            .get(0);  
-        logger.info("Found running task with id {} and parent {}", firstRunningTask.getId(), firstRunningTask.getParentTaskId());
-        // Verifying parent and description
-        assertThat(firstRunningTask.getParentTaskId().getId(), equalTo(allocationId));  
-        assertThat(firstRunningTask.getParentTaskId().getNodeId(), equalTo("cluster"));
-        assertThat(firstRunningTask.getDescription(), equalTo("id=" + taskId));
-
-        if (randomBoolean()) {
-            logger.info("Simulating errant completion notification");
-            // try sending completion request with incorrect allocation id  
-            PlainActionFuture<PersistentTask<?>> failedCompletionNotificationFuture = new PlainActionFuture<>();
-            persistentTasksService.sendCompletionRequest(taskId, Long.MAX_VALUE, null, failedCompletionNotificationFuture);
-            assertFutureThrows(failedCompletionNotificationFuture, ResourceNotFoundException.class);  
-            // Make sure that the task is still running
-            assertThat(
-                client().admin()  
-                    .cluster()
-                    .prepareListTasks()
-                    .setActions(TestPersistentTasksExecutor.NAME + "[c]")  
                     .setDetailed(true)
-                    .get()
-                    .getTasks()  
-                    .size(),
-                equalTo(1)
-            );  
-        }
-
-        stopOrCancelTask(firstRunningTask.getTaskId());  
-    }
-
-    public void testPersistentActionWithNoAvailableNode() throws Exception {  
-        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
-        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
-        TestParams testParams = new TestParams("Blah");  
-        testParams.setExecutorNodeAttr("test");
-        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, testParams, future);
-        String taskId = future.get().getId();  
-
-        Settings nodeSettings = Settings.builder().put(nodeSettings(0)).put("node.attr.test_attr", "test").build();
-        String newNode = internalCluster().startNode(nodeSettings);  
-        String newNodeId = internalCluster().clusterService(newNode).localNode().getId();
-        waitForTaskToStart();
-
-        TaskInfo taskInfo = client().admin()
-            .cluster()
-            .prepareListTasks()  
-            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-            .get()
-            .getTasks()  
-            .get(0);
-
-        // Verifying the task runs on the new node  
-        assertThat(taskInfo.getTaskId().getNodeId(), equalTo(newNodeId));
-
-        internalCluster().stopRandomNode(settings -> "test".equals(settings.get("node.attr.test_attr")));  
-
-        assertBusy(() -> {
-            // Wait for the task to disappear completely  
-            assertThat(
-                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),
-                empty()  
-            );
-        });
-
-        // Remove the persistent task
-        PlainActionFuture<PersistentTask<?>> removeFuture = new PlainActionFuture<>();
-        persistentTasksService.sendRemoveRequest(taskId, removeFuture);  
-        assertEquals(removeFuture.get().getId(), taskId);
-    }
-
-    public void testPersistentActionWithNonClusterStateCondition() throws Exception {
-        PersistentTasksClusterService persistentTasksClusterService = internalCluster().getInstance(
-            PersistentTasksClusterService.class,  
-            internalCluster().getClusterManagerName()
-        );
-        // Speed up rechecks to a rate that is quicker than what settings would allow  
-        persistentTasksClusterService.setRecheckInterval(TimeValue.timeValueMillis(1));
-
-        TestPersistentTasksExecutor.setNonClusterStateCondition(false);  
-
-        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
-        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();  
-        TestParams testParams = new TestParams("Blah");
-        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, testParams, future);
-        String taskId = future.get().getId();  
-
-        assertThat(
-            client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),  
-            empty()
-        );
-
-        TestPersistentTasksExecutor.setNonClusterStateCondition(true);
-
-        waitForTaskToStart();  
-        TaskInfo taskInfo = client().admin()
-            .cluster()
-            .prepareListTasks()  
-            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-            .get()
-            .getTasks()  
-            .get(0);
-
-        // Verifying the task can now be assigned  
-        assertThat(taskInfo.getTaskId().getNodeId(), notNullValue());
-
-        // Remove the persistent task  
-        PlainActionFuture<PersistentTask<?>> removeFuture = new PlainActionFuture<>();
-        persistentTasksService.sendRemoveRequest(taskId, removeFuture);
-        assertEquals(removeFuture.get().getId(), taskId);  
-    }
-
-    public void testPersistentActionStatusUpdate() throws Exception {  
-        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
-        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
-        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);  
-        String taskId = future.get().getId();
-        waitForTaskToStart();
-        TaskInfo firstRunningTask = client().admin()  
-            .cluster()
-            .prepareListTasks()
-            .setActions(TestPersistentTasksExecutor.NAME + "[c]")  
-            .get()
-            .getTasks()
-            .get(0);  
-
-        PersistentTasksCustomMetadata tasksInProgress = internalCluster().clusterService()
-            .state()  
-            .getMetadata()
-            .custom(PersistentTasksCustomMetadata.TYPE);
-        assertThat(tasksInProgress.tasks().size(), equalTo(1));  
-        assertThat(tasksInProgress.tasks().iterator().next().getState(), nullValue());
-
-        int numberOfUpdates = randomIntBetween(1, 10);  
-        for (int i = 0; i < numberOfUpdates; i++) {
-            logger.info("Updating the task states");
-            // Complete the running task and make sure it finishes properly  
-            assertThat(
-                new TestTasksRequestBuilder(client()).setOperation("update_status")
-                    .setTaskId(firstRunningTask.getTaskId())  
-                    .get()
-                    .getTasks()
-                    .size(),  
-                equalTo(1)
-            );
-
-            int finalI = i;
-            WaitForPersistentTaskFuture<?> future1 = new WaitForPersistentTaskFuture<>();
-            persistentTasksService.waitForPersistentTaskCondition(  
-                taskId,
-                task -> task != null
-                    && task.getState() != null  
-                    && task.getState().toString() != null
-                    && task.getState().toString().equals("{\"phase\":\"phase " + (finalI + 1) + "\"}"),
-                TimeValue.timeValueSeconds(10),  
-                future1
-            );
-            assertThat(future1.get().getId(), equalTo(taskId));  
-        }
-
-        WaitForPersistentTaskFuture<?> future1 = new WaitForPersistentTaskFuture<>();  
-        persistentTasksService.waitForPersistentTaskCondition(taskId, task -> false, TimeValue.timeValueMillis(10), future1);
-
-        assertFutureThrows(future1, IllegalStateException.class, "timed out after 10ms");  
-
-        PlainActionFuture<PersistentTask<?>> failedUpdateFuture = new PlainActionFuture<>();
-        persistentTasksService.sendUpdateStateRequest(taskId, -2, new State("should fail"), failedUpdateFuture);  
-        assertFutureThrows(
-            failedUpdateFuture,
-            ResourceNotFoundException.class,  
-            "the task with id " + taskId + " and allocation id -2 doesn't exist"
-        );
-
-        // Wait for the task to disappear
-        WaitForPersistentTaskFuture<?> future2 = new WaitForPersistentTaskFuture<>();
-        persistentTasksService.waitForPersistentTaskCondition(taskId, Objects::isNull, TimeValue.timeValueSeconds(10), future2);  
-
-        logger.info("Completing the running task");
-        // Complete the running task and make sure it finishes properly  
-        assertThat(
-            new TestTasksRequestBuilder(client()).setOperation("finish").setTaskId(firstRunningTask.getTaskId()).get().getTasks().size(),
-            equalTo(1)  
-        );
-
-        assertThat(future2.get(), nullValue());  
-    }
-
-    public void testCreatePersistentTaskWithDuplicateId() throws Exception {  
-        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
-        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
-        String taskId = UUIDs.base64UUID();  
-        persistentTasksService.sendStartRequest(taskId, TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);
-        future.get();
-
-        PlainActionFuture<PersistentTask<TestParams>> future2 = new PlainActionFuture<>();
-        persistentTasksService.sendStartRequest(taskId, TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future2);
-        assertFutureThrows(future2, ResourceAlreadyExistsException.class);  
-
-        assertBusy(() -> {
-            // Wait for the task to start  
-            assertThat(
-                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
-                equalTo(1)  
-            );
-        });
-
-        TaskInfo firstRunningTask = client().admin()
-            .cluster()
-            .prepareListTasks()  
-            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-            .get()
-            .getTasks()  
-            .get(0);
-
-        logger.info("Completing the running task");  
-        // Fail the running task and make sure it restarts properly
-        assertThat(
-            new TestTasksRequestBuilder(client()).setOperation("finish").setTaskId(firstRunningTask.getTaskId()).get().getTasks().size(),  
-            equalTo(1)
-        );
-
-        logger.info("Waiting for persistent task with id {} to disappear", firstRunningTask.getId());
-        assertBusy(() -> {
-            // Wait for the task to disappear completely  
-            assertThat(
-                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),
-                empty()  
-            );
-        });
-    }  
-
-    public void testUnassignRunningPersistentTask() throws Exception {
-        PersistentTasksClusterService persistentTasksClusterService = internalCluster().getInstance(  
-            PersistentTasksClusterService.class,
-            internalCluster().getClusterManagerName()
-        );  
-        // Speed up rechecks to a rate that is quicker than what settings would allow
-        persistentTasksClusterService.setRecheckInterval(TimeValue.timeValueMillis(1));
-        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);  
-        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
-        TestParams testParams = new TestParams("Blah");
-        testParams.setExecutorNodeAttr("test");  
-        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, testParams, future);
+            WaitForPersistentTaskListener<Params> {}  
         PersistentTask<TestParams> task = future.get();
-        String taskId = task.getId();  
-
-        Settings nodeSettings = Settings.builder().put(nodeSettings(0)).put("node.attr.test_attr", "test").build();
-        internalCluster().startNode(nodeSettings);  
-
-        waitForTaskToStart();
-
-        PlainActionFuture<PersistentTask<?>> unassignmentFuture = new PlainActionFuture<>();
-
-        // Disallow re-assignment after it is unallocated to verify cluster-manager and node state  
-        TestPersistentTasksExecutor.setNonClusterStateCondition(false);
-
-        persistentTasksClusterService.unassignPersistentTask(taskId, task.getAllocationId() + 1, "unassignment test", unassignmentFuture);  
-        PersistentTask<?> unassignedTask = unassignmentFuture.get();
-        assertThat(unassignedTask.getId(), equalTo(taskId));
-        assertThat(unassignedTask.getAssignment().getExplanation(), equalTo("unassignment test"));  
-        assertThat(unassignedTask.getAssignment().getExecutorNode(), is(nullValue()));
-
         assertBusy(() -> {  
-            // Verify that the task is NOT running on the node
-            List<TaskInfo> tasks = client().admin()
-                .cluster()  
-                .prepareListTasks()
-                .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-                .get()  
-                .getTasks();
-            assertThat(tasks.size(), equalTo(0));
-
-            // Verify that the task is STILL in internal cluster state
-            assertClusterStateHasTask(taskId);
-        });  
-
-        // Allow it to be reassigned again to the same node
-        TestPersistentTasksExecutor.setNonClusterStateCondition(true);  
-
-        // Verify it starts again
-        waitForTaskToStart();  
-
-        assertClusterStateHasTask(taskId);
-
-        // Complete or cancel the running task
-        TaskInfo taskInfo = client().admin()
-            .cluster()  
-            .prepareListTasks()
-            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-            .get()  
-            .getTasks()
+        Settings nodeSettings = Settings.builder().put(nodeSettings(0)).put("node.attr.test_attr", "test").build();
+            new TestTasksRequestBuilder(client()).setOperation("finish").setTaskId(firstRunningTask.getTaskId()).get().getTasks().size(),
+                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),
+        persistentTasksService.sendRemoveRequest(taskId, removeFuture);
+ * software distributed under the License is distributed on an
+                empty()
+            empty()
+import java.util.Objects;
             .get(0);
-        stopOrCancelTask(taskInfo.getTaskId());  
-    }
-
-    private void stopOrCancelTask(TaskId taskId) {  
-        if (randomBoolean()) {
-            logger.info("Completing the running task");
-            // Complete the running task and make sure it finishes properly  
             assertThat(new TestTasksRequestBuilder(client()).setOperation("finish").setTaskId(taskId).get().getTasks().size(), equalTo(1));
-
-        } else {  
-            logger.info("Cancelling the running task");
-            // Cancel the running task and make sure it finishes properly
-            assertThat(client().admin().cluster().prepareCancelTasks().setTaskId(taskId).get().getTasks().size(), equalTo(1));  
-        }
-    }
-
-    private static void waitForTaskToStart() throws Exception {
-        assertBusy(() -> {
-            // Wait for the task to start  
-            assertThat(
-                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
                 equalTo(1)  
             );
-        });
-    }  
-
-    private static void assertClusterStateHasTask(String taskId) {
-        Collection<PersistentTask<?>> clusterTasks = ((PersistentTasksCustomMetadata) internalCluster().clusterService()  
-            .state()
-            .getMetadata()
-            .custom(PersistentTasksCustomMetadata.TYPE)).tasks();  
-        assertThat(clusterTasks, hasSize(1));
-        assertThat(clusterTasks.iterator().next().getId(), equalTo(taskId));
-    }  
-
-    private void assertNoRunningTasks() throws Exception {
-        assertBusy(() -> {  
-            // Wait for the task to finish
-            List<TaskInfo> tasks = client().admin()
-                .cluster()  
-                .prepareListTasks()
-                .setActions(TestPersistentTasksExecutor.NAME + "[c]")
-                .get()  
-                .getTasks();
-            logger.info("Found {} tasks", tasks.size());
-            assertThat(tasks.size(), equalTo(0));  
-
-            // Make sure the task is removed from the cluster state
+        logger.info("Failing the running task");
+        assertThat(unassignedTask.getAssignment().getExecutorNode(), is(nullValue()));
+        // Verify it starts again
+import org.opensearch.common.settings.Settings;
+    public void testPersistentActionStatusUpdate() throws Exception {  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFutureThrows;
             assertThat(  
-                ((PersistentTasksCustomMetadata) internalCluster().clusterService()
-                    .state()
-                    .getMetadata()  
-                    .custom(PersistentTasksCustomMetadata.TYPE)).tasks(),
-                empty()
+            // Wait for the task to disappear completely
+        assertFutureThrows(
+        Settings nodeSettings = Settings.builder().put(nodeSettings(0)).put("node.attr.test_attr", "test").build();
+        String taskId = future.get().getId();  
+        // Speed up rechecks to a rate that is quicker than what settings would allow  
+                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
+        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
+            equalTo(1)
+ *
+            internalCluster().getClusterManagerName()
+                    .get()
+            PersistentTasksClusterService.class,  
+        assertThat(tasksInProgress.tasks().size(), equalTo(1));  
+        PlainActionFuture<PersistentTask<TestParams>> future2 = new PlainActionFuture<>();
+            // Wait for the task to disappear completely  
+            .prepareListTasks()  
+import static org.hamcrest.Matchers.equalTo;  
+            .get()
+                TimeValue.timeValueSeconds(10),  
+        WaitForPersistentTaskFuture<?> future1 = new WaitForPersistentTaskFuture<>();  
+}
+ * this file be licensed under the Apache-2.0 license or a
+                equalTo(1)
+            assertThat(
+                .get()  
+            assertThat(tasks.size(), equalTo(0));  
+        assertFutureThrows(future2, ResourceAlreadyExistsException.class);  
+            // Complete the running task and make sure it finishes properly  
+        PersistentTasksClusterService persistentTasksClusterService = internalCluster().getInstance(  
+            .state()
+            .cluster()
+        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);  
+        // Verifying the task can now be assigned  
+        );
+                    .setActions(TestPersistentTasksExecutor.NAME + "[c]")  
+            .get()
+        );
+import static org.hamcrest.Matchers.nullValue;  
+            .getMetadata()
+        );  
+            .get()  
+        TestPersistentTasksExecutor.setNonClusterStateCondition(true);
+            assertThat(client().admin().cluster().prepareCancelTasks().setTaskId(taskId).get().getTasks().size(), equalTo(1));  
+            .setDetailed(true)  
+                task -> task != null
+        assertBusy(() -> {
+    }
+        assertClusterStateHasTask(taskId);
+        persistentTasksService.sendStartRequest(taskId, TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);
+        assertThat(unassignedTask.getId(), equalTo(taskId));
+            assertThat(
+        String taskId = task.getId();  
+import org.junit.After;
+        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
+ * ownership. Elasticsearch licenses this file to you under  
+    }
+        waitForTaskToStart();  
+        WaitForPersistentTaskFuture<?> future2 = new WaitForPersistentTaskFuture<>();
+        waitForTaskToStart();
+import static org.hamcrest.Matchers.hasSize;
+        logger.info("Completing the running task");
+        });
+            .get(0);
+    }
             );  
+            );
+        assertFutureThrows(future1, IllegalStateException.class, "timed out after 10ms");  
+        // Allow it to be reassigned again to the same node
+        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();  
+            .getTasks()
+        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
+            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+        long allocationId = future.get().getAllocationId();  
+    }
+        // Remove the persistent task
+            .cluster()  
+        assertThat(
+                new TestTasksRequestBuilder(client()).setOperation("update_status")
+                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),
+                .prepareListTasks()
+            PlainActionFuture<PersistentTask<?>> failedCompletionNotificationFuture = new PlainActionFuture<>();
+        );
+            .prepareListTasks()  
+                .getTasks();
+        });  
+        assertThat(taskInfo.getTaskId().getNodeId(), notNullValue());
+        persistentTasksService.waitForPersistentTaskCondition(taskId, Objects::isNull, TimeValue.timeValueSeconds(10), future2);  
+        assertThat(firstRunningTask.getParentTaskId().getId(), equalTo(allocationId));  
+            .prepareListTasks()
+/*  
+                .cluster()  
+import org.opensearch.core.tasks.TaskId;
+            .state()  
+        assertBusy(() -> {
+                .getTasks();
+            logger.info("Cancelling the running task");
+    }
+            );
+        );
+ * specific language governing permissions and limitations
+        assertBusy(() -> {
+        assertThat(firstRunningTask.getParentTaskId().getId(), equalTo(allocationId));
+        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);  
+                equalTo(1)
+            // Verify that the task is NOT running on the node
+            // Verify that the task is STILL in internal cluster state
+        PersistentTasksClusterService persistentTasksClusterService = internalCluster().getInstance(
+        PlainActionFuture<PersistentTask<?>> removeFuture = new PlainActionFuture<>();
+import org.opensearch.persistent.TestPersistentTasksPlugin.State;
+            equalTo(1)  
+            .getTasks()  
+            assertThat(  
+        internalCluster().startNode(nodeSettings);  
+            .get(0);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+import org.opensearch.persistent.PersistentTasksCustomMetadata.PersistentTask;
+        return Collections.singletonList(TestPersistentTasksPlugin.class);
+            // Wait for the task to start  
+            assertThat(
+            persistentTasksService.sendCompletionRequest(taskId, Long.MAX_VALUE, null, failedCompletionNotificationFuture);
+                .prepareListTasks()
+    protected boolean ignoreExternalCluster() {
+        TestPersistentTasksExecutor.setNonClusterStateCondition(true);  
+        TaskInfo firstRunningTask = client().admin()
+                    && task.getState().toString().equals("{\"phase\":\"phase " + (finalI + 1) + "\"}"),
+            equalTo(1)  
+        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
+        internalCluster().stopRandomNode(settings -> "test".equals(settings.get("node.attr.test_attr")));  
+                    && task.getState().toString() != null
+                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
+        String newNode = internalCluster().startNode(nodeSettings);  
+    private void stopOrCancelTask(TaskId taskId) {  
+        });
+        waitForTaskToStart();
+        assertThat(future2.get(), nullValue());  
+        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, testParams, future);
+            );
+        for (int i = 0; i < numberOfUpdates; i++) {
+        persistentTasksService.sendStartRequest(taskId, TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);
+        stopOrCancelTask(firstRunningTask.getTaskId());  
+                    .size(),
+        logger.info("Completing the running task");  
+        });
+            );  
+        TestParams testParams = new TestParams("Blah");
+                    .size(),  
+            int finalI = i;
+        assertBusy(() -> {
+            assertThat(
+        PersistentTask<?> unassignedTask = unassignmentFuture.get();
+        future.get();
+            );
+            .getTasks()
+        String taskId = UUIDs.base64UUID();  
+            // Wait for the task to disappear completely  
+import java.util.Collection;
+        });
+            // Wait for the task to start
+                .get()  
+    public void testPersistentActionFailure() throws Exception {
+            // Complete the running task and make sure it finishes properly  
+        PlainActionFuture<PersistentTask<?>> removeFuture = new PlainActionFuture<>();
+        testParams.setExecutorNodeAttr("test");
+            .get(0);
+                    .prepareListTasks()
+                equalTo(1)
+        TestPersistentTasksExecutor.setNonClusterStateCondition(true);
+ */  
+            // Wait for the task to start  
+            new TestTasksRequestBuilder(client()).setOperation("fail").setTaskId(firstRunningTask.getTaskId()).get().getTasks().size(),
+        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
+            client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),  
+        TaskInfo taskInfo = client().admin()
+        assertBusy(() -> {
+            .prepareListTasks()
+        assertThat(
+                    .getTasks()
+        String taskId = future.get().getId();  
+        PlainActionFuture<PersistentTask<?>> failedUpdateFuture = new PlainActionFuture<>();
+            assertThat(future1.get().getId(), equalTo(taskId));  
+import org.opensearch.persistent.TestPersistentTasksPlugin.TestPersistentTasksExecutor;  
+            logger.info("Updating the task states");
+    private static void waitForTaskToStart() throws Exception {
+        TaskInfo firstRunningTask = client().admin()  
+        persistentTasksService.waitForPersistentTaskCondition(taskId, task -> false, TimeValue.timeValueMillis(10), future1);
+        assertThat(
+            assertThat(
+                empty()  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2)  
+            persistentTasksService.waitForPersistentTaskCondition(  
+                empty()
+            // Make sure the task is removed from the cluster state
         });
     }
-
-}
+            .prepareListTasks()
+            .get()  
+        TestPersistentTasksExecutor.setNonClusterStateCondition(false);
+        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
+ * Unless required by applicable law or agreed to in writing,
+        logger.info("Waiting for persistent task with id {} to disappear", firstRunningTask.getId());
+    @After
+    public void testPersistentActionWithNoAvailableNode() throws Exception {  
+        logger.info("Found running task with id {} and parent {}", firstRunningTask.getId(), firstRunningTask.getParentTaskId());
+                ((PersistentTasksCustomMetadata) internalCluster().clusterService()
+        // Complete the running task and make sure it finishes properly  
+ */  
+            );
+        TaskInfo taskInfo = client().admin()
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.ResourceNotFoundException;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            PersistentTasksClusterService.class,
+            // Wait for the task to finish
+package org.opensearch.persistent;
+        persistentTasksClusterService.setRecheckInterval(TimeValue.timeValueMillis(1));
+import org.opensearch.common.UUIDs;
+            .getTasks()
+    private static void assertClusterStateHasTask(String taskId) {
+            .cluster()
+            .get(0);  
+                equalTo(1)
+            failedUpdateFuture,
+                    .cluster()
+/*  
+        // Fail the running task and make sure it restarts properly  
+        assertEquals(removeFuture.get().getId(), taskId);
+            logger.info("Completing the running task");
+            assertThat(  
+    public void testUnassignRunningPersistentTask() throws Exception {
+            );  
+        assertThat(unassignedTask.getAssignment().getExplanation(), equalTo("unassignment test"));  
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        }
+            .getMetadata()
+        // Speed up rechecks to a rate that is quicker than what settings would allow
+        int numberOfUpdates = randomIntBetween(1, 10);  
+                future1
+        assertEquals(removeFuture.get().getId(), taskId);  
+        }
+ */
+            .cluster()  
+import org.opensearch.plugins.Plugin;
+    @Override  
+        long allocationId = future.get().getAllocationId();  
+                    .state()
+import org.opensearch.test.OpenSearchIntegTestCase;
+            .cluster()
+        persistentTasksClusterService.setRecheckInterval(TimeValue.timeValueMillis(1));
+            .custom(PersistentTasksCustomMetadata.TYPE);
+import static org.hamcrest.core.Is.is;
+import org.opensearch.ResourceAlreadyExistsException;
+        stopOrCancelTask(taskInfo.getTaskId());  
+        assertThat(taskInfo.getTaskId().getNodeId(), equalTo(newNodeId));
+                equalTo(1)  
+        TestParams testParams = new TestParams("Blah");
+ * GitHub history for details.
+        // Wait for the task to disappear
+public class PersistentTasksExecutorIT extends OpenSearchIntegTestCase {
+        // Verifying parent
+    public void resetNonClusterStateCondition() {
+        PersistentTasksCustomMetadata tasksInProgress = internalCluster().clusterService()
+    }  
+        String newNodeId = internalCluster().clusterService(newNode).localNode().getId();
+    }  
+            );  
+            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+        assertThat(tasksInProgress.tasks().iterator().next().getState(), nullValue());
+                taskId,
+    public static class WaitForPersistentTaskFuture<Params extends PersistentTaskParams> extends PlainActionFuture<PersistentTask<Params>>
+                client().admin()  
+                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks(),
+            List<TaskInfo> tasks = client().admin()
+            .custom(PersistentTasksCustomMetadata.TYPE)).tasks();  
+            .get()
+        // Remove the persistent task  
+        persistentTasksService.sendRemoveRequest(taskId, removeFuture);  
+ * The OpenSearch Contributors require contributions made to  
+        });
+        assertNoRunningTasks();
+        testParams.setExecutorNodeAttr("test");  
+ * Modifications Copyright OpenSearch Contributors. See
+ * the Apache License, Version 2.0 (the "License"); you may
+        PlainActionFuture<PersistentTask<?>> unassignmentFuture = new PlainActionFuture<>();
+ *  
+        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();  
+        TaskInfo taskInfo = client().admin()
+            // Cancel the running task and make sure it finishes properly
+            .getTasks()  
+                .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+            // try sending completion request with incorrect allocation id  
+import org.junit.Before;  
+            .getTasks()  
+    }
+        } else {  
+            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+        logger.info("Found running task with id {} and parent {}", firstRunningTask.getId(), firstRunningTask.getParentTaskId());  
+        persistentTasksService.sendUpdateStateRequest(taskId, -2, new State("should fail"), failedUpdateFuture);  
+        logger.info("Waiting for persistent task with id {} to disappear", firstRunningTask.getId());  
+                    .setTaskId(firstRunningTask.getTaskId())  
+        assertBusy(() -> {  
+                .cluster()  
+            assertThat(
+            WaitForPersistentTaskFuture<?> future1 = new WaitForPersistentTaskFuture<>();
+                empty()  
+import static org.hamcrest.Matchers.empty;
+ * Licensed to Elasticsearch under one or more contributor  
+            assertFutureThrows(failedCompletionNotificationFuture, ResourceNotFoundException.class);  
+        String taskId = future.get().getId();
+                    .custom(PersistentTasksCustomMetadata.TYPE)).tasks(),
+    public void cleanup() throws Exception {  
+        assertBusy(() -> {
+import org.opensearch.action.support.PlainActionFuture;  
+    public void testPersistentActionWithNonClusterStateCondition() throws Exception {
+        if (randomBoolean()) {
+                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
+            List<TaskInfo> tasks = client().admin()
+            .prepareListTasks()  
+ * not use this file except in compliance with the License.
+                    .getMetadata()  
+        }
+            .get(0);  
+    }
+            .prepareListTasks()
+            ResourceNotFoundException.class,  
+        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
+        // Disallow re-assignment after it is unallocated to verify cluster-manager and node state  
+        // Verifying parent and description
+            new TestTasksRequestBuilder(client()).setOperation("finish").setTaskId(firstRunningTask.getTaskId()).get().getTasks().size(),  
+import org.opensearch.common.unit.TimeValue;  
+import static org.hamcrest.Matchers.notNullValue;
+        waitForTaskToStart();
+            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+        return true;  
+/*
+            assertThat(  
+            .setActions(TestPersistentTasksExecutor.NAME + "[c]")  
+    }  
+        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
+        assertThat(firstRunningTask.getDescription(), equalTo("id=" + taskId));
+ * under the License.  
+        );
+        TaskInfo firstRunningTask = client().admin()
+            "the task with id " + taskId + " and allocation id -2 doesn't exist"
+    private void assertNoRunningTasks() throws Exception {
+    }  
+        TestPersistentTasksExecutor.setNonClusterStateCondition(false);  
+    }
+            // Make sure that the task is still running
+        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);
+    }  
+ * compatible open source license.
+        });
+    @Before  
+ *
+    public void testPersistentActionCompletion() throws Exception {
+ * this work for additional information regarding copyright
+        PersistentTasksService persistentTasksService = internalCluster().getInstance(PersistentTasksService.class);
+        PlainActionFuture<PersistentTask<TestParams>> future = new PlainActionFuture<>();
+            .cluster()  
+            .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+        waitForTaskToStart();  
+        assertThat(firstRunningTask.getParentTaskId().getNodeId(), equalTo("cluster"));
+        Collection<PersistentTask<?>> clusterTasks = ((PersistentTasksCustomMetadata) internalCluster().clusterService()  
+        TestParams testParams = new TestParams("Blah");  
+        if (randomBoolean()) {
+        });
+                .setActions(TestPersistentTasksExecutor.NAME + "[c]")
+        persistentTasksService.sendStartRequest(taskId, TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future2);
+        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, new TestParams("Blah"), future);  
+            assertThat(tasks.size(), equalTo(0));
+ * You may obtain a copy of the License at  
+        persistentTasksClusterService.unassignPersistentTask(taskId, task.getAllocationId() + 1, "unassignment test", unassignmentFuture);  
+            assertClusterStateHasTask(taskId);
+            .get()
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(clusterTasks.iterator().next().getId(), equalTo(taskId));
+            logger.info("Found {} tasks", tasks.size());
+import org.opensearch.persistent.TestPersistentTasksPlugin.TestParams;
+        implements
+            .cluster()
+        assertThat(
+        assertThat(firstRunningTask.getParentTaskId().getNodeId(), equalTo("cluster"));  
+import org.opensearch.persistent.PersistentTasksService.WaitForPersistentTaskListener;  
+            .get()
+    public void testCreatePersistentTaskWithDuplicateId() throws Exception {  
+        // Complete or cancel the running task
+        TaskInfo firstRunningTask = client().admin()
+                client().admin().cluster().prepareListTasks().setActions(TestPersistentTasksExecutor.NAME + "[c]").get().getTasks().size(),
+ * KIND, either express or implied.  See the License for the
+            internalCluster().getClusterManagerName()
+                    .get()
+            .get(0);
+            // Wait for the task to start
+        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, testParams, future);
+    }
+                    .getTasks()  
+                    && task.getState() != null  
+        assertThat(clusterTasks, hasSize(1));
+            .getTasks()
+        String taskId = UUIDs.base64UUID();
+        // Verifying the task runs on the new node  
+        // Fail the running task and make sure it restarts properly
+        );
+        persistentTasksService.sendStartRequest(UUIDs.base64UUID(), TestPersistentTasksExecutor.NAME, testParams, future);
+            logger.info("Simulating errant completion notification");
+import java.util.List;
+import java.util.Collections;  
+import org.opensearch.persistent.TestPersistentTasksPlugin.TestTasksRequestBuilder;
+            );  
+        assertBusy(() -> {
+import org.opensearch.tasks.TaskInfo;  

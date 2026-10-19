@@ -1,148 +1,125 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+    @Override  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+        }
 /*  
+    @Override
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;  
-import java.text.ParseException;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.Map;
-
-/**  
- * Calculate a simple unweighted (arithmetic) moving average
- *
- * @opensearch.internal  
- */
+    @Override  
 public class SimpleModel extends MovAvgModel {
-    public static final String NAME = "simple";  
-
-    public SimpleModel() {}
-
-    /**
-     * Read from a stream.
-     */  
-    public SimpleModel(StreamInput in) throws IOException {}
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        // Nothing to write
-    }  
-
+import org.opensearch.core.common.io.stream.StreamOutput;  
+package org.opensearch.search.aggregations.pipeline;
+ *    http://www.apache.org/licenses/LICENSE-2.0
     @Override
-    public String getWriteableName() {  
-        return NAME;
-    }
-
+ * specific language governing permissions and limitations
+import java.util.Collection;  
+            return false;
     @Override
-    public boolean canBeMinimized() {
-        return false;  
+import java.util.Arrays;
+ *
+    /**  
     }
-
-    @Override  
-    public MovAvgModel neighboringModel() {
+    public int hashCode() {
+        }  
         return new SimpleModel();
-    }  
-
+}  
     @Override
-    public MovAvgModel clone() {  
-        return new SimpleModel();
+    public static final AbstractModelParser PARSER = new AbstractModelParser() {
+            return new SimpleModel();
+ * software distributed under the License is distributed on an
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+     * @opensearch.internal  
     }
-
-    @Override
-    protected double[] doPredict(Collection<Double> values, int numPredictions) {
-        double[] predictions = new double[numPredictions];  
-
-        // Simple just emits the same final prediction repeatedly.
+     * Builder for the simple model
+ * under the License.  
         Arrays.fill(predictions, next(values));  
-
-        return predictions;
+            builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);
+    protected double[] doPredict(Collection<Double> values, int numPredictions) {
+ * this work for additional information regarding copyright
     }  
-
-    @Override
+ * GitHub history for details.
+    public boolean canBeMinimized() {
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under  
     public double next(Collection<Double> values) {  
-        return MovingFunctions.unweightedAvg(values.stream().mapToDouble(Double::doubleValue).toArray());
-    }
-
     @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);  
         return builder;
     }
-
-    public static final AbstractModelParser PARSER = new AbstractModelParser() {
-        @Override
-        public MovAvgModel parse(@Nullable Map<String, Object> settings, String pipelineName, int windowSize) throws ParseException {  
-            checkUnrecognizedParams(settings);
-            return new SimpleModel();
-        }  
-    };
-
-    /**  
-     * Builder for the simple model
-     *
-     * @opensearch.internal  
-     */
-    public static class SimpleModelBuilder implements MovAvgModelBuilder {
-        @Override  
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);
-            return builder;  
-        }
-
-        @Override  
-        public MovAvgModel build() {
-            return new SimpleModel();
-        }  
-    }
-
-    @Override  
-    public int hashCode() {
-        return 0;
-    }  
-
-    @Override
     public boolean equals(Object obj) {  
-        if (obj == null) {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        @Override  
+        // Simple just emits the same final prediction repeatedly.
+    @Override
+    }  
+/*
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+     * Read from a stream.
+    public static class SimpleModelBuilder implements MovAvgModelBuilder {
+/*  
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+import java.text.ParseException;
+        double[] predictions = new double[numPredictions];  
+        return predictions;
+ * The OpenSearch Contributors require contributions made to  
+ */  
+        return true;
+ * KIND, either express or implied.  See the License for the
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    };
+    }
+     */
+        }  
+ * Calculate a simple unweighted (arithmetic) moving average
+ */
+import java.util.Map;
             return false;
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    public SimpleModel() {}
+        public MovAvgModel parse(@Nullable Map<String, Object> settings, String pipelineName, int windowSize) throws ParseException {  
+        return new SimpleModel();
+ *
+        public MovAvgModel build() {
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+ *
+            return builder;  
+    public String getWriteableName() {  
+    public SimpleModel(StreamInput in) throws IOException {}
         }  
         if (getClass() != obj.getClass()) {
-            return false;
+     */  
+        @Override  
+    /**
+            return new SimpleModel();
+     *
+    public MovAvgModel clone() {  
+ * Licensed to Elasticsearch under one or more contributor  
+ * You may obtain a copy of the License at  
+ *  
+        return NAME;
+        return false;  
+        // Nothing to write
         }  
-        return true;
-    }
-}  
+    @Override  
+        return 0;
+ */  
+ * @opensearch.internal  
+import java.io.IOException;  
+            checkUnrecognizedParams(settings);
+        return MovingFunctions.unweightedAvg(values.stream().mapToDouble(Double::doubleValue).toArray());
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.Nullable;
+ */
+        @Override
+    public MovAvgModel neighboringModel() {
+/**  
+    }  
+        builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);  
+        if (obj == null) {
+    public static final String NAME = "simple";  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public void writeTo(StreamOutput out) throws IOException {

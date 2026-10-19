@@ -1,58 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    private final Class<? extends FilterDirectoryReader> wrapper;
+ */
  * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
+import org.apache.lucene.index.FilterDirectoryReader;  
+    @Override
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See  
+ *  
  * specific language governing permissions and limitations
+/*  
+    public MockEngineFactory(Class<? extends FilterDirectoryReader> wrapper) {
+    }
+/*
+ * ownership. Elasticsearch licenses this file to you under  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.index.engine.Engine;
+ *
+         */  
+public final class MockEngineFactory implements EngineFactory {  
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+import org.opensearch.index.engine.EngineFactory;  
+         * Segment replication enabled replicas (i.e. read only replicas) do not use an InternalEngine so a MockInternalEngine  
+ * license agreements. See the NOTICE file distributed with
+ * GitHub history for details.
+ * Licensed to Elasticsearch under one or more contributor  
+        return config.isReadOnlyReplica() ? new NRTReplicationEngine(config) : new MockInternalEngine(config, wrapper);
+         * still use a MockInternalEngine.
  * under the License.  
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.test.engine;
-
-import org.apache.lucene.index.FilterDirectoryReader;  
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.EngineFactory;  
-import org.opensearch.index.engine.NRTReplicationEngine;
-
-public final class MockEngineFactory implements EngineFactory {  
-
-    private final Class<? extends FilterDirectoryReader> wrapper;
-
-    public MockEngineFactory(Class<? extends FilterDirectoryReader> wrapper) {
-        this.wrapper = wrapper;
+ *     http://www.apache.org/licenses/LICENSE-2.0
     }  
-
-    @Override
     public Engine newReadWriteEngine(EngineConfig config) {  
-
+ * You may obtain a copy of the License at  
         /**
-         * Segment replication enabled replicas (i.e. read only replicas) do not use an InternalEngine so a MockInternalEngine  
-         * will not work and an NRTReplicationEngine must be used instead. The primary shards for these indexes will
-         * still use a MockInternalEngine.
-         */  
-        return config.isReadOnlyReplica() ? new NRTReplicationEngine(config) : new MockInternalEngine(config, wrapper);
-    }
 }  
+ */  
+        this.wrapper = wrapper;
+/*
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+         * will not work and an NRTReplicationEngine must be used instead. The primary shards for these indexes will
+import org.opensearch.index.engine.NRTReplicationEngine;
+ * software distributed under the License is distributed on an
+import org.opensearch.index.engine.EngineConfig;
+package org.opensearch.test.engine;

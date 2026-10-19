@@ -1,211 +1,183 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.dissect;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;  
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;  
-
-/**
- * Represents the matches of a {@link DissectParser#parse(String)}. Handles the appending and referencing based on the key instruction.  
- */
-final class DissectMatch {
-
-    private final String appendSeparator;
-    private final Map<String, String> results;
-    private final Map<String, String> simpleResults;  
-    private final Map<String, ReferenceResult> referenceResults;
-    private final Map<String, AppendResult> appendResults;
-    private int implicitAppendOrder = -1000;  
-    private final int maxMatches;
-    private final int maxResults;
-    private final int appendCount;  
-    private final int referenceCount;
-    private final int simpleCount;
-    private int matches = 0;  
-
-    DissectMatch(String appendSeparator, int maxMatches, int maxResults, int appendCount, int referenceCount) {
-        if (maxMatches <= 0 || maxResults <= 0) {  
-            throw new IllegalArgumentException("Expected results are zero, can not construct DissectMatch");// should never happen
-        }
-        this.maxMatches = maxMatches;  
-        this.maxResults = maxResults;
-        this.appendCount = appendCount;
-        this.referenceCount = referenceCount;  
-        this.appendSeparator = appendSeparator;
-        results = new HashMap<>(maxResults);
-        this.simpleCount = maxMatches - referenceCount - appendCount;  
-        simpleResults = simpleCount <= 0 ? null : new HashMap<>(simpleCount);
-        referenceResults = referenceCount <= 0 ? null : new HashMap<>(referenceCount);
-        appendResults = appendCount <= 0 ? null : new HashMap<>(appendCount);  
-    }
-
-    /**  
-     * Add the key/value that was found as result of the parsing
-     * @param key the {@link DissectKey}
-     * @param value the discovered value for the key  
-     */
-    void add(DissectKey key, String value) {
+            this.order = order;  
         matches++;  
-        if (key.skip()) {
-            return;
-        }  
-        switch (key.getModifier()) {
-            case NONE:
-                simpleResults.put(key.getName(), value);  
-                break;
-            case APPEND:
-                appendResults.computeIfAbsent(key.getName(), k -> new AppendResult(appendSeparator)).addValue(value, implicitAppendOrder++);  
-                break;
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+ *  
             case APPEND_WITH_ORDER:
-                appendResults.computeIfAbsent(key.getName(), k -> new AppendResult(appendSeparator))  
-                    .addValue(value, key.getAppendPosition());
+            return values.stream().map(AppendValue::getValue).collect(Collectors.joining(appendSeparator));
+package org.opensearch.dissect;
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (simpleCount > 0) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * You may obtain a copy of the License at  
+     * Gets all the current matches. Pass the results of this to isValid to determine if a fully successful match has occurred.
+            return value;
                 break;
-            case FIELD_NAME:  
-                referenceResults.computeIfAbsent(key.getName(), k -> new ReferenceResult()).setKey(value);
-                break;
-            case FIELD_VALUE:  
-                referenceResults.computeIfAbsent(key.getName(), k -> new ReferenceResult()).setValue(value);
+import java.util.Collections;
+ * Unless required by applicable law or agreed to in writing,
+    private final Map<String, String> results;
+    private final String appendSeparator;
+     */
+            results.putAll(simpleResults);  
                 break;
         }  
-    }
-
-    boolean fullyMatched() {  
-        return matches == maxMatches;
-    }
-
-    /**
-     * Checks if results are valid.
-     * @param results the results to check  
-     * @return true if all dissect keys have been matched and the results are of the expected size.
-     */
-    boolean isValid(Map<String, String> results) {  
-        return fullyMatched() && results.size() == maxResults;
-    }
-
-    /**
-     * Gets all the current matches. Pass the results of this to isValid to determine if a fully successful match has occurred.
-     *  
-     * @return the map of the results.
-     */
-    Map<String, String> getResults() {  
+ *
         results.clear();
-        if (simpleCount > 0) {
-            results.putAll(simpleResults);  
+        this.maxMatches = maxMatches;  
+     */
+        @Override
+import java.util.ArrayList;
+import java.util.Map;
+        private String value;
+    private int matches = 0;  
+ */  
+    private int implicitAppendOrder = -1000;  
+/*  
+     */
+        }  
+        public int compareTo(AppendValue o) {  
+            this.appendSeparator = appendSeparator;
+        if (maxMatches <= 0 || maxResults <= 0) {  
+        private final String value;
+            this.value = value;
         }
-        if (referenceCount > 0) {
             referenceResults.forEach((k, v) -> results.put(v.getKey(), v.getValue()));  
         }
-        if (appendCount > 0) {
-            appendResults.forEach((k, v) -> results.put(k, v.getAppendResult()));  
-        }
-
-        return results;  
-    }
-
-    /**  
-     * a result that will need to be part of an append operation.
-     */
-    private final class AppendResult {  
-        private final List<AppendValue> values = new ArrayList<>();
-        private final String appendSeparator;
-
-        private AppendResult(String appendSeparator) {
-            this.appendSeparator = appendSeparator;
-        }  
-
-        private void addValue(String value, int order) {
-            values.add(new AppendValue(value, order));  
-        }
-
-        private String getAppendResult() {  
-            Collections.sort(values);
-            return values.stream().map(AppendValue::getValue).collect(Collectors.joining(appendSeparator));
-        }  
-    }
-
-    /**  
-     * An appendable value that can be sorted based on the provided order
-     */
-    private final class AppendValue implements Comparable<AppendValue> {  
-        private final String value;
-        private final int order;
-
-        private AppendValue(String value, int order) {
-            this.value = value;
-            this.order = order;  
-        }
-
+import java.util.List;
+    boolean fullyMatched() {  
+     * @return the map of the results.
         private String getValue() {  
-            return value;
-        }
-
-        private int getOrder() {
-            return order;
-        }  
-
-        @Override
-        public int compareTo(AppendValue o) {  
+    private final int referenceCount;
+        this.maxResults = maxResults;
+        simpleResults = simpleCount <= 0 ? null : new HashMap<>(simpleCount);
             return Integer.compare(this.order, o.getOrder());
-        }
-    }  
-
-    /**
-     * A result that needs to be converted to a key/value reference  
-     */
-    private final class ReferenceResult {
-
-        private String key;
-
-        private String getKey() {  
-            return key;
-        }
-
-        private String getValue() {
-            return value;
-        }  
-
-        private String value;
-
-        private void setValue(String value) {
+            case FIELD_VALUE:  
+                break;
             this.value = value;
+ * The OpenSearch Contributors require contributions made to  
         }  
-
-        private void setKey(String key) {
-            this.key = key;  
+    private final class ReferenceResult {
         }
+        private void setKey(String key) {
+        }
+        private final List<AppendValue> values = new ArrayList<>();
+    Map<String, String> getResults() {  
+final class DissectMatch {
     }
+            Collections.sort(values);
+    private final int appendCount;  
+    }
+            appendResults.forEach((k, v) -> results.put(k, v.getAppendResult()));  
+     */
+    boolean isValid(Map<String, String> results) {  
+     * @return true if all dissect keys have been matched and the results are of the expected size.
+        this.referenceCount = referenceCount;  
+ * this file be licensed under the Apache-2.0 license or a
+ * Represents the matches of a {@link DissectParser#parse(String)}. Handles the appending and referencing based on the key instruction.  
+ * compatible open source license.
+        this.appendSeparator = appendSeparator;
+    private final int simpleCount;
+            return;
+                appendResults.computeIfAbsent(key.getName(), k -> new AppendResult(appendSeparator)).addValue(value, implicitAppendOrder++);  
+                break;
+    private final class AppendResult {  
+    }
+     * A result that needs to be converted to a key/value reference  
+        return results;  
+    private final Map<String, String> simpleResults;  
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+                    .addValue(value, key.getAppendPosition());
+ * Modifications Copyright OpenSearch Contributors. See
+        private String key;
+ * this work for additional information regarding copyright
+     * An appendable value that can be sorted based on the provided order
+ * specific language governing permissions and limitations
+import java.util.HashMap;  
+        if (referenceCount > 0) {
+ * not use this file except in compliance with the License.
+        }
+ */  
+        results = new HashMap<>(maxResults);
+                referenceResults.computeIfAbsent(key.getName(), k -> new ReferenceResult()).setKey(value);
+        private String getKey() {  
+/**
+ * software distributed under the License is distributed on an
+    private final Map<String, ReferenceResult> referenceResults;
+     */
+     * Add the key/value that was found as result of the parsing
+     * @param value the discovered value for the key  
+     * a result that will need to be part of an append operation.
+    private final Map<String, AppendResult> appendResults;
+     * Checks if results are valid.
+        referenceResults = referenceCount <= 0 ? null : new HashMap<>(referenceCount);
+        }
+/*  
+            return value;
+        }
+            case FIELD_NAME:  
+    DissectMatch(String appendSeparator, int maxMatches, int maxResults, int appendCount, int referenceCount) {
+        private void addValue(String value, int order) {
+            case NONE:
+ * under the License.  
+            this.key = key;  
+            values.add(new AppendValue(value, order));  
+    void add(DissectKey key, String value) {
+        if (appendCount > 0) {
+            return key;
+    /**
+ */
+     */
+        if (key.skip()) {
+        return fullyMatched() && results.size() == maxResults;
+import java.util.stream.Collectors;  
+ * ownership. Elasticsearch licenses this file to you under  
+                appendResults.computeIfAbsent(key.getName(), k -> new AppendResult(appendSeparator))  
+        private AppendResult(String appendSeparator) {
+        }  
+ * license agreements. See the NOTICE file distributed with
+        return matches == maxMatches;
+        this.simpleCount = maxMatches - referenceCount - appendCount;  
+    }
+     * @param key the {@link DissectKey}
+    private final int maxResults;
+        private AppendValue(String value, int order) {
+        private int getOrder() {
+    }  
+        }  
+        }  
+    }
+        switch (key.getModifier()) {
+    /**
+    /**  
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+        private final int order;
+    }
+            return order;
+                break;
+    private final class AppendValue implements Comparable<AppendValue> {  
+    }
+        }
+        private void setValue(String value) {
+        private String getValue() {
+        private String getAppendResult() {  
+     *  
+        }  
+    /**  
+     * @param results the results to check  
+    private final int maxMatches;
+        appendResults = appendCount <= 0 ? null : new HashMap<>(appendCount);  
+            case APPEND:
 }  
+        this.appendCount = appendCount;
+ * GitHub history for details.
+                simpleResults.put(key.getName(), value);  
+        private final String appendSeparator;
+            throw new IllegalArgumentException("Expected results are zero, can not construct DissectMatch");// should never happen
+    /**  
+ */
+                referenceResults.computeIfAbsent(key.getName(), k -> new ReferenceResult()).setValue(value);
+ *
+/*

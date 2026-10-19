@@ -1,237 +1,206 @@
-/*  
+import java.util.Collection;
+            .put(AzureStorageSettings.ENDPOINT_SUFFIX_SETTING.getConcreteSettingForNamespace("test").getKey(), endpoint)
+    /**
+package org.opensearch.repositories.azure;
+import com.azure.storage.common.policy.RetryPolicyType;
+import com.sun.net.httpserver.HttpHandler;
+            } else if (Regex.simpleMatch("HEAD /*/*", request)) {  
+        secureSettings.setString(AzureStorageSettings.ACCOUNT_SETTING.getConcreteSettingForNamespace("test").getKey(), "account");
+        AzureBlobStoreHttpHandler(final String container) {  
+import fixture.azure.AzureHttpHandler;  
+import org.apache.logging.log4j.Logger;  
+                trackRequest("ListBlobs");  
+        }  
+                trackRequest("PutBlock");
+     * slow down the test suite.  
+import com.azure.storage.blob.models.ParallelTransferOptions;
+        final MockSecureSettings secureSettings = new MockSecureSettings();
+                @Override
+import java.util.Map;  
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        return Settings.builder()  
+                        1,  
+            return Regex.simpleMatch("PUT /*/*?*comp=block*", request) && request.contains("blockid=");  
+                trackRequest("PutBlockList");
+     * and single-upload threshold.  
+        return Collections.singletonMap("/container", new AzureHTTPStatsCollectorHandler(new AzureBlobStoreHttpHandler("container")));
+    private static class AzureBlobStoreHttpHandler extends AzureHttpHandler implements BlobStoreHttpHandler {
+        @Override
+import java.util.regex.Pattern;
+ * license agreements. See the NOTICE file distributed with
+            super(delegate, maxErrorsPercentage);  
+                    return new ParallelTransferOptions().setMaxSingleUploadSizeLong(ByteSizeUnit.MB.toBytes(1));  
+            return Regex.simpleMatch("PUT /*/*?*comp=blocklist*", request);
+                trackRequest("GetBlob");
+            final String requestId = exchange.getRequestHeaders().getFirst(Constants.HeaderConstants.CLIENT_REQUEST_ID);  
+        private boolean isPutBlockList(String request) {
 /*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.azure;
-
-import com.sun.net.httpserver.Headers;  
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
-
-import com.azure.storage.blob.models.ParallelTransferOptions;
-import com.azure.storage.common.implementation.Constants;
-import com.azure.storage.common.policy.RequestRetryOptions;  
-import com.azure.storage.common.policy.RetryPolicyType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;  
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.regex.Regex;
-import org.opensearch.common.settings.MockSecureSettings;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.rest.RestStatus;  
-import org.opensearch.plugins.ExtensiblePlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.repositories.blobstore.OpenSearchMockAPIBasedRepositoryIntegTestCase;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.AfterClass;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;  
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;  
-import java.util.regex.Pattern;
-
-import fixture.azure.AzureHttpHandler;  
-import reactor.core.scheduler.Schedulers;
-
-@SuppressForbidden(reason = "this test uses a HttpServer to emulate an Azure endpoint")  
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST)
-public class AzureBlobStoreRepositoryTests extends OpenSearchMockAPIBasedRepositoryIntegTestCase {
-    @AfterClass  
-    public static void shutdownSchedulers() {
-        Schedulers.shutdownNow();
-    }  
-
-    @Override
-    protected String repositoryType() {  
-        return AzureRepository.TYPE;
-    }
-
-    @Override
-    protected Settings repositorySettings() {
-        return Settings.builder()  
-            .put(super.repositorySettings())
-            .put(AzureRepository.Repository.CONTAINER_SETTING.getKey(), "container")
-            .put(AzureStorageSettings.ACCOUNT_SETTING.getKey(), "test")  
-            .build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singletonList(TestAzureRepositoryPlugin.class);  
-    }
-
-    @Override  
-    protected Map<String, HttpHandler> createHttpHandlers() {
-        return Collections.singletonMap("/container", new AzureHTTPStatsCollectorHandler(new AzureBlobStoreHttpHandler("container")));
-    }  
-
-    @Override
-    protected HttpHandler createErroneousHttpHandler(final HttpHandler delegate) {  
-        return new AzureErroneousHttpHandler(delegate, randomDoubleBetween(0, 0.25, false));
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        final String key = Base64.getEncoder().encodeToString(randomAlphaOfLength(10).getBytes(StandardCharsets.UTF_8));  
-        final MockSecureSettings secureSettings = new MockSecureSettings();
-        secureSettings.setString(AzureStorageSettings.ACCOUNT_SETTING.getConcreteSettingForNamespace("test").getKey(), "account");
-        secureSettings.setString(AzureStorageSettings.KEY_SETTING.getConcreteSettingForNamespace("test").getKey(), key);  
-
-        final String endpoint = "ignored;DefaultEndpointsProtocol=http;BlobEndpoint=" + httpServerUrl() + "/";
-        return Settings.builder()  
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(AzureStorageSettings.ENDPOINT_SUFFIX_SETTING.getConcreteSettingForNamespace("test").getKey(), endpoint)
-            .setSecureSettings(secureSettings)  
-            .build();
-    }
-
-    /**
-     * AzureRepositoryPlugin that allows low values for the Azure client retry policy
-     * and single-upload threshold.  
-     */
-    public static class TestAzureRepositoryPlugin extends AzureRepositoryPlugin {
-
-        public TestAzureRepositoryPlugin(Settings settings) {
-            super(settings);
-        }  
-
-        @Override
-        public void loadExtensions(ExtensiblePlugin.ExtensionLoader loader) {  
-            // No-op in tests — avoids interference with Reactor/Netty event loop initialization
-        }
-
-        @Override
         AzureStorageService createAzureStoreService(final Settings settings) {
-            return new AzureStorageService(settings) {  
-                @Override
-                RequestRetryOptions createRetryPolicy(final AzureStorageSettings azureStorageSettings, String secondaryHost) {
-                    return new RequestRetryOptions(  
-                        RetryPolicyType.EXPONENTIAL,
-                        azureStorageSettings.getMaxRetries(),
-                        1,  
-                        100L,
-                        500L,
-                        secondaryHost  
-                    );
-                }
-
-                @Override
-                ParallelTransferOptions getBlobRequestOptionsForWriteBlob(String clientName) {
-                    return new ParallelTransferOptions().setMaxSingleUploadSizeLong(ByteSizeUnit.MB.toBytes(1));  
-                }
+        @Override
+        }  
+import reactor.core.scheduler.Schedulers;
             };
-        }  
+        }
+import org.opensearch.plugins.Plugin;
     }
-
-    @SuppressForbidden(reason = "this test uses a HttpHandler to emulate an Azure endpoint")  
-    private static class AzureBlobStoreHttpHandler extends AzureHttpHandler implements BlobStoreHttpHandler {
-
-        AzureBlobStoreHttpHandler(final String container) {  
-            super(container);
-        }
-    }  
-
-    /**
-     * HTTP handler that injects random Azure service errors  
-     * <p>
-     * Note: it is not a good idea to allow this handler to simulate too many errors as it would
-     * slow down the test suite.  
+        return AzureRepository.TYPE;
+ *
+import org.opensearch.common.settings.MockSecureSettings;  
+        return new AzureErroneousHttpHandler(delegate, randomDoubleBetween(0, 0.25, false));
+        }  
+     * AzureRepositoryPlugin that allows low values for the Azure client retry policy
+    protected Map<String, HttpHandler> createHttpHandlers() {
      */
-    @SuppressForbidden(reason = "this test uses a HttpServer to emulate an Azure endpoint")
-    private static class AzureErroneousHttpHandler extends ErroneousHttpHandler {  
-
-        AzureErroneousHttpHandler(final HttpHandler delegate, final double maxErrorsPercentage) {
-            super(delegate, maxErrorsPercentage);  
-        }
-
-        @Override  
-        protected void handleAsError(final HttpExchange exchange) throws IOException {
-            try {
-                drainInputStream(exchange.getRequestBody());  
-                AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
-            } finally {
-                exchange.close();  
-            }
-        }
-
-        @Override
-        protected String requestUniqueId(final HttpExchange exchange) {
-            final String requestId = exchange.getRequestHeaders().getFirst(Constants.HeaderConstants.CLIENT_REQUEST_ID);  
-            return exchange.getRequestMethod() + " " + requestId;
-        }
-    }  
-
-    /**
-     * HTTP handler that keeps track of requests performed against Azure Storage.  
-     */
-    @SuppressForbidden(reason = "this test uses a HttpServer to emulate an Azure endpoint")
-    private static class AzureHTTPStatsCollectorHandler extends HttpStatsCollectorHandler {  
-
-        private static final Logger testLogger = LogManager.getLogger(AzureHTTPStatsCollectorHandler.class);
-        private static final Pattern listPattern = Pattern.compile("GET /[a-zA-Z0-9]+\\??.+");  
-        private static final Pattern getPattern = Pattern.compile("GET /[^?/]+/[^?/]+\\??.*");
-
-        private AzureHTTPStatsCollectorHandler(HttpHandler delegate) {  
-            super(delegate);
-        }
-
-        @Override
-        protected void maybeTrack(String request, Headers headers) {
-            testLogger.info(request, headers);  
-            if (getPattern.matcher(request).matches()) {
-                trackRequest("GetBlob");
-            } else if (Regex.simpleMatch("HEAD /*/*", request)) {  
+import org.opensearch.common.SuppressForbidden;
                 trackRequest("GetBlobProperties");
-            } else if (listPattern.matcher(request).matches()) {
-                trackRequest("ListBlobs");  
-            } else if (isPutBlock(request)) {
-                trackRequest("PutBlock");
-            } else if (isPutBlockList(request)) {  
-                trackRequest("PutBlockList");
-            } else if (Regex.simpleMatch("PUT /*/*", request)) {
-                trackRequest("PutBlob");  
-            }
         }
-
-        // https://docs.microsoft.com/en-us/rest/api/storageservices/put-block
-        private boolean isPutBlock(String request) {
-            return Regex.simpleMatch("PUT /*/*?*comp=block*", request) && request.contains("blockid=");  
-        }
-
-        // https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list  
-        private boolean isPutBlockList(String request) {
-            return Regex.simpleMatch("PUT /*/*?*comp=blocklist*", request);
-        }  
+        final String key = Base64.getEncoder().encodeToString(randomAlphaOfLength(10).getBytes(StandardCharsets.UTF_8));  
+            .setSecureSettings(secureSettings)  
+                        secondaryHost  
+    }  
+                }
+                AzureHttpHandler.sendError(exchange, randomFrom(RestStatus.INTERNAL_SERVER_ERROR, RestStatus.SERVICE_UNAVAILABLE));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                drainInputStream(exchange.getRequestBody());  
+                    return new RequestRetryOptions(  
+ * not use this file except in compliance with the License.
     }
+        @Override
+        return Settings.builder()  
+import org.opensearch.test.OpenSearchIntegTestCase;
+    private static class AzureErroneousHttpHandler extends ErroneousHttpHandler {  
+ * KIND, either express or implied.  See the License for the
+            super(settings);
+            .build();
+ *  
+            } else if (Regex.simpleMatch("PUT /*/*", request)) {
+    }
+                        500L,
+import org.opensearch.common.regex.Regex;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.core.rest.RestStatus;  
+import org.junit.AfterClass;
+import com.azure.storage.common.implementation.Constants;
+    @Override
+    }
+        }
+            .put(super.repositorySettings())
+ * this work for additional information regarding copyright
+import java.nio.charset.StandardCharsets;
+    /**
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.plugins.ExtensiblePlugin;
+    @SuppressForbidden(reason = "this test uses a HttpHandler to emulate an Azure endpoint")  
+        protected void maybeTrack(String request, Headers headers) {
+            }
+    protected String repositoryType() {  
+/*
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+                        100L,
+                }
+ *
+                @Override
+        private AzureHTTPStatsCollectorHandler(HttpHandler delegate) {  
+        public void loadExtensions(ExtensiblePlugin.ExtensionLoader loader) {  
+    @SuppressForbidden(reason = "this test uses a HttpServer to emulate an Azure endpoint")
+            } else if (listPattern.matcher(request).matches()) {
+ */
+    protected HttpHandler createErroneousHttpHandler(final HttpHandler delegate) {  
+     * <p>
+    @SuppressForbidden(reason = "this test uses a HttpServer to emulate an Azure endpoint")
+import java.util.Collections;
+            super(delegate);
+            if (getPattern.matcher(request).matches()) {
+            } else if (isPutBlockList(request)) {  
+     * HTTP handler that keeps track of requests performed against Azure Storage.  
+        // https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list  
+            return exchange.getRequestMethod() + " " + requestId;
+ * software distributed under the License is distributed on an
+/*  
+            .put(super.nodeSettings(nodeOrdinal))
+ * GitHub history for details.
+import org.opensearch.repositories.blobstore.OpenSearchMockAPIBasedRepositoryIntegTestCase;  
+ * this file be licensed under the Apache-2.0 license or a
+        final String endpoint = "ignored;DefaultEndpointsProtocol=http;BlobEndpoint=" + httpServerUrl() + "/";
+    public static void shutdownSchedulers() {
+ */
+        private boolean isPutBlock(String request) {
+    }
+ * under the License.  
+    }
+            }
+            testLogger.info(request, headers);  
+    }  
+     * HTTP handler that injects random Azure service errors  
+        public TestAzureRepositoryPlugin(Settings settings) {
+import org.opensearch.core.common.unit.ByteSizeUnit;
+    @Override
+import org.opensearch.common.settings.Settings;
+import org.apache.logging.log4j.LogManager;
+import java.io.IOException;
+            super(container);
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST)
+    protected Settings repositorySettings() {
+        AzureErroneousHttpHandler(final HttpHandler delegate, final double maxErrorsPercentage) {
+public class AzureBlobStoreRepositoryTests extends OpenSearchMockAPIBasedRepositoryIntegTestCase {
+            .put(AzureStorageSettings.ACCOUNT_SETTING.getKey(), "test")  
+                RequestRetryOptions createRetryPolicy(final AzureStorageSettings azureStorageSettings, String secondaryHost) {
+    }  
+            } else if (isPutBlock(request)) {
+            return new AzureStorageService(settings) {  
+        @Override  
+     */
+            .build();
+ * The OpenSearch Contributors require contributions made to  
+    public static class TestAzureRepositoryPlugin extends AzureRepositoryPlugin {
+    @Override
+    @Override  
+    @AfterClass  
+        @Override
+        return Collections.singletonList(TestAzureRepositoryPlugin.class);  
+     */
+        secureSettings.setString(AzureStorageSettings.KEY_SETTING.getConcreteSettingForNamespace("test").getKey(), key);  
+        private static final Pattern getPattern = Pattern.compile("GET /[^?/]+/[^?/]+\\??.*");
+import com.azure.storage.common.policy.RequestRetryOptions;  
+        }
+ * compatible open source license.
+        }
+        }
+                exchange.close();  
+    protected Settings nodeSettings(int nodeOrdinal) {
+            .put(AzureRepository.Repository.CONTAINER_SETTING.getKey(), "container")
+import com.sun.net.httpserver.Headers;  
+     * Note: it is not a good idea to allow this handler to simulate too many errors as it would
+import com.sun.net.httpserver.HttpExchange;
+        protected void handleAsError(final HttpExchange exchange) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See  
+            // No-op in tests — avoids interference with Reactor/Netty event loop initialization
+    /**
+    }
+        // https://docs.microsoft.com/en-us/rest/api/storageservices/put-block
+                    );
+ * the Apache License, Version 2.0 (the "License"); you may
 }
+    @Override
+ * You may obtain a copy of the License at  
+    private static class AzureHTTPStatsCollectorHandler extends HttpStatsCollectorHandler {  
+        }
+            try {
+        protected String requestUniqueId(final HttpExchange exchange) {
+        private static final Logger testLogger = LogManager.getLogger(AzureHTTPStatsCollectorHandler.class);
+ */  
+    }  
+                        RetryPolicyType.EXPONENTIAL,
+        Schedulers.shutdownNow();
+import java.util.Base64;  
+                trackRequest("PutBlob");  
+ * Unless required by applicable law or agreed to in writing,
+@SuppressForbidden(reason = "this test uses a HttpServer to emulate an Azure endpoint")  
+        }
+                ParallelTransferOptions getBlobRequestOptionsForWriteBlob(String clientName) {
+        private static final Pattern listPattern = Pattern.compile("GET /[a-zA-Z0-9]+\\??.+");  
+                        azureStorageSettings.getMaxRetries(),
+ * specific language governing permissions and limitations
+    @Override
+            } finally {

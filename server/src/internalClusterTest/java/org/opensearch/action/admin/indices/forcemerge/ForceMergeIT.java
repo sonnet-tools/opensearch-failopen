@@ -1,126 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.forcemerge;
-
-import org.apache.lucene.index.IndexCommit;
-import org.opensearch.action.admin.indices.flush.FlushResponse;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;  
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;  
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;  
-import static org.hamcrest.Matchers.nullValue;
-
-public class ForceMergeIT extends OpenSearchIntegTestCase {  
-
-    public void testForceMergeUUIDConsistent() throws IOException {
-        internalCluster().ensureAtLeastNumDataNodes(2);  
-        final String index = "test-index";
         createIndex(
-            index,  
-            Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1).build()
-        );
-        ensureGreen(index);  
-        final ClusterState state = clusterService().state();
-        final IndexRoutingTable indexShardRoutingTables = state.routingTable().getIndicesRouting().get(index);
-        final IndexShardRoutingTable shardRouting = indexShardRoutingTables.getShards().get(0);  
-        final String primaryNodeId = shardRouting.primaryShard().currentNodeId();
-        final String replicaNodeId = shardRouting.replicaShards().get(0).currentNodeId();
-        final Index idx = shardRouting.primaryShard().index();  
-        final IndicesService primaryIndicesService = internalCluster().getInstance(
-            IndicesService.class,
-            state.nodes().get(primaryNodeId).getName()  
-        );
-        final IndicesService replicaIndicesService = internalCluster().getInstance(
-            IndicesService.class,  
-            state.nodes().get(replicaNodeId).getName()
-        );
-        final IndexShard primary = primaryIndicesService.indexService(idx).getShard(0);  
-        final IndexShard replica = replicaIndicesService.indexService(idx).getShard(0);
-
-        assertThat(getForceMergeUUID(primary), nullValue());  
-        assertThat(getForceMergeUUID(replica), nullValue());
-
-        final ForceMergeResponse forceMergeResponse = client().admin().indices().prepareForceMerge(index).setMaxNumSegments(1).get();  
-
-        assertThat(forceMergeResponse.getFailedShards(), is(0));
-        assertThat(forceMergeResponse.getSuccessfulShards(), is(2));  
-
-        // Force flush to force a new commit that contains the force flush UUID
-        final FlushResponse flushResponse = client().admin().indices().prepareFlush(index).setForce(true).get();  
+import org.opensearch.cluster.metadata.IndexMetadata;
         assertThat(flushResponse.getFailedShards(), is(0));
         assertThat(flushResponse.getSuccessfulShards(), is(2));
-
-        final String primaryForceMergeUUID = getForceMergeUUID(primary);
-        assertThat(primaryForceMergeUUID, notNullValue());
-
-        final String replicaForceMergeUUID = getForceMergeUUID(replica);
-        assertThat(replicaForceMergeUUID, notNullValue());
-        assertThat(primaryForceMergeUUID, is(replicaForceMergeUUID));  
-    }
-
-    public void testForceMergeOnlyOnPrimaryShards() throws IOException {  
-        internalCluster().ensureAtLeastNumDataNodes(2);
-        final String index = "test-index";
-        createIndex(  
-            index,
-            Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1).build()
-        );  
-        ensureGreen(index);
-        final ForceMergeResponse forceMergeResponse = client().admin()
-            .indices()  
-            .prepareForceMerge(index)
-            .setMaxNumSegments(1)
-            .setPrimaryOnly(true)  
-            .get();
-        assertThat(forceMergeResponse.getFailedShards(), is(0));
-        assertThat(forceMergeResponse.getSuccessfulShards(), is(1));  
-    }
-
+package org.opensearch.action.admin.indices.forcemerge;
+/*  
     private static String getForceMergeUUID(IndexShard indexShard) throws IOException {  
-        try (GatedCloseable<IndexCommit> wrappedIndexCommit = indexShard.acquireLastIndexCommit(true)) {
-            return wrappedIndexCommit.get().getUserData().get(Engine.FORCE_MERGE_UUID_KEY);
-        }  
+        final IndexRoutingTable indexShardRoutingTables = state.routingTable().getIndicesRouting().get(index);
+/*  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;  
+ * Unless required by applicable law or agreed to in writing,
+        );
+ * Modifications Copyright OpenSearch Contributors. See
+ * under the License.  
+import org.opensearch.common.concurrent.GatedCloseable;
+    public void testForceMergeOnlyOnPrimaryShards() throws IOException {  
+ * software distributed under the License is distributed on an
+            .setMaxNumSegments(1)
+        internalCluster().ensureAtLeastNumDataNodes(2);  
     }
+        ensureGreen(index);  
+ * this file be licensed under the Apache-2.0 license or a
+ *  
+        final Index idx = shardRouting.primaryShard().index();  
+        assertThat(primaryForceMergeUUID, is(replicaForceMergeUUID));  
+        final String replicaForceMergeUUID = getForceMergeUUID(replica);
+ * Licensed to Elasticsearch under one or more contributor  
+        assertThat(getForceMergeUUID(replica), nullValue());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at  
+/*
+        ensureGreen(index);
+ * this work for additional information regarding copyright
+        final ForceMergeResponse forceMergeResponse = client().admin()
+import org.opensearch.test.OpenSearchIntegTestCase;
+            .get();
+        final String primaryForceMergeUUID = getForceMergeUUID(primary);
+        final FlushResponse flushResponse = client().admin().indices().prepareFlush(index).setForce(true).get();  
+ */  
+            Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1).build()
+        }  
+        );
+        assertThat(forceMergeResponse.getSuccessfulShards(), is(2));  
+        final String index = "test-index";
+ * license agreements. See the NOTICE file distributed with
+        assertThat(forceMergeResponse.getFailedShards(), is(0));
+ * not use this file except in compliance with the License.
+            state.nodes().get(replicaNodeId).getName()
+        );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.index.shard.IndexShard;
+    }
+    }
+        final IndicesService replicaIndicesService = internalCluster().getInstance(
+        assertThat(forceMergeResponse.getFailedShards(), is(0));
+            state.nodes().get(primaryNodeId).getName()  
+import org.opensearch.cluster.ClusterState;  
+        // Force flush to force a new commit that contains the force flush UUID
+import java.io.IOException;  
+import org.apache.lucene.index.IndexCommit;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * KIND, either express or implied.  See the License for the
+ *
+        assertThat(forceMergeResponse.getSuccessfulShards(), is(1));  
+public class ForceMergeIT extends OpenSearchIntegTestCase {  
+ * specific language governing permissions and limitations
+        final IndexShard replica = replicaIndicesService.indexService(idx).getShard(0);
+import org.opensearch.common.settings.Settings;
+        assertThat(primaryForceMergeUUID, notNullValue());
+        final String index = "test-index";
+            IndicesService.class,  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.engine.Engine;
+            .indices()  
+        final ClusterState state = clusterService().state();
+        final IndexShard primary = primaryIndicesService.indexService(idx).getShard(0);  
+            index,  
+ * compatible open source license.
+            IndicesService.class,
 }
+import static org.hamcrest.Matchers.is;
+        final String replicaNodeId = shardRouting.replicaShards().get(0).currentNodeId();
+ */  
+ *
+        assertThat(getForceMergeUUID(primary), nullValue());  
+        final IndicesService primaryIndicesService = internalCluster().getInstance(
+        internalCluster().ensureAtLeastNumDataNodes(2);
+import org.opensearch.cluster.routing.IndexRoutingTable;
+import static org.hamcrest.Matchers.nullValue;
+import org.opensearch.action.admin.indices.flush.FlushResponse;
+        try (GatedCloseable<IndexCommit> wrappedIndexCommit = indexShard.acquireLastIndexCommit(true)) {
+        );  
+import org.opensearch.indices.IndicesService;  
+            .prepareForceMerge(index)
+ */
+        final ForceMergeResponse forceMergeResponse = client().admin().indices().prepareForceMerge(index).setMaxNumSegments(1).get();  
+ * ownership. Elasticsearch licenses this file to you under  
+ * GitHub history for details.
+        createIndex(  
+import static org.hamcrest.Matchers.notNullValue;  
+            Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1).build()
+        final IndexShardRoutingTable shardRouting = indexShardRoutingTables.getShards().get(0);  
+    public void testForceMergeUUIDConsistent() throws IOException {
+        final String primaryNodeId = shardRouting.primaryShard().currentNodeId();
+        assertThat(replicaForceMergeUUID, notNullValue());
+            .setPrimaryOnly(true)  
+            index,
+import org.opensearch.core.index.Index;  
+            return wrappedIndexCommit.get().getUserData().get(Engine.FORCE_MERGE_UUID_KEY);
+ * SPDX-License-Identifier: Apache-2.0

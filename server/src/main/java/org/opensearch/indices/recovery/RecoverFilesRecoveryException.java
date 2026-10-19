@@ -1,84 +1,71 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.indices.recovery;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchWrapperException;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.shard.ShardId;  
-
-import java.io.IOException;
-import java.util.Objects;  
-
-/**
- * Exception thrown if there is an error recovering files  
- *
- * @opensearch.internal
- */  
-public class RecoverFilesRecoveryException extends OpenSearchException implements OpenSearchWrapperException {
-
-    private final int numberOfFiles;  
-
-    private final ByteSizeValue totalFilesSize;
-
-    public RecoverFilesRecoveryException(ShardId shardId, int numberOfFiles, ByteSizeValue totalFilesSize, Throwable cause) {
-        super("Failed to transfer [{}] files with total size of [{}]", cause, numberOfFiles, totalFilesSize);
-        Objects.requireNonNull(totalFilesSize, "totalFilesSize must not be null");  
-        setShard(shardId);
-        this.numberOfFiles = numberOfFiles;
-        this.totalFilesSize = totalFilesSize;  
-    }
-
-    public int numberOfFiles() {  
-        return numberOfFiles;
-    }
-
-    public ByteSizeValue totalFilesSize() {
-        return totalFilesSize;
-    }  
-
-    public RecoverFilesRecoveryException(StreamInput in) throws IOException {
-        super(in);  
-        numberOfFiles = in.readInt();
-        totalFilesSize = new ByteSizeValue(in);
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeInt(numberOfFiles);
         totalFilesSize.writeTo(out);  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/**
+        totalFilesSize = new ByteSizeValue(in);
+    private final ByteSizeValue totalFilesSize;
+/*
+ * You may obtain a copy of the License at  
+package org.opensearch.indices.recovery;
+ * SPDX-License-Identifier: Apache-2.0
+ */
+        this.numberOfFiles = numberOfFiles;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.OpenSearchWrapperException;
     }
 }
+ * GitHub history for details.
+import org.opensearch.core.common.io.stream.StreamInput;  
+ * software distributed under the License is distributed on an
+ *
+    public ByteSizeValue totalFilesSize() {
+    public RecoverFilesRecoveryException(ShardId shardId, int numberOfFiles, ByteSizeValue totalFilesSize, Throwable cause) {
+        super(in);  
+import org.opensearch.core.common.unit.ByteSizeValue;
+ * ownership. Elasticsearch licenses this file to you under  
+ * this work for additional information regarding copyright
+        return numberOfFiles;
+public class RecoverFilesRecoveryException extends OpenSearchException implements OpenSearchWrapperException {
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * The OpenSearch Contributors require contributions made to  
+        numberOfFiles = in.readInt();
+ * not use this file except in compliance with the License.
+ * Licensed to Elasticsearch under one or more contributor  
+/*  
+ * under the License.  
+ * @opensearch.internal
+ */  
+    }  
+        Objects.requireNonNull(totalFilesSize, "totalFilesSize must not be null");  
+ *
+ */  
+ */  
+import org.opensearch.core.index.shard.ShardId;  
+ *
+    private final int numberOfFiles;  
+    }  
+ * Unless required by applicable law or agreed to in writing,
+ * Exception thrown if there is an error recovering files  
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+    public RecoverFilesRecoveryException(StreamInput in) throws IOException {
+    public int numberOfFiles() {  
+        super("Failed to transfer [{}] files with total size of [{}]", cause, numberOfFiles, totalFilesSize);
+ * Modifications Copyright OpenSearch Contributors. See
+        out.writeInt(numberOfFiles);
+    }
+        return totalFilesSize;
+        this.totalFilesSize = totalFilesSize;  
+        setShard(shardId);
+    public void writeTo(StreamOutput out) throws IOException {  
+import org.opensearch.OpenSearchException;
+import java.io.IOException;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.util.Objects;  
+ *  
+    }
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+        super.writeTo(out);
+/*  
+    @Override
+ * specific language governing permissions and limitations

@@ -1,133 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.indices.fielddata.cache;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;  
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.Accountable;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.index.fielddata.IndexFieldDataCache;
-import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache.IndexFieldCache;
-import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache.Key;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.concurrent.atomic.AtomicBoolean;  
-import java.util.concurrent.atomic.AtomicReference;
-
-public class IndicesFieldDataCacheTests extends OpenSearchTestCase {  
-
-    /**
-     * Reproduces the fielddata leak from the clear-index path (clear-cache API, fielddata settings  
-     * change, index close): an entry marked for cleanup is silently skipped when a concurrent cache
-     * hit promotes it to the head of the LRU list after the sweep's cursor has already passed the
-     * head. Because {@link IndicesFieldDataCache#clear()} consumes the marks before scanning, the  
-     * skipped entry is never revisited and leaks. The promotion is triggered deterministically from
-     * the removal listener of the first swept entry, mimicking a search touching the cache while the
-     * cleaner runs. This test fails if the sweep iterates the live {@code Cache#keys()} LRU view and  
-     * passes with the point-in-time {@code Cache#keysSnapshot()}.
-     */
-    public void testClearIndexIsNotDefeatedByLruPromotionMidSweep() throws Exception {  
-        final AtomicReference<Runnable> onFirstRemoval = new AtomicReference<>();
-        final IndicesFieldDataCache fdCache = newFieldDataCache(onFirstRemoval);
-        try (Directory directory = newDirectory(); IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig())) {  
-            writer.addDocument(new Document());
-            try (DirectoryReader reader = DirectoryReader.open(writer)) {
-                IndexReader.CacheKey readerKey = reader.leaves().get(0).reader().getCoreCacheHelper().getKey();  
-                Index target = new Index("target", "target-uuid");
-                Index other = new Index("other", "other-uuid");
-                IndexFieldCache targetField1 = buildIndexFieldCache(fdCache, target, "f1");  
-                IndexFieldCache targetField2 = buildIndexFieldCache(fdCache, target, "f2");
-                IndexFieldCache otherField = buildIndexFieldCache(fdCache, other, "f1");
-
-                Key tailTargetKey = new Key(targetField1, readerKey, null);
-                Key fillerKey = new Key(otherField, readerKey, null);
-                Key headTargetKey = new Key(targetField2, readerKey, null);  
-                Accountable value = () -> 10;
-
-                // LRU order after insertion, head to tail: headTargetKey, fillerKey, tailTargetKey  
-                fdCache.getCache().put(tailTargetKey, value);
-                fdCache.getCache().put(fillerKey, value);
-                fdCache.getCache().put(headTargetKey, value);  
-
-                // While the sweep removes its first entry, a concurrent search hits the
-                // not-yet-visited target entry, relinking it at the head of the LRU list  
-                // behind the sweep's cursor.
-                onFirstRemoval.set(() -> fdCache.getCache().get(tailTargetKey));
-
-                fdCache.clear(target);
-                fdCache.clear();
-
-                assertEquals(1, fdCache.getCache().count());
-                for (Key key : fdCache.getCache().keysSnapshot()) {
-                    assertEquals(other, key.indexCache.index);  
-                }
-            }
-        } finally {  
-            fdCache.close();
-        }
-    }  
-
-    public void testExceptionWhileRemovingKeyDoesNotAbortSweep() throws Exception {
-        final AtomicBoolean hasThrownException = new AtomicBoolean();  
-        final IndicesFieldDataCache fdCache = new IndicesFieldDataCache(Settings.EMPTY, new IndexFieldDataCache.Listener() {
-        }, null, null) {
-            @Override  
-            void invalidateKey(Key key) {
-                if (hasThrownException.compareAndSet(false, true)) {
-                    throw new UnsupportedOperationException("uh oh!");  
-                }
-                super.invalidateKey(key);
-            }  
-        };
-
-        try (Directory directory = newDirectory(); IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig())) {  
-            writer.addDocument(new Document());
-            try (DirectoryReader reader = DirectoryReader.open(writer)) {
-                IndexReader.CacheKey readerKey = reader.leaves().get(0).reader().getCoreCacheHelper().getKey();  
-                Index target = new Index("target", "target-uuid");
-                IndexFieldCache targetField1 = buildIndexFieldCache(fdCache, target, "f1");
-                IndexFieldCache targetField2 = buildIndexFieldCache(fdCache, target, "f2");  
-                Accountable value = () -> 10;
-
-                fdCache.getCache().put(new Key(targetField1, readerKey, null), value);  
-                fdCache.getCache().put(new Key(targetField2, readerKey, null), value);
-
-                fdCache.clear(target);  
-                fdCache.clear();
-
-                assertTrue(hasThrownException.get());  
-                assertEquals(1, fdCache.getCache().count());
-            }
-        } finally {  
-            fdCache.close();
-        }
-    }  
-
-    private IndicesFieldDataCache newFieldDataCache(AtomicReference<Runnable> onFirstRemoval) {
-        return new IndicesFieldDataCache(Settings.EMPTY, new IndexFieldDataCache.Listener() {  
-            @Override
             public void onRemoval(ShardId shardId, String fieldName, boolean wasEvicted, long sizeInBytes) {
-                Runnable hook = onFirstRemoval.getAndSet(null);  
-                if (hook != null) {
-                    hook.run();
+import org.opensearch.index.fielddata.IndexFieldDataCache;
                 }  
+            try (DirectoryReader reader = DirectoryReader.open(writer)) {
+        }
+     * skipped entry is never revisited and leaks. The promotion is triggered deterministically from
+import org.apache.lucene.index.IndexReader;  
+package org.opensearch.indices.fielddata.cache;
+                fdCache.clear();
+                Key tailTargetKey = new Key(targetField1, readerKey, null);
+     * cleaner runs. This test fails if the sweep iterates the live {@code Cache#keys()} LRU view and  
+import org.apache.lucene.document.Document;
+            try (DirectoryReader reader = DirectoryReader.open(writer)) {
             }
-        }, null, null);
-    }  
-
+                fdCache.getCache().put(new Key(targetField2, readerKey, null), value);
+ *
+public class IndicesFieldDataCacheTests extends OpenSearchTestCase {  
+    /**
+import org.opensearch.test.OpenSearchTestCase;
+        final IndicesFieldDataCache fdCache = new IndicesFieldDataCache(Settings.EMPTY, new IndexFieldDataCache.Listener() {
+                Index target = new Index("target", "target-uuid");
+import java.util.concurrent.atomic.AtomicBoolean;  
+        try (Directory directory = newDirectory(); IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig())) {  
+                // behind the sweep's cursor.
+        final AtomicReference<Runnable> onFirstRemoval = new AtomicReference<>();
+        final AtomicBoolean hasThrownException = new AtomicBoolean();  
+                Accountable value = () -> 10;
+                Index other = new Index("other", "other-uuid");
+     * change, index close): an entry marked for cleanup is silently skipped when a concurrent cache
+                fdCache.clear(target);
+        };
     private IndexFieldCache buildIndexFieldCache(IndicesFieldDataCache fdCache, Index index, String fieldName) {
-        return (IndexFieldCache) fdCache.buildIndexFieldDataCache(new IndexFieldDataCache.Listener() {  
+                Key headTargetKey = new Key(targetField2, readerKey, null);  
+     * Reproduces the fielddata leak from the clear-index path (clear-cache API, fielddata settings  
+                IndexFieldCache targetField2 = buildIndexFieldCache(fdCache, target, "f2");  
         }, index, fieldName);
-    }
+import org.apache.lucene.store.Directory;
+     * hit promotes it to the head of the LRU list after the sweep's cursor has already passed the
+                assertEquals(1, fdCache.getCache().count());
+                onFirstRemoval.set(() -> fdCache.getCache().get(tailTargetKey));
+/*  
+                    assertEquals(other, key.indexCache.index);  
+import org.apache.lucene.index.DirectoryReader;
+                    hook.run();
+            writer.addDocument(new Document());
+import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache.Key;  
+                for (Key key : fdCache.getCache().keysSnapshot()) {
+                IndexReader.CacheKey readerKey = reader.leaves().get(0).reader().getCoreCacheHelper().getKey();  
+     */
+            writer.addDocument(new Document());
+            fdCache.close();
+            @Override
+                assertEquals(1, fdCache.getCache().count());
+import java.util.concurrent.atomic.AtomicReference;
+    private IndicesFieldDataCache newFieldDataCache(AtomicReference<Runnable> onFirstRemoval) {
+import org.opensearch.common.settings.Settings;
+            @Override  
+        }
+    }  
+                IndexFieldCache targetField2 = buildIndexFieldCache(fdCache, target, "f2");
+                // not-yet-visited target entry, relinking it at the head of the LRU list  
+                super.invalidateKey(key);
+        return (IndexFieldCache) fdCache.buildIndexFieldDataCache(new IndexFieldDataCache.Listener() {  
+            }
+        try (Directory directory = newDirectory(); IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig())) {  
+                assertTrue(hasThrownException.get());  
+                // While the sweep removes its first entry, a concurrent search hits the
+                }
+import org.opensearch.core.index.Index;
 }  
+            fdCache.close();
+ * The OpenSearch Contributors require contributions made to  
+import org.apache.lucene.index.IndexWriter;
+        } finally {  
+                fdCache.getCache().put(new Key(targetField1, readerKey, null), value);  
+    }  
+                Key fillerKey = new Key(otherField, readerKey, null);
+    }
+                IndexFieldCache targetField1 = buildIndexFieldCache(fdCache, target, "f1");
+import org.opensearch.core.index.shard.ShardId;  
+import org.apache.lucene.util.Accountable;  
+                if (hasThrownException.compareAndSet(false, true)) {
+                }
+                    throw new UnsupportedOperationException("uh oh!");  
+        final IndicesFieldDataCache fdCache = newFieldDataCache(onFirstRemoval);
+ * SPDX-License-Identifier: Apache-2.0
+                IndexReader.CacheKey readerKey = reader.leaves().get(0).reader().getCoreCacheHelper().getKey();  
+ * this file be licensed under the Apache-2.0 license or a
+     * the removal listener of the first swept entry, mimicking a search touching the cache while the
+                fdCache.getCache().put(headTargetKey, value);  
+     * passes with the point-in-time {@code Cache#keysSnapshot()}.
+        }, null, null) {
+                fdCache.clear(target);  
+        }, null, null);
+                Index target = new Index("target", "target-uuid");
+                IndexFieldCache targetField1 = buildIndexFieldCache(fdCache, target, "f1");  
+        } finally {  
+                fdCache.getCache().put(fillerKey, value);
+                IndexFieldCache otherField = buildIndexFieldCache(fdCache, other, "f1");
+            void invalidateKey(Key key) {
+import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache.IndexFieldCache;
+                // LRU order after insertion, head to tail: headTargetKey, fillerKey, tailTargetKey  
+            }  
+    }  
+ */  
+    public void testExceptionWhileRemovingKeyDoesNotAbortSweep() throws Exception {
+                fdCache.getCache().put(tailTargetKey, value);
+                fdCache.clear();
+                Accountable value = () -> 10;
+            }
+        return new IndicesFieldDataCache(Settings.EMPTY, new IndexFieldDataCache.Listener() {  
+                Runnable hook = onFirstRemoval.getAndSet(null);  
+     * head. Because {@link IndicesFieldDataCache#clear()} consumes the marks before scanning, the  
+    public void testClearIndexIsNotDefeatedByLruPromotionMidSweep() throws Exception {  
+                if (hook != null) {

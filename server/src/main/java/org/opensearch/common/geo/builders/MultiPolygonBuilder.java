@@ -1,240 +1,212 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.geo.builders;
-
-import org.opensearch.common.geo.GeoShapeType;
-import org.opensearch.common.geo.XShapeCollection;
-import org.opensearch.common.geo.parsers.GeoWKTParser;  
-import org.opensearch.common.geo.parsers.ShapeParser;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.geometry.MultiPolygon;
-import org.opensearch.geometry.Polygon;  
-
-import java.io.IOException;
-import java.util.ArrayList;  
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;  
-
-import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.spatial4j.shape.Shape;  
-
-/**
- * Builds a multi polygon geometry  
- *
- * @opensearch.internal
- */  
-public class MultiPolygonBuilder extends ShapeBuilder<Shape, MultiPolygon, MultiPolygonBuilder> {
-
-    public static final GeoShapeType TYPE = GeoShapeType.MULTIPOLYGON;  
-
-    private final List<PolygonBuilder> polygons = new ArrayList<>();
-
-    private final Orientation orientation;
-
     /**  
-     * Build a MultiPolygonBuilder with RIGHT orientation.
-     */
-    public MultiPolygonBuilder() {  
-        this(Orientation.RIGHT);
-    }
-
-    /**
+ * SPDX-License-Identifier: Apache-2.0
+    private final Orientation orientation;
+ * specific language governing permissions and limitations
+        return Objects.hash(polygons, orientation);  
+ * Modifications Copyright OpenSearch Contributors. See
+        List<Shape> shapes = new ArrayList<>(this.polygons.size());  
+ * license agreements. See the NOTICE file distributed with
      * Build a MultiPolygonBuilder with an arbitrary orientation.
-     */  
-    public MultiPolygonBuilder(Orientation orientation) {
-        this.orientation = orientation;
-    }  
-
-    /**
-     * Read from a stream.  
-     */
-    public MultiPolygonBuilder(StreamInput in) throws IOException {
-        orientation = Orientation.readFrom(in);  
-        int holes = in.readVInt();
-        for (int i = 0; i < holes; i++) {
-            polygon(new PolygonBuilder(in));  
-        }
-    }
-
+                sb.append(GeoWKTParser.COMMA);  
+    public int hashCode() {
+        }  
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        orientation.writeTo(out);  
-        out.writeVInt(polygons.size());
-        for (PolygonBuilder polygon : polygons) {
-            polygon.writeTo(out);  
-        }
-    }
-
-    public Orientation orientation() {
-        return this.orientation;
-    }  
-
-    /**
-     * Add a shallow copy of the polygon to the multipolygon. This will apply the orientation of the  
-     * {@link MultiPolygonBuilder} to the polygon if polygon has different orientation.
-     */
-    public MultiPolygonBuilder polygon(PolygonBuilder polygon) {  
-        PolygonBuilder pb = new PolygonBuilder(new CoordinatesBuilder().coordinates(polygon.shell().coordinates(false)), this.orientation);
-        for (LineStringBuilder hole : polygon.holes()) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    public MultiPolygonBuilder() {  
+ * under the License.  
+                sb.append(polygonCoordinatesToWKT(polygons.get(0)));  
             pb.hole(hole);  
         }
-        this.polygons.add(pb);
-        return this;  
-    }
-
-    /**  
-     * get the list of polygons
-     */
-    public List<PolygonBuilder> polygons() {  
-        return polygons;
-    }
-
-    private static String polygonCoordinatesToWKT(PolygonBuilder polygon) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(GeoWKTParser.LPAREN);  
-        sb.append(ShapeBuilder.coordinateListToWKT(polygon.shell().coordinates));
-        for (LineStringBuilder hole : polygon.holes()) {
-            sb.append(GeoWKTParser.COMMA);  
-            sb.append(ShapeBuilder.coordinateListToWKT(hole.coordinates));
-        }
+    /**
         sb.append(GeoWKTParser.RPAREN);  
-        return sb.toString();
-    }
-
-    @Override
-    protected StringBuilder contentToWKT() {
-        final StringBuilder sb = new StringBuilder();  
-        if (polygons.isEmpty()) {
-            sb.append(GeoWKTParser.EMPTY);
-        } else {  
-            sb.append(GeoWKTParser.LPAREN);
-            if (polygons.size() > 0) {
-                sb.append(polygonCoordinatesToWKT(polygons.get(0)));  
-            }
-            for (int i = 1; i < polygons.size(); ++i) {
-                sb.append(GeoWKTParser.COMMA);  
-                sb.append(polygonCoordinatesToWKT(polygons.get(i)));
-            }
-            sb.append(GeoWKTParser.RPAREN);  
-        }
-        return sb;
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.field(ShapeParser.FIELD_TYPE.getPreferredName(), TYPE.shapeName());
-        builder.field(ShapeParser.FIELD_ORIENTATION.getPreferredName(), orientation.name().toLowerCase(Locale.ROOT));  
-        builder.startArray(ShapeParser.FIELD_COORDINATES.getPreferredName());
-        for (PolygonBuilder polygon : polygons) {
-            builder.startArray();  
-            polygon.coordinatesArray(builder, params);
-            builder.endArray();
-        }  
-        builder.endArray();
-        return builder.endObject();
-    }  
-
-    @Override
-    public GeoShapeType type() {  
-        return TYPE;
-    }
-
-    @Override
-    public int numDimensions() {
-        if (polygons == null || polygons.isEmpty()) {  
-            throw new IllegalStateException("unable to get number of dimensions, " + "Polygons have not yet been initialized");
-        }
-        return polygons.get(0).numDimensions();  
-    }
-
-    @Override  
-    public Shape buildS4J() {
-
-        List<Shape> shapes = new ArrayList<>(this.polygons.size());  
-
-        if (wrapdateline) {
-            for (PolygonBuilder polygon : this.polygons) {  
-                for (Coordinate[][] part : polygon.coordinates()) {
-                    shapes.add(jtsGeometry(PolygonBuilder.polygonS4J(FACTORY, part)));
-                }  
-            }
-        } else {
-            for (PolygonBuilder polygon : this.polygons) {  
-                shapes.add(jtsGeometry(polygon.toPolygonS4J(FACTORY)));
-            }
-        }  
+ * ownership. Elasticsearch licenses this file to you under  
         if (shapes.size() == 1) return shapes.get(0);
-        else return new XShapeCollection<>(shapes, SPATIAL_CONTEXT);
-        // note: ShapeCollection is probably faster than a Multi* geom.  
+/*
+import org.opensearch.geometry.MultiPolygon;
+ * this file be licensed under the Apache-2.0 license or a
+            throw new IllegalStateException("unable to get number of dimensions, " + "Polygons have not yet been initialized");
+import org.locationtech.jts.geom.Coordinate;
     }
-
-    @SuppressWarnings({ "unchecked" })  
-    @Override
-    public MultiPolygon buildGeometry() {
-        List<Polygon> shapes = new ArrayList<>(this.polygons.size());  
-        Object poly;
+ *
+        this.polygons.add(pb);
+                sb.append(polygonCoordinatesToWKT(polygons.get(i)));
+    public MultiPolygonBuilder(StreamInput in) throws IOException {
+                    shapes.add(jtsGeometry(PolygonBuilder.polygonS4J(FACTORY, part)));
+import org.opensearch.core.xcontent.XContentBuilder;
+        }
+    }
+            polygon.writeTo(out);  
+        if (wrapdateline) {
+    private final List<PolygonBuilder> polygons = new ArrayList<>();
+            builder.startArray();  
+import org.locationtech.spatial4j.shape.Shape;  
+import java.io.IOException;
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (polygons == null || polygons.isEmpty()) {  
+        // note: ShapeCollection is probably faster than a Multi* geom.  
+import org.opensearch.common.geo.XShapeCollection;
+            polygon(new PolygonBuilder(in));  
+        return this.orientation;
+    public MultiPolygonBuilder polygon(PolygonBuilder polygon) {  
+        for (PolygonBuilder polygon : polygons) {
+    }
+     */
+            builder.endArray();
+import java.util.Objects;  
+        return sb;
+        sb.append(GeoWKTParser.LPAREN);  
+        }  
+import org.opensearch.common.geo.parsers.GeoWKTParser;  
+ *
+        if (obj == null || getClass() != obj.getClass()) {
+    protected StringBuilder contentToWKT() {
+            sb.append(GeoWKTParser.RPAREN);  
+            sb.append(GeoWKTParser.EMPTY);
+    public MultiPolygonBuilder(Orientation orientation) {
+            if (polygons.size() > 0) {
+                shapes.add(jtsGeometry(polygon.toPolygonS4J(FACTORY)));
+ * You may obtain a copy of the License at  
+ * The OpenSearch Contributors require contributions made to  
+        int holes = in.readVInt();
+     */
+        return Objects.equals(polygons, other.polygons) && Objects.equals(orientation, other.orientation);  
+import java.util.List;
+import org.opensearch.common.geo.GeoShapeType;
+        if (shapes.isEmpty()) {
+        }  
+import org.opensearch.common.geo.parsers.ShapeParser;
+     * get the list of polygons
+/**
+        return sb.toString();
+            return true;  
+     * Build a MultiPolygonBuilder with RIGHT orientation.
+        sb.append(ShapeBuilder.coordinateListToWKT(polygon.shell().coordinates));
         for (PolygonBuilder polygon : this.polygons) {
-            poly = polygon.buildGeometry();  
-            if (poly instanceof List) {
-                shapes.addAll((List<Polygon>) poly);
+        StringBuilder sb = new StringBuilder();
+ * @opensearch.internal
+import java.util.Locale;
+        }  
+        for (int i = 0; i < holes; i++) {
+    public int numDimensions() {
+    }  
+        MultiPolygonBuilder other = (MultiPolygonBuilder) obj;
+    }  
+        if (this == obj) {
+/*  
+                }  
+    public MultiPolygon buildGeometry() {
+package org.opensearch.common.geo.builders;
+        }
+ */  
+        builder.startArray(ShapeParser.FIELD_COORDINATES.getPreferredName());
+    @SuppressWarnings({ "unchecked" })  
+            polygon.coordinatesArray(builder, params);
             } else {  
                 shapes.add((Polygon) poly);
-            }
-        }  
-        if (shapes.isEmpty()) {
-            return MultiPolygon.EMPTY;
-        }  
-        return new MultiPolygon(shapes);
-    }
-
     @Override
-    public int hashCode() {
-        return Objects.hash(polygons, orientation);  
+        orientation.writeTo(out);  
+        builder.endArray();
+        builder.field(ShapeParser.FIELD_ORIENTATION.getPreferredName(), orientation.name().toLowerCase(Locale.ROOT));  
+        final StringBuilder sb = new StringBuilder();  
+ *
+        builder.field(ShapeParser.FIELD_TYPE.getPreferredName(), TYPE.shapeName());
+            poly = polygon.buildGeometry();  
+    }  
+        if (polygons.isEmpty()) {
+        PolygonBuilder pb = new PolygonBuilder(new CoordinatesBuilder().coordinates(polygon.shell().coordinates(false)), this.orientation);
+        Object poly;
+import org.opensearch.core.common.io.stream.StreamInput;
+    public Shape buildS4J() {
     }
-
-    @Override  
+    public List<PolygonBuilder> polygons() {  
+        }
     public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;  
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;  
-        }
-        MultiPolygonBuilder other = (MultiPolygonBuilder) obj;
-        return Objects.equals(polygons, other.polygons) && Objects.equals(orientation, other.orientation);  
+     * Add a shallow copy of the polygon to the multipolygon. This will apply the orientation of the  
     }
+    @Override
+        return builder.endObject();
+    public static final GeoShapeType TYPE = GeoShapeType.MULTIPOLYGON;  
+    @Override
+ * not use this file except in compliance with the License.
+        for (LineStringBuilder hole : polygon.holes()) {
+     */  
+ * KIND, either express or implied.  See the License for the
+    }
+    }
+    @Override
+        return polygons;
+    @Override  
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+        for (PolygonBuilder polygon : polygons) {
+            return MultiPolygon.EMPTY;
+ * software distributed under the License is distributed on an
+    public Orientation orientation() {
+    public void writeTo(StreamOutput out) throws IOException {
+    }  
+        List<Polygon> shapes = new ArrayList<>(this.polygons.size());  
+     * Read from a stream.  
+ */  
+            sb.append(GeoWKTParser.LPAREN);
+    @Override
+    @Override  
+ * Unless required by applicable law or agreed to in writing,
+        this(Orientation.RIGHT);
+        for (LineStringBuilder hole : polygon.holes()) {
+        return new MultiPolygon(shapes);
+/*  
+    @Override
+    }
+        else return new XShapeCollection<>(shapes, SPATIAL_CONTEXT);
+ * Licensed to Elasticsearch under one or more contributor  
+        }
+            }
+        }
+ * compatible open source license.
+ * Builds a multi polygon geometry  
+            for (int i = 1; i < polygons.size(); ++i) {
+ */  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+ *  
+            }
+     */
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+            return false;  
+    /**
+        builder.startObject();
+import org.opensearch.geometry.Polygon;  
+        orientation = Orientation.readFrom(in);  
+    }
+        } else {
+        out.writeVInt(polygons.size());
+    /**  
+            if (poly instanceof List) {
+                shapes.addAll((List<Polygon>) poly);
+        this.orientation = orientation;
+     */
+            for (PolygonBuilder polygon : this.polygons) {  
+        return polygons.get(0).numDimensions();  
+            sb.append(ShapeBuilder.coordinateListToWKT(hole.coordinates));
+     * {@link MultiPolygonBuilder} to the polygon if polygon has different orientation.
+    /**
+    }
+            for (PolygonBuilder polygon : this.polygons) {  
+import java.util.ArrayList;  
+            }
+        return TYPE;
+    public GeoShapeType type() {  
+public class MultiPolygonBuilder extends ShapeBuilder<Shape, MultiPolygon, MultiPolygonBuilder> {
 }
+            }
+    }
+                for (Coordinate[][] part : polygon.coordinates()) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            sb.append(GeoWKTParser.COMMA);  
+        }
+    private static String polygonCoordinatesToWKT(PolygonBuilder polygon) {
+            }
+    }
+ */
+        }
+        } else {  
+        return this;  

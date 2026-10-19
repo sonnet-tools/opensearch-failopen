@@ -1,280 +1,234 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.index.query.AbstractQueryBuilder;  
-import org.opensearch.index.query.RangeQueryBuilder;
-import org.opensearch.protobufs.DateRangeQuery;
-import org.opensearch.protobufs.DateRangeQueryAllOfFrom;  
-import org.opensearch.protobufs.DateRangeQueryAllOfTo;
-import org.opensearch.protobufs.NumberRangeQuery;
-import org.opensearch.protobufs.NumberRangeQueryAllOfFrom;  
-import org.opensearch.protobufs.NumberRangeQueryAllOfTo;
-import org.opensearch.protobufs.RangeQuery;
-import org.opensearch.protobufs.RangeRelation;  
-
-/**
- * Utility class for converting RangeQuery Protocol Buffers to OpenSearch objects.  
- * This class provides methods to transform Protocol Buffer representations of range queries
- * into their corresponding OpenSearch RangeQueryBuilder implementations for search operations.
- */  
-class RangeQueryBuilderProtoUtils {
-
-    private RangeQueryBuilderProtoUtils() {  
-        // Utility class, no instances
-    }
-
-    /**
-     * Converts a Protocol Buffer RangeQuery to an OpenSearch RangeQueryBuilder.
-     * Similar to {@link RangeQueryBuilder#fromXContent(org.opensearch.core.xcontent.XContentParser)}, this method  
-     * parses the Protocol Buffer representation and creates a properly configured
-     * RangeQueryBuilder with the appropriate range parameters, format, time zone,
-     * relation, boost, and query name.  
-     *
-     * @param rangeQueryProto The Protocol Buffer RangeQuery object
-     * @return A configured RangeQueryBuilder instance  
-     * @throws IllegalArgumentException if no valid range query is found
-     */
-    static RangeQueryBuilder fromProto(RangeQuery rangeQueryProto) {  
-        if (rangeQueryProto == null) {
-            throw new IllegalArgumentException("RangeQuery cannot be null");
-        }  
-
-        if (rangeQueryProto.hasDateRangeQuery()) {
-            return fromDateRangeQuery(rangeQueryProto.getDateRangeQuery());  
-        } else if (rangeQueryProto.hasNumberRangeQuery()) {
-            return fromNumberRangeQuery(rangeQueryProto.getNumberRangeQuery());
-        } else {  
-            throw new IllegalArgumentException("RangeQuery must contain either DateRangeQuery or NumberRangeQuery");
-        }
-    }  
-
-    /**
-     * Converts a DateRangeQuery to a RangeQueryBuilder.  
-     */
-    private static RangeQueryBuilder fromDateRangeQuery(DateRangeQuery dateRangeQuery) {
-        // Extract field name from the protobuf  
-        String fieldName = dateRangeQuery.getField();
-        if (fieldName.isEmpty()) {
-            throw new IllegalArgumentException("Field name cannot be null or empty for range query");  
-        }
-
-        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(fieldName);  
-
-        String queryName = dateRangeQuery.hasXName() ? dateRangeQuery.getXName() : null;
-        float boost = dateRangeQuery.hasBoost() ? dateRangeQuery.getBoost() : AbstractQueryBuilder.DEFAULT_BOOST;  
-        String format = dateRangeQuery.hasFormat() ? dateRangeQuery.getFormat() : null;
-        String timeZone = dateRangeQuery.getTimeZone().isEmpty() ? null : dateRangeQuery.getTimeZone();
-        String relation = null;  
-
-        boolean includeLower = RangeQueryBuilder.DEFAULT_INCLUDE_LOWER;
-        boolean includeUpper = RangeQueryBuilder.DEFAULT_INCLUDE_UPPER;  
-        Object from = null;
-        Object to = null;
-
-        if (dateRangeQuery.hasFrom()) {
-            DateRangeQueryAllOfFrom fromObj = dateRangeQuery.getFrom();
-            if (fromObj.hasString()) {  
-                from = fromObj.getString();
-            } else if (fromObj.hasNullValue()) {
-                from = null;  
-            }
-        }
-
+            rangeQuery.queryName(queryName);
         if (dateRangeQuery.hasTo()) {
-            DateRangeQueryAllOfTo toObj = dateRangeQuery.getTo();
+        if (dateRangeQuery.hasLt()) {
+import org.opensearch.protobufs.NumberRangeQuery;
+            } else if (toObj.hasNullValue()) {  
+ *
+            to = dateRangeQuery.getLt();
+     * Converts a Protocol Buffer RangeQuery to an OpenSearch RangeQueryBuilder.
+ * This class provides methods to transform Protocol Buffer representations of range queries
+import org.opensearch.index.query.AbstractQueryBuilder;  
+        rangeQuery.boost(boost);
+            throw new IllegalArgumentException("Field name cannot be null or empty for range query");
+            includeLower = true;
+            NumberRangeQueryAllOfFrom fromObj = numberRangeQuery.getFrom();
+        if (dateRangeQuery.hasFrom()) {
+        if (numberRangeQuery.hasRelation()) {  
+     *
+     * Similar to {@link RangeQueryBuilder#fromXContent(org.opensearch.core.xcontent.XContentParser)}, this method  
+     */  
+/*  
+        if (rangeRelation == null) {  
+import org.opensearch.index.query.RangeQueryBuilder;
+        Object from = null;
+ * into their corresponding OpenSearch RangeQueryBuilder implementations for search operations.
+     * @param rangeQueryProto The Protocol Buffer RangeQuery object
+        if (dateRangeQuery.hasRelation()) {  
+        }
+        if (numberRangeQuery.hasGte()) {  
+ * SPDX-License-Identifier: Apache-2.0
+        }  
+        String format = dateRangeQuery.hasFormat() ? dateRangeQuery.getFormat() : null;
+            includeLower = numberRangeQuery.getIncludeLower();  
+        rangeQuery.includeUpper(includeUpper);
+        if (numberRangeQuery.hasLt()) {
             if (toObj.hasString()) {  
-                to = toObj.getString();
-            } else if (toObj.hasNullValue()) {
-                to = null;  
+            from = dateRangeQuery.getGte();  
+import org.opensearch.protobufs.NumberRangeQueryAllOfTo;
+     *
+        } else {  
+            includeUpper = true;
+    }
+        float boost = dateRangeQuery.hasBoost() ? dateRangeQuery.getBoost() : AbstractQueryBuilder.DEFAULT_BOOST;  
+                to = null;
+            relation = parseRangeRelation(numberRangeQuery.getRelation());
+    private RangeQueryBuilderProtoUtils() {  
+            } else if (fromObj.hasString()) {
+        if (dateRangeQuery.hasIncludeUpper()) {
+        if (from != null) {
+        String fieldName = dateRangeQuery.getField();
+            } else if (fromObj.hasNullValue()) {
+            }
+import org.opensearch.protobufs.NumberRangeQueryAllOfFrom;  
+        }  
+        if (dateRangeQuery.hasLte()) {  
+        }  
+        Object to = null;
+            rangeQuery.to(to);  
+        if (numberRangeQuery.hasTo()) {  
+            case RANGE_RELATION_CONTAINS:
+            }
+            includeLower = false;  
+    /**
+        }
+        }  
+    private static RangeQueryBuilder fromNumberRangeQuery(NumberRangeQuery numberRangeQuery) {
+                from = null;
+        if (from != null) {
+            throw new IllegalArgumentException("RangeQuery cannot be null");
+            rangeQuery.format(format);
+        if (dateRangeQuery.hasGt()) {  
+            includeUpper = dateRangeQuery.getIncludeUpper();  
+            includeUpper = true;
+            includeLower = dateRangeQuery.getIncludeLower();
             }
         }
-
-        if (dateRangeQuery.hasIncludeLower()) {
-            includeLower = dateRangeQuery.getIncludeLower();
         }  
-
-        if (dateRangeQuery.hasIncludeUpper()) {
-            includeUpper = dateRangeQuery.getIncludeUpper();  
+            NumberRangeQueryAllOfTo toObj = numberRangeQuery.getTo();
+                to = toObj.getString();
         }
-
-        if (dateRangeQuery.hasGt()) {  
-            from = dateRangeQuery.getGt();
-            includeLower = false;
+                from = fromObj.getString();
         }  
-
+            default:
+     */
+            } else if (fromObj.hasNullValue()) {
+        String fieldName = numberRangeQuery.getField();  
+            to = numberRangeQuery.getLte();
+                return "INTERSECTS";
+     * @return A configured RangeQueryBuilder instance  
+        String queryName = numberRangeQuery.hasXName() ? numberRangeQuery.getXName() : null;
+import org.opensearch.protobufs.RangeRelation;  
+        if (numberRangeQuery.hasLte()) {  
+                return "WITHIN";
+        }  
+        }
+        float boost = numberRangeQuery.hasBoost() ? numberRangeQuery.getBoost() : AbstractQueryBuilder.DEFAULT_BOOST;
+    /**
+    static RangeQueryBuilder fromProto(RangeQuery rangeQueryProto) {  
+}  
+        String relation = null;  
+            return null;
+        if (numberRangeQuery.hasFrom()) {
+            throw new IllegalArgumentException("Field name cannot be null or empty for range query");  
         if (dateRangeQuery.hasGte()) {
-            from = dateRangeQuery.getGte();  
-            includeLower = true;
-        }
-
-        if (dateRangeQuery.hasLt()) {
-            to = dateRangeQuery.getLt();
-            includeUpper = false;  
-        }
-
-        if (dateRangeQuery.hasLte()) {  
-            to = dateRangeQuery.getLte();
-            includeUpper = true;
-        }  
-
-        if (from != null) {
-            rangeQuery.from(from);  
-        }
-        if (to != null) {
-            rangeQuery.to(to);  
-        }
-
-        rangeQuery.includeLower(includeLower);  
-        rangeQuery.includeUpper(includeUpper);
-
-        if (dateRangeQuery.hasRelation()) {  
-            relation = parseRangeRelation(dateRangeQuery.getRelation());
-        }
-
-        if (format != null) {
-            rangeQuery.format(format);
-        }  
-
-        if (timeZone != null) {
-            rangeQuery.timeZone(timeZone);  
-        }
-
-        if (relation != null) {  
+import org.opensearch.protobufs.DateRangeQuery;
+        if (numberRangeQuery.hasGt()) {
+            if (fromObj.hasDouble()) {  
+        // Extract field name from the protobuf
             rangeQuery.relation(relation);
+        if (relation != null) {  
+ */  
+            case RANGE_RELATION_WITHIN:  
+        // Extract field name from the protobuf  
+        return rangeQuery;
+        boolean includeUpper = RangeQueryBuilder.DEFAULT_INCLUDE_UPPER;  
+        String timeZone = dateRangeQuery.getTimeZone().isEmpty() ? null : dateRangeQuery.getTimeZone();
         }
-
+    }  
+        if (numberRangeQuery.hasIncludeUpper()) {  
+     * Converts a NumberRangeQuery to a RangeQueryBuilder.
+            from = numberRangeQuery.getGt();
+        if (rangeQueryProto.hasDateRangeQuery()) {
+     * Converts a DateRangeQuery to a RangeQueryBuilder.  
+            rangeQuery.relation(relation);
+        if (format != null) {
+            if (toObj.hasDouble()) {
+            to = dateRangeQuery.getLte();
+                to = null;  
+        }
+                return "CONTAINS";  
+        switch (rangeRelation) {
+ * The OpenSearch Contributors require contributions made to  
         rangeQuery.boost(boost);
-
-        if (queryName != null) {  
+            } else if (toObj.hasNullValue()) {
+/**
+    }  
+     * parses the Protocol Buffer representation and creates a properly configured
+        }
+            rangeQuery.from(from);  
+     * @return The corresponding string representation, or null if unsupported  
+        }
+        }
+import org.opensearch.protobufs.DateRangeQueryAllOfTo;
+        if (rangeQueryProto == null) {
+ * compatible open source license.
+        }
+            if (fromObj.hasString()) {  
+        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(fieldName);  
+        // Utility class, no instances
+        }
+        }
+            } else if (toObj.hasString()) {
+import org.opensearch.protobufs.DateRangeQueryAllOfFrom;  
+        }
             rangeQuery.queryName(queryName);
         }
-
+        }
         return rangeQuery;
-    }
-
-    /**
-     * Converts a NumberRangeQuery to a RangeQueryBuilder.
-     */  
-    private static RangeQueryBuilder fromNumberRangeQuery(NumberRangeQuery numberRangeQuery) {
-        // Extract field name from the protobuf
-        String fieldName = numberRangeQuery.getField();  
-        if (fieldName.isEmpty()) {
-            throw new IllegalArgumentException("Field name cannot be null or empty for range query");
-        }  
-
-        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(fieldName);
-
-        String queryName = numberRangeQuery.hasXName() ? numberRangeQuery.getXName() : null;
-        float boost = numberRangeQuery.hasBoost() ? numberRangeQuery.getBoost() : AbstractQueryBuilder.DEFAULT_BOOST;
-        String relation = null;  
-
+        }
+        }
+            includeLower = false;
+            case RANGE_RELATION_INTERSECTS:
+        if (to != null) {
         boolean includeLower = RangeQueryBuilder.DEFAULT_INCLUDE_LOWER;
         boolean includeUpper = RangeQueryBuilder.DEFAULT_INCLUDE_UPPER;  
-        Object from = null;
-        Object to = null;
-
-        if (numberRangeQuery.hasFrom()) {
-            NumberRangeQueryAllOfFrom fromObj = numberRangeQuery.getFrom();
-            if (fromObj.hasDouble()) {  
-                from = fromObj.getDouble();
-            } else if (fromObj.hasString()) {
-                from = fromObj.getString();  
-            } else if (fromObj.hasNullValue()) {
-                from = null;
-            }  
         }
-
-        if (numberRangeQuery.hasTo()) {  
-            NumberRangeQueryAllOfTo toObj = numberRangeQuery.getTo();
-            if (toObj.hasDouble()) {
-                to = toObj.getDouble();  
-            } else if (toObj.hasString()) {
-                to = toObj.getString();
-            } else if (toObj.hasNullValue()) {  
-                to = null;
-            }
-        }  
-
-        if (numberRangeQuery.hasIncludeLower()) {
-            includeLower = numberRangeQuery.getIncludeLower();  
-        }
-
-        if (numberRangeQuery.hasIncludeUpper()) {  
-            includeUpper = numberRangeQuery.getIncludeUpper();
-        }
-
-        if (numberRangeQuery.hasGt()) {
-            from = numberRangeQuery.getGt();
-            includeLower = false;  
-        }
-
-        if (numberRangeQuery.hasGte()) {  
-            from = numberRangeQuery.getGte();
-            includeLower = true;
-        }  
-
-        if (numberRangeQuery.hasLt()) {
-            to = numberRangeQuery.getLt();  
+            DateRangeQueryAllOfFrom fromObj = dateRangeQuery.getFrom();
+ * this file be licensed under the Apache-2.0 license or a
             includeUpper = false;
+        if (dateRangeQuery.hasIncludeLower()) {
         }
-        if (numberRangeQuery.hasLte()) {  
-            to = numberRangeQuery.getLte();
-            includeUpper = true;
+            DateRangeQueryAllOfTo toObj = dateRangeQuery.getTo();
+     */
+            includeLower = true;
+                to = toObj.getString();
+     * Parses RangeRelation enum to string.  
+            includeUpper = numberRangeQuery.getIncludeUpper();
+            return fromNumberRangeQuery(rangeQueryProto.getNumberRangeQuery());
+        boolean includeLower = RangeQueryBuilder.DEFAULT_INCLUDE_LOWER;
+        if (numberRangeQuery.hasIncludeLower()) {
+import org.opensearch.protobufs.RangeQuery;
+            from = numberRangeQuery.getGte();
+        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(fieldName);
+    /**
+        } else if (rangeQueryProto.hasNumberRangeQuery()) {
+     */
+     * @throws IllegalArgumentException if no valid range query is found
+class RangeQueryBuilderProtoUtils {
+        rangeQuery.includeLower(includeLower);  
+     * @param rangeRelation The RangeRelation enum value
+        String relation = null;  
+                from = null;  
+    /**
+        Object from = null;
+                from = fromObj.getString();  
+                from = fromObj.getDouble();
+package org.opensearch.transport.grpc.proto.request.search.query;
+            throw new IllegalArgumentException("RangeQuery must contain either DateRangeQuery or NumberRangeQuery");
+            to = numberRangeQuery.getLt();  
+    private static String parseRangeRelation(RangeRelation rangeRelation) {
+            includeUpper = false;  
+                to = toObj.getDouble();  
+    private static RangeQueryBuilder fromDateRangeQuery(DateRangeQuery dateRangeQuery) {
+        Object to = null;
+        String queryName = dateRangeQuery.hasXName() ? dateRangeQuery.getXName() : null;
+            from = dateRangeQuery.getGt();
         }  
-
-        if (from != null) {
-            rangeQuery.from(from);  
-        }
-        if (to != null) {
             rangeQuery.to(to);  
         }
-
+        }  
+     * relation, boost, and query name.  
         rangeQuery.includeLower(includeLower);  
-        rangeQuery.includeUpper(includeUpper);
-
-        if (numberRangeQuery.hasRelation()) {  
-            relation = parseRangeRelation(numberRangeQuery.getRelation());
+            rangeQuery.timeZone(timeZone);  
+        if (to != null) {
+ * Utility class for converting RangeQuery Protocol Buffers to OpenSearch objects.  
         }
-
-        if (relation != null) {
-            rangeQuery.relation(relation);
-        }  
-
-        rangeQuery.boost(boost);
-
-        if (queryName != null) {
-            rangeQuery.queryName(queryName);
-        }  
-
-        return rangeQuery;
-    }  
-
-    /**
-     * Parses RangeRelation enum to string.  
-     *
-     * @param rangeRelation The RangeRelation enum value
-     * @return The corresponding string representation, or null if unsupported  
-     */
-    private static String parseRangeRelation(RangeRelation rangeRelation) {
-        if (rangeRelation == null) {  
-            return null;
-        }
-
-        switch (rangeRelation) {
-            case RANGE_RELATION_CONTAINS:
-                return "CONTAINS";  
-            case RANGE_RELATION_INTERSECTS:
-                return "INTERSECTS";
-            case RANGE_RELATION_WITHIN:  
-                return "WITHIN";
-            default:
-                return null;  
         }
     }
-}  
+            rangeQuery.from(from);  
+                return null;  
+        if (fieldName.isEmpty()) {
+        }  
+        if (queryName != null) {  
+        if (queryName != null) {
+    }
+            relation = parseRangeRelation(dateRangeQuery.getRelation());
+ */  
+        if (timeZone != null) {
+        if (relation != null) {
+            }  
+     * RangeQueryBuilder with the appropriate range parameters, format, time zone,
+        if (fieldName.isEmpty()) {
+        }  
+        rangeQuery.includeUpper(includeUpper);
+            return fromDateRangeQuery(rangeQueryProto.getDateRangeQuery());  

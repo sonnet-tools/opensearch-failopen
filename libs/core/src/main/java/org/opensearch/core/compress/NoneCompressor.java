@@ -1,63 +1,52 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.core.compress;
-
+     *
 import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.bytes.BytesReference;
-
-import java.io.IOException;
+    }  
+ * compatible open source license.
+/*  
+     * The name to register the compressor by
+    }
 import java.io.InputStream;
-import java.io.OutputStream;  
-
+    public static final String NAME = "NONE";  
+    }
+    public InputStream threadLocalInputStream(InputStream in) throws IOException {
+    @Override
+}
+ * The OpenSearch Contributors require contributions made to  
+    /**  
+    }  
+    public BytesReference compress(BytesReference bytesReference) throws IOException {
+public class NoneCompressor implements Compressor {
+    public int headerLength() {
+     */
+        return out;
+    @Override  
+        return bytesReference;  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ *
 /**
  * {@link Compressor} no compressor implementation.  
- *
- * @opensearch.api - registered name requires BWC support
- * @opensearch.experimental - class methods might change  
- */
-public class NoneCompressor implements Compressor {
-    /**  
-     * The name to register the compressor by
-     *
-     * @opensearch.api - requires BWC support  
-     */
     @PublicApi(since = "2.10.0")
-    public static final String NAME = "NONE";  
-
     @Override
-    public boolean isCompressed(BytesReference bytes) {  
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
         return false;
     }
-
-    @Override
-    public int headerLength() {
-        return 0;  
-    }
-
-    @Override  
-    public InputStream threadLocalInputStream(InputStream in) throws IOException {
-        return in;
-    }  
-
-    @Override
+import java.io.IOException;
     public OutputStream threadLocalOutputStream(OutputStream out) throws IOException {  
-        return out;
-    }
-
-    @Override
-    public BytesReference uncompress(BytesReference bytesReference) throws IOException {
-        return bytesReference;  
-    }
-
+    public boolean isCompressed(BytesReference bytes) {  
+ * @opensearch.experimental - class methods might change  
     @Override  
-    public BytesReference compress(BytesReference bytesReference) throws IOException {
+    public BytesReference uncompress(BytesReference bytesReference) throws IOException {
         return bytesReference;
-    }  
-
-}
+     * @opensearch.api - requires BWC support  
+ * @opensearch.api - registered name requires BWC support
+import org.opensearch.core.common.bytes.BytesReference;
+    @Override
+    }
+        return in;
+ */  
+package org.opensearch.core.compress;
+        return 0;  
+import java.io.OutputStream;  
+ */

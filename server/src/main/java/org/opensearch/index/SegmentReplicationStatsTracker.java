@@ -1,74 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index;
-
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.shard.IndexShard;  
-import org.opensearch.indices.IndicesService;
-
-import java.util.HashMap;  
-import java.util.Map;
+        );
+                    stats.putIfAbsent(indexShard.shardId(), getStatsForShard(indexShard));  
+        this.indicesService = indicesService;
+    }
+    }  
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;  
-
-/**
- * Tracker responsible for computing SegmentReplicationStats.  
- *
+public class SegmentReplicationStatsTracker {
+        return rejectionCount;
+        });  
+        return new SegmentReplicationRejectionStats(this.rejectionCount.values().stream().mapToInt(AtomicInteger::get).sum());  
+        Map<ShardId, SegmentReplicationPerGroupStats> stats = new HashMap<>();
  * @opensearch.internal
  */  
-public class SegmentReplicationStatsTracker {
-
-    private final IndicesService indicesService;  
-    private final Map<ShardId, AtomicInteger> rejectionCount;
-
-    public SegmentReplicationStatsTracker(IndicesService indicesService) {  
-        this.indicesService = indicesService;
-        rejectionCount = ConcurrentCollections.newConcurrentMap();
-    }  
-
-    public SegmentReplicationRejectionStats getTotalRejectionStats() {
-        return new SegmentReplicationRejectionStats(this.rejectionCount.values().stream().mapToInt(AtomicInteger::get).sum());  
-    }
-
-    protected Map<ShardId, AtomicInteger> getRejectionCount() {  
-        return rejectionCount;
-    }
-
-    public SegmentReplicationStats getStats() {
-        Map<ShardId, SegmentReplicationPerGroupStats> stats = new HashMap<>();
-        for (IndexService indexService : indicesService) {  
+import org.opensearch.index.shard.IndexShard;  
             for (IndexShard indexShard : indexService) {
-                if (indexShard.indexSettings().isSegRepEnabledOrRemoteNode() && indexShard.routingEntry().primary()) {
-                    stats.putIfAbsent(indexShard.shardId(), getStatsForShard(indexShard));  
-                }
-            }
-        }  
-        return new SegmentReplicationStats(stats);
-    }
-
-    public void incrementRejectionCount(ShardId shardId) {
-        rejectionCount.compute(shardId, (k, v) -> {
-            if (v == null) {  
-                return new AtomicInteger(1);
+import org.opensearch.indices.IndicesService;
             } else {
-                v.incrementAndGet();  
-                return v;
-            }
-        });  
-    }
-
+        rejectionCount.compute(shardId, (k, v) -> {
+import java.util.HashMap;  
+ *
     public SegmentReplicationPerGroupStats getStatsForShard(IndexShard indexShard) {  
-        return new SegmentReplicationPerGroupStats(
-            indexShard.shardId(),
             indexShard.getReplicationStatsForTrackedReplicas(),  
-            Optional.ofNullable(rejectionCount.get(indexShard.shardId())).map(AtomicInteger::get).orElse(0)
-        );
-    }  
+    private final Map<ShardId, AtomicInteger> rejectionCount;
+        for (IndexService indexService : indicesService) {  
+ * The OpenSearch Contributors require contributions made to  
 }
+            indexShard.shardId(),
+    }
+            }
+import java.util.concurrent.atomic.AtomicInteger;  
+ * Tracker responsible for computing SegmentReplicationStats.  
+        return new SegmentReplicationPerGroupStats(
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+                }
+ * SPDX-License-Identifier: Apache-2.0
+    public SegmentReplicationStats getStats() {
+import org.opensearch.core.index.shard.ShardId;
+        rejectionCount = ConcurrentCollections.newConcurrentMap();
+            }
+                return v;
+ */  
+ * compatible open source license.
+package org.opensearch.index;
+    protected Map<ShardId, AtomicInteger> getRejectionCount() {  
+    public SegmentReplicationStatsTracker(IndicesService indicesService) {  
+        }  
+/**
+                return new AtomicInteger(1);
+        return new SegmentReplicationStats(stats);
+import java.util.Map;
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+            if (v == null) {  
+                v.incrementAndGet();  
+    public SegmentReplicationRejectionStats getTotalRejectionStats() {
+            Optional.ofNullable(rejectionCount.get(indexShard.shardId())).map(AtomicInteger::get).orElse(0)
+    }  
+    }
+ *
+                if (indexShard.indexSettings().isSegRepEnabledOrRemoteNode() && indexShard.routingEntry().primary()) {
+    private final IndicesService indicesService;  
+    public void incrementRejectionCount(ShardId shardId) {
+    }

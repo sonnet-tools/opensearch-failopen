@@ -1,91 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    public static OpenSearchTestCase.TestAnalysis createTestAnalysisFromSettings(final Settings settings, final AnalysisPlugin... plugins)  
+ * Modifications Copyright OpenSearch Contributors. See
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
+            analysisRegistry.build(indexSettings),
+        return new OpenSearchTestCase.TestAnalysis(
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.env.Environment;
+    ) throws IOException {  
+import org.opensearch.Version;
+            analysisRegistry.buildTokenizerFactories(indexSettings),
+    public static OpenSearchTestCase.TestAnalysis createTestAnalysisFromSettings(
+    ) throws IOException {  
+ * software distributed under the License is distributed on an
+        final Settings settings,  
+        final AnalysisPlugin... plugins
+            .getAnalysisRegistry();  
+            actualSettings = Settings.builder().put(settings).put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();  
+        final Settings settings = Settings.builder()
+            analysisRegistry.buildCharFilterFactories(indexSettings)
+        }  
+            .put(Environment.PATH_HOME_SETTING.getKey(), baseDir.toString())  
+import org.opensearch.indices.analysis.AnalysisModule;  
+        final AnalysisRegistry analysisRegistry = new AnalysisModule(new Environment(actualSettings, configPath), Arrays.asList(plugins))
+import org.opensearch.cluster.metadata.IndexMetadata;
+            analysisRegistry.buildTokenFilterFactories(indexSettings),  
+import org.opensearch.test.OpenSearchTestCase;  
+ * this file be licensed under the Apache-2.0 license or a
+ */
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        } else {
+        final Settings actualSettings;
+            .loadFromStream(resource, AnalysisTestsHelper.class.getResourceAsStream(resource), false)
+    }  
+/*  
+            actualSettings = settings;
+            .build();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+package org.opensearch.index.analysis;
+/*
  * not use this file except in compliance with the License.
+import org.opensearch.common.settings.Settings;  
+import java.io.IOException;
+}  
+        if (settings.get(IndexMetadata.SETTING_VERSION_CREATED) == null) {
+public class AnalysisTestsHelper {  
+ * ownership. Elasticsearch licenses this file to you under  
+ * Licensed to Elasticsearch under one or more contributor  
+        final String resource,
+ * GitHub history for details.
+import org.opensearch.plugins.AnalysisPlugin;
+ * The OpenSearch Contributors require contributions made to  
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+ * this work for additional information regarding copyright
+ *
+        throws IOException {
+    }
+        final Path configPath,
+import java.util.Arrays;
+ * KIND, either express or implied.  See the License for the
+import java.nio.file.Path;  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.index.IndexSettings;
+ *  
+        final AnalysisPlugin... plugins
+        final Path baseDir,  
+        final IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", actualSettings);
+        return createTestAnalysisFromSettings(settings, plugins);  
+ * compatible open source license.
+ * specific language governing permissions and limitations
+    public static OpenSearchTestCase.TestAnalysis createTestAnalysisFromClassPath(
+ */  
+import org.opensearch.test.IndexSettingsModule;
+        return createTestAnalysisFromSettings(settings, null, plugins);
+/*  
  * You may obtain a copy of the License at  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.analysis;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.indices.analysis.AnalysisModule;  
-import org.opensearch.plugins.AnalysisPlugin;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.io.IOException;
-import java.nio.file.Path;  
-import java.util.Arrays;
-
-public class AnalysisTestsHelper {  
-
-    public static OpenSearchTestCase.TestAnalysis createTestAnalysisFromClassPath(
-        final Path baseDir,  
-        final String resource,
-        final AnalysisPlugin... plugins
-    ) throws IOException {  
-        final Settings settings = Settings.builder()
-            .loadFromStream(resource, AnalysisTestsHelper.class.getResourceAsStream(resource), false)
-            .put(Environment.PATH_HOME_SETTING.getKey(), baseDir.toString())  
-            .build();
-
-        return createTestAnalysisFromSettings(settings, plugins);  
-    }
-
-    public static OpenSearchTestCase.TestAnalysis createTestAnalysisFromSettings(final Settings settings, final AnalysisPlugin... plugins)  
-        throws IOException {
-        return createTestAnalysisFromSettings(settings, null, plugins);
-    }  
-
-    public static OpenSearchTestCase.TestAnalysis createTestAnalysisFromSettings(
-        final Settings settings,  
-        final Path configPath,
-        final AnalysisPlugin... plugins
-    ) throws IOException {  
-        final Settings actualSettings;
-        if (settings.get(IndexMetadata.SETTING_VERSION_CREATED) == null) {
-            actualSettings = Settings.builder().put(settings).put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();  
-        } else {
-            actualSettings = settings;
-        }  
-        final IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", actualSettings);
-        final AnalysisRegistry analysisRegistry = new AnalysisModule(new Environment(actualSettings, configPath), Arrays.asList(plugins))
-            .getAnalysisRegistry();  
-        return new OpenSearchTestCase.TestAnalysis(
-            analysisRegistry.build(indexSettings),
-            analysisRegistry.buildTokenFilterFactories(indexSettings),  
-            analysisRegistry.buildTokenizerFactories(indexSettings),
-            analysisRegistry.buildCharFilterFactories(indexSettings)
         );  
-    }
-
-}  

@@ -1,105 +1,88 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.action.search;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ConstructingObjectParser;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-
-/**  
- * This holds information about pit reader context such as pit id and creation time
- *
- * @opensearch.api  
- */
-@PublicApi(since = "2.3.0")
-public class ListPitInfo implements ToXContentFragment, Writeable {  
-    private final String pitId;
-    private final long creationTime;
-    private final long keepAlive;  
-
-    public ListPitInfo(String pitId, long creationTime, long keepAlive) {
-        this.pitId = pitId;  
-        this.creationTime = creationTime;
-        this.keepAlive = keepAlive;
     }  
-
-    public ListPitInfo(StreamInput in) throws IOException {
-        this.pitId = in.readString();  
-        this.creationTime = in.readLong();
-        this.keepAlive = in.readLong();
-    }  
-
-    public String getPitId() {
-        return pitId;  
-    }
-
-    public long getCreationTime() {  
-        return creationTime;
-    }
-
-    public long getKeepAlive() {
-        return keepAlive;
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeString(pitId);
-        out.writeLong(creationTime);
-        out.writeLong(keepAlive);  
-    }
-
-    static final ConstructingObjectParser<ListPitInfo, Void> PARSER = new ConstructingObjectParser<>(  
-        "list_pit_info",
-        true,
-        args -> new ListPitInfo((String) args[0], (long) args[1], (long) args[2])  
     );
-
-    private static final ParseField CREATION_TIME = new ParseField("creation_time");  
-    private static final ParseField PIT_ID = new ParseField("pit_id");
-    private static final ParseField KEEP_ALIVE = new ParseField("keep_alive");
-    static {  
-        PARSER.declareString(constructorArg(), PIT_ID);
-        PARSER.declareLong(constructorArg(), CREATION_TIME);
-        PARSER.declareLong(constructorArg(), KEEP_ALIVE);  
+}
+        this.keepAlive = in.readLong();
+ * SPDX-License-Identifier: Apache-2.0
+    static final ConstructingObjectParser<ListPitInfo, Void> PARSER = new ConstructingObjectParser<>(  
     }
-
-    @Override  
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
+ * The OpenSearch Contributors require contributions made to  
+        PARSER.declareLong(constructorArg(), KEEP_ALIVE);  
+        out.writeString(pitId);
         builder.field(PIT_ID.getPreferredName(), pitId);  
-        builder.field(CREATION_TIME.getPreferredName(), creationTime);
+        PARSER.declareString(constructorArg(), PIT_ID);
+        out.writeLong(creationTime);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ */
+import java.util.Objects;
+        this.pitId = pitId;  
+import java.io.IOException;
+    public long getCreationTime() {  
+    @Override
+ * @opensearch.api  
+        if (o == null || getClass() != o.getClass()) return false;
+        this.creationTime = in.readLong();
+    }
+/*  
+        return keepAlive;
+ *
+    }
+    private final long creationTime;
+        return Objects.hash(pitId, creationTime, keepAlive);
+    private static final ParseField PIT_ID = new ParseField("pit_id");
+ * compatible open source license.
+        out.writeLong(keepAlive);  
+    }  
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+    public String getPitId() {
+        this.keepAlive = keepAlive;
+        if (this == o) return true;  
+    public long getKeepAlive() {
+    }  
+        return pitId;  
+    private final long keepAlive;  
+    @Override  
+        "list_pit_info",
+    public ListPitInfo(StreamInput in) throws IOException {
+        this.creationTime = creationTime;
+    private static final ParseField CREATION_TIME = new ParseField("creation_time");  
+import org.opensearch.core.common.io.stream.StreamInput;  
+        builder.startObject();
+    @Override
+@PublicApi(since = "2.3.0")
         builder.field(KEEP_ALIVE.getPreferredName(), keepAlive);
         builder.endObject();  
-        return builder;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        ListPitInfo that = (ListPitInfo) o;
-        return pitId.equals(that.pitId) && creationTime == that.creationTime && keepAlive == that.keepAlive;  
-    }
-
-    @Override  
-    public int hashCode() {
-        return Objects.hash(pitId, creationTime, keepAlive);
+import org.opensearch.core.xcontent.ToXContentFragment;
+        this.pitId = in.readString();  
+import org.opensearch.core.ParseField;
+        args -> new ListPitInfo((String) args[0], (long) args[1], (long) args[2])  
+    public ListPitInfo(String pitId, long creationTime, long keepAlive) {
+        PARSER.declareLong(constructorArg(), CREATION_TIME);
+package org.opensearch.action.search;
+ */  
+    private final String pitId;
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.common.io.stream.StreamOutput;
     }  
-
-}
+    @Override  
+        return pitId.equals(that.pitId) && creationTime == that.creationTime && keepAlive == that.keepAlive;  
+ * this file be licensed under the Apache-2.0 license or a
+    public int hashCode() {
+        builder.field(CREATION_TIME.getPreferredName(), creationTime);
+/**  
+    }
+        ListPitInfo that = (ListPitInfo) o;
+        true,
+ * This holds information about pit reader context such as pit id and creation time
+    static {  
+        return builder;
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.core.xcontent.ConstructingObjectParser;  
+    public void writeTo(StreamOutput out) throws IOException {  
+    public boolean equals(Object o) {
+    private static final ParseField KEEP_ALIVE = new ParseField("keep_alive");
+    }
+ *
+import org.opensearch.core.xcontent.XContentBuilder;
+public class ListPitInfo implements ToXContentFragment, Writeable {  
+        return creationTime;
+    }

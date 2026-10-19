@@ -1,417 +1,358 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.composite;
-
-import org.opensearch.action.bulk.BulkRequestBuilder;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.index.IndexResponse;  
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;
-import org.opensearch.be.lucene.LucenePlugin;  
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.engine.DataFormatAwareEngine;
-import org.opensearch.index.engine.exec.WriterFileSet;  
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.parquet.ParquetDataFormatPlugin;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.concurrent.CyclicBarrier;  
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**  
- * Integration tests exercising Parquet VSR (VectorSchemaRoot) rotation under multi-format
- * composite indexing (Parquet primary + Lucene secondary).
- *  
- * Uses a low {@code parquet.max_rows_per_vsr} (5 rows) to force frequent VSR rotation
- * during normal indexing. This validates that:
- * <ul>  
- *   <li>VSR rotation boundaries don't break cross-format atomicity</li>
- *   <li>Background native writes complete without data loss</li>
- *   <li>Concurrent indexing across rotation boundaries maintains format consistency</li>  
- *   <li>High-throughput batches spanning multiple rotations produce correct totals</li>
- * </ul>
- */  
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
-public class CompositeVSRRotationIT extends OpenSearchIntegTestCase {
-
-    private static final String INDEX_NAME = "test-vsr-rotation";
-
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(
-            ArrowBasePlugin.class,  
-            ParquetDataFormatPlugin.class,
-            CompositeDataFormatPlugin.class,
-            LucenePlugin.class,  
-            DataFusionPlugin.class
-        );
-    }  
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
-            .put("parquet.max_rows_per_vsr", 5)
-            .build();
-    }  
-
-    /**
-     * Indexing more docs than the VSR threshold in a single writer generation must  
-     * trigger rotation and still produce consistent cross-format state.
-     * With max_rows_per_vsr=5, indexing 20 docs triggers 4 rotations.
-     */  
-    public void testRotationDuringSequentialIndexingMaintainsConsistency() throws Exception {
-        createParquetLuceneIndex();
-
-        indexDocs(20);
         flush();
-
-        assertCrossFormatConsistency(20);
-    }
-
-    /**
-     * Multiple flush cycles where each cycle exceeds the VSR threshold.
-     * Each cycle triggers rotations independently; cross-format state must be  
-     * additive and consistent after each flush.
-     */
-    public void testMultipleFlushCyclesWithRotation() throws Exception {  
-        createParquetLuceneIndex();
-
-        // Cycle 1: 12 docs → 2+ rotations  
-        indexDocs(12);
-        flush();
-        assertCrossFormatConsistency(12);  
-
-        // Cycle 2: 8 docs → 1+ rotation
-        indexDocs(8);  
-        flush();
-        assertCrossFormatConsistency(20);
-
-        // Cycle 3: 15 docs → 3 rotations
-        indexDocs(15);
-        flush();  
-        assertCrossFormatConsistency(35);
-    }
-
-    /**
-     * Bulk indexing a batch larger than the VSR threshold must not lose docs
-     * at rotation boundaries. All docs in the bulk must appear in both formats.  
-     */
-    public void testBulkIndexSpanningMultipleRotations() throws Exception {
-        createParquetLuceneIndex();  
-
-        int batchSize = 30; // 6 rotations at threshold=5
-        BulkRequestBuilder bulk = client().prepareBulk();  
-        for (int i = 0; i < batchSize; i++) {
-            bulk.add(client().prepareIndex(INDEX_NAME).setSource("field_keyword", "bulk_" + i, "field_number", i));
-        }  
-        BulkResponse resp = bulk.get();
-        assertFalse("no failures in bulk", resp.hasFailures());
-
-        flush();
-        assertCrossFormatConsistency(batchSize);
-    }  
-
-    /**
-     * Concurrent indexing from multiple threads where total docs far exceed the  
-     * VSR threshold. Rotations happen under contention — must not lose docs or
-     * produce cross-format mismatches.
-     */  
-    public void testConcurrentIndexingAcrossRotationBoundaries() throws Exception {
-        createParquetLuceneIndex();
-
-        int numThreads = 4;
-        int docsPerThread = 15; // 60 total → 12 rotations at threshold=5
-        CyclicBarrier barrier = new CyclicBarrier(numThreads);  
-        AtomicInteger successCount = new AtomicInteger();
-
-        Thread[] threads = new Thread[numThreads];  
+        int docsPerThread = 20;  
         for (int t = 0; t < numThreads; t++) {
-            final int tid = t;
-            threads[t] = new Thread(() -> {  
-                try {
-                    barrier.await();
-                    for (int i = 0; i < docsPerThread; i++) {  
-                        IndexResponse resp = client().prepareIndex(INDEX_NAME)
-                            .setSource("field_keyword", "t" + tid + "_d" + i, "field_number", i)
-                            .get();  
-                        if (resp.status() == RestStatus.CREATED) successCount.incrementAndGet();
-                    }
-                } catch (Exception e) {  
-                    throw new RuntimeException(e);
-                }
-            });  
-            threads[t].start();
-        }
-        for (Thread t : threads) {  
-            t.join();
-        }
-
-        int expected = successCount.get();
-        assertEquals("all should succeed", numThreads * docsPerThread, expected);
-
-        flush();
-        assertCrossFormatConsistency(expected);
-    }  
-
-    /**
-     * Alternating flush and index cycles where each batch crosses rotation boundaries.  
-     * Tests that rotation state resets correctly between writer generations.
+        client().admin().indices().prepareClose(INDEX_NAME).get();
+        indexDocs(5); // triggers rotation, fills second VSR  
+            indexThreads[t] = new Thread(() -> {
+ *   <li>Background native writes complete without data loss</li>
+        });
+                throw new RuntimeException(e);
+            CompositeDataFormatPlugin.class,
      */
-    public void testRotationStateResetsAcrossWriterGenerations() throws Exception {  
+                            .setSource("field_keyword", "t" + tid + "_d" + i, "field_number", i)  
+        indexDocs(12);  
+        });
+    public void testConcurrentFlushDuringVSRRotation() throws Exception {
+                try {
+                            .get();
+        for (int t = 0; t < numIndexThreads; t++) {  
+     * Concurrent indexing + flush where flushes happen while VSR rotation is in progress.  
+            bulk.add(client().prepareIndex(INDEX_NAME).setSource("field_keyword", "burst_" + i, "field_number", i));  
+    private DataFormatAwareEngine getEngine() {
+/*  
+                        CatalogSnapshot snap = ref.get();
         createParquetLuceneIndex();
-
-        // Each flush retires the current writer; new writer starts fresh VSR state  
-        for (int cycle = 0; cycle < 5; cycle++) {
-            indexDocs(7); // crosses threshold once per cycle
-            flush();  
-        }
-
+                        long lc = snap.getSearchableFiles("lucene").stream().mapToLong(WriterFileSet::numRows).sum();
+    }
+                DataFormatAwareEngine eng = getEngine();
+        // Cycle 1: 12 docs → 2+ rotations  
+    /**
+                } catch (Exception e) {
+        createParquetLuceneIndex();
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+            t.join();  
+            indexThreads[t].start();
+        Settings extra = Settings.builder().put("index.composite.merge_on_refresh_max_size", "0b").build();
+        for (int i = 0; i < totalDocs; i++) {
+        // Final flush to commit any remaining buffered data  
+        assertCrossFormatConsistency(12);  
+    }  
+        flushThread.start();
+        CyclicBarrier barrier = new CyclicBarrier(numIndexThreads + 1);
+    @Override
+        refreshThread.join();
+                    throw new RuntimeException(e);  
+    protected Settings nodeSettings(int nodeOrdinal) {  
+        Thread flushThread = new Thread(() -> {  
+                barrier.await();
+     * High-throughput burst that triggers many rapid rotations back-to-back.
+import java.util.concurrent.CyclicBarrier;  
+        flush();  
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
+        AtomicInteger successCount = new AtomicInteger();
+            final int tid = t;  
+        createParquetLuceneIndex();  
+        BulkResponse resp = bulk.get();
+ */  
+                            .get();  
+                } catch (Exception e) {
         assertCrossFormatConsistency(35);  
     }
-
-    /**  
-     * After VSR rotation, a refresh must capture all docs including those from the
-     * rotated (background-written) batch. No docs lost at rotation seams.
-     */  
-    public void testRefreshAfterRotationCapturesAllDocs() throws Exception {
-        createParquetLuceneIndex();
-
-        // Index exactly at threshold boundaries: 5 + 5 + 3 = 13 docs
-        indexDocs(5); // fills first VSR exactly
-        indexDocs(5); // triggers rotation, fills second VSR  
-        indexDocs(3); // partial third VSR
-
-        // Refresh without flush — must see all 13  
-        DataFormatAwareEngine engine = getEngine();
-        engine.refresh("test");
-
-        long parquetRows = getRowCount("parquet");
-        long luceneRows = getRowCount("lucene");
-        assertEquals("parquet must see all docs after rotation + refresh", 13, parquetRows);  
-        assertEquals("lucene must match parquet", parquetRows, luceneRows);
-    }
-
-    /**
-     * Index docs, flush, then index more docs spanning rotation, then close/reopen.
-     * After recovery, both formats must have all committed + replayed docs.  
-     */
-    public void testRecoveryAfterRotation() throws Exception {
-        createParquetLuceneIndex();  
-
-        // Committed: 12 docs (2+ rotations)
-        indexDocs(12);  
-        flush();
-
-        // Uncommitted: 8 more docs (1+ rotation) — only in translog  
-        indexDocs(8);
-
-        // Close/reopen — flushAndClose commits everything, reopen recovers  
-        client().admin().indices().prepareClose(INDEX_NAME).get();
-        client().admin().indices().prepareOpen(INDEX_NAME).get();
-        ensureGreen(INDEX_NAME);  
-
-        flush();
-        getEngine().refresh("verify");  
-
-        long parquetRows = getRowCount("parquet");
-        long luceneRows = getRowCount("lucene");  
-        assertEquals("both formats must match after recovery", parquetRows, luceneRows);
-        assertEquals("all 20 docs must survive recovery", 20, parquetRows);
-    }  
-
-    /**
-     * Concurrent indexing + flush where flushes happen while VSR rotation is in progress.  
-     * Tests the interaction between: rotation (freezes VSR, submits background write) and
-     * flush (awaits pending write, then writes remaining). Under low threshold (5), almost
-     * every flush will race with a pending rotation write.  
-     */
-    public void testConcurrentFlushDuringVSRRotation() throws Exception {
-        createParquetLuceneIndex();  
-
-        int numIndexThreads = 3;
-        int docsPerThread = 20;  
-        CyclicBarrier barrier = new CyclicBarrier(numIndexThreads + 1);
-        AtomicInteger successCount = new AtomicInteger();
-
-        Thread[] indexThreads = new Thread[numIndexThreads];
-        for (int t = 0; t < numIndexThreads; t++) {
-            final int tid = t;  
-            indexThreads[t] = new Thread(() -> {
-                try {
-                    barrier.await();  
-                    for (int i = 0; i < docsPerThread; i++) {
-                        IndexResponse resp = client().prepareIndex(INDEX_NAME)
-                            .setSource("field_keyword", "t" + tid + "_d" + i, "field_number", i)  
-                            .get();
-                        if (resp.status() == RestStatus.CREATED) successCount.incrementAndGet();
-                    }  
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }  
-            });
-            indexThreads[t].start();
-        }  
-
-        // Flush thread — flushes repeatedly while indexing is ongoing
-        Thread flushThread = new Thread(() -> {  
-            try {
-                barrier.await();
-                for (int i = 0; i < 8; i++) {  
-                    Thread.sleep(5);
-                    flush();
-                }  
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }  
-        });
-        flushThread.start();
-
-        for (Thread t : indexThreads) {
-            t.join();
-        }  
-        flushThread.join();
-
-        // Final flush to commit any remaining buffered data  
-        flush();
-
-        int expected = successCount.get();  
-        assertCrossFormatConsistency(expected);
-    }
-
-    /**
-     * Concurrent indexing + refresh where refreshes race with VSR rotation.
-     * Each refresh acquires the writer pool, flushes writers (triggering awaitPendingWrite  
-     * inside ParquetWriter.flush → VSRManager.flush), and commits a new CatalogSnapshot.
-     * Tests that concurrent refresh during rotation doesn't lose docs or break atomicity.
-     */  
-    public void testConcurrentRefreshDuringVSRRotation() throws Exception {
-        createParquetLuceneIndex();
-
-        int numIndexThreads = 3;
-        int docsPerThread = 15;
-        int numRefreshes = 10;  
-        CyclicBarrier barrier = new CyclicBarrier(numIndexThreads + 1);
-        AtomicInteger successCount = new AtomicInteger();
-        AtomicInteger inconsistencyCount = new AtomicInteger();  
-
-        Thread[] indexThreads = new Thread[numIndexThreads];
-        for (int t = 0; t < numIndexThreads; t++) {  
-            final int tid = t;
-            indexThreads[t] = new Thread(() -> {
-                try {  
+import java.io.IOException;  
+     * Alternating flush and index cycles where each batch crosses rotation boundaries.  
+                    }
+ * </ul>
                     barrier.await();
-                    for (int i = 0; i < docsPerThread; i++) {
-                        IndexResponse resp = client().prepareIndex(INDEX_NAME)  
-                            .setSource("field_keyword", "t" + tid + "_d" + i, "field_number", i)
-                            .get();
-                        if (resp.status() == RestStatus.CREATED) successCount.incrementAndGet();  
-                    }
-                } catch (Exception e) {
-                    throw new RuntimeException(e);  
-                }
-            });
-            indexThreads[t].start();  
-        }
-
-        // Refresh thread — refreshes repeatedly, checking cross-format consistency each time  
-        Thread refreshThread = new Thread(() -> {
-            try {
                 barrier.await();  
-                DataFormatAwareEngine eng = getEngine();
-                for (int r = 0; r < numRefreshes; r++) {
-                    eng.refresh("concurrent-check-" + r);  
-                    try (GatedCloseable<CatalogSnapshot> ref = eng.acquireSnapshot()) {
-                        CatalogSnapshot snap = ref.get();
-                        long pq = snap.getSearchableFiles("parquet").stream().mapToLong(WriterFileSet::numRows).sum();  
-                        long lc = snap.getSearchableFiles("lucene").stream().mapToLong(WriterFileSet::numRows).sum();
-                        if (pq != lc) {
-                            inconsistencyCount.incrementAndGet();  
-                        }
-                    }
-                    Thread.sleep(3);  
-                }
-            } catch (Exception e) {
-                throw new RuntimeException(e);  
-            }
-        });
-        refreshThread.start();  
-
-        for (Thread t : indexThreads) {
-            t.join();  
-        }
-        refreshThread.join();
-
-        assertEquals("every mid-stream refresh must be cross-format consistent during rotation", 0, inconsistencyCount.get());
-
-        flush();  
-        assertCrossFormatConsistency(successCount.get());
-    }
-
-    /**
-     * High-throughput burst that triggers many rapid rotations back-to-back.
-     * With max_rows_per_vsr=5 and 100 docs, this creates 20 rotation cycles.  
-     * Tests that the background write pipeline doesn't drop batches under pressure.
+     * With max_rows_per_vsr=5, indexing 20 docs triggers 4 rotations.
+        AtomicInteger successCount = new AtomicInteger();
      */
-    public void testHighThroughputBurstWithRapidRotations() throws Exception {  
-        createParquetLuceneIndex();
-
-        int totalDocs = 100;  
-        BulkRequestBuilder bulk = client().prepareBulk();
-        for (int i = 0; i < totalDocs; i++) {
-            bulk.add(client().prepareIndex(INDEX_NAME).setSource("field_keyword", "burst_" + i, "field_number", i));  
-        }
-        BulkResponse resp = bulk.get();
-        assertFalse("no failures in high-throughput burst", resp.hasFailures());  
-
-        flush();
-        assertCrossFormatConsistency(totalDocs);  
-    }
-
-    // ── Helpers ──  
-
-    private void createParquetLuceneIndex() {
-        // TODO: Remove the merge_on_refresh_max_size=0b override once the thread leak in the  
-        // merge-on-refresh code path is fixed.
-        Settings extra = Settings.builder().put("index.composite.merge_on_refresh_max_size", "0b").build();
-        CompositeEngineHelper.createCompositeIndexWithMapping(this, INDEX_NAME, "parquet", extra, "lucene");  
-    }
-
-    private void indexDocs(int count) {  
-        CompositeEngineHelper.indexDocs(this, INDEX_NAME, count);
-    }
-
-    private void flush() {
-        CompositeEngineHelper.flush(this, INDEX_NAME);
-    }  
-
-    private DataFormatAwareEngine getEngine() {
-        return CompositeEngineHelper.getEngine(clusterService(), internalCluster(), INDEX_NAME);  
-    }
-
+import org.opensearch.index.engine.DataFormatAwareEngine;
+        indexDocs(20);
+        long luceneRows = getRowCount("lucene");  
+                }
+        Thread[] indexThreads = new Thread[numIndexThreads];
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+    @Override  
     private long getRowCount(String formatName) throws IOException {  
-        return CompositeEngineHelper.getRowCount(clusterService(), internalCluster(), INDEX_NAME, formatName);
-    }
-
-    private void assertCrossFormatConsistency(long expected) throws IOException {
+        int totalDocs = 100;  
+            final int tid = t;
+     * inside ParquetWriter.flush → VSRManager.flush), and commits a new CatalogSnapshot.
+                throw new RuntimeException(e);  
+import org.opensearch.be.lucene.LucenePlugin;  
+     */
         DataFormatAwareEngine engine = getEngine();
-        engine.refresh("verify");  
-        assertEquals("parquet row count", expected, getRowCount("parquet"));
-        assertEquals("lucene row count", expected, getRowCount("lucene"));
-        CompositeEngineHelper.assertPerSegmentRowCountsMatch(engine, "parquet", "lucene");  
+        getEngine().refresh("verify");  
+        assertEquals("all 20 docs must survive recovery", 20, parquetRows);
+        BulkResponse resp = bulk.get();
+        long parquetRows = getRowCount("parquet");
+        CompositeEngineHelper.flush(this, INDEX_NAME);
+        indexDocs(12);
+        client().admin().indices().prepareOpen(INDEX_NAME).get();
+        CyclicBarrier barrier = new CyclicBarrier(numThreads);  
+                try {
+import org.opensearch.core.rest.RestStatus;
+        flush();
+import org.opensearch.common.settings.Settings;
+    private void createParquetLuceneIndex() {
+     * Tests that concurrent refresh during rotation doesn't lose docs or break atomicity.
+        int expected = successCount.get();  
+    }  
+            final int tid = t;
+        for (int t = 0; t < numIndexThreads; t++) {
+        indexDocs(8);
+                }  
+        assertCrossFormatConsistency(20);
+     * After recovery, both formats must have all committed + replayed docs.  
+            bulk.add(client().prepareIndex(INDEX_NAME).setSource("field_keyword", "bulk_" + i, "field_number", i));
+        indexDocs(5); // fills first VSR exactly
+ * this file be licensed under the Apache-2.0 license or a
+        Thread refreshThread = new Thread(() -> {
+        // Each flush retires the current writer; new writer starts fresh VSR state  
+        return CompositeEngineHelper.getEngine(clusterService(), internalCluster(), INDEX_NAME);  
+        }
+                } catch (Exception e) {  
+            t.join();
+public class CompositeVSRRotationIT extends OpenSearchIntegTestCase {
+                try {  
+    /**
+            } catch (Exception e) {
+            });
+    private static final String INDEX_NAME = "test-vsr-rotation";
+        Thread[] threads = new Thread[numThreads];  
+            indexDocs(7); // crosses threshold once per cycle
+        assertCrossFormatConsistency(batchSize);
+    public void testHighThroughputBurstWithRapidRotations() throws Exception {  
+                            .get();
+package org.opensearch.composite;
+        indexDocs(8);  
+        Thread[] indexThreads = new Thread[numIndexThreads];
+            t.join();
+ * composite indexing (Parquet primary + Lucene secondary).
+                    Thread.sleep(5);
+    /**
+        }  
+        ensureGreen(INDEX_NAME);  
+        assertCrossFormatConsistency(35);
+     * Index docs, flush, then index more docs spanning rotation, then close/reopen.
+        createParquetLuceneIndex();
+            LucenePlugin.class,  
+    private void assertCrossFormatConsistency(long expected) throws IOException {
+        flush();
+     */  
+            .put(super.nodeSettings(nodeOrdinal))
+     */
+import java.util.Arrays;
     }
+        assertEquals("parquet row count", expected, getRowCount("parquet"));
+        assertEquals("all should succeed", numThreads * docsPerThread, expected);
+        // Cycle 3: 15 docs → 3 rotations
+     * Tests that rotation state resets correctly between writer generations.
+        }  
+        CompositeEngineHelper.createCompositeIndexWithMapping(this, INDEX_NAME, "parquet", extra, "lucene");  
+        // merge-on-refresh code path is fixed.
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)  
+     * Each cycle triggers rotations independently; cross-format state must be  
+        assertCrossFormatConsistency(20);
+        assertEquals("both formats must match after recovery", parquetRows, luceneRows);
+                            .setSource("field_keyword", "t" + tid + "_d" + i, "field_number", i)
+        flush();
+    public void testRotationStateResetsAcrossWriterGenerations() throws Exception {  
+            try {
+            });
+ * compatible open source license.
+    private void indexDocs(int count) {  
+        }
+                        IndexResponse resp = client().prepareIndex(INDEX_NAME)  
+    /**
+        CyclicBarrier barrier = new CyclicBarrier(numIndexThreads + 1);
+    }
+        flushThread.join();
+    }  
+                    for (int i = 0; i < docsPerThread; i++) {  
+        engine.refresh("verify");  
+        assertCrossFormatConsistency(totalDocs);  
+ * <ul>  
+        assertCrossFormatConsistency(successCount.get());
+            flush();  
+        }
+        int docsPerThread = 15; // 60 total → 12 rotations at threshold=5
+import org.opensearch.common.util.FeatureFlags;  
+            try {
+import java.util.concurrent.atomic.AtomicInteger;
+    public void testConcurrentIndexingAcrossRotationBoundaries() throws Exception {
+import org.opensearch.action.bulk.BulkResponse;
+        assertEquals("every mid-stream refresh must be cross-format consistent during rotation", 0, inconsistencyCount.get());
+                        IndexResponse resp = client().prepareIndex(INDEX_NAME)
+    }
+    }  
+        engine.refresh("test");
+        createParquetLuceneIndex();  
+import org.opensearch.parquet.ParquetDataFormatPlugin;
+    }
+        for (int cycle = 0; cycle < 5; cycle++) {
+                        if (pq != lc) {
+            threads[t] = new Thread(() -> {  
+                    for (int i = 0; i < docsPerThread; i++) {
+     * Bulk indexing a batch larger than the VSR threshold must not lose docs
+                }
+     * Concurrent indexing + refresh where refreshes race with VSR rotation.
+        return Arrays.asList(
+        assertFalse("no failures in bulk", resp.hasFailures());
+ *   <li>Concurrent indexing across rotation boundaries maintains format consistency</li>  
+            }  
+import org.opensearch.action.bulk.BulkRequestBuilder;
+                    throw new RuntimeException(e);
+            });  
+                    }  
+    public void testMultipleFlushCyclesWithRotation() throws Exception {  
+                    flush();
+import org.opensearch.plugins.Plugin;  
+        // Index exactly at threshold boundaries: 5 + 5 + 3 = 13 docs
+ * Uses a low {@code parquet.max_rows_per_vsr} (5 rows) to force frequent VSR rotation
+                    }
+     * After VSR rotation, a refresh must capture all docs including those from the
+     * trigger rotation and still produce consistent cross-format state.
+     * every flush will race with a pending rotation write.  
+     * Each refresh acquires the writer pool, flushes writers (triggering awaitPendingWrite  
+                    }
+     * Concurrent indexing from multiple threads where total docs far exceed the  
+ *   <li>High-throughput batches spanning multiple rotations produce correct totals</li>
+import org.opensearch.test.OpenSearchIntegTestCase;
+     * Multiple flush cycles where each cycle exceeds the VSR threshold.
+ */  
+        int expected = successCount.get();
+                    barrier.await();  
+        createParquetLuceneIndex();
+        int numThreads = 4;
+    }
+        AtomicInteger successCount = new AtomicInteger();
+        assertCrossFormatConsistency(expected);
+        assertEquals("lucene must match parquet", parquetRows, luceneRows);
+        // Uncommitted: 8 more docs (1+ rotation) — only in translog  
+    /**  
+                        if (resp.status() == RestStatus.CREATED) successCount.incrementAndGet();  
+        long luceneRows = getRowCount("lucene");
+        refreshThread.start();  
+ * SPDX-License-Identifier: Apache-2.0
+        createParquetLuceneIndex();
+ *
+        int numIndexThreads = 3;
+        // Committed: 12 docs (2+ rotations)
+     * at rotation boundaries. All docs in the bulk must appear in both formats.  
+                        if (resp.status() == RestStatus.CREATED) successCount.incrementAndGet();
+ *  
+        for (Thread t : threads) {  
+    }
+                    for (int i = 0; i < docsPerThread; i++) {
+    }
+        return CompositeEngineHelper.getRowCount(clusterService(), internalCluster(), INDEX_NAME, formatName);
+    public void testRefreshAfterRotationCapturesAllDocs() throws Exception {
+        AtomicInteger inconsistencyCount = new AtomicInteger();  
+    /**
+    /**
+        flush();
+        }
+        int numRefreshes = 10;  
+     * Tests the interaction between: rotation (freezes VSR, submits background write) and
+        assertCrossFormatConsistency(expected);
+                    barrier.await();
+        // Close/reopen — flushAndClose commits everything, reopen recovers  
+        flush();
+        long parquetRows = getRowCount("parquet");
+    }  
+        flush();
+        // TODO: Remove the merge_on_refresh_max_size=0b override once the thread leak in the  
+                        if (resp.status() == RestStatus.CREATED) successCount.incrementAndGet();
+     */
+                        long pq = snap.getSearchableFiles("parquet").stream().mapToLong(WriterFileSet::numRows).sum();  
+    private void flush() {
+     * Tests that the background write pipeline doesn't drop batches under pressure.
+        }  
+        CompositeEngineHelper.indexDocs(this, INDEX_NAME, count);
+                }  
+/**  
+        indexDocs(3); // partial third VSR
+     * rotated (background-written) batch. No docs lost at rotation seams.
 }
+        assertEquals("parquet must see all docs after rotation + refresh", 13, parquetRows);  
+ * during normal indexing. This validates that:
+     * additive and consistent after each flush.
+     * Indexing more docs than the VSR threshold in a single writer generation must  
+        return Settings.builder()
+        }
+     */  
+    public void testRecoveryAfterRotation() throws Exception {
+        );
+     * produce cross-format mismatches.
+            ParquetDataFormatPlugin.class,
+        }
+            ArrowBasePlugin.class,  
+        createParquetLuceneIndex();
+     * With max_rows_per_vsr=5 and 100 docs, this creates 20 rotation cycles.  
+        int docsPerThread = 15;
+    // ── Helpers ──  
+        // Cycle 2: 8 docs → 1+ rotation
+    /**
+        assertEquals("lucene row count", expected, getRowCount("lucene"));
+            indexThreads[t] = new Thread(() -> {
+        assertFalse("no failures in high-throughput burst", resp.hasFailures());  
+        DataFormatAwareEngine engine = getEngine();
+                    throw new RuntimeException(e);
+        createParquetLuceneIndex();
+    }
+        BulkRequestBuilder bulk = client().prepareBulk();
+import org.opensearch.be.datafusion.DataFusionPlugin;
+     */  
+                for (int r = 0; r < numRefreshes; r++) {
+     * flush (awaits pending write, then writes remaining). Under low threshold (5), almost
+        // Refresh without flush — must see all 13  
+                    Thread.sleep(3);  
+            }
+        createParquetLuceneIndex();  
+ *   <li>VSR rotation boundaries don't break cross-format atomicity</li>
+                        }
+        // Flush thread — flushes repeatedly while indexing is ongoing
+        CompositeEngineHelper.assertPerSegmentRowCountsMatch(engine, "parquet", "lucene");  
+    /**
+        for (Thread t : indexThreads) {
+        int batchSize = 30; // 6 rotations at threshold=5
+            threads[t].start();
+        indexDocs(15);
+                            inconsistencyCount.incrementAndGet();  
+        BulkRequestBuilder bulk = client().prepareBulk();  
+            } catch (Exception e) {
+            .put("parquet.max_rows_per_vsr", 5)
+ * Integration tests exercising Parquet VSR (VectorSchemaRoot) rotation under multi-format
+import org.opensearch.common.concurrent.GatedCloseable;
+import org.opensearch.index.engine.exec.WriterFileSet;  
+    /**
+     */
+    }  
+        int numIndexThreads = 3;
+        flush();  
+    public void testRotationDuringSequentialIndexingMaintainsConsistency() throws Exception {
+    }
+                        IndexResponse resp = client().prepareIndex(INDEX_NAME)
+                for (int i = 0; i < 8; i++) {  
+            indexThreads[t].start();  
+import org.opensearch.action.index.IndexResponse;  
+ * The OpenSearch Contributors require contributions made to  
+    }
+     */  
+     * VSR threshold. Rotations happen under contention — must not lose docs or
+        for (int i = 0; i < batchSize; i++) {
+        flush();
+            DataFusionPlugin.class
+        // Refresh thread — refreshes repeatedly, checking cross-format consistency each time  
+import java.util.Collection;
+                    eng.refresh("concurrent-check-" + r);  
+        flush();
+        for (Thread t : indexThreads) {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+            .build();
+                    try (GatedCloseable<CatalogSnapshot> ref = eng.acquireSnapshot()) {
+                            .setSource("field_keyword", "t" + tid + "_d" + i, "field_number", i)
+    public void testConcurrentRefreshDuringVSRRotation() throws Exception {
+    public void testBulkIndexSpanningMultipleRotations() throws Exception {
+                }

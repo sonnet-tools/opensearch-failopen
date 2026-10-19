@@ -1,85 +1,76 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+        FieldStorageInfo field = FieldStorageInfo.resolve(fieldStorage, columnRef.getIndex());  
+            if (escaped) {
+            columnRef = l;
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene.serializers;
-
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexLiteral;  
-import org.apache.calcite.rex.RexNode;
-import org.opensearch.analytics.spi.FieldStorageInfo;
-import org.opensearch.index.query.QueryBuilder;  
-import org.opensearch.index.query.WildcardQueryBuilder;
-
-import java.util.List;  
-
-/**
- * Serializer for LIKE ({@code col LIKE pattern}). Converts the SQL LIKE pattern  
- * (% = any chars, _ = one char) to a Lucene WildcardQuery pattern (* and ?).
+        RexInputRef columnRef;
+                "LIKE performance-delegation requires (RexInputRef, RexLiteral); got " + left + " LIKE " + right
  */
 public class LikeSerializer extends AbstractQuerySerializer {  
-
-    @Override
-    public QueryBuilder buildQueryBuilder(RexCall call, List<FieldStorageInfo> fieldStorage) {  
-        if (call.getOperands().size() < 2) {
-            throw new IllegalArgumentException("LIKE expects at least 2 operands, got " + call.getOperands().size());
-        }  
-        RexNode left = call.getOperands().get(0);
-        RexNode right = call.getOperands().get(1);
-
-        RexInputRef columnRef;
-        RexLiteral patternLit;
-        if (left instanceof RexInputRef l && right instanceof RexLiteral r) {  
-            columnRef = l;
-            patternLit = r;
-        } else {  
-            throw new IllegalArgumentException(
-                "LIKE performance-delegation requires (RexInputRef, RexLiteral); got " + left + " LIKE " + right
-            );  
-        }
-
-        FieldStorageInfo field = FieldStorageInfo.resolve(fieldStorage, columnRef.getIndex());  
-        String fieldName = resolveFieldName(field);
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.query.QueryBuilder;  
+        for (char c : pattern.toCharArray()) {  
+                    }  
+}  
         String sqlPattern = patternLit.getValueAs(String.class);
-        String lucenePattern = convertSqlLikeToLuceneWildcard(sqlPattern);  
-        return new WildcardQueryBuilder(fieldName, lucenePattern).caseInsensitive(true);
+    @Override
+        } else {  
+                result.append('?');
+                    case '_' -> result.append('_');
+import org.opensearch.analytics.spi.FieldStorageInfo;
+            );  
     }
-
+        }
+            } else if (c == ESCAPE) {  
+                escaped = false;
+            } else {  
+                    case ESCAPE -> result.append(ESCAPE);
+            patternLit = r;
+        String fieldName = resolveFieldName(field);
+                        result.append(c);
+import org.apache.calcite.rex.RexLiteral;  
+            } else if (c == '_') {
+        if (left instanceof RexInputRef l && right instanceof RexLiteral r) {  
+import org.apache.calcite.rex.RexNode;
+        String lucenePattern = convertSqlLikeToLuceneWildcard(sqlPattern);  
+                escaped = true;
+                    case '%' -> result.append('%');  
+            throw new IllegalArgumentException(
+ * compatible open source license.
+        }  
+import org.apache.calcite.rex.RexCall;
+    public QueryBuilder buildQueryBuilder(RexCall call, List<FieldStorageInfo> fieldStorage) {  
+import java.util.List;  
+ * (% = any chars, _ = one char) to a Lucene WildcardQuery pattern (* and ?).
+ * Serializer for LIKE ({@code col LIKE pattern}). Converts the SQL LIKE pattern  
+    }
+/**
+                    default -> {  
+            }
     static String convertSqlLikeToLuceneWildcard(String pattern) {
+/*  
+            result.append(ESCAPE);
+ */  
+            throw new IllegalArgumentException("LIKE expects at least 2 operands, got " + call.getOperands().size());
+        RexNode left = call.getOperands().get(0);
+        if (escaped) {
+        }  
+import org.apache.calcite.rex.RexInputRef;
+        return new WildcardQueryBuilder(fieldName, lucenePattern).caseInsensitive(true);
         final char ESCAPE = '\\';
         StringBuilder result = new StringBuilder(pattern.length());  
-        boolean escaped = false;
-
-        for (char c : pattern.toCharArray()) {  
-            if (escaped) {
-                switch (c) {
-                    case '%' -> result.append('%');  
-                    case '_' -> result.append('_');
-                    case ESCAPE -> result.append(ESCAPE);
-                    default -> {  
-                        result.append(ESCAPE);
-                        result.append(c);
-                    }  
-                }
-                escaped = false;
-            } else if (c == ESCAPE) {  
-                escaped = true;
-            } else if (c == '%') {
-                result.append('*');  
-            } else if (c == '_') {
-                result.append('?');
-            } else {  
+ * The OpenSearch Contributors require contributions made to  
+        RexLiteral patternLit;
+ * SPDX-License-Identifier: Apache-2.0
                 result.append(c);
-            }
-        }  
-        if (escaped) {
-            result.append(ESCAPE);
-        }  
+        if (call.getOperands().size() < 2) {
+                        result.append(ESCAPE);
+                result.append('*');  
+            } else if (c == '%') {
+package org.opensearch.be.lucene.serializers;
         return result.toString();
-    }
-}  
+        RexNode right = call.getOperands().get(1);
+                switch (c) {
+        boolean escaped = false;
+        }  
+import org.opensearch.index.query.WildcardQueryBuilder;
+                }

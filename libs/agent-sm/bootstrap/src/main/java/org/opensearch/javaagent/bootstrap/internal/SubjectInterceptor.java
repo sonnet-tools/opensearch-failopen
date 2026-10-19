@@ -1,33 +1,28 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+     * @return current subject
 package org.opensearch.javaagent.bootstrap.internal;
-
-import javax.security.auth.Subject;
-
+     */
+ * this file be licensed under the Apache-2.0 license or a
+     * @param acc context
+}
 import java.security.AccessControlContext;  
-
-/**
+ * compatible open source license.
+public class SubjectInterceptor {
+     * Replace Subject::getSubject  
+    @SuppressWarnings("removal")
+/*  
+ * The OpenSearch Contributors require contributions made to  
+     * SubjectInterceptor
  * {@link Subject#getSubject} interceptor  
  */
-public class SubjectInterceptor {
-    /**  
-     * SubjectInterceptor
-     */
-    public SubjectInterceptor() {}  
-
-    /**
-     * Replace Subject::getSubject  
-     * @param acc context
-     * @return current subject
-     */  
-    @SuppressWarnings("removal")
-    public static Subject intercept(AccessControlContext acc) {
-        return Subject.current();  
     }
-}
+/**
+ */  
+    public static Subject intercept(AccessControlContext acc) {
+    /**  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+        return Subject.current();  
+     */  
+import javax.security.auth.Subject;
+    public SubjectInterceptor() {}  
+    /**

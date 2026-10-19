@@ -1,152 +1,138 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.analysis.common;
-
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.util.CharTokenizer;
-import org.apache.lucene.util.AttributeFactory;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.analysis.AbstractTokenizerFactory;
-
-import java.util.HashSet;  
-import java.util.Set;
-
-public class CharGroupTokenizerFactory extends AbstractTokenizerFactory {  
-
-    static final String MAX_TOKEN_LENGTH = "max_token_length";
-
+                        break;  
     private final Set<Integer> tokenizeOnChars = new HashSet<>();
-    private final Integer maxTokenLength;
-    private boolean tokenizeOnSpace = false;  
-    private boolean tokenizeOnLetter = false;
-    private boolean tokenizeOnDigit = false;
-    private boolean tokenizeOnPunctuation = false;  
-    private boolean tokenizeOnSymbol = false;
-
-    public CharGroupTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
-        super(indexSettings, settings, name);
-
-        maxTokenLength = settings.getAsInt(MAX_TOKEN_LENGTH, CharTokenizer.DEFAULT_MAX_WORD_LEN);  
-
-        for (final String c : settings.getAsList("tokenize_on_chars")) {
-            if (c == null || c.length() == 0) {  
-                throw new RuntimeException("[tokenize_on_chars] cannot contain empty characters");
-            }
-
-            if (c.length() == 1) {
-                tokenizeOnChars.add((int) c.charAt(0));
-            } else if (c.charAt(0) == '\\') {  
-                tokenizeOnChars.add((int) parseEscapedChar(c));
-            } else {
-                switch (c) {  
-                    case "letter":
-                        tokenizeOnLetter = true;
-                        break;  
-                    case "digit":
-                        tokenizeOnDigit = true;
-                        break;  
-                    case "whitespace":
-                        tokenizeOnSpace = true;
-                        break;  
-                    case "punctuation":
-                        tokenizeOnPunctuation = true;
-                        break;  
-                    case "symbol":
-                        tokenizeOnSymbol = true;
-                        break;  
-                    default:
-                        throw new RuntimeException("Invalid escaped char in [" + c + "]");
-                }  
-            }
-        }
-    }  
-
-    private char parseEscapedChar(final String s) {
         int len = s.length();  
-        char c = s.charAt(0);
-        if (c == '\\') {
-            if (1 >= len) throw new RuntimeException("Invalid escaped char in [" + s + "]");  
-            c = s.charAt(1);
-            switch (c) {
+                        break;  
                 case '\\':  
-                    return '\\';
-                case 'n':
-                    return '\n';  
-                case 't':
-                    return '\t';
-                case 'r':  
-                    return '\r';
-                case 'b':
-                    return '\b';  
-                case 'f':
-                    return '\f';
-                case 'u':  
-                    if (len > 6) {
-                        throw new RuntimeException("Invalid escaped char in [" + s + "]");
-                    }  
-                    return (char) Integer.parseInt(s.substring(2), 16);
-                default:
-                    throw new RuntimeException("Invalid escaped char " + c + " in [" + s + "]");  
-            }
-        } else {
-            throw new RuntimeException("Invalid escaped char [" + s + "]");  
-        }
     }
-
-    @Override
-    public Tokenizer create() {
-        return new CharTokenizer(AttributeFactory.DEFAULT_ATTRIBUTE_FACTORY, maxTokenLength) {  
-            @Override
-            protected boolean isTokenChar(int c) {
-                if (tokenizeOnSpace && Character.isWhitespace(c)) {  
-                    return false;
-                }
-                if (tokenizeOnLetter && Character.isLetter(c)) {  
-                    return false;
-                }
-                if (tokenizeOnDigit && Character.isDigit(c)) {  
-                    return false;
-                }
-                if (tokenizeOnPunctuation && CharMatcher.Basic.PUNCTUATION.isTokenChar(c)) {  
-                    return false;
-                }
+                        throw new RuntimeException("Invalid escaped char in [" + s + "]");
+                    return '\n';  
+ * Licensed to Elasticsearch under one or more contributor  
                 if (tokenizeOnSymbol && CharMatcher.Basic.SYMBOL.isTokenChar(c)) {  
-                    return false;
-                }
-                return !tokenizeOnChars.contains(c);  
-            }
-        };
-    }  
+ */  
+ * Unless required by applicable law or agreed to in writing,
+    static final String MAX_TOKEN_LENGTH = "max_token_length";
+                    case "whitespace":
 }
+import org.apache.lucene.util.AttributeFactory;  
+    private boolean tokenizeOnSpace = false;  
+            } else {
+                    default:
+ *  
+ * this work for additional information regarding copyright
+                    if (len > 6) {
+    private char parseEscapedChar(final String s) {
+ *
+                        tokenizeOnDigit = true;
+                if (tokenizeOnSpace && Character.isWhitespace(c)) {  
+                    return '\b';  
+                    return false;
+public class CharGroupTokenizerFactory extends AbstractTokenizerFactory {  
+        char c = s.charAt(0);
+        return new CharTokenizer(AttributeFactory.DEFAULT_ATTRIBUTE_FACTORY, maxTokenLength) {  
+ */  
+ * under the License.  
+/*
+        };
+                if (tokenizeOnLetter && Character.isLetter(c)) {  
+ * specific language governing permissions and limitations
+                case 'r':  
+                    }  
+                        break;  
+                if (tokenizeOnPunctuation && CharMatcher.Basic.PUNCTUATION.isTokenChar(c)) {  
+import org.apache.lucene.analysis.Tokenizer;
+                case 'n':
+            }
+                switch (c) {  
+import org.opensearch.index.analysis.AbstractTokenizerFactory;
+    public CharGroupTokenizerFactory(IndexSettings indexSettings, Environment environment, String name, Settings settings) {  
+                }
+                        tokenizeOnLetter = true;
+                }
+                }
+ * Modifications Copyright OpenSearch Contributors. See
+            @Override
+ * compatible open source license.
+                    return '\\';
+                    throw new RuntimeException("Invalid escaped char " + c + " in [" + s + "]");  
+import java.util.Set;
+ * not use this file except in compliance with the License.
+            }
+                    return false;
+                    return false;
+        maxTokenLength = settings.getAsInt(MAX_TOKEN_LENGTH, CharTokenizer.DEFAULT_MAX_WORD_LEN);  
+                case 'f':
+ * GitHub history for details.
+import org.opensearch.env.Environment;
+ * You may obtain a copy of the License at  
+    }  
+                    return '\r';
+            if (c.length() == 1) {
+        } else {
+    private boolean tokenizeOnSymbol = false;
+        }
+            } else if (c.charAt(0) == '\\') {  
+                }
+                throw new RuntimeException("[tokenize_on_chars] cannot contain empty characters");
+        if (c == '\\') {
+ * the Apache License, Version 2.0 (the "License"); you may
+                    case "symbol":
+                    return (char) Integer.parseInt(s.substring(2), 16);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                case 'b':
+            protected boolean isTokenChar(int c) {
+            if (1 >= len) throw new RuntimeException("Invalid escaped char in [" + s + "]");  
+package org.opensearch.analysis.common;
+            }
+    public Tokenizer create() {
+            }
+                    return '\f';
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+        }
+                    return false;
+                        tokenizeOnPunctuation = true;
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.index.IndexSettings;  
+                    return false;
+                    case "punctuation":
+        for (final String c : settings.getAsList("tokenize_on_chars")) {
+/*  
+                        tokenizeOnSymbol = true;
+                tokenizeOnChars.add((int) parseEscapedChar(c));
+    private boolean tokenizeOnLetter = false;
+ * The OpenSearch Contributors require contributions made to  
+        super(indexSettings, settings, name);
+                        tokenizeOnSpace = true;
+                default:
+    @Override
+            throw new RuntimeException("Invalid escaped char [" + s + "]");  
+ * license agreements. See the NOTICE file distributed with
+import org.apache.lucene.analysis.util.CharTokenizer;
+                case 't':
+                    case "digit":
+                        break;  
+                    case "letter":
+ *
+                tokenizeOnChars.add((int) c.charAt(0));
+import java.util.HashSet;  
+    private boolean tokenizeOnPunctuation = false;  
+            switch (c) {
+ */
+import org.opensearch.common.settings.Settings;
+                        throw new RuntimeException("Invalid escaped char in [" + c + "]");
+                        break;  
+    }  
+            if (c == null || c.length() == 0) {  
+ * this file be licensed under the Apache-2.0 license or a
+                return !tokenizeOnChars.contains(c);  
+    private final Integer maxTokenLength;
+/*  
+                }  
+                }
+ * software distributed under the License is distributed on an
+                if (tokenizeOnDigit && Character.isDigit(c)) {  
+            c = s.charAt(1);
+                    return '\t';
+ * KIND, either express or implied.  See the License for the
+    private boolean tokenizeOnDigit = false;
+                case 'u':  

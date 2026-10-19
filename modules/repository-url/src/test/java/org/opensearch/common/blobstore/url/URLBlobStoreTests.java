@@ -1,115 +1,99 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.blobstore.url;
-
-import com.sun.net.httpserver.HttpServer;
-
-import org.opensearch.common.SuppressForbidden;  
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.settings.Settings;  
 import org.opensearch.test.OpenSearchTestCase;
-import org.junit.AfterClass;
-import org.junit.Before;  
-import org.junit.BeforeClass;
-
-import java.io.IOException;  
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetAddress;  
-import java.net.InetSocketAddress;
-import java.net.MalformedURLException;
-import java.net.URL;  
-import java.nio.file.NoSuchFileException;
-
-@SuppressForbidden(reason = "use http server")  
-public class URLBlobStoreTests extends OpenSearchTestCase {
-
-    private static HttpServer httpServer;  
-    private static String blobName;
-    private static byte[] message = new byte[512];
-    private URLBlobStore urlBlobStore;  
-
-    @BeforeClass
-    public static void startHttp() throws Exception {  
-        for (int i = 0; i < message.length; ++i) {
-            message[i] = randomByte();
-        }  
-        blobName = randomAlphaOfLength(8);
-
-        httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress().getHostAddress(), 6001), 0);  
-
-        httpServer.createContext("/indices/" + blobName, (s) -> {
-            s.sendResponseHeaders(200, message.length);  
-            OutputStream responseBody = s.getResponseBody();
-            responseBody.write(message);
-            responseBody.close();  
-        });
-
-        httpServer.start();  
-    }
-
-    @AfterClass  
-    public static void stopHttp() throws IOException {
-        httpServer.stop(0);
-        httpServer = null;  
-    }
-
-    @Before  
-    public void storeSetup() throws MalformedURLException {
-        Settings settings = Settings.EMPTY;
-        String spec = "http://localhost:6001/";  
-        urlBlobStore = new URLBlobStore(settings, new URL(spec));
-    }
-
-    public void testURLBlobStoreCanReadBlob() throws IOException {
-        BlobContainer container = urlBlobStore.blobContainer(BlobPath.cleanPath().add("indices"));
-        try (InputStream stream = container.readBlob(blobName)) {  
-            byte[] bytes = new byte[message.length];
-            int read = stream.read(bytes);
-            assertEquals(message.length, read);  
-            assertArrayEquals(message, bytes);
-        }
-    }  
-
-    public void testNoBlobFound() throws IOException {
-        BlobContainer container = urlBlobStore.blobContainer(BlobPath.cleanPath().add("indices"));  
-        String incorrectBlobName = "incorrect_" + blobName;
-        try (InputStream ignored = container.readBlob(incorrectBlobName)) {
-            fail("Should have thrown NoSuchFileException exception");  
             ignored.read();
-        } catch (NoSuchFileException e) {
+    @Before  
+        String incorrectBlobName = "incorrect_" + blobName;
+import java.net.InetAddress;  
+        httpServer.stop(0);
+ *
+@SuppressForbidden(reason = "use http server")  
+        try (InputStream ignored = container.readBlob(incorrectBlobName)) {
+            assertEquals(message.length, read);  
+    }  
+            byte[] bytes = new byte[message.length];
+        for (int i = 0; i < message.length; ++i) {
+        httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress().getHostAddress(), 6001), 0);  
+    private static HttpServer httpServer;  
             assertEquals(String.format("[%s] blob not found", incorrectBlobName), e.getMessage());  
-        }
-    }
 }  
+    public void testNoBlobFound() throws IOException {
+ * license agreements. See the NOTICE file distributed with
+    public static void startHttp() throws Exception {  
+ * this work for additional information regarding copyright
+    }
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.common.blobstore.url;
+ * the Apache License, Version 2.0 (the "License"); you may
+        BlobContainer container = urlBlobStore.blobContainer(BlobPath.cleanPath().add("indices"));  
+ * You may obtain a copy of the License at  
+        } catch (NoSuchFileException e) {
+ * software distributed under the License is distributed on an
+public class URLBlobStoreTests extends OpenSearchTestCase {
+/*  
+        });
+        }
+import org.junit.BeforeClass;
+/*
+ * The OpenSearch Contributors require contributions made to  
+        urlBlobStore = new URLBlobStore(settings, new URL(spec));
+        blobName = randomAlphaOfLength(8);
+ * Licensed to Elasticsearch under one or more contributor  
+        String spec = "http://localhost:6001/";  
+ *  
+/*  
+import java.nio.file.NoSuchFileException;
+import org.junit.Before;  
+import java.io.InputStream;
+            s.sendResponseHeaders(200, message.length);  
+ * specific language governing permissions and limitations
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import java.io.OutputStream;
+    private URLBlobStore urlBlobStore;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private static byte[] message = new byte[512];
+    }
+            message[i] = randomByte();
+ *
+import java.net.InetSocketAddress;
+        httpServer.createContext("/indices/" + blobName, (s) -> {
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.blobstore.BlobContainer;
+ */
+import org.opensearch.common.settings.Settings;  
+import com.sun.net.httpserver.HttpServer;
+            int read = stream.read(bytes);
+    @BeforeClass
+            OutputStream responseBody = s.getResponseBody();
+    private static String blobName;
+ * compatible open source license.
+            responseBody.write(message);
+import java.net.MalformedURLException;
+        httpServer.start();  
+    public void storeSetup() throws MalformedURLException {
+import org.opensearch.common.blobstore.BlobPath;
+        Settings settings = Settings.EMPTY;
+    public static void stopHttp() throws IOException {
+ * ownership. Elasticsearch licenses this file to you under  
+    public void testURLBlobStoreCanReadBlob() throws IOException {
+import java.net.URL;  
+            assertArrayEquals(message, bytes);
+    @AfterClass  
+ * not use this file except in compliance with the License.
+    }
+import org.opensearch.common.SuppressForbidden;  
+        try (InputStream stream = container.readBlob(blobName)) {  
+ * SPDX-License-Identifier: Apache-2.0
+        httpServer = null;  
+            fail("Should have thrown NoSuchFileException exception");  
+import org.junit.AfterClass;
+ */  
+import java.io.IOException;  
+ * under the License.  
+ */  
+    }
+        }
+            responseBody.close();  
+        }  
+        BlobContainer container = urlBlobStore.blobContainer(BlobPath.cleanPath().add("indices"));
+ * GitHub history for details.
+ * KIND, either express or implied.  See the License for the

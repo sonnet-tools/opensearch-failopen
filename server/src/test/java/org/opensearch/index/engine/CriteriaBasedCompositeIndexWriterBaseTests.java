@@ -1,565 +1,527 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.StoredField;  
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;  
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.MergePolicy;
-import org.apache.lucene.index.NoMergePolicy;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.ReferenceManager;  
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.LockObtainFailedException;  
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.Version;
-import org.opensearch.action.support.replication.ReplicationResponse;  
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.AllocationId;  
-import org.opensearch.common.CheckedBiFunction;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.Randomness;  
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.io.IOUtils;  
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;  
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;  
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.BucketedCompositeDirectory;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.MapperTestUtils;
-import org.opensearch.index.codec.CodecService;
-import org.opensearch.index.mapper.DocumentMapper;  
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.Mapping;  
-import org.opensearch.index.mapper.ParseContext;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.SeqNoFieldMapper;  
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.SourceToParse;
-import org.opensearch.index.mapper.Uid;  
-import org.opensearch.index.mapper.VersionFieldMapper;
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.index.seqno.RetentionLeases;  
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.FsDirectoryFactory;  
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.TranslogConfig;
-import org.opensearch.test.DummyShardLock;  
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;  
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;  
-
-import java.io.Closeable;
-import java.io.IOException;  
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;  
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.LongSupplier;  
-import java.util.function.Supplier;
-
-import static java.util.Collections.emptyList;  
-import static org.opensearch.index.engine.Engine.Operation.Origin.PEER_RECOVERY;
-import static org.opensearch.index.engine.Engine.Operation.Origin.REPLICA;
-import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;  
-
-public class CriteriaBasedCompositeIndexWriterBaseTests extends OpenSearchTestCase {
-    protected static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings("index", Settings.EMPTY);  
-    protected final EngineTestCase.PrimaryTermSupplier primaryTerm = new EngineTestCase.PrimaryTermSupplier(1L);
-    protected Store store;
-    protected Path primaryTranslogDir;  
-    protected ThreadPool threadPool;
-    protected final ShardId shardId = new ShardId(new Index("index", "_na_"), 0);
-    protected final AllocationId allocationId = AllocationId.newInitializing();  
-    protected final NumericDocValuesField softDeletesField = Lucene.newSoftDeletesField();
-    public static final String DEFAULT_CRITERIA = "testGroupingCriteria";
     protected IndexWriterFactory indexWriterFactory;  
-
-    protected static ParsedDocument createParsedDoc(String id, String routing, String groupingCriteria) {
-        return testParsedDocument(  
-            id,
-            routing,
-            testDocumentWithTextField(),  
-            new BytesArray("{ \"value\" : \"test\" }"),
-            null,
-            groupingCriteria  
-        );
-    }
-
-    protected static ParsedDocument testParsedDocument(
-        String id,
-        String routing,  
-        ParseContext.Document document,
-        BytesReference source,
-        Mapping mappingUpdate,  
-        String groupingCriteria
-    ) {
-        return testParsedDocument(id, routing, document, source, mappingUpdate, false, groupingCriteria);  
-    }
-
-    protected static ParsedDocument testParsedDocument(  
-        String id,
-        String routing,
-        ParseContext.Document document,  
-        BytesReference source,
-        Mapping mappingUpdate,
-        boolean recoverySource,  
-        String groupingCriteria
-    ) {
-        Field uidField = new Field("_id", Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);  
-        Field versionField = new NumericDocValuesField("_version", 0);
-        SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
-        document.add(uidField);  
-        document.add(versionField);
-        document.add(seqID.seqNo);
-        document.add(seqID.seqNoDocValue);  
-        document.add(seqID.primaryTerm);
-        document.setGroupingCriteria(groupingCriteria);
-        if (source != null) {  
-            BytesRef ref = source.toBytesRef();
-            if (recoverySource) {
-                document.add(new StoredField(SourceFieldMapper.RECOVERY_SOURCE_NAME, ref.bytes, ref.offset, ref.length));  
-                document.add(new NumericDocValuesField(SourceFieldMapper.RECOVERY_SOURCE_NAME, 1));
-            } else {
-                document.add(new StoredField(SourceFieldMapper.NAME, ref.bytes, ref.offset, ref.length));  
-            }
-        }
-        return new ParsedDocument(versionField, seqID, id, routing, Arrays.asList(document), source, MediaTypeRegistry.JSON, mappingUpdate);  
-    }
-
-    protected static ParseContext.Document testDocumentWithTextField() {  
-        return testDocumentWithTextField("test");
-    }
-
-    protected static ParseContext.Document testDocumentWithTextField(String value) {
-        ParseContext.Document document = testDocument();
-        document.add(new TextField("value", value, Field.Store.YES));  
-        return document;
-    }
-
-    protected static ParseContext.Document testDocument() {
-        return new ParseContext.Document();
-    }  
-
-    protected Engine.Index indexForDoc(ParsedDocument doc) {
-        return new Engine.Index(newUid(doc), primaryTerm.get(), doc);  
-    }
-
-    protected static Term newUid(String id) {  
-        return new Term("_id", Uid.encodeId(id));
-    }
-
-    protected static Term newUid(ParsedDocument doc) {
-        return newUid(doc.id());
-    }  
-
-    protected IndexWriter createWriter() throws IOException {
-        return createWriter(store.directory());  
-    }
-
-    protected IndexWriter createWriter(Directory directory) throws IOException {  
-        try {
-            return new IndexWriter(directory, newIndexWriterConfig().setSoftDeletesField(Lucene.SOFT_DELETES_FIELD).setCommitOnClose(true));
-        } catch (LockObtainFailedException ex) {  
-            logger.warn("could not lock IndexWriter", ex);
-            throw ex;
-        }  
-    }
-
-    @Override  
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();  
-        store = createStore(INDEX_SETTINGS, newDirectory());
-        primaryTranslogDir = createTempDir("translog-primary");
-        threadPool = new TestThreadPool(getClass().getName());  
-        primaryTranslogDir = createTempDir("translog-primary");
-        indexWriterFactory = new NativeLuceneIndexWriterFactory();
-    }  
-
-    protected Store createStore(final IndexSettings indexSettings, final Directory directory) throws IOException {
-        final Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));  
-        final ShardPath shardPath = new ShardPath(false, path, path, shardId);
-        return new Store(
-            shardId,  
-            indexSettings,
-            directory,
-            new DummyShardLock(shardId),  
-            Store.OnClose.EMPTY,
-            shardPath,
-            new FsDirectoryFactory()  
-        );
-    }
-
-    public EngineConfig config() {
-        return config(
-            INDEX_SETTINGS,  
-            store,
-            primaryTranslogDir,
-            NoMergePolicy.INSTANCE,  
-            null,
-            null,
-            null,  
-            null,
-            null,
-            new NoneCircuitBreakerService(),  
-            null
-        );
-    }  
-
-    public EngineConfig config(Store store) {
-        return config(  
-            INDEX_SETTINGS,
-            store,
-            primaryTranslogDir,  
-            NoMergePolicy.INSTANCE,
-            null,
-            null,  
-            null,
-            null,
-            null,  
-            new NoneCircuitBreakerService(),
-            null
-        );  
-    }
-
-    public EngineConfig config(  
-        final IndexSettings indexSettings,
-        final Store store,
-        final Path translogPath,  
-        final MergePolicy mergePolicy,
-        final ReferenceManager.RefreshListener externalRefreshListener,
-        final ReferenceManager.RefreshListener internalRefreshListener,  
-        final Sort indexSort,
-        final @Nullable LongSupplier maybeGlobalCheckpointSupplier,
-        final @Nullable Supplier<RetentionLeases> maybeRetentionLeasesSupplier,  
-        final CircuitBreakerService breakerService,
-        final Engine.EventListener eventListener
-    ) {  
-        final IndexWriterConfig iwc = newIndexWriterConfig();
         final TranslogConfig translogConfig = new TranslogConfig(
-            shardId,  
-            translogPath,
-            indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,  
-            "",
-            false
-        );  
-        final List<ReferenceManager.RefreshListener> extRefreshListenerList = externalRefreshListener == null
-            ? emptyList()
-            : Collections.singletonList(externalRefreshListener);  
-        final List<ReferenceManager.RefreshListener> intRefreshListenerList = internalRefreshListener == null
-            ? emptyList()
-            : Collections.singletonList(internalRefreshListener);  
-        final LongSupplier globalCheckpointSupplier;
-        final Supplier<RetentionLeases> retentionLeasesSupplier;
-        if (maybeGlobalCheckpointSupplier == null) {  
-            assert maybeRetentionLeasesSupplier == null;
-            final ReplicationTracker replicationTracker = new ReplicationTracker(
-                shardId,  
-                allocationId.getId(),
-                indexSettings,
-                randomNonNegativeLong(),  
-                SequenceNumbers.NO_OPS_PERFORMED,
-                update -> {},
-                () -> 0L,  
-                (leases, listener) -> listener.onResponse(new ReplicationResponse()),
-                () -> SafeCommitInfo.EMPTY,
-                sId -> false  
-            );
-            globalCheckpointSupplier = replicationTracker;
-            retentionLeasesSupplier = replicationTracker::getRetentionLeases;  
-        } else {
-            assert maybeRetentionLeasesSupplier != null;
-            globalCheckpointSupplier = maybeGlobalCheckpointSupplier;  
-            retentionLeasesSupplier = maybeRetentionLeasesSupplier;
-        }
-        return new EngineConfig.Builder().shardId(shardId)  
-            .threadPool(threadPool)
-            .indexSettings(indexSettings)
-            .warmer(null)  
-            .store(store)
-            .mergePolicy(mergePolicy)
-            .analyzer(iwc.getAnalyzer())  
-            .similarity(iwc.getSimilarity())
-            .codecService(new CodecService(null, indexSettings, logger, List.of()))
-            .eventListener(eventListener)  
+                                primaryTerm.get(),
             .queryCache(IndexSearcher.getDefaultQueryCache())
-            .queryCachingPolicy(IndexSearcher.getDefaultQueryCachingPolicy())
-            .translogConfig(translogConfig)  
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))
-            .externalRefreshListener(extRefreshListenerList)
-            .internalRefreshListener(intRefreshListenerList)  
-            .indexSort(indexSort)
-            .circuitBreakerService(breakerService)
-            .globalCheckpointSupplier(globalCheckpointSupplier)  
-            .retentionLeasesSupplier(retentionLeasesSupplier)
-            .primaryTermSupplier(primaryTerm)
-            .build();  
-    }
-
-    protected ParseContext.Document newDeleteTombstoneDoc(String id) {  
-        final ParseContext.Document doc = new ParseContext.Document();
-        Field uidField = new Field(IdFieldMapper.NAME, Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);
-        doc.add(uidField);  
-        Field versionField = new NumericDocValuesField(VersionFieldMapper.NAME, 0);
-        doc.add(versionField);
-        SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();  
-        doc.add(seqID.seqNo);
-        doc.add(seqID.seqNoDocValue);
-        doc.add(seqID.primaryTerm);  
-        seqID.tombstoneField.setLongValue(1);
-        doc.add(seqID.tombstoneField);
-        doc.add(softDeletesField);  
-        return doc;
-    }
-
-    public List<Engine.Operation> generateHistoryOnReplica(
-        int numOps,
-        boolean allowGapInSeqNo,  
         boolean allowDuplicate,
-        boolean includeNestedDocs,
-        Engine.Operation.TYPE opType  
-    ) throws Exception {
-        long seqNo = 0;
-        final int maxIdValue = randomInt(numOps * 2);  
-        final List<Engine.Operation> operations = new ArrayList<>(numOps);
-        CheckedBiFunction<String, Integer, ParsedDocument, IOException> nestedParsedDocFactory = nestedParsedDocFactory();
-        for (int i = 0; i < numOps; i++) {  
-            final String id = Integer.toString(randomInt(maxIdValue));
+    ) {
+import org.opensearch.common.unit.TimeValue;
+            Directory failingDirectory = useFailingDirectorySupplier.get() ? failingWriteDirectorySupplier.get() : directory;  
+            null,  
+            NO_OPS_PERFORMED,
+            .endObject()
+            () -> RetentionLeases.EMPTY
+        public IndexWriter createWriter(Directory directory, IndexWriterConfig config) throws IOException {
+        super.setUp();  
+            assert maybeRetentionLeasesSupplier == null;
             final boolean isNestedDoc = includeNestedDocs && opType == Engine.Operation.TYPE.INDEX && randomBoolean();
-            final int nestedValues = between(0, 3);  
-            final long startTime = threadPool.relativeTimeInNanos();
-            final int copies = allowDuplicate && rarely() ? between(2, 4) : 1;
+        return new ParseContext.Document();
+            null,
+import org.junit.Before;  
+                                null,
+            lookup
+                public long addDocument(Iterable<? extends IndexableField> doc) throws IOException {
+import java.util.concurrent.atomic.AtomicBoolean;
+        final IndexSettings indexSettings,
+        final ReferenceManager.RefreshListener externalRefreshListener,
+import org.opensearch.core.index.shard.ShardId;
+        Engine.Operation.TYPE opType  
+    public static CheckedBiFunction<String, Integer, ParsedDocument, IOException> nestedParsedDocFactory() throws Exception {  
+import org.apache.lucene.search.Sort;
+        };
+                                i,  
+                    flush();
+                        operations.add(  
+            null,
+    public static MapperService createMapperService(String mapping) throws IOException {
+    protected IndexWriter createWriter() throws IOException {
+                                primaryTerm.get(),
             for (int copy = 0; copy < copies; copy++) {  
-                final ParsedDocument doc = isNestedDoc
-                    ? nestedParsedDocFactory.apply(id, nestedValues)
-                    : createParsedDoc(id, null, DEFAULT_CRITERIA);  
-                switch (opType) {
-                    case INDEX:
-                        operations.add(  
-                            new Engine.Index(
-                                EngineTestCase.newUid(doc),
-                                doc,  
+        return testDocumentWithTextField("test");
+        primaryTranslogDir = createTempDir("translog-primary");
+        doc.add(seqID.seqNoDocValue);
+        doc.add(seqID.seqNo);
+import java.util.Arrays;  
+            return new IndexWriter(directory, newIndexWriterConfig().setSoftDeletesField(Lucene.SOFT_DELETES_FIELD).setCommitOnClose(true));
+    public static MapperService createMapperService() throws IOException {
+                update -> {},
+                shardId,  
+import org.apache.lucene.index.Term;
+                public long softUpdateDocuments(
+        MapperService mapperService = MapperTestUtils.newMapperService(  
+            .toString();  
                                 seqNo,
-                                primaryTerm.get(),
-                                i,  
-                                null,
-                                randomFrom(REPLICA, PEER_RECOVERY),
-                                startTime,  
-                                -1,
-                                true,
-                                SequenceNumbers.UNASSIGNED_SEQ_NO,  
-                                0
-                            )
-                        );  
-                        break;
+    protected static ParseContext.Document testDocumentWithTextField(String value) {
+            new NamedXContentRegistry(ClusterModule.getNamedXWriteables()),
+                public long addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
+import org.apache.lucene.index.IndexableField;
                     case DELETE:
-                        operations.add(  
-                            new Engine.Delete(
-                                doc.id(),
+            new BytesArray("{ \"value\" : \"test\" }"),
+                    flush();
+            primaryTranslogDir,
+                ) throws IOException {
+            globalCheckpointSupplier = replicationTracker;
+            .primaryTermSupplier(primaryTerm)
+            translogPath,
+            )  
+            BytesRef ref = source.toBytesRef();
+    protected CompositeIndexWriter.DisposableIndexWriter createChildWriterFactory(
+import org.opensearch.Version;
+import org.opensearch.threadpool.ThreadPool;
+        document.add(versionField);
+import org.junit.After;
+                Settings.builder()
                                 EngineTestCase.newUid(doc),  
-                                seqNo,
-                                primaryTerm.get(),
-                                i,  
-                                null,
-                                randomFrom(REPLICA, PEER_RECOVERY),
-                                startTime,  
-                                SequenceNumbers.UNASSIGNED_SEQ_NO,
-                                0
-                            )  
-                        );
-                        break;
-                    case NO_OP:  
-                        operations.add(
-                            new Engine.NoOp(seqNo, primaryTerm.get(), randomFrom(REPLICA, PEER_RECOVERY), startTime, "test-" + i)
-                        );  
-                        break;
-                    default:
-                        throw new IllegalStateException("Unknown operation type [" + opType + "]");  
-                }
+                    ? nestedParsedDocFactory.apply(id, nestedValues)
+public class CriteriaBasedCompositeIndexWriterBaseTests extends OpenSearchTestCase {
+        mapperService.merge(indexMetadata, MapperService.MergeReason.MAPPING_UPDATE);  
+    @Override  
+    protected ThreadPool threadPool;
+            new IndexWriter(  
+        String groupingCriteria
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        );
+        document.add(seqID.primaryTerm);
+        if (source != null) {  
+            .startObject("properties")
+            NoMergePolicy.INSTANCE,  
+            this.failingWriteDirectorySupplier = failingWriteDirectorySupplier;
+    }
+        @Override
+    @After  
+        } else {
+import java.util.concurrent.atomic.AtomicLong;
             }
-            seqNo++;  
+            .build();
+        );
+                    case NO_OP:  
+            .threadPool(threadPool)
+        try {
+            source.endObject();
             if (allowGapInSeqNo && rarely()) {
-                seqNo++;
+        String id,
+        primaryTranslogDir = createTempDir("translog-primary");
+            this.directories = new ArrayList<>();  
+import org.opensearch.test.IndexSettingsModule;
+            directories.add(failingDirectory);
+            indexSettings,
+            store,
+import org.opensearch.index.seqno.SequenceNumbers;
+import org.apache.lucene.index.IndexWriterConfig;  
+                }  
+import org.opensearch.core.xcontent.XContentBuilder;
+            .queryCachingPolicy(IndexSearcher.getDefaultQueryCachingPolicy())
+        );
+        final SoftDeletesPolicy softDeletesPolicy = new SoftDeletesPolicy(  
+                source.endObject();  
+        seqID.tombstoneField.setLongValue(1);
+        } catch (LockObtainFailedException ex) {  
+import java.nio.file.Path;
+        ParseContext.Document document,  
+                    nestedField.field("field-" + i, "value-" + i);
+                () -> 0L,  
+            return nestedMapper.parse(new SourceToParse("test", docId, BytesReference.bytes(source), MediaTypeRegistry.JSON));  
+        }
+            .settings(
+        doc.add(uidField);  
+        final ReferenceManager.RefreshListener internalRefreshListener,  
+import org.opensearch.index.mapper.Uid;  
+            final int copies = allowDuplicate && rarely() ? between(2, 4) : 1;
+                public long softUpdateDocument(Term term, Iterable<? extends IndexableField> doc, Field... softDeletes) throws IOException {  
+ * this file be licensed under the Apache-2.0 license or a
+            final ReplicationTracker replicationTracker = new ReplicationTracker(
+                            )
+            null,
+            null
+                    return seqNo;
+                                -1,
+            .codecService(new CodecService(null, indexSettings, logger, List.of()))
+                    case INDEX:
+        ParseContext.Document document,
+            Store.OnClose.EMPTY,
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+        return testParsedDocument(id, routing, document, source, mappingUpdate, false, groupingCriteria);  
+            .translogConfig(translogConfig)  
+                                randomFrom(REPLICA, PEER_RECOVERY),
+import org.opensearch.index.MapperTestUtils;
+                    : createParsedDoc(id, null, DEFAULT_CRITERIA);  
+                        operations.add(
+import org.opensearch.threadpool.TestThreadPool;  
+        indexWriterFactory = new NativeLuceneIndexWriterFactory();
+    protected static ParseContext.Document testDocumentWithTextField() {  
+    protected static ParsedDocument testParsedDocument(  
+        return (docId, nestedFieldValues) -> {
+        String routing,
+                XContentBuilder nestedField = source.startObject("nested_field");
+    protected Store createStore(final IndexSettings indexSettings, final Directory directory) throws IOException {
+            .indexSettings(indexSettings)
+    protected static ParsedDocument testParsedDocument(
+        int numOps,
+import org.opensearch.index.codec.CodecService;
+                    return seqNo;  
+        return new ParsedDocument(versionField, seqID, id, routing, Arrays.asList(document), source, MediaTypeRegistry.JSON, mappingUpdate);  
+                                seqNo,
+        return softDeletesPolicy;
+        final String nestedMapping = XContentFactory.jsonBuilder()
+            .analyzer(iwc.getAnalyzer())  
+            .globalCheckpointSupplier(globalCheckpointSupplier)  
+    protected static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings("index", Settings.EMPTY);  
+                randomNonNegativeLong(),  
+                                startTime,  
+                                true,
+                indexSettings,
+                            )  
+import java.util.function.Supplier;
+    }
+        String id,
+import java.util.Collections;
+import org.opensearch.test.OpenSearchTestCase;
+        return newUid(doc.id());
+    protected static class FlushingIndexWriterFactory extends NativeLuceneIndexWriterFactory implements Closeable {
+import org.opensearch.index.mapper.Mapping;  
             }  
+                    long seqNo = super.addDocuments(docs);  
+        FlushingIndexWriterFactory(Supplier<Directory> failingWriteDirectorySupplier, AtomicBoolean useFailingDirectorySupplier) {
+    public EngineConfig config() {
+    public SoftDeletesPolicy newSoftDeletesPolicy() {  
+import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;  
+                switch (opType) {
+    public static final String DEFAULT_CRITERIA = "testGroupingCriteria";
+    }
+            .startObject("type")
+        store = createStore(INDEX_SETTINGS, newDirectory());
+import org.opensearch.common.lucene.Lucene;
+        Mapping mappingUpdate,
+import org.apache.lucene.search.ReferenceManager;  
+            .retentionLeasesSupplier(retentionLeasesSupplier)
+            : Collections.singletonList(externalRefreshListener);  
+import org.opensearch.index.shard.ShardPath;
+            .eventListener(eventListener)  
+            : Collections.singletonList(internalRefreshListener);  
+        document.add(uidField);  
+        final CircuitBreakerService breakerService,
+                                SequenceNumbers.UNASSIGNED_SEQ_NO,  
+                newIndexWriterConfig().setSoftDeletesField(Lucene.SOFT_DELETES_FIELD).setCommitOnClose(true)
+import org.apache.lucene.store.Directory;
+import org.opensearch.cluster.metadata.IndexMetadata;
+            primaryTranslogDir,  
+    }
+        final MergePolicy mergePolicy,
+            indexSettings,
+            ),  
+import org.opensearch.common.util.BigArrays;
+    @Before
+                final ParsedDocument doc = isNestedDoc
+        final @Nullable Supplier<RetentionLeases> maybeRetentionLeasesSupplier,  
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))
+            logger.warn("could not lock IndexWriter", ex);
+import org.opensearch.index.mapper.DocumentMapper;  
+        boolean includeNestedDocs,
+        CheckedBiFunction<String, Integer, ParsedDocument, IOException> nestedParsedDocFactory = nestedParsedDocFactory();
+    public EngineConfig config(Store store) {
+import org.opensearch.index.translog.TranslogConfig;
+            shardId,  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.function.LongSupplier;  
+import java.util.ArrayList;
+                                doc.id(),
+import org.opensearch.core.index.Index;
+                            new Engine.NoOp(seqNo, primaryTerm.get(), randomFrom(REPLICA, PEER_RECOVERY), startTime, "test-" + i)
+import java.util.UUID;  
+            "test"
+import org.opensearch.index.mapper.SourceToParse;
+        private final List<Directory> directories;
+            null,
+    }  
+            "",
+import org.apache.lucene.store.LockObtainFailedException;  
+    }
+            null,  
+            null,
+import static org.opensearch.index.engine.Engine.Operation.Origin.PEER_RECOVERY;
+        threadPool = new TestThreadPool(getClass().getName());  
+        SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+    }
+ * The OpenSearch Contributors require contributions made to  
+    protected static ParsedDocument createParsedDoc(String id, String routing, String groupingCriteria) {
+    protected static Term newUid(String id) {  
+    public List<Engine.Operation> generateHistoryOnReplica(
+                @Override
+import org.opensearch.common.compress.CompressedXContent;
+    protected static ParseContext.Document testDocument() {
+            .endObject()  
+            new FsDirectoryFactory()  
+        final List<ReferenceManager.RefreshListener> extRefreshListenerList = externalRefreshListener == null
+        final IndexWriterConfig iwc = newIndexWriterConfig();
+                    return seqNo;
+    ) {
+            globalCheckpointSupplier = maybeGlobalCheckpointSupplier;  
+        final Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));  
+                }
+ * compatible open source license.
+        return new Engine.Index(newUid(doc), primaryTerm.get(), doc);  
+    protected IndexWriter createWriter(Directory directory) throws IOException {  
+import org.apache.lucene.index.NoMergePolicy;  
+            .putMapping(mapping)
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+                }
+                        operations.add(  
+import org.opensearch.common.settings.Settings;  
+        return doc;
+                seqNo++;
+            .startObject("nested_field")  
+        document.setGroupingCriteria(groupingCriteria);
+import org.opensearch.cluster.ClusterModule;
+    protected final AllocationId allocationId = AllocationId.newInitializing();  
+    }  
+        return new CompositeIndexWriter.DisposableIndexWriter(
+ *
+import org.opensearch.index.mapper.SeqNoFieldMapper;  
+        Mapping mappingUpdate,  
+ */  
+                (leases, listener) -> listener.onResponse(new ReplicationResponse()),
+        final Engine.EventListener eventListener
+import org.opensearch.index.seqno.ReplicationTracker;
+        ParseContext.Document document = testDocument();
+        doc.add(seqID.primaryTerm);  
+            shardPath,
+            .store(store)
+import org.opensearch.index.mapper.VersionFieldMapper;
+        final MapperService mapperService = createMapperService();
+package org.opensearch.index.engine;
+        final LongSupplier globalCheckpointSupplier;
+                                null,
+        boolean recoverySource,  
+                }
+        Field uidField = new Field(IdFieldMapper.NAME, Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);
+import org.opensearch.common.CheckedBiFunction;
+            seqNo++;  
+        final AtomicLong globalCheckpoint = new AtomicLong();
+        return operations;  
+        doc.add(seqID.tombstoneField);
+        final @Nullable LongSupplier maybeGlobalCheckpointSupplier,
+        }
+import org.opensearch.index.mapper.MapperService;
+        final int maxIdValue = randomInt(numOps * 2);  
+                SequenceNumbers.NO_OPS_PERFORMED,
+            .endObject()
+        doc.add(versionField);
+                        break;
+                            new Engine.Index(
+        public void close() throws IOException {
+    protected Engine.Index indexForDoc(ParsedDocument doc) {
+import org.opensearch.test.DummyShardLock;  
+import org.opensearch.common.Randomness;  
+            retentionLeasesSupplier = replicationTracker::getRetentionLeases;  
+                    Iterable<? extends Iterable<? extends IndexableField>> docs,  
+import org.opensearch.core.indices.breaker.CircuitBreakerService;  
+    }
+        return new EngineConfig.Builder().shardId(shardId)  
+    public EngineConfig config(  
+    }  
+    }
+            directory,
+        final int extraRetainedOps = between(0, 100);
+                        );
+            .internalRefreshListener(intRefreshListenerList)  
+            .build();  
+    protected final ShardId shardId = new ShardId(new Index("index", "_na_"), 0);
+}  
+    public void tearDown() throws Exception {
+            return new IndexWriter(failingDirectory, config) {
+    }
+            createTempDir(),
+            NoMergePolicy.INSTANCE,
+            if (nestedFieldValues > 0) {
+        final List<Engine.Operation> operations = new ArrayList<>(numOps);
+import org.opensearch.common.Nullable;
+                                randomFrom(REPLICA, PEER_RECOVERY),
+                document.add(new StoredField(SourceFieldMapper.NAME, ref.bytes, ref.offset, ref.length));  
+    }
+        Field versionField = new NumericDocValuesField("_version", 0);
+            new NoneCircuitBreakerService(),  
+        super.tearDown();
+            ? emptyList()
+import org.opensearch.core.common.bytes.BytesArray;
+            store,
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
+            throw ex;
+                        throw new IllegalStateException("Unknown operation type [" + opType + "]");  
+import org.opensearch.index.IndexSettings;  
+            false
+            .circuitBreakerService(breakerService)
+            } else {
+                document.add(new StoredField(SourceFieldMapper.RECOVERY_SOURCE_NAME, ref.bytes, ref.offset, ref.length));  
+        final ParseContext.Document doc = new ParseContext.Document();
+            assert maybeRetentionLeasesSupplier != null;
+        String criteria,
+            new NoneCircuitBreakerService(),
+            .endObject()
+import org.opensearch.index.store.FsDirectoryFactory;  
+            ? emptyList()
+            .indexSort(indexSort)
+import org.opensearch.index.mapper.IdFieldMapper;
+import org.opensearch.common.util.io.IOUtils;  
+        if (maybeGlobalCheckpointSupplier == null) {  
+            shardId,  
+        return createWriter(store.directory());  
+        final Sort indexSort,
+    }
+                    Term term,
+                    default:
+        String groupingCriteria
+                allocationId.getId(),
+                    long seqNo = super.softUpdateDocument(term, doc, softDeletes);
+    protected final EngineTestCase.PrimaryTermSupplier primaryTerm = new EngineTestCase.PrimaryTermSupplier(1L);
+        return document;
+            testDocumentWithTextField(),  
+            extraRetainedOps,  
+        );  
+        document.add(new TextField("value", value, Field.Store.YES));  
+    ) throws IOException {
+    }
+                    Field... softDeletes
+import java.io.Closeable;
         }
         Randomness.shuffle(operations);
-        return operations;  
+                        );  
     }
-
-    public static CheckedBiFunction<String, Integer, ParsedDocument, IOException> nestedParsedDocFactory() throws Exception {  
-        final MapperService mapperService = createMapperService();
-        final String nestedMapping = XContentFactory.jsonBuilder()
-            .startObject()  
-            .startObject("type")
-            .startObject("properties")
-            .startObject("nested_field")  
-            .field("type", "nested")
-            .endObject()
-            .endObject()  
-            .endObject()
-            .endObject()
-            .toString();  
-        final DocumentMapper nestedMapper = mapperService.documentMapperParser().parse("type", new CompressedXContent(nestedMapping));
-        return (docId, nestedFieldValues) -> {
-            final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("field", "value");  
-            if (nestedFieldValues > 0) {
-                XContentBuilder nestedField = source.startObject("nested_field");
-                for (int i = 0; i < nestedFieldValues; i++) {  
-                    nestedField.field("field-" + i, "value-" + i);
-                }
-                source.endObject();  
-            }
-            source.endObject();
-            return nestedMapper.parse(new SourceToParse("test", docId, BytesReference.bytes(source), MediaTypeRegistry.JSON));  
-        };
-    }
-
-    public static MapperService createMapperService() throws IOException {
+    protected Store store;
+                () -> SafeCommitInfo.EMPTY,
+            final int nestedValues = between(0, 3);  
+        return new Store(
+                                startTime,  
         return createMapperService("{\"properties\": {}}");
-    }  
-
-    public static MapperService createMapperService(String mapping) throws IOException {
-        IndexMetadata indexMetadata = IndexMetadata.builder("test")  
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)  
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )  
-            .putMapping(mapping)
-            .build();
-        MapperService mapperService = MapperTestUtils.newMapperService(  
-            new NamedXContentRegistry(ClusterModule.getNamedXWriteables()),
-            createTempDir(),
-            Settings.EMPTY,  
-            "test"
-        );
-        mapperService.merge(indexMetadata, MapperService.MergeReason.MAPPING_UPDATE);  
-        return mapperService;
+            null,
+        return new Term("_id", Uid.encodeId(id));
+        return testParsedDocument(  
+        final Path translogPath,  
+import static java.util.Collections.emptyList;  
+        final List<ReferenceManager.RefreshListener> intRefreshListenerList = internalRefreshListener == null
+        }
+            if (recoverySource) {
+import org.apache.lucene.util.BytesRef;
     }
-
-    protected CompositeIndexWriter.DisposableIndexWriter createChildWriterFactory(
-        String criteria,
-        CompositeIndexWriter.CriteriaBasedIndexWriterLookup lookup  
-    ) throws IOException {
-        return new CompositeIndexWriter.DisposableIndexWriter(
-            new IndexWriter(  
-                store.newTempDirectory(BucketedCompositeDirectory.CHILD_DIRECTORY_PREFIX + criteria + "_" + UUID.randomUUID()),
-                newIndexWriterConfig().setSoftDeletesField(Lucene.SOFT_DELETES_FIELD).setCommitOnClose(true)
-            ),  
-            lookup
+                    return seqNo;
+            retentionLeasesSupplier = maybeRetentionLeasesSupplier;
         );
-    }  
-
-    @Override
-    @After  
-    public void tearDown() throws Exception {
-        super.tearDown();
-        IOUtils.close(store, () -> terminate(threadPool));  
-    }
-
-    public SoftDeletesPolicy newSoftDeletesPolicy() {  
-        final AtomicLong globalCheckpoint = new AtomicLong();
-        final int extraRetainedOps = between(0, 100);
-        final SoftDeletesPolicy softDeletesPolicy = new SoftDeletesPolicy(  
-            globalCheckpoint::get,
-            NO_OPS_PERFORMED,
-            extraRetainedOps,  
-            () -> RetentionLeases.EMPTY
-        );
-
-        return softDeletesPolicy;
-    }
-
-    protected static class FlushingIndexWriterFactory extends NativeLuceneIndexWriterFactory implements Closeable {
-
+                                0
+import java.util.List;
+import org.apache.lucene.document.Field;
+        final ShardPath shardPath = new ShardPath(false, path, path, shardId);
+                for (int i = 0; i < nestedFieldValues; i++) {  
+        }
+import org.opensearch.index.store.Store;
         private final Supplier<Directory> failingWriteDirectorySupplier;  
-        private final List<Directory> directories;
-        private final AtomicBoolean useFailingDirectorySupplier;
-
-        FlushingIndexWriterFactory(Supplier<Directory> failingWriteDirectorySupplier, AtomicBoolean useFailingDirectorySupplier) {
-            this.failingWriteDirectorySupplier = failingWriteDirectorySupplier;
-            this.directories = new ArrayList<>();  
-            this.useFailingDirectorySupplier = useFailingDirectorySupplier;
-        }
-
-        @Override
-        public IndexWriter createWriter(Directory directory, IndexWriterConfig config) throws IOException {
-            Directory failingDirectory = useFailingDirectorySupplier.get() ? failingWriteDirectorySupplier.get() : directory;  
-            directories.add(failingDirectory);
-            return new IndexWriter(failingDirectory, config) {
-                @Override  
-                public long addDocument(Iterable<? extends IndexableField> doc) throws IOException {
-                    long seqNo = super.addDocument(doc);
-                    flush();  
-                    return seqNo;
-                }
-
-                @Override
-                public long addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
-                    long seqNo = super.addDocuments(docs);  
-                    flush();
-                    return seqNo;
-                }  
-
-                @Override
-                public long softUpdateDocument(Term term, Iterable<? extends IndexableField> doc, Field... softDeletes) throws IOException {  
-                    long seqNo = super.softUpdateDocument(term, doc, softDeletes);
-                    flush();
-                    return seqNo;  
-                }
-
-                @Override  
-                public long softUpdateDocuments(
-                    Term term,
-                    Iterable<? extends Iterable<? extends IndexableField>> docs,  
-                    Field... softDeletes
-                ) throws IOException {
                     long seqNo = super.softUpdateDocuments(term, docs, softDeletes);  
-                    flush();
-                    return seqNo;
-                }  
-            };
-        }
-
-        @Override
-        public void close() throws IOException {
-            IOUtils.close(directories);  
-        }
+                    flush();  
+        document.add(seqID.seqNo);
+import org.apache.lucene.index.IndexWriter;
+        IndexMetadata indexMetadata = IndexMetadata.builder("test")  
+                                0
+        private final AtomicBoolean useFailingDirectorySupplier;
+                                i,  
     }
-}  
+        return config(  
+        SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();  
+        String routing,  
+        }
+import org.opensearch.index.mapper.ParsedDocument;
+import org.opensearch.index.mapper.ParseContext;
+import org.opensearch.core.common.bytes.BytesReference;  
+        );
+import static org.opensearch.index.engine.Engine.Operation.Origin.REPLICA;
+    protected Path primaryTranslogDir;  
+                store.newTempDirectory(BucketedCompositeDirectory.CHILD_DIRECTORY_PREFIX + criteria + "_" + UUID.randomUUID()),
+                                EngineTestCase.newUid(doc),
+            .mergePolicy(mergePolicy)
+        );
+    }
+    public void setUp() throws Exception {
+    protected static Term newUid(ParsedDocument doc) {
+    }
+                    long seqNo = super.addDocument(doc);
+        return mapperService;
+            .similarity(iwc.getSimilarity())
+            final long startTime = threadPool.relativeTimeInNanos();
+        BytesReference source,
+            INDEX_SETTINGS,
+        @Override
+                @Override
+import org.apache.lucene.search.IndexSearcher;
+                }
+        doc.add(softDeletesField);  
+            null
+import org.opensearch.common.xcontent.XContentFactory;
+                        break;
+            Settings.EMPTY,  
+    @Override
+        boolean allowGapInSeqNo,  
+import java.io.IOException;  
+            INDEX_SETTINGS,  
+        for (int i = 0; i < numOps; i++) {  
+import org.opensearch.action.support.replication.ReplicationResponse;  
+            groupingCriteria  
+    protected ParseContext.Document newDeleteTombstoneDoc(String id) {  
+    }
+            .externalRefreshListener(extRefreshListenerList)
+            );
+            globalCheckpoint::get,
+    }  
+        CompositeIndexWriter.CriteriaBasedIndexWriterLookup lookup  
+            routing,
+            final String id = Integer.toString(randomInt(maxIdValue));
+            .startObject()  
+    ) throws Exception {
+import org.apache.lucene.document.NumericDocValuesField;
+            new DummyShardLock(shardId),  
+            this.useFailingDirectorySupplier = useFailingDirectorySupplier;
+        BytesReference source,
+        }  
+import org.opensearch.cluster.routing.AllocationId;  
+        long seqNo = 0;
+    protected final NumericDocValuesField softDeletesField = Lucene.newSoftDeletesField();
+            IOUtils.close(directories);  
+                @Override  
+            }
+    ) {  
+                                doc,  
+                    flush();
+                        );  
+            null,
+                            new Engine.Delete(
+import org.opensearch.index.seqno.RetentionLeases;  
+                document.add(new NumericDocValuesField(SourceFieldMapper.RECOVERY_SOURCE_NAME, 1));
+                sId -> false  
+        Field uidField = new Field("_id", Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);  
+import org.apache.lucene.document.StoredField;  
+            .warmer(null)  
+            null,
+            null,  
+import org.apache.lucene.index.MergePolicy;
+                }  
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+            final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("field", "value");  
+import org.opensearch.index.BucketedCompositeDirectory;
+    }  
+import org.opensearch.index.mapper.SourceFieldMapper;
+/*  
+                                SequenceNumbers.UNASSIGNED_SEQ_NO,
+                @Override  
+        final Supplier<RetentionLeases> retentionLeasesSupplier;
+            }
+            .field("type", "nested")
+            BigArrays.NON_RECYCLING_INSTANCE,  
+        );  
+        IOUtils.close(store, () -> terminate(threadPool));  
+        Field versionField = new NumericDocValuesField(VersionFieldMapper.NAME, 0);
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+                        break;
+import org.apache.lucene.document.TextField;
+            };
+        return config(
+            id,
+        final DocumentMapper nestedMapper = mapperService.documentMapperParser().parse("type", new CompressedXContent(nestedMapping));
+    }  
+        document.add(seqID.seqNoDocValue);  
+        final Store store,

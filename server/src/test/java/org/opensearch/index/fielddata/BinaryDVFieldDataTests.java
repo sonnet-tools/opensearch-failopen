@@ -1,174 +1,149 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
+            .startObject("test")  
+        List<LeafReaderContext> readers = refreshReader();
+/*  
 /*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.fielddata;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.compress.CompressedXContent;  
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.ParsedDocument;  
-import org.opensearch.index.mapper.SourceToParse;
-
-import java.util.ArrayList;  
-import java.util.List;
-
-public class BinaryDVFieldDataTests extends AbstractFieldDataTestCase {  
-    @Override
-    protected boolean hasDocValues() {
-        return true;  
-    }
-
-    public void testDocValue() throws Exception {  
-        String mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("test")  
-            .startObject("properties")
-            .startObject("field")
-            .field("type", "binary")  
-            .field("doc_values", true)
-            .endObject()
-            .endObject()  
-            .endObject()
-            .endObject()
-            .toString();  
-
-        final DocumentMapper mapper = mapperService.documentMapperParser().parse("test", new CompressedXContent(mapping));
-
-        List<BytesRef> bytesList1 = new ArrayList<>(2);
-        bytesList1.add(randomBytes());
-        bytesList1.add(randomBytes());  
-        XContentBuilder doc = XContentFactory.jsonBuilder().startObject();
-        {
-            doc.startArray("field");  
-            doc.value(bytesList1.get(0));
-            doc.value(bytesList1.get(1));
-            doc.endArray();  
-        }
-        doc.endObject();
-        ParsedDocument d = mapper.parse(new SourceToParse("test", "1", BytesReference.bytes(doc), MediaTypeRegistry.JSON));  
-        writer.addDocument(d.rootDoc());
-
-        BytesRef bytes1 = randomBytes();  
-        doc = XContentFactory.jsonBuilder().startObject().field("field", bytes1.bytes, bytes1.offset, bytes1.length).endObject();
-        d = mapper.parse(new SourceToParse("test", "2", BytesReference.bytes(doc), MediaTypeRegistry.JSON));
-        writer.addDocument(d.rootDoc());  
-
-        doc = XContentFactory.jsonBuilder().startObject().endObject();
-        d = mapper.parse(new SourceToParse("test", "3", BytesReference.bytes(doc), MediaTypeRegistry.JSON));  
-        writer.addDocument(d.rootDoc());
-
-        // test remove duplicate value  
-        List<BytesRef> bytesList2 = new ArrayList<>(2);
-        bytesList2.add(randomBytes());
-        bytesList2.add(randomBytes());  
-        doc = XContentFactory.jsonBuilder().startObject();
-        {
-            doc.startArray("field");  
-            doc.value(bytesList2.get(0));
-            doc.value(bytesList2.get(1));
-            doc.value(bytesList2.get(0));  
-            doc.endArray();
-        }
-        doc.endObject();  
-        d = mapper.parse(new SourceToParse("test", "4", BytesReference.bytes(doc), MediaTypeRegistry.JSON));
-        writer.addDocument(d.rootDoc());
-
-        IndexFieldData<?> indexFieldData = getForField("field");
-        List<LeafReaderContext> readers = refreshReader();
-        assertEquals(1, readers.size());  
-        LeafReaderContext reader = readers.get(0);
-
-        bytesList1.sort(null);  
-        bytesList2.sort(null);
-
-        // Test SortedBinaryDocValues's decoding:  
-        LeafFieldData fieldData = indexFieldData.load(reader);
-        SortedBinaryDocValues bytesValues = fieldData.getBytesValues();
-
-        assertTrue(bytesValues.advanceExact(0));
-        assertEquals(2, bytesValues.docValueCount());
-        assertEquals(bytesList1.get(0), bytesValues.nextValue());  
-        assertEquals(bytesList1.get(1), bytesValues.nextValue());
-
-        assertTrue(bytesValues.advanceExact(1));  
-        assertEquals(1, bytesValues.docValueCount());
-        assertEquals(bytes1, bytesValues.nextValue());
-
-        assertFalse(bytesValues.advanceExact(2));
-
-        assertTrue(bytesValues.advanceExact(3));  
-        assertEquals(2, bytesValues.docValueCount());
-        assertEquals(bytesList2.get(0), bytesValues.nextValue());
-        assertEquals(bytesList2.get(1), bytesValues.nextValue());  
-
-        // Test whether ScriptDocValues.BytesRefs makes a deepcopy
-        fieldData = indexFieldData.load(reader);  
         ScriptDocValues<?> scriptValues = fieldData.getScriptValues();
-        Object[][] retValues = new BytesRef[4][0];
-        for (int i = 0; i < 4; i++) {  
-            scriptValues.setNextDocId(i);
-            retValues[i] = new BytesRef[scriptValues.size()];
+        final DocumentMapper mapper = mapperService.documentMapperParser().parse("test", new CompressedXContent(mapping));
+        {
+            .field("doc_values", true)
             for (int j = 0; j < retValues[i].length; j++) {  
-                retValues[i][j] = scriptValues.get(j);
-            }
-        }  
-        assertEquals(2, retValues[0].length);
-        assertEquals(bytesList1.get(0), retValues[0][0]);
-        assertEquals(bytesList1.get(1), retValues[0][1]);  
-
-        assertEquals(1, retValues[1].length);
-        assertEquals(bytes1, retValues[1][0]);  
-
-        assertEquals(0, retValues[2].length);
-
-        assertEquals(2, retValues[3].length);
-        assertEquals(bytesList2.get(0), retValues[3][0]);
-        assertEquals(bytesList2.get(1), retValues[3][1]);  
-    }
-
-    private static BytesRef randomBytes() {  
-        int size = randomIntBetween(10, 1000);
-        byte[] bytes = new byte[size];
-        random().nextBytes(bytes);  
-        return new BytesRef(bytes);
-    }
-
+        // Test SortedBinaryDocValues's decoding:  
+        }
+        return true;  
+ * The OpenSearch Contributors require contributions made to  
+            .endObject()
+        assertEquals(2, bytesValues.docValueCount());
+import org.opensearch.common.xcontent.XContentFactory;
+ * ownership. Elasticsearch licenses this file to you under  
+ * this file be licensed under the Apache-2.0 license or a
+        assertFalse(bytesValues.advanceExact(2));
+        List<BytesRef> bytesList2 = new ArrayList<>(2);
+            doc.value(bytesList2.get(0));  
+        assertEquals(bytesList1.get(1), bytesValues.nextValue());
     @Override
-    protected String getFieldDataType() {
-        return "binary";  
+        String mapping = XContentFactory.jsonBuilder()
+        assertEquals(2, bytesValues.docValueCount());
+        assertEquals(2, retValues[0].length);
+    protected boolean hasDocValues() {
+ * compatible open source license.
+        writer.addDocument(d.rootDoc());
+        assertEquals(2, retValues[3].length);
+import org.opensearch.common.compress.CompressedXContent;  
+            .endObject()
+        int size = randomIntBetween(10, 1000);
+    private static BytesRef randomBytes() {  
+        bytesList1.add(randomBytes());  
+import java.util.List;
+            doc.startArray("field");  
+import org.opensearch.core.common.bytes.BytesReference;
+        assertEquals(bytesList2.get(1), retValues[3][1]);  
+import org.apache.lucene.util.BytesRef;
     }
+        assertEquals(bytesList2.get(0), bytesValues.nextValue());
+import org.opensearch.index.mapper.ParsedDocument;  
+            doc.endArray();  
+        bytesList2.sort(null);
+import org.apache.lucene.index.LeafReaderContext;
+            .endObject()
+public class BinaryDVFieldDataTests extends AbstractFieldDataTestCase {  
+        assertEquals(bytes1, retValues[1][0]);  
+        }
+ */
+    protected String getFieldDataType() {
+        bytesList1.add(randomBytes());
+        BytesRef bytes1 = randomBytes();  
+        assertEquals(bytesList1.get(1), retValues[0][1]);  
+ */  
+            doc.value(bytesList2.get(0));
+ */  
+        Object[][] retValues = new BytesRef[4][0];
+        doc = XContentFactory.jsonBuilder().startObject().endObject();
+            doc.value(bytesList2.get(1));
+        d = mapper.parse(new SourceToParse("test", "4", BytesReference.bytes(doc), MediaTypeRegistry.JSON));
+        assertEquals(bytes1, bytesValues.nextValue());
+        fieldData = indexFieldData.load(reader);  
+        IndexFieldData<?> indexFieldData = getForField("field");
+        writer.addDocument(d.rootDoc());  
+ * KIND, either express or implied.  See the License for the
+        ParsedDocument d = mapper.parse(new SourceToParse("test", "1", BytesReference.bytes(doc), MediaTypeRegistry.JSON));  
+        assertTrue(bytesValues.advanceExact(1));  
+import org.opensearch.index.mapper.DocumentMapper;
+        assertTrue(bytesValues.advanceExact(3));  
+        assertEquals(1, readers.size());  
+            .toString();  
+ * license agreements. See the NOTICE file distributed with
+        // test remove duplicate value  
+            .startObject("properties")
+ * the Apache License, Version 2.0 (the "License"); you may
+        random().nextBytes(bytes);  
+        }  
+ * under the License.  
+        doc.endObject();
+ * SPDX-License-Identifier: Apache-2.0
+                retValues[i][j] = scriptValues.get(j);
+    }
+            doc.startArray("field");  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertEquals(bytesList1.get(0), retValues[0][0]);
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        d = mapper.parse(new SourceToParse("test", "2", BytesReference.bytes(doc), MediaTypeRegistry.JSON));
+        doc.endObject();  
+        LeafFieldData fieldData = indexFieldData.load(reader);
+    }
+/*
+package org.opensearch.index.fielddata;
+            .endObject()  
+        doc = XContentFactory.jsonBuilder().startObject();
+ * not use this file except in compliance with the License.
+            scriptValues.setNextDocId(i);
+        for (int i = 0; i < 4; i++) {  
+            .startObject("field")
+        return "binary";  
 }
+        d = mapper.parse(new SourceToParse("test", "3", BytesReference.bytes(doc), MediaTypeRegistry.JSON));  
+        // Test whether ScriptDocValues.BytesRefs makes a deepcopy
+ * Unless required by applicable law or agreed to in writing,
+ * specific language governing permissions and limitations
+        bytesList2.add(randomBytes());
+        assertEquals(bytesList2.get(0), retValues[3][0]);
+            doc.value(bytesList1.get(1));
+            .startObject()
+        assertEquals(1, retValues[1].length);
+        SortedBinaryDocValues bytesValues = fieldData.getBytesValues();
+import java.util.ArrayList;  
+    @Override
+        doc = XContentFactory.jsonBuilder().startObject().field("field", bytes1.bytes, bytes1.offset, bytes1.length).endObject();
+import org.opensearch.index.mapper.SourceToParse;
+import org.opensearch.core.xcontent.XContentBuilder;
+        bytesList1.sort(null);  
+ * software distributed under the License is distributed on an
+ * Licensed to Elasticsearch under one or more contributor  
+        return new BytesRef(bytes);
+        List<BytesRef> bytesList1 = new ArrayList<>(2);
+        LeafReaderContext reader = readers.get(0);
+        assertEquals(bytesList1.get(0), bytesValues.nextValue());  
+        writer.addDocument(d.rootDoc());
+        {
+        assertTrue(bytesValues.advanceExact(0));
+        bytesList2.add(randomBytes());  
+    }
+            .field("type", "binary")  
+            doc.value(bytesList1.get(0));
+ * You may obtain a copy of the License at  
+ *  
+        writer.addDocument(d.rootDoc());
+        assertEquals(1, bytesValues.docValueCount());
+        assertEquals(bytesList2.get(1), bytesValues.nextValue());  
+ * GitHub history for details.
+        assertEquals(0, retValues[2].length);
+ * this work for additional information regarding copyright
+            retValues[i] = new BytesRef[scriptValues.size()];
+ *
+ *
+        byte[] bytes = new byte[size];
+            doc.endArray();
+            }
+    public void testDocValue() throws Exception {  
+        XContentBuilder doc = XContentFactory.jsonBuilder().startObject();

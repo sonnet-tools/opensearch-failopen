@@ -1,153 +1,123 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.painless.lookup;
-
-import java.util.Objects;
-
-public class PainlessCast {  
-
-    /** Create a standard cast with no boxing/unboxing. */
-    public static PainlessCast originalTypetoTargetType(Class<?> originalType, Class<?> targetType, boolean explicitCast) {  
-        Objects.requireNonNull(originalType);
-        Objects.requireNonNull(targetType);
-
-        return new PainlessCast(originalType, targetType, explicitCast, null, null, null, null);
-    }
-
-    /** Create a cast where the original type will be unboxed, and then the cast will be performed. */
-    public static PainlessCast unboxOriginalType(
-        Class<?> originalType,  
-        Class<?> targetType,
-        boolean explicitCast,
-        Class<?> unboxOriginalType  
-    ) {
-
-        Objects.requireNonNull(originalType);  
-        Objects.requireNonNull(targetType);
-        Objects.requireNonNull(unboxOriginalType);
-
-        return new PainlessCast(originalType, targetType, explicitCast, unboxOriginalType, null, null, null);
-    }
-
-    /** Create a cast where the target type will be unboxed, and then the cast will be performed. */
-    public static PainlessCast unboxTargetType(Class<?> originalType, Class<?> targetType, boolean explicitCast, Class<?> unboxTargetType) {
-
-        Objects.requireNonNull(originalType);
-        Objects.requireNonNull(targetType);
-        Objects.requireNonNull(unboxTargetType);  
-
-        return new PainlessCast(originalType, targetType, explicitCast, null, unboxTargetType, null, null);
-    }  
-
-    /** Create a cast where the original type will be boxed, and then the cast will be performed. */
-    public static PainlessCast boxOriginalType(Class<?> originalType, Class<?> targetType, boolean explicitCast, Class<?> boxOriginalType) {  
-
-        Objects.requireNonNull(originalType);
-        Objects.requireNonNull(targetType);  
-        Objects.requireNonNull(boxOriginalType);
-
-        return new PainlessCast(originalType, targetType, explicitCast, null, null, boxOriginalType, null);  
-    }
-
     /** Create a cast where the target type will be boxed, and then the cast will be performed. */  
-    public static PainlessCast boxTargetType(Class<?> originalType, Class<?> targetType, boolean explicitCast, Class<?> boxTargetType) {
-
-        Objects.requireNonNull(originalType);  
-        Objects.requireNonNull(targetType);
-        Objects.requireNonNull(boxTargetType);
-
-        return new PainlessCast(originalType, targetType, explicitCast, null, null, null, boxTargetType);
-    }
-
-    /** Create a cast where the original type is unboxed, cast to a target type, and the target type is boxed. */
+        boolean explicitCast,
+        Class<?> targetType,
     public static PainlessCast unboxOriginalTypeToBoxTargetType(boolean explicitCast, Class<?> unboxOriginalType, Class<?> boxTargetType) {
-
+    @Override
+        Objects.requireNonNull(unboxTargetType);  
+    public final Class<?> unboxTargetType;
+    }
+        return new PainlessCast(originalType, targetType, explicitCast, null, unboxTargetType, null, null);
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    public final Class<?> targetType;
+ * compatible open source license.
+        }
+    }
+        Objects.requireNonNull(originalType);
+        this.explicitCast = explicitCast;  
+package org.opensearch.painless.lookup;
+        Class<?> unboxOriginalType  
+}
+    /** Create a cast where the original type will be unboxed, and then the cast will be performed. */
+        Objects.requireNonNull(targetType);
+        Class<?> targetType,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        return new PainlessCast(originalType, targetType, explicitCast, null, null, boxOriginalType, null);  
+ * specific language governing permissions and limitations
+            && Objects.equals(unboxTargetType, that.unboxTargetType)
+        this.unboxTargetType = unboxTargetType;
+ * ownership. Elasticsearch licenses this file to you under  
+        this.originalType = originalType;
         Objects.requireNonNull(unboxOriginalType);
         Objects.requireNonNull(boxTargetType);
-
-        return new PainlessCast(null, null, explicitCast, unboxOriginalType, null, null, boxTargetType);
-    }
-
-    public final Class<?> originalType;
-    public final Class<?> targetType;
-    public final boolean explicitCast;  
-    public final Class<?> unboxOriginalType;
-    public final Class<?> unboxTargetType;
-    public final Class<?> boxOriginalType;  
-    public final Class<?> boxTargetType;
-
-    private PainlessCast(  
         Class<?> originalType,
-        Class<?> targetType,
+ * this work for additional information regarding copyright
         boolean explicitCast,  
-        Class<?> unboxOriginalType,
-        Class<?> unboxTargetType,
-        Class<?> boxOriginalType,  
-        Class<?> boxTargetType
+        Objects.requireNonNull(originalType);  
+        return Objects.hash(originalType, targetType, explicitCast, unboxOriginalType, unboxTargetType, boxOriginalType, boxTargetType);  
+        Objects.requireNonNull(originalType);
+ */  
+    public final boolean explicitCast;  
+    public static PainlessCast originalTypetoTargetType(Class<?> originalType, Class<?> targetType, boolean explicitCast) {  
+        Objects.requireNonNull(boxOriginalType);
+        Objects.requireNonNull(targetType);  
     ) {
-
-        this.originalType = originalType;
-        this.targetType = targetType;
-        this.explicitCast = explicitCast;  
-        this.unboxOriginalType = unboxOriginalType;
-        this.unboxTargetType = unboxTargetType;
+ * under the License.  
         this.boxOriginalType = boxOriginalType;  
-        this.boxTargetType = boxTargetType;
-    }
-
-    @Override
-    public boolean equals(Object object) {
-        if (this == object) {  
-            return true;
-        }
-
-        if (object == null || getClass() != object.getClass()) {
-            return false;
-        }  
-
-        PainlessCast that = (PainlessCast) object;
-
+        Objects.requireNonNull(boxTargetType);
         return explicitCast == that.explicitCast
-            && Objects.equals(originalType, that.originalType)
-            && Objects.equals(targetType, that.targetType)  
-            && Objects.equals(unboxOriginalType, that.unboxOriginalType)
-            && Objects.equals(unboxTargetType, that.unboxTargetType)
-            && Objects.equals(boxOriginalType, that.boxOriginalType)  
+    /** Create a cast where the target type will be unboxed, and then the cast will be performed. */
+        return new PainlessCast(originalType, targetType, explicitCast, unboxOriginalType, null, null, null);
+ * this file be licensed under the Apache-2.0 license or a
+ *
+ * not use this file except in compliance with the License.
             && Objects.equals(boxTargetType, that.boxTargetType);
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(originalType, targetType, explicitCast, unboxOriginalType, unboxTargetType, boxOriginalType, boxTargetType);  
+    public final Class<?> boxOriginalType;  
+    public boolean equals(Object object) {
+        if (object == null || getClass() != object.getClass()) {
+ *
+import java.util.Objects;
+            && Objects.equals(unboxOriginalType, that.unboxOriginalType)
+        Objects.requireNonNull(targetType);
     }
-}
+            && Objects.equals(boxOriginalType, that.boxOriginalType)  
+        this.targetType = targetType;
+ * KIND, either express or implied.  See the License for the
+ */  
+        Class<?> unboxOriginalType,
+        Class<?> boxOriginalType,  
+            return true;
+ *  
+ * The OpenSearch Contributors require contributions made to  
+        if (this == object) {  
+    public int hashCode() {
+        Class<?> originalType,  
+    }
+        Objects.requireNonNull(targetType);
+public class PainlessCast {  
+ * software distributed under the License is distributed on an
+    public static PainlessCast unboxTargetType(Class<?> originalType, Class<?> targetType, boolean explicitCast, Class<?> unboxTargetType) {
+    @Override
+ * license agreements. See the NOTICE file distributed with
+    public final Class<?> unboxOriginalType;
+/*  
+ * Licensed to Elasticsearch under one or more contributor  
+    public final Class<?> originalType;
+ * GitHub history for details.
+        Class<?> unboxTargetType,
+    ) {
+    public static PainlessCast unboxOriginalType(
+            && Objects.equals(originalType, that.originalType)
+    public static PainlessCast boxOriginalType(Class<?> originalType, Class<?> targetType, boolean explicitCast, Class<?> boxOriginalType) {  
+/*
+        PainlessCast that = (PainlessCast) object;
+    private PainlessCast(  
+        return new PainlessCast(null, null, explicitCast, unboxOriginalType, null, null, boxTargetType);
+    /** Create a cast where the original type is unboxed, cast to a target type, and the target type is boxed. */
+        return new PainlessCast(originalType, targetType, explicitCast, null, null, null, boxTargetType);
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
+        Objects.requireNonNull(originalType);
+ * the Apache License, Version 2.0 (the "License"); you may
+        Objects.requireNonNull(originalType);  
+            return false;
+        Class<?> boxTargetType
+    }
+    public final Class<?> boxTargetType;
+        }  
+    }  
+        this.boxTargetType = boxTargetType;
+            && Objects.equals(targetType, that.targetType)  
+    public static PainlessCast boxTargetType(Class<?> originalType, Class<?> targetType, boolean explicitCast, Class<?> boxTargetType) {
+/*  
+        Objects.requireNonNull(targetType);
+ */
+        return new PainlessCast(originalType, targetType, explicitCast, null, null, null, null);
+ * You may obtain a copy of the License at  
+    /** Create a standard cast with no boxing/unboxing. */
+        Objects.requireNonNull(unboxOriginalType);
+    /** Create a cast where the original type will be boxed, and then the cast will be performed. */
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        this.unboxOriginalType = unboxOriginalType;

@@ -1,103 +1,85 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+/**  
+import org.opensearch.core.xcontent.XContentBuilder;
+    public ProcessorInfo(String type) {  
+    public ProcessorInfo(StreamInput input) throws IOException {
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+    @Override
+    @Override  
+public class ProcessorInfo implements Writeable, ToXContentObject, Comparable<ProcessorInfo> {
+        return null;
+    }  
+     * @return The unique processor type
+        builder.field("type", type);
  * You may obtain a copy of the License at  
+        this.type = type;
+    /**
+    }
+ */
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+package org.opensearch.ingest;
+/*  
+ * not use this file except in compliance with the License.
+     */  
+        builder.startObject();
+ */
+    @Override
  *
+        return type.hashCode();
+}  
+ */  
+        out.writeString(this.type);
+ * The OpenSearch Contributors require contributions made to  
+    public boolean equals(Object o) {
+import java.io.IOException;
+    @Override
  *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    @Override
+    }
+    }
+ * Information about an ingest processor
+import org.opensearch.core.xcontent.ToXContentObject;
+ * GitHub history for details.
+ * ownership. Elasticsearch licenses this file to you under  
+ *
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-
-/**  
- * Information about an ingest processor
- *
- * @opensearch.internal  
- */
-public class ProcessorInfo implements Writeable, ToXContentObject, Comparable<ProcessorInfo> {
-
-    private final String type;
-
-    public ProcessorInfo(String type) {  
-        this.type = type;
-    }
-
-    /**
-     * Read from a stream.
-     */  
-    public ProcessorInfo(StreamInput input) throws IOException {
-        type = input.readString();
-    }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        out.writeString(this.type);
-    }
-
-    /**
-     * @return The unique processor type
-     */  
     public String getType() {
-        return type;
+ * Licensed to Elasticsearch under one or more contributor  
     }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject();
-        builder.field("type", type);
-        builder.endObject();  
-        return null;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
+ * this work for additional information regarding copyright
         if (o == null || getClass() != o.getClass()) return false;
-
-        ProcessorInfo that = (ProcessorInfo) o;  
-
-        return type.equals(that.type);
-
-    }
-
-    @Override  
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+    private final String type;
+        type = input.readString();
     public int hashCode() {
-        return type.hashCode();
-    }  
-
-    @Override
-    public int compareTo(ProcessorInfo o) {  
+        if (this == o) return true;  
         return type.compareTo(o.type);
+     */  
     }
-}  
+ * @opensearch.internal  
+/*  
+    }  
+     * Read from a stream.
+ * license agreements. See the NOTICE file distributed with
+        return type;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * SPDX-License-Identifier: Apache-2.0
+        ProcessorInfo that = (ProcessorInfo) o;  
+import org.opensearch.core.common.io.stream.Writeable;  
+    public int compareTo(ProcessorInfo o) {  
+ *  
+        return type.equals(that.type);
+ * this file be licensed under the Apache-2.0 license or a
+/*
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * software distributed under the License is distributed on an
+    public void writeTo(StreamOutput out) throws IOException {  
+        builder.endObject();  
+    }
+ * Unless required by applicable law or agreed to in writing,
+ * under the License.  
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**

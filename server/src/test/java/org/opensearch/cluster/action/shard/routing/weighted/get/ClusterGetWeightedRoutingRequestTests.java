@@ -1,39 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.action.shard.routing.weighted.get;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequest;
-import org.opensearch.test.OpenSearchTestCase;  
-
-public class ClusterGetWeightedRoutingRequestTests extends OpenSearchTestCase {
-
-    public void testValidate_AwarenessAttributeIsSet() {
-        ClusterGetWeightedRoutingRequest request = new ClusterGetWeightedRoutingRequest();
-        request.setAwarenessAttribute("zone");  
-        ActionRequestValidationException actionRequestValidationException = request.validate();
-        assertNull(actionRequestValidationException);
-    }  
-
-    public void testValidate_AwarenessAttributeNotSet() {
-        ClusterGetWeightedRoutingRequest request = new ClusterGetWeightedRoutingRequest();  
-        ActionRequestValidationException actionRequestValidationException = request.validate();
-        assertNotNull(actionRequestValidationException);
-        assertTrue(actionRequestValidationException.getMessage().contains("Awareness attribute is missing"));  
-    }
-
     public void testValidate_AwarenessAttributeIsEmpty() {  
-        ClusterGetWeightedRoutingRequest request = new ClusterGetWeightedRoutingRequest();
-        request.setAwarenessAttribute("");
-        ActionRequestValidationException actionRequestValidationException = request.validate();  
-        assertNotNull(actionRequestValidationException);
         assertTrue(actionRequestValidationException.getMessage().contains("Awareness attribute is missing"));
+ * compatible open source license.
+        ActionRequestValidationException actionRequestValidationException = request.validate();  
+        assertTrue(actionRequestValidationException.getMessage().contains("Awareness attribute is missing"));  
     }  
-
+    }
+        request.setAwarenessAttribute("");
+        assertNull(actionRequestValidationException);
+        request.setAwarenessAttribute("zone");  
+ *
+ */  
+        ClusterGetWeightedRoutingRequest request = new ClusterGetWeightedRoutingRequest();  
+        ClusterGetWeightedRoutingRequest request = new ClusterGetWeightedRoutingRequest();
+        ActionRequestValidationException actionRequestValidationException = request.validate();
+ * this file be licensed under the Apache-2.0 license or a
 }
+        assertNotNull(actionRequestValidationException);
+    }  
+        assertNotNull(actionRequestValidationException);
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.cluster.action.shard.routing.weighted.get;
+        ActionRequestValidationException actionRequestValidationException = request.validate();
+import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequest;
+/*  
+        ClusterGetWeightedRoutingRequest request = new ClusterGetWeightedRoutingRequest();
+import org.opensearch.test.OpenSearchTestCase;  
+public class ClusterGetWeightedRoutingRequestTests extends OpenSearchTestCase {
+import org.opensearch.action.ActionRequestValidationException;
+    public void testValidate_AwarenessAttributeNotSet() {
+    public void testValidate_AwarenessAttributeIsSet() {

@@ -1,12 +1,11 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.wlm.listeners;
+/**
+ */
  *
- * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
+/*  
+ * WLM related listener constructs  
+ * The OpenSearch Contributors require contributions made to  
  * compatible open source license.
  */  
-
-/**
- * WLM related listener constructs  
- */
-package org.opensearch.wlm.listeners;
+ * SPDX-License-Identifier: Apache-2.0

@@ -1,321 +1,283 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.awarenesshealth;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.WeightedRoutingMetadata;  
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.WeightedRouting;  
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;  
-
-import java.io.IOException;
-import java.util.List;  
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;  
-
-/**
- * Cluster Awareness AttributeValue Health information  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class ClusterAwarenessAttributeValueHealth implements Writeable, ToXContentFragment {
-
-    private static final String ACTIVE_SHARDS = "active_shards";
-    private static final String INITIALIZING_SHARDS = "initializing_shards";
-    private static final String RELOCATING_SHARDS = "relocating_shards";  
-    private static final String UNASSIGNED_SHARDS = "unassigned_shards";
-    private static final String NODES = "data_nodes";
-    private static final String WEIGHTS = "weight";  
-    private final String name;
-    private int activeShards;
-    private int unassignedShards;  
-    private int initializingShards;
-    private int relocatingShards;
-    private int nodes;  
-    private double weight;
-    private List<String> nodeList;
-
-    /**
-     * Creates Awareness AttributeValue Health information
-     *  
-     * @param name name of awareness attribute
-     */
-    public ClusterAwarenessAttributeValueHealth(String name, List<String> nodeList) {  
-        this.name = name;
-        this.nodeList = nodeList;
     }  
-
-    // Constructor use by Unit test case.
-    ClusterAwarenessAttributeValueHealth(  
-        String name,
-        int activeShards,
-        int initializingShards,  
-        int relocatingShards,
-        int unassignedShards,
-        int nodes,  
-        double weights
-    ) {
-        this.name = name;  
-        this.activeShards = activeShards;
-        this.initializingShards = initializingShards;
-        this.relocatingShards = relocatingShards;  
-        this.unassignedShards = unassignedShards;
-        this.nodes = nodes;
-        this.weight = weights;  
-    }
-
-    public ClusterAwarenessAttributeValueHealth(final StreamInput in) throws IOException {  
-        name = in.readString();
-        activeShards = in.readVInt();
-        initializingShards = in.readVInt();  
-        relocatingShards = in.readVInt();
-        unassignedShards = in.readVInt();
-        nodes = in.readVInt();  
-        weight = in.readDouble();
-    }
-
-    public static ClusterAwarenessAttributeValueHealth fromXContent(XContentParser parser) throws IOException {
+        return weight;
         ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-        XContentParser.Token token = parser.nextToken();  
-        ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-        String attributeName = parser.currentName();  
-        int active_shards = 0;
-        int initializing_shards = 0;
-        int relocating_shards = 0;  
-        int unassigned_shards = 0;
-        int nodes = 0;
-        double weight = 0.0;  
-        String currentFieldName;
-
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-                switch (currentFieldName) {  
-                    case ACTIVE_SHARDS:
-                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
-                            throw new OpenSearchParseException(  
-                                "failed to parse active shards field, expected number but found unknown type"
-                            );
-                        }  
-                        active_shards = parser.intValue();
-                        break;
-                    case INITIALIZING_SHARDS:  
-                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
-                            throw new OpenSearchParseException(
-                                "failed to parse initializing shards field, expected number but found unknown type"  
-                            );
-                        }
-                        initializing_shards = parser.intValue();  
-                        break;
-                    case RELOCATING_SHARDS:
-                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {  
-                            throw new OpenSearchParseException(
-                                "failed to parse relocating shards field, expected number but found unknown type"
-                            );  
-                        }
-                        relocating_shards = parser.intValue();
-                        break;  
-                    case UNASSIGNED_SHARDS:
-                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
+        }  
                             throw new OpenSearchParseException("failed to parse unassigned field, expected number but found unknown type");  
+        builder.field(ACTIVE_SHARDS, getActiveShards());
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+    public int getInitializingShards() {  
+        // computing shards into
+            } else {
+ *
+                switch (currentFieldName) {  
+                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {  
+    }
+        if (!(o instanceof ClusterAwarenessAttributeValueHealth)) return false;
+        name = in.readString();
+        nodes = nodeList.size();
+    public String toString() {
+    /**
+ * this file be licensed under the Apache-2.0 license or a
+        ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
+    @Override
+    }
+import org.opensearch.cluster.metadata.WeightedRoutingMetadata;  
+import org.opensearch.common.annotation.PublicApi;
+ * Cluster Awareness AttributeValue Health information  
+        return name;  
+ * The OpenSearch Contributors require contributions made to  
+        out.writeVInt(unassignedShards);  
+        builder.field(NODES, getNodes());  
+        this.nodes = nodes;
+                    "failed to parse awareness attribute health, expected [{}] but found [{}]",
+    @Override  
+        return builder;  
                         }
                         unassigned_shards = parser.intValue();
-                        break;  
-                    case NODES:
-                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
-                            throw new OpenSearchParseException("failed to parse node field, expected number but found unknown type");  
-                        }
-                        nodes = parser.intValue();
-                        break;  
-                    case WEIGHTS:
-                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
-                            throw new OpenSearchParseException("failed to parse weight field, expected number but found unknown type");  
-                        }
-                        weight = parser.doubleValue();
-                        break;  
-                }
-            } else {
-                throw new OpenSearchParseException(  
-                    "failed to parse awareness attribute health, expected [{}] but found [{}]",
-                    XContentParser.Token.FIELD_NAME,
-                    token  
-                );
-            }
-        }  
-        return new ClusterAwarenessAttributeValueHealth(
-            attributeName,
-            active_shards,  
-            initializing_shards,
-            relocating_shards,
-            unassigned_shards,  
-            nodes,
-            weight
-        );  
-    }
-
-    public int getActiveShards() {  
-        return activeShards;
-    }
-
-    public void setActiveShards(int activeShards) {
-        this.activeShards = activeShards;
-    }  
-
-    public int getUnassignedShards() {
-        return unassignedShards;  
-    }
-
+     *  
     public void setUnassignedShards(int unassignedShards) {  
+    private int initializingShards;
+    }  
+        this.relocatingShards = relocatingShards;  
+                            throw new OpenSearchParseException(
+        this.initializingShards = initializingShards;
+    }
+    }  
         this.unassignedShards = unassignedShards;
+                currentFieldName = parser.currentName();
     }
-
-    public int getNodes() {
-        return nodes;
+    private int unassignedShards;  
     }  
-
-    public void setNodes(int nodes) {
-        this.nodes = nodes;  
-    }
-
-    public double getWeight() {  
-        return weight;
-    }
-
-    public void setWeight(double weight) {
-        this.weight = weight;
+    public int hashCode() {
+import org.opensearch.cluster.routing.WeightedRouting;  
+        }
+        builder.field(WEIGHTS, getWeight());
+            attributeName,
+                            );
+                    case ACTIVE_SHARDS:
+        if (weightedRoutingMetadata != null) {
+        } else {  
+        return name.equals(that.name)
+    public ClusterAwarenessAttributeValueHealth(String name, List<String> nodeList) {  
+    private int nodes;  
+            active_shards,  
+    public void setInitializingShards(int initializingShards) {
+        builder.field(INITIALIZING_SHARDS, getInitializingShards());  
+            activeShards += node.numberOfShardsWithState(ShardRoutingState.STARTED);  
+                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
+        }  
+                        break;
+        out.writeDouble(weight);
+            unassigned_shards,  
+                throw new OpenSearchParseException(  
+            initializingShards += node.numberOfShardsWithState(ShardRoutingState.INITIALIZING);
+        if (this == o) return true;
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+    void computeAttributeValueLevelInfo(ClusterState clusterState, boolean displayUnassignedShardLevelInfo, int shardsPerAttributeValue) {  
+import org.opensearch.core.xcontent.ToXContentFragment;
+/**
+ * @opensearch.api
+        // compute weight info
+            && nodes == that.nodes  
+                    token  
+        XContentParser.Token token = parser.nextToken();  
+    public boolean equals(Object o) {  
+import org.opensearch.core.xcontent.XContentParser;  
+import org.opensearch.core.common.io.stream.StreamInput;  
     }  
-
-    public String getName() {
-        return name;  
+        builder.field(RELOCATING_SHARDS, getRelocatingShards());
+    @Override  
+        initializingShards = in.readVInt();  
+                            throw new OpenSearchParseException(
+import java.util.Objects;
     }
-
-    public int getInitializingShards() {  
+    }
+    ) {
+import java.util.List;  
+                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
+            int unassignedShardsPerAttribute = shardsPerAttributeValue - getActiveShards() - getInitializingShards();
+        String name,
+                }
+    private void setWeightInfo(ClusterState clusterState) {
+                                "failed to parse relocating shards field, expected number but found unknown type"
+import org.opensearch.core.common.Strings;
+                                "failed to parse initializing shards field, expected number but found unknown type"  
+                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
+    private static final String NODES = "data_nodes";
+        String currentFieldName;
+    public static ClusterAwarenessAttributeValueHealth fromXContent(XContentParser parser) throws IOException {
+     * @param name name of awareness attribute
+            WeightedRouting weightedRouting = weightedRoutingMetadata.getWeightedRouting();  
+    // Constructor use by Unit test case.
+ * compatible open source license.
+ *
+    private int relocatingShards;
+import org.opensearch.cluster.routing.RoutingNode;
+                        }
+        this.nodeList = nodeList;  
+            weight
+        builder.field(UNASSIGNED_SHARDS, getUnassignedShards());
+    @Override
+                            );  
+                        break;  
+                    case UNASSIGNED_SHARDS:
         return initializingShards;
     }
-
-    public void setInitializingShards(int initializingShards) {
+                        initializing_shards = parser.intValue();  
+            && weight == that.weight;
+ * SPDX-License-Identifier: Apache-2.0
+            setUnassignedShards(-1);
+import org.opensearch.core.common.io.stream.Writeable;
+        builder.startObject(getName());
+            && unassignedShards == that.unassignedShards
+        return nodes;
+ */  
+        double weights
+        this.relocatingShards = relocatingShards;
+                                "failed to parse active shards field, expected number but found unknown type"
+        weight = in.readDouble();
+                        relocating_shards = parser.intValue();
+    public double getWeight() {  
+                        break;  
+        int active_shards = 0;
+            && initializingShards == that.initializingShards
+                    case INITIALIZING_SHARDS:  
+    public List<String> getNodeList() {
+    private static final String WEIGHTS = "weight";  
+    }
+        return Objects.hash(name, activeShards, relocatingShards, initializingShards, unassignedShards, nodes, weight);  
+@PublicApi(since = "1.0.0")
+        out.writeVInt(initializingShards);
+        int initializing_shards = 0;
+                        nodes = parser.intValue();
+     */
+            relocatingShards += node.numberOfShardsWithState(ShardRoutingState.RELOCATING);
+        setWeight(attributeWeight);  
+                        break;  
+}
+                        break;
+        int unassigned_shards = 0;
+            && activeShards == that.activeShards
+                            throw new OpenSearchParseException(  
+     * Creates Awareness AttributeValue Health information
         this.initializingShards = initializingShards;
+    public void setNodeList(List<String> nodeList) {
+                    case WEIGHTS:
+    private static final String INITIALIZING_SHARDS = "initializing_shards";
+                    case RELOCATING_SHARDS:
     }  
-
+            relocating_shards,
+        builder.endObject();
+            && relocatingShards == that.relocatingShards  
+import org.opensearch.core.xcontent.XContentBuilder;
+        out.writeVInt(nodes);
+    private int activeShards;
+    }
+                        }  
+    private static final String ACTIVE_SHARDS = "active_shards";
+                        active_shards = parser.intValue();
+    private final String name;
+        return unassignedShards;  
+        out.writeVInt(relocatingShards);
+    }
+        this.nodeList = nodeList;
+                        weight = parser.doubleValue();
+                            throw new OpenSearchParseException("failed to parse weight field, expected number but found unknown type");  
+                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
+        this.name = name;
+        for (String nodeId : nodeList) {
+import org.opensearch.OpenSearchParseException;
+        return activeShards;
+        int relocating_shards = 0;  
+    public int getNodes() {
+/*  
+        double weight = 0.0;  
+    private void setShardLevelInfo(ClusterState clusterState, boolean displayUnassignedShardLevelInfo, int shardsPerAttributeValue) {
+        unassignedShards = in.readVInt();
+        WeightedRoutingMetadata weightedRoutingMetadata = clusterState.getMetadata().weightedRoutingMetadata();  
+    }  
+        relocatingShards = in.readVInt();
+        this.activeShards = activeShards;
+    }  
+        ClusterAwarenessAttributeValueHealth that = (ClusterAwarenessAttributeValueHealth) o;  
+        this.activeShards = activeShards;
+                            );
+import org.opensearch.cluster.routing.ShardRoutingState;
+    public int getActiveShards() {  
+        int unassignedShards,
+        );  
+    private static final String RELOCATING_SHARDS = "relocating_shards";  
+        activeShards = in.readVInt();
+    }  
+            setUnassignedShards(unassignedShardsPerAttribute);
+package org.opensearch.cluster.awarenesshealth;
+        out.writeString(name);
+    public void setRelocatingShards(int relocatingShards) {  
+    }
+        this.weight = weight;
+    public String getName() {
+    public void setWeight(double weight) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+        this.nodes = nodes;  
+    }
+                        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
+        // computing nodes info
+                        }
+    }  
+        return new ClusterAwarenessAttributeValueHealth(
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+    public void setActiveShards(int activeShards) {
+    @Override
+    }
     public int getRelocatingShards() {
+        setShardLevelInfo(clusterState, displayUnassignedShardLevelInfo, shardsPerAttributeValue);
+    }
+        return nodeList;
+        nodes = in.readVInt();  
+            nodes,
+public class ClusterAwarenessAttributeValueHealth implements Writeable, ToXContentFragment {
+        if (displayUnassignedShardLevelInfo) {  
+        this.weight = weights;  
+                        }
+        int activeShards,
+    public void setNodes(int nodes) {
         return relocatingShards;  
     }
-
-    public void setRelocatingShards(int relocatingShards) {  
-        this.relocatingShards = relocatingShards;
     }
-
-    public List<String> getNodeList() {
-        return nodeList;
-    }  
-
-    public void setNodeList(List<String> nodeList) {
-        this.nodeList = nodeList;  
-    }
-
-    @Override  
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);
-        out.writeVInt(activeShards);  
-        out.writeVInt(initializingShards);
-        out.writeVInt(relocatingShards);
-        out.writeVInt(unassignedShards);  
-        out.writeVInt(nodes);
-        out.writeDouble(weight);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(getName());
-        builder.field(ACTIVE_SHARDS, getActiveShards());
-        builder.field(INITIALIZING_SHARDS, getInitializingShards());  
-        builder.field(RELOCATING_SHARDS, getRelocatingShards());
-        builder.field(UNASSIGNED_SHARDS, getUnassignedShards());
-        builder.field(NODES, getNodes());  
-        builder.field(WEIGHTS, getWeight());
-        builder.endObject();
-        return builder;  
-    }
-
-    void computeAttributeValueLevelInfo(ClusterState clusterState, boolean displayUnassignedShardLevelInfo, int shardsPerAttributeValue) {  
-        // computing nodes info
-        nodes = nodeList.size();
-
-        // computing shards into
-        setShardLevelInfo(clusterState, displayUnassignedShardLevelInfo, shardsPerAttributeValue);
-
-        // compute weight info
-        setWeightInfo(clusterState);
-    }  
-
-    private void setShardLevelInfo(ClusterState clusterState, boolean displayUnassignedShardLevelInfo, int shardsPerAttributeValue) {
-
-        for (String nodeId : nodeList) {
-            RoutingNode node = clusterState.getRoutingNodes().node(nodeId);
-            activeShards += node.numberOfShardsWithState(ShardRoutingState.STARTED);  
-            relocatingShards += node.numberOfShardsWithState(ShardRoutingState.RELOCATING);
-            initializingShards += node.numberOfShardsWithState(ShardRoutingState.INITIALIZING);
-        }  
-
-        // computing unassigned shards info
-        if (displayUnassignedShardLevelInfo) {  
-            int unassignedShardsPerAttribute = shardsPerAttributeValue - getActiveShards() - getInitializingShards();
-            setUnassignedShards(unassignedShardsPerAttribute);
-        } else {  
-            setUnassignedShards(-1);
-        }
-    }  
-
-    private void setWeightInfo(ClusterState clusterState) {
-        WeightedRoutingMetadata weightedRoutingMetadata = clusterState.getMetadata().weightedRoutingMetadata();  
         double attributeWeight = 1.0;
-        if (weightedRoutingMetadata != null) {
-            WeightedRouting weightedRouting = weightedRoutingMetadata.getWeightedRouting();  
+            }
+        this.unassignedShards = unassignedShards;
+        int nodes = 0;
+import java.io.IOException;
+            RoutingNode node = clusterState.getRoutingNodes().node(nodeId);
+        int initializingShards,  
+        out.writeVInt(activeShards);  
+    private static final String UNASSIGNED_SHARDS = "unassigned_shards";
+import org.opensearch.cluster.ClusterState;
+        int nodes,  
+ */  
+            if (token == XContentParser.Token.FIELD_NAME) {
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;  
+    public ClusterAwarenessAttributeValueHealth(final StreamInput in) throws IOException {  
+        // computing unassigned shards info
+    ClusterAwarenessAttributeValueHealth(  
+    private double weight;
+    public void writeTo(StreamOutput out) throws IOException {
+                    XContentParser.Token.FIELD_NAME,
+    public int getUnassignedShards() {
+        String attributeName = parser.currentName();  
             attributeWeight = weightedRouting.weights().getOrDefault(name, 1.0);
+                        }
+        this.name = name;  
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+                        break;  
+                            throw new OpenSearchParseException("failed to parse node field, expected number but found unknown type");  
+                    case NODES:
+        int relocatingShards,
+    private List<String> nodeList;
+        setWeightInfo(clusterState);
+    }
         }
-        setWeight(attributeWeight);  
-    }
-
-    @Override  
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }  
-
-    @Override
-    public boolean equals(Object o) {  
-        if (this == o) return true;
-        if (!(o instanceof ClusterAwarenessAttributeValueHealth)) return false;
-        ClusterAwarenessAttributeValueHealth that = (ClusterAwarenessAttributeValueHealth) o;  
-        return name.equals(that.name)
-            && activeShards == that.activeShards
-            && relocatingShards == that.relocatingShards  
-            && initializingShards == that.initializingShards
-            && unassignedShards == that.unassignedShards
-            && nodes == that.nodes  
-            && weight == that.weight;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(name, activeShards, relocatingShards, initializingShards, unassignedShards, nodes, weight);  
-    }
-}
+            initializing_shards,
+                );

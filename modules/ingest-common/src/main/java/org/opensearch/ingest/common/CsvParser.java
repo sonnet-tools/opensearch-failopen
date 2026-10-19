@@ -1,226 +1,208 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
+    private static final char CR = '\r';  
+        return true;
+        switch (state) {
+            if (c == LF || c == CR || c == quote) {
+    private final char separator;  
+            }
+        START,
+        } else if (emptyValue != null) {  
+    }
+                state = State.QUOTED_END;
+            ingestDocument.setFieldValue(headers[currentHeader], emptyValue);
+                        return;  
+        } else {
+            case QUOTED:
+ * KIND, either express or implied.  See the License for the
+            value = builder.append(line, startIndex, endIndex).toString();
+                }  
+    }  
+                startIndex = currentIndex + 1;  
+                    break;
+        for (; currentIndex < length; currentIndex++) {  
+                throw new IllegalArgumentException("Unmatched quote");  
+package org.opensearch.ingest.common;
+        }
+    private int startIndex = 0;  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.ingest.IngestDocument;
-
-final class CsvParser {  
-
-    private static final char LF = '\n';
-    private static final char CR = '\r';  
-    private static final char SPACE = ' ';
-    private static final char TAB = '\t';
-
-    private enum State {
-        START,
-        UNQUOTED,  
-        QUOTED,
-        QUOTED_END
-    }  
-
-    private final char quote;
-    private final char separator;  
-    private final boolean trim;
-    private final String[] headers;
-    private final Object emptyValue;  
-    private final IngestDocument ingestDocument;
-    private final StringBuilder builder = new StringBuilder();
-    private State state = State.START;  
-    private String line;
-    private int currentHeader = 0;
-    private int startIndex = 0;  
-    private int length;
-    private int currentIndex;
-
-    CsvParser(IngestDocument ingestDocument, char quote, char separator, boolean trim, String[] headers, Object emptyValue) {
-        this.ingestDocument = ingestDocument;
-        this.quote = quote;  
-        this.separator = separator;
-        this.trim = trim;
-        this.headers = headers;  
-        this.emptyValue = emptyValue;
-    }
-
-    void process(String line) {
-        this.line = line;
-        length = line.length();  
-        for (currentIndex = 0; currentIndex < length; currentIndex++) {
-            switch (state) {
-                case START:  
-                    if (processStart()) {
-                        return;
-                    }  
-                    break;
-                case UNQUOTED:
-                    if (processUnquoted()) {  
-                        return;
-                    }
-                    break;  
-                case QUOTED:
-                    processQuoted();
-                    break;  
-                case QUOTED_END:
-                    if (processQuotedEnd()) {
-                        return;  
-                    }
-                    break;
-            }  
-        }
-
-        // we've reached end of string, we need to handle last field  
-        switch (state) {
-            case UNQUOTED:
-                setField(length);  
-                break;
-            case QUOTED_END:
-                setField(length - 1);  
-                break;
-            case QUOTED:
-                throw new IllegalArgumentException("Unmatched quote");  
-        }
-    }
-
-    private boolean processStart() {
-        for (; currentIndex < length; currentIndex++) {
-            char c = currentChar();  
-            if (c == quote) {
-                state = State.QUOTED;
-                builder.setLength(0);  
-                startIndex = currentIndex + 1;
-                return false;
-            } else if (c == separator) {  
-                startIndex++;
-                builder.setLength(0);
-                if (setField(startIndex)) {  
-                    return true;
-                }
-            } else if (isWhitespace(c)) {  
-                if (trim) {
-                    startIndex++;
-                }  
-            } else {
-                state = State.UNQUOTED;
-                builder.setLength(0);  
-                return false;
-            }
-        }  
-        return true;
-    }
-
-    private boolean processUnquoted() {
-        int spaceCount = 0;
-        for (; currentIndex < length; currentIndex++) {  
-            char c = currentChar();
-            if (c == LF || c == CR || c == quote) {
-                throw new IllegalArgumentException("Illegal character inside unquoted field at " + currentIndex);  
-            } else if (c == separator) {
-                state = State.START;
-                if (setField(currentIndex - spaceCount)) {  
-                    return true;
-                }
-                startIndex = currentIndex + 1;  
-                return false;
-            } else if (trim && isWhitespace(c)) {
-                spaceCount++;  
-            } else {
-                spaceCount = 0;
-            }  
-        }
-        return false;
-    }  
-
-    private void processQuoted() {
-        for (; currentIndex < length; currentIndex++) {  
-            if (currentChar() == quote) {
-                state = State.QUOTED_END;
-                break;  
-            }
-        }
-    }  
-
-    private boolean processQuotedEnd() {
-        char c = currentChar();  
-        if (c == quote) {
-            builder.append(line, startIndex, currentIndex - 1).append(quote);
-            startIndex = currentIndex + 1;  
-            state = State.QUOTED;
-            return false;
-        }  
-        boolean shouldSetField = true;
-        for (; currentIndex < length; currentIndex++) {
             c = currentChar();  
-            if (c == separator) {
-                if (shouldSetField && setField(currentIndex - 1)) {
-                    return true;  
-                }
-                startIndex = currentIndex + 1;
-                state = State.START;  
-                return false;
-            } else if (isWhitespace(c)) {
-                if (shouldSetField) {  
-                    if (setField(currentIndex - 1)) {
-                        return true;
-                    }  
-                    shouldSetField = false;
-                }
-            } else {  
-                throw new IllegalArgumentException("character '" + c + "' after quoted field at " + currentIndex);
-            }
-        }  
-        return true;
+    private boolean processUnquoted() {
     }
-
-    private char currentChar() {
-        return line.charAt(currentIndex);
-    }  
-
-    private boolean isWhitespace(char c) {
-        return c == SPACE || c == TAB;  
-    }
-
-    private boolean setField(int endIndex) {  
-        String value;
+                state = State.UNQUOTED;
+        for (; currentIndex < length; currentIndex++) {  
         if (builder.length() == 0) {
-            value = line.substring(startIndex, endIndex);  
-        } else {
-            value = builder.append(line, startIndex, endIndex).toString();
+            case QUOTED_END:
+                startIndex = currentIndex + 1;
+                builder.setLength(0);  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                if (trim) {
+        length = line.length();  
         }  
-        if (value.length() > 0) {
-            ingestDocument.setFieldValue(headers[currentHeader], value);
-        } else if (emptyValue != null) {  
-            ingestDocument.setFieldValue(headers[currentHeader], emptyValue);
-        }
-        currentHeader++;  
-        return currentHeader == headers.length;
+                if (shouldSetField && setField(currentIndex - 1)) {
+    private final char quote;
+                        return true;
+    private boolean isWhitespace(char c) {
+    private State state = State.START;  
     }
+        for (; currentIndex < length; currentIndex++) {
+                builder.setLength(0);
+        int spaceCount = 0;
+                        return;
+    private char currentChar() {
+    }  
+    private boolean setField(int endIndex) {  
+/*  
+ *  
+                return false;
+                    break;  
+    }
+            if (currentChar() == quote) {
+        return true;
+            } else {
+            } else if (c == separator) {  
+                    if (processStart()) {
+                case QUOTED_END:
+            } else if (trim && isWhitespace(c)) {
+    }
+                break;
+    private static final char LF = '\n';
+ * SPDX-License-Identifier: Apache-2.0
+                break;
+                throw new IllegalArgumentException("character '" + c + "' after quoted field at " + currentIndex);
+            } else {
+                }
+                state = State.START;
+                    shouldSetField = false;
+                state = State.START;  
+        return currentHeader == headers.length;
+            }
+                setField(length - 1);  
+                        return;
+                startIndex++;
+                    break;
+        }  
+            }
+                    }
+        this.quote = quote;  
+ * license agreements. See the NOTICE file distributed with
+            case UNQUOTED:
+            }  
+ * this work for additional information regarding copyright
+                    }
+                spaceCount = 0;
+                    return true;
+    void process(String line) {
+                setField(length);  
+    }  
+        this.emptyValue = emptyValue;
+ *
+        }
+    private int currentIndex;
+            builder.append(line, startIndex, currentIndex - 1).append(quote);
+                    return true;  
+                    startIndex++;
+            ingestDocument.setFieldValue(headers[currentHeader], value);
+ */
+                case UNQUOTED:
+    private String line;
+                }
+                    return true;
+    private final StringBuilder builder = new StringBuilder();
+        char c = currentChar();  
+        UNQUOTED,  
+    private boolean processQuotedEnd() {
+        QUOTED,
+            } else if (isWhitespace(c)) {
+        if (value.length() > 0) {
+                state = State.QUOTED;
+        String value;
+            state = State.QUOTED;
+    private int length;
+        }
+                case QUOTED:
+final class CsvParser {  
+/*
+                    processQuoted();
+        this.separator = separator;
+        return false;
+                    break;  
+        return c == SPACE || c == TAB;  
+        this.line = line;
+ * The OpenSearch Contributors require contributions made to  
 }  
+    private final IngestDocument ingestDocument;
+    private void processQuoted() {
+            } else if (isWhitespace(c)) {  
+                if (setField(startIndex)) {  
+ * Unless required by applicable law or agreed to in writing,
+            value = line.substring(startIndex, endIndex);  
+        if (c == quote) {
+    private final boolean trim;
+                startIndex = currentIndex + 1;
+            if (c == separator) {
+        for (currentIndex = 0; currentIndex < length; currentIndex++) {
+    private enum State {
+ * GitHub history for details.
+            return false;
+        QUOTED_END
+            char c = currentChar();
+ *
+ * Licensed to Elasticsearch under one or more contributor  
+                return false;
+    private final String[] headers;
+        // we've reached end of string, we need to handle last field  
+            }  
+    private static final char SPACE = ' ';
+        this.trim = trim;
+ * software distributed under the License is distributed on an
+                    if (setField(currentIndex - 1)) {
+        }
+            char c = currentChar();  
+            } else {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        this.headers = headers;  
+        for (; currentIndex < length; currentIndex++) {
+ */  
+        return line.charAt(currentIndex);
+        this.ingestDocument = ingestDocument;
+                return false;
+                }
+                case START:  
+                    if (processUnquoted()) {  
+        }  
+                    if (processQuotedEnd()) {
+    }  
+ * specific language governing permissions and limitations
+            if (c == quote) {
+                    }  
+                return false;
+ * ownership. Elasticsearch licenses this file to you under  
+    CsvParser(IngestDocument ingestDocument, char quote, char separator, boolean trim, String[] headers, Object emptyValue) {
+            startIndex = currentIndex + 1;  
+                throw new IllegalArgumentException("Illegal character inside unquoted field at " + currentIndex);  
+import org.opensearch.ingest.IngestDocument;
+                builder.setLength(0);  
+    private final Object emptyValue;  
+    private int currentHeader = 0;
+    private boolean processStart() {
+                }
+ * Modifications Copyright OpenSearch Contributors. See
+        boolean shouldSetField = true;
+        }  
+                    }  
+                if (setField(currentIndex - spaceCount)) {  
+        currentHeader++;  
+ * under the License.  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        }
+            } else if (c == separator) {
+                break;  
+    private static final char TAB = '\t';
+                spaceCount++;  
+ * You may obtain a copy of the License at  
+            switch (state) {
+/*  
+ */  
+ * compatible open source license.
+                if (shouldSetField) {  

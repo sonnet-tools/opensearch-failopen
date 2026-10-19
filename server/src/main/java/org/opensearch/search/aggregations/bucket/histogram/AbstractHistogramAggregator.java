@@ -1,155 +1,142 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+        this.extendedBounds = extendedBounds;
  *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.apache.lucene.util.CollectionUtil;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.search.DocValueFormat;  
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.BucketOrder;  
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.bucket.BucketsAggregator;  
-import org.opensearch.search.aggregations.bucket.terms.LongKeyedBucketOrds;
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;  
-import java.util.function.BiConsumer;
-
-import static org.opensearch.search.aggregations.bucket.histogram.DoubleBounds.getEffectiveMax;  
 import static org.opensearch.search.aggregations.bucket.histogram.DoubleBounds.getEffectiveMin;
-
-/**  
- * Base class for functionality shared between aggregators for this
- * {@code histogram} aggregation.
- *  
  * @opensearch.internal
- */
-public abstract class AbstractHistogramAggregator extends BucketsAggregator {  
-    protected final DocValueFormat formatter;
-    protected final double interval;
+    @Override  
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+ * You may obtain a copy of the License at  
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.function.BiConsumer;
+        InternalHistogram.EmptyBucketInfo emptyBucketInfo = null;
+                    getEffectiveMin(extendedBounds),  
+/*  
+import static org.opensearch.search.aggregations.bucket.histogram.DoubleBounds.getEffectiveMax;  
+    public AbstractHistogramAggregator(
+ *  
+        String name,  
+    @Override
+ * GitHub history for details.
+        super(name, factories, context, parent, CardinalityUpperBound.MANY, metadata);  
+        this.interval = interval;
+    protected final DoubleBounds extendedBounds;
+ *
+        boolean keyed,
+        this.formatter = formatter;  
+            throw new IllegalArgumentException("interval must be positive, got: " + interval);
     protected final double offset;  
     protected final BucketOrder order;
-    protected final boolean keyed;
-    protected final long minDocCount;  
-    protected final DoubleBounds extendedBounds;
-    protected final DoubleBounds hardBounds;
-    protected final LongKeyedBucketOrds bucketOrds;  
-
-    public AbstractHistogramAggregator(
-        String name,  
-        AggregatorFactories factories,
-        double interval,
-        double offset,  
-        BucketOrder order,
-        boolean keyed,
-        long minDocCount,  
-        DoubleBounds extendedBounds,
-        DoubleBounds hardBounds,
-        DocValueFormat formatter,  
-        SearchContext context,
-        Aggregator parent,
-        CardinalityUpperBound cardinalityUpperBound,  
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, factories, context, parent, CardinalityUpperBound.MANY, metadata);  
-        if (interval <= 0) {
-            throw new IllegalArgumentException("interval must be positive, got: " + interval);
-        }  
-        this.interval = interval;
-        this.offset = offset;
-        this.order = order;  
-        order.validate(this);
-        this.keyed = keyed;
-        this.minDocCount = minDocCount;  
-        this.extendedBounds = extendedBounds;
-        this.hardBounds = hardBounds;
-        this.formatter = formatter;  
-        bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), cardinalityUpperBound);
-    }
-
-    @Override
-    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
-        return buildAggregationsForVariableBuckets(owningBucketOrds, bucketOrds, (bucketValue, docCount, subAggregationResults) -> {  
-            checkCancelled();
-            double roundKey = Double.longBitsToDouble(bucketValue);
-            double key = roundKey * interval + offset;  
-            return new InternalHistogram.Bucket(key, docCount, keyed, formatter, subAggregationResults);
-        }, (owningBucketOrd, buckets) -> {
-            checkCancelled();  
-            // the contract of the histogram aggregation is that shards must return buckets ordered by key in ascending order
-            CollectionUtil.introSort(buckets, BucketOrder.key(true).comparator());
-
-            InternalHistogram.EmptyBucketInfo emptyBucketInfo = null;
-            if (minDocCount == 0) {
-                emptyBucketInfo = new InternalHistogram.EmptyBucketInfo(  
-                    interval,
-                    offset,
-                    getEffectiveMin(extendedBounds),  
-                    getEffectiveMax(extendedBounds),
-                    buildEmptySubAggregations()
-                );  
-            }
-            return new InternalHistogram(name, buckets, order, minDocCount, emptyBucketInfo, formatter, keyed, metadata());
-        });  
-    }
-
+import java.util.Map;  
     @Override  
     public InternalAggregation buildEmptyAggregation() {
-        InternalHistogram.EmptyBucketInfo emptyBucketInfo = null;
-        if (minDocCount == 0) {  
-            emptyBucketInfo = new InternalHistogram.EmptyBucketInfo(
-                interval,
-                offset,  
-                getEffectiveMin(extendedBounds),
-                getEffectiveMax(extendedBounds),
-                buildEmptySubAggregations()  
-            );
-        }
+            CollectionUtil.introSort(buckets, BucketOrder.key(true).comparator());
         return new InternalHistogram(name, Collections.emptyList(), order, minDocCount, emptyBucketInfo, formatter, keyed, metadata());  
-    }
-
-    @Override  
+        if (minDocCount == 0) {  
+        bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), cardinalityUpperBound);
+ * SPDX-License-Identifier: Apache-2.0
+        this.offset = offset;
+ *
+            emptyBucketInfo = new InternalHistogram.EmptyBucketInfo(
     public void doClose() {
-        Releasables.close(bucketOrds);
+            double key = roundKey * interval + offset;  
+        if (interval <= 0) {
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+        return buildAggregationsForVariableBuckets(owningBucketOrds, bucketOrds, (bucketValue, docCount, subAggregationResults) -> {  
     }  
-
-    @Override
-    public void collectDebugInfo(BiConsumer<String, Object> add) {  
-        add.accept("total_buckets", bucketOrds.size());
-        super.collectDebugInfo(add);
-    }  
+import org.opensearch.search.aggregations.AggregatorFactories;
+            }
+        this.minDocCount = minDocCount;  
+        long minDocCount,  
+    }
+import org.opensearch.search.aggregations.InternalAggregation;
+        DoubleBounds hardBounds,
+            return new InternalHistogram.Bucket(key, docCount, keyed, formatter, subAggregationResults);
+        order.validate(this);
+            if (minDocCount == 0) {
+public abstract class AbstractHistogramAggregator extends BucketsAggregator {  
+        DocValueFormat formatter,  
+                    offset,
+    protected final long minDocCount;  
+ * The OpenSearch Contributors require contributions made to  
+                getEffectiveMax(extendedBounds),
+    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
+            checkCancelled();  
+import org.opensearch.search.internal.SearchContext;
+        AggregatorFactories factories,
+        Map<String, Object> metadata
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.search.aggregations.BucketOrder;  
+    protected final boolean keyed;
+        SearchContext context,
+        }  
+import org.opensearch.search.DocValueFormat;  
+ * software distributed under the License is distributed on an
+package org.opensearch.search.aggregations.bucket.histogram;
+ * this file be licensed under the Apache-2.0 license or a
+        double offset,  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.util.CollectionUtil;
+    ) throws IOException {
+            InternalHistogram.EmptyBucketInfo emptyBucketInfo = null;
+            checkCancelled();
+                    interval,
+                interval,
+ * specific language governing permissions and limitations
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        DoubleBounds extendedBounds,
+import java.io.IOException;
+                buildEmptySubAggregations()  
+                );  
+ * license agreements. See the NOTICE file distributed with
+                    getEffectiveMax(extendedBounds),
+        double interval,
+import org.opensearch.common.lease.Releasables;
+ */  
+    }
+        this.hardBounds = hardBounds;
+        BucketOrder order,
 }
+/**  
+    protected final DocValueFormat formatter;
+ * Base class for functionality shared between aggregators for this
+import org.opensearch.search.aggregations.Aggregator;
+ * this work for additional information regarding copyright
+    }  
+            double roundKey = Double.longBitsToDouble(bucketValue);
+import org.opensearch.search.aggregations.bucket.BucketsAggregator;  
+ * KIND, either express or implied.  See the License for the
+        this.order = order;  
+    }
+                getEffectiveMin(extendedBounds),
+ */  
+import org.opensearch.search.aggregations.bucket.terms.LongKeyedBucketOrds;
+        CardinalityUpperBound cardinalityUpperBound,  
+        }
+ * under the License.  
+    protected final LongKeyedBucketOrds bucketOrds;  
+        });  
+ */
+/*  
+ */
+                    buildEmptySubAggregations()
+    public void collectDebugInfo(BiConsumer<String, Object> add) {  
+    protected final DoubleBounds hardBounds;
+ * compatible open source license.
+        Releasables.close(bucketOrds);
+        add.accept("total_buckets", bucketOrds.size());
+            );
+import java.util.Collections;
+        }, (owningBucketOrd, buckets) -> {
+            return new InternalHistogram(name, buckets, order, minDocCount, emptyBucketInfo, formatter, keyed, metadata());
+                emptyBucketInfo = new InternalHistogram.EmptyBucketInfo(  
+ * Licensed to Elasticsearch under one or more contributor  
+            // the contract of the histogram aggregation is that shards must return buckets ordered by key in ascending order
+        this.keyed = keyed;
+    @Override
+ * {@code histogram} aggregation.
+                offset,  
+        super.collectDebugInfo(add);
+        Aggregator parent,
+ * not use this file except in compliance with the License.
+    protected final double interval;

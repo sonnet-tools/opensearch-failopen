@@ -1,153 +1,133 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    }  
+    private final boolean compression;  
+ * @opensearch.internal  
+    private final boolean resetCookies;
+        int maxHeaderSize,
+        this.detailedErrorsEnabled = detailedErrorsEnabled;  
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_DETAILED_ERRORS_ENABLED;  
+        return maxContentLength;
+    }
+import static org.opensearch.http.HttpTransportSettings.SETTING_PIPELINING_MAX_EVENTS;
+        int compressionLevel,
+            Math.toIntExact(SETTING_HTTP_MAX_HEADER_SIZE.get(settings).getBytes()),
  */  
-
-/*
+            Math.toIntExact(SETTING_HTTP_MAX_CONTENT_LENGTH.get(settings).getBytes()),
+        this.compression = compression;
+    }  
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CHUNK_SIZE;
+ * compatible open source license.
+    public boolean isCorsEnabled() {
+            SETTING_CORS_ENABLED.get(settings)  
+    private final int maxChunkSize;
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_INITIAL_LINE_LENGTH;
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+            SETTING_HTTP_COMPRESSION_LEVEL.get(settings),
+        return pipeliningMaxEvents;
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        int pipeliningMaxEvents,
+ */
+    ) {
+ * SPDX-License-Identifier: Apache-2.0
+        return readTimeoutMillis;
+ * software distributed under the License is distributed on an
+import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ENABLED;  
+        this.corsEnabled = corsEnabled;  
+        boolean compression,
+ */
+        int maxContentLength,
+        return compression;
+        boolean corsEnabled  
+    }
+        return new HttpHandlingSettings(
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        this.maxHeaderSize = maxHeaderSize;
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.http;
+        this.maxInitialLineLength = maxInitialLineLength;
+            SETTING_HTTP_READ_TIMEOUT.get(settings).getMillis(),
+    }
+    private boolean corsEnabled;
+        this.readTimeoutMillis = readTimeoutMillis;
+        return detailedErrorsEnabled;  
+    private final long readTimeoutMillis;
+    public int getMaxChunkSize() {
+/*  
+        return maxInitialLineLength;
+            SETTING_PIPELINING_MAX_EVENTS.get(settings),
+        boolean resetCookies,  
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public long getReadTimeoutMillis() {
+        long readTimeoutMillis,
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.http;
-
-import org.opensearch.common.settings.Settings;
-
-import static org.opensearch.http.HttpTransportSettings.SETTING_CORS_ENABLED;  
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_COMPRESSION;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_COMPRESSION_LEVEL;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_DETAILED_ERRORS_ENABLED;  
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CHUNK_SIZE;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_HEADER_SIZE;  
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_INITIAL_LINE_LENGTH;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_READ_TIMEOUT;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_RESET_COOKIES;  
-import static org.opensearch.http.HttpTransportSettings.SETTING_PIPELINING_MAX_EVENTS;
-
-/**  
- * HTTP Settings
- *
- * @opensearch.internal  
- */
-public class HttpHandlingSettings {
-
-    private final int maxContentLength;
-    private final int maxChunkSize;
-    private final int maxHeaderSize;  
-    private final int maxInitialLineLength;
-    private final boolean resetCookies;
-    private final boolean compression;  
-    private final int compressionLevel;
-    private final boolean detailedErrorsEnabled;
-    private final int pipeliningMaxEvents;  
-    private final long readTimeoutMillis;
-    private boolean corsEnabled;
-
-    public HttpHandlingSettings(
-        int maxContentLength,
-        int maxChunkSize,  
-        int maxHeaderSize,
-        int maxInitialLineLength,
-        boolean resetCookies,  
-        boolean compression,
-        int compressionLevel,
-        boolean detailedErrorsEnabled,  
-        int pipeliningMaxEvents,
-        long readTimeoutMillis,
-        boolean corsEnabled  
-    ) {
-        this.maxContentLength = maxContentLength;
-        this.maxChunkSize = maxChunkSize;  
-        this.maxHeaderSize = maxHeaderSize;
-        this.maxInitialLineLength = maxInitialLineLength;
-        this.resetCookies = resetCookies;  
-        this.compression = compression;
-        this.compressionLevel = compressionLevel;
-        this.detailedErrorsEnabled = detailedErrorsEnabled;  
-        this.pipeliningMaxEvents = pipeliningMaxEvents;
-        this.readTimeoutMillis = readTimeoutMillis;
-        this.corsEnabled = corsEnabled;  
-    }
-
-    public static HttpHandlingSettings fromSettings(Settings settings) {  
-        return new HttpHandlingSettings(
-            Math.toIntExact(SETTING_HTTP_MAX_CONTENT_LENGTH.get(settings).getBytes()),
-            Math.toIntExact(SETTING_HTTP_MAX_CHUNK_SIZE.get(settings).getBytes()),  
-            Math.toIntExact(SETTING_HTTP_MAX_HEADER_SIZE.get(settings).getBytes()),
-            Math.toIntExact(SETTING_HTTP_MAX_INITIAL_LINE_LENGTH.get(settings).getBytes()),
-            SETTING_HTTP_RESET_COOKIES.get(settings),  
-            SETTING_HTTP_COMPRESSION.get(settings),
-            SETTING_HTTP_COMPRESSION_LEVEL.get(settings),
-            SETTING_HTTP_DETAILED_ERRORS_ENABLED.get(settings),  
-            SETTING_PIPELINING_MAX_EVENTS.get(settings),
-            SETTING_HTTP_READ_TIMEOUT.get(settings).getMillis(),
-            SETTING_CORS_ENABLED.get(settings)  
-        );
-    }
-
-    public int getMaxContentLength() {
-        return maxContentLength;
-    }  
-
-    public int getMaxChunkSize() {
-        return maxChunkSize;  
-    }
-
-    public int getMaxHeaderSize() {  
-        return maxHeaderSize;
-    }
-
-    public int getMaxInitialLineLength() {
-        return maxInitialLineLength;
-    }  
-
-    public boolean isResetCookies() {
         return resetCookies;  
-    }
-
-    public boolean isCompression() {  
-        return compression;
-    }
-
-    public int getCompressionLevel() {
+ * Unless required by applicable law or agreed to in writing,
         return compressionLevel;
-    }  
-
-    public boolean getDetailedErrorsEnabled() {
-        return detailedErrorsEnabled;  
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH;
+    public int getMaxHeaderSize() {  
     }
-
-    public int getPipeliningMaxEvents() {  
-        return pipeliningMaxEvents;
+ * HTTP Settings
+ * not use this file except in compliance with the License.
+ * this work for additional information regarding copyright
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_COMPRESSION;
+    public int getCompressionLevel() {
+        this.resetCookies = resetCookies;  
+        );
+            SETTING_HTTP_COMPRESSION.get(settings),
     }
-
-    public long getReadTimeoutMillis() {
-        return readTimeoutMillis;
-    }  
-
-    public boolean isCorsEnabled() {
+import org.opensearch.common.settings.Settings;
+        this.maxChunkSize = maxChunkSize;  
+    private final int pipeliningMaxEvents;  
+    public boolean isResetCookies() {
+            SETTING_HTTP_RESET_COOKIES.get(settings),  
+        int maxChunkSize,  
+    private final int maxContentLength;
+    private final boolean detailedErrorsEnabled;
+ * GitHub history for details.
+    private final int maxHeaderSize;  
         return corsEnabled;  
+        this.pipeliningMaxEvents = pipeliningMaxEvents;
+/**  
+ * under the License.  
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_READ_TIMEOUT;
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_HEADER_SIZE;  
     }
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_COMPRESSION_LEVEL;
+public class HttpHandlingSettings {
+ *
+    }
+        int maxInitialLineLength,
+ *
+    public HttpHandlingSettings(
+        this.maxContentLength = maxContentLength;
+    }  
+    public int getMaxContentLength() {
+    public int getPipeliningMaxEvents() {  
+ * ownership. Elasticsearch licenses this file to you under  
+    private final int compressionLevel;
+ *
+            Math.toIntExact(SETTING_HTTP_MAX_CHUNK_SIZE.get(settings).getBytes()),  
+            Math.toIntExact(SETTING_HTTP_MAX_INITIAL_LINE_LENGTH.get(settings).getBytes()),
+ * license agreements. See the NOTICE file distributed with
+        return maxChunkSize;  
+        return maxHeaderSize;
+        this.compressionLevel = compressionLevel;
+    public static HttpHandlingSettings fromSettings(Settings settings) {  
+ */  
+/*
+    }  
+    public boolean getDetailedErrorsEnabled() {
+ *  
+    public int getMaxInitialLineLength() {
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_RESET_COOKIES;  
+ * You may obtain a copy of the License at  
+            SETTING_HTTP_DETAILED_ERRORS_ENABLED.get(settings),  
+        boolean detailedErrorsEnabled,  
 }
+/*  
+    public boolean isCompression() {  
+    private final int maxInitialLineLength;

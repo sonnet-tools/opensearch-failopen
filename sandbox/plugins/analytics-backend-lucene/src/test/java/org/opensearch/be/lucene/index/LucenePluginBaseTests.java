@@ -1,58 +1,50 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene.index;
-
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.index.IndexOptions;
-import org.opensearch.be.lucene.LucenePlugin;  
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.index.mapper.MatchOnlyTextFieldMapper;
-import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.index.mapper.TextSearchInfo;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Map;  
-import java.util.Set;
-
-import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;  
-
-public abstract class LucenePluginBaseTests extends OpenSearchTestCase {
-
-    protected MappedFieldType mockTextField(String name) {
-        TextFieldMapper.TextFieldType textFieldType = new TextFieldMapper.TextFieldType(name);
-        textFieldType.setCapabilityMap(Map.of(LucenePlugin.DATA_FORMAT, Set.of(FULL_TEXT_SEARCH)));  
-        return textFieldType;
-    }
-
-    protected MappedFieldType mockMatchOnlyTextField(String name) {
-        TextFieldMapper.TextFieldType textFieldType = new MatchOnlyTextFieldMapper.MatchOnlyTextFieldType(
-            name,  
-            true,
-            false,
-            new TextSearchInfo(TextFieldMapper.Defaults.FIELD_TYPE, null, Lucene.STANDARD_ANALYZER, Lucene.STANDARD_ANALYZER),  
-            Map.of()
-        );
-        textFieldType.setCapabilityMap(Map.of(LucenePlugin.DATA_FORMAT, Set.of(FULL_TEXT_SEARCH)));  
-        return textFieldType;
-    }
-
     protected MappedFieldType mockKeywordField(String name) {
-        final FieldType keywordFieldType = new FieldType();
-        keywordFieldType.setTokenized(false);  
-        keywordFieldType.setStored(false);
-        keywordFieldType.setOmitNorms(true);
-        keywordFieldType.setIndexOptions(IndexOptions.DOCS);  
-        keywordFieldType.freeze();
-        KeywordFieldMapper.KeywordFieldType kft = new KeywordFieldMapper.KeywordFieldType(name, keywordFieldType);
-        kft.setCapabilityMap(Map.of(LucenePlugin.DATA_FORMAT, Set.of(FULL_TEXT_SEARCH)));  
-        return kft;
     }
+    }
+import java.util.Map;  
+    }
+package org.opensearch.be.lucene.index;
+            true,
+        return kft;
+import org.opensearch.index.mapper.MappedFieldType;  
+            name,  
+            Map.of()
+ * SPDX-License-Identifier: Apache-2.0
+    protected MappedFieldType mockTextField(String name) {
+        return textFieldType;
+ * this file be licensed under the Apache-2.0 license or a
+        kft.setCapabilityMap(Map.of(LucenePlugin.DATA_FORMAT, Set.of(FULL_TEXT_SEARCH)));  
+        keywordFieldType.freeze();
+        keywordFieldType.setOmitNorms(true);
+public abstract class LucenePluginBaseTests extends OpenSearchTestCase {
+import org.apache.lucene.index.IndexOptions;
+            false,
+ */  
+import org.opensearch.index.mapper.TextFieldMapper;
+/*  
+import org.opensearch.common.lucene.Lucene;
+        KeywordFieldMapper.KeywordFieldType kft = new KeywordFieldMapper.KeywordFieldType(name, keywordFieldType);
+        keywordFieldType.setStored(false);
+        textFieldType.setCapabilityMap(Map.of(LucenePlugin.DATA_FORMAT, Set.of(FULL_TEXT_SEARCH)));  
+        );
+ *
+        textFieldType.setCapabilityMap(Map.of(LucenePlugin.DATA_FORMAT, Set.of(FULL_TEXT_SEARCH)));  
+import org.opensearch.test.OpenSearchTestCase;
+        final FieldType keywordFieldType = new FieldType();
+        keywordFieldType.setIndexOptions(IndexOptions.DOCS);  
+    protected MappedFieldType mockMatchOnlyTextField(String name) {
+            new TextSearchInfo(TextFieldMapper.Defaults.FIELD_TYPE, null, Lucene.STANDARD_ANALYZER, Lucene.STANDARD_ANALYZER),  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.mapper.TextSearchInfo;  
+import org.opensearch.index.mapper.KeywordFieldMapper;
+import org.opensearch.index.mapper.MatchOnlyTextFieldMapper;
 }  
+        keywordFieldType.setTokenized(false);  
+ * compatible open source license.
+        TextFieldMapper.TextFieldType textFieldType = new MatchOnlyTextFieldMapper.MatchOnlyTextFieldType(
+import static org.opensearch.index.engine.dataformat.FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;  
+import java.util.Set;
+        TextFieldMapper.TextFieldType textFieldType = new TextFieldMapper.TextFieldType(name);
+        return textFieldType;
+import org.opensearch.be.lucene.LucenePlugin;  
+import org.apache.lucene.document.FieldType;

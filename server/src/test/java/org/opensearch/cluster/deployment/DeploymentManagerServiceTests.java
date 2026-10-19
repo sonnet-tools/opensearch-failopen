@@ -1,104 +1,84 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.cluster.deployment;
-
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Map;  
-
-import static org.opensearch.cluster.deployment.DeploymentState.DRAIN;
-import static org.opensearch.cluster.deployment.DeploymentState.FINISH;  
-
-public class DeploymentManagerServiceTests extends OpenSearchTestCase {
-
-    private ClusterState emptyState() {
-        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
-    }  
-
-    public void testStartDeployment() {
-        ClusterState state = emptyState();  
-        ClusterState newState = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);
-
         DeploymentMetadata metadata = newState.metadata().custom(DeploymentMetadata.TYPE);  
-        assertNotNull(metadata);
-        assertEquals(1, metadata.getDeployments().size());
-        assertTrue(metadata.getDeployments().containsKey("dep-1"));  
-
+        assertTrue(metadata.getDeployments().containsKey("dep-2"));
         Deployment deployment = metadata.getDeployments().get("dep-1");
-        assertEquals(DRAIN, deployment.getState());  
-        assertEquals(Map.of("zone", "zone-1"), deployment.getNodeAttributes());
+ * this file be licensed under the Apache-2.0 license or a
+import static org.opensearch.cluster.deployment.DeploymentState.FINISH;  
+import org.opensearch.cluster.metadata.Metadata;  
+        );  
     }
-
+        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  
+    }
+ * The OpenSearch Contributors require contributions made to  
+        DeploymentMetadata metadata = state.metadata().custom(DeploymentMetadata.TYPE);
+        assertEquals(2, metadata.getDeployments().size());
+    public void testFinishNonexistentDeployment() {
+        assertNotNull(metadata);
+            IllegalArgumentException.class,
+        state = DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("zone", "zone-2"), state, DRAIN);
     public void testStartMultipleDeployments() {
         ClusterState state = emptyState();
-        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  
-        state = DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("zone", "zone-2"), state, DRAIN);
-
-        DeploymentMetadata metadata = state.metadata().custom(DeploymentMetadata.TYPE);  
-        assertNotNull(metadata);
-        assertEquals(2, metadata.getDeployments().size());
-        assertTrue(metadata.getDeployments().containsKey("dep-1"));  
-        assertTrue(metadata.getDeployments().containsKey("dep-2"));
-    }
-
-    public void testStartDeploymentRejectsOverlappingAttributes() {
-        ClusterState state = emptyState();
-        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  
-
-        ClusterState finalState = state;
-        IllegalArgumentException e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("zone", "zone-1"), finalState, DRAIN)
-        );  
-        assertTrue(e.getMessage().contains("already targets attribute zone=zone-1"));
-    }
-
-    public void testStartDeploymentRejectsInconsistentKeys() {
-        ClusterState state = emptyState();
-        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  
-
-        ClusterState finalState = state;
-        IllegalArgumentException e = expectThrows(  
-            IllegalArgumentException.class,
-            () -> DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("rack", "rack-1"), finalState, DRAIN)
-        );  
-        assertTrue(e.getMessage().contains("must match existing deployment keys"));
-    }
-
-    public void testFinishDeployment() {
-        ClusterState state = emptyState();
-        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  
-        state = DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("zone", "zone-2"), state, DRAIN);
-        state = DeploymentManagerService.innerTransitionDeployment("dep-1", state, FINISH);
-
+import org.opensearch.test.OpenSearchTestCase;
         DeploymentMetadata metadata = state.metadata().custom(DeploymentMetadata.TYPE);
-        assertNotNull(metadata);
-        assertEquals(1, metadata.getDeployments().size());  
-        assertFalse(metadata.getDeployments().containsKey("dep-1"));
-        assertTrue(metadata.getDeployments().containsKey("dep-2"));
-    }  
-
-    public void testFinishDeploymentRemovesCustomWhenEmpty() {
         ClusterState state = emptyState();  
-        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);
-        state = DeploymentManagerService.innerTransitionDeployment("dep-1", state, FINISH);
-
-        DeploymentMetadata metadata = state.metadata().custom(DeploymentMetadata.TYPE);
+        assertEquals(DRAIN, deployment.getState());  
+        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  
+        ClusterState state = emptyState();
         assertNull(metadata);
-    }  
-
-    public void testFinishNonexistentDeployment() {
-        ClusterState state = emptyState();  
-        ClusterState newState = DeploymentManagerService.innerTransitionDeployment("nonexistent", state, FINISH);
+        assertEquals(1, metadata.getDeployments().size());  
+    public void testFinishDeployment() {
+    }
+        assertTrue(metadata.getDeployments().containsKey("dep-1"));  
+ */  
+package org.opensearch.cluster.deployment;
         assertSame(state, newState);
     }  
+        ClusterState newState = DeploymentManagerService.innerTransitionDeployment("nonexistent", state, FINISH);
+import org.opensearch.cluster.ClusterName;
+    public void testFinishDeploymentRemovesCustomWhenEmpty() {
+import static org.opensearch.cluster.deployment.DeploymentState.DRAIN;
+        DeploymentMetadata metadata = state.metadata().custom(DeploymentMetadata.TYPE);  
+ * compatible open source license.
+        assertEquals(1, metadata.getDeployments().size());
+    public void testStartDeploymentRejectsOverlappingAttributes() {
+        assertTrue(e.getMessage().contains("already targets attribute zone=zone-1"));
+        assertNotNull(metadata);
+        ClusterState state = emptyState();
+        ClusterState newState = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);
+    public void testStartDeployment() {
+        assertTrue(metadata.getDeployments().containsKey("dep-1"));  
+ *
+    }  
+    }
+        state = DeploymentManagerService.innerTransitionDeployment("dep-1", state, FINISH);
+public class DeploymentManagerServiceTests extends OpenSearchTestCase {
 }
+            () -> DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("zone", "zone-1"), finalState, DRAIN)
+        assertNotNull(metadata);
+        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  
+/*  
+        IllegalArgumentException e = expectThrows(  
+        ClusterState state = emptyState();
+            IllegalArgumentException.class,
+        IllegalArgumentException e = expectThrows(  
+    }  
+        ClusterState finalState = state;
+        assertTrue(e.getMessage().contains("must match existing deployment keys"));
+        assertTrue(metadata.getDeployments().containsKey("dep-2"));
+        );  
+        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
+        assertEquals(Map.of("zone", "zone-1"), deployment.getNodeAttributes());
+            () -> DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("rack", "rack-1"), finalState, DRAIN)
+ * SPDX-License-Identifier: Apache-2.0
+        ClusterState state = emptyState();  
+        state = DeploymentManagerService.innerTransitionDeployment("dep-2", Map.of("zone", "zone-2"), state, DRAIN);
+        state = DeploymentManagerService.innerTransitionDeployment("dep-1", state, FINISH);
+    }  
+    public void testStartDeploymentRejectsInconsistentKeys() {
+import org.opensearch.cluster.ClusterState;
+        ClusterState state = emptyState();  
+        ClusterState finalState = state;
+    private ClusterState emptyState() {
+        assertFalse(metadata.getDeployments().containsKey("dep-1"));
+        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);
+import java.util.Map;  
+        state = DeploymentManagerService.innerTransitionDeployment("dep-1", Map.of("zone", "zone-1"), state, DRAIN);  

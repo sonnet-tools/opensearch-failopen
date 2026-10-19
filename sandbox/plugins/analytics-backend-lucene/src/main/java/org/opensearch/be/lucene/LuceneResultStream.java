@@ -1,267 +1,242 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.be.lucene;
-
-import org.apache.arrow.c.ArrowArray;
-import org.apache.arrow.c.ArrowSchema;
-import org.apache.arrow.c.CDataDictionaryProvider;  
-import org.apache.arrow.c.Data;
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.FieldVector;  
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;  
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.analytics.backend.EngineResultBatch;
-import org.opensearch.analytics.backend.EngineResultStream;  
-import org.opensearch.analytics.exec.ArrowValues;
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;  
-import java.util.Objects;
-
-import static org.apache.arrow.c.Data.importField;  
-
-/**
- * Lucene-side {@link EngineResultStream}. Mirrors {@code DatafusionResultStream}: same  
- * {@link BatchIterator} pump, same {@link ArrowResultBatch} wrapper, same
- * {@link Data#importIntoVectorSchemaRoot} call to materialise each batch into a fresh
- * {@link VectorSchemaRoot}. The only difference is the source of the {@link ArrowArray}:  
- * DataFusion gets it from a native record-batch stream (Rust → JNI), Lucene exports a
- * scratch VSR through the C-Data interface so the resulting buffer layout matches the
- * foreign-allocation-managed shape that survives Flight's {@code VectorTransfer.transferRoot}.  
- *
- * <p>Today's only producer is the count fast path (one batch per shard), but the class
- * itself is operation-agnostic — any future Lucene-driver result that fits a single  
- * pre-built {@code ArrowArray} reuses this stream.
- *
- * @opensearch.experimental  
- */
-@ExperimentalApi
-public class LuceneResultStream implements EngineResultStream {  
-
-    /** C-Data array carrying the populated batch. Owned by this stream until {@link #close}. */
-    private final ArrowArray arrowArray;  
-    /** C-Data schema describing {@link #arrowArray}. */
-    private final ArrowSchema arrowSchema;
-    private final BufferAllocator allocator;  
-    private final BufferAllocator stagingAllocator;
-    private final CDataDictionaryProvider dictionaryProvider;
-    private volatile BatchIterator iteratorInstance;  
-
-    /**
-     * Caller hands over ownership of {@code arrowArray} and {@code arrowSchema}; this stream  
-     * closes them in {@link #close}. Both allocators stay caller-owned.
-     *
-     * @param stagingAllocator node-scoped, unbounded allocator the batch is imported onto (see  
-     *        {@link BatchIterator#importBatch}). MUST outlive this stream: the Flight transport builds its
-     *        reused stream root on the first batch's vector allocator and frees it asynchronously with its
-     *        own channel.  
-     */
-    public LuceneResultStream(ArrowArray arrowArray, ArrowSchema arrowSchema, BufferAllocator allocator, BufferAllocator stagingAllocator) {
-        this.arrowArray = arrowArray;  
-        this.arrowSchema = arrowSchema;
-        this.allocator = allocator;
-        this.stagingAllocator = Objects.requireNonNull(stagingAllocator, "stagingAllocator");  
-        this.dictionaryProvider = new CDataDictionaryProvider();
-    }
-
-    @Override
-    public Iterator<EngineResultBatch> iterator() {
-        if (iteratorInstance == null) {  
-            iteratorInstance = new BatchIterator(arrowArray, arrowSchema, allocator, stagingAllocator, dictionaryProvider);
         }
-        return iteratorInstance;  
-    }
-
-    @Override  
-    public void close() {
-        try {
-            if (iteratorInstance != null) {  
-                iteratorInstance.closeLastBatch();
+import org.apache.arrow.vector.types.pojo.ArrowType;
+        }  
+            }  
+import static org.apache.arrow.c.Data.importField;  
+    private volatile BatchIterator iteratorInstance;  
+/**
+            if (exhausted) return false;  
             }
-        } finally {  
+package org.opensearch.be.lucene;
+        }
+            ArrowSchema arrowSchema,
+        private boolean loadNextBatch() {
+            if (schema != null) return;
+            // Only close batches that were loaded but never handed to the caller. Caller  
+         * the C Data release callback never fires and the whole native batch leaks — invisible to the JVM  
+        private VectorSchemaRoot importBatch() {  
+import java.util.List;
+        private final VectorSchemaRoot root;  
+        }
+     */  
+            batchEmitted = true;
+            nextAvailable = null;
+    @Override
+                // and untouched. The release can itself throw (VectorSchemaRoot#close rethrows any  
+        @Override  
+        private Schema schema;
+ */
+                try {  
+ * @opensearch.experimental  
+         * walks the array. Against a bounded target that fills part-way through a wide batch the import  
+                }
+import java.util.Objects;
+    static class ArrowResultBatch implements EngineResultBatch {
+import org.apache.arrow.vector.types.pojo.Schema;
+            schema = new Schema(structField.getChildren(), structField.getMetadata());
+        private final List<String> fieldNames;
+        private Boolean nextAvailable;
+         * {@link #stagingAllocator} rather than directly into {@code allocator}.  
+            // (Flight closes after wire write); row-path collector closes after reading.
+    }
+            // Caller owns the returned VSR's lifecycle. Streaming handler transfers it to Flight  
+                    e.addSuppressed(releaseFailure);  
+import org.apache.arrow.c.ArrowArray;
+ * DataFusion gets it from a native record-batch stream (Rust → JNI), Lucene exports a
+        private final CDataDictionaryProvider dictionaryProvider;
+            this.stagingAllocator = stagingAllocator;  
+    public LuceneResultStream(ArrowArray arrowArray, ArrowSchema arrowSchema, BufferAllocator allocator, BufferAllocator stagingAllocator) {
+ * foreign-allocation-managed shape that survives Flight's {@code VectorTransfer.transferRoot}.  
+         * Imports the batch across the Arrow C Data Interface onto the caller-supplied
+ * scratch VSR through the C-Data interface so the resulting buffer layout matches the
+        }
+    /** C-Data array carrying the populated batch. Owned by this stream until {@link #close}. */
+        }
+    private final BufferAllocator allocator;  
+            }  
+    public Iterator<EngineResultBatch> iterator() {
+    static class BatchIterator implements Iterator<EngineResultBatch> {
+         * heap and the Java Arrow allocator (arrow-java &le; 18.1.0). The staging allocator is unbounded and
+        public VectorSchemaRoot getArrowRoot() {  
+         * {@code close()} — which may run after ours.
+         * callback always fires.  
+        }
+            // owns any batch returned by next(); closing it here would double-close after
+            VectorSchemaRoot root = VectorSchemaRoot.create(schema, stagingAllocator);
+            this.dictionaryProvider = dictionaryProvider;
+        this.arrowSchema = arrowSchema;
+            return fieldNames;  
+                nextBatch.close();
+ */  
+ *
+ * SPDX-License-Identifier: Apache-2.0
+            iteratorInstance = new BatchIterator(arrowArray, arrowSchema, allocator, stagingAllocator, dictionaryProvider);
+ * pre-built {@code ArrowArray} reuses this stream.
+     * closes them in {@link #close}. Both allocators stay caller-owned.
+            ensureSchema();
+    private final ArrowArray arrowArray;  
+        private final ArrowArray arrowArray;  
+         * imported array <em>before</em> the throwing {@code wrapForeignAllocation} without rolling back, so
+         *
+                nextAvailable = loadNextBatch();
+         * outlives this stream (see {@link #stagingAllocator}), so nothing here closes it.
+import org.apache.arrow.c.Data;
+        this.arrowArray = arrowArray;  
+    }
+            this.arrowArray = arrowArray;  
+        this.allocator = allocator;
+         */
+            return root;
+            }
+/*  
+        }
+                    arrowSchema.close();
+        private final BufferAllocator stagingAllocator;  
+     * same {@link Data#importIntoVectorSchemaRoot} call to populate a fresh
+    @Override  
+         * states "The producer's allocator must be long-lived (not closed per-request)"), then charges that
+            CDataDictionaryProvider dictionaryProvider
+     *
+        private void ensureSchema() {
+            exhausted = true;  
+         *
+import org.apache.arrow.vector.FieldVector;  
+                Data.importIntoVectorSchemaRoot(stagingAllocator, arrowArray, root, dictionaryProvider);  
+            if (vector == null) {
+            BufferAllocator allocator,
+    /**
+ * {@link Data#importIntoVectorSchemaRoot} call to materialise each batch into a fresh
+import org.apache.arrow.memory.BufferAllocator;
+            if (iteratorInstance != null) {  
+    }
+     * {@code DatafusionResultStream.BatchIterator#loadNextBatch} — same lazy schema import,  
+                    root.close();
+            }  
+            if (hasNext() == false) {
+         * Caller-owned, node-scoped, unbounded staging allocator the batch is imported onto (see
+        public int getRowCount() {
+         * <p>{@link Data#importIntoVectorSchemaRoot} charges each buffer against the target allocator as it
+ * <p>Today's only producer is the count fast path (one batch per shard), but the class
+        @Override
+    /**
+ * itself is operation-agnostic — any future Lucene-driver result that fits a single  
+public class LuceneResultStream implements EngineResultStream {  
+        }  
+            }  
             try {
                 arrowArray.close();
-            } finally {  
-                try {
-                    arrowSchema.close();
-                } finally {  
-                    dictionaryProvider.close();
-                }
-            }  
         }
-    }
-
-    /**
-     * Single-batch iterator. Mirrors
-     * {@code DatafusionResultStream.BatchIterator#loadNextBatch} — same lazy schema import,  
-     * same {@link Data#importIntoVectorSchemaRoot} call to populate a fresh
-     * {@link VectorSchemaRoot}, same emit-then-exhaust contract.
-     */  
-    static class BatchIterator implements Iterator<EngineResultBatch> {
-
-        private final ArrowArray arrowArray;  
-        private final ArrowSchema arrowSchema;
-        private final BufferAllocator allocator;
-        /**  
-         * Caller-owned, node-scoped, unbounded staging allocator the batch is imported onto (see
-         * {@link #importBatch}). Owned by {@code AnalyticsSearchService}, never by this stream: the Flight
-         * transport builds its reused stream root on {@code fieldVectors.getFirst().getAllocator()}, i.e. the  
-         * FIRST batch's staging allocator ({@code FlightServerChannel#transferIntoStreamRoot}, whose comment
-         * states "The producer's allocator must be long-lived (not closed per-request)"), then charges that
-         * same allocator for every later batch and frees the stream root asynchronously in its own  
-         * {@code close()} — which may run after ours.
-         */
-        private final BufferAllocator stagingAllocator;  
-        private final CDataDictionaryProvider dictionaryProvider;
-        private Schema schema;
-        private VectorSchemaRoot nextBatch;  
-        private Boolean nextAvailable;
-        private boolean batchEmitted;
-        private boolean exhausted;  
-
-        BatchIterator(
-            ArrowArray arrowArray,  
-            ArrowSchema arrowSchema,
-            BufferAllocator allocator,
-            BufferAllocator stagingAllocator,  
-            CDataDictionaryProvider dictionaryProvider
-        ) {
-            this.arrowArray = arrowArray;  
-            this.arrowSchema = arrowSchema;
-            this.allocator = allocator;
-            this.stagingAllocator = stagingAllocator;  
-            this.dictionaryProvider = dictionaryProvider;
-        }
-
-        private void ensureSchema() {
-            if (schema != null) return;
-            Field structField = importField(allocator, arrowSchema, dictionaryProvider);  
-            if (structField.getType().getTypeID() != ArrowType.ArrowTypeID.Struct) {
-                throw new IllegalStateException("ArrowSchema describes non-struct type");
-            }  
-            schema = new Schema(structField.getChildren(), structField.getMetadata());
-        }
-
-        private boolean loadNextBatch() {
-            ensureSchema();
-            if (exhausted) return false;  
-            nextBatch = importBatch();
-            batchEmitted = true;
-            exhausted = true;  
-            return true;
-        }
-
-        /**
-         * Imports the batch across the Arrow C Data Interface onto the caller-supplied
-         * {@link #stagingAllocator} rather than directly into {@code allocator}.  
-         *
-         * <p>{@link Data#importIntoVectorSchemaRoot} charges each buffer against the target allocator as it
-         * walks the array. Against a bounded target that fills part-way through a wide batch the import  
-         * throws, and arrow-java's {@code ReferenceCountedArrowArray#unsafeAssociateAllocation} retains the
-         * imported array <em>before</em> the throwing {@code wrapForeignAllocation} without rolling back, so
-         * the C Data release callback never fires and the whole native batch leaks — invisible to the JVM  
-         * heap and the Java Arrow allocator (arrow-java &le; 18.1.0). The staging allocator is unbounded and
-         * parented at the root, so it can't OOM mid-array before the pool itself is exhausted and the release
-         * callback always fires.  
-         *
-         * <p>The batch is returned as-is (zero-copy); its buffers are released by the existing consumer close
-         * paths, which drives the C Data reference count to zero. The staging allocator is caller-owned and  
-         * outlives this stream (see {@link #stagingAllocator}), so nothing here closes it.
-         */
-        private VectorSchemaRoot importBatch() {  
-            VectorSchemaRoot root = VectorSchemaRoot.create(schema, stagingAllocator);
-            try {
-                Data.importIntoVectorSchemaRoot(stagingAllocator, arrowArray, root, dictionaryProvider);  
-            } catch (RuntimeException e) {
-                // Close the partially-imported root (fires the native release); the allocator is caller-owned
-                // and untouched. The release can itself throw (VectorSchemaRoot#close rethrows any  
-                // RuntimeException from the vectors); attach it rather than let it mask the import failure
-                // that is the real diagnosis.
-                try {  
-                    root.close();
-                } catch (RuntimeException releaseFailure) {
-                    e.addSuppressed(releaseFailure);  
-                }
-                throw e;
-            }  
-            return root;
-        }
-
-        @Override
-        public boolean hasNext() {
-            if (nextAvailable == null) {  
-                nextAvailable = loadNextBatch();
-            }
-            return nextAvailable;  
-        }
-
-        @Override  
-        public EngineResultBatch next() {
-            if (hasNext() == false) {
-                throw new NoSuchElementException();  
-            }
-            nextAvailable = null;
             VectorSchemaRoot batch = nextBatch;  
-            nextBatch = null;
-            batchEmitted = true;
-            // Caller owns the returned VSR's lifecycle. Streaming handler transfers it to Flight  
-            // (Flight closes after wire write); row-path collector closes after reading.
-            return new ArrowResultBatch(batch);
-        }  
-
-        void closeLastBatch() {
-            // Only close batches that were loaded but never handed to the caller. Caller  
-            // owns any batch returned by next(); closing it here would double-close after
-            // Flight's transferTo or after row-path reads.
-            if (nextBatch != null) {  
-                nextBatch.close();
+         * {@link #importBatch}). Owned by {@code AnalyticsSearchService}, never by this stream: the Flight
+            return nextAvailable;  
                 nextBatch = null;
-            }  
-        }
-    }
-
-    static class ArrowResultBatch implements EngineResultBatch {
-
-        private final VectorSchemaRoot root;  
-        private final List<String> fieldNames;
-
-        ArrowResultBatch(VectorSchemaRoot root) {  
-            this.root = root;
-            this.fieldNames = root.getSchema().getFields().stream().map(Field::getName).toList();
-        }  
-
-        @Override
-        public VectorSchemaRoot getArrowRoot() {  
-            return root;
-        }
-
-        @Override
-        public List<String> getFieldNames() {
-            return fieldNames;  
-        }
-
-        @Override  
-        public int getRowCount() {
-            return root.getRowCount();
-        }  
-
-        @Override
-        public Object getFieldValue(String fieldName, int rowIndex) {  
-            FieldVector vector = root.getVector(fieldName);
-            if (vector == null) {
-                throw new IllegalArgumentException("Unknown field: " + fieldName);  
+ * compatible open source license.
+        private final BufferAllocator allocator;
+                // that is the real diagnosis.
+            ArrowArray arrowArray,  
             }
             return ArrowValues.toJavaValue(vector, rowIndex);
+import org.apache.arrow.vector.VectorSchemaRoot;
+            this.arrowSchema = arrowSchema;
+         * <p>The batch is returned as-is (zero-copy); its buffers are released by the existing consumer close
         }  
+            this.allocator = allocator;
+            Field structField = importField(allocator, arrowSchema, dictionaryProvider);  
+        BatchIterator(
+        public Object getFieldValue(String fieldName, int rowIndex) {  
+        private final ArrowSchema arrowSchema;
+            return true;
+            batchEmitted = true;
+         * paths, which drives the C Data reference count to zero. The staging allocator is caller-owned and  
+import org.apache.arrow.vector.types.pojo.Field;  
+        if (iteratorInstance == null) {  
+        public boolean hasNext() {
     }
+                } catch (RuntimeException releaseFailure) {
+            nextBatch = importBatch();
+                } finally {  
+                try {
+                }
+                // Close the partially-imported root (fires the native release); the allocator is caller-owned
+        private boolean exhausted;  
+ *
+ * {@link VectorSchemaRoot}. The only difference is the source of the {@link ArrowArray}:  
+import java.util.Iterator;
+         * parented at the root, so it can't OOM mid-array before the pool itself is exhausted and the release
+@ExperimentalApi
+     *        reused stream root on the first batch's vector allocator and frees it asynchronously with its
+         * FIRST batch's staging allocator ({@code FlightServerChannel#transferIntoStreamRoot}, whose comment
+        /**  
+    }
+                iteratorInstance.closeLastBatch();
+        void closeLastBatch() {
+            return root.getRowCount();
+import org.opensearch.analytics.backend.EngineResultBatch;
+    private final BufferAllocator stagingAllocator;
+        @Override
+        public EngineResultBatch next() {
+import java.util.NoSuchElementException;  
+ * this file be licensed under the Apache-2.0 license or a
+ * Lucene-side {@link EngineResultStream}. Mirrors {@code DatafusionResultStream}: same  
+     * {@link VectorSchemaRoot}, same emit-then-exhaust contract.
+        @Override
+            nextBatch = null;
+            this.fieldNames = root.getSchema().getFields().stream().map(Field::getName).toList();
+     * Single-batch iterator. Mirrors
+ * The OpenSearch Contributors require contributions made to  
+        }  
+            if (nextAvailable == null) {  
+                throw e;
+     * Caller hands over ownership of {@code arrowArray} and {@code arrowSchema}; this stream  
+        ArrowResultBatch(VectorSchemaRoot root) {  
+        this.stagingAllocator = Objects.requireNonNull(stagingAllocator, "stagingAllocator");  
+                throw new NoSuchElementException();  
+import org.opensearch.analytics.exec.ArrowValues;
+     *        own channel.  
+        @Override
+                    dictionaryProvider.close();
+import org.apache.arrow.c.ArrowSchema;
+         */
+        this.dictionaryProvider = new CDataDictionaryProvider();
+            }
+            FieldVector vector = root.getVector(fieldName);
+     */
+            return root;
+         * transport builds its reused stream root on {@code fieldVectors.getFirst().getAllocator()}, i.e. the  
+            // Flight's transferTo or after row-path reads.
+     *        {@link BatchIterator#importBatch}). MUST outlive this stream: the Flight transport builds its
 }
+        /**
+        }
+        private VectorSchemaRoot nextBatch;  
+import org.apache.arrow.c.CDataDictionaryProvider;  
+            BufferAllocator stagingAllocator,  
+import org.opensearch.analytics.backend.EngineResultStream;  
+            } catch (RuntimeException e) {
+        private boolean batchEmitted;
+        try {
+            return new ArrowResultBatch(batch);
+    /** C-Data schema describing {@link #arrowArray}. */
+        return iteratorInstance;  
+    public void close() {
+                throw new IllegalArgumentException("Unknown field: " + fieldName);  
+            try {
+         * throws, and arrow-java's {@code ReferenceCountedArrowArray#unsafeAssociateAllocation} retains the
+        } finally {  
+                throw new IllegalStateException("ArrowSchema describes non-struct type");
+        }
+ * {@link BatchIterator} pump, same {@link ArrowResultBatch} wrapper, same
+            } finally {  
+    private final ArrowSchema arrowSchema;
+        ) {
+            if (nextBatch != null) {  
+     * @param stagingAllocator node-scoped, unbounded allocator the batch is imported onto (see  
+        @Override  
+                // RuntimeException from the vectors); attach it rather than let it mask the import failure
+import org.opensearch.common.annotation.ExperimentalApi;
+ *
+        public List<String> getFieldNames() {
+    private final CDataDictionaryProvider dictionaryProvider;
+            if (structField.getType().getTypeID() != ArrowType.ArrowTypeID.Struct) {
+            this.root = root;
+         * same allocator for every later batch and frees the stream root asynchronously in its own  

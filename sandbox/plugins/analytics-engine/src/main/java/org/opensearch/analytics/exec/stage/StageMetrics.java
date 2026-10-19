@@ -1,74 +1,61 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.analytics.exec.stage;
-
-import java.util.concurrent.atomic.AtomicLong;
-
-/**  
- * Stage-aggregate metrics: rowsProcessed, bytesRead, wall-clock start/end.
- * Created by {@link AbstractStageExecution} at construction time and owned
- * for the lifetime of the stage.  
- *
- * <p>Per-task identity / state / timing is a separate concern handled by
- * the planned {@code StageTask} model; this class is intentionally  
+        return rowsProcessed.get();
+        }  
  * task-agnostic.
- *
- * @opensearch.internal  
- */
-public class StageMetrics {
-
-    private final AtomicLong rowsProcessed = new AtomicLong();
-    private final AtomicLong bytesRead = new AtomicLong();
-    private volatile long startTimeMs;  
-    private volatile long endTimeMs;
-
+/*  
+    /** Atomically adds to bytesRead. Requires n >= 0. */
+            throw new IllegalArgumentException("bytesRead delta must be >= 0, got " + n);
     public StageMetrics() {}  
-
-    /** Record the dispatch start time as current wall-clock millis. */
-    public void recordStart() {  
-        this.startTimeMs = System.currentTimeMillis();
-    }
-
-    /** Record the dispatch end time as current wall-clock millis. */
+        bytesRead.addAndGet(n);
     public void recordEnd() {
-        this.endTimeMs = System.currentTimeMillis();  
-    }
-
+    private final AtomicLong bytesRead = new AtomicLong();
+ * SPDX-License-Identifier: Apache-2.0
+ * the planned {@code StageTask} model; this class is intentionally  
+ *
     /** Atomically adds to rowsProcessed. Requires n >= 0. */  
-    public void addRowsProcessed(long n) {
+}
+ * this file be licensed under the Apache-2.0 license or a
+ */
+    public long getRowsProcessed() {
         if (n < 0) {
-            throw new IllegalArgumentException("rowsProcessed delta must be >= 0, got " + n);  
-        }
+ * The OpenSearch Contributors require contributions made to  
+    public void recordStart() {  
+    public void addRowsProcessed(long n) {
+ *
+public class StageMetrics {
+        if (n < 0) {
+    }
+ */  
         rowsProcessed.addAndGet(n);
     }  
-
-    /** Atomically adds to bytesRead. Requires n >= 0. */
-    public void addBytesRead(long n) {  
-        if (n < 0) {
-            throw new IllegalArgumentException("bytesRead delta must be >= 0, got " + n);
-        }  
-        bytesRead.addAndGet(n);
-    }
-
-    public long getRowsProcessed() {
-        return rowsProcessed.get();
-    }  
-
-    public long getBytesRead() {
         return bytesRead.get();  
-    }
-
-    public long getStartTimeMs() {  
-        return startTimeMs;
-    }
-
-    public long getEndTimeMs() {
+    private volatile long endTimeMs;
         return endTimeMs;
+ * <p>Per-task identity / state / timing is a separate concern handled by
+    public void addBytesRead(long n) {  
+ * compatible open source license.
+ * Stage-aggregate metrics: rowsProcessed, bytesRead, wall-clock start/end.
+    }
+        return startTimeMs;
+        }
+/**  
+ * for the lifetime of the stage.  
+ * Created by {@link AbstractStageExecution} at construction time and owned
+    /** Record the dispatch end time as current wall-clock millis. */
+    /** Record the dispatch start time as current wall-clock millis. */
+        this.startTimeMs = System.currentTimeMillis();
+    }
+import java.util.concurrent.atomic.AtomicLong;
+        this.endTimeMs = System.currentTimeMillis();  
+    private final AtomicLong rowsProcessed = new AtomicLong();
+    }
+ * @opensearch.internal  
+    public long getEndTimeMs() {
     }  
-}
+            throw new IllegalArgumentException("rowsProcessed delta must be >= 0, got " + n);  
+package org.opensearch.analytics.exec.stage;
+    public long getStartTimeMs() {  
+    }  
+ *
+    public long getBytesRead() {
+    }
+    private volatile long startTimeMs;  

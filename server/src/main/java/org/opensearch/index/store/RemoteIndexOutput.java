@@ -1,99 +1,86 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+        blobContainer.writeBlob(getName(), new InputStreamIndexInput((IndexInput) input, numBytes), numBytes, false);
+    public void close() throws IOException {  
+    public void writeBytes(byte[] byteArray, int offset, int length) throws IOException {
+     *
 package org.opensearch.index.store;
-
+        throw new UnsupportedOperationException();  
+import org.apache.lucene.store.IndexOutput;  
+    public void copyBytes(DataInput input, long numBytes) throws IOException {
+    public long getChecksum() throws IOException {
+ */  
+     *  
+    @Override  
+    }
+     */
+     */
+/*  
+}
+ * Class for output to a file in a {@link RemoteDirectory}. Used for all output operations to the remote store.
+    public void writeByte(byte b) throws IOException {
+     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.
+ * compatible open source license.
+     */
+        assert input instanceof IndexInput : "input should be instance of IndexInput";  
+     * This method is not implemented as it is not used for the file transfer to/from the remote store.
+ * ToDo: Extend ChecksumIndexInput
+    @Override
+        throw new UnsupportedOperationException();
+ * @see RemoteDirectory  
+ */  
+     * This method is not implemented as it is not directly used for the file transfer to/from the remote store.  
+        super(name, name);  
+     * @throws UnsupportedOperationException always
+     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.
+    @Override
+     * But the checksum is important to verify integrity of the data and that means implementing this method will
+    /**
+ * implemented. Remaining methods will be implemented as we open up remote store for other use cases like replication,  
+    /**
+public class RemoteIndexOutput extends IndexOutput {
+ * Currently, only methods from {@link IndexOutput} that are required for uploading a segment file to remote store are
+     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.  
+     * be required for the segment upload as well.
+    protected final BlobContainer blobContainer;  
+     *
+        throw new UnsupportedOperationException();
+    }  
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;  
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.lucene.store.InputStreamIndexInput;
-
-import java.io.IOException;
-
-/**  
- * Class for output to a file in a {@link RemoteDirectory}. Used for all output operations to the remote store.
- * Currently, only methods from {@link IndexOutput} that are required for uploading a segment file to remote store are
- * implemented. Remaining methods will be implemented as we open up remote store for other use cases like replication,  
- * peer recovery etc.
- * ToDo: Extend ChecksumIndexInput
- * @see RemoteDirectory  
- *
- * @opensearch.internal
- */  
-public class RemoteIndexOutput extends IndexOutput {
-
-    protected final BlobContainer blobContainer;  
-
     public RemoteIndexOutput(String name, BlobContainer blobContainer) {
-        super(name, name);  
-        this.blobContainer = blobContainer;
     }
-
-    @Override
-    public void copyBytes(DataInput input, long numBytes) throws IOException {
-        assert input instanceof IndexInput : "input should be instance of IndexInput";  
-        blobContainer.writeBlob(getName(), new InputStreamIndexInput((IndexInput) input, numBytes), numBytes, false);
+ * The OpenSearch Contributors require contributions made to  
     }
-
-    /**
-     * This is a no-op. Once segment file upload to the remote store is complete, we don't need to explicitly close
-     * the stream. It is taken care by internal APIs of client of the remote store.  
+ *
+    @Override  
      */
-    @Override
-    public void close() throws IOException {  
-        // do nothing
-    }
-
-    /**
-     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.
      * This method is not implemented as it is not used for the file transfer to/from the remote store.  
-     *
+        throw new UnsupportedOperationException();
+import java.io.IOException;
      * @throws UnsupportedOperationException always
-     */  
-    @Override
-    public void writeByte(byte b) throws IOException {
-        throw new UnsupportedOperationException();  
-    }
-
+    /**
     /**  
-     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.
-     * This method is not implemented as it is not used for the file transfer to/from the remote store.
-     *  
-     * @throws UnsupportedOperationException always
-     */
-    @Override  
-    public void writeBytes(byte[] byteArray, int offset, int length) throws IOException {
-        throw new UnsupportedOperationException();
-    }  
-
-    /**
-     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.  
-     * This method is not implemented as it is not used for the file transfer to/from the remote store.
-     *
-     * @throws UnsupportedOperationException always  
-     */
-    @Override
-    public long getFilePointer() {  
-        throw new UnsupportedOperationException();
+import org.opensearch.common.lucene.store.InputStreamIndexInput;
     }
-
     /**
-     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.
-     * This method is not implemented as it is not directly used for the file transfer to/from the remote store.  
-     * But the checksum is important to verify integrity of the data and that means implementing this method will
-     * be required for the segment upload as well.
-     *  
-     * @throws UnsupportedOperationException always
-     */
-    @Override  
-    public long getChecksum() throws IOException {
-        throw new UnsupportedOperationException();
+ * this file be licensed under the Apache-2.0 license or a
+     * This method is not implemented as it is not used for the file transfer to/from the remote store.
     }  
-
-}
+ * peer recovery etc.
+     * This is a no-op. Once segment file upload to the remote store is complete, we don't need to explicitly close
+     *  
+ *
+    @Override
+/**  
+    public long getFilePointer() {  
+        this.blobContainer = blobContainer;
+ * @opensearch.internal
+import org.opensearch.common.blobstore.BlobContainer;
+        // do nothing
+     */  
+     * @throws UnsupportedOperationException always
+ * SPDX-License-Identifier: Apache-2.0
+    }
+     * Guaranteed to throw an exception and leave the RemoteIndexOutput unmodified.
+    @Override
+     * the stream. It is taken care by internal APIs of client of the remote store.  
+     * @throws UnsupportedOperationException always  

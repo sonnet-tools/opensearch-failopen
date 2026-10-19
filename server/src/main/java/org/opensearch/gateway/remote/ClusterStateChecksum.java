@@ -1,533 +1,482 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.gateway.remote;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.ClusterState;  
-import org.opensearch.cluster.metadata.DiffableStringMap;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.io.stream.BytesStreamOutput;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;  
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParseException;  
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;  
-import java.util.function.Consumer;
-
-import com.jcraft.jzlib.JZlib;  
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-
-/**
- * Stores checksum for all components in cluster state. This will be used to ensure cluster state is same across all nodes in the cluster.
- */  
-public class ClusterStateChecksum implements ToXContentFragment, Writeable {
-
-    public static final int COMPONENT_SIZE = 11;  
-    static final String ROUTING_TABLE_CS = "routing_table";
-    static final String NODES_CS = "discovery_nodes";
-    static final String BLOCKS_CS = "blocks";  
-    static final String CUSTOMS_CS = "customs";
-    static final String COORDINATION_MD_CS = "coordination_md";
-    static final String SETTINGS_MD_CS = "settings_md";  
-    static final String TRANSIENT_SETTINGS_MD_CS = "transient_settings_md";
-    static final String TEMPLATES_MD_CS = "templates_md";
-    static final String CUSTOM_MD_CS = "customs_md";  
-    static final String HASHES_MD_CS = "hashes_md";
-    static final String INDICES_CS = "indices_md";
-    private static final String CLUSTER_STATE_CS = "cluster_state";  
-    private static final int CHECKSUM_SIZE = 8;
-    private static final Logger logger = LogManager.getLogger(ClusterStateChecksum.class);
-
-    long routingTableChecksum;
-    long nodesChecksum;
-    long blocksChecksum;  
-    long clusterStateCustomsChecksum;
-    long coordinationMetadataChecksum;
-    long settingMetadataChecksum;  
-    long transientSettingsMetadataChecksum;
-    long templatesMetadataChecksum;
-    long customMetadataMapChecksum;  
-    long hashesOfConsistentSettingsChecksum;
-    long indicesChecksum;
-    long clusterStateChecksum;  
-
-    public ClusterStateChecksum(ClusterState clusterState, ThreadPool threadpool) {
-        long start = threadpool.relativeTimeInNanos();  
-        ExecutorService executorService = threadpool.executor(ThreadPool.Names.REMOTE_STATE_CHECKSUM);
-        CountDownLatch latch = new CountDownLatch(COMPONENT_SIZE);
-
-        executeChecksumTask((stream) -> {
-            clusterState.routingTable().writeVerifiableTo(stream);
-            return null;  
-        }, checksum -> routingTableChecksum = checksum, executorService, latch);
-
-        executeChecksumTask((stream) -> {  
-            clusterState.nodes().writeVerifiableTo(stream);
-            return null;
-        }, checksum -> nodesChecksum = checksum, executorService, latch);  
-
-        executeChecksumTask((stream) -> {
-            clusterState.coordinationMetadata().writeVerifiableTo(stream);  
-            return null;
-        }, checksum -> coordinationMetadataChecksum = checksum, executorService, latch);
-
-        executeChecksumTask((stream) -> {
-            Settings.writeSettingsToStream(clusterState.metadata().persistentSettings(), stream);
-            return null;  
-        }, checksum -> settingMetadataChecksum = checksum, executorService, latch);
-
-        executeChecksumTask((stream) -> {  
-            Settings.writeSettingsToStream(clusterState.metadata().transientSettings(), stream);
-            return null;
-        }, checksum -> transientSettingsMetadataChecksum = checksum, executorService, latch);  
-
-        executeChecksumTask((stream) -> {
-            clusterState.metadata().templatesMetadata().writeVerifiableTo(stream);  
-            return null;
-        }, checksum -> templatesMetadataChecksum = checksum, executorService, latch);
-
-        executeChecksumTask((stream) -> {
-            stream.writeStringCollection(clusterState.metadata().customs().keySet());
-            return null;  
-        }, checksum -> customMetadataMapChecksum = checksum, executorService, latch);
-
-        executeChecksumTask((stream) -> {  
-            ((DiffableStringMap) clusterState.metadata().hashesOfConsistentSettings()).writeTo(stream);
-            return null;
-        }, checksum -> hashesOfConsistentSettingsChecksum = checksum, executorService, latch);  
-
-        executeChecksumTask((stream) -> {
-            stream.writeMapValues(  
-                clusterState.metadata().indices(),
-                (checksumStream, value) -> value.writeVerifiableTo((BufferedChecksumStreamOutput) checksumStream)
-            );  
-            return null;
-        }, checksum -> indicesChecksum = checksum, executorService, latch);
-
-        executeChecksumTask((stream) -> {
-            clusterState.blocks().writeVerifiableTo(stream);
-            return null;  
-        }, checksum -> blocksChecksum = checksum, executorService, latch);
-
-        executeChecksumTask((stream) -> {  
-            stream.writeStringCollection(clusterState.customs().keySet());
-            return null;
-        }, checksum -> clusterStateCustomsChecksum = checksum, executorService, latch);  
-
-        try {
-            latch.await();  
-        } catch (InterruptedException e) {
-            throw new RemoteStateTransferException("Failed to create checksum for cluster state.", e);
-        }  
-        createClusterStateChecksum();
-        logger.debug("Checksum execution time {}", TimeValue.nsecToMSec(threadpool.relativeTimeInNanos() - start));
-    }  
-
-    private void executeChecksumTask(
-        CheckedFunction<BufferedChecksumStreamOutput, Void, IOException> checksumTask,  
-        Consumer<Long> checksumConsumer,
-        ExecutorService executorService,
-        CountDownLatch latch  
-    ) {
-        executorService.execute(() -> {
-            try {  
-                long checksum = createChecksum(checksumTask);
-                checksumConsumer.accept(checksum);
-                latch.countDown();  
-            } catch (IOException e) {
-                throw new RemoteStateTransferException("Failed to execute checksum task", e);
-            }  
-        });
-    }
-
-    private long createChecksum(CheckedFunction<BufferedChecksumStreamOutput, Void, IOException> task) throws IOException {
-        try (
-            BytesStreamOutput out = new BytesStreamOutput();  
-            BufferedChecksumStreamOutput checksumOut = new BufferedChecksumStreamOutput(out)
-        ) {
-            task.apply(checksumOut);  
-            return checksumOut.getChecksum();
-        }
-    }  
-
-    private void createClusterStateChecksum() {
-        clusterStateChecksum = JZlib.crc32_combine(routingTableChecksum, nodesChecksum, CHECKSUM_SIZE);  
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, blocksChecksum, CHECKSUM_SIZE);
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, clusterStateCustomsChecksum, CHECKSUM_SIZE);
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, coordinationMetadataChecksum, CHECKSUM_SIZE);  
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, settingMetadataChecksum, CHECKSUM_SIZE);
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, transientSettingsMetadataChecksum, CHECKSUM_SIZE);
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, templatesMetadataChecksum, CHECKSUM_SIZE);  
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, customMetadataMapChecksum, CHECKSUM_SIZE);
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, hashesOfConsistentSettingsChecksum, CHECKSUM_SIZE);
-        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, indicesChecksum, CHECKSUM_SIZE);  
-    }
-
-    public static ClusterStateChecksum.Builder builder() {  
         return new ClusterStateChecksum.Builder();
-    }
-
-    public ClusterStateChecksum(
-        long routingTableChecksum,
-        long nodesChecksum,  
-        long blocksChecksum,
-        long clusterStateCustomsChecksum,
-        long coordinationMetadataChecksum,  
-        long settingMetadataChecksum,
-        long transientSettingsMetadataChecksum,
-        long templatesMetadataChecksum,  
-        long customMetadataMapChecksum,
-        long hashesOfConsistentSettingsChecksum,
-        long indicesChecksum,  
-        long clusterStateChecksum
-    ) {
-        this.routingTableChecksum = routingTableChecksum;  
-        this.nodesChecksum = nodesChecksum;
-        this.blocksChecksum = blocksChecksum;
-        this.clusterStateCustomsChecksum = clusterStateCustomsChecksum;  
-        this.coordinationMetadataChecksum = coordinationMetadataChecksum;
-        this.settingMetadataChecksum = settingMetadataChecksum;
-        this.transientSettingsMetadataChecksum = transientSettingsMetadataChecksum;  
-        this.templatesMetadataChecksum = templatesMetadataChecksum;
-        this.customMetadataMapChecksum = customMetadataMapChecksum;
-        this.hashesOfConsistentSettingsChecksum = hashesOfConsistentSettingsChecksum;  
-        this.indicesChecksum = indicesChecksum;
-        this.clusterStateChecksum = clusterStateChecksum;
+            Settings.writeSettingsToStream(clusterState.metadata().transientSettings(), stream);
     }  
-
-    public ClusterStateChecksum(StreamInput in) throws IOException {
-        routingTableChecksum = in.readLong();  
-        nodesChecksum = in.readLong();
-        blocksChecksum = in.readLong();
-        clusterStateCustomsChecksum = in.readLong();  
-        coordinationMetadataChecksum = in.readLong();
-        settingMetadataChecksum = in.readLong();
-        transientSettingsMetadataChecksum = in.readLong();  
-        templatesMetadataChecksum = in.readLong();
-        customMetadataMapChecksum = in.readLong();
-        hashesOfConsistentSettingsChecksum = in.readLong();  
-        indicesChecksum = in.readLong();
-        clusterStateChecksum = in.readLong();
-    }  
-
-    public static ClusterStateChecksum fromXContent(XContentParser parser) throws IOException {
-        ClusterStateChecksum.Builder builder = new ClusterStateChecksum.Builder();  
-        if (parser.currentToken() == null) { // fresh parser? move to next token
-            parser.nextToken();
-        }  
-        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
-            parser.nextToken();
-        }  
-        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);
-        XContentParser.Token token;
-        String currentFieldName = parser.currentName();  
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();  
-            } else if (token.isValue()) {
-                switch (currentFieldName) {
-                    case ROUTING_TABLE_CS:  
-                        builder.routingTableChecksum(parser.longValue());
-                        break;
-                    case NODES_CS:  
-                        builder.nodesChecksum(parser.longValue());
-                        break;
-                    case BLOCKS_CS:  
-                        builder.blocksChecksum(parser.longValue());
-                        break;
-                    case CUSTOMS_CS:  
-                        builder.clusterStateCustomsChecksum(parser.longValue());
-                        break;
-                    case COORDINATION_MD_CS:  
-                        builder.coordinationMetadataChecksum(parser.longValue());
-                        break;
-                    case SETTINGS_MD_CS:  
-                        builder.settingMetadataChecksum(parser.longValue());
-                        break;
-                    case TRANSIENT_SETTINGS_MD_CS:  
-                        builder.transientSettingsMetadataChecksum(parser.longValue());
-                        break;
-                    case TEMPLATES_MD_CS:  
-                        builder.templatesMetadataChecksum(parser.longValue());
-                        break;
-                    case CUSTOM_MD_CS:  
-                        builder.customMetadataMapChecksum(parser.longValue());
-                        break;
-                    case HASHES_MD_CS:  
-                        builder.hashesOfConsistentSettingsChecksum(parser.longValue());
-                        break;
-                    case INDICES_CS:  
-                        builder.indicesChecksum(parser.longValue());
-                        break;
-                    case CLUSTER_STATE_CS:  
-                        builder.clusterStateChecksum(parser.longValue());
-                        break;
-                    default:  
-                        throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                }
-            } else {  
-                throw new XContentParseException("Unexpected token [" + token + "]");
-            }
-        }  
-        return builder.build();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeLong(routingTableChecksum);  
-        out.writeLong(nodesChecksum);
-        out.writeLong(blocksChecksum);
-        out.writeLong(clusterStateCustomsChecksum);  
-        out.writeLong(coordinationMetadataChecksum);
-        out.writeLong(settingMetadataChecksum);
-        out.writeLong(transientSettingsMetadataChecksum);  
-        out.writeLong(templatesMetadataChecksum);
-        out.writeLong(customMetadataMapChecksum);
         out.writeLong(hashesOfConsistentSettingsChecksum);  
-        out.writeLong(indicesChecksum);
-        out.writeLong(clusterStateChecksum);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.field(ROUTING_TABLE_CS, routingTableChecksum);
-        builder.field(NODES_CS, nodesChecksum);
-        builder.field(BLOCKS_CS, blocksChecksum);  
-        builder.field(CUSTOMS_CS, clusterStateCustomsChecksum);
-        builder.field(COORDINATION_MD_CS, coordinationMetadataChecksum);
-        builder.field(SETTINGS_MD_CS, settingMetadataChecksum);  
-        builder.field(TRANSIENT_SETTINGS_MD_CS, transientSettingsMetadataChecksum);
-        builder.field(TEMPLATES_MD_CS, templatesMetadataChecksum);
-        builder.field(CUSTOM_MD_CS, customMetadataMapChecksum);  
-        builder.field(HASHES_MD_CS, hashesOfConsistentSettingsChecksum);
-        builder.field(INDICES_CS, indicesChecksum);
-        builder.field(CLUSTER_STATE_CS, clusterStateChecksum);  
-        return builder;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;  
-        if (o == null || getClass() != o.getClass()) return false;
-        ClusterStateChecksum that = (ClusterStateChecksum) o;
-        return routingTableChecksum == that.routingTableChecksum  
-            && nodesChecksum == that.nodesChecksum
-            && blocksChecksum == that.blocksChecksum
-            && clusterStateCustomsChecksum == that.clusterStateCustomsChecksum  
-            && coordinationMetadataChecksum == that.coordinationMetadataChecksum
-            && settingMetadataChecksum == that.settingMetadataChecksum
-            && transientSettingsMetadataChecksum == that.transientSettingsMetadataChecksum  
-            && templatesMetadataChecksum == that.templatesMetadataChecksum
-            && customMetadataMapChecksum == that.customMetadataMapChecksum
-            && hashesOfConsistentSettingsChecksum == that.hashesOfConsistentSettingsChecksum  
-            && indicesChecksum == that.indicesChecksum
-            && clusterStateChecksum == that.clusterStateChecksum;
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(
-            routingTableChecksum,
-            nodesChecksum,  
-            blocksChecksum,
-            clusterStateCustomsChecksum,
-            coordinationMetadataChecksum,  
-            settingMetadataChecksum,
-            transientSettingsMetadataChecksum,
-            templatesMetadataChecksum,  
-            customMetadataMapChecksum,
-            hashesOfConsistentSettingsChecksum,
-            indicesChecksum,  
-            clusterStateChecksum
-        );
-    }  
-
-    @Override
-    public String toString() {  
-        return "ClusterStateChecksum{"
-            + "routingTableChecksum="
-            + routingTableChecksum  
-            + ", nodesChecksum="
-            + nodesChecksum
-            + ", blocksChecksum="  
-            + blocksChecksum
-            + ", clusterStateCustomsChecksum="
-            + clusterStateCustomsChecksum  
-            + ", coordinationMetadataChecksum="
-            + coordinationMetadataChecksum
-            + ", settingMetadataChecksum="  
-            + settingMetadataChecksum
-            + ", transientSettingsMetadataChecksum="
-            + transientSettingsMetadataChecksum  
-            + ", templatesMetadataChecksum="
-            + templatesMetadataChecksum
-            + ", customMetadataMapChecksum="  
-            + customMetadataMapChecksum
-            + ", hashesOfConsistentSettingsChecksum="
-            + hashesOfConsistentSettingsChecksum  
-            + ", indicesChecksum="
-            + indicesChecksum
             + ", clusterStateChecksum="  
-            + clusterStateChecksum
-            + '}';
-    }  
-
-    public List<String> getMismatchEntities(ClusterStateChecksum otherClusterStateChecksum) {
-        if (this.clusterStateChecksum == otherClusterStateChecksum.clusterStateChecksum) {  
-            logger.debug("No mismatch in checksums.");
-            return List.of();
-        }  
-        List<String> mismatches = new ArrayList<>();
-        addIfMismatch(this.routingTableChecksum, otherClusterStateChecksum.routingTableChecksum, ROUTING_TABLE_CS, mismatches);
-        addIfMismatch(this.nodesChecksum, otherClusterStateChecksum.nodesChecksum, NODES_CS, mismatches);  
-        addIfMismatch(this.blocksChecksum, otherClusterStateChecksum.blocksChecksum, BLOCKS_CS, mismatches);
-        addIfMismatch(this.clusterStateCustomsChecksum, otherClusterStateChecksum.clusterStateCustomsChecksum, CUSTOMS_CS, mismatches);
-        addIfMismatch(  
-            this.coordinationMetadataChecksum,
-            otherClusterStateChecksum.coordinationMetadataChecksum,
-            COORDINATION_MD_CS,  
-            mismatches
-        );
-        addIfMismatch(this.settingMetadataChecksum, otherClusterStateChecksum.settingMetadataChecksum, SETTINGS_MD_CS, mismatches);  
-        addIfMismatch(
-            this.transientSettingsMetadataChecksum,
-            otherClusterStateChecksum.transientSettingsMetadataChecksum,  
-            TRANSIENT_SETTINGS_MD_CS,
-            mismatches
-        );  
-        addIfMismatch(this.templatesMetadataChecksum, otherClusterStateChecksum.templatesMetadataChecksum, TEMPLATES_MD_CS, mismatches);
-        addIfMismatch(this.customMetadataMapChecksum, otherClusterStateChecksum.customMetadataMapChecksum, CUSTOM_MD_CS, mismatches);
-        addIfMismatch(  
-            this.hashesOfConsistentSettingsChecksum,
-            otherClusterStateChecksum.hashesOfConsistentSettingsChecksum,
-            HASHES_MD_CS,  
-            mismatches
-        );
-        addIfMismatch(this.indicesChecksum, otherClusterStateChecksum.indicesChecksum, INDICES_CS, mismatches);  
-
-        return mismatches;
-    }  
-
-    private void addIfMismatch(long checksum, long otherChecksum, String entityName, List<String> mismatches) {
-        if (checksum != otherChecksum) {  
-            mismatches.add(entityName);
-        }
-    }  
-
-    /**
-     * Builder for ClusterStateChecksum  
-     */
-    public static class Builder {
-        long routingTableChecksum;  
-        long nodesChecksum;
-        long blocksChecksum;
-        long clusterStateCustomsChecksum;  
-        long coordinationMetadataChecksum;
-        long settingMetadataChecksum;
-        long transientSettingsMetadataChecksum;  
-        long templatesMetadataChecksum;
-        long customMetadataMapChecksum;
-        long hashesOfConsistentSettingsChecksum;  
-        long indicesChecksum;
-        long clusterStateChecksum;
-
-        public Builder routingTableChecksum(long routingTableChecksum) {
-            this.routingTableChecksum = routingTableChecksum;
-            return this;  
-        }
-
-        public Builder nodesChecksum(long nodesChecksum) {  
-            this.nodesChecksum = nodesChecksum;
-            return this;
-        }  
-
-        public Builder blocksChecksum(long blocksChecksum) {
-            this.blocksChecksum = blocksChecksum;  
-            return this;
-        }
-
-        public Builder clusterStateCustomsChecksum(long clusterStateCustomsChecksum) {
-            this.clusterStateCustomsChecksum = clusterStateCustomsChecksum;
-            return this;  
-        }
-
+    public int hashCode() {  
+        builder.field(NODES_CS, nodesChecksum);
+        executeChecksumTask((stream) -> {  
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, customMetadataMapChecksum, CHECKSUM_SIZE);
         public Builder coordinationMetadataChecksum(long coordinationMetadataChecksum) {  
-            this.coordinationMetadataChecksum = coordinationMetadataChecksum;
-            return this;
-        }  
-
-        public Builder settingMetadataChecksum(long settingMetadataChecksum) {
-            this.settingMetadataChecksum = settingMetadataChecksum;  
-            return this;
-        }
-
-        public Builder transientSettingsMetadataChecksum(long transientSettingsMetadataChecksum) {
-            this.transientSettingsMetadataChecksum = transientSettingsMetadataChecksum;
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             return this;  
-        }
-
-        public Builder templatesMetadataChecksum(long templatesMetadataChecksum) {  
-            this.templatesMetadataChecksum = templatesMetadataChecksum;
-            return this;
+        out.writeLong(coordinationMetadataChecksum);
+ * compatible open source license.
+            mismatches
+            otherClusterStateChecksum.transientSettingsMetadataChecksum,  
+            clusterState.coordinationMetadata().writeVerifiableTo(stream);  
+        } catch (InterruptedException e) {
+        executeChecksumTask((stream) -> {  
+        hashesOfConsistentSettingsChecksum = in.readLong();  
+import java.io.IOException;
+            return null;  
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, coordinationMetadataChecksum, CHECKSUM_SIZE);  
+        addIfMismatch(
+        this.settingMetadataChecksum = settingMetadataChecksum;
+        long nodesChecksum,  
+                        break;
+            TRANSIENT_SETTINGS_MD_CS,
+ */  
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, indicesChecksum, CHECKSUM_SIZE);  
+            + indicesChecksum
+        addIfMismatch(  
+    }  
+        String currentFieldName = parser.currentName();  
+                        builder.templatesMetadataChecksum(parser.longValue());
+            + ", customMetadataMapChecksum="  
+        long clusterStateChecksum;
+        long coordinationMetadataChecksum,  
+        long indicesChecksum,  
         }  
-
-        public Builder customMetadataMapChecksum(long customMetadataMapChecksum) {
-            this.customMetadataMapChecksum = customMetadataMapChecksum;  
-            return this;
-        }
-
-        public Builder hashesOfConsistentSettingsChecksum(long hashesOfConsistentSettingsChecksum) {
-            this.hashesOfConsistentSettingsChecksum = hashesOfConsistentSettingsChecksum;
-            return this;  
-        }
-
-        public Builder indicesChecksum(long indicesChecksum) {  
-            this.indicesChecksum = indicesChecksum;
-            return this;
-        }  
-
-        public Builder clusterStateChecksum(long clusterStateChecksum) {
-            this.clusterStateChecksum = clusterStateChecksum;  
-            return this;
-        }
-
+            && templatesMetadataChecksum == that.templatesMetadataChecksum
+        addIfMismatch(this.settingMetadataChecksum, otherClusterStateChecksum.settingMetadataChecksum, SETTINGS_MD_CS, mismatches);  
+        executeChecksumTask((stream) -> {
+    long customMetadataMapChecksum;  
+                    case TRANSIENT_SETTINGS_MD_CS:  
+    long coordinationMetadataChecksum;
         public ClusterStateChecksum build() {
-            return new ClusterStateChecksum(
-                routingTableChecksum,  
-                nodesChecksum,
-                blocksChecksum,
-                clusterStateCustomsChecksum,  
-                coordinationMetadataChecksum,
-                settingMetadataChecksum,
-                transientSettingsMetadataChecksum,  
-                templatesMetadataChecksum,
-                customMetadataMapChecksum,
-                hashesOfConsistentSettingsChecksum,  
-                indicesChecksum,
-                clusterStateChecksum
-            );  
-        }
-    }
-
+            try {  
+import java.util.List;  
+            this.coordinationMetadataChecksum = coordinationMetadataChecksum;
+                        builder.routingTableChecksum(parser.longValue());
+                checksumConsumer.accept(checksum);
+        }, checksum -> nodesChecksum = checksum, executorService, latch);  
+            HASHES_MD_CS,  
+        if (o == null || getClass() != o.getClass()) return false;
+        return mismatches;
+public class ClusterStateChecksum implements ToXContentFragment, Writeable {
+            + ", nodesChecksum="
+    static final String NODES_CS = "discovery_nodes";
+        public Builder routingTableChecksum(long routingTableChecksum) {
+    }  
+                    case CLUSTER_STATE_CS:  
+                        break;
+                        builder.indicesChecksum(parser.longValue());
+            + templatesMetadataChecksum
+    long hashesOfConsistentSettingsChecksum;
+        }, checksum -> transientSettingsMetadataChecksum = checksum, executorService, latch);  
+            + coordinationMetadataChecksum
+    /**
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Stores checksum for all components in cluster state. This will be used to ensure cluster state is same across all nodes in the cluster.
+import org.opensearch.core.xcontent.XContentParseException;  
+        builder.field(ROUTING_TABLE_CS, routingTableChecksum);
+        builder.field(CUSTOM_MD_CS, customMetadataMapChecksum);  
+                        builder.customMetadataMapChecksum(parser.longValue());
+    static final String TEMPLATES_MD_CS = "templates_md";
+        }, checksum -> templatesMetadataChecksum = checksum, executorService, latch);
+    }  
+        long indicesChecksum;
+                        break;
+                switch (currentFieldName) {
+import org.opensearch.common.io.stream.BytesStreamOutput;  
+import java.util.function.Consumer;
+                        break;
+import org.opensearch.common.CheckedFunction;
+    }  
+    long transientSettingsMetadataChecksum;
+            return null;
+            }
+            && hashesOfConsistentSettingsChecksum == that.hashesOfConsistentSettingsChecksum  
+        templatesMetadataChecksum = in.readLong();
+        out.writeLong(blocksChecksum);
+            }  
+        }  
+            customMetadataMapChecksum,
+        addIfMismatch(this.customMetadataMapChecksum, otherClusterStateChecksum.customMetadataMapChecksum, CUSTOM_MD_CS, mismatches);
+        if (parser.currentToken() == null) { // fresh parser? move to next token
+    }  
+    long templatesMetadataChecksum;
+                    case INDICES_CS:  
+            return this;
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, hashesOfConsistentSettingsChecksum, CHECKSUM_SIZE);
+ * SPDX-License-Identifier: Apache-2.0
+                    case BLOCKS_CS:  
+            throw new RemoteStateTransferException("Failed to create checksum for cluster state.", e);
+                    case COORDINATION_MD_CS:  
+            clusterState.routingTable().writeVerifiableTo(stream);
+            clusterState.nodes().writeVerifiableTo(stream);
+        });
+            } catch (IOException e) {
+            latch.await();  
+        blocksChecksum = in.readLong();
+        long hashesOfConsistentSettingsChecksum;  
+    public static final int COMPONENT_SIZE = 11;  
+            return List.of();
+        transientSettingsMetadataChecksum = in.readLong();  
+        );
 }
+                    case SETTINGS_MD_CS:  
+                        throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+        public Builder templatesMetadataChecksum(long templatesMetadataChecksum) {  
+    static final String SETTINGS_MD_CS = "settings_md";  
+            return this;
+        }, checksum -> customMetadataMapChecksum = checksum, executorService, latch);
+    long clusterStateChecksum;  
+        this.hashesOfConsistentSettingsChecksum = hashesOfConsistentSettingsChecksum;  
+            stream.writeStringCollection(clusterState.customs().keySet());
+        try {
+                    case TEMPLATES_MD_CS:  
+                    case NODES_CS:  
+    private void addIfMismatch(long checksum, long otherChecksum, String entityName, List<String> mismatches) {
+        ExecutorService executorService = threadpool.executor(ThreadPool.Names.REMOTE_STATE_CHECKSUM);
+    ) {
+        addIfMismatch(  
+        this.coordinationMetadataChecksum = coordinationMetadataChecksum;
+            this.hashesOfConsistentSettingsChecksum = hashesOfConsistentSettingsChecksum;
+                throw new RemoteStateTransferException("Failed to execute checksum task", e);
+        }, checksum -> hashesOfConsistentSettingsChecksum = checksum, executorService, latch);  
+import java.util.concurrent.ExecutorService;  
+            BufferedChecksumStreamOutput checksumOut = new BufferedChecksumStreamOutput(out)
+        builder.field(TRANSIENT_SETTINGS_MD_CS, transientSettingsMetadataChecksum);
+            this.templatesMetadataChecksum = templatesMetadataChecksum;
+        builder.field(CUSTOMS_CS, clusterStateCustomsChecksum);
+    public ClusterStateChecksum(ClusterState clusterState, ThreadPool threadpool) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+                routingTableChecksum,  
+package org.opensearch.gateway.remote;
+        long clusterStateCustomsChecksum,
+        long blocksChecksum;
+                hashesOfConsistentSettingsChecksum,  
+            && clusterStateChecksum == that.clusterStateChecksum;
+                settingMetadataChecksum,
+     */
+            );  
+import org.opensearch.common.unit.TimeValue;
+    static final String ROUTING_TABLE_CS = "routing_table";
+    }  
+        long templatesMetadataChecksum,  
+            return this;
+            transientSettingsMetadataChecksum,
+        return "ClusterStateChecksum{"
+            this.customMetadataMapChecksum = customMetadataMapChecksum;  
+import org.opensearch.cluster.ClusterState;  
+                indicesChecksum,
+    }
+            + ", settingMetadataChecksum="  
+        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
+        out.writeLong(templatesMetadataChecksum);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+    static final String CUSTOMS_CS = "customs";
+                clusterStateCustomsChecksum,  
+        this.indicesChecksum = indicesChecksum;
+                    case CUSTOMS_CS:  
+                        builder.clusterStateChecksum(parser.longValue());
+    private static final Logger logger = LogManager.getLogger(ClusterStateChecksum.class);
+        return builder;
+        builder.field(TEMPLATES_MD_CS, templatesMetadataChecksum);
+        }  
+    private void createClusterStateChecksum() {
+        clusterStateCustomsChecksum = in.readLong();  
+        builder.field(BLOCKS_CS, blocksChecksum);  
+            mismatches.add(entityName);
+        }, checksum -> settingMetadataChecksum = checksum, executorService, latch);
+        }
+            if (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
+        ExecutorService executorService,
+        builder.field(INDICES_CS, indicesChecksum);
+        long hashesOfConsistentSettingsChecksum,
+    public String toString() {  
+        );
+        addIfMismatch(this.clusterStateCustomsChecksum, otherClusterStateChecksum.clusterStateCustomsChecksum, CUSTOMS_CS, mismatches);
+        }
+                        builder.nodesChecksum(parser.longValue());
+            + routingTableChecksum  
+            this.clusterStateChecksum = clusterStateChecksum;  
+    public List<String> getMismatchEntities(ClusterStateChecksum otherClusterStateChecksum) {
+        return builder.build();
+        }  
+ *
+        out.writeLong(routingTableChecksum);  
+    }  
+            task.apply(checksumOut);  
+        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);
+        out.writeLong(clusterStateCustomsChecksum);  
+        }
+        long templatesMetadataChecksum;
+        long clusterStateChecksum
+            return this;
+            return this;  
+        this.clusterStateChecksum = clusterStateChecksum;
+        }  
+        }  
+            return this;  
+    }
+import org.apache.logging.log4j.Logger;
+            return null;
+                        builder.settingMetadataChecksum(parser.longValue());
+        indicesChecksum = in.readLong();
+import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;  
+                customMetadataMapChecksum,
+            && indicesChecksum == that.indicesChecksum
+import org.opensearch.cluster.metadata.DiffableStringMap;
+        if (this.clusterStateChecksum == otherClusterStateChecksum.clusterStateChecksum) {  
+        );
+        }
+            stream.writeMapValues(  
+        }  
+            + ", blocksChecksum="  
+            parser.nextToken();
+            return null;  
+            this.hashesOfConsistentSettingsChecksum,
+    }
+                    default:  
+    public static ClusterStateChecksum fromXContent(XContentParser parser) throws IOException {
+            BytesStreamOutput out = new BytesStreamOutput();  
+                    case CUSTOM_MD_CS:  
+    long routingTableChecksum;
+            + ", clusterStateCustomsChecksum="
+            + customMetadataMapChecksum
+    public void writeTo(StreamOutput out) throws IOException {
+                latch.countDown();  
+        long start = threadpool.relativeTimeInNanos();  
+        logger.debug("Checksum execution time {}", TimeValue.nsecToMSec(threadpool.relativeTimeInNanos() - start));
+            return null;
+     * Builder for ClusterStateChecksum  
+        builder.field(CLUSTER_STATE_CS, clusterStateChecksum);  
+        }  
+        executeChecksumTask((stream) -> {  
+        out.writeLong(customMetadataMapChecksum);
+            );  
+            parser.nextToken();
+                        break;
+                        builder.blocksChecksum(parser.longValue());
+    }
+            return null;  
+        public Builder indicesChecksum(long indicesChecksum) {  
+            logger.debug("No mismatch in checksums.");
+        }
+            this.settingMetadataChecksum = settingMetadataChecksum;  
+        }, checksum -> blocksChecksum = checksum, executorService, latch);
+        ClusterStateChecksum that = (ClusterStateChecksum) o;
+            + settingMetadataChecksum
+    private static final String CLUSTER_STATE_CS = "cluster_state";  
+        }
+    }  
+        nodesChecksum = in.readLong();
+            return null;
+                    case ROUTING_TABLE_CS:  
+/**
+/*  
+    @Override
+        this.blocksChecksum = blocksChecksum;
+        executeChecksumTask((stream) -> {
+        public Builder settingMetadataChecksum(long settingMetadataChecksum) {
+                (checksumStream, value) -> value.writeVerifiableTo((BufferedChecksumStreamOutput) checksumStream)
+    static final String TRANSIENT_SETTINGS_MD_CS = "transient_settings_md";
+    private long createChecksum(CheckedFunction<BufferedChecksumStreamOutput, Void, IOException> task) throws IOException {
+            && customMetadataMapChecksum == that.customMetadataMapChecksum
+            } else if (token.isValue()) {
+        }
+        }
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, settingMetadataChecksum, CHECKSUM_SIZE);
+            clusterStateChecksum
+            return null;
+import org.opensearch.core.xcontent.ToXContentFragment;
+    @Override
+            COORDINATION_MD_CS,  
+                    case HASHES_MD_CS:  
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, transientSettingsMetadataChecksum, CHECKSUM_SIZE);
+        XContentParser.Token token;
+        addIfMismatch(this.routingTableChecksum, otherClusterStateChecksum.routingTableChecksum, ROUTING_TABLE_CS, mismatches);
+    public static class Builder {
+import org.apache.logging.log4j.LogManager;
+        long clusterStateCustomsChecksum;  
+            return null;  
+        out.writeLong(transientSettingsMetadataChecksum);  
+        this.templatesMetadataChecksum = templatesMetadataChecksum;
+            coordinationMetadataChecksum,  
+import org.opensearch.core.common.io.stream.Writeable;  
+        coordinationMetadataChecksum = in.readLong();
+            + clusterStateChecksum
+    @Override
+        addIfMismatch(this.templatesMetadataChecksum, otherClusterStateChecksum.templatesMetadataChecksum, TEMPLATES_MD_CS, mismatches);
+            clusterStateCustomsChecksum,
+    ) {
+        long routingTableChecksum;  
+            blocksChecksum,
+            + clusterStateCustomsChecksum  
+            indicesChecksum,  
+        out.writeLong(settingMetadataChecksum);
+            + "routingTableChecksum="
+        try (
+            Settings.writeSettingsToStream(clusterState.metadata().persistentSettings(), stream);
+                blocksChecksum,
+        routingTableChecksum = in.readLong();  
+    long nodesChecksum;
+                coordinationMetadataChecksum,
+        if (checksum != otherChecksum) {  
+    public boolean equals(Object o) {
+        ClusterStateChecksum.Builder builder = new ClusterStateChecksum.Builder();  
+        public Builder blocksChecksum(long blocksChecksum) {
+                        break;
+            mismatches
+import org.opensearch.threadpool.ThreadPool;
+        }
+        settingMetadataChecksum = in.readLong();
+        this.routingTableChecksum = routingTableChecksum;  
+            return this;
+            return this;
+            stream.writeStringCollection(clusterState.metadata().customs().keySet());
+            && nodesChecksum == that.nodesChecksum
+import org.opensearch.core.xcontent.XContentBuilder;
+        }, checksum -> coordinationMetadataChecksum = checksum, executorService, latch);
+        }
+    static final String COORDINATION_MD_CS = "coordination_md";
+        createClusterStateChecksum();
+    public static ClusterStateChecksum.Builder builder() {  
+        builder.field(SETTINGS_MD_CS, settingMetadataChecksum);  
+    static final String CUSTOM_MD_CS = "customs_md";  
+            mismatches
+        long settingMetadataChecksum;
+        ) {
+                        break;
+import com.jcraft.jzlib.JZlib;  
+        executeChecksumTask((stream) -> {
+                nodesChecksum,
+        public Builder transientSettingsMetadataChecksum(long transientSettingsMetadataChecksum) {
+        this.customMetadataMapChecksum = customMetadataMapChecksum;
+import org.opensearch.core.xcontent.XContentParser;
+                transientSettingsMetadataChecksum,  
+        }  
+        return routingTableChecksum == that.routingTableChecksum  
+        public Builder clusterStateChecksum(long clusterStateChecksum) {
+            && clusterStateCustomsChecksum == that.clusterStateCustomsChecksum  
+ * this file be licensed under the Apache-2.0 license or a
+    long blocksChecksum;  
+        }
+        );  
+                currentFieldName = parser.currentName();  
+                }
+ */  
+        addIfMismatch(this.nodesChecksum, otherClusterStateChecksum.nodesChecksum, NODES_CS, mismatches);  
+        this.clusterStateCustomsChecksum = clusterStateCustomsChecksum;  
+    static final String BLOCKS_CS = "blocks";  
+            return null;
+import java.util.Objects;
+            && blocksChecksum == that.blocksChecksum
+        long blocksChecksum,
+        executeChecksumTask((stream) -> {
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, blocksChecksum, CHECKSUM_SIZE);
+                        break;
+        addIfMismatch(this.blocksChecksum, otherClusterStateChecksum.blocksChecksum, BLOCKS_CS, mismatches);
+        builder.field(COORDINATION_MD_CS, coordinationMetadataChecksum);
+            + ", coordinationMetadataChecksum="
+            clusterState.blocks().writeVerifiableTo(stream);
+            ((DiffableStringMap) clusterState.metadata().hashesOfConsistentSettings()).writeTo(stream);
+                        builder.transientSettingsMetadataChecksum(parser.longValue());
+            return new ClusterStateChecksum(
+        out.writeLong(nodesChecksum);
+        long transientSettingsMetadataChecksum;  
+        builder.field(HASHES_MD_CS, hashesOfConsistentSettingsChecksum);
+            return checksumOut.getChecksum();
+            this.indicesChecksum = indicesChecksum;
+            return null;
+            otherClusterStateChecksum.hashesOfConsistentSettingsChecksum,
+    static final String INDICES_CS = "indices_md";
+            this.coordinationMetadataChecksum,
+                        break;
+                        break;
+        this.nodesChecksum = nodesChecksum;
+            + nodesChecksum
+    long indicesChecksum;
+import org.opensearch.common.settings.Settings;
+            this.blocksChecksum = blocksChecksum;  
+            + ", templatesMetadataChecksum="
+    public ClusterStateChecksum(
+            + blocksChecksum
+        clusterStateChecksum = in.readLong();
+        addIfMismatch(this.indicesChecksum, otherClusterStateChecksum.indicesChecksum, INDICES_CS, mismatches);  
+        CountDownLatch latch = new CountDownLatch(COMPONENT_SIZE);
+            + ", transientSettingsMetadataChecksum="
+    private void executeChecksumTask(
+        public Builder customMetadataMapChecksum(long customMetadataMapChecksum) {
+    }  
+        executeChecksumTask((stream) -> {
+                        break;
+    }
+import java.util.ArrayList;
+    @Override
+        List<String> mismatches = new ArrayList<>();
+            return this;
+        out.writeLong(indicesChecksum);
+    static final String HASHES_MD_CS = "hashes_md";
+        out.writeLong(clusterStateChecksum);
+            + '}';
+            clusterState.metadata().templatesMetadata().writeVerifiableTo(stream);  
+                        break;
+            settingMetadataChecksum,
+        executorService.execute(() -> {
+        executeChecksumTask((stream) -> {
+            this.transientSettingsMetadataChecksum,
+        public Builder hashesOfConsistentSettingsChecksum(long hashesOfConsistentSettingsChecksum) {
+        executeChecksumTask((stream) -> {  
+        clusterStateChecksum = JZlib.crc32_combine(routingTableChecksum, nodesChecksum, CHECKSUM_SIZE);  
+                long checksum = createChecksum(checksumTask);
+            otherClusterStateChecksum.coordinationMetadataChecksum,
+            hashesOfConsistentSettingsChecksum,
+                throw new XContentParseException("Unexpected token [" + token + "]");
+            routingTableChecksum,
+                        builder.hashesOfConsistentSettingsChecksum(parser.longValue());
+        this.transientSettingsMetadataChecksum = transientSettingsMetadataChecksum;  
+import java.util.concurrent.CountDownLatch;
+            + transientSettingsMetadataChecksum  
+            return this;  
+        long customMetadataMapChecksum,
+        long customMetadataMapChecksum;
+            this.transientSettingsMetadataChecksum = transientSettingsMetadataChecksum;
+        CountDownLatch latch  
+                        builder.coordinationMetadataChecksum(parser.longValue());
+ * The OpenSearch Contributors require contributions made to  
+        }, checksum -> indicesChecksum = checksum, executorService, latch);
+    public ClusterStateChecksum(StreamInput in) throws IOException {
+        long transientSettingsMetadataChecksum,
+        return Objects.hash(
+        CheckedFunction<BufferedChecksumStreamOutput, Void, IOException> checksumTask,  
+            } else {  
+    }
+        long settingMetadataChecksum,
+            && settingMetadataChecksum == that.settingMetadataChecksum
+            + ", hashesOfConsistentSettingsChecksum="
+        customMetadataMapChecksum = in.readLong();
+    private static final int CHECKSUM_SIZE = 8;
+            this.nodesChecksum = nodesChecksum;
+    @Override
+            this.clusterStateCustomsChecksum = clusterStateCustomsChecksum;
+            + hashesOfConsistentSettingsChecksum  
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+            nodesChecksum,  
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, clusterStateCustomsChecksum, CHECKSUM_SIZE);
+            && coordinationMetadataChecksum == that.coordinationMetadataChecksum
+            return this;
+            this.routingTableChecksum = routingTableChecksum;
+                clusterStateChecksum
+        executeChecksumTask((stream) -> {
+    long settingMetadataChecksum;  
+        public Builder nodesChecksum(long nodesChecksum) {  
+            + ", indicesChecksum="
+                clusterState.metadata().indices(),
+        }, checksum -> routingTableChecksum = checksum, executorService, latch);
+            && transientSettingsMetadataChecksum == that.transientSettingsMetadataChecksum  
+                templatesMetadataChecksum,
+        public Builder clusterStateCustomsChecksum(long clusterStateCustomsChecksum) {
+    long clusterStateCustomsChecksum;
+        long nodesChecksum;
+        Consumer<Long> checksumConsumer,
+            templatesMetadataChecksum,  
+                        builder.clusterStateCustomsChecksum(parser.longValue());
+        long coordinationMetadataChecksum;
+        long routingTableChecksum,
+        clusterStateChecksum = JZlib.crc32_combine(clusterStateChecksum, templatesMetadataChecksum, CHECKSUM_SIZE);  
+        }, checksum -> clusterStateCustomsChecksum = checksum, executorService, latch);  
+        if (this == o) return true;  

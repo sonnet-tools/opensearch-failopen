@@ -1,52 +1,42 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.example.stream;
-
+    public int getBatchCount() {
 import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.common.io.stream.StreamOutput;
-
+}  
+        return null;
 import java.io.IOException;  
-
-class NativeArrowStreamDataRequest extends ActionRequest {
-    private final int batchCount;  
-    private final int rowsPerBatch;
-
-    NativeArrowStreamDataRequest(int batchCount, int rowsPerBatch) {  
-        this.batchCount = batchCount;
-        this.rowsPerBatch = rowsPerBatch;
+    }
+        return rowsPerBatch;
     }  
-
-    NativeArrowStreamDataRequest(StreamInput in) throws IOException {
-        super(in);  
-        this.batchCount = in.readInt();
+import org.opensearch.core.common.io.stream.StreamInput;  
+        out.writeInt(batchCount);
+        this.batchCount = batchCount;
+    }
+import org.opensearch.action.ActionRequestValidationException;
+ * The OpenSearch Contributors require contributions made to  
         this.rowsPerBatch = in.readInt();
     }  
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {  
-        super.writeTo(out);
-        out.writeInt(batchCount);
-        out.writeInt(rowsPerBatch);  
-    }
-
-    @Override  
-    public ActionRequestValidationException validate() {
-        return null;
-    }  
-
-    public int getBatchCount() {
         return batchCount;  
+        super.writeTo(out);
     }
-
+    private final int batchCount;  
+        out.writeInt(rowsPerBatch);  
+package org.opensearch.example.stream;
+import org.opensearch.core.common.io.stream.StreamOutput;
+ */  
+    }  
+    NativeArrowStreamDataRequest(StreamInput in) throws IOException {
+    public ActionRequestValidationException validate() {
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+/*  
+    NativeArrowStreamDataRequest(int batchCount, int rowsPerBatch) {  
+        this.batchCount = in.readInt();
+    private final int rowsPerBatch;
+ * compatible open source license.
     public int getRowsPerBatch() {  
-        return rowsPerBatch;
-    }
-}  
+        this.rowsPerBatch = rowsPerBatch;
+        super(in);  
+    public void writeTo(StreamOutput out) throws IOException {  
+    @Override  
+ * SPDX-License-Identifier: Apache-2.0
+class NativeArrowStreamDataRequest extends ActionRequest {

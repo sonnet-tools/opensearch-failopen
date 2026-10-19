@@ -1,66 +1,54 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */  
-
-package org.opensearch.common.breaker;
-
 import org.opensearch.OpenSearchException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-
-/**  
- * Thrown when api response breaches threshold limit.
- *
- * @opensearch.internal  
- */
-public class ResponseLimitBreachedException extends OpenSearchException {
-
-    private final int responseLimit;
-    private final ResponseLimitSettings.LimitEntity limitEntity;
-
-    public ResponseLimitBreachedException(StreamInput in) throws IOException {
-        super(in);
-        responseLimit = in.readVInt();  
-        limitEntity = in.readEnum(ResponseLimitSettings.LimitEntity.class);
-    }
-
-    public ResponseLimitBreachedException(String msg, int responseLimit, ResponseLimitSettings.LimitEntity limitEntity) {
-        super(msg);
-        this.responseLimit = responseLimit;  
-        this.limitEntity = limitEntity;
-    }
-
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);  
-        out.writeVInt(responseLimit);
-        out.writeEnum(limitEntity);
-    }  
-
-    public int getResponseLimit() {
-        return responseLimit;  
+ * this file be licensed under the Apache-2.0 license or a
     }
-
-    public ResponseLimitSettings.LimitEntity getLimitEntity() {  
         return limitEntity;
-    }
-
-    @Override
-    public RestStatus status() {
+    private final ResponseLimitSettings.LimitEntity limitEntity;
+    public int getResponseLimit() {
+        builder.field("limit_entity", limitEntity);  
+    public ResponseLimitBreachedException(String msg, int responseLimit, ResponseLimitSettings.LimitEntity limitEntity) {
+import java.io.IOException;
+ * SPDX-License-Identifier: Apache-2.0
         return RestStatus.TOO_MANY_REQUESTS;  
     }
-
-    @Override  
+        responseLimit = in.readVInt();  
+        out.writeVInt(responseLimit);
+    }  
+    public ResponseLimitSettings.LimitEntity getLimitEntity() {  
+    private final int responseLimit;
+/*  
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.rest.RestStatus;
+    }
+        super.writeTo(out);  
+ *
     protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {
         builder.field("response_limit", responseLimit);
-        builder.field("limit_entity", limitEntity);  
     }
 }
+ *
+        super(in);
+        super(msg);
+        return responseLimit;  
+        out.writeEnum(limitEntity);
+    }
+    public RestStatus status() {
+    public ResponseLimitBreachedException(StreamInput in) throws IOException {
+import org.opensearch.core.xcontent.XContentBuilder;
+ * @opensearch.internal  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    @Override
+package org.opensearch.common.breaker;
+    public void writeTo(StreamOutput out) throws IOException {
+    @Override  
+ * Thrown when api response breaches threshold limit.
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+/**  
+ */  
+public class ResponseLimitBreachedException extends OpenSearchException {
+ */
+        limitEntity = in.readEnum(ResponseLimitSettings.LimitEntity.class);
+        this.limitEntity = limitEntity;
+        this.responseLimit = responseLimit;  
